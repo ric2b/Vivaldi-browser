@@ -12,7 +12,8 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_cache.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_utils.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/favicon/favicon_attributes.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
@@ -171,8 +172,7 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
     ];
     NSDictionary* metrics =
         @{ @"barHeight" : @(tabSwitcherLocalSessionCellTopBarHeight()) };
-    ApplyVisualConstraintsWithMetrics(constraints, viewsDictionary, metrics,
-                                      [self containerView]);
+    ApplyVisualConstraintsWithMetrics(constraints, viewsDictionary, metrics);
 
     // Create and add subviews to the cell bar.
     // Title label.
@@ -213,7 +213,7 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
       @"V:[favicon(==24)]",
       @"V:[closeButton(==32)]",
     ];
-    ApplyVisualConstraints(barConstraints, barViewsDictionary, _topBar);
+    ApplyVisualConstraints(barConstraints, barViewsDictionary);
     AddSameCenterYConstraint(_topBar, _favicon);
     AddSameCenterYConstraint(_topBar, _titleLabel);
     AddSameCenterYConstraint(_topBar, _closeButton);
@@ -350,8 +350,7 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
             forControlEvents:UIControlEventTouchUpInside];
     [[self containerView] addSubview:_raisedButton];
     ApplyVisualConstraints(@[ @"H:|-0-[button]-0-|", @"V:|-0-[button]-0-|" ],
-                           @{ @"button" : _raisedButton },
-                           [self containerView]);
+                           @{@"button" : _raisedButton});
 
     // Create and add view that will be vertically centered in the space over
     // the favicon.
@@ -394,7 +393,7 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
       @"H:[favicon(==16)]",
       @"V:|-(>=16)-[centeredView]-(>=16)-[favicon(==16)]-16-|",
     ];
-    ApplyVisualConstraints(constraintsInButton, viewsDictionary, _raisedButton);
+    ApplyVisualConstraints(constraintsInButton, viewsDictionary);
     AddSameCenterXConstraint(_raisedButton, _favicon);
     [_raisedButton addConstraint:[NSLayoutConstraint
                                      constraintWithItem:_verticallyCenteredView
@@ -410,8 +409,8 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
       @"H:|-16-[title]-16-|",
       @"V:|-0-[newTabIcon(==24)]-16-[title(>=16)]-0-|",
     ];
-    ApplyVisualConstraints(constraintsInVerticallyCenteredView, viewsDictionary,
-                           _verticallyCenteredView);
+    ApplyVisualConstraints(constraintsInVerticallyCenteredView,
+                           viewsDictionary);
     AddSameCenterXConstraint(_verticallyCenteredView, _newTabIcon);
   }
   return self;
@@ -424,30 +423,33 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
 
 - (void)setSessionGURL:(GURL const&)gurl
       withBrowserState:(ios::ChromeBrowserState*)browserState {
-  TabSwitcherFaviconGetterCompletionBlock block = ^(UIImage* favicon) {
-    UIColor* imageDominantColor =
-        DominantColorForImage(gfx::Image(favicon), 1.0);
-    MDCPalette* dominantPalette =
-        [MDCPalette paletteGeneratedFromColor:imageDominantColor];
-    UIColor* backgroundColor = dominantPalette.tint300;
-    UIColor* textColor =
-        [MDFTextAccessibility textColorOnBackgroundColor:backgroundColor
-                                         targetTextAlpha:kTitleLabelTextAlpha
-                                                    font:[_titleLabel font]];
-    UIColor* iconColor =
-        [MDFTextAccessibility textColorOnBackgroundColor:backgroundColor
-                                         targetTextAlpha:kNewTabIconAlpha
-                                                    font:[_titleLabel font]];
-    [_raisedButton setBackgroundColor:backgroundColor];
-    [_titleLabel setTextColor:textColor];
-    [_newTabIcon setTintColor:iconColor];
-    [_newTabIcon setAlpha:1.0];
-    [_favicon setImage:favicon];
-    [UIView animateWithDuration:0.2
-                     animations:^{
-                       [_raisedButton setAlpha:1.0];
-                     }];
-  };
+  TabSwitcherFaviconGetterCompletionBlock block =
+      ^(FaviconAttributes* attributes) {
+        if (attributes.faviconImage) {
+          UIColor* imageDominantColor =
+              DominantColorForImage(gfx::Image(attributes.faviconImage), 1.0);
+          MDCPalette* dominantPalette =
+              [MDCPalette paletteGeneratedFromColor:imageDominantColor];
+          UIColor* backgroundColor = dominantPalette.tint300;
+          UIColor* textColor = [MDFTextAccessibility
+              textColorOnBackgroundColor:backgroundColor
+                         targetTextAlpha:kTitleLabelTextAlpha
+                                    font:[_titleLabel font]];
+          UIColor* iconColor = [MDFTextAccessibility
+              textColorOnBackgroundColor:backgroundColor
+                         targetTextAlpha:kNewTabIconAlpha
+                                    font:[_titleLabel font]];
+          [_raisedButton setBackgroundColor:backgroundColor];
+          [_titleLabel setTextColor:textColor];
+          [_newTabIcon setTintColor:iconColor];
+          [_newTabIcon setAlpha:1.0];
+          [_favicon setImage:attributes.faviconImage];
+          [UIView animateWithDuration:0.2
+                           animations:^{
+                             [_raisedButton setAlpha:1.0];
+                           }];
+        }
+      };
   GURL gurlCopy = gurl;
   _faviconObtainer = [NSBlockOperation blockOperationWithBlock:^{
     TabSwitcherGetFavicon(gurlCopy, browserState, block);

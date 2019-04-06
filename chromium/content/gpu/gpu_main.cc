@@ -24,25 +24,26 @@
 #include "components/viz/service/main/viz_main_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
+#include "content/common/skia_utils.h"
 #include "content/gpu/gpu_child_thread.h"
 #include "content/gpu/gpu_process.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/result_codes.h"
+#include "content/public/gpu/content_gpu_client.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_info_collector.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
-#include "gpu/ipc/common/gpu_preferences_util.h"
 #include "gpu/ipc/service/gpu_config.h"
 #include "gpu/ipc/service/gpu_init.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
-#include "media/gpu/features.h"
+#include "media/gpu/buildflags.h"
 #include "third_party/angle/src/gpu_info_util/SystemInfo.h"
-#include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_context.h"
@@ -65,8 +66,8 @@
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
-#include "media/gpu/dxva_video_decode_accelerator_win.h"
-#include "media/gpu/media_foundation_video_encode_accelerator_win.h"
+#include "media/gpu/windows/dxva_video_decode_accelerator_win.h"
+#include "media/gpu/windows/media_foundation_video_encode_accelerator_win.h"
 #include "sandbox/win/src/sandbox.h"
 #endif
 
@@ -77,16 +78,15 @@
 #endif
 
 #if defined(OS_LINUX)
-#include "content/common/font_config_ipc_linux.h"
 #include "content/gpu/gpu_sandbox_hook_linux.h"
-#include "content/public/common/common_sandbox_support_linux.h"
 #include "content/public/common/sandbox_init.h"
 #include "services/service_manager/sandbox/linux/sandbox_linux.h"
-#include "third_party/skia/include/ports/SkFontConfigInterface.h"
+#include "services/service_manager/zygote/common/common_sandbox_support_linux.h"
 #endif
 
 #if defined(OS_MACOSX)
 #include "base/message_loop/message_pump_mac.h"
+#include "sandbox/mac/seatbelt.h"
 #include "services/service_manager/sandbox/mac/sandbox_mac.h"
 #endif
 
@@ -97,6 +97,14 @@
 #if BUILDFLAG(USE_VAAPI)
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #endif
+
+#if defined(OS_MACOSX)
+extern "C" {
+void _LSSetApplicationLaunchServicesServerConnectionStatus(
+    uint64_t flags,
+    bool (^connection_allowed)(CFDictionaryRef));
+};
+#endif  // defined(OS_MACOSX)
 
 namespace content {
 
@@ -168,7 +176,7 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
 #elif defined(OS_WIN)
     return StartSandboxWindows(sandbox_info_);
 #elif defined(OS_MACOSX)
-    return service_manager::SandboxMac::IsCurrentlyActive();
+    return sandbox::Seatbelt::IsSandboxed();
 #else
     return false;
 #endif
@@ -196,7 +204,7 @@ int GpuMain(const MainFunctionParams& parameters) {
   if (command_line.HasSwitch(switches::kGpuPreferences)) {
     std::string value =
         command_line.GetSwitchValueASCII(switches::kGpuPreferences);
-    bool success = gpu::SwitchValueToGpuPreferences(value, &gpu_preferences);
+    bool success = gpu_preferences.FromSwitchValue(value);
     CHECK(success);
   }
 
@@ -265,6 +273,9 @@ int GpuMain(const MainFunctionParams& parameters) {
     // https://crbug.com/312462#c51 and https://crbug.com/783298
     std::unique_ptr<base::MessagePump> pump(new base::MessagePumpNSRunLoop());
     main_message_loop.reset(new base::MessageLoop(std::move(pump)));
+
+    // Tell LaunchServices to continue without a connection to the daemon.
+    _LSSetApplicationLaunchServicesServerConnectionStatus(0, nullptr);
 #else
     main_message_loop.reset(
         new base::MessageLoop(base::MessageLoop::TYPE_DEFAULT));
@@ -285,6 +296,10 @@ int GpuMain(const MainFunctionParams& parameters) {
 #endif
 
   gpu_init->set_sandbox_helper(&sandbox_helper);
+
+  // Since GPU initialization calls into skia, its important to initialize skia
+  // before it.
+  InitializeSkia();
 
   // Gpu initialization may fail for various reasons, in which case we will need
   // to tear down this process. However, we can not do so safely until the IPC
@@ -307,6 +322,11 @@ int GpuMain(const MainFunctionParams& parameters) {
 #endif
 
   GpuProcess gpu_process(io_thread_priority);
+
+  auto* client = GetContentClient()->gpu();
+  if (client)
+    client->PostIOThreadCreated(gpu_process.io_task_runner());
+
   GpuChildThread* child_thread = new GpuChildThread(
       std::move(gpu_init), std::move(deferred_messages.Get()));
   deferred_messages.Get().clear();
@@ -320,15 +340,6 @@ int GpuMain(const MainFunctionParams& parameters) {
       tracing::GraphicsMemoryDumpProvider::GetInstance(), "AndroidGraphics",
       nullptr);
 #endif
-
-  if (command_line.HasSwitch(switches::kEnableOOPRasterization)) {
-    SkGraphics::Init();
-#if defined(OS_LINUX)
-    // Set up the font IPC so that the GPU process can create typefaces.
-    SkFontConfigInterface::SetGlobal(new FontConfigIPC(GetSandboxFD()))
-        ->unref();
-#endif
-  }
 
   base::HighResolutionTimerManager hi_res_timer_manager;
 

@@ -20,6 +20,7 @@
 #include "media/base/audio_decoder_config.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/mock_media_log.h"
+#include "media/base/test_helpers.h"
 #include "media/base/timestamp_constants.h"
 #include "media/formats/webm/cluster_builder.h"
 #include "media/formats/webm/opus_packet_builder.h"
@@ -44,15 +45,6 @@ MATCHER_P(OpusPacketDurationTooHigh, actual_duration_ms, "") {
       arg, "Warning, demuxed Opus packet with encoded duration: " +
                base::IntToString(actual_duration_ms) +
                "ms. Should be no greater than 120ms.");
-}
-
-MATCHER_P(WebMSimpleBlockDurationEstimated, estimated_duration_ms, "") {
-  return CONTAINS_STRING(arg, "Estimating WebM block duration to be " +
-                                  base::IntToString(estimated_duration_ms) +
-                                  "ms for the last (Simple)Block in the "
-                                  "Cluster for this Track. Use BlockGroups "
-                                  "with BlockDurations at the end of each "
-                                  "Track in a Cluster to avoid estimation.");
 }
 
 MATCHER_P2(WebMBlockDurationMismatchesOpusDuration,
@@ -838,11 +830,9 @@ TEST_F(WebMClusterParserTest, ParseWithoutAnyDurationsSimpleBlocks) {
   // Absent DefaultDuration information, SimpleBlock durations are derived from
   // inter-buffer track timestamp delta if within the cluster. Duration for the
   // last block in a cluster is estimated independently for each track in the
-  // cluster. For video tracks we use the maximum seen so far. For audio we use
-  // the the minimum.
-  // TODO(chcunningham): Move audio over to use the maximum.
+  // cluster using the maximum seen so far.
 
-  const int kExpectedAudioEstimationInMs = 22;
+  const int kExpectedAudioEstimationInMs = 23;
   const int kExpectedVideoEstimationInMs = 34;
   const BlockInfo kBlockInfo1[] = {
       {kAudioTrackNum, 0, 23, true, NULL, 0, false},
@@ -910,11 +900,9 @@ TEST_F(WebMClusterParserTest, ParseWithoutAnyDurationsBlockGroups) {
   // Absent DefaultDuration and BlockDuration information, BlockGroup block
   // durations are derived from inter-buffer track timestamp delta if within the
   // cluster. Duration for the last block in a cluster is estimated
-  // independently for each track in the cluster. For video tracks we use the
-  // maximum seen so far. For audio we use the the minimum.
-  // TODO(chcunningham): Move audio over to use the maximum.
+  // independently for each track in the cluster using the maximum seen so far.
 
-  const int kExpectedAudioEstimationInMs = 22;
+  const int kExpectedAudioEstimationInMs = 23;
   const int kExpectedVideoEstimationInMs = 34;
   const BlockInfo kBlockInfo1[] = {
       {kAudioTrackNum, 0, -23, false, NULL, 0, false},

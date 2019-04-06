@@ -33,7 +33,7 @@
 namespace base {
 namespace debug {
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 namespace {
 
 void BusyWork(std::vector<std::string>* vec) {
@@ -56,44 +56,6 @@ class SystemMetricsTest : public testing::Test {
  private:
   DISALLOW_COPY_AND_ASSIGN(SystemMetricsTest);
 };
-
-/////////////////////////////////////////////////////////////////////////////
-
-#if defined(OS_MACOSX) && !defined(OS_IOS) && !defined(ADDRESS_SANITIZER)
-TEST_F(SystemMetricsTest, LockedBytes) {
-  ProcessHandle handle = GetCurrentProcessHandle();
-  std::unique_ptr<ProcessMetrics> metrics(
-      ProcessMetrics::CreateProcessMetrics(handle, nullptr));
-
-  size_t initial_locked_bytes;
-  bool result =
-      metrics->GetMemoryBytes(nullptr, nullptr, nullptr, &initial_locked_bytes);
-  ASSERT_TRUE(result);
-
-  size_t size = 8 * 1024 * 1024;
-  std::unique_ptr<char[]> memory(new char[size]);
-  int r = mlock(memory.get(), size);
-  ASSERT_EQ(0, r);
-
-  size_t new_locked_bytes;
-  result =
-      metrics->GetMemoryBytes(nullptr, nullptr, nullptr, &new_locked_bytes);
-  ASSERT_TRUE(result);
-
-  // There should be around |size| more locked bytes, but multi-threading might
-  // cause noise.
-  EXPECT_LT(initial_locked_bytes + size / 2, new_locked_bytes);
-  EXPECT_GT(initial_locked_bytes + size * 1.5, new_locked_bytes);
-
-  r = munlock(memory.get(), size);
-  ASSERT_EQ(0, r);
-
-  result =
-      metrics->GetMemoryBytes(nullptr, nullptr, nullptr, &new_locked_bytes);
-  ASSERT_TRUE(result);
-  EXPECT_EQ(initial_locked_bytes, new_locked_bytes);
-}
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS) && !defined(ADDRESS_SANITIZER)
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
 TEST_F(SystemMetricsTest, IsValidDiskName) {
@@ -359,7 +321,7 @@ TEST_F(SystemMetricsTest, ParseVmstat) {
 }
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 
 // Test that ProcessMetrics::GetPlatformIndependentCPUUsage() doesn't return
 // negative values when the number of threads running on the process decreases
@@ -390,15 +352,25 @@ TEST_F(SystemMetricsTest, TestNoNegativeCpuUsage) {
   thread2.task_runner()->PostTask(FROM_HERE, BindOnce(&BusyWork, &vec2));
   thread3.task_runner()->PostTask(FROM_HERE, BindOnce(&BusyWork, &vec3));
 
+  TimeDelta prev_cpu_usage = metrics->GetCumulativeCPUUsage();
+  EXPECT_GE(prev_cpu_usage, TimeDelta());
   EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 
   thread1.Stop();
+  TimeDelta current_cpu_usage = metrics->GetCumulativeCPUUsage();
+  EXPECT_GE(current_cpu_usage, prev_cpu_usage);
+  prev_cpu_usage = current_cpu_usage;
   EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 
   thread2.Stop();
+  current_cpu_usage = metrics->GetCumulativeCPUUsage();
+  EXPECT_GE(current_cpu_usage, prev_cpu_usage);
+  prev_cpu_usage = current_cpu_usage;
   EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 
   thread3.Stop();
+  current_cpu_usage = metrics->GetCumulativeCPUUsage();
+  EXPECT_GE(current_cpu_usage, prev_cpu_usage);
   EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 }
 

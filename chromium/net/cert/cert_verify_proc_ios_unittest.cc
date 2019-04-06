@@ -14,6 +14,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "testing/platform_test.h"
 
 namespace {
 
@@ -49,15 +50,17 @@ base::ScopedCFTypeRef<SecTrustRef> CreateSecTrust(
 
 namespace net {
 
+using CertVerifyProcIOSTest = PlatformTest;
+
 // Tests |GetCertFailureStatusFromTrust| with null trust object.
-TEST(CertVerifyProcIOSTest, StatusForNullTrust) {
+TEST_F(CertVerifyProcIOSTest, StatusForNullTrust) {
   EXPECT_EQ(CERT_STATUS_INVALID,
             CertVerifyProcIOS::GetCertFailureStatusFromTrust(nullptr));
 }
 
 // Tests |GetCertFailureStatusFromTrust| with trust object that has not been
 // evaluated backed by ok_cert.pem cert.
-TEST(CertVerifyProcIOSTest, StatusForNotEvaluatedTrust) {
+TEST_F(CertVerifyProcIOSTest, StatusForNotEvaluatedTrust) {
   CertStatus status = CertVerifyProcIOS::GetCertFailureStatusFromTrust(
       CreateSecTrust("ok_cert.pem"));
   EXPECT_TRUE(status & CERT_STATUS_COMMON_NAME_INVALID);
@@ -67,10 +70,11 @@ TEST(CertVerifyProcIOSTest, StatusForNotEvaluatedTrust) {
 
 // Tests |GetCertFailureStatusFromTrust| with evaluated trust object backed by
 // expired_cert.pem cert.
-TEST(CertVerifyProcIOSTest, StatusForEvaluatedTrust) {
+TEST_F(CertVerifyProcIOSTest, StatusForEvaluatedTrust) {
   base::ScopedCFTypeRef<SecTrustRef> trust(CreateSecTrust("expired_cert.pem"));
   ASSERT_TRUE(trust);
-  SecTrustEvaluate(trust, nullptr);
+  SecTrustResultType result = kSecTrustResultInvalid;
+  SecTrustEvaluate(trust, &result);
 
   CertStatus status = CertVerifyProcIOS::GetCertFailureStatusFromTrust(trust);
   EXPECT_TRUE(status & CERT_STATUS_COMMON_NAME_INVALID);

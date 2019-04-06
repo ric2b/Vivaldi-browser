@@ -13,13 +13,13 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "content/browser/renderer_host/p2p/socket_host.h"
 #include "content/common/content_export.h"
 #include "content/common/p2p_socket_type.h"
 #include "ipc/ipc_sender.h"
 #include "net/base/completion_callback.h"
 #include "net/socket/tcp_server_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 class StreamSocket;
@@ -42,7 +42,8 @@ class CONTENT_EXPORT P2PSocketHostTcpServer : public P2PSocketHost {
   void Send(const net::IPEndPoint& to,
             const std::vector<char>& data,
             const rtc::PacketOptions& options,
-            uint64_t packet_id) override;
+            uint64_t packet_id,
+            const net::NetworkTrafficAnnotationTag traffic_annotation) override;
   std::unique_ptr<P2PSocketHost> AcceptIncomingTcpConnection(
       const net::IPEndPoint& remote_address,
       int id) override;

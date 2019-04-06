@@ -5,13 +5,12 @@
 #include "chromecast/media/audio/cast_audio_manager.h"
 
 #include <algorithm>
-#include <memory>
-#include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "chromecast/media/audio/cast_audio_mixer.h"
 #include "chromecast/media/audio/cast_audio_output_stream.h"
-#include "chromecast/media/cma/backend/media_pipeline_backend_factory.h"
+#include "chromecast/media/cma/backend/cma_backend_factory.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 
 namespace {
@@ -36,12 +35,13 @@ namespace media {
 CastAudioManager::CastAudioManager(
     std::unique_ptr<::media::AudioThread> audio_thread,
     ::media::AudioLogFactory* audio_log_factory,
-    std::unique_ptr<MediaPipelineBackendFactory> backend_factory,
+    base::RepeatingCallback<CmaBackendFactory*()> backend_factory_getter,
     scoped_refptr<base::SingleThreadTaskRunner> backend_task_runner,
     bool use_mixer)
     : AudioManagerBase(std::move(audio_thread), audio_log_factory),
-      backend_factory_(std::move(backend_factory)),
+      backend_factory_getter_(std::move(backend_factory_getter)),
       backend_task_runner_(std::move(backend_task_runner)) {
+  DCHECK(backend_factory_getter_);
   if (use_mixer)
     mixer_ = std::make_unique<CastAudioMixer>(this);
 }
@@ -68,7 +68,7 @@ void CastAudioManager::GetAudioInputDeviceNames(
   // Need to send a valid AudioParameters object even when it will be unused.
   return ::media::AudioParameters(
       ::media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-      ::media::CHANNEL_LAYOUT_STEREO, kDefaultSampleRate, 16,
+      ::media::CHANNEL_LAYOUT_STEREO, kDefaultSampleRate,
       kDefaultInputBufferSize);
 }
 
@@ -89,6 +89,12 @@ void CastAudioManager::ReleaseOutputStream(::media::AudioOutputStream* stream) {
   } else {
     AudioManagerBase::ReleaseOutputStream(stream);
   }
+}
+
+CmaBackendFactory* CastAudioManager::backend_factory() {
+  if (!backend_factory_)
+    backend_factory_ = backend_factory_getter_.Run();
+  return backend_factory_;
 }
 
 ::media::AudioOutputStream* CastAudioManager::MakeLinearOutputStream(
@@ -138,7 +144,6 @@ void CastAudioManager::ReleaseOutputStream(::media::AudioOutputStream* stream) {
   ::media::ChannelLayout channel_layout = ::media::CHANNEL_LAYOUT_STEREO;
   int sample_rate = kDefaultSampleRate;
   int buffer_size = kDefaultOutputBufferSize;
-  int bits_per_sample = 16;
   if (input_params.IsValid()) {
     // Do not change:
     // - the channel layout
@@ -152,7 +157,7 @@ void CastAudioManager::ReleaseOutputStream(::media::AudioOutputStream* stream) {
 
   ::media::AudioParameters output_params(
       ::media::AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-      sample_rate, bits_per_sample, buffer_size);
+      sample_rate, buffer_size);
   return output_params;
 }
 

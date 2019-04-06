@@ -134,13 +134,8 @@ function expose(publicClass, privateClass, exposed) {
   if ('functions' in exposed) {
     $Array.forEach(exposed.functions, function(func) {
       publicClassPrototype[func] = function() {
-        // andre@vivaldi.com : This check was added due to VB-3887.
-        //   A listener could be added to an event, where the listener was
-        //   deleted. Causing this to be null and access to 'undefined.'
-        if (privates(this) !== undefined) {
         var impl = getPrivateImpl(this);
         return $Function.apply(impl[func], impl, arguments);
-        }
       };
     });
   }

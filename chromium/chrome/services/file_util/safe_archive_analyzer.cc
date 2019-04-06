@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/common/safe_browsing/archive_analyzer_results.h"
+#include "chrome/common/safe_browsing/rar_analyzer.h"
 #include "chrome/common/safe_browsing/zip_analyzer.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
@@ -42,4 +43,13 @@ void SafeArchiveAnalyzer::AnalyzeDmgFile(base::File dmg_file,
 #else
   NOTREACHED();
 #endif
+}
+
+void SafeArchiveAnalyzer::AnalyzeRarFile(base::File rar_file,
+                                         AnalyzeRarFileCallback callback) {
+  DCHECK(rar_file.IsValid());
+
+  safe_browsing::ArchiveAnalyzerResults results;
+  safe_browsing::rar_analyzer::AnalyzeRarFile(std::move(rar_file), &results);
+  std::move(callback).Run(results);
 }

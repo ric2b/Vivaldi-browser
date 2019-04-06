@@ -40,7 +40,6 @@ def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
   local_scope = {}
   if git_url:
     custom_scope['git_url'] = git_url
-    custom_scope['webkit_url'] = git_url+"/chromium/blink.git"
     custom_scope['chromium_git'] = git_url
   var = VarImpl(local_scope, custom_scope)
   global_scope = {
@@ -59,6 +58,23 @@ def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
   local_scope.setdefault('hooks', [])
   local_scope.setdefault('vars', {})
   local_scope.setdefault('recursion', None)
+  
+  def update_alternative_variables(old_dict):
+    new_dict = {}
+    for key, item in old_dict.iteritems():
+      key = key.format(**local_scope["vars"])
+      if isinstance(item, str):
+        item = item.format(**local_scope["vars"])
+      elif isinstance(item, dict):
+        item = update_alternative_variables(item)
+      elif isinstance(item, list):
+        item = [update_alternative_variables(i) for i in item]
+      elif isinstance(item, tuple):
+        item = (update_alternative_variables(i) for i in item)
+      new_dict[key] = item
+    return new_dict
+  
+  local_scope["deps"] = update_alternative_variables(local_scope["deps"])
   
   if return_dict:
     return local_scope

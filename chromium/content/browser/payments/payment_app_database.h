@@ -16,10 +16,10 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/content_export.h"
-#include "content/common/service_worker/service_worker_status_code.h"
 #include "content/public/browser/stored_payment_app.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/platform/modules/payments/payment_app.mojom.h"
 
 namespace content {
 
@@ -42,9 +42,11 @@ class CONTENT_EXPORT PaymentAppDatabase {
       base::OnceCallback<void(payments::mojom::PaymentHandlerStatus)>;
   using WritePaymentInstrumentCallback =
       base::OnceCallback<void(payments::mojom::PaymentHandlerStatus)>;
-  using FetchAndWritePaymentAppInfoCallback =
+  using FetchAndUpdatePaymentAppInfoCallback =
       base::OnceCallback<void(payments::mojom::PaymentHandlerStatus)>;
   using ClearPaymentInstrumentsCallback =
+      base::OnceCallback<void(payments::mojom::PaymentHandlerStatus)>;
+  using SetPaymentAppInfoCallback =
       base::OnceCallback<void(payments::mojom::PaymentHandlerStatus)>;
 
   explicit PaymentAppDatabase(
@@ -68,69 +70,75 @@ class CONTENT_EXPORT PaymentAppDatabase {
                               const std::string& instrument_key,
                               payments::mojom::PaymentInstrumentPtr instrument,
                               WritePaymentInstrumentCallback callback);
-  void FetchAndWritePaymentAppInfo(
+  void FetchAndUpdatePaymentAppInfo(
       const GURL& context,
       const GURL& scope,
-      const std::string& user_hint,
-      FetchAndWritePaymentAppInfoCallback callback);
+      FetchAndUpdatePaymentAppInfoCallback callback);
   void ClearPaymentInstruments(const GURL& scope,
                                ClearPaymentInstrumentsCallback callback);
   void SetPaymentAppUserHint(const GURL& scope, const std::string& user_hint);
+  void SetPaymentAppInfoForRegisteredServiceWorker(
+      int64_t registration_id,
+      const std::string& instrument_key,
+      const std::string& name,
+      const std::string& icon,
+      const std::string& method,
+      SetPaymentAppInfoCallback callback);
 
  private:
   // ReadAllPaymentApps callbacks
   void DidReadAllPaymentApps(
       ReadAllPaymentAppsCallback callback,
       const std::vector<std::pair<int64_t, std::string>>& raw_data,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
   void DidReadAllPaymentInstruments(
       PaymentApps apps,
       ReadAllPaymentAppsCallback callback,
       const std::vector<std::pair<int64_t, std::string>>& raw_data,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
 
   // DeletePaymentInstrument callbacks
   void DidFindRegistrationToDeletePaymentInstrument(
       const std::string& instrument_key,
       DeletePaymentInstrumentCallback callback,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidFindPaymentInstrument(int64_t registration_id,
                                 const std::string& instrument_key,
                                 DeletePaymentInstrumentCallback callback,
                                 const std::vector<std::string>& data,
-                                ServiceWorkerStatusCode status);
+                                blink::ServiceWorkerStatusCode status);
   void DidDeletePaymentInstrument(DeletePaymentInstrumentCallback callback,
-                                  ServiceWorkerStatusCode status);
+                                  blink::ServiceWorkerStatusCode status);
 
   // ReadPaymentInstrument callbacks
   void DidFindRegistrationToReadPaymentInstrument(
       const std::string& instrument_key,
       ReadPaymentInstrumentCallback callback,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidReadPaymentInstrument(ReadPaymentInstrumentCallback callback,
                                 const std::vector<std::string>& data,
-                                ServiceWorkerStatusCode status);
+                                blink::ServiceWorkerStatusCode status);
 
   // KeysOfPaymentInstruments callbacks
   void DidFindRegistrationToGetKeys(
       KeysOfPaymentInstrumentsCallback callback,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidGetKeysOfPaymentInstruments(KeysOfPaymentInstrumentsCallback callback,
                                       const std::vector<std::string>& data,
-                                      ServiceWorkerStatusCode status);
+                                      blink::ServiceWorkerStatusCode status);
 
   // HasPaymentInstrument callbacks
   void DidFindRegistrationToHasPaymentInstrument(
       const std::string& instrument_key,
       HasPaymentInstrumentCallback callback,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidHasPaymentInstrument(DeletePaymentInstrumentCallback callback,
                                const std::vector<std::string>& data,
-                               ServiceWorkerStatusCode status);
+                               blink::ServiceWorkerStatusCode status);
 
   // WritePaymentInstrument callbacks
   void DidFindRegistrationToWritePaymentInstrument(
@@ -138,26 +146,30 @@ class CONTENT_EXPORT PaymentAppDatabase {
       payments::mojom::PaymentInstrumentPtr instrument,
       const std::string& decoded_instrument_icon,
       WritePaymentInstrumentCallback callback,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidWritePaymentInstrument(WritePaymentInstrumentCallback callback,
-                                 ServiceWorkerStatusCode status);
+                                 blink::ServiceWorkerStatusCode status);
 
-  // FetchAndWritePaymentAppInfo callbacks.
+  // FetchAndUpdatePaymentAppInfo callbacks.
   void FetchPaymentAppInfoCallback(
       const GURL& scope,
-      const std::string& user_hint,
-      FetchAndWritePaymentAppInfoCallback callback,
+      FetchAndUpdatePaymentAppInfoCallback callback,
       std::unique_ptr<PaymentAppInfoFetcher::PaymentAppInfo> app_info);
-  void DidFindRegistrationToWritePaymentAppInfo(
-      const std::string& user_hint,
-      FetchAndWritePaymentAppInfoCallback callback,
+  void DidFindRegistrationToUpdatePaymentAppInfo(
+      FetchAndUpdatePaymentAppInfoCallback callback,
       std::unique_ptr<PaymentAppInfoFetcher::PaymentAppInfo> app_info,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
-  void DidWritePaymentApp(FetchAndWritePaymentAppInfoCallback callback,
-                          bool fetch_app_info_failed,
-                          ServiceWorkerStatusCode status);
+  void DidGetPaymentAppInfoToUpdatePaymentAppInfo(
+      FetchAndUpdatePaymentAppInfoCallback callback,
+      std::unique_ptr<PaymentAppInfoFetcher::PaymentAppInfo> app_info,
+      scoped_refptr<ServiceWorkerRegistration> registration,
+      const std::vector<std::string>& data,
+      blink::ServiceWorkerStatusCode status);
+  void DidUpdatePaymentApp(FetchAndUpdatePaymentAppInfoCallback callback,
+                           bool fetch_app_info_failed,
+                           blink::ServiceWorkerStatusCode status);
 
   // PaymentInstrumentIconFetcherCallback.
   void DidFetchedPaymentInstrumentIcon(
@@ -171,7 +183,7 @@ class CONTENT_EXPORT PaymentAppDatabase {
   void DidFindRegistrationToClearPaymentInstruments(
       const GURL& scope,
       ClearPaymentInstrumentsCallback callback,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidGetKeysToClearPaymentInstruments(
       scoped_refptr<ServiceWorkerRegistration> registration,
@@ -179,19 +191,38 @@ class CONTENT_EXPORT PaymentAppDatabase {
       const std::vector<std::string>& keys,
       payments::mojom::PaymentHandlerStatus status);
   void DidClearPaymentInstruments(ClearPaymentInstrumentsCallback callback,
-                                  ServiceWorkerStatusCode status);
+                                  blink::ServiceWorkerStatusCode status);
 
   // SetPaymentAppUserHint callbacks.
   void DidFindRegistrationToSetPaymentAppUserHint(
       const std::string& user_hint,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidGetPaymentAppInfoToSetUserHint(const std::string& user_hint,
                                          int64_t registration_id,
                                          const GURL& pattern,
                                          const std::vector<std::string>& data,
-                                         ServiceWorkerStatusCode status);
-  void DidSetPaymentAppUserHint(ServiceWorkerStatusCode status);
+                                         blink::ServiceWorkerStatusCode status);
+  void DidSetPaymentAppUserHint(blink::ServiceWorkerStatusCode status);
+
+  // SetPaymentAppInfoForRegisteredServiceWorker callbacks.
+  void DidFindRegistrationToSetPaymentApp(
+      const std::string& instrument_key,
+      const std::string& name,
+      const std::string& icon,
+      const std::string& method,
+      SetPaymentAppInfoCallback callback,
+      blink::ServiceWorkerStatusCode status,
+      scoped_refptr<ServiceWorkerRegistration> registration);
+  void DidWritePaymentAppForSetPaymentApp(
+      const std::string& instrument_key,
+      const std::string& method,
+      SetPaymentAppInfoCallback callback,
+      scoped_refptr<ServiceWorkerRegistration> registration,
+      blink::ServiceWorkerStatusCode status);
+  void DidWritePaymentInstrumentForSetPaymentApp(
+      SetPaymentAppInfoCallback callback,
+      blink::ServiceWorkerStatusCode status);
 
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
   base::WeakPtrFactory<PaymentAppDatabase> weak_ptr_factory_;

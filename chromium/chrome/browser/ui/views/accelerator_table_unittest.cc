@@ -12,7 +12,7 @@
 #include "ui/events/event_constants.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/accelerators/accelerator_table.h"
+#include "ash/public/cpp/accelerators.h"
 #endif
 
 namespace chrome {

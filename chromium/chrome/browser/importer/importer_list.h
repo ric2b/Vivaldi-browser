@@ -43,7 +43,7 @@ class ImporterList {
   // Returns the SourceProfile at |index|. The profiles are ordered such that
   // the profile at index 0 is the likely default browser. The SourceProfile
   // should be passed to ImporterHost::StartImportSettings().
-  importer::SourceProfile GetSourceProfileAt(size_t index) const;
+  const importer::SourceProfile& GetSourceProfileAt(size_t index) const;
 
  private:
   // Called when the source profiles are loaded. Copies the loaded profiles

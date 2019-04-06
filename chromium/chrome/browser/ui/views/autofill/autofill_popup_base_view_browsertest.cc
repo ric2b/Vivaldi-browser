@@ -4,16 +4,20 @@
 
 #include "chrome/browser/ui/views/autofill/autofill_popup_base_view.h"
 
+#include "base/macros.h"
+#include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_utils.h"
+#include "ui/views/border.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 
@@ -31,6 +35,8 @@ class MockAutofillPopupViewDelegate : public AutofillPopupViewDelegate {
   MOCK_METHOD1(SetSelectionAtPoint, void(const gfx::Point&));
   MOCK_METHOD0(AcceptSelectedLine, bool());
   MOCK_METHOD0(SelectionCleared, void());
+  MOCK_CONST_METHOD0(HasSelection, bool());
+
   // TODO(jdduke): Mock this method upon resolution of crbug.com/352463.
   MOCK_CONST_METHOD0(popup_bounds, gfx::Rect());
   MOCK_METHOD0(container_view, gfx::NativeView());
@@ -80,8 +86,11 @@ class AutofillPopupBaseViewTest : public InProcessBrowserTest {
   }
 
  protected:
+  test::ScopedMacViewsBrowserMode views_mode_{true};
   testing::NiceMock<MockAutofillPopupViewDelegate> mock_delegate_;
   AutofillPopupBaseView* view_;
+
+  DISALLOW_COPY_AND_ASSIGN(AutofillPopupBaseViewTest);
 };
 
 // Flaky on Win and Linux.  http://crbug.com/376299
@@ -148,8 +157,27 @@ IN_PROC_BROWSER_TEST_F(AutofillPopupBaseViewTest, CorrectBoundsTest) {
                                  ->GetWidget()
                                  ->GetClientAreaBoundsInScreen()
                                  .origin();
+  // The expected origin is shifted to accomodate the border of the bubble.
   gfx::Point expected_point = bounds.origin();
+  gfx::Insets border = view_->GetWidget()->GetRootView()->border()->GetInsets();
+  expected_point.Offset(-border.left(), -border.top());
   EXPECT_EQ(expected_point, display_point);
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPopupBaseViewTest, MouseExitedTest) {
+  for (bool has_selection : {true, false}) {
+    EXPECT_CALL(mock_delegate_, HasSelection()).WillOnce(Return(has_selection));
+    EXPECT_CALL(mock_delegate_, SelectionCleared())
+        .Times(has_selection ? 1 : 0);
+
+    ShowView();
+
+    ui::MouseEvent exit_event(ui::ET_MOUSE_EXITED, gfx::Point(), gfx::Point(),
+                              ui::EventTimeForNow(), 0, 0);
+    static_cast<views::View*>(view_)->OnMouseExited(exit_event);
+
+    base::RunLoop().RunUntilIdle();
+  }
 }
 
 }  // namespace autofill

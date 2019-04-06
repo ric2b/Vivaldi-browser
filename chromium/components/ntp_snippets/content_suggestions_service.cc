@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,6 +18,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
+#include "components/favicon/core/favicon_server_fetcher_params.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon_base/fallback_icon_style.h"
 #include "components/favicon_base/favicon_types.h"
@@ -55,7 +55,7 @@ void RecordFaviconFetchResult(FaviconFetchResult result) {
 
 ContentSuggestionsService::ContentSuggestionsService(
     State state,
-    SigninManagerBase* signin_manager,
+    identity::IdentityManager* identity_manager,
     history::HistoryService* history_service,
     favicon::LargeIconService* large_icon_service,
     PrefService* pref_service,
@@ -64,7 +64,7 @@ ContentSuggestionsService::ContentSuggestionsService(
     std::unique_ptr<RemoteSuggestionsScheduler> remote_suggestions_scheduler,
     std::unique_ptr<Logger> debug_logger)
     : state_(state),
-      signin_observer_(this),
+      identity_manager_observer_(this),
       history_service_observer_(this),
       remote_suggestions_provider_(nullptr),
       large_icon_service_(large_icon_service),
@@ -74,8 +74,8 @@ ContentSuggestionsService::ContentSuggestionsService(
       category_ranker_(std::move(category_ranker)),
       debug_logger_(std::move(debug_logger)) {
   // Can be null in tests.
-  if (signin_manager) {
-    signin_observer_.Add(signin_manager);
+  if (identity_manager) {
+    identity_manager_observer_.Add(identity_manager);
   }
 
   if (history_service) {
@@ -160,6 +160,20 @@ void ContentSuggestionsService::FetchSuggestionImage(
     return;
   }
   providers_by_category_[suggestion_id.category()]->FetchSuggestionImage(
+      suggestion_id, std::move(callback));
+}
+
+void ContentSuggestionsService::FetchSuggestionImageData(
+    const ContentSuggestion::ID& suggestion_id,
+    ImageDataFetchedCallback callback) {
+  if (!providers_by_category_.count(suggestion_id.category())) {
+    LOG(WARNING) << "Requested image for suggestion " << suggestion_id
+                 << " for unavailable category " << suggestion_id.category();
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), std::string()));
+    return;
+  }
+  providers_by_category_[suggestion_id.category()]->FetchSuggestionImageData(
       suggestion_id, std::move(callback));
 }
 
@@ -282,7 +296,8 @@ void ContentSuggestionsService::OnGetFaviconFromCacheFinished(
         })");
   large_icon_service_
       ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
-          publisher_url, minimum_size_in_pixel, desired_size_in_pixel,
+          favicon::FaviconServerFetcherParams::CreateForMobile(
+              publisher_url, minimum_size_in_pixel, desired_size_in_pixel),
           /*may_page_url_be_private=*/false, traffic_annotation,
           base::Bind(
               &ContentSuggestionsService::OnGetFaviconFromGoogleServerFinished,
@@ -434,22 +449,6 @@ void ContentSuggestionsService::ReloadSuggestions() {
   }
 }
 
-void ContentSuggestionsService::OnChromeHomeStatusChanged(
-    bool is_chrome_home_enabled) {
-  debug_logger_->Log(
-      FROM_HERE, base::StringPrintf("Chrome Home enabled: %s",
-                                    is_chrome_home_enabled ? "true" : "false"));
-  if (is_chrome_home_enabled) {
-    // TODO(vitaliii): Make this code more general and do not hardcode specific
-    // categories.
-    DestroyCategoryAndItsProvider(
-        Category::FromKnownCategory(KnownCategories::BOOKMARKS));
-    DestroyCategoryAndItsProvider(
-        Category::FromKnownCategory(KnownCategories::DOWNLOADS));
-  }
-  // TODO(vitaliii): Recreate providers when Chrome Home is turned off.
-}
-
 bool ContentSuggestionsService::AreRemoteSuggestionsEnabled() const {
   return remote_suggestions_provider_ &&
          !remote_suggestions_provider_->IsDisabled();
@@ -521,32 +520,27 @@ void ContentSuggestionsService::OnSuggestionInvalidated(
     observer.OnSuggestionInvalidated(suggestion_id);
   }
 }
-
-// SigninManagerBase::Observer implementation
-void ContentSuggestionsService::GoogleSigninSucceeded(
-    const std::string& account_id,
-    const std::string& username) {
+// identity::IdentityManager::Observer implementation
+void ContentSuggestionsService::OnPrimaryAccountSet(
+    const AccountInfo& account_info) {
   OnSignInStateChanged(/*has_signed_in=*/true);
 }
 
-void ContentSuggestionsService::GoogleSignedOut(const std::string& account_id,
-                                                const std::string& username) {
+void ContentSuggestionsService::OnPrimaryAccountCleared(
+    const AccountInfo& account_info) {
   OnSignInStateChanged(/*has_signed_in=*/false);
 }
 
 // history::HistoryServiceObserver implementation.
 void ContentSuggestionsService::OnURLsDeleted(
     history::HistoryService* history_service,
-    bool all_history,
-    bool expired,
-    const history::URLRows& deleted_rows,
-    const std::set<GURL>& favicon_urls) {
+    const history::DeletionInfo& deletion_info) {
   // We don't care about expired entries.
-  if (expired) {
+  if (deletion_info.is_from_expiration()) {
     return;
   }
 
-  if (all_history) {
+  if (deletion_info.IsAllHistory()) {
     base::Callback<bool(const GURL& url)> filter =
         base::Bind([](const GURL& url) { return true; });
     ClearHistory(base::Time(), base::Time::Max(), filter);
@@ -557,11 +551,11 @@ void ContentSuggestionsService::OnURLsDeleted(
     // basis. However this depends on the provider's details and thus cannot be
     // done here. Introduce a OnURLsDeleted() method on the providers to move
     // this decision further down.
-    if (deleted_rows.size() < 2) {
+    if (deletion_info.deleted_rows().size() < 2) {
       return;
     }
     std::set<GURL> deleted_urls;
-    for (const history::URLRow& row : deleted_rows) {
+    for (const history::URLRow& row : deletion_info.deleted_rows()) {
       deleted_urls.insert(row.url());
     }
     base::Callback<bool(const GURL& url)> filter =

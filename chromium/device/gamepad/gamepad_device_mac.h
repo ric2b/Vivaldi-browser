@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 #include "device/gamepad/abstract_haptic_gamepad.h"
+#include "device/gamepad/dualshock4_controller_mac.h"
 #include "device/gamepad/public/cpp/gamepad.h"
 
 namespace device {
@@ -18,9 +19,15 @@ namespace device {
 // GamepadDeviceMac represents a single gamepad device. Gamepad enumeration
 // and state polling is handled through the raw HID interface, while haptics
 // commands are issued through the ForceFeedback framework.
+//
+// Dualshock4 haptics are not supported through ForceFeedback and are instead
+// sent through the raw HID interface.
 class GamepadDeviceMac : public AbstractHapticGamepad {
  public:
-  GamepadDeviceMac(int location_id, IOHIDDeviceRef device_ref);
+  GamepadDeviceMac(int location_id,
+                   IOHIDDeviceRef device_ref,
+                   int vendor_id,
+                   int product_id);
   ~GamepadDeviceMac() override;
 
   // Initialize |gamepad| with the number of buttons and axes described in the
@@ -39,7 +46,7 @@ class GamepadDeviceMac : public AbstractHapticGamepad {
 
   // Return true if this device supports force feedback through the
   // ForceFeedback framework.
-  bool SupportsForceFeedback() { return ff_device_ref_ != nullptr; }
+  bool SupportsVibration();
 
   // Starts vibrating the device with the specified magnitudes.
   void SetVibration(double strong_magnitude, double weak_magnitude) override;
@@ -50,6 +57,12 @@ class GamepadDeviceMac : public AbstractHapticGamepad {
  private:
   // Stop vibration and release held resources.
   void DoShutdown() override;
+
+  // Initialize button capabilities for |gamepad|.
+  bool AddButtons(Gamepad* gamepad);
+
+  // Initialize axis capabilities for |gamepad|.
+  bool AddAxes(Gamepad* gamepad);
 
   // Return true if this element has a parent collection with a usage page that
   // suggests it could be a gamepad.
@@ -89,6 +102,9 @@ class GamepadDeviceMac : public AbstractHapticGamepad {
   LONG force_data_[2];
   DWORD axes_data_[2];
   LONG direction_data_[2];
+
+  // Dualshock4 functionality, if available.
+  std::unique_ptr<Dualshock4ControllerMac> dualshock4_;
 };
 
 }  // namespace device

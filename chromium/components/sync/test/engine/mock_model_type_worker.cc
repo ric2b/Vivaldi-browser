@@ -13,28 +13,25 @@
 
 namespace syncer {
 
-namespace {
-
-void CaptureCommitRequest(CommitRequestDataList* dst,
-                          CommitRequestDataList&& src) {
-  *dst = std::move(src);
-}
-
-}  // namespace
-
 MockModelTypeWorker::MockModelTypeWorker(
     const sync_pb::ModelTypeState& model_type_state,
     ModelTypeProcessor* processor)
-    : model_type_state_(model_type_state), processor_(processor) {
+    : model_type_state_(model_type_state),
+      processor_(processor),
+      weak_ptr_factory_(this) {
   model_type_state_.set_initial_sync_done(true);
 }
 
 MockModelTypeWorker::~MockModelTypeWorker() {}
 
 void MockModelTypeWorker::NudgeForCommit() {
-  CommitRequestDataList commit_request;
   processor_->GetLocalChanges(
-      INT_MAX, base::Bind(&CaptureCommitRequest, &commit_request));
+      INT_MAX, base::BindRepeating(&MockModelTypeWorker::LocalChangesReceived,
+                                   weak_ptr_factory_.GetWeakPtr()));
+}
+
+void MockModelTypeWorker::LocalChangesReceived(
+    CommitRequestDataList&& commit_request) {
   // Verify that all request entities have valid id, version combinations.
   for (const CommitRequestData& commit_request_data : commit_request) {
     EXPECT_TRUE(commit_request_data.base_version == -1 ||
@@ -82,23 +79,29 @@ CommitRequestData MockModelTypeWorker::GetLatestPendingCommitForHash(
 
 void MockModelTypeWorker::VerifyNthPendingCommit(
     size_t n,
-    const std::string& tag_hash,
-    const sync_pb::EntitySpecifics& specifics) {
+    const std::vector<std::string>& tag_hashes,
+    const std::vector<sync_pb::EntitySpecifics>& specifics_list) {
+  ASSERT_EQ(tag_hashes.size(), specifics_list.size());
   const CommitRequestDataList& list = GetNthPendingCommit(n);
-  ASSERT_EQ(1U, list.size());
-  const EntityData& data = list[0].entity.value();
-  EXPECT_EQ(tag_hash, data.client_tag_hash);
-  EXPECT_EQ(specifics.SerializeAsString(), data.specifics.SerializeAsString());
+  ASSERT_EQ(tag_hashes.size(), list.size());
+  for (size_t i = 0; i < tag_hashes.size(); i++) {
+    const EntityData& data = list[i].entity.value();
+    EXPECT_EQ(tag_hashes[i], data.client_tag_hash);
+    EXPECT_EQ(specifics_list[i].SerializeAsString(),
+              data.specifics.SerializeAsString());
+  }
 }
 
 void MockModelTypeWorker::VerifyPendingCommits(
-    const std::vector<std::string>& tag_hashes) {
+    const std::vector<std::vector<std::string>>& tag_hashes) {
   EXPECT_EQ(tag_hashes.size(), GetNumPendingCommits());
   for (size_t i = 0; i < tag_hashes.size(); i++) {
     const CommitRequestDataList& commits = GetNthPendingCommit(i);
-    EXPECT_EQ(1U, commits.size());
-    EXPECT_EQ(tag_hashes[i], commits[0].entity->client_tag_hash)
-        << "Hash for tag " << tag_hashes[i] << " doesn't match.";
+    EXPECT_EQ(tag_hashes[i].size(), commits.size());
+    for (size_t j = 0; j < tag_hashes[i].size(); j++) {
+      EXPECT_EQ(tag_hashes[i][j], commits[j].entity->client_tag_hash)
+          << "Hash for tag " << tag_hashes[i][j] << " doesn't match.";
+    }
   }
 }
 
@@ -172,6 +175,25 @@ UpdateResponseData MockModelTypeWorker::GenerateUpdateData(
     const sync_pb::EntitySpecifics& specifics) {
   return GenerateUpdateData(tag_hash, specifics, 1,
                             model_type_state_.encryption_key_name());
+}
+
+UpdateResponseData MockModelTypeWorker::GenerateTypeRootUpdateData(
+    const ModelType& model_type) {
+  EntityData data;
+  data.id = syncer::ModelTypeToRootTag(model_type);
+  data.parent_id = "r";
+  data.server_defined_unique_tag = syncer::ModelTypeToRootTag(model_type);
+  syncer::AddDefaultFieldValue(model_type, &data.specifics);
+  // These elements should have no effect on behavior, but we set them anyway
+  // so we can test they are properly copied around the system if we want to.
+  data.creation_time = base::Time::UnixEpoch();
+  data.modification_time = base::Time::UnixEpoch();
+
+  UpdateResponseData response_data;
+  response_data.entity = data.PassToPtr();
+  // Similar to what's done in the loopback_server.
+  response_data.response_version = 0;
+  return response_data;
 }
 
 void MockModelTypeWorker::TombstoneFromServer(const std::string& tag_hash) {

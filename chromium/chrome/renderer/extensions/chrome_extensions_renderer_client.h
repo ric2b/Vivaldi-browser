@@ -25,6 +25,7 @@ class WebURL;
 namespace content {
 class BrowserPluginDelegate;
 class RenderFrame;
+struct WebPluginInfo;
 }
 
 namespace extensions {
@@ -32,6 +33,10 @@ class Dispatcher;
 class ExtensionsGuestViewContainerDispatcher;
 class RendererPermissionsPolicyDelegate;
 class ResourceRequestPolicy;
+}
+
+namespace url {
+class Origin;
 }
 
 class ChromeExtensionsRendererClient
@@ -58,10 +63,12 @@ class ChromeExtensionsRendererClient
   bool OverrideCreatePlugin(content::RenderFrame* render_frame,
                             const blink::WebPluginParams& params);
   bool AllowPopup();
-  bool WillSendRequest(blink::WebLocalFrame* frame,
+  void WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
-                       GURL* new_url);
+                       const url::Origin* initiator_origin,
+                       GURL* new_url,
+                       bool* attach_same_site_cookies);
   void SetExtensionDispatcherForTest(
       std::unique_ptr<extensions::Dispatcher> extension_dispatcher);
   extensions::Dispatcher* GetExtensionDispatcherForTest();
@@ -73,6 +80,7 @@ class ChromeExtensionsRendererClient
                          bool* send_referrer);
   static content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
       content::RenderFrame* render_frame,
+      const content::WebPluginInfo& info,
       const std::string& mime_type,
       const GURL& original_url);
   static blink::WebFrame* FindFrame(blink::WebLocalFrame* relative_to_frame,

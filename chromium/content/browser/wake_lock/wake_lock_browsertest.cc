@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -378,7 +377,7 @@ IN_PROC_BROWSER_TEST_F(WakeLockTest, UnlockAfterCrashOutOfProcessFrame) {
   RenderProcessHostWatcher watcher(
       GetNestedFrame()->GetProcess(),
       RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-  GetNestedFrame()->GetProcess()->Shutdown(0, false);
+  GetNestedFrame()->GetProcess()->Shutdown(0);
   watcher.Wait();
 
   // Screen wake lock should be released.

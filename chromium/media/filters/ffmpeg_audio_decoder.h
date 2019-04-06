@@ -40,11 +40,13 @@ class MEDIA_EXPORT FFmpegAudioDecoder : public AudioDecoder {
 
   // AudioDecoder implementation.
   std::string GetDisplayName() const override;
-  void Initialize(const AudioDecoderConfig& config,
-                  CdmContext* cdm_context,
-                  const InitCB& init_cb,
-                  const OutputCB& output_cb) override;
-  void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+  void Initialize(
+      const AudioDecoderConfig& config,
+      CdmContext* cdm_context,
+      const InitCB& init_cb,
+      const OutputCB& output_cb,
+      const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) override;
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
 
@@ -84,11 +86,10 @@ class MEDIA_EXPORT FFmpegAudioDecoder : public AudioDecoder {
   void DoReset();
 
   // Handles decoding an unencrypted encoded buffer.
-  void DecodeBuffer(const scoped_refptr<DecoderBuffer>& buffer,
-                    const DecodeCB& decode_cb);
-  bool FFmpegDecode(const scoped_refptr<DecoderBuffer>& buffer);
-  bool OnNewFrame(bool* decoded_frame_this_loop,
-                  const scoped_refptr<DecoderBuffer>& buffer,
+  void DecodeBuffer(const DecoderBuffer& buffer, const DecodeCB& decode_cb);
+  bool FFmpegDecode(const DecoderBuffer& buffer);
+  bool OnNewFrame(const DecoderBuffer& buffer,
+                  bool* decoded_frame_this_loop,
                   AVFrame* frame);
 
   // Handles (re-)initializing the decoder with a (new) config.

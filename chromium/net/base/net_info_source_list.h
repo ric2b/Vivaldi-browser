@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 // This file intentionally does not have header guards, it's included
-// inside a macro to generate enum values.
+// inside a macro to generate enum values. The following line silences a
+// presubmit warning that would otherwise be triggered by this:
+// no-include-guard-because-multiply-included
 
 // Flags used to request different types of information about the current state
 // of a URLRequestContext.
@@ -19,3 +21,4 @@ NET_INFO_SOURCE(SPDY_SESSIONS, "spdySessionInfo",                        1 << 5)
 NET_INFO_SOURCE(SPDY_STATUS, "spdyStatus",                               1 << 6)
 NET_INFO_SOURCE(ALT_SVC_MAPPINGS, "altSvcMappings", 1 << 7)
 NET_INFO_SOURCE(HTTP_CACHE, "httpCacheInfo",                             1 << 8)
+NET_INFO_SOURCE(REPORTING, "reportingInfo",                              1 << 9)

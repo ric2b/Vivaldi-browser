@@ -77,7 +77,7 @@ const base::FilePath::CharType* kTitle1File = FILE_PATH_LITERAL("title1.html");
 
 }  // namespace
 
-class TaskManagerBrowserTest : public ExtensionBrowserTest {
+class TaskManagerBrowserTest : public extensions::ExtensionBrowserTest {
  public:
   TaskManagerBrowserTest() {}
   ~TaskManagerBrowserTest() override {}
@@ -117,7 +117,7 @@ class TaskManagerBrowserTest : public ExtensionBrowserTest {
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionBrowserTest::SetUpCommandLine(command_line);
+    extensions::ExtensionBrowserTest::SetUpCommandLine(command_line);
 
     // Do not launch device discovery process.
     command_line->AppendSwitch(switches::kDisableDeviceDiscoveryNotifications);
@@ -125,11 +125,11 @@ class TaskManagerBrowserTest : public ExtensionBrowserTest {
 
   void TearDownOnMainThread() override {
     model_.reset();
-    ExtensionBrowserTest::TearDownOnMainThread();
+    extensions::ExtensionBrowserTest::TearDownOnMainThread();
   }
 
   void SetUpOnMainThread() override {
-    ExtensionBrowserTest::SetUpOnMainThread();
+    extensions::ExtensionBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
 
     // Add content/test/data so we can use cross_site_iframe_factory.html
@@ -268,7 +268,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, KillTab) {
   // Killing the tab via task manager should remove the row.
   int tab = FindResourceIndex(MatchTab("title1.html"));
   ASSERT_NE(-1, tab);
-  ASSERT_NE(-1, model()->GetTabId(tab));
+  ASSERT_TRUE(model()->GetTabId(tab).is_valid());
   model()->Kill(tab);
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(0, MatchTab("title1.html")));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyTab()));
@@ -365,11 +365,11 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeExtensionTabChanges) {
 
   int extension_tab = FindResourceIndex(MatchExtension("Foobar"));
   ASSERT_NE(-1, extension_tab);
-  ASSERT_NE(-1, model()->GetTabId(extension_tab));
+  ASSERT_TRUE(model()->GetTabId(extension_tab).is_valid());
 
   int background_page = FindResourceIndex(MatchExtension("My extension 1"));
   ASSERT_NE(-1, background_page);
-  ASSERT_EQ(-1, model()->GetTabId(background_page));
+  ASSERT_FALSE(model()->GetTabId(background_page).is_valid());
 }
 
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeExtensionTab) {
@@ -395,19 +395,20 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeExtensionTab) {
 
   int extension_tab = FindResourceIndex(MatchExtension("Foobar"));
   ASSERT_NE(-1, extension_tab);
-  ASSERT_NE(-1, model()->GetTabId(extension_tab));
+  ASSERT_TRUE(model()->GetTabId(extension_tab).is_valid());
 
   int background_page = FindResourceIndex(MatchExtension("My extension 1"));
   ASSERT_NE(-1, background_page);
-  ASSERT_EQ(-1, model()->GetTabId(background_page));
+  ASSERT_FALSE(model()->GetTabId(background_page).is_valid());
 }
 
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeAppTabChanges) {
   ShowTaskManager();
 
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("packaged_app")));
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-                                  browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   const extensions::Extension* extension =
       service->GetExtensionById(last_loaded_extension_id(), false);
 
@@ -432,7 +433,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeAppTabChanges) {
   // a tab contents and an extension.
   int app_tab = FindResourceIndex(MatchApp("Packaged App Test"));
   ASSERT_NE(-1, app_tab);
-  ASSERT_NE(-1, model()->GetTabId(app_tab));
+  ASSERT_TRUE(model()->GetTabId(app_tab).is_valid());
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
 
   // Unload extension to make sure the tab goes away.
@@ -448,8 +449,9 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeAppTabChanges) {
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeAppTab) {
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("packaged_app")));
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   const extensions::Extension* extension =
       service->GetExtensionById(last_loaded_extension_id(), false);
 
@@ -469,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeAppTab) {
   // a tab contents and an extension.
   int app_tab = FindResourceIndex(MatchApp("Packaged App Test"));
   ASSERT_NE(-1, app_tab);
-  ASSERT_NE(-1, model()->GetTabId(app_tab));
+  ASSERT_TRUE(model()->GetTabId(app_tab).is_valid());
 }
 
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticeHostedAppTabChanges) {
@@ -698,12 +700,13 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, SentDataObserved) {
       ->GetActiveWebContents()
       ->GetMainFrame()
       ->ExecuteJavaScriptForTests(base::UTF8ToUTF16(test_js));
-  // TODO(cburn): The assertion below currently assumes that the rate
-  // contribution of the entire 16MB upload arrives in a single refresh cycle.
-  // That's true now because it's only reported when the transaction completes,
-  // but if that changes in the future, this assertion may need to change.
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
-      MatchTab("network use"), ColumnSpecifier::NETWORK_USE, 16000000));
+      MatchTab("network use"), ColumnSpecifier::TOTAL_NETWORK_USE, 16000000));
+  // There shouldn't be too much usage on the browser process. Note that it
+  // should be the first row since tasks are sorted by process ID then by task
+  // ID.
+  EXPECT_GE(20000,
+            model()->GetColumnValue(ColumnSpecifier::TOTAL_NETWORK_USE, 0));
 }
 
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, TotalSentDataObserved) {
@@ -747,17 +750,15 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, TotalSentDataObserved) {
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
       MatchTab("network use"), ColumnSpecifier::TOTAL_NETWORK_USE,
       16000000 * 2));
+  // There shouldn't be too much usage on the browser process. Note that it
+  // should be the first row since tasks are sorted by process ID then by task
+  // ID.
+  EXPECT_GE(20000,
+            model()->GetColumnValue(ColumnSpecifier::TOTAL_NETWORK_USE, 0));
 }
 
 // Checks that task manager counts idle wakeups.
-// Flakily fails on Mac: http://crbug.com/639939
-#if defined(OS_MACOSX)
-#define MAYBE_IdleWakeups DISABLED_IdleWakeups
-#else
-#define MAYBE_IdleWakeups IdleWakeups
-#endif  // defined(OS_MACOSX)
-IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest,
-                       MAYBE_IdleWakeups) {
+IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, IdleWakeups) {
   ShowTaskManager();
   model()->ToggleColumnVisibility(ColumnSpecifier::IDLE_WAKEUPS);
 
@@ -775,10 +776,17 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest,
       browser()->tab_strip_model()->GetActiveWebContents(), test_js, &ok));
   ASSERT_EQ("okay", ok);
 
-  // The script above should trigger a lot of idle wakeups - up to 1000 per
-  // second. Let's make sure we get at least 100 (in case the test runs slow).
+// The script above should trigger a lot of idle wakeups - up to 1000 per
+// second. Let's make sure we get at least 100 (in case the test runs slow).
+// On Mac, set a lower threshold because Chrome Mac generates fewer wakes.
+#if defined(OS_MACOSX)
+  const int kMinExpectedWakeCount = 50;
+#else
+  const int kMinExpectedWakeCount = 100;
+#endif  // defined(OS_MACOSX)
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
-      MatchTab("title1.html"), ColumnSpecifier::IDLE_WAKEUPS, 100));
+      MatchTab("title1.html"), ColumnSpecifier::IDLE_WAKEUPS,
+      kMinExpectedWakeCount));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyTab()));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("title1.html")));
 }
@@ -800,7 +808,6 @@ IN_PROC_BROWSER_TEST_F(TaskManagerUtilityProcessBrowserTest,
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
       MatchUtility(proxy_resolver_name), ColumnSpecifier::V8_MEMORY_USED,
       minimal_heap_size));
-  ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyUtility()));
   ASSERT_NO_FATAL_FAILURE(
       WaitForTaskManagerRows(1, MatchUtility(proxy_resolver_name)));
 }
@@ -975,8 +982,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, SubframeHistoryNavigation) {
       MatchSubframe("http://e.com/"), ColumnSpecifier::MEMORY_FOOTPRINT, 1000));
 }
 
-// Flaky, see https://crbug.com/797860.
-IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, DISABLED_KillSubframe) {
+IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, KillSubframe) {
   ShowTaskManager();
 
   content::TestNavigationObserver navigation_observer(
@@ -1015,7 +1021,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, DISABLED_KillSubframe) {
 
     int subframe_b = FindResourceIndex(MatchSubframe("http://b.com/"));
     ASSERT_NE(-1, subframe_b);
-    ASSERT_NE(-1, model()->GetTabId(subframe_b));
+    ASSERT_TRUE(model()->GetTabId(subframe_b).is_valid());
     model()->Kill(subframe_b);
 
     ASSERT_NO_FATAL_FAILURE(

@@ -420,6 +420,11 @@ field **WiFi** must be set to an object of type [WiFi](#WiFi-type).
         *WEP-8021X* or *WPA-EAP*, otherwise ignored) - [EAP](#EAP-type)
     * EAP settings.
 
+* **FTEnabled**
+    * (optional, defaults to *false*) - **boolean**
+    * Indicating if the client should attempt to use Fast Transition with the
+    * network.
+
 * **HexSSID**
     * (optional if **SSID** is set, if so defaults to a hex representation of
       **SSID**) - **string**
@@ -1475,6 +1480,10 @@ ONC configuration of of **Cellular** networks is not yet supported.
     * (optional) - **string**
     * Password for making connections if required.
 
+* **Authentication**
+    * (optional) - **string**
+    * Type of authentication protocol for sending username and password.
+
 * **Language**
     * (optional, rquired if **LocalizedName** is provided) - **string**
       Two letter language code for Localizedname if provided.
@@ -1736,29 +1745,57 @@ expansions. These allow one ONC to have basic user-specific variations.
 
 ### The expansions are:
 
-* ${LOGIN_ID} - expands to the email address of the user, but before the '@'.
+* Placeholders that will only be replaced in user-specific ONC:
+    * ${LOGIN\_ID} - expands to the email address of the user, but before
+      the '@'.
+    * ${LOGIN\_EMAIL} - expands to the email address of the user.
 
-* ${LOGIN_EMAIL} - expands to the email address of the user.
+* Placeholders that will only be replaced in device-wide ONC:
+    * ${DEVICE\_SERIAL\_NUMBER} - expands to the serial number of the device.
+    * ${DEVICE\_ASSET\_ID} - expands to the administrator-set asset ID of the
+      device.
+
+* Placeholders that will only be replaced when a client certificate has been
+  matched by a [CertificatePattern](#CertificatePattern-type):
+    * ${CERT\_SAN\_EMAIL} - expands to the first RFC822 SubjectAlternativeName
+      extracted from the client certificate.
+    * ${CERT\_SAN\_UPN} - expands to the first OtherName SubjectAlternativeName
+      with OID 1.3.6.1.4.1.311.20.2.3 (UserPrincipalName) extracted from the
+      client certificate.
+    * ${CERT\_SUBJECT\_COMMON\_NAME} - expands to the ASCII value of the Subject
+      CommonName extracted from the client certificate.
 
 ### The following SED would properly handle resolution.
 
-* s/\$\{LOGIN_ID\}/bobquail$1/g
+* s/\$\{LOGIN\_ID\}/bobquail$1/g
 
-* s/\$\{LOGIN_EMAIL\}/bobquail@example.com$1/g
+* s/\$\{LOGIN\_EMAIL\}/bobquail@example.com$1/g
 
 ### Example expansions, assuming the user was bobquail@example.com:
 
-* "${LOGIN_ID}" -> "bobquail"
+* "${LOGIN\_ID}" -> "bobquail"
 
-* "${LOGIN_ID}@corp.example.com" -> "bobquail@corp.example.com"
+* "${LOGIN\_ID}@corp.example.com" -> "bobquail@corp.example.com"
 
-* "${LOGIN_EMAIL}" -> "bobquail@example.com"
+* "${LOGIN\_EMAIL}" -> "bobquail@example.com"
 
-* "${LOGIN_ID}X" -> "bobquailX"
+* "${LOGIN\_ID}X" -> "bobquailX"
 
-* "${LOGIN_IDX}" -> "${LOGIN_IDX}"
+* "${LOGIN\_IDX}" -> "${LOGIN\_IDX}"
 
-* "X${LOGIN_ID}" -> "Xbobquail"
+* "X${LOGIN\_ID}" -> "Xbobquail"
+
+
+## String Substitutions
+The value of **WiFi.EAP.Password** is subject to string substitution. These
+differ from the **String Expansions** section above in that an exact match of
+the substitution variable is required in order to substitute the real value.
+
+### Example expansions, assuming the user password was *helloworld*:
+
+* "${PASSWORD}" -> "helloworld"
+
+* "${PASSWORD}foo" -> "${PASSWORD}foo"
 
 ## Detection
 

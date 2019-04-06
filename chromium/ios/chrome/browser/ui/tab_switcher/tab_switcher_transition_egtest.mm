@@ -8,11 +8,13 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #import "ios/chrome/app/main_controller.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
+#import "ios/chrome/browser/ui/tab_grid/tab_grid_egtest_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_egtest_util.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_mode.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_panel_cell.h"
-#import "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
@@ -29,6 +31,12 @@
 #endif
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
+using chrome_test_util::TabGridDoneButton;
+using chrome_test_util::TabGridIncognitoTabsPanelButton;
+using chrome_test_util::TabGridNewIncognitoTabButton;
+using chrome_test_util::TabGridNewTabButton;
+using chrome_test_util::TabGridOpenButton;
+using chrome_test_util::TabGridOpenTabsPanelButton;
 using chrome_test_util::TabletTabSwitcherCloseButton;
 using chrome_test_util::TabletTabSwitcherIncognitoTabsPanelButton;
 using chrome_test_util::TabletTabSwitcherNewIncognitoTabButton;
@@ -48,10 +56,16 @@ TabModel* GetNormalTabModel() {
 // and tablet.
 void ShowTabSwitcher() {
   id<GREYMatcher> matcher = nil;
-  if (IsIPadIdiom()) {
-    matcher = TabletTabSwitcherOpenButton();
-  } else {
-    matcher = chrome_test_util::ShowTabsButton();
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      matcher = chrome_test_util::ShowTabsButton();
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      matcher = TabletTabSwitcherOpenButton();
+      break;
+    case TabSwitcherMode::GRID:
+      matcher = TabGridOpenButton();
+      break;
   }
   DCHECK(matcher);
 
@@ -76,10 +90,16 @@ void ShowTabSwitcher() {
 // and tablet.
 void ShowTabViewController() {
   id<GREYMatcher> matcher = nil;
-  if (IsIPadIdiom()) {
-    matcher = TabletTabSwitcherCloseButton();
-  } else {
-    matcher = chrome_test_util::ShowTabsButton();
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      matcher = chrome_test_util::ShowTabsButton();
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      matcher = TabletTabSwitcherCloseButton();
+      break;
+    case TabSwitcherMode::GRID:
+      matcher = TabGridDoneButton();
+      break;
   }
   DCHECK(matcher);
 
@@ -88,23 +108,35 @@ void ShowTabViewController() {
 
 // Selects and focuses the tab with the given |title|.
 void SelectTab(NSString* title) {
-  if (IsIPadIdiom()) {
-    // The UILabel containing the tab's title is not tappable, but its parent
-    // TabSwitcherLocalSessionCell is.
-    [[EarlGrey
-        selectElementWithMatcher:grey_allOf(
-                                     grey_kindOfClass(
-                                         [TabSwitcherLocalSessionCell class]),
-                                     grey_descendant(grey_text(title)),
-                                     grey_sufficientlyVisible(), nil)]
-        performAction:grey_tap()];
-  } else {
-    // On phone, tapping on the title UILabel will select the tab.
-    [[EarlGrey
-        selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(title),
-                                            grey_accessibilityTrait(
-                                                UIAccessibilityTraitStaticText),
-                                            nil)] performAction:grey_tap()];
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      // In the stack view, tapping on the title UILabel will select the tab.
+      [[EarlGrey
+          selectElementWithMatcher:grey_allOf(
+                                       grey_accessibilityLabel(title),
+                                       grey_accessibilityTrait(
+                                           UIAccessibilityTraitStaticText),
+                                       nil)] performAction:grey_tap()];
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      // In the tablet tab switcher, the UILabel containing the tab's title is
+      // not tappable, but its parent TabSwitcherLocalSessionCell is.
+      [[EarlGrey
+          selectElementWithMatcher:grey_allOf(
+                                       grey_kindOfClass(
+                                           [TabSwitcherLocalSessionCell class]),
+                                       grey_descendant(grey_text(title)),
+                                       grey_sufficientlyVisible(), nil)]
+          performAction:grey_tap()];
+      break;
+    case TabSwitcherMode::GRID:
+      [[EarlGrey
+          selectElementWithMatcher:grey_allOf(
+                                       grey_accessibilityLabel(title),
+                                       grey_accessibilityTrait(
+                                           UIAccessibilityTraitStaticText),
+                                       nil)] performAction:grey_tap()];
+      break;
   }
 }
 
@@ -234,24 +266,30 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
 
   // Enter the switcher and open a new tab using the new tab button.
   ShowTabSwitcher();
-  if (IsIPadIdiom()) {
-    [[EarlGrey selectElementWithMatcher:TabletTabSwitcherNewTabButton()]
-        performAction:grey_tap()];
-  } else {
-    [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
-                                            IDS_IOS_TOOLS_MENU_NEW_TAB)]
-        performAction:grey_tap()];
+  id<GREYMatcher> matcher = nil;
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      matcher = ButtonWithAccessibilityLabelId(IDS_IOS_TOOLS_MENU_NEW_TAB);
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      matcher = TabletTabSwitcherNewTabButton();
+      break;
+    case TabSwitcherMode::GRID:
+      matcher = TabGridNewTabButton();
+      break;
   }
+  DCHECK(matcher);
+  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
 
   // Load a URL in this newly-created tab and verify that the tab is visible.
   [ChromeEarlGrey loadURL:[self makeURLForTitle:tab1_title]];
   [ChromeEarlGrey
       waitForWebViewContainingText:base::SysNSStringToUTF8(tab1_title)];
 
-  if (!IsIPadIdiom()) {
-    // On phone, enter the switcher again and open a new tab using the tools
-    // menu.  This does not apply on tablet because there is no tools menu
-    // in the switcher.
+  if (GetTabSwitcherMode() == TabSwitcherMode::STACK) {
+    // When the stack view is in use, enter the switcher again and open a new
+    // tab using the tools menu.  This does not apply for other switcher modes
+    // because they do not show a tools menu in the switcher.
     ShowTabSwitcher();
     [ChromeEarlGreyUI openNewTab];
 
@@ -275,26 +313,31 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
 
   // Enter the switcher and open a new incognito tab using the new tab button.
   ShowTabSwitcher();
-  if (IsIPadIdiom()) {
-    [[EarlGrey
-        selectElementWithMatcher:TabletTabSwitcherNewIncognitoTabButton()]
-        performAction:grey_tap()];
-  } else {
-    [[EarlGrey
-        selectElementWithMatcher:ButtonWithAccessibilityLabelId(
-                                     IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB)]
-        performAction:grey_tap()];
+  id<GREYMatcher> matcher = nil;
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      matcher =
+          ButtonWithAccessibilityLabelId(IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB);
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      matcher = TabletTabSwitcherNewIncognitoTabButton();
+      break;
+    case TabSwitcherMode::GRID:
+      matcher = TabGridNewIncognitoTabButton();
+      break;
   }
+  DCHECK(matcher);
+  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
 
   // Load a URL in this newly-created tab and verify that the tab is visible.
   [ChromeEarlGrey loadURL:[self makeURLForTitle:tab1_title]];
   [ChromeEarlGrey
       waitForWebViewContainingText:base::SysNSStringToUTF8(tab1_title)];
 
-  if (!IsIPadIdiom()) {
-    // On phone, enter the switcher again and open a new incognito tab using the
-    // tools menu.  This does not apply on tablet because there is no tools menu
-    // in the switcher.
+  if (GetTabSwitcherMode() == TabSwitcherMode::STACK) {
+    // When the stack view is in use, enter the switcher again and open a new
+    // incognito tab using the tools menu.  This does not apply for other
+    // switcher modes because they do not show a tools menu in the switcher.
     ShowTabSwitcher();
     [ChromeEarlGreyUI openNewIncognitoTab];
 
@@ -313,15 +356,24 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
 
   // Go from normal mode to incognito mode.
   ShowTabSwitcher();
-  if (IsIPadIdiom()) {
-    [[EarlGrey
-        selectElementWithMatcher:TabletTabSwitcherIncognitoTabsPanelButton()]
-        performAction:grey_tap()];
-    [[EarlGrey
-        selectElementWithMatcher:TabletTabSwitcherNewIncognitoTabButton()]
-        performAction:grey_tap()];
-  } else {
-    [ChromeEarlGreyUI openNewIncognitoTab];
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      [ChromeEarlGreyUI openNewIncognitoTab];
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      [[EarlGrey
+          selectElementWithMatcher:TabletTabSwitcherIncognitoTabsPanelButton()]
+          performAction:grey_tap()];
+      [[EarlGrey
+          selectElementWithMatcher:TabletTabSwitcherNewIncognitoTabButton()]
+          performAction:grey_tap()];
+      break;
+    case TabSwitcherMode::GRID:
+      [[EarlGrey selectElementWithMatcher:TabGridIncognitoTabsPanelButton()]
+          performAction:grey_tap()];
+      [[EarlGrey selectElementWithMatcher:TabGridNewIncognitoTabButton()]
+          performAction:grey_tap()];
+      break;
   }
 
   // Load a URL in this newly-created tab and verify that the tab is visible.
@@ -331,13 +383,23 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
 
   // Go from incognito mode to normal mode.
   ShowTabSwitcher();
-  if (IsIPadIdiom()) {
-    [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenTabsPanelButton()]
-        performAction:grey_tap()];
-    [[EarlGrey selectElementWithMatcher:TabletTabSwitcherNewTabButton()]
-        performAction:grey_tap()];
-  } else {
-    [ChromeEarlGreyUI openNewTab];
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      [ChromeEarlGreyUI openNewTab];
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      [[EarlGrey
+          selectElementWithMatcher:TabletTabSwitcherOpenTabsPanelButton()]
+          performAction:grey_tap()];
+      [[EarlGrey selectElementWithMatcher:TabletTabSwitcherNewTabButton()]
+          performAction:grey_tap()];
+      break;
+    case TabSwitcherMode::GRID:
+      [[EarlGrey selectElementWithMatcher:TabGridOpenTabsPanelButton()]
+          performAction:grey_tap()];
+      [[EarlGrey selectElementWithMatcher:TabGridNewTabButton()]
+          performAction:grey_tap()];
+      break;
   }
 
   // Load a URL in this newly-created tab and verify that the tab is visible.
@@ -410,39 +472,80 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
   [ChromeEarlGrey loadURL:[self makeURLForTitle:incognito_title]];
 
   ShowTabSwitcher();
-  if (IsIPadIdiom()) {
-    // On tablet, switch to the normal panel and select the one tab that is
-    // there.
-    [[EarlGrey selectElementWithMatcher:TabletTabSwitcherOpenTabsPanelButton()]
-        performAction:grey_tap()];
-  } else {
-    // On phone, get to the normal card stack by swiping right on the current
-    // incognito card.
-    [[EarlGrey
-        selectElementWithMatcher:grey_allOf(
-                                     grey_accessibilityLabel(incognito_title),
-                                     grey_accessibilityTrait(
-                                         UIAccessibilityTraitStaticText),
-                                     nil)]
-        performAction:grey_swipeFastInDirection(kGREYDirectionRight)];
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK: {
+      // In the stack view, get to the normal card stack by swiping right on the
+      // current incognito card.
+
+      // Make sure the incognito card is interactable before swiping it.
+      ConditionBlock condition = ^{
+        NSError* error = nil;
+        [[EarlGrey
+            selectElementWithMatcher:grey_allOf(
+                                         grey_accessibilityLabel(
+                                             incognito_title),
+                                         grey_accessibilityTrait(
+                                             UIAccessibilityTraitStaticText),
+                                         grey_interactable(), nil)]
+            assertWithMatcher:grey_sufficientlyVisible()
+                        error:&error];
+        return error == nil;
+      };
+
+      GREYAssertTrue(base::test::ios::WaitUntilConditionOrTimeout(
+                         base::test::ios::kWaitForUIElementTimeout, condition),
+                     @"Incognito card wasn't interactable.");
+      [[EarlGrey
+          selectElementWithMatcher:grey_allOf(
+                                       grey_accessibilityLabel(incognito_title),
+                                       grey_accessibilityTrait(
+                                           UIAccessibilityTraitStaticText),
+                                       nil)]
+          performAction:grey_swipeFastInDirection(kGREYDirectionRight)];
+      break;
+    }
+    case TabSwitcherMode::TABLET_SWITCHER:
+      // In the tablet tab switcher, switch to the normal panel and select the
+      // one tab that is there.
+      [[EarlGrey
+          selectElementWithMatcher:TabletTabSwitcherOpenTabsPanelButton()]
+          performAction:grey_tap()];
+      break;
+    case TabSwitcherMode::GRID:
+      // In the tab grid, switch to the normal panel and select the one tab that
+      // is there.
+      [[EarlGrey selectElementWithMatcher:TabGridOpenTabsPanelButton()]
+          performAction:grey_tap()];
+      break;
   }
+
   SelectTab(normal_title);
   [ChromeEarlGrey
       waitForWebViewContainingText:base::SysNSStringToUTF8(normal_title)];
 
   ShowTabSwitcher();
-  if (IsIPadIdiom()) {
-    // On tablet, switch to the incognito panel and select the one tab that is
-    // there.
-    [[EarlGrey
-        selectElementWithMatcher:TabletTabSwitcherIncognitoTabsPanelButton()]
-        performAction:grey_tap()];
-  } else {
-    // On phone, get to the incognito card stack by tapping on the
-    // partially-visible incognito card.  It will need to be tapped a second
-    // time to actually select it.
-    SelectTab(incognito_title);
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::STACK:
+      // In the stack view, get to the incognito card stack by tapping on the
+      // partially-visible incognito card.  It will need to be tapped a second
+      // time to actually select it.
+      SelectTab(incognito_title);
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+      // In the tablet tab switcher, switch to the incognito panel and select
+      // the one tab that is there.
+      [[EarlGrey
+          selectElementWithMatcher:TabletTabSwitcherIncognitoTabsPanelButton()]
+          performAction:grey_tap()];
+      break;
+    case TabSwitcherMode::GRID:
+      // In the tab grid, switch to the incognito panel and select the one tab
+      // that is there.
+      [[EarlGrey selectElementWithMatcher:TabGridIncognitoTabsPanelButton()]
+          performAction:grey_tap()];
+      break;
   }
+
   SelectTab(incognito_title);
   [ChromeEarlGrey
       waitForWebViewContainingText:base::SysNSStringToUTF8(incognito_title)];
@@ -455,9 +558,25 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
   [ChromeEarlGreyUI openNewTab];
 }
 
+// Tests switching back and forth between the normal and incognito BVCs many
+// times.  This is a regression test for https://crbug.com/851954.
+- (void)testSwappingBVCModesManyTimesWithoutEnteringSwitcher {
+  for (int ii = 0; ii < 10; ++ii) {
+    // Opening a new tab from the menu will force a change in BVC.
+    [ChromeEarlGreyUI openNewIncognitoTab];
+    [ChromeEarlGreyUI openNewTab];
+  }
+}
+
 // Tests rotating the device while the switcher is not active.  This is a
 // regression test case for https://crbug.com/789975.
 - (void)testRotationsWhileSwitcherIsNotActive {
+  // TODO(crbug.com/835860): This test fails when the grid is active.
+  if (GetTabSwitcherMode() == TabSwitcherMode::GRID) {
+    EARL_GREY_TEST_DISABLED(
+        @"testRotationsWhileSwitcherIsNotActive fails under UIRefresh");
+  }
+
   NSString* tab_title = @"NormalTabLongerStringForRotationTest";
   [self setUpTestServer];
   [ChromeEarlGrey loadURL:[self makeURLForTitle:tab_title]];

@@ -15,11 +15,10 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "content/common/frame_messages.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/pepper/host_dispatcher_wrapper.h"
@@ -122,9 +121,7 @@
 #include "ppapi/c/private/ppb_host_resolver_private.h"
 #include "ppapi/c/private/ppb_instance_private.h"
 #include "ppapi/c/private/ppb_isolated_file_system_private.h"
-#include "ppapi/c/private/ppb_output_protection_private.h"
 #include "ppapi/c/private/ppb_pdf.h"
-#include "ppapi/c/private/ppb_platform_verification_private.h"
 #include "ppapi/c/private/ppb_proxy_private.h"
 #include "ppapi/c/private/ppb_tcp_server_socket_private.h"
 #include "ppapi/c/private/ppb_tcp_socket_private.h"
@@ -406,6 +403,7 @@ const void* InternalGetInterface(const char* name) {
 #include "ppapi/thunk/interfaces_ppb_private.h"
 #include "ppapi/thunk/interfaces_ppb_private_flash.h"
 #include "ppapi/thunk/interfaces_ppb_private_no_permissions.h"
+#include "ppapi/thunk/interfaces_ppb_private_pdf.h"
 #include "ppapi/thunk/interfaces_ppb_public_dev.h"
 #include "ppapi/thunk/interfaces_ppb_public_dev_channel.h"
 #include "ppapi/thunk/interfaces_ppb_public_stable.h"
@@ -774,13 +772,14 @@ bool PluginModule::InitializeModule(
 scoped_refptr<PluginModule> PluginModule::Create(
     RenderFrameImpl* render_frame,
     const WebPluginInfo& webplugin_info,
+    const base::Optional<url::Origin>& origin_lock,
     bool* pepper_plugin_was_registered) {
   *pepper_plugin_was_registered = true;
 
   // See if a module has already been loaded for this plugin.
   base::FilePath path(webplugin_info.path);
   scoped_refptr<PluginModule> module =
-      PepperPluginRegistry::GetInstance()->GetLiveModule(path);
+      PepperPluginRegistry::GetInstance()->GetLiveModule(path, origin_lock);
   if (module.get()) {
     if (!module->renderer_ppapi_host()) {
       // If the module exists and no embedder state was associated with it,
@@ -809,7 +808,7 @@ scoped_refptr<PluginModule> PluginModule::Create(
   base::ProcessId peer_pid = 0;
   int plugin_child_id = 0;
   render_frame->Send(new FrameHostMsg_OpenChannelToPepperPlugin(
-      path, &channel_handle, &peer_pid, &plugin_child_id));
+      path, origin_lock, &channel_handle, &peer_pid, &plugin_child_id));
   if (!channel_handle.is_mojo_channel_handle()) {
     // Couldn't be initialized.
     return scoped_refptr<PluginModule>();
@@ -820,7 +819,8 @@ scoped_refptr<PluginModule> PluginModule::Create(
   // AddLiveModule must be called before any early returns since the
   // module's destructor will remove itself.
   module = new PluginModule(info->name, info->version, path, permissions);
-  PepperPluginRegistry::GetInstance()->AddLiveModule(path, module.get());
+  PepperPluginRegistry::GetInstance()->AddLiveModule(path, origin_lock,
+                                                     module.get());
 
   if (!module->CreateOutOfProcessModule(render_frame,
                                         path,

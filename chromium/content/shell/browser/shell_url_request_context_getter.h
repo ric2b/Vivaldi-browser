@@ -20,11 +20,10 @@
 
 namespace net {
 class CertVerifier;
-class HostResolver;
 class NetLog;
 class NetworkDelegate;
 class ProxyConfigService;
-class ProxyService;
+class ProxyResolutionService;
 class URLRequestContext;
 }
 
@@ -46,15 +45,13 @@ class ShellURLRequestContextGetter : public net::URLRequestContextGetter {
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
       const override;
 
-  net::HostResolver* host_resolver();
-
   void NotifyContextShuttingDown();
 
  protected:
   ~ShellURLRequestContextGetter() override;
 
   // Used by subclasses to create their own implementation of NetworkDelegate
-  // and net::ProxyService.
+  // and net::ProxyResolutionService.
   virtual std::unique_ptr<net::NetworkDelegate> CreateNetworkDelegate();
   virtual std::unique_ptr<net::CertVerifier> GetCertVerifier();
   // GetProxyConfigService() and GetProxyService() are mutually exclusive.
@@ -64,7 +61,7 @@ class ShellURLRequestContextGetter : public net::URLRequestContextGetter {
   virtual std::unique_ptr<net::ProxyConfigService> GetProxyConfigService();
   // If this returns nullptr, the URLRequestContextBuilder will create the
   // service.
-  virtual std::unique_ptr<net::ProxyService> GetProxyService();
+  virtual std::unique_ptr<net::ProxyResolutionService> GetProxyService();
 
  private:
   bool ignore_certificate_errors_;

@@ -31,6 +31,7 @@ std::string TestPersonalDataManager::SaveImportedProfile(
 
 std::string TestPersonalDataManager::SaveImportedCreditCard(
     const CreditCard& imported_credit_card) {
+  num_times_save_imported_credit_card_called_++;
   AddCreditCard(imported_credit_card);
   return imported_credit_card.guid();
 }
@@ -40,6 +41,15 @@ void TestPersonalDataManager::AddProfile(const AutofillProfile& profile) {
       std::make_unique<AutofillProfile>(profile);
   web_profiles_.push_back(std::move(profile_ptr));
   NotifyPersonalDataChanged();
+}
+
+void TestPersonalDataManager::UpdateProfile(const AutofillProfile& profile) {
+  AutofillProfile* existing_profile =
+      GetProfileWithGUID(profile.guid().c_str());
+  if (existing_profile) {
+    RemoveByGUID(existing_profile->guid());
+    AddProfile(profile);
+  }
 }
 
 void TestPersonalDataManager::RemoveByGUID(const std::string& guid) {
@@ -69,6 +79,15 @@ void TestPersonalDataManager::AddCreditCard(const CreditCard& credit_card) {
   NotifyPersonalDataChanged();
 }
 
+void TestPersonalDataManager::UpdateCreditCard(const CreditCard& credit_card) {
+  CreditCard* existing_credit_card =
+      GetCreditCardWithGUID(credit_card.guid().c_str());
+  if (existing_credit_card) {
+    RemoveByGUID(existing_credit_card->guid());
+    AddCreditCard(credit_card);
+  }
+}
+
 void TestPersonalDataManager::AddFullServerCreditCard(
     const CreditCard& credit_card) {
   // Though the name is AddFullServerCreditCard, this test class treats masked
@@ -82,21 +101,6 @@ std::vector<AutofillProfile*> TestPersonalDataManager::GetProfiles() const {
   result.reserve(web_profiles_.size());
   for (const auto& profile : web_profiles_)
     result.push_back(profile.get());
-  return result;
-}
-
-std::vector<CreditCard*> TestPersonalDataManager::GetCreditCards() const {
-  // TODO(crbug.com/778436): The real PersonalDataManager relies on its
-  // |pref_service_| to decide what to return. Since the lack of a pref_service_
-  // makes this fake class crash, it might be useful to refactor the real
-  // GetCreditCards()'s logic into overrideable methods and then remove this
-  // function.
-  std::vector<CreditCard*> result;
-  result.reserve(local_credit_cards_.size() + server_credit_cards_.size());
-  for (const auto& card : local_credit_cards_)
-    result.push_back(card.get());
-  for (const auto& card : server_credit_cards_)
-    result.push_back(card.get());
   return result;
 }
 
@@ -167,12 +171,51 @@ void TestPersonalDataManager::LoadCreditCards() {
 bool TestPersonalDataManager::IsAutofillEnabled() const {
   // Return the value of autofill_enabled_ if it has been set, otherwise fall
   // back to the normal behavior of checking the pref_service.
-  return autofill_enabled_.value_or(PersonalDataManager::IsAutofillEnabled());
+  if (autofill_enabled_.has_value())
+    return autofill_enabled_.value();
+  return PersonalDataManager::IsAutofillEnabled();
+}
+
+bool TestPersonalDataManager::IsAutofillProfileEnabled() const {
+  // Return the value of autofill_profile_enabled_ if it has been set,
+  // otherwise fall back to the normal behavior of checking the pref_service.
+  if (autofill_profile_enabled_.has_value())
+    return autofill_profile_enabled_.value();
+  return PersonalDataManager::IsAutofillProfileEnabled();
+}
+
+bool TestPersonalDataManager::IsAutofillCreditCardEnabled() const {
+  // Return the value of autofill_credit_card_enabled_ if it has been set,
+  // otherwise fall back to the normal behavior of checking the pref_service.
+  if (autofill_credit_card_enabled_.has_value())
+    return autofill_credit_card_enabled_.value();
+  return PersonalDataManager::IsAutofillCreditCardEnabled();
+}
+
+bool TestPersonalDataManager::IsAutofillWalletImportEnabled() const {
+  // Return the value of autofill_wallet_import_enabled_ if it has been set,
+  // otherwise fall back to the normal behavior of checking the pref_service.
+  if (autofill_wallet_import_enabled_.has_value())
+    return autofill_wallet_import_enabled_.value();
+  return PersonalDataManager::IsAutofillWalletImportEnabled();
+}
+
+bool TestPersonalDataManager::ShouldSuggestServerCards() const {
+  return IsAutofillCreditCardEnabled() && IsAutofillWalletImportEnabled();
 }
 
 std::string TestPersonalDataManager::CountryCodeForCurrentTimezone()
     const {
   return timezone_country_code_;
+}
+
+void TestPersonalDataManager::ClearAllLocalData() {
+  web_profiles_.clear();
+  local_credit_cards_.clear();
+}
+
+bool TestPersonalDataManager::IsDataLoaded() const {
+  return true;
 }
 
 void TestPersonalDataManager::ClearProfiles() {

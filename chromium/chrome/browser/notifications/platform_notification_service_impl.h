@@ -21,11 +21,11 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "content/public/browser/platform_notification_service.h"
 #include "content/public/common/persistent_notification_status.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
-#include "ui/message_center/notification.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 class NotificationDelegate;
 class ScopedKeepAlive;
@@ -44,6 +44,9 @@ class PushMessagingBrowserTest;
 class PlatformNotificationServiceImpl
     : public content::PlatformNotificationService {
  public:
+  // Register profile-specific prefs.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   // Returns the active instance of the service in the browser process. Safe to
   // be called from any thread.
   static PlatformNotificationServiceImpl* GetInstance();
@@ -70,14 +73,6 @@ class PlatformNotificationServiceImpl
                                      base::OnceClosure completed_closure);
 
   // content::PlatformNotificationService implementation.
-  blink::mojom::PermissionStatus CheckPermissionOnUIThread(
-      content::BrowserContext* browser_context,
-      const GURL& origin,
-      int render_process_id) override;
-  blink::mojom::PermissionStatus CheckPermissionOnIOThread(
-      content::ResourceContext* resource_context,
-      const GURL& origin,
-      int render_process_id) override;
   void DisplayNotification(
       content::BrowserContext* browser_context,
       const std::string& notification_id,
@@ -98,6 +93,8 @@ class PlatformNotificationServiceImpl
   void GetDisplayedNotifications(
       content::BrowserContext* browser_context,
       const DisplayedNotificationsCallback& callback) override;
+  int64_t ReadNextPersistentNotificationId(
+      content::BrowserContext* browser_context) override;
 
  private:
   friend struct base::DefaultSingletonTraits<PlatformNotificationServiceImpl>;

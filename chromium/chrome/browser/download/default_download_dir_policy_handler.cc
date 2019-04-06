@@ -5,7 +5,6 @@
 #include "chrome/browser/download/default_download_dir_policy_handler.h"
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/download/download_dir_util.h"
 #include "chrome/common/pref_names.h"
@@ -41,9 +40,9 @@ void DefaultDownloadDirPolicyHandler::ApplyPolicySettingsWithParameters(
 
   if (policies.Get(policy_name())->level == policy::POLICY_LEVEL_RECOMMENDED) {
     prefs->SetValue(prefs::kDownloadDefaultDirectory,
-                    base::MakeUnique<base::Value>(expanded_value));
+                    std::make_unique<base::Value>(expanded_value));
     prefs->SetValue(prefs::kSaveFileDefaultDirectory,
-                    base::MakeUnique<base::Value>(expanded_value));
+                    std::make_unique<base::Value>(expanded_value));
   }
 }
 

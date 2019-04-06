@@ -29,7 +29,8 @@ class MockAffiliationFetchThrottlerDelegate
     : public AffiliationFetchThrottlerDelegate {
  public:
   // The |tick_clock| should outlive this instance.
-  explicit MockAffiliationFetchThrottlerDelegate(base::TickClock* tick_clock)
+  explicit MockAffiliationFetchThrottlerDelegate(
+      const base::TickClock* tick_clock)
       : tick_clock_(tick_clock),
         emulated_return_value_(true),
         can_send_count_(0u) {}
@@ -50,7 +51,7 @@ class MockAffiliationFetchThrottlerDelegate
   }
 
  private:
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_;
   bool emulated_return_value_;
   size_t can_send_count_;
   base::TimeTicks last_can_send_time_;
@@ -65,13 +66,12 @@ class AffiliationFetchThrottlerTest : public testing::Test {
   AffiliationFetchThrottlerTest()
       : network_change_notifier_(net::NetworkChangeNotifier::CreateMock()),
         task_runner_(new base::TestMockTimeTaskRunner),
-        mock_tick_clock_(task_runner_->GetMockTickClock()),
-        mock_delegate_(mock_tick_clock_.get()) {}
+        mock_delegate_(task_runner_->GetMockTickClock()) {}
   ~AffiliationFetchThrottlerTest() override {}
 
   std::unique_ptr<AffiliationFetchThrottler> CreateThrottler() {
     return std::make_unique<AffiliationFetchThrottler>(
-        &mock_delegate_, task_runner_, mock_tick_clock_.get());
+        &mock_delegate_, task_runner_, task_runner_->GetMockTickClock());
   }
 
   void SimulateHasNetworkConnectivity(bool has_connectivity) {
@@ -126,7 +126,6 @@ class AffiliationFetchThrottlerTest : public testing::Test {
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
-  std::unique_ptr<base::TickClock> mock_tick_clock_;
   MockAffiliationFetchThrottlerDelegate mock_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(AffiliationFetchThrottlerTest);
@@ -412,7 +411,8 @@ TEST_F(AffiliationFetchThrottlerTest, InstanceDestroyedWhileInBackoff) {
 
   throttler->SignalNetworkRequestNeeded();
   throttler.reset();
-  EXPECT_EQ(1u, GetPendingTaskCount());
+  // We expect the task to be cancelled.
+  EXPECT_EQ(0u, GetPendingTaskCount());
   AssertNoReleaseUntilNoTasksRemain();
 }
 

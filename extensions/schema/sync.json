@@ -32,10 +32,6 @@
           "account_id": {
             "type": "string",
             "descirption": "The sync account id for which the token is valid"
-          },
-          "expire": {
-            "type": "string",
-            "description": "The time at which the token expires"
           }
         }
       },

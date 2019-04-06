@@ -17,15 +17,14 @@
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/palette/palette_tool_manager.h"
 #include "ash/system/palette/palette_utils.h"
 #include "ash/system/palette/palette_welcome_bubble.h"
 #include "ash/system/tray/system_menu_button.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
-#include "ash/system/tray/tray_popup_header_button.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "base/metrics/histogram_macros.h"
@@ -96,15 +95,14 @@ class TitleView : public views::View, public views::ButtonListener {
         new views::Label(l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
     title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     AddChildView(title_label);
-    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::TITLE);
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::TITLE,
+                             false /* use_unified_theme */);
     style.SetupLabel(title_label);
     layout_ptr->SetFlexForView(title_label, 1);
-    help_button_ =
-        new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
-                             kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
-    settings_button_ =
-        new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
-                             kSystemMenuSettingsIcon, IDS_ASH_PALETTE_SETTINGS);
+    help_button_ = new SystemMenuButton(this, kSystemMenuHelpIcon,
+                                        IDS_ASH_STATUS_TRAY_HELP);
+    settings_button_ = new SystemMenuButton(this, kSystemMenuSettingsIcon,
+                                            IDS_ASH_PALETTE_SETTINGS);
 
     AddChildView(help_button_);
     AddChildView(TrayPopupUtils::CreateVerticalSeparator());
@@ -120,13 +118,13 @@ class TitleView : public views::View, public views::ButtonListener {
       palette_tray_->RecordPaletteOptionsUsage(
           PaletteTrayOptions::PALETTE_SETTINGS_BUTTON,
           PaletteInvocationMethod::MENU);
-      Shell::Get()->system_tray_controller()->ShowPaletteSettings();
+      Shell::Get()->system_tray_model()->client_ptr()->ShowPaletteSettings();
       palette_tray_->HidePalette();
     } else if (sender == help_button_) {
       palette_tray_->RecordPaletteOptionsUsage(
           PaletteTrayOptions::PALETTE_HELP_BUTTON,
           PaletteInvocationMethod::MENU);
-      Shell::Get()->system_tray_controller()->ShowPaletteHelp();
+      Shell::Get()->system_tray_model()->client_ptr()->ShowPaletteHelp();
       palette_tray_->HidePalette();
     } else {
       NOTREACHED();
@@ -209,8 +207,8 @@ void PaletteTray::OnActiveUserPrefServiceChanged(PrefService* pref_service) {
   pref_change_registrar_user_->Init(pref_service);
   pref_change_registrar_user_->Add(
       prefs::kEnableStylusTools,
-      base::Bind(&PaletteTray::OnPaletteEnabledPrefChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&PaletteTray::OnPaletteEnabledPrefChanged,
+                          base::Unretained(this)));
 
   // Read the initial value.
   OnPaletteEnabledPrefChanged();
@@ -256,8 +254,8 @@ void PaletteTray::OnLocalStatePrefServiceInitialized(
   pref_change_registrar_local_->Init(local_state_pref_service_);
   pref_change_registrar_local_->Add(
       prefs::kHasSeenStylus,
-      base::Bind(&PaletteTray::OnHasSeenStylusPrefChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&PaletteTray::OnHasSeenStylusPrefChanged,
+                          base::Unretained(this)));
 
   OnHasSeenStylusPrefChanged();
 }
@@ -288,9 +286,8 @@ void PaletteTray::OnStylusStateChanged(ui::StylusState stylus_state) {
   if (!stylus_utils::HasStylusInput())
     return;
 
-  // Don't do anything if the palette should not be shown or if the user has
-  // disabled it all-together.
-  if (!palette_utils::IsInUserSession() || !is_palette_enabled_)
+  // Don't do anything if the palette tray is not shown.
+  if (!visible())
     return;
 
   // Auto show/hide the palette if allowed by the user.

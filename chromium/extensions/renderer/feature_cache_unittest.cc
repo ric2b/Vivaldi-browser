@@ -4,7 +4,6 @@
 
 #include "extensions/renderer/feature_cache.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension.h"
@@ -16,10 +15,10 @@
 #include "extensions/renderer/script_context.h"
 #include "v8/include/v8.h"
 
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace extensions {
 

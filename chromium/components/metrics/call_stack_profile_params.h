@@ -28,21 +28,13 @@ struct CallStackProfileParams {
   enum Thread {
     UNKNOWN_THREAD,
 
-    // Browser process threads, some of which occur in other processes as well.
-    UI_THREAD,
-    FILE_THREAD,
-    FILE_USER_BLOCKING_THREAD,
-    PROCESS_LAUNCHER_THREAD,
-    CACHE_THREAD,
+    // Each process has a 'main thread'. In the Browser process, the 'main
+    // thread' is also often called the 'UI thread'.
+    MAIN_THREAD,
     IO_THREAD,
-    DB_THREAD,
 
-    // GPU process thread.
-    GPU_MAIN_THREAD,
-
-    // Renderer process threads.
-    RENDER_THREAD,
-    UTILITY_THREAD
+    // Compositor thread (can be in both renderer and gpu processes).
+    COMPOSITOR_THREAD,
   };
 
   // The event that triggered the profile collection.
@@ -93,12 +85,6 @@ struct CallStackProfileParams {
 
   // Whether to preserve sample ordering.
   SampleOrderingSpec ordering_spec;
-
-  // The time at which the CallStackProfileMetricsProvider became aware of the
-  // request for profiling. In particular, this is when callback was requested
-  // via CallStackProfileMetricsProvider::GetProfilerCallback(). Used to
-  // determine if collection was disabled during the collection of the profile.
-  base::TimeTicks start_timestamp;
 };
 
 }  // namespace metrics

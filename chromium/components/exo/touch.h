@@ -13,6 +13,7 @@
 #include "ui/gfx/geometry/point_f.h"
 
 namespace ui {
+class LocatedEvent;
 class TouchEvent;
 }
 
@@ -27,6 +28,8 @@ class Touch : public ui::EventHandler, public SurfaceObserver {
   explicit Touch(TouchDelegate* delegate);
   ~Touch() override;
 
+  TouchDelegate* delegate() const { return delegate_; }
+
   // Set delegate for stylus events.
   void SetStylusDelegate(TouchStylusDelegate* delegate);
   bool HasStylusDelegate() const;
@@ -39,7 +42,7 @@ class Touch : public ui::EventHandler, public SurfaceObserver {
 
  private:
   // Returns the effective target for |event|.
-  Surface* GetEffectiveTargetForEvent(ui::Event* event) const;
+  Surface* GetEffectiveTargetForEvent(ui::LocatedEvent* event) const;
 
   // The delegate instance that all events are dispatched to.
   TouchDelegate* const delegate_;

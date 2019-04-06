@@ -311,6 +311,10 @@ void TakesACallback(const Closure& callback) {
   callback.Run();
 }
 
+int Noexcept() noexcept {
+  return 42;
+}
+
 class BindTest : public ::testing::Test {
  public:
   BindTest() {
@@ -319,13 +323,15 @@ class BindTest : public ::testing::Test {
     static_func_mock_ptr = &static_func_mock_;
   }
 
-  virtual ~BindTest() = default;
+  ~BindTest() override = default;
 
   static void VoidFunc0() {
     static_func_mock_ptr->VoidMethod0();
   }
 
   static int IntFunc0() { return static_func_mock_ptr->IntMethod0(); }
+  int NoexceptMethod() noexcept { return 42; }
+  int ConstNoexceptMethod() const noexcept { return 42; }
 
  protected:
   StrictMock<NoRef> no_ref_;
@@ -1429,6 +1435,55 @@ TEST_F(BindTest, WindowsCallingConventions) {
   EXPECT_EQ(2, stdcall_cb.Run());
 }
 #endif
+
+// Test unwrapping the various wrapping functions.
+
+TEST_F(BindTest, UnwrapUnretained) {
+  int i = 0;
+  auto unretained = Unretained(&i);
+  EXPECT_EQ(&i, internal::Unwrap(unretained));
+  EXPECT_EQ(&i, internal::Unwrap(std::move(unretained)));
+}
+
+TEST_F(BindTest, UnwrapConstRef) {
+  int p = 0;
+  auto const_ref = ConstRef(p);
+  EXPECT_EQ(&p, &internal::Unwrap(const_ref));
+  EXPECT_EQ(&p, &internal::Unwrap(std::move(const_ref)));
+}
+
+TEST_F(BindTest, UnwrapRetainedRef) {
+  auto p = MakeRefCounted<RefCountedData<int>>();
+  auto retained_ref = RetainedRef(p);
+  EXPECT_EQ(p.get(), internal::Unwrap(retained_ref));
+  EXPECT_EQ(p.get(), internal::Unwrap(std::move(retained_ref)));
+}
+
+TEST_F(BindTest, UnwrapOwned) {
+  int* p = new int;
+  auto owned = Owned(p);
+  EXPECT_EQ(p, internal::Unwrap(owned));
+  EXPECT_EQ(p, internal::Unwrap(std::move(owned)));
+}
+
+TEST_F(BindTest, UnwrapPassed) {
+  int* p = new int;
+  auto passed = Passed(WrapUnique(p));
+  EXPECT_EQ(p, internal::Unwrap(passed).get());
+
+  p = new int;
+  EXPECT_EQ(p, internal::Unwrap(Passed(WrapUnique(p))).get());
+}
+
+TEST_F(BindTest, BindNoexcept) {
+  EXPECT_EQ(42, base::BindOnce(&Noexcept).Run());
+  EXPECT_EQ(
+      42,
+      base::BindOnce(&BindTest::NoexceptMethod, base::Unretained(this)).Run());
+  EXPECT_EQ(
+      42, base::BindOnce(&BindTest::ConstNoexceptMethod, base::Unretained(this))
+              .Run());
+}
 
 // Test null callbacks cause a DCHECK.
 TEST(BindDeathTest, NullCallback) {

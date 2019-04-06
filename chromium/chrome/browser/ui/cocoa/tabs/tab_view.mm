@@ -60,7 +60,7 @@ const CGFloat kMouseHoverWhiteValueIncongito = 0.3;
 // has moved less than the threshold, we want to close the tab.
 const CGFloat kRapidCloseDist = 2.5;
 
-@interface NSView (PrivateAPI)
+@interface NSView (PrivateTabViewAPI)
 // Called by AppKit to check if dragging this view should move the window.
 // NSButton overrides this method in the same way so dragging window buttons
 // has no effect. NSView implementation returns NSZeroRect so the whole view
@@ -88,7 +88,8 @@ const CGFloat kRapidCloseDist = 2.5;
 + (void)setTabEdgeStrokeColor;
 @end
 
-extern NSString* const _Nonnull NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification;
+extern NSString* const
+    NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification;
 
 namespace {
 
@@ -192,15 +193,15 @@ CGFloat LineWidthFromContext(CGContextRef context) {
 
 }  // namespace
 
-@interface TabView(Private)
+@interface TabViewCocoa (Private)
 
 - (void)resetLastGlowUpdateTime;
 - (NSTimeInterval)timeElapsedSinceLastGlowUpdate;
 - (void)adjustGlowValue;
 
-@end  // TabView(Private)
+@end  // TabViewCocoa(Private)
 
-@implementation TabView
+@implementation TabViewCocoa
 
 @synthesize state = state_;
 @synthesize hoverAlpha = hoverAlpha_;
@@ -208,11 +209,11 @@ CGFloat LineWidthFromContext(CGContextRef context) {
 
 + (CGFloat)maskImageFillHeight {
   // Return the height of the "mask on" part of the mask bitmap.
-  return [TabController defaultTabHeight] - 1;
+  return [TabControllerCocoa defaultTabHeight] - 1;
 }
 
 - (id)initWithFrame:(NSRect)frame
-         controller:(TabController*)controller
+         controller:(TabControllerCocoa*)controller
         closeButton:(HoverCloseButton*)closeButton {
   self = [super initWithFrame:frame];
   if (self) {
@@ -328,7 +329,7 @@ CGFloat LineWidthFromContext(CGContextRef context) {
 
   NSPoint viewPoint = [self convertPoint:aPoint fromView:[self superview]];
   NSRect maskRect = [self bounds];
-  maskRect.size.height = [TabView maskImageFillHeight];
+  maskRect.size.height = [TabViewCocoa maskImageFillHeight];
   return GetMaskImage().HitTest(viewPoint, maskRect) ? self : nil;
 }
 
@@ -363,7 +364,7 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   // strip and then deallocated. This will also result in *us* being
   // deallocated. Both these are bad, so we prevent this by retaining the
   // controller.
-  base::scoped_nsobject<TabController> controller([controller_ retain]);
+  base::scoped_nsobject<TabControllerCocoa> controller([controller_ retain]);
 
   // Try to initiate a drag. This will spin a custom event loop and may
   // dispatch other mouse events.
@@ -453,7 +454,7 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   NSRect bounds = [self bounds];
 
   NSRect clippingRect = bounds;
-  clippingRect.size.height = [TabView maskImageFillHeight];
+  clippingRect.size.height = [TabViewCocoa maskImageFillHeight];
   if (state_ != NSOnState) {
     // Background tabs should not paint over the tab strip separator, which is
     // two pixels high in both lodpi and hidpi, and one pixel high in MD.
@@ -674,6 +675,32 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   return tabs::kDefaultTabTextColor;
 }
 
+- (SkColor)alertIndicatorColorForState:(TabAlertState)state {
+  // If theme provider is not yet available, return the default button
+  // color.
+  const ui::ThemeProvider* themeProvider = [[self window] themeProvider];
+  if (!themeProvider)
+    return [self iconColor];
+
+  switch (state) {
+    case TabAlertState::MEDIA_RECORDING:
+      return themeProvider->GetColor(
+          ThemeProperties::COLOR_TAB_ALERT_RECORDING);
+    case TabAlertState::PIP_PLAYING:
+      return themeProvider->GetColor(ThemeProperties::COLOR_TAB_PIP_PLAYING);
+    case TabAlertState::AUDIO_PLAYING:
+    case TabAlertState::AUDIO_MUTING:
+    case TabAlertState::TAB_CAPTURING:
+    case TabAlertState::BLUETOOTH_CONNECTED:
+    case TabAlertState::USB_CONNECTED:
+    case TabAlertState::NONE:
+      return [self iconColor];
+    default:
+      NOTREACHED();
+      return [self iconColor];
+  }
+}
+
 - (void)accessibilityOptionsDidChange:(id)ignored {
   [self updateAppearance];
   [self setNeedsDisplay:YES];
@@ -712,7 +739,8 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   // Assume the entire region to the left of the alert indicator and/or close
   // buttons is available for click-to-select.  If neither are visible, the
   // entire tab region is available.
-  AlertIndicatorButton* const indicator = [controller_ alertIndicatorButton];
+  AlertIndicatorButtonCocoa* const indicator =
+      [controller_ alertIndicatorButton];
   const int indicatorLeft = (!indicator || [indicator isHidden]) ?
       NSWidth([self frame]) : NSMinX([indicator frame]);
   const int closeButtonLeft = (!closeButton_ || [closeButton_ isHidden])
@@ -816,17 +844,17 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   return [self bounds];
 }
 
-@end  // @implementation TabView
+@end  // @implementation TabViewCocoa
 
-@implementation TabView (TabControllerInterface)
+@implementation TabViewCocoa (TabControllerInterface)
 
-- (void)setController:(TabController*)controller {
+- (void)setController:(TabControllerCocoa*)controller {
   controller_ = controller;
 }
 
-@end  // @implementation TabView (TabControllerInterface)
+@end  // @implementation TabViewCocoa (TabControllerInterface)
 
-@implementation TabView(Private)
+@implementation TabViewCocoa (Private)
 
 - (void)resetLastGlowUpdateTime {
   lastGlowUpdate_ = [NSDate timeIntervalSinceReferenceDate];
@@ -878,7 +906,7 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   [self setNeedsDisplay:YES];
 }
 
-@end  // @implementation TabView(Private)
+@end  // @implementation TabViewCocoa(Private)
 
 @implementation TabImageMaker
 

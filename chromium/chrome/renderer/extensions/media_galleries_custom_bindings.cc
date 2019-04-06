@@ -8,10 +8,10 @@
 
 #include "extensions/renderer/script_context.h"
 #include "storage/common/fileapi/file_system_util.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/web/WebDOMFileSystem.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_dom_file_system.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "v8/include/v8.h"
@@ -20,8 +20,10 @@ namespace extensions {
 
 MediaGalleriesCustomBindings::MediaGalleriesCustomBindings(
     ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction(
+    : ObjectBackedNativeHandler(context) {}
+
+void MediaGalleriesCustomBindings::AddRoutes() {
+  RouteHandlerFunction(
       "GetMediaFileSystemObject", "mediaGalleries",
       base::Bind(&MediaGalleriesCustomBindings::GetMediaFileSystemObject,
                  base::Unretained(this)));

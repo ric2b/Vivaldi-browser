@@ -16,7 +16,34 @@ namespace media {
 
 class VideoFrame;
 
-// Computes the size of |visible_size| for a given aspect ratio.
+// Computes the pixel aspect ratio of a given |visible_rect| from its
+// |natural_size|. This describes the shape of a coded pixel as the ratio
+// of its width to its height.
+//
+// See https://en.wikipedia.org/wiki/Pixel_aspect_ratio for a detailed
+// definition.
+//
+// Returns NaN or Infinity if |visible_rect| or |natural_size| are empty.
+//
+// Note: Something has probably gone wrong if you need to call this function;
+// pixel aspect ratios should be the source of truth.
+//
+// TODO(crbug.com/837337): Decide how to encode 'not provided' for pixel aspect
+// ratios, and return that if one of the inputs is empty.
+MEDIA_EXPORT double GetPixelAspectRatio(const gfx::Rect& visible_rect,
+                                        const gfx::Size& natural_size);
+
+// Increases (at most) one of the dimensions of |visible_rect| to produce
+// a |natural_size| with the given pixel aspect ratio.
+//
+// Returns gfx::Size() if |pixel_aspect_ratio| is not finite and positive.
+MEDIA_EXPORT gfx::Size GetNaturalSize(const gfx::Rect& visible_rect,
+                                      double pixel_aspect_ratio);
+
+// Overload that takes the pixel aspect ratio as an integer fraction (and
+// |visible_size| instead of |visible_rect|).
+//
+// Returns gfx::Size() if numerator or denominator are not positive.
 MEDIA_EXPORT gfx::Size GetNaturalSize(const gfx::Size& visible_size,
                                       int aspect_ratio_numerator,
                                       int aspect_ratio_denominator);
@@ -31,12 +58,12 @@ MEDIA_EXPORT void FillYUVA(VideoFrame* frame,
                            uint8_t v,
                            uint8_t a);
 
-// Creates a border in |frame| such that all pixels outside of
-// |view_area| are black. The size and position of |view_area|
-// must be even to align correctly with the color planes.
-// Only YV12 format video frames are currently supported.
-MEDIA_EXPORT void LetterboxYUV(VideoFrame* frame,
-                               const gfx::Rect& view_area);
+// Creates a border in |frame| such that all pixels outside of |view_area| are
+// black. Only YV12 and ARGB format video frames are currently supported. If
+// format is YV12, the size and position of |view_area| must be even to align
+// correctly with the color planes.
+MEDIA_EXPORT void LetterboxVideoFrame(VideoFrame* frame,
+                                      const gfx::Rect& view_area);
 
 // Rotates |src| plane by |rotation| degree with possible flipping vertically
 // and horizontally.

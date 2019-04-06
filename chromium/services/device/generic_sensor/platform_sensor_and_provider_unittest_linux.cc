@@ -4,7 +4,6 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -568,6 +567,17 @@ TEST_F(PlatformSensorAndProviderLinuxTest,
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 }
 
+// Tests that LinearAcceleration sensor is not created if its source sensor is
+// not available.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckLinearAccelerationSensorNotCreatedIfNoAccelerometer) {
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::LINEAR_ACCELERATION);
+  EXPECT_FALSE(sensor);
+}
+
 // Tests that LinearAcceleration sensor is successfully created and works.
 TEST_F(PlatformSensorAndProviderLinuxTest, CheckLinearAcceleration) {
   mojo::ScopedSharedBufferHandle handle = provider_->CloneSharedBufferHandle();
@@ -749,6 +759,211 @@ TEST_F(PlatformSensorAndProviderLinuxTest,
   EXPECT_THAT(buffer->reading.als.value, sensor_value[0]);
 
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
+}
+
+// Tests that ABSOLUTE_ORIENTATION_EULER_ANGLES/ABSOLUTE_ORIENTATION_QUATERNION
+// sensor is not created if both of its source sensors are not available.
+TEST_F(
+    PlatformSensorAndProviderLinuxTest,
+    CheckAbsoluteOrientationSensorNotCreatedIfNoAccelerometerAndNoMagnetometer) {
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  {
+    auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES);
+    EXPECT_FALSE(sensor);
+  }
+
+  {
+    auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_QUATERNION);
+    EXPECT_FALSE(sensor);
+  }
+}
+
+// Tests that ABSOLUTE_ORIENTATION_EULER_ANGLES/ABSOLUTE_ORIENTATION_QUATERNION
+// sensor is not created if accelerometer is not available.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckAbsoluteOrientationSensorNotCreatedIfNoAccelerometer) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(
+      SensorType::MAGNETOMETER, kMagnetometerFrequencyValue,
+      kMagnetometerOffsetValue, kMagnetometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  {
+    auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES);
+    EXPECT_FALSE(sensor);
+  }
+
+  {
+    auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_QUATERNION);
+    EXPECT_FALSE(sensor);
+  }
+}
+
+// Tests that ABSOLUTE_ORIENTATION_EULER_ANGLES/ABSOLUTE_ORIENTATION_QUATERNION
+// sensor is not created if magnetometer is not available.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckAbsoluteOrientationSensorNotCreatedIfNoMagnetometer) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(
+      SensorType::ACCELEROMETER, kAccelerometerFrequencyValue,
+      kAccelerometerOffsetValue, kAccelerometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  {
+    auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES);
+    EXPECT_FALSE(sensor);
+  }
+
+  {
+    auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_QUATERNION);
+    EXPECT_FALSE(sensor);
+  }
+}
+
+// Tests that ABSOLUTE_ORIENTATION_EULER_ANGLES sensor is successfully created.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckAbsoluteOrientationEulerAnglesSensor) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(
+      SensorType::ACCELEROMETER, kAccelerometerFrequencyValue,
+      kAccelerometerOffsetValue, kAccelerometerScalingValue, sensor_value);
+  InitializeSupportedSensor(
+      SensorType::MAGNETOMETER, kMagnetometerFrequencyValue,
+      kMagnetometerOffsetValue, kMagnetometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES);
+  EXPECT_TRUE(sensor);
+}
+
+// Tests that ABSOLUTE_ORIENTATION_QUATERNION sensor is successfully created.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckAbsoluteOrientationQuaternionSensor) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(
+      SensorType::ACCELEROMETER, kAccelerometerFrequencyValue,
+      kAccelerometerOffsetValue, kAccelerometerScalingValue, sensor_value);
+  InitializeSupportedSensor(
+      SensorType::MAGNETOMETER, kMagnetometerFrequencyValue,
+      kMagnetometerOffsetValue, kMagnetometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::ABSOLUTE_ORIENTATION_QUATERNION);
+  EXPECT_TRUE(sensor);
+}
+
+// Tests that RELATIVE_ORIENTATION_EULER_ANGLES/RELATIVE_ORIENTATION_QUATERNION
+// sensor is not created if both accelerometer and gyroscope are not available.
+TEST_F(
+    PlatformSensorAndProviderLinuxTest,
+    CheckRelativeOrientationSensorNotCreatedIfNoAccelerometerAndNoGyroscope) {
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  {
+    auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_EULER_ANGLES);
+    EXPECT_FALSE(sensor);
+  }
+
+  {
+    auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_QUATERNION);
+    EXPECT_FALSE(sensor);
+  }
+}
+
+// Tests that RELATIVE_ORIENTATION_EULER_ANGLES/RELATIVE_ORIENTATION_QUATERNION
+// sensor is not created if accelerometer is not available.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckRelativeOrientationSensorNotCreatedIfNoAccelerometer) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(SensorType::GYROSCOPE, kGyroscopeFrequencyValue,
+                            kGyroscopeOffsetValue, kGyroscopeScalingValue,
+                            sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  {
+    auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_EULER_ANGLES);
+    EXPECT_FALSE(sensor);
+  }
+
+  {
+    auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_QUATERNION);
+    EXPECT_FALSE(sensor);
+  }
+}
+
+// Tests that RELATIVE_ORIENTATION_EULER_ANGLES sensor is successfully created
+// if both accelerometer and gyroscope are available.
+TEST_F(
+    PlatformSensorAndProviderLinuxTest,
+    CheckRelativeOrientationEulerAnglesSensorUsingAccelerometerAndGyroscope) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(SensorType::GYROSCOPE, kGyroscopeFrequencyValue,
+                            kGyroscopeOffsetValue, kGyroscopeScalingValue,
+                            sensor_value);
+  InitializeSupportedSensor(
+      SensorType::ACCELEROMETER, kAccelerometerFrequencyValue,
+      kAccelerometerOffsetValue, kAccelerometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_EULER_ANGLES);
+  EXPECT_TRUE(sensor);
+}
+
+// Tests that RELATIVE_ORIENTATION_EULER_ANGLES sensor is successfully created
+// if only accelerometer is available.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckRelativeOrientationEulerAnglesSensorUsingAccelerometer) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(
+      SensorType::ACCELEROMETER, kAccelerometerFrequencyValue,
+      kAccelerometerOffsetValue, kAccelerometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_EULER_ANGLES);
+  EXPECT_TRUE(sensor);
+}
+
+// Tests that RELATIVE_ORIENTATION_QUATERNION sensor is successfully created if
+// both accelerometer and gyroscope are available.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckRelativeOrientationQuaternionSensorUsingAccelerometerAndGyroscope) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(SensorType::GYROSCOPE, kGyroscopeFrequencyValue,
+                            kGyroscopeOffsetValue, kGyroscopeScalingValue,
+                            sensor_value);
+  InitializeSupportedSensor(
+      SensorType::ACCELEROMETER, kAccelerometerFrequencyValue,
+      kAccelerometerOffsetValue, kAccelerometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_QUATERNION);
+  EXPECT_TRUE(sensor);
+}
+
+// Tests that RELATIVE_ORIENTATION_QUATERNION sensor is successfully created if
+// only accelerometer is available.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       CheckRelativeOrientationQuaternionSensorUsingAccelerometer) {
+  double sensor_value[3] = {1, 2, 3};
+  InitializeSupportedSensor(
+      SensorType::ACCELEROMETER, kAccelerometerFrequencyValue,
+      kAccelerometerOffsetValue, kAccelerometerScalingValue, sensor_value);
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::RELATIVE_ORIENTATION_QUATERNION);
+  EXPECT_TRUE(sensor);
 }
 
 }  // namespace device

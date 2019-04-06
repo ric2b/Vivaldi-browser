@@ -19,6 +19,7 @@
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/account_id/account_id.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -169,7 +170,7 @@ class ProfileAttributesStorageTest : public testing::Test {
         base::StringPrintf("testing_profile_gaia%" PRIuS, number_of_profiles),
         base::ASCIIToUTF16(base::StringPrintf("testing_profile_user%" PRIuS,
                                               number_of_profiles)),
-        number_of_profiles, std::string(""));
+        number_of_profiles, std::string(""), EmptyAccountId());
 
     EXPECT_EQ(number_of_profiles + 1, storage()->GetNumberOfProfiles());
   }
@@ -206,9 +207,8 @@ TEST_F(ProfileAttributesStorageTest, AddProfile) {
   storage()->AddProfile(GetProfilePath("new_profile_path_1"),
                         base::ASCIIToUTF16("new_profile_name_1"),
                         std::string("new_profile_gaia_1"),
-                        base::ASCIIToUTF16("new_profile_username_1"),
-                        1,
-                        std::string(""));
+                        base::ASCIIToUTF16("new_profile_username_1"), 1,
+                        std::string(""), EmptyAccountId());
 
   VerifyAndResetCallExpectations();
   EXPECT_EQ(1U, storage()->GetNumberOfProfiles());
@@ -504,18 +504,14 @@ TEST_F(ProfileAttributesStorageTest, ReSortTriggered) {
   DisableObserver();  // No need to test observers in this test.
 
   storage()->AddProfile(GetProfilePath("alpha_path"),
-                        base::ASCIIToUTF16("alpha"),
-                        std::string("alpha_gaia"),
-                        base::ASCIIToUTF16("alpha_username"),
-                        1,
-                        std::string(""));
+                        base::ASCIIToUTF16("alpha"), std::string("alpha_gaia"),
+                        base::ASCIIToUTF16("alpha_username"), 1,
+                        std::string(""), EmptyAccountId());
 
-  storage()->AddProfile(GetProfilePath("lima_path"),
-                        base::ASCIIToUTF16("lima"),
+  storage()->AddProfile(GetProfilePath("lima_path"), base::ASCIIToUTF16("lima"),
                         std::string("lima_gaia"),
-                        base::ASCIIToUTF16("lima_username"),
-                        1,
-                        std::string(""));
+                        base::ASCIIToUTF16("lima_username"), 1, std::string(""),
+                        EmptyAccountId());
 
   ProfileAttributesEntry* entry;
   ASSERT_TRUE(storage()->GetProfileAttributesWithPath(
@@ -630,7 +626,8 @@ TEST_F(ProfileAttributesStorageTest, ChooseAvatarIconIndexForNewProfile) {
         GetProfilePath(base::StringPrintf("testing_profile_path%" PRIuS, i));
     EXPECT_CALL(observer(), OnProfileAdded(profile_path)).Times(1);
     storage()->AddProfile(profile_path, base::string16(), std::string(),
-                          base::string16(), icon_index, std::string());
+                          base::string16(), icon_index, std::string(),
+                          EmptyAccountId());
     VerifyAndResetCallExpectations();
   }
 
@@ -700,7 +697,7 @@ TEST_F(ProfileAttributesStorageTest, DownloadHighResAvatarTest) {
   EXPECT_CALL(observer(), OnProfileAdded(profile_path)).Times(1);
   storage()->AddProfile(profile_path, base::ASCIIToUTF16("name_1"),
                         std::string(), base::string16(), kIconIndex,
-                        std::string());
+                        std::string(), EmptyAccountId());
   ASSERT_EQ(1U, storage()->GetNumberOfProfiles());
   VerifyAndResetCallExpectations();
 
@@ -781,7 +778,7 @@ TEST_F(ProfileAttributesStorageTest, NothingToDownloadHighResAvatarTest) {
   EXPECT_CALL(observer(), OnProfileAdded(profile_path)).Times(1);
   storage()->AddProfile(profile_path, base::ASCIIToUTF16("name_1"),
                         std::string(), base::string16(), kIconIndex,
-                        std::string());
+                        std::string(), EmptyAccountId());
   EXPECT_EQ(1U, storage()->GetNumberOfProfiles());
   content::RunAllTasksUntilIdle();
 
@@ -791,21 +788,17 @@ TEST_F(ProfileAttributesStorageTest, NothingToDownloadHighResAvatarTest) {
   EXPECT_EQ(0U, storage()->avatar_images_downloads_in_progress_.size());
 }
 
-// Flaky on Linux ASAN. http://crbug.com/794821.
-#if defined(OS_LINUX) && defined(ADDRESS_SANITIZER)
-#define MAYBE_LoadAvatarFromDiskTest DISABLED_LoadAvatarFromDiskTest
-#else
-#define MAYBE_LoadAvatarFromDiskTest LoadAvatarFromDiskTest
-#endif
-
-TEST_F(ProfileAttributesStorageTest, MAYBE_LoadAvatarFromDiskTest) {
+TEST_F(ProfileAttributesStorageTest, LoadAvatarFromDiskTest) {
   const size_t kIconIndex = 0;
   base::FilePath icon_path =
       profiles::GetPathOfHighResAvatarAtIndex(kIconIndex);
 
   // Create the avatar on the disk, which is a valid 1x1 transparent png.
+  base::FilePath dir = icon_path.DirName();
+  ASSERT_FALSE(base::DirectoryExists(dir));
+  ASSERT_TRUE(base::CreateDirectory(dir));
   ASSERT_FALSE(base::PathExists(icon_path));
-  const char* bitmap =
+  const char bitmap[] =
       "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52"
       "\x00\x00\x00\x01\x00\x00\x00\x01\x01\x00\x00\x00\x00\x37\x6E\xF9"
       "\x24\x00\x00\x00\x0A\x49\x44\x41\x54\x08\x1D\x63\x60\x00\x00\x00"
@@ -820,7 +813,7 @@ TEST_F(ProfileAttributesStorageTest, MAYBE_LoadAvatarFromDiskTest) {
   EXPECT_CALL(observer(), OnProfileAdded(profile_path)).Times(1);
   storage()->AddProfile(profile_path, base::ASCIIToUTF16("name_1"),
                         std::string(), base::string16(), kIconIndex,
-                        std::string());
+                        std::string(), EmptyAccountId());
   EXPECT_EQ(1U, storage()->GetNumberOfProfiles());
   VerifyAndResetCallExpectations();
 

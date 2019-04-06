@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -97,7 +98,7 @@ void RefreshIPConfigsCallback(
       continue;
     DBusThreadManager::Get()->GetShillIPConfigClient()->Refresh(
         dbus::ObjectPath(ipconfig_path),
-        base::Bind(&IPConfigRefreshCallback, ipconfig_path));
+        base::BindOnce(&IPConfigRefreshCallback, ipconfig_path));
   }
   // It is safe to invoke |callback| here instead of waiting for the
   // IPConfig.Refresh callbacks to complete because the Refresh DBus calls will
@@ -190,8 +191,9 @@ void TDLSSuccessCallback(
     request_delay = base::TimeDelta::FromMilliseconds(request_delay_ms);
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&CallPerformTDLSOperation, device_path, new_params,
-                            callback, error_callback),
+      FROM_HERE,
+      base::BindOnce(&CallPerformTDLSOperation, device_path, new_params,
+                     callback, error_callback),
       request_delay);
 }
 
@@ -218,8 +220,9 @@ void TDLSErrorCallback(
       request_delay = base::TimeDelta::FromMilliseconds(kReRequestDelayMs);
 
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&CallPerformTDLSOperation, device_path,
-                              retry_params, callback, error_callback),
+        FROM_HERE,
+        base::BindOnce(&CallPerformTDLSOperation, device_path, retry_params,
+                       callback, error_callback),
         request_delay);
     return;
   }
@@ -533,10 +536,10 @@ void NetworkDeviceHandlerImpl::ApplyCellularAllowRoamingToShill() {
     if (new_device_value == current_allow_roaming)
       continue;
 
-    SetDevicePropertyInternal(
-        device_state->path(), shill::kCellularAllowRoamingProperty,
-        base::Value(new_device_value), base::Bind(&base::DoNothing),
-        network_handler::ErrorCallback());
+    SetDevicePropertyInternal(device_state->path(),
+                              shill::kCellularAllowRoamingProperty,
+                              base::Value(new_device_value), base::DoNothing(),
+                              network_handler::ErrorCallback());
   }
 }
 
@@ -562,8 +565,8 @@ void NetworkDeviceHandlerImpl::ApplyMACAddressRandomizationToShill() {
     case MACAddressRandomizationSupport::SUPPORTED:
       SetDevicePropertyInternal(
           device_state->path(), shill::kMACAddressRandomizationEnabledProperty,
-          base::Value(mac_addr_randomization_enabled_),
-          base::Bind(&base::DoNothing), network_handler::ErrorCallback());
+          base::Value(mac_addr_randomization_enabled_), base::DoNothing(),
+          network_handler::ErrorCallback());
       return;
     case MACAddressRandomizationSupport::UNSUPPORTED:
       return;

@@ -81,8 +81,8 @@ class CHROMEOS_EXPORT Validator : public Mapper {
     onc_source_ = source;
   }
 
-  // Validate the given |onc_object| according to |object_signature|. The
-  // |object_signature| has to be a pointer to one of the signatures in
+  // Validate the given |onc_object| dictionary according to |object_signature|.
+  // The |object_signature| has to be a pointer to one of the signatures in
   // |onc_signature.h|. If an error is found, the function returns NULL and sets
   // |result| to INVALID. If possible (no error encountered) a DeepCopy is
   // created that contains all but the invalid fields and values and returns
@@ -96,7 +96,7 @@ class CHROMEOS_EXPORT Validator : public Mapper {
   // For details, see the class comment.
   std::unique_ptr<base::DictionaryValue> ValidateAndRepairObject(
       const OncValueSignature* object_signature,
-      const base::DictionaryValue& onc_object,
+      const base::Value& onc_object,
       Result* result);
 
  private:
@@ -176,6 +176,10 @@ class CHROMEOS_EXPORT Validator : public Mapper {
 
   bool IsValidValue(const std::string& field_value,
                     const std::vector<const char*>& valid_values);
+
+  bool IsInDevicePolicy(base::DictionaryValue* result,
+                        const std::string& field_name);
+
   bool FieldExistsAndHasNoValidValue(
       const base::DictionaryValue& object,
       const std::string& field_name,

@@ -9,31 +9,25 @@
 #include <utility>
 #include <vector>
 
-#include "ash/app_list/model/search/search_result.h"
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/bind.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/search/history.h"
-#include "ui/app_list/search_provider.h"
+#include "chrome/browser/ui/app_list/search/chrome_search_result.h"
+#include "chrome/browser/ui/app_list/search/search_provider.h"
 
 namespace app_list {
 
 SearchController::SearchController(AppListModelUpdater* model_updater,
-                                   History* history)
-    : mixer_(new Mixer(model_updater)), history_(history) {}
+                                   AppListControllerDelegate* list_controller)
+    : mixer_(std::make_unique<Mixer>(model_updater)),
+      list_controller_(list_controller) {}
 
 SearchController::~SearchController() {}
 
-void SearchController::Start(const base::string16& raw_query) {
-  last_raw_query_ = raw_query;
-
-  base::string16 query;
-  base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
-
+void SearchController::Start(const base::string16& query) {
   dispatching_query_ = true;
   for (const auto& provider : providers_)
     provider->Start(query);
@@ -44,37 +38,21 @@ void SearchController::Start(const base::string16& raw_query) {
   OnResultsChanged();
 }
 
-void SearchController::OpenResult(SearchResult* result, int event_flags) {
+void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
   // This can happen in certain circumstances due to races. See
   // https://crbug.com/534772
   if (!result)
     return;
 
-  UMA_HISTOGRAM_ENUMERATION(kSearchResultOpenDisplayTypeHistogram,
-                            result->display_type(),
-                            SearchResult::DISPLAY_TYPE_LAST);
-
-  // Record the search metric if the SearchResult is not a suggested app.
-  if (result->display_type() != SearchResult::DISPLAY_RECOMMENDATION) {
-    // Count AppList.Search here because it is composed of search + action.
-    base::RecordAction(base::UserMetricsAction("AppList_OpenSearchResult"));
-
-    UMA_HISTOGRAM_COUNTS_100(kSearchQueryLength, last_raw_query_.size());
-
-    if (result->distance_from_origin() >= 0) {
-      UMA_HISTOGRAM_COUNTS_100(kSearchResultDistanceFromOrigin,
-                               result->distance_from_origin());
-    }
-  }
-
   result->Open(event_flags);
 
-  if (history_ && history_->IsReady()) {
-    history_->AddLaunchEvent(base::UTF16ToUTF8(last_raw_query_), result->id());
-  }
+  // Launching apps can take some time. It looks nicer to dismiss the app list.
+  // Do not close app list for home launcher.
+  if (!list_controller_->IsHomeLauncherEnabledInTabletMode())
+    list_controller_->DismissView();
 }
 
-void SearchController::InvokeResultAction(SearchResult* result,
+void SearchController::InvokeResultAction(ChromeSearchResult* result,
                                           int action_index,
                                           int event_flags) {
   // TODO(xiyuan): Hook up with user learning.
@@ -99,15 +77,36 @@ void SearchController::OnResultsChanged() {
   if (dispatching_query_)
     return;
 
-  KnownResults known_results;
-  if (history_ && history_->IsReady()) {
-    history_->GetKnownResults(base::UTF16ToUTF8(last_raw_query_))
-        ->swap(known_results);
-  }
-
   size_t num_max_results =
       query_for_recommendation_ ? kNumStartPageTiles : kMaxSearchResults;
-  mixer_->MixAndPublish(known_results, num_max_results);
+  mixer_->MixAndPublish(num_max_results);
+}
+
+ChromeSearchResult* SearchController::FindSearchResult(
+    const std::string& result_id) {
+  for (const auto& provider : providers_) {
+    for (const auto& result : provider->results()) {
+      if (result->id() == result_id)
+        return result.get();
+    }
+  }
+  return nullptr;
+}
+
+ChromeSearchResult* SearchController::GetResultByTitleForTest(
+    const std::string& title) {
+  base::string16 target_title = base::ASCIIToUTF16(title);
+  for (const auto& provider : providers_) {
+    for (const auto& result : provider->results()) {
+      if (result->title() == target_title &&
+          result->result_type() == ash::SearchResultType::kInstalledApp &&
+          result->display_type() !=
+              ash::SearchResultDisplayType::kRecommendation) {
+        return result.get();
+      }
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace app_list

@@ -75,7 +75,7 @@ void CheckV2ColumnExistence(const base::FilePath& db_path, bool is_v2) {
 
 const base::FilePath GetTestDataDir() {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   return path.AppendASCII("components/test/data/omnibox");
 }
 
@@ -316,7 +316,7 @@ TEST(ShortcutsDatabaseMigrationTest, Recovery1) {
   ASSERT_TRUE(sql::test::CreateDatabaseFromSQL(db_path, sql_path));
 
   // Capture the row count from the golden file before corrupting the database.
-  const char kCountSql[] = "SELECT COUNT(*) FROM omni_box_shortcuts";
+  static const char kCountSql[] = "SELECT COUNT(*) FROM omni_box_shortcuts";
   int row_count;
   {
     sql::Connection connection;

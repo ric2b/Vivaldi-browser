@@ -11,8 +11,8 @@
 #include "base/single_thread_task_runner.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/blink/webinbandtexttrack_impl.h"
-#include "third_party/WebKit/public/platform/WebInbandTextTrackClient.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
+#include "third_party/blink/public/platform/web_inband_text_track_client.h"
+#include "third_party/blink/public/platform/web_media_player_client.h"
 
 namespace media {
 
@@ -27,29 +27,24 @@ TextTrackImpl::TextTrackImpl(
 }
 
 TextTrackImpl::~TextTrackImpl() {
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&TextTrackImpl::OnRemoveTrack,
-                 client_,
-                 base::Passed(&text_track_)));
+  task_runner_->PostTask(FROM_HERE,
+                         base::Bind(&TextTrackImpl::OnRemoveTrack, client_,
+                                    base::Passed(&text_track_)));
 }
 
-void TextTrackImpl::addWebVTTCue(const base::TimeDelta& start,
-                                 const base::TimeDelta& end,
+void TextTrackImpl::addWebVTTCue(base::TimeDelta start,
+                                 base::TimeDelta end,
                                  const std::string& id,
                                  const std::string& content,
                                  const std::string& settings) {
   task_runner_->PostTask(
-    FROM_HERE,
-    base::Bind(&TextTrackImpl::OnAddCue,
-                text_track_.get(),
-                start, end,
-                id, content, settings));
+      FROM_HERE, base::Bind(&TextTrackImpl::OnAddCue, text_track_.get(), start,
+                            end, id, content, settings));
 }
 
 void TextTrackImpl::OnAddCue(WebInbandTextTrackImpl* text_track,
-                             const base::TimeDelta& start,
-                             const base::TimeDelta& end,
+                             base::TimeDelta start,
+                             base::TimeDelta end,
                              const std::string& id,
                              const std::string& content,
                              const std::string& settings) {

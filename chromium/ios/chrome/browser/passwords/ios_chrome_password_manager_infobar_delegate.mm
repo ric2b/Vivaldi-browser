@@ -7,11 +7,11 @@
 #include <utility>
 
 #include "base/strings/string16.h"
-#include "components/password_manager/core/browser/password_form_manager.h"
+#include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/open_url_command.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "ios/web/public/referrer.h"
@@ -23,22 +23,16 @@
 #endif
 
 IOSChromePasswordManagerInfoBarDelegate::
-    ~IOSChromePasswordManagerInfoBarDelegate() {
-  password_manager::metrics_util::LogUIDismissalReason(infobar_response_);
-};
+    ~IOSChromePasswordManagerInfoBarDelegate() = default;
 
 IOSChromePasswordManagerInfoBarDelegate::
     IOSChromePasswordManagerInfoBarDelegate(
         bool is_smart_lock_branding_enabled,
-        std::unique_ptr<password_manager::PasswordFormManager> form_to_save)
+        std::unique_ptr<password_manager::PasswordFormManagerForUI>
+            form_to_save)
     : form_to_save_(std::move(form_to_save)),
       infobar_response_(password_manager::metrics_util::NO_DIRECT_INTERACTION),
       is_smart_lock_branding_enabled_(is_smart_lock_branding_enabled) {}
-
-infobars::InfoBarDelegate::Type
-IOSChromePasswordManagerInfoBarDelegate::GetInfoBarType() const {
-  return PAGE_ACTION_TYPE;
-};
 
 base::string16 IOSChromePasswordManagerInfoBarDelegate::GetLinkText() const {
   return is_smart_lock_branding_enabled_
@@ -52,7 +46,7 @@ int IOSChromePasswordManagerInfoBarDelegate::GetIconId() const {
 
 bool IOSChromePasswordManagerInfoBarDelegate::LinkClicked(
     WindowOpenDisposition disposition) {
-  OpenUrlCommand* command = [[OpenUrlCommand alloc]
+  OpenNewTabCommand* command = [[OpenNewTabCommand alloc]
        initWithURL:GURL(password_manager::kPasswordManagerHelpCenterSmartLock)
           referrer:web::Referrer()
        inIncognito:NO

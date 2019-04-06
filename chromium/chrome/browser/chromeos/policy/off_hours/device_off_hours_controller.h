@@ -14,7 +14,7 @@
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/policy/off_hours/off_hours_interval.h"
+#include "chrome/browser/chromeos/policy/weekly_time/weekly_time_interval.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/system_clock_client.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
@@ -83,8 +83,8 @@ class DeviceOffHoursController : public chromeos::SystemClockClient::Observer,
 
   // |timer_clock| is not owned and its lifetime should cover lifetime of
   // DeviceOffHoursContoller.
-  void SetClockForTesting(std::unique_ptr<base::Clock> clock,
-                          base::TickClock* timer_clock);
+  void SetClockForTesting(base::Clock* clock,
+                          const base::TickClock* timer_clock);
 
  private:
   // Run OnOffHoursEndTimeChanged() for observers.
@@ -134,13 +134,13 @@ class DeviceOffHoursController : public chromeos::SystemClockClient::Observer,
 
   // Used for testing purposes, otherwise it's an instance of
   // base::DefaultClock.
-  std::unique_ptr<base::Clock> clock_;
+  base::Clock* clock_;
 
   // Value is false until the system time is synchronized with network time.
   bool network_synchronized_ = false;
 
   // Current "OffHours" time intervals.
-  std::vector<OffHoursInterval> off_hours_intervals_;
+  std::vector<WeeklyTimeInterval> off_hours_intervals_;
 
   // Non-"OffHours" device settings proto.
   // Needed to check policies outside of "OffHours" mode.

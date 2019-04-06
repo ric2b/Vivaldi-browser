@@ -5,14 +5,14 @@
 #include <stddef.h>
 
 #include "base/logging.h"
-#include "content/renderer/media/media_stream_audio_track.h"
+#include "content/renderer/media/stream/media_stream_audio_track.h"
 #include "content/renderer/media/webrtc_local_audio_source_provider.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_parameters.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_heap.h"
 
 namespace content {
 
@@ -20,10 +20,10 @@ class WebRtcLocalAudioSourceProviderTest : public testing::Test {
  protected:
   void SetUp() override {
     source_params_.Reset(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                         media::CHANNEL_LAYOUT_MONO, 48000, 16, 480);
+                         media::CHANNEL_LAYOUT_MONO, 48000, 480);
     sink_params_.Reset(
         media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-        media::CHANNEL_LAYOUT_STEREO, 44100, 16,
+        media::CHANNEL_LAYOUT_STEREO, 44100,
         WebRtcLocalAudioSourceProvider::kWebAudioRenderBufferSize);
     sink_bus_ = media::AudioBus::Create(sink_params_);
     blink::WebMediaStreamSource audio_source;

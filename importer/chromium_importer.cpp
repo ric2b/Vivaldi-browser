@@ -34,9 +34,6 @@ ChromiumImporter::ChromiumImporter() {}
 
 ChromiumImporter::~ChromiumImporter() {}
 
-ChromiumImporter::ChromiumImporter(
-    const importer::ImportConfig& import_config) {}
-
 void ChromiumImporter::StartImport(
     const importer::SourceProfile& source_profile,
     uint16_t items,

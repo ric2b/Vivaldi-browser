@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "ash/app_list/model/app_list_model_export.h"
-#include "ash/app_list/model/speech/speech_ui_model_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -26,28 +25,8 @@ class SearchBoxModelObserver;
 // text, cursor position and selected text in edit control.
 class APP_LIST_MODEL_EXPORT SearchBoxModel {
  public:
-  // The properties of the speech button.
-  struct APP_LIST_MODEL_EXPORT SpeechButtonProperty {
-    SpeechButtonProperty(const gfx::ImageSkia& icon,
-                         const base::string16& tooltip,
-                         const base::string16& accessible_name);
-    ~SpeechButtonProperty();
-
-    gfx::ImageSkia icon;
-    base::string16 tooltip;
-
-    // The accessibility name of the button.
-    base::string16 accessible_name;
-  };
-
   SearchBoxModel();
   ~SearchBoxModel();
-
-  // Sets/gets the properties for the button of speech recognition.
-  void SetSpeechRecognitionButton(SpeechRecognitionState state);
-  const SpeechButtonProperty* speech_button() const {
-    return speech_button_.get();
-  }
 
   // Sets/gets the hint text to display when there is in input.
   void SetHintText(const base::string16& hint_text);
@@ -70,7 +49,11 @@ class APP_LIST_MODEL_EXPORT SearchBoxModel {
     return selection_model_;
   }
 
-  void SetTabletMode(bool started);
+  void SetTabletMode(bool is_tablet_mode);
+  bool is_tablet_mode() const { return is_tablet_mode_; }
+
+  void SetSearchEngineIsGoogle(bool is_google);
+  bool search_engine_is_google() const { return search_engine_is_google_; }
 
   // Sets/gets the text for the search box's Textfield and the voice search
   // flag.
@@ -82,14 +65,14 @@ class APP_LIST_MODEL_EXPORT SearchBoxModel {
   void RemoveObserver(SearchBoxModelObserver* observer);
 
  private:
-  std::unique_ptr<SpeechButtonProperty> speech_button_;
   base::string16 hint_text_;
   base::string16 tablet_accessible_name_;
   base::string16 clamshell_accessible_name_;
   base::string16 accessible_name_;
   gfx::SelectionModel selection_model_;
   base::string16 text_;
-  bool is_tablet_mode_;
+  bool search_engine_is_google_ = false;
+  bool is_tablet_mode_ = false;
 
   base::ObserverList<SearchBoxModelObserver> observers_;
 

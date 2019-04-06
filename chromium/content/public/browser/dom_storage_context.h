@@ -26,9 +26,8 @@ class DOMStorageContext {
       void(const std::vector<LocalStorageUsageInfo>&)>
           GetLocalStorageUsageCallback;
 
-  typedef base::Callback<
-      void(const std::vector<SessionStorageUsageInfo>&)>
-          GetSessionStorageUsageCallback;
+  typedef base::OnceCallback<void(const std::vector<SessionStorageUsageInfo>&)>
+      GetSessionStorageUsageCallback;
 
   // Returns a collection of origins using local storage to the given callback.
   virtual void GetLocalStorageUsage(
@@ -37,16 +36,13 @@ class DOMStorageContext {
   // Returns a collection of origins using session storage to the given
   // callback.
   virtual void GetSessionStorageUsage(
-      const GetSessionStorageUsageCallback& callback) = 0;
+      GetSessionStorageUsageCallback callback) = 0;
 
-  // Deletes the local storage data for the physical origin of |origin_url|,
-  // including all suborigins at the physical origin.
-  //
-  // See https://w3c.github.io/webappsec-suborigins/.
-  virtual void DeleteLocalStorageForPhysicalOrigin(const GURL& origin_url) = 0;
-
-  // Deletes the local storage for the origin of |origin_url|.
-  virtual void DeleteLocalStorage(const GURL& origin_url) = 0;
+  // Deletes the local storage for the origin of |origin_url|. |callback| is
+  // called when the deletion is sent to the database and GetLocalStorageUsage()
+  // will not return entries for |origin_url| anymore.
+  virtual void DeleteLocalStorage(const GURL& origin_url,
+                                  base::OnceClosure callback) = 0;
 
   // Deletes the session storage data identified by |usage_info|.
   virtual void DeleteSessionStorage(
@@ -58,12 +54,12 @@ class DOMStorageContext {
   // and before it's used.
   virtual void SetSaveSessionStorageOnDisk() = 0;
 
-  // Creates a SessionStorageNamespace with the given |persistent_id|. Used
+  // Creates a SessionStorageNamespace with the given |namespace_id|. Used
   // after tabs are restored by session restore. When created, the
-  // SessionStorageNamespace with the correct |persistent_id| will be
+  // SessionStorageNamespace with the correct |namespace_id| will be
   // associated with the persisted sessionStorage data.
   virtual scoped_refptr<SessionStorageNamespace> RecreateSessionStorage(
-      const std::string& persistent_id) = 0;
+      const std::string& namespace_id) = 0;
 
   // Starts deleting sessionStorages which don't have an associated
   // SessionStorageNamespace alive. Called when SessionStorageNamespaces have

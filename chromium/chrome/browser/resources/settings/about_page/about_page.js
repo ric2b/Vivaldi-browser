@@ -16,7 +16,12 @@ Polymer({
     /** @private {?UpdateStatusChangedEvent} */
     currentUpdateStatusEvent_: {
       type: Object,
-      value: {message: '', progress: 0, status: UpdateStatus.DISABLED},
+      value: {
+        message: '',
+        progress: 0,
+        rollback: false,
+        status: UpdateStatus.DISABLED
+      },
     },
 
     // <if expr="chromeos">
@@ -37,6 +42,15 @@ Polymer({
 
     /** @private */
     hasEndOfLife_: Boolean,
+
+    /** @private */
+    showCrostini: Boolean,
+
+    /** @private */
+    showCrostiniLicense_: {
+      type: Boolean,
+      value: false,
+    },
     // </if>
 
     // <if expr="_google_chrome and is_macosx">
@@ -128,6 +142,7 @@ Polymer({
         'currentChannel_)',
     'updateShowButtonContainer_(' +
         'showRelaunch_, showRelaunchAndPowerwash_, showCheckUpdates_)',
+    'handleCrostiniEnabledChanged_(prefs.crostini.enabled.value)',
     // </if>
   ],
 
@@ -298,8 +313,8 @@ Polymer({
     this.showRelaunch_ = this.checkStatus_(UpdateStatus.NEARLY_UPDATED);
     // </if>
     // <if expr="chromeos">
-    this.showRelaunch_ = this.checkStatus_(UpdateStatus.NEARLY_UPDATED) &&
-        !this.isTargetChannelMoreStable_();
+    this.showRelaunch_ =
+        this.checkStatus_(UpdateStatus.NEARLY_UPDATED) && !this.isRollback_();
     // </if>
   },
 
@@ -324,6 +339,8 @@ Polymer({
         // <if expr="chromeos">
         if (this.currentChannel_ != this.targetChannel_)
           return this.i18nAdvanced('aboutUpgradeSuccessChannelSwitch');
+        if (this.currentUpdateStatusEvent_.rollback)
+          return this.i18nAdvanced('aboutRollbackSuccess');
         // </if>
         return this.i18nAdvanced('aboutUpgradeRelaunch');
       case UpdateStatus.UPDATED:
@@ -340,6 +357,11 @@ Polymer({
                   settings.browserChannelToI18nId(this.targetChannel_)),
               progressPercent
             ]
+          });
+        }
+        if (this.currentUpdateStatusEvent_.rollback) {
+          return this.i18nAdvanced('aboutRollbackInProgress', {
+            substitutions: [progressPercent],
           });
         }
         // </if>
@@ -387,14 +409,14 @@ Polymer({
     // If this platform has reached the end of the line, display an error icon
     // and ignore UpdateStatus.
     if (this.obsoleteSystemInfo_.endOfLine)
-      return 'settings:error';
+      return 'cr:error';
     // </if>
 
     switch (this.currentUpdateStatusEvent_.status) {
       case UpdateStatus.DISABLED_BY_ADMIN:
         return 'cr20:domain';
       case UpdateStatus.FAILED:
-        return 'settings:error';
+        return 'cr:error';
       case UpdateStatus.UPDATED:
       case UpdateStatus.NEARLY_UPDATED:
         return 'settings:check-circle';
@@ -442,9 +464,13 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  isTargetChannelMoreStable_: function() {
+  isRollback_: function() {
     assert(this.currentChannel_.length > 0);
     assert(this.targetChannel_.length > 0);
+    if (this.currentUpdateStatusEvent_.rollback) {
+      return true;
+    }
+    // Channel switch to a more stable channel is also a rollback
     return settings.isTargetChannelMoreStable(
         this.currentChannel_, this.targetChannel_);
   },
@@ -456,7 +482,13 @@ Polymer({
 
   /** @private */
   onRelaunchAndPowerwashTap_: function() {
-    this.lifetimeBrowserProxy_.factoryReset(false);
+    if (this.currentUpdateStatusEvent_.rollback) {
+      // Wipe already initiated, simply relaunch.
+      this.lifetimeBrowserProxy_.relaunch();
+    } else {
+      this.lifetimeBrowserProxy_.factoryReset(
+          /* requestTpmFirmwareUpdate= */ false);
+    }
   },
 
   /**
@@ -464,8 +496,7 @@ Polymer({
    * @private
    */
   computeShowRelaunchAndPowerwash_: function() {
-    return this.checkStatus_(UpdateStatus.NEARLY_UPDATED) &&
-        this.isTargetChannelMoreStable_();
+    return this.checkStatus_(UpdateStatus.NEARLY_UPDATED) && this.isRollback_();
   },
 
   /** @private */
@@ -490,6 +521,26 @@ Polymer({
         !this.hasCheckedForUpdates_ && this.checkStatus_(UpdateStatus.UPDATED);
 
     return staleUpdatedStatus || this.checkStatus_(UpdateStatus.FAILED);
+  },
+
+  /**
+   * @param {boolean} showCrostiniLicense True if Crostini is enabled and
+   * Crostini UI is allowed.
+   * @return {string}
+   * @private
+   */
+  getAboutProductOsLicense_: function(showCrostiniLicense) {
+    return showCrostiniLicense ?
+        this.i18nAdvanced('aboutProductOsWithLinuxLicense') :
+        this.i18nAdvanced('aboutProductOsLicense');
+  },
+
+  /**
+   * @param {boolean} enabled True if Crostini is enabled.
+   * @private
+   */
+  handleCrostiniEnabledChanged_: function(enabled) {
+    this.showCrostiniLicense_ = enabled && this.showCrostini;
   },
 
   /**

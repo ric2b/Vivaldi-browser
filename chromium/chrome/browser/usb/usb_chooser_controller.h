@@ -14,12 +14,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/chooser_controller/chooser_controller.h"
-#include "device/usb/public/interfaces/chooser_service.mojom.h"
+#include "device/usb/public/mojom/chooser_service.mojom.h"
 #include "device/usb/usb_service.h"
 #include "url/gurl.h"
 
 namespace content {
 class RenderFrameHost;
+class WebContents;
 }
 
 namespace device {
@@ -64,6 +65,7 @@ class UsbChooserController : public ChooserController,
   GURL requesting_origin_;
   GURL embedding_origin_;
 
+  content::WebContents* const web_contents_;
   base::WeakPtr<UsbChooserContext> chooser_context_;
   ScopedObserver<device::UsbService, device::UsbService::Observer>
       usb_service_observer_;

@@ -8,7 +8,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/grit/browser_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -36,6 +36,8 @@ net::CertStatus MapToCertStatus(
     case chrome_browser_ssl::DynamicInterstitial::
         ERR_CERTIFICATE_TRANSPARENCY_REQUIRED:
       return net::CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED;
+    case chrome_browser_ssl::DynamicInterstitial::ERR_CERT_SYMANTEC_LEGACY:
+      return net::CERT_STATUS_SYMANTEC_LEGACY;
     case chrome_browser_ssl::DynamicInterstitial::ERR_CERT_REVOKED:
       return net::CERT_STATUS_REVOKED;
     case chrome_browser_ssl::DynamicInterstitial::ERR_CERT_INVALID:
@@ -111,8 +113,10 @@ LoadDynamicInterstitialList(
   for (const chrome_browser_ssl::DynamicInterstitial& entry :
        proto.dynamic_interstitial()) {
     dynamic_interstitial_list.get()->push_back(DynamicInterstitialInfo(
-        HashesFromDynamicInterstitial(entry), entry.interstitial_type(),
-        MapToCertStatus(entry.cert_error()), GURL(entry.support_url())));
+        HashesFromDynamicInterstitial(entry), entry.issuer_common_name_regex(),
+        entry.issuer_organization_regex(), entry.mitm_software_name(),
+        entry.interstitial_type(), MapToCertStatus(entry.cert_error()),
+        GURL(entry.support_url())));
   }
 
   return dynamic_interstitial_list;
@@ -168,11 +172,17 @@ MITMSoftwareType::MITMSoftwareType(const std::string& name,
 
 DynamicInterstitialInfo::DynamicInterstitialInfo(
     const std::unordered_set<std::string>& spki_hashes,
+    const std::string& issuer_common_name_regex,
+    const std::string& issuer_organization_regex,
+    const std::string& mitm_software_name,
     chrome_browser_ssl::DynamicInterstitial::InterstitialPageType
         interstitial_type,
     int cert_error,
     const GURL& support_url)
     : spki_hashes(spki_hashes),
+      issuer_common_name_regex(issuer_common_name_regex),
+      issuer_organization_regex(issuer_organization_regex),
+      mitm_software_name(mitm_software_name),
       interstitial_type(interstitial_type),
       cert_error(cert_error),
       support_url(support_url) {}
@@ -217,8 +227,24 @@ SSLErrorAssistant::MatchDynamicInterstitial(const net::SSLInfo& ssl_info) {
     if (data.cert_error && !(ssl_info.cert_status & data.cert_error))
       continue;
 
-    if (MatchSSLInfoWithHashes(ssl_info, data.spki_hashes))
-      return data;
+    if (!data.spki_hashes.empty() &&
+        !MatchSSLInfoWithHashes(ssl_info, data.spki_hashes)) {
+      continue;
+    }
+
+    if (!data.issuer_common_name_regex.empty() &&
+        !re2::RE2::FullMatch(ssl_info.cert->issuer().common_name,
+                             re2::RE2(data.issuer_common_name_regex))) {
+      continue;
+    }
+
+    if (!data.issuer_organization_regex.empty() &&
+        !RegexMatchesAny(ssl_info.cert->issuer().organization_names,
+                         data.issuer_organization_regex)) {
+      continue;
+    }
+
+    return data;
   }
 
   return base::nullopt;

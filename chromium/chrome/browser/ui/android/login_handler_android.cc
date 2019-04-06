@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/android/chrome_http_auth_handler.h"
@@ -19,14 +20,17 @@
 #include "ui/android/window_android.h"
 
 using content::BrowserThread;
-using net::URLRequest;
 using net::AuthChallengeInfo;
 
 class LoginHandlerAndroid : public LoginHandler {
  public:
-  LoginHandlerAndroid(AuthChallengeInfo* auth_info, URLRequest* request)
-      : LoginHandler(auth_info, request) {
-  }
+  LoginHandlerAndroid(
+      net::AuthChallengeInfo* auth_info,
+      content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      LoginAuthRequiredCallback auth_required_callback)
+      : LoginHandler(auth_info,
+                     web_contents_getter,
+                     std::move(auth_required_callback)) {}
 
   // LoginHandler methods:
 
@@ -51,8 +55,8 @@ class LoginHandlerAndroid : public LoginHandler {
     ViewAndroidHelper* view_helper = ViewAndroidHelper::FromWebContents(
         web_contents);
 
-    if (vr::VrTabHelper::IsInVr(web_contents)) {
-      vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kHttpAuth);
+    if (vr::VrTabHelper::IsUiSuppressedInVr(
+            web_contents, vr::UiSuppressedElement::kHttpAuth)) {
       CancelAuth();
       return;
     }
@@ -90,7 +94,10 @@ class LoginHandlerAndroid : public LoginHandler {
 };
 
 // static
-LoginHandler* LoginHandler::Create(net::AuthChallengeInfo* auth_info,
-                                   net::URLRequest* request) {
-  return new LoginHandlerAndroid(auth_info, request);
+scoped_refptr<LoginHandler> LoginHandler::Create(
+    net::AuthChallengeInfo* auth_info,
+    content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+    LoginAuthRequiredCallback auth_required_callback) {
+  return base::MakeRefCounted<LoginHandlerAndroid>(
+      auth_info, web_contents_getter, std::move(auth_required_callback));
 }

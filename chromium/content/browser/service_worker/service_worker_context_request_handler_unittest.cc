@@ -9,8 +9,8 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
-#include "content/browser/browser_thread_impl.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
@@ -20,6 +20,7 @@
 #include "content/browser/service_worker/service_worker_write_to_cache_job.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/resource_request_info.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/load_flags.h"
@@ -27,10 +28,10 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_util.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -60,8 +61,7 @@ class ServiceWorkerContextRequestHandlerTest : public testing::Test {
 
   void SetUp() override {
     helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
-    context()->storage()->LazyInitializeForTest(
-        base::BindOnce(&base::DoNothing));
+    context()->storage()->LazyInitializeForTest(base::DoNothing());
     base::RunLoop().RunUntilIdle();
 
     // A new unstored registration/version.
@@ -94,13 +94,9 @@ class ServiceWorkerContextRequestHandlerTest : public testing::Test {
   ServiceWorkerContextCore* context() const { return helper_->context(); }
 
   void SetUpProvider() {
-    std::unique_ptr<ServiceWorkerProviderHost> host =
-        CreateProviderHostForServiceWorkerContext(
-            helper_->mock_render_process_id(),
-            true /* is_parent_frame_secure */, version_.get(),
-            context()->AsWeakPtr(), &remote_endpoint_);
-    provider_host_ = host->AsWeakPtr();
-    context()->AddProviderHost(std::move(host));
+    provider_host_ = CreateProviderHostForServiceWorkerContext(
+        helper_->mock_render_process_id(), true /* is_parent_frame_secure */,
+        version_.get(), context()->AsWeakPtr(), &remote_endpoint_);
   }
 
   std::unique_ptr<net::URLRequest> CreateRequest(const GURL& url) {
@@ -133,6 +129,32 @@ class ServiceWorkerContextRequestHandlerTest : public testing::Test {
         network::mojom::RequestContextFrameType::kNone, nullptr);
   }
 
+  // Tests if net::LOAD_BYPASS_CACHE is set for a resource fetch.
+  void TestBypassCache(const GURL& url,
+                       ResourceType resource_type,
+                       bool expect_bypass) {
+    std::unique_ptr<net::URLRequest> request(CreateRequest(url));
+    std::unique_ptr<ServiceWorkerContextRequestHandler> handler(
+        CreateHandler(resource_type));
+    std::unique_ptr<net::URLRequestJob> job(
+        handler->MaybeCreateJob(request.get(), nullptr, nullptr));
+    ASSERT_TRUE(job.get());
+    ServiceWorkerWriteToCacheJob* sw_job =
+        static_cast<ServiceWorkerWriteToCacheJob*>(job.get());
+    if (expect_bypass)
+      EXPECT_TRUE(sw_job->net_request_->load_flags() & net::LOAD_BYPASS_CACHE);
+    else
+      EXPECT_FALSE(sw_job->net_request_->load_flags() & net::LOAD_BYPASS_CACHE);
+  }
+
+  void TestBypassCacheForMainScript(bool expect_bypass) {
+    TestBypassCache(script_url_, RESOURCE_TYPE_SERVICE_WORKER, expect_bypass);
+  }
+
+  void TestBypassCacheForImportedScript(bool expect_bypass) {
+    TestBypassCache(import_script_url_, RESOURCE_TYPE_SCRIPT, expect_bypass);
+  }
+
  protected:
   TestBrowserThreadBundle browser_thread_bundle_;
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
@@ -155,72 +177,86 @@ TEST_F(ServiceWorkerContextRequestHandlerTest, UpdateBefore24Hours) {
   registration_->set_last_update_check(base::Time::Now());
   version_->SetStatus(ServiceWorkerVersion::NEW);
 
-  // Conduct a resource fetch for the main script.
-  base::HistogramTester histograms;
-  std::unique_ptr<net::URLRequest> request(CreateRequest(script_url_));
-  std::unique_ptr<ServiceWorkerContextRequestHandler> handler(
-      CreateHandler(RESOURCE_TYPE_SERVICE_WORKER));
-  std::unique_ptr<net::URLRequestJob> job(
-      handler->MaybeCreateJob(request.get(), nullptr, nullptr));
-  ASSERT_TRUE(job.get());
-  ServiceWorkerWriteToCacheJob* sw_job =
-      static_cast<ServiceWorkerWriteToCacheJob*>(job.get());
-  histograms.ExpectUniqueSample(
-      "ServiceWorker.ContextRequestHandlerStatus.NewWorker.MainScript",
-      static_cast<int>(
-          ServiceWorkerContextRequestHandler::CreateJobStatus::WRITE_JOB),
-      1);
+  TestBypassCacheForMainScript(true);
+  TestBypassCacheForImportedScript(false);
+}
 
-  // Verify the net request is not initialized to bypass the browser cache.
-  EXPECT_FALSE(sw_job->net_request_->load_flags() & net::LOAD_BYPASS_CACHE);
+TEST_F(ServiceWorkerContextRequestHandlerTest,
+       UpdateBefore24HoursWithUpdateViaCacheAll) {
+  registration_->SetUpdateViaCache(
+      blink::mojom::ServiceWorkerUpdateViaCache::kAll);
+  // Give the registration a very recent last update time and pretend
+  // we're installing a new version.
+  registration_->set_last_update_check(base::Time::Now());
+  version_->SetStatus(ServiceWorkerVersion::NEW);
+
+  TestBypassCacheForMainScript(false);
+  TestBypassCacheForImportedScript(false);
+}
+
+TEST_F(ServiceWorkerContextRequestHandlerTest,
+       UpdateBefore24HoursWithUpdateViaCacheNone) {
+  registration_->SetUpdateViaCache(
+      blink::mojom::ServiceWorkerUpdateViaCache::kNone);
+  // Give the registration a very recent last update time and pretend
+  // we're installing a new version.
+  registration_->set_last_update_check(base::Time::Now());
+  version_->SetStatus(ServiceWorkerVersion::NEW);
+
+  TestBypassCacheForMainScript(true);
+  TestBypassCacheForImportedScript(true);
 }
 
 TEST_F(ServiceWorkerContextRequestHandlerTest, UpdateAfter24Hours) {
+  // Give the registration a old update time and pretend
+  // we're installing a new version.
+  registration_->set_last_update_check(base::Time::Now() -
+                                       base::TimeDelta::FromDays(7));
+  version_->SetStatus(ServiceWorkerVersion::NEW);
+
+  TestBypassCacheForMainScript(true);
+  TestBypassCacheForImportedScript(true);
+}
+
+TEST_F(ServiceWorkerContextRequestHandlerTest,
+       UpdateAfter24HoursWithUpdateViaCacheAll) {
+  registration_->SetUpdateViaCache(
+      blink::mojom::ServiceWorkerUpdateViaCache::kAll);
+  // Give the registration a old update time and pretend
+  // we're installing a new version.
+  registration_->set_last_update_check(base::Time::Now() -
+                                       base::TimeDelta::FromDays(7));
+  version_->SetStatus(ServiceWorkerVersion::NEW);
+
+  TestBypassCacheForMainScript(true);
+  TestBypassCacheForImportedScript(true);
+}
+
+TEST_F(ServiceWorkerContextRequestHandlerTest,
+       UpdateAfter24HoursWithUpdateViaCacheNone) {
+  registration_->SetUpdateViaCache(
+      blink::mojom::ServiceWorkerUpdateViaCache::kNone);
   // Give the registration a old update time and pretend
   // we're installing a new version.
   registration_->set_last_update_check(
       base::Time::Now() - base::TimeDelta::FromDays(7));
   version_->SetStatus(ServiceWorkerVersion::NEW);
 
-  // Conduct a resource fetch for the main script.
-  base::HistogramTester histograms;
-  std::unique_ptr<net::URLRequest> request(CreateRequest(script_url_));
-  std::unique_ptr<ServiceWorkerContextRequestHandler> handler(
-      CreateHandler(RESOURCE_TYPE_SERVICE_WORKER));
-  std::unique_ptr<net::URLRequestJob> job(
-      handler->MaybeCreateJob(request.get(), nullptr, nullptr));
-  ASSERT_TRUE(job.get());
-  ServiceWorkerWriteToCacheJob* sw_job =
-      static_cast<ServiceWorkerWriteToCacheJob*>(job.get());
-  histograms.ExpectUniqueSample(
-      "ServiceWorker.ContextRequestHandlerStatus.NewWorker.MainScript",
-      static_cast<int>(
-          ServiceWorkerContextRequestHandler::CreateJobStatus::WRITE_JOB),
-      1);
-
-  // Verify the net request is initialized to bypass the browser cache.
-  EXPECT_TRUE(sw_job->net_request_->load_flags() & net::LOAD_BYPASS_CACHE);
+  TestBypassCacheForMainScript(true);
+  TestBypassCacheForImportedScript(true);
 }
 
 TEST_F(ServiceWorkerContextRequestHandlerTest, UpdateForceBypassCache) {
+  registration_->SetUpdateViaCache(
+      blink::mojom::ServiceWorkerUpdateViaCache::kAll);
   // Give the registration a very recent last update time and pretend
   // we're installing a new version.
   registration_->set_last_update_check(base::Time::Now());
   version_->SetStatus(ServiceWorkerVersion::NEW);
   version_->set_force_bypass_cache_for_scripts(true);
 
-  // Conduct a resource fetch for the main script.
-  std::unique_ptr<net::URLRequest> request(CreateRequest(script_url_));
-  std::unique_ptr<ServiceWorkerContextRequestHandler> handler(
-      CreateHandler(RESOURCE_TYPE_SERVICE_WORKER));
-  std::unique_ptr<net::URLRequestJob> job(
-      handler->MaybeCreateJob(request.get(), nullptr, nullptr));
-  ASSERT_TRUE(job.get());
-  ServiceWorkerWriteToCacheJob* sw_job =
-      static_cast<ServiceWorkerWriteToCacheJob*>(job.get());
-
-  // Verify the net request is initialized to bypass the browser cache.
-  EXPECT_TRUE(sw_job->net_request_->load_flags() & net::LOAD_BYPASS_CACHE);
+  TestBypassCacheForMainScript(true);
+  TestBypassCacheForImportedScript(true);
 }
 
 TEST_F(ServiceWorkerContextRequestHandlerTest,

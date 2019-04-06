@@ -20,7 +20,6 @@ policies:
 * [HTTP Strict Transport Security (HSTS)](https://tools.ietf.org/html/rfc6797)
 * [Public Key Pinning Extension for HTTP](https://tools.ietf.org/html/rfc7469)
 * [Expect-CT Extension for HTTP](http://httpwg.org/http-extensions/expect-ct.html)
-* [OCSP Expect-Staple](https://docs.google.com/document/d/1aISglJIIwglcOAhqNfK-2vtQl-_dWAapc-VLDh-9-BE/preview)
 
 Chromium and most other browsers ship the preloaded configurations inside their
 binary. Chromium uses a custom data structure for this.
@@ -64,8 +63,9 @@ Make sure you have build the `transport_security_state_generator` target.
 The preload data is stored in the Chromium binary as a trie encoded in a byte
 array (`net::TransportSecurityStateSource::preloaded_data`). The hostnames are
 stored in their canonicalized form and compressed using a Huffman coding. The
-decoder (`DecodeHSTSPreloadRaw`) lives in
-`net/http/transport_security_state.cc`.
+generic decoder for preloaded Huffman encoded trie data is `PreloadDecoder` and
+lives in `net/extras/preload_data/decoder.cc`. The HSTS specific implementation
+is `DecodeHSTSPreload` and lives in `net/http/transport_security_state.cc`.
 
 ### Huffman Coding
 
@@ -168,7 +168,7 @@ The binary format for an entry is defined by the following ABNF.
 
 ```abnf
 preloaded-entry    = BIT                   ; simple entry flag
-                     [hsts-part hpkp-part expect-ct-part expect-staple-part]
+                     [hsts-part hpkp-part expect-ct-part]
                                            ; policy specific parts are only
                                            ; present when the simple entry flag
                                            ; is set to 0 and omitted otherwise
@@ -187,12 +187,6 @@ hpkp-pinset-id     = array-index
 expect-ct-part     = BIT              ; whether to enable Expect-CT
                      [report-uri-id]  ; only present when Expect-CT is enabled
 
-expect-staple-part = BIT              ; whether to enable Expect-Staple
-                     [include-subdomains report-uri-id]
-                                      ; Expect-Staple includeSubdomains flag and
-                                      ; report-uri, only present when
-                                      ; Expect-Staple is enabled
-
 report-uri-id      = array-index
 include-subdomains = BIT
 array-index        = 4BIT             ; a 4 bit number
@@ -203,8 +197,6 @@ The **array-index** values are indices in the associated arrays:
 *  `net::TransportSecurityStateSource::pinsets` for **pinset-id**
 *  `net::TransportSecurityStateSource::expect_ct_report_uris` for Expect-CT's
 **report-uri-id**
-*  `net::TransportSecurityStateSource::expect_staple_report_uris` for
-Expect-Staple's **report-uri-id**.
 
 #### Simple entries
 

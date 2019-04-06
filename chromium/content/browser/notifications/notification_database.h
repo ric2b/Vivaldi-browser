@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/sequence_checker.h"
+#include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/common/content_export.h"
 
 class GURL;
@@ -90,6 +91,15 @@ class CONTENT_EXPORT NotificationDatabase {
       const GURL& origin,
       NotificationDatabaseData* notification_data) const;
 
+  // This function is identical to ReadNotificationData above, but also records
+  // an interaction with that notification in the database for UKM logging
+  // purposes.
+  Status ReadNotificationDataAndRecordInteraction(
+      const std::string& notification_id,
+      const GURL& origin,
+      PlatformNotificationContext::Interaction interaction,
+      NotificationDatabaseData* notification_data);
+
   // Reads all notification data for all origins from the database, and appends
   // the data to |notification_data_vector|. Returns the status code.
   Status ReadAllNotificationData(
@@ -147,12 +157,10 @@ class CONTENT_EXPORT NotificationDatabase {
  private:
   friend class NotificationDatabaseTest;
 
-  // TODO(peter): Convert to an enum class when DCHECK_EQ supports this.
-  // See https://crbug.com/463869.
-  enum State {
-    STATE_UNINITIALIZED,
-    STATE_INITIALIZED,
-    STATE_DISABLED,
+  enum class State {
+    UNINITIALIZED,
+    INITIALIZED,
+    DISABLED,
   };
 
   // Reads the next available persistent notification id from the database and
@@ -193,9 +201,6 @@ class CONTENT_EXPORT NotificationDatabase {
 
   base::FilePath path_;
 
-  int64_t next_persistent_notification_id_ = 0;
-  int64_t written_persistent_notification_id_ = 0;
-
   std::unique_ptr<const leveldb::FilterPolicy> filter_policy_;
 
   // The declaration order for these members matters, as |db_| depends on |env_|
@@ -203,7 +208,7 @@ class CONTENT_EXPORT NotificationDatabase {
   std::unique_ptr<leveldb::Env> env_;
   std::unique_ptr<leveldb::DB> db_;
 
-  State state_ = STATE_UNINITIALIZED;
+  State state_ = State::UNINITIALIZED;
 
   base::SequenceChecker sequence_checker_;
 

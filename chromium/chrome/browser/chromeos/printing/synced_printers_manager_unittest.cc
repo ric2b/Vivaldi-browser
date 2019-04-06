@@ -21,6 +21,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/sync/model/fake_model_type_change_processor.h"
 #include "components/sync/model/model_type_store.h"
+#include "components/sync/model/model_type_store_test_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,11 +30,11 @@ namespace chromeos {
 
 namespace {
 
-const char kTestPrinterId[] = "UUID-UUID-UUID-PRINTER";
-const char kTestPrinterId2[] = "UUID-UUID-UUID-PRINTR2";
-const char kTestUri[] = "ipps://printer.chromium.org/ipp/print";
+constexpr char kTestPrinterId[] = "UUID-UUID-UUID-PRINTER";
+constexpr char kTestPrinterId2[] = "UUID-UUID-UUID-PRINTR2";
+constexpr char kTestUri[] = "ipps://printer.chromium.org/ipp/print";
 
-const char kLexJson[] = R"({
+constexpr char kLexJson[] = R"({
         "display_name": "LexaPrint",
         "description": "Laser on the test shelf",
         "manufacturer": "LexaPrint, Inc.",
@@ -45,7 +46,7 @@ const char kLexJson[] = R"({
         },
       } )";
 
-const char kColorLaserJson[] = R"json({
+constexpr char kColorLaserJson[] = R"json({
       "display_name": "Color Laser",
       "description": "The printer next to the water cooler.",
       "manufacturer": "Printer Manufacturer",
@@ -95,7 +96,8 @@ class SyncedPrintersManagerTest : public testing::Test {
       : manager_(SyncedPrintersManager::Create(
             &profile_,
             std::make_unique<PrintersSyncBridge>(
-                base::Bind(&syncer::ModelTypeStore::CreateInMemoryStoreForTest),
+                syncer::ModelTypeStoreTestUtil::
+                    FactoryForInMemoryStoreForTest(),
                 base::BindRepeating(
                     base::IgnoreResult(&base::debug::DumpWithoutCrashing))))) {
     base::RunLoop().RunUntilIdle();

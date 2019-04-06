@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/utsname.h>
 
 #include "base/environment.h"
 #include "base/files/file.h"
@@ -18,6 +19,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 
 namespace base {
@@ -131,16 +133,13 @@ class ChromeOSVersionInfo {
     }
     StringTokenizer tokenizer(version, ".");
     if (tokenizer.GetNext()) {
-      StringToInt(StringPiece(tokenizer.token_begin(), tokenizer.token_end()),
-                  &major_version_);
+      StringToInt(tokenizer.token_piece(), &major_version_);
     }
     if (tokenizer.GetNext()) {
-      StringToInt(StringPiece(tokenizer.token_begin(), tokenizer.token_end()),
-                  &minor_version_);
+      StringToInt(tokenizer.token_piece(), &minor_version_);
     }
     if (tokenizer.GetNext()) {
-      StringToInt(StringPiece(tokenizer.token_begin(), tokenizer.token_end()),
-                  &bugfix_version_);
+      StringToInt(tokenizer.token_piece(), &bugfix_version_);
     }
 
     // Check release name for Chrome OS.
@@ -181,6 +180,23 @@ void SysInfo::OperatingSystemVersionNumbers(int32_t* major_version,
 }
 
 // static
+std::string SysInfo::OperatingSystemVersion() {
+  int32_t major, minor, bugfix;
+  GetChromeOSVersionInfo().GetVersionNumbers(&major, &minor, &bugfix);
+  return base::StringPrintf("%d.%d.%d", major, minor, bugfix);
+}
+
+// static
+std::string SysInfo::KernelVersion() {
+  struct utsname info;
+  if (uname(&info) < 0) {
+    NOTREACHED();
+    return std::string();
+  }
+  return std::string(info.release);
+}
+
+// static
 const SysInfo::LsbReleaseMap& SysInfo::GetLsbReleaseMap() {
   return GetChromeOSVersionInfo().lsb_release_map();
 }
@@ -197,16 +213,6 @@ std::string SysInfo::GetLsbReleaseBoard() {
   if (!GetLsbReleaseValue(kMachineInfoBoard, &board))
     board = "unknown";
   return board;
-}
-
-// static
-std::string SysInfo::GetStrippedReleaseBoard() {
-  std::string board = GetLsbReleaseBoard();
-  const size_t index = board.find("-signed-");
-  if (index != std::string::npos)
-    board.resize(index);
-
-  return base::ToLowerASCII(board);
 }
 
 // static

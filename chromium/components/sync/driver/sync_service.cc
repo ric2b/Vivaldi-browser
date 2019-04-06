@@ -4,8 +4,6 @@
 
 #include "components/sync/driver/sync_service.h"
 
-#include "components/sync/engine/sync_manager.h"
-
 namespace syncer {
 
 SyncSetupInProgressHandle::SyncSetupInProgressHandle(base::Closure on_destroy)
@@ -15,8 +13,22 @@ SyncSetupInProgressHandle::~SyncSetupInProgressHandle() {
   on_destroy_.Run();
 }
 
-SyncService::SyncTokenStatus::SyncTokenStatus()
-    : connection_status(CONNECTION_NOT_ATTEMPTED),
-      last_get_token_error(GoogleServiceAuthError::AuthErrorNone()) {}
+bool SyncService::CanSyncStart() const {
+  return GetDisableReasons() == DISABLE_REASON_NONE;
+}
+
+bool SyncService::IsSyncAllowed() const {
+  return !HasDisableReason(DISABLE_REASON_PLATFORM_OVERRIDE) &&
+         !HasDisableReason(DISABLE_REASON_ENTERPRISE_POLICY);
+}
+
+bool SyncService::IsSyncActive() const {
+  State state = GetState();
+  return state == State::CONFIGURING || state == State::ACTIVE;
+}
+
+bool SyncService::HasUnrecoverableError() const {
+  return HasDisableReason(DISABLE_REASON_UNRECOVERABLE_ERROR);
+}
 
 }  // namespace syncer

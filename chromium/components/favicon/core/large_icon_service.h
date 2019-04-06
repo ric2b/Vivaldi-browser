@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/favicon_base/favicon_callback.h"
 #include "components/favicon_base/favicon_types.h"
@@ -25,6 +26,7 @@ class ImageFetcher;
 namespace favicon {
 
 class FaviconService;
+class FaviconServerFetcherParams;
 
 // The large icon service provides methods to access large icons. It relies on
 // the favicon service.
@@ -92,9 +94,7 @@ class LargeIconService : public KeyedService {
   // TODO(jkrcal): It is not clear from the name of this function, that it
   // actually adds the icon to the local cache. Maybe "StoreLargeIcon..."?
   void GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
-      const GURL& page_url,
-      int min_source_size_in_pixel,
-      int desired_size_in_pixel,
+      std::unique_ptr<FaviconServerFetcherParams> params,
       bool may_page_url_be_private,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       const favicon_base::GoogleFaviconServerCallback& callback);
@@ -121,6 +121,14 @@ class LargeIconService : public KeyedService {
       const favicon_base::LargeIconImageCallback& image_callback,
       base::CancelableTaskTracker* tracker);
 
+  void OnCanSetOnDemandFaviconComplete(
+      const GURL& server_request_url,
+      const GURL& page_url,
+      favicon_base::IconType icon_type,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation,
+      const favicon_base::GoogleFaviconServerCallback& callback,
+      bool can_set_on_demand_favicon);
+
   FaviconService* favicon_service_;
 
   // A pre-populated list of icon types to consider when looking for large
@@ -129,6 +137,8 @@ class LargeIconService : public KeyedService {
   std::vector<favicon_base::IconTypeSet> large_icon_types_;
 
   std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
+
+  base::WeakPtrFactory<LargeIconService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(LargeIconService);
 };

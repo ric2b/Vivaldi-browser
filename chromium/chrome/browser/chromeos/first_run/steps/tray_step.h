@@ -5,20 +5,26 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FIRST_RUN_STEPS_TRAY_STEP_H_
 #define CHROME_BROWSER_CHROMEOS_FIRST_RUN_STEPS_TRAY_STEP_H_
 
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/first_run/step.h"
+
+namespace gfx {
+class Rect;
+}
 
 namespace chromeos {
 namespace first_run {
 
 class TrayStep : public Step {
  public:
-  TrayStep(ash::FirstRunHelper* shell_helper, FirstRunActor* actor);
+  TrayStep(FirstRunController* controller, FirstRunActor* actor);
 
  private:
-  // Overriden from Step.
+  // Step:
   void DoShow() override;
+
+  // Shows the step when the bubble bounds are available.
+  void ShowWithBubbleBounds(const gfx::Rect& screen_bounds);
 
   DISALLOW_COPY_AND_ASSIGN(TrayStep);
 };

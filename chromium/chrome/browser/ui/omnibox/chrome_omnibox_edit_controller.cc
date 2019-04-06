@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/toolbar/toolbar_model.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
@@ -38,6 +38,12 @@ void ChromeOmniboxEditController::OnInputInProgress(bool in_progress) {
   GetToolbarModel()->set_input_in_progress(in_progress);
   UpdateWithoutTabRestore();
 }
+
+content::WebContents* ChromeOmniboxEditController::GetWebContents() {
+  return nullptr;
+}
+
+void ChromeOmniboxEditController::UpdateWithoutTabRestore() {}
 
 ChromeOmniboxEditController::ChromeOmniboxEditController(
     CommandUpdater* command_updater)

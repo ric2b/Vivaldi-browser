@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -87,8 +88,6 @@ std::string DnsConfigToString(const DnsConfig& dns_config) {
   base::StringAppendF(&output, "options attempts:%d\n", dns_config.attempts);
   if (dns_config.rotate)
     output.append("options rotate\n");
-  if (dns_config.edns0)
-    output.append("options edns0\n");
   return output;
 }
 
@@ -407,7 +406,7 @@ void GDig::Start() {
 void GDig::Finish(Result result) {
   DCHECK_NE(RESULT_PENDING, result);
   result_ = result;
-  if (base::MessageLoop::current())
+  if (base::MessageLoopCurrent::Get())
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 

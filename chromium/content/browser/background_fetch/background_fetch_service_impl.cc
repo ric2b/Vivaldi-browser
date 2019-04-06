@@ -8,6 +8,7 @@
 
 #include "base/guid.h"
 #include "content/browser/background_fetch/background_fetch_context.h"
+#include "content/browser/background_fetch/background_fetch_metrics.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/storage_partition_impl.h"
@@ -73,19 +74,15 @@ void BackgroundFetchServiceImpl::Fetch(
     const std::string& developer_id,
     const std::vector<ServiceWorkerFetchRequest>& requests,
     const BackgroundFetchOptions& options,
+    const SkBitmap& icon,
     FetchCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!ValidateDeveloperId(developer_id)) {
+  if (!ValidateDeveloperId(developer_id) || !ValidateRequests(requests)) {
     std::move(callback).Run(
         blink::mojom::BackgroundFetchError::INVALID_ARGUMENT,
         base::nullopt /* registration */);
-    return;
-  }
-
-  if (!ValidateRequests(requests)) {
-    std::move(callback).Run(
-        blink::mojom::BackgroundFetchError::INVALID_ARGUMENT,
-        base::nullopt /* registration */);
+    background_fetch::RecordRegistrationCreatedError(
+        blink::mojom::BackgroundFetchError::INVALID_ARGUMENT);
     return;
   }
 
@@ -96,12 +93,21 @@ void BackgroundFetchServiceImpl::Fetch(
                                                 base::GenerateGUID());
 
   background_fetch_context_->StartFetch(registration_id, requests, options,
-                                        std::move(callback));
+                                        icon, std::move(callback));
 }
 
-void BackgroundFetchServiceImpl::UpdateUI(const std::string& unique_id,
-                                          const std::string& title,
-                                          UpdateUICallback callback) {
+void BackgroundFetchServiceImpl::GetIconDisplaySize(
+    blink::mojom::BackgroundFetchService::GetIconDisplaySizeCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  background_fetch_context_->GetIconDisplaySize(std::move(callback));
+}
+
+void BackgroundFetchServiceImpl::UpdateUI(
+    int64_t service_worker_registration_id,
+    const std::string& developer_id,
+    const std::string& unique_id,
+    const std::string& title,
+    UpdateUICallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!ValidateUniqueId(unique_id) || !ValidateTitle(title)) {
     std::move(callback).Run(
@@ -109,7 +115,10 @@ void BackgroundFetchServiceImpl::UpdateUI(const std::string& unique_id,
     return;
   }
 
-  background_fetch_context_->UpdateUI(unique_id, title, std::move(callback));
+  BackgroundFetchRegistrationId registration_id(
+      service_worker_registration_id, origin_, developer_id, unique_id);
+  background_fetch_context_->UpdateUI(registration_id, title,
+                                      std::move(callback));
 }
 
 void BackgroundFetchServiceImpl::Abort(int64_t service_worker_registration_id,

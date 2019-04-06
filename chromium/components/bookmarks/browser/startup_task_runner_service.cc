@@ -30,11 +30,6 @@ scoped_refptr<base::DeferredSequencedTaskRunner>
   return bookmark_task_runner_;
 }
 
-scoped_refptr<base::DeferredSequencedTaskRunner>
-    StartupTaskRunnerService::GetNotesTaskRunner() {
-  return GetBookmarkTaskRunner();
-}
-
 void StartupTaskRunnerService::StartDeferredTaskRunners() {
   GetBookmarkTaskRunner()->Start();
 }

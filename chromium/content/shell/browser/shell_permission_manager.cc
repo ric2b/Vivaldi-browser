@@ -6,7 +6,9 @@
 
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "content/public/browser/permission_controller.h"
 #include "content/public/browser/permission_type.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/shell/common/shell_switches.h"
 #include "media/base/media_switches.h"
@@ -19,18 +21,18 @@ bool IsWhitelistedPermissionType(PermissionType permission) {
   return permission == PermissionType::GEOLOCATION ||
          permission == PermissionType::MIDI ||
          permission == PermissionType::SENSORS ||
+         permission == PermissionType::PAYMENT_HANDLER ||
          // Background sync browser tests require permission to be granted by
          // default.
          // TODO(nsatragno): add a command line flag so that it's only granted
          // for tests.
-         permission == PermissionType::BACKGROUND_SYNC;
+         permission == PermissionType::BACKGROUND_SYNC ||
+         permission == PermissionType::ACCESSIBILITY_EVENTS;
 }
 
 }  // namespace
 
-ShellPermissionManager::ShellPermissionManager()
-    : PermissionManager() {
-}
+ShellPermissionManager::ShellPermissionManager() = default;
 
 ShellPermissionManager::~ShellPermissionManager() {
 }
@@ -44,7 +46,7 @@ int ShellPermissionManager::RequestPermission(
   callback.Run(IsWhitelistedPermissionType(permission)
                    ? blink::mojom::PermissionStatus::GRANTED
                    : blink::mojom::PermissionStatus::DENIED);
-  return kNoPendingOperation;
+  return PermissionController::kNoPendingOperation;
 }
 
 int ShellPermissionManager::RequestPermissions(
@@ -61,10 +63,7 @@ int ShellPermissionManager::RequestPermissions(
                          : blink::mojom::PermissionStatus::DENIED);
   }
   callback.Run(result);
-  return kNoPendingOperation;
-}
-
-void ShellPermissionManager::CancelPermissionRequest(int request_id) {
+  return PermissionController::kNoPendingOperation;
 }
 
 void ShellPermissionManager::ResetPermission(
@@ -90,12 +89,24 @@ blink::mojom::PermissionStatus ShellPermissionManager::GetPermissionStatus(
              : blink::mojom::PermissionStatus::DENIED;
 }
 
+blink::mojom::PermissionStatus
+ShellPermissionManager::GetPermissionStatusForFrame(
+    PermissionType permission,
+    content::RenderFrameHost* render_frame_host,
+    const GURL& requesting_origin) {
+  return GetPermissionStatus(
+      permission, requesting_origin,
+      content::WebContents::FromRenderFrameHost(render_frame_host)
+          ->GetLastCommittedURL()
+          .GetOrigin());
+}
+
 int ShellPermissionManager::SubscribePermissionStatusChange(
     PermissionType permission,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
     const base::Callback<void(blink::mojom::PermissionStatus)>& callback) {
-  return kNoPendingOperation;
+  return PermissionController::kNoPendingOperation;
 }
 
 void ShellPermissionManager::UnsubscribePermissionStatusChange(

@@ -67,7 +67,6 @@ namespace developerPrivate {
     EXTENSION_DIALOG,
     EXTENSION_GUEST,
     EXTENSION_POPUP,
-    PANEL,
     TAB_CONTENTS
   };
 
@@ -165,6 +164,12 @@ namespace developerPrivate {
     SUPERVISED_USER_CUSTODIAN
   };
 
+  enum HostAccess {
+    ON_CLICK,
+    ON_SPECIFIC_SITES,
+    ON_ALL_SITES
+  };
+
   dictionary ControlledInfo {
     ControllerType type;
     DOMString text;
@@ -187,6 +192,18 @@ namespace developerPrivate {
   dictionary Permission {
     DOMString message;
     DOMString[] submessages;
+  };
+
+  dictionary Permissions {
+    Permission[] simplePermissions;
+
+    // Only populated for extensions affected by the runtime host
+    // permissions feature.
+    HostAccess? hostAccess;
+
+    // Only populated for extensions affected by the runtime host
+    // permissions feature and |hostAccess| is equal to ON_SPECIFIC_SITES.
+    DOMString[]? runtimeHostPermissions;
   };
 
   dictionary ExtensionInfo {
@@ -214,9 +231,8 @@ namespace developerPrivate {
     boolean offlineEnabled;
     OptionsPage? optionsPage;
     DOMString? path;
-    Permission[] permissions;
+    Permissions permissions;
     DOMString? prettifiedPath;
-    AccessModifier runOnAllUrls;
     RuntimeError[] runtimeErrors;
     DOMString[] runtimeWarnings;
     ExtensionState state;
@@ -284,7 +300,7 @@ namespace developerPrivate {
     boolean? fileAccess;
     boolean? incognitoAccess;
     boolean? errorCollection;
-    boolean? runOnAllUrls;
+    HostAccess? hostAccess;
     boolean? showActionButton;
   };
 
@@ -359,7 +375,9 @@ namespace developerPrivate {
     ERROR_ADDED,
     ERRORS_REMOVED,
     PREFS_CHANGED,
-    WARNINGS_CHANGED
+    WARNINGS_CHANGED,
+    COMMAND_ADDED,
+    COMMAND_REMOVED
   };
 
   dictionary PackDirectoryResponse {
@@ -564,6 +582,10 @@ namespace developerPrivate {
     static void loadUnpacked(optional LoadUnpackedOptions options,
                              optional LoadErrorCallback callback);
 
+    // Installs the file that was dragged and dropped onto the associated
+    // page.
+    static void installDroppedFile(optional VoidCallback callback);
+
     // Notifies the browser that a user began a drag in order to install an
     // extension.
     static void notifyDragInstallInProgress();
@@ -634,6 +656,22 @@ namespace developerPrivate {
     // |update| : The parameters for updating the extension command.
     static void updateExtensionCommand(ExtensionCommandUpdate update,
                                        optional VoidCallback callback);
+
+    // Adds a new host permission to the extension. The extension will only
+    // have access to the host if it is within the requested permissions.
+    // |extensionId|: The id of the extension to modify.
+    // |host|: The host to add.
+    static void addHostPermission(DOMString extensionId,
+                                  DOMString host,
+                                  optional VoidCallback callback);
+
+    // Removes a host permission from the extension. This should only be called
+    // with a host that the extension has access to.
+    // |extensionId|: The id of the extension to modify.
+    // |host|: The host to remove.
+    static void removeHostPermission(DOMString extensionId,
+                                     DOMString host,
+                                     optional VoidCallback callback);
 
     [nocompile, deprecated="Use management.setEnabled"]
         static void enable(DOMString id,

@@ -46,6 +46,12 @@ class GFX_EXPORT Matrix3F {
     data_[8] = m22;
   }
 
+  Vector3dF get_row(int i) const {
+    return Vector3dF(data_[MatrixToArrayCoords(i, 0)],
+                     data_[MatrixToArrayCoords(i, 1)],
+                     data_[MatrixToArrayCoords(i, 2)]);
+  }
+
   Vector3dF get_column(int i) const {
     return Vector3dF(
       data_[MatrixToArrayCoords(0, i)],
@@ -59,9 +65,17 @@ class GFX_EXPORT Matrix3F {
     data_[MatrixToArrayCoords(2, i)] = c.z();
   }
 
+  // Produces a new matrix by adding the elements of |rhs| to this matrix
+  Matrix3F Add(const Matrix3F& rhs) const;
+  // Produces a new matrix by subtracting elements of |rhs| from this matrix.
+  Matrix3F Subtract(const Matrix3F& rhs) const;
+
   // Returns an inverse of this if the matrix is non-singular, zero (== Zero())
   // otherwise.
   Matrix3F Inverse() const;
+
+  // Returns a transpose of this matrix.
+  Matrix3F Transpose() const;
 
   // Value of the determinant of the matrix.
   float Determinant() const;
@@ -87,6 +101,8 @@ class GFX_EXPORT Matrix3F {
   // to eigenvalues.
   Vector3dF SolveEigenproblem(Matrix3F* eigenvectors) const;
 
+  std::string ToString() const;
+
  private:
   Matrix3F();  // Uninitialized default.
 
@@ -102,6 +118,21 @@ class GFX_EXPORT Matrix3F {
 inline bool operator==(const Matrix3F& lhs, const Matrix3F& rhs) {
   return lhs.IsEqual(rhs);
 }
+
+// Matrix addition. Produces a new matrix by adding the corresponding elements
+// together.
+inline Matrix3F operator+(const Matrix3F& lhs, const Matrix3F& rhs) {
+  return lhs.Add(rhs);
+}
+
+// Matrix subtraction. Produces a new matrix by subtracting elements of rhs
+// from corresponding elements of lhs.
+inline Matrix3F operator-(const Matrix3F& lhs, const Matrix3F& rhs) {
+  return lhs.Subtract(rhs);
+}
+
+GFX_EXPORT Matrix3F MatrixProduct(const Matrix3F& lhs, const Matrix3F& rhs);
+GFX_EXPORT Vector3dF MatrixProduct(const Matrix3F& lhs, const Vector3dF& rhs);
 
 }  // namespace gfx
 

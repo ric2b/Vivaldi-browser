@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -16,18 +17,28 @@
 
 class GURL;
 
+namespace gfx {
+class Size;
+}
+
 namespace net {
 class HttpRequestHeaders;
 struct NetworkTrafficAnnotationTag;
 }  // namespace net
 
-namespace url {
-class Origin;
-}  // namespace url
-
 namespace content {
 struct BackgroundFetchResponse;
 struct BackgroundFetchResult;
+struct BackgroundFetchDescription;
+
+// Various reasons a Background Fetch can get aborted.
+enum class BackgroundFetchReasonToAbort {
+  NONE,
+  CANCELLED_FROM_UI,
+  ABORTED_BY_DEVELOPER,
+  TOTAL_DOWNLOAD_SIZE_EXCEEDED,
+  SERVICE_WORKER_UNAVAILABLE,
+};
 
 // Interface for launching background fetches. Implementing classes would
 // generally interface with the DownloadService or DownloadManager.
@@ -35,6 +46,8 @@ struct BackgroundFetchResult;
 // BackgroundFetchDelegateProxy.
 class CONTENT_EXPORT BackgroundFetchDelegate {
  public:
+  using GetIconDisplaySizeCallback = base::OnceCallback<void(const gfx::Size&)>;
+
   // Client interface that a BackgroundFetchDelegate would use to signal the
   // progress of a background fetch.
   class Client {
@@ -43,7 +56,9 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
 
     // Called when the entire download job has been cancelled by the delegate,
     // e.g. because the user clicked cancel on a notification.
-    virtual void OnJobCancelled(const std::string& job_unique_id) = 0;
+    virtual void OnJobCancelled(
+        const std::string& job_unique_id,
+        BackgroundFetchReasonToAbort reason_to_abort) = 0;
 
     // Called after the download has started with the initial response
     // (including headers and URL chain). Always called on the UI thread.
@@ -65,6 +80,9 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
         const std::string& download_guid,
         std::unique_ptr<BackgroundFetchResult> result) = 0;
 
+    // Called when the UI of a background fetch job is activated.
+    virtual void OnUIActivated(const std::string& job_unique_id) = 0;
+
     // Called by the delegate when it's shutting down to signal that the
     // delegate is no longer valid.
     virtual void OnDelegateShutdown() = 0;
@@ -74,6 +92,9 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
 
   virtual ~BackgroundFetchDelegate();
 
+  // Gets size of the icon to display with the Background Fetch UI.
+  virtual void GetIconDisplaySize(GetIconDisplaySizeCallback callback) = 0;
+
   // Creates a new download grouping identified by |job_unique_id|. Further
   // downloads started by DownloadUrl will also use this |job_unique_id| so that
   // a notification can be updated with the current status. If the download was
@@ -81,12 +102,7 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
   // contain the GUIDs of in progress downloads, while completed downloads are
   // recorded in |completed_parts|.
   virtual void CreateDownloadJob(
-      const std::string& job_unique_id,
-      const std::string& title,
-      const url::Origin& origin,
-      int completed_parts,
-      int total_parts,
-      const std::vector<std::string>& current_guids) = 0;
+      std::unique_ptr<BackgroundFetchDescription> fetch_description) = 0;
 
   // Creates a new download identified by |download_guid| in the download job
   // identified by |job_unique_id|.
@@ -100,6 +116,11 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
 
   // Aborts any downloads associated with |job_unique_id|.
   virtual void Abort(const std::string& job_unique_id) = 0;
+
+  // Updates the UI shown for the fetch job associated with |job_unique_id| to
+  // display a new |title|.
+  virtual void UpdateUI(const std::string& job_unique_id,
+                        const std::string& title) = 0;
 
   // Set the client that the delegate should communicate changes to.
   void SetDelegateClient(base::WeakPtr<Client> client) { client_ = client; }

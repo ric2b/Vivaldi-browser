@@ -56,6 +56,7 @@
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/text_utils.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -126,7 +127,7 @@ class FullscreenButton : public ImageButton {
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     ImageButton::GetAccessibleNodeData(node_data);
-    node_data->role = ui::AX_ROLE_MENU_ITEM;
+    node_data->role = ax::mojom::Role::kMenuItem;
   }
 
  private:
@@ -192,6 +193,7 @@ class InMenuButtonBackground : public views::Background {
       case views::Button::STATE_HOVERED:
         // Hovered should be handled in DrawBackground.
         NOTREACHED();
+        FALLTHROUGH;
       default:
         return theme->GetSystemColor(
             ui::NativeTheme::kColorId_MenuBackgroundColor);
@@ -267,7 +269,7 @@ class InMenuButton : public LabelButton {
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     LabelButton::GetAccessibleNodeData(node_data);
     if (!role_is_button_)
-      node_data->role = ui::AX_ROLE_MENU_ITEM;
+      node_data->role = ax::mojom::Role::kMenuItem;
   }
 
   // views::LabelButton
@@ -314,6 +316,12 @@ class AppMenuView : public views::View,
   ~AppMenuView() override {
     if (menu_)
       menu_->RemoveObserver(this);
+  }
+
+  // Overridden from views::View.
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    views::View::GetAccessibleNodeData(node_data);
+    node_data->role = ax::mojom::Role::kMenu;
   }
 
   // Overridden from views::View.
@@ -503,6 +511,10 @@ class AppMenu::ZoomView : public AppMenuView {
     zoom_label_->SetBackground(std::make_unique<InMenuButtonBackground>(
         InMenuButtonBackground::NO_BORDER));
 
+    // An accessibility role of kAlert will ensure that any updates to the zoom
+    // level can be picked up by screen readers.
+    zoom_label_->GetViewAccessibility().OverrideRole(ax::mojom::Role::kAlert);
+
     AddChildView(zoom_label_);
     zoom_label_max_width_valid_ = false;
 
@@ -512,7 +524,7 @@ class AppMenu::ZoomView : public AppMenuView {
 
     fullscreen_button_ = new FullscreenButton(this);
     // all buttons on menu should must be a custom button in order for
-    // the keyboard navigation work.
+    // the keyboard navigation to work.
     DCHECK(Button::AsButton(fullscreen_button_));
     gfx::ImageSkia* full_screen_image =
         ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
@@ -638,7 +650,9 @@ class AppMenu::ZoomView : public AppMenuView {
                                     contents->GetMinimumZoomPercent());
     }
     zoom_label_->SetText(base::FormatPercent(zoom));
-    zoom_label_->NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
+    // An alert notification will ensure that the zoom label is always announced
+    // even if is not focusable.
+    zoom_label_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
     zoom_label_max_width_valid_ = false;
   }
 
@@ -826,7 +840,7 @@ void AppMenu::CloseMenu() {
     menu_runner_->Cancel();
 }
 
-bool AppMenu::IsShowing() {
+bool AppMenu::IsShowing() const {
   return menu_runner_.get() && menu_runner_->IsRunning();
 }
 

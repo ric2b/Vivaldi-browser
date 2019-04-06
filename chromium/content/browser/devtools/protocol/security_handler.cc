@@ -20,7 +20,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
-#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
+#include "third_party/blink/public/platform/web_mixed_content_context_type.h"
 
 namespace content {
 namespace protocol {
@@ -132,7 +132,7 @@ void SecurityHandler::AttachToRenderFrameHost() {
   DidChangeVisibleSecurityState();
 }
 
-void SecurityHandler::SetRenderer(RenderProcessHost* process_host,
+void SecurityHandler::SetRenderer(int process_host_id,
                                   RenderFrameHostImpl* frame_host) {
   host_ = frame_host;
   if (enabled_ && host_)
@@ -141,6 +141,8 @@ void SecurityHandler::SetRenderer(RenderProcessHost* process_host,
 
 void SecurityHandler::DidChangeVisibleSecurityState() {
   DCHECK(enabled_);
+  if (!web_contents()->GetDelegate())
+    return;
 
   SecurityStyleExplanations security_style_explanations;
   blink::WebSecurityStyle security_style =
@@ -206,7 +208,7 @@ bool SecurityHandler::NotifyCertificateError(int cert_error,
                                              CertErrorCallback handler) {
   if (cert_error_override_mode_ == CertErrorOverrideMode::kIgnoreAll) {
     if (handler)
-      handler.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE);
+      std::move(handler).Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE);
     return true;
   }
 
@@ -222,7 +224,7 @@ bool SecurityHandler::NotifyCertificateError(int cert_error,
     return false;
   }
 
-  cert_error_callbacks_[last_cert_error_id_] = handler;
+  cert_error_callbacks_[last_cert_error_id_] = std::move(handler);
   return true;
 }
 

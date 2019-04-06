@@ -225,6 +225,7 @@ const OncFieldSignature wifi_fields[] = {
     {::onc::wifi::kAllowGatewayARPPolling, &kBoolSignature},
     {::onc::wifi::kAutoConnect, &kBoolSignature},
     {::onc::wifi::kEAP, &kEAPSignature},
+    {::onc::wifi::kFTEnabled, &kBoolSignature},
     {::onc::wifi::kHexSSID, &kStringSignature},
     {::onc::wifi::kHiddenSSID, &kBoolSignature},
     {::onc::wifi::kPassphrase, &kStringSignature},
@@ -267,6 +268,7 @@ const OncFieldSignature cellular_apn_fields[] = {
     {::onc::cellular_apn::kName, &kStringSignature},
     {::onc::cellular_apn::kUsername, &kStringSignature},
     {::onc::cellular_apn::kPassword, &kStringSignature},
+    {::onc::cellular_apn::kAuthentication, &kStringSignature},
     {::onc::cellular_apn::kLocalizedName, &kStringSignature},
     {::onc::cellular_apn::kLanguage, &kStringSignature},
     {NULL}};
@@ -364,6 +366,7 @@ const OncFieldSignature global_network_configuration_fields[] = {
      &kBoolSignature},
     {::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
      &kBoolSignature},
+    {::onc::global_network_config::kBlacklistedHexSSIDs, &kStringListSignature},
     {::onc::global_network_config::kDisableNetworkTypes, &kStringListSignature},
     {NULL}};
 

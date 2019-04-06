@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
@@ -48,8 +49,11 @@ void DisconnectWindowServer() {
   // launchservicesd to get an ASN. By setting this flag, HIServices skips
   // that.
   SetApplicationIsDaemon(true);
-  // Tell LaunchServices to continue without a connection to the daemon.
-  _LSSetApplicationLaunchServicesServerConnectionStatus(0, nullptr);
+  // Tell LaunchServices no connections are ever allowed.
+  _LSSetApplicationLaunchServicesServerConnectionStatus(
+      0, ^bool(CFDictionaryRef options) {
+        return false;
+      });
 }
 
 // You are about to read a pretty disgusting hack. In a static initializer,
@@ -100,15 +104,9 @@ void DisconnectCFNotificationCenter() {
     // Convert the string to an address.
     std::string port_address_std_string =
         base::SysCFStringRefToUTF8(port_address_string);
-#if __LP64__
     uint64_t port_address = 0;
     if (!base::HexStringToUInt64(port_address_std_string, &port_address))
       continue;
-#else
-    uint32_t port_address = 0;
-    if (!base::HexStringToUInt(port_address_std_string, &port_address))
-      continue;
-#endif
 
     // Cast the address to an object.
     CFMachPortRef mach_port = reinterpret_cast<CFMachPortRef>(port_address);

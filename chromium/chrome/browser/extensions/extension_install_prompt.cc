@@ -95,12 +95,6 @@ bool AutoConfirmPrompt(ExtensionInstallPrompt::DoneCallback* callback) {
   return false;
 }
 
-Profile* ProfileForWebContents(content::WebContents* web_contents) {
-  if (!web_contents)
-    return NULL;
-  return Profile::FromBrowserContext(web_contents->GetBrowserContext());
-}
-
 }  // namespace
 
 ExtensionInstallPrompt::Prompt::InstallPromptPermissions::
@@ -113,35 +107,6 @@ ExtensionInstallPrompt::Prompt::InstallPromptPermissions::
 ExtensionInstallPrompt::PromptType
 ExtensionInstallPrompt::g_last_prompt_type_for_tests =
     ExtensionInstallPrompt::UNSET_PROMPT_TYPE;
-
-// This should match the PromptType enum.
-std::string ExtensionInstallPrompt::PromptTypeToString(PromptType type) {
-  switch (type) {
-    case INSTALL_PROMPT:
-      return "INSTALL_PROMPT";
-    case INLINE_INSTALL_PROMPT:
-      return "INLINE_INSTALL_PROMPT";
-    case RE_ENABLE_PROMPT:
-      return "RE_ENABLE_PROMPT";
-    case PERMISSIONS_PROMPT:
-      return "PERMISSIONS_PROMPT";
-    case EXTERNAL_INSTALL_PROMPT:
-      return "EXTERNAL_INSTALL_PROMPT";
-    case POST_INSTALL_PERMISSIONS_PROMPT:
-      return "POST_INSTALL_PERMISSIONS_PROMPT";
-    case REMOTE_INSTALL_PROMPT:
-      return "REMOTE_INSTALL_PROMPT";
-    case REPAIR_PROMPT:
-      return "REPAIR_PROMPT";
-    case DELEGATED_PERMISSIONS_PROMPT:
-      return "DELEGATED_PERMISSIONS_PROMPT";
-    case UNSET_PROMPT_TYPE:
-    case NUM_PROMPT_TYPES:
-      NOTREACHED();
-      break;
-  }
-  return "OTHER";
-}
 
 ExtensionInstallPrompt::Prompt::Prompt(PromptType type)
     : type_(type),
@@ -160,13 +125,9 @@ ExtensionInstallPrompt::Prompt::~Prompt() {
 }
 
 void ExtensionInstallPrompt::Prompt::AddPermissions(
-    const PermissionMessages& permissions,
-    PermissionsType permissions_type) {
-  InstallPromptPermissions& install_permissions =
-      GetPermissionsForType(permissions_type);
-
+    const PermissionMessages& permissions) {
   for (const PermissionMessage& msg : permissions) {
-    install_permissions.permissions.push_back(msg.message());
+    prompt_permissions_.permissions.push_back(msg.message());
     // Add a dash to the front of each permission detail.
     base::string16 details;
     if (!msg.submessages().empty()) {
@@ -179,8 +140,8 @@ void ExtensionInstallPrompt::Prompt::AddPermissions(
       details = base::JoinString(detail_lines_with_bullets,
                                  base::ASCIIToUTF16("\n"));
     }
-    install_permissions.details.push_back(details);
-    install_permissions.is_showing_details.push_back(false);
+    prompt_permissions_.details.push_back(details);
+    prompt_permissions_.is_showing_details.push_back(false);
   }
 }
 
@@ -191,10 +152,6 @@ void ExtensionInstallPrompt::Prompt::SetIsShowingDetails(
   switch (type) {
     case PERMISSIONS_DETAILS:
       prompt_permissions_.is_showing_details[index] = is_showing_details;
-      break;
-    case WITHHELD_PERMISSIONS_DETAILS:
-      withheld_prompt_permissions_.is_showing_details[index] =
-          is_showing_details;
       break;
     case RETAINED_FILES_DETAILS:
       is_showing_details_for_retained_files_ = is_showing_details;
@@ -362,43 +319,31 @@ base::string16 ExtensionInstallPrompt::Prompt::GetAbortButtonLabel() const {
   return l10n_util::GetStringUTF16(id);
 }
 
-base::string16 ExtensionInstallPrompt::Prompt::GetPermissionsHeading(
-    PermissionsType permissions_type) const {
-  switch (permissions_type) {
-    case REGULAR_PERMISSIONS: {
-      int id = -1;
-      switch (type_) {
-        case INSTALL_PROMPT:
-        case INLINE_INSTALL_PROMPT:
-        case EXTERNAL_INSTALL_PROMPT:
-        case REMOTE_INSTALL_PROMPT:
-        case DELEGATED_PERMISSIONS_PROMPT:
-          id = IDS_EXTENSION_PROMPT_WILL_HAVE_ACCESS_TO;
-          break;
-        case RE_ENABLE_PROMPT:
-          id = IDS_EXTENSION_PROMPT_WILL_NOW_HAVE_ACCESS_TO;
-          break;
-        case PERMISSIONS_PROMPT:
-          id = IDS_EXTENSION_PROMPT_WANTS_ACCESS_TO;
-          break;
-        case POST_INSTALL_PERMISSIONS_PROMPT:
-        case REPAIR_PROMPT:
-          id = IDS_EXTENSION_PROMPT_CAN_ACCESS;
-          break;
-        case UNSET_PROMPT_TYPE:
-        case NUM_PROMPT_TYPES:
-          NOTREACHED();
-      }
-      return l10n_util::GetStringUTF16(id);
-    }
-    case WITHHELD_PERMISSIONS:
-      return l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WITHHELD);
-    case ALL_PERMISSIONS:
+base::string16 ExtensionInstallPrompt::Prompt::GetPermissionsHeading() const {
+  int id = -1;
+  switch (type_) {
+    case INSTALL_PROMPT:
+    case INLINE_INSTALL_PROMPT:
+    case EXTERNAL_INSTALL_PROMPT:
+    case REMOTE_INSTALL_PROMPT:
+    case DELEGATED_PERMISSIONS_PROMPT:
+      id = IDS_EXTENSION_PROMPT_WILL_HAVE_ACCESS_TO;
+      break;
+    case RE_ENABLE_PROMPT:
+      id = IDS_EXTENSION_PROMPT_WILL_NOW_HAVE_ACCESS_TO;
+      break;
+    case PERMISSIONS_PROMPT:
+      id = IDS_EXTENSION_PROMPT_WANTS_ACCESS_TO;
+      break;
+    case POST_INSTALL_PERMISSIONS_PROMPT:
+    case REPAIR_PROMPT:
+      id = IDS_EXTENSION_PROMPT_CAN_ACCESS;
+      break;
+    case UNSET_PROMPT_TYPE:
+    case NUM_PROMPT_TYPES:
       NOTREACHED();
-      return base::string16();
   }
-  NOTREACHED();
-  return base::string16();
+  return l10n_util::GetStringUTF16(id);
 }
 
 base::string16 ExtensionInstallPrompt::Prompt::GetRetainedFilesHeading() const {
@@ -413,8 +358,7 @@ base::string16 ExtensionInstallPrompt::Prompt::GetRetainedDevicesHeading()
 }
 
 bool ExtensionInstallPrompt::Prompt::ShouldShowPermissions() const {
-  return GetPermissionCount(ALL_PERMISSIONS) > 0 ||
-         type_ == POST_INSTALL_PERMISSIONS_PROMPT;
+  return GetPermissionCount() > 0 || type_ == POST_INSTALL_PERMISSIONS_PROMPT;
 }
 
 bool ExtensionInstallPrompt::Prompt::ShouldUseTabModalDialog() const {
@@ -469,54 +413,24 @@ base::string16 ExtensionInstallPrompt::Prompt::GetUserCount() const {
   return base::string16();
 }
 
-size_t ExtensionInstallPrompt::Prompt::GetPermissionCount(
-    PermissionsType permissions_type) const {
-  switch (permissions_type) {
-    case REGULAR_PERMISSIONS:
-      return prompt_permissions_.permissions.size();
-    case WITHHELD_PERMISSIONS:
-      return withheld_prompt_permissions_.permissions.size();
-    case ALL_PERMISSIONS:
-      return prompt_permissions_.permissions.size() +
-             withheld_prompt_permissions_.permissions.size();
-    default:
-      NOTREACHED();
-      return 0u;
-  }
+size_t ExtensionInstallPrompt::Prompt::GetPermissionCount() const {
+  return prompt_permissions_.permissions.size();
 }
 
-size_t ExtensionInstallPrompt::Prompt::GetPermissionsDetailsCount(
-    PermissionsType permissions_type) const {
-  switch (permissions_type) {
-    case REGULAR_PERMISSIONS:
-      return prompt_permissions_.details.size();
-    case WITHHELD_PERMISSIONS:
-      return withheld_prompt_permissions_.details.size();
-    case ALL_PERMISSIONS:
-      return prompt_permissions_.details.size() +
-             withheld_prompt_permissions_.details.size();
-    default:
-      NOTREACHED();
-      return 0u;
-  }
+size_t ExtensionInstallPrompt::Prompt::GetPermissionsDetailsCount() const {
+  return prompt_permissions_.details.size();
 }
 
 base::string16 ExtensionInstallPrompt::Prompt::GetPermission(
-    size_t index,
-    PermissionsType permissions_type) const {
-  const InstallPromptPermissions& install_permissions =
-      GetPermissionsForType(permissions_type);
-  CHECK_LT(index, install_permissions.permissions.size());
-  return install_permissions.permissions[index];
+    size_t index) const {
+  CHECK_LT(index, prompt_permissions_.permissions.size());
+  return prompt_permissions_.permissions[index];
 }
 
 base::string16 ExtensionInstallPrompt::Prompt::GetPermissionsDetails(
-    size_t index,
-    PermissionsType permissions_type) const {
-  const InstallPromptPermissions& install_permissions =
-      GetPermissionsForType(permissions_type);
-  CHECK_LT(index, install_permissions.details.size());
-  return install_permissions.details[index];
+    size_t index) const {
+  CHECK_LT(index, prompt_permissions_.details.size());
+  return prompt_permissions_.details[index];
 }
 
 bool ExtensionInstallPrompt::Prompt::GetIsShowingDetails(
@@ -525,9 +439,6 @@ bool ExtensionInstallPrompt::Prompt::GetIsShowingDetails(
     case PERMISSIONS_DETAILS:
       CHECK_LT(index, prompt_permissions_.is_showing_details.size());
       return prompt_permissions_.is_showing_details[index];
-    case WITHHELD_PERMISSIONS_DETAILS:
-      CHECK_LT(index, withheld_prompt_permissions_.is_showing_details.size());
-      return withheld_prompt_permissions_.is_showing_details[index];
     case RETAINED_FILES_DETAILS:
       return is_showing_details_for_retained_files_;
     case RETAINED_DEVICES_DETAILS:
@@ -558,22 +469,6 @@ base::string16 ExtensionInstallPrompt::Prompt::GetRetainedDeviceMessageString(
 
 bool ExtensionInstallPrompt::Prompt::ShouldDisplayRevokeButton() const {
   return !retained_files_.empty() || !retained_device_messages_.empty();
-}
-
-ExtensionInstallPrompt::Prompt::InstallPromptPermissions&
-ExtensionInstallPrompt::Prompt::GetPermissionsForType(
-    PermissionsType permissions_type) {
-  DCHECK_NE(ALL_PERMISSIONS, permissions_type);
-  return permissions_type == REGULAR_PERMISSIONS ? prompt_permissions_
-                                                 : withheld_prompt_permissions_;
-}
-
-const ExtensionInstallPrompt::Prompt::InstallPromptPermissions&
-ExtensionInstallPrompt::Prompt::GetPermissionsForType(
-    PermissionsType permissions_type) const {
-  DCHECK_NE(ALL_PERMISSIONS, permissions_type);
-  return permissions_type == REGULAR_PERMISSIONS ? prompt_permissions_
-                                                 : withheld_prompt_permissions_;
 }
 
 bool ExtensionInstallPrompt::Prompt::ShouldDisplayRevokeFilesButton() const {
@@ -622,14 +517,14 @@ scoped_refptr<Extension>
 }
 
 ExtensionInstallPrompt::ExtensionInstallPrompt(content::WebContents* contents)
-    : profile_(ProfileForWebContents(contents)),
+    : profile_(contents
+                   ? Profile::FromBrowserContext(contents->GetBrowserContext())
+                   : nullptr),
       extension_(NULL),
-      install_ui_(extensions::CreateExtensionInstallUI(
-          ProfileForWebContents(contents))),
+      install_ui_(extensions::CreateExtensionInstallUI(profile_)),
       show_params_(new ExtensionInstallPromptShowParams(contents)),
       did_call_show_dialog_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 ExtensionInstallPrompt::ExtensionInstallPrompt(Profile* profile,
                                                gfx::NativeWindow native_window)
@@ -760,7 +655,7 @@ void ExtensionInstallPrompt::ShowConfirmation() {
     permissions_to_display = custom_permissions_.get();
   } else if (extension_) {
     // Initialize permissions if they have not already been set so that
-    // withheld permissions are displayed properly in the install prompt.
+    // any transformations are correctly reflected in the install prompt.
     extensions::PermissionsUpdater(
         profile_, extensions::PermissionsUpdater::INIT_FLAG_TRANSIENT)
         .InitializePermissions(extension_);
@@ -777,29 +672,14 @@ void ExtensionInstallPrompt::ShowConfirmation() {
     }
   }
 
-  if (permissions_to_display &&
-      (!extension_ ||
-       !extensions::PermissionsData::ShouldSkipPermissionWarnings(
-           extension_->id()))) {
+  if (permissions_to_display) {
     Manifest::Type type =
         extension_ ? extension_->GetType() : Manifest::TYPE_UNKNOWN;
     const extensions::PermissionMessageProvider* message_provider =
         extensions::PermissionMessageProvider::Get();
 
     prompt_->AddPermissions(message_provider->GetPermissionMessages(
-                                message_provider->GetAllPermissionIDs(
-                                    *permissions_to_display, type)),
-                            REGULAR_PERMISSIONS);
-
-    const PermissionSet* withheld =
-        extension_ ? &extension_->permissions_data()->withheld_permissions()
-                   : nullptr;
-    if (withheld && !withheld->IsEmpty()) {
-      prompt_->AddPermissions(
-          message_provider->GetPermissionMessages(
-              message_provider->GetAllPermissionIDs(*withheld, type)),
-          WITHHELD_PERMISSIONS);
-    }
+        message_provider->GetAllPermissionIDs(*permissions_to_display, type)));
   }
 
   prompt_->set_extension(extension_);

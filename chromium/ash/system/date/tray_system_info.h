@@ -9,32 +9,48 @@
 
 #include "ash/ash_export.h"
 #include "ash/login_status.h"
+#include "ash/session/session_controller.h"
+#include "ash/session/session_observer.h"
 #include "ash/system/date/clock_observer.h"
 #include "ash/system/tray/system_tray_item.h"
+#include "ash/system/tray/tray_item_view.h"
 #include "base/macros.h"
 
-namespace views {
-class Label;
-}
-
 namespace ash {
-class SystemClockObserver;
+class Shelf;
 class SystemInfoDefaultView;
 
 namespace tray {
+
 class TimeView;
-}
+
+class TimeTrayItemView : public TrayItemView, public SessionObserver {
+ public:
+  TimeTrayItemView(SystemTrayItem* owner, Shelf* shelf);
+  ~TimeTrayItemView() override;
+
+  void UpdateAlignmentForShelf(Shelf* shelf);
+  tray::TimeView* time_view() { return time_view_; }
+
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
+
+ private:
+  TimeView* time_view_ = nullptr;
+  ScopedSessionObserver session_observer_;
+  DISALLOW_COPY_AND_ASSIGN(TimeTrayItemView);
+};
+
+}  // namespace tray
 
 // The bottom row of the system menu. The default view shows the current date
 // and power status. The tray view shows the current time.
-class ASH_EXPORT TraySystemInfo : public SystemTrayItem, public ClockObserver {
+class ASH_EXPORT TraySystemInfo : public SystemTrayItem {
  public:
   explicit TraySystemInfo(SystemTray* system_tray);
   ~TraySystemInfo() override;
 
   const tray::TimeView* GetTimeTrayForTesting() const;
-  const SystemInfoDefaultView* GetDefaultViewForTesting() const;
-  views::View* CreateDefaultViewForTesting(LoginStatus status);
 
  private:
   // SystemTrayItem:
@@ -44,20 +60,8 @@ class ASH_EXPORT TraySystemInfo : public SystemTrayItem, public ClockObserver {
   void OnDefaultViewDestroyed() override;
   void UpdateAfterShelfAlignmentChange() override;
 
-  // ClockObserver:
-  void OnDateFormatChanged() override;
-  void OnSystemClockTimeUpdated() override;
-  void OnSystemClockCanSetTimeChanged(bool can_set_time) override;
-  void Refresh() override;
-
-  void SetupLabelForTimeTray(views::Label* label);
-  void UpdateTimeFormat();
-
-  tray::TimeView* tray_view_;
-  SystemInfoDefaultView* default_view_;
-  LoginStatus login_status_;
-
-  std::unique_ptr<SystemClockObserver> system_clock_observer_;
+  tray::TimeTrayItemView* tray_view_ = nullptr;
+  SystemInfoDefaultView* default_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TraySystemInfo);
 };

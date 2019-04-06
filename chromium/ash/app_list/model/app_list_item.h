@@ -18,7 +18,10 @@
 #include "ui/gfx/image/image_skia.h"
 
 class FastShowPickler;
-class ChromeAppListModelUpdater;
+
+namespace ash {
+class AppListControllerImpl;
+}  // namespace ash
 
 namespace app_list {
 
@@ -35,7 +38,7 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   virtual ~AppListItem();
 
   void SetIcon(const gfx::ImageSkia& icon);
-  const gfx::ImageSkia& icon() const { return icon_; }
+  const gfx::ImageSkia& icon() const { return metadata_->icon; }
 
   const std::string& GetDisplayName() const {
     return short_name_.empty() ? name() : short_name_;
@@ -84,21 +87,20 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   // Returns the number of child items if it has any (e.g. is a folder) or 0.
   virtual size_t ChildItemCount() const;
 
-  // Returns the number of items that were badged because they are extension
-  // apps that have their Android analogs installed.
-  virtual size_t BadgedItemCount() const;
-
   // Utility functions for sync integration tests.
   virtual bool CompareForTest(const AppListItem* other) const;
   virtual std::string ToDebugString() const;
 
   bool is_folder() const { return metadata_->is_folder; }
 
- protected:
-  // TODO(hejq): remove this when we have mojo interfaces.
-  friend class ::ChromeAppListModelUpdater;
+  void set_is_page_break(bool is_page_break) {
+    metadata_->is_page_break = is_page_break;
+  }
+  bool is_page_break() const { return metadata_->is_page_break; }
 
+ protected:
   friend class ::FastShowPickler;
+  friend class ash::AppListControllerImpl;
   friend class AppListItemList;
   friend class AppListItemListTest;
   friend class AppListModel;
@@ -129,8 +131,6 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   friend class AppListModelTest;
 
   ash::mojom::AppListItemMetadataPtr metadata_;
-
-  gfx::ImageSkia icon_;
 
   // A shortened name for the item, used for display.
   std::string short_name_;

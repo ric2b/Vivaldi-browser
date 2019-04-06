@@ -4,7 +4,6 @@
 
 #include "chrome/browser/search/search_engine_base_url_tracker.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/test/mock_callback.h"
 #include "chrome/browser/search/instant_unittest_base.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
@@ -17,7 +16,7 @@ TEST_F(SearchEngineBaseURLTrackerTest, DispatchDefaultSearchProviderChanged) {
       callback;
   SearchEngineBaseURLTracker tracker(
       template_url_service_,
-      base::MakeUnique<UIThreadSearchTermsData>(profile()), callback.Get());
+      std::make_unique<UIThreadSearchTermsData>(profile()), callback.Get());
 
   // Changing the search provider should invoke the callback.
   EXPECT_CALL(
@@ -31,7 +30,7 @@ TEST_F(SearchEngineBaseURLTrackerTest, DispatchGoogleURLUpdated) {
       callback;
   SearchEngineBaseURLTracker tracker(
       template_url_service_,
-      base::MakeUnique<UIThreadSearchTermsData>(profile()), callback.Get());
+      std::make_unique<UIThreadSearchTermsData>(profile()), callback.Get());
 
   // While Google is the default search provider, changes to the Google base URL
   // should invoke the callback.
@@ -46,7 +45,7 @@ TEST_F(SearchEngineBaseURLTrackerTest,
       callback;
   SearchEngineBaseURLTracker tracker(
       template_url_service_,
-      base::MakeUnique<UIThreadSearchTermsData>(profile()), callback.Get());
+      std::make_unique<UIThreadSearchTermsData>(profile()), callback.Get());
 
   // Set up a non-Google default search provider.
   EXPECT_CALL(

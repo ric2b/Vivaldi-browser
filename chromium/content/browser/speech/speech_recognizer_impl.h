@@ -14,16 +14,15 @@
 #include "content/browser/speech/endpointer/endpointer.h"
 #include "content/browser/speech/speech_recognition_engine.h"
 #include "content/browser/speech/speech_recognizer.h"
-#include "content/public/common/speech_recognition_error.h"
-#include "content/public/common/speech_recognition_result.h"
-#include "media/audio/audio_input_controller.h"
-#include "media/audio/audio_logging.h"
+#include "media/base/audio_capturer_source.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "third_party/blink/public/mojom/speech/speech_recognition_error.mojom.h"
+#include "third_party/blink/public/mojom/speech/speech_recognition_result.mojom.h"
 
 namespace media {
 class AudioBus;
 class AudioSystem;
-}
+}  // namespace media
 
 namespace content {
 
@@ -34,8 +33,7 @@ class SpeechRecognitionEventListener;
 // SpeechRecognitionEngine.
 class CONTENT_EXPORT SpeechRecognizerImpl
     : public SpeechRecognizer,
-      public media::AudioInputController::EventHandler,
-      public media::AudioInputController::SyncWriter,
+      public media::AudioCapturerSource::CaptureCallback,
       public SpeechRecognitionEngine::Delegate {
  public:
   static const int kAudioSampleRate;
@@ -44,22 +42,24 @@ class CONTENT_EXPORT SpeechRecognizerImpl
   static const int kNoSpeechTimeoutMs;
   static const int kEndpointerEstimationTimeMs;
 
-  static void SetAudioEnvironmentForTesting(media::AudioSystem* audio_system,
-                                            media::AudioManager* audio_manager);
+  static void SetAudioEnvironmentForTesting(
+      media::AudioSystem* audio_system,
+      media::AudioCapturerSource* capturer_source);
 
   SpeechRecognizerImpl(SpeechRecognitionEventListener* listener,
                        media::AudioSystem* audio_system,
-                       media::AudioManager* audio_manager,
                        int session_id,
                        bool continuous,
                        bool provisional_results,
                        SpeechRecognitionEngine* engine);
 
+  // SpeechRecognizer methods.
   void StartRecognition(const std::string& device_id) override;
   void AbortRecognition() override;
   void StopAudioCapture() override;
   bool IsActive() const override;
   bool IsCapturingAudio() const override;
+
   const SpeechRecognitionEngine& recognition_engine() const;
 
  private:
@@ -96,8 +96,8 @@ class CONTENT_EXPORT SpeechRecognizerImpl
 
     FSMEvent event;
     scoped_refptr<AudioChunk> audio_data;
-    SpeechRecognitionResults engine_results;
-    SpeechRecognitionError engine_error;
+    std::vector<blink::mojom::SpeechRecognitionResultPtr> engine_results;
+    blink::mojom::SpeechRecognitionError engine_error;
   };
 
   ~SpeechRecognizerImpl() override;
@@ -126,7 +126,7 @@ class CONTENT_EXPORT SpeechRecognizerImpl
   FSMState ProcessFinalResult(const FSMEventArgs& event_args);
   FSMState AbortSilently(const FSMEventArgs& event_args);
   FSMState AbortWithError(const FSMEventArgs& event_args);
-  FSMState Abort(const SpeechRecognitionError& error);
+  FSMState Abort(const blink::mojom::SpeechRecognitionError& error);
   FSMState DetectEndOfSpeech(const FSMEventArgs& event_args);
   FSMState DoNothing(const FSMEventArgs& event_args) const;
   FSMState NotFeasible(const FSMEventArgs& event_args);
@@ -138,43 +138,37 @@ class CONTENT_EXPORT SpeechRecognizerImpl
   // OnAudioLevelsChange event accordingly.
   void UpdateSignalAndNoiseLevels(const float& rms, bool clip_detected);
 
-  void CloseAudioControllerAsynchronously();
+  void CloseAudioCapturerSource();
 
-  // Callback called on IO thread by audio_controller->Close().
-  void OnAudioClosed(media::AudioInputController*);
-
-  // AudioInputController::EventHandler methods.
-  void OnCreated(bool initially_muted) override {}
-  void OnError(media::AudioInputController::ErrorCode error_code) override;
-  void OnLog(base::StringPiece) override {}
-  void OnMuted(bool is_muted) override {}
-
-  // AudioInputController::SyncWriter methods.
-  void Write(const media::AudioBus* data,
-             double volume,
-             bool key_pressed,
-             base::TimeTicks capture_time) override;
-  void Close() override;
+  // media::AudioCapturerSource::CaptureCallback methods.
+  void OnCaptureStarted() final {}
+  void Capture(const media::AudioBus* audio_bus,
+               int audio_delay_milliseconds,
+               double volume,
+               bool key_pressed) final;
+  void OnCaptureError(const std::string& message) final;
+  void OnCaptureMuted(bool is_muted) final {}
 
   // SpeechRecognitionEngineDelegate methods.
   void OnSpeechRecognitionEngineResults(
-      const SpeechRecognitionResults& results) override;
+      const std::vector<blink::mojom::SpeechRecognitionResultPtr>& results)
+      override;
   void OnSpeechRecognitionEngineEndOfUtterance() override;
   void OnSpeechRecognitionEngineError(
-      const SpeechRecognitionError& error) override;
+      const blink::mojom::SpeechRecognitionError& error) override;
 
   media::AudioSystem* GetAudioSystem();
-  media::AudioManager* GetAudioManager();
+  void CreateAudioCapturerSource();
+  media::AudioCapturerSource* GetAudioCapturerSource();
 
-  // Substitutes the real audio system in browser tests.
+  // Substitute the real audio system and capturer source in browser tests.
   static media::AudioSystem* audio_system_for_tests_;
-  static media::AudioManager* audio_manager_for_tests_;
+  static media::AudioCapturerSource* audio_capturer_source_for_tests_;
+
   media::AudioSystem* audio_system_;
-  media::AudioManager* audio_manager_;
   std::unique_ptr<SpeechRecognitionEngine> recognition_engine_;
   Endpointer endpointer_;
-  scoped_refptr<media::AudioInputController> audio_controller_;
-  std::unique_ptr<media::AudioLog> audio_log_;
+  scoped_refptr<media::AudioCapturerSource> audio_capturer_source_;
   int num_samples_recorded_;
   float audio_level_;
   bool is_dispatching_event_;

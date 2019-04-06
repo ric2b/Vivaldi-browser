@@ -7,11 +7,13 @@
 #include <memory>
 #include <utility>
 
-#include "ash/content/shell_content_state.h"
+#include "ash/components/quick_launch/public/mojom/constants.mojom.h"
+#include "ash/components/shortcut_viewer/public/mojom/shortcut_viewer.mojom.h"
+#include "ash/components/tap_visualizer/public/mojom/constants.mojom.h"
+#include "ash/content/content_gpu_interface_provider.h"
 #include "ash/login_status.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
-#include "ash/shell/content/shell_content_state_impl.h"
-#include "ash/shell/example_app_list_presenter.h"
 #include "ash/shell/example_session_controller_client.h"
 #include "ash/shell/shell_delegate_impl.h"
 #include "ash/shell/shell_views_delegate.h"
@@ -22,27 +24,30 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/time/time.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_policy_controller.h"
+#include "components/exo/file_helper.h"
 #include "content/public/browser/context_factory.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_manager_connection.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_net_log.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "net/base/net_module.h"
-#include "ui/app_list/presenter/app_list.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/ime/test_ime_driver/public/mojom/constants.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/compositor/compositor.h"
-#include "ui/message_center/message_center.h"
 #include "ui/views/examples/examples_window_with_content.h"
 #include "ui/wm/core/wm_state.h"
 
@@ -57,8 +62,7 @@ ShellBrowserMainParts::~ShellBrowserMainParts() = default;
 void ShellBrowserMainParts::PreMainMessageLoopStart() {}
 
 void ShellBrowserMainParts::PostMainMessageLoopStart() {
-  chromeos::DBusThreadManager::Initialize(
-      chromeos::DBusThreadManager::PROCESS_ASH);
+  chromeos::DBusThreadManager::Initialize(chromeos::DBusThreadManager::kShared);
 }
 
 void ShellBrowserMainParts::ToolkitInitialized() {
@@ -74,24 +78,23 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
   if (!views::ViewsDelegate::GetInstance())
     views_delegate_.reset(new ShellViewsDelegate);
 
-  // The global message center state must be initialized absent
-  // g_browser_process.
-  message_center::MessageCenter::Initialize();
-
   // Create CrasAudioHandler for testing since g_browser_process
   // is absent.
   chromeos::CrasAudioHandler::InitializeForTesting();
 
   bluez::BluezDBusManager::Initialize(nullptr, true /* use stub */);
 
-  ShellContentState::SetInstance(
-      new ShellContentStateImpl(browser_context_.get()));
+  chromeos::PowerPolicyController::Initialize(
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient());
+
   ui::MaterialDesignController::Initialize();
   ash::ShellInitParams init_params;
   init_params.shell_port = std::make_unique<ash::ShellPortClassic>();
   init_params.delegate = std::make_unique<ash::shell::ShellDelegateImpl>();
   init_params.context_factory = content::GetContextFactory();
   init_params.context_factory_private = content::GetContextFactoryPrivate();
+  init_params.gpu_interface_provider =
+      std::make_unique<ContentGpuInterfaceProvider>();
   ash::Shell::CreateInstance(std::move(init_params));
 
   // Initialize session controller client and create fake user sessions. The
@@ -105,26 +108,36 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 
   ash::shell::InitWindowTypeLauncher(base::Bind(
       &views::examples::ShowExamplesWindowWithContent,
-      views::examples::DO_NOTHING_ON_CLOSE,
-      ShellContentState::GetInstance()->GetActiveBrowserContext(), nullptr));
-
-  // Initialize the example app list presenter.
-  example_app_list_presenter_ = std::make_unique<ExampleAppListPresenter>();
-  Shell::Get()->app_list()->SetAppListPresenter(
-      example_app_list_presenter_->CreateInterfacePtrAndBind());
+      views::examples::DO_NOTHING_ON_CLOSE, browser_context_.get(), nullptr));
 
   ash::Shell::GetPrimaryRootWindow()->GetHost()->Show();
+
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->StartService(test_ime_driver::mojom::kServiceName);
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->StartService(quick_launch::mojom::kServiceName);
+  if (base::FeatureList::IsEnabled(features::kTapVisualizerApp)) {
+    content::ServiceManagerConnection::GetForProcess()
+        ->GetConnector()
+        ->StartService(tap_visualizer::mojom::kServiceName);
+  }
+  shortcut_viewer::mojom::ShortcutViewerPtr shortcut_viewer;
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(shortcut_viewer::mojom::kServiceName, &shortcut_viewer);
+  shortcut_viewer->Toggle(base::TimeTicks::Now());
+  ash::Shell::Get()->InitWaylandServer(nullptr);
 }
 
 void ShellBrowserMainParts::PostMainMessageLoopRun() {
   window_watcher_.reset();
   ash::Shell::DeleteInstance();
-  ShellContentState::DestroyInstance();
-  // The global message center state must be shutdown absent
-  // g_browser_process.
-  message_center::MessageCenter::Shutdown();
 
   chromeos::CrasAudioHandler::Shutdown();
+
+  chromeos::PowerPolicyController::Shutdown();
 
   views_delegate_.reset();
 

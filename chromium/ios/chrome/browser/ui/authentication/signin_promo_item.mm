@@ -6,13 +6,19 @@
 
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#include "ios/chrome/browser/ui/ui_util.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+// Padding for SignInPromoView.
+const CGFloat kSignInPromoViewPadding = 10;
+}  // namespace
 
 @implementation SigninPromoItem
 
@@ -48,10 +54,30 @@
   self = [super initWithFrame:frame];
   if (self) {
     UIView* contentView = self.contentView;
-    _signinPromoView = [[SigninPromoView alloc] initWithFrame:self.bounds];
+    _signinPromoView =
+        [[SigninPromoView alloc] initWithFrame:self.bounds
+                                         style:SigninPromoViewUIRefresh];
     _signinPromoView.translatesAutoresizingMaskIntoConstraints = NO;
     [contentView addSubview:_signinPromoView];
-    AddSameConstraints(_signinPromoView, contentView);
+
+    if (IsUIRefreshPhase1Enabled()) {
+      [NSLayoutConstraint activateConstraints:@[
+        [_signinPromoView.leadingAnchor
+            constraintEqualToAnchor:contentView.leadingAnchor
+                           constant:kSignInPromoViewPadding],
+        [_signinPromoView.trailingAnchor
+            constraintEqualToAnchor:contentView.trailingAnchor
+                           constant:-kSignInPromoViewPadding],
+        [_signinPromoView.topAnchor
+            constraintEqualToAnchor:contentView.topAnchor
+                           constant:kSignInPromoViewPadding],
+        [_signinPromoView.bottomAnchor
+            constraintEqualToAnchor:contentView.bottomAnchor
+                           constant:-kSignInPromoViewPadding],
+      ]];
+    } else {
+      AddSameConstraints(_signinPromoView, contentView);
+    }
   }
   return self;
 }

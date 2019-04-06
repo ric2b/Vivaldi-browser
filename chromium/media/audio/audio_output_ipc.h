@@ -7,12 +7,11 @@
 
 #include <string>
 
-#include "base/memory/shared_memory.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/sync_socket.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 #include "media/base/output_device_info.h"
-#include "url/origin.h"
 
 namespace media {
 
@@ -32,15 +31,14 @@ class MEDIA_EXPORT AudioOutputIPCDelegate {
                                   const std::string& matched_device_id) = 0;
 
   // Called when an audio stream has been created.
-  // The shared memory |handle| points to a memory section that's used to
-  // transfer audio buffers from the AudioOutputIPCDelegate back to the
-  // AudioRendererHost.  The implementation of OnStreamCreated takes ownership.
-  // The |socket_handle| is used by AudioRendererHost to signal requests for
-  // audio data to be written into the shared memory. The AudioOutputIPCDelegate
-  // must read from this socket and provide audio whenever data (search for
-  // "pending_bytes") is received.
-  virtual void OnStreamCreated(base::SharedMemoryHandle handle,
-                               base::SyncSocket::Handle socket_handle) = 0;
+  // See media/mojo/interfaces/audio_data_pipe.mojom for documentation of
+  // |handle| and |socket_handle|. |playing_automatically| indicates if the
+  // AudioOutputIPCDelegate is playing right away due to an earlier call to
+  // Play();
+  virtual void OnStreamCreated(
+      base::UnsafeSharedMemoryRegion shared_memory_region,
+      base::SyncSocket::Handle socket_handle,
+      bool playing_automatically) = 0;
 
   // Called when the AudioOutputIPC object is going away and/or when the IPC
   // channel has been closed and no more ipc requests can be made.
@@ -72,11 +70,9 @@ class MEDIA_EXPORT AudioOutputIPC {
   // the default device.
   // Once the authorization process is complete, the implementation will
   // notify |delegate| by calling OnDeviceAuthorized().
-  virtual void RequestDeviceAuthorization(
-      AudioOutputIPCDelegate* delegate,
-      int session_id,
-      const std::string& device_id,
-      const url::Origin& security_origin) = 0;
+  virtual void RequestDeviceAuthorization(AudioOutputIPCDelegate* delegate,
+                                          int session_id,
+                                          const std::string& device_id) = 0;
 
   // Sends a request to create an AudioOutputController object in the peer
   // process and configures it to use the specified audio |params| including

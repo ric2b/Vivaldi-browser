@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/format_macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -102,7 +101,7 @@ class LogDnsClientTest : public ::testing::TestWithParam<net::IoMode> {
 
   std::unique_ptr<LogDnsClient> CreateLogDnsClient(
       size_t max_concurrent_queries) {
-    return base::MakeUnique<LogDnsClient>(mock_dns_.CreateDnsClient(),
+    return std::make_unique<LogDnsClient>(mock_dns_.CreateDnsClient(),
                                           net::NetLogWithSource(),
                                           max_concurrent_queries);
   }
@@ -134,8 +133,8 @@ TEST_P(LogDnsClientTest, QueryAuditProofReportsThatLogDomainDoesNotExist) {
   ASSERT_TRUE(mock_dns_.ExpectRequestAndErrorResponse(
       kLeafIndexQnames[0], net::dns_protocol::kRcodeNXDOMAIN));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_NAME_NOT_RESOLVED));
 }
 
@@ -144,8 +143,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectRequestAndErrorResponse(
       kLeafIndexQnames[0], net::dns_protocol::kRcodeSERVFAIL));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_SERVER_FAILED));
 }
 
@@ -154,8 +153,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectRequestAndErrorResponse(
       kLeafIndexQnames[0], net::dns_protocol::kRcodeREFUSED));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_SERVER_FAILED));
 }
 
@@ -165,8 +164,8 @@ TEST_P(
   ASSERT_TRUE(mock_dns_.ExpectRequestAndResponse(
       kLeafIndexQnames[0], std::vector<base::StringPiece>()));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -176,8 +175,8 @@ TEST_P(
   ASSERT_TRUE(
       mock_dns_.ExpectRequestAndResponse(kLeafIndexQnames[0], {"123456", "7"}));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -185,8 +184,8 @@ TEST_P(LogDnsClientTest,
        QueryAuditProofReportsMalformedResponseIfLeafIndexIsNotNumeric) {
   ASSERT_TRUE(mock_dns_.ExpectRequestAndResponse(kLeafIndexQnames[0], {"foo"}));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -195,8 +194,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(
       mock_dns_.ExpectRequestAndResponse(kLeafIndexQnames[0], {"123456.0"}));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -204,8 +203,8 @@ TEST_P(LogDnsClientTest,
        QueryAuditProofReportsMalformedResponseIfLeafIndexIsEmpty) {
   ASSERT_TRUE(mock_dns_.ExpectRequestAndResponse(kLeafIndexQnames[0], {""}));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -214,8 +213,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(
       mock_dns_.ExpectRequestAndResponse(kLeafIndexQnames[0], {"foo123456"}));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -224,26 +223,26 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(
       mock_dns_.ExpectRequestAndResponse(kLeafIndexQnames[0], {"123456foo"}));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
 TEST_P(LogDnsClientTest, QueryAuditProofReportsInvalidArgIfLogDomainIsEmpty) {
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_INVALID_ARGUMENT));
 }
 
 TEST_P(LogDnsClientTest, QueryAuditProofReportsInvalidArgIfLeafHashIsInvalid) {
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", "foo", kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", "foo", kTreeSizes[0], &query),
               IsError(net::ERR_INVALID_ARGUMENT));
 }
 
 TEST_P(LogDnsClientTest, QueryAuditProofReportsInvalidArgIfLeafHashIsEmpty) {
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", "", kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", "", kTreeSizes[0], &query),
               IsError(net::ERR_INVALID_ARGUMENT));
 }
 
@@ -252,8 +251,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectRequestAndSocketError(
       kLeafIndexQnames[0], net::ERR_CONNECTION_REFUSED));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_CONNECTION_REFUSED));
 }
 
@@ -261,8 +260,8 @@ TEST_P(LogDnsClientTest,
        QueryAuditProofReportsTimeoutsDuringLeafIndexRequests) {
   ASSERT_TRUE(mock_dns_.ExpectRequestAndTimeout(kLeafIndexQnames[0]));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], kTreeSizes[0], &query),
               IsError(net::ERR_DNS_TIMED_OUT));
 }
 
@@ -285,9 +284,10 @@ TEST_P(LogDnsClientTest, QueryAuditProof) {
         audit_proof.begin() + nodes_begin, audit_proof.begin() + nodes_end));
   }
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsOk());
+  const net::ct::MerkleAuditProof& proof = query->GetProof();
   EXPECT_THAT(proof.leaf_index, Eq(123456u));
   EXPECT_THAT(proof.tree_size, Eq(999999u));
   EXPECT_THAT(proof.nodes, Eq(audit_proof));
@@ -320,9 +320,10 @@ TEST_P(LogDnsClientTest, QueryAuditProofHandlesResponsesWithShortAuditPaths) {
       "13.123456.999999.tree.ct.test.", audit_proof.begin() + 13,
       audit_proof.end()));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsOk());
+  const net::ct::MerkleAuditProof& proof = query->GetProof();
   EXPECT_THAT(proof.leaf_index, Eq(123456u));
   EXPECT_THAT(proof.tree_size, Eq(999999u));
   EXPECT_THAT(proof.nodes, Eq(audit_proof));
@@ -335,8 +336,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectRequestAndErrorResponse(
       "0.123456.999999.tree.ct.test.", net::dns_protocol::kRcodeNXDOMAIN));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_NAME_NOT_RESOLVED));
 }
 
@@ -347,8 +348,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectRequestAndErrorResponse(
       "0.123456.999999.tree.ct.test.", net::dns_protocol::kRcodeSERVFAIL));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_SERVER_FAILED));
 }
 
@@ -359,8 +360,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectRequestAndErrorResponse(
       "0.123456.999999.tree.ct.test.", net::dns_protocol::kRcodeREFUSED));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_SERVER_FAILED));
 }
 
@@ -374,8 +375,8 @@ TEST_P(
   ASSERT_TRUE(mock_dns_.ExpectRequestAndResponse(
       "0.123456.999999.tree.ct.test.", std::vector<base::StringPiece>()));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -399,8 +400,8 @@ TEST_P(
       "0.123456.999999.tree.ct.test.",
       {first_chunk_of_proof, second_chunk_of_proof}));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -414,8 +415,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectAuditProofRequestAndResponse(
       "0.123456.999999.tree.ct.test.", audit_proof.begin(), audit_proof.end()));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -428,8 +429,8 @@ TEST_P(LogDnsClientTest, QueryAuditProofReportsResponseMalformedIfNodeTooLong) {
   ASSERT_TRUE(mock_dns_.ExpectAuditProofRequestAndResponse(
       "0.123456.999999.tree.ct.test.", audit_proof.begin(), audit_proof.end()));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -441,8 +442,8 @@ TEST_P(LogDnsClientTest, QueryAuditProofReportsResponseMalformedIfEmpty) {
   ASSERT_TRUE(mock_dns_.ExpectAuditProofRequestAndResponse(
       "0.123456.999999.tree.ct.test.", audit_proof.begin(), audit_proof.end()));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_MALFORMED_RESPONSE));
 }
 
@@ -451,8 +452,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(
       mock_dns_.ExpectLeafIndexRequestAndResponse(kLeafIndexQnames[0], 123456));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 123456, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 123456, &query),
               IsError(net::ERR_INVALID_ARGUMENT));
 }
 
@@ -461,8 +462,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(
       mock_dns_.ExpectLeafIndexRequestAndResponse(kLeafIndexQnames[0], 999999));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 123456, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 123456, &query),
               IsError(net::ERR_INVALID_ARGUMENT));
 }
 
@@ -473,8 +474,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(mock_dns_.ExpectRequestAndSocketError(
       "0.123456.999999.tree.ct.test.", net::ERR_CONNECTION_REFUSED));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_CONNECTION_REFUSED));
 }
 
@@ -485,8 +486,8 @@ TEST_P(LogDnsClientTest,
   ASSERT_TRUE(
       mock_dns_.ExpectRequestAndTimeout("0.123456.999999.tree.ct.test."));
 
-  net::ct::MerkleAuditProof proof;
-  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &proof),
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  ASSERT_THAT(QueryAuditProof("ct.test", kLeafHashes[0], 999999, &query),
               IsError(net::ERR_DNS_TIMED_OUT));
 }
 
@@ -548,10 +549,10 @@ TEST_P(LogDnsClientTest, AdoptsLatestDnsConfigMidQuery) {
   LogDnsClient log_client(std::move(tmp), net::NetLogWithSource(), 0);
 
   // Start query.
-  net::ct::MerkleAuditProof proof;
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
   net::TestCompletionCallback callback;
   ASSERT_THAT(log_client.QueryAuditProof("ct.test", kLeafHashes[0], 999999,
-                                         &proof, callback.callback()),
+                                         &query, callback.callback()),
               IsError(net::ERR_IO_PENDING));
 
   // Get the current DNS config, modify it and publish the update.
@@ -567,6 +568,7 @@ TEST_P(LogDnsClientTest, AdoptsLatestDnsConfigMidQuery) {
   // Wait for the query to complete, then check that it was successful.
   // The DNS config should be updated during this time.
   ASSERT_THAT(callback.WaitForResult(), IsOk());
+  const net::ct::MerkleAuditProof& proof = query->GetProof();
   EXPECT_THAT(proof.leaf_index, Eq(123456u));
   EXPECT_THAT(proof.tree_size, Eq(999999u));
   EXPECT_THAT(proof.nodes, Eq(audit_proof));
@@ -633,13 +635,13 @@ TEST_P(LogDnsClientTest, CanPerformQueriesInParallel) {
     }
   }
 
-  net::ct::MerkleAuditProof proofs[kNumOfParallelQueries];
+  std::unique_ptr<LogDnsClient::AuditProofQuery> queries[kNumOfParallelQueries];
 
   // Start the queries.
   for (size_t i = 0; i < kNumOfParallelQueries; ++i) {
     ASSERT_THAT(
         log_client->QueryAuditProof("ct.test", kLeafHashes[i], kTreeSizes[i],
-                                    &proofs[i], callbacks[i].callback()),
+                                    &queries[i], callbacks[i].callback()),
         IsError(net::ERR_IO_PENDING))
         << "query #" << i;
   }
@@ -650,9 +652,10 @@ TEST_P(LogDnsClientTest, CanPerformQueriesInParallel) {
 
     SCOPED_TRACE(testing::Message() << "callbacks[" << i << "]");
     EXPECT_THAT(callback.WaitForResult(), IsOk());
-    EXPECT_THAT(proofs[i].leaf_index, Eq(kLeafIndices[i]));
-    EXPECT_THAT(proofs[i].tree_size, Eq(kTreeSizes[i]));
-    EXPECT_THAT(proofs[i].nodes, Eq(audit_proofs[i]));
+    const net::ct::MerkleAuditProof& proof = queries[i]->GetProof();
+    EXPECT_THAT(proof.leaf_index, Eq(kLeafIndices[i]));
+    EXPECT_THAT(proof.tree_size, Eq(kTreeSizes[i]));
+    EXPECT_THAT(proof.nodes, Eq(audit_proofs[i]));
   }
 }
 
@@ -685,20 +688,21 @@ TEST_P(LogDnsClientTest, CanBeThrottledToOneQueryAtATime) {
       CreateLogDnsClient(kMaxConcurrentQueries);
 
   // Try to start the queries.
-  net::ct::MerkleAuditProof proof1;
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query1;
   net::TestCompletionCallback callback1;
   ASSERT_THAT(log_client->QueryAuditProof("ct.test", kLeafHashes[0], 999999,
-                                          &proof1, callback1.callback()),
+                                          &query1, callback1.callback()),
               IsError(net::ERR_IO_PENDING));
 
-  net::ct::MerkleAuditProof proof2;
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query2;
   net::TestCompletionCallback callback2;
   ASSERT_THAT(log_client->QueryAuditProof("ct.test", kLeafHashes[1], 999999,
-                                          &proof2, callback2.callback()),
+                                          &query2, callback2.callback()),
               IsError(net::ERR_TEMPORARILY_THROTTLED));
 
   // Check that the first query succeeded.
   EXPECT_THAT(callback1.WaitForResult(), IsOk());
+  const net::ct::MerkleAuditProof& proof1 = query1->GetProof();
   EXPECT_THAT(proof1.leaf_index, Eq(123456u));
   EXPECT_THAT(proof1.tree_size, Eq(999999u));
   EXPECT_THAT(proof1.nodes, Eq(audit_proof));
@@ -716,14 +720,15 @@ TEST_P(LogDnsClientTest, CanBeThrottledToOneQueryAtATime) {
       "14.666.999999.tree.ct.test.", audit_proof.begin() + 14,
       audit_proof.end()));
 
-  net::ct::MerkleAuditProof proof3;
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query3;
   net::TestCompletionCallback callback3;
   ASSERT_THAT(log_client->QueryAuditProof("ct.test", kLeafHashes[2], 999999,
-                                          &proof3, callback3.callback()),
+                                          &query3, callback3.callback()),
               IsError(net::ERR_IO_PENDING));
 
   // Check that the third query succeeded.
   EXPECT_THAT(callback3.WaitForResult(), IsOk());
+  const net::ct::MerkleAuditProof& proof3 = query3->GetProof();
   EXPECT_THAT(proof3.leaf_index, Eq(666u));
   EXPECT_THAT(proof3.tree_size, Eq(999999u));
   EXPECT_THAT(proof3.nodes, Eq(audit_proof));
@@ -749,16 +754,16 @@ TEST_P(LogDnsClientTest, NotifiesWhenNoLongerThrottled) {
       CreateLogDnsClient(kMaxConcurrentQueries);
 
   // Start a query.
-  net::ct::MerkleAuditProof proof1;
-  net::TestCompletionCallback proof_callback1;
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query1;
+  net::TestCompletionCallback query_callback1;
   ASSERT_THAT(log_client->QueryAuditProof("ct.test", kLeafHashes[0], 999999,
-                                          &proof1, proof_callback1.callback()),
+                                          &query1, query_callback1.callback()),
               IsError(net::ERR_IO_PENDING));
 
   net::TestClosure not_throttled_callback;
   log_client->NotifyWhenNotThrottled(not_throttled_callback.closure());
 
-  ASSERT_THAT(proof_callback1.WaitForResult(), IsOk());
+  ASSERT_THAT(query_callback1.WaitForResult(), IsOk());
   not_throttled_callback.WaitForResult();
 
   // Start another query to check |not_throttled_callback| doesn't fire again.
@@ -774,17 +779,42 @@ TEST_P(LogDnsClientTest, NotifiesWhenNoLongerThrottled) {
       "14.666.999999.tree.ct.test.", audit_proof.begin() + 14,
       audit_proof.end()));
 
-  net::ct::MerkleAuditProof proof2;
-  net::TestCompletionCallback proof_callback2;
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query2;
+  net::TestCompletionCallback query_callback2;
   ASSERT_THAT(log_client->QueryAuditProof("ct.test", kLeafHashes[1], 999999,
-                                          &proof2, proof_callback2.callback()),
+                                          &query2, query_callback2.callback()),
               IsError(net::ERR_IO_PENDING));
 
   // Give the query a chance to run.
-  ASSERT_THAT(proof_callback2.WaitForResult(), IsOk());
+  ASSERT_THAT(query_callback2.WaitForResult(), IsOk());
   // Give |not_throttled_callback| a chance to run - it shouldn't though.
   base::RunLoop().RunUntilIdle();
   ASSERT_FALSE(not_throttled_callback.have_result());
+}
+
+TEST_P(LogDnsClientTest, CanCancelQueries) {
+  const size_t kMaxConcurrentQueries = 1;
+  std::unique_ptr<LogDnsClient> log_client =
+      CreateLogDnsClient(kMaxConcurrentQueries);
+
+  // Expect the first request of the query to be sent, but not the rest because
+  // it'll be cancelled before it gets that far.
+  ASSERT_TRUE(
+      mock_dns_.ExpectLeafIndexRequestAndResponse(kLeafIndexQnames[0], 123456));
+
+  // Start query.
+  std::unique_ptr<LogDnsClient::AuditProofQuery> query;
+  net::TestCompletionCallback callback;
+  ASSERT_THAT(log_client->QueryAuditProof("ct.test", kLeafHashes[0], 999999,
+                                          &query, callback.callback()),
+              IsError(net::ERR_IO_PENDING));
+
+  // Cancel the query.
+  query.reset();
+
+  // Give |callback| a chance to run - it shouldn't though.
+  base::RunLoop().RunUntilIdle();
+  ASSERT_FALSE(callback.have_result());
 }
 
 INSTANTIATE_TEST_CASE_P(ReadMode,

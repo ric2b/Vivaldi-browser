@@ -257,7 +257,7 @@ TEST(VideoCaptureOracleTest, SamplesAtCorrectTimesAroundRefreshRequests) {
   for (int i = 0; i < 10; ++i) {
     t += refresh_interval;
     ASSERT_FALSE(oracle.ObserveEventAndDecideCapture(
-        VideoCaptureOracle::kPassiveRefreshRequest, gfx::Rect(), t));
+        VideoCaptureOracle::kRefreshRequest, gfx::Rect(), t));
   }
 
   // Now, complete the oustanding compositor-based capture and continue
@@ -267,8 +267,8 @@ TEST(VideoCaptureOracleTest, SamplesAtCorrectTimesAroundRefreshRequests) {
   did_complete_a_capture = false;
   for (int i = 0; i < 10; ++i) {
     t += refresh_interval;
-    if (oracle.ObserveEventAndDecideCapture(
-            VideoCaptureOracle::kPassiveRefreshRequest, gfx::Rect(), t)) {
+    if (oracle.ObserveEventAndDecideCapture(VideoCaptureOracle::kRefreshRequest,
+                                            gfx::Rect(), t)) {
       const int frame_number = oracle.next_frame_number();
       oracle.RecordCapture(0.0);
       ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
@@ -281,8 +281,8 @@ TEST(VideoCaptureOracleTest, SamplesAtCorrectTimesAroundRefreshRequests) {
   for (int i = 0; i <= 10; ++i) {
     ASSERT_GT(10, i) << "BUG: Seems like it'll never happen!";
     t += refresh_interval;
-    if (oracle.ObserveEventAndDecideCapture(
-            VideoCaptureOracle::kPassiveRefreshRequest, gfx::Rect(), t)) {
+    if (oracle.ObserveEventAndDecideCapture(VideoCaptureOracle::kRefreshRequest,
+                                            gfx::Rect(), t)) {
       break;
     }
   }
@@ -294,14 +294,14 @@ TEST(VideoCaptureOracleTest, SamplesAtCorrectTimesAroundRefreshRequests) {
   for (int i = 0; i < 10; ++i) {
     t += refresh_interval;
     ASSERT_FALSE(oracle.ObserveEventAndDecideCapture(
-        VideoCaptureOracle::kPassiveRefreshRequest, gfx::Rect(), t));
+        VideoCaptureOracle::kRefreshRequest, gfx::Rect(), t));
   }
   ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
   for (int i = 0; i <= 10; ++i) {
     ASSERT_GT(10, i) << "BUG: Seems like it'll never happen!";
     t += refresh_interval;
-    if (oracle.ObserveEventAndDecideCapture(
-            VideoCaptureOracle::kPassiveRefreshRequest, gfx::Rect(), t)) {
+    if (oracle.ObserveEventAndDecideCapture(VideoCaptureOracle::kRefreshRequest,
+                                            gfx::Rect(), t)) {
       break;
     }
   }
@@ -361,41 +361,42 @@ TEST(VideoCaptureOracleTest, DoesNotRapidlyChangeCaptureSize) {
   }
 }
 
-// Tests that un-sampled compositor update event will fail the next passive
-// refresh request, forcing an active refresh.
-TEST(VideoCaptureOracleTest, EnforceActiveRefreshForUnsampledCompositorUpdate) {
-  const gfx::Rect damage_rect(Get720pSize());
-  const base::TimeDelta event_increment = Get30HzPeriod() * 2;
-  const base::TimeDelta short_event_increment = Get30HzPeriod() / 4;
-
-  VideoCaptureOracle oracle(false);
+// Tests that VideoCaptureOracle allows every video frame to have a different
+// size if resize throttling is disabled.
+TEST(VideoCaptureOracleTest, ResizeThrottlingDisabled) {
+  VideoCaptureOracle oracle(true);
   oracle.SetMinCapturePeriod(Get30HzPeriod());
-  oracle.SetCaptureSizeConstraints(Get720pSize(), Get720pSize(), false);
+  oracle.SetMinSizeChangePeriod(base::TimeDelta());
+  oracle.SetCaptureSizeConstraints(GetSmallestNonEmptySize(), Get720pSize(),
+                                   false);
+  oracle.SetSourceSize(Get1080pSize());
 
+  // Run 30 seconds of frame captures with lots of random source size
+  // changes. The capture size should be different every time.
   base::TimeTicks t = InitialTestTimeTicks();
-  int last_frame_number;
-  base::TimeTicks ignored;
+  const base::TimeDelta event_increment = Get30HzPeriod() * 2;
+  base::TimeTicks end_t = t + base::TimeDelta::FromSeconds(30);
+  gfx::Size source_size = oracle.capture_size();
+  gfx::Size last_capture_size = oracle.capture_size();
+  for (; t < end_t; t += event_increment) {
+    // Change the source size every frame to a random non-empty size.
+    const gfx::Size last_source_size = source_size;
+    source_size.SetSize(((last_source_size.width() * 11 + 12345) % 1280) + 1,
+                        ((last_source_size.height() * 11 + 12345) % 720) + 1);
+    ASSERT_NE(last_source_size, source_size);
+    oracle.SetSourceSize(source_size);
 
-  // CompositorUpdate is sampled normally.
-  t += event_increment;
-  ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
-      VideoCaptureOracle::kCompositorUpdate, damage_rect, t));
-  last_frame_number = oracle.next_frame_number();
-  oracle.RecordCapture(0.0);
-  ASSERT_TRUE(oracle.CompleteCapture(last_frame_number, true, &ignored));
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
 
-  // Next CompositorUpdate comes too soon and won't be sampled.
-  t += short_event_increment;
-  ASSERT_FALSE(oracle.ObserveEventAndDecideCapture(
-      VideoCaptureOracle::kCompositorUpdate, damage_rect, t));
+    ASSERT_NE(last_capture_size, oracle.capture_size());
+    last_capture_size = oracle.capture_size();
 
-  // Then the next valid PassiveRefreshRequest will fail to enforce an
-  // ActiveRefreshRequest to capture the updated content.
-  t += event_increment;
-  ASSERT_FALSE(oracle.ObserveEventAndDecideCapture(
-      VideoCaptureOracle::kPassiveRefreshRequest, damage_rect, t));
-  ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
-      VideoCaptureOracle::kActiveRefreshRequest, damage_rect, t));
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.0);
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+  }
 }
 
 namespace {

@@ -5,8 +5,7 @@
 #ifndef COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_H_
 #define COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_H_
 
-#include <stddef.h>
-
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -89,6 +88,10 @@ class TemplateURLRef {
       ContextualSearchParams(const ContextualSearchParams& other);
       ~ContextualSearchParams();
 
+      // Estimates dynamic memory usage.
+      // See base/trace_event/memory_usage_estimator.h for more info.
+      size_t EstimateMemoryUsage() const;
+
       // The version of contextual search.
       int version;
 
@@ -101,6 +104,10 @@ class TemplateURLRef {
       // resides, not where they currently are.
       std::string home_country;
     };
+
+    // Estimates dynamic memory usage.
+    // See base/trace_event/memory_usage_estimator.h for more info.
+    size_t EstimateMemoryUsage() const;
 
     // The search terms (query).
     base::string16 search_terms;
@@ -223,7 +230,7 @@ class TemplateURLRef {
   // If this TemplateURLRef is valid and contains one search term, this returns
   // the host/path of the URL, otherwise this returns an empty string.
   const std::string& GetHost(const SearchTermsData& search_terms_data) const;
-  const std::string& GetPath(const SearchTermsData& search_terms_data) const;
+  std::string GetPath(const SearchTermsData& search_terms_data) const;
 
   // If this TemplateURLRef is valid and contains one search term
   // in its query or ref, this returns the key of the search term,
@@ -273,6 +280,10 @@ class TemplateURLRef {
 
   // Whether the URL uses POST (as opposed to GET).
   bool UsesPOSTMethod(const SearchTermsData& search_terms_data) const;
+
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
 
  private:
   friend class TemplateURL;
@@ -339,6 +350,10 @@ class TemplateURLRef {
     std::string name;
     std::string value;
     std::string content_type;
+
+    // Estimates dynamic memory usage.
+    // See base/trace_event/memory_usage_estimator.h for more info.
+    size_t EstimateMemoryUsage() const;
   };
 
   // The list of elements to replace.
@@ -381,6 +396,18 @@ class TemplateURLRef {
   // search_offset_.
   void ParseIfNecessary(const SearchTermsData& search_terms_data) const;
 
+  // Parses a wildcard out of |path|, putting the parsed path in |path_prefix_|
+  // and |path_suffix_| and setting |path_wildcard_present_| to true.
+  // In the absence of a wildcard, the full path will be contained in
+  // |path_prefix_| and |path_wildcard_present_| will be false.
+  void ParsePath(const std::string& path) const;
+
+  // Returns whether the path portion of this template URL is equal to the path
+  // in |url|, checking that URL is prefixed/suffixed by
+  // |path_prefix_|/|path_suffix_| if |path_wildcard_present_| is true, or equal
+  // to |path_prefix_| otherwise.
+  bool PathIsEqual(const GURL& url) const;
+
   // Extracts the query key and host from the url.
   void ParseHostAndSearchTermKey(
       const SearchTermsData& search_terms_data) const;
@@ -416,39 +443,44 @@ class TemplateURLRef {
 
   // If |type_| is |INDEXED|, this |index_in_owner_| is used instead to refer to
   // a url within our owner.
-  size_t index_in_owner_;
+  size_t index_in_owner_ = 0;
 
   // Whether the URL has been parsed.
-  mutable bool parsed_;
+  mutable bool parsed_ = false;
 
   // Whether the url was successfully parsed.
-  mutable bool valid_;
+  mutable bool valid_ = false;
 
   // The parsed URL. All terms have been stripped out of this with
   // replacements_ giving the index of the terms to replace.
   mutable std::string parsed_url_;
 
   // Do we support search term replacement?
-  mutable bool supports_replacements_;
+  mutable bool supports_replacements_ = false;
 
   // The replaceable parts of url (parsed_url_). These are ordered by index
   // into the string, and may be empty.
   mutable Replacements replacements_;
 
+  // Whether the path contains a wildcard.
+  mutable bool path_wildcard_present_ = false;
+
   // Host, port, path, key and location of the search term. These are only set
   // if the url contains one search term.
   mutable std::string host_;
   mutable std::string port_;
-  mutable std::string path_;
+  mutable std::string path_prefix_;
+  mutable std::string path_suffix_;
   mutable std::string search_term_key_;
-  mutable url::Parsed::ComponentType search_term_key_location_;
+  mutable url::Parsed::ComponentType search_term_key_location_ =
+      url::Parsed::QUERY;
   mutable std::string search_term_value_prefix_;
   mutable std::string search_term_value_suffix_;
 
   mutable PostParams post_params_;
 
   // Whether the contained URL is a pre-populated URL.
-  bool prepopulated_;
+  bool prepopulated_ = false;
 };
 
 
@@ -466,6 +498,9 @@ class TemplateURLRef {
 // is made a friend so that it can be the exception to this pattern.
 class TemplateURL {
  public:
+  using TemplateURLVector = std::vector<TemplateURL*>;
+  using OwnedTemplateURLVector = std::vector<std::unique_ptr<TemplateURL>>;
+
   enum Type {
     // Regular search engine.
     NORMAL,
@@ -484,6 +519,10 @@ class TemplateURL {
                             base::Time install_time,
                             bool wants_to_be_default_engine);
     ~AssociatedExtensionInfo();
+
+    // Estimates dynamic memory usage.
+    // See base/trace_event/memory_usage_estimator.h for more info.
+    size_t EstimateMemoryUsage() const;
 
     std::string extension_id;
 
@@ -578,7 +617,11 @@ class TemplateURL {
   const std::string& sync_guid() const { return data_.sync_guid; }
 
   const std::vector<TemplateURLRef>& url_refs() const { return url_refs_; }
-  const TemplateURLRef& url_ref() const { return url_refs_.back(); }
+  const TemplateURLRef& url_ref() const {
+    // Sanity check for https://crbug.com/781703.
+    CHECK(!url_refs_.empty());
+    return url_refs_.back();
+  }
   const TemplateURLRef& suggestions_url_ref() const {
     return suggestions_url_ref_;
   }
@@ -667,6 +710,10 @@ class TemplateURL {
   // to make its functions quick. This method invalidates any cached values and
   // it should be called after SearchTermsData has been changed.
   void InvalidateCachedValues() const;
+
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
 
  private:
   friend class TemplateURLService;

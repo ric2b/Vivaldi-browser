@@ -30,6 +30,7 @@ namespace ash {
 
 // Ash's ShelfController owns the ShelfModel and implements interface functions
 // that allow Chrome to modify and observe the Shelf and ShelfModel state.
+// Chrome keeps its own ShelfModel copy in sync with Ash's ShelfModel.
 class ASH_EXPORT ShelfController : public message_center::MessageCenterObserver,
                                    public mojom::ShelfController,
                                    public ShelfModelObserver,
@@ -40,16 +41,15 @@ class ASH_EXPORT ShelfController : public message_center::MessageCenterObserver,
   ShelfController();
   ~ShelfController() override;
 
+  // Removes observers from this object's dependencies.
+  void Shutdown();
+
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // Binds the mojom::ShelfController interface request to this object.
   void BindRequest(mojom::ShelfControllerRequest request);
 
   ShelfModel* model() { return &model_; }
-
-  bool should_synchronize_shelf_models() const {
-    return should_synchronize_shelf_models_;
-  }
 
   // mojom::ShelfController:
   void AddObserver(mojom::ShelfObserverAssociatedPtrInfo observer) override;
@@ -98,16 +98,13 @@ class ASH_EXPORT ShelfController : public message_center::MessageCenterObserver,
   // Bindings for the ShelfController interface.
   mojo::BindingSet<mojom::ShelfController> bindings_;
 
-  // True if Ash and Chrome should synchronize separate ShelfModel instances.
-  bool should_synchronize_shelf_models_ = false;
-
   // True when applying changes from the remote ShelfModel owned by Chrome.
   // Changes to the local ShelfModel should not be reported during this time.
   bool applying_remote_shelf_model_changes_ = false;
 
   // Whether touchable context menus have been enabled for app icons on the
   // shelf.
-  const bool is_touchable_app_context_menu_enabled_;
+  const bool is_notification_indicator_enabled_;
 
   ScopedObserver<message_center::MessageCenter,
                  message_center::MessageCenterObserver>

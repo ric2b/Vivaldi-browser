@@ -4,14 +4,18 @@
 
 #include "ui/gfx/font_render_params.h"
 
+#include <fontconfig/fontconfig.h>
+
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/strings/stringprintf.h"
+#include "base/test/fontconfig_util_linux.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/linux_font_delegate.h"
-#include "ui/gfx/test/fontconfig_util_linux.h"
 
 namespace gfx {
 
@@ -55,12 +59,76 @@ class TestFontDelegate : public LinuxFontDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestFontDelegate);
 };
 
+// Instructs Fontconfig to load |path|, an XML configuration file, into the
+// current config, returning true on success.
+bool LoadConfigFileIntoFontconfig(const base::FilePath& path) {
+  // Unlike other FcConfig functions, FcConfigParseAndLoad() doesn't default to
+  // the current config when passed NULL. So that's cool.
+  if (!FcConfigParseAndLoad(
+          FcConfigGetCurrent(),
+          reinterpret_cast<const FcChar8*>(path.value().c_str()), FcTrue)) {
+    LOG(ERROR) << "Fontconfig failed to load " << path.value();
+    return false;
+  }
+  return true;
+}
+
+// Writes |data| to a file in |temp_dir| and passes it to
+// LoadConfigFileIntoFontconfig().
+bool LoadConfigDataIntoFontconfig(const base::FilePath& temp_dir,
+                                  const std::string& data) {
+  base::FilePath path;
+  if (!base::CreateTemporaryFileInDir(temp_dir, &path)) {
+    PLOG(ERROR) << "Unable to create temporary file in " << temp_dir.value();
+    return false;
+  }
+  if (base::WriteFile(path, data.data(), data.size()) !=
+      static_cast<int>(data.size())) {
+    PLOG(ERROR) << "Unable to write config data to " << path.value();
+    return false;
+  }
+  return LoadConfigFileIntoFontconfig(path);
+}
+
+// Returns a Fontconfig <edit> stanza.
+std::string CreateFontconfigEditStanza(const std::string& name,
+                                       const std::string& type,
+                                       const std::string& value) {
+  return base::StringPrintf(
+      "    <edit name=\"%s\" mode=\"assign\">\n"
+      "      <%s>%s</%s>\n"
+      "    </edit>\n",
+      name.c_str(), type.c_str(), value.c_str(), type.c_str());
+}
+
+// Returns a Fontconfig <test> stanza.
+std::string CreateFontconfigTestStanza(const std::string& name,
+                                       const std::string& op,
+                                       const std::string& type,
+                                       const std::string& value) {
+  return base::StringPrintf(
+      "    <test name=\"%s\" compare=\"%s\" qual=\"any\">\n"
+      "      <%s>%s</%s>\n"
+      "    </test>\n",
+      name.c_str(), op.c_str(), type.c_str(), value.c_str(), type.c_str());
+}
+
+// Returns a Fontconfig <alias> stanza.
+std::string CreateFontconfigAliasStanza(const std::string& original_family,
+                                        const std::string& preferred_family) {
+  return base::StringPrintf(
+      "  <alias>\n"
+      "    <family>%s</family>\n"
+      "    <prefer><family>%s</family></prefer>\n"
+      "  </alias>\n",
+      original_family.c_str(), preferred_family.c_str());
+}
+
 }  // namespace
 
 class FontRenderParamsTest : public testing::Test {
  public:
   FontRenderParamsTest() {
-    SetUpFontconfig();
     CHECK(temp_dir_.CreateUniqueTempDir());
     original_font_delegate_ = LinuxFontDelegate::instance();
     LinuxFontDelegate::SetInstance(&test_font_delegate_);
@@ -70,7 +138,17 @@ class FontRenderParamsTest : public testing::Test {
   ~FontRenderParamsTest() override {
     LinuxFontDelegate::SetInstance(
         const_cast<LinuxFontDelegate*>(original_font_delegate_));
-    TearDownFontconfig();
+  }
+
+  void SetUp() override {
+    // Fontconfig should already be set up by the test runner.
+    DCHECK(FcConfigGetCurrent());
+  }
+
+  void TearDown() override {
+    // We might have made a mess introducing new fontconfig settings.  Reset the
+    // state of fontconfig for the next test.
+    base::SetUpFontconfig();
   }
 
  protected:
@@ -83,7 +161,6 @@ class FontRenderParamsTest : public testing::Test {
 };
 
 TEST_F(FontRenderParamsTest, Default) {
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("arial.ttf"));
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
       temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) +
@@ -97,11 +174,10 @@ TEST_F(FontRenderParamsTest, Default) {
           CreateFontconfigEditStanza("hintstyle", "const", "hintslight") +
           CreateFontconfigEditStanza("rgba", "const", "rgb") +
           kFontconfigMatchFooter +
-          // Add a font match for Arial. Since it specifies a family, it
-          // shouldn't
-          // take effect when querying default settings.
+          // Add a font match for Arimo. Since it specifies a family, it
+          // shouldn't take effect when querying default settings.
           kFontconfigMatchFontHeader +
-          CreateFontconfigTestStanza("family", "eq", "string", "Arial") +
+          CreateFontconfigTestStanza("family", "eq", "string", "Arimo") +
           CreateFontconfigEditStanza("antialias", "bool", "true") +
           CreateFontconfigEditStanza("autohint", "bool", "false") +
           CreateFontconfigEditStanza("hinting", "bool", "true") +
@@ -109,8 +185,7 @@ TEST_F(FontRenderParamsTest, Default) {
           CreateFontconfigEditStanza("rgba", "const", "none") +
           kFontconfigMatchFooter +
           // Add font matches for fonts between 10 and 20 points or pixels.
-          // Since
-          // they specify sizes, they also should not affect the defaults.
+          // Since they specify sizes, they also should not affect the defaults.
           kFontconfigMatchFontHeader +
           CreateFontconfigTestStanza("size", "more_eq", "double", "10.0") +
           CreateFontconfigTestStanza("size", "less_eq", "double", "20.0") +
@@ -135,7 +210,6 @@ TEST_F(FontRenderParamsTest, Default) {
 }
 
 TEST_F(FontRenderParamsTest, Size) {
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("arial.ttf"));
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
       temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) + kFontconfigMatchPatternHeader +
@@ -179,7 +253,6 @@ TEST_F(FontRenderParamsTest, Size) {
 }
 
 TEST_F(FontRenderParamsTest, Style) {
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("arial.ttf"));
   // Load a config that disables subpixel rendering for bold text and disables
   // hinting for italic text.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
@@ -243,7 +316,6 @@ TEST_F(FontRenderParamsTest, Scalable) {
 }
 
 TEST_F(FontRenderParamsTest, UseBitmaps) {
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("arial.ttf"));
   // Load a config that enables embedded bitmaps for fonts <= 10 pixels.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
       temp_dir_.GetPath(),
@@ -304,6 +376,21 @@ TEST_F(FontRenderParamsTest, ForceSubpixelPositioning) {
     EXPECT_TRUE(params.subpixel_positioning);
     SetFontRenderParamsDeviceScaleFactor(1.0f);
   }
+  ClearFontRenderParamsCacheForTest();
+  SetFontRenderParamsDeviceScaleFactor(2.f);
+  // Subpixel positioning should be forced on non-Chrome-OS.
+  {
+    FontRenderParams params =
+        GetFontRenderParams(FontRenderParamsQuery(), nullptr);
+    EXPECT_TRUE(params.antialiasing);
+#if !defined(OS_CHROMEOS)
+    EXPECT_TRUE(params.subpixel_positioning);
+#else
+    // Integral scale factor does not require subpixel positioning.
+    EXPECT_FALSE(params.subpixel_positioning);
+#endif  // !defined(OS_CHROMEOS)
+    SetFontRenderParamsDeviceScaleFactor(1.0f);
+  }
 }
 
 TEST_F(FontRenderParamsTest, OnlySetConfiguredValues) {
@@ -328,7 +415,9 @@ TEST_F(FontRenderParamsTest, OnlySetConfiguredValues) {
 }
 
 TEST_F(FontRenderParamsTest, NoFontconfigMatch) {
-  // Don't load a Fontconfig configuration.
+  // A default configuration was set up globally.  Reset it to a blank config.
+  FcConfigSetCurrent(FcConfigCreate());
+
   FontRenderParams system_params;
   system_params.antialiasing = true;
   system_params.hinting = FontRenderParams::HINTING_MEDIUM;
@@ -336,7 +425,7 @@ TEST_F(FontRenderParamsTest, NoFontconfigMatch) {
   test_font_delegate_.set_params(system_params);
 
   FontRenderParamsQuery query;
-  query.families.push_back("Arial");
+  query.families.push_back("Arimo");
   query.families.push_back("Times New Roman");
   query.pixel_size = 10;
   std::string suggested_family;
@@ -350,43 +439,39 @@ TEST_F(FontRenderParamsTest, NoFontconfigMatch) {
 }
 
 TEST_F(FontRenderParamsTest, MissingFamily) {
-  // With Arial and Verdana installed, request (in order) Helvetica, Arial, and
-  // Verdana and check that Arial is returned.
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("arial.ttf"));
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("verdana.ttf"));
+  // With Arimo and Verdana installed, request (in order) Helvetica, Arimo, and
+  // Verdana and check that Arimo is returned.
   FontRenderParamsQuery query;
   query.families.push_back("Helvetica");
-  query.families.push_back("Arial");
+  query.families.push_back("Arimo");
   query.families.push_back("Verdana");
   std::string suggested_family;
   GetFontRenderParams(query, &suggested_family);
-  EXPECT_EQ("Arial", suggested_family);
+  EXPECT_EQ("Arimo", suggested_family);
 }
 
 TEST_F(FontRenderParamsTest, SubstituteFamily) {
-  // Configure Fontconfig to use Verdana for both Helvetica and Arial.
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("arial.ttf"));
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("verdana.ttf"));
+  // Configure Fontconfig to use Tinos for both Helvetica and Arimo.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
       temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) +
-          CreateFontconfigAliasStanza("Helvetica", "Verdana") +
+          CreateFontconfigAliasStanza("Helvetica", "Tinos") +
           kFontconfigMatchPatternHeader +
-          CreateFontconfigTestStanza("family", "eq", "string", "Arial") +
-          CreateFontconfigEditStanza("family", "string", "Verdana") +
+          CreateFontconfigTestStanza("family", "eq", "string", "Arimo") +
+          CreateFontconfigEditStanza("family", "string", "Tinos") +
           kFontconfigMatchFooter + kFontconfigFileFooter));
 
   FontRenderParamsQuery query;
   query.families.push_back("Helvetica");
   std::string suggested_family;
   GetFontRenderParams(query, &suggested_family);
-  EXPECT_EQ("Verdana", suggested_family);
+  EXPECT_EQ("Tinos", suggested_family);
 
   query.families.clear();
-  query.families.push_back("Arial");
+  query.families.push_back("Arimo");
   suggested_family.clear();
   GetFontRenderParams(query, &suggested_family);
-  EXPECT_EQ("Verdana", suggested_family);
+  EXPECT_EQ("Tinos", suggested_family);
 }
 
 }  // namespace gfx

@@ -4,9 +4,11 @@
 
 #include "content/browser/download/save_file.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
-#include "content/browser/download/download_task_runner.h"
-#include "content/public/browser/download_item.h"
+#include "base/optional.h"
+#include "components/download/public/common/download_item.h"
+#include "components/download/public/common/download_task_runner.h"
 
 namespace content {
 
@@ -14,30 +16,37 @@ namespace content {
 //               the default download directory when initializing |file_|.
 //               Unfortunately, as it is, constructors of SaveFile don't always
 //               have access to the SavePackage at this point.
-SaveFile::SaveFile(const SaveFileCreateInfo* info, bool calculate_hash)
-    : file_(DownloadItem::kInvalidId), info_(info) {
-  DCHECK(GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
+SaveFile::SaveFile(std::unique_ptr<SaveFileCreateInfo> info,
+                   bool calculate_hash)
+    : file_(download::DownloadItem::kInvalidId), info_(std::move(info)) {
+  DCHECK(download::GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
 
-  DCHECK(info);
-  DCHECK(info->path.empty());
+  DCHECK(info_);
+  DCHECK(info_->path.empty());
 }
 
 SaveFile::~SaveFile() {
-  DCHECK(GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
+  DCHECK(download::GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
 }
 
-DownloadInterruptReason SaveFile::Initialize() {
-  return file_.Initialize(base::FilePath(), base::FilePath(), base::File(), 0,
-                          std::string(), std::unique_ptr<crypto::SecureHash>(),
-                          false);
+download::DownloadInterruptReason SaveFile::Initialize() {
+  int64_t bytes_wasted = 0;
+  download::DownloadInterruptReason reason = file_.Initialize(
+      /*full_path=*/base::FilePath(), /*default_directory=*/base::FilePath(),
+      /*file=*/base::File(), /*bytes_so_far=*/0, /*hash_so_far=*/std::string(),
+      /*hash_state=*/nullptr, /*is_sparse_file=*/false,
+      /*bytes_wasted*/ &bytes_wasted);
+  info_->path = FullPath();
+  return reason;
 }
 
-DownloadInterruptReason SaveFile::AppendDataToFile(const char* data,
-                                                   size_t data_len) {
+download::DownloadInterruptReason SaveFile::AppendDataToFile(const char* data,
+                                                             size_t data_len) {
   return file_.AppendDataToFile(data, data_len);
 }
 
-DownloadInterruptReason SaveFile::Rename(const base::FilePath& full_path) {
+download::DownloadInterruptReason SaveFile::Rename(
+    const base::FilePath& full_path) {
   return file_.Rename(full_path);
 }
 

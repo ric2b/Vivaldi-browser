@@ -28,6 +28,8 @@ bool BASE_EXPORT ForcedVivaldiRunning();
 
 bool BASE_EXPORT IsTabDragInProgress();
 void BASE_EXPORT SetTabDragInProgress(bool tab_drag_in_progress);
+bool BASE_EXPORT GetBlockNextContextMenu();
+void BASE_EXPORT SetBlockNextContextMenu(bool block_next_context_menu);
 
 void BASE_EXPORT CommandLineAppendSwitchNoDup(base::CommandLine* const cmd_line,
                                               const std::string& switch_string);

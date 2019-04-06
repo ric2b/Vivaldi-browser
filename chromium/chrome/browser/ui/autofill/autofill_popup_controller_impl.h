@@ -16,7 +16,7 @@
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #include "chrome/browser/ui/autofill/autofill_popup_layout_model.h"
 #include "chrome/browser/ui/autofill/popup_controller_common.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/native_theme/native_theme.h"
@@ -49,11 +49,12 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
       base::i18n::TextDirection text_direction);
 
   // Shows the popup, or updates the existing popup with the given values.
-  void Show(const std::vector<autofill::Suggestion>& suggestions);
+  virtual void Show(const std::vector<autofill::Suggestion>& suggestions,
+                    bool autoselect_first_suggestion);
 
   // Updates the data list values currently shown with the popup.
-  void UpdateDataListValues(const std::vector<base::string16>& values,
-                            const std::vector<base::string16>& labels);
+  virtual void UpdateDataListValues(const std::vector<base::string16>& values,
+                                    const std::vector<base::string16>& labels);
 
   // Hides the popup and destroys the controller. This also invalidates
   // |delegate_|.
@@ -82,6 +83,7 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
   void SetSelectionAtPoint(const gfx::Point& point) override;
   bool AcceptSelectedLine() override;
   void SelectionCleared() override;
+  bool HasSelection() const override;
   gfx::Rect popup_bounds() const override;
   gfx::NativeView container_view() override;
   const gfx::RectF& element_bounds() const override;
@@ -106,11 +108,9 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
                                   base::string16* body) override;
   bool RemoveSuggestion(int list_index) override;
   ui::NativeTheme::ColorId GetBackgroundColorIDForRow(int index) const override;
+  void SetSelectedLine(base::Optional<int> selected_line) override;
   base::Optional<int> selected_line() const override;
   const AutofillPopupLayoutModel& layout_model() const override;
-
-  // Change which line is currently selected by the user.
-  void SetSelectedLine(base::Optional<int> selected_line);
 
   // Increase the selected line by 1, properly handling wrapping.
   void SelectNextLine();
@@ -135,9 +135,7 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
 
   base::WeakPtr<AutofillPopupControllerImpl> GetWeakPtr();
 
-  // Contains common popup functionality such as popup layout. Protected for
-  // testing.
-  PopupControllerCommon controller_common_;
+  AutofillPopupLayoutModel& LayoutModelForTesting() { return layout_model_; }
 
  private:
 #if !defined(OS_ANDROID)
@@ -158,7 +156,8 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
   friend class AutofillPopupControllerUnitTest;
   void SetViewForTesting(AutofillPopupView* view) { view_ = view; }
 
-  AutofillPopupView* view_;  // Weak reference.
+  PopupControllerCommon controller_common_;
+  AutofillPopupView* view_ = nullptr;  // Weak reference.
   AutofillPopupLayoutModel layout_model_;
   base::WeakPtr<AutofillPopupDelegate> delegate_;
 
@@ -181,7 +180,7 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
   // is drawn by Cocoa on macOS.
   gfx::Typesetter typesetter_ = gfx::Typesetter::HARFBUZZ;
 
-  base::WeakPtrFactory<AutofillPopupControllerImpl> weak_ptr_factory_;
+  base::WeakPtrFactory<AutofillPopupControllerImpl> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AutofillPopupControllerImpl);
 };

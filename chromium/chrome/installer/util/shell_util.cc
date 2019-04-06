@@ -32,7 +32,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/md5.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -70,6 +69,8 @@
 #include "components/base32/base32.h"
 
 #include "base/file_version_info.h"
+
+#include "installer/util/vivaldi_install_util.h"
 
 using base::win::RegKey;
 
@@ -254,7 +255,7 @@ std::vector<std::unique_ptr<RegistryEntry>> GetChromeDelegateExecuteEntries(
   app_id_shell_key.append(ShellUtil::kRegShellPath);
 
   // <root hkey>\Software\Classes\<app_id>\.exe\shell @=open
-  entries.push_back(base::MakeUnique<RegistryEntry>(app_id_shell_key,
+  entries.push_back(std::make_unique<RegistryEntry>(app_id_shell_key,
                                                     ShellUtil::kRegVerbOpen));
 
   // The command to execute when opening this application via the Metro UI.
@@ -286,9 +287,9 @@ std::vector<std::unique_ptr<RegistryEntry>> GetChromeDelegateExecuteEntries(
       const base::string16 verb_name(
           installer::GetLocalizedString(verb_and_id.name_id));
       entries.push_back(
-          base::MakeUnique<RegistryEntry>(sub_path, verb_name.c_str()));
+          std::make_unique<RegistryEntry>(sub_path, verb_name.c_str()));
     }
-    entries.push_back(base::MakeUnique<RegistryEntry>(sub_path, L"CommandId",
+    entries.push_back(std::make_unique<RegistryEntry>(sub_path, L"CommandId",
                                                       L"Browser.Launch"));
 
     sub_path.push_back(base::FilePath::kSeparators[0]);
@@ -296,8 +297,8 @@ std::vector<std::unique_ptr<RegistryEntry>> GetChromeDelegateExecuteEntries(
 
     // <root hkey>\Software\Classes\<app_id>\.exe\shell\<verb>\command
     entries.push_back(
-        base::MakeUnique<RegistryEntry>(sub_path, delegate_command));
-    entries.push_back(base::MakeUnique<RegistryEntry>(
+        std::make_unique<RegistryEntry>(sub_path, delegate_command));
+    entries.push_back(std::make_unique<RegistryEntry>(
         sub_path, ShellUtil::kRegDelegateExecute, app_info.delegate_clsid));
   }
 
@@ -317,15 +318,15 @@ void GetProgIdEntries(const ApplicationInfo& app_info,
   prog_id_path.push_back(base::FilePath::kSeparators[0]);
   prog_id_path.append(app_info.prog_id);
   entries->push_back(
-      base::MakeUnique<RegistryEntry>(prog_id_path, app_info.file_type_name));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+      std::make_unique<RegistryEntry>(prog_id_path, app_info.file_type_name));
+  entries->push_back(std::make_unique<RegistryEntry>(
       prog_id_path + ShellUtil::kRegDefaultIcon,
       ShellUtil::FormatIconLocation(app_info.file_type_icon_path,
                                     app_info.file_type_icon_index)));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       prog_id_path + ShellUtil::kRegShellOpen, app_info.command_line));
   if (!app_info.delegate_clsid.empty()) {
-    entries->push_back(base::MakeUnique<RegistryEntry>(
+    entries->push_back(std::make_unique<RegistryEntry>(
         prog_id_path + ShellUtil::kRegShellOpen, ShellUtil::kRegDelegateExecute,
         app_info.delegate_clsid));
     // TODO(scottmg): Simplify after Metro removal. https://crbug.com/558054.
@@ -336,34 +337,34 @@ void GetProgIdEntries(const ApplicationInfo& app_info,
   // depend on the DelegateExecute verb handler being set.
   if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
     if (!app_info.app_id.empty()) {
-      entries->push_back(base::MakeUnique<RegistryEntry>(
+      entries->push_back(std::make_unique<RegistryEntry>(
           prog_id_path, ShellUtil::kRegAppUserModelId, app_info.app_id));
     }
 
     // Add \Software\Classes\<prog_id>\Application entries
     base::string16 application_path(prog_id_path + ShellUtil::kRegApplication);
     if (!app_info.app_id.empty()) {
-      entries->push_back(base::MakeUnique<RegistryEntry>(
+      entries->push_back(std::make_unique<RegistryEntry>(
           application_path, ShellUtil::kRegAppUserModelId, app_info.app_id));
     }
     if (!app_info.application_icon_path.empty()) {
-      entries->push_back(base::MakeUnique<RegistryEntry>(
+      entries->push_back(std::make_unique<RegistryEntry>(
           application_path, ShellUtil::kRegApplicationIcon,
           ShellUtil::FormatIconLocation(app_info.application_icon_path,
                                         app_info.application_icon_index)));
     }
     if (!app_info.application_name.empty()) {
-      entries->push_back(base::MakeUnique<RegistryEntry>(
+      entries->push_back(std::make_unique<RegistryEntry>(
           application_path, ShellUtil::kRegApplicationName,
           app_info.application_name));
     }
     if (!app_info.application_description.empty()) {
-      entries->push_back(base::MakeUnique<RegistryEntry>(
+      entries->push_back(std::make_unique<RegistryEntry>(
           application_path, ShellUtil::kRegApplicationDescription,
           app_info.application_description));
     }
     if (!app_info.publisher_name.empty()) {
-      entries->push_back(base::MakeUnique<RegistryEntry>(
+      entries->push_back(std::make_unique<RegistryEntry>(
           application_path, ShellUtil::kRegApplicationCompany,
           app_info.publisher_name));
     }
@@ -390,7 +391,7 @@ void GetChromeProgIdEntries(
 
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   bool is_standalone =
-      command_line.HasSwitch(installer::switches::kVivaldiStandalone);
+      command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
   if (is_standalone) {
     app_info.app_id = install_static::GetBaseAppId() + suffix;
   } else {
@@ -432,7 +433,7 @@ void GetProtocolCapabilityEntries(
     const base::string16& suffix,
     const base::string16& protocol,
     std::vector<std::unique_ptr<RegistryEntry>>* entries) {
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       GetCapabilitiesKey(suffix).append(L"\\URLAssociations"), protocol,
       GetBrowserProgId(suffix)));
 }
@@ -456,53 +457,53 @@ void GetShellIntegrationEntries(
   // Register Chrome's display name.
   // TODO(grt): http://crbug.com/75152 Also set LocalizedString; see
   // http://msdn.microsoft.com/en-us/library/windows/desktop/cc144109(v=VS.85).aspx#registering_the_display_name
-  entries->push_back(base::MakeUnique<RegistryEntry>(start_menu_entry,
+  entries->push_back(std::make_unique<RegistryEntry>(start_menu_entry,
                                              vivaldi::GetAppName(dist,
                                                  chrome_exe.value())));
   // Register the "open" verb for launching Chrome via the "Internet" link.
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       start_menu_entry + ShellUtil::kRegShellOpen, quoted_exe_path));
   // Register Chrome's icon for the Start Menu "Internet" link.
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       start_menu_entry + ShellUtil::kRegDefaultIcon, icon_path));
 
   // Register installation information.
   base::string16 install_info(start_menu_entry + L"\\InstallInfo");
   // Note: not using CommandLine since it has ambiguous rules for quoting
   // strings.
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       install_info, kReinstallCommand,
       quoted_exe_path + L" --" +
           base::ASCIIToUTF16(switches::kMakeDefaultBrowser)));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       install_info, L"HideIconsCommand",
       quoted_exe_path + L" --" + base::ASCIIToUTF16(switches::kHideIcons)));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       install_info, L"ShowIconsCommand",
       quoted_exe_path + L" --" + base::ASCIIToUTF16(switches::kShowIcons)));
   entries->push_back(
-      base::MakeUnique<RegistryEntry>(install_info, L"IconsVisible", 1));
+      std::make_unique<RegistryEntry>(install_info, L"IconsVisible", 1));
 
   // Register with Default Programs.
   const base::string16 reg_app_name(
       install_static::GetBaseAppName().append(suffix));
   // Tell Windows where to find Chrome's Default Programs info.
   const base::string16 capabilities(GetCapabilitiesKey(suffix));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       ShellUtil::kRegRegisteredApplications, reg_app_name, capabilities));
   // Write out Chrome's Default Programs info.
   // TODO(grt): http://crbug.com/75152 Write a reference to a localized
   // resource rather than this.
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       capabilities, ShellUtil::kRegApplicationDescription,
       dist->GetLongAppDescription()));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       capabilities, ShellUtil::kRegApplicationIcon, icon_path));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       capabilities, ShellUtil::kRegApplicationName, vivaldi::GetAppName(dist,
           chrome_exe.value())));
 
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       capabilities + L"\\Startmenu", L"StartMenuInternet", reg_app_name));
 
   const base::string16 html_prog_id(GetBrowserProgId(suffix));
@@ -511,7 +512,7 @@ void GetShellIntegrationEntries(
 #else
   for (int i = 0; ShellUtil::kPotentialFileAssociations[i] != NULL; i++) {
 #endif
-    entries->push_back(base::MakeUnique<RegistryEntry>(
+    entries->push_back(std::make_unique<RegistryEntry>(
         capabilities + L"\\FileAssociations",
 #if defined(VIVALDI_BUILD)
         ShellUtil::kDefaultFileAssociations[i], html_prog_id));
@@ -524,7 +525,7 @@ void GetShellIntegrationEntries(
 #else
   for (int i = 0; ShellUtil::kPotentialProtocolAssociations[i] != NULL; i++) {
 #endif
-    entries->push_back(base::MakeUnique<RegistryEntry>(
+    entries->push_back(std::make_unique<RegistryEntry>(
         capabilities + L"\\URLAssociations",
 #if defined(VIVALDI_BUILD)
         ShellUtil::kBrowserProtocolAssociations[i], html_prog_id));
@@ -549,7 +550,7 @@ void GetAppExtRegistrationEntries(
   key_name.push_back(base::FilePath::kSeparators[0]);
   key_name.append(ShellUtil::kRegOpenWithProgids);
   entries->push_back(
-      base::MakeUnique<RegistryEntry>(key_name, prog_id, base::string16()));
+      std::make_unique<RegistryEntry>(key_name, prog_id, base::string16()));
 }
 
 // This method returns a list of the registry entries required for this
@@ -568,8 +569,8 @@ void GetChromeAppRegistrationEntries(
   app_path_key.push_back(base::FilePath::kSeparators[0]);
   app_path_key.append(chrome_exe.BaseName().value());
   entries->push_back(
-      base::MakeUnique<RegistryEntry>(app_path_key, chrome_exe.value()));
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+      std::make_unique<RegistryEntry>(app_path_key, chrome_exe.value()));
+  entries->push_back(std::make_unique<RegistryEntry>(
       app_path_key, ShellUtil::kAppPathsRegistryPathName,
       chrome_exe.DirName().value()));
 
@@ -601,7 +602,7 @@ void GetAppDefaultRegistrationEntries(
   base::string16 key_name(ShellUtil::kRegClasses);
   key_name.push_back(base::FilePath::kSeparators[0]);
   key_name.append(ext);
-  auto default_association = base::MakeUnique<RegistryEntry>(key_name, prog_id);
+  auto default_association = std::make_unique<RegistryEntry>(key_name, prog_id);
   if (overwrite_existing ||
       !default_association->KeyExistsInRegistry(RegistryEntry::LOOK_IN_HKCU)) {
     entries->push_back(std::move(default_association));
@@ -623,26 +624,26 @@ void GetXPStyleUserProtocolEntries(
   // This registry value tells Windows that this 'class' is a URL scheme
   // so IE, explorer and other apps will route it to our handler.
   // <root hkey>\Software\Classes\<protocol>\URL Protocol
-  entries->push_back(base::MakeUnique<RegistryEntry>(
+  entries->push_back(std::make_unique<RegistryEntry>(
       url_key, ShellUtil::kRegUrlProtocol, base::string16()));
 
   // <root hkey>\Software\Classes\<protocol>\DefaultIcon
   base::string16 icon_key = url_key + ShellUtil::kRegDefaultIcon;
-  entries->push_back(base::MakeUnique<RegistryEntry>(icon_key, chrome_icon));
+  entries->push_back(std::make_unique<RegistryEntry>(icon_key, chrome_icon));
 
   // <root hkey>\Software\Classes\<protocol>\shell\open\command
   base::string16 shell_key = url_key + ShellUtil::kRegShellOpen;
-  entries->push_back(base::MakeUnique<RegistryEntry>(shell_key, chrome_open));
+  entries->push_back(std::make_unique<RegistryEntry>(shell_key, chrome_open));
 
   // <root hkey>\Software\Classes\<protocol>\shell\open\ddeexec
   base::string16 dde_key = url_key + L"\\shell\\open\\ddeexec";
   entries->push_back(
-      base::MakeUnique<RegistryEntry>(dde_key, base::string16()));
+      std::make_unique<RegistryEntry>(dde_key, base::string16()));
 
   // <root hkey>\Software\Classes\<protocol>\shell\@
   base::string16 protocol_shell_key = url_key + ShellUtil::kRegShellPath;
   entries->push_back(
-      base::MakeUnique<RegistryEntry>(protocol_shell_key, L"open"));
+      std::make_unique<RegistryEntry>(protocol_shell_key, L"open"));
 }
 
 // This method returns a list of all the user level registry entries that are
@@ -672,7 +673,7 @@ void GetXPStyleDefaultBrowserUserEntries(
   // start->Internet shortcut.
   base::string16 start_menu(ShellUtil::kRegStartMenuInternet);
   base::string16 app_name = install_static::GetBaseAppName().append(suffix);
-  entries->push_back(base::MakeUnique<RegistryEntry>(start_menu, app_name));
+  entries->push_back(std::make_unique<RegistryEntry>(start_menu, app_name));
 }
 
 // Checks that all |entries| are present on this computer (or absent if their
@@ -741,7 +742,7 @@ bool ElevateAndRegisterChrome(BrowserDistribution* dist,
   // (see AddUninstallShortcutWorkItems).
   const bool is_per_user = InstallUtil::IsPerUserInstall();
   if (base::CommandLine::ForCurrentProcess()->
-      HasSwitch(installer::switches::kVivaldiStandalone)) {
+      HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
     std::unique_ptr<FileVersionInfo> version_info(
         FileVersionInfo::CreateFileVersionInfo(chrome_exe));
     if (version_info.get()) {
@@ -1322,7 +1323,7 @@ bool GetAppShortcutsFolder(ShellUtil::ShellChange level, base::FilePath* path) {
   DCHECK_GE(base::win::GetVersion(), base::win::VERSION_WIN8);
 
   base::FilePath folder;
-  if (!PathService::Get(base::DIR_APP_SHORTCUTS, &folder)) {
+  if (!base::PathService::Get(base::DIR_APP_SHORTCUTS, &folder)) {
     LOG(ERROR) << "Could not get application shortcuts location.";
     return false;
   }
@@ -1671,7 +1672,7 @@ bool ShellUtil::GetShortcutPath(ShortcutLocation location,
       return false;
   }
 
-  if (!PathService::Get(dir_key, path) || path->empty()) {
+  if (!base::PathService::Get(dir_key, path) || path->empty()) {
     NOTREACHED() << dir_key;
     return false;
   }
@@ -1874,7 +1875,7 @@ base::string16 ShellUtil::GetCurrentInstallationSuffix(
   //   3) Unsuffixed (even worse).
   base::string16 tested_suffix;
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(installer::switches::kVivaldiStandalone)) {
+  if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
     vivaldi::GetPathSpecificSuffix(chrome_exe, &tested_suffix);
   } else if (InstallUtil::IsPerUserInstall() &&
       (!GetUserSpecificRegistrySuffix(&tested_suffix) ||
@@ -1960,7 +1961,7 @@ base::string16 ShellUtil::BuildAppModelId(
 
 ShellUtil::DefaultState ShellUtil::GetChromeDefaultState() {
   base::FilePath app_path;
-  if (!PathService::Get(base::FILE_EXE, &app_path)) {
+  if (!base::PathService::Get(base::FILE_EXE, &app_path)) {
     NOTREACHED();
     return UNKNOWN_DEFAULT;
   }
@@ -1992,7 +1993,7 @@ ShellUtil::DefaultState ShellUtil::GetChromeDefaultProtocolClientState(
     return UNKNOWN_DEFAULT;
 
   base::FilePath chrome_exe;
-  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
+  if (!base::PathService::Get(base::FILE_EXE, &chrome_exe)) {
     NOTREACHED();
     return UNKNOWN_DEFAULT;
   }
@@ -2083,6 +2084,29 @@ bool ShellUtil::MakeChromeDefault(BrowserDistribution* dist,
   SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
   return ret;
 }
+
+#if defined(GOOGLE_CHROME_BUILD)
+// static
+bool ShellUtil::LaunchUninstallAppsSettings() {
+  DCHECK_GE(base::win::GetVersion(), base::win::VERSION_WIN10);
+
+  static constexpr wchar_t kControlPanelAppModelId[] =
+      L"windows.immersivecontrolpanel_cw5n1h2txyewy"
+      L"!microsoft.windows.immersivecontrolpanel";
+
+  Microsoft::WRL::ComPtr<IApplicationActivationManager> activator;
+  HRESULT hr = ::CoCreateInstance(CLSID_ApplicationActivationManager, nullptr,
+                                  CLSCTX_ALL, IID_PPV_ARGS(&activator));
+  if (FAILED(hr))
+    return false;
+
+  DWORD pid = 0;
+  CoAllowSetForegroundWindow(activator.Get(), nullptr);
+  hr = activator->ActivateApplication(
+      kControlPanelAppModelId, L"page=SettingsPageAppsSizes", AO_NONE, &pid);
+  return SUCCEEDED(hr);
+}
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
 bool ShellUtil::ShowMakeChromeDefaultSystemUI(
     BrowserDistribution* dist,
@@ -2238,7 +2262,7 @@ bool ShellUtil::RegisterChromeBrowser(BrowserDistribution* dist,
                  installer::switches::kRegisterChromeBrowserSuffix)) {
     suffix = command_line.GetSwitchValueNative(
         installer::switches::kRegisterChromeBrowserSuffix);
-  } else if (command_line.HasSwitch(installer::switches::kVivaldiStandalone)) {
+  } else if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
     vivaldi::GetPathSpecificSuffix(chrome_exe, &suffix);
   } else if (!GetInstallationSpecificSuffix(chrome_exe, &suffix)) {
     return false;

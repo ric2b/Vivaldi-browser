@@ -8,39 +8,14 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/feature_list.h"
-#include "base/single_thread_task_runner.h"
-#include "build/build_config.h"
-#include "build/buildflag.h"
 #include "media/base/decoder_factory.h"
-#include "media/base/media_log.h"
-#include "media/base/media_switches.h"
-#include "media/filters/gpu_video_decoder.h"
-#include "media/media_features.h"
 #include "media/renderers/audio_renderer_impl.h"
 #include "media/renderers/renderer_impl.h"
 #include "media/renderers/video_renderer_impl.h"
+#include "media/video/gpu_memory_buffer_video_frame_pool.h"
 #include "media/video/gpu_video_accelerator_factories.h"
-#include "third_party/libaom/av1_features.h"
-
-#if BUILDFLAG(ENABLE_AV1_DECODER)
-#include "media/filters/aom_video_decoder.h"
-#endif
-
-#if BUILDFLAG(ENABLE_FFMPEG)
-#include "media/filters/ffmpeg_audio_decoder.h"
-#endif
-
-#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-#include "media/filters/ffmpeg_video_decoder.h"
-#endif
-
-#if BUILDFLAG(ENABLE_LIBVPX)
-#include "media/filters/vpx_video_decoder.h"
-#endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/common/pipeline_stats.h"
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #include "platform_media/renderer/decoders/pass_through_audio_decoder.h"
 #include "platform_media/renderer/decoders/pass_through_video_decoder.h"
@@ -61,7 +36,9 @@ DefaultRendererFactory::DefaultRendererFactory(
     const GetGpuFactoriesCB& get_gpu_factories_cb)
     : media_log_(media_log),
       decoder_factory_(decoder_factory),
-      get_gpu_factories_cb_(get_gpu_factories_cb) {}
+      get_gpu_factories_cb_(get_gpu_factories_cb) {
+  DCHECK(decoder_factory_);
+}
 
 DefaultRendererFactory::~DefaultRendererFactory() = default;
 
@@ -84,22 +61,11 @@ DefaultRendererFactory::CreateAudioDecoders(
     audio_decoders.push_back(
         std::make_unique<WMFAudioDecoder>(media_task_runner));
 #endif
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
-#if BUILDFLAG(ENABLE_FFMPEG)
-  audio_decoders.push_back(
-      std::make_unique<FFmpegAudioDecoder>(media_task_runner, media_log_));
-#endif
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
 #endif
 
-  // Use an external decoder only if we cannot otherwise decode in the
-  // renderer.
-  if (decoder_factory_)
-    decoder_factory_->CreateAudioDecoders(media_task_runner, &audio_decoders);
-
+  decoder_factory_->CreateAudioDecoders(media_task_runner, media_log_,
+                                        &audio_decoders);
   return audio_decoders;
 }
 
@@ -110,20 +76,8 @@ DefaultRendererFactory::CreateVideoDecoders(
     const gfx::ColorSpace& target_color_space,
     GpuVideoAcceleratorFactories* gpu_factories,
     bool use_platform_media_pipeline) {
-  // TODO(crbug.com/789597): Move this (and CreateAudioDecoders) into a decoder
-  // factory, and just call |decoder_factory_| here.
-
   // Create our video decoders and renderer.
   std::vector<std::unique_ptr<VideoDecoder>> video_decoders;
-
-  // Prefer an external decoder since one will only exist if it is hardware
-  // accelerated.
-  if (gpu_factories) {
-    // |gpu_factories_| requires that its entry points be called on its
-    // |GetTaskRunner()|.  Since |pipeline_| will own decoders created from the
-    // factories, require that their message loops are identical.
-    DCHECK(gpu_factories->GetTaskRunner() == media_task_runner.get());
-  }
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (use_platform_media_pipeline) {
@@ -136,22 +90,9 @@ DefaultRendererFactory::CreateVideoDecoders(
   // GpuVideoDecoder, we should make it our first choice on the list of video
   // decoders, for more details see: DNA-36050,
   // https://code.google.com/p/chromium/issues/detail?id=470466.
-    if (decoder_factory_) {
-      decoder_factory_->CreateVideoDecoders(media_task_runner, gpu_factories,
-                                            media_log_, request_overlay_info_cb,
-                                            &video_decoders);
-    }
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    if (gpu_factories) {
-#else
-    // MojoVideoDecoder replaces any VDA for this platform when it's enabled.
-    if (!base::FeatureList::IsEnabled(media::kMojoVideoDecoder)) {
-#endif
-      video_decoders.push_back(std::make_unique<GpuVideoDecoder>(
-          gpu_factories, request_overlay_info_cb, target_color_space,
-          media_log_));
-    }
+  decoder_factory_->CreateVideoDecoders(media_task_runner, gpu_factories,
+                                        media_log_, request_overlay_info_cb,
+                                        target_color_space, &video_decoders);
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
@@ -160,23 +101,7 @@ DefaultRendererFactory::CreateVideoDecoders(
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #if defined(OS_WIN)
     video_decoders.push_back(std::make_unique<WMFVideoDecoder>(media_task_runner));
-#elif defined(OS_MACOSX)
-    if (!gpu_factories)
-      pipeline_stats::ReportNoGpuProcessForDecoder();
 #endif
-#endif
-
-#if BUILDFLAG(ENABLE_LIBVPX)
-  video_decoders.push_back(std::make_unique<OffloadingVpxVideoDecoder>());
-#endif
-
-#if BUILDFLAG(ENABLE_AV1_DECODER)
-  if (base::FeatureList::IsEnabled(kAv1Decoder))
-    video_decoders.push_back(std::make_unique<AomVideoDecoder>(media_log_));
-#endif
-
-#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-  video_decoders.push_back(std::make_unique<FFmpegVideoDecoder>(media_log_));
 #endif
 
   return video_decoders;
@@ -208,8 +133,16 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
   if (!get_gpu_factories_cb_.is_null())
     gpu_factories = get_gpu_factories_cb_.Run();
 
+  std::unique_ptr<GpuMemoryBufferVideoFramePool> gmb_pool;
+  if (gpu_factories && gpu_factories->ShouldUseGpuMemoryBuffersForVideoFrames(
+                           false /* for_media_stream */)) {
+    gmb_pool = std::make_unique<GpuMemoryBufferVideoFramePool>(
+        std::move(media_task_runner), std::move(worker_task_runner),
+        gpu_factories);
+  }
+
   std::unique_ptr<VideoRenderer> video_renderer(new VideoRendererImpl(
-      media_task_runner, worker_task_runner, video_renderer_sink,
+      media_task_runner, video_renderer_sink,
       // Unretained is safe here, because the RendererFactory is guaranteed to
       // outlive the RendererImpl. The RendererImpl is destroyed when WMPI
       // destructor calls pipeline_controller_.Stop() -> PipelineImpl::Stop() ->
@@ -218,9 +151,8 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
       // finishes.
       base::Bind(&DefaultRendererFactory::CreateVideoDecoders,
                  base::Unretained(this), media_task_runner,
-                 request_overlay_info_cb, target_color_space, gpu_factories,
-                 use_platform_media_pipeline),
-      true, gpu_factories, media_log_));
+                 request_overlay_info_cb, target_color_space, gpu_factories, use_platform_media_pipeline),
+      true, media_log_, std::move(gmb_pool)));
 
   return std::make_unique<RendererImpl>(
       media_task_runner, std::move(audio_renderer), std::move(video_renderer));

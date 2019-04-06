@@ -26,6 +26,7 @@ import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.preferences.website.ContentSettingsResources;
 import org.chromium.chrome.browser.preferences.website.SingleCategoryPreferences;
+import org.chromium.chrome.browser.preferences.website.SiteSettingsCategory;
 import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content.browser.test.util.Criteria;
@@ -122,7 +123,8 @@ public class NotificationsPreferencesTest {
         });
 
         SingleCategoryPreferences fragment = (SingleCategoryPreferences) getTopFragment();
-        Assert.assertTrue(fragment.getCategoryForTest().showNotificationsSites());
+        Assert.assertTrue(
+                fragment.getCategoryForTest().showSites(SiteSettingsCategory.Type.NOTIFICATIONS));
     }
 
     /** Gets the fragment of the top Activity. Assumes the top Activity is a Preferences. */
@@ -143,11 +145,13 @@ public class NotificationsPreferencesTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                PrefServiceBridge.getInstance().setNotificationsEnabled(false);
+                PrefServiceBridge.getInstance().setCategoryEnabled(
+                        ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS, false);
                 fragment.onResume();
                 Assert.assertEquals(fromWebsites.getSummary(), getNotificationsSummary(false));
 
-                PrefServiceBridge.getInstance().setNotificationsEnabled(true);
+                PrefServiceBridge.getInstance().setCategoryEnabled(
+                        ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS, true);
                 fragment.onResume();
                 Assert.assertEquals(fromWebsites.getSummary(), getNotificationsSummary(true));
             }

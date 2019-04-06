@@ -362,6 +362,17 @@ class ToolbarActionsBarObserverHelper : public ToolbarActionsBarObserver {
   [view setFrameOrigin:NSZeroPoint];
   [[containerView superview] setFrameOrigin:NSZeroPoint];
   [containerView setFrameOrigin:NSMakePoint(kLeftPadding, 0)];
+
+  if (containerView.isHidden)
+    return;
+
+  // Remove and re-add menu item so menu gets the correct size.
+  // |removeItemAtIndex:| can trigger an eager dealloc, so retain it
+  // in the meantime.
+  base::scoped_nsobject<NSMenuItem> menuItem([browserActionsMenuItem_ retain]);
+  NSInteger index = [[self menu] indexOfItem:browserActionsMenuItem_];
+  [[self menu] removeItemAtIndex:index];
+  [[self menu] insertItem:browserActionsMenuItem_ atIndex:index];
 }
 
 - (void)menuWillOpen:(NSMenu*)menu {
@@ -490,6 +501,10 @@ class ToolbarActionsBarObserverHelper : public ToolbarActionsBarObserver {
 
 - (BrowserActionsController*)browserActionsController {
   return browserActionsController_.get();
+}
+
+- (ui::AcceleratorProvider*)acceleratorProvider {
+  return acceleratorDelegate_.get();
 }
 
 - (void)createModel {

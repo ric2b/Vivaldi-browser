@@ -38,6 +38,17 @@ struct PasswordFormFillData {
   typedef std::map<UsernamesCollectionKey,
                    std::vector<base::string16> > UsernamesCollection;
 
+  // If |has_renderer_ids| == true then |form_renderer_id| contains the unique
+  // renderer form id. No special values for |has_renderer_ids| == false case
+  // was introduced because the absent of ids is just temprorary situation while
+  // the old form parsing still exists.
+  // If there is no form tag then |form_renderer_id| ==
+  // FormData::kNotSetFormRendererId.
+  // Username and Password elements renderer ids are in
+  // |username_field.unique_renderer_id| and |password_field.unique_renderer_id|
+  // correspondingly.
+  uint32_t form_renderer_id;
+
   // The name of the form.
   base::string16 name;
 
@@ -53,18 +64,15 @@ struct PasswordFormFillData {
   FormFieldData username_field;
   FormFieldData password_field;
 
+  // True if the server-side classification believes that the field may be
+  // pre-filled with a placeholder in the value attribute.
+  bool username_may_use_prefilled_placeholder = false;
+
   // The signon realm of the preferred user/pass pair.
   std::string preferred_realm;
 
   // A list of other matching username->PasswordAndRealm pairs for the form.
   LoginCollection additional_logins;
-
-  // A list of possible usernames in the case where we aren't completely sure
-  // that the original saved username is correct. This data is keyed by the
-  // saved username/password to ensure uniqueness, though the username is not
-  // used.
-  // TODO(crbug/188908). Remove |other_possible_usernames| or launch.
-  UsernamesCollection other_possible_usernames;
 
   // Tells us whether we need to wait for the user to enter a valid username
   // before we autofill the password. By default, this is off unless the
@@ -75,6 +83,11 @@ struct PasswordFormFillData {
 
   // True if this form is a change password form.
   bool is_possible_change_password_form;
+
+  // True if renderer ids for form, username and password fields are present.
+  // TODO(https://crbug.com/831123): Remove this field when old parsing is
+  // removed and filling by renderer ids is by default.
+  bool has_renderer_ids = false;
 
   PasswordFormFillData();
   PasswordFormFillData(const PasswordFormFillData& other);
@@ -94,7 +107,6 @@ void InitPasswordFormFillData(
     const std::map<base::string16, const PasswordForm*>& matches,
     const PasswordForm* const preferred_match,
     bool wait_for_username_before_autofill,
-    bool enable_other_possible_usernames,
     PasswordFormFillData* result);
 
 // Renderer needs to have only a password that should be autofilled, all other

@@ -18,7 +18,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -89,8 +89,7 @@ HIDDetectionScreen::~HIDDetectionScreen() {
   if (view_)
     view_->Unbind();
   if (discovery_session_.get())
-    discovery_session_->Stop(base::Bind(&base::DoNothing),
-                             base::Bind(&base::DoNothing));
+    discovery_session_->Stop(base::DoNothing(), base::DoNothing());
   if (adapter_.get())
     adapter_->RemoveObserver(this);
 }
@@ -156,8 +155,7 @@ void HIDDetectionScreen::Hide() {
 
   showing_ = false;
   if (discovery_session_.get()) {
-    discovery_session_->Stop(base::Bind(&base::DoNothing),
-                             base::Bind(&base::DoNothing));
+    discovery_session_->Stop(base::DoNothing(), base::DoNothing());
   }
   if (view_)
     view_->Hide();
@@ -587,7 +585,7 @@ void HIDDetectionScreen::PowerOff() {
   }
   if (!use_bluetooth) {
     VLOG(1) << "Switching off BT adapter after HID OOBE screen as unused.";
-    adapter_->SetPowered(false, base::Bind(&base::DoNothing),
+    adapter_->SetPowered(false, base::DoNothing(),
                          base::Bind(&HIDDetectionScreen::SetPoweredOffError,
                                     weak_ptr_factory_.GetWeakPtr()));
   }

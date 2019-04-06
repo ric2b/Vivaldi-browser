@@ -9,6 +9,9 @@
 // object. Handles interactions between Cocoa and the cross-platform
 // code. Each window has a single toolbar and, by virtue of being a
 // TabWindowController, a tab strip along the top.
+// Note that under the hood the BrowserWindowController is neither an
+// NSWindowController nor its window's delegate, though it receives all
+// NSWindowDelegate methods as if it were.
 
 #import <Cocoa/Cocoa.h>
 
@@ -36,7 +39,7 @@ class Browser;
 class BrowserWindow;
 class BrowserWindowCocoa;
 @class BrowserWindowFullscreenTransition;
-@class BrowserWindowTouchBar;
+@class BrowserWindowTouchBarController;
 @class DevToolsController;
 @class DownloadShelfController;
 class ExtensionKeybindingRegistryCocoa;
@@ -44,14 +47,14 @@ class ExclusiveAccessController;
 class ExclusiveAccessContext;
 @class FindBarCocoaController;
 @class FullscreenModeController;
-@class FullscreenToolbarController;
+@class FullscreenToolbarControllerCocoa;
 @class FullscreenToolbarVisibilityLockController;
 @class FullscreenWindow;
 @class InfoBarContainerController;
 class LocationBarViewMac;
 @class OverlayableContentsController;
 class StatusBubbleMac;
-@class TabStripController;
+@class TabStripControllerCocoa;
 @class TabStripView;
 @class ToolbarController;
 @class TranslateBubbleController;
@@ -62,10 +65,6 @@ class WebContents;
 
 namespace extensions {
 class Command;
-}
-
-namespace {
-class OmniboxPopupModelObserverBridge;
 }
 
 constexpr const gfx::Size kMinCocoaTabbedWindowSize(400, 272);
@@ -84,7 +83,7 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
   NSWindow* savedRegularWindow_;
   std::unique_ptr<BrowserWindowCocoa> windowShim_;
   base::scoped_nsobject<ToolbarController> toolbarController_;
-  base::scoped_nsobject<TabStripController> tabStripController_;
+  base::scoped_nsobject<TabStripControllerCocoa> tabStripController_;
   base::scoped_nsobject<FindBarCocoaController> findBarCocoaController_;
   base::scoped_nsobject<InfoBarContainerController> infoBarContainerController_;
   base::scoped_nsobject<DownloadShelfController> downloadShelfController_;
@@ -92,12 +91,12 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
   base::scoped_nsobject<DevToolsController> devToolsController_;
   base::scoped_nsobject<OverlayableContentsController>
       overlayableContentsController_;
-  base::scoped_nsobject<FullscreenToolbarController>
+  base::scoped_nsobject<FullscreenToolbarControllerCocoa>
       fullscreenToolbarController_;
   std::unique_ptr<ExclusiveAccessController> exclusiveAccessController_;
   base::scoped_nsobject<BrowserWindowFullscreenTransition>
       fullscreenTransition_;
-  base::scoped_nsobject<BrowserWindowTouchBar> touchBar_;
+  base::scoped_nsobject<BrowserWindowTouchBarController> touchBarController_;
 
   // Strong. StatusBubble is a special case of a strong reference that
   // we don't wrap in a scoped_ptr because it is acting the same
@@ -198,14 +197,11 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
   // handle.
   std::unique_ptr<ExtensionKeybindingRegistryCocoa>
       extensionKeybindingRegistry_;
-
-  // Observes whether the omnibox popup is shown or hidden.
-  std::unique_ptr<OmniboxPopupModelObserverBridge>
-      omniboxPopupModelObserverBridge_;
 }
 
-// A convenience class method which gets the |BrowserWindowController| for a
-// given window. This method returns nil if no window in the chain has a BWC.
+// A convenience class method which returns the |BrowserWindowController| for
+// |window|, or nil if neither |window| nor its parent or any other ancestor
+// has one.
 + (BrowserWindowController*)browserWindowControllerForWindow:(NSWindow*)window;
 
 // A convenience class method which gets the |BrowserWindowController| for a
@@ -232,7 +228,7 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
 - (ToolbarController*)toolbarController;
 
 // Return a weak pointer to the tab strip controller.
-- (TabStripController*)tabStripController;
+- (TabStripControllerCocoa*)tabStripController;
 
 // Return a weak pointer to the find bar controller.
 - (FindBarCocoaController*)findBarCocoaController;
@@ -402,11 +398,9 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
 // UpdateAlertState.
 - (TabAlertState)alertState;
 
-// Returns the BrowserWindowTouchBar object associated with the window.
-- (BrowserWindowTouchBar*)browserWindowTouchBar;
-
-// Invalidates the browser's touch bar.
-- (void)invalidateTouchBar;
+// Returns the BrowserWindowTouchBarController object associated with the
+// window.
+- (BrowserWindowTouchBarController*)browserWindowTouchBarController;
 
 // Indicates whether the toolbar is visible to the user. Toolbar is usually
 // triggered by moving mouse cursor to the top of the monitor.
@@ -628,15 +622,16 @@ constexpr const gfx::Size kMinCocoaPopupWindowSize(100, 122);
 - (BOOL)isActiveTabContentsControllerResizeBlocked;
 
 // Returns the fullscreen toolbar controller.
-- (FullscreenToolbarController*)fullscreenToolbarController;
+- (FullscreenToolbarControllerCocoa*)fullscreenToolbarController;
 
 // Sets the fullscreen toolbar controller.
-- (void)setFullscreenToolbarController:(FullscreenToolbarController*)controller;
+- (void)setFullscreenToolbarController:
+    (FullscreenToolbarControllerCocoa*)controller;
 
-// Sets |browserWindowTouchbar_|.
-- (void)setBrowserWindowTouchBar:(BrowserWindowTouchBar*)touchBar;
+// Sets |touchbarController_|.
+- (void)setBrowserWindowTouchBarController:
+    (BrowserWindowTouchBarController*)controller;
 
 @end  // @interface BrowserWindowController (TestingAPI)
-
 
 #endif  // CHROME_BROWSER_UI_COCOA_BROWSER_WINDOW_CONTROLLER_H_

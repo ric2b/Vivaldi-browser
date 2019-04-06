@@ -36,6 +36,9 @@ const char kDriveOtherDirName[] = "other";
 const char kDriveTeamDrivesDirName[] = "team_drives";
 const char kDriveTrashDirName[] = "trash";
 
+// The team_drive_id value that signifies the users default corpus.
+constexpr char kTeamDriveIdDefaultCorpus[] = "";
+
 // Returns the path of the top root of the pseudo tree.
 const base::FilePath& GetDriveGrandRootPath();
 
@@ -45,6 +48,9 @@ const base::FilePath& GetDriveMyDriveRootPath();
 // Returns the path of the directory representing "Team Drives".
 const base::FilePath& GetDriveTeamDrivesRootPath();
 
+// Returns true if |file_path| is a child directory of the team drives root.
+bool IsTeamDrivesPath(const base::FilePath& file_path);
+
 // Escapes a file name in Drive cache.
 // Replaces percent ('%'), period ('.') and slash ('/') with %XX (hex)
 std::string EscapeCacheFileName(const std::string& filename);
@@ -53,15 +59,19 @@ std::string EscapeCacheFileName(const std::string& filename);
 // This is the inverse of EscapeCacheFileName.
 std::string UnescapeCacheFileName(const std::string& filename);
 
+// Converts a numerical changestamp value to a start page token.
+std::string ConvertChangestampToStartPageToken(int64_t changestamp);
+
+// Convers a start page token to a numerical changestamp
+bool ConvertStartPageTokenToChangestamp(const std::string& stat_page_token,
+                                        int64_t* changestamp);
+
 // Converts the given string to a form suitable as a file name. Specifically,
 // - Normalizes in Unicode Normalization Form C.
 // - Replaces slashes '/' with '_'.
 // - Replaces the whole input with "_" if the all input characters are '.'.
 // |input| must be a valid UTF-8 encoded string.
 std::string NormalizeFileName(const std::string& input);
-
-// Does nothing with |error|. Used with functions taking FileOperationCallback.
-void EmptyFileOperationCallback(FileError error);
 
 // Helper to destroy objects which needs Destroy() to be called on destruction.
 struct DestroyHelper {

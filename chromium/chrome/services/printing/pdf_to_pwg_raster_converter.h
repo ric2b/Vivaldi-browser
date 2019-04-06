@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "chrome/services/printing/public/interfaces/pdf_to_pwg_raster_converter.mojom.h"
+#include "chrome/services/printing/public/mojom/pdf_to_pwg_raster_converter.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 
@@ -25,10 +25,9 @@ class PdfToPwgRasterConverter
 
  private:
   // printing::mojom::PdfToPwgRasterConverter
-  void Convert(mojo::ScopedHandle pdf_file_in,
+  void Convert(base::ReadOnlySharedMemoryRegion pdf_region,
                const PdfRenderSettings& pdf_settings,
                const PwgRasterSettings& pwg_raster_settings,
-               mojo::ScopedHandle pwg_raster_file_out,
                ConvertCallback callback) override;
 
   const std::unique_ptr<service_manager::ServiceContextRef> service_ref_;

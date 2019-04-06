@@ -4,13 +4,17 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizer.h"
 
+#include "base/ios/ios_util.h"
+#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cell.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_cell.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_cell.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_controlling.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_controlling.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/web/public/features.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -19,6 +23,20 @@
 namespace {
 const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 const CGFloat kShiftTilesUpAnimationDuration = 0.25;
+
+UIEdgeInsets SafeAreaInsetsForViewWithinNTP(UIView* view) {
+  UIEdgeInsets insets = SafeAreaInsetsForView(view);
+  if ((IsUIRefreshPhase1Enabled() ||
+       base::FeatureList::IsEnabled(
+           web::features::kBrowserContainerFullscreen)) &&
+      !base::ios::IsRunningOnIOS11OrLater()) {
+    // TODO(crbug.com/826369) Replace this when the NTP is contained by the
+    // BVC with |self.collectionController.topLayoutGuide.length|.
+    insets = UIEdgeInsetsMake(StatusBarHeight(), 0, 0, 0);
+  }
+  return insets;
+}
+
 }  // namespace
 
 @interface ContentSuggestionsHeaderSynchronizer ()<UIGestureRecognizerDelegate>
@@ -30,11 +48,10 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.25;
     collectionController;
 @property(nonatomic, weak) id<ContentSuggestionsHeaderControlling>
     headerController;
-@property(nonatomic, assign) CFTimeInterval shiftTilesDownStartTime;
+@property(nonatomic, assign) CFTimeInterval shiftTileStartTime;
 
 // Tap gesture recognizer when the omnibox is focused.
 @property(nonatomic, strong) UITapGestureRecognizer* tapGestureRecognizer;
-
 @end
 
 @implementation ContentSuggestionsHeaderSynchronizer
@@ -42,7 +59,7 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.25;
 @synthesize collectionController = _collectionController;
 @synthesize headerController = _headerController;
 @synthesize shouldAnimateHeader = _shouldAnimateHeader;
-@synthesize shiftTilesDownStartTime = _shiftTilesDownStartTime;
+@synthesize shiftTileStartTime = _shiftTileStartTime;
 @synthesize tapGestureRecognizer = _tapGestureRecognizer;
 @synthesize collectionShiftingOffset = _collectionShiftingOffset;
 
@@ -53,7 +70,7 @@ initWithCollectionController:
                 (id<ContentSuggestionsHeaderControlling>)headerController {
   self = [super init];
   if (self) {
-    _shiftTilesDownStartTime = -1;
+    _shiftTileStartTime = -1;
     _shouldAnimateHeader = YES;
 
     _tapGestureRecognizer = [[UITapGestureRecognizer alloc]
@@ -104,9 +121,12 @@ initWithCollectionController:
   // Add gesture recognizer to collection view when the omnibox is focused.
   [self.collectionView addGestureRecognizer:self.tapGestureRecognizer];
 
-  CGFloat pinnedOffsetY = [self.headerController pinnedOffsetY];
-  self.collectionShiftingOffset =
-      MAX(0, pinnedOffsetY - self.collectionView.contentOffset.y);
+  if (self.collectionView.decelerating) {
+    // Stop the scrolling if the scroll view is decelerating to prevent the
+    // focus to be immediately lost.
+    [self.collectionView setContentOffset:self.collectionView.contentOffset
+                                 animated:NO];
+  }
 
   if (self.collectionController.scrolledToTop) {
     self.shouldAnimateHeader = NO;
@@ -114,6 +134,10 @@ initWithCollectionController:
       completion();
     return;
   }
+
+  CGFloat pinnedOffsetY = [self.headerController pinnedOffsetY];
+  self.collectionShiftingOffset =
+      MAX(0, pinnedOffsetY - self.collectionView.contentOffset.y);
 
   self.collectionController.scrolledToTop = YES;
   self.shouldAnimateHeader = YES;
@@ -142,6 +166,7 @@ initWithCollectionController:
 }
 
 - (void)invalidateLayout {
+  [self updateFakeOmniboxOnNewWidth:self.collectionView.bounds.size.width];
   [self.collectionView.collectionViewLayout invalidateLayout];
 }
 
@@ -155,27 +180,41 @@ initWithCollectionController:
     [self.headerController unfocusOmnibox];
   }
 
-  if (IsIPadIdiom()) {
+  if (IsIPadIdiom() && !IsUIRefreshPhase1Enabled()) {
     return;
   }
 
   if (self.shouldAnimateHeader) {
+    UIEdgeInsets insets = SafeAreaInsetsForViewWithinNTP(self.collectionView);
     [self.headerController
         updateFakeOmniboxForOffset:self.collectionView.contentOffset.y
                        screenWidth:self.collectionView.frame.size.width
-                    safeAreaInsets:SafeAreaInsetsForView(self.collectionView)];
+                    safeAreaInsets:insets];
   }
 }
 
 - (void)updateFakeOmniboxOnNewWidth:(CGFloat)width {
-  if (self.shouldAnimateHeader && !IsIPadIdiom()) {
+  if (self.shouldAnimateHeader &&
+      (IsUIRefreshPhase1Enabled() || !IsIPadIdiom())) {
+    // We check -superview here because in certain scenarios (such as when the
+    // VC is rotated underneath another presented VC), in a
+    // UICollectionViewController -viewSafeAreaInsetsDidChange the VC.view has
+    // updated safeAreaInsets, but VC.collectionView does not until a layer
+    // -viewDidLayoutSubviews.  Since self.collectionView and it's superview
+    // should always have the same safeArea, this should be safe.
+    UIEdgeInsets insets =
+        SafeAreaInsetsForViewWithinNTP(self.collectionView.superview);
     [self.headerController
         updateFakeOmniboxForOffset:self.collectionView.contentOffset.y
                        screenWidth:width
-                    safeAreaInsets:SafeAreaInsetsForView(self.collectionView)];
+                    safeAreaInsets:insets];
   } else {
     [self.headerController updateFakeOmniboxForWidth:width];
   }
+}
+
+- (void)updateConstraints {
+  [self.headerController updateConstraints];
 }
 
 - (void)unfocusOmnibox {
@@ -202,12 +241,12 @@ initWithCollectionController:
 - (void)shiftTilesDownAnimationDidFire:(CADisplayLink*)link {
   // If this is the first frame of the animation, store the starting timestamp
   // and do nothing.
-  if (self.shiftTilesDownStartTime == -1) {
-    self.shiftTilesDownStartTime = link.timestamp;
+  if (self.shiftTileStartTime == -1) {
+    self.shiftTileStartTime = link.timestamp;
     return;
   }
 
-  CFTimeInterval timeElapsed = link.timestamp - self.shiftTilesDownStartTime;
+  CFTimeInterval timeElapsed = link.timestamp - self.shiftTileStartTime;
   double percentComplete = timeElapsed / kShiftTilesDownAnimationDuration;
   // Ensure that the percentage cannot be above 1.0.
   if (percentComplete > 1.0)
@@ -223,8 +262,8 @@ initWithCollectionController:
   if (percentComplete == 1.0) {
     [link invalidate];
     self.collectionShiftingOffset = 0;
-    // Reset |shiftTilesDownStartTime to its sentinel value.
-    self.shiftTilesDownStartTime = -1;
+    // Reset |shiftTileStartTime| to its sentinel value.
+    self.shiftTileStartTime = -1;
   }
 }
 
@@ -235,10 +274,13 @@ initWithCollectionController:
   BOOL isMostVisitedCell =
       content_suggestions::nearestAncestor(
           touch.view, [ContentSuggestionsMostVisitedCell class]) != nil;
+  BOOL isMostVisitedActionCell =
+      content_suggestions::nearestAncestor(
+          touch.view, [ContentSuggestionsMostVisitedActionCell class]) != nil;
   BOOL isSuggestionCell =
       content_suggestions::nearestAncestor(
           touch.view, [ContentSuggestionsCell class]) != nil;
-  return !isMostVisitedCell && !isSuggestionCell;
+  return !isMostVisitedCell && !isMostVisitedActionCell && !isSuggestionCell;
 }
 
 - (UIView*)nearestAncestorOfView:(UIView*)view withClass:(Class)aClass {

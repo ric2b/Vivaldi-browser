@@ -111,7 +111,8 @@ public class BrowserActionsService extends Service {
                     .show();
             updateNumTabCreatedInBackground();
             NotificationUmaTracker.getInstance().onNotificationShown(
-                    NotificationUmaTracker.BROWSER_ACTIONS, ChannelDefinitions.CHANNEL_ID_BROWSER);
+                    NotificationUmaTracker.SystemNotificationType.BROWSER_ACTIONS,
+                    ChannelDefinitions.ChannelId.BROWSER);
         } else if (TextUtils.equals(intent.getAction(), ACTION_TAB_CREATION_CHROME_DISPLAYED)) {
             clearPendingStatus();
             removeObserver();
@@ -238,7 +239,7 @@ public class BrowserActionsService extends Service {
         ChromeNotificationBuilder builder =
                 NotificationBuilderFactory
                         .createChromeNotificationBuilder(
-                                true /* preferCompat */, ChannelDefinitions.CHANNEL_ID_BROWSER)
+                                true /* preferCompat */, ChannelDefinitions.ChannelId.BROWSER)
                         .setSmallIcon(R.drawable.infobar_chrome)
                         .setLocalOnly(true)
                         .setAutoCancel(true)

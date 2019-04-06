@@ -82,10 +82,11 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
       const std::vector<AccessibilityHostMsg_LocationChangeParams>& params)
           override;
   void FireFocusEvent(BrowserAccessibility* node) override;
-  void FireBlinkEvent(ui::AXEvent event_type,
+  void FireBlinkEvent(ax::mojom::Event event_type,
                       BrowserAccessibility* node) override;
   void FireGeneratedEvent(AXEventGenerator::Event event_type,
                           BrowserAccessibility* node) override;
+  gfx::Rect GetViewBounds() override;
 
   void FireLocationChanged(BrowserAccessibility* node);
 

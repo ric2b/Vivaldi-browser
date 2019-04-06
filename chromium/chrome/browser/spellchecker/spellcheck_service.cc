@@ -4,7 +4,9 @@
 
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 
+#include <algorithm>
 #include <set>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/stl_util.h"
@@ -13,8 +15,10 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/chrome_service.h"
 #include "chrome/browser/spellchecker/spellcheck_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_hunspell_dictionary.h"
+#include "chrome/common/constants.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
@@ -24,7 +28,7 @@
 #include "components/spellcheck/browser/spelling_service_client.h"
 #include "components/spellcheck/common/spellcheck.mojom.h"
 #include "components/spellcheck/common/spellcheck_common.h"
-#include "components/spellcheck/spellcheck_build_features.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -168,7 +172,7 @@ bool SpellcheckService::SignalStatusEvent(
 }
 
 void SpellcheckService::StartRecordingMetrics(bool spellcheck_enabled) {
-  metrics_.reset(new SpellCheckHostMetrics());
+  metrics_ = std::make_unique<SpellCheckHostMetrics>();
   metrics_->RecordEnabledStats(spellcheck_enabled);
   OnUseSpellingServiceChanged();
 }
@@ -202,8 +206,10 @@ void SpellcheckService::InitForRenderer(
   }
 
   spellcheck::mojom::SpellCheckerPtr spellchecker;
-  content::BindInterface(
-      content::RenderProcessHost::FromRendererIdentity(renderer_identity),
+  ChromeService::GetInstance()->connector()->BindInterface(
+      service_manager::Identity(chrome::mojom::kRendererServiceName,
+                                renderer_identity.user_id(),
+                                renderer_identity.instance()),
       &spellchecker);
   spellchecker->Initialize(std::move(dictionaries), custom_words, enable);
 }
@@ -236,11 +242,8 @@ void SpellcheckService::LoadHunspellDictionaries() {
 
   for (const auto& dictionary : dictionaries) {
     hunspell_dictionaries_.push_back(
-        base::MakeUnique<SpellcheckHunspellDictionary>(
-            dictionary,
-            content::BrowserContext::GetDefaultStoragePartition(context_)
-                ->GetURLRequestContext(),
-            this));
+        std::make_unique<SpellcheckHunspellDictionary>(dictionary, context_,
+                                                       this));
     hunspell_dictionaries_.back()->AddObserver(this);
     hunspell_dictionaries_.back()->Load();
   }
@@ -280,17 +283,25 @@ void SpellcheckService::OnCustomDictionaryChanged(
     const SpellcheckCustomDictionary::Change& change) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  auto process_hosts(content::RenderProcessHost::AllHostsIterator());
-
   const std::vector<std::string> additions(change.to_add().begin(),
                                            change.to_add().end());
   const std::vector<std::string> deletions(change.to_remove().begin(),
                                            change.to_remove().end());
-  while (!process_hosts.IsAtEnd()) {
+  for (content::RenderProcessHost::iterator it(
+           content::RenderProcessHost::AllHostsIterator());
+       !it.IsAtEnd(); it.Advance()) {
+    content::RenderProcessHost* process = it.GetCurrentValue();
+    if (!process->IsInitializedAndNotDead())
+      continue;
+
+    service_manager::Identity renderer_identity = process->GetChildIdentity();
     spellcheck::mojom::SpellCheckerPtr spellchecker;
-    content::BindInterface(process_hosts.GetCurrentValue(), &spellchecker);
+    ChromeService::GetInstance()->connector()->BindInterface(
+        service_manager::Identity(chrome::mojom::kRendererServiceName,
+                                  renderer_identity.user_id(),
+                                  renderer_identity.instance()),
+        &spellchecker);
     spellchecker->CustomDictionaryChanged(additions, deletions);
-    process_hosts.Advance();
   }
 }
 
@@ -330,7 +341,7 @@ void SpellcheckService::InitForAllRenderers() {
           content::RenderProcessHost::AllHostsIterator());
        !i.IsAtEnd(); i.Advance()) {
     content::RenderProcessHost* process = i.GetCurrentValue();
-    if (process && process->GetHandle())
+    if (process && process->GetProcess().Handle())
       InitForRenderer(process->GetChildIdentity());
   }
 }

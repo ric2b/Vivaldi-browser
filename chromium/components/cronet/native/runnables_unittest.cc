@@ -9,9 +9,11 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/test/scoped_task_environment.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "components/cronet/native/generated/cronet.idl_impl_interface.h"
 #include "components/cronet/native/include/cronet_c.h"
-#include "components/cronet/native/test_util.h"
+#include "components/cronet/native/test/test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -26,7 +28,7 @@ class RunnablesTest : public ::testing::Test {
       Cronet_UrlRequestCallbackPtr self,
       Cronet_UrlRequestPtr request,
       Cronet_UrlResponseInfoPtr info,
-      CharString newLocationUrl);
+      Cronet_String newLocationUrl);
   static void UrlRequestCallback_OnResponseStarted(
       Cronet_UrlRequestCallbackPtr self,
       Cronet_UrlRequestPtr request,
@@ -35,21 +37,23 @@ class RunnablesTest : public ::testing::Test {
       Cronet_UrlRequestCallbackPtr self,
       Cronet_UrlRequestPtr request,
       Cronet_UrlResponseInfoPtr info,
-      Cronet_BufferPtr buffer);
+      Cronet_BufferPtr buffer,
+      uint64_t bytesRead);
 
   bool callback_called() const { return callback_called_; }
 
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  // Provide a message loop for use by TestExecutor instances.
+  base::MessageLoop message_loop_;
 
  private:
   bool callback_called_ = false;
   DISALLOW_COPY_AND_ASSIGN(RunnablesTest);
 };
 
-class OnRedirectReceived_Runnable : public cronet::BaseCronet_Runnable {
+class OnRedirectReceived_Runnable : public Cronet_Runnable {
  public:
   OnRedirectReceived_Runnable(Cronet_UrlRequestCallbackPtr callback,
-                              CharString new_location_url)
+                              Cronet_String new_location_url)
       : callback_(callback), new_location_url_(new_location_url) {}
 
   ~OnRedirectReceived_Runnable() override = default;
@@ -58,6 +62,8 @@ class OnRedirectReceived_Runnable : public cronet::BaseCronet_Runnable {
     Cronet_UrlRequestCallback_OnRedirectReceived(
         callback_, /* request = */ nullptr, /* response_info = */ nullptr,
         new_location_url_.c_str());
+    // Self-Destroy after running.
+    delete this;
   }
 
  private:
@@ -74,10 +80,10 @@ void RunnablesTest::UrlRequestCallback_OnRedirectReceived(
     Cronet_UrlRequestCallbackPtr self,
     Cronet_UrlRequestPtr request,
     Cronet_UrlResponseInfoPtr info,
-    CharString newLocationUrl) {
+    Cronet_String newLocationUrl) {
   CHECK(self);
-  Cronet_UrlRequestCallbackContext context =
-      Cronet_UrlRequestCallback_GetContext(self);
+  Cronet_ClientContext context =
+      Cronet_UrlRequestCallback_GetClientContext(self);
   RunnablesTest* test = static_cast<RunnablesTest*>(context);
   CHECK(test);
   test->callback_called_ = true;
@@ -90,8 +96,8 @@ void RunnablesTest::UrlRequestCallback_OnResponseStarted(
     Cronet_UrlRequestPtr request,
     Cronet_UrlResponseInfoPtr info) {
   CHECK(self);
-  Cronet_UrlRequestCallbackContext context =
-      Cronet_UrlRequestCallback_GetContext(self);
+  Cronet_ClientContext context =
+      Cronet_UrlRequestCallback_GetClientContext(self);
   RunnablesTest* test = static_cast<RunnablesTest*>(context);
   CHECK(test);
   test->callback_called_ = true;
@@ -102,13 +108,14 @@ void RunnablesTest::UrlRequestCallback_OnReadCompleted(
     Cronet_UrlRequestCallbackPtr self,
     Cronet_UrlRequestPtr request,
     Cronet_UrlResponseInfoPtr info,
-    Cronet_BufferPtr buffer) {
+    Cronet_BufferPtr buffer,
+    uint64_t bytesRead) {
   CHECK(self);
   CHECK(buffer);
   // Destroy the |buffer|.
   Cronet_Buffer_Destroy(buffer);
-  Cronet_UrlRequestCallbackContext context =
-      Cronet_UrlRequestCallback_GetContext(self);
+  Cronet_ClientContext context =
+      Cronet_UrlRequestCallback_GetClientContext(self);
   RunnablesTest* test = static_cast<RunnablesTest*>(context);
   CHECK(test);
   test->callback_called_ = true;
@@ -119,7 +126,7 @@ TEST_F(RunnablesTest, TestRunCallbackOnExecutor) {
   // Executor provided by the application.
   Cronet_ExecutorPtr executor = cronet::test::CreateTestExecutor();
   // Callback provided by the application.
-  Cronet_UrlRequestCallbackPtr callback = Cronet_UrlRequestCallback_CreateStub(
+  Cronet_UrlRequestCallbackPtr callback = Cronet_UrlRequestCallback_CreateWith(
       RunnablesTest::UrlRequestCallback_OnRedirectReceived,
       /* OnResponseStartedFunc = */ nullptr,
       /* OnReadCompletedFunc = */ nullptr,
@@ -127,16 +134,17 @@ TEST_F(RunnablesTest, TestRunCallbackOnExecutor) {
       /* OnFailedFunc = */ nullptr,
       /* OnCanceledFunc = */ nullptr);
   // New location to redirect to.
-  CharString new_location_url = "newUrl";
+  Cronet_String new_location_url = "newUrl";
   // Invoke Cronet_UrlRequestCallback_OnRedirectReceived
   Cronet_RunnablePtr runnable =
       new OnRedirectReceived_Runnable(callback, new_location_url);
   new_location_url = "bad";
-  Cronet_UrlRequestCallback_SetContext(callback, this);
+  Cronet_UrlRequestCallback_SetClientContext(callback, this);
   Cronet_Executor_Execute(executor, runnable);
-  scoped_task_environment_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(callback_called());
   Cronet_Executor_Destroy(executor);
+  Cronet_UrlRequestCallback_Destroy(callback);
 }
 
 // Example of posting application callback to the executor using OneClosure.
@@ -144,7 +152,7 @@ TEST_F(RunnablesTest, TestRunOnceClosureOnExecutor) {
   // Executor provided by the application.
   Cronet_ExecutorPtr executor = cronet::test::CreateTestExecutor();
   // Callback provided by the application.
-  Cronet_UrlRequestCallbackPtr callback = Cronet_UrlRequestCallback_CreateStub(
+  Cronet_UrlRequestCallbackPtr callback = Cronet_UrlRequestCallback_CreateWith(
       RunnablesTest::UrlRequestCallback_OnRedirectReceived,
       RunnablesTest::UrlRequestCallback_OnResponseStarted,
       /* OnReadCompletedFunc = */ nullptr,
@@ -155,11 +163,12 @@ TEST_F(RunnablesTest, TestRunOnceClosureOnExecutor) {
   Cronet_RunnablePtr runnable = new cronet::OnceClosureRunnable(
       base::BindOnce(Cronet_UrlRequestCallback_OnResponseStarted, callback,
                      /* request = */ nullptr, /* response_info = */ nullptr));
-  Cronet_UrlRequestCallback_SetContext(callback, this);
+  Cronet_UrlRequestCallback_SetClientContext(callback, this);
   Cronet_Executor_Execute(executor, runnable);
-  scoped_task_environment_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(callback_called());
   Cronet_Executor_Destroy(executor);
+  Cronet_UrlRequestCallback_Destroy(callback);
 }
 
 // Example of posting application callback to the executor and passing
@@ -168,7 +177,7 @@ TEST_F(RunnablesTest, TestCronetBuffer) {
   // Executor provided by the application.
   Cronet_ExecutorPtr executor = cronet::test::CreateTestExecutor();
   // Callback provided by the application.
-  Cronet_UrlRequestCallbackPtr callback = Cronet_UrlRequestCallback_CreateStub(
+  Cronet_UrlRequestCallbackPtr callback = Cronet_UrlRequestCallback_CreateWith(
       RunnablesTest::UrlRequestCallback_OnRedirectReceived,
       RunnablesTest::UrlRequestCallback_OnResponseStarted,
       RunnablesTest::UrlRequestCallback_OnReadCompleted,
@@ -182,12 +191,13 @@ TEST_F(RunnablesTest, TestCronetBuffer) {
   Cronet_RunnablePtr runnable = new cronet::OnceClosureRunnable(base::BindOnce(
       RunnablesTest::UrlRequestCallback_OnReadCompleted, callback,
       /* request = */ nullptr,
-      /* response_info = */ nullptr, buffer));
-  Cronet_UrlRequestCallback_SetContext(callback, this);
+      /* response_info = */ nullptr, buffer, /* bytes_read = */ 0));
+  Cronet_UrlRequestCallback_SetClientContext(callback, this);
   Cronet_Executor_Execute(executor, runnable);
-  scoped_task_environment_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(callback_called());
   Cronet_Executor_Destroy(executor);
+  Cronet_UrlRequestCallback_Destroy(callback);
 }
 
 }  // namespace

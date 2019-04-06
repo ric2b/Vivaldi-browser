@@ -6,64 +6,51 @@
 #define ASH_FIRST_RUN_FIRST_RUN_HELPER_H_
 
 #include "ash/ash_export.h"
+#include "ash/public/interfaces/first_run_helper.mojom.h"
+#include "ash/session/session_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-
-namespace gfx {
-class Rect;
-}
-
-namespace views {
-class Widget;
-}
+#include "mojo/public/cpp/bindings/binding_set.h"
 
 namespace ash {
 
+class DesktopCleaner;
+
 // Interface used by first-run tutorial to manipulate and retrieve information
 // about shell elements.
-// All returned coordinates are in screen coordinate system.
-class ASH_EXPORT FirstRunHelper {
- public:
-  class Observer {
-   public:
-    // Called when first-run UI was cancelled.
-    virtual void OnCancelled() = 0;
-    virtual ~Observer() {}
-  };
-
+class ASH_EXPORT FirstRunHelper : public mojom::FirstRunHelper,
+                                  public SessionObserver {
  public:
   FirstRunHelper();
-  virtual ~FirstRunHelper();
+  ~FirstRunHelper() override;
 
-  void AddObserver(Observer* observer);
-  void RemoveObserver(Observer* observer);
+  void BindRequest(mojom::FirstRunHelperRequest request);
 
-  // Returns widget to place tutorial UI into it.
-  virtual views::Widget* GetOverlayWidget() = 0;
+  // mojom::FirstRunHelper:
+  void Start(mojom::FirstRunHelperClientPtr client) override;
+  void Stop() override;
+  void GetAppListButtonBounds(GetAppListButtonBoundsCallback cb) override;
+  void OpenTrayBubble(OpenTrayBubbleCallback cb) override;
+  void CloseTrayBubble() override;
+  void GetHelpButtonBounds(GetHelpButtonBoundsCallback cb) override;
 
-  // Returns bounds of application list button.
-  virtual gfx::Rect GetAppListButtonBounds() = 0;
+  // SessionObserver:
+  void OnLockStateChanged(bool locked) override;
+  void OnChromeTerminating() override;
 
-  // Opens and closes system tray bubble.
-  virtual void OpenTrayBubble() = 0;
-  virtual void CloseTrayBubble() = 0;
-
-  // Returns |true| iff system tray bubble is opened now.
-  virtual bool IsTrayBubbleOpened() = 0;
-
-  // Returns bounds of system tray bubble. You must open bubble before calling
-  // this method.
-  virtual gfx::Rect GetTrayBubbleBounds() = 0;
-
-  // Returns bounds of help app button from system tray buble. You must open
-  // bubble before calling this method.
-  virtual gfx::Rect GetHelpButtonBounds() = 0;
-
- protected:
-  base::ObserverList<Observer>& observers() { return observers_; }
+  void FlushForTesting();
 
  private:
-  base::ObserverList<Observer> observers_;
+  // Notifies the client to cancel the tutorial.
+  void Cancel();
+
+  // Bindings for clients of the mojo interface.
+  mojo::BindingSet<mojom::FirstRunHelper> bindings_;
+
+  // Client interface (e.g. chrome).
+  mojom::FirstRunHelperClientPtr client_;
+
+  std::unique_ptr<DesktopCleaner> cleaner_;
 
   DISALLOW_COPY_AND_ASSIGN(FirstRunHelper);
 };

@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/containers/queue.h"
-#include "base/memory/ptr_util.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "services/ui/ws/drag_source.h"
 #include "services/ui/ws/drag_target_connection.h"
@@ -41,7 +40,7 @@ class DragTestWindow : public DragTargetConnection {
 
   DragTestWindow(DragControllerTest* parent,
                  TestServerWindowDelegate* window_delegate,
-                 const WindowId& id)
+                 const viz::FrameSinkId& id)
       : parent_(parent),
         window_delegate_(window_delegate),
         window_(window_delegate_, id) {
@@ -84,7 +83,7 @@ class DragTestWindow : public DragTargetConnection {
 
   // Overridden from DragTestConnection:
   void PerformOnDragDropStart(
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
+      const base::flat_map<std::string, std::vector<uint8_t>>& mime_data)
       override {
     times_received_drag_drop_start_++;
     mime_data_ = mime_data;
@@ -135,7 +134,7 @@ class DragTestWindow : public DragTargetConnection {
   DragControllerTest* parent_;
   TestServerWindowDelegate* window_delegate_;
   ServerWindow window_;
-  std::unordered_map<std::string, std::vector<uint8_t>> mime_data_;
+  base::flat_map<std::string, std::vector<uint8_t>> mime_data_;
   uint32_t times_received_drag_drop_start_ = 0;
 
   base::queue<DragEvent> queued_callbacks_;
@@ -146,10 +145,9 @@ class DragControllerTest : public testing::Test,
                            public DragSource {
  public:
   std::unique_ptr<DragTestWindow> BuildWindow() {
-    WindowId id(1, ++window_id_);
+    viz::FrameSinkId id(1, ++window_id_);
     std::unique_ptr<DragTestWindow> p =
         std::make_unique<DragTestWindow>(this, window_delegate_.get(), id);
-    server_window_by_id_[id] = p->window();
     connection_by_window_[p->window()] = p.get();
     return p;
   }
@@ -158,11 +156,10 @@ class DragControllerTest : public testing::Test,
       DragTestWindow* window,
       uint32_t drag_operations) {
     window->PerformOnDragDropStart(
-        std::unordered_map<std::string, std::vector<uint8_t>>());
+        base::flat_map<std::string, std::vector<uint8_t>>());
     drag_operation_ = std::make_unique<DragController>(
         this, this, window->window(), window, MouseEvent::kMousePointerId,
-        std::unordered_map<std::string, std::vector<uint8_t>>(),
-        drag_operations);
+        base::flat_map<std::string, std::vector<uint8_t>>(), drag_operations);
 
     // It would be nice if we could just let the observer method fire, but it
     // fires during the constructor when we haven't assigned the unique_ptr
@@ -196,7 +193,6 @@ class DragControllerTest : public testing::Test,
 
   void OnTestWindowDestroyed(DragTestWindow* test_window) {
     drag_operation_->OnWillDestroyDragTargetConnection(test_window);
-    server_window_by_id_.erase(test_window->window()->id());
     connection_by_window_.erase(test_window->window());
   }
 
@@ -218,8 +214,8 @@ class DragControllerTest : public testing::Test,
 
     window_delegate_ = std::make_unique<TestServerWindowDelegate>(
         ws_test_helper_.window_server()->GetVizHostProxy());
-    root_window_ =
-        std::make_unique<ServerWindow>(window_delegate_.get(), WindowId(1, 2));
+    root_window_ = std::make_unique<ServerWindow>(window_delegate_.get(),
+                                                  viz::FrameSinkId(1, 2));
     window_delegate_->set_root_window(root_window_.get());
     root_window_->SetVisible(true);
   }
@@ -229,7 +225,6 @@ class DragControllerTest : public testing::Test,
     root_window_.reset();
     window_delegate_.reset();
 
-    DCHECK(server_window_by_id_.empty());
     DCHECK(connection_by_window_.empty());
 
     testing::Test::TearDown();
@@ -249,13 +244,6 @@ class DragControllerTest : public testing::Test,
     drag_completed_value_ = success;
   }
 
-  ServerWindow* GetWindowById(const WindowId& id) override {
-    auto it = server_window_by_id_.find(id);
-    if (it == server_window_by_id_.end())
-      return nullptr;
-    return it->second;
-  }
-
   DragTargetConnection* GetDragTargetForWindow(
       const ServerWindow* window) override {
     auto it = connection_by_window_.find(const_cast<ServerWindow*>(window));
@@ -270,7 +258,6 @@ class DragControllerTest : public testing::Test,
 
   ui::CursorType cursor_;
 
-  std::map<WindowId, ServerWindow*> server_window_by_id_;
   std::map<ServerWindow*, DragTargetConnection*> connection_by_window_;
 
   std::unique_ptr<TestServerWindowDelegate> window_delegate_;

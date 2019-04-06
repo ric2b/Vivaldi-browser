@@ -2,16 +2,18 @@
 
 <link rel="import" href="chrome://resources/cr_elements/cr_container_shadow_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
-<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/cr/ui/focus_outline_manager.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
 <link rel="import" href="code_section.html">
 <link rel="import" href="item_util.html">
 <link rel="import" href="navigation_helper.html">
@@ -30,16 +32,16 @@
       }
 
       iron-icon {
-        --iron-icon-fill-color: var(--paper-grey-500);
-        @apply(--cr-icon-height-width);
+        --iron-icon-fill-color: var(--google-grey-refresh-700);
+        @apply --cr-icon-height-width;
         flex-shrink: 0;
       }
 
-      iron-icon[icon=warning] {
+      iron-icon[icon='cr:warning'] {
         --iron-icon-fill-color: var(--paper-orange-500);
       }
 
-      iron-icon[icon=error] {
+      iron-icon[icon='cr:error'] {
         --iron-icon-fill-color: var(--paper-red-700);
       }
 
@@ -47,7 +49,7 @@
        * detail_view.html and error_page.html. Refactor such that no duplication
        * happens.*/
       #main {
-        @apply(--shadow-elevation-2dp);
+        @apply --cr-card-elevation;
         background-color: white;
         margin: auto;
         min-height: 100%;
@@ -64,7 +66,7 @@
         height: 40px;
         margin-bottom: 30px;
         padding: 8px 12px 0;
-        @apply(--cr-title-text);
+        @apply --cr-title-text;
       }
 
       #heading span {
@@ -77,11 +79,11 @@
       }
 
       .error-item {
-        @apply(--cr-section);
+        @apply --cr-section;
         padding-left: 0;
       }
 
-      .error-item button[is='paper-icon-button-light'] {
+      .error-item paper-icon-button-light {
         -webkit-margin-end: 0;
       }
 
@@ -100,7 +102,7 @@
       .error-message {
         -webkit-margin-start: 10px;
         flex-grow: 1;
-        word-break: break-all;
+        word-break: break-word;
       }
 
       .devtools-controls {
@@ -108,7 +110,7 @@
       }
 
       .details-heading {
-        @apply(--cr-title-text);
+        @apply --cr-title-text;
         align-items: center;
         display: flex;
         height: var(--cr-section-min-height);
@@ -129,11 +131,6 @@
       .stack-trace-container li.selected,
       .stack-trace-container li:hover {
         background: var(--google-blue-100);
-      }
-
-      .devtool-button {
-        margin-bottom: 20px;
-        max-width: 300px;
       }
 
       extensions-code-section {
@@ -160,7 +157,7 @@
       }
 
       /* TODO(scottchen): extract to shared location from settings. */
-      .separator + button[is='paper-icon-button-light'] {
+      .separator + paper-icon-button-light {
         -webkit-margin-start: var(--cr-icon-ripple-margin);
       }
 
@@ -175,12 +172,13 @@
     <div id="container">
       <div id="main">
         <div id="heading">
-          <button id="close-button" is="paper-icon-button-light"
-              aria-label="$i18n{back}"
-              class="icon-arrow-back no-overlap" on-tap="onCloseButtonTap_">
-          </button>
+          <paper-icon-button-light class="icon-arrow-back no-overlap">
+            <button id="closeButton" aria-label="$i18n{back}"
+                on-click="onCloseButtonTap_">
+            </button>
+          </paper-icon-button-light>
           <span>$i18n{errorsPageHeading}</span>
-          <paper-button on-tap="onClearAllTap_" hidden="[[!entries_.length]]">
+          <paper-button on-click="onClearAllTap_" hidden="[[!entries_.length]]">
             $i18n{clearAll}
           </paper-button>
         </div>
@@ -190,10 +188,11 @@
               <div class="item-container">
                 <div class$="error-item
                     [[computeErrorClass_(item, selectedEntry_)]]">
-                  <div actionable class=" start" on-tap="onErrorItemAction_"
+                  <div actionable class="start" on-click="onErrorItemAction_"
                       on-keydown="onErrorItemAction_" tabindex="0"
-                      role="button">
-                    <iron-icon icon$="[[computeErrorIcon_(item)]]"
+                      role="button" aria-expanded$="[[isAriaExpanded_(
+                          index, selectedEntry_)]]">
+                    <iron-icon icon$="cr:[[computeErrorIcon_(item)]]"
                         title$="[[computeErrorTypeLabel_(item)]]">
                     </iron-icon>
                     <div id$="[[item.id]]" class="error-message">
@@ -203,12 +202,13 @@
                     </div>
                   </div>
                   <div class="separator"></div>
-                  <button is="paper-icon-button-light" class="icon-delete-gray"
-                      on-tap="onDeleteErrorAction_"
-                      aria-describedby$="[[item.id]]"
-                      aria-label="$i18n{clearEntry}"
-                      on-keydown="onDeleteErrorAction_">
-                  </button>
+                  <paper-icon-button-light class="icon-delete-gray">
+                    <button on-click="onDeleteErrorAction_"
+                        aria-describedby$="[[item.id]]"
+                        aria-label="$i18n{clearEntry}"
+                        on-keydown="onDeleteErrorAction_">
+                    </button>
+                  </paper-icon-button-light>
                 </div>
                 <iron-collapse opened="[[isOpened_(index, selectedEntry_)]]">
                   <div class="devtools-controls">
@@ -224,9 +224,12 @@
                       <div class="details-heading">
                         $i18n{stackTrace}
                       </div>
-                      <ul class="stack-trace-container">
+                      <ul class="stack-trace-container"
+                          on-keydown="onStackKeydown_">
                         <template is="dom-repeat" items="[[item.stackTrace]]">
-                          <li on-tap="onStackFrameTap_"
+                          <li on-click="onStackFrameTap_"
+                              tabindex$="[[getStackFrameTabIndex_(item,
+                                  selectedStackFrame_)]]"
                               hidden="[[!shouldDisplayFrame_(item.url)]]"
                               class$="[[getStackFrameClass_(item,
                                   selectedStackFrame_)]]">
@@ -241,12 +244,6 @@
                           could-not-display-code="$i18n{noErrorsToShow}">
                       </extensions-code-section>
                     </template>
-                    <paper-button class="devtool-button action-button"
-                        hidden$="[[!computeIsRuntimeError_(item)]]"
-                        disabled="[[!item.canInspect]]"
-                        on-tap="onDevToolButtonTap_">
-                      $i18n{openInDevtool}
-                    </paper-button>
                   </div>
                 </iron-collapse>
               </div>

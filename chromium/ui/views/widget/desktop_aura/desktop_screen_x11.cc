@@ -6,6 +6,8 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/protected_memory_cfi.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/aura/window.h"
@@ -33,14 +35,22 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
 #include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
 
+#include <dlfcn.h>
+
 namespace {
 
 // static
-gfx::ICCProfile GetICCProfileFromBestMonitor() {
+gfx::ICCProfile GetICCProfileForMonitor(int monitor) {
   gfx::ICCProfile icc_profile;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kHeadless))
     return icc_profile;
-  Atom property = gfx::GetAtom("_ICC_PROFILE");
+  std::string atom_name;
+  if (monitor == 0) {
+    atom_name = "_ICC_PROFILE";
+  } else {
+    atom_name = base::StringPrintf("_ICC_PROFILE_%d", monitor);
+  }
+  Atom property = gfx::GetAtom(atom_name.c_str());
   if (property != x11::None) {
     Atom prop_type = x11::None;
     int prop_format = 0;
@@ -108,7 +118,7 @@ namespace views {
 DesktopScreenX11::DesktopScreenX11()
     : xdisplay_(gfx::GetXDisplay()),
       x_root_window_(DefaultRootWindow(xdisplay_)),
-      has_xrandr_(false),
+      xrandr_version_(0),
       xrandr_event_base_(0),
       primary_display_index_(0),
       weak_factory_(this) {
@@ -118,12 +128,11 @@ DesktopScreenX11::DesktopScreenX11()
   // use the new interface instead of the 1.2 one.
   int randr_version_major = 0;
   int randr_version_minor = 0;
-  has_xrandr_ = XRRQueryVersion(
-        xdisplay_, &randr_version_major, &randr_version_minor) &&
-      randr_version_major == 1 &&
-      randr_version_minor >= 3;
-
-  if (has_xrandr_) {
+  if (XRRQueryVersion(xdisplay_, &randr_version_major, &randr_version_minor)) {
+    xrandr_version_ = randr_version_major * 100 + randr_version_minor;
+  }
+  // Need at least xrandr version 1.3.
+  if (xrandr_version_ >= 103) {
     int error_base_ignored = 0;
     XRRQueryExtension(xdisplay_, &xrandr_event_base_, &error_base_ignored);
 
@@ -144,7 +153,7 @@ DesktopScreenX11::DesktopScreenX11()
 DesktopScreenX11::~DesktopScreenX11() {
   if (views::LinuxUI::instance())
     views::LinuxUI::instance()->AddDeviceScaleFactorObserver(this);
-  if (has_xrandr_ && ui::PlatformEventSource::GetInstance())
+  if (xrandr_version_ >= 103 && ui::PlatformEventSource::GetInstance())
     ui::PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
 }
 
@@ -203,14 +212,17 @@ display::Display DesktopScreenX11::GetDisplayNearestWindow(
   // created before we create the aura::WindowEventDispatcher. So we ask what
   // the DRWHX11 believes the window bounds are instead of going through the
   // aura::Window's screen bounds.
-  if (window) {
   aura::WindowTreeHost* host = window->GetHost();
   if (host) {
     DesktopWindowTreeHostX11* rwh = DesktopWindowTreeHostX11::GetHostForXID(
         host->GetAcceleratedWidget());
-    if (rwh)
-      return GetDisplayMatching(rwh->GetX11RootWindowBounds());
-  }
+    if (rwh) {
+      const float scale = 1.0f / GetDeviceScaleFactor();
+      const gfx::Rect pixel_rect = rwh->GetX11RootWindowBounds();
+      return GetDisplayMatching(
+          gfx::Rect(gfx::ScaleToFlooredPoint(pixel_rect.origin(), scale),
+                    gfx::ScaleToCeiledSize(pixel_rect.size(), scale)));
+    }
   }
 
   return GetPrimaryDisplay();
@@ -299,7 +311,7 @@ DesktopScreenX11::DesktopScreenX11(
     const std::vector<display::Display>& test_displays)
     : xdisplay_(gfx::GetXDisplay()),
       x_root_window_(DefaultRootWindow(xdisplay_)),
-      has_xrandr_(false),
+      xrandr_version_(0),
       xrandr_event_base_(0),
       displays_(test_displays),
       primary_display_index_(0),
@@ -308,8 +320,16 @@ DesktopScreenX11::DesktopScreenX11(
     views::LinuxUI::instance()->AddDeviceScaleFactorObserver(this);
 }
 
+typedef XRRMonitorInfo* (*XRRGetMonitors)(::Display*, Window, bool, int*);
+typedef void (*XRRFreeMonitors)(XRRMonitorInfo*);
+
+PROTECTED_MEMORY_SECTION base::ProtectedMemory<XRRGetMonitors>
+    g_XRRGetMonitors_ptr;
+PROTECTED_MEMORY_SECTION base::ProtectedMemory<XRRFreeMonitors>
+    g_XRRFreeMonitors_ptr;
+
 std::vector<display::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
-  DCHECK(has_xrandr_);
+  DCHECK(xrandr_version_ >= 103);
   std::vector<display::Display> displays;
   gfx::XScopedPtr<
       XRRScreenResources,
@@ -320,8 +340,35 @@ std::vector<display::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
     return GetFallbackDisplayList();
   }
 
+  std::map<RROutput, int> output_to_monitor;
+  if (xrandr_version_ >= 105) {
+    void* xrandr_lib = dlopen(NULL, RTLD_NOW);
+    if (xrandr_lib) {
+      static base::ProtectedMemory<XRRGetMonitors>::Initializer get_init(
+          &g_XRRGetMonitors_ptr, reinterpret_cast<XRRGetMonitors>(
+                                     dlsym(xrandr_lib, "XRRGetMonitors")));
+      static base::ProtectedMemory<XRRFreeMonitors>::Initializer free_init(
+          &g_XRRFreeMonitors_ptr, reinterpret_cast<XRRFreeMonitors>(
+                                      dlsym(xrandr_lib, "XRRFreeMonitors")));
+      if (*g_XRRGetMonitors_ptr && *g_XRRFreeMonitors_ptr) {
+        int nmonitors = 0;
+        XRRMonitorInfo* monitors = base::UnsanitizedCfiCall(
+            g_XRRGetMonitors_ptr)(xdisplay_, x_root_window_, false, &nmonitors);
+        for (int monitor = 0; monitor < nmonitors; monitor++) {
+          for (int j = 0; j < monitors[monitor].noutput; j++) {
+            output_to_monitor[monitors[monitor].outputs[j]] = monitor;
+          }
+        }
+        base::UnsanitizedCfiCall(g_XRRFreeMonitors_ptr)(monitors);
+      }
+    }
+  }
+
   primary_display_index_ = 0;
   RROutput primary_display_id = XRRGetOutputPrimary(xdisplay_, x_root_window_);
+
+  int explicit_primary_display_index = -1;
+  int monitor_order_primary_display_index = -1;
 
   bool has_work_area = false;
   gfx::Rect work_area_in_pixels;
@@ -397,18 +444,27 @@ std::vector<display::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
       }
 
       if (is_primary_display)
-        primary_display_index_ = displays.size();
+        explicit_primary_display_index = displays.size();
 
-      // TODO(ccameron): Populate this based on this specific display.
-      // http://crbug.com/735613
+      auto monitor_iter = output_to_monitor.find(output_id);
+      if (monitor_iter != output_to_monitor.end() && monitor_iter->second == 0)
+        monitor_order_primary_display_index = displays.size();
+
       if (!display::Display::HasForceColorProfile()) {
-        gfx::ICCProfile icc_profile = GetICCProfileFromBestMonitor();
+        gfx::ICCProfile icc_profile = GetICCProfileForMonitor(
+            monitor_iter == output_to_monitor.end() ? 0 : monitor_iter->second);
         icc_profile.HistogramDisplay(display.id());
         display.set_color_space(icc_profile.GetColorSpace());
       }
 
       displays.push_back(display);
     }
+  }
+
+  if (explicit_primary_display_index != -1) {
+    primary_display_index_ = explicit_primary_display_index;
+  } else if (monitor_order_primary_display_index != -1) {
+    primary_display_index_ = monitor_order_primary_display_index;
   }
 
   if (displays.empty())
@@ -426,7 +482,7 @@ void DesktopScreenX11::RestartDelayedConfigurationTask() {
 
 void DesktopScreenX11::UpdateDisplays() {
   std::vector<display::Display> old_displays = displays_;
-  if (has_xrandr_)
+  if (xrandr_version_ > 103)
     SetDisplaysInternal(BuildDisplaysFromXRandRInfo());
   else
     SetDisplaysInternal(GetFallbackDisplayList());

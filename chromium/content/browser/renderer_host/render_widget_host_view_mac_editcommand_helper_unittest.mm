@@ -10,7 +10,6 @@
 
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/message_loop/message_loop.h"
-#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/compositor/test/test_image_transport_factory.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -19,6 +18,7 @@
 #include "content/common/input_messages.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/mock_widget_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,15 +36,15 @@ using content::RenderWidgetHostViewMac;
 @end
 
 // Class that owns a RenderWidgetHostViewMac.
-@interface RenderWidgetHostViewMacOwner :
-    NSObject<RenderWidgetHostViewMacOwner> {
+@interface RenderWidgetHostNSViewClientOwner
+    : NSObject<RenderWidgetHostNSViewClientOwner> {
   RenderWidgetHostViewMac* rwhvm_;
 }
 
 - (id)initWithRenderWidgetHostViewMac:(RenderWidgetHostViewMac*)rwhvm;
 @end
 
-@implementation RenderWidgetHostViewMacOwner
+@implementation RenderWidgetHostNSViewClientOwner
 
 - (id)initWithRenderWidgetHostViewMac:(RenderWidgetHostViewMac*)rwhvm {
   if ((self = [super init])) {
@@ -53,7 +53,7 @@ using content::RenderWidgetHostViewMac;
   return self;
 }
 
-- (RenderWidgetHostViewMac*)renderWidgetHostViewMac {
+- (content::mojom::RenderWidgetHostNSViewClient*)renderWidgetHostNSViewClient {
   return rwhvm_;
 }
 
@@ -117,8 +117,10 @@ class RenderWidgetHostViewMacEditCommandHelperWithTaskEnvTest
   void TearDown() override { ImageTransportFactory::Terminate(); }
 
  private:
-  // This has a MessageLoop for ImageTransportFactory.
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  // This has a MessageLoop for ImageTransportFactory and enables
+  // BrowserThread::UI for RecyclableCompositorMac used by
+  // RenderWidgetHostViewMac.
+  content::TestBrowserThreadBundle thread_bundle_;
 };
 
 }  // namespace
@@ -158,8 +160,8 @@ TEST_F(RenderWidgetHostViewMacEditCommandHelperWithTaskEnvTest,
 
   RenderWidgetHostViewMacEditCommandHelper helper;
   NSArray* edit_command_strings = helper.GetEditSelectorNames();
-  RenderWidgetHostViewMacOwner* rwhwvm_owner =
-      [[[RenderWidgetHostViewMacOwner alloc]
+  RenderWidgetHostNSViewClientOwner* rwhwvm_owner =
+      [[[RenderWidgetHostNSViewClientOwner alloc]
           initWithRenderWidgetHostViewMac:rwhv_mac] autorelease];
 
   helper.AddEditingSelectorsToClass([rwhwvm_owner class]);
@@ -213,8 +215,8 @@ TEST_F(RenderWidgetHostViewMacEditCommandHelperTest,
 // Test RenderWidgetHostViewMacEditCommandHelper::IsMenuItemEnabled.
 TEST_F(RenderWidgetHostViewMacEditCommandHelperTest, TestMenuItemEnabling) {
   RenderWidgetHostViewMacEditCommandHelper helper;
-  RenderWidgetHostViewMacOwner* rwhvm_owner =
-      [[[RenderWidgetHostViewMacOwner alloc] init] autorelease];
+  RenderWidgetHostNSViewClientOwner* rwhvm_owner =
+      [[[RenderWidgetHostNSViewClientOwner alloc] init] autorelease];
 
   // The select all menu should always be enabled.
   SEL select_all = NSSelectorFromString(@"selectAll:");

@@ -12,12 +12,15 @@
 #include "base/lazy_instance.h"
 #include "base/power_monitor/power_observer.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
+#include "chrome/browser/shell_integration.h"
+#include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/vivaldi_utilities.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+
 
 class Browser;
 
@@ -124,7 +127,7 @@ class UtilitiesClearAllRecentlyClosedSessionsFunction
 // as a unique user id. The user id is stored in the vivaldi user profile
 // with a backup copy stored in the OS user profile (registry on Windows).
 // If no stored user id is found, a new one is generated.
-class UtilitiesGetUniqueUserIdFunction : public AsyncExtensionFunction {
+class UtilitiesGetUniqueUserIdFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getUniqueUserId",
                              UTILITIES_GETUNIQUEUSERID)
@@ -249,7 +252,7 @@ class UtilitiesSelectFileFunction : public ChromeAsyncExtensionFunction,
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectFileFunction);
 };
 
-class UtilitiesGetVersionFunction : public AsyncExtensionFunction {
+class UtilitiesGetVersionFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getVersion",
                              UTILITIES_GETVERSION)
@@ -292,6 +295,276 @@ class UtilitiesGetSharedDataFunction : public ChromeAsyncExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSharedDataFunction);
+};
+
+class UtilitiesGetSystemDateFormatFunction : public UIThreadExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("utilities.getSystemDateFormat",
+                             UTILITIES_GETSYSTEM_DATE_FORMAT)
+ public:
+  UtilitiesGetSystemDateFormatFunction() = default;
+
+  bool ReadDateFormats(vivaldi::utilities::DateFormats* date_formats);
+
+ protected:
+  ~UtilitiesGetSystemDateFormatFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSystemDateFormatFunction);
+};
+
+class UtilitiesSetLanguageFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setLanguage", UTILITIES_SETLANGUAGE)
+  UtilitiesSetLanguageFunction() = default;
+
+ protected:
+  ~UtilitiesSetLanguageFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetLanguageFunction);
+};
+
+class UtilitiesGetLanguageFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getLanguage", UTILITIES_GETLANGUAGE)
+  UtilitiesGetLanguageFunction() = default;
+
+ protected:
+  ~UtilitiesGetLanguageFunction() override = default;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetLanguageFunction);
+};
+
+class UtilitiesSetVivaldiAsDefaultBrowserFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setVivaldiAsDefaultBrowser",
+                             UTILITIES_SETVIVALDIDEFAULT)
+  UtilitiesSetVivaldiAsDefaultBrowserFunction();
+
+ protected:
+  ~UtilitiesSetVivaldiAsDefaultBrowserFunction() override;
+  scoped_refptr<shell_integration::DefaultBrowserWorker>
+      default_browser_worker_;
+
+  void OnDefaultBrowserWorkerFinished(
+      shell_integration::DefaultWebClientState state);
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  // Used to get WeakPtr to self for use on the UI thread.
+  base::WeakPtrFactory<UtilitiesSetVivaldiAsDefaultBrowserFunction>
+      weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetVivaldiAsDefaultBrowserFunction);
+};
+
+class UtilitiesIsVivaldiDefaultBrowserFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.isVivaldiDefaultBrowser",
+                             UTILITIES_ISVIVALDIDEFAULT)
+  UtilitiesIsVivaldiDefaultBrowserFunction();
+
+ protected:
+  ~UtilitiesIsVivaldiDefaultBrowserFunction() override;
+
+  scoped_refptr<shell_integration::DefaultBrowserWorker>
+      default_browser_worker_;
+
+  void OnDefaultBrowserWorkerFinished(
+      shell_integration::DefaultWebClientState state);
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  // Used to get WeakPtr to self for use on the UI thread.
+  base::WeakPtrFactory<UtilitiesIsVivaldiDefaultBrowserFunction>
+      weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsVivaldiDefaultBrowserFunction);
+};
+
+class UtilitiesLaunchNetworkSettingsFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.launchNetworkSettings",
+                             UTILITIES_LAUNCHNETWORKSETTINGS)
+  UtilitiesLaunchNetworkSettingsFunction();
+
+ protected:
+  ~UtilitiesLaunchNetworkSettingsFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesLaunchNetworkSettingsFunction);
+};
+
+class UtilitiesSavePageFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.savePage", UTILITIES_SAVEPAGE)
+  UtilitiesSavePageFunction();
+
+ protected:
+  ~UtilitiesSavePageFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSavePageFunction);
+};
+
+class UtilitiesOpenPageFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.openPage",
+                             UTILITIES_OPENPAGE)
+  UtilitiesOpenPageFunction();
+
+ protected:
+  ~UtilitiesOpenPageFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesOpenPageFunction);
+};
+
+class UtilitiesSetDefaultContentSettingsFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setDefaultContentSettings",
+                             UTILITIES_SETDEFAULTCONTENTSETTING)
+  UtilitiesSetDefaultContentSettingsFunction();
+
+ protected:
+  ~UtilitiesSetDefaultContentSettingsFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetDefaultContentSettingsFunction);
+};
+
+class UtilitiesGetDefaultContentSettingsFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getDefaultContentSettings",
+                             UTILITIES_GETDEFAULTCONTENTSETTING)
+  UtilitiesGetDefaultContentSettingsFunction();
+
+ protected:
+  ~UtilitiesGetDefaultContentSettingsFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetDefaultContentSettingsFunction);
+};
+
+class UtilitiesSetBlockThirdPartyCookiesFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setBlockThirdPartyCookies",
+                             UTILITIES_SET_BLOCKTHIRDPARTYCOOKIES)
+  UtilitiesSetBlockThirdPartyCookiesFunction();
+
+ protected:
+  ~UtilitiesSetBlockThirdPartyCookiesFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetBlockThirdPartyCookiesFunction);
+};
+
+class UtilitiesGetBlockThirdPartyCookiesFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getBlockThirdPartyCookies",
+                             UTILITIES_GET_BLOCKTHIRDPARTYCOOKIES)
+  UtilitiesGetBlockThirdPartyCookiesFunction();
+
+ protected:
+  ~UtilitiesGetBlockThirdPartyCookiesFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetBlockThirdPartyCookiesFunction);
+};
+
+class UtilitiesOpenTaskManagerFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.openTaskManager",
+                             UTILITIES_OPENTASKMANAGER)
+  UtilitiesOpenTaskManagerFunction();
+
+ protected:
+  ~UtilitiesOpenTaskManagerFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesOpenTaskManagerFunction);
+};
+
+
+class UtilitiesGetStartupActionFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getStartupAction",
+                             UTILITIES_GET_STARTUPTYPE)
+  UtilitiesGetStartupActionFunction();
+
+ protected:
+  ~UtilitiesGetStartupActionFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetStartupActionFunction);
+};
+
+class UtilitiesSetStartupActionFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setStartupAction",
+                             UTILITIES_SET_STARTUPTYPE)
+  UtilitiesSetStartupActionFunction();
+
+ protected:
+  ~UtilitiesSetStartupActionFunction() override;
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetStartupActionFunction);
+};
+
+class UtilitiesCanShowWelcomePageFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.canShowWelcomePage",
+                             UTILITIES_CANSHOWWELCOMEPAGE)
+  UtilitiesCanShowWelcomePageFunction() = default;
+
+  bool RunAsync() override;
+
+ protected:
+  ~UtilitiesCanShowWelcomePageFunction() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesCanShowWelcomePageFunction);
 };
 
 }  // namespace extensions

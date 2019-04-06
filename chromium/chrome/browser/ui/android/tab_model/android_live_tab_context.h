@@ -26,7 +26,7 @@ class AndroidLiveTabContext : public sessions::LiveTabContext {
 
   // Overridden from LiveTabContext:
   void ShowBrowserWindow() override;
-  const SessionID& GetSessionID() const override;
+  SessionID GetSessionID() const override;
   int GetTabCount() const override;
   int GetSelectedIndex() const override;
   std::string GetAppName() const override;
@@ -57,8 +57,7 @@ class AndroidLiveTabContext : public sessions::LiveTabContext {
 
   static LiveTabContext* FindContextForWebContents(
       const content::WebContents* contents);
-  static sessions::LiveTabContext* FindContextWithID(
-      SessionID::id_type desired_id);
+  static sessions::LiveTabContext* FindContextWithID(SessionID desired_id);
 
  private:
   TabModel* tab_model_;

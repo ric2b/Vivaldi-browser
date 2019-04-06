@@ -11,7 +11,7 @@ import org.chromium.base.Log;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.content.browser.BrowserStartupController;
+import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_shell.ShellManager;
 import org.chromium.native_test.NativeBrowserTestActivity;
 import org.chromium.ui.base.ActivityWindowAndroid;
@@ -34,7 +34,7 @@ public abstract class ContentShellBrowserTestActivity extends NativeBrowserTestA
     @Override
     protected void initializeBrowserProcess() {
         try {
-            LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER).ensureInitialized();
+            LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
         } catch (ProcessInitException e) {
             Log.e(TAG, "Cannot load content_browsertests.", e);
             System.exit(-1);

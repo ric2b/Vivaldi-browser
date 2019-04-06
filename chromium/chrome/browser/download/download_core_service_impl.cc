@@ -9,13 +9,14 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_history.h"
+#include "chrome/browser/download/download_offline_content_provider.h"
 #include "chrome/browser/download/download_status_updater.h"
 #include "chrome/browser/download/download_ui_controller.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/history/core/browser/history_service.h"
 #include "content/public/browser/download_manager.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
@@ -34,11 +35,8 @@ ChromeDownloadManagerDelegate*
 DownloadCoreServiceImpl::GetDownloadManagerDelegate() {
   DownloadManager* manager = BrowserContext::GetDownloadManager(profile_);
   // If we've already created the delegate, just return it.
-  if (download_manager_created_) {
-    DCHECK(static_cast<DownloadManagerDelegate*>(manager_delegate_.get()) ==
-           manager->GetDelegate());
+  if (download_manager_created_)
     return manager_delegate_.get();
-  }
   download_manager_created_ = true;
 
   // In case the delegate has already been set by
@@ -68,8 +66,11 @@ DownloadCoreServiceImpl::GetDownloadManagerDelegate() {
   download_ui_.reset(new DownloadUIController(
       manager, std::unique_ptr<DownloadUIController::Delegate>()));
 
+  download_provider_.reset(new DownloadOfflineContentProvider(manager));
+
   // Include this download manager in the set monitored by the
   // global status updater.
+  DCHECK(g_browser_process->download_status_updater());
   g_browser_process->download_status_updater()->AddManager(manager);
 
   return manager_delegate_.get();
@@ -111,7 +112,7 @@ void DownloadCoreServiceImpl::CancelDownloads() {
   download_manager->GetAllDownloads(&downloads);
   for (DownloadManager::DownloadVector::iterator it = downloads.begin();
        it != downloads.end(); ++it) {
-    if ((*it)->GetState() == content::DownloadItem::IN_PROGRESS)
+    if ((*it)->GetState() == download::DownloadItem::IN_PROGRESS)
       (*it)->Cancel(false);
   }
 }
@@ -121,7 +122,9 @@ void DownloadCoreServiceImpl::SetDownloadManagerDelegateForTesting(
   manager_delegate_.swap(new_delegate);
   DownloadManager* dm = BrowserContext::GetDownloadManager(profile_);
   dm->SetDelegate(manager_delegate_.get());
-  manager_delegate_->SetDownloadManager(dm);
+  if (manager_delegate_)
+    manager_delegate_->SetDownloadManager(dm);
+  download_manager_created_ = !!manager_delegate_;
   if (new_delegate)
     new_delegate->Shutdown();
 }

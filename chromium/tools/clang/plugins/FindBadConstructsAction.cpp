@@ -48,15 +48,13 @@ bool FindBadConstructsAction::ParseArgs(const CompilerInstance& instance,
       // TODO(rsleevi): Remove this once http://crbug.com/123295 is fixed.
       options_.check_base_classes = true;
     } else if (args[i] == "enforce-in-thirdparty-webkit") {
-      options_.enforce_in_thirdparty_webkit = true;
-    } else if (args[i] == "check-enum-last-value") {
-      // TODO(tsepez): Enable this by default once http://crbug.com/356815
-      // and http://crbug.com/356816 are fixed.
-      options_.check_enum_last_value = true;
-    } else if (args[i] == "no-realpath") {
-      options_.no_realpath = true;
+      // TODO(dcheng): Remove completely.
+    } else if (args[i] == "check-enum-max-value") {
+      // TODO(dcheng): Remove completely.
     } else if (args[i] == "check-ipc") {
       options_.check_ipc = true;
+    } else if (args[i] == "check-gmock-objects") {
+      options_.check_gmock_objects = true;
     } else {
       parsed = false;
       llvm::errs() << "Unknown clang plugin argument: " << args[i] << "\n";

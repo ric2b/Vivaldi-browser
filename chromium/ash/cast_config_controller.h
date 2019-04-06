@@ -43,6 +43,15 @@ class CastConfigController : public ash::mojom::CastConfig {
 
   void BindRequest(mojom::CastConfigRequest request);
 
+  // Return true if there are available cast devices.
+  bool HasSinksAndRoutes() const;
+
+  // Return true if casting is active. The route may be DIAL based, such as
+  // casting YouTube where the cast sink directly streams content from another
+  // server. In that case, this device is not actively transmitting information
+  // to the cast sink.
+  bool HasActiveRoute() const;
+
   // ash::mojom::CastConfig:
   void SetClient(mojom::CastConfigClientAssociatedPtrInfo client) override;
   void OnDevicesUpdated(std::vector<mojom::SinkAndRoutePtr> devices) override;
@@ -52,11 +61,17 @@ class CastConfigController : public ash::mojom::CastConfig {
   void CastToSink(mojom::CastSinkPtr sink);
   void StopCasting(mojom::CastRoutePtr route);
 
+  const std::vector<mojom::SinkAndRoutePtr>& sinks_and_routes() const {
+    return sinks_and_routes_;
+  }
+
  private:
   // Bindings for the CastConfig interface.
   mojo::BindingSet<mojom::CastConfig> bindings_;
 
   mojom::CastConfigClientAssociatedPtr client_;
+
+  std::vector<mojom::SinkAndRoutePtr> sinks_and_routes_;
 
   base::ObserverList<CastConfigControllerObserver> observers_;
 

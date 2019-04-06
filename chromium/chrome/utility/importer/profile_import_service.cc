@@ -20,7 +20,7 @@ void OnProfileImportRequest(
     service_manager::ServiceContextRefFactory* ref_factory,
     chrome::mojom::ProfileImportRequest request) {
   mojo::MakeStrongBinding(
-      base::MakeUnique<ProfileImportImpl>(ref_factory->CreateRef()),
+      std::make_unique<ProfileImportImpl>(ref_factory->CreateRef()),
       std::move(request));
 }
 
@@ -32,13 +32,12 @@ ProfileImportService::~ProfileImportService() {}
 
 std::unique_ptr<service_manager::Service>
 ProfileImportService::CreateService() {
-  return base::MakeUnique<ProfileImportService>();
+  return std::make_unique<ProfileImportService>();
 }
 
 void ProfileImportService::OnStart() {
   ref_factory_.reset(new service_manager::ServiceContextRefFactory(
-      base::Bind(&service_manager::ServiceContext::RequestQuit,
-                 base::Unretained(context()))));
+      context()->CreateQuitClosure()));
   registry_.AddInterface(
       base::Bind(&OnProfileImportRequest, ref_factory_.get()));
 

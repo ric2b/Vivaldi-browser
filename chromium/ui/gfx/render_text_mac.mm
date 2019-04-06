@@ -349,7 +349,8 @@ base::ScopedCFTypeRef<CFMutableArrayRef> RenderTextMac::ApplyStyles(
       CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks));
 
   // https://developer.apple.com/library/mac/#documentation/Carbon/Reference/CoreText_StringAttributes_Ref/Reference/reference.html
-  internal::StyleIterator style(colors(), baselines(), weights(), styles());
+  internal::StyleIterator style(colors(), baselines(), font_size_overrides(),
+                                weights(), styles());
   const size_t layout_text_length = CFAttributedStringGetLength(attr_string);
   for (size_t i = 0, end = 0; i < layout_text_length; i = end) {
     end = TextIndexToGivenTextIndex(text, style.GetRange().end());
@@ -360,8 +361,10 @@ base::ScopedCFTypeRef<CFMutableArrayRef> RenderTextMac::ApplyStyles(
                                    kCTForegroundColorAttributeName, foreground);
     CFArrayAppendValue(attributes, foreground);
 
-    if (style.style(UNDERLINE)) {
-      CTUnderlineStyle value = kCTUnderlineStyleSingle;
+    if (style.style(UNDERLINE) || style.style(HEAVY_UNDERLINE)) {
+      CTUnderlineStyle value = style.style(HEAVY_UNDERLINE)
+                                   ? kCTUnderlineStyleThick
+                                   : kCTUnderlineStyleSingle;
       base::ScopedCFTypeRef<CFNumberRef> underline_value(
           CFNumberCreate(NULL, kCFNumberSInt32Type, &value));
       CFAttributedStringSetAttribute(

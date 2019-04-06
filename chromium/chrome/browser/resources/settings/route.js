@@ -13,6 +13,8 @@
  *   ADVANCED: (undefined|!settings.Route),
  *   ANDROID_APPS: (undefined|!settings.Route),
  *   ANDROID_APPS_DETAILS: (undefined|!settings.Route),
+ *   CROSTINI: (undefined|!settings.Route),
+ *   CROSTINI_DETAILS: (undefined|!settings.Route),
  *   APPEARANCE: (undefined|!settings.Route),
  *   AUTOFILL: (undefined|!settings.Route),
  *   BASIC: (undefined|!settings.Route),
@@ -36,6 +38,7 @@
  *   FONTS: (undefined|!settings.Route),
  *   GOOGLE_ASSISTANT: (undefined|!settings.Route),
  *   IMPORT_DATA: (undefined|!settings.Route),
+ *   INCOMPATIBLE_APPLICATIONS: (undefined|!settings.Route),
  *   INPUT_METHODS: (undefined|!settings.Route),
  *   INTERNET: (undefined|!settings.Route),
  *   INTERNET_NETWORKS: (undefined|!settings.Route),
@@ -46,7 +49,9 @@
  *   MANAGE_ACCESSIBILITY: (undefined|!settings.Route),
  *   MANAGE_PASSWORDS: (undefined|!settings.Route),
  *   MANAGE_PROFILE: (undefined|!settings.Route),
+ *   MANAGE_TTS_SETTINGS: (undefined|!settings.Route),
  *   MULTIDEVICE: (undefined|!settings.Route),
+ *   MULTIDEVICE_FEATURES: (undefined|!settings.Route),
  *   NETWORK_DETAIL: (undefined|!settings.Route),
  *   ON_STARTUP: (undefined|!settings.Route),
  *   PASSWORDS: (undefined|!settings.Route),
@@ -73,11 +78,13 @@
  *   SITE_SETTINGS_HANDLERS: (undefined|!settings.Route),
  *   SITE_SETTINGS_IMAGES: (undefined|!settings.Route),
  *   SITE_SETTINGS_JAVASCRIPT: (undefined|!settings.Route),
+ *   SITE_SETTINGS_SENSORS: (undefined|!settings.Route),
  *   SITE_SETTINGS_SOUND: (undefined|!settings.Route),
  *   SITE_SETTINGS_LOCATION: (undefined|!settings.Route),
  *   SITE_SETTINGS_MICROPHONE: (undefined|!settings.Route),
  *   SITE_SETTINGS_MIDI_DEVICES: (undefined|!settings.Route),
  *   SITE_SETTINGS_NOTIFICATIONS: (undefined|!settings.Route),
+ *   SITE_SETTINGS_PAYMENT_HANDLER: (undefined|!settings.Route),
  *   SITE_SETTINGS_PDF_DOCUMENTS: (undefined|!settings.Route),
  *   SITE_SETTINGS_POPUPS: (undefined|!settings.Route),
  *   SITE_SETTINGS_PROTECTED_CONTENT: (undefined|!settings.Route),
@@ -86,6 +93,7 @@
  *   SITE_SETTINGS_UNSANDBOXED_PLUGINS: (undefined|!settings.Route),
  *   SITE_SETTINGS_USB_DEVICES: (undefined|!settings.Route),
  *   SITE_SETTINGS_ZOOM_LEVELS: (undefined|!settings.Route),
+ *   SMB_SHARES: (undefined|!settings.Route),
  *   STORAGE: (undefined|!settings.Route),
  *   STYLUS: (undefined|!settings.Route),
  *   SYNC: (undefined|!settings.Route),
@@ -203,6 +211,10 @@ cr.define('settings', function() {
     /** @type {!SettingsRoutes} */
     const r = {};
 
+    const autofillHomeEnabled =
+        loadTimeData.valueExists('autofillHomeEnabled') &&
+        loadTimeData.getBoolean('autofillHomeEnabled');
+
     // Root pages.
     r.BASIC = new Route('/');
     r.ABOUT = new Route('/help');
@@ -222,6 +234,9 @@ cr.define('settings', function() {
     r.KNOWN_NETWORKS = r.INTERNET.createChild('/knownNetworks');
     r.BLUETOOTH = r.BASIC.createSection('/bluetooth', 'bluetooth');
     r.BLUETOOTH_DEVICES = r.BLUETOOTH.createChild('/bluetoothDevices');
+
+    r.MULTIDEVICE = r.BASIC.createSection('/multidevice', 'multidevice');
+    r.MULTIDEVICE_FEATURES = r.MULTIDEVICE.createChild('/multidevice/features');
     // </if>
 
     if (pageVisibility.appearance !== false) {
@@ -238,11 +253,15 @@ cr.define('settings', function() {
     r.SEARCH_ENGINES = r.SEARCH.createChild('/searchEngines');
     // <if expr="chromeos">
     r.GOOGLE_ASSISTANT = r.SEARCH.createChild('/googleAssistant');
-    // </if>
 
-    // <if expr="chromeos">
     r.ANDROID_APPS = r.BASIC.createSection('/androidApps', 'androidApps');
     r.ANDROID_APPS_DETAILS = r.ANDROID_APPS.createChild('/androidApps/details');
+
+    if (loadTimeData.valueExists('showCrostini') &&
+        loadTimeData.getBoolean('showCrostini')) {
+      r.CROSTINI = r.BASIC.createSection('/crostini', 'crostini');
+      r.CROSTINI_DETAILS = r.CROSTINI.createChild('/crostini/details');
+    }
     // </if>
 
     if (pageVisibility.onStartup !== false) {
@@ -253,12 +272,17 @@ cr.define('settings', function() {
     if (pageVisibility.people !== false) {
       r.PEOPLE = r.BASIC.createSection('/people', 'people');
       r.SYNC = r.PEOPLE.createChild('/syncSetup');
+      if (autofillHomeEnabled) {
+        r.AUTOFILL = r.PEOPLE.createChild('/autofill');
+        r.MANAGE_PASSWORDS = r.PEOPLE.createChild('/passwords');
+      }
       // <if expr="not chromeos">
       r.MANAGE_PROFILE = r.PEOPLE.createChild('/manageProfile');
       // </if>
       // <if expr="chromeos">
       r.CHANGE_PICTURE = r.PEOPLE.createChild('/changePicture');
       r.ACCOUNTS = r.PEOPLE.createChild('/accounts');
+      r.ACCOUNT_MANAGER = r.PEOPLE.createChild('/accountManager');
       r.LOCK_SCREEN = r.PEOPLE.createChild('/lockScreen');
       r.FINGERPRINT = r.LOCK_SCREEN.createChild('/lockScreen/fingerprint');
       // </if>
@@ -317,6 +341,7 @@ cr.define('settings', function() {
       r.SITE_SETTINGS_IMAGES = r.SITE_SETTINGS.createChild('images');
       r.SITE_SETTINGS_JAVASCRIPT = r.SITE_SETTINGS.createChild('javascript');
       r.SITE_SETTINGS_SOUND = r.SITE_SETTINGS.createChild('sound');
+      r.SITE_SETTINGS_SENSORS = r.SITE_SETTINGS.createChild('sensors');
       r.SITE_SETTINGS_LOCATION = r.SITE_SETTINGS.createChild('location');
       r.SITE_SETTINGS_MICROPHONE = r.SITE_SETTINGS.createChild('microphone');
       r.SITE_SETTINGS_NOTIFICATIONS =
@@ -332,6 +357,10 @@ cr.define('settings', function() {
           r.SITE_SETTINGS.createChild('pdfDocuments');
       r.SITE_SETTINGS_PROTECTED_CONTENT =
           r.SITE_SETTINGS.createChild('protectedContent');
+      if (loadTimeData.getBoolean('enablePaymentHandlerContentSetting')) {
+        r.SITE_SETTINGS_PAYMENT_HANDLER =
+            r.SITE_SETTINGS.createChild('paymentHandler');
+      }
 
       // <if expr="chromeos">
       if (pageVisibility.dateTime !== false) {
@@ -341,7 +370,7 @@ cr.define('settings', function() {
       }
       // </if>
 
-      if (pageVisibility.passwordsAndForms !== false) {
+      if (!autofillHomeEnabled && pageVisibility.passwordsAndForms !== false) {
         r.PASSWORDS =
             r.ADVANCED.createSection('/passwordsAndForms', 'passwordsAndForms');
         r.AUTOFILL = r.PASSWORDS.createChild('/autofill');
@@ -358,20 +387,23 @@ cr.define('settings', function() {
 
       if (pageVisibility.downloads !== false) {
         r.DOWNLOADS = r.ADVANCED.createSection('/downloads', 'downloads');
+        // <if expr="chromeos">
+        r.SMB_SHARES = r.DOWNLOADS.createChild('/smbShares');
+        // </if>
       }
 
       r.PRINTING = r.ADVANCED.createSection('/printing', 'printing');
       r.CLOUD_PRINTERS = r.PRINTING.createChild('/cloudPrinters');
       // <if expr="chromeos">
       r.CUPS_PRINTERS = r.PRINTING.createChild('/cupsPrinters');
-
-      r.MULTIDEVICE = r.ADVANCED.createSection('/multidevice', 'multidevice');
       // </if>
 
       r.ACCESSIBILITY = r.ADVANCED.createSection('/accessibility', 'a11y');
       // <if expr="chromeos">
       r.MANAGE_ACCESSIBILITY =
           r.ACCESSIBILITY.createChild('/manageAccessibility');
+      r.MANAGE_TTS_SETTINGS =
+          r.MANAGE_ACCESSIBILITY.createChild('/manageAccessibility/tts');
       // </if>
 
       r.SYSTEM = r.ADVANCED.createSection('/system', 'system');
@@ -384,9 +416,10 @@ cr.define('settings', function() {
             r.ADVANCED.createChild('/triggeredResetProfileSettings');
         r.TRIGGERED_RESET_DIALOG.isNavigableDialog = true;
         // <if expr="_google_chrome and is_win">
-        // This should only be added if the feature is enabled.
-        if (loadTimeData.getBoolean('userInitiatedCleanupsEnabled')) {
-          r.CHROME_CLEANUP = r.RESET.createChild('/cleanup');
+        r.CHROME_CLEANUP = r.RESET.createChild('/cleanup');
+        if (loadTimeData.getBoolean('showIncompatibleApplications')) {
+          r.INCOMPATIBLE_APPLICATIONS =
+              r.RESET.createChild('/incompatibleApplications');
         }
         // </if>
       }

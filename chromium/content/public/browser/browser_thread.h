@@ -13,16 +13,12 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-
-namespace base {
-class MessageLoop;
-class Thread;
-}
+#include "content/public/browser/browser_thread.h"
 
 namespace content {
 
@@ -67,42 +63,12 @@ class CONTENT_EXPORT BrowserThread {
     // The main thread in the browser.
     UI,
 
-    // This is the thread that interacts with the database.
-    DB,
-
-    // This is the thread that interacts with the file system.
-    // DEPRECATED: prefer base/task_scheduler/post_task.h for new classes
-    // requiring a background file I/O task runner, i.e.:
-    //   base::CreateSequencedTaskRunnerWithTraits(
-    //       {base::MayBlock(), base::TaskPriority::BACKGROUND})
-    //   Note: You can use base::TaskPriority::USER_VISIBLE instead of
-    //         base::TaskPriority::BACKGROUND if the latency of this operation
-    //         is visible but non-blocking to the user.
-    FILE,
-
-    // Used for file system operations that block user interactions.
-    // Responsiveness of this thread affect users.
-    // DEPRECATED: prefer base/task_scheduler/post_task.h for new classes
-    // requiring a user-blocking file I/O task runner, i.e.:
-    //   base::CreateSequencedTaskRunnerWithTraits(
-    //       {base::MayBlock(), base::TaskPriority::USER_BLOCKING})
-    FILE_USER_BLOCKING,
-
-    // Used to launch and terminate Chrome processes.
-    PROCESS_LAUNCHER,
-
-    // This is the thread to handle slow HTTP cache operations.
-    CACHE,
-
     // This is the thread that processes non-blocking IO, i.e. IPC and network.
-    // Blocking IO should happen on other threads like DB, FILE,
-    // FILE_USER_BLOCKING and CACHE depending on the usage.
+    // Blocking I/O should happen in TaskScheduler.
     IO,
 
-    // NOTE: do not add new threads here that are only used by a small number of
-    // files. Instead you should just use a Thread class and pass its
-    // task runner around. Named threads there are only for threads that
-    // are used in many places.
+    // NOTE: do not add new threads here. Instead you should just use
+    // base::Create*TaskRunnerWithTraits.
 
     // This identifier does not represent a thread.  Instead it counts the
     // number of well-known threads.  Insert new well-known threads before this
@@ -206,11 +172,6 @@ class CONTENT_EXPORT BrowserThread {
   // thread.  To DCHECK this, use the DCHECK_CURRENTLY_ON() macro above.
   static bool CurrentlyOn(ID identifier) WARN_UNUSED_RESULT;
 
-  // Callable on any thread.  Returns whether the threads message loop is valid.
-  // If this returns false it means the thread is in the process of shutting
-  // down.
-  static bool IsMessageLoopValid(ID identifier) WARN_UNUSED_RESULT;
-
   // If the current message loop is one of the known threads, returns true and
   // sets identifier to its ID.  Otherwise returns false.
   static bool GetCurrentThreadIdentifier(ID* identifier) WARN_UNUSED_RESULT;
@@ -222,16 +183,12 @@ class CONTENT_EXPORT BrowserThread {
 
   // Sets the delegate for BrowserThread::IO.
   //
-  // This only supports the IO thread as it doesn't work for potentially
-  // redirected threads (ref. http://crbug.com/653916) and also doesn't make
-  // sense for the UI thread.
-  //
   // Only one delegate may be registered at a time. The delegate may be
   // unregistered by providing a nullptr pointer.
   //
-  // If the caller unregisters the delegate before CleanUp has been called, it
-  // must perform its own locking to ensure the delegate is not deleted while
-  // unregistering.
+  // The delegate can only be registered through this call before
+  // BrowserThreadImpl(BrowserThread::IO) is created and unregistered after
+  // it was destroyed and its underlying thread shutdown.
   static void SetIOThreadDelegate(BrowserThreadDelegate* delegate);
 
   // Use these templates in conjunction with RefCountedThreadSafe or scoped_ptr

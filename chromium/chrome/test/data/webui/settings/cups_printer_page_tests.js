@@ -87,14 +87,14 @@ suite('CupsAddPrinterDialogTests', function() {
     assertTrue(!!dialog, 'Dialog is null for add');
     const addButton = dialog.$$('.action-button');
     assertTrue(!!addButton, 'Button is null');
-    MockInteractions.tap(addButton);
+    addButton.click();
   }
 
   function clickCancelButton(dialog) {
     assertTrue(!!dialog, 'Dialog is null for cancel');
     const cancelButton = dialog.$$('.cancel-button');
     assertTrue(!!cancelButton, 'Button is null');
-    MockInteractions.tap(cancelButton);
+    cancelButton.click();
   }
 
   let page = null;
@@ -208,7 +208,7 @@ suite('CupsAddPrinterDialogTests', function() {
     // Starts in discovery dialog, select add manually button.
     const discoveryDialog = dialog.$$('add-printer-discovery-dialog');
     assertTrue(!!discoveryDialog);
-    MockInteractions.tap(discoveryDialog.$$('.secondary-button'));
+    discoveryDialog.$$('.secondary-button').click();
     Polymer.dom.flush();
 
     // Now we should be in the manually add dialog.
@@ -216,18 +216,18 @@ suite('CupsAddPrinterDialogTests', function() {
     assertTrue(!!addDialog);
     fillAddManuallyDialog(addDialog);
 
-    MockInteractions.tap(addDialog.$$('.action-button'));
+    addDialog.$$('.action-button').click();
     Polymer.dom.flush();
     // Configure is shown until getPrinterInfo is rejected.
     assertTrue(!!dialog.$$('add-printer-configuring-dialog'));
 
     // Upon rejection, show model.
-    return cupsPrintersBrowserProxy.
-        whenCalled('getCupsPrinterManufacturersList').
-        then(function() {
+    return cupsPrintersBrowserProxy
+        .whenCalled('getCupsPrinterManufacturersList')
+        .then(function() {
           return PolymerTest.flushTasks();
-        }).
-        then(function() {
+        })
+        .then(function() {
           // Showing model selection.
           assertFalse(!!dialog.$$('add-printer-configuring-dialog'));
           assertTrue(!!dialog.$$('add-printer-manufacturer-model-dialog'));
@@ -245,7 +245,7 @@ suite('CupsAddPrinterDialogTests', function() {
   test('NoBlankQueries', function() {
     const discoveryDialog = dialog.$$('add-printer-discovery-dialog');
     assertTrue(!!discoveryDialog);
-    MockInteractions.tap(discoveryDialog.$$('.secondary-button'));
+    discoveryDialog.$$('.secondary-button').click();
     Polymer.dom.flush();
 
     const addDialog = dialog.$$('add-printer-manually-dialog');
@@ -261,7 +261,7 @@ suite('CupsAddPrinterDialogTests', function() {
 
     cupsPrintersBrowserProxy.manufacturers =
         ['ManufacturerA', 'ManufacturerB', 'Chromites'];
-    MockInteractions.tap(addDialog.$$('.action-button'));
+    addDialog.$$('.action-button').click();
     Polymer.dom.flush();
 
     return cupsPrintersBrowserProxy
@@ -399,5 +399,43 @@ suite('CupsAddPrinterDialogTests', function() {
           assertEquals(expectedPrinter, printer.printerId);
           assertDeepEquals(usbInfo, printer.printerUsbInfo);
         });
+  });
+});
+
+suite('CupsDropDownSearchBoxTests', function() {
+  let searchBox;
+
+  setup(function() {
+    PolymerTest.clearBody();
+    searchBox = document.createElement('drop-down-search-box');
+    document.body.appendChild(searchBox);
+    assertTrue(!!searchBox);
+    Polymer.dom.flush();
+  });
+
+  test('searchingWithInput', function() {
+    function testFilteredLength(filter, length) {
+      searchBox.$.search.value = filter;
+      Polymer.dom.flush();
+      assertEquals(
+          length, searchBox.shadowRoot.querySelectorAll('.list-item').length);
+    }
+
+    searchBox.items = ['a', 'aa', 'b', 'c'];
+    testFilteredLength('a', 2);
+    // Makes sure final value doesn't change while searching.
+    assertTrue(searchBox.value === undefined);
+    testFilteredLength('aa', 1);
+    testFilteredLength('a', 2);
+    testFilteredLength('ab', 0);
+    testFilteredLength('b', 1);
+    testFilteredLength('', 4);
+    testFilteredLength('c', 1);
+    // Makes sure final value doesn't change while searching.
+    assertTrue(searchBox.value === undefined);
+
+    // Clicking on an item sets the final value of the search box.
+    searchBox.$$('.list-item').click();
+    assertEquals('c', searchBox.value);
   });
 });

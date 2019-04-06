@@ -70,8 +70,10 @@ base::string16 ExtensionMessageBubbleBridge::GetDismissButtonText() {
   return controller_->delegate()->GetDismissButtonLabel();
 }
 
-base::string16 ExtensionMessageBubbleBridge::GetLearnMoreButtonText() {
-  return controller_->delegate()->GetLearnMoreLabel();
+ui::DialogButton ExtensionMessageBubbleBridge::GetDefaultDialogButton() {
+  // TODO(estade): we should set a default where appropriate. See
+  // http://crbug.com/751279
+  return ui::DIALOG_BUTTON_NONE;
 }
 
 std::string ExtensionMessageBubbleBridge::GetAnchorActionId() {
@@ -122,10 +124,10 @@ ExtensionMessageBubbleBridge::GetExtraViewInfo() {
     extra_view_info->resource = &vector_icons::kBusinessIcon;
     extra_view_info->text =
         l10n_util::GetStringUTF16(IDS_EXTENSIONS_INSTALLED_BY_ADMIN);
-    extra_view_info->is_text_linked = false;
+    extra_view_info->is_learn_more = false;
   } else {
     extra_view_info->text = controller_->delegate()->GetLearnMoreLabel();
-    extra_view_info->is_text_linked = true;
+    extra_view_info->is_learn_more = true;
   }
 
   return extra_view_info;

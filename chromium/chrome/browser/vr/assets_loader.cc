@@ -6,13 +6,16 @@
 
 #include "base/files/file_util.h"
 #include "base/memory/singleton.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chrome/browser/vr/metrics_helper.h"
+#include "chrome/browser/vr/metrics/metrics_helper.h"
 #include "chrome/browser/vr/model/assets.h"
+#include "chrome/browser/vr/vr_features.h"
 #include "content/public/browser/browser_thread.h"
+#include "media/audio/sounds/wav_audio_handler.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -20,6 +23,10 @@
 namespace vr {
 
 namespace {
+
+constexpr char kMinVersionWithGradients[] = "1.1";
+constexpr char kMinVersionWithSounds[] = "2.0";
+constexpr char kMinVersionWithInactiveButtonClickSound[] = "2.2";
 
 static const base::FilePath::CharType kBackgroundBaseFilename[] =
     FILE_PATH_LITERAL("background");
@@ -34,7 +41,14 @@ static const base::FilePath::CharType kPngExtension[] =
 static const base::FilePath::CharType kJpegExtension[] =
     FILE_PATH_LITERAL("jpeg");
 
-constexpr char kMinVersionWithGradients[] = "1.1";
+static const base::FilePath::CharType kButtonHoverSoundFilename[] =
+    FILE_PATH_LITERAL("button_hover.wav");
+static const base::FilePath::CharType kButtonClickSoundFilename[] =
+    FILE_PATH_LITERAL("button_click.wav");
+static const base::FilePath::CharType kBackButtonClickSoundFilename[] =
+    FILE_PATH_LITERAL("back_button_click.wav");
+static const base::FilePath::CharType kInactiveButtonClickSoundFilename[] =
+    FILE_PATH_LITERAL("inactive_button_click.wav");
 
 }  // namespace
 
@@ -52,6 +66,15 @@ AssetsLoader* AssetsLoader::GetInstance() {
 // static
 base::Version AssetsLoader::MinVersionWithGradients() {
   return base::Version(kMinVersionWithGradients);
+}
+
+// static
+bool AssetsLoader::AssetsSupported() {
+#if BUILDFLAG(USE_VR_ASSETS_COMPONENT)
+  return true;
+#else   // BUILDFLAG(USE_VR_ASSETS_COMPONENT)
+  return false;
+#endif  // BUILDFLAG(USE_VR_ASSETS_COMPONENT)
 }
 
 void AssetsLoader::OnComponentReady(
@@ -137,6 +160,27 @@ AssetsLoadStatus LoadImage(const base::FilePath& component_install_dir,
   return AssetsLoadStatus::kSuccess;
 }
 
+AssetsLoadStatus LoadSound(const base::FilePath& component_install_dir,
+                           const base::FilePath::CharType* file_name,
+                           std::unique_ptr<std::string>* out_buffer) {
+  base::FilePath file_path = component_install_dir.Append(file_name);
+  if (!base::PathExists(file_path)) {
+    return AssetsLoadStatus::kNotFound;
+  }
+
+  auto buffer = std::make_unique<std::string>();
+  if (!base::ReadFileToString(file_path, buffer.get())) {
+    return AssetsLoadStatus::kParseFailure;
+  }
+
+  if (!media::WavAudioHandler::Create(*buffer)) {
+    return AssetsLoadStatus::kInvalidContent;
+  }
+
+  *out_buffer = std::move(buffer);
+  return AssetsLoadStatus::kSuccess;
+}
+
 // static
 void AssetsLoader::LoadAssetsTask(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -162,6 +206,30 @@ void AssetsLoader::LoadAssetsTask(
       status = LoadImage(component_install_dir, kFullscreenGradientBaseFilename,
                          &assets->fullscreen_gradient);
     }
+  }
+
+  std::vector<std::tuple<const char*, const base::FilePath::CharType*,
+                         std::unique_ptr<std::string>*>>
+      sounds = {{kMinVersionWithSounds, kButtonHoverSoundFilename,
+                 &assets->button_hover_sound},
+                {kMinVersionWithSounds, kButtonClickSoundFilename,
+                 &assets->button_click_sound},
+                {kMinVersionWithSounds, kBackButtonClickSoundFilename,
+                 &assets->back_button_click_sound},
+                {kMinVersionWithInactiveButtonClickSound,
+                 kInactiveButtonClickSoundFilename,
+                 &assets->inactive_button_click_sound}};
+
+  auto sounds_iter = sounds.begin();
+  while (status == AssetsLoadStatus::kSuccess && sounds_iter != sounds.end()) {
+    const char* min_version;
+    const base::FilePath::CharType* file_name;
+    std::unique_ptr<std::string>* data;
+    std::tie(min_version, file_name, data) = *sounds_iter;
+    if (component_version >= base::Version(min_version)) {
+      status = LoadSound(component_install_dir, file_name, data);
+    }
+    sounds_iter++;
   }
 
   if (status != AssetsLoadStatus::kSuccess) {

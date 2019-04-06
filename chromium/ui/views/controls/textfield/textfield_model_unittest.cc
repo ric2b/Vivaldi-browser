@@ -11,7 +11,6 @@
 
 #include "base/auto_reset.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -233,6 +232,38 @@ TEST_F(TextfieldModelTest, EditString_ComplexScript) {
   EXPECT_TRUE(model.Backspace());
   EXPECT_EQ(base::WideToUTF16(L"\x002C\x0020\x05D1\x05BC\x05B7\x05E9"),
             model.text());
+
+  // Halfwidth katakana ﾀﾞ:
+  // "HALFWIDTH KATAKANA LETTER TA" + "HALFWIDTH KATAKANA VOICED SOUND MARK"
+  // ("ABC" prefix as sanity check that the entire string isn't deleted).
+  model.SetText(base::WideToUTF16(L"ABC\xFF80\xFF9E"));
+  MoveCursorTo(model, model.text().length());
+  model.Backspace();
+#if defined(OS_MACOSX)
+  // On Mac, the entire cluster should be deleted to match
+  // NSTextField behavior.
+  EXPECT_EQ(base::WideToUTF16(L"ABC"), model.text());
+  EXPECT_EQ(3U, model.GetCursorPosition());
+#else
+  EXPECT_EQ(base::WideToUTF16(L"ABC\xFF80"), model.text());
+  EXPECT_EQ(4U, model.GetCursorPosition());
+#endif
+
+  // Emoji with Fitzpatrick modifier:
+  // 'BOY' + 'EMOJI MODIFIER FITZPATRICK TYPE-5'
+  model.SetText(base::WideToUTF16(L"\U0001F466\U0001F3FE"));
+  MoveCursorTo(model, model.text().length());
+  model.Backspace();
+#if defined(OS_MACOSX)
+  // On Mac, the entire emoji should be deleted to match NSTextField
+  // behavior.
+  EXPECT_EQ(base::WideToUTF16(L""), model.text());
+  EXPECT_EQ(0U, model.GetCursorPosition());
+#else
+  // https://crbug.com/829040
+  EXPECT_EQ(base::WideToUTF16(L"\U0001F466"), model.text());
+  EXPECT_EQ(2U, model.GetCursorPosition());
+#endif
 }
 
 TEST_F(TextfieldModelTest, EmptyString) {
@@ -973,7 +1004,8 @@ TEST_F(TextfieldModelTest, CompositionTextTest) {
 
   ui::CompositionText composition;
   composition.text = base::ASCIIToUTF16("678");
-  composition.ime_text_spans.push_back(ui::ImeTextSpan(0, 3, 0, false));
+  composition.ime_text_spans.push_back(
+      ui::ImeTextSpan(0, 3, ui::ImeTextSpan::Thickness::kThin));
 
   // Cursor should be at the end of composition when characters are just typed.
   composition.selection = gfx::Range(3, 3);
@@ -988,8 +1020,10 @@ TEST_F(TextfieldModelTest, CompositionTextTest) {
   // Restart composition with targeting "67" in "678".
   composition.selection = gfx::Range(1, 3);
   composition.ime_text_spans.clear();
-  composition.ime_text_spans.push_back(ui::ImeTextSpan(0, 2, 0, true));
-  composition.ime_text_spans.push_back(ui::ImeTextSpan(2, 3, 0, false));
+  composition.ime_text_spans.push_back(
+      ui::ImeTextSpan(0, 2, ui::ImeTextSpan::Thickness::kThick));
+  composition.ime_text_spans.push_back(
+      ui::ImeTextSpan(2, 3, ui::ImeTextSpan::Thickness::kThin));
   model.SetCompositionText(composition);
   EXPECT_TRUE(model.HasCompositionText());
   EXPECT_TRUE(model.HasSelection());
@@ -1352,7 +1386,9 @@ TEST_F(TextfieldModelTest, UndoRedo_CutCopyPasteTest) {
   EXPECT_EQ(1U, model.GetCursorPosition());
   EXPECT_TRUE(model.Undo());
   EXPECT_STR_EQ("ABCDE", model.text());
-  EXPECT_EQ(3U, model.GetCursorPosition());
+  EXPECT_EQ(1U, model.GetCursorPosition());
+  EXPECT_TRUE(model.render_text()->selection().EqualsIgnoringDirection(
+      gfx::Range(1, 3)));
   EXPECT_TRUE(model.Undo());
   EXPECT_STR_EQ("", model.text());
   EXPECT_EQ(0U, model.GetCursorPosition());
@@ -1383,7 +1419,9 @@ TEST_F(TextfieldModelTest, UndoRedo_CutCopyPasteTest) {
   EXPECT_EQ(1U, model.GetCursorPosition());
   EXPECT_TRUE(model.Undo());
   EXPECT_STR_EQ("ABCDE", model.text());
-  EXPECT_EQ(3U, model.GetCursorPosition());
+  EXPECT_EQ(1U, model.GetCursorPosition());
+  EXPECT_TRUE(model.render_text()->selection().EqualsIgnoringDirection(
+      gfx::Range(1, 3)));
   EXPECT_TRUE(model.Undo());
   EXPECT_STR_EQ("", model.text());
   EXPECT_EQ(0U, model.GetCursorPosition());
@@ -1425,8 +1463,9 @@ TEST_F(TextfieldModelTest, UndoRedo_CutCopyPasteTest) {
   // An empty cut shouldn't create an edit.
   EXPECT_TRUE(model.Undo());
   EXPECT_STR_EQ("ABCBCBCDE", model.text());
-  EXPECT_EQ(3U, model.GetCursorPosition());
-
+  EXPECT_EQ(1U, model.GetCursorPosition());
+  EXPECT_TRUE(model.render_text()->selection().EqualsIgnoringDirection(
+      gfx::Range(1, 3)));
   // Test Copy.
   ResetModel(&model);
   model.SetText(base::ASCIIToUTF16("12345"));
@@ -1496,6 +1535,47 @@ TEST_F(TextfieldModelTest, UndoRedo_CursorTest) {
   EXPECT_STR_EQ("ab", model.text());
   EXPECT_EQ(2U, model.GetCursorPosition());
   EXPECT_FALSE(model.Redo());
+}
+
+TEST_F(TextfieldModelTest, Undo_SelectionTest) {
+  gfx::Range range = gfx::Range(2, 4);
+  TextfieldModel model(nullptr);
+  model.SetText(base::ASCIIToUTF16("abcdef"));
+  model.SelectRange(range);
+  EXPECT_EQ(model.render_text()->selection(), range);
+
+  // Deleting the selected text should change the text and the range.
+  EXPECT_TRUE(model.Backspace());
+  EXPECT_STR_EQ("abef", model.text());
+  EXPECT_EQ(model.render_text()->selection(), gfx::Range(2, 2));
+
+  // Undoing the deletion should restore the former range.
+  EXPECT_TRUE(model.Undo());
+  EXPECT_STR_EQ("abcdef", model.text());
+  EXPECT_EQ(model.render_text()->selection(), range);
+
+  // When range.start = range.end, nothing is selected and
+  // range.start = range.end = cursor position
+  model.MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_LEFT, gfx::SELECTION_NONE);
+  EXPECT_EQ(model.render_text()->selection(), gfx::Range(2, 2));
+
+  // Deleting a single character should change the text and cursor location.
+  EXPECT_TRUE(model.Backspace());
+  EXPECT_STR_EQ("acdef", model.text());
+  EXPECT_EQ(model.render_text()->selection(), gfx::Range(1, 1));
+
+  // Undoing the deletion should restore the former range.
+  EXPECT_TRUE(model.Undo());
+  EXPECT_STR_EQ("abcdef", model.text());
+  EXPECT_EQ(model.render_text()->selection(), gfx::Range(2, 2));
+
+  MoveCursorTo(model, model.text().length());
+  EXPECT_TRUE(model.Backspace());
+  model.SelectRange(gfx::Range(1, 3));
+  model.SetText(base::ASCIIToUTF16("[set]"));
+  EXPECT_TRUE(model.Undo());
+  EXPECT_STR_EQ("abcde", model.text());
+  EXPECT_EQ(model.render_text()->selection(), gfx::Range(1, 3));
 }
 
 void RunInsertReplaceTest(TextfieldModel& model) {
@@ -1581,7 +1661,8 @@ TEST_F(TextfieldModelTest, UndoRedo_CompositionText) {
 
   ui::CompositionText composition;
   composition.text = base::ASCIIToUTF16("abc");
-  composition.ime_text_spans.push_back(ui::ImeTextSpan(0, 3, 0, false));
+  composition.ime_text_spans.push_back(
+      ui::ImeTextSpan(0, 3, ui::ImeTextSpan::Thickness::kThin));
   composition.selection = gfx::Range(2, 3);
 
   model.SetText(base::ASCIIToUTF16("ABCDE"));

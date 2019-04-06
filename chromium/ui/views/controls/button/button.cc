@@ -6,8 +6,6 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
-
-#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/class_property.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -24,6 +22,7 @@
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/button/toggle_button.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
@@ -92,12 +91,13 @@ void Button::SetTooltipText(const base::string16& tooltip_text) {
   tooltip_text_ = tooltip_text;
   if (accessible_name_.empty())
     accessible_name_ = tooltip_text_;
+  OnSetTooltipText(tooltip_text);
   TooltipTextChanged();
 }
 
 void Button::SetAccessibleName(const base::string16& name) {
   accessible_name_ = name;
-  NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
+  NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
 }
 
 void Button::SetState(ButtonState state) {
@@ -147,12 +147,19 @@ void Button::SetAnimationDuration(int duration) {
   hover_animation_.SetSlideDuration(duration);
 }
 
+void Button::SetInstallFocusRingOnFocus(bool install) {
+  if (install)
+    focus_ring_ = FocusRing::Install(this);
+  else
+    focus_ring_.reset();
+}
+
 void Button::SetHotTracked(bool is_hot_tracked) {
   if (state_ != STATE_DISABLED)
     SetState(is_hot_tracked ? STATE_HOVERED : STATE_NORMAL);
 
   if (is_hot_tracked)
-    NotifyAccessibilityEvent(ui::AX_EVENT_HOVER, true);
+    NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
 }
 
 bool Button::IsHotTracked() const {
@@ -385,34 +392,28 @@ void Button::OnPaint(gfx::Canvas* canvas) {
 }
 
 void Button::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->role = ax::mojom::Role::kButton;
   node_data->SetName(accessible_name_);
-  if (!enabled()) {
-    node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
-                               ui::AX_RESTRICTION_DISABLED);
-  }
+  if (!enabled())
+    node_data->SetRestriction(ax::mojom::Restriction::kDisabled);
 
   switch (state_) {
     case STATE_HOVERED:
-      node_data->AddState(ui::AX_STATE_HOVERED);
+      node_data->AddState(ax::mojom::State::kHovered);
       break;
     case STATE_PRESSED:
-      node_data->AddIntAttribute(ui::AX_ATTR_CHECKED_STATE,
-                                 ui::AX_CHECKED_STATE_TRUE);
+      node_data->SetCheckedState(ax::mojom::CheckedState::kTrue);
       break;
     case STATE_DISABLED:
-      node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
-                                 ui::AX_RESTRICTION_DISABLED);
+      node_data->SetRestriction(ax::mojom::Restriction::kDisabled);
       break;
     case STATE_NORMAL:
     case STATE_COUNT:
       // No additional accessibility node_data set for this button node_data.
       break;
   }
-  if (enabled()) {
-    node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
-                               ui::AX_DEFAULT_ACTION_VERB_PRESS);
-  }
+  if (enabled())
+    node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kPress);
 }
 
 void Button::VisibilityChanged(View* starting_from, bool visible) {
@@ -425,6 +426,7 @@ void Button::VisibilityChanged(View* starting_from, bool visible) {
 void Button::ViewHierarchyChanged(const ViewHierarchyChangedDetails& details) {
   if (!details.is_add && state_ != STATE_DISABLED && details.child == this)
     SetState(STATE_NORMAL);
+  InkDropHostView::ViewHierarchyChanged(details);
 }
 
 void Button::OnFocus() {
@@ -450,7 +452,8 @@ void Button::OnBlur() {
 
 std::unique_ptr<InkDrop> Button::CreateInkDrop() {
   std::unique_ptr<views::InkDropImpl> ink_drop = CreateDefaultInkDropImpl();
-  ink_drop->SetShowHighlightOnFocus(true);
+  ink_drop->SetShowHighlightOnFocus(!focus_ring_);
+  ink_drop->SetAutoHighlightModeForPlatform();
   return std::move(ink_drop);
 }
 
@@ -512,6 +515,8 @@ void Button::OnClickCanceled(const ui::Event& event) {
     }
   }
 }
+
+void Button::OnSetTooltipText(const base::string16& tooltip_text) {}
 
 void Button::StateChanged(ButtonState old_state) {}
 

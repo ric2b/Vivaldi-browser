@@ -102,6 +102,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate,
     const gfx::Image& iconForNode(const bookmarks::BookmarkNode* node) const;
     base::string16 add_label;
     std::vector<gfx::Image> icons;
+    bool observer_enabled;
   };
 
   VivaldiMenuController(Delegate* delegate,
@@ -165,6 +166,8 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate,
   void PopulateBookmarkFolder(ui::SimpleMenuModel* menu_model,
                               int node_id,
                               int offset);
+  bookmarks::BookmarkModel* GetBookmarkModel();
+  void EnableBookmarkObserver(bool enable);
   bool IsBookmarkSeparator(const bookmarks::BookmarkNode* node);
   bool HasDeveloperTools();
   bool IsDeveloperTools(int command_id) const;

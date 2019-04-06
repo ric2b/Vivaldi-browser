@@ -14,6 +14,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/search/ntp_logging_events.h"
 #include "components/ntp_tiles/ntp_tile_impression.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -42,7 +43,8 @@ class NTPUserDataLogger
 
   // Called when an event occurs on the NTP that requires a counter to be
   // incremented. |time| is the delta time from navigation start until this
-  // event happened.
+  // event happened. The NTP_ALL_TILES_LOADED event may be logged from all NTPs;
+  // all others require Google as the default search provider.
   void LogEvent(NTPLoggingEventType event, base::TimeDelta time);
 
   // Logs an impression on one of the NTP tiles by given details.
@@ -78,6 +80,12 @@ class NTPUserDataLogger
   // for testing.
   virtual bool DefaultSearchProviderIsGoogle() const;
 
+  // Returns whether a theme is configured. Virtual for testing.
+  virtual bool ThemeIsConfigured() const;
+
+  // Returns whether a custom background is configured. Virtual for testing.
+  virtual bool CustomBackgroundIsConfigured() const;
+
   // Logs a number of statistics regarding the NTP. Called when an NTP tab is
   // about to be deactivated (be it by switching tabs, losing focus or closing
   // the tab/shutting down Chrome), or when the user navigates to a URL.
@@ -112,6 +120,9 @@ class NTPUserDataLogger
 
   // The URL of this New Tab Page - varies based on NTP version.
   GURL ntp_url_;
+
+  // The profile in which this New Tab Page was loaded.
+  Profile* profile_;
 
   DISALLOW_COPY_AND_ASSIGN(NTPUserDataLogger);
 };

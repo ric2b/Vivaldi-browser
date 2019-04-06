@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "components/data_reduction_proxy/core/browser/data_store.h"
 #include "components/data_reduction_proxy/core/browser/data_usage_store.h"
 #include "components/data_reduction_proxy/proto/data_store.pb.h"
@@ -48,7 +47,7 @@ void DBDataOwner::StoreCurrentDataUsageBucket(
     std::unique_ptr<DataUsageBucket> current) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
-  data_usage_->StoreCurrentDataUsageBucket(*current.get());
+  data_usage_->StoreCurrentDataUsageBucket(*current);
 }
 
 void DBDataOwner::DeleteHistoricalDataUsage() {

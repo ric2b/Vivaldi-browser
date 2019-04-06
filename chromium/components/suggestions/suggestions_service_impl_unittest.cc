@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -44,9 +45,7 @@ using testing::StrictMock;
 
 namespace {
 
-const char kGaiaId[] = "foo_gaia";
 const char kEmail[] = "foo_email";
-const char kRefreshToken[] = "foo_token";
 const char kSuggestionsUrlPath[] = "/chromesuggestions";
 const char kBlacklistUrlPath[] = "/chromesuggestions/blacklist";
 const char kBlacklistClearUrlPath[] = "/chromesuggestions/blacklist/clear";
@@ -85,11 +84,16 @@ SuggestionsProfile CreateSuggestionsProfile() {
 class MockSyncService : public syncer::FakeSyncService {
  public:
   MockSyncService() {}
-  virtual ~MockSyncService() {}
-  MOCK_CONST_METHOD0(CanSyncStart, bool());
-  MOCK_CONST_METHOD0(IsSyncActive, bool());
+  ~MockSyncService() override {}
+  MOCK_CONST_METHOD0(GetDisableReasons, int());
+  MOCK_CONST_METHOD0(IsEngineInitialized, bool());
+  MOCK_CONST_METHOD0(IsFirstSetupComplete, bool());
   MOCK_CONST_METHOD0(ConfigurationDone, bool());
+  MOCK_CONST_METHOD0(IsLocalSyncEnabled, bool());
+  MOCK_CONST_METHOD0(IsUsingSecondaryPassphrase, bool());
+  MOCK_CONST_METHOD0(GetPreferredDataTypes, syncer::ModelTypeSet());
   MOCK_CONST_METHOD0(GetActiveDataTypes, syncer::ModelTypeSet());
+  MOCK_CONST_METHOD0(GetLastCycleSnapshot, syncer::SyncCycleSnapshot());
 };
 
 class TestSuggestionsStore : public suggestions::SuggestionsStore {
@@ -113,7 +117,7 @@ class TestSuggestionsStore : public suggestions::SuggestionsStore {
 class MockImageManager : public suggestions::ImageManager {
  public:
   MockImageManager() {}
-  virtual ~MockImageManager() {}
+  ~MockImageManager() override {}
   MOCK_METHOD1(Initialize, void(const SuggestionsProfile&));
   MOCK_METHOD2(GetImageForURL,
                void(const GURL&,
@@ -143,27 +147,50 @@ class SuggestionsServiceTest : public testing::Test {
         mock_thumbnail_manager_(nullptr),
         mock_blacklist_store_(nullptr),
         test_suggestions_store_(nullptr) {
-    identity_test_env_.MakePrimaryAccountAvailable(kGaiaId, kEmail,
-                                                   kRefreshToken);
+    identity_test_env_.MakePrimaryAccountAvailable(kEmail);
     identity_test_env_.SetAutomaticIssueOfAccessTokens(true);
   }
 
   ~SuggestionsServiceTest() override {}
 
   void SetUp() override {
-    EXPECT_CALL(*sync_service(), CanSyncStart())
+    EXPECT_CALL(*sync_service(), GetDisableReasons())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_NONE));
+    EXPECT_CALL(*sync_service(), IsEngineInitialized())
         .Times(AnyNumber())
         .WillRepeatedly(Return(true));
-    EXPECT_CALL(*sync_service(), IsSyncActive())
+    EXPECT_CALL(*sync_service(), IsFirstSetupComplete())
         .Times(AnyNumber())
         .WillRepeatedly(Return(true));
     EXPECT_CALL(*sync_service(), ConfigurationDone())
         .Times(AnyNumber())
         .WillRepeatedly(Return(true));
+    EXPECT_CALL(*sync_service(), IsLocalSyncEnabled())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*sync_service(), IsUsingSecondaryPassphrase())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*sync_service(), GetPreferredDataTypes())
+        .Times(AnyNumber())
+        .WillRepeatedly(
+            Return(syncer::ModelTypeSet(syncer::HISTORY_DELETE_DIRECTIVES)));
     EXPECT_CALL(*sync_service(), GetActiveDataTypes())
         .Times(AnyNumber())
         .WillRepeatedly(
             Return(syncer::ModelTypeSet(syncer::HISTORY_DELETE_DIRECTIVES)));
+    EXPECT_CALL(*sync_service(), GetLastCycleSnapshot())
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(syncer::SyncCycleSnapshot(
+            syncer::ModelNeutralState(), syncer::ProgressMarkerMap(), false, 5,
+            2, 7, false, 0, base::Time::Now(), base::Time::Now(),
+            std::vector<int>(syncer::MODEL_TYPE_COUNT, 0),
+            std::vector<int>(syncer::MODEL_TYPE_COUNT, 0),
+            sync_pb::SyncEnums::UNKNOWN_ORIGIN,
+            /*short_poll_interval=*/base::TimeDelta::FromMinutes(30),
+            /*long_poll_interval=*/base::TimeDelta::FromMinutes(180),
+            /*has_remaining_local_changes=*/false)));
     // These objects are owned by the SuggestionsService, but we keep the
     // pointers around for testing.
     test_suggestions_store_ = new TestSuggestionsStore();
@@ -278,6 +305,25 @@ TEST_F(SuggestionsServiceTest, IgnoresNoopSyncChange) {
   EXPECT_FALSE(suggestions_service()->HasPendingRequestForTesting());
 }
 
+TEST_F(SuggestionsServiceTest, PersistentAuthErrorState) {
+  // Put some suggestions in.
+  suggestions_store()->StoreSuggestions(CreateSuggestionsProfile());
+
+  GoogleServiceAuthError error =
+      GoogleServiceAuthError(GoogleServiceAuthError::SERVICE_ERROR);
+  sync_service()->set_auth_error(std::move(error));
+  // An no-op change should not result in a suggestions refresh.
+  static_cast<SyncServiceObserver*>(suggestions_service())
+      ->OnStateChanged(sync_service());
+
+  // Wait for eventual (but unexpected) network requests.
+  task_runner()->RunUntilIdle();
+  EXPECT_FALSE(suggestions_service()->HasPendingRequestForTesting());
+
+  SuggestionsProfile empty_suggestions;
+  EXPECT_FALSE(suggestions_store()->LoadSuggestions(&empty_suggestions));
+}
+
 TEST_F(SuggestionsServiceTest, IgnoresUninterestingSyncChange) {
   base::MockCallback<SuggestionsService::ResponseCallback> callback;
   EXPECT_CALL(callback, Run(_)).Times(0);
@@ -302,7 +348,8 @@ TEST_F(SuggestionsServiceTest, IgnoresUninterestingSyncChange) {
 // This should *not* result in an automatic fetch.
 TEST_F(SuggestionsServiceTest, DoesNotFetchOnStartup) {
   // The sync service starts out inactive.
-  EXPECT_CALL(*sync_service(), IsSyncActive()).WillRepeatedly(Return(false));
+  EXPECT_CALL(*sync_service(), IsEngineInitialized())
+      .WillRepeatedly(Return(false));
   static_cast<SyncServiceObserver*>(suggestions_service())
       ->OnStateChanged(sync_service());
 
@@ -310,7 +357,8 @@ TEST_F(SuggestionsServiceTest, DoesNotFetchOnStartup) {
   ASSERT_FALSE(suggestions_service()->HasPendingRequestForTesting());
 
   // Sync getting enabled should not result in a fetch.
-  EXPECT_CALL(*sync_service(), IsSyncActive()).WillRepeatedly(Return(true));
+  EXPECT_CALL(*sync_service(), IsEngineInitialized())
+      .WillRepeatedly(Return(true));
   static_cast<SyncServiceObserver*>(suggestions_service())
       ->OnStateChanged(sync_service());
 
@@ -343,7 +391,8 @@ TEST_F(SuggestionsServiceTest, BuildUrlWithDefaultMinZeroParamForFewFeature) {
 }
 
 TEST_F(SuggestionsServiceTest, FetchSuggestionsDataSyncNotInitializedEnabled) {
-  EXPECT_CALL(*sync_service(), IsSyncActive()).WillRepeatedly(Return(false));
+  EXPECT_CALL(*sync_service(), IsEngineInitialized())
+      .WillRepeatedly(Return(false));
   static_cast<SyncServiceObserver*>(suggestions_service())
       ->OnStateChanged(sync_service());
 
@@ -366,7 +415,9 @@ TEST_F(SuggestionsServiceTest, FetchSuggestionsDataSyncNotInitializedEnabled) {
 }
 
 TEST_F(SuggestionsServiceTest, FetchSuggestionsDataSyncDisabled) {
-  EXPECT_CALL(*sync_service(), CanSyncStart()).WillRepeatedly(Return(false));
+  EXPECT_CALL(*sync_service(), GetDisableReasons())
+      .Times(AnyNumber())
+      .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_USER_CHOICE));
 
   base::MockCallback<SuggestionsService::ResponseCallback> callback;
   auto subscription = suggestions_service()->AddCallback(callback.Get());
@@ -398,7 +449,7 @@ TEST_F(SuggestionsServiceTest, FetchSuggestionsDataNoAccessToken) {
 
   suggestions_service()->FetchSuggestionsData();
 
-  identity_test_env()->WaitForAccessTokenRequestAndRespondWithError(
+  identity_test_env()->WaitForAccessTokenRequestIfNecessaryAndRespondWithError(
       GoogleServiceAuthError(
           GoogleServiceAuthError::State::INVALID_GAIA_CREDENTIALS));
 

@@ -13,10 +13,9 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
-#include "content/child/scoped_web_callbacks.h"
-#include "content/renderer/media/media_stream_audio_track.h"
-#include "content/renderer/media/media_stream_track.h"
-#include "content/renderer/media/webrtc_uma_histograms.h"
+#include "content/renderer/media/stream/media_stream_audio_track.h"
+#include "content/renderer/media/stream/media_stream_track.h"
+#include "content/renderer/media/webrtc/webrtc_uma_histograms.h"
 #include "content/renderer/media_recorder/audio_track_recorder.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_codecs.h"
@@ -26,10 +25,11 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_frame.h"
 #include "media/muxers/webm_muxer.h"
-#include "third_party/WebKit/public/platform/WebMediaRecorderHandlerClient.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/modules/media_capabilities/WebMediaConfiguration.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_media_configuration.h"
+#include "third_party/blink/public/platform/scoped_web_callbacks.h"
+#include "third_party/blink/public/platform/web_media_recorder_handler_client.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_string.h"
 
 using base::TimeDelta;
 using base::TimeTicks;
@@ -119,13 +119,15 @@ void OnEncodingInfoError(
 
 }  // anonymous namespace
 
-MediaRecorderHandler::MediaRecorderHandler()
+MediaRecorderHandler::MediaRecorderHandler(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : video_bits_per_second_(0),
       audio_bits_per_second_(0),
-      video_codec_id_(VideoTrackRecorder::CodecId::VP8),
-      audio_codec_id_(AudioTrackRecorder::CodecId::OPUS),
+      video_codec_id_(VideoTrackRecorder::CodecId::LAST),
+      audio_codec_id_(AudioTrackRecorder::CodecId::LAST),
       recording_(false),
       client_(nullptr),
+      task_runner_(std::move(task_runner)),
       weak_factory_(this) {}
 
 MediaRecorderHandler::~MediaRecorderHandler() {
@@ -188,7 +190,7 @@ bool MediaRecorderHandler::Initialize(
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   // Save histogram data so we can see how much MediaStream Recorder is used.
   // The histogram counts the number of calls to the JS API.
-  UpdateWebRTCMethodCount(WEBKIT_MEDIA_STREAM_RECORDER);
+  UpdateWebRTCMethodCount(blink::WebRTCAPIName::kMediaStreamRecorder);
 
   if (!CanSupportMimeType(type, codecs)) {
     DLOG(ERROR) << "Unsupported " << type.Utf8() << ";codecs=" << codecs.Utf8();
@@ -234,8 +236,8 @@ bool MediaRecorderHandler::Start(int timeslice) {
   timeslice_ = TimeDelta::FromMilliseconds(timeslice);
   slice_origin_timestamp_ = TimeTicks::Now();
 
-  media_stream_.VideoTracks(video_tracks_);
-  media_stream_.AudioTracks(audio_tracks_);
+  video_tracks_ = media_stream_.VideoTracks();
+  audio_tracks_ = media_stream_.AudioTracks();
 
   if (video_tracks_.IsEmpty() && audio_tracks_.IsEmpty()) {
     LOG(WARNING) << __func__ << ": no media tracks.";
@@ -279,9 +281,9 @@ bool MediaRecorderHandler::Start(int timeslice) {
         media::BindToCurrentLoop(base::Bind(
             &MediaRecorderHandler::OnEncodedVideo, weak_factory_.GetWeakPtr()));
 
-    video_recorders_.emplace_back(
-        new VideoTrackRecorder(video_codec_id_, video_track,
-                               on_encoded_video_cb, video_bits_per_second_));
+    video_recorders_.emplace_back(new VideoTrackRecorder(
+        video_codec_id_, video_track, on_encoded_video_cb,
+        video_bits_per_second_, task_runner_));
   }
 
   if (use_audio_tracks) {
@@ -348,9 +350,8 @@ void MediaRecorderHandler::EncodingInfo(
   DCHECK(configuration.video_configuration ||
          configuration.audio_configuration);
 
-  ScopedWebCallbacks<WebMediaCapabilitiesQueryCallbacks> scoped_callbacks =
-      make_scoped_web_callbacks(callbacks.release(),
-                                base::Bind(&OnEncodingInfoError));
+  auto scoped_callbacks = blink::MakeScopedWebCallbacks(
+      std::move(callbacks), base::BindOnce(&OnEncodingInfoError));
 
   std::unique_ptr<blink::WebMediaCapabilitiesInfo> info(
       new blink::WebMediaCapabilitiesInfo());
@@ -396,6 +397,72 @@ void MediaRecorderHandler::EncodingInfo(
            << " and" << (info->smooth ? " smooth" : " NOT smooth");
 
   scoped_callbacks.PassCallbacks()->OnSuccess(std::move(info));
+}
+
+blink::WebString MediaRecorderHandler::ActualMimeType() {
+  DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  DCHECK(client_) << __func__ << " should be called after Initialize()";
+
+  const bool has_video_tracks = !media_stream_.VideoTracks().empty();
+  const bool has_audio_tracks = !media_stream_.AudioTracks().empty();
+  if (!has_video_tracks && !has_audio_tracks)
+    return blink::WebString();
+
+  std::string mime_type;
+  if (!has_video_tracks && has_audio_tracks) {
+    mime_type.append("audio/webm;codecs=");
+  } else {
+    switch (video_codec_id_) {
+      case VideoTrackRecorder::CodecId::VP8:
+      case VideoTrackRecorder::CodecId::VP9:
+        mime_type.append("video/webm;codecs=");
+        break;
+#if BUILDFLAG(RTC_USE_H264)
+      case VideoTrackRecorder::CodecId::H264:
+        mime_type.append("video/x-matroska;codecs=");
+        break;
+#endif
+      case VideoTrackRecorder::CodecId::LAST:
+        // Do nothing.
+        break;
+    }
+  }
+  if (has_video_tracks) {
+    switch (video_codec_id_) {
+      case VideoTrackRecorder::CodecId::VP8:
+        mime_type.append("vp8");
+        break;
+      case VideoTrackRecorder::CodecId::VP9:
+        mime_type.append("vp9");
+        break;
+#if BUILDFLAG(RTC_USE_H264)
+      case VideoTrackRecorder::CodecId::H264:
+        mime_type.append("avc1");
+        break;
+#endif
+      case VideoTrackRecorder::CodecId::LAST:
+        DCHECK_NE(audio_codec_id_, AudioTrackRecorder::CodecId::LAST);
+    }
+  }
+  if (has_video_tracks && has_audio_tracks) {
+    if (video_codec_id_ != VideoTrackRecorder::CodecId::LAST &&
+        audio_codec_id_ != AudioTrackRecorder::CodecId::LAST) {
+      mime_type.append(",");
+    }
+  }
+  if (has_audio_tracks) {
+    switch (audio_codec_id_) {
+      case AudioTrackRecorder::CodecId::OPUS:
+        mime_type.append("opus");
+        break;
+      case AudioTrackRecorder::CodecId::PCM:
+        mime_type.append("pcm");
+        break;
+      case AudioTrackRecorder::CodecId::LAST:
+        DCHECK_NE(video_codec_id_, VideoTrackRecorder::CodecId::LAST);
+    }
+  }
+  return blink::WebString::FromUTF8(mime_type);
 }
 
 void MediaRecorderHandler::OnEncodedVideo(
@@ -461,8 +528,8 @@ bool MediaRecorderHandler::UpdateTracksAndCheckIfChanged() {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
 
   blink::WebVector<blink::WebMediaStreamTrack> video_tracks, audio_tracks;
-  media_stream_.VideoTracks(video_tracks);
-  media_stream_.AudioTracks(audio_tracks);
+  video_tracks = media_stream_.VideoTracks();
+  audio_tracks = media_stream_.AudioTracks();
 
   bool video_tracks_changed = video_tracks_.size() != video_tracks.size();
   bool audio_tracks_changed = audio_tracks_.size() != audio_tracks.size();

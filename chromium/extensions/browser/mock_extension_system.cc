@@ -81,8 +81,16 @@ void MockExtensionSystem::InstallUpdate(
     const std::string& extension_id,
     const std::string& public_key,
     const base::FilePath& temp_dir,
+    bool install_immediately,
     InstallUpdateCallback install_update_callback) {
   NOTREACHED();
+}
+
+bool MockExtensionSystem::FinishDelayedInstallationIfReady(
+    const std::string& extension_id,
+    bool install_immediately) {
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace extensions

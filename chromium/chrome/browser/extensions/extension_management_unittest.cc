@@ -185,12 +185,12 @@ class ExtensionManagementServiceTest : public testing::Test {
     return extension_management_->GetInstallationMode(extension.get());
   }
 
-  // Wrapper of ExtensionManagement::GetRuntimeBlockedHosts, |id| is used
+  // Wrapper of ExtensionManagement::GetPolicyBlockedHosts, |id| is used
   // to construct an Extension for testing.
-  URLPatternSet GetRuntimeBlockedHosts(const std::string& id) {
+  URLPatternSet GetPolicyBlockedHosts(const std::string& id) {
     scoped_refptr<const Extension> extension =
         CreateExtension(Manifest::UNPACKED, "0.1", id, kNonExistingUpdateUrl);
-    return extension_management_->GetRuntimeBlockedHosts(extension.get());
+    return extension_management_->GetPolicyBlockedHosts(extension.get());
   }
 
   // Wrapper of ExtensionManagement::BlockedInstallMessage, |id| is used
@@ -237,6 +237,7 @@ class ExtensionManagementServiceTest : public testing::Test {
     base::DictionaryValue manifest_dict;
     manifest_dict.SetString(manifest_keys::kName, "test");
     manifest_dict.SetString(manifest_keys::kVersion, version);
+    manifest_dict.SetInteger(manifest_keys::kManifestVersion, 2);
     manifest_dict.SetString(manifest_keys::kUpdateURL, update_url);
     std::string error;
     scoped_refptr<const Extension> extension =
@@ -275,6 +276,7 @@ class ExtensionAdminPolicyTest : public ExtensionManagementServiceTest {
                                  base::DictionaryValue* values) {
     values->SetString(extensions::manifest_keys::kName, "test");
     values->SetString(extensions::manifest_keys::kVersion, "0.1");
+    values->SetInteger(extensions::manifest_keys::kManifestVersion, 2);
     std::string error;
     extension_ = Extension::Create(base::FilePath(), location, *values,
                                    Extension::NO_FLAGS, &error);
@@ -290,6 +292,9 @@ class ExtensionAdminPolicyTest : public ExtensionManagementServiceTest {
                    const Extension* extension,
                    base::string16* error);
   bool UserMayModifySettings(const Extension* extension, base::string16* error);
+  bool ExtensionMayModifySettings(const Extension* source_extension,
+                                  const Extension* extension,
+                                  base::string16* error);
   bool MustRemainEnabled(const Extension* extension, base::string16* error);
 
  protected:
@@ -328,6 +333,15 @@ bool ExtensionAdminPolicyTest::UserMayModifySettings(const Extension* extension,
                                                      base::string16* error) {
   SetUpPolicyProvider();
   return provider_->UserMayModifySettings(extension, error);
+}
+
+bool ExtensionAdminPolicyTest::ExtensionMayModifySettings(
+    const Extension* source_extension,
+    const Extension* extension,
+    base::string16* error) {
+  SetUpPolicyProvider();
+  return provider_->ExtensionMayModifySettings(source_extension, extension,
+                                               error);
 }
 
 bool ExtensionAdminPolicyTest::MustRemainEnabled(const Extension* extension,
@@ -452,10 +466,10 @@ TEST_F(ExtensionManagementServiceTest, PreferenceParsing) {
             ExtensionManagement::INSTALLATION_BLOCKED);
   EXPECT_EQ(GetInstallationModeByUpdateUrl(kExampleUpdateUrl),
             ExtensionManagement::INSTALLATION_ALLOWED);
-  EXPECT_TRUE(GetRuntimeBlockedHosts(kTargetExtension).is_empty());
-  EXPECT_TRUE(GetRuntimeBlockedHosts(kTargetExtension4)
+  EXPECT_TRUE(GetPolicyBlockedHosts(kTargetExtension).is_empty());
+  EXPECT_TRUE(GetPolicyBlockedHosts(kTargetExtension4)
                   .MatchesURL(GURL("http://test.foo.com/test")));
-  EXPECT_TRUE(GetRuntimeBlockedHosts(kTargetExtension4)
+  EXPECT_TRUE(GetPolicyBlockedHosts(kTargetExtension4)
                   .MatchesURL(GURL("https://bar.org/test")));
   EXPECT_TRUE(GetBlockedInstallMessage(kTargetExtension).empty());
   EXPECT_EQ("Custom Error Extension4",
@@ -469,7 +483,7 @@ TEST_F(ExtensionManagementServiceTest, PreferenceParsing) {
   EXPECT_EQ(allowed_sites.size(), 1u);
   EXPECT_TRUE(allowed_sites.MatchesURL(GURL("http://foo.com/entry")));
   EXPECT_FALSE(allowed_sites.MatchesURL(GURL("http://bar.com/entry")));
-  EXPECT_TRUE(GetRuntimeBlockedHosts(kNonExistingExtension)
+  EXPECT_TRUE(GetPolicyBlockedHosts(kNonExistingExtension)
                   .MatchesURL(GURL("http://example.com/default")));
 
   EXPECT_TRUE(ReadGlobalSettings()->has_restricted_allowed_types);
@@ -914,6 +928,36 @@ TEST_F(ExtensionAdminPolicyTest, UserMayModifySettings) {
   EXPECT_FALSE(UserMayModifySettings(extension_.get(), NULL));
   EXPECT_FALSE(UserMayModifySettings(extension_.get(), &error));
   EXPECT_FALSE(error.empty());
+}
+
+TEST_F(ExtensionAdminPolicyTest, ExtensionMayModifySettings) {
+  CreateExtension(Manifest::EXTERNAL_POLICY_DOWNLOAD);
+  auto external_policy_download = extension_;
+  CreateExtension(Manifest::EXTERNAL_POLICY);
+  auto external_policy = extension_;
+  CreateExtension(Manifest::EXTERNAL_PREF);
+  auto external_pref = extension_;
+  CreateExtension(Manifest::COMPONENT);
+  auto component = extension_;
+  CreateExtension(Manifest::COMPONENT);
+  auto component2 = extension_;
+  // Make sure that component/policy/external extensions cannot modify component
+  // extensions (no extension may modify a component extension).
+  EXPECT_FALSE(ExtensionMayModifySettings(external_policy_download.get(),
+                                          component.get(), nullptr));
+  EXPECT_FALSE(
+      ExtensionMayModifySettings(component2.get(), component.get(), nullptr));
+  EXPECT_FALSE(ExtensionMayModifySettings(external_pref.get(), component.get(),
+                                          nullptr));
+
+  // Only component/policy extensions *can* modify policy extensions, and eg.
+  // external cannot.
+  EXPECT_TRUE(ExtensionMayModifySettings(
+      external_policy.get(), external_policy_download.get(), nullptr));
+  EXPECT_TRUE(ExtensionMayModifySettings(
+      component.get(), external_policy_download.get(), nullptr));
+  EXPECT_FALSE(ExtensionMayModifySettings(
+      external_pref.get(), external_policy_download.get(), nullptr));
 }
 
 TEST_F(ExtensionAdminPolicyTest, MustRemainEnabled) {

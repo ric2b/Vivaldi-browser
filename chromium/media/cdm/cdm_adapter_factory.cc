@@ -8,6 +8,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/cdm_factory.h"
 #include "media/cdm/cdm_adapter.h"
+#include "media/cdm/cdm_module.h"
 #include "url/origin.h"
 
 namespace media {
@@ -28,12 +29,21 @@ void CdmAdapterFactory::Create(
     const SessionKeysChangeCB& session_keys_change_cb,
     const SessionExpirationUpdateCB& session_expiration_update_cb,
     const CdmCreatedCB& cdm_created_cb) {
-  DVLOG(1) << __FUNCTION__ << ": key_system=" << key_system;
+  DVLOG(1) << __func__ << ": key_system=" << key_system;
 
   if (security_origin.unique()) {
     LOG(ERROR) << "Invalid Origin: " << security_origin;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(cdm_created_cb, nullptr, "Invalid origin."));
+    return;
+  }
+
+  CdmAdapter::CreateCdmFunc create_cdm_func =
+      CdmModule::GetInstance()->GetCreateCdmFunc();
+  if (!create_cdm_func) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(cdm_created_cb, nullptr, "CreateCdmFunc not available."));
     return;
   }
 
@@ -45,10 +55,10 @@ void CdmAdapterFactory::Create(
     return;
   }
 
-  CdmAdapter::Create(key_system, cdm_config, std::move(cdm_helper),
-                     session_message_cb, session_closed_cb,
-                     session_keys_change_cb, session_expiration_update_cb,
-                     cdm_created_cb);
+  CdmAdapter::Create(key_system, security_origin, cdm_config, create_cdm_func,
+                     std::move(cdm_helper), session_message_cb,
+                     session_closed_cb, session_keys_change_cb,
+                     session_expiration_update_cb, cdm_created_cb);
 }
 
 }  // namespace media

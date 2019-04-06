@@ -10,7 +10,7 @@
 #include "base/atomic_sequence_num.h"
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/security_style_explanation.h"
@@ -23,7 +23,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
+#include "third_party/blink/public/platform/web_mixed_content_context_type.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {

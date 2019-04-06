@@ -112,6 +112,7 @@ void ContactBackend::InitImpl(
     case sql::INIT_FAILURE: {
       // TODO(arnar): add db init failure check
       LOG(ERROR) << "ContactBackend db init failure";
+      FALLTHROUGH;
     }  // Falls through.
     case sql::INIT_TOO_NEW: {
       LOG(ERROR) << "INIT_TOO_NEW";
@@ -163,6 +164,31 @@ void ContactBackend::CreateContact(ContactRow row,
   }
 }
 
+// Creates multiple contacts
+void ContactBackend::CreateContacts(
+    std::vector<ContactRow> contacts,
+    std::shared_ptr<CreateContactsResult> result) {
+  int success_counter = 0;
+  int failed_counter = 0;
+
+  size_t count = contacts.size();
+
+  for (size_t i = 0; i < count; i++) {
+    ContactRow contact = contacts[i];
+    ContactID id = db_->CreateContact(contact);
+    if (id) {
+      success_counter++;
+    } else {
+      failed_counter++;
+    }
+  }
+
+  result->number_success = success_counter;
+  result->number_failed = failed_counter;
+  ContactRow ev;
+  NotifyContactCreated(ev);
+}
+
 void ContactBackend::UpdateContact(ContactID contact_id,
                                    const Contact& contact,
                                    std::shared_ptr<ContactResults> result) {
@@ -198,11 +224,16 @@ void ContactBackend::UpdateContact(ContactID contact_id,
           contact.generated_from_sent_mail);
     }
 
+    if (contact.updateFields & contact::TRUSTED) {
+      contact_row.set_trusted(contact.trusted);
+    }
+
     result->success = db_->UpdateContactRow(contact_row);
 
     if (result->success) {
       ContactRow changed_row;
       if (db_->GetRowForContact(contact_id, &changed_row)) {
+        FillUpdatedContact(contact_id, changed_row);
         result->contact = changed_row;
         NotifyContactModified(changed_row);
       }

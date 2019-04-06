@@ -28,7 +28,6 @@
 #include "media/base/video_util.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/ffmpeg/ffmpeg_decoding_loop.h"
-#include "media/filters/ffmpeg_glue.h"
 
 namespace media {
 
@@ -111,7 +110,6 @@ static void ReleaseVideoBufferImpl(void* opaque, uint8_t* data) {
 
 // static
 bool FFmpegVideoDecoder::IsCodecSupported(VideoCodec codec) {
-  FFmpegGlue::InitializeFFmpeg();
   return avcodec_find_decoder(VideoCodecToCodecID(codec)) != nullptr;
 }
 
@@ -151,7 +149,8 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
                                   codec_context->sample_aspect_ratio.num,
                                   codec_context->sample_aspect_ratio.den);
   } else {
-    natural_size = config_.natural_size();
+    natural_size =
+        GetNaturalSize(gfx::Rect(size), config_.GetPixelAspectRatio());
   }
 
   // FFmpeg has specific requirements on the allocation size of the frame.  The
@@ -186,9 +185,20 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   video_frame->metadata()->SetInteger(VideoFrameMetadata::COLOR_SPACE,
                                       color_space);
 
-  if (codec_context->color_primaries != AVCOL_PRI_UNSPECIFIED ||
-      codec_context->color_trc != AVCOL_TRC_UNSPECIFIED ||
-      codec_context->colorspace != AVCOL_SPC_UNSPECIFIED) {
+  if (codec_context->codec_id == AV_CODEC_ID_VP8 &&
+      codec_context->color_primaries == AVCOL_PRI_UNSPECIFIED &&
+      codec_context->color_trc == AVCOL_TRC_UNSPECIFIED &&
+      codec_context->colorspace == AVCOL_SPC_BT470BG) {
+    // vp8 has no colorspace information, except for the color range.
+    // However, because of a comment in the vp8 spec, ffmpeg sets the
+    // colorspace to BT470BG. We detect this and treat it as unset.
+    // If the color range is set to full range, we use the jpeg color space.
+    if (codec_context->color_range == AVCOL_RANGE_JPEG) {
+      video_frame->set_color_space(gfx::ColorSpace::CreateJpeg());
+    }
+  } else if (codec_context->color_primaries != AVCOL_PRI_UNSPECIFIED ||
+             codec_context->color_trc != AVCOL_TRC_UNSPECIFIED ||
+             codec_context->colorspace != AVCOL_SPC_UNSPECIFIED) {
     media::VideoColorSpace video_color_space = media::VideoColorSpace(
         codec_context->color_primaries, codec_context->color_trc,
         codec_context->colorspace,
@@ -225,11 +235,13 @@ std::string FFmpegVideoDecoder::GetDisplayName() const {
   return "FFmpegVideoDecoder";
 }
 
-void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
-                                    bool low_delay,
-                                    CdmContext* /* cdm_context */,
-                                    const InitCB& init_cb,
-                                    const OutputCB& output_cb) {
+void FFmpegVideoDecoder::Initialize(
+    const VideoDecoderConfig& config,
+    bool low_delay,
+    CdmContext* /* cdm_context */,
+    const InitCB& init_cb,
+    const OutputCB& output_cb,
+    const WaitingForDecryptionKeyCB& /* waiting_for_decryption_key_cb */) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(config.IsValidConfig());
   DCHECK(!output_cb.is_null());
@@ -240,8 +252,6 @@ void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
     bound_init_cb.Run(false);
     return;
   }
-
-  FFmpegGlue::InitializeFFmpeg();
 
   if (!ConfigureDecoder(config, low_delay)) {
     bound_init_cb.Run(false);
@@ -255,7 +265,7 @@ void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
   bound_init_cb.Run(true);
 }
 
-void FFmpegVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void FFmpegVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                 const DecodeCB& decode_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(buffer.get());
@@ -294,7 +304,7 @@ void FFmpegVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   // (any state) -> kNormal:
   //     Any time Reset() is called.
 
-  if (!FFmpegDecode(buffer)) {
+  if (!FFmpegDecode(*buffer)) {
     state_ = kError;
     decode_cb_bound.Run(DecodeStatus::DECODE_ERROR);
     return;
@@ -324,28 +334,23 @@ FFmpegVideoDecoder::~FFmpegVideoDecoder() {
     ReleaseFFmpegResources();
 }
 
-bool FFmpegVideoDecoder::FFmpegDecode(
-    const scoped_refptr<DecoderBuffer>& buffer) {
+bool FFmpegVideoDecoder::FFmpegDecode(const DecoderBuffer& buffer) {
   // Create a packet for input data.
   // Due to FFmpeg API changes we no longer have const read-only pointers.
   AVPacket packet;
   av_init_packet(&packet);
-  if (buffer->end_of_stream()) {
+  if (buffer.end_of_stream()) {
     packet.data = NULL;
     packet.size = 0;
   } else {
-    packet.data = const_cast<uint8_t*>(buffer->data());
-    packet.size = buffer->data_size();
+    packet.data = const_cast<uint8_t*>(buffer.data());
+    packet.size = buffer.data_size();
 
-    // Starting in M60, the decoder generates an error if an empty buffer is
-    // provided. Since we're not at EOS and there is no data available in the
-    // current buffer, simply return and let the caller provide more data.
-    // crbug.com/663438 has more context on 0-byte buffers.
-    if (!packet.size)
-      return true;
+    DCHECK(packet.data);
+    DCHECK_GT(packet.size, 0);
 
     // Let FFmpeg handle presentation timestamp reordering.
-    codec_context_->reordered_opaque = buffer->timestamp().InMicroseconds();
+    codec_context_->reordered_opaque = buffer.timestamp().InMicroseconds();
   }
 
   switch (decoding_loop_->DecodePacket(
@@ -354,7 +359,7 @@ bool FFmpegVideoDecoder::FFmpegDecode(
     case FFmpegDecodingLoop::DecodeStatus::kSendPacketFailed:
       MEDIA_LOG(ERROR, media_log_)
           << "Failed to send video packet for decoding: "
-          << buffer->AsHumanReadableString();
+          << buffer.AsHumanReadableString();
       return false;
     case FFmpegDecodingLoop::DecodeStatus::kFrameProcessingFailed:
       // OnNewFrame() should have already issued a MEDIA_LOG for this.
@@ -363,7 +368,7 @@ bool FFmpegVideoDecoder::FFmpegDecode(
       MEDIA_LOG(DEBUG, media_log_)
           << GetDisplayName() << " failed to decode a video frame: "
           << AVErrorToString(decoding_loop_->last_averror_code()) << ", at "
-          << buffer->AsHumanReadableString();
+          << buffer.AsHumanReadableString();
       return false;
     case FFmpegDecodingLoop::DecodeStatus::kOkay:
       break;

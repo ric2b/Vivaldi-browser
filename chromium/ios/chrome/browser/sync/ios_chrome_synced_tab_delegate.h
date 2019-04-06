@@ -22,10 +22,10 @@ class IOSChromeSyncedTabDelegate
   ~IOSChromeSyncedTabDelegate() override;
 
   // SyncedTabDelegate:
-  SessionID::id_type GetWindowId() const override;
-  SessionID::id_type GetSessionId() const override;
+  SessionID GetWindowId() const override;
+  SessionID GetSessionId() const override;
   bool IsBeingDestroyed() const override;
-  SessionID::id_type GetSourceTabID() const override;
+  SessionID GetSourceTabID() const override;
   std::string GetExtensionAppId() const override;
   bool IsInitialBlankNavigation() const override;
   int GetCurrentEntryIndex() const override;
@@ -40,8 +40,6 @@ class IOSChromeSyncedTabDelegate
   const std::vector<std::unique_ptr<const sessions::SerializedNavigationEntry>>*
   GetBlockedNavigations() const override;
   bool IsPlaceholderTab() const override;
-  int GetSyncId() const override;
-  void SetSyncId(int sync_id) override;
   bool ShouldSync(sync_sessions::SyncSessionsClient* sessions_client) override;
 
  private:
@@ -49,7 +47,6 @@ class IOSChromeSyncedTabDelegate
   friend class web::WebStateUserData<IOSChromeSyncedTabDelegate>;
 
   web::WebState* web_state_;
-  int sync_session_id_;
 
   DISALLOW_COPY_AND_ASSIGN(IOSChromeSyncedTabDelegate);
 };

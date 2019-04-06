@@ -16,12 +16,13 @@
 #include "build/build_config.h"
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
+#include "media/base/video_codecs.h"
 #include "media/formats/mp4/mp4_stream_parser.h"
 #include "media/formats/mpeg/adts_stream_parser.h"
 #include "media/formats/mpeg/mpeg1_audio_stream_parser.h"
 #include "media/formats/webm/webm_stream_parser.h"
-#include "media/media_features.h"
-#include "third_party/libaom/av1_features.h"
+#include "media/media_buildflags.h"
+#include "third_party/libaom/av1_buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "media/base/android/media_codec_util.h"
@@ -62,7 +63,9 @@ struct CodecInfo {
     HISTOGRAM_DOLBYVISION,
     HISTOGRAM_FLAC,
     HISTOGRAM_AV1,
-    HISTOGRAM_MAX = HISTOGRAM_AV1  // Must be equal to largest logged entry.
+    HISTOGRAM_MPEG_H_AUDIO,
+    HISTOGRAM_MAX =
+        HISTOGRAM_MPEG_H_AUDIO  // Must be equal to largest logged entry.
   };
 
   const char* pattern;
@@ -93,9 +96,8 @@ static const CodecInfo kOpusCodecInfo = {"opus", CodecInfo::AUDIO, nullptr,
                                          CodecInfo::HISTOGRAM_OPUS};
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
-// TODO(dalecurtis): This is not the correct final string. Fix before enabling
-// by default. http://crbug.com/784607
-static const CodecInfo kAV1CodecInfo = {"av1", CodecInfo::VIDEO, nullptr,
+// Note: Validation of the codec string is handled by the caller.
+static const CodecInfo kAV1CodecInfo = {"av01.*", CodecInfo::VIDEO, nullptr,
                                         CodecInfo::HISTOGRAM_AV1};
 #endif
 
@@ -209,6 +211,11 @@ static const CodecInfo kEAC3CodecInfo3 = {"mp4a.A6", CodecInfo::AUDIO, nullptr,
                                           CodecInfo::HISTOGRAM_EAC3};
 #endif  // BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
 
+#if BUILDFLAG(ENABLE_MPEG_H_AUDIO_DEMUXING)
+static const CodecInfo kMpegHAudioCodecInfo = {
+    "mhm1.*", CodecInfo::AUDIO, nullptr, CodecInfo::HISTOGRAM_MPEG_H_AUDIO};
+#endif
+
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 static const CodecInfo kMP3CodecInfo = {nullptr, CodecInfo::AUDIO, nullptr,
@@ -220,15 +227,9 @@ static StreamParser* BuildMP3Parser(const std::vector<std::string>& codecs,
   return new MPEG1AudioStreamParser();
 }
 
-bool CheckIfMseFlacInIsobmffEnabled(const std::string& codec_id,
-                                    MediaLog* media_log) {
-  return base::FeatureList::IsEnabled(kMseFlacInIsobmff);
-}
-
 static const CodecInfo kMPEG4VP09CodecInfo = {
     "vp09.*", CodecInfo::VIDEO, nullptr, CodecInfo::HISTOGRAM_VP9};
-static const CodecInfo kMPEG4FLACCodecInfo = {"flac", CodecInfo::AUDIO,
-                                              &CheckIfMseFlacInIsobmffEnabled,
+static const CodecInfo kMPEG4FLACCodecInfo = {"flac", CodecInfo::AUDIO, nullptr,
                                               CodecInfo::HISTOGRAM_FLAC};
 
 static const CodecInfo* const kVideoMP4Codecs[] = {&kMPEG4FLACCodecInfo,
@@ -250,6 +251,9 @@ static const CodecInfo* const kVideoMP4Codecs[] = {&kMPEG4FLACCodecInfo,
 #endif
                                                    &kMPEG4AACCodecInfo,
                                                    &kMPEG2AACLCCodecInfo,
+#if BUILDFLAG(ENABLE_MPEG_H_AUDIO_DEMUXING)
+                                                   &kMpegHAudioCodecInfo,
+#endif
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 #if BUILDFLAG(ENABLE_AV1_DECODER)
                                                    &kAV1CodecInfo,
@@ -260,7 +264,9 @@ static const CodecInfo* const kAudioMP4Codecs[] = {&kMPEG4FLACCodecInfo,
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
                                                    &kMPEG4AACCodecInfo,
                                                    &kMPEG2AACLCCodecInfo,
-
+#if BUILDFLAG(ENABLE_MPEG_H_AUDIO_DEMUXING)
+                                                   &kMpegHAudioCodecInfo,
+#endif
 #if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
                                                    &kAC3CodecInfo1,
                                                    &kAC3CodecInfo2,
@@ -397,12 +403,6 @@ static bool VerifyCodec(const CodecInfo* codec_info,
   switch (codec_info->type) {
     case CodecInfo::AUDIO:
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(PLATFORM_MEDIA_MP3)
-      if (codec_info->tag == CodecInfo::HISTOGRAM_MP3) {
-        if (!IsPlatformAudioDecoderAvailable(kCodecMP3))
-          return false;
-      }
-#endif
       if (codec_info->tag == CodecInfo::HISTOGRAM_MPEG2AAC ||
           codec_info->tag == CodecInfo::HISTOGRAM_MPEG4AAC) {
         if (!IsPlatformAudioDecoderAvailable(kCodecAAC))

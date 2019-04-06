@@ -6,9 +6,7 @@
 #include <vector>
 
 #include "apps/test/app_window_waiter.h"
-#include "ash/shell.h"
-#include "ash/wallpaper/wallpaper_controller.h"
-#include "ash/wallpaper/wallpaper_controller_observer.h"
+#include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
@@ -46,6 +44,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/kiosk_app_menu_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -76,8 +75,12 @@
 #include "google_apis/gaia/gaia_switches.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "media/audio/mock_audio_manager.h"
+#include "media/audio/sounds/audio_stream_handler.h"
+#include "media/audio/sounds/sounds_manager.h"
 #include "media/audio/test_audio_thread.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/audio/public/cpp/fake_system_info.h"
 #include "ui/aura/window.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/keyboard/keyboard_switches.h"
@@ -259,6 +262,25 @@ void SetPlatformVersion(const std::string& platform_version) {
   base::SysInfo::SetChromeOSVersionInfoForTest(lsb_release, base::Time::Now());
 }
 
+class KioskSessionInitializedWaiter : public KioskAppManagerObserver {
+ public:
+  KioskSessionInitializedWaiter() : scoped_observer_(this) {
+    scoped_observer_.Add(KioskAppManager::Get());
+  }
+  ~KioskSessionInitializedWaiter() override = default;
+
+  void Wait() { run_loop_.Run(); }
+
+  // KioskAppManagerObserver:
+  void OnKioskSessionInitialized() override { run_loop_.Quit(); }
+
+ private:
+  ScopedObserver<KioskAppManager, KioskAppManagerObserver> scoped_observer_;
+  base::RunLoop run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(KioskSessionInitializedWaiter);
+};
+
 // Helper functions for CanConfigureNetwork mock.
 class ScopedCanConfigureNetwork {
  public:
@@ -347,7 +369,7 @@ class KioskFakeDiskMountManager : public file_manager::FakeDiskMountManager {
 
   void MountUsbStick() {
     DCHECK(!usb_mount_path_.empty());
-    MountPath(usb_mount_path_, "", "", chromeos::MOUNT_TYPE_DEVICE,
+    MountPath(usb_mount_path_, "", "", {}, chromeos::MOUNT_TYPE_DEVICE,
               chromeos::MOUNT_ACCESS_MODE_READ_ONLY);
   }
 
@@ -629,10 +651,7 @@ class KioskTest : public OobeBaseTest {
         "launchData.isKioskSession = true", false);
 
     // Wait for the Kiosk App to launch.
-    content::WindowedNotificationObserver(
-        chrome::NOTIFICATION_KIOSK_APP_LAUNCHED,
-        content::NotificationService::AllSources())
-        .Wait();
+    KioskSessionInitializedWaiter().Wait();
 
     // Default profile switches to app profile after app is launched.
     Profile* app_profile = ProfileManager::GetPrimaryUserProfile();
@@ -672,7 +691,7 @@ class KioskTest : public OobeBaseTest {
 
     // Wait until the app terminates if it is still running.
     if (!app_window_registry->GetAppWindowsForApp(test_app_id_).empty())
-      content::RunMessageLoop();
+      RunUntilBrowserProcessQuits();
 
     // Check that the app had been informed that it is running in a kiosk
     // session.
@@ -813,11 +832,12 @@ IN_PROC_BROWSER_TEST_F(KioskTest, InstallAndLaunchApp) {
   EXPECT_EQ(extensions::Manifest::EXTERNAL_PREF, GetInstalledAppLocation());
 }
 
-IN_PROC_BROWSER_TEST_F(KioskTest, ZoomSupport) {
+// Flaky crash failures; see https://crbug.com/856393.
+IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_ZoomSupport) {
   ExtensionTestMessageListener app_window_loaded_listener("appWindowLoaded",
                                                           false);
   StartAppLaunchFromLoginScreen(SimulateNetworkOnlineClosure());
-  app_window_loaded_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(app_window_loaded_listener.WaitUntilSatisfied());
 
   Profile* app_profile = ProfileManager::GetPrimaryUserProfile();
   ASSERT_TRUE(app_profile);
@@ -900,10 +920,12 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppNetworkDown) {
   RunAppLaunchNetworkDownTest();
 }
 
-IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppWithNetworkConfigAccelerator) {
+// Times out in MSAN and DBG: https://crbug.com/811379
+IN_PROC_BROWSER_TEST_F(KioskTest,
+                       DISABLED_LaunchAppWithNetworkConfigAccelerator) {
   ScopedCanConfigureNetwork can_configure_network(true, false);
 
-  // Block app loading until the network screen is shown.
+  // Block app loading until the welcome screen is shown.
   AppLaunchController::SetBlockAppLaunchForTesting(true);
 
   // Start app launch and wait for network connectivity timeout.
@@ -920,7 +942,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppWithNetworkConfigAccelerator) {
   ASSERT_TRUE(GetAppLaunchController()->showing_network_dialog());
 
   // Continue button should be visible since we are online.
-  JsExpect("$('continue-network-config-btn').hidden == false");
+  JsExpect("$('error-message-md-continue-button').hidden == false");
 
   // Let app launching resume.
   AppLaunchController::SetBlockAppLaunchForTesting(false);
@@ -930,7 +952,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppWithNetworkConfigAccelerator) {
       GetLoginUI()->GetWebContents(),
       "(function() {"
       "var e = new Event('click');"
-      "$('continue-network-config-btn').dispatchEvent(e);"
+      "$('error-message-md-continue-button').dispatchEvent(e);"
       "})();"));
 
   WaitForAppLaunchSuccess();
@@ -1030,7 +1052,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, AutolaunchWarningCancel) {
 
   // Start login screen after configuring auto launch app since the warning
   // is triggered when switching to login screen.
-  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_NETWORK);
+  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_WELCOME);
   ReloadAutolaunchKioskApps();
   EXPECT_FALSE(KioskAppManager::Get()->GetAutoLaunchApp().empty());
   EXPECT_FALSE(KioskAppManager::Get()->IsAutoLaunchEnabled());
@@ -1063,7 +1085,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, AutolaunchWarningConfirm) {
 
   // Start login screen after configuring auto launch app since the warning
   // is triggered when switching to login screen.
-  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_NETWORK);
+  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_WELCOME);
   ReloadAutolaunchKioskApps();
   EXPECT_FALSE(KioskAppManager::Get()->GetAutoLaunchApp().empty());
   EXPECT_FALSE(KioskAppManager::Get()->IsAutoLaunchEnabled());
@@ -1256,7 +1278,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, MAYBE_NoConsumerAutoLaunchWhenUntrusted) {
   chromeos::WizardController* wizard_controller =
       chromeos::WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
-  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_NETWORK);
+  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_WELCOME);
   ReloadAutolaunchKioskApps();
   wizard_controller->SkipToLoginForTesting(LoginScreenContext());
   content::WindowedNotificationObserver(
@@ -1392,7 +1414,7 @@ class KioskUpdateTest : public KioskTest {
 
   void SetupFakeDiskMountManagerMountPath(const std::string& mount_path) {
     base::FilePath test_data_dir;
-    PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+    base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
     test_data_dir = test_data_dir.AppendASCII(mount_path);
     fake_disk_mount_manager_->set_usb_mount_path(test_data_dir.value());
   }
@@ -1892,13 +1914,15 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PreserveLocalData) {
 //      compliant.
 //   3. Platform version changed and the new app is installed because it is
 //      compliant now.
+// Flaky tests - crbug.com/859715
 IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
-                       PRE_PRE_IncompliantPlatformDelayInstall) {
+                       DISABLED_PRE_PRE_IncompliantPlatformDelayInstall) {
   PreCacheAndLaunchApp(kTestOfflineEnabledKioskApp, "1.0.0",
                        std::string(kTestOfflineEnabledKioskApp) + "_v1.crx");
 }
 
-IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_IncompliantPlatformDelayInstall) {
+// Flaky tests - crbug.com/859715
+IN_PROC_BROWSER_TEST_F(KioskUpdateTest, DISABLED_PRE_IncompliantPlatformDelayInstall) {
   SetPlatformVersion("1233.0.0");
 
   set_test_app_id(kTestOfflineEnabledKioskApp);
@@ -1919,7 +1943,8 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_IncompliantPlatformDelayInstall) {
   EXPECT_TRUE(PrimaryAppUpdateIsPending());
 }
 
-IN_PROC_BROWSER_TEST_F(KioskUpdateTest, IncompliantPlatformDelayInstall) {
+// Flaky tests - crbug.com/859715
+IN_PROC_BROWSER_TEST_F(KioskUpdateTest, DISABLED_IncompliantPlatformDelayInstall) {
   SetPlatformVersion("1234.0.0");
 
   set_test_app_id(kTestOfflineEnabledKioskApp);
@@ -2202,11 +2227,7 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, EnterpriseKioskApp) {
   PrepareAppLaunch();
   LaunchApp(kTestEnterpriseKioskApp, false);
 
-  // Wait for the Kiosk App to launch.
-  content::WindowedNotificationObserver(
-      chrome::NOTIFICATION_KIOSK_APP_LAUNCHED,
-      content::NotificationService::AllSources())
-      .Wait();
+  KioskSessionInitializedWaiter().Wait();
 
   // Check installer status.
   EXPECT_EQ(chromeos::KioskAppLaunchError::NONE,
@@ -2252,7 +2273,7 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, PrivateStore) {
 
   // |private_server| serves crx from test data dir.
   base::FilePath test_data_dir;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
   private_server.ServeFilesFromDirectory(test_data_dir);
   ASSERT_TRUE(private_server.InitializeAndListen());
 
@@ -2284,15 +2305,75 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, PrivateStore) {
   EXPECT_EQ(extensions::Manifest::EXTERNAL_POLICY, GetInstalledAppLocation());
 }
 
+// A custom SoundsManagerTestImpl implements Initialize and Play only.
+// The difference with media::SoundsManagerImpl is AudioStreamHandler is
+// only initialized upon Play is called, so the most recent AudioManager
+// instance could be used, to make sure of using MockAudioManager to play
+// bundled sounds.
+// It's not a nested class under KioskVirtualKeyboardTest because forward
+// declaration of a nested class is not possible.
+// TODO(crbug.com/805319): remove this fake impl for test.
+class KioskVirtualKeyboardTestSoundsManagerTestImpl
+    : public media::SoundsManager {
+ public:
+  KioskVirtualKeyboardTestSoundsManagerTestImpl() {}
+
+  bool Initialize(SoundKey key, const base::StringPiece& data) override {
+    sound_data_[key] = data.as_string();
+    return true;
+  }
+
+  bool Play(SoundKey key) override {
+    auto iter = sound_data_.find(key);
+    if (iter == sound_data_.end()) {
+      LOG(WARNING) << "Playing non-existent key = " << key;
+      return false;
+    }
+    auto handler = std::make_unique<media::AudioStreamHandler>(iter->second);
+    if (!handler->IsInitialized()) {
+      LOG(WARNING) << "Can't initialize AudioStreamHandler for key = " << key;
+      return false;
+    }
+    return handler->Play();
+  }
+
+  bool Stop(SoundKey key) override {
+    NOTIMPLEMENTED();
+    return false;
+  }
+
+  base::TimeDelta GetDuration(SoundKey key) override {
+    NOTIMPLEMENTED();
+    return base::TimeDelta();
+  }
+
+ private:
+  std::map<SoundKey, std::string> sound_data_;
+
+  DISALLOW_COPY_AND_ASSIGN(KioskVirtualKeyboardTestSoundsManagerTestImpl);
+};
+
 // Specialized test fixture for testing kiosk mode where virtual keyboard is
 // enabled.
-class KioskVirtualKeyboardTest : public KioskTest {
+class KioskVirtualKeyboardTest : public KioskTest,
+                                 public audio::FakeSystemInfo {
  public:
-  KioskVirtualKeyboardTest() {}
-  ~KioskVirtualKeyboardTest() override = default;
+  KioskVirtualKeyboardTest() {
+    audio::FakeSystemInfo::OverrideGlobalBinderForAudioService(this);
+  }
+
+  ~KioskVirtualKeyboardTest() override {
+    audio::FakeSystemInfo::ClearGlobalBinderForAudioService();
+  }
 
  protected:
-  // KioskTest overrides:
+  // KioskVirtualKeyboardTest overrides:
+  void SetUp() override {
+    media::SoundsManager::InitializeForTesting(
+        new KioskVirtualKeyboardTestSoundsManagerTestImpl());
+    KioskTest::SetUp();
+  }
+
   void SetUpCommandLine(base::CommandLine* command_line) override {
     KioskTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(
@@ -2301,7 +2382,14 @@ class KioskVirtualKeyboardTest : public KioskTest {
     command_line->AppendSwitch(keyboard::switches::kEnableVirtualKeyboard);
   }
 
+  // audio::FakeSystemInfo override.
+  void HasInputDevices(HasInputDevicesCallback callback) override {
+    std::move(callback).Run(true);
+  }
+
   // Use class variable for sane lifetime.
+  // TODO(https://crbug.com/812170): Remove it when media::AudioSystem becomes
+  // service-based.
   std::unique_ptr<media::MockAudioManager> mock_audio_manager_;
 
  private:
@@ -2323,7 +2411,7 @@ IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, RestrictFeatures) {
 
   extensions::ResultCatcher catcher;
   StartAppLaunchFromLoginScreen(SimulateNetworkOnlineClosure());
-  ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
 
   // Shutdown should be done in the same thread, thus not in the destructor.
   mock_audio_manager_->Shutdown();
@@ -2332,19 +2420,20 @@ IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, RestrictFeatures) {
 // Specialized test fixture for testing kiosk mode on the
 // hidden WebUI initialization flow for slow hardware.
 class KioskHiddenWebUITest : public KioskTest,
-                             public ash::WallpaperControllerObserver {
+                             public ash::mojom::WallpaperObserver {
  public:
-  KioskHiddenWebUITest() : wallpaper_loaded_(false) {}
+  KioskHiddenWebUITest() : wallpaper_loaded_(false), observer_binding_(this) {}
 
   void SetUpOnMainThread() override {
     LoginDisplayHostWebUI::DisableRestrictiveProxyCheckForTest();
 
     KioskTest::SetUpOnMainThread();
-    ash::Shell::Get()->wallpaper_controller()->AddObserver(this);
+    ash::mojom::WallpaperObserverAssociatedPtrInfo ptr_info;
+    observer_binding_.Bind(mojo::MakeRequest(&ptr_info));
+    WallpaperControllerClient::Get()->AddObserver(std::move(ptr_info));
   }
 
   void TearDownOnMainThread() override {
-    ash::Shell::Get()->wallpaper_controller()->RemoveObserver(this);
     KioskTest::TearDownOnMainThread();
   }
 
@@ -2357,17 +2446,25 @@ class KioskHiddenWebUITest : public KioskTest,
 
   bool wallpaper_loaded() const { return wallpaper_loaded_; }
 
-  // ash::WallpaperControllerObserver overrides:
-  void OnWallpaperDataChanged() override {
+  // ash::mojom::WallpaperObserver:
+  void OnWallpaperChanged(uint32_t image_id) override {
     wallpaper_loaded_ = true;
     if (runner_.get())
       runner_->Quit();
   }
 
+  void OnWallpaperColorsChanged(
+      const std::vector<SkColor>& prominent_colors) override {}
+
+  void OnWallpaperBlurChanged(bool blurred) override {}
+
   bool wallpaper_loaded_;
   scoped_refptr<content::MessageLoopRunner> runner_;
 
  private:
+  // The binding this instance uses to implement ash::mojom::WallpaperObserver.
+  mojo::AssociatedBinding<ash::mojom::WallpaperObserver> observer_binding_;
+
   DISALLOW_COPY_AND_ASSIGN(KioskHiddenWebUITest);
 };
 
@@ -2385,7 +2482,7 @@ IN_PROC_BROWSER_TEST_F(KioskHiddenWebUITest, AutolaunchWarning) {
 
   // Start login screen after configuring auto launch app since the warning
   // is triggered when switching to login screen.
-  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_NETWORK);
+  wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_WELCOME);
   ReloadAutolaunchKioskApps();
   wizard_controller->SkipToLoginForTesting(LoginScreenContext());
 

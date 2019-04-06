@@ -1,29 +1,26 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.appmenu;
 
 import android.content.Context;
-import android.content.res.Resources;
+import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.LinearLayout;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.widget.TintedImageButton;
 
 /**
  * A {@link LinearLayout} that displays a horizontal row of icons for page actions.
  */
-public class AppMenuIconRowFooter
-        extends LinearLayout implements View.OnClickListener, View.OnLongClickListener {
+public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickListener {
     private ChromeActivity mActivity;
     private AppMenu mAppMenu;
 
@@ -40,25 +37,21 @@ public class AppMenuIconRowFooter
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
+
         mForwardButton = (TintedImageButton) findViewById(R.id.forward_menu_id);
         mForwardButton.setOnClickListener(this);
-        mForwardButton.setOnLongClickListener(this);
 
         mBookmarkButton = (TintedImageButton) findViewById(R.id.bookmark_this_page_id);
         mBookmarkButton.setOnClickListener(this);
-        mBookmarkButton.setOnLongClickListener(this);
 
         mDownloadButton = (TintedImageButton) findViewById(R.id.offline_page_id);
         mDownloadButton.setOnClickListener(this);
-        mDownloadButton.setOnLongClickListener(this);
 
         mPageInfoButton = (TintedImageButton) findViewById(R.id.info_menu_id);
         mPageInfoButton.setOnClickListener(this);
-        mPageInfoButton.setOnLongClickListener(this);
 
         mReloadButton = (TintedImageButton) findViewById(R.id.reload_menu_id);
         mReloadButton.setOnClickListener(this);
-        mReloadButton.setOnLongClickListener(this);
     }
 
     /**
@@ -90,30 +83,6 @@ public class AppMenuIconRowFooter
         mAppMenu.dismiss();
     }
 
-    @Override
-    public boolean onLongClick(View v) {
-        String description = null;
-        Context context = getContext();
-        Resources resources = context.getResources();
-        final int itemId = v.getId();
-
-        if (itemId == R.id.forward_menu_id) {
-            description = resources.getString(R.string.menu_forward);
-        } else if (itemId == R.id.bookmark_this_page_id) {
-            description = resources.getString(R.string.menu_bookmark);
-        } else if (itemId == R.id.offline_page_id) {
-            description = resources.getString(R.string.menu_download);
-        } else if (itemId == R.id.info_menu_id) {
-            description = resources.getString(R.string.menu_page_info);
-        } else if (itemId == R.id.reload_menu_id) {
-            description = (mReloadButton.getDrawable().getLevel()
-                                  == resources.getInteger(R.integer.reload_button_level_reload))
-                    ? resources.getString(R.string.menu_refresh)
-                    : resources.getString(R.string.menu_stop_refresh);
-        }
-        return AccessibilityUtil.showAccessibilityToast(context, v, description);
-    }
-
     /**
      * Called when the current tab's load state  has changed.
      * @param isLoading Whether the tab is currently loading.
@@ -133,32 +102,12 @@ public class AppMenuIconRowFooter
         if (currentTab.getBookmarkId() != Tab.INVALID_BOOKMARK_ID) {
             mBookmarkButton.setImageResource(R.drawable.btn_star_filled);
             mBookmarkButton.setContentDescription(mActivity.getString(R.string.edit_bookmark));
-            mBookmarkButton.setTint(ApiCompatibilityUtils.getColorStateList(
-                    getResources(), R.color.blue_mode_tint));
+            mBookmarkButton.setTint(
+                    AppCompatResources.getColorStateList(getContext(), R.color.blue_mode_tint));
         } else {
             mBookmarkButton.setImageResource(R.drawable.btn_star);
             mBookmarkButton.setContentDescription(
                     mActivity.getString(R.string.accessibility_menu_bookmark));
         }
-    }
-
-    TintedImageButton getForwardButtonForTests() {
-        return mForwardButton;
-    }
-
-    TintedImageButton getBookmarkButtonForTests() {
-        return mBookmarkButton;
-    }
-
-    TintedImageButton getDownloadButtonForTests() {
-        return mDownloadButton;
-    }
-
-    TintedImageButton getPageInfoButtonForTests() {
-        return mPageInfoButton;
-    }
-
-    TintedImageButton getReloadButtonForTests() {
-        return mReloadButton;
     }
 }

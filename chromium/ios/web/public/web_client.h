@@ -77,10 +77,6 @@ class WebClient {
   // schemes early on in the startup sequence.
   virtual void AddAdditionalSchemes(Schemes* schemes) const {}
 
-  // Returns the languages used in the Accept-Languages HTTP header.
-  // Used to decide URL formatting.
-  virtual std::string GetAcceptLangs(BrowserState* state) const;
-
   // Returns the embedding application locale string.
   virtual std::string GetApplicationLocale() const;
 
@@ -124,6 +120,16 @@ class WebClient {
 
   // Gives the embedder a chance to provide the JavaScript to be injected into
   // the web view as early as possible. Result must not be nil.
+  // The script returned will be injected in all frames (main and subframes).
+  //
+  // TODO(crbug.com/703964): Change the return value to NSArray<NSString*> to
+  // improve performance.
+  virtual NSString* GetDocumentStartScriptForAllFrames(
+      BrowserState* browser_state) const;
+
+  // Gives the embedder a chance to provide the JavaScript to be injected into
+  // the web view as early as possible. Result must not be nil.
+  // The script returned will only be injected in the main frame.
   //
   // TODO(crbug.com/703964): Change the return value to NSArray<NSString*> to
   // improve performance.
@@ -162,6 +168,15 @@ class WebClient {
       const GURL& request_url,
       bool overridable,
       const base::Callback<void(bool)>& callback);
+
+  // Returns the information to display when a navigation error occurs.
+  // |error| and |error_html| are always valid pointers. Embedder may set
+  // |error_html| to an HTML page containing the details of the error and maybe
+  // links to more info.
+  virtual void PrepareErrorPage(NSError* error,
+                                bool is_post,
+                                bool is_off_the_record,
+                                NSString** error_html);
 
   // Allows upper layers to inject experimental flags to the web layer.
   // TODO(crbug.com/734150): Clean up this flag after experiment. If need for a

@@ -9,7 +9,7 @@
 #include "base/run_loop.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_task_environment.h"
-#include "mojo/common/data_pipe_drainer.h"
+#include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "net/base/net_errors.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -20,7 +20,7 @@ namespace storage {
 
 namespace {
 
-class DataPipeReader : public mojo::common::DataPipeDrainer::Client {
+class DataPipeReader : public mojo::DataPipeDrainer::Client {
  public:
   DataPipeReader(std::string* data_out, base::OnceClosure done_callback)
       : data_out_(data_out), done_callback_(std::move(done_callback)) {}
@@ -68,16 +68,16 @@ class BlobImplTest : public testing::Test {
   std::unique_ptr<BlobDataHandle> CreateBlobFromString(
       const std::string& uuid,
       const std::string& contents) {
-    BlobDataBuilder builder(uuid);
-    builder.set_content_type("text/plain");
-    builder.AppendData(contents);
-    return context_->AddFinishedBlob(builder);
+    auto builder = std::make_unique<BlobDataBuilder>(uuid);
+    builder->set_content_type("text/plain");
+    builder->AppendData(contents);
+    return context_->AddFinishedBlob(std::move(builder));
   }
 
   std::string UUIDFromBlob(blink::mojom::Blob* blob) {
     base::RunLoop loop;
     std::string received_uuid;
-    blob->GetInternalUUID(base::Bind(
+    blob->GetInternalUUID(base::BindOnce(
         [](base::Closure quit_closure, std::string* uuid_out,
            const std::string& uuid) {
           *uuid_out = uuid;
@@ -92,7 +92,7 @@ class BlobImplTest : public testing::Test {
     base::RunLoop loop;
     std::string data;
     DataPipeReader reader(&data, loop.QuitClosure());
-    mojo::common::DataPipeDrainer drainer(&reader, std::move(pipe));
+    mojo::DataPipeDrainer drainer(&reader, std::move(pipe));
     loop.Run();
     return data;
   }

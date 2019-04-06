@@ -13,16 +13,23 @@ import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
 import("//components/nacl/features.gni")
 
 if (current_cpu == "x86" || current_cpu == "x64") {
-  import("//media/cdm/ppapi/cdm_paths.gni")
+  import("//media/cdm/library_cdm/cdm_paths.gni")
 }
 
-if (is_vivaldi) {
+if (defined(is_vivaldi) && is_vivaldi) {
   import("//vivaldi/gn/config/product.gni")
 }
 
+declare_args() {
+  # Enables checks that ensure the packages are installable on all supported
+  # distributions.
+  enable_distro_version_check = true
+}
+
+
 assert(is_linux)
 
-if (is_vivaldi) {
+if (defined(is_vivaldi) && is_vivaldi) {
   packaging_files_executables = [
     "$root_out_dir/vivaldi",
     "$root_out_dir/chrome_sandbox",
@@ -54,10 +61,8 @@ if (enable_nacl) {
 
 # The widevine BUILD.gn only produces shared libraries for x86 and x64
 if (is_chrome_branded && (current_cpu == "x86" || current_cpu == "x64")) {
-  packaging_files_shlibs += [
-    "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
-    "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so",
-  ]
+  packaging_files_shlibs +=
+      [ "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so" ]
 }
 
 if (!libcpp_is_static && use_custom_libcxx) {
@@ -96,7 +101,7 @@ action_foreach("calculate_deb_dependencies") {
     target_cpu,
     "deb_{{source_name_part}}.deps",
   ]
-  if (is_desktop_linux && target_cpu == "x64") {
+  if (is_desktop_linux && target_cpu == "x64" && enable_distro_version_check) {
     args += [ "--distro-check" ]
   }
 }
@@ -140,7 +145,7 @@ action_foreach("calculate_rpm_dependencies") {
     "rpm_{{source_name_part}}.deps",
   ]
   args += rebase_path(packaging_files_shlibs, root_build_dir)
-  if (is_desktop_linux && target_cpu == "x64") {
+  if (is_desktop_linux && target_cpu == "x64" && enable_distro_version_check) {
     args += [ "--distro-check" ]
   }
 }
@@ -159,14 +164,16 @@ action("merge_rpm_dependencies") {
   ]
   args = [
     "rpm_common.deps",
-    rebase_path(additional_deps, root_build_dir),
   ]
+  if (target_cpu == "x64") {
+    args += [ rebase_path(additional_deps, root_build_dir) ]
+  }
   args += rebase_path(get_target_outputs(":calculate_rpm_dependencies"),
                       root_build_dir)
 }
 
 action("strip_chrome_binary") {
-  if (is_vivaldi) {
+  if (defined(is_vivaldi) && is_vivaldi) {
     prog_name = "$root_out_dir/vivaldi"
   } else {
     prog_name = "$root_out_dir/chrome"
@@ -227,7 +234,7 @@ group("linux") {
   ]
 }
 
-if (is_vivaldi) {
+if (defined(is_vivaldi) && is_vivaldi) {
   branding_dir = "//vivaldi/app/resources/theme/vivaldi"
   branding_dir_100 = "//vivaldi/app/resources/theme/default_100_percent/vivaldi"
 } else {
@@ -322,7 +329,7 @@ copy("theme_files") {
       "$branding_dir_100/product_logo_32_dev.png",
     ]
   }
-  if (is_vivaldi) {
+  if (defined(is_vivaldi) && is_vivaldi) {
     sources += [
       "$branding_dir/../$VIVALDI_RELEASE_KIND/linux/product_logo_32.xpm",
       "$branding_dir/../$VIVALDI_RELEASE_KIND/product_logo_128.png",
@@ -391,10 +398,7 @@ group("installer_deps") {
     ]
   }
   if (current_cpu == "x86" || current_cpu == "x64") {
-    public_deps += [
-      "//third_party/widevine/cdm:widevinecdm",
-      "//third_party/widevine/cdm:widevinecdmadapter",
-    ]
+    public_deps += [ "//third_party/widevine/cdm" ]
   }
   if (!is_chromeos) {
     public_deps += [ ":rpm_packaging_files" ]
@@ -435,13 +439,15 @@ template("linux_package") {
       deb_arch = "arm64"
     } else if (current_cpu == "mipsel") {
       deb_arch = "mipsel"
+    } else if (current_cpu == "mips64el") {
+      deb_arch = "mips64el"
     } else {
       assert(false, "Linux installer not configured for this architecture.")
     }
 
     inputs = packaging_files
     version = chrome_version_full
-    if (is_vivaldi) {
+    if (defined(is_vivaldi) && is_vivaldi) {
       package = "vivaldi"
       version = vivaldi_version_full
     } else if (is_chrome_branded) {
@@ -495,13 +501,15 @@ template("linux_package") {
         rpm_arch = "arm64"
       } else if (current_cpu == "mipsel") {
         rpm_arch = "mipsel"
+      } else if (current_cpu == "mips64el") {
+        rpm_arch = "mips64el"
       } else {
         assert(false, "Linux installer not configured for this architecture.")
       }
 
       inputs = packaging_files
       version = chrome_version_full
-      if (is_vivaldi) {
+      if (defined(is_vivaldi) && is_vivaldi) {
         package = "vivaldi"
         version = vivaldi_version_full
       } else if (is_chrome_branded) {

@@ -62,8 +62,7 @@ constexpr size_t kTasksSize = arraysize(kTestTasks);
 class DummyTaskManager : public task_manager::TestTaskManager {
  public:
   DummyTaskManager() {
-    set_timer_for_testing(
-        std::unique_ptr<base::Timer>(new base::MockTimer(false, false)));
+    set_timer_for_testing(std::make_unique<base::MockRepeatingTimer>());
   }
   ~DummyTaskManager() override {}
 
@@ -76,7 +75,7 @@ class DummyTaskManager : public task_manager::TestTaskManager {
     return tasks_.at(task_id)->cpu_percent *
            base::SysInfo::NumberOfProcessors();
   }
-  int64_t GetPhysicalMemoryUsage(TaskId task_id) const override {
+  int64_t GetMemoryFootprintUsage(TaskId task_id) const override {
     return tasks_.at(task_id)->memory_bytes;
   }
   const std::string& GetTaskNameForRappor(TaskId task_id) const override {

@@ -20,7 +20,7 @@ capture the context that rests in the head of an experienced Blink engineer.
 ## General Principles
 
 This section contains guidelines adopted from
-[web-platform-tests documentation](http://web-platform-tests.org/writing-tests/general-guidelines.html)
+[web-platform-tests documentation](https://web-platform-tests.org/writing-tests/general-guidelines.html)
 and
 [WebKit's Wiki page on Writing good test cases](https://trac.webkit.org/wiki/Writing%20Layout%20Tests%20for%20DumpRenderTree),
 with Blink-specific flavoring.
@@ -77,7 +77,7 @@ assess its flakiness. While not foolproof, this approach gives you some
 confidence, and giving up CPU cycles for mental energy is a pretty good trade.
 
 ```bash
-third_party/WebKit/Tools/Scripts/run-webkit-tests path/to/test.html --repeat-each=100
+third_party/blink/tools/run_web_tests.py path/to/test.html --repeat-each=100
 ```
 
 The
@@ -93,7 +93,7 @@ feature being tested.
 `testharness.js` makes a test self-describing when used correctly. Other types
 of tests, such as reference tests and
 [tests with manual fallback](./layout_tests_with_manual_fallback.md),
-[must be carefully designed](http://web-platform-tests.org/writing-tests/manual.html#requirements-for-a-manual-test)
+[must be carefully designed](https://web-platform-tests.org/writing-tests/manual.html#requirements-for-a-manual-test)
 to be self-describing.
 
 ### Minimal
@@ -107,7 +107,7 @@ valid markup (no parsing errors).
 
 Tests should provide as much relevant information as possible when failing.
 `testharness.js` tests should prefer
-[rich assert_ functions](https://github.com/w3c/testharness.js/blob/master/docs/api.md#list-of-assertions)
+[rich assert_ functions](https://web-platform-tests.org/writing-tests/testharness-api.html#list-of-assertions)
 to combining `assert_true()` with a boolean operator. Using appropriate
 `assert_` functions results in better diagnostic output when the assertion
 fails.

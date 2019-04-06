@@ -8,6 +8,7 @@
 #include "ui/views/vivaldi_context_menu_views.h"
 
 #include "base/command_line.h"
+#include "base/message_loop/message_loop.h"
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
@@ -22,18 +23,18 @@
 
 namespace vivaldi {
 VivaldiContextMenu* CreateVivaldiContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const content::ContextMenuParams& params) {
-  return new VivaldiContextMenuViews(render_frame_host, menu_model, params);
+  return new VivaldiContextMenuViews(web_contents, menu_model, params);
 }
 }  // vivialdi
 
 VivaldiContextMenuViews::VivaldiContextMenuViews(
-    content::RenderFrameHost* render_frame_host,
+    content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const content::ContextMenuParams& params)
-    : render_frame_host_(render_frame_host),
+    : web_contents_(web_contents),
       menu_model_(menu_model),
       params_(params) {
   toolkit_delegate_.reset(new ToolkitDelegateViews);
@@ -74,8 +75,7 @@ void VivaldiContextMenuViews::Show() {
   }
   // Enable recursive tasks on the message loop so we can get updates while
   // the context menu is being displayed.
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
+  base::MessageLoop::ScopedNestableTaskAllower allow;
   RunMenuAt(top_level_widget, screen_point, params_.source_type);
 }
 
@@ -84,26 +84,24 @@ views::Widget* VivaldiContextMenuViews::GetTopLevelWidget() {
 }
 
 aura::Window* VivaldiContextMenuViews::GetActiveNativeView() {
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(render_frame_host_);
-  if (!web_contents) {
-    LOG(ERROR) << "VivaldiContextMenuViews::Show, couldn't find WebContents";
-    return NULL;
-  }
-  return web_contents->GetFullscreenRenderWidgetHostView()
-             ? web_contents->GetFullscreenRenderWidgetHostView()
+  return web_contents_->GetFullscreenRenderWidgetHostView()
+             ? web_contents_->GetFullscreenRenderWidgetHostView()
                    ->GetNativeView()
-             : web_contents->GetNativeView();
+             : web_contents_->GetNativeView();
 }
 
 void VivaldiContextMenuViews::SetIcon(const gfx::Image& icon, int id) {
-  menu_view_->SetIcon(*icon.ToImageSkia(), id);
+  if (menu_view_->GetMenuItemByID(id)) {
+    menu_view_->SetIcon(*icon.ToImageSkia(), id);
+  }
 }
 
 void VivaldiContextMenuViews::SetSelectedItem(int id) {
   views::MenuItemView* item = menu_view_->GetMenuItemByID(id);
   if (item && views::MenuController::GetActiveInstance()) {
-    views::MenuController::GetActiveInstance()->VivaldiSelectItem(item);
+    views::MenuController::GetActiveInstance()->SetSelection(
+        item, views::MenuController::SELECTION_OPEN_SUBMENU |
+                  views::MenuController::SELECTION_UPDATE_IMMEDIATELY);
   }
 }
 

@@ -6,6 +6,7 @@ include_rules = [
   "+cc/test/stub_layer_tree_host_client.h",
   "+cc/test/test_task_graph_runner.h",
   "+cc/trees/layer_tree_host.h",
+  "+components/viz/client",
   "+components/viz/common",
   "+components/viz/host",
   "+components/viz/service/frame_sinks",
@@ -13,11 +14,19 @@ include_rules = [
   "+jni",
   "+services/viz/public/interfaces",
   "+skia/ext",
-  "+third_party/WebKit/public/platform/WebCursorInfo.h",
+  "+third_party/blink/public/platform/web_cursor_info.h",
   "+third_party/skia",
   "+ui/base",
   "+ui/compositor/compositor_lock.h",
   "+ui/display",
   "+ui/events",
   "+ui/gfx",
+  "+ui/touch_selection/touch_handle.h",
 ]
+
+specific_include_rules = {
+  ".*test\.(cc|h)": [
+    "+components/viz/service/display_embedder",
+    "+components/viz/test"
+  ]
+}

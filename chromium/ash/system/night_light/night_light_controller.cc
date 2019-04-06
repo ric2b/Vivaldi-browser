@@ -7,9 +7,10 @@
 #include <cmath>
 #include <memory>
 
+#include "ash/display/display_color_manager.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "base/i18n/time_formatting.h"
@@ -21,9 +22,15 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/icu/source/i18n/astro.h"
+#include "ui/aura/env.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/manager/display_configurator.h"
+#include "ui/display/manager/display_manager.h"
+#include "ui/display/types/display_constants.h"
+#include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/linear_animation.h"
 
@@ -105,23 +112,120 @@ int GetTemperatureRange(float temperature) {
   return std::floor(5 * temperature);
 }
 
-// Applies the given |temperature| value by converting it to the corresponding
-// color matrix that will be set on the output display.
-void ApplyTemperatureToCompositors(float temperature) {
+// Returns the color matrix that corresponds to the given |temperature|.
+// If |in_linear_gamma_space| is true, the generated matrix is the one that
+// should be applied after gamma correction, and it corresponds to the
+// non-linear temperature value for the given |temperature|.
+SkMatrix44 MatrixFromTemperature(float temperature,
+                                 bool in_linear_gamma_space) {
+  if (in_linear_gamma_space)
+    temperature = NightLightController::GetNonLinearTemperature(temperature);
+
   SkMatrix44 matrix(SkMatrix44::kIdentity_Constructor);
   if (temperature != 0.0f) {
     const float blue_scale =
         NightLightController::BlueColorScaleFromTemperature(temperature);
     const float green_scale =
-        NightLightController::GreenColorScaleFromTemperature(temperature);
+        NightLightController::GreenColorScaleFromTemperature(
+            temperature, in_linear_gamma_space);
 
     matrix.set(1, 1, green_scale);
     matrix.set(2, 2, blue_scale);
   }
+  return matrix;
+}
 
-  for (auto* controller : RootWindowController::root_window_controllers()) {
-    if (controller->GetHost()->compositor())
-      controller->GetHost()->compositor()->SetDisplayColorMatrix(matrix);
+// Based on the result of setting the hardware CRTC matrix |crtc_matrix_result|,
+// either apply the |night_light_matrix| on the compositor, or reset it to
+// the identity matrix to avoid having double the Night Light effect.
+void UpdateCompositorMatrix(aura::WindowTreeHost* host,
+                            const SkMatrix44& night_light_matrix,
+                            bool crtc_matrix_result) {
+  if (host->compositor()) {
+    host->compositor()->SetDisplayColorMatrix(
+        crtc_matrix_result ? SkMatrix44::I() : night_light_matrix);
+  }
+}
+
+// Attempts setting one of the given color matrices on the display hardware of
+// |display_id| depending on the hardware capability. The matrix
+// |linear_gamma_space_matrix| will be applied if the hardware applies the
+// CTM in the linear gamma space (i.e. after gamma decoding), whereas the
+// matrix |gamma_compressed_matrix| will be applied instead if the hardware
+// applies the CTM in the gamma compressed space (i.e. after degamma
+// encoding).
+// Returns true if the hardware supports this operation and one of the
+// matrices was successfully sent to the GPU.
+bool AttemptSettingHardwareCtm(int64_t display_id,
+                               const SkMatrix44& linear_gamma_space_matrix,
+                               const SkMatrix44& gamma_compressed_matrix) {
+  for (const auto* snapshot :
+       Shell::Get()->display_configurator()->cached_displays()) {
+    if (snapshot->display_id() == display_id &&
+        snapshot->has_color_correction_matrix()) {
+      return Shell::Get()->display_color_manager()->SetDisplayColorMatrix(
+          snapshot, snapshot->color_correction_in_linear_space()
+                        ? linear_gamma_space_matrix
+                        : gamma_compressed_matrix);
+    }
+  }
+
+  return false;
+}
+
+// Applies the given |temperature| to the display associated with the given
+// |host|. This is useful for when we have a host and not a display ID.
+void ApplyTemperatureToHost(aura::WindowTreeHost* host, float temperature) {
+  DCHECK(host);
+  const int64_t display_id = host->GetDisplayId();
+  DCHECK_NE(display_id, display::kInvalidDisplayId);
+  if (display_id == display::kUnifiedDisplayId) {
+    // In Unified Desktop mode, applying the color matrix to either the CRTC or
+    // the compositor of the mirroring (actual) displays is sufficient. If we
+    // apply it to the compositor of the Unified host (since there's no actual
+    // display CRTC for |display::kUnifiedDisplayId|), then we'll end up with
+    // double the temperature.
+    return;
+  }
+
+  const SkMatrix44 linear_gamma_space_matrix =
+      MatrixFromTemperature(temperature, true);
+  const SkMatrix44 gamma_compressed_matrix =
+      MatrixFromTemperature(temperature, false);
+  const bool crtc_result = AttemptSettingHardwareCtm(
+      display_id, linear_gamma_space_matrix, gamma_compressed_matrix);
+  UpdateCompositorMatrix(host, gamma_compressed_matrix, crtc_result);
+}
+
+// Applies the given |temperature| value by converting it to the corresponding
+// color matrix that will be set on the output displays.
+void ApplyTemperatureToAllDisplays(float temperature) {
+  const SkMatrix44 linear_gamma_space_matrix =
+      MatrixFromTemperature(temperature, true);
+  const SkMatrix44 gamma_compressed_matrix =
+      MatrixFromTemperature(temperature, false);
+
+  Shell* shell = Shell::Get();
+  WindowTreeHostManager* wth_manager = shell->window_tree_host_manager();
+  for (int64_t display_id :
+       shell->display_manager()->GetCurrentDisplayIdList()) {
+    DCHECK_NE(display_id, display::kUnifiedDisplayId);
+
+    const bool crtc_result = AttemptSettingHardwareCtm(
+        display_id, linear_gamma_space_matrix, gamma_compressed_matrix);
+
+    aura::Window* root_window =
+        wth_manager->GetRootWindowForDisplayId(display_id);
+    if (!root_window) {
+      // Some displays' hosts may have not being initialized yet. In this case
+      // NightLightController::OnHostInitialized() will take care of those
+      // hosts.
+      continue;
+    }
+
+    auto* host = root_window->GetHost();
+    DCHECK(host);
+    UpdateCompositorMatrix(host, gamma_compressed_matrix, crtc_result);
   }
 }
 
@@ -153,7 +257,7 @@ class ColorTemperatureAnimation : public gfx::LinearAnimation,
       // Animations are disabled. Apply the target temperature directly to the
       // compositors.
       current_temperature_ = target_temperature_;
-      ApplyTemperatureToCompositors(target_temperature_);
+      ApplyTemperatureToAllDisplays(target_temperature_);
       Stop();
       return;
     }
@@ -180,7 +284,7 @@ class ColorTemperatureAnimation : public gfx::LinearAnimation,
       Stop();
     }
 
-    ApplyTemperatureToCompositors(current_temperature_);
+    ApplyTemperatureToAllDisplays(current_temperature_);
   }
 
   float start_temperature_ = 0.0f;
@@ -196,6 +300,7 @@ NightLightController::NightLightController()
       binding_(this) {
   Shell::Get()->session_controller()->AddObserver(this);
   Shell::Get()->window_tree_host_manager()->AddObserver(this);
+  aura::Env::GetInstance()->AddObserver(this);
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
       this);
 }
@@ -203,6 +308,7 @@ NightLightController::NightLightController()
 NightLightController::~NightLightController() {
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
       this);
+  aura::Env::GetInstance()->RemoveObserver(this);
   Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
   Shell::Get()->session_controller()->RemoveObserver(this);
 }
@@ -230,21 +336,19 @@ float NightLightController::BlueColorScaleFromTemperature(float temperature) {
 }
 
 // static
-float NightLightController::GreenColorScaleFromTemperature(float temperature) {
+float NightLightController::GreenColorScaleFromTemperature(
+    float temperature,
+    bool in_linear_space) {
   // If we only tone down the blue scale, the screen will look very green so
   // we also need to tone down the green, but with a less value compared to
   // the blue scale to avoid making things look very red.
-  return 1.0f - 0.4f * temperature;
+  return 1.0f - (in_linear_space ? 0.7f : 0.5f) * temperature;
 }
 
 // static
-float NightLightController::TemperatureFromBlueColorScale(float blue_scale) {
-  return 1.0f - blue_scale;
-}
-
-// static
-float NightLightController::TemperatureFromGreenColorScale(float green_scale) {
-  return 2.5f * (1.0f - green_scale);
+float NightLightController::GetNonLinearTemperature(float temperature) {
+  constexpr float kGammaFactor = 1.0f / 2.2f;
+  return std::pow(temperature, kGammaFactor);
 }
 
 void NightLightController::BindRequest(
@@ -345,11 +449,16 @@ void NightLightController::Toggle() {
 }
 
 void NightLightController::OnDisplayConfigurationChanged() {
-  // Since the color temperature matrix is a per-display output surface
-  // property, then when displays are added, removed, mirrored, extended, or
-  // switched to Unified Mode, we need to apply the current temperature
-  // immediately without animation.
-  ApplyTemperatureToCompositors(GetEnabled() ? GetColorTemperature() : 0.0f);
+  // When display configurations changes, we should re-apply the current
+  // temperature immediately without animation.
+  ApplyTemperatureToAllDisplays(GetEnabled() ? GetColorTemperature() : 0.0f);
+}
+
+void NightLightController::OnHostInitialized(aura::WindowTreeHost* host) {
+  // This newly initialized |host| could be of a newly added display, or of a
+  // newly created mirroring display (either for mirroring or unified). we need
+  // to apply the current temperature immediately without animation.
+  ApplyTemperatureToHost(host, GetEnabled() ? GetColorTemperature() : 0.0f);
 }
 
 void NightLightController::OnActiveUserPrefServiceChanged(
@@ -417,24 +526,24 @@ void NightLightController::StartWatchingPrefsChanges() {
   pref_change_registrar_->Init(active_user_pref_service_);
   pref_change_registrar_->Add(
       prefs::kNightLightEnabled,
-      base::Bind(&NightLightController::OnEnabledPrefChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&NightLightController::OnEnabledPrefChanged,
+                          base::Unretained(this)));
   pref_change_registrar_->Add(
       prefs::kNightLightTemperature,
-      base::Bind(&NightLightController::OnColorTemperaturePrefChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&NightLightController::OnColorTemperaturePrefChanged,
+                          base::Unretained(this)));
   pref_change_registrar_->Add(
       prefs::kNightLightScheduleType,
-      base::Bind(&NightLightController::OnScheduleTypePrefChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&NightLightController::OnScheduleTypePrefChanged,
+                          base::Unretained(this)));
   pref_change_registrar_->Add(
       prefs::kNightLightCustomStartTime,
-      base::Bind(&NightLightController::OnCustomSchedulePrefsChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&NightLightController::OnCustomSchedulePrefsChanged,
+                          base::Unretained(this)));
   pref_change_registrar_->Add(
       prefs::kNightLightCustomEndTime,
-      base::Bind(&NightLightController::OnCustomSchedulePrefsChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&NightLightController::OnCustomSchedulePrefsChanged,
+                          base::Unretained(this)));
 }
 
 void NightLightController::InitFromUserPrefs() {
@@ -470,9 +579,7 @@ void NightLightController::OnScheduleTypePrefChanged() {
   NotifyClientWithScheduleChange();
   Refresh(true /* did_schedule_change */);
 
-  // TODO(https://crbug.com/742517).
-  UMA_HISTOGRAM_ENUMERATION("Ash.NightLight.ScheduleType", GetScheduleType(),
-                            static_cast<int>(ScheduleType::kLast) + 1);
+  UMA_HISTOGRAM_ENUMERATION("Ash.NightLight.ScheduleType", GetScheduleType());
 }
 
 void NightLightController::OnCustomSchedulePrefsChanged() {

@@ -10,19 +10,27 @@
 #include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/options/passphrase_textfield.h"
+#include "chrome/browser/chromeos/ui/passphrase_textfield.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/event.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/widget/widget.h"
 
 namespace chromeos {
+
+namespace {
+
+// Default width of the text field.
+constexpr int kDefaultTextWidth = 200;
+
+}  // namespace
 
 RequestPinView::RequestPinView(const std::string& extension_name,
                                RequestPinView::RequestPinCodeType code_type,
@@ -85,14 +93,6 @@ bool RequestPinView::Accept() {
   return false;
 }
 
-base::string16 RequestPinView::GetWindowTitle() const {
-  return window_title_;
-}
-
-views::View* RequestPinView::GetInitiallyFocusedView() {
-  return textfield_;
-}
-
 bool RequestPinView::IsDialogButtonEnabled(ui::DialogButton button) const {
   switch (button) {
     case ui::DialogButton::DIALOG_BUTTON_CANCEL:
@@ -114,6 +114,24 @@ bool RequestPinView::IsDialogButtonEnabled(ui::DialogButton button) const {
 
   NOTREACHED();
   return true;
+}
+
+views::View* RequestPinView::GetInitiallyFocusedView() {
+  return textfield_;
+}
+
+base::string16 RequestPinView::GetWindowTitle() const {
+  return window_title_;
+}
+
+bool RequestPinView::ShouldShowCloseButton() const {
+  return false;
+}
+
+gfx::Size RequestPinView::CalculatePreferredSize() const {
+  int default_width = views::LayoutProvider::Get()->GetDistanceMetric(
+      DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH);
+  return gfx::Size(default_width, GetHeightForWidth(default_width));
 }
 
 bool RequestPinView::IsLocked() {
@@ -161,8 +179,9 @@ void RequestPinView::UpdateHeaderText() {
 }
 
 void RequestPinView::Init() {
-  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
-      views::TEXT, views::TEXT));
+  const views::LayoutProvider* provider = views::LayoutProvider::Get();
+  SetBorder(views::CreateEmptyBorder(
+      provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT)));
 
   views::GridLayout* layout =
       SetLayoutManager(std::make_unique<views::GridLayout>(this));
@@ -182,8 +201,7 @@ void RequestPinView::Init() {
   layout->AddView(header_label_);
 
   const int related_vertical_spacing =
-      ChromeLayoutProvider::Get()->GetDistanceMetric(
-          views::DISTANCE_RELATED_CONTROL_VERTICAL);
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
   layout->AddPaddingRow(0, related_vertical_spacing);
 
   column_view_set_id++;
@@ -196,7 +214,9 @@ void RequestPinView::Init() {
   textfield_ = new PassphraseTextfield();
   textfield_->set_controller(this);
   textfield_->SetEnabled(true);
-  layout->AddView(textfield_);
+  textfield_->SetAssociatedLabel(header_label_);
+  layout->AddView(textfield_, 1, 1, views::GridLayout::LEADING,
+                  views::GridLayout::FILL, kDefaultTextWidth, 0);
 
   layout->AddPaddingRow(0, related_vertical_spacing);
 
@@ -247,12 +267,15 @@ void RequestPinView::SetErrorMessage(RequestPinErrorType error_type,
     case RequestPinErrorType::NONE:
       if (attempts_left < 0) {
         error_label_->SetVisible(false);
+        textfield_->SetInvalid(false);
         return;
       }
       break;
   }
 
   if (attempts_left >= 0) {
+    if (!error_message.empty())
+      error_message.append(base::ASCIIToUTF16(" "));
     error_message.append(l10n_util::GetStringFUTF16(
         IDS_REQUEST_PIN_DIALOG_ATTEMPTS_LEFT,
         base::ASCIIToUTF16(std::to_string(attempts_left))));
@@ -261,8 +284,9 @@ void RequestPinView::SetErrorMessage(RequestPinErrorType error_type,
   error_label_->SetVisible(true);
   error_label_->SetText(error_message);
   error_label_->SetTooltipText(error_message);
-  error_label_->SetEnabledColor(SK_ColorRED);
+  error_label_->SetEnabledColor(gfx::kGoogleRed600);
   error_label_->SizeToPreferredSize();
+  textfield_->SetInvalid(true);
 }
 
 }  // namespace chromeos

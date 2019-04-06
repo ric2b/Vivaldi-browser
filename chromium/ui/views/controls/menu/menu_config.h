@@ -11,6 +11,9 @@
 
 namespace views {
 
+class MenuController;
+class MenuItemView;
+
 // Layout type information for menu items. Use the instance() method to obtain
 // the MenuConfig for the current platform.
 struct VIEWS_EXPORT MenuConfig {
@@ -18,6 +21,16 @@ struct VIEWS_EXPORT MenuConfig {
   ~MenuConfig();
 
   static const MenuConfig& instance();
+
+  // Helper methods to simplify access to MenuConfig:
+  // Returns the appropriate corner radius for the menu controlled by
+  // |controller|, or the default corner radius if |controller| is nullptr.
+  int CornerRadiusForMenu(const MenuController* controller) const;
+
+  // Returns whether |item_view| should show accelerator text. If so, returns
+  // the text to show.
+  bool ShouldShowAcceleratorText(const MenuItemView* item_view,
+                                 base::string16* text) const;
 
   // Font list used by menus.
   gfx::FontList font_list;
@@ -44,8 +57,18 @@ struct VIEWS_EXPORT MenuConfig {
   int item_no_icon_top_margin;
   int item_no_icon_bottom_margin;
 
-  // Margins between the left of the item and the icon.
-  int item_left_margin;
+  // Minimum dimensions used for entire items. If these are nonzero, they
+  // override the vertical margin constants given above - the item's text and
+  // icon are vertically centered within these heights.
+  int minimum_text_item_height;
+  int minimum_container_item_height;
+  int minimum_menu_width;
+
+  // Horizontal padding between components in a menu item.
+  int item_horizontal_padding;
+
+  // Horizontal padding between components in a touchable menu item.
+  int touchable_item_horizontal_padding;
 
   // Padding between the label and submenu arrow.
   int label_to_arrow_padding;
@@ -53,8 +76,11 @@ struct VIEWS_EXPORT MenuConfig {
   // Padding between the arrow and the edge.
   int arrow_to_edge_padding;
 
-  // Padding between the icon and label.
-  int icon_to_label_padding;
+  // The icon size used for icons in touchable menu items.
+  int touchable_icon_size;
+
+  // The color used for icons in touchable menu items.
+  SkColor touchable_icon_color;
 
   // The space reserved for the check. The actual size of the image may be
   // different.
@@ -68,6 +94,9 @@ struct VIEWS_EXPORT MenuConfig {
   // Height of a normal separator (ui::NORMAL_SEPARATOR).
   int separator_height;
 
+  // Height of a double separator (ui::DOUBLE_SEPARATOR).
+  int double_separator_height;
+
   // Height of a ui::UPPER_SEPARATOR.
   int separator_upper_height;
 
@@ -80,18 +109,32 @@ struct VIEWS_EXPORT MenuConfig {
   // Thickness of the drawn separator line in pixels.
   int separator_thickness;
 
+  // Thickness of the drawn separator line in pixels for double separator.
+  int double_separator_thickness;
+
   // Are mnemonics shown?
   bool show_mnemonics;
+
+  // Are mnemonics used to activate items?
+  bool use_mnemonics;
 
   // Height of the scroll arrow.
   int scroll_arrow_height;
 
-  // Padding between the label and minor text. Only used if there is an
-  // accelerator or sublabel.
-  int label_to_minor_text_padding;
-
   // Minimum height of menu item.
   int item_min_height;
+
+  // Edge padding for an actionable submenu arrow.
+  int actionable_submenu_arrow_to_edge_padding;
+
+  // Width of the submenu in an actionable submenu.
+  int actionable_submenu_width;
+
+  // The height of the vertical separator used in an actionable submenu.
+  int actionable_submenu_vertical_separator_height;
+
+  // The width of the vertical separator used in an actionable submenu.
+  int actionable_submenu_vertical_separator_width;
 
   // Whether the keyboard accelerators are visible.
   bool show_accelerators;
@@ -120,6 +163,37 @@ struct VIEWS_EXPORT MenuConfig {
 
   // Radius of the rounded corners of the menu border. Must be >= 0.
   int corner_radius;
+
+  // Radius of "auxiliary" rounded corners - comboboxes and context menus.
+  // Must be >= 0.
+  int auxiliary_corner_radius;
+
+  // Radius of the rounded corners of the touchable menu border
+  int touchable_corner_radius;
+
+  // Anchor offset for touchable menus created by a touch event.
+  int touchable_anchor_offset;
+
+  // Height of child MenuItemViews for touchable menus.
+  int touchable_menu_height;
+
+  // Width of touchable menus.
+  int touchable_menu_width;
+
+  // Shadow elevation of touchable menus.
+  int touchable_menu_shadow_elevation;
+
+  // Vertical padding for touchable menus.
+  int vertical_touchable_menu_item_padding;
+
+  // Left margin of padded separator (ui::PADDED_SEPARATOR).
+  int padded_separator_left_margin;
+
+  // Whether arrow keys should wrap around the end of the menu when selecting.
+  bool arrow_key_selection_wraps;
+
+  // Whether to show accelerators in context menus.
+  bool show_context_menu_accelerators;
 
  private:
   // Configures a MenuConfig as appropriate for the current platform.

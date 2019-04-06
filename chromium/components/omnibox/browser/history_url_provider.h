@@ -109,6 +109,10 @@ struct HistoryURLProviderParams {
                            const SearchTermsData& search_terms_data);
   ~HistoryURLProviderParams();
 
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
+
   const scoped_refptr<base::SequencedTaskRunner> origin_task_runner;
 
   // A copy of the autocomplete input. We need the copy since this object will
@@ -199,6 +203,10 @@ class HistoryURLProvider : public HistoryProvider {
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
   void Stop(bool clear_cached_results, bool due_to_user_inactivity) override;
 
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const override;
+
   // Returns a match representing a navigation to |destination_url|, highlighted
   // appropriately against |input|.  |trim_http| controls whether the match's
   // |fill_into_edit| and |contents| should have any HTTP stripped off, and
@@ -226,10 +234,9 @@ class HistoryURLProvider : public HistoryProvider {
                            DontTrimHttpSchemeIfInputHasScheme);
   FRIEND_TEST_ALL_PREFIXES(HistoryURLProviderTest,
                            DontTrimHttpSchemeIfInputMatchesInScheme);
-  FRIEND_TEST_ALL_PREFIXES(HistoryURLProviderTest, DontTrimHttpsScheme);
   FRIEND_TEST_ALL_PREFIXES(HistoryURLProviderTest,
-                           DontTrimHttpsSchemeDespiteFlag);
-  FRIEND_TEST_ALL_PREFIXES(HistoryURLProviderTest, DoTrimHttpsSchemeIfFlag);
+                           DontTrimHttpsSchemeIfInputMatchesInScheme);
+  FRIEND_TEST_ALL_PREFIXES(HistoryURLProviderTest, DoTrimHttpsScheme);
 
   enum MatchType {
     NORMAL,

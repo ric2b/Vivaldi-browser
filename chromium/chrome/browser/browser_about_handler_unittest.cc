@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/navigation_controller.h"
@@ -61,8 +60,6 @@ TEST_F(BrowserAboutHandlerTest, WillHandleBrowserAboutURL) {
         GURL(chrome_prefix + chrome::kChromeUIVersionHost)},
        {GURL(chrome_prefix + chrome::kChromeUIAboutHost),
         GURL(chrome_prefix + chrome::kChromeUIChromeURLsHost)},
-       {GURL(chrome_prefix + chrome::kChromeUICacheHost),
-        GURL(chrome_prefix + content::kChromeUINetworkViewCacheHost)},
        {GURL(chrome_prefix + chrome::kChromeUISignInInternalsHost),
         GURL(chrome_prefix + chrome::kChromeUISignInInternalsHost)},
        {GURL(chrome_prefix + chrome::kChromeUISyncHost),
@@ -115,7 +112,7 @@ TEST_F(BrowserAboutHandlerTest, NoVirtualURLForFixup) {
   std::unique_ptr<NavigationEntry> entry(
       NavigationController::CreateNavigationEntry(
           url, Referrer(), ui::PAGE_TRANSITION_RELOAD, false, std::string(),
-          &profile));
+          &profile, nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(fixed_url, entry->GetVirtualURL());
   EXPECT_EQ(rewritten_url, entry->GetURL());
 }

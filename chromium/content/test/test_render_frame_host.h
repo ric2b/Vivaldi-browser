@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/common/navigation_client.mojom.h"
 #include "content/common/navigation_params.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -79,7 +80,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void NavigateAndCommitRendererInitiated(bool did_create_new_entry,
                                           const GURL& url) override;
   void SimulateFeaturePolicyHeader(
-      blink::FeaturePolicyFeature feature,
+      blink::mojom::FeaturePolicyFeature feature,
       const std::vector<url::Origin>& whitelist) override;
   const std::vector<std::string>& GetConsoleMessages() override;
 
@@ -99,10 +100,12 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       const GURL& url,
       const ModificationCallback& callback);
   void SendNavigateWithParams(
-      FrameHostMsg_DidCommitProvisionalLoad_Params* params);
+      FrameHostMsg_DidCommitProvisionalLoad_Params* params,
+      bool was_within_same_document);
   void SendNavigateWithParamsAndInterfaceProvider(
       FrameHostMsg_DidCommitProvisionalLoad_Params* params,
-      service_manager::mojom::InterfaceProviderRequest request);
+      service_manager::mojom::InterfaceProviderRequest request,
+      bool was_within_same_document);
 
   // Simulates a navigation to |url| failing with the error code |error_code|.
   // DEPRECATED: use NavigationSimulator instead.
@@ -169,9 +172,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // interaction with the IO thread up until the response is ready to commit.
   void PrepareForCommitIfNecessary();
 
-  // PlzNavigate
-  void set_pending_commit(bool pending) { pending_commit_ = pending; }
-  bool pending_commit() const { return pending_commit_; }
+  // Used to simulate the commit of a navigation having been processed in the
+  // renderer.
+  void SimulateCommitProcessed(int64_t navigation_id, bool was_successful);
 
   // Send a message with the sandbox flags and feature policy
   void SendFramePolicy(blink::WebSandboxFlags sandbox_flags,
@@ -193,8 +196,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   CreateStubInterfaceProviderRequest();
 
  private:
-  class NavigationInterceptor;
-
   void SendNavigateWithParameters(int nav_entry_id,
                                   bool did_create_new_entry,
                                   bool should_replace_entry,
@@ -209,11 +210,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // Computes the page ID for a pending navigation in this RenderFrameHost;
   int32_t ComputeNextPageID();
 
-  // RenderFrameHostImpl:
-  mojom::FrameNavigationControl* GetNavigationControl() override;
-
-  mojom::FrameNavigationControl* GetInternalNavigationControl();
-
   // Keeps a running vector of messages sent to AddMessageToConsole.
   std::vector<std::string> console_messages_;
 
@@ -226,9 +222,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
 
   // The last commit was for an error page.
   bool last_commit_was_error_page_;
-
-  // Used to track and forward outgoing navigation requests from the host.
-  std::unique_ptr<NavigationInterceptor> navigation_interceptor_;
 
   DISALLOW_COPY_AND_ASSIGN(TestRenderFrameHost);
 };

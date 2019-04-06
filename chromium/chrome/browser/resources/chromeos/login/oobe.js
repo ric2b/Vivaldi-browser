@@ -15,101 +15,22 @@
 // <include src="oobe_screen_eula.js">
 // <include src="oobe_screen_hid_detection.js">
 // <include src="oobe_screen_host_pairing.js">
-// <include src="oobe_screen_network.js">
+// <include src="oobe_screen_welcome.js">
 // <include src="oobe_screen_update.js">
+// <include src="oobe_screen_demo_setup.js">
+// <include src="oobe_screen_demo_preferences.js">
 
 cr.define('cr.ui.Oobe', function() {
   return {
-    /**
-     * Setups given "select" element using the list and adds callback.
-     * Creates option groups if needed.
-     * @param {!Element} select Select object to be updated.
-     * @param {!Object} list List of the options to be added.
-     * Elements with optionGroupName are considered option group.
-     * @param {string} callback Callback name which should be send to Chrome or
-     * an empty string if the event listener shouldn't be added.
-     *
-     * Note: do not forget to update getSelectedTitle() below if this is
-     * updated!
-     */
-    setupSelect: function(select, list, callback) {
-      select.innerHTML = '';
-      var optgroup = select;
-      for (var i = 0; i < list.length; ++i) {
-        var item = list[i];
-        if (item.optionGroupName) {
-          optgroup = document.createElement('optgroup');
-          optgroup.label = item.optionGroupName;
-          select.appendChild(optgroup);
-        } else {
-          var option =
-              new Option(item.title, item.value, item.selected, item.selected);
-          optgroup.appendChild(option);
-        }
-      }
-      if (callback) {
-        var runCallback = function() {
-          callback(select.options[select.selectedIndex].value);
-        };
-        select.addEventListener('blur', runCallback);
-        select.addEventListener('click', runCallback);
-        select.addEventListener('keyup', function(event) {
-          var keycodeInterested = [
-            9,   // Tab
-            13,  // Enter
-            27,  // Escape
-          ];
-          if (keycodeInterested.indexOf(event.keyCode) >= 0)
-            runCallback();
-        });
-      }
-    },
-
-    /**
-     * Returns title of the selected option (see setupSelect() above).
-     * @param {!Object} list The same as in setupSelect() above.
-     */
-    getSelectedTitle: function(list) {
-      var firstTitle = '';
-      for (var i = 0; i < list.length; ++i) {
-        var item = list[i];
-        if (item.optionGroupName)
-          continue;
-
-        if (!firstTitle)
-          firstTitle = item.title;
-
-        if (item.selected)
-          return item.title;
-      }
-      return firstTitle;
-    },
-
-    /**
-     * Returns value of the selected option (see setupSelect() above).
-     * @param {!Object} list The same as in setupSelect() above.
-     */
-    getSelectedValue: function(list) {
-      for (var i = 0; i < list.length; ++i) {
-        var item = list[i];
-        if (item.optionGroupName)
-          continue;
-        if (item.selected)
-          return item.value;
-      }
-      return null;
-    },
-
     /**
      * Initializes the OOBE flow.  This will cause all C++ handlers to
      * be invoked to do final setup.
      */
     initialize: function() {
-      this.setMDMode_();
       cr.ui.login.DisplayManager.initialize();
       login.HIDDetectionScreen.register();
       login.WrongHWIDScreen.register();
-      login.NetworkScreen.register();
+      login.WelcomeScreen.register();
       login.EulaScreen.register();
       login.UpdateScreen.register();
       login.AutoEnrollmentCheckScreen.register();
@@ -127,6 +48,8 @@ cr.define('cr.ui.Oobe', function() {
       login.TermsOfServiceScreen.register();
       login.SyncConsentScreen.register();
       login.ArcTermsOfServiceScreen.register();
+      login.RecommendAppsScreen.register();
+      login.AppDownloadingScreen.register();
       login.AppLaunchSplashScreen.register();
       login.ArcKioskSplashScreen.register();
       login.ConfirmPasswordScreen.register();
@@ -137,6 +60,13 @@ cr.define('cr.ui.Oobe', function() {
       login.ActiveDirectoryPasswordChangeScreen.register(/* lazyInit= */ true);
       login.VoiceInteractionValuePropScreen.register();
       login.WaitForContainerReadyScreen.register();
+      login.DemoSetupScreen.register();
+      login.DemoPreferencesScreen.register();
+      login.DiscoverScreen.register();
+
+      cr.ui.Bubble.decorate($('bubble-persistent'));
+      $('bubble-persistent').persistent = true;
+      $('bubble-persistent').hideOnKeyPress = false;
 
       cr.ui.Bubble.decorate($('bubble'));
       login.HeaderBar.decorate($('login-header-bar'));
@@ -153,20 +83,11 @@ cr.define('cr.ui.Oobe', function() {
      */
     initializeA11yMenu: function() {
       cr.ui.Bubble.decorate($('accessibility-menu'));
-      $('connect-accessibility-link')
-          .addEventListener('click', Oobe.handleAccessibilityLinkClick);
-      $('eula-accessibility-link')
-          .addEventListener('click', Oobe.handleAccessibilityLinkClick);
-      $('update-accessibility-link')
-          .addEventListener('click', Oobe.handleAccessibilityLinkClick);
       // Same behaviour on hitting spacebar. See crbug.com/342991.
       function reactOnSpace(event) {
         if (event.keyCode == 32)
           Oobe.handleAccessibilityLinkClick(event);
       }
-      $('connect-accessibility-link').addEventListener('keyup', reactOnSpace);
-      $('eula-accessibility-link').addEventListener('keyup', reactOnSpace);
-      $('update-accessibility-link').addEventListener('keyup', reactOnSpace);
 
       $('high-contrast')
           .addEventListener('click', Oobe.handleHighContrastClick);
@@ -290,16 +211,7 @@ cr.define('cr.ui.Oobe', function() {
      * @param {boolean} checked Is the checkbox checked?
      */
     setUsageStats: function(checked) {
-      $('usage-stats').checked = checked;
       $('oobe-eula-md').usageStatsChecked = checked;
-    },
-
-    /**
-     * Set OEM EULA URL.
-     * @param {text} oemEulaUrl OEM EULA URL.
-     */
-    setOemEulaUrl: function(oemEulaUrl) {
-      $('eula').setOemEulaUrl(oemEulaUrl);
     },
 
     /**
@@ -307,15 +219,7 @@ cr.define('cr.ui.Oobe', function() {
      * @param {text} password TPM password to be shown.
      */
     setTpmPassword: function(password) {
-      $('tpm-busy').hidden = true;
-
-      if (password.length) {
-        $('tpm-password').textContent = password;
-        $('tpm-password').hidden = false;
-      } else {
-        $('tpm-desc').hidden = true;
-        $('tpm-desc-powerwash').hidden = false;
-      }
+      $('eula').setTpmPassword(password);
     },
 
     /**
@@ -341,13 +245,6 @@ cr.define('cr.ui.Oobe', function() {
       // Reload global local strings, process DOM tree again.
       loadTimeData.overrideValues(data);
       i18nTemplate.process(document, loadTimeData);
-
-      // Update language and input method menu lists.
-      Oobe.setupSelect($('language-select'), data.languageList);
-      Oobe.setupSelect($('keyboard-select'), data.inputMethodsList);
-      Oobe.setupSelect($('timezone-select'), data.timezoneList);
-
-      this.setMDMode_();
 
       // Update localized content of the screens.
       Oobe.updateLocalizedContent();
@@ -380,17 +277,11 @@ cr.define('cr.ui.Oobe', function() {
     },
 
     /**
-     * This method takes care of switching to material-design OOBE.
-     * @private
+     * Updates OOBE configuration when it is loaded.
+     * @param {dictionary} configuration OOBE configuration.
      */
-    setMDMode_: function() {
-      if (loadTimeData.getString('newOobeUI') == 'on') {
-        $('oobe').setAttribute('md-mode', 'true');
-        $('popup-overlay').setAttribute('md-mode', 'true');
-      } else {
-        $('oobe').removeAttribute('md-mode');
-        $('popup-overlay').removeAttribute('md-mode');
-      }
+    updateOobeConfiguration: function(configuration) {
+      Oobe.getInstance().updateOobeConfiguration_(configuration);
     },
   };
 });

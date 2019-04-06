@@ -17,7 +17,6 @@
 #include "extensions/browser/extension_icon_image.h"
 #include "ui/gfx/image/image_skia.h"
 
-class AppListControllerDelegate;
 class ExtensionEnableFlow;
 class Profile;
 
@@ -74,11 +73,12 @@ class ExtensionAppItem : public ChromeAppListItem,
   void ExtensionEnableFlowFinished() override;
   void ExtensionEnableFlowAborted(bool user_initiated) override;
 
-  // Overridden from AppListItem:
+  // Overridden from ChromeAppListItem:
   void Activate(int event_flags) override;
-  ui::MenuModel* GetContextMenuModel() override;
+  void GetContextMenuModel(GetMenuModelCallback callback) override;
   const char* GetItemType() const override;
-  size_t BadgedItemCount() const override;
+  bool IsBadged() const override;
+  app_list::AppContextMenu* GetAppContextMenu() override;
 
   // Overridden from app_list::AppContextMenuDelegate:
   void ExecuteLaunchCommand(int event_flags) override;
@@ -89,7 +89,6 @@ class ExtensionAppItem : public ChromeAppListItem,
   std::unique_ptr<extensions::ChromeAppIcon> icon_;
   std::unique_ptr<app_list::ExtensionAppContextMenu> context_menu_;
   std::unique_ptr<ExtensionEnableFlow> extension_enable_flow_;
-  AppListControllerDelegate* extension_enable_flow_controller_;
 
   // Name to use for the extension if we can't access it.
   std::string extension_name_;

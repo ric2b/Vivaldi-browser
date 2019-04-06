@@ -10,105 +10,164 @@
 Polymer({
   is: 'sync-consent',
 
-  behaviors: [I18nBehavior],
+  behaviors: [I18nBehavior, OobeDialogHostBehavior],
 
-  properties: {
-    /**
-     * Value of "Sync all" trigger button.
-     */
-    syncAllEnabled_: {
-      type: Boolean,
-      value: true,
-    },
-
-    /**
-     * False until user sync prefs are known.
-     */
-    userPrefsKnown_: {
-      type: Boolean,
-      value: false,
-    },
-
-    /**
-     * True when sync preferences are managed.
-     */
-    isManaged_: {
-      type: Boolean,
-      value: true,
-    },
-
-    /**
-     * Name of currently active section.
-     */
-    activeSection_: {
-      type: String,
-      value: 'overview',
-    }
+  /** @override */
+  ready: function() {
+    this.updateLocalizedContent();
   },
 
   focus: function() {
-    if (this.activeSection_ == 'overview') {
-      this.$.syncConsentOverviewDialog.show();
+    let activeScreen = this.getActiveScreen_();
+    if (activeScreen)
+      activeScreen.focus();
+  },
+
+  /**
+   * Hides all screens to help switching from one screen to another.
+   * @private
+   */
+  hideAllScreens_: function() {
+    var screens = Polymer.dom(this.root).querySelectorAll('oobe-dialog');
+    for (let screen of screens)
+      screen.hidden = true;
+  },
+
+  /**
+   * Returns active screen or null if none.
+   * @private
+   */
+  getActiveScreen_: function() {
+    var screens = Polymer.dom(this.root).querySelectorAll('oobe-dialog');
+    for (let screen of screens) {
+      if (!screen.hidden)
+        return screen;
+    }
+    return null;
+  },
+
+  /**
+   * Shows given screen.
+   * @param id String Screen ID.
+   * @private
+   */
+  showScreen_: function(id) {
+    this.hideAllScreens_();
+
+    var screen = this.$[id];
+    assert(screen);
+    screen.hidden = false;
+    screen.show();
+    screen.focus();
+  },
+
+  /**
+   * Reacts to changes in loadTimeData.
+   */
+  updateLocalizedContent: function() {
+    let useMakeBetterScreen = loadTimeData.getBoolean('syncConsentMakeBetter');
+    if (useMakeBetterScreen) {
+      if (this.$.syncConsentMakeChromeSyncOptionsDialog.hidden)
+        this.showScreen_('syncConsentNewDialog');
     } else {
-      this.$.syncConsentSettingsDialog.show();
+      this.showScreen_('syncConsentOverviewDialog');
+    }
+    this.i18nUpdateLocale();
+  },
+
+  /**
+   * This is 'on-tap' event handler for 'AcceptAndContinue' button.
+   * @private
+   */
+  onSettingsSaveAndContinue_: function(e) {
+    if (this.$.reviewSettingsBox.checked) {
+      chrome.send('login.SyncConsentScreen.continueAndReview', [
+        this.getConsentDescription_(), this.getConsentConfirmation_(e.path)
+      ]);
+    } else {
+      chrome.send('login.SyncConsentScreen.continueWithDefaults', [
+        this.getConsentDescription_(), this.getConsentConfirmation_(e.path)
+      ]);
     }
   },
 
-  isSectionHidden_: function(activeSectionName, thisSectionName) {
-    return activeSectionName != thisSectionName;
-  },
-
   /**
-   * This updates link to 'Settings' section on locale change.
-   * @param {string} locale The UI language used.
+   * @param {!Array<!HTMLElement>} path Path of the click event. Must contain
+   *     a consent confirmation element.
+   * @return {string} The text of the consent confirmation element.
    * @private
    */
-  updateSettingsLink_: function(locale) {
-    this.$.settingsLink.innerHTML = loadTimeData.getStringF(
-        'syncConsentScreenSettingsLink', '<a id="settingsLinkAnchor" href="#">',
-        '</a>');
-    this.$$('#settingsLinkAnchor')
-        .addEventListener('click', this.switchToSettingsDialog_.bind(this));
+  getConsentConfirmation_: function(path) {
+    for (let element of path) {
+      if (!element.hasAttribute)
+        continue;
+
+      if (element.hasAttribute('consent-confirmation'))
+        return element.innerHTML.trim();
+
+      // Search down in case of click on a button with description below.
+      let labels = element.querySelectorAll('[consent-confirmation]');
+      if (labels && labels.length > 0) {
+        assert(labels.length == 1);
+
+        let result = '';
+        for (let label of labels) {
+          result += label.innerHTML.trim();
+        }
+        return result;
+      }
+    }
+    assertNotReached('No consent confirmation element found.');
+    return '';
   },
 
+  /** @return {!Array<string>} Text of the consent description elements. */
+  getConsentDescription_: function() {
+    let consentDescription =
+        Array.from(this.shadowRoot.querySelectorAll('[consent-description]'))
+            .filter(element => element.clientWidth * element.clientHeight > 0)
+            .map(element => element.innerHTML.trim());
+    assert(consentDescription);
+    return consentDescription;
+  },
+
+  /******************************************************
+   * Get Google smarts in Chrome dialog.
+   ******************************************************/
+
   /**
-   * This is called when "Settings" link is clicked.
    * @private
    */
-  switchToSettingsDialog_: function() {
-    this.activeSection_ = 'settings';
-    this.focus();
+  onMoreOptionsButton_: function() {
+    this.showScreen_('syncConsentMakeChromeSyncOptionsDialog');
   },
 
   /**
-   * This is called when "Sync all" trigger value is changed.
-   * @param {!Event} event
    * @private
    */
-  onSyncAllEnabledChanged_: function(event) {
-    if (this.syncAllEnabled_ == event.currentTarget.checked)
-      return;
-
-    this.syncAllEnabled_ = event.currentTarget.checked;
-    chrome.send('syncEverythingChanged', [this.syncAllEnabled_]);
+  onConfirm_: function() {
+    chrome.send(
+        'login.SyncConsentScreen.userActed',
+        ['continue-with-sync-and-personalization']);
   },
 
-  /**
-   * This is 'on-tap' event handler for 'AcceptAndContinue/Next' buttons.
-   * @private
-   */
-  onSettingsSaveAndContinue_: function() {
-    chrome.send('login.SyncConsentScreen.userActed', ['save-and-continue']);
-  },
+  /******************************************************
+   * Get Google smarts ... options dialog
+   ******************************************************/
 
-  /**
-   * Modify UI state to match given user preferences.
-   * @param {boolean} sync_all_enabled Whether "sync everything" is enabled.
-   * @param {boolean} is_managed Whether sync preferences are managed.
-   */
-  onUserSyncPrefsKnown: function(sync_all_enabled, is_managed) {
-    this.isManaged_ = is_managed;
-    this.syncAllEnabled_ = sync_all_enabled;
-    this.userPrefsKnown_ = true;
+  /** @private */
+  onOptionsAcceptAndContinue_: function() {
+    const selected = this.$.optionsGroup.selected;
+    if (selected == 'justSync') {
+      chrome.send(
+          'login.SyncConsentScreen.userActed', ['continue-with-sync-only']);
+    } else if (selected == 'syncAndPersonalization') {
+      chrome.send(
+          'login.SyncConsentScreen.userActed',
+          ['continue-with-sync-and-personalization']);
+    } else {
+      // 'Continue and review' is default option.
+      chrome.send('login.SyncConsentScreen.userActed', ['continue-and-review']);
+    }
   },
 });

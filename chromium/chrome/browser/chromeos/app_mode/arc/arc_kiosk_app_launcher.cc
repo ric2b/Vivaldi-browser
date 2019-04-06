@@ -7,7 +7,8 @@
 #include <memory>
 #include <string>
 
-#include "ash/wm/window_util.h"
+#include "ash/public/cpp/window_properties.h"
+#include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "ui/aura/env.h"
@@ -23,7 +24,8 @@ ArcKioskAppLauncher::ArcKioskAppLauncher(content::BrowserContext* context,
   prefs_->AddObserver(this);
   aura::Env::GetInstance()->AddObserver(this);
   // Launching the app by app id in landscape mode and in non-touch mode.
-  arc::LaunchApp(context, app_id_, ui::EF_NONE);
+  arc::LaunchApp(context, app_id_, ui::EF_NONE,
+                 arc::UserInteractionType::NOT_USER_INITIATED);
 }
 
 ArcKioskAppLauncher::~ArcKioskAppLauncher() {
@@ -78,7 +80,8 @@ bool ArcKioskAppLauncher::CheckAndPinWindow(aura::Window* const window) {
     return false;
   // Stop observing as target window is already found.
   StopObserving();
-  ash::wm::PinWindow(window, true /* trusted */);
+  window->SetProperty(ash::kWindowPinTypeKey,
+                      ash::mojom::WindowPinType::TRUSTED_PINNED);
   if (delegate_)
     delegate_->OnAppWindowLaunched();
   return true;

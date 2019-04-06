@@ -11,7 +11,8 @@ Polymer({
   is: 'site-details',
 
   behaviors: [
-    SiteSettingsBehavior, settings.RouteObserverBehavior, WebUIListenerBehavior
+    I18nBehavior, SiteSettingsBehavior, settings.RouteObserverBehavior,
+    WebUIListenerBehavior
   ],
 
   properties: {
@@ -47,30 +48,6 @@ Polymer({
       type: Boolean,
       value: function() {
         return loadTimeData.getBoolean('enableSiteSettings');
-      },
-    },
-
-    /** @private */
-    enableSafeBrowsingSubresourceFilter_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
-      },
-    },
-
-    /** @private */
-    enableSoundContentSetting_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableSoundContentSetting');
-      },
-    },
-
-    /** @private */
-    enableClipboardContentSetting_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableClipboardContentSetting');
       },
     },
 
@@ -126,7 +103,7 @@ Polymer({
         if (this.enableSiteSettings_)
           this.$.usageApi.fetchUsageTotal(this.toUrl(this.origin).hostname);
 
-        this.updatePermissions_(this.getCategoryList_());
+        this.updatePermissions_(this.getCategoryList());
       }
     });
   },
@@ -144,7 +121,7 @@ Polymer({
         origin === undefined || origin == '') {
       return;
     }
-    if (!this.getCategoryList_().includes(category))
+    if (!this.getCategoryList().includes(category))
       return;
 
     // Site details currently doesn't support embedded origins, so ignore it and
@@ -193,68 +170,67 @@ Polymer({
   },
 
   /** @private */
-  onCloseDialog_: function() {
-    this.$.confirmDeleteDialog.close();
+  onCloseDialog_: function(e) {
+    e.target.closest('cr-dialog').close();
   },
 
   /**
-   * Confirms the deletion of storage for a site.
+   * Confirms the resetting of all content settings for an origin.
    * @param {!Event} e
    * @private
    */
   onConfirmClearSettings_: function(e) {
     e.preventDefault();
-    this.$.confirmDeleteDialog.showModal();
+    this.$.confirmResetSettings.showModal();
   },
 
   /**
-   * Clears all data stored for the current origin.
+   * Confirms the clearing of storage for an origin.
+   * @param {!Event} e
    * @private
    */
-  onClearStorage_: function() {
-    // Since usage is only shown when "Site Settings" is enabled, don't clear it
-    // when it's not shown.
-    if (this.enableSiteSettings_)
-      this.$.usageApi.clearUsage(
-          this.toUrl(this.origin).href, this.storageType_);
+  onConfirmClearStorage_: function(e) {
+    e.preventDefault();
+    this.$.confirmClearStorage.showModal();
   },
 
   /**
-   * Called when usage has been deleted for an origin.
+   * Resets all permissions for the current origin.
+   * @private
+   */
+  onResetSettings_: function(e) {
+    this.browserProxy.setOriginPermissions(
+        this.origin, this.getCategoryList(), settings.ContentSetting.DEFAULT);
+    if (this.getCategoryList().includes(settings.ContentSettingsTypes.PLUGINS))
+      this.browserProxy.clearFlashPref(this.origin);
+
+    this.onCloseDialog_(e);
+  },
+
+  /**
+   * Clears all data stored, except cookies, for the current origin.
+   * @private
+   */
+  onClearStorage_: function(e) {
+    // Since usage is only shown when "Site Settings" is enabled, don't clear it
+    // when it's not shown.
+    if (this.enableSiteSettings_ && this.storedData_ != '') {
+      this.$.usageApi.clearUsage(
+          this.toUrl(this.origin).href, this.storageType_);
+    }
+
+    this.onCloseDialog_(e);
+  },
+
+  /**
+   * Called when usage has been deleted for an origin via a non-Site Details
+   * source, e.g. clear browsing data.
    * @param {!{detail: !{origin: string}}} event
    * @private
    */
   onUsageDeleted_: function(event) {
     if (event.detail.origin == this.toUrl(this.origin).href)
       this.storedData_ = '';
-  },
-
-  /**
-   * Resets all permissions and clears all data stored for the current origin.
-   * @private
-   */
-  onClearAndReset_: function() {
-    this.browserProxy.setOriginPermissions(
-        this.origin, this.getCategoryList_(), settings.ContentSetting.DEFAULT);
-
-    if (this.storedData_ != '')
-      this.onClearStorage_();
-
-    this.onCloseDialog_();
-  },
-
-  /**
-   * Returns list of categories for each permission displayed in <site-details>.
-   * @return {!Array<!settings.ContentSettingsTypes>}
-   * @private
-   */
-  getCategoryList_: function() {
-    const categoryList = [];
-    this.root.querySelectorAll('site-details-permission').forEach((element) => {
-      if (!element.hidden)
-        categoryList.push(element.category);
-    });
-    return categoryList;
   },
 
   /**

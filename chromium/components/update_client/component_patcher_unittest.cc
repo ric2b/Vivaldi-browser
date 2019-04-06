@@ -5,7 +5,6 @@
 #include "components/update_client/component_patcher.h"
 #include "base/base_paths.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -13,7 +12,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/values.h"
-#include "components/patch_service/patch_service.h"
+#include "components/services/patch/patch_service.h"
 #include "components/update_client/component_patcher_operation.h"
 #include "components/update_client/component_patcher_unittest.h"
 #include "components/update_client/test_installer.h"
@@ -52,7 +51,7 @@ void TestCallback::Set(update_client::UnpackerError error, int extra_code) {
 
 base::FilePath test_file(const char* file) {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   return path.AppendASCII("components")
       .AppendASCII("test")
       .AppendASCII("data")

@@ -13,8 +13,8 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.payments.AddressEditor;
 import org.chromium.chrome.browser.payments.AutofillAddress;
 import org.chromium.chrome.browser.payments.SettingsAutofillAndPaymentsObserver;
-import org.chromium.chrome.browser.payments.ui.EditorDialog;
-import org.chromium.chrome.browser.payments.ui.EditorObserverForTest;
+import org.chromium.chrome.browser.widget.prefeditor.EditorDialog;
+import org.chromium.chrome.browser.widget.prefeditor.EditorObserverForTest;
 
 /**
  * Launches the UI to edit, create or delete an Autofill profile entry.
@@ -48,7 +48,8 @@ public class AutofillProfileEditorPreference extends Preference {
     }
 
     private void prepareAddressEditor() {
-        AddressEditor addressEditor = new AddressEditor(/*emailIncluded=*/true);
+        AddressEditor addressEditor =
+                new AddressEditor(/*emailFieldIncluded=*/true, /*saveToDisk=*/true);
         addressEditor.setEditorDialog(mEditorDialog);
 
         addressEditor.edit(mAutofillAddress, new Callback<AutofillAddress>() {

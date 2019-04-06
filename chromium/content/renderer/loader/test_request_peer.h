@@ -11,6 +11,8 @@
 #include <vector>
 #include "base/time/time.h"
 #include "content/public/renderer/request_peer.h"
+#include "net/base/load_timing_info.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
 
 namespace net {
 struct RedirectInfo;
@@ -37,7 +39,8 @@ class TestRequestPeer : public RequestPeer {
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
                           const network::ResourceResponseInfo& info) override;
   void OnReceivedResponse(const network::ResourceResponseInfo& info) override;
-  void OnDownloadedData(int len, int encoded_data_length) override;
+  void OnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body) override;
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override;
   void OnTransferSizeUpdated(int transfer_size_diff) override;
   void OnReceivedCachedMetadata(const char* data, int len) override;
@@ -69,12 +72,12 @@ class TestRequestPeer : public RequestPeer {
     int total_encoded_data_length = 0;
     bool defer_on_transfer_size_updated = false;
 
-    // Total length when downloading to a file.
-    int total_downloaded_data_length = 0;
-
     bool complete = false;
     bool cancelled = false;
     int request_id = -1;
+
+    net::LoadTimingInfo last_load_timing;
+    network::URLLoaderCompletionStatus completion_status;
   };
 
  private:

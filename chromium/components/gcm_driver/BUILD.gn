@@ -5,15 +5,15 @@
 import("//build/buildflag_header.gni")
 import("//components/gcm_driver/config.gni")
 
-buildflag_header("gcm_build_features") {
-  header = "gcm_build_features.h"
+buildflag_header("gcm_buildflags") {
+  header = "gcm_buildflags.h"
   flags = [ "USE_GCM_FROM_PLATFORM=$use_gcm_from_platform" ]
 }
 
 static_library("gcm_driver") {
   sources = [
-    "gcm_account_tracker.cc",
-    "gcm_account_tracker.h",
+    "features.cc",
+    "features.h",
     "gcm_activity.cc",
     "gcm_activity.h",
     "gcm_app_handler.cc",
@@ -49,7 +49,7 @@ static_library("gcm_driver") {
     "//components/gcm_driver/instance_id",
   ]
   deps = [
-    ":gcm_build_features",
+    ":gcm_buildflags",
     "//base:i18n",
     "//components/crx_file",
     "//components/data_use_measurement/core",
@@ -63,6 +63,8 @@ static_library("gcm_driver") {
     "//google_apis",
     "//google_apis/gcm",
     "//net",
+    "//services/identity/public/cpp",
+    "//services/network/public/cpp",
     "//url:url",
   ]
 
@@ -86,8 +88,12 @@ static_library("gcm_driver") {
     ]
   } else {
     sources += [
+      "account_tracker.cc",
+      "account_tracker.h",
       "gcm_account_mapper.cc",
       "gcm_account_mapper.h",
+      "gcm_account_tracker.cc",
+      "gcm_account_tracker.h",
       "gcm_channel_status_request.cc",
       "gcm_channel_status_request.h",
       "gcm_channel_status_syncer.cc",
@@ -121,6 +127,8 @@ static_library("test_support") {
     "fake_gcm_app_handler.h",
     "fake_gcm_driver.cc",
     "fake_gcm_driver.h",
+    "fake_gcm_profile_service.cc",
+    "fake_gcm_profile_service.h",
   ]
 
   public_deps = [
@@ -128,10 +136,25 @@ static_library("test_support") {
   ]
   deps = [
     "//base",
+    "//components/gcm_driver/instance_id:test_support",
     "//google_apis/gcm:test_support",
     "//net",
+    "//services/network:test_support",
+    "//services/network/public/cpp",
     "//testing/gtest",
   ]
+
+  # This target goes with Instance ID and they can include headers from each
+  # other.
+  allow_circular_includes_from =
+      [ "//components/gcm_driver/instance_id:test_support" ]
+
+  if (is_ios) {
+    sources -= [
+      "fake_gcm_profile_service.cc",
+      "fake_gcm_profile_service.h",
+    ]
+  }
 
   if (!use_gcm_from_platform) {
     sources += [
@@ -144,11 +167,11 @@ static_library("test_support") {
   }
 }
 
+# This is part of the components_unittests BUILD target.
 source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "gcm_account_tracker_unittest.cc",
     "gcm_delayed_task_controller_unittest.cc",
     "gcm_stats_recorder_android_unittest.cc",
   ]
@@ -171,11 +194,20 @@ source_set("unit_tests") {
 
   if (!use_gcm_from_platform) {
     sources += [
+      "account_tracker_unittest.cc",
       "gcm_account_mapper_unittest.cc",
+      "gcm_account_tracker_unittest.cc",
       "gcm_channel_status_request_unittest.cc",
       "gcm_client_impl_unittest.cc",
       "gcm_driver_desktop_unittest.cc",
       "gcm_stats_recorder_impl_unittest.cc",
     ]
   }
+  deps += [
+    "//components/signin/core/browser",
+    "//components/signin/core/browser:test_support",
+    "//components/sync_preferences:test_support",
+    "//services/identity/public/cpp",
+    "//services/identity/public/cpp:test_support",
+  ]
 }

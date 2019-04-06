@@ -29,13 +29,16 @@ class GPU_GLES2_EXPORT VertexArrayManager {
   // Must call before destruction.
   void Destroy(bool have_context);
 
+  void MarkContextLost() { have_context_ = false; }
+
   // Creates a VertexAttribManager and if client_visible,
   // maps it to the client_id.
   scoped_refptr<VertexAttribManager> CreateVertexAttribManager(
       GLuint client_id,
       GLuint service_id,
       uint32_t num_vertex_attribs,
-      bool client_visible);
+      bool client_visible,
+      bool do_buffer_refcounting);
 
   // Gets the vertex attrib manager for the given vertex array.
   VertexAttribManager* GetVertexAttribManager(GLuint client_id);

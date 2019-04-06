@@ -5,7 +5,6 @@
 #include <map>
 
 #include "build/build_config.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -18,7 +17,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "content/public/test/test_utils.h"
 #include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_system.h"
@@ -44,7 +42,7 @@ Browser* FindOtherBrowser(Browser* browser) {
 
 }  // namespace
 
-class ExtensionManagementApiTest : public ExtensionApiTest {
+class ExtensionManagementApiTest : public extensions::ExtensionApiTest {
  public:
   virtual void LoadExtensions() {
     base::FilePath basedir = test_data_dir_.AppendASCII("management");
@@ -159,8 +157,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest,
   LoadExtensions();
   extensions::ScopedTestDialogAutoConfirm auto_confirm(
       extensions::ScopedTestDialogAutoConfirm::ACCEPT);
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   EXPECT_TRUE(service->GetExtensionById(extension_ids_["enabled_extension"],
                                         false));
 
@@ -185,8 +184,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest,
 IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest,
                        MAYBE_ManagementPolicyProhibited) {
   LoadExtensions();
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   EXPECT_TRUE(service->GetExtensionById(extension_ids_["enabled_extension"],
                                         false));
 
@@ -202,8 +202,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, LaunchPanelApp) {
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
 
   // Load an extension that calls launchApp() on any app that gets
   // installed.
@@ -224,12 +225,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, LaunchPanelApp) {
   ASSERT_TRUE(app_browser->is_app());
 
   // Close the app panel.
-  content::WindowedNotificationObserver signal(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::Source<Browser>(app_browser));
-
-  chrome::CloseWindow(app_browser);
-  signal.Wait();
+  CloseBrowserSynchronously(app_browser);
 
   // Unload the extension.
   UninstallExtension(app_id);
@@ -264,8 +260,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, LaunchPanelApp) {
 #define MAYBE_LaunchTabApp LaunchTabApp
 #endif
 IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, MAYBE_LaunchTabApp) {
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
 
   // Load an extension that calls launchApp() on any app that gets
   // installed.

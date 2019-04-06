@@ -8,6 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
+#include "chromecast/browser/extensions/api/generated_api_registration.h"
 #include "chromecast/browser/extensions/cast_extension_host_delegate.h"
 #include "chromecast/browser/extensions/cast_extension_system_factory.h"
 #include "chromecast/browser/extensions/cast_extension_web_contents_observer.h"
@@ -27,7 +28,6 @@
 #include "extensions/browser/updater/null_extension_cache.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/common/features/feature_channel.h"
-#include "extensions/shell/browser/api/generated_api_registration.h"
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -109,6 +109,24 @@ CastExtensionsBrowserClient::MaybeCreateResourceBundleRequestJob(
   return nullptr;
 }
 
+base::FilePath CastExtensionsBrowserClient::GetBundleResourcePath(
+    const network::ResourceRequest& request,
+    const base::FilePath& extension_resources_path,
+    int* resource_id) const {
+  return base::FilePath();
+}
+
+void CastExtensionsBrowserClient::LoadResourceFromResourceBundle(
+    const network::ResourceRequest& request,
+    network::mojom::URLLoaderRequest loader,
+    const base::FilePath& resource_relative_path,
+    int resource_id,
+    const std::string& content_security_policy,
+    network::mojom::URLLoaderClientPtr client,
+    bool send_cors_header) {
+  NOTREACHED() << "Cannot load resource from bundle w/o path";
+}
+
 bool CastExtensionsBrowserClient::AllowCrossRendererResourceLoad(
     const GURL& url,
     content::ResourceType resource_type,
@@ -154,7 +172,15 @@ bool CastExtensionsBrowserClient::DidVersionUpdate(BrowserContext* context) {
 
 void CastExtensionsBrowserClient::PermitExternalProtocolHandler() {}
 
+bool CastExtensionsBrowserClient::IsInDemoMode() {
+  return false;
+}
+
 bool CastExtensionsBrowserClient::IsRunningInForcedAppMode() {
+  return false;
+}
+
+bool CastExtensionsBrowserClient::IsAppModeForcedForApp(const ExtensionId& id) {
   return false;
 }
 
@@ -173,7 +199,7 @@ void CastExtensionsBrowserClient::RegisterExtensionFunctions(
   api::GeneratedFunctionRegistry::RegisterAll(registry);
 
   // cast_shell-only APIs.
-  shell::api::ShellGeneratedFunctionRegistry::RegisterAll(registry);
+  cast::api::CastGeneratedFunctionRegistry::RegisterAll(registry);
 }
 
 void CastExtensionsBrowserClient::RegisterExtensionInterfaces(
@@ -202,9 +228,9 @@ void CastExtensionsBrowserClient::BroadcastEventToRenderers(
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&CastExtensionsBrowserClient::BroadcastEventToRenderers,
-                   base::Unretained(this), histogram_value, event_name,
-                   base::Passed(&args)));
+        base::BindOnce(&CastExtensionsBrowserClient::BroadcastEventToRenderers,
+                       base::Unretained(this), histogram_value, event_name,
+                       std::move(args)));
     return;
   }
 

@@ -10,16 +10,19 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
 
 #include "base/callback.h"
+#include "base/callback_helpers.h"
+#include "base/containers/stack_container.h"
 #include "base/debug/alias.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/rand_util.h"
+#include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "net/base/io_buffer.h"
@@ -53,10 +56,6 @@
 #include <pthread.h>
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
-#if defined(OS_FUCHSIA)
-#include <netstack/netconfig.h>
-#endif  // defined(OS_FUCHSIA)
-
 namespace net {
 
 namespace {
@@ -69,10 +68,9 @@ const int kActivityMonitorMinimumSamplesForThroughputEstimate = 2;
 const base::TimeDelta kActivityMonitorMsThreshold =
     base::TimeDelta::FromMilliseconds(100);
 
-#if defined(OS_MACOSX) || defined(OS_FUCHSIA)
-
-// When enabling multicast using setsockopt(IP_MULTICAST_IF) MacOS and Fuchsia
-// require passing IPv4 address instead of interface index. This function
+#if defined(OS_MACOSX)
+// When enabling multicast using setsockopt(IP_MULTICAST_IF) MacOS
+// requires passing IPv4 address instead of interface index. This function
 // resolves IPv4 address by interface index. The |address| is returned in
 // network order.
 int GetIPv4AddressFromIndex(int socket, uint32_t index, uint32_t* address) {
@@ -83,7 +81,6 @@ int GetIPv4AddressFromIndex(int socket, uint32_t index, uint32_t* address) {
 
   sockaddr_in* result = nullptr;
 
-#if defined(OS_MACOSX)
   ifreq ifr;
   ifr.ifr_addr.sa_family = AF_INET;
   if (!if_indextoname(index, ifr.ifr_name))
@@ -92,19 +89,6 @@ int GetIPv4AddressFromIndex(int socket, uint32_t index, uint32_t* address) {
   if (rv == -1)
     return MapSystemError(errno);
   result = reinterpret_cast<sockaddr_in*>(&ifr.ifr_addr);
-#elif defined(OS_FUCHSIA)
-  netc_get_if_info_t netconfig;
-  int size = ioctl_netc_get_if_info(socket, &netconfig);
-  if (size < 0)
-    return MapSystemError(errno);
-  for (size_t i = 0; i < netconfig.n_info; ++i) {
-    netc_if_info_t* interface = netconfig.info + i;
-    if (interface->index == index && interface->addr.ss_family == AF_INET) {
-      result = reinterpret_cast<sockaddr_in*>(&(interface->addr));
-      break;
-    }
-  }
-#endif
 
   if (!result)
     return ERR_ADDRESS_INVALID;
@@ -113,7 +97,7 @@ int GetIPv4AddressFromIndex(int socket, uint32_t index, uint32_t* address) {
   return OK;
 }
 
-#endif  // OS_MACOSX || OS_FUCHSIA
+#endif  // OS_MACOSX
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 
@@ -186,30 +170,34 @@ const guardid_t kSocketFdGuard = 0xD712BC0BC9A4EAD4;
 }  // namespace
 
 UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
-                               const RandIntCallback& rand_int_cb,
                                net::NetLog* net_log,
                                const net::NetLogSource& source)
-    : socket_(kInvalidSocket),
+    : write_async_watcher_(std::make_unique<WriteAsyncWatcher>(this)),
+      sender_(new UDPSocketPosixSender()),
+      socket_(kInvalidSocket),
       addr_family_(0),
       is_connected_(false),
       socket_options_(SOCKET_OPTION_MULTICAST_LOOP),
+      sendto_flags_(0),
       multicast_interface_(0),
       multicast_time_to_live_(1),
       bind_type_(bind_type),
-      rand_int_cb_(rand_int_cb),
       read_socket_watcher_(FROM_HERE),
       write_socket_watcher_(FROM_HERE),
       read_watcher_(this),
       write_watcher_(this),
+      last_async_result_(0),
+      write_async_timer_running_(false),
+      write_async_outstanding_(0),
       read_buf_len_(0),
       recv_from_address_(NULL),
       write_buf_len_(0),
       net_log_(NetLogWithSource::Make(net_log, NetLogSourceType::UDP_SOCKET)),
-      bound_network_(NetworkChangeNotifier::kInvalidNetworkHandle) {
+      bound_network_(NetworkChangeNotifier::kInvalidNetworkHandle),
+      experimental_recv_optimization_enabled_(false),
+      weak_factory_(this) {
   net_log_.BeginEvent(NetLogEventType::SOCKET_ALIVE,
                       source.ToEventParametersCallback());
-  if (bind_type == DatagramSocket::RANDOM_BIND)
-    DCHECK(!rand_int_cb.is_null());
 }
 
 UDPSocketPosix::~UDPSocketPosix() {
@@ -327,6 +315,7 @@ void UDPSocketPosix::Close() {
   is_connected_ = false;
   tag_ = SocketTag();
 
+  write_async_timer_.Stop();
   sent_activity_monitor_.OnClose();
   received_activity_monitor_.OnClose();
 }
@@ -376,14 +365,14 @@ int UDPSocketPosix::GetLocalAddress(IPEndPoint* address) const {
 
 int UDPSocketPosix::Read(IOBuffer* buf,
                          int buf_len,
-                         const CompletionCallback& callback) {
-  return RecvFrom(buf, buf_len, NULL, callback);
+                         CompletionOnceCallback callback) {
+  return RecvFrom(buf, buf_len, NULL, std::move(callback));
 }
 
 int UDPSocketPosix::RecvFrom(IOBuffer* buf,
                              int buf_len,
                              IPEndPoint* address,
-                             const CompletionCallback& callback) {
+                             CompletionOnceCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_NE(kInvalidSocket, socket_);
   CHECK(read_callback_.is_null());
@@ -395,8 +384,8 @@ int UDPSocketPosix::RecvFrom(IOBuffer* buf,
   if (nread != ERR_IO_PENDING)
     return nread;
 
-  if (!base::MessageLoopForIO::current()->WatchFileDescriptor(
-          socket_, true, base::MessageLoopForIO::WATCH_READ,
+  if (!base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+          socket_, true, base::MessagePumpForIO::WATCH_READ,
           &read_socket_watcher_, &read_watcher_)) {
     PLOG(ERROR) << "WatchFileDescriptor failed on read";
     int result = MapSystemError(errno);
@@ -407,29 +396,29 @@ int UDPSocketPosix::RecvFrom(IOBuffer* buf,
   read_buf_ = buf;
   read_buf_len_ = buf_len;
   recv_from_address_ = address;
-  read_callback_ = callback;
+  read_callback_ = std::move(callback);
   return ERR_IO_PENDING;
 }
 
 int UDPSocketPosix::Write(
     IOBuffer* buf,
     int buf_len,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const NetworkTrafficAnnotationTag& traffic_annotation) {
-  return SendToOrWrite(buf, buf_len, NULL, callback);
+  return SendToOrWrite(buf, buf_len, NULL, std::move(callback));
 }
 
 int UDPSocketPosix::SendTo(IOBuffer* buf,
                            int buf_len,
                            const IPEndPoint& address,
-                           const CompletionCallback& callback) {
-  return SendToOrWrite(buf, buf_len, &address, callback);
+                           CompletionOnceCallback callback) {
+  return SendToOrWrite(buf, buf_len, &address, std::move(callback));
 }
 
 int UDPSocketPosix::SendToOrWrite(IOBuffer* buf,
                                   int buf_len,
                                   const IPEndPoint* address,
-                                  const CompletionCallback& callback) {
+                                  CompletionOnceCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_NE(kInvalidSocket, socket_);
   CHECK(write_callback_.is_null());
@@ -440,8 +429,8 @@ int UDPSocketPosix::SendToOrWrite(IOBuffer* buf,
   if (result != ERR_IO_PENDING)
     return result;
 
-  if (!base::MessageLoopForIO::current()->WatchFileDescriptor(
-          socket_, true, base::MessageLoopForIO::WATCH_WRITE,
+  if (!base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+          socket_, true, base::MessagePumpForIO::WATCH_WRITE,
           &write_socket_watcher_, &write_watcher_)) {
     DVLOG(1) << "WatchFileDescriptor failed on write, errno " << errno;
     int result = MapSystemError(errno);
@@ -455,7 +444,7 @@ int UDPSocketPosix::SendToOrWrite(IOBuffer* buf,
   if (address) {
     send_to_address_.reset(new IPEndPoint(*address));
   }
-  write_callback_ = callback;
+  write_callback_ = std::move(callback);
   return ERR_IO_PENDING;
 }
 
@@ -642,6 +631,16 @@ int UDPSocketPosix::SetDoNotFragment() {
 #endif
 }
 
+void UDPSocketPosix::SetMsgConfirm(bool confirm) {
+#if !defined(OS_MACOSX) && !defined(OS_IOS)
+  if (confirm) {
+    sendto_flags_ |= MSG_CONFIRM;
+  } else {
+    sendto_flags_ &= ~MSG_CONFIRM;
+  }
+#endif  // !defined(OS_MACOSX) && !defined(OS_IOS)
+}
+
 int UDPSocketPosix::AllowAddressReuse() {
   DCHECK_NE(socket_, kInvalidSocket);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -686,20 +685,18 @@ void UDPSocketPosix::DoReadCallback(int rv) {
   DCHECK_NE(rv, ERR_IO_PENDING);
   DCHECK(!read_callback_.is_null());
 
-  // since Run may result in Read being called, clear read_callback_ up front.
-  CompletionCallback c = read_callback_;
-  read_callback_.Reset();
-  c.Run(rv);
+  // Since Run() may result in Read() being called,
+  // clear |read_callback_| up front.
+  std::move(read_callback_).Run(rv);
 }
 
 void UDPSocketPosix::DoWriteCallback(int rv) {
   DCHECK_NE(rv, ERR_IO_PENDING);
   DCHECK(!write_callback_.is_null());
 
-  // since Run may result in Write being called, clear write_callback_ up front.
-  CompletionCallback c = write_callback_;
-  write_callback_.Reset();
-  c.Run(rv);
+  // Since Run() may result in Write() being called,
+  // clear |write_callback_| up front.
+  std::move(write_callback_).Run(rv);
 }
 
 void UDPSocketPosix::DidCompleteRead() {
@@ -772,6 +769,47 @@ void UDPSocketPosix::LogWrite(int result,
 int UDPSocketPosix::InternalRecvFrom(IOBuffer* buf,
                                      int buf_len,
                                      IPEndPoint* address) {
+  // If the socket is connected and the remote address is known
+  // use the more efficient method that uses read() instead of recvmsg().
+  if (experimental_recv_optimization_enabled_ && is_connected_ &&
+      remote_address_) {
+    return InternalRecvFromConnectedSocket(buf, buf_len, address);
+  }
+  return InternalRecvFromNonConnectedSocket(buf, buf_len, address);
+}
+
+int UDPSocketPosix::InternalRecvFromConnectedSocket(IOBuffer* buf,
+                                                    int buf_len,
+                                                    IPEndPoint* address) {
+  DCHECK(is_connected_);
+  DCHECK(remote_address_);
+  int bytes_transferred;
+  bytes_transferred = HANDLE_EINTR(read(socket_, buf->data(), buf_len));
+  int result;
+
+  if (bytes_transferred < 0) {
+    result = MapSystemError(errno);
+  } else if (bytes_transferred == buf_len) {
+    result = ERR_MSG_TOO_BIG;
+  } else {
+    result = bytes_transferred;
+    if (address)
+      *address = *remote_address_.get();
+  }
+
+  if (result != ERR_IO_PENDING) {
+    SockaddrStorage sock_addr;
+    bool success =
+        remote_address_->ToSockAddr(sock_addr.addr, &sock_addr.addr_len);
+    DCHECK(success);
+    LogRead(result, buf->data(), sock_addr.addr_len, sock_addr.addr);
+  }
+  return result;
+}
+
+int UDPSocketPosix::InternalRecvFromNonConnectedSocket(IOBuffer* buf,
+                                                       int buf_len,
+                                                       IPEndPoint* address) {
   int bytes_transferred;
 
   struct iovec iov = {};
@@ -821,12 +859,8 @@ int UDPSocketPosix::InternalSendTo(IOBuffer* buf,
     }
   }
 
-  int result = HANDLE_EINTR(sendto(socket_,
-                            buf->data(),
-                            buf_len,
-                            0,
-                            addr,
-                            storage.addr_len));
+  int result = HANDLE_EINTR(sendto(socket_, buf->data(), buf_len, sendto_flags_,
+                                   addr, storage.addr_len));
   if (result < 0)
     result = MapSystemError(errno);
   if (result != ERR_IO_PENDING)
@@ -867,17 +901,17 @@ int UDPSocketPosix::SetMulticastOptions() {
   if (multicast_interface_ != 0) {
     switch (addr_family_) {
       case AF_INET: {
-#if defined(OS_MACOSX) || defined(OS_FUCHSIA)
-        ip_mreq mreq;
+#if defined(OS_MACOSX)
+        ip_mreq mreq = {};
         int error = GetIPv4AddressFromIndex(socket_, multicast_interface_,
                                             &mreq.imr_interface.s_addr);
         if (error != OK)
           return error;
-#else   //  defined(OS_MACOSX) || defined(OS_FUCHSIA)
-        ip_mreqn mreq;
+#else   //  defined(OS_MACOSX)
+        ip_mreqn mreq = {};
         mreq.imr_ifindex = multicast_interface_;
         mreq.imr_address.s_addr = htonl(INADDR_ANY);
-#endif  //  !defined(OS_MACOSX) && !defined(OS_FUCHSIA)
+#endif  //  !defined(OS_MACOSX)
         int rv = setsockopt(socket_, IPPROTO_IP, IP_MULTICAST_IF,
                             reinterpret_cast<const char*>(&mreq), sizeof(mreq));
         if (rv)
@@ -920,14 +954,14 @@ int UDPSocketPosix::DoBind(const IPEndPoint& address) {
 }
 
 int UDPSocketPosix::RandomBind(const IPAddress& address) {
-  DCHECK(bind_type_ == DatagramSocket::RANDOM_BIND && !rand_int_cb_.is_null());
+  DCHECK_EQ(bind_type_, DatagramSocket::RANDOM_BIND);
 
   for (int i = 0; i < kBindRetries; ++i) {
-    int rv = DoBind(IPEndPoint(address,
-                               rand_int_cb_.Run(kPortStart, kPortEnd)));
+    int rv = DoBind(IPEndPoint(address, base::RandInt(kPortStart, kPortEnd)));
     if (rv != ERR_ADDRESS_IN_USE)
       return rv;
   }
+
   return DoBind(IPEndPoint(address, 0));
 }
 
@@ -941,14 +975,14 @@ int UDPSocketPosix::JoinGroup(const IPAddress& group_address) const {
       if (addr_family_ != AF_INET)
         return ERR_ADDRESS_INVALID;
 
-#if defined(OS_MACOSX) || defined(OS_FUCHSIA)
-      ip_mreq mreq;
+#if defined(OS_MACOSX)
+      ip_mreq mreq = {};
       int error = GetIPv4AddressFromIndex(socket_, multicast_interface_,
                                           &mreq.imr_interface.s_addr);
       if (error != OK)
         return error;
 #else
-      ip_mreqn mreq;
+      ip_mreqn mreq = {};
       mreq.imr_ifindex = multicast_interface_;
       mreq.imr_address.s_addr = htonl(INADDR_ANY);
 #endif
@@ -989,16 +1023,8 @@ int UDPSocketPosix::LeaveGroup(const IPAddress& group_address) const {
     case IPAddress::kIPv4AddressSize: {
       if (addr_family_ != AF_INET)
         return ERR_ADDRESS_INVALID;
-      ip_mreq mreq;
-#if defined(OS_FUCHSIA)
-      // Fuchsia currently doesn't support INADDR_ANY in ip_mreq.imr_interface.
-      int error = GetIPv4AddressFromIndex(socket_, multicast_interface_,
-                                          &mreq.imr_interface.s_addr);
-      if (error != OK)
-        return error;
-#else   // defined(OS_FUCHSIA)
+      ip_mreq mreq = {};
       mreq.imr_interface.s_addr = INADDR_ANY;
-#endif  // !defined(OS_FUCHSIA)
       memcpy(&mreq.imr_multiaddr, group_address.bytes().data(),
              IPAddress::kIPv4AddressSize);
       int rv = setsockopt(socket_, IPPROTO_IP, IP_DROP_MEMBERSHIP,
@@ -1065,12 +1091,14 @@ int UDPSocketPosix::SetDiffServCodePoint(DiffServCodePoint dscp) {
   if (dscp == DSCP_NO_CHANGE) {
     return OK;
   }
-  int rv;
+
   int dscp_and_ecn = dscp << 2;
-  if (addr_family_ == AF_INET) {
-    rv = setsockopt(socket_, IPPROTO_IP, IP_TOS,
-                    &dscp_and_ecn, sizeof(dscp_and_ecn));
-  } else {
+  // Set the IPv4 option in all cases to support dual-stack sockets.
+  int rv = setsockopt(socket_, IPPROTO_IP, IP_TOS, &dscp_and_ecn,
+                      sizeof(dscp_and_ecn));
+  if (addr_family_ == AF_INET6) {
+    // In the IPv6 case, the previous socksetopt may fail because of a lack of
+    // dual-stack support. Therefore ignore the previous return value.
     rv = setsockopt(socket_, IPPROTO_IPV6, IPV6_TCLASS,
                     &dscp_and_ecn, sizeof(dscp_and_ecn));
   }
@@ -1090,6 +1118,346 @@ void UDPSocketPosix::ApplySocketTag(const SocketTag& tag) {
     tag.Apply(socket_);
   }
   tag_ = tag;
+}
+
+UDPSocketPosixSender::UDPSocketPosixSender() : sendmmsg_enabled_(false) {}
+UDPSocketPosixSender::~UDPSocketPosixSender() {}
+
+SendResult::SendResult() : rv(0), write_count(0) {}
+SendResult::~SendResult() {}
+SendResult::SendResult(int _rv, int _write_count, DatagramBuffers _buffers)
+    : rv(_rv), write_count(_write_count), buffers(std::move(_buffers)) {}
+SendResult::SendResult(SendResult&& other) = default;
+
+SendResult UDPSocketPosixSender::InternalSendBuffers(
+    int fd,
+    DatagramBuffers buffers) const {
+  int rv = 0;
+  int write_count = 0;
+  for (auto& buffer : buffers) {
+    int result = HANDLE_EINTR(Send(fd, buffer->data(), buffer->length(), 0));
+    if (result < 0) {
+      rv = MapSystemError(errno);
+      break;
+    }
+    write_count++;
+  }
+  return SendResult(rv, write_count, std::move(buffers));
+}
+
+#if HAVE_SENDMMSG
+SendResult UDPSocketPosixSender::InternalSendmmsgBuffers(
+    int fd,
+    DatagramBuffers buffers) const {
+  base::StackVector<struct iovec, kWriteAsyncMaxBuffersThreshold + 1> msg_iov;
+  base::StackVector<struct mmsghdr, kWriteAsyncMaxBuffersThreshold + 1> msgvec;
+  int i = 0;
+  for (auto& buffer : buffers) {
+    msg_iov[i].iov_base = const_cast<char*>(buffer->data());
+    msg_iov[i].iov_len = buffer->length();
+    i++;
+  }
+  for (size_t j = 0; j < buffers.size(); j++) {
+    std::memset(&msgvec[j], 0, sizeof(msgvec[j]));
+    msgvec[j].msg_hdr.msg_iov = &msg_iov[j];
+    msgvec[j].msg_hdr.msg_iovlen = 1;
+  }
+  int result = HANDLE_EINTR(Sendmmsg(fd, &msgvec[0], buffers.size(), 0));
+  SendResult send_result(0, 0, std::move(buffers));
+  if (result < 0) {
+    send_result.rv = MapSystemError(errno);
+  } else {
+    send_result.write_count = result;
+  }
+  return send_result;
+}
+#endif
+
+SendResult UDPSocketPosixSender::SendBuffers(int fd, DatagramBuffers buffers) {
+#if HAVE_SENDMMSG
+  if (sendmmsg_enabled_) {
+    auto result = InternalSendmmsgBuffers(fd, std::move(buffers));
+    if (LIKELY(result.rv != ERR_NOT_IMPLEMENTED)) {
+      return result;
+    }
+    DLOG(WARNING) << "senddmsg() not implemented, falling back to send()";
+    sendmmsg_enabled_ = false;
+    buffers = std::move(result.buffers);
+  }
+#endif
+  return InternalSendBuffers(fd, std::move(buffers));
+}
+
+ssize_t UDPSocketPosixSender::Send(int sockfd,
+                                   const void* buf,
+                                   size_t len,
+                                   int flags) const {
+  return send(sockfd, buf, len, flags);
+}
+
+#if HAVE_SENDMMSG
+int UDPSocketPosixSender::Sendmmsg(int sockfd,
+                                   struct mmsghdr* msgvec,
+                                   unsigned int vlen,
+                                   unsigned int flags) const {
+  return sendmmsg(sockfd, msgvec, vlen, flags);
+}
+#endif
+
+int UDPSocketPosix::WriteAsync(
+    const char* buffer,
+    size_t buf_len,
+    CompletionOnceCallback callback,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
+  DCHECK(datagram_buffer_pool_ != nullptr);
+  IncreaseWriteAsyncOutstanding(1);
+  datagram_buffer_pool_->Enqueue(buffer, buf_len, &pending_writes_);
+  return InternalWriteAsync(std::move(callback), traffic_annotation);
+}
+
+int UDPSocketPosix::WriteAsync(
+    DatagramBuffers buffers,
+    CompletionOnceCallback callback,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
+  IncreaseWriteAsyncOutstanding(buffers.size());
+  pending_writes_.splice(pending_writes_.end(), std::move(buffers));
+  return InternalWriteAsync(std::move(callback), traffic_annotation);
+}
+
+int UDPSocketPosix::InternalWriteAsync(
+    CompletionOnceCallback callback,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
+  CHECK(write_callback_.is_null());
+
+  // Surface error immediately if one is pending.
+  if (last_async_result_ < 0) {
+    return ResetLastAsyncResult();
+  }
+
+  size_t flush_threshold =
+      write_batching_active_ ? kWriteAsyncPostBuffersThreshold : 1;
+  if (pending_writes_.size() >= flush_threshold) {
+    FlushPending();
+    // Surface error immediately if one is pending.
+    if (last_async_result_ < 0) {
+      return ResetLastAsyncResult();
+    }
+  }
+
+  if (!write_async_timer_running_) {
+    write_async_timer_running_ = true;
+    write_async_timer_.Start(FROM_HERE, kWriteAsyncMsThreshold, this,
+                             &UDPSocketPosix::OnWriteAsyncTimerFired);
+  }
+
+  int blocking_threshold =
+      write_batching_active_ ? kWriteAsyncMaxBuffersThreshold : 1;
+  if (write_async_outstanding_ >= blocking_threshold) {
+    write_callback_ = std::move(callback);
+    return ERR_IO_PENDING;
+  }
+
+  DVLOG(2) << __func__ << " pending " << pending_writes_.size()
+           << " outstanding " << write_async_outstanding_;
+  return ResetWrittenBytes();
+}
+
+DatagramBuffers UDPSocketPosix::GetUnwrittenBuffers() {
+  write_async_outstanding_ -= pending_writes_.size();
+  return std::move(pending_writes_);
+}
+
+void UDPSocketPosix::FlushPending() {
+  // Nothing to do if socket is blocked.
+  if (write_async_watcher_->watching())
+    return;
+
+  if (pending_writes_.empty())
+    return;
+
+  if (write_async_timer_running_)
+    write_async_timer_.Reset();
+
+  int num_pending_writes = static_cast<int>(pending_writes_.size());
+  if (!write_multi_core_enabled_ ||
+      // Don't bother with post if not enough buffers
+      (num_pending_writes <= kWriteAsyncMinBuffersThreshold &&
+       // but not if there is a previous post
+       // outstanding, to prevent out of order transmission.
+       (num_pending_writes == write_async_outstanding_))) {
+    LocalSendBuffers();
+  } else {
+    PostSendBuffers();
+  }
+}
+
+// TODO(ckrasic) Sad face.  Do this lazily because many tests exploded
+// otherwise.  |threading_and_tasks.md| advises to instantiate a
+// |base::test::ScopedTaskEnvironment| in the test, implementing that
+// for all tests that might exercise QUIC is too daunting.  Also, in
+// some tests it seemed like following the advice just broke in other
+// ways.
+base::SequencedTaskRunner* UDPSocketPosix::GetTaskRunner() {
+  if (task_runner_ == nullptr) {
+    task_runner_ = CreateSequencedTaskRunnerWithTraits(base::TaskTraits());
+  }
+  return task_runner_.get();
+}
+
+void UDPSocketPosix::OnWriteAsyncTimerFired() {
+  DVLOG(2) << __func__ << " pending writes " << pending_writes_.size();
+  if (pending_writes_.empty()) {
+    write_async_timer_.Stop();
+    write_async_timer_running_ = false;
+    return;
+  }
+  if (last_async_result_ < 0) {
+    DVLOG(1) << __func__ << " socket not writeable";
+    return;
+  }
+  FlushPending();
+}
+
+void UDPSocketPosix::LocalSendBuffers() {
+  DVLOG(1) << __func__ << " queue " << pending_writes_.size() << " out of "
+           << write_async_outstanding_ << " total";
+  DidSendBuffers(sender_->SendBuffers(socket_, std::move(pending_writes_)));
+}
+
+void UDPSocketPosix::PostSendBuffers() {
+  DVLOG(1) << __func__ << " queue " << pending_writes_.size() << " out of "
+           << write_async_outstanding_ << " total";
+  base::PostTaskAndReplyWithResult(
+      GetTaskRunner(), FROM_HERE,
+      base::BindOnce(&UDPSocketPosixSender::SendBuffers, sender_, socket_,
+                     std::move(pending_writes_)),
+      base::BindOnce(&UDPSocketPosix::DidSendBuffers,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void UDPSocketPosix::DidSendBuffers(SendResult send_result) {
+  DVLOG(3) << __func__;
+  int write_count = send_result.write_count;
+  DatagramBuffers& buffers = send_result.buffers;
+
+  DCHECK(!buffers.empty());
+  int num_buffers = buffers.size();
+
+  // Dequeue buffers that have been written.
+  if (write_count > 0) {
+    write_async_outstanding_ -= write_count;
+
+    DatagramBuffers::const_iterator it;
+    // Generate logs for written buffers
+    it = buffers.cbegin();
+    for (int i = 0; i < write_count; i++, it++) {
+      auto& buffer = *it;
+      LogWrite(buffer->length(), buffer->data(), NULL);
+      written_bytes_ += buffer->length();
+    }
+    // Return written buffers to pool
+    DatagramBuffers written_buffers;
+    if (write_count == num_buffers) {
+      it = buffers.cend();
+    } else {
+      it = buffers.cbegin();
+      for (int i = 0; i < write_count; i++) {
+        it++;
+      }
+    }
+    written_buffers.splice(written_buffers.cend(), buffers, buffers.cbegin(),
+                           it);
+    DCHECK(datagram_buffer_pool_ != nullptr);
+    datagram_buffer_pool_->Dequeue(&written_buffers);
+  }
+
+  // Requeue left-over (unwritten) buffers.
+  if (!buffers.empty()) {
+    DVLOG(2) << __func__ << " requeue " << buffers.size() << " buffers";
+    pending_writes_.splice(pending_writes_.begin(), std::move(buffers));
+  }
+
+  last_async_result_ = send_result.rv;
+  if (last_async_result_ == ERR_IO_PENDING) {
+    DVLOG(2) << __func__ << " WatchFileDescriptor start";
+    if (!WatchFileDescriptor()) {
+      DVLOG(1) << "WatchFileDescriptor failed on write, errno " << errno;
+      last_async_result_ = MapSystemError(errno);
+      LogWrite(last_async_result_, NULL, NULL);
+    } else {
+      last_async_result_ = 0;
+    }
+  } else if (last_async_result_ < 0 || pending_writes_.empty()) {
+    DVLOG(2) << __func__ << " WatchFileDescriptor stop: result "
+             << ErrorToShortString(last_async_result_) << " pending_writes "
+             << pending_writes_.size();
+    StopWatchingFileDescriptor();
+  }
+  DCHECK(last_async_result_ != ERR_IO_PENDING);
+
+  if (write_callback_.is_null())
+    return;
+
+  if (last_async_result_ < 0) {
+    DVLOG(1) << last_async_result_;
+    // Update the writer with the latest result.
+    DoWriteCallback(ResetLastAsyncResult());
+  } else if (write_async_outstanding_ < kWriteAsyncCallbackBuffersThreshold) {
+    DVLOG(1) << write_async_outstanding_ << " < "
+             << kWriteAsyncCallbackBuffersThreshold;
+    DoWriteCallback(ResetWrittenBytes());
+  }
+}
+
+void UDPSocketPosix::WriteAsyncWatcher::OnFileCanWriteWithoutBlocking(int) {
+  DVLOG(1) << __func__ << " queue " << socket_->pending_writes_.size()
+           << " out of " << socket_->write_async_outstanding_ << " total";
+  socket_->StopWatchingFileDescriptor();
+  socket_->FlushPending();
+}
+
+bool UDPSocketPosix::WatchFileDescriptor() {
+  if (write_async_watcher_->watching())
+    return true;
+  bool result = InternalWatchFileDescriptor();
+  if (result) {
+    write_async_watcher_->set_watching(true);
+  }
+  return result;
+}
+
+void UDPSocketPosix::StopWatchingFileDescriptor() {
+  if (!write_async_watcher_->watching())
+    return;
+  InternalStopWatchingFileDescriptor();
+  write_async_watcher_->set_watching(false);
+}
+
+bool UDPSocketPosix::InternalWatchFileDescriptor() {
+  return base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+      socket_, true, base::MessagePumpForIO::WATCH_WRITE,
+      &write_socket_watcher_, write_async_watcher_.get());
+}
+
+void UDPSocketPosix::InternalStopWatchingFileDescriptor() {
+  bool ok = write_socket_watcher_.StopWatchingFileDescriptor();
+  DCHECK(ok);
+}
+
+void UDPSocketPosix::SetMaxPacketSize(size_t max_packet_size) {
+  datagram_buffer_pool_ = std::make_unique<DatagramBufferPool>(max_packet_size);
+}
+
+int UDPSocketPosix::ResetLastAsyncResult() {
+  int result = last_async_result_;
+  last_async_result_ = 0;
+  return result;
+}
+
+int UDPSocketPosix::ResetWrittenBytes() {
+  int bytes = written_bytes_;
+  written_bytes_ = 0;
+  return bytes;
 }
 
 }  // namespace net

@@ -29,6 +29,8 @@ const int kVEADefaultBitratePerPixel = 2;
 // Number of output buffers used to copy the encoded data coming from HW
 // encoders.
 const int kVEAEncoderOutputBufferCount = 4;
+// Force a keyframe in regular intervals.
+const uint32_t kMaxKeyframeInterval = 100;
 
 }  // anonymous namespace
 
@@ -37,14 +39,18 @@ VEAEncoder::VEAEncoder(
     const VideoTrackRecorder::OnErrorCB& on_error_callback,
     int32_t bits_per_second,
     media::VideoCodecProfile codec,
-    const gfx::Size& size)
+    const gfx::Size& size,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : Encoder(on_encoded_video_callback,
               bits_per_second > 0 ? bits_per_second
                                   : size.GetArea() * kVEADefaultBitratePerPixel,
+              std::move(task_runner),
               RenderThreadImpl::current()->GetGpuFactories()->GetTaskRunner()),
       gpu_factories_(RenderThreadImpl::current()->GetGpuFactories()),
       codec_(codec),
       error_notified_(false),
+      num_frames_after_keyframe_(0),
+      force_next_frame_to_be_keyframe_(false),
       on_error_callback_(on_error_callback) {
   DCHECK(gpu_factories_);
   DCHECK_GE(size.width(), kVEAEncoderMinResolutionWidth);
@@ -94,26 +100,32 @@ void VEAEncoder::RequireBitstreamBuffers(unsigned int /*input_count*/,
     UseOutputBitstreamBufferId(i);
 }
 
-void VEAEncoder::BitstreamBufferReady(int32_t bitstream_buffer_id,
-                                      size_t payload_size,
-                                      bool keyframe,
-                                      base::TimeDelta timestamp) {
+void VEAEncoder::BitstreamBufferReady(
+    int32_t bitstream_buffer_id,
+    const media::BitstreamBufferMetadata& metadata) {
   DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
 
+  num_frames_after_keyframe_ =
+      metadata.key_frame ? 0 : num_frames_after_keyframe_ + 1;
+  if (num_frames_after_keyframe_ > kMaxKeyframeInterval) {
+    force_next_frame_to_be_keyframe_ = true;
+    num_frames_after_keyframe_ = 0;
+  }
+
   base::SharedMemory* output_buffer =
       output_buffers_[bitstream_buffer_id].get();
-
   std::unique_ptr<std::string> data(new std::string);
-  data->append(reinterpret_cast<char*>(output_buffer->memory()), payload_size);
+  data->append(reinterpret_cast<char*>(output_buffer->memory()),
+               metadata.payload_size_bytes);
 
   const auto front_frame = frames_in_encode_.front();
   frames_in_encode_.pop();
   origin_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(OnFrameEncodeCompleted, on_encoded_video_callback_,
-                     front_frame.first, base::Passed(&data), nullptr,
-                     front_frame.second, keyframe));
+                     front_frame.first, std::move(data), nullptr,
+                     front_frame.second, metadata.key_frame));
   UseOutputBitstreamBufferId(bitstream_buffer_id);
 }
 
@@ -229,7 +241,8 @@ void VEAEncoder::EncodeOnEncodingTaskRunner(scoped_refptr<VideoFrame> frame,
   frames_in_encode_.push(std::make_pair(
       media::WebmMuxer::VideoParameters(frame), capture_timestamp));
 
-  video_encoder_->Encode(video_frame, false);
+  video_encoder_->Encode(video_frame, force_next_frame_to_be_keyframe_);
+  force_next_frame_to_be_keyframe_ = false;
 }
 
 void VEAEncoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size) {

@@ -6,6 +6,7 @@
 
 #include <list>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -31,17 +32,16 @@ class TestClientSocketFactory : public ClientSocketFactory {
 
   std::unique_ptr<DatagramClientSocket> CreateDatagramClientSocket(
       DatagramSocket::BindType bind_type,
-      const RandIntCallback& rand_int_cb,
       NetLog* net_log,
       const NetLogSource& source) override;
 
-  std::unique_ptr<StreamSocket> CreateTransportClientSocket(
+  std::unique_ptr<TransportClientSocket> CreateTransportClientSocket(
       const AddressList& addresses,
       std::unique_ptr<SocketPerformanceWatcher>,
       NetLog*,
       const NetLogSource&) override {
     NOTIMPLEMENTED();
-    return std::unique_ptr<StreamSocket>();
+    return nullptr;
   }
 
   std::unique_ptr<SSLClientSocket> CreateSSLClientSocket(
@@ -51,6 +51,20 @@ class TestClientSocketFactory : public ClientSocketFactory {
       const SSLClientSocketContext& context) override {
     NOTIMPLEMENTED();
     return std::unique_ptr<SSLClientSocket>();
+  }
+
+  std::unique_ptr<ProxyClientSocket> CreateProxyClientSocket(
+      std::unique_ptr<ClientSocketHandle> transport_socket,
+      const std::string& user_agent,
+      const HostPortPair& endpoint,
+      HttpAuthController* http_auth_controller,
+      bool tunnel,
+      bool using_spdy,
+      NextProto negotiated_protocol,
+      bool is_https_proxy,
+      const NetworkTrafficAnnotationTag& traffic_annotation) override {
+    NOTIMPLEMENTED();
+    return nullptr;
   }
 
   void ClearSSLSessionCache() override { NOTIMPLEMENTED(); }
@@ -181,7 +195,6 @@ bool DnsSessionTest::ExpectEvent(const PoolEvent& expected) {
 std::unique_ptr<DatagramClientSocket>
 TestClientSocketFactory::CreateDatagramClientSocket(
     DatagramSocket::BindType bind_type,
-    const RandIntCallback& rand_int_cb,
     NetLog* net_log,
     const NetLogSource& source) {
   // We're not actually expecting to send or receive any data, so use the

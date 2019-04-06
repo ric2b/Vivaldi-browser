@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/offline_store_types.h"
@@ -21,10 +22,6 @@ namespace offline_pages {
 namespace {
 
 const char kPrefetchStoreFileName[] = "PrefetchStore.db";
-
-using InitializeCallback =
-    base::Callback<void(InitializationStatus,
-                        std::unique_ptr<sql::Connection>)>;
 
 bool PrepareDirectory(const base::FilePath& path) {
   base::File::Error error = base::File::FILE_OK;

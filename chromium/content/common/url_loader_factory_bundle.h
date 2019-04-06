@@ -10,44 +10,54 @@
 
 #include "base/macros.h"
 #include "content/common/content_export.h"
-#include "services/network/public/interfaces/url_loader_factory.mojom.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 class GURL;
 
-namespace mojo {
-template <typename, typename>
-struct StructTraits;
-}
-
 namespace content {
-namespace mojom {
-class URLLoaderFactoryBundleDataView;
-}
 
 // Holds the internal state of a URLLoaderFactoryBundle in a form that is safe
 // to pass across sequences.
-struct CONTENT_EXPORT URLLoaderFactoryBundleInfo {
-  URLLoaderFactoryBundleInfo(URLLoaderFactoryBundleInfo&&);
+class CONTENT_EXPORT URLLoaderFactoryBundleInfo
+    : public network::SharedURLLoaderFactoryInfo {
+ public:
+  URLLoaderFactoryBundleInfo();
   URLLoaderFactoryBundleInfo(
       network::mojom::URLLoaderFactoryPtrInfo default_factory_info,
       std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo>
           factories_info);
-  ~URLLoaderFactoryBundleInfo();
+  ~URLLoaderFactoryBundleInfo() override;
 
-  network::mojom::URLLoaderFactoryPtrInfo default_factory_info;
-  std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo> factories_info;
+  network::mojom::URLLoaderFactoryPtrInfo& default_factory_info() {
+    return default_factory_info_;
+  }
+
+  std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo>&
+  factories_info() {
+    return factories_info_;
+  }
+
+ protected:
+  // SharedURLLoaderFactoryInfo implementation.
+  scoped_refptr<network::SharedURLLoaderFactory> CreateFactory() override;
+
+  network::mojom::URLLoaderFactoryPtrInfo default_factory_info_;
+  std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo>
+      factories_info_;
+
+  DISALLOW_COPY_AND_ASSIGN(URLLoaderFactoryBundleInfo);
 };
 
 // Encapsulates a collection of URLLoaderFactoryPtrs which can be usd to acquire
 // loaders for various types of resource requests.
-class CONTENT_EXPORT URLLoaderFactoryBundle {
+class CONTENT_EXPORT URLLoaderFactoryBundle
+    : public network::SharedURLLoaderFactory {
  public:
   URLLoaderFactoryBundle();
-  URLLoaderFactoryBundle(URLLoaderFactoryBundle&&);
-  explicit URLLoaderFactoryBundle(URLLoaderFactoryBundleInfo info);
-  ~URLLoaderFactoryBundle();
 
-  URLLoaderFactoryBundle& operator=(URLLoaderFactoryBundle&&);
+  explicit URLLoaderFactoryBundle(
+      std::unique_ptr<URLLoaderFactoryBundleInfo> info);
 
   // Sets the default factory to use when no registered factories match a given
   // |url|.
@@ -60,27 +70,29 @@ class CONTENT_EXPORT URLLoaderFactoryBundle {
   // Returns a factory which can be used to acquire a loader for |url|. If no
   // registered factory matches |url|'s scheme, the default factory is used. It
   // is undefined behavior to call this when no default factory is set.
-  network::mojom::URLLoaderFactory* GetFactoryForRequest(const GURL& url);
+  virtual network::mojom::URLLoaderFactory* GetFactoryForURL(const GURL& url);
 
-  // Passes out a structure which captures the internal state of this bundle in
-  // a form that is safe to pass across sequences. Effectively resets |this|
-  // to have no registered factories.
-  URLLoaderFactoryBundleInfo PassInfo();
+  // SharedURLLoaderFactory implementation.
+  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const network::ResourceRequest& request,
+                            network::mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override;
+  void Clone(network::mojom::URLLoaderFactoryRequest request) override;
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override;
 
-  // Creates a clone of this bundle which can be passed to and owned by another
-  // consumer. The clone operates identically to but independent from the
-  // original (this) bundle.
-  URLLoaderFactoryBundle Clone();
+  // The |info| contains replacement factories for a subset of the existing
+  // bundle.
+  void Update(std::unique_ptr<URLLoaderFactoryBundleInfo> info);
 
- private:
-  friend struct mojo::StructTraits<
-      content::mojom::URLLoaderFactoryBundleDataView,
-      URLLoaderFactoryBundle>;
+ protected:
+  ~URLLoaderFactoryBundle() override;
 
   network::mojom::URLLoaderFactoryPtr default_factory_;
   std::map<std::string, network::mojom::URLLoaderFactoryPtr> factories_;
-
-  DISALLOW_COPY_AND_ASSIGN(URLLoaderFactoryBundle);
 };
 
 }  // namespace content

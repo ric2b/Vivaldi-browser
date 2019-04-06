@@ -4,6 +4,7 @@
 
 #include "services/ui/public/interfaces/ime/ime_struct_traits.h"
 
+#include "mojo/public/cpp/base/string16_mojom_traits.h"
 #include "ui/gfx/range/mojo/range_struct_traits.h"
 
 namespace mojo {
@@ -50,7 +51,8 @@ bool StructTraits<ui::mojom::ImeTextSpanDataView, ui::ImeTextSpan>::Read(
   out->start_offset = data.start_offset();
   out->end_offset = data.end_offset();
   out->underline_color = data.underline_color();
-  out->thick = data.thick();
+  if (!data.ReadThickness(&out->thickness))
+    return false;
   out->background_color = data.background_color();
   out->suggestion_highlight_color = data.suggestion_highlight_color();
   if (!data.ReadSuggestions(&out->suggestions))
@@ -96,6 +98,43 @@ bool EnumTraits<ui::mojom::ImeTextSpanType, ui::ImeTextSpan::Type>::FromMojom(
       return true;
     case ui::mojom::ImeTextSpanType::kMisspellingSuggestion:
       *out = ui::ImeTextSpan::Type::kMisspellingSuggestion;
+      return true;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
+// static
+ui::mojom::ImeTextSpanThickness EnumTraits<
+    ui::mojom::ImeTextSpanThickness,
+    ui::ImeTextSpan::Thickness>::ToMojom(ui::ImeTextSpan::Thickness thickness) {
+  switch (thickness) {
+    case ui::ImeTextSpan::Thickness::kNone:
+      return ui::mojom::ImeTextSpanThickness::kNone;
+    case ui::ImeTextSpan::Thickness::kThin:
+      return ui::mojom::ImeTextSpanThickness::kThin;
+    case ui::ImeTextSpan::Thickness::kThick:
+      return ui::mojom::ImeTextSpanThickness::kThick;
+  }
+
+  NOTREACHED();
+  return ui::mojom::ImeTextSpanThickness::kThin;
+}
+
+// static
+bool EnumTraits<ui::mojom::ImeTextSpanThickness, ui::ImeTextSpan::Thickness>::
+    FromMojom(ui::mojom::ImeTextSpanThickness input,
+              ui::ImeTextSpan::Thickness* out) {
+  switch (input) {
+    case ui::mojom::ImeTextSpanThickness::kNone:
+      *out = ui::ImeTextSpan::Thickness::kNone;
+      return true;
+    case ui::mojom::ImeTextSpanThickness::kThin:
+      *out = ui::ImeTextSpan::Thickness::kThin;
+      return true;
+    case ui::mojom::ImeTextSpanThickness::kThick:
+      *out = ui::ImeTextSpan::Thickness::kThick;
       return true;
   }
 

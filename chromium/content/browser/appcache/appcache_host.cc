@@ -16,7 +16,8 @@
 #include "content/browser/appcache/appcache_subresource_url_factory.h"
 #include "content/public/common/content_features.h"
 #include "net/url_request/url_request.h"
-#include "services/network/public/interfaces/url_loader_factory.mojom.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 
 namespace content {
@@ -78,7 +79,7 @@ AppCacheHost::~AppCacheHost() {
   if (group_being_updated_.get())
     group_being_updated_->RemoveUpdateObserver(this);
   storage()->CancelDelegateCallbacks(this);
-  if (service()->quota_manager_proxy() && !origin_in_use_.is_empty())
+  if (service()->quota_manager_proxy() && !origin_in_use_.unique())
     service()->quota_manager_proxy()->NotifyOriginNoLongerInUse(origin_in_use_);
 }
 
@@ -107,8 +108,8 @@ bool AppCacheHost::SelectCache(const GURL& document_url,
     return true;
   }
 
-  origin_in_use_ = document_url.GetOrigin();
-  if (service()->quota_manager_proxy() && !origin_in_use_.is_empty())
+  origin_in_use_ = url::Origin::Create(document_url);
+  if (service()->quota_manager_proxy() && !origin_in_use_.unique())
     service()->quota_manager_proxy()->NotifyOriginInUse(origin_in_use_);
 
   if (main_resource_blocked_)
@@ -508,26 +509,12 @@ void AppCacheHost::NotifyMainResourceBlocked(const GURL& manifest_url) {
   blocked_manifest_url_ = manifest_url;
 }
 
-void AppCacheHost::PrepareForTransfer() {
-  // This can only happen prior to the document having been loaded.
-  DCHECK(!associated_cache());
-  DCHECK(!is_selection_pending());
-  DCHECK(!group_being_updated_.get());
-  host_id_ = kAppCacheNoHostId;
-  frontend_ = nullptr;
-}
-
-void AppCacheHost::CompleteTransfer(int host_id, AppCacheFrontend* frontend) {
-  host_id_ = host_id;
-  frontend_ = frontend;
-}
-
 base::WeakPtr<AppCacheHost> AppCacheHost::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
 void AppCacheHost::MaybePassSubresourceFactory() {
-  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService))
     return;
 
   // We already have a valid factory. This happens when the document was loaded
@@ -538,7 +525,8 @@ void AppCacheHost::MaybePassSubresourceFactory() {
   network::mojom::URLLoaderFactoryPtr factory_ptr = nullptr;
 
   AppCacheSubresourceURLFactory::CreateURLLoaderFactory(
-      service()->url_loader_factory_getter(), GetWeakPtr(), &factory_ptr);
+      service()->url_loader_factory_getter()->GetNetworkFactory(), GetWeakPtr(),
+      &factory_ptr);
 
   frontend_->OnSetSubresourceFactory(host_id(), std::move(factory_ptr));
 }

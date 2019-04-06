@@ -11,7 +11,6 @@ import android.graphics.RectF;
 import org.chromium.chrome.browser.compositor.TitleCache;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.ui.resources.ResourceManager;
 
 /**
@@ -104,6 +103,16 @@ class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
     }
 
     @Override
+    public int getTopControlsHeightPixels() {
+        return 0;
+    }
+
+    @Override
+    public int getBottomControlsHeightPixels() {
+        return 0;
+    }
+
+    @Override
     public LayoutRenderHost getLayoutRenderHost() {
         return this;
     }
@@ -134,9 +143,6 @@ class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
 
     @Override
     public void invalidateAccessibilityProvider() { }
-
-    @Override
-    public void onOverlayPanelContentViewCoreAdded(ContentViewCore content) { }
 
     @Override
     public void onContentChanged() { }

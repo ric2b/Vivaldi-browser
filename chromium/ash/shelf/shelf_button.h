@@ -65,6 +65,9 @@ class ASH_EXPORT ShelfButton : public views::Button {
   // Called when user started dragging the shelf button.
   void OnDragStarted(const ui::LocatedEvent* event);
 
+  // Callback used when a menu for this ShelfButton is closed.
+  void OnMenuClosed();
+
   // Overrides to views::Button:
   void ShowContextMenu(const gfx::Point& p,
                        ui::MenuSourceType source_type) override;
@@ -90,12 +93,12 @@ class ASH_EXPORT ShelfButton : public views::Button {
   bool ShouldEnterPushedState(const ui::Event& event) override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
   void NotifyClick(const ui::Event& event) override;
-  void PaintButtonContents(gfx::Canvas* canvas) override;
 
   // Sets the icon image with a shadow.
   void SetShadowedImage(const gfx::ImageSkia& bitmap);
 
  private:
+  class AppNotificationIndicatorView;
   class AppStatusIndicatorView;
 
   // Updates the parts of the button to reflect the current |state_| and
@@ -104,6 +107,9 @@ class ASH_EXPORT ShelfButton : public views::Button {
 
   // Invoked when |touch_drag_timer_| fires to show dragging UI.
   void OnTouchDragTimer();
+
+  // Invoked when |ripple_activation_timer_| fires to activate the ink drop.
+  void OnRippleTimer();
 
   // Scales up app icon if |scale_up| is true, otherwise scales it back to
   // normal size.
@@ -121,6 +127,10 @@ class ASH_EXPORT ShelfButton : public views::Button {
   // application.
   AppStatusIndicatorView* indicator_;
 
+  // Draws an indicator in the top right corner of the image to represent an
+  // active notification.
+  AppNotificationIndicatorView* notification_indicator_;
+
   // The current application state, a bitfield of State enum values.
   int state_;
 
@@ -130,11 +140,14 @@ class ASH_EXPORT ShelfButton : public views::Button {
   // showing and used to detect if the menu was deleted while running.
   bool* destroyed_flag_;
 
-  // Whether the touchable context menu is enabled.
-  const bool is_touchable_app_context_menu_enabled_;
+  // Whether the notification indicator is enabled.
+  const bool is_notification_indicator_enabled_;
 
   // A timer to defer showing drag UI when the shelf button is pressed.
   base::OneShotTimer drag_timer_;
+
+  // A timer to activate the ink drop ripple during a long press.
+  base::OneShotTimer ripple_activation_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfButton);
 };

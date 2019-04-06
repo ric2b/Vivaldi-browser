@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
+#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/window/dialog_delegate.h"
 
 class Browser;
@@ -41,7 +42,8 @@ class SigninViewControllerDelegateViews : public views::DialogDelegateView,
       signin_metrics::AccessPoint access_point);
 
   static std::unique_ptr<views::WebView> CreateSyncConfirmationWebView(
-      Browser* browser);
+      Browser* browser,
+      bool is_consent_bump = false);
 
   static std::unique_ptr<views::WebView> CreateSigninErrorWebView(
       Browser* browser);
@@ -72,6 +74,11 @@ class SigninViewControllerDelegateViews : public views::DialogDelegateView,
   void PerformClose() override;
   void ResizeNativeView(int height) override;
 
+  // content::WebContentsDelegate:
+  void HandleKeyboardEvent(
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
+
   void DisplayModal();
 
   // Creates a WebView for a dialog with the specified URL.
@@ -84,6 +91,7 @@ class SigninViewControllerDelegateViews : public views::DialogDelegateView,
   views::WebView* content_view_;
   views::Widget* modal_signin_widget_;  // Not owned.
   ui::ModalType dialog_modal_type_;
+  views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(SigninViewControllerDelegateViews);
 };

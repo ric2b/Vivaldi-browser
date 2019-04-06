@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/strings/grit/extensions_strings.h"
@@ -51,14 +50,7 @@ bool SettingsOverrideAPIPermission::FromValue(
     const base::Value* value,
     std::string* /*error*/,
     std::vector<std::string>* unhandled_permissions) {
-  // Ugly hack: |value| being null should be an error. But before M46 beta, we
-  // didn't store the parameter for settings override permissions in prefs.
-  // See crbug.com/533086 and crbug.com/619759.
-  // TODO(treib,devlin): Remove this for M56, when hopefully all users will have
-  // updated prefs.
-  // This should read:
-  // return value && value->GetAsString(&setting_value_);
-  return !value || value->GetAsString(&setting_value_);
+  return value && value->GetAsString(&setting_value_);
 }
 
 std::unique_ptr<base::Value> SettingsOverrideAPIPermission::ToValue() const {

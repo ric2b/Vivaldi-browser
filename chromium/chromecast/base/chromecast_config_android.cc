@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/android/jni_android.h"
-#include "base/lazy_instance.h"
 #include "jni/ChromecastConfigAndroid_jni.h"
 
 using base::android::JavaParamRef;
@@ -15,14 +14,10 @@ using base::android::JavaParamRef;
 namespace chromecast {
 namespace android {
 
-namespace {
-base::LazyInstance<ChromecastConfigAndroid>::DestructorAtExit g_instance =
-    LAZY_INSTANCE_INITIALIZER;
-}  // namespace
-
 // static
 ChromecastConfigAndroid* ChromecastConfigAndroid::GetInstance() {
-  return g_instance.Pointer();
+  static base::NoDestructor<ChromecastConfigAndroid> instance;
+  return instance.get();
 }
 
 ChromecastConfigAndroid::ChromecastConfigAndroid() {
@@ -32,10 +27,15 @@ ChromecastConfigAndroid::~ChromecastConfigAndroid() {
 }
 
 bool ChromecastConfigAndroid::CanSendUsageStats() {
-  // TODO(gunsch): make opt-in.stats pref the source of truth for this data,
+  // TODO(sanfin): make opt-in.stats pref the source of truth for this data,
   // instead of Android prefs, then delete ChromecastConfigAndroid.
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_ChromecastConfigAndroid_canSendUsageStats(env);
+}
+
+void ChromecastConfigAndroid::SetSendUsageStats(bool enabled) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ChromecastConfigAndroid_setSendUsageStats(env, enabled);
 }
 
 // Registers a handler to be notified when SendUsageStats is changed.

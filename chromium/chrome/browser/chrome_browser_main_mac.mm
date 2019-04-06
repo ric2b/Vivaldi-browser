@@ -27,7 +27,6 @@
 #include "chrome/browser/mac/keychain_reauthorize.h"
 #import "chrome/browser/mac/keystone_glue.h"
 #include "chrome/browser/mac/mac_startup_profiler.h"
-#include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/crash/content/app/crashpad.h"
@@ -71,18 +70,14 @@ void EnsureMetadataNeverIndexFile(const base::FilePath& user_data_dir) {
 // ChromeBrowserMainPartsMac ---------------------------------------------------
 
 ChromeBrowserMainPartsMac::ChromeBrowserMainPartsMac(
-    const content::MainFunctionParams& parameters)
-    : ChromeBrowserMainPartsPosix(parameters) {
-}
+    const content::MainFunctionParams& parameters,
+    std::unique_ptr<ui::DataPack> data_pack)
+    : ChromeBrowserMainPartsPosix(parameters, std::move(data_pack)) {}
 
 ChromeBrowserMainPartsMac::~ChromeBrowserMainPartsMac() {
 }
 
 int ChromeBrowserMainPartsMac::PreEarlyInitialization() {
-  const int result = ChromeBrowserMainPartsPosix::PreEarlyInitialization();
-  if (result != content::RESULT_CODE_NORMAL_EXIT)
-    return result;
-
   if (base::mac::WasLaunchedAsLoginItemRestoreState()) {
     base::CommandLine* singleton_command_line =
         base::CommandLine::ForCurrentProcess();
@@ -93,7 +88,16 @@ int ChromeBrowserMainPartsMac::PreEarlyInitialization() {
     singleton_command_line->AppendSwitch(switches::kNoStartupWindow);
   }
 
-  return content::RESULT_CODE_NORMAL_EXIT;
+  // If ui_task is not NULL, the app is actually a browser_test.
+  if (!parameters().ui_task) {
+    // The browser process only wants to support the language Cocoa will use,
+    // so force the app locale to be overriden with that value. This must
+    // happen before the ResourceBundle is loaded, which happens in
+    // ChromeBrowserMainParts::PreEarlyInitialization().
+    l10n_util::OverrideLocaleWithCocoaLocale();
+  }
+
+  return ChromeBrowserMainPartsPosix::PreEarlyInitialization();
 }
 
 void ChromeBrowserMainPartsMac::PreMainMessageLoopStart() {
@@ -101,37 +105,9 @@ void ChromeBrowserMainPartsMac::PreMainMessageLoopStart() {
       MacStartupProfiler::PRE_MAIN_MESSAGE_LOOP_START);
   ChromeBrowserMainPartsPosix::PreMainMessageLoopStart();
 
-  // Tell Cocoa to finish its initialization, which we want to do manually
-  // instead of calling NSApplicationMain(). The primary reason is that NSAM()
-  // never returns, which would leave all the objects currently on the stack
-  // in scoped_ptrs hanging and never cleaned up. We then load the main nib
-  // directly. The main event loop is run from common code using the
-  // MessageLoop API, which works out ok for us because it's a wrapper around
-  // CFRunLoop.
-
-  // Initialize NSApplication using the custom subclass.
-  chrome_browser_application_mac::RegisterBrowserCrApp();
-
-  // If ui_task is not NULL, the app is actually a browser_test.
-  if (!parameters().ui_task) {
-    // The browser process only wants to support the language Cocoa will use,
-    // so force the app locale to be overriden with that value.
-    l10n_util::OverrideLocaleWithCocoaLocale();
-  }
-
-  // Before we load the nib, we need to start up the resource bundle so we
-  // have the strings avaiable for localization.
-  // TODO(markusheintz): Read preference pref::kApplicationLocale in order
-  // to enforce the application locale.
-  const std::string loaded_locale =
-      ui::ResourceBundle::InitSharedInstanceWithLocale(
-          std::string(), nullptr, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
-  CHECK(!loaded_locale.empty()) << "Default locale could not be found";
-
-  base::FilePath resources_pack_path;
-  PathService::Get(chrome::FILE_RESOURCES_PACK, &resources_pack_path);
-  ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
-      resources_pack_path, ui::SCALE_FACTOR_NONE);
+  // ChromeBrowserMainParts should have loaded the resource bundle by this
+  // point (needed to load the nib).
+  CHECK(ui::ResourceBundle::HasSharedInstance());
 
   // This is a no-op if the KeystoneRegistration framework is not present.
   // The framework is only distributed with branded Google Chrome builds.
@@ -210,8 +186,6 @@ void ChromeBrowserMainPartsMac::PreProfileInit() {
   // This is called here so that the app shim socket is only created after
   // taking the singleton lock.
   g_browser_process->platform_part()->app_shim_host_manager()->Init();
-  AppListService::InitAll(NULL,
-      GetStartupProfilePath(user_data_dir(), parsed_command_line()));
 }
 
 void ChromeBrowserMainPartsMac::PostProfileInit() {

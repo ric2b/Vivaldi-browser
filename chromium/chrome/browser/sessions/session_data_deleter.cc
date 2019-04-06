@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_shutdown.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
@@ -20,7 +20,7 @@
 #include "content/public/browser/local_storage_usage_info.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/cookies/cookie_util.h"
-#include "services/network/public/interfaces/cookie_manager.mojom.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "storage/browser/quota/special_storage_policy.h"
 
 namespace {
@@ -104,23 +104,16 @@ void SessionDataDeleter::Run(content::StoragePartition* storage_partition) {
 
 void SessionDataDeleter::DeleteSessionOnlyOriginCookies(
     const std::vector<net::CanonicalCookie>& cookies) {
-  base::Time yesterday(base::Time::Now() - base::TimeDelta::FromDays(1));
-  for (const auto& cookie : cookies) {
-    GURL url =
-        net::cookie_util::CookieOriginToURL(cookie.Domain(), cookie.IsSecure());
-    if (!storage_policy_->IsStorageSessionOnlyOrBlocked(url))
-      continue;
+  auto delete_cookie_predicate =
+      storage_policy_->CreateDeleteCookieOnExitPredicate();
+  DCHECK(delete_cookie_predicate);
 
-    // Delete a single cookie by setting its expiration time into the past.
-    cookie_manager_->SetCanonicalCookie(
-        net::CanonicalCookie(cookie.Name(), cookie.Value(), cookie.Domain(),
-                             cookie.Path(), cookie.CreationDate(), yesterday,
-                             cookie.LastAccessDate(), cookie.IsSecure(),
-                             cookie.IsHttpOnly(), cookie.SameSite(),
-                             cookie.Priority()),
-        true /* secure_source */, true /* modify_http_only */,
-        // Fire and forget
-        network::mojom::CookieManager::SetCanonicalCookieCallback());
+  for (const auto& cookie : cookies) {
+    if (!delete_cookie_predicate.Run(cookie.Domain(), cookie.IsSecure())) {
+      continue;
+    }
+    // Fire and forget.
+    cookie_manager_->DeleteCanonicalCookie(cookie, base::DoNothing());
   }
 }
 
@@ -135,7 +128,8 @@ void SessionDataDeleter::ClearSessionOnlyLocalStorage(
     const content::LocalStorageUsageInfo& usage = usages[i];
     if (!storage_policy_->IsStorageSessionOnly(usage.origin))
       continue;
-    storage_partition->GetDOMStorageContext()->DeleteLocalStorage(usage.origin);
+    storage_partition->GetDOMStorageContext()->DeleteLocalStorage(
+        usage.origin, base::DoNothing());
   }
 }
 

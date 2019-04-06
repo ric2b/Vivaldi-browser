@@ -9,11 +9,11 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/common/features.h"
 #include "chrome/grit/browser_resources.h"
 #include "extensions/common/constants.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
@@ -32,6 +32,7 @@ bool IsComponentExtensionWhitelisted(const std::string& extension_id) {
     extension_misc::kMediaRouterStableExtensionId,
     extension_misc::kPdfExtensionId,
 #if defined(OS_CHROMEOS)
+    extension_misc::kAssessmentAssistantExtensionId,
     extension_misc::kChromeVoxExtensionId,
     extension_misc::kSelectToSpeakExtensionId,
     extension_misc::kSpeechSynthesisExtensionId,
@@ -61,7 +62,6 @@ bool IsComponentExtensionWhitelisted(const std::string& extension_id) {
 bool IsComponentExtensionWhitelisted(int manifest_resource_id) {
   switch (manifest_resource_id) {
     // Please keep the list in alphabetical order.
-    case IDR_BOOKMARKS_MANIFEST:
 #if BUILDFLAG(ENABLE_APP_LIST)
     case IDR_CHROME_APP_MANIFEST:
 #endif

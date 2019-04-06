@@ -12,6 +12,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -19,9 +20,11 @@
 #include "chrome/browser/ui/views/frame/avatar_button_manager.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/canvas.h"
@@ -72,6 +75,10 @@ std::unique_ptr<views::Border> CreateThemedBorder(
 
   return std::move(border);
 }
+#endif
+
+#if defined(OS_MACOSX)
+constexpr int kMacButtonHeight = 24;
 #endif
 
 // This class draws the border (and background) of the avatar button for
@@ -177,6 +184,22 @@ class AvatarButtonShutdownNotifierFactory
   DISALLOW_COPY_AND_ASSIGN(AvatarButtonShutdownNotifierFactory);
 };
 
+#if defined(OS_WIN) || defined(OS_MACOSX)
+SkColor BaseColorForButton(const ui::ThemeProvider* theme_provider) {
+  return color_utils::IsDark(
+             theme_provider->GetColor(ThemeProperties::COLOR_FRAME))
+             ? SK_ColorWHITE
+             : SK_ColorBLACK;
+}
+
+gfx::ImageSkia AvatarIconWithBaseColor(const SkColor base_color) {
+  const SkColor icon_color =
+      SkColorSetA(base_color, static_cast<SkAlpha>(0.54 * 0xFF));
+  return gfx::CreateVectorIcon(kAccountCircleIcon, kGenericAvatarIconSize,
+                               icon_color);
+}
+#endif
+
 }  // namespace
 
 AvatarButton::AvatarButton(views::MenuButtonListener* listener,
@@ -189,6 +212,7 @@ AvatarButton::AvatarButton(views::MenuButtonListener* listener,
       profile_observer_(this),
       button_style_(button_style),
       widget_observer_(this) {
+  DCHECK_NE(button_style, AvatarButtonStyle::NONE);
 #if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
   views::NavButtonProvider* nav_button_provider =
       manager->get_nav_button_provider();
@@ -198,8 +222,10 @@ AvatarButton::AvatarButton(views::MenuButtonListener* listener,
   set_triggerable_event_flags(ui::EF_LEFT_MOUSE_BUTTON |
                               ui::EF_RIGHT_MOUSE_BUTTON);
   set_animate_on_state_change(false);
+#if !defined(OS_MACOSX)
   SetEnabledTextColors(SK_ColorWHITE);
   SetTextSubpixelRenderingEnabled(false);
+#endif
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
 
   profile_observer_.Add(
@@ -212,21 +238,14 @@ AvatarButton::AvatarButton(views::MenuButtonListener* listener,
   label()->SetFontList(
       label()->font_list().DeriveWithHeightUpperBound(kDisplayFontHeight));
 
-  bool apply_ink_drop = IsCondensible();
-#if defined(OS_LINUX)
-  DCHECK_EQ(AvatarButtonStyle::THEMED, button_style);
-  apply_ink_drop = true;
-#endif
-  if (render_native_nav_buttons_)
-    apply_ink_drop = false;
-
+  bool apply_ink_drop = ShouldApplyInkDrop();
   if (render_native_nav_buttons_) {
 #if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
     SetBackground(nav_button_provider->CreateAvatarButtonBackground(this));
     SetBorder(nullptr);
     generic_avatar_ =
         gfx::CreateVectorIcon(kProfileSwitcherOutlineIcon,
-                              kGenericAvatarIconSize, gfx::kPlaceholderColor);
+                              kGenericAvatarIconSize, gfx::kChromeIconGrey);
 #endif
   } else if (apply_ink_drop) {
     SetInkDropMode(InkDropMode::ON);
@@ -236,7 +255,7 @@ AvatarButton::AvatarButton(views::MenuButtonListener* listener,
     SetBorder(std::make_unique<AvatarButtonThemedBorder>());
     generic_avatar_ =
         gfx::CreateVectorIcon(kProfileSwitcherOutlineIcon,
-                              kGenericAvatarIconSize, gfx::kPlaceholderColor);
+                              kGenericAvatarIconSize, gfx::kChromeIconGrey);
 #elif defined(OS_WIN)
     DCHECK_EQ(AvatarButtonStyle::NATIVE, button_style);
     SetBorder(views::CreateEmptyBorder(kBorderInsets));
@@ -274,21 +293,19 @@ AvatarButton::AvatarButton(views::MenuButtonListener* listener,
 AvatarButton::~AvatarButton() {}
 
 void AvatarButton::SetupThemeColorButton() {
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN)
   if (IsCondensible()) {
     // TODO(bsep): This needs to also be called when the Windows accent color
     // updates, but there is currently no signal for that.
-    const SkColor base_color = color_utils::IsDark(GetThemeProvider()->GetColor(
-                                   ThemeProperties::COLOR_FRAME))
-                                   ? SK_ColorWHITE
-                                   : SK_ColorBLACK;
+    const SkColor base_color = BaseColorForButton(GetThemeProvider());
     set_ink_drop_base_color(base_color);
-    const SkColor icon_color =
-        SkColorSetA(base_color, static_cast<SkAlpha>(0.54 * 0xFF));
-    generic_avatar_ = gfx::CreateVectorIcon(kAccountCircleIcon,
-                                            kGenericAvatarIconSize, icon_color);
+    generic_avatar_ = AvatarIconWithBaseColor(base_color);
   }
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
+#elif defined(OS_MACOSX)
+  const SkColor base_color = BaseColorForButton(GetThemeProvider());
+  SetEnabledTextColors(base_color);
+  generic_avatar_ = AvatarIconWithBaseColor(base_color);
+#endif
 }
 
 void AvatarButton::OnAvatarButtonPressed(const ui::Event* event) {
@@ -344,14 +361,25 @@ gfx::Size AvatarButton::CalculatePreferredSize() const {
     size.set_height(MinimizeButtonMetrics::GetCaptionButtonHeightInDIPs());
 #endif
   }
-
+#if defined(OS_MACOSX)
+  size.set_height(kMacButtonHeight);
+#endif
   return size;
 }
 
 std::unique_ptr<views::InkDropMask> AvatarButton::CreateInkDropMask() const {
+#if defined(OS_MACOSX)
+  // On Mac, this looks and behaves like a regular MD button, so we need a hover
+  // background.
+  // TODO (lgrey): Determine and set the correct insets.
+  constexpr int kHoverCornerRadius = 2;
+  return std::make_unique<views::RoundRectInkDropMask>(size(), gfx::Insets(),
+                                                       kHoverCornerRadius);
+#else
   if (button_style_ == AvatarButtonStyle::THEMED)
     return AvatarButtonThemedBorder::CreateInkDropMask(size());
   return MenuButton::CreateInkDropMask();
+#endif
 }
 
 std::unique_ptr<views::InkDropHighlight> AvatarButton::CreateInkDropHighlight()
@@ -365,6 +393,15 @@ std::unique_ptr<views::InkDropHighlight> AvatarButton::CreateInkDropHighlight()
   constexpr float kInkDropHighlightOpacity = 0.08f;
   ink_drop_highlight->set_visible_opacity(kInkDropHighlightOpacity);
   return ink_drop_highlight;
+}
+
+SkColor AvatarButton::GetInkDropBaseColor() const {
+#if defined(OS_MACOSX)
+  return GetThemeProvider()->GetColor(
+      ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
+#else
+  return MenuButton::GetInkDropBaseColor();
+#endif
 }
 
 bool AvatarButton::ShouldEnterPushedState(const ui::Event& event) {
@@ -441,23 +478,45 @@ void AvatarButton::Update() {
       !profile_->IsGuestSession() && storage.GetNumberOfProfiles() == 1 &&
       !SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated();
 
-  SetText(use_generic_button
-              ? base::string16()
-              : profiles::GetAvatarButtonTextForProfile(profile_));
+  // Always set the accessible name as accessible text, but don't display it if
+  // is just a generic button.
+  base::string16 name =
+      use_generic_button
+          ? l10n_util::GetStringUTF16(IDS_GENERIC_USER_AVATAR_LABEL)
+          : profiles::GetAvatarButtonTextForProfile(profile_);
+  if (use_generic_button) {
+    SetText(base::string16());
+    SetAccessibleName(name);  // Must be set after setting text to override it.
+  } else {
+    SetText(name);
+  }
 
+#if !defined(OS_MACOSX)
   // If the button has no text, clear the text shadows to make sure the
-  // image is centered correctly.
+  // image is centered correctly. macOS doesn't use a shadow.
   SetTextShadows(
       use_generic_button
           ? gfx::ShadowValues()
           : gfx::ShadowValues(
                 10, gfx::ShadowValue(gfx::Vector2d(), 2.0f, SK_ColorDKGRAY)));
+#endif
 
   if (use_generic_button) {
     SetImage(views::Button::STATE_NORMAL, generic_avatar_);
-  } else if (error_controller_.HasAvatarError()) {
-    SetImage(views::Button::STATE_NORMAL,
-             gfx::CreateVectorIcon(kSyncProblemIcon, 16, gfx::kGoogleRed700));
+  } else if (profile_->IsSyncAllowed() && error_controller_.HasAvatarError()) {
+    // When DICE is enabled and the error is an auth error, the sync-paused icon
+    // is shown.
+    int dummy;
+    const bool should_show_sync_paused_ui =
+        AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_) &&
+        sync_ui_util::GetMessagesForAvatarSyncError(
+            profile_, *SigninManagerFactory::GetForProfile(profile_), &dummy,
+            &dummy) == sync_ui_util::AUTH_ERROR;
+    SetImage(
+        views::Button::STATE_NORMAL,
+        should_show_sync_paused_ui
+            ? gfx::CreateVectorIcon(kSyncPausedIcon, 16, gfx::kGoogleBlue500)
+            : gfx::CreateVectorIcon(kSyncProblemIcon, 16, gfx::kGoogleRed700));
   } else {
     SetImage(views::Button::STATE_NORMAL, gfx::ImageSkia());
   }
@@ -482,5 +541,17 @@ bool AvatarButton::IsCondensible() const {
          button_style_ == AvatarButtonStyle::NATIVE;
 #else
   return false;
+#endif
+}
+bool AvatarButton::ShouldApplyInkDrop() const {
+#if defined(OS_LINUX)
+  DCHECK_EQ(AvatarButtonStyle::THEMED, button_style_);
+  return true;
+#elif defined(OS_MACOSX)
+  return true;
+#else
+  if (render_native_nav_buttons_)
+    return false;
+  return IsCondensible();
 #endif
 }

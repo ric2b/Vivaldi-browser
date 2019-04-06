@@ -5,11 +5,10 @@
 #include "ui/keyboard/keyboard_util.h"
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
+#include "ui/keyboard/test/keyboard_test_util.h"
 
 namespace keyboard {
 namespace {
@@ -48,6 +47,10 @@ class KeyboardUtilTest : public testing::Test {
   }
 
   void SetUp() override { ResetAllFlags(); }
+
+ protected:
+  // Used indirectly by keyboard utils.
+  KeyboardController keyboard_controller_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(KeyboardUtilTest);
@@ -152,13 +155,12 @@ TEST_F(KeyboardUtilTest, IsOverscrollEnabled) {
 
   // Set keyboard_locked() to true.
   ui::DummyInputMethod input_method;
-  KeyboardController::ResetInstance(new KeyboardController(
-      std::make_unique<TestKeyboardUI>(&input_method), nullptr));
-  KeyboardController* controller = keyboard::KeyboardController::GetInstance();
-  controller->set_keyboard_locked(true);
-  EXPECT_TRUE(controller->keyboard_locked());
+  keyboard_controller_.EnableKeyboard(
+      std::make_unique<TestKeyboardUI>(&input_method), nullptr);
+  keyboard_controller_.set_keyboard_locked(true);
+  EXPECT_TRUE(keyboard_controller_.keyboard_locked());
   EXPECT_FALSE(keyboard::IsKeyboardOverscrollEnabled());
-  KeyboardController::ResetInstance(nullptr);
+  keyboard_controller_.DisableKeyboard();
 }
 
 }  // namespace keyboard

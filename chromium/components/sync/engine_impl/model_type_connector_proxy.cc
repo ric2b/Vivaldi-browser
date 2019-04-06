@@ -4,10 +4,11 @@
 
 #include "components/sync/engine_impl/model_type_connector_proxy.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
-#include "components/sync/engine/activation_context.h"
+#include "components/sync/engine/data_type_activation_response.h"
 
 namespace syncer {
 
@@ -20,11 +21,11 @@ ModelTypeConnectorProxy::~ModelTypeConnectorProxy() {}
 
 void ModelTypeConnectorProxy::ConnectNonBlockingType(
     ModelType type,
-    std::unique_ptr<ActivationContext> activation_context) {
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&ModelTypeConnector::ConnectNonBlockingType,
-                                    model_type_connector_, type,
-                                    base::Passed(&activation_context)));
+    std::unique_ptr<DataTypeActivationResponse> activation_response) {
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&ModelTypeConnector::ConnectNonBlockingType,
+                                model_type_connector_, type,
+                                std::move(activation_response)));
 }
 
 void ModelTypeConnectorProxy::DisconnectNonBlockingType(ModelType type) {

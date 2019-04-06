@@ -15,6 +15,7 @@
 #include "base/supports_user_data.h"
 #include "media/base/video_codecs.h"
 #include "media/capabilities/video_decode_stats_db.h"
+#include "media/capabilities/video_decode_stats_db_provider.h"
 #include "media/mojo/interfaces/video_decode_perf_history.mojom.h"
 #include "media/mojo/services/media_mojo_export.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -45,6 +46,7 @@ namespace media {
 // sequence.
 class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
     : public mojom::VideoDecodePerfHistory,
+      public VideoDecodeStatsDBProvider,
       public base::SupportsUserData::Data {
  public:
   explicit VideoDecodePerfHistory(
@@ -56,28 +58,29 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
   void BindRequest(mojom::VideoDecodePerfHistoryRequest request);
 
   // mojom::VideoDecodePerfHistory implementation:
-  void GetPerfInfo(VideoCodecProfile profile,
-                   const gfx::Size& natural_size,
-                   int frame_rate,
+  void GetPerfInfo(mojom::PredictionFeaturesPtr features,
                    GetPerfInfoCallback got_info_cb) override;
 
-  // Save a record of the given performance stats for the described stream.
-  // Saving is generally fire-and-forget, but |save_done_cb| may be optionally
+  // Provides a callback for saving a stats record for the described stream.
+  // This callback will silently fail if called after |this| is destroyed.
+  // Saving is generally fire-and-forget, but |save_done_cb| may be provided
   // for tests to know the save is complete.
-  void SavePerfRecord(const url::Origin& untrusted_top_frame_origin,
-                      bool is_top_frame,
-                      VideoCodecProfile profile,
-                      const gfx::Size& natural_size,
-                      int frame_rate,
-                      uint32_t frames_decoded,
-                      uint32_t frames_dropped,
-                      uint32_t frames_decoded_power_efficient,
-                      uint64_t player_id,
-                      base::OnceClosure save_done_cb = base::OnceClosure());
+  using SaveCallback = base::RepeatingCallback<void(
+      const url::Origin& untrusted_top_frame_origin,
+      bool is_top_frame,
+      mojom::PredictionFeatures features,
+      mojom::PredictionTargets targets,
+      uint64_t player_id,
+      base::OnceClosure save_done_cb)>;
+  SaveCallback GetSaveCallback();
 
   // Clear all history from the underlying database. Run |clear_done_cb| when
   // complete.
   void ClearHistory(base::OnceClosure clear_done_cb);
+
+  // From VideoDecodeStatsDBProvider. |cb| receives a pointer to the
+  // *initialized* VideoDecodeStatsDB, or null in case of error.
+  void GetVideoDecodeStatsDB(GetCB cb) override;
 
  private:
   friend class VideoDecodePerfHistoryTest;
@@ -106,6 +109,14 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
 
   // Callback from |db_->Initialize()|.
   void OnDatabaseInit(bool success);
+
+  // Initiate saving of the provided record. See GetSaveCallback().
+  void SavePerfRecord(const url::Origin& untrusted_top_frame_origin,
+                      bool is_top_frame,
+                      mojom::PredictionFeatures features,
+                      mojom::PredictionTargets targets,
+                      uint64_t player_id,
+                      base::OnceClosure save_done_cb);
 
   // Internal callback for database queries made from GetPerfInfo() (mojo API).
   // Assesses performance from database stats and passes results to

@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.tabmodel;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.support.annotation.Nullable;
@@ -16,6 +15,7 @@ import android.util.Pair;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -266,7 +266,7 @@ public class TabPersistentStore extends TabPersister {
     }
 
     private static void logExecutionTime(String name, long time) {
-        if (LibraryLoader.isInitialized()) {
+        if (LibraryLoader.getInstance().isInitialized()) {
             RecordHistogram.recordTimesHistogram("Android.StrictMode.TabPersistentStore." + name,
                     SystemClock.uptimeMillis() - time, TimeUnit.MILLISECONDS);
         }
@@ -914,7 +914,7 @@ public class TabPersistentStore extends TabPersister {
 
         saveListToFile(getStateDirectory(), mPersistencePolicy.getStateFileName(), listData);
         mLastSavedMetadata = listData;
-        if (LibraryLoader.isInitialized()) {
+        if (LibraryLoader.getInstance().isInitialized()) {
             RecordHistogram.recordCountHistogram(
                     "Android.TabPersistentStore.MetadataFileSize", listData.length);
         }
@@ -1402,7 +1402,7 @@ public class TabPersistentStore extends TabPersister {
                     Log.i(TAG, "State file does not exist.");
                     return null;
                 }
-                if (LibraryLoader.isInitialized()) {
+                if (LibraryLoader.getInstance().isInitialized()) {
                     RecordHistogram.recordCountHistogram(
                             "Android.TabPersistentStore.MergeStateMetadataFileSize",
                             (int) stateFile.length());

@@ -59,11 +59,6 @@ class SparseHistogramTest : public testing::TestWithParam<bool> {
   }
 
   void CreatePersistentMemoryAllocator() {
-    // By getting the results-histogram before any persistent allocator
-    // is attached, that histogram is guaranteed not to be stored in
-    // any persistent memory segment (which simplifies some tests).
-    GlobalHistogramAllocator::GetCreateHistogramResultHistogram();
-
     GlobalHistogramAllocator::CreateWithLocalMemory(
         kAllocatorMemorySize, 0, "SparseHistogramAllocatorTest");
     allocator_ = GlobalHistogramAllocator::Get()->memory_allocator();
@@ -206,7 +201,7 @@ TEST_P(SparseHistogramTest, MacroInLoopTest) {
   }
 
   const StatisticsRecorder::Histograms histograms =
-      StatisticsRecorder::GetHistograms();
+      StatisticsRecorder::Sort(StatisticsRecorder::GetHistograms());
   ASSERT_THAT(histograms, testing::SizeIs(2));
   EXPECT_STREQ(histograms[0]->histogram_name(), "Sparse0");
   EXPECT_STREQ(histograms[1]->histogram_name(), "Sparse1");

@@ -6,10 +6,10 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -23,6 +23,7 @@
 #include "content/public/common/webplugininfo.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
@@ -37,12 +38,12 @@ const char kExtensionId[] = "bjjcibdiodkkeanflmiijlcfieiemced";
 
 // This class tests that the Native Client plugin is blocked unless the
 // .nexe is part of an extension from the Chrome Webstore.
-class NaClExtensionTest : public ExtensionBrowserTest {
+class NaClExtensionTest : public extensions::ExtensionBrowserTest {
  public:
   NaClExtensionTest() {}
 
   void SetUpOnMainThread() override {
-    ExtensionBrowserTest::SetUpOnMainThread();
+    extensions::ExtensionBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(embedded_test_server()->Start());
   }
@@ -65,8 +66,9 @@ class NaClExtensionTest : public ExtensionBrowserTest {
 
   const Extension* InstallExtension(const base::FilePath& file_path,
                                     InstallType install_type) {
-    ExtensionService* service = extensions::ExtensionSystem::Get(
-        browser()->profile())->extension_service();
+    extensions::ExtensionService* service =
+        extensions::ExtensionSystem::Get(browser()->profile())
+            ->extension_service();
     const Extension* extension = NULL;
     switch (install_type) {
       case INSTALL_TYPE_COMPONENT:
@@ -92,7 +94,7 @@ class NaClExtensionTest : public ExtensionBrowserTest {
 
       case INSTALL_TYPE_NON_WEBSTORE:
         // Install native_client.crx but not from the webstore.
-        if (ExtensionBrowserTest::InstallExtension(file_path, 1)) {
+        if (extensions::ExtensionBrowserTest::InstallExtension(file_path, 1)) {
           extension = service->GetExtensionById(last_loaded_extension_id(),
                                                 false);
         }
@@ -114,7 +116,17 @@ class NaClExtensionTest : public ExtensionBrowserTest {
 
   bool IsNaClPluginLoaded() {
     base::FilePath path;
-    if (PathService::Get(chrome::FILE_NACL_PLUGIN, &path)) {
+    if (base::PathService::Get(chrome::FILE_NACL_PLUGIN, &path)) {
+      // Make sure plugins are loaded off disk first.
+      {
+        base::RunLoop run_loop;
+        PluginService::GetInstance()->GetPlugins(base::BindLambdaForTesting(
+            [&](const std::vector<content::WebPluginInfo>&) {
+              run_loop.Quit();
+            }));
+        run_loop.Run();
+      }
+
       content::WebPluginInfo info;
       return PluginService::GetInstance()->GetPluginInfoByPath(path, &info);
     }
@@ -199,7 +211,7 @@ IN_PROC_BROWSER_TEST_F(NaClExtensionTest, DISABLED_NonExtensionScheme) {
 }
 
 // Test that NaCl plugin isn't blocked for hosted app URLs.
-IN_PROC_BROWSER_TEST_F(NaClExtensionTest, HostedApp) {
+IN_PROC_BROWSER_TEST_F(NaClExtensionTest, DISABLED_HostedApp) {
   GURL url =
       embedded_test_server()->GetURL("/extensions/native_client/test.html");
   GURL::Replacements replace_host;

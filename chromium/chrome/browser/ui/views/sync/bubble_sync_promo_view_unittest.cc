@@ -12,23 +12,30 @@
 #include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/views/chrome_views_test_base.h"
+#include "components/signin/core/browser/account_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/range/range.h"
 #include "ui/views/controls/styled_label.h"
-#include "ui/views/test/views_test_base.h"
 
-class BubbleSyncPromoViewTest : public views::ViewsTestBase,
+class BubbleSyncPromoViewTest : public ChromeViewsTestBase,
                                 public BubbleSyncPromoDelegate {
  public:
-  BubbleSyncPromoViewTest() : sign_in_clicked_count_(0) {}
+  BubbleSyncPromoViewTest() {}
 
  protected:
   // BubbleSyncPromoDelegate:
-  void OnSignInLinkClicked() override { ++sign_in_clicked_count_; }
+  void OnEnableSync(const AccountInfo& account,
+                    bool is_default_promo_account) override {
+    // The bubble sync promo view does not allow the user to enable sync
+    // for an existing account id.
+    DCHECK(account.IsEmpty());
+    ++on_enable_sync_count_;
+  }
 
   // Number of times that OnSignInLinkClicked has been called.
-  int sign_in_clicked_count_;
+  int on_enable_sync_count_ = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BubbleSyncPromoViewTest);
@@ -36,13 +43,14 @@ class BubbleSyncPromoViewTest : public views::ViewsTestBase,
 
 TEST_F(BubbleSyncPromoViewTest, SignInLink) {
   std::unique_ptr<BubbleSyncPromoView> sync_promo;
-  sync_promo.reset(new BubbleSyncPromoView(this, IDS_BOOKMARK_SYNC_PROMO_LINK,
-                                           IDS_BOOKMARK_SYNC_PROMO_MESSAGE));
+  sync_promo.reset(new BubbleSyncPromoView(
+      this, signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE,
+      IDS_BOOKMARK_SYNC_PROMO_LINK, IDS_BOOKMARK_SYNC_PROMO_MESSAGE));
 
   // Simulate clicking the "Sign in" link.
   views::StyledLabel styled_label(base::ASCIIToUTF16("test"), nullptr);
   views::StyledLabelListener* listener = sync_promo.get();
   listener->StyledLabelLinkClicked(&styled_label, gfx::Range(), ui::EF_NONE);
 
-  EXPECT_EQ(1, sign_in_clicked_count_);
+  EXPECT_EQ(1, on_enable_sync_count_);
 }

@@ -19,7 +19,6 @@
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/crash/core/common/crash_keys.h"
 #include "components/history/core/browser/history_service.h"
@@ -30,6 +29,7 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_reporting_default_state.h"
 #include "components/metrics/metrics_service.h"
+#include "components/metrics/metrics_switches.h"
 #include "components/metrics/net/cellular_logic_helper.h"
 #include "components/metrics/net/net_metrics_log_uploader.h"
 #include "components/metrics/net/network_metrics_provider.h"
@@ -46,6 +46,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/application_context.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/google/google_brand.h"
@@ -53,11 +54,12 @@
 #include "ios/chrome/browser/metrics/ios_chrome_stability_metrics_provider.h"
 #include "ios/chrome/browser/metrics/mobile_session_shutdown_metrics_provider.h"
 #include "ios/chrome/browser/signin/ios_chrome_signin_status_metrics_provider_delegate.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_sync_client.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/tab_parenting_global_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_list.h"
 #include "ios/chrome/browser/translate/translate_ranker_metrics_provider.h"
+#include "ios/chrome/browser/unified_consent/feature.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/web_thread.h"
 
@@ -71,7 +73,7 @@ IOSChromeMetricsServiceClient::IOSChromeMetricsServiceClient(
       stability_metrics_provider_(nullptr),
       weak_ptr_factory_(this) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  RegisterForNotifications();
+  notification_listeners_active_ = RegisterForNotifications();
 }
 
 IOSChromeMetricsServiceClient::~IOSChromeMetricsServiceClient() {
@@ -98,6 +100,12 @@ void IOSChromeMetricsServiceClient::RegisterPrefs(
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
   metrics::RegisterMetricsReportingStatePrefs(registry);
   ukm::UkmService::RegisterPrefs(registry);
+}
+
+// static
+bool IOSChromeMetricsServiceClient::IsMetricsReportingForceEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      metrics::switches::kForceEnableMetricsReporting);
 }
 
 metrics::MetricsService* IOSChromeMetricsServiceClient::GetMetricsService() {
@@ -177,8 +185,14 @@ void IOSChromeMetricsServiceClient::Initialize() {
   metrics_service_ = std::make_unique<metrics::MetricsService>(
       metrics_state_manager_, this, local_state);
 
-  if (base::FeatureList::IsEnabled(ukm::kUkmFeature))
-    ukm_service_ = std::make_unique<ukm::UkmService>(local_state, this);
+  if (IsMetricsReportingForceEnabled() ||
+      base::FeatureList::IsEnabled(ukm::kUkmFeature)) {
+    // We only need to restrict to whitelisted Entries if metrics reporting
+    // is not forced.
+    bool restrict_to_whitelist_entries = !IsMetricsReportingForceEnabled();
+    ukm_service_ = std::make_unique<ukm::UkmService>(
+        local_state, this, restrict_to_whitelist_entries);
+  }
 
   // Register metrics providers.
   metrics_service_->RegisterMetricsProvider(
@@ -232,15 +246,21 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
   // shared between the iOS port's usage and
   // ChromeMetricsServiceClient::CollectFinalHistograms()'s usage of
   // MetricsMemoryDetails.
-  std::unique_ptr<base::ProcessMetrics> process_metrics(
-      base::ProcessMetrics::CreateProcessMetrics(
-          base::GetCurrentProcessHandle()));
-  UMA_HISTOGRAM_MEMORY_KB("Memory.Browser",
-                          process_metrics->GetWorkingSetSize() / 1024);
+  task_vm_info task_info_data;
+  mach_msg_type_number_t count = sizeof(task_vm_info) / sizeof(natural_t);
+  kern_return_t kr =
+      task_info(mach_task_self(), TASK_VM_INFO,
+                reinterpret_cast<task_info_t>(&task_info_data), &count);
+  if (kr == KERN_SUCCESS) {
+    UMA_HISTOGRAM_MEMORY_KB(
+        "Memory.Browser",
+        (task_info_data.resident_size - task_info_data.reusable) / 1024);
+  }
+
   collect_final_metrics_done_callback_.Run();
 }
 
-void IOSChromeMetricsServiceClient::RegisterForNotifications() {
+bool IOSChromeMetricsServiceClient::RegisterForNotifications() {
   tab_parented_subscription_ =
       TabParentingGlobalObserver::GetInstance()->RegisterCallback(
           base::Bind(&IOSChromeMetricsServiceClient::OnTabParented,
@@ -254,21 +274,28 @@ void IOSChromeMetricsServiceClient::RegisterForNotifications() {
       GetApplicationContext()
           ->GetChromeBrowserStateManager()
           ->GetLoadedBrowserStates();
+  bool all_profiles_succeeded = true;
   for (ios::ChromeBrowserState* browser_state : loaded_browser_states) {
-    RegisterForBrowserStateEvents(browser_state);
+    if (!RegisterForBrowserStateEvents(browser_state)) {
+      all_profiles_succeeded = false;
+    }
   }
+  return all_profiles_succeeded;
 }
 
-void IOSChromeMetricsServiceClient::RegisterForBrowserStateEvents(
+bool IOSChromeMetricsServiceClient::RegisterForBrowserStateEvents(
     ios::ChromeBrowserState* browser_state) {
   history::HistoryService* history_service =
       ios::HistoryServiceFactory::GetForBrowserState(
           browser_state, ServiceAccessType::IMPLICIT_ACCESS);
   ObserveServiceForDeletions(history_service);
   browser_sync::ProfileSyncService* sync =
-      IOSChromeProfileSyncServiceFactory::GetInstance()->GetForBrowserState(
+      ProfileSyncServiceFactory::GetInstance()->GetForBrowserState(
           browser_state);
-  ObserveServiceForSyncDisables(static_cast<syncer::SyncService*>(sync));
+  ObserveServiceForSyncDisables(static_cast<syncer::SyncService*>(sync),
+                                browser_state->GetPrefs(),
+                                IsUnifiedConsentEnabled());
+  return (history_service != nullptr && sync != nullptr);
 }
 
 void IOSChromeMetricsServiceClient::OnTabParented(web::WebState* web_state) {
@@ -311,6 +338,11 @@ void IOSChromeMetricsServiceClient::OnIncognitoWebStateRemoved() {
   UpdateRunningServices();
 }
 
-bool IOSChromeMetricsServiceClient::IsHistorySyncEnabledOnAllProfiles() {
-  return SyncDisableObserver::IsHistorySyncEnabledOnAllProfiles();
+bool IOSChromeMetricsServiceClient::SyncStateAllowsUkm() {
+  return SyncDisableObserver::SyncStateAllowsUkm();
+}
+
+bool IOSChromeMetricsServiceClient::
+    AreNotificationListenersEnabledOnAllProfiles() {
+  return notification_listeners_active_;
 }

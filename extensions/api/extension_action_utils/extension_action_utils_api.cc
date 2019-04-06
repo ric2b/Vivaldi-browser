@@ -13,6 +13,7 @@
 #include "base/json/json_reader.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
@@ -44,6 +45,7 @@
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
+#include "extensions/common/manifest_handlers/options_page_info.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
@@ -123,6 +125,9 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
     content::BrowserContext* browser_context) {
   vivaldi::extension_action_utils::ExtensionInfo info;
 
+  info.keyboard_shortcut.reset(new std::string(
+      GetShortcutTextForExtensionAction(extension_action, browser_context)));
+
   // We only update the browseraction items for the active tab.
   int tab_id = ExtensionAction::kDefaultTabId;
   int windowId = extension_misc::kCurrentWindowId;
@@ -135,7 +140,7 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
       web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
   if (browser) {
     TabStripModel* tab_strip = browser->tab_strip_model();
-    tab_id = SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents());
+    tab_id = SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents()).id();
     windowId = browser->session_id().id();
   }
 
@@ -166,16 +171,19 @@ void ExtensionActionUtil::FillInfoFromManifest(
     vivaldi::extension_action_utils::ExtensionInfo* info,
     const Extension* extension) {
   if (extension) {
-    info->name.reset(new std::string(extension->name()));
+    info->name = std::make_unique<std::string>(extension->name());
 
     std::string manifest_string;
     if (extension->manifest()->GetString(manifest_keys::kHomepageURL,
                                          &manifest_string)) {
-      info->homepage.reset(new std::string(manifest_string));
+      info->homepage = std::make_unique<std::string>(manifest_string);
     }
-    if (extension->manifest()->GetString(manifest_keys::kOptionsPage,
-                                         &manifest_string)) {
-      info->optionspage.reset(new std::string(manifest_string));
+    if (OptionsPageInfo::HasOptionsPage(extension)) {
+      GURL url = OptionsPageInfo::GetOptionsPage(extension);
+      info->optionspage = std::make_unique<std::string>(url.spec());
+
+      bool new_tab = OptionsPageInfo::ShouldOpenInTab(extension);
+      info->options_in_new_tab = std::make_unique<bool>(new_tab);
     }
   }
 }
@@ -251,6 +259,21 @@ void ExtensionActionUtil::OnImageLoaded(const std::string& extension_id,
 }
 
 /* static */
+std::string ExtensionActionUtil::GetShortcutTextForExtensionAction(
+    ExtensionAction* action,
+    content::BrowserContext* browser_context) {
+  bool active = false;
+  extensions::Command browser_action;
+  extensions::CommandService *command_service = extensions::CommandService::Get(
+      browser_context);
+  command_service->GetBrowserActionCommand(action->extension_id(),
+          extensions::CommandService::ALL,
+          &browser_action,
+          &active);
+  return base::UTF16ToUTF8(browser_action.accelerator().GetShortcutText());
+}
+
+/* static */
 bool ExtensionActionUtil::FillInfoForTabId(
     vivaldi::extension_action_utils::ExtensionInfo* info,
     ExtensionAction* action,
@@ -259,6 +282,10 @@ bool ExtensionActionUtil::FillInfoForTabId(
   if (!action) {
     return false;
   }
+
+  info->keyboard_shortcut.reset(
+      new std::string(GetShortcutTextForExtensionAction(
+          action, static_cast<content::BrowserContext*>(profile))));
 
   info->id = action->extension_id();
 
@@ -593,7 +620,7 @@ void ExtensionActionUtil::UpdateState() {
           : nullptr;
   if (browser) {
     TabStripModel* tab_strip = browser->tab_strip_model();
-    tab_id = SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents());
+    tab_id = SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents()).id();
     windowId = browser->session_id().id();
   }
 
@@ -746,7 +773,7 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
   if (action_runner && action_runner->RunAction(extension, true) ==
                            ExtensionAction::ACTION_SHOW_POPUP) {
     GURL popup_url = action->GetPopupUrl(SessionTabHelper::IdForTab(
-        browser->tab_strip_model()->GetActiveWebContents()));
+        browser->tab_strip_model()->GetActiveWebContents()).id());
     info.popup_url.reset(new std::string(popup_url.spec()));
   }
 
@@ -892,11 +919,16 @@ bool ExtensionActionUtilsRemoveExtensionFunction::RunAsync() {
                              extensions::ExtensionRegistry::ENABLED);
 
   Browser* browser = nullptr;
-  for (auto* browser_it : *BrowserList::GetInstance()) {
-    if (ExtensionTabUtil::GetWindowId(browser_it) == *params->window_id.get() &&
-        browser_it->window()) {
-      browser = browser_it;
+  if (params->window_id) {
+    for (auto* browser_it : *BrowserList::GetInstance()) {
+      if (ExtensionTabUtil::GetWindowId(browser_it) ==
+              *params->window_id.get() &&
+          browser_it->window()) {
+        browser = browser_it;
+      }
     }
+  } else {
+    browser = BrowserList::GetInstance()->GetLastActive();
   }
   DCHECK(browser);
   DCHECK(extension);
@@ -906,6 +938,45 @@ bool ExtensionActionUtilsRemoveExtensionFunction::RunAsync() {
   }
 
   UninstallDialogHelper::UninstallExtension(browser, extension);
+
+  SendResponse(true);
+  return true;
+}
+
+bool ExtensionActionUtilsShowExtensionOptionsFunction::RunAsync() {
+  std::unique_ptr<vivaldi::extension_action_utils::ShowExtensionOptions::Params>
+      params(
+          vivaldi::extension_action_utils::ShowExtensionOptions::Params::Create(
+              *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  const Extension* extension =
+    extensions::ExtensionRegistry::Get(GetProfile())
+    ->GetExtensionById(params->extension_id,
+      extensions::ExtensionRegistry::ENABLED);
+
+  Browser* browser = nullptr;
+  if (params->window_id) {
+    for (auto* browser_it : *BrowserList::GetInstance()) {
+      if (ExtensionTabUtil::GetWindowId(browser_it) ==
+        *params->window_id.get() &&
+        browser_it->window()) {
+        browser = browser_it;
+      }
+    }
+  }
+  else {
+    browser = BrowserList::GetInstance()->GetLastActive();
+  }
+  DCHECK(browser);
+  DCHECK(extension);
+
+  if (!browser || !extension) {
+    return false;
+  }
+  DCHECK(OptionsPageInfo::HasOptionsPage(extension));
+
+  ExtensionTabUtil::OpenOptionsPage(extension, browser);
 
   SendResponse(true);
   return true;

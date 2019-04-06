@@ -8,15 +8,15 @@
 #include <memory>
 #include <utility>
 
-#include "ash/ash_constants.h"
-#include "ash/ash_view_ids.h"
+#include "ash/public/cpp/ash_constants.h"
+#include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/size_range_layout.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_popup_item_style.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
@@ -30,7 +30,6 @@
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/image_view.h"
@@ -110,54 +109,6 @@ void ConfigureDefaultSizeAndFlex(TriView* tri_view,
       gfx::Size(SizeRangeLayout::kAbsoluteMaxSize, kTrayPopupItemMaxHeight));
 }
 
-class BorderlessLabelButton : public views::LabelButton {
- public:
-  BorderlessLabelButton(views::ButtonListener* listener,
-                        const base::string16& text)
-      : LabelButton(listener, text) {
-    const int kHorizontalPadding = 20;
-    SetBorder(views::CreateEmptyBorder(gfx::Insets(0, kHorizontalPadding)));
-    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::BUTTON);
-    style.SetupLabel(label());
-    SetHorizontalAlignment(gfx::ALIGN_CENTER);
-    SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
-
-    TrayPopupUtils::ConfigureTrayPopupButton(this);
-  }
-
-  ~BorderlessLabelButton() override = default;
-
-  // views::LabelButton:
-  int GetHeightForWidth(int width) const override { return kMenuButtonSize; }
-
- private:
-  // TODO(estade,bruthig): there's a lot in common here with ActionableView.
-  // Find a way to share. See related TODO on InkDropHostView::SetInkDropMode().
-  std::unique_ptr<views::InkDrop> CreateInkDrop() override {
-    return TrayPopupUtils::CreateInkDrop(TrayPopupInkDropStyle::INSET_BOUNDS,
-                                         this);
-  }
-
-  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
-    return TrayPopupUtils::CreateInkDropRipple(
-        TrayPopupInkDropStyle::INSET_BOUNDS, this,
-        GetInkDropCenterBasedOnLastEvent());
-  }
-
-  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-      const override {
-    return TrayPopupUtils::CreateInkDropHighlight(
-        TrayPopupInkDropStyle::INSET_BOUNDS, this);
-  }
-
-  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override {
-    return TrayPopupUtils::CreateInkDropMask(
-        TrayPopupInkDropStyle::INSET_BOUNDS, this);
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(BorderlessLabelButton);
-};
-
 }  // namespace
 
 TriView* TrayPopupUtils::CreateDefaultRowView() {
@@ -209,11 +160,15 @@ TriView* TrayPopupUtils::CreateMultiTargetRowView() {
 views::Label* TrayPopupUtils::CreateDefaultLabel() {
   views::Label* label = new views::Label();
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  // Frequently the label will paint to a layer that's non-opaque, so subpixel
-  // rendering won't work unless we explicitly set a background. See
-  // crbug.com/686363
-  label->SetBackground(views::CreateThemedSolidBackground(
-      label, ui::NativeTheme::kColorId_BubbleBackground));
+  if (features::IsSystemTrayUnifiedEnabled()) {
+    label->SetSubpixelRenderingEnabled(false);
+  } else {
+    // Frequently the label will paint to a layer that's non-opaque, so subpixel
+    // rendering won't work unless we explicitly set a background. See
+    // https://crbug.com/686363
+    label->SetBackground(views::CreateThemedSolidBackground(
+        label, ui::NativeTheme::kColorId_BubbleBackground));
+  }
   return label;
 }
 
@@ -271,8 +226,11 @@ void TrayPopupUtils::ConfigureTrayPopupButton(views::Button* button) {
 
 void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
   view->set_id(VIEW_ID_STICKY_HEADER);
-  view->SetBackground(views::CreateThemedSolidBackground(
-      view, ui::NativeTheme::kColorId_BubbleBackground));
+
+  if (!features::IsSystemTrayUnifiedEnabled()) {
+    view->SetBackground(views::CreateThemedSolidBackground(
+        view, ui::NativeTheme::kColorId_BubbleBackground));
+  }
   view->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(kMenuSeparatorVerticalPadding, 0)));
   view->SetPaintToLayer();
@@ -299,12 +257,6 @@ void TrayPopupUtils::ConfigureContainer(TriView::Container container,
   container_view->SetLayoutManager(CreateDefaultLayoutManager(container));
 }
 
-views::LabelButton* TrayPopupUtils::CreateTrayPopupBorderlessButton(
-    views::ButtonListener* listener,
-    const base::string16& text) {
-  return new BorderlessLabelButton(listener, text);
-}
-
 views::LabelButton* TrayPopupUtils::CreateTrayPopupButton(
     views::ButtonListener* listener,
     const base::string16& text) {
@@ -321,7 +273,6 @@ views::Separator* TrayPopupUtils::CreateVerticalSeparator() {
 }
 
 std::unique_ptr<views::InkDrop> TrayPopupUtils::CreateInkDrop(
-    TrayPopupInkDropStyle ink_drop_style,
     views::InkDropHostView* host) {
   std::unique_ptr<views::InkDropImpl> ink_drop =
       std::make_unique<views::InkDropImpl>(host, host->size());

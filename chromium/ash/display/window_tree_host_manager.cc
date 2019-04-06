@@ -18,18 +18,20 @@
 #include "ash/host/root_window_transformer.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
-#include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/config.h"
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "ash/wm/window_util.h"
-#include "base/command_line.h"
+#include "ash/ws/window_service_owner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "services/ui/ws2/window_service.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -41,6 +43,7 @@
 #include "ui/base/class_property.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/compositor.h"
 #include "ui/display/display.h"
@@ -100,7 +103,7 @@ aura::Window* GetWindow(AshWindowTreeHost* ash_host) {
 
 bool ShouldUpdateMirrorWindowController() {
   return aura::Env::GetInstance()->mode() == aura::Env::Mode::LOCAL ||
-         !::switches::IsMusHostingViz();
+         !base::FeatureList::IsEnabled(::features::kMashDeprecated);
 }
 
 }  // namespace
@@ -266,6 +269,11 @@ void WindowTreeHostManager::RemoveObserver(Observer* observer) {
 int64_t WindowTreeHostManager::GetPrimaryDisplayId() {
   CHECK_NE(display::kInvalidDisplayId, primary_display_id);
   return primary_display_id;
+}
+
+// static
+bool WindowTreeHostManager::HasValidPrimaryDisplayId() {
+  return primary_display_id != display::kInvalidDisplayId;
 }
 
 aura::Window* WindowTreeHostManager::GetPrimaryRootWindow() {
@@ -469,12 +477,12 @@ void WindowTreeHostManager::UpdateMouseLocationAfterDisplayChange() {
   if (target_location_in_native !=
           cursor_location_in_native_coords_for_restore_ ||
       target_display_id != cursor_display_id_for_restore_) {
-    // TODO(oshima): Moving the cursor was necessary for x11, but We
-    // probably do not have to do this any more on ozone.  Consider
-    // just notifying the cursor location change.
-    if (Shell::Get()->cursor_manager() &&
-        Shell::Get()->cursor_manager()->IsCursorVisible()) {
-      dst_root_window->MoveCursorTo(target_location_in_root);
+    if (Shell::Get()->cursor_manager()) {
+      if (Shell::Get()->cursor_manager()->IsCursorVisible()) {
+        dst_root_window->MoveCursorTo(target_location_in_root);
+      } else if (target_display_id != cursor_display_id_for_restore_) {
+        Shell::Get()->cursor_manager()->SetDisplay(target_display);
+      }
     }
 
   } else if (target_location_in_screen !=
@@ -533,10 +541,25 @@ void WindowTreeHostManager::OnDisplayAdded(const display::Display& display) {
 
     // Show the shelf if the original WTH had a visible system
     // tray. It may or may not be visible depending on OOBE state.
-    ash::SystemTray* old_tray =
-        RootWindowController::ForWindow(to_delete->AsWindowTreeHost()->window())
-            ->GetSystemTray();
-    ash::SystemTray* new_tray = ash::Shell::Get()->GetPrimarySystemTray();
+    RootWindowController* old_root_window_controller =
+        RootWindowController::ForWindow(
+            to_delete->AsWindowTreeHost()->window());
+    RootWindowController* new_root_window_controller =
+        ash::Shell::Get()->GetPrimaryRootWindowController();
+    TrayBackgroundView* old_tray =
+        features::IsSystemTrayUnifiedEnabled()
+            ? static_cast<TrayBackgroundView*>(
+                  old_root_window_controller->GetStatusAreaWidget()
+                      ->unified_system_tray())
+            : static_cast<TrayBackgroundView*>(
+                  old_root_window_controller->GetSystemTray());
+    TrayBackgroundView* new_tray =
+        features::IsSystemTrayUnifiedEnabled()
+            ? static_cast<TrayBackgroundView*>(
+                  new_root_window_controller->GetStatusAreaWidget()
+                      ->unified_system_tray())
+            : static_cast<TrayBackgroundView*>(
+                  new_root_window_controller->GetSystemTray());
     if (old_tray->GetWidget()->IsVisible()) {
       new_tray->SetVisible(true);
       new_tray->GetWidget()->Show();
@@ -647,6 +670,15 @@ void WindowTreeHostManager::OnDisplayRemoved(const display::Display& display) {
 void WindowTreeHostManager::OnDisplayMetricsChanged(
     const display::Display& display,
     uint32_t metrics) {
+  // Shell creates |window_service_owner_| from Shell::Init(), but this
+  // function may be called before |window_service_owner_| is created. It's safe
+  // to ignore the call in this case as no clients have connected yet.
+  ui::ws2::WindowService* window_service =
+      Shell::Get()->window_service_owner()
+          ? Shell::Get()->window_service_owner()->window_service()
+          : nullptr;
+  if (window_service)
+    window_service->OnDisplayMetricsChanged(display, metrics);
   if (!(metrics & (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_ROTATION |
                    DISPLAY_METRIC_DEVICE_SCALE_FACTOR)))
     return;
@@ -824,11 +856,8 @@ AshWindowTreeHost* WindowTreeHostManager::AddWindowTreeHostForDisplay(
   window_tree_hosts_[display.id()] = ash_host;
   SetDisplayPropertiesOnHost(ash_host, display);
 
-  if (base::SysInfo::IsRunningOnChromeOS() ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshConstrainPointerToRoot)) {
-    ash_host->ConfineCursorToRootWindow();
-  }
+  ash_host->ConfineCursorToRootWindow();
+
   return ash_host;
 }
 

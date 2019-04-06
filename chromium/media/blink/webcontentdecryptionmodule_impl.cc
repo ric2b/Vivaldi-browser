@@ -11,15 +11,16 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "media/base/cdm_context.h"
 #include "media/base/cdm_promise.h"
 #include "media/base/content_decryption_module.h"
 #include "media/base/key_systems.h"
 #include "media/blink/cdm_result_promise.h"
 #include "media/blink/cdm_session_adapter.h"
 #include "media/blink/webcontentdecryptionmodulesession_impl.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "url/origin.h"
 
 namespace media {
@@ -151,9 +152,9 @@ void WebContentDecryptionModuleImpl::GetStatusForPolicy(
                                 result, std::string())));
 }
 
-scoped_refptr<ContentDecryptionModule>
-WebContentDecryptionModuleImpl::GetCdm() {
-  return adapter_->GetCdm();
+std::unique_ptr<CdmContextRef>
+WebContentDecryptionModuleImpl::GetCdmContextRef() {
+  return adapter_->GetCdmContextRef();
 }
 
 }  // namespace media

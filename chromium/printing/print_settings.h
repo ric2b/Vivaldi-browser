@@ -110,6 +110,7 @@ class PRINTING_EXPORT PrintSettings {
   int dpi() const { return std::max(dpi_.width(), dpi_.height()); }
   int dpi_horizontal() const { return dpi_.width(); }
   int dpi_vertical() const { return dpi_.height(); }
+  const gfx::Size& dpi_size() const { return dpi_; }
 
   void set_scale_factor(double scale_factor) { scale_factor_ = scale_factor; }
   double scale_factor() const { return scale_factor_; }
@@ -186,6 +187,11 @@ class PRINTING_EXPORT PrintSettings {
   void set_is_modifiable(bool is_modifiable) { is_modifiable_ = is_modifiable; }
   bool is_modifiable() const { return is_modifiable_; }
 
+  int pages_per_sheet() const { return pages_per_sheet_; }
+  void set_pages_per_sheet(int pages_per_sheet) {
+    pages_per_sheet_ = pages_per_sheet;
+  }
+
   // Cookie generator. It is used to initialize PrintedDocument with its
   // associated PrintSettings, to be sure that each generated PrintedPage is
   // correctly associated with its corresponding PrintedDocument.
@@ -261,6 +267,9 @@ class PRINTING_EXPORT PrintSettings {
 
   // If margin type is custom, this is what was requested.
   PageMargins requested_custom_margins_in_points_;
+
+  // Number of pages per sheet.
+  int pages_per_sheet_;
 };
 
 }  // namespace printing

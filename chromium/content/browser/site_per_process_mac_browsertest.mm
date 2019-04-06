@@ -9,8 +9,10 @@
 #include "base/mac/mac_util.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -167,7 +169,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
 
   blink::WebMouseWheelEvent scroll_event(
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   scroll_event.SetPositionInWidget(1, 1);
   scroll_event.has_precise_scrolling_deltas = true;
   scroll_event.delta_x = 0.0f;
@@ -189,28 +191,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
   scroll_event.momentum_phase = blink::WebMouseWheelEvent::kPhaseNone;
   child_rwhv->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
 
-  // If wheel scroll latching is enabled, no wheel event with phase ended will
-  // be sent before a wheel event with momentum phase began. So, no
-  // GestureScrollEnd and no GestureScrollBegin will be generated between
-  // normal scroll and momentum scroll phases.
-  if (!child_rwhv->wheel_scroll_latching_enabled()) {
-    // End of non-momentum scrolling.
-    scroll_event.delta_y = 0.0f;
-    scroll_event.phase = blink::WebMouseWheelEvent::kPhaseEnded;
-    scroll_event.momentum_phase = blink::WebMouseWheelEvent::kPhaseNone;
-    child_rwhv->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
-    gesture_scroll_end_ack_observer.Wait();
-    gesture_scroll_begin_ack_observer.Reset();
-    gesture_scroll_end_ack_observer.Reset();
-  }
-
   // We now go into a fling.
   scroll_event.delta_y = -2.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseNone;
   scroll_event.momentum_phase = blink::WebMouseWheelEvent::kPhaseBegan;
   child_rwhv->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
-  if (!child_rwhv->wheel_scroll_latching_enabled())
-    gesture_scroll_begin_ack_observer.Wait();
 
   scroll_event.delta_y = -2.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseNone;
@@ -293,7 +278,7 @@ void SendMacTouchpadPinchSequenceWithExpectedTarget(
   [cocoa_view magnifyWithEvent:pinchEndEvent];
   if (ShouldSendGestureEvents())
     [cocoa_view endGestureWithEvent:pinchEndEvent];
-  EXPECT_EQ(expected_target, router_touchpad_gesture_target);
+  EXPECT_EQ(nullptr, router_touchpad_gesture_target);
 }
 
 }  // namespace
@@ -317,7 +302,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
   // surface information required for event hit testing is ready.
   auto* rwhv_child =
       static_cast<RenderWidgetHostViewBase*>(child_frame_host->GetView());
-  WaitForChildFrameSurfaceReady(child_frame_host);
+  WaitForHitTestDataOrChildSurfaceReady(child_frame_host);
 
   // All touches & gestures are sent to the main frame's view, and should be
   // routed appropriately from there.

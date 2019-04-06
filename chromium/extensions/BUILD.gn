@@ -1,7 +1,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//extensions/features/features.gni")
+import("//build/config/jumbo.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
@@ -52,11 +53,11 @@ grit("extensions_renderer_resources") {
   deps = [
     "//extensions/common:mojo_js",
     "//extensions/common/api:mojom_js",
-    "//services/device/public/interfaces:interfaces_js",
+    "//services/device/public/mojom:mojom_js",
   ]
 }
 
-static_library("test_support") {
+jumbo_static_library("test_support") {
   testonly = true
   sources = [
     "browser/api/declarative/test_rules_registry.cc",
@@ -71,6 +72,8 @@ static_library("test_support") {
     "browser/api_unittest.h",
     "browser/app_window/test_app_window_contents.cc",
     "browser/app_window/test_app_window_contents.h",
+    "browser/content_verifier/test_utils.cc",
+    "browser/content_verifier/test_utils.h",
     "browser/extension_error_test_util.cc",
     "browser/extension_error_test_util.h",
     "browser/extensions_test.cc",
@@ -103,6 +106,8 @@ static_library("test_support") {
     "common/permissions/mock_manifest_permission.h",
     "common/permissions/permission_message_test_util.cc",
     "common/permissions/permission_message_test_util.h",
+    "common/scoped_testing_manifest_handler_registry.cc",
+    "common/scoped_testing_manifest_handler_registry.h",
     "renderer/test_extensions_renderer_client.cc",
     "renderer/test_extensions_renderer_client.h",
     "test/background_page_watcher.cc",
@@ -111,12 +116,14 @@ static_library("test_support") {
     "test/extension_test_message_listener.h",
     "test/extension_test_notification_observer.cc",
     "test/extension_test_notification_observer.h",
+    "test/logging_timer.cc",
+    "test/logging_timer.h",
     "test/result_catcher.cc",
     "test/result_catcher.h",
-    "test/test_content_browser_client.cc",
-    "test/test_content_browser_client.h",
     "test/test_content_utility_client.cc",
     "test/test_content_utility_client.h",
+    "test/test_extension_dir.cc",
+    "test/test_extension_dir.h",
     "test/test_extensions_client.cc",
     "test/test_extensions_client.h",
     "test/test_permission_message_provider.cc",
@@ -141,7 +148,7 @@ static_library("test_support") {
     "//extensions/browser/api:api_registration",
     "//extensions/common",
     "//extensions/common/api",
-    "//extensions/test:extensions_features",
+    "//extensions/common/api:extensions_features",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -155,8 +162,6 @@ static_library("test_support") {
 
 repack("shell_and_test_pak") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_resources.pak",
-    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
     "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
@@ -167,6 +172,8 @@ repack("shell_and_test_pak") {
     "$root_gen_dir/extensions/shell/app_shell_resources.pak",
     "$root_gen_dir/extensions/strings/extensions_strings_en-US.pak",
     "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
     "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
@@ -183,8 +190,8 @@ repack("shell_and_test_pak") {
     "//extensions/shell:resources",
     "//extensions/strings",
     "//mojo/public/js:resources",
-    "//third_party/WebKit/public:resources",
-    "//third_party/WebKit/public:scaled_resources_100_percent",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
     "//ui/resources",
     "//ui/strings",
   ]
@@ -193,6 +200,7 @@ repack("shell_and_test_pak") {
 test("extensions_unittests") {
   sources = [
     "test/extensions_unittests_main.cc",
+    "test/logging_timer_unittest.cc",
   ]
 
   data = [
@@ -215,7 +223,6 @@ test("extensions_unittests") {
     "//extensions/common:unit_tests",
     "//extensions/renderer:unit_tests",
     "//extensions/shell:unit_tests",
-    "//extensions/utility:unit_tests",
     "//services/data_decoder:lib",
     "//services/service_manager/public/cpp/test:test_support",
     "//ui/gl:test_support",
@@ -277,6 +284,7 @@ source_set("chrome_extensions_browsertests") {
     "//chrome/browser",
     "//chrome/common/extensions/api",
     "//chrome/renderer",
+    "//components/app_modal",
     "//components/autofill/content/browser:risk_proto",
     "//components/autofill/content/renderer:test_support",
     "//components/captive_portal:test_support",
@@ -301,7 +309,7 @@ source_set("chrome_extensions_browsertests") {
     "//testing/gmock",
     "//testing/gtest",
     "//testing/perf",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//third_party/cacheinvalidation",
     "//third_party/icu",
     "//third_party/leveldatabase",
@@ -328,6 +336,7 @@ source_set("chrome_extensions_interactive_uitests") {
   testonly = true
   sources = [
     "browser/app_window/app_window_interactive_uitest.cc",
+    "browser/guest_view/mime_handler_view/mime_handler_view_interactive_uitest.cc",
   ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]

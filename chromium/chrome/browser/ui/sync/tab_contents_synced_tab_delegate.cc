@@ -6,19 +6,16 @@
 
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/sync/sessions/sync_sessions_router_tab_helper.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "components/sync_sessions/synced_window_delegate.h"
 #include "components/sync_sessions/synced_window_delegates_getter.h"
-#include "components/sync_sessions/tab_node_pool.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/tab_helper.h"
@@ -30,8 +27,6 @@
 #endif
 
 using content::NavigationEntry;
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(TabContentsSyncedTabDelegate);
 
 namespace {
 
@@ -47,20 +42,10 @@ NavigationEntry* GetPossiblyPendingEntryAtIndex(
 
 }  // namespace
 
-TabContentsSyncedTabDelegate::TabContentsSyncedTabDelegate(
-    content::WebContents* web_contents)
-    : web_contents_(web_contents),
-      sync_session_id_(sync_sessions::TabNodePool::kInvalidTabNodeID) {}
+TabContentsSyncedTabDelegate::TabContentsSyncedTabDelegate()
+    : web_contents_(nullptr) {}
 
 TabContentsSyncedTabDelegate::~TabContentsSyncedTabDelegate() {}
-
-SessionID::id_type TabContentsSyncedTabDelegate::GetWindowId() const {
-  return SessionTabHelper::FromWebContents(web_contents_)->window_id().id();
-}
-
-SessionID::id_type TabContentsSyncedTabDelegate::GetSessionId() const {
-  return SessionTabHelper::FromWebContents(web_contents_)->session_id().id();
-}
 
 bool TabContentsSyncedTabDelegate::IsBeingDestroyed() const {
   return web_contents_->IsBeingDestroyed();
@@ -142,18 +127,6 @@ TabContentsSyncedTabDelegate::GetBlockedNavigations() const {
 #endif
 }
 
-bool TabContentsSyncedTabDelegate::IsPlaceholderTab() const {
-  return false;
-}
-
-int TabContentsSyncedTabDelegate::GetSyncId() const {
-  return sync_session_id_;
-}
-
-void TabContentsSyncedTabDelegate::SetSyncId(int sync_id) {
-  sync_session_id_ = sync_id;
-}
-
 bool TabContentsSyncedTabDelegate::ShouldSync(
     sync_sessions::SyncSessionsClient* sessions_client) {
   if (sessions_client->GetSyncedWindowDelegatesGetter()->FindById(
@@ -179,9 +152,15 @@ bool TabContentsSyncedTabDelegate::ShouldSync(
   return false;
 }
 
-SessionID::id_type TabContentsSyncedTabDelegate::GetSourceTabID() const {
-  sync_sessions::SyncSessionsRouterTabHelper* helper =
-      sync_sessions::SyncSessionsRouterTabHelper::FromWebContents(
-          web_contents_);
-  return helper->source_tab_id();
+const content::WebContents* TabContentsSyncedTabDelegate::web_contents() const {
+  return web_contents_;
+}
+
+content::WebContents* TabContentsSyncedTabDelegate::web_contents() {
+  return web_contents_;
+}
+
+void TabContentsSyncedTabDelegate::SetWebContents(
+    content::WebContents* web_contents) {
+  web_contents_ = web_contents;
 }

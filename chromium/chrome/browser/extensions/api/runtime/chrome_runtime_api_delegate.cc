@@ -115,7 +115,7 @@ const net::BackoffEntry::Policy* BackoffPolicy::Get() {
   return &g_backoff_policy.Get().policy_;
 }
 
-base::TickClock* g_test_clock = nullptr;
+const base::TickClock* g_test_clock = nullptr;
 
 }  // namespace
 
@@ -150,7 +150,7 @@ ChromeRuntimeAPIDelegate::~ChromeRuntimeAPIDelegate() {
 
 // static
 void ChromeRuntimeAPIDelegate::set_tick_clock_for_tests(
-    base::TickClock* clock) {
+    const base::TickClock* clock) {
   g_test_clock = clock;
 }
 
@@ -190,7 +190,7 @@ void ChromeRuntimeAPIDelegate::ReloadExtension(
                            reload_info.second);
   reload_info.first = now;
 
-  ExtensionService* service =
+  extensions::ExtensionService* service =
       ExtensionSystem::Get(browser_context_)->extension_service();
   if (reload_info.second >= kFastReloadCount) {
     // Unloading an extension clears all warnings, so first terminate the
@@ -199,8 +199,9 @@ void ChromeRuntimeAPIDelegate::ReloadExtension(
     // asynchronously. Fortunately PostTask guarentees FIFO order so just
     // post both tasks.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&ExtensionService::TerminateExtension,
-                                  service->AsWeakPtr(), extension_id));
+        FROM_HERE,
+        base::BindOnce(&extensions::ExtensionService::TerminateExtension,
+                       service->AsWeakPtr(), extension_id));
     extensions::WarningSet warnings;
     warnings.insert(
         extensions::Warning::CreateReloadTooFrequentWarning(
@@ -214,8 +215,9 @@ void ChromeRuntimeAPIDelegate::ReloadExtension(
     // it tries to decrease the reference count for the extension, which fails
     // if the extension has already been reloaded; so instead we post a task.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&ExtensionService::ReloadExtension,
-                                  service->AsWeakPtr(), extension_id));
+        FROM_HERE,
+        base::BindOnce(&extensions::ExtensionService::ReloadExtension,
+                       service->AsWeakPtr(), extension_id));
   }
 }
 
@@ -223,7 +225,7 @@ bool ChromeRuntimeAPIDelegate::CheckForUpdates(
     const std::string& extension_id,
     const UpdateCheckCallback& callback) {
   ExtensionSystem* system = ExtensionSystem::Get(browser_context_);
-  ExtensionService* service = system->extension_service();
+  extensions::ExtensionService* service = system->extension_service();
   ExtensionUpdater* updater = service->updater();
   if (!updater) {
     return false;
@@ -283,6 +285,10 @@ bool ChromeRuntimeAPIDelegate::GetPlatformInfo(PlatformInfo* info) {
     info->arch = extensions::api::runtime::PLATFORM_ARCH_X86_32;
   } else if (strcmp(arch, "x64") == 0) {
     info->arch = extensions::api::runtime::PLATFORM_ARCH_X86_64;
+  } else if (strcmp(arch, "mipsel") == 0) {
+    info->arch = extensions::api::runtime::PLATFORM_ARCH_MIPS;
+  } else if (strcmp(arch, "mips64el") == 0) {
+    info->arch = extensions::api::runtime::PLATFORM_ARCH_MIPS64;
   } else {
     NOTREACHED();
     return false;
@@ -295,6 +301,10 @@ bool ChromeRuntimeAPIDelegate::GetPlatformInfo(PlatformInfo* info) {
     info->nacl_arch = extensions::api::runtime::PLATFORM_NACL_ARCH_X86_32;
   } else if (strcmp(nacl_arch, "x86-64") == 0) {
     info->nacl_arch = extensions::api::runtime::PLATFORM_NACL_ARCH_X86_64;
+  } else if (strcmp(nacl_arch, "mips32") == 0) {
+    info->nacl_arch = extensions::api::runtime::PLATFORM_NACL_ARCH_MIPS;
+  } else if (strcmp(nacl_arch, "mips64") == 0) {
+    info->nacl_arch = extensions::api::runtime::PLATFORM_NACL_ARCH_MIPS64;
   } else {
     NOTREACHED();
     return false;
@@ -352,7 +362,7 @@ void ChromeRuntimeAPIDelegate::OnExtensionInstalled(
 void ChromeRuntimeAPIDelegate::UpdateCheckComplete(
     const std::string& extension_id) {
   ExtensionSystem* system = ExtensionSystem::Get(browser_context_);
-  ExtensionService* service = system->extension_service();
+  extensions::ExtensionService* service = system->extension_service();
   const Extension* update = service->GetPendingExtensionUpdate(extension_id);
   UpdateCheckInfo& info = update_check_info_[extension_id];
 

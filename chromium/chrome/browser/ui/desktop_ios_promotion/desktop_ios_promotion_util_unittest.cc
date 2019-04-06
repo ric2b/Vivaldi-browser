@@ -12,22 +12,20 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browser_sync/test_profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/fake_auth_status_provider.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/sync/driver/fake_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-
-typedef GoogleServiceAuthError AuthError;
+#include "services/identity/public/cpp/identity_test_environment.h"
 
 namespace {
 
@@ -37,12 +35,14 @@ class TestSyncService : public browser_sync::TestProfileSyncService {
       : browser_sync::TestProfileSyncService(
             CreateProfileSyncServiceParamsForTest(profile)) {}
 
-  bool IsSyncAllowed() const override { return is_sync_allowed_; }
+  int GetDisableReasons() const override { return disable_reasons_; }
 
-  void set_sync_allowed(bool sync_allowed) { is_sync_allowed_ = sync_allowed; }
+  void SetDisableReasons(int disable_reasons) {
+    disable_reasons_ = disable_reasons;
+  }
 
  private:
-  bool is_sync_allowed_ = true;
+  int disable_reasons_ = DISABLE_REASON_NONE;
   DISALLOW_COPY_AND_ASSIGN(TestSyncService);
 };
 
@@ -64,13 +64,11 @@ constexpr int kSMSEntrypointBookmarksBubble =
 
 class DesktopIOSPromotionUtilTest : public testing::Test {
  public:
-  DesktopIOSPromotionUtilTest() {}
+  DesktopIOSPromotionUtilTest()
+      : local_state_(TestingBrowserProcess::GetGlobal()) {}
   ~DesktopIOSPromotionUtilTest() override {}
 
   void SetUp() override {
-    local_state_.reset(new TestingPrefServiceSimple);
-    TestingBrowserProcess::GetGlobal()->SetLocalState(local_state_.get());
-    desktop_ios_promotion::RegisterLocalPrefs(local_state_->registry());
     auto pref_service =
         std::make_unique<sync_preferences::TestingPrefServiceSyncable>();
     RegisterUserProfilePrefs(pref_service->registry());
@@ -81,25 +79,26 @@ class DesktopIOSPromotionUtilTest : public testing::Test {
     profile_ = profile_builder.Build();
     sync_service_ = static_cast<TestSyncService*>(
         ProfileSyncServiceFactory::GetForProfile(profile_.get()));
-    mock_signin_ = static_cast<SigninManagerBase*>(
-        SigninManagerFactory::GetForProfile(profile_.get()));
-    mock_signin_->SetAuthenticatedAccountInfo("test", "test");
+    identity_test_environment_.MakePrimaryAccountAvailable("test@gmail.com");
   }
 
   void TearDown() override {
     profile_.reset();
-    // Ensure that g_accept_requests gets set back to true after test execution.
-    TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
-    local_state_.reset();
   }
 
-  PrefService* local_state() { return local_state_.get(); }
+  PrefService* local_state() { return local_state_.Get(); }
 
   TestSyncService* sync_service() { return sync_service_; }
 
   PrefService* prefs() { return profile_->GetPrefs(); }
 
   Profile* profile() { return profile_.get(); }
+
+  const std::string& account_id() {
+    return identity_test_environment_.identity_manager()
+        ->GetPrimaryAccountInfo()
+        .account_id;
+  }
 
   double GetDoubleNDayOldDate(int days) {
     base::Time time_result =
@@ -110,8 +109,8 @@ class DesktopIOSPromotionUtilTest : public testing::Test {
  private:
   TestSyncService* sync_service_ = nullptr;
   content::TestBrowserThreadBundle thread_bundle_;
-  std::unique_ptr<TestingPrefServiceSimple> local_state_;
-  SigninManagerBase* mock_signin_ = nullptr;
+  identity::IdentityTestEnvironment identity_test_environment_;
+  ScopedTestingLocalState local_state_;
   std::unique_ptr<TestingProfile> profile_;
   DISALLOW_COPY_AND_ASSIGN(DesktopIOSPromotionUtilTest);
 };
@@ -179,18 +178,21 @@ TEST_F(DesktopIOSPromotionUtilTest, IsEligibleForIOSPromotionForSavePassword) {
        false, true},
   };
   std::string locale = base::i18n::GetConfiguredLocale();
-  FakeAuthStatusProvider auth_provider(
-      SigninErrorControllerFactory::GetForProfile(profile()));
 
   for (const auto& test_case : kTestData) {
     SCOPED_TRACE(testing::Message("#test_case = ") << (&test_case - kTestData));
-    sync_service()->set_sync_allowed(test_case.is_sync_allowed);
+    sync_service()->SetDisableReasons(
+        test_case.is_sync_allowed
+            ? syncer::SyncService::DISABLE_REASON_NONE
+            : syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE);
     const GoogleServiceAuthError error(
         test_case.signin_error
             ? GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS
             : GoogleServiceAuthError::NONE);
 
-    auth_provider.SetAuthError("test", error);
+    FakeAuthStatusProvider auth_status_provider(
+        SigninErrorControllerFactory::GetForProfile(profile()));
+    auth_status_provider.SetAuthError(account_id(), error);
 
     local_state()->SetBoolean(prefs::kSavePasswordsBubbleIOSPromoDismissed,
                               test_case.is_dismissed);

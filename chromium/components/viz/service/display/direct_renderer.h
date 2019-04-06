@@ -12,10 +12,10 @@
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "base/macros.h"
-#include "cc/resources/display_resource_provider.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
 #include "components/viz/service/display/ca_layer_overlay.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
+#include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/overlay_processor.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
@@ -25,7 +25,6 @@
 
 namespace cc {
 class FilterOperations;
-class OutputSurface;
 }  // namespace cc
 
 namespace gfx {
@@ -35,6 +34,7 @@ class ColorSpace;
 namespace viz {
 class BspWalkActionDrawPolygon;
 class DrawPolygon;
+class OutputSurface;
 class RendererSettings;
 class RenderPass;
 
@@ -46,7 +46,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
  public:
   DirectRenderer(const RendererSettings* settings,
                  OutputSurface* output_surface,
-                 cc::DisplayResourceProvider* resource_provider);
+                 DisplayResourceProvider* resource_provider);
   virtual ~DirectRenderer();
 
   void Initialize();
@@ -61,7 +61,8 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
                  const gfx::Size& device_viewport_size);
 
   // Public interface implemented by subclasses.
-  virtual void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) = 0;
+  virtual void SwapBuffers(std::vector<ui::LatencyInfo> latency_info,
+                           bool need_presentation_feedback) = 0;
   virtual void SwapBuffersComplete() {}
   virtual void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) {}
@@ -82,7 +83,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     gfx::Transform projection_matrix;
     gfx::Transform window_matrix;
 
-    cc::OverlayCandidateList overlay_list;
+    OverlayCandidateList overlay_list;
     CALayerOverlayList ca_layer_overlay_list;
     DCLayerOverlayList dc_layer_overlay_list;
   };
@@ -131,7 +132,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
                       const gfx::Rect& render_pass_scissor);
   void SetScissorTestRectInDrawSpace(const gfx::Rect& draw_space_rect);
 
-  gfx::Size RenderPassTextureSize(const RenderPass* render_pass);
+  gfx::Size CalculateTextureSizeForRenderPass(const RenderPass* render_pass);
 
   void FlushPolygons(
       base::circular_deque<std::unique_ptr<DrawPolygon>>* poly_list,
@@ -166,7 +167,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
       const RenderPassRequirements& requirements) = 0;
   virtual bool IsRenderPassResourceAllocated(
       const RenderPassId& render_pass_id) const = 0;
-  virtual gfx::Size GetRenderPassTextureSize(
+  virtual gfx::Size GetRenderPassBackingPixelSize(
       const RenderPassId& render_pass_id) = 0;
   virtual void BindFramebufferToOutputSurface() = 0;
   virtual void BindFramebufferToTexture(const RenderPassId render_pass_id) = 0;
@@ -201,7 +202,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
 
   const RendererSettings* const settings_;
   OutputSurface* const output_surface_;
-  cc::DisplayResourceProvider* const resource_provider_;
+  DisplayResourceProvider* const resource_provider_;
   // This can be replaced by test implementations.
   std::unique_ptr<OverlayProcessor> overlay_processor_;
 

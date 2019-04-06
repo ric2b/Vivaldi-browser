@@ -20,7 +20,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 namespace guest_view {
 
@@ -135,9 +135,9 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // This creates a WebContents and initializes |this| GuestViewBase to use the
   // newly created WebContents.
   using WebContentsCreatedCallback =
-      base::Callback<void(content::WebContents*)>;
+      base::OnceCallback<void(content::WebContents*)>;
   void Init(const base::DictionaryValue& create_params,
-            const WebContentsCreatedCallback& callback);
+            WebContentsCreatedCallback callback);
 
   void InitWithWebContents(const base::DictionaryValue& create_params,
                            content::WebContents* guest_web_contents);
@@ -227,13 +227,15 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // of webcontents is working for webcontents owned by multiple guests.
   bool web_contents_is_owned_by_this_ = true;
 
+  // NOTE(andre@vivaldi.com) : We need to manage the BrowserPluginGuest when we
+  // move WebContents ownership between guests. Used to reset guest_host_ in
+  // between hand-overs.
+  content::BrowserPluginGuest* delegate_to_browser_plugin_ = nullptr;
+
  protected:
   explicit GuestViewBase(content::WebContents* owner_web_contents);
 
   ~GuestViewBase() override;
-
-  // BrowserPluginGuestDelegate implementation.
-  void SetContextMenuPosition(const gfx::Point& position) override;
 
   // TODO(ekaramad): If a guest is based on BrowserPlugin and is embedded inside
   // a cross-process frame, we need to notify the destruction of the frame so
@@ -255,9 +257,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // Given a set of initialization parameters, a concrete subclass of
   // GuestViewBase can create a specialized WebContents that it returns back to
   // GuestViewBase.
-  virtual void CreateWebContents(
-      const base::DictionaryValue& create_params,
-      const WebContentsCreatedCallback& callback) = 0;
+  virtual void CreateWebContents(const base::DictionaryValue& create_params,
+                                 WebContentsCreatedCallback callback) = 0;
 
   // This method is called after the guest has been attached to an embedder and
   // suspended resource loads have been resumed.
@@ -412,7 +413,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void SendQueuedEvents();
 
   void CompleteInit(std::unique_ptr<base::DictionaryValue> create_params,
-                    const WebContentsCreatedCallback& callback,
+                    WebContentsCreatedCallback callback,
                     content::WebContents* guest_web_contents);
 
   // Dispatches the onResize event to the embedder.

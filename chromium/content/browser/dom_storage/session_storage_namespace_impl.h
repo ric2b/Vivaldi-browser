@@ -7,48 +7,83 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <string>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/session_storage_namespace.h"
 
-namespace content {
+namespace base {
+class SequencedTaskRunner;
+}
 
+namespace content {
+class DOMStorageContextImpl;
 class DOMStorageContextWrapper;
-class DOMStorageSession;
 
 class SessionStorageNamespaceImpl : public SessionStorageNamespace {
  public:
-  // Constructs a |SessionStorageNamespaceImpl| and allocates new IDs for it.
+  // Constructs a SessionStorageNamespaceImpl and allocates a new ID for it.
   //
   // The CONTENT_EXPORT allows TestRenderViewHost to instantiate these.
-  CONTENT_EXPORT explicit SessionStorageNamespaceImpl(
-      DOMStorageContextWrapper* context);
+  CONTENT_EXPORT static scoped_refptr<SessionStorageNamespaceImpl> Create(
+      scoped_refptr<DOMStorageContextWrapper> context);
 
-  // Constructs a |SessionStorageNamespaceImpl| by cloning
-  // |namespace_to_clone|. Allocates new IDs for it.
-  SessionStorageNamespaceImpl(DOMStorageContextWrapper* context,
-                              int64_t namepace_id_to_clone);
+  // If there is an existing SessionStorageNamespaceImpl with the given id in
+  // the DOMStorageContextWrapper, this will return that object. Otherwise this
+  // constructs a SessionStorageNamespaceImpl and assigns |namespace_id| to it.
+  CONTENT_EXPORT static scoped_refptr<SessionStorageNamespaceImpl> Create(
+      scoped_refptr<DOMStorageContextWrapper> context,
+      std::string namespace_id);
 
-  // Constructs a |SessionStorageNamespaceImpl| and assigns |persistent_id|
-  // to it. Allocates a new non-persistent ID.
-  SessionStorageNamespaceImpl(DOMStorageContextWrapper* context,
-                              const std::string& persistent_id);
+  // Constructs a |SessionStorageNamespaceImpl| with id |namespace_id| by
+  // cloning |namespace_to_clone|. Allocates it a new ID.
+  // Only set |immediately| to true to cause the clone to immediately happen,
+  // where there definitely will not be a |Clone| call from the
+  // SessionStorageNamespace mojo object.
+  static scoped_refptr<SessionStorageNamespaceImpl> CloneFrom(
+      scoped_refptr<DOMStorageContextWrapper> context,
+      std::string namespace_id,
+      const std::string& namespace_id_to_clone,
+      bool immediately = false);
+
+  DOMStorageContextWrapper* context() const { return context_wrapper_.get(); }
 
   // SessionStorageNamespace implementation.
-  int64_t id() const override;
-  const std::string& persistent_id() const override;
+  const std::string& id() const override;
   void SetShouldPersist(bool should_persist) override;
   bool should_persist() const override;
 
-  SessionStorageNamespaceImpl* Clone();
+  bool IsMojoSessionStorage() { return context_.get(); }
+
+  scoped_refptr<SessionStorageNamespaceImpl> Clone();
   bool IsFromContext(DOMStorageContextWrapper* context);
 
  private:
-  explicit SessionStorageNamespaceImpl(DOMStorageSession* clone);
+  // Creates the non-mojo version.
+  SessionStorageNamespaceImpl(
+      scoped_refptr<DOMStorageContextWrapper> context_wrapper,
+      scoped_refptr<DOMStorageContextImpl> context_impl,
+      std::string namespace_id);
+  // Creates a mojo version.
+  SessionStorageNamespaceImpl(scoped_refptr<DOMStorageContextWrapper> context,
+                              std::string namespace_id);
+
   ~SessionStorageNamespaceImpl() override;
 
-  scoped_refptr<DOMStorageSession> session_;
+  static void DeleteSessionNamespaceFromUIThread(
+      scoped_refptr<base::SequencedTaskRunner> mojo_task_runner,
+      scoped_refptr<DOMStorageContextWrapper> context_wrapper,
+      std::string namespace_id,
+      bool should_persist);
+
+  scoped_refptr<DOMStorageContextImpl> context_;
+  scoped_refptr<DOMStorageContextWrapper> context_wrapper_;
+  scoped_refptr<base::SequencedTaskRunner> mojo_task_runner_;
+  std::string namespace_id_;
+  bool should_persist_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionStorageNamespaceImpl);
 };

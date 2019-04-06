@@ -208,16 +208,16 @@ bool InputMethodEngineBase::SetComposition(
        segment != segments.end(); ++segment) {
     ui::ImeTextSpan ime_text_span;
 
+    ime_text_span.underline_color = SK_ColorTRANSPARENT;
     switch (segment->style) {
       case SEGMENT_STYLE_UNDERLINE:
-        ime_text_span.underline_color = SK_ColorBLACK;
+        ime_text_span.thickness = ui::ImeTextSpan::Thickness::kThin;
         break;
       case SEGMENT_STYLE_DOUBLE_UNDERLINE:
-        ime_text_span.underline_color = SK_ColorBLACK;
-        ime_text_span.thick = true;
+        ime_text_span.thickness = ui::ImeTextSpan::Thickness::kThick;
         break;
       case SEGMENT_STYLE_NO_UNDERLINE:
-        ime_text_span.underline_color = SK_ColorTRANSPARENT;
+        ime_text_span.thickness = ui::ImeTextSpan::Thickness::kNone;
         break;
       default:
         continue;
@@ -292,6 +292,7 @@ bool InputMethodEngineBase::DeleteSurroundingText(int context_id,
 
 void InputMethodEngineBase::SetCompositionBounds(
     const std::vector<gfx::Rect>& bounds) {
+  composition_bounds_ = bounds;
   observer_->OnCompositionBoundsChanged(bounds);
 }
 
@@ -306,8 +307,8 @@ void InputMethodEngineBase::FocusIn(
   ++next_context_id_;
 
   observer_->OnFocus(ui::IMEEngineHandlerInterface::InputContext(
-      context_id_, input_context.type, input_context.mode,
-      input_context.flags));
+      context_id_, input_context.type, input_context.mode, input_context.flags,
+      input_context.focus_reason, input_context.should_do_learning));
 }
 
 void InputMethodEngineBase::FocusOut() {
@@ -345,22 +346,18 @@ void InputMethodEngineBase::Reset() {
   observer_->OnReset(active_component_id_);
 }
 
-void InputMethodEngineBase::MaybeSwitchEngine() {
-  observer_->OnRequestEngineSwitch();
-}
-
 bool InputMethodEngineBase::IsInterestedInKeyEvent() const {
   return observer_->IsInterestedInKeyEvent();
 }
 
 void InputMethodEngineBase::ProcessKeyEvent(const ui::KeyEvent& key_event,
-                                            KeyEventDoneCallback& callback) {
+                                            KeyEventDoneCallback callback) {
   // Make true that we don't handle IME API calling of setComposition and
   // commitText while the extension is handling key event.
   handling_key_event_ = true;
 
   if (key_event.IsCommandDown()) {
-    callback.Run(false);
+    std::move(callback).Run(false);
     return;
   }
 
@@ -376,7 +373,7 @@ void InputMethodEngineBase::ProcessKeyEvent(const ui::KeyEvent& key_event,
 
   // Should not pass key event in password field.
   if (current_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD)
-    observer_->OnKeyEvent(active_component_id_, ext_event, callback);
+    observer_->OnKeyEvent(active_component_id_, ext_event, std::move(callback));
 }
 
 void InputMethodEngineBase::SetSurroundingText(const std::string& text,
@@ -419,17 +416,17 @@ void InputMethodEngineBase::KeyEventHandled(const std::string& extension_id,
     return;
   }
 
-  request->second.second.Run(handled);
+  std::move(request->second.second).Run(handled);
   request_map_.erase(request);
 }
 
 std::string InputMethodEngineBase::AddRequest(
     const std::string& component_id,
-    ui::IMEEngineHandlerInterface::KeyEventDoneCallback& key_data) {
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback key_data) {
   std::string request_id = base::IntToString(next_request_id_);
   ++next_request_id_;
 
-  request_map_[request_id] = std::make_pair(component_id, key_data);
+  request_map_[request_id] = std::make_pair(component_id, std::move(key_data));
 
   return request_id;
 }

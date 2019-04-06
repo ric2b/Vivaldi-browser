@@ -6,8 +6,8 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "components/metrics/metrics_service.h"
-#include "components/signin/core/browser/signin_cookie_changed_subscription.h"
-#include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/browser/cookie_settings_util.h"
+#include "components/signin/core/browser/signin_cookie_change_subscription.h"
 #include "components/signin/ios/browser/account_consistency_service.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/browser_state_info_cache.h"
@@ -17,6 +17,7 @@
 #include "ios/chrome/browser/signin/gaia_auth_fetcher_ios.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -102,6 +103,11 @@ net::URLRequestContextGetter* IOSChromeSigninClient::GetURLRequestContext() {
   return browser_state_->GetRequestContext();
 }
 
+scoped_refptr<network::SharedURLLoaderFactory>
+IOSChromeSigninClient::GetURLLoaderFactory() {
+  return browser_state_->GetSharedURLLoaderFactory();
+}
+
 void IOSChromeSigninClient::DoFinalInit() {}
 
 bool IOSChromeSigninClient::CanRevokeCredentials() {
@@ -110,10 +116,6 @@ bool IOSChromeSigninClient::CanRevokeCredentials() {
 
 std::string IOSChromeSigninClient::GetSigninScopedDeviceId() {
   return GetOrCreateScopedDeviceIdPref(GetPrefs());
-}
-
-bool IOSChromeSigninClient::ShouldMergeSigninCredentialsIntoCookieJar() {
-  return false;
 }
 
 bool IOSChromeSigninClient::IsFirstRun() const {
@@ -134,17 +136,16 @@ void IOSChromeSigninClient::RemoveContentSettingsObserver(
   host_content_settings_map_->RemoveObserver(observer);
 }
 
-std::unique_ptr<SigninClient::CookieChangedSubscription>
-IOSChromeSigninClient::AddCookieChangedCallback(
+std::unique_ptr<SigninClient::CookieChangeSubscription>
+IOSChromeSigninClient::AddCookieChangeCallback(
     const GURL& url,
     const std::string& name,
-    const net::CookieStore::CookieChangedCallback& callback) {
+    net::CookieChangeCallback callback) {
   scoped_refptr<net::URLRequestContextGetter> context_getter =
       GetURLRequestContext();
   DCHECK(context_getter.get());
-  std::unique_ptr<SigninCookieChangedSubscription> subscription(
-      new SigninCookieChangedSubscription(context_getter, url, name, callback));
-  return subscription;
+  return std::make_unique<SigninCookieChangeSubscription>(
+      context_getter, url, name, std::move(callback));
 }
 
 void IOSChromeSigninClient::DelayNetworkCall(const base::Closure& callback) {
@@ -154,9 +155,9 @@ void IOSChromeSigninClient::DelayNetworkCall(const base::Closure& callback) {
 std::unique_ptr<GaiaAuthFetcher> IOSChromeSigninClient::CreateGaiaAuthFetcher(
     GaiaAuthConsumer* consumer,
     const std::string& source,
-    net::URLRequestContextGetter* getter) {
-  return std::make_unique<GaiaAuthFetcherIOS>(consumer, source, getter,
-                                              browser_state_);
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  return std::make_unique<GaiaAuthFetcherIOS>(
+      consumer, source, url_loader_factory, browser_state_);
 }
 
 void IOSChromeSigninClient::PreGaiaLogout(base::OnceClosure callback) {

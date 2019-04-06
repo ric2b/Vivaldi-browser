@@ -29,7 +29,7 @@ FirstRun::FirstRunState FirstRun::first_run_ = FIRST_RUN_UNKNOWN;
 // static
 bool FirstRun::GetFirstRunSentinelFilePath(base::FilePath* path) {
   base::FilePath first_run_sentinel;
-  if (!PathService::Get(ios::DIR_USER_DATA, &first_run_sentinel)) {
+  if (!base::PathService::Get(ios::DIR_USER_DATA, &first_run_sentinel)) {
     NOTREACHED();
     return false;
   }
@@ -61,12 +61,16 @@ bool FirstRun::RemoveSentinel() {
 }
 
 // static
-bool FirstRun::CreateSentinel() {
+FirstRun::SentinelResult FirstRun::CreateSentinel(base::File::Error* error) {
   base::FilePath first_run_sentinel;
-  if (!GetFirstRunSentinelFilePath(&first_run_sentinel) ||
-      base::PathExists(first_run_sentinel))
-    return false;
-  return base::WriteFile(first_run_sentinel, "", 0) != -1;
+  if (!GetFirstRunSentinelFilePath(&first_run_sentinel))
+    return SENTINEL_RESULT_FAILED_TO_GET_PATH;
+  if (base::PathExists(first_run_sentinel))
+    return SENTINEL_RESULT_FILE_PATH_EXISTS;
+  bool success = base::WriteFile(first_run_sentinel, "", 0) != -1;
+  if (error)
+    *error = base::File::GetLastFileError();
+  return success ? SENTINEL_RESULT_SUCCESS : SENTINEL_RESULT_FILE_ERROR;
 }
 
 // static

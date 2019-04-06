@@ -88,15 +88,16 @@ class VideoDetector::ClientInfo {
 };
 
 VideoDetector::VideoDetector(
+    const std::vector<FrameSinkId>& registered_frame_sink_ids,
     SurfaceManager* surface_manager,
-    std::unique_ptr<base::TickClock> tick_clock,
+    const base::TickClock* tick_clock,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
-    : tick_clock_(std::move(tick_clock)),
-      video_inactive_timer_(tick_clock_.get()),
+    : tick_clock_(tick_clock),
+      video_inactive_timer_(tick_clock),
       surface_manager_(surface_manager) {
   surface_manager_->AddObserver(this);
-  for (auto it : surface_manager_->valid_frame_sink_labels())
-    client_infos_[it.first] = std::make_unique<ClientInfo>();
+  for (auto& frame_sink_id : registered_frame_sink_ids)
+    client_infos_[frame_sink_id] = std::make_unique<ClientInfo>();
   if (task_runner)
     video_inactive_timer_.SetTaskRunner(task_runner);
 }

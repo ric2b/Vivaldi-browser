@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -96,8 +95,9 @@ bool AppIsolationHandler::AlwaysParseForType(Manifest::Type type) const {
   return type == Manifest::TYPE_PLATFORM_APP;
 }
 
-const std::vector<std::string> AppIsolationHandler::Keys() const {
-  return SingleKey(keys::kIsolation);
+base::span<const char* const> AppIsolationHandler::Keys() const {
+  static constexpr const char* kKeys[] = {keys::kIsolation};
+  return kKeys;
 }
 
 }  // namespace extensions

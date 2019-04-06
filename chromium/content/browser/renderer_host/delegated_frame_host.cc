@@ -11,33 +11,23 @@
 
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
-#include "base/time/default_tick_clock.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
-#include "components/viz/common/gl_helper.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/resources/single_release_callback.h"
-#include "components/viz/common/surfaces/stub_surface_reference_factory.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
-#include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_hittest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
-#include "content/browser/renderer_host/compositor_resize_lock.h"
-#include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
+#include "content/common/tab_switching_time_callback.h"
 #include "content/public/common/content_switches.h"
-#include "gpu/command_buffer/common/mailbox.h"
-#include "gpu/command_buffer/common/sync_token.h"
-#include "media/base/video_frame.h"
-#include "media/base/video_util.h"
-#include "skia/ext/image_operations.h"
-#include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkPaint.h"
-#include "third_party/skia/include/effects/SkLumaColorFilter.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/dip_util.h"
 
 namespace content {
@@ -47,24 +37,22 @@ namespace content {
 
 DelegatedFrameHost::DelegatedFrameHost(const viz::FrameSinkId& frame_sink_id,
                                        DelegatedFrameHostClient* client,
-                                       bool enable_surface_synchronization,
-                                       bool enable_viz)
+                                       bool enable_viz,
+                                       bool should_register_frame_sink_id)
     : frame_sink_id_(frame_sink_id),
       client_(client),
-      enable_surface_synchronization_(enable_surface_synchronization),
       enable_viz_(enable_viz),
-      tick_clock_(base::DefaultTickClock::GetInstance()),
-      frame_evictor_(std::make_unique<viz::FrameEvictor>(this)),
-      weak_ptr_factory_(this) {
+      should_register_frame_sink_id_(should_register_frame_sink_id),
+      frame_evictor_(std::make_unique<viz::FrameEvictor>(this)) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   factory->GetContextFactory()->AddObserver(this);
   viz::HostFrameSinkManager* host_frame_sink_manager =
       factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
   host_frame_sink_manager->RegisterFrameSinkId(frame_sink_id_, this);
-#if DCHECK_IS_ON()
+  host_frame_sink_manager->EnableSynchronizationReporting(
+      frame_sink_id_, "Compositing.MainFrameSynchronization.Duration");
   host_frame_sink_manager->SetFrameSinkDebugLabel(frame_sink_id_,
                                                   "DelegatedFrameHost");
-#endif
   CreateCompositorFrameSinkSupport();
 }
 
@@ -78,130 +66,98 @@ DelegatedFrameHost::~DelegatedFrameHost() {
   viz::HostFrameSinkManager* host_frame_sink_manager =
       factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
   host_frame_sink_manager->InvalidateFrameSinkId(frame_sink_id_);
-
-  DCHECK(!vsync_manager_.get());
 }
 
-void DelegatedFrameHost::WasShown(const ui::LatencyInfo& latency_info) {
+void DelegatedFrameHost::WasShown(
+    const viz::LocalSurfaceId& new_pending_local_surface_id,
+    const gfx::Size& new_pending_dip_size,
+    bool record_presentation_time) {
   frame_evictor_->SetVisible(true);
-
-  if (!enable_surface_synchronization_ && !HasFallbackSurface() &&
-      !released_front_lock_.get()) {
-    if (compositor_)
-      released_front_lock_ = compositor_->GetCompositorLock(nullptr);
+  if (record_presentation_time && compositor_) {
+    compositor_->RequestPresentationTimeForNextFrame(
+        CreateTabSwitchingTimeRecorder(base::TimeTicks::Now()));
   }
 
-  if (compositor_)
-    compositor_->SetLatencyInfo(latency_info);
-
-  WasResized();
+  // Use the default deadline to synchronize web content with browser UI.
+  // TODO(fsamuel): Investigate if there is a better deadline to use here.
+  EmbedSurface(new_pending_local_surface_id, new_pending_dip_size,
+               cc::DeadlinePolicy::UseDefaultDeadline());
 }
 
-bool DelegatedFrameHost::HasSavedFrame() {
+bool DelegatedFrameHost::HasSavedFrame() const {
   return frame_evictor_->HasFrame();
 }
 
 void DelegatedFrameHost::WasHidden() {
   frame_evictor_->SetVisible(false);
-  released_front_lock_ = nullptr;
-}
-
-void DelegatedFrameHost::MaybeCreateResizeLock() {
-  DCHECK(!resize_lock_);
-
-  if (!compositor_)
-    return;
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableResizeLock))
-    return;
-
-  if (!HasFallbackSurface())
-    return;
-
-  if (!client_->DelegatedFrameCanCreateResizeLock())
-    return;
-
-  gfx::Size desired_size = client_->DelegatedFrameHostDesiredSizeInDIP();
-  if (desired_size.IsEmpty())
-    return;
-  if (desired_size == current_frame_size_in_dip_)
-    return;
-
-  resize_lock_ = client_->DelegatedFrameHostCreateResizeLock();
-  bool locked = resize_lock_->Lock();
-  DCHECK(locked);
 }
 
 void DelegatedFrameHost::CopyFromCompositingSurface(
     const gfx::Rect& src_subrect,
     const gfx::Size& output_size,
-    const ReadbackRequestCallback& callback,
-    const SkColorType preferred_color_type) {
-  // Only ARGB888 and RGB565 supported as of now.
-  bool format_support = ((preferred_color_type == kAlpha_8_SkColorType) ||
-                         (preferred_color_type == kRGB_565_SkColorType) ||
-                         (preferred_color_type == kN32_SkColorType));
-  DCHECK(format_support);
-  if (!CanCopyFromCompositingSurface()) {
-    callback.Run(SkBitmap(), content::READBACK_SURFACE_UNAVAILABLE);
-    return;
-  }
-
+    base::OnceCallback<void(const SkBitmap&)> callback) {
   std::unique_ptr<viz::CopyOutputRequest> request =
       std::make_unique<viz::CopyOutputRequest>(
-          viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
-          base::BindOnce(&CopyFromCompositingSurfaceHasResult, output_size,
-                         preferred_color_type, callback));
+          viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+          base::BindOnce(
+              [](base::OnceCallback<void(const SkBitmap&)> callback,
+                 std::unique_ptr<viz::CopyOutputResult> result) {
+                std::move(callback).Run(result->AsSkBitmap());
+              },
+              std::move(callback)));
+
   if (!src_subrect.IsEmpty())
     request->set_area(src_subrect);
-  RequestCopyOfOutput(std::move(request));
+  if (!output_size.IsEmpty())
+    request->set_result_selection(gfx::Rect(output_size));
+
+  // If there is enough information to populate the copy output request fields,
+  // then process it now. Otherwise, wait until the information becomes
+  // available.
+  if (CanCopyFromCompositingSurface() &&
+      active_local_surface_id_ == pending_local_surface_id_)
+    ProcessCopyOutputRequest(std::move(request));
+  else
+    pending_first_frame_requests_.push_back(std::move(request));
 }
 
-void DelegatedFrameHost::CopyFromCompositingSurfaceToVideoFrame(
-    const gfx::Rect& src_subrect,
-    scoped_refptr<media::VideoFrame> target,
-    const base::Callback<void(const gfx::Rect&, bool)>& callback) {
-  if (!CanCopyFromCompositingSurface()) {
-    callback.Run(gfx::Rect(), false);
-    return;
+void DelegatedFrameHost::ProcessCopyOutputRequest(
+    std::unique_ptr<viz::CopyOutputRequest> request) {
+  if (!request->has_area())
+    request->set_area(gfx::Rect(pending_surface_dip_size_));
+
+  request->set_area(
+      gfx::ScaleToRoundedRect(request->area(), active_device_scale_factor_));
+
+  if (request->has_result_selection()) {
+    const gfx::Rect& area = request->area();
+    const gfx::Rect& result_selection = request->result_selection();
+    if (area.IsEmpty() || result_selection.IsEmpty()) {
+      // Viz would normally return an empty result for an empty selection.
+      // However, this guard here is still necessary to protect against setting
+      // an illegal scaling ratio.
+      return;
+    }
+    request->SetScaleRatio(
+        gfx::Vector2d(area.width(), area.height()),
+        gfx::Vector2d(result_selection.width(), result_selection.height()));
   }
 
-  std::unique_ptr<viz::CopyOutputRequest> request = std::make_unique<
-      viz::CopyOutputRequest>(
-      viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
-      base::BindOnce(
-          &DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo,
-          AsWeakPtr(),  // For caching the ReadbackYUVInterface on this class.
-          nullptr, std::move(target), callback));
-  if (!src_subrect.IsEmpty())
-    request->set_area(src_subrect);
-  RequestCopyOfOutput(std::move(request));
+  GetHostFrameSinkManager()->RequestCopyOfOutput(
+      viz::SurfaceId(frame_sink_id_, pending_local_surface_id_),
+      std::move(request));
 }
 
 bool DelegatedFrameHost::CanCopyFromCompositingSurface() const {
-  return compositor_ && HasFallbackSurface();
+  return (enable_viz_ || support_) && HasFallbackSurface() &&
+         active_device_scale_factor_ != 0.f;
 }
 
-void DelegatedFrameHost::BeginFrameSubscription(
-    std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
-  frame_subscriber_ = std::move(subscriber);
-}
-
-void DelegatedFrameHost::EndFrameSubscription() {
-  idle_frame_subscriber_textures_.clear();
-  frame_subscriber_.reset();
-}
-
-viz::FrameSinkId DelegatedFrameHost::GetFrameSinkId() {
-  return frame_sink_id_;
-}
-
-bool DelegatedFrameHost::TransformPointToLocalCoordSpace(
+bool DelegatedFrameHost::TransformPointToLocalCoordSpaceLegacy(
     const gfx::PointF& point,
     const viz::SurfaceId& original_surface,
     gfx::PointF* transformed_point) {
-  viz::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
+  viz::SurfaceId surface_id(frame_sink_id_, active_local_surface_id_);
   if (!surface_id.is_valid() || enable_viz_)
     return false;
   *transformed_point = point;
@@ -217,13 +173,14 @@ bool DelegatedFrameHost::TransformPointToLocalCoordSpace(
 bool DelegatedFrameHost::TransformPointToCoordSpaceForView(
     const gfx::PointF& point,
     RenderWidgetHostViewBase* target_view,
-    gfx::PointF* transformed_point) {
+    gfx::PointF* transformed_point,
+    viz::EventSource source) {
   if (!HasFallbackSurface())
     return false;
 
   return target_view->TransformPointToLocalCoordSpace(
-      point, viz::SurfaceId(frame_sink_id_, local_surface_id_),
-      transformed_point);
+      point, viz::SurfaceId(frame_sink_id_, active_local_surface_id_),
+      transformed_point, source);
 }
 
 void DelegatedFrameHost::SetNeedsBeginFrames(bool needs_begin_frames) {
@@ -267,61 +224,58 @@ bool DelegatedFrameHost::HasFallbackSurface() const {
   return fallback_surface_id && fallback_surface_id->is_valid();
 }
 
-bool DelegatedFrameHost::ShouldSkipFrame(const gfx::Size& size_in_dip) {
-  if (!resize_lock_)
-    return false;
-  // Allow a single renderer frame through even though there's a resize lock
-  // currently in place.
-  if (allow_one_renderer_frame_during_resize_lock_) {
-    allow_one_renderer_frame_during_resize_lock_ = false;
-    return false;
-  }
-  return size_in_dip != resize_lock_->expected_size();
-}
-
-void DelegatedFrameHost::OnAggregatedSurfaceDamage(
-    const viz::LocalSurfaceId& id,
-    const gfx::Rect& damage_rect) {
-  if (id != local_surface_id_)
-    return;
-  AttemptFrameSubscriberCapture(damage_rect);
-}
-
-void DelegatedFrameHost::WasResized() {
+void DelegatedFrameHost::EmbedSurface(
+    const viz::LocalSurfaceId& new_pending_local_surface_id,
+    const gfx::Size& new_pending_dip_size,
+    cc::DeadlinePolicy deadline_policy) {
   const viz::SurfaceId* primary_surface_id =
       client_->DelegatedFrameHostGetLayer()->GetPrimarySurfaceId();
-  gfx::Size new_size_in_dip = client_->DelegatedFrameHostDesiredSizeInDIP();
 
-  if (enable_surface_synchronization_ &&
-      client_->DelegatedFrameHostIsVisible() &&
-      (!primary_surface_id || primary_surface_id->local_surface_id() !=
-                                  client_->GetLocalSurfaceId())) {
-    current_frame_size_in_dip_ = new_size_in_dip;
+  pending_local_surface_id_ = new_pending_local_surface_id;
+  pending_surface_dip_size_ = new_pending_dip_size;
 
-    viz::SurfaceId surface_id(frame_sink_id_, client_->GetLocalSurfaceId());
+  if (!client_->DelegatedFrameHostIsVisible()) {
+    // If the tab is resized while hidden, reset the fallback so that the next
+    // time user switches back to it the page is blank. This is preferred to
+    // showing contents of old size. Don't call EvictDelegatedFrame to avoid
+    // races when dragging tabs across displays. See https://crbug.com/813157.
+    if (pending_surface_dip_size_ != current_frame_size_in_dip_ &&
+        HasFallbackSurface()) {
+      client_->DelegatedFrameHostGetLayer()->SetFallbackSurfaceId(
+          viz::SurfaceId());
+    }
+    // Don't update the SurfaceLayer when invisible to avoid blocking on
+    // renderers that do not submit CompositorFrames. Next time the renderer
+    // is visible, EmbedSurface will be called again. See WasShown.
+    return;
+  }
+
+  if (!primary_surface_id ||
+      primary_surface_id->local_surface_id() != pending_local_surface_id_) {
+    viz::SurfaceId surface_id(frame_sink_id_, pending_local_surface_id_);
+#if defined(OS_WIN) || defined(USE_X11)
+    // On Windows and Linux, we would like to produce new content as soon as
+    // possible or the OS will create an additional black gutter. Until we can
+    // block resize on surface synchronization on these platforms, we will not
+    // block UI on the top-level renderer. The exception to this is if we're
+    // using an infinite deadline, in which case we should respect the
+    // specified deadline and block UI since that's what was requested.
+    if (deadline_policy.policy_type() !=
+            cc::DeadlinePolicy::kUseInfiniteDeadline &&
+        !current_frame_size_in_dip_.IsEmpty() &&
+        current_frame_size_in_dip_ != pending_surface_dip_size_) {
+      deadline_policy = cc::DeadlinePolicy::UseSpecifiedDeadline(0u);
+    }
+#endif
+    current_frame_size_in_dip_ = pending_surface_dip_size_;
     client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
         surface_id, current_frame_size_in_dip_, GetGutterColor(),
-        GetSurfaceReferenceFactory());
+        deadline_policy, false /* stretch_content_to_fill_bounds */);
     if (compositor_ && !base::CommandLine::ForCurrentProcess()->HasSwitch(
                            switches::kDisableResizeLock)) {
       compositor_->OnChildResizing();
     }
-    // Input throttling and guttering are handled differently when surface
-    // synchronization is enabled so exit early here.
-    return;
   }
-
-  if (new_size_in_dip != current_frame_size_in_dip_ &&
-      !client_->DelegatedFrameHostIsVisible()) {
-    EvictDelegatedFrame();
-  }
-
-  // If |create_resize_lock_after_commit_| is true, we're waiting to recreate
-  // an expired resize lock after the next UI frame is submitted, so don't
-  // make a lock here.
-  if (!resize_lock_ && !create_resize_lock_after_commit_)
-    MaybeCreateResizeLock();
-  UpdateGutters();
 }
 
 SkColor DelegatedFrameHost::GetGutterColor() const {
@@ -329,118 +283,6 @@ SkColor DelegatedFrameHost::GetGutterColor() const {
   // make the initial switch to fullscreen mode look better by using black as
   // the gutter color.
   return client_->DelegatedFrameHostGetGutterColor();
-}
-
-void DelegatedFrameHost::UpdateGutters() {
-  if (!HasFallbackSurface() || enable_surface_synchronization_) {
-    right_gutter_.reset();
-    bottom_gutter_.reset();
-    return;
-  }
-
-  gfx::Size size_in_dip = client_->DelegatedFrameHostDesiredSizeInDIP();
-  if (current_frame_size_in_dip_.width() < size_in_dip.width()) {
-    right_gutter_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
-    right_gutter_->SetColor(GetGutterColor());
-    int width = size_in_dip.width() - current_frame_size_in_dip_.width();
-    // The right gutter also includes the bottom-right corner, if necessary.
-    int height = size_in_dip.height();
-    right_gutter_->SetBounds(
-        gfx::Rect(current_frame_size_in_dip_.width(), 0, width, height));
-
-    client_->DelegatedFrameHostGetLayer()->Add(right_gutter_.get());
-  } else {
-    right_gutter_.reset();
-  }
-
-  if (current_frame_size_in_dip_.height() < size_in_dip.height()) {
-    bottom_gutter_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
-    bottom_gutter_->SetColor(GetGutterColor());
-    int width = current_frame_size_in_dip_.width();
-    int height = size_in_dip.height() - current_frame_size_in_dip_.height();
-    bottom_gutter_->SetBounds(
-        gfx::Rect(0, current_frame_size_in_dip_.height(), width, height));
-    client_->DelegatedFrameHostGetLayer()->Add(bottom_gutter_.get());
-  } else {
-    bottom_gutter_.reset();
-  }
-}
-
-gfx::Size DelegatedFrameHost::GetRequestedRendererSize() const {
-  if (resize_lock_)
-    return resize_lock_->expected_size();
-  else
-    return client_->DelegatedFrameHostDesiredSizeInDIP();
-}
-
-void DelegatedFrameHost::CheckResizeLock() {
-  if (!resize_lock_ ||
-      resize_lock_->expected_size() != current_frame_size_in_dip_)
-    return;
-
-  // Since we got the size we were looking for, unlock the compositor. But delay
-  // the release of the lock until we've kicked a frame with the new texture, to
-  // avoid resizing the UI before we have a chance to draw a "good" frame.
-  resize_lock_->UnlockCompositor();
-}
-
-void DelegatedFrameHost::AttemptFrameSubscriberCapture(
-    const gfx::Rect& damage_rect) {
-  if (!frame_subscriber() || !CanCopyFromCompositingSurface())
-    return;
-
-  const base::TimeTicks now = tick_clock_->NowTicks();
-  base::TimeTicks present_time;
-  if (vsync_interval_ <= base::TimeDelta()) {
-    present_time = now;
-  } else {
-    const int64_t intervals_elapsed = (now - vsync_timebase_) / vsync_interval_;
-    present_time = vsync_timebase_ + (intervals_elapsed + 1) * vsync_interval_;
-  }
-
-  scoped_refptr<media::VideoFrame> frame;
-  RenderWidgetHostViewFrameSubscriber::DeliverFrameCallback callback;
-  if (!frame_subscriber()->ShouldCaptureFrame(damage_rect, present_time, &frame,
-                                              &callback))
-    return;
-
-  // Get a texture to re-use; else, create a new one.
-  scoped_refptr<OwnedMailbox> subscriber_texture;
-  if (!idle_frame_subscriber_textures_.empty()) {
-    subscriber_texture = idle_frame_subscriber_textures_.back();
-    idle_frame_subscriber_textures_.pop_back();
-  } else if (viz::GLHelper* helper =
-                 ImageTransportFactory::GetInstance()->GetGLHelper()) {
-    subscriber_texture = new OwnedMailbox(helper);
-  }
-
-  std::unique_ptr<viz::CopyOutputRequest> request =
-      std::make_unique<viz::CopyOutputRequest>(
-          viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
-          base::BindOnce(
-              &DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo,
-              AsWeakPtr(), subscriber_texture, frame,
-              base::Bind(callback, present_time)));
-  // Setting the source in this copy request asks that the layer abort any prior
-  // uncommitted copy requests made on behalf of the same frame subscriber.
-  // This will not affect any of the copy requests spawned elsewhere from
-  // DelegatedFrameHost (e.g., a call to CopyFromCompositingSurface() for
-  // screenshots) since those copy requests do not specify |frame_subscriber()|
-  // as a source.
-  request->set_source(frame_subscriber()->GetSourceIdForCopyRequest());
-  if (subscriber_texture) {
-    request->SetMailbox(subscriber_texture->mailbox(),
-                        subscriber_texture->sync_token());
-  }
-
-  // To avoid unnecessary browser composites, try to go directly to the Surface
-  // rather than through the Layer (which goes through the browser compositor).
-  if (HasFallbackSurface() &&
-      request_copy_of_output_callback_for_testing_.is_null()) {
-    support_->RequestCopyOfSurface(std::move(request));
-  } else {
-    RequestCopyOfOutput(std::move(request));
-  }
 }
 
 void DelegatedFrameHost::DidCreateNewRendererCompositorFrameSink(
@@ -453,66 +295,11 @@ void DelegatedFrameHost::DidCreateNewRendererCompositorFrameSink(
 void DelegatedFrameHost::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
     viz::CompositorFrame frame,
-    viz::mojom::HitTestRegionListPtr hit_test_region_list) {
-#if defined(OS_CHROMEOS)
-  DCHECK(!resize_lock_ || !client_->IsAutoResizeEnabled());
-#endif
-  float frame_device_scale_factor = frame.metadata.device_scale_factor;
-  viz::BeginFrameAck ack(frame.metadata.begin_frame_ack);
-
-  DCHECK(!frame.render_pass_list.empty());
-
-  viz::RenderPass* root_pass = frame.render_pass_list.back().get();
-
-  gfx::Size frame_size = root_pass->output_rect.size();
-  gfx::Size frame_size_in_dip =
-      gfx::ConvertSizeToDIP(frame_device_scale_factor, frame_size);
-
-  if (ShouldSkipFrame(frame_size_in_dip)) {
-    std::vector<viz::ReturnedResource> resources =
-        viz::TransferableResource::ReturnResources(frame.resource_list);
-
-    skipped_latency_info_list_.insert(skipped_latency_info_list_.end(),
-                                      frame.metadata.latency_info.begin(),
-                                      frame.metadata.latency_info.end());
-
-    renderer_compositor_frame_sink_->DidReceiveCompositorFrameAck(resources);
-
-    skipped_frames_ = true;
-    ack.has_damage = false;
-    DidNotProduceFrame(ack);
-    return;
-  }
-
-  // If we are allowing one renderer frame through, this would ensure the frame
-  // gets through even if we regrab the lock after the UI compositor makes one
-  // frame. If the renderer frame beats the UI compositor, then we don't need to
-  // allow any more, though.
-  allow_one_renderer_frame_during_resize_lock_ = false;
-
-  if (skipped_frames_) {
-    skipped_frames_ = false;
-
-    // Give the same damage rect to the compositor.
-    viz::RenderPass* root_pass = frame.render_pass_list.back().get();
-    root_pass->damage_rect = gfx::Rect(frame_size);
-  }
-
-  if (frame_size.IsEmpty()) {
-    DCHECK(frame.resource_list.empty());
-    EvictDelegatedFrame();
-  } else {
-    frame.metadata.latency_info.insert(frame.metadata.latency_info.end(),
-                                       skipped_latency_info_list_.begin(),
-                                       skipped_latency_info_list_.end());
-    skipped_latency_info_list_.clear();
-
-    // If surface synchronization is off, then OnFirstSurfaceActivation will be
-    // called in the same call stack.
-    bool result = support_->SubmitCompositorFrame(
-        local_surface_id, std::move(frame), std::move(hit_test_region_list));
-    DCHECK(result);
-  }
+    base::Optional<viz::HitTestRegionList> hit_test_region_list) {
+  // If surface synchronization is off, then OnFirstSurfaceActivation will be
+  // called in the same call stack.
+  support_->SubmitCompositorFrame(local_surface_id, std::move(frame),
+                                  std::move(hit_test_region_list));
 }
 
 void DelegatedFrameHost::ClearDelegatedFrame() {
@@ -520,7 +307,6 @@ void DelegatedFrameHost::ClearDelegatedFrame() {
   // content. This will result in a white flash if we switch back to this
   // content.
   // https://crbug.com/739621
-  released_front_lock_.reset();
   EvictDelegatedFrame();
 }
 
@@ -529,18 +315,11 @@ void DelegatedFrameHost::DidReceiveCompositorFrameAck(
   renderer_compositor_frame_sink_->DidReceiveCompositorFrameAck(resources);
 }
 
-void DelegatedFrameHost::DidPresentCompositorFrame(uint32_t presentation_token,
-                                                   base::TimeTicks time,
-                                                   base::TimeDelta refresh,
-                                                   uint32_t flags) {
-  renderer_compositor_frame_sink_->DidPresentCompositorFrame(
-      presentation_token, time, refresh, flags);
-}
-
-void DelegatedFrameHost::DidDiscardCompositorFrame(
-    uint32_t presentation_token) {
-  renderer_compositor_frame_sink_->DidDiscardCompositorFrame(
-      presentation_token);
+void DelegatedFrameHost::DidPresentCompositorFrame(
+    uint32_t presentation_token,
+    const gfx::PresentationFeedback& feedback) {
+  renderer_compositor_frame_sink_->DidPresentCompositorFrame(presentation_token,
+                                                             feedback);
 }
 
 void DelegatedFrameHost::ReclaimResources(
@@ -555,42 +334,61 @@ void DelegatedFrameHost::OnBeginFramePausedChanged(bool paused) {
 
 void DelegatedFrameHost::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
-  gfx::Size frame_size_in_dip = gfx::ConvertSizeToDIP(
-      surface_info.device_scale_factor(), surface_info.size_in_pixels());
-
-  if (enable_surface_synchronization_) {
-    // If there's no primary surface, then we don't wish to display content at
-    // this time (e.g. the view is hidden) and so we don't need a fallback
-    // surface either. Since we won't use the fallback surface, we drop the
-    // temporary reference here to save resources.
-    if (!HasPrimarySurface()) {
-      ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-      viz::HostFrameSinkManager* host_frame_sink_manager =
-          factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
-      host_frame_sink_manager->DropTemporaryReference(surface_info.id());
-      return;
+  // If this is the first Surface created after navigation, notify |client_|.
+  // If the Surface was created before navigation, drop it.
+  uint32_t parent_sequence_number =
+      surface_info.id().local_surface_id().parent_sequence_number();
+  uint32_t latest_parent_sequence_number =
+      pending_local_surface_id_.parent_sequence_number();
+  // If |latest_parent_sequence_number| is less than
+  // |first_parent_sequence_number_after_navigation_|, then the parent id has
+  // wrapped around. Make sure that case is covered.
+  if (parent_sequence_number >=
+          first_parent_sequence_number_after_navigation_ ||
+      (latest_parent_sequence_number <
+           first_parent_sequence_number_after_navigation_ &&
+       parent_sequence_number <= latest_parent_sequence_number)) {
+    if (!received_frame_after_navigation_) {
+      received_frame_after_navigation_ = true;
+      client_->DidReceiveFirstFrameAfterNavigation();
     }
   } else {
-    client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
-        surface_info.id(), frame_size_in_dip, GetGutterColor(),
-        GetSurfaceReferenceFactory());
+    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+    viz::HostFrameSinkManager* host_frame_sink_manager =
+        factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
+    host_frame_sink_manager->DropTemporaryReference(surface_info.id());
+    return;
+  }
+
+  // If there's no primary surface, then we don't wish to display content at
+  // this time (e.g. the view is hidden) and so we don't need a fallback
+  // surface either. Since we won't use the fallback surface, we drop the
+  // temporary reference here to save resources.
+  if (!HasPrimarySurface()) {
+    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+    viz::HostFrameSinkManager* host_frame_sink_manager =
+        factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
+    host_frame_sink_manager->DropTemporaryReference(surface_info.id());
+    return;
   }
 
   client_->DelegatedFrameHostGetLayer()->SetFallbackSurfaceId(
       surface_info.id());
-  local_surface_id_ = surface_info.id().local_surface_id();
+  active_local_surface_id_ = surface_info.id().local_surface_id();
+  active_device_scale_factor_ = surface_info.device_scale_factor();
 
-  // Surface synchronization deals with resizes in WasResized().
-  if (!enable_surface_synchronization_) {
-    released_front_lock_ = nullptr;
-    current_frame_size_in_dip_ = frame_size_in_dip;
-    CheckResizeLock();
-
-    UpdateGutters();
-  }
+  // This is used by macOS' unique resize path.
+  client_->OnFirstSurfaceActivation(surface_info);
 
   frame_evictor_->SwappedFrame(client_->DelegatedFrameHostIsVisible());
   // Note: the frame may have been evicted immediately.
+
+  if (!pending_first_frame_requests_.empty()) {
+    DCHECK(CanCopyFromCompositingSurface());
+    for (auto& request : pending_first_frame_requests_)
+      ProcessCopyOutputRequest(std::move(request));
+    pending_first_frame_requests_.clear();
+  }
 }
 
 void DelegatedFrameHost::OnFrameTokenChanged(uint32_t frame_token) {
@@ -604,239 +402,29 @@ void DelegatedFrameHost::OnBeginFrame(const viz::BeginFrameArgs& args) {
 }
 
 void DelegatedFrameHost::EvictDelegatedFrame() {
-  if (!HasFallbackSurface())
+  // Replaces the SurfaceLayer with a SolidColorLayer.
+  client_->DelegatedFrameHostGetLayer()->SetShowSolidColorContent();
+
+  if (!HasSavedFrame())
     return;
-
-  if (enable_surface_synchronization_) {
-    client_->DelegatedFrameHostGetLayer()->SetFallbackSurfaceId(
-        viz::SurfaceId());
-  } else {
-    client_->DelegatedFrameHostGetLayer()->SetShowSolidColorContent();
-    resize_lock_.reset();
-    UpdateGutters();
-  }
-
-  // TODO(samans): Ensure that with VizDisplayCompositor enabled the latest
-  // frame is evicted and that DelegatedFrameHost updates the SurfaceLayer when
-  // the frame becomes visible again.
-  if (!enable_viz_)
-    support_->EvictCurrentSurface();
-
+  std::vector<viz::SurfaceId> surface_ids = {GetCurrentSurfaceId()};
+  GetHostFrameSinkManager()->EvictSurfaces(surface_ids);
   frame_evictor_->DiscardedFrame();
-}
-
-// static
-void DelegatedFrameHost::ReturnSubscriberTexture(
-    base::WeakPtr<DelegatedFrameHost> dfh,
-    scoped_refptr<OwnedMailbox> subscriber_texture,
-    const gpu::SyncToken& sync_token) {
-  if (!subscriber_texture.get())
-    return;
-  if (!dfh)
-    return;
-
-  subscriber_texture->UpdateSyncToken(sync_token);
-
-  if (dfh->frame_subscriber_ && subscriber_texture->texture_id())
-    dfh->idle_frame_subscriber_textures_.push_back(subscriber_texture);
-}
-
-// static
-void DelegatedFrameHost::CopyFromCompositingSurfaceFinishedForVideo(
-    scoped_refptr<media::VideoFrame> video_frame,
-    base::WeakPtr<DelegatedFrameHost> dfh,
-    const base::Callback<void(bool)>& callback,
-    scoped_refptr<OwnedMailbox> subscriber_texture,
-    std::unique_ptr<viz::SingleReleaseCallback> release_callback,
-    bool result) {
-  callback.Run(result);
-
-  gpu::SyncToken sync_token;
-  if (result) {
-    viz::GLHelper* gl_helper =
-        ImageTransportFactory::GetInstance()->GetGLHelper();
-    gl_helper->GenerateSyncToken(&sync_token);
-  }
-  if (release_callback) {
-    const bool lost_resource = !sync_token.HasData();
-    release_callback->Run(sync_token, lost_resource);
-  }
-  ReturnSubscriberTexture(dfh, subscriber_texture, sync_token);
-}
-
-// static
-void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
-    base::WeakPtr<DelegatedFrameHost> dfh,
-    scoped_refptr<OwnedMailbox> subscriber_texture,
-    scoped_refptr<media::VideoFrame> video_frame,
-    const base::Callback<void(const gfx::Rect&, bool)>& callback,
-    std::unique_ptr<viz::CopyOutputResult> result) {
-  base::ScopedClosureRunner scoped_callback_runner(
-      base::BindOnce(callback, gfx::Rect(), false));
-  base::ScopedClosureRunner scoped_return_subscriber_texture(base::BindOnce(
-      &ReturnSubscriberTexture, dfh, subscriber_texture, gpu::SyncToken()));
-
-  if (!dfh)
-    return;
-  if (result->IsEmpty())
-    return;
-
-  // Compute the dest size we want after the letterboxing resize. Make the
-  // coordinates and sizes even because we letterbox in YUV space
-  // (see CopyRGBToVideoFrame). They need to be even for the UV samples to
-  // line up correctly.
-  // The video frame's visible_rect() and the result's size() are both physical
-  // pixels.
-  gfx::Rect region_in_frame = media::ComputeLetterboxRegion(
-      video_frame->visible_rect(), result->size());
-  region_in_frame =
-      gfx::Rect(region_in_frame.x() & ~1, region_in_frame.y() & ~1,
-                region_in_frame.width() & ~1, region_in_frame.height() & ~1);
-  if (region_in_frame.IsEmpty())
-    return;
-
-  if (result->format() == viz::CopyOutputResult::Format::RGBA_BITMAP) {
-    SkBitmap bitmap = result->AsSkBitmap();
-    // Scale the bitmap to the required size, if necessary.
-    SkBitmap scaled_bitmap;
-    if (result->size() != region_in_frame.size()) {
-      skia::ImageOperations::ResizeMethod method =
-          skia::ImageOperations::RESIZE_GOOD;
-      scaled_bitmap = skia::ImageOperations::Resize(
-          bitmap, method, region_in_frame.width(), region_in_frame.height());
-    } else {
-      scaled_bitmap = bitmap;
-    }
-
-    media::CopyRGBToVideoFrame(
-        reinterpret_cast<uint8_t*>(scaled_bitmap.getPixels()),
-        scaled_bitmap.rowBytes(), region_in_frame, video_frame.get());
-
-    ignore_result(scoped_callback_runner.Release());
-    callback.Run(region_in_frame, true);
-    return;
-  }
-
-  DCHECK_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
-
-  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  viz::GLHelper* gl_helper = factory->GetGLHelper();
-  if (!gl_helper)
-    return;
-  if (subscriber_texture.get() && !subscriber_texture->texture_id())
-    return;
-
-  gpu::Mailbox mailbox = result->GetTextureResult()->mailbox;
-  gpu::SyncToken sync_token = result->GetTextureResult()->sync_token;
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback =
-      result->TakeTextureOwnership();
-
-  if (!dfh->yuv_readback_pipeline_) {
-    dfh->yuv_readback_pipeline_ =
-        gl_helper->CreateReadbackPipelineYUV(true, true);
-  }
-  viz::ReadbackYUVInterface* yuv_readback_pipeline =
-      dfh->yuv_readback_pipeline_.get();
-  viz::GLHelper::ScalerInterface* const scaler =
-      yuv_readback_pipeline->scaler();
-  const gfx::Vector2d scale_from(result->size().width(),
-                                 result->size().height());
-  const gfx::Vector2d scale_to(region_in_frame.width(),
-                               region_in_frame.height());
-  if (scale_from == scale_to) {
-    if (scaler)
-      yuv_readback_pipeline->SetScaler(nullptr);
-  } else if (!scaler || !scaler->IsSameScaleRatio(scale_from, scale_to)) {
-    // The scaler chosen here is based on performance measurements of full
-    // end-to-end systems.  When down-scaling, always use the "fast" scaler
-    // because it performs well on both low- and high- end machines, provides
-    // decent image quality, and doesn't overwhelm downstream video encoders
-    // with too much entropy (which can drastically increase CPU utilization).
-    // When up-scaling, always use "best" because the quality improvement is
-    // huge with insignificant performance penalty.  Note that this strategy
-    // differs from single-frame snapshot capture.
-    viz::GLHelper::ScalerQuality quality =
-        ((result->size().width() < region_in_frame.size().width()) &&
-         (result->size().height() < region_in_frame.size().height()))
-            ? viz::GLHelper::SCALER_QUALITY_BEST
-            : viz::GLHelper::SCALER_QUALITY_FAST;
-
-    DVLOG(1) << "Re-creating YUV readback pipeline scaler for source rect "
-             << result->rect().ToString() << " and destination size "
-             << region_in_frame.size().ToString();
-
-    std::unique_ptr<viz::GLHelper::ScalerInterface> scaler =
-        gl_helper->CreateScaler(quality, scale_from, scale_to, false, false,
-                                false);
-    DCHECK(scaler);  // Arguments to CreateScaler() should never be invalid.
-    yuv_readback_pipeline->SetScaler(std::move(scaler));
-  }
-
-  ignore_result(scoped_callback_runner.Release());
-  ignore_result(scoped_return_subscriber_texture.Release());
-
-  base::Callback<void(bool result)> finished_callback = base::Bind(
-      &DelegatedFrameHost::CopyFromCompositingSurfaceFinishedForVideo,
-      video_frame, dfh->AsWeakPtr(), base::Bind(callback, region_in_frame),
-      subscriber_texture, base::Passed(&release_callback));
-  yuv_readback_pipeline->ReadbackYUV(
-      mailbox, sync_token, result->size(), gfx::Rect(region_in_frame.size()),
-      video_frame->stride(media::VideoFrame::kYPlane),
-      video_frame->data(media::VideoFrame::kYPlane),
-      video_frame->stride(media::VideoFrame::kUPlane),
-      video_frame->data(media::VideoFrame::kUPlane),
-      video_frame->stride(media::VideoFrame::kVPlane),
-      video_frame->data(media::VideoFrame::kVPlane), region_in_frame.origin(),
-      finished_callback);
-  media::LetterboxYUV(video_frame.get(), region_in_frame);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // DelegatedFrameHost, ui::CompositorObserver implementation:
 
 void DelegatedFrameHost::OnCompositingDidCommit(ui::Compositor* compositor) {
-  // If |create_resize_lock_after_commit_| then we should have popped the old
-  // lock already.
-  DCHECK(!resize_lock_ || !create_resize_lock_after_commit_);
-
-  if (resize_lock_ &&
-      resize_lock_->expected_size() == current_frame_size_in_dip_) {
-    resize_lock_.reset();
-    // We had a lock but the UI may have resized in the meantime.
-    create_resize_lock_after_commit_ = true;
-  }
-
-  if (create_resize_lock_after_commit_) {
-    create_resize_lock_after_commit_ = false;
-    MaybeCreateResizeLock();
-  }
 }
 
 void DelegatedFrameHost::OnCompositingStarted(ui::Compositor* compositor,
-                                              base::TimeTicks start_time) {
-  last_draw_ended_ = start_time;
-}
+                                              base::TimeTicks start_time) {}
 
 void DelegatedFrameHost::OnCompositingEnded(ui::Compositor* compositor) {}
 
 void DelegatedFrameHost::OnCompositingLockStateChanged(
     ui::Compositor* compositor) {
-  if (resize_lock_ && resize_lock_->timed_out()) {
-    // A compositor lock that is part of a resize lock timed out. We allow
-    // the UI to produce a frame before locking it again, so we don't lock here.
-    // We release the |resize_lock_| though to allow any other resizes that are
-    // desired at the same time since we're allowing the UI to make a frame
-    // which will gutter anyways.
-    resize_lock_.reset();
-    create_resize_lock_after_commit_ = true;
-    // Because this timed out, we're going to allow the UI to update and lock
-    // again. We would allow renderer frames through during this time if they
-    // came late, but would stop them again once the UI finished its frame. We
-    // want to allow the slow renderer to show us one frame even if its wrong
-    // since we're guttering anyways, but not unlimited number of frames as that
-    // would be a waste of power.
-    allow_one_renderer_frame_during_resize_lock_ = true;
-  }
 }
 
 void DelegatedFrameHost::OnCompositingChildResizing(
@@ -848,19 +436,22 @@ void DelegatedFrameHost::OnCompositingShuttingDown(ui::Compositor* compositor) {
   DCHECK(!compositor_);
 }
 
-void DelegatedFrameHost::OnUpdateVSyncParameters(base::TimeTicks timebase,
-                                                 base::TimeDelta interval) {
-  vsync_timebase_ = timebase;
-  vsync_interval_ = interval;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
-// DelegatedFrameHost, ImageTransportFactoryObserver implementation:
+// DelegatedFrameHost, ContextFactoryObserver implementation:
 
-void DelegatedFrameHost::OnLostResources() {
-  EvictDelegatedFrame();
-  idle_frame_subscriber_textures_.clear();
-  yuv_readback_pipeline_.reset();
+void DelegatedFrameHost::OnLostSharedContext() {}
+
+void DelegatedFrameHost::OnLostVizProcess() {
+  // With OOP-D renderer surface was destroyed if the GPU process crashed. Reset
+  // the fallback Surface but leave the primary so we embed the renderer surface
+  // again.
+  if (HasFallbackSurface()) {
+    client_->DelegatedFrameHostGetLayer()->SetFallbackSurfaceId(
+        viz::SurfaceId());
+  }
+
+  if (HasSavedFrame())
+    frame_evictor_->DiscardedFrame();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -872,50 +463,27 @@ void DelegatedFrameHost::SetCompositor(ui::Compositor* compositor) {
     return;
   compositor_ = compositor;
   compositor_->AddObserver(this);
-  DCHECK(!vsync_manager_.get());
-  vsync_manager_ = compositor_->vsync_manager();
-  vsync_manager_->AddObserver(this);
-
-  compositor_->AddFrameSink(frame_sink_id_);
+  if (should_register_frame_sink_id_)
+    compositor_->AddFrameSink(frame_sink_id_);
 }
 
 void DelegatedFrameHost::ResetCompositor() {
   if (!compositor_)
     return;
-  resize_lock_.reset();
   if (compositor_->HasObserver(this))
     compositor_->RemoveObserver(this);
-  if (vsync_manager_) {
-    vsync_manager_->RemoveObserver(this);
-    vsync_manager_ = nullptr;
-  }
-
-  compositor_->RemoveFrameSink(frame_sink_id_);
+  if (should_register_frame_sink_id_)
+    compositor_->RemoveFrameSink(frame_sink_id_);
   compositor_ = nullptr;
 }
 
 void DelegatedFrameHost::LockResources() {
-  DCHECK(local_surface_id_.is_valid());
+  DCHECK(active_local_surface_id_.is_valid());
   frame_evictor_->LockFrame();
 }
 
-void DelegatedFrameHost::RequestCopyOfOutput(
-    std::unique_ptr<viz::CopyOutputRequest> request) {
-  // If a specific area has not been requested, set one to ensure correct
-  // clipping occurs.
-  if (!request->has_area())
-    request->set_area(gfx::Rect(current_frame_size_in_dip_));
-
-  if (request_copy_of_output_callback_for_testing_.is_null()) {
-    client_->DelegatedFrameHostGetLayer()->RequestCopyOfOutput(
-        std::move(request));
-  } else {
-    request_copy_of_output_callback_for_testing_.Run(std::move(request));
-  }
-}
-
 void DelegatedFrameHost::UnlockResources() {
-  DCHECK(local_surface_id_.is_valid());
+  DCHECK(active_local_surface_id_.is_valid());
   frame_evictor_->UnlockFrame();
 }
 
@@ -931,10 +499,7 @@ void DelegatedFrameHost::CreateCompositorFrameSinkSupport() {
                  ->GetHostFrameSinkManager()
                  ->CreateCompositorFrameSinkSupport(this, frame_sink_id_,
                                                     is_root, needs_sync_points);
-  support_->SetAggregatedDamageCallback(
-      base::BindRepeating(&DelegatedFrameHost::OnAggregatedSurfaceDamage,
-                          weak_ptr_factory_.GetWeakPtr()));
-  if (compositor_)
+  if (compositor_ && should_register_frame_sink_id_)
     compositor_->AddFrameSink(frame_sink_id_);
   if (needs_begin_frame_)
     support_->SetNeedsBeginFrame(true);
@@ -943,17 +508,43 @@ void DelegatedFrameHost::CreateCompositorFrameSinkSupport() {
 void DelegatedFrameHost::ResetCompositorFrameSinkSupport() {
   if (!support_)
     return;
-  if (compositor_)
+  if (compositor_ && should_register_frame_sink_id_)
     compositor_->RemoveFrameSink(frame_sink_id_);
   support_.reset();
 }
 
-scoped_refptr<viz::SurfaceReferenceFactory>
-DelegatedFrameHost::GetSurfaceReferenceFactory() {
-  if (enable_viz_)
-    return base::MakeRefCounted<viz::StubSurfaceReferenceFactory>();
+void DelegatedFrameHost::DidNavigate() {
+  first_parent_sequence_number_after_navigation_ =
+      pending_local_surface_id_.parent_sequence_number();
+  received_frame_after_navigation_ = false;
+}
 
-  return GetFrameSinkManager()->surface_manager()->reference_factory();
+bool DelegatedFrameHost::IsPrimarySurfaceEvicted() const {
+  return active_local_surface_id_ == pending_local_surface_id_ &&
+         !HasSavedFrame();
+}
+
+void DelegatedFrameHost::WindowTitleChanged(const std::string& title) {
+  auto* host_frame_sink_manager = GetHostFrameSinkManager();
+  if (host_frame_sink_manager)
+    host_frame_sink_manager->SetFrameSinkDebugLabel(frame_sink_id_, title);
+}
+
+void DelegatedFrameHost::TakeFallbackContentFrom(DelegatedFrameHost* other) {
+  if (!other->HasFallbackSurface() || HasFallbackSurface())
+    return;
+
+  if (!HasPrimarySurface()) {
+    client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
+        *other->client_->DelegatedFrameHostGetLayer()->GetFallbackSurfaceId(),
+        other->client_->DelegatedFrameHostGetLayer()->size(),
+        other->client_->DelegatedFrameHostGetLayer()->background_color(),
+        cc::DeadlinePolicy::UseDefaultDeadline(),
+        false /* stretch_content_to_fill_bounds */);
+  }
+
+  client_->DelegatedFrameHostGetLayer()->SetFallbackSurfaceId(
+      *other->client_->DelegatedFrameHostGetLayer()->GetFallbackSurfaceId());
 }
 
 }  // namespace content

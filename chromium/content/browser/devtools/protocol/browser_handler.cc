@@ -7,11 +7,15 @@
 #include <string.h>
 #include <algorithm>
 
+#include "base/command_line.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
 #include "v8/include/v8-version-string.h"
 
@@ -43,10 +47,14 @@ Response BrowserHandler::GetVersion(std::string* protocol_version,
 namespace {
 
 // Converts an histogram.
-std::unique_ptr<Browser::Histogram> Convert(
-    const base::HistogramBase& in_histogram) {
-  const std::unique_ptr<const base::HistogramSamples> in_buckets =
-      in_histogram.SnapshotSamples();
+std::unique_ptr<Browser::Histogram> Convert(base::HistogramBase& in_histogram,
+                                            bool in_delta) {
+  std::unique_ptr<const base::HistogramSamples> in_buckets;
+  if (!in_delta) {
+    in_buckets = in_histogram.SnapshotSamples();
+  } else {
+    in_buckets = in_histogram.SnapshotDelta();
+  }
   DCHECK(in_buckets);
 
   auto out_buckets = std::make_unique<Array<Browser::Bucket>>();
@@ -77,14 +85,17 @@ std::unique_ptr<Browser::Histogram> Convert(
 
 Response BrowserHandler::GetHistograms(
     const Maybe<std::string> in_query,
+    const Maybe<bool> in_delta,
     std::unique_ptr<Array<Browser::Histogram>>* const out_histograms) {
   // Convert histograms.
   DCHECK(out_histograms);
   *out_histograms = std::make_unique<Array<Browser::Histogram>>();
-  for (const base::HistogramBase* const h :
-       base::StatisticsRecorder::GetSnapshot(in_query.fromMaybe(""))) {
+  for (base::HistogramBase* const h :
+       base::StatisticsRecorder::Sort(base::StatisticsRecorder::WithName(
+           base::StatisticsRecorder::GetHistograms(),
+           in_query.fromMaybe("")))) {
     DCHECK(h);
-    (*out_histograms)->addItem(Convert(*h));
+    (*out_histograms)->addItem(Convert(*h, in_delta.fromMaybe(false)));
   }
 
   return Response::OK();
@@ -92,18 +103,40 @@ Response BrowserHandler::GetHistograms(
 
 Response BrowserHandler::GetHistogram(
     const std::string& in_name,
+    const Maybe<bool> in_delta,
     std::unique_ptr<Browser::Histogram>* const out_histogram) {
   // Get histogram by name.
-  const base::HistogramBase* const in_histogram =
+  base::HistogramBase* const in_histogram =
       base::StatisticsRecorder::FindHistogram(in_name);
   if (!in_histogram)
     return Response::InvalidParams("Cannot find histogram: " + in_name);
 
   // Convert histogram.
   DCHECK(out_histogram);
-  *out_histogram = Convert(*in_histogram);
+  *out_histogram = Convert(*in_histogram, in_delta.fromMaybe(false));
 
   return Response::OK();
+}
+
+Response BrowserHandler::GetBrowserCommandLine(
+    std::unique_ptr<protocol::Array<String>>* arguments) {
+  *arguments = protocol::Array<String>::create();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  // The commandline is potentially sensitive, only return it if it
+  // contains kEnableAutomation.
+  if (command_line->HasSwitch(switches::kEnableAutomation)) {
+    for (const auto& arg : command_line->argv()) {
+#if defined(OS_WIN)
+      (*arguments)->addItem(base::UTF16ToUTF8(arg.c_str()));
+#else
+      (*arguments)->addItem(arg.c_str());
+#endif
+    }
+    return Response::OK();
+  } else {
+    return Response::Error(
+        "Command line not returned because --enable-automation not set.");
+  }
 }
 
 }  // namespace protocol

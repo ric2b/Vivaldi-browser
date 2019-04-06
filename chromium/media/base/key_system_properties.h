@@ -8,6 +8,7 @@
 #include <string>
 
 #include "build/build_config.h"
+#include "media/base/decrypt_config.h"
 #include "media/base/eme_constants.h"
 #include "media/base/media_export.h"
 
@@ -25,13 +26,15 @@ class MEDIA_EXPORT KeySystemProperties {
   virtual bool IsSupportedInitDataType(
       EmeInitDataType init_data_type) const = 0;
 
+  // Returns the configuration rule for supporting |encryption_scheme|.
+  virtual EmeConfigRule GetEncryptionSchemeConfigRule(
+      EncryptionMode encryption_scheme) const = 0;
+
   // Returns the codecs supported by this key system.
   virtual SupportedCodecs GetSupportedCodecs() const = 0;
 
-#if defined(OS_ANDROID)
   // Returns the codecs with hardware-secure support in this key system.
-  virtual SupportedCodecs GetSupportedSecureCodecs() const;
-#endif
+  virtual SupportedCodecs GetSupportedHwSecureCodecs() const;
 
   // Returns the configuration rule for supporting a robustness requirement.
   virtual EmeConfigRule GetRobustnessConfigRule(
@@ -42,9 +45,9 @@ class MEDIA_EXPORT KeySystemProperties {
   // sessions.
   virtual EmeSessionTypeSupport GetPersistentLicenseSessionSupport() const = 0;
 
-  // Returns the support this key system provides for persistent-release-message
+  // Returns the support this key system provides for persistent-usage-record
   // sessions.
-  virtual EmeSessionTypeSupport GetPersistentReleaseMessageSessionSupport()
+  virtual EmeSessionTypeSupport GetPersistentUsageRecordSessionSupport()
       const = 0;
 
   // Returns the support this key system provides for persistent state.
@@ -55,8 +58,6 @@ class MEDIA_EXPORT KeySystemProperties {
 
   // Returns whether AesDecryptor can be used for this key system.
   virtual bool UseAesDecryptor() const;
-
-  virtual std::string GetPepperType() const;
 };
 
 }  // namespace media

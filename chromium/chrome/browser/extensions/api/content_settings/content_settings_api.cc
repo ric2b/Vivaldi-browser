@@ -31,9 +31,11 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/webplugininfo.h"
 #include "extensions/browser/extension_prefs_scope.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/common/error_utils.h"
 
 using content::BrowserThread;
@@ -65,9 +67,6 @@ bool RemoveContentType(base::ListValue* args,
 
 namespace extensions {
 
-namespace helpers = content_settings_helpers;
-namespace keys = content_settings_api_constants;
-
 ExtensionFunction::ResponseAction
 ContentSettingsContentSettingClearFunction::Run() {
   ContentSettingsType content_type;
@@ -90,7 +89,8 @@ ContentSettingsContentSettingClearFunction::Run() {
   } else if (browser_context()->IsOffTheRecord()) {
     // Incognito profiles can't access regular mode ever, they only exist in
     // split mode.
-    return RespondNow(Error(keys::kIncognitoContextError));
+    return RespondNow(
+        Error(content_settings_api_constants::kIncognitoContextError));
   }
 
   scoped_refptr<ContentSettingsStore> store =
@@ -110,16 +110,16 @@ ContentSettingsContentSettingGetFunction::Run() {
 
   GURL primary_url(params->details.primary_url);
   if (!primary_url.is_valid()) {
-    return RespondNow(
-        Error(keys::kInvalidUrlError, params->details.primary_url));
+    return RespondNow(Error(content_settings_api_constants::kInvalidUrlError,
+                            params->details.primary_url));
   }
 
   GURL secondary_url(primary_url);
   if (params->details.secondary_url.get()) {
     secondary_url = GURL(*params->details.secondary_url);
     if (!secondary_url.is_valid()) {
-      return RespondNow(
-          Error(keys::kInvalidUrlError, *params->details.secondary_url));
+      return RespondNow(Error(content_settings_api_constants::kInvalidUrlError,
+                              *params->details.secondary_url));
     }
   }
 
@@ -130,7 +130,7 @@ ContentSettingsContentSettingGetFunction::Run() {
   bool incognito = false;
   if (params->details.incognito.get())
     incognito = *params->details.incognito;
-  if (incognito && !include_incognito())
+  if (incognito && !include_incognito_information())
     return RespondNow(Error(pref_keys::kIncognitoErrorMessage));
 
   HostContentSettingsMap* map;
@@ -140,7 +140,8 @@ ContentSettingsContentSettingGetFunction::Run() {
     if (!profile->HasOffTheRecordProfile()) {
       // TODO(bauerb): Allow reading incognito content settings
       // outside of an incognito session.
-      return RespondNow(Error(keys::kIncognitoSessionOnlyError));
+      return RespondNow(
+          Error(content_settings_api_constants::kIncognitoSessionOnlyError));
     }
     map = HostContentSettingsMapFactory::GetForProfile(
         profile->GetOffTheRecordProfile());
@@ -165,7 +166,8 @@ ContentSettingsContentSettingGetFunction::Run() {
   std::string setting_string =
       content_settings::ContentSettingToString(setting);
   DCHECK(!setting_string.empty());
-  result->SetString(keys::kContentSettingKey, setting_string);
+  result->SetString(content_settings_api_constants::kContentSettingKey,
+                    setting_string);
 
   return RespondNow(OneArgument(std::move(result)));
 }
@@ -180,17 +182,16 @@ ContentSettingsContentSettingSetFunction::Run() {
 
   std::string primary_error;
   ContentSettingsPattern primary_pattern =
-      helpers::ParseExtensionPattern(params->details.primary_pattern,
-                                     &primary_error);
+      content_settings_helpers::ParseExtensionPattern(
+          params->details.primary_pattern, &primary_error);
   if (!primary_pattern.IsValid())
     return RespondNow(Error(primary_error));
 
   ContentSettingsPattern secondary_pattern = ContentSettingsPattern::Wildcard();
   if (params->details.secondary_pattern.get()) {
     std::string secondary_error;
-    secondary_pattern =
-        helpers::ParseExtensionPattern(*params->details.secondary_pattern,
-                                       &secondary_error);
+    secondary_pattern = content_settings_helpers::ParseExtensionPattern(
+        *params->details.secondary_pattern, &secondary_error);
     if (!secondary_pattern.IsValid())
       return RespondNow(Error(secondary_error));
   }
@@ -251,14 +252,19 @@ ContentSettingsContentSettingSetFunction::Run() {
   }
 
   if (incognito) {
-    // Regular profiles can't access incognito unless include_incognito is true.
-    if (!browser_context()->IsOffTheRecord() && !include_incognito())
+    // Regular profiles can't access incognito unless the extension is allowed
+    // to run in incognito contexts.
+    if (!browser_context()->IsOffTheRecord() &&
+        !extensions::util::IsIncognitoEnabled(extension_id(),
+                                              browser_context())) {
       return RespondNow(Error(pref_keys::kIncognitoErrorMessage));
+    }
   } else {
     // Incognito profiles can't access regular mode ever, they only exist in
     // split mode.
     if (browser_context()->IsOffTheRecord())
-      return RespondNow(Error(keys::kIncognitoContextError));
+      return RespondNow(
+          Error(content_settings_api_constants::kIncognitoContextError));
   }
 
   if (scope == kExtensionPrefsScopeIncognitoSessionOnly &&
@@ -306,8 +312,9 @@ void ContentSettingsContentSettingGetResourceIdentifiersFunction::OnGotPlugins(
 
     group_identifiers.insert(group_identifier);
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-    dict->SetString(keys::kIdKey, group_identifier);
-    dict->SetString(keys::kDescriptionKey, plugin_metadata->name());
+    dict->SetString(content_settings_api_constants::kIdKey, group_identifier);
+    dict->SetString(content_settings_api_constants::kDescriptionKey,
+                    plugin_metadata->name());
     list->Append(std::move(dict));
   }
   SetResult(std::move(list));

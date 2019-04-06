@@ -85,7 +85,9 @@ while test "${1:0:1}" = "-"; do
     --icon)
       POSITION_CLAUSE="${POSITION_CLAUSE}set position of item \"$2\" to {$3, $4}
 "
-      APPNAME=$2
+      if ! test -z "$APPNAME"; then
+        APPNAME=$2
+      fi
       shift; shift; shift; shift;;
     --hide-extension)
       HIDING_CLAUSE="${HIDING_CLAUSE}set the extension hidden of item \"$2\" to true

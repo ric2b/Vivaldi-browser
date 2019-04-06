@@ -7,9 +7,7 @@
 #include <memory>
 #include <string>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/browser/webrtc/webrtc_internals_ui_observer.h"
 #include "content/public/test/test_browser_thread.h"
@@ -73,14 +71,6 @@ class MockWakeLock : public device::mojom::WakeLock {
 
 }  // namespace
 
-class WebRtcEventLogManagerForTesting : public WebRtcEventLogManager {
- public:
-  WebRtcEventLogManagerForTesting() {
-    SetTaskRunnerForTesting(base::ThreadTaskRunnerHandle::Get());
-  }
-  ~WebRtcEventLogManagerForTesting() override = default;
-};
-
 // Derived class for testing only.  Allows the tests to have their own instance
 // for testing and control the period for which WebRTCInternals will bulk up
 // updates (changes down from 500ms to 1ms).
@@ -96,7 +86,6 @@ class WebRTCInternalsForTest : public WebRTCInternals {
 
  private:
   MockWakeLock mock_wake_lock_;
-  WebRtcEventLogManagerForTesting synchronous_webrtc_event_log_manager_;
 };
 
 class WebRtcInternalsTest : public testing::Test {
@@ -507,5 +496,8 @@ TEST_F(WebRtcInternalsTest, WakeLock) {
 
   base::RunLoop().RunUntilIdle();
 }
+
+// TODO(eladalon): Add tests that WebRtcEventLogger::Enable/Disable is
+// correctly called. https://crbug.com/775415
 
 }  // namespace content

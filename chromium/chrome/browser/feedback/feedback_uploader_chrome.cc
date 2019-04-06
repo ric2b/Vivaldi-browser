@@ -6,12 +6,11 @@
 
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "content/public/browser/browser_context.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "net/url_request/url_fetcher.h"
+#include "services/identity/public/cpp/identity_manager.h"
+#include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace feedback {
 
@@ -23,46 +22,48 @@ constexpr char kAuthenticationErrorLogMessage[] =
 }  // namespace
 
 FeedbackUploaderChrome::FeedbackUploaderChrome(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     content::BrowserContext* context,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : OAuth2TokenService::Consumer("feedback_uploader_chrome"),
-      FeedbackUploader(context, task_runner) {}
+    : FeedbackUploader(url_loader_factory, context, task_runner) {}
 
 FeedbackUploaderChrome::~FeedbackUploaderChrome() = default;
 
-void FeedbackUploaderChrome::OnGetTokenSuccess(
-    const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
-  access_token_request_.reset();
-  access_token_ = access_token;
-  FeedbackUploader::StartDispatchingReport();
-}
-
-void FeedbackUploaderChrome::OnGetTokenFailure(
-    const OAuth2TokenService::Request* request,
-    const GoogleServiceAuthError& error) {
-  LOG(ERROR) << "Failed to get the access token. "
-             << kAuthenticationErrorLogMessage;
-  access_token_request_.reset();
+void FeedbackUploaderChrome::AccessTokenAvailable(
+    GoogleServiceAuthError error,
+    identity::AccessTokenInfo access_token_info) {
+  DCHECK(token_fetcher_);
+  token_fetcher_.reset();
+  if (error.state() == GoogleServiceAuthError::NONE) {
+    DCHECK(!access_token_info.token.empty());
+    access_token_ = access_token_info.token;
+  } else {
+    LOG(ERROR) << "Failed to get the access token. "
+               << kAuthenticationErrorLogMessage;
+  }
   FeedbackUploader::StartDispatchingReport();
 }
 
 void FeedbackUploaderChrome::StartDispatchingReport() {
   access_token_.clear();
 
+  // TODO(crbug.com/849591): Instead of getting the IdentityManager from the
+  // profile, we should pass the IdentityManager to FeedbackUploaderChrome's
+  // ctor.
   Profile* profile = Profile::FromBrowserContext(context());
   DCHECK(profile);
-  auto* oauth2_token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
-  auto* signin_manager = SigninManagerFactory::GetForProfile(profile);
-  if (oauth2_token_service && signin_manager &&
-      signin_manager->IsAuthenticated()) {
-    std::string account_id = signin_manager->GetAuthenticatedAccountId();
+  identity::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile);
+
+  if (identity_manager && identity_manager->HasPrimaryAccount()) {
     OAuth2TokenService::ScopeSet scopes;
     scopes.insert("https://www.googleapis.com/auth/supportcontent");
-    access_token_request_ =
-        oauth2_token_service->StartRequest(account_id, scopes, this);
+    token_fetcher_ =
+        std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(
+            "feedback_uploader_chrome", identity_manager, scopes,
+            base::BindOnce(&FeedbackUploaderChrome::AccessTokenAvailable,
+                           base::Unretained(this)),
+            identity::PrimaryAccountAccessTokenFetcher::Mode::kImmediate);
     return;
   }
 
@@ -72,11 +73,11 @@ void FeedbackUploaderChrome::StartDispatchingReport() {
 }
 
 void FeedbackUploaderChrome::AppendExtraHeadersToUploadRequest(
-    net::URLFetcher* fetcher) {
+    network::ResourceRequest* resource_request) {
   if (access_token_.empty())
     return;
 
-  fetcher->AddExtraRequestHeader(
+  resource_request->headers.AddHeaderFromString(
       base::StringPrintf("Authorization: Bearer %s", access_token_.c_str()));
 }
 

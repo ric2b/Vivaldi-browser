@@ -16,12 +16,12 @@ class HostContentSettingsMap;
 class MockSettingsObserver : public content_settings::Observer {
  public:
   explicit MockSettingsObserver(HostContentSettingsMap* map);
-  virtual ~MockSettingsObserver();
+  ~MockSettingsObserver() override;
 
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
                                ContentSettingsType content_type,
-                               std::string resource_identifier) override;
+                               const std::string& resource_identifier) override;
 
   MOCK_METHOD6(OnContentSettingsChanged,
                void(HostContentSettingsMap*,

@@ -76,9 +76,7 @@ void AutoEnrollmentCheckScreen::ClearState() {
 
 void AutoEnrollmentCheckScreen::Show() {
   // If the decision got made already, don't show the screen at all.
-  if (AutoEnrollmentController::GetMode() !=
-          AutoEnrollmentController::MODE_FORCED_RE_ENROLLMENT ||
-      IsCompleted()) {
+  if (!AutoEnrollmentController::IsEnabled() || IsCompleted()) {
     SignalCompletion();
     return;
   }
@@ -113,7 +111,8 @@ void AutoEnrollmentCheckScreen::Show() {
 
   // Make sure gears are in motion in the background.
   auto_enrollment_controller_->Start();
-  network_portal_detector::GetInstance()->StartDetectionIfIdle();
+  network_portal_detector::GetInstance()->StartPortalDetection(
+      false /* force */);
 }
 
 void AutoEnrollmentCheckScreen::Hide() {}
@@ -203,11 +202,17 @@ bool AutoEnrollmentCheckScreen::UpdateAutoEnrollmentState(
   switch (new_auto_enrollment_state) {
     case policy::AUTO_ENROLLMENT_STATE_IDLE:
     case policy::AUTO_ENROLLMENT_STATE_PENDING:
-    case policy::AUTO_ENROLLMENT_STATE_SERVER_ERROR:
     case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ENROLLMENT:
     case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ZERO_TOUCH:
     case policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT:
       return false;
+    case policy::AUTO_ENROLLMENT_STATE_SERVER_ERROR:
+      if (!ShouldBlockOnServerError())
+        return false;
+
+      // Fall to the same behavior like any connection error if the device is
+      // enrolled.
+      FALLTHROUGH;
     case policy::AUTO_ENROLLMENT_STATE_CONNECTION_ERROR:
       ShowErrorScreen(NetworkError::ERROR_STATE_OFFLINE);
       return true;
@@ -224,7 +229,9 @@ void AutoEnrollmentCheckScreen::ShowErrorScreen(
       NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
   ErrorScreen* error_screen = get_base_screen_delegate()->GetErrorScreen();
   error_screen->SetUIState(NetworkError::UI_STATE_AUTO_ENROLLMENT_ERROR);
-  error_screen->AllowGuestSignin(true);
+  error_screen->AllowGuestSignin(
+      auto_enrollment_controller_->GetFRERequirement() !=
+      AutoEnrollmentController::FRERequirement::kExplicitlyRequired);
   error_screen->SetErrorState(error_state,
                               network ? network->name() : std::string());
   connect_request_subscription_ = error_screen->RegisterConnectRequestCallback(
@@ -255,7 +262,8 @@ bool AutoEnrollmentCheckScreen::IsCompleted() const {
     case policy::AUTO_ENROLLMENT_STATE_CONNECTION_ERROR:
       return false;
     case policy::AUTO_ENROLLMENT_STATE_SERVER_ERROR:
-    // Server errors don't block OOBE.
+      // Server errors should block OOBE for enrolled devices.
+      return !ShouldBlockOnServerError();
     case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ENROLLMENT:
     case policy::AUTO_ENROLLMENT_STATE_TRIGGER_ZERO_TOUCH:
     case policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT:
@@ -268,6 +276,21 @@ bool AutoEnrollmentCheckScreen::IsCompleted() const {
 
 void AutoEnrollmentCheckScreen::OnConnectRequested() {
   auto_enrollment_controller_->Retry();
+}
+
+bool AutoEnrollmentCheckScreen::ShouldBlockOnServerError() const {
+  switch (auto_enrollment_controller_->auto_enrollment_check_type()) {
+    case AutoEnrollmentController::AutoEnrollmentCheckType::kFRE:
+      // Only block on errors in FRE if FRE is expliclty required (i.e. the
+      // device was enrolled before).
+      return auto_enrollment_controller_->GetFRERequirement() ==
+             AutoEnrollmentController::FRERequirement::kExplicitlyRequired;
+    case AutoEnrollmentController::AutoEnrollmentCheckType::kInitialEnrollment:
+      return true;
+    case AutoEnrollmentController::AutoEnrollmentCheckType::kNone:
+      NOTREACHED();
+      return false;
+  }
 }
 
 }  // namespace chromeos

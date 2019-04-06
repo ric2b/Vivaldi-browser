@@ -39,9 +39,10 @@
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/proto/csd.pb.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/notification_service.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "services/preferences/public/interfaces/tracked_preference_validation_delegate.mojom.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
 
 namespace safe_browsing {
 
@@ -241,7 +242,7 @@ void IncidentReportingService::Receiver::AddIncidentForProcess(
         FROM_HERE,
         base::BindOnce(
             &IncidentReportingService::Receiver::AddIncidentOnMainThread,
-            service_, nullptr, base::Passed(&incident)));
+            service_, nullptr, std::move(incident)));
   }
 }
 
@@ -254,7 +255,7 @@ void IncidentReportingService::Receiver::ClearIncidentForProcess(
         FROM_HERE,
         base::BindOnce(
             &IncidentReportingService::Receiver::ClearIncidentOnMainThread,
-            service_, nullptr, base::Passed(&incident)));
+            service_, nullptr, std::move(incident)));
   }
 }
 
@@ -318,9 +319,9 @@ bool IncidentReportingService::IsEnabledForProfile(Profile* profile) {
 
 IncidentReportingService::IncidentReportingService(
     SafeBrowsingService* safe_browsing_service)
-    : url_request_context_getter_(
-          safe_browsing_service ? safe_browsing_service->url_request_context()
-                                : nullptr),
+    : url_loader_factory_(safe_browsing_service
+                              ? safe_browsing_service->GetURLLoaderFactory()
+                              : nullptr),
       collect_environment_data_fn_(&CollectEnvironmentData),
       environment_collection_task_runner_(GetBackgroundTaskRunner()),
       environment_collection_pending_(),
@@ -403,11 +404,9 @@ void IncidentReportingService::AddDownloadManager(
 
 IncidentReportingService::IncidentReportingService(
     SafeBrowsingService* safe_browsing_service,
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
     base::TimeDelta delayed_task_interval,
     const scoped_refptr<base::TaskRunner>& delayed_task_runner)
-    : url_request_context_getter_(request_context_getter),
-      collect_environment_data_fn_(&CollectEnvironmentData),
+    : collect_environment_data_fn_(&CollectEnvironmentData),
       environment_collection_task_runner_(GetBackgroundTaskRunner()),
       environment_collection_pending_(),
       collation_timeout_pending_(),
@@ -508,10 +507,9 @@ IncidentReportingService::CreateDownloadFinder(
 std::unique_ptr<IncidentReportUploader>
 IncidentReportingService::StartReportUpload(
     const IncidentReportUploader::OnResultCallback& callback,
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
     const ClientIncidentReport& report) {
-  return IncidentReportUploaderImpl::UploadReport(
-      callback, request_context_getter, report);
+  return IncidentReportUploaderImpl::UploadReport(callback, url_loader_factory_,
+                                                  report);
 }
 
 bool IncidentReportingService::IsProcessingReport() const {
@@ -691,7 +689,7 @@ void IncidentReportingService::BeginEnvironmentCollection() {
           base::BindOnce(collect_environment_data_fn_, environment_data),
           base::BindOnce(&IncidentReportingService::OnEnvironmentDataCollected,
                          weak_ptr_factory_.GetWeakPtr(),
-                         base::Passed(base::WrapUnique(environment_data))));
+                         base::WrapUnique(environment_data)));
 
   // Posting the task will fail if the runner has been shut down. This should
   // never happen since the blocking pool is shut down after this service.
@@ -964,7 +962,7 @@ void IncidentReportingService::UploadReportIfUploadingEnabled(
   context->uploader = StartReportUpload(
       base::Bind(&IncidentReportingService::OnReportUploadResult,
                  weak_ptr_factory_.GetWeakPtr(), context),
-      url_request_context_getter_, *context->report);
+      *context->report);
   if (!context->uploader) {
     OnReportUploadResult(context,
                          IncidentReportUploader::UPLOAD_INVALID_REQUEST,
@@ -1008,10 +1006,11 @@ void IncidentReportingService::OnReportUploadResult(
 }
 
 void IncidentReportingService::OnClientDownloadRequest(
-    content::DownloadItem* download,
+    download::DownloadItem* download,
     const ClientDownloadRequest* request) {
-  if (download->GetBrowserContext() &&
-      !download->GetBrowserContext()->IsOffTheRecord()) {
+  if (content::DownloadItemUtils::GetBrowserContext(download) &&
+      !content::DownloadItemUtils::GetBrowserContext(download)
+           ->IsOffTheRecord()) {
     download_metadata_manager_.SetRequest(download, request);
   }
 }

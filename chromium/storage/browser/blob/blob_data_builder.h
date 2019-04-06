@@ -14,8 +14,11 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/numerics/checked_math.h"
 #include "storage/browser/blob/blob_data_item.h"
 #include "storage/browser/blob/blob_data_snapshot.h"
+#include "storage/browser/blob/blob_entry.h"
+#include "storage/browser/blob/shareable_blob_data_item.h"
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/storage_browser_export.h"
@@ -24,9 +27,14 @@ namespace disk_cache {
 class Entry;
 }
 
+namespace network {
+class DataElement;
+}
+
 namespace storage {
+class BlobSliceTest;
 class BlobStorageContext;
-class ShareableFileReference;
+class BlobStorageRegistry;
 
 // This class is used to build blobs. It also facilitates the operation of
 // 'pending' data, where the user knows the size and existence of a file or
@@ -36,17 +44,9 @@ class ShareableFileReference;
 class STORAGE_EXPORT BlobDataBuilder {
  public:
   using DataHandle = BlobDataItem::DataHandle;
-  // Visible for testing.
-  static base::FilePath GetFutureFileItemPath(uint64_t file_id);
-
-  // Returns if the given item was created by AppendFutureFile.
-  static bool IsFutureFileItem(const network::DataElement& element);
-  // Returns |file_id| given to AppendFutureFile.
-  static uint64_t GetFutureFileID(const network::DataElement& element);
+  using ItemCopyEntry = BlobEntry::ItemCopyEntry;
 
   explicit BlobDataBuilder(const std::string& uuid);
-  BlobDataBuilder(BlobDataBuilder&&);
-  BlobDataBuilder& operator=(BlobDataBuilder&&);
   ~BlobDataBuilder();
 
   const std::string& uuid() const { return uuid_; }
@@ -57,9 +57,11 @@ class STORAGE_EXPORT BlobDataBuilder {
   // given to this method.
   // |file_system_context| needs to be set if data element is of type
   // FILE_FILESYSTEM.
+  // |blob_registry| is needed for data elements of type BLOB.
   void AppendIPCDataElement(
       const network::DataElement& ipc_data,
-      const scoped_refptr<FileSystemContext>& file_system_context);
+      const scoped_refptr<FileSystemContext>& file_system_context,
+      const BlobStorageRegistry& blob_registry);
 
   // Copies the given data into the blob.
   void AppendData(const std::string& data) {
@@ -82,7 +84,7 @@ class STORAGE_EXPORT BlobDataBuilder {
     // Returns true if:
     // * The offset and length are valid, and
     // * data is a valid pointer.
-    bool Populate(base::span<const char> data, size_t offset) const;
+    bool Populate(base::span<const char> data, size_t offset = 0) const;
 
     // Same as Populate, but rather than passing in the data to be
     // copied, this method returns a pointer where the caller can copy |length|
@@ -145,9 +147,12 @@ class STORAGE_EXPORT BlobDataBuilder {
                   uint64_t length,
                   const base::Time& expected_modification_time);
 
-  void AppendBlob(const std::string& uuid, uint64_t offset, uint64_t length);
-
-  void AppendBlob(const std::string& uuid);
+  void AppendBlob(const std::string& uuid,
+                  uint64_t offset,
+                  uint64_t length,
+                  const BlobStorageRegistry& blob_registry);
+  void AppendBlob(const std::string& uuid,
+                  const BlobStorageRegistry& blob_registry);
 
   void AppendFileSystemFile(
       const GURL& url,
@@ -175,56 +180,97 @@ class STORAGE_EXPORT BlobDataBuilder {
     content_disposition_ = content_disposition;
   }
 
-  void Clear();
+  std::unique_ptr<BlobDataSnapshot> CreateSnapshot() const;
+
+  const std::vector<scoped_refptr<ShareableBlobDataItem>>& items() const {
+    return items_;
+  }
+
+  std::vector<scoped_refptr<ShareableBlobDataItem>> ReleaseItems() {
+    return std::move(items_);
+  }
+
+  const std::vector<scoped_refptr<ShareableBlobDataItem>>&
+  pending_transport_items() const {
+    return pending_transport_items_;
+  }
+
+  std::vector<scoped_refptr<ShareableBlobDataItem>>
+  ReleasePendingTransportItems() {
+    return std::move(pending_transport_items_);
+  }
+
+  const std::vector<ItemCopyEntry>& copies() const { return copies_; }
+
+  std::vector<ItemCopyEntry> ReleaseCopies() { return std::move(copies_); }
+
+  const std::set<std::string>& dependent_blobs() const {
+    return dependent_blob_uuids_;
+  }
+
+  bool IsValid() const {
+    return !(found_memory_transport_ && found_file_transport_) &&
+           !has_blob_errors_ && total_size_.IsValid() &&
+           transport_quota_needed_.IsValid() && copy_quota_needed_.IsValid();
+  }
+
+  bool found_memory_transport() const { return found_memory_transport_; }
+
+  bool found_file_transport() const { return found_file_transport_; }
+
+  uint64_t total_size() const {
+    return IsValid() ? total_size_.ValueOrDie() : 0u;
+  }
+
+  uint64_t total_memory_size() const {
+    return IsValid() ? total_memory_size_.ValueOrDie() : 0u;
+  }
+
+  uint64_t transport_quota_needed() const {
+    return IsValid() ? transport_quota_needed_.ValueOrDie() : 0u;
+  }
+
+  uint64_t copy_quota_needed() const {
+    return IsValid() ? copy_quota_needed_.ValueOrDie() : 0u;
+  }
 
  private:
-  friend class BlobMemoryControllerTest;
   friend class BlobStorageContext;
-  friend bool operator==(const BlobDataBuilder& a, const BlobDataBuilder& b);
-  friend bool operator==(const BlobDataSnapshot& a, const BlobDataBuilder& b);
   friend STORAGE_EXPORT void PrintTo(const BlobDataBuilder& x,
                                      ::std::ostream* os);
-  FRIEND_TEST_ALL_PREFIXES(BlobDataBuilderTest, TestFutureFiles);
-  FRIEND_TEST_ALL_PREFIXES(BlobStorageContextTest, BuildBlobFuzzy);
+  friend class BlobSliceTest;
+
+  void SliceBlob(const BlobEntry* entry,
+                 uint64_t slice_offset,
+                 uint64_t slice_size);
 
   std::string uuid_;
   std::string content_type_;
   std::string content_disposition_;
-  std::vector<scoped_refptr<BlobDataItem>> items_;
+
+  base::CheckedNumeric<uint64_t> total_size_;
+  base::CheckedNumeric<uint64_t> total_memory_size_;
+  base::CheckedNumeric<uint64_t> transport_quota_needed_;
+  base::CheckedNumeric<uint64_t> copy_quota_needed_;
+  bool has_blob_errors_ = false;
+  bool found_memory_transport_ = false;
+  bool found_file_transport_ = false;
+
+  std::vector<scoped_refptr<ShareableBlobDataItem>> items_;
+  std::vector<scoped_refptr<ShareableBlobDataItem>> pending_transport_items_;
+  std::set<std::string> dependent_blob_uuids_;
+  std::vector<ItemCopyEntry> copies_;
 
   DISALLOW_COPY_AND_ASSIGN(BlobDataBuilder);
 };
 
 #if defined(UNIT_TEST)
-inline bool operator==(const BlobDataBuilder& a, const BlobDataBuilder& b) {
-  if (a.content_type_ != b.content_type_)
-    return false;
-  if (a.content_disposition_ != b.content_disposition_)
-    return false;
-  if (a.items_.size() != b.items_.size())
-    return false;
-  for (size_t i = 0; i < a.items_.size(); ++i) {
-    if (*(a.items_[i]) != *(b.items_[i]))
-      return false;
-  }
-  return true;
+inline bool operator==(const BlobDataSnapshot& a, const BlobDataBuilder& b) {
+  return a == *b.CreateSnapshot();
 }
 
-inline bool operator==(const BlobDataSnapshot& a, const BlobDataBuilder& b) {
-  if (a.content_type() != b.content_type_) {
-    return false;
-  }
-  if (a.content_disposition() != b.content_disposition_) {
-    return false;
-  }
-  if (a.items().size() != b.items_.size()) {
-    return false;
-  }
-  for (size_t i = 0; i < a.items().size(); ++i) {
-    if (*(a.items()[i]) != *(b.items_[i]))
-      return false;
-  }
-  return true;
+inline bool operator==(const BlobDataBuilder& a, const BlobDataBuilder& b) {
+  return *a.CreateSnapshot() == b;
 }
 
 inline bool operator==(const BlobDataBuilder& a, const BlobDataSnapshot& b) {

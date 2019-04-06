@@ -6,7 +6,8 @@ There are instructions for other platforms linked from the
 ## Instructions for Google Employees
 
 Are you a Google employee? See
-[go/building-chrome](https://goto.google.com/building-chrome) instead.
+[go/building-android-chrome](https://goto.google.com/building-android-chrome)
+instead.
 
 [TOC]
 
@@ -182,6 +183,25 @@ two targets can be substituted.
 **Note**: These targets are actually the open-source equivalents to the
 closed-source targets that get shipped to the Play Store.
 
+**Note**: For more in-depth differences, see [android_native_libraries.md](android_native_libraries.md).
+
+## Updating your checkout
+
+To update an existing checkout, you can run
+
+```shell
+$ git rebase-update
+$ gclient sync
+```
+
+The first command updates the primary Chromium source repository and rebases
+any of your local branches on top of tip-of-tree (aka the Git branch
+`origin/master`). If you don't want to use this script, you can also just use
+`git pull` or other common Git commands to update the repo.
+
+The second command syncs dependencies to the appropriate versions and re-runs
+hooks as needed.
+
 ## Installing and Running Chromium on a device
 
 ### Plug in your Android device
@@ -332,6 +352,11 @@ incremental_apk_by_default = true
 ```
 
 This will make `chrome_public_apk` build in incremental mode.
+
+## Installing and Running Chromium on an Emulator
+
+Running on an emulator is the same as on a device. Refer to
+[android_emulator.md](android_emulator.md) for setting up emulators.
 
 
 ## Tips, tricks, and troubleshooting

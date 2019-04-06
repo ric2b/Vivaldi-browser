@@ -93,15 +93,21 @@ NSString* GetDocumentStartScriptForMainFrame(BrowserState* browser_state) {
 }
 
 NSString* GetDocumentStartScriptForAllFrames(BrowserState* browser_state) {
-  return MakeScriptInjectableOnce(@"start_all_frames",
-                                  GetPageScript(@"all_frames_web_bundle"));
+  DCHECK(GetWebClient());
+  NSString* embedder_page_script =
+      GetWebClient()->GetDocumentStartScriptForAllFrames(browser_state);
+  DCHECK(embedder_page_script);
+  NSString* web_bundle = GetPageScript(@"all_frames_web_bundle");
+  NSString* script =
+      [NSString stringWithFormat:@"%@; %@", web_bundle, embedder_page_script];
+  return MakeScriptInjectableOnce(@"start_all_frames", script);
 }
 
 NSString* GetDocumentEndScriptForAllFrames(BrowserState* browser_state) {
   NSString* plugin_not_supported_text =
       base::SysUTF16ToNSString(GetWebClient()->GetPluginNotSupportedText());
 
-  NSString* script = [GetPageScript(@"plugin_placeholder")
+  NSString* script = [GetPageScript(@"all_frames_document_end_web_bundle")
       stringByReplacingOccurrencesOfString:@"$(PLUGIN_NOT_SUPPORTED_TEXT)"
                                 withString:EscapedQuotedString(
                                                plugin_not_supported_text)];

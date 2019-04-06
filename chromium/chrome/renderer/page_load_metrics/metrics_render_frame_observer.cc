@@ -13,11 +13,11 @@
 #include "chrome/renderer/page_load_metrics/page_timing_metrics_sender.h"
 #include "chrome/renderer/page_load_metrics/page_timing_sender.h"
 #include "content/public/renderer/render_frame.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebDocumentLoader.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPerformance.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_document_loader.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_performance.h"
 #include "url/gurl.h"
 
 namespace page_load_metrics {
@@ -40,10 +40,12 @@ class MojoPageTimingSender : public PageTimingSender {
   ~MojoPageTimingSender() override {}
   void SendTiming(const mojom::PageLoadTimingPtr& timing,
                   const mojom::PageLoadMetadataPtr& metadata,
-                  mojom::PageLoadFeaturesPtr new_features) override {
+                  mojom::PageLoadFeaturesPtr new_features,
+                  mojom::PageLoadDataUsePtr new_data_use) override {
     DCHECK(page_load_metrics_);
     page_load_metrics_->UpdateTiming(timing->Clone(), metadata->Clone(),
-                                     std::move(new_features));
+                                     std::move(new_features),
+                                     std::move(new_data_use));
   }
 
  private:
@@ -76,8 +78,83 @@ void MetricsRenderFrameObserver::DidObserveNewFeatureUsage(
     page_timing_metrics_sender_->DidObserveNewFeatureUsage(feature);
 }
 
+void MetricsRenderFrameObserver::DidObserveNewCssPropertyUsage(
+    int css_property,
+    bool is_animated) {
+  if (page_timing_metrics_sender_) {
+    page_timing_metrics_sender_->DidObserveNewCssPropertyUsage(css_property,
+                                                               is_animated);
+  }
+}
+
+void MetricsRenderFrameObserver::DidStartResponse(
+    int request_id,
+    const network::ResourceResponseHead& response_head,
+    content::ResourceType resource_type) {
+  if (provisional_frame_resource_data_use_ &&
+      content::IsResourceTypeFrame(resource_type)) {
+    // TODO(rajendrant): This frame request might start before the provisional
+    // load starts, and data use of the frame request might be missed in that
+    // case. There should be a guarantee that DidStartProvisionalLoad be called
+    // before DidStartResponse for the frame request.
+    provisional_frame_resource_data_use_->DidStartResponse(request_id,
+                                                           response_head);
+  } else if (page_timing_metrics_sender_) {
+    page_timing_metrics_sender_->DidStartResponse(request_id, response_head);
+  }
+}
+
+void MetricsRenderFrameObserver::DidCompleteResponse(
+    int request_id,
+    const network::URLLoaderCompletionStatus& status) {
+  if (provisional_frame_resource_data_use_ &&
+      provisional_frame_resource_data_use_->resource_id() == request_id) {
+    provisional_frame_resource_data_use_->DidCompleteResponse(
+        status, provisional_delta_data_use_.get());
+  } else if (page_timing_metrics_sender_) {
+    page_timing_metrics_sender_->DidCompleteResponse(request_id, status);
+  }
+}
+
+void MetricsRenderFrameObserver::DidCancelResponse(int request_id) {
+  if (provisional_frame_resource_data_use_ &&
+      provisional_frame_resource_data_use_->resource_id() == request_id) {
+    provisional_frame_resource_data_use_.reset();
+  } else if (page_timing_metrics_sender_) {
+    page_timing_metrics_sender_->DidCancelResponse(request_id);
+  }
+}
+
+void MetricsRenderFrameObserver::DidReceiveTransferSizeUpdate(
+    int request_id,
+    int received_data_length) {
+  if (provisional_frame_resource_data_use_ &&
+      provisional_frame_resource_data_use_->resource_id() == request_id) {
+    provisional_frame_resource_data_use_->DidReceiveTransferSizeUpdate(
+        received_data_length, provisional_delta_data_use_.get());
+  } else if (page_timing_metrics_sender_) {
+    page_timing_metrics_sender_->DidReceiveTransferSizeUpdate(
+        request_id, received_data_length);
+  }
+}
+
 void MetricsRenderFrameObserver::FrameDetached() {
   page_timing_metrics_sender_.reset();
+}
+
+void MetricsRenderFrameObserver::DidStartProvisionalLoad(
+    blink::WebDocumentLoader* document_loader) {
+  // Create a new data use tracker for the new provisional load.
+  provisional_frame_resource_data_use_ =
+      std::make_unique<PageResourceDataUse>();
+  provisional_delta_data_use_ = mojom::PageLoadDataUse::New();
+}
+
+void MetricsRenderFrameObserver::DidFailProvisionalLoad(
+    const blink::WebURLError& error) {
+  // Clear the data use tracker for the provisional navigation that started.
+  provisional_frame_resource_data_use_.reset();
+  provisional_delta_data_use_.reset();
 }
 
 void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
@@ -97,8 +174,10 @@ void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
   if (HasNoRenderFrame())
     return;
 
-  page_timing_metrics_sender_ = base::MakeUnique<PageTimingMetricsSender>(
-      CreatePageTimingSender(), CreateTimer(), GetTiming());
+  page_timing_metrics_sender_ = std::make_unique<PageTimingMetricsSender>(
+      CreatePageTimingSender(), CreateTimer(), GetTiming(),
+      std::move(provisional_frame_resource_data_use_),
+      std::move(provisional_delta_data_use_));
 }
 
 void MetricsRenderFrameObserver::SendMetrics() {
@@ -136,6 +215,14 @@ mojom::PageLoadTimingPtr MetricsRenderFrameObserver::GetTiming() const {
   if (perf.FirstInputTimestamp() > 0.0) {
     timing->interactive_timing->first_input_timestamp =
         ClampDelta(perf.FirstInputTimestamp(), start);
+  }
+  if (perf.LongestInputDelay() > 0.0) {
+    timing->interactive_timing->longest_input_delay =
+        base::TimeDelta::FromSecondsD(perf.LongestInputDelay());
+  }
+  if (perf.LongestInputTimestamp() > 0.0) {
+    timing->interactive_timing->longest_input_timestamp =
+        ClampDelta(perf.LongestInputTimestamp(), start);
   }
   if (perf.ResponseStart() > 0.0)
     timing->response_start = ClampDelta(perf.ResponseStart(), start);
@@ -190,20 +277,11 @@ mojom::PageLoadTimingPtr MetricsRenderFrameObserver::GetTiming() const {
             perf.ParseBlockedOnScriptExecutionFromDocumentWriteDuration());
   }
 
-  if (perf.AuthorStyleSheetParseDurationBeforeFCP() > 0.0) {
-    timing->style_sheet_timing->author_style_sheet_parse_duration_before_fcp =
-        base::TimeDelta::FromSecondsD(
-            perf.AuthorStyleSheetParseDurationBeforeFCP());
-  }
-  if (perf.UpdateStyleDurationBeforeFCP() > 0.0) {
-    timing->style_sheet_timing->update_style_duration_before_fcp =
-        base::TimeDelta::FromSecondsD(perf.UpdateStyleDurationBeforeFCP());
-  }
   return timing;
 }
 
-std::unique_ptr<base::Timer> MetricsRenderFrameObserver::CreateTimer() {
-  return base::MakeUnique<base::OneShotTimer>();
+std::unique_ptr<base::OneShotTimer> MetricsRenderFrameObserver::CreateTimer() {
+  return std::make_unique<base::OneShotTimer>();
 }
 
 std::unique_ptr<PageTimingSender>

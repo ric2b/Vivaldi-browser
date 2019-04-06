@@ -88,6 +88,12 @@ $ ./build.py --clang-completer
 If it fails with "Your C++ compiler does NOT fully support C++11." but you know
 you have a good compiler, hack cpp/CMakeLists.txt to set CPP11_AVAILABLE true.
 
+On Mac, replace the last command above with the following.
+
+```
+$ ./build.py --clang-completer --system-libclang
+```
+
 The following extensions might be useful for you as well:
 
 *   ***Annotator*** -
@@ -231,7 +237,7 @@ You might have to adjust the commands to your situation and needs.
 ```
 {
   "version": "0.1.0",
-  "_runner": "terminal",
+  "runner": "terminal",
   "showOutput": "always",
   "echoCommand": true,
   "tasks": [
@@ -328,6 +334,28 @@ You might have to adjust the commands to your situation and needs.
   {
     "taskName": "5-build_test_debug",
     "command": "ninja -C out/Debug -j 2000 unit_tests components_unittests browser_tests",
+    "isShellCommand": true,
+    "problemMatcher": [
+    {
+      "owner": "cpp",
+      "fileLocation": ["relative", "${workspaceRoot}"],
+      "pattern": {
+        "regexp": "^../../(.*):(\\d+):(\\d+):\\s+(warning|\\w*\\s?error):\\s+(.*)$",
+        "file": 1, "line": 2, "column": 3, "severity": 4, "message": 5
+      }
+    },
+    {
+      "owner": "cpp",
+      "fileLocation": ["relative", "${workspaceRoot}"],
+      "pattern": {
+        "regexp": "^../../(.*?):(.*):\\s+(warning|\\w*\\s?error):\\s+(.*)$",
+        "file": 1, "severity": 3, "message": 4
+      }
+    }]
+  },
+  {
+    "taskName": "6-build_current_file",
+    "command": "compile_single_file --build-dir=out/Debug --file-path=${file}",
     "isShellCommand": true,
     "problemMatcher": [
     {
@@ -496,18 +524,20 @@ Here are some key bindings that are likely to be useful for you:
 #### The `out` folder
 Automatically generated code is put into a subfolder of out/, which means that
 these files are ignored by VS Code (see files.exclude above) and cannot be
-opened e.g. from quick-open (`Ctrl+P`). On Linux, you can create a symlink as a
-work-around:
+opened e.g. from quick-open (`Ctrl+P`).
+As of version 1.21, VS Code does not support negated glob commands, but you can
+define a set of exclude pattern to include only out/Debug/gen:
 ```
-  cd ~/chromium/src
-  mkdir _out
-  ln -s ../out/Debug/gen _out/gen
+"files.exclude": {
+  // Ignore build output folders. Except out/Debug/gen/
+  "out/[^D]*/": true,
+  "out/Debug/[^g]*": true,
+  "out/Debug/g[^e]*": true,
+  "out_*/**": true,
+},
 ```
-We picked _out since it is already in .gitignore, so it won't show up in git
-status.
 
-Note: As of version 1.9, VS Code does not support negated glob commands, but
-once it does, you can use
+Once it does, you can use
 ```
 "!out/Debug/gen/**": true
 ```

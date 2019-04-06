@@ -158,6 +158,7 @@ bool StructTraits<viz::mojom::TileQuadStateDataView, viz::DrawQuad>::Read(
   }
 
   quad->swizzle_contents = data.swizzle_contents();
+  quad->is_premultiplied = data.is_premultiplied();
   quad->nearest_neighbor = data.nearest_neighbor();
   quad->force_anti_aliasing_off = data.force_anti_aliasing_off();
   quad->resources.ids[viz::TileDrawQuad::kResourceIdIndex] = data.resource_id();
@@ -198,6 +199,7 @@ bool StructTraits<viz::mojom::YUVVideoQuadStateDataView, viz::DrawQuad>::Read(
     return false;
   }
   quad->require_overlay = data.require_overlay();
+  quad->is_protected_video = data.is_protected_video();
   return true;
 }
 

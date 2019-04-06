@@ -26,8 +26,8 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
-#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
+#include "ui/keyboard/test/keyboard_test_util.h"
 #include "ui/views/test/capture_tracking_view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -153,12 +153,12 @@ class SystemModalContainerLayoutManagerTest : public AshTestBase {
 
   void ActivateKeyboard() {
     Shell::GetPrimaryRootWindowController()->ActivateKeyboard(
-        keyboard::KeyboardController::GetInstance());
+        keyboard::KeyboardController::Get());
   }
 
   void DeactivateKeyboard() {
     Shell::GetPrimaryRootWindowController()->DeactivateKeyboard(
-        keyboard::KeyboardController::GetInstance());
+        keyboard::KeyboardController::Get());
   }
 
   aura::Window* OpenToplevelTestWindow(bool modal) {
@@ -177,24 +177,24 @@ class SystemModalContainerLayoutManagerTest : public AshTestBase {
 
   // Show or hide the keyboard.
   void ShowKeyboard(bool show) {
-    keyboard::KeyboardController* keyboard =
-        keyboard::KeyboardController::GetInstance();
-    ASSERT_TRUE(keyboard);
-    if (show == keyboard->keyboard_visible())
+    auto* keyboard = keyboard::KeyboardController::Get();
+    ASSERT_TRUE(keyboard->enabled());
+    if (show == keyboard->IsKeyboardVisible())
       return;
 
     if (show) {
       keyboard->ShowKeyboard(true);
-      if (keyboard->ui()->GetContentsWindow()->bounds().height() == 0) {
-        keyboard->ui()->GetContentsWindow()->SetBounds(
+      if (keyboard->ui()->GetKeyboardWindow()->bounds().height() == 0) {
+        keyboard->ui()->GetKeyboardWindow()->SetBounds(
             keyboard::KeyboardBoundsFromRootBounds(
                 Shell::GetPrimaryRootWindow()->bounds(), 100));
+        keyboard->NotifyKeyboardWindowLoaded();
       }
     } else {
-      keyboard->HideKeyboard(keyboard::KeyboardController::HIDE_REASON_MANUAL);
+      keyboard->HideKeyboardByUser();
     }
 
-    DCHECK_EQ(show, keyboard->keyboard_visible());
+    DCHECK_EQ(show, keyboard->IsKeyboardVisible());
   }
 };
 

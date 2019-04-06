@@ -87,15 +87,20 @@ WelcomeWin10Handler::~WelcomeWin10Handler() {
 void WelcomeWin10Handler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "handleSetDefaultBrowser",
-      base::Bind(&WelcomeWin10Handler::HandleSetDefaultBrowser,
-                 base::Unretained(this)));
+      base::BindRepeating(&WelcomeWin10Handler::HandleSetDefaultBrowser,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "handleContinue",
-      base::Bind(&WelcomeWin10Handler::HandleContinue, base::Unretained(this)));
+      base::BindRepeating(&WelcomeWin10Handler::HandleContinue,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getPinnedToTaskbarState",
-      base::Bind(&WelcomeWin10Handler::HandleGetPinnedToTaskbarState,
-                 base::Unretained(this)));
+      base::BindRepeating(&WelcomeWin10Handler::HandleGetPinnedToTaskbarState,
+                          base::Unretained(this)));
+}
+
+void WelcomeWin10Handler::OnJavascriptDisallowed() {
+  pinned_state_callback_id_.clear();
 }
 
 void WelcomeWin10Handler::HandleGetPinnedToTaskbarState(

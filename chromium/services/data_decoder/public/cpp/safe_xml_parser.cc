@@ -9,10 +9,10 @@
 #include "base/threading/thread_checker.h"
 #include "base/unguessable_token.h"
 #include "base/values.h"
-#include "services/data_decoder/public/interfaces/constants.mojom.h"
-#include "services/data_decoder/public/interfaces/xml_parser.mojom.h"
+#include "services/data_decoder/public/mojom/constants.mojom.h"
+#include "services/data_decoder/public/mojom/xml_parser.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/interfaces/constants.mojom.h"
+#include "services/service_manager/public/mojom/constants.mojom.h"
 
 namespace data_decoder {
 
@@ -28,7 +28,7 @@ class SafeXmlParser {
   ~SafeXmlParser();
 
  private:
-  void ReportResults(std::unique_ptr<base::Value> parsed_json,
+  void ReportResults(base::Optional<base::Value> parsed_json,
                      const base::Optional<std::string>& error);
 
   XmlParserCallback callback_;
@@ -56,7 +56,7 @@ SafeXmlParser::SafeXmlParser(service_manager::Connector* connector,
   // Unretained(this) is safe as the xml_parser_ptr_ is owned by this class.
   xml_parser_ptr_.set_connection_error_handler(base::BindOnce(
       &SafeXmlParser::ReportResults, base::Unretained(this),
-      /*parsed_xml=*/nullptr,
+      /*parsed_xml=*/base::nullopt,
       base::make_optional(
           std::string("Connection error with the XML parser process."))));
   xml_parser_ptr_->Parse(
@@ -66,11 +66,14 @@ SafeXmlParser::SafeXmlParser(service_manager::Connector* connector,
 
 SafeXmlParser::~SafeXmlParser() = default;
 
-void SafeXmlParser::ReportResults(std::unique_ptr<base::Value> parsed_xml,
+void SafeXmlParser::ReportResults(base::Optional<base::Value> parsed_xml,
                                   const base::Optional<std::string>& error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  std::move(callback_).Run(std::move(parsed_xml), error);
+  std::unique_ptr<base::Value> parsed_xml_ptr =
+      parsed_xml ? base::Value::ToUniquePtrValue(std::move(parsed_xml.value()))
+                 : nullptr;
+  std::move(callback_).Run(std::move(parsed_xml_ptr), error);
 
   // This should be the last interaction with this instance, safely delete.
   delete this;

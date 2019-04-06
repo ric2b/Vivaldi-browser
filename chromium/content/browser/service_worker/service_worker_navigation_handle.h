@@ -27,23 +27,24 @@ class ServiceWorkerNavigationHandleCore;
 //   2) When the navigation request is sent to the IO thread, we include a
 //   pointer to the ServiceWorkerNavigationHandleCore.
 //
-//   3) If we pre-create a ServiceWorkerProviderHost for this navigation, its
-//   ownershipped is passed to the ServiceWorkerNavigationHandleCore. The
-//   ServiceWorkerNavigationHandleCore id is updated.
+//   3) If we pre-create a ServiceWorkerProviderHost for this navigation, it
+//   is added to ServiceWorkerContextCore and the id is passed to
+//   ServiceWorkerNavigationHandleCore.
 //
 //   4) The ServiceWorkerNavigationHandleCore informs the
-//   ServiceWorkerNavigationHandle on the UI that the service worker provider
-//   id was updated.
+//   ServiceWorkerNavigationHandle on the UI thread that the service worker
+//   provider id was updated.
 //
 //   5) When the navigation is ready to commit, the NavigationRequest will
 //   update the RequestNavigationParams based on the id from the
 //   ServiceWorkerNavigationHandle.
 //
 //   6) If the commit leads to the creation of a ServiceWorkerNetworkProvider
-//   in the renderer, a ServiceWorkerHostMsg_ProviderCreated will be received
-//   in the browser. The ServiceWorkerDispatcherHost will retrieve the
-//   ServiceWorkerProviderHost from the ServiceWorkerNavigationHandleCore and
-//   put it in the ServiceWorkerContextCore map of ServiceWorkerProviderHosts.
+//   in the renderer, an OnProviderCreated IPC will be received in the browser.
+//   The ServiceWorkerDispatcherHost will take the ServiceWorkerProviderHost
+//   from ServiceWorkerContextCore and complete its initialization, including
+//   setting the process id. It is then re-added to ServiceWorkerContextCore
+//   since it now has a correct process id.
 //
 //   7) When the navigation finishes, the ServiceWorkerNavigationHandle is
 //   destroyed. The destructor of the ServiceWorkerNavigationHandle posts a

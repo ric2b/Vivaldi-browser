@@ -20,6 +20,11 @@
         <attr name="helpContext" format="string" />
     </declare-styleable>
 
+    <declare-styleable name="ChromeBasePreference">
+        <!-- The tint color for the icon set by android:icon. -->
+        <attr name="iconTint" format="color" />
+    </declare-styleable>
+
     <declare-styleable name="ChromeSwitchPreference">
         <!-- Prevents the summary text from being styled like title text in the
              case that the title is empty. -->
@@ -49,6 +54,8 @@
 
     <declare-styleable name="BoundedView">
         <attr name="maxWidth" format="dimension" />
+        <attr name="maxWidthLandscape" format="dimension" />
+        <attr name="maxWidthPortrait" format="dimension" />
         <attr name="maxHeight" format="dimension" />
     </declare-styleable>
 
@@ -80,5 +87,12 @@
     <declare-styleable name="ListMenuButton">
         <!-- Used to customize the width of the popup menu. -->
         <attr name="menuWidth" format="reference|dimension" />
+    </declare-styleable>
+
+    <declare-styleable name="TextViewWithCompoundDrawables">
+        <attr name="drawableWidth" format="dimension"/>
+        <attr name="drawableHeight" format="dimension"/>
+        <!-- drawableTint wasn't added in Android until API level 23. -->
+        <attr name="chromeDrawableTint" format="color"/>
     </declare-styleable>
 </resources>

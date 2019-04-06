@@ -17,49 +17,59 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/host_port_pair.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "url/gurl.h"
+
+namespace content {
+class RenderFrameHost;
+}  // namespace content
 
 namespace page_load_metrics {
 
 // This enum represents how a page load ends. If the action occurs before the
 // page load finishes (or reaches some point like first paint), then we consider
 // the load to be aborted.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. For any additions, also update the
+// corresponding PageEndReason enum in enums.xml.
 enum PageEndReason {
   // Page lifetime has not yet ended (page is still active).
-  END_NONE,
+  END_NONE = 0,
 
   // The page was reloaded, possibly by the user.
-  END_RELOAD,
+  END_RELOAD = 1,
 
   // The page was navigated away from, via a back or forward navigation.
-  END_FORWARD_BACK,
+  END_FORWARD_BACK = 2,
 
   // The navigation is replaced with a navigation with the qualifier
   // ui::PAGE_TRANSITION_CLIENT_REDIRECT, which is caused by Javascript, or the
   // meta refresh tag.
-  END_CLIENT_REDIRECT,
+  END_CLIENT_REDIRECT = 3,
 
   // If the page load is replaced by a new navigation. This includes link
   // clicks, typing in the omnibox (not a reload), and form submissions.
-  END_NEW_NAVIGATION,
+  END_NEW_NAVIGATION = 4,
 
   // The page load was stopped (e.g. the user presses the stop X button).
-  END_STOP,
+  END_STOP = 5,
 
   // Page load ended due to closing the tab or browser.
-  END_CLOSE,
+  END_CLOSE = 6,
 
   // The provisional load for this page load failed before committing.
-  END_PROVISIONAL_LOAD_FAILED,
+  END_PROVISIONAL_LOAD_FAILED = 7,
 
   // The render process hosting the page terminated unexpectedly.
-  END_RENDER_PROCESS_GONE,
+  END_RENDER_PROCESS_GONE = 8,
 
   // We don't know why the page load ended. This is the value we assign to a
   // terminated provisional load if the only signal we get is the load finished
   // without committing, either without error or with net::ERR_ABORTED.
-  END_OTHER
+  END_OTHER = 9,
+
+  PAGE_END_REASON_COUNT
 };
 
 // Information related to failed provisional loads.
@@ -181,9 +191,9 @@ struct PageLoadExtraInfo {
   // better abstraction. Note that this is an approximation.
   UserInitiatedInfo page_end_user_initiated_info;
 
-  // Total lifetime of the page from the user standoint, starting at navigation
-  // start. The page lifetime ends when the first of the following events
-  // happen:
+  // Total lifetime of the page from the user's standpoint, starting at
+  // navigation start. The page lifetime ends when the first of the following
+  // events happen:
   // * the load of the main resource fails
   // * the page load is stopped
   // * the tab hosting the page is closed
@@ -354,7 +364,9 @@ class PageLoadMetricsObserver {
   // implement one of the On* callbacks, such as OnFirstContentfulPaint or
   // OnDomContentLoadedEventStart. Please email loading-dev@chromium.org if you
   // intend to override this method.
-  virtual void OnTimingUpdate(bool is_subframe,
+  //
+  // If |subframe_rfh| is nullptr, the update took place in the main frame.
+  virtual void OnTimingUpdate(content::RenderFrameHost* subframe_rfh,
                               const mojom::PageLoadTiming& timing,
                               const PageLoadExtraInfo& extra_info) {}
 
@@ -408,16 +420,18 @@ class PageLoadMetricsObserver {
   virtual void OnFeaturesUsageObserved(const mojom::PageLoadFeatures& features,
                                        const PageLoadExtraInfo& extra_info) {}
 
+  // Invoked when data use is observed for the page load across all frames.
+  // These bytes are the additional bytes reported since the last call to
+  // OnDataUseObserved. |received_data_length| is the received network bytes.
+  // |data_reduction_proxy_bytes_saved| is the bytes saved by the data reduction
+  // proxy, which could be negative if the proxy had inflated the resource.
+  virtual void OnDataUseObserved(int64_t received_data_length,
+                                 int64_t data_reduction_proxy_bytes_saved) {}
+
   // Invoked when a media element starts playing.
   virtual void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
       bool is_in_main_frame) {}
-
-  // Invoked on navigations where a navigation delay was added by the
-  // DelayNavigationThrottle. This is a temporary method that will be removed
-  // once the experiment is complete.
-  virtual void OnNavigationDelayComplete(base::TimeDelta scheduled_delay,
-                                         base::TimeDelta actual_delay) {}
 
   // Invoked when the UMA metrics subsystem is persisting metrics as the
   // application goes into the background, on platforms where the browser

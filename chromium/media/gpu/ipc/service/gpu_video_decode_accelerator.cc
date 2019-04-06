@@ -16,7 +16,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/command_buffer.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "ipc/ipc_message_macros.h"
@@ -268,7 +268,7 @@ void GpuVideoDecodeAccelerator::PictureReady(const Picture& picture) {
   params.color_space = picture.color_space();
   params.allow_overlay = picture.allow_overlay();
   params.size_changed = picture.size_changed();
-  params.surface_texture = picture.surface_texture();
+  params.surface_texture = picture.texture_owner();
   params.wants_promotion_hint = picture.wants_promotion_hint();
   if (!Send(new AcceleratedVideoDecoderHostMsg_PictureReady(host_route_id_,
                                                             params))) {
@@ -305,7 +305,7 @@ void GpuVideoDecodeAccelerator::NotifyError(
   }
 }
 
-void GpuVideoDecodeAccelerator::OnWillDestroyStub() {
+void GpuVideoDecodeAccelerator::OnWillDestroyStub(bool have_context) {
   // The stub is going away, so we have to stop and destroy VDA here, before
   // returning, because the VDA may need the GL context to run and/or do its
   // cleanup. We cannot destroy the VDA before the IO thread message filter is
@@ -464,8 +464,7 @@ void GpuVideoDecodeAccelerator::OnAssignPictureBuffers(
 
           // TODO(dshwang): after moving to D3D11, remove this.
           // https://crbug.com/438691
-          GLenum format =
-              video_decode_accelerator_.get()->GetSurfaceInternalFormat();
+          GLenum format = video_decode_accelerator_->GetSurfaceInternalFormat();
           if (format != GL_RGBA) {
             DCHECK(format == GL_BGRA_EXT);
             texture_manager->SetLevelInfo(texture_ref, texture_target_, 0,
@@ -514,7 +513,7 @@ void GpuVideoDecodeAccelerator::OnSetOverlayInfo(
 
 void GpuVideoDecodeAccelerator::OnDestroy() {
   DCHECK(video_decode_accelerator_);
-  OnWillDestroyStub();
+  OnWillDestroyStub(false);
 }
 
 void GpuVideoDecodeAccelerator::OnFilterRemoved() {

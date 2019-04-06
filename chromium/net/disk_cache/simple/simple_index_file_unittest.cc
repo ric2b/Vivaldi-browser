@@ -12,7 +12,6 @@
 #include "base/hash.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/pickle.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -30,6 +29,7 @@
 #include "net/disk_cache/simple/simple_util.h"
 #include "net/disk_cache/simple/simple_version_upgrade.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -170,7 +170,7 @@ class WrappedSimpleIndexFile : public SimpleIndexFile {
   }
 };
 
-class SimpleIndexFileTest : public testing::Test {
+class SimpleIndexFileTest : public net::TestWithScopedTaskEnvironment {
  public:
   bool CompareTwoEntryMetadata(const EntryMetadata& a, const EntryMetadata& b) {
     return a.last_used_time_seconds_since_epoch_ ==
@@ -365,6 +365,38 @@ TEST_F(SimpleIndexFileTest, LoadCorruptIndex) {
   EXPECT_TRUE(load_index_result.flush_required);
 }
 
+TEST_F(SimpleIndexFileTest, LoadCorruptIndex2) {
+  // Variant where the index looks like a pickle, but not one with right
+  // header size --- that used to hit a DCHECK on debug builds.
+  base::ScopedTempDir cache_dir;
+  ASSERT_TRUE(cache_dir.CreateUniqueTempDir());
+
+  WrappedSimpleIndexFile simple_index_file(cache_dir.GetPath());
+  ASSERT_TRUE(simple_index_file.CreateIndexFileDirectory());
+  const base::FilePath& index_path = simple_index_file.GetIndexFilePath();
+  base::Pickle bad_payload;
+  bad_payload.WriteString("nothing to be seen here");
+
+  EXPECT_EQ(
+      static_cast<int>(bad_payload.size()),
+      base::WriteFile(index_path, static_cast<const char*>(bad_payload.data()),
+                      bad_payload.size()));
+  base::Time fake_cache_mtime;
+  ASSERT_TRUE(simple_util::GetMTime(simple_index_file.GetIndexFilePath(),
+                                    &fake_cache_mtime));
+  EXPECT_FALSE(WrappedSimpleIndexFile::LegacyIsIndexFileStale(fake_cache_mtime,
+                                                              index_path));
+  SimpleIndexLoadResult load_index_result;
+  net::TestClosure closure;
+  simple_index_file.LoadIndexEntries(fake_cache_mtime, closure.closure(),
+                                     &load_index_result);
+  closure.WaitForResult();
+
+  EXPECT_FALSE(base::PathExists(index_path));
+  EXPECT_TRUE(load_index_result.did_load);
+  EXPECT_TRUE(load_index_result.flush_required);
+}
+
 // Tests that after an upgrade the backend has the index file put in place.
 TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
   base::ScopedTempDir cache_dir;
@@ -393,36 +425,32 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
                             index_file_contents.size()));
 
   // Upgrade the cache.
-  ASSERT_TRUE(
-      disk_cache::UpgradeSimpleCacheOnDisk(cache_path, SimpleExperiment()));
+  ASSERT_TRUE(disk_cache::UpgradeSimpleCacheOnDisk(cache_path));
 
   // Create the backend and initiate index flush by destroying the backend.
-  base::Thread cache_thread("CacheThread");
-  ASSERT_TRUE(cache_thread.StartWithOptions(
-      base::Thread::Options(base::MessageLoop::TYPE_IO, 0)));
+  scoped_refptr<disk_cache::BackendCleanupTracker> cleanup_tracker =
+      disk_cache::BackendCleanupTracker::TryCreate(cache_path,
+                                                   base::OnceClosure());
+  ASSERT_TRUE(cleanup_tracker != nullptr);
+
+  net::TestClosure post_cleanup;
+  cleanup_tracker->AddPostCleanupCallback(post_cleanup.closure());
+
   disk_cache::SimpleBackendImpl* simple_cache =
       new disk_cache::SimpleBackendImpl(
-          cache_path, /* cleanup_tracker = */ nullptr,
-          /* file_tracker = */ nullptr, 0, net::DISK_CACHE,
-          cache_thread.task_runner(), /* net_log = */ nullptr);
+          cache_path, cleanup_tracker, /* file_tracker = */ nullptr, 0,
+          net::DISK_CACHE, /* net_log = */ nullptr);
   net::TestCompletionCallback cb;
   int rv = simple_cache->Init(cb.callback());
   EXPECT_THAT(cb.GetResult(rv), IsOk());
   rv = simple_cache->index()->ExecuteWhenReady(cb.callback());
   EXPECT_THAT(cb.GetResult(rv), IsOk());
   delete simple_cache;
+  cleanup_tracker = nullptr;
 
-  // The backend flushes the index on destruction and does so on the cache
-  // thread, wait for the flushing to finish by posting a callback to the cache
-  // thread after that.
-  // TODO(morlovich): Convert this test to post-cleanup callback API once it's
-  // there.
-  MessageLoopHelper helper;
-  CallbackTest cb_shutdown(&helper, false);
-  cache_thread.task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&base::DoNothing),
-      base::Bind(&CallbackTest::Run, base::Unretained(&cb_shutdown), net::OK));
-  helper.WaitUntilCacheIoFinished(1);
+  // The backend flushes the index on destruction; it will run the post-cleanup
+  // callback set on the cleanup_tracker once that finishes.
+  post_cleanup.WaitForResult();
 
   // Verify that the index file exists.
   const base::FilePath& index_file_path =

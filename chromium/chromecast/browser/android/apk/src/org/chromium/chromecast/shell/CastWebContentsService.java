@@ -7,17 +7,14 @@ package org.chromium.chromecast.shell;
 import android.app.Notification;
 import android.app.Service;
 import android.content.Intent;
-import android.media.AudioManager;
 import android.os.IBinder;
 import android.widget.Toast;
 
 import org.chromium.base.Log;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.content.browser.ContentView;
-import org.chromium.content.browser.ContentViewCore;
+import org.chromium.chromecast.base.Controller;
+import org.chromium.content.browser.MediaSessionImpl;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.base.ViewAndroidDelegate;
-import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Service for "displaying" a WebContents in CastShell.
@@ -31,98 +28,63 @@ public class CastWebContentsService extends Service {
     private static final boolean DEBUG = true;
     private static final int CAST_NOTIFICATION_ID = 100;
 
+    private final Controller<WebContents> mWebContentsState = new Controller<>();
     private String mInstanceId;
     private CastAudioManager mAudioManager;
-    private WindowAndroid mWindow;
-    private ContentViewCore mContentViewCore;
-    private ContentView mContentView;
+
+    {
+        // React to web contents by presenting them in a headless view.
+        mWebContentsState.watch(CastWebContentsView.withoutLayout(this));
+        mWebContentsState.watch(() -> {
+            if (DEBUG) Log.d(TAG, "show web contents");
+            // TODO(thoren): Notification.Builder(Context) is deprecated in O. Use the
+            // (Context, String) constructor when CastWebContentsService starts supporting O.
+            Notification notification = new Notification.Builder(this).build();
+            startForeground(CAST_NOTIFICATION_ID, notification);
+            return () -> {
+                if (DEBUG) Log.d(TAG, "detach web contents");
+                stopForeground(true /*removeNotification*/);
+                // Inform CastContentWindowAndroid we're detaching.
+                CastWebContentsComponent.onComponentClosed(mInstanceId);
+            };
+        });
+    }
 
     protected void handleIntent(Intent intent) {
         intent.setExtrasClassLoader(WebContents.class.getClassLoader());
         mInstanceId = intent.getData().getPath();
 
-        WebContents webContents = (WebContents) intent.getParcelableExtra(
-                CastWebContentsComponent.ACTION_EXTRA_WEB_CONTENTS);
+        WebContents webContents = CastWebContentsIntentUtils.getWebContents(intent);
         if (webContents == null) {
             Log.e(TAG, "Received null WebContents in intent.");
             return;
         }
 
-        detachWebContentsIfAny();
-        showWebContents(webContents);
+        MediaSessionImpl.fromWebContents(webContents).requestSystemAudioFocus();
+        mWebContentsState.set(webContents);
     }
 
     @Override
     public void onDestroy() {
         if (DEBUG) Log.d(TAG, "onDestroy");
-
-        if (mAudioManager.abandonAudioFocus(null) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            Log.e(TAG, "Failed to abandon audio focus");
-        }
-
+        mWebContentsState.reset();
         super.onDestroy();
     }
 
     @Override
     public void onCreate() {
         if (DEBUG) Log.d(TAG, "onCreate");
-
         if (!CastBrowserHelper.initializeBrowser(getApplicationContext())) {
             Toast.makeText(this, R.string.browser_process_initialization_failed, Toast.LENGTH_SHORT)
                     .show();
             stopSelf();
-        }
-
-        mWindow = new WindowAndroid(this);
-        mAudioManager = CastAudioManager.getAudioManager(this);
-
-        if (mAudioManager.requestAudioFocus(
-                    null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
-                != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            Log.e(TAG, "Failed to obtain audio focus");
         }
     }
 
     @Override
     public IBinder onBind(Intent intent) {
         if (DEBUG) Log.d(TAG, "onBind");
-
         handleIntent(intent);
-
         return null;
-    }
-
-    // Sets webContents to be the currently displayed webContents.
-    // TODO(thoren): Notification.Builder(Context) is deprecated in O. Use the (Context, String)
-    // constructor when CastWebContentsService starts supporting O.
-    @SuppressWarnings("deprecation")
-    private void showWebContents(WebContents webContents) {
-        if (DEBUG) Log.d(TAG, "showWebContents");
-
-        Notification notification = new Notification.Builder(this).build();
-        startForeground(CAST_NOTIFICATION_ID, notification);
-
-        // TODO(derekjchow): productVersion
-        mContentViewCore = ContentViewCore.create(this, "");
-        mContentView = ContentView.createContentView(this, mContentViewCore);
-        mContentViewCore.initialize(ViewAndroidDelegate.createBasicDelegate(mContentView),
-                mContentView, webContents, mWindow);
-        // Enable display of current webContents.
-        mContentViewCore.onShow();
-    }
-
-    // Remove the currently displayed webContents. no-op if nothing is being displayed.
-    private void detachWebContentsIfAny() {
-        if (DEBUG) Log.d(TAG, "detachWebContentsIfAny");
-
-        stopForeground(true /*removeNotification*/ );
-
-        if (mContentView != null) {
-            mContentView = null;
-            mContentViewCore = null;
-
-            // Inform CastContentWindowAndroid we're detaching.
-            CastWebContentsComponent.onComponentClosed(this, mInstanceId);
-        }
     }
 }

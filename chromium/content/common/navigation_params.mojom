@@ -4,9 +4,10 @@
 
 module content.mojom;
 
-import "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom";
-import "url/mojo/origin.mojom";
-import "url/mojo/url.mojom";
+import "mojo/public/mojom/base/values.mojom";
+import "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom";
+import "url/mojom/origin.mojom";
+import "url/mojom/url.mojom";
 
 [Native]
 enum MixedContentContextType;
@@ -56,9 +57,11 @@ struct BeginNavigationParams {
   // of the page that had the client side redirect.
   url.mojom.Url client_side_redirect_url;
 
-  // If the anchor element that triggered this navigation had a download
-  // attribute, this field will be set to the attribute's (possibly empty)
-  // value.
-  string? suggested_filename;
+  // If the navigation is renderer-initiated and the renderer is being
+  // inspected by DevTools, this field is non-null and contains the
+  // initiator information in DevTools protocol format. See
+  // https://chromedevtools.github.io/devtools-protocol/tot/Network#type-Initiator
+  // for details.
+  mojo_base.mojom.DictionaryValue? devtools_initiator;
 };
 

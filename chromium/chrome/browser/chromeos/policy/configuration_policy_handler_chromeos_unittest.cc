@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/common/pref_names.h"
+#include "components/arc/arc_prefs.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_map.h"
@@ -71,7 +72,7 @@ TEST_F(ScreenMagnifierPolicyHandlerTest, Disabled) {
   EXPECT_TRUE(prefs_.GetValue(ash::prefs::kAccessibilityScreenMagnifierEnabled,
                               &enabled));
   ASSERT_TRUE(enabled);
-  EXPECT_TRUE(base::Value(false).Equals(enabled));
+  EXPECT_EQ(base::Value(false), *enabled);
 }
 
 TEST_F(ScreenMagnifierPolicyHandlerTest, Enabled) {
@@ -84,7 +85,7 @@ TEST_F(ScreenMagnifierPolicyHandlerTest, Enabled) {
   EXPECT_TRUE(prefs_.GetValue(ash::prefs::kAccessibilityScreenMagnifierEnabled,
                               &enabled));
   ASSERT_TRUE(enabled);
-  EXPECT_TRUE(base::Value(true).Equals(enabled));
+  EXPECT_EQ(base::Value(true), *enabled);
 }
 
 TEST(ExternalDataPolicyHandlerTest, Empty) {
@@ -363,6 +364,101 @@ TEST_F(LoginScreenPowerManagementPolicyHandlerTest, WrongType) {
   EXPECT_FALSE(handler.CheckPolicySettings(policy_map, &errors));
   EXPECT_FALSE(
       errors.GetErrors(key::kDeviceLoginScreenPowerManagement).empty());
+}
+
+TEST(ArcServicePolicyHandlerTest, DisabledByDefault) {
+  PolicyMap policy_map;
+  SetEnterpriseUsersDefaults(&policy_map);
+  ArcServicePolicyHandler handler(key::kArcBackupRestoreServiceEnabled,
+                                  arc::prefs::kArcBackupRestoreEnabled);
+  PolicyErrorMap errors;
+  ASSERT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_TRUE(errors.empty());
+  PrefValueMap prefs;
+  handler.ApplyPolicySettings(policy_map, &prefs);
+  const base::Value* enabled = nullptr;
+  EXPECT_TRUE(prefs.GetValue(arc::prefs::kArcBackupRestoreEnabled, &enabled));
+  ASSERT_TRUE(enabled);
+  EXPECT_EQ(base::Value(false), *enabled);
+}
+
+TEST(ArcServicePolicyHandlerTest, UnderUserControlWhenWrongType) {
+  PolicyMap policy_map;
+  policy_map.Set(key::kArcBackupRestoreServiceEnabled, POLICY_LEVEL_MANDATORY,
+                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                 std::make_unique<base::Value>(false), nullptr);
+  SetEnterpriseUsersDefaults(&policy_map);
+  ArcServicePolicyHandler handler(key::kArcBackupRestoreServiceEnabled,
+                                  arc::prefs::kArcBackupRestoreEnabled);
+  PolicyErrorMap errors;
+  EXPECT_FALSE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_FALSE(errors.GetErrors(key::kArcBackupRestoreServiceEnabled).empty());
+}
+
+TEST(ArcServicePolicyHandlerTest, UnderUserControlWhenOutOfRange) {
+  PolicyMap policy_map;
+  policy_map.Set(key::kArcBackupRestoreServiceEnabled, POLICY_LEVEL_MANDATORY,
+                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                 std::make_unique<base::Value>(2), nullptr);
+  SetEnterpriseUsersDefaults(&policy_map);
+  ArcServicePolicyHandler handler(key::kArcBackupRestoreServiceEnabled,
+                                  arc::prefs::kArcBackupRestoreEnabled);
+  PolicyErrorMap errors;
+  EXPECT_FALSE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_FALSE(errors.GetErrors(key::kArcBackupRestoreServiceEnabled).empty());
+}
+
+TEST(ArcServicePolicyHandlerTest, DisabledByPolicy) {
+  PolicyMap policy_map;
+  policy_map.Set(key::kArcBackupRestoreServiceEnabled, POLICY_LEVEL_MANDATORY,
+                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                 std::make_unique<base::Value>(
+                     static_cast<int>(ArcServicePolicyValue::kDisabled)),
+                 nullptr);
+  SetEnterpriseUsersDefaults(&policy_map);
+  ArcServicePolicyHandler handler(key::kArcBackupRestoreServiceEnabled,
+                                  arc::prefs::kArcBackupRestoreEnabled);
+  PolicyErrorMap errors;
+  ASSERT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_TRUE(errors.empty());
+  PrefValueMap prefs;
+  handler.ApplyPolicySettings(policy_map, &prefs);
+  const base::Value* enabled = nullptr;
+  EXPECT_TRUE(prefs.GetValue(arc::prefs::kArcBackupRestoreEnabled, &enabled));
+  ASSERT_TRUE(enabled);
+  EXPECT_EQ(base::Value(false), *enabled);
+}
+
+TEST(ArcServicePolicyHandlerTest, UnderUserControlByPolicy) {
+  PolicyMap policy_map;
+  policy_map.Set(key::kArcBackupRestoreServiceEnabled, POLICY_LEVEL_MANDATORY,
+                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                 std::make_unique<base::Value>(static_cast<int>(
+                     ArcServicePolicyValue::kUnderUserControl)),
+                 nullptr);
+  SetEnterpriseUsersDefaults(&policy_map);
+  ArcServicePolicyHandler handler(key::kArcBackupRestoreServiceEnabled,
+                                  arc::prefs::kArcBackupRestoreEnabled);
+  PolicyErrorMap errors;
+  ASSERT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_TRUE(errors.empty());
+  PrefValueMap prefs;
+  handler.ApplyPolicySettings(policy_map, &prefs);
+  const base::Value* enabled = nullptr;
+  EXPECT_FALSE(prefs.GetValue(arc::prefs::kArcBackupRestoreEnabled, &enabled));
+}
+
+TEST(ArcServicePolicyHandlerTest, UnserUserControlForConsumer) {
+  PolicyMap policy_map;
+  ArcServicePolicyHandler handler(key::kArcBackupRestoreServiceEnabled,
+                                  arc::prefs::kArcBackupRestoreEnabled);
+  PolicyErrorMap errors;
+  ASSERT_TRUE(handler.CheckPolicySettings(policy_map, &errors));
+  EXPECT_TRUE(errors.empty());
+  PrefValueMap prefs;
+  handler.ApplyPolicySettings(policy_map, &prefs);
+  const base::Value* enabled = nullptr;
+  EXPECT_FALSE(prefs.GetValue(arc::prefs::kArcBackupRestoreEnabled, &enabled));
 }
 
 }  // namespace policy

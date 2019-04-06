@@ -31,11 +31,11 @@ class GL_EXPORT GLContextCGL : public GLContextReal {
   void ReleaseCurrent(GLSurface* surface) override;
   bool IsCurrent(GLSurface* surface) override;
   void* GetHandle() override;
-  void OnSetSwapInterval(int interval) override;
   void SetSafeToForceGpuSwitch() override;
   bool ForceGpuSwitchIfNeeded() override;
   YUVToRGBConverter* GetYUVToRGBConverter(
       const gfx::ColorSpace& color_space) override;
+  void FlushForDriverCrashWorkaround() override;
 
  protected:
   ~GLContextCGL() override;

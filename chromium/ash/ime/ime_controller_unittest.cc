@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "ash/ime/test_ime_controller_client.h"
 #include "ash/public/interfaces/ime_info.mojom.h"
 #include "ash/shell.h"
 #include "ash/system/ime/ime_observer.h"
@@ -60,39 +61,25 @@ class TestImeObserver : public IMEObserver {
   bool ime_menu_active_ = false;
 };
 
-class TestImeControllerClient : public mojom::ImeControllerClient {
+class TestImeControllerObserver : public ImeController::Observer {
  public:
-  TestImeControllerClient() : binding_(this) {}
-  ~TestImeControllerClient() override = default;
+  TestImeControllerObserver() = default;
 
-  mojom::ImeControllerClientPtr CreateInterfacePtr() {
-    mojom::ImeControllerClientPtr ptr;
-    binding_.Bind(mojo::MakeRequest(&ptr));
-    return ptr;
+  // IMEController::Observer:
+  void OnCapsLockChanged(bool enabled) override { ++caps_lock_count_; }
+  void OnKeyboardLayoutNameChanged(const std::string& layout_name) override {
+    last_keyboard_layout_name_ = layout_name;
   }
 
-  // mojom::ImeControllerClient:
-  void SwitchToNextIme() override { ++next_ime_count_; }
-  void SwitchToPreviousIme() override { ++previous_ime_count_; }
-  void SwitchImeById(const std::string& id, bool show_message) override {
-    ++switch_ime_count_;
-    last_switch_ime_id_ = id;
-    last_show_message_ = show_message;
+  const std::string& last_keyboard_layout_name() const {
+    return last_keyboard_layout_name_;
   }
-  void ActivateImeMenuItem(const std::string& key) override {}
-  void SetCapsLockFromTray(bool enabled) override { ++set_caps_lock_count_; }
-
-  int next_ime_count_ = 0;
-  int previous_ime_count_ = 0;
-  int switch_ime_count_ = 0;
-  int set_caps_lock_count_ = 0;
-  std::string last_switch_ime_id_;
-  bool last_show_message_ = false;
 
  private:
-  mojo::Binding<mojom::ImeControllerClient> binding_;
+  int caps_lock_count_ = 0;
+  std::string last_keyboard_layout_name_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestImeControllerClient);
+  DISALLOW_COPY_AND_ASSIGN(TestImeControllerObserver);
 };
 
 using ImeControllerTest = AshTestBase;
@@ -272,30 +259,41 @@ TEST_F(ImeControllerTest, SetCapsLock) {
   TestImeControllerClient client;
   EXPECT_EQ(0, client.set_caps_lock_count_);
 
-  controller->SetCapsLockFromTray(true);
+  controller->SetCapsLockEnabled(true);
   EXPECT_EQ(0, client.set_caps_lock_count_);
 
   controller->SetClient(client.CreateInterfacePtr());
 
-  controller->SetCapsLockFromTray(true);
+  controller->SetCapsLockEnabled(true);
   controller->FlushMojoForTesting();
   EXPECT_EQ(1, client.set_caps_lock_count_);
   // Does not no-op when the state is the same. Should send all notifications.
-  controller->SetCapsLockFromTray(true);
+  controller->SetCapsLockEnabled(true);
   controller->FlushMojoForTesting();
   EXPECT_EQ(2, client.set_caps_lock_count_);
-  controller->SetCapsLockFromTray(false);
+  controller->SetCapsLockEnabled(false);
   controller->FlushMojoForTesting();
   EXPECT_EQ(3, client.set_caps_lock_count_);
-  controller->SetCapsLockFromTray(false);
+  controller->SetCapsLockEnabled(false);
   controller->FlushMojoForTesting();
   EXPECT_EQ(4, client.set_caps_lock_count_);
 
   EXPECT_FALSE(controller->IsCapsLockEnabled());
-  controller->SetCapsLockState(true);
+  controller->UpdateCapsLockState(true);
   EXPECT_TRUE(controller->IsCapsLockEnabled());
-  controller->SetCapsLockState(false);
+  controller->UpdateCapsLockState(false);
   EXPECT_FALSE(controller->IsCapsLockEnabled());
+}
+
+TEST_F(ImeControllerTest, OnKeyboardLayoutNameChanged) {
+  ImeController* controller = Shell::Get()->ime_controller();
+  EXPECT_TRUE(controller->keyboard_layout_name().empty());
+
+  TestImeControllerObserver observer;
+  controller->AddObserver(&observer);
+  controller->OnKeyboardLayoutNameChanged("us(dvorak)");
+  EXPECT_EQ("us(dvorak)", controller->keyboard_layout_name());
+  EXPECT_EQ("us(dvorak)", observer.last_keyboard_layout_name());
 }
 
 }  // namespace

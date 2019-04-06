@@ -12,7 +12,6 @@
 #include "base/cancelable_callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -70,13 +69,13 @@ class FullStreamUIPolicyTest : public testing::Test {
 
   // A wrapper function for CheckReadFilteredData, so that we don't need to
   // enter empty string values for parameters we don't care about.
-  void CheckReadData(ActivityLogDatabasePolicy* policy,
-                     const std::string& extension_id,
-                     int day,
-                     const base::Callback<void(
-                         std::unique_ptr<Action::ActionVector>)>& checker) {
-    CheckReadFilteredData(
-        policy, extension_id, Action::ACTION_ANY, "", "", "", day, checker);
+  void CheckReadData(
+      ActivityLogDatabasePolicy* policy,
+      const std::string& extension_id,
+      int day,
+      base::OnceCallback<void(std::unique_ptr<Action::ActionVector>)> checker) {
+    CheckReadFilteredData(policy, extension_id, Action::ACTION_ANY, "", "", "",
+                          day, std::move(checker));
   }
 
   // A helper function to call ReadFilteredData on a policy object and wait for
@@ -89,20 +88,20 @@ class FullStreamUIPolicyTest : public testing::Test {
       const std::string& page_url,
       const std::string& arg_url,
       const int days_ago,
-      const base::Callback<void(std::unique_ptr<Action::ActionVector>)>&
-          checker) {
+      base::OnceCallback<void(std::unique_ptr<Action::ActionVector>)> checker) {
     // Submit a request to the policy to read back some data, and call the
     // checker function when results are available.  This will happen on the
     // database thread.
     policy->ReadFilteredData(
         extension_id, type, api_name, page_url, arg_url, days_ago,
-        base::Bind(&FullStreamUIPolicyTest::CheckWrapper, checker,
-                   base::MessageLoop::current()->QuitWhenIdleClosure()));
+        base::BindOnce(&FullStreamUIPolicyTest::CheckWrapper,
+                       std::move(checker),
+                       base::RunLoop::QuitCurrentWhenIdleClosureDeprecated()));
 
     // Set up a timeout for receiving results; if we haven't received anything
     // when the timeout triggers then assume that the test is broken.
-    base::CancelableClosure timeout(
-        base::Bind(&FullStreamUIPolicyTest::TimeoutCallback));
+    base::CancelableOnceClosure timeout(
+        base::BindOnce(&FullStreamUIPolicyTest::TimeoutCallback));
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, timeout.callback(), TestTimeouts::action_timeout());
 
@@ -113,12 +112,12 @@ class FullStreamUIPolicyTest : public testing::Test {
     timeout.Cancel();
   }
 
-  static void CheckWrapper(const base::Callback<void(
-                               std::unique_ptr<Action::ActionVector>)>& checker,
-                           const base::Closure& done,
-                           std::unique_ptr<Action::ActionVector> results) {
-    checker.Run(std::move(results));
-    done.Run();
+  static void CheckWrapper(
+      base::OnceCallback<void(std::unique_ptr<Action::ActionVector>)> checker,
+      base::OnceClosure done,
+      std::unique_ptr<Action::ActionVector> results) {
+    std::move(checker).Run(std::move(results));
+    std::move(done).Run();
   }
 
   static void TimeoutCallback() {
@@ -226,21 +225,18 @@ class FullStreamUIPolicyTest : public testing::Test {
   void CheckRemoveActions(
       ActivityLogDatabasePolicy* policy,
       const std::vector<int64_t>& action_ids,
-      const base::Callback<void(std::unique_ptr<Action::ActionVector>)>&
-          checker) {
+      base::OnceCallback<void(std::unique_ptr<Action::ActionVector>)> checker) {
     // Use a mock clock to ensure that events are not recorded on the wrong day
     // when the test is run close to local midnight.
-    base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
-    mock_clock->SetNow(base::Time::Now().LocalMidnight() +
-                       base::TimeDelta::FromHours(12));
-    policy->SetClockForTesting(std::unique_ptr<base::Clock>(mock_clock));
+    base::SimpleTestClock mock_clock;
+    mock_clock.SetNow(base::Time::Now().LocalMidnight() +
+                      base::TimeDelta::FromHours(12));
+    policy->SetClockForTesting(&mock_clock);
 
     // Record some actions
-    scoped_refptr<Action> action =
-        new Action("punky1",
-                   mock_clock->Now() - base::TimeDelta::FromMinutes(40),
-                   Action::ACTION_DOM_ACCESS,
-                   "lets1");
+    scoped_refptr<Action> action = new Action(
+        "punky1", mock_clock.Now() - base::TimeDelta::FromMinutes(40),
+        Action::ACTION_DOM_ACCESS, "lets1");
     action->mutable_args()->AppendString("vamoose1");
     action->set_page_url(GURL("http://www.google1.com"));
     action->set_page_title("Google1");
@@ -251,9 +247,8 @@ class FullStreamUIPolicyTest : public testing::Test {
     policy->ProcessAction(action);
 
     action = new Action("punky2",
-                        mock_clock->Now() - base::TimeDelta::FromMinutes(30),
-                        Action::ACTION_API_CALL,
-                        "lets2");
+                        mock_clock.Now() - base::TimeDelta::FromMinutes(30),
+                        Action::ACTION_API_CALL, "lets2");
     action->mutable_args()->AppendString("vamoose2");
     action->set_page_url(GURL("http://www.google2.com"));
     action->set_page_title("Google2");
@@ -268,10 +263,11 @@ class FullStreamUIPolicyTest : public testing::Test {
 
     // Check the result of the deletion. The checker function gets all
     // activities in the database.
-    CheckReadData(policy, "", -1, checker);
+    CheckReadData(policy, "", -1, std::move(checker));
 
     // Clean database.
     policy->DeleteDatabase();
+    policy->SetClockForTesting(nullptr);
   }
 
   static void AllActionsDeleted(std::unique_ptr<Action::ActionVector> actions) {
@@ -390,10 +386,9 @@ TEST_F(FullStreamUIPolicyTest, LogAndFetchActions) {
   policy->ProcessAction(action_dom);
 
   CheckReadData(
-      policy,
-      extension->id(),
-      0,
-      base::Bind(&FullStreamUIPolicyTest::RetrieveActions_LogAndFetchActions));
+      policy, extension->id(), 0,
+      base::BindOnce(
+          &FullStreamUIPolicyTest::RetrieveActions_LogAndFetchActions));
 
   policy->Close();
 }
@@ -429,69 +424,36 @@ TEST_F(FullStreamUIPolicyTest, LogAndFetchFilteredActions) {
   policy->ProcessAction(action_dom);
 
   CheckReadFilteredData(
-      policy,
-      extension->id(),
-      Action::ACTION_API_CALL,
-      "tabs.testMethod",
-      "",
-      "",
-      -1,
-      base::Bind(
+      policy, extension->id(), Action::ACTION_API_CALL, "tabs.testMethod", "",
+      "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions1));
 
   CheckReadFilteredData(
-      policy,
-      "",
-      Action::ACTION_DOM_ACCESS,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(
+      policy, "", Action::ACTION_DOM_ACCESS, "", "", "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions1));
 
   CheckReadFilteredData(
-      policy,
-      "",
-      Action::ACTION_DOM_ACCESS,
-      "",
-      "http://www.google.com/",
-      "",
+      policy, "", Action::ACTION_DOM_ACCESS, "", "http://www.google.com/", "",
       -1,
-      base::Bind(
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions1));
 
   CheckReadFilteredData(
-      policy,
-      "",
-      Action::ACTION_DOM_ACCESS,
-      "",
-      "http://www.google.com",
-      "",
+      policy, "", Action::ACTION_DOM_ACCESS, "", "http://www.google.com", "",
       -1,
-      base::Bind(
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions1));
 
   CheckReadFilteredData(
-      policy,
-      "",
-      Action::ACTION_DOM_ACCESS,
-      "",
-      "http://www.goo",
-      "",
-      -1,
-      base::Bind(
+      policy, "", Action::ACTION_DOM_ACCESS, "", "http://www.goo", "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions1));
 
   CheckReadFilteredData(
-      policy,
-      extension->id(),
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(
+      policy, extension->id(), Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions2));
 
   policy->Close();
@@ -520,10 +482,8 @@ TEST_F(FullStreamUIPolicyTest, LogWithArguments) {
   action->set_args(std::move(args));
 
   policy->ProcessAction(action);
-  CheckReadData(policy,
-                extension->id(),
-                0,
-                base::Bind(&FullStreamUIPolicyTest::Arguments_Present));
+  CheckReadData(policy, extension->id(), 0,
+                base::BindOnce(&FullStreamUIPolicyTest::Arguments_Present));
   policy->Close();
 }
 
@@ -536,42 +496,38 @@ TEST_F(FullStreamUIPolicyTest, GetTodaysActions) {
   // to the policy, but we still keep a pointer locally.  The policy will take
   // care of destruction; this is safe since the policy outlives all our
   // accesses to the mock clock.
-  base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
-  mock_clock->SetNow(base::Time::Now().LocalMidnight() +
-                     base::TimeDelta::FromHours(12));
-  policy->SetClockForTesting(std::unique_ptr<base::Clock>(mock_clock));
+  base::SimpleTestClock mock_clock;
+  mock_clock.SetNow(base::Time::Now().LocalMidnight() +
+                    base::TimeDelta::FromHours(12));
+  policy->SetClockForTesting(&mock_clock);
 
   // Record some actions
   scoped_refptr<Action> action =
-      new Action("punky",
-                 mock_clock->Now() - base::TimeDelta::FromMinutes(40),
-                 Action::ACTION_API_CALL,
-                 "brewster");
+      new Action("punky", mock_clock.Now() - base::TimeDelta::FromMinutes(40),
+                 Action::ACTION_API_CALL, "brewster");
   action->mutable_args()->AppendString("woof");
   action->set_arg_url(GURL("http://www.arg-url.com"));
   action->set_page_title("Page Title");
   policy->ProcessAction(action);
 
   action =
-      new Action("punky", mock_clock->Now(), Action::ACTION_DOM_ACCESS, "lets");
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google.com"));
   action->set_arg_url(GURL("http://www.arg-url.com"));
   action->set_page_title("Page Title");
   policy->ProcessAction(action);
 
-  action = new Action(
-      "scoobydoo", mock_clock->Now(), Action::ACTION_DOM_ACCESS, "lets");
+  action = new Action("scoobydoo", mock_clock.Now(), Action::ACTION_DOM_ACCESS,
+                      "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google.com"));
   action->set_arg_url(GURL("http://www.arg-url.com"));
   policy->ProcessAction(action);
 
   CheckReadData(
-      policy,
-      "punky",
-      0,
-      base::Bind(&FullStreamUIPolicyTest::Arguments_GetTodaysActions));
+      policy, "punky", 0,
+      base::BindOnce(&FullStreamUIPolicyTest::Arguments_GetTodaysActions));
   policy->Close();
 }
 
@@ -582,50 +538,41 @@ TEST_F(FullStreamUIPolicyTest, GetOlderActions) {
 
   // Use a mock clock to ensure that events are not recorded on the wrong day
   // when the test is run close to local midnight.
-  base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
-  mock_clock->SetNow(base::Time::Now().LocalMidnight() +
-                     base::TimeDelta::FromHours(12));
-  policy->SetClockForTesting(std::unique_ptr<base::Clock>(mock_clock));
+  base::SimpleTestClock mock_clock;
+  mock_clock.SetNow(base::Time::Now().LocalMidnight() +
+                    base::TimeDelta::FromHours(12));
+  policy->SetClockForTesting(&mock_clock);
 
   // Record some actions
   scoped_refptr<Action> action =
       new Action("punky",
-                 mock_clock->Now() - base::TimeDelta::FromDays(3) -
+                 mock_clock.Now() - base::TimeDelta::FromDays(3) -
                      base::TimeDelta::FromMinutes(40),
-                 Action::ACTION_API_CALL,
-                 "brewster");
+                 Action::ACTION_API_CALL, "brewster");
   action->mutable_args()->AppendString("woof");
   policy->ProcessAction(action);
 
-  action = new Action("punky",
-                      mock_clock->Now() - base::TimeDelta::FromDays(3),
-                      Action::ACTION_DOM_ACCESS,
-                      "lets");
+  action = new Action("punky", mock_clock.Now() - base::TimeDelta::FromDays(3),
+                      Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google.com"));
   policy->ProcessAction(action);
 
-  action = new Action("punky",
-                      mock_clock->Now(),
-                      Action::ACTION_DOM_ACCESS,
-                      "lets");
+  action =
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("too new");
   action->set_page_url(GURL("http://www.google.com"));
   policy->ProcessAction(action);
 
-  action = new Action("punky",
-                      mock_clock->Now() - base::TimeDelta::FromDays(7),
-                      Action::ACTION_DOM_ACCESS,
-                      "lets");
+  action = new Action("punky", mock_clock.Now() - base::TimeDelta::FromDays(7),
+                      Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("too old");
   action->set_page_url(GURL("http://www.google.com"));
   policy->ProcessAction(action);
 
   CheckReadData(
-      policy,
-      "punky",
-      3,
-      base::Bind(&FullStreamUIPolicyTest::Arguments_GetOlderActions));
+      policy, "punky", 3,
+      base::BindOnce(&FullStreamUIPolicyTest::Arguments_GetOlderActions));
   policy->Close();
 }
 
@@ -635,24 +582,23 @@ TEST_F(FullStreamUIPolicyTest, RemoveAllURLs) {
 
   // Use a mock clock to ensure that events are not recorded on the wrong day
   // when the test is run close to local midnight.
-  base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
-  mock_clock->SetNow(base::Time::Now().LocalMidnight() +
-                     base::TimeDelta::FromHours(12));
-  policy->SetClockForTesting(std::unique_ptr<base::Clock>(mock_clock));
+  base::SimpleTestClock mock_clock;
+  mock_clock.SetNow(base::Time::Now().LocalMidnight() +
+                    base::TimeDelta::FromHours(12));
+  policy->SetClockForTesting(&mock_clock);
 
   // Record some actions
   scoped_refptr<Action> action =
-      new Action("punky", mock_clock->Now(),
-                 Action::ACTION_DOM_ACCESS, "lets");
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google.com"));
   action->set_page_title("Google");
   action->set_arg_url(GURL("http://www.google.com"));
   policy->ProcessAction(action);
 
-  mock_clock->Advance(base::TimeDelta::FromSeconds(1));
-  action = new Action(
-      "punky", mock_clock->Now(), Action::ACTION_API_CALL, "lets");
+  mock_clock.Advance(base::TimeDelta::FromSeconds(1));
+  action =
+      new Action("punky", mock_clock.Now(), Action::ACTION_API_CALL, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google2.com"));
   action->set_page_title("Google");
@@ -664,11 +610,8 @@ TEST_F(FullStreamUIPolicyTest, RemoveAllURLs) {
   std::vector<GURL> no_url_restrictions;
   policy->RemoveURLs(no_url_restrictions);
 
-  CheckReadData(
-      policy,
-      "punky",
-      0,
-      base::Bind(&FullStreamUIPolicyTest::AllURLsRemoved));
+  CheckReadData(policy, "punky", 0,
+                base::BindOnce(&FullStreamUIPolicyTest::AllURLsRemoved));
   policy->Close();
 }
 
@@ -678,15 +621,15 @@ TEST_F(FullStreamUIPolicyTest, RemoveSpecificURLs) {
 
   // Use a mock clock to ensure that events are not recorded on the wrong day
   // when the test is run close to local midnight.
-  base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
-  mock_clock->SetNow(base::Time::Now().LocalMidnight() +
-                     base::TimeDelta::FromHours(12));
-  policy->SetClockForTesting(std::unique_ptr<base::Clock>(mock_clock));
+  base::SimpleTestClock mock_clock;
+  mock_clock.SetNow(base::Time::Now().LocalMidnight() +
+                    base::TimeDelta::FromHours(12));
+  policy->SetClockForTesting(&mock_clock);
 
   // Record some actions
   // This should have the page url and args url cleared.
-  scoped_refptr<Action> action = new Action("punky", mock_clock->Now(),
-                                            Action::ACTION_DOM_ACCESS, "lets");
+  scoped_refptr<Action> action =
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google1.com"));
   action->set_page_title("Google");
@@ -694,9 +637,9 @@ TEST_F(FullStreamUIPolicyTest, RemoveSpecificURLs) {
   policy->ProcessAction(action);
 
   // This should have the page url cleared but not args url.
-  mock_clock->Advance(base::TimeDelta::FromSeconds(1));
-  action = new Action(
-      "punky", mock_clock->Now(), Action::ACTION_DOM_ACCESS, "lets");
+  mock_clock.Advance(base::TimeDelta::FromSeconds(1));
+  action =
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google1.com"));
   action->set_page_title("Google");
@@ -705,18 +648,18 @@ TEST_F(FullStreamUIPolicyTest, RemoveSpecificURLs) {
 
   // This should have the page url cleared. The args url is deliberately not set
   // to make sure this doesn't cause any issues.
-  mock_clock->Advance(base::TimeDelta::FromSeconds(1));
-  action = new Action(
-      "punky", mock_clock->Now(), Action::ACTION_DOM_ACCESS, "lets");
+  mock_clock.Advance(base::TimeDelta::FromSeconds(1));
+  action =
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google2.com"));
   action->set_page_title("Google");
   policy->ProcessAction(action);
 
   // This should have the args url cleared but not the page url or page title.
-  mock_clock->Advance(base::TimeDelta::FromSeconds(1));
-  action = new Action(
-      "punky", mock_clock->Now(), Action::ACTION_DOM_ACCESS, "lets");
+  mock_clock.Advance(base::TimeDelta::FromSeconds(1));
+  action =
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google.com"));
   action->set_page_title("Google");
@@ -724,9 +667,9 @@ TEST_F(FullStreamUIPolicyTest, RemoveSpecificURLs) {
   policy->ProcessAction(action);
 
   // This should have neither cleared.
-  mock_clock->Advance(base::TimeDelta::FromSeconds(1));
-  action = new Action(
-      "punky", mock_clock->Now(), Action::ACTION_DOM_ACCESS, "lets");
+  mock_clock.Advance(base::TimeDelta::FromSeconds(1));
+  action =
+      new Action("punky", mock_clock.Now(), Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_url(GURL("http://www.google.com"));
   action->set_page_title("Google");
@@ -740,11 +683,8 @@ TEST_F(FullStreamUIPolicyTest, RemoveSpecificURLs) {
   urls.push_back(GURL("http://www.url_not_in_db.com"));
   policy->RemoveURLs(urls);
 
-  CheckReadData(
-      policy,
-      "punky",
-      0,
-      base::Bind(&FullStreamUIPolicyTest::SomeURLsRemoved));
+  CheckReadData(policy, "punky", 0,
+                base::BindOnce(&FullStreamUIPolicyTest::SomeURLsRemoved));
   policy->Close();
 }
 
@@ -754,16 +694,15 @@ TEST_F(FullStreamUIPolicyTest, RemoveExtensionData) {
 
   // Use a mock clock to ensure that events are not recorded on the wrong day
   // when the test is run close to local midnight.
-  base::SimpleTestClock* mock_clock = new base::SimpleTestClock();
-  mock_clock->SetNow(base::Time::Now().LocalMidnight() +
-                     base::TimeDelta::FromHours(12));
-  policy->SetClockForTesting(std::unique_ptr<base::Clock>(mock_clock));
+  base::SimpleTestClock mock_clock;
+  mock_clock.SetNow(base::Time::Now().LocalMidnight() +
+                    base::TimeDelta::FromHours(12));
+  policy->SetClockForTesting(&mock_clock);
 
   // Record some actions
-  scoped_refptr<Action> action = new Action("deleteextensiondata",
-                                            mock_clock->Now(),
-                                            Action::ACTION_DOM_ACCESS,
-                                            "lets");
+  scoped_refptr<Action> action =
+      new Action("deleteextensiondata", mock_clock.Now(),
+                 Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_title("Google");
   action->set_arg_url(GURL("http://www.google.com"));
@@ -771,10 +710,8 @@ TEST_F(FullStreamUIPolicyTest, RemoveExtensionData) {
   policy->ProcessAction(action);
   policy->ProcessAction(action);
 
-  scoped_refptr<Action> action2 = new Action("dontdelete",
-                                             mock_clock->Now(),
-                                             Action::ACTION_DOM_ACCESS,
-                                             "lets");
+  scoped_refptr<Action> action2 = new Action("dontdelete", mock_clock.Now(),
+                                             Action::ACTION_DOM_ACCESS, "lets");
   action->mutable_args()->AppendString("vamoose");
   action->set_page_title("Google");
   action->set_arg_url(GURL("http://www.google.com"));
@@ -784,25 +721,13 @@ TEST_F(FullStreamUIPolicyTest, RemoveExtensionData) {
   policy->RemoveExtensionData("deleteextensiondata");
 
   CheckReadFilteredData(
-      policy,
-      "deleteextensiondata",
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(
+      policy, "deleteextensiondata", Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions0));
 
   CheckReadFilteredData(
-      policy,
-      "dontdelete",
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(
+      policy, "dontdelete", Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions1));
   policy->Close();
 }
@@ -822,19 +747,13 @@ TEST_F(FullStreamUIPolicyTest, CapReturns) {
 
   policy->Flush();
   GetActivityLogTaskRunner()->PostTaskAndReply(
-      FROM_HERE, base::BindOnce(&base::DoNothing),
-      base::MessageLoop::current()->QuitWhenIdleClosure());
+      FROM_HERE, base::DoNothing(),
+      base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
   base::RunLoop().Run();
 
   CheckReadFilteredData(
-      policy,
-      "punky",
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(
+      policy, "punky", Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions300));
   policy->Close();
 }
@@ -870,23 +789,16 @@ TEST_F(FullStreamUIPolicyTest, DeleteDatabase) {
   policy->ProcessAction(action_dom);
 
   CheckReadData(
-      policy,
-      extension->id(),
-      0,
-      base::Bind(&FullStreamUIPolicyTest::RetrieveActions_LogAndFetchActions));
+      policy, extension->id(), 0,
+      base::BindOnce(
+          &FullStreamUIPolicyTest::RetrieveActions_LogAndFetchActions));
 
   // Now delete them.
   policy->DeleteDatabase();
 
   CheckReadFilteredData(
-      policy,
-      "",
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(
+      policy, "", Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(
           &FullStreamUIPolicyTest::RetrieveActions_FetchFilteredActions0));
 
   policy->Close();
@@ -898,26 +810,23 @@ TEST_F(FullStreamUIPolicyTest, RemoveActions) {
 
   std::vector<int64_t> action_ids;
 
-  CheckRemoveActions(policy,
-                     action_ids,
-                     base::Bind(&FullStreamUIPolicyTest::NoActionsDeleted));
+  CheckRemoveActions(policy, action_ids,
+                     base::BindOnce(&FullStreamUIPolicyTest::NoActionsDeleted));
 
   action_ids.push_back(-1);
   action_ids.push_back(-10);
   action_ids.push_back(0);
   action_ids.push_back(5);
   action_ids.push_back(10);
-  CheckRemoveActions(policy,
-                     action_ids,
-                     base::Bind(&FullStreamUIPolicyTest::NoActionsDeleted));
+  CheckRemoveActions(policy, action_ids,
+                     base::BindOnce(&FullStreamUIPolicyTest::NoActionsDeleted));
   action_ids.clear();
 
   for (int i = 0; i < 50; i++) {
     action_ids.push_back(i + 5);
   }
-  CheckRemoveActions(policy,
-                     action_ids,
-                     base::Bind(&FullStreamUIPolicyTest::NoActionsDeleted));
+  CheckRemoveActions(policy, action_ids,
+                     base::BindOnce(&FullStreamUIPolicyTest::NoActionsDeleted));
   action_ids.clear();
 
   // CheckRemoveActions pushes four actions to the Activity Log database with
@@ -926,21 +835,21 @@ TEST_F(FullStreamUIPolicyTest, RemoveActions) {
   action_ids.push_back(2);
   action_ids.push_back(3);
   action_ids.push_back(4);
-  CheckRemoveActions(policy,
-                     action_ids,
-                     base::Bind(&FullStreamUIPolicyTest::AllActionsDeleted));
+  CheckRemoveActions(
+      policy, action_ids,
+      base::BindOnce(&FullStreamUIPolicyTest::AllActionsDeleted));
   action_ids.clear();
 
   action_ids.push_back(1);
   action_ids.push_back(2);
-  CheckRemoveActions(
-      policy, action_ids, base::Bind(&FullStreamUIPolicyTest::Action1Deleted));
+  CheckRemoveActions(policy, action_ids,
+                     base::BindOnce(&FullStreamUIPolicyTest::Action1Deleted));
   action_ids.clear();
 
   action_ids.push_back(3);
   action_ids.push_back(4);
-  CheckRemoveActions(
-      policy, action_ids, base::Bind(&FullStreamUIPolicyTest::Action2Deleted));
+  CheckRemoveActions(policy, action_ids,
+                     base::BindOnce(&FullStreamUIPolicyTest::Action2Deleted));
   action_ids.clear();
 
   policy->Close();

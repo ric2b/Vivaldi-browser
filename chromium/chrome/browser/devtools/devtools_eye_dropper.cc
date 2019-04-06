@@ -4,16 +4,22 @@
 
 #include "chrome/browser/devtools/devtools_eye_dropper.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "build/build_config.h"
+#include "cc/paint/skia_paint_canvas.h"
+#include "components/viz/common/features.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/cursor_info.h"
 #include "content/public/common/screen_info.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
+#include "media/base/limits.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpaceXform.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -27,6 +33,10 @@ DevToolsEyeDropper::DevToolsEyeDropper(content::WebContents* web_contents,
       last_cursor_x_(-1),
       last_cursor_y_(-1),
       host_(nullptr),
+      use_video_capture_api_(
+          base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
+          base::FeatureList::IsEnabled(
+              features::kUseVideoCaptureApiForDevToolsSnapshots)),
       weak_factory_(this) {
   mouse_event_callback_ =
       base::Bind(&DevToolsEyeDropper::HandleMouseEvent, base::Unretained(this));
@@ -44,6 +54,32 @@ DevToolsEyeDropper::~DevToolsEyeDropper() {
 void DevToolsEyeDropper::AttachToHost(content::RenderWidgetHost* host) {
   host_ = host;
   host_->AddMouseEventCallback(mouse_event_callback_);
+
+  if (!use_video_capture_api_)
+    return;
+
+  // The view can be null if the renderer process has crashed.
+  // (https://crbug.com/847363)
+  if (!host_->GetView())
+    return;
+
+  // Capturing a full-page screenshot can be costly so we shouldn't do it too
+  // often. We can capture at a lower frame rate without hurting the user
+  // experience.
+  constexpr static int kMaxFrameRate = 15;
+
+  // Create and configure the video capturer.
+  video_capturer_ = host_->GetView()->CreateVideoCapturer();
+  video_capturer_->SetResolutionConstraints(
+      host_->GetView()->GetViewBounds().size(),
+      host_->GetView()->GetViewBounds().size(), true);
+  video_capturer_->SetAutoThrottlingEnabled(false);
+  video_capturer_->SetMinSizeChangePeriod(base::TimeDelta());
+  video_capturer_->SetFormat(media::PIXEL_FORMAT_ARGB,
+                             media::COLOR_SPACE_UNSPECIFIED);
+  video_capturer_->SetMinCapturePeriod(base::TimeDelta::FromSeconds(1) /
+                                       kMaxFrameRate);
+  video_capturer_->Start(this);
 }
 
 void DevToolsEyeDropper::DetachFromHost() {
@@ -53,6 +89,7 @@ void DevToolsEyeDropper::DetachFromHost() {
   content::CursorInfo cursor_info;
   cursor_info.type = blink::WebCursorInfo::kTypePointer;
   host_->SetCursor(cursor_info);
+  video_capturer_.reset();
   host_ = nullptr;
 }
 
@@ -85,7 +122,7 @@ void DevToolsEyeDropper::DidReceiveCompositorFrame() {
 }
 
 void DevToolsEyeDropper::UpdateFrame() {
-  if (!host_ || !host_->GetView())
+  if (use_video_capture_api_ || !host_ || !host_->GetView())
     return;
 
   // TODO(miu): This is the wrong size. It's the size of the view on-screen, and
@@ -95,8 +132,8 @@ void DevToolsEyeDropper::UpdateFrame() {
   gfx::Size should_be_rendering_size = host_->GetView()->GetViewBounds().size();
   host_->GetView()->CopyFromSurface(
       gfx::Rect(), should_be_rendering_size,
-      base::Bind(&DevToolsEyeDropper::FrameUpdated, weak_factory_.GetWeakPtr()),
-      kN32_SkColorType);
+      base::BindOnce(&DevToolsEyeDropper::FrameUpdated,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void DevToolsEyeDropper::ResetFrame() {
@@ -105,12 +142,12 @@ void DevToolsEyeDropper::ResetFrame() {
   last_cursor_y_ = -1;
 }
 
-void DevToolsEyeDropper::FrameUpdated(const SkBitmap& bitmap,
-                                      content::ReadbackResponse response) {
-  if (response == content::READBACK_SUCCESS) {
-    frame_ = bitmap;
-    UpdateCursor();
-  }
+void DevToolsEyeDropper::FrameUpdated(const SkBitmap& bitmap) {
+  DCHECK(!use_video_capture_api_);
+  if (bitmap.drawsNothing())
+    return;
+  frame_ = bitmap;
+  UpdateCursor();
 }
 
 bool DevToolsEyeDropper::HandleMouseEvent(const blink::WebMouseEvent& event) {
@@ -272,3 +309,42 @@ void DevToolsEyeDropper::UpdateCursor() {
                                    kHotspotOffset * device_scale_factor);
   host_->SetCursor(cursor_info);
 }
+
+void DevToolsEyeDropper::OnFrameCaptured(
+    mojo::ScopedSharedBufferHandle buffer,
+    uint32_t buffer_size,
+    ::media::mojom::VideoFrameInfoPtr info,
+    const gfx::Rect& update_rect,
+    const gfx::Rect& content_rect,
+    viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) {
+  gfx::Size view_size = host_->GetView()->GetViewBounds().size();
+  if (view_size != content_rect.size()) {
+    video_capturer_->SetResolutionConstraints(view_size, view_size, true);
+    video_capturer_->RequestRefreshFrame();
+    return;
+  }
+
+  if (!buffer.is_valid()) {
+    callbacks->Done();
+    return;
+  }
+  mojo::ScopedSharedBufferMapping mapping = buffer->Map(buffer_size);
+  if (!mapping) {
+    DLOG(ERROR) << "Shared memory mapping failed.";
+    return;
+  }
+
+  SkImageInfo image_info = SkImageInfo::MakeN32(
+      content_rect.width(), content_rect.height(), kPremul_SkAlphaType);
+  SkPixmap pixmap(image_info, mapping.get(),
+                  media::VideoFrame::RowBytes(media::VideoFrame::kARGBPlane,
+                                              info->pixel_format,
+                                              info->coded_size.width()));
+  frame_.installPixels(pixmap);
+  shared_memory_mapping_ = std::move(mapping);
+  shared_memory_releaser_ = std::move(callbacks);
+
+  UpdateCursor();
+}
+
+void DevToolsEyeDropper::OnStopped() {}

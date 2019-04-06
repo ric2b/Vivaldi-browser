@@ -5,28 +5,24 @@
 #ifndef IOS_CHROME_BROWSER_UI_TOOLBAR_ADAPTIVE_TOOLBAR_COORDINATOR_ADAPTOR_H_
 #define IOS_CHROME_BROWSER_UI_TOOLBAR_ADAPTIVE_TOOLBAR_COORDINATOR_ADAPTOR_H_
 
+#import "ios/chrome/browser/ui/popup_menu/public/popup_menu_ui_updating.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_coordinating.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_presentation_state_provider.h"
 
 @class CommandDispatcher;
-@protocol ToolbarCommands;
-@protocol ToolsMenuConfigurationProvider;
+@protocol ToolbarCoordinatee;
 
 // This object is an interface between multiple toolbars and the objects which
 // want to interact with them without having to know to which one specifically
 // send the call.
 @interface ToolbarCoordinatorAdaptor
-    : NSObject<ToolbarCoordinating, ToolsMenuPresentationStateProvider>
+    : NSObject<PopupMenuUIUpdating, ToolbarCoordinating>
 
-- (instancetype)initWithToolsMenuConfigurationProvider:
-                    (id<ToolsMenuConfigurationProvider>)configurationProvider
-                                            dispatcher:
-                                                (CommandDispatcher*)dispatcher;
+- (instancetype)initWithDispatcher:(CommandDispatcher*)dispatcher;
 
 // Adds a |toolbarCoordinator| to the set of coordinators this object is
 // interfacing with.
-- (void)addToolbarCoordinator:
-    (id<ToolbarCoordinating, ToolbarCommands>)toolbarCoordinator;
+- (void)addToolbarCoordinator:(id<ToolbarCoordinatee>)toolbarCoordinator;
 
 @end
 

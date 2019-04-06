@@ -4,6 +4,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_extension_test_notification_observer.h"
 #include "chrome/browser/extensions/chrome_extensions_browser_client.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
@@ -28,12 +29,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, EventsAreUnregistered) {
   // In this test, page1.html registers for a number of events, then navigates
   // to page2.html, which should unregister those events. page2.html notifies
   // pass, by which point the event should have been unregistered.
-  //
-  // This test relies on the extension installed with RunExtensionSubtest
-  // actually being installed, which won't happen if subtests are skipped (see
-  // comment on ExtensionApiTest::ExtensionSubtestsAreSkipped)
-  if (ExtensionSubtestsAreSkipped())
-    return;
 
   EventRouter* event_router = EventRouter::Get(profile());
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
@@ -212,9 +207,15 @@ IN_PROC_BROWSER_TEST_F(EventsApiTest,
   }
 }
 
+// Disabled on non-Mac due to flaky timeouts. https://crbug.com/833854
+#if !defined(OS_MACOSX)
+#define MAYBE_NewlyIntroducedListener DISABLED_NewlyIntroducedListener
+#else
+#define MAYBE_NewlyIntroducedListener NewlyIntroducedListener
+#endif
 // Tests that if an extension's updated version has a new lazy listener, it
 // fires properly after the update.
-IN_PROC_BROWSER_TEST_F(EventsApiTest, NewlyIntroducedListener) {
+IN_PROC_BROWSER_TEST_F(EventsApiTest, MAYBE_NewlyIntroducedListener) {
   std::vector<ExtensionCRXData> data;
   data.emplace_back("v1");
   data.emplace_back("v2");

@@ -55,14 +55,6 @@ cr.define('print_preview', function() {
       this.inFlightRequestId_ = -1;
 
       /**
-       * Whether the current in flight request requires generating draft pages
-       * for print preview. This is true only for modifiable documents when the
-       * print settings has changed sufficiently to require re-rendering.
-       * @private {boolean}
-       */
-      this.generateDraft_ = false;
-
-      /**
        * Media size to generate preview with. {@code null} indicates default
        * size.
        * @private {print_preview.ValueType}
@@ -99,6 +91,12 @@ cr.define('print_preview', function() {
        * @private {number}
        */
       this.scalingValue_ = 100;
+
+      /**
+       * Whether the PDF should be rasterized for printing.
+       * @private {boolean}
+       */
+      this.rasterize_ = false;
 
       /**
        * Page ranges setting used used to generate the last preview.
@@ -176,6 +174,7 @@ cr.define('print_preview', function() {
           this.printTicketStore_.headerFooter.getValue();
       this.colorValue_ = this.printTicketStore_.color.getValue();
       this.isFitToPageEnabled_ = this.printTicketStore_.fitToPage.getValue();
+      this.rasterize_ = this.printTicketStore_.rasterize.getValue();
       this.scalingValue_ = this.printTicketStore_.scaling.getValueAsNumber();
       this.pageRanges_ = this.printTicketStore_.pageRange.getPageRanges();
       this.marginsType_ = this.printTicketStore_.marginsType.getValue();
@@ -186,7 +185,6 @@ cr.define('print_preview', function() {
       this.selectedDestination_ = this.destinationStore_.selectedDestination;
 
       this.inFlightRequestId_++;
-      this.generateDraft_ = this.documentInfo_.isModifiable;
       return {
         id: this.inFlightRequestId_,
         request: this.getPreview_(),
@@ -217,7 +215,6 @@ cr.define('print_preview', function() {
         isFirstRequest: this.inFlightRequestId_ == 0,
         requestID: this.inFlightRequestId_,
         previewModifiable: this.documentInfo_.isModifiable,
-        generateDraftData: this.generateDraft_,
         fitToPageEnabled: printTicketStore.fitToPage.getValue(),
         scaleFactor: printTicketStore.scaling.getValueAsNumber(),
         // NOTE: Even though the following fields dont directly relate to the
@@ -240,7 +237,7 @@ cr.define('print_preview', function() {
         printWithCloudPrint: !destination.isLocal,
         printWithPrivet: destination.isPrivet,
         printWithExtension: destination.isExtension,
-        rasterizePDF: false,
+        rasterizePDF: printTicketStore.rasterize.getValue(),
         shouldPrintBackgrounds: printTicketStore.cssBackground.getValue(),
         shouldPrintSelectionOnly: printTicketStore.selectionOnly.getValue()
       };
@@ -264,9 +261,7 @@ cr.define('print_preview', function() {
         };
       }
 
-      const pageCount =
-          this.inFlightRequestId_ > 0 ? this.documentInfo_.pageCount : -1;
-      return this.nativeLayer_.getPreview(JSON.stringify(ticket), pageCount);
+      return this.nativeLayer_.getPreview(JSON.stringify(ticket));
     }
 
     /**
@@ -321,6 +316,7 @@ cr.define('print_preview', function() {
           !ticketStore.color.isValueEqual(this.colorValue_) ||
           !ticketStore.scaling.isValueEqual(this.scalingValue_) ||
           !ticketStore.fitToPage.isValueEqual(this.isFitToPageEnabled_) ||
+          !ticketStore.rasterize.isValueEqual(this.rasterize_) ||
           (!ticketStore.marginsType.isValueEqual(this.marginsType_) &&
            !ticketStore.marginsType.isValueEqual(
                print_preview.ticket_items.MarginsTypeValue.CUSTOM)) ||
@@ -442,9 +438,9 @@ cr.define('print_preview', function() {
       if (this.inFlightRequestId_ != previewResponseId) {
         return;  // Ignore old response.
       }
-      if (!this.generateDraft_) {
-        // Dispatch a PREVIEW_START event since not generating a draft PDF,
-        // which includes print preview for non-modifiable documents, does not
+      if (!this.documentInfo_.isModifiable) {
+        // Dispatch a PREVIEW_START event since not generating a PDF, which
+        // includes print preview for non-modifiable documents, does not
         // trigger PAGE_READY events.
         this.dispatchPreviewStartEvent_(previewUid, 0);
       }

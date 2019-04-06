@@ -23,9 +23,7 @@ cr.define('bookmarks', function() {
       },
 
       /** @private {Set<string>} */
-      menuIds_: {
-        type: Object,
-      },
+      menuIds_: Object,
 
       /** @private */
       hasAnySublabel_: {
@@ -40,7 +38,10 @@ cr.define('bookmarks', function() {
        * or elsewhere in the UI.
        * @private {MenuSource}
        */
-      menuSource_: MenuSource.NONE,
+      menuSource_: {
+        type: Number,
+        value: MenuSource.NONE,
+      },
 
       /** @private */
       globalCanEdit_: Boolean,
@@ -57,21 +58,6 @@ cr.define('bookmarks', function() {
         return state.prefs.canEdit;
       });
       this.updateFromStore();
-
-      /** @private {function(!Event)} */
-      this.boundOnOpenCommandMenu_ = this.onOpenCommandMenu_.bind(this);
-      document.addEventListener(
-          'open-command-menu', this.boundOnOpenCommandMenu_);
-
-      /** @private {function()} */
-      this.boundOnCommandUndo_ = () => {
-        this.handle(Command.UNDO, new Set());
-      };
-      document.addEventListener('command-undo', this.boundOnCommandUndo_);
-
-      /** @private {function(!Event)} */
-      this.boundOnKeydown_ = this.onKeydown_.bind(this);
-      document.addEventListener('keydown', this.boundOnKeydown_);
 
       /** @private {!Map<Command, cr.ui.KeyboardShortcutList>} */
       this.shortcuts_ = new Map();
@@ -92,14 +78,40 @@ cr.define('bookmarks', function() {
       this.addShortcut_(Command.CUT, 'Ctrl|x', 'Meta|x');
       this.addShortcut_(Command.COPY, 'Ctrl|c', 'Meta|c');
       this.addShortcut_(Command.PASTE, 'Ctrl|v', 'Meta|v');
+
+      /** @private {!Map<string, Function>} */
+      this.boundListeners_ = new Map();
+
+      const addDocumentListener = (eventName, handler) => {
+        assert(!this.boundListeners_.has(eventName));
+        const boundListener = handler.bind(this);
+        this.boundListeners_.set(eventName, boundListener);
+        document.addEventListener(eventName, boundListener);
+      };
+      addDocumentListener('open-command-menu', this.onOpenCommandMenu_);
+      addDocumentListener('keydown', this.onKeydown_);
+
+      const addDocumentListenerForCommand = (eventName, command) => {
+        addDocumentListener(eventName, (e) => {
+          if (e.path[0].tagName == 'INPUT')
+            return;
+
+          const items = this.getState().selection.items;
+          if (this.canExecute(command, items))
+            this.handle(command, items);
+        });
+      };
+      addDocumentListenerForCommand('command-undo', Command.UNDO);
+      addDocumentListenerForCommand('cut', Command.CUT);
+      addDocumentListenerForCommand('copy', Command.COPY);
+      addDocumentListenerForCommand('paste', Command.PASTE);
     },
 
     detached: function() {
       CommandManager.instance_ = null;
-      document.removeEventListener(
-          'open-command-menu', this.boundOnOpenCommandMenu_);
-      document.removeEventListener('command-undo', this.boundOnCommandUndo_);
-      document.removeEventListener('keydown', this.boundOnKeydown_);
+      this.boundListeners_.forEach(
+          (handler, eventName) =>
+              document.removeEventListener(eventName, handler));
     },
 
     /**
@@ -120,7 +132,7 @@ cr.define('bookmarks', function() {
       // Ensure that the menu is fully rendered before trying to position it.
       Polymer.dom.flush();
       bookmarks.DialogFocusManager.getInstance().showDialog(
-          dropdown, function() {
+          dropdown.getDialog(), function() {
             dropdown.showAtPosition({top: y, left: x});
           });
     },
@@ -140,7 +152,7 @@ cr.define('bookmarks', function() {
       // Ensure that the menu is fully rendered before trying to position it.
       Polymer.dom.flush();
       bookmarks.DialogFocusManager.getInstance().showDialog(
-          dropdown, function() {
+          dropdown.getDialog(), function() {
             dropdown.showAt(target);
           });
     },
@@ -691,7 +703,7 @@ cr.define('bookmarks', function() {
      * @private
      */
     computeHasAnySublabel_: function() {
-      if (!this.menuIds_)
+      if (this.menuIds_ == undefined || this.menuCommands_ == undefined)
         return false;
 
       return this.menuCommands_.some(
@@ -784,7 +796,7 @@ cr.define('bookmarks', function() {
      * @private
      */
     onMenuMousedown_: function(e) {
-      if (e.path[0] != this.$.dropdown.getIfExists())
+      if (e.path[0].tagName != 'DIALOG')
         return;
 
       this.closeCommandMenu();

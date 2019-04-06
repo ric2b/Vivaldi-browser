@@ -96,10 +96,6 @@ PrimaryLoader::PrimaryLoader()
       video_decoder_available_(
           LoadMFLibrary(GetMFVideoDecoderLibraryName().c_str()) &&
           LoadMFLibrary("evr.dll")) {
-#if defined(PLATFORM_MEDIA_MP3)
-  audio_decoder_available_[AudioCodec::kCodecMP3] =
-      LoadMFLibrary(GetMFAudioDecoderLibraryName(AudioCodec::kCodecMP3).c_str());
-#endif
   audio_decoder_available_[AudioCodec::kCodecAAC] =
       LoadMFLibrary(GetMFAudioDecoderLibraryName(AudioCodec::kCodecAAC).c_str());
 
@@ -116,8 +112,6 @@ void PrimaryLoader::ReportLoadResults() {
                                              : MF_PLAT_NOT_AVAILABLE);
   ReportMFStatus(video_decoder_available_ ? MF_VIDEO_DECODER_AVAILABLE
                                           : MF_VIDEO_DECODER_NOT_AVAILABLE);
-  // TODO(wdzierzanowski): Start reporting MP3 decoder status once the feature
-  // is stable.
   ReportMFStatus(audio_decoder_available_[AudioCodec::kCodecAAC]
                      ? MF_AAC_DECODER_AVAILABLE
                      : MF_AAC_DECODER_NOT_AVAILABLE);
@@ -164,12 +158,6 @@ bool LoadMFVideoDecoderLibraries() {
 }
 
 std::string GetMFAudioDecoderLibraryName(AudioCodec codec) {
-
-#if defined(PLATFORM_MEDIA_MP3)
-  if (codec == AudioCodec::kCodecMP3)
-    return "mp3dmod.dll";
-#endif
-
   std::string name;
   const base::win::Version version = base::win::GetVersion();
   if (version >= base::win::VERSION_WIN8)

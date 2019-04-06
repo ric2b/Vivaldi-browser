@@ -13,10 +13,6 @@
 #include "base/command_line.h"
 #include "build/build_config.h"
 
-#if defined(USE_AURA)
-#include "ui/aura/env.h"
-#endif
-
 #if defined(OS_WIN)
 namespace sandbox {
 struct SandboxInterfaceInfo;
@@ -32,6 +28,7 @@ class ScopedNSAutoreleasePool;
 namespace content {
 
 class BrowserMainParts;
+struct StartupData;
 
 using CreatedMainPartsClosure = base::Callback<void(BrowserMainParts*)>;
 
@@ -48,13 +45,6 @@ struct MainFunctionParams {
   bool zygote_child = false;
 #endif
 
-#if defined(USE_AURA)
-  aura::Env::Mode env_mode = aura::Env::Mode::LOCAL;
-#endif
-
-  // Whether DiscardableSharedMemoryManager should be created.
-  bool create_discardable_memory = true;
-
   // TODO(sky): fix ownership of these tasks. MainFunctionParams should really
   // be passed as an r-value, at which point these can be unique_ptrs. For the
   // time ownership is passed with MainFunctionParams (meaning these are deleted
@@ -67,6 +57,10 @@ struct MainFunctionParams {
   // Used by InProcessBrowserTest. If non-null this is Run() after
   // BrowserMainParts has been created and before PreEarlyInitialization().
   CreatedMainPartsClosure* created_main_parts_closure = nullptr;
+
+  // Used by //content, when the embedder yields control back to it, to extract
+  // startup data passed from ContentMainRunner.
+  StartupData* startup_data = nullptr;
 };
 
 }  // namespace content

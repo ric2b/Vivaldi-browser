@@ -5,7 +5,7 @@
 'use strict';
 
 /**
- * Tests restoring geometry of the Files app.
+ * Tests restoring window geometry of the Files app.
  */
 testcase.restoreGeometry = function() {
   var appId;
@@ -50,9 +50,13 @@ testcase.restoreGeometry = function() {
   ]);
 };
 
-testcase.restoreGeometryMaximizedState = function() {
+/**
+ * Tests restoring a maximized Files app window.
+ */
+testcase.restoreGeometryMaximized = function() {
   var appId;
   var appId2;
+  var caller = getCaller();
   StepsRunner.run([
     // Set up File Manager.
     function() {
@@ -71,7 +75,7 @@ testcase.restoreGeometryMaximizedState = function() {
               if (isMaximized)
                 return true;
               else
-                return pending('Waiting window maximized...');
+                return pending(caller, 'Waiting window maximized...');
             });
       }).then(this.next);
     },
@@ -92,7 +96,7 @@ testcase.restoreGeometryMaximizedState = function() {
               if (isMaximized)
                 return true;
               else
-                return pending('Waiting window maximized...');
+                return pending(caller, 'Waiting window maximized...');
             });
       }).then(this.next);
     },

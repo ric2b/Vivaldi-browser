@@ -10,12 +10,21 @@
 cr.exportPath('settings');
 
 /**
+ * @typedef {{fullName: (string|undefined),
+ *            givenName: (string|undefined),
+ *            email: string,
+ *            avatarImage: (string|undefined)}}
+ * @see chrome/browser/ui/webui/settings/people_handler.cc
+ */
+settings.StoredAccount;
+
+/**
  * @typedef {{childUser: (boolean|undefined),
+ *            disabled: (boolean|undefined),
  *            domain: (string|undefined),
  *            hasError: (boolean|undefined),
  *            hasUnrecoverableError: (boolean|undefined),
  *            managed: (boolean|undefined),
- *            setupCompleted: (boolean|undefined),
  *            setupInProgress: (boolean|undefined),
  *            signedIn: (boolean|undefined),
  *            signedInUsername: (string|undefined),
@@ -88,6 +97,9 @@ settings.StatusAction = {
  *   typedUrlsEnforced: boolean,
  *   typedUrlsRegistered: boolean,
  *   typedUrlsSynced: boolean,
+ *   userEventsEnforced: boolean,
+ *   userEventsRegistered: boolean,
+ *   userEventsSynced: boolean,
  * }}
  */
 settings.SyncPrefs;
@@ -104,6 +116,12 @@ settings.PageStatus = {
 };
 
 cr.define('settings', function() {
+  /**
+   * Key to be used with localStorage.
+   * @type {string}
+   */
+  const PROMO_IMPRESSION_COUNT_KEY = 'signin-promo-count';
+
   /** @interface */
   class SyncBrowserProxy {
     // <if expr="not chromeos">
@@ -124,6 +142,16 @@ cr.define('settings', function() {
      */
     manageOtherPeople() {}
 
+    /**
+     * @return {number} the number of times the sync account promo was shown.
+     */
+    getPromoImpressionCount() {}
+
+    /**
+     * Increment the number of times the sync account promo was shown.
+     */
+    incrementPromoImpressionCount() {}
+
     // </if>
 
     // <if expr="chromeos">
@@ -141,6 +169,12 @@ cr.define('settings', function() {
     getSyncStatus() {}
 
     /**
+     * Gets a list of stored accounts.
+     * @return {!Promise<!Array<!settings.StoredAccount>>}
+     */
+    getStoredAccounts() {}
+
+    /**
      * Function to invoke when the sync page has been navigated to. This
      * registers the UI as the "active" sync UI so that if the user tries to
      * open another sync UI, this one will be shown instead.
@@ -150,8 +184,9 @@ cr.define('settings', function() {
     /**
      * Function to invoke when leaving the sync page so that the C++ layer can
      * be notified that the sync UI is no longer open.
+     * @param {boolean} didAbort
      */
-    didNavigateAwayFromSyncPage() {}
+    didNavigateAwayFromSyncPage(didAbort) {}
 
     /**
      * Sets which types of data to sync.
@@ -166,6 +201,15 @@ cr.define('settings', function() {
      * @return {!Promise<!settings.PageStatus>}
      */
     setSyncEncryption(syncPrefs) {}
+
+    /**
+     * Start syncing with an account, specified by its email.
+     * |isDefaultPromoAccount| is true if |email| is the email of the default
+     * account displayed in the promo.
+     * @param {string} email
+     * @param {boolean} isDefaultPromoAccount
+     */
+    startSyncingWithEmail(email, isDefaultPromoAccount) {}
 
     /**
      * Opens the Google Activity Controls url in a new tab.
@@ -185,12 +229,26 @@ cr.define('settings', function() {
 
     /** @override */
     signOut(deleteProfile) {
-      chrome.send('SyncSetupStopSyncing', [deleteProfile]);
+      chrome.send('SyncSetupSignout', [deleteProfile]);
     }
 
     /** @override */
     manageOtherPeople() {
       chrome.send('SyncSetupManageOtherPeople');
+    }
+
+    /** @override */
+    getPromoImpressionCount() {
+      return parseInt(
+                 window.localStorage.getItem(PROMO_IMPRESSION_COUNT_KEY), 10) ||
+          0;
+    }
+
+    /** @override */
+    incrementPromoImpressionCount() {
+      window.localStorage.setItem(
+          PROMO_IMPRESSION_COUNT_KEY,
+          (this.getPromoImpressionCount() + 1).toString());
     }
 
     // </if>
@@ -199,7 +257,6 @@ cr.define('settings', function() {
     attemptUserExit() {
       return chrome.send('AttemptUserExit');
     }
-
     // </if>
 
     /** @override */
@@ -208,13 +265,18 @@ cr.define('settings', function() {
     }
 
     /** @override */
+    getStoredAccounts() {
+      return cr.sendWithPromise('SyncSetupGetStoredAccounts');
+    }
+
+    /** @override */
     didNavigateToSyncPage() {
       chrome.send('SyncSetupShowSetupUI');
     }
 
     /** @override */
-    didNavigateAwayFromSyncPage() {
-      chrome.send('SyncSetupDidClosePage');
+    didNavigateAwayFromSyncPage(didAbort) {
+      chrome.send('SyncSetupDidClosePage', [didAbort]);
     }
 
     /** @override */
@@ -227,6 +289,12 @@ cr.define('settings', function() {
     setSyncEncryption(syncPrefs) {
       return cr.sendWithPromise(
           'SyncSetupSetEncryption', JSON.stringify(syncPrefs));
+    }
+
+    /** @override */
+    startSyncingWithEmail(email, isDefaultPromoAccount) {
+      chrome.send(
+          'SyncSetupStartSyncingWithEmail', [email, isDefaultPromoAccount]);
     }
 
     /** @override */

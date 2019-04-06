@@ -70,6 +70,10 @@ class GIN_EXPORT WrappableBase {
   // Overrides of this method should be declared final and not overridden again.
   virtual ObjectTemplateBuilder GetObjectTemplateBuilder(v8::Isolate* isolate);
 
+  // Returns a readable type name that will be used in surfacing errors. The
+  // default implementation returns nullptr, which results in a generic error.
+  virtual const char* GetTypeName();
+
   v8::MaybeLocal<v8::Object> GetWrapperImpl(v8::Isolate* isolate,
                                             WrapperInfo* wrapper_info);
 
@@ -96,7 +100,7 @@ class Wrappable : public WrappableBase {
 
  protected:
   Wrappable() {}
-  virtual ~Wrappable() {}
+  ~Wrappable() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Wrappable);
@@ -115,10 +119,9 @@ template <typename T>
 struct Converter<T*,
                  typename std::enable_if<
                      std::is_convertible<T*, WrappableBase*>::value>::type> {
-  static v8::MaybeLocal<v8::Value> ToV8(v8::Local<v8::Context> context,
-                                        T* val) {
+  static v8::MaybeLocal<v8::Value> ToV8(v8::Isolate* isolate, T* val) {
     v8::Local<v8::Object> wrapper;
-    if (!val->GetWrapper(context->GetIsolate()).ToLocal(&wrapper))
+    if (!val->GetWrapper(isolate).ToLocal(&wrapper))
       return v8::MaybeLocal<v8::Value>();
     return v8::MaybeLocal<v8::Value>(wrapper);
   }

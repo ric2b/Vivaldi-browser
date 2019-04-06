@@ -10,13 +10,16 @@
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/blacklist.h"
 #include "chrome/browser/extensions/chrome_app_sorting.h"
+#include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
+#include "components/services/unzip/unzip_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -28,6 +31,8 @@
 #include "extensions/browser/state_store.h"
 #include "extensions/browser/value_store/test_value_store_factory.h"
 #include "extensions/browser/value_store/testing_value_store.h"
+#include "services/data_decoder/data_decoder_service.h"
+#include "services/service_manager/public/cpp/test/test_connector_factory.h"
 #if defined(OS_CHROMEOS)
 #include "components/user_manager/user_manager.h"
 #endif
@@ -72,6 +77,20 @@ ExtensionService* TestExtensionSystem::CreateExtensionService(
       profile_, command_line, install_directory, ExtensionPrefs::Get(profile_),
       Blacklist::Get(profile_), autoupdate_enabled, extensions_enabled,
       &ready_));
+
+  if (!connector_factory_) {
+    service_manager::TestConnectorFactory::NameToServiceMap services;
+    services.insert(std::make_pair(
+        "data_decoder", std::make_unique<data_decoder::DataDecoderService>()));
+    services.insert(
+        std::make_pair("unzip_service", unzip::UnzipService::CreateService()));
+    connector_factory_ =
+        service_manager::TestConnectorFactory::CreateForServices(
+            std::move(services));
+    connector_ = connector_factory_->CreateConnector();
+    CrxInstaller::set_connector_for_test(connector_.get());
+  }
+
   extension_service_->ClearProvidersForTesting();
   return extension_service_.get();
 }
@@ -140,8 +159,16 @@ void TestExtensionSystem::InstallUpdate(
     const std::string& extension_id,
     const std::string& public_key,
     const base::FilePath& temp_dir,
+    bool install_immediately,
     InstallUpdateCallback install_update_callback) {
   NOTREACHED();
+}
+
+bool TestExtensionSystem::FinishDelayedInstallationIfReady(
+    const std::string& extension_id,
+    bool install_immediately) {
+  NOTREACHED();
+  return false;
 }
 
 TestingValueStore* TestExtensionSystem::value_store() {

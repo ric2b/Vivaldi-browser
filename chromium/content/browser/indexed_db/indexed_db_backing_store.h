@@ -573,6 +573,8 @@ class CONTENT_EXPORT IndexedDBBackingStore
   // Returns true if a blob cleanup job is pending on journal_cleaning_timer_.
   bool IsBlobCleanupPending();
 
+  int64_t GetInMemoryBlobSize() const;
+
 #if DCHECK_IS_ON()
   int NumBlobFilesDeletedForTesting() { return num_blob_files_deleted_; }
   int NumAggregatedJournalCleaningRequestsForTesting() const {
@@ -597,6 +599,9 @@ class CONTENT_EXPORT IndexedDBBackingStore
   virtual ~IndexedDBBackingStore();
 
   bool is_incognito() const { return !indexed_db_factory_; }
+
+  leveldb::Status AnyDatabaseContainsBlobs(LevelDBTransaction* transaction,
+                                           bool* blobs_exist);
 
   leveldb::Status SetUpMetadata();
 

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_CHROMEOS_ARC_VOICE_INTERACTION_TEST_VOICE_INTERACTION_CONTROLLER_H_
-#define CHROME_BROWSER_CHROMEOS_ARC_VOICE_INTERACTION_TEST_VOICE_INTERACTION_CONTROLLER_H_
+#ifndef CHROME_BROWSER_CHROMEOS_ARC_VOICE_INTERACTION_FAKE_VOICE_INTERACTION_CONTROLLER_H_
+#define CHROME_BROWSER_CHROMEOS_ARC_VOICE_INTERACTION_FAKE_VOICE_INTERACTION_CONTROLLER_H_
 
 #include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -22,8 +22,13 @@ class FakeVoiceInteractionController
   void NotifyStatusChanged(ash::mojom::VoiceInteractionState state) override;
   void NotifySettingsEnabled(bool enabled) override;
   void NotifyContextEnabled(bool enabled) override;
+  void NotifyHotwordEnabled(bool enabled) override;
   void NotifySetupCompleted(bool completed) override;
   void NotifyFeatureAllowed(ash::mojom::AssistantAllowedState state) override;
+  void IsSettingEnabled(IsSettingEnabledCallback callback) override;
+  void IsSetupCompleted(IsSetupCompletedCallback callback) override;
+  void IsHotwordEnabled(IsHotwordEnabledCallback callback) override;
+  void AddObserver(ash::mojom::VoiceInteractionObserverPtr observer) override {}
 
   ash::mojom::VoiceInteractionState voice_interaction_state() const {
     return voice_interaction_state_;
@@ -33,6 +38,9 @@ class FakeVoiceInteractionController
   }
   bool voice_interaction_context_enabled() const {
     return voice_interaction_context_enabled_;
+  }
+  bool voice_interaction_hotword_enabled() const {
+    return voice_interaction_hotword_enabled_;
   }
   bool voice_interaction_setup_completed() const {
     return voice_interaction_setup_completed_;
@@ -46,6 +54,7 @@ class FakeVoiceInteractionController
       ash::mojom::VoiceInteractionState::STOPPED;
   bool voice_interaction_settings_enabled_ = false;
   bool voice_interaction_context_enabled_ = false;
+  bool voice_interaction_hotword_enabled_ = false;
   bool voice_interaction_setup_completed_ = false;
   ash::mojom::AssistantAllowedState assistant_allowed_state_ =
       ash::mojom::AssistantAllowedState::DISALLOWED_BY_INCOGNITO;
@@ -57,4 +66,4 @@ class FakeVoiceInteractionController
 
 }  // namespace arc
 
-#endif  // CHROME_BROWSER_CHROMEOS_ARC_VOICE_INTERACTION_TEST_VOICE_INTERACTION_CONTROLLER_H_
+#endif  // CHROME_BROWSER_CHROMEOS_ARC_VOICE_INTERACTION_FAKE_VOICE_INTERACTION_CONTROLLER_H_

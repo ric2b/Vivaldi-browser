@@ -7,19 +7,14 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "content/child/thread_safe_sender.h"
 #include "content/common/service_worker/service_worker_messages.h"
-#include "content/renderer/service_worker/service_worker_dispatcher.h"
-#include "content/renderer/service_worker/service_worker_handle_reference.h"
+#include "content/renderer/service_worker/service_worker_context_client.h"
+#include "content/renderer/service_worker/service_worker_provider_context.h"
 #include "content/renderer/service_worker/web_service_worker_provider_impl.h"
-#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProxy.h"
+#include "third_party/blink/public/platform/modules/service_worker/web_service_worker_proxy.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/platform/web_string.h"
 
-using blink::WebSecurityOrigin;
 using blink::WebString;
 
 namespace content {
@@ -28,9 +23,8 @@ namespace {
 
 class ServiceWorkerHandleImpl : public blink::WebServiceWorker::Handle {
  public:
-  explicit ServiceWorkerHandleImpl(
-      const scoped_refptr<WebServiceWorkerImpl>& worker)
-      : worker_(worker) {}
+  explicit ServiceWorkerHandleImpl(scoped_refptr<WebServiceWorkerImpl> worker)
+      : worker_(std::move(worker)) {}
   ~ServiceWorkerHandleImpl() override {}
 
   blink::WebServiceWorker* ServiceWorker() override { return worker_.get(); }
@@ -41,24 +35,35 @@ class ServiceWorkerHandleImpl : public blink::WebServiceWorker::Handle {
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerHandleImpl);
 };
 
-}  // namespace
-
-WebServiceWorkerImpl::WebServiceWorkerImpl(
-    std::unique_ptr<ServiceWorkerHandleReference> handle_ref,
-    ThreadSafeSender* thread_safe_sender)
-    : handle_ref_(std::move(handle_ref)),
-      state_(handle_ref_->state()),
-      thread_safe_sender_(thread_safe_sender),
-      proxy_(nullptr) {
-  DCHECK_NE(blink::mojom::kInvalidServiceWorkerHandleId,
-            handle_ref_->handle_id());
-  ServiceWorkerDispatcher* dispatcher =
-      ServiceWorkerDispatcher::GetThreadSpecificInstance();
-  DCHECK(dispatcher);
-  dispatcher->AddServiceWorker(handle_ref_->handle_id(), this);
+void OnTerminated(
+    std::unique_ptr<WebServiceWorkerImpl::TerminateForTestingCallback>
+        callback) {
+  callback->OnSuccess();
 }
 
-void WebServiceWorkerImpl::OnStateChanged(
+}  // namespace
+
+// static
+scoped_refptr<WebServiceWorkerImpl>
+WebServiceWorkerImpl::CreateForServiceWorkerGlobalScope(
+    blink::mojom::ServiceWorkerObjectInfoPtr info) {
+  scoped_refptr<WebServiceWorkerImpl> impl =
+      new WebServiceWorkerImpl(std::move(info), nullptr /* provider_context */);
+  return impl;
+}
+
+// static
+scoped_refptr<WebServiceWorkerImpl>
+WebServiceWorkerImpl::CreateForServiceWorkerClient(
+    blink::mojom::ServiceWorkerObjectInfoPtr info,
+    base::WeakPtr<ServiceWorkerProviderContext> provider_context) {
+  DCHECK(provider_context);
+  scoped_refptr<WebServiceWorkerImpl> impl =
+      new WebServiceWorkerImpl(std::move(info), std::move(provider_context));
+  return impl;
+}
+
+void WebServiceWorkerImpl::StateChanged(
     blink::mojom::ServiceWorkerState new_state) {
   state_ = new_state;
 
@@ -77,43 +82,64 @@ blink::WebServiceWorkerProxy* WebServiceWorkerImpl::Proxy() {
 }
 
 blink::WebURL WebServiceWorkerImpl::Url() const {
-  return handle_ref_->url();
+  return info_->url;
 }
 
 blink::mojom::ServiceWorkerState WebServiceWorkerImpl::GetState() const {
   return state_;
 }
 
-void WebServiceWorkerImpl::PostMessageToWorker(
-    blink::WebServiceWorkerProvider* provider,
-    const WebString& message,
-    const WebSecurityOrigin& source_origin,
-    blink::WebVector<blink::MessagePortChannel> channels) {
-  thread_safe_sender_->Send(new ServiceWorkerHostMsg_PostMessageToWorker(
-      handle_ref_->handle_id(),
-      static_cast<WebServiceWorkerProviderImpl*>(provider)->provider_id(),
-      message.Utf16(), url::Origin(source_origin), channels.ReleaseVector()));
+void WebServiceWorkerImpl::PostMessageToServiceWorker(
+    blink::TransferableMessage message) {
+  host_->PostMessageToServiceWorker(std::move(message));
 }
 
-void WebServiceWorkerImpl::Terminate() {
-  thread_safe_sender_->Send(
-      new ServiceWorkerHostMsg_TerminateWorker(handle_ref_->handle_id()));
+void WebServiceWorkerImpl::TerminateForTesting(
+    std::unique_ptr<TerminateForTestingCallback> callback) {
+  host_->TerminateForTesting(
+      base::BindOnce(&OnTerminated, std::move(callback)));
 }
 
 // static
 std::unique_ptr<blink::WebServiceWorker::Handle>
-WebServiceWorkerImpl::CreateHandle(
-    const scoped_refptr<WebServiceWorkerImpl>& worker) {
+WebServiceWorkerImpl::CreateHandle(scoped_refptr<WebServiceWorkerImpl> worker) {
   if (!worker)
     return nullptr;
-  return std::make_unique<ServiceWorkerHandleImpl>(worker);
+  return std::make_unique<ServiceWorkerHandleImpl>(std::move(worker));
+}
+
+WebServiceWorkerImpl::WebServiceWorkerImpl(
+    blink::mojom::ServiceWorkerObjectInfoPtr info,
+    base::WeakPtr<ServiceWorkerProviderContext> provider_context)
+    : binding_(this),
+      info_(std::move(info)),
+      state_(info_->state),
+      proxy_(nullptr),
+      is_for_client_(provider_context),
+      context_for_client_(std::move(provider_context)) {
+  DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId, info_->version_id);
+  host_.Bind(std::move(info_->host_ptr_info));
+  binding_.Bind(std::move(info_->request));
+
+  if (is_for_client_) {
+    context_for_client_->AddServiceWorkerObject(info_->version_id, this);
+  } else {
+    ServiceWorkerContextClient::ThreadSpecificInstance()
+        ->AddServiceWorkerObject(info_->version_id, this);
+  }
 }
 
 WebServiceWorkerImpl::~WebServiceWorkerImpl() {
-  ServiceWorkerDispatcher* dispatcher =
-      ServiceWorkerDispatcher::GetThreadSpecificInstance();
-  if (dispatcher)
-    dispatcher->RemoveServiceWorker(handle_ref_->handle_id());
+  if (is_for_client_) {
+    if (context_for_client_) {
+      context_for_client_->RemoveServiceWorkerObject(info_->version_id);
+    }
+  } else {
+    if (ServiceWorkerContextClient::ThreadSpecificInstance()) {
+      ServiceWorkerContextClient::ThreadSpecificInstance()
+          ->RemoveServiceWorkerObject(info_->version_id);
+    }
+  }
 }
 
 }  // namespace content

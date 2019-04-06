@@ -62,6 +62,18 @@ bool CsrssDisconnectCleanup() {
   return true;
 }
 
+// Used by EnumSystemLocales for warming up.
+static BOOL CALLBACK EnumLocalesProcEx(LPWSTR lpLocaleString,
+                                       DWORD dwFlags,
+                                       LPARAM lParam) {
+  return TRUE;
+}
+
+// Additional warmup done just when CSRSS is being disconnected.
+bool CsrssDisconnectWarmup() {
+  return ::EnumSystemLocalesEx(EnumLocalesProcEx, LOCALE_WINDOWS, 0, 0);
+}
+
 // Checks if we have handle entries pending and runs the closer.
 // Updates is_csrss_connected based on which handle types are closed.
 bool CloseOpenHandles(bool* is_csrss_connected) {
@@ -69,7 +81,7 @@ bool CloseOpenHandles(bool* is_csrss_connected) {
     HandleCloserAgent handle_closer;
     handle_closer.InitializeHandlesToClose(is_csrss_connected);
     if (!*is_csrss_connected) {
-      if (!CsrssDisconnectCleanup()) {
+      if (!CsrssDisconnectWarmup() || !CsrssDisconnectCleanup()) {
         return false;
       }
     }
@@ -78,11 +90,6 @@ bool CloseOpenHandles(bool* is_csrss_connected) {
   }
   return true;
 }
-
-// GetUserDefaultLocaleName is not available on WIN XP.  So we'll
-// load it on-the-fly.
-const wchar_t kKernel32DllName[] = L"kernel32.dll";
-typedef decltype(GetUserDefaultLocaleName)* GetUserDefaultLocaleNameFunction;
 
 // Warm up language subsystems before the sandbox is turned on.
 // Tested on Win8.1 x64:
@@ -96,23 +103,8 @@ bool WarmupWindowsLocales() {
   // warmup all of these functions, but let's not assume that.
   ::GetUserDefaultLangID();
   ::GetUserDefaultLCID();
-  static GetUserDefaultLocaleNameFunction GetUserDefaultLocaleName_func =
-      nullptr;
-  if (!GetUserDefaultLocaleName_func) {
-    HMODULE kernel32_dll = ::GetModuleHandle(kKernel32DllName);
-    if (!kernel32_dll) {
-      return false;
-    }
-    GetUserDefaultLocaleName_func =
-        reinterpret_cast<GetUserDefaultLocaleNameFunction>(
-            GetProcAddress(kernel32_dll, "GetUserDefaultLocaleName"));
-    if (!GetUserDefaultLocaleName_func) {
-      return false;
-    }
-  }
   wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {0};
-  return (0 != GetUserDefaultLocaleName_func(
-                   localeName, LOCALE_NAME_MAX_LENGTH * sizeof(wchar_t)));
+  return (0 != ::GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH));
 }
 
 // Used as storage for g_target_services, because other allocation facilities

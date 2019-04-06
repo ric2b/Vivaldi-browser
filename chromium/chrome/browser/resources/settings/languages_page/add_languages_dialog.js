@@ -11,6 +11,7 @@ Polymer({
 
   behaviors: [
     CrScrollableBehavior,
+    settings.FindShortcutBehavior,
   ],
 
   properties: {
@@ -49,6 +50,16 @@ Polymer({
     this.$.dialog.showModal();
   },
 
+  // Override settings.FindShortcutBehavior methods.
+  canHandleFindShortcut: function() {
+    return true;
+  },
+
+  handleFindShortcut: function() {
+    this.$.search.getSearchInput().scrollIntoViewIfNeeded();
+    this.$.search.getSearchInput().focus();
+  },
+
   /**
    * @param {!CustomEvent} e
    * @private
@@ -71,6 +82,9 @@ Polymer({
 
       if (!isAvailableLanguage)
         return false;
+
+      if (this.languageHelper.isLanguageCodeForArcIme(language.code))
+        return false;  // internal use only
 
       if (filterValue === null)
         return true;
@@ -106,7 +120,7 @@ Polymer({
   /**
    * Handler for checking or unchecking a language item.
    * @param {!{model: !{item: !chrome.languageSettingsPrivate.Language},
-   *           target: !PaperCheckboxElement}} e
+   *           target: !Element}} e
    * @private
    */
   onLanguageCheckboxChange_: function(e) {
@@ -137,5 +151,15 @@ Polymer({
     this.languagesToAdd_.forEach(languageCode => {
       this.languageHelper.enableLanguage(languageCode);
     });
+  },
+
+  /**
+   * @param {!KeyboardEvent} e
+   * @private
+   */
+  onKeydown_: function(e) {
+    // Close dialog if 'esc' is pressed and the search box is already empty.
+    if (e.key == 'Escape' && !this.$.search.getValue().trim())
+      this.$.dialog.close();
   },
 });

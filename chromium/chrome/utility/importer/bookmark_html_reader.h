@@ -76,8 +76,8 @@ bool ParseFolderNameFromLine(const std::string& line,
                              const std::string& charset,
                              base::string16* folder_name,
                              bool* is_toolbar_folder,
-                             bool* is_speeddial_folder,
-                             base::Time* add_date);
+                             base::Time* add_date,
+                             bool* is_speeddial_folder = nullptr);
 // See above, this will also put the data: URL of the favicon into |*favicon|
 // if there is a favicon given. |post_data| is set for POST base keywords to
 // the contents of the actual POST (with %s for the search term).

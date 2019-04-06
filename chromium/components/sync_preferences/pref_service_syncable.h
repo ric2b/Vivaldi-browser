@@ -18,6 +18,7 @@
 #include "components/prefs/pref_value_store.h"
 #include "components/sync_preferences/pref_model_associator.h"
 #include "components/sync_preferences/synced_pref_observer.h"
+#include "components/sync_preferences/unknown_user_pref_accessor.h"
 
 namespace syncer {
 class SyncableService;
@@ -38,10 +39,10 @@ class PrefServiceSyncable : public PrefService {
   PrefServiceSyncable(
       std::unique_ptr<PrefNotifierImpl> pref_notifier,
       std::unique_ptr<PrefValueStore> pref_value_store,
-      PersistentPrefStore* user_prefs,
-      user_prefs::PrefRegistrySyncable* pref_registry,
-      const PrefModelAssociatorClient* pref_model_associato_client,
-      base::Callback<void(PersistentPrefStore::PrefReadError)>
+      scoped_refptr<PersistentPrefStore> user_prefs,
+      scoped_refptr<user_prefs::PrefRegistrySyncable> pref_registry,
+      const PrefModelAssociatorClient* pref_model_associator_client,
+      base::RepeatingCallback<void(PersistentPrefStore::PrefReadError)>
           read_error_callback,
       bool async);
   ~PrefServiceSyncable() override;
@@ -49,11 +50,11 @@ class PrefServiceSyncable : public PrefService {
   // Creates an incognito copy of the pref service that shares most pref stores
   // but uses a fresh non-persistent overlay for the user pref store and an
   // individual extension pref store (to cache the effective extension prefs for
-  // incognito windows). |overlay_pref_names| is a list of preference names
-  // whose changes will not be persisted by the returned incognito pref service.
-  PrefServiceSyncable* CreateIncognitoPrefService(
+  // incognito windows). |persistent_pref_names| is a list of preference names
+  // whose changes will be persisted by the returned incognito pref service.
+  std::unique_ptr<PrefServiceSyncable> CreateIncognitoPrefService(
       PrefStore* incognito_extension_pref_store,
-      const std::vector<const char*>& overlay_pref_names,
+      const std::vector<const char*>& persistent_pref_names,
       std::unique_ptr<PrefValueStore::Delegate> delegate);
 
   // Returns true if preferences state has synchronized with the remote
@@ -91,11 +92,6 @@ class PrefServiceSyncable : public PrefService {
   void RemoveSyncedPrefObserver(const std::string& name,
                                 SyncedPrefObserver* observer);
 
- protected:
-  // Set the PrefModelAssociatorClient to use for that object during tests.
-  void SetPrefModelAssociatorClientForTesting(
-      const PrefModelAssociatorClient* pref_model_associator_client);
-
  private:
   friend class PrefModelAssociator;
 
@@ -112,8 +108,10 @@ class PrefServiceSyncable : public PrefService {
   // "forked" PrefService.
   bool pref_service_forked_;
 
+  UnknownUserPrefAccessor unknown_pref_accessor_;
   PrefModelAssociator pref_sync_associator_;
   PrefModelAssociator priority_pref_sync_associator_;
+  const scoped_refptr<user_prefs::PrefRegistrySyncable> pref_registry_;
 
   base::ObserverList<PrefServiceSyncableObserver> observer_list_;
 

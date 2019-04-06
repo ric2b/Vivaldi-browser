@@ -78,7 +78,6 @@ class CC_EXPORT PictureLayerImpl
   bool UpdateTiles();
   // Returns true if the LCD state changed.
   bool UpdateCanUseLCDTextAfterCommit();
-  WhichTree GetTree() const;
 
   // Mask-related functions.
   void GetContentsResourceId(viz::ResourceId* resource_id,
@@ -164,11 +163,20 @@ class CC_EXPORT PictureLayerImpl
   scoped_refptr<RasterSource> raster_source_;
   Region invalidation_;
 
+  // Ideal scales are calcuated from the transforms applied to the layer. They
+  // represent the best known scale from the layer to the final output.
+  // Page scale is from user pinch/zoom.
   float ideal_page_scale_;
+  // Device scale is from screen dpi, and it comes from device scale facter.
   float ideal_device_scale_;
+  // Source scale comes from javascript css scale.
   float ideal_source_scale_;
+  // Contents scale = device scale * page scale * source scale.
   float ideal_contents_scale_;
 
+  // Raster scales are set from ideal scales. They are scales we choose to
+  // raster at. They may not match the ideal scales at times to avoid raster for
+  // performance reasons.
   float raster_page_scale_;
   float raster_device_scale_;
   float raster_source_scale_;

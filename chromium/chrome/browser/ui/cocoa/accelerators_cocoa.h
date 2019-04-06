@@ -42,10 +42,6 @@ class AcceleratorsCocoa {
 
   // Returns NULL if there is no accelerator for the command.
   const ui::Accelerator* GetAcceleratorForCommand(int command_id);
-  // Searches the list of accelerators without a command_id for an accelerator
-  // that matches the given |key_equivalent| and |modifiers|.
-  const ui::Accelerator* GetAcceleratorForHotKey(NSString* key_equivalent,
-                                                 NSUInteger modifiers) const;
 
   // Returns the singleton instance.
   static AcceleratorsCocoa* GetInstance();
@@ -58,14 +54,8 @@ class AcceleratorsCocoa {
   AcceleratorsCocoa();
   ~AcceleratorsCocoa();
 
-  // A map from command_id to Accelerator. The accelerator is fully filled out,
-  // and its platform_accelerator is also fully filled out.
   // Contains accelerators from both the app menu and the main menu.
   AcceleratorMap accelerators_;
-  // A list of accelerators used in the main menu that have no associated
-  // command_id. The accelerator is fully filled out, and its
-  // platform_accelerator is also fully filled out.
-  AcceleratorVector accelerator_vector_;
 
   DISALLOW_COPY_AND_ASSIGN(AcceleratorsCocoa);
 };

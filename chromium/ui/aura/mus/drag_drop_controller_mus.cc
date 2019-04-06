@@ -9,8 +9,6 @@
 #include <vector>
 
 #include "base/auto_reset.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/map.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
@@ -40,7 +38,7 @@ namespace aura {
 
 // State related to a drag initiated by this client.
 struct DragDropControllerMus::CurrentDragState {
-  Id window_id;
+  ui::Id window_id;
 
   // The change id of the drag. Used to identify the drag on the server.
   uint32_t change_id;
@@ -138,7 +136,7 @@ int DragDropControllerMus::StartDragAndDrop(
     ui::DragDropTypes::DragEventSource source) {
   DCHECK(!current_drag_state_);
 
-  base::RunLoop run_loop;
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
   WindowMus* root_window_mus = WindowMus::Get(root_window);
   const uint32_t change_id =
       drag_drop_controller_host_->CreateChangeIdForDrag(root_window_mus);
@@ -149,9 +147,6 @@ int DragDropControllerMus::StartDragAndDrop(
   // current_drag_state_ will be reset in |OnPerformDragDropCompleted| before
   // run_loop.Run() quits.
   current_drag_state_ = &current_drag_state;
-
-  base::MessageLoop* loop = base::MessageLoop::current();
-  base::MessageLoop::ScopedNestableTaskAllower allow_nested(loop);
 
   ui::mojom::PointerKind mojo_source = ui::mojom::PointerKind::MOUSE;
   if (source != ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE) {
@@ -168,8 +163,7 @@ int DragDropControllerMus::StartDragAndDrop(
 
   window_tree_->PerformDragDrop(
       change_id, root_window_mus->server_id(), screen_location,
-      mojo::MapToUnorderedMap(drag_data),
-      *data.provider().GetDragImage().bitmap(),
+      mojo::MapToFlatMap(drag_data), data.provider().GetDragImage(),
       data.provider().GetDragImageOffset(), drag_operations, mojo_source);
 
   run_loop.Run();

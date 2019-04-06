@@ -17,10 +17,8 @@ class FilePath;
 }  // namespace base
 
 namespace mojo {
-namespace edk {
-struct PlatformHandle;
+class PlatformChannelEndpoint;
 }  // namespace mojo
-}  // namespace edk
 
 // Contains the common functionalities between the various POSIX child process
 // launcher implementations.
@@ -33,7 +31,7 @@ namespace internal {
 
 std::unique_ptr<PosixFileDescriptorInfo> CreateDefaultPosixFilesToMap(
     int child_process_id,
-    const mojo::edk::PlatformHandle& mojo_client_handle,
+    const mojo::PlatformChannelEndpoint& mojo_channel_remote_endpoint,
     bool include_service_required_files,
     const std::string& process_type,
     base::CommandLine* command_line);

@@ -7,7 +7,6 @@ package org.chromium.chromoting.base;
 import android.accounts.Account;
 import android.app.Activity;
 import android.content.Context;
-import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -15,12 +14,15 @@ import com.google.android.gms.auth.GoogleAuthException;
 import com.google.android.gms.auth.GoogleAuthUtil;
 import com.google.android.gms.auth.UserRecoverableAuthException;
 
+import org.chromium.base.AsyncTask;
+
 import java.io.IOException;
 
 /**
  * This helper class fetches an OAuth token on a separate thread, and properly handles the various
  * error-conditions that can occur (such as, starting an Activity to prompt user for input).
  */
+@SuppressWarnings("JavaLangClash")
 public class OAuthTokenFetcher {
     /**
      * Callback interface to receive the token, or an error notification. These will be called

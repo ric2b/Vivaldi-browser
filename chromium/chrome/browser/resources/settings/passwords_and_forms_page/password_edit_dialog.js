@@ -34,12 +34,17 @@ Polymer({
   },
 
   /**
+   * Manually select texts for readonly inputs.
    * @param {!Event} event
    * @private
    */
   onInputFocus_: function(event) {
-    /** @type {!PaperInputElement} */ (Polymer.dom(event).localTarget)
-        .inputElement.select();
-  }
+    (/** @type {!CrInputElement} */ (event.target)).select();
+  },
+
+  /** Manually de-select texts for readonly inputs. */
+  onInputBlur_: function() {
+    this.shadowRoot.getSelection().removeAllRanges();
+  },
 });
 })();

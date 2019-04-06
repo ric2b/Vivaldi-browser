@@ -13,7 +13,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -32,6 +32,7 @@
 #include "extensions/common/extension_messages.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
 #include "net/log/net_log_event_type.h"
 #include "url/url_constants.h"
@@ -49,7 +50,34 @@ namespace extension_web_request_api_helpers {
 
 namespace {
 
-using ParsedResponseCookies = std::vector<linked_ptr<net::ParsedCookie>>;
+using ParsedResponseCookies = std::vector<std::unique_ptr<net::ParsedCookie>>;
+
+// Mirrors the histogram enum of the same name. DO NOT REORDER THESE VALUES OR
+// CHANGE THEIR MEANING.
+enum class WebRequestSpecialHeaderRemoval {
+  kNeither,
+  kAcceptLanguage,
+  kUserAgent,
+  kBoth,
+  kMaxValue = kBoth,
+};
+
+// Mirrors the histogram enum of the same name. DO NOT REORDER THESE VALUES OR
+// CHANGE THEIR MEANING.
+enum class WebRequestResponseHeaderType {
+  kNone,
+  kSetCookie,
+  kMaxValue = kSetCookie,
+};
+
+// Mirrors the histogram enum of the same name. DO NOT REORDER THESE VALUES OR
+// CHANGE THEIR MEANING.
+enum class WebRequestWSRequestHeadersModification {
+  kNone,
+  kSetUserAgentOnly,
+  kRiskyModification,
+  kMaxValue = kRiskyModification,
+};
 
 void ClearCacheOnNavigationOnUI() {
   web_cache::WebCacheManager::GetInstance()->ClearCacheOnNavigation();
@@ -605,6 +633,7 @@ static bool MergeRemoveRequestCookieModifications(
 }
 
 void MergeCookiesInOnBeforeSendHeadersResponses(
+    const GURL& url,
     const EventResponseDeltas& deltas,
     net::HttpRequestHeaders* request_headers,
     extensions::WarningSet* conflicting_extensions,
@@ -637,6 +666,11 @@ void MergeCookiesInOnBeforeSendHeadersResponses(
         net::cookie_util::SerializeRequestCookieLine(cookies);
     request_headers->SetHeader(net::HttpRequestHeaders::kCookie,
                                new_cookie_header);
+  }
+  if (url.SchemeIsWSOrWSS()) {
+    UMA_HISTOGRAM_BOOLEAN(
+        "Extensions.WebRequest.WS_CookiesAreModifiedOnBeforeSendHeaders",
+        modified);
   }
 }
 
@@ -677,7 +711,103 @@ static std::string FindRemoveRequestHeader(
   return std::string();
 }
 
+// TODO(yhirano): Remove this once https://crbug.com/827582 is solved.
+class WebSocketRequestHeaderModificationStatusReporter final {
+ public:
+  WebSocketRequestHeaderModificationStatusReporter() = default;
+
+  void Report(const std::set<std::string>& removed_headers,
+              const std::set<std::string>& set_headers) {
+    auto modification =
+        WebRequestWSRequestHeadersModification::kRiskyModification;
+    if (removed_headers.empty() && set_headers.empty())
+      modification = WebRequestWSRequestHeadersModification::kNone;
+    if (removed_headers.empty() && set_headers.size() == 1 &&
+        base::ToLowerASCII(*set_headers.begin()) == "user-agent") {
+      modification = WebRequestWSRequestHeadersModification::kSetUserAgentOnly;
+    }
+    UMA_HISTOGRAM_ENUMERATION(
+        "Extensions.WebRequest.WS_RequestHeadersModification", modification);
+
+    for (const std::string& header : removed_headers)
+      Update(header);
+    for (const std::string& header : set_headers)
+      Update(header);
+
+    UMA_HISTOGRAM_BOOLEAN("Extensions.WebRequest.WS_RequestHeaders_SecOrProxy",
+                          modified_sec_or_proxy_headers_);
+    UMA_HISTOGRAM_BOOLEAN(
+        "Extensions.WebRequest.WS_RequestHeaders_SecOrProxyExceptProtocol",
+        modified_sec_or_proxy_headers_except_sec_websocket_protocol_);
+    UMA_HISTOGRAM_BOOLEAN("Extensions.WebRequest.WS_RequestHeaders_Unsafe",
+                          modified_unsafe_headers_);
+    UMA_HISTOGRAM_BOOLEAN("Extensions.WebRequest.WS_RequestHeaders_WebSocket",
+                          modified_websocket_headers_);
+    UMA_HISTOGRAM_BOOLEAN(
+        "Extensions.WebRequest.WS_RequestHeaders_WebSocketExceptProtocol",
+        modified_websocket_headers_except_sec_websocket_protocol_);
+    UMA_HISTOGRAM_BOOLEAN("Extensions.WebRequest.WS_RequestHeaders_Origin",
+                          modified_origin_);
+    UMA_HISTOGRAM_BOOLEAN(
+        "Extensions.WebRequest.WS_RequestHeaders_OriginOrCookie",
+        modified_origin_or_cookie_);
+  }
+
+ private:
+  void Update(const std::string& header) {
+    std::string lower_header = base::ToLowerASCII(header);
+
+    if (base::StartsWith(lower_header, "sec-", base::CompareCase::SENSITIVE)) {
+      if (lower_header != "sec-websocket-protocol")
+        modified_sec_or_proxy_headers_except_sec_websocket_protocol_ = true;
+      modified_sec_or_proxy_headers_ = true;
+
+      if (base::StartsWith(lower_header, "sec-websocket-",
+                           base::CompareCase::SENSITIVE)) {
+        if (lower_header != "sec-websocket-protocol")
+          modified_websocket_headers_except_sec_websocket_protocol_ = true;
+        modified_websocket_headers_ = true;
+      }
+    } else if (base::StartsWith(lower_header, "proxy-",
+                                base::CompareCase::SENSITIVE)) {
+      modified_sec_or_proxy_headers_ = true;
+      modified_sec_or_proxy_headers_except_sec_websocket_protocol_ = true;
+    } else if (lower_header == "cookie" || lower_header == "cookie2") {
+      modified_origin_or_cookie_ = true;
+    } else if (lower_header == "cache-control" || lower_header == "pragma" ||
+               lower_header == "upgrade" || lower_header == "connection" ||
+               lower_header == "host") {
+      modified_websocket_headers_ = true;
+      modified_websocket_headers_except_sec_websocket_protocol_ = true;
+    } else if (lower_header == "origin") {
+      // As we don't have an option to allow "origin" modification, all
+      // booleans should be set here.
+      modified_sec_or_proxy_headers_ = true;
+      modified_sec_or_proxy_headers_except_sec_websocket_protocol_ = true;
+      modified_unsafe_headers_ = true;
+      modified_websocket_headers_ = true;
+      modified_websocket_headers_except_sec_websocket_protocol_ = true;
+      modified_origin_ = true;
+      modified_origin_or_cookie_ = true;
+    } else if (!net::HttpUtil::IsSafeHeader(lower_header) &&
+               lower_header != "user-agent") {
+      modified_unsafe_headers_ = true;
+    }
+  }
+
+  bool modified_sec_or_proxy_headers_ = false;
+  bool modified_sec_or_proxy_headers_except_sec_websocket_protocol_ = false;
+  bool modified_unsafe_headers_ = false;
+  bool modified_websocket_headers_ = false;
+  bool modified_websocket_headers_except_sec_websocket_protocol_ = false;
+  bool modified_origin_ = false;
+  bool modified_origin_or_cookie_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(WebSocketRequestHeaderModificationStatusReporter);
+};
+
 void MergeOnBeforeSendHeadersResponses(
+    const GURL& url,
     const EventResponseDeltas& deltas,
     net::HttpRequestHeaders* request_headers,
     extensions::WarningSet* conflicting_extensions,
@@ -794,7 +924,24 @@ void MergeOnBeforeSendHeadersResponses(
     }
   }
 
-  MergeCookiesInOnBeforeSendHeadersResponses(deltas, request_headers,
+  // See https://crbug.com/827582
+  auto removal = WebRequestSpecialHeaderRemoval::kNeither;
+  bool removed_accept_language = removed_headers.count("Accept-Language");
+  bool removed_user_agent = removed_headers.count("User-Agent");
+  if (removed_accept_language && removed_user_agent)
+    removal = WebRequestSpecialHeaderRemoval::kBoth;
+  else if (removed_accept_language)
+    removal = WebRequestSpecialHeaderRemoval::kAcceptLanguage;
+  else if (removed_user_agent)
+    removal = WebRequestSpecialHeaderRemoval::kUserAgent;
+  UMA_HISTOGRAM_ENUMERATION("Extensions.WebRequest.SpecialHeadersRemoved",
+                            removal);
+
+  if (url.SchemeIsWSOrWSS()) {
+    WebSocketRequestHeaderModificationStatusReporter().Report(removed_headers,
+                                                              set_headers);
+  }
+  MergeCookiesInOnBeforeSendHeadersResponses(url, deltas, request_headers,
                                              conflicting_extensions, logger);
 }
 
@@ -807,7 +954,7 @@ static ParsedResponseCookies GetResponseCookies(
   std::string value;
   while (override_response_headers->EnumerateHeader(&iter, "Set-Cookie",
                                                     &value)) {
-    result.push_back(make_linked_ptr(new net::ParsedCookie(value)));
+    result.push_back(std::make_unique<net::ParsedCookie>(value));
   }
   return result;
 }
@@ -818,9 +965,9 @@ static void StoreResponseCookies(
     const ParsedResponseCookies& cookies,
     scoped_refptr<net::HttpResponseHeaders> override_response_headers) {
   override_response_headers->RemoveHeader("Set-Cookie");
-  for (ParsedResponseCookies::const_iterator i = cookies.begin();
-       i != cookies.end(); ++i) {
-    override_response_headers->AddHeader("Set-Cookie: " + (*i)->ToCookieLine());
+  for (const std::unique_ptr<net::ParsedCookie>& cookie : cookies) {
+    override_response_headers->AddHeader("Set-Cookie: " +
+                                         cookie->ToCookieLine());
   }
 }
 
@@ -916,10 +1063,9 @@ static bool MergeAddResponseCookieModifications(
         continue;
       // Cookie names are not unique in response cookies so we always append
       // and never override.
-      linked_ptr<net::ParsedCookie> cookie(
-          new net::ParsedCookie(std::string()));
+      auto cookie = std::make_unique<net::ParsedCookie>(std::string());
       ApplyResponseCookieModification((*mod)->modification.get(), cookie.get());
-      cookies->push_back(cookie);
+      cookies->push_back(std::move(cookie));
       modified = true;
     }
   }
@@ -943,12 +1089,10 @@ static bool MergeEditResponseCookieModifications(
       if ((*mod)->type != EDIT || !(*mod)->modification.get())
         continue;
 
-      for (ParsedResponseCookies::iterator cookie = cookies->begin();
-           cookie != cookies->end(); ++cookie) {
-        if (DoesResponseCookieMatchFilter(cookie->get(),
-                                          (*mod)->filter.get())) {
+      for (const std::unique_ptr<net::ParsedCookie>& cookie : *cookies) {
+        if (DoesResponseCookieMatchFilter(cookie.get(), (*mod)->filter.get())) {
           modified |= ApplyResponseCookieModification(
-              (*mod)->modification.get(), cookie->get());
+              (*mod)->modification.get(), cookie.get());
         }
       }
     }
@@ -989,6 +1133,7 @@ static bool MergeRemoveResponseCookieModifications(
 }
 
 void MergeCookiesInOnHeadersReceivedResponses(
+    const GURL& url,
     const EventResponseDeltas& deltas,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
@@ -1001,6 +1146,12 @@ void MergeCookiesInOnHeadersReceivedResponses(
     cookie_modifications_exist |=
         !(*delta)->response_cookie_modifications.empty();
   }
+  // See https://crbug.com/827582
+  UMA_HISTOGRAM_ENUMERATION("Extensions.WebRequest.ModifiedResponseHeaders",
+                            cookie_modifications_exist
+                                ? WebRequestResponseHeaderType::kSetCookie
+                                : WebRequestResponseHeaderType::kNone);
+
   if (!cookie_modifications_exist)
     return;
 
@@ -1021,6 +1172,12 @@ void MergeCookiesInOnHeadersReceivedResponses(
   // Store new value.
   if (modified)
     StoreResponseCookies(cookies, *override_response_headers);
+
+  if (url.SchemeIsWSOrWSS()) {
+    UMA_HISTOGRAM_BOOLEAN(
+        "Extensions.WebRequest.WS_CookiesAreModifiedOnHeadersReceived",
+        modified);
+  }
 }
 
 // Converts the key of the (key, value) pair to lower case.
@@ -1132,9 +1289,9 @@ void MergeOnHeadersReceivedResponses(
     }
   }
 
-  MergeCookiesInOnHeadersReceivedResponses(deltas, original_response_headers,
-                                           override_response_headers,
-                                           conflicting_extensions, logger);
+  MergeCookiesInOnHeadersReceivedResponses(
+      url, deltas, original_response_headers, override_response_headers,
+      conflicting_extensions, logger);
 
   GURL new_url;
   MergeRedirectUrlOfResponses(url, deltas, &new_url, conflicting_extensions,
@@ -1151,6 +1308,11 @@ void MergeOnHeadersReceivedResponses(
     // Explicitly mark the URL as safe for redirection, to prevent the request
     // from being blocked because of net::ERR_UNSAFE_REDIRECT.
     *allowed_unsafe_redirect_url = new_url;
+  }
+
+  if (url.SchemeIsWSOrWSS()) {
+    UMA_HISTOGRAM_BOOLEAN("Extensions.WebRequest.WS_ResponseHeadersAreModified",
+                          !added_headers.empty() || !removed_headers.empty());
   }
 }
 

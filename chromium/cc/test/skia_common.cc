@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/draw_image.h"
 #include "cc/paint/paint_canvas.h"
@@ -60,12 +59,15 @@ sk_sp<PaintImageGenerator> CreatePaintImageGenerator(const gfx::Size& size) {
 
 PaintImage CreateDiscardablePaintImage(const gfx::Size& size,
                                        sk_sp<SkColorSpace> color_space,
-                                       bool allocate_encoded_data) {
+                                       bool allocate_encoded_data,
+                                       PaintImage::Id id) {
   if (!color_space)
     color_space = SkColorSpace::MakeSRGB();
+  if (id == PaintImage::kInvalidId)
+    id = PaintImage::GetNextId();
 
   return PaintImageBuilder::WithDefault()
-      .set_id(PaintImage::GetNextId())
+      .set_id(id)
       .set_paint_image_generator(sk_make_sp<FakePaintImageGenerator>(
           SkImageInfo::MakeN32Premul(size.width(), size.height(), color_space),
           std::vector<FrameMetadata>{FrameMetadata()}, allocate_encoded_data))
@@ -101,6 +103,17 @@ PaintImage CreateAnimatedImage(const gfx::Size& size,
       .set_animation_type(PaintImage::AnimationType::ANIMATED)
       .set_repetition_count(repetition_count)
       .set_frame_index(frame_index)
+      .TakePaintImage();
+}
+
+PaintImage CreateBitmapImage(const gfx::Size& size) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(size.width(), size.height());
+  bitmap.eraseColor(SK_AlphaTRANSPARENT);
+  return PaintImageBuilder::WithDefault()
+      .set_id(PaintImage::GetNextId())
+      .set_image(SkImage::MakeFromBitmap(bitmap),
+                 PaintImage::GetNextContentId())
       .TakePaintImage();
 }
 

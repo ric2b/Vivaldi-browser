@@ -7,25 +7,26 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/mac/foundation_util.h"
 #import "base/mac/sdk_forward_declarations.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/global_keyboard_shortcuts_mac.h"
 #include "chrome/browser/metrics/browser_window_histogram_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
-#include "chrome/browser/ui/bookmarks/bookmark_bar_constants.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/cocoa/autofill/save_card_bubble_view_views.h"
@@ -48,10 +49,11 @@
 #include "chrome/browser/ui/cocoa/task_manager_mac.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -154,6 +156,10 @@ void BrowserWindowCocoa::ShowInactive() {
 
 void BrowserWindowCocoa::Hide() {
   [window() orderOut:controller_];
+}
+
+bool BrowserWindowCocoa::IsVisible() const {
+  return [window() isVisible];
 }
 
 void BrowserWindowCocoa::SetBounds(const gfx::Rect& bounds) {
@@ -312,7 +318,7 @@ void BrowserWindowCocoa::OnActiveTabChanged(content::WebContents* old_contents,
                                             int reason) {
   [controller_ onActiveTabChanged:old_contents to:new_contents];
   // TODO(pkasting): Perhaps the code in
-  // TabStripController::activateTabWithContents should move here?  Or this
+  // TabStripControllerCocoa::activateTabWithContents should move here?  Or this
   // should call that (instead of TabStripModelObserverBridge doing so)?  It's
   // not obvious to me why Mac doesn't handle tab changes in BrowserWindow the
   // way views and GTK do.
@@ -399,6 +405,10 @@ bool BrowserWindowCocoa::IsFullscreenBubbleVisible() const {
   return false;  // Currently only called from toolkit-views page_info.
 }
 
+PageActionIconContainer* BrowserWindowCocoa::GetPageActionIconContainer() {
+  return [controller_ locationBarBridge];
+}
+
 LocationBar* BrowserWindowCocoa::GetLocationBar() const {
   return [controller_ locationBarBridge];
 }
@@ -446,7 +456,7 @@ void BrowserWindowCocoa::FocusBookmarksToolbar() {
   // Not needed on the Mac.
 }
 
-void BrowserWindowCocoa::FocusInfobars() {
+void BrowserWindowCocoa::FocusInactivePopupForAccessibility() {
   // Not needed on the Mac.
 }
 
@@ -498,6 +508,16 @@ autofill::SaveCardBubbleView* BrowserWindowCocoa::ShowSaveCreditCardBubble(
     bool user_gesture) {
   return autofill::CreateSaveCardBubbleView(web_contents, controller,
                                             controller_, user_gesture);
+}
+
+autofill::LocalCardMigrationBubble*
+BrowserWindowCocoa::ShowLocalCardMigrationBubble(
+    content::WebContents* web_contents,
+    autofill::LocalCardMigrationBubbleController* controller,
+    bool user_gesture) {
+  // TODO(crbug.com/859652): Implement on Mac.
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 ShowTranslateBubbleResult BrowserWindowCocoa::ShowTranslateBubble(
@@ -564,48 +584,47 @@ void BrowserWindowCocoa::ShowAppMenu() {
 content::KeyboardEventProcessingResult
 BrowserWindowCocoa::PreHandleKeyboardEvent(
     const NativeWebKeyboardEvent& event) {
+  using Result = content::KeyboardEventProcessingResult;
   // Handle ESC to dismiss permission bubbles, but still forward it
   // to the window afterwards.
   if (event.windows_key_code == ui::VKEY_ESCAPE)
     [controller_ dismissPermissionBubble];
 
   if (![BrowserWindowUtils shouldHandleKeyboardEvent:event])
-    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+    return Result::NOT_HANDLED;
 
-  if (event.GetType() == blink::WebInputEvent::kRawKeyDown &&
-      [controller_
-          handledByExtensionCommand:event.os_event
-                           priority:ui::AcceleratorManager::kHighPriority])
-    return content::KeyboardEventProcessingResult::HANDLED;
-
-  int id = [BrowserWindowUtils getCommandId:event];
-  if (id == -1)
-    return content::KeyboardEventProcessingResult::NOT_HANDLED;
-
-  if (browser_->command_controller()->IsReservedCommandOrKey(id, event)) {
-    using Result = content::KeyboardEventProcessingResult;
-    return [BrowserWindowUtils handleKeyboardEvent:event.os_event
-                                          inWindow:window()]
-               ? Result::HANDLED
-               : Result::NOT_HANDLED;
-  }
-
-  return content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT;
+  int command = CommandForKeyEvent(event.os_event).chrome_command;
+  if (command == -1)
+    command = DelayedWebContentsCommandForKeyEvent(event.os_event);
+  return command == -1 ? Result::NOT_HANDLED : Result::NOT_HANDLED_IS_SHORTCUT;
 }
 
 void BrowserWindowCocoa::HandleKeyboardEvent(
     const NativeWebKeyboardEvent& event) {
-  if ([BrowserWindowUtils shouldHandleKeyboardEvent:event]) {
-    if (![BrowserWindowUtils handleKeyboardEvent:event.os_event
-                                        inWindow:window()]) {
+  if (![BrowserWindowUtils shouldHandleKeyboardEvent:event])
+    return;
 
-      // TODO(spqchan): This is a temporary fix for exit extension fullscreen.
-      // A priority system for exiting extension fullscreen when there is a
-      // conflict is being experimented. See Issue 536047.
-      if (event.windows_key_code == ui::VKEY_ESCAPE)
-        [controller_ exitExtensionFullscreenIfPossible];
+  // TODO(spqchan): This is a temporary fix for exit extension fullscreen.
+  // A priority system for exiting extension fullscreen when there is a
+  // conflict is being experimented. See Issue 536047.
+  if (event.windows_key_code == ui::VKEY_ESCAPE) {
+    [controller_ exitExtensionFullscreenIfPossible];
+
+    // This is a press of an escape key with no modifiers except potentially
+    // shift. This will not be handled by the performKeyEquivalent: path, so
+    // handle it directly here.
+    if (!EventUsesPerformKeyEquivalent(event.os_event)) {
+      int command = IDC_STOP;
+      Browser* browser = chrome::FindBrowserWithWindow(window());
+      if (browser)
+        chrome::ExecuteCommand(browser, command);
+      return;
     }
   }
+
+  ChromeEventProcessingWindow* event_window =
+      base::mac::ObjCCastStrict<ChromeEventProcessingWindow>(window());
+  [[event_window commandDispatcher] redispatchKeyEvent:event.os_event];
 }
 
 void BrowserWindowCocoa::CutCopyPaste(int command_id) {
@@ -615,14 +634,6 @@ void BrowserWindowCocoa::CutCopyPaste(int command_id) {
     [NSApp sendAction:@selector(copy:) to:nil from:nil];
   else
     [NSApp sendAction:@selector(paste:) to:nil from:nil];
-}
-
-WindowOpenDisposition BrowserWindowCocoa::GetDispositionForPopupBounds(
-    const gfx::Rect& bounds) {
-  // When using Cocoa's System Fullscreen mode, convert popups into tabs.
-  if ([controller_ isInAppKitFullscreen])
-    return WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  return WindowOpenDisposition::NEW_POPUP;
 }
 
 FindBar* BrowserWindowCocoa::CreateFindBar() {
@@ -694,7 +705,7 @@ int
 BrowserWindowCocoa::GetRenderViewHeightInsetWithDetachedBookmarkBar() {
   if (browser_->bookmark_bar_state() != BookmarkBar::DETACHED)
     return 0;
-  return chrome::kNTPBookmarkBarHeight;
+  return GetCocoaLayoutConstant(BOOKMARK_BAR_NTP_HEIGHT);
 }
 
 void BrowserWindowCocoa::ExecuteExtensionCommand(

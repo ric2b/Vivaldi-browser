@@ -7,6 +7,7 @@
 #include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
+#include "components/arc/video_accelerator/arc_video_accelerator_util.h"
 #include "components/arc/video_accelerator/protected_buffer_manager.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
@@ -50,27 +51,6 @@ constexpr size_t kMaxOutputBufferCount = 32;
 // Currently we have no way to know the resources are not enough to create more
 // VDAs. Arbitrarily chosen a reasonable constant as the limit.
 constexpr size_t kMaxConcurrentClients = 8;
-
-// Maximum number of protected input buffers.
-// It is disallowed to allocate more than number of protected input buffers.
-constexpr size_t kMaxProtectedInputBuffers = 8;
-
-base::ScopedFD UnwrapFdFromMojoHandle(mojo::ScopedHandle handle) {
-  if (!handle.is_valid()) {
-    VLOGF(1) << "Handle is invalid.";
-    return base::ScopedFD();
-  }
-
-  base::PlatformFile platform_file;
-  MojoResult mojo_result =
-      mojo::UnwrapPlatformFile(std::move(handle), &platform_file);
-  if (mojo_result != MOJO_RESULT_OK) {
-    VLOGF(1) << "UnwrapPlatformFile failed: " << mojo_result;
-    return base::ScopedFD();
-  }
-
-  return base::ScopedFD(platform_file);
-}
 
 arc::mojom::VideoDecodeAccelerator::Result ConvertErrorCode(
     media::VideoDecodeAccelerator::Error error) {
@@ -167,9 +147,9 @@ size_t GpuArcVideoDecodeAccelerator::client_count_ = 0;
 
 GpuArcVideoDecodeAccelerator::GpuArcVideoDecodeAccelerator(
     const gpu::GpuPreferences& gpu_preferences,
-    ProtectedBufferManager* protected_buffer_manager)
+    scoped_refptr<ProtectedBufferManager> protected_buffer_manager)
     : gpu_preferences_(gpu_preferences),
-      protected_buffer_manager_(protected_buffer_manager) {}
+      protected_buffer_manager_(std::move(protected_buffer_manager)) {}
 
 GpuArcVideoDecodeAccelerator::~GpuArcVideoDecodeAccelerator() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -372,11 +352,8 @@ void GpuArcVideoDecodeAccelerator::Initialize(
   auto result = InitializeTask(std::move(config));
 
   // Report initialization status to UMA.
-  const int RESULT_MAX =
-      static_cast<int>(mojom::VideoDecodeAccelerator::Result::RESULT_MAX);
   UMA_HISTOGRAM_ENUMERATION(
-      "Media.GpuArcVideoDecodeAccelerator.InitializeResult",
-      static_cast<int>(result), RESULT_MAX);
+      "Media.GpuArcVideoDecodeAccelerator.InitializeResult", result);
   std::move(callback).Run(result);
 }
 
@@ -417,47 +394,9 @@ GpuArcVideoDecodeAccelerator::InitializeTask(
   pending_requests_ = {};
   pending_flush_callbacks_ = {};
   pending_reset_callback_.Reset();
-  protected_input_handles_.clear();
-  protected_output_handles_.clear();
+  protected_input_buffer_count_ = 0;
   VLOGF(2) << "Number of concurrent clients: " << client_count_;
   return mojom::VideoDecodeAccelerator::Result::SUCCESS;
-}
-
-void GpuArcVideoDecodeAccelerator::AllocateProtectedBuffer(
-    mojo::ScopedHandle handle,
-    uint64_t size,
-    AllocateProtectedBufferCallback callback) {
-  VLOGF(2);
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (!secure_mode_) {
-    VLOGF(1) << "Not in secure mode.";
-    std::move(callback).Run(false);
-    return;
-  }
-  if (protected_input_handles_.size() >= kMaxProtectedInputBuffers) {
-    VLOGF(1) << "Too many protected input buffers"
-             << ", kMaxProtectedInputBuffers=" << kMaxProtectedInputBuffers;
-    std::move(callback).Run(false);
-    return;
-  }
-
-  base::ScopedFD fd = UnwrapFdFromMojoHandle(std::move(handle));
-  if (!fd.is_valid()) {
-    std::move(callback).Run(false);
-    return;
-  }
-  VLOGF(2) << " fd=" << fd.get() << " size=" << size;
-
-  auto protected_shmem =
-      protected_buffer_manager_->AllocateProtectedSharedMemory(std::move(fd),
-                                                               size);
-  if (!protected_shmem) {
-    VLOGF(1) << "Failed allocating protected shared memory.";
-    std::move(callback).Run(false);
-    return;
-  }
-  protected_input_handles_.emplace_back(std::move(protected_shmem));
-  std::move(callback).Run(true);
 }
 
 void GpuArcVideoDecodeAccelerator::Decode(
@@ -530,10 +469,6 @@ void GpuArcVideoDecodeAccelerator::AssignPictureBuffers(uint32_t count) {
     buffers.push_back(
         media::PictureBuffer(static_cast<int32_t>(id), coded_size_));
   }
-  if (secure_mode_) {
-    protected_output_handles_.clear();
-    protected_output_handles_.resize(static_cast<size_t>(count));
-  }
   output_buffer_count_ = static_cast<size_t>(count);
   vda_->AssignPictureBuffers(buffers);
 }
@@ -582,23 +517,19 @@ void GpuArcVideoDecodeAccelerator::ImportBufferForPicture(
   gfx::GpuMemoryBufferHandle gmb_handle;
   gmb_handle.type = gfx::NATIVE_PIXMAP;
   if (secure_mode_) {
-    DCHECK_EQ(protected_output_handles_.size(), output_buffer_count_);
-    VLOGF(2) << "Allocate output protected buffer"
-             << ", picture_buffer_id=" << picture_buffer_id;
-    auto protected_pixmap =
-        protected_buffer_manager_->AllocateProtectedNativePixmap(
-            std::move(handle_fd),
-            media::VideoPixelFormatToGfxBufferFormat(pixel_format),
-            coded_size_);
-    if (!protected_pixmap) {
-      VLOGF(1) << "Failed allocating protected pixmap.";
+    // Get protected output buffer associated with |handle_fd|.
+    // Duplicating handle here is needed as ownership of passed fd is
+    // transferred to AllocateProtectedNativePixmap().
+    auto protected_native_pixmap =
+        protected_buffer_manager_->GetProtectedNativePixmapHandleFor(
+            std::move(handle_fd));
+    if (protected_native_pixmap.fds.size() == 0) {
+      VLOGF(1) << "No protected native pixmap found for handle";
       client_->NotifyError(
           mojom::VideoDecodeAccelerator::Result::PLATFORM_FAILURE);
       return;
     }
-    gmb_handle.native_pixmap_handle =
-        gfx::CloneHandleForIPC(protected_pixmap->native_pixmap_handle());
-    protected_output_handles_[picture_buffer_id] = std::move(protected_pixmap);
+    gmb_handle.native_pixmap_handle = std::move(protected_native_pixmap);
   } else {
     if (!VerifyDmabuf(pixel_format, coded_size_, handle_fd.get(), planes)) {
       VLOGF(1) << "Failed verifying dmabuf";

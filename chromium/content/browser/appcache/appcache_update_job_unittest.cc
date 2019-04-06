@@ -28,7 +28,6 @@
 #include "content/browser/appcache/appcache_update_url_loader_request.h"
 #include "content/browser/appcache/mock_appcache_service.h"
 #include "content/browser/url_loader_factory_getter.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -40,8 +39,9 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
-#include "services/network/public/interfaces/url_loader.mojom.h"
-#include "services/network/public/interfaces/url_loader_factory.mojom.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -261,11 +261,9 @@ class MockFrontend : public AppCacheFrontend {
 
     // Trigger additional updates if requested.
     if (event_id == start_update_trigger_ && update_) {
-      for (std::vector<AppCacheHost*>::iterator it = update_hosts_.begin();
-           it != update_hosts_.end(); ++it) {
-        AppCacheHost* host = *it;
-        update_->StartUpdate(host,
-            (host ? host->pending_master_entry_url() : GURL()));
+      for (AppCacheHost* host : update_hosts_) {
+        update_->StartUpdate(
+            host, (host ? host->pending_master_entry_url() : GURL()));
       }
       update_hosts_.clear();  // only trigger once
     }
@@ -349,9 +347,9 @@ class MockFrontend : public AppCacheFrontend {
     update_hosts_.push_back(host);
   }
 
-  typedef std::vector<int> HostIds;
-  typedef std::pair<HostIds, AppCacheEventID> RaisedEvent;
-  typedef std::vector<RaisedEvent> RaisedEvents;
+  using HostIds = std::vector<int>;
+  using RaisedEvent = std::pair<HostIds, AppCacheEventID>;
+  using RaisedEvents = std::vector<RaisedEvent>;
   RaisedEvents raised_events_;
   std::string error_message_;
 
@@ -626,7 +624,7 @@ class MockURLLoaderFactory : public network::mojom::URLLoaderFactory {
     response.headers = info.headers;
     response.headers->GetMimeType(&response.mime_type);
 
-    client->OnReceiveResponse(response, base::nullopt, nullptr);
+    client->OnReceiveResponse(response);
 
     mojo::DataPipe data_pipe;
 
@@ -712,7 +710,7 @@ class AppCacheUpdateJobTest : public testing::TestWithParam<RequestHandlerType>,
 
     if (request_handler_type_ == URLLOADER) {
       loader_factory_getter_ = new URLLoaderFactoryGetter();
-      feature_list_.InitAndEnableFeature(features::kNetworkService);
+      feature_list_.InitAndEnableFeature(network::features::kNetworkService);
       BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,
           base::BindOnce(&AppCacheUpdateJobTest::InitializeFactory,
@@ -833,10 +831,8 @@ class AppCacheUpdateJobTest : public testing::TestWithParam<RequestHandlerType>,
       expected = 2;  // 2 hosts using frontend1
       EXPECT_EQ(expected, events[0].first.size());
       MockFrontend::HostIds& host_ids = events[0].first;
-      EXPECT_TRUE(std::find(host_ids.begin(), host_ids.end(), host1.host_id())
-          != host_ids.end());
-      EXPECT_TRUE(std::find(host_ids.begin(), host_ids.end(), host3.host_id())
-          != host_ids.end());
+      EXPECT_TRUE(base::ContainsValue(host_ids, host1.host_id()));
+      EXPECT_TRUE(base::ContainsValue(host_ids, host3.host_id()));
       EXPECT_EQ(AppCacheEventID::APPCACHE_CHECKING_EVENT, events[0].second);
 
       events = mock_frontend2.raised_events_;
@@ -3607,22 +3603,19 @@ class AppCacheUpdateJobTest : public testing::TestWithParam<RequestHandlerType>,
         EXPECT_TRUE(storage->IsCacheStored(group_->newest_complete_cache()));
 
         // Check that all entries in the newest cache were stored.
-        const AppCache::EntryMap& entries =
-            group_->newest_complete_cache()->entries();
-        for (AppCache::EntryMap::const_iterator it = entries.begin();
-             it != entries.end(); ++it) {
-          EXPECT_NE(kAppCacheNoResponseId, it->second.response_id());
+        for (const auto& pair : group_->newest_complete_cache()->entries()) {
+          EXPECT_NE(kAppCacheNoResponseId, pair.second.response_id());
 
           // Check that any copied entries have the expected response id
           // and that entries that are not copied have a different response id.
           std::map<GURL, int64_t>::iterator found =
-              expect_response_ids_.find(it->first);
+              expect_response_ids_.find(pair.first);
           if (found != expect_response_ids_.end()) {
-            EXPECT_EQ(found->second, it->second.response_id());
+            EXPECT_EQ(found->second, pair.second.response_id());
           } else if (expect_old_cache_) {
-            AppCacheEntry* old_entry = expect_old_cache_->GetEntry(it->first);
+            AppCacheEntry* old_entry = expect_old_cache_->GetEntry(pair.first);
             if (old_entry)
-              EXPECT_NE(old_entry->response_id(), it->second.response_id());
+              EXPECT_NE(old_entry->response_id(), pair.second.response_id());
           }
         }
       }
@@ -3649,8 +3642,7 @@ class AppCacheUpdateJobTest : public testing::TestWithParam<RequestHandlerType>,
 
         for (size_t k = 0; k < expected_ids.size(); ++k) {
           int id = expected_ids[k];
-          EXPECT_TRUE(std::find(actual_ids.begin(), actual_ids.end(), id) !=
-              actual_ids.end());
+          EXPECT_TRUE(base::ContainsValue(actual_ids, id));
         }
       }
 
@@ -3712,11 +3704,10 @@ class AppCacheUpdateJobTest : public testing::TestWithParam<RequestHandlerType>,
     ASSERT_TRUE(entry);
     EXPECT_EQ(AppCacheEntry::FALLBACK, entry->types());
 
-    for (AppCache::EntryMap::iterator i = expect_extra_entries_.begin();
-         i != expect_extra_entries_.end(); ++i) {
-      entry = cache->GetEntry(i->first);
+    for (const auto& pair : expect_extra_entries_) {
+      entry = cache->GetEntry(pair.first);
       ASSERT_TRUE(entry);
-      EXPECT_EQ(i->second.types(), entry->types());
+      EXPECT_EQ(pair.second.types(), entry->types());
     }
 
     expected = 1;
@@ -3874,7 +3865,7 @@ class AppCacheUpdateJobTest : public testing::TestWithParam<RequestHandlerType>,
 
   // Response infos used by an async test that need to live until update job
   // finishes.
-  std::vector<scoped_refptr<AppCacheResponseInfo> > response_infos_;
+  std::vector<scoped_refptr<AppCacheResponseInfo>> response_infos_;
 
   // Flag indicating if test cares to verify the update after update finishes.
   bool do_checks_after_update_finished_;

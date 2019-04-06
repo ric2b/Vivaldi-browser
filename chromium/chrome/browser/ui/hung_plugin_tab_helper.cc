@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/process/process.h"
 #include "build/build_config.h"
-#include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/hang_monitor/hang_crash_dump.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/plugins/hung_plugin_infobar_delegate.h"
 #include "chrome/common/channel_info.h"
@@ -19,16 +19,9 @@
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/result_codes.h"
-
-#if defined(OS_WIN)
-#include "chrome/browser/hang_monitor/hang_crash_dump_win.h"
-#endif
-
 
 namespace {
 
@@ -45,13 +38,10 @@ void KillPluginOnIOThread(int child_id) {
   while (!iter.Done()) {
     const content::ChildProcessData& data = iter.GetData();
     if (data.id == child_id) {
-#if defined(OS_WIN)
-      CrashDumpAndTerminateHungChildProcess(data.handle);
-#else
+      CrashDumpHungChildProcess(data.handle);
       base::Process process =
           base::Process::DeprecatedGetProcessFromHandle(data.handle);
       process.Terminate(content::RESULT_CODE_HUNG, false);
-#endif
       break;
     }
     ++iter;
@@ -85,7 +75,7 @@ struct HungPluginTabHelper::PluginState {
   base::TimeDelta next_reshow_delay;
 
   // Handles calling the helper when the infobar should be re-shown.
-  base::Timer timer;
+  base::OneShotTimer timer;
 
  private:
   // Initial delay in seconds before re-showing the hung plugin message.
@@ -104,9 +94,7 @@ HungPluginTabHelper::PluginState::PluginState(const base::FilePath& p,
     : path(p),
       name(n),
       infobar(NULL),
-      next_reshow_delay(base::TimeDelta::FromSeconds(kInitialReshowDelaySec)),
-      timer(false, false) {
-}
+      next_reshow_delay(base::TimeDelta::FromSeconds(kInitialReshowDelaySec)) {}
 
 HungPluginTabHelper::PluginState::~PluginState() {
 }
@@ -117,10 +105,7 @@ HungPluginTabHelper::PluginState::~PluginState() {
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(HungPluginTabHelper);
 
 HungPluginTabHelper::HungPluginTabHelper(content::WebContents* contents)
-    : content::WebContentsObserver(contents) {
-  registrar_.Add(this, chrome::NOTIFICATION_TAB_CONTENTS_INFOBAR_REMOVED,
-                 content::NotificationService::AllSources());
-}
+    : content::WebContentsObserver(contents), infobar_observer_(this) {}
 
 HungPluginTabHelper::~HungPluginTabHelper() {
 }
@@ -156,6 +141,8 @@ void HungPluginTabHelper::PluginHungStatusChanged(
       InfoBarService::FromWebContents(web_contents());
   if (!infobar_service)
     return;
+  if (!infobar_observer_.IsObserving(infobar_service))
+    infobar_observer_.Add(infobar_service);
 
   PluginStateMap::iterator found = hung_plugins_.find(plugin_child_id);
   if (found != hung_plugins_.end()) {
@@ -177,18 +164,12 @@ void HungPluginTabHelper::PluginHungStatusChanged(
   ShowBar(plugin_child_id, state.get());
 }
 
-void HungPluginTabHelper::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_EQ(chrome::NOTIFICATION_TAB_CONTENTS_INFOBAR_REMOVED, type);
-  infobars::InfoBar* infobar =
-      content::Details<infobars::InfoBar::RemovedDetails>(details)->first;
-  for (PluginStateMap::iterator i = hung_plugins_.begin();
-       i != hung_plugins_.end(); ++i) {
+void HungPluginTabHelper::OnInfoBarRemoved(infobars::InfoBar* infobar,
+                                           bool animate) {
+  for (auto i = hung_plugins_.begin(); i != hung_plugins_.end(); ++i) {
     PluginState* state = i->second.get();
     if (state->infobar == infobar) {
-      state->infobar = NULL;
+      state->infobar = nullptr;
 
       // Schedule the timer to re-show the infobar if the plugin continues to be
       // hung.
@@ -202,6 +183,11 @@ void HungPluginTabHelper::Observe(
       return;
     }
   }
+}
+
+void HungPluginTabHelper::OnManagerShuttingDown(
+    infobars::InfoBarManager* manager) {
+  infobar_observer_.Remove(manager);
 }
 
 void HungPluginTabHelper::KillPlugin(int child_id) {

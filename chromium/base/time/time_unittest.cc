@@ -9,15 +9,19 @@
 #include <limits>
 #include <string>
 
+#include "base/build_time.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/platform_thread.h"
+#include "base/time/time_override.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_IOS)
+#if defined(OS_ANDROID)
+#include "base/android/jni_android.h"
+#elif defined(OS_IOS)
 #include "base/ios/ios_util.h"
 #elif defined(OS_WIN)
 #include <windows.h>
@@ -154,7 +158,7 @@ TEST_F(TimeTest, UTCTimeT) {
   struct tm tms;
 #if defined(OS_WIN)
   gmtime_s(&tms, &now_t_1);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   gmtime_r(&now_t_1, &tms);
 #endif
 
@@ -200,7 +204,7 @@ TEST_F(TimeTest, LocalTimeT) {
   struct tm tms;
 #if defined(OS_WIN)
   localtime_s(&tms, &now_t_1);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   localtime_r(&now_t_1, &tms);
 #endif
 
@@ -236,13 +240,13 @@ TEST_F(TimeTest, JsTime) {
   EXPECT_EQ(800730.0, t.ToJsTime());
 }
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 TEST_F(TimeTest, FromTimeVal) {
   Time now = Time::Now();
   Time also_now = Time::FromTimeVal(now.ToTimeVal());
   EXPECT_EQ(now, also_now);
 }
-#endif  // OS_POSIX
+#endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 TEST_F(TimeTest, FromExplodedWithMilliseconds) {
   // Some platform implementations of FromExploded are liable to drop
@@ -302,13 +306,12 @@ TEST_F(TimeTest, ParseTimeTest1) {
   time_t current_time = 0;
   time(&current_time);
 
-  const int BUFFER_SIZE = 64;
-  struct tm local_time = {0};
-  char time_buf[BUFFER_SIZE] = {0};
+  struct tm local_time = {};
+  char time_buf[64] = {};
 #if defined(OS_WIN)
   localtime_s(&local_time, &current_time);
   asctime_s(time_buf, arraysize(time_buf), &local_time);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   localtime_r(&current_time, &local_time);
   asctime_r(&local_time, time_buf);
 #endif
@@ -644,7 +647,7 @@ TEST_F(TimeTest, MaxConversions) {
   EXPECT_TRUE(t.is_max());
   EXPECT_EQ(std::numeric_limits<time_t>::max(), t.ToTimeT());
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
   struct timeval tval;
   tval.tv_sec = std::numeric_limits<time_t>::max();
   tval.tv_usec = static_cast<suseconds_t>(Time::kMicrosecondsPerSecond) - 1;
@@ -716,7 +719,7 @@ TEST_F(TimeTest, FromExploded_MinMax) {
   if (Time::kExplodedMinYear != std::numeric_limits<int>::min()) {
     exploded.year = Time::kExplodedMinYear;
     EXPECT_TRUE(Time::FromUTCExploded(exploded, &parsed_time));
-#if !defined(OS_WIN)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
     // On Windows, January 1, 1601 00:00:00 is actually the null time.
     EXPECT_FALSE(parsed_time.is_null());
 #endif
@@ -746,6 +749,73 @@ TEST_F(TimeTest, FromExploded_MinMax) {
     EXPECT_FALSE(Time::FromUTCExploded(exploded, &parsed_time));
     EXPECT_TRUE(parsed_time.is_null());
   }
+}
+
+class TimeOverride {
+ public:
+  static Time Now() {
+    now_time_ += TimeDelta::FromSeconds(1);
+    return now_time_;
+  }
+
+  static Time now_time_;
+};
+
+// static
+Time TimeOverride::now_time_;
+
+TEST_F(TimeTest, NowOverride) {
+  TimeOverride::now_time_ = Time::UnixEpoch();
+
+  // Choose a reference time that we know to be in the past but close to now.
+  Time build_time = GetBuildTime();
+
+  // Override is not active. All Now() methods should return a time greater than
+  // the build time.
+  EXPECT_LT(build_time, Time::Now());
+  EXPECT_GT(Time::Max(), Time::Now());
+  EXPECT_LT(build_time, subtle::TimeNowIgnoringOverride());
+  EXPECT_GT(Time::Max(), subtle::TimeNowIgnoringOverride());
+  EXPECT_LT(build_time, Time::NowFromSystemTime());
+  EXPECT_GT(Time::Max(), Time::NowFromSystemTime());
+  EXPECT_LT(build_time, subtle::TimeNowFromSystemTimeIgnoringOverride());
+  EXPECT_GT(Time::Max(), subtle::TimeNowFromSystemTimeIgnoringOverride());
+
+  {
+    // Set override.
+    subtle::ScopedTimeClockOverrides overrides(&TimeOverride::Now, nullptr,
+                                               nullptr);
+
+    // Overridden value is returned and incremented when Now() or
+    // NowFromSystemTime() is called.
+    EXPECT_EQ(Time::UnixEpoch() + TimeDelta::FromSeconds(1), Time::Now());
+    EXPECT_EQ(Time::UnixEpoch() + TimeDelta::FromSeconds(2), Time::Now());
+    EXPECT_EQ(Time::UnixEpoch() + TimeDelta::FromSeconds(3),
+              Time::NowFromSystemTime());
+    EXPECT_EQ(Time::UnixEpoch() + TimeDelta::FromSeconds(4),
+              Time::NowFromSystemTime());
+
+    // IgnoringOverride methods still return real time.
+    EXPECT_LT(build_time, subtle::TimeNowIgnoringOverride());
+    EXPECT_GT(Time::Max(), subtle::TimeNowIgnoringOverride());
+    EXPECT_LT(build_time, subtle::TimeNowFromSystemTimeIgnoringOverride());
+    EXPECT_GT(Time::Max(), subtle::TimeNowFromSystemTimeIgnoringOverride());
+
+    // IgnoringOverride methods didn't call NowOverrideClock::Now().
+    EXPECT_EQ(Time::UnixEpoch() + TimeDelta::FromSeconds(5), Time::Now());
+    EXPECT_EQ(Time::UnixEpoch() + TimeDelta::FromSeconds(6),
+              Time::NowFromSystemTime());
+  }
+
+  // All methods return real time again.
+  EXPECT_LT(build_time, Time::Now());
+  EXPECT_GT(Time::Max(), Time::Now());
+  EXPECT_LT(build_time, subtle::TimeNowIgnoringOverride());
+  EXPECT_GT(Time::Max(), subtle::TimeNowIgnoringOverride());
+  EXPECT_LT(build_time, Time::NowFromSystemTime());
+  EXPECT_GT(Time::Max(), Time::NowFromSystemTime());
+  EXPECT_LT(build_time, subtle::TimeNowFromSystemTimeIgnoringOverride());
+  EXPECT_GT(Time::Max(), subtle::TimeNowFromSystemTimeIgnoringOverride());
 }
 
 TEST(TimeTicks, Deltas) {
@@ -816,14 +886,110 @@ TEST(TimeTicks, HighRes) {
   HighResClockTest(&TimeTicks::Now);
 }
 
-// Fails frequently on Android http://crbug.com/352633 with:
-// Expected: (delta_thread.InMicroseconds()) > (0), actual: 0 vs 0
-#if defined(OS_ANDROID)
-#define MAYBE_ThreadNow DISABLED_ThreadNow
+class TimeTicksOverride {
+ public:
+  static TimeTicks Now() {
+    now_ticks_ += TimeDelta::FromSeconds(1);
+    return now_ticks_;
+  }
+
+  static TimeTicks now_ticks_;
+};
+
+// static
+TimeTicks TimeTicksOverride::now_ticks_;
+
+TEST(TimeTicks, NowOverride) {
+  TimeTicksOverride::now_ticks_ = TimeTicks::Min();
+
+  // Override is not active. All Now() methods should return a sensible value.
+  EXPECT_LT(TimeTicks::Min(), TimeTicks::UnixEpoch());
+  EXPECT_LT(TimeTicks::UnixEpoch(), TimeTicks::Now());
+  EXPECT_GT(TimeTicks::Max(), TimeTicks::Now());
+  EXPECT_LT(TimeTicks::UnixEpoch(), subtle::TimeTicksNowIgnoringOverride());
+  EXPECT_GT(TimeTicks::Max(), subtle::TimeTicksNowIgnoringOverride());
+
+  {
+    // Set override.
+    subtle::ScopedTimeClockOverrides overrides(nullptr, &TimeTicksOverride::Now,
+                                               nullptr);
+
+    // Overridden value is returned and incremented when Now() is called.
+    EXPECT_EQ(TimeTicks::Min() + TimeDelta::FromSeconds(1), TimeTicks::Now());
+    EXPECT_EQ(TimeTicks::Min() + TimeDelta::FromSeconds(2), TimeTicks::Now());
+
+    // NowIgnoringOverride() still returns real ticks.
+    EXPECT_LT(TimeTicks::UnixEpoch(), subtle::TimeTicksNowIgnoringOverride());
+    EXPECT_GT(TimeTicks::Max(), subtle::TimeTicksNowIgnoringOverride());
+
+    // IgnoringOverride methods didn't call NowOverrideTickClock::NowTicks().
+    EXPECT_EQ(TimeTicks::Min() + TimeDelta::FromSeconds(3), TimeTicks::Now());
+  }
+
+  // All methods return real ticks again.
+  EXPECT_LT(TimeTicks::UnixEpoch(), TimeTicks::Now());
+  EXPECT_GT(TimeTicks::Max(), TimeTicks::Now());
+  EXPECT_LT(TimeTicks::UnixEpoch(), subtle::TimeTicksNowIgnoringOverride());
+  EXPECT_GT(TimeTicks::Max(), subtle::TimeTicksNowIgnoringOverride());
+}
+
+class ThreadTicksOverride {
+ public:
+  static ThreadTicks Now() {
+    now_ticks_ += TimeDelta::FromSeconds(1);
+    return now_ticks_;
+  }
+
+  static ThreadTicks now_ticks_;
+};
+
+// static
+ThreadTicks ThreadTicksOverride::now_ticks_;
+
+// IOS doesn't support ThreadTicks::Now().
+#if defined(OS_IOS)
+#define MAYBE_NowOverride DISABLED_NowOverride
 #else
-#define MAYBE_ThreadNow ThreadNow
+#define MAYBE_NowOverride NowOverride
 #endif
-TEST(ThreadTicks, MAYBE_ThreadNow) {
+TEST(ThreadTicks, MAYBE_NowOverride) {
+  ThreadTicksOverride::now_ticks_ = ThreadTicks::Min();
+
+  // Override is not active. All Now() methods should return a sensible value.
+  ThreadTicks initial_thread_ticks = ThreadTicks::Now();
+  EXPECT_LE(initial_thread_ticks, ThreadTicks::Now());
+  EXPECT_GT(ThreadTicks::Max(), ThreadTicks::Now());
+  EXPECT_LE(initial_thread_ticks, subtle::ThreadTicksNowIgnoringOverride());
+  EXPECT_GT(ThreadTicks::Max(), subtle::ThreadTicksNowIgnoringOverride());
+
+  {
+    // Set override.
+    subtle::ScopedTimeClockOverrides overrides(nullptr, nullptr,
+                                               &ThreadTicksOverride::Now);
+
+    // Overridden value is returned and incremented when Now() is called.
+    EXPECT_EQ(ThreadTicks::Min() + TimeDelta::FromSeconds(1),
+              ThreadTicks::Now());
+    EXPECT_EQ(ThreadTicks::Min() + TimeDelta::FromSeconds(2),
+              ThreadTicks::Now());
+
+    // NowIgnoringOverride() still returns real ticks.
+    EXPECT_LE(initial_thread_ticks, subtle::ThreadTicksNowIgnoringOverride());
+    EXPECT_GT(ThreadTicks::Max(), subtle::ThreadTicksNowIgnoringOverride());
+
+    // IgnoringOverride methods didn't call NowOverrideTickClock::NowTicks().
+    EXPECT_EQ(ThreadTicks::Min() + TimeDelta::FromSeconds(3),
+              ThreadTicks::Now());
+  }
+
+  // All methods return real ticks again.
+  EXPECT_LE(initial_thread_ticks, ThreadTicks::Now());
+  EXPECT_GT(ThreadTicks::Max(), ThreadTicks::Now());
+  EXPECT_LE(initial_thread_ticks, subtle::ThreadTicksNowIgnoringOverride());
+  EXPECT_GT(ThreadTicks::Max(), subtle::ThreadTicksNowIgnoringOverride());
+}
+
+TEST(ThreadTicks, ThreadNow) {
   if (ThreadTicks::IsSupported()) {
     ThreadTicks::WaitUntilInitialized();
     TimeTicks begin = TimeTicks::Now();
@@ -837,7 +1003,7 @@ TEST(ThreadTicks, MAYBE_ThreadNow) {
     TimeDelta delta = end - begin;
     TimeDelta delta_thread = end_thread - begin_thread;
     // Make sure that some thread time have elapsed.
-    EXPECT_GT(delta_thread.InMicroseconds(), 0);
+    EXPECT_GE(delta_thread.InMicroseconds(), 0);
     // But the thread time is at least 9ms less than clock time.
     TimeDelta difference = delta - delta_thread;
     EXPECT_GE(difference.InMicroseconds(), 9000);
@@ -900,6 +1066,28 @@ TEST(TimeTicks, SnappedToNextTickOverflow) {
                 .ToInternalValue());
 }
 
+#if defined(OS_ANDROID)
+TEST(TimeTicks, Android_FromUptimeMillis_ClocksMatch) {
+  JNIEnv* const env = android::AttachCurrentThread();
+  android::ScopedJavaLocalRef<jclass> clazz(
+      android::GetClass(env, "android/os/SystemClock"));
+  ASSERT_TRUE(clazz.obj());
+  const jmethodID method_id =
+      android::MethodID::Get<android::MethodID::TYPE_STATIC>(
+          env, clazz.obj(), "uptimeMillis", "()J");
+  ASSERT_FALSE(!method_id);
+  // Subtract 1ms from the expected lower bound to allow millisecon-level
+  // truncation performed in uptimeMillis().
+  const TimeTicks lower_bound_ticks =
+      TimeTicks::Now() - TimeDelta::FromMilliseconds(1);
+  const TimeTicks converted_ticks = TimeTicks::FromUptimeMillis(
+      env->CallStaticLongMethod(clazz.obj(), method_id));
+  const TimeTicks upper_bound_ticks = TimeTicks::Now();
+  EXPECT_LE(lower_bound_ticks, converted_ticks);
+  EXPECT_GE(upper_bound_ticks, converted_ticks);
+}
+#endif  // OS_ANDROID
+
 TEST(TimeDelta, FromAndIn) {
   // static_assert also checks that the contained expression is a constant
   // expression, meaning all its components are suitable for initializing global
@@ -916,22 +1104,66 @@ TEST(TimeDelta, FromAndIn) {
   static_assert(
       TimeDelta::FromMillisecondsD(2.5) == TimeDelta::FromMicroseconds(2500),
       "");
-  EXPECT_EQ(13, TimeDelta::FromDays(13).InDays());
-  EXPECT_EQ(13, TimeDelta::FromHours(13).InHours());
-  EXPECT_EQ(13, TimeDelta::FromMinutes(13).InMinutes());
-  EXPECT_EQ(13, TimeDelta::FromSeconds(13).InSeconds());
-  EXPECT_EQ(13.0, TimeDelta::FromSeconds(13).InSecondsF());
-  EXPECT_EQ(13, TimeDelta::FromMilliseconds(13).InMilliseconds());
-  EXPECT_EQ(13.0, TimeDelta::FromMilliseconds(13).InMillisecondsF());
-  EXPECT_EQ(13, TimeDelta::FromSecondsD(13.1).InSeconds());
-  EXPECT_EQ(13.1, TimeDelta::FromSecondsD(13.1).InSecondsF());
-  EXPECT_EQ(13, TimeDelta::FromMillisecondsD(13.3).InMilliseconds());
-  EXPECT_EQ(13.3, TimeDelta::FromMillisecondsD(13.3).InMillisecondsF());
-  EXPECT_EQ(13, TimeDelta::FromMicroseconds(13).InMicroseconds());
-  EXPECT_EQ(3.456, TimeDelta::FromMillisecondsD(3.45678).InMillisecondsF());
+  EXPECT_EQ(TimeDelta::FromDays(13).InDays(), 13);
+  EXPECT_EQ(TimeDelta::FromHours(13).InHours(), 13);
+  EXPECT_EQ(TimeDelta::FromMinutes(13).InMinutes(), 13);
+  EXPECT_EQ(TimeDelta::FromSeconds(13).InSeconds(), 13);
+  EXPECT_EQ(TimeDelta::FromSeconds(13).InSecondsF(), 13.0);
+  EXPECT_EQ(TimeDelta::FromMilliseconds(13).InMilliseconds(), 13);
+  EXPECT_EQ(TimeDelta::FromMilliseconds(13).InMillisecondsF(), 13.0);
+  EXPECT_EQ(TimeDelta::FromSecondsD(13.1).InSeconds(), 13);
+  EXPECT_EQ(TimeDelta::FromSecondsD(13.1).InSecondsF(), 13.1);
+  EXPECT_EQ(TimeDelta::FromMillisecondsD(13.3).InMilliseconds(), 13);
+  EXPECT_EQ(TimeDelta::FromMillisecondsD(13.3).InMillisecondsF(), 13.3);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(13).InMicroseconds(), 13);
+  EXPECT_EQ(TimeDelta::FromMicrosecondsD(13.3).InMicroseconds(), 13);
+  EXPECT_EQ(TimeDelta::FromMillisecondsD(3.45678).InMillisecondsF(), 3.456);
+  EXPECT_EQ(TimeDelta::FromNanoseconds(12345).InNanoseconds(), 12000);
+  EXPECT_EQ(TimeDelta::FromNanosecondsD(12345.678).InNanoseconds(), 12000);
 }
 
-#if defined(OS_POSIX)
+TEST(TimeDelta, InRoundsTowardsZero) {
+  EXPECT_EQ(TimeDelta::FromHours(23).InDays(), 0);
+  EXPECT_EQ(TimeDelta::FromHours(-23).InDays(), 0);
+  EXPECT_EQ(TimeDelta::FromMinutes(59).InHours(), 0);
+  EXPECT_EQ(TimeDelta::FromMinutes(-59).InHours(), 0);
+  EXPECT_EQ(TimeDelta::FromSeconds(59).InMinutes(), 0);
+  EXPECT_EQ(TimeDelta::FromSeconds(-59).InMinutes(), 0);
+  EXPECT_EQ(TimeDelta::FromMilliseconds(999).InSeconds(), 0);
+  EXPECT_EQ(TimeDelta::FromMilliseconds(-999).InSeconds(), 0);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(999).InMilliseconds(), 0);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(-999).InMilliseconds(), 0);
+}
+
+TEST(TimeDelta, InDaysFloored) {
+  EXPECT_EQ(TimeDelta::FromHours(-25).InDaysFloored(), -2);
+  EXPECT_EQ(TimeDelta::FromHours(-24).InDaysFloored(), -1);
+  EXPECT_EQ(TimeDelta::FromHours(-23).InDaysFloored(), -1);
+
+  EXPECT_EQ(TimeDelta::FromHours(-1).InDaysFloored(), -1);
+  EXPECT_EQ(TimeDelta::FromHours(0).InDaysFloored(), 0);
+  EXPECT_EQ(TimeDelta::FromHours(1).InDaysFloored(), 0);
+
+  EXPECT_EQ(TimeDelta::FromHours(23).InDaysFloored(), 0);
+  EXPECT_EQ(TimeDelta::FromHours(24).InDaysFloored(), 1);
+  EXPECT_EQ(TimeDelta::FromHours(25).InDaysFloored(), 1);
+}
+
+TEST(TimeDelta, InMillisecondsRoundedUp) {
+  EXPECT_EQ(TimeDelta::FromMicroseconds(-1001).InMillisecondsRoundedUp(), -1);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(-1000).InMillisecondsRoundedUp(), -1);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(-999).InMillisecondsRoundedUp(), 0);
+
+  EXPECT_EQ(TimeDelta::FromMicroseconds(-1).InMillisecondsRoundedUp(), 0);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(0).InMillisecondsRoundedUp(), 0);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(1).InMillisecondsRoundedUp(), 1);
+
+  EXPECT_EQ(TimeDelta::FromMicroseconds(999).InMillisecondsRoundedUp(), 1);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(1000).InMillisecondsRoundedUp(), 1);
+  EXPECT_EQ(TimeDelta::FromMicroseconds(1001).InMillisecondsRoundedUp(), 2);
+}
+
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 TEST(TimeDelta, TimeSpecConversion) {
   TimeDelta delta = TimeDelta::FromSeconds(0);
   struct timespec result = delta.ToTimeSpec();
@@ -957,7 +1189,7 @@ TEST(TimeDelta, TimeSpecConversion) {
   EXPECT_EQ(result.tv_nsec, 1000);
   EXPECT_EQ(delta, TimeDelta::FromTimeSpec(result));
 }
-#endif  // OS_POSIX
+#endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 // Our internal time format is serialized in things like databases, so it's
 // important that it's consistent across all our platforms.  We use the 1601
@@ -991,214 +1223,285 @@ std::string AnyToString(Any any) {
 }
 
 TEST(TimeDelta, Magnitude) {
-  const int64_t zero = 0;
-  EXPECT_EQ(TimeDelta::FromMicroseconds(zero),
-            TimeDelta::FromMicroseconds(zero).magnitude());
+  constexpr int64_t zero = 0;
+  static_assert(TimeDelta::FromMicroseconds(zero) ==
+                    TimeDelta::FromMicroseconds(zero).magnitude(),
+                "");
 
-  const int64_t one = 1;
-  const int64_t negative_one = -1;
-  EXPECT_EQ(TimeDelta::FromMicroseconds(one),
-            TimeDelta::FromMicroseconds(one).magnitude());
-  EXPECT_EQ(TimeDelta::FromMicroseconds(one),
-            TimeDelta::FromMicroseconds(negative_one).magnitude());
+  constexpr int64_t one = 1;
+  constexpr int64_t negative_one = -1;
+  static_assert(TimeDelta::FromMicroseconds(one) ==
+                    TimeDelta::FromMicroseconds(one).magnitude(),
+                "");
+  static_assert(TimeDelta::FromMicroseconds(one) ==
+                    TimeDelta::FromMicroseconds(negative_one).magnitude(),
+                "");
 
-  const int64_t max_int64_minus_one = std::numeric_limits<int64_t>::max() - 1;
-  const int64_t min_int64_plus_two = std::numeric_limits<int64_t>::min() + 2;
-  EXPECT_EQ(TimeDelta::FromMicroseconds(max_int64_minus_one),
-            TimeDelta::FromMicroseconds(max_int64_minus_one).magnitude());
-  EXPECT_EQ(TimeDelta::FromMicroseconds(max_int64_minus_one),
-            TimeDelta::FromMicroseconds(min_int64_plus_two).magnitude());
+  constexpr int64_t max_int64_minus_one =
+      std::numeric_limits<int64_t>::max() - 1;
+  constexpr int64_t min_int64_plus_two =
+      std::numeric_limits<int64_t>::min() + 2;
+  static_assert(
+      TimeDelta::FromMicroseconds(max_int64_minus_one) ==
+          TimeDelta::FromMicroseconds(max_int64_minus_one).magnitude(),
+      "");
+  static_assert(TimeDelta::FromMicroseconds(max_int64_minus_one) ==
+                    TimeDelta::FromMicroseconds(min_int64_plus_two).magnitude(),
+                "");
 }
 
-TEST(TimeDelta, Max) {
-  TimeDelta max = TimeDelta::Max();
-  EXPECT_TRUE(max.is_max());
-  EXPECT_EQ(max, TimeDelta::Max());
-  EXPECT_GT(max, TimeDelta::FromDays(100 * 365));
-  EXPECT_GT(max, TimeDelta());
-}
+TEST(TimeDelta, ZeroMinMax) {
+  constexpr TimeDelta kZero;
+  static_assert(kZero.is_zero(), "");
 
-bool IsMin(TimeDelta delta) {
-  return delta.is_min();
+  constexpr TimeDelta kMax = TimeDelta::Max();
+  static_assert(kMax.is_max(), "");
+  static_assert(kMax == TimeDelta::Max(), "");
+  static_assert(kMax > TimeDelta::FromDays(100 * 365), "");
+  static_assert(kMax > kZero, "");
+
+  constexpr TimeDelta kMin = TimeDelta::Min();
+  static_assert(kMin.is_min(), "");
+  static_assert(kMin == TimeDelta::Min(), "");
+  static_assert(kMin < TimeDelta::FromDays(-100 * 365), "");
+  static_assert(kMin < kZero, "");
 }
 
 TEST(TimeDelta, MaxConversions) {
-  TimeDelta t = TimeDelta::Max();
-  EXPECT_EQ(std::numeric_limits<int64_t>::max(), t.ToInternalValue());
+  // static_assert also confirms constexpr works as intended.
+  constexpr TimeDelta kMax = TimeDelta::Max();
+  static_assert(kMax.ToInternalValue() == std::numeric_limits<int64_t>::max(),
+                "");
+  EXPECT_EQ(kMax.InDays(), std::numeric_limits<int>::max());
+  EXPECT_EQ(kMax.InHours(), std::numeric_limits<int>::max());
+  EXPECT_EQ(kMax.InMinutes(), std::numeric_limits<int>::max());
+  EXPECT_EQ(kMax.InSecondsF(), std::numeric_limits<double>::infinity());
+  EXPECT_EQ(kMax.InSeconds(), std::numeric_limits<int64_t>::max());
+  EXPECT_EQ(kMax.InMillisecondsF(), std::numeric_limits<double>::infinity());
+  EXPECT_EQ(kMax.InMilliseconds(), std::numeric_limits<int64_t>::max());
+  EXPECT_EQ(kMax.InMillisecondsRoundedUp(), std::numeric_limits<int64_t>::max());
 
-  EXPECT_EQ(std::numeric_limits<int>::max(), t.InDays());
-  EXPECT_EQ(std::numeric_limits<int>::max(), t.InHours());
-  EXPECT_EQ(std::numeric_limits<int>::max(), t.InMinutes());
-  EXPECT_EQ(std::numeric_limits<double>::infinity(), t.InSecondsF());
-  EXPECT_EQ(std::numeric_limits<int64_t>::max(), t.InSeconds());
-  EXPECT_EQ(std::numeric_limits<double>::infinity(), t.InMillisecondsF());
-  EXPECT_EQ(std::numeric_limits<int64_t>::max(), t.InMilliseconds());
-  EXPECT_EQ(std::numeric_limits<int64_t>::max(), t.InMillisecondsRoundedUp());
+  static_assert(TimeDelta::FromDays(std::numeric_limits<int>::max()).is_max(),
+                "");
 
-  t = TimeDelta::FromDays(std::numeric_limits<int>::max());
-  EXPECT_TRUE(t.is_max());
+  static_assert(TimeDelta::FromHours(std::numeric_limits<int>::max()).is_max(),
+                "");
 
-  t = TimeDelta::FromHours(std::numeric_limits<int>::max());
-  EXPECT_TRUE(t.is_max());
+  static_assert(
+      TimeDelta::FromMinutes(std::numeric_limits<int>::max()).is_max(), "");
 
-  t = TimeDelta::FromMinutes(std::numeric_limits<int>::max());
-  EXPECT_TRUE(t.is_max());
+  constexpr int64_t max_int = std::numeric_limits<int64_t>::max();
+  constexpr int64_t min_int = std::numeric_limits<int64_t>::min();
 
-  int64_t max_int = std::numeric_limits<int64_t>::max();
-  int64_t min_int = std::numeric_limits<int64_t>::min();
+  static_assert(
+      TimeDelta::FromSeconds(max_int / Time::kMicrosecondsPerSecond + 1)
+          .is_max(),
+      "");
 
-  t = TimeDelta::FromSeconds(max_int / Time::kMicrosecondsPerSecond + 1);
-  EXPECT_TRUE(t.is_max());
+  static_assert(
+      TimeDelta::FromMilliseconds(max_int / Time::kMillisecondsPerSecond + 1)
+          .is_max(),
+      "");
 
-  t = TimeDelta::FromMilliseconds(max_int / Time::kMillisecondsPerSecond + 1);
-  EXPECT_TRUE(t.is_max());
+  static_assert(TimeDelta::FromMicroseconds(max_int).is_max(), "");
 
-  t = TimeDelta::FromMicroseconds(max_int);
-  EXPECT_TRUE(t.is_max());
+  static_assert(
+      TimeDelta::FromSeconds(min_int / Time::kMicrosecondsPerSecond - 1)
+          .is_min(),
+      "");
 
-  t = TimeDelta::FromSeconds(min_int / Time::kMicrosecondsPerSecond - 1);
-  EXPECT_TRUE(IsMin(t));
+  static_assert(
+      TimeDelta::FromMilliseconds(min_int / Time::kMillisecondsPerSecond - 1)
+          .is_min(),
+      "");
 
-  t = TimeDelta::FromMilliseconds(min_int / Time::kMillisecondsPerSecond - 1);
-  EXPECT_TRUE(IsMin(t));
+  static_assert(TimeDelta::FromMicroseconds(min_int).is_min(), "");
 
-  t = TimeDelta::FromMicroseconds(min_int);
-  EXPECT_TRUE(IsMin(t));
+  static_assert(
+      TimeDelta::FromMicroseconds(std::numeric_limits<int64_t>::min()).is_min(),
+      "");
 
-  t = TimeDelta::FromMicroseconds(std::numeric_limits<int64_t>::min());
-  EXPECT_TRUE(IsMin(t));
+  // Floating point arithmetic resulting in infinity isn't constexpr in C++14.
+  EXPECT_TRUE(TimeDelta::FromSecondsD(std::numeric_limits<double>::infinity())
+                  .is_max());
 
-  t = TimeDelta::FromSecondsD(std::numeric_limits<double>::infinity());
-  EXPECT_TRUE(t.is_max());
+  // Note that max_int/min_int will be rounded when converted to doubles - they
+  // can't be exactly represented.
+  constexpr double max_d = static_cast<double>(max_int);
+  constexpr double min_d = static_cast<double>(min_int);
 
-  double max_d = max_int;
-  double min_d = min_int;
+  static_assert(
+      TimeDelta::FromSecondsD(max_d / Time::kMicrosecondsPerSecond + 1)
+          .is_max(),
+      "");
 
-  t = TimeDelta::FromSecondsD(max_d / Time::kMicrosecondsPerSecond + 1);
-  EXPECT_TRUE(t.is_max());
+  // Floating point arithmetic resulting in infinity isn't constexpr in C++14.
+  EXPECT_TRUE(
+      TimeDelta::FromMillisecondsD(std::numeric_limits<double>::infinity())
+          .is_max());
 
-  t = TimeDelta::FromMillisecondsD(std::numeric_limits<double>::infinity());
-  EXPECT_TRUE(t.is_max());
+  static_assert(
+      TimeDelta::FromMillisecondsD(max_d / Time::kMillisecondsPerSecond * 2)
+          .is_max(),
+      "");
 
-  t = TimeDelta::FromMillisecondsD(max_d / Time::kMillisecondsPerSecond * 2);
-  EXPECT_TRUE(t.is_max());
+  static_assert(
+      TimeDelta::FromSecondsD(min_d / Time::kMicrosecondsPerSecond - 1)
+          .is_min(),
+      "");
 
-  t = TimeDelta::FromSecondsD(min_d / Time::kMicrosecondsPerSecond - 1);
-  EXPECT_TRUE(IsMin(t));
-
-  t = TimeDelta::FromMillisecondsD(min_d / Time::kMillisecondsPerSecond * 2);
-  EXPECT_TRUE(IsMin(t));
+  static_assert(
+      TimeDelta::FromMillisecondsD(min_d / Time::kMillisecondsPerSecond * 2)
+          .is_min(),
+      "");
 }
 
 TEST(TimeDelta, NumericOperators) {
-  double d = 0.5;
+  constexpr double d = 0.5;
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) * d);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) / d);
+            (TimeDelta::FromMilliseconds(1000) * d));
+  static_assert(TimeDelta::FromMilliseconds(2000) ==
+                    (TimeDelta::FromMilliseconds(1000) / d),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) *= d);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) /= d);
+            (TimeDelta::FromMilliseconds(1000) *= d));
+  static_assert(TimeDelta::FromMilliseconds(2000) ==
+                    (TimeDelta::FromMilliseconds(1000) /= d),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            d * TimeDelta::FromMilliseconds(1000));
+            (d * TimeDelta::FromMilliseconds(1000)));
 
-  float f = 0.5;
+  constexpr float f = 0.5;
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) * f);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) / f);
+            (TimeDelta::FromMilliseconds(1000) * f));
+  static_assert(TimeDelta::FromMilliseconds(2000) ==
+                    (TimeDelta::FromMilliseconds(1000) / f),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) *= f);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) /= f);
+            (TimeDelta::FromMilliseconds(1000) *= f));
+  static_assert(TimeDelta::FromMilliseconds(2000) ==
+                    (TimeDelta::FromMilliseconds(1000) /= f),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            f * TimeDelta::FromMilliseconds(1000));
+            (f * TimeDelta::FromMilliseconds(1000)));
 
-  int i = 2;
+  constexpr int i = 2;
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) * i);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) / i);
+            (TimeDelta::FromMilliseconds(1000) * i));
+  static_assert(TimeDelta::FromMilliseconds(500) ==
+                    (TimeDelta::FromMilliseconds(1000) / i),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) *= i);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) /= i);
+            (TimeDelta::FromMilliseconds(1000) *= i));
+  static_assert(TimeDelta::FromMilliseconds(500) ==
+                    (TimeDelta::FromMilliseconds(1000) /= i),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            i * TimeDelta::FromMilliseconds(1000));
+            (i * TimeDelta::FromMilliseconds(1000)));
 
-  int64_t i64 = 2;
+  constexpr int64_t i64 = 2;
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) * i64);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) / i64);
+            (TimeDelta::FromMilliseconds(1000) * i64));
+  static_assert(TimeDelta::FromMilliseconds(500) ==
+                    (TimeDelta::FromMilliseconds(1000) / i64),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) *= i64);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) /= i64);
+            (TimeDelta::FromMilliseconds(1000) *= i64));
+  static_assert(TimeDelta::FromMilliseconds(500) ==
+                    (TimeDelta::FromMilliseconds(1000) /= i64),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            i64 * TimeDelta::FromMilliseconds(1000));
+            (i64 * TimeDelta::FromMilliseconds(1000)));
 
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) * 0.5);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) / 0.5);
+            (TimeDelta::FromMilliseconds(1000) * 0.5));
+  static_assert(TimeDelta::FromMilliseconds(2000) ==
+                    (TimeDelta::FromMilliseconds(1000) / 0.5),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) *= 0.5);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) /= 0.5);
+            (TimeDelta::FromMilliseconds(1000) *= 0.5));
+  static_assert(TimeDelta::FromMilliseconds(2000) ==
+                    (TimeDelta::FromMilliseconds(1000) /= 0.5),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            0.5 * TimeDelta::FromMilliseconds(1000));
+            (0.5 * TimeDelta::FromMilliseconds(1000)));
 
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) * 2);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) / 2);
+            (TimeDelta::FromMilliseconds(1000) * 2));
+  static_assert(TimeDelta::FromMilliseconds(500) ==
+                    (TimeDelta::FromMilliseconds(1000) / 2),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            TimeDelta::FromMilliseconds(1000) *= 2);
-  EXPECT_EQ(TimeDelta::FromMilliseconds(500),
-            TimeDelta::FromMilliseconds(1000) /= 2);
+            (TimeDelta::FromMilliseconds(1000) *= 2));
+  static_assert(TimeDelta::FromMilliseconds(500) ==
+                    (TimeDelta::FromMilliseconds(1000) /= 2),
+                "");
   EXPECT_EQ(TimeDelta::FromMilliseconds(2000),
-            2 * TimeDelta::FromMilliseconds(1000));
+            (2 * TimeDelta::FromMilliseconds(1000)));
+}
+
+// Basic test of operators between TimeDeltas (without overflow -- next test
+// handles overflow).
+TEST(TimeDelta, TimeDeltaOperators) {
+  constexpr TimeDelta kElevenSeconds = TimeDelta::FromSeconds(11);
+  constexpr TimeDelta kThreeSeconds = TimeDelta::FromSeconds(3);
+
+  EXPECT_EQ(TimeDelta::FromSeconds(14), kElevenSeconds + kThreeSeconds);
+  EXPECT_EQ(TimeDelta::FromSeconds(14), kThreeSeconds + kElevenSeconds);
+  EXPECT_EQ(TimeDelta::FromSeconds(8), kElevenSeconds - kThreeSeconds);
+  EXPECT_EQ(TimeDelta::FromSeconds(-8), kThreeSeconds - kElevenSeconds);
+  static_assert(3 == kElevenSeconds / kThreeSeconds, "");
+  static_assert(0 == kThreeSeconds / kElevenSeconds, "");
+  static_assert(TimeDelta::FromSeconds(2) == kElevenSeconds % kThreeSeconds,
+                "");
 }
 
 TEST(TimeDelta, Overflows) {
-  // Some sanity checks.
-  EXPECT_TRUE(TimeDelta::Max().is_max());
-  EXPECT_LT(-TimeDelta::Max(), TimeDelta());
-  EXPECT_GT(-TimeDelta::Max(), TimeDelta::Min());
-  EXPECT_GT(TimeDelta(), -TimeDelta::Max());
+  // Some sanity checks. static_assert's used were possible to verify constexpr
+  // evaluation at the same time.
+  static_assert(TimeDelta::Max().is_max(), "");
+  static_assert(-TimeDelta::Max() < TimeDelta(), "");
+  static_assert(-TimeDelta::Max() > TimeDelta::Min(), "");
+  static_assert(TimeDelta() > -TimeDelta::Max(), "");
 
   TimeDelta large_delta = TimeDelta::Max() - TimeDelta::FromMilliseconds(1);
   TimeDelta large_negative = -large_delta;
   EXPECT_GT(TimeDelta(), large_negative);
   EXPECT_FALSE(large_delta.is_max());
-  EXPECT_FALSE(IsMin(-large_negative));
-  TimeDelta one_second = TimeDelta::FromSeconds(1);
+  EXPECT_FALSE((-large_negative).is_min());
+  constexpr TimeDelta kOneSecond = TimeDelta::FromSeconds(1);
 
   // Test +, -, * and / operators.
-  EXPECT_TRUE((large_delta + one_second).is_max());
-  EXPECT_TRUE(IsMin(large_negative + (-one_second)));
-  EXPECT_TRUE(IsMin(large_negative - one_second));
-  EXPECT_TRUE((large_delta - (-one_second)).is_max());
+  EXPECT_TRUE((large_delta + kOneSecond).is_max());
+  EXPECT_TRUE((large_negative + (-kOneSecond)).is_min());
+  EXPECT_TRUE((large_negative - kOneSecond).is_min());
+  EXPECT_TRUE((large_delta - (-kOneSecond)).is_max());
   EXPECT_TRUE((large_delta * 2).is_max());
-  EXPECT_TRUE(IsMin(large_delta * -2));
+  EXPECT_TRUE((large_delta * -2).is_min());
   EXPECT_TRUE((large_delta / 0.5).is_max());
-  EXPECT_TRUE(IsMin(large_delta / -0.5));
+  EXPECT_TRUE((large_delta / -0.5).is_min());
+
+  // Test that double conversions overflow to infinity.
+  EXPECT_EQ((large_delta + kOneSecond).InSecondsF(),
+            std::numeric_limits<double>::infinity());
+  EXPECT_EQ((large_delta + kOneSecond).InMillisecondsF(),
+            std::numeric_limits<double>::infinity());
+  EXPECT_EQ((large_delta + kOneSecond).InMicrosecondsF(),
+            std::numeric_limits<double>::infinity());
 
   // Test +=, -=, *= and /= operators.
   TimeDelta delta = large_delta;
-  delta += one_second;
+  delta += kOneSecond;
   EXPECT_TRUE(delta.is_max());
   delta = large_negative;
-  delta += -one_second;
-  EXPECT_TRUE(IsMin(delta));
+  delta += -kOneSecond;
+  EXPECT_TRUE((delta).is_min());
 
   delta = large_negative;
-  delta -= one_second;
-  EXPECT_TRUE(IsMin(delta));
+  delta -= kOneSecond;
+  EXPECT_TRUE((delta).is_min());
   delta = large_delta;
-  delta -= -one_second;
+  delta -= -kOneSecond;
   EXPECT_TRUE(delta.is_max());
 
   delta = large_delta;
@@ -1206,14 +1509,14 @@ TEST(TimeDelta, Overflows) {
   EXPECT_TRUE(delta.is_max());
   delta = large_negative;
   delta *= 1.5;
-  EXPECT_TRUE(IsMin(delta));
+  EXPECT_TRUE((delta).is_min());
 
   delta = large_delta;
   delta /= 0.5;
   EXPECT_TRUE(delta.is_max());
   delta = large_negative;
   delta /= 0.5;
-  EXPECT_TRUE(IsMin(delta));
+  EXPECT_TRUE((delta).is_min());
 
   // Test operations with Time and TimeTicks.
   EXPECT_TRUE((large_delta + Time::Now()).is_max());
@@ -1222,12 +1525,12 @@ TEST(TimeDelta, Overflows) {
   EXPECT_TRUE((TimeTicks::Now() + large_delta).is_max());
 
   Time time_now = Time::Now();
-  EXPECT_EQ(one_second, (time_now + one_second) - time_now);
-  EXPECT_EQ(-one_second, (time_now - one_second) - time_now);
+  EXPECT_EQ(kOneSecond, (time_now + kOneSecond) - time_now);
+  EXPECT_EQ(-kOneSecond, (time_now - kOneSecond) - time_now);
 
   TimeTicks ticks_now = TimeTicks::Now();
-  EXPECT_EQ(-one_second, (ticks_now - one_second) - ticks_now);
-  EXPECT_EQ(one_second, (ticks_now + one_second) - ticks_now);
+  EXPECT_EQ(-kOneSecond, (ticks_now - kOneSecond) - ticks_now);
+  EXPECT_EQ(kOneSecond, (ticks_now + kOneSecond) - ticks_now);
 }
 
 TEST(TimeDeltaLogging, DCheckEqCompiles) {
@@ -1235,18 +1538,18 @@ TEST(TimeDeltaLogging, DCheckEqCompiles) {
 }
 
 TEST(TimeDeltaLogging, EmptyIsZero) {
-  TimeDelta zero;
-  EXPECT_EQ("0 s", AnyToString(zero));
+  constexpr TimeDelta kZero;
+  EXPECT_EQ("0 s", AnyToString(kZero));
 }
 
 TEST(TimeDeltaLogging, FiveHundredMs) {
-  TimeDelta five_hundred_ms = TimeDelta::FromMilliseconds(500);
-  EXPECT_EQ("0.5 s", AnyToString(five_hundred_ms));
+  constexpr TimeDelta kFiveHundredMs = TimeDelta::FromMilliseconds(500);
+  EXPECT_EQ("0.5 s", AnyToString(kFiveHundredMs));
 }
 
 TEST(TimeDeltaLogging, MinusTenSeconds) {
-  TimeDelta minus_ten_seconds = TimeDelta::FromSeconds(-10);
-  EXPECT_EQ("-10 s", AnyToString(minus_ten_seconds));
+  constexpr TimeDelta kMinusTenSeconds = TimeDelta::FromSeconds(-10);
+  EXPECT_EQ("-10 s", AnyToString(kMinusTenSeconds));
 }
 
 TEST(TimeDeltaLogging, DoesNotMessUpFormattingFlags) {

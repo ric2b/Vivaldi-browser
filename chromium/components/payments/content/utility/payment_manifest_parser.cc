@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -29,6 +28,15 @@ const char* const kDefaultApplications = "default_applications";
 const char* const kHttpPrefix = "http://";
 const char* const kHttpsPrefix = "https://";
 const char* const kSupportedOrigins = "supported_origins";
+const char* const kServiceWorker = "serviceworker";
+const char* const kServiceWorkerSrc = "src";
+const char* const kServiceWorkerScope = "scope";
+const char* const kServiceWorkerUseCache = "use_cache";
+const char* const kWebAppName = "name";
+const char* const kWebAppIcons = "icons";
+const char* const kWebAppIconSrc = "src";
+const char* const kWebAppIconSizes = "sizes";
+const char* const kWebAppIconType = "type";
 
 // Parses the "default_applications": ["https://some/url"] from |dict| into
 // |web_app_manifest_urls|. Returns 'false' for invalid data.
@@ -188,6 +196,10 @@ class JsonParserCallback
 
 }  // namespace
 
+PaymentManifestParser::WebAppIcon::WebAppIcon() = default;
+
+PaymentManifestParser::WebAppIcon::~WebAppIcon() = default;
+
 PaymentManifestParser::PaymentManifestParser() : weak_factory_(this) {}
 
 PaymentManifestParser::~PaymentManifestParser() = default;
@@ -231,6 +243,25 @@ void PaymentManifestParser::ParseWebAppManifest(const std::string& content,
                  parser_callback),
       base::Bind(&JsonParserCallback<WebAppCallback>::OnError,
                  parser_callback));
+}
+
+void PaymentManifestParser::ParseWebAppInstallationInfo(
+    const std::string& content,
+    WebAppInstallationInfoCallback callback) {
+  scoped_refptr<JsonParserCallback<WebAppInstallationInfoCallback>>
+      sw_parser_callback =
+          new JsonParserCallback<WebAppInstallationInfoCallback>(
+              base::Bind(&PaymentManifestParser::OnWebAppParseInstallationInfo,
+                         weak_factory_.GetWeakPtr()),
+              std::move(callback));
+
+  data_decoder::SafeJsonParser::Parse(
+      content::ServiceManagerConnection::GetForProcess()->GetConnector(),
+      content,
+      base::Bind(&JsonParserCallback<WebAppInstallationInfoCallback>::OnSuccess,
+                 sw_parser_callback),
+      base::Bind(&JsonParserCallback<WebAppInstallationInfoCallback>::OnError,
+                 sw_parser_callback));
 }
 
 // static
@@ -411,6 +442,73 @@ void PaymentManifestParser::OnWebAppParse(WebAppCallback callback,
   // Can trigger synchronous deletion of this object, so can't access any of the
   // member variables after this block.
   std::move(callback).Run(manifest);
+}
+
+void PaymentManifestParser::OnWebAppParseInstallationInfo(
+    WebAppInstallationInfoCallback callback,
+    std::unique_ptr<base::Value> value) {
+  // TODO(crbug.com/782270): Move this function into a static function for unit
+  // test.
+  if (!value || value->FindKey({kServiceWorker}) == nullptr) {
+    return std::move(callback).Run(nullptr, nullptr);
+  }
+
+  std::unique_ptr<WebAppInstallationInfo> sw =
+      std::make_unique<WebAppInstallationInfo>();
+  auto* sw_path = value->FindPath({kServiceWorker, kServiceWorkerSrc});
+  if (sw_path == nullptr) {
+    LOG(ERROR) << "Service Worker js src cannot be empty.";
+    return std::move(callback).Run(nullptr, nullptr);
+  }
+  sw->sw_js_url = sw_path->GetString();
+
+  sw_path = value->FindPath({kServiceWorker, kServiceWorkerScope});
+  if (sw_path != nullptr) {
+    sw->sw_scope = sw_path->GetString();
+  }
+
+  sw_path = value->FindPath({kServiceWorker, kServiceWorkerUseCache});
+  if (sw_path != nullptr) {
+    sw->sw_use_cache = sw_path->GetBool();
+  }
+
+  auto* name_key = value->FindKey({kWebAppName});
+  if (name_key != nullptr) {
+    sw->name = name_key->GetString();
+  }
+
+  // Extract icons.
+  std::unique_ptr<std::vector<WebAppIcon>> icons;
+  auto* icons_key = value->FindKey({kWebAppIcons});
+  if (icons_key != nullptr) {
+    icons = std::make_unique<std::vector<WebAppIcon>>();
+    for (const auto& icon : icons_key->GetList()) {
+      if (!icon.is_dict())
+        continue;
+
+      WebAppIcon web_app_icon;
+      const base::Value* icon_src =
+          icon.FindKeyOfType(kWebAppIconSrc, base::Value::Type::STRING);
+      if (!icon_src || icon_src->GetString().empty())
+        continue;
+      web_app_icon.src = icon_src->GetString();
+
+      const base::Value* icon_sizes =
+          icon.FindKeyOfType(kWebAppIconSizes, base::Value::Type::STRING);
+      if (!icon_sizes || icon_sizes->GetString().empty())
+        continue;
+      web_app_icon.sizes = icon_sizes->GetString();
+
+      const base::Value* icon_type =
+          icon.FindKeyOfType(kWebAppIconType, base::Value::Type::STRING);
+      if (icon_type)
+        web_app_icon.type = icon_type->GetString();
+
+      icons->emplace_back(web_app_icon);
+    }
+  }
+
+  return std::move(callback).Run(std::move(sw), std::move(icons));
 }
 
 }  // namespace payments

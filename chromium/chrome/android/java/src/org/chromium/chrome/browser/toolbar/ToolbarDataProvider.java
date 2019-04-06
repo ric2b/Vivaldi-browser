@@ -4,11 +4,13 @@
 
 package org.chromium.chrome.browser.toolbar;
 
+import android.content.res.ColorStateList;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
@@ -50,9 +52,9 @@ public interface ToolbarDataProvider {
     Profile getProfile();
 
     /**
-     * @return The formatted text (URL or search terms) for display.
+     * @return The contents of the {@link org.chromium.chrome.browser.omnibox.UrlBar}.
      */
-    String getText();
+    UrlBarData getUrlBarData();
 
     /**
      * @return The title of the current tab, or the empty string if there is currently no tab.
@@ -81,11 +83,6 @@ public interface ToolbarDataProvider {
     boolean shouldShowGoogleG(String urlBarText);
 
     /**
-     * @return Whether the security icon should be displayed.
-     */
-    boolean shouldShowSecurityIcon();
-
-    /**
      * @return Whether verbose status next to the security icon should be displayed.
      */
     boolean shouldShowVerboseStatus();
@@ -97,9 +94,18 @@ public interface ToolbarDataProvider {
     int getSecurityLevel();
 
     /**
-     * Determines the icon that should be displayed for the current security level.
-     * @return The resource ID of the icon that should be displayed, 0 if no icon should show.
+     * @return The resource ID of the icon that should be displayed or 0 if no icon should be shown.
      */
     @DrawableRes
-    int getSecurityIconResource();
+    int getSecurityIconResource(boolean isTablet);
+
+    /**
+     * @return The {@link ColorStateList} to use to tint the security state icon.
+     */
+    ColorStateList getSecurityIconColorStateList();
+
+    /**
+     * @return Whether or not we should display search terms instead of a URL for query in omnibox.
+     */
+    boolean shouldDisplaySearchTerms();
 }

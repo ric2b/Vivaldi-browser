@@ -56,20 +56,17 @@ Polymer({
     titleRow.addItem('collapse', '#collapse-button');
     const rows = [titleRow];
     if (this.opened) {
-      Polymer.dom(this.root)
-          .querySelectorAll('.item-container')
-          .forEach(function(el) {
-            const row = new cr.ui.FocusRow(el, null);
-            row.addItem('title', '.website-title');
-            rows.push(row);
-          });
+      this.shadowRoot.querySelectorAll('.item-container').forEach(function(el) {
+        const row = new cr.ui.FocusRow(el, null);
+        row.addItem('title', '.website-title');
+        rows.push(row);
+      });
     }
     return rows;
   },
 
   /**
-   * Open a single synced tab. Listens to 'click' rather than 'tap'
-   * to determine what modifier keys were pressed.
+   * Open a single synced tab.
    * @param {DomRepeatClickEvent} e
    * @private
    */

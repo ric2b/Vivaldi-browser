@@ -11,17 +11,13 @@
 namespace viz {
 
 SurfaceDependencyTracker::SurfaceDependencyTracker(
-    SurfaceManager* surface_manager,
-    uint32_t number_of_frames_to_deadline)
-    : surface_manager_(surface_manager),
-      number_of_frames_to_deadline_(number_of_frames_to_deadline) {}
+    SurfaceManager* surface_manager)
+    : surface_manager_(surface_manager) {}
 
 SurfaceDependencyTracker::~SurfaceDependencyTracker() = default;
 
 void SurfaceDependencyTracker::RequestSurfaceResolution(Surface* surface) {
   DCHECK(surface->HasPendingFrame());
-
-  const CompositorFrame& pending_frame = surface->GetPendingFrame();
 
   if (IsSurfaceLate(surface)) {
     ActivateLateSurfaceSubtree(surface);
@@ -30,8 +26,7 @@ void SurfaceDependencyTracker::RequestSurfaceResolution(Surface* surface) {
 
   // Activation dependencies that aren't currently known to the surface manager
   // or do not have an active CompositorFrame block this frame.
-  for (const SurfaceId& surface_id :
-       pending_frame.metadata.activation_dependencies) {
+  for (const SurfaceId& surface_id : surface->activation_dependencies()) {
     Surface* dependency = surface_manager_->GetSurfaceForId(surface_id);
     if (!dependency || !dependency->HasActiveFrame()) {
       blocked_surfaces_from_dependency_[surface_id.frame_sink_id()].insert(
@@ -63,68 +58,51 @@ void SurfaceDependencyTracker::OnSurfaceDependenciesChanged(
 
   for (const FrameSinkId& frame_sink_id : removed_dependencies) {
     auto it = blocked_surfaces_from_dependency_.find(frame_sink_id);
-    it->second.erase(surface->surface_id());
-    if (it->second.empty())
-      blocked_surfaces_from_dependency_.erase(it);
+    if (it != blocked_surfaces_from_dependency_.end()) {
+      it->second.erase(surface->surface_id());
+      if (it->second.empty())
+        blocked_surfaces_from_dependency_.erase(it);
+    }
   }
 }
 
 void SurfaceDependencyTracker::OnSurfaceDiscarded(Surface* surface) {
   surfaces_with_missing_dependencies_.erase(surface->surface_id());
 
-  // If the surface being destroyed doesn't have a pending frame then we have
-  // nothing to do here.
-  if (!surface->HasPendingFrame())
-    return;
+  base::flat_set<FrameSinkId> removed_dependencies;
+  for (const SurfaceId& surface_id : surface->activation_dependencies())
+    removed_dependencies.insert(surface_id.frame_sink_id());
 
-  const CompositorFrame& pending_frame = surface->GetPendingFrame();
-
-  DCHECK(!pending_frame.metadata.activation_dependencies.empty());
-
-  for (const SurfaceId& surface_id :
-       pending_frame.metadata.activation_dependencies) {
-    auto it =
-        blocked_surfaces_from_dependency_.find(surface_id.frame_sink_id());
-    if (it == blocked_surfaces_from_dependency_.end())
-      continue;
-
-    auto& blocked_surface_ids = it->second;
-    auto blocked_surface_ids_it =
-        blocked_surface_ids.find(surface->surface_id());
-    if (blocked_surface_ids_it != blocked_surface_ids.end()) {
-      blocked_surface_ids.erase(surface->surface_id());
-      if (blocked_surface_ids.empty())
-        blocked_surfaces_from_dependency_.erase(surface_id.frame_sink_id());
-    }
-  }
+  OnSurfaceDependenciesChanged(surface, {}, removed_dependencies);
 
   // Pretend that the discarded surface's SurfaceId is now available to
   // unblock dependencies because we now know the surface will never activate.
   NotifySurfaceIdAvailable(surface->surface_id());
 }
 
+void SurfaceDependencyTracker::OnFrameSinkInvalidated(
+    const FrameSinkId& frame_sink_id) {
+  // We now know the frame sink will never generated any more frames,
+  // thus unblock all dependencies to any future surfaces.
+  NotifySurfaceIdAvailable(SurfaceId::MaxSequenceId(frame_sink_id));
+}
+
 void SurfaceDependencyTracker::ActivateLateSurfaceSubtree(Surface* surface) {
   DCHECK(surface->HasPendingFrame());
 
-  const CompositorFrame& pending_frame = surface->GetPendingFrame();
-
-  for (const SurfaceId& surface_id :
-       pending_frame.metadata.activation_dependencies) {
+  base::flat_set<SurfaceId> late_dependencies(
+      surface->activation_dependencies());
+  for (const SurfaceId& surface_id : late_dependencies) {
     Surface* dependency = surface_manager_->GetSurfaceForId(surface_id);
     if (dependency && dependency->HasPendingFrame())
       ActivateLateSurfaceSubtree(dependency);
   }
 
-  surface->ActivatePendingFrameForDeadline();
+  surface->ActivatePendingFrameForDeadline(base::nullopt);
 }
 
 void SurfaceDependencyTracker::UpdateSurfaceDeadline(Surface* surface) {
   DCHECK(surface->HasPendingFrame());
-
-  const CompositorFrame& pending_frame = surface->GetPendingFrame();
-
-  // Determine an activation deadline for the pending CompositorFrame.
-  bool deadline_changed = false;
 
   // Inherit the deadline from the first parent blocked on this surface.
   auto it = blocked_surfaces_from_dependency_.find(
@@ -135,25 +113,19 @@ void SurfaceDependencyTracker::UpdateSurfaceDeadline(Surface* surface) {
       Surface* parent = surface_manager_->GetSurfaceForId(parent_id);
       if (parent && parent->has_deadline() &&
           parent->activation_dependencies().count(surface->surface_id())) {
-        deadline_changed =
-            surface->InheritActivationDeadlineFrom(parent->deadline());
+        surface->InheritActivationDeadlineFrom(parent);
         break;
       }
     }
   }
-  // If there are no CompositorFrames currently blocked on this surface, then
-  // set a default deadline for this surface.
-  if (!surface->has_deadline()) {
-    surface->SetActivationDeadline(number_of_frames_to_deadline_);
-    deadline_changed = true;
-  }
 
-  if (!deadline_changed)
-    return;
+  DCHECK(!surface_manager_->activation_deadline_in_frames() ||
+         surface->has_deadline());
 
   // Recursively propagate the newly set deadline to children.
-  for (const SurfaceId& surface_id :
-       pending_frame.metadata.activation_dependencies) {
+  base::flat_set<SurfaceId> activation_dependencies(
+      surface->activation_dependencies());
+  for (const SurfaceId& surface_id : activation_dependencies) {
     Surface* dependency = surface_manager_->GetSurfaceForId(surface_id);
     if (dependency && dependency->HasPendingFrame())
       UpdateSurfaceDeadline(dependency);

@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/task_runner_util.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -59,7 +58,7 @@ static void FinishedAsyncCopyRequest(
     aura::Window* window = tracker->windows()[0];
     MakeAsyncCopyRequest(
         window->layer(), source_rect,
-        base::BindOnce(&FinishedAsyncCopyRequest, base::Passed(&tracker),
+        base::BindOnce(&FinishedAsyncCopyRequest, std::move(tracker),
                        source_rect, std::move(callback), retry_count + 1));
     return;
   }
@@ -75,8 +74,8 @@ static void MakeInitialAsyncCopyRequest(
   tracker->Add(window);
   MakeAsyncCopyRequest(
       window->layer(), source_rect,
-      base::BindOnce(&FinishedAsyncCopyRequest, base::Passed(&tracker),
-                     source_rect, std::move(callback), 0));
+      base::BindOnce(&FinishedAsyncCopyRequest, std::move(tracker), source_rect,
+                     std::move(callback), 0));
 }
 
 void GrabWindowSnapshotAndScaleAsyncAura(

@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/owned_mailbox.h"
@@ -164,7 +163,7 @@ void ReflectorImpl::UpdateTexture(ReflectorImpl::LayerData* layer_data,
                                           mailbox_->holder().texture_target,
                                           mailbox_->holder().sync_token),
         viz::SingleReleaseCallback::Create(
-            base::Bind(ReleaseMailbox, mailbox_)),
+            base::BindOnce(ReleaseMailbox, mailbox_)),
         source_size);
     layer_data->needs_set_mailbox = false;
   } else {

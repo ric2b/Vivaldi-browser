@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLConnection;
 import java.util.List;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Implements the Java side of Android URL protocol jobs.
@@ -43,9 +44,22 @@ public class AndroidProtocolHandler {
         if (uri == null) {
             return null;
         }
+        InputStream stream = openByScheme(uri);
+        if (stream != null && uri.getLastPathSegment().endsWith(".svgz")) {
+            try {
+                stream = new GZIPInputStream(stream);
+            } catch (IOException e) {
+                Log.e(TAG, "Error decompressing " + uri + " - " + e.getMessage());
+                return null;
+            }
+        }
+        return stream;
+    }
+
+    private static InputStream openByScheme(Uri uri) {
         try {
-            String path = uri.getPath();
             if (uri.getScheme().equals(FILE_SCHEME)) {
+                String path = uri.getPath();
                 if (path.startsWith(nativeGetAndroidAssetPath())) {
                     return openAsset(uri);
                 } else if (path.startsWith(nativeGetAndroidResourcePath())) {
@@ -55,7 +69,7 @@ public class AndroidProtocolHandler {
                 return openContent(uri);
             }
         } catch (Exception ex) {
-            Log.e(TAG, "Error opening inputstream: " + url);
+            Log.e(TAG, "Error opening inputstream: " + uri);
         }
         return null;
     }
@@ -69,26 +83,27 @@ public class AndroidProtocolHandler {
         return input.substring(0, lastDotIndex);
     }
 
-    private static Class<?> getClazz(String assetType) throws ClassNotFoundException {
+    private static Class<?> getClazz(String packageName, String assetType)
+            throws ClassNotFoundException {
         return ContextUtils.getApplicationContext().getClassLoader().loadClass(
-                ContextUtils.getApplicationContext().getPackageName() + ".R$" + assetType);
+                packageName + ".R$" + assetType);
     }
 
     private static int getFieldId(String assetType, String assetName)
             throws ClassNotFoundException, NoSuchFieldException, IllegalAccessException {
         Class<?> clazz = null;
+        String packageName = ContextUtils.getApplicationContext().getPackageName();
         try {
-            clazz = getClazz(assetType);
+            clazz = getClazz(packageName, assetType);
         } catch (ClassNotFoundException e) {
             // Strip out components from the end so gradle generated application suffix such as
             // com.example.my.pkg.pro works. This is by no means bulletproof.
-            String packageName = ContextUtils.getApplicationContext().getPackageName();
             while (clazz == null) {
                 packageName = removeOneSuffix(packageName);
                 // Throw original exception which contains the entire package id.
                 if (packageName == null) throw e;
                 try {
-                    clazz = getClazz(assetType);
+                    clazz = getClazz(packageName, assetType);
                 } catch (ClassNotFoundException ignored) {
                     // Strip and try again.
                 }

@@ -18,10 +18,10 @@
 #include "chrome/browser/download/download_target_determiner_delegate.h"
 #include "chrome/browser/download/download_target_info.h"
 #include "chrome/common/safe_browsing/download_file_types.pb.h"
-#include "content/public/browser/download_danger_type.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_danger_type.h"
+#include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_manager_delegate.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 class Profile;
 class DownloadPrefs;
@@ -49,8 +49,7 @@ class DownloadPrefs;
 //
 // The only public entrypoint is the static Start() method which creates an
 // instance of DownloadTargetDeterminer.
-class DownloadTargetDeterminer
-    : public content::DownloadItem::Observer {
+class DownloadTargetDeterminer : public download::DownloadItem::Observer {
  public:
   using CompletionCallback =
       base::Callback<void(std::unique_ptr<DownloadTargetInfo>)>;
@@ -72,7 +71,7 @@ class DownloadTargetDeterminer
   //
   // Start() should be called on the UI thread.
   static void Start(
-      content::DownloadItem* download,
+      download::DownloadItem* download,
       const base::FilePath& initial_virtual_path,
       DownloadPathReservationTracker::FilenameConflictAction conflict_action,
       DownloadPrefs* download_prefs,
@@ -137,7 +136,7 @@ class DownloadTargetDeterminer
   // Construct a DownloadTargetDeterminer object. Constraints on the arguments
   // are as per Start() above.
   DownloadTargetDeterminer(
-      content::DownloadItem* download,
+      download::DownloadItem* download,
       const base::FilePath& initial_virtual_path,
       DownloadPathReservationTracker::FilenameConflictAction conflict_action,
       DownloadPrefs* download_prefs,
@@ -249,7 +248,7 @@ class DownloadTargetDeterminer
 
   // Callback invoked after the delegate has checked the download URL. Sets the
   // danger type of the download to |danger_type|.
-  void CheckDownloadUrlDone(content::DownloadDangerType danger_type);
+  void CheckDownloadUrlDone(download::DownloadDangerType danger_type);
 
   // Checks if the user has visited the referrer URL of the download prior to
   // today. The actual check is only performed if it would be needed to
@@ -277,7 +276,7 @@ class DownloadTargetDeterminer
   // this object. The determined target info will be passed into the callback
   // if |interrupt_reason| is NONE. Otherwise, only the interrupt reason will be
   // passed on.
-  void ScheduleCallbackAndDeleteSelf(content::DownloadInterruptReason result);
+  void ScheduleCallbackAndDeleteSelf(download::DownloadInterruptReason result);
 
   Profile* GetProfile() const;
 
@@ -308,8 +307,8 @@ class DownloadTargetDeterminer
   safe_browsing::DownloadFileType::DangerLevel GetDangerLevel(
       PriorVisitsToReferrer visits) const;
 
-  // content::DownloadItem::Observer
-  void OnDownloadDestroyed(content::DownloadItem* download) override;
+  // download::DownloadItem::Observer
+  void OnDownloadDestroyed(download::DownloadItem* download) override;
 
   // state
   State next_state_;
@@ -317,15 +316,18 @@ class DownloadTargetDeterminer
   bool should_notify_extensions_;
   bool create_target_directory_;
   DownloadPathReservationTracker::FilenameConflictAction conflict_action_;
-  content::DownloadDangerType danger_type_;
+  download::DownloadDangerType danger_type_;
   safe_browsing::DownloadFileType::DangerLevel danger_level_;
   base::FilePath virtual_path_;
   base::FilePath local_path_;
   base::FilePath intermediate_path_;
   std::string mime_type_;
   bool is_filetype_handled_safely_;
+#if defined(OS_ANDROID)
+  bool is_checking_dialog_confirmed_path_;
+#endif
 
-  content::DownloadItem* download_;
+  download::DownloadItem* download_;
   const bool is_resumption_;
   DownloadPrefs* download_prefs_;
   DownloadTargetDeterminerDelegate* delegate_;

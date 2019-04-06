@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -13,6 +14,15 @@
 #include "ui/gl/gl_image_io_surface.h"
 
 namespace gpu {
+
+namespace {
+// A GpuMemoryBuffer with client_id = 0 behaves like anonymous shared memory.
+const int kAnonymousClientId = 0;
+
+// The maximum number of times to dump before throttling (to avoid sending
+// thousands of crash dumps).
+const int kMaxCrashDumps = 10;
+}  // namespace
 
 GpuMemoryBufferFactoryIOSurface::GpuMemoryBufferFactoryIOSurface() {
 }
@@ -28,26 +38,48 @@ GpuMemoryBufferFactoryIOSurface::CreateGpuMemoryBuffer(
     gfx::BufferUsage usage,
     int client_id,
     SurfaceHandle surface_handle) {
-  // Don't clear anonymous io surfaces.
-  bool should_clear = (client_id != 0);
+  DCHECK_NE(client_id, kAnonymousClientId);
+
+  bool should_clear = true;
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
       gfx::CreateIOSurface(size, format, should_clear));
-  if (!io_surface)
+  if (!io_surface) {
+    LOG(ERROR) << "Failed to allocate IOSurface.";
     return gfx::GpuMemoryBufferHandle();
-
-  // A GpuMemoryBuffer with client_id = 0 behaves like anonymous shared memory.
-  if (client_id != 0) {
-    base::AutoLock lock(io_surfaces_lock_);
-
-    IOSurfaceMapKey key(id, client_id);
-    DCHECK(io_surfaces_.find(key) == io_surfaces_.end());
-    io_surfaces_[key] = io_surface;
   }
 
   gfx::GpuMemoryBufferHandle handle;
   handle.type = gfx::IO_SURFACE_BUFFER;
   handle.id = id;
   handle.mach_port.reset(IOSurfaceCreateMachPort(io_surface));
+  CHECK(handle.mach_port);
+
+  // This IOSurface will be opened via mach port in the client process. It has
+  // been observed in https://crbug.com/574014 that these ports sometimes fail
+  // to be opened in the client process. It has further been observed in
+  // https://crbug.com/795649#c30 that these ports fail to be opened in creating
+  // process. To determine if these failures are independent, attempt to open
+  // the creating process first (and don't not return those that fail).
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface_from_mach_port(
+      IOSurfaceLookupFromMachPort(handle.mach_port.get()));
+  if (!io_surface_from_mach_port) {
+    LOG(ERROR) << "Failed to locally open IOSurface from mach port to be "
+                  "returned to client, not returning to client.";
+    static int dump_counter = kMaxCrashDumps;
+    if (dump_counter) {
+      dump_counter -= 1;
+      base::debug::DumpWithoutCrashing();
+    }
+    return gfx::GpuMemoryBufferHandle();
+  }
+
+  {
+    base::AutoLock lock(io_surfaces_lock_);
+    IOSurfaceMapKey key(id, client_id);
+    DCHECK(io_surfaces_.find(key) == io_surfaces_.end());
+    io_surfaces_[key] = io_surface;
+  }
+
   return handle;
 }
 
@@ -67,6 +99,10 @@ ImageFactory* GpuMemoryBufferFactoryIOSurface::AsImageFactory() {
   return this;
 }
 
+bool GpuMemoryBufferFactoryIOSurface::SupportsCreateAnonymousImage() const {
+  return true;
+}
+
 scoped_refptr<gl::GLImage>
 GpuMemoryBufferFactoryIOSurface::CreateImageForGpuMemoryBuffer(
     const gfx::GpuMemoryBufferHandle& handle,
@@ -80,13 +116,17 @@ GpuMemoryBufferFactoryIOSurface::CreateImageForGpuMemoryBuffer(
   DCHECK_EQ(handle.type, gfx::IO_SURFACE_BUFFER);
   IOSurfaceMapKey key(handle.id, client_id);
   IOSurfaceMap::iterator it = io_surfaces_.find(key);
-  if (it == io_surfaces_.end())
+  if (it == io_surfaces_.end()) {
+    DLOG(ERROR) << "Failed to find IOSurface based on key.";
     return scoped_refptr<gl::GLImage>();
+  }
 
   scoped_refptr<gl::GLImageIOSurface> image(
       gl::GLImageIOSurface::Create(size, internalformat));
-  if (!image->Initialize(it->second.get(), handle.id, format))
+  if (!image->Initialize(it->second.get(), handle.id, format)) {
+    DLOG(ERROR) << "Failed to initialize GLImage for IOSurface.";
     return scoped_refptr<gl::GLImage>();
+  }
 
   return image;
 }
@@ -97,20 +137,43 @@ GpuMemoryBufferFactoryIOSurface::CreateAnonymousImage(const gfx::Size& size,
                                                       gfx::BufferUsage usage,
                                                       unsigned internalformat,
                                                       bool* is_cleared) {
-  // Note that the child id doesn't matter since the texture will never be
-  // directly exposed to other processes, only via a mailbox.
-  gfx::GpuMemoryBufferHandle handle = CreateGpuMemoryBuffer(
-      gfx::GpuMemoryBufferId(next_anonymous_image_id_++), size, format, usage,
-      0 /* client_id */, gpu::kNullSurfaceHandle);
+  bool should_clear = false;
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
+      gfx::CreateIOSurface(size, format, should_clear));
+  if (!io_surface) {
+    LOG(ERROR) << "Failed to allocate IOSurface.";
+    return nullptr;
+  }
 
-  base::ScopedCFTypeRef<IOSurfaceRef> io_surface;
-  io_surface.reset(IOSurfaceLookupFromMachPort(handle.mach_port.get()));
-  DCHECK_NE(nullptr, io_surface.get());
+  // This IOSurface does not require passing via a mach port, but attempt to
+  // locally open via a mach port to gather data to include in a Radar about
+  // this failure.
+  // https://crbug.com/795649
+  gfx::ScopedRefCountedIOSurfaceMachPort mach_port(
+      IOSurfaceCreateMachPort(io_surface));
+  if (mach_port) {
+    base::ScopedCFTypeRef<IOSurfaceRef> io_surface_from_mach_port(
+        IOSurfaceLookupFromMachPort(mach_port.get()));
+    if (!io_surface_from_mach_port) {
+      LOG(ERROR) << "Failed to locally open anonymous IOSurface mach port "
+                    "(ignoring failure).";
+      static int dump_counter = kMaxCrashDumps;
+      if (dump_counter) {
+        dump_counter -= 1;
+        base::debug::DumpWithoutCrashing();
+      }
+    }
+  } else {
+    LOG(ERROR) << "Failed to create IOSurface mach port.";
+  }
 
+  gfx::GenericSharedMemoryId image_id(++next_anonymous_image_id_);
   scoped_refptr<gl::GLImageIOSurface> image(
       gl::GLImageIOSurface::Create(size, internalformat));
-  if (!image->Initialize(io_surface.get(), handle.id, format))
+  if (!image->Initialize(io_surface.get(), image_id, format)) {
+    DLOG(ERROR) << "Failed to initialize anonymous GLImage.";
     return scoped_refptr<gl::GLImage>();
+  }
 
   *is_cleared = false;
   return image;

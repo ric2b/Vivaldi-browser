@@ -7,10 +7,10 @@
 #include <memory>
 #include <set>
 
-#include "base/metrics/histogram_macros.h"
+#include "chromeos/chromeos_features.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/timer_factory.h"
-#include "components/proximity_auth/logging/logging.h"
 
 namespace chromeos {
 
@@ -18,10 +18,12 @@ namespace tether {
 
 namespace {
 
-std::vector<cryptauth::RemoteDevice> RemoveDuplicatesFromVector(
-    const std::vector<cryptauth::RemoteDevice>& remote_devices) {
-  std::vector<cryptauth::RemoteDevice> updated_remote_devices;
-  std::set<cryptauth::RemoteDevice> remote_devices_set;
+const char kTetherFeature[] = "magic_tether";
+
+cryptauth::RemoteDeviceRefList RemoveDuplicatesFromVector(
+    const cryptauth::RemoteDeviceRefList& remote_devices) {
+  cryptauth::RemoteDeviceRefList updated_remote_devices;
+  std::set<cryptauth::RemoteDeviceRef> remote_devices_set;
   for (const auto& remote_device : remote_devices) {
     // Only add the device to the output vector if it has not already been put
     // into the set.
@@ -42,20 +44,75 @@ const uint32_t MessageTransferOperation::kMaxEmptyScansPerDevice = 3;
 const uint32_t MessageTransferOperation::kMaxGattConnectionAttemptsPerDevice =
     6;
 
+MessageTransferOperation::ConnectionAttemptDelegate::ConnectionAttemptDelegate(
+    MessageTransferOperation* operation,
+    cryptauth::RemoteDeviceRef remote_device,
+    std::unique_ptr<secure_channel::ConnectionAttempt> connection_attempt)
+    : operation_(operation),
+      remote_device_(remote_device),
+      connection_attempt_(std::move(connection_attempt)) {
+  connection_attempt_->SetDelegate(this);
+}
+
+MessageTransferOperation::ConnectionAttemptDelegate::
+    ~ConnectionAttemptDelegate() = default;
+
+void MessageTransferOperation::ConnectionAttemptDelegate::
+    OnConnectionAttemptFailure(
+        secure_channel::mojom::ConnectionAttemptFailureReason reason) {
+  operation_->OnConnectionAttemptFailure(remote_device_, reason);
+}
+
+void MessageTransferOperation::ConnectionAttemptDelegate::OnConnection(
+    std::unique_ptr<secure_channel::ClientChannel> channel) {
+  operation_->OnConnection(remote_device_, std::move(channel));
+}
+
+MessageTransferOperation::ClientChannelObserver::ClientChannelObserver(
+    MessageTransferOperation* operation,
+    cryptauth::RemoteDeviceRef remote_device,
+    std::unique_ptr<secure_channel::ClientChannel> client_channel)
+    : operation_(operation),
+      remote_device_(remote_device),
+      client_channel_(std::move(client_channel)) {
+  client_channel_->AddObserver(this);
+}
+
+MessageTransferOperation::ClientChannelObserver::~ClientChannelObserver() {
+  client_channel_->RemoveObserver(this);
+}
+
+void MessageTransferOperation::ClientChannelObserver::OnDisconnected() {
+  operation_->OnDisconnected(remote_device_);
+}
+
+void MessageTransferOperation::ClientChannelObserver::OnMessageReceived(
+    const std::string& payload) {
+  operation_->OnMessageReceived(remote_device_, payload);
+}
+
 MessageTransferOperation::MessageTransferOperation(
-    const std::vector<cryptauth::RemoteDevice>& devices_to_connect,
+    const cryptauth::RemoteDeviceRefList& devices_to_connect,
+    secure_channel::ConnectionPriority connection_priority,
+    device_sync::DeviceSyncClient* device_sync_client,
+    secure_channel::SecureChannelClient* secure_channel_client,
     BleConnectionManager* connection_manager)
     : remote_devices_(RemoveDuplicatesFromVector(devices_to_connect)),
+      device_sync_client_(device_sync_client),
+      secure_channel_client_(secure_channel_client),
       connection_manager_(connection_manager),
+      connection_priority_(connection_priority),
+      request_id_(base::UnguessableToken::Create()),
       timer_factory_(std::make_unique<TimerFactory>()),
       weak_ptr_factory_(this) {}
 
 MessageTransferOperation::~MessageTransferOperation() {
-  connection_manager_->RemoveObserver(this);
-
   // If initialization never occurred, devices were never registered.
   if (!initialized_)
     return;
+
+  if (!base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi))
+    connection_manager_->RemoveObserver(this);
 
   shutting_down_ = true;
 
@@ -63,7 +120,7 @@ MessageTransferOperation::~MessageTransferOperation() {
   // connections will continue to stay alive until the Tether component is shut
   // down (see crbug.com/761106). Note that a copy of |remote_devices_| is used
   // here because UnregisterDevice() will modify |remote_devices_| internally.
-  std::vector<cryptauth::RemoteDevice> remote_devices_copy = remote_devices_;
+  cryptauth::RemoteDeviceRefList remote_devices_copy = remote_devices_;
   for (const auto& remote_device : remote_devices_copy)
     UnregisterDevice(remote_device);
 }
@@ -81,19 +138,31 @@ void MessageTransferOperation::Initialize() {
   // function at that time.
   message_type_for_connection_ = GetMessageTypeForConnection();
 
-  connection_manager_->AddObserver(this);
+  if (!base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi))
+    connection_manager_->AddObserver(this);
+
   OnOperationStarted();
 
   for (const auto& remote_device : remote_devices_) {
-    connection_manager_->RegisterRemoteDevice(remote_device.GetDeviceId(),
-                                              message_type_for_connection_);
+    if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
+      StartConnectionTimerForDevice(remote_device);
+      remote_device_to_connection_attempt_delegate_map_[remote_device] =
+          std::make_unique<ConnectionAttemptDelegate>(
+              this, remote_device,
+              secure_channel_client_->ListenForConnectionFromDevice(
+                  remote_device, *device_sync_client_->GetLocalDeviceMetadata(),
+                  kTetherFeature, connection_priority_));
+    } else {
+      connection_manager_->RegisterRemoteDevice(
+          remote_device.GetDeviceId(), request_id_, connection_priority_);
 
-    cryptauth::SecureChannel::Status status;
-    if (connection_manager_->GetStatusForDevice(remote_device.GetDeviceId(),
-                                                &status) &&
-        status == cryptauth::SecureChannel::Status::AUTHENTICATED) {
-      StartTimerForDevice(remote_device);
-      OnDeviceAuthenticated(remote_device);
+      cryptauth::SecureChannel::Status status;
+      if (connection_manager_->GetStatusForDevice(remote_device.GetDeviceId(),
+                                                  &status) &&
+          status == cryptauth::SecureChannel::Status::AUTHENTICATED) {
+        StartMessageTimerForDevice(remote_device);
+        OnDeviceAuthenticated(remote_device);
+      }
     }
   }
 }
@@ -103,7 +172,10 @@ void MessageTransferOperation::OnSecureChannelStatusChanged(
     const cryptauth::SecureChannel::Status& old_status,
     const cryptauth::SecureChannel::Status& new_status,
     BleConnectionManager::StateChangeDetail status_change_detail) {
-  cryptauth::RemoteDevice* remote_device = GetRemoteDevice(device_id);
+  DCHECK(!base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi));
+
+  base::Optional<cryptauth::RemoteDeviceRef> remote_device =
+      GetRemoteDevice(device_id);
   if (!remote_device) {
     // If the device whose status has changed does not correspond to any of the
     // devices passed to this MessageTransferOperation instance, ignore the
@@ -113,13 +185,7 @@ void MessageTransferOperation::OnSecureChannelStatusChanged(
 
   switch (new_status) {
     case cryptauth::SecureChannel::Status::AUTHENTICATED:
-      UMA_HISTOGRAM_BOOLEAN(
-          "InstantTethering.GattConnectionAttempt.SuccessRate", true);
-      UMA_HISTOGRAM_BOOLEAN(
-          "InstantTethering.GattConnectionAttempt."
-          "EffectiveSuccessRateWithRetries",
-          true);
-      StartTimerForDevice(*remote_device);
+      StartMessageTimerForDevice(*remote_device);
       OnDeviceAuthenticated(*remote_device);
       break;
     case cryptauth::SecureChannel::Status::DISCONNECTED:
@@ -138,7 +204,8 @@ void MessageTransferOperation::OnSecureChannelStatusChanged(
 
 void MessageTransferOperation::OnMessageReceived(const std::string& device_id,
                                                  const std::string& payload) {
-  cryptauth::RemoteDevice* remote_device = GetRemoteDevice(device_id);
+  base::Optional<cryptauth::RemoteDeviceRef> remote_device =
+      GetRemoteDevice(device_id);
   if (!remote_device) {
     // If the device from which the message has been received does not
     // correspond to any of the devices passed to this MessageTransferOperation
@@ -154,46 +221,109 @@ void MessageTransferOperation::OnMessageReceived(const std::string& device_id,
 }
 
 void MessageTransferOperation::UnregisterDevice(
-    const cryptauth::RemoteDevice& remote_device) {
+    cryptauth::RemoteDeviceRef remote_device) {
   // Note: This function may be called from the destructor. It is invalid to
   // invoke any virtual methods if |shutting_down_| is true.
 
   // Make a copy of |remote_device| before continuing, since the code below may
   // cause the original reference to be deleted.
-  cryptauth::RemoteDevice remote_device_copy = remote_device;
+  cryptauth::RemoteDeviceRef remote_device_copy = remote_device;
 
-  remote_device_to_attempts_map_.erase(remote_device_copy);
+  if (!base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi))
+    remote_device_to_attempts_map_.erase(remote_device_copy);
+
   remote_devices_.erase(std::remove(remote_devices_.begin(),
                                     remote_devices_.end(), remote_device_copy),
                         remote_devices_.end());
   StopTimerForDeviceIfRunning(remote_device_copy);
 
-  connection_manager_->UnregisterRemoteDevice(remote_device_copy.GetDeviceId(),
-                                              message_type_for_connection_);
+  if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
+    remote_device_to_connection_attempt_delegate_map_.erase(remote_device);
+
+    if (base::ContainsKey(remote_device_to_client_channel_observer_map_,
+                          remote_device)) {
+      remote_device_to_client_channel_observer_map_.erase(remote_device);
+    }
+  } else {
+    connection_manager_->UnregisterRemoteDevice(
+        remote_device_copy.GetDeviceId(), request_id_);
+  }
 
   if (!shutting_down_ && remote_devices_.empty())
     OnOperationFinished();
 }
 
 int MessageTransferOperation::SendMessageToDevice(
-    const cryptauth::RemoteDevice& remote_device,
+    cryptauth::RemoteDeviceRef remote_device,
     std::unique_ptr<MessageWrapper> message_wrapper) {
-  return connection_manager_->SendMessage(remote_device.GetDeviceId(),
-                                          message_wrapper->ToRawMessage());
+  if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
+    DCHECK(base::ContainsKey(remote_device_to_client_channel_observer_map_,
+                             remote_device));
+    int sequence_number = next_message_sequence_number_++;
+    bool success =
+        remote_device_to_client_channel_observer_map_[remote_device]
+            ->channel()
+            ->SendMessage(message_wrapper->ToRawMessage(),
+                          base::BindOnce(
+                              &MessageTransferOperation::OnMessageSent,
+                              weak_ptr_factory_.GetWeakPtr(), sequence_number));
+    return success ? sequence_number : -1;
+  } else {
+    return connection_manager_->SendMessage(remote_device.GetDeviceId(),
+                                            message_wrapper->ToRawMessage());
+  }
 }
 
-uint32_t MessageTransferOperation::GetTimeoutSeconds() {
-  return MessageTransferOperation::kDefaultTimeoutSeconds;
+uint32_t MessageTransferOperation::GetMessageTimeoutSeconds() {
+  return MessageTransferOperation::kDefaultMessageTimeoutSeconds;
 }
 
-void MessageTransferOperation::SetTimerFactoryForTest(
-    std::unique_ptr<TimerFactory> timer_factory_for_test) {
-  timer_factory_ = std::move(timer_factory_for_test);
+void MessageTransferOperation::OnConnectionAttemptFailure(
+    cryptauth::RemoteDeviceRef remote_device,
+    secure_channel::mojom::ConnectionAttemptFailureReason reason) {
+  DCHECK(base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi));
+  PA_LOG(WARNING) << "Failed to connect to device "
+                  << remote_device.GetTruncatedDeviceIdForLogs()
+                  << ", error: " << reason;
+  UnregisterDevice(remote_device);
+}
+
+void MessageTransferOperation::OnConnection(
+    cryptauth::RemoteDeviceRef remote_device,
+    std::unique_ptr<secure_channel::ClientChannel> channel) {
+  DCHECK(base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi));
+  remote_device_to_client_channel_observer_map_[remote_device] =
+      std::make_unique<ClientChannelObserver>(this, remote_device,
+                                              std::move(channel));
+
+  // Stop the timer which was started from StartConnectionTimerForDevice() since
+  // the connection has now been established. Start another timer now via
+  // StartMessageTimerForDevice() while waiting for messages to be sent to and
+  // received by |remote_device|.
+  StopTimerForDeviceIfRunning(remote_device);
+  StartMessageTimerForDevice(remote_device);
+
+  OnDeviceAuthenticated(remote_device);
+}
+
+void MessageTransferOperation::OnDisconnected(
+    cryptauth::RemoteDeviceRef remote_device) {
+  PA_LOG(INFO) << "Remote device disconnected from this device: "
+               << remote_device.GetTruncatedDeviceIdForLogs();
+  UnregisterDevice(remote_device);
+}
+
+void MessageTransferOperation::OnMessageReceived(
+    cryptauth::RemoteDeviceRef remote_device,
+    const std::string& payload) {
+  OnMessageReceived(remote_device.GetDeviceId(), payload);
 }
 
 void MessageTransferOperation::HandleDeviceDisconnection(
-    const cryptauth::RemoteDevice& remote_device,
+    cryptauth::RemoteDeviceRef remote_device,
     BleConnectionManager::StateChangeDetail status_change_detail) {
+  DCHECK(!base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi));
+
   ConnectAttemptCounts& attempts_for_device =
       remote_device_to_attempts_map_[remote_device];
 
@@ -202,7 +332,7 @@ void MessageTransferOperation::HandleDeviceDisconnection(
       PA_LOG(ERROR) << "State transitioned to DISCONNECTED, but no "
                     << "StateChangeDetail was provided. Treating this as a "
                     << "failure to discover the device.";
-    // Note: Intentional fall-through to next case.
+      FALLTHROUGH;
     case BleConnectionManager::StateChangeDetail::
         STATE_CHANGE_DETAIL_COULD_NOT_ATTEMPT_CONNECTION:
       ++attempts_for_device.empty_scan_attempts;
@@ -228,19 +358,12 @@ void MessageTransferOperation::HandleDeviceDisconnection(
                    << remote_device.GetTruncatedDeviceIdForLogs() << ". "
                    << "Number of GATT error: "
                    << attempts_for_device.gatt_connection_attempts;
-      UMA_HISTOGRAM_BOOLEAN(
-          "InstantTethering.GattConnectionAttempt.SuccessRate", false);
-
       if (attempts_for_device.gatt_connection_attempts >=
           kMaxGattConnectionAttemptsPerDevice) {
         PA_LOG(INFO) << "Reached retry limit for GATT connection errors for "
                      << "device with ID "
                      << remote_device.GetTruncatedDeviceIdForLogs() << ". "
                      << "Unregistering device.";
-        UMA_HISTOGRAM_BOOLEAN(
-            "InstantTethering.GattConnectionAttempt."
-            "EffectiveSuccessRateWithRetries",
-            false);
         UnregisterDevice(remote_device);
       }
       break;
@@ -261,8 +384,19 @@ void MessageTransferOperation::HandleDeviceDisconnection(
   }
 }
 
+void MessageTransferOperation::StartConnectionTimerForDevice(
+    cryptauth::RemoteDeviceRef remote_device) {
+  StartTimerForDevice(remote_device, kConnectionTimeoutSeconds);
+}
+
+void MessageTransferOperation::StartMessageTimerForDevice(
+    cryptauth::RemoteDeviceRef remote_device) {
+  StartTimerForDevice(remote_device, GetMessageTimeoutSeconds());
+}
+
 void MessageTransferOperation::StartTimerForDevice(
-    const cryptauth::RemoteDevice& remote_device) {
+    cryptauth::RemoteDeviceRef remote_device,
+    uint32_t timeout_seconds) {
   PA_LOG(INFO) << "Starting timer for operation with message type "
                << message_type_for_connection_ << " from device with ID "
                << remote_device.GetTruncatedDeviceIdForLogs() << ".";
@@ -270,13 +404,13 @@ void MessageTransferOperation::StartTimerForDevice(
   remote_device_to_timer_map_.emplace(remote_device,
                                       timer_factory_->CreateOneShotTimer());
   remote_device_to_timer_map_[remote_device]->Start(
-      FROM_HERE, base::TimeDelta::FromSeconds(GetTimeoutSeconds()),
+      FROM_HERE, base::TimeDelta::FromSeconds(timeout_seconds),
       base::Bind(&MessageTransferOperation::OnTimeout,
                  weak_ptr_factory_.GetWeakPtr(), remote_device));
 }
 
 void MessageTransferOperation::StopTimerForDeviceIfRunning(
-    const cryptauth::RemoteDevice& remote_device) {
+    cryptauth::RemoteDeviceRef remote_device) {
   if (!remote_device_to_timer_map_[remote_device])
     return;
 
@@ -285,7 +419,7 @@ void MessageTransferOperation::StopTimerForDeviceIfRunning(
 }
 
 void MessageTransferOperation::OnTimeout(
-    const cryptauth::RemoteDevice& remote_device) {
+    cryptauth::RemoteDeviceRef remote_device) {
   PA_LOG(WARNING) << "Timed out operation for message type "
                   << message_type_for_connection_ << " from device with ID "
                   << remote_device.GetTruncatedDeviceIdForLogs() << ".";
@@ -294,14 +428,19 @@ void MessageTransferOperation::OnTimeout(
   UnregisterDevice(remote_device);
 }
 
-cryptauth::RemoteDevice* MessageTransferOperation::GetRemoteDevice(
-    const std::string& device_id) {
+base::Optional<cryptauth::RemoteDeviceRef>
+MessageTransferOperation::GetRemoteDevice(const std::string& device_id) {
   for (auto& remote_device : remote_devices_) {
     if (remote_device.GetDeviceId() == device_id)
-      return &remote_device;
+      return remote_device;
   }
 
-  return nullptr;
+  return base::nullopt;
+}
+
+void MessageTransferOperation::SetTimerFactoryForTest(
+    std::unique_ptr<TimerFactory> timer_factory_for_test) {
+  timer_factory_ = std::move(timer_factory_for_test);
 }
 
 }  // namespace tether

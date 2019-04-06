@@ -8,12 +8,12 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
 #include "base/location.h"
+#include "base/memory/weak_ptr.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/engine/activation_context.h"
 #include "components/sync/model/entity_data.h"
 #include "components/sync/model/model_error.h"
+#include "components/sync/model/model_type_controller_delegate.h"
 
 namespace syncer {
 
@@ -24,15 +24,6 @@ class ModelTypeSyncBridge;
 // Interface used by the ModelTypeSyncBridge to inform sync of local changes.
 class ModelTypeChangeProcessor {
  public:
-  using StartCallback =
-      base::Callback<void(std::unique_ptr<ActivationContext>)>;
-
-  // A factory function to make an implementation of ModelTypeChangeProcessor.
-  static std::unique_ptr<ModelTypeChangeProcessor> Create(
-      const base::RepeatingClosure& dump_stack,
-      ModelType type,
-      ModelTypeSyncBridge* bridge);
-
   ModelTypeChangeProcessor();
   virtual ~ModelTypeChangeProcessor();
 
@@ -66,26 +57,25 @@ class ModelTypeChangeProcessor {
   // change_processor()->Delete() instead.
   virtual void UntrackEntity(const EntityData& entity_data) = 0;
 
-  // The bridge is expected to call this exactly once unless it encounters an
+  // Remove entity metadata and do not track the entity. Applies to datatypes
+  // that support local deletions that should not get synced up (e.g. TYPED_URL
+  // does not sync up deletions of expired URLs). If the deletion should get
+  // synced up, use change_processor()->Delete() instead. The call is ignored if
+  // |storage_key| is unknown.
+  virtual void UntrackEntityForStorageKey(const std::string& storage_key) = 0;
+
+  // Pass the pointer to the processor so that the processor can notify the
+  // bridge of various events; |bridge| must not be nullptr and must outlive
+  // this object.
+  virtual void OnModelStarting(ModelTypeSyncBridge* bridge) = 0;
+
+  // The |bridge| is expected to call this exactly once unless it encounters an
   // error. Ideally ModelReadyToSync() is called as soon as possible during
   // initialization, and must be called before invoking either Put() or
   // Delete(). The bridge needs to be able to synchronously handle
   // MergeSyncData() and ApplySyncChanges() after calling ModelReadyToSync(). If
   // an error is encountered, calling ReportError() instead is sufficient.
   virtual void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) = 0;
-
-  // Indicates that sync wants to connect a sync worker to this processor. Once
-  // the processor has metadata from the bridge, it will pass the info needed
-  // for the worker into |callback|. |error_handler| is how the processor will
-  // inform sync of any unrecoverable errors, and is guaranteed to outlive the
-  // processor. If an error is encountered, |error_handler| should be called
-  // and |callback| should not.
-  virtual void OnSyncStarting(const ModelErrorHandler& error_handler,
-                              const StartCallback& callback) = 0;
-
-  // Indicates that sync is being disabled permanently for this data type. All
-  // metadata should be erased from storage.
-  virtual void DisableSync() = 0;
 
   // Returns a boolean representing whether the processor's metadata is
   // currently up to date and accurately tracking the model type's data. If
@@ -100,9 +90,10 @@ class ModelTypeChangeProcessor {
   // disabled for the model type (generally until the next restart).
   virtual void ReportError(const ModelError& error) = 0;
 
-  // A convenience form of the above.
-  virtual void ReportError(const base::Location& location,
-                           const std::string& message) = 0;
+  // Returns the delegate for the controller. This function must be thread-safe!
+  // It is run on the UI thread by the ModelTypeController.
+  virtual base::WeakPtr<ModelTypeControllerDelegate>
+  GetControllerDelegateOnUIThread() = 0;
 };
 
 }  // namespace syncer

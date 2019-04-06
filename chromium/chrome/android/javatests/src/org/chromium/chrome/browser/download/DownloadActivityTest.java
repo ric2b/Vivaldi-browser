@@ -28,27 +28,35 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryAdapter;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryItemViewHolder;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper;
+import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper.OfflineItemWrapper;
 import org.chromium.chrome.browser.download.ui.DownloadItemView;
 import org.chromium.chrome.browser.download.ui.DownloadManagerToolbar;
 import org.chromium.chrome.browser.download.ui.DownloadManagerUi;
 import org.chromium.chrome.browser.download.ui.SpaceDisplay;
 import org.chromium.chrome.browser.download.ui.StubbedProvider;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.ListMenuButton.Item;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.ui.test.util.UiRestriction;
 
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -62,11 +70,9 @@ public class DownloadActivityTest {
             new ActivityTestRule<>(DownloadActivity.class);
 
     private static class TestObserver extends RecyclerView.AdapterDataObserver
-            implements SelectionObserver<DownloadHistoryItemWrapper>,
-                    DownloadManagerUi.DownloadUiObserver, SpaceDisplay.Observer {
+            implements SelectionObserver<DownloadHistoryItemWrapper>, SpaceDisplay.Observer {
         public final CallbackHelper onChangedCallback = new CallbackHelper();
         public final CallbackHelper onSelectionCallback = new CallbackHelper();
-        public final CallbackHelper onFilterCallback = new CallbackHelper();
         public final CallbackHelper onSpaceDisplayUpdatedCallback = new CallbackHelper();
 
         private List<DownloadHistoryItemWrapper> mOnSelectionItems;
@@ -90,17 +96,8 @@ public class DownloadActivityTest {
         }
 
         @Override
-        public void onFilterChanged(int filter) {
-            mHandler.post(() -> onFilterCallback.notifyCalled());
-        }
-
-        @Override
         public void onSpaceDisplayUpdated(SpaceDisplay display) {
             mHandler.post(() -> onSpaceDisplayUpdatedCallback.notifyCalled());
-        }
-
-        @Override
-        public void onManagerDestroyed() {
         }
     }
 
@@ -119,6 +116,17 @@ public class DownloadActivityTest {
     public void setUp() throws Exception {
         Editor editor = ContextUtils.getAppSharedPreferences().edit();
         editor.putBoolean(PREF_SHOW_STORAGE_INFO_HEADER, true).apply();
+
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            PrefServiceBridge.getInstance().setPromptForDownloadAndroid(
+                    DownloadPromptStatus.DONT_SHOW);
+        });
+
+        HashMap<String, Boolean> features = new HashMap<String, Boolean>();
+        features.put(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE, false);
+        features.put(ChromeFeatureList.DOWNLOAD_HOME_SHOW_STORAGE_INFO, false);
+        features.put(ChromeFeatureList.DOWNLOAD_HOME_V2, false);
+        ChromeFeatureList.setTestFeatures(features);
 
         mStubbedProvider = new StubbedProvider();
         DownloadManagerUi.setProviderForTests(mStubbedProvider);
@@ -142,6 +150,7 @@ public class DownloadActivityTest {
 
     @Test
     @MediumTest
+    @FlakyTest(message = "crbug.com/855168")
     public void testSpaceDisplay() throws Exception {
         // This first check is a Criteria because initialization of the Adapter is asynchronous.
         CriteriaHelper.pollUiThread(new Criteria() {
@@ -201,6 +210,7 @@ public class DownloadActivityTest {
     }
 
     /** Clicking on filters affects various things in the UI. */
+    @DisabledTest(message = "crbug.com/855389")
     @Test
     @MediumTest
     public void testFilters() throws Exception {
@@ -235,6 +245,7 @@ public class DownloadActivityTest {
     @Test
     @MediumTest
     @RetryOnFailure
+    @FlakyTest(message = "crbug.com/854241")
     public void testDeleteFiles() throws Exception {
         SnackbarManager.setDurationForTesting(1);
 
@@ -274,6 +285,7 @@ public class DownloadActivityTest {
     @Test
     @MediumTest
     @RetryOnFailure
+    @FlakyTest(message = "crbug.com/855219")
     public void testDeleteFileFromMenu() throws Exception {
         SnackbarManager.setDurationForTesting(1);
 
@@ -305,6 +317,7 @@ public class DownloadActivityTest {
         Assert.assertEquals("5.00 GB downloaded", mSpaceUsedDisplay.getText());
     }
 
+    @DisabledTest(message = "crbug.com/855389")
     @Test
     @MediumTest
     @RetryOnFailure
@@ -375,6 +388,7 @@ public class DownloadActivityTest {
         Assert.assertEquals("6.50 GB downloaded", mSpaceUsedDisplay.getText());
     }
 
+    @DisabledTest(message = "crbug.com/855389")
     @Test
     @MediumTest
     @RetryOnFailure
@@ -440,6 +454,7 @@ public class DownloadActivityTest {
         Assert.assertEquals("6.50 GB downloaded", mSpaceUsedDisplay.getText());
     }
 
+    @DisabledTest(message = "crbug.com/855389")
     @Test
     @MediumTest
     @RetryOnFailure
@@ -504,6 +519,8 @@ public class DownloadActivityTest {
 
     @Test
     @MediumTest
+    @DisableFeatures("OfflinePagesSharing")
+    @FlakyTest(message = "crbug.com/855167")
     public void testShareFiles() throws Exception {
         // Adapter positions:
         // 0 = space display
@@ -522,7 +539,7 @@ public class DownloadActivityTest {
         // Select an image, download item #6.
         toggleItemSelection(2);
         Intent shareIntent = DownloadUtils.createShareIntent(
-                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems());
+                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems(), null);
         Assert.assertEquals("Incorrect intent action", Intent.ACTION_SEND, shareIntent.getAction());
         Assert.assertEquals("Incorrect intent mime type", "image/png", shareIntent.getType());
         Assert.assertNotNull(
@@ -537,7 +554,7 @@ public class DownloadActivityTest {
         // Select another image, download item #0.
         toggleItemSelection(9);
         shareIntent = DownloadUtils.createShareIntent(
-                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems());
+                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems(), null);
         Assert.assertEquals(
                 "Incorrect intent action", Intent.ACTION_SEND_MULTIPLE, shareIntent.getAction());
         Assert.assertEquals("Incorrect intent mime type", "image/*", shareIntent.getType());
@@ -551,7 +568,7 @@ public class DownloadActivityTest {
         // Select non-image item, download item #4.
         toggleItemSelection(6);
         shareIntent = DownloadUtils.createShareIntent(
-                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems());
+                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems(), null);
         Assert.assertEquals(
                 "Incorrect intent action", Intent.ACTION_SEND_MULTIPLE, shareIntent.getAction());
         Assert.assertEquals("Incorrect intent mime type", "*/*", shareIntent.getType());
@@ -565,7 +582,7 @@ public class DownloadActivityTest {
         // Select an offline page #3.
         toggleItemSelection(3);
         shareIntent = DownloadUtils.createShareIntent(
-                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems());
+                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems(), null);
         Assert.assertEquals(
                 "Incorrect intent action", Intent.ACTION_SEND_MULTIPLE, shareIntent.getAction());
         Assert.assertEquals("Incorrect intent mime type", "*/*", shareIntent.getType());
@@ -576,8 +593,54 @@ public class DownloadActivityTest {
                 IntentUtils.safeGetStringExtra(shareIntent, Intent.EXTRA_TEXT));
     }
 
+    // TODO(carlosk): OfflineItems used here come from StubbedProvider so this might not be the best
+    // place to test peer-2-peer sharing.
+    @DisabledTest(message = "crbug.com/855389")
     @Test
     @MediumTest
+    @EnableFeatures("OfflinePagesSharing")
+    public void testShareOfflinePageWithP2PSharingEnabled() throws Exception {
+        // Scroll to ensure the item at position 2 is visible.
+        ThreadUtils.runOnUiThread(() -> mRecyclerView.scrollToPosition(3));
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+
+        // Select the offline page located at position #3.
+        toggleItemSelection(3);
+        List<DownloadHistoryItemWrapper> selected_items =
+                mUi.getBackendProvider().getSelectionDelegate().getSelectedItems();
+        Assert.assertEquals("There should be only one item selected", 1, selected_items.size());
+        Intent shareIntent = DownloadUtils.createShareIntent(selected_items, null);
+
+        Assert.assertEquals("Incorrect intent action", Intent.ACTION_SEND, shareIntent.getAction());
+        Assert.assertEquals("Incorrect intent mime type", "*/*", shareIntent.getType());
+        Assert.assertNotNull("Intent expected to have parcelable ArrayList",
+                shareIntent.getParcelableExtra(Intent.EXTRA_STREAM));
+        Assert.assertEquals("Intent expected to have parcelable Uri",
+                "file:///data/fake_path/Downloads/4",
+                shareIntent.getParcelableExtra(Intent.EXTRA_STREAM).toString());
+        Assert.assertNull("Intent expected to not have any text for offline page",
+                IntentUtils.safeGetStringExtra(shareIntent, Intent.EXTRA_TEXT));
+
+        // Pass a map that contains a new file path.
+        HashMap<String, String> newFilePathMap = new HashMap<String, String>();
+        newFilePathMap.put(((OfflineItemWrapper) selected_items.get(0)).getId(),
+                "/data/new_fake_path/Downloads/4");
+        shareIntent = DownloadUtils.createShareIntent(selected_items, newFilePathMap);
+
+        Assert.assertEquals("Incorrect intent action", Intent.ACTION_SEND, shareIntent.getAction());
+        Assert.assertEquals("Incorrect intent mime type", "*/*", shareIntent.getType());
+        Assert.assertNotNull("Intent expected to have parcelable ArrayList",
+                shareIntent.getParcelableExtra(Intent.EXTRA_STREAM));
+        Assert.assertEquals("Intent expected to have parcelable Uri",
+                "file:///data/new_fake_path/Downloads/4",
+                shareIntent.getParcelableExtra(Intent.EXTRA_STREAM).toString());
+        Assert.assertNull("Intent expected to not have any text for offline page",
+                IntentUtils.safeGetStringExtra(shareIntent, Intent.EXTRA_TEXT));
+    }
+
+    @Test
+    @MediumTest
+    @DisableFeatures(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE)
     public void testToggleSelection() throws Exception {
         // The selection toolbar should not be showing.
         Assert.assertTrue(mAdapterObserver.mOnSelectionItems.isEmpty());
@@ -632,6 +695,7 @@ public class DownloadActivityTest {
 
     @Test
     @MediumTest
+    @DisableFeatures(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE)
     public void testSearchView() throws Exception {
         final DownloadManagerToolbar toolbar = mUi.getDownloadManagerToolbarForTests();
         View toolbarSearchView = toolbar.getSearchViewForTests();

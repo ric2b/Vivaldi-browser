@@ -27,8 +27,9 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/transport_security_state.h"
-#include "net/proxy/proxy_config_service_fixed.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_config_service_fixed.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -97,7 +98,7 @@ static void AddToSerializedList(const GURL& motivation,
     motivation_list = new base::ListValue;
     motivation_list->AppendString(motivation.spec());
     // Provide empty subresource list.
-    motivation_list->Append(base::MakeUnique<base::ListValue>());
+    motivation_list->Append(std::make_unique<base::ListValue>());
 
     // ...and make it part of the serialized referral_list.
     referral_list->Append(base::WrapUnique(motivation_list));
@@ -187,36 +188,8 @@ TEST_F(PredictorTest, ReferrerSerializationSingleReferrerTest) {
   predictor.Shutdown();
 }
 
-// Test that the referrers are sorted in MRU order in the HTML UI.
-TEST_F(PredictorTest, GetHtmlReferrerLists) {
-  SimplePredictor predictor(true);
-
-  predictor.LearnFromNavigation(GURL("http://www.source_b.test"),
-                                GURL("http://www.target_b.test"));
-  predictor.LearnFromNavigation(GURL("http://www.source_a.test"),
-                                GURL("http://www.target_a.test"));
-  predictor.LearnFromNavigation(GURL("http://www.source_c.test"),
-                                GURL("http://www.target_c.test"));
-
-  std::string html;
-  predictor.GetHtmlReferrerLists(&html);
-
-  size_t pos[] = {
-      html.find("<td rowspan=1>http://www.source_c.test"),
-      html.find("<td rowspan=1>http://www.source_a.test"),
-      html.find("<td rowspan=1>http://www.source_b.test"),
-  };
-
-  // Make sure things appeared in the expected order.
-  for (size_t i = 1; i < arraysize(pos); ++i) {
-    EXPECT_LT(pos[i - 1], pos[i]) << "Mismatch for pos[" << i << "]";
-  }
-
-  predictor.Shutdown();
-}
-
-// Expect the exact same HTML when the predictor's referrers are serialized and
-// deserialized (implies ordering remains the same).
+// Expect the exact same referral list when the predictor's referrers are
+// serialized and deserialized (implies ordering remains the same).
 TEST_F(PredictorTest, SerializeAndDeserialize) {
   SimplePredictor predictor(true);
 
@@ -225,17 +198,15 @@ TEST_F(PredictorTest, SerializeAndDeserialize) {
         GURL(base::StringPrintf("http://www.source_%d.test", i)),
         GURL(base::StringPrintf("http://www.target_%d.test", i)));
   }
-  std::string html;
-  predictor.GetHtmlReferrerLists(&html);
 
   base::ListValue referral_list;
   predictor.SerializeReferrers(&referral_list);
   predictor.DeserializeReferrers(referral_list);
 
-  std::string html2;
-  predictor.GetHtmlReferrerLists(&html2);
+  base::ListValue referral_list2;
+  predictor.SerializeReferrers(&referral_list2);
 
-  EXPECT_EQ(html, html2);
+  EXPECT_EQ(referral_list, referral_list2);
 
   predictor.Shutdown();
 }
@@ -250,17 +221,22 @@ TEST_F(PredictorTest, FillMRUCache) {
         GURL(base::StringPrintf("http://www.target_%d.test", i)));
   }
 
-  std::string html;
-  predictor.GetHtmlReferrerLists(&html);
+  base::ListValue referral_list;
+  predictor.SerializeReferrers(&referral_list);
 
   for (int i = 0; i < Predictor::kMaxReferrers; ++i) {
-    EXPECT_EQ(html.find(base::StringPrintf("http://www.source_%d.test", i)),
-              std::string::npos);
+    EXPECT_EQ(FindSerializationMotivation(
+                  GURL(base::StringPrintf("http://www.source_%d.test", i)),
+                  &referral_list),
+              nullptr);
   }
+
   for (int i = Predictor::kMaxReferrers; i < Predictor::kMaxReferrers * 2;
        ++i) {
-    EXPECT_NE(html.find(base::StringPrintf("http://www.source_%d.test", i)),
-              std::string::npos);
+    EXPECT_NE(FindSerializationMotivation(
+                  GURL(base::StringPrintf("http://www.source_%d.test", i)),
+                  &referral_list),
+              nullptr);
   }
 
   predictor.Shutdown();
@@ -510,9 +486,10 @@ TEST_F(PredictorTest, ProxyDefinitelyEnabled) {
 
   net::ProxyConfig config;
   config.proxy_rules().ParseFromString("http=socks://localhost:12345");
-  std::unique_ptr<net::ProxyService> proxy_service(
-      net::ProxyService::CreateFixed(config));
-  testing_master.proxy_service_ = proxy_service.get();
+  std::unique_ptr<net::ProxyResolutionService> proxy_resolution_service(
+      net::ProxyResolutionService::CreateFixed(net::ProxyConfigWithAnnotation(
+          config, TRAFFIC_ANNOTATION_FOR_TESTS)));
+  testing_master.proxy_resolution_service_ = proxy_resolution_service.get();
 
   GURL goog("http://www.google.com:80");
   testing_master.Resolve(goog, UrlInfo::OMNIBOX_MOTIVATED);
@@ -528,10 +505,11 @@ TEST_F(PredictorTest, ProxyDefinitelyNotEnabled) {
   Predictor::set_max_parallel_resolves(0);
 
   Predictor testing_master(true);
-  net::ProxyConfig config = net::ProxyConfig::CreateDirect();
-  std::unique_ptr<net::ProxyService> proxy_service(
-      net::ProxyService::CreateFixed(config));
-  testing_master.proxy_service_ = proxy_service.get();
+  net::ProxyConfigWithAnnotation config =
+      net::ProxyConfigWithAnnotation::CreateDirect();
+  std::unique_ptr<net::ProxyResolutionService> proxy_resolution_service(
+      net::ProxyResolutionService::CreateFixed(config));
+  testing_master.proxy_resolution_service_ = proxy_resolution_service.get();
 
   GURL goog("http://www.google.com:80");
   testing_master.Resolve(goog, UrlInfo::OMNIBOX_MOTIVATED);
@@ -549,9 +527,10 @@ TEST_F(PredictorTest, ProxyMaybeEnabled) {
   Predictor testing_master(true);
   net::ProxyConfig config = net::ProxyConfig::CreateFromCustomPacURL(GURL(
       "http://foopy/proxy.pac"));
-  std::unique_ptr<net::ProxyService> proxy_service(
-      net::ProxyService::CreateFixed(config));
-  testing_master.proxy_service_ = proxy_service.get();
+  std::unique_ptr<net::ProxyResolutionService> proxy_resolution_service(
+      net::ProxyResolutionService::CreateFixed(net::ProxyConfigWithAnnotation(
+          config, TRAFFIC_ANNOTATION_FOR_TESTS)));
+  testing_master.proxy_resolution_service_ = proxy_resolution_service.get();
 
   GURL goog("http://www.google.com:80");
   testing_master.Resolve(goog, UrlInfo::OMNIBOX_MOTIVATED);

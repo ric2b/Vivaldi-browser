@@ -13,6 +13,7 @@
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/context_state.h"
+#include "gpu/command_buffer/service/gl_stream_texture_image_stub.h"
 #include "gpu/command_buffer/service/gl_surface_mock.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/image_manager.h"
@@ -20,13 +21,15 @@
 #include "gpu/command_buffer/service/mocks.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
+#include "gpu/command_buffer/service/validating_abstract_texture_impl.h"
 #include "gpu/config/gpu_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gl/gl_image_stub.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_mock.h"
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gpu_timing_fake.h"
-
+#include "ui/gl/scoped_make_current.h"
 
 #if !defined(GL_DEPTH24_STENCIL8)
 #define GL_DEPTH24_STENCIL8 0x88F0
@@ -54,13 +57,9 @@ namespace gles2 {
 using namespace cmds;
 
 void GLES2DecoderRGBBackbufferTest::SetUp() {
-  // Test codepath with workaround clear_alpha_in_readpixels because
-  // ReadPixelsEmulator emulates the incorrect driver behavior.
-  gpu::GpuDriverBugWorkarounds workarounds;
-  workarounds.clear_alpha_in_readpixels = true;
   InitState init;
   init.bind_generates_resource = true;
-  InitDecoderWithWorkarounds(init, workarounds);
+  InitDecoder(init);
   SetupDefaultProgram();
 }
 
@@ -200,6 +199,9 @@ TEST_P(GLES2DecoderTest, IsBuffer) {
   EXPECT_FALSE(DoIsBuffer(client_buffer_id_));
   DoBindBuffer(GL_ARRAY_BUFFER, client_buffer_id_, kServiceBufferId);
   EXPECT_TRUE(DoIsBuffer(client_buffer_id_));
+  EXPECT_CALL(*gl_, BindBuffer(GL_ARRAY_BUFFER, 0))
+      .Times(1)
+      .RetiresOnSaturation();
   DoDeleteBuffer(client_buffer_id_, kServiceBufferId);
   EXPECT_FALSE(DoIsBuffer(client_buffer_id_));
 }
@@ -252,6 +254,206 @@ TEST_P(GLES2DecoderTest, IsTexture) {
   EXPECT_TRUE(DoIsTexture(client_texture_id_));
   DoDeleteTexture(client_texture_id_, kServiceTextureId);
   EXPECT_FALSE(DoIsTexture(client_texture_id_));
+}
+
+TEST_P(GLES2DecoderTest, TestImageBindingForDecoderManagement) {
+  const GLuint service_id = 123;
+  EXPECT_CALL(*gl_, GenTextures(1, _))
+      .Times(1)
+      .WillOnce(SetArgPointee<1>(service_id))
+      .RetiresOnSaturation();
+  const GLenum target = GL_TEXTURE_EXTERNAL_OES;
+  std::unique_ptr<AbstractTexture> abstract_texture =
+      GetDecoder()->CreateAbstractTexture(target, GL_RGBA, 256, /* width */
+                                          256,                  /* height */
+                                          1,                    /* depth */
+                                          0,                    /* border */
+                                          GL_RGBA, GL_UNSIGNED_BYTE);
+  scoped_refptr<gl::GLImage> image(new gl::GLImageStub);
+  abstract_texture->BindImage(image.get(), GetParam());
+  ValidatingAbstractTextureImpl* validating_texture =
+      static_cast<ValidatingAbstractTextureImpl*>(abstract_texture.get());
+  TextureRef* texture_ref = validating_texture->GetTextureRefForTesting();
+  Texture::ImageState state;
+  EXPECT_EQ(texture_ref->texture()->GetLevelImage(target, 0, &state),
+            image.get());
+  EXPECT_EQ(state, GetParam() ? Texture::ImageState::BOUND
+                              : Texture::ImageState::UNBOUND);
+
+  EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1).RetiresOnSaturation();
+  abstract_texture.reset();
+}
+
+TEST_P(GLES2DecoderTest, CreateAbstractTexture) {
+  const GLuint service_id = 123;
+  EXPECT_CALL(*gl_, GenTextures(1, _))
+      .Times(1)
+      .WillOnce(SetArgPointee<1>(service_id))
+      .RetiresOnSaturation();
+  const GLenum target = GL_TEXTURE_EXTERNAL_OES;
+  std::unique_ptr<AbstractTexture> abstract_texture =
+      GetDecoder()->CreateAbstractTexture(target, GL_RGBA, 256, /* width */
+                                          256,                  /* height */
+                                          1,                    /* depth */
+                                          0,                    /* border */
+                                          GL_RGBA, GL_UNSIGNED_BYTE);
+  EXPECT_EQ(abstract_texture->GetTextureBase()->target(), target);
+  EXPECT_EQ(abstract_texture->service_id(), service_id);
+  Texture* texture = static_cast<Texture*>(abstract_texture->GetTextureBase());
+  EXPECT_EQ(texture->SafeToRenderFrom(), false);
+
+  // Set some parameters, and verify that we set them.
+  // These three are for ScopedTextureBinder.
+  // TODO(liberato): Is there a way to make this less brittle?
+  EXPECT_CALL(*gl_, GetIntegerv(_, _)).Times(1).RetiresOnSaturation();
+  EXPECT_CALL(*gl_, BindTexture(target, _)).Times(1).RetiresOnSaturation();
+  EXPECT_CALL(*gl_, BindTexture(target, abstract_texture->service_id()))
+      .Times(1)
+      .RetiresOnSaturation();
+
+  // This one we actually care about.
+  EXPECT_CALL(*gl_, TexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+  abstract_texture->SetParameteri(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  EXPECT_EQ(texture->min_filter(), static_cast<GLenum>(GL_LINEAR));
+
+  // Attach an image and see if it works.
+  scoped_refptr<gl::GLImage> image(new gl::GLImageStub);
+  abstract_texture->BindImage(image.get(), true);
+  EXPECT_EQ(abstract_texture->GetImage(), image.get());
+  // Binding an image should make the texture renderable.
+  EXPECT_EQ(texture->SafeToRenderFrom(), true);
+  EXPECT_EQ(texture->GetLevelImage(target, 0), image.get());
+
+  // Unbinding should make it not renderable.
+  abstract_texture->ReleaseImage();
+  EXPECT_EQ(texture->SafeToRenderFrom(), false);
+  EXPECT_EQ(abstract_texture->GetImage(), nullptr);
+
+  // Attach a stream image, and verify that the image changes and the service_id
+  // matches the one we provide.
+  scoped_refptr<gpu::gles2::GLStreamTextureImage> stream_image(
+      new gpu::gles2::GLStreamTextureImageStub);
+  const GLuint surface_texture_service_id = service_id + 1;
+  abstract_texture->BindStreamTextureImage(stream_image.get(),
+                                           surface_texture_service_id);
+  EXPECT_EQ(texture->SafeToRenderFrom(), true);
+  EXPECT_EQ(texture->GetLevelStreamTextureImage(target, 0), stream_image.get());
+  EXPECT_EQ(abstract_texture->service_id(), surface_texture_service_id);
+
+  // Deleting |abstract_texture| should delete the platform texture as well,
+  // since we haven't make a copy of the TextureRef.  Also make sure that the
+  // cleanup CB is called.
+  EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1).RetiresOnSaturation();
+  bool cleanup_flag = false;
+  abstract_texture->SetCleanupCallback(base::BindOnce(
+      [](bool* flag, AbstractTexture*) { *flag = true; }, &cleanup_flag));
+  abstract_texture.reset();
+  EXPECT_TRUE(cleanup_flag);
+}
+
+TEST_P(GLES2DecoderTest, AbstractTextureIsDestroyedWithDecoder) {
+  // Deleting the decoder should delete the AbstractTexture's TextureRef.
+  const GLuint service_id = 123;
+  EXPECT_CALL(*gl_, GenTextures(1, _))
+      .Times(1)
+      .WillOnce(SetArgPointee<1>(service_id))
+      .RetiresOnSaturation();
+  const GLenum target = GL_TEXTURE_EXTERNAL_OES;
+  std::unique_ptr<AbstractTexture> abstract_texture =
+      GetDecoder()->CreateAbstractTexture(target, GL_RGBA, 256, /* width */
+                                          256,                  /* height */
+                                          1,                    /* depth */
+                                          0,                    /* border */
+                                          GL_RGBA, GL_UNSIGNED_BYTE);
+  bool cleanup_flag = false;
+  abstract_texture->SetCleanupCallback(base::BindOnce(
+      [](bool* flag, AbstractTexture*) { *flag = true; }, &cleanup_flag));
+
+  // There is only one TextureRef, so it should delete the platform texture.  It
+  // should also call the cleanup cb.
+  EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1).RetiresOnSaturation();
+  ResetDecoder();
+  // The texture should no longer have a TextureRef.
+  EXPECT_EQ(abstract_texture->GetTextureBase(), nullptr);
+  EXPECT_TRUE(cleanup_flag);
+}
+
+TEST_P(GLES2DecoderTest, AbstractTextureIsDestroyedWhenMadeCurrent) {
+  // When an AbstractTexture is destroyed, the ref will be dropped by the next
+  // call to MakeCurrent if the context isn't already current.
+  const GLuint service_id = 123;
+  EXPECT_CALL(*gl_, GenTextures(1, _))
+      .Times(1)
+      .WillOnce(SetArgPointee<1>(service_id))
+      .RetiresOnSaturation();
+  const GLenum target = GL_TEXTURE_EXTERNAL_OES;
+  std::unique_ptr<AbstractTexture> abstract_texture =
+      GetDecoder()->CreateAbstractTexture(target, GL_RGBA, 256, /* width */
+                                          256,                  /* height */
+                                          1,                    /* depth */
+                                          0,                    /* border */
+                                          GL_RGBA, GL_UNSIGNED_BYTE);
+
+  // Make the context not current, so that it's not destroyed immediately.
+  context_->ReleaseCurrent(surface_.get());
+  abstract_texture.reset();
+  // Make the context current again, |context_| overrides it with a mock.
+  context_->GLContextStub::MakeCurrent(surface_.get());
+
+  // Having textures to delete should signal idle work.
+  EXPECT_EQ(GetDecoder()->HasMoreIdleWork(), true);
+  EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1).RetiresOnSaturation();
+
+  // Allow the context to be made current.
+  EXPECT_CALL(*context_, MakeCurrent(surface_.get())).WillOnce(Return(true));
+  GetDecoder()->MakeCurrent();
+}
+
+TEST_P(GLES2DecoderTest, AbstractTextureIsDestroyedIfAlreadyCurrent) {
+  // When an AbstractTexture is destroyed, the ref will be dropped immediately
+  // if the context is current.
+  const GLuint service_id = 123;
+  EXPECT_CALL(*gl_, GenTextures(1, _))
+      .Times(1)
+      .WillOnce(SetArgPointee<1>(service_id))
+      .RetiresOnSaturation();
+  const GLenum target = GL_TEXTURE_EXTERNAL_OES;
+  std::unique_ptr<AbstractTexture> abstract_texture =
+      GetDecoder()->CreateAbstractTexture(target, GL_RGBA, 256, /* width */
+                                          256,                  /* height */
+                                          1,                    /* depth */
+                                          0,                    /* border */
+                                          GL_RGBA, GL_UNSIGNED_BYTE);
+
+  EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1).RetiresOnSaturation();
+  abstract_texture.reset();
+  EXPECT_EQ(GetDecoder()->HasMoreIdleWork(), false);
+}
+
+TEST_P(GLES2DecoderTest, TestAbstractTextureSetClearedWorks) {
+  const GLuint service_id = 123;
+  EXPECT_CALL(*gl_, GenTextures(1, _))
+      .Times(1)
+      .WillOnce(SetArgPointee<1>(service_id))
+      .RetiresOnSaturation();
+  const GLenum target = GL_TEXTURE_2D;
+  std::unique_ptr<AbstractTexture> abstract_texture =
+      GetDecoder()->CreateAbstractTexture(target, GL_RGBA, 256, /* width */
+                                          256,                  /* height */
+                                          1,                    /* depth */
+                                          0,                    /* border */
+                                          GL_RGBA, GL_UNSIGNED_BYTE);
+  Texture* texture = static_cast<Texture*>(abstract_texture->GetTextureBase());
+
+  // Texture should start off unrenderable.
+  EXPECT_EQ(texture->SafeToRenderFrom(), false);
+
+  // Setting it to be cleared should make it renderable.
+  abstract_texture->SetCleared();
+  EXPECT_EQ(texture->SafeToRenderFrom(), true);
+
+  EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1).RetiresOnSaturation();
+  abstract_texture.reset();
 }
 
 TEST_P(GLES3DecoderTest, GetInternalformativValidArgsSamples) {
@@ -463,7 +665,7 @@ TEST_P(GLES2DecoderTest, GenQueriesEXTImmediateInvalidArgs) {
 TEST_P(GLES2DecoderManualInitTest, BeginEndQueryEXT) {
   InitState init;
   init.extensions = "GL_EXT_occlusion_query_boolean";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
@@ -697,7 +899,7 @@ static void CheckBeginEndQueryBadMemoryFails(GLES2DecoderTestBase* test,
   init.extensions = "GL_EXT_occlusion_query_boolean"
                     " GL_ARB_sync"
                     " GL_ARB_timer_query";
-  init.gl_version = "opengl es 3.0";
+  init.gl_version = "OpenGL ES 3.0";
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
@@ -750,7 +952,7 @@ TEST_P(GLES2DecoderManualInitTest, QueryReuseTest) {
     init.extensions = "GL_EXT_occlusion_query_boolean"
                       " GL_ARB_sync"
                       " GL_ARB_timer_query";
-    init.gl_version = "opengl es 3.0";
+    init.gl_version = "OpenGL ES 3.0";
     init.has_alpha = true;
     init.request_alpha = true;
     init.bind_generates_resource = true;
@@ -885,7 +1087,7 @@ TEST_P(GLES2DecoderTest, SetDisjointValueSync) {
 TEST_P(GLES2DecoderManualInitTest, BeginEndQueryEXTCommandsCompletedCHROMIUM) {
   InitState init;
   init.extensions = "GL_EXT_occlusion_query_boolean GL_ARB_sync";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
@@ -957,7 +1159,7 @@ TEST_P(GLES2DecoderManualInitTest, BeginEndQueryEXTCommandsCompletedCHROMIUM) {
 TEST_P(GLES2DecoderManualInitTest, BeginInvalidTargetQueryFails) {
   InitState init;
   init.extensions = "";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
@@ -995,7 +1197,7 @@ TEST_P(GLES2DecoderManualInitTest, BeginInvalidTargetQueryFails) {
 TEST_P(GLES2DecoderManualInitTest, QueryCounterEXTTimeStamp) {
   InitState init;
   init.extensions = "GL_ARB_timer_query";
-  init.gl_version = "opengl es 3.0";
+  init.gl_version = "OpenGL ES 3.0";
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
@@ -1028,7 +1230,7 @@ TEST_P(GLES2DecoderManualInitTest, QueryCounterEXTTimeStamp) {
 TEST_P(GLES2DecoderManualInitTest, InvalidTargetQueryCounterFails) {
   InitState init;
   init.extensions = "";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
@@ -1083,16 +1285,13 @@ class SizeOnlyMemoryTracker : public MemoryTracker {
     pool_info_.initial_size = 28;
     pool_info_.size = 0;
   }
+  ~SizeOnlyMemoryTracker() override = default;
 
-  // Ensure a certain amount of GPU memory is free. Returns true on success.
-  MOCK_METHOD1(EnsureGPUMemoryAvailable, bool(size_t size_needed));
-
-  virtual void TrackMemoryAllocatedChange(size_t old_size,
-                                          size_t new_size) {
-    pool_info_.size += new_size - old_size;
+  void TrackMemoryAllocatedChange(uint64_t delta) override {
+    pool_info_.size += delta;
   }
 
-  size_t GetPoolSize() {
+  uint64_t GetSize() const override {
     return pool_info_.size - pool_info_.initial_size;
   }
 
@@ -1101,11 +1300,10 @@ class SizeOnlyMemoryTracker : public MemoryTracker {
   uint64_t ShareGroupTracingGUID() const override { return 0; }
 
  private:
-  virtual ~SizeOnlyMemoryTracker() = default;
   struct PoolInfo {
     PoolInfo() : initial_size(0), size(0) {}
-    size_t initial_size;
-    size_t size;
+    uint64_t initial_size;
+    uint64_t size;
   };
   PoolInfo pool_info_;
 };
@@ -1113,69 +1311,50 @@ class SizeOnlyMemoryTracker : public MemoryTracker {
 }  // anonymous namespace.
 
 TEST_P(GLES2DecoderManualInitTest, MemoryTrackerInitialSize) {
-  scoped_refptr<SizeOnlyMemoryTracker> memory_tracker =
-      new SizeOnlyMemoryTracker();
-  set_memory_tracker(memory_tracker.get());
+  auto memory_tracker = std::make_unique<SizeOnlyMemoryTracker>();
+  auto* memory_tracker_ptr = memory_tracker.get();
+  set_memory_tracker(std::move(memory_tracker));
   InitState init;
   init.bind_generates_resource = true;
   InitDecoder(init);
   // Expect that initial size - size is 0.
-  EXPECT_EQ(0u, memory_tracker->GetPoolSize());
-  EXPECT_EQ(0u, memory_tracker->GetPoolSize());
+  EXPECT_EQ(0u, memory_tracker_ptr->GetSize());
+  EXPECT_EQ(0u, memory_tracker_ptr->GetSize());
 }
 
 TEST_P(GLES2DecoderManualInitTest, MemoryTrackerTexImage2D) {
-  scoped_refptr<SizeOnlyMemoryTracker> memory_tracker =
-      new SizeOnlyMemoryTracker();
-  set_memory_tracker(memory_tracker.get());
+  auto memory_tracker = std::make_unique<SizeOnlyMemoryTracker>();
+  auto* memory_tracker_ptr = memory_tracker.get();
+  set_memory_tracker(std::move(memory_tracker));
   InitState init;
   init.bind_generates_resource = true;
   InitDecoder(init);
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(true))
-      .RetiresOnSaturation();
   DoTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 8, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                shared_memory_id_, kSharedMemoryOffset);
-  EXPECT_EQ(128u, memory_tracker->GetPoolSize());
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(64))
-      .WillOnce(Return(true))
-      .RetiresOnSaturation();
+  EXPECT_EQ(128u, memory_tracker_ptr->GetSize());
   DoTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                shared_memory_id_, kSharedMemoryOffset);
-  EXPECT_EQ(64u, memory_tracker->GetPoolSize());
+  EXPECT_EQ(64u, memory_tracker_ptr->GetSize());
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  // Check we get out of memory and no call to glTexImage2D if Ensure fails.
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(64))
-      .WillOnce(Return(false))
-      .RetiresOnSaturation();
-  TexImage2D cmd;
-  cmd.Init(GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, GL_RGBA, GL_UNSIGNED_BYTE,
-           shared_memory_id_, kSharedMemoryOffset);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_OUT_OF_MEMORY, GetGLError());
-  EXPECT_EQ(64u, memory_tracker->GetPoolSize());
 }
 
 TEST_P(GLES2DecoderManualInitTest, MemoryTrackerTexStorage2DEXT) {
-  scoped_refptr<SizeOnlyMemoryTracker> memory_tracker =
-      new SizeOnlyMemoryTracker();
-  set_memory_tracker(memory_tracker.get());
+  auto memory_tracker = std::make_unique<SizeOnlyMemoryTracker>();
+  auto* memory_tracker_ptr = memory_tracker.get();
+  set_memory_tracker(std::move(memory_tracker));
   InitState init;
   init.extensions = "GL_EXT_texture_storage";
   init.bind_generates_resource = true;
   InitDecoder(init);
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
-  // Check we get out of memory and no call to glTexStorage2DEXT
-  // if Ensure fails.
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(false))
+  EXPECT_CALL(*gl_, TexStorage2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, 8, 4))
+      .Times(1)
       .RetiresOnSaturation();
   TexStorage2DEXT cmd;
   cmd.Init(GL_TEXTURE_2D, 1, GL_RGBA8, 8, 4);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(0u, memory_tracker->GetPoolSize());
-  EXPECT_EQ(GL_OUT_OF_MEMORY, GetGLError());
+  EXPECT_EQ(128u, memory_tracker_ptr->GetSize());
 }
 
 TEST_P(GLES2DecoderManualInitTest, MemoryTrackerCopyTexImage2D) {
@@ -1185,18 +1364,15 @@ TEST_P(GLES2DecoderManualInitTest, MemoryTrackerCopyTexImage2D) {
   GLsizei width = 4;
   GLsizei height = 8;
   GLint border = 0;
-  scoped_refptr<SizeOnlyMemoryTracker> memory_tracker =
-      new SizeOnlyMemoryTracker();
-  set_memory_tracker(memory_tracker.get());
+  auto memory_tracker = std::make_unique<SizeOnlyMemoryTracker>();
+  auto* memory_tracker_ptr = memory_tracker.get();
+  set_memory_tracker(std::move(memory_tracker));
   InitState init;
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
   InitDecoder(init);
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(true))
-      .RetiresOnSaturation();
   EXPECT_CALL(*gl_, GetError())
       .WillOnce(Return(GL_NO_ERROR))
       .WillOnce(Return(GL_NO_ERROR))
@@ -1209,21 +1385,14 @@ TEST_P(GLES2DecoderManualInitTest, MemoryTrackerCopyTexImage2D) {
   CopyTexImage2D cmd;
   cmd.Init(target, level, internal_format, 0, 0, width, height);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(128u, memory_tracker->GetPoolSize());
+  EXPECT_EQ(128u, memory_tracker_ptr->GetSize());
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  // Check we get out of memory and no call to glCopyTexImage2D if Ensure fails.
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(false))
-      .RetiresOnSaturation();
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_OUT_OF_MEMORY, GetGLError());
-  EXPECT_EQ(128u, memory_tracker->GetPoolSize());
 }
 
 TEST_P(GLES2DecoderManualInitTest, MemoryTrackerRenderbufferStorage) {
-  scoped_refptr<SizeOnlyMemoryTracker> memory_tracker =
-      new SizeOnlyMemoryTracker();
-  set_memory_tracker(memory_tracker.get());
+  auto memory_tracker = std::make_unique<SizeOnlyMemoryTracker>();
+  auto* memory_tracker_ptr = memory_tracker.get();
+  set_memory_tracker(std::move(memory_tracker));
   InitState init;
   init.bind_generates_resource = true;
   InitDecoder(init);
@@ -1234,9 +1403,6 @@ TEST_P(GLES2DecoderManualInitTest, MemoryTrackerRenderbufferStorage) {
       .WillOnce(Return(GL_NO_ERROR))
       .WillOnce(Return(GL_NO_ERROR))
       .RetiresOnSaturation();
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(true))
-      .RetiresOnSaturation();
   EXPECT_CALL(*gl_, RenderbufferStorageEXT(GL_RENDERBUFFER, GL_RGBA, 8, 4))
       .Times(1)
       .RetiresOnSaturation();
@@ -1244,32 +1410,21 @@ TEST_P(GLES2DecoderManualInitTest, MemoryTrackerRenderbufferStorage) {
   cmd.Init(GL_RENDERBUFFER, GL_RGBA4, 8, 4);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  EXPECT_EQ(128u, memory_tracker->GetPoolSize());
-  // Check we get out of memory and no call to glRenderbufferStorage if Ensure
-  // fails.
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(false))
-      .RetiresOnSaturation();
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_OUT_OF_MEMORY, GetGLError());
-  EXPECT_EQ(128u, memory_tracker->GetPoolSize());
+  EXPECT_EQ(128u, memory_tracker_ptr->GetSize());
 }
 
 TEST_P(GLES2DecoderManualInitTest, MemoryTrackerBufferData) {
-  scoped_refptr<SizeOnlyMemoryTracker> memory_tracker =
-      new SizeOnlyMemoryTracker();
-  set_memory_tracker(memory_tracker.get());
+  auto memory_tracker = std::make_unique<SizeOnlyMemoryTracker>();
+  auto* memory_tracker_ptr = memory_tracker.get();
+  set_memory_tracker(std::move(memory_tracker));
   InitState init;
   init.bind_generates_resource = true;
   InitDecoder(init);
-  EXPECT_EQ(0u, memory_tracker->GetPoolSize());
+  EXPECT_EQ(0u, memory_tracker_ptr->GetSize());
   DoBindBuffer(GL_ARRAY_BUFFER, client_buffer_id_, kServiceBufferId);
   EXPECT_CALL(*gl_, GetError())
       .WillOnce(Return(GL_NO_ERROR))
       .WillOnce(Return(GL_NO_ERROR))
-      .RetiresOnSaturation();
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(true))
       .RetiresOnSaturation();
   EXPECT_CALL(*gl_, BufferData(GL_ARRAY_BUFFER, 128, _, GL_STREAM_DRAW))
       .Times(1)
@@ -1278,15 +1433,7 @@ TEST_P(GLES2DecoderManualInitTest, MemoryTrackerBufferData) {
   cmd.Init(GL_ARRAY_BUFFER, 128, 0, 0, GL_STREAM_DRAW);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  EXPECT_EQ(128u, memory_tracker->GetPoolSize());
-  // Check we get out of memory and no call to glBufferData if Ensure
-  // fails.
-  EXPECT_CALL(*memory_tracker.get(), EnsureGPUMemoryAvailable(128))
-      .WillOnce(Return(false))
-      .RetiresOnSaturation();
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_OUT_OF_MEMORY, GetGLError());
-  EXPECT_EQ(128u, memory_tracker->GetPoolSize());
+  EXPECT_EQ(128u, memory_tracker_ptr->GetSize());
 }
 
 TEST_P(GLES2DecoderManualInitTest, ImmutableCopyTexImage2D) {
@@ -1411,6 +1558,9 @@ TEST_P(GLES3DecoderTest, BindTransformFeedbackValidArgs) {
   SpecializedSetup<BindTransformFeedback, 0>(true);
   BindTransformFeedback cmd;
   cmd.Init(GL_TRANSFORM_FEEDBACK, client_transformfeedback_id_);
+  EXPECT_CALL(*gl_, BindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, 0))
+      .Times(1)
+      .RetiresOnSaturation();
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
@@ -1483,6 +1633,9 @@ TEST_P(GLES3DecoderTest, GetTransformFeedbackBinding) {
   const GLuint kServiceID = 1012;
   const GLenum kTarget = GL_TRANSFORM_FEEDBACK;
   DoCreateTransformFeedback(kClientID, kServiceID);
+  EXPECT_CALL(*gl_, BindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, 0))
+      .Times(1)
+      .RetiresOnSaturation();
   DoBindTransformFeedback(kTarget, kClientID, kServiceID);
 
   EXPECT_CALL(*gl_, GetError())
@@ -1500,6 +1653,9 @@ TEST_P(GLES3DecoderTest, GetTransformFeedbackBinding) {
   EXPECT_EQ(1, result->GetNumResults());
   EXPECT_EQ(kClientID, static_cast<GLuint>(result->GetData()[0]));
 
+  EXPECT_CALL(*gl_, BindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, 0))
+      .Times(1)
+      .RetiresOnSaturation();
   DoBindTransformFeedback(kTarget, 0, kServiceDefaultTransformFeedbackId);
   DoDeleteTransformFeedback(kClientID, kServiceID);
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -1581,7 +1737,11 @@ TEST_P(GLES2DecoderDoCommandsTest, DoCommandsBadArgSize) {
             decoder_->DoCommands(
                 2, &cmds_, entries_per_cmd_ * 2 + 1, &num_processed));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  EXPECT_EQ(entries_per_cmd_ + cmds_[1].header.size, num_processed);
+  // gpu::CommandHeader::size is a 21-bit field, so casting it to int is safe.
+  // Without the explicit cast, Visual Studio ends up promoting the left hand
+  // side to unsigned, and emits a sign mismatch warning.
+  EXPECT_EQ(entries_per_cmd_ + static_cast<int>(cmds_[1].header.size),
+            num_processed);
 }
 
 class GLES2DecoderDescheduleUntilFinishedTest : public GLES2DecoderTest {
@@ -1683,13 +1843,11 @@ void GLES3DecoderWithShaderTest::SetUp() {
 }
 
 void GLES3DecoderRGBBackbufferTest::SetUp() {
-  gpu::GpuDriverBugWorkarounds workarounds;
-  workarounds.clear_alpha_in_readpixels = true;
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
   init.bind_generates_resource = true;
   init.context_type = CONTEXT_TYPE_OPENGLES3;
-  InitDecoderWithWorkarounds(init, workarounds);
+  InitDecoder(init);
   SetupDefaultProgram();
 }
 

@@ -18,15 +18,6 @@ namespace arc {
 
 namespace {
 
-// Sends MountEvents of all existing MountPoints in cros-disks.
-void SendAllMountEvents(ArcVolumeMounterBridge* bridge) {
-  for (const auto& keyValue : DiskMountManager::GetInstance()->mount_points()) {
-    bridge->OnMountEvent(DiskMountManager::MountEvent::MOUNTING,
-                         chromeos::MountError::MOUNT_ERROR_NONE,
-                         keyValue.second);
-  }
-}
-
 // Singleton factory for ArcVolumeMounterBridge.
 class ArcVolumeMounterBridgeFactory
     : public internal::ArcBrowserContextKeyedServiceFactoryBase<
@@ -56,22 +47,34 @@ ArcVolumeMounterBridge* ArcVolumeMounterBridge::GetForBrowserContext(
 
 ArcVolumeMounterBridge::ArcVolumeMounterBridge(content::BrowserContext* context,
                                                ArcBridgeService* bridge_service)
-    : arc_bridge_service_(bridge_service) {
+    : arc_bridge_service_(bridge_service), weak_ptr_factory_(this) {
   arc_bridge_service_->volume_mounter()->AddObserver(this);
+  arc_bridge_service_->volume_mounter()->SetHost(this);
   DCHECK(DiskMountManager::GetInstance());
   DiskMountManager::GetInstance()->AddObserver(this);
 }
 
 ArcVolumeMounterBridge::~ArcVolumeMounterBridge() {
   DiskMountManager::GetInstance()->RemoveObserver(this);
+  arc_bridge_service_->volume_mounter()->SetHost(nullptr);
   arc_bridge_service_->volume_mounter()->RemoveObserver(this);
 }
 
+// Sends MountEvents of all existing MountPoints in cros-disks.
+void ArcVolumeMounterBridge::SendAllMountEvents() {
+  for (const auto& keyValue : DiskMountManager::GetInstance()->mount_points()) {
+    OnMountEvent(DiskMountManager::MountEvent::MOUNTING,
+                 chromeos::MountError::MOUNT_ERROR_NONE, keyValue.second);
+  }
+}
+
 void ArcVolumeMounterBridge::OnConnectionReady() {
-  base::PostTaskWithTraits(FROM_HERE,
-                           {base::TaskPriority::USER_BLOCKING,
-                            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-                           base::BindOnce(&SendAllMountEvents, this));
+  // Deferring the SendAllMountEvents as a task to current thread to not
+  // block the mojo request since SendAllMountEvents might takes non trivial
+  // amount of time.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&ArcVolumeMounterBridge::SendAllMountEvents,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcVolumeMounterBridge::OnAutoMountableDiskEvent(
@@ -144,6 +147,15 @@ void ArcVolumeMounterBridge::OnMountEvent(
   volume_mounter_instance->OnMountEvent(mojom::MountPointInfo::New(
       event, mount_info.source_path, mount_info.mount_path, fs_uuid,
       device_label, device_type));
+}
+
+void ArcVolumeMounterBridge::RequestAllMountPoints() {
+  // Deferring the SendAllMountEvents as a task to current thread to not
+  // block the mojo request since SendAllMountEvents might takes non trivial
+  // amount of time.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&ArcVolumeMounterBridge::SendAllMountEvents,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 }  // namespace arc

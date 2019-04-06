@@ -1,5 +1,6 @@
 <link rel="import" href="chrome://history/shared_vars.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 
 <dom-module id="shared-style">
   <template>
@@ -12,7 +13,6 @@
       .card-title {
         align-items: center;
         border-bottom: 1px solid var(--card-border-color);
-        border-radius: 2px 2px 0 0;
         display: flex;
         font-size: 108%;
         font-weight: 500;
@@ -44,14 +44,14 @@
 
       .website-title {
         -webkit-margin-start: 16px;
-        color: var(--primary-text-color);
+        color: var(--cr-primary-text-color);
         overflow: hidden;
         text-decoration: none;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      button[is='paper-icon-button-light'] {
+      paper-icon-button-light {
         background: none;
         border: none;
         height: 36px;
@@ -59,12 +59,12 @@
         width: 36px;
       }
 
-      button.more-vert-button {
+      paper-icon-button-light.more-vert-button > button {
         padding: 8px;
       }
 
-      button.more-vert-button div {
-        border: 2px solid var(--secondary-text-color);
+      paper-icon-button-light.more-vert-button div {
+        border: 2px solid var(--cr-secondary-text-color);
         border-radius: 2px;
         margin: 1px 8px;
         pointer-events: none;

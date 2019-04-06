@@ -122,7 +122,8 @@ class MockTouchEventConverterEvdev : public TouchEventConverterEvdev {
 class MockDeviceEventDispatcherEvdev : public DeviceEventDispatcherEvdev {
  public:
   MockDeviceEventDispatcherEvdev(
-      const base::Callback<void(const GenericEventParams& params)>& callback)
+      const base::RepeatingCallback<void(const GenericEventParams& params)>&
+          callback)
       : callback_(callback) {}
   ~MockDeviceEventDispatcherEvdev() override {}
 
@@ -168,7 +169,7 @@ class MockDeviceEventDispatcherEvdev : public DeviceEventDispatcherEvdev {
       const std::vector<InputDevice>& devices) override {}
 
  private:
-  base::Callback<void(const GenericEventParams& params)> callback_;
+  base::RepeatingCallback<void(const GenericEventParams& params)> callback_;
 };
 
 MockTouchEventConverterEvdev::MockTouchEventConverterEvdev(
@@ -229,8 +230,8 @@ class TouchEventConverterEvdevTest : public testing::Test {
     // loop.
     EventDeviceInfo devinfo;
     dispatcher_.reset(new ui::MockDeviceEventDispatcherEvdev(
-        base::Bind(&TouchEventConverterEvdevTest::DispatchCallback,
-                   base::Unretained(this))));
+        base::BindRepeating(&TouchEventConverterEvdevTest::DispatchCallback,
+                            base::Unretained(this))));
     device_.reset(new ui::MockTouchEventConverterEvdev(
         std::move(events_in), base::FilePath(kTestDevicePath), devinfo,
         dispatcher_.get()));
@@ -1200,12 +1201,12 @@ class TouchEventConverterEvdevTouchNoiseTest
   ~TouchEventConverterEvdevTouchNoiseTest() override {}
 
   // Makes the FalseTouchFinder use |filter| and only |filter| to filter out
-  // touch noise. Also removes the edge touch filter.
+  // touch noise. Also removes any delay filters.
   void SetTouchNoiseFilter(std::unique_ptr<TouchFilter> filter) {
     FalseTouchFinder* finder = device()->false_touch_finder();
     finder->noise_filters_.clear();
     finder->noise_filters_.push_back(std::move(filter));
-    finder->edge_touch_filter_.reset();
+    finder->delay_filters_.clear();
   }
 
   // Returns the first of FalseTouchFinder's filters.

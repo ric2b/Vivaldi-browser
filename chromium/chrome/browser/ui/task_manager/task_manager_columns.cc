@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 
 namespace task_manager {
 
@@ -29,12 +29,6 @@ const TableColumnData kColumns[] = {
     {IDS_TASK_MANAGER_MEM_FOOTPRINT_COLUMN, ui::TableColumn::RIGHT, -1, 0,
      arraysize("800 MiB") * kCharWidth,
      arraysize("Memory Footprint") * 1.5 * kCharWidth, true, false, true},
-    {IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN, ui::TableColumn::RIGHT, -1, 0,
-     arraysize("800 MiB") * kCharWidth, -1, true, false, false},
-    {IDS_TASK_MANAGER_SHARED_MEM_COLUMN, ui::TableColumn::RIGHT, -1, 0,
-     arraysize("800 MiB") * kCharWidth, -1, true, false, false},
-    {IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN, ui::TableColumn::RIGHT, -1, 0,
-     arraysize("800 MiB") * kCharWidth, -1, true, false, false},
 
 #if defined(OS_CHROMEOS)
     {IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN, ui::TableColumn::RIGHT, -1, 0,
@@ -131,9 +125,6 @@ std::string GetColumnIdAsString(int column_id) {
     COLUMN_CASE(IDS_TASK_MANAGER_TASK_COLUMN);
     COLUMN_CASE(IDS_TASK_MANAGER_PROFILE_NAME_COLUMN);
     COLUMN_CASE(IDS_TASK_MANAGER_MEM_FOOTPRINT_COLUMN);
-    COLUMN_CASE(IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN);
-    COLUMN_CASE(IDS_TASK_MANAGER_SHARED_MEM_COLUMN);
-    COLUMN_CASE(IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN);
     COLUMN_CASE(IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN);
     COLUMN_CASE(IDS_TASK_MANAGER_CPU_COLUMN);
     COLUMN_CASE(IDS_TASK_MANAGER_START_TIME_COLUMN);

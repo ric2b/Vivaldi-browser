@@ -15,12 +15,12 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -29,7 +29,7 @@ using ::testing::ReturnRef;
 using ::testing::_;
 using base::Time;
 using base::Value;
-using content::DownloadItem;
+using download::DownloadItem;
 typedef DownloadQuery::DownloadVector DownloadVector;
 
 namespace {
@@ -63,14 +63,15 @@ class DownloadQueryTest : public testing::Test {
 
   void CreateMocks(int count) {
     for (int i = 0; i < count; ++i) {
-      owned_mocks_.push_back(base::MakeUnique<content::MockDownloadItem>());
+      owned_mocks_.push_back(std::make_unique<download::MockDownloadItem>());
       mocks_.push_back(owned_mocks_.back().get());
       EXPECT_CALL(mock(mocks_.size() - 1), GetId()).WillRepeatedly(Return(
           mocks_.size() - 1));
+      content::DownloadItemUtils::AttachInfo(mocks_.back(), nullptr, nullptr);
     }
   }
 
-  content::MockDownloadItem& mock(int index) { return *mocks_[index]; }
+  download::MockDownloadItem& mock(int index) { return *mocks_[index]; }
 
   DownloadQuery* query() { return &query_; }
 
@@ -105,8 +106,8 @@ class DownloadQueryTest : public testing::Test {
   // These two vectors hold the MockDownloadItems. |mocks_| contains just the
   // pointers, but is necessary because DownloadQuery processes vectors of
   // unowned pointers. |owned_mocks_| holds the ownership of the mock objects.
-  std::vector<content::MockDownloadItem*> mocks_;
-  std::vector<std::unique_ptr<content::MockDownloadItem>> owned_mocks_;
+  std::vector<download::MockDownloadItem*> mocks_;
+  std::vector<std::unique_ptr<download::MockDownloadItem>> owned_mocks_;
   DownloadQuery query_;
   DownloadVector results_;
 
@@ -196,10 +197,6 @@ TEST_F(DownloadQueryTest, DownloadQueryTest_Limit) {
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryFilename) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
-  EXPECT_CALL(mock(1), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
   base::FilePath match_filename(FILE_PATH_LITERAL("query"));
   EXPECT_CALL(mock(0), GetTargetFilePath()).WillRepeatedly(ReturnRef(
       match_filename));
@@ -219,10 +216,6 @@ TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryFilename) {
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryOriginalUrl) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
-  EXPECT_CALL(mock(1), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
   base::FilePath fail_filename(FILE_PATH_LITERAL("fail"));
   EXPECT_CALL(mock(0), GetTargetFilePath()).WillRepeatedly(ReturnRef(
       fail_filename));
@@ -243,10 +236,6 @@ TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryOriginalUrl) {
 TEST_F(DownloadQueryTest,
        DownloadQueryTest_FilterGenericQueryOriginalUrlUnescaping) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
-  EXPECT_CALL(mock(1), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
   base::FilePath fail_filename(FILE_PATH_LITERAL("fail"));
   EXPECT_CALL(mock(0), GetTargetFilePath()).WillRepeatedly(ReturnRef(
       fail_filename));
@@ -266,10 +255,6 @@ TEST_F(DownloadQueryTest,
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryUrl) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
-  EXPECT_CALL(mock(1), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
   base::FilePath fail_filename(FILE_PATH_LITERAL("fail"));
   EXPECT_CALL(mock(0), GetTargetFilePath()).WillRepeatedly(ReturnRef(
       fail_filename));
@@ -289,10 +274,6 @@ TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryUrl) {
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryUrlUnescaping) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
-  EXPECT_CALL(mock(1), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
   base::FilePath fail_filename(FILE_PATH_LITERAL("fail"));
   EXPECT_CALL(mock(0), GetTargetFilePath()).WillRepeatedly(ReturnRef(
       fail_filename));
@@ -312,10 +293,6 @@ TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryUrlUnescaping) {
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_FilterGenericQueryFilenameI18N) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
-  EXPECT_CALL(mock(1), GetBrowserContext()).WillRepeatedly(Return(
-      static_cast<content::BrowserContext*>(NULL)));
   const base::FilePath::StringType kTestString(
 #if defined(OS_POSIX)
       "/\xe4\xbd\xa0\xe5\xa5\xbd\xe4\xbd\xa0\xe5\xa5\xbd"
@@ -462,20 +439,20 @@ TEST_F(DownloadQueryTest, DownloadQueryTest_SortBytesReceived) {
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_FilterDangerAccepted) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED));
-  EXPECT_CALL(mock(1), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
+  EXPECT_CALL(mock(0), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED));
+  EXPECT_CALL(mock(1), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
   AddFilter(DownloadQuery::FILTER_DANGER_ACCEPTED, true);
   ExpectStandardFilterResults();
 }
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_SortDangerAccepted) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED));
-  EXPECT_CALL(mock(1), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
+  EXPECT_CALL(mock(0), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED));
+  EXPECT_CALL(mock(1), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
   query()->AddSorter(DownloadQuery::SORT_DANGER_ACCEPTED,
                      DownloadQuery::ASCENDING);
   ExpectSortInverted();
@@ -739,20 +716,20 @@ TEST_F(DownloadQueryTest, DownloadQueryTest_SortState) {
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_FilterDanger) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
-  EXPECT_CALL(mock(1), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
-  query()->AddFilter(content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
+  EXPECT_CALL(mock(0), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
+  EXPECT_CALL(mock(1), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
+  query()->AddFilter(download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
   ExpectStandardFilterResults();
 }
 
 TEST_F(DownloadQueryTest, DownloadQueryTest_SortDanger) {
   CreateMocks(2);
-  EXPECT_CALL(mock(0), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
-  EXPECT_CALL(mock(1), GetDangerType()).WillRepeatedly(Return(
-      content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
+  EXPECT_CALL(mock(0), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
+  EXPECT_CALL(mock(1), GetDangerType())
+      .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE));
   query()->AddSorter(DownloadQuery::SORT_DANGER, DownloadQuery::DESCENDING);
   ExpectSortInverted();
 }

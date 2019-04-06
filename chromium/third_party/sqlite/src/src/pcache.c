@@ -431,7 +431,7 @@ int sqlite3PcacheFetchStress(
       sqlite3_log(SQLITE_FULL,
                   "spill page %d making room for %d - cache used: %d/%d",
                   pPg->pgno, pgno,
-                  sqlite3GlobalConfig.pcache.xPagecount(pCache->pCache),
+                  sqlite3GlobalConfig.pcache2.xPagecount(pCache->pCache),
                 numberOfCachePages(pCache));
 #endif
       pcacheTrace(("%p.SPILL %d\n",pCache,pPg->pgno));
@@ -566,16 +566,15 @@ void sqlite3PcacheMakeDirty(PgHdr *p){
 */
 void sqlite3PcacheMakeClean(PgHdr *p){
   assert( sqlite3PcachePageSanity(p) );
-  if( ALWAYS((p->flags & PGHDR_DIRTY)!=0) ){
-    assert( (p->flags & PGHDR_CLEAN)==0 );
-    pcacheManageDirtyList(p, PCACHE_DIRTYLIST_REMOVE);
-    p->flags &= ~(PGHDR_DIRTY|PGHDR_NEED_SYNC|PGHDR_WRITEABLE);
-    p->flags |= PGHDR_CLEAN;
-    pcacheTrace(("%p.CLEAN %d\n",p->pCache,p->pgno));
-    assert( sqlite3PcachePageSanity(p) );
-    if( p->nRef==0 ){
-      pcacheUnpin(p);
-    }
+  assert( (p->flags & PGHDR_DIRTY)!=0 );
+  assert( (p->flags & PGHDR_CLEAN)==0 );
+  pcacheManageDirtyList(p, PCACHE_DIRTYLIST_REMOVE);
+  p->flags &= ~(PGHDR_DIRTY|PGHDR_NEED_SYNC|PGHDR_WRITEABLE);
+  p->flags |= PGHDR_CLEAN;
+  pcacheTrace(("%p.CLEAN %d\n",p->pCache,p->pgno));
+  assert( sqlite3PcachePageSanity(p) );
+  if( p->nRef==0 ){
+    pcacheUnpin(p);
   }
 }
 

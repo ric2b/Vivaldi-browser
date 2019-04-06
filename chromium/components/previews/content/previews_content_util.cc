@@ -18,32 +18,42 @@ bool HasEnabledPreviews(content::PreviewsState previews_state) {
 
 content::PreviewsState DetermineEnabledClientPreviewsState(
     const net::URLRequest& url_request,
-    previews::PreviewsDecider* previews_decider) {
+    const previews::PreviewsDecider* previews_decider) {
   content::PreviewsState previews_state = content::PREVIEWS_UNSPECIFIED;
+
+  if (!previews::params::ArePreviewsAllowed()) {
+    return previews_state;
+  }
 
   if (!url_request.url().SchemeIsHTTPOrHTTPS()) {
     return previews_state;
   }
 
+  if (previews_decider->ShouldAllowPreview(
+          url_request, previews::PreviewsType::RESOURCE_LOADING_HINTS)) {
+    previews_state |= content::RESOURCE_LOADING_HINTS_ON;
+  }
+
+  if (previews_decider->ShouldAllowPreview(url_request,
+                                           previews::PreviewsType::OFFLINE)) {
+    previews_state |= content::OFFLINE_PAGE_ON;
+  }
+
   // Check for client-side previews in precendence order.
-  // Note: this for for the beginning of navigation so we should not
+  // Note: this is for the beginning of navigation so we should not
   // check for https here (since an http request may redirect to https).
-  if (previews_decider->ShouldAllowPreviewAtECT(
-          url_request, previews::PreviewsType::NOSCRIPT,
-          previews::params::GetECTThresholdForPreview(
-              previews::PreviewsType::NOSCRIPT),
-          std::vector<std::string>())) {
+  if (previews_decider->ShouldAllowPreview(url_request,
+                                           previews::PreviewsType::NOSCRIPT)) {
     previews_state |= content::NOSCRIPT_ON;
-    return previews_state;
   }
 
   if (previews::params::IsClientLoFiEnabled() &&
       previews_decider->ShouldAllowPreviewAtECT(
           url_request, previews::PreviewsType::LOFI,
           previews::params::EffectiveConnectionTypeThresholdForClientLoFi(),
-          previews::params::GetBlackListedHostsForClientLoFiFieldTrial())) {
+          previews::params::GetBlackListedHostsForClientLoFiFieldTrial(),
+          false)) {
     previews_state |= content::CLIENT_LOFI_ON;
-    return previews_state;
   }
 
   return previews_state;
@@ -51,8 +61,18 @@ content::PreviewsState DetermineEnabledClientPreviewsState(
 
 content::PreviewsState DetermineCommittedClientPreviewsState(
     const net::URLRequest& url_request,
-    content::PreviewsState previews_state) {
+    content::PreviewsState previews_state,
+    const previews::PreviewsDecider* previews_decider) {
   bool is_https = url_request.url().SchemeIs(url::kHttpsScheme);
+
+  previews::PreviewsUserData* previews_user_data =
+      previews::PreviewsUserData::GetData(url_request);
+  // Check if an offline preview was actually served.
+  if (previews_user_data && previews_user_data->offline_preview_used()) {
+    DCHECK(previews_state & content::OFFLINE_PAGE_ON);
+    return content::OFFLINE_PAGE_ON;
+  }
+  previews_state &= ~content::OFFLINE_PAGE_ON;
 
   // If a server preview is set, retain only the bits determined for the server.
   // |previews_state| must already have been updated for server previews from
@@ -65,8 +85,6 @@ content::PreviewsState DetermineCommittedClientPreviewsState(
                              content::SERVER_LOFI_ON | content::CLIENT_LOFI_ON);
   }
 
-  previews::PreviewsUserData* previews_user_data =
-      previews::PreviewsUserData::GetData(url_request);
   if (previews_user_data &&
       previews_user_data->cache_control_no_transform_directive()) {
     if (HasEnabledPreviews(previews_state)) {
@@ -78,14 +96,30 @@ content::PreviewsState DetermineCommittedClientPreviewsState(
     return content::PREVIEWS_OFF;
   }
 
-  // Make priority decision among allow client preview types that can be decided
-  // at Commit time.
-  if (previews_state & content::NOSCRIPT_ON) {
-    if (is_https) {
-      return content::NOSCRIPT_ON;
-    } else {
-      previews_state &= ~(content::NOSCRIPT_ON);
+  // Make priority decision among allowed client preview types that can be
+  // decided at Commit time.
+  if (previews_state & content::RESOURCE_LOADING_HINTS_ON) {
+    // Resource loading hints was chosen for the original URL but only continue
+    //  with it if the committed URL has HTTPS scheme and is allowed by decider.
+    if (is_https && previews_decider &&
+        previews_decider->IsURLAllowedForPreview(
+            url_request, previews::PreviewsType::RESOURCE_LOADING_HINTS)) {
+      return content::RESOURCE_LOADING_HINTS_ON;
     }
+    // Remove RESOURCE_LOADING_HINTS_ON from |previews_state| since we decided
+    // not to commit to it.
+    previews_state = previews_state & ~content::RESOURCE_LOADING_HINTS_ON;
+  }
+
+  if (previews_state & content::NOSCRIPT_ON) {
+    // NoScript was chosen for the original URL but only continue with it
+    // if the committed URL has HTTPS scheme and is allowed by decider.
+    if (is_https && previews_decider &&
+        previews_decider->IsURLAllowedForPreview(
+            url_request, previews::PreviewsType::NOSCRIPT)) {
+      return content::NOSCRIPT_ON;
+    }
+    return content::PREVIEWS_OFF;
   }
   if (previews_state & content::CLIENT_LOFI_ON) {
     return content::CLIENT_LOFI_ON;
@@ -95,21 +129,30 @@ content::PreviewsState DetermineCommittedClientPreviewsState(
     return content::PREVIEWS_OFF;
   }
 
-  NOTREACHED() << previews_state;
-  return previews_state;
+  DCHECK(previews_state == content::PREVIEWS_OFF ||
+         previews_state == content::PREVIEWS_UNSPECIFIED);
+  return content::PREVIEWS_OFF;
 }
 
 previews::PreviewsType GetMainFramePreviewsType(
     content::PreviewsState previews_state) {
-  if (previews_state & content::SERVER_LITE_PAGE_ON) {
+  // The order is important here.
+  if (previews_state & content::OFFLINE_PAGE_ON)
+    return previews::PreviewsType::OFFLINE;
+  if (previews_state & content::SERVER_LITE_PAGE_ON)
     return previews::PreviewsType::LITE_PAGE;
-  } else if (previews_state & content::SERVER_LOFI_ON) {
+  if (previews_state & content::SERVER_LOFI_ON)
     return previews::PreviewsType::LOFI;
-  } else if (previews_state & content::NOSCRIPT_ON) {
+  if (previews_state & content::RESOURCE_LOADING_HINTS_ON)
+    return previews::PreviewsType::RESOURCE_LOADING_HINTS;
+  if (previews_state & content::NOSCRIPT_ON)
     return previews::PreviewsType::NOSCRIPT;
-  } else if (previews_state & content::CLIENT_LOFI_ON) {
+  if (previews_state & content::CLIENT_LOFI_ON)
     return previews::PreviewsType::LOFI;
-  }
+
+  DCHECK_EQ(content::PREVIEWS_UNSPECIFIED,
+            previews_state & ~content::CLIENT_LOFI_AUTO_RELOAD &
+                ~content::PREVIEWS_NO_TRANSFORM & ~content::PREVIEWS_OFF);
   return previews::PreviewsType::NONE;
 }
 

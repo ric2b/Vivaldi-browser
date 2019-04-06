@@ -3,9 +3,6 @@
 <translationbundle lang="sv">
 <translation id="1002108253973310084">En inkompatibel version av protokollet upptäcktes. Kontrollera att du har den senaste versionen av programvaran på båda datorerna och försök igen.</translation>
 <translation id="1050693411695664090">Dålig</translation>
-<translation id="1059802506829356230">• Nytt utseende.
-• Appen har fått bättre prestanda, svarar snabbare och är mer stabil.
-• Stöd för att spela upp ljud från Windows- och Linux-datorer.</translation>
 <translation id="1152528166145813711">Välj …</translation>
 <translation id="1199593201721843963">Inaktivera fjärranslutningar</translation>
 <translation id="1291443878853470558">Du måste aktivera fjärranslutningar om du vill använda Chromoting för att få åtkomst till den här datorn.</translation>
@@ -143,10 +140,12 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="4145029455188493639">Inloggad som <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Vissa obligatoriska komponenter saknas. Kontrollera att du har installerat den senaste versionen av programvaran och försök igen.</translation>
 <translation id="4156740505453712750">Om du vill skydda åtkomsten till den här datorn väljer du en PIN-kod som består av <ph name="BOLD_START" />minst sex siffror<ph name="BOLD_END" />. PIN-koden krävs när du ansluter från en annan plats.</translation>
+<translation id="4169432154993690151">Ge Chrome Remote Desktop åtkomst till kameran om du vill välja profilbild</translation>
 <translation id="4176825807642096119">Åtkomstkod</translation>
 <translation id="4207623512727273241">Kör installationsprogrammet innan du fortsätter.</translation>
 <translation id="4227991223508142681">Verktyg för värdprovisionering</translation>
 <translation id="4240294130679914010">Chromoting Host Uninstaller</translation>
+<translation id="4249741460382919890">Allmänna felkorrigeringar och stabilitetsförbättringar.</translation>
 <translation id="4277463233460010382">Den här datorn är konfigurerad för att tillåta att en eller flera klienter ansluter utan att en pinkod måste anges.</translation>
 <translation id="4277736576214464567">Koden är ogiltig. Försök igen.</translation>
 <translation id="4361728918881830843">Om du vill aktivera fjärranslutning till en annan dator installerar du Chrome Remote Desktop på den och klickar på <ph name="BUTTON_NAME" />.</translation>
@@ -194,6 +193,7 @@ dator</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">Fjärrvärden kräver att du autentiserar via en tredje parts webbplats. Om du vill fortsätta måste du ge Chrome Remote Desktop ytterligare behörigheter att komma åt den här adressen:</translation>
 <translation id="507204348399810022">Är du säker på att du vill inaktivera fjärranslutningar till <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Det gick inte att kommunicera med servern: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Ange samma PIN-kod i båda rutorna.</translation>
 <translation id="5170982930780719864">Ogiltigt värd-id.</translation>
 <translation id="518094545883702183">Den här informationen används bara för att diagnostisera det som felrapporten gäller. Bara den som arbetar med ärendet kan se den och den sparas i högst 30 dagar.</translation>
@@ -244,6 +244,7 @@ dator</translation>
 <translation id="6381670701864002291">Något annat.</translation>
 <translation id="6398765197997659313">Avsluta helskärmsläge</translation>
 <translation id="6441316101718669559">Integrering med skrivbordet stöds inte på den här plattformen. Du kan använda appen ändå, men användarupplevelsen försämras.</translation>
+<translation id="6502629188777329097">Få säker åtkomst till datorn</translation>
 <translation id="652218476070540101">PIN-koden för den här datorn uppdateras …</translation>
 <translation id="6527303717912515753">Dela</translation>
 <translation id="6541219117979389420">Programloggar kan innehålla privata uppgifter, som din identitet (e-postadress) och namn på och egenskaper hos filer och mappar på Google Drive.</translation>
@@ -261,6 +262,7 @@ dator</translation>
 <translation id="6748108480210050150">Från</translation>
 <translation id="677755392401385740">Värd startad för användaren: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Visa/redigera</translation>
+<translation id="6913710942997637770">Ge Chrome Remote Desktop åtkomst till dina foton om du vill välja en profilbild</translation>
 <translation id="6930242544192836755">Varaktighet</translation>
 <translation id="6939719207673461467">Visa/dölj tangentbordet.</translation>
 <translation id="6944854424004126054">Återställ fönstret</translation>
@@ -292,6 +294,7 @@ dator</translation>
 <translation id="7672203038394118626">Fjärranslutningar har inaktiverats för den här datorn.</translation>
 <translation id="7678209621226490279">Docka till vänster</translation>
 <translation id="7693372326588366043">Uppdatera listan med värdar</translation>
+<translation id="7714222945760997814">Rapportera detta</translation>
 <translation id="7782471917492991422">Kontrollera datorns inställningar för energisparfunktioner och se till att den inte försätts i viloläge vid inaktivitet.</translation>
 <translation id="7810127880729796595">Visa statistik (anslutning: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Vissa obligatoriska komponenter saknas. Kontrollera att du kör den senaste versionen av Chrome och försök igen.</translation>

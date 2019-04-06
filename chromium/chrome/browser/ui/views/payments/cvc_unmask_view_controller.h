@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_models.h"
@@ -104,8 +103,6 @@ class CvcUnmaskViewController
   views::Textfield* cvc_field_;  // owned by the view hierarchy, outlives this.
   autofill::CreditCard credit_card_;
   content::WebContents* web_contents_;
-  // The identity provider, used for Payments integration.
-  std::unique_ptr<IdentityProvider> identity_provider_;
   autofill::payments::PaymentsClient payments_client_;
   autofill::payments::FullCardRequest full_card_request_;
   base::WeakPtr<autofill::CardUnmaskDelegate> unmask_delegate_;

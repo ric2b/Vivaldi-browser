@@ -13,13 +13,13 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_options.h"
@@ -73,6 +73,13 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
                     base::TimeTicks reference_time,
                     base::TimeDelta timestamp,
                     int frame_feedback_id));
+  MOCK_METHOD6(OnIncomingCapturedGfxBuffer,
+               void(gfx::GpuMemoryBuffer* buffer,
+                    const media::VideoCaptureFormat& frame_format,
+                    int clockwise_rotation,
+                    base::TimeTicks reference_time,
+                    base::TimeDelta timestamp,
+                    int frame_feedback_id));
   MOCK_METHOD0(DoReserveOutputBuffer, void(void));
   MOCK_METHOD0(DoOnIncomingCapturedBuffer, void(void));
   MOCK_METHOD0(DoOnIncomingCapturedVideoFrame, void(void));
@@ -85,10 +92,8 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
   // Trampoline methods to workaround GMOCK problems with std::unique_ptr<>.
   Buffer ReserveOutputBuffer(const gfx::Size& dimensions,
                              media::VideoPixelFormat format,
-                             media::VideoPixelStorage storage,
                              int frame_feedback_id) override {
-    EXPECT_TRUE(format == media::PIXEL_FORMAT_I420 &&
-                storage == media::VideoPixelStorage::CPU);
+    EXPECT_TRUE(format == media::PIXEL_FORMAT_I420);
     DoReserveOutputBuffer();
     return Buffer();
   }
@@ -109,10 +114,8 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
   }
   Buffer ResurrectLastOutputBuffer(const gfx::Size& dimensions,
                                    media::VideoPixelFormat format,
-                                   media::VideoPixelStorage storage,
                                    int frame_feedback_id) override {
-    EXPECT_TRUE(format == media::PIXEL_FORMAT_I420 &&
-                storage == media::VideoPixelStorage::CPU);
+    EXPECT_TRUE(format == media::PIXEL_FORMAT_I420);
     DoResurrectLastOutputBuffer();
     return Buffer();
   }
@@ -630,7 +633,7 @@ class DesktopCaptureDeviceThrottledTest : public DesktopCaptureDeviceTest {
                 // 'PostNonNestable' is required to make sure the next one
                 // shot capture timer is already pushed when forwaring the
                 // virtual time by the next pending task delay.
-                base::MessageLoop::current()
+                base::MessageLoopCurrent::Get()
                     ->task_runner()
                     ->PostNonNestableTask(
                         FROM_HERE,

@@ -5,16 +5,18 @@
 module viz.mojom;
 
 import "gpu/ipc/common/surface_handle.mojom";
-import "mojo/common/time.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "services/viz/privileged/interfaces/compositing/display_private.mojom";
 import "services/viz/privileged/interfaces/compositing/external_begin_frame_controller.mojom";
 import "services/viz/privileged/interfaces/compositing/frame_sink_video_capture.mojom";
 import "services/viz/privileged/interfaces/compositing/renderer_settings.mojom";
 import "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom";
+import "services/viz/public/interfaces/compositing/copy_output_request.mojom";
 import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
 import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
 import "services/viz/public/interfaces/compositing/surface_id.mojom";
 import "services/viz/public/interfaces/compositing/surface_info.mojom";
+import "services/viz/public/interfaces/hit_test/aggregated_hit_test_region.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 import "services/viz/public/interfaces/compositing/video_detector_observer.mojom";
 
@@ -22,8 +24,9 @@ import "services/viz/public/interfaces/compositing/video_detector_observer.mojom
 struct RootCompositorFrameSinkParams {
   FrameSinkId frame_sink_id;
   gpu.mojom.SurfaceHandle widget;
-  bool force_software_compositing = false;
+  bool gpu_compositing = true;
   RendererSettings renderer_settings;
+  bool send_swap_size_notifications = false;
 
   associated CompositorFrameSink& compositor_frame_sink;
   CompositorFrameSinkClient compositor_frame_sink_client;
@@ -60,6 +63,14 @@ interface FrameSinkManager {
   // message pipe to the client will be closed.
   InvalidateFrameSinkId(FrameSinkId frame_sink_id);
 
+  // Tells FrameSinkManger to report when a synchronization event completes via
+  // tracing and UMA and the duration of that event. A synchronization event
+  // occurs when a CompositorFrame submitted to the CompositorFrameSink
+  // specified by |frame_sink_id| activates after having been blocked by
+  // unresolved dependencies.
+  EnableSynchronizationReporting(FrameSinkId frame_sink_id,
+                                 string reporting_label);
+
   // |debug_label| is used when printing out the surface hierarchy so we know
   // which clients are contributing which surfaces.
   SetFrameSinkDebugLabel(FrameSinkId frame_sink_id, string debug_label);
@@ -82,6 +93,13 @@ interface FrameSinkManager {
       FrameSinkId frame_sink_id,
       CompositorFrameSink& compositor_frame_sink,
       CompositorFrameSinkClient compositor_frame_sink_client);
+
+  // Destroys CompositorFrameSink created by Create[Root]CompositorFrameSink().
+  // This function should only be used synchronously for destroying root
+  // CompositorFrameSinks to ensure the GL context/surface is destroyed before
+  // the platform window.
+  [Sync]
+  DestroyCompositorFrameSink(FrameSinkId frame_sink_id) => ();
 
   // Set up a BeginFrame relationship between two FrameSinkIds. In this case,
   // the child inherits the viz::BeginFrameSource from the parent if it doesn't
@@ -109,6 +127,14 @@ interface FrameSinkManager {
 
   // Creates a FrameSinkVideoCapturer instance.
   CreateVideoCapturer(FrameSinkVideoCapturer& request);
+
+  // Marks the given SurfaceIds for destruction.
+  EvictSurfaces(array<SurfaceId> surface_ids);
+
+  // Takes a snapshot of |surface_id| or a newer surface with the same
+  // FrameSinkId. The request will be queued up until such surface exists and is
+  // reachable from the root surface.
+  RequestCopyOfOutput(SurfaceId surface_id, CopyOutputRequest request);
 };
 
 // The FrameSinkManagerClient interface is implemented by the Display
@@ -123,21 +149,9 @@ interface FrameSinkManagerClient {
   // SurfaceId activates for the first time.
   OnFirstSurfaceActivation(SurfaceInfo surface_info);
 
-  // The CompositorFrameSink pipe for |frame_sink_id| was closed. The client
-  // cannot submit any CompositorFrames to viz after this occurs.
-  OnClientConnectionClosed(FrameSinkId frame_sink_id);
-
-  // Sends |active_handle| and |idle_handle| along with their sizes to the
-  // client when they are allocated or resized.
-  OnAggregatedHitTestRegionListUpdated(FrameSinkId frame_sink_id,
-                                       handle<shared_buffer> active_handle,
-                                       uint32 active_handle_size,
-                                       handle<shared_buffer> idle_handle,
-                                       uint32 idle_handle_size);
-
-  // Tells the client to update the currently active handle.
-  SwitchActiveAggregatedHitTestRegionList(FrameSinkId frame_sink_id,
-                                          uint8 active_handle_index);
+  // Sends new |hit_test_data| to the client.
+  OnAggregatedHitTestRegionListUpdated(
+      FrameSinkId frame_sink_id, array<AggregatedHitTestRegion> hit_test_data);
 
   // Sends |frame_sink_id| and |frame_token| to the client when a surface
   // of the provided |frame_sink_id| activates.

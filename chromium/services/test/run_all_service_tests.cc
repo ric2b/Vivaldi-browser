@@ -29,13 +29,14 @@ class ServiceTestSuite : public base::TestSuite {
     ui::RegisterPathProvider();
 
     base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+    ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
     ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
 #if defined(USE_OZONE)
     ui::OzonePlatform::InitParams params;
     params.single_process = true;
     ui::OzonePlatform::InitializeForGPU(params);
+    ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
 #endif
 
     // base::TestSuite and ViewsInit both try to load icu. That's ok for tests.

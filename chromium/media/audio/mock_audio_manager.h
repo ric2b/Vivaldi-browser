@@ -10,9 +10,9 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/sequenced_task_runner_helpers.h"
-#include "base/single_thread_task_runner.h"
+#include "media/audio/audio_debug_recording_manager.h"
 #include "media/audio/audio_manager.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace media {
 
@@ -56,11 +56,11 @@ class MockAudioManager : public AudioManager {
   void RemoveOutputDeviceChangeListener(AudioDeviceListener* listener) override;
 
   std::unique_ptr<AudioLog> CreateAudioLog(
-      AudioLogFactory::AudioComponent component) override;
+      AudioLogFactory::AudioComponent component,
+      int component_id) override;
 
   void InitializeDebugRecording() override;
-  void EnableDebugRecording(const base::FilePath& base_file_name) override;
-  void DisableDebugRecording() override;
+  AudioDebugRecordingManager* GetAudioDebugRecordingManager() override;
 
   const char* GetName() override;
 
@@ -115,6 +115,7 @@ class MockAudioManager : public AudioManager {
   GetDeviceDescriptionsCallback get_input_device_descriptions_cb_;
   GetDeviceDescriptionsCallback get_output_device_descriptions_cb_;
   GetAssociatedOutputDeviceIDCallback get_associated_output_device_id_cb_;
+  std::unique_ptr<AudioDebugRecordingManager> debug_recording_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(MockAudioManager);
 };

@@ -7,9 +7,11 @@
 #include <utility>
 
 #include "base/files/file_path.h"
+#include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/null_task_runner.h"
-#include "content/public/browser/permission_manager.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/permission_controller_delegate.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/test/mock_background_sync_controller.h"
 #include "content/test/mock_ssl_host_state_delegate.h"
@@ -45,12 +47,28 @@ class TestContextURLRequestContextGetter : public net::URLRequestContextGetter {
 
 namespace content {
 
-TestBrowserContext::TestBrowserContext() {
-  EXPECT_TRUE(browser_context_dir_.CreateUniqueTempDir());
+TestBrowserContext::TestBrowserContext(
+    base::FilePath browser_context_dir_path) {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI))
+      << "Please construct content::TestBrowserTheadBundle before constructing "
+      << "TestBrowserContext instances.  "
+      << BrowserThread::GetDCheckCurrentlyOnErrorMessage(BrowserThread::UI);
+
+  if (browser_context_dir_path.empty()) {
+    EXPECT_TRUE(browser_context_dir_.CreateUniqueTempDir());
+  } else {
+    EXPECT_TRUE(browser_context_dir_.Set(browser_context_dir_path));
+  }
   BrowserContext::Initialize(this, browser_context_dir_.GetPath());
 }
 
 TestBrowserContext::~TestBrowserContext() {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI))
+      << "Please destruct content::TestBrowserContext before destructing "
+      << "the TestBrowserThreadBundle instance.  "
+      << BrowserThread::GetDCheckCurrentlyOnErrorMessage(BrowserThread::UI);
+
+  NotifyWillBeDestroyed(this);
   ShutdownStoragePartitions();
 }
 
@@ -63,9 +81,9 @@ void TestBrowserContext::SetSpecialStoragePolicy(
   special_storage_policy_ = policy;
 }
 
-void TestBrowserContext::SetPermissionManager(
-    std::unique_ptr<PermissionManager> permission_manager) {
-  permission_manager_ = std::move(permission_manager);
+void TestBrowserContext::SetPermissionControllerDelegate(
+    std::unique_ptr<PermissionControllerDelegate> delegate) {
+  permission_controller_delegate_ = std::move(delegate);
 }
 
 net::URLRequestContextGetter* TestBrowserContext::GetRequestContext() {
@@ -119,8 +137,9 @@ SSLHostStateDelegate* TestBrowserContext::GetSSLHostStateDelegate() {
   return ssl_host_state_delegate_.get();
 }
 
-PermissionManager* TestBrowserContext::GetPermissionManager() {
-  return permission_manager_.get();
+PermissionControllerDelegate*
+TestBrowserContext::GetPermissionControllerDelegate() {
+  return permission_controller_delegate_.get();
 }
 
 BackgroundFetchDelegate* TestBrowserContext::GetBackgroundFetchDelegate() {
@@ -155,7 +174,9 @@ TestBrowserContext::CreateRequestContextForStoragePartition(
     ProtocolHandlerMap* protocol_handlers,
     URLRequestInterceptorScopedVector request_interceptors) {
   request_interceptors_ = std::move(request_interceptors);
-  return nullptr;
+  // Simply returns the same RequestContext since no tests is relying on the
+  // expected behavior.
+  return GetRequestContext();
 }
 
 net::URLRequestContextGetter* TestBrowserContext::CreateMediaRequestContext() {

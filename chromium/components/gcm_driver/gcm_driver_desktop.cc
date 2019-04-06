@@ -15,7 +15,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_runner_util.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/gcm_driver/gcm_account_mapper.h"
@@ -28,6 +27,7 @@
 #include "google_apis/gcm/engine/account_mapping.h"
 #include "net/base/ip_endpoint.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if defined(OS_CHROMEOS)
 #include "components/timers/alarm_timer_chromeos.h"
@@ -74,6 +74,7 @@ class GCMDriverDesktop::IOWorker : public GCMClient::Delegate {
       const GCMClient::ChromeBuildInfo& chrome_build_info,
       const base::FilePath& store_path,
       const scoped_refptr<net::URLRequestContextGetter>& request_context,
+      std::unique_ptr<network::SharedURLLoaderFactoryInfo> loader_factory_info,
       const scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
   void Start(GCMClient::StartMode start_mode,
              const base::WeakPtr<GCMDriverDesktop>& service);
@@ -145,14 +146,18 @@ void GCMDriverDesktop::IOWorker::Initialize(
     const GCMClient::ChromeBuildInfo& chrome_build_info,
     const base::FilePath& store_path,
     const scoped_refptr<net::URLRequestContextGetter>& request_context,
+    std::unique_ptr<network::SharedURLLoaderFactoryInfo> loader_factory_info,
     const scoped_refptr<base::SequencedTaskRunner> blocking_task_runner) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
   gcm_client_ = gcm_client_factory->BuildInstance();
 
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_for_io =
+      network::SharedURLLoaderFactory::Create(std::move(loader_factory_info));
+
   gcm_client_->Initialize(chrome_build_info, store_path, blocking_task_runner,
-                          request_context, std::make_unique<SystemEncryptor>(),
-                          this);
+                          request_context, url_loader_factory_for_io,
+                          std::make_unique<SystemEncryptor>(), this);
 }
 
 void GCMDriverDesktop::IOWorker::OnRegisterFinished(
@@ -364,7 +369,7 @@ void GCMDriverDesktop::IOWorker::GetGCMStatistics(
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
   gcm::GCMClient::GCMStatistics stats;
 
-  if (gcm_client_.get()) {
+  if (gcm_client_) {
     if (clear_logs == GCMDriver::CLEAR_LOGS)
       gcm_client_->ClearActivityLogs();
     stats = gcm_client_->GetStatistics();
@@ -379,7 +384,7 @@ void GCMDriverDesktop::IOWorker::SetGCMRecording(bool recording) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
   gcm::GCMClient::GCMStatistics stats;
 
-  if (gcm_client_.get()) {
+  if (gcm_client_) {
     gcm_client_->SetRecording(recording);
     stats = gcm_client_->GetStatistics();
     stats.gcm_client_created = true;
@@ -394,7 +399,7 @@ void GCMDriverDesktop::IOWorker::SetAccountTokens(
     const std::vector<GCMClient::AccountTokenInfo>& account_tokens) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
-  if (gcm_client_.get())
+  if (gcm_client_)
     gcm_client_->SetAccountTokens(account_tokens);
 }
 
@@ -402,7 +407,7 @@ void GCMDriverDesktop::IOWorker::UpdateAccountMapping(
     const AccountMapping& account_mapping) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
-  if (gcm_client_.get())
+  if (gcm_client_)
     gcm_client_->UpdateAccountMapping(account_mapping);
 }
 
@@ -410,14 +415,14 @@ void GCMDriverDesktop::IOWorker::RemoveAccountMapping(
     const std::string& account_id) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
-  if (gcm_client_.get())
+  if (gcm_client_)
     gcm_client_->RemoveAccountMapping(account_id);
 }
 
 void GCMDriverDesktop::IOWorker::SetLastTokenFetchTime(const base::Time& time) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
-  if (gcm_client_.get())
+  if (gcm_client_)
     gcm_client_->SetLastTokenFetchTime(time);
 }
 
@@ -427,7 +432,7 @@ void GCMDriverDesktop::IOWorker::AddInstanceIDData(
     const std::string& extra_data) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
-  if (gcm_client_.get())
+  if (gcm_client_)
     gcm_client_->AddInstanceIDData(app_id, instance_id, extra_data);
 }
 
@@ -435,7 +440,7 @@ void GCMDriverDesktop::IOWorker::RemoveInstanceIDData(
     const std::string& app_id) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
-  if (gcm_client_.get())
+  if (gcm_client_)
     gcm_client_->RemoveInstanceIDData(app_id);
 }
 
@@ -445,7 +450,7 @@ void GCMDriverDesktop::IOWorker::GetInstanceIDData(
 
   std::string instance_id;
   std::string extra_data;
-  if (gcm_client_.get())
+  if (gcm_client_)
     gcm_client_->GetInstanceIDData(app_id, &instance_id, &extra_data);
 
   ui_thread_->PostTask(
@@ -486,11 +491,11 @@ void GCMDriverDesktop::IOWorker::WakeFromSuspendForHeartbeat(bool wake) {
 #if defined(OS_CHROMEOS)
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
-  std::unique_ptr<base::Timer> timer;
+  std::unique_ptr<base::RetainingOneShotTimer> timer;
   if (wake)
     timer = std::make_unique<timers::SimpleAlarmTimer>();
   else
-    timer = std::make_unique<base::Timer>(true, false);
+    timer = std::make_unique<base::RetainingOneShotTimer>();
 
   gcm_client_->UpdateHeartbeatTimer(std::move(timer));
 #endif
@@ -523,6 +528,7 @@ GCMDriverDesktop::GCMDriverDesktop(
     PrefService* prefs,
     const base::FilePath& store_path,
     const scoped_refptr<net::URLRequestContextGetter>& request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_for_ui,
     const scoped_refptr<base::SequencedTaskRunner>& ui_thread,
     const scoped_refptr<base::SequencedTaskRunner>& io_thread,
     const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner)
@@ -532,7 +538,7 @@ GCMDriverDesktop::GCMDriverDesktop(
                                      prefs,
                                      channel_status_request_url,
                                      user_agent,
-                                     request_context)),
+                                     url_loader_factory_for_ui)),
       signed_in_(false),
       gcm_started_(false),
       gcm_enabled_(true),
@@ -553,13 +559,13 @@ GCMDriverDesktop::GCMDriverDesktop(
   io_worker_.reset(new IOWorker(ui_thread, io_thread));
   io_thread_->PostTask(
       FROM_HERE,
-      base::Bind(&GCMDriverDesktop::IOWorker::Initialize,
-                 base::Unretained(io_worker_.get()),
-                 base::Passed(&gcm_client_factory),
-                 chrome_build_info,
-                 store_path,
-                 request_context,
-                 blocking_task_runner));
+      base::BindOnce(&GCMDriverDesktop::IOWorker::Initialize,
+                     base::Unretained(io_worker_.get()),
+                     std::move(gcm_client_factory), chrome_build_info,
+                     store_path, request_context,
+                     // ->Clone() permits creation of an equivalent
+                     // SharedURLLoaderFactory on IO thread.
+                     url_loader_factory_for_ui->Clone(), blocking_task_runner));
 }
 
 GCMDriverDesktop::~GCMDriverDesktop() {

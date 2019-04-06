@@ -26,131 +26,18 @@ using blink::WebTouchEvent;
 using ui::LatencyInfo;
 
 namespace content {
-namespace {
-
-ukm::SourceId GenerateUkmSourceId() {
-  ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
-  return ukm_recorder ? ukm_recorder->GetNewSourceID() : ukm::kInvalidSourceId;
-}
-
-// LatencyComponents generated in the renderer must have component IDs
-// provided to them by the browser process. This function adds the correct
-// component ID where necessary.
-void AddLatencyInfoComponentIds(LatencyInfo* latency,
-                                int64_t latency_component_id) {
-  std::vector<std::pair<ui::LatencyComponentType, int64_t>> new_components_key;
-  std::vector<LatencyInfo::LatencyComponent> new_components_value;
-  for (const auto& lc : latency->latency_components()) {
-    ui::LatencyComponentType component_type = lc.first.first;
-    if (component_type == ui::BROWSER_SNAPSHOT_FRAME_NUMBER_COMPONENT) {
-      // Generate a new component entry with the correct component ID
-      new_components_key.push_back(std::make_pair(component_type,
-                                                  latency_component_id));
-      new_components_value.push_back(lc.second);
-    }
-  }
-
-  // Remove the entries with invalid component IDs.
-  latency->RemoveLatency(ui::BROWSER_SNAPSHOT_FRAME_NUMBER_COMPONENT);
-
-  // Add newly generated components into the latency info
-  for (size_t i = 0; i < new_components_key.size(); i++) {
-    latency->AddLatencyNumberWithTimestamp(
-        new_components_key[i].first,
-        new_components_key[i].second,
-        new_components_value[i].sequence_number,
-        new_components_value[i].event_time,
-        new_components_value[i].event_count);
-  }
-}
-
-void RecordEQTAccuracy(base::TimeDelta queueing_time,
-                       base::TimeDelta expected_queueing_time) {
-  float queueing_time_ms = queueing_time.InMillisecondsF();
-
-  if (queueing_time_ms < 10) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.10ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms < 150) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.150ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms < 300) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.300ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms < 450) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_LessThan.450ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 10) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.10ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 150) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.150ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 300) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.300ms",
-        expected_queueing_time);
-  }
-
-  if (queueing_time_ms > 450) {
-    UMA_HISTOGRAM_TIMES(
-        "RendererScheduler."
-        "ExpectedQueueingTimeWhenQueueingTime_GreaterThan.450ms",
-        expected_queueing_time);
-  }
-}
-
-}  // namespace
 
 RenderWidgetHostLatencyTracker::RenderWidgetHostLatencyTracker(
-    bool metric_sampling,
     RenderWidgetHostDelegate* delegate)
-    : LatencyTracker(metric_sampling, GenerateUkmSourceId()),
-      last_event_id_(0),
-      latency_component_id_(0),
-      has_seen_first_gesture_scroll_update_(false),
+    : has_seen_first_gesture_scroll_update_(false),
       active_multi_finger_gesture_(false),
       touch_start_default_prevented_(false),
       render_widget_host_delegate_(delegate) {}
 
 RenderWidgetHostLatencyTracker::~RenderWidgetHostLatencyTracker() {}
 
-void RenderWidgetHostLatencyTracker::Initialize(int routing_id,
-                                                int process_id) {
-  DCHECK_EQ(0, last_event_id_);
-  DCHECK_EQ(0, latency_component_id_);
-  last_event_id_ = static_cast<int64_t>(process_id) << 32;
-  latency_component_id_ = routing_id | last_event_id_;
-}
-
 void RenderWidgetHostLatencyTracker::ComputeInputLatencyHistograms(
     WebInputEvent::Type type,
-    int64_t latency_component_id,
     const LatencyInfo& latency,
     InputEventAckState ack_result) {
   // If this event was coalesced into another event, ignore it, as the event it
@@ -165,12 +52,10 @@ void RenderWidgetHostLatencyTracker::ComputeInputLatencyHistograms(
 
   // The event will have gone through OnInputEvent(). So the BEGIN_RWH component
   // should always be available here.
-  LatencyInfo::LatencyComponent rwh_component;
-  bool found_component =
-      latency.FindLatency(ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
-                          latency_component_id, &rwh_component);
+  base::TimeTicks rwh_timestamp;
+  bool found_component = latency.FindLatency(
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, &rwh_timestamp);
   DCHECK(found_component);
-  DCHECK_EQ(rwh_component.event_count, 1u);
 
   bool multi_finger_touch_gesture =
       WebInputEvent::IsTouchEventType(type) && active_multi_finger_gesture_;
@@ -191,30 +76,23 @@ void RenderWidgetHostLatencyTracker::ComputeInputLatencyHistograms(
   std::string default_action_status =
       action_prevented ? "DefaultPrevented" : "DefaultAllowed";
 
-  LatencyInfo::LatencyComponent main_component;
-  if (latency.FindLatency(ui::INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT, 0,
-                          &main_component)) {
-    DCHECK_EQ(main_component.event_count, 1u);
+  base::TimeTicks main_thread_timestamp;
+  if (latency.FindLatency(ui::INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT,
+                          &main_thread_timestamp)) {
     if (!multi_finger_touch_gesture) {
       UMA_HISTOGRAM_INPUT_LATENCY_MILLISECONDS(
           "Event.Latency.QueueingTime." + event_name + default_action_status,
-          rwh_component, main_component);
-
-      RecordEQTAccuracy(
-          main_component.last_event_time - rwh_component.first_event_time,
-          latency.expected_queueing_time_on_dispatch());
+          rwh_timestamp, main_thread_timestamp);
     }
   }
 
-  LatencyInfo::LatencyComponent acked_component;
-  if (latency.FindLatency(ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT, 0,
-                          &acked_component)) {
-    DCHECK_EQ(acked_component.event_count, 1u);
-    if (!multi_finger_touch_gesture &&
-        main_component.event_time != base::TimeTicks()) {
+  base::TimeTicks rwh_ack_timestamp;
+  if (latency.FindLatency(ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT,
+                          &rwh_ack_timestamp)) {
+    if (!multi_finger_touch_gesture && !main_thread_timestamp.is_null()) {
       UMA_HISTOGRAM_INPUT_LATENCY_MILLISECONDS(
           "Event.Latency.BlockingTime." + event_name + default_action_status,
-          main_component, acked_component);
+          main_thread_timestamp, rwh_ack_timestamp);
     }
   }
 }
@@ -226,12 +104,6 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   OnEventStart(latency);
-  if (!set_url_for_ukm_ && render_widget_host_delegate_ &&
-      ukm_source_id() != ukm::kInvalidSourceId) {
-    render_widget_host_delegate_->UpdateUrlForUkmSource(ukm::UkmRecorder::Get(),
-                                                        ukm_source_id());
-    set_url_for_ukm_ = true;
-  }
 
   if (event.GetType() == WebInputEvent::kTouchStart) {
     const WebTouchEvent& touch_event =
@@ -247,18 +119,15 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
 
   // This is the only place to add the BEGIN_RWH component. So this component
   // should not already be present in the latency info.
-  bool found_component =
-      latency->FindLatency(ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
-                           latency_component_id_, nullptr);
+  bool found_component = latency->FindLatency(
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, nullptr);
   DCHECK(!found_component);
 
-  if (event.TimeStampSeconds() &&
-      !latency->FindLatency(ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0,
+  if (!event.TimeStamp().is_null() &&
+      !latency->FindLatency(ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
                             nullptr)) {
     base::TimeTicks timestamp_now = base::TimeTicks::Now();
-    base::TimeTicks timestamp_original =
-        base::TimeTicks() +
-        base::TimeDelta::FromSecondsD(event.TimeStampSeconds());
+    base::TimeTicks timestamp_original = event.TimeStamp();
 
     // Timestamp from platform input can wrap, e.g. 32 bits timestamp
     // for Xserver and Window MSG time will wrap about 49.6 days. Do a
@@ -269,15 +138,13 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
 
     latency->AddLatencyNumberWithTimestamp(
         ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
-        0,
-        0,
         timestamp_original,
         1);
   }
 
   latency->AddLatencyNumberWithTraceName(
-      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, latency_component_id_,
-      ++last_event_id_, WebInputEvent::GetName(event.GetType()));
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
+      WebInputEvent::GetName(event.GetType()));
 
   if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
     has_seen_first_gesture_scroll_update_ = false;
@@ -285,15 +152,14 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
     // Make a copy of the INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT with a
     // different name INPUT_EVENT_LATENCY_SCROLL_UPDATE_ORIGINAL_COMPONENT.
     // So we can track the latency specifically for scroll update events.
-    LatencyInfo::LatencyComponent original_component;
-    if (latency->FindLatency(ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0,
-                             &original_component)) {
+    base::TimeTicks original_event_timestamp;
+    if (latency->FindLatency(ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
+                             &original_event_timestamp)) {
       latency->AddLatencyNumberWithTimestamp(
           has_seen_first_gesture_scroll_update_
               ? ui::INPUT_EVENT_LATENCY_SCROLL_UPDATE_ORIGINAL_COMPONENT
               : ui::INPUT_EVENT_LATENCY_FIRST_SCROLL_UPDATE_ORIGINAL_COMPONENT,
-          latency_component_id_, original_component.sequence_number,
-          original_component.event_time, original_component.event_count);
+          original_event_timestamp, 1);
     }
 
     has_seen_first_gesture_scroll_update_ = true;
@@ -307,9 +173,9 @@ void RenderWidgetHostLatencyTracker::OnInputEventAck(
 
   // Latency ends if an event is acked but does not cause render scheduling.
   bool rendering_scheduled = latency->FindLatency(
-      ui::INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_MAIN_COMPONENT, 0, nullptr);
+      ui::INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_MAIN_COMPONENT, nullptr);
   rendering_scheduled |= latency->FindLatency(
-      ui::INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_IMPL_COMPONENT, 0, nullptr);
+      ui::INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_IMPL_COMPONENT, nullptr);
 
   if (WebInputEvent::IsTouchEventType(event.GetType())) {
     const WebTouchEvent& touch_event =
@@ -323,46 +189,25 @@ void RenderWidgetHostLatencyTracker::OnInputEventAck(
     }
   }
 
-  latency->AddLatencyNumber(ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT, 0, 0);
+  latency->AddLatencyNumber(ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT);
   // If this event couldn't have caused a gesture event, and it didn't trigger
   // rendering, we're done processing it. If the event got coalesced then
-  // terminate it as well.
-  if (!rendering_scheduled || latency->coalesced()) {
-    latency->AddLatencyNumber(
-        ui::INPUT_EVENT_LATENCY_TERMINATED_NO_SWAP_COMPONENT, 0, 0);
+  // terminate it as well. We also exclude cases where we're against the scroll
+  // extent from scrolling metrics.
+  if (!rendering_scheduled || latency->coalesced() ||
+      (event.GetType() == WebInputEvent::kGestureScrollUpdate &&
+       ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS)) {
+    latency->Terminate();
   }
 
-  ComputeInputLatencyHistograms(event.GetType(), latency_component_id_,
-                                *latency, ack_result);
+  ComputeInputLatencyHistograms(event.GetType(), *latency, ack_result);
 }
 
-void RenderWidgetHostLatencyTracker::OnSwapCompositorFrame(
-    std::vector<LatencyInfo>* latencies) {
-  DCHECK(latencies);
-  for (LatencyInfo& latency : *latencies) {
-    AddLatencyInfoComponentIds(&latency, latency_component_id_);
-  }
-}
-
-void RenderWidgetHostLatencyTracker::ReportRapporScrollLatency(
-    const std::string& name,
-    const LatencyInfo::LatencyComponent& start_component,
-    const LatencyInfo::LatencyComponent& end_component) {
-  CONFIRM_EVENT_TIMES_EXIST(start_component, end_component)
-  rappor::RapporService* rappor_service =
-      GetContentClient()->browser()->GetRapporService();
-  if (rappor_service && render_widget_host_delegate_) {
-    std::unique_ptr<rappor::Sample> sample =
-        rappor_service->CreateSample(rappor::UMA_RAPPOR_TYPE);
-    render_widget_host_delegate_->AddDomainInfoToRapporSample(sample.get());
-    sample->SetUInt64Field(
-        "Latency",
-        std::max(static_cast<int64_t>(0), (end_component.last_event_time -
-                                           start_component.first_event_time)
-                                              .InMicroseconds()),
-        rappor::NO_NOISE);
-    rappor_service->RecordSample(name, std::move(sample));
-  }
+void RenderWidgetHostLatencyTracker::OnEventStart(ui::LatencyInfo* latency) {
+  static uint64_t global_trace_id = 0;
+  latency->set_trace_id(++global_trace_id);
+  latency->set_ukm_source_id(
+      render_widget_host_delegate_->GetUkmSourceIdForLastCommittedSource());
 }
 
 }  // namespace content

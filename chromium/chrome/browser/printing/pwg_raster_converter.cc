@@ -10,20 +10,11 @@
 
 #include "base/bind_helpers.h"
 #include "base/cancelable_callback.h"
-#include "base/files/file.h"
-#include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
-#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "chrome/common/chrome_utility_printing_messages.h"
-#include "chrome/services/printing/public/interfaces/constants.mojom.h"
-#include "chrome/services/printing/public/interfaces/pdf_to_pwg_raster_converter.mojom.h"
+#include "base/metrics/histogram_macros.h"
+#include "chrome/services/printing/public/mojom/constants.mojom.h"
+#include "chrome/services/printing/public/mojom/pdf_to_pwg_raster_converter.mojom.h"
 #include "components/cloud_devices/common/cloud_device_description.h"
 #include "components/cloud_devices/common/printer_description.h"
 #include "content/public/browser/browser_thread.h"
@@ -43,100 +34,29 @@ namespace {
 
 using content::BrowserThread;
 
-class FileHandlers {
- public:
-  FileHandlers() {}
-
-  ~FileHandlers() { base::AssertBlockingAllowed(); }
-
-  void Init(base::RefCountedMemory* data);
-  bool IsValid();
-
-  base::FilePath GetPwgPath() const {
-    return temp_dir_.GetPath().AppendASCII("output.pwg");
-  }
-
-  base::FilePath GetPdfPath() const {
-    return temp_dir_.GetPath().AppendASCII("input.pdf");
-  }
-
-  base::PlatformFile GetPdfForProcess() {
-    DCHECK(pdf_file_.IsValid());
-    return pdf_file_.TakePlatformFile();
-  }
-
-  base::PlatformFile GetPwgForProcess() {
-    DCHECK(pwg_file_.IsValid());
-    return pwg_file_.TakePlatformFile();
-  }
-
- private:
-  base::ScopedTempDir temp_dir_;
-  base::File pdf_file_;
-  base::File pwg_file_;
-
-  DISALLOW_COPY_AND_ASSIGN(FileHandlers);
-};
-
-void FileHandlers::Init(base::RefCountedMemory* data) {
-  base::AssertBlockingAllowed();
-
-  if (!temp_dir_.CreateUniqueTempDir())
-    return;
-
-  if (static_cast<int>(data->size()) !=
-      base::WriteFile(GetPdfPath(), data->front_as<char>(), data->size())) {
-    return;
-  }
-
-  // Reopen in read only mode.
-  pdf_file_.Initialize(GetPdfPath(),
-                       base::File::FLAG_OPEN | base::File::FLAG_READ);
-  pwg_file_.Initialize(GetPwgPath(),
-                       base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
-}
-
-bool FileHandlers::IsValid() {
-  return pdf_file_.IsValid() && pwg_file_.IsValid();
-}
-
-// Converts PDF into PWG raster.
-// Class uses UI thread and |blocking_task_runner_|.
-// Internal workflow is following:
-// 1. Create instance on the UI thread. (files_, settings_,)
-// 2. Create file on |blocking_task_runner_|.
-// 3. Connect to the printing utility service and start the conversion.
-// 4. Run result callback on the UI thread.
-// 5. Instance is destroyed from any thread that has the last reference.
-// 6. FileHandlers destroyed on |blocking_task_runner_|.
-//    This step posts |FileHandlers| to be destroyed on |blocking_task_runner_|.
-// All these steps work sequentially, so no data should be accessed
-// simultaneously by several threads.
+// Converts PDF into PWG raster. Class lives on the UI thread.
 class PwgRasterConverterHelper
-    : public base::RefCountedThreadSafe<PwgRasterConverterHelper> {
+    : public base::RefCounted<PwgRasterConverterHelper> {
  public:
   PwgRasterConverterHelper(const PdfRenderSettings& settings,
                            const PwgRasterSettings& bitmap_settings);
 
-  void Convert(base::RefCountedMemory* data,
+  void Convert(const base::RefCountedMemory* data,
                PwgRasterConverter::ResultCallback callback);
 
  private:
-  friend class base::RefCountedThreadSafe<PwgRasterConverterHelper>;
+  friend class base::RefCounted<PwgRasterConverterHelper>;
 
   ~PwgRasterConverterHelper();
 
-  void RunCallback(bool success);
-
-  void OnFilesReadyOnUIThread();
+  void RunCallback(base::ReadOnlySharedMemoryRegion region,
+                   uint32_t page_count);
 
   PdfRenderSettings settings_;
   PwgRasterSettings bitmap_settings_;
   mojo::InterfacePtr<printing::mojom::PdfToPwgRasterConverter>
       pdf_to_pwg_raster_converter_ptr_;
   PwgRasterConverter::ResultCallback callback_;
-  const scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
-  std::unique_ptr<FileHandlers, base::OnTaskRunnerDeleter> files_;
 
   DISALLOW_COPY_AND_ASSIGN(PwgRasterConverterHelper);
 };
@@ -144,38 +64,20 @@ class PwgRasterConverterHelper
 PwgRasterConverterHelper::PwgRasterConverterHelper(
     const PdfRenderSettings& settings,
     const PwgRasterSettings& bitmap_settings)
-    : settings_(settings),
-      bitmap_settings_(bitmap_settings),
-      blocking_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-           base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
-      files_(nullptr, base::OnTaskRunnerDeleter(blocking_task_runner_)) {}
+    : settings_(settings), bitmap_settings_(bitmap_settings) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+}
 
-PwgRasterConverterHelper::~PwgRasterConverterHelper() {}
+PwgRasterConverterHelper::~PwgRasterConverterHelper() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+}
 
 void PwgRasterConverterHelper::Convert(
-    base::RefCountedMemory* data,
+    const base::RefCountedMemory* data,
     PwgRasterConverter::ResultCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   callback_ = std::move(callback);
-  CHECK(!files_);
-  files_.reset(new FileHandlers());
-
-  blocking_task_runner_->PostTaskAndReply(
-      FROM_HERE,
-      base::BindOnce(&FileHandlers::Init, base::Unretained(files_.get()),
-                     base::RetainedRef(data)),
-      base::BindOnce(&PwgRasterConverterHelper::OnFilesReadyOnUIThread, this));
-}
-
-void PwgRasterConverterHelper::OnFilesReadyOnUIThread() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  if (!files_->IsValid()) {
-    RunCallback(false);
-    return;
-  }
 
   content::ServiceManagerConnection::GetForProcess()
       ->GetConnector()
@@ -183,18 +85,41 @@ void PwgRasterConverterHelper::OnFilesReadyOnUIThread() {
                       &pdf_to_pwg_raster_converter_ptr_);
 
   pdf_to_pwg_raster_converter_ptr_.set_connection_error_handler(
-      base::Bind(&PwgRasterConverterHelper::RunCallback, this, false));
+      base::BindOnce(&PwgRasterConverterHelper::RunCallback, this,
+                     base::ReadOnlySharedMemoryRegion(), /*page_count=*/0));
 
+  base::MappedReadOnlyRegion memory =
+      base::ReadOnlySharedMemoryRegion::Create(data->size());
+  if (!memory.IsValid()) {
+    RunCallback(base::ReadOnlySharedMemoryRegion(), /*page_count=*/0);
+    return;
+  }
+
+  // TODO(thestig): Write |data| into shared memory in the first place, to avoid
+  // this memcpy().
+  memcpy(memory.mapping.memory(), data->front(), data->size());
   pdf_to_pwg_raster_converter_ptr_->Convert(
-      mojo::WrapPlatformFile(files_->GetPdfForProcess()), settings_,
-      bitmap_settings_, mojo::WrapPlatformFile(files_->GetPwgForProcess()),
+      std::move(memory.region), settings_, bitmap_settings_,
       base::Bind(&PwgRasterConverterHelper::RunCallback, this));
 }
 
-void PwgRasterConverterHelper::RunCallback(bool success) {
+void PwgRasterConverterHelper::RunCallback(
+    base::ReadOnlySharedMemoryRegion region,
+    uint32_t page_count) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (callback_)
-    std::move(callback_).Run(success, files_->GetPwgPath());
+  if (callback_) {
+    if (region.IsValid() && page_count > 0) {
+      size_t average_page_size_in_kb = region.GetSize() / 1024;
+      average_page_size_in_kb /= page_count;
+      UMA_HISTOGRAM_MEMORY_KB("Printing.ConversionSize.Pwg",
+                              average_page_size_in_kb);
+      std::move(callback_).Run(std::move(region));
+    } else {
+      // TODO(thestig): Consider adding UMA to track failure rates.
+      std::move(callback_).Run(base::ReadOnlySharedMemoryRegion());
+    }
+  }
+  pdf_to_pwg_raster_converter_ptr_.reset();
 }
 
 class PwgRasterConverterImpl : public PwgRasterConverter {
@@ -202,69 +127,72 @@ class PwgRasterConverterImpl : public PwgRasterConverter {
   PwgRasterConverterImpl();
   ~PwgRasterConverterImpl() override;
 
-  void Start(base::RefCountedMemory* data,
+  void Start(const base::RefCountedMemory* data,
              const PdfRenderSettings& conversion_settings,
              const PwgRasterSettings& bitmap_settings,
              ResultCallback callback) override;
 
  private:
-  // TODO (rbpotter): Once CancelableOnceCallback is added, remove this and
-  // change callback_ to a CancelableOnceCallback.
-  void RunCallback(bool success, const base::FilePath& temp_file);
-
   scoped_refptr<PwgRasterConverterHelper> utility_client_;
-  ResultCallback callback_;
-  base::WeakPtrFactory<PwgRasterConverterImpl> weak_ptr_factory_;
+
+  // Cancelable version of PwgRasterConverter::ResultCallback.
+  base::CancelableOnceCallback<void(base::ReadOnlySharedMemoryRegion)>
+      cancelable_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(PwgRasterConverterImpl);
 };
 
-PwgRasterConverterImpl::PwgRasterConverterImpl() : weak_ptr_factory_(this) {}
+PwgRasterConverterImpl::PwgRasterConverterImpl() = default;
 
-PwgRasterConverterImpl::~PwgRasterConverterImpl() {}
+PwgRasterConverterImpl::~PwgRasterConverterImpl() = default;
 
-void PwgRasterConverterImpl::Start(base::RefCountedMemory* data,
+void PwgRasterConverterImpl::Start(const base::RefCountedMemory* data,
                                    const PdfRenderSettings& conversion_settings,
                                    const PwgRasterSettings& bitmap_settings,
                                    ResultCallback callback) {
-  // Bind callback here and pass a wrapper to the utility client to avoid
-  // calling callback if PwgRasterConverterImpl is destroyed.
-  callback_ = std::move(callback);
+  cancelable_callback_.Reset(std::move(callback));
   utility_client_ = base::MakeRefCounted<PwgRasterConverterHelper>(
       conversion_settings, bitmap_settings);
-  utility_client_->Convert(data,
-                           base::BindOnce(&PwgRasterConverterImpl::RunCallback,
-                                          weak_ptr_factory_.GetWeakPtr()));
-}
-
-void PwgRasterConverterImpl::RunCallback(bool success,
-                                         const base::FilePath& temp_file) {
-  std::move(callback_).Run(success, temp_file);
+  utility_client_->Convert(data, cancelable_callback_.callback());
 }
 
 }  // namespace
 
 // static
 std::unique_ptr<PwgRasterConverter> PwgRasterConverter::CreateDefault() {
-  return base::MakeUnique<PwgRasterConverterImpl>();
+  return std::make_unique<PwgRasterConverterImpl>();
 }
 
 // static
 PdfRenderSettings PwgRasterConverter::GetConversionSettings(
     const cloud_devices::CloudDeviceDescription& printer_capabilities,
-    const gfx::Size& page_size) {
-  int dpi = kDefaultPdfDpi;
+    const gfx::Size& page_size,
+    bool use_color) {
+  gfx::Size dpi = gfx::Size(kDefaultPdfDpi, kDefaultPdfDpi);
   cloud_devices::printer::DpiCapability dpis;
   if (dpis.LoadFrom(printer_capabilities))
-    dpi = std::max(dpis.GetDefault().horizontal, dpis.GetDefault().vertical);
+    dpi = gfx::Size(dpis.GetDefault().horizontal, dpis.GetDefault().vertical);
 
-  const double scale = static_cast<double>(dpi) / kPointsPerInch;
+  bool page_is_landscape =
+      static_cast<double>(page_size.width()) / dpi.width() >
+      static_cast<double>(page_size.height()) / dpi.height();
+
+  // Pdfium assumes that page width is given in dpi.width(), and height in
+  // dpi.height(). If we rotate the page, we need to also swap the DPIs.
+  gfx::Size final_page_size = page_size;
+  if (page_is_landscape) {
+    final_page_size = gfx::Size(page_size.height(), page_size.width());
+    dpi = gfx::Size(dpi.height(), dpi.width());
+  }
+  double scale_x = static_cast<double>(dpi.width()) / kPointsPerInch;
+  double scale_y = static_cast<double>(dpi.height()) / kPointsPerInch;
 
   // Make vertical rectangle to optimize streaming to printer. Fix orientation
   // by autorotate.
-  gfx::Rect area(std::min(page_size.width(), page_size.height()) * scale,
-                 std::max(page_size.width(), page_size.height()) * scale);
-  return PdfRenderSettings(area, gfx::Point(0, 0), dpi, /*autorotate=*/true,
+  gfx::Rect area(final_page_size.width() * scale_x,
+                 final_page_size.height() * scale_y);
+  return PdfRenderSettings(area, gfx::Point(0, 0), dpi,
+                           /*autorotate=*/true, use_color,
                            PdfRenderSettings::Mode::NORMAL);
 }
 

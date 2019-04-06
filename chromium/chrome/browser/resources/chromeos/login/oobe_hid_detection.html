@@ -1,6 +1,5 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-iconset-svg/iron-iconset-svg.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 
 <iron-iconset-svg name="oobe-hid-detection" size="24">
@@ -50,16 +49,13 @@
 <dom-module id="oobe-hid-detection-md">
   <template>
     <link rel="stylesheet" href="oobe_hid_detection.css">
-    <link rel="stylesheet" href="oobe_dialog_parameters.css">
     <link rel="stylesheet" href="oobe_flex_layout.css">
     <oobe-dialog has-buttons>
-      <iron-icon icon="oobe-hid-detection:bluetooth" class="oobe-icon">
+      <iron-icon icon="oobe-hid-detection:bluetooth" slot="oobe-icon">
       </iron-icon>
-      <div class="header">
-        <h1 class="title" i18n-content="hidDetectionInvitation"></h1>
-        <div class="subtitle" i18n-content="hidDetectionPrerequisites"></div>
-      </div>
-      <div class="footer flex layout vertical">
+      <h1 slot="title" i18n-content="hidDetectionInvitation"></h1>
+      <div slot="subtitle" i18n-content="hidDetectionPrerequisites"></div>
+      <div slot="footer" class="flex layout vertical">
         <div class="layout vertical justified hid-selection-entry">
           <div class="flex layout horizontal center">
             <hd-iron-icon id="mouse-icon" alt=""
@@ -88,7 +84,7 @@
           </div>
         </div>
         <div class="layout vertical hid-selection-entry">
-          <div class="flex layout horizontal center">
+          <div id="status-container" class="flex layout horizontal center">
             <hd-iron-icon id="keyboard-icon" alt=""
                 icon1x="oobe-hid-detection-20:keyboard"
                 icon2x="oobe-hid-detection-40:keyboard">
@@ -141,11 +137,10 @@
           </div>
         </div>
       </div>
-      <div class="bottom-buttons flex layout horizontal end-justified">
-        <oobe-text-button id="hid-continue-button"
-            inverse on-tap="onHIDContinueTap_"
+      <div slot="bottom-buttons" class="flex layout horizontal end-justified">
+        <oobe-text-button inverse on-tap="onHIDContinueTap_"
             disabled="[[continueButtonDisabled]]">
-          <div i18n-content="hidDetectionContinue" id="continue-button-text">
+          <div i18n-content="hidDetectionContinue">
           </div>
         </oobe-text-button>
       </div>

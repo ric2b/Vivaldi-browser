@@ -8,10 +8,15 @@
 #include "base/macros.h"
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
 #include "content/browser/devtools/protocol/emulation.h"
-#include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
+#include "third_party/blink/public/web/web_device_emulation_params.h"
+
+namespace net {
+class HttpRequestHeaders;
+}  // namespace net
 
 namespace content {
 
+class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
 class WebContentsImpl;
 
@@ -23,8 +28,11 @@ class EmulationHandler : public DevToolsDomainHandler,
   EmulationHandler();
   ~EmulationHandler() override;
 
+  static std::vector<EmulationHandler*> ForAgentHost(
+      DevToolsAgentHostImpl* host);
+
   void Wire(UberDispatcher* dispatcher) override;
-  void SetRenderer(RenderProcessHost* process_host,
+  void SetRenderer(int process_host_id,
                    RenderFrameHostImpl* frame_host) override;
 
   Response Disable() override;
@@ -37,6 +45,10 @@ class EmulationHandler : public DevToolsDomainHandler,
   Response SetEmitTouchEventsForMouse(
       bool enabled,
       Maybe<std::string> configuration) override;
+
+  Response SetUserAgentOverride(const std::string& user_agent,
+                                Maybe<std::string> accept_language,
+                                Maybe<std::string> platform) override;
 
   Response CanEmulate(bool* result) override;
   Response SetDeviceMetricsOverride(
@@ -61,6 +73,8 @@ class EmulationHandler : public DevToolsDomainHandler,
 
   bool device_emulation_enabled() { return device_emulation_enabled_; }
 
+  void ApplyOverrides(net::HttpRequestHeaders* headers);
+
  private:
   WebContentsImpl* GetWebContents();
   void UpdateTouchEventEmulationState();
@@ -71,6 +85,8 @@ class EmulationHandler : public DevToolsDomainHandler,
 
   bool device_emulation_enabled_;
   blink::WebDeviceEmulationParams device_emulation_params_;
+  std::string user_agent_;
+  std::string accept_language_;
 
   RenderFrameHostImpl* host_;
 

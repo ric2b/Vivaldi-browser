@@ -14,13 +14,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_item.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/user_script.h"
 
 using content::BrowserThread;
-using content::DownloadItem;
+using download::DownloadItem;
 using extensions::WebstoreInstaller;
 
 namespace download_crx_util {
@@ -46,7 +48,9 @@ std::unique_ptr<ExtensionInstallPrompt> CreateExtensionInstallPrompt(
     mock_install_prompt_for_testing = NULL;
     return std::unique_ptr<ExtensionInstallPrompt>(result);
   } else {
-    content::WebContents* web_contents = download_item.GetWebContents();
+    content::WebContents* web_contents =
+        content::DownloadItemUtils::GetWebContents(
+            const_cast<DownloadItem*>(&download_item));
     if (!web_contents) {
       Browser* browser = chrome::FindLastActiveWithProfile(profile);
       if (!browser) {
@@ -71,9 +75,9 @@ void SetMockInstallPromptForTesting(
 
 scoped_refptr<extensions::CrxInstaller> CreateCrxInstaller(
     Profile* profile,
-    const content::DownloadItem& download_item) {
-  ExtensionService* service = extensions::ExtensionSystem::Get(profile)->
-      extension_service();
+    const download::DownloadItem& download_item) {
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(profile)->extension_service();
   CHECK(service);
 
   scoped_refptr<extensions::CrxInstaller> installer(
@@ -141,7 +145,7 @@ bool OffStoreInstallAllowedByPrefs(Profile* profile, const DownloadItem& item) {
 
 std::unique_ptr<base::AutoReset<bool>> OverrideOffstoreInstallAllowedForTesting(
     bool allowed) {
-  return base::MakeUnique<base::AutoReset<bool>>(
+  return std::make_unique<base::AutoReset<bool>>(
       &g_allow_offstore_install_for_testing, allowed);
 }
 

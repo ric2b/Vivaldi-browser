@@ -32,7 +32,6 @@ Profile* ChromeExtensionFunctionDetails::GetProfile() const {
   return Profile::FromBrowserContext(function_->browser_context());
 }
 
-// TODO(stevenjb): Replace this with GetExtensionWindowController().
 Browser* ChromeExtensionFunctionDetails::GetCurrentBrowser() const {
   // If the delegate has an associated browser, return it.
   if (function_->dispatcher()) {
@@ -56,8 +55,8 @@ Browser* ChromeExtensionFunctionDetails::GetCurrentBrowser() const {
   Profile* profile = Profile::FromBrowserContext(
       web_contents ? web_contents->GetBrowserContext()
                    : function_->browser_context());
-  Browser* browser =
-      chrome::FindAnyBrowser(profile, function_->include_incognito());
+  Browser* browser = chrome::FindAnyBrowser(
+      profile, function_->include_incognito_information());
   if (browser)
     return browser;
 
@@ -69,35 +68,6 @@ Browser* ChromeExtensionFunctionDetails::GetCurrentBrowser() const {
   // TODO(rafaelw): Delay creation of background_page until the browser
   // is available. http://code.google.com/p/chromium/issues/detail?id=13284
   return NULL;
-}
-
-extensions::WindowController*
-ChromeExtensionFunctionDetails::GetExtensionWindowController() const {
-  // If the delegate has an associated window controller, return it.
-  if (function_->dispatcher()) {
-    extensions::WindowController* window_controller =
-        function_->dispatcher()->GetExtensionWindowController();
-    if (window_controller)
-      return window_controller;
-  }
-
-  return extensions::WindowControllerList::GetInstance()
-      ->CurrentWindowForFunction(function_);
-}
-
-content::WebContents*
-ChromeExtensionFunctionDetails::GetAssociatedWebContents() {
-  if (function_->dispatcher()) {
-    content::WebContents* web_contents =
-        function_->dispatcher()->GetAssociatedWebContents();
-    if (web_contents)
-      return web_contents;
-  }
-
-  Browser* browser = GetCurrentBrowser();
-  if (!browser)
-    return NULL;
-  return browser->tab_strip_model()->GetActiveWebContents();
 }
 
 gfx::NativeWindow ChromeExtensionFunctionDetails::GetNativeWindowForUI() {

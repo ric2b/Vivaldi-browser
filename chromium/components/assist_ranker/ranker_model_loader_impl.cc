@@ -6,13 +6,14 @@
 
 #include <utility>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
@@ -21,6 +22,7 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/assist_ranker/proto/ranker_model.pb.h"
 #include "components/assist_ranker/ranker_url_fetcher.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace assist_ranker {
 namespace {
@@ -89,7 +91,7 @@ void SaveToFile(const GURL& model_url,
 RankerModelLoaderImpl::RankerModelLoaderImpl(
     ValidateModelCallback validate_model_cb,
     OnModelAvailableCallback on_model_available_cb,
-    net::URLRequestContextGetter* request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     base::FilePath model_path,
     GURL model_url,
     std::string uma_prefix)
@@ -98,11 +100,11 @@ RankerModelLoaderImpl::RankerModelLoaderImpl(
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       validate_model_cb_(std::move(validate_model_cb)),
       on_model_available_cb_(std::move(on_model_available_cb)),
-      request_context_getter_(request_context_getter),
+      url_loader_factory_(std::move(url_loader_factory)),
       model_path_(std::move(model_path)),
       model_url_(std::move(model_url)),
       uma_prefix_(std::move(uma_prefix)),
-      url_fetcher_(base::MakeUnique<RankerURLFetcher>()),
+      url_fetcher_(std::make_unique<RankerURLFetcher>()),
       weak_ptr_factory_(this) {}
 
 RankerModelLoaderImpl::~RankerModelLoaderImpl() {
@@ -120,6 +122,7 @@ void RankerModelLoaderImpl::NotifyOfRankerActivity() {
       // There was no configured model path. Switch the state to IDLE and
       // fall through to consider the URL.
       state_ = LoaderState::IDLE;
+      FALLTHROUGH;
     case LoaderState::IDLE:
       if (model_url_.is_valid()) {
         StartLoadFromURL();
@@ -128,6 +131,7 @@ void RankerModelLoaderImpl::NotifyOfRankerActivity() {
       // There was no configured model URL. Switch the state to FINISHED and
       // fall through.
       state_ = LoaderState::FINISHED;
+      FALLTHROUGH;
     case LoaderState::FINISHED:
     case LoaderState::LOADING_FROM_FILE:
     case LoaderState::LOADING_FROM_URL:
@@ -144,9 +148,9 @@ void RankerModelLoaderImpl::StartLoadFromFile() {
   load_start_time_ = base::TimeTicks::Now();
   base::PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE,
-      base::Bind(&LoadFromFile, model_path_),
-      base::Bind(&RankerModelLoaderImpl::OnFileLoaded,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&LoadFromFile, model_path_),
+      base::BindOnce(&RankerModelLoaderImpl::OnFileLoaded,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void RankerModelLoaderImpl::OnFileLoaded(const std::string& data) {
@@ -217,9 +221,9 @@ void RankerModelLoaderImpl::StartLoadFromURL() {
       load_start_time_ + base::TimeDelta::FromMinutes(kMinRetryDelayMins);
   bool request_started =
       url_fetcher_->Request(model_url_,
-                            base::Bind(&RankerModelLoaderImpl::OnURLFetched,
-                                       weak_ptr_factory_.GetWeakPtr()),
-                            request_context_getter_.get());
+                            base::BindOnce(&RankerModelLoaderImpl::OnURLFetched,
+                                           weak_ptr_factory_.GetWeakPtr()),
+                            url_loader_factory_.get());
 
   // |url_fetcher_| maintains a request retry counter. If all allowed attempts
   // have already been exhausted, then the loader is finished and has abandoned

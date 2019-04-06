@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "gpu/command_buffer/client/cmd_buffer_helper.h"
@@ -42,7 +41,7 @@ const int32_t kUnusedCommandId = 5;  // we use 0 and 2 currently.
 // interface (calling it directly, not through the RPC mechanism).
 class CommandBufferHelperTest : public testing::Test {
  protected:
-  virtual void SetUp() {
+  void SetUp() override {
     transfer_buffer_manager_ = std::make_unique<TransferBufferManager>(nullptr);
     command_buffer_.reset(
         new CommandBufferDirectLocked(transfer_buffer_manager_.get()));
@@ -60,7 +59,7 @@ class CommandBufferHelperTest : public testing::Test {
     test_command_next_id_ = kUnusedCommandId;
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     // If the CommandExecutor posts any tasks, this forces them to run.
     base::RunLoop().RunUntilIdle();
     test_command_args_.clear();
@@ -335,6 +334,34 @@ TEST_F(CommandBufferHelperTest, TestCalcImmediateEntriesAutoFlushing) {
   EXPECT_EQ(error::kNoError, GetError());
 }
 
+// Checks that automatic flushing treats ordering barriers as flushes.
+TEST_F(CommandBufferHelperTest,
+       TestCalcImmediateEntriesAutoFlushingOrderingBarrier) {
+  // Check that auto flush happens without an ordering barrier.
+  AddUniqueCommandWithExpect(error::kNoError, kAutoFlushSmall - 1);
+  EXPECT_EQ(0, command_buffer_->FlushCount());
+  AddUniqueCommandWithExpect(error::kNoError, 1);
+  // Auto flush should be triggered by going past the threshold.
+  EXPECT_EQ(1, command_buffer_->FlushCount());
+  helper_->Finish();
+  EXPECT_EQ(2, command_buffer_->FlushCount());
+
+  // Check that an ordering barrier prevents auto flush.
+  AddUniqueCommandWithExpect(error::kNoError, kAutoFlushSmall - 1);
+  EXPECT_EQ(2, command_buffer_->FlushCount());
+  helper_->OrderingBarrier();
+  EXPECT_EQ(3, command_buffer_->FlushCount());
+  AddUniqueCommandWithExpect(error::kNoError, 1);
+  // Adding a command should not have caused a flush because there was an
+  // ordering barrier.
+  EXPECT_EQ(3, command_buffer_->FlushCount());
+
+  // Check that the commands did happen.
+  helper_->Finish();
+  Mock::VerifyAndClearExpectations(api_mock_.get());
+  EXPECT_EQ(error::kNoError, GetError());
+}
+
 // Checks immediate_entry_count_ calc when automatic flushing is enabled, and
 // we allocate commands over the immediate_entry_count_ size.
 TEST_F(CommandBufferHelperTest, TestCalcImmediateEntriesOverFlushLimit) {
@@ -602,8 +629,8 @@ TEST_F(CommandBufferHelperTest, FreeRingBuffer) {
 
   helper_->FreeRingBuffer();
   EXPECT_FALSE(helper_->HaveRingBuffer());
-  // FreeRingBuffer should have caused a flush.
-  EXPECT_EQ(command_buffer_->FlushCount(), old_flush_count + 1);
+  // FreeRingBuffer should have caused an ordering barrier and a flush.
+  EXPECT_EQ(command_buffer_->FlushCount(), old_flush_count + 2);
   // However it shouldn't force a finish.
   EXPECT_EQ(command_buffer_->GetLastState().get_offset, old_get_offset);
 
@@ -611,7 +638,7 @@ TEST_F(CommandBufferHelperTest, FreeRingBuffer) {
   // should work.
   helper_->Finish();
   EXPECT_FALSE(helper_->HaveRingBuffer());
-  EXPECT_EQ(command_buffer_->FlushCount(), old_flush_count + 1);
+  EXPECT_EQ(command_buffer_->FlushCount(), old_flush_count + 2);
   EXPECT_EQ(command_buffer_->GetLastState().get_offset,
             helper_->GetPutOffsetForTest());
 }

@@ -3,9 +3,6 @@
 <translationbundle lang="it">
 <translation id="1002108253973310084">È stata rilevata una versione incompatibile del protocollo. Verifica che la versione più recente del software sia installata su entrambi i computer e riprova.</translation>
 <translation id="1050693411695664090">Scadente</translation>
-<translation id="1059802506829356230">• Aspetto e design rinnovati.
-• Prestazioni, reattività e affidabilità migliorate.
-• Supporto per la riproduzione di file audio da computer Windows o Linux.</translation>
 <translation id="1152528166145813711">Seleziona…</translation>
 <translation id="1199593201721843963">Disattiva connessioni remote</translation>
 <translation id="1291443878853470558">Per accedere a questo computer utilizzando Chromoting devi attivare le connessioni remote.</translation>
@@ -143,10 +140,12 @@ Per informazioni sulla privacy, leggi le Norme sulla privacy di Google (http://g
 <translation id="4145029455188493639">Accesso eseguito come <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Mancano alcuni componenti obbligatori. Verifica che sia installata la versione più recente del software e riprova.</translation>
 <translation id="4156740505453712750">Per proteggere l'accesso a questo computer, scegli un PIN di <ph name="BOLD_START" />almeno sei cifre<ph name="BOLD_END" />. Questo PIN sarà richiesto quando ti connetti da un'altra posizione.</translation>
+<translation id="4169432154993690151">Per scegliere un'immagine del profilo, consenti a Chrome Remote Desktop di accedere alla videocamera</translation>
 <translation id="4176825807642096119">Codice di accesso</translation>
 <translation id="4207623512727273241">Esegui il programma di installazione prima di continuare.</translation>
 <translation id="4227991223508142681">Utilità di provisioning degli host</translation>
 <translation id="4240294130679914010">Programma di disinstallazione host Chromoting</translation>
+<translation id="4249741460382919890">Correzioni generali e miglioramenti di stabilità.</translation>
 <translation id="4277463233460010382">Questo computer è configurato per consentire la connessione di uno o più client senza l'inserimento di un codice PIN.</translation>
 <translation id="4277736576214464567">Il codice di accesso non è valido. Riprova.</translation>
 <translation id="4361728918881830843">Per attivare le connessioni remote su un altro computer, installa Chrome Remote Desktop sul computer e fai clic su "<ph name="BUTTON_NAME" />".</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">L'host remoto richiede l'autenticazione su un sito web di terze parti. Per continuare, devi concedere a Chrome Remote Desktop ulteriori autorizzazioni per accedere a questo indirizzo:</translation>
 <translation id="507204348399810022">Vuoi disattivare le connessioni remote a <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Impossibile comunicare con il server: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Inserisci lo stesso PIN in entrambe le caselle.</translation>
 <translation id="5170982930780719864">ID host non valido.</translation>
 <translation id="518094545883702183">Queste informazioni vengono utilizzate soltanto per identificare il problema segnalato, sono disponibili soltanto a chi effettua accertamenti in merito alla tua segnalazione e vengono conservate per massimo 30 giorni.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Qualcos'altro.</translation>
 <translation id="6398765197997659313">Esci da schermo intero</translation>
 <translation id="6441316101718669559">L'integrazione desktop non è supportata su questa piattaforma. Puoi comunque utilizzare l'applicazione, ma l'esperienza utente sarà peggiore.</translation>
+<translation id="6502629188777329097">Accedi in sicurezza al tuo computer</translation>
 <translation id="652218476070540101">Aggiornamento PIN del computer in corso…</translation>
 <translation id="6527303717912515753">Condividi</translation>
 <translation id="6541219117979389420">I log delle applicazioni potrebbero includere informazioni private quali la tua identità (indirizzo email), i nomi e le proprietà di file e cartelle memorizzati su Google Drive.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">Da</translation>
 <translation id="677755392401385740">Host avviato per utente: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Visualizza/modifica</translation>
+<translation id="6913710942997637770">Per scegliere un'immagine del profilo, consenti a Chrome Remote Desktop di accedere alle tue foto</translation>
 <translation id="6930242544192836755">Durata</translation>
 <translation id="6939719207673461467">Mostra/nascondi tastiera.</translation>
 <translation id="6944854424004126054">Ripristina finestra</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Le connessioni remote per questo computer sono state disattivate.</translation>
 <translation id="7678209621226490279">Aggancia a sinistra</translation>
 <translation id="7693372326588366043">Aggiorna l'elenco degli host</translation>
+<translation id="7714222945760997814">Segnala errore</translation>
 <translation id="7782471917492991422">Verifica le impostazioni di risparmio energia del computer e verifica che non sia configurata la sospensione per inattività.</translation>
 <translation id="7810127880729796595">Mostra statistiche (connessione: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Mancano alcuni componenti obbligatori. Assicurati di avere l'ultima versione di Chrome e riprova.</translation>

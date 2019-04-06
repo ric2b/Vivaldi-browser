@@ -42,23 +42,6 @@ enum DataUsePageTransition {
 
 namespace data_use_measurement {
 
-bool IsUserRequest(const net::URLRequest& request) {
-  // The presence of ResourecRequestInfo in |request| implies that this request
-  // was created for a content::WebContents. For now we could add a condition to
-  // check ProcessType in info is content::PROCESS_TYPE_RENDERER, but it won't
-  // be compatible with upcoming PlzNavigate architecture. So just existence of
-  // ResourceRequestInfo is verified, and the current check should be compatible
-  // with upcoming changes in PlzNavigate.
-  // TODO(rajendrant): Verify this condition for different use cases. See
-  // crbug.com/626063.
-  return content::ResourceRequestInfo::ForRequest(&request) != nullptr;
-}
-
-bool ContentURLRequestClassifier::IsUserRequest(
-    const net::URLRequest& request) const {
-  return data_use_measurement::IsUserRequest(request);
-}
-
 DataUseUserData::DataUseContentType ContentURLRequestClassifier::GetContentType(
     const net::URLRequest& request,
     const net::HttpResponseHeaders& response_headers) const {
@@ -141,12 +124,12 @@ void ContentURLRequestClassifier::RecordPageTransitionUMA(
   DCHECK_NE(DataUsePageTransition::TRANSITION_MAX, data_use_page_transition);
 
   // Use the more primitive STATIC_HISTOGRAM_POINTER_BLOCK macro because the
-  // simple UMA_HISTOGRAM_ENUMERATION macros don't expose 'AddCount'.
+  // simple UMA_HISTOGRAM_ENUMERATION macros don't expose 'AddKiB'.
   STATIC_HISTOGRAM_POINTER_BLOCK(
-      "DataUse.PageTransition.UserTraffic",
-      AddCount(data_use_page_transition, received_bytes),
+      "DataUse.PageTransition.UserTrafficKB",
+      AddKiB(data_use_page_transition, received_bytes),
       base::LinearHistogram::FactoryGet(
-          "DataUse.PageTransition.UserTraffic", 1,
+          "DataUse.PageTransition.UserTrafficKB", 1,
           DataUsePageTransition::TRANSITION_MAX,
           DataUsePageTransition::TRANSITION_MAX + 1,
           base::HistogramBase::kUmaTargetedHistogramFlag));

@@ -15,11 +15,14 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/autocomplete_provider_client.h"
+#include "components/omnibox/browser/fake_autocomplete_provider_client.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/search_engines/template_url_service.h"
@@ -103,7 +106,7 @@ class AutocompleteResultTest : public testing::Test {
     // a DCHECK.
     field_trial_list_.reset();
     field_trial_list_.reset(new base::FieldTrialList(
-        std::make_unique<metrics::SHA1EntropyProvider>("foo")));
+        std::make_unique<variations::SHA1EntropyProvider>("foo")));
     variations::testing::ClearAllVariationParams();
 
     // Create the list of mock providers.  5 is enough.
@@ -117,6 +120,8 @@ class AutocompleteResultTest : public testing::Test {
     template_url_service_.reset(new TemplateURLService(nullptr, 0));
     template_url_service_->Load();
   }
+
+  void TearDown() override { scoped_task_environment_.RunUntilIdle(); }
 
   // Configures |match| from |data|.
   void PopulateAutocompleteMatch(const TestData& data,
@@ -148,6 +153,7 @@ class AutocompleteResultTest : public testing::Test {
   std::unique_ptr<TemplateURLService> template_url_service_;
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<base::FieldTrialList> field_trial_list_;
 
   // For every provider mentioned in TestData, we need a mock provider.
@@ -541,7 +547,7 @@ TEST_F(AutocompleteResultTest, SortAndCullDuplicateSearchURLs) {
   url_data.SetShortName(base::ASCIIToUTF16("unittest"));
   url_data.SetKeyword(base::ASCIIToUTF16("foo"));
   url_data.SetURL("http://www.foo.com/s?q={searchTerms}");
-  template_url_service_.get()->Add(std::make_unique<TemplateURL>(url_data));
+  template_url_service_->Add(std::make_unique<TemplateURL>(url_data));
 
   TestData data[] = {
     { 0, 1, 1300, true },
@@ -585,7 +591,7 @@ TEST_F(AutocompleteResultTest, SortAndCullWithMatchDups) {
   url_data.SetShortName(base::ASCIIToUTF16("unittest"));
   url_data.SetKeyword(base::ASCIIToUTF16("foo"));
   url_data.SetURL("http://www.foo.com/s?q={searchTerms}");
-  template_url_service_.get()->Add(std::make_unique<TemplateURL>(url_data));
+  template_url_service_->Add(std::make_unique<TemplateURL>(url_data));
 
   AutocompleteMatch dup_match;
   dup_match.destination_url = GURL("http://www.foo.com/s?q=foo&oq=dup");
@@ -865,4 +871,27 @@ TEST_F(AutocompleteResultTest, InlineTailPrefixes) {
     EXPECT_TRUE(EqualClassifications(result.match_at(i)->contents_class,
                                      cases[i].after_contents_class));
   }
+}
+
+TEST_F(AutocompleteResultTest, ConvertsOpenTabsCorrectly) {
+  AutocompleteResult result;
+  AutocompleteMatch match;
+  match.destination_url = GURL("http://this-site-matches.com");
+  result.matches_.push_back(match);
+  match.destination_url = GURL("http://other-site-matches.com");
+  match.description = base::UTF8ToUTF16("Some Other Site");
+  result.matches_.push_back(match);
+  match.destination_url = GURL("http://doesnt-match.com");
+  match.description = base::string16();
+  result.matches_.push_back(match);
+
+  // Have IsTabOpenWithURL() return true for some URLs.
+  FakeAutocompleteProviderClient client;
+  client.set_url_substring_match("matches");
+
+  result.ConvertOpenTabMatches(&client, nullptr);
+
+  EXPECT_TRUE(result.match_at(0)->has_tab_match);
+  EXPECT_TRUE(result.match_at(1)->has_tab_match);
+  EXPECT_FALSE(result.match_at(2)->has_tab_match);
 }

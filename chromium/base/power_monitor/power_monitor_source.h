@@ -31,14 +31,19 @@ class BASE_EXPORT PowerMonitorSource {
   // Is the computer currently on battery power. Can be called on any thread.
   bool IsOnBatteryPower();
 
+  // Called by PowerMonitor just before PowerMonitor destroys both itself and
+  // this instance). After return from this call it is no longer safe for
+  // subclasses to call into PowerMonitor (e.g., via PowerMonitor::Get(). Hence,
+  // subclasses should take any necessary actions here to ensure that after
+  // return from this invocation they will no longer make any calls on
+  // PowerMonitor.
+  virtual void Shutdown() = 0;
+
  protected:
   friend class PowerMonitorTest;
 
   // Friend function that is allowed to access the protected ProcessPowerEvent.
   friend void ProcessPowerEventHelper(PowerEvent);
-
-  // Get the process-wide PowerMonitorSource (if not present, returns NULL).
-  static PowerMonitorSource* Get();
 
   // ProcessPowerEvent should only be called from a single thread, most likely
   // the UI thread or, in child processes, the IO thread.

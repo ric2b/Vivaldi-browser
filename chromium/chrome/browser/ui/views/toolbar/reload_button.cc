@@ -15,6 +15,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
@@ -31,6 +32,13 @@ const int kReloadMenuItems[]  = {
   IDS_RELOAD_MENU_EMPTY_AND_HARD_RELOAD_ITEM,
 };
 
+const gfx::VectorIcon& GetIconForMode(bool is_reload) {
+  if (ui::MaterialDesignController::IsTouchOptimizedUiEnabled())
+    return is_reload ? kReloadTouchIcon : kNavigateStopTouchIcon;
+
+  return is_reload ? vector_icons::kReloadIcon : kNavigateStopIcon;
+}
+
 }  // namespace
 
 // ReloadButton ---------------------------------------------------------------
@@ -38,8 +46,8 @@ const int kReloadMenuItems[]  = {
 // static
 const char ReloadButton::kViewClassName[] = "ReloadButton";
 
-ReloadButton::ReloadButton(Profile* profile, CommandUpdater* command_updater)
-    : ToolbarButton(profile, this, CreateMenuModel()),
+ReloadButton::ReloadButton(CommandUpdater* command_updater)
+    : ToolbarButton(this, CreateMenuModel(), nullptr),
       command_updater_(command_updater),
       double_click_timer_delay_(
           base::TimeDelta::FromMilliseconds(views::GetDoubleClickInterval())),
@@ -127,9 +135,10 @@ void ReloadButton::ButtonPressed(views::Button* /* button */,
   ClearPendingMenu();
 
   if (visible_mode_ == Mode::kStop) {
-    if (command_updater_)
+    if (command_updater_) {
       command_updater_->ExecuteCommandWithDisposition(
           IDC_STOP, WindowOpenDisposition::CURRENT_TAB);
+    }
     // The user has clicked, so we can feel free to update the button, even if
     // the mouse is still hovering.
     ChangeMode(Mode::kReload, true);
@@ -208,8 +217,8 @@ void ReloadButton::ExecuteCommand(int command_id, int event_flags) {
 
 std::unique_ptr<ui::SimpleMenuModel> ReloadButton::CreateMenuModel() {
   auto menu_model = std::make_unique<ui::SimpleMenuModel>(this);
-  for (size_t i = 0; i < arraysize(kReloadMenuItems); ++i)
-    menu_model->AddItemWithStringId(kReloadMenuItems[i], kReloadMenuItems[i]);
+  for (int item : kReloadMenuItems)
+    menu_model->AddItemWithStringId(item, item);
   return menu_model;
 }
 
@@ -224,8 +233,7 @@ void ReloadButton::ChangeModeInternal(Mode mode) {
   const ui::ThemeProvider* tp = GetThemeProvider();
   // |tp| can be NULL in unit tests.
   if (tp) {
-    const gfx::VectorIcon& icon =
-        (mode == Mode::kReload) ? vector_icons::kReloadIcon : kNavigateStopIcon;
+    const gfx::VectorIcon& icon = GetIconForMode(mode == Mode::kReload);
     const SkColor normal_color =
         tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
     const SkColor disabled_color =
@@ -234,7 +242,6 @@ void ReloadButton::ChangeModeInternal(Mode mode) {
              gfx::CreateVectorIcon(icon, normal_color));
     SetImage(views::Button::STATE_DISABLED,
              gfx::CreateVectorIcon(icon, disabled_color));
-    set_ink_drop_base_color(normal_color);
   }
 
   visible_mode_ = mode;

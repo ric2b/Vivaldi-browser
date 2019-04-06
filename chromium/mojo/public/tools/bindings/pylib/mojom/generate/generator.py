@@ -70,12 +70,18 @@ class Stylizer(object):
 
 
 def WriteFile(contents, full_path):
+  # If |contents| is same with the file content, we skip updating.
+  if os.path.isfile(full_path):
+    with open(full_path, 'rb') as destination_file:
+      if destination_file.read() == contents:
+        return
+
   # Make sure the containing directory exists.
   full_dir = os.path.dirname(full_path)
   fileutil.EnsureDirectoryExists(full_dir)
 
   # Dump the data to disk.
-  with open(full_path, "w+") as f:
+  with open(full_path, "wb") as f:
     f.write(contents)
 
 
@@ -157,7 +163,9 @@ class Generator(object):
                bytecode_path=None, for_blink=False, use_once_callback=False,
                js_bindings_mode="new", export_attribute=None,
                export_header=None, generate_non_variant_code=False,
-               support_lazy_serialization=False, allow_native_structs=False):
+               support_lazy_serialization=False, disallow_native_types=False,
+               disallow_interfaces=False, generate_message_ids=False,
+               generate_fuzzing=False):
     self.module = module
     self.output_dir = output_dir
     self.typemap = typemap or {}
@@ -170,7 +178,10 @@ class Generator(object):
     self.export_header = export_header
     self.generate_non_variant_code = generate_non_variant_code
     self.support_lazy_serialization = support_lazy_serialization
-    self.allow_native_structs = allow_native_structs
+    self.disallow_native_types = disallow_native_types
+    self.disallow_interfaces = disallow_interfaces
+    self.generate_message_ids = generate_message_ids
+    self.generate_fuzzing = generate_fuzzing
 
   def Write(self, contents, filename):
     if self.output_dir is None:
@@ -189,4 +200,3 @@ class Generator(object):
   def GetGlobals(self):
     """Returns global mappings for the template generation."""
     return {}
-

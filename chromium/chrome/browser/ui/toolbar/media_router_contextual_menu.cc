@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/media_router/cloud_services_dialog.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
 #include "chrome/browser/ui/toolbar/media_router_action_controller.h"
@@ -27,6 +28,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "extensions/common/constants.h"
 #include "ui/base/models/menu_model_delegate.h"
@@ -35,31 +37,36 @@
 
 // static
 std::unique_ptr<MediaRouterContextualMenu>
-MediaRouterContextualMenu::CreateForToolbar(Browser* browser) {
+MediaRouterContextualMenu::CreateForToolbar(Browser* browser,
+                                            Observer* observer) {
   return std::make_unique<MediaRouterContextualMenu>(
       browser, true,
-      MediaRouterActionController::IsActionShownByPolicy(browser->profile()));
+      MediaRouterActionController::IsActionShownByPolicy(browser->profile()),
+      observer);
 }
 
 // static
 std::unique_ptr<MediaRouterContextualMenu>
-MediaRouterContextualMenu::CreateForOverflowMenu(Browser* browser) {
+MediaRouterContextualMenu::CreateForOverflowMenu(Browser* browser,
+                                                 Observer* observer) {
   return std::make_unique<MediaRouterContextualMenu>(
       browser, false,
-      MediaRouterActionController::IsActionShownByPolicy(browser->profile()));
+      MediaRouterActionController::IsActionShownByPolicy(browser->profile()),
+      observer);
 }
 
 MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser,
                                                      bool is_action_in_toolbar,
-                                                     bool shown_by_policy)
-    : browser_(browser),
+                                                     bool shown_by_policy,
+                                                     Observer* observer)
+    : observer_(observer),
+      browser_(browser),
       menu_model_(this),
       is_action_in_toolbar_(is_action_in_toolbar) {
   menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_ABOUT,
                                   IDS_MEDIA_ROUTER_ABOUT);
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-  menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_LEARN_MORE,
-                                  IDS_MEDIA_ROUTER_LEARN_MORE);
+  menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_LEARN_MORE, IDS_LEARN_MORE);
   menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_HELP,
                                   IDS_MEDIA_ROUTER_HELP);
   if (shown_by_policy) {
@@ -89,9 +96,12 @@ MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser,
     menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_REPORT_ISSUE,
                                     IDS_MEDIA_ROUTER_REPORT_ISSUE);
   }
+  observer_->OnContextMenuShown();
 }
 
-MediaRouterContextualMenu::~MediaRouterContextualMenu() {}
+MediaRouterContextualMenu::~MediaRouterContextualMenu() {
+  observer_->OnContextMenuHidden();
+}
 
 bool MediaRouterContextualMenu::GetAlwaysShowActionPref() const {
   return MediaRouterActionController::GetAlwaysShowActionPref(
@@ -142,7 +152,6 @@ void MediaRouterContextualMenu::ExecuteCommand(int command_id,
   const char kCastLearnMorePageUrl[] =
       "https://support.google.com/chromecast/answer/2998338";
 
-  PrefService* pref_service;
   switch (command_id) {
     case IDC_MEDIA_ROUTER_ABOUT:
       ShowSingletonTab(browser_, GURL(kAboutPageUrl));
@@ -151,12 +160,7 @@ void MediaRouterContextualMenu::ExecuteCommand(int command_id,
       SetAlwaysShowActionPref(!GetAlwaysShowActionPref());
       break;
     case IDC_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE:
-      pref_service = browser_->profile()->GetPrefs();
-      pref_service->SetBoolean(prefs::kMediaRouterEnableCloudServices,
-          !pref_service->GetBoolean(prefs::kMediaRouterEnableCloudServices));
-
-      // If this has been set before, this is a no-op.
-      pref_service->SetBoolean(prefs::kMediaRouterCloudServicesPrefSet, true);
+      ToggleCloudServices();
       break;
     case IDC_MEDIA_ROUTER_HELP:
       ShowSingletonTab(browser_, GURL(kCastHelpCenterPageUrl));
@@ -182,6 +186,18 @@ void MediaRouterContextualMenu::ExecuteCommand(int command_id,
       break;
     default:
       NOTREACHED();
+  }
+}
+
+void MediaRouterContextualMenu::ToggleCloudServices() {
+  PrefService* pref_service = browser_->profile()->GetPrefs();
+  if (pref_service->GetBoolean(prefs::kMediaRouterCloudServicesPrefSet)) {
+    pref_service->SetBoolean(
+        prefs::kMediaRouterEnableCloudServices,
+        !pref_service->GetBoolean(prefs::kMediaRouterEnableCloudServices));
+  } else {
+    // If the user hasn't enabled cloud services before, show the opt-in dialog.
+    media_router::ShowCloudServicesDialog(browser_);
   }
 }
 

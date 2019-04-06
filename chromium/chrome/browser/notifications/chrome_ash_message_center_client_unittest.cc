@@ -27,7 +27,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 namespace {
 
@@ -110,7 +110,7 @@ TEST_F(ChromeAshMessageCenterClientTest, NotifierSortOrder) {
       static_cast<extensions::TestExtensionSystem*>(
           extensions::ExtensionSystem::Get(profile));
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       test_extension_system->CreateExtensionService(
           &command_line, base::FilePath() /* install_directory */,
           false /* autoupdate_enabled*/);

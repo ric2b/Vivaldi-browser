@@ -106,7 +106,8 @@ PolicyBase::PolicyBase()
       policy_(nullptr),
       lowbox_sid_(nullptr),
       lockdown_default_dacl_(false),
-      enable_opm_redirection_(false) {
+      enable_opm_redirection_(false),
+      effective_token_(nullptr) {
   ::InitializeCriticalSection(&lock_);
   dispatcher_.reset(new TopLevelDispatcher(this));
 }
@@ -267,7 +268,7 @@ void PolicyBase::DestroyAlternateDesktop() {
 }
 
 ResultCode PolicyBase::SetIntegrityLevel(IntegrityLevel integrity_level) {
-  if (_app_container_profile)
+  if (app_container_profile_)
     return SBOX_ERROR_BAD_PARAMS;
   integrity_level_ = integrity_level;
   return SBOX_ALL_OK;
@@ -288,7 +289,7 @@ ResultCode PolicyBase::SetLowBox(const wchar_t* sid) {
     return SBOX_ERROR_UNSUPPORTED;
 
   DCHECK(sid);
-  if (lowbox_sid_ || _app_container_profile)
+  if (lowbox_sid_ || app_container_profile_)
     return SBOX_ERROR_BAD_PARAMS;
 
   if (!ConvertStringSidToSid(sid, &lowbox_sid_))
@@ -298,7 +299,7 @@ ResultCode PolicyBase::SetLowBox(const wchar_t* sid) {
 }
 
 ResultCode PolicyBase::SetProcessMitigations(MitigationFlags flags) {
-  if (!CanSetProcessMitigationsPreStartup(flags))
+  if (app_container_profile_ || !CanSetProcessMitigationsPreStartup(flags))
     return SBOX_ERROR_BAD_PARAMS;
   mitigations_ = flags;
   return SBOX_ALL_OK;
@@ -399,8 +400,8 @@ ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
   // Create the 'naked' token. This will be the permanent token associated
   // with the process and therefore with any thread that is not impersonating.
   DWORD result =
-      CreateRestrictedToken(lockdown_level_, integrity_level_, PRIMARY,
-                            lockdown_default_dacl_, lockdown);
+      CreateRestrictedToken(effective_token_, lockdown_level_, integrity_level_,
+                            PRIMARY, lockdown_default_dacl_, lockdown);
   if (ERROR_SUCCESS != result)
     return SBOX_ERROR_GENERIC;
 
@@ -463,8 +464,8 @@ ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
   // thread uses when booting up the process. It should contain most of
   // what we need (before reaching main( ))
   result =
-      CreateRestrictedToken(initial_level_, integrity_level_, IMPERSONATION,
-                            lockdown_default_dacl_, initial);
+      CreateRestrictedToken(effective_token_, initial_level_, integrity_level_,
+                            IMPERSONATION, lockdown_default_dacl_, initial);
   if (ERROR_SUCCESS != result)
     return SBOX_ERROR_GENERIC;
 
@@ -544,8 +545,10 @@ bool PolicyBase::OnJobEmpty(HANDLE job) {
 }
 
 ResultCode PolicyBase::SetDisconnectCsrss() {
-// Does not work on 32-bit.
-#if defined(_WIN64)
+// Does not work on 32-bit, and the ASAN runtime falls over with the
+// CreateThread EAT patch used when this is enabled.
+// See https://crbug.com/783296#c27.
+#if defined(_WIN64) && !defined(ADDRESS_SANITIZER)
   if (base::win::GetVersion() >= base::win::VERSION_WIN10) {
     is_csrss_connected_ = false;
     return AddKernelObjectToClose(L"ALPC Port", nullptr);
@@ -596,21 +599,46 @@ bool PolicyBase::GetEnableOPMRedirection() {
   return enable_opm_redirection_;
 }
 
-ResultCode PolicyBase::SetAppContainerProfile(AppContainerProfile* profile) {
+ResultCode PolicyBase::AddAppContainerProfile(const wchar_t* package_name,
+                                              bool create_profile) {
   if (base::win::GetVersion() < base::win::VERSION_WIN8)
     return SBOX_ERROR_UNSUPPORTED;
 
-  DCHECK(profile);
-  if (lowbox_sid_ || _app_container_profile ||
+  DCHECK(package_name);
+  if (lowbox_sid_ || app_container_profile_ ||
       integrity_level_ != INTEGRITY_LEVEL_LAST)
     return SBOX_ERROR_BAD_PARAMS;
 
-  _app_container_profile = profile;
+  if (create_profile) {
+    app_container_profile_ = AppContainerProfileBase::Create(
+        package_name, L"Chrome Sandbox", L"Profile for Chrome Sandbox");
+  } else {
+    app_container_profile_ = AppContainerProfileBase::Open(package_name);
+  }
+  if (!app_container_profile_)
+    return SBOX_ERROR_CREATE_APPCONTAINER_PROFILE;
+  // A bug exists in CreateProcess where enabling an AppContainer profile and
+  // passing a set of mitigation flags will generate ERROR_INVALID_PARAMETER.
+  // Apply best efforts here and convert set mitigations to delayed mitigations.
+  delayed_mitigations_ =
+      mitigations_ & GetAllowedPostStartupProcessMitigations();
+  DCHECK(delayed_mitigations_ == (mitigations_ & ~MITIGATION_SEHOP));
+  mitigations_ = 0;
   return SBOX_ALL_OK;
 }
 
 scoped_refptr<AppContainerProfile> PolicyBase::GetAppContainerProfile() {
-  return _app_container_profile;
+  return GetAppContainerProfileBase();
+}
+
+void PolicyBase::SetEffectiveToken(HANDLE token) {
+  CHECK(token);
+  effective_token_ = token;
+}
+
+scoped_refptr<AppContainerProfileBase>
+PolicyBase::GetAppContainerProfileBase() {
+  return app_container_profile_;
 }
 
 ResultCode PolicyBase::SetupAllInterceptions(TargetProcess* target) {

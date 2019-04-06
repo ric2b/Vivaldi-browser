@@ -4,6 +4,7 @@
 
 import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
+import("//gpu/vulkan/features.gni")
 import("//ui/ozone/ozone.gni")
 import("//ui/ozone/ozone_extra.gni")
 import("//testing/test.gni")
@@ -20,6 +21,16 @@ ozone_platform_deps = ozone_external_platform_deps
 
 # Extra dependencies to pull into ozone_unittests for built platforms.
 ozone_platform_test_deps = ozone_external_platform_test_deps
+
+if (ozone_platform_magma) {
+  ozone_platforms += [ "magma" ]
+  ozone_platform_deps += [ "platform/magma" ]
+}
+
+if (ozone_platform_windows) {
+  ozone_platforms += [ "windows" ]
+  ozone_platform_deps += [ "platform/windows" ]
+}
 
 if (ozone_platform_headless) {
   ozone_platforms += [ "headless" ]
@@ -48,6 +59,11 @@ if (ozone_platform_x11) {
   ozone_platform_deps += [ "platform/x11" ]
 }
 
+if (ozone_platform_scenic) {
+  ozone_platforms += [ "scenic" ]
+  ozone_platform_deps += [ "platform/scenic" ]
+}
+
 platform_list_cc_file = "$target_gen_dir/platform_list.cc"
 platform_list_h_file = "$target_gen_dir/platform_list.h"
 platform_list_txt_file = "$target_gen_dir/platform_list.txt"
@@ -56,6 +72,7 @@ constructor_list_cc_file = "$target_gen_dir/constructor_list.cc"
 jumbo_component("ozone_base") {
   sources = [
     "ozone_base_export.h",
+    "public/clipboard_delegate.h",
     "public/cursor_factory_ozone.cc",
     "public/cursor_factory_ozone.h",
     "public/gl_ozone.h",
@@ -66,6 +83,10 @@ jumbo_component("ozone_base") {
     "public/overlay_candidates_ozone.cc",
     "public/overlay_candidates_ozone.h",
     "public/overlay_manager_ozone.h",
+    "public/overlay_plane.cc",
+    "public/overlay_plane.h",
+    "public/overlay_surface.cc",
+    "public/overlay_surface.h",
     "public/overlay_surface_candidate.cc",
     "public/overlay_surface_candidate.h",
     "public/ozone_switches.cc",
@@ -80,6 +101,7 @@ jumbo_component("ozone_base") {
 
   public_deps = [
     "//base",
+    "//gpu/vulkan:buildflags",
     "//ipc",
     "//skia",
     "//ui/display/types",
@@ -94,6 +116,10 @@ jumbo_component("ozone_base") {
     "//ui/gfx/ipc/skia",
     "//ui/gl",
   ]
+
+  if (enable_vulkan) {
+    public_deps += [ "//gpu/vulkan" ]
+  }
 
   visibility += [
     # Everyone should depend on //ui/ozone instead except a handful of
@@ -180,7 +206,7 @@ jumbo_source_set("test_support_internal") {
   configs += [ "//build/config:precompiled_headers" ]
 
   deps = [
-    "//mojo/edk/test:run_all_unittests",
+    "//mojo/core/test:run_all_unittests",
     "//mojo/public/cpp/bindings",
     "//testing/gmock",
     "//testing/gtest",

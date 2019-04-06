@@ -11,7 +11,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "chrome/browser/ssl/ssl_blocking_page_base.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "net/ssl/ssl_info.h"
 #include "url/gurl.h"
@@ -45,6 +45,7 @@ class CaptivePortalBlockingPage : public SSLBlockingPageBase {
       const GURL& login_url,
       std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
       const net::SSLInfo& ssl_info,
+      int cert_error,
       const base::Callback<void(content::CertificateRequestResultType)>&
           callback);
   ~CaptivePortalBlockingPage() override;

@@ -29,7 +29,7 @@ static void corruptSchema(
     char *z;
     if( zObj==0 ) zObj = "?";
     z = sqlite3MPrintf(db, "malformed database schema (%s)", zObj);
-    if( zExtra ) z = sqlite3MPrintf(db, "%z - %s", z, zExtra);
+    if( zExtra && zExtra[0] ) z = sqlite3MPrintf(db, "%z - %s", z, zExtra);
     sqlite3DbFree(db, *pData->pzErrMsg);
     *pData->pzErrMsg = z;
   }
@@ -145,6 +145,7 @@ static int sqlite3InitOne(sqlite3 *db, int iDb, char **pzErrMsg){
   const char *zMasterName;
   int openedTransaction = 0;
 
+  assert( (db->mDbFlags & DBFLAG_SchemaKnownOk)==0 );
   assert( iDb>=0 && iDb<db->nDb );
   assert( db->aDb[iDb].pSchema );
   assert( sqlite3_mutex_held(db->mutex) );
@@ -214,6 +215,9 @@ static int sqlite3InitOne(sqlite3 *db, int iDb, char **pzErrMsg){
   */
   for(i=0; i<ArraySize(meta); i++){
     sqlite3BtreeGetMeta(pDb->pBt, i+1, (u32 *)&meta[i]);
+  }
+  if( (db->flags & SQLITE_ResetDatabase)!=0 ){
+    memset(meta, 0, sizeof(meta));
   }
   pDb->pSchema->schema_cookie = meta[BTREE_SCHEMA_VERSION-1];
 
@@ -374,6 +378,7 @@ int sqlite3Init(sqlite3 *db, char **pzErrMsg){
   }
   /* All other schemas after the main schema. The "temp" schema must be last */
   for(i=db->nDb-1; i>0; i--){
+    assert( i==1 || sqlite3BtreeHoldsMutex(db->aDb[i].pBt) );
     if( !DbHasProperty(db, i, DB_SchemaLoaded) ){
       rc = sqlite3InitOne(db, i, pzErrMsg);
       if( rc ) return rc;
@@ -395,10 +400,12 @@ int sqlite3ReadSchema(Parse *pParse){
   assert( sqlite3_mutex_held(db->mutex) );
   if( !db->init.busy ){
     rc = sqlite3Init(db, &pParse->zErrMsg);
-  }
-  if( rc!=SQLITE_OK ){
-    pParse->rc = rc;
-    pParse->nErr++;
+    if( rc!=SQLITE_OK ){
+      pParse->rc = rc;
+      pParse->nErr++;
+    }else if( db->noSharedCache ){
+      db->mDbFlags |= DBFLAG_SchemaKnownOk;
+    }
   }
   return rc;
 }
@@ -473,7 +480,8 @@ int sqlite3SchemaToIndex(sqlite3 *db, Schema *pSchema){
   */
   assert( sqlite3_mutex_held(db->mutex) );
   if( pSchema ){
-    for(i=0; ALWAYS(i<db->nDb); i++){
+    for(i=0; 1; i++){
+      assert( i<db->nDb );
       if( db->aDb[i].pSchema==pSchema ){
         break;
       }
@@ -608,7 +616,7 @@ static int sqlite3Prepare(
   if( rc==SQLITE_OK && sParse.pVdbe && sParse.explain ){
     static const char * const azColName[] = {
        "addr", "opcode", "p1", "p2", "p3", "p4", "p5", "comment",
-       "selectid", "order", "from", "detail"
+       "id", "parent", "notused", "detail"
     };
     int iFirst, mx;
     if( sParse.explain==2 ){
@@ -654,8 +662,6 @@ static int sqlite3Prepare(
 end_prepare:
 
   sqlite3ParserReset(&sParse);
-  rc = sqlite3ApiExit(db, rc);
-  assert( (rc&db->errMask)==rc );
   return rc;
 }
 static int sqlite3LockAndPrepare(
@@ -668,6 +674,7 @@ static int sqlite3LockAndPrepare(
   const char **pzTail       /* OUT: End of parsed string */
 ){
   int rc;
+  int cnt = 0;
 
 #ifdef SQLITE_ENABLE_API_ARMOR
   if( ppStmt==0 ) return SQLITE_MISUSE_BKPT;
@@ -678,15 +685,18 @@ static int sqlite3LockAndPrepare(
   }
   sqlite3_mutex_enter(db->mutex);
   sqlite3BtreeEnterAll(db);
-  rc = sqlite3Prepare(db, zSql, nBytes, prepFlags, pOld, ppStmt, pzTail);
-  if( rc==SQLITE_SCHEMA ){
-    sqlite3ResetOneSchema(db, -1);
-    sqlite3_finalize(*ppStmt);
+  do{
+    /* Make multiple attempts to compile the SQL, until it either succeeds
+    ** or encounters a permanent error.  A schema problem after one schema
+    ** reset is considered a permanent error. */
     rc = sqlite3Prepare(db, zSql, nBytes, prepFlags, pOld, ppStmt, pzTail);
-  }
+    assert( rc==SQLITE_OK || *ppStmt==0 );
+  }while( rc==SQLITE_ERROR_RETRY
+       || (rc==SQLITE_SCHEMA && (sqlite3ResetOneSchema(db,-1), cnt++)==0) );
   sqlite3BtreeLeaveAll(db);
+  rc = sqlite3ApiExit(db, rc);
+  assert( (rc&db->errMask)==rc );
   sqlite3_mutex_leave(db->mutex);
-  assert( rc==SQLITE_OK || *ppStmt==0 );
   return rc;
 }
 

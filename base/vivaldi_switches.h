@@ -5,20 +5,31 @@
 #ifndef BASE_VIVALDI_SWITCHES_H_
 #define BASE_VIVALDI_SWITCHES_H_
 
+#include "build/build_config.h"
+
+#if defined(OS_LINUX)
+// Needed for chromium/services/service_manager/zygote/host/zygote_communication_linux.cc
+#include "base/base_export.h"
+
+#define SWITCHES_EXPORT BASE_EXPORT
+#else
+#define SWITCHES_EXPORT
+#endif
+
 namespace switches {
 
 // All switches in alphabetical order. The switches should be documented
 // alongside the definition of their values in the .cc file.
 
-extern const char kDebugVivaldi[];
-extern const char kDisableVivaldi[];
-extern const char kRunningVivaldi[];
+SWITCHES_EXPORT extern const char kDebugVivaldi[];
+SWITCHES_EXPORT extern const char kDisableVivaldi[];
+SWITCHES_EXPORT extern const char kRunningVivaldi[];
 
-extern const char kVivaldiUpdateURL[];
+SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 #if defined(COMPONENT_BUILD)
-extern const char kLaunchUpdater[];
+SWITCHES_EXPORT extern const char kLaunchUpdater[];
 #endif
-extern const char kTestAlreadyRunningDialog[];
+SWITCHES_EXPORT extern const char kTestAlreadyRunningDialog[];
 
 }  // namespace switches
 

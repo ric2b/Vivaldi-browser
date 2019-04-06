@@ -8,27 +8,39 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "build/build_config.h"
+#include "chrome/browser/platform_util.h"
+#include "chrome/browser/ui/autofill/popup_view_common.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/grit/generated_resources.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_features.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/border.h"
-#include "ui/views/controls/scroll_view.h"
+#include "ui/views/bubble/bubble_border.h"
 #include "ui/views/focus/focus_manager.h"
-#include "ui/views/widget/widget.h"
+#include "ui/views/layout/fill_layout.h"
 
 namespace autofill {
 
-namespace {
+// TODO(crbug.com/831603): Determine how colors should be shared with menus
+// and/or omnibox, and how these should interact (if at all) with native
+// theme colors.
+const SkColor AutofillPopupBaseView::kBackgroundColor = SK_ColorWHITE;
+const SkColor AutofillPopupBaseView::kSelectedBackgroundColor =
+    gfx::kGoogleGrey200;
+const SkColor AutofillPopupBaseView::kFooterBackgroundColor =
+    gfx::kGoogleGrey050;
+const SkColor AutofillPopupBaseView::kSeparatorColor = gfx::kGoogleGrey200;
+const SkColor AutofillPopupBaseView::kWarningColor = gfx::kGoogleRed600;
 
-// The minimum vertical space between the bottom of the autofill popup and the
-// bottom of the Chrome frame.
-// TODO(crbug.com/739978): Investigate if we should compute this distance
-// programmatically. 10dp may not be enough for windows with thick borders.
-const int kPopupBottomMargin = 10;
-
-// The thickness of the border for the autofill popup in dp.
-const int kPopupBorderThicknessDp = 1;
-
-}  // namespace
+int AutofillPopupBaseView::GetCornerRadius() {
+  return ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
+      views::EMPHASIS_MEDIUM);
+}
 
 AutofillPopupBaseView::AutofillPopupBaseView(
     AutofillPopupViewDelegate* delegate,
@@ -41,23 +53,18 @@ AutofillPopupBaseView::~AutofillPopupBaseView() {
   if (delegate_) {
     delegate_->ViewDestroyed();
 
-    RemoveObserver();
+    RemoveWidgetObservers();
   }
 }
 
 void AutofillPopupBaseView::DoShow() {
   const bool initialize_widget = !GetWidget();
   if (initialize_widget) {
-    parent_widget_->AddObserver(this);
-    views::FocusManager* focus_manager = parent_widget_->GetFocusManager();
-    focus_manager->RegisterAccelerator(
-        ui::Accelerator(ui::VKEY_RETURN, ui::EF_NONE),
-        ui::AcceleratorManager::kNormalPriority,
-        this);
-    focus_manager->RegisterAccelerator(
-        ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE),
-        ui::AcceleratorManager::kNormalPriority,
-        this);
+    // On Mac Cocoa browser, |parent_widget_| is null (the parent is not a
+    // views::Widget).
+    // TODO(crbug.com/826862): Remove |parent_widget_|.
+    if (parent_widget_)
+      parent_widget_->AddObserver(this);
 
     // The widget is destroyed by the corresponding NativeWidget, so we use
     // a weak pointer to hold the reference and don't have to worry about
@@ -65,14 +72,13 @@ void AutofillPopupBaseView::DoShow() {
     views::Widget* widget = new views::Widget;
     views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
     params.delegate = this;
-    params.parent = parent_widget_->GetNativeView();
+    params.parent = parent_widget_ ? parent_widget_->GetNativeView()
+                                   : delegate_->container_view();
+    AddExtraInitParams(&params);
     widget->Init(params);
 
-    scroll_view_ = new views::ScrollView;
-    scroll_view_->set_hide_horizontal_scrollbar(true);
-    scroll_view_->SetContents(this);
-
-    widget->SetContentsView(scroll_view_);
+    widget->SetContentsView(CreateWrapperView().release());
+    widget->AddObserver(this);
 
     // No animation for popup appearance (too distracting).
     widget->SetVisibilityAnimationTransition(views::Widget::ANIMATE_HIDE);
@@ -80,13 +86,16 @@ void AutofillPopupBaseView::DoShow() {
     show_time_ = base::Time::Now();
   }
 
-  GetWidget()->GetRootView()->SetBorder(views::CreateSolidBorder(
-      kPopupBorderThicknessDp,
-      GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_UnfocusedBorderColor)));
-
+  GetWidget()->GetRootView()->SetBorder(CreateBorder());
   DoUpdateBoundsAndRedrawPopup();
   GetWidget()->Show();
+
+#if defined(OS_MACOSX)
+  mac_bubble_closer_ = std::make_unique<ui::BubbleCloser>(
+      GetWidget()->GetNativeWindow(),
+      base::BindRepeating(&AutofillPopupBaseView::HideController,
+                          base::Unretained(this)));
+#endif
 
   // Showing the widget can change native focus (which would result in an
   // immediate hiding of the popup). Only start observing after shown.
@@ -98,7 +107,7 @@ void AutofillPopupBaseView::DoHide() {
   // The controller is no longer valid after it hides us.
   delegate_ = NULL;
 
-  RemoveObserver();
+  RemoveWidgetObservers();
 
   if (GetWidget()) {
     // Don't call CloseNow() because some of the functions higher up the stack
@@ -113,44 +122,103 @@ void AutofillPopupBaseView::DoHide() {
 
 void AutofillPopupBaseView::OnWidgetBoundsChanged(views::Widget* widget,
                                                   const gfx::Rect& new_bounds) {
-  DCHECK_EQ(widget, parent_widget_);
+  DCHECK(widget == parent_widget_ || widget == GetWidget());
+  if (widget != parent_widget_)
+    return;
+
   HideController();
 }
 
-void AutofillPopupBaseView::RemoveObserver() {
-  parent_widget_->GetFocusManager()->UnregisterAccelerators(this);
-  parent_widget_->RemoveObserver(this);
+void AutofillPopupBaseView::OnWidgetDestroying(views::Widget* widget) {
+  // On Windows, widgets can be destroyed in any order. Regardless of which
+  // widget is destroyed first, remove all observers and hide the popup.
+  DCHECK(widget == parent_widget_ || widget == GetWidget());
+
+  // Normally this happens at destruct-time or hide-time, but because it depends
+  // on |parent_widget_| (which is about to go away), it needs to happen sooner
+  // in this case.
+  RemoveWidgetObservers();
+
+  // Because the parent widget is about to be destroyed, we null out the weak
+  // reference to it and protect against possibly accessing it during
+  // destruction (e.g., by attempting to remove observers).
+  parent_widget_ = nullptr;
+
+  HideController();
+}
+
+void AutofillPopupBaseView::RemoveWidgetObservers() {
+  if (parent_widget_)
+    parent_widget_->RemoveObserver(this);
+  GetWidget()->RemoveObserver(this);
+
   views::WidgetFocusManager::GetInstance()->RemoveFocusChangeListener(this);
 }
 
-void AutofillPopupBaseView::DoUpdateBoundsAndRedrawPopup() {
-  gfx::Rect bounds = delegate_->popup_bounds();
+// TODO(crbug.com/831603): Inline this function once AutofillPopupViewViews is
+// deleted.
+void AutofillPopupBaseView::AddExtraInitParams(
+    views::Widget::InitParams* params) {
+  // Ensure the bubble border is not painted on an opaque background.
+  params->opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params->shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
+}
 
-  // |bounds| is in screen space and we want the bounds relative to the parent
-  // view. Since the parent is the scroll container, this will always be at
-  // position 0, 0 with dimensions specified by |bounds|.
+std::unique_ptr<views::View> AutofillPopupBaseView::CreateWrapperView() {
+  // Create a wrapper view that contains the current view and will receive the
+  // bubble border. This is needed so that a clipping path can be later applied
+  // on the contents only and not affect the border.
+  auto wrapper_view = std::make_unique<views::View>();
+  wrapper_view->SetLayoutManager(std::make_unique<views::FillLayout>());
+  wrapper_view->AddChildView(this);
+  return wrapper_view;
+}
+
+std::unique_ptr<views::Border> AutofillPopupBaseView::CreateBorder() {
+  auto border = std::make_unique<views::BubbleBorder>(
+      views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW,
+      SK_ColorWHITE);
+  border->SetCornerRadius(GetCornerRadius());
+  border->set_md_shadow_elevation(
+      ChromeLayoutProvider::Get()->GetShadowElevationMetric(
+          views::EMPHASIS_MEDIUM));
+  return border;
+}
+
+void AutofillPopupBaseView::SetClipPath() {
+  SkRect local_bounds = gfx::RectToSkRect(GetLocalBounds());
+  SkScalar radius = SkIntToScalar(GetCornerRadius());
+  gfx::Path clip_path;
+  clip_path.addRoundRect(local_bounds, radius, radius);
+  set_clip_path(clip_path);
+}
+
+void AutofillPopupBaseView::DoUpdateBoundsAndRedrawPopup() {
+  gfx::Rect bounds = delegate()->popup_bounds();
+
   SetSize(bounds.size());
 
-  // Compute the space available for the popup. It's the space between its top
-  // and the bottom of its parent view, minus some margin space.
-  int available_vertical_space =
-      parent_widget_->GetClientAreaBoundsInScreen().height() -
-      (bounds.y() - parent_widget_->GetClientAreaBoundsInScreen().y()) -
-      kPopupBottomMargin;
+  gfx::Rect clipping_bounds = CalculateClippingBounds();
 
-  if (available_vertical_space < bounds.height()) {
-    // The available space is not enough for the full popup so clamp the widget
-    // to what's available. Since the scroll view will show a scroll bar,
-    // increase the width so that the content isn't partially hidden.
-    bounds.set_width(bounds.width() + scroll_view_->GetScrollBarLayoutWidth());
+  int available_vertical_space =
+      clipping_bounds.height() - (bounds.y() - clipping_bounds.y());
+
+  if (available_vertical_space < bounds.height())
     bounds.set_height(available_vertical_space);
-  }
 
   // Account for the scroll view's border so that the content has enough space.
-  bounds.set_height(bounds.height() + 2 * kPopupBorderThicknessDp);
-  bounds.set_width(bounds.width() + 2 * kPopupBorderThicknessDp);
+  bounds.Inset(-GetWidget()->GetRootView()->border()->GetInsets());
   GetWidget()->SetBounds(bounds);
+  SetClipPath();
+
   SchedulePaint();
+}
+
+gfx::Rect AutofillPopupBaseView::CalculateClippingBounds() const {
+  if (parent_widget_)
+    return parent_widget_->GetClientAreaBoundsInScreen();
+
+  return PopupViewCommon().GetWindowBounds(delegate_->container_view());
 }
 
 void AutofillPopupBaseView::OnNativeFocusChanged(gfx::NativeView focused_now) {
@@ -177,6 +245,10 @@ bool AutofillPopupBaseView::OnMouseDragged(const ui::MouseEvent& event) {
 }
 
 void AutofillPopupBaseView::OnMouseExited(const ui::MouseEvent& event) {
+  // There is no need to post a ClearSelection task if no row is selected.
+  if (!delegate_ || !delegate_->HasSelection())
+    return;
+
   // Pressing return causes the cursor to hide, which will generate an
   // OnMouseExited event. Pressing return should activate the current selection
   // via AcceleratorPressed, so we need to let that run first.
@@ -241,20 +313,30 @@ void AutofillPopupBaseView::OnGestureEvent(ui::GestureEvent* event) {
   event->SetHandled();
 }
 
-bool AutofillPopupBaseView::AcceleratorPressed(
-    const ui::Accelerator& accelerator) {
-  DCHECK_EQ(accelerator.modifiers(), ui::EF_NONE);
+void AutofillPopupBaseView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ax::mojom::Role::kMenu;
+  node_data->SetName(
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_POPUP_ACCESSIBLE_NODE_DATA));
+}
 
-  if (accelerator.key_code() == ui::VKEY_ESCAPE) {
-    HideController();
-    return true;
+void AutofillPopupBaseView::VisibilityChanged(View* starting_from,
+                                              bool is_visible) {
+  if (is_visible) {
+    // Announce that the suggestions are available before the pop up is open.
+    // The password generation pop up relies on this call.
+    ui::AXPlatformNode::OnInputSuggestionsAvailable();
+    // Fire these the first time a menu is visible. By firing these and the
+    // matching end events, we are telling screen readers that the focus
+    // is only changing temporarily, and the screen reader will restore the
+    // focus back to the appropriate textfield when the menu closes.
+    NotifyAccessibilityEvent(ax::mojom::Event::kMenuStart, true);
+  } else {
+    // TODO(https://crbug.com/848427) Only call if suggestions are actually no
+    // longer available. The suggestions could be hidden but still available, as
+    // is the case when the Escape key is pressed.
+    ui::AXPlatformNode::OnInputSuggestionsUnavailable();
+    NotifyAccessibilityEvent(ax::mojom::Event::kMenuEnd, true);
   }
-
-  if (accelerator.key_code() == ui::VKEY_RETURN)
-    return delegate_->AcceptSelectedLine();
-
-  NOTREACHED();
-  return false;
 }
 
 void AutofillPopupBaseView::SetSelection(const gfx::Point& point) {
@@ -278,6 +360,9 @@ void AutofillPopupBaseView::ClearSelection() {
 void AutofillPopupBaseView::HideController() {
   if (delegate_)
     delegate_->Hide();
+  // This will eventually result in the deletion of |this|, as the delegate
+  // will hide |this|. See |DoHide| above for an explanation on why the precise
+  // timing of that deletion is tricky.
 }
 
 gfx::NativeView AutofillPopupBaseView::container_view() {

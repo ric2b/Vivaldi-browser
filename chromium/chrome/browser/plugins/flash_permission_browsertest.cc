@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -18,7 +17,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/ppapi_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "url/gurl.h"
 
 namespace {
@@ -127,7 +126,7 @@ IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest, SucceedsInPopupWindow) {
   PermissionRequestManager* manager = PermissionRequestManager::FromWebContents(
       GetWebContents());
   auto popup_prompt_factory =
-      base::MakeUnique<MockPermissionPromptFactory>(manager);
+      std::make_unique<MockPermissionPromptFactory>(manager);
 
   EXPECT_EQ(0, popup_prompt_factory->TotalRequestCount());
   popup_prompt_factory->set_response_type(PermissionRequestManager::ACCEPT_ALL);
@@ -196,7 +195,7 @@ IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest, AllowFileURL) {
   base::FilePath test_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_path);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &test_path);
   ui_test_utils::NavigateToURL(
       browser(), GURL("file://" + test_path.AsUTF8Unsafe() + test_url()));
   CommonSucceedsIfAllowed();
@@ -211,7 +210,7 @@ IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest, AllowFileURL) {
 
 IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest, BlockFileURL) {
   base::FilePath test_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_path);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &test_path);
   ui_test_utils::NavigateToURL(
       browser(), GURL("file://" + test_path.AsUTF8Unsafe() + test_url()));
   CommonFailsIfBlocked();

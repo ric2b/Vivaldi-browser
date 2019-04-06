@@ -84,10 +84,8 @@ void AsyncPolicyProvider::RefreshPolicies() {
   refresh_callback_.Reset(
       base::Bind(&AsyncPolicyProvider::ReloadAfterRefreshSync,
                  weak_factory_.GetWeakPtr()));
-  loader_->task_runner()->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(base::DoNothing),
-      refresh_callback_.callback());
+  loader_->task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                           refresh_callback_.callback());
 }
 
 void AsyncPolicyProvider::ReloadAfterRefreshSync() {
@@ -126,9 +124,8 @@ void AsyncPolicyProvider::LoaderUpdateCallback(
     base::WeakPtr<AsyncPolicyProvider> weak_this,
     std::unique_ptr<PolicyBundle> bundle) {
   runner->PostTask(FROM_HERE,
-                 base::Bind(&AsyncPolicyProvider::OnLoaderReloaded,
-                            weak_this,
-                            base::Passed(&bundle)));
+                   base::BindOnce(&AsyncPolicyProvider::OnLoaderReloaded,
+                                  weak_this, std::move(bundle)));
 }
 
 }  // namespace policy

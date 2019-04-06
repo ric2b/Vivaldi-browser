@@ -23,11 +23,17 @@ public class AutofillTestHelper {
     public AutofillTestHelper() {
         registerDataObserver();
         setRequestTimeoutForTesting();
+        setSyncServiceForTesting();
     }
 
     void setRequestTimeoutForTesting() {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> PersonalDataManager.getInstance().setRequestTimeoutForTesting(0));
+    }
+
+    void setSyncServiceForTesting() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> PersonalDataManager.getInstance().setSyncServiceForTesting());
     }
 
     AutofillProfile getProfile(final String guid) throws ExecutionException {
@@ -77,7 +83,9 @@ public class AutofillTestHelper {
 
     List<CreditCard> getCreditCardsToSuggest() throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(
-                () -> PersonalDataManager.getInstance().getCreditCardsToSuggest());
+                ()
+                        -> PersonalDataManager.getInstance().getCreditCardsToSuggest(
+                                /*includeServerCards=*/true));
     }
 
     List<CreditCard> getCreditCardsForSettings() throws ExecutionException {

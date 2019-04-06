@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/test/test_simple_task_runner.h"
@@ -29,15 +28,17 @@ class HistoryServiceMock : public history::HistoryService {
       : history_thread_(std::move(history_thread)) {}
 
   base::CancelableTaskTracker::TaskId ScheduleDBTask(
+      const base::Location& from_here,
       std::unique_ptr<history::HistoryDBTask> task,
       base::CancelableTaskTracker* tracker) override {
     history::HistoryDBTask* task_raw = task.get();
     history_thread_->PostTaskAndReply(
-        FROM_HERE,
-        base::Bind(base::IgnoreResult(&history::HistoryDBTask::RunOnDBThread),
-                   base::Unretained(task_raw), nullptr, nullptr),
-        base::Bind(&history::HistoryDBTask::DoneRunOnMainThread,
-                   base::Passed(std::move(task))));
+        from_here,
+        base::BindOnce(
+            base::IgnoreResult(&history::HistoryDBTask::RunOnDBThread),
+            base::Unretained(task_raw), nullptr, nullptr),
+        base::BindOnce(&history::HistoryDBTask::DoneRunOnMainThread,
+                       std::move(task)));
     return base::CancelableTaskTracker::kBadTaskId;  // Unused.
   }
 
@@ -68,9 +69,16 @@ class HistoryModelWorkerTest : public testing::Test {
   }
 
   ~HistoryModelWorkerTest() override {
-    // HistoryModelWorker posts a cleanup task to the UI thread in its
-    // destructor. Run it to prevent a leak.
+    // Run tasks that might still have a reference to |worker_|.
+    ui_thread_->RunUntilIdle();
+    history_thread_->RunUntilIdle();
+
+    // Release the last reference to |worker_|.
+    EXPECT_TRUE(worker_->HasOneRef());
     worker_ = nullptr;
+
+    // Run the DeleteSoon() task posted from ~HistoryModelWorker. This prevents
+    // a leak.
     ui_thread_->RunUntilIdle();
   }
 
@@ -78,9 +86,9 @@ class HistoryModelWorkerTest : public testing::Test {
   void DoWorkAndWaitUntilDoneOnSyncThread(base::Closure work) {
     sync_thread_.task_runner()->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             base::IgnoreResult(&HistoryModelWorker::DoWorkAndWaitUntilDone),
-            worker_, base::Passed(ClosureToWorkCallback(work))));
+            worker_, ClosureToWorkCallback(work)));
     sync_thread_.task_runner()->PostTask(
         FROM_HERE, base::Bind(&base::AtomicFlag::Set,
                               base::Unretained(&sync_thread_unblocked_)));

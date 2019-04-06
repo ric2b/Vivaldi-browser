@@ -5,15 +5,15 @@
 #import "ios/chrome/browser/ui/settings/bandwidth_management_collection_view_controller.h"
 
 #include "base/mac/foundation_util.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/pref_names.h"
-#import "ios/chrome/browser/prefs/pref_observer_bridge.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_detail_item.h"
 #import "ios/chrome/browser/ui/settings/dataplan_usage_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_utils.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -52,7 +52,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   PrefChangeRegistrar _prefChangeRegistrarApplicationContext;
 
   // Updatable Items
-  CollectionViewDetailItem* _preloadWebpagesDetailItem;
+  SettingsDetailItem* _preloadWebpagesDetailItem;
 }
 
 // Helpers to create collection view items.
@@ -110,7 +110,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
                        basePref:prefs::kNetworkPredictionEnabled
                        wifiPref:prefs::kNetworkPredictionWifiOnly];
   _preloadWebpagesDetailItem =
-      [[CollectionViewDetailItem alloc] initWithType:ItemTypePreload];
+      [[SettingsDetailItem alloc] initWithType:ItemTypePreload];
 
   _preloadWebpagesDetailItem.text =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_PRELOAD_WEBPAGES);
@@ -125,6 +125,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   CollectionViewFooterItem* item =
       [[CollectionViewFooterItem alloc] initWithType:ItemTypeFooter];
 
+  item.cellStyle = CollectionViewCellStyle::kUIKit;
   item.text = l10n_util::GetNSString(
       IDS_IOS_BANDWIDTH_MANAGEMENT_DESCRIPTION_LEARN_MORE);
   item.linkURL =

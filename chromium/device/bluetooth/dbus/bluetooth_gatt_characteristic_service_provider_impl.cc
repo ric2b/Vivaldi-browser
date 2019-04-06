@@ -9,7 +9,9 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/dbus/bluetooth_gatt_attribute_helpers.h"
+#include "device/bluetooth/dbus/bluetooth_gatt_characteristic_delegate_wrapper.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace bluez {
@@ -90,6 +92,14 @@ BluetoothGattCharacteristicServiceProviderImpl::
                  weak_ptr_factory_.GetWeakPtr()));
   exported_object_->ExportMethod(
       bluetooth_gatt_characteristic::kBluetoothGattCharacteristicInterface,
+      bluetooth_gatt_characteristic::kPrepareWriteValue,
+      base::Bind(
+          &BluetoothGattCharacteristicServiceProviderImpl::PrepareWriteValue,
+          weak_ptr_factory_.GetWeakPtr()),
+      base::Bind(&BluetoothGattCharacteristicServiceProviderImpl::OnExported,
+                 weak_ptr_factory_.GetWeakPtr()));
+  exported_object_->ExportMethod(
+      bluetooth_gatt_characteristic::kBluetoothGattCharacteristicInterface,
       bluetooth_gatt_characteristic::kStartNotify,
       base::Bind(&BluetoothGattCharacteristicServiceProviderImpl::StartNotify,
                  weak_ptr_factory_.GetWeakPtr()),
@@ -122,9 +132,9 @@ void BluetoothGattCharacteristicServiceProviderImpl::SendValueChanged(
   dbus::Signal signal(dbus::kDBusPropertiesInterface,
                       dbus::kDBusPropertiesChangedSignal);
   dbus::MessageWriter writer(&signal);
-  dbus::MessageWriter array_writer(NULL);
-  dbus::MessageWriter dict_entry_writer(NULL);
-  dbus::MessageWriter variant_writer(NULL);
+  dbus::MessageWriter array_writer(nullptr);
+  dbus::MessageWriter dict_entry_writer(nullptr);
+  dbus::MessageWriter variant_writer(nullptr);
 
   // interface_name
   writer.AppendString(
@@ -186,7 +196,7 @@ void BluetoothGattCharacteristicServiceProviderImpl::Get(
   std::unique_ptr<dbus::Response> response =
       dbus::Response::FromMethodCall(method_call);
   dbus::MessageWriter writer(response.get());
-  dbus::MessageWriter variant_writer(NULL);
+  dbus::MessageWriter variant_writer(nullptr);
 
   if (property_name == bluetooth_gatt_characteristic::kUUIDProperty) {
     writer.OpenVariant("s", &variant_writer);
@@ -267,7 +277,13 @@ void BluetoothGattCharacteristicServiceProviderImpl::ReadValue(
   DCHECK(OnOriginThread());
 
   dbus::MessageReader reader(method_call);
-  dbus::ObjectPath device_path = ReadDevicePath(&reader);
+  std::map<std::string, dbus::MessageReader> options;
+  dbus::ObjectPath device_path;
+  ReadOptions(&reader, &options);
+  auto it = options.find(bluetooth_gatt_characteristic::kOptionDevice);
+  if (it != options.end())
+    it->second.PopObjectPath(&device_path);
+
   if (device_path.value().empty()) {
     LOG(WARNING) << "ReadValue called with incorrect parameters: "
                  << method_call->ToString();
@@ -292,7 +308,7 @@ void BluetoothGattCharacteristicServiceProviderImpl::WriteValue(
   DCHECK(OnOriginThread());
 
   dbus::MessageReader reader(method_call);
-  const uint8_t* bytes = NULL;
+  const uint8_t* bytes = nullptr;
   size_t length = 0;
 
   std::vector<uint8_t> value;
@@ -304,7 +320,13 @@ void BluetoothGattCharacteristicServiceProviderImpl::WriteValue(
   if (bytes)
     value.assign(bytes, bytes + length);
 
-  dbus::ObjectPath device_path = ReadDevicePath(&reader);
+  std::map<std::string, dbus::MessageReader> options;
+  dbus::ObjectPath device_path;
+  ReadOptions(&reader, &options);
+  auto it = options.find(bluetooth_gatt_characteristic::kOptionDevice);
+  if (it != options.end())
+    it->second.PopObjectPath(&device_path);
+
   if (device_path.value().empty()) {
     LOG(WARNING) << "WriteValue called with incorrect parameters: "
                  << method_call->ToString();
@@ -321,14 +343,86 @@ void BluetoothGattCharacteristicServiceProviderImpl::WriteValue(
                  weak_ptr_factory_.GetWeakPtr(), method_call, response_sender));
 }
 
+void BluetoothGattCharacteristicServiceProviderImpl::PrepareWriteValue(
+    dbus::MethodCall* method_call,
+    dbus::ExportedObject::ResponseSender response_sender) {
+  VLOG(3) << "BluetoothGattCharacteristicServiceProvider::PrepareWriteValue: "
+          << object_path_.value();
+  DCHECK(OnOriginThread());
+
+  dbus::MessageReader reader(method_call);
+  const uint8_t* bytes = nullptr;
+  size_t length = 0;
+
+  std::vector<uint8_t> value;
+  if (!reader.PopArrayOfBytes(&bytes, &length)) {
+    LOG(WARNING) << "Error reading value parameter. PrepareWriteValue called "
+                 << "with incorrect parameters: " << method_call->ToString();
+  }
+  if (bytes)
+    value.assign(bytes, bytes + length);
+
+  std::map<std::string, dbus::MessageReader> options;
+  dbus::ObjectPath device_path;
+  uint16_t offset = 0;
+  bool has_subsequent_write = false;
+  ReadOptions(&reader, &options);
+  auto it = options.find(bluetooth_gatt_characteristic::kOptionDevice);
+  if (it != options.end())
+    it->second.PopObjectPath(&device_path);
+  it = options.find(bluetooth_gatt_characteristic::kOptionOffset);
+  if (it != options.end())
+    it->second.PopUint16(&offset);
+  // TODO(b/78650442): kOptionHasSubsequentWrite
+  it = options.find("has-subsequent-write");
+  if (it != options.end())
+    it->second.PopBool(&has_subsequent_write);
+
+  if (device_path.value().empty()) {
+    LOG(WARNING) << "PrepareWriteValue called with incorrect parameters: "
+                 << method_call->ToString();
+    // Continue on with an empty device path. This will return a null device to
+    // the delegate, which should know how to handle it.
+  }
+
+  DCHECK(delegate_);
+  delegate_->PrepareSetValue(
+      device_path, value, offset, has_subsequent_write,
+      base::Bind(&BluetoothGattCharacteristicServiceProviderImpl::OnWriteValue,
+                 weak_ptr_factory_.GetWeakPtr(), method_call, response_sender),
+      base::Bind(&BluetoothGattCharacteristicServiceProviderImpl::OnFailure,
+                 weak_ptr_factory_.GetWeakPtr(), method_call, response_sender));
+}
+
 void BluetoothGattCharacteristicServiceProviderImpl::StartNotify(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
   VLOG(3) << "BluetoothGattCharacteristicServiceProvider::StartNotify: "
           << object_path_.value();
   DCHECK(OnOriginThread());
+
+  dbus::MessageReader reader(method_call);
+  uint8_t cccd_value = 0;
+  if (!reader.PopByte(&cccd_value)) {
+    LOG(WARNING) << "Error reading cccd_value parameter. StartNotify called "
+                 << "with incorrect parameters: " << method_call->ToString();
+  }
+
+  std::map<std::string, dbus::MessageReader> options;
+  dbus::ObjectPath device_path;
+  ReadOptions(&reader, &options);
+  auto it = options.find(bluetooth_gatt_characteristic::kOptionDevice);
+  if (it != options.end())
+    it->second.PopObjectPath(&device_path);
+
   DCHECK(delegate_);
-  delegate_->StartNotifications();
+  delegate_->StartNotifications(
+      device_path,
+      cccd_value == static_cast<uint8_t>(device::BluetoothGattCharacteristic::
+                                             NotificationType::kIndication)
+          ? device::BluetoothGattCharacteristic::NotificationType::kIndication
+          : device::BluetoothGattCharacteristic::NotificationType::
+                kNotification);
 }
 
 void BluetoothGattCharacteristicServiceProviderImpl::StopNotify(
@@ -338,8 +432,16 @@ void BluetoothGattCharacteristicServiceProviderImpl::StopNotify(
           << object_path_.value();
   DCHECK(OnOriginThread());
 
+  dbus::MessageReader reader(method_call);
+  std::map<std::string, dbus::MessageReader> options;
+  dbus::ObjectPath device_path;
+  ReadOptions(&reader, &options);
+  auto it = options.find(bluetooth_gatt_characteristic::kOptionDevice);
+  if (it != options.end())
+    it->second.PopObjectPath(&device_path);
+
   DCHECK(delegate_);
-  delegate_->StopNotifications();
+  delegate_->StopNotifications(device_path);
 }
 
 void BluetoothGattCharacteristicServiceProviderImpl::OnExported(
@@ -376,9 +478,9 @@ void BluetoothGattCharacteristicServiceProviderImpl::OnWriteValue(
 
 void BluetoothGattCharacteristicServiceProviderImpl::WriteProperties(
     dbus::MessageWriter* writer) {
-  dbus::MessageWriter array_writer(NULL);
-  dbus::MessageWriter dict_entry_writer(NULL);
-  dbus::MessageWriter variant_writer(NULL);
+  dbus::MessageWriter array_writer(nullptr);
+  dbus::MessageWriter dict_entry_writer(nullptr);
+  dbus::MessageWriter variant_writer(nullptr);
 
   writer->OpenArray("{sv}", &array_writer);
 

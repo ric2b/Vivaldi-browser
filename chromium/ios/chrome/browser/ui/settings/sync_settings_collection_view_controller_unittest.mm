@@ -8,14 +8,18 @@
 
 #import "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/sync_preferences/pref_service_mock_factory.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_test_util.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service_mock.h"
@@ -92,8 +96,7 @@ class SyncSettingsCollectionViewControllerTest
     ios::ChromeBrowserState* chrome_browser_state =
         ios::ChromeBrowserState::FromBrowserState(context);
     browser_sync::ProfileSyncService* sync_service =
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-            chrome_browser_state);
+        ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state);
     return std::make_unique<NiceMock<SyncSetupServiceMock>>(
         sync_service, chrome_browser_state->GetPrefs());
   }
@@ -103,8 +106,7 @@ class SyncSettingsCollectionViewControllerTest
     ios::ChromeBrowserState* chrome_browser_state =
         ios::ChromeBrowserState::FromBrowserState(context);
     browser_sync::ProfileSyncService* sync_service =
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-            chrome_browser_state);
+        ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state);
     return std::make_unique<NiceMock<SyncSetupServiceMockThatSucceeds>>(
         sync_service, chrome_browser_state->GetPrefs());
   }
@@ -114,8 +116,7 @@ class SyncSettingsCollectionViewControllerTest
     ios::ChromeBrowserState* chrome_browser_state =
         ios::ChromeBrowserState::FromBrowserState(context);
     browser_sync::ProfileSyncService* sync_service =
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-            chrome_browser_state);
+        ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state);
     return std::make_unique<NiceMock<SyncSetupServiceMockThatFails>>(
         sync_service, chrome_browser_state->GetPrefs());
   }
@@ -127,6 +128,14 @@ class SyncSettingsCollectionViewControllerTest
             nullptr, ios::ChromeBrowserState::FromBrowserState(context));
     return std::make_unique<NiceMock<browser_sync::ProfileSyncServiceMock>>(
         &init_params);
+  }
+
+  std::unique_ptr<sync_preferences::PrefServiceSyncable> CreatePrefService() {
+    scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
+        new user_prefs::PrefRegistrySyncable);
+    RegisterBrowserStatePrefs(registry.get());
+    sync_preferences::PrefServiceMockFactory factory;
+    return factory.CreateSyncable(registry.get());
   }
 
   void TurnSyncOn() {
@@ -157,9 +166,9 @@ class SyncSettingsCollectionViewControllerTest
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(SyncSetupServiceFactory::GetInstance(),
                                        &CreateSyncSetupService);
-    test_cbs_builder.AddTestingFactory(
-        IOSChromeProfileSyncServiceFactory::GetInstance(),
-        &CreateProfileSyncService);
+    test_cbs_builder.AddTestingFactory(ProfileSyncServiceFactory::GetInstance(),
+                                       &CreateProfileSyncService);
+    test_cbs_builder.SetPrefService(CreatePrefService());
     chrome_browser_state_ = test_cbs_builder.Build();
     CollectionViewControllerTest::SetUp();
 
@@ -176,7 +185,7 @@ class SyncSettingsCollectionViewControllerTest
 
     mock_profile_sync_service_ =
         static_cast<browser_sync::ProfileSyncServiceMock*>(
-            IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+            ProfileSyncServiceFactory::GetForBrowserState(
                 chrome_browser_state_.get()));
     ON_CALL(*mock_profile_sync_service_, IsEngineInitialized())
         .WillByDefault(Return(true));
@@ -231,8 +240,9 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestModel) {
   EXPECT_EQ(3, NumberOfSections());
 
   EXPECT_EQ(1, NumberOfItemsInSection(0));
+  // One extra item for "Sync Everything" and one for Autofill wallet import.
   int expected_number_of_items =
-      SyncSetupService::kNumberOfSyncableDatatypes + 1;
+      SyncSetupService::kNumberOfSyncableDatatypes + 2;
   EXPECT_EQ(expected_number_of_items, NumberOfItemsInSection(1));
   EXPECT_EQ(2, NumberOfItemsInSection(2));
 
@@ -258,6 +268,11 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestModel) {
                 l10n_util::GetNSString(
                     [sync_controller titleIdForSyncableDataType:dataType]));
   }
+
+  SyncSwitchItem* autofillWalletImportItem = GetCollectionViewItem(1, item);
+  EXPECT_NSEQ(autofillWalletImportItem.text,
+              l10n_util::GetNSString(IDS_IOS_AUTOFILL_USE_WALLET_DATA));
+
   TextAndErrorItem* encryptionItem = GetCollectionViewItem(2, 0);
   EXPECT_NSEQ(encryptionItem.text,
               l10n_util::GetNSString(IDS_IOS_SYNC_ENCRYPTION_TITLE));
@@ -284,13 +299,44 @@ TEST_F(SyncSettingsCollectionViewControllerTest,
 
   SyncSwitchItem* syncEverythingItem = GetCollectionViewItem(1, 0);
   EXPECT_TRUE(syncEverythingItem.enabled);
-  for (int item = 1; item < NumberOfItemsInSection(1); ++item) {
+  for (int item = 1; item <= SyncSetupService::kNumberOfSyncableDatatypes;
+       ++item) {
     SyncSwitchItem* object = GetCollectionViewItem(1, item);
     EXPECT_FALSE(object.enabled);
   }
 
+  SyncSwitchItem* autofillWalletImportItem =
+      GetCollectionViewItem(1, NumberOfItemsInSection(1) - 1);
+  EXPECT_FALSE(autofillWalletImportItem.enabled);
+
   TextAndErrorItem* encryptionItem = GetCollectionViewItem(2, 0);
   EXPECT_TRUE(encryptionItem.enabled);
+}
+
+TEST_F(SyncSettingsCollectionViewControllerTest, TestAutofillWalletImportOff) {
+  chrome_browser_state_->GetPrefs()->SetBoolean(
+      autofill::prefs::kAutofillWalletImportEnabled, false);
+
+  TurnSyncOn();
+  TurnSyncEverythingOn();
+  CreateSyncController();
+
+  SyncSwitchItem* autofillWalletImportItem =
+      GetCollectionViewItem(1, NumberOfItemsInSection(1) - 1);
+  EXPECT_FALSE(autofillWalletImportItem.isOn);
+}
+
+TEST_F(SyncSettingsCollectionViewControllerTest, TestAutofillWalletImportOn) {
+  chrome_browser_state_->GetPrefs()->SetBoolean(
+      autofill::prefs::kAutofillWalletImportEnabled, true);
+
+  TurnSyncOn();
+  TurnSyncEverythingOn();
+  CreateSyncController();
+
+  SyncSwitchItem* autofillWalletImportItem =
+      GetCollectionViewItem(1, NumberOfItemsInSection(1) - 1);
+  EXPECT_TRUE(autofillWalletImportItem.isOn);
 }
 
 TEST_F(SyncSettingsCollectionViewControllerTest, TestShouldDisplayError) {

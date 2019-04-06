@@ -34,7 +34,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/ios/proxy_service_factory.h"
 #include "components/signin/core/browser/signin_pref_names.h"
-#include "components/sync/base/pref_names.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
@@ -55,9 +54,9 @@
 #include "net/http/http_util.h"
 #include "net/http/transport_security_persister.h"
 #include "net/nqe/network_quality_estimator.h"
-#include "net/proxy/proxy_config_service_fixed.h"
-#include "net/proxy/proxy_script_fetcher_impl.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/pac_file_fetcher_impl.h"
+#include "net/proxy_resolution/proxy_config_service_fixed.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/data_protocol_handler.h"
@@ -83,8 +82,6 @@ void NotifyContextGettersOfShutdownOnIO(
         ChromeBrowserStateIOData::IOSChromeURLRequestContextGetterVector>
         getters) {
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
-  ChromeBrowserStateIOData::IOSChromeURLRequestContextGetterVector::iterator
-      iter;
   for (auto& chrome_context_getter : *getters)
     chrome_context_getter->NotifyContextShuttingDown();
 }
@@ -104,7 +101,6 @@ void ChromeBrowserStateIOData::InitializeOnUIThread(
       ios::CookieSettingsFactory::GetForBrowserState(browser_state);
   params->host_content_settings_map =
       ios::HostContentSettingsMapFactory::GetForBrowserState(browser_state);
-  params->ssl_config_service = browser_state->GetSSLConfigService();
 
   params->proxy_config_service = ProxyServiceFactory::CreateProxyConfigService(
       browser_state->GetProxyConfigTracker());
@@ -127,12 +123,6 @@ void ChromeBrowserStateIOData::InitializeOnUIThread(
     google_services_user_account_id_.Init(prefs::kGoogleServicesUserAccountId,
                                           pref_service);
     google_services_user_account_id_.MoveToThread(io_task_runner);
-
-    sync_disabled_.Init(syncer::prefs::kSyncManaged, pref_service);
-    sync_disabled_.MoveToThread(io_task_runner);
-
-    signin_allowed_.Init(prefs::kSigninAllowed, pref_service);
-    signin_allowed_.MoveToThread(io_task_runner);
   }
 }
 
@@ -183,7 +173,7 @@ ChromeBrowserStateIOData::ChromeBrowserStateIOData(
 }
 
 ChromeBrowserStateIOData::~ChromeBrowserStateIOData() {
-  if (web::WebThread::IsMessageLoopValid(web::WebThread::IO))
+  if (web::WebThread::IsThreadInitialized(web::WebThread::IO))
     DCHECK_CURRENTLY_ON(web::WebThread::IO);
 
   // Pull the contents of the request context maps onto the stack for sanity
@@ -354,9 +344,9 @@ void ChromeBrowserStateIOData::Init(
   network_delegate->set_cookie_settings(profile_params_->cookie_settings.get());
   network_delegate->set_enable_do_not_track(&enable_do_not_track_);
 
-  // NOTE: Proxy service uses the default io thread network delegate, not the
-  // delegate just created.
-  proxy_service_ = ProxyServiceFactory::CreateProxyService(
+  // NOTE: The proxy resolution service uses the default io thread network
+  // delegate, not the delegate just created.
+  proxy_resolution_service_ = ProxyServiceFactory::CreateProxyResolutionService(
       io_thread->net_log(), nullptr,
       io_thread_globals->system_network_delegate.get(),
       std::move(profile_params_->proxy_config_service),
@@ -407,6 +397,8 @@ void ChromeBrowserStateIOData::Init(
   cookie_settings_ = profile_params_->cookie_settings;
   host_content_settings_map_ = profile_params_->host_content_settings_map;
 
+  main_request_context_->set_ssl_config_service(
+      io_thread_globals->ssl_config_service.get());
   main_request_context_->set_cert_verifier(
       io_thread_globals->cert_verifier.get());
   main_request_context_->set_ct_policy_enforcer(
@@ -424,7 +416,6 @@ void ChromeBrowserStateIOData::Init(
 void ChromeBrowserStateIOData::ApplyProfileParamsToContext(
     net::URLRequestContext* context) const {
   context->set_http_user_agent_settings(chrome_http_user_agent_settings_.get());
-  context->set_ssl_config_service(profile_params_->ssl_config_service.get());
 }
 
 std::unique_ptr<net::URLRequestJobFactory>
@@ -460,13 +451,11 @@ void ChromeBrowserStateIOData::ShutdownOnUIThread(
   enable_referrers_.Destroy();
   enable_do_not_track_.Destroy();
   enable_metrics_.Destroy();
-  sync_disabled_.Destroy();
-  signin_allowed_.Destroy();
   if (chrome_http_user_agent_settings_)
     chrome_http_user_agent_settings_->CleanupOnUIThread();
 
   if (!context_getters->empty()) {
-    if (web::WebThread::IsMessageLoopValid(web::WebThread::IO)) {
+    if (web::WebThread::IsThreadInitialized(web::WebThread::IO)) {
       web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
                                base::Bind(&NotifyContextGettersOfShutdownOnIO,
                                           base::Passed(&context_getters)));

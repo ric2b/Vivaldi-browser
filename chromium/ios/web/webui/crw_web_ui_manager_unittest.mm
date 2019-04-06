@@ -10,7 +10,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
@@ -73,7 +72,7 @@ class MockURLFetcherBlockAdapter : public URLFetcherBlockAdapter {
   void Start() override {
     if (url_.spec() == kFaviconUrl) {
       base::FilePath favicon_path;
-      ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &favicon_path));
+      ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &favicon_path));
       favicon_path = favicon_path.AppendASCII(kFaviconPath);
       NSData* favicon = [NSData
           dataWithContentsOfFile:base::SysUTF8ToNSString(favicon_path.value())];

@@ -10,17 +10,15 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_mock_time_message_loop_task_runner.h"
-#include "base/test/test_mock_time_task_runner.h"
-#include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/ip_address.h"
 #include "net/http/http_network_session.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -30,7 +28,6 @@ namespace net {
 namespace {
 
 using base::StringPrintf;
-using base::TestMockTimeTaskRunner;
 using ::testing::_;
 using ::testing::AtLeast;
 using ::testing::Invoke;
@@ -105,25 +102,26 @@ class MockPrefDelegate : public net::HttpServerPropertiesManager::PrefDelegate {
 // to version 4, delete the following code.
 static const int kHttpServerPropertiesVersions[] = {3, 4, 5};
 
-class HttpServerPropertiesManagerTest : public testing::TestWithParam<int> {
+class HttpServerPropertiesManagerTest : public testing::TestWithParam<int>,
+                                        public WithScopedTaskEnvironment {
  protected:
-  HttpServerPropertiesManagerTest() = default;
+  HttpServerPropertiesManagerTest()
+      : WithScopedTaskEnvironment(
+            base::test::ScopedTaskEnvironment::MainThreadType::MOCK_TIME) {}
 
   void SetUp() override {
     one_day_from_now_ = base::Time::Now() + base::TimeDelta::FromDays(1);
     advertised_versions_ = HttpNetworkSession::Params().quic_supported_versions;
     pref_delegate_ = new MockPrefDelegate;
 
-    clock_ = test_task_runner_->GetMockTickClock();
-    net_test_task_runner_clock_ = clock_.get();
     http_server_props_manager_ = std::make_unique<HttpServerPropertiesManager>(
         base::WrapUnique(pref_delegate_), /*net_log=*/nullptr,
-        net_test_task_runner_clock_);
+        GetMockTickClock());
 
     EXPECT_FALSE(http_server_props_manager_->IsInitialized());
     pref_delegate_->SetPrefs(base::DictionaryValue());
     EXPECT_TRUE(http_server_props_manager_->IsInitialized());
-    EXPECT_FALSE(test_task_runner_->HasPendingTask());
+    EXPECT_FALSE(MainThreadHasPendingTask());
     EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
   }
 
@@ -133,7 +131,7 @@ class HttpServerPropertiesManagerTest : public testing::TestWithParam<int> {
     // mock clock and doesn't see timings as having expired, ref.
     // HttpServerPropertiesImpl::
     //     ScheduleBrokenAlternateProtocolMappingsExpiration()).
-    test_task_runner_->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     http_server_props_manager_.reset();
   }
 
@@ -146,16 +144,7 @@ class HttpServerPropertiesManagerTest : public testing::TestWithParam<int> {
   MockPrefDelegate* pref_delegate_;  // Owned by HttpServerPropertiesManager.
   std::unique_ptr<HttpServerPropertiesManager> http_server_props_manager_;
   base::Time one_day_from_now_;
-  QuicTransportVersionVector advertised_versions_;
-
-  // Overrides the main thread's message loop with a mock tick clock.
-  base::ScopedMockTimeMessageLoopTaskRunner test_task_runner_;
-
-  // TODO(tzik): Remove |clock_| after updating GetMockTickClock to own the
-  // instance.
-  std::unique_ptr<base::TickClock> clock_;
-
-  base::TickClock* net_test_task_runner_clock_;
+  quic::QuicTransportVersionVector advertised_versions_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HttpServerPropertiesManagerTest);
@@ -269,16 +258,16 @@ TEST_P(HttpServerPropertiesManagerTest,
   std::string quic_server_info3("quic_server_info3");
   quic_server_pref_dict3->SetKey("server_info", base::Value(quic_server_info3));
   // Set the quic_server_info1 for https://www.google.com.
-  QuicServerId google_quic_server_id("www.google.com", 443);
-  quic_servers_dict->SetWithoutPathExpansion(google_quic_server_id.ToString(),
+  quic::QuicServerId google_quic_server_id("www.google.com", 443, false);
+  quic_servers_dict->SetWithoutPathExpansion("https://www.google.com",
                                              std::move(quic_server_pref_dict1));
   // Set the quic_server_info2 for https://mail.google.com.
-  QuicServerId mail_quic_server_id("mail.google.com", 443);
-  quic_servers_dict->SetWithoutPathExpansion(mail_quic_server_id.ToString(),
+  quic::QuicServerId mail_quic_server_id("mail.google.com", 443, false);
+  quic_servers_dict->SetWithoutPathExpansion("https://mail.google.com",
                                              std::move(quic_server_pref_dict2));
   // Set the quic_server_info3 for https://play.google.com.
-  QuicServerId play_quic_server_id("play.google.com", 443);
-  quic_servers_dict->SetWithoutPathExpansion(play_quic_server_id.ToString(),
+  quic::QuicServerId play_quic_server_id("play.google.com", 443, false);
+  quic_servers_dict->SetWithoutPathExpansion("https://play.google.com",
                                              std::move(quic_server_pref_dict3));
   http_server_properties_dict.SetWithoutPathExpansion(
       "quic_servers", std::move(quic_servers_dict));
@@ -288,8 +277,8 @@ TEST_P(HttpServerPropertiesManagerTest,
   pref_delegate_->SetPrefs(http_server_properties_dict);
 
   // Should be a delayed task to update the cache from the prefs file.
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
 
   // Verify SupportsSpdy.
   EXPECT_TRUE(
@@ -412,8 +401,8 @@ TEST_P(HttpServerPropertiesManagerTest, BadCachedHostPortPair) {
   pref_delegate_->SetPrefs(http_server_properties_dict);
 
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   // Prefs should have been overwritten, due to the bad data.
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
@@ -474,8 +463,8 @@ TEST_P(HttpServerPropertiesManagerTest, BadCachedAltProtocolPort) {
   pref_delegate_->SetPrefs(http_server_properties_dict);
 
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   // Prefs should have been overwritten, due to the bad data.
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
@@ -496,15 +485,15 @@ TEST_P(HttpServerPropertiesManagerTest, SupportsSpdy) {
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   // Setting the value to the same thing again should not trigger another pref
   // update.
   http_server_props_manager_->SetSupportsSpdy(spdy_server, true);
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
 
   EXPECT_TRUE(http_server_props_manager_->SupportsRequestPriority(spdy_server));
 }
@@ -522,24 +511,23 @@ TEST_P(HttpServerPropertiesManagerTest,
       http_server_props_manager_->SupportsRequestPriority(spdy_server));
   http_server_props_manager_->SetSupportsSpdy(spdy_server, true);
   // The pref update task should be scheduled.
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
 
   // Move forward the task runner short by 20ms.
-  test_task_runner_->FastForwardBy(
-      HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting() -
-      base::TimeDelta::FromMilliseconds(20));
+  FastForwardBy(HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting() -
+                base::TimeDelta::FromMilliseconds(20));
 
   // Set another spdy server to trigger another call to
   // ScheduleUpdatePrefs. There should be no new update posted.
   url::SchemeHostPort spdy_server2("https", "drive.google.com", 443);
   http_server_props_manager_->SetSupportsSpdy(spdy_server2, true);
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
 
   // Move forward the extra 20ms. The pref update should be executed.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromMilliseconds(20));
+  FastForwardBy(base::TimeDelta::FromMilliseconds(20));
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
 
   EXPECT_TRUE(http_server_props_manager_->SupportsRequestPriority(spdy_server));
   EXPECT_TRUE(
@@ -549,11 +537,11 @@ TEST_P(HttpServerPropertiesManagerTest,
   // previous one is completed.
   url::SchemeHostPort spdy_server3("https", "maps.google.com", 443);
   http_server_props_manager_->SetSupportsSpdy(spdy_server3, true);
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 }
 
@@ -570,8 +558,8 @@ TEST_P(HttpServerPropertiesManagerTest, GetAlternativeServiceInfos) {
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   AlternativeServiceInfoVector alternative_service_info_vector =
@@ -603,7 +591,7 @@ TEST_P(HttpServerPropertiesManagerTest, SetAlternativeServices) {
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   AlternativeServiceInfoVector alternative_service_info_vector2 =
@@ -623,7 +611,7 @@ TEST_P(HttpServerPropertiesManagerTest, SetAlternativeServicesEmpty) {
   http_server_props_manager_->SetAlternativeServices(
       spdy_server_mail, AlternativeServiceInfoVector());
 
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
 
   EXPECT_FALSE(HasAlternativeService(spdy_server_mail));
@@ -644,7 +632,7 @@ TEST_P(HttpServerPropertiesManagerTest, ConfirmAlternativeService) {
   EXPECT_FALSE(http_server_props_manager_->WasAlternativeServiceRecentlyBroken(
       alternative_service));
 
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
 
   http_server_props_manager_->MarkAlternativeServiceBroken(alternative_service);
   EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
@@ -654,7 +642,7 @@ TEST_P(HttpServerPropertiesManagerTest, ConfirmAlternativeService) {
 
   // In addition to the pref update task, there's now a task to mark the
   // alternative service as no longer broken.
-  EXPECT_EQ(2u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(2u, GetPendingMainThreadTaskCount());
 
   http_server_props_manager_->ConfirmAlternativeService(alternative_service);
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
@@ -662,11 +650,11 @@ TEST_P(HttpServerPropertiesManagerTest, ConfirmAlternativeService) {
   EXPECT_FALSE(http_server_props_manager_->WasAlternativeServiceRecentlyBroken(
       alternative_service));
 
-  EXPECT_EQ(2u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(2u, GetPendingMainThreadTaskCount());
 
   // Run the task.
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
@@ -686,8 +674,8 @@ TEST_P(HttpServerPropertiesManagerTest, SupportsQuic) {
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   EXPECT_TRUE(http_server_props_manager_->GetSupportsQuic(&address));
@@ -696,7 +684,7 @@ TEST_P(HttpServerPropertiesManagerTest, SupportsQuic) {
   // Another task should not be scheduled.
   http_server_props_manager_->SetSupportsQuic(true, actual_address);
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
 }
 
 TEST_P(HttpServerPropertiesManagerTest, ServerNetworkStats) {
@@ -712,14 +700,14 @@ TEST_P(HttpServerPropertiesManagerTest, ServerNetworkStats) {
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   // Another task should not be scheduled.
   http_server_props_manager_->SetServerNetworkStats(mail_server, stats1);
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
 
   const ServerNetworkStats* stats2 =
       http_server_props_manager_->GetServerNetworkStats(mail_server);
@@ -729,8 +717,8 @@ TEST_P(HttpServerPropertiesManagerTest, ServerNetworkStats) {
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   EXPECT_EQ(nullptr,
@@ -738,7 +726,7 @@ TEST_P(HttpServerPropertiesManagerTest, ServerNetworkStats) {
 }
 
 TEST_P(HttpServerPropertiesManagerTest, QuicServerInfo) {
-  QuicServerId mail_quic_server_id("mail.google.com", 80);
+  quic::QuicServerId mail_quic_server_id("mail.google.com", 80, false);
   EXPECT_EQ(nullptr,
             http_server_props_manager_->GetQuicServerInfo(mail_quic_server_id));
   std::string quic_server_info1("quic_server_info1");
@@ -750,8 +738,8 @@ TEST_P(HttpServerPropertiesManagerTest, QuicServerInfo) {
 
   // Run the task.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   EXPECT_EQ(quic_server_info1, *http_server_props_manager_->GetQuicServerInfo(
@@ -761,13 +749,13 @@ TEST_P(HttpServerPropertiesManagerTest, QuicServerInfo) {
   http_server_props_manager_->SetQuicServerInfo(mail_quic_server_id,
                                                 quic_server_info1);
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
 }
 
 TEST_P(HttpServerPropertiesManagerTest, Clear) {
   const url::SchemeHostPort spdy_server("https", "mail.google.com", 443);
   const IPAddress actual_address(127, 0, 0, 1);
-  const QuicServerId mail_quic_server_id("mail.google.com", 80);
+  const quic::QuicServerId mail_quic_server_id("mail.google.com", 80, false);
   const std::string quic_server_info1("quic_server_info1");
   const AlternativeService alternative_service(kProtoHTTP2, "mail.google.com",
                                                1234);
@@ -797,9 +785,8 @@ TEST_P(HttpServerPropertiesManagerTest, Clear) {
 
   // Advance time by just enough so that the prefs update task is executed but
   // not the task to expire the brokenness of |broken_alternative_service|.
-  test_task_runner_->FastForwardBy(
-      HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
+  FastForwardBy(HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
+  EXPECT_TRUE(MainThreadHasPendingTask());
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
@@ -907,7 +894,7 @@ TEST_P(HttpServerPropertiesManagerTest, BadSupportsQuic) {
 
   // Set up the pref.
   pref_delegate_->SetPrefs(http_server_properties_dict);
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  FastForwardUntilNoTasksRemain();
 
   // Verify alternative service.
   for (int i = 1; i <= 200; ++i) {
@@ -979,7 +966,7 @@ TEST_P(HttpServerPropertiesManagerTest, UpdatePrefsWithCache) {
   http_server_props_manager_->SetServerNetworkStats(server_mail, stats);
 
   // #5: Set quic_server_info string.
-  QuicServerId mail_quic_server_id("mail.google.com", 80);
+  quic::QuicServerId mail_quic_server_id("mail.google.com", 80, false);
   std::string quic_server_info1("quic_server_info1");
   http_server_props_manager_->SetQuicServerInfo(mail_quic_server_id,
                                                 quic_server_info1);
@@ -991,15 +978,14 @@ TEST_P(HttpServerPropertiesManagerTest, UpdatePrefsWithCache) {
   base::Time time_before_prefs_update = base::Time::Now();
 
   // Update Prefs.
-  // |test_task_runner_| has a remaining pending task to expire
+  // The task runner has a remaining pending task to expire
   // |www_alternative_service2| in 5 minutes. Fast forward enough such
   // that the prefs update task is executed but not the task to expire
   // |broken_alternative_service|.
-  EXPECT_EQ(2u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(2u, GetPendingMainThreadTaskCount());
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  test_task_runner_->FastForwardBy(
-      HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  FastForwardBy(HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   base::Time time_after_prefs_update = base::Time::Now();
@@ -1082,33 +1068,32 @@ TEST_P(HttpServerPropertiesManagerTest, UpdatePrefsWithCache) {
 
 TEST_P(HttpServerPropertiesManagerTest,
        SingleCacheUpdateForMultipleUpdatesScheduled) {
-  EXPECT_EQ(0u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(0u, GetPendingMainThreadTaskCount());
   // Update cache.
   http_server_props_manager_->ScheduleUpdateCacheForTesting();
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
 
   // Move forward the task runner short by 20ms.
-  test_task_runner_->FastForwardBy(
-      HttpServerPropertiesManager::GetUpdateCacheDelayForTesting() -
-      base::TimeDelta::FromMilliseconds(20));
+  FastForwardBy(HttpServerPropertiesManager::GetUpdateCacheDelayForTesting() -
+                base::TimeDelta::FromMilliseconds(20));
   // Schedule a new cache update within the time window should be a no-op.
   http_server_props_manager_->ScheduleUpdateCacheForTesting();
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
 
   // Move forward the task runner the extra 20ms, now the cache update should be
   // executed.
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromMilliseconds(20));
+  FastForwardBy(base::TimeDelta::FromMilliseconds(20));
 
   // Since this test has no pref corruption, there shouldn't be any pref update.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
 
   // Schedule one more cache update. The task should be successfully scheduled
   // on the task runner.
   http_server_props_manager_->ScheduleUpdateCacheForTesting();
-  EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(1u, GetPendingMainThreadTaskCount());
 
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
 }
 
@@ -1219,11 +1204,10 @@ TEST_P(HttpServerPropertiesManagerTest, DoNotPersistExpiredAlternativeService) {
   // |broken_alternative_service| at |time_one_day_later|. Fast forward enough
   // such that the prefs update task is executed but not the task to expire
   // |broken_alternative_service|.
-  EXPECT_EQ(2U, test_task_runner_->GetPendingTaskCount());
+  EXPECT_EQ(2U, GetPendingMainThreadTaskCount());
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  test_task_runner_->FastForwardBy(
-      HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
-  EXPECT_EQ(1U, test_task_runner_->GetPendingTaskCount());
+  FastForwardBy(HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
+  EXPECT_EQ(1U, GetPendingMainThreadTaskCount());
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   const base::DictionaryValue* pref_dict =
@@ -1319,8 +1303,8 @@ TEST_P(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
   AlternativeService quic_alternative_service1(kProtoQUIC, "", 443);
   base::Time expiration1;
   ASSERT_TRUE(base::Time::FromUTCString("2036-12-01 10:00:00", &expiration1));
-  QuicTransportVersionVector advertised_versions = {QUIC_VERSION_37,
-                                                    QUIC_VERSION_35};
+  quic::QuicTransportVersionVector advertised_versions = {
+      quic::QUIC_VERSION_41, quic::QUIC_VERSION_35};
   alternative_service_info_vector.push_back(
       AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
           quic_alternative_service1, expiration1, advertised_versions));
@@ -1348,7 +1332,7 @@ TEST_P(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
   http_server_props_manager_->SetServerNetworkStats(server_mail, stats);
 
   // #4: Set quic_server_info string.
-  QuicServerId mail_quic_server_id("mail.google.com", 80);
+  quic::QuicServerId mail_quic_server_id("mail.google.com", 80, false);
   std::string quic_server_info1("quic_server_info1");
   http_server_props_manager_->SetQuicServerInfo(mail_quic_server_id,
                                                 quic_server_info1);
@@ -1359,8 +1343,8 @@ TEST_P(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
 
   // Update Prefs.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   // Verify preferences with correct advertised version field.
@@ -1368,12 +1352,12 @@ TEST_P(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
       "{\"quic_servers\":{\"https://mail.google.com:80\":{"
       "\"server_info\":\"quic_server_info1\"}},\"servers\":["
       "{\"https://www.google.com:80\":{\"alternative_service\":[{"
-      "\"advertised_versions\":[35,37],\"expiration\":\"13756212000000000\","
+      "\"advertised_versions\":[35,41],\"expiration\":\"13756212000000000\","
       "\"port\":443,\"protocol_str\":\"quic\"},{\"advertised_versions\":[],"
       "\"expiration\":\"13758804000000000\",\"host\":\"www.google.com\","
       "\"port\":1234,\"protocol_str\":\"h2\"}]}},"
       "{\"https://mail.google.com:80\":{\"alternative_service\":[{"
-      "\"advertised_versions\":[39],\"expiration\":\"9223372036854775807\","
+      "\"advertised_versions\":[43],\"expiration\":\"9223372036854775807\","
       "\"host\":\"foo.google.com\",\"port\":444,\"protocol_str\":\"quic\"}],"
       "\"network_stats\":{\"srtt\":42}}}],\"supports_quic\":{"
       "\"address\":\"127.0.0.1\",\"used_quic\":true},\"version\":5}";
@@ -1392,7 +1376,7 @@ TEST_P(HttpServerPropertiesManagerTest, ReadAdvertisedVersionsFromPref) {
       "{\"port\":443,\"protocol_str\":\"quic\"},"
       "{\"port\":123,\"protocol_str\":\"quic\","
       "\"expiration\":\"9223372036854775807\","
-      "\"advertised_versions\":[37,35]}]}");
+      "\"advertised_versions\":[41,35]}]}");
   ASSERT_TRUE(server_value);
   base::DictionaryValue* server_dict;
   ASSERT_TRUE(server_value->GetAsDictionary(&server_dict));
@@ -1426,11 +1410,11 @@ TEST_P(HttpServerPropertiesManagerTest, ReadAdvertisedVersionsFromPref) {
   EXPECT_EQ(123, alternative_service_info_vector[1].alternative_service().port);
   EXPECT_EQ(base::Time::Max(), alternative_service_info_vector[1].expiration());
   // Verify advertised versions.
-  const QuicTransportVersionVector loaded_advertised_versions =
+  const quic::QuicTransportVersionVector loaded_advertised_versions =
       alternative_service_info_vector[1].advertised_versions();
   EXPECT_EQ(2u, loaded_advertised_versions.size());
-  EXPECT_EQ(QUIC_VERSION_35, loaded_advertised_versions[0]);
-  EXPECT_EQ(QUIC_VERSION_37, loaded_advertised_versions[1]);
+  EXPECT_EQ(quic::QUIC_VERSION_35, loaded_advertised_versions[0]);
+  EXPECT_EQ(quic::QUIC_VERSION_41, loaded_advertised_versions[1]);
 }
 
 TEST_P(HttpServerPropertiesManagerTest,
@@ -1439,7 +1423,8 @@ TEST_P(HttpServerPropertiesManagerTest,
 
   // #1: Set alternate protocol.
   AlternativeServiceInfoVector alternative_service_info_vector;
-  // Quic alternative service set with a single QUIC version: QUIC_VERSION_37.
+  // Quic alternative service set with a single QUIC version:
+  // quic::QUIC_VERSION_41.
   AlternativeService quic_alternative_service1(kProtoQUIC, "", 443);
   base::Time expiration1;
   ASSERT_TRUE(base::Time::FromUTCString("2036-12-01 10:00:00", &expiration1));
@@ -1450,7 +1435,7 @@ TEST_P(HttpServerPropertiesManagerTest,
       server_www, alternative_service_info_vector));
 
   // Set quic_server_info string.
-  QuicServerId mail_quic_server_id("mail.google.com", 80);
+  quic::QuicServerId mail_quic_server_id("mail.google.com", 80, false);
   std::string quic_server_info1("quic_server_info1");
   http_server_props_manager_->SetQuicServerInfo(mail_quic_server_id,
                                                 quic_server_info1);
@@ -1461,8 +1446,8 @@ TEST_P(HttpServerPropertiesManagerTest,
 
   // Update Prefs.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   // Verify preferences with correct advertised version field.
@@ -1470,7 +1455,7 @@ TEST_P(HttpServerPropertiesManagerTest,
       "{\"quic_servers\":{\"https://mail.google.com:80\":"
       "{\"server_info\":\"quic_server_info1\"}},\"servers\":["
       "{\"https://www.google.com:80\":"
-      "{\"alternative_service\":[{\"advertised_versions\":[39],"
+      "{\"alternative_service\":[{\"advertised_versions\":[43],"
       "\"expiration\":\"13756212000000000\",\"port\":443,"
       "\"protocol_str\":\"quic\"}]}}],\"supports_quic\":"
       "{\"address\":\"127.0.0.1\",\"used_quic\":true},\"version\":5}";
@@ -1486,8 +1471,8 @@ TEST_P(HttpServerPropertiesManagerTest,
   // AlternativeService.
   AlternativeServiceInfoVector alternative_service_info_vector_2;
   // Quic alternative service set with two advertised QUIC versions.
-  QuicTransportVersionVector advertised_versions = {QUIC_VERSION_37,
-                                                    QUIC_VERSION_35};
+  quic::QuicTransportVersionVector advertised_versions = {
+      quic::QUIC_VERSION_41, quic::QUIC_VERSION_35};
   alternative_service_info_vector_2.push_back(
       AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
           quic_alternative_service1, expiration1, advertised_versions));
@@ -1496,8 +1481,8 @@ TEST_P(HttpServerPropertiesManagerTest,
 
   // Update Prefs.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardUntilNoTasksRemain();
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   // Verify preferences updated with new advertised versions.
@@ -1505,7 +1490,7 @@ TEST_P(HttpServerPropertiesManagerTest,
       "{\"quic_servers\":{\"https://mail.google.com:80\":"
       "{\"server_info\":\"quic_server_info1\"}},\"servers\":["
       "{\"https://www.google.com:80\":"
-      "{\"alternative_service\":[{\"advertised_versions\":[35,37],"
+      "{\"alternative_service\":[{\"advertised_versions\":[35,41],"
       "\"expiration\":\"13756212000000000\",\"port\":443,"
       "\"protocol_str\":\"quic\"}]}}],\"supports_quic\":"
       "{\"address\":\"127.0.0.1\",\"used_quic\":true},\"version\":5}";
@@ -1516,8 +1501,8 @@ TEST_P(HttpServerPropertiesManagerTest,
   // #3: Set AlternativeService with same advertised_versions.
   AlternativeServiceInfoVector alternative_service_info_vector_3;
   // A same set of QUIC versions but listed in a different order.
-  QuicTransportVersionVector advertised_versions_2 = {QUIC_VERSION_35,
-                                                      QUIC_VERSION_37};
+  quic::QuicTransportVersionVector advertised_versions_2 = {
+      quic::QUIC_VERSION_35, quic::QUIC_VERSION_41};
   alternative_service_info_vector_3.push_back(
       AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
           quic_alternative_service1, expiration1, advertised_versions_2));
@@ -1525,7 +1510,7 @@ TEST_P(HttpServerPropertiesManagerTest,
       server_www, alternative_service_info_vector_3));
 
   // No Prefs update.
-  EXPECT_FALSE(test_task_runner_->HasPendingTask());
+  EXPECT_FALSE(MainThreadHasPendingTask());
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
 }
 
@@ -1543,12 +1528,11 @@ TEST_P(HttpServerPropertiesManagerTest, UpdateCacheWithPrefs) {
       cached_recently_broken_service);
 
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
+  EXPECT_TRUE(MainThreadHasPendingTask());
   // Run the prefs update task but not the expiration task for
   // |cached_broken_service|.
-  test_task_runner_->FastForwardBy(
-      HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
+  FastForwardBy(HttpServerPropertiesManager::GetUpdatePrefsDelayForTesting());
+  EXPECT_TRUE(MainThreadHasPendingTask());
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
 
   // Load the |pref_delegate_| with some JSON to verify updating the cache from
@@ -1602,11 +1586,11 @@ TEST_P(HttpServerPropertiesManagerTest, UpdateCacheWithPrefs) {
 
   pref_delegate_->SetPrefs(*server_dict);
 
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
+  EXPECT_TRUE(MainThreadHasPendingTask());
   // Run the cache update task but not the expiration task for
   // |cached_broken_service|.
-  test_task_runner_->FastForwardBy(test_task_runner_->NextPendingTaskDelay());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
+  FastForwardBy(NextMainThreadPendingTaskDelay());
+  EXPECT_TRUE(MainThreadHasPendingTask());
 
   //
   // Verify alternative service info for https://www.google.com
@@ -1671,14 +1655,14 @@ TEST_P(HttpServerPropertiesManagerTest, UpdateCacheWithPrefs) {
   // expiration time should still be 5 minutes due to being marked broken.
   // |prefs_broken_service|'s expiration time should be approximately 1 day from
   // now which comes from the prefs.
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(4));
+  FastForwardBy(base::TimeDelta::FromMinutes(4));
   EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
       cached_broken_service));
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
       cached_broken_service2));
   EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
       prefs_broken_service));
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromDays(1));
+  FastForwardBy(base::TimeDelta::FromDays(1));
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
       cached_broken_service));
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
@@ -1720,48 +1704,48 @@ TEST_P(HttpServerPropertiesManagerTest, UpdateCacheWithPrefs) {
   http_server_props_manager_->MarkAlternativeServiceBroken(
       prefs_broken_service);
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(10) -
-                                   base::TimeDelta::FromInternalValue(1));
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardBy(base::TimeDelta::FromMinutes(10) -
+                base::TimeDelta::FromInternalValue(1));
   EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
       prefs_broken_service));
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromInternalValue(1));
+  FastForwardBy(base::TimeDelta::FromInternalValue(1));
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
       prefs_broken_service));
   // Make sure |cached_recently_broken_service| has the right expiration delay
   // when marked broken.
   http_server_props_manager_->MarkAlternativeServiceBroken(
       cached_recently_broken_service);
-  EXPECT_TRUE(test_task_runner_->HasPendingTask());
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(40) -
-                                   base::TimeDelta::FromInternalValue(1));
+  EXPECT_TRUE(MainThreadHasPendingTask());
+  FastForwardBy(base::TimeDelta::FromMinutes(40) -
+                base::TimeDelta::FromInternalValue(1));
   EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
       cached_recently_broken_service));
-  test_task_runner_->FastForwardBy(base::TimeDelta::FromInternalValue(1));
+  FastForwardBy(base::TimeDelta::FromInternalValue(1));
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
       cached_recently_broken_service));
   // Make sure |cached_broken_service| has the right expiration delay when
   // marked broken.
     http_server_props_manager_->MarkAlternativeServiceBroken(
         cached_broken_service);
-    EXPECT_TRUE(test_task_runner_->HasPendingTask());
-    test_task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(20) -
-                                     base::TimeDelta::FromInternalValue(1));
+    EXPECT_TRUE(MainThreadHasPendingTask());
+    FastForwardBy(base::TimeDelta::FromMinutes(20) -
+                  base::TimeDelta::FromInternalValue(1));
     EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
         cached_broken_service));
-    test_task_runner_->FastForwardBy(base::TimeDelta::FromInternalValue(1));
+    FastForwardBy(base::TimeDelta::FromInternalValue(1));
     EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
         cached_broken_service));
     // Make sure |cached_broken_service2| has the right expiration delay when
     // marked broken.
     http_server_props_manager_->MarkAlternativeServiceBroken(
         cached_broken_service2);
-    EXPECT_TRUE(test_task_runner_->HasPendingTask());
-    test_task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(10) -
-                                     base::TimeDelta::FromInternalValue(1));
+    EXPECT_TRUE(MainThreadHasPendingTask());
+    FastForwardBy(base::TimeDelta::FromMinutes(10) -
+                  base::TimeDelta::FromInternalValue(1));
     EXPECT_TRUE(http_server_props_manager_->IsAlternativeServiceBroken(
         cached_broken_service2));
-    test_task_runner_->FastForwardBy(base::TimeDelta::FromInternalValue(1));
+    FastForwardBy(base::TimeDelta::FromInternalValue(1));
     EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
         cached_broken_service2));
 
@@ -1780,7 +1764,7 @@ TEST_P(HttpServerPropertiesManagerTest, UpdateCacheWithPrefs) {
     //
     const std::string* quic_server_info =
         http_server_props_manager_->GetQuicServerInfo(
-            QuicServerId("mail.google.com", 80));
+            quic::QuicServerId("mail.google.com", 80, false));
     EXPECT_EQ("quic_server_info1", *quic_server_info);
 
     //

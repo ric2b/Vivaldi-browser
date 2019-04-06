@@ -16,7 +16,7 @@
 #include "base/time/time.h"
 #include "chromecast/media/audio/cast_audio_manager.h"
 #include "chromecast/media/audio/cast_audio_output_stream.h"
-#include "chromecast/media/cma/test/mock_media_pipeline_backend_factory.h"
+#include "chromecast/media/cma/backend/cma_backend_factory.h"
 #include "media/audio/test_audio_thread.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,7 +36,7 @@ using testing::StrictMock;
 ::media::AudioParameters GetAudioParams() {
   return ::media::AudioParameters(
       ::media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-      ::media::CHANNEL_LAYOUT_STEREO, 48000, 16, 1024);
+      ::media::CHANNEL_LAYOUT_STEREO, 48000, 1024);
 }
 
 // Mock implementations
@@ -90,15 +90,18 @@ class MockCastAudioOutputStream : public CastAudioOutputStream {
 class MockCastAudioManager : public CastAudioManager {
  public:
   MockCastAudioManager()
-      : CastAudioManager(std::make_unique<::media::TestAudioThread>(),
-                         nullptr,
-                         nullptr,
-                         nullptr,
-                         true /* use_mixer */) {
+      : CastAudioManager(
+            std::make_unique<::media::TestAudioThread>(),
+            nullptr,
+            base::BindRepeating(&MockCastAudioManager::GetCmaBackendFactory,
+                                base::Unretained(this)),
+            nullptr,
+            true /* use_mixer */) {
     ON_CALL(*this, ReleaseOutputStream(_))
         .WillByDefault(
             Invoke(this, &MockCastAudioManager::ReleaseOutputStreamConcrete));
   }
+  media::CmaBackendFactory* GetCmaBackendFactory() { return nullptr; }
 
   MOCK_METHOD1(
       MakeMixerOutputStream,

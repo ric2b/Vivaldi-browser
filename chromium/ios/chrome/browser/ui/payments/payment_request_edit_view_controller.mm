@@ -12,9 +12,9 @@
 #import "ios/chrome/browser/ui/autofill/cells/autofill_edit_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_item+collection_view_controller.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_switch_item.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
+#import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_selector_edit_item.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller_actions.h"
@@ -194,7 +194,7 @@ PaymentsTextItem* ErrorMessageItemForError(NSString* errorMessage) {
         initWithTitle:l10n_util::GetNSString(IDS_CANCEL)
                 style:UIBarButtonItemStylePlain
                target:self
-               action:@selector(onCancel)];
+               action:@selector(didCancel)];
     [cancelButton setTitleTextAttributes:@{
       NSForegroundColorAttributeName : [UIColor lightGrayColor]
     }
@@ -203,19 +203,19 @@ PaymentsTextItem* ErrorMessageItemForError(NSString* errorMessage) {
         setAccessibilityLabel:l10n_util::GetNSString(IDS_ACCNAME_CANCEL)];
     [self navigationItem].leftBarButtonItem = cancelButton;
 
-    // Set up trailing (done) button.
-    UIBarButtonItem* doneButton =
-        [[UIBarButtonItem alloc] initWithTitle:l10n_util::GetNSString(IDS_DONE)
+    // Set up trailing (save) button.
+    UIBarButtonItem* saveButton =
+        [[UIBarButtonItem alloc] initWithTitle:l10n_util::GetNSString(IDS_SAVE)
                                          style:UIBarButtonItemStylePlain
                                         target:nil
-                                        action:@selector(onDone)];
-    [doneButton setTitleTextAttributes:@{
+                                        action:@selector(didSave)];
+    [saveButton setTitleTextAttributes:@{
       NSForegroundColorAttributeName : [UIColor lightGrayColor]
     }
                               forState:UIControlStateDisabled];
-    [doneButton setAccessibilityLabel:l10n_util::GetNSString(IDS_ACCNAME_DONE)];
-    doneButton.enabled = NO;  // Disabled until form has been validated.
-    [self navigationItem].rightBarButtonItem = doneButton;
+    [saveButton setAccessibilityLabel:l10n_util::GetNSString(IDS_ACCNAME_SAVE)];
+    saveButton.enabled = NO;  // Disabled until form has been validated.
+    [self navigationItem].rightBarButtonItem = saveButton;
   }
 
   return self;
@@ -467,30 +467,33 @@ PaymentsTextItem* ErrorMessageItemForError(NSString* errorMessage) {
   return NO;
 }
 
-// This method is called as the text is being typed in, pasted, or deleted. Asks
-// the delegate if the text should be changed. Should always return NO. During
-// typing/pasting text, |newText| contains one or more new characters. When user
-// deletes text, |newText| is empty. |range| is the range of characters to be
-// replaced.
+// This method is called as the text is being typed in, pasted, or deleted.
+// Returns NO if the text should be formatted or that the text should only be
+// changed via the UIPickerView. Returns YES otherwise. During typing/pasting
+// text, |newText| contains one or more new characters. When user deletes text,
+// |newText| is empty. |range| is the range of characters to be replaced.
 - (BOOL)textField:(UITextField*)textField
     shouldChangeCharactersInRange:(NSRange)range
                 replacementString:(NSString*)newText {
   DCHECK(_currentEditingCell == AutofillEditCellForTextField(textField));
 
-  // Find the respective editor field and update its value to the proposed text
-  // only if the editor field does not have an associated UIPickerView. This
-  // prevents users from altering the text unless it is via the UIPickerView.
+  // Return NO if the respective editor field has an associated UIPickerView.
+  // This prevents altering the text unless it is via the UIPickerView.
   EditorField* field = [self currentEditingField];
   DCHECK(field);
   NSNumber* key = [NSNumber numberWithInt:field.autofillUIType];
   if ([self.pickerViews objectForKey:key])
     return NO;
 
+  // Return without formatting the proposed text if no formatting is necessary.
+  if (![_dataSource shouldFormatValueForAutofillUIType:field.autofillUIType])
+    return YES;
+
   field.value = [textField.text stringByReplacingCharactersInRange:range
                                                         withString:newText];
-
-  // Format the proposed text if necessary.
-  [_dataSource formatValueForEditorField:field];
+  // Format the proposed text.
+  field.value =
+      [_dataSource formatValue:field.value autofillUIType:field.autofillUIType];
 
   // Since this method is returning NO, update the text field's value now.
   textField.text = field.value;
@@ -889,11 +892,11 @@ PaymentsTextItem* ErrorMessageItemForError(NSString* errorMessage) {
 
 #pragma mark - PaymentRequestEditViewControllerActions methods
 
-- (void)onCancel {
+- (void)didCancel {
   [self.delegate paymentRequestEditViewControllerDidCancel:self];
 }
 
-- (void)onDone {
+- (void)didSave {
   [_currentEditingCell.textField resignFirstResponder];
 
   [self.delegate paymentRequestEditViewController:self
@@ -903,7 +906,7 @@ PaymentsTextItem* ErrorMessageItemForError(NSString* errorMessage) {
 #pragma mark - UIAccessibilityAction
 
 - (BOOL)accessibilityPerformEscape {
-  [self onCancel];
+  [self didCancel];
   return YES;
 }
 

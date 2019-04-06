@@ -7,14 +7,13 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "components/contextual_search/renderer/contextual_search_wrapper.h"
 #include "content/public/renderer/render_frame.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_document.h"
 #include "v8/include/v8.h"
 
 namespace contextual_search {

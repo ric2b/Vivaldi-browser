@@ -4,27 +4,39 @@
 
 #include "chromecast/base/cast_features.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/lazy_instance.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 
 namespace chromecast {
 namespace {
-
 // A constant used to always activate a FieldTrial.
 const base::FieldTrial::Probability k100PercentProbability = 100;
 
 // The name of the default group to use for Cast DCS features.
 const char kDefaultDCSFeaturesGroup[] = "default_dcs_features_group";
 
-base::LazyInstance<std::unordered_set<int32_t>>::Leaky g_experiment_ids =
-    LAZY_INSTANCE_INITIALIZER;
+std::unordered_set<int32_t>& GetExperimentIds() {
+  static base::NoDestructor<std::unordered_set<int32_t>> g_experiment_ids;
+  return *g_experiment_ids;
+}
+
 bool g_experiment_ids_initialized = false;
+
+// The collection of features that have been registered by unit tests
+std::vector<const base::Feature*>& GetTestFeatures() {
+  static base::NoDestructor<std::vector<const base::Feature*>>
+      features_for_test;
+  return *features_for_test;
+}
 
 void SetExperimentIds(const base::ListValue& list) {
   DCHECK(!g_experiment_ids_initialized);
@@ -37,7 +49,7 @@ void SetExperimentIds(const base::ListValue& list) {
       LOG(ERROR) << "Non-integer value found in experiment id list!";
     }
   }
-  g_experiment_ids.Get().swap(ids);
+  GetExperimentIds().swap(ids);
   g_experiment_ids_initialized = true;
 }
 
@@ -105,6 +117,10 @@ void SetExperimentIds(const base::ListValue& list) {
 //
 //      --disable-features=enable_foo,enable_bar
 //
+// 5) If you add a new feature to the system you must include it in kFeatures
+//    This is because the system relies on knowing all of the features so
+//    it can properly iterate over all features to detect changes.
+//
 
 // Begin Chromecast Feature definitions.
 
@@ -124,11 +140,38 @@ const base::Feature kTripleBuffer720{"enable_triple_buffer_720",
 // settings and takes precedence over triple-buffer feature).
 const base::Feature kSingleBuffer{"enable_single_buffer",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
+// Disable idle sockets closing on memory pressure. See
+// chromecast/browser/url_request_context_factory.cc for usage.
+const base::Feature kDisableIdleSocketsCloseOnMemoryPressure{
+    "disable_idle_sockets_close_on_memory_pressure",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // End Chromecast Feature definitions.
+const base::Feature* kFeatures[] = {
+    &kAllowUserMediaAccess,
+    &kEnableQuic,
+    &kTripleBuffer720,
+    &kSingleBuffer,
+    &kDisableIdleSocketsCloseOnMemoryPressure,
+};
 
 // An iterator for a base::DictionaryValue. Use an alias for brevity in loops.
 using Iterator = base::DictionaryValue::Iterator;
+
+std::vector<const base::Feature*> GetInternalFeatures();
+
+const std::vector<const base::Feature*>& GetFeatures() {
+  static const base::NoDestructor<std::vector<const base::Feature*>> features([] {
+    auto features = std::vector<const base::Feature*>(
+      kFeatures, kFeatures + sizeof(kFeatures) / sizeof(base::Feature*));
+    auto internal_features = GetInternalFeatures();
+    features.insert(features.end(), internal_features.begin(), internal_features.end());
+    return features;
+  }());
+  if (GetTestFeatures().size() > 0)
+    return GetTestFeatures();
+  return *features;
+}
 
 void InitializeFeatureList(const base::DictionaryValue& dcs_features,
                            const base::ListValue& dcs_experiment_ids,
@@ -220,6 +263,13 @@ void InitializeFeatureList(const base::DictionaryValue& dcs_features,
   base::FeatureList::SetInstance(std::move(feature_list));
 }
 
+bool IsFeatureEnabled(const base::Feature& feature) {
+  DCHECK(std::find(GetFeatures().begin(), GetFeatures().end(), &feature) !=
+         GetFeatures().end())
+      << feature.name;
+  return base::FeatureList::IsEnabled(feature);
+}
+
 base::DictionaryValue GetOverriddenFeaturesForStorage(
     const base::DictionaryValue& features) {
   base::DictionaryValue persistent_dict;
@@ -271,12 +321,17 @@ base::DictionaryValue GetOverriddenFeaturesForStorage(
 
 const std::unordered_set<int32_t>& GetDCSExperimentIds() {
   DCHECK(g_experiment_ids_initialized);
-  return g_experiment_ids.Get();
+  return GetExperimentIds();
 }
 
 void ResetCastFeaturesForTesting() {
   g_experiment_ids_initialized = false;
   base::FeatureList::ClearInstanceForTesting();
+  GetTestFeatures().clear();
+}
+
+void SetFeaturesForTest(std::vector<const base::Feature*> features) {
+  GetTestFeatures() = std::move(features);
 }
 
 }  // namespace chromecast

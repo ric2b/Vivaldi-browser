@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2011, Google Inc.
 // All rights reserved.
 //
@@ -45,12 +46,12 @@
 #include <gperftools/malloc_extension.h>
 #include "base/logging.h"
 
-const char kCurrent[] = "generic.current_allocated_bytes";
-
 int main() {
   // We don't do accounting right when using debugallocation.cc, so
   // turn off the test then.  TODO(csilvers): get this working too.
 #ifdef NDEBUG
+  static const char kCurrent[] = "generic.current_allocated_bytes";
+
   size_t before_bytes, after_bytes;
   MallocExtension::instance()->GetNumericProperty(kCurrent, &before_bytes);
   free(malloc(200));

@@ -5,11 +5,13 @@
 #ifndef CHROME_BROWSER_VR_SPEECH_RECOGNIZER_H_
 #define CHROME_BROWSER_VR_SPEECH_RECOGNIZER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/vr/vr_export.h"
 
 namespace content {
 class SpeechRecognitionManager;
@@ -17,6 +19,10 @@ class SpeechRecognitionManager;
 
 namespace net {
 class URLRequestContextGetter;
+}
+
+namespace network {
+class SharedURLLoaderFactoryInfo;
 }
 
 namespace vr {
@@ -88,12 +94,17 @@ class IOBrowserUIInterface {
 // SpeechRecognizer is a wrapper around the speech recognition engine that
 // simplifies its use from the UI thread. This class handles all setup/shutdown,
 // collection of results, error cases, and threading.
-class SpeechRecognizer : public IOBrowserUIInterface {
+class VR_EXPORT SpeechRecognizer : public IOBrowserUIInterface {
  public:
-  SpeechRecognizer(VoiceResultDelegate* delegate,
-                   BrowserUiInterface* ui,
-                   net::URLRequestContextGetter* url_request_context_getter,
-                   const std::string& locale);
+  // |shared_url_loader_factory_info| must be for a creating a
+  // SharedURLLoaderFactory that can be used on the IO Thread.
+  SpeechRecognizer(
+      VoiceResultDelegate* delegate,
+      BrowserUiInterface* ui,
+      std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+          shared_url_loader_factory_info,
+      net::URLRequestContextGetter* deprecated_url_request_context_getter,
+      const std::string& locale);
   ~SpeechRecognizer() override;
 
   // Start/stop the speech recognizer.
@@ -111,12 +122,19 @@ class SpeechRecognizer : public IOBrowserUIInterface {
                                std::string* auth_token);
 
   static void SetManagerForTest(content::SpeechRecognitionManager* manager);
-  void SetSpeechTimerForTest(std::unique_ptr<base::Timer> speech_timer);
+  void SetSpeechTimerForTest(std::unique_ptr<base::OneShotTimer> speech_timer);
 
  private:
   VoiceResultDelegate* delegate_;
   BrowserUiInterface* ui_;
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
+
+  // Non-null until first Start() call, at which point it's moved to the IO
+  // thread.
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+      shared_url_loader_factory_info_;
+
+  scoped_refptr<net::URLRequestContextGetter>
+      deprecated_url_request_context_getter_;
   std::string locale_;
   base::string16 final_result_;
 

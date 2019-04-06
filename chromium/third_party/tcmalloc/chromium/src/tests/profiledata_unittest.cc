@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2007, Google Inc.
 // All rights reserved.
 //
@@ -365,6 +366,7 @@ class ProfileDataTest {
     RUN(CollectTwoMatching);
     RUN(CollectTwoFlush);
     RUN(StartResetRestart);
+    RUN(StartStopNoOptionsEmpty);
     return 0;
   }
 };

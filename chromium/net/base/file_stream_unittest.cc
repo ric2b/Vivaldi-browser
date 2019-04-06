@@ -11,20 +11,23 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
 #include "net/log/test_net_log.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -40,8 +43,8 @@ namespace net {
 
 namespace {
 
-const char kTestData[] = "0123456789";
-const int kTestDataSize = arraysize(kTestData) - 1;
+constexpr char kTestData[] = "0123456789";
+constexpr int kTestDataSize = base::size(kTestData) - 1;
 
 // Creates an IOBufferWithSize that contains the kTestDataSize.
 IOBufferWithSize* CreateTestDataBuffer() {
@@ -52,7 +55,7 @@ IOBufferWithSize* CreateTestDataBuffer() {
 
 }  // namespace
 
-class FileStreamTest : public PlatformTest {
+class FileStreamTest : public PlatformTest, public WithScopedTaskEnvironment {
  public:
   void SetUp() override {
     PlatformTest::SetUp();
@@ -521,8 +524,7 @@ class TestWriteReadCompletionCallback {
       scoped_refptr<IOBufferWithSize> buf = new IOBufferWithSize(4);
       rv = stream_->Read(buf.get(), buf->size(), callback.callback());
       if (rv == ERR_IO_PENDING) {
-        base::MessageLoop::ScopedNestableTaskAllower allow(
-            base::MessageLoop::current());
+        base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
         rv = callback.WaitForResult();
       }
       EXPECT_LE(0, rv);
@@ -559,8 +561,7 @@ class TestWriteReadCompletionCallback {
       EXPECT_THAT(stream_->Seek(0, callback64.callback()),
                   IsError(ERR_IO_PENDING));
       {
-        base::MessageLoop::ScopedNestableTaskAllower allow(
-            base::MessageLoop::current());
+        base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
         EXPECT_LE(0, callback64.WaitForResult());
       }
     }
@@ -805,10 +806,30 @@ TEST_F(FileStreamTest, ReadError) {
   base::RunLoop().RunUntilIdle();
 }
 
+#if defined(OS_WIN)
+// Verifies that a FileStream will close itself if it receives a File whose
+// async flag doesn't match the async state of the underlying handle.
+TEST_F(FileStreamTest, AsyncFlagMismatch) {
+  // Open the test file without async, then make a File with the same sync
+  // handle but with the async flag set to true.
+  uint32_t flags = base::File::FLAG_OPEN | base::File::FLAG_READ;
+  base::File file(temp_file_path(), flags);
+  base::File lying_file(file.TakePlatformFile(), true);
+  ASSERT_TRUE(lying_file.IsValid());
+
+  FileStream stream(std::move(lying_file), base::ThreadTaskRunnerHandle::Get());
+  ASSERT_FALSE(stream.IsOpen());
+  TestCompletionCallback callback;
+  scoped_refptr<IOBufferWithSize> buf = new IOBufferWithSize(4);
+  int rv = stream.Read(buf.get(), buf->size(), callback.callback());
+  EXPECT_THAT(callback.GetResult(rv), IsError(ERR_UNEXPECTED));
+}
+#endif
+
 #if defined(OS_ANDROID)
 TEST_F(FileStreamTest, ContentUriRead) {
   base::FilePath test_dir;
-  PathService::Get(base::DIR_SOURCE_ROOT, &test_dir);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &test_dir);
   test_dir = test_dir.AppendASCII("net");
   test_dir = test_dir.AppendASCII("data");
   test_dir = test_dir.AppendASCII("file_stream_unittest");

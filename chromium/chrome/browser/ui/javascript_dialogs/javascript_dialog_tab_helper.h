@@ -56,7 +56,7 @@ class JavaScriptDialogTabHelper
 
   // JavaScriptDialogManager:
   void RunJavaScriptDialog(content::WebContents* web_contents,
-                           const GURL& alerting_frame_url,
+                           content::RenderFrameHost* render_frame_host,
                            content::JavaScriptDialogType dialog_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
@@ -73,8 +73,7 @@ class JavaScriptDialogTabHelper
                      bool reset_state) override;
 
   // WebContentsObserver:
-  void WasShown() override;
-  void WasHidden() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DidStartNavigationToPendingEntry(
@@ -90,6 +89,9 @@ class JavaScriptDialogTabHelper
                      content::WebContents* old_contents,
                      content::WebContents* new_contents,
                      int index) override;
+  void TabDetachedAt(content::WebContents* contents,
+                     int index,
+                     bool was_active) override;
 #endif
 
  private:
@@ -160,6 +162,21 @@ class JavaScriptDialogTabHelper
 
   // A closure to be fired when a dialog is shown. For testing only.
   base::OnceClosure dialog_shown_;
+
+#if !defined(OS_ANDROID)
+  // If this instance is observing a TabStripModel, then this member is not
+  // nullptr.
+  //
+  // This raw pointer is safe to use because the lifetime of this instance is
+  // tied to the corresponding WebContents, which is owned by the TabStripModel.
+  // Any time TabStripModel would give up ownership of the WebContents, it would
+  // first send either a TabDetachedAt() or TabReplacedAt() callback, which
+  // gives this instance the opportunity to stop observing the TabStripModel.
+  //
+  // A TabStripModel cannot be destroyed without first detaching all of its
+  // WebContents.
+  TabStripModel* tab_strip_model_being_observed_ = nullptr;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(JavaScriptDialogTabHelper);
 };

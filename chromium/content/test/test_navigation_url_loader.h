@@ -24,9 +24,7 @@ namespace content {
 
 class NavigationData;
 class NavigationURLLoaderDelegate;
-class StreamHandle;
 
-// PlzNavigate
 // Test implementation of NavigationURLLoader to simulate the network stack
 // response.
 class TestNavigationURLLoader
@@ -37,7 +35,10 @@ class TestNavigationURLLoader
                           NavigationURLLoaderDelegate* delegate);
 
   // NavigationURLLoader implementation.
-  void FollowRedirect() override;
+  void FollowRedirect(const base::Optional<std::vector<std::string>>&
+                          to_be_removed_request_headers,
+                      const base::Optional<net::HttpRequestHeaders>&
+                          modified_request_headers) override;
   void ProceedWithResponse() override;
 
   NavigationRequestInfo* request_info() const { return request_info_.get(); }
@@ -51,7 +52,6 @@ class TestNavigationURLLoader
       const scoped_refptr<network::ResourceResponse>& response);
   void CallOnResponseStarted(
       const scoped_refptr<network::ResourceResponse>& response,
-      std::unique_ptr<StreamHandle> body,
       std::unique_ptr<NavigationData> navigation_data);
 
   int redirect_count() { return redirect_count_; }

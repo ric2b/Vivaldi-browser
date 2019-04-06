@@ -21,17 +21,23 @@ struct WebRequestInfo;
 }
 
 // Exposed for unit testing.
-bool IsSensitiveURL(const GURL& url,
-                    bool is_request_from_browser_or_webui_renderer);
+bool IsSensitiveRequest(const extensions::WebRequestInfo& request,
+                        bool is_request_from_browser,
+                        bool is_request_from_webui_renderer);
 
-// This class is used to test whether extensions may modify web requests.
+// This class is used to test whether extensions may modify web requests. It
+// should be used on the IO thread.
 class WebRequestPermissions {
  public:
   // Different host permission checking modes for CanExtensionAccessURL.
   enum HostPermissionsCheck {
-    DO_NOT_CHECK_HOST = 0,    // No check.
-    REQUIRE_HOST_PERMISSION,  // Permission needed for given URL.
-    REQUIRE_ALL_URLS          // Permission needed for <all_urls>.
+    DO_NOT_CHECK_HOST = 0,            // No check.
+    REQUIRE_HOST_PERMISSION_FOR_URL,  // Permission needed for given request
+                                      // URL.
+    REQUIRE_HOST_PERMISSION_FOR_URL_AND_INITIATOR,  // Permission needed for
+                                                    // given request URL and its
+                                                    // initiator.
+    REQUIRE_ALL_URLS  // Permission needed for <all_urls>.
   };
 
   // Returns true if the request shall not be reported to extensions.
@@ -44,7 +50,7 @@ class WebRequestPermissions {
 
   // |host_permission_check| controls how permissions are checked with regard to
   // |url| and |initiator| if an initiator exists.
-  static extensions::PermissionsData::AccessType CanExtensionAccessURL(
+  static extensions::PermissionsData::PageAccess CanExtensionAccessURL(
       const extensions::InfoMap* extension_info_map,
       const std::string& extension_id,
       const GURL& url,
@@ -60,7 +66,6 @@ class WebRequestPermissions {
       int tab_id,
       bool crosses_incognito);
 
- private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(WebRequestPermissions);
 };
 

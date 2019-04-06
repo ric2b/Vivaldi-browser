@@ -5,25 +5,22 @@
 #include "ash/shelf/shelf_tooltip_manager.h"
 
 #include "ash/public/cpp/config.h"
-#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_tooltip_bubble.h"
+#include "ash/shelf/shelf_tooltip_preview_bubble.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
-#include "ash/system/tray/tray_constants.h"
 #include "ash/wm/window_util.h"
 #include "base/bind.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "chromeos/chromeos_switches.h"
 #include "ui/aura/window.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
-#include "ui/views/controls/label.h"
-#include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_animations.h"
 
@@ -32,91 +29,7 @@ namespace {
 
 const int kTooltipAppearanceDelay = 1000;  // msec
 
-// Tooltip layout constants.
-
-// Shelf item tooltip height.
-const int kTooltipHeight = 24;
-
-// The maximum width of the tooltip bubble.  Borrowed the value from
-// ash/tooltip/tooltip_controller.cc
-const int kTooltipMaxWidth = 250;
-
-// Shelf item tooltip internal text margins.
-const int kTooltipTopBottomMargin = 4;
-const int kTooltipLeftRightMargin = 8;
-
-// The offset for the tooltip bubble - making sure that the bubble is spaced
-// with a fixed gap. The gap is accounted for by the transparent arrow in the
-// bubble and an additional 1px padding for the shelf item views.
-const int kArrowTopBottomOffset = 1;
-const int kArrowLeftRightOffset = 1;
-
-// Tooltip's border interior thickness that defines its minimum height.
-const int kBorderInteriorThickness = kTooltipHeight / 2;
-
 }  // namespace
-
-// The implementation of tooltip of the launcher.
-class ShelfTooltipManager::ShelfTooltipBubble
-    : public views::BubbleDialogDelegateView {
- public:
-  ShelfTooltipBubble(views::View* anchor,
-                     views::BubbleBorder::Arrow arrow,
-                     const base::string16& text)
-      : views::BubbleDialogDelegateView(anchor, arrow) {
-    set_close_on_deactivate(false);
-    set_can_activate(false);
-    set_accept_events(false);
-    set_margins(gfx::Insets(kTooltipTopBottomMargin, kTooltipLeftRightMargin));
-    set_shadow(views::BubbleBorder::NO_ASSETS);
-    SetLayoutManager(std::make_unique<views::FillLayout>());
-    views::Label* label = new views::Label(text);
-    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    ui::NativeTheme* theme = anchor->GetWidget()->GetNativeTheme();
-    label->SetEnabledColor(
-        theme->GetSystemColor(ui::NativeTheme::kColorId_TooltipText));
-    SkColor background_color =
-        theme->GetSystemColor(ui::NativeTheme::kColorId_TooltipBackground);
-    set_color(background_color);
-    label->SetBackgroundColor(background_color);
-    // The background is not opaque, so we can't do subpixel rendering.
-    label->SetSubpixelRenderingEnabled(false);
-    AddChildView(label);
-
-    gfx::Insets insets(kArrowTopBottomOffset, kArrowLeftRightOffset);
-    // Adjust the anchor location for asymmetrical borders of shelf item.
-    if (anchor->border())
-      insets += anchor->border()->GetInsets();
-    if (ui::MaterialDesignController::IsSecondaryUiMaterial())
-      insets += gfx::Insets(-kBubblePaddingHorizontalBottom);
-    set_anchor_view_insets(insets);
-
-    // Place the bubble in the same display as the anchor.
-    set_parent_window(
-        anchor_widget()->GetNativeWindow()->GetRootWindow()->GetChildById(
-            kShellWindowId_SettingBubbleContainer));
-
-    views::BubbleDialogDelegateView::CreateBubble(this);
-    if (!ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-      // These must both be called after CreateBubble.
-      SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
-      SetBorderInteriorThickness(kBorderInteriorThickness);
-    }
-  }
-
- private:
-  // BubbleDialogDelegateView overrides:
-  gfx::Size CalculatePreferredSize() const override {
-    const gfx::Size size = BubbleDialogDelegateView::CalculatePreferredSize();
-    const int kTooltipMinHeight = kTooltipHeight - 2 * kTooltipTopBottomMargin;
-    return gfx::Size(std::min(size.width(), kTooltipMaxWidth),
-                     std::max(size.height(), kTooltipMinHeight));
-  }
-
-  int GetDialogButtons() const override { return ui::DIALOG_BUTTON_NONE; }
-
-  DISALLOW_COPY_AND_ASSIGN(ShelfTooltipBubble);
-};
 
 ShelfTooltipManager::ShelfTooltipManager(ShelfView* shelf_view)
     : timer_delay_(kTooltipAppearanceDelay),
@@ -184,8 +97,17 @@ void ShelfTooltipManager::ShowTooltip(views::View* view) {
       break;
   }
 
-  base::string16 text = shelf_view_->GetTitleForView(view);
-  bubble_ = new ShelfTooltipBubble(view, arrow, text);
+  const std::vector<aura::Window*> open_windows =
+      shelf_view_->GetOpenWindowsForShelfView(view);
+
+  const base::string16 text = shelf_view_->GetTitleForView(view);
+  if (chromeos::switches::ShouldShowShelfHoverPreviews() &&
+      open_windows.size() > 0) {
+    bubble_ = new ShelfTooltipPreviewBubble(view, arrow, open_windows, this);
+  } else {
+    bubble_ = new ShelfTooltipBubble(view, arrow, text);
+  }
+
   aura::Window* window = bubble_->GetWidget()->GetNativeWindow();
   ::wm::SetWindowVisibilityAnimationType(
       window, ::wm::WINDOW_VISIBILITY_ANIMATION_TYPE_VERTICAL);
@@ -205,14 +127,25 @@ void ShelfTooltipManager::OnPointerEventObserved(
     const ui::PointerEvent& event,
     const gfx::Point& location_in_screen,
     gfx::NativeView target) {
-  // Close on any press events inside or outside the tooltip.
-  if (event.type() == ui::ET_POINTER_DOWN)
+  if (event.type() != ui::ET_POINTER_DOWN || !bubble_)
+    return;
+
+  // If the click was outside the tooltip, always close it.
+  if (!bubble_->GetWidget()->GetWindowBoundsInScreen().Contains(
+          location_in_screen)) {
+    Close();
+    return;
+  }
+
+  // Close the bubble if appropriate.
+  if (bubble_->ShouldCloseOnPressDown())
     Close();
 }
 
 void ShelfTooltipManager::OnMouseEvent(ui::MouseEvent* event) {
   if (event->type() == ui::ET_MOUSE_EXITED) {
-    Close();
+    if (bubble_ && bubble_->ShouldCloseOnMouseExit())
+      Close();
     return;
   }
 

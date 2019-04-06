@@ -27,7 +27,8 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
  public:
   // Returns the motion event action defined in Java layer for a given
   // MotionEvent::Action.
-  static int GetAndroidActionForTesting(int action);
+  static int GetAndroidAction(Action action);
+  static int GetAndroidToolType(ToolType tool_type);
 
   struct Pointer {
     Pointer(jint id,
@@ -79,6 +80,9 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
 
   // Convenience method returning the pointer at index 0.
   gfx::PointF GetPoint() const { return gfx::PointF(GetX(0), GetY(0)); }
+  gfx::PointF GetPointPix() const {
+    return gfx::PointF(GetXPix(0), GetYPix(0));
+  }
 
   // ui::MotionEvent methods.
   uint32_t GetUniqueEventId() const override;
@@ -118,6 +122,9 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
   bool for_touch_handle() const { return for_touch_handle_; }
 
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject() const;
+
+  float GetXPix(size_t pointer_index) const;
+  float GetYPix(size_t pointer_index) const;
 
  private:
   struct CachedPointer;

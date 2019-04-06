@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/speech/tts_controller.h"
+#include "components/prefs/testing_pref_service.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -55,7 +56,10 @@ class TtsControllerImpl : public TtsController {
   ~TtsControllerImpl() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(TtsControllerTest, TestTtsControllerShutdown);
   FRIEND_TEST_ALL_PREFIXES(TtsControllerTest, TestGetMatchingVoice);
+  FRIEND_TEST_ALL_PREFIXES(TtsControllerTest,
+                           TestTtsControllerUtteranceDefaults);
 
   // Get the platform TTS implementation (or injected mock).
   TtsPlatformImpl* GetPlatformImpl();
@@ -78,6 +82,13 @@ class TtsControllerImpl : public TtsController {
   // index of the voice that best matches the utterance.
   int GetMatchingVoice(const Utterance* utterance,
                        std::vector<VoiceData>& voices);
+
+  // Updates the utterance to have default values for rate, pitch, and
+  // volume if they have not yet been set. On Chrome OS, defaults are
+  // pulled from user prefs, and may not be the same as other platforms.
+  void UpdateUtteranceDefaults(Utterance* utterance);
+
+  virtual const PrefService* GetPrefService(const Utterance* utterance);
 
   friend struct base::DefaultSingletonTraits<TtsControllerImpl>;
 

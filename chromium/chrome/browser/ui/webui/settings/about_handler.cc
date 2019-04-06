@@ -52,7 +52,6 @@
 #include "v8/include/v8-version-string.h"
 
 #if defined(OS_CHROMEOS)
-#include "base/files/file_util_proxy.h"
 #include "base/i18n/time_formatting.h"
 #include "base/sys_info.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
@@ -67,6 +66,7 @@
 #include "chrome/browser/ui/webui/help/version_updater_chromeos.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/system/statistics_provider.h"
@@ -283,7 +283,7 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
           l10n_util::GetStringUTF16(version_info::IsOfficialBuild()
                                         ? IDS_VERSION_UI_OFFICIAL
                                         : IDS_VERSION_UI_UNOFFICIAL),
-          base::UTF8ToUTF16(chrome::GetChannelString()),
+          base::UTF8ToUTF16(chrome::GetChannelName()),
 #if defined(ARCH_CPU_64_BITS)
           l10n_util::GetStringUTF16(IDS_VERSION_UI_64BIT)));
 #else
@@ -322,6 +322,12 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
       IDS_ABOUT_CROS_VERSION_LICENSE,
       base::ASCIIToUTF16(chrome::kChromeUIOSCreditsURL));
   html_source->AddString("aboutProductOsLicense", os_license);
+  base::string16 os_with_linux_license = l10n_util::GetStringFUTF16(
+      IDS_ABOUT_CROS_WITH_LINUX_VERSION_LICENSE,
+      base::ASCIIToUTF16(chrome::kChromeUIOSCreditsURL),
+      base::ASCIIToUTF16(chrome::kChromeUILinuxCreditsURL));
+  html_source->AddString("aboutProductOsWithLinuxLicense",
+                         os_with_linux_license);
   html_source->AddBoolean("aboutEnterpriseManaged", IsEnterpriseManaged());
 
   base::Time build_time = base::SysInfo::GetLsbReleaseTime();
@@ -346,42 +352,44 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
 
 void AboutHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "aboutPageReady",
-      base::Bind(&AboutHandler::HandlePageReady, base::Unretained(this)));
+      "aboutPageReady", base::BindRepeating(&AboutHandler::HandlePageReady,
+                                            base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "refreshUpdateStatus",
-      base::Bind(&AboutHandler::HandleRefreshUpdateStatus,
-                 base::Unretained(this)));
+      base::BindRepeating(&AboutHandler::HandleRefreshUpdateStatus,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "openFeedbackDialog", base::Bind(&AboutHandler::HandleOpenFeedbackDialog,
-                                       base::Unretained(this)));
+      "openFeedbackDialog",
+      base::BindRepeating(&AboutHandler::HandleOpenFeedbackDialog,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "openHelpPage",
-      base::Bind(&AboutHandler::HandleOpenHelpPage, base::Unretained(this)));
+      "openHelpPage", base::BindRepeating(&AboutHandler::HandleOpenHelpPage,
+                                          base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
-      "setChannel",
-      base::Bind(&AboutHandler::HandleSetChannel, base::Unretained(this)));
+      "setChannel", base::BindRepeating(&AboutHandler::HandleSetChannel,
+                                        base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "requestUpdate",
-      base::Bind(&AboutHandler::HandleRequestUpdate, base::Unretained(this)));
+      "requestUpdate", base::BindRepeating(&AboutHandler::HandleRequestUpdate,
+                                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "requestUpdateOverCellular",
-      base::Bind(&AboutHandler::HandleRequestUpdateOverCellular,
-                 base::Unretained(this)));
+      base::BindRepeating(&AboutHandler::HandleRequestUpdateOverCellular,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "getVersionInfo",
-      base::Bind(&AboutHandler::HandleGetVersionInfo, base::Unretained(this)));
+      "getVersionInfo", base::BindRepeating(&AboutHandler::HandleGetVersionInfo,
+                                            base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "getRegulatoryInfo", base::Bind(&AboutHandler::HandleGetRegulatoryInfo,
-                                      base::Unretained(this)));
+      "getRegulatoryInfo",
+      base::BindRepeating(&AboutHandler::HandleGetRegulatoryInfo,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "getChannelInfo", base::Bind(&AboutHandler::HandleGetChannelInfo,
-                                   base::Unretained(this)));
+      "getChannelInfo", base::BindRepeating(&AboutHandler::HandleGetChannelInfo,
+                                            base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "refreshTPMFirmwareUpdateStatus",
-      base::Bind(&AboutHandler::HandleRefreshTPMFirmwareUpdateStatus,
-                 base::Unretained(this)));
+      base::BindRepeating(&AboutHandler::HandleRefreshTPMFirmwareUpdateStatus,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getHasEndOfLife",
       base::BindRepeating(&AboutHandler::HandleGetHasEndOfLife,
@@ -389,8 +397,8 @@ void AboutHandler::RegisterMessages() {
 #endif
 #if defined(OS_MACOSX)
   web_ui()->RegisterMessageCallback(
-      "promoteUpdater",
-      base::Bind(&AboutHandler::PromoteUpdater, base::Unretained(this)));
+      "promoteUpdater", base::BindRepeating(&AboutHandler::PromoteUpdater,
+                                            base::Unretained(this)));
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -600,14 +608,16 @@ void AboutHandler::RequestUpdateOverCellular(const std::string& update_version,
 
 void AboutHandler::HandleRefreshTPMFirmwareUpdateStatus(
     const base::ListValue* args) {
-  chromeos::tpm_firmware_update::ShouldOfferUpdateViaPowerwash(
+  chromeos::tpm_firmware_update::GetAvailableUpdateModes(
       base::Bind(&AboutHandler::RefreshTPMFirmwareUpdateStatus,
-                 weak_factory_.GetWeakPtr()));
+                 weak_factory_.GetWeakPtr()),
+      base::TimeDelta());
 }
 
-void AboutHandler::RefreshTPMFirmwareUpdateStatus(bool update_available) {
+void AboutHandler::RefreshTPMFirmwareUpdateStatus(
+    const std::set<chromeos::tpm_firmware_update::Mode>& modes) {
   std::unique_ptr<base::DictionaryValue> event(new base::DictionaryValue);
-  event->SetBoolean("updateAvailable", update_available);
+  event->SetBoolean("updateAvailable", !modes.empty());
   FireWebUIListener("tpm-firmware-update-status-changed", *event);
 }
 
@@ -643,6 +653,7 @@ void AboutHandler::RequestUpdate() {
 
 void AboutHandler::SetUpdateStatus(VersionUpdater::Status status,
                                    int progress,
+                                   bool rollback,
                                    const std::string& version,
                                    int64_t size,
                                    const base::string16& message) {
@@ -653,6 +664,7 @@ void AboutHandler::SetUpdateStatus(VersionUpdater::Status status,
   event->SetString("status", UpdateStatusToString(status));
   event->SetString("message", message);
   event->SetInteger("progress", progress);
+  event->SetBoolean("rollback", rollback);
   event->SetString("version", version);
   // DictionaryValue does not support int64_t, so convert to string.
   event->SetString("size", base::Int64ToString(size));

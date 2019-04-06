@@ -8,6 +8,8 @@
 
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "chrome/grit/theme_resources.h"
+#include "ui/gfx/color_palette.h"
 
 FakeBaseTabStripController::FakeBaseTabStripController() {}
 
@@ -18,7 +20,7 @@ void FakeBaseTabStripController::AddTab(int index, bool is_active) {
   num_tabs_++;
   tab_strip_->AddTabAt(index, TabRendererData(), is_active);
   if (is_active)
-    active_index_ = index;
+    SelectTab(index);
 }
 
 void FakeBaseTabStripController::AddPinnedTab(int index, bool is_active) {
@@ -32,9 +34,14 @@ void FakeBaseTabStripController::AddPinnedTab(int index, bool is_active) {
 
 void FakeBaseTabStripController::RemoveTab(int index) {
   num_tabs_--;
-  tab_strip_->RemoveTabAt(nullptr, index);
-  if (active_index_ == index)
-    active_index_ = -1;
+  // RemoveTabAt() expects the controller state to have been updated already.
+  const bool was_active = index == active_index_;
+  if (active_index_ > index) {
+    --active_index_;
+  } else if (active_index_ == index) {
+    SetActiveIndex(std::min(active_index_, num_tabs_ - 1));
+  }
+  tab_strip_->RemoveTabAt(nullptr, index, was_active);
 }
 
 const ui::ListSelectionModel&
@@ -71,11 +78,8 @@ bool FakeBaseTabStripController::IsTabPinned(int index) const {
 void FakeBaseTabStripController::SelectTab(int index) {
   if (!IsValidIndex(index) || active_index_ == index)
     return;
-  ui::ListSelectionModel old_selection_model;
-  old_selection_model.SetSelectedIndex(active_index_);
-  active_index_ = index;
-  selection_model_.SetSelectedIndex(active_index_);
-  tab_strip_->SetSelection(old_selection_model, selection_model_);
+
+  SetActiveIndex(index);
 }
 
 void FakeBaseTabStripController::ExtendSelectionTo(int index) {
@@ -88,6 +92,7 @@ void FakeBaseTabStripController::AddSelectionFromAnchorTo(int index) {
 }
 
 void FakeBaseTabStripController::CloseTab(int index, CloseTabSource source) {
+  RemoveTab(index);
 }
 
 void FakeBaseTabStripController::ToggleTabAudioMute(int index) {
@@ -107,16 +112,17 @@ void FakeBaseTabStripController::OnDropIndexUpdate(int index,
                                                    bool drop_before) {
 }
 
-void FakeBaseTabStripController::PerformDrop(bool drop_before,
-                                             int index,
-                                             const GURL& url) {
-}
-
 bool FakeBaseTabStripController::IsCompatibleWith(TabStrip* other) const {
   return false;
 }
 
+NewTabButtonPosition FakeBaseTabStripController::GetNewTabButtonPosition()
+    const {
+  return AFTER_TABS;
+}
+
 void FakeBaseTabStripController::CreateNewTab() {
+  AddTab(num_tabs_, true);
 }
 
 void FakeBaseTabStripController::CreateNewTabWithLocation(
@@ -130,18 +136,51 @@ bool FakeBaseTabStripController::IsIncognito() {
 void FakeBaseTabStripController::StackedLayoutMaybeChanged() {
 }
 
+bool FakeBaseTabStripController::IsSingleTabModeAvailable() {
+  return false;
+}
+
+bool FakeBaseTabStripController::ShouldDrawStrokes() const {
+  return false;
+}
+
 void FakeBaseTabStripController::OnStartedDraggingTabs() {
 }
 
 void FakeBaseTabStripController::OnStoppedDraggingTabs() {
 }
 
-void FakeBaseTabStripController::CheckFileSupported(const GURL& url) {
-  tab_strip_->FileSupported(url, true);
+bool FakeBaseTabStripController::HasVisibleBackgroundTabShapes() const {
+  return false;
+}
+
+bool FakeBaseTabStripController::EverHasVisibleBackgroundTabShapes() const {
+  return false;
+}
+
+SkColor FakeBaseTabStripController::GetFrameColor() const {
+  return gfx::kPlaceholderColor;
 }
 
 SkColor FakeBaseTabStripController::GetToolbarTopSeparatorColor() const {
-  return SK_ColorBLACK;
+  return gfx::kPlaceholderColor;
+}
+
+SkColor FakeBaseTabStripController::GetTabBackgroundColor(TabState state,
+                                                          bool opaque) const {
+  return gfx::kPlaceholderColor;
+}
+
+SkColor FakeBaseTabStripController::GetTabForegroundColor(
+    TabState state) const {
+  return gfx::kPlaceholderColor;
+}
+
+int FakeBaseTabStripController::GetTabBackgroundResourceId(
+    BrowserNonClientFrameView::ActiveState active_state,
+    bool* has_custom_image) const {
+  *has_custom_image = false;
+  return IDR_THEME_TAB_BACKGROUND;
 }
 
 base::string16 FakeBaseTabStripController::GetAccessibleTabName(
@@ -151,4 +190,11 @@ base::string16 FakeBaseTabStripController::GetAccessibleTabName(
 
 Profile* FakeBaseTabStripController::GetProfile() const {
   return nullptr;
+}
+
+void FakeBaseTabStripController::SetActiveIndex(int new_index) {
+  active_index_ = new_index;
+  selection_model_.SetSelectedIndex(active_index_);
+  if (IsValidIndex(active_index_))
+    tab_strip_->SetSelection(selection_model_);
 }

@@ -15,8 +15,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"  // For CHECK macros.
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -30,7 +28,6 @@
 #include "chrome/test/chromedriver/chrome/adb_impl.h"
 #include "chrome/test/chromedriver/chrome/device_manager.h"
 #include "chrome/test/chromedriver/chrome/status.h"
-#include "chrome/test/chromedriver/net/port_server.h"
 #include "chrome/test/chromedriver/net/url_request_context_getter.h"
 #include "chrome/test/chromedriver/session.h"
 #include "chrome/test/chromedriver/session_thread_map.h"
@@ -71,8 +68,7 @@ HttpHandler::HttpHandler(
     const base::Closure& quit_func,
     const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     const std::string& url_base,
-    int adb_port,
-    std::unique_ptr<PortServer> port_server)
+    int adb_port)
     : quit_func_(quit_func),
       url_base_(url_base),
       received_shutdown_(false),
@@ -84,8 +80,6 @@ HttpHandler::HttpHandler(
   socket_factory_ = CreateSyncWebSocketFactory(context_getter_.get());
   adb_.reset(new AdbImpl(io_task_runner, adb_port));
   device_manager_.reset(new DeviceManager(adb_.get()));
-  port_server_ = std::move(port_server);
-  port_manager_.reset(new PortManager(12000, 13000));
 
   CommandMapping commands[] = {
       CommandMapping(
@@ -96,9 +90,7 @@ HttpHandler::HttpHandler(
                   "InitSession",
                   base::Bind(&ExecuteInitSession,
                              InitSessionParams(context_getter_, socket_factory_,
-                                               device_manager_.get(),
-                                               port_server_.get(),
-                                               port_manager_.get()))))),
+                                               device_manager_.get()))))),
       CommandMapping(kDelete, "session/:sessionId",
                      base::Bind(&ExecuteSessionCommand, &session_thread_map_,
                                 "Quit", base::Bind(&ExecuteQuit, false), true)),
@@ -108,7 +100,7 @@ HttpHandler::HttpHandler(
           WrapToCommand("GetTimeouts", base::Bind(&ExecuteGetTimeouts))),
       CommandMapping(
           kPost, "session/:sessionId/timeouts",
-          WrapToCommand("SetTimeout", base::Bind(&ExecuteSetTimeout))),
+          WrapToCommand("SetTimeouts", base::Bind(&ExecuteSetTimeouts))),
       CommandMapping(kPost, "session/:sessionId/url",
                      WrapToCommand("Navigate", base::Bind(&ExecuteGet))),
       CommandMapping(
@@ -121,6 +113,10 @@ HttpHandler::HttpHandler(
 
       CommandMapping(kPost, "session/:sessionId/refresh",
                      WrapToCommand("Refresh", base::Bind(&ExecuteRefresh))),
+      CommandMapping(kPost, "session/:sessionId/goog/page/freeze",
+                     WrapToCommand("Freeze", base::Bind(&ExecuteFreeze))),
+      CommandMapping(kPost, "session/:sessionId/goog/page/resume",
+                     WrapToCommand("Resume", base::Bind(&ExecuteResume))),
       CommandMapping(kGet, "session/:sessionId/title",
                      WrapToCommand("GetTitle", base::Bind(&ExecuteGetTitle))),
       CommandMapping(kGet, "session/:sessionId/window",
@@ -143,9 +139,23 @@ HttpHandler::HttpHandler(
       CommandMapping(
           kGet, "session/:sessionId/window/rect",
           WrapToCommand("GetWindowRect", base::Bind(&ExecuteGetWindowRect))),
+
+      // minimize/maximize oss version
       CommandMapping(
           kPost, "session/:sessionId/window/:windowHandle/maximize",
           WrapToCommand("MaximizeWindow", base::Bind(&ExecuteMaximizeWindow))),
+      CommandMapping(
+          kPost, "session/:sessionId/window/:windowHandle/minimize",
+          WrapToCommand("MinimizeWindow", base::Bind(&ExecuteMinimizeWindow))),
+
+      // minimize/maximize w3c version
+      CommandMapping(
+          kPost, "session/:sessionId/window/maximize",
+          WrapToCommand("MaximizeWindow", base::Bind(&ExecuteMaximizeWindow))),
+      CommandMapping(
+          kPost, "session/:sessionId/window/minimize",
+          WrapToCommand("MinimizeWindow", base::Bind(&ExecuteMinimizeWindow))),
+
       CommandMapping(kPost, "session/:sessionId/window/fullscreen",
                      WrapToCommand("FullscreenWindow",
                                    base::Bind(&ExecuteFullScreenWindow))),
@@ -317,6 +327,9 @@ HttpHandler::HttpHandler(
       CommandMapping(kGet, "session/:sessionId/element/:id/location",
                      WrapToCommand("GetElementLocation",
                                    base::Bind(&ExecuteGetElementLocation))),
+      CommandMapping(
+          kGet, "session/:sessionId/element/:id/rect",
+          WrapToCommand("GetElementRect", base::Bind(&ExecuteGetElementRect))),
       CommandMapping(
           kGet, "session/:sessionId/element/:id/location_in_view",
           WrapToCommand(
@@ -554,6 +567,9 @@ HttpHandler::HttpHandler(
           kPost, "session/:sessionId/chromium/send_command",
           WrapToCommand("SendCommand", base::Bind(&ExecuteSendCommand))),
       CommandMapping(
+          kPost, "session/:sessionId/goog/cdp/execute",
+          WrapToCommand("ExecuteCDP", base::Bind(&ExecuteSendCommandAndGetResult))),
+      CommandMapping(
           kPost, "session/:sessionId/chromium/send_command_and_get_result",
           WrapToCommand("SendCommandAndGetResult",
                         base::Bind(&ExecuteSendCommandAndGetResult))),
@@ -707,7 +723,7 @@ std::unique_ptr<net::HttpServerResponseInfo> HttpHandler::PrepareLegacyResponse(
     value = std::move(error);
   }
   if (!value)
-    value = base::MakeUnique<base::Value>();
+    value = std::make_unique<base::Value>();
 
   base::DictionaryValue body_params;
   body_params.SetInteger("status", status.code());
@@ -757,6 +773,9 @@ HttpHandler::PrepareStandardResponse(
       response.reset(
           new net::HttpServerResponseInfo(net::HTTP_INTERNAL_SERVER_ERROR));
       break;
+    case kNoSuchAlert:
+      response.reset(new net::HttpServerResponseInfo(net::HTTP_NOT_FOUND));
+      break;
     case kNoSuchCookie:
       response.reset(new net::HttpServerResponseInfo(net::HTTP_NOT_FOUND));
       break;
@@ -803,11 +822,13 @@ HttpHandler::PrepareStandardResponse(
       response.reset(
           new net::HttpServerResponseInfo(net::HTTP_INTERNAL_SERVER_ERROR));
       break;
+    case kTargetDetached:
+      response.reset(new net::HttpServerResponseInfo(net::HTTP_NOT_FOUND));
+      break;
 
     // TODO(kereliuk): evaluate the usage of these as they relate to the spec
     case kElementNotVisible:
     case kXPathLookupError:
-    case kNoAlertOpen:
     case kNoSuchExecutionContext:
       response.reset(new net::HttpServerResponseInfo(net::HTTP_BAD_REQUEST));
       break;
@@ -822,7 +843,7 @@ HttpHandler::PrepareStandardResponse(
   }
 
   if (!value)
-    value = base::MakeUnique<base::Value>();
+    value = std::make_unique<base::Value>();
 
   base::DictionaryValue body_params;
   if (status.IsError()){

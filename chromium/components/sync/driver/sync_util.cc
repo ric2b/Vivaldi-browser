@@ -10,6 +10,8 @@
 #include "components/sync/driver/sync_driver_switches.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_version_info.h"
 #include "sync/vivaldi_sync_urls.h"
 
 namespace {
@@ -66,6 +68,12 @@ std::string FormatUserAgentForSync(const std::string& system,
   } else {
     user_agent += " channel(" + version_info::GetChannelString(channel) + ")";
   }
+
+  if (vivaldi::IsVivaldiRunning()) {
+    user_agent += " Vivaldi ";
+    user_agent += vivaldi::GetVivaldiVersionString();
+  }
+
   return user_agent;
 }
 

@@ -4,8 +4,7 @@
 
 #include "chrome/browser/ui/cocoa/translate/translate_bubble_controller.h"
 
-#include "base/message_loop/message_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #import "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -59,11 +58,13 @@ class TranslateBubbleControllerTest : public CocoaProfileTest {
   }
 
   content::WebContents* AppendToTabStrip() {
-    content::WebContents* web_contents = content::WebContents::Create(
-        content::WebContents::CreateParams(profile(), site_instance_.get()));
-    browser()->tab_strip_model()->AppendWebContents(
-        web_contents, /*foreground=*/true);
-    return web_contents;
+    std::unique_ptr<content::WebContents> web_contents =
+        content::WebContents::Create(content::WebContents::CreateParams(
+            profile(), site_instance_.get()));
+    content::WebContents* raw_web_contents = web_contents.get();
+    browser()->tab_strip_model()->AppendWebContents(std::move(web_contents),
+                                                    /*foreground=*/true);
+    return raw_web_contents;
   }
 
   BrowserWindowController* bwc() { return bwc_; }

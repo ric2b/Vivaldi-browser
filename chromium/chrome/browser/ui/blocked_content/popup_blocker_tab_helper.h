@@ -36,6 +36,14 @@ class PopupBlockerTabHelper
   // Mapping from popup IDs to blocked popup requests.
   typedef std::map<int32_t, GURL> PopupIdMap;
 
+  // Classifies what caused a popup to be blocked.
+  enum class PopupBlockType {
+    // Popup blocked due to no user gesture.
+    kNoGesture,
+    // Popup blocked due to the abusive popup blocker.
+    kAbusive,
+  };
+
   // This enum is backed by a histogram. Make sure enums.xml is updated if this
   // is updated.
   enum class Action : int {
@@ -46,8 +54,13 @@ class PopupBlockerTabHelper
     // A popup was blocked by the popup blocker.
     kBlocked,
 
-    // A previously blocked popup was clicked through.
-    kClickedThrough,
+    // A previously blocked popup was clicked through. For popups blocked
+    // without a user gesture.
+    kClickedThroughNoGesture,
+
+    // A previously blocked popup was clicked through. For popups blocked
+    // due to the abusive popup blocker.
+    kClickedThroughAbusive,
 
     // Add new elements before this value.
     kLast
@@ -78,10 +91,13 @@ class PopupBlockerTabHelper
   // |opener_url| is an optional parameter used to compute how the popup
   // permission will behave. If it is not set the current committed URL will be
   // used instead.
+  //
+  // If this function returns true, then the contents of |params| is moved to
+  // |blocked_popups_|.
   static bool MaybeBlockPopup(
       content::WebContents* web_contents,
       const base::Optional<GURL>& opener_url,
-      const NavigateParams& params,
+      NavigateParams* params,
       const content::OpenURLParams* open_url_params,
       const blink::mojom::WindowFeatures& window_features);
 
@@ -105,8 +121,9 @@ class PopupBlockerTabHelper
 
   explicit PopupBlockerTabHelper(content::WebContents* web_contents);
 
-  void AddBlockedPopup(const NavigateParams& params,
-                       const blink::mojom::WindowFeatures& window_features);
+  void AddBlockedPopup(NavigateParams* params,
+                       const blink::mojom::WindowFeatures& window_features,
+                       PopupBlockType block_type);
 
   // Called when the blocked popup notification is shown or hidden.
   void PopupNotificationVisibilityChanged(bool visible);

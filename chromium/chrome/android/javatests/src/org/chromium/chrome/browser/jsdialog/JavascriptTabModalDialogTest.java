@@ -15,6 +15,7 @@ import static android.support.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.not;
 
+import android.content.pm.ActivityInfo;
 import android.support.test.espresso.Espresso;
 import android.support.test.filters.MediumTest;
 
@@ -26,7 +27,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
@@ -105,8 +105,8 @@ public class JavascriptTabModalDialogTest {
         Assert.assertNotNull("No dialog showing.", jsDialog);
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            jsDialog.onClick(ModalDialogView.BUTTON_POSITIVE);
-            jsDialog.onClick(ModalDialogView.BUTTON_POSITIVE);
+            jsDialog.onClick(ModalDialogView.ButtonType.POSITIVE);
+            jsDialog.onClick(ModalDialogView.ButtonType.POSITIVE);
         });
 
         Assert.assertTrue("JavaScript execution should continue after closing prompt.",
@@ -183,12 +183,14 @@ public class JavascriptTabModalDialogTest {
      */
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/800377")
     @Feature({"Browser", "Main"})
     public void testAlertModalDialogMessageFocus()
             throws InterruptedException, TimeoutException, ExecutionException {
         assertScrollViewFocusabilityInAlertDialog("alert('Short message!');", false);
 
+        // Test on landscape mode so that the message is long enough to make scroll view scrollable
+        // on a large-screen device.
+        mActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         assertScrollViewFocusabilityInAlertDialog(
                 "alert(new Array(200).join('Long message!'));", true);
     }
@@ -202,7 +204,7 @@ public class JavascriptTabModalDialogTest {
         final JavascriptTabModalDialog jsDialog = getCurrentDialog();
         Assert.assertNotNull("No dialog showing.", jsDialog);
 
-        onView(withId(R.id.js_modal_dialog_scroll_view))
+        onView(withId(R.id.modal_dialog_scroll_view))
                 .check(matches(expectedFocusability ? isFocusable() : not(isFocusable())));
 
         onView(withText(R.string.ok)).perform(click());
@@ -295,8 +297,7 @@ public class JavascriptTabModalDialogTest {
      */
     private OnEvaluateJavaScriptResultHelper executeJavaScriptAndWaitForDialog(
             final OnEvaluateJavaScriptResultHelper helper, String script) {
-        helper.evaluateJavaScriptForTests(
-                mActivity.getCurrentContentViewCore().getWebContents(), script);
+        helper.evaluateJavaScriptForTests(mActivity.getCurrentWebContents(), script);
         checkDialogShowing("Could not spawn or locate a modal dialog.", true);
         return helper;
     }

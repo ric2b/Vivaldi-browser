@@ -158,7 +158,7 @@ class ContentSuggestionsServiceTest : public testing::Test {
         pref_service_.get(), base::DefaultClock::GetInstance());
 
     service_ = std::make_unique<ContentSuggestionsService>(
-        enabled, /*signin_manager=*/nullptr, /*history_service=*/nullptr,
+        enabled, /*identity_manager=*/nullptr, /*history_service=*/nullptr,
         /*large_icon_service=*/nullptr, pref_service_.get(),
         std::move(category_ranker_), std::move(user_classifier),
         /*scheduler=*/nullptr, /*debug_logger=*/std::make_unique<Logger>());
@@ -576,8 +576,7 @@ TEST_F(ContentSuggestionsServiceTest, ShouldForwardDeleteAllHistoryURLs) {
       MakeRegisteredMockProvider(category);
   EXPECT_CALL(*provider, ClearHistory(base::Time(), base::Time::Max(), _));
   static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
-      /*history_service=*/nullptr, /*all_history=*/true, /*expired=*/false,
-      history::URLRows(), /*favicon_urls=*/std::set<GURL>());
+      /*history_service=*/nullptr, history::DeletionInfo::ForAllHistory());
 
   service()->RemoveObserver(&observer);
 }
@@ -590,15 +589,19 @@ TEST_F(ContentSuggestionsServiceTest, ShouldIgnoreExpiredURLDeletions) {
   service()->AddObserver(&observer);
 
   static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
-      /*history_service=*/nullptr, /*all_history=*/true,
-      /*expired=*/true, history::URLRows(),
-      /*favicon_urls=*/std::set<GURL>());
+      /*history_service=*/nullptr,
+      history::DeletionInfo(history::DeletionTimeRange::AllTime(),
+                            /*expired=*/true, history::URLRows(),
+                            /*favicon_urls=*/std::set<GURL>(),
+                            /*restrict_urls=*/base::nullopt));
   static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
-      /*history_service=*/nullptr, /*all_history=*/false,
-      /*expired=*/true,
-      history::URLRows({history::URLRow(GURL("http://google.com")),
-                        history::URLRow(GURL("http://maps.google.com"))}),
-      /*favicon_urls=*/std::set<GURL>());
+      /*history_service=*/nullptr,
+      history::DeletionInfo(history::DeletionTimeRange::Invalid(),
+                            /*expired=*/true,
+                            {history::URLRow(GURL("http://google.com")),
+                             history::URLRow(GURL("http://maps.google.com"))},
+                            /*favicon_urls=*/std::set<GURL>(),
+                            /*restrict_urls=*/base::nullopt));
 
   service()->RemoveObserver(&observer);
 }
@@ -607,9 +610,7 @@ TEST_F(ContentSuggestionsServiceTest, ShouldIgnoreEmptyURLDeletions) {
   Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
   MakeRegisteredMockProvider(category);
   static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
-      /*history_service=*/nullptr, /*all_history=*/false,
-      /*expired=*/false, history::URLRows(),
-      /*favicon_urls=*/std::set<GURL>());
+      /*history_service=*/nullptr, history::DeletionInfo::ForUrls({}, {}));
 }
 
 TEST_F(ContentSuggestionsServiceTest,
@@ -618,10 +619,10 @@ TEST_F(ContentSuggestionsServiceTest,
   MakeRegisteredMockProvider(category);
   // Single URLs should not trigger
   static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
-      /*history_service=*/nullptr, /*all_history=*/false,
-      /*expired=*/false,
-      history::URLRows({history::URLRow(GURL("http://google.com"))}),
-      /*favicon_urls=*/std::set<GURL>());
+      /*history_service=*/nullptr,
+      history::DeletionInfo::ForUrls(
+          {history::URLRow(GURL("http://google.com"))},
+          /*favicon_urls=*/std::set<GURL>()));
 }
 
 TEST_F(ContentSuggestionsServiceTest,
@@ -636,11 +637,11 @@ TEST_F(ContentSuggestionsServiceTest,
   EXPECT_CALL(*provider, ClearHistory(base::Time(), base::Time::Max(), _));
 
   static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
-      /*history_service=*/nullptr, /*all_history=*/false,
-      /*expired=*/false,
-      history::URLRows({history::URLRow(GURL("http://google.com")),
-                        history::URLRow(GURL("http://youtube.com"))}),
-      /*favicon_urls=*/std::set<GURL>());
+      /*history_service=*/nullptr,
+      history::DeletionInfo::ForUrls(
+          {history::URLRow(GURL("http://google.com")),
+           history::URLRow(GURL("http://youtube.com"))},
+          /*favicon_urls=*/std::set<GURL>()));
 
   service()->RemoveObserver(&observer);
 }
@@ -817,132 +818,6 @@ TEST_F(ContentSuggestionsServiceTest,
 
   EXPECT_CALL(*raw_mock_ranker, OnCategoryDismissed(category));
   service()->DismissCategory(category);
-}
-
-TEST_F(ContentSuggestionsServiceTest,
-       ShouldDestroyBookmarksProviderWhenChromeHomeIsEnabled) {
-  // Create and register the provider.
-  Category bookmarks_category =
-      Category::FromKnownCategory(KnownCategories::BOOKMARKS);
-  MockContentSuggestionsProvider* bookmarks_provider =
-      MakeRegisteredMockProvider(bookmarks_category);
-  bookmarks_provider->FireSuggestionsChanged(
-      bookmarks_category, CreateSuggestions(bookmarks_category, {1}));
-  bookmarks_provider->FireCategoryStatusChangedWithCurrentStatus(
-      bookmarks_category);
-  ASSERT_THAT(service()->GetCategories(),
-              UnorderedElementsAre(bookmarks_category));
-  ASSERT_THAT(service()->GetCategoryStatus(bookmarks_category),
-              Eq(CategoryStatus::AVAILABLE));
-  ASSERT_THAT(service()->GetSuggestionsForCategory(bookmarks_category),
-              SizeIs(1));
-
-  // Set destructor callback to expect the destruction.
-  base::MockCallback<MockContentSuggestionsProvider::DestructorCallback>
-      mock_destructor_callback;
-  bookmarks_provider->SetDestructorCallback(mock_destructor_callback.Get());
-
-  MockServiceObserver observer;
-  service()->AddObserver(&observer);
-
-  // The provider must be destructed and the category status must change.
-  EXPECT_CALL(mock_destructor_callback, Run());
-  EXPECT_CALL(observer, OnCategoryStatusChanged(bookmarks_category,
-                                                CategoryStatus::NOT_PROVIDED));
-  service()->OnChromeHomeStatusChanged(/*is_chrome_home_enabled=*/true);
-
-  EXPECT_THAT(service()->GetCategories(), IsEmpty());
-  EXPECT_THAT(service()->GetCategoryStatus(bookmarks_category),
-              Eq(CategoryStatus::NOT_PROVIDED));
-  EXPECT_THAT(service()->GetSuggestionsForCategory(bookmarks_category),
-              IsEmpty());
-
-  service()->RemoveObserver(&observer);
-}
-
-TEST_F(ContentSuggestionsServiceTest,
-       ShouldDestroyDownloadsProviderWhenChromeHomeIsEnabled) {
-  // Create and register the provider.
-  Category downloads_category =
-      Category::FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockContentSuggestionsProvider* downloads_provider =
-      MakeRegisteredMockProvider(downloads_category);
-  downloads_provider->FireSuggestionsChanged(
-      downloads_category, CreateSuggestions(downloads_category, {1}));
-  downloads_provider->FireCategoryStatusChangedWithCurrentStatus(
-      downloads_category);
-  ASSERT_THAT(service()->GetCategories(),
-              UnorderedElementsAre(downloads_category));
-  ASSERT_THAT(service()->GetCategoryStatus(downloads_category),
-              Eq(CategoryStatus::AVAILABLE));
-  ASSERT_THAT(service()->GetSuggestionsForCategory(downloads_category),
-              SizeIs(1));
-
-  // Set destructor callback to expect the destruction.
-  base::MockCallback<MockContentSuggestionsProvider::DestructorCallback>
-      mock_destructor_callback;
-  downloads_provider->SetDestructorCallback(mock_destructor_callback.Get());
-
-  MockServiceObserver observer;
-  service()->AddObserver(&observer);
-
-  // The provider must be destructed and the category status must change.
-  EXPECT_CALL(mock_destructor_callback, Run());
-  EXPECT_CALL(observer, OnCategoryStatusChanged(downloads_category,
-                                                CategoryStatus::NOT_PROVIDED));
-  service()->OnChromeHomeStatusChanged(/*is_chrome_home_enabled=*/true);
-
-  EXPECT_THAT(service()->GetCategories(), IsEmpty());
-  EXPECT_THAT(service()->GetCategoryStatus(downloads_category),
-              Eq(CategoryStatus::NOT_PROVIDED));
-  EXPECT_THAT(service()->GetSuggestionsForCategory(downloads_category),
-              IsEmpty());
-
-  service()->RemoveObserver(&observer);
-}
-
-TEST_F(ContentSuggestionsServiceTest,
-       ShouldNotDestroyArticlesProviderWhenChromeHomeIsEnabled) {
-  // Create and register the provider.
-  Category articles_category =
-      Category::FromKnownCategory(KnownCategories::ARTICLES);
-  MockContentSuggestionsProvider* articles_provider =
-      MakeRegisteredMockProvider(articles_category);
-  articles_provider->FireSuggestionsChanged(
-      articles_category, CreateSuggestions(articles_category, {1}));
-  articles_provider->FireCategoryStatusChangedWithCurrentStatus(
-      articles_category);
-  ASSERT_THAT(service()->GetCategories(),
-              UnorderedElementsAre(articles_category));
-  ASSERT_THAT(service()->GetCategoryStatus(articles_category),
-              Eq(CategoryStatus::AVAILABLE));
-  ASSERT_THAT(service()->GetSuggestionsForCategory(articles_category),
-              SizeIs(1));
-
-  // Set destructor callback to ensure no destruction.
-  base::MockCallback<MockContentSuggestionsProvider::DestructorCallback>
-      mock_destructor_callback;
-  articles_provider->SetDestructorCallback(mock_destructor_callback.Get());
-
-  MockServiceObserver observer;
-  service()->AddObserver(&observer);
-
-  // The provider must not be destructed and the category status must not
-  // change, because Articles are enabled in Chrome Home.
-  EXPECT_CALL(mock_destructor_callback, Run()).Times(0);
-  EXPECT_CALL(observer, OnCategoryStatusChanged(articles_category, _)).Times(0);
-  service()->OnChromeHomeStatusChanged(/*is_chrome_home_enabled=*/true);
-
-  EXPECT_THAT(service()->GetCategories(),
-              UnorderedElementsAre(articles_category));
-  EXPECT_THAT(service()->GetCategoryStatus(articles_category),
-              Eq(CategoryStatus::AVAILABLE));
-  EXPECT_THAT(service()->GetSuggestionsForCategory(articles_category),
-              SizeIs(1));
-
-  articles_provider->SetDestructorCallback(
-      MockContentSuggestionsProvider::DestructorCallback());
-  service()->RemoveObserver(&observer);
 }
 
 }  // namespace ntp_snippets

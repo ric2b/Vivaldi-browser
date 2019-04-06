@@ -11,7 +11,7 @@
 #include "build/build_config.h"
 #include "media/base/test_data_util.h"
 #include "media/filters/file_data_source.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
@@ -185,6 +185,7 @@ TEST(AudioVideoMetadataExtractorTest, AndroidRotatedMP4Video) {
 
   EXPECT_EQ(0u, extractor->attached_images_bytes().size());
 }
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 TEST(AudioVideoMetadataExtractorTest, AudioMP3) {
   std::unique_ptr<AudioVideoMetadataExtractor> extractor =
@@ -259,6 +260,5 @@ TEST(AudioVideoMetadataExtractorTest, AudioFLACInMp4) {
 
   EXPECT_EQ(0u, extractor->attached_images_bytes().size());
 }
-#endif
 
 }  // namespace media

@@ -32,7 +32,9 @@ source_set("trigger_throttler") {
   ]
   deps = [
     "//base:base",
+    "//components/prefs:prefs",
     "//components/safe_browsing:features",
+    "//components/safe_browsing/common:safe_browsing_prefs",
   ]
 }
 
@@ -50,15 +52,36 @@ source_set("ad_sampler_trigger") {
   ]
 }
 
+source_set("suspicious_site_trigger") {
+  sources = [
+    "suspicious_site_trigger.cc",
+    "suspicious_site_trigger.h",
+  ]
+  deps = [
+    ":trigger_throttler",
+    ":triggers",
+    "//base:base",
+    "//components/history/core/browser:browser",
+    "//components/prefs:prefs",
+    "//components/safe_browsing:features",
+    "//content/public/browser",
+    "//net:net",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
     "ad_sampler_trigger_unittest.cc",
+    "mock_trigger_manager.cc",
+    "mock_trigger_manager.h",
+    "suspicious_site_trigger_unittest.cc",
     "trigger_manager_unittest.cc",
     "trigger_throttler_unittest.cc",
   ]
   deps = [
     ":ad_sampler_trigger",
+    ":suspicious_site_trigger",
     ":trigger_throttler",
     ":triggers",
     "//base",

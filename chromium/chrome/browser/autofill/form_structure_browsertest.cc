@@ -56,7 +56,7 @@ const std::set<base::FilePath::StringType>& GetFailingTestNames() {
 const base::FilePath& GetTestDataDir() {
   CR_DEFINE_STATIC_LOCAL(base::FilePath, dir, ());
   if (dir.empty()) {
-    PathService::Get(base::DIR_SOURCE_ROOT, &dir);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &dir);
     dir = dir.AppendASCII("components");
     dir = dir.AppendASCII("test");
     dir = dir.AppendASCII("data");
@@ -98,7 +98,7 @@ std::string FormStructuresToString(
       forms_string += " | " + base::UTF16ToUTF8(field->name);
       forms_string += " | " + base::UTF16ToUTF8(field->label);
       forms_string += " | " + base::UTF16ToUTF8(field->value);
-      forms_string += " | " + field->section();
+      forms_string += " | " + field->section;
       forms_string += "\n";
     }
   }
@@ -146,7 +146,9 @@ FormStructureBrowserTest::FormStructureBrowserTest()
       // Enabled
       {},
       // Disabled
-      {autofill::features::kAutofillEnforceMinRequiredFieldsForUpload,
+      {autofill::features::kAutofillEnforceMinRequiredFieldsForHeuristics,
+       autofill::features::kAutofillEnforceMinRequiredFieldsForQuery,
+       autofill::features::kAutofillEnforceMinRequiredFieldsForUpload,
        autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout});
 }
 
@@ -198,7 +200,7 @@ void FormStructureBrowserTest::GenerateResults(const std::string& input,
   AutofillManager* autofill_manager = autofill_driver->autofill_manager();
   ASSERT_NE(nullptr, autofill_manager);
   const std::vector<std::unique_ptr<FormStructure>>& forms =
-      autofill_manager->form_structures_;
+      autofill_manager->form_structures();
   *output = FormStructuresToString(forms);
 }
 

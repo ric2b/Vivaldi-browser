@@ -10,13 +10,16 @@
 
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/syncable_util.h"
+#include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "sync/test/fake_server/notes_entity.h"
+#include "sync/vivaldi_hash_util.h"
 #include "url/gurl.h"
 
 using std::string;
@@ -70,7 +73,7 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
   // TODO(pvalenzuela): Allow caller customization of the position integer.
   string suffix = GenerateSyncableNotesHash(originator_cache_guid_,
                                             originator_client_item_id_);
-  syncer::UniquePosition::FromInt64(0, suffix).ToProto(&unique_position);
+  unique_position = syncer::UniquePosition::FromInt64(0, suffix).ToProto();
 
   const string id =
     LoopbackServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
@@ -80,6 +83,14 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
           id, kUnusedVersion, title_, originator_cache_guid_,
           originator_client_item_id_, unique_position, entity_specifics, false,
           parent_id_, kDefaultTime, kDefaultTime));
+}
+
+NotesEntityBuilder EntityBuilderFactory::NewNotesEntityBuilder(
+  const string& title, const GURL& url, const string& content) {
+  --latest_client_item_id_;
+  NotesEntityBuilder builder(title, url, content, cache_guid_,
+    base::Int64ToString(latest_client_item_id_));
+  return builder;
 }
 
 }  // namespace fake_server

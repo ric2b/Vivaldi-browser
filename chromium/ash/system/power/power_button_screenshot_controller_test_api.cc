@@ -21,25 +21,7 @@ bool PowerButtonScreenshotControllerTestApi::TriggerVolumeDownTimer() {
   if (!controller_->volume_down_timer_.IsRunning())
     return false;
 
-  base::Closure task = controller_->volume_down_timer_.user_task();
-  controller_->volume_down_timer_.Stop();
-  task.Run();
-  return true;
-}
-
-bool PowerButtonScreenshotControllerTestApi::
-    ClamshellPowerButtonTimerIsRunning() const {
-  return controller_->clamshell_power_button_timer_.IsRunning();
-}
-
-bool PowerButtonScreenshotControllerTestApi::
-    TriggerClamshellPowerButtonTimer() {
-  if (!controller_->clamshell_power_button_timer_.IsRunning())
-    return false;
-
-  base::Closure task = controller_->clamshell_power_button_timer_.user_task();
-  controller_->clamshell_power_button_timer_.Stop();
-  task.Run();
+  controller_->volume_down_timer_.FireNow();
   return true;
 }
 

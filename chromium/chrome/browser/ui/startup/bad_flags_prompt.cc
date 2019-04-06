@@ -6,6 +6,7 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -22,54 +23,40 @@
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
 #include "components/invalidation/impl/invalidation_switches.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/translate/core/common/translate_switches.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/switches.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "services/service_manager/sandbox/switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/chrome_feature_list.h"
+#endif  // OS_ANDROID
+
 namespace chrome {
 
-void ShowBadFlagsPrompt(Browser* browser) {
-  content::WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  if (!web_contents)
-    return;
+namespace {
 
-  // Flags only available in specific builds, for which to display a warning
-  // "the flag is not implemented in this build", if necessary.
-  struct {
-    const char* name;
-    bool is_invalid;
-  } conditional_flags[] = {
-      {switches::kEnableHeapProfiling,
-       base::trace_event::MemoryDumpManager::
-               GetHeapProfilingModeFromCommandLine() ==
-           base::trace_event::kHeapProfilingModeInvalid},
-  };
-  for (auto conditional_flag : conditional_flags) {
-    if (conditional_flag.is_invalid) {
-      ShowBadFlagsInfoBar(web_contents, IDS_UNIMPLEMENTED_FLAGS_WARNING_MESSAGE,
-                          conditional_flag.name);
-      return;
-    }
-  }
-
-  // Unsupported flags for which to display a warning that "stability and
-  // security will suffer".
-  static const char* kBadFlags[] = {
+#if !defined(OS_ANDROID)
+// Dangerous command line flags for which to display a warning that "stability
+// and security will suffer".
+static const char* kBadFlags[] = {
+    network::switches::kIgnoreCertificateErrorsSPKIList,
     // These flags disable sandbox-related security.
     service_manager::switches::kDisableGpuSandbox,
     service_manager::switches::kDisableSeccompFilterSandbox,
     service_manager::switches::kDisableSetuidSandbox,
+    service_manager::switches::kNoSandbox,
 #if defined(OS_WIN)
     service_manager::switches::kAllowThirdPartyModules,
 #endif
@@ -77,26 +64,23 @@ void ShowBadFlagsPrompt(Browser* browser) {
 #if BUILDFLAG(ENABLE_NACL)
     switches::kNaClDangerousNoSandboxNonSfi,
 #endif
-    switches::kNoSandbox,
     switches::kSingleProcess,
 
     // These flags disable or undermine the Same Origin Policy.
     translate::switches::kTranslateSecurityOrigin,
 
     // These flags undermine HTTPS / connection security.
-#if BUILDFLAG(ENABLE_WEBRTC)
     switches::kDisableWebRtcEncryption,
-#endif
     switches::kIgnoreCertificateErrors,
-    switches::kIgnoreCertificateErrorsSPKIList,
     invalidation::switches::kSyncAllowInsecureXmppConnection,
 
     // These flags change the URLs that handle PII.
-    switches::kGaiaUrl,
-    translate::switches::kTranslateScriptURL,
+    switches::kGaiaUrl, translate::switches::kTranslateScriptURL,
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     // This flag gives extensions more powers.
     extensions::switches::kExtensionsOnChromeURLs,
+#endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
     // Speech dispatcher is buggy, it can crash and it can make Chrome freeze.
@@ -106,8 +90,7 @@ void ShowBadFlagsPrompt(Browser* browser) {
 
     // These flags control Blink feature state, which is not supported and is
     // intended only for use by Chromium developers.
-    switches::kDisableBlinkFeatures,
-    switches::kEnableBlinkFeatures,
+    switches::kDisableBlinkFeatures, switches::kEnableBlinkFeatures,
 
     // This flag allows people to whitelist certain origins as secure, even
     // if they are not.
@@ -119,12 +102,55 @@ void ShowBadFlagsPrompt(Browser* browser) {
 
     // This flag allows sites to access protected media identifiers without
     // getting the user's permission.
-    switches::kUnsafelyAllowProtectedMediaIdentifierForDomain
-  };
+    switches::kUnsafelyAllowProtectedMediaIdentifierForDomain,
 
+    // This flag delays execution of base::TaskPriority::BACKGROUND tasks until
+    // shutdown. The queue of base::TaskPriority::BACKGROUND tasks can increase
+    // memory usage. Also, while it should be possible to use Chrome almost
+    // normally with this flag, it is expected that some non-visible operations
+    // such as writing user data to disk, cleaning caches, reporting metrics or
+    // updating components won't be performed until shutdown.
+    switches::kDisableBackgroundTasks,
+};
+#endif  // OS_ANDROID
+
+// Dangerous feature flags in about:flags for which to display a warning that
+// "stability and security will suffer".
+static const base::Feature* kBadFeatureFlagsInAboutFlags[] = {
+    &features::kSignedHTTPExchange,
+#if defined(OS_ANDROID)
+    &chrome::android::kCommandLineOnNonRooted,
+#endif  // OS_ANDROID
+};
+
+void ShowBadFeatureFlagsInfoBar(content::WebContents* web_contents,
+                                int message_id,
+                                const base::Feature* feature) {
+  SimpleAlertInfoBarDelegate::Create(
+      InfoBarService::FromWebContents(web_contents),
+      infobars::InfoBarDelegate::BAD_FLAGS_INFOBAR_DELEGATE, nullptr,
+      l10n_util::GetStringFUTF16(message_id, base::UTF8ToUTF16(feature->name)),
+      false);
+}
+
+}  // namespace
+
+void ShowBadFlagsPrompt(content::WebContents* web_contents) {
+// On Android, ShowBadFlagsPrompt doesn't show the warning notification
+// for flags which are not available in about:flags.
+#if !defined(OS_ANDROID)
   for (const char* flag : kBadFlags) {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(flag)) {
       ShowBadFlagsInfoBar(web_contents, IDS_BAD_FLAGS_WARNING_MESSAGE, flag);
+      return;
+    }
+  }
+#endif  // OS_ANDROID
+
+  for (const base::Feature* feature : kBadFeatureFlagsInAboutFlags) {
+    if (base::FeatureList::IsEnabled(*feature)) {
+      ShowBadFeatureFlagsInfoBar(web_contents, IDS_BAD_FEATURES_WARNING_MESSAGE,
+                                 feature);
       return;
     }
   }

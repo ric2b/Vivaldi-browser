@@ -16,7 +16,7 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "chrome/browser/apps/browser_context_keyed_service_factories.h"
+#include "chrome/browser/apps/platform_apps/browser_context_keyed_service_factories.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/chrome_app_sorting.h"
@@ -32,7 +32,6 @@
 #include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/extensions/navigation_observer.h"
 #include "chrome/browser/extensions/shared_module_service.h"
-#include "chrome/browser/extensions/shared_user_script_master.h"
 #include "chrome/browser/extensions/state_store_notification_observer.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/extensions/update_install_gate.h"
@@ -56,13 +55,14 @@
 #include "extensions/browser/quota_service.h"
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/service_worker_manager.h"
+#include "extensions/browser/shared_user_script_master.h"
 #include "extensions/browser/state_store.h"
 #include "extensions/browser/uninstall_ping_sender.h"
 #include "extensions/browser/value_store/value_store_factory_impl.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_url_handlers.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -193,7 +193,8 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
 
   navigation_observer_.reset(new NavigationObserver(profile_));
 
-  bool allow_noisy_errors = !command_line->HasSwitch(switches::kNoErrorDialogs);
+  bool allow_noisy_errors =
+      !command_line->HasSwitch(::switches::kNoErrorDialogs);
   LoadErrorReporter::Init(allow_noisy_errors);
 
   content_verifier_ = new ContentVerifier(
@@ -443,6 +444,7 @@ void ExtensionSystemImpl::InstallUpdate(
     const std::string& extension_id,
     const std::string& public_key,
     const base::FilePath& unpacked_dir,
+    bool install_immediately,
     InstallUpdateCallback install_update_callback) {
   DCHECK(!install_update_callback.is_null());
 
@@ -452,8 +454,19 @@ void ExtensionSystemImpl::InstallUpdate(
   scoped_refptr<CrxInstaller> installer = CrxInstaller::CreateSilent(service);
   installer->set_delete_source(true);
   installer->set_installer_callback(std::move(install_update_callback));
+  installer->set_install_immediately(install_immediately);
   installer->UpdateExtensionFromUnpackedCrx(extension_id, public_key,
                                             unpacked_dir);
+}
+
+bool ExtensionSystemImpl::FinishDelayedInstallationIfReady(
+    const std::string& extension_id,
+    bool install_immediately) {
+  ExtensionService* service = extension_service();
+  DCHECK(service);
+  return service->GetPendingExtensionUpdate(extension_id) &&
+         service->FinishDelayedInstallationIfReady(extension_id,
+                                                   install_immediately);
 }
 
 void ExtensionSystemImpl::RegisterExtensionWithRequestContexts(

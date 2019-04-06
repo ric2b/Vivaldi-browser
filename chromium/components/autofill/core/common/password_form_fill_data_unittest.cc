@@ -54,7 +54,6 @@ TEST(PasswordFormFillDataTest, TestSinglePreferredMatch) {
                            matches,
                            &preferred_match,
                            true,
-                           false,
                            &result);
 
   // |wait_for_username| should reflect the |wait_for_username_before_autofill|
@@ -68,7 +67,6 @@ TEST(PasswordFormFillDataTest, TestSinglePreferredMatch) {
   InitPasswordFormFillData(form_on_page,
                            matches,
                            &preferred_match,
-                           false,
                            false,
                            &result2);
 
@@ -149,7 +147,6 @@ TEST(PasswordFormFillDataTest, TestPublicSuffixDomainMatching) {
                            matches,
                            &preferred_match,
                            true,
-                           false,
                            &result);
   EXPECT_TRUE(result.wait_for_username);
   // The preferred realm should match the signon realm from the
@@ -227,7 +224,7 @@ TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
 
   PasswordFormFillData result;
   InitPasswordFormFillData(form_on_page, matches, &preferred_match, false,
-                           false, &result);
+                           &result);
   EXPECT_FALSE(result.wait_for_username);
   // The preferred realm should match the signon realm from the
   // preferred match so the user can see where the result came from.
@@ -242,6 +239,46 @@ TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
   // signon realm so the user can see where the result came from.
   iter = result.additional_logins.find(affiliated_match.username_value);
   EXPECT_EQ(iter->second.realm, affiliated_match.signon_realm);
+}
+
+// Tests that renderer ids are passed correctly.
+TEST(PasswordFormFillDataTest, RendererIDs) {
+  // Create the current form on the page.
+  PasswordForm form_on_page;
+  form_on_page.origin = GURL("https://foo.com/");
+  form_on_page.action = GURL("https://foo.com/login");
+  form_on_page.username_element = ASCIIToUTF16("username");
+  form_on_page.password_element = ASCIIToUTF16("password");
+  form_on_page.username_may_use_prefilled_placeholder = true;
+
+  // Create an exact match in the database.
+  PasswordForm preferred_match = form_on_page;
+  preferred_match.username_value = ASCIIToUTF16("test@gmail.com");
+  preferred_match.password_value = ASCIIToUTF16("test");
+  preferred_match.preferred = true;
+
+  // Set renderer id related fields.
+  FormData form_data;
+  form_data.unique_renderer_id = 42;
+  form_data.is_form_tag = true;
+  form_on_page.form_data = form_data;
+  form_on_page.has_renderer_ids = true;
+  form_on_page.username_element_renderer_id = 123;
+  form_on_page.password_element_renderer_id = 456;
+
+  std::map<base::string16, const PasswordForm*> matches;
+
+  PasswordFormFillData result;
+  InitPasswordFormFillData(form_on_page, matches, &preferred_match, true,
+                           &result);
+
+  EXPECT_EQ(form_data.unique_renderer_id, result.form_renderer_id);
+  EXPECT_EQ(form_on_page.has_renderer_ids, result.has_renderer_ids);
+  EXPECT_EQ(form_on_page.username_element_renderer_id,
+            result.username_field.unique_renderer_id);
+  EXPECT_EQ(form_on_page.password_element_renderer_id,
+            result.password_field.unique_renderer_id);
+  EXPECT_TRUE(result.username_may_use_prefilled_placeholder);
 }
 
 }  // namespace autofill

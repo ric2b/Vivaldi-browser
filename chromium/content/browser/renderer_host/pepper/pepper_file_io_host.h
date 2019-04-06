@@ -15,8 +15,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "components/download/quarantine/quarantine.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
-#include "content/public/common/quarantine.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_platform_file.h"
 #include "ppapi/c/pp_file_info.h"
@@ -94,7 +94,7 @@ class PepperFileIOHost : public ppapi::host::ResourceHost,
 
   void OnLocalFileQuarantined(ppapi::host::ReplyMessageContext reply_context,
                               const base::FilePath& path,
-                              QuarantineFileResult quarantine_result);
+                              download::QuarantineFileResult quarantine_result);
 
   void SendFileOpenReply(ppapi::host::ReplyMessageContext reply_context,
                          base::File::Error error_code);
@@ -105,7 +105,7 @@ class PepperFileIOHost : public ppapi::host::ResourceHost,
       UIThreadStuff ui_thread_stuff);
   void DidOpenInternalFile(ppapi::host::ReplyMessageContext reply_context,
                            base::File file,
-                           const base::Closure& on_close_callback);
+                           base::OnceClosure on_close_callback);
   void GotResolvedRenderProcessId(
       ppapi::host::ReplyMessageContext reply_context,
       base::FilePath path,
@@ -145,7 +145,7 @@ class PepperFileIOHost : public ppapi::host::ResourceHost,
   // Valid only for PP_FILESYSTEMTYPE_LOCAL{PERSISTENT,TEMPORARY}.
   scoped_refptr<storage::FileSystemContext> file_system_context_;
   storage::FileSystemURL file_system_url_;
-  base::Closure on_close_callback_;
+  base::OnceClosure on_close_callback_;
   int64_t max_written_offset_;
   bool check_quota_;
 

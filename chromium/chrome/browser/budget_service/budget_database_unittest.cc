@@ -9,7 +9,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/budget_service/budget.pb.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
@@ -336,7 +336,7 @@ TEST_F(BudgetDatabaseTest, DefaultSiteEngagementInIncognitoProfile) {
   // Create a second BudgetDatabase instance for the off-the-record version of
   // a second profile. This will not have been influenced by the |profile_|.
   std::unique_ptr<BudgetDatabase> second_database =
-      base::MakeUnique<BudgetDatabase>(second_profile_incognito,
+      std::make_unique<BudgetDatabase>(second_profile_incognito,
                                        base::FilePath() /* in memory */);
 
   ASSERT_FALSE(profile()->IsOffTheRecord());

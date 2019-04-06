@@ -10,23 +10,26 @@ namespace update_client {
 // Errors generated as a result of calling UpdateClient member functions.
 // These errors are not sent in pings.
 enum class Error {
-  INVALID_ARGUMENT = -1,
   NONE = 0,
   UPDATE_IN_PROGRESS = 1,
   UPDATE_CANCELED = 2,
   RETRY_LATER = 3,
   SERVICE_ERROR = 4,
   UPDATE_CHECK_ERROR = 5,
+  CRX_NOT_FOUND = 6,
+  INVALID_ARGUMENT = 7,
+  MAX_VALUE,
 };
 
 // These errors are sent in pings. Add new values only to the bottom of
 // the enums below; the order must be kept stable.
 enum class ErrorCategory {
-  kErrorNone = 0,
-  kNetworkError,
-  kUnpackError,
-  kInstallError,
-  kServiceError,  // Runtime errors which occur in the service itself.
+  kNone = 0,
+  kDownload,
+  kUnpack,
+  kInstall,
+  kService,  // Runtime errors which occur in the service itself.
+  kUpdateCheck,
 };
 
 // These errors are returned with the |kNetworkError| error category. This
@@ -43,7 +46,7 @@ enum class CrxDownloaderError {
   GENERIC_ERROR = -1
 };
 
-// These errors are returned with the |kUnpackError| error category and
+// These errors are returned with the |kUnpack| error category and
 // indicate unpacker or patcher error.
 enum class UnpackerError {
   kNone = 0,
@@ -66,7 +69,7 @@ enum class UnpackerError {
   // kFingerprintWriteFailed = 17,    // Deprecated. Don't use.
 };
 
-// These errors are returned with the |kServiceError| error category and
+// These errors are returned with the |kService| error category and
 // are returned by the component installers.
 enum class InstallError {
   NONE = 0,
@@ -83,12 +86,31 @@ enum class InstallError {
   CUSTOM_ERROR_BASE = 100,  // Specific installer errors go above this value.
 };
 
-// These errors are returned with the |kInstallError| error category and
+// These errors are returned with the |kService| error category and
 // indicate critical or configuration errors in the update service.
 enum class ServiceError {
   NONE = 0,
   SERVICE_WAIT_FAILED = 1,
   UPDATE_DISABLED = 2,
+};
+
+// These errors are related to serialization, deserialization, and parsing of
+// protocol requests.
+// The begin value for this enum is chosen not to conflict with network errors
+// defined by net/base/net_error_list.h. The callers don't have to handle this
+// error in any meaningful way, but this value may be reported in UMA stats,
+// therefore avoiding collisions with known network errors is desirable.
+enum class ProtocolError : int {
+  NONE = 0,
+  RESPONSE_NOT_TRUSTED = -10000,
+  MISSING_PUBLIC_KEY = -10001,
+  MISSING_URLS = -10002,
+  PARSE_FAILED = -10003,
+  UPDATE_RESPONSE_NOT_FOUND = -10004,
+  URL_FETCHER_FAILED = -10005,
+  UNKNOWN_APPLICATION = -10006,
+  RESTRICTED_APPLICATION = -10007,
+  INVALID_APPID = -10008,
 };
 
 }  // namespace update_client

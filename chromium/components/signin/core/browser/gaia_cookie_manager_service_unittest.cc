@@ -16,7 +16,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -26,8 +26,7 @@
 #include "google_apis/gaia/fake_oauth2_token_service.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_test_util.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -39,7 +38,7 @@ class MockObserver : public GaiaCookieManagerService::Observer {
     helper_->AddObserver(this);
   }
 
-  ~MockObserver() { helper_->RemoveObserver(this); }
+  ~MockObserver() override { helper_->RemoveObserver(this); }
 
   MOCK_METHOD2(OnAddAccountToCookieCompleted,
                void(const std::string&, const GoogleServiceAuthError&));
@@ -59,28 +58,33 @@ class MockObserver : public GaiaCookieManagerService::Observer {
 
 int total = 0;
 
-// Custom matcher for ListedAccounts.
-MATCHER_P(ListedAccountEquals, expected, "") {
-  if (expected.size() != arg.size())
+bool AreAccountListsEqual(const std::vector<gaia::ListedAccount>& left,
+                          const std::vector<gaia::ListedAccount>& right) {
+  if (left.size() != right.size())
     return false;
 
-  for (size_t i = 0u; i < expected.size(); ++i) {
-    const gaia::ListedAccount& expected_account = expected[i];
-    const gaia::ListedAccount& actual_account = arg[i];
+  for (size_t i = 0u; i < left.size(); ++i) {
+    const gaia::ListedAccount& left_account = left[i];
+    const gaia::ListedAccount& actual_account = right[i];
     // If both accounts have an ID, use it for the comparison.
-    if (!expected_account.id.empty() && !actual_account.id.empty()) {
-      if (expected_account.id != actual_account.id)
+    if (!left_account.id.empty() && !actual_account.id.empty()) {
+      if (left_account.id != actual_account.id)
         return false;
-    } else if (expected_account.email != actual_account.email ||
-               expected_account.gaia_id != actual_account.gaia_id ||
-               expected_account.raw_email != actual_account.raw_email ||
-               expected_account.valid != actual_account.valid ||
-               expected_account.signed_out != actual_account.signed_out ||
-               expected_account.verified != actual_account.verified) {
+    } else if (left_account.email != actual_account.email ||
+               left_account.gaia_id != actual_account.gaia_id ||
+               left_account.raw_email != actual_account.raw_email ||
+               left_account.valid != actual_account.valid ||
+               left_account.signed_out != actual_account.signed_out ||
+               left_account.verified != actual_account.verified) {
       return false;
     }
   }
   return true;
+}
+
+// Custom matcher for ListedAccounts.
+MATCHER_P(ListedAccountEquals, expected, "") {
+  return AreAccountListsEqual(expected, arg);
 }
 
 class InstrumentedGaiaCookieManagerService : public GaiaCookieManagerService {
@@ -94,7 +98,7 @@ class InstrumentedGaiaCookieManagerService : public GaiaCookieManagerService {
     total++;
   }
 
-  virtual ~InstrumentedGaiaCookieManagerService() { total--; }
+  ~InstrumentedGaiaCookieManagerService() override { total--; }
 
   MOCK_METHOD0(StartFetchingUbertoken, void());
   MOCK_METHOD0(StartFetchingListAccounts, void());
@@ -156,33 +160,40 @@ class GaiaCookieManagerServiceTest : public testing::Test {
     consumer->OnLogOutFailure(error);
   }
 
-  void SimulateGetCheckConnctionInfoSuccess(net::TestURLFetcher* fetcher,
-                                            const std::string& data) {
-    fetcher->set_status(net::URLRequestStatus());
-    fetcher->set_response_code(200);
-    fetcher->SetResponseString(data);
-    fetcher->delegate()->OnURLFetchComplete(fetcher);
+  void SimulateGetCheckConnectionInfoSuccess(const std::string& data) {
+    signin_client_->test_url_loader_factory()->AddResponse(
+        GaiaUrls::GetInstance()
+            ->GetCheckConnectionInfoURLWithSource(GaiaConstants::kChromeSource)
+            .spec(),
+        data);
+    base::RunLoop().RunUntilIdle();
   }
 
-  void SimulateGetCheckConnctionInfoResult(net::URLFetcher* fetcher,
-                                           const std::string& result) {
-    net::TestURLFetcher* test_fetcher =
-        static_cast<net::TestURLFetcher*>(fetcher);
-    test_fetcher->set_status(net::URLRequestStatus());
-    test_fetcher->set_response_code(200);
-    test_fetcher->SetResponseString(result);
-    test_fetcher->delegate()->OnURLFetchComplete(fetcher);
+  void SimulateGetCheckConnectionInfoResult(const std::string& url,
+                                            const std::string& result) {
+    signin_client_->test_url_loader_factory()->AddResponse(url, result);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  bool IsLoadPending(const std::string& url) {
+    return signin_client_->test_url_loader_factory()->IsPending(
+        GURL(url).spec());
+  }
+
+  bool IsLoadPending() {
+    return signin_client_->test_url_loader_factory()->NumPending() > 0;
   }
 
   const GoogleServiceAuthError& no_error() { return no_error_; }
   const GoogleServiceAuthError& error() { return error_; }
   const GoogleServiceAuthError& canceled() { return canceled_; }
 
-  net::TestURLFetcherFactory* factory() { return &factory_; }
+  scoped_refptr<network::SharedURLLoaderFactory> factory() const {
+    return signin_client_->GetURLLoaderFactory();
+  }
 
  private:
   base::MessageLoop message_loop_;
-  net::TestURLFetcherFactory factory_;
   FakeOAuth2TokenService token_service_;
   GoogleServiceAuthError no_error_;
   GoogleServiceAuthError error_;
@@ -247,11 +258,12 @@ TEST_F(GaiaCookieManagerServiceTest, MergeSessionRetried) {
   helper.AddAccountToCookie("acc1@gmail.com", GaiaConstants::kChromeSource);
   SimulateMergeSessionFailure(&helper, canceled());
   DCHECK(helper.is_running());
+  base::RunLoop run_loop;
   // Transient error incurs a retry after 1 second.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+      FROM_HERE, run_loop.QuitClosure(),
       base::TimeDelta::FromMilliseconds(1100));
-  base::RunLoop().Run();
+  run_loop.Run();
   SimulateMergeSessionSuccess(&helper, "token");
   DCHECK(!helper.is_running());
 }
@@ -272,19 +284,25 @@ TEST_F(GaiaCookieManagerServiceTest, MergeSessionRetriedTwice) {
   // Transient error incurs a retry after 1 second.
   EXPECT_LT(helper.GetBackoffEntry()->GetTimeUntilRelease(),
       base::TimeDelta::FromMilliseconds(1100));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
-      base::TimeDelta::FromMilliseconds(1100));
-  base::RunLoop().Run();
+  {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(),
+        base::TimeDelta::FromMilliseconds(1100));
+    run_loop.Run();
+  }
   SimulateMergeSessionFailure(&helper, canceled());
   DCHECK(helper.is_running());
   // Next transient error incurs a retry after 3 seconds.
   EXPECT_LT(helper.GetBackoffEntry()->GetTimeUntilRelease(),
       base::TimeDelta::FromMilliseconds(3100));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
-      base::TimeDelta::FromMilliseconds(3100));
-  base::RunLoop().Run();
+  {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(),
+        base::TimeDelta::FromMilliseconds(3100));
+    run_loop.Run();
+  }
   SimulateMergeSessionSuccess(&helper, "token");
   DCHECK(!helper.is_running());
   histograms.ExpectUniqueSample("OAuth2Login.MergeSessionRetry",
@@ -657,7 +675,7 @@ TEST_F(GaiaCookieManagerServiceTest, ListAccountsAcceptsNull) {
   ASSERT_EQ(1u, accounts.size());
 }
 
-TEST_F(GaiaCookieManagerServiceTest, ListAccountsAfterOnCookieChanged) {
+TEST_F(GaiaCookieManagerServiceTest, ListAccountsAfterOnCookieChange) {
   InstrumentedGaiaCookieManagerService helper(token_service(), signin_client());
   MockObserver observer(&helper);
 
@@ -666,21 +684,31 @@ TEST_F(GaiaCookieManagerServiceTest, ListAccountsAfterOnCookieChanged) {
   std::vector<gaia::ListedAccount> signed_out_accounts;
   std::vector<gaia::ListedAccount> empty_signed_out_accounts;
 
+  std::vector<gaia::ListedAccount> nonempty_list_accounts;
+  gaia::ListedAccount listed_account;
+  listed_account.email = "a@b.com";
+  listed_account.raw_email = "a@b.com";
+  listed_account.gaia_id = "8";
+  nonempty_list_accounts.push_back(listed_account);
+
+  // Add a single account.
   EXPECT_CALL(helper, StartFetchingListAccounts());
   EXPECT_CALL(observer,
               OnGaiaAccountsInCookieUpdated(
-                  ListedAccountEquals(empty_list_accounts),
+                  ListedAccountEquals(nonempty_list_accounts),
                   ListedAccountEquals(empty_signed_out_accounts), no_error()));
   ASSERT_FALSE(helper.ListAccounts(&list_accounts, &signed_out_accounts,
                                    GaiaConstants::kChromeSource));
   ASSERT_TRUE(list_accounts.empty());
   ASSERT_TRUE(signed_out_accounts.empty());
-  SimulateListAccountsSuccess(&helper, "[\"f\",[]]");
+  SimulateListAccountsSuccess(
+      &helper,
+      "[\"f\", [[\"b\", 0, \"n\", \"a@b.com\", \"p\", 0, 0, 0, 0, 1, \"8\"]]]");
 
-  // ListAccounts returns cached data.
+  // Sanity-check that ListAccounts returns the cached data.
   ASSERT_TRUE(helper.ListAccounts(&list_accounts, &signed_out_accounts,
                                   GaiaConstants::kChromeSource));
-  ASSERT_TRUE(list_accounts.empty());
+  ASSERT_TRUE(AreAccountListsEqual(nonempty_list_accounts, list_accounts));
   ASSERT_TRUE(signed_out_accounts.empty());
 
   EXPECT_CALL(helper, StartFetchingListAccounts());
@@ -688,12 +716,17 @@ TEST_F(GaiaCookieManagerServiceTest, ListAccountsAfterOnCookieChanged) {
               OnGaiaAccountsInCookieUpdated(
                   ListedAccountEquals(empty_list_accounts),
                   ListedAccountEquals(empty_signed_out_accounts), no_error()));
-  helper.ForceOnCookieChangedProcessing();
+  helper.ForceOnCookieChangeProcessing();
 
-  // OnCookieChanged should invalidate cached data.
+  // OnCookieChange should invalidate the cached data.
+
+  // Clear the list before calling |ListAccounts()| to make sure that
+  // GaiaCookieManagerService repopulates it with the stale cached information.
+  list_accounts.clear();
+
   ASSERT_FALSE(helper.ListAccounts(&list_accounts, &signed_out_accounts,
                                    GaiaConstants::kChromeSource));
-  ASSERT_TRUE(list_accounts.empty());
+  ASSERT_TRUE(AreAccountListsEqual(nonempty_list_accounts, list_accounts));
   ASSERT_TRUE(signed_out_accounts.empty());
   SimulateListAccountsSuccess(&helper, "[\"f\",[]]");
 }
@@ -705,26 +738,21 @@ TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcher) {
   result_fetcher.Start();
 
   // Simulate a successful completion of GetCheckConnctionInfo.
-  net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(nullptr != fetcher);
-  SimulateGetCheckConnctionInfoSuccess(
-      fetcher,
+  SimulateGetCheckConnectionInfoSuccess(
       "[{\"carryBackToken\": \"yt\", \"url\": \"http://www.yt.com\"},"
       " {\"carryBackToken\": \"bl\", \"url\": \"http://www.bl.com\"}]");
 
   // Simulate responses for the two connection URLs.
-  GaiaCookieManagerService::ExternalCcResultFetcher::URLToTokenAndFetcher
-      fetchers = result_fetcher.get_fetcher_map_for_testing();
-  ASSERT_EQ(2u, fetchers.size());
-  ASSERT_EQ(1u, fetchers.count(GURL("http://www.yt.com")));
-  ASSERT_EQ(1u, fetchers.count(GURL("http://www.bl.com")));
+  GaiaCookieManagerService::ExternalCcResultFetcher::LoaderToToken loaders =
+      result_fetcher.get_loader_map_for_testing();
+  ASSERT_EQ(2u, loaders.size());
+  ASSERT_TRUE(IsLoadPending("http://www.yt.com"));
+  ASSERT_TRUE(IsLoadPending("http://www.bl.com"));
 
   ASSERT_EQ("bl:null,yt:null", result_fetcher.GetExternalCcResult());
-  SimulateGetCheckConnctionInfoResult(
-      fetchers[GURL("http://www.yt.com")].second, "yt_result");
+  SimulateGetCheckConnectionInfoResult("http://www.yt.com", "yt_result");
   ASSERT_EQ("bl:null,yt:yt_result", result_fetcher.GetExternalCcResult());
-  SimulateGetCheckConnctionInfoResult(
-      fetchers[GURL("http://www.bl.com")].second, "bl_result");
+  SimulateGetCheckConnectionInfoResult("http://www.bl.com", "bl_result");
   ASSERT_EQ("bl:bl_result,yt:yt_result", result_fetcher.GetExternalCcResult());
 }
 
@@ -735,30 +763,26 @@ TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcherTimeout) {
   result_fetcher.Start();
 
   // Simulate a successful completion of GetCheckConnctionInfo.
-  net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(nullptr != fetcher);
-  SimulateGetCheckConnctionInfoSuccess(
-      fetcher,
+  SimulateGetCheckConnectionInfoSuccess(
       "[{\"carryBackToken\": \"yt\", \"url\": \"http://www.yt.com\"},"
       " {\"carryBackToken\": \"bl\", \"url\": \"http://www.bl.com\"}]");
 
-  GaiaCookieManagerService::ExternalCcResultFetcher::URLToTokenAndFetcher
-      fetchers = result_fetcher.get_fetcher_map_for_testing();
-  ASSERT_EQ(2u, fetchers.size());
-  ASSERT_EQ(1u, fetchers.count(GURL("http://www.yt.com")));
-  ASSERT_EQ(1u, fetchers.count(GURL("http://www.bl.com")));
+  GaiaCookieManagerService::ExternalCcResultFetcher::LoaderToToken loaders =
+      result_fetcher.get_loader_map_for_testing();
+  ASSERT_EQ(2u, loaders.size());
+  ASSERT_TRUE(IsLoadPending("http://www.yt.com"));
+  ASSERT_TRUE(IsLoadPending("http://www.bl.com"));
 
   // Simulate response only for "yt".
   ASSERT_EQ("bl:null,yt:null", result_fetcher.GetExternalCcResult());
-  SimulateGetCheckConnctionInfoResult(
-      fetchers[GURL("http://www.yt.com")].second, "yt_result");
+  SimulateGetCheckConnectionInfoResult("http://www.yt.com", "yt_result");
   ASSERT_EQ("bl:null,yt:yt_result", result_fetcher.GetExternalCcResult());
 
   // Now timeout.
   result_fetcher.TimeoutForTests();
   ASSERT_EQ("bl:null,yt:yt_result", result_fetcher.GetExternalCcResult());
-  fetchers = result_fetcher.get_fetcher_map_for_testing();
-  ASSERT_EQ(0u, fetchers.size());
+  loaders = result_fetcher.get_loader_map_for_testing();
+  ASSERT_EQ(0u, loaders.size());
 }
 
 TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcherTruncate) {
@@ -768,20 +792,17 @@ TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcherTruncate) {
   result_fetcher.Start();
 
   // Simulate a successful completion of GetCheckConnctionInfo.
-  net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(nullptr != fetcher);
-  SimulateGetCheckConnctionInfoSuccess(
-      fetcher,
+  SimulateGetCheckConnectionInfoSuccess(
       "[{\"carryBackToken\": \"yt\", \"url\": \"http://www.yt.com\"}]");
 
-  GaiaCookieManagerService::ExternalCcResultFetcher::URLToTokenAndFetcher
-      fetchers = result_fetcher.get_fetcher_map_for_testing();
-  ASSERT_EQ(1u, fetchers.size());
-  ASSERT_EQ(1u, fetchers.count(GURL("http://www.yt.com")));
+  GaiaCookieManagerService::ExternalCcResultFetcher::LoaderToToken loaders =
+      result_fetcher.get_loader_map_for_testing();
+  ASSERT_EQ(1u, loaders.size());
+  ASSERT_TRUE(IsLoadPending("http://www.yt.com"));
 
   // Simulate response for "yt" with a string that is too long.
-  SimulateGetCheckConnctionInfoResult(
-      fetchers[GURL("http://www.yt.com")].second, "1234567890123456trunc");
+  SimulateGetCheckConnectionInfoResult("http://www.yt.com",
+                                       "1234567890123456trunc");
   ASSERT_EQ("yt:1234567890123456", result_fetcher.GetExternalCcResult());
 }
 
@@ -791,21 +812,18 @@ TEST_F(GaiaCookieManagerServiceTest, UbertokenSuccessFetchesExternalCC) {
   EXPECT_CALL(helper, StartFetchingUbertoken());
   helper.AddAccountToCookie("acc1@gmail.com", GaiaConstants::kChromeSource);
 
-  ASSERT_FALSE(factory()->GetFetcherByID(0));
+  ASSERT_FALSE(IsLoadPending());
   SimulateUbertokenSuccess(&helper, "token");
 
   // Check there is now a fetcher that belongs to the ExternalCCResultFetcher.
-  net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(nullptr != fetcher);
-  SimulateGetCheckConnctionInfoSuccess(
-      fetcher,
+  SimulateGetCheckConnectionInfoSuccess(
       "[{\"carryBackToken\": \"bl\", \"url\": \"http://www.bl.com\"}]");
   GaiaCookieManagerService::ExternalCcResultFetcher* result_fetcher =
       helper.external_cc_result_fetcher_for_testing();
-  GaiaCookieManagerService::ExternalCcResultFetcher::URLToTokenAndFetcher
-      fetchers = result_fetcher->get_fetcher_map_for_testing();
-  ASSERT_EQ(1u, fetchers.size());
-  ASSERT_EQ(1u, fetchers.count(GURL("http://www.bl.com")));
+  GaiaCookieManagerService::ExternalCcResultFetcher::LoaderToToken loaders =
+      result_fetcher->get_loader_map_for_testing();
+  ASSERT_EQ(1u, loaders.size());
+  ASSERT_TRUE(IsLoadPending("http://www.bl.com"));
 }
 
 TEST_F(GaiaCookieManagerServiceTest, UbertokenSuccessFetchesExternalCCOnce) {

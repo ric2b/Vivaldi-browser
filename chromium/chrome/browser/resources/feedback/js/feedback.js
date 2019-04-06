@@ -78,6 +78,28 @@ var isSystemInfoReady = false;
 var isShowingSrtPrompt = false;
 
 /**
+ * Regular expression to check for all variants of bluetooth, blutooth, with or
+ * without space between the words and for BT when used as an individual word,
+ * or as two individual characters. Case insensitive matching.
+ * @type {RegExp}
+ */
+const btRegEx = new RegExp('[b]lu[e]?[ ]?tooth|\b[b][ ]?[t]\b', 'i');
+
+/**
+ * Regular expression to check for all strings indicating that a user can't
+ * connect to a HID or Audio device. This is also a likely indication of a
+ * Bluetooth related issue.
+ * Sample strings this will match:
+ * "I can't connect the speaker!",
+ * "The keyboard has connection problem."
+ * @type {RegExp}
+ */
+const cantConnectRegEx = new RegExp(
+    '((headphone|keyboard|mouse|speaker)((?!(connect|pair)).*)(connect|pair))' +
+        '|((connect|pair).*(headphone|keyboard|mouse|speaker))',
+    'i');
+
+/**
  * The callback used by the sys_info_page to receive the event that the system
  * information is ready.
  * @type {function(sysInfo)}
@@ -135,11 +157,38 @@ function windowOpener(windowId, url) {
 }
 
 /**
+ * Sets up the event handlers for the given |anchorElement|.
+ * @param {HTMLElement} anchorElement The <a> html element.
+ * @param {string} url The destination URL for the link.
+ */
+function setupLinkHandlers(anchorElement, url) {
+  anchorElement.onclick = function(e) {
+    e.preventDefault();
+    window.open(url, '_blank');
+  };
+
+  anchorElement.onauxclick = function(e) {
+    e.preventDefault();
+  };
+}
+
+/**
  * Opens a new window with chrome://slow_trace, downloading performance data.
  */
 function openSlowTraceWindow() {
   chrome.app.window.create(
       'chrome://slow_trace/tracing.zip#' + feedbackInfo.traceId);
+}
+
+/**
+ * Checks if any keywords related to bluetooth have been typed. If they are,
+ * we show the bluetooth logs option, otherwise hide it.
+ * @param {Event} inputEvent The input event for the description textarea.
+ */
+function checkForBluetoothKeywords(inputEvent) {
+  var isRelatedToBluetooth = btRegEx.test(inputEvent.target.value) ||
+      cantConnectRegEx.test(inputEvent.target.value);
+  $('bluetooth-checkbox-container').hidden = !isRelatedToBluetooth;
 }
 
 /**
@@ -177,6 +226,12 @@ function sendReport() {
     useSystemInfo = useHistograms = true;
   }
   // <if expr="chromeos">
+  if ($('bluetooth-logs-checkbox') != null &&
+      $('bluetooth-logs-checkbox').checked &&
+      !$('bluetooth-checkbox-container').hidden) {
+    feedbackInfo.sendBluetoothLogs = true;
+    feedbackInfo.categoryTag = 'BluetoothReportWithLogs';
+  }
   if ($('performance-info-checkbox') == null ||
       !($('performance-info-checkbox').checked)) {
     feedbackInfo.traceId = null;
@@ -316,6 +371,12 @@ function initialize() {
             chrome.feedbackPrivate.logSrtPromptResult(SrtPromptResult.CLOSED);
           }
         });
+      } else if (
+          feedbackInfo.flow ==
+          chrome.feedbackPrivate.FeedbackFlow.GOOGLE_INTERNAL) {
+        $('description-text')
+            .addEventListener('input', checkForBluetoothKeywords);
+        $('srt-prompt').hidden = true;
       } else {
         $('srt-prompt').hidden = true;
       }
@@ -333,6 +394,13 @@ function initialize() {
           resizeAppWindow();
         });
         chrome.app.window.current().show();
+
+        // Allow feedback to be sent even if the screenshot failed.
+        if (!screenshotCanvas) {
+          $('screenshot-checkbox').disabled = true;
+          $('screenshot-checkbox').checked = false;
+          return;
+        }
 
         screenshotCanvas.toBlob(function(blob) {
           $('screenshot-image').src = URL.createObjectURL(blob);
@@ -395,10 +463,12 @@ function initialize() {
         loadTimeData.data = strings;
         i18nTemplate.process(document, loadTimeData);
 
-        if ($('sys-info-url')) {
+        var sysInfoUrlElement = $('sys-info-url');
+        if (sysInfoUrlElement) {
           // Opens a new window showing the full anonymized system+app
           // information.
-          $('sys-info-url').onclick = function() {
+          sysInfoUrlElement.onclick = function(e) {
+            e.preventDefault();
             var win = chrome.app.window.get(SYSINFO_WINDOW_ID);
             if (win) {
               win.show();
@@ -433,12 +503,60 @@ function initialize() {
                   };
                 });
           };
+
+          sysInfoUrlElement.onauxclick = function(e) {
+            e.preventDefault();
+          };
         }
-        if ($('histograms-url')) {
+
+        var histogramUrlElement = $('histograms-url');
+        if (histogramUrlElement) {
           // Opens a new window showing the histogram metrics.
-          $('histograms-url').onclick =
+          histogramUrlElement.onclick =
               windowOpener(STATS_WINDOW_ID, 'chrome://histograms');
+
+          histogramUrlElement.onauxclick = function(e) {
+            e.preventDefault();
+          };
         }
+
+        var legalHelpPageUrlElement = $('legal-help-page-url');
+        if (legalHelpPageUrlElement)
+          setupLinkHandlers(legalHelpPageUrlElement, FEEDBACK_LEGAL_HELP_URL);
+
+        var privacyPolicyUrlElement = $('privacy-policy-url');
+        if (privacyPolicyUrlElement) {
+          setupLinkHandlers(
+              privacyPolicyUrlElement, FEEDBACK_PRIVACY_POLICY_URL);
+        }
+
+        var termsOfServiceUrlElement = $('terms-of-service-url');
+        if (termsOfServiceUrlElement) {
+          setupLinkHandlers(
+              termsOfServiceUrlElement, FEEDBACK_TERM_OF_SERVICE_URL);
+        }
+
+        var bluetoothLogsInfoLinkElement = $('bluetooth-logs-info-link');
+        if (bluetoothLogsInfoLinkElement) {
+          bluetoothLogsInfoLinkElement.onclick = function(e) {
+            e.preventDefault();
+
+            chrome.app.window.create(
+                '/html/bluetooth_logs_info.html',
+                {width: 400, height: 120, resizable: false},
+                function(appWindow) {
+                  appWindow.contentWindow.onload = function() {
+                    i18nTemplate.process(
+                        appWindow.contentWindow.document, loadTimeData);
+                  };
+                });
+
+            bluetoothLogsInfoLinkElement.onauxclick = function(e) {
+              e.preventDefault();
+            };
+          };
+        }
+
         // Make sure our focus starts on the description field.
         $('description-text').focus();
       });

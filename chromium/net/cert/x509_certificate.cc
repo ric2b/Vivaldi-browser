@@ -110,8 +110,8 @@ bool GeneralizedTimeToBaseTime(const der::GeneralizedTime& generalized,
 
 // Sets |value| to the Value from a DER Sequence Tag-Length-Value and return
 // true, or return false if the TLV was not a valid DER Sequence.
-WARN_UNUSED_RESULT bool GetSequenceValue(const der::Input& tlv,
-                                         der::Input* value) {
+WARN_UNUSED_RESULT bool ParseSequenceValue(const der::Input& tlv,
+                                           der::Input* value) {
   der::Parser parser(tlv);
   return parser.ReadTag(der::kSequence, value) && !parser.HasMore();
 }
@@ -136,7 +136,7 @@ bool GetNormalizedCertIssuer(CRYPTO_BUFFER* cert,
     return false;
 
   der::Input issuer_value;
-  if (!GetSequenceValue(tbs.issuer_tlv, &issuer_value))
+  if (!ParseSequenceValue(tbs.issuer_tlv, &issuer_value))
     return false;
 
   CertErrors errors;
@@ -318,8 +318,8 @@ CertificateList X509Certificate::CreateCertificateListFromBytes(
     // formats other than PEM are acceptable, check to see if the decoded
     // data is one of the accepted formats.
     if (format & ~FORMAT_PEM_CERT_SEQUENCE) {
-      for (size_t i = 0; certificates.empty() &&
-           i < arraysize(kFormatDecodePriority); ++i) {
+      for (size_t i = 0;
+           certificates.empty() && i < base::size(kFormatDecodePriority); ++i) {
         if (format & kFormatDecodePriority[i]) {
           certificates = CreateCertBuffersFromBytes(
               decoded.c_str(), decoded.size(), kFormatDecodePriority[i]);
@@ -337,8 +337,8 @@ CertificateList X509Certificate::CreateCertificateListFromBytes(
   // Try each of the formats, in order of parse preference, to see if |data|
   // contains the binary representation of a Format, if it failed to parse
   // as a PEM certificate/chain.
-  for (size_t i = 0; certificates.empty() &&
-       i < arraysize(kFormatDecodePriority); ++i) {
+  for (size_t i = 0;
+       certificates.empty() && i < base::size(kFormatDecodePriority); ++i) {
     if (format & kFormatDecodePriority[i])
       certificates =
           CreateCertBuffersFromBytes(data, length, kFormatDecodePriority[i]);
@@ -371,12 +371,6 @@ void X509Certificate::Persist(base::Pickle* pickle) {
     pickle->WriteString(
         x509_util::CryptoBufferAsStringPiece(intermediate.get()));
   }
-}
-
-void X509Certificate::GetDNSNames(std::vector<std::string>* dns_names) const {
-  GetSubjectAltName(dns_names, NULL);
-  if (dns_names->empty())
-    dns_names->push_back(subject_.common_name);
 }
 
 bool X509Certificate::GetSubjectAltName(
@@ -441,9 +435,23 @@ bool X509Certificate::HasExpired() const {
   return base::Time::Now() > valid_expiry();
 }
 
-bool X509Certificate::Equals(const X509Certificate* other) const {
+bool X509Certificate::EqualsExcludingChain(const X509Certificate* other) const {
   return x509_util::CryptoBufferEqual(cert_buffer_.get(),
                                       other->cert_buffer_.get());
+}
+
+bool X509Certificate::EqualsIncludingChain(const X509Certificate* other) const {
+  if (intermediate_ca_certs_.size() != other->intermediate_ca_certs_.size() ||
+      !EqualsExcludingChain(other)) {
+    return false;
+  }
+  for (size_t i = 0; i < intermediate_ca_certs_.size(); ++i) {
+    if (!x509_util::CryptoBufferEqual(intermediate_ca_certs_[i].get(),
+                                      other->intermediate_ca_certs_[i].get())) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool X509Certificate::IsIssuedByEncoded(
@@ -453,7 +461,7 @@ bool X509Certificate::IsIssuedByEncoded(
   for (const auto& raw_issuer : valid_issuers) {
     der::Input issuer_value;
     std::string normalized_issuer;
-    if (!GetSequenceValue(der::Input(&raw_issuer), &issuer_value) ||
+    if (!ParseSequenceValue(der::Input(&raw_issuer), &issuer_value) ||
         !NormalizeName(issuer_value, &normalized_issuer, &errors)) {
       continue;
     }
@@ -478,11 +486,16 @@ bool X509Certificate::IsIssuedByEncoded(
 // static
 bool X509Certificate::VerifyHostname(
     const std::string& hostname,
-    const std::string& cert_common_name,
     const std::vector<std::string>& cert_san_dns_names,
-    const std::vector<std::string>& cert_san_ip_addrs,
-    bool allow_common_name_fallback) {
+    const std::vector<std::string>& cert_san_ip_addrs) {
   DCHECK(!hostname.empty());
+
+  if (cert_san_dns_names.empty() && cert_san_ip_addrs.empty()) {
+    // Either a dNSName or iPAddress subjectAltName MUST be present in order
+    // to match, so fail quickly if not.
+    return false;
+  }
+
   // Perform name verification following http://tools.ietf.org/html/rfc6125.
   // The terminology used in this method is as per that RFC:-
   // Reference identifier == the host the local user/agent is intending to
@@ -502,21 +515,8 @@ bool X509Certificate::VerifyHostname(
   if (reference_name.empty())
     return false;
 
-  if (!allow_common_name_fallback && cert_san_dns_names.empty() &&
-      cert_san_ip_addrs.empty()) {
-    // Common Name matching is not allowed, so fail fast.
-    return false;
-  }
-
   // Fully handle all cases where |hostname| contains an IP address.
   if (host_info.IsIPAddress()) {
-    if (allow_common_name_fallback && cert_san_dns_names.empty() &&
-        cert_san_ip_addrs.empty() &&
-        host_info.family == url::CanonHostInfo::IPV4) {
-      // Fallback to Common name matching. As this is deprecated and only
-      // supported for compatibility refuse it for IPv6 addresses.
-      return reference_name == cert_common_name;
-    }
     base::StringPiece ip_addr_string(
         reinterpret_cast<const char*>(host_info.address),
         host_info.AddressLength());
@@ -566,28 +566,15 @@ bool X509Certificate::VerifyHostname(
   }
 
   // Now step through the DNS names doing wild card comparison (if necessary)
-  // on each against the reference name. If subjectAltName is empty, then
-  // fallback to use the common name instead.
-  std::vector<std::string> common_name_as_vector;
-  const std::vector<std::string>* presented_names = &cert_san_dns_names;
-  if (allow_common_name_fallback && cert_san_dns_names.empty() &&
-      cert_san_ip_addrs.empty()) {
-    // Note: there's a small possibility cert_common_name is an international
-    // domain name in non-standard encoding (e.g. UTF8String or BMPString
-    // instead of A-label). As common name fallback is deprecated we're not
-    // doing anything specific to deal with this.
-    common_name_as_vector.push_back(cert_common_name);
-    presented_names = &common_name_as_vector;
-  }
-  for (std::vector<std::string>::const_iterator it =
-           presented_names->begin();
-       it != presented_names->end(); ++it) {
+  // on each against the reference name.
+  for (const auto& cert_san_dns_name : cert_san_dns_names) {
     // Catch badly corrupt cert names up front.
-    if (it->empty() || it->find('\0') != std::string::npos) {
-      DVLOG(1) << "Bad name in cert: " << *it;
+    if (cert_san_dns_name.empty() ||
+        cert_san_dns_name.find('\0') != std::string::npos) {
+      DVLOG(1) << "Bad name in cert: " << cert_san_dns_name;
       continue;
     }
-    std::string presented_name(base::ToLowerASCII(*it));
+    std::string presented_name(base::ToLowerASCII(cert_san_dns_name));
 
     // Remove trailing dot, if any.
     if (*presented_name.rbegin() == '.')
@@ -618,12 +605,10 @@ bool X509Certificate::VerifyHostname(
   return false;
 }
 
-bool X509Certificate::VerifyNameMatch(const std::string& hostname,
-                                      bool allow_common_name_fallback) const {
+bool X509Certificate::VerifyNameMatch(const std::string& hostname) const {
   std::vector<std::string> dns_names, ip_addrs;
   GetSubjectAltName(&dns_names, &ip_addrs);
-  return VerifyHostname(hostname, subject_.common_name, dns_names, ip_addrs,
-                        allow_common_name_fallback);
+  return VerifyHostname(hostname, dns_names, ip_addrs);
 }
 
 // static
@@ -808,13 +793,13 @@ bool X509Certificate::IsSelfSigned(const CRYPTO_BUFFER* cert_buffer) {
   der::Input subject_value;
   CertErrors errors;
   std::string normalized_subject;
-  if (!GetSequenceValue(tbs.subject_tlv, &subject_value) ||
+  if (!ParseSequenceValue(tbs.subject_tlv, &subject_value) ||
       !NormalizeName(subject_value, &normalized_subject, &errors)) {
     return false;
   }
   der::Input issuer_value;
   std::string normalized_issuer;
-  if (!GetSequenceValue(tbs.issuer_tlv, &issuer_value) ||
+  if (!ParseSequenceValue(tbs.issuer_tlv, &issuer_value) ||
       !NormalizeName(issuer_value, &normalized_issuer, &errors)) {
     return false;
   }

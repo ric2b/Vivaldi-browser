@@ -37,6 +37,10 @@ struct PP_PrivateAccessibilityViewportInfo {
   double zoom;
   struct PP_Point scroll;
   struct PP_Point offset;
+  uint32_t selection_start_page_index;
+  uint32_t selection_start_char_index;
+  uint32_t selection_end_page_index;
+  uint32_t selection_end_char_index;
 };
 
 struct PP_PrivateAccessibilityDocInfo {
@@ -169,8 +173,16 @@ struct PPB_PDF {
                            const struct PP_FloatPoint* right,
                            int32_t right_height);
 
-  // Notifies embedder that the PDF has scrolled.
-  void (*DidScroll)(PP_Instance instance);
+  // Displays an alert dialog.
+  void (*ShowAlertDialog)(PP_Instance instance, const char* message);
+
+  // Displays a confirmation dialog. This method is synchronous.
+  bool (*ShowConfirmDialog)(PP_Instance instance, const char* message);
+
+  // Displays a prompt dialog. This method is synchronous.
+  struct PP_Var (*ShowPromptDialog)(PP_Instance instance,
+                                    const char* message,
+                                    const char* default_answer);
 };
 
 #endif  // PPAPI_C_PRIVATE_PPB_PDF_H_

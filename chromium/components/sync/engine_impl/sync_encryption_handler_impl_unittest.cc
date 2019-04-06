@@ -14,6 +14,7 @@
 #include "base/test/scoped_task_environment.h"
 #include "components/sync/base/fake_encryptor.h"
 #include "components/sync/base/model_type_test_util.h"
+#include "components/sync/base/passphrase_type.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/entry.h"
@@ -75,15 +76,15 @@ BuildEncryptionKeyProto(const std::string& encryption_key) {
 class SyncEncryptionHandlerImplTest : public ::testing::Test {
  public:
   SyncEncryptionHandlerImplTest() {}
-  virtual ~SyncEncryptionHandlerImplTest() {}
+  ~SyncEncryptionHandlerImplTest() override {}
 
-  virtual void SetUp() {
+  void SetUp() override {
     test_user_share_.SetUp();
     SetUpEncryption();
     CreateRootForType(NIGORI);
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     PumpLoop();
     test_user_share_.TearDown();
   }

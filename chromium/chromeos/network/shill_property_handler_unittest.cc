@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
@@ -330,8 +331,7 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerTechnologyChanged) {
   // Enable the technology.
   listener_->reset_list_updates();
   DBusThreadManager::Get()->GetShillManagerClient()->EnableTechnology(
-      shill::kTypeWifi,
-      base::Bind(&base::DoNothing), base::Bind(&ErrorCallbackFunction));
+      shill::kTypeWifi, base::DoNothing(), base::Bind(&ErrorCallbackFunction));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, listener_->technology_list_updates());
   EXPECT_TRUE(shill_property_handler_->IsTechnologyEnabled(shill::kTypeWifi));
@@ -383,10 +383,8 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerServicePropertyChanged) {
   // Change a property.
   base::Value scan_interval(3);
   DBusThreadManager::Get()->GetShillServiceClient()->SetProperty(
-      dbus::ObjectPath(kTestServicePath),
-      shill::kScanIntervalProperty,
-      scan_interval,
-      base::Bind(&base::DoNothing), base::Bind(&ErrorCallbackFunction));
+      dbus::ObjectPath(kTestServicePath), shill::kScanIntervalProperty,
+      scan_interval, base::DoNothing(), base::Bind(&ErrorCallbackFunction));
   base::RunLoop().RunUntilIdle();
   // Property change triggers an update (but not a service list update).
   EXPECT_EQ(1, listener_->property_updates(
@@ -397,7 +395,7 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerServicePropertyChanged) {
   listener_->reset_list_updates();
   DBusThreadManager::Get()->GetShillServiceClient()->SetProperty(
       dbus::ObjectPath(kTestServicePath), shill::kVisibleProperty,
-      base::Value(false), base::Bind(&base::DoNothing),
+      base::Value(false), base::DoNothing(),
       base::Bind(&ErrorCallbackFunction));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, listener_->list_updates(shill::kServiceCompleteListProperty));
@@ -448,7 +446,7 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerIPConfigPropertyChanged) {
       shill::kServiceCompleteListProperty)[kTestServicePath1]);
   DBusThreadManager::Get()->GetShillServiceClient()->SetProperty(
       dbus::ObjectPath(kTestServicePath1), shill::kIPConfigProperty,
-      base::Value(kTestIPConfigPath), base::Bind(&base::DoNothing),
+      base::Value(kTestIPConfigPath), base::DoNothing(),
       base::Bind(&ErrorCallbackFunction));
   base::RunLoop().RunUntilIdle();
   // IPConfig property change on the service should trigger an IPConfigs update.

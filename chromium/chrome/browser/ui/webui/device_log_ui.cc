@@ -33,7 +33,8 @@ class DeviceLogMessageHandler : public content::WebUIMessageHandler {
   void RegisterMessages() override {
     web_ui()->RegisterMessageCallback(
         "DeviceLog.getLog",
-        base::Bind(&DeviceLogMessageHandler::GetLog, base::Unretained(this)));
+        base::BindRepeating(&DeviceLogMessageHandler::GetLog,
+                            base::Unretained(this)));
   }
 
  private:
@@ -76,6 +77,7 @@ DeviceLogUI::DeviceLogUI(content::WebUI* web_ui)
                            IDS_DEVICE_LOG_TYPE_BLUETOOTH);
   html->AddLocalizedString("logTypeUsbText", IDS_DEVICE_LOG_TYPE_USB);
   html->AddLocalizedString("logTypeHidText", IDS_DEVICE_LOG_TYPE_HID);
+  html->AddLocalizedString("logTypePrinterText", IDS_DEVICE_LOG_TYPE_PRINTER);
 
   html->AddLocalizedString("logEntryFormat", IDS_DEVICE_LOG_ENTRY);
   html->SetJsonPath("strings.js");

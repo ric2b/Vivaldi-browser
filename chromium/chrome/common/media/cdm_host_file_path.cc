@@ -8,7 +8,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_version.h"
@@ -50,7 +49,7 @@ void AddCdmHostFilePaths(
 
   // Find where chrome.exe is installed.
   base::FilePath chrome_exe_dir;
-  if (!PathService::Get(base::DIR_EXE, &chrome_exe_dir))
+  if (!base::PathService::Get(base::DIR_EXE, &chrome_exe_dir))
     NOTREACHED();
   base::FilePath version_dir(chrome_exe_dir.AppendASCII(CHROME_VERSION_STRING));
 
@@ -97,7 +96,7 @@ void AddCdmHostFilePaths(
 #elif defined(OS_LINUX)
 
   base::FilePath chrome_exe_dir;
-  if (!PathService::Get(base::DIR_EXE, &chrome_exe_dir))
+  if (!base::PathService::Get(base::DIR_EXE, &chrome_exe_dir))
     NOTREACHED();
 
   base::FilePath chrome_path =

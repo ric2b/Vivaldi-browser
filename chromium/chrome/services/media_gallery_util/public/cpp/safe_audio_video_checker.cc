@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/time/time.h"
-#include "chrome/services/media_gallery_util/public/interfaces/constants.mojom.h"
+#include "chrome/services/media_gallery_util/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 SafeAudioVideoChecker::SafeAudioVideoChecker(
@@ -28,23 +28,24 @@ void SafeAudioVideoChecker::Start() {
     return;
   }
 
-  DCHECK(!media_parser_ptr_);
+  RetrieveMediaParser(connector_.get());
+}
 
-  connector_->BindInterface(chrome::mojom::kMediaGalleryUtilServiceName,
-                            mojo::MakeRequest(&media_parser_ptr_));
-  media_parser_ptr_.set_connection_error_handler(base::Bind(
-      &SafeAudioVideoChecker::CheckMediaFileDone, this, /*valid=*/false));
-
+void SafeAudioVideoChecker::OnMediaParserCreated() {
   static constexpr auto kFileDecodeTime =
       base::TimeDelta::FromMilliseconds(250);
 
-  media_parser_ptr_->CheckMediaFile(
+  media_parser()->CheckMediaFile(
       kFileDecodeTime, std::move(file_),
-      base::Bind(&SafeAudioVideoChecker::CheckMediaFileDone, this));
+      base::BindOnce(&SafeAudioVideoChecker::CheckMediaFileDone,
+                     base::Unretained(this)));
+}
+
+void SafeAudioVideoChecker::OnConnectionError() {
+  CheckMediaFileDone(/*valid=*/false);
 }
 
 void SafeAudioVideoChecker::CheckMediaFileDone(bool valid) {
-  media_parser_ptr_.reset();  // Terminate the utility process.
   std::move(callback_).Run(valid ? base::File::FILE_OK
                                  : base::File::FILE_ERROR_SECURITY);
 }

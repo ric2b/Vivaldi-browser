@@ -86,7 +86,8 @@ bool WriteToDisk(const int version,
                  const base::FilePath& plugin_path,
                  const std::string& flash_version) {
   base::FilePath hint_file_path;
-  if (!PathService::Get(chrome::FILE_COMPONENT_FLASH_HINT, &hint_file_path))
+  if (!base::PathService::Get(chrome::FILE_COMPONENT_FLASH_HINT,
+                              &hint_file_path))
     return false;
 
   std::string encoded_hash;
@@ -133,7 +134,7 @@ bool RecordFlashUpdate(const base::FilePath& unpacked_plugin,
     return false;
 
   std::string hash(crypto::kSHA256Length, 0);
-  SHA256Hash(mapped_file, base::string_as_array(&hash), hash.size());
+  SHA256Hash(mapped_file, base::data(hash), hash.size());
 
   return WriteToDisk(kCurrentHintFileVersion,
                      crypto::SecureHash::Algorithm::SHA256, hash, moved_plugin,
@@ -142,7 +143,8 @@ bool RecordFlashUpdate(const base::FilePath& unpacked_plugin,
 
 bool DoesHintFileExist() {
   base::FilePath hint_file_path;
-  if (!PathService::Get(chrome::FILE_COMPONENT_FLASH_HINT, &hint_file_path))
+  if (!base::PathService::Get(chrome::FILE_COMPONENT_FLASH_HINT,
+                              &hint_file_path))
     return false;
   return base::PathExists(hint_file_path);
 }
@@ -150,7 +152,8 @@ bool DoesHintFileExist() {
 bool VerifyAndReturnFlashLocation(base::FilePath* path,
                                   std::string* flash_version) {
   base::FilePath hint_file_path;
-  if (!PathService::Get(chrome::FILE_COMPONENT_FLASH_HINT, &hint_file_path))
+  if (!base::PathService::Get(chrome::FILE_COMPONENT_FLASH_HINT,
+                              &hint_file_path))
     return false;
 
   std::string json_string;
@@ -209,8 +212,7 @@ bool VerifyAndReturnFlashLocation(base::FilePath* path,
 
   std::vector<uint8_t> file_hash(crypto::kSHA256Length, 0);
   SHA256Hash(plugin_file, &file_hash[0], file_hash.size());
-  if (!crypto::SecureMemEqual(&file_hash[0],
-                              base::string_as_array(&decoded_hash),
+  if (!crypto::SecureMemEqual(base::data(file_hash), base::data(decoded_hash),
                               crypto::kSHA256Length)) {
     LOG(ERROR)
         << "The hash recorded in the component flash hint file does not "

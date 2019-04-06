@@ -45,6 +45,10 @@ namespace history {
 struct HistoryAddPageArgs;
 }
 
+namespace memory_instrumentation {
+class GlobalMemoryDump;
+}
+
 namespace prerender {
 
 class PrerenderManager;
@@ -140,10 +144,7 @@ class PrerenderContents : public content::NotificationObserver,
 
   PrerenderManager* prerender_manager() { return prerender_manager_; }
 
-  base::string16 title() const { return title_; }
   const GURL& prerender_url() const { return prerender_url_; }
-  const content::Referrer& referrer() const { return referrer_; }
-  bool has_stopped_loading() const { return has_stopped_loading_; }
   bool has_finished_loading() const { return has_finished_loading_; }
   bool prerendering_has_started() const { return prerendering_has_started_; }
 
@@ -272,11 +273,7 @@ class PrerenderContents : public content::NotificationObserver,
   virtual void OnRenderViewHostCreated(
       content::RenderViewHost* new_render_view_host);
 
-  content::NotificationRegistrar& notification_registrar() {
-    return notification_registrar_;
-  }
-
-  content::WebContents* CreateWebContents(
+  std::unique_ptr<content::WebContents> CreateWebContents(
       content::SessionStorageNamespace* session_storage_namespace);
 
   PrerenderMode prerender_mode_;
@@ -293,7 +290,7 @@ class PrerenderContents : public content::NotificationObserver,
   // The session storage namespace id for use in matching. We must save it
   // rather than get it from the RenderViewHost since in the control group
   // we won't have a RenderViewHost.
-  int64_t session_storage_namespace_id_;
+  std::string session_storage_namespace_id_;
 
  private:
   class WebContentsDelegateImpl;
@@ -302,7 +299,9 @@ class PrerenderContents : public content::NotificationObserver,
   friend class PrerenderContentsFactoryImpl;
 
   // Returns the ProcessMetrics for the render process, if it exists.
-  base::ProcessMetrics* MaybeGetProcessMetrics();
+  void DidGetMemoryUsage(
+      bool success,
+      std::unique_ptr<memory_instrumentation::GlobalMemoryDump> dump);
 
   // chrome::mojom::PrerenderCanceler:
   void CancelPrerenderForPrinting() override;
@@ -329,21 +328,12 @@ class PrerenderContents : public content::NotificationObserver,
   // The profile being used
   Profile* profile_;
 
-  // Information about the title and URL of the page that this class as a
-  // RenderViewHostDelegate has received from the RenderView.
-  // Used to apply to the new RenderViewHost delegate that might eventually
-  // own the contained RenderViewHost when the prerendered page is shown
-  // in a WebContents.
-  base::string16 title_;
-  GURL url_;
   content::NotificationRegistrar notification_registrar_;
 
   // A vector of URLs that this prerendered page matches against.
   // This array can contain more than element as a result of redirects,
   // such as HTTP redirects or javascript redirects.
   std::vector<GURL> alias_urls_;
-
-  bool has_stopped_loading_;
 
   // True when the main frame has finished loading.
   bool has_finished_loading_;
@@ -354,9 +344,9 @@ class PrerenderContents : public content::NotificationObserver,
   // Used solely to prevent double deletion.
   bool prerendering_has_been_cancelled_;
 
-  // Process Metrics of the render process associated with the
-  // RenderViewHost for this object.
-  std::unique_ptr<base::ProcessMetrics> process_metrics_;
+  // Pid of the render process associated with the RenderViewHost for this
+  // object.
+  base::ProcessId process_pid_;
 
   std::unique_ptr<WebContentsDelegateImpl> web_contents_delegate_;
 

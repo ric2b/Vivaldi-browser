@@ -7,7 +7,8 @@
 
 #include <memory>
 #include <set>
-#include <unordered_map>
+#include <string>
+#include <vector>
 
 #include "base/files/file.h"
 #include "base/memory/weak_ptr.h"
@@ -34,7 +35,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
       uint16_t service_attribute_handle,
       bool is_primary,
       BluetoothRemoteGattServiceWin* parent_service,
-      scoped_refptr<base::SequencedTaskRunner>& ui_task_runner);
+      scoped_refptr<base::SequencedTaskRunner> ui_task_runner);
   ~BluetoothRemoteGattServiceWin() override;
 
   // Override BluetoothRemoteGattService interfaces.
@@ -42,11 +43,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
   BluetoothUUID GetUUID() const override;
   bool IsPrimary() const override;
   BluetoothDevice* GetDevice() const override;
-  std::vector<BluetoothRemoteGattCharacteristic*> GetCharacteristics()
-      const override;
   std::vector<BluetoothRemoteGattService*> GetIncludedServices() const override;
-  BluetoothRemoteGattCharacteristic* GetCharacteristic(
-      const std::string& identifier) const override;
 
   // Notify |characteristic| discovery complete, |characteristic| is the
   // included characteritic of this service.
@@ -68,12 +65,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
       PBTH_LE_GATT_CHARACTERISTIC characteristics,
       uint16_t num);
 
-  // Sends GattDiscoveryCompleteForService notification if necessary.
-  void NotifyGattDiscoveryCompleteForServiceIfNecessary();
+  // Sends GattServiceDiscoveryComplete notification if necessary.
+  void NotifyGattServiceDiscoveryCompleteIfNecessary();
 
   // Checks if the characteristic with |uuid| and |attribute_handle| has already
   // been discovered as included characteristic.
-  bool IsCharacteristicDiscovered(BTH_LE_UUID& uuid, uint16_t attribute_handle);
+  bool IsCharacteristicDiscovered(const BTH_LE_UUID& uuid,
+                                  uint16_t attribute_handle);
 
   // Checks if |characteristic| still exists in this service according to newly
   // retreived |num| of included |characteristics|.
@@ -99,25 +97,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
   // dependent operations.
   scoped_refptr<BluetoothTaskManagerWin> task_manager_;
 
-  // The key of GattCharacteristicsMap is the identifier of
-  // BluetoothRemoteGattCharacteristicWin instance.
-  typedef std::unordered_map<
-      std::string,
-      std::unique_ptr<BluetoothRemoteGattCharacteristicWin>>
-      GattCharacteristicsMap;
-  GattCharacteristicsMap included_characteristics_;
-
   // The element of the set is the identifier of
   // BluetoothRemoteGattCharacteristicWin instance.
   std::set<std::string> discovery_completed_included_characteristics_;
 
   // Flag indicates if discovery complete notification has been send out to
   // avoid duplicate notification.
-  bool discovery_complete_notified_;
+  bool discovery_complete_notified_ = false;
 
   // Counts the number of asynchronous operations that are discovering
   // characteristics.
-  int discovery_pending_count_;
+  int discovery_pending_count_ = 0;
 
   base::WeakPtrFactory<BluetoothRemoteGattServiceWin> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(BluetoothRemoteGattServiceWin);

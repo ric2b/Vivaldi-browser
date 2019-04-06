@@ -19,7 +19,7 @@ of Chromium interact with cc/animation, most prominently Blink and ui/.
 ## How cc/animation works
 
 The root concept in cc/animation is an
-[animation](https://codesearch.chromium.org/chromium/src/cc/animation/animation.h).
+[keyframe model](https://codesearch.chromium.org/chromium/src/cc/animation/keyframe_model.h).
 Animations contain the state necessary to 'play' (interpolate values from) an
 [animation curve](https://codesearch.chromium.org/chromium/src/cc/animation/animation_curve.h),
 which is a function that returns a value given an input time. Aside from the
@@ -29,10 +29,10 @@ An animation does not know or care what property is being animated, and holds
 only an opaque identifier for the property to allow clients to map output values
 to the correct properties.
 
-Targeting only a single property means that cc animations are distinct from the
+Targeting only a single property means that cc KeyframeModels are distinct from the
 Blink concept of an animation, which wraps the animation of multiple properties.
 To coordinate the playback of multiple cc/animations (e.g. those that are
-animating multiple properties on the same target), animations have the concept
+animating multiple properties on the same target), KeyframeModels have the concept
 of a group identifier. Animations that have the same group identifier and the
 same target are started together, and animation-finished notifications are only
 sent when all animations in the group have finished.
@@ -40,23 +40,23 @@ sent when all animations in the group have finished.
 Animations are grouped together based on their
 [animation target](https://codesearch.chromium.org/chromium/src/cc/animation/animation_target.h)
 (the entity whose property is being animated) and each such group is owned by an
-[animation player](https://codesearch.chromium.org/chromium/src/cc/animation/animation_player.h).
-Note that there may be multiple animation players with the same target (each
-with a set of animations for that target); the
+[animation](https://codesearch.chromium.org/chromium/src/cc/animation/animation.h).
+Note that there may be multiple animations with the same target (each
+with a set of KeyframeModels for that target); the
 [ElementAnimations](https://codesearch.chromium.org/chromium/src/cc/animation/element_animations.h)
-class wraps the multiple animation players and has a 1:1 relationship with
+class wraps the multiple animations and has a 1:1 relationship with
 target entities.
 
-`TODO(smcgruer): Why are ElementAnimations and AnimationPlayers separate?`
+`TODO(smcgruer): Why are ElementAnimations and Animations separate?`
 
 In order to play an animation, input time values must be provided to the
 animation curve and output values fed back into the animating entity. This is
 called 'ticking' an animation and is the responsibility of the
 [animation host](https://codesearch.chromium.org/chromium/src/cc/animation/animation_host.h).
-The animation host has a list of currently ticking players (i.e. those that have
+The animation host has a list of currently ticking animations (i.e. those that have
 any non-deleted animations), which it iterates through whenever it receives a
 tick call from the client (along with a corresponding input time).  The
-animation players then call into their non-deleted animations, retrieving the
+animations then call into their non-deleted animations, retrieving the
 value from the animation curve.  As they are computed, output values are sent to
 the target which is responsible for passing them to the client entity that is
 being animated.
@@ -93,7 +93,7 @@ cc/animation has a concept of an
 [animation timeline](https://codesearch.chromium.org/chromium/src/cc/animation/animation_timeline.h).
 This should not be confused with the identically named Blink concept. In
 cc/animation, animation timelines are an implementation detail - they hold the
-animation players and are responsible for syncing them to the impl thread (see
+animations and are responsible for syncing them to the impl thread (see
 below), but do not participate in the ticking process in any way.
 
 ### Main/Impl Threads
@@ -157,5 +157,5 @@ base. [Smooth Scrolling in Chromium](https://goo.gl/XXwAwk) provides
 an overview of smooth scrolling. There is further class header
 documentation in
 Blink's
-[platform/scroll](https://codesearch.chromium.org/chromium/src/third_party/WebKit/Source/platform/scroll/)
+[platform/scroll](https://codesearch.chromium.org/chromium/src/third_party/blink/renderer/platform/scroll/)
 directory.

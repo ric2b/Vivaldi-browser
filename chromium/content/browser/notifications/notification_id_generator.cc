@@ -8,30 +8,31 @@
 
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "url/gurl.h"
 
 namespace content {
 namespace {
 
-const char kNotificationTagSeparator[] = "#";
-const char kPersistentNotificationPrefix[] = "p";
-const char kNonPersistentNotificationPrefix[] = "n";
+const char kNotificationTagSeparator = '#';
+const char kPersistentNotificationPrefix = 'p';
+const char kNonPersistentNotificationPrefix = 'n';
 
 }  // namespace
 
 // static
 bool NotificationIdGenerator::IsPersistentNotification(
     const base::StringPiece& notification_id) {
-  return notification_id.starts_with(
-      std::string(kPersistentNotificationPrefix));
+  return notification_id.length() > 0 &&
+         notification_id.front() == kPersistentNotificationPrefix;
 }
 
 // static
 bool NotificationIdGenerator::IsNonPersistentNotification(
     const base::StringPiece& notification_id) {
-  return notification_id.starts_with(
-      std::string(kNonPersistentNotificationPrefix));
+  return notification_id.length() > 0 &&
+         notification_id.front() == kNonPersistentNotificationPrefix;
 }
 
 // Notification Id is of the following format:
@@ -59,32 +60,15 @@ std::string NotificationIdGenerator::GenerateForPersistentNotification(
 }
 
 // Notification Id is of the following format:
-// n#<origin>#[1<developer_tag>|0<render_process_id>#<request_id>]
+// p#<origin>#<token>
 std::string NotificationIdGenerator::GenerateForNonPersistentNotification(
-    const GURL& origin,
-    const std::string& tag,
-    int request_id,
-    int render_process_id) const {
-  DCHECK(origin.is_valid());
-  DCHECK_EQ(origin, origin.GetOrigin());
-
-  std::stringstream stream;
-
-  stream << kNonPersistentNotificationPrefix << kNotificationTagSeparator;
-  stream << origin;
-  stream << kNotificationTagSeparator;
-
-  stream << base::IntToString(!tag.empty());
-  if (tag.empty()) {
-    stream << base::IntToString(render_process_id);
-    stream << kNotificationTagSeparator;
-
-    stream << base::IntToString(request_id);
-  } else {
-    stream << tag;
-  }
-
-  return stream.str();
+    const url::Origin& origin,
+    const std::string& token) const {
+  DCHECK(!origin.unique());
+  DCHECK(!token.empty());
+  return base::StringPrintf(
+      "%c%c%s%c%s", kNonPersistentNotificationPrefix, kNotificationTagSeparator,
+      origin.Serialize().c_str(), kNotificationTagSeparator, token.c_str());
 }
 
 }  // namespace content

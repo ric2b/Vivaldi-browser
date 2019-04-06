@@ -43,8 +43,8 @@ public class SyncPreference extends Preference {
             // Sets preference icon and tints it to blue.
             Drawable icon = ApiCompatibilityUtils.getDrawable(
                     getContext().getResources(), R.drawable.permission_background_sync);
-            icon.setColorFilter(ApiCompatibilityUtils.getColor(
-                                        getContext().getResources(), R.color.light_active_color),
+            icon.setColorFilter(ApiCompatibilityUtils.getColor(getContext().getResources(),
+                                        R.color.default_icon_color_blue),
                     PorterDuff.Mode.SRC_IN);
             setIcon(icon);
         }
@@ -55,7 +55,7 @@ public class SyncPreference extends Preference {
      * of error, passphrase required or disabled in Android.
      */
     static boolean showSyncErrorIcon(Context context) {
-        if (!AndroidSyncSettings.isMasterSyncEnabled(context)) {
+        if (!AndroidSyncSettings.isMasterSyncEnabled()) {
             return true;
         }
 
@@ -87,7 +87,7 @@ public class SyncPreference extends Preference {
         ProfileSyncService profileSyncService = ProfileSyncService.get();
         Resources res = context.getResources();
 
-        if (!AndroidSyncSettings.isMasterSyncEnabled(context)) {
+        if (!AndroidSyncSettings.isMasterSyncEnabled()) {
             return res.getString(R.string.sync_android_master_sync_disabled);
         }
 
@@ -101,14 +101,15 @@ public class SyncPreference extends Preference {
 
         if (profileSyncService.getProtocolErrorClientAction()
                 == ProtocolErrorClientAction.UPGRADE_CLIENT) {
-            return res.getString(R.string.sync_error_upgrade_client, BuildInfo.getPackageLabel());
+            return res.getString(
+                    R.string.sync_error_upgrade_client, BuildInfo.getInstance().hostPackageLabel);
         }
 
         if (profileSyncService.hasUnrecoverableError()) {
             return res.getString(R.string.sync_error_generic);
         }
 
-        boolean syncEnabled = AndroidSyncSettings.isSyncEnabled(context);
+        boolean syncEnabled = AndroidSyncSettings.isSyncEnabled();
 
         if (syncEnabled) {
             if (!profileSyncService.isSyncActive()) {

@@ -12,17 +12,17 @@
 #import "base/ios/block_types.h"
 #import "ios/chrome/browser/ui/settings/sync_utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
+#import "ios/chrome/browser/ui/toolbar/clean/toolbar_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
-#import "ios/chrome/browser/ui/toolbar/web_toolbar_delegate.h"
 #import "ios/chrome/browser/ui/url_loader.h"
-#import "ios/public/provider/chrome/browser/voice/voice_search_presenter.h"
+#import "ios/public/provider/chrome/browser/voice/logo_animation_controller.h"
 
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
-@class BrowserContainerView;
 @class BrowserViewControllerDependencyFactory;
 class GURL;
 @protocol OmniboxFocuser;
+@protocol PopupMenuCommands;
 @protocol FakeboxFocuser;
 @protocol SnackbarCommands;
 @class Tab;
@@ -36,11 +36,12 @@ class ChromeBrowserState;
 
 // The top-level view controller for the browser UI. Manages other controllers
 // which implement the interface.
-@interface BrowserViewController : UIViewController<SyncPresenter,
-                                                    ToolbarOwner,
-                                                    UrlLoader,
-                                                    VoiceSearchPresenter,
-                                                    WebToolbarDelegate>
+@interface BrowserViewController
+    : UIViewController<LogoAnimationControllerOwnerOwner,
+                       SyncPresenter,
+                       ToolbarCoordinatorDelegate,
+                       ToolbarOwner,
+                       UrlLoader>
 
 // Initializes a new BVC from its nib. |model| must not be nil. The
 // webUsageSuspended property for this BVC will be based on |model|, and future
@@ -61,15 +62,15 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 @property(nonatomic, readonly) id<ApplicationCommands,
                                   BrowserCommands,
                                   OmniboxFocuser,
+                                  PopupMenuCommands,
                                   FakeboxFocuser,
                                   SnackbarCommands,
                                   ToolbarCommands,
-                                  UrlLoader,
-                                  WebToolbarDelegate>
+                                  UrlLoader>
     dispatcher;
 
 // The top-level browser container view.
-@property(nonatomic, strong) BrowserContainerView* contentArea;
+@property(nonatomic, strong, readonly) UIView* contentArea;
 
 // Invisible button used to dismiss the keyboard.
 @property(nonatomic, strong) UIButton* typingShield;
@@ -98,16 +99,19 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 // Called when the user explicitly opens the tab switcher.
 - (void)userEnteredTabSwitcher;
 
-// Presents either the new tab tip or incognito tab tip in-product help bubbles
-// if the the user is in a valid state to see one of them. At most one bubble
-// will be shown. If the feature engagement tracker determines it is not valid
-// to see one of the bubbles, that bubble will not be shown.
+// Presents either in-product help bubbles if the the user is in a valid state
+// to see one of them. At most one bubble will be shown. If the feature
+// engagement tracker determines it is not valid to see one of the bubbles, that
+// bubble will not be shown.
 - (void)presentBubblesIfEligible;
 
 // Called when the browser state provided to this instance is being destroyed.
 // At this point the browser will no longer ever be active, and will likely be
 // deallocated soon.
 - (void)browserStateDestroyed;
+
+- (void)openNewTabFromOriginPoint:(CGPoint)originPoint
+                     focusOmnibox:(BOOL)focusOmnibox;
 
 // Add a new tab with the given url, appends it to the end of the model,
 // and makes it the selected tab. The selected tab is returned.
@@ -136,9 +140,8 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 // related to showing the previously selected tab.
 - (void)expectNewForegroundTab;
 
-// Shows the voice search UI. |originView|'s center is used for the presentation
-// and dismissal animations of the Voice Search UI. |originView| can be nil.
-- (void)startVoiceSearchWithOriginView:(UIView*)originView;
+// Shows the voice search UI.
+- (void)startVoiceSearch;
 
 // Dismisses all presented views, excluding the omnibox if |dismissOmnibox| is
 // NO, then calls |completion|.

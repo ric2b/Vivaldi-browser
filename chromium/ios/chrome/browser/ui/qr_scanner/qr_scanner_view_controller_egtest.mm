@@ -15,15 +15,14 @@
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #include "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_coordinator.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_url_loader.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_delegate.h"
 #include "ios/chrome/browser/ui/qr_scanner/camera_controller.h"
 #include "ios/chrome/browser/ui/qr_scanner/qr_scanner_view.h"
 #include "ios/chrome/browser/ui/qr_scanner/qr_scanner_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_coordinator.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
-#include "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/web_toolbar_controller_private.h"
+#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -107,7 +106,8 @@ id<GREYMatcher> QrScannerViewportCaption() {
 id<GREYMatcher> DialogCancelButton() {
   return grey_allOf(
       grey_text(l10n_util::GetNSString(IDS_IOS_QR_SCANNER_ALERT_CANCEL)),
-      grey_accessibilityTrait(UIAccessibilityTraitStaticText), nil);
+      grey_accessibilityTrait(UIAccessibilityTraitStaticText),
+      grey_sufficientlyVisible(), nil);
 }
 
 // Opens the QR Scanner view.
@@ -118,6 +118,8 @@ void ShowQRScanner() {
       grey_minimumVisiblePercent(0.2), nil);
   [[EarlGrey selectElementWithMatcher:locationbarButton]
       performAction:grey_tap()];
+  [ChromeEarlGrey
+      waitForElementWithMatcherSufficientlyVisible:chrome_test_util::Omnibox()];
 
   // Tap the QR Code scanner button in the keyboard accessory view.
   id<GREYMatcher> matcher =
@@ -159,7 +161,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 @implementation QRScannerViewControllerTestCase {
   // A swizzler for the CameraController method cameraControllerWithDelegate:.
   std::unique_ptr<ScopedBlockSwizzler> camera_controller_swizzler_;
-  // A swizzler for the WebToolbarController method
+  // A swizzler for the LocationBarCoordinator method
   // loadGURLFromLocationBar:transition:.
   std::unique_ptr<ScopedBlockSwizzler> load_GURL_from_location_bar_swizzler_;
 }
@@ -409,40 +411,38 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
       swizzleCameraControllerBlock));
 }
 
-// Swizzles the WebToolbarController loadGURLFromLocationBarBlock:transition:
+// Swizzles the LocationBarCoordinator loadGURLFromLocationBarBlock:transition:
 // method to load |searchURL| instead of the generated search URL.
-- (void)swizzleWebToolbarControllerLoadGURLFromLocationBar:
-    (const GURL&)searchURL {
-  if (base::FeatureList::IsEnabled(kCleanToolbar)) {
-    void (^loadGURLFromLocationBarBlock)(ToolbarCoordinator*, const GURL&,
+- (void)swizzleLocationBarCoordinatorLoadGURLFromLocationBar:
+    (const GURL&)replacementURL {
+  // The specific class to swizzle depends on whether the UIRefresh experiment
+  // is enabled.
+  if (IsRefreshLocationBarEnabled()) {
+    void (^loadGURLFromLocationBarBlock)(LocationBarCoordinator*, const GURL&,
                                          ui::PageTransition) =
-        ^void(ToolbarCoordinator* self, const GURL& url,
+        ^void(LocationBarCoordinator* self, const GURL& url,
               ui::PageTransition transition) {
-          [self.URLLoader loadURL:searchURL
-                         referrer:web::Referrer()
-                       transition:transition
-                rendererInitiated:NO];
+          web::NavigationManager::WebLoadParams params(replacementURL);
+          params.transition_type = transition;
+          [self.URLLoader loadURLWithParams:params];
           [self cancelOmniboxEdit];
         };
-
     load_GURL_from_location_bar_swizzler_.reset(
         new ScopedBlockSwizzler([LocationBarCoordinator class],
                                 @selector(loadGURLFromLocationBar:transition:),
                                 loadGURLFromLocationBarBlock));
   } else {
-    void (^loadGURLFromLocationBarBlock)(WebToolbarController*, const GURL&,
-                                         ui::PageTransition) =
-        ^void(WebToolbarController* self, const GURL& url,
+    void (^loadGURLFromLocationBarBlock)(LocationBarLegacyCoordinator*,
+                                         const GURL&, ui::PageTransition) =
+        ^void(LocationBarLegacyCoordinator* self, const GURL& url,
               ui::PageTransition transition) {
-          [self.urlLoader loadURL:searchURL
-                         referrer:web::Referrer()
-                       transition:transition
-                rendererInitiated:NO];
+          web::NavigationManager::WebLoadParams params(replacementURL);
+          params.transition_type = transition;
+          [self.URLLoader loadURLWithParams:params];
           [self cancelOmniboxEdit];
         };
-
     load_GURL_from_location_bar_swizzler_.reset(
-        new ScopedBlockSwizzler([WebToolbarController class],
+        new ScopedBlockSwizzler([LocationBarLegacyCoordinator class],
                                 @selector(loadGURLFromLocationBar:transition:),
                                 loadGURLFromLocationBarBlock));
   }
@@ -818,7 +818,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 
 // Test that the correct page is loaded if the scanner result is a search query.
 - (void)testReceivingQRScannerSearchQueryResult {
-  [self swizzleWebToolbarControllerLoadGURLFromLocationBar:_testQuery];
+  [self swizzleLocationBarCoordinatorLoadGURLFromLocationBar:_testQuery];
   [self doTestReceivingResult:kTestQuery response:kTestQueryResponse edit:nil];
 }
 
@@ -831,7 +831,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
     EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
   }
 
-  [self swizzleWebToolbarControllerLoadGURLFromLocationBar:_testQueryEdited];
+  [self swizzleLocationBarCoordinatorLoadGURLFromLocationBar:_testQueryEdited];
   [self doTestReceivingResult:kTestQuery
                      response:kTestQueryEditedResponse
                          edit:@"\bedited"];

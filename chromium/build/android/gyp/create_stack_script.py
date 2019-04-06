@@ -40,7 +40,6 @@ SCRIPT_TEMPLATE = textwrap.dedent(
 def main(args):
 
   parser = argparse.ArgumentParser()
-  build_utils.AddDepfileOption(parser)
   parser.add_argument(
       '--script-path',
       help='Path to the wrapped script.')
@@ -66,16 +65,13 @@ def main(args):
     for p in build_utils.ParseGnList(args.packed_libs):
       script_path_args.append(('--packed-lib', relativize(p)))
 
-  with open(args.script_output_path, 'w') as script:
+  with build_utils.AtomicOutput(args.script_output_path) as script:
     script.write(SCRIPT_TEMPLATE.format(
         script_path=script_path,
         script_args=script_args,
         script_path_args=script_path_args))
 
   os.chmod(args.script_output_path, 0750)
-
-  if args.depfile:
-    build_utils.WriteDepfile(args.depfile, args.script_output_path)
 
   return 0
 

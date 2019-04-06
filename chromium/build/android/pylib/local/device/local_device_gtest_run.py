@@ -51,11 +51,13 @@ _SECONDS_TO_NANOS = int(1e9)
 # The amount of time a test executable may run before it gets killed.
 _TEST_TIMEOUT_SECONDS = 30*60
 
+# Tests that use SpawnedTestServer must run the LocalTestServerSpawner on the
+# host machine.
 # TODO(jbudorick): Move this up to the test instance if the net test server is
 # handled outside of the APK for the remote_device environment.
 _SUITE_REQUIRES_TEST_SERVER_SPAWNER = [
   'components_browsertests', 'content_unittests', 'content_browsertests',
-  'net_unittests', 'unit_tests'
+  'net_unittests', 'services_unittests', 'unit_tests'
 ]
 
 # No-op context manager. If we used Python 3, we could change this to
@@ -391,11 +393,19 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
       retries = 1
       if self._test_instance.wait_for_java_debugger:
         timeout = None
+
+      flags = list(self._test_instance.flags)
+      flags.append('--gtest_list_tests')
+
       # TODO(crbug.com/726880): Remove retries when no longer necessary.
       for i in range(0, retries+1):
+        logging.info('flags:')
+        for f in flags:
+          logging.info('  %s', f)
+
         raw_test_list = crash_handler.RetryOnSystemCrash(
             lambda d: self._delegate.Run(
-                None, d, flags='--gtest_list_tests', timeout=timeout),
+                None, d, flags=' '.join(flags), timeout=timeout),
             device=dev)
         tests = gtest_test_instance.ParseGTestListTests(raw_test_list)
         if not tests:
@@ -464,10 +474,11 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
           device_temp_file.NamedDeviceTemporaryDirectory(
               adb=device.adb, dir='/sdcard/'),
           self._test_instance.gs_test_artifacts_bucket) as test_artifacts_dir:
-        with contextlib_ext.Optional(
+        with (contextlib_ext.Optional(
             device_temp_file.DeviceTempFile(
                 adb=device.adb, dir=self._delegate.ResultsDirectory(device)),
-            self._test_instance.chartjson_result_file) as chartjson_result_file:
+            self._test_instance.isolated_script_test_perf_output)
+            ) as isolated_script_test_perf_output:
 
           flags = list(self._test_instance.flags)
           if self._test_instance.enable_xml_result_parsing:
@@ -476,9 +487,9 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
           if self._test_instance.gs_test_artifacts_bucket:
             flags.append('--test_artifacts_dir=%s' % test_artifacts_dir.name)
 
-          if self._test_instance.chartjson_result_file:
-            flags.append('--chartjson_result_file=%s'
-                         % chartjson_result_file.name)
+          if self._test_instance.isolated_script_test_perf_output:
+            flags.append('--isolated_script_test_perf_output=%s'
+                         % isolated_script_test_perf_output.name)
 
           logging.info('flags:')
           for f in flags:
@@ -518,14 +529,15 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
                   str(e))
               gtest_xml = None
 
-          if self._test_instance.chartjson_result_file:
+          if self._test_instance.isolated_script_test_perf_output:
             try:
-              device.PullFile(chartjson_result_file.name,
-                              self._test_instance.chartjson_result_file)
+              device.PullFile(
+                  isolated_script_test_perf_output.name,
+                  self._test_instance.isolated_script_test_perf_output)
             except device_errors.CommandFailedError as e:
               logging.warning(
                   'Failed to pull chartjson results %s: %s',
-                  chartjson_result_file.name, str(e))
+                  isolated_script_test_perf_output.name, str(e))
 
           test_artifacts_url = self._UploadTestArtifacts(device,
                                                          test_artifacts_dir)

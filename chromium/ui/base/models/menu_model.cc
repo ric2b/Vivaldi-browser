@@ -17,7 +17,14 @@ bool MenuModel::GetModelAndIndexForCommandId(int command_id,
   const int item_count = (*model)->GetItemCount();
   for (int i = 0; i < item_count; ++i) {
     const int candidate_index = i;
-    if ((*model)->GetTypeAt(candidate_index) == TYPE_SUBMENU) {
+    // Actionable submenus have commands.
+    if ((*model)->GetTypeAt(candidate_index) == TYPE_ACTIONABLE_SUBMENU &&
+        (*model)->GetCommandIdAt(candidate_index) == command_id) {
+      *index = candidate_index;
+      return true;
+    }
+    if ((*model)->GetTypeAt(candidate_index) == TYPE_SUBMENU ||
+        (*model)->GetTypeAt(candidate_index) == TYPE_ACTIONABLE_SUBMENU) {
       MenuModel* submenu_model = (*model)->GetSubmenuModelAt(candidate_index);
       if (GetModelAndIndexForCommandId(command_id, &submenu_model, index)) {
         *model = submenu_model;
@@ -38,6 +45,10 @@ base::string16 MenuModel::GetSublabelAt(int index) const {
 
 base::string16 MenuModel::GetMinorTextAt(int index) const {
   return base::string16();
+}
+
+const gfx::VectorIcon* MenuModel::GetMinorIconAt(int index) const {
+  return nullptr;
 }
 
 const gfx::FontList* MenuModel::GetLabelFontListAt(int index) const {

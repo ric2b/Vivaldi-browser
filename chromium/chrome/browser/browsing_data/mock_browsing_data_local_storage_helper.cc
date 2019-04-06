@@ -25,11 +25,13 @@ void MockBrowsingDataLocalStorageHelper::StartFetching(
 }
 
 void MockBrowsingDataLocalStorageHelper::DeleteOrigin(
-    const GURL& origin) {
+    const GURL& origin,
+    base::OnceClosure callback) {
   ASSERT_FALSE(callback_.is_null());
   ASSERT_TRUE(base::ContainsKey(origins_, origin));
   last_deleted_origin_ = origin;
   origins_[origin] = false;
+  std::move(callback).Run();
 }
 
 void MockBrowsingDataLocalStorageHelper::AddLocalStorageSamples() {
@@ -43,23 +45,6 @@ void MockBrowsingDataLocalStorageHelper::AddLocalStorageSamples() {
       BrowsingDataLocalStorageHelper::LocalStorageInfo(
           kOrigin2, 2, base::Time()));
   origins_[kOrigin2] = true;
-}
-
-void MockBrowsingDataLocalStorageHelper::
-    AddLocalStorageSamplesWithSuborigins() {
-  AddLocalStorageSamples();
-  const GURL kSuborigin3("http-so://foobar.host3:3");
-  const GURL kOrigin4("http://host4:4");
-  const GURL kSuborigin4("http-so://foobar.host4:4");
-  response_.push_back(BrowsingDataLocalStorageHelper::LocalStorageInfo(
-      kSuborigin3, 1, base::Time()));
-  origins_[kSuborigin3] = true;
-  response_.push_back(BrowsingDataLocalStorageHelper::LocalStorageInfo(
-      kOrigin4, 1, base::Time()));
-  origins_[kOrigin4] = true;
-  response_.push_back(BrowsingDataLocalStorageHelper::LocalStorageInfo(
-      kSuborigin4, 1, base::Time()));
-  origins_[kSuborigin4] = true;
 }
 
 void MockBrowsingDataLocalStorageHelper::Notify() {

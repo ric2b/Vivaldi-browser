@@ -22,6 +22,7 @@ struct AutocompleteMatch;
 class AutocompleteClassifier;
 class AutocompleteSchemeClassifier;
 class ContextualSuggestionsService;
+class DocumentSuggestionsService;
 class GURL;
 class InMemoryURLIndex;
 class KeywordProvider;
@@ -37,12 +38,8 @@ class HistoryService;
 class URLDatabase;
 }
 
-namespace net {
-class URLRequestContextGetter;
-}
-
-namespace physical_web {
-class PhysicalWebDataSource;
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 class SearchTermsData;
@@ -52,7 +49,8 @@ class AutocompleteProviderClient {
  public:
   virtual ~AutocompleteProviderClient() {}
 
-  virtual net::URLRequestContextGetter* GetRequestContext() = 0;
+  virtual scoped_refptr<network::SharedURLLoaderFactory>
+  GetURLLoaderFactory() = 0;
   virtual PrefService* GetPrefs() = 0;
   virtual const AutocompleteSchemeClassifier& GetSchemeClassifier() const = 0;
   virtual AutocompleteClassifier* GetAutocompleteClassifier() = 0;
@@ -65,12 +63,13 @@ class AutocompleteProviderClient {
   virtual const TemplateURLService* GetTemplateURLService() const = 0;
   virtual ContextualSuggestionsService* GetContextualSuggestionsService(
       bool create_if_necessary) const = 0;
+  virtual DocumentSuggestionsService* GetDocumentSuggestionsService(
+      bool create_if_necessary) const = 0;
   virtual const SearchTermsData& GetSearchTermsData() const = 0;
   virtual scoped_refptr<ShortcutsBackend> GetShortcutsBackend() = 0;
   virtual scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() = 0;
   virtual std::unique_ptr<KeywordExtensionsDelegate>
   GetKeywordExtensionsDelegate(KeywordProvider* keyword_provider) = 0;
-  virtual physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() = 0;
 
   // The value to use for Accept-Languages HTTP header when making an HTTP
   // request.
@@ -99,7 +98,12 @@ class AutocompleteProviderClient {
   virtual bool IsOffTheRecord() const = 0;
   virtual bool SearchSuggestEnabled() const = 0;
 
-  virtual bool TabSyncEnabledAndUnencrypted() const = 0;
+  // Returns whether personalized URL data collection is enabled.  I.e.,
+  // the user has consented to have URLs recorded keyed by their Google account.
+  // In this case, the user has agreed to share browsing data with Google and so
+  // this state can be used to govern features such as sending the current page
+  // URL with omnibox suggest requests.
+  virtual bool IsPersonalizedUrlDataCollectionActive() const = 0;
 
   // This function returns true if the user is signed in.
   virtual bool IsAuthenticated() const = 0;
@@ -142,9 +146,11 @@ class AutocompleteProviderClient {
   // configure the provider if desired.
   virtual void ConfigureKeywordProvider(KeywordProvider* keyword_provider) {}
 
-  // Called to find out if there is an open tab with the given URL within
-  // the current profile.
-  virtual bool IsTabOpenWithURL(const GURL& url) = 0;
+  // Called to find out if there is an open tab with the given URL within the
+  // current profile. |input| can be null; match is more precise (e.g. scheme
+  // presence) if provided.
+  virtual bool IsTabOpenWithURL(const GURL& url,
+                                const AutocompleteInput* input) = 0;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_PROVIDER_CLIENT_H_

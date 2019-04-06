@@ -43,14 +43,13 @@ void CameraDeviceContext::LogToClient(std::string message) {
 }
 
 void CameraDeviceContext::SubmitCapturedData(
-    const uint8_t* data,
-    int length,
+    gfx::GpuMemoryBuffer* buffer,
     const VideoCaptureFormat& frame_format,
     base::TimeTicks reference_time,
     base::TimeDelta timestamp) {
-  int total_rotation = (sensor_orientation_ + screen_rotation_) % 360;
-  client_->OnIncomingCapturedData(data, length, frame_format, total_rotation,
-                                  reference_time, timestamp);
+  client_->OnIncomingCapturedGfxBuffer(buffer, frame_format,
+                                       GetCameraFrameOrientation(),
+                                       reference_time, timestamp);
 }
 
 void CameraDeviceContext::SetSensorOrientation(int sensor_orientation) {
@@ -65,6 +64,10 @@ void CameraDeviceContext::SetScreenRotation(int screen_rotation) {
   DCHECK(screen_rotation >= 0 && screen_rotation < 360 &&
          screen_rotation % 90 == 0);
   screen_rotation_ = screen_rotation;
+}
+
+int CameraDeviceContext::GetCameraFrameOrientation() {
+  return (sensor_orientation_ + screen_rotation_) % 360;
 }
 
 }  // namespace media

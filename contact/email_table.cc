@@ -23,16 +23,14 @@ void FillEmailRow(sql::Statement& statement, EmailAddressRow* email_row) {
   int contact_id = statement.ColumnInt(1);
   base::string16 email = statement.ColumnString16(2);
   std::string type = statement.ColumnString(3);
-  bool trusted = statement.ColumnInt(4) == 1 ? true : false;
-  bool is_default = statement.ColumnInt(5) == 1 ? true : false;
-  bool obsolete = statement.ColumnInt(6) == 1 ? true : false;
+  bool favorite = statement.ColumnInt(4) == 1 ? true : false;
+  bool obsolete = statement.ColumnInt(5) == 1 ? true : false;
 
   email_row->set_email_address_id(email_address_id);
   email_row->set_contact_id(contact_id);
   email_row->set_email_address(email);
   email_row->set_type(type);
-  email_row->set_trusted(trusted);
-  email_row->set_is_default(is_default);
+  email_row->set_favorite(favorite);
   email_row->set_obsolete(obsolete);
 }
 
@@ -77,9 +75,8 @@ bool EmailTable::CreateEmailTable() {
       "contact_id INTEGER,"
       "email LONGVARCHAR,"
       "type LONGVARCHAR,"
-      "trusted INTEGER,"
-      "is_default INTEGER,"
-      "obsolete INTEGER,"
+      "favorite INTEGER DEFAULT 0,"
+      "obsolete INTEGER DEFAULT 0,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -93,20 +90,19 @@ EmailAddressID EmailTable::AddEmailAddress(EmailAddressRow row) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "INSERT INTO email_addresses "
-      "(contact_id, email, type, trusted, is_default, obsolete, created, "
+      "(contact_id, email, type, favorite, obsolete, created, "
       "last_modified) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
+      "VALUES (?, ?, ?, ?, ?, ?, ?)"));
 
   statement.BindInt64(0, row.contact_id());
   statement.BindString16(1, row.email_address());
   statement.BindString(2, row.type());
-  statement.BindInt(3, row.trusted() ? 1 : 0);
-  statement.BindInt(4, row.is_default() ? 1 : 0);
-  statement.BindInt(5, row.obsolete() ? 1 : 0);
+  statement.BindInt(3, row.favorite() ? 1 : 0);
+  statement.BindInt(4, row.obsolete() ? 1 : 0);
 
   int created = base::Time().Now().ToInternalValue();
+  statement.BindInt64(5, created);
   statement.BindInt64(6, created);
-  statement.BindInt64(7, created);
 
   if (!statement.Run()) {
     return 0;
@@ -118,18 +114,17 @@ bool EmailTable::UpdateEmailAddress(EmailAddressRow row) {
   sql::Statement statement(
       GetDB().GetCachedStatement(SQL_FROM_HERE,
                                  "UPDATE email_addresses SET \
-        email=?, type=?, trusted=?, is_default=?, obsolete=?, last_modified=? \
+        email=?, type=?, favorite=?, obsolete=?, last_modified=? \
         WHERE email_address_id=? and contact_id=?"));
 
   int modified = base::Time().Now().ToInternalValue();
   statement.BindString16(0, row.email_address());
   statement.BindString(1, row.type());
-  statement.BindInt(2, row.trusted() ? 1 : 0);
-  statement.BindInt(3, row.is_default() ? 1 : 0);
-  statement.BindInt(4, row.obsolete() ? 1 : 0);
-  statement.BindInt64(5, modified);
-  statement.BindInt64(6, row.email_address_id());
-  statement.BindInt64(7, row.contact_id());
+  statement.BindInt(2, row.favorite() ? 1 : 0);
+  statement.BindInt(3, row.obsolete() ? 1 : 0);
+  statement.BindInt64(4, modified);
+  statement.BindInt64(5, row.email_address_id());
+  statement.BindInt64(6, row.contact_id());
 
   return statement.Run();
 }
@@ -151,7 +146,7 @@ bool EmailTable::GetEmailsForContact(ContactID contact_id,
   sql::Statement statement(
       GetDB().GetCachedStatement(SQL_FROM_HERE,
                                  "SELECT email_address_id, contact_id, email, "
-                                 "type, trusted, is_default, obsolete "
+                                 "type, favorite, obsolete "
                                  "FROM email_addresses WHERE contact_id=?"));
   statement.BindInt64(0, contact_id);
   return FillEmailVector(statement, emails);
@@ -163,7 +158,7 @@ bool EmailTable::GetAllEmailAddresses(EmailAddressRows* emails) {
   sql::Statement statement(
       GetDB().GetCachedStatement(SQL_FROM_HERE,
                                  "SELECT email_address_id, contact_id, email, "
-                                 "type, trusted, is_default, obsolete "
+                                 "type, favorite, obsolete "
                                  "FROM email_addresses"));
   return FillEmailVector(statement, emails);
 }

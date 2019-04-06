@@ -24,11 +24,11 @@
 #include "extensions/common/guest_view/extensions_guest_view_messages.h"
 #include "extensions/renderer/guest_view/extensions_guest_view_container.h"
 #include "extensions/renderer/script_context.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebRemoteFrame.h"
-#include "third_party/WebKit/public/web/WebScopedUserGesture.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_remote_frame.h"
+#include "third_party/blink/public/web/web_scoped_user_gesture.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "v8/include/v8.h"
 
 #include "app/vivaldi_apptools.h"
@@ -78,47 +78,54 @@ class RenderFrameStatus : public content::RenderFrameObserver {
 
 GuestViewInternalCustomBindings::GuestViewInternalCustomBindings(
     ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction("AttachGuest",
-                base::Bind(&GuestViewInternalCustomBindings::AttachGuest,
-                           base::Unretained(this)));
-  RouteFunction("DetachGuest",
-                base::Bind(&GuestViewInternalCustomBindings::DetachGuest,
-                           base::Unretained(this)));
-  RouteFunction("AttachIframeGuest",
-                base::Bind(&GuestViewInternalCustomBindings::AttachIframeGuest,
-                           base::Unretained(this)));
-  RouteFunction("DestroyContainer",
-                base::Bind(&GuestViewInternalCustomBindings::DestroyContainer,
-                           base::Unretained(this)));
-  RouteFunction("GetContentWindow",
-                base::Bind(&GuestViewInternalCustomBindings::GetContentWindow,
-                           base::Unretained(this)));
-  RouteFunction("GetViewFromID",
-                base::Bind(&GuestViewInternalCustomBindings::GetViewFromID,
-                           base::Unretained(this)));
-  RouteFunction(
+    : ObjectBackedNativeHandler(context) {}
+
+GuestViewInternalCustomBindings::~GuestViewInternalCustomBindings() {}
+
+void GuestViewInternalCustomBindings::AddRoutes() {
+  RouteHandlerFunction("AttachGuest",
+                       base::Bind(&GuestViewInternalCustomBindings::AttachGuest,
+                                  base::Unretained(this)));
+  RouteHandlerFunction("DetachGuest",
+                       base::Bind(&GuestViewInternalCustomBindings::DetachGuest,
+                                  base::Unretained(this)));
+  RouteHandlerFunction(
+      "AttachIframeGuest",
+      base::Bind(&GuestViewInternalCustomBindings::AttachIframeGuest,
+                 base::Unretained(this)));
+  RouteHandlerFunction(
+      "DestroyContainer",
+      base::Bind(&GuestViewInternalCustomBindings::DestroyContainer,
+                 base::Unretained(this)));
+  RouteHandlerFunction(
+      "GetContentWindow",
+      base::Bind(&GuestViewInternalCustomBindings::GetContentWindow,
+                 base::Unretained(this)));
+  RouteHandlerFunction(
+      "GetViewFromID",
+      base::Bind(&GuestViewInternalCustomBindings::GetViewFromID,
+                 base::Unretained(this)));
+  RouteHandlerFunction(
       "RegisterDestructionCallback",
       base::Bind(&GuestViewInternalCustomBindings::RegisterDestructionCallback,
                  base::Unretained(this)));
-  RouteFunction("IsVivaldi",
-                base::Bind(&GuestViewInternalCustomBindings::IsVivaldi,
-                           base::Unretained(this)));
-  RouteFunction(
+  RouteHandlerFunction(
+     "IsVivaldi",
+      base::Bind(&GuestViewInternalCustomBindings::IsVivaldi,
+                 base::Unretained(this)));
+  RouteHandlerFunction(
       "RegisterElementResizeCallback",
       base::Bind(
           &GuestViewInternalCustomBindings::RegisterElementResizeCallback,
           base::Unretained(this)));
-  RouteFunction("RegisterView",
-                base::Bind(&GuestViewInternalCustomBindings::RegisterView,
-                           base::Unretained(this)));
-  RouteFunction(
+  RouteHandlerFunction(
+      "RegisterView", base::Bind(&GuestViewInternalCustomBindings::RegisterView,
+                                 base::Unretained(this)));
+  RouteHandlerFunction(
       "RunWithGesture",
       base::Bind(&GuestViewInternalCustomBindings::RunWithGesture,
                  base::Unretained(this)));
 }
-
-GuestViewInternalCustomBindings::~GuestViewInternalCustomBindings() {}
 
 // static
 void GuestViewInternalCustomBindings::ResetMapEntry(

@@ -11,12 +11,12 @@ import("//ui/ozone/ozone.gni")
 import("//testing/test.gni")
 
 declare_args() {
-  enable_swiftshader = (is_win || (is_linux && use_x11) ||
-                        (is_chromeos && ozone_platform_x11)) &&
-                       (target_cpu == "x86" || target_cpu == "x64")
+  enable_swiftshader =
+      (is_win || (is_linux && use_x11) || (is_mac && use_egl) ||
+       (is_chromeos && ozone_platform_x11)) &&
+      (target_cpu == "x86" || target_cpu == "x64")
 }
 
-use_egl = is_win || is_android || is_linux || is_fuchsia
 use_glx = use_x11 || ozone_platform_x11
 
 if (is_android) {
@@ -26,8 +26,10 @@ if (is_android) {
 
 buildflag_header("gl_features") {
   header = "gl_features.h"
+  use_egl_on_mac = use_egl && is_mac
   flags = [
     "ENABLE_SWIFTSHADER=$enable_swiftshader",
+    "USE_EGL_ON_MAC=$use_egl_on_mac",
     "USE_STATIC_ANGLE=$use_static_angle",
   ]
 }
@@ -59,8 +61,6 @@ component("gl") {
     "ca_renderer_layer_params.h",
     "dc_renderer_layer_params.cc",
     "dc_renderer_layer_params.h",
-    "extension_set.cc",
-    "extension_set.h",
     "gl_bindings.cc",
     "gl_bindings.h",
     "gl_bindings_autogen_gl.cc",
@@ -124,8 +124,6 @@ component("gl") {
     "gl_surface_stub.h",
     "gl_switches.cc",
     "gl_switches.h",
-    "gl_switches_util.cc",
-    "gl_switches_util.h",
     "gl_utils.cc",
     "gl_utils.h",
     "gl_version_info.cc",
@@ -155,10 +153,8 @@ component("gl") {
   public_configs = [ "//third_party/khronos:khronos_headers" ]
 
   deps = [
+    ":gl_features",
     "//base/third_party/dynamic_annotations",
-
-    # Remove after fixing crbug.com/724999.
-    "//components/crash/core/common:crash_key",
 
     # ANGLE includes are used cross-platform.
     "//third_party/angle:includes",
@@ -195,7 +191,7 @@ component("gl") {
       "gl_surface_egl.h",
     ]
 
-    if (is_linux) {
+    if (is_linux || use_ozone) {
       sources += [
         "gl_image_native_pixmap.cc",
         "gl_image_native_pixmap.h",
@@ -213,15 +209,29 @@ component("gl") {
       }
     }
 
-    if (is_posix) {
-      # Windows has USE_EGL but doesn't support base::FileDescriptor
+    if (is_posix && !is_fuchsia && !is_mac) {
+      # Windows has USE_EGL but doesn't support base::FileDescriptor.
+      # libsync isn't supported or needed on MacOSX.
+      # Fuchsia is excluded due to a libsync dependency and because it's
+      # unknown if the required EGL_ANDROID_native_fence_sync extension works
+      # there. If it does and there's a use case, this could be revisited.
       sources += [
         "gl_fence_android_native_fence_sync.cc",
         "gl_fence_android_native_fence_sync.h",
       ]
+
+      deps += [ "//third_party/libsync" ]
     }
   }
-  if (is_android || is_linux || is_fuchsia) {
+  if (is_mac || use_egl) {
+    sources += [
+      "yuv_to_rgb_converter.cc",
+      "yuv_to_rgb_converter.h",
+    ]
+  }
+
+  # TODO(camurcu): Windows/Ozone uses OSMesa for now. Will be updated.
+  if (is_android || is_linux || is_fuchsia || (is_win && use_ozone)) {
     sources += [
       "gl_implementation_osmesa.cc",
       "gl_implementation_osmesa.h",
@@ -239,6 +249,7 @@ component("gl") {
 
     deps += [ "//ui/base/x" ]
 
+    assert(use_egl)
     data_deps += [
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
@@ -291,6 +302,7 @@ component("gl") {
     libs = [ "dwmapi.lib" ]
     ldflags = [ "/DELAYLOAD:dwmapi.dll" ]
 
+    assert(use_egl)
     data_deps += [
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
@@ -308,8 +320,6 @@ component("gl") {
       "gl_image_io_surface.mm",
       "scoped_cgl.cc",
       "scoped_cgl.h",
-      "yuv_to_rgb_converter.cc",
-      "yuv_to_rgb_converter.h",
     ]
 
     libs = [
@@ -318,6 +328,19 @@ component("gl") {
       "OpenGL.framework",
       "Quartz.framework",
     ]
+
+    if (use_egl) {
+      sources += [
+        "gl_image_io_surface_egl.h",
+        "gl_image_io_surface_egl.mm",
+      ]
+
+      data_deps += [
+        "//third_party/angle:libEGL",
+        "//third_party/angle:libGLESv2",
+        "//third_party/swiftshader",
+      ]
+    }
   }
   if (is_android) {
     sources += [
@@ -333,6 +356,41 @@ component("gl") {
     libs = [ "android" ]
 
     deps += [ ":gl_jni_headers" ]
+  }
+}
+
+if (is_mac && use_egl) {
+  # We need to copy the ANGLE and SwiftShader libraries so that the
+  # bundle_data dependencies have a "copy" target type. Otherwise for
+  # "shared_library" target types it will try to link things into
+  # Chromium Framework when we want to keep the ANGLE and SwiftShader
+  # libraries separate instead.
+  copy("angle_library_copy") {
+    sources = [
+      "$root_out_dir/libEGL.dylib",
+      "$root_out_dir/libGLESv2.dylib",
+    ]
+    outputs = [
+      "$root_out_dir/egl_intermediates/{{source_file_part}}",
+    ]
+    deps = [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+    ]
+  }
+
+  copy("swiftshader_library_copy") {
+    sources = [
+      "$root_out_dir/libswiftshader_libEGL.dylib",
+      "$root_out_dir/libswiftshader_libGLESv2.dylib",
+    ]
+    outputs = [
+      "$root_out_dir/egl_intermediates/{{source_file_part}}",
+    ]
+    deps = [
+      "//third_party/swiftshader/src/OpenGL/libEGL:swiftshader_libEGL",
+      "//third_party/swiftshader/src/OpenGL/libGLESv2:swiftshader_libGLESv2",
+    ]
   }
 }
 
@@ -414,7 +472,7 @@ source_set("run_all_unittests") {
 
   if (use_ozone) {
     deps += [
-      "//mojo/edk/system",
+      "//mojo/core/embedder",
       "//services/service_manager/public/cpp/test:test_support",
       "//ui/ozone",
     ]

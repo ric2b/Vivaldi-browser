@@ -11,6 +11,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "components/keep_alive_registry/keep_alive_state_observer.h"
 #include "extensions/shell/browser/desktop_controller.h"
 #include "extensions/shell/browser/root_window_controller.h"
 #include "ui/aura/window.h"
@@ -19,7 +20,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/dbus/power_manager_client.h"
-#include "ui/display/manager/chromeos/display_configurator.h"
+#include "ui/display/manager/display_configurator.h"
 #endif
 
 namespace aura {
@@ -69,7 +70,8 @@ class ShellDesktopControllerAura
       public chromeos::PowerManagerClient::Observer,
       public display::DisplayConfigurator::Observer,
 #endif
-      public ui::internal::InputMethodDelegate {
+      public ui::internal::InputMethodDelegate,
+      public KeepAliveStateObserver {
  public:
   explicit ShellDesktopControllerAura(content::BrowserContext* browser_context);
   ~ShellDesktopControllerAura() override;
@@ -84,24 +86,32 @@ class ShellDesktopControllerAura
       RootWindowController* root_window_controller) override;
 
 #if defined(OS_CHROMEOS)
-  // chromeos::PowerManagerClient::Observer overrides:
+  // chromeos::PowerManagerClient::Observer:
   void PowerButtonEventReceived(bool down,
                                 const base::TimeTicks& timestamp) override;
 
-  // display::DisplayConfigurator::Observer overrides.
+  // display::DisplayConfigurator::Observer:
   void OnDisplayModeChanged(
       const display::DisplayConfigurator::DisplayStateList& displays) override;
 #endif
 
-  // ui::internal::InputMethodDelegate overrides:
+  // ui::internal::InputMethodDelegate:
   ui::EventDispatchDetails DispatchKeyEventPostIME(
       ui::KeyEvent* key_event) override;
+
+  // KeepAliveStateObserver:
+  void OnKeepAliveStateChanged(bool is_keeping_alive) override;
+  void OnKeepAliveRestartStateChanged(bool can_restart) override;
 
   // Returns the WindowTreeHost for the primary display.
   aura::WindowTreeHost* GetPrimaryHost();
 
   // Returns all root windows managed by RootWindowControllers.
   aura::Window::Windows GetAllRootWindows();
+
+  // Updates the bounds of |app_window|. This may involve reparenting the window
+  // to a different root window if the new bounds are in a different display.
+  void SetWindowBoundsInScreen(AppWindow* app_window, const gfx::Rect& bounds);
 
  protected:
   // Creates and sets the aura clients and window manager stuff. Subclass may
@@ -118,6 +128,10 @@ class ShellDesktopControllerAura
 
   // Removes handlers from the RootWindowController so it can be destroyed.
   void TearDownRootWindowController(RootWindowController* root);
+
+  // Quits if there are no app windows, and no keep-alives waiting for apps to
+  // relaunch.
+  void MaybeQuit();
 
 #if defined(OS_CHROMEOS)
   // Returns the desired dimensions of the RootWindowController from the command

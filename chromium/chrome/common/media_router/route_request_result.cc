@@ -4,7 +4,6 @@
 
 #include "chrome/common/media_router/route_request_result.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/common/media_router/media_route.h"
 
 namespace media_router {
@@ -13,8 +12,8 @@ namespace media_router {
 std::unique_ptr<RouteRequestResult> RouteRequestResult::FromSuccess(
     const MediaRoute& route,
     const std::string& presentation_id) {
-  return base::MakeUnique<RouteRequestResult>(
-      base::MakeUnique<MediaRoute>(route), presentation_id, std::string(),
+  return std::make_unique<RouteRequestResult>(
+      std::make_unique<MediaRoute>(route), presentation_id, std::string(),
       RouteRequestResult::OK);
 }
 
@@ -22,7 +21,7 @@ std::unique_ptr<RouteRequestResult> RouteRequestResult::FromSuccess(
 std::unique_ptr<RouteRequestResult> RouteRequestResult::FromError(
     const std::string& error,
     ResultCode result_code) {
-  return base::MakeUnique<RouteRequestResult>(nullptr, std::string(), error,
+  return std::make_unique<RouteRequestResult>(nullptr, std::string(), error,
                                               result_code);
 }
 

@@ -10,7 +10,6 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -31,11 +30,11 @@
 #include "extensions/renderer/scripts_run_info.h"
 #include "extensions/renderer/web_ui_injection_host.h"
 #include "ipc/ipc_message_macros.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -80,7 +79,6 @@ class ScriptInjectionManager::RFOHelper : public content::RenderFrameObserver {
   void DidCreateDocumentElement() override;
   void DidFailProvisionalLoad(const blink::WebURLError& error) override;
   void DidFinishDocumentLoad() override;
-  void DidFinishLoad() override;
   void FrameDetached() override;
   void OnDestruct() override;
   void OnStop() override;
@@ -180,35 +178,25 @@ void ScriptInjectionManager::RFOHelper::DidFinishDocumentLoad() {
           base::Bind(&ScriptInjectionManager::RFOHelper::StartInjectScripts,
                      weak_factory_.GetWeakPtr(), UserScript::DOCUMENT_END));
 
-  // We try to run idle in two places: here and DidFinishLoad.
-  // DidFinishDocumentLoad() corresponds to completing the document's load,
-  // whereas DidFinishLoad corresponds to completing the document and all
-  // subresources' load. We don't want to hold up script injection for a
-  // particularly slow subresource, so we set a delayed task from here - but if
-  // we finish everything before that point (i.e., DidFinishLoad() is
-  // triggered), then there's no reason to keep waiting.
+  // We try to run idle in two places: a delayed task here and in response to
+  // ContentRendererClient::RunScriptsAtDocumentIdle(). DidFinishDocumentLoad()
+  // corresponds to completing the document's load, whereas
+  // RunScriptsAtDocumentIdle() corresponds to completing the document and all
+  // subresources' load (but before the window.onload event). We don't want to
+  // hold up script injection for a particularly slow subresource, so we set a
+  // delayed task from here - but if we finish everything before that point
+  // (i.e., RunScriptsAtDocumentIdle() is triggered), then there's no reason to
+  // keep waiting.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
                  weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kScriptIdleTimeoutInMs));
 
-  if (base::FeatureList::IsEnabled(features::kYieldBetweenContentScriptRuns)) {
-    ExtensionFrameHelper::Get(render_frame())
-        ->ScheduleAtDocumentIdle(
-            base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
-                       weak_factory_.GetWeakPtr()));
-  }
-}
-
-void ScriptInjectionManager::RFOHelper::DidFinishLoad() {
-  DCHECK(content::RenderThread::Get());
-  if (!base::FeatureList::IsEnabled(features::kYieldBetweenContentScriptRuns)) {
-    // Ensure that we don't block any UI progress by running scripts.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
-                              weak_factory_.GetWeakPtr()));
-  }
+  ExtensionFrameHelper::Get(render_frame())
+      ->ScheduleAtDocumentIdle(
+          base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void ScriptInjectionManager::RFOHelper::FrameDetached() {
@@ -221,14 +209,10 @@ void ScriptInjectionManager::RFOHelper::OnDestruct() {
 }
 
 void ScriptInjectionManager::RFOHelper::OnStop() {
-  // With PlzNavigate, we won't get a provisional load failed notification
-  // for 204/205/downloads since these don't notify the renderer. However the
-  // browser does fire the OnStop IPC. So use that signal instead to avoid
-  // keeping the frame in a START state indefinitely which leads to deadlocks.
-  if (content::IsBrowserSideNavigationEnabled()) {
-    DidFailProvisionalLoad(
-        blink::WebURLError(net::ERR_FAILED, blink::WebURL()));
-  }
+  // If the navigation request fails (e.g. 204/205/downloads), notify the
+  // extension to avoid keeping the frame in a START state indefinitely which
+  // leads to deadlocks.
+  DidFailProvisionalLoad(blink::WebURLError(net::ERR_FAILED, blink::WebURL()));
 }
 
 void ScriptInjectionManager::RFOHelper::OnExecuteCode(
@@ -419,9 +403,8 @@ void ScriptInjectionManager::InjectScripts(
   active_injection_frames_.insert(frame);
 
   ScriptsRunInfo scripts_run_info(frame, run_location);
-  scoped_refptr<AsyncScriptsRunInfo> async_run_info;
-  if (base::FeatureList::IsEnabled(features::kYieldBetweenContentScriptRuns))
-    async_run_info = base::MakeRefCounted<AsyncScriptsRunInfo>(run_location);
+  scoped_refptr<AsyncScriptsRunInfo> async_run_info =
+      base::MakeRefCounted<AsyncScriptsRunInfo>(run_location);
 
   for (auto iter = frame_injections.begin(); iter != frame_injections.end();) {
     // It's possible for the frame to be invalidated in the course of injection

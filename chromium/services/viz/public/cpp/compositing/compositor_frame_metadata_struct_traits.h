@@ -10,6 +10,7 @@
 #include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "services/viz/public/cpp/compositing/begin_frame_args_struct_traits.h"
 #include "services/viz/public/cpp/compositing/frame_deadline_struct_traits.h"
+#include "services/viz/public/cpp/compositing/surface_range_struct_traits.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_metadata.mojom-shared.h"
 
 namespace mojo {
@@ -49,11 +50,6 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
   static float max_page_scale_factor(
       const viz::CompositorFrameMetadata& metadata) {
     return metadata.max_page_scale_factor;
-  }
-
-  static bool root_overflow_x_hidden(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.root_overflow_x_hidden;
   }
 
   static bool root_overflow_y_hidden(
@@ -105,7 +101,7 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
     return metadata.latency_info;
   }
 
-  static const std::vector<viz::SurfaceId>& referenced_surfaces(
+  static const std::vector<viz::SurfaceRange>& referenced_surfaces(
       const viz::CompositorFrameMetadata& metadata) {
     return metadata.referenced_surfaces;
   }
@@ -115,9 +111,9 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
     return metadata.activation_dependencies;
   }
 
-  static const base::Optional<uint32_t>& deadline_in_frames(
+  static const viz::FrameDeadline& deadline(
       const viz::CompositorFrameMetadata& metadata) {
-    return metadata.deadline_in_frames;
+    return metadata.deadline;
   }
 
   static uint32_t content_source_id(
@@ -134,9 +130,14 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
     return metadata.frame_token;
   }
 
-  static uint32_t presentation_token(
+  static bool send_frame_token_to_embedder(
       const viz::CompositorFrameMetadata& metadata) {
-    return metadata.presentation_token;
+    return metadata.send_frame_token_to_embedder;
+  }
+
+  static bool request_presentation_feedback(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.request_presentation_feedback;
   }
 
   static bool Read(viz::mojom::CompositorFrameMetadataDataView data,

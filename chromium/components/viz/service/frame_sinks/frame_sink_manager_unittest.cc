@@ -2,25 +2,63 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+
 #include <stddef.h>
 
+#include <tuple>
+
+#include "base/run_loop.h"
+#include "components/viz/common/constants.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
-#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/test/begin_frame_source_test.h"
+#include "components/viz/test/compositor_frame_helpers.h"
 #include "components/viz/test/fake_external_begin_frame_source.h"
+#include "components/viz/test/mock_compositor_frame_sink_client.h"
+#include "components/viz/test/mock_display_client.h"
+#include "components/viz/test/test_display_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace viz {
 namespace {
 
-constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
+constexpr FrameSinkId kFrameSinkIdRoot(1, 1);
+constexpr FrameSinkId kFrameSinkIdA(2, 1);
+constexpr FrameSinkId kFrameSinkIdB(3, 1);
+constexpr FrameSinkId kFrameSinkIdC(4, 1);
+
+// Holds the four interface objects needed to create a RootCompositorFrameSink.
+struct RootCompositorFrameSinkData {
+  mojom::RootCompositorFrameSinkParamsPtr BuildParams(
+      const FrameSinkId& frame_sink_id) {
+    auto params = mojom::RootCompositorFrameSinkParams::New();
+    params->frame_sink_id = frame_sink_id;
+    params->widget = gpu::kNullSurfaceHandle;
+    params->compositor_frame_sink = MakeRequest(&compositor_frame_sink);
+    params->compositor_frame_sink_client =
+        compositor_frame_sink_client.BindInterfacePtr().PassInterface();
+    params->display_private = MakeRequest(&display_private);
+    params->display_client = display_client.BindInterfacePtr().PassInterface();
+    return params;
+  }
+
+  mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink;
+  MockCompositorFrameSinkClient compositor_frame_sink_client;
+  mojom::DisplayPrivateAssociatedPtr display_private;
+  MockDisplayClient display_client;
+};
 
 }  // namespace
 
 class FrameSinkManagerTest : public testing::Test {
  public:
-  FrameSinkManagerTest() = default;
+  FrameSinkManagerTest()
+      : manager_(&shared_bitmap_manager_,
+                 kDefaultActivationDeadlineInFrames,
+                 &display_provider_) {}
   ~FrameSinkManagerTest() override = default;
 
   std::unique_ptr<CompositorFrameSinkSupport> CreateCompositorFrameSinkSupport(
@@ -34,15 +72,85 @@ class FrameSinkManagerTest : public testing::Test {
     return support->begin_frame_source_;
   }
 
+  // Checks if a [Root]CompositorFrameSinkImpl exists for |frame_sink_id|.
+  bool CompositorFrameSinkExists(const FrameSinkId& frame_sink_id) {
+    return base::ContainsKey(manager_.sink_map_, frame_sink_id);
+  }
+
   // testing::Test implementation.
   void TearDown() override {
     // Make sure that all FrameSinkSourceMappings have been deleted.
     EXPECT_TRUE(manager_.frame_sink_source_map_.empty());
+
+    // Make sure test cleans up all [Root]CompositorFrameSinkImpls.
+    EXPECT_TRUE(manager_.support_map_.empty());
+
+    // Make sure test has invalidated all registered FrameSinkIds.
+    EXPECT_TRUE(manager_.frame_sink_data_.empty());
   }
 
  protected:
+  ServerSharedBitmapManager shared_bitmap_manager_;
+  TestDisplayProvider display_provider_;
   FrameSinkManagerImpl manager_;
 };
+
+TEST_F(FrameSinkManagerTest, CreateRootCompositorFrameSink) {
+  manager_.RegisterFrameSinkId(kFrameSinkIdRoot);
+
+  // Create a RootCompositorFrameSinkImpl.
+  RootCompositorFrameSinkData root_data;
+  manager_.CreateRootCompositorFrameSink(
+      root_data.BuildParams(kFrameSinkIdRoot));
+  EXPECT_TRUE(CompositorFrameSinkExists(kFrameSinkIdRoot));
+
+  // Invalidating should destroy the RootCompositorFrameSinkImpl.
+  manager_.InvalidateFrameSinkId(kFrameSinkIdRoot);
+  EXPECT_FALSE(CompositorFrameSinkExists(kFrameSinkIdRoot));
+}
+
+TEST_F(FrameSinkManagerTest, CreateCompositorFrameSink) {
+  manager_.RegisterFrameSinkId(kFrameSinkIdA);
+
+  // Create a CompositorFrameSinkImpl.
+  MockCompositorFrameSinkClient compositor_frame_sink_client;
+  mojom::CompositorFrameSinkPtr compositor_frame_sink;
+  manager_.CreateCompositorFrameSink(
+      kFrameSinkIdA, MakeRequest(&compositor_frame_sink),
+      compositor_frame_sink_client.BindInterfacePtr());
+  EXPECT_TRUE(CompositorFrameSinkExists(kFrameSinkIdA));
+
+  // Invalidating should destroy the CompositorFrameSinkImpl.
+  manager_.InvalidateFrameSinkId(kFrameSinkIdA);
+  EXPECT_FALSE(CompositorFrameSinkExists(kFrameSinkIdA));
+}
+
+TEST_F(FrameSinkManagerTest, CompositorFrameSinkConnectionLost) {
+  manager_.RegisterFrameSinkId(kFrameSinkIdA);
+
+  // Create a CompositorFrameSinkImpl.
+  MockCompositorFrameSinkClient compositor_frame_sink_client;
+  mojom::CompositorFrameSinkPtr compositor_frame_sink;
+  manager_.CreateCompositorFrameSink(
+      kFrameSinkIdA, MakeRequest(&compositor_frame_sink),
+      compositor_frame_sink_client.BindInterfacePtr());
+  EXPECT_TRUE(CompositorFrameSinkExists(kFrameSinkIdA));
+
+  // Close the connection from the renderer.
+  compositor_frame_sink.reset();
+
+  // Closing the connection will destroy the CompositorFrameSinkImpl along with
+  // the mojom::CompositorFrameSinkClient binding.
+  base::RunLoop run_loop;
+  compositor_frame_sink_client.set_connection_error_handler(
+      run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Check that the CompositorFrameSinkImpl was destroyed.
+  EXPECT_FALSE(CompositorFrameSinkExists(kFrameSinkIdA));
+
+  manager_.InvalidateFrameSinkId(kFrameSinkIdA);
+}
 
 TEST_F(FrameSinkManagerTest, SingleClients) {
   auto client = CreateCompositorFrameSinkSupport(FrameSinkId(1, 1));
@@ -78,16 +186,16 @@ TEST_F(FrameSinkManagerTest, SingleClients) {
 // This test verifies that a client is still connected to the BeginFrameSource
 // after restart.
 TEST_F(FrameSinkManagerTest, ClientRestart) {
-  auto client = CreateCompositorFrameSinkSupport(kArbitraryFrameSinkId);
+  auto client = CreateCompositorFrameSinkSupport(kFrameSinkIdRoot);
   StubBeginFrameSource source;
 
-  manager_.RegisterBeginFrameSource(&source, kArbitraryFrameSinkId);
+  manager_.RegisterBeginFrameSource(&source, kFrameSinkIdRoot);
   EXPECT_EQ(&source, GetBeginFrameSource(client));
 
   client.reset();
 
   // |client| is reconnected with |source| after being recreated..
-  client = CreateCompositorFrameSinkSupport(kArbitraryFrameSinkId);
+  client = CreateCompositorFrameSinkSupport(kFrameSinkIdRoot);
   EXPECT_EQ(&source, GetBeginFrameSource(client));
 
   manager_.UnregisterBeginFrameSource(&source);
@@ -233,11 +341,6 @@ TEST_F(FrameSinkManagerTest, MultipleDisplays) {
 TEST_F(FrameSinkManagerTest, ParentWithoutClientRetained) {
   StubBeginFrameSource root_source;
 
-  constexpr FrameSinkId kFrameSinkIdRoot(1, 1);
-  constexpr FrameSinkId kFrameSinkIdA(2, 2);
-  constexpr FrameSinkId kFrameSinkIdB(3, 3);
-  constexpr FrameSinkId kFrameSinkIdC(4, 4);
-
   auto root = CreateCompositorFrameSinkSupport(kFrameSinkIdRoot);
   auto client_b = CreateCompositorFrameSinkSupport(kFrameSinkIdB);
   auto client_c = CreateCompositorFrameSinkSupport(kFrameSinkIdC);
@@ -276,11 +379,6 @@ TEST_F(FrameSinkManagerTest,
        ParentWithoutClientRetained_LateBeginFrameRegistration) {
   StubBeginFrameSource root_source;
 
-  constexpr FrameSinkId kFrameSinkIdRoot(1, 1);
-  constexpr FrameSinkId kFrameSinkIdA(2, 2);
-  constexpr FrameSinkId kFrameSinkIdB(3, 3);
-  constexpr FrameSinkId kFrameSinkIdC(4, 4);
-
   auto root = CreateCompositorFrameSinkSupport(kFrameSinkIdRoot);
   auto client_b = CreateCompositorFrameSinkSupport(kFrameSinkIdB);
   auto client_c = CreateCompositorFrameSinkSupport(kFrameSinkIdC);
@@ -312,11 +410,48 @@ TEST_F(FrameSinkManagerTest,
   manager_.UnregisterFrameSinkHierarchy(kFrameSinkIdA, kFrameSinkIdC);
 }
 
-namespace {
+// Verifies that the SurfaceIds passed to EvictSurfaces will be destroyed in the
+// next garbage collection.
+TEST_F(FrameSinkManagerTest, EvictSurfaces) {
+  ParentLocalSurfaceIdAllocator allocator;
+  LocalSurfaceId local_surface_id1 = allocator.GenerateId();
+  LocalSurfaceId local_surface_id2 = allocator.GenerateId();
+  SurfaceId surface_id1(kFrameSinkIdA, local_surface_id1);
+  SurfaceId surface_id2(kFrameSinkIdB, local_surface_id2);
 
-constexpr FrameSinkId kClientIdA(1, 1);
-constexpr FrameSinkId kClientIdB(2, 2);
-constexpr FrameSinkId kClientIdC(3, 3);
+  // Create two frame sinks. Each create a surface.
+  auto sink1 = CreateCompositorFrameSinkSupport(kFrameSinkIdA);
+  auto sink2 = CreateCompositorFrameSinkSupport(kFrameSinkIdB);
+  sink1->SubmitCompositorFrame(local_surface_id1, MakeDefaultCompositorFrame());
+  sink2->SubmitCompositorFrame(local_surface_id2, MakeDefaultCompositorFrame());
+
+  // |surface_id1| and |surface_id2| should remain alive after garbage
+  // collection because they're not marked for destruction.
+  manager_.surface_manager()->GarbageCollectSurfaces();
+  EXPECT_TRUE(manager_.surface_manager()->GetSurfaceForId(surface_id1));
+  EXPECT_TRUE(manager_.surface_manager()->GetSurfaceForId(surface_id2));
+
+  // Call EvictSurfaces. Now the garbage collector can destroy the surfaces.
+  manager_.EvictSurfaces({surface_id1, surface_id2});
+  manager_.surface_manager()->GarbageCollectSurfaces();
+  EXPECT_FALSE(manager_.surface_manager()->GetSurfaceForId(surface_id1));
+  EXPECT_FALSE(manager_.surface_manager()->GetSurfaceForId(surface_id2));
+}
+
+// Verify that setting debug label works and that debug labels are cleared when
+// FrameSinkId is invalidated.
+TEST_F(FrameSinkManagerTest, DebugLabel) {
+  const std::string label = "Test Label";
+
+  manager_.RegisterFrameSinkId(kFrameSinkIdA);
+  manager_.SetFrameSinkDebugLabel(kFrameSinkIdA, label);
+  EXPECT_EQ(label, manager_.GetFrameSinkDebugLabel(kFrameSinkIdA));
+
+  manager_.InvalidateFrameSinkId(kFrameSinkIdA);
+  EXPECT_EQ("", manager_.GetFrameSinkDebugLabel(kFrameSinkIdA));
+}
+
+namespace {
 
 enum RegisterOrder { REGISTER_HIERARCHY_FIRST, REGISTER_CLIENTS_FIRST };
 enum UnregisterOrder { UNREGISTER_HIERARCHY_FIRST, UNREGISTER_CLIENTS_FIRST };
@@ -354,24 +489,24 @@ class FrameSinkManagerOrderingTest : public FrameSinkManagerTest {
   void RegisterHierarchy() {
     DCHECK(!hierarchy_registered_);
     hierarchy_registered_ = true;
-    manager_.RegisterFrameSinkHierarchy(kClientIdA, kClientIdB);
-    manager_.RegisterFrameSinkHierarchy(kClientIdB, kClientIdC);
+    manager_.RegisterFrameSinkHierarchy(kFrameSinkIdA, kFrameSinkIdB);
+    manager_.RegisterFrameSinkHierarchy(kFrameSinkIdB, kFrameSinkIdC);
     AssertCorrectBFSState();
   }
   void UnregisterHierarchy() {
     DCHECK(hierarchy_registered_);
     hierarchy_registered_ = false;
-    manager_.UnregisterFrameSinkHierarchy(kClientIdA, kClientIdB);
-    manager_.UnregisterFrameSinkHierarchy(kClientIdB, kClientIdC);
+    manager_.UnregisterFrameSinkHierarchy(kFrameSinkIdA, kFrameSinkIdB);
+    manager_.UnregisterFrameSinkHierarchy(kFrameSinkIdB, kFrameSinkIdC);
     AssertCorrectBFSState();
   }
 
   void RegisterClients() {
     DCHECK(!clients_registered_);
     clients_registered_ = true;
-    client_a_ = CreateCompositorFrameSinkSupport(kClientIdA);
-    client_b_ = CreateCompositorFrameSinkSupport(kClientIdB);
-    client_c_ = CreateCompositorFrameSinkSupport(kClientIdC);
+    client_a_ = CreateCompositorFrameSinkSupport(kFrameSinkIdA);
+    client_b_ = CreateCompositorFrameSinkSupport(kFrameSinkIdB);
+    client_c_ = CreateCompositorFrameSinkSupport(kFrameSinkIdC);
     AssertCorrectBFSState();
   }
 
@@ -387,7 +522,7 @@ class FrameSinkManagerOrderingTest : public FrameSinkManagerTest {
   void RegisterBFS() {
     DCHECK(!bfs_registered_);
     bfs_registered_ = true;
-    manager_.RegisterBeginFrameSource(&source_, kClientIdA);
+    manager_.RegisterBeginFrameSource(&source_, kFrameSinkIdA);
     AssertCorrectBFSState();
   }
   void UnregisterBFS() {
@@ -444,7 +579,7 @@ class FrameSinkManagerOrderingTest : public FrameSinkManagerTest {
 class FrameSinkManagerOrderingParamTest
     : public FrameSinkManagerOrderingTest,
       public ::testing::WithParamInterface<
-          std::tr1::tuple<RegisterOrder, UnregisterOrder, BFSOrder>> {};
+          std::tuple<RegisterOrder, UnregisterOrder, BFSOrder>> {};
 
 TEST_P(FrameSinkManagerOrderingParamTest, Ordering) {
   // Test the four permutations of client/hierarchy setting/unsetting and test
@@ -452,9 +587,9 @@ TEST_P(FrameSinkManagerOrderingParamTest, Ordering) {
   // client/hierarchy are less related, so BFS is tested independently instead
   // of every permutation of BFS setting and unsetting.
   // The register/unregister functions themselves test most of the state.
-  RegisterOrder register_order = std::tr1::get<0>(GetParam());
-  UnregisterOrder unregister_order = std::tr1::get<1>(GetParam());
-  BFSOrder bfs_order = std::tr1::get<2>(GetParam());
+  RegisterOrder register_order = std::get<0>(GetParam());
+  UnregisterOrder unregister_order = std::get<1>(GetParam());
+  BFSOrder bfs_order = std::get<2>(GetParam());
 
   // Attach everything up in the specified order.
   if (bfs_order == BFS_FIRST)

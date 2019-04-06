@@ -33,10 +33,6 @@ namespace content {
 class NavigationHandle;
 }
 
-namespace net {
-class CookieOptions;
-}
-
 namespace url {
 class Origin;
 }  // namespace url
@@ -121,7 +117,6 @@ class TabSpecificContentSettings
       const GURL& url,
       const GURL& first_party_url,
       const net::CanonicalCookie& cookie,
-      const net::CookieOptions& options,
       bool blocked_by_policy);
 
   // Called when a specific Web database in the current page was accessed. If
@@ -333,11 +328,10 @@ class TabSpecificContentSettings
                      const GURL& first_party_url,
                      const net::CookieList& cookie_list,
                      bool blocked_by_policy);
-  void OnCookieChanged(const GURL& url,
-                       const GURL& first_party_url,
-                       const net::CanonicalCookie& cookie,
-                       const net::CookieOptions& options,
-                       bool blocked_by_policy);
+  void OnCookieChange(const GURL& url,
+                      const GURL& first_party_url,
+                      const net::CanonicalCookie& cookie,
+                      bool blocked_by_policy);
   void OnFileSystemAccessed(const GURL& url,
                             bool blocked_by_policy);
   void OnIndexedDBAccessed(const GURL& url,
@@ -416,7 +410,7 @@ class TabSpecificContentSettings
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
                                ContentSettingsType content_type,
-                               std::string resource_identifier) override;
+                               const std::string& resource_identifier) override;
 
   // Notifies all registered |SiteDataObserver|s.
   void NotifySiteDataObservers();

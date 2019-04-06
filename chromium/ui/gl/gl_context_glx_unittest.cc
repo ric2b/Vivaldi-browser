@@ -15,7 +15,16 @@
 
 namespace gl {
 
-TEST(GLContextGLXTest, DoNotDestroyOnFailedMakeCurrent) {
+#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
+    defined(THREAD_SANITIZER)
+// https://crbug.com/830653
+#define MAYBE_DoNotDestroyOnFailedMakeCurrent \
+  DISABLED_DoNotDestroyOnFailedMakeCurrent
+#else
+#define MAYBE_DoNotDestroyOnFailedMakeCurrent DoNotDestroyOnFailedMakeCurrent
+#endif
+
+TEST(GLContextGLXTest, MAYBE_DoNotDestroyOnFailedMakeCurrent) {
   auto* xdisplay = gfx::GetXDisplay();
   ASSERT_TRUE(xdisplay);
 

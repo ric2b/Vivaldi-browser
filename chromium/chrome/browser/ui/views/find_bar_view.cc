@@ -49,7 +49,11 @@
 namespace {
 
 // The default number of average characters that the text box will be.
-const int kDefaultCharWidth = 30;
+constexpr int kDefaultCharWidth = 30;
+
+// The minimum allowable width in chars for the find_text_ view. This ensures
+// the view can at least display the caret and some number of characters.
+constexpr int kMinimumCharWidth = 1;
 
 // The match count label is like a normal label, but can process events (which
 // makes it easier to forward events to the text input --- see
@@ -114,7 +118,8 @@ FindBarView::FindBarView(FindBarHost* host)
       find_next_button_(views::CreateVectorImageButton(this)),
       close_button_(views::CreateVectorImageButton(this)) {
   find_text_->set_id(VIEW_ID_FIND_IN_PAGE_TEXT_FIELD);
-  find_text_->set_default_width_in_chars(kDefaultCharWidth);
+  find_text_->SetDefaultWidthInChars(kDefaultCharWidth);
+  find_text_->SetMinimumWidthInChars(kMinimumCharWidth);
   find_text_->set_controller(this);
   find_text_->SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_FIND));
   find_text_->SetTextInputFlags(ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
@@ -202,7 +207,8 @@ FindBarView::FindBarView(FindBarHost* host)
       views::BoxLayout::kHorizontal,
       gfx::Insets(provider->GetInsetsMetric(INSETS_TOAST) - horizontal_margin),
       0));
-  manager->SetFlexForView(find_text_, 1);
+
+  manager->SetFlexForView(find_text_, 1, true);
 }
 
 FindBarView::~FindBarView() {
@@ -239,7 +245,12 @@ void FindBarView::UpdateForResult(const FindNotificationDetails& result,
   // http://crbug.com/34970: some IMEs get confused if we change the text
   // composed by them. To avoid this problem, we should check the IME status and
   // update the text only when the IME is not composing text.
-  if (find_text_->text() != find_text && !find_text_->IsIMEComposing()) {
+  //
+  // Find Bar hosts with global find pasteboards are expected to preserve the
+  // find text contents after clearing the find results as the normal
+  // prepopulation code does not run.
+  if (find_text_->text() != find_text && !find_text_->IsIMEComposing() &&
+      (!find_bar_host_->HasGlobalFindPasteboard() || !find_text.empty())) {
     find_text_->SetText(find_text);
     find_text_->SelectAll(true);
   }
@@ -310,7 +321,7 @@ void FindBarView::AddedToWidget() {
 
 void FindBarView::SetFocusAndSelection(bool select_all) {
   find_text_->RequestFocus();
-  GetWidget()->GetInputMethod()->ShowImeIfNeeded();
+  GetWidget()->GetInputMethod()->ShowVirtualKeyboardIfEnabled();
   if (select_all && !find_text_->text().empty())
     find_text_->SelectAll(true);
 }
@@ -406,6 +417,8 @@ void FindBarView::Find(const base::string16& search_text) {
 
   last_searched_text_ = search_text;
 
+  controller->OnUserChangedFindText(search_text);
+
   // When the user changes something in the text box we check the contents and
   // if the textbox contains something we set it as the new search string and
   // initiate search (even though old searches might be in progress).
@@ -459,6 +472,6 @@ void FindBarView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
                                 base_icon_color);
   views::SetImageFromVectorIcon(find_next_button_, kCaretDownIcon,
                                 base_icon_color);
-  views::SetImageFromVectorIcon(close_button_, vector_icons::kClose16Icon,
+  views::SetImageFromVectorIcon(close_button_, vector_icons::kCloseRoundedIcon,
                                 base_icon_color);
 }

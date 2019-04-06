@@ -34,9 +34,8 @@ NET_EXPORT extern const CertErrorId kSignatureAlgorithmMismatch;
 NET_EXPORT extern const CertErrorId kChainIsEmpty;
 
 // Certificate verification was called with a chain of length 1, which is not
-// currently supported (i.e. the target certificate cannot also be a trusted
-// certificate).
-// TODO(eroman): Remove this.
+// supported (i.e. the target certificate cannot also be a trusted
+// certificate). See https://crbug.com/814994.
 NET_EXPORT extern const CertErrorId kChainIsLength1;
 
 // The certificate contains an unknown extension which is marked as critical.
@@ -64,6 +63,9 @@ NET_EXPORT extern const CertErrorId kMissingBasicConstraints;
 // The certificate has a subject or subjectAltName that violates an issuer's
 // name constraints.
 NET_EXPORT extern const CertErrorId kNotPermittedByNameConstraints;
+
+// The chain has an excessive number of names and/or name constraints.
+NET_EXPORT extern const CertErrorId kTooManyNameConstraintChecks;
 
 // The certificate's issuer field does not match the subject of its alleged
 // issuer.

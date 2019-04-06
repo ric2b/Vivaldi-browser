@@ -28,7 +28,7 @@ import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.browserservices.TrustedWebActivityClient;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
@@ -80,6 +80,8 @@ public class NotificationPlatformBridge {
 
     private long mLastNotificationClickMs;
 
+    private TrustedWebActivityClient mTwaClient;
+
     /**
      * Creates a new instance of the NotificationPlatformBridge.
      *
@@ -130,6 +132,7 @@ public class NotificationPlatformBridge {
             mNotificationManager = new NotificationManagerProxyImpl(
                     (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE));
         }
+        mTwaClient = new TrustedWebActivityClient();
     }
 
     /**
@@ -170,7 +173,6 @@ public class NotificationPlatformBridge {
                 intent.getStringExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_PROFILE_ID);
         boolean incognito = intent.getBooleanExtra(
                 NotificationConstants.EXTRA_NOTIFICATION_INFO_PROFILE_INCOGNITO, false);
-        String tag = intent.getStringExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_TAG);
 
         Log.i(TAG, "Dispatching notification event to native: " + notificationId);
 
@@ -183,14 +185,14 @@ public class NotificationPlatformBridge {
             int actionIndex = intent.getIntExtra(
                     NotificationConstants.EXTRA_NOTIFICATION_INFO_ACTION_INDEX, -1);
             sInstance.onNotificationClicked(notificationId, origin, scopeUrl, profileId, incognito,
-                    tag, webApkPackage, actionIndex, getNotificationReply(intent));
+                    webApkPackage, actionIndex, getNotificationReply(intent));
             return true;
         } else if (NotificationConstants.ACTION_CLOSE_NOTIFICATION.equals(intent.getAction())) {
             // Notification deleteIntent is executed only "when the notification is explicitly
             // dismissed by the user, either with the 'Clear All' button or by swiping it away
             // individually" (though a third-party NotificationListenerService may also trigger it).
             sInstance.onNotificationClosed(
-                    notificationId, origin, profileId, incognito, tag, true /* byUser */);
+                    notificationId, origin, profileId, incognito, true /* byUser */);
             return true;
         }
 
@@ -235,17 +237,16 @@ public class NotificationPlatformBridge {
      * from the gear button on a flipped notification, this launches the site specific preferences
      * screen.
      *
-     * @param context The context that received the intent.
      * @param incomingIntent The received intent.
      */
-    public static void launchNotificationPreferences(Context context, Intent incomingIntent) {
+    public static void launchNotificationPreferences(Intent incomingIntent) {
         // This method handles an intent fired by the Android system. There is no guarantee that the
         // native library is loaded at this point. The native library is needed for the preferences
         // activity, and it loads the library, but there are some native calls even before that
         // activity is started: from RecordUserAction.record and (indirectly) from
         // UrlFormatter.formatUrlForSecurityDisplay.
         try {
-            ChromeBrowserInitializer.getInstance(context).handleSynchronousStartup();
+            ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
         } catch (ProcessInitException e) {
             Log.e(TAG, "Failed to start browser process.", e);
             // The library failed to initialize and nothing in the application can work, so kill
@@ -256,7 +257,7 @@ public class NotificationPlatformBridge {
 
         // Use the application context because it lives longer. When using the given context, it
         // may be stopped before the preferences intent is handled.
-        Context applicationContext = context.getApplicationContext();
+        Context applicationContext = ContextUtils.getApplicationContext();
 
         // If we can read an origin from the intent, use it to open the settings screen for that
         // origin.
@@ -280,16 +281,12 @@ public class NotificationPlatformBridge {
             // Notification preferences for all origins.
             fragmentArguments = new Bundle();
             fragmentArguments.putString(SingleCategoryPreferences.EXTRA_CATEGORY,
-                    SiteSettingsCategory.CATEGORY_NOTIFICATIONS);
+                    SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.NOTIFICATIONS));
             fragmentArguments.putString(SingleCategoryPreferences.EXTRA_TITLE,
                     applicationContext.getResources().getString(
                             R.string.push_notifications_permission_title));
         }
         preferencesIntent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArguments);
-
-        // We need to ensure that no existing preference tasks are being re-used in order for the
-        // new activity to appear on top.
-        preferencesIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
 
         applicationContext.startActivity(preferencesIntent);
     }
@@ -322,23 +319,24 @@ public class NotificationPlatformBridge {
      *                 comes from.
      * @param profileId Id of the profile to which the notification belongs.
      * @param incognito Whether the profile was in incognito mode.
-     * @param tag The tag of the notification. May be NULL.
      * @param webApkPackage The package of the WebAPK associated with the notification. Empty if
      *        the notification is not associated with a WebAPK.
      * @param actionIndex The zero-based index of the action button, or -1 if not applicable.
      */
     private PendingIntent makePendingIntent(Context context, String action, String notificationId,
             String origin, String scopeUrl, String profileId, boolean incognito,
-            @Nullable String tag, String webApkPackage, int actionIndex) {
+            String webApkPackage, int actionIndex) {
         Uri intentData = makeIntentData(notificationId, origin, actionIndex);
         Intent intent = new Intent(action, intentData);
         intent.setClass(context, NotificationService.Receiver.class);
+
+        // Make sure to update NotificationJobService.getJobExtrasFromIntent() when changing any
+        // of the extras included with the |intent|.
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_ID, notificationId);
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_ORIGIN, origin);
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_SCOPE, scopeUrl);
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_PROFILE_ID, profileId);
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_PROFILE_INCOGNITO, incognito);
-        intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_TAG, tag);
         intent.putExtra(
                 NotificationConstants.EXTRA_NOTIFICATION_INFO_WEBAPK_PACKAGE, webApkPackage);
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_ACTION_INDEX, actionIndex);
@@ -346,7 +344,7 @@ public class NotificationPlatformBridge {
         // This flag ensures the broadcast is delivered with foreground priority. It also means the
         // receiver gets a shorter timeout interval before it may be killed, but this is ok because
         // we schedule a job to handle the intent in NotificationService.Receiver on N+.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         }
 
@@ -474,10 +472,6 @@ public class NotificationPlatformBridge {
      *                 comes from.
      * @param profileId Id of the profile that showed the notification.
      * @param incognito if the session of the profile is an off the record one.
-     * @param tag A string identifier for this notification. If the tag is not empty, the new
-     *            notification will replace the previous notification with the same tag and origin,
-     *            if present. If no matching previous notification is present, the new one will just
-     *            be added.
      * @param title Title to be displayed in the notification.
      * @param body Message to be displayed in the notification. Will be trimmed to one line of
      *             text by the Android notification system.
@@ -498,10 +492,9 @@ public class NotificationPlatformBridge {
     @CalledByNative
     private void displayNotification(final String notificationId, final String origin,
             final String scopeUrl, final String profileId, final boolean incognito,
-            final String tag, final String title, final String body, final Bitmap image,
-            final Bitmap icon, final Bitmap badge, final int[] vibrationPattern,
-            final long timestamp, final boolean renotify, final boolean silent,
-            final ActionInfo[] actions) {
+            final String title, final String body, final Bitmap image, final Bitmap icon,
+            final Bitmap badge, final int[] vibrationPattern, final long timestamp,
+            final boolean renotify, final boolean silent, final ActionInfo[] actions) {
         final String webApkPackage =
                 WebApkValidator.queryWebApkPackage(ContextUtils.getApplicationContext(), scopeUrl);
         if (webApkPackage != null) {
@@ -510,8 +503,8 @@ public class NotificationPlatformBridge {
                         @Override
                         public void onChecked(boolean doesBrowserBackWebApk) {
                             displayNotificationInternal(notificationId, origin, scopeUrl, profileId,
-                                    incognito, tag, title, body, image, icon, badge,
-                                    vibrationPattern, timestamp, renotify, silent, actions,
+                                    incognito, title, body, image, icon, badge, vibrationPattern,
+                                    timestamp, renotify, silent, actions,
                                     doesBrowserBackWebApk ? webApkPackage : "");
                         }
                     };
@@ -519,16 +512,16 @@ public class NotificationPlatformBridge {
             return;
         }
 
-        displayNotificationInternal(notificationId, origin, scopeUrl, profileId, incognito, tag,
-                title, body, image, icon, badge, vibrationPattern, timestamp, renotify, silent,
-                actions, "");
+        displayNotificationInternal(notificationId, origin, scopeUrl, profileId, incognito, title,
+                body, image, icon, badge, vibrationPattern, timestamp, renotify, silent, actions,
+                "");
     }
 
     /** Called after querying whether the browser backs the given WebAPK. */
     private void displayNotificationInternal(String notificationId, String origin, String scopeUrl,
-            String profileId, boolean incognito, String tag, String title, String body,
-            Bitmap image, Bitmap icon, Bitmap badge, int[] vibrationPattern, long timestamp,
-            boolean renotify, boolean silent, ActionInfo[] actions, String webApkPackage) {
+            String profileId, boolean incognito, String title, String body, Bitmap image,
+            Bitmap icon, Bitmap badge, int[] vibrationPattern, long timestamp, boolean renotify,
+            boolean silent, ActionInfo[] actions, String webApkPackage) {
         nativeStoreCachedWebApkPackageForNotificationId(
                 mNativeNotificationPlatformBridge, notificationId, webApkPackage);
 
@@ -536,16 +529,14 @@ public class NotificationPlatformBridge {
         Resources res = context.getResources();
 
         // Record whether it's known whether notifications can be shown to the user at all.
-        RecordHistogram.recordEnumeratedHistogram("Notifications.AppNotificationStatus",
-                NotificationSystemStatusUtil.determineAppNotificationStatus(context),
-                NotificationSystemStatusUtil.APP_NOTIFICATIONS_STATUS_BOUNDARY);
+        NotificationSystemStatusUtil.recordAppNotificationStatusHistogram(context);
 
         PendingIntent clickIntent = makePendingIntent(context,
                 NotificationConstants.ACTION_CLICK_NOTIFICATION, notificationId, origin, scopeUrl,
-                profileId, incognito, tag, webApkPackage, -1 /* actionIndex */);
+                profileId, incognito, webApkPackage, -1 /* actionIndex */);
         PendingIntent closeIntent = makePendingIntent(context,
                 NotificationConstants.ACTION_CLOSE_NOTIFICATION, notificationId, origin, scopeUrl,
-                profileId, incognito, tag, webApkPackage, -1 /* actionIndex */);
+                profileId, incognito, webApkPackage, -1 /* actionIndex */);
 
         boolean hasImage = image != null;
         boolean forWebApk = !webApkPackage.isEmpty();
@@ -562,23 +553,19 @@ public class NotificationPlatformBridge {
                         .setTicker(createTickerText(title, body))
                         .setTimestamp(timestamp)
                         .setRenotify(renotify)
-                        .setOrigin(UrlFormatter.formatUrlForSecurityDisplay(
-                                origin, false /* showScheme */));
+                        .setOrigin(UrlFormatter.formatUrlForSecurityDisplayOmitScheme(origin));
 
         if (shouldSetChannelId(forWebApk)) {
-            // TODO(crbug.com/700377): Channel ID should be retrieved from cache in native and
+            // TODO(crbug.com/773738): Channel ID should be retrieved from cache in native and
             // passed through to here with other notification parameters.
-            String channelId =
-                    ChromeFeatureList.isEnabled(ChromeFeatureList.SITE_NOTIFICATION_CHANNELS)
-                    ? SiteChannelsManager.getInstance().getChannelIdForOrigin(origin)
-                    : ChannelDefinitions.CHANNEL_ID_SITES;
+            String channelId = SiteChannelsManager.getInstance().getChannelIdForOrigin(origin);
             notificationBuilder.setChannelId(channelId);
         }
 
         for (int actionIndex = 0; actionIndex < actions.length; actionIndex++) {
             PendingIntent intent = makePendingIntent(context,
                     NotificationConstants.ACTION_CLICK_NOTIFICATION, notificationId, origin,
-                    scopeUrl, profileId, incognito, tag, webApkPackage, actionIndex);
+                    scopeUrl, profileId, incognito, webApkPackage, actionIndex);
             ActionInfo action = actions[actionIndex];
             // Don't show action button icons when there's an image, as then action buttons go on
             // the same row as the Site Settings button, so icons wouldn't leave room for text.
@@ -605,6 +592,9 @@ public class NotificationPlatformBridge {
         if (forWebApk) {
             WebApkServiceClient.getInstance().notifyNotification(
                     webApkPackage, notificationBuilder, notificationId, PLATFORM_ID);
+        } else if (mTwaClient.twaExistsForScope(Uri.parse(scopeUrl))) {
+            mTwaClient.notifyNotification(Uri.parse(scopeUrl), notificationId, PLATFORM_ID,
+                    notificationBuilder);
         } else {
             // Set up a pending intent for going to the settings screen for |origin|.
             Intent settingsIntent = PreferencesLauncher.createIntentForSettingsPage(
@@ -633,15 +623,14 @@ public class NotificationPlatformBridge {
 
             mNotificationManager.notify(notificationId, PLATFORM_ID, notificationBuilder.build());
             NotificationUmaTracker.getInstance().onNotificationShown(
-                    NotificationUmaTracker.SITES, notificationBuilder.mChannelId);
+                    NotificationUmaTracker.SystemNotificationType.SITES,
+                    notificationBuilder.mChannelId);
         }
     }
 
     private NotificationBuilderBase createNotificationBuilder(Context context, boolean hasImage) {
-        if (useCustomLayouts(hasImage)) {
-            return new CustomNotificationBuilder(context);
-        }
-        return new StandardNotificationBuilder(context);
+        return useCustomLayouts(hasImage) ? new CustomNotificationBuilder(context)
+                                          : new StandardNotificationBuilder(context);
     }
 
     /** Returns whether to set a channel id when building a notification. */
@@ -721,24 +710,37 @@ public class NotificationPlatformBridge {
                             @Override
                             public void onChecked(boolean doesBrowserBackWebApk) {
                                 closeNotificationInternal(notificationId,
-                                        doesBrowserBackWebApk ? webApkPackageFound : null);
+                                        doesBrowserBackWebApk ? webApkPackageFound : null,
+                                        scopeUrl);
                             }
                         };
                 ChromeWebApkHost.checkChromeBacksWebApkAsync(webApkPackageFound, callback);
                 return;
             }
         }
-        closeNotificationInternal(notificationId, webApkPackage);
+        closeNotificationInternal(notificationId, webApkPackage, scopeUrl);
     }
 
     /** Called after querying whether the browser backs the given WebAPK. */
-    private void closeNotificationInternal(String notificationId, String webApkPackage) {
-        if (TextUtils.isEmpty(webApkPackage)) {
-            mNotificationManager.cancel(notificationId, PLATFORM_ID);
-        } else {
+    private void closeNotificationInternal(String notificationId, String webApkPackage,
+            String scopeUrl) {
+        if (!TextUtils.isEmpty(webApkPackage)) {
             WebApkServiceClient.getInstance().cancelNotification(
                     webApkPackage, notificationId, PLATFORM_ID);
+            return;
         }
+
+        if (mTwaClient.twaExistsForScope(Uri.parse(scopeUrl))) {
+            mTwaClient.cancelNotification(Uri.parse(scopeUrl), notificationId, PLATFORM_ID);
+
+            // There's an edge case where a notification was displayed by Chrome, a Trusted Web
+            // Activity is then installed and run then the notification is cancelled by javascript.
+            // Chrome will attempt to close the notification through the TWA client and not itself.
+            // Since NotificationManager#cancel is safe to call if the requested notification
+            // isn't being shown, we just call that as well to ensure notifications are cleared.
+        }
+
+        mNotificationManager.cancel(notificationId, PLATFORM_ID);
     }
 
     /**
@@ -751,7 +753,6 @@ public class NotificationPlatformBridge {
      *                 comes from.
      * @param profileId Id of the profile that showed the notification.
      * @param incognito if the profile session was an off the record one.
-     * @param tag The tag of the notification. May be NULL.
      * @param webApkPackage The package of the WebAPK associated with the notification.
      *                      Empty if the notification is not associated with a WebAPK.
      * @param actionIndex The index of the action button that was clicked, or -1 if not applicable.
@@ -759,11 +760,11 @@ public class NotificationPlatformBridge {
      *              on a text action or if inline replies are not supported.
      */
     private void onNotificationClicked(String notificationId, String origin, String scopeUrl,
-            String profileId, boolean incognito, String tag, String webApkPackage, int actionIndex,
+            String profileId, boolean incognito, String webApkPackage, int actionIndex,
             @Nullable String reply) {
         mLastNotificationClickMs = System.currentTimeMillis();
         nativeOnNotificationClicked(mNativeNotificationPlatformBridge, notificationId, origin,
-                scopeUrl, profileId, incognito, tag, webApkPackage, actionIndex, reply);
+                scopeUrl, profileId, incognito, webApkPackage, actionIndex, reply);
     }
 
     /**
@@ -774,22 +775,21 @@ public class NotificationPlatformBridge {
      * @param origin The origin of the notification.
      * @param profileId Id of the profile that showed the notification.
      * @param incognito if the profile session was an off the record one.
-     * @param tag The tag of the notification. May be NULL.
      * @param byUser Whether the notification was closed by a user gesture.
      */
     private void onNotificationClosed(String notificationId, String origin, String profileId,
-            boolean incognito, String tag, boolean byUser) {
+            boolean incognito, boolean byUser) {
         nativeOnNotificationClosed(mNativeNotificationPlatformBridge, notificationId, origin,
-                profileId, incognito, tag, byUser);
+                profileId, incognito, byUser);
     }
 
     private static native void nativeInitializeNotificationPlatformBridge();
 
     private native void nativeOnNotificationClicked(long nativeNotificationPlatformBridgeAndroid,
             String notificationId, String origin, String scopeUrl, String profileId,
-            boolean incognito, String tag, String webApkPackage, int actionIndex, String reply);
+            boolean incognito, String webApkPackage, int actionIndex, String reply);
     private native void nativeOnNotificationClosed(long nativeNotificationPlatformBridgeAndroid,
-            String notificationId, String origin, String profileId, boolean incognito, String tag,
+            String notificationId, String origin, String profileId, boolean incognito,
             boolean byUser);
     private native void nativeStoreCachedWebApkPackageForNotificationId(
             long nativeNotificationPlatformBridgeAndroid, String notificationId,

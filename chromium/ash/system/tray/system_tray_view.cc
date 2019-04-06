@@ -5,6 +5,8 @@
 #include "ash/system/tray/system_tray_view.h"
 
 #include "ash/shell.h"
+#include "ash/system/tray/interacted_by_tap_recorder.h"
+#include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/views/layout/box_layout.h"
@@ -46,9 +48,15 @@ class BottomAlignedBoxLayout : public views::BoxLayout {
 
 }  // anonymous namespace
 
-SystemTrayView::SystemTrayView(SystemTrayType system_tray_type,
+SystemTrayView::SystemTrayView(SystemTray* system_tray,
+                               SystemTrayType system_tray_type,
                                const std::vector<ash::SystemTrayItem*>& items)
-    : items_(items), system_tray_type_(system_tray_type) {
+    : time_to_click_recorder_(
+          std::make_unique<TimeToClickRecorder>(system_tray, this)),
+      interacted_by_tap_recorder_(
+          std::make_unique<InteractedByTapRecorder>(this)),
+      items_(items),
+      system_tray_type_(system_tray_type) {
   SetLayoutManager(std::make_unique<BottomAlignedBoxLayout>());
 }
 
@@ -72,8 +80,12 @@ bool SystemTrayView::CreateItemViews(LoginStatus login_status) {
     switch (system_tray_type_) {
       case SYSTEM_TRAY_TYPE_DEFAULT:
         item_view = it->CreateDefaultView(login_status);
-        if (it->restore_focus())
+        if (it->restore_focus()) {
+          focus_view = it->GetItemToRestoreFocusTo()
+                           ? it->GetItemToRestoreFocusTo()
+                           : item_view;
           focus_view = item_view;
+        }
         break;
       case SYSTEM_TRAY_TYPE_DETAILED:
         item_view = it->CreateDetailedView(login_status);
@@ -109,12 +121,12 @@ void SystemTrayView::RecordVisibleRowMetrics() {
   if (system_tray_type_ != SYSTEM_TRAY_TYPE_DEFAULT)
     return;
 
-  for (const std::pair<SystemTrayItem::UmaType, views::View*>& pair :
+  for (const std::pair<SystemTrayItemUmaType, views::View*>& pair :
        tray_item_view_map_) {
     if (pair.second->visible() &&
-        pair.first != SystemTrayItem::UMA_NOT_RECORDED) {
+        pair.first != SystemTrayItemUmaType::UMA_NOT_RECORDED) {
       UMA_HISTOGRAM_ENUMERATION("Ash.SystemMenu.DefaultView.VisibleRows",
-                                pair.first, SystemTrayItem::UMA_COUNT);
+                                pair.first, SystemTrayItemUmaType::UMA_COUNT);
     }
   }
 }

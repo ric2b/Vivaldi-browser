@@ -32,6 +32,7 @@ class AXWindowObjWrapper : public AXAuraObjWrapper,
   void set_is_alert(bool is_alert) { is_alert_ = is_alert; }
 
   // AXAuraObjWrapper overrides.
+  bool IsIgnored() override;
   AXAuraObjWrapper* GetParent() override;
   void GetChildren(std::vector<AXAuraObjWrapper*>* out_children) override;
   void Serialize(ui::AXNodeData* out_node_data) override;
@@ -48,6 +49,7 @@ class AXWindowObjWrapper : public AXAuraObjWrapper,
   void OnWindowPropertyChanged(aura::Window* window,
                                const void* key,
                                intptr_t old) override;
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
 
  private:
   aura::Window* window_;

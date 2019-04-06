@@ -4,7 +4,7 @@
 
 module ui.mojom;
 
-import "mojo/common/time.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "ui/events/mojo/event_constants.mojom";
 import "ui/events/mojo/keyboard_codes.mojom";
 import "ui/latency/mojo/latency_info.mojom";
@@ -122,6 +122,27 @@ struct GestureData {
   LocationData location;
 };
 
+// Data to support scroll events.
+struct ScrollData {
+  LocationData location;
+
+  // Potential accelerated offsets.
+  float x_offset;
+  float y_offset;
+  // Unaccelerated offsets.
+  float x_offset_ordinal;
+  float y_offset_ordinal;
+  // Number of fingers on the pad.
+  int32 finger_count;
+
+  // For non-fling events, provides momentum information (e.g. for the case
+  // where the device provides continuous event updates during a fling).
+  EventMomentumPhase momentum_phase;
+
+  // Provides phase information if device can provide.
+  ScrollEventPhase scroll_event_phase;
+};
+
 struct Event {
   // TODO(sky): rename to type.
   EventType action;
@@ -133,9 +154,10 @@ struct Event {
   // This value accurately orders events w.r.t. to each other but does not
   // position them at an absolute time since the TimeTicks origin is only
   // guaranteed to be fixed during one instance of the application.
-  mojo.common.mojom.TimeTicks time_stamp;
+  mojo_base.mojom.TimeTicks time_stamp;
   LatencyInfo latency;
   KeyData? key_data;
   PointerData? pointer_data;
   GestureData? gesture_data;
+  ScrollData? scroll_data;
 };

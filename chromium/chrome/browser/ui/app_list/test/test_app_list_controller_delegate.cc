@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 
+#include <utility>
+
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace test {
@@ -14,12 +17,11 @@ TestAppListControllerDelegate::TestAppListControllerDelegate() {
 TestAppListControllerDelegate::~TestAppListControllerDelegate() {
 }
 
-void TestAppListControllerDelegate::DismissView() {
+int64_t TestAppListControllerDelegate::GetAppListDisplayId() {
+  return display::kInvalidDisplayId;
 }
 
-gfx::NativeWindow TestAppListControllerDelegate::GetAppListWindow() {
-  return nullptr;
-}
+void TestAppListControllerDelegate::DismissView() {}
 
 bool TestAppListControllerDelegate::IsAppPinned(const std::string& app_id) {
   return false;

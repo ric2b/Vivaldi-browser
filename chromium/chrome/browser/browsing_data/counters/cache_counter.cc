@@ -6,7 +6,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/browsing_data/content/conditional_cache_counting_helper.h"
 #include "components/browsing_data/core/pref_names.h"
-#include "components/offline_pages/features/features.h"
+#include "components/offline_pages/buildflags/buildflags.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/net_errors.h"
 
@@ -42,13 +42,11 @@ void CacheCounter::Count() {
   calculated_size_ = 0;
   is_upper_limit_ = false;
   pending_sources_ = 1;
-  base::WeakPtr<browsing_data::ConditionalCacheCountingHelper> counter =
-      browsing_data::ConditionalCacheCountingHelper::CreateForRange(
-          content::BrowserContext::GetDefaultStoragePartition(profile_),
-          GetPeriodStart(), base::Time::Max())
-          ->CountAndDestroySelfWhenFinished(
-              base::Bind(&CacheCounter::OnCacheSizeCalculated,
-                         weak_ptr_factory_.GetWeakPtr()));
+  browsing_data::ConditionalCacheCountingHelper::Count(
+      content::BrowserContext::GetDefaultStoragePartition(profile_),
+      GetPeriodStart(), base::Time::Max(),
+      base::BindOnce(&CacheCounter::OnCacheSizeCalculated,
+                     weak_ptr_factory_.GetWeakPtr()));
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   if (offline_pages::OfflinePageUtils::GetCachedOfflinePageSizeBetween(
           profile_,
@@ -72,7 +70,7 @@ void CacheCounter::OnCacheSizeCalculated(bool is_upper_limit,
   is_upper_limit_ |= is_upper_limit;
   if (pending_sources_ == 0) {
     auto result =
-        base::MakeUnique<CacheResult>(this, calculated_size_, is_upper_limit_);
+        std::make_unique<CacheResult>(this, calculated_size_, is_upper_limit_);
     ReportResult(std::move(result));
   }
 }

@@ -163,7 +163,8 @@ function registerInputviewApi() {
     NONE: 0,
     ALT: 8,
     CONTROL: 4,
-    SHIFT: 2
+    SHIFT: 2,
+    CAPSLOCK: 256
   };
 
   // Mapping from keyName to keyCode (see ui::KeyEvent).
@@ -295,8 +296,10 @@ function registerInputviewApi() {
         event.modifiers |= Modifier.ALT;
       if (data.ctrlKey)
         event.modifiers |= Modifier.CONTROL;
-      if (data.shiftKey || data.capsLock)
+      if (data.shiftKey)
         event.modifiers |= Modifier.SHIFT;
+      if (data.capsLock)
+        event.modifiers |= Modifier.CAPSLOCK;
 
       chrome.virtualKeyboardPrivate.sendKeyEvent(event, logIfError_);
     });
@@ -356,12 +359,7 @@ function registerInputviewApi() {
     else
       defaultSendMessage(message);
   });
-
-  registerFunction('chrome.runtime.setContainerMode', function(mode, callback) {
-    chrome.virtualKeyboardPrivate.setMode(mode, callback);
-  });
 }
-
 
 registerFunction('chrome.runtime.getBackgroundPage', function() {
   var callback = arguments[0];
@@ -376,7 +374,6 @@ if (!chrome.i18n) {
     return name;
   }
 }
-
 
 /**
  * Trigger loading the virtual keyboard on completion of page load.

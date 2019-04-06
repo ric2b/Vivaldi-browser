@@ -4,9 +4,9 @@
 
 module client_hints.mojom;
 
-import "mojo/common/time.mojom";
-import "third_party/WebKit/public/platform/web_client_hints_types.mojom";
-import "url/mojo/origin.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "third_party/blink/public/platform/web_client_hints_types.mojom";
+import "url/mojom/origin.mojom";
 
 // Sent from renderer to browser process when the lifetime of the client hints
 // for |primary_origin| has changed. |client_hints| is the list of client hints
@@ -15,5 +15,5 @@ import "url/mojo/origin.mojom";
 interface ClientHints {
   PersistClientHints(url.mojom.Origin primary_origin,
                      array<blink.mojom.WebClientHintsType> client_hints,
-                     mojo.common.mojom.TimeDelta expiration_duration);
+                     mojo_base.mojom.TimeDelta expiration_duration);
 };

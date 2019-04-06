@@ -13,9 +13,11 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/guid.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/time/time.h"
+#include "chrome/browser/android/color_helpers.h"
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/android/webapk/webapk_metrics.h"
@@ -24,13 +26,15 @@
 #include "content/public/browser/manifest_icon_downloader.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/ShortcutHelper_jni.h"
+#include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/color_analysis.h"
 #include "url/gurl.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
-using content::Manifest;
 
 namespace {
 
@@ -109,8 +113,10 @@ void AddWebappWithSkBitmap(const ShortcutInfo& info,
   Java_ShortcutHelper_addWebapp(
       env, java_webapp_id, java_url, java_scope_url, java_user_title, java_name,
       java_short_name, java_best_primary_icon_url, java_bitmap, info.display,
-      info.orientation, info.source, info.theme_color, info.background_color,
-      java_splash_screen_url, callback_pointer);
+      info.orientation, info.source,
+      OptionalSkColorToJavaColor(info.theme_color),
+      OptionalSkColorToJavaColor(info.background_color), java_splash_screen_url,
+      callback_pointer);
 }
 
 // Adds a shortcut which opens in a browser tab to the launcher.
@@ -133,6 +139,32 @@ void AddShortcutWithSkBitmap(const ShortcutInfo& info,
 }
 
 }  // anonymous namespace
+
+// static
+std::unique_ptr<ShortcutInfo> ShortcutHelper::CreateShortcutInfo(
+    const GURL& manifest_url,
+    const blink::Manifest& manifest,
+    const GURL& primary_icon_url,
+    const GURL& badge_icon_url) {
+  auto shortcut_info = std::make_unique<ShortcutInfo>(GURL());
+  if (!manifest.IsEmpty()) {
+    shortcut_info->UpdateFromManifest(manifest);
+    shortcut_info->manifest_url = manifest_url;
+    shortcut_info->best_primary_icon_url = primary_icon_url;
+    shortcut_info->best_badge_icon_url = badge_icon_url;
+  }
+
+  shortcut_info->ideal_splash_image_size_in_px = GetIdealSplashImageSizeInPx();
+  shortcut_info->minimum_splash_image_size_in_px =
+      GetMinimumSplashImageSizeInPx();
+  shortcut_info->splash_image_url =
+      blink::ManifestIconSelector::FindBestMatchingIcon(
+          manifest.icons, shortcut_info->ideal_splash_image_size_in_px,
+          shortcut_info->minimum_splash_image_size_in_px,
+          blink::Manifest::ImageResource::Purpose::ANY);
+
+  return shortcut_info;
+}
 
 // static
 void ShortcutHelper::AddToLauncherWithSkBitmap(
@@ -335,7 +367,9 @@ void JNI_ShortcutHelper_OnWebApksRetrieved(
     const JavaParamRef<jintArray>& jdisplay_modes,
     const JavaParamRef<jintArray>& jorientations,
     const JavaParamRef<jlongArray>& jtheme_colors,
-    const JavaParamRef<jlongArray>& jbackground_colors) {
+    const JavaParamRef<jlongArray>& jbackground_colors,
+    const JavaParamRef<jlongArray>& jlast_update_check_times_ms,
+    const JavaParamRef<jbooleanArray>& jrelax_updates) {
   DCHECK(jcallback_pointer);
   std::vector<std::string> names;
   base::android::AppendJavaStringArrayToStringVector(env, jnames, &names);
@@ -369,6 +403,12 @@ void JNI_ShortcutHelper_OnWebApksRetrieved(
   std::vector<int64_t> background_colors;
   base::android::JavaLongArrayToInt64Vector(env, jbackground_colors,
                                             &background_colors);
+  std::vector<int64_t> last_update_check_times_ms;
+  base::android::JavaLongArrayToInt64Vector(env, jlast_update_check_times_ms,
+                                            &last_update_check_times_ms);
+  std::vector<bool> relax_updates;
+  base::android::JavaBooleanArrayToBoolVector(env, jrelax_updates,
+                                              &relax_updates);
 
   DCHECK(short_names.size() == names.size());
   DCHECK(short_names.size() == package_names.size());
@@ -382,6 +422,8 @@ void JNI_ShortcutHelper_OnWebApksRetrieved(
   DCHECK(short_names.size() == orientations.size());
   DCHECK(short_names.size() == theme_colors.size());
   DCHECK(short_names.size() == background_colors.size());
+  DCHECK(short_names.size() == last_update_check_times_ms.size());
+  DCHECK(short_names.size() == relax_updates.size());
 
   std::vector<WebApkInfo> webapk_list;
   webapk_list.reserve(short_names.size());
@@ -393,7 +435,10 @@ void JNI_ShortcutHelper_OnWebApksRetrieved(
         std::move(manifest_start_urls[i]),
         static_cast<blink::WebDisplayMode>(display_modes[i]),
         static_cast<blink::WebScreenOrientationLockType>(orientations[i]),
-        theme_colors[i], background_colors[i]));
+        JavaColorToOptionalSkColor(theme_colors[i]),
+        JavaColorToOptionalSkColor(background_colors[i]),
+        base::Time::FromJavaTime(last_update_check_times_ms[i]),
+        relax_updates[i]));
   }
 
   ShortcutHelper::WebApkInfoCallback* webapk_list_callback =

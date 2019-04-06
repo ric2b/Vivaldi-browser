@@ -9,9 +9,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/image_decoder.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_item.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/native_theme/native_theme.h"
 
 class SkBitmap;
@@ -20,36 +20,28 @@ namespace test {
 class DownloadItemNotificationTest;
 }
 
-namespace gfx {
-struct VectorIcon;
-}
-
 namespace message_center {
 class Notification;
 }
 
-class DownloadNotificationManagerForProfile;
-
-class DownloadItemNotification : public ImageDecoder::ImageRequest {
+class DownloadItemNotification : public ImageDecoder::ImageRequest,
+                                 public message_center::NotificationObserver {
  public:
-  DownloadItemNotification(content::DownloadItem* item,
-                           DownloadNotificationManagerForProfile* manager);
-
+  explicit DownloadItemNotification(download::DownloadItem* item);
   ~DownloadItemNotification() override;
 
-  void OnDownloadUpdated(content::DownloadItem* item);
-  void OnDownloadRemoved(content::DownloadItem* item);
+  void OnDownloadUpdated(download::DownloadItem* item);
+  void OnDownloadRemoved(download::DownloadItem* item);
 
   // Disables popup by setting low priority.
   void DisablePopup();
 
-  // Called back from the NotificationHandler.
-  void OnNotificationClose();
-  void OnNotificationClick();
-  void OnNotificationButtonClick(int button_index);
+  // NotificationObserver:
+  void Close(bool by_user) override;
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override;
 
  private:
-  class DownloadItemNotificationDelegate;
   friend class test::DownloadItemNotificationTest;
 
   enum ImageDecodeStatus { NOT_STARTED, IN_PROGRESS, DONE, FAILED, NOT_IMAGE };
@@ -64,11 +56,8 @@ class DownloadItemNotification : public ImageDecoder::ImageRequest {
 
   void CloseNotification();
   void Update();
-  void UpdateNotificationData(bool display, bool bump_priority);
-  void UpdateNotificationIcon();
-
-  // Set icon of the notification.
-  void SetNotificationIcon(const gfx::VectorIcon& icon, SkColor color);
+  void UpdateNotificationData(bool display, bool force_pop_up);
+  SkColor GetNotificationIconColor();
 
   // Set preview image of the notification. Must be called on IO thread.
   void OnImageLoaded(const std::string& image_data);
@@ -116,11 +105,11 @@ class DownloadItemNotification : public ImageDecoder::ImageRequest {
   // prevents updates after close.
   bool closed_ = false;
 
-  content::DownloadItem::DownloadState previous_download_state_ =
-      content::DownloadItem::MAX_DOWNLOAD_STATE;  // As uninitialized state
+  download::DownloadItem::DownloadState previous_download_state_ =
+      download::DownloadItem::MAX_DOWNLOAD_STATE;  // As uninitialized state
   bool previous_dangerous_state_ = false;
   std::unique_ptr<message_center::Notification> notification_;
-  content::DownloadItem* item_;
+  download::DownloadItem* item_;
   std::unique_ptr<std::vector<DownloadCommands::Command>> button_actions_;
 
   // Status of the preview image decode.

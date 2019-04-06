@@ -29,12 +29,11 @@
 #include "media/filters/video_renderer_algorithm.h"
 #include "media/renderers/default_renderer_factory.h"
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
-#include "media/video/gpu_video_accelerator_factories.h"
 
 namespace base {
 class SingleThreadTaskRunner;
 class TickClock;
-}
+}  // namespace base
 
 namespace media {
 
@@ -54,12 +53,11 @@ class MEDIA_EXPORT VideoRendererImpl
   // Setting |drop_frames_| to true causes the renderer to drop expired frames.
   VideoRendererImpl(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-      const scoped_refptr<base::TaskRunner>& worker_task_runner,
       VideoRendererSink* sink,
       const CreateVideoDecodersCB& create_video_decoders_cb,
       bool drop_frames,
-      GpuVideoAcceleratorFactories* gpu_factories,
-      MediaLog* media_log);
+      MediaLog* media_log,
+      std::unique_ptr<GpuMemoryBufferVideoFramePool> gmb_pool);
   ~VideoRendererImpl() override;
 
   // VideoRenderer implementation.
@@ -73,20 +71,12 @@ class MEDIA_EXPORT VideoRendererImpl
   void OnTimeProgressing() override;
   void OnTimeStopped() override;
 
-  void SetTickClockForTesting(base::TickClock* tick_clock);
-  void SetGpuMemoryBufferVideoForTesting(
-      std::unique_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
   size_t frames_queued_for_testing() const {
     return algorithm_->frames_queued();
   }
   size_t effective_frames_queued_for_testing() const {
     return algorithm_->effective_frames_queued();
-  }
-  size_t min_buffered_frames_for_testing() const {
-    return min_buffered_frames_;
-  }
-  size_t max_buffered_frames_for_testing() const {
-    return max_buffered_frames_;
   }
 
   // VideoRendererSink::RenderCallback implementation.
@@ -111,19 +101,8 @@ class MEDIA_EXPORT VideoRendererImpl
   void OnConfigChange(const VideoDecoderConfig& config);
 
   // Callback for |video_frame_stream_| to deliver decoded video frames and
-  // report video decoding status. If a frame is available the planes will be
-  // copied asynchronously and FrameReady will be called once finished copying.
-  // |read_time| is the time at which this read was started.
-  void FrameReadyForCopyingToGpuMemoryBuffers(
-      base::TimeTicks read_time,
-      VideoFrameStream::Status status,
-      const scoped_refptr<VideoFrame>& frame);
-
-  // Callback for |video_frame_stream_| to deliver decoded video frames and
-  // report video decoding status. |read_time| is the time at which this read
-  // was started.
-  void FrameReady(base::TimeTicks read_time,
-                  VideoFrameStream::Status status,
+  // report video decoding status.
+  void FrameReady(VideoFrameStream::Status status,
                   const scoped_refptr<VideoFrame>& frame);
 
   // Helper method for enqueueing a frame to |alogorithm_|.
@@ -200,10 +179,6 @@ class MEDIA_EXPORT VideoRendererImpl
   void AttemptReadAndCheckForMetadataChanges(VideoPixelFormat pixel_format,
                                              const gfx::Size& natural_size);
 
-  // Updates |max_buffered_frames_| based on the current memory pressure level,
-  // |max_read_duration_|, and |time_progressing_|.
-  void UpdateMaxBufferedFrames();
-
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // Sink which calls into VideoRendererImpl via Render() for video frames.  Do
@@ -224,13 +199,14 @@ class MEDIA_EXPORT VideoRendererImpl
 
   RendererClient* client_;
 
-  // Provides video frames to VideoRendererImpl.
-  std::unique_ptr<VideoFrameStream> video_frame_stream_;
-
   // Pool of GpuMemoryBuffers and resources used to create hardware frames.
   // Ensure this is destructed after |algorithm_| for optimal memory release
-  // when a frames are still held by the compositor.
+  // when a frames are still held by the compositor. Must be destructed after
+  // |video_frame_stream_| since it holds a callback to the pool.
   std::unique_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
+
+  // Provides video frames to VideoRendererImpl.
+  std::unique_ptr<VideoFrameStream> video_frame_stream_;
 
   MediaLog* media_log_;
 
@@ -261,20 +237,12 @@ class MEDIA_EXPORT VideoRendererImpl
   //           |                            |
   //           |                            | Flush()
   //           `---------> kPlaying --------'
-  enum State {
-    kUninitialized,
-    kInitializing,
-    kFlushing,
-    kFlushed,
-    kPlaying
-  };
+  enum State { kUninitialized, kInitializing, kFlushing, kFlushed, kPlaying };
   State state_;
 
   // TODO(servolk): Consider using DecoderFactory here instead of the
   // CreateVideoDecodersCB.
   CreateVideoDecodersCB create_video_decoders_cb_;
-  GpuVideoAcceleratorFactories* gpu_factories_;
-  scoped_refptr<base::TaskRunner> worker_task_runner_;
 
   // Keep track of the outstanding read on the VideoFrameStream. Flushing can
   // only complete once the read has completed.
@@ -295,7 +263,7 @@ class MEDIA_EXPORT VideoRendererImpl
   // last call to |statistics_cb_|. These must be accessed under lock.
   PipelineStatistics stats_;
 
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // Algorithm for selecting which frame to render; manages frames and all
   // timing related information. Ensure this is destructed before
@@ -324,30 +292,13 @@ class MEDIA_EXPORT VideoRendererImpl
 
   // Current minimum and maximum for buffered frames. |min_buffered_frames_| is
   // the number of frames required to transition from BUFFERING_HAVE_NOTHING to
-  // BUFFERING_HAVE_ENOUGH. |max_buffered_frames_| is the maximum number of
-  // frames the algorithm may queue.
-  //
-  // The maximum is determined by the observed time to decode a frame relative
-  // to the average frame duration. Specifically the maximum observed time for a
-  // call to VideoFrameStream::Read() to yield a new frame.
-  //
-  // During an underflow event, the minimum is set to the maximum. Any increases
-  // are reset upon Flush() to avoid Seek() penalties.
+  // BUFFERING_HAVE_ENOUGH.
   size_t min_buffered_frames_;
-  size_t max_buffered_frames_;
-  MovingAverage read_durations_;
 
   // Last Render() and last FrameReady() times respectively. Used to avoid
   // triggering underflow when background rendering.
   base::TimeTicks last_render_time_;
   base::TimeTicks last_frame_ready_time_;
-
-  // Indicates that the playback has been ongoing for at least
-  // limits::kMinimumElapsedWatchTimeSecs.
-  bool has_playback_met_watch_time_duration_requirement_;
-
-  // Controls enrollment in the complexity based buffering experiment.
-  const bool use_complexity_based_buffering_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<VideoRendererImpl> weak_factory_;

@@ -5,19 +5,20 @@
 #include "components/autofill/core/browser/payments/test_payments_client.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace autofill {
 namespace payments {
 
 TestPaymentsClient::TestPaymentsClient(
-    net::URLRequestContextGetter* context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_,
     PrefService* pref_service,
-    IdentityProvider* identity_provider,
+    identity::IdentityManager* identity_manager,
     payments::PaymentsClientUnmaskDelegate* unmask_delegate,
     payments::PaymentsClientSaveDelegate* save_delegate)
-    : PaymentsClient(context_getter,
+    : PaymentsClient(url_loader_factory_,
                      pref_service,
-                     identity_provider,
+                     identity_manager,
                      unmask_delegate,
                      save_delegate),
       save_delegate_(save_delegate) {}
@@ -30,6 +31,7 @@ void TestPaymentsClient::GetUploadDetails(
     const std::string& pan_first_six,
     const std::vector<const char*>& active_experiments,
     const std::string& app_locale) {
+  upload_details_addresses_ = addresses;
   detected_values_ = detected_values;
   pan_first_six_ = pan_first_six;
   active_experiments_ = active_experiments;
@@ -54,19 +56,6 @@ void TestPaymentsClient::SetSaveDelegate(
 
 void TestPaymentsClient::SetServerIdForCardUpload(std::string server_id) {
   server_id_ = server_id;
-}
-
-int TestPaymentsClient::GetDetectedValuesSetInRequest() const {
-  return detected_values_;
-}
-
-std::string TestPaymentsClient::GetPanFirstSixSetInRequest() const {
-  return pan_first_six_;
-}
-
-std::vector<const char*> TestPaymentsClient::GetActiveExperimentsSetInRequest()
-    const {
-  return active_experiments_;
 }
 
 }  // namespace payments

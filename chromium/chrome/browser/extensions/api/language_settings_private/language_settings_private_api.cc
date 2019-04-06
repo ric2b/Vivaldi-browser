@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
@@ -23,7 +24,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/language_settings_private/language_settings_private_delegate.h"
 #include "chrome/browser/extensions/api/language_settings_private/language_settings_private_delegate_factory.h"
-#include "chrome/browser/language/language_model_factory.h"
+#include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/spellchecker/spellcheck_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
@@ -31,7 +32,8 @@
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/common/extensions/api/language_settings_private.h"
 #include "chrome/common/pref_names.h"
-#include "components/language/core/browser/language_model.h"
+#include "components/language/core/browser/language_model_manager.h"
+#include "components/language/core/common/locale_util.h"
 #include "components/spellcheck/common/spellcheck_common.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -41,6 +43,7 @@
 #include "ui/base/l10n/l10n_util_collator.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -66,6 +69,13 @@ std::unordered_set<std::string> GetEnabledIMEs(
   return std::unordered_set<std::string>(ime_ids.begin(), ime_ids.end());
 }
 
+// Returns the set of IDs of all allowed IMEs.
+std::unordered_set<std::string> GetAllowedIMEs(
+    scoped_refptr<InputMethodManager::State> ime_state) {
+  const std::vector<std::string>& ime_ids(ime_state->GetAllowedInputMethods());
+  return std::unordered_set<std::string>(ime_ids.begin(), ime_ids.end());
+}
+
 // Returns the set of IDs of enabled IMEs for the given pref.
 std::unordered_set<std::string> GetIMEsFromPref(PrefService* prefs,
                                                 const char* pref_name) {
@@ -74,6 +84,16 @@ std::unordered_set<std::string> GetIMEsFromPref(PrefService* prefs,
                         base::SPLIT_WANT_NONEMPTY);
   return std::unordered_set<std::string>(enabled_imes.begin(),
                                          enabled_imes.end());
+}
+
+// Returns the set of allowed UI locales.
+std::unordered_set<std::string> GetAllowedUILocales(PrefService* prefs) {
+  std::unordered_set<std::string> allowed_ui_locales;
+  const base::Value::ListStorage& pref_value =
+      prefs->GetList(prefs::kAllowedUILocales)->GetList();
+  for (const base::Value& locale_value : pref_value)
+    allowed_ui_locales.insert(locale_value.GetString());
+  return allowed_ui_locales;
 }
 
 // Sorts the input methods by the order of their associated languages. For
@@ -114,24 +134,28 @@ std::vector<std::string> GetSortedComponentIMEs(
 }
 
 // Sorts the third-party IMEs by the order of their associated languages.
-std::vector<std::string> GetSortedExtensionIMEs(
+std::vector<std::string> GetSortedThirdPartyIMEs(
     scoped_refptr<InputMethodManager::State> ime_state,
-    const std::unordered_set<std::string>& extension_ime_set,
+    const std::unordered_set<std::string>& third_party_ime_set,
     PrefService* prefs) {
-  std::vector<std::string> extension_ime_list;
+  std::vector<std::string> ime_list;
   std::string preferred_languages =
       prefs->GetString(prefs::kLanguagePreferredLanguages);
   std::vector<std::string> enabled_languages =
       base::SplitString(preferred_languages, ",", base::TRIM_WHITESPACE,
                         base::SPLIT_WANT_NONEMPTY);
 
+  // Add the fake language for ARC IMEs at the very last of the list. Unlike
+  // Chrome OS IMEs, these ARC ones are not associated with any (real) language.
+  enabled_languages.push_back(chromeos::extension_ime_util::kArcImeLanguage);
+
   InputMethodDescriptors descriptors;
   ime_state->GetInputMethodExtensions(&descriptors);
 
-  // Filter out the IMEs not in |extension_ime_set|.
+  // Filter out the IMEs not in |third_party_ime_set|.
   auto it = descriptors.begin();
   while (it != descriptors.end()) {
-    if (extension_ime_set.count(it->id()) == 0)
+    if (third_party_ime_set.count(it->id()) == 0)
       it = descriptors.erase(it);
     else
       it++;
@@ -141,9 +165,9 @@ std::vector<std::string> GetSortedExtensionIMEs(
   for (const auto& language : enabled_languages) {
     auto it = descriptors.begin();
     while (it != descriptors.end() && descriptors.size()) {
-      if (extension_ime_set.count(it->id()) &&
+      if (third_party_ime_set.count(it->id()) &&
           base::ContainsValue(it->language_codes(), language)) {
-        extension_ime_list.push_back(it->id());
+        ime_list.push_back(it->id());
         // Remove the added descriptor from the candidate list.
         it = descriptors.erase(it);
       } else {
@@ -152,7 +176,7 @@ std::vector<std::string> GetSortedExtensionIMEs(
     }
   }
 
-  return extension_ime_list;
+  return ime_list;
 }
 
 }  // namespace
@@ -178,18 +202,21 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
       app_locale, translate_prefs->IsTranslateAllowedByPolicy(), &languages);
 
   // Get the list of available locales (display languages) and convert to a set.
-  const std::vector<std::string>& locales = l10n_util::GetAvailableLocales();
-  const std::unordered_set<std::string> locale_set(locales.begin(),
-                                                   locales.end());
+  const base::flat_set<std::string> locale_set(
+      l10n_util::GetAvailableLocales());
 
   // Get the list of spell check languages and convert to a set.
   std::vector<std::string> spellcheck_languages =
       spellcheck::SpellCheckLanguages();
-  const std::unordered_set<std::string> spellcheck_language_set(
-      spellcheck_languages.begin(), spellcheck_languages.end());
+  const base::flat_set<std::string> spellcheck_language_set(
+      std::move(spellcheck_languages));
 
   // Build the language list.
   std::unique_ptr<base::ListValue> language_list(new base::ListValue);
+#if defined(OS_CHROMEOS)
+  const std::unordered_set<std::string> allowed_ui_locales(
+      GetAllowedUILocales(chrome_details_.GetProfile()->GetPrefs()));
+#endif  // defined(OS_CHROMEOS)
   for (const auto& entry : languages) {
     language_settings_private::Language language;
 
@@ -198,18 +225,43 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
     language.native_display_name = entry.native_display_name;
 
     // Set optional fields only if they differ from the default.
-    if (locale_set.count(entry.code) > 0) {
-      language.supports_ui.reset(new bool(true));
-    }
-    if (spellcheck_language_set.count(entry.code) > 0) {
+    if (base::ContainsKey(spellcheck_language_set, entry.code)) {
       language.supports_spellcheck.reset(new bool(true));
     }
     if (entry.supports_translate) {
       language.supports_translate.reset(new bool(true));
     }
+    if (base::FeatureList::IsEnabled(translate::kRegionalLocalesAsDisplayUI)) {
+      std::string temp_locale = entry.code;
+      if (language::ConvertToActualUILocale(&temp_locale)) {
+        language.supports_ui.reset(new bool(true));
+      }
+    } else if (base::ContainsKey(locale_set, entry.code)) {
+      language.supports_ui.reset(new bool(true));
+    }
+#if defined(OS_CHROMEOS)
+    if (!allowed_ui_locales.empty() &&
+        allowed_ui_locales.count(language.code) == 0) {
+      language.is_prohibited_ui_locale.reset(new bool(true));
+    }
+#endif  // defined(OS_CHROMEOS)
 
     language_list->Append(language.ToValue());
   }
+
+#if defined(OS_CHROMEOS)
+  // Send the display name of the fake language for ARC IMEs to the JS side.
+  // |native_display_name| does't have to be set because the language selection
+  // drop-down menu doesn't list the fake language.
+  {
+    language_settings_private::Language language;
+    language.code = chromeos::extension_ime_util::kArcImeLanguage;
+    language.display_name =
+        l10n_util::GetStringUTF8(IDS_SETTINGS_LANGUAGES_KEYBOARD_APPS);
+    language_list->Append(language.ToValue());
+  }
+#endif  // defined(OS_CHROMEOS)
+
   return RespondNow(OneArgument(std::move(language_list)));
 }
 
@@ -269,8 +321,7 @@ LanguageSettingsPrivateDisableLanguageFunction::Run() {
   std::string chrome_language = language_code;
   translate::ToChromeLanguageSynonym(&chrome_language);
 
-  auto it = std::find(languages.begin(), languages.end(), chrome_language);
-  if (it == languages.end()) {
+  if (!base::ContainsValue(languages, chrome_language)) {
     LOG(ERROR) << "Language " << chrome_language << " not enabled";
     return RespondNow(NoArguments());
   }
@@ -373,7 +424,7 @@ LanguageSettingsPrivateGetSpellcheckDictionaryStatusesFunction::Run() {
       LanguageSettingsPrivateDelegateFactory::GetForBrowserContext(
           browser_context());
 
-  return RespondNow(OneArgument(
+  return RespondNow(ArgumentList(
       language_settings_private::GetSpellcheckDictionaryStatuses::Results::
           Create(delegate->GetHunspellDictionaryStatuses())));
 }
@@ -480,7 +531,8 @@ ExtensionFunction::ResponseAction
 LanguageSettingsPrivateGetTranslateTargetLanguageFunction::Run() {
   Profile* profile = chrome_details_.GetProfile();
   language::LanguageModel* language_model =
-      LanguageModelFactory::GetForBrowserContext(profile);
+      LanguageModelManagerFactory::GetForBrowserContext(profile)
+          ->GetDefaultModel();
   return RespondNow(OneArgument(
       std::make_unique<base::Value>(TranslateService::GetTargetLanguage(
           profile->GetPrefs(), language_model))));
@@ -500,16 +552,20 @@ void PopulateInputMethodListFromDescriptors(
     return;
 
   const std::unordered_set<std::string> active_ids(GetEnabledIMEs(ime_state));
+  const std::unordered_set<std::string> allowed_ids(GetAllowedIMEs(ime_state));
   for (const auto& descriptor : descriptors) {
     language_settings_private::InputMethod input_method;
     input_method.id = descriptor.id();
     input_method.display_name = util->GetLocalizedDisplayName(descriptor);
     input_method.language_codes = descriptor.language_codes();
-    bool enabled = active_ids.count(input_method.id) > 0;
-    if (enabled)
+    if (active_ids.count(input_method.id) > 0)
       input_method.enabled.reset(new bool(true));
     if (descriptor.options_page_url().is_valid())
       input_method.has_options_page.reset(new bool(true));
+    if (!allowed_ids.empty() && util->IsKeyboardLayout(input_method.id) &&
+        allowed_ids.count(input_method.id) == 0) {
+      input_method.is_prohibited_by_policy.reset(new bool(true));
+    }
     input_methods->push_back(std::move(input_method));
   }
 }
@@ -573,13 +629,14 @@ LanguageSettingsPrivateAddInputMethodFunction::Run() {
     return RespondNow(NoArguments());
 
   std::string new_input_method_id = params->input_method_id;
-  bool is_extension_ime =
-      chromeos::extension_ime_util::IsExtensionIME(new_input_method_id);
+  bool is_component_extension_ime =
+      chromeos::extension_ime_util::IsComponentExtensionIME(
+          new_input_method_id);
 
   PrefService* prefs = chrome_details_.GetProfile()->GetPrefs();
-  const char* pref_name = is_extension_ime
-                              ? prefs::kLanguageEnabledExtensionImes
-                              : prefs::kLanguagePreloadEngines;
+  const char* pref_name = is_component_extension_ime
+                              ? prefs::kLanguagePreloadEngines
+                              : prefs::kLanguageEnabledImes;
 
   // Get the input methods we are adding to.
   std::unordered_set<std::string> input_method_set(
@@ -590,12 +647,12 @@ LanguageSettingsPrivateAddInputMethodFunction::Run() {
 
   // Sort the new input method list by preferred languages.
   std::vector<std::string> input_method_list;
-  if (is_extension_ime) {
-    input_method_list =
-        GetSortedExtensionIMEs(ime_state, input_method_set, prefs);
-  } else {
+  if (is_component_extension_ime) {
     input_method_list =
         GetSortedComponentIMEs(manager, ime_state, input_method_set, prefs);
+  } else {
+    input_method_list =
+        GetSortedThirdPartyIMEs(ime_state, input_method_set, prefs);
   }
 
   std::string input_methods = base::JoinString(input_method_list, ",");
@@ -627,13 +684,14 @@ LanguageSettingsPrivateRemoveInputMethodFunction::Run() {
     return RespondNow(NoArguments());
 
   std::string input_method_id = params->input_method_id;
+  bool is_component_extension_ime =
+      chromeos::extension_ime_util::IsComponentExtensionIME(input_method_id);
 
   // Use the pref for the corresponding input method type.
   PrefService* prefs = chrome_details_.GetProfile()->GetPrefs();
-  const char* pref_name =
-      chromeos::extension_ime_util::IsExtensionIME(input_method_id)
-          ? prefs::kLanguageEnabledExtensionImes
-          : prefs::kLanguagePreloadEngines;
+  const char* pref_name = is_component_extension_ime
+                              ? prefs::kLanguagePreloadEngines
+                              : prefs::kLanguageEnabledImes;
 
   std::string input_method_ids = prefs->GetString(pref_name);
   std::vector<std::string> input_method_list = base::SplitString(
@@ -647,6 +705,26 @@ LanguageSettingsPrivateRemoveInputMethodFunction::Run() {
     prefs->SetString(pref_name, base::JoinString(input_method_list, ","));
   }
 #endif
+  return RespondNow(NoArguments());
+}
+
+LanguageSettingsPrivateRetryDownloadDictionaryFunction::
+    LanguageSettingsPrivateRetryDownloadDictionaryFunction() = default;
+
+LanguageSettingsPrivateRetryDownloadDictionaryFunction::
+    ~LanguageSettingsPrivateRetryDownloadDictionaryFunction() = default;
+
+ExtensionFunction::ResponseAction
+LanguageSettingsPrivateRetryDownloadDictionaryFunction::Run() {
+  const auto parameters =
+      language_settings_private::RetryDownloadDictionary::Params::Create(
+          *args_);
+  EXTENSION_FUNCTION_VALIDATE(parameters.get());
+
+  LanguageSettingsPrivateDelegate* delegate =
+      LanguageSettingsPrivateDelegateFactory::GetForBrowserContext(
+          browser_context());
+  delegate->RetryDownloadHunspellDictionary(parameters->language_code);
   return RespondNow(NoArguments());
 }
 

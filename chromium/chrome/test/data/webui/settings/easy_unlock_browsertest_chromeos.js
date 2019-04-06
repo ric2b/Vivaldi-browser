@@ -10,8 +10,7 @@ GEN_INCLUDE(['settings_page_browsertest.js']);
  * @constructor
  * @extends {SettingsPageBrowserTest}
  */
-function SettingsEasyUnlockBrowserTest() {
-}
+function SettingsEasyUnlockBrowserTest() {}
 
 SettingsEasyUnlockBrowserTest.prototype = {
   __proto__: SettingsPageBrowserTest.prototype,
@@ -133,7 +132,7 @@ TEST_F('SettingsEasyUnlockBrowserTest', 'DISABLED_EasyUnlock', function() {
         assertTrue(!!setupButton);
         expectFalse(setupButton.hidden);
 
-        MockInteractions.tap(setupButton);
+        setupButton.click();
         return browserProxy.whenCalled('startTurnOnFlow');
       });
     });
@@ -155,7 +154,7 @@ TEST_F('SettingsEasyUnlockBrowserTest', 'DISABLED_EasyUnlock', function() {
             assertTrue(!!turnOffButton);
             expectFalse(turnOffButton.hidden);
 
-            MockInteractions.tap(turnOffButton);
+            turnOffButton.click();
             return browserProxy.whenCalled('getTurnOffFlowStatus');
           })
           .then(function() {
@@ -197,7 +196,7 @@ TEST_F('SettingsEasyUnlockBrowserTest', 'DISABLED_EasyUnlock', function() {
                 'easy-unlock-turn-off-flow-status', 'idle');
             expectFalse(turnOffDialogConfirmButton.hidden);
 
-            MockInteractions.tap(turnOffDialogConfirmButton);
+            turnOffDialogConfirmButton.click();
 
             return browserProxy.whenCalled('startTurnOffFlow');
           })

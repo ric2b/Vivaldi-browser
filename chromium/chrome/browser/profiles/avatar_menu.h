@@ -17,7 +17,7 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_metrics.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/image/image.h"
@@ -110,9 +110,6 @@ class AvatarMenu :
              AvatarMenuObserver* observer,
              Browser* browser);
   ~AvatarMenu() override;
-
-  // True if avatar menu should be displayed.
-  static bool ShouldShowAvatarMenu();
 
   // Sets |image| to the avatar corresponding to the profile at |profile_path|.
   // For built-in profile avatars, returns the non-high res version. Returns the

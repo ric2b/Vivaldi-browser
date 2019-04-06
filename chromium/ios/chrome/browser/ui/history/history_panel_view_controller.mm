@@ -4,22 +4,29 @@
 
 #import "ios/chrome/browser/ui/history/history_panel_view_controller.h"
 
+#include <memory>
+
 #include "base/ios/block_types.h"
-#include "base/ios/ios_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "components/browser_sync/profile_sync_service.h"
+#include "components/history/core/browser/browsing_history_service.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/history/clear_browsing_bar.h"
-#import "ios/chrome/browser/ui/history/history_collection_view_controller.h"
 #import "ios/chrome/browser/ui/history/history_search_view_controller.h"
+#include "ios/chrome/browser/ui/history/ios_browsing_history_driver.h"
+#import "ios/chrome/browser/ui/history/legacy_history_collection_view_controller.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/material_components/utils.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/panel_bar_view.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 #import "ios/third_party/material_components_ios/src/components/NavigationBar/src/MaterialNavigationBar.h"
@@ -35,10 +42,10 @@ CGFloat kShadowOpacity = 0.2f;
 }  // namespace
 
 @interface HistoryPanelViewController ()<
-    HistoryCollectionViewControllerDelegate,
+    LegacyHistoryCollectionViewControllerDelegate,
     HistorySearchViewControllerDelegate> {
   // Controller for collection view that displays history entries.
-  HistoryCollectionViewController* _historyCollectionController;
+  LegacyHistoryCollectionViewController* _historyCollectionController;
   // Bar at the bottom of the history panel the displays options for entry
   // deletion, including "Clear Browsing Data..." which takes the user to
   // Privacy settings, or "Edit" for entering a mode for deleting individual
@@ -55,6 +62,12 @@ CGFloat kShadowOpacity = 0.2f;
   UIBarButtonItem* _leftBarButtonItem;
   // Right bar button item for Dismiss history action.
   UIBarButtonItem* _rightBarButtonItem;
+  // YES if NSLayoutConstraits were added.
+  BOOL _addedConstraints;
+  // Provides dependencies and funnels callbacks from BrowsingHistoryService.
+  std::unique_ptr<IOSBrowsingHistoryDriver> _browsingHistoryDriver;
+  // Abstraction to communicate with HistoryService and WebHistoryService.
+  std::unique_ptr<history::BrowsingHistoryService> _browsingHistoryService;
 }
 // Closes history.
 - (void)closeHistory;
@@ -93,9 +106,22 @@ CGFloat kShadowOpacity = 0.2f;
   self = [super initWithNibName:nil bundle:nil];
   if (self) {
     _historyCollectionController =
-        [[HistoryCollectionViewController alloc] initWithLoader:loader
-                                                   browserState:browserState
-                                                       delegate:self];
+        [[LegacyHistoryCollectionViewController alloc]
+            initWithLoader:loader
+              browserState:browserState
+                  delegate:self];
+
+    _browsingHistoryDriver = std::make_unique<IOSBrowsingHistoryDriver>(
+        browserState, _historyCollectionController);
+
+    _browsingHistoryService = std::make_unique<history::BrowsingHistoryService>(
+        _browsingHistoryDriver.get(),
+        ios::HistoryServiceFactory::GetForBrowserState(
+            browserState, ServiceAccessType::EXPLICIT_ACCESS),
+        ProfileSyncServiceFactory::GetForBrowserState(browserState));
+
+    _historyCollectionController.historyService = _browsingHistoryService.get();
+
     _dispatcher = dispatcher;
 
     // Configure modal presentation.
@@ -172,15 +198,18 @@ CGFloat kShadowOpacity = 0.2f;
 }
 
 - (void)updateViewConstraints {
-  NSDictionary* views = @{
-    @"collectionView" : [_historyCollectionController view],
-    @"clearBrowsingBar" : _clearBrowsingBar,
-  };
-  NSArray* constraints = @[
-    @"V:|[collectionView][clearBrowsingBar]|", @"H:|[collectionView]|",
-    @"H:|[clearBrowsingBar]|"
-  ];
-  ApplyVisualConstraints(constraints, views);
+  if (!_addedConstraints) {
+    NSDictionary* views = @{
+      @"collectionView" : [_historyCollectionController view],
+      @"clearBrowsingBar" : _clearBrowsingBar,
+    };
+    NSArray* constraints = @[
+      @"V:|[collectionView][clearBrowsingBar]|", @"H:|[collectionView]|",
+      @"H:|[clearBrowsingBar]|"
+    ];
+    ApplyVisualConstraints(constraints, views);
+    _addedConstraints = YES;
+  }
   [super updateViewConstraints];
 }
 
@@ -193,81 +222,16 @@ CGFloat kShadowOpacity = 0.2f;
   [_clearBrowsingBar updateHeight];
 }
 
-#pragma mark - Status bar
-
-- (BOOL)modalPresentationCapturesStatusBarAppearance {
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // TODO(crbug.com/620361): Remove the entire method override when iOS 9 is
-    // dropped.
-    return YES;
-  } else {
-    return [super modalPresentationCapturesStatusBarAppearance];
-  }
-}
-
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // TODO(crbug.com/620361): Remove the entire method override when iOS 9 is
-    // dropped.
-    [self setNeedsStatusBarAppearanceUpdate];
-  }
-}
-
-- (UIViewController*)childViewControllerForStatusBarHidden {
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // TODO(crbug.com/620361): Remove the entire method override when iOS 9 is
-    // dropped.
-    return nil;
-  } else {
-    return _appBar.headerViewController;
-  }
-}
-
-- (BOOL)prefersStatusBarHidden {
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // TODO(crbug.com/620361): Remove the entire method override when iOS 9 is
-    // dropped.
-    return NO;
-  } else {
-    return [super prefersStatusBarHidden];
-  }
-}
-
-- (UIViewController*)childViewControllerForStatusBarStyle {
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // TODO(crbug.com/620361): Remove the entire method override when iOS 9 is
-    // dropped.
-    return nil;
-  } else {
-    return _appBar.headerViewController;
-  }
-}
-
-- (UIStatusBarStyle)preferredStatusBarStyle {
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // TODO(crbug.com/620361): Remove the entire method override when iOS 9 is
-    // dropped.
-    if (IsIPadIdiom() && !IsCompact()) {
-      return UIStatusBarStyleLightContent;
-    } else {
-      return UIStatusBarStyleDefault;
-    }
-  } else {
-    return [super preferredStatusBarStyle];
-  }
-}
-
 #pragma mark - HistoryCollectionViewControllerDelegate
 
 - (void)historyCollectionViewController:
-            (HistoryCollectionViewController*)collectionViewcontroller
+            (LegacyHistoryCollectionViewController*)collectionViewcontroller
               shouldCloseWithCompletion:(ProceduralBlock)completionHandler {
   [self closeHistoryWithCompletion:completionHandler];
 }
 
 - (void)historyCollectionViewController:
-            (HistoryCollectionViewController*)controller
+            (LegacyHistoryCollectionViewController*)controller
                       didScrollToOffset:(CGPoint)offset {
   // Display a shadow on the header when the collection is scrolled.
   MDCFlexibleHeaderView* headerView = _appBar.headerViewController.headerView;
@@ -276,7 +240,7 @@ CGFloat kShadowOpacity = 0.2f;
 }
 
 - (void)historyCollectionViewControllerDidChangeEntries:
-    (HistoryCollectionViewController*)controller {
+    (LegacyHistoryCollectionViewController*)controller {
   // Reconfigure the navigation and clear browsing bars to reflect currently
   // displayed entries.
   [self configureNavigationBar];
@@ -284,7 +248,7 @@ CGFloat kShadowOpacity = 0.2f;
 }
 
 - (void)historyCollectionViewControllerDidChangeEntrySelection:
-    (HistoryCollectionViewController*)controller {
+    (LegacyHistoryCollectionViewController*)controller {
   // Reconfigure the clear browsing bar to reflect current availability of
   // entries for deletion.
   [self configureClearBrowsingBar];

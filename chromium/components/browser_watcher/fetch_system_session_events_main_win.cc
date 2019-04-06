@@ -9,26 +9,26 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
-#include "components/browser_watcher/system_session_analyzer_win.h"
+#include "components/metrics/system_session_analyzer_win.h"
 
 namespace {
 
-using browser_watcher::SystemSessionAnalyzer;
+using metrics::SystemSessionAnalyzer;
 
 class SystemSessionEventFetcher : public SystemSessionAnalyzer {
  public:
-  explicit SystemSessionEventFetcher(uint32_t session_cnt)
-      : SystemSessionAnalyzer(session_cnt) {}
+  explicit SystemSessionEventFetcher() : SystemSessionAnalyzer(0) {}
   using SystemSessionAnalyzer::FetchEvents;
 };
 
 }  // namespace
 
 int main(int argc, char** argv) {
-  // Retrieve events for the last 5 sessions.
-  SystemSessionEventFetcher fetcher(5U);
+  SystemSessionEventFetcher fetcher;
   std::vector<SystemSessionEventFetcher::EventInfo> events;
-  if (!fetcher.FetchEvents(&events)) {
+  // Retrieve events for the last 5 sessions. We expect our own sessions start
+  // event, and then 2 events per each preceding session for 11 total.
+  if (!fetcher.FetchEvents(11U, &events)) {
     std::cerr << "Failed to fetch events." << std::endl;
     return 1;
   }

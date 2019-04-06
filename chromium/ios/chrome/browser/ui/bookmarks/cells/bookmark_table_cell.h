@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_UI_BOOKMARKS_CELLS_BOOKMARK_TABLE_CELL_H_
 #define IOS_CHROME_BROWSER_UI_BOOKMARKS_CELLS_BOOKMARK_TABLE_CELL_H_
 
+#import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_cell_title_editing.h"
+
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
@@ -13,7 +15,6 @@ class BookmarkNode;
 }  // namespace bookmarks
 
 @class BookmarkTableCell;
-@class BookmarkTableCellTextFieldDelegate;
 
 // Cell to display bookmark folders and URLs.
 // |---------------------------------------------|
@@ -23,21 +24,11 @@ class BookmarkNode;
 // |---------------------------------------------|
 //
 
-// Delegates the cell's text field's event.
-@protocol BookmarkTableCellTitleEditDelegate
-
-// Called when the |titleText| of the cell was changed.
-- (void)textDidChangeTo:(NSString*)newName;
-
-@end
-
-@interface BookmarkTableCell : UITableViewCell
-
-- (instancetype)initWithReuseIdentifier:(NSString*)bookmarkCellIdentifier
-    NS_DESIGNATED_INITIALIZER;
+@interface BookmarkTableCell : UITableViewCell<BookmarkTableCellTitleEditing>
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style
-              reuseIdentifier:(NSString*)reuseIdentifier NS_UNAVAILABLE;
+              reuseIdentifier:(NSString*)reuseIdentifier
+    NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
@@ -54,16 +45,6 @@ class BookmarkNode;
 
 // Set the bookmark node this cell shows.
 - (void)setNode:(const bookmarks::BookmarkNode*)node;
-
-// Start editing the |titleText| of this cell.
-- (void)startEdit;
-
-// Stop editing the |titleText| of this cell. This will call textDidChangeTo:
-// on |textDelegate| with the |titleText| value at the moment.
-- (void)stopEdit;
-
-// Receives the text field events.
-@property(nonatomic, weak) id<BookmarkTableCellTitleEditDelegate> textDelegate;
 
 @end
 

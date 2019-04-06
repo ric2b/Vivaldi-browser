@@ -13,10 +13,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.heap_profiling.HeapProfilingTestShim;
 
 /**
  * Test suite for out of process heap profiling.
@@ -36,23 +38,60 @@ public class ProfilingProcessHostAndroidTest {
 
     @Test
     @MediumTest
-    @CommandLineFlags.Add({"memlog=browser"})
+    @CommandLineFlags.Add({"memlog=browser", "memlog-stack-mode=native-include-thread-names"})
     public void testModeBrowser() throws Exception {
-        TestAndroidShim profilingProcessHost = new TestAndroidShim();
-        Assert.assertTrue(profilingProcessHost.runTestForMode("browser", false, false));
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(
+                shim.runTestForMode("browser", false, "native-include-thread-names", false, false));
     }
 
     @Test
     @MediumTest
     public void testModeBrowserDynamic() throws Exception {
-        TestAndroidShim profilingProcessHost = new TestAndroidShim();
-        Assert.assertTrue(profilingProcessHost.runTestForMode("browser", true, false));
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(shim.runTestForMode("browser", true, "native", false, false));
     }
 
     @Test
     @MediumTest
     public void testModeBrowserDynamicPseudo() throws Exception {
-        TestAndroidShim profilingProcessHost = new TestAndroidShim();
-        Assert.assertTrue(profilingProcessHost.runTestForMode("browser", true, true));
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", false, false));
+    }
+
+    // Non-browser processes must be profiled with a command line flag, since
+    // otherwise, profiling will start after the relevant processes have been
+    // created, thus that process will be not be profiled.
+    // TODO(erikchen): Figure out what makes this test flaky and re-enable.
+    // https://crbug.com/833590.
+    @DisabledTest
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({"memlog=all-renderers", "memlog-stack-mode=pseudo"})
+    public void testModeRendererPseudo() throws Exception {
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(shim.runTestForMode("all-renderers", false, "pseudo", false, false));
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({"memlog=gpu", "memlog-stack-mode=pseudo"})
+    public void testModeGpuPseudo() throws Exception {
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(shim.runTestForMode("gpu", false, "native", false, false));
+    }
+
+    @Test
+    @MediumTest
+    public void testModeBrowserDynamicPseudoSampleEverything() throws Exception {
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", true, true));
+    }
+
+    @Test
+    @MediumTest
+    public void testModeBrowserDynamicPseudoSamplePartial() throws Exception {
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", true, false));
     }
 }

@@ -6,6 +6,8 @@
 #define CHROMEOS_COMPONENTS_TETHER_FAKE_SYNCHRONOUS_SHUTDOWN_OBJECT_CONTAINER_H_
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/callback.h"
 #include "base/macros.h"
 #include "chromeos/components/tether/synchronous_shutdown_object_container.h"
 
@@ -19,7 +21,7 @@ class FakeSynchronousShutdownObjectContainer
  public:
   // |deletion_callback| will be invoked when the object is deleted.
   FakeSynchronousShutdownObjectContainer(
-      const base::Closure& deletion_callback = base::Bind(&base::DoNothing));
+      const base::Closure& deletion_callback = base::DoNothing());
   ~FakeSynchronousShutdownObjectContainer() override;
 
   void set_active_host(ActiveHost* active_host) { active_host_ = active_host; }

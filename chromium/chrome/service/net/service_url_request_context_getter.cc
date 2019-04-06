@@ -14,8 +14,8 @@
 #include "build/build_config.h"
 #include "chrome/service/service_process.h"
 #include "components/version_info/version_info.h"
-#include "net/proxy/proxy_config_service.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_config_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/url_request/url_request_context_builder.h"
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
@@ -99,8 +99,9 @@ ServiceURLRequestContextGetter::ServiceURLRequestContextGetter()
     : user_agent_(MakeUserAgentForServiceProcess()),
       network_task_runner_(g_service_process->io_task_runner()) {
   DCHECK(g_service_process);
-  proxy_config_service_ = net::ProxyService::CreateSystemProxyConfigService(
-      g_service_process->io_task_runner());
+  proxy_config_service_ =
+      net::ProxyResolutionService::CreateSystemProxyConfigService(
+          g_service_process->io_task_runner());
 }
 
 net::URLRequestContext*

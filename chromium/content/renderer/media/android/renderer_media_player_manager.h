@@ -55,7 +55,7 @@ class RendererMediaPlayerManager :
   void Pause(int player_id, bool is_media_related_action) override;
 
   // Performs seek on the player.
-  void Seek(int player_id, const base::TimeDelta& time) override;
+  void Seek(int player_id, base::TimeDelta time) override;
 
   // Sets the player volume.
   void SetVolume(int player_id, double volume) override;
@@ -78,9 +78,6 @@ class RendererMediaPlayerManager :
   // Requests stopping remote playback
   void RequestRemotePlaybackStop(int player_id) override;
 
-  // Requests the player to enter fullscreen.
-  void EnterFullscreen(int player_id);
-
   // Registers and unregisters a WebMediaPlayerAndroid object.
   int RegisterMediaPlayer(media::RendererMediaPlayerInterface* player) override;
   void UnregisterMediaPlayer(int player_id) override;
@@ -100,9 +97,8 @@ class RendererMediaPlayerManager :
                               bool success);
   void OnMediaPlaybackCompleted(int player_id);
   void OnMediaBufferingUpdate(int player_id, int percent);
-  void OnSeekRequest(int player_id, const base::TimeDelta& time_to_seek);
-  void OnSeekCompleted(int player_id,
-                       const base::TimeDelta& current_timestamp);
+  void OnSeekRequest(int player_id, base::TimeDelta time_to_seek);
+  void OnSeekCompleted(int player_id, base::TimeDelta current_timestamp);
   void OnMediaError(int player_id, int error);
   void OnVideoSizeChanged(int player_id, int width, int height);
   void OnTimeUpdate(int player_id,

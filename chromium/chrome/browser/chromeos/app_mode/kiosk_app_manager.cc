@@ -27,6 +27,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager_observer.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_external_updater.h"
 #include "chrome/browser/chromeos/extensions/external_cache_impl.h"
+#include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -42,13 +43,12 @@
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/account_id/account_id.h"
 #include "components/ownership/owner_key_util.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "extensions/common/extension_urls.h"
@@ -144,7 +144,7 @@ void CheckOwnerFilePresence(bool *present) {
 
 base::FilePath GetCrxCacheDir() {
   base::FilePath user_data_dir;
-  CHECK(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
+  CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   return user_data_dir.AppendASCII(kCrxCacheDir);
 }
 
@@ -307,15 +307,19 @@ void KioskAppManager::InitSession(Profile* profile,
     // set here is to be able to properly restore session if the session is
     // restarted - e.g. due to crash. For example, this will ensure restarted
     // app session restores auto-launched state.
-    DBusThreadManager::Get()->GetSessionManagerClient()->SetFlagsForUser(
-        cryptohome::Identification(
-            user_manager::UserManager::Get()->GetActiveUser()->GetAccountId()),
+    chromeos::UserSessionManager::GetInstance()->SetSwitchesForUser(
+        user_manager::UserManager::Get()->GetActiveUser()->GetAccountId(),
+        chromeos::UserSessionManager::CommandLineSwitchesType::
+            kPolicyAndFlagsAndKioskControl,
         flags);
   }
 
   app_session_ = CreateAppSession();
   if (app_session_)
     app_session_->Init(profile, app_id);
+
+  for (auto& observer : observers_)
+    observer.OnKioskSessionInitialized();
 }
 
 bool KioskAppManager::GetSwitchesForSessionRestore(
@@ -936,7 +940,7 @@ void KioskAppManager::UpdateExternalCachePrefs() {
 
 void KioskAppManager::GetKioskAppIconCacheDir(base::FilePath* cache_dir) {
   base::FilePath user_data_dir;
-  CHECK(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
+  CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   *cache_dir = user_data_dir.AppendASCII(kIconCacheDir);
 }
 

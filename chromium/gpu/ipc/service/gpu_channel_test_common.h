@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef GPU_IPC_SERVICE_GPU_CHANNEL_TEST_COMMON_H_
+#define GPU_IPC_SERVICE_GPU_CHANNEL_TEST_COMMON_H_
+
 #include <memory>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/shared_memory_handle.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -36,7 +39,7 @@ class GpuChannelTestCommon : public testing::Test {
 
   void HandleMessage(GpuChannel* channel, IPC::Message* msg);
 
-  base::SharedMemoryHandle GetSharedHandle();
+  base::UnsafeSharedMemoryRegion GetSharedMemoryRegion();
 
  private:
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
@@ -50,3 +53,5 @@ class GpuChannelTestCommon : public testing::Test {
 };
 
 }  // namespace gpu
+
+#endif  // GPU_IPC_SERVICE_GPU_CHANNEL_TEST_COMMON_H_

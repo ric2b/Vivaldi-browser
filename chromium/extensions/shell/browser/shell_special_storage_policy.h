@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_SHELL_BROWSER_SHELL_SPECIAL_STORAGE_POLICY_H_
 #define EXTENSIONS_SHELL_BROWSER_SHELL_SPECIAL_STORAGE_POLICY_H_
 
+#include "services/network/session_cleanup_cookie_store.h"
 #include "storage/browser/quota/special_storage_policy.h"
 
 namespace extensions {
@@ -20,9 +21,10 @@ class ShellSpecialStoragePolicy : public storage::SpecialStoragePolicy {
   bool IsStorageUnlimited(const GURL& origin) override;
   bool IsStorageDurable(const GURL& origin) override;
   bool IsStorageSessionOnly(const GURL& origin) override;
-  bool IsStorageSessionOnlyOrBlocked(const GURL& origin) override;
   bool HasIsolatedStorage(const GURL& origin) override;
   bool HasSessionOnlyOrigins() override;
+  network::SessionCleanupCookieStore::DeleteCookiePredicate
+  CreateDeleteCookieOnExitPredicate() override;
 
  protected:
   ~ShellSpecialStoragePolicy() override;

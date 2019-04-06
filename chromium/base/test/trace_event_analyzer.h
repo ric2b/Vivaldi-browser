@@ -71,7 +71,21 @@
 //     EXPECT_TRUE(events[i].GetAbsTimeToOtherEvent(&duration));
 //     EXPECT_LT(duration, 1000000.0/60.0); // expect less than 1/60 second.
 //   }
-
+//
+// There are two helper functions, Start(category_filter_string) and Stop(), for
+// facilitating the collection of process-local traces and building a
+// TraceAnalyzer from them. A typical test, that uses the helper functions,
+// looks like the following:
+//
+// TEST_F(...) {
+//   Start("*");
+//   [Invoke the functions you want to test their traces]
+//   auto analyzer = Stop();
+//
+//   [Use the analyzer to verify produced traces, as explained above]
+// }
+//
+// Note: The Stop() function needs a SingleThreadTaskRunner.
 
 #ifndef BASE_TEST_TRACE_EVENT_ANALYZER_H_
 #define BASE_TEST_TRACE_EVENT_ANALYZER_H_
@@ -80,6 +94,9 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -165,6 +182,14 @@ struct TraceEvent {
   std::string category;
   std::string name;
   std::string id;
+  double thread_duration = 0.0;
+  double thread_timestamp = 0.0;
+  std::string scope;
+  std::string bind_id;
+  bool flow_out = false;
+  bool flow_in = false;
+  std::string global_id2;
+  std::string local_id2;
 
   // All numbers and bool values from TraceEvent args are cast to double.
   // bool becomes 1.0 (true) or 0.0 (false).
@@ -490,7 +515,6 @@ class Query {
   // This is a recursive method that walks the query tree.
   bool Evaluate(const TraceEvent& event) const;
 
- private:
   enum TraceEventMember {
     EVENT_INVALID,
     EVENT_PID,
@@ -629,6 +653,7 @@ class Query {
   const Query& left() const;
   const Query& right() const;
 
+ private:
   QueryType type_;
   Operator operator_;
   scoped_refptr<QueryNode> left_;
@@ -742,6 +767,13 @@ class TraceAnalyzer {
 
   DISALLOW_COPY_AND_ASSIGN(TraceAnalyzer);
 };
+
+// Utility functions for collecting process-local traces and creating a
+// |TraceAnalyzer| from the result. Please see comments in trace_config.h to
+// understand how the |category_filter_string| works. Use "*" to enable all
+// default categories.
+void Start(const std::string& category_filter_string);
+std::unique_ptr<TraceAnalyzer> Stop();
 
 // Utility functions for TraceEventVector.
 

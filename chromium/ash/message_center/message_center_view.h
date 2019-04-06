@@ -24,13 +24,13 @@ class SlideAnimation;
 namespace message_center {
 
 class MessageCenter;
-class UiController;
 class MessageView;
 
 }  // namespace message_center
 
 namespace ash {
 
+class ArcNotificationContentViewTest;
 class MessageCenterButtonBar;
 class NotifierSettingsView;
 
@@ -48,7 +48,6 @@ class ASH_EXPORT MessageCenterView
       public views::ViewObserver {
  public:
   MessageCenterView(message_center::MessageCenter* message_center,
-                    message_center::UiController* ui_controller,
                     int max_height,
                     bool initially_settings_visible);
   ~MessageCenterView() override;
@@ -65,11 +64,8 @@ class ASH_EXPORT MessageCenterView
   void SetSettingsVisible(bool visible);
   void OnSettingsChanged();
   bool settings_visible() const { return settings_visible_; }
-  message_center::UiController* ui_controller() { return ui_controller_; }
 
   void SetIsClosing(bool is_closing);
-
-  base::string16 GetButtonBarTitle() const;
 
   void SetMaxHeight(int max_height) { max_height_ = max_height; }
 
@@ -77,8 +73,7 @@ class ASH_EXPORT MessageCenterView
   void OnWillChangeFocus(views::View* before, views::View* now) override {}
   void OnDidChangeFocus(views::View* before, views::View* now) override;
 
-  // Fallback background color when the device does not support blur.
-  static const SkColor kBackgroundColor;
+  void UpdateScrollerShadowVisibility();
 
   static const size_t kMaxVisibleNotifications;
 
@@ -115,6 +110,7 @@ class ASH_EXPORT MessageCenterView
   void OnViewPreferredSizeChanged(views::View* observed_view) override;
 
  private:
+  friend class ArcNotificationContentViewTest;
   friend class MessageCenterViewTest;
 
   // NOTIFICATIONS: Normal notification list (MessageListView) is shown.
@@ -143,14 +139,18 @@ class ASH_EXPORT MessageCenterView
   // - Only NotifierSettingsView moves.
   // Thus, these two methods are needed.
   int GetSettingsHeightForWidth(int width) const;
-  int GetContentHeightDuringAnimation(int width) const;
+  int GetContentHeightDuringAnimation() const;
+
+  // Returns the height for the given |width| of the view correspond to |mode|
+  // e.g. |settings_view_|.
+  int GetContentHeightForMode(Mode mode, int width) const;
 
   message_center::MessageCenter* message_center_;
-  message_center::UiController* ui_controller_;
 
   // Child views.
   views::ScrollView* scroller_ = nullptr;
   std::unique_ptr<MessageListView> message_list_view_;
+  views::View* scroller_shadow_ = nullptr;
   NotifierSettingsView* settings_view_ = nullptr;
   views::View* no_notifications_view_ = nullptr;
   MessageCenterButtonBar* button_bar_ = nullptr;

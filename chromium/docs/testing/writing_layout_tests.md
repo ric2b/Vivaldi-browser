@@ -21,7 +21,7 @@ Layout tests should be used to accomplish one of the following goals:
    get better. This is very much in line with our goal to move the Web forward.
 2. When a Blink feature cannot be tested using the tools provided by WPT, and
    cannot be easily covered by
-   [C++ unit tests](https://cs.chromium.org/chromium/src/third_party/WebKit/Source/web/tests/?q=webframetest&sq=package:chromium&type=cs),
+   [C++ unit tests](https://cs.chromium.org/chromium/src/third_party/blink/renderer/web/tests/?q=webframetest&sq=package:chromium&type=cs),
    the feature must be covered by layout tests, to avoid unexpected regressions.
    These tests will use Blink-specific testing APIs that are only available in
    [content_shell](./layout_tests_in_content_shell.md).
@@ -73,7 +73,7 @@ There are four broad types of layout tests, listed in the order of preference.
 
 Tests should be written under the assumption that they will be upstreamed
 to the WPT project. To this end, tests should follow the
-[WPT guidelines](http://web-platform-tests.org/writing-tests/).
+[WPT guidelines](https://web-platform-tests.org/writing-tests/).
 
 
 There is no style guide that applies to all layout tests. However, some projects
@@ -93,18 +93,18 @@ alternatives, which will be described in future sections, result in slower and
 less reliable tests.
 
 All new JavaScript tests should be written using the
-[testharness.js](https://github.com/w3c/web-platform-tests/tree/master/resources)
+[testharness.js](https://github.com/web-platform-tests/wpt/tree/master/resources)
 testing framework. This framework is used by the tests in the
-[web-platform-tests](https://github.com/w3c/web-platform-tests) repository,
+[web-platform-tests](https://github.com/web-platform-tests/wpt) repository,
 which is shared with all the other browser vendors, so `testharness.js` tests
 are more accessible to browser developers.
 
-See the [API documentation](http://web-platform-tests.org/writing-tests/testharness-api.html)
+See the [API documentation](https://web-platform-tests.org/writing-tests/testharness-api.html)
 for a thorough introduction to `testharness.js`.
 
 Layout tests should follow the recommendations of the above documentation.
 Furthermore, layout tests should include relevant
-[metadata](http://web-platform-tests.org/writing-tests/css-metadata.html). The
+[metadata](https://web-platform-tests.org/writing-tests/css-metadata.html). The
 specification URL (in `<link rel="help">`) is almost always relevant, and is
 incredibly helpful to a developer who needs to understand the test quickly.
 
@@ -190,7 +190,7 @@ and
 This is contrary to the WPT guidelines, which call for absolute paths.
 This limitation does not apply to the tests in `LayoutTests/http`, which rely on
 an HTTP server, or to the tests in `LayoutTests/external/wpt`, which are
-imported from the [WPT repository](https://github.com/w3c/web-platform-tests).
+imported from the [WPT repository](https://github.com/web-platform-tests/wpt).
 ***
 
 ### WPT Supplemental Testing APIs
@@ -224,19 +224,28 @@ other tests that use it, or reading its source code.
 
 For example, the most popular Blink-specific API is `testRunner`, which is
 implemented in
-[components/test_runner/test_runner.h](../../components/test_runner/test_runner.h)
+[content/shell/test_runner/test_runner.h](../../content/shell/test_runner/test_runner.h)
 and
-[components/test_runner/test_runner.cc](../../components/test_runner/test_runner.cc).
+[content/shell/test_runner/test_runner.cc](../../content/shell/test_runner/test_runner.cc).
 By skimming the `TestRunnerBindings::Install` method, we learn that the
-testRunner API is presented by the `window.testRunner` and
-`window.layoutTestsController` objects, which are synonyms. Reading the
+testRunner API is presented by the `.testRunner` etc. objects. Reading the
 `TestRunnerBindings::GetObjectTemplateBuilder` method tells us what properties
-are available on the `window.testRunner` object.
+are available on the `testRunner` object.
 
-*** aside
-`window.testRunner` is the preferred way to access the `testRunner` APIs.
-`window.layoutTestsController` is still supported because it is used by
-3rd-party tests.
+Another popular Blink-specific API 'internals' defined in
+[third_party/blink/renderer/core/testing/internals.idl](../../third_party/blink/renderer/core/testing/internals.idl)
+contains more direct access to blink internals.
+
+*** note
+If possible, a test using blink-specific testing APIs should be written not to
+depend on the APIs, so that it can also work directly in a browser. If the test
+does need the APIs to work, it should still check if the API is available before
+using the API. Note that though we omit the `window.` prefix when using the
+APIs, we should use the qualified name in the `if` statement:
+```javascript
+  if (window.testRunner)
+    testRunner.waitUntilDone();
+```
 ***
 
 *** note
@@ -248,12 +257,12 @@ by tests that stick to Web Platform APIs. The `testharnessreport.js` file in
 and uses the `testRunner` API.
 ***
 
-See the [components/test_runner/](../../components/test_runner/) directory and
+See the [content/shell/test_runner/](../../content/shell/test_runner/) directory and
 [WebKit's LayoutTests guide](https://trac.webkit.org/wiki/Writing%20Layout%20Tests%20for%20DumpRenderTree)
-for other useful APIs. For example, `window.eventSender`
-([components/test_runner/event_sender.h](../../components/test_runner/event_sender.h)
+for other useful APIs. For example, `eventSender`
+([content/shell/test_runner/event_sender.h](../../content/shell/test_runner/event_sender.h)
 and
-[components/test_runner/event_sender.cc](../../components/test_runner/event_sender.cc))
+[content/shell/test_runner/event_sender.cc](../../content/shell/test_runner/event_sender.cc))
 has methods that simulate events input such as keyboard / mouse input and
 drag-and-drop.
 
@@ -271,7 +280,7 @@ In these situations, a test file will be accompanied by a baseline, which is an
 `-expected.txt` file that contains the test's expected output.
 
 The baselines are generated automatically when appropriate by
-`run-webkit-tests`, which is described [here](./layout_tests.md), and by the
+`run_web_tests.py`, which is described [here](./layout_tests.md), and by the
 [rebaselining tools](./layout_test_expectations.md).
 
 Text baselines for `testharness.js` should be avoided, as having a text baseline
@@ -315,12 +324,12 @@ or features restricted to secure protocols.
 HTTP tests are those under `LayoutTests/http/tests` (or virtual variants). Use a
 locally running HTTP server (Apache) to run them. Tests are served off of ports
 8000 and 8080 for HTTP, and 8443 for HTTPS. If you run the tests using
-`run-webkit-tests`, the server will be started automatically. To run the server
+`run_web_tests.py`, the server will be started automatically. To run the server
 manually to reproduce or debug a failure:
 
 ```bash
-cd src/third_party/WebKit/Tools/Scripts
-./run-blink-httpd
+cd src/third_party/blink/tools
+./run_blink_httpd.py
 ```
 
 The layout tests will be served from `http://127.0.0.1:8000`. For example, to
@@ -330,7 +339,7 @@ navigate to
 tests will behave differently if you go to 127.0.0.1 instead of localhost, so
 use 127.0.0.1.
 
-To kill the server, hit any key on the terminal where `run-blink-httpd` is
+To kill the server, hit any key on the terminal where `run_blink_httpd.py` is
 running, or just use `taskkill` or the Task Manager on Windows, and `killall` or
 Activity Monitor on MacOS.
 
@@ -353,7 +362,7 @@ be slower as well. Therefore, they should only be used for functionality that
 cannot be covered by JavaScript tests.
 
 New reference tests should follow the
-[WPT reftests guidelines](http://web-platform-tests.org/writing-tests/reftests.html).
+[WPT reftests guidelines](https://web-platform-tests.org/writing-tests/reftests.html).
 The most important points are summarized below.
 
 * &#x1F6A7; The test page declares the reference page using a
@@ -415,8 +424,8 @@ being discussed on
 
 ## Pixel Tests
 
-`testRunner` APIs such as `window.testRunner.dumpAsTextWithPixelResults()` and
-`window.testRunner.dumpDragImage()` create an image result that is associated
+`testRunner` APIs such as `testRunner.dumpAsTextWithPixelResults()` and
+`testRunner.dumpDragImage()` create an image result that is associated
 with the test. The image result is compared against an image baseline, which is
 an `-expected.png` file associated with the test, and the test passes if the
 image result is identical to the baseline, according to a pixel-by-pixel
@@ -426,7 +435,7 @@ tests**.
 Pixel tests should still follow the principles laid out above. Pixel tests pose
 unique challenges to the desire to have *self-describing* and *cross-platform*
 tests. The
-[WPT rendering test guidelines](http://web-platform-tests.org/writing-tests/rendering.html)
+[WPT rendering test guidelines](https://web-platform-tests.org/writing-tests/rendering.html)
 contain useful guidance. The most relevant pieces of advice are below.
 
 * Whenever possible, use a green paragraph / page / square to indicate success.
@@ -444,7 +453,7 @@ TODO: Document how to opt out of generating a layout tree when generating
 pixel results.
 
 *** promo
-When using `window.testRunner.dumpAsTextWithPixelResults()`, the image result
+When using `testRunner.dumpAsTextWithPixelResults()`, the image result
 will always be 800x600px, because test pages are rendered in an 800x600px
 viewport. Pixel tests that do not specifically cover scrolling should fit in an
 800x600px viewport without creating scrollbars.
@@ -475,11 +484,12 @@ to use a relative path to
 ### Tests that need to paint, raster, or draw a frame of intermediate output
 
 A layout test does not actually draw frames of output until the test exits.
-Tests that need to generate a painted frame can use
-`window.testRunner.displayAsyncThen`, which will run the machinery to put up a
-frame, then call the passed callback. There is also a library at
-`fast/repaint/resources/text-based-repaint.js` to help with writing paint
-invalidation and repaint tests.
+Tests that need to generate a painted frame can use `runAfterLayoutAndPaint()`
+defined in [third_party/WebKit/LayoutTests/resources/run-after-layout-and-paint.js](../../third_party/WebKit/LayoutTests/resources/run-after-layout-and-paint.js)
+which will run the machinery to put up a frame, then call the passed callback.
+There is also a library at
+[third_party/WebKit/LayoutTests/paint/invalidation/resources/text-based-repaint.js](../../third_party/WebKit/LayoutTests/paint/invalidation/resources/text-based-repaint.js)
+to help with writing paint invalidation and repaint tests.
 
 ## Layout tree tests
 

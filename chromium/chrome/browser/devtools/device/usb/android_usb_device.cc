@@ -10,7 +10,6 @@
 #include "base/barrier_closure.h"
 #include "base/base64.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -379,7 +378,7 @@ void AndroidUsbDevice::InitOnCallerThread() {
   if (task_runner_)
     return;
   task_runner_ = base::ThreadTaskRunnerHandle::Get();
-  Queue(base::MakeUnique<AdbMessage>(AdbMessage::kCommandCNXN, kVersion,
+  Queue(std::make_unique<AdbMessage>(AdbMessage::kCommandCNXN, kVersion,
                                      kMaxPayload, kHostConnectMessage));
   ReadHeader();
 }
@@ -398,7 +397,7 @@ void AndroidUsbDevice::Send(uint32_t command,
                             uint32_t arg0,
                             uint32_t arg1,
                             const std::string& body) {
-  auto message = base::MakeUnique<AdbMessage>(command, arg0, arg1, body);
+  auto message = std::make_unique<AdbMessage>(command, arg0, arg1, body);
   // Delay open request if not yet connected.
   if (!is_connected_) {
     pending_messages_.push_back(std::move(message));
@@ -524,12 +523,11 @@ void AndroidUsbDevice::ParseHeader(UsbTransferStatus status,
   if (data_length == 0) {
     task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&AndroidUsbDevice::HandleIncoming, this,
-                                  base::Passed(&message)));
+                                  std::move(message)));
   } else {
     task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&AndroidUsbDevice::ReadBody, this,
-                       base::Passed(&message), data_length, data_check));
+        FROM_HERE, base::BindOnce(&AndroidUsbDevice::ReadBody, this,
+                                  std::move(message), data_length, data_check));
   }
 }
 
@@ -559,9 +557,8 @@ void AndroidUsbDevice::ParseBody(std::unique_ptr<AdbMessage> message,
 
   if (status == UsbTransferStatus::TIMEOUT) {
     task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&AndroidUsbDevice::ReadBody, this,
-                       base::Passed(&message), data_length, data_check));
+        FROM_HERE, base::BindOnce(&AndroidUsbDevice::ReadBody, this,
+                                  std::move(message), data_length, data_check));
     return;
   }
 
@@ -580,7 +577,7 @@ void AndroidUsbDevice::ParseBody(std::unique_ptr<AdbMessage> message,
 
   task_runner_->PostTask(FROM_HERE,
                          base::BindOnce(&AndroidUsbDevice::HandleIncoming, this,
-                                        base::Passed(&message)));
+                                        std::move(message)));
 }
 
 void AndroidUsbDevice::HandleIncoming(std::unique_ptr<AdbMessage> message) {
@@ -591,18 +588,18 @@ void AndroidUsbDevice::HandleIncoming(std::unique_ptr<AdbMessage> message) {
       {
       DCHECK_EQ(message->arg0, static_cast<uint32_t>(AdbMessage::kAuthToken));
         if (signature_sent_) {
-          Queue(base::MakeUnique<AdbMessage>(
+          Queue(std::make_unique<AdbMessage>(
               AdbMessage::kCommandAUTH, AdbMessage::kAuthRSAPublicKey, 0,
               AndroidRSAPublicKey(rsa_key_.get())));
         } else {
           signature_sent_ = true;
           std::string signature = AndroidRSASign(rsa_key_.get(), message->body);
           if (!signature.empty()) {
-            Queue(base::MakeUnique<AdbMessage>(AdbMessage::kCommandAUTH,
+            Queue(std::make_unique<AdbMessage>(AdbMessage::kCommandAUTH,
                                                AdbMessage::kAuthSignature, 0,
                                                signature));
           } else {
-            Queue(base::MakeUnique<AdbMessage>(
+            Queue(std::make_unique<AdbMessage>(
                 AdbMessage::kCommandAUTH, AdbMessage::kAuthRSAPublicKey, 0,
                 AndroidRSAPublicKey(rsa_key_.get())));
           }

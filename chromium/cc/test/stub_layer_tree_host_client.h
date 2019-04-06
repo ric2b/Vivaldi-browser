@@ -35,8 +35,9 @@ class StubLayerTreeHostClient : public LayerTreeHostClient {
   void DidCommitAndDrawFrame() override {}
   void DidReceiveCompositorFrameAck() override {}
   void DidCompletePageScaleAnimation() override {}
-
-  bool IsForSubframe() override;
+  void DidPresentCompositorFrame(
+      uint32_t frame_token,
+      const gfx::PresentationFeedback& feedback) override {}
 };
 
 }  // namespace cc

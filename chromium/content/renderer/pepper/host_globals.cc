@@ -11,6 +11,7 @@
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "content/public/common/content_switches.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/plugin_module.h"
@@ -18,11 +19,11 @@
 #include "ppapi/shared_impl/api_id.h"
 #include "ppapi/shared_impl/id_assignment.h"
 #include "ppapi/shared_impl/proxy_lock.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 
 using ppapi::CheckIdType;
 using ppapi::MakeTypedId;
@@ -190,7 +191,9 @@ void HostGlobals::BroadcastLogWithSource(PP_Module pp_module,
 }
 
 base::TaskRunner* HostGlobals::GetFileTaskRunner() {
-  return RenderThreadImpl::current()->GetFileThreadTaskRunner().get();
+  if (!file_task_runner_)
+    file_task_runner_ = base::CreateTaskRunnerWithTraits({base::MayBlock()});
+  return file_task_runner_.get();
 }
 
 ppapi::MessageLoopShared* HostGlobals::GetCurrentMessageLoop() {

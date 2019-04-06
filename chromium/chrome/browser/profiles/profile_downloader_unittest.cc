@@ -9,7 +9,6 @@
 #include "chrome/browser/profiles/profile_downloader_delegate.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/fake_account_fetcher_service_builder.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
@@ -30,7 +29,8 @@ const std::string kTestHostedDomain = "google.com";
 const std::string kTestFullName = "full_name";
 const std::string kTestGivenName = "given_name";
 const std::string kTestLocale = "locale";
-const std::string kTestPictureURL = "http://www.google.com/";
+const std::string kTestValidPictureURL = "http://www.google.com/";
+const std::string kTestInvalidPictureURL = "invalid_picture_url";
 
 } // namespace
 
@@ -47,17 +47,11 @@ class ProfileDownloaderTest : public testing::Test,
                               &BuildAutoIssuingFakeProfileOAuth2TokenService);
     builder.AddTestingFactory(AccountFetcherServiceFactory::GetInstance(),
                               FakeAccountFetcherServiceBuilder::BuildForTests);
-    builder.AddTestingFactory(ChromeSigninClientFactory::GetInstance(),
-                              signin::BuildTestSigninClient);
-
     profile_ = builder.Build();
     account_tracker_service_ =
         AccountTrackerServiceFactory::GetForProfile(profile_.get());
     account_fetcher_service_ = static_cast<FakeAccountFetcherService*>(
         AccountFetcherServiceFactory::GetForProfile(profile_.get()));
-    signin_client_ = static_cast<TestSigninClient*>(
-        ChromeSigninClientFactory::GetForProfile(profile_.get()));
-    signin_client_->SetURLRequestContext(profile_->GetRequestContext());
     profile_downloader_.reset(new ProfileDownloader(this));
   }
 
@@ -73,22 +67,17 @@ class ProfileDownloaderTest : public testing::Test,
       ProfileDownloader* downloader,
       ProfileDownloaderDelegate::FailureReason reason) override {}
 
-  void SimulateUserInfoSuccess() {
+  void SimulateUserInfoSuccess(const std::string& picture_url) {
     account_fetcher_service_->FakeUserInfoFetchSuccess(
-      account_tracker_service_->PickAccountIdForAccount(kTestGaia, kTestEmail),
-      kTestEmail,
-      kTestGaia,
-      kTestHostedDomain,
-      kTestFullName,
-      kTestGivenName,
-      kTestLocale,
-      kTestPictureURL);
+        account_tracker_service_->PickAccountIdForAccount(kTestGaia,
+                                                          kTestEmail),
+        kTestEmail, kTestGaia, kTestHostedDomain, kTestFullName, kTestGivenName,
+        kTestLocale, picture_url);
   }
 
   AccountTrackerService* account_tracker_service_;
   FakeAccountFetcherService* account_fetcher_service_;
   content::TestBrowserThreadBundle thread_bundle_;
-  TestSigninClient* signin_client_;
   std::unique_ptr<Profile> profile_;
   std::unique_ptr<ProfileDownloader> profile_downloader_;
 };
@@ -96,13 +85,13 @@ class ProfileDownloaderTest : public testing::Test,
 TEST_F(ProfileDownloaderTest, AccountInfoReady) {
   std::string account_id =
       account_tracker_service_->SeedAccountInfo(kTestGaia, kTestEmail);
-  SimulateUserInfoSuccess();
+  SimulateUserInfoSuccess(kTestValidPictureURL);
 
   ASSERT_EQ(ProfileDownloader::PICTURE_FAILED,
             profile_downloader_->GetProfilePictureStatus());
   profile_downloader_->StartForAccount(account_id);
   profile_downloader_->StartFetchingImage();
-  ASSERT_EQ(kTestPictureURL, profile_downloader_->GetProfilePictureURL());
+  ASSERT_EQ(kTestValidPictureURL, profile_downloader_->GetProfilePictureURL());
 }
 
 TEST_F(ProfileDownloaderTest, AccountInfoNotReady) {
@@ -113,6 +102,34 @@ TEST_F(ProfileDownloaderTest, AccountInfoNotReady) {
             profile_downloader_->GetProfilePictureStatus());
   profile_downloader_->StartForAccount(account_id);
   profile_downloader_->StartFetchingImage();
-  SimulateUserInfoSuccess();
-  ASSERT_EQ(kTestPictureURL, profile_downloader_->GetProfilePictureURL());
+  SimulateUserInfoSuccess(kTestValidPictureURL);
+  ASSERT_EQ(kTestValidPictureURL, profile_downloader_->GetProfilePictureURL());
+}
+
+// Regression test for http://crbug.com/854907
+TEST_F(ProfileDownloaderTest, AccountInfoNoPictureDoesNotCrash) {
+  std::string account_id =
+      account_tracker_service_->SeedAccountInfo(kTestGaia, kTestEmail);
+  SimulateUserInfoSuccess(AccountTrackerService::kNoPictureURLFound);
+
+  profile_downloader_->StartForAccount(account_id);
+  profile_downloader_->StartFetchingImage();
+
+  EXPECT_TRUE(profile_downloader_->GetProfilePictureURL().empty());
+  ASSERT_EQ(ProfileDownloader::PICTURE_DEFAULT,
+            profile_downloader_->GetProfilePictureStatus());
+}
+
+// Regression test for http://crbug.com/854907
+TEST_F(ProfileDownloaderTest, AccountInfoInvalidPictureURLDoesNotCrash) {
+  std::string account_id =
+      account_tracker_service_->SeedAccountInfo(kTestGaia, kTestEmail);
+  SimulateUserInfoSuccess(kTestInvalidPictureURL);
+
+  profile_downloader_->StartForAccount(account_id);
+  profile_downloader_->StartFetchingImage();
+
+  EXPECT_TRUE(profile_downloader_->GetProfilePictureURL().empty());
+  ASSERT_EQ(ProfileDownloader::PICTURE_FAILED,
+            profile_downloader_->GetProfilePictureStatus());
 }

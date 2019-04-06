@@ -4,7 +4,6 @@
 
 #include "ash/wm/lock_layout_manager.h"
 
-#include "ash/keyboard/keyboard_observer_register.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/wm/lock_window_state.h"
@@ -20,16 +19,16 @@ LockLayoutManager::LockLayoutManager(aura::Window* window, Shelf* shelf)
     : wm::WmSnapToPixelLayoutManager(),
       window_(window),
       root_window_(window->GetRootWindow()),
-      shelf_observer_(this),
-      keyboard_observer_(this) {
+      shelf_observer_(this) {
   Shell::Get()->AddShellObserver(this);
   root_window_->AddObserver(this);
-  if (keyboard::KeyboardController::GetInstance())
-    keyboard_observer_.Add(keyboard::KeyboardController::GetInstance());
+  keyboard::KeyboardController::Get()->AddObserver(this);
   shelf_observer_.Add(shelf);
 }
 
 LockLayoutManager::~LockLayoutManager() {
+  keyboard::KeyboardController::Get()->RemoveObserver(this);
+
   if (root_window_)
     root_window_->RemoveObserver(this);
 
@@ -85,13 +84,6 @@ void LockLayoutManager::OnWindowBoundsChanged(aura::Window* window,
   }
 }
 
-void LockLayoutManager::OnVirtualKeyboardStateChanged(
-    bool activated,
-    aura::Window* root_window) {
-  UpdateKeyboardObserverFromStateChanged(activated, root_window, root_window_,
-                                         &keyboard_observer_);
-}
-
 void LockLayoutManager::WillChangeVisibilityState(
     ShelfVisibilityState visibility) {
   // This will be called when shelf work area changes.
@@ -106,13 +98,9 @@ void LockLayoutManager::WillChangeVisibilityState(
   AdjustWindowsForWorkAreaChange(&event);
 }
 
-void LockLayoutManager::OnKeyboardWorkspaceOccludedBoundsChanging(
+void LockLayoutManager::OnKeyboardWorkspaceOccludedBoundsChanged(
     const gfx::Rect& new_bounds) {
   OnWindowResized();
-}
-
-void LockLayoutManager::OnKeyboardClosed() {
-  keyboard_observer_.RemoveAll();
 }
 
 void LockLayoutManager::AdjustWindowsForWorkAreaChange(

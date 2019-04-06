@@ -28,16 +28,24 @@ test_data_dirs = [gpu_data_dir,
 test_harness_script = r"""
   var domAutomationController = {};
 
+  domAutomationController._proceed = false;
+
+  domAutomationController._readyForActions = false;
   domAutomationController._succeeded = false;
   domAutomationController._finished = false;
 
   domAutomationController.send = function(msg) {
-    domAutomationController._finished = true;
-
-    if(msg.toLowerCase() == "success") {
-      domAutomationController._succeeded = true;
+    domAutomationController._proceed = true;
+    let lmsg = msg.toLowerCase();
+    if (lmsg == "ready") {
+      domAutomationController._readyForActions = true;
     } else {
-      domAutomationController._succeeded = false;
+      domAutomationController._finished = true;
+      if (lmsg == "success") {
+        domAutomationController._succeeded = true;
+      } else {
+        domAutomationController._succeeded = false;
+      }
     }
   }
 
@@ -121,66 +129,83 @@ class PixelIntegrationTest(
     tab = self.tab
     tab.Navigate(url, script_to_evaluate_on_commit=test_harness_script)
     tab.action_runner.WaitForJavaScriptCondition(
-      'domAutomationController._finished', timeout=300)
-    if not tab.EvaluateJavaScript('domAutomationController._succeeded'):
-      self.fail('page indicated test failure')
-    if not tab.screenshot_supported:
-      self.fail('Browser does not support screenshot capture')
-    screenshot = tab.Screenshot(5)
-    if screenshot is None:
-      self.fail('Could not capture screenshot')
-    dpr = tab.EvaluateJavaScript('window.devicePixelRatio')
-    if page.test_rect:
-      screenshot = image_util.Crop(
-          screenshot, int(page.test_rect[0] * dpr),
-          int(page.test_rect[1] * dpr), int(page.test_rect[2] * dpr),
-          int(page.test_rect[3] * dpr))
-    if page.expected_colors:
-      # Use expected colors instead of ref images for validation.
-      self._ValidateScreenshotSamples(
-          tab, page.name, screenshot, page.expected_colors, dpr)
-      return
-    image_name = self._UrlToImageName(page.name)
-    if self.GetParsedCommandLineOptions().upload_refimg_to_cloud_storage:
-      if self._ConditionallyUploadToCloudStorage(image_name, page, tab,
-                                                 screenshot):
-        # This is the new reference image; there's nothing to compare against.
-        ref_png = screenshot
+      'domAutomationController._proceed', timeout=300)
+    do_page_action = tab.EvaluateJavaScript(
+      'domAutomationController._readyForActions')
+    if do_page_action:
+      self._DoPageAction(tab, page)
+    try:
+      if not tab.EvaluateJavaScript('domAutomationController._succeeded'):
+        self.fail('page indicated test failure')
+      if not tab.screenshot_supported:
+        self.fail('Browser does not support screenshot capture')
+      screenshot = tab.Screenshot(5)
+      if screenshot is None:
+        self.fail('Could not capture screenshot')
+      dpr = tab.EvaluateJavaScript('window.devicePixelRatio')
+      if page.test_rect:
+        screenshot = image_util.Crop(
+            screenshot, int(page.test_rect[0] * dpr),
+            int(page.test_rect[1] * dpr), int(page.test_rect[2] * dpr),
+            int(page.test_rect[3] * dpr))
+      if page.expected_colors:
+        # Use expected colors instead of ref images for validation.
+        self._ValidateScreenshotSamples(
+            tab, page.name, screenshot, page.expected_colors, dpr)
+        return
+      image_name = self._UrlToImageName(page.name)
+      if self.GetParsedCommandLineOptions().upload_refimg_to_cloud_storage:
+        if self._ConditionallyUploadToCloudStorage(image_name, page, tab,
+                                                   screenshot):
+          # This is the new reference image; there's nothing to compare against.
+          ref_png = screenshot
+        else:
+          # There was a preexisting reference image, so we might as well
+          # compare against it.
+          ref_png = self._DownloadFromCloudStorage(image_name, page, tab)
+      elif self.GetParsedCommandLineOptions().\
+          download_refimg_from_cloud_storage:
+        # This bot doesn't have the ability to properly generate a
+        # reference image, so download it from cloud storage.
+        try:
+          ref_png = self._DownloadFromCloudStorage(image_name, page, tab)
+        except cloud_storage.NotFoundError:
+          # There is no reference image yet in cloud storage. This
+          # happens when the revision of the test is incremented or when
+          # a new test is added, because the trybots are not allowed to
+          # produce reference images, only the bots on the main
+          # waterfalls. Report this as a failure so the developer has to
+          # take action by explicitly suppressing the failure and
+          # removing the suppression once the reference images have been
+          # generated. Otherwise silent failures could happen for long
+          # periods of time.
+          self.fail('Could not find image %s in cloud storage' % image_name)
       else:
-        # There was a preexisting reference image, so we might as well
-        # compare against it.
-        ref_png = self._DownloadFromCloudStorage(image_name, page, tab)
-    elif self.GetParsedCommandLineOptions().download_refimg_from_cloud_storage:
-      # This bot doesn't have the ability to properly generate a
-      # reference image, so download it from cloud storage.
-      try:
-        ref_png = self._DownloadFromCloudStorage(image_name, page, tab)
-      except cloud_storage.NotFoundError:
-        # There is no reference image yet in cloud storage. This
-        # happens when the revision of the test is incremented or when
-        # a new test is added, because the trybots are not allowed to
-        # produce reference images, only the bots on the main
-        # waterfalls. Report this as a failure so the developer has to
-        # take action by explicitly suppressing the failure and
-        # removing the suppression once the reference images have been
-        # generated. Otherwise silent failures could happen for long
-        # periods of time.
-        self.fail('Could not find image %s in cloud storage' % image_name)
-    else:
-      # Legacy path using on-disk results.
-      ref_png = self._GetReferenceImage(
-        self.GetParsedCommandLineOptions().reference_dir,
-        image_name, page.revision, screenshot)
+        # Legacy path using on-disk results.
+        ref_png = self._GetReferenceImage(
+          self.GetParsedCommandLineOptions().reference_dir,
+          image_name, page.revision, screenshot)
 
-    # Test new snapshot against existing reference image
-    if not image_util.AreEqual(ref_png, screenshot, tolerance=page.tolerance):
-      if self.GetParsedCommandLineOptions().test_machine_name:
-        self._UploadErrorImagesToCloudStorage(image_name, screenshot, ref_png)
-      else:
-        self._WriteErrorImages(
-          self.GetParsedCommandLineOptions().generated_dir, image_name,
-          screenshot, ref_png)
-      self.fail('Reference image did not match captured screen')
+      # Test new snapshot against existing reference image
+      if not image_util.AreEqual(ref_png, screenshot, tolerance=page.tolerance):
+        if self.GetParsedCommandLineOptions().test_machine_name:
+          self._UploadErrorImagesToCloudStorage(image_name, screenshot, ref_png)
+        else:
+          self._WriteErrorImages(
+            self.GetParsedCommandLineOptions().generated_dir, image_name,
+            screenshot, ref_png)
+        self.fail('Reference image did not match captured screen')
+    finally:
+      if do_page_action:
+        # Assume that page actions might have killed the GPU process.
+        self._RestartBrowser('Must restart after page actions')
+
+  def _DoPageAction(self, tab, page):
+    getattr(self, '_' + page.optional_action)(tab, page)
+    # Now that we've done the page's specific action, wait for it to
+    # report completion.
+    tab.action_runner.WaitForJavaScriptCondition(
+      'domAutomationController._finished', timeout=300)
 
   def _DeleteOldReferenceImages(self, ref_image_path, cur_revision):
     if not cur_revision:
@@ -217,6 +242,24 @@ class PixelIntegrationTest(
 
     self._WriteImage(image_path, screenshot)
     return screenshot
+
+  #
+  # Optional actions pages can take.
+  # These are specified as methods taking the tab and the page as
+  # arguments.
+  #
+  def _CrashGpuProcess(self, tab, page):
+    # Crash the GPU process.
+    gpucrash_tab = tab.browser.tabs.New()
+    # To access these debug URLs from Telemetry, they have to be
+    # written using the chrome:// scheme.
+    # The try/except is a workaround for crbug.com/368107.
+    try:
+      gpucrash_tab.Navigate('chrome://gpucrash')
+    except Exception:
+      print 'Tab crashed while navigating to chrome://gpucrash'
+    # Activate the original tab and wait for completion.
+    tab.Activate()
 
 def load_tests(loader, tests, pattern):
   del loader, tests, pattern  # Unused.

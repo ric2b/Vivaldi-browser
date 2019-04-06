@@ -7,7 +7,6 @@
 #import <QuartzCore/QuartzCore.h>
 #include <stdint.h>
 
-#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
@@ -18,6 +17,7 @@
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
@@ -26,11 +26,10 @@
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_model.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_tools_cell.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
@@ -115,6 +114,8 @@ NS_INLINE void AnimateInViews(NSArray* views,
   // Weak pointer to ReadingListMenuNotifier, used to set the starting values
   // for the reading list badge.
   __weak ReadingListMenuNotifier* _readingListMenuNotifier;
+  // YES if NSLayoutConstraits were added.
+  BOOL _addedConstraints;
 }
 
 // Determines if the reading list should display a new feature badge. Defaults
@@ -362,7 +363,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
   _menuView = [[ToolsMenuCollectionView alloc] initWithFrame:[rootView bounds]
                                         collectionViewLayout:menuItemsLayout];
   [_menuView setAccessibilityLabel:l10n_util::GetNSString(IDS_IOS_TOOLS_MENU)];
-  [_menuView setAccessibilityIdentifier:kToolsMenuTableViewId];
+  [_menuView setAccessibilityIdentifier:kPopupMenuToolsMenuTableViewId];
   [_menuView setTranslatesAutoresizingMaskIntoConstraints:NO];
   [_menuView setBackgroundColor:[UIColor whiteColor]];
   [_menuView setDataSource:self];
@@ -402,12 +403,14 @@ NS_INLINE void AnimateInViews(NSArray* views,
 }
 
 - (void)updateViewConstraints {
+  if (!_addedConstraints) {
+    NSDictionary* view = @{@"menu" : _menuView};
+    NSArray* constraints =
+        @[ @"V:|-(0)-[menu]-(0)-|", @"H:|-(0)-[menu]-(0)-|" ];
+    ApplyVisualConstraints(constraints, view);
+    _addedConstraints = YES;
+  }
   [super updateViewConstraints];
-
-  UIView* rootView = [self view];
-  NSDictionary* view = @{ @"menu" : _menuView };
-  NSArray* constraints = @[ @"V:|-(0)-[menu]-(0)-|", @"H:|-(0)-[menu]-(0)-|" ];
-  ApplyVisualConstraints(constraints, view, rootView);
 }
 
 #pragma mark - Content Animation Stuff

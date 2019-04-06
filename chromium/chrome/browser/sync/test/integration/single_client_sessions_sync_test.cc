@@ -4,7 +4,8 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/sync/sessions/sync_sessions_router_tab_helper.h"
@@ -24,7 +25,10 @@
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync/test/fake_server/sessions_hierarchy.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/mojo/window_open_disposition.mojom.h"
+
+namespace {
 
 using base::HistogramBase;
 using base::HistogramSamples;
@@ -47,8 +51,6 @@ using sessions_helper::SyncedSessionVector;
 using sessions_helper::WindowsMatch;
 using typed_urls_helper::GetUrlFromClient;
 
-namespace {
-
 static const char* kURL1 = "data:text/html,<html><title>Test</title></html>";
 static const char* kURL2 = "data:text/html,<html><title>Test2</title></html>";
 static const char* kURL3 = "data:text/html,<html><title>Test3</title></html>";
@@ -68,9 +70,23 @@ void ExpectUniqueSampleGE(const HistogramTester& histogram_tester,
   EXPECT_EQ(sample_count, samples->TotalCount());
 }
 
-}  // namespace
+// Class that enables or disables USS based on test parameter. Must be the first
+// base class of the test fixture.
+class UssSwitchToggler : public testing::WithParamInterface<bool> {
+ public:
+  UssSwitchToggler() {
+    if (GetParam()) {
+      override_features_.InitAndEnableFeature(switches::kSyncUSSSessions);
+    } else {
+      override_features_.InitAndDisableFeature(switches::kSyncUSSSessions);
+    }
+  }
 
-class SingleClientSessionsSyncTest : public SyncTest {
+ private:
+  base::test::ScopedFeatureList override_features_;
+};
+
+class SingleClientSessionsSyncTest : public UssSwitchToggler, public SyncTest {
  public:
   SingleClientSessionsSyncTest() : SyncTest(SINGLE_CLIENT) {}
   ~SingleClientSessionsSyncTest() override {}
@@ -129,7 +145,16 @@ class SingleClientSessionsSyncTest : public SyncTest {
   DISALLOW_COPY_AND_ASSIGN(SingleClientSessionsSyncTest);
 };
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, Sanity) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest,
+                       RequireProxyTabsForUiDelegate) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  ASSERT_TRUE(CheckInitialState(0));
+  EXPECT_NE(nullptr, GetClient(0)->service()->GetOpenTabsUIDelegate());
+  ASSERT_TRUE(GetClient(0)->DisableSyncForDatatype(syncer::PROXY_TABS));
+  EXPECT_EQ(nullptr, GetClient(0)->service()->GetOpenTabsUIDelegate());
+}
+
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, Sanity) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -154,13 +179,13 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, Sanity) {
   WaitForURLOnServer(url);
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, NoSessions) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, NoSessions) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   WaitForHierarchyOnServer(SessionsHierarchy());
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, ChromeHistory) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, ChromeHistory) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -169,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, ChromeHistory) {
   WaitForURLOnServer(GURL(chrome::kChromeUIHistoryURL));
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, TimestampMatchesHistory) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, TimestampMatchesHistory) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -191,8 +216,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, TimestampMatchesHistory) {
         history::URLRow virtual_row;
         ASSERT_TRUE(GetUrlFromClient(0, it3->virtual_url(), &virtual_row));
         const base::Time history_timestamp = virtual_row.last_visit();
-
-        ASSERT_EQ(timestamp, history_timestamp);
+        // Propagated timestamps have millisecond-level resolution, so we avoid
+        // exact comparison here (i.e. usecs might differ).
+        ASSERT_EQ(0, (timestamp - history_timestamp).InMilliseconds());
         ++found_navigations;
       }
     }
@@ -200,7 +226,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, TimestampMatchesHistory) {
   ASSERT_EQ(1, found_navigations);
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, ResponseCodeIsPreserved) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, ResponseCodeIsPreserved) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -224,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, ResponseCodeIsPreserved) {
   ASSERT_EQ(1, found_navigations);
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, FragmentURLNavigation) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, FragmentURLNavigation) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(CheckInitialState(0));
 
@@ -237,7 +263,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, FragmentURLNavigation) {
   WaitForURLOnServer(fragment_url);
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest,
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest,
                        NavigationChainForwardBack) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(CheckInitialState(0));
@@ -261,7 +287,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest,
   ExpectNavigationChain({first_url, second_url});
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest,
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest,
                        NavigationChainAlteredDestructively) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(CheckInitialState(0));
@@ -293,7 +319,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest,
   ExpectNavigationChain({base_url, second_url});
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, OpenNewTab) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, OpenNewTab) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(CheckInitialState(0));
 
@@ -309,7 +335,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, OpenNewTab) {
       SessionsHierarchy({{base_url.spec(), new_tab_url.spec()}}));
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, OpenNewWindow) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, OpenNewWindow) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(CheckInitialState(0));
 
@@ -326,7 +352,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, OpenNewWindow) {
       SessionsHierarchy({{base_url.spec()}, {new_window_url.spec()}}));
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, TabMovedToOtherWindow) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, TabMovedToOtherWindow) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(CheckInitialState(0));
 
@@ -350,7 +376,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, TabMovedToOtherWindow) {
       {{base_url.spec()}, {new_window_url.spec(), moved_tab_url.spec()}}));
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, SourceTabIDSet) {
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest, SourceTabIDSet) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(CheckInitialState(0));
 
@@ -370,8 +396,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, SourceTabIDSet) {
   content::WebContents* new_tab_contents =
       GetBrowser(0)->tab_strip_model()->GetWebContentsAt(1);
 
-  SessionID::id_type source_tab_id =
-      SessionTabHelper::IdForTab(original_tab_contents);
+  SessionID source_tab_id = SessionTabHelper::IdForTab(original_tab_contents);
   sync_sessions::SyncSessionsRouterTabHelper* new_tab_helper =
       sync_sessions::SyncSessionsRouterTabHelper::FromWebContents(
           new_tab_contents);
@@ -387,7 +412,7 @@ void DumpSessionsOnServer(fake_server::FakeServer* fake_server) {
 
 // TODO(pavely): This test is flaky. Report failures in
 // https://crbug.com/789129.
-IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest,
+IN_PROC_BROWSER_TEST_P(SingleClientSessionsSyncTest,
                        DISABLED_CookieJarMismatch) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
@@ -428,7 +453,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest,
   // want to block here and not create the HistogramTester below until we know
   // the cookie jar stats have been updated.
   UpdateCookieJarAccountsAndWait(
-      {GetClient(0)->service()->signin()->GetAuthenticatedAccountId()}, false);
+      {GetClient(0)->service()->GetAuthenticatedAccountInfo().account_id},
+      false);
 
   {
     HistogramTester histogram_tester;
@@ -452,3 +478,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest,
     histogram_tester.ExpectTotalCount("Sync.CookieJarEmptyOnMismatch", 0);
   }
 }
+
+INSTANTIATE_TEST_CASE_P(USS,
+                        SingleClientSessionsSyncTest,
+                        ::testing::Values(false, true));
+
+}  // namespace

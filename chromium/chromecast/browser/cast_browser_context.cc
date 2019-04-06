@@ -38,11 +38,6 @@ class CastBrowserContext::CastResourceContext :
   ~CastResourceContext() override {}
 
   // ResourceContext implementation:
-  net::HostResolver* GetHostResolver() override {
-    return url_request_context_factory_->GetMainGetter()->
-        GetURLRequestContext()->host_resolver();
-  }
-
   net::URLRequestContext* GetRequestContext() override {
     return url_request_context_factory_->GetMainGetter()->
         GetURLRequestContext();
@@ -62,6 +57,7 @@ CastBrowserContext::CastBrowserContext(
 }
 
 CastBrowserContext::~CastBrowserContext() {
+  BrowserContext::NotifyWillBeDestroyed(this);
   ShutdownStoragePartitions();
   content::BrowserThread::DeleteSoon(
       content::BrowserThread::IO,
@@ -71,7 +67,7 @@ CastBrowserContext::~CastBrowserContext() {
 
 void CastBrowserContext::InitWhileIOAllowed() {
 #if defined(OS_ANDROID)
-  CHECK(PathService::Get(base::DIR_ANDROID_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_ANDROID_APP_DATA, &path_));
   path_ = path_.Append(FILE_PATH_LITERAL("cast_shell"));
 
   if (!base::PathExists(path_))
@@ -81,7 +77,7 @@ void CastBrowserContext::InitWhileIOAllowed() {
   // incognito mode.  This means that all of the persistent
   // data (currently only cookies and local storage) will be
   // shared in a single location as defined here.
-  CHECK(PathService::Get(DIR_CAST_HOME, &path_));
+  CHECK(base::PathService::Get(DIR_CAST_HOME, &path_));
 #endif  // defined(OS_ANDROID)
   BrowserContext::Initialize(this, path_);
 }
@@ -136,7 +132,8 @@ content::SSLHostStateDelegate* CastBrowserContext::GetSSLHostStateDelegate() {
   return nullptr;
 }
 
-content::PermissionManager* CastBrowserContext::GetPermissionManager() {
+content::PermissionControllerDelegate*
+CastBrowserContext::GetPermissionControllerDelegate() {
   if (!permission_manager_.get())
     permission_manager_.reset(new CastPermissionManager());
   return permission_manager_.get();

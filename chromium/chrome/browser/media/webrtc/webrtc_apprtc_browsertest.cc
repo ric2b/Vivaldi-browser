@@ -35,12 +35,9 @@ const char kIsApprtcCallUpJavascript[] =
     "    remoteVideo.classList.contains('active');"
     "window.domAutomationController.send(remoteVideoActive.toString());";
 
-
 // WebRTC-AppRTC integration test. Requires a real webcam and microphone
 // on the running system. This test is not meant to run in the main browser
-// test suite since normal tester machines do not have webcams. Chrome will use
-// its fake camera for both tests, but Firefox will use the real webcam in the
-// Firefox interop test. Thus, this test must on a machine with a real webcam.
+// test suite since normal tester machines do not have webcams.
 //
 // This test will bring up a AppRTC instance on localhost and verify that the
 // call gets up when connecting to the same room from two tabs in a browser.
@@ -68,16 +65,14 @@ class WebRtcApprtcBrowserTest : public WebRtcTestBase {
       dev_appserver_.Terminate(0, false);
     if (collider_server_.IsValid())
       collider_server_.Terminate(0, false);
-    if (firefox_.IsValid())
-      firefox_.Terminate(0, false);
     LOG(INFO) << "Exiting TearDown";
   }
 
  protected:
   bool LaunchApprtcInstanceOnLocalhost(const std::string& port) {
     base::FilePath appengine_dev_appserver =
-        GetSourceDir().Append(
-            FILE_PATH_LITERAL("../google_appengine/dev_appserver.py"));
+        GetSourceDir().Append(FILE_PATH_LITERAL(
+            "out/apprtc/temp/google-cloud-sdk/bin/dev_appserver.py"));
     if (!base::PathExists(appengine_dev_appserver)) {
       LOG(ERROR) << "Missing appengine sdk at " <<
           appengine_dev_appserver.value() << ".\n" <<
@@ -93,10 +88,9 @@ class WebRtcApprtcBrowserTest : public WebRtcTestBase {
       return false;
     }
     if (!base::PathExists(apprtc_dir.Append(FILE_PATH_LITERAL("app.yaml")))) {
-      LOG(ERROR) << "The AppRTC AppEngine app at " <<
-          apprtc_dir.value() << " appears to have not been built." <<
-          "This should have been done by webrtc.DEPS scripts which invoke " <<
-          "'grunt build' on AppRTC.";
+      LOG(ERROR) << "The AppRTC AppEngine app at " << apprtc_dir.value()
+                 << " appears to have not been built."
+                 << "This should have been done by webrtc.DEPS scripts.";
       return false;
     }
 
@@ -121,10 +115,10 @@ class WebRtcApprtcBrowserTest : public WebRtcTestBase {
     // runhooks stage when webrtc.DEPS/build_apprtc_collider.py runs.
 #if defined(OS_WIN)
     base::FilePath collider_server = GetSourceDir().Append(
-        FILE_PATH_LITERAL("out/go-workspace/bin/collidermain.exe"));
+        FILE_PATH_LITERAL("out/collider/collidermain.exe"));
 #else
-    base::FilePath collider_server = GetSourceDir().Append(
-        FILE_PATH_LITERAL("out/go-workspace/bin/collidermain"));
+    base::FilePath collider_server =
+        GetSourceDir().Append(FILE_PATH_LITERAL("out/collider/collidermain"));
 #endif
     if (!base::PathExists(collider_server)) {
       LOG(ERROR) << "Missing Collider server binary at " <<
@@ -205,40 +199,12 @@ class WebRtcApprtcBrowserTest : public WebRtcTestBase {
 
   base::FilePath GetSourceDir() {
     base::FilePath source_dir;
-    PathService::Get(base::DIR_SOURCE_ROOT, &source_dir);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &source_dir);
     return source_dir;
-  }
-
-  bool LaunchFirefoxWithUrl(const GURL& url) {
-    base::FilePath firefox_binary =
-        GetSourceDir().Append(
-            FILE_PATH_LITERAL("../firefox-nightly/firefox/firefox"));
-    if (!base::PathExists(firefox_binary)) {
-      LOG(ERROR) << "Missing firefox binary at " <<
-          firefox_binary.value() << ".\n" << test::kAdviseOnGclientSolution;
-      return false;
-    }
-    base::FilePath firefox_launcher =
-        GetSourceDir().Append(
-            FILE_PATH_LITERAL("../webrtc.DEPS/run_firefox_webrtc.py"));
-    if (!base::PathExists(firefox_launcher)) {
-      LOG(ERROR) << "Missing firefox launcher at " <<
-          firefox_launcher.value() << ".\n" << test::kAdviseOnGclientSolution;
-      return false;
-    }
-
-    base::CommandLine command_line(firefox_launcher);
-    command_line.AppendSwitchPath("--binary", firefox_binary);
-    command_line.AppendSwitchASCII("--webpage", url.spec());
-
-    DVLOG(1) << "Running " << command_line.GetCommandLineString();
-    firefox_ = base::LaunchProcess(command_line, base::LaunchOptions());
-    return firefox_.IsValid();
   }
 
  private:
   base::Process dev_appserver_;
-  base::Process firefox_;
   base::Process collider_server_;
 };
 
@@ -288,42 +254,4 @@ IN_PROC_BROWSER_TEST_F(WebRtcApprtcBrowserTest, MANUAL_WorksOnApprtc) {
 
   chrome::CloseWebContents(browser(), left_tab, false);
   chrome::CloseWebContents(browser(), right_tab, false);
-}
-
-#if defined(OS_LINUX)
-// Disabled due to failure, see http://crbug.com/751211.
-#define MAYBE_MANUAL_FirefoxApprtcInteropTest \
-  DISABLED_MANUAL_FirefoxApprtcInteropTest
-#else
-// Not implemented yet on Windows and Mac.
-#define MAYBE_MANUAL_FirefoxApprtcInteropTest \
-  DISABLED_MANUAL_FirefoxApprtcInteropTest
-#endif
-
-IN_PROC_BROWSER_TEST_F(WebRtcApprtcBrowserTest,
-                       MAYBE_MANUAL_FirefoxApprtcInteropTest) {
-  DetectErrorsInJavaScript();
-  ASSERT_TRUE(LaunchApprtcInstanceOnLocalhost("9999"));
-  ASSERT_TRUE(LaunchColliderOnLocalHost("http://localhost:9999", "8089"));
-  while (!LocalApprtcInstanceIsUp())
-    DVLOG(1) << "Waiting for AppRTC to come up...";
-
-  GURL room_url = GURL("http://localhost:9999/r/some_room"
-                       "?wshpp=localhost:8089&wstls=false"
-                       "&firefox_fake_device=1");
-  chrome::AddTabAt(browser(), GURL(), -1, true);
-  content::WebContents* chrome_tab =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  PermissionRequestManager::FromWebContents(chrome_tab)
-      ->set_auto_response_for_test(PermissionRequestManager::ACCEPT_ALL);
-  InfoBarResponder infobar_responder(
-      InfoBarService::FromWebContents(chrome_tab), InfoBarResponder::ACCEPT);
-  ui_test_utils::NavigateToURL(browser(), room_url);
-
-  ASSERT_TRUE(LaunchFirefoxWithUrl(room_url));
-
-  ASSERT_TRUE(WaitForCallToComeUp(chrome_tab));
-
-  // Ensure Firefox manages to send video our way.
-  ASSERT_TRUE(DetectRemoteVideoPlaying(chrome_tab));
 }

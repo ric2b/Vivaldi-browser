@@ -12,8 +12,9 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
 #include "ash/wm/workspace_controller_test_api.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -76,8 +77,7 @@ class WindowPropertyObserver : public aura::WindowObserver {
   ~WindowPropertyObserver() override { window_->RemoveObserver(this); }
 
   bool DidPropertyChange(const void* property) const {
-    return std::find(properties_changed_.begin(), properties_changed_.end(),
-                     property) != properties_changed_.end();
+    return base::ContainsValue(properties_changed_, property);
   }
 
  private:

@@ -22,8 +22,6 @@
 
 namespace {
 
-const base::FilePath* g_override_versioned_directory = NULL;
-
 // Return a retained (NOT autoreleased) NSBundle* as the internal
 // implementation of chrome::OuterAppBundle(), which should be the only
 // caller.
@@ -98,7 +96,7 @@ std::string ProductDirName() {
 bool GetDefaultUserDataDirectoryForProduct(const std::string& product_dir,
                                            base::FilePath* result) {
   bool success = false;
-  if (result && PathService::Get(base::DIR_APP_DATA, result)) {
+  if (result && base::PathService::Get(base::DIR_APP_DATA, result)) {
     *result = result->Append(product_dir);
     success = true;
   }
@@ -129,10 +127,10 @@ void GetUserCacheDirectory(const base::FilePath& profile_dir,
   *result = profile_dir;
 
   base::FilePath app_data_dir;
-  if (!PathService::Get(base::DIR_APP_DATA, &app_data_dir))
+  if (!base::PathService::Get(base::DIR_APP_DATA, &app_data_dir))
     return;
   base::FilePath cache_dir;
-  if (!PathService::Get(base::DIR_CACHE, &cache_dir))
+  if (!base::PathService::Get(base::DIR_CACHE, &cache_dir))
     return;
   if (!app_data_dir.AppendRelativePath(profile_dir, &cache_dir))
     return;
@@ -157,12 +155,9 @@ bool GetUserVideosDirectory(base::FilePath* result) {
 }
 
 base::FilePath GetVersionedDirectory() {
-  if (g_override_versioned_directory)
-    return *g_override_versioned_directory;
-
   // Start out with the path to the running executable.
   base::FilePath path;
-  PathService::Get(base::FILE_EXE, &path);
+  base::PathService::Get(base::FILE_EXE, &path);
 
   // One step up to MacOS, another to Contents.
   path = path.DirName().DirName();
@@ -188,13 +183,6 @@ base::FilePath GetVersionedDirectory() {
   }
 
   return path;
-}
-
-void SetOverrideVersionedDirectory(const base::FilePath* path) {
-  if (path != g_override_versioned_directory) {
-    delete g_override_versioned_directory;
-    g_override_versioned_directory = path;
-  }
 }
 
 base::FilePath GetFrameworkBundlePath() {

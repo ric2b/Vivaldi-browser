@@ -22,12 +22,10 @@
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "storage/browser/fileapi/watcher_manager.h"
-#include "storage/common/fileapi/directory_entry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 using ChangeType = arc::ArcDocumentsProviderRoot::ChangeType;
-using storage::DirectoryEntry;
 using Document = arc::FakeFileSystemInstance::Document;
 using EntryList = storage::AsyncFileUtil::EntryList;
 
@@ -170,7 +168,7 @@ class ArcDocumentsProviderRootTest : public testing::Test {
 TEST_F(ArcDocumentsProviderRootTest, GetFileInfo) {
   base::RunLoop run_loop;
   root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dir/photo.jpg")),
-                     base::Bind(
+                     base::BindOnce(
                          [](base::RunLoop* run_loop, base::File::Error error,
                             const base::File::Info& info) {
                            run_loop->Quit();
@@ -184,7 +182,7 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfo) {
 TEST_F(ArcDocumentsProviderRootTest, GetFileInfoDirectory) {
   base::RunLoop run_loop;
   root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dir")),
-                     base::Bind(
+                     base::BindOnce(
                          [](base::RunLoop* run_loop, base::File::Error error,
                             const base::File::Info& info) {
                            run_loop->Quit();
@@ -198,7 +196,7 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfoDirectory) {
 TEST_F(ArcDocumentsProviderRootTest, GetFileInfoRoot) {
   base::RunLoop run_loop;
   root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("")),
-                     base::Bind(
+                     base::BindOnce(
                          [](base::RunLoop* run_loop, base::File::Error error,
                             const base::File::Info& info) {
                            run_loop->Quit();
@@ -212,7 +210,7 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfoRoot) {
 TEST_F(ArcDocumentsProviderRootTest, GetFileInfoNoSuchFile) {
   base::RunLoop run_loop;
   root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dir/missing.jpg")),
-                     base::Bind(
+                     base::BindOnce(
                          [](base::RunLoop* run_loop, base::File::Error error,
                             const base::File::Info& info) {
                            run_loop->Quit();
@@ -227,7 +225,7 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfoDups) {
   // "dup (2).mp4" should map to the 3rd instance of "dup.mp4" regardless of the
   // order returned from FileSystemInstance.
   root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dups/dup (2).mp4")),
-                     base::Bind(
+                     base::BindOnce(
                          [](base::RunLoop* run_loop, base::File::Error error,
                             const base::File::Info& info) {
                            run_loop->Quit();
@@ -243,9 +241,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfoWithCache) {
     base::RunLoop run_loop;
     root_->GetFileInfo(
         base::FilePath(FILE_PATH_LITERAL("dir/photo.jpg")),
-        base::Bind([](base::RunLoop* run_loop, base::File::Error error,
-                      const base::File::Info& info) { run_loop->Quit(); },
-                   &run_loop));
+        base::BindOnce([](base::RunLoop* run_loop, base::File::Error error,
+                          const base::File::Info& info) { run_loop->Quit(); },
+                       &run_loop));
     run_loop.Run();
   }
 
@@ -255,9 +253,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfoWithCache) {
     base::RunLoop run_loop;
     root_->GetFileInfo(
         base::FilePath(FILE_PATH_LITERAL("dir/photo.jpg")),
-        base::Bind([](base::RunLoop* run_loop, base::File::Error error,
-                      const base::File::Info& info) { run_loop->Quit(); },
-                   &run_loop));
+        base::BindOnce([](base::RunLoop* run_loop, base::File::Error error,
+                          const base::File::Info& info) { run_loop->Quit(); },
+                       &run_loop));
     run_loop.Run();
   }
 
@@ -273,9 +271,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfoWithCacheExpired) {
     base::RunLoop run_loop;
     root_->GetFileInfo(
         base::FilePath(FILE_PATH_LITERAL("dir/photo.jpg")),
-        base::Bind([](base::RunLoop* run_loop, base::File::Error error,
-                      const base::File::Info& info) { run_loop->Quit(); },
-                   &run_loop));
+        base::BindOnce([](base::RunLoop* run_loop, base::File::Error error,
+                          const base::File::Info& info) { run_loop->Quit(); },
+                       &run_loop));
     run_loop.Run();
   }
 
@@ -288,9 +286,9 @@ TEST_F(ArcDocumentsProviderRootTest, GetFileInfoWithCacheExpired) {
     base::RunLoop run_loop;
     root_->GetFileInfo(
         base::FilePath(FILE_PATH_LITERAL("dir/photo.jpg")),
-        base::Bind([](base::RunLoop* run_loop, base::File::Error error,
-                      const base::File::Info& info) { run_loop->Quit(); },
-                   &run_loop));
+        base::BindOnce([](base::RunLoop* run_loop, base::File::Error error,
+                          const base::File::Info& info) { run_loop->Quit(); },
+                       &run_loop));
     run_loop.Run();
   }
 
@@ -303,7 +301,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectory) {
   base::RunLoop run_loop;
   root_->ReadDirectory(
       base::FilePath(FILE_PATH_LITERAL("dir")),
-      base::Bind(
+      base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
              std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
             run_loop->Quit();
@@ -326,7 +324,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryRoot) {
   base::RunLoop run_loop;
   root_->ReadDirectory(
       base::FilePath(FILE_PATH_LITERAL("")),
-      base::Bind(
+      base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
              std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
             run_loop->Quit();
@@ -349,7 +347,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryNoSuchDirectory) {
   base::RunLoop run_loop;
   root_->ReadDirectory(
       base::FilePath(FILE_PATH_LITERAL("missing")),
-      base::Bind(
+      base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
              std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
             run_loop->Quit();
@@ -364,7 +362,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryDups) {
   base::RunLoop run_loop;
   root_->ReadDirectory(
       base::FilePath(FILE_PATH_LITERAL("dups")),
-      base::Bind(
+      base::BindOnce(
           [](base::RunLoop* run_loop, base::File::Error error,
              std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
             run_loop->Quit();
@@ -397,7 +395,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryWithCache) {
     base::RunLoop run_loop;
     root_->ReadDirectory(
         base::FilePath(FILE_PATH_LITERAL("dir")),
-        base::Bind(
+        base::BindOnce(
             [](base::RunLoop* run_loop, base::File::Error error,
                std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
               run_loop->Quit();
@@ -412,7 +410,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryWithCache) {
     base::RunLoop run_loop;
     root_->ReadDirectory(
         base::FilePath(FILE_PATH_LITERAL("dir")),
-        base::Bind(
+        base::BindOnce(
             [](base::RunLoop* run_loop, base::File::Error error,
                std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
               run_loop->Quit();
@@ -433,7 +431,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryWithCacheExpired) {
     base::RunLoop run_loop;
     root_->ReadDirectory(
         base::FilePath(FILE_PATH_LITERAL("dir")),
-        base::Bind(
+        base::BindOnce(
             [](base::RunLoop* run_loop, base::File::Error error,
                std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
               run_loop->Quit();
@@ -451,7 +449,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryWithCacheExpired) {
     base::RunLoop run_loop;
     root_->ReadDirectory(
         base::FilePath(FILE_PATH_LITERAL("dir")),
-        base::Bind(
+        base::BindOnce(
             [](base::RunLoop* run_loop, base::File::Error error,
                std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
               run_loop->Quit();
@@ -473,7 +471,7 @@ TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryPendingCallbacks) {
   for (int i = 0; i < 3; ++i) {
     root_->ReadDirectory(
         base::FilePath(FILE_PATH_LITERAL("dir")),
-        base::Bind(
+        base::BindOnce(
             [](int* num_callbacks, base::File::Error error,
                std::vector<ArcDocumentsProviderRoot::ThinFileInfo> file_list) {
               ++*num_callbacks;

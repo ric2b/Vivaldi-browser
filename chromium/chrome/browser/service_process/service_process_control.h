@@ -33,9 +33,7 @@ class CommandLine;
 }
 
 namespace mojo {
-namespace edk {
-class PeerConnection;
-}
+class IsolatedConnection;
 }
 
 // A ServiceProcessControl works as a portal between the service process and
@@ -87,8 +85,8 @@ class ServiceProcessControl : public UpgradeObserver {
   // Note that if we are already connected to service process then
   // |success_task| can be invoked in the context of the Launch call.
   // Virtual for testing.
-  virtual void Launch(const base::Closure& success_task,
-                      const base::Closure& failure_task);
+  virtual void Launch(base::OnceClosure success_task,
+                      base::OnceClosure failure_task);
 
   // Disconnect the IPC channel from the service process.
   // Virtual for testing.
@@ -155,7 +153,7 @@ class ServiceProcessControl : public UpgradeObserver {
 
   friend struct base::DefaultSingletonTraits<ServiceProcessControl>;
 
-  typedef std::vector<base::Closure> TaskList;
+  using TaskList = std::vector<base::OnceClosure>;
 
   void OnChannelConnected();
   void OnChannelError();
@@ -176,14 +174,14 @@ class ServiceProcessControl : public UpgradeObserver {
 
   // Called when ConnectInternal's async work is done.
   void OnPeerConnectionComplete(
-      std::unique_ptr<mojo::edk::PeerConnection> connection);
+      std::unique_ptr<mojo::IsolatedConnection> connection);
 
   // Split out for testing.
   void SetMojoHandle(service_manager::mojom::InterfaceProviderPtr handle);
 
   static void RunAllTasksHelper(TaskList* task_list);
 
-  std::unique_ptr<mojo::edk::PeerConnection> peer_connection_;
+  std::unique_ptr<mojo::IsolatedConnection> mojo_connection_;
 
   service_manager::InterfaceProvider remote_interfaces_;
   chrome::mojom::ServiceProcessPtr service_process_;

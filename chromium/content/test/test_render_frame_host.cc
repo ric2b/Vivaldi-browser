@@ -16,10 +16,10 @@
 #include "content/browser/frame_host/navigator_impl.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/associated_interface_provider_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/public/browser/navigation_throttle.h"
-#include "content/public/browser/stream_handle.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
@@ -30,10 +30,10 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
-#include "third_party/WebKit/common/frame_policy.h"
-#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
-#include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
-#include "third_party/WebKit/public/web/WebTreeScopeType.h"
+#include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
+#include "third_party/blink/public/platform/web_mixed_content_context_type.h"
+#include "third_party/blink/public/web/web_tree_scope_type.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -49,46 +49,6 @@ void TestRenderFrameHostCreationObserver::RenderFrameCreated(
     RenderFrameHost* render_frame_host) {
   last_created_frame_ = render_frame_host;
 }
-
-class TestRenderFrameHost::NavigationInterceptor
-    : public mojom::FrameNavigationControl {
- public:
-  explicit NavigationInterceptor(TestRenderFrameHost* frame_host)
-      : frame_host_(frame_host) {}
-  ~NavigationInterceptor() override = default;
-
-  // mojom::FrameNavigationControl:
-  void CommitNavigation(
-      const network::ResourceResponseHead& head,
-      const GURL& body_url,
-      const CommonNavigationParams& common_params,
-      const RequestNavigationParams& request_params,
-      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
-      base::Optional<URLLoaderFactoryBundle> subresource_loader_factories,
-      mojom::ControllerServiceWorkerInfoPtr controller_service_worker,
-      const base::UnguessableToken& devtools_navigation_token) override {
-    frame_host_->GetProcess()->set_did_frame_commit_navigation(true);
-    frame_host_->GetInternalNavigationControl()->CommitNavigation(
-        head, body_url, common_params, request_params,
-        std::move(url_loader_client_endpoints),
-        std::move(subresource_loader_factories),
-        std::move(controller_service_worker), devtools_navigation_token);
-  }
-
-  void CommitFailedNavigation(
-      const content::CommonNavigationParams& common_params,
-      const content::RequestNavigationParams& request_params,
-      bool has_stale_copy_in_cache,
-      int32_t error_code,
-      const base::Optional<std::string>& error_page_content,
-      base::Optional<content::URLLoaderFactoryBundle>
-          subresource_loader_factories) override {}
-
- private:
-  TestRenderFrameHost* const frame_host_;
-
-  DISALLOW_COPY_AND_ASSIGN(NavigationInterceptor);
-};
 
 TestRenderFrameHost::TestRenderFrameHost(SiteInstance* site_instance,
                                          RenderViewHostImpl* render_view_host,
@@ -188,12 +148,12 @@ void TestRenderFrameHost::SimulateRedirect(const GURL& new_url) {
     return;
   }
 
-  navigation_handle()->CallWillRedirectRequestForTesting(new_url, false, GURL(),
-                                                         false);
+  GetNavigationHandle()->CallWillRedirectRequestForTesting(new_url, false,
+                                                           GURL(), false);
 }
 
 void TestRenderFrameHost::SimulateNavigationCommit(const GURL& url) {
-  if (frame_tree_node()->navigation_request())
+  if (frame_tree_node_->navigation_request())
     PrepareForCommit();
 
   bool is_auto_subframe =
@@ -226,14 +186,14 @@ void TestRenderFrameHost::SimulateNavigationCommit(const GURL& url) {
   // This approach to determining whether a navigation is to be treated as
   // same document is not robust, as it will not handle pushState type
   // navigation. Do not use elsewhere!
-  params.was_within_same_document =
+  bool was_within_same_document =
       (GetLastCommittedURL().is_valid() && !last_commit_was_error_page_ &&
        url.ReplaceComponents(replacements) ==
            GetLastCommittedURL().ReplaceComponents(replacements));
 
   params.page_state = PageState::CreateForTesting(url, false, nullptr, nullptr);
 
-  SendNavigateWithParams(&params);
+  SendNavigateWithParams(&params, was_within_same_document);
 }
 
 void TestRenderFrameHost::SimulateNavigationError(const GURL& url,
@@ -267,21 +227,20 @@ void TestRenderFrameHost::SimulateNavigationError(const GURL& url,
 }
 
 void TestRenderFrameHost::SimulateNavigationErrorPageCommit() {
-  CHECK(navigation_handle());
+  CHECK(GetNavigationHandle());
   GURL error_url = GURL(kUnreachableWebDataURL);
   OnDidStartProvisionalLoad(error_url, std::vector<GURL>(),
                             base::TimeTicks::Now());
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
   params.did_create_new_entry = true;
-  params.url = navigation_handle()->GetURL();
+  params.url = GetNavigationHandle()->GetURL();
   params.transition = GetParent() ? ui::PAGE_TRANSITION_MANUAL_SUBFRAME
                                   : ui::PAGE_TRANSITION_LINK;
-  params.was_within_same_document = false;
   params.url_is_unreachable = true;
-  params.page_state = PageState::CreateForTesting(navigation_handle()->GetURL(),
-                                                  false, nullptr, nullptr);
-  SendNavigateWithParams(&params);
+  params.page_state = PageState::CreateForTesting(
+      GetNavigationHandle()->GetURL(), false, nullptr, nullptr);
+  SendNavigateWithParams(&params, false /* was_within_same_document */);
 }
 
 void TestRenderFrameHost::SimulateNavigationStop() {
@@ -323,7 +282,7 @@ void TestRenderFrameHost::NavigateAndCommitRendererInitiated(
 }
 
 void TestRenderFrameHost::SimulateFeaturePolicyHeader(
-    blink::FeaturePolicyFeature feature,
+    blink::mojom::FeaturePolicyFeature feature,
     const std::vector<url::Origin>& whitelist) {
   blink::ParsedFeaturePolicy header(1);
   header[0].feature = feature;
@@ -440,7 +399,7 @@ void TestRenderFrameHost::SendNavigateWithParameters(
   // This approach to determining whether a navigation is to be treated as
   // same document is not robust, as it will not handle pushState type
   // navigation. Do not use elsewhere!
-  params.was_within_same_document =
+  bool was_within_same_document =
       !ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_RELOAD) &&
       !ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED) &&
       (GetLastCommittedURL().is_valid() && !last_commit_was_error_page_ &&
@@ -455,33 +414,42 @@ void TestRenderFrameHost::SendNavigateWithParameters(
   if (!callback.is_null())
     callback.Run(&params);
 
-  SendNavigateWithParams(&params);
+  SendNavigateWithParams(&params, was_within_same_document);
 }
 
 void TestRenderFrameHost::SendNavigateWithParams(
-    FrameHostMsg_DidCommitProvisionalLoad_Params* params) {
+    FrameHostMsg_DidCommitProvisionalLoad_Params* params,
+    bool was_within_same_document) {
   service_manager::mojom::InterfaceProviderPtr interface_provider;
   service_manager::mojom::InterfaceProviderRequest interface_provider_request;
-  if (!params->was_within_same_document)
+  if (!was_within_same_document)
     interface_provider_request = mojo::MakeRequest(&interface_provider);
 
   SendNavigateWithParamsAndInterfaceProvider(
-      params, std::move(interface_provider_request));
+      params, std::move(interface_provider_request), was_within_same_document);
 }
 
 void TestRenderFrameHost::SendNavigateWithParamsAndInterfaceProvider(
     FrameHostMsg_DidCommitProvisionalLoad_Params* params,
-    service_manager::mojom::InterfaceProviderRequest request) {
-  if (navigation_handle()) {
+    service_manager::mojom::InterfaceProviderRequest request,
+    bool was_within_same_document) {
+  if (GetNavigationHandle()) {
     scoped_refptr<net::HttpResponseHeaders> response_headers =
         new net::HttpResponseHeaders(std::string());
     response_headers->AddHeader(std::string("Content-Type: ") +
                                 contents_mime_type_);
-    navigation_handle()->set_response_headers_for_testing(response_headers);
+    GetNavigationHandle()->set_response_headers_for_testing(response_headers);
   }
-  DidCommitProvisionalLoad(
-      std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>(*params),
-      std::move(request));
+
+  if (was_within_same_document) {
+    DidCommitSameDocumentNavigation(
+        std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>(
+            *params));
+  } else {
+    DidCommitProvisionalLoad(
+        std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>(*params),
+        std::move(request));
+  }
   last_commit_was_error_page_ = params->url_is_unreachable;
 }
 
@@ -492,24 +460,30 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
   // initialized. Do it if it hasn't happened yet.
   InitializeRenderFrameIfNeeded();
 
-  if (IsBrowserSideNavigationEnabled()) {
-    // TODO(mkwst): The initiator origin here is incorrect.
-    mojom::BeginNavigationParamsPtr begin_params =
-        mojom::BeginNavigationParams::New(
-            std::string() /* headers */, net::LOAD_NORMAL,
-            false /* skip_service_worker */, REQUEST_CONTEXT_TYPE_HYPERLINK,
-            blink::WebMixedContentContextType::kBlockable,
-            false /* is_form_submission */, GURL() /* searchable_form_url */,
-            std::string() /* searchable_form_encoding */, url::Origin(),
-            GURL() /* client_side_redirect_url */,
-            base::nullopt /* suggested_filename */);
-    CommonNavigationParams common_params;
-    common_params.url = url;
-    common_params.referrer = Referrer(GURL(), blink::kWebReferrerPolicyDefault);
-    common_params.transition = ui::PAGE_TRANSITION_LINK;
-    common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
-    common_params.has_user_gesture = has_user_gesture;
-    BeginNavigation(common_params, std::move(begin_params));
+  // TODO(mkwst): The initiator origin here is incorrect.
+  mojom::BeginNavigationParamsPtr begin_params =
+      mojom::BeginNavigationParams::New(
+          std::string() /* headers */, net::LOAD_NORMAL,
+          false /* skip_service_worker */, REQUEST_CONTEXT_TYPE_HYPERLINK,
+          blink::WebMixedContentContextType::kBlockable,
+          false /* is_form_submission */, GURL() /* searchable_form_url */,
+          std::string() /* searchable_form_encoding */, url::Origin(),
+          GURL() /* client_side_redirect_url */,
+          base::nullopt /* devtools_initiator_info */);
+  CommonNavigationParams common_params;
+  common_params.url = url;
+  common_params.referrer = Referrer(GURL(), blink::kWebReferrerPolicyDefault);
+  common_params.transition = ui::PAGE_TRANSITION_LINK;
+  common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
+  common_params.has_user_gesture = has_user_gesture;
+
+  mojom::NavigationClientAssociatedPtr navigation_client_ptr;
+  if (IsPerNavigationMojoInterfaceEnabled()) {
+    GetRemoteAssociatedInterfaces()->GetInterface(&navigation_client_ptr);
+    BeginNavigation(common_params, std::move(begin_params), nullptr,
+                    navigation_client_ptr.PassInterface());
+  } else {
+    BeginNavigation(common_params, std::move(begin_params), nullptr, nullptr);
   }
 }
 
@@ -539,14 +513,6 @@ void TestRenderFrameHost::PrepareForCommitWithServerRedirect(
 void TestRenderFrameHost::PrepareForCommitInternal(
     const GURL& redirect_url,
     const net::HostPortPair& socket_address) {
-  if (!IsBrowserSideNavigationEnabled()) {
-    // Non PlzNavigate
-    if (is_waiting_for_beforeunload_ack())
-      SendBeforeUnloadACK(true);
-    return;
-  }
-
-  // PlzNavigate
   NavigationRequest* request = frame_tree_node_->navigation_request();
   CHECK(request);
   bool have_to_make_network_request =
@@ -585,9 +551,9 @@ void TestRenderFrameHost::PrepareForCommitInternal(
   scoped_refptr<network::ResourceResponse> response(
       new network::ResourceResponse);
   response->head.socket_address = socket_address;
-  // TODO(carlosk): ideally with PlzNavigate it should be possible someday to
+  // TODO(carlosk): Ideally, it should be possible someday to
   // fully commit the navigation at this call to CallOnResponseStarted.
-  url_loader->CallOnResponseStarted(response, MakeEmptyStream(), nullptr);
+  url_loader->CallOnResponseStarted(response, nullptr);
 }
 
 void TestRenderFrameHost::PrepareForCommitIfNecessary() {
@@ -595,6 +561,13 @@ void TestRenderFrameHost::PrepareForCommitIfNecessary() {
       frame_tree_node()->navigation_request()) {
     PrepareForCommit();
   }
+}
+
+void TestRenderFrameHost::SimulateCommitProcessed(int64_t navigation_id,
+                                                  bool was_successful) {
+  RenderFrameHostImpl::OnCrossDocumentCommitProcessed(
+      navigation_id, was_successful ? blink::mojom::CommitResult::Ok
+                                    : blink::mojom::CommitResult::Aborted);
 }
 
 WebBluetoothServiceImpl*
@@ -609,17 +582,6 @@ void TestRenderFrameHost::SendFramePolicy(
     blink::WebSandboxFlags sandbox_flags,
     const blink::ParsedFeaturePolicy& declared_policy) {
   DidSetFramePolicyHeaders(sandbox_flags, declared_policy);
-}
-
-mojom::FrameNavigationControl* TestRenderFrameHost::GetNavigationControl() {
-  if (!navigation_interceptor_)
-    navigation_interceptor_ = std::make_unique<NavigationInterceptor>(this);
-  return navigation_interceptor_.get();
-}
-
-mojom::FrameNavigationControl*
-TestRenderFrameHost::GetInternalNavigationControl() {
-  return RenderFrameHostImpl::GetNavigationControl();
 }
 
 // static

@@ -5,7 +5,7 @@
 module media.mojom;
 
 import "media/mojo/interfaces/media_types.mojom";
-import "mojo/common/time.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // This file is the Mojo version of the media::VideoEncodeAccelerator interface
@@ -36,6 +36,12 @@ interface VideoEncodeAcceleratorProvider {
   CreateVideoEncodeAccelerator(VideoEncodeAccelerator& request);
 };
 
+// Class that describes how video bitrate, in bps, is allocated across temporal
+// and spatial layers. See media::VideoBitrateAllocation for more details.
+struct VideoBitrateAllocation {
+  array<int32> bitrates;
+};
+
 interface VideoEncodeAccelerator {
   // See media::VideoEncodeAccelerator::Error
   enum Error {
@@ -60,7 +66,22 @@ interface VideoEncodeAccelerator {
   UseOutputBitstreamBuffer(int32 bitstream_buffer_id,
                            handle<shared_buffer> buffer);
 
-  RequestEncodingParametersChange(uint32 bitrate, uint32 framerate);
+  RequestEncodingParametersChange(
+    VideoBitrateAllocation bitrate_allocation,
+    uint32 framerate);
+};
+
+struct Vp8Metadata {
+  bool non_reference;
+  uint8 temporal_idx;
+  bool layer_sync;
+};
+
+struct BitstreamBufferMetadata {
+  uint32 payload_size_bytes;
+  bool key_frame;
+  mojo_base.mojom.TimeDelta timestamp;
+  Vp8Metadata? vp8;
 };
 
 interface VideoEncodeAcceleratorClient {
@@ -69,8 +90,8 @@ interface VideoEncodeAcceleratorClient {
                           gfx.mojom.Size input_coded_size,
                           uint32 output_buffer_size);
 
-  BitstreamBufferReady(int32 bitstream_buffer_id, uint32 payload_size,
-                       bool key_frame, mojo.common.mojom.TimeDelta timestamp);
+  BitstreamBufferReady(int32 bitstream_buffer_id,
+                       BitstreamBufferMetadata metadata);
 
   NotifyError(VideoEncodeAccelerator.Error error);
 };

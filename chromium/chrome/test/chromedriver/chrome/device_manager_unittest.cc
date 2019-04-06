@@ -27,8 +27,8 @@ class FakeAdb : public Adb {
   }
 
   Status ForwardPort(const std::string& device_serial,
-                     int local_port,
-                     const std::string& remote_abstract) override {
+                     const std::string& remote_abstract,
+                     int* local_port) override {
     return Status(kOk);
   }
 
@@ -71,6 +71,13 @@ class FakeAdb : public Adb {
     *pid = 0; // avoid uninit error crbug.com/393231
     return Status(kOk);
   }
+
+  Status GetSocketByPattern(const std::string& device_serial,
+                            const std::string& grep_pattern,
+                            std::string* socket_name) override {
+    *socket_name = "@webview_devtools_remote_0";
+    return Status(kOk);
+  }
 };
 
 }  // namespace
@@ -110,17 +117,34 @@ TEST(Device, StartStopApp) {
   std::unique_ptr<Device> device1;
   ASSERT_TRUE(device_manager.AcquireDevice(&device1).IsOk());
   ASSERT_TRUE(device1->TearDown().IsOk());
-  ASSERT_TRUE(device1->SetUp("a.chrome.package", "", "", "", false, 0).IsOk());
-  ASSERT_FALSE(device1->SetUp("a.chrome.package", "", "", "", false, 0).IsOk());
+  ASSERT_TRUE(
+      device1->SetUp("a.chrome.package", "", "", "", "", "", false, 0).IsOk());
+  ASSERT_FALSE(
+      device1->SetUp("a.chrome.package", "", "", "", "", "", false, 0).IsOk());
   ASSERT_TRUE(device1->TearDown().IsOk());
-  ASSERT_FALSE(device1->SetUp(
-      "a.chrome.package", "an.activity", "", "", false, 0).IsOk());
-  ASSERT_FALSE(device1->SetUp("a.package", "", "", "", false, 0).IsOk());
-  ASSERT_TRUE(device1->SetUp(
-      "a.package", "an.activity", "", "", false, 0).IsOk());
+  ASSERT_FALSE(
+      device1
+          ->SetUp("a.chrome.package", "an.activity", "", "", "", "", false, 0)
+          .IsOk());
+  ASSERT_FALSE(
+      device1->SetUp("a.package", "", "", "", "", "", false, 0).IsOk());
+  ASSERT_TRUE(
+      device1->SetUp("a.package", "an.activity", "", "", "", "", false, 0)
+          .IsOk());
   ASSERT_TRUE(device1->TearDown().IsOk());
+  ASSERT_TRUE(
+      device1
+          ->SetUp("a.package", "an.activity", "a.process", "", "", "", false, 0)
+          .IsOk());
   ASSERT_TRUE(device1->TearDown().IsOk());
-  ASSERT_TRUE(device1->SetUp(
-      "a.package", "an.activity", "a.process", "", false, 0).IsOk());
+  ASSERT_TRUE(device1
+                  ->SetUp("a.package", "an.activity", "a.process",
+                          "a.deviceSocket", "", "", false, 0)
+                  .IsOk());
+  ASSERT_TRUE(device1->TearDown().IsOk());
+  ASSERT_TRUE(device1
+                  ->SetUp("a.package", "an.activity", "a.process",
+                          "a.deviceSocket", "an.execName", "", false, 0)
+                  .IsOk());
   ASSERT_TRUE(device1->TearDown().IsOk());
 }

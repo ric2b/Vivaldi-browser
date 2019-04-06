@@ -27,6 +27,7 @@ class TokenContext(object):
     commit: A Commit object that corresponds to the commit that added
       this token.
   """
+
   def __init__(self, row, column, token, commit=None):
     self.row = row
     self.column = column
@@ -45,6 +46,7 @@ class Commit(object):
     message: The commit message.
     diff: The commit diff.
   """
+
   def __init__(self, hash, author_name, author_email, author_date, message,
                diff):
     self.hash = hash
@@ -55,14 +57,18 @@ class Commit(object):
     self.diff = diff
 
 
-def tokenize_data(data):
+def tokenize_data(data, tokenize_by_char, tokenize_whitespace):
   """Tokenizes |data|.
 
   Args:
     data: String to tokenize.
+    tokenize_by_char: If true, individual characters are treated as tokens.
+      Otherwise, tokens are either symbols or strings of both alphanumeric
+      characters and underscores.
+    tokenize_whitespace: Treat non-newline whitespace characters as tokens.
 
   Returns:
-    A list of TokenContexts.
+    A list of lists of TokenContexts.  Each list represents a line.
   """
   contexts = []
   in_identifier = False
@@ -72,8 +78,8 @@ def tokenize_data(data):
   column = 0
   line_contexts = []
 
-  for c in data + '\n':
-    if c.isalnum() or c == '_':
+  for c in data:
+    if not tokenize_by_char and (c.isalnum() or c == '_'):
       if in_identifier:
         identifier += c
       else:
@@ -82,10 +88,9 @@ def tokenize_data(data):
         identifier = c
     else:
       if in_identifier:
-        line_contexts.append(
-            TokenContext(row, identifier_start, identifier))
+        line_contexts.append(TokenContext(row, identifier_start, identifier))
       in_identifier = False
-      if not c.isspace():
+      if not c.isspace() or (tokenize_whitespace and c != '\n'):
         line_contexts.append(TokenContext(row, column, c))
 
     if c == '\n':
@@ -96,6 +101,7 @@ def tokenize_data(data):
       line_contexts = []
     else:
       column += 1
+  contexts.append(line_contexts)
   return contexts
 
 
@@ -238,31 +244,46 @@ def parse_chunks_from_diff(diff):
       in unified diff format.
 
   Returns:
-    A generator of tuples (added_lines_start, added_lines_end,
-                           removed_lines, removed_lines_start)
+    A generator of tuples (added_lines_start, added_lines_end, removed_lines)
   """
-  in_chunk = False
-  chunk_previous = []
-  previous_start = None
-  current_start = None
-  current_end = None
-  for line in diff:
-    if line.startswith('@@'):
-      if in_chunk:
-        yield (current_start, current_end,
-               chunk_previous, previous_start)
-      parts = line.split(' ')
-      previous = parts[1].lstrip('-')
-      previous_start, _ = parse_chunk_header_file_range(previous)
-      current = parts[2].lstrip('+')
-      current_start, current_end = parse_chunk_header_file_range(current)
-      in_chunk = True
-      chunk_previous = []
-    elif in_chunk and line.startswith('-'):
-      chunk_previous.append(line[1:])
-  if current_start != None:
-    yield (current_start, current_end,
-           chunk_previous, previous_start)
+  it = iter(diff)
+  for line in it:
+    while not line.startswith('@@'):
+      line = it.next()
+    parts = line.split(' ')
+    previous_start, previous_end = parse_chunk_header_file_range(
+        parts[1].lstrip('-'))
+    current_start, current_end = parse_chunk_header_file_range(
+        parts[2].lstrip('+'))
+
+    in_delta = False
+    added_lines_start = None
+    added_lines_end = None
+    removed_lines = []
+    while previous_start < previous_end or current_start < current_end:
+      line = it.next()
+      firstchar = line[0]
+      line = line[1:]
+      if not in_delta and (firstchar == '-' or firstchar == '+'):
+        in_delta = True
+        added_lines_start = current_start
+        added_lines_end = current_start
+        removed_lines = []
+
+      if firstchar == '-':
+        removed_lines.append(line)
+        previous_start += 1
+      elif firstchar == '+':
+        current_start += 1
+        added_lines_end = current_start
+      elif firstchar == ' ':
+        if in_delta:
+          in_delta = False
+          yield (added_lines_start, added_lines_end, removed_lines)
+        previous_start += 1
+        current_start += 1
+    if in_delta:
+      yield (added_lines_start, added_lines_end, removed_lines)
 
 
 def should_skip_commit(commit):
@@ -340,25 +361,27 @@ def generate_commits(git_log_stdout):
     author_name = substring_generator.next()
     author_email = substring_generator.next()
     author_date = substring_generator.next()
-    message = substring_generator.next()
-    diff = substring_generator.next().split('\n')
+    message = substring_generator.next().rstrip('\n')
+    diff = substring_generator.next().split('\n')[1:-1]
     yield Commit(hash, author_name, author_email, author_date, message, diff)
 
 
-def uberblame_aux(file_name, git_log_stdout, data):
+def uberblame_aux(file_name, git_log_stdout, data, tokenization_method):
   """Computes the uberblame of file |file_name|.
 
   Args:
     file_name: File to uberblame.
     git_log_stdout: A file object that represents the git log output.
     data: A string containing the data of file |file_name|.
+    tokenization_method: A function that takes a string and returns a list of
+      TokenContexts.
 
   Returns:
     A tuple (data, blame).
       data: File contents.
       blame: A list of TokenContexts.
   """
-  blame = tokenize_data(data)
+  blame = tokenization_method(data)
 
   blamed_tokens = 0
   total_tokens = len(blame)
@@ -369,22 +392,20 @@ def uberblame_aux(file_name, git_log_stdout, data):
       continue
 
     offset = 0
-    for (added_lines_start, added_lines_end, removed_lines,
-         removed_lines_start) in parse_chunks_from_diff(commit.diff):
+    for (added_lines_start, added_lines_end,
+         removed_lines) in parse_chunks_from_diff(commit.diff):
       added_lines_start += offset
       added_lines_end += offset
-      previous_contexts = [token_lines
-                           for line_previous in removed_lines
-                           for token_lines in tokenize_data(line_previous)]
-      previous_tokens = [
-          [context.token for context in contexts]
-          for contexts in previous_contexts
+      previous_contexts = [
+          token_lines
+          for line_previous in removed_lines
+          for token_lines in tokenization_method(line_previous)
       ]
+      previous_tokens = [[context.token for context in contexts]
+                         for contexts in previous_contexts]
       current_contexts = blame[added_lines_start:added_lines_end]
-      current_tokens = [
-          [context.token for context in contexts]
-          for contexts in current_contexts
-      ]
+      current_tokens = [[context.token for context in contexts]
+                        for contexts in current_contexts]
       added_token_positions, changed_token_positions = (
           compute_changed_token_positions(previous_tokens, current_tokens))
       for r, c in added_token_positions:
@@ -403,40 +424,33 @@ def uberblame_aux(file_name, git_log_stdout, data):
   return uber_blame
 
 
-def uberblame(file_name, revision):
+def uberblame(file_name, revision, tokenization_method):
   """Computes the uberblame of file |file_name|.
 
   Args:
     file_name: File to uberblame.
     revision: The revision to start the uberblame at.
+    tokenization_method: A function that takes a string and returns a list of
+      TokenContexts.
 
   Returns:
     A tuple (data, blame).
       data: File contents.
       blame: A list of TokenContexts.
   """
+  DIFF_CONTEXT = 3
   cmd_git_log = [
-      'git',
-      'log',
-      '--minimal',
-      '--no-prefix',
-      '--follow',
-      '-m',
-      '--first-parent',
-      '-p',
-      '-U0',
-      '-z',
-      '--format=%x00%H%x00%an%x00%ae%x00%ad%x00%B',
-      revision,
-      '--',
-      file_name
+      'git', 'log', '--minimal', '--no-prefix', '--follow', '-m',
+      '--first-parent', '-p',
+      '-U%d' % DIFF_CONTEXT, '-z', '--format=%x00%H%x00%an%x00%ae%x00%ad%x00%B',
+      revision, '--', file_name
   ]
-  git_log = subprocess.Popen(cmd_git_log,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
+  git_log = subprocess.Popen(
+      cmd_git_log, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   data = subprocess.check_output(
       ['git', 'show', '%s:%s' % (revision, file_name)])
-  data, blame = uberblame_aux(file_name, git_log.stdout, data)
+  data, blame = uberblame_aux(file_name, git_log.stdout, data,
+                              tokenization_method)
 
   _, stderr = git_log.communicate()
   if git_log.returncode != 0:
@@ -445,19 +459,57 @@ def uberblame(file_name, revision):
 
 
 def generate_pastel_color():
-  (h, l, s) = (random.uniform(0, 1),
-               random.uniform(0.8, 0.9),
-               random.uniform(0.5, 1))
+  """Generates a random color from a nice looking pastel palette.
+
+  Returns:
+    The color, formatted as hex string.  For example, white is "#FFFFFF".
+  """
+  (h, l, s) = (random.uniform(0, 1), random.uniform(0.8, 0.9), random.uniform(
+      0.5, 1))
   (r, g, b) = colorsys.hls_to_rgb(h, l, s)
-  return "#%0.2X%0.2X%0.2X" % (int(r*255), int(g*255), int(b*255))
+  return "#%0.2X%0.2X%0.2X" % (int(r * 255), int(g * 255), int(b * 255))
 
 
-def visualize_uberblame(data, blame):
-  """Creates and displays a web page to visualize |blame|.
+def colorize_diff(diff):
+  """Colorizes a diff for use in an HTML page.
+
+  Args:
+    diff: The diff, in unified diff format, as a list of line strings.
+
+  Returns:
+    The HTML-formatted diff, as a string.  The diff will already be escaped.
+  """
+
+  colorized = []
+  for line in diff:
+    escaped = cgi.escape(line.replace('\r', ''), quote=True)
+    if line.startswith('+'):
+      colorized.append('<span class=\\"addition\\">%s</span>' % escaped)
+    elif line.startswith('-'):
+      colorized.append('<span class=\\"deletion\\">%s</span>' % escaped)
+    elif line.startswith('@@'):
+      context_begin = escaped.find('@@', 2)
+      assert context_begin != -1
+      colorized.append(
+          '<span class=\\"chunk_meta\\">%s</span>'
+          '<span class=\\"chunk_context\\">%s</span'
+          % (escaped[0:context_begin + 2], escaped[context_begin + 2:]))
+    elif line.startswith('diff') or line.startswith('index'):
+      colorized.append('<span class=\\"file_header\\">%s</span>' % escaped)
+    else:
+      colorized.append('<span class=\\"context_line\\">%s</span>' % escaped)
+  return '\n'.join(colorized)
+
+
+def create_visualization(data, blame):
+  """Creates a web page to visualize |blame|.
 
   Args:
     data: The data file as returned by uberblame().
     blame: A list of TokenContexts as returned by uberblame().
+
+  Returns:
+    The HTML for the generated page, as a string.
   """
   # Use the same seed for the color generator on each run so that
   # loading the same blame of the same file twice will result in the
@@ -468,15 +520,30 @@ def visualize_uberblame(data, blame):
     <head>
       <style>
         body {
-          font-family: "Courier New";
+          font-family: monospace;
         }
         pre {
           display: inline;
         }
-        span {
+        .token {
           outline: 1pt solid #00000030;
           outline-offset: -1pt;
           cursor: pointer;
+        }
+        .addition {
+          color: #080;
+        }
+        .deletion {
+          color: #c00;
+        }
+        .chunk_meta {
+          color: #099;
+        }
+        .context_line .chunk_context {
+          // Just normal text.
+        }
+        .file_header {
+          font-weight: bold;
         }
         #linenums {
           text-align: right;
@@ -543,35 +610,34 @@ def visualize_uberblame(data, blame):
         token_context = blame[blame_index]
         if (row == token_context.row and
             column == token_context.column + len(token_context.token)):
-          if (blame_index + 1 == len(blame) or
-              blame[blame_index].commit.hash !=
+          if (blame_index + 1 == len(blame) or blame[blame_index].commit.hash !=
               blame[blame_index + 1].commit.hash):
             lines.append('</span>')
           blame_index += 1
       if blame_index < len(blame):
         token_context = blame[blame_index]
         if row == token_context.row and column == token_context.column:
-          if (blame_index == 0 or
-              blame[blame_index - 1].commit.hash !=
+          if (blame_index == 0 or blame[blame_index - 1].commit.hash !=
               blame[blame_index].commit.hash):
             hash = token_context.commit.hash
             commits[hash] = token_context.commit
             if hash not in commit_colors:
               commit_colors[hash] = generate_pastel_color()
             color = commit_colors[hash]
-            lines.append(
-                ('<span style="background-color: %s" ' +
-                 'onclick="display_commit(&quot;%s&quot;)">') % (color, hash))
+            lines.append(('<span class="token" style="background-color: %s" ' +
+                          'onclick="display_commit(&quot;%s&quot;)">') % (color,
+                                                                          hash))
       lines.append(cgi.escape(c))
       column += 1
     row += 1
-  commit_data = ['{']
+  commit_data = ['{\n']
   commit_display_format = """\
     commit: {hash}
     Author: {author_name} <{author_email}>
     Date: {author_date}
 
     {message}
+
     """
   commit_display_format = textwrap.dedent(commit_display_format)
   links = re.compile(r'(https?:\/\/\S+)')
@@ -582,13 +648,12 @@ def visualize_uberblame(data, blame):
         author_name=commit.author_name,
         author_email=commit.author_email,
         author_date=commit.author_date,
-        message=commit.message,
-    )
+        message=commit.message)
     commit_display = cgi.escape(commit_display, quote=True)
-    commit_display = re.sub(
-        links, '<a href=\\"\\1\\">\\1</a>', commit_display)
+    commit_display += colorize_diff(commit.diff)
+    commit_display = re.sub(links, '<a href=\\"\\1\\">\\1</a>', commit_display)
     commit_display = commit_display.replace('\n', '\\n')
-    commit_data.append('"%s": "%s",' % (hash, commit_display))
+    commit_data.append('"%s": "%s",\n' % (hash, commit_display))
   commit_data.append('}')
   commit_data = ''.join(commit_data)
   line_nums = range(1, row if lastline.strip() == '' else row + 1)
@@ -625,19 +690,38 @@ def show_visualization(html):
     os.close(saved_stderr)
 
 
-def main():
+def main(argv):
   parser = argparse.ArgumentParser(
-      description='Show what revision last modified each token of a file')
-  parser.add_argument('revision', default='HEAD', nargs='?',
-                      help='Show only commits starting from a revision.')
-  parser.add_argument('file', help='The file to uberblame.')
-  args = parser.parse_args()
+      description='Show what revision last modified each token of a file.')
+  parser.add_argument(
+      'revision',
+      default='HEAD',
+      nargs='?',
+      help='show only commits starting from a revision')
+  parser.add_argument('file', help='the file to uberblame')
+  parser.add_argument(
+      '--skip-visualization',
+      action='store_true',
+      help='do not display the blame visualization in a web browser')
+  parser.add_argument(
+      '--tokenize-by-char',
+      action='store_true',
+      help='treat individual characters as tokens')
+  parser.add_argument(
+      '--tokenize-whitespace',
+      action='store_true',
+      help='also blame non-newline whitespace characters')
+  args = parser.parse_args(argv)
 
-  data, blame = uberblame(args.file, args.revision)
-  html = visualize_uberblame(data, blame)
-  show_visualization(html)
+  def tokenization_method(data):
+    return tokenize_data(data, args.tokenize_by_char, args.tokenize_whitespace)
+
+  data, blame = uberblame(args.file, args.revision, tokenization_method)
+  html = create_visualization(data, blame)
+  if not args.skip_visualization:
+    show_visualization(html)
   return 0
 
 
 if __name__ == '__main__':
-  sys.exit(main())
+  sys.exit(main(sys.argv[1:]))

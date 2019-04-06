@@ -20,12 +20,13 @@
 #include "build/build_config.h"
 #include "components/spellcheck/common/spellcheck_common.h"
 #include "components/spellcheck/common/spellcheck_result.h"
+#include "components/spellcheck/renderer/empty_local_interface_provider.h"
 #include "components/spellcheck/renderer/hunspell_engine.h"
 #include "components/spellcheck/renderer/spellcheck_language.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebTextCheckingCompletion.h"
-#include "third_party/WebKit/public/web/WebTextCheckingResult.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_text_checking_completion.h"
+#include "third_party/blink/public/web/web_text_checking_result.h"
 
 #define TYPOGRAPHICAL_APOSTROPHE L"\x2019"
 
@@ -36,7 +37,7 @@ const int kNoTag = 0;
 
 base::FilePath GetHunspellDirectory() {
   base::FilePath hunspell_directory;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &hunspell_directory))
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &hunspell_directory))
     return base::FilePath();
 
   hunspell_directory = hunspell_directory.AppendASCII("third_party");
@@ -59,7 +60,7 @@ class SpellCheckTest : public testing::Test {
   }
 
   void UninitializeSpellCheck() {
-    spell_check_ = std::make_unique<SpellCheck>(nullptr);
+    spell_check_ = std::make_unique<SpellCheck>(nullptr, &embedder_provider_);
   }
 
   bool InitializeIfNeeded() {
@@ -76,9 +77,9 @@ class SpellCheckTest : public testing::Test {
     // TODO(groby): Forcing spellcheck to use hunspell, even on OSX.
     // Instead, tests should exercise individual spelling engines.
     spell_check_->languages_.push_back(
-        std::make_unique<SpellcheckLanguage>(nullptr));
+        std::make_unique<SpellcheckLanguage>(&embedder_provider_));
     spell_check_->languages_.front()->platform_spelling_engine_ =
-        std::make_unique<HunspellEngine>(nullptr);
+        std::make_unique<HunspellEngine>(&embedder_provider_);
     spell_check_->languages_.front()->Init(std::move(file), language);
 #else
     spell_check_->AddSpellcheckLanguage(std::move(file), language);
@@ -124,6 +125,7 @@ class SpellCheckTest : public testing::Test {
 #endif
 
  private:
+  spellcheck::EmptyLocalInterfaceProvider embedder_provider_;
   std::unique_ptr<SpellCheck> spell_check_;
   base::MessageLoop loop_;
 };

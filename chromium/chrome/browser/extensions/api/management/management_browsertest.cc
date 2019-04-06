@@ -59,7 +59,7 @@ std::string BuildForceInstallPolicyValue(const char* extension_id,
 
 }  // namespace
 
-class ExtensionManagementTest : public ExtensionBrowserTest {
+class ExtensionManagementTest : public extensions::ExtensionBrowserTest {
  public:
   void SetUpInProcessBrowserTestFixture() override {
     EXPECT_CALL(policy_provider_, IsInitializationComplete(_))
@@ -97,7 +97,7 @@ class ExtensionManagementTest : public ExtensionBrowserTest {
 
     std::string version_from_bg;
     bool exec = content::ExecuteScriptAndExtractString(
-        ext_host->render_view_host(), "version()", &version_from_bg);
+        ext_host->host_contents(), "version()", &version_from_bg);
     EXPECT_TRUE(exec);
     if (!exec)
       return false;
@@ -122,15 +122,28 @@ class ExtensionManagementTest : public ExtensionBrowserTest {
 
 // Tests that installing the same version overwrites.
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_InstallSameVersion) {
-  const Extension* extension = InstallExtension(
-      test_data_dir_.AppendASCII("install/install.crx"), 1);
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  base::FilePath root_path = test_data_dir_.AppendASCII("install");
+  base::FilePath pem_path = root_path.AppendASCII("install.pem");
+  base::FilePath first_path =
+      PackExtensionWithOptions(root_path.AppendASCII("install"),
+                               temp_dir.GetPath().AppendASCII("install.crx"),
+                               pem_path, base::FilePath());
+  base::FilePath second_path = PackExtensionWithOptions(
+      root_path.AppendASCII("install_same_version"),
+      temp_dir.GetPath().AppendASCII("install_same_version.crx"), pem_path,
+      base::FilePath());
+
+  const Extension* extension = InstallExtension(first_path, 1);
   ASSERT_TRUE(extension);
   base::FilePath old_path = extension->path();
 
   // Install an extension with the same version. The previous install should be
   // overwritten.
-  extension = InstallExtension(
-      test_data_dir_.AppendASCII("install/install_same_version.crx"), 0);
+  extension = InstallExtension(second_path, 0);
   ASSERT_TRUE(extension);
   base::FilePath new_path = extension->path();
 
@@ -139,22 +152,48 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_InstallSameVersion) {
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, InstallOlderVersion) {
-  const Extension* extension = InstallExtension(
-      test_data_dir_.AppendASCII("install/install.crx"), 1);
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  base::FilePath root_path = test_data_dir_.AppendASCII("install");
+  base::FilePath pem_path = root_path.AppendASCII("install.pem");
+  base::FilePath modern_path =
+      PackExtensionWithOptions(root_path.AppendASCII("install"),
+                               temp_dir.GetPath().AppendASCII("install.crx"),
+                               pem_path, base::FilePath());
+  base::FilePath older_path = PackExtensionWithOptions(
+      root_path.AppendASCII("install_older_version"),
+      temp_dir.GetPath().AppendASCII("install_older_version.crx"), pem_path,
+      base::FilePath());
+
+  const Extension* extension = InstallExtension(modern_path, 1);
   ASSERT_TRUE(extension);
-  ASSERT_FALSE(InstallExtension(
-      test_data_dir_.AppendASCII("install/install_older_version.crx"), 0));
+  ASSERT_FALSE(InstallExtension(older_path, 0));
   EXPECT_TRUE(IsExtensionAtVersion(extension, "1.0"));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, InstallThenCancel) {
-  const Extension* extension = InstallExtension(
-      test_data_dir_.AppendASCII("install/install.crx"), 1);
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  base::FilePath root_path = test_data_dir_.AppendASCII("install");
+  base::FilePath pem_path = root_path.AppendASCII("install.pem");
+  base::FilePath v1_path =
+      PackExtensionWithOptions(root_path.AppendASCII("install"),
+                               temp_dir.GetPath().AppendASCII("install.crx"),
+                               pem_path, base::FilePath());
+  base::FilePath v2_path =
+      PackExtensionWithOptions(root_path.AppendASCII("install_v2"),
+                               temp_dir.GetPath().AppendASCII("install_v2.crx"),
+                               pem_path, base::FilePath());
+
+  const Extension* extension = InstallExtension(v1_path, 1);
   ASSERT_TRUE(extension);
 
   // Cancel this install.
-  ASSERT_FALSE(StartInstallButCancel(
-      test_data_dir_.AppendASCII("install/install_v2.crx")));
+  ASSERT_FALSE(StartInstallButCancel(v2_path));
   EXPECT_TRUE(IsExtensionAtVersion(extension, "1.0"));
 }
 
@@ -167,8 +206,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, InstallThenCancel) {
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_InstallRequiresConfirm) {
   // Installing the extension without an auto confirming UI should result in
   // it being disabled, since good.crx has permissions that require approval.
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   std::string id = "ldnnhddmnhbkjipkidpdiheffobcpfmf";
   ASSERT_FALSE(InstallExtension(test_data_dir_.AppendASCII("good.crx"), 0));
   ASSERT_TRUE(service->GetExtensionById(id, true));
@@ -288,8 +328,20 @@ class NotificationListener : public content::NotificationObserver {
 
 // Tests extension autoupdate.
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_AutoUpdate) {
-  NotificationListener notification_listener;
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
   base::FilePath basedir = test_data_dir_.AppendASCII("autoupdate");
+  NotificationListener notification_listener;
+
+  base::FilePath pem_path = basedir.AppendASCII("key.pem");
+  base::FilePath v1_path = PackExtensionWithOptions(
+      basedir.AppendASCII("v1"), temp_dir.GetPath().AppendASCII("v1.crx"),
+      pem_path, base::FilePath());
+  base::FilePath v2_path = PackExtensionWithOptions(
+      basedir.AppendASCII("v2"), temp_dir.GetPath().AppendASCII("v2.crx"),
+      pem_path, base::FilePath());
 
   // Note: This interceptor gets requests on the IO thread.
   net::LocalHostTestURLRequestInterceptor interceptor(
@@ -302,35 +354,33 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_AutoUpdate) {
       GURL("http://localhost/autoupdate/manifest"),
       basedir.AppendASCII("manifest_v2.xml"));
   interceptor.SetResponseIgnoreQuery(GURL("http://localhost/autoupdate/v2.crx"),
-                                          basedir.AppendASCII("v2.crx"));
+                                     v2_path);
 
   // Install version 1 of the extension.
   ExtensionTestMessageListener listener1("v1 installed", false);
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
   const size_t size_before = registry->enabled_extensions().size();
   ASSERT_TRUE(registry->disabled_extensions().is_empty());
-  const Extension* extension =
-      InstallExtension(basedir.AppendASCII("v1.crx"), 1);
+  const Extension* extension = InstallExtension(v1_path, 1);
   ASSERT_TRUE(extension);
-  listener1.WaitUntilSatisfied();
+  EXPECT_TRUE(listener1.WaitUntilSatisfied());
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   ASSERT_EQ("ogjcoiohnmldgjemafoockdghcjciccf", extension->id());
   ASSERT_EQ("1.0", extension->VersionString());
-
-  extensions::ExtensionUpdater::CheckParams params;
-  params.callback =
-      base::Bind(&NotificationListener::OnFinished,
-                 base::Unretained(&notification_listener));
 
   // Run autoupdate and make sure version 2 of the extension was installed.
   ExtensionTestMessageListener listener2("v2 installed", false);
 
   extensions::TestExtensionRegistryObserver install_observer(registry);
-  service->updater()->CheckNow(params);
+  extensions::ExtensionUpdater::CheckParams params1;
+  params1.callback = base::BindOnce(&NotificationListener::OnFinished,
+                                    base::Unretained(&notification_listener));
+  service->updater()->CheckNow(std::move(params1));
   install_observer.WaitForExtensionWillBeInstalled();
-  listener2.WaitUntilSatisfied();
+  EXPECT_TRUE(listener2.WaitUntilSatisfied());
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   extension = service->GetExtensionById(
       "ogjcoiohnmldgjemafoockdghcjciccf", false);
@@ -350,7 +400,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_AutoUpdate) {
   interceptor.SetResponseIgnoreQuery(GURL("http://localhost/autoupdate/v3.crx"),
                                      basedir.AppendASCII("v3.crx"));
 
-  service->updater()->CheckNow(params);
+  extensions::ExtensionUpdater::CheckParams params2;
+  params2.callback = base::BindOnce(&NotificationListener::OnFinished,
+                                    base::Unretained(&notification_listener));
+  service->updater()->CheckNow(std::move(params2));
   ASSERT_TRUE(WaitForExtensionInstallError());
   ASSERT_TRUE(notification_listener.started());
   ASSERT_TRUE(notification_listener.finished());
@@ -379,8 +432,20 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_AutoUpdate) {
 // Tests extension autoupdate.
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
                        MAYBE_AutoUpdateDisabledExtensions) {
-  NotificationListener notification_listener;
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
   base::FilePath basedir = test_data_dir_.AppendASCII("autoupdate");
+  NotificationListener notification_listener;
+
+  base::FilePath pem_path = basedir.AppendASCII("key.pem");
+  base::FilePath v1_path = PackExtensionWithOptions(
+      basedir.AppendASCII("v1"), temp_dir.GetPath().AppendASCII("v1.crx"),
+      pem_path, base::FilePath());
+  base::FilePath v2_path = PackExtensionWithOptions(
+      basedir.AppendASCII("v2"), temp_dir.GetPath().AppendASCII("v2.crx"),
+      pem_path, base::FilePath());
 
   // Note: This interceptor gets requests on the IO thread.
   net::LocalHostTestURLRequestInterceptor interceptor(
@@ -393,35 +458,33 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
       GURL("http://localhost/autoupdate/manifest"),
       basedir.AppendASCII("manifest_v2.xml"));
   interceptor.SetResponseIgnoreQuery(GURL("http://localhost/autoupdate/v2.crx"),
-                                     basedir.AppendASCII("v2.crx"));
+                                     v2_path);
 
   // Install version 1 of the extension.
   ExtensionTestMessageListener listener1("v1 installed", false);
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
   const size_t enabled_size_before = registry->enabled_extensions().size();
   const size_t disabled_size_before = registry->disabled_extensions().size();
-  const Extension* extension =
-      InstallExtension(basedir.AppendASCII("v1.crx"), 1);
+  const Extension* extension = InstallExtension(v1_path, 1);
   ASSERT_TRUE(extension);
-  listener1.WaitUntilSatisfied();
+  EXPECT_TRUE(listener1.WaitUntilSatisfied());
   DisableExtension(extension->id());
   ASSERT_EQ(disabled_size_before + 1, registry->disabled_extensions().size());
   ASSERT_EQ(enabled_size_before, registry->enabled_extensions().size());
   ASSERT_EQ("ogjcoiohnmldgjemafoockdghcjciccf", extension->id());
   ASSERT_EQ("1.0", extension->VersionString());
 
-  extensions::ExtensionUpdater::CheckParams params;
-  params.callback =
-      base::Bind(&NotificationListener::OnFinished,
-                 base::Unretained(&notification_listener));
-
   ExtensionTestMessageListener listener2("v2 installed", false);
   extensions::TestExtensionRegistryObserver install_observer(registry);
   // Run autoupdate and make sure version 2 of the extension was installed but
   // is still disabled.
-  service->updater()->CheckNow(params);
+  extensions::ExtensionUpdater::CheckParams params;
+  params.callback = base::BindOnce(&NotificationListener::OnFinished,
+                                   base::Unretained(&notification_listener));
+  service->updater()->CheckNow(std::move(params));
   install_observer.WaitForExtensionWillBeInstalled();
   ASSERT_EQ(disabled_size_before + 1, registry->disabled_extensions().size());
   ASSERT_EQ(enabled_size_before, registry->enabled_extensions().size());
@@ -436,7 +499,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
   // When we enabled it, it should then make the callback.
   ASSERT_FALSE(listener2.was_satisfied());
   EnableExtension(extension->id());
-  listener2.WaitUntilSatisfied();
+  EXPECT_TRUE(listener2.WaitUntilSatisfied());
   ASSERT_TRUE(notification_listener.started());
   ASSERT_TRUE(notification_listener.finished());
   ASSERT_TRUE(base::ContainsKey(notification_listener.updates(),
@@ -445,12 +508,20 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   const char kExtensionId[] = "ogjcoiohnmldgjemafoockdghcjciccf";
-  extensions::ExtensionUpdater::CheckParams params;
+
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
   base::FilePath basedir = test_data_dir_.AppendASCII("autoupdate");
+  base::FilePath pem_path = basedir.AppendASCII("key.pem");
+  base::FilePath v2_path = PackExtensionWithOptions(
+      basedir.AppendASCII("v2"), temp_dir.GetPath().AppendASCII("v2.crx"),
+      pem_path, base::FilePath());
 
   // Note: This interceptor gets requests on the IO thread.
   net::LocalHostTestURLRequestInterceptor interceptor(
@@ -463,7 +534,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
       GURL("http://localhost/autoupdate/manifest"),
       basedir.AppendASCII("manifest_v2.xml"));
   interceptor.SetResponseIgnoreQuery(GURL("http://localhost/autoupdate/v2.crx"),
-                                     basedir.AppendASCII("v2.crx"));
+                                     v2_path);
 
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
   const size_t size_before = registry->enabled_extensions().size();
@@ -473,9 +544,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
       service->pending_extension_manager();
 
   // The code that reads external_extensions.json uses this method to inform
-  // the ExtensionService of an extension to download.  Using the real code
-  // is race-prone, because instantating the ExtensionService starts a read
-  // of external_extensions.json before this test function starts.
+  // the extensions::ExtensionService of an extension to download.  Using the
+  // real code is race-prone, because instantating the
+  // extensions::ExtensionService starts a read of external_extensions.json
+  // before this test function starts.
 
   EXPECT_TRUE(pending_extension_manager->AddFromExternalUpdateUrl(
       kExtensionId,
@@ -487,7 +559,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
 
   extensions::TestExtensionRegistryObserver install_observer(registry);
   // Run autoupdate and make sure version 2 of the extension was installed.
-  service->updater()->CheckNow(params);
+  service->updater()->CheckNow(extensions::ExtensionUpdater::CheckParams());
   install_observer.WaitForExtensionWillBeInstalled();
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   const Extension* extension = service->GetExtensionById(kExtensionId, false);
@@ -519,7 +591,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
       << "External reinstall of a killed extension should leave it killed.";
 
   // Installing from non-external source.
-  ASSERT_TRUE(InstallExtension(basedir.AppendASCII("v2.crx"), 1));
+  ASSERT_TRUE(InstallExtension(v2_path, 1));
 
   EXPECT_FALSE(extension_prefs->IsExternalExtensionUninstalled(kExtensionId))
       << "Reinstalling should clear the kill bit.";
@@ -543,11 +615,20 @@ const char kForceInstallNotEmptyHelp[] =
 
 // See http://crbug.com/57378 for flakiness details.
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalPolicyRefresh) {
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   const char kExtensionId[] = "ogjcoiohnmldgjemafoockdghcjciccf";
 
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
   base::FilePath basedir = test_data_dir_.AppendASCII("autoupdate");
+  base::FilePath pem_path = basedir.AppendASCII("key.pem");
+  base::FilePath v2_path = PackExtensionWithOptions(
+      basedir.AppendASCII("v2"), temp_dir.GetPath().AppendASCII("v2.crx"),
+      pem_path, base::FilePath());
 
   // Note: This interceptor gets requests on the IO thread.
   net::LocalHostTestURLRequestInterceptor interceptor(
@@ -560,7 +641,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalPolicyRefresh) {
       GURL("http://localhost/autoupdate/manifest"),
       basedir.AppendASCII("manifest_v2.xml"));
   interceptor.SetResponseIgnoreQuery(GURL("http://localhost/autoupdate/v2.crx"),
-                                     basedir.AppendASCII("v2.crx"));
+                                     v2_path);
 
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
   const size_t size_before = registry->enabled_extensions().size();
@@ -623,13 +704,23 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalPolicyRefresh) {
 
 IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
                        MAYBE_PolicyOverridesUserInstall) {
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
   const char kExtensionId[] = "ogjcoiohnmldgjemafoockdghcjciccf";
   const size_t size_before = registry->enabled_extensions().size();
   base::FilePath basedir = test_data_dir_.AppendASCII("autoupdate");
   ASSERT_TRUE(registry->disabled_extensions().is_empty());
+
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  base::FilePath pem_path = basedir.AppendASCII("key.pem");
+  base::FilePath v2_path = PackExtensionWithOptions(
+      basedir.AppendASCII("v2"), temp_dir.GetPath().AppendASCII("v2.crx"),
+      pem_path, base::FilePath());
 
   // Note: This interceptor gets requests on the IO thread.
   net::LocalHostTestURLRequestInterceptor interceptor(
@@ -642,7 +733,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
       GURL("http://localhost/autoupdate/manifest"),
       basedir.AppendASCII("manifest_v2.xml"));
   interceptor.SetResponseIgnoreQuery(GURL("http://localhost/autoupdate/v2.crx"),
-                                     basedir.AppendASCII("v2.crx"));
+                                     v2_path);
 
   // Check that the policy is initially empty.
   ASSERT_TRUE(extensions::ExtensionManagementFactory::GetForBrowserContext(
@@ -652,7 +743,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
       << kForceInstallNotEmptyHelp;
 
   // User install of the extension.
-  ASSERT_TRUE(InstallExtension(basedir.AppendASCII("v2.crx"), 1));
+  ASSERT_TRUE(InstallExtension(v2_path, 1));
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   const Extension* extension = service->GetExtensionById(kExtensionId, false);
   ASSERT_TRUE(extension);
@@ -689,7 +780,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
   EXPECT_FALSE(extension);
 
   // User install again, but have it disabled too before setting the policy.
-  ASSERT_TRUE(InstallExtension(basedir.AppendASCII("v2.crx"), 1));
+  ASSERT_TRUE(InstallExtension(v2_path, 1));
   ASSERT_EQ(size_before + 1, registry->enabled_extensions().size());
   extension = service->GetExtensionById(kExtensionId, false);
   ASSERT_TRUE(extension);

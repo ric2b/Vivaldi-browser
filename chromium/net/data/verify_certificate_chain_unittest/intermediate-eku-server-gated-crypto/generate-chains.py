@@ -25,6 +25,9 @@ def generate_chain(intermediate_digest_algorithm):
   target = gencerts.create_end_entity_certificate('Target', intermediate)
   target.get_extensions().set_property('extendedKeyUsage',
                                    'serverAuth,clientAuth')
+  # TODO(eroman): Set subjectAltName by default rather than specifically in
+  # this test.
+  target.get_extensions().set_property('subjectAltName', 'DNS:test.example')
 
   chain = [target, intermediate, root]
   gencerts.write_chain(__doc__, chain,

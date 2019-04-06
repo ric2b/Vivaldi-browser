@@ -5,7 +5,7 @@
 #include "chrome/common/client_hints/client_hints.h"
 
 #include "content/public/common/origin_util.h"
-#include "third_party/WebKit/public/platform/WebClientHintsType.h"
+#include "third_party/blink/public/platform/web_client_hints_type.h"
 #include "url/gurl.h"
 
 namespace client_hints {
@@ -32,9 +32,9 @@ void GetAllowedClientHintsFromSource(
 
     // Found an exact match.
     DCHECK(ContentSettingsPattern::Wildcard() == rule.secondary_pattern);
-    DCHECK(rule.setting_value->is_dict());
+    DCHECK(rule.setting_value.is_dict());
     const base::Value* expiration_time =
-        rule.setting_value->FindKey("expiration_time");
+        rule.setting_value.FindKey("expiration_time");
     DCHECK(expiration_time->is_double());
 
     if (base::Time::Now().ToDoubleT() > expiration_time->GetDouble()) {
@@ -42,7 +42,7 @@ void GetAllowedClientHintsFromSource(
       return;
     }
 
-    const base::Value* list_value = rule.setting_value->FindKey("client_hints");
+    const base::Value* list_value = rule.setting_value.FindKey("client_hints");
     DCHECK(list_value->is_list());
     const base::Value::ListStorage& client_hints_list = list_value->GetList();
     for (const auto& client_hint : client_hints_list) {

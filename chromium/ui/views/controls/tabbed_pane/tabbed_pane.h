@@ -24,12 +24,27 @@ class TabbedPaneTest;
 
 // TabbedPane is a view that shows tabs. When the user clicks on a tab, the
 // associated view is displayed.
+// Support for horizontal-highlight and vertical-border modes is limited and
+// may require additional polish.
 class VIEWS_EXPORT TabbedPane : public View {
  public:
   // Internal class name.
   static const char kViewClassName[];
 
-  TabbedPane();
+  // The orientation of the tab alignment.
+  enum class Orientation {
+    kHorizontal,
+    kVertical,
+  };
+
+  // The style of the tab strip.
+  enum class TabStripStyle {
+    kBorder,     // Draw border around the selected tab.
+    kHighlight,  // Highlight background and text of the selected tab.
+  };
+
+  TabbedPane(Orientation orientation = Orientation::kHorizontal,
+             TabStripStyle style = TabStripStyle::kBorder);
   ~TabbedPane() override;
 
   TabbedPaneListener* listener() const { return listener_; }
@@ -61,6 +76,12 @@ class VIEWS_EXPORT TabbedPane : public View {
   // Overridden from View:
   gfx::Size CalculatePreferredSize() const override;
   const char* GetClassName() const override;
+
+  // Gets the orientation of the tab alignment.
+  Orientation GetOrientation() const;
+
+  // Gets the style of the tab strip.
+  TabStripStyle GetStyle() const;
 
  private:
   friend class FocusTraversalTest;
@@ -132,6 +153,8 @@ class Tab : public View {
  protected:
   Label* title() { return title_; }
 
+  TabbedPane* tabbed_pane() { return tabbed_pane_; }
+
   // Called whenever |tab_state_| changes.
   virtual void OnStateChanged();
 
@@ -144,6 +167,9 @@ class Tab : public View {
 
   void SetState(TabState tab_state);
 
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override;
+
   TabbedPane* tabbed_pane_;
   Label* title_;
   gfx::Size preferred_title_size_;
@@ -154,13 +180,14 @@ class Tab : public View {
   DISALLOW_COPY_AND_ASSIGN(Tab);
 };
 
-// The tab strip shown above the tab contents.
+// The tab strip shown above/left of the tab contents.
 class TabStrip : public View {
  public:
   // Internal class name.
   static const char kViewClassName[];
 
-  TabStrip();
+  TabStrip(TabbedPane::Orientation orientation,
+           TabbedPane::TabStripStyle style);
   ~TabStrip() override;
 
   // Called by TabStrip when the selected tab changes. This function is only
@@ -177,7 +204,17 @@ class TabStrip : public View {
   Tab* GetTabAtIndex(int index) const;
   int GetSelectedTabIndex() const;
 
+  TabbedPane::Orientation orientation() const { return orientation_; }
+
+  TabbedPane::TabStripStyle style() const { return style_; }
+
  private:
+  // The orientation of the tab alignment.
+  const TabbedPane::Orientation orientation_;
+
+  // The style of the tab strip.
+  const TabbedPane::TabStripStyle style_;
+
   DISALLOW_COPY_AND_ASSIGN(TabStrip);
 };
 

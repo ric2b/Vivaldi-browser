@@ -5,15 +5,17 @@
 #include "chromeos/dbus/dbus_clients_common.h"
 
 #include "base/command_line.h"
-#include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/biod/biod_client.h"
+#include "chromeos/dbus/cec_service_client.h"
 #include "chromeos/dbus/cras_audio_client.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
+#include "chromeos/dbus/dbus_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cras_audio_client.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "chromeos/dbus/fake_gsm_sms_client.h"
+#include "chromeos/dbus/fake_hammerd_client.h"
 #include "chromeos/dbus/fake_modem_messaging_client.h"
 #include "chromeos/dbus/fake_permission_broker_client.h"
 #include "chromeos/dbus/fake_shill_device_client.h"
@@ -24,7 +26,10 @@
 #include "chromeos/dbus/fake_shill_third_party_vpn_driver_client.h"
 #include "chromeos/dbus/fake_sms_client.h"
 #include "chromeos/dbus/fake_system_clock_client.h"
+#include "chromeos/dbus/fake_upstart_client.h"
 #include "chromeos/dbus/gsm_sms_client.h"
+#include "chromeos/dbus/hammerd_client.h"
+#include "chromeos/dbus/machine_learning_client.h"
 #include "chromeos/dbus/modem_messaging_client.h"
 #include "chromeos/dbus/permission_broker_client.h"
 #include "chromeos/dbus/power_manager_client.h"
@@ -39,6 +44,7 @@
 #include "chromeos/dbus/sms_client.h"
 #include "chromeos/dbus/system_clock_client.h"
 #include "chromeos/dbus/update_engine_client.h"
+#include "chromeos/dbus/upstart_client.h"
 
 namespace chromeos {
 
@@ -48,6 +54,8 @@ DBusClientsCommon::DBusClientsCommon(bool use_real_clients) {
                        : FAKE_DBUS_CLIENT_IMPLEMENTATION;
 
   biod_client_.reset(BiodClient::Create(client_impl_type));
+
+  cec_service_client_ = CecServiceClient::Create(client_impl_type);
 
   if (use_real_clients)
     cras_audio_client_.reset(CrasAudioClient::Create());
@@ -87,6 +95,14 @@ DBusClientsCommon::DBusClientsCommon(bool use_real_clients) {
     gsm_sms_client_.reset(gsm_sms_client);
   }
 
+  if (use_real_clients) {
+    hammerd_client_ = HammerdClient::Create();
+  } else {
+    hammerd_client_ = std::make_unique<FakeHammerdClient>();
+  }
+
+  machine_learning_client_ = MachineLearningClient::Create(client_impl_type);
+
   if (use_real_clients)
     modem_messaging_client_.reset(ModemMessagingClient::Create());
   else
@@ -112,6 +128,11 @@ DBusClientsCommon::DBusClientsCommon(bool use_real_clients) {
     system_clock_client_.reset(new FakeSystemClockClient);
 
   update_engine_client_.reset(UpdateEngineClient::Create(client_impl_type));
+
+  if (use_real_clients)
+    upstart_client_.reset(UpstartClient::Create());
+  else
+    upstart_client_.reset(new FakeUpstartClient);
 }
 
 DBusClientsCommon::~DBusClientsCommon() = default;
@@ -120,9 +141,12 @@ void DBusClientsCommon::Initialize(dbus::Bus* system_bus) {
   DCHECK(DBusThreadManager::IsInitialized());
 
   biod_client_->Init(system_bus);
+  cec_service_client_->Init(system_bus);
   cras_audio_client_->Init(system_bus);
   cryptohome_client_->Init(system_bus);
   gsm_sms_client_->Init(system_bus);
+  hammerd_client_->Init(system_bus);
+  machine_learning_client_->Init(system_bus);
   modem_messaging_client_->Init(system_bus);
   permission_broker_client_->Init(system_bus);
   power_manager_client_->Init(system_bus);
@@ -136,6 +160,7 @@ void DBusClientsCommon::Initialize(dbus::Bus* system_bus) {
   sms_client_->Init(system_bus);
   system_clock_client_->Init(system_bus);
   update_engine_client_->Init(system_bus);
+  upstart_client_->Init(system_bus);
 
   ShillManagerClient::TestInterface* manager =
       shill_manager_client_->GetTestInterface();

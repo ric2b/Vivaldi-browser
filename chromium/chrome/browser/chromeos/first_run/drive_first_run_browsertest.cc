@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/chromeos/first_run/drive_first_run_controller.h"
@@ -88,7 +87,7 @@ DriveFirstRunTest::DriveFirstRunTest() :
     success_(false) {}
 
 void DriveFirstRunTest::SetUpOnMainThread() {
-  PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_);
   test_data_dir_ = test_data_dir_.AppendASCII(kTestDirectory);
 
   host_resolver()->AddRule("example.com", "127.0.0.1");

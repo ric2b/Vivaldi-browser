@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/background_sync/background_sync_service_impl.h"
@@ -16,11 +15,15 @@
 
 namespace content {
 
-BackgroundSyncContext::BackgroundSyncContext() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-}
+BackgroundSyncContext::BackgroundSyncContext()
+    : base::RefCountedDeleteOnSequence<BackgroundSyncContext>(
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)) {}
 
 BackgroundSyncContext::~BackgroundSyncContext() {
+  // The destructor must run on the IO thread because it implicitly accesses
+  // background_sync_manager_ and services_, when it runs their destructors.
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   DCHECK(!background_sync_manager_);
   DCHECK(services_.empty());
 }
@@ -37,7 +40,6 @@ void BackgroundSyncContext::Init(
 
 void BackgroundSyncContext::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&BackgroundSyncContext::ShutdownOnIO, this));
@@ -46,11 +48,10 @@ void BackgroundSyncContext::Shutdown() {
 void BackgroundSyncContext::CreateService(
     blink::mojom::BackgroundSyncServiceRequest request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&BackgroundSyncContext::CreateServiceOnIOThread, this,
-                     base::Passed(&request)));
+                     std::move(request)));
 }
 
 void BackgroundSyncContext::ServiceHadConnectionError(
@@ -86,9 +87,9 @@ void BackgroundSyncContext::CreateServiceOnIOThread(
     mojo::InterfaceRequest<blink::mojom::BackgroundSyncService> request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(background_sync_manager_);
-  BackgroundSyncServiceImpl* service =
-      new BackgroundSyncServiceImpl(this, std::move(request));
-  services_[service] = base::WrapUnique(service);
+  auto service =
+      std::make_unique<BackgroundSyncServiceImpl>(this, std::move(request));
+  services_[service.get()] = std::move(service);
 }
 
 void BackgroundSyncContext::ShutdownOnIO() {

@@ -51,6 +51,9 @@ int Governor::ProcessFrames(float* data,
                             int frames,
                             float volume,
                             float volume_dbfs) {
+  DCHECK(data);
+  data_ = data;
+
   if (volume != volume_) {
     volume_ = volume;
     slew_volume_.SetVolume(GetGovernorMultiplier());
@@ -70,6 +73,19 @@ float Governor::GetGovernorMultiplier() {
     return clamp_multiplier_;
   }
   return 1.0;
+}
+
+int Governor::NumOutputChannels() {
+  return channels_;
+}
+
+float* Governor::GetOutputBuffer() {
+  DCHECK(data_);
+  return data_;
+}
+
+bool Governor::UpdateParameters(const std::string& message) {
+  return false;
 }
 
 void Governor::SetSlewTimeMsForTest(int slew_time_ms) {

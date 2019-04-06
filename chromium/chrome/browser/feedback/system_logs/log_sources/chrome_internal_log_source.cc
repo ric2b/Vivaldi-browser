@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_util.h"
@@ -29,10 +30,13 @@
 #include "extensions/common/extension_set.h"
 
 #if defined(OS_CHROMEOS)
+#include "ash/public/interfaces/constants.mojom.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
+#include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/system/statistics_provider.h"
-#include "chromeos/system/version_loader.h"
+#include "content/public/common/service_manager_connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 #endif
 
 #if defined(OS_WIN)
@@ -56,6 +60,7 @@ constexpr char kHWIDKey[] = "HWID";
 constexpr char kSettingsKey[] = "settings";
 constexpr char kLocalStateSettingsResponseKey[] = "Local State: settings";
 constexpr char kArcStatusKey[] = "CHROMEOS_ARC_STATUS";
+constexpr char kMonitorInfoKey[] = "monitor_info";
 #else
 constexpr char kOsVersionTag[] = "OS VERSION";
 #endif
@@ -82,7 +87,52 @@ std::string GetEnrollmentStatusString() {
   return std::string();
 }
 
-void GetEntriesAsync(SystemLogsResponse* response) {
+std::string GetDisplayInfoString(
+    const ash::mojom::DisplayUnitInfo& display_info) {
+  std::string entry;
+  if (!display_info.name.empty())
+    base::StringAppendF(&entry, "%s : ", display_info.name.c_str());
+  if (!display_info.edid)
+    return entry;
+  const ash::mojom::Edid& edid = *display_info.edid;
+  if (!edid.manufacturer_id.empty()) {
+    base::StringAppendF(&entry, "Manufacturer: %s - ",
+                        edid.manufacturer_id.c_str());
+  }
+  if (!edid.product_id.empty()) {
+    base::StringAppendF(&entry, "Product ID: %s - ", edid.product_id.c_str());
+  }
+  if (edid.year_of_manufacture != display::kInvalidYearOfManufacture) {
+    base::StringAppendF(&entry, "Year of Manufacture: %d",
+                        edid.year_of_manufacture);
+  }
+  return entry;
+}
+
+// Called from the main (UI) thread, invokes |callback| when complete.
+void PopulateMonitorInfoAsync(
+    ash::mojom::CrosDisplayConfigController* cros_display_config_ptr,
+    SystemLogsResponse* response,
+    base::OnceCallback<void()> callback) {
+  cros_display_config_ptr->GetDisplayUnitInfoList(
+      false /* single_unified */,
+      base::BindOnce(
+          [](SystemLogsResponse* response, base::OnceCallback<void()> callback,
+             std::vector<ash::mojom::DisplayUnitInfoPtr> info_list) {
+            std::string entry;
+            for (const ash::mojom::DisplayUnitInfoPtr& info : info_list) {
+              if (!entry.empty())
+                base::StringAppendF(&entry, "\n");
+              entry += GetDisplayInfoString(*info);
+            }
+            response->emplace(kMonitorInfoKey, entry);
+            std::move(callback).Run();
+          },
+          response, std::move(callback)));
+}
+
+// Called from a worker thread via PostTaskAndReply.
+void PopulateEntriesAsync(SystemLogsResponse* response) {
   DCHECK(response);
 
   chromeos::system::StatisticsProvider* stats =
@@ -100,12 +150,17 @@ void GetEntriesAsync(SystemLogsResponse* response) {
   response->emplace(kChromeOsFirmwareVersion,
                     chromeos::version_loader::GetFirmware());
 }
-#endif
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace
 
 ChromeInternalLogSource::ChromeInternalLogSource()
     : SystemLogsSource("ChromeInternal") {
+#if defined(OS_CHROMEOS)
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash::mojom::kServiceName, &cros_display_config_ptr_);
+#endif
 }
 
 ChromeInternalLogSource::~ChromeInternalLogSource() {
@@ -142,21 +197,26 @@ void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
     response->emplace("account_type", "child");
 
 #if defined(OS_CHROMEOS)
-  PopulateLocalStateSettings(response.get());
-
   // Store ARC enabled status.
   response->emplace(kArcStatusKey, arc::IsArcPlayStoreEnabledForProfile(
                                        ProfileManager::GetLastUsedProfile())
                                        ? "enabled"
                                        : "disabled");
+  PopulateLocalStateSettings(response.get());
 
-  // Get the entries that should be retrieved on the blocking pool and invoke
-  // the callback later when done.
-  SystemLogsResponse* response_ptr = response.get();
-  base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::BindOnce(&GetEntriesAsync, response_ptr),
-      base::BindOnce(std::move(callback), std::move(response)));
+  // Chain asynchronous fetchers: PopulateMonitorInfoAsync, PopulateEntriesAsync
+  PopulateMonitorInfoAsync(
+      cros_display_config_ptr_.get(), response.get(),
+      base::BindOnce(
+          [](std::unique_ptr<SystemLogsResponse> response,
+             SysLogsSourceCallback callback) {
+            SystemLogsResponse* response_ptr = response.get();
+            base::PostTaskWithTraitsAndReply(
+                FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+                base::BindOnce(&PopulateEntriesAsync, response_ptr),
+                base::BindOnce(std::move(callback), std::move(response)));
+          },
+          std::move(response), std::move(callback)));
 #else
   // On other platforms, we're done. Invoke the callback.
   std::move(callback).Run(std::move(response));
@@ -173,8 +233,8 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
   std::unique_ptr<base::DictionaryValue> sync_logs(
-      syncer::sync_ui_util::ConstructAboutInformation_DEPRECATED(
-          service, chrome::GetChannel()));
+      syncer::sync_ui_util::ConstructAboutInformation(service,
+                                                      chrome::GetChannel()));
 
   // Remove identity section.
   base::ListValue* details = NULL;
@@ -277,6 +337,7 @@ void ChromeInternalLogSource::PopulateLocalStateSettings(
 
   response->emplace(kLocalStateSettingsResponseKey, serialized_settings);
 }
+
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)

@@ -300,7 +300,7 @@ def AddGTestOptions(parser):
       help='Host directory to which app data files will be'
            ' saved. Used with --app-data-file.')
   parser.add_argument(
-      '--chartjson-result-file',
+      '--isolated-script-test-perf-output',
       help='If present, store chartjson results on this path.')
   parser.add_argument(
       '--delete-stale-data',
@@ -425,11 +425,6 @@ def AddInstrumentationTestOptions(parser):
       '--gtest_also_run_disabled_tests', '--gtest-also-run-disabled-tests',
       dest='run_disabled', action='store_true',
       help='Also run disabled tests if applicable.')
-  parser.add_argument(
-      '--non-native-packed-relocations',
-      action='store_true',
-      help='Whether relocations were packed using the Android '
-           'relocation_packer tool.')
   def package_replacement(arg):
     split_arg = arg.split(',')
     if len(split_arg) != 2:
@@ -493,10 +488,6 @@ def AddInstrumentationTestOptions(parser):
       '--timeout-scale',
       type=float,
       help='Factor by which timeouts should be scaled.')
-  parser.add_argument(
-      '--ui-screenshot-directory',
-      dest='ui_screenshot_dir', type=os.path.realpath,
-      help='Destination for screenshots captured by the tests')
   parser.add_argument(
       '-w', '--wait-for-java-debugger', action='store_true',
       help='Wait for java debugger to attach before running any application '
@@ -940,6 +931,16 @@ def RunTestsInPlatformMode(args):
         results_detail_file.write(result_html_string)
         results_detail_file.flush()
       logging.critical('TEST RESULTS: %s', results_detail_file.Link())
+
+      ui_screenshots = test_results_presentation.ui_screenshot_set(
+          json_file.name)
+      if ui_screenshots:
+        with out_manager.ArchivedTempfile(
+            'ui_screenshots.json',
+            'ui_capture',
+            output_manager.Datatype.JSON) as ui_screenshot_file:
+          ui_screenshot_file.write(ui_screenshots)
+        logging.critical('UI Screenshots: %s', ui_screenshot_file.Link())
 
   if args.command == 'perf' and (args.steps or args.single_step):
     return 0

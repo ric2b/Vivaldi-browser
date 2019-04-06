@@ -78,6 +78,7 @@ struct TileQuadState {
   gfx.mojom.RectF tex_coord_rect;
   gfx.mojom.Size texture_size;
   bool swizzle_contents;
+  bool is_premultiplied;
   uint32 resource_id;
   bool nearest_neighbor;
   bool force_anti_aliasing_off;
@@ -97,6 +98,7 @@ struct YUVVideoQuadState {
   uint32 bits_per_channel;
   gfx.mojom.ColorSpace video_color_space;
   bool require_overlay;
+  bool is_protected_video;
 };
 
 union DrawQuadState {

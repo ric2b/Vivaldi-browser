@@ -94,8 +94,8 @@ class WEBVIEW_EXPORT WebDialogView : public views::ClientView,
   bool HandleContextMenu(const content::ContextMenuParams& params) override;
 
   // Overridden from content::WebContentsDelegate:
-  void MoveContents(content::WebContents* source,
-                    const gfx::Rect& pos) override;
+  void SetContentsBounds(content::WebContents* source,
+                         const gfx::Rect& bounds) override;
   void HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
@@ -104,7 +104,7 @@ class WEBVIEW_EXPORT WebDialogView : public views::ClientView,
       content::WebContents* source,
       const content::OpenURLParams& params) override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,

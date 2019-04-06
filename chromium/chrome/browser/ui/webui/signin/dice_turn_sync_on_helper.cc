@@ -5,37 +5,30 @@
 #include "chrome/browser/ui/webui/signin/dice_turn_sync_on_helper.h"
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/browser_tabstrip.h"
-#include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/startup/startup_types.h"
-#include "chrome/browser/ui/tab_dialogs.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/signin/login_ui_service.h"
-#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
+#include "chrome/browser/ui/webui/signin/dice_turn_sync_on_helper_delegate_impl.h"
 #include "chrome/browser/ui/webui/signin/signin_utils_desktop.h"
-#include "chrome/common/url_constants.h"
+#include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "components/browser_sync/profile_sync_service.h"
+#include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/account_tracker_service.h"
@@ -44,131 +37,59 @@
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/unified_consent/unified_consent_service.h"
+#include "content/public/browser/storage_partition.h"
 #include "net/url_request/url_request_context_getter.h"
 
 namespace {
-
-// UMA histogram for tracking what users do when presented with the signin
-// screen.
-// Hence,
-//   (a) existing enumerated constants should never be deleted or reordered, and
-//   (b) new constants should only be appended at the end of the enumeration.
-//
-// Keep this in sync with SigninChoice in histograms.xml.
-enum SigninChoice {
-  SIGNIN_CHOICE_CANCEL = 0,
-  SIGNIN_CHOICE_CONTINUE = 1,
-  SIGNIN_CHOICE_NEW_PROFILE = 2,
-  // SIGNIN_CHOICE_SIZE should always be last - this is a count of the number
-  // of items in this enum.
-  SIGNIN_CHOICE_SIZE,
-};
-
-void SetUserChoiceHistogram(SigninChoice choice) {
-  UMA_HISTOGRAM_ENUMERATION("Enterprise.UserSigninChoice", choice,
-                            SIGNIN_CHOICE_SIZE);
-}
 
 AccountInfo GetAccountInfo(Profile* profile, const std::string& account_id) {
   return AccountTrackerServiceFactory::GetForProfile(profile)->GetAccountInfo(
       account_id);
 }
 
-// If the |browser| argument is non-null, returns the pointer directly.
-// Otherwise creates a new browser for the given profile on the given desktop,
-// adds an empty tab and makes sure the browser is visible.
-Browser* EnsureBrowser(Browser* browser, Profile* profile) {
-  if (!browser) {
-    // The user just created a new profile or has closed the browser that
-    // we used previously. Grab the most recently active browser or else
-    // create a new one.
-    browser = chrome::FindLastActiveWithProfile(profile);
-    if (!browser) {
-      browser = new Browser(Browser::CreateParams(profile, true));
-      chrome::AddTabAt(browser, GURL(), -1, true);
-    }
-    browser->window()->Show();
-  }
-  return browser;
-}
-
-void StartNewSigninInNewProfile(Profile* new_profile,
-                                const std::string& username) {
-  profiles::FindOrCreateNewWindowForProfile(
-      new_profile, chrome::startup::IS_PROCESS_STARTUP,
-      chrome::startup::IS_FIRST_RUN, false);
-  Browser* browser = chrome::FindTabbedBrowser(new_profile, false);
-  browser->signin_view_controller()->ShowDiceSigninTab(
-      profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN, browser,
-      signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE, username);
-}
-
 }  // namespace
-
-DiceTurnSyncOnHelper::SigninDialogDelegate::SigninDialogDelegate(
-    base::WeakPtr<DiceTurnSyncOnHelper> sync_starter)
-    : sync_starter_(sync_starter) {}
-
-DiceTurnSyncOnHelper::SigninDialogDelegate::~SigninDialogDelegate() {}
-
-void DiceTurnSyncOnHelper::SigninDialogDelegate::OnCancelSignin() {
-  SetUserChoiceHistogram(SIGNIN_CHOICE_CANCEL);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_EnterpriseAccountPrompt_Cancel"));
-
-  if (sync_starter_)
-    sync_starter_->AbortAndDelete();
-}
-
-void DiceTurnSyncOnHelper::SigninDialogDelegate::OnContinueSignin() {
-  SetUserChoiceHistogram(SIGNIN_CHOICE_CONTINUE);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_EnterpriseAccountPrompt_ImportData"));
-
-  if (sync_starter_)
-    sync_starter_->LoadPolicyWithCachedCredentials();
-}
-
-void DiceTurnSyncOnHelper::SigninDialogDelegate::OnSigninWithNewProfile() {
-  SetUserChoiceHistogram(SIGNIN_CHOICE_NEW_PROFILE);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_EnterpriseAccountPrompt_DontImportData"));
-
-  if (sync_starter_)
-    sync_starter_->CreateNewSignedInProfile();
-}
 
 DiceTurnSyncOnHelper::DiceTurnSyncOnHelper(
     Profile* profile,
-    Browser* browser,
     signin_metrics::AccessPoint signin_access_point,
+    signin_metrics::PromoAction signin_promo_action,
     signin_metrics::Reason signin_reason,
     const std::string& account_id,
-    SigninAbortedMode signin_aborted_mode)
-    : profile_(profile),
-      browser_(browser),
+    SigninAbortedMode signin_aborted_mode,
+    std::unique_ptr<Delegate> delegate)
+    : delegate_(std::move(delegate)),
+      profile_(profile),
       signin_manager_(SigninManagerFactory::GetForProfile(profile)),
       token_service_(ProfileOAuth2TokenServiceFactory::GetForProfile(profile)),
       signin_access_point_(signin_access_point),
+      signin_promo_action_(signin_promo_action),
       signin_reason_(signin_reason),
       signin_aborted_mode_(signin_aborted_mode),
       account_info_(GetAccountInfo(profile, account_id)),
-      scoped_browser_list_observer_(this),
-      scoped_login_ui_service_observer_(this),
       weak_pointer_factory_(this) {
-  DCHECK(signin::IsDicePrepareMigrationEnabled());
+  DCHECK(delegate_);
   DCHECK(profile_);
-  DCHECK(browser_);
-  DCHECK(!account_info_.gaia.empty());
-  DCHECK(!account_info_.email.empty());
   // Should not start syncing if the profile is already authenticated
   DCHECK(!signin_manager_->IsAuthenticated());
 
   // Force sign-in uses the modal sign-in flow.
   DCHECK(!signin_util::IsForceSigninEnabled());
 
+  if (account_info_.gaia.empty() || account_info_.email.empty()) {
+    LOG(ERROR) << "Cannot turn Sync On for invalid account.";
+    base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+    return;
+  }
+
+  DCHECK(!account_info_.gaia.empty());
+  DCHECK(!account_info_.email.empty());
+
   if (HasCanOfferSigninError()) {
-    AbortAndDelete();
+    // Do not self-destruct synchronously in the constructor.
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&DiceTurnSyncOnHelper::AbortAndDelete,
+                                  base::Unretained(this)));
     return;
   }
 
@@ -181,22 +102,35 @@ DiceTurnSyncOnHelper::DiceTurnSyncOnHelper(
   // last authenticated account of the current profile, then Chrome will show a
   // confirmation dialog before starting sync.
   // TODO(skym): Warn for high risk upgrade scenario (https://crbug.com/572754).
-  content::WebContents* web_contents =
-      browser_->tab_strip_model()->GetActiveWebContents();
   std::string last_email =
       profile_->GetPrefs()->GetString(prefs::kGoogleServicesLastUsername);
-  SigninEmailConfirmationDialog::AskForConfirmation(
-      web_contents, profile_, last_email, account_info_.email,
-      base::Bind(&DiceTurnSyncOnHelper::ConfirmEmailAction,
-                 weak_pointer_factory_.GetWeakPtr()));
+  delegate_->ShowMergeSyncDataConfirmation(
+      last_email, account_info_.email,
+      base::BindOnce(&DiceTurnSyncOnHelper::OnMergeAccountConfirmation,
+                     weak_pointer_factory_.GetWeakPtr()));
 }
 
+DiceTurnSyncOnHelper::DiceTurnSyncOnHelper(
+    Profile* profile,
+    Browser* browser,
+    signin_metrics::AccessPoint signin_access_point,
+    signin_metrics::PromoAction signin_promo_action,
+    signin_metrics::Reason signin_reason,
+    const std::string& account_id,
+    SigninAbortedMode signin_aborted_mode)
+    : DiceTurnSyncOnHelper(
+          profile,
+          signin_access_point,
+          signin_promo_action,
+          signin_reason,
+          account_id,
+          signin_aborted_mode,
+          std::make_unique<DiceTurnSyncOnHelperDelegateImpl>(browser)) {}
+
 DiceTurnSyncOnHelper::~DiceTurnSyncOnHelper() {
-  DCHECK(!scoped_login_ui_service_observer_.IsObservingSources());
 }
 
 bool DiceTurnSyncOnHelper::HasCanOfferSigninError() {
-  DCHECK(browser_);
   std::string error_msg;
   bool can_offer =
       CanOfferSignin(profile_, CAN_OFFER_SIGNIN_FOR_ALL_ACCOUNTS,
@@ -205,36 +139,62 @@ bool DiceTurnSyncOnHelper::HasCanOfferSigninError() {
     return false;
 
   // Display the error message
-  LoginUIServiceFactory::GetForProfile(profile_)->DisplayLoginResult(
-      browser_, base::UTF8ToUTF16(error_msg),
-      base::UTF8ToUTF16(account_info_.email));
+  delegate_->ShowLoginError(account_info_.email, error_msg);
   return true;
 }
 
-void DiceTurnSyncOnHelper::ConfirmEmailAction(
-    SigninEmailConfirmationDialog::Action action) {
-  switch (action) {
-    case SigninEmailConfirmationDialog::CREATE_NEW_USER:
+void DiceTurnSyncOnHelper::OnMergeAccountConfirmation(SigninChoice choice) {
+  switch (choice) {
+    case SIGNIN_CHOICE_NEW_PROFILE:
       base::RecordAction(
           base::UserMetricsAction("Signin_ImportDataPrompt_DontImport"));
       TurnSyncOnWithProfileMode(ProfileMode::NEW_PROFILE);
       break;
-    case SigninEmailConfirmationDialog::START_SYNC:
+    case SIGNIN_CHOICE_CONTINUE:
       base::RecordAction(
           base::UserMetricsAction("Signin_ImportDataPrompt_ImportData"));
       TurnSyncOnWithProfileMode(ProfileMode::CURRENT_PROFILE);
       break;
-    case SigninEmailConfirmationDialog::CLOSE:
+    case SIGNIN_CHOICE_CANCEL:
       base::RecordAction(
           base::UserMetricsAction("Signin_ImportDataPrompt_Cancel"));
+      AbortAndDelete();
+      break;
+    case SIGNIN_CHOICE_SIZE:
+      NOTREACHED();
+      AbortAndDelete();
+      break;
+  }
+}
+
+void DiceTurnSyncOnHelper::OnEnterpriseAccountConfirmation(
+    SigninChoice choice) {
+  UMA_HISTOGRAM_ENUMERATION("Enterprise.UserSigninChoice", choice,
+                            DiceTurnSyncOnHelper::SIGNIN_CHOICE_SIZE);
+  switch (choice) {
+    case SIGNIN_CHOICE_CANCEL:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_EnterpriseAccountPrompt_Cancel"));
+      AbortAndDelete();
+      break;
+    case SIGNIN_CHOICE_CONTINUE:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_EnterpriseAccountPrompt_ImportData"));
+      LoadPolicyWithCachedCredentials();
+      break;
+    case SIGNIN_CHOICE_NEW_PROFILE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_EnterpriseAccountPrompt_DontImportData"));
+      CreateNewSignedInProfile();
+      break;
+    case SIGNIN_CHOICE_SIZE:
+      NOTREACHED();
       AbortAndDelete();
       break;
   }
 }
 
 void DiceTurnSyncOnHelper::TurnSyncOnWithProfileMode(ProfileMode profile_mode) {
-  scoped_browser_list_observer_.Add(BrowserList::GetInstance());
-
   // Make sure the syncing is requested, otherwise the SigninManager
   // will not be able to complete successfully.
   syncer::SyncPrefs sync_prefs(profile_->GetPrefs());
@@ -282,20 +242,10 @@ void DiceTurnSyncOnHelper::OnRegisteredForPolicy(const std::string& dm_token,
   client_id_ = client_id;
 
   // Allow user to create a new profile before continuing with sign-in.
-  browser_ = EnsureBrowser(browser_, profile_);
-  content::WebContents* web_contents =
-      browser_->tab_strip_model()->GetActiveWebContents();
-  if (!web_contents) {
-    AbortAndDelete();
-    return;
-  }
-
-  base::RecordAction(
-      base::UserMetricsAction("Signin_Show_EnterpriseAccountPrompt"));
-  TabDialogs::FromWebContents(web_contents)
-      ->ShowProfileSigninConfirmation(browser_, profile_, account_info_.email,
-                                      std::make_unique<SigninDialogDelegate>(
-                                          weak_pointer_factory_.GetWeakPtr()));
+  delegate_->ShowEnterpriseAccountConfirmation(
+      account_info_.email,
+      base::BindOnce(&DiceTurnSyncOnHelper::OnEnterpriseAccountConfirmation,
+                     weak_pointer_factory_.GetWeakPtr()));
 }
 
 void DiceTurnSyncOnHelper::LoadPolicyWithCachedCredentials() {
@@ -304,7 +254,10 @@ void DiceTurnSyncOnHelper::LoadPolicyWithCachedCredentials() {
   policy::UserPolicySigninService* policy_service =
       policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
   policy_service->FetchPolicyForSignedInUser(
-      account_info_.email, dm_token_, client_id_, profile_->GetRequestContext(),
+      AccountIdFromAccountInfo(account_info_), dm_token_, client_id_,
+      profile_->GetRequestContext(),
+      content::BrowserContext::GetDefaultStoragePartition(profile_)
+          ->GetURLLoaderFactoryForBrowserProcess(),
       base::Bind(&DiceTurnSyncOnHelper::OnPolicyFetchComplete,
                  weak_pointer_factory_.GetWeakPtr()));
 }
@@ -349,7 +302,7 @@ void DiceTurnSyncOnHelper::CompleteInitForNewProfile(
       break;
     case Profile::CREATE_STATUS_INITIALIZED:
       // The user needs to sign in to the new profile in order to enable sync.
-      StartNewSigninInNewProfile(new_profile, account_info_.email);
+      delegate_->ShowSigninPageInNewProfile(new_profile, account_info_.email);
       AbortAndDelete();
       break;
     case Profile::CREATE_STATUS_REMOTE_FAIL:
@@ -372,7 +325,8 @@ DiceTurnSyncOnHelper::GetProfileSyncService() {
 void DiceTurnSyncOnHelper::SigninAndShowSyncConfirmationUI() {
   // Signin.
   signin_manager_->OnExternalSigninCompleted(account_info_.email);
-  signin_metrics::LogSigninAccessPointCompleted(signin_access_point_);
+  signin_metrics::LogSigninAccessPointCompleted(signin_access_point_,
+                                                signin_promo_action_);
   signin_metrics::LogSigninReason(signin_reason_);
   base::RecordAction(base::UserMetricsAction("Signin_Signin_Succeed"));
 
@@ -383,9 +337,14 @@ void DiceTurnSyncOnHelper::SigninAndShowSyncConfirmationUI() {
     // progress.
     // TODO(https://crbug.com/811211): Remove this handle.
     sync_blocker_ = sync_service->GetSetupInProgressHandle();
-    if (SyncStartupTracker::GetSyncServiceState(profile_) ==
-        SyncStartupTracker::SYNC_STARTUP_PENDING) {
-      // Wait until sync is initialized so that the confirmation UI can be
+    bool is_enterprise_user =
+        !policy::BrowserPolicyConnector::IsNonEnterpriseUser(
+            account_info_.email);
+    if (is_enterprise_user &&
+        SyncStartupTracker::GetSyncServiceState(profile_) ==
+            SyncStartupTracker::SYNC_STARTUP_PENDING) {
+      // For enterprise users it is important to wait until sync is initialized
+      // so that the confirmation UI can be
       // aware of startup errors. This is needed to make sure that the sync
       // confirmation dialog is shown only after the sync service had a chance
       // to check whether sync was disabled by admin.
@@ -411,24 +370,24 @@ void DiceTurnSyncOnHelper::SyncStartupFailed() {
 }
 
 void DiceTurnSyncOnHelper::ShowSyncConfirmationUI() {
-  scoped_login_ui_service_observer_.Add(
-      LoginUIServiceFactory::GetForProfile(profile_));
-  browser_ = EnsureBrowser(browser_, profile_);
-  browser_->signin_view_controller()->ShowModalSyncConfirmationDialog(browser_);
+  delegate_->ShowSyncConfirmation(
+      base::BindOnce(&DiceTurnSyncOnHelper::FinishSyncSetupAndDelete,
+                     weak_pointer_factory_.GetWeakPtr()));
 }
 
-void DiceTurnSyncOnHelper::OnSyncConfirmationUIClosed(
+void DiceTurnSyncOnHelper::FinishSyncSetupAndDelete(
     LoginUIService::SyncConfirmationUIClosedResult result) {
-  scoped_login_ui_service_observer_.RemoveAll();
   switch (result) {
     case LoginUIService::CONFIGURE_SYNC_FIRST:
-      browser_ = EnsureBrowser(browser_, profile_);
-      chrome::ShowSettingsSubPage(browser_, chrome::kSyncSetupSubPage);
+      EnableUnifiedConsentIfNeeded();
+      delegate_->ShowSyncSettings();
       break;
     case LoginUIService::SYNC_WITH_DEFAULT_SETTINGS: {
       browser_sync::ProfileSyncService* sync_service = GetProfileSyncService();
-      if (sync_service)
+      if (sync_service) {
         sync_service->SetFirstSetupComplete();
+        EnableUnifiedConsentIfNeeded();
+      }
       break;
     }
     case LoginUIService::ABORT_SIGNIN:
@@ -441,11 +400,6 @@ void DiceTurnSyncOnHelper::OnSyncConfirmationUIClosed(
   delete this;
 }
 
-void DiceTurnSyncOnHelper::OnBrowserRemoved(Browser* browser) {
-  if (browser == browser_)
-    browser_ = nullptr;
-}
-
 void DiceTurnSyncOnHelper::AbortAndDelete() {
   if (signin_aborted_mode_ == SigninAbortedMode::REMOVE_ACCOUNT) {
     // Revoke the token, and the AccountReconcilor and/or the Gaia server will
@@ -453,4 +407,11 @@ void DiceTurnSyncOnHelper::AbortAndDelete() {
     token_service_->RevokeCredentials(account_info_.account_id);
   }
   delete this;
+}
+
+void DiceTurnSyncOnHelper::EnableUnifiedConsentIfNeeded() {
+  if (IsUnifiedConsentEnabled(profile_)) {
+    UnifiedConsentServiceFactory::GetForProfile(profile_)
+        ->SetUnifiedConsentGiven(true);
+  }
 }

@@ -6,7 +6,6 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "build/build_config.h"
-#include "chromecast/base/metrics/cast_metrics_test_helper.h"
 #include "media/base/media.h"
 
 class CastMediaTestSuite : public base::TestSuite {
@@ -23,10 +22,6 @@ void CastMediaTestSuite::Initialize() {
   // Run TestSuite::Initialize first so that logging is initialized.
   base::TestSuite::Initialize();
 
-  // Some of the chromecast media unit tests require a metrics helper instance.
-  // Provide a fake one.
-  chromecast::metrics::InitializeMetricsHelperForTesting();
-
   // Initialize the FFMpeg library.
   // Note: at this time, AtExitManager is already present.
   media::InitializeMediaLibrary();
@@ -37,5 +32,5 @@ int main(int argc, char** argv) {
 
   return base::LaunchUnitTests(
       argc, argv,
-      base::Bind(&CastMediaTestSuite::Run, base::Unretained(&test_suite)));
+      base::BindOnce(&CastMediaTestSuite::Run, base::Unretained(&test_suite)));
 }

@@ -4,7 +4,7 @@
 
 #include "ash/login/ui/login_button.h"
 
-#include "ash/ash_constants.h"
+#include "ash/public/cpp/ash_constants.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -15,12 +15,11 @@ namespace ash {
 namespace {
 
 // Color of the ink drop ripple.
-constexpr SkColor kInkDropRippleColor =
-    SkColorSetARGBMacro(0x0F, 0xFF, 0xFF, 0xFF);
+constexpr SkColor kInkDropRippleColor = SkColorSetARGB(0x0F, 0xFF, 0xFF, 0xFF);
 
 // Color of the ink drop highlight.
 constexpr SkColor kInkDropHighlightColor =
-    SkColorSetARGBMacro(0x14, 0xFF, 0xFF, 0xFF);
+    SkColorSetARGB(0x14, 0xFF, 0xFF, 0xFF);
 
 }  // namespace
 

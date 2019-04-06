@@ -45,10 +45,6 @@
 #include "ui/gfx/paint_vector_icon.h"
 #endif
 
-#if defined(OS_CHROMEOS)
-#include "ash/accelerators/accelerator_table.h"
-#endif
-
 namespace {
 
 // Initial comamnd ID's for navigatable (and hence executable) tab/window menu
@@ -151,16 +147,13 @@ enum RecentTabAction {
 // the navigation information of a local or other devices' tab required to
 // restore the tab.
 struct RecentTabsSubMenuModel::TabNavigationItem {
-  TabNavigationItem() : tab_id(-1) {}
+  TabNavigationItem() : tab_id(SessionID::InvalidValue()) {}
 
   TabNavigationItem(const std::string& session_tag,
-                    const SessionID::id_type& tab_id,
+                    SessionID tab_id,
                     const base::string16& title,
                     const GURL& url)
-      : session_tag(session_tag),
-        tab_id(tab_id),
-        title(title),
-        url(url) {}
+      : session_tag(session_tag), tab_id(tab_id), title(title), url(url) {}
 
   // For use by std::set for sorting.
   bool operator<(const TabNavigationItem& other) const {
@@ -169,7 +162,7 @@ struct RecentTabsSubMenuModel::TabNavigationItem {
 
   // Empty for local tabs, non-empty for other devices' tabs.
   std::string session_tag;
-  SessionID::id_type tab_id;  // -1 for invalid, >= 0 otherwise.
+  SessionID tab_id;  // Might be invalid.
   base::string16 title;
   GURL url;
 };
@@ -182,7 +175,8 @@ RecentTabsSubMenuModel::RecentTabsSubMenuModel(
     Browser* browser)
     : ui::SimpleMenuModel(this),
       browser_(browser),
-      open_tabs_delegate_(nullptr),
+      sync_service_(ProfileSyncServiceFactory::GetInstance()->GetForProfile(
+          browser->profile())),
       last_local_model_index_(kHistorySeparatorIndex),
       default_favicon_(
           ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
@@ -208,35 +202,15 @@ RecentTabsSubMenuModel::RecentTabsSubMenuModel(
 
 // Mac doesn't support the dynamic menu.
 #if !defined(OS_MACOSX)
-  browser_sync::ProfileSyncService* sync_service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(
-          browser_->profile());
-  if (sync_service)
-    sync_observer_.Add(sync_service);
+  if (sync_service_)
+    sync_observer_.Add(sync_service_);
 #endif  // !defined(OS_MACOSX)
 
   Build();
 
-  // Retrieve accelerator key for IDC_RESTORE_TAB now, because on ASH, it's not
-  // defined in |accelerator_provider|, but in shell, so simply retrieve it now
-  // for all ASH and non-ASH for use in |GetAcceleratorForCommandId|.
-#if defined(OS_CHROMEOS)
-  for (size_t i = 0; i < ash::kAcceleratorDataLength; ++i) {
-    const ash::AcceleratorData& accel_data = ash::kAcceleratorData[i];
-    if (accel_data.action == ash::RESTORE_TAB) {
-      reopen_closed_tab_accelerator_ = ui::Accelerator(accel_data.keycode,
-                                                       accel_data.modifiers);
-      break;
-    }
-  }
-#else
   if (accelerator_provider) {
     accelerator_provider->GetAcceleratorForCommandId(
         IDC_RESTORE_TAB, &reopen_closed_tab_accelerator_);
-  }
-#endif  // defined(OS_CHROMEOS)
-
-  if (accelerator_provider) {
     accelerator_provider->GetAcceleratorForCommandId(
         IDC_SHOW_HISTORY, &show_history_accelerator_);
   }
@@ -313,7 +287,7 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
     TabNavigationItems* tab_items = NULL;
     int tab_items_idx = CommandIdToTabVectorIndex(command_id, &tab_items);
     const TabNavigationItem& item = (*tab_items)[tab_items_idx];
-    DCHECK(item.tab_id > -1 && item.url.is_valid());
+    DCHECK(item.tab_id.is_valid() && item.url.is_valid());
 
     if (item.session_tag.empty()) {  // Restore tab of local session.
       if (service && context) {
@@ -534,7 +508,7 @@ void RecentTabsSubMenuModel::BuildTabsFromOtherDevices() {
   DCHECK_GT(GetItemCount(), 0);
 }
 
-void RecentTabsSubMenuModel::BuildLocalTabItem(int session_id,
+void RecentTabsSubMenuModel::BuildLocalTabItem(SessionID session_id,
                                                const base::string16& title,
                                                const GURL& url,
                                                int curr_model_index) {
@@ -549,10 +523,9 @@ void RecentTabsSubMenuModel::BuildLocalTabItem(int session_id,
   local_tab_navigation_items_.push_back(item);
 }
 
-void RecentTabsSubMenuModel::BuildLocalWindowItem(
-    const SessionID::id_type& window_id,
-    int num_tabs,
-    int curr_model_index) {
+void RecentTabsSubMenuModel::BuildLocalWindowItem(SessionID window_id,
+                                                  int num_tabs,
+                                                  int curr_model_index) {
   int command_id = WindowVectorIndexToCommandId(local_window_items_.size());
   // See comments in BuildLocalEntries() about usage of InsertItem*At().
   InsertItemAt(curr_model_index, command_id, l10n_util::GetPluralStringFUTF16(
@@ -571,8 +544,7 @@ void RecentTabsSubMenuModel::BuildOtherDevicesTabItem(
     const sessions::SessionTab& tab) {
   const sessions::SerializedNavigationEntry& current_navigation =
       tab.navigations.at(tab.normalized_navigation_index());
-  TabNavigationItem item(session_tag, tab.tab_id.id(),
-                         current_navigation.title(),
+  TabNavigationItem item(session_tag, tab.tab_id, current_navigation.title(),
                          current_navigation.virtual_url());
   int command_id = TabVectorIndexToCommandId(
       other_devices_tab_navigation_items_.size(),
@@ -588,24 +560,24 @@ void RecentTabsSubMenuModel::BuildOtherDevicesTabItem(
 
 void RecentTabsSubMenuModel::AddDeviceFavicon(
     int index_in_menu,
-    sync_sessions::SyncedSession::DeviceType device_type) {
+    sync_pb::SyncEnums::DeviceType device_type) {
 #if defined(OS_MACOSX)
   int favicon_id = -1;
   switch (device_type) {
-    case sync_sessions::SyncedSession::TYPE_PHONE:
+    case sync_pb::SyncEnums::TYPE_PHONE:
       favicon_id = IDR_PHONE_FAVICON;
       break;
 
-    case sync_sessions::SyncedSession::TYPE_TABLET:
+    case sync_pb::SyncEnums::TYPE_TABLET:
       favicon_id = IDR_TABLET_FAVICON;
       break;
 
-    case sync_sessions::SyncedSession::TYPE_CHROMEOS:
-    case sync_sessions::SyncedSession::TYPE_WIN:
-    case sync_sessions::SyncedSession::TYPE_MACOSX:
-    case sync_sessions::SyncedSession::TYPE_LINUX:
-    case sync_sessions::SyncedSession::TYPE_OTHER:
-    case sync_sessions::SyncedSession::TYPE_UNSET:
+    case sync_pb::SyncEnums::TYPE_CROS:
+    case sync_pb::SyncEnums::TYPE_WIN:
+    case sync_pb::SyncEnums::TYPE_MAC:
+    case sync_pb::SyncEnums::TYPE_LINUX:
+    case sync_pb::SyncEnums::TYPE_OTHER:
+    case sync_pb::SyncEnums::TYPE_UNSET:
       favicon_id = IDR_LAPTOP_FAVICON;
       break;
   }
@@ -615,20 +587,20 @@ void RecentTabsSubMenuModel::AddDeviceFavicon(
 #else
   const gfx::VectorIcon* favicon = nullptr;
   switch (device_type) {
-    case sync_sessions::SyncedSession::TYPE_PHONE:
+    case sync_pb::SyncEnums::TYPE_PHONE:
       favicon = &kSmartphoneIcon;
       break;
 
-    case sync_sessions::SyncedSession::TYPE_TABLET:
+    case sync_pb::SyncEnums::TYPE_TABLET:
       favicon = &kTabletIcon;
       break;
 
-    case sync_sessions::SyncedSession::TYPE_CHROMEOS:
-    case sync_sessions::SyncedSession::TYPE_WIN:
-    case sync_sessions::SyncedSession::TYPE_MACOSX:
-    case sync_sessions::SyncedSession::TYPE_LINUX:
-    case sync_sessions::SyncedSession::TYPE_OTHER:
-    case sync_sessions::SyncedSession::TYPE_UNSET:
+    case sync_pb::SyncEnums::TYPE_CROS:
+    case sync_pb::SyncEnums::TYPE_WIN:
+    case sync_pb::SyncEnums::TYPE_MAC:
+    case sync_pb::SyncEnums::TYPE_LINUX:
+    case sync_pb::SyncEnums::TYPE_OTHER:
+    case sync_pb::SyncEnums::TYPE_UNSET:
       favicon = &kLaptopIcon;
       break;
   }
@@ -730,15 +702,10 @@ void RecentTabsSubMenuModel::ClearTabsFromOtherDevices() {
 
 sync_sessions::OpenTabsUIDelegate*
 RecentTabsSubMenuModel::GetOpenTabsUIDelegate() {
-  if (!open_tabs_delegate_) {
-    browser_sync::ProfileSyncService* service =
-        ProfileSyncServiceFactory::GetInstance()->GetForProfile(
-            browser_->profile());
-    // Only return the delegate if it exists and it is done syncing sessions.
-    if (service && service->IsSyncActive())
-      open_tabs_delegate_ = service->GetOpenTabsUIDelegate();
-  }
-  return open_tabs_delegate_;
+  // Only return the delegate if it exists and it is done syncing sessions.
+  return sync_service_ && sync_service_->IsSyncActive()
+             ? sync_service_->GetOpenTabsUIDelegate()
+             : nullptr;
 }
 
 void RecentTabsSubMenuModel::TabRestoreServiceChanged(

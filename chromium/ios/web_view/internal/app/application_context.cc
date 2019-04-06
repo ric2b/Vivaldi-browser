@@ -15,11 +15,12 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/signin/core/browser/signin_manager_base.h"
-#include "components/ssl_config/ssl_config_service_manager.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "ios/web/public/web_thread.h"
+#include "ios/web_view/cwv_web_view_features.h"
 #include "ios/web_view/internal/app/web_view_io_thread.h"
 #include "net/socket/client_socket_pool_manager.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 namespace ios_web_view {
@@ -48,6 +49,14 @@ void ApplicationContext::SaveState() {
   if (local_state_) {
     local_state_->CommitPendingWrite();
   }
+
+  if (shared_url_loader_factory_)
+    shared_url_loader_factory_->Detach();
+
+  if (network_context_) {
+    web::WebThread::DeleteSoon(web::WebThread::IO, FROM_HERE,
+                               network_context_owner_.release());
+  }
 }
 
 void ApplicationContext::PostDestroyThreads() {
@@ -69,11 +78,12 @@ PrefService* ApplicationContext::GetLocalState() {
     scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple);
     flags_ui::PrefServiceFlagsStorage::RegisterPrefs(pref_registry.get());
     PrefProxyConfigTrackerImpl::RegisterPrefs(pref_registry.get());
-    ssl_config::SSLConfigServiceManager::RegisterPrefs(pref_registry.get());
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
     SigninManagerBase::RegisterPrefs(pref_registry.get());
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
 
     base::FilePath local_state_path;
-    PathService::Get(base::DIR_APP_DATA, &local_state_path);
+    base::PathService::Get(base::DIR_APP_DATA, &local_state_path);
     local_state_path =
         local_state_path.Append(FILE_PATH_LITERAL("ChromeWebView"));
     local_state_path =
@@ -100,6 +110,31 @@ PrefService* ApplicationContext::GetLocalState() {
 net::URLRequestContextGetter* ApplicationContext::GetSystemURLRequestContext() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return web_view_io_thread_->system_url_request_context_getter();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+ApplicationContext::GetSharedURLLoaderFactory() {
+  if (!url_loader_factory_) {
+    auto url_loader_factory_params =
+        network::mojom::URLLoaderFactoryParams::New();
+    url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
+    url_loader_factory_params->is_corb_enabled = false;
+    GetSystemNetworkContext()->CreateURLLoaderFactory(
+        mojo::MakeRequest(&url_loader_factory_),
+        std::move(url_loader_factory_params));
+    shared_url_loader_factory_ =
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+            url_loader_factory_.get());
+  }
+  return shared_url_loader_factory_;
+}
+
+network::mojom::NetworkContext* ApplicationContext::GetSystemNetworkContext() {
+  if (!network_context_) {
+    network_context_owner_ = std::make_unique<web::NetworkContextOwner>(
+        GetSystemURLRequestContext(), &network_context_);
+  }
+  return network_context_.get();
 }
 
 const std::string& ApplicationContext::GetApplicationLocale() {

@@ -65,7 +65,8 @@ class NotificationCollector
     delegates_.insert(delegate);
   }
 
-  void Reset() {
+  void Reset(base::OnceClosure signal_closure) {
+    signal_closure_ = std::move(signal_closure);
     signaled_.clear();
   }
 
@@ -84,8 +85,8 @@ class NotificationCollector
     signaled_.insert(delegate);
 
     // Check whether all delegates have been signaled.
-    if (signaled_ == delegates_)
-      task_runner_->PostTask(FROM_HERE, MessageLoop::QuitWhenIdleClosure());
+    if (signal_closure_ && signaled_ == delegates_)
+      std::move(signal_closure_).Run();
   }
 
   // Set of registered delegates.
@@ -96,6 +97,9 @@ class NotificationCollector
 
   // The loop we should break after all delegates signaled.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+  // Closure to run when all delegates have signaled.
+  base::OnceClosure signal_closure_;
 };
 
 class TestDelegateBase : public SupportsWeakPtr<TestDelegateBase> {
@@ -184,13 +188,16 @@ class FilePathWatcherTest : public testing::Test {
                   bool recursive_watch) WARN_UNUSED_RESULT;
 
   bool WaitForEvents() WARN_UNUSED_RESULT {
-    collector_->Reset();
+    return WaitForEventsWithTimeout(TestTimeouts::action_timeout());
+  }
 
+  bool WaitForEventsWithTimeout(TimeDelta timeout) WARN_UNUSED_RESULT {
     RunLoop run_loop;
+    collector_->Reset(run_loop.QuitClosure());
+
     // Make sure we timeout if we don't get notified.
     ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitWhenIdleClosure(),
-        TestTimeouts::action_timeout());
+        FROM_HERE, run_loop.QuitClosure(), timeout);
     run_loop.Run();
     return collector_->Success();
   }
@@ -271,40 +278,37 @@ TEST_F(FilePathWatcherTest, DeletedFile) {
 // Deletes the FilePathWatcher when it's notified.
 class Deleter : public TestDelegateBase {
  public:
-  Deleter(FilePathWatcher* watcher, MessageLoop* loop)
-      : watcher_(watcher),
-        loop_(loop) {
-  }
+  explicit Deleter(base::OnceClosure done_closure)
+      : watcher_(std::make_unique<FilePathWatcher>()),
+        done_closure_(std::move(done_closure)) {}
   ~Deleter() override = default;
 
   void OnFileChanged(const FilePath&, bool) override {
     watcher_.reset();
-    loop_->task_runner()->PostTask(FROM_HERE,
-                                   MessageLoop::QuitWhenIdleClosure());
+    std::move(done_closure_).Run();
   }
 
   FilePathWatcher* watcher() const { return watcher_.get(); }
 
  private:
   std::unique_ptr<FilePathWatcher> watcher_;
-  MessageLoop* loop_;
+  base::OnceClosure done_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(Deleter);
 };
 
 // Verify that deleting a watcher during the callback doesn't crash.
 TEST_F(FilePathWatcherTest, DeleteDuringNotify) {
-  FilePathWatcher* watcher = new FilePathWatcher;
-  // Takes ownership of watcher.
-  std::unique_ptr<Deleter> deleter(new Deleter(watcher, &loop_));
-  ASSERT_TRUE(SetupWatch(test_file(), watcher, deleter.get(), false));
+  base::RunLoop run_loop;
+  Deleter deleter(run_loop.QuitClosure());
+  ASSERT_TRUE(SetupWatch(test_file(), deleter.watcher(), &deleter, false));
 
   ASSERT_TRUE(WriteFile(test_file(), "content"));
-  ASSERT_TRUE(WaitForEvents());
+  run_loop.Run();
 
   // We win if we haven't crashed yet.
   // Might as well double-check it got deleted, too.
-  ASSERT_TRUE(deleter->watcher() == nullptr);
+  ASSERT_TRUE(deleter.watcher() == nullptr);
 }
 
 // Verify that deleting the watcher works even if there is a pending
@@ -539,7 +543,7 @@ TEST_F(FilePathWatcherTest, RecursiveWatch) {
   ASSERT_TRUE(WaitForEvents());
 }
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+#if defined(OS_POSIX) && !defined(OS_ANDROID)
 // Apps cannot create symlinks on Android in /sdcard as /sdcard uses the
 // "fuse" file system, while /data uses "ext4".  Running these tests in /data
 // would be preferable and allow testing file attributes and symlinks.
@@ -584,7 +588,7 @@ TEST_F(FilePathWatcherTest, RecursiveWithSymLink) {
   ASSERT_TRUE(WriteFile(target2_file, "content"));
   ASSERT_TRUE(WaitForEvents());
 }
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+#endif  // defined(OS_POSIX) && !defined(OS_ANDROID)
 
 TEST_F(FilePathWatcherTest, MoveChild) {
   FilePathWatcher file_watcher;
@@ -853,10 +857,7 @@ TEST_F(FilePathWatcherTest, DirAttributesChanged) {
   // We should not get notified in this case as it hasn't affected our ability
   // to access the file.
   ASSERT_TRUE(ChangeFilePermissions(test_dir1, Read, false));
-  loop_.task_runner()->PostDelayedTask(FROM_HERE,
-                                       MessageLoop::QuitWhenIdleClosure(),
-                                       TestTimeouts::tiny_timeout());
-  ASSERT_FALSE(WaitForEvents());
+  ASSERT_FALSE(WaitForEventsWithTimeout(TestTimeouts::tiny_timeout()));
   ASSERT_TRUE(ChangeFilePermissions(test_dir1, Read, true));
 
   // We should get notified in this case because filepathwatcher can no

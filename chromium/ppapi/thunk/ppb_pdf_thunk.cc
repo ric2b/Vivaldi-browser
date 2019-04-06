@@ -86,6 +86,28 @@ void HasUnsupportedFeature(PP_Instance instance) {
     enter.functions()->HasUnsupportedFeature();
 }
 
+void ShowAlertDialog(PP_Instance instance, const char* message) {
+  EnterInstanceAPI<PPB_PDF_API> enter(instance);
+  if (enter.succeeded())
+    enter.functions()->ShowAlertDialog(message);
+}
+
+bool ShowConfirmDialog(PP_Instance instance, const char* message) {
+  EnterInstanceAPI<PPB_PDF_API> enter(instance);
+  if (enter.succeeded())
+    return enter.functions()->ShowConfirmDialog(message);
+  return false;
+}
+
+PP_Var ShowPromptDialog(PP_Instance instance,
+                        const char* message,
+                        const char* default_answer) {
+  EnterInstanceAPI<PPB_PDF_API> enter(instance);
+  if (enter.succeeded())
+    return enter.functions()->ShowPromptDialog(message, default_answer);
+  return PP_MakeUndefined();
+}
+
 void SaveAs(PP_Instance instance) {
   EnterInstanceAPI<PPB_PDF_API> enter(instance);
   if (enter.succeeded())
@@ -180,13 +202,6 @@ void SelectionChanged(PP_Instance instance,
   enter.functions()->SelectionChanged(*left, left_height, *right, right_height);
 }
 
-void DidScroll(PP_Instance instance) {
-  EnterInstanceAPI<PPB_PDF_API> enter(instance);
-  if (enter.failed())
-    return;
-  enter.functions()->DidScroll();
-}
-
 const PPB_PDF g_ppb_pdf_thunk = {
     &GetFontFileWithFallback,
     &GetFontTableForPrivateFontFile,
@@ -207,7 +222,9 @@ const PPB_PDF g_ppb_pdf_thunk = {
     &SetAccessibilityPageInfo,
     &SetCrashData,
     &SelectionChanged,
-    &DidScroll,
+    &ShowAlertDialog,
+    &ShowConfirmDialog,
+    &ShowPromptDialog,
 };
 
 }  // namespace

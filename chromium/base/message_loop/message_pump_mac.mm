@@ -7,13 +7,13 @@
 #import <Foundation/Foundation.h>
 
 #include <limits>
+#include <memory>
 
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/mac/call_with_eh_frame.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/timer_slack.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
@@ -25,28 +25,12 @@
 
 namespace base {
 
+const CFStringRef kMessageLoopExclusiveRunLoopMode =
+    CFSTR("kMessageLoopExclusiveRunLoopMode");
+
 namespace {
 
-// AppKit RunLoop modes observed to potentially run tasks posted to Chrome's
-// main thread task runner. Some are internal to AppKit but must be observed to
-// keep Chrome's UI responsive. Others that may be interesting, but are not
-// watched:
-//  - com.apple.hitoolbox.windows.transitionmode
-//  - com.apple.hitoolbox.windows.flushmode
-const CFStringRef kAllModes[] = {
-    kCFRunLoopCommonModes,
-
-    // Mode that only sees Chrome work sources.
-    kMessageLoopExclusiveRunLoopMode,
-
-    // Process work when NSMenus are fading out.
-    CFSTR("com.apple.hitoolbox.windows.windowfadingmode"),
-
-    // Process work when AppKit is highlighting an item on the main menubar.
-    CFSTR("NSUnhighlightMenuRunLoopMode"),
-};
-
-// Mask that determines which modes in |kAllModes| to use.
+// Mask that determines which modes to use.
 enum { kCommonModeMask = 0x1, kAllModesMask = 0xf };
 
 // Modes to use for MessagePumpNSApplication that are considered "safe".
@@ -72,9 +56,7 @@ MessagePumpNSApplication* g_app_pump;
 typedef struct __CFRuntimeBase {
   uintptr_t _cfisa;
   uint8_t _cfinfo[4];
-#if __LP64__
   uint32_t _rc;
-#endif
 } CFRuntimeBase;
 
 #if defined(__BIG_ENDIAN__)
@@ -111,10 +93,6 @@ void __ChromeCFRunLoopTimerSetValid(CFRunLoopTimerRef timer, bool valid) {
 #endif  // !defined(OS_IOS)
 
 }  // namespace
-
-// static
-const CFStringRef kMessageLoopExclusiveRunLoopMode =
-    CFSTR("kMessageLoopExclusiveRunLoopMode");
 
 // A scoper for autorelease pools created from message pump run loops.
 // Avoids dirtying up the ScopedNSAutoreleasePool interface for the rare
@@ -158,7 +136,33 @@ class MessagePumpCFRunLoopBase::ScopedModeEnabler {
     CFRunLoopRemoveTimer(loop, owner_->delayed_work_timer_, mode());
   }
 
-  const CFStringRef& mode() const { return kAllModes[mode_index_]; }
+  // This function knows about the AppKit RunLoop modes observed to potentially
+  // run tasks posted to Chrome's main thread task runner. Some are internal to
+  // AppKit but must be observed to keep Chrome's UI responsive. Others that may
+  // be interesting, but are not watched:
+  //  - com.apple.hitoolbox.windows.transitionmode
+  //  - com.apple.hitoolbox.windows.flushmode
+  const CFStringRef& mode() const {
+    static const CFStringRef modes[] = {
+        // The standard Core Foundation "common modes" constant. Must always be
+        // first in this list to match the value of kCommonModeMask.
+        kCFRunLoopCommonModes,
+
+        // Mode that only sees Chrome work sources.
+        kMessageLoopExclusiveRunLoopMode,
+
+        // Process work when NSMenus are fading out.
+        CFSTR("com.apple.hitoolbox.windows.windowfadingmode"),
+
+        // Process work when AppKit is highlighting an item on the main menubar.
+        CFSTR("NSUnhighlightMenuRunLoopMode"),
+    };
+    static_assert(arraysize(modes) == kNumModes, "mode size mismatch");
+    static_assert((1 << kNumModes) - 1 == kAllModesMask,
+                  "kAllModesMask not large enough");
+
+    return modes[mode_index_];
+  }
 
  private:
   MessagePumpCFRunLoopBase* const owner_;  // Weak. Owns this.
@@ -322,20 +326,18 @@ AutoreleasePoolType* MessagePumpCFRunLoopBase::CreateAutoreleasePool() {
 }
 
 void MessagePumpCFRunLoopBase::SetModeMask(int mode_mask) {
-  static_assert(arraysize(enabled_modes_) == arraysize(kAllModes),
-                "mode size mismatch");
-  for (size_t i = 0; i < arraysize(kAllModes); ++i) {
+  for (size_t i = 0; i < kNumModes; ++i) {
     bool enable = mode_mask & (0x1 << i);
     if (enable == !enabled_modes_[i]) {
       enabled_modes_[i] =
-          enable ? base::MakeUnique<ScopedModeEnabler>(this, i) : nullptr;
+          enable ? std::make_unique<ScopedModeEnabler>(this, i) : nullptr;
     }
   }
 }
 
 int MessagePumpCFRunLoopBase::GetModeMask() const {
   int mask = 0;
-  for (size_t i = 0; i < arraysize(enabled_modes_); ++i)
+  for (size_t i = 0; i < kNumModes; ++i)
     mask |= enabled_modes_[i] ? (0x1 << i) : 0;
   return mask;
 }
@@ -909,13 +911,13 @@ bool MessagePumpMac::IsHandlingSendEvent() {
 #endif  // !defined(OS_IOS)
 
 // static
-MessagePump* MessagePumpMac::Create() {
+std::unique_ptr<MessagePump> MessagePumpMac::Create() {
   if ([NSThread isMainThread]) {
 #if defined(OS_IOS)
-    return new MessagePumpUIApplication;
+    return std::make_unique<MessagePumpUIApplication>();
 #else
     if ([NSApp conformsToProtocol:@protocol(CrAppProtocol)])
-      return new MessagePumpCrApplication;
+      return std::make_unique<MessagePumpCrApplication>();
 
     // The main-thread MessagePump implementations REQUIRE an NSApp.
     // Executables which have specific requirements for their
@@ -923,11 +925,11 @@ MessagePump* MessagePumpMac::Create() {
     // creating an event loop.
     [NSApplication sharedApplication];
     g_not_using_cr_app = true;
-    return new MessagePumpNSApplication;
+    return std::make_unique<MessagePumpNSApplication>();
 #endif
   }
 
-  return new MessagePumpNSRunLoop;
+  return std::make_unique<MessagePumpNSRunLoop>();
 }
 
 }  // namespace base

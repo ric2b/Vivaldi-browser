@@ -1,5 +1,5 @@
 template("system_command") {
-  forward_variables_from(invoker, "*")
+  forward_variables_from(invoker, "*", [ "testonly" ])
 
   command_args = args
   if (defined(deps)) {
@@ -41,7 +41,7 @@ template("system_command") {
 }
 
 template("command_action") {
-  forward_variables_from(invoker, "*")
+  forward_variables_from(invoker, "*", [ "testonly" ])
   command_name = command
   command_args = args
   if (defined(deps)) {
@@ -85,7 +85,7 @@ template("command_action") {
 }
 
 template("command_bash") {
-  forward_variables_from(invoker, "*")
+  forward_variables_from(invoker, "*", [ "testonly" ])
   command_name = command
   command_args = args
   if (defined(deps)) {

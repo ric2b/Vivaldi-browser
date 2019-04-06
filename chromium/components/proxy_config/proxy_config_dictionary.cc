@@ -4,12 +4,12 @@
 
 #include "components/proxy_config/proxy_config_dictionary.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "net/proxy/proxy_config.h"
+#include "net/proxy_resolution/proxy_config.h"
 
 namespace {
 
@@ -133,7 +133,7 @@ std::unique_ptr<base::DictionaryValue> ProxyConfigDictionary::CreateDictionary(
     bool pac_mandatory,
     const std::string& proxy_server,
     const std::string& bypass_list) {
-  auto dict = base::MakeUnique<base::DictionaryValue>();
+  auto dict = std::make_unique<base::DictionaryValue>();
   dict->SetString(kProxyMode, ProxyModeToString(mode));
   if (!pac_url.empty()) {
     dict->SetString(kProxyPacUrl, pac_url);

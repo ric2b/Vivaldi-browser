@@ -4,8 +4,7 @@
 
 #include "services/ui/public/interfaces/cursor/cursor_struct_traits.h"
 
-#include "mojo/common/common_custom_types_struct_traits.h"
-#include "mojo/common/time_struct_traits.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "skia/public/interfaces/bitmap_skbitmap_struct_traits.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -335,14 +334,20 @@ bool StructTraits<ui::mojom::CursorDataDataView, ui::CursorData>::Read(
 
   gfx::Point hotspot_in_pixels;
   std::vector<SkBitmap> cursor_frames;
-  float scale_factor = data.scale_factor();
   base::TimeDelta frame_delay;
 
   if (!data.ReadHotspotInPixels(&hotspot_in_pixels) ||
-      !data.ReadCursorFrames(&cursor_frames) ||
+      !data.ReadCursorFrames(&cursor_frames) || cursor_frames.empty() ||
       !data.ReadFrameDelay(&frame_delay)) {
     return false;
   }
+
+  // Clamp the scale factor to a reasonable value. TODO(estade): do we even need
+  // this field? It doesn't appear to be used anywhere and is a property of the
+  // display, not the cursor.
+  float scale_factor = data.scale_factor();
+  if (scale_factor < 1.f || scale_factor > 3.f)
+    return false;
 
   *out = ui::CursorData(hotspot_in_pixels, cursor_frames, scale_factor,
                         frame_delay);

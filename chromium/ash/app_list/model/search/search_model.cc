@@ -10,27 +10,18 @@
 
 namespace app_list {
 
-namespace {
-
-void UpdateResult(SearchResult* source, SearchResult* target) {
-  target->set_display_type(source->display_type());
-  target->set_title(source->title());
-  target->set_title_tags(source->title_tags());
-  target->set_details(source->details());
-  target->set_details_tags(source->details_tags());
-}
-
-}  // namespace
-
 SearchModel::SearchModel()
     : search_box_(std::make_unique<SearchBoxModel>()),
       results_(std::make_unique<SearchResults>()) {}
 
 SearchModel::~SearchModel() {}
 
-void SearchModel::SetTabletMode(bool started) {
-  is_tablet_mode_ = started;
-  search_box_->SetTabletMode(started);
+void SearchModel::SetTabletMode(bool is_tablet_mode) {
+  search_box_->SetTabletMode(is_tablet_mode);
+}
+
+void SearchModel::SetSearchEngineIsGoogle(bool is_google) {
+  search_box_->SetSearchEngineIsGoogle(is_google);
 }
 
 std::vector<SearchResult*> SearchModel::FilterSearchResultsByDisplayType(
@@ -70,12 +61,11 @@ void SearchModel::PublishResults(
   for (auto&& new_result : new_results) {
     auto ui_result_it = results_map.find(new_result->id());
     if (ui_result_it != results_map.end() &&
-        new_result->view() == ui_result_it->second->view()) {
+        new_result->answer_card_contents_token() ==
+            ui_result_it->second->answer_card_contents_token()) {
       // Update and use the old result if it exists.
       std::unique_ptr<SearchResult> ui_result = std::move(ui_result_it->second);
-      UpdateResult(new_result.get(), ui_result.get());
-      ui_result->set_relevance(new_result->relevance());
-
+      ui_result->SetMetadata(new_result->CloneMetadata());
       results_->Add(std::move(ui_result));
 
       // Remove the item from the map so that it ends up only with unused
@@ -88,6 +78,18 @@ void SearchModel::PublishResults(
   }
 
   // Any remaining results in |results_map| will be automatically deleted.
+}
+
+SearchResult* SearchModel::FindSearchResult(const std::string& id) {
+  for (const auto& result : *results_) {
+    if (result->id() == id)
+      return result.get();
+  }
+  return nullptr;
+}
+
+void SearchModel::DeleteAllResults() {
+  PublishResults(std::vector<std::unique_ptr<SearchResult>>());
 }
 
 }  // namespace app_list

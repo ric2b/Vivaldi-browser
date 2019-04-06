@@ -28,7 +28,7 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/common/input_messages.h"
-#include "third_party/WebKit/common/frame_policy.h"
+#include "third_party/blink/public/common/frame/frame_policy.h"
 
 namespace content {
 
@@ -183,7 +183,8 @@ bool FrameTree::AddFrame(
     bool is_created_by_script,
     const base::UnguessableToken& devtools_frame_token,
     const blink::FramePolicy& frame_policy,
-    const FrameOwnerProperties& frame_owner_properties) {
+    const FrameOwnerProperties& frame_owner_properties,
+    bool was_discarded) {
   CHECK_NE(new_routing_id, MSG_ROUTING_NONE);
 
   // A child frame always starts with an initial empty document, which means
@@ -206,6 +207,9 @@ bool FrameTree::AddFrame(
   // RenderFrameProxy objects when the RenderFrameHost is created.
   new_node->SetPendingFramePolicy(frame_policy);
   new_node->CommitPendingFramePolicy();
+
+  if (was_discarded)
+    new_node->set_was_discarded();
 
   // Add the new node to the FrameTree, creating the RenderFrameHost.
   FrameTreeNode* added_node =
@@ -349,6 +353,7 @@ RenderViewHostImpl* FrameTree::CreateRenderViewHost(
     SiteInstance* site_instance,
     int32_t routing_id,
     int32_t main_frame_routing_id,
+    int32_t widget_routing_id,
     bool swapped_out,
     bool hidden) {
   RenderViewHostMap::iterator iter =
@@ -359,7 +364,8 @@ RenderViewHostImpl* FrameTree::CreateRenderViewHost(
   RenderViewHostImpl* rvh =
       static_cast<RenderViewHostImpl*>(RenderViewHostFactory::Create(
           site_instance, render_view_delegate_, render_widget_delegate_,
-          routing_id, main_frame_routing_id, swapped_out, hidden));
+          routing_id, main_frame_routing_id, widget_routing_id, swapped_out,
+          hidden));
 
   render_view_host_map_[site_instance->GetId()] = rvh;
   return rvh;
@@ -418,76 +424,27 @@ void FrameTree::FrameRemoved(FrameTreeNode* frame) {
     on_frame_removed_.Run(frame->current_frame_host());
 }
 
-void FrameTree::UpdateLoadProgress() {
-  double progress = 0.0;
-  ProgressBarCompletion completion = GetProgressBarCompletionPolicy();
-  double loaded_bytes = 0.0;
-  int loaded_elements = 0;
-  int total_elements = 0;
-  int frame_count = 0;
-  switch (completion) {
-    case ProgressBarCompletion::DOM_CONTENT_LOADED:
-    case ProgressBarCompletion::RESOURCES_BEFORE_DCL:
-      if (root_->has_started_loading())
-        progress = root_->loading_progress();
-      // Vivaldi addition:
-      loaded_bytes = root_->loaded_bytes();
-      total_elements = root_->total_elements();
-      loaded_elements = root_->loaded_elements();
-      break;
-    case ProgressBarCompletion::LOAD_EVENT:
-      for (FrameTreeNode* node : Nodes()) {
-        // Ignore the current frame if it has not started loading.
-        if (!node->has_started_loading())
-          continue;
-        progress += node->loading_progress();
-        frame_count++;
-
-        // Vivaldi addition:
-        loaded_bytes += node->loaded_bytes();
-        total_elements += node->total_elements();
-        loaded_elements += node->loaded_elements();
-      }
-      break;
-    case ProgressBarCompletion::RESOURCES_BEFORE_DCL_AND_SAME_ORIGIN_IFRAMES:
-      for (FrameTreeNode* node : Nodes()) {
-        // Ignore the current frame if it has not started loading,
-        // if the frame is cross-origin, or about:blank.
-        if (!node->has_started_loading() || !node->HasSameOrigin(*root_) ||
-            node->current_url() == url::kAboutBlankURL)
-          continue;
-        progress += node->loading_progress();
-        frame_count++;
-
-        // Vivaldi addition:
-        loaded_bytes += node->loaded_bytes();
-        total_elements += node->total_elements();
-        loaded_elements += node->loaded_elements();
-      }
-      break;
-    default:
-      NOTREACHED();
-  }
-
-  if (frame_count != 0)
-    progress /= frame_count;
-
+void FrameTree::UpdateLoadProgress(double progress) {
   if (progress <= load_progress_)
     return;
   load_progress_ = progress;
 
   // Vivaldi addition:
-  loaded_bytes_ = loaded_bytes;
-  loaded_elements_ = loaded_elements;
-  total_elements_ = total_elements;
+  // Add the sum of all the nodes to get proper
+  // totals.
+  loaded_bytes_ = total_elements_ = loaded_elements_ = 0;
+
+  for (FrameTreeNode* node : Nodes()) {
+    loaded_bytes_ += node->loaded_bytes();
+    total_elements_ += node->total_elements();
+    loaded_elements_ += node->loaded_elements();
+  }
 
   // Notify the WebContents.
   root_->navigator()->GetDelegate()->DidChangeLoadProgress();
 }
 
 void FrameTree::ResetLoadProgress() {
-  for (FrameTreeNode* node : Nodes())
-    node->reset_loading_progress();
   load_progress_ = 0.0;
   loaded_bytes_ = 0;
   loaded_elements_ = 0;

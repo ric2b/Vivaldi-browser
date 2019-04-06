@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "base/files/scoped_temp_dir.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/url_util.h"
@@ -19,6 +19,8 @@
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "storage/browser/test/mock_storage_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 using blink::mojom::QuotaStatusCode;
 using blink::mojom::StorageType;
@@ -80,17 +82,18 @@ class UsageMockQuotaManager : public QuotaManager {
   }
 
   void InvokeCallback() {
-    delayed_callback_.Run(callback_status_, callback_usage_, callback_quota_);
+    std::move(delayed_callback_)
+        .Run(callback_status_, callback_usage_, callback_quota_);
   }
 
-  void GetUsageAndQuotaForWebApps(
-      const GURL& origin,
-      StorageType type,
-      const UsageAndQuotaCallback& callback) override {
+  void GetUsageAndQuotaForWebApps(const GURL& origin,
+                                  StorageType type,
+                                  UsageAndQuotaCallback callback) override {
     if (initialized_)
-      callback.Run(callback_status_, callback_usage_, callback_quota_);
+      std::move(callback).Run(callback_status_, callback_usage_,
+                              callback_quota_);
     else
-      delayed_callback_ = callback;
+      delayed_callback_ = std::move(callback);
   }
 
  protected:
@@ -125,10 +128,8 @@ class StorageMonitorTestBase : public testing::Test {
 
   int GetRequiredUpdatesCount(const StorageObserverList& observer_list) {
     int count = 0;
-    for (StorageObserverList::StorageObserverStateMap::const_iterator it =
-            observer_list.observers_.begin();
-         it != observer_list.observers_.end(); ++it) {
-      if (it->second.requires_update)
+    for (const auto& observer_state_pair : observer_list.observer_state_map_) {
+      if (observer_state_pair.second.requires_update)
         ++count;
     }
 
@@ -141,11 +142,9 @@ class StorageMonitorTestBase : public testing::Test {
 
   void SetLastNotificationTime(StorageObserverList& observer_list,
                                StorageObserver* observer) {
-    ASSERT_TRUE(observer_list.observers_.find(observer) !=
-                observer_list.observers_.end());
-
+    ASSERT_TRUE(base::ContainsKey(observer_list.observer_state_map_, observer));
     StorageObserverList::ObserverState& state =
-        observer_list.observers_[observer];
+        observer_list.observer_state_map_[observer];
     state.last_notification_time = base::TimeTicks::Now() - state.rate;
   }
 
@@ -181,7 +180,7 @@ class StorageTestWithManagerBase : public StorageMonitorTestBase {
 
 // Tests for StorageObserverList:
 
-typedef StorageMonitorTestBase StorageObserverListTest;
+using StorageObserverListTest = StorageMonitorTestBase;
 
 // Test dispatching events to one observer.
 TEST_F(StorageObserverListTest, DispatchEventToSingleObserver) {
@@ -306,7 +305,7 @@ TEST_F(StorageObserverListTest, ReplaceEventOrigin) {
 
 // Tests for HostStorageObservers:
 
-typedef StorageTestWithManagerBase HostStorageObserversTest;
+using HostStorageObserversTest = StorageTestWithManagerBase;
 
 // Verify that HostStorageObservers is initialized after the first usage change.
 TEST_F(HostStorageObserversTest, InitializeOnUsageChange) {
@@ -484,7 +483,7 @@ TEST_F(HostStorageObserversTest, AsyncInitialization) {
 
 // Tests for StorageTypeObservers:
 
-typedef StorageTestWithManagerBase StorageTypeObserversTest;
+using StorageTypeObserversTest = StorageTestWithManagerBase;
 
 // Test adding and removing observers.
 TEST_F(StorageTypeObserversTest, AddRemoveObservers) {
@@ -668,9 +667,8 @@ TEST_F(StorageMonitorIntegrationTest, NotifyUsageEvent) {
   quota_manager_->AddStorageObserver(&mock_observer, params);
 
   // Fire a usage change.
-  client_->AddOriginAndNotify(GURL(kDefaultOrigin),
-                              kTestStorageType,
-                              kTestUsage);
+  client_->AddOriginAndNotify(url::Origin::Create(GURL(kDefaultOrigin)),
+                              kTestStorageType, kTestUsage);
   scoped_task_environment_.RunUntilIdle();
 
   // Verify that the observer receives it.

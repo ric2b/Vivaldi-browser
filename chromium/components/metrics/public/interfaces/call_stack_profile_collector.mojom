@@ -4,15 +4,15 @@
 
 module metrics.mojom;
 
-import "mojo/common/file_path.mojom";
-import "mojo/common/time.mojom";
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/time.mojom";
 
 // These structs mirror the corresponding types in base::StackSamplingProfiler.
 
 struct CallStackModule {
   uint64 base_address;
   string id;
-  mojo.common.mojom.FilePath filename;
+  mojo_base.mojom.FilePath filename;
 };
 
 struct CallStackFrame {
@@ -28,8 +28,8 @@ struct CallStackSample {
 struct CallStackProfile {
   array<CallStackModule> modules;
   array<CallStackSample> samples;
-  mojo.common.mojom.TimeDelta profile_duration;
-  mojo.common.mojom.TimeDelta sampling_period;
+  mojo_base.mojom.TimeDelta profile_duration;
+  mojo_base.mojom.TimeDelta sampling_period;
 };
 
 enum Process {
@@ -46,19 +46,9 @@ enum Process {
 
 enum Thread {
   UNKNOWN_THREAD,
-
-  UI_THREAD,
-  FILE_THREAD,
-  FILE_USER_BLOCKING_THREAD,
-  PROCESS_LAUNCHER_THREAD,
-  CACHE_THREAD,
+  MAIN_THREAD,
   IO_THREAD,
-  DB_THREAD,
-
-  GPU_MAIN_THREAD,
-
-  RENDER_THREAD,
-  UTILITY_THREAD,
+  COMPOSITOR_THREAD,
 };
 
 enum Trigger {
@@ -83,6 +73,6 @@ struct CallStackProfileParams {
 
 interface CallStackProfileCollector {
   Collect(CallStackProfileParams params,
-          mojo.common.mojom.TimeTicks start_timestamp,
-          array<CallStackProfile> profiles);
+          mojo_base.mojom.TimeTicks start_timestamp,
+          CallStackProfile profile);
 };

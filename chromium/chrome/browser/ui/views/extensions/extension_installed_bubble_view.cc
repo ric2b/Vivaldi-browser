@@ -9,25 +9,30 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/extension_installed_bubble.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
+#include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/sync/bubble_sync_promo_view.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bubble/bubble_controller.h"
+#include "components/signin/core/browser/account_info.h"
+#include "components/signin/core/browser/signin_buildflags.h"
 #include "extensions/common/extension.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_features.h"
@@ -43,16 +48,20 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#endif
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
+#include "chrome/browser/ui/views/sync/dice_bubble_sync_promo_view.h"
 #endif
 
 using extensions::Extension;
 
 namespace {
 
-const int kIconSize = 43;
+const int kExtensionInstalledIconSize = 43;
 
 const int kRightColumnWidth = 285;
 
@@ -67,13 +76,21 @@ views::Label* CreateLabel(const base::string16& text) {
 #if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 views::View* AnchorViewForBrowser(ExtensionInstalledBubble* controller,
                                   Browser* browser) {
+// The Cocoa browser always needs to use an anchor point.
+#if BUILDFLAG(MAC_VIEWS_BROWSER)
+  if (views_mode_controller::IsViewsBrowserCocoa())
+    return nullptr;
+#endif
+
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   views::View* reference_view = nullptr;
+
   switch (controller->anchor_position()) {
     case ExtensionInstalledBubble::ANCHOR_ACTION: {
       BrowserActionsContainer* container =
           browser_view->toolbar()->browser_actions();
       // Hitting this DCHECK means |ShouldShow| failed.
+      DCHECK(container);
       DCHECK(!container->animating());
 
       reference_view = container->GetViewForId(controller->extension()->id());
@@ -90,13 +107,15 @@ views::View* AnchorViewForBrowser(ExtensionInstalledBubble* controller,
 
   // Default case.
   if (!reference_view || !reference_view->visible())
-    return browser_view->toolbar()->app_menu_button();
+    return browser_view->toolbar_button_provider()->GetAppMenuButton();
   return reference_view;
 }
-#else
+#else  // OS_MACOSX && !MAC_VIEWS_BROWSER
+// Always use an anchor point in non-Views Mac builds. This needs a separate
+// implementation because non-Views Mac builds can't even reference BrowserView.
 views::View* AnchorViewForBrowser(ExtensionInstalledBubble* controller,
                                   Browser* browser) {
-  return nullptr;  // Always use the anchor point.
+  return nullptr;
 }
 #endif
 
@@ -137,12 +156,13 @@ class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
   void Init() override;
 
   // BubbleSyncPromoDelegate:
-  void OnSignInLinkClicked() override;
+  void OnEnableSync(const AccountInfo& account_info,
+                    bool is_default_promo_account) override;
 
   // views::LinkListener:
   void LinkClicked(views::Link* source, int event_flags) override;
 
-  // Gets the size of the icon, capped at kIconSize.
+  // Gets the size of the icon, capped at kExtensionInstalledIconSize.
   gfx::Size GetIconSize() const;
 
   ExtensionInstalledBubble* controller_;
@@ -217,9 +237,27 @@ views::View* ExtensionInstalledBubbleView::CreateFootnoteView() {
   if (!(controller_->options() & ExtensionInstalledBubble::SIGN_IN_PROMO))
     return nullptr;
 
-  return new BubbleSyncPromoView(this,
-                                 IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
-                                 IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  Profile* profile = browser()->profile();
+  if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile)) {
+    return new DiceBubbleSyncPromoView(
+        profile, this,
+        signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+        IDS_EXTENSION_INSTALLED_DICE_PROMO_SIGNIN_MESSAGE,
+        IDS_EXTENSION_INSTALLED_DICE_PROMO_SYNC_MESSAGE);
+  } else {
+    return new BubbleSyncPromoView(
+        this,
+        signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+        IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
+        IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
+  }
+#else
+  return new BubbleSyncPromoView(
+      this, signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+      IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
+      IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
+#endif
 }
 
 int ExtensionInstalledBubbleView::GetDialogButtons() const {
@@ -282,10 +320,12 @@ void ExtensionInstalledBubbleView::Init() {
   }
 }
 
-void ExtensionInstalledBubbleView::OnSignInLinkClicked() {
-  chrome::ShowBrowserSignin(
-      browser(),
-      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
+void ExtensionInstalledBubbleView::OnEnableSync(const AccountInfo& account,
+                                                bool is_default_promo_account) {
+  signin_ui_util::EnableSyncFromPromo(
+      browser(), account,
+      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+      is_default_promo_account);
   CloseBubble(BUBBLE_CLOSE_NAVIGATED);
 }
 
@@ -305,8 +345,10 @@ gfx::Size ExtensionInstalledBubbleView::GetIconSize() const {
   const SkBitmap& bitmap = controller_->icon();
   // Scale down to 43x43, but allow smaller icons (don't scale up).
   gfx::Size size(bitmap.width(), bitmap.height());
-  return size.width() > kIconSize || size.height() > kIconSize
-             ? gfx::Size(kIconSize, kIconSize)
+  return size.width() > kExtensionInstalledIconSize ||
+                 size.height() > kExtensionInstalledIconSize
+             ? gfx::Size(kExtensionInstalledIconSize,
+                         kExtensionInstalledIconSize)
              : size;
 }
 
@@ -327,8 +369,6 @@ void ExtensionInstalledBubbleUi::Show(BubbleReference bubble_reference) {
 
   views::BubbleDialogDelegateView::CreateBubble(bubble_view_)->Show();
   bubble_view_->GetWidget()->AddObserver(this);
-  base::RecordAction(
-      base::UserMetricsAction("Signin_Impression_FromExtensionInstallBubble"));
 }
 
 void ExtensionInstalledBubbleUi::Close() {
@@ -356,18 +396,30 @@ void ExtensionInstalledBubbleUi::OnWidgetClosing(views::Widget* widget) {
 
 // Views (BrowserView) specific implementation.
 bool ExtensionInstalledBubble::ShouldShow() {
+#if BUILDFLAG(MAC_VIEWS_BROWSER)
+  // Cocoa browser windows can always show the bubble - no need to check for an
+  // animation.
+  // TODO(ellyjones): Is that actually true?
+  if (views_mode_controller::IsViewsBrowserCocoa())
+    return true;
+#endif
   if (anchor_position() == ANCHOR_ACTION) {
     BrowserActionsContainer* container =
         BrowserView::GetBrowserViewForBrowser(browser())
             ->toolbar()
             ->browser_actions();
-    return !container->animating();
+    return container && !container->animating();
   }
   return true;
 }
 
 gfx::Point ExtensionInstalledBubble::GetAnchorPoint(
     gfx::NativeWindow window) const {
+#if BUILDFLAG(MAC_VIEWS_BROWSER)
+  DCHECK(views_mode_controller::IsViewsBrowserCocoa());
+  return bubble_anchor_util::GetExtensionInstalledAnchorPointCocoa(window,
+                                                                   this);
+#endif
   NOTREACHED();  // There is always an anchor view.
   return gfx::Point();
 }

@@ -4,23 +4,27 @@
 
 #import "chrome/browser/ui/views/frame/native_widget_mac_frameless_nswindow.h"
 
+@interface NSWindow (PrivateAPI)
++ (Class)frameViewClassForStyleMask:(NSUInteger)windowStyle;
+@end
+
+@interface NativeWidgetMacFramelessNSWindowFrame
+    : NativeWidgetMacNSWindowTitledFrame
+@end
+
+@implementation NativeWidgetMacFramelessNSWindowFrame
+- (CGFloat)_titlebarHeight {
+  return 0;
+}
+@end
+
 @implementation NativeWidgetMacFramelessNSWindow
 
-+ (NSRect)frameRectForContentRect:(NSRect)contentRect
-                        styleMask:(NSUInteger)mask {
-  return contentRect;
-}
-
-+ (NSRect)contentRectForFrameRect:(NSRect)frameRect styleMask:(NSUInteger)mask {
-  return frameRect;
-}
-
-- (NSRect)frameRectForContentRect:(NSRect)contentRect {
-  return contentRect;
-}
-
-- (NSRect)contentRectForFrameRect:(NSRect)frameRect {
-  return frameRect;
++ (Class)frameViewClassForStyleMask:(NSUInteger)windowStyle {
+  if ([NativeWidgetMacFramelessNSWindowFrame class]) {
+    return [NativeWidgetMacFramelessNSWindowFrame class];
+  }
+  return [super frameViewClassForStyleMask:windowStyle];
 }
 
 @end

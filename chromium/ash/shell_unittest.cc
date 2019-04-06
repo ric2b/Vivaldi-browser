@@ -13,6 +13,7 @@
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/scoped_root_window_for_new_windows.h"
 #include "ash/session/session_controller.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shelf/shelf.h"
@@ -28,8 +29,8 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -125,6 +126,20 @@ class ModalWindow : public views::WidgetDelegateView {
   DISALLOW_COPY_AND_ASSIGN(ModalWindow);
 };
 
+class WindowWithPreferredSize : public views::WidgetDelegateView {
+ public:
+  WindowWithPreferredSize() = default;
+  ~WindowWithPreferredSize() override = default;
+
+  // views::WidgetDelegate:
+  gfx::Size CalculatePreferredSize() const override {
+    return gfx::Size(400, 300);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WindowWithPreferredSize);
+};
+
 class SimpleMenuDelegate : public ui::SimpleMenuModel::Delegate {
  public:
   SimpleMenuDelegate() = default;
@@ -160,9 +175,9 @@ class TestShellObserver : public ShellObserver {
 
 class ShellTest : public AshTestBase {
  public:
+  // TODO(jamescook): Convert to AshTestBase::CreateTestWidget().
   views::Widget* CreateTestWindow(views::Widget::InitParams params) {
     views::Widget* widget = new views::Widget;
-    params.context = CurrentContext();
     widget->Init(params);
     return widget;
   }
@@ -231,6 +246,28 @@ TEST_F(ShellTest, CreateWindow) {
   TestCreateWindow(views::Widget::InitParams::TYPE_POPUP,
                    true,  // always_on_top
                    GetAlwaysOnTopContainer());
+}
+
+// Verifies that a window with a preferred size is created centered on the
+// default display for new windows. Mojo apps like shortcut_viewer rely on this
+// behavior.
+TEST_F(ShellTest, CreateWindowWithPreferredSize) {
+  UpdateDisplay("1024x768,800x600");
+
+  aura::Window* secondary_root = Shell::GetAllRootWindows()[1];
+  ScopedRootWindowForNewWindows scoped_root(secondary_root);
+
+  views::Widget::InitParams params;
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  // Don't specify bounds, parent or context.
+  params.delegate = new WindowWithPreferredSize;
+  views::Widget widget;
+  widget.Init(params);
+
+  // Widget is centered on secondary display.
+  EXPECT_EQ(secondary_root, widget.GetNativeWindow()->GetRootWindow());
+  EXPECT_EQ(GetSecondaryDisplay().work_area().CenterPoint(),
+            widget.GetRestoredBounds().CenterPoint());
 }
 
 TEST_F(ShellTest, ChangeAlwaysOnTop) {
@@ -383,7 +420,7 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
   menu_model->AddItem(0, base::ASCIIToUTF16("Menu item"));
   views::Widget* widget = Shell::GetPrimaryRootWindowController()
                               ->wallpaper_widget_controller()
-                              ->widget();
+                              ->GetWidget();
   std::unique_ptr<views::MenuRunner> menu_runner(
       new views::MenuRunner(menu_model.get(), views::MenuRunner::CONTEXT_MENU));
 
@@ -491,7 +528,7 @@ TEST_F(ShellTest, TestPreTargetHandlerOrder) {
   ui::EventTargetTestApi test_api(shell);
   ShellTestApi shell_test_api(shell);
 
-  const ui::EventHandlerList& handlers = test_api.pre_target_handlers();
+  ui::EventHandlerList handlers = test_api.GetPreTargetHandlers();
   ui::EventHandlerList::const_iterator cursor_filter =
       std::find(handlers.begin(), handlers.end(), shell->mouse_cursor_filter());
   ui::EventHandlerList::const_iterator drag_drop = std::find(
@@ -511,7 +548,7 @@ TEST_F(ShellTest, EnvPreTargetHandler) {
   aura::Env::GetInstance()->RemovePreTargetHandler(&event_handler);
 }
 
-// Verifies keyboard is re-created on proper timing.
+// Verifies keyboard is re-enabled on proper timing.
 TEST_F(ShellTest, KeyboardCreation) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       keyboard::switches::kEnableVirtualKeyboard);
@@ -519,11 +556,12 @@ TEST_F(ShellTest, KeyboardCreation) {
   ASSERT_TRUE(keyboard::IsKeyboardEnabled());
 
   SessionObserver* shell = Shell::Get();
-  EXPECT_FALSE(keyboard::KeyboardController::GetInstance());
+  EXPECT_FALSE(keyboard::KeyboardController::Get()->enabled());
+
   shell->OnSessionStateChanged(
       session_manager::SessionState::LOGGED_IN_NOT_ACTIVE);
 
-  EXPECT_TRUE(keyboard::KeyboardController::GetInstance());
+  EXPECT_TRUE(keyboard::KeyboardController::Get()->enabled());
 }
 
 // This verifies WindowObservers are removed when a window is destroyed after
@@ -563,11 +601,11 @@ TEST_F(ShellLocalStateTest, LocalState) {
   // Prefs service wrapper code creates a PrefService.
   std::unique_ptr<TestingPrefServiceSimple> local_state =
       std::make_unique<TestingPrefServiceSimple>();
-  Shell::RegisterLocalStatePrefs(local_state->registry());
+  Shell::RegisterLocalStatePrefs(local_state->registry(), true);
   TestingPrefServiceSimple* local_state_ptr = local_state.get();
   ShellTestApi().OnLocalStatePrefServiceInitialized(std::move(local_state));
   EXPECT_EQ(local_state_ptr, observer.last_local_state_);
-  EXPECT_EQ(local_state_ptr, Shell::Get()->GetLocalStatePrefService());
+  EXPECT_EQ(local_state_ptr, ash_test_helper()->GetLocalStatePrefService());
 
   Shell::Get()->RemoveShellObserver(&observer);
 }

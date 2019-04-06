@@ -26,7 +26,7 @@ var SigninSyncConfirmationTest = class extends PolymerTest {
 
   /** @override */
   testGenPreamble() {
-    GEN('  EnableDice();');
+    GEN('  EnableUnity();');
   }
 
   /** @override */
@@ -37,11 +37,22 @@ var SigninSyncConfirmationTest = class extends PolymerTest {
   /** @override */
   get extraLibraries() {
     return PolymerTest.getLibraries(ROOT_PATH).concat([
+      ROOT_PATH + 'chrome/test/data/webui/test_browser_proxy.js',
+      ROOT_PATH + 'chrome/browser/resources/signin/dice_sync_confirmation/' +
+          'sync_confirmation_browser_proxy.js',
+      'test_sync_confirmation_browser_proxy.js',
       'sync_confirmation_test.js',
     ]);
   }
 };
 
-TEST_F('SigninSyncConfirmationTest', 'DialogWithDice', function() {
+// TODO(https://crbug.com/862573): Re-enable when no longer failing when
+// is_chrome_branded is true.
+GEN('#if defined(GOOGLE_CHROME_BUILD)');
+GEN('#define MAYBE_DialogWithDice DISABLED_DialogWithDice');
+GEN('#else');
+GEN('#define MAYBE_DialogWithDice');
+GEN('#endif');
+TEST_F('SigninSyncConfirmationTest', 'MAYBE_DialogWithDice', function() {
   mocha.run();
 });

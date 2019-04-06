@@ -28,7 +28,10 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetString("origin", form.origin.possibly_invalid_spec());
   target->SetString("action", form.action.possibly_invalid_spec());
   target->SetString("submit_element", form.submit_element);
-  target->SetString("username_elem", form.username_element);
+  target->SetBoolean("has_renderer_ids", form.has_renderer_ids);
+  target->SetString("username_element", form.username_element);
+  target->SetInteger("username_element_renderer_id",
+                     form.username_element_renderer_id);
   target->SetBoolean("username_marked_by_site", form.username_marked_by_site);
   target->SetString("username_value", form.username_value);
   target->SetString("password_elem", form.password_element);
@@ -36,16 +39,17 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetBoolean("password_value_is_default",
                      form.password_value_is_default);
   target->SetString("new_password_element", form.new_password_element);
+  target->SetInteger("password_element_renderer_id",
+                     form.password_element_renderer_id);
   target->SetString("new_password_value", form.new_password_value);
   target->SetBoolean("new_password_value_is_default",
                      form.new_password_value_is_default);
   target->SetBoolean("new_password_marked_by_site",
                      form.new_password_marked_by_site);
-  target->SetString(
-      "other_possible_usernames",
-      OtherPossibleUsernamesToString(form.other_possible_usernames));
+  target->SetString("other_possible_usernames",
+                    ValueElementVectorToString(form.other_possible_usernames));
   target->SetString("all_possible_passwords",
-                    AllPossiblePasswordsToString(form.all_possible_passwords));
+                    ValueElementVectorToString(form.all_possible_passwords));
   target->SetBoolean("blacklisted", form.blacklisted_by_user);
   target->SetBoolean("preferred", form.preferred);
   target->SetDouble("date_created", form.date_created.ToDoubleT());
@@ -68,12 +72,12 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetString("affiliated_web_realm", form.affiliated_web_realm);
   target->SetString("app_display_name", form.app_display_name);
   target->SetString("app_icon_url", form.app_icon_url.possibly_invalid_spec());
-  target->SetBoolean("does_look_like_signup_form",
-                     form.does_look_like_signup_form);
   std::ostringstream submission_event_string_stream;
   submission_event_string_stream << form.submission_event;
   target->SetString("submission_event", submission_event_string_stream.str());
   target->SetBoolean("only_for_fallback_saving", form.only_for_fallback_saving);
+  target->SetBoolean("is_gaia_with_skip_save_password_form",
+                     form.is_gaia_with_skip_save_password_form);
 }
 
 }  // namespace
@@ -95,9 +99,9 @@ PasswordForm::PasswordForm()
       was_parsed_using_autofill_predictions(false),
       is_public_suffix_match(false),
       is_affiliation_based_match(false),
-      does_look_like_signup_form(false),
       submission_event(SubmissionIndicatorEvent::NONE),
-      only_for_fallback_saving(false) {}
+      only_for_fallback_saving(false),
+      is_gaia_with_skip_save_password_form(false) {}
 
 PasswordForm::PasswordForm(const PasswordForm& other) = default;
 
@@ -122,13 +126,16 @@ bool PasswordForm::operator==(const PasswordForm& form) const {
   return scheme == form.scheme && signon_realm == form.signon_realm &&
          origin == form.origin && action == form.action &&
          submit_element == form.submit_element &&
+         has_renderer_ids == form.has_renderer_ids &&
          username_element == form.username_element &&
+         username_element_renderer_id == form.username_element_renderer_id &&
          username_marked_by_site == form.username_marked_by_site &&
          username_value == form.username_value &&
          other_possible_usernames == form.other_possible_usernames &&
          all_possible_passwords == form.all_possible_passwords &&
          form_has_autofilled_value == form.form_has_autofilled_value &&
          password_element == form.password_element &&
+         password_element_renderer_id == form.password_element_renderer_id &&
          password_value == form.password_value &&
          new_password_element == form.new_password_element &&
          new_password_marked_by_site == form.new_password_marked_by_site &&
@@ -151,9 +158,10 @@ bool PasswordForm::operator==(const PasswordForm& form) const {
          affiliated_web_realm == form.affiliated_web_realm &&
          app_display_name == form.app_display_name &&
          app_icon_url == form.app_icon_url &&
-         does_look_like_signup_form == form.does_look_like_signup_form &&
          submission_event == form.submission_event &&
-         only_for_fallback_saving == form.only_for_fallback_saving;
+         only_for_fallback_saving == form.only_for_fallback_saving &&
+         is_gaia_with_skip_save_password_form ==
+             form.is_gaia_with_skip_save_password_form;
 }
 
 bool PasswordForm::operator!=(const PasswordForm& form) const {
@@ -191,19 +199,14 @@ bool LessThanUniqueKey::operator()(
   return left->origin < right->origin;
 }
 
-base::string16 OtherPossibleUsernamesToString(
-    const PossibleUsernamesVector& possible_usernames) {
-  std::vector<base::string16> pairs(possible_usernames.size());
-  std::transform(possible_usernames.begin(), possible_usernames.end(),
-                 pairs.begin(), [](const PossibleUsernamePair& p) {
+base::string16 ValueElementVectorToString(
+    const ValueElementVector& value_element_pairs) {
+  std::vector<base::string16> pairs(value_element_pairs.size());
+  std::transform(value_element_pairs.begin(), value_element_pairs.end(),
+                 pairs.begin(), [](const ValueElementPair& p) {
                    return p.first + base::ASCIIToUTF16("+") + p.second;
                  });
   return base::JoinString(pairs, base::ASCIIToUTF16(", "));
-}
-
-base::string16 AllPossiblePasswordsToString(
-    const std::vector<base::string16>& possible_passwords) {
-  return base::JoinString(possible_passwords, base::ASCIIToUTF16(", "));
 }
 
 std::ostream& operator<<(std::ostream& os, PasswordForm::Layout layout) {
@@ -271,14 +274,6 @@ std::ostream& operator<<(
     case PasswordForm::SubmissionIndicatorEvent::
         PROVISIONALLY_SAVED_FORM_ON_START_PROVISIONAL_LOAD:
       os << "PROVISIONALLY_SAVED_FORM_ON_START_PROVISIONAL_LOAD";
-      break;
-    case PasswordForm::SubmissionIndicatorEvent::
-        FILLED_FORM_ON_START_PROVISIONAL_LOAD:
-      os << "FILLED_FORM_ON_START_PROVISIONAL_LOAD";
-      break;
-    case PasswordForm::SubmissionIndicatorEvent::
-        FILLED_INPUT_ELEMENTS_ON_START_PROVISIONAL_LOAD:
-      os << "FILLED_INPUT_ELEMENTS_ON_START_PROVISIONAL_LOAD";
       break;
     default:
       os << "NO_SUBMISSION";

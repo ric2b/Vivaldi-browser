@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,8 +20,8 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.search_engines.TemplateUrl;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
-import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrl;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ActivityUtils;
@@ -39,24 +39,21 @@ import java.util.concurrent.ExecutionException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class DefaultSearchEnginePromoDialogTest {
     @Before
-    public void setUp() throws Exception {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+    public void setUp() throws ExecutionException, ProcessInitException {
+        ThreadUtils.runOnUiThreadBlocking(new Callable<Void>() {
             @Override
-            public void run() {
-                try {
-                    ChromeBrowserInitializer.getInstance(InstrumentationRegistry.getTargetContext())
-                            .handleSynchronousStartup();
-                } catch (ProcessInitException e) {
-                    Assert.fail("Failed to initialize Chrome process");
-                }
+            public Void call() throws ProcessInitException {
+                ChromeBrowserInitializer.getInstance(InstrumentationRegistry.getTargetContext())
+                        .handleSynchronousStartup();
 
                 LocaleManager mockManager = new LocaleManager() {
                     @Override
                     public List<TemplateUrl> getSearchEnginesForPromoDialog(int promoType) {
-                        return TemplateUrlService.getInstance().getSearchEngines();
+                        return TemplateUrlService.getInstance().getTemplateUrls();
                     }
                 };
                 LocaleManager.setInstanceForTest(mockManager);
+                return null;
             }
         });
     }
@@ -124,7 +121,7 @@ public class DefaultSearchEnginePromoDialogTest {
             @Override
             public DefaultSearchEnginePromoDialog call() throws Exception {
                 DefaultSearchEnginePromoDialog dialog = new DefaultSearchEnginePromoDialog(
-                        activity, LocaleManager.SEARCH_ENGINE_PROMO_SHOW_EXISTING, null);
+                        activity, LocaleManager.SearchEnginePromoType.SHOW_EXISTING, null);
                 dialog.show();
                 return dialog;
             }

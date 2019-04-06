@@ -36,8 +36,6 @@ class BrowserList {
   // Returns the last active browser for this list.
   Browser* GetLastActive() const;
 
-  // Browsers are added to the list before they have constructed windows,
-  // so the |window()| member function may return NULL.
   const_iterator begin() const { return browsers_.begin(); }
   const_iterator end() const { return browsers_.end(); }
 
@@ -109,6 +107,14 @@ class BrowserList {
                                           const CloseCallback& on_close_success,
                                           const CloseCallback& on_close_aborted,
                                           bool skip_beforeunload);
+
+  // Similarly to CloseAllBrowsersWithProfile, but DCHECK's that profile is
+  // Off-the-Record and doesn't close browsers with the original profile.
+  static void CloseAllBrowsersWithIncognitoProfile(
+      Profile* profile,
+      const CloseCallback& on_close_success,
+      const CloseCallback& on_close_aborted,
+      bool skip_beforeunload);
 
   // Returns true if at least one incognito session is active across all
   // desktops.

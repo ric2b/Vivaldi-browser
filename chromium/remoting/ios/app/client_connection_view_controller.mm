@@ -8,11 +8,11 @@
 
 #import "remoting/ios/app/client_connection_view_controller.h"
 
-#import "base/mac/bind_objc_block.h"
 #import "ios/third_party/material_components_ios/src/components/ActivityIndicator/src/MDCActivityIndicator.h"
 #import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
 #import "ios/third_party/material_components_ios/src/components/NavigationBar/src/MaterialNavigationBar.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
+#import "remoting/ios/app/help_and_feedback.h"
 #import "remoting/ios/app/host_view_controller.h"
 #import "remoting/ios/app/pin_entry_view.h"
 #import "remoting/ios/app/remoting_theme.h"
@@ -42,9 +42,10 @@ static const CGFloat kReconnectViewHeight = 90.f;
 static const CGFloat kPadding = 20.f;
 static const CGFloat kMargin = 20.f;
 
-static const CGFloat kBarHeight = 58.f;
-
 static const CGFloat kKeyboardAnimationTime = 0.3;
+
+static NSString* const kConnectionErrorFeedbackContext =
+    @"ConnectionErrorFeedbackContext";
 
 @interface ClientConnectionViewController ()<PinEntryDelegate,
                                              SessionReconnectViewDelegate> {
@@ -104,13 +105,13 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
     _navBar.translatesAutoresizingMaskIntoConstraints = NO;
 
     // Attach navBar to the top of the view.
+    UILayoutGuide* layoutGuide =
+        remoting::SafeAreaLayoutGuideForView(self.view);
     [NSLayoutConstraint activateConstraints:@[
-      [[_navBar topAnchor] constraintEqualToAnchor:[self.view topAnchor]],
-      [[_navBar leadingAnchor]
-          constraintEqualToAnchor:[self.view leadingAnchor]],
-      [[_navBar trailingAnchor]
-          constraintEqualToAnchor:[self.view trailingAnchor]],
-      [[_navBar heightAnchor] constraintEqualToConstant:kBarHeight],
+      [_navBar.topAnchor constraintEqualToAnchor:layoutGuide.topAnchor],
+      [_navBar.leadingAnchor constraintEqualToAnchor:layoutGuide.leadingAnchor],
+      [_navBar.trailingAnchor
+          constraintEqualToAnchor:layoutGuide.trailingAnchor],
     ]];
   }
   return self;
@@ -382,6 +383,15 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 
 - (void)didTapReconnect {
   [self attemptConnectionToHost];
+}
+
+- (void)didTapReport {
+  [_client createFeedbackDataWithCallback:^(
+               const remoting::FeedbackData& feedbackData) {
+    [HelpAndFeedback.instance
+        presentFeedbackFlowWithContext:kConnectionErrorFeedbackContext
+                          feedbackData:feedbackData];
+  }];
 }
 
 #pragma mark - Private

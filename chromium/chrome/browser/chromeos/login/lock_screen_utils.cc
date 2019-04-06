@@ -9,8 +9,8 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/ui/ash/ime_controller_client.h"
 #include "chrome/common/pref_names.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 
@@ -116,7 +116,7 @@ void EnforcePolicyInputMethods(std::string user_input_method) {
   }
   chromeos::input_method::InputMethodManager* imm =
       chromeos::input_method::InputMethodManager::Get();
-  imm->GetActiveIMEState()->SetAllowedInputMethods(allowed_input_methods);
+  imm->GetActiveIMEState()->SetAllowedInputMethods(allowed_input_methods, true);
   if (ImeControllerClient::Get())  // Can be null in tests.
     ImeControllerClient::Get()->SetImesManagedByPolicy(true);
 }
@@ -126,7 +126,7 @@ void StopEnforcingPolicyInputMethods() {
   std::vector<std::string> allowed_input_methods;
   chromeos::input_method::InputMethodManager* imm =
       chromeos::input_method::InputMethodManager::Get();
-  imm->GetActiveIMEState()->SetAllowedInputMethods(allowed_input_methods);
+  imm->GetActiveIMEState()->SetAllowedInputMethods(allowed_input_methods, true);
   if (ImeControllerClient::Get())  // Can be null in tests.
     ImeControllerClient::Get()->SetImesManagedByPolicy(false);
 }
@@ -157,6 +157,32 @@ void SetKeyboardSettings(const AccountId& account_id) {
       ->SetAutoRepeatEnabled(true);
   input_method::InputMethodManager::Get()->GetImeKeyboard()->SetAutoRepeatRate(
       rate);
+}
+
+std::vector<ash::mojom::LocaleItemPtr> FromListValueToLocaleItem(
+    std::unique_ptr<base::ListValue> locales) {
+  std::vector<ash::mojom::LocaleItemPtr> result;
+  for (const auto& locale : *locales) {
+    const base::DictionaryValue* dictionary;
+    if (!locale.GetAsDictionary(&dictionary))
+      continue;
+
+    ash::mojom::LocaleItemPtr locale_item = ash::mojom::LocaleItem::New();
+    std::string language_code;
+    dictionary->GetString("value", &language_code);
+    locale_item->language_code = language_code;
+
+    std::string title;
+    dictionary->GetString("title", &title);
+    locale_item->title = title;
+
+    std::string group_name;
+    dictionary->GetString("optionGroupName", &group_name);
+    if (!group_name.empty())
+      locale_item->group_name = group_name;
+    result.push_back(std::move(locale_item));
+  }
+  return result;
 }
 
 }  // namespace lock_screen_utils

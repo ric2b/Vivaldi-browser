@@ -32,11 +32,18 @@ ScopedAudioChannelLayoutPtr GetInputChannelLayoutFromChromeChannelLayout(
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " Using AudioDecoderConfig :"
           << Loggable(config);
+
+  AudioChannelLayoutTag tag = ChromeChannelLayoutToCoreAudioTag(config.channel_layout());
+  if (tag == kAudioChannelLayoutTag_Unknown) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Failed to convert Chrome Channel Layout";
+    return nullptr;
+  }
+
   ScopedAudioChannelLayoutPtr layout(
       static_cast<AudioChannelLayout*>(malloc(sizeof(AudioChannelLayout))));
   memset(layout.get(), 0, sizeof(AudioChannelLayout));
-  layout->mChannelLayoutTag =
-      ChromeChannelLayoutToCoreAudioTag(config.channel_layout());
+  layout->mChannelLayoutTag = tag;
 
   return layout;
 }
@@ -73,6 +80,47 @@ ScopedAudioChannelLayoutPtr ReadInputChannelLayoutFromEsds(
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " Successful";
   return layout;
+}
+
+ScopedAudioChannelLayoutPtr GetChannelLayout(const AudioDecoderConfig& config) {
+
+  ScopedAudioChannelLayoutPtr channel_layout;
+
+  ScopedAudioChannelLayoutPtr chrome_layout = GetInputChannelLayoutFromChromeChannelLayout(config);
+  ScopedAudioChannelLayoutPtr esds_layout = ReadInputChannelLayoutFromEsds(config);
+
+  if (chrome_layout && esds_layout) {
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " chrome_layout : " << Loggable(chrome_layout->mChannelLayoutTag)
+            << " esds_layout : " << Loggable(esds_layout->mChannelLayoutTag);
+  } else if (chrome_layout) {
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " chrome_layout : " << Loggable(chrome_layout->mChannelLayoutTag);
+  } else if (esds_layout) {
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " esds_layout : " << Loggable(esds_layout->mChannelLayoutTag);
+  } else {
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " No Channel Layouts available";
+    return nullptr;
+  }
+
+  // Prefer to let Audio Toolbox figure out the channel layout from the ESDS
+  // itself.  Fall back to the layout specified by AudioDecoderConfig.
+  channel_layout = std::move(esds_layout);
+  if (!channel_layout) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Failed to Read InputChannelLayout From Esds - trying the config";
+    channel_layout = std::move(chrome_layout);
+  }
+
+  if (!channel_layout) {
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " Failed to Read InputChannelLayout from AudioDecoderConfig";
+    return nullptr;
+  }
+
+  return channel_layout;
 }
 
 struct ScopedAudioFileStreamIDTraits {
@@ -284,18 +332,10 @@ bool ATAACHelper::Initialize(const AudioDecoderConfig& config,
   input_format_known_cb_ = input_format_known_cb;
   convert_audio_cb_ = convert_audio_cb;
 
-  // Prefer to let Audio Toolbox figure out the channel layout from the ESDS
-  // itself.  Fall back to the layout specified by AudioDecoderConfig.
-  input_channel_layout_ = ReadInputChannelLayoutFromEsds(config);
-  if (!input_channel_layout_) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Failed to Read InputChannelLayout From Esds - trying the config";
-    input_channel_layout_ =
-        GetInputChannelLayoutFromChromeChannelLayout(config);
-  } else  {
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << ": Read InputChannelLayout From Esds";
-  }
+  input_channel_layout_ = GetChannelLayout(config);
+
+  if (!input_channel_layout_)
+    return false;
 
   // We are not fully initialized yet, because the input format is still not
   // known.  We will figure it out from the audio stream itself in
@@ -305,32 +345,51 @@ bool ATAACHelper::Initialize(const AudioDecoderConfig& config,
 }
 
 bool ATAACHelper::ProcessBuffer(const scoped_refptr<DecoderBuffer>& buffer) {
-  if (!is_input_format_known())
+  if (!is_input_format_known()) {
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << ": Input format not known, is buffer EOS? " << buffer->end_of_stream();
     return !buffer->end_of_stream() ? ReadInputFormat(buffer) : true;
-
-  return ConvertAudio(buffer);
+  } else {
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << ": Input format known, convert buffer";
+    return ConvertAudio(buffer);
+  }
 }
 
 bool ATAACHelper::ReadInputFormat(const scoped_refptr<DecoderBuffer>& buffer) {
-  if (!input_format_reader_->ParseAndQueueBuffer(buffer))
+  if (!input_format_reader_->ParseAndQueueBuffer(buffer)) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " ParseAndQueueBuffer failed";
     return false;
+  }
 
-  if (!input_format_reader_->is_finished())
+  if (!input_format_reader_->is_finished()) {
     // Must parse more audio stream bytes.  Try again with the next call to
     // ProcessBuffer().
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Format reader not finished";
     return true;
+  }
 
   if (!input_format_known_cb_.Run(input_format_reader_->audio_format(),
-                                  std::move(input_channel_layout_)))
+                                  std::move(input_channel_layout_))) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Callback failed";
     return false;
+  }
 
   // Consume any input buffers queued in |input_format_reader_|.
   while (const scoped_refptr<DecoderBuffer> queued_buffer =
              input_format_reader_->ReclaimQueuedBuffer()) {
-    if (!ConvertAudio(queued_buffer))
+    if (!ConvertAudio(queued_buffer)) {
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " ConvertAudio failed";
       return false;
+    }
   }
 
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Resetting format reader";
   input_format_reader_.reset();
   return true;
 }

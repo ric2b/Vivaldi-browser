@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "media/midi/midi_service.h"
 #include "media/midi/task_service.h"
@@ -72,7 +71,7 @@ void MidiManagerUsb::Initialize(Callback callback) {
 void MidiManagerUsb::DispatchSendMidiData(MidiManagerClient* client,
                                           uint32_t port_index,
                                           const std::vector<uint8_t>& data,
-                                          double timestamp) {
+                                          base::TimeTicks timestamp) {
   if (port_index >= output_streams_.size()) {
     // |port_index| is provided by a renderer so we can't believe that it is
     // in the valid range.

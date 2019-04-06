@@ -20,6 +20,17 @@ Polymer({
      * @private {boolean}
      */
     needsReconfigured_: Boolean,
+
+    /**
+     * The current PPD in use by the printer.
+     * @private
+     */
+    existingUserPPDMessage_: String,
+
+    networkProtocolActive_: {
+      type: Boolean,
+      computed: 'isNetworkProtocol_(activePrinter.printerProtocol)',
+    },
   },
 
   observers: [
@@ -33,6 +44,11 @@ Polymer({
         .then(
             this.onGetPrinterPpdManufacturerAndModel_.bind(this),
             this.onGetPrinterPpdManufacturerAndModelFailed_.bind(this));
+    let basename = this.getBaseName(this.activePrinter.printerPPDPath);
+    if (basename) {
+      this.existingUserPPDMessage_ =
+          loadTimeData.getStringF('currentPpdMessage', basename);
+    }
   },
 
   /**
@@ -109,5 +125,14 @@ Polymer({
    */
   onGetPrinterPpdManufacturerAndModelFailed_: function() {
     this.needsReconfigured_ = false;
+  },
+
+  /**
+   * @param {string} protocol
+   * @return {boolean} Whether |protocol| is a network protocol
+   * @private
+   */
+  isNetworkProtocol_: function(protocol) {
+    return ['ipp', 'ipps', 'http', 'https', 'socket', 'lpd'].includes(protocol);
   },
 });

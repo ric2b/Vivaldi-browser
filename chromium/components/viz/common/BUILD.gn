@@ -33,6 +33,8 @@ viz_component("common") {
   defines = [ "VIZ_COMMON_IMPLEMENTATION" ]
 
   sources = [
+    "constants.cc",
+    "constants.h",
     "display/renderer_settings.cc",
     "display/renderer_settings.h",
     "features.cc",
@@ -58,16 +60,17 @@ viz_component("common") {
     "gpu/context_cache_controller.cc",
     "gpu/context_cache_controller.h",
     "gpu/context_lost_observer.h",
+    "gpu/context_lost_reason.cc",
+    "gpu/context_lost_reason.h",
     "gpu/context_provider.cc",
     "gpu/context_provider.h",
-    "gpu/in_process_context_provider.cc",
-    "gpu/in_process_context_provider.h",
     "gpu/raster_context_provider.cc",
     "gpu/raster_context_provider.h",
-    "gpu/vulkan_context_provider.h",
-    "gpu/vulkan_in_process_context_provider.cc",
-    "gpu/vulkan_in_process_context_provider.h",
+    "gpu/texture_allocation.cc",
+    "gpu/texture_allocation.h",
     "hit_test/aggregated_hit_test_region.h",
+    "hit_test/hit_test_region_list.cc",
+    "hit_test/hit_test_region_list.h",
     "quads/compositor_frame.cc",
     "quads/compositor_frame.h",
     "quads/compositor_frame_metadata.cc",
@@ -78,6 +81,7 @@ viz_component("common") {
     "quads/debug_border_draw_quad.h",
     "quads/draw_quad.cc",
     "quads/draw_quad.h",
+    "quads/frame_deadline.h",
     "quads/largest_draw_quad.cc",
     "quads/largest_draw_quad.h",
     "quads/picture_draw_quad.cc",
@@ -87,8 +91,6 @@ viz_component("common") {
     "quads/render_pass_draw_quad.cc",
     "quads/render_pass_draw_quad.h",
     "quads/selection.h",
-    "quads/shared_bitmap.cc",
-    "quads/shared_bitmap.h",
     "quads/shared_quad_state.cc",
     "quads/shared_quad_state.h",
     "quads/solid_color_draw_quad.cc",
@@ -103,41 +105,42 @@ viz_component("common") {
     "quads/tile_draw_quad.h",
     "quads/yuv_video_draw_quad.cc",
     "quads/yuv_video_draw_quad.h",
+    "resources/bitmap_allocation.cc",
+    "resources/bitmap_allocation.h",
     "resources/platform_color.h",
     "resources/release_callback.h",
-    "resources/resource.cc",
-    "resources/resource.h",
-    "resources/resource_fence.h",
     "resources/resource_id.h",
     "resources/resource_settings.cc",
     "resources/resource_settings.h",
-    "resources/resource_texture_hint.h",
-    "resources/resource_type.h",
+    "resources/resource_sizes.h",
+    "resources/return_callback.h",
     "resources/returned_resource.h",
-    "resources/shared_bitmap_manager.h",
+    "resources/shared_bitmap.cc",
+    "resources/shared_bitmap.h",
     "resources/single_release_callback.cc",
     "resources/single_release_callback.h",
     "resources/transferable_resource.cc",
     "resources/transferable_resource.h",
+    "skia_helper.cc",
+    "skia_helper.h",
+    "surfaces/child_local_surface_id_allocator.cc",
+    "surfaces/child_local_surface_id_allocator.h",
     "surfaces/frame_sink_id.cc",
     "surfaces/frame_sink_id.h",
+    "surfaces/frame_sink_id_allocator.cc",
     "surfaces/frame_sink_id_allocator.h",
     "surfaces/local_surface_id.cc",
     "surfaces/local_surface_id.h",
     "surfaces/parent_local_surface_id_allocator.cc",
     "surfaces/parent_local_surface_id_allocator.h",
-    "surfaces/sequence_surface_reference_factory.cc",
-    "surfaces/sequence_surface_reference_factory.h",
-    "surfaces/stub_surface_reference_factory.cc",
-    "surfaces/stub_surface_reference_factory.h",
+    "surfaces/scoped_surface_id_allocator.cc",
+    "surfaces/scoped_surface_id_allocator.h",
     "surfaces/surface_id.cc",
     "surfaces/surface_id.h",
+    "surfaces/surface_info.cc",
     "surfaces/surface_info.h",
-    "surfaces/surface_reference_factory.h",
-    "surfaces/surface_reference_owner.h",
-    "surfaces/surface_sequence.h",
-    "surfaces/surface_sequence_generator.cc",
-    "surfaces/surface_sequence_generator.h",
+    "surfaces/surface_range.cc",
+    "surfaces/surface_range.h",
     "switches.cc",
     "switches.h",
     "traced_value.cc",
@@ -152,15 +155,12 @@ viz_component("common") {
     # cc::MathUtil. Remove it once cc/base/math_util* are moved to viz.
     "//cc/base",
     "//cc/paint",
-    "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
-    "//gpu/command_buffer/service",
-    "//gpu/ipc:gl_in_process_context",
-    "//gpu/skia_bindings:skia_bindings",
-    "//gpu/vulkan:features",
-    "//mojo/public/cpp/bindings",
-    "//skia",
+    "//gpu/command_buffer/client:raster",
+    "//gpu/command_buffer/client:raster_interface",
+    "//gpu/vulkan:buildflags",
+    "//mojo/public/cpp/system",
     "//third_party/libyuv",
     "//ui/gfx",
     "//ui/gfx:color_space",
@@ -171,8 +171,22 @@ viz_component("common") {
   ]
 
   if (enable_vulkan) {
+    sources += [
+      "gpu/vulkan_context_provider.h",
+      "gpu/vulkan_in_process_context_provider.cc",
+      "gpu/vulkan_in_process_context_provider.h",
+    ]
     configs = [ "//third_party/vulkan:vulkan_config" ]
-    deps += [ "//gpu/vulkan" ]
+    deps += [ "//gpu/vulkan/init" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "display/use_layered_window.cc",
+      "display/use_layered_window.h",
+    ]
+
+    deps += [ "//ui/base" ]
   }
 
   public_deps = [
@@ -180,6 +194,7 @@ viz_component("common") {
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/common",
     "//mojo/public/cpp/bindings",
+    "//skia",
   ]
 }
 
@@ -187,6 +202,7 @@ viz_source_set("unit_tests") {
   testonly = true
   sources = [
     "frame_sinks/begin_frame_args_unittest.cc",
+    "frame_sinks/begin_frame_source_unittest.cc",
     "frame_sinks/copy_output_util_unittest.cc",
     "frame_sinks/delay_based_time_source_unittest.cc",
     "gl_helper_unittest.cc",
@@ -194,7 +210,11 @@ viz_source_set("unit_tests") {
     "quads/draw_quad_unittest.cc",
     "quads/render_pass_unittest.cc",
     "resources/platform_color_unittest.cc",
-    "surfaces/surface_sequence_generator_unittest.cc",
+    "resources/resource_sizes_unittest.cc",
+    "surfaces/child_local_surface_id_allocator_unittest.cc",
+    "surfaces/local_surface_id_unittest.cc",
+    "surfaces/parent_local_surface_id_allocator_unittest.cc",
+    "surfaces/scoped_surface_id_allocator_unittest.cc",
     "yuv_readback_unittest.cc",
   ]
 

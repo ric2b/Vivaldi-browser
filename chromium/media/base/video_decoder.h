@@ -36,6 +36,10 @@ class MEDIA_EXPORT VideoDecoder {
   // buffer to decode.
   using DecodeCB = base::Callback<void(DecodeStatus)>;
 
+  // Callback for whenever the key needed to decrypt the stream is not
+  // available. May be called at any time after Initialize().
+  using WaitingForDecryptionKeyCB = base::RepeatingClosure;
+
   VideoDecoder();
 
   // Returns the name of the decoder for logging and decoder selection purposes.
@@ -43,6 +47,15 @@ class MEDIA_EXPORT VideoDecoder {
   // Initialize() is called). It should also be stable in the sense that the
   // name does not change across multiple constructions.
   virtual std::string GetDisplayName() const = 0;
+
+  // Returns true if the implementation is expected to be implemented by the
+  // platform. The value should be available immediately after construction and
+  // should not change within the lifetime of a decoder instance. The value is
+  // used for logging and metrics recording.
+  //
+  // TODO(sandersd): Use this to decide when to switch to software decode for
+  // low-resolution videos. https://crbug.com/684792
+  virtual bool IsPlatformDecoder() const;
 
   // Initializes a VideoDecoder with the given |config|, executing the
   // |init_cb| upon completion. |output_cb| is called for each output frame
@@ -57,6 +70,9 @@ class MEDIA_EXPORT VideoDecoder {
   // |cdm_context| can be used to handle encrypted buffers. May be null if the
   // stream is not encrypted.
   //
+  // |waiting_for_decryption_key_cb| is called whenever the key needed to
+  // decrypt the stream is not available.
+  //
   // Note:
   // 1) The VideoDecoder will be reinitialized if it was initialized before.
   //    Upon reinitialization, all internal buffered frames will be dropped.
@@ -66,11 +82,13 @@ class MEDIA_EXPORT VideoDecoder {
   // is ready (i.e. w/o thread trampolining) since it can strongly affect frame
   // delivery times with high-frame-rate material.  See Decode() for additional
   // notes.
-  virtual void Initialize(const VideoDecoderConfig& config,
-                          bool low_delay,
-                          CdmContext* cdm_context,
-                          const InitCB& init_cb,
-                          const OutputCB& output_cb) = 0;
+  virtual void Initialize(
+      const VideoDecoderConfig& config,
+      bool low_delay,
+      CdmContext* cdm_context,
+      const InitCB& init_cb,
+      const OutputCB& output_cb,
+      const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) = 0;
 
   // Requests a |buffer| to be decoded. The status of the decoder and decoded
   // frame are returned via the provided callback. Some decoders may allow
@@ -90,7 +108,7 @@ class MEDIA_EXPORT VideoDecoder {
   // |output_cb| must be called for each frame pending in the queue and
   // |decode_cb| must be called after that. Callers will not call Decode()
   // again until after the flush completes.
-  virtual void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+  virtual void Decode(scoped_refptr<DecoderBuffer> buffer,
                       const DecodeCB& decode_cb) = 0;
 
   // Resets decoder state. All pending Decode() requests will be finished or

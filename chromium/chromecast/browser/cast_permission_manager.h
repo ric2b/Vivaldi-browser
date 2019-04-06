@@ -7,17 +7,17 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "content/public/browser/permission_manager.h"
+#include "content/public/browser/permission_controller_delegate.h"
 
 namespace chromecast {
 namespace shell {
 
-class CastPermissionManager : public content::PermissionManager {
+class CastPermissionManager : public content::PermissionControllerDelegate {
  public:
   CastPermissionManager();
   ~CastPermissionManager() override;
 
-  // content::PermissionManager implementation:
+  // content::PermissionControllerDelegate implementation:
   int RequestPermission(
       content::PermissionType permission,
       content::RenderFrameHost* render_frame_host,
@@ -33,7 +33,6 @@ class CastPermissionManager : public content::PermissionManager {
       const base::Callback<
           void(const std::vector<blink::mojom::PermissionStatus>&)>& callback)
       override;
-  void CancelPermissionRequest(int request_id) override;
   void ResetPermission(content::PermissionType permission,
                        const GURL& requesting_origin,
                        const GURL& embedding_origin) override;
@@ -41,6 +40,10 @@ class CastPermissionManager : public content::PermissionManager {
       content::PermissionType permission,
       const GURL& requesting_origin,
       const GURL& embedding_origin) override;
+  blink::mojom::PermissionStatus GetPermissionStatusForFrame(
+      content::PermissionType permission,
+      content::RenderFrameHost* render_frame_host,
+      const GURL& requesting_origin) override;
   int SubscribePermissionStatusChange(
       content::PermissionType permission,
       const GURL& requesting_origin,

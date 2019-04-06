@@ -38,16 +38,14 @@ _OBJECT_OUTPUTS = {
          ' int, unsigned short const*, int, unsigned int*, signed char, signed '
          'char)'),
     ],
-    'obj/third_party/WebKit.a': [
-        '',
-        'PaintChunker.o:',
+    'obj/third_party/sub/PaintChunker.o': [
         '01010101 t ' + _SHRINK_TO_FIT,
         '010101 t (anonymous namespace)::kAnimationFrameTimeHistogramClassPath',
         '010101 r vtable for ChromeMainDelegateAndroid',
         ('01010101 r blink::(anonymous namespace)::CSSValueKeywordsHash::findVa'
          'lueImpl(char const*, unsigned int)::value_word_list'),
-        '',
-        'ContiguousContainer.o:',
+    ],
+    'obj/third_party/sub/ContiguousContainer.o': [
         '01010101 d chrome::mojom::FilePatcher::Name_',
         '01010101 r vtable for chrome::mojom::FieldTrialRecorderProxy',
         '01010101 r google::protobuf::internal::pLinuxKernelMemoryBarrier',
@@ -101,7 +99,7 @@ def _PrintHeader(path):
 
 
 def _PrintOutput(path):
-  if path.endswith(os.path.join('mock_output_directory', 'elf')):
+  if path.endswith(os.path.join('out', 'Release', 'elf')):
     sys.stdout.write(_ELF_OUTPUT)
   else:
     lines = _OBJECT_OUTPUTS.get(os.path.normpath(path))

@@ -44,7 +44,7 @@ CGFloat GetPatternVerticalOffsetWithTabStrip(bool tabStripVisible) {
 }
 
 + (int)getCommandId:(const NativeWebKeyboardEvent&)event {
-  return CommandForKeyEvent(event.os_event);
+  return CommandForKeyEvent(event.os_event).chrome_command;
 }
 
 + (BOOL)handleKeyboardEvent:(NSEvent*)event
@@ -53,22 +53,7 @@ CGFloat GetPatternVerticalOffsetWithTabStrip(bool tabStripVisible) {
       static_cast<ChromeEventProcessingWindow*>(window);
   DCHECK([event_window isKindOfClass:[ChromeEventProcessingWindow class]]);
 
-  // Do not fire shortcuts on key up.
-  if ([event type] == NSKeyDown) {
-    // Send the event to the menu before sending it to the browser/window
-    // shortcut handling, so that if a user configures cmd-left to mean
-    // "previous tab", it takes precedence over the built-in "history back"
-    // binding. Other than that, the |-redispatchKeyEvent:| call would take care
-    // of invoking the original menu item shortcut as well.
-
-    if ([[NSApp mainMenu] performKeyEquivalent:event])
-      return true;
-
-    if ([event_window handleExtraKeyboardShortcut:event])
-      return true;
-  }
-
-  return [event_window redispatchKeyEvent:event];
+  return [[event_window commandDispatcher] redispatchKeyEvent:event];
 }
 
 + (NSString*)scheduleReplaceOldTitle:(NSString*)oldTitle
@@ -128,8 +113,8 @@ const CGFloat kPatternHorizontalOffset = -5;
     // The theme image is lined up with the top of the tab which is below the
     // top of the tab strip.
     return NSMakePoint(kPatternHorizontalOffset,
-        [TabStripController defaultTabHeight] +
-            GetPatternVerticalOffsetWithTabStrip(true));
+                       [TabStripControllerCocoa defaultTabHeight] +
+                           GetPatternVerticalOffsetWithTabStrip(true));
   }
   // The theme image is lined up with the top of the tab strip (as opposed to
   // the top of the tab above). This is the same as lining up with the top of

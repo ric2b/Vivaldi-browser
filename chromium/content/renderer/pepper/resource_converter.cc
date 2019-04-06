@@ -7,25 +7,24 @@
 #include <stddef.h>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/pepper_file_system_host.h"
 #include "content/renderer/pepper/pepper_media_stream_audio_track_host.h"
 #include "content/renderer/pepper/pepper_media_stream_video_track_host.h"
 #include "ipc/ipc_message.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/host/resource_host.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/resource_var.h"
 #include "ppapi/shared_impl/scoped_pp_var.h"
 #include "storage/common/fileapi/file_system_util.h"
-#include "third_party/WebKit/public/platform/WebFileSystem.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/web/WebDOMFileSystem.h"
-#include "third_party/WebKit/public/web/WebDOMMediaStreamTrack.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_file_system.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/web/web_dom_file_system.h"
+#include "third_party/blink/public/web/web_dom_media_stream_track.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 using ppapi::ResourceVar;
 
@@ -164,7 +163,6 @@ bool DOMMediaStreamTrackToResource(
     std::unique_ptr<IPC::Message>* create_message) {
   DCHECK(!dom_media_stream_track.IsNull());
   *pending_renderer_id = 0;
-#if BUILDFLAG(ENABLE_WEBRTC)
   const blink::WebMediaStreamTrack track = dom_media_stream_track.Component();
   const std::string id = track.Source().Id().Utf8();
 
@@ -190,7 +188,6 @@ bool DOMMediaStreamTrackToResource(
         new PpapiPluginMsg_MediaStreamAudioTrack_CreateFromPendingHost(id));
     return true;
   }
-#endif
   return false;
 }
 

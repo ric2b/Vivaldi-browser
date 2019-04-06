@@ -23,16 +23,16 @@ constexpr float kDefaultHoverOffsetDMM = 0.048f;
 
 }  // namespace
 
-Button::Button(base::RepeatingCallback<void()> click_handler)
+Button::Button(base::RepeatingCallback<void()> click_handler,
+               AudioDelegate* audio_delegate)
     : click_handler_(click_handler), hover_offset_(kDefaultHoverOffsetDMM) {
-  set_hit_testable(false);
-
   auto background = std::make_unique<Rect>();
   background->SetType(kTypeButtonBackground);
   background->set_bubble_events(true);
   background->set_contributes_to_parent_bounds(false);
-  background->SetTransitionedProperties({TRANSFORM});
-  background->set_hit_testable(false);
+  background->SetColor(colors_.background);
+  background->SetTransitionedProperties(
+      {TRANSFORM, BACKGROUND_COLOR, FOREGROUND_COLOR});
   background_ = background.get();
   AddChild(std::move(background));
 
@@ -42,7 +42,7 @@ Button::Button(base::RepeatingCallback<void()> click_handler)
   hit_plane->set_bubble_events(true);
   hit_plane->set_contributes_to_parent_bounds(false);
   hit_plane_ = hit_plane.get();
-  AddChild(std::move(hit_plane));
+  background_->AddChild(std::move(hit_plane));
 
   EventHandlers event_handlers;
   event_handlers.hover_enter =
@@ -56,6 +56,14 @@ Button::Button(base::RepeatingCallback<void()> click_handler)
   event_handlers.button_up =
       base::BindRepeating(&Button::HandleButtonUp, base::Unretained(this));
   set_event_handlers(event_handlers);
+
+  Sounds sounds;
+  sounds.hover_enter = kSoundButtonHover;
+  sounds.button_down = kSoundButtonClick;
+  SetSounds(sounds, audio_delegate);
+
+  disabled_sounds_.hover_enter = kSoundNone;
+  disabled_sounds_.button_down = kSoundInactiveButtonClick;
 }
 
 Button::~Button() = default;
@@ -65,6 +73,11 @@ void Button::Render(UiElementRenderer* renderer,
 
 void Button::SetButtonColors(const ButtonColors& colors) {
   colors_ = colors;
+  OnStateUpdated();
+}
+
+void Button::SetEnabled(bool enabled) {
+  enabled_ = enabled;
   OnStateUpdated();
 }
 
@@ -95,9 +108,13 @@ void Button::HandleButtonUp() {
     click_handler_.Run();
 }
 
+void Button::OnSetColors(const ButtonColors& colors) {}
+
 void Button::OnStateUpdated() {
   pressed_ = hovered_ ? down_ : false;
   background_->SetColor(colors_.GetBackgroundColor(hovered_, pressed_));
+
+  OnSetColors(colors_);
 
   if (hover_offset_ == 0.0f)
     return;
@@ -123,7 +140,9 @@ void Button::OnSetName() {
 }
 
 void Button::OnSetSize(const gfx::SizeF& size) {
-  background_->SetSize(size.width(), size.height());
+  if (!background_->contributes_to_parent_bounds()) {
+    background_->SetSize(size.width(), size.height());
+  }
   hit_plane_->SetSize(size.width(), size.height());
 }
 
@@ -134,12 +153,21 @@ void Button::OnSetCornerRadii(const CornerRadii& radii) {
 
 void Button::NotifyClientSizeAnimated(const gfx::SizeF& size,
                                       int target_property_id,
-                                      cc::Animation* animation) {
+                                      cc::KeyframeModel* animation) {
+  // We could have OnSetSize called in UiElement's Notify handler instead, but
+  // this may have expensive implications (such as regenerating textures on
+  // every frame of an animation).  For now, keep this elements-specific.
   if (target_property_id == BOUNDS) {
-    background_->SetSize(size.width(), size.height());
-    hit_plane_->SetSize(size.width(), size.height());
+    OnSetSize(size);
   }
   UiElement::NotifyClientSizeAnimated(size, target_property_id, animation);
+}
+
+const Sounds& Button::GetSounds() const {
+  if (!enabled()) {
+    return disabled_sounds_;
+  }
+  return UiElement::GetSounds();
 }
 
 }  // namespace vr

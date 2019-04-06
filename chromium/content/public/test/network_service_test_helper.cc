@@ -11,9 +11,9 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/process/process.h"
 #include "build/build_config.h"
-#include "content/network/network_context.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_host_resolver.h"
@@ -21,9 +21,15 @@
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/test_root_certs.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/http/transport_security_state.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/test_data_directory.h"
-#include "services/network/public/interfaces/network_change_manager.mojom.h"
+#include "services/network/network_context.h"
+#include "services/network/network_service.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/network_change_manager.mojom.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 
 #if defined(OS_ANDROID)
@@ -34,18 +40,20 @@
 namespace content {
 
 class NetworkServiceTestHelper::NetworkServiceTestImpl
-    : public network::mojom::NetworkServiceTest {
+    : public network::mojom::NetworkServiceTest,
+      public base::MessageLoopCurrent::DestructionObserver {
  public:
   NetworkServiceTestImpl() {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kUseMockCertVerifierForTesting)) {
       mock_cert_verifier_ = std::make_unique<net::MockCertVerifier>();
-      NetworkContext::SetCertVerifierForTesting(mock_cert_verifier_.get());
+      network::NetworkContext::SetCertVerifierForTesting(
+          mock_cert_verifier_.get());
     }
   }
 
   ~NetworkServiceTestImpl() override {
-    NetworkContext::SetCertVerifierForTesting(nullptr);
+    network::NetworkContext::SetCertVerifierForTesting(nullptr);
   }
 
   // network::mojom::NetworkServiceTest:
@@ -66,12 +74,21 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
     std::move(callback).Run();
   }
 
+  void SimulateNetworkQualityChange(
+      net::EffectiveConnectionType type,
+      SimulateNetworkChangeCallback callback) override {
+    network::NetworkService::GetNetworkServiceForTesting()
+        ->network_quality_estimator()
+        ->SimulateNetworkQualityChangeForTesting(type);
+    std::move(callback).Run();
+  }
+
   void SimulateCrash() override {
-    LOG(ERROR) << "Intentionally issuing kill signal to current process to"
-               << " simulate NetworkService crash for testing.";
-    // Use |Process::Terminate()| instead of |CHECK()| to avoid 'Fatal error'
-    // dialog on Windows debug.
-    base::Process::Current().Terminate(1, false);
+    LOG(ERROR) << "Intentionally terminating current process to simulate"
+                  " NetworkService crash for testing.";
+    // Use |TerminateCurrentProcessImmediately()| instead of |CHECK()| to avoid
+    // 'Fatal error' dialog on Windows debug.
+    base::Process::TerminateCurrentProcessImmediately(1);
   }
 
   void MockCertVerifierSetDefaultResult(
@@ -92,11 +109,38 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
     std::move(callback).Run();
   }
 
+  void SetShouldRequireCT(ShouldRequireCT required,
+                          SetShouldRequireCTCallback callback) override {
+    if (required == NetworkServiceTest::ShouldRequireCT::RESET) {
+      net::TransportSecurityState::SetShouldRequireCTForTesting(nullptr);
+      std::move(callback).Run();
+      return;
+    }
+
+    bool ct = true;
+    if (NetworkServiceTest::ShouldRequireCT::DONT_REQUIRE == required)
+      ct = false;
+
+    net::TransportSecurityState::SetShouldRequireCTForTesting(&ct);
+    std::move(callback).Run();
+  }
+
   void BindRequest(network::mojom::NetworkServiceTestRequest request) {
     bindings_.AddBinding(this, std::move(request));
+    if (!registered_as_destruction_observer_) {
+      base::MessageLoopCurrentForIO::Get()->AddDestructionObserver(this);
+      registered_as_destruction_observer_ = true;
+    }
+  }
+
+  // base::MessageLoopCurrent::DestructionObserver:
+  void WillDestroyCurrentMessageLoop() override {
+    // Needs to be called on the IO thread.
+    bindings_.CloseAllBindings();
   }
 
  private:
+  bool registered_as_destruction_observer_ = false;
   mojo::BindingSet<network::mojom::NetworkServiceTest> bindings_;
   TestHostResolver test_host_resolver_;
   std::unique_ptr<net::MockCertVerifier> mock_cert_verifier_;
@@ -111,7 +155,7 @@ NetworkServiceTestHelper::~NetworkServiceTestHelper() = default;
 
 void NetworkServiceTestHelper::RegisterNetworkBinders(
     service_manager::BinderRegistry* registry) {
-  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService))
     return;
 
   registry->AddInterface(
@@ -129,6 +173,7 @@ void NetworkServiceTestHelper::RegisterNetworkBinders(
     base::InitAndroidTestPaths(base::android::GetIsolatedTestRoot());
 #endif
     net::EmbeddedTestServer::RegisterTestCerts();
+    net::SpawnedTestServer::RegisterTestCerts();
 
     // Also add the QUIC test certificate.
     net::TestRootCerts* root_certs = net::TestRootCerts::GetInstance();

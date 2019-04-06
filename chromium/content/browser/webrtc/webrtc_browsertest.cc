@@ -15,6 +15,7 @@
 #include "content/public/test/test_utils.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/media_switches.h"
+#include "media/media_buildflags.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace content {
@@ -103,17 +104,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
   MakeTypicalPeerConnectionCall(javascript);
 }
 
-
-#if defined(OS_WIN) && !defined(NVALGRIND)
-// Times out on Dr. Memory bots: https://crbug.com/545740
-#define MAYBE_CanSetupCallAndSendDtmf DISABLED_CanSetupCallAndSendDtmf
-#else
-#define MAYBE_CanSetupCallAndSendDtmf CanSetupCallAndSendDtmf
-#endif
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       MAYBE_CanSetupCallAndSendDtmf) {
-  MakeTypicalPeerConnectionCall("callAndSendDtmf(\'123,abc\');");
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CanSetupCallAndSendDtmf) {
+  MakeTypicalPeerConnectionCall("callAndSendDtmf(\'123,ABC\');");
 }
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
@@ -241,7 +233,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
       "testGetSettingsWhenRemoteDimensionsUnknown();");
 }
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
 // This test is to make sure HW H264 work normally on supported devices, since
 // there is no SW H264 fallback available on Android.
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,

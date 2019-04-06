@@ -16,13 +16,15 @@
 #include "google_apis/gcm/monitoring/gcm_stats_recorder.h"
 #include "google_apis/gcm/protocol/mcs.pb.h"
 #include "net/base/net_errors.h"
-#include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
+#include "net/http/proxy_fallback.h"
 #include "net/log/net_log_source_type.h"
-#include "net/proxy/proxy_info.h"
+#include "net/proxy_resolution/proxy_info.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/ssl/ssl_config_service.h"
+#include "services/network/proxy_resolving_client_socket.h"
+#include "services/network/proxy_resolving_client_socket_factory.h"
 
 namespace gcm {
 
@@ -50,19 +52,15 @@ bool ShouldRestorePreviousBackoff(const base::TimeTicks& login_time,
 ConnectionFactoryImpl::ConnectionFactoryImpl(
     const std::vector<GURL>& mcs_endpoints,
     const net::BackoffEntry::Policy& backoff_policy,
-    net::HttpNetworkSession* gcm_network_session,
-    net::HttpNetworkSession* http_network_session,
-    net::NetLog* net_log,
+    net::URLRequestContext* url_request_context,
     GCMStatsRecorder* recorder)
     : mcs_endpoints_(mcs_endpoints),
       next_endpoint_(0),
       last_successful_endpoint_(0),
       backoff_policy_(backoff_policy),
-      gcm_network_session_(gcm_network_session),
-      http_network_session_(http_network_session),
-      net_log_(
-          net::NetLogWithSource::Make(net_log, net::NetLogSourceType::SOCKET)),
-      proxy_resolve_request_(NULL),
+      socket_factory_(
+          std::make_unique<network::ProxyResolvingClientSocketFactory>(
+              url_request_context)),
       connecting_(false),
       waiting_for_backoff_(false),
       waiting_for_network_online_(false),
@@ -71,18 +69,11 @@ ConnectionFactoryImpl::ConnectionFactoryImpl(
       listener_(NULL),
       weak_ptr_factory_(this) {
   DCHECK_GE(mcs_endpoints_.size(), 1U);
-  DCHECK(!http_network_session_ ||
-         (gcm_network_session_ != http_network_session_));
 }
 
 ConnectionFactoryImpl::~ConnectionFactoryImpl() {
   CloseSocket();
   net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
-  if (proxy_resolve_request_) {
-    gcm_network_session_->proxy_service()->CancelRequest(
-        proxy_resolve_request_);
-    proxy_resolve_request_ = NULL;
-  }
 }
 
 void ConnectionFactoryImpl::Initialize(
@@ -298,11 +289,11 @@ GURL ConnectionFactoryImpl::GetCurrentEndpoint() const {
 }
 
 net::IPEndPoint ConnectionFactoryImpl::GetPeerIP() {
-  if (!socket_handle_.socket())
+  if (!socket_)
     return net::IPEndPoint();
 
   net::IPEndPoint ip_endpoint;
-  int result = socket_handle_.socket()->GetPeerAddress(&ip_endpoint);
+  int result = socket_->GetPeerAddress(&ip_endpoint);
   if (result != net::OK)
     return net::IPEndPoint();
 
@@ -317,7 +308,7 @@ void ConnectionFactoryImpl::ConnectImpl() {
 void ConnectionFactoryImpl::StartConnection() {
   DCHECK(!IsEndpointReachable());
   // TODO(zea): Make this a dcheck again. crbug.com/462319
-  CHECK(!socket_handle_.socket());
+  CHECK(!socket_);
 
   // TODO(zea): if the network is offline, don't attempt to connect.
   // See crbug.com/396687
@@ -325,14 +316,11 @@ void ConnectionFactoryImpl::StartConnection() {
   connecting_ = true;
   GURL current_endpoint = GetCurrentEndpoint();
   recorder_->RecordConnectionInitiated(current_endpoint.host());
-  UpdateFromHttpNetworkSession();
-  int status = gcm_network_session_->proxy_service()->ResolveProxy(
-      current_endpoint, std::string(), &proxy_info_,
-      base::Bind(&ConnectionFactoryImpl::OnProxyResolveDone,
-                 weak_ptr_factory_.GetWeakPtr()),
-      &proxy_resolve_request_, NULL, net_log_);
+  socket_ = socket_factory_->CreateSocket(current_endpoint, true /*use_tls*/);
+  int status = socket_->Connect(base::BindRepeating(
+      &ConnectionFactoryImpl::OnConnectDone, weak_ptr_factory_.GetWeakPtr()));
   if (status != net::ERR_IO_PENDING)
-    OnProxyResolveDone(status);
+    OnConnectDone(status);
 }
 
 void ConnectionFactoryImpl::InitHandler() {
@@ -344,7 +332,43 @@ void ConnectionFactoryImpl::InitHandler() {
     event_tracker_.WriteToLoginRequest(&login_request);
   }
 
-  connection_handler_->Init(login_request, socket_handle_.socket());
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("gcm_connection_factory", R"(
+        semantics {
+          sender: "GCM Connection Factory"
+          description:
+            "TCP connection to the Google Cloud Messaging notification "
+            "servers. Supports reliable bi-directional messaging and push "
+            "notifications for multiple consumers."
+          trigger:
+            "The connection is created when an application (e.g. Chrome Sync) "
+            "or a website using Web Push starts the GCM service, and is kept "
+            "alive as long as there are valid applications registered. "
+            "Messaging is application/website controlled."
+          data:
+            "Arbitrary application-specific data."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "Users can stop messages related to Sync by disabling Sync for "
+            "everything in settings. Messages related to Web Push can be "
+            "stopped by revoking the site permissions in settings. Messages "
+            "related to extensions can be stopped by uninstalling the "
+            "extension."
+          chrome_policy {
+            SyncDisabled {
+              SyncDisabled: True
+            }
+          }
+        }
+        comments:
+          "'SyncDisabled' policy disables messages that are based on Sync, "
+          "but does not have any effect on other Google Cloud messages."
+        )");
+
+  connection_handler_->Init(login_request, traffic_annotation, socket_.get());
 }
 
 std::unique_ptr<net::BackoffEntry> ConnectionFactoryImpl::CreateBackoffEntry(
@@ -367,15 +391,8 @@ base::TimeTicks ConnectionFactoryImpl::NowTicks() {
 }
 
 void ConnectionFactoryImpl::OnConnectDone(int result) {
+  DCHECK_NE(net::ERR_IO_PENDING, result);
   if (result != net::OK) {
-    // If the connection fails, try another proxy.
-    result = ReconsiderProxyAfterError(result);
-    // ReconsiderProxyAfterError either returns an error (in which case it is
-    // not reconsidering a proxy) or returns ERR_IO_PENDING if it is considering
-    // another proxy.
-    DCHECK_NE(result, net::OK);
-    if (result == net::ERR_IO_PENDING)
-      return;  // Proxy reconsideration pending. Return.
     LOG(ERROR) << "Failed to connect to MCS endpoint with error " << result;
     UMA_HISTOGRAM_BOOLEAN("GCM.ConnectionSuccessRate", false);
     recorder_->RecordConnectionFailure(result);
@@ -398,9 +415,6 @@ void ConnectionFactoryImpl::OnConnectDone(int result) {
 
   UMA_HISTOGRAM_BOOLEAN("GCM.ConnectionSuccessRate", true);
   UMA_HISTOGRAM_COUNTS("GCM.ConnectionEndpoint", next_endpoint_);
-  UMA_HISTOGRAM_BOOLEAN("GCM.ConnectedViaProxy",
-                        !(proxy_info_.is_empty() || proxy_info_.is_direct()));
-  ReportSuccessfulProxyConnection();
   recorder_->RecordConnectionSuccess();
 
   // Reset the endpoint back to the default.
@@ -440,163 +454,15 @@ void ConnectionFactoryImpl::ConnectionHandlerCallback(int result) {
     listener_->OnConnected(GetCurrentEndpoint(), GetPeerIP());
 }
 
-// This has largely been copied from
-// HttpStreamFactoryImpl::Job::DoResolveProxyComplete. This should be
-// refactored into some common place.
-void ConnectionFactoryImpl::OnProxyResolveDone(int status) {
-  proxy_resolve_request_ = NULL;
-  DVLOG(1) << "Proxy resolution status: " << status;
-
-  DCHECK_NE(status, net::ERR_IO_PENDING);
-  if (status == net::OK) {
-    // Remove unsupported proxies from the list.
-    proxy_info_.RemoveProxiesWithoutScheme(
-        net::ProxyServer::SCHEME_DIRECT |
-        net::ProxyServer::SCHEME_HTTP | net::ProxyServer::SCHEME_HTTPS |
-        net::ProxyServer::SCHEME_SOCKS4 | net::ProxyServer::SCHEME_SOCKS5);
-
-    if (proxy_info_.is_empty()) {
-      // No proxies/direct to choose from. This happens when we don't support
-      // any of the proxies in the returned list.
-      status = net::ERR_NO_SUPPORTED_PROXIES;
-    }
-  }
-
-  if (status != net::OK) {
-    // Failed to resolve proxy. Retry later.
-    OnConnectDone(status);
-    return;
-  }
-
-  DVLOG(1) << "Resolved proxy with PAC:" << proxy_info_.ToPacString();
-
-  net::SSLConfig ssl_config;
-  gcm_network_session_->ssl_config_service()->GetSSLConfig(&ssl_config);
-  status = net::InitSocketHandleForTlsConnect(
-      net::HostPortPair::FromURL(GetCurrentEndpoint()),
-      gcm_network_session_,
-      proxy_info_,
-      ssl_config,
-      ssl_config,
-      net::PRIVACY_MODE_DISABLED,
-      net_log_,
-      &socket_handle_,
-      base::Bind(&ConnectionFactoryImpl::OnConnectDone,
-                 weak_ptr_factory_.GetWeakPtr()));
-  if (status != net::ERR_IO_PENDING)
-    OnConnectDone(status);
-}
-
-// This has largely been copied from
-// HttpStreamFactoryImpl::Job::ReconsiderProxyAfterError. This should be
-// refactored into some common place.
-// This method reconsiders the proxy on certain errors. If it does reconsider
-// a proxy it always returns ERR_IO_PENDING and posts a call to
-// OnProxyResolveDone with the result of the reconsideration.
-int ConnectionFactoryImpl::ReconsiderProxyAfterError(int error) {
-  DCHECK(!proxy_resolve_request_);
-  DCHECK_NE(error, net::OK);
-  DCHECK_NE(error, net::ERR_IO_PENDING);
-  // A failure to resolve the hostname or any error related to establishing a
-  // TCP connection could be grounds for trying a new proxy configuration.
-  //
-  // Why do this when a hostname cannot be resolved?  Some URLs only make sense
-  // to proxy servers.  The hostname in those URLs might fail to resolve if we
-  // are still using a non-proxy config.  We need to check if a proxy config
-  // now exists that corresponds to a proxy server that could load the URL.
-  //
-  switch (error) {
-    case net::ERR_PROXY_CONNECTION_FAILED:
-    case net::ERR_NAME_NOT_RESOLVED:
-    case net::ERR_INTERNET_DISCONNECTED:
-    case net::ERR_ADDRESS_UNREACHABLE:
-    case net::ERR_CONNECTION_CLOSED:
-    case net::ERR_CONNECTION_TIMED_OUT:
-    case net::ERR_CONNECTION_RESET:
-    case net::ERR_CONNECTION_REFUSED:
-    case net::ERR_CONNECTION_ABORTED:
-    case net::ERR_TIMED_OUT:
-    case net::ERR_TUNNEL_CONNECTION_FAILED:
-    case net::ERR_SOCKS_CONNECTION_FAILED:
-    // This can happen in the case of trying to talk to a proxy using SSL, and
-    // ending up talking to a captive portal that supports SSL instead.
-    case net::ERR_PROXY_CERTIFICATE_INVALID:
-    // This can happen when trying to talk SSL to a non-SSL server (Like a
-    // captive portal).
-    case net::ERR_SSL_PROTOCOL_ERROR:
-      break;
-    case net::ERR_SOCKS_CONNECTION_HOST_UNREACHABLE:
-      // Remap the SOCKS-specific "host unreachable" error to a more
-      // generic error code (this way consumers like the link doctor
-      // know to substitute their error page).
-      //
-      // Note that if the host resolving was done by the SOCKS5 proxy, we can't
-      // differentiate between a proxy-side "host not found" versus a proxy-side
-      // "address unreachable" error, and will report both of these failures as
-      // ERR_ADDRESS_UNREACHABLE.
-      return net::ERR_ADDRESS_UNREACHABLE;
-    default:
-      return error;
-  }
-
-  net::SSLConfig ssl_config;
-  gcm_network_session_->ssl_config_service()->GetSSLConfig(&ssl_config);
-  if (proxy_info_.is_https() && ssl_config.send_client_cert) {
-    gcm_network_session_->ssl_client_auth_cache()->Remove(
-        proxy_info_.proxy_server().host_port_pair());
-  }
-
-  int status = gcm_network_session_->proxy_service()->ReconsiderProxyAfterError(
-      GetCurrentEndpoint(), std::string(), error, &proxy_info_,
-      base::Bind(&ConnectionFactoryImpl::OnProxyResolveDone,
-                 weak_ptr_factory_.GetWeakPtr()),
-      &proxy_resolve_request_, NULL, net_log_);
-  if (status == net::OK || status == net::ERR_IO_PENDING) {
-    CloseSocket();
-  } else {
-    // If ReconsiderProxyAfterError() failed synchronously, it means
-    // there was nothing left to fall-back to, so fail the transaction
-    // with the last connection error we got.
-    status = error;
-  }
-
-  // If there is new proxy info, post OnProxyResolveDone to retry it. Otherwise,
-  // if there was an error falling back, fail synchronously.
-  if (status == net::OK) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&ConnectionFactoryImpl::OnProxyResolveDone,
-                   weak_ptr_factory_.GetWeakPtr(), status));
-    status = net::ERR_IO_PENDING;
-  }
-  return status;
-}
-
-void ConnectionFactoryImpl::ReportSuccessfulProxyConnection() {
-  if (gcm_network_session_ && gcm_network_session_->proxy_service())
-    gcm_network_session_->proxy_service()->ReportSuccess(proxy_info_, NULL);
-}
-
 void ConnectionFactoryImpl::CloseSocket() {
   // The connection handler needs to be reset, else it'll attempt to keep using
   // the destroyed socket.
   if (connection_handler_)
     connection_handler_->Reset();
 
-  if (socket_handle_.socket() && socket_handle_.socket()->IsConnected())
-    socket_handle_.socket()->Disconnect();
-  socket_handle_.Reset();
-}
-
-void ConnectionFactoryImpl::UpdateFromHttpNetworkSession() {
-  if (!http_network_session_ || !http_network_session_->http_auth_cache())
-    return;
-
-  gcm_network_session_->http_auth_cache()->UpdateAllFrom(
-      *http_network_session_->http_auth_cache());
-
-  if (!http_network_session_->IsQuicEnabled())
-    gcm_network_session_->DisableQuic();
+  if (socket_)
+    socket_->Disconnect();
+  socket_ = nullptr;
 }
 
 }  // namespace gcm

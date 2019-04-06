@@ -5,19 +5,19 @@
 #ifndef CONTENT_BROWSER_DEDICATED_WORKER_DEDICATED_WORKER_HOST_H_
 #define CONTENT_BROWSER_DEDICATED_WORKER_DEDICATED_WORKER_HOST_H_
 
-#include "third_party/WebKit/public/platform/dedicated_worker_factory.mojom.h"
+#include "third_party/blink/public/platform/dedicated_worker_factory.mojom.h"
 
 namespace url {
 class Origin;
 }
 
 namespace content {
-class RenderProcessHost;
 
 void CreateDedicatedWorkerHostFactory(
-    blink::mojom::DedicatedWorkerFactoryRequest request,
-    RenderProcessHost* host,
-    const url::Origin& origin);
+    int process_id,
+    int parent_render_frame_id,
+    const url::Origin& origin,
+    blink::mojom::DedicatedWorkerFactoryRequest request);
 
 }  // namespace content
 

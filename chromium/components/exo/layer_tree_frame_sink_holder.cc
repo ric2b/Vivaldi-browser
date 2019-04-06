@@ -5,9 +5,11 @@
 #include "components/exo/layer_tree_frame_sink_holder.h"
 
 #include "ash/shell.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/exo/surface_tree_host.h"
+#include "components/viz/common/hit_test/hit_test_region_list.h"
 #include "components/viz/common/resources/returned_resource.h"
 
 namespace exo {
@@ -113,10 +115,9 @@ base::WeakPtr<LayerTreeFrameSinkHolder> LayerTreeFrameSinkHolder::GetWeakPtr() {
 ////////////////////////////////////////////////////////////////////////////////
 // cc::LayerTreeFrameSinkClient overrides:
 
-void LayerTreeFrameSinkHolder::SetBeginFrameSource(
-    viz::BeginFrameSource* source) {
-  if (surface_tree_host_)
-    surface_tree_host_->SetBeginFrameSource(source);
+base::Optional<viz::HitTestRegionList>
+LayerTreeFrameSinkHolder::BuildHitTestData() {
+  return {};
 }
 
 void LayerTreeFrameSinkHolder::ReclaimResources(
@@ -124,8 +125,7 @@ void LayerTreeFrameSinkHolder::ReclaimResources(
   for (auto& resource : resources) {
     // Skip resources that are also in last frame. This can happen if
     // the frame sink id changed.
-    if (std::find(last_frame_resources_.begin(), last_frame_resources_.end(),
-                  resource.id) != last_frame_resources_.end()) {
+    if (base::ContainsValue(last_frame_resources_, resource.id)) {
       continue;
     }
     auto it = release_callbacks_.find(resource.id);
@@ -147,18 +147,9 @@ void LayerTreeFrameSinkHolder::DidReceiveCompositorFrameAck() {
 
 void LayerTreeFrameSinkHolder::DidPresentCompositorFrame(
     uint32_t presentation_token,
-    base::TimeTicks time,
-    base::TimeDelta refresh,
-    uint32_t flags) {
+    const gfx::PresentationFeedback& feedback) {
   if (surface_tree_host_)
-    surface_tree_host_->DidPresentCompositorFrame(presentation_token, time,
-                                                  refresh, flags);
-}
-
-void LayerTreeFrameSinkHolder::DidDiscardCompositorFrame(
-    uint32_t presentation_token) {
-  if (surface_tree_host_)
-    surface_tree_host_->DidDiscardCompositorFrame(presentation_token);
+    surface_tree_host_->DidPresentCompositorFrame(presentation_token, feedback);
 }
 
 void LayerTreeFrameSinkHolder::DidLoseLayerTreeFrameSink() {

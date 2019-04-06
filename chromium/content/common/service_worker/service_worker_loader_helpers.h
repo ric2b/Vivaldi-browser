@@ -9,7 +9,7 @@
 #include "content/common/service_worker/service_worker_types.h"
 #include "net/http/http_request_headers.h"
 #include "net/url_request/redirect_info.h"
-#include "third_party/WebKit/common/blob/blob.mojom.h"
+#include "third_party/blink/public/mojom/blob/blob.mojom.h"
 
 namespace network {
 struct ResourceRequest;
@@ -19,12 +19,9 @@ struct ResourceResponseHead;
 namespace content {
 
 // Helper functions for service worker classes that use URLLoader
-//(e.g., ServiceWorkerURLLoaderJob and ServiceWorkerSubresourceLoader).
+//(e.g., ServiceWorkerNavigationLoader and ServiceWorkerSubresourceLoader).
 class ServiceWorkerLoaderHelpers {
  public:
-  static std::unique_ptr<ServiceWorkerFetchRequest> CreateFetchRequest(
-      const network::ResourceRequest& request);
-
   // Populates |out_head->headers| with the given |status_code|, |status_text|,
   // and |headers|.
   static void SaveResponseHeaders(const int status_code,

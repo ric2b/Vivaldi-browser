@@ -5,16 +5,16 @@
 /** @fileoverview Suite of tests for extension-sidebar. */
 cr.define('extension_sidebar_tests', function() {
   /** @enum {string} */
-  var TestNames = {
+  const TestNames = {
     LayoutAndClickHandlers: 'layout and click handlers',
     SetSelected: 'set selected',
   };
 
-  var suiteName = 'ExtensionSidebarTest';
+  const suiteName = 'ExtensionSidebarTest';
 
   suite(suiteName, function() {
     /** @type {extensions.Sidebar} */
-    var sidebar;
+    let sidebar;
 
     setup(function() {
       PolymerTest.clearBody();
@@ -30,21 +30,31 @@ cr.define('extension_sidebar_tests', function() {
       PolymerTest.clearBody();
       sidebar = new extensions.Sidebar();
       document.body.appendChild(sidebar);
+      const whenSelected =
+          test_util.eventToPromise('iron-select', sidebar.$.sectionMenu);
       Polymer.dom.flush();
-      expectEquals(sidebar.$$(selector).id, 'sections-shortcuts');
+      return whenSelected
+          .then(function() {
+            expectEquals(sidebar.$$(selector).id, 'sections-shortcuts');
 
-      window.history.replaceState(undefined, '', '/');
-      PolymerTest.clearBody();
-      sidebar = new extensions.Sidebar();
-      document.body.appendChild(sidebar);
-      Polymer.dom.flush();
-      expectEquals(sidebar.$$(selector).id, 'sections-extensions');
+            window.history.replaceState(undefined, '', '/');
+            PolymerTest.clearBody();
+            sidebar = new extensions.Sidebar();
+            document.body.appendChild(sidebar);
+            const whenSelected =
+                test_util.eventToPromise('iron-select', sidebar.$.sectionMenu);
+            Polymer.dom.flush();
+            return whenSelected;
+          })
+          .then(function() {
+            expectEquals(sidebar.$$(selector).id, 'sections-extensions');
+          });
     });
 
     test(assert(TestNames.LayoutAndClickHandlers), function(done) {
       extension_test_util.testIcons(sidebar);
 
-      var testVisible = extension_test_util.testVisible.bind(null, sidebar);
+      const testVisible = extension_test_util.testVisible.bind(null, sidebar);
       testVisible('#sections-extensions', true);
       testVisible('#sections-shortcuts', true);
       testVisible('#more-extensions', true);
@@ -53,7 +63,7 @@ cr.define('extension_sidebar_tests', function() {
       Polymer.dom.flush();
       testVisible('#more-extensions', false);
 
-      var currentPage;
+      let currentPage;
       extensions.navigation.addListener(newPage => {
         currentPage = newPage;
       });

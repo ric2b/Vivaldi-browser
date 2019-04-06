@@ -49,10 +49,8 @@ GpuMemoryBufferFactoryAndroidHardwareBuffer::CreateImageForGpuMemoryBuffer(
   // We should only end up in this code path if the memory buffer has a valid
   // AHardwareBuffer.
   DCHECK_EQ(handle.type, gfx::ANDROID_HARDWARE_BUFFER);
-  DCHECK_EQ(handle.handle.GetType(),
-            base::SharedMemoryHandle::Type::ANDROID_HARDWARE_BUFFER);
 
-  AHardwareBuffer* buffer = handle.handle.GetMemoryObject();
+  AHardwareBuffer* buffer = handle.android_hardware_buffer;
   DCHECK(buffer);
 
   scoped_refptr<gl::GLImageAHardwareBuffer> image(
@@ -72,17 +70,6 @@ GpuMemoryBufferFactoryAndroidHardwareBuffer::CreateImageForGpuMemoryBuffer(
   base::AndroidHardwareBufferCompat::GetInstance().Release(buffer);
 
   return image;
-}
-
-scoped_refptr<gl::GLImage>
-GpuMemoryBufferFactoryAndroidHardwareBuffer::CreateAnonymousImage(
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    gfx::BufferUsage usage,
-    unsigned internalformat,
-    bool* is_cleared) {
-  NOTIMPLEMENTED();
-  return nullptr;
 }
 
 unsigned GpuMemoryBufferFactoryAndroidHardwareBuffer::RequiredTextureType() {

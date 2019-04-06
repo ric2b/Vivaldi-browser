@@ -69,8 +69,7 @@ class CryptoTokenPrivateApiTest : public extensions::ExtensionApiUnittest {
     args->AppendString(app_id);
 
     if (!extension_function_test_utils::RunFunction(
-            function.get(), std::move(args), browser(),
-            extension_function_test_utils::NONE)) {
+            function.get(), std::move(args), browser(), api_test_utils::NONE)) {
       return false;
     }
 
@@ -89,7 +88,7 @@ class CryptoTokenPrivateApiTest : public extensions::ExtensionApiUnittest {
 
     if (!extension_function_test_utils::RunFunction(
             function.get(), base::ListValue::From(std::move(args)), browser(),
-            extension_function_test_utils::NONE)) {
+            api_test_utils::NONE)) {
       return false;
     }
 
@@ -176,7 +175,7 @@ class CryptoTokenPermissionTest : public ExtensionApiUnittest {
 
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetWebContentsAt(0);
-    tab_id_ = SessionTabHelper::IdForTab(web_contents);
+    tab_id_ = SessionTabHelper::IdForTab(web_contents).id();
     PermissionRequestManager::CreateForWebContents(web_contents);
     prompt_factory_ = std::make_unique<MockPermissionPromptFactory>(
         PermissionRequestManager::FromWebContents(web_contents));
@@ -214,8 +213,7 @@ class CryptoTokenPermissionTest : public ExtensionApiUnittest {
     auto args_list = base::ListValue::From(std::move(args));
 
     extension_function_test_utils::RunFunction(
-        function.get(), std::move(args_list), browser(),
-        extension_function_test_utils::NONE);
+        function.get(), std::move(args_list), browser(), api_test_utils::NONE);
 
     return GetSingleBooleanResult(function.get(), out_result);
   }

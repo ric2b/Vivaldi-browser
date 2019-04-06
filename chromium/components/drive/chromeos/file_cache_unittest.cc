@@ -10,6 +10,7 @@
 #include <sys/ioctl.h>
 #include <sys/xattr.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -77,7 +78,7 @@ class FileCacheTest : public testing::Test {
     ASSERT_TRUE(base::CreateDirectory(metadata_dir));
     ASSERT_TRUE(base::CreateDirectory(cache_files_dir_));
 
-    fake_free_disk_space_getter_.reset(new FakeFreeDiskSpaceGetter);
+    fake_free_disk_space_getter_ = std::make_unique<FakeFreeDiskSpaceGetter>();
 
     metadata_storage_.reset(new ResourceMetadataStorage(
         metadata_dir,
@@ -131,7 +132,7 @@ class FileCacheTest : public testing::Test {
 
 TEST_F(FileCacheTest, RecoverFilesFromCacheDirectory) {
   base::FilePath dir_source_root;
-  EXPECT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &dir_source_root));
+  EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &dir_source_root));
   const base::FilePath src_path =
       dir_source_root.AppendASCII("chrome/test/data/chromeos/drive/image.png");
 
@@ -536,11 +537,15 @@ TEST_F(FileCacheTest, MountUnmount) {
   base::FilePath cache_file_path;
   EXPECT_EQ(FILE_ERROR_OK, cache_->MarkAsMounted(id, &cache_file_path));
 
+  EXPECT_TRUE(cache_->IsMarkedAsMounted(id));
+
   // Try to remove it.
   EXPECT_EQ(FILE_ERROR_IN_USE, cache_->Remove(id));
 
   // Clear mounted state of the file.
   EXPECT_EQ(FILE_ERROR_OK, cache_->MarkAsUnmounted(cache_file_path));
+
+  EXPECT_FALSE(cache_->IsMarkedAsMounted(id));
 
   // Try to remove again.
   EXPECT_EQ(FILE_ERROR_OK, cache_->Remove(id));

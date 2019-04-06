@@ -34,9 +34,8 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/content_renderer_client.h"
-#include "content/renderer/loader/site_isolation_stats_gatherer.h"
 #include "services/service_manager/embedder/switches.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/blink/public/web/web_frame.h"
 #include "v8/include/v8.h"
 
 #if defined(OS_WIN)
@@ -86,13 +85,13 @@ GetDefaultTaskSchedulerInitParams() {
                                       kSuggestedReclaimTime));
 }
 
-#if DCHECK_IS_ON() && defined(SYZYASAN)
+#if DCHECK_IS_CONFIGURABLE
 void V8DcheckCallbackHandler(const char* file, int line, const char* message) {
   // TODO(siggi): Set a crash key or a breadcrumb so the fact that we hit a
   //     V8 DCHECK gets out in the crash report.
   ::logging::LogMessage(file, line, logging::LOG_DCHECK).stream() << message;
 }
-#endif  // DCHECK_IS_ON() && defined(SYZYASAN)
+#endif  // DCHECK_IS_CONFIGURABLE
 
 }  // namespace
 
@@ -102,44 +101,26 @@ RenderProcessImpl::RenderProcessImpl(
     std::unique_ptr<base::TaskScheduler::InitParams> task_scheduler_init_params)
     : RenderProcess("Renderer", std::move(task_scheduler_init_params)),
       enabled_bindings_(0) {
-#if defined(OS_WIN)
-  // HACK:  See http://b/issue?id=1024307 for rationale.
-  if (GetModuleHandle(L"LPK.DLL") == NULL) {
-    // Makes sure lpk.dll is loaded by gdi32 to make sure ExtTextOut() works
-    // when buffering into a EMF buffer for printing.
-    typedef BOOL (__stdcall *GdiInitializeLanguagePack)(int LoadedShapingDLLs);
-    GdiInitializeLanguagePack gdi_init_lpk =
-        reinterpret_cast<GdiInitializeLanguagePack>(GetProcAddress(
-            GetModuleHandle(L"GDI32.DLL"),
-            "GdiInitializeLanguagePack"));
-    DCHECK(gdi_init_lpk);
-    if (gdi_init_lpk) {
-      gdi_init_lpk(0);
-    }
-  }
-#endif
-
-#if DCHECK_IS_ON() && defined(SYZYASAN)
-  // SyzyASAN official builds can ship with DCHECKs compiled in. Failing DCHECKs
-  // then are either fatal or simply log the error, based on a feature flag.
+#if DCHECK_IS_CONFIGURABLE
+  // Some official builds ship with DCHECKs compiled in. Failing DCHECKs then
+  // are either fatal or simply log the error, based on a feature flag.
   // Make sure V8 follows suit by setting a Dcheck handler that forwards to
   // the Chrome base logging implementation.
   v8::V8::SetDcheckErrorHandler(&V8DcheckCallbackHandler);
 
-  if (!base::FeatureList::IsEnabled(base::kSyzyAsanDCheckIsFatalFeature)) {
+  if (!base::FeatureList::IsEnabled(base::kDCheckIsFatalFeature)) {
     // These V8 flags default on in this build configuration. This triggers
     // additional verification and code generation, which both slows down V8,
     // and can lead to fatal CHECKs. Turn these flags down to get something
     // closer to V8s normal performance and behavior.
     constexpr char kDisabledFlags[] =
         "--noturbo_verify "
-        "--noverify_csa "
         "--noturbo_verify_allocation "
         "--nodebug_code";
 
     v8::V8::SetFlagsFromString(kDisabledFlags, sizeof(kDisabledFlags));
   }
-#endif  // DCHECK_IS_ON() && defined(SYZYASAN)
+#endif  // DCHECK_IS_CONFIGURABLE
 
   if (base::SysInfo::IsLowEndDevice()) {
     std::string optimize_flag("--optimize-for-size");
@@ -156,22 +137,39 @@ RenderProcessImpl::RenderProcessImpl(
                      "--harmony-import-meta");
   SetV8FlagIfFeature(features::kAsmJsToWebAssembly, "--validate-asm");
   SetV8FlagIfNotFeature(features::kAsmJsToWebAssembly, "--no-validate-asm");
-  SetV8FlagIfNotFeature(features::kWebAssembly,
-                        "--wasm-disable-structured-cloning");
-  SetV8FlagIfFeature(features::kV8BackgroundCompile, "--background-compile");
+
+  SetV8FlagIfFeature(features::kV8Orinoco, "--no-single-threaded-gc");
+  SetV8FlagIfNotFeature(features::kV8Orinoco, "--single-threaded-gc");
 
   SetV8FlagIfFeature(features::kV8VmFuture, "--future");
   SetV8FlagIfNotFeature(features::kV8VmFuture, "--no-future");
-  SetV8FlagIfFeature(features::kSharedArrayBuffer,
-                     "--harmony-sharedarraybuffer");
-  SetV8FlagIfNotFeature(features::kSharedArrayBuffer,
-                        "--no-harmony-sharedarraybuffer");
 
-  SetV8FlagIfFeature(features::kWebAssemblyTrapHandler, "--wasm-trap-handler");
+  SetV8FlagIfFeature(features::kWebAssemblyBaseline,
+                     "--liftoff --wasm-tier-up");
+  SetV8FlagIfNotFeature(features::kWebAssemblyBaseline,
+                        "--no-liftoff --no-wasm-tier-up");
+
+  if (base::FeatureList::IsEnabled(features::kWebAssemblyThreads)) {
+    constexpr char kFlags[] =
+        "--harmony-sharedarraybuffer "
+        "--no-wasm-disable-structured-cloning "
+        "--experimental-wasm-threads";
+
+    v8::V8::SetFlagsFromString(kFlags, sizeof(kFlags));
+  } else {
+    SetV8FlagIfNotFeature(features::kWebAssembly,
+                          "--wasm-disable-structured-cloning");
+    SetV8FlagIfFeature(features::kSharedArrayBuffer,
+                       "--harmony-sharedarraybuffer");
+    SetV8FlagIfNotFeature(features::kSharedArrayBuffer,
+                          "--no-harmony-sharedarraybuffer");
+  }
+
   SetV8FlagIfNotFeature(features::kWebAssemblyTrapHandler,
                         "--no-wasm-trap-handler");
-#if defined(OS_LINUX) && defined(ARCH_CPU_X86_64) && !defined(OS_ANDROID)
+#if defined(OS_LINUX) && defined(ARCH_CPU_X86_64)
   if (base::FeatureList::IsEnabled(features::kWebAssemblyTrapHandler)) {
+    bool use_v8_signal_handler = false;
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     if (!command_line->HasSwitch(
             service_manager::switches::kDisableInProcessStackTraces)) {
@@ -183,8 +181,10 @@ RenderProcessImpl::RenderProcessImpl(
       // in-process stack traces are disabled then there will be no signal
       // handler. In this case, we fall back on V8's default handler
       // (https://crbug.com/798150).
-      v8::V8::RegisterDefaultSignalHandler();
+      use_v8_signal_handler = true;
     }
+    // TODO(eholk): report UMA stat for how often this succeeds
+    v8::V8::EnableWebAssemblyTrapHandler(use_v8_signal_handler);
   }
 #endif
 
@@ -196,9 +196,6 @@ RenderProcessImpl::RenderProcessImpl(
         command_line.GetSwitchValueASCII(switches::kJavaScriptFlags));
     v8::V8::SetFlagsFromString(flags.c_str(), static_cast<int>(flags.size()));
   }
-
-  SiteIsolationStatsGatherer::SetEnabled(
-      GetContentClient()->renderer()->ShouldGatherSiteIsolationStats());
 
   if (command_line.HasSwitch(switches::kDomAutomationController))
     enabled_bindings_ |= BINDINGS_POLICY_DOM_AUTOMATION;

@@ -5,25 +5,44 @@
 #include "components/subresource_filter/content/browser/subframe_navigation_filtering_throttle.h"
 
 #include <memory>
+#include <sstream>
+#include <string>
 
 #include "base/callback.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter_test_utils.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
+#include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/activation_state.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace subresource_filter {
+
+class MockDelegate : public SubframeNavigationFilteringThrottle::Delegate {
+ public:
+  MockDelegate() = default;
+  ~MockDelegate() override = default;
+
+  // SubframeNavigationFilteringThrottle::Delegate:
+  bool CalculateIsAdSubframe(content::RenderFrameHost* frame_host,
+                             LoadPolicy load_policy) override {
+    return false;
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(MockDelegate);
+};
 
 class SubframeNavigationFilteringThrottleTest
     : public content::RenderViewHostTestHarness,
@@ -57,13 +76,16 @@ class SubframeNavigationFilteringThrottleTest
     // The |parent_filter_| is the parent frame's filter. Do not register a
     // throttle if the parent is not activated with a valid filter.
     if (parent_filter_) {
-      navigation_handle->RegisterThrottleForTesting(
-          std::make_unique<SubframeNavigationFilteringThrottle>(
-              navigation_handle, parent_filter_.get()));
+      auto throttle = std::make_unique<SubframeNavigationFilteringThrottle>(
+          navigation_handle, parent_filter_.get(), &mock_delegate_);
+      ASSERT_NE(nullptr, throttle->GetNameForLogging());
+      navigation_handle->RegisterThrottleForTesting(std::move(throttle));
     }
   }
 
-  void InitializeDocumentSubresourceFilter(const GURL& document_url) {
+  void InitializeDocumentSubresourceFilter(
+      const GURL& document_url,
+      ActivationLevel parent_level = ActivationLevel::ENABLED) {
     ASSERT_NO_FATAL_FAILURE(
         test_ruleset_creator_.CreateRulesetToDisallowURLsWithPathSuffix(
             "disallowed.html", &test_ruleset_pair_));
@@ -72,22 +94,23 @@ class SubframeNavigationFilteringThrottleTest
     // tests, to ensure that the NavigationSimulator properly runs all necessary
     // tasks while waiting for throttle checks to finish.
     dealer_handle_ = std::make_unique<VerifiedRulesetDealer::Handle>(
-        base::MessageLoop::current()->task_runner());
-    dealer_handle_->SetRulesetFile(
-        testing::TestRuleset::Open(test_ruleset_pair_.indexed));
+        base::MessageLoopCurrent::Get()->task_runner());
+    dealer_handle_->TryOpenAndSetRulesetFile(test_ruleset_pair_.indexed.path,
+                                             base::DoNothing());
     ruleset_handle_ =
         std::make_unique<VerifiedRuleset::Handle>(dealer_handle_.get());
 
     testing::TestActivationStateCallbackReceiver activation_state;
+    ActivationState parent_activation_state(parent_level);
+    parent_activation_state.enable_logging = true;
     parent_filter_ = std::make_unique<AsyncDocumentSubresourceFilter>(
         ruleset_handle_.get(),
         AsyncDocumentSubresourceFilter::InitializationParams(
-            document_url, ActivationLevel::ENABLED,
-            false /* measure_performance */),
+            document_url, url::Origin::Create(document_url),
+            parent_activation_state),
         activation_state.GetCallback());
     RunUntilIdle();
-    activation_state.ExpectReceivedOnce(
-        ActivationState(ActivationLevel::ENABLED));
+    activation_state.ExpectReceivedOnce(parent_activation_state);
   }
 
   void RunUntilIdle() { base::RunLoop().RunUntilIdle(); }
@@ -125,14 +148,26 @@ class SubframeNavigationFilteringThrottleTest
   }
 
   void SimulateCommitErrorPage() {
-    DCHECK(content::IsBrowserSideNavigationEnabled());
     navigation_simulator_->CommitErrorPage();
+  }
+
+  const std::vector<std::string>& GetConsoleMessages() {
+    return content::RenderFrameHostTester::For(main_rfh())
+        ->GetConsoleMessages();
+  }
+
+  std::string GetFilterConsoleMessage(const GURL& filtered_url) {
+    std::ostringstream oss(kDisallowSubframeConsoleMessagePrefix);
+    oss << filtered_url;
+    oss << kDisallowSubframeConsoleMessageSuffix;
+    return oss.str();
   }
 
  private:
   testing::TestRulesetCreator test_ruleset_creator_;
   testing::TestRulesetPair test_ruleset_pair_;
 
+  MockDelegate mock_delegate_;
   std::unique_ptr<VerifiedRulesetDealer::Handle> dealer_handle_;
   std::unique_ptr<VerifiedRuleset::Handle> ruleset_handle_;
 
@@ -145,10 +180,12 @@ class SubframeNavigationFilteringThrottleTest
 
 TEST_F(SubframeNavigationFilteringThrottleTest, FilterOnStart) {
   InitializeDocumentSubresourceFilter(GURL("https://example.test"));
-  CreateTestSubframeAndInitNavigation(
-      GURL("https://example.test/disallowed.html"), main_rfh());
+  const GURL url("https://example.test/disallowed.html");
+  CreateTestSubframeAndInitNavigation(url, main_rfh());
   SimulateStartAndExpectResult(
       content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE);
+  EXPECT_TRUE(
+      base::ContainsValue(GetConsoleMessages(), GetFilterConsoleMessage(url)));
 }
 
 TEST_F(SubframeNavigationFilteringThrottleTest, FilterOnRedirect) {
@@ -158,11 +195,31 @@ TEST_F(SubframeNavigationFilteringThrottleTest, FilterOnRedirect) {
 
   SimulateStartAndExpectResult(content::NavigationThrottle::PROCEED);
   content::NavigationThrottle::ThrottleAction expected_result =
-      content::IsBrowserSideNavigationEnabled()
-          ? content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE
-          : content::NavigationThrottle::CANCEL;
+      content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE;
   SimulateRedirectAndExpectResult(GURL("https://example.test/disallowed.html"),
                                   expected_result);
+}
+
+TEST_F(SubframeNavigationFilteringThrottleTest, DryRunOnStart) {
+  InitializeDocumentSubresourceFilter(GURL("https://example.test"),
+                                      ActivationLevel::DRYRUN);
+  const GURL url("https://example.test/disallowed.html");
+  CreateTestSubframeAndInitNavigation(url, main_rfh());
+
+  SimulateStartAndExpectResult(content::NavigationThrottle::PROCEED);
+  EXPECT_FALSE(
+      base::ContainsValue(GetConsoleMessages(), GetFilterConsoleMessage(url)));
+}
+
+TEST_F(SubframeNavigationFilteringThrottleTest, DryRunOnRedirect) {
+  InitializeDocumentSubresourceFilter(GURL("https://example.test"),
+                                      ActivationLevel::DRYRUN);
+  CreateTestSubframeAndInitNavigation(GURL("https://example.test/allowed.html"),
+                                      main_rfh());
+
+  SimulateStartAndExpectResult(content::NavigationThrottle::PROCEED);
+  SimulateRedirectAndExpectResult(GURL("https://example.test/disallowed.html"),
+                                  content::NavigationThrottle::PROCEED);
 }
 
 TEST_F(SubframeNavigationFilteringThrottleTest, FilterOnSecondRedirect) {
@@ -174,9 +231,7 @@ TEST_F(SubframeNavigationFilteringThrottleTest, FilterOnSecondRedirect) {
   SimulateRedirectAndExpectResult(GURL("https://example.test/allowed2.html"),
                                   content::NavigationThrottle::PROCEED);
   content::NavigationThrottle::ThrottleAction expected_result =
-      content::IsBrowserSideNavigationEnabled()
-          ? content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE
-          : content::NavigationThrottle::CANCEL;
+      content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE;
   SimulateRedirectAndExpectResult(GURL("https://example.test/disallowed.html"),
                                   expected_result);
 }
@@ -215,17 +270,13 @@ TEST_F(SubframeNavigationFilteringThrottleTest, DelayMetrics) {
   InitializeDocumentSubresourceFilter(GURL("https://example.test"));
   CreateTestSubframeAndInitNavigation(GURL("https://example.test/allowed.html"),
                                       main_rfh());
-  if (content::IsBrowserSideNavigationEnabled())
-    navigation_simulator()->SetTransition(ui::PAGE_TRANSITION_MANUAL_SUBFRAME);
+  navigation_simulator()->SetTransition(ui::PAGE_TRANSITION_MANUAL_SUBFRAME);
   SimulateStartAndExpectResult(content::NavigationThrottle::PROCEED);
   content::NavigationThrottle::ThrottleAction expected_result =
-      content::IsBrowserSideNavigationEnabled()
-          ? content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE
-          : content::NavigationThrottle::CANCEL;
+      content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE;
   SimulateRedirectAndExpectResult(GURL("https://example.test/disallowed.html"),
                                   expected_result);
-  if (content::IsBrowserSideNavigationEnabled())
-    SimulateCommitErrorPage();
+  SimulateCommitErrorPage();
 
   const char kFilterDelayDisallowed[] =
       "SubresourceFilter.DocumentLoad.SubframeFilteringDelay.Disallowed";

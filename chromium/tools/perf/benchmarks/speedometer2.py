@@ -19,7 +19,7 @@ from telemetry.value import list_of_scalar_values
 
 
 _SPEEDOMETER_DIR = os.path.join(path_util.GetChromiumSrcDir(),
-    'third_party', 'WebKit', 'PerformanceTests', 'Speedometer')
+    'third_party', 'blink', 'perf_tests', 'speedometer')
 _SPEEDOMETER_SUITE_NAME_BASE = '{0}-TodoMVC'
 _SPEEDOMETER_SUITES = [
   'VanillaJS',
@@ -42,10 +42,12 @@ _SPEEDOMETER_SUITES = [
 
 
 class Speedometer2Measurement(legacy_page_test.LegacyPageTest):
-  def __init__(self, should_filter_suites, filtered_suite_names=None):
+  def __init__(self, should_filter_suites, filtered_suite_names=None,
+               enable_smoke_test_mode=False):
     super(Speedometer2Measurement, self).__init__()
     self.should_filter_suites_ = should_filter_suites
     self.filtered_suites_ = filtered_suite_names
+    self.enable_smoke_test_mode = enable_smoke_test_mode
 
   def ValidateAndMeasurePage(self, page, tab, results):
     tab.WaitForDocumentReadyStateToBeComplete()
@@ -54,6 +56,9 @@ class Speedometer2Measurement(legacy_page_test.LegacyPageTest):
     # when running for 10 iterations.
     if tab.browser.platform.GetOSName() == 'android':
       iterationCount = 3
+    # For a smoke test one iteration is sufficient
+    if self.enable_smoke_test_mode:
+      iterationCount = 1
 
     if self.should_filter_suites_:
       tab.ExecuteJavaScript("""
@@ -115,7 +120,7 @@ class Speedometer2Measurement(legacy_page_test.LegacyPageTest):
               key=suite_name), important=False))
 
 
-@benchmark.Owner(emails=['hablich@chromium.org'])
+@benchmark.Info(emails=['hablich@chromium.org'])
 class Speedometer2(perf_benchmark.PerfBenchmark):
   """Speedometer2 Benchmark.
 
@@ -123,6 +128,9 @@ class Speedometer2(perf_benchmark.PerfBenchmark):
   out suites, and only run suites whose names are matched by the regular
   expression provided.
   """
+
+  enable_smoke_test_mode = False
+
   @classmethod
   def Name(cls):
     return 'speedometer2'
@@ -143,7 +151,8 @@ class Speedometer2(perf_benchmark.PerfBenchmark):
       should_filter_suites = bool(options.suite)
       filtered_suite_names = map(Speedometer2.GetFullSuiteName,
           Speedometer2.GetSuites(options.suite))
-      return Speedometer2Measurement(should_filter_suites, filtered_suite_names)
+      return Speedometer2Measurement(should_filter_suites, filtered_suite_names,
+                                     self.enable_smoke_test_mode)
 
   def CreateStorySet(self, options):
     ps = story.StorySet(base_dir=_SPEEDOMETER_DIR,
@@ -167,7 +176,7 @@ class Speedometer2(perf_benchmark.PerfBenchmark):
         raise parser.error('--suite: Invalid regex.')
 
 
-@benchmark.Owner(emails=['hablich@chromium.org'])
+@benchmark.Info(emails=['hablich@chromium.org'])
 class V8Speedometer2Future(Speedometer2):
   """Speedometer2 benchmark with the V8 flag --future.
 

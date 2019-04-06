@@ -24,8 +24,8 @@ namespace base {
 class Value;
 }
 
-namespace net {
-class URLFetcher;
+namespace network {
+class SimpleURLLoader;
 }
 
 class SearchSuggestionParser {
@@ -132,6 +132,8 @@ class SearchSuggestionParser {
                   std::unique_ptr<SuggestionAnswer> answer,
                   const std::string& suggest_query_params,
                   const std::string& deletion_url,
+                  const std::string& image_dominant_color,
+                  const std::string& image_url,
                   bool from_keyword_provider,
                   int relevance,
                   bool relevance_from_server,
@@ -154,6 +156,11 @@ class SearchSuggestionParser {
     const base::string16& answer_contents() const { return answer_contents_; }
     const base::string16& answer_type() const { return answer_type_; }
     const SuggestionAnswer* answer() const { return answer_.get(); }
+
+    const std::string& image_dominant_color() const {
+      return image_dominant_color_;
+    }
+    const std::string& image_url() const { return image_url_; }
 
     bool should_prefetch() const { return should_prefetch_; }
 
@@ -196,6 +203,12 @@ class SearchSuggestionParser {
 
     // Optional short answer to the input that produced this suggestion.
     std::unique_ptr<SuggestionAnswer> answer_;
+
+    // Optional image information. Used for entity suggestions. The dominant
+    // color can be used to paint the image placeholder while fetching the
+    // image.
+    std::string image_dominant_color_;
+    std::string image_url_;
 
     // Should this result be prefetched?
     bool should_prefetch_;
@@ -262,7 +275,9 @@ class SearchSuggestionParser {
     // server-provided scores.
     bool HasServerProvidedScores() const;
 
-    // Query suggestions sorted by relevance score.
+    // Query suggestions sorted by relevance score, descending. This order is
+    // normally provided by server and is guaranteed after search provider
+    // calls SortResults, so order always holds except possibly while parsing.
     SuggestResults suggest_results;
 
     // Navigational suggestions sorted by relevance score.
@@ -282,15 +297,20 @@ class SearchSuggestionParser {
     // If the relevance values of the results are from the server.
     bool relevances_from_server;
 
-    // URLs of any images in Answers results.
-    SuggestionAnswer::URLs answers_image_urls;
-
    private:
     DISALLOW_COPY_AND_ASSIGN(Results);
   };
 
-  // Extracts JSON data fetched by |source| and converts it to UTF-8.
-  static std::string ExtractJsonData(const net::URLFetcher* source);
+  // Converts JSON loaded by a SimpleURLLoader into UTF-8 and returns the
+  // result.
+  //
+  // |source| must be the SimpleURLLoader that loaded the data; it is used to
+  // lookup the body's encoding from response headers.
+  //
+  // |response_body| must be the body of the response; it may be null.
+  static std::string ExtractJsonData(
+      const network::SimpleURLLoader* source,
+      std::unique_ptr<std::string> response_body);
 
   // Parses JSON response received from the provider, stripping XSSI
   // protection if needed. Returns the parsed data if successful, NULL

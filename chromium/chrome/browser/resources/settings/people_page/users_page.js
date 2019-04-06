@@ -19,15 +19,6 @@ Polymer({
       notify: true,
     },
 
-    /**
-     * True if the current profile manages supervised users.
-     * Set in people-page.
-     */
-    profileManagesSupervisedUsers: {
-      type: Boolean,
-      value: false,
-    },
-
     /** @private */
     isOwner_: {
       type: Boolean,
@@ -43,8 +34,8 @@ Polymer({
 
   /** @override */
   created: function() {
-    chrome.usersPrivate.isCurrentUserOwner(isOwner => {
-      this.isOwner_ = isOwner;
+    chrome.usersPrivate.getCurrentUser(user => {
+      this.isOwner_ = user.isOwner;
     });
 
     chrome.usersPrivate.isWhitelistManaged(isWhitelistManaged => {
@@ -85,5 +76,10 @@ Polymer({
    */
   isEditingUsersDisabled_: function(isOwner, isWhitelistManaged, allowGuest) {
     return !isOwner || isWhitelistManaged || allowGuest;
-  }
+  },
+
+  /** @return {boolean} */
+  shouldHideModifiedByOwnerLabel_: function() {
+    return this.isWhitelistManaged_ || this.isOwner_;
+  },
 });

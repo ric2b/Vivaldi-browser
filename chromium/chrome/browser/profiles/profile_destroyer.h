@@ -43,14 +43,13 @@ class ProfileDestroyer : public content::RenderProcessHostObserver {
   void DestroyProfile();
 
   // Fetch the list of render process hosts that still refer to the profile.
-  // Return true if we found at least one, false otherwise.
-  static bool GetHostsForProfile(Profile* const profile, HostSet* hosts);
+  static HostSet GetHostsForProfile(Profile* const profile);
 
   // We need access to all pending destroyers so we can cancel them.
   static DestroyerSet* pending_destroyers_;
 
   // We don't want to wait forever, so we have a cancellation timer.
-  base::Timer timer_;
+  base::OneShotTimer timer_;
 
   // Used to count down the number of render process host left.
   uint32_t num_hosts_;

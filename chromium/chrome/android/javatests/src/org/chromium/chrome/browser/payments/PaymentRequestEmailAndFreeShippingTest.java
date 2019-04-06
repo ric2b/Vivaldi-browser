@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.content.DialogInterface;
 import android.support.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -21,6 +20,7 @@ import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
@@ -62,10 +62,10 @@ public class PaymentRequestEmailAndFreeShippingTest implements MainActivityStart
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(new String[] {"jon.doe@google.com", "Jon Doe",
-                "4111111111111111", "12", "2050", "visa", "123", "Google", "340 Main St", "CA",
-                "Los Angeles", "90291", "US", "en", "freeShippingOption"});
+                "4111111111111111", "12", "2050", "basic-card", "123", "Google", "340 Main St",
+                "CA", "Los Angeles", "90291", "US", "en", "freeShippingOption"});
     }
 
     /**
@@ -110,7 +110,7 @@ public class PaymentRequestEmailAndFreeShippingTest implements MainActivityStart
                         "94043", "650-253-0000"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyForInput());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyForInput());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.close_button, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(new String[] {"Request cancelled"});

@@ -6,7 +6,7 @@
 
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/blink/public/platform/web_url.h"
 
 using blink::WebString;
 using blink::WebURL;
@@ -28,8 +28,9 @@ unsigned LocalStorageArea::length() {
   return cached_area_->GetLength();
 }
 
-WebString LocalStorageArea::Key(unsigned index) {
-  return WebString::FromUTF16(cached_area_->GetKey(index));
+WebString LocalStorageArea::Key(unsigned index, bool* did_decrease_iterator) {
+  return WebString::FromUTF16(
+      cached_area_->GetKey(index, did_decrease_iterator));
 }
 
 WebString LocalStorageArea::GetItem(const WebString& key) {

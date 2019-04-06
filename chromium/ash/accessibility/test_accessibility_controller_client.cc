@@ -37,11 +37,33 @@ void TestAccessibilityControllerClient::PlayShutdownSound(
 }
 
 void TestAccessibilityControllerClient::HandleAccessibilityGesture(
-    const std::string& gesture) {
+    ax::mojom::Gesture gesture) {
   last_a11y_gesture_ = gesture;
 }
 
-void TestAccessibilityControllerClient::ToggleDictation() {}
+void TestAccessibilityControllerClient::ToggleDictation(
+    ToggleDictationCallback callback) {
+  is_dictation_active_ = !is_dictation_active_;
+  std::move(callback).Run(is_dictation_active_);
+}
+
+void TestAccessibilityControllerClient::SilenceSpokenFeedback() {}
+
+void TestAccessibilityControllerClient::OnTwoFingerTouchStart() {}
+
+void TestAccessibilityControllerClient::OnTwoFingerTouchStop() {}
+
+void TestAccessibilityControllerClient::ShouldToggleSpokenFeedbackViaTouch(
+    ShouldToggleSpokenFeedbackViaTouchCallback callback) {
+  std::move(callback).Run(true);  // Passing true for testing.
+}
+
+void TestAccessibilityControllerClient::PlaySpokenFeedbackToggleCountdown(
+    int tick_count) {}
+
+void TestAccessibilityControllerClient::RequestSelectToSpeakStateChange() {
+  ++select_to_speak_state_change_requests_;
+}
 
 int32_t TestAccessibilityControllerClient::GetPlayedEarconAndReset() {
   int32_t tmp = sound_key_;

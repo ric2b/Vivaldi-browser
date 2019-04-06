@@ -6,7 +6,10 @@
 
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/client_native_pixmap.h"
+#include "ui/gfx/linux/native_pixmap_dmabuf.h"
 #include "ui/gfx/native_pixmap.h"
+#include "ui/gl/gl_bindings.h"
+#include "ui/gl/gl_enums.h"
 #include "ui/gl/gl_image_native_pixmap.h"
 
 #if defined(USE_OZONE)
@@ -104,9 +107,9 @@ GpuMemoryBufferFactoryNativePixmap::CreateImageForGpuMemoryBuffer(
                  ->CreateNativePixmapFromHandle(surface_handle, size, format,
                                                 handle.native_pixmap_handle);
 #else
-    // TODO(j.isorce): implement this to enable glCreateImageCHROMIUM on Linux.
-    // On going in http://codereview.chromium.org/2705213005, crbug.com/584248.
-    NOTIMPLEMENTED();
+    DCHECK_EQ(surface_handle, gpu::kNullSurfaceHandle);
+    pixmap = base::WrapRefCounted(
+        new gfx::NativePixmapDmaBuf(size, format, handle.native_pixmap_handle));
 #endif
     if (!pixmap.get()) {
       DLOG(ERROR) << "Failed to create pixmap from handle";
@@ -124,10 +127,19 @@ GpuMemoryBufferFactoryNativePixmap::CreateImageForGpuMemoryBuffer(
       new gl::GLImageNativePixmap(size, internalformat));
   if (!image->Initialize(pixmap.get(), format)) {
     LOG(ERROR) << "Failed to create GLImage " << size.ToString() << ", "
-               << gfx::BufferFormatToString(format);
+               << gfx::BufferFormatToString(format) << ", |internalformat|: "
+               << gl::GLEnums::GetStringEnum(internalformat);
     return nullptr;
   }
   return image;
+}
+
+bool GpuMemoryBufferFactoryNativePixmap::SupportsCreateAnonymousImage() const {
+#if defined(USE_OZONE)
+  return true;
+#else
+  return false;
+#endif
 }
 
 scoped_refptr<gl::GLImage>
@@ -155,7 +167,8 @@ GpuMemoryBufferFactoryNativePixmap::CreateAnonymousImage(
       new gl::GLImageNativePixmap(size, internalformat));
   if (!image->Initialize(pixmap.get(), format)) {
     LOG(ERROR) << "Failed to create GLImage " << size.ToString() << ", "
-               << gfx::BufferFormatToString(format);
+               << gfx::BufferFormatToString(format) << ", |internalformat|: "
+               << gl::GLEnums::GetStringEnum(internalformat);
     return nullptr;
   }
   *is_cleared = true;

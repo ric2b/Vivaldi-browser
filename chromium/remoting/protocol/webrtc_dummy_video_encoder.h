@@ -53,7 +53,9 @@ class WebrtcDummyVideoEncoder : public webrtc::VideoEncoder {
 
   webrtc::EncodedImageCallback::Result SendEncodedFrame(
       const WebrtcVideoEncoder::EncodedFrame& frame,
-      base::TimeTicks capture_time);
+      base::TimeTicks capture_time,
+      base::TimeTicks encode_started_time,
+      base::TimeTicks encode_finished_time);
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
@@ -64,10 +66,6 @@ class WebrtcDummyVideoEncoder : public webrtc::VideoEncoder {
   webrtc::EncodedImageCallback* encoded_callback_ = nullptr;
 
   base::WeakPtr<VideoChannelStateObserver> video_channel_state_observer_;
-
-  // 15-bit incrementing ID applied to RTP payload for each video frame when
-  // VPX is used.
-  uint16_t picture_id_ = 0;
 };
 
 // This is the external encoder factory implementation that is passed to
@@ -88,7 +86,9 @@ class WebrtcDummyVideoEncoderFactory
 
   webrtc::EncodedImageCallback::Result SendEncodedFrame(
       const WebrtcVideoEncoder::EncodedFrame& packet,
-      base::TimeTicks capture_time);
+      base::TimeTicks capture_time,
+      base::TimeTicks encode_started_time,
+      base::TimeTicks encode_finished_time);
 
   // Callback will be called once the dummy encoder has been created on
   // |main_task_runner_|.

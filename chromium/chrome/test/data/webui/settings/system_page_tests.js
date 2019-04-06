@@ -84,18 +84,18 @@ suite('settings system page', function() {
     const restart = control.querySelector('paper-button');
     expectTrue(!!restart);  // The "RESTART" button should be showing now.
 
-    MockInteractions.tap(restart);
+    restart.click();
     return lifetimeBrowserProxy.whenCalled('restart');
   });
 
   test('proxy row', function() {
-    MockInteractions.tap(systemPage.$.proxy);
+    systemPage.$.proxy.click();
     return systemBrowserProxy.whenCalled('showProxySettings');
   });
 
   test('proxy row enforcement', function() {
     const control = systemPage.$.proxy;
-    const showProxyButton = control.querySelector('button');
+    const showProxyButton = control.querySelector('paper-icon-button-light');
     assertTrue(control.hasAttribute('actionable'));
     assertEquals(null, control.querySelector('cr-policy-pref-indicator'));
     assertFalse(showProxyButton.hidden);

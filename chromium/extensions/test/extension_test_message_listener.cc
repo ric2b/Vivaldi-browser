@@ -4,7 +4,6 @@
 
 #include "extensions/test/extension_test_message_listener.h"
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -19,7 +18,6 @@ ExtensionTestMessageListener::ExtensionTestMessageListener(
     bool will_reply)
     : expected_message_(expected_message),
       satisfied_(false),
-      waiting_(false),
       wait_for_any_message_(false),
       will_reply_(will_reply),
       replied_(false),
@@ -31,7 +29,6 @@ ExtensionTestMessageListener::ExtensionTestMessageListener(
 
 ExtensionTestMessageListener::ExtensionTestMessageListener(bool will_reply)
     : satisfied_(false),
-      waiting_(false),
       wait_for_any_message_(true),
       will_reply_(will_reply),
       replied_(false),
@@ -46,8 +43,9 @@ ExtensionTestMessageListener::~ExtensionTestMessageListener() {}
 bool ExtensionTestMessageListener::WaitUntilSatisfied()  {
   if (satisfied_)
     return !failed_;
-  waiting_ = true;
-  content::RunMessageLoop();
+  base::RunLoop run_loop;
+  quit_wait_closure_ = run_loop.QuitWhenIdleClosure();
+  run_loop.Run();
   return !failed_;
 }
 
@@ -77,6 +75,7 @@ void ExtensionTestMessageListener::Reset() {
   satisfied_ = false;
   failed_ = false;
   message_.clear();
+  extension_id_for_message_.clear();
   replied_ = false;
 }
 
@@ -90,13 +89,19 @@ void ExtensionTestMessageListener::Observe(
   // extension.
   extensions::TestSendMessageFunction* function =
       content::Source<extensions::TestSendMessageFunction>(source).ptr();
+
+  std::string sender_extension_id;
+  if (function->extension())
+    sender_extension_id = function->extension_id();
+
   if (satisfied_ ||
-      (!extension_id_.empty() && function->extension_id() != extension_id_)) {
+      (!extension_id_.empty() && sender_extension_id != extension_id_)) {
     return;
   }
 
   // We should have an empty message if we're not already satisfied.
   CHECK(message_.empty());
+  CHECK(extension_id_for_message_.empty());
 
   std::pair<std::string, bool*>* message_details =
       content::Details<std::pair<std::string, bool*>>(details).ptr();
@@ -107,6 +112,7 @@ void ExtensionTestMessageListener::Observe(
     // empty string.
     *message_details->second = true;
     message_ = message;
+    extension_id_for_message_ = sender_extension_id;
     satisfied_ = true;
     failed_ = (message_ == failure_message_);
 
@@ -115,9 +121,7 @@ void ExtensionTestMessageListener::Observe(
     if (!will_reply_)
       Reply(std::string());
 
-    if (waiting_) {
-      waiting_ = false;
-      base::RunLoop::QuitCurrentWhenIdleDeprecated();
-    }
+    if (quit_wait_closure_)
+      std::move(quit_wait_closure_).Run();
   }
 }

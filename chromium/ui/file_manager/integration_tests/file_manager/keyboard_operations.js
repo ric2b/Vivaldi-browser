@@ -32,7 +32,7 @@ function waitAndAcceptDialog(windowId) {
  */
 function getTreeItems(windowId) {
   return remoteCall.callRemoteTestUtil('getTreeItems', windowId, []);
-};
+}
 
 /**
  * Waits until the directory item appears.
@@ -42,12 +42,13 @@ function getTreeItems(windowId) {
  * @return {!Promise}
  */
 function waitForDirectoryItem(windowId, name) {
+  var caller = getCaller();
   return repeatUntil(function() {
     return getTreeItems(windowId).then(function(items) {
       if (items.indexOf(name) !== -1) {
         return true;
       } else {
-        return pending('Tree item %s is not found.', name);
+        return pending(caller, 'Tree item %s is not found.', name);
       }
     });
   });
@@ -61,13 +62,14 @@ function waitForDirectoryItem(windowId, name) {
  * @return {!Promise}
  */
 function waitForDirectoryItemLost(windowId, name) {
+  var caller = getCaller();
   return repeatUntil(function() {
     return getTreeItems(windowId).then(function(items) {
       console.log(items);
       if (items.indexOf(name) === -1) {
         return true;
       } else {
-        return pending('Tree item %s is still exists.', name);
+        return pending(caller, 'Tree item %s is still exists.', name);
       }
     });
   });
@@ -112,7 +114,7 @@ function keyboardCopy(path, callback) {
       checkIfNoErrorsOccured(this.next);
     }
   ]);
-};
+}
 
 /**
  * Tests deleting a file and and waits until the file lists changes.
@@ -328,7 +330,7 @@ function testRenameFile(path, initialEntrySet) {
                         expectedEntryRows,
                         {ignoreLastModifiedTime: true});
   });
-};
+}
 
 testcase.keyboardCopyDownloads = function() {
   keyboardCopy(RootPath.DOWNLOADS);
@@ -354,12 +356,12 @@ testcase.renameFileDrive = function() {
   testPromise(testRenameFile(RootPath.DRIVE, BASIC_DRIVE_ENTRY_SET));
 };
 
-testcase.renameNewDirectoryDownloads = function() {
+testcase.renameNewFolderDownloads = function() {
   testPromise(testRenameNewDirectory(RootPath.DOWNLOADS,
       BASIC_LOCAL_ENTRY_SET, '/Downloads'));
 };
 
-testcase.renameNewDirectoryDrive = function() {
+testcase.renameNewFolderDrive = function() {
   testPromise(testRenameNewDirectory(RootPath.DRIVE, BASIC_DRIVE_ENTRY_SET,
       '/My Drive'));
 };

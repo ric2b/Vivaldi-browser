@@ -20,7 +20,7 @@
 #include "media/base/audio_codecs.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 using media::MediaDrmBridge;
 using media::SupportedCodecs;
@@ -39,6 +39,8 @@ struct CodecInfo {
 const CodecInfo<media::VideoCodec> kVideoCodecsToQuery[] = {
     {media::EME_CODEC_WEBM_VP8, media::kCodecVP8, "video/webm"},
     {media::EME_CODEC_WEBM_VP9, media::kCodecVP9, "video/webm"},
+    {media::EME_CODEC_COMMON_VP9, media::kCodecVP9, "video/webm"},
+    {media::EME_CODEC_COMMON_VP9, media::kCodecVP9, "video/mp4"},
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
     {media::EME_CODEC_MP4_AVC1, media::kCodecH264, "video/mp4"},
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)

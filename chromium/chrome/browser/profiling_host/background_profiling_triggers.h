@@ -11,7 +11,7 @@
 #include "base/timer/timer.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
 
-namespace profiling {
+namespace heap_profiling {
 
 class ProfilingProcessHost;
 
@@ -30,6 +30,12 @@ class BackgroundProfilingTriggers {
 
   // Register a periodic timer calling |PerformMemoryUsageChecks|.
   void StartTimer();
+
+ protected:
+  // High water mark for private footprint of each profiled pid at time of
+  // upload. Results are stored in |kb|.
+  // Exposed to subclasses for testing.
+  std::map<base::ProcessId, uint32_t> pmf_at_last_upload_;
 
  private:
   friend class FakeBackgroundProfilingTriggers;
@@ -70,6 +76,6 @@ class BackgroundProfilingTriggers {
   DISALLOW_COPY_AND_ASSIGN(BackgroundProfilingTriggers);
 };
 
-}  // namespace profiling
+}  // namespace heap_profiling
 
 #endif  // CHROME_BROWSER_PROFILING_HOST_BACKGROUND_PROFILING_TRIGGERS_H_

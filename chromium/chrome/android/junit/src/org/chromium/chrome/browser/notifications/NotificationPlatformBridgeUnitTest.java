@@ -14,17 +14,17 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.Arrays;
 
 /**
  * Unit tests for NotificationPlatformBridge.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class NotificationPlatformBridgeUnitTest {
     /**
@@ -72,9 +72,9 @@ public class NotificationPlatformBridgeUnitTest {
 
         // Returns null for a channel id that is not associated with a particular origin.
         assertNull(NotificationPlatformBridge.getOriginFromChannelId(
-                ChannelDefinitions.CHANNEL_ID_BROWSER));
+                ChannelDefinitions.ChannelId.BROWSER));
         assertNull(NotificationPlatformBridge.getOriginFromChannelId(
-                ChannelDefinitions.CHANNEL_ID_SITES));
+                ChannelDefinitions.ChannelId.SITES));
 
         // Returns null if channel id is null.
         assertNull(NotificationPlatformBridge.getOriginFromChannelId(null));

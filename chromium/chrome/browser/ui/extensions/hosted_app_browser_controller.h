@@ -9,7 +9,9 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/engagement/site_engagement_observer.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class Browser;
@@ -25,7 +27,8 @@ extern const char kPwaWindowEngagementTypeHistogram[];
 class Extension;
 
 // Class to encapsulate logic to control the browser UI for hosted apps.
-class HostedAppBrowserController : public SiteEngagementObserver {
+class HostedAppBrowserController : public SiteEngagementObserver,
+                                   public TabStripModelObserver {
  public:
   // Indicates whether |browser| is a hosted app browser.
   static bool IsForHostedApp(const Browser* browser);
@@ -33,11 +36,18 @@ class HostedAppBrowserController : public SiteEngagementObserver {
   // Returns whether |browser| uses the experimental hosted app experience.
   static bool IsForExperimentalHostedAppBrowser(const Browser* browser);
 
+  // Functions to set preferences that are unique to app windows.
+  static void SetAppPrefsForWebContents(HostedAppBrowserController* controller,
+                                        content::WebContents* web_contents);
+
+  // Renders |url|'s origin as Unicode.
+  static base::string16 FormatUrlOrigin(const GURL& url);
+
   explicit HostedAppBrowserController(Browser* browser);
   ~HostedAppBrowserController() override;
 
-  // Returns whether the associated browser is for an installed PWA window.
-  bool IsForInstalledPwa(content::WebContents* web_contents) const;
+  // Returns true if the associated Hosted App is for a PWA.
+  bool created_for_installed_pwa() const { return created_for_installed_pwa_; }
 
   // Whether the browser being controlled should be currently showing the
   // location bar.
@@ -63,8 +73,9 @@ class HostedAppBrowserController : public SiteEngagementObserver {
   // Gets the short name of the app.
   std::string GetAppShortName() const;
 
-  // Gets the domain and registry of the app start url (e.g example.com.au).
-  std::string GetDomainAndRegistry() const;
+  // Gets the origin of the app start url suitable for display (e.g
+  // example.com.au).
+  base::string16 GetFormattedUrlOrigin() const;
 
   // Gets the extension for this controller.
   const Extension* GetExtension() const;
@@ -75,9 +86,19 @@ class HostedAppBrowserController : public SiteEngagementObserver {
                          double score,
                          SiteEngagementService::EngagementType type) override;
 
+  // TabStripModelObserver overrides.
+  void TabInsertedAt(TabStripModel* tab_strip_model,
+                     content::WebContents* contents,
+                     int index,
+                     bool foreground) override;
+  void TabDetachedAt(content::WebContents* contents,
+                     int index,
+                     bool was_active) override;
+
  private:
   Browser* const browser_;
   const std::string extension_id_;
+  const bool created_for_installed_pwa_;
 
   DISALLOW_COPY_AND_ASSIGN(HostedAppBrowserController);
 };

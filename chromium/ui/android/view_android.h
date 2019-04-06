@@ -30,18 +30,19 @@ class Size;
 namespace ui {
 class DragEventAndroid;
 class EventForwarder;
+class EventHandlerAndroid;
 class GestureEventAndroid;
+class KeyEventAndroid;
 class MotionEventAndroid;
-class ViewClient;
 class WindowAndroid;
 class ViewAndroidObserver;
 
 // View-related parameters from frame updates.
 struct FrameInfo {
-  gfx::SizeF viewport_size;  // In CSS pixels.
+  gfx::SizeF viewport_size;  // In dip.
 
   // Content offset from the top. Used to translate snapshots to
-  // the correct part of the view. In CSS pixels.
+  // the correct part of the view. In dip.
   float content_offset;
 };
 
@@ -91,13 +92,13 @@ class UI_ANDROID_EXPORT ViewAndroid {
     MATCH_PARENT
   };
 
-  ViewAndroid(ViewClient* view_client, LayoutType layout_type);
+  explicit ViewAndroid(LayoutType layout_type);
 
   ViewAndroid();
   virtual ~ViewAndroid();
 
   void UpdateFrameInfo(const FrameInfo& frame_info);
-  // content_offset is in CSS scale.
+  // content_offset is in dip.
   float content_offset() const { return frame_info_.content_offset; }
   gfx::SizeF viewport_size() const { return frame_info_.viewport_size; }
 
@@ -137,6 +138,7 @@ class UI_ANDROID_EXPORT ViewAndroid {
 
   gfx::Size GetPhysicalBackingSize() const;
   gfx::Size GetSize() const;
+  gfx::Rect bounds() const { return bounds_; }
 
   void OnSizeChanged(int width, int height);
   void OnPhysicalBackingSizeChanged(const gfx::Size& size);
@@ -167,7 +169,18 @@ class UI_ANDROID_EXPORT ViewAndroid {
   void AddObserver(ViewAndroidObserver* observer);
   void RemoveObserver(ViewAndroidObserver* observer);
 
+  void RequestDisallowInterceptTouchEvent();
+  void RequestUnbufferedDispatch(const MotionEventAndroid& event);
+
+  void set_event_handler(EventHandlerAndroid* handler) {
+    event_handler_ = handler;
+  }
+
+  ViewAndroid* parent() const { return parent_; }
+
  protected:
+  void RemoveAllChildren(bool attached_to_window);
+
   ViewAndroid* parent_;
 
  private:
@@ -186,6 +199,11 @@ class UI_ANDROID_EXPORT ViewAndroid {
   bool OnMouseEvent(const MotionEventAndroid& event);
   bool OnMouseWheelEvent(const MotionEventAndroid& event);
   bool OnGestureEvent(const GestureEventAndroid& event);
+  bool OnGenericMotionEvent(const MotionEventAndroid& event);
+  bool OnKeyUp(const KeyEventAndroid& event);
+  bool DispatchKeyEvent(const KeyEventAndroid& event);
+  bool ScrollBy(float delta_x, float delta_y);
+  bool ScrollTo(float x, float y);
 
   void RemoveChild(ViewAndroid* child);
 
@@ -195,23 +213,23 @@ class UI_ANDROID_EXPORT ViewAndroid {
   void SetLayoutForTesting(int x, int y, int width, int height);
 
   template <typename E>
-  using ViewClientCallback = const base::Callback<bool(ViewClient*, const E&)>;
-
+  using EventHandlerCallback =
+      const base::RepeatingCallback<bool(EventHandlerAndroid*, const E&)>;
   template <typename E>
-  bool HitTest(ViewClientCallback<E> send_to_client,
+  bool HitTest(EventHandlerCallback<E> handler_callback,
                const E& event,
                const gfx::PointF& point);
 
-  static bool SendDragEventToClient(ViewClient* client,
-                                    const DragEventAndroid& event);
-  static bool SendTouchEventToClient(ViewClient* client,
-                                     const MotionEventAndroid& event);
-  static bool SendMouseEventToClient(ViewClient* client,
-                                     const MotionEventAndroid& event);
-  static bool SendMouseWheelEventToClient(ViewClient* client,
-                                          const MotionEventAndroid& event);
-  static bool SendGestureEventToClient(ViewClient* client,
-                                       const GestureEventAndroid& event);
+  static bool SendDragEventToHandler(EventHandlerAndroid* handler,
+                                     const DragEventAndroid& event);
+  static bool SendTouchEventToHandler(EventHandlerAndroid* handler,
+                                      const MotionEventAndroid& event);
+  static bool SendMouseEventToHandler(EventHandlerAndroid* handler,
+                                      const MotionEventAndroid& event);
+  static bool SendMouseWheelEventToHandler(EventHandlerAndroid* handler,
+                                           const MotionEventAndroid& event);
+  static bool SendGestureEventToHandler(EventHandlerAndroid* handler,
+                                        const GestureEventAndroid& event);
 
   bool has_event_forwarder() const { return !!event_forwarder_; }
 
@@ -230,19 +248,19 @@ class UI_ANDROID_EXPORT ViewAndroid {
   // Returns the Java delegate for this view. This is used to delegate work
   // up to the embedding view (or the embedder that can deal with the
   // implementation details).
-  const base::android::ScopedJavaLocalRef<jobject>
-      GetViewAndroidDelegate() const;
+  const base::android::ScopedJavaLocalRef<jobject> GetViewAndroidDelegate()
+      const;
 
   std::list<ViewAndroid*> children_;
   base::ObserverList<ViewAndroidObserver> observer_list_;
   scoped_refptr<cc::Layer> layer_;
   JavaObjectWeakGlobalRef delegate_;
 
-  ViewClient* const client_;
+  EventHandlerAndroid* event_handler_ = nullptr;  // Not owned
 
   // Basic view layout information. Used to do hit testing deciding whether
   // the passed events should be processed by the view. Unit in DIP.
-  gfx::Rect view_rect_;
+  gfx::Rect bounds_;
   const LayoutType layout_type_;
 
   // In physical pixel.

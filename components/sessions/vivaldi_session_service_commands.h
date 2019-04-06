@@ -20,26 +20,26 @@ namespace vivaldi {
 // Creates a SessionCommand that represents ext data.
 SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetTabExtDataCommand(
     SessionID::id_type command_id,
-    SessionID::id_type tab_id,
+    SessionID tab_id,
     const std::string& ext_data);
 
 // Creates a SessionCommand stores a browser window's ext data.
 SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
     SessionID::id_type command_id,
-    SessionID::id_type window_id,
+    SessionID window_id,
     const std::string& ext_data);
 
 // Extracts a SessionCommand as previously created by
 // CreateSetExtDataCommand into the tab id and ext data.
 SESSIONS_EXPORT bool RestoreSetExtDataCommand(const SessionCommand& command,
-                                              SessionID::id_type* tab_id,
+                                              SessionID* tab_id,
                                               std::string* ext_data);
 
 // Extracts a SessionCommand as previously created by
 // CreateSetWindowExtDataCommand into the window id and ext data.
 SESSIONS_EXPORT bool RestoreSetWindowExtDataCommand(
     const SessionCommand& command,
-    SessionID::id_type* window_id,
+    SessionID* window_id,
     std::string* ext_data);
 
 }  // namespace vivaldi

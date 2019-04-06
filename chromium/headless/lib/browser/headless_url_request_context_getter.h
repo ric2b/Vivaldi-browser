@@ -15,8 +15,9 @@
 #include "base/single_thread_task_runner.h"
 #include "content/public/browser/browser_context.h"
 #include "headless/public/headless_browser.h"
-#include "net/proxy/proxy_config.h"
-#include "net/proxy/proxy_config_service.h"
+#include "net/http/http_auth_preferences.h"
+#include "net/proxy_resolution/proxy_config.h"
+#include "net/proxy_resolution/proxy_config_service.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory.h"
 
@@ -29,9 +30,7 @@ namespace headless {
 class HeadlessBrowserContextOptions;
 class HeadlessBrowserContextImpl;
 
-class HeadlessURLRequestContextGetter
-    : public net::URLRequestContextGetter,
-      public HeadlessBrowserContext::Observer {
+class HeadlessURLRequestContextGetter : public net::URLRequestContextGetter {
  public:
   HeadlessURLRequestContextGetter(
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
@@ -48,9 +47,6 @@ class HeadlessURLRequestContextGetter
       const override;
 
   net::HostResolver* host_resolver() const;
-
-  // HeadlessBrowserContext::Observer implementation:
-  void OnHeadlessBrowserContextDestruct() override;
 
   void NotifyContextShuttingDown();
 
@@ -73,10 +69,8 @@ class HeadlessURLRequestContextGetter
   content::ProtocolHandlerMap protocol_handlers_;
   content::URLRequestInterceptorScopedVector request_interceptors_;
   net::NetLog* net_log_;  // Not owned
-
-  base::Lock lock_;  // Protects |headless_browser_context_|.
-  HeadlessBrowserContextImpl* headless_browser_context_;  // Not owned.
-
+  net::HttpAuthPreferences prefs_;
+  base::FilePath user_data_path_;
   bool shut_down_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessURLRequestContextGetter);

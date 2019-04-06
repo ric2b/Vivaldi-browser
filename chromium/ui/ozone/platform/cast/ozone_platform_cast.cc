@@ -10,7 +10,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "chromecast/public/cast_egl_platform.h"
 #include "chromecast/public/cast_egl_platform_shlib.h"
 #include "ui/display/types/native_display_delegate.h"
@@ -26,6 +26,7 @@
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 using chromecast::CastEglPlatform;
 
@@ -92,9 +93,9 @@ class OzonePlatformCast : public OzonePlatform {
   }
   std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
-      const gfx::Rect& bounds) override {
+      PlatformWindowInitProperties properties) override {
     return base::WrapUnique<PlatformWindow>(
-        new PlatformWindowCast(delegate, bounds));
+        new PlatformWindowCast(delegate, properties.bounds));
   }
   std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
       override {

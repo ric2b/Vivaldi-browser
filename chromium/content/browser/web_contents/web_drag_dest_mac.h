@@ -15,12 +15,11 @@
 #include "content/public/common/drop_data.h"
 #include "ui/gfx/geometry/point_f.h"
 
-#include "content/public/browser/web_drag_dest_delegate.h"
-
 namespace content {
 class RenderViewHost;
 class RenderWidgetHostImpl;
 class WebContentsImpl;
+class WebDragDestDelegate;
 }
 
 // A typedef for a RenderViewHost used for comparison purposes only.

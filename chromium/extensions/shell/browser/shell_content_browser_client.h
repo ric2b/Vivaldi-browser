@@ -40,7 +40,9 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
   // content::ContentBrowserClient overrides.
   content::BrowserMainParts* CreateBrowserMainParts(
       const content::MainFunctionParams& parameters) override;
-  void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
+  void RenderProcessWillLaunch(
+      content::RenderProcessHost* host,
+      service_manager::mojom::ServiceRequest* service_request) override;
   bool ShouldUseProcessPerSite(content::BrowserContext* browser_context,
                                const GURL& effective_url) override;
   void GetQuotaSettings(
@@ -64,6 +66,26 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       content::NavigationHandle* navigation_handle) override;
   std::unique_ptr<content::NavigationUIData> GetNavigationUIData(
       content::NavigationHandle* navigation_handle) override;
+  void RegisterNonNetworkNavigationURLLoaderFactories(
+      int frame_tree_node_id,
+      NonNetworkURLLoaderFactoryMap* factories) override;
+  void RegisterNonNetworkSubresourceURLLoaderFactories(
+      int render_process_id,
+      int render_frame_id,
+      NonNetworkURLLoaderFactoryMap* factories) override;
+  bool WillCreateURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* frame_host,
+      bool is_navigation,
+      network::mojom::URLLoaderFactoryRequest* factory_request) override;
+  bool HandleExternalProtocol(
+      const GURL& url,
+      content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      int child_id,
+      content::NavigationUIData* navigation_data,
+      bool is_main_frame,
+      ui::PageTransition page_transition,
+      bool has_user_gesture) override;
 
  protected:
   // Subclasses may wish to provide their own ShellBrowserMainParts.

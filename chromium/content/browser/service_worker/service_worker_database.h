@@ -21,9 +21,9 @@
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-#include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "third_party/WebKit/common/origin_trials/trial_token_validator.h"
+#include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -36,7 +36,7 @@ class DB;
 class Env;
 class Status;
 class WriteBatch;
-}
+}  // namespace leveldb
 
 namespace content {
 
@@ -72,6 +72,7 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
     // the waiting version. Then transition to the active version. The stored
     // version may be in the ACTIVATED state or in the INSTALLED state.
     GURL script;
+    blink::mojom::ServiceWorkerUpdateViaCache update_via_cache;
     int64_t version_id;
     bool is_active;
     bool has_fetch_handler;

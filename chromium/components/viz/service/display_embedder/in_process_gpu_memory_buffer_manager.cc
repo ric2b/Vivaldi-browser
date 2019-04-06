@@ -4,7 +4,10 @@
 
 #include "components/viz/service/display_embedder/in_process_gpu_memory_buffer_manager.h"
 
-#include "gpu/ipc/client/gpu_memory_buffer_impl.h"
+#include "base/bind.h"
+#include "gpu/ipc/common/gpu_memory_buffer_impl.h"
+#include "gpu/ipc/common/gpu_memory_buffer_support.h"
+#include "gpu/ipc/in_process_command_buffer.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 
@@ -12,7 +15,10 @@ namespace viz {
 
 InProcessGpuMemoryBufferManager::InProcessGpuMemoryBufferManager(
     gpu::GpuChannelManager* channel_manager)
-    : client_id_(1), channel_manager_(channel_manager), weak_factory_(this) {
+    : gpu_memory_buffer_support_(new gpu::GpuMemoryBufferSupport()),
+      client_id_(gpu::InProcessCommandBuffer::kGpuClientId),
+      channel_manager_(channel_manager),
+      weak_factory_(this) {
   weak_ptr_ = weak_factory_.GetWeakPtr();
 }
 
@@ -28,8 +34,8 @@ InProcessGpuMemoryBufferManager::CreateGpuMemoryBuffer(
   gfx::GpuMemoryBufferHandle buffer_handle =
       channel_manager_->gpu_memory_buffer_factory()->CreateGpuMemoryBuffer(
           id, size, format, usage, client_id_, surface_handle);
-  return gpu::GpuMemoryBufferImpl::CreateFromHandle(
-      buffer_handle, size, format, usage,
+  return gpu_memory_buffer_support_->CreateGpuMemoryBufferImplFromHandle(
+      std::move(buffer_handle), size, format, usage,
       base::Bind(&InProcessGpuMemoryBufferManager::DestroyGpuMemoryBuffer,
                  weak_ptr_, id, client_id_));
 }

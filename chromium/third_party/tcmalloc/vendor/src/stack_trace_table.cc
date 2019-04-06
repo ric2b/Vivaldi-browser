@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2009, Google Inc.
 // All rights reserved.
 //
@@ -135,7 +136,7 @@ void** StackTraceTable::ReadStackTracesAndClear() {
       b = b->next;
     }
   }
-  out[idx++] = static_cast<uintptr_t>(0);
+  out[idx++] = NULL;
   ASSERT(idx == out_len);
 
   // Clear state

@@ -16,8 +16,8 @@ ScopedPrefConnectionBuilder::ScopedPrefConnectionBuilder(
       observed_prefs_(std::move(observed_prefs)) {}
 
 void ScopedPrefConnectionBuilder::ProvidePrefStoreConnections(
-    const std::unordered_map<PrefValueStore::PrefStoreType,
-                             std::unique_ptr<PrefStoreImpl>>& pref_stores) {
+    const base::flat_map<PrefValueStore::PrefStoreType,
+                         std::unique_ptr<PrefStoreImpl>>& pref_stores) {
   for (const auto& pref_store : pref_stores) {
     ProvidePrefStoreConnection(pref_store.first, pref_store.second.get());
   }
@@ -42,17 +42,17 @@ void ScopedPrefConnectionBuilder::ProvidePersistentPrefStore(
 
 void ScopedPrefConnectionBuilder::ProvideIncognitoPersistentPrefStoreUnderlay(
     PersistentPrefStoreImpl* persistent_pref_store,
-    const std::vector<const char*>& overlay_pref_names) {
+    const std::vector<const char*>& persistent_perf_names) {
   PersistentPrefStoreImpl::ObservedPrefs observed_prefs(observed_prefs_.begin(),
                                                         observed_prefs_.end());
-  std::vector<std::string> filtered_overlay_pref_names;
-  for (const char* overlay_pref_name : overlay_pref_names) {
-    if (base::ContainsKey(observed_prefs, overlay_pref_name))
-      filtered_overlay_pref_names.emplace_back(overlay_pref_name);
+  std::vector<std::string> filtered_persistent_perf_names;
+  for (const char* persistent_perf_name : persistent_perf_names) {
+    if (base::ContainsKey(observed_prefs, persistent_perf_name))
+      filtered_persistent_perf_names.emplace_back(persistent_perf_name);
   }
   incognito_connection_ = mojom::IncognitoPersistentPrefStoreConnection::New(
       persistent_pref_store->CreateConnection(std::move(observed_prefs)),
-      std::move(filtered_overlay_pref_names));
+      std::move(filtered_persistent_perf_names));
 }
 
 void ScopedPrefConnectionBuilder::ProvideDefaults(

@@ -30,14 +30,16 @@ class ImageButton;
 class ZoomBubbleView : public LocationBarBubbleDelegateView,
                        public views::ButtonListener,
                        public ImmersiveModeController::Observer,
-                       public extensions::IconImage::Observer,
-                       public content::WebContentsObserver {
+                       public extensions::IconImage::Observer {
  public:
   // Shows the bubble and automatically closes it after a short time period if
   // |reason| is AUTOMATIC.
   static void ShowBubble(content::WebContents* web_contents,
                          const gfx::Point& anchor_point,
                          DisplayReason reason);
+
+  // If the bubble is being shown for the given |web_contents|, refreshes it.
+  static bool RefreshBubbleIfShowing(const content::WebContents* web_contents);
 
   // Closes the showing bubble (if one exists).
   static void CloseCurrentBubble();
@@ -52,6 +54,12 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ZoomBubbleBrowserTest, ImmersiveFullscreen);
+  FRIEND_TEST_ALL_PREFIXES(ZoomBubbleBrowserTest,
+                           BubbleSuppressingExtensionRefreshesExistingBubble);
+
+  // Returns true if we can reuse the existing bubble for the given
+  // |web_contents|.
+  static bool CanRefresh(const content::WebContents* web_contents);
 
   // Stores information about the extension that initiated the zoom change, if
   // any.
@@ -102,10 +110,6 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
   // extensions::IconImage::Observer:
   void OnExtensionIconImageChanged(extensions::IconImage* /* image */) override;
 
-  // content::WebContentsObserver:
-  void WasHidden() override;
-  void WebContentsDestroyed() override;
-
   // Sets information about the extension that initiated the zoom change.
   // Calling this method asserts that the extension |extension| did initiate
   // the zoom change.
@@ -114,7 +118,7 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
   // Updates |label_| with the up to date zoom.
   void UpdateZoomPercent();
 
-  // Updates visibility of the zoom icon in location bar.
+  // Updates visibility of the zoom icon.
   void UpdateZoomIconVisibility();
 
   // Starts a timer which will close the bubble if |auto_close_| is true.

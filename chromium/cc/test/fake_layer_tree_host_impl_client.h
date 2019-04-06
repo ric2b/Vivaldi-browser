@@ -34,15 +34,15 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void WillPrepareTiles() override {}
   void DidPrepareTiles() override {}
   void DidCompletePageScaleAnimationOnImplThread() override {}
-  void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw) override {}
+  void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw,
+                                   bool skip_draw) override {}
   void NeedsImplSideInvalidation(bool needs_first_draw_on_activation) override;
   void RequestBeginMainFrameNotExpected(bool new_state) override {}
   void NotifyImageDecodeRequestFinished() override {}
   void DidPresentCompositorFrameOnImplThread(
-      const std::vector<int>& source_frames,
-      base::TimeTicks time,
-      base::TimeDelta refresh,
-      uint32_t flags) override {}
+      uint32_t frame_token,
+      std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
+      const gfx::PresentationFeedback& feedback) override {}
 
   void reset_did_request_impl_side_invalidation() {
     did_request_impl_side_invalidation_ = false;

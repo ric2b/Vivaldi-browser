@@ -32,14 +32,14 @@ const char kCompositedScrollingDataURL[] =
     "<!DOCTYPE html>"
     "<meta name='viewport' content='width=device-width'/>"
     "<style>"
-    "#scroller {"
+    "%23scroller {"
     "  width:500px;"
     "  height:500px;"
     "  overflow:scroll;"
     "  transform: rotateX(-30deg);"
     "}"
 
-    "#content {"
+    "%23content {"
     "  background-color:red;"
     "  width:1000px;"
     "  height:1000px;"
@@ -151,7 +151,8 @@ class CompositedScrollingBrowserTest : public ContentBrowserTest {
 // crbug.com/543655 for a case where this was broken.
 // Disabled on MacOS because it doesn't support touch input.
 // Disabled on Android due to flakiness, see https://crbug.com/376668.
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+// Flaky on Windows: crbug.com/804009
+#if defined(OS_MACOSX) || defined(OS_ANDROID) || defined(OS_WIN)
 #define MAYBE_Scroll3DTransformedScroller DISABLED_Scroll3DTransformedScroller
 #else
 #define MAYBE_Scroll3DTransformedScroller Scroll3DTransformedScroller

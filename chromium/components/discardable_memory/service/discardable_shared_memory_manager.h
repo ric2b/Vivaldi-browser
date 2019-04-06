@@ -20,9 +20,10 @@
 #include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/process/process_handle.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -49,7 +50,7 @@ class DISCARDABLE_MEMORY_EXPORT DiscardableSharedMemoryManager
     : public base::DiscardableMemoryAllocator,
       public base::trace_event::MemoryDumpProvider,
       public base::MemoryCoordinatorClient,
-      public base::MessageLoop::DestructionObserver {
+      public base::MessageLoopCurrent::DestructionObserver {
  public:
   DiscardableSharedMemoryManager();
   ~DiscardableSharedMemoryManager() override;
@@ -67,12 +68,12 @@ class DISCARDABLE_MEMORY_EXPORT DiscardableSharedMemoryManager
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
   // This allocates a discardable memory segment for |process_handle|.
-  // A valid shared memory handle is returned on success.
+  // A valid shared memory region is returned on success.
   void AllocateLockedDiscardableSharedMemoryForClient(
       int client_id,
       size_t size,
       int32_t id,
-      base::SharedMemoryHandle* shared_memory_handle);
+      base::UnsafeSharedMemoryRegion* shared_memory_region);
 
   // Call this to notify the manager that client process associated with
   // |client_id| has deleted discardable memory segment with |id|.
@@ -120,14 +121,14 @@ class DISCARDABLE_MEMORY_EXPORT DiscardableSharedMemoryManager
   void OnMemoryStateChange(base::MemoryState state) override;
   void OnPurgeMemory() override;
 
-  // base::MessageLoop::DestructionObserver implementation:
+  // base::MessageLoopCurrent::DestructionObserver implementation:
   void WillDestroyCurrentMessageLoop() override;
 
   void AllocateLockedDiscardableSharedMemory(
       int client_id,
       size_t size,
       int32_t id,
-      base::SharedMemoryHandle* shared_memory_handle);
+      base::UnsafeSharedMemoryRegion* shared_memory_region);
   void DeletedDiscardableSharedMemory(int32_t id, int client_id);
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);

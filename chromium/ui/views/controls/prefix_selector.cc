@@ -89,6 +89,12 @@ bool PrefixSelector::HasCompositionText() const {
   return false;
 }
 
+ui::TextInputClient::FocusReason PrefixSelector::GetFocusReason() const {
+  // TODO(https://crbug.com/824604): Implement this correctly.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return ui::TextInputClient::FOCUS_REASON_OTHER;
+}
+
 bool PrefixSelector::GetTextRange(gfx::Range* range) const {
   *range = gfx::Range();
   return false;
@@ -139,10 +145,16 @@ bool PrefixSelector::IsTextEditCommandEnabled(
 void PrefixSelector::SetTextEditCommandForNextKeyEvent(
     ui::TextEditCommand command) {}
 
-const std::string& PrefixSelector::GetClientSourceInfo() const {
-  // TODO(yhanada): Implement this method.
+ukm::SourceId PrefixSelector::GetClientSourceForMetrics() const {
+  // TODO(shend): Implement this method.
   NOTIMPLEMENTED_LOG_ONCE();
-  return base::EmptyString();
+  return ukm::SourceId();
+}
+
+bool PrefixSelector::ShouldDoLearning() {
+  // TODO(https://crbug.com/311180): Implement this method.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
 }
 
 void PrefixSelector::OnTextInput(const base::string16& text) {

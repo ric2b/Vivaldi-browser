@@ -12,7 +12,7 @@
 #if defined(OS_MACOSX)
 #define CHROMIUM_PRODUCT_STRING "Vivaldi"
 #if defined(GOOGLE_CHROME_BUILD)
-#define PRODUCT_STRING "Vivaldi"
+#define PRODUCT_STRING "Google Chrome"
 #elif defined(CHROMIUM_BUILD)
 #define PRODUCT_STRING "Vivaldi"
 #else
@@ -139,8 +139,6 @@ const base::FilePath::CharType kCRLSetFilename[] =
     FPL("Certificate Revocation Lists");
 const base::FilePath::CharType kCustomDictionaryFileName[] =
     FPL("Custom Dictionary.txt");
-const base::FilePath::CharType kDownloadMetadataStoreFilename[] =
-    FPL("in_progress_download_metadata_store");
 const base::FilePath::CharType kDownloadServiceStorageDirname[] =
     FPL("Download Service");
 const base::FilePath::CharType kExtensionActivityLogFilename[] =
@@ -163,6 +161,8 @@ const base::FilePath::CharType kOfflinePagePrefetchStoreDirname[] =
     FPL("Offline Pages/prefech_store");
 const base::FilePath::CharType kOfflinePageRequestQueueDirname[] =
     FPL("Offline Pages/request_queue");
+const base::FilePath::CharType kPageLoadCappingOptOutDBFilename[] =
+    FPL("page_load_capping_opt_out.db");
 const base::FilePath::CharType kPreferencesFilename[] = FPL("Preferences");
 const base::FilePath::CharType kPreviewsOptOutDBFilename[] =
     FPL("previews_opt_out.db");

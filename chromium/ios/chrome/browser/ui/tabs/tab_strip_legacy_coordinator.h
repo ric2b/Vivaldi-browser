@@ -7,12 +7,12 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_highlighting.h"
 
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
+@protocol PopupMenuLongPressDelegate;
 @class TabModel;
 @protocol TabStripFoldAnimation;
 @protocol TabStripPresentation;
@@ -23,14 +23,16 @@ class ChromeBrowserState;
 
 // A legacy coordinator that presents the public interface for the tablet tab
 // strip feature.
-@interface TabStripLegacyCoordinator
-    : ChromeCoordinator<BubbleViewAnchorPointProvider, TabStripHighlighting>
+@interface TabStripLegacyCoordinator : ChromeCoordinator<TabStripHighlighting>
 
 // BrowserState for this coordinator.
 @property(nonatomic, assign) ios::ChromeBrowserState* browserState;
 
 // Dispatcher for sending commands.
 @property(nonatomic, weak) id dispatcher;
+
+// Delegate for the long press gesture recognizer triggering popup menu.
+@property(nonatomic, weak) id<PopupMenuLongPressDelegate> longPressDelegate;
 
 // Model layer for the tab strip.
 @property(nonatomic, weak) TabModel* tabModel;
@@ -46,6 +48,9 @@ class ChromeBrowserState;
 // Used has a placeholder for the tab strip view during the tab switcher
 // controller transition animations.
 - (UIView<TabStripFoldAnimation>*)placeholderView;
+
+// Hides or shows the TabStrip.
+- (void)hideTabStrip:(BOOL)hidden;
 
 @end
 

@@ -127,9 +127,10 @@ void NotesCodec::ExtractSpecialNode(Notes_Node::Type type,
   }
 
   if (item) {
-    for (int i = 0; i < item->child_count(); ++i) {
-      Notes_Node* child = item->GetChild(i);
-      target->Add(item->Remove(child), i);
+    // Using variable instead of relying on child_count() decrement
+    int count = item->child_count();
+    while (count-- > 0) {
+      target->Add(item->Remove(item->GetChild(0)), 0);
     }
     target->set_id(item->id());
     target->SetTitle(item->GetTitle());

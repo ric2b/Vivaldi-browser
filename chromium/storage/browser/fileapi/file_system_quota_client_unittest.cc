@@ -21,7 +21,7 @@
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/fileapi/file_system_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
 using blink::mojom::StorageType;
@@ -72,9 +72,9 @@ class FileSystemQuotaClientTest : public testing::Test {
                            const std::string& origin_url,
                            StorageType type) {
     quota_client->GetOriginUsage(
-        GURL(origin_url), type,
-        base::Bind(&FileSystemQuotaClientTest::OnGetUsage,
-                   weak_factory_.GetWeakPtr()));
+        url::Origin::Create(GURL(origin_url)), type,
+        base::BindOnce(&FileSystemQuotaClientTest::OnGetUsage,
+                       weak_factory_.GetWeakPtr()));
   }
 
   int64_t GetOriginUsage(FileSystemQuotaClient* quota_client,
@@ -85,25 +85,26 @@ class FileSystemQuotaClientTest : public testing::Test {
     return usage_;
   }
 
-  const std::set<GURL>& GetOriginsForType(FileSystemQuotaClient* quota_client,
-                                          StorageType type) {
+  const std::set<url::Origin>& GetOriginsForType(
+      FileSystemQuotaClient* quota_client,
+      StorageType type) {
     origins_.clear();
     quota_client->GetOriginsForType(
-        type,
-        base::Bind(&FileSystemQuotaClientTest::OnGetOrigins,
-                   weak_factory_.GetWeakPtr()));
+        type, base::BindOnce(&FileSystemQuotaClientTest::OnGetOrigins,
+                             weak_factory_.GetWeakPtr()));
     base::RunLoop().RunUntilIdle();
     return origins_;
   }
 
-  const std::set<GURL>& GetOriginsForHost(FileSystemQuotaClient* quota_client,
-                                          StorageType type,
-                                          const std::string& host) {
+  const std::set<url::Origin>& GetOriginsForHost(
+      FileSystemQuotaClient* quota_client,
+      StorageType type,
+      const std::string& host) {
     origins_.clear();
     quota_client->GetOriginsForHost(
         type, host,
-        base::Bind(&FileSystemQuotaClientTest::OnGetOrigins,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&FileSystemQuotaClientTest::OnGetOrigins,
+                       weak_factory_.GetWeakPtr()));
     base::RunLoop().RunUntilIdle();
     return origins_;
   }
@@ -112,9 +113,9 @@ class FileSystemQuotaClientTest : public testing::Test {
                                     const std::string& origin_url,
                                     StorageType type) {
     quota_client->GetOriginUsage(
-        GURL(origin_url), type,
-        base::Bind(&FileSystemQuotaClientTest::OnGetAdditionalUsage,
-                   weak_factory_.GetWeakPtr()));
+        url::Origin::Create(GURL(origin_url)), type,
+        base::BindOnce(&FileSystemQuotaClientTest::OnGetAdditionalUsage,
+                       weak_factory_.GetWeakPtr()));
   }
 
   bool CreateFileSystemDirectory(const base::FilePath& file_path,
@@ -203,9 +204,9 @@ class FileSystemQuotaClientTest : public testing::Test {
                         StorageType type) {
     deletion_status_ = blink::mojom::QuotaStatusCode::kUnknown;
     quota_client->DeleteOriginData(
-        GURL(origin), type,
-        base::Bind(&FileSystemQuotaClientTest::OnDeleteOrigin,
-                   weak_factory_.GetWeakPtr()));
+        url::Origin::Create(GURL(origin)), type,
+        base::BindOnce(&FileSystemQuotaClientTest::OnDeleteOrigin,
+                       weak_factory_.GetWeakPtr()));
   }
 
   int64_t usage() const { return usage_; }
@@ -218,7 +219,7 @@ class FileSystemQuotaClientTest : public testing::Test {
  private:
   void OnGetUsage(int64_t usage) { usage_ = usage; }
 
-  void OnGetOrigins(const std::set<GURL>& origins) {
+  void OnGetOrigins(const std::set<url::Origin>& origins) {
     origins_ = origins;
   }
 
@@ -235,7 +236,7 @@ class FileSystemQuotaClientTest : public testing::Test {
   scoped_refptr<storage::FileSystemContext> file_system_context_;
   int64_t usage_;
   int additional_callback_count_;
-  std::set<GURL> origins_;
+  std::set<url::Origin> origins_;
   blink::mojom::QuotaStatusCode deletion_status_;
   base::WeakPtrFactory<FileSystemQuotaClientTest> weak_factory_;
 
@@ -442,11 +443,15 @@ TEST_F(FileSystemQuotaClientTest, GetOriginsForType) {
   };
   InitializeOriginFiles(quota_client.get(), kFiles, arraysize(kFiles));
 
-  std::set<GURL> origins = GetOriginsForType(quota_client.get(), kTemporary);
+  std::set<url::Origin> origins =
+      GetOriginsForType(quota_client.get(), kTemporary);
   EXPECT_EQ(2U, origins.size());
-  EXPECT_TRUE(origins.find(GURL(kDummyURL1)) != origins.end());
-  EXPECT_TRUE(origins.find(GURL(kDummyURL2)) != origins.end());
-  EXPECT_TRUE(origins.find(GURL(kDummyURL3)) == origins.end());
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kDummyURL1))) !=
+              origins.end());
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kDummyURL2))) !=
+              origins.end());
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kDummyURL3))) ==
+              origins.end());
 }
 
 TEST_F(FileSystemQuotaClientTest, GetOriginsForHost) {
@@ -465,14 +470,16 @@ TEST_F(FileSystemQuotaClientTest, GetOriginsForHost) {
   };
   InitializeOriginFiles(quota_client.get(), kFiles, arraysize(kFiles));
 
-  std::set<GURL> origins = GetOriginsForHost(
-      quota_client.get(), kTemporary, "foo.com");
+  std::set<url::Origin> origins =
+      GetOriginsForHost(quota_client.get(), kTemporary, "foo.com");
   EXPECT_EQ(3U, origins.size());
-  EXPECT_TRUE(origins.find(GURL(kURL1)) != origins.end());
-  EXPECT_TRUE(origins.find(GURL(kURL2)) != origins.end());
-  EXPECT_TRUE(origins.find(GURL(kURL3)) != origins.end());
-  EXPECT_TRUE(origins.find(GURL(kURL4)) == origins.end());  // Different host.
-  EXPECT_TRUE(origins.find(GURL(kURL5)) == origins.end());  // Different type.
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL1))) != origins.end());
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL2))) != origins.end());
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL3))) != origins.end());
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL4))) ==
+              origins.end());  // Different host.
+  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL5))) ==
+              origins.end());  // Different type.
 }
 
 TEST_F(FileSystemQuotaClientTest, IncognitoTest) {
@@ -488,7 +495,8 @@ TEST_F(FileSystemQuotaClientTest, IncognitoTest) {
   EXPECT_EQ(0, GetOriginUsage(quota_client.get(), kDummyURL1, kTemporary));
   EXPECT_EQ(0, GetOriginUsage(quota_client.get(), kDummyURL1, kPersistent));
 
-  std::set<GURL> origins = GetOriginsForType(quota_client.get(), kTemporary);
+  std::set<url::Origin> origins =
+      GetOriginsForType(quota_client.get(), kTemporary);
   EXPECT_EQ(0U, origins.size());
   origins = GetOriginsForHost(quota_client.get(), kTemporary, "www.dummy.org");
   EXPECT_EQ(0U, origins.size());

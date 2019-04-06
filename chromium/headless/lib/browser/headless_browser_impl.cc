@@ -8,9 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/app/content_main.h"
 #include "content/public/browser/browser_thread.h"
@@ -20,11 +21,12 @@
 #include "headless/app/headless_shell_switches.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
-#include "headless/lib/browser/headless_net_log.h"
+#include "headless/lib/browser/headless_devtools_agent_host_client.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
 #include "headless/lib/headless_content_main_delegate.h"
 #include "headless/public/internal/headless_devtools_client_impl.h"
 #include "net/http/http_util.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -44,7 +46,7 @@ namespace {
 
 int RunContentMain(
     HeadlessBrowser::Options options,
-    const base::Callback<void(HeadlessBrowser*)>& on_browser_start_callback) {
+    base::OnceCallback<void(HeadlessBrowser*)> on_browser_start_callback) {
   content::ContentMainParams params(nullptr);
 #if defined(OS_WIN)
   // Sandbox info has to be set and initialized.
@@ -59,8 +61,8 @@ int RunContentMain(
   // TODO(skyostil): Implement custom message pumps.
   DCHECK(!options.message_pump);
 
-  std::unique_ptr<HeadlessBrowserImpl> browser(
-      new HeadlessBrowserImpl(on_browser_start_callback, std::move(options)));
+  std::unique_ptr<HeadlessBrowserImpl> browser(new HeadlessBrowserImpl(
+      std::move(on_browser_start_callback), std::move(options)));
   HeadlessContentMainDelegate delegate(std::move(browser));
   params.delegate = &delegate;
   return content::ContentMain(params);
@@ -68,10 +70,13 @@ int RunContentMain(
 
 }  // namespace
 
+const base::FilePath::CharType kDefaultProfileName[] =
+    FILE_PATH_LITERAL("Default");
+
 HeadlessBrowserImpl::HeadlessBrowserImpl(
-    const base::Callback<void(HeadlessBrowser*)>& on_start_callback,
+    base::OnceCallback<void(HeadlessBrowser*)> on_start_callback,
     HeadlessBrowser::Options options)
-    : on_start_callback_(on_start_callback),
+    : on_start_callback_(std::move(on_start_callback)),
       options_(std::move(options)),
       browser_main_parts_(nullptr),
       default_browser_context_(nullptr),
@@ -87,12 +92,6 @@ HeadlessBrowserImpl::CreateBrowserContextBuilder() {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-HeadlessBrowserImpl::BrowserIOThread() const {
-  return content::BrowserThread::GetTaskRunnerForThread(
-      content::BrowserThread::IO);
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
 HeadlessBrowserImpl::BrowserMainThread() const {
   return content::BrowserThread::GetTaskRunnerForThread(
       content::BrowserThread::UI);
@@ -103,20 +102,14 @@ void HeadlessBrowserImpl::Shutdown() {
 
   weak_ptr_factory_.InvalidateWeakPtrs();
 
-  // Destroy all browser contexts.
-  {
-    base::AutoLock lock(browser_contexts_lock_);
-    browser_contexts_.clear();
-  }
+  browser_contexts_.clear();
 
-  BrowserMainThread()->PostTask(FROM_HERE,
-                                base::MessageLoop::QuitWhenIdleClosure());
+  browser_main_parts_->QuitMainMessageLoop();
 }
 
 std::vector<HeadlessBrowserContext*>
 HeadlessBrowserImpl::GetAllBrowserContexts() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  base::AutoLock lock(browser_contexts_lock_);
 
   std::vector<HeadlessBrowserContext*> result;
   result.reserve(browser_contexts_.size());
@@ -139,31 +132,13 @@ void HeadlessBrowserImpl::set_browser_main_parts(
   browser_main_parts_ = browser_main_parts;
 }
 
-void HeadlessBrowserImpl::PreMainMessageLoopRun() {
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(::switches::kLogNetLog)) {
-    base::FilePath log_path =
-        command_line->GetSwitchValuePath(::switches::kLogNetLog);
-    net_log_.reset(new HeadlessNetLog(log_path));
-  } else {
-    net_log_.reset(new net::NetLog());
-  }
-}
-
 void HeadlessBrowserImpl::RunOnStartCallback() {
-#if defined(USE_NSS_CERTS)
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&net::SetMessageLoopForNSSHttpIO));
-#endif
   // We don't support the tethering domain on this agent host.
   agent_host_ = content::DevToolsAgentHost::CreateForBrowser(
       nullptr, content::DevToolsAgentHost::CreateServerSocketCallback());
 
   PlatformStart();
-  on_start_callback_.Run(this);
-  on_start_callback_ = base::Callback<void(HeadlessBrowser*)>();
+  std::move(on_start_callback_).Run(this);
 }
 
 HeadlessBrowserContext* HeadlessBrowserImpl::CreateBrowserContext(
@@ -179,7 +154,6 @@ HeadlessBrowserContext* HeadlessBrowserImpl::CreateBrowserContext(
 
   HeadlessBrowserContext* result = browser_context.get();
 
-  base::AutoLock lock(browser_contexts_lock_);
   browser_contexts_[browser_context->Id()] = std::move(browser_context);
 
   return result;
@@ -187,10 +161,9 @@ HeadlessBrowserContext* HeadlessBrowserImpl::CreateBrowserContext(
 
 void HeadlessBrowserImpl::DestroyBrowserContext(
     HeadlessBrowserContextImpl* browser_context) {
-  base::AutoLock lock(browser_contexts_lock_);
-  auto it = browser_contexts_.find(browser_context->Id());
-  DCHECK(it != browser_contexts_.end());
-  browser_contexts_.erase(it);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  int erased = browser_contexts_.erase(browser_context->Id());
+  DCHECK(erased);
   if (default_browser_context_ == browser_context)
     SetDefaultBrowserContext(nullptr);
 }
@@ -237,45 +210,29 @@ HeadlessWebContentsImpl* HeadlessBrowserImpl::GetWebContentsForWindowId(
 
 HeadlessBrowserContext* HeadlessBrowserImpl::GetBrowserContextForId(
     const std::string& id) {
-  base::AutoLock lock(browser_contexts_lock_);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   auto find_it = browser_contexts_.find(id);
   if (find_it == browser_contexts_.end())
     return nullptr;
   return find_it->second.get();
 }
 
-LockedPtr<HeadlessBrowserContextImpl>
-HeadlessBrowserImpl::GetBrowserContextForRenderFrame(
-    int render_process_id,
-    int render_frame_id) const {
-  MoveableAutoLock lock(browser_contexts_lock_);
-  for (const auto& pair : browser_contexts_) {
-    if (pair.second->GetDevToolsFrameToken(render_process_id, render_frame_id))
-      return LockedPtr<HeadlessBrowserContextImpl>(std::move(lock),
-                                                   pair.second.get());
-  }
-  return LockedPtr<HeadlessBrowserContextImpl>(std::move(lock), nullptr);
-}
-
 HeadlessDevToolsTarget* HeadlessBrowserImpl::GetDevToolsTarget() {
   return agent_host_ ? this : nullptr;
 }
 
-bool HeadlessBrowserImpl::AttachClient(HeadlessDevToolsClient* client) {
+std::unique_ptr<HeadlessDevToolsChannel>
+HeadlessBrowserImpl::CreateDevToolsChannel() {
   DCHECK(agent_host_);
-  return HeadlessDevToolsClientImpl::From(client)->AttachToHost(
-      agent_host_.get());
+  return std::make_unique<HeadlessDevToolsAgentHostClient>(agent_host_);
 }
 
-void HeadlessBrowserImpl::ForceAttachClient(HeadlessDevToolsClient* client) {
-  DCHECK(agent_host_);
-  HeadlessDevToolsClientImpl::From(client)->ForceAttachToHost(
-      agent_host_.get());
+void HeadlessBrowserImpl::AttachClient(HeadlessDevToolsClient* client) {
+  client->AttachToChannel(CreateDevToolsChannel());
 }
 
 void HeadlessBrowserImpl::DetachClient(HeadlessDevToolsClient* client) {
-  DCHECK(agent_host_);
-  HeadlessDevToolsClientImpl::From(client)->DetachFromHost(agent_host_.get());
+  client->DetachFromChannel();
 }
 
 bool HeadlessBrowserImpl::IsAttached() {
@@ -308,12 +265,12 @@ void RunChildProcessIfNeeded(int argc, const char** argv) {
   }
 
   exit(RunContentMain(builder.Build(),
-                      base::Callback<void(HeadlessBrowser*)>()));
+                      base::OnceCallback<void(HeadlessBrowser*)>()));
 }
 
 int HeadlessBrowserMain(
     HeadlessBrowser::Options options,
-    const base::Callback<void(HeadlessBrowser*)>& on_browser_start_callback) {
+    base::OnceCallback<void(HeadlessBrowser*)> on_browser_start_callback) {
   DCHECK(!on_browser_start_callback.is_null());
 #if DCHECK_IS_ON()
   // The browser can only be initialized once.

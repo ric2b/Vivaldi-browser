@@ -6,10 +6,9 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 #if BUILDFLAG(ENABLE_CDM_STORAGE_ID)
 #include "chrome/browser/media/cdm_storage_id.h"

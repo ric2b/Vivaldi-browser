@@ -17,10 +17,10 @@
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/quic/chromium/quic_chromium_client_session.h"
 #include "net/quic/chromium/quic_chromium_client_stream.h"
-#include "net/spdy/core/spdy_header_block.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
 
 namespace base {
-class Timer;
+class OneShotTimer;
 }  // namespace base
 
 namespace net {
@@ -41,7 +41,8 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
              const NetLogWithSource& net_log,
              bool send_request_headers_automatically,
              BidirectionalStreamImpl::Delegate* delegate,
-             std::unique_ptr<base::Timer> timer) override;
+             std::unique_ptr<base::OneShotTimer> timer,
+             const NetworkTrafficAnnotationTag& traffic_annotation) override;
   void SendRequestHeaders() override;
   int ReadData(IOBuffer* buffer, int buffer_len) override;
   void SendvData(const std::vector<scoped_refptr<IOBuffer>>& buffers,
@@ -94,8 +95,8 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   // received.
   LoadTimingInfo::ConnectTiming connect_timing_;
 
-  SpdyHeaderBlock initial_headers_;
-  SpdyHeaderBlock trailing_headers_;
+  spdy::SpdyHeaderBlock initial_headers_;
+  spdy::SpdyHeaderBlock trailing_headers_;
 
   // User provided read buffer for ReadData() response.
   scoped_refptr<IOBuffer> read_buffer_;

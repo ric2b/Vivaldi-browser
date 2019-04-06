@@ -7,7 +7,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -33,7 +33,8 @@ using ::testing::_;
 
 class MockLoginUIService : public LoginUIService {
  public:
-  MockLoginUIService() : LoginUIService(nullptr) {}
+  explicit MockLoginUIService(content::BrowserContext* context)
+      : LoginUIService(static_cast<Profile*>(context)) {}
   ~MockLoginUIService() override {}
   MOCK_METHOD3(DisplayLoginResult,
                void(Browser* browser,
@@ -44,7 +45,7 @@ class MockLoginUIService : public LoginUIService {
 
 std::unique_ptr<KeyedService> CreateLoginUIService(
     content::BrowserContext* context) {
-  return std::make_unique<MockLoginUIService>();
+  return std::make_unique<MockLoginUIService>(context);
 }
 
 class UserManagerUIBrowserTest : public InProcessBrowserTest,

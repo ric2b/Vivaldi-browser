@@ -17,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
@@ -75,28 +74,9 @@ const char kPakFileExtension[] = ".pak";
 
 ResourceBundle* g_shared_instance_ = NULL;
 
-#if defined(OS_ANDROID)
-// Returns the scale factor closest to |scale| from the full list of factors.
-// Note that it does NOT rely on the list of supported scale factors.
-// Finding the closest match is inefficient and shouldn't be done frequently.
-ScaleFactor FindClosestScaleFactorUnsafe(float scale) {
-  float smallest_diff =  std::numeric_limits<float>::max();
-  ScaleFactor closest_match = SCALE_FACTOR_100P;
-  for (int i = SCALE_FACTOR_100P; i < NUM_SCALE_FACTORS; ++i) {
-    const ScaleFactor scale_factor = static_cast<ScaleFactor>(i);
-    float diff = std::abs(GetScaleForScaleFactor(scale_factor) - scale);
-    if (diff < smallest_diff) {
-      closest_match = scale_factor;
-      smallest_diff = diff;
-    }
-  }
-  return closest_match;
-}
-#endif  // OS_ANDROID
-
 base::FilePath GetResourcesPakFilePath(const std::string& pak_name) {
   base::FilePath path;
-  if (PathService::Get(base::DIR_MODULE, &path))
+  if (base::PathService::Get(base::DIR_MODULE, &path))
     return path.AppendASCII(pak_name.c_str());
 
   // Return just the name of the pak file.
@@ -234,10 +214,8 @@ void ResourceBundle::InitSharedInstanceWithPakPath(const base::FilePath& path) {
 
 // static
 void ResourceBundle::CleanupSharedInstance() {
-  if (g_shared_instance_) {
-    delete g_shared_instance_;
-    g_shared_instance_ = NULL;
-  }
+  delete g_shared_instance_;
+  g_shared_instance_ = NULL;
 }
 
 // static
@@ -273,6 +251,18 @@ bool ResourceBundle::LocaleDataPakExists(const std::string& locale) {
   return locale_file_path_exists;
 }
 #endif  // !defined(OS_ANDROID)
+
+void ResourceBundle::AddDataPack(std::unique_ptr<DataPack> data_pack) {
+#if DCHECK_IS_ON()
+  data_pack->CheckForDuplicateResources(data_packs_);
+#endif
+
+  if (GetScaleForScaleFactor(data_pack->GetScaleFactor()) >
+      GetScaleForScaleFactor(max_scale_factor_))
+    max_scale_factor_ = data_pack->GetScaleFactor();
+
+  data_packs_.push_back(std::move(data_pack));
+}
 
 void ResourceBundle::AddDataPackFromPath(const base::FilePath& path,
                                          ScaleFactor scale_factor) {
@@ -322,7 +312,7 @@ base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
 
   base::FilePath locale_file_path;
 
-  PathService::Get(ui::DIR_LOCALES, &locale_file_path);
+  base::PathService::Get(ui::DIR_LOCALES, &locale_file_path);
 
   if (!locale_file_path.empty()) {
 #if defined(OS_ANDROID)
@@ -773,22 +763,7 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   DCHECK(g_shared_instance_ == NULL) << "ResourceBundle initialized twice";
   g_shared_instance_ = new ResourceBundle(delegate);
   static std::vector<ScaleFactor> supported_scale_factors;
-#if !defined(OS_IOS)
-  // On platforms other than iOS, 100P is always a supported scale factor.
-  // For Windows we have a separate case in this function.
-  supported_scale_factors.push_back(SCALE_FACTOR_100P);
-#endif
-#if defined(OS_ANDROID)
-  float display_density;
-  if (display::Display::HasForceDeviceScaleFactor()) {
-    display_density = display::Display::GetForcedDeviceScaleFactor();
-  } else {
-    display_density = GetPrimaryDisplayScale();
-  }
-  const ScaleFactor closest = FindClosestScaleFactorUnsafe(display_density);
-  if (closest != SCALE_FACTOR_100P)
-    supported_scale_factors.push_back(closest);
-#elif defined(OS_IOS)
+#if defined(OS_IOS)
   display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.device_scale_factor() > 2.0) {
     DCHECK_EQ(3.0, display.device_scale_factor());
@@ -799,8 +774,13 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   } else {
     supported_scale_factors.push_back(SCALE_FACTOR_100P);
   }
-#elif defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_WIN)
+#else
+  // On platforms other than iOS, 100P is always a supported scale factor.
+  // For Windows we have a separate case in this function.
+  supported_scale_factors.push_back(SCALE_FACTOR_100P);
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_WIN)
   supported_scale_factors.push_back(SCALE_FACTOR_200P);
+#endif
 #endif
   ui::SetSupportedScaleFactors(supported_scale_factors);
 }
@@ -847,18 +827,6 @@ void ResourceBundle::AddDataPackFromPathInternal(
     LOG(ERROR) << "Failed to load " << pack_path.value()
                << "\nSome features may not be available.";
   }
-}
-
-void ResourceBundle::AddDataPack(std::unique_ptr<DataPack> data_pack) {
-#if DCHECK_IS_ON()
-  data_pack->CheckForDuplicateResources(data_packs_);
-#endif
-
-  if (GetScaleForScaleFactor(data_pack->GetScaleFactor()) >
-      GetScaleForScaleFactor(max_scale_factor_))
-    max_scale_factor_ = data_pack->GetScaleFactor();
-
-  data_packs_.push_back(std::move(data_pack));
 }
 
 void ResourceBundle::InitDefaultFontList() {

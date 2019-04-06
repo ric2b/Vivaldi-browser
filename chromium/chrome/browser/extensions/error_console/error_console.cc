@@ -140,6 +140,9 @@ void ErrorConsole::ReportError(std::unique_ptr<ExtensionError> error) {
   if (!enabled_ || !crx_file::id_util::IdIsValid(error->extension_id()))
     return;
 
+  DCHECK_GE(error->level(), extension_misc::kMinimumSeverityToReportError)
+      << "Errors less than severity warning should not be reported.";
+
   int mask = GetMaskForExtension(error->extension_id());
   if (!(mask & (1 << error->type())))
     return;
@@ -172,15 +175,7 @@ void ErrorConsole::RemoveObserver(Observer* observer) {
 }
 
 bool ErrorConsole::IsEnabledForChromeExtensionsPage() const {
-  if (!profile_->GetPrefs()->GetBoolean(prefs::kExtensionsUIDeveloperMode)) {
-    return false;  // Only enabled in developer mode.
-  }
-  // If there is a command line switch or override, respect that.
-  if (FeatureSwitch::error_console()->HasValue()) {
-    return FeatureSwitch::error_console()->IsEnabled();
-  }
-  // Enable by default on dev channel, disabled on other channels.
-  return GetCurrentChannel() <= version_info::Channel::DEV;
+  return profile_->GetPrefs()->GetBoolean(prefs::kExtensionsUIDeveloperMode);
 }
 
 bool ErrorConsole::IsEnabledForAppsDeveloperTools() const {

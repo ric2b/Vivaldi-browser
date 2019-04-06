@@ -1,6 +1,10 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/util.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="../native_layer.html">
 <link rel="import" href="../print_preview_utils.html">
@@ -10,11 +14,16 @@
 <link rel="import" href="../data/margins.html">
 <link rel="import" href="../data/printable_area.html">
 <link rel="import" href="../data/size.html">
+<link rel="import" href="margin_control_container.html">
+<link rel="import" href="model.html">
+<link rel="import" href="plugin_proxy.html">
+<link rel="import" href="state.html">
 <link rel="import" href="settings_behavior.html">
+<link rel="import" href="strings.html">
 
 <dom-module id="print-preview-preview-area">
   <template>
-    <style>
+    <style include="action-link cr-hidden-style">
       @keyframes dancing-dots-jump {
         0% { top: 0; }
         55% { top: 0; }
@@ -108,19 +117,25 @@
       }
 
     </style>
-    <div class="preview-area-overlay-layer">
+    <div class$="preview-area-overlay-layer [[getInvisible_(previewState)]]"
+        aria-hidden$="[[getAriaHidden_(previewState)]]">
       <div class="preview-area-messages">
-
-        <div class="preview-area-loading-message preview-area-message"
-          hidden$="[[!state.previewLoading]]">
-          <span>$i18n{loading}</span>
-          <span class="preview-area-loading-message-jumping-dots jumping-dots"
-              ><span>.</span><span>.</span><span>.</span></span>
-        </div>
-
-        <div class="preview-area-custom-message preview-area-message" hidden>
-          <div class="preview-area-custom-message-text"></div>
-          <div class="preview-area-custom-action-area">
+        <div class="preview-area-message">
+          <div>
+            <span>[[currentMessage_(previewState)]]</span>
+            <span class$="preview-area-loading-message-jumping-dots
+                          [[getJumpingDots_(previewState)]]"
+                hidden$="[[!isPreviewLoading_(previewState)]]">
+                <span>.</span><span>.</span><span>.</span>
+            </span>
+            <a is="action-link" class="learn-more-link"
+                hidden$="[[!shouldShowLearnMoreLink_(previewState)]]"
+                on-click="onGcpErrorLearnMoreClick_">
+              $i18n{learnMore}
+            </a>
+          </div>
+          <div class="preview-area-action-area"
+              hidden$="[[!displaySystemDialogButton_(previewState)]]">
             <button class="preview-area-open-system-dialog-button">
               $i18n{launchNativeDialog}
             </button>
@@ -129,25 +144,6 @@
                 hidden></div>
           </div>
         </div>
-
-        <div class="preview-area-preview-failed-message preview-area-message"
-          hidden$="[[!state.previewFailed]]">
-          $i18n{previewFailed}
-        </div>
-
-        <div class="preview-area-print-failed preview-area-message"
-          hidden$="[[!state.invalidSettings]]">
-          <div>$i18n{invalidPrinterSettings}</div>
-          <div class="preview-area-print-failed-action-area">
-            <button class="preview-area-open-system-dialog-button">
-              $i18n{launchNativeDialog}
-            </button>
-            <div
-                class="preview-area-open-system-dialog-button-throbber throbber"
-                hidden></div>
-          </div>
-        </div>
-
       </div>
     </div>
     <div class="preview-area-plugin-wrapper">
@@ -155,9 +151,13 @@
           type="application/x-google-chrome-pdf"
           data="chrome://print/dummy.pdf"></object>
     </div>
+    <print-preview-margin-control-container id="marginControlContainer"
+        page-size="[[documentInfo.pageSize]]" settings="{{settings}}"
+        document-margins="[[documentInfo.margins]]"
+        measurement-system="[[measurementSystem]]"
+        preview-loaded="[[previewLoaded_]]"
+        on-margin-drag-changed="onMarginDragChanged_">
+    </print-preview-margin-control-container>
   </template>
   <script src="preview_area.js"></script>
-  <script
-    src="chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_scripting_api.js">
-  </script>
 </dom-module>

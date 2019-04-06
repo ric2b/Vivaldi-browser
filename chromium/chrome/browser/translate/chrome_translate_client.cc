@@ -15,7 +15,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/language/language_model_factory.h"
+#include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/translate/translate_accept_languages_factory.h"
@@ -30,6 +30,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/language/core/browser/language_model_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
@@ -47,10 +48,9 @@
 #include "components/variations/service/variations_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/metrics_proto/translate_event.pb.h"
+#include "ui/base/ui_base_features.h"
 #include "url/gurl.h"
 
 namespace {
@@ -98,7 +98,7 @@ void LogTranslateEvent(const content::WebContents* const web_contents,
   if (entry == nullptr)
     return;
 
-  auto specifics = base::MakeUnique<sync_pb::UserEventSpecifics>();
+  auto specifics = std::make_unique<sync_pb::UserEventSpecifics>();
   // We only log the event we care about.
   const bool needs_logging = translate::ConstructTranslateEvent(
       entry->GetTimestamp().ToInternalValue(), translate_event,
@@ -110,9 +110,6 @@ void LogTranslateEvent(const content::WebContents* const web_contents,
 
 }  // namespace
 
-const base::Feature kDecoupleTranslateLanguageFeature{
-    "DecoupleTranslateLanguageFeature", base::FEATURE_DISABLED_BY_DEFAULT};
-
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ChromeTranslateClient);
 
 ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
@@ -122,10 +119,9 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
           this,
           translate::TranslateRankerFactory::GetForBrowserContext(
               web_contents->GetBrowserContext()),
-          LanguageModelFactory::GetForBrowserContext(
-              web_contents->GetBrowserContext()))),
-      language_histogram_(UrlLanguageHistogramFactory::GetForBrowserContext(
-          web_contents->GetBrowserContext())) {
+          LanguageModelManagerFactory::GetForBrowserContext(
+              web_contents->GetBrowserContext())
+              ->GetDefaultModel())) {
   translate_driver_.AddObserver(this);
   translate_driver_.set_translate_manager(translate_manager_.get());
 }
@@ -213,8 +209,9 @@ void ChromeTranslateClient::GetTranslateLanguages(
   }
 
   *target = translate::TranslateManager::GetTargetLanguage(
-      translate_prefs.get(),
-      LanguageModelFactory::GetInstance()->GetForBrowserContext(profile));
+      translate_prefs.get(), LanguageModelManagerFactory::GetInstance()
+                                 ->GetForBrowserContext(profile)
+                                 ->GetDefaultModel());
 }
 
 void ChromeTranslateClient::RecordTranslateEvent(
@@ -222,36 +219,11 @@ void ChromeTranslateClient::RecordTranslateEvent(
   LogTranslateEvent(web_contents(), translate_event);
 }
 
-// static
-void ChromeTranslateClient::BindContentTranslateDriver(
-    translate::mojom::ContentTranslateDriverRequest request,
-    content::RenderFrameHost* render_frame_host) {
-  // Only valid for the main frame.
-  if (render_frame_host->GetParent())
-    return;
-
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(render_frame_host);
-  if (!web_contents)
-    return;
-
-  ChromeTranslateClient* instance =
-      ChromeTranslateClient::FromWebContents(web_contents);
-  // We try to bind to the driver, but if driver is not ready for now or totally
-  // not available for this render frame host, the request will be just dropped.
-  // This would cause the message pipe to be closed, which will raise a
-  // connection error on the peer side.
-  if (!instance)
-    return;
-
-  instance->translate_driver().BindRequest(std::move(request));
-}
-
 translate::TranslateManager* ChromeTranslateClient::GetTranslateManager() {
   return translate_manager_.get();
 }
 
-void ChromeTranslateClient::ShowTranslateUI(
+bool ChromeTranslateClient::ShowTranslateUI(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
@@ -263,7 +235,7 @@ void ChromeTranslateClient::ShowTranslateUI(
   if (error_type != translate::TranslateErrors::NONE)
     step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
 
-#if !defined(USE_AURA)
+#if !defined(USE_AURA) && !BUILDFLAG(MAC_VIEWS_BROWSER)
   if (!TranslateService::IsTranslateBubbleEnabled()) {
     // Infobar UI.
     translate::TranslateInfoBarDelegate::Create(
@@ -272,7 +244,7 @@ void ChromeTranslateClient::ShowTranslateUI(
         InfoBarService::FromWebContents(web_contents()),
         web_contents()->GetBrowserContext()->IsOffTheRecord(), step,
         source_language, target_language, error_type, triggered_from_menu);
-    return;
+    return true;
   }
 #endif
 
@@ -280,7 +252,7 @@ void ChromeTranslateClient::ShowTranslateUI(
   if (step == translate::TRANSLATE_STEP_BEFORE_TRANSLATE &&
       translate_manager_->ShouldSuppressBubbleUI(triggered_from_menu,
                                                  source_language)) {
-    return;
+    return false;
   }
 
   ShowTranslateBubbleResult result = ShowBubble(step, error_type);
@@ -289,6 +261,8 @@ void ChromeTranslateClient::ShowTranslateUI(
     translate_manager_->RecordTranslateEvent(
         BubbleResultToTranslateEvent(result));
   }
+
+  return true;
 }
 
 translate::TranslateDriver* ChromeTranslateClient::GetTranslateDriver() {
@@ -392,14 +366,6 @@ void ChromeTranslateClient::OnLanguageDetermined(
       content::Details<const translate::LanguageDetectionDetails>(&details));
 
   RecordLanguageDetectionEvent(details);
-
-  // Only update language model if it isn't already being handled by the
-  // language component.
-  if (!base::FeatureList::IsEnabled(kDecoupleTranslateLanguageFeature)) {
-    // Notify the model about detected language of every page visited.
-    if (language_histogram_ && details.is_cld_reliable)
-      language_histogram_->OnPageVisited(details.cld_language);
-  }
 }
 
 void ChromeTranslateClient::OnPageTranslated(

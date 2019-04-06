@@ -36,11 +36,10 @@ update_template_instance("//chrome/browser/ui:ui") {
 }
 
 update_target("//components/guest_view/browser:browser") {
-  public_deps += [ "//vivaldi/extensions/helper:helper" ]
+  public_deps += [ "//vivaldi/extensions/helper:app_helper" ]
 }
 
 update_target("//components/history/core/browser:browser") {
-  deps += [ "//vivaldi/prefs:prefs" ]
   public_deps += [ "//vivaldi/db" ]
 }
 

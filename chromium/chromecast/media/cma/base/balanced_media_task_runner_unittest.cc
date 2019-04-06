@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
@@ -127,8 +128,9 @@ void BalancedMediaTaskRunnerTest::SetupTest(
 
 void BalancedMediaTaskRunnerTest::ProcessAllTasks() {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&BalancedMediaTaskRunnerTest::OnTestTimeout,
-                            base::Unretained(this)),
+      FROM_HERE,
+      base::BindOnce(&BalancedMediaTaskRunnerTest::OnTestTimeout,
+                     base::Unretained(this)),
       base::TimeDelta::FromSeconds(5));
   ScheduleTask();
 }
@@ -156,8 +158,8 @@ void BalancedMediaTaskRunnerTest::ScheduleTask() {
       context.is_pending_task) {
     pattern_index_ = next_pattern_index;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&BalancedMediaTaskRunnerTest::ScheduleTask,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&BalancedMediaTaskRunnerTest::ScheduleTask,
+                                  base::Unretained(this)));
     return;
   }
 
@@ -183,8 +185,8 @@ void BalancedMediaTaskRunnerTest::ScheduleTask() {
   context.task_index++;
   pattern_index_ = next_pattern_index;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&BalancedMediaTaskRunnerTest::ScheduleTask,
-                            base::Unretained(this)));
+      FROM_HERE, base::BindOnce(&BalancedMediaTaskRunnerTest::ScheduleTask,
+                                base::Unretained(this)));
 }
 
 void BalancedMediaTaskRunnerTest::Task(
@@ -205,7 +207,7 @@ void BalancedMediaTaskRunnerTest::Task(
 
 void BalancedMediaTaskRunnerTest::OnTestTimeout() {
   ADD_FAILURE() << "Test timed out";
-  if (base::MessageLoop::current())
+  if (base::MessageLoopCurrent::Get())
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 

@@ -8,10 +8,9 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "device/vr/public/mojom/isolated_xr_service.mojom.h"
 
 namespace device {
-
-class VRDevice;
 
 class VRDeviceProvider {
  public:
@@ -20,8 +19,10 @@ class VRDeviceProvider {
 
   // If the VR API requires initialization that should happen here.
   virtual void Initialize(
-      base::Callback<void(VRDevice*)> add_device_callback,
-      base::Callback<void(VRDevice*)> remove_device_callback,
+      base::RepeatingCallback<void(unsigned int,
+                                   mojom::VRDisplayInfoPtr,
+                                   mojom::XRRuntimePtr)> add_device_callback,
+      base::RepeatingCallback<void(unsigned int)> remove_device_callback,
       base::OnceClosure initialization_complete) = 0;
 
   // Returns true if initialization is complete.

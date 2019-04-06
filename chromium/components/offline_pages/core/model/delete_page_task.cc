@@ -13,7 +13,7 @@
 #include "components/offline_pages/core/client_policy_controller.h"
 #include "components/offline_pages/core/model/offline_page_model_utils.h"
 #include "components/offline_pages/core/offline_page_client_policy.h"
-#include "components/offline_pages/core/offline_page_metadata_store_sql.h"
+#include "components/offline_pages/core/offline_page_metadata_store.h"
 #include "components/offline_pages/core/offline_page_model.h"
 #include "components/offline_pages/core/offline_page_types.h"
 #include "components/offline_pages/core/offline_store_utils.h"
@@ -40,34 +40,38 @@ namespace {
 // in the SQL query and the result of it can be simply fetched by calling
 // statement.Column*(INFO_WRAPPER_COUNT), as it's the last column. For example,
 // please take a look at GetCachedDeletedPageInfoWrappersByUrlPredicateSync.
-#define INFO_WRAPPER_FIELDS                                              \
-  "offline_id, client_namespace, client_id, file_path, request_origin, " \
-  "access_count, creation_time"
-#define INFO_WRAPPER_FIELD_COUNT 7
+#define INFO_WRAPPER_FIELDS                                                  \
+  "offline_id, system_download_id, client_namespace, client_id, file_path, " \
+  "request_origin, access_count, creation_time, online_url"
+#define INFO_WRAPPER_FIELD_COUNT 8
 
 struct DeletedPageInfoWrapper {
   DeletedPageInfoWrapper();
   DeletedPageInfoWrapper(const DeletedPageInfoWrapper& other);
   int64_t offline_id;
+  int64_t system_download_id;
   ClientId client_id;
   base::FilePath file_path;
   std::string request_origin;
   // Used by metric collection only:
   int access_count;
   base::Time creation_time;
+  GURL url;
 };
 
 DeletedPageInfoWrapper CreateInfoWrapper(const sql::Statement& statement) {
   DeletedPageInfoWrapper info_wrapper;
   info_wrapper.offline_id = statement.ColumnInt64(0);
-  info_wrapper.client_id.name_space = statement.ColumnString(1);
-  info_wrapper.client_id.id = statement.ColumnString(2);
+  info_wrapper.system_download_id = statement.ColumnInt64(1);
+  info_wrapper.client_id.name_space = statement.ColumnString(2);
+  info_wrapper.client_id.id = statement.ColumnString(3);
   info_wrapper.file_path =
-      store_utils::FromDatabaseFilePath(statement.ColumnString(3));
-  info_wrapper.request_origin = statement.ColumnString(4);
-  info_wrapper.access_count = statement.ColumnInt(5);
+      store_utils::FromDatabaseFilePath(statement.ColumnString(4));
+  info_wrapper.request_origin = statement.ColumnString(5);
+  info_wrapper.access_count = statement.ColumnInt(6);
   info_wrapper.creation_time =
-      store_utils::FromDatabaseTime(statement.ColumnInt64(6));
+      store_utils::FromDatabaseTime(statement.ColumnInt64(7));
+  info_wrapper.url = GURL(statement.ColumnString(8));
   return info_wrapper;
 }
 
@@ -130,9 +134,10 @@ DeletePageTaskResult DeletePagesByDeletedPageInfoWrappersSync(
     if (DeleteArchiveSync(info_wrapper.file_path)) {
       any_archive_deleted = true;
       if (DeletePageEntryByOfflineIdSync(db, info_wrapper.offline_id)) {
-        deleted_page_infos.emplace_back(info_wrapper.offline_id,
-                                        info_wrapper.client_id,
-                                        info_wrapper.request_origin);
+        deleted_page_infos.emplace_back(
+            info_wrapper.offline_id, info_wrapper.system_download_id,
+            info_wrapper.client_id, info_wrapper.request_origin,
+            info_wrapper.url);
       }
     }
   }
@@ -229,6 +234,59 @@ DeletePageTaskResult DeletePagesByClientIdsSync(
   for (ClientId client_id : client_ids) {
     std::vector<DeletedPageInfoWrapper> temp_infos =
         GetDeletedPageInfoWrappersByClientIdSync(db, client_id);
+    infos.insert(infos.end(), temp_infos.begin(), temp_infos.end());
+  }
+
+  DeletePageTaskResult result =
+      DeletePagesByDeletedPageInfoWrappersSync(db, infos);
+
+  if (!transaction.Commit())
+    return DeletePageTaskResult(DeletePageResult::STORE_FAILURE, {});
+  return result;
+}
+
+// Gets page infos for |client_id|, returning a vector of
+// DeletedPageInfoWrappers because ClientId can refer to multiple pages.
+std::vector<DeletedPageInfoWrapper>
+GetDeletedPageInfoWrappersByClientIdAndOriginSync(sql::Connection* db,
+                                                  ClientId client_id,
+                                                  const std::string& origin) {
+  std::vector<DeletedPageInfoWrapper> info_wrappers;
+  static const char kSql[] =
+      "SELECT " INFO_WRAPPER_FIELDS " FROM " OFFLINE_PAGES_TABLE_NAME
+      " WHERE client_namespace = ? AND client_id = ? AND request_origin = ?";
+  sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
+  statement.BindString(0, client_id.name_space);
+  statement.BindString(1, client_id.id);
+  statement.BindString(2, origin);
+
+  while (statement.Step())
+    info_wrappers.emplace_back(CreateInfoWrapper(statement));
+
+  return info_wrappers;
+}
+
+DeletePageTaskResult DeletePagesByClientIdsAndOriginSync(
+    const std::vector<ClientId> client_ids,
+    const std::string& origin,
+    sql::Connection* db) {
+  std::vector<DeletedPageInfoWrapper> infos;
+
+  if (!db)
+    return DeletePageTaskResult(DeletePageResult::STORE_FAILURE, {});
+  if (client_ids.empty())
+    return DeletePageTaskResult(DeletePageResult::SUCCESS, {});
+
+  // If you create a transaction but dont Commit() it is automatically
+  // rolled back by its destructor when it falls out of scope.
+  sql::Transaction transaction(db);
+  if (!transaction.Begin())
+    return DeletePageTaskResult(DeletePageResult::STORE_FAILURE, {});
+
+  for (ClientId client_id : client_ids) {
+    std::vector<DeletedPageInfoWrapper> temp_infos =
+        GetDeletedPageInfoWrappersByClientIdAndOriginSync(db, client_id,
+                                                          origin);
     infos.insert(infos.end(), temp_infos.begin(), temp_infos.end());
   }
 
@@ -367,7 +425,7 @@ DeletePageTaskResult::~DeletePageTaskResult() = default;
 
 // static
 std::unique_ptr<DeletePageTask> DeletePageTask::CreateTaskMatchingOfflineIds(
-    OfflinePageMetadataStoreSQL* store,
+    OfflinePageMetadataStore* store,
     DeletePageTask::DeletePageTaskCallback callback,
     const std::vector<int64_t>& offline_ids) {
   return std::unique_ptr<DeletePageTask>(new DeletePageTask(
@@ -377,7 +435,7 @@ std::unique_ptr<DeletePageTask> DeletePageTask::CreateTaskMatchingOfflineIds(
 
 // static
 std::unique_ptr<DeletePageTask> DeletePageTask::CreateTaskMatchingClientIds(
-    OfflinePageMetadataStoreSQL* store,
+    OfflinePageMetadataStore* store,
     DeletePageTask::DeletePageTaskCallback callback,
     const std::vector<ClientId>& client_ids) {
   return std::unique_ptr<DeletePageTask>(new DeletePageTask(
@@ -387,8 +445,21 @@ std::unique_ptr<DeletePageTask> DeletePageTask::CreateTaskMatchingClientIds(
 
 // static
 std::unique_ptr<DeletePageTask>
+DeletePageTask::CreateTaskMatchingClientIdsAndOrigin(
+    OfflinePageMetadataStore* store,
+    DeletePageTask::DeletePageTaskCallback callback,
+    const std::vector<ClientId>& client_ids,
+    const std::string& origin) {
+  return std::unique_ptr<DeletePageTask>(new DeletePageTask(
+      store,
+      base::BindOnce(&DeletePagesByClientIdsAndOriginSync, client_ids, origin),
+      std::move(callback)));
+}
+
+// static
+std::unique_ptr<DeletePageTask>
 DeletePageTask::CreateTaskMatchingUrlPredicateForCachedPages(
-    OfflinePageMetadataStoreSQL* store,
+    OfflinePageMetadataStore* store,
     DeletePageTask::DeletePageTaskCallback callback,
     ClientPolicyController* policy_controller,
     const UrlPredicate& predicate) {
@@ -403,7 +474,7 @@ DeletePageTask::CreateTaskMatchingUrlPredicateForCachedPages(
 
 // static
 std::unique_ptr<DeletePageTask> DeletePageTask::CreateTaskDeletingForPageLimit(
-    OfflinePageMetadataStoreSQL* store,
+    OfflinePageMetadataStore* store,
     DeletePageTask::DeletePageTaskCallback callback,
     ClientPolicyController* policy_controller,
     const OfflinePageItem& page) {
@@ -415,7 +486,7 @@ std::unique_ptr<DeletePageTask> DeletePageTask::CreateTaskDeletingForPageLimit(
       std::move(callback)));
 }
 
-DeletePageTask::DeletePageTask(OfflinePageMetadataStoreSQL* store,
+DeletePageTask::DeletePageTask(OfflinePageMetadataStore* store,
                                DeleteFunction func,
                                DeletePageTaskCallback callback)
     : store_(store),

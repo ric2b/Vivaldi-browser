@@ -59,9 +59,20 @@ void TestPrefetchDispatcher::CleanupDownloads(
   cleanup_downloads_count++;
 }
 
+void TestPrefetchDispatcher::GeneratePageBundleRequested(
+    std::unique_ptr<IdsVector> ids) {
+  generate_page_bundle_requested++;
+  ids_from_generate_page_bundle_requested = std::move(ids);
+}
+
 void TestPrefetchDispatcher::DownloadCompleted(
     const PrefetchDownloadResult& download_result) {
   download_results.push_back(download_result);
+}
+
+void TestPrefetchDispatcher::ItemDownloaded(int64_t offline_id,
+                                            const ClientId& client_id) {
+  item_downloaded_results.push_back(std::make_pair(offline_id, client_id));
 }
 
 void TestPrefetchDispatcher::ArchiveImported(int64_t offline_id, bool success) {

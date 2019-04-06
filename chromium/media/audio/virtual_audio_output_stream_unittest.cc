@@ -21,8 +21,10 @@ using ::testing::_;
 namespace media {
 
 namespace {
-const AudioParameters kParams(
-    AudioParameters::AUDIO_PCM_LOW_LATENCY, CHANNEL_LAYOUT_MONO, 8000, 8, 128);
+const AudioParameters kParams(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                              CHANNEL_LAYOUT_MONO,
+                              8000,
+                              128);
 }
 
 class MockVirtualAudioInputStream : public VirtualAudioInputStream {
@@ -33,7 +35,7 @@ class MockVirtualAudioInputStream : public VirtualAudioInputStream {
             kParams,
             worker_task_runner,
             base::Bind(&base::DeletePointer<VirtualAudioInputStream>)) {}
-  ~MockVirtualAudioInputStream() = default;
+  ~MockVirtualAudioInputStream() override = default;
 
   MOCK_METHOD2(AddInputProvider,
                void(AudioConverter::InputCallback* input,

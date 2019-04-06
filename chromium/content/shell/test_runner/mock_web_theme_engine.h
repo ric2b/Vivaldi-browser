@@ -6,7 +6,7 @@
 #define CONTENT_SHELL_TEST_RUNNER_MOCK_WEB_THEME_ENGINE_H_
 
 #include "build/build_config.h"
-#include "third_party/WebKit/public/platform/WebThemeEngine.h"
+#include "third_party/blink/public/platform/web_theme_engine.h"
 
 namespace test_runner {
 
@@ -17,7 +17,7 @@ class MockWebThemeEngine : public blink::WebThemeEngine {
 #if !defined(OS_MACOSX)
   // blink::WebThemeEngine:
   blink::WebSize GetSize(blink::WebThemeEngine::Part) override;
-  void Paint(blink::WebCanvas*,
+  void Paint(cc::PaintCanvas*,
              blink::WebThemeEngine::Part,
              blink::WebThemeEngine::State,
              const blink::WebRect&,

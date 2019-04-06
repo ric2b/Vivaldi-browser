@@ -7,14 +7,18 @@
 #include <utility>
 
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
+#include "ash/public/cpp/window_state_type.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
+#include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_manager.h"
 #include "ash/wm/window_animation_types.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_util.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -31,11 +35,12 @@ void SetWindowRestoreOverrides(aura::Window* window,
                                const gfx::Rect& bounds_override,
                                ui::WindowShowState window_state_override) {
   if (bounds_override.IsEmpty()) {
-    window->ClearProperty(kRestoreShowStateOverrideKey);
+    window->ClearProperty(kRestoreWindowStateTypeOverrideKey);
     window->ClearProperty(kRestoreBoundsOverrideKey);
     return;
   }
-  window->SetProperty(kRestoreShowStateOverrideKey, window_state_override);
+  window->SetProperty(kRestoreWindowStateTypeOverrideKey,
+                      ToWindowStateType(window_state_override));
   window->SetProperty(kRestoreBoundsOverrideKey,
                       new gfx::Rect(bounds_override));
 }
@@ -83,7 +88,6 @@ gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
     return screen_util::GetDisplayBoundsInParent(state_object->window());
 
   if (state_object->GetStateType() == mojom::WindowStateType::LEFT_SNAPPED) {
-    DCHECK(CanSnap(state_object));
     return Shell::Get()
         ->split_view_controller()
         ->GetSnappedWindowBoundsInParent(state_object->window(),
@@ -91,7 +95,6 @@ gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
   }
 
   if (state_object->GetStateType() == mojom::WindowStateType::RIGHT_SNAPPED) {
-    DCHECK(CanSnap(state_object));
     return Shell::Get()
         ->split_view_controller()
         ->GetSnappedWindowBoundsInParent(state_object->window(),
@@ -124,13 +127,40 @@ gfx::Rect GetRestoreBounds(wm::WindowState* window_state) {
   return window_state->window()->GetBoundsInScreen();
 }
 
+// Returns true if |window| is the source window of the current tab-dragging
+// window.
+bool IsTabDraggingSourceWindow(aura::Window* window) {
+  if (!window)
+    return false;
+
+  MruWindowTracker::WindowList window_list =
+      Shell::Get()->mru_window_tracker()->BuildMruWindowList();
+  if (window_list.empty())
+    return false;
+
+  // Find the window that's currently in tab-dragging process. There is at most
+  // one such window.
+  aura::Window* dragged_window = nullptr;
+  for (auto* window : window_list) {
+    if (wm::IsDraggingTabs(window)) {
+      dragged_window = window;
+      break;
+    }
+  }
+  if (!dragged_window)
+    return false;
+
+  return dragged_window->GetProperty(ash::kTabDraggingSourceWindowKey) ==
+         window;
+}
+
 }  // namespace
 
 // static
 void TabletModeWindowState::UpdateWindowPosition(
     wm::WindowState* window_state) {
   gfx::Rect bounds_in_parent = GetBoundsInMaximizedMode(window_state);
-  if (bounds_in_parent == window_state->window()->bounds())
+  if (bounds_in_parent == window_state->window()->GetTargetBounds())
     return;
   window_state->SetBoundsDirect(bounds_in_parent);
 }
@@ -203,12 +233,18 @@ void TabletModeWindowState::OnWMEvent(wm::WindowState* window_state,
                    true /* animated */);
       return;
     case wm::WM_EVENT_SNAP_LEFT:
+      // Set bounds_changed_by_user to true to avoid WindowPositioner to auto
+      // place the window.
+      window_state->set_bounds_changed_by_user(true);
       UpdateWindow(window_state,
                    GetSnappedWindowStateType(
                        window_state, mojom::WindowStateType::LEFT_SNAPPED),
                    false /* animated */);
       return;
     case wm::WM_EVENT_SNAP_RIGHT:
+      // Set bounds_changed_by_user to true to avoid WindowPositioner to auto
+      // place the window.
+      window_state->set_bounds_changed_by_user(true);
       UpdateWindow(window_state,
                    GetSnappedWindowStateType(
                        window_state, mojom::WindowStateType::RIGHT_SNAPPED),
@@ -220,15 +256,23 @@ void TabletModeWindowState::OnWMEvent(wm::WindowState* window_state,
       return;
     case wm::WM_EVENT_SHOW_INACTIVE:
       return;
-    case wm::WM_EVENT_SET_BOUNDS:
-      if (current_state_type_ == mojom::WindowStateType::MAXIMIZED) {
+    case wm::WM_EVENT_SET_BOUNDS: {
+      gfx::Rect bounds_in_parent =
+          (static_cast<const wm::SetBoundsEvent*>(event))->requested_bounds();
+      if (bounds_in_parent.IsEmpty())
+        return;
+
+      if (wm::IsDraggingTabs(window_state->window()) ||
+          IsTabDraggingSourceWindow(window_state->window())) {
+        // If the window is the current tab-dragged window or the current tab-
+        // dragged window's source window, we may need to update its bounds
+        // during dragging.
+        window_state->SetBoundsDirect(bounds_in_parent);
+      } else if (current_state_type_ == mojom::WindowStateType::MAXIMIZED) {
         // Having a maximized window, it could have been created with an empty
         // size and the caller should get his size upon leaving the maximized
         // mode. As such we set the restore bounds to the requested bounds.
-        gfx::Rect bounds_in_parent =
-            (static_cast<const wm::SetBoundsEvent*>(event))->requested_bounds();
-        if (!bounds_in_parent.IsEmpty())
-          window_state->SetRestoreBoundsInParent(bounds_in_parent);
+        window_state->SetRestoreBoundsInParent(bounds_in_parent);
       } else if (current_state_type_ != mojom::WindowStateType::MINIMIZED &&
                  current_state_type_ != mojom::WindowStateType::FULLSCREEN &&
                  current_state_type_ != mojom::WindowStateType::PINNED &&
@@ -238,8 +282,6 @@ void TabletModeWindowState::OnWMEvent(wm::WindowState* window_state,
                  current_state_type_ != mojom::WindowStateType::RIGHT_SNAPPED) {
         // In all other cases (except for minimized windows) we respect the
         // requested bounds and center it to a fully visible area on the screen.
-        gfx::Rect bounds_in_parent =
-            (static_cast<const wm::SetBoundsEvent*>(event))->requested_bounds();
         bounds_in_parent = GetCenteredBounds(bounds_in_parent, window_state);
         if (bounds_in_parent != window_state->window()->bounds()) {
           if (window_state->window()->IsVisible())
@@ -249,6 +291,7 @@ void TabletModeWindowState::OnWMEvent(wm::WindowState* window_state,
         }
       }
       break;
+    }
     case wm::WM_EVENT_ADDED_TO_WORKSPACE:
       if (current_state_type_ != mojom::WindowStateType::MAXIMIZED &&
           current_state_type_ != mojom::WindowStateType::FULLSCREEN &&
@@ -296,15 +339,12 @@ void TabletModeWindowState::AttachState(
     UpdateWindow(window_state, GetMaximizedOrCenteredWindowType(window_state),
                  true /* animated */);
   }
-
-  window_state->set_can_be_dragged(false);
 }
 
 void TabletModeWindowState::DetachState(wm::WindowState* window_state) {
   // From now on, we can use the default session restore mechanism again.
   SetWindowRestoreOverrides(window_state->window(), gfx::Rect(),
                             ui::SHOW_STATE_NORMAL);
-  window_state->set_can_be_dragged(true);
 }
 
 void TabletModeWindowState::UpdateWindow(wm::WindowState* window_state,
@@ -343,6 +383,14 @@ void TabletModeWindowState::UpdateWindow(wm::WindowState* window_state,
     UpdateBounds(window_state, animated);
   }
 
+  if ((window_state->window()->layer()->GetTargetVisibility() ||
+       old_state_type == mojom::WindowStateType::MINIMIZED) &&
+      !window_state->window()->layer()->visible()) {
+    // The layer may be hidden if the window was previously minimized. Make
+    // sure it's visible.
+    window_state->window()->Show();
+  }
+
   window_state->NotifyPostStateTypeChange(old_state_type);
 
   if (old_state_type == mojom::WindowStateType::PINNED ||
@@ -351,14 +399,6 @@ void TabletModeWindowState::UpdateWindow(wm::WindowState* window_state,
       target_state == mojom::WindowStateType::TRUSTED_PINNED) {
     Shell::Get()->screen_pinning_controller()->SetPinnedWindow(
         window_state->window());
-  }
-
-  if ((window_state->window()->layer()->GetTargetVisibility() ||
-       old_state_type == mojom::WindowStateType::MINIMIZED) &&
-      !window_state->window()->layer()->visible()) {
-    // The layer may be hidden if the window was previously minimized. Make
-    // sure it's visible.
-    window_state->window()->Show();
   }
 }
 
@@ -381,19 +421,30 @@ void TabletModeWindowState::UpdateBounds(wm::WindowState* window_state,
                                          bool animated) {
   if (defer_bounds_updates_)
     return;
+
+  // Do not update window's bounds if it's in tab-dragging process. The bounds
+  // will be updated later when the drag ends.
+  if (wm::IsDraggingTabs(window_state->window()))
+    return;
+
+  // Do not update minimized windows bounds until it was unminimized.
+  if (current_state_type_ == mojom::WindowStateType::MINIMIZED)
+    return;
+
   gfx::Rect bounds_in_parent = GetBoundsInMaximizedMode(window_state);
   // If we have a target bounds rectangle, we center it and set it
   // accordingly.
   if (!bounds_in_parent.IsEmpty() &&
       bounds_in_parent != window_state->window()->bounds()) {
-    if (current_state_type_ == mojom::WindowStateType::MINIMIZED ||
-        !window_state->window()->IsVisible() || !animated) {
+    if (!window_state->window()->IsVisible() || !animated) {
       window_state->SetBoundsDirect(bounds_in_parent);
     } else {
       // If we animate (to) tablet mode, we want to use the cross fade to
       // avoid flashing.
       if (window_state->IsMaximized())
         window_state->SetBoundsDirectCrossFade(bounds_in_parent);
+      else if (window_state->IsSnapped())
+        window_state->SetBoundsDirect(bounds_in_parent);
       else
         window_state->SetBoundsDirectAnimated(bounds_in_parent);
     }

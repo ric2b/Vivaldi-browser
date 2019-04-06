@@ -77,7 +77,6 @@ class DataPromoNotificationTest : public testing::Test {
     chromeos::NetworkConnect::Shutdown();
     network_connect_delegate_.reset();
     LoginState::Shutdown();
-    display_service_.reset();
     profile_manager_.reset();
     user_manager_enabler_.reset();
     data_promo_notification_.reset();
@@ -125,7 +124,8 @@ class DataPromoNotificationTest : public testing::Test {
     home_provider.SetString("name", "Cellular1_Provider");
     home_provider.SetString("country", "us");
     device_test->SetDeviceProperty(kCellularDevicePath,
-                                   shill::kHomeProviderProperty, home_provider);
+                                   shill::kHomeProviderProperty, home_provider,
+                                   /*notify_changed=*/true);
 
     // Create a cellular network and activate it.
     chromeos::ShillServiceClient::TestInterface* service_test =

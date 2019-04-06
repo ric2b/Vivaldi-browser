@@ -6,12 +6,14 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "components/subresource_filter/content/common/subresource_filter_messages.h"
 #include "components/subresource_filter/core/browser/ruleset_service.h"
+#include "components/subresource_filter/core/common/common_features.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -41,7 +43,7 @@ void CloseFileOnFileThread(base::File* file) {
     return;
   base::PostTaskWithTraits(FROM_HERE,
                            {base::TaskPriority::BACKGROUND, base::MayBlock()},
-                           base::Bind(&CloseFile, base::Passed(file)));
+                           base::BindOnce(&CloseFile, std::move(*file)));
 }
 
 }  // namespace
@@ -75,13 +77,23 @@ void ContentRulesetService::PostAfterStartupTask(base::Closure task) {
       task);
 }
 
+void ContentRulesetService::TryOpenAndSetRulesetFile(
+    const base::FilePath& file_path,
+    base::OnceCallback<void(base::File)> callback) {
+  ruleset_dealer_->TryOpenAndSetRulesetFile(file_path, std::move(callback));
+}
+
 void ContentRulesetService::PublishNewRulesetVersion(base::File ruleset_data) {
   DCHECK(ruleset_data.IsValid());
   CloseFileOnFileThread(&ruleset_data_);
 
-  // Will not perform verification until the ruleset is retrieved the first
-  // time.
-  ruleset_dealer_->SetRulesetFile(ruleset_data.Duplicate());
+  // If Ad Tagging is running, then every request does a lookup and it's
+  // important that we verify the ruleset early on.
+  if (base::FeatureList::IsEnabled(kAdTagging)) {
+    // Even though the handle will immediately be destroyed, it will still
+    // validate the ruleset on its task runner.
+    VerifiedRuleset::Handle ruleset_handle(ruleset_dealer_.get());
+  }
 
   ruleset_data_ = std::move(ruleset_data);
   for (auto it = content::RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
@@ -103,6 +115,11 @@ void ContentRulesetService::IndexAndStoreAndPublishRulesetIfNeeded(
   DCHECK(ruleset_service_);
   ruleset_service_->IndexAndStoreAndPublishRulesetIfNeeded(
       unindexed_ruleset_info);
+}
+
+void ContentRulesetService::SetIsAfterStartupForTesting() {
+  DCHECK(ruleset_service_);
+  ruleset_service_->set_is_after_startup_for_testing();
 }
 
 void ContentRulesetService::Observe(

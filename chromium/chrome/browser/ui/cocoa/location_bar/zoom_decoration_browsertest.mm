@@ -7,7 +7,6 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -19,6 +18,7 @@
 #include "chrome/browser/ui/cocoa/test/run_loop_testing.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/toolbar/test_toolbar_model.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
@@ -92,6 +92,8 @@ class ZoomDecorationTest : public InProcessBrowserTest,
   bool should_quit_on_zoom_;
   std::unique_ptr<content::HostZoomMap::Subscription> zoom_subscription_;
   base::test::ScopedFeatureList scoped_feature_list_;
+
+  test::ScopedMacViewsBrowserMode cocoa_browser_mode_{false};
 
   DISALLOW_COPY_AND_ASSIGN(ZoomDecorationTest);
 };

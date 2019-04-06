@@ -189,8 +189,9 @@ ExtensionFunction::ResponseAction TabCaptureCaptureFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   // Figure out the active WebContents and retrieve the needed ids.
-  Browser* target_browser = chrome::FindAnyBrowser(
-      Profile::FromBrowserContext(browser_context()), include_incognito());
+  Browser* target_browser =
+      chrome::FindAnyBrowser(Profile::FromBrowserContext(browser_context()),
+                             include_incognito_information());
   if (!target_browser)
     return RespondNow(Error(kFindingTabError));
 
@@ -204,7 +205,7 @@ ExtensionFunction::ResponseAction TabCaptureCaptureFunction::Run() {
   // Make sure either we have been granted permission to capture through an
   // extension icon click or our extension is whitelisted.
   if (!extension()->permissions_data()->HasAPIPermissionForTab(
-          SessionTabHelper::IdForTab(target_contents),
+          SessionTabHelper::IdForTab(target_contents).id(),
           APIPermission::kTabCaptureForTab) &&
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kWhitelistedExtensionID) != extension_id &&

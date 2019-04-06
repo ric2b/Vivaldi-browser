@@ -8,7 +8,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/active_tab_permission_granter.h"
@@ -17,7 +16,6 @@
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -42,12 +40,12 @@
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/value_builder.h"
+#include "extensions/test/test_extension_dir.h"
 
 #if defined(OS_CHROMEOS)
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/extensions/active_tab_permission_granter_delegate_chromeos.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/ash/test_wallpaper_controller.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
@@ -55,8 +53,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/scoped_test_public_session_login_state.h"
+#include "components/account_id/account_id.h"
 #include "components/browser_sync/browser_sync_switches.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #endif
 
@@ -102,8 +100,9 @@ class ActiveTabPermissionGranterTestDelegate
   ~ActiveTabPermissionGranterTestDelegate() override {}
 
   // ActiveTabPermissionGranterTestDelegate::Delegate
-  bool ShouldGrantActiveTab(const Extension* extension,
-                            content::WebContents* contents) override {
+  bool ShouldGrantActiveTabOrPrompt(const Extension* extension,
+                                    content::WebContents* contents) override {
+    should_grant_call_count_++;
     return should_grant_;
   }
 
@@ -111,8 +110,11 @@ class ActiveTabPermissionGranterTestDelegate
     should_grant_ = should_grant;
   }
 
+  int should_grant_call_count() { return should_grant_call_count_; }
+
  private:
   bool should_grant_ = false;
+  int should_grant_call_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ActiveTabPermissionGranterTestDelegate);
 };
@@ -135,9 +137,7 @@ class ActiveTabTest : public ChromeRenderViewHostTestHarness {
     TabHelper::CreateForWebContents(web_contents());
   }
 
-  int tab_id() {
-    return SessionTabHelper::IdForTab(web_contents());
-  }
+  int tab_id() { return SessionTabHelper::IdForTab(web_contents()).id(); }
 
   ActiveTabPermissionGranter* active_tab_permission_granter() {
     return extensions::TabHelper::FromWebContents(web_contents())->
@@ -160,12 +160,10 @@ class ActiveTabTest : public ChromeRenderViewHostTestHarness {
                  PermittedFeature feature,
                  int tab_id) {
     const PermissionsData* permissions_data = extension->permissions_data();
-    bool script = permissions_data->CanAccessPage(extension.get(), url, tab_id,
-                                                  nullptr) &&
-                  permissions_data->CanRunContentScriptOnPage(
-                      extension.get(), url, tab_id, nullptr);
-    bool capture = permissions_data->CanCaptureVisiblePage(url, extension.get(),
-                                                           tab_id, NULL);
+    bool script =
+        permissions_data->CanAccessPage(url, tab_id, nullptr) &&
+        permissions_data->CanRunContentScriptOnPage(url, tab_id, nullptr);
+    bool capture = permissions_data->CanCaptureVisiblePage(url, tab_id, NULL);
     switch (feature) {
       case PERMITTED_SCRIPT_ONLY:
         return script && !capture;
@@ -204,7 +202,7 @@ class ActiveTabTest : public ChromeRenderViewHostTestHarness {
   bool IsGrantedForTab(const Extension* extension,
                        const content::WebContents* web_contents) {
     return extension->permissions_data()->HasAPIPermissionForTab(
-        SessionTabHelper::IdForTab(web_contents), APIPermission::kTab);
+        SessionTabHelper::IdForTab(web_contents).id(), APIPermission::kTab);
   }
 
   // TODO(justinlin): Remove when tabCapture is moved to stable.
@@ -333,6 +331,35 @@ TEST_F(ActiveTabTest, GrantToSinglePage) {
   EXPECT_TRUE(IsBlocked(extension_without_active_tab, chromium));
 }
 
+TEST_F(ActiveTabTest, CapturingPagesWithActiveTab) {
+  std::vector<GURL> test_urls = {
+      GURL("https://example.com"),
+      GURL("chrome://version"),
+      GURL("chrome://newtab"),
+      GURL("http://[2607:f8b0:4005:805::200e]"),
+      extension->GetResourceURL("test.html"),
+      another_extension->GetResourceURL("test.html"),
+  };
+
+  const GURL kAboutBlank("about:blank");
+
+  for (const GURL& url : test_urls) {
+    SCOPED_TRACE(url);
+    NavigateAndCommit(url);
+    // By default, there should be no access.
+    EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
+        url, tab_id(), nullptr /*error*/));
+    // Granting permission should allow page capture.
+    active_tab_permission_granter()->GrantIfRequested(extension.get());
+    EXPECT_TRUE(extension->permissions_data()->CanCaptureVisiblePage(
+        url, tab_id(), nullptr /*error*/));
+    // Navigating away should revoke access.
+    NavigateAndCommit(kAboutBlank);
+    EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
+        url, tab_id(), nullptr /*error*/));
+  }
+}
+
 TEST_F(ActiveTabTest, Uninstalling) {
   // Some semi-arbitrary setup.
   GURL google("http://www.google.com");
@@ -432,12 +459,23 @@ TEST_F(ActiveTabTest, ChromeUrlGrants) {
       tab_id() + 1, APIPermission::kTabCaptureForTab));
 }
 
-// Test that the custom platform delegate works as expected.
-TEST_F(ActiveTabTest, Delegate) {
-  auto test_delegate =
-      std::make_unique<ActiveTabPermissionGranterTestDelegate>();
-  ActiveTabPermissionGranter::SetPlatformDelegate(test_delegate.get());
+class ActiveTabDelegateTest : public ActiveTabTest {
+ protected:
+  ActiveTabDelegateTest()
+      : test_delegate_(
+            std::make_unique<ActiveTabPermissionGranterTestDelegate>()) {
+    ActiveTabPermissionGranter::SetPlatformDelegate(test_delegate_.get());
+  }
 
+  ~ActiveTabDelegateTest() override {
+    ActiveTabPermissionGranter::SetPlatformDelegate(nullptr);
+  }
+
+  std::unique_ptr<ActiveTabPermissionGranterTestDelegate> test_delegate_;
+};
+
+// Test that the custom platform delegate works as expected.
+TEST_F(ActiveTabDelegateTest, Delegate) {
   GURL google("http://www.google.com");
   NavigateAndCommit(google);
 
@@ -446,12 +484,17 @@ TEST_F(ActiveTabTest, Delegate) {
   EXPECT_TRUE(IsBlocked(extension, google));
 
   // This time it's granted because the delegate allows it.
-  test_delegate->SetShouldGrant(true);
+  test_delegate_->SetShouldGrant(true);
   active_tab_permission_granter()->GrantIfRequested(extension.get());
   EXPECT_TRUE(IsAllowed(extension, google));
+}
 
-  // Cleanup :).
-  ActiveTabPermissionGranter::SetPlatformDelegate(nullptr);
+// Regression test for crbug.com/833188.
+TEST_F(ActiveTabDelegateTest, DelegateUsedOnlyWhenNeeded) {
+  active_tab_permission_granter()->GrantIfRequested(
+      extension_without_active_tab.get());
+
+  EXPECT_EQ(0, test_delegate_->should_grant_call_count());
 }
 
 #if defined(OS_CHROMEOS)
@@ -485,7 +528,6 @@ TEST_F(ActiveTabTest, DelegateIsSet) {
   std::string user_id_hash = chromeos::ProfileHelper::Get()->
       GetUserIdHashByUserIdForTesting(user_id);
   ScopedTestingLocalState local_state(TestingBrowserProcess::GetGlobal());
-  chromeos::WallpaperManager::Initialize();
   std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_ =
       std::make_unique<WallpaperControllerClient>();
   TestWallpaperController test_wallpaper_controller_;
@@ -539,7 +581,6 @@ TEST_F(ActiveTabTest, DelegateIsSet) {
   // Cleanup.
   ActiveTabPermissionGranterDelegateChromeOS::
       SetRequestResolvedCallbackForTesting(nullptr);
-  chromeos::WallpaperManager::Shutdown();
   delete ActiveTabPermissionGranter::SetPlatformDelegate(nullptr);
   chromeos::ChromeUserManager::Get()->Shutdown();
 }
@@ -608,15 +649,15 @@ TEST_F(ActiveTabWithServiceTest, FileURLs) {
       TabHelper::FromWebContents(web_contents.get())
           ->active_tab_permission_granter();
   ASSERT_TRUE(permission_granter);
-  const int tab_id = SessionTabHelper::IdForTab(web_contents.get());
+  const int tab_id = SessionTabHelper::IdForTab(web_contents.get()).id();
   EXPECT_NE(extension_misc::kUnknownTabId, tab_id);
 
   EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), extension.get(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr));
 
   permission_granter->GrantIfRequested(extension.get());
   EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), extension.get(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr));
 
   permission_granter->RevokeForTesting();
   TestExtensionRegistryObserver observer(registry(), id);
@@ -626,10 +667,10 @@ TEST_F(ActiveTabWithServiceTest, FileURLs) {
   ASSERT_TRUE(extension);
 
   EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), extension.get(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr));
   permission_granter->GrantIfRequested(extension.get());
   EXPECT_TRUE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), extension.get(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr));
 }
 
 }  // namespace

@@ -9,6 +9,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/test_io_thread.h"
 #include "base/test/trace_event_analyzer.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -22,7 +23,7 @@
 #include "base/trace_event/trace_log.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/coordinator.h"
-#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
+#include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -75,8 +76,6 @@ class MockMemoryDumpProvider : public MemoryDumpProvider {
   MOCK_METHOD0(Destructor, void());
   MOCK_METHOD2(OnMemoryDump,
                bool(const MemoryDumpArgs& args, ProcessMemoryDump* pmd));
-  MOCK_METHOD1(PollFastMemoryTotal, void(uint64_t* memory_total));
-  MOCK_METHOD0(SuspendFastMemoryPolling, void());
 
   MockMemoryDumpProvider() : enable_mock_destructor(false) {
     ON_CALL(*this, OnMemoryDump(_, _))
@@ -84,10 +83,6 @@ class MockMemoryDumpProvider : public MemoryDumpProvider {
             Invoke([](const MemoryDumpArgs&, ProcessMemoryDump* pmd) -> bool {
               return true;
             }));
-
-    ON_CALL(*this, PollFastMemoryTotal(_))
-        .WillByDefault(
-            Invoke([](uint64_t* memory_total) -> void { NOTREACHED(); }));
   }
 
   ~MockMemoryDumpProvider() override {
@@ -115,20 +110,27 @@ class MockCoordinator : public Coordinator, public mojom::Coordinator {
   void RegisterClientProcess(mojom::ClientProcessPtr,
                              mojom::ProcessType) override {}
 
+  void RegisterHeapProfiler(mojom::HeapProfilerPtr heap_profiler) override {}
+
   void RequestGlobalMemoryDump(
       MemoryDumpType dump_type,
       MemoryDumpLevelOfDetail level_of_detail,
       const std::vector<std::string>& allocator_dump_names,
-      const RequestGlobalMemoryDumpCallback&) override;
+      RequestGlobalMemoryDumpCallback) override;
 
   void RequestGlobalMemoryDumpForPid(
       base::ProcessId pid,
-      const RequestGlobalMemoryDumpForPidCallback&) override {}
+      const std::vector<std::string>& allocator_dump_names,
+      RequestGlobalMemoryDumpForPidCallback) override {}
+
+  void RequestPrivateMemoryFootprint(
+      base::ProcessId pid,
+      RequestPrivateMemoryFootprintCallback) override {}
 
   void RequestGlobalMemoryDumpAndAppendToTrace(
       MemoryDumpType dump_type,
       MemoryDumpLevelOfDetail level_of_detail,
-      const RequestGlobalMemoryDumpAndAppendToTraceCallback&) override;
+      RequestGlobalMemoryDumpAndAppendToTraceCallback) override;
 
  private:
   mojo::BindingSet<mojom::Coordinator> bindings_;
@@ -157,7 +159,7 @@ class MemoryTracingIntegrationTest : public testing::Test {
     client_process_.reset();
     coordinator_.reset();
     message_loop_.reset();
-    TraceLog::DeleteForTesting();
+    TraceLog::ResetForTesting();
   }
 
   // Blocks the current thread (spinning a nested message loop) until the
@@ -171,20 +173,21 @@ class MemoryTracingIntegrationTest : public testing::Test {
     bool success = false;
     uint64_t req_guid = ++guid_counter_;
     MemoryDumpRequestArgs request_args{req_guid, dump_type, level_of_detail};
-    ClientProcessImpl::RequestChromeMemoryDumpCallback callback = base::Bind(
-        [](bool* curried_success, base::Closure curried_quit_closure,
-           std::unique_ptr<base::trace_event::ProcessMemoryDump>*
-               curried_result,
-           uint64_t curried_expected_guid, bool success, uint64_t dump_guid,
-           std::unique_ptr<base::trace_event::ProcessMemoryDump> result) {
-          EXPECT_EQ(curried_expected_guid, dump_guid);
-          *curried_success = success;
-          if (curried_result)
-            *curried_result = std::move(result);
-          curried_quit_closure.Run();
-        },
-        &success, run_loop.QuitClosure(), result, req_guid);
-    client_process_->RequestChromeMemoryDump(request_args, callback);
+    ClientProcessImpl::RequestChromeMemoryDumpCallback callback =
+        base::BindOnce(
+            [](bool* curried_success, base::OnceClosure curried_quit_closure,
+               std::unique_ptr<base::trace_event::ProcessMemoryDump>*
+                   curried_result,
+               uint64_t curried_expected_guid, bool success, uint64_t dump_guid,
+               std::unique_ptr<base::trace_event::ProcessMemoryDump> result) {
+              EXPECT_EQ(curried_expected_guid, dump_guid);
+              *curried_success = success;
+              if (curried_result)
+                *curried_result = std::move(result);
+              std::move(curried_quit_closure).Run();
+            },
+            &success, run_loop.QuitClosure(), result, req_guid);
+    client_process_->RequestChromeMemoryDump(request_args, std::move(callback));
     run_loop.Run();
     return success;
   }
@@ -193,10 +196,12 @@ class MemoryTracingIntegrationTest : public testing::Test {
                          MemoryDumpLevelOfDetail level_of_detail) {
     uint64_t req_guid = ++guid_counter_;
     MemoryDumpRequestArgs request_args{req_guid, dump_type, level_of_detail};
-    ClientProcessImpl::RequestChromeMemoryDumpCallback callback = base::Bind(
-        [](bool success, uint64_t dump_guid,
-           std::unique_ptr<base::trace_event::ProcessMemoryDump> result) {});
-    client_process_->RequestChromeMemoryDump(request_args, callback);
+    ClientProcessImpl::RequestChromeMemoryDumpCallback callback =
+        base::BindOnce(
+            [](bool success, uint64_t dump_guid,
+               std::unique_ptr<base::trace_event::ProcessMemoryDump> result) {
+            });
+    client_process_->RequestChromeMemoryDump(request_args, std::move(callback));
   }
 
  protected:
@@ -247,17 +252,17 @@ void MockCoordinator::RequestGlobalMemoryDump(
     MemoryDumpType dump_type,
     MemoryDumpLevelOfDetail level_of_detail,
     const std::vector<std::string>& allocator_dump_names,
-    const RequestGlobalMemoryDumpCallback& callback) {
+    RequestGlobalMemoryDumpCallback callback) {
   client_->RequestChromeDump(dump_type, level_of_detail);
-  callback.Run(true, mojom::GlobalMemoryDumpPtr());
+  std::move(callback).Run(true, mojom::GlobalMemoryDumpPtr());
 }
 
 void MockCoordinator::RequestGlobalMemoryDumpAndAppendToTrace(
     MemoryDumpType dump_type,
     MemoryDumpLevelOfDetail level_of_detail,
-    const RequestGlobalMemoryDumpAndAppendToTraceCallback& callback) {
+    RequestGlobalMemoryDumpAndAppendToTraceCallback callback) {
   client_->RequestChromeDump(dump_type, level_of_detail);
-  callback.Run(1, true);
+  std::move(callback).Run(1, true);
 }
 
 // Checks that is the ClientProcessImpl is initialized after tracing already
@@ -448,57 +453,6 @@ TEST_F(MemoryTracingIntegrationTest, TestWhitelistingMDP) {
   DisableTracing();
 }
 
-TEST_F(MemoryTracingIntegrationTest, TestPollingOnDumpThread) {
-  InitializeClientProcess(mojom::ProcessType::RENDERER);
-  std::unique_ptr<MockMemoryDumpProvider> mdp1(new MockMemoryDumpProvider());
-  std::unique_ptr<MockMemoryDumpProvider> mdp2(new MockMemoryDumpProvider());
-  mdp1->enable_mock_destructor = true;
-  mdp2->enable_mock_destructor = true;
-  EXPECT_CALL(*mdp1, Destructor());
-  EXPECT_CALL(*mdp2, Destructor());
-
-  MemoryDumpProvider::Options options;
-  options.is_fast_polling_supported = true;
-  RegisterDumpProvider(mdp1.get(), nullptr, options);
-
-  base::RunLoop run_loop;
-  auto test_task_runner = base::ThreadTaskRunnerHandle::Get();
-  auto quit_closure = run_loop.QuitClosure();
-  MemoryDumpManager* mdm = mdm_.get();
-
-  EXPECT_CALL(*mdp1, PollFastMemoryTotal(_))
-      .WillOnce(Invoke([&mdp2, options, this](uint64_t*) {
-        RegisterDumpProvider(mdp2.get(), nullptr, options);
-      }))
-      .WillOnce(Return())
-      .WillOnce(Invoke([mdm, &mdp2](uint64_t*) {
-        mdm->UnregisterAndDeleteDumpProviderSoon(std::move(mdp2));
-      }))
-      .WillOnce(Invoke([test_task_runner, quit_closure](uint64_t*) {
-        test_task_runner->PostTask(FROM_HERE, quit_closure);
-      }))
-      .WillRepeatedly(Return());
-
-  // We expect a call to |mdp1| because it is still registered at the time the
-  // Peak detector is Stop()-ed (upon OnTraceLogDisabled(). We do NOT expect
-  // instead a call for |mdp2|, because that gets unregisterd before the Stop().
-  EXPECT_CALL(*mdp1, SuspendFastMemoryPolling()).Times(1);
-  EXPECT_CALL(*mdp2, SuspendFastMemoryPolling()).Times(0);
-
-  // |mdp2| should invoke exactly twice:
-  // - once after the registrarion, when |mdp1| hits the first Return()
-  // - the 2nd time when |mdp1| unregisters |mdp1|. The unregistration is
-  //   posted and will necessarily happen after the polling task.
-  EXPECT_CALL(*mdp2, PollFastMemoryTotal(_)).Times(2).WillRepeatedly(Return());
-
-  EnableMemoryInfraTracingWithTraceConfig(
-      base::trace_event::TraceConfigMemoryTestUtil::
-          GetTraceConfig_PeakDetectionTrigger(1));
-  run_loop.Run();
-  DisableTracing();
-  mdm_->UnregisterAndDeleteDumpProviderSoon(std::move(mdp1));
-}
-
 // Regression test for https://crbug.com/766274 .
 TEST_F(MemoryTracingIntegrationTest, GenerationChangeDoesntReenterMDM) {
   InitializeClientProcess(mojom::ProcessType::RENDERER);
@@ -524,11 +478,11 @@ TEST_F(MemoryTracingIntegrationTest, GenerationChangeDoesntReenterMDM) {
   base::RunLoop run_loop;
   thread->PostTask(
       FROM_HERE,
-      Bind(
+      base::BindOnce(
           [](scoped_refptr<base::SequencedTaskRunner> main_task_runner,
-             base::Closure quit_closure) {
+             base::OnceClosure quit_closure) {
             TRACE_EVENT0(MemoryDumpManager::kTraceCategory, "foo");
-            main_task_runner->PostTask(FROM_HERE, quit_closure);
+            main_task_runner->PostTask(FROM_HERE, std::move(quit_closure));
           },
           base::SequencedTaskRunnerHandle::Get(), run_loop.QuitClosure()));
   run_loop.Run();

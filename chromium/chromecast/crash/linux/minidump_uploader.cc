@@ -39,14 +39,14 @@ namespace {
 const char kProductName[] = "Eureka";
 
 const char kCrashServerStaging[] =
-    "http://clients2.google.com/cr/staging_report";
-const char kCrashServerProduction[] = "http://clients2.google.com/cr/report";
+    "https://clients2.google.com/cr/staging_report";
+const char kCrashServerProduction[] = "https://clients2.google.com/cr/report";
 
 typedef std::vector<std::unique_ptr<DumpInfo>> DumpList;
 
 std::unique_ptr<PrefService> CreatePrefService() {
   base::FilePath prefs_path;
-  CHECK(PathService::Get(chromecast::FILE_CAST_CONFIG, &prefs_path));
+  CHECK(base::PathService::Get(chromecast::FILE_CAST_CONFIG, &prefs_path));
   VLOG(1) << "Loading prefs from " << prefs_path.value();
 
   PrefRegistrySimple* registry = new PrefRegistrySimple;

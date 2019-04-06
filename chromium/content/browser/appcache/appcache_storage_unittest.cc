@@ -79,8 +79,8 @@ TEST_F(AppCacheStorageTest, AddRemoveResponseInfo) {
 }
 
 TEST_F(AppCacheStorageTest, DelegateReferences) {
-  typedef scoped_refptr<AppCacheStorage::DelegateReference>
-      ScopedDelegateReference;
+  using ScopedDelegateReference =
+      scoped_refptr<AppCacheStorage::DelegateReference>;
   MockAppCacheService service;
   MockStorageDelegate delegate;
   ScopedDelegateReference delegate_reference1;
@@ -117,8 +117,8 @@ TEST_F(AppCacheStorageTest, DelegateReferences) {
 }
 
 TEST_F(AppCacheStorageTest, UsageMap) {
-  const GURL kOrigin("http://origin/");
-  const GURL kOrigin2("http://origin2/");
+  const url::Origin kOrigin(url::Origin::Create(GURL("http://origin/")));
+  const url::Origin kOrigin2(url::Origin::Create(GURL("http://origin2/")));
 
   MockAppCacheService service;
   scoped_refptr<MockQuotaManagerProxy> mock_proxy(

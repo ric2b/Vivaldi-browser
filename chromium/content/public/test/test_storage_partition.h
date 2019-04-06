@@ -30,7 +30,6 @@ class ZoomLevelDelegate;
 
 namespace mojom {
 class NetworkContext;
-class URLLoaderFactory;
 }
 
 // Fake implementation of StoragePartition.
@@ -57,14 +56,11 @@ class TestStoragePartition : public StoragePartition {
   }
   network::mojom::NetworkContext* GetNetworkContext() override;
 
-  void set_url_loader_factory_for_browser_process(
-      network::mojom::URLLoaderFactory*
-          url_loader_factory_for_browser_process) {
-    url_loader_factory_for_browser_process_ =
-        url_loader_factory_for_browser_process;
-  }
-  network::mojom::URLLoaderFactory* GetURLLoaderFactoryForBrowserProcess()
-      override;
+  scoped_refptr<network::SharedURLLoaderFactory>
+  GetURLLoaderFactoryForBrowserProcess() override;
+
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+  GetURLLoaderFactoryForBrowserProcessIOThread() override;
 
   void set_cookie_manager_for_browser_process(
       network::mojom::CookieManager* cookie_manager_for_browser_process) {
@@ -122,6 +118,11 @@ class TestStoragePartition : public StoragePartition {
   }
   PlatformNotificationContext* GetPlatformNotificationContext() override;
 
+  void set_web_package_context(WebPackageContext* context) {
+    web_package_context_ = context;
+  }
+  WebPackageContext* GetWebPackageContext() override;
+
 #if !defined(OS_ANDROID)
   void set_host_zoom_map(HostZoomMap* map) { host_zoom_map_ = map; }
   HostZoomMap* GetHostZoomMap() override;
@@ -152,7 +153,7 @@ class TestStoragePartition : public StoragePartition {
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
                  const OriginMatcherFunction& origin_matcher,
-                 const CookieMatcherFunction& cookie_matcher,
+                 network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
                  const base::Time begin,
                  const base::Time end,
                  base::OnceClosure callback) override;
@@ -167,14 +168,13 @@ class TestStoragePartition : public StoragePartition {
 
   void ClearBluetoothAllowedDevicesMapForTesting() override;
   void FlushNetworkInterfaceForTesting() override;
+  void WaitForDeletionTasksForTesting() override;
 
  private:
   base::FilePath file_path_;
   net::URLRequestContextGetter* url_request_context_getter_ = nullptr;
   net::URLRequestContextGetter* media_url_request_context_getter_ = nullptr;
   network::mojom::NetworkContext* network_context_ = nullptr;
-  network::mojom::URLLoaderFactory* url_loader_factory_for_browser_process_ =
-      nullptr;
   network::mojom::CookieManager* cookie_manager_for_browser_process_ = nullptr;
   storage::QuotaManager* quota_manager_ = nullptr;
   AppCacheService* app_cache_service_ = nullptr;
@@ -186,6 +186,7 @@ class TestStoragePartition : public StoragePartition {
   SharedWorkerService* shared_worker_service_ = nullptr;
   CacheStorageContext* cache_storage_context_ = nullptr;
   PlatformNotificationContext* platform_notification_context_ = nullptr;
+  WebPackageContext* web_package_context_ = nullptr;
 #if !defined(OS_ANDROID)
   HostZoomMap* host_zoom_map_ = nullptr;
   HostZoomLevelContext* host_zoom_level_context_ = nullptr;

@@ -28,9 +28,10 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/previews/core/previews_experiments.h"
 #include "jni/DataReductionProxySettings_jni.h"
+#include "net/base/proxy_server.h"
 #include "net/base/url_util.h"
-#include "net/proxy/proxy_server.h"
 #include "url/gurl.h"
 
 using base::android::ConvertUTF8ToJavaString;
@@ -103,8 +104,11 @@ jlong DataReductionProxySettingsAndroid::GetDataReductionLastUpdateTime(
 
 void DataReductionProxySettingsAndroid::ClearDataSavingStatistics(
     JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
-  Settings()->ClearDataSavingStatistics();
+    const base::android::JavaParamRef<jobject>& obj,
+    jint reason) {
+  Settings()->ClearDataSavingStatistics(
+      static_cast<data_reduction_proxy::DataReductionProxySavingsClearedReason>(
+          reason));
 }
 
 base::android::ScopedJavaLocalRef<jobject>
@@ -167,6 +171,8 @@ DataReductionProxySettingsAndroid::MaybeRewriteWebliteUrl(
     const base::android::JavaRef<jobject>& obj,
     const base::android::JavaRef<jstring>& url) {
   if (url.is_null() || !Settings()->IsDataReductionProxyEnabled() ||
+      !previews::params::ArePreviewsAllowed() ||
+      data_reduction_proxy::params::IsIncludedInHoldbackFieldTrial() ||
       !base::FeatureList::IsEnabled(data_reduction_proxy::features::
                                         kDataReductionProxyDecidesTransform)) {
     return ScopedJavaLocalRef<jstring>(url);

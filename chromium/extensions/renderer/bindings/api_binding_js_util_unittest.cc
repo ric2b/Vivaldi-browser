@@ -5,9 +5,11 @@
 #include "extensions/renderer/bindings/api_binding_js_util.h"
 
 #include "base/bind.h"
+#include "base/optional.h"
 #include "extensions/renderer/bindings/api_binding_test_util.h"
 #include "extensions/renderer/bindings/api_bindings_system.h"
 #include "extensions/renderer/bindings/api_bindings_system_unittest.h"
+#include "extensions/renderer/bindings/api_invocation_errors.h"
 #include "gin/arguments.h"
 #include "gin/handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -285,6 +287,104 @@ TEST_F(APIBindingJSUtilUnittest, TestSetExceptionHandler) {
   EXPECT_TRUE(console_errors().empty());
   EXPECT_EQ("handled: Error: some error", error_info.full_message);
   EXPECT_EQ("\"some error\"", error_info.exception_message);
+}
+
+TEST_F(APIBindingJSUtilUnittest, TestValidateType) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+
+  gin::Handle<APIBindingJSUtil> util = CreateUtil();
+  v8::Local<v8::Object> v8_util = util.ToV8().As<v8::Object>();
+
+  auto call_validate_type = [context, v8_util](
+                                const char* function,
+                                base::Optional<std::string> expected_error) {
+    v8::Local<v8::Function> v8_function = FunctionFromString(context, function);
+    v8::Local<v8::Value> args[] = {v8_util};
+    if (expected_error) {
+      RunFunctionAndExpectError(v8_function, context, arraysize(args), args,
+                                *expected_error);
+    } else {
+      RunFunction(v8_function, context, arraysize(args), args);
+    }
+  };
+
+  // Test a case that should succeed (a valid value).
+  call_validate_type(
+      R"((function(util) {
+           util.validateType('alpha.objRef', {prop1: 'hello'});
+         }))",
+      base::nullopt);
+
+  // Test a failing case (prop1 is supposed to be a string).
+  std::string expected_error =
+      "Uncaught TypeError: " +
+      api_errors::PropertyError(
+          "prop1", api_errors::InvalidType(api_errors::kTypeString,
+                                           api_errors::kTypeInteger));
+  call_validate_type(
+      R"((function(util) {
+           util.validateType('alpha.objRef', {prop1: 2});
+         }))",
+      expected_error);
+}
+
+TEST_F(APIBindingJSUtilUnittest, TestValidateCustomSignature) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+
+  gin::Handle<APIBindingJSUtil> util = CreateUtil();
+  v8::Local<v8::Object> v8_util = util.ToV8().As<v8::Object>();
+
+  constexpr char kSignatureName[] = "custom_signature";
+  EXPECT_FALSE(bindings_system()->type_reference_map()->GetCustomSignature(
+      kSignatureName));
+
+  {
+    constexpr char kAddSignature[] =
+        R"((function(util) {
+             util.addCustomSignature(
+                 'custom_signature',
+                 [{type: 'integer'}, {'type': 'string'}]);
+           }))";
+    v8::Local<v8::Function> add_signature =
+        FunctionFromString(context, kAddSignature);
+    v8::Local<v8::Value> args[] = {v8_util};
+    RunFunction(add_signature, context, arraysize(args), args);
+  }
+
+  EXPECT_TRUE(bindings_system()->type_reference_map()->GetCustomSignature(
+      kSignatureName));
+
+  auto call_validate_signature =
+      [context, v8_util](const char* function,
+                         base::Optional<std::string> expected_error) {
+        v8::Local<v8::Function> v8_function =
+            FunctionFromString(context, function);
+        v8::Local<v8::Value> args[] = {v8_util};
+        if (expected_error) {
+          RunFunctionAndExpectError(v8_function, context, arraysize(args), args,
+                                    *expected_error);
+        } else {
+          RunFunction(v8_function, context, arraysize(args), args);
+        }
+      };
+
+  // Test a case that should succeed (a valid value).
+  call_validate_signature(
+      R"((function(util) {
+           util.validateCustomSignature('custom_signature', [1, 'foo']);
+         }))",
+      base::nullopt);
+
+  // Test a failing case (prop1 is supposed to be a string).
+  std::string expected_error =
+      "Uncaught TypeError: " + api_errors::NoMatchingSignature();
+  call_validate_signature(
+      R"((function(util) {
+           util.validateCustomSignature('custom_signature', [1, 2]);
+         }))",
+      expected_error);
 }
 
 }  // namespace extensions

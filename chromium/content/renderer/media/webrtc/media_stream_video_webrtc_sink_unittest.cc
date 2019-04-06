@@ -6,11 +6,12 @@
 
 #include "base/test/scoped_task_environment.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/mock_constraint_factory.h"
-#include "content/renderer/media/mock_media_stream_registry.h"
-#include "content/renderer/media/video_track_adapter.h"
+#include "content/renderer/media/stream/mock_constraint_factory.h"
+#include "content/renderer/media/stream/mock_media_stream_registry.h"
+#include "content/renderer/media/stream/video_track_adapter.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 namespace content {
 namespace {
@@ -24,8 +25,8 @@ class MediaStreamVideoWebRtcSinkTest : public ::testing::Test {
   void SetVideoTrack() {
     registry_.Init("stream URL");
     registry_.AddVideoTrack("test video track");
-    blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
-    registry_.test_stream().VideoTracks(video_tracks);
+    blink::WebVector<blink::WebMediaStreamTrack> video_tracks =
+        registry_.test_stream().VideoTracks();
     track_ = video_tracks[0];
     // TODO(hta): Verify that track_ is valid. When constraints produce
     // no valid format, using the track will cause a crash.
@@ -35,8 +36,8 @@ class MediaStreamVideoWebRtcSinkTest : public ::testing::Test {
     registry_.Init("stream URL");
     registry_.AddVideoTrack("test video track", VideoTrackAdapterSettings(),
                             noise_reduction, false, 0.0);
-    blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
-    registry_.test_stream().VideoTracks(video_tracks);
+    blink::WebVector<blink::WebMediaStreamTrack> video_tracks =
+        registry_.test_stream().VideoTracks();
     track_ = video_tracks[0];
     // TODO(hta): Verify that track_ is valid. When constraints produce
     // no valid format, using the track will cause a crash.
@@ -57,7 +58,9 @@ class MediaStreamVideoWebRtcSinkTest : public ::testing::Test {
 
 TEST_F(MediaStreamVideoWebRtcSinkTest, NoiseReductionDefaultsToNotSet) {
   SetVideoTrack();
-  MediaStreamVideoWebRtcSink my_sink(track_, &dependency_factory_);
+  MediaStreamVideoWebRtcSink my_sink(
+      track_, &dependency_factory_,
+      blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   EXPECT_TRUE(my_sink.webrtc_video_track());
   EXPECT_FALSE(my_sink.SourceNeedsDenoisingForTesting());
 }

@@ -15,6 +15,7 @@
 #include "base/timer/timer.h"
 #include "net/socket/socket_test_util.h"
 #include "net/ssl/ssl_info.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "net/websockets/websocket_event_interface.h"
 #include "net/websockets/websocket_test_util.h"
 
@@ -30,7 +31,7 @@ class WebSocketStreamRequest;
 struct WebSocketHandshakeRequestInfo;
 struct WebSocketHandshakeResponseInfo;
 
-class WebSocketStreamCreateTestBase {
+class WebSocketStreamCreateTestBase : public WithScopedTaskEnvironment {
  public:
   using HeaderKeyValuePair = std::pair<std::string, std::string>;
 
@@ -43,8 +44,8 @@ class WebSocketStreamCreateTestBase {
                               const std::vector<std::string>& sub_protocols,
                               const url::Origin& origin,
                               const GURL& site_for_cookies,
-                              const std::string& additional_headers,
-                              std::unique_ptr<base::Timer> timer);
+                              const HttpRequestHeaders& additional_headers,
+                              std::unique_ptr<base::OneShotTimer> timer);
 
   static std::vector<HeaderKeyValuePair> RequestHeadersToVector(
       const HttpRequestHeaders& headers);
@@ -57,6 +58,10 @@ class WebSocketStreamCreateTestBase {
   // Runs |connect_run_loop_|. It will stop when the connection establishes or
   // fails.
   void WaitUntilConnectDone();
+
+  // Runs |run_loop_waiting_for_on_auth_required_| until OnAuthRequired() is
+  // called.
+  void WaitUntilOnAuthRequired();
 
   // A simple function to make the tests more readable.
   std::vector<std::string> NoSubProtocols();
@@ -75,13 +80,18 @@ class WebSocketStreamCreateTestBase {
       ssl_error_callbacks_;
   SSLInfo ssl_info_;
   bool ssl_fatal_;
-  std::vector<std::unique_ptr<SSLSocketDataProvider>> ssl_data_;
   URLRequest* url_request_;
+  scoped_refptr<AuthChallengeInfo> auth_challenge_info_;
+  base::OnceCallback<void(const AuthCredentials*)> on_auth_required_callback_;
 
-  // This temporarily sets WebSocketEndpointLockManager unlock delay to zero
-  // during tests.
-  ScopedWebSocketEndpointZeroUnlockDelay zero_unlock_delay_;
+  // This value will be copied to |*credentials| on OnAuthRequired.
+  base::Optional<AuthCredentials> auth_credentials_;
+  // OnAuthRequired returns this value.
+  int on_auth_required_rv_ = OK;
+
   base::RunLoop connect_run_loop_;
+
+  base::RunLoop run_loop_waiting_for_on_auth_required_;
 
  private:
   class TestConnectDelegate;

@@ -4,8 +4,9 @@
 
 #include "FindBadConstructsConsumer.h"
 
-#include "clang/Frontend/CompilerInstance.h"
+#include "Util.h"
 #include "clang/AST/Attr.h"
+#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Sema/Sema.h"
 #include "llvm/Support/raw_ostream.h"
@@ -27,8 +28,45 @@ const Type* UnwrapType(const Type* type) {
   return type;
 }
 
+bool InTestingNamespace(const Decl* record) {
+  return GetNamespace(record).find("testing") != std::string::npos;
+}
+
 bool IsGtestTestFixture(const CXXRecordDecl* decl) {
   return decl->getQualifiedNameAsString() == "testing::Test";
+}
+
+bool IsMethodInTestingNamespace(const CXXMethodDecl* method) {
+  for (auto* overridden : method->overridden_methods()) {
+    if (IsMethodInTestingNamespace(overridden) ||
+        // Provide an exception for ::testing::Test. gtest itself uses some
+        // magic to try to make sure SetUp()/TearDown() aren't capitalized
+        // incorrectly, but having the plugin enforce override is also nice.
+        (InTestingNamespace(overridden) &&
+         !IsGtestTestFixture(overridden->getParent()))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool IsGmockObject(const CXXRecordDecl* decl) {
+  // If |record| has member variables whose types are in the "testing" namespace
+  // (which is how gmock works behind the scenes), there's a really high chance
+  // that |record| is a gmock object.
+  for (auto* field : decl->fields()) {
+    CXXRecordDecl* record_type = field->getTypeSourceInfo()
+                                     ->getTypeLoc()
+                                     .getTypePtr()
+                                     ->getAsCXXRecordDecl();
+    if (record_type) {
+      if (InTestingNamespace(record_type)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool IsPodOrTemplateType(const CXXRecordDecl& record) {
@@ -147,17 +185,20 @@ FindBadConstructsConsumer::FindBadConstructsConsumer(CompilerInstance& instance,
   diag_weak_ptr_factory_order_ = diagnostic().getCustomDiagID(
       getErrorLevel(),
       "[chromium-style] WeakPtrFactory members which refer to their outer "
-      "class "
-      "must be the last member in the outer class definition.");
-  diag_bad_enum_last_value_ =
-      diagnostic().getCustomDiagID(getErrorLevel(),
-                                   "[chromium-style] _LAST/Last constants of "
-                                   "enum types must have the maximal "
-                                   "value for any constant of that type.");
-  diag_auto_deduced_to_a_pointer_type_ = diagnostic().getCustomDiagID(
+      "class must be the last member in the outer class definition.");
+  diag_bad_enum_max_value_ = diagnostic().getCustomDiagID(
       getErrorLevel(),
-      "[chromium-style] auto variable type must not deduce to a raw pointer "
-      "type.");
+      "[chromium-style] kMaxValue enumerator does not match max value %0 of "
+      "other enumerators");
+  diag_enum_max_value_unique_ = diagnostic().getCustomDiagID(
+      getErrorLevel(),
+      "[chromium-style] kMaxValue enumerator should not have a unique value: "
+      "it should share the value of the highest enumerator");
+  diag_auto_deduced_to_a_pointer_type_ =
+      diagnostic().getCustomDiagID(getErrorLevel(),
+                                   "[chromium-style] auto variable type "
+                                   "must not deduce to a raw pointer "
+                                   "type.");
 
   // Registers notes to make it easier to interpret warnings.
   diag_note_inheritance_ = diagnostic().getCustomDiagID(
@@ -187,6 +228,11 @@ bool FindBadConstructsConsumer::TraverseDecl(Decl* decl) {
   bool result = RecursiveASTVisitor::TraverseDecl(decl);
   if (ipc_visitor_) ipc_visitor_->EndDecl();
   return result;
+}
+
+bool FindBadConstructsConsumer::VisitEnumDecl(clang::EnumDecl* decl) {
+  CheckEnumMaxValue(decl);
+  return true;
 }
 
 bool FindBadConstructsConsumer::VisitTagDecl(clang::TagDecl* tag_decl) {
@@ -246,47 +292,50 @@ void FindBadConstructsConsumer::CheckChromeClass(LocationType location_type,
   CheckWeakPtrFactoryMembers(record_location, record);
 }
 
-void FindBadConstructsConsumer::CheckChromeEnum(LocationType location_type,
-                                                SourceLocation enum_location,
-                                                EnumDecl* enum_decl) {
-  if (!options_.check_enum_last_value)
+void FindBadConstructsConsumer::CheckEnumMaxValue(EnumDecl* decl) {
+  if (!decl->isScoped())
     return;
 
-  if (location_type == LocationType::kBlink)
-    return;
+  clang::EnumConstantDecl* max_value = nullptr;
+  std::set<clang::EnumConstantDecl*> max_enumerators;
+  llvm::APSInt max_seen;
+  for (clang::EnumConstantDecl* enumerator : decl->enumerators()) {
+    if (enumerator->getName() == "kMaxValue")
+      max_value = enumerator;
 
-  bool got_one = false;
-  bool is_signed = false;
-  llvm::APSInt max_so_far;
-  EnumDecl::enumerator_iterator iter;
-  for (iter = enum_decl->enumerator_begin();
-       iter != enum_decl->enumerator_end();
-       ++iter) {
-    llvm::APSInt current_value = iter->getInitVal();
-    if (!got_one) {
-      max_so_far = current_value;
-      is_signed = current_value.isSigned();
-      got_one = true;
-    } else {
-      if (is_signed != current_value.isSigned()) {
-        // This only happens in some cases when compiling C (not C++) files,
-        // so it is OK to bail out here.
-        return;
-      }
-      if (current_value > max_so_far)
-        max_so_far = current_value;
+    llvm::APSInt current_value = enumerator->getInitVal();
+    if (max_enumerators.empty()) {
+      max_enumerators.emplace(enumerator);
+      max_seen = current_value;
+      continue;
     }
+
+    assert(max_seen.isSigned() == current_value.isSigned());
+
+    if (current_value < max_seen)
+      continue;
+
+    if (current_value == max_seen) {
+      max_enumerators.emplace(enumerator);
+      continue;
+    }
+
+    assert(current_value > max_seen);
+    max_enumerators.clear();
+    max_enumerators.emplace(enumerator);
+    max_seen = current_value;
   }
-  for (iter = enum_decl->enumerator_begin();
-       iter != enum_decl->enumerator_end();
-       ++iter) {
-    std::string name = iter->getNameAsString();
-    if (((name.size() > 4 && name.compare(name.size() - 4, 4, "Last") == 0) ||
-         (name.size() > 5 && name.compare(name.size() - 5, 5, "_LAST") == 0)) &&
-        iter->getInitVal() < max_so_far) {
-      ReportIfSpellingLocNotIgnored(iter->getLocation(),
-                                    diag_bad_enum_last_value_);
-    }
+
+  if (!max_value)
+    return;
+
+  if (max_enumerators.find(max_value) == max_enumerators.end()) {
+    ReportIfSpellingLocNotIgnored(max_value->getLocation(),
+                                  diag_bad_enum_max_value_)
+        << max_seen.toString(10);
+  } else if (max_enumerators.size() < 2) {
+    ReportIfSpellingLocNotIgnored(decl->getLocation(),
+                                  diag_enum_max_value_unique_);
   }
 }
 
@@ -423,29 +472,6 @@ void FindBadConstructsConsumer::CheckCtorDtorWeight(
   }
 }
 
-bool FindBadConstructsConsumer::InTestingNamespace(const Decl* record) {
-  return GetNamespace(record).find("testing") != std::string::npos;
-}
-
-bool FindBadConstructsConsumer::IsMethodInTestingNamespace(
-    const CXXMethodDecl* method) {
-  for (CXXMethodDecl::method_iterator i = method->begin_overridden_methods();
-       i != method->end_overridden_methods();
-       ++i) {
-    const CXXMethodDecl* overridden = *i;
-    if (IsMethodInTestingNamespace(overridden) ||
-        // Provide an exception for ::testing::Test. gtest itself uses some
-        // magic to try to make sure SetUp()/TearDown() aren't capitalized
-        // incorrectly, but having the plugin enforce override is also nice.
-        (InTestingNamespace(overridden) &&
-         !IsGtestTestFixture(overridden->getParent()))) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 SuppressibleDiagnosticBuilder
 FindBadConstructsConsumer::ReportIfSpellingLocNotIgnored(
     SourceLocation loc,
@@ -454,16 +480,13 @@ FindBadConstructsConsumer::ReportIfSpellingLocNotIgnored(
       ClassifyLocation(instance().getSourceManager().getSpellingLoc(loc));
   bool ignored = type == LocationType::kThirdParty;
   if (type == LocationType::kBlink) {
-    if (!options_.enforce_in_thirdparty_webkit) {
-      ignored = true;
-    } else if (diagnostic_id == diag_no_explicit_ctor_ ||
-               diagnostic_id == diag_no_explicit_copy_ctor_ ||
-               diagnostic_id == diag_inline_complex_ctor_ ||
-               diagnostic_id == diag_no_explicit_dtor_ ||
-               diagnostic_id == diag_inline_complex_dtor_ ||
-               diagnostic_id ==
-                   diag_refcounted_with_protected_non_virtual_dtor_ ||
-               diagnostic_id == diag_virtual_with_inline_body_) {
+    if (diagnostic_id == diag_no_explicit_ctor_ ||
+        diagnostic_id == diag_no_explicit_copy_ctor_ ||
+        diagnostic_id == diag_inline_complex_ctor_ ||
+        diagnostic_id == diag_no_explicit_dtor_ ||
+        diagnostic_id == diag_inline_complex_dtor_ ||
+        diagnostic_id == diag_refcounted_with_protected_non_virtual_dtor_ ||
+        diagnostic_id == diag_virtual_with_inline_body_) {
       // Certain checks are ignored in Blink for historical reasons.
       // TODO(dcheng): Make this list smaller.
       ignored = true;
@@ -479,22 +502,10 @@ void FindBadConstructsConsumer::CheckVirtualMethods(
     SourceLocation record_location,
     CXXRecordDecl* record,
     bool warn_on_inline_bodies) {
-  // Gmock objects trigger these for each MOCK_BLAH() macro used. So we have a
-  // trick to get around that. If a class has member variables whose types are
-  // in the "testing" namespace (which is how gmock works behind the scenes),
-  // there's a really high chance we won't care about these errors
-  for (CXXRecordDecl::field_iterator it = record->field_begin();
-       it != record->field_end();
-       ++it) {
-    CXXRecordDecl* record_type = it->getTypeSourceInfo()
-                                     ->getTypeLoc()
-                                     .getTypePtr()
-                                     ->getAsCXXRecordDecl();
-    if (record_type) {
-      if (InTestingNamespace(record_type)) {
-        return;
-      }
-    }
+  if (IsGmockObject(record)) {
+    if (!options_.check_gmock_objects)
+      return;
+    warn_on_inline_bodies = false;
   }
 
   for (CXXRecordDecl::method_iterator it = record->method_begin();
@@ -757,7 +768,6 @@ FindBadConstructsConsumer::CheckRecordForRefcountIssue(
 bool FindBadConstructsConsumer::IsRefCounted(
     const CXXBaseSpecifier* base,
     CXXBasePath& path) {
-  FindBadConstructsConsumer* self = this;
   const TemplateSpecializationType* base_type =
       dyn_cast<TemplateSpecializationType>(
           UnwrapType(base->getType().getTypePtr()));
@@ -775,7 +785,7 @@ bool FindBadConstructsConsumer::IsRefCounted(
 
     // Check for both base::RefCounted and base::RefCountedThreadSafe.
     if (base_name.compare(0, 10, "RefCounted") == 0 &&
-        self->GetNamespace(decl) == "base") {
+        GetNamespace(decl) == "base") {
       return true;
     }
   }
@@ -1010,6 +1020,10 @@ void FindBadConstructsConsumer::ParseFunctionTemplates(
 }
 
 void FindBadConstructsConsumer::CheckVarDecl(clang::VarDecl* var_decl) {
+  // Lambda init-captures should be ignored.
+  if (var_decl->isInitCapture())
+    return;
+
   // Check whether auto deduces to a raw pointer.
   QualType non_reference_type = var_decl->getType().getNonReferenceType();
   // We might have a case where the type is written as auto*, but the actual

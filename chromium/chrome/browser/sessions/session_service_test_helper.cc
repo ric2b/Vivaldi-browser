@@ -4,7 +4,6 @@
 
 #include "chrome/browser/sessions/session_service_test_helper.h"
 
-#include "base/message_loop/message_loop.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "components/sessions/core/base_session_service_test_helper.h"
 #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
@@ -57,7 +56,7 @@ void SessionServiceTestHelper::SetForceBrowserNotAliveWithNoWindows(
 // Be sure and null out service to force closing the file.
 void SessionServiceTestHelper::ReadWindows(
     std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
-    SessionID::id_type* active_window_id) {
+    SessionID* active_window_id) {
   std::vector<std::unique_ptr<sessions::SessionCommand>> read_commands;
   sessions::BaseSessionServiceTestHelper test_helper(
       service_->GetBaseSessionServiceForTest());

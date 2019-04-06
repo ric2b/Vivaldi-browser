@@ -9,7 +9,7 @@
 
 
 // static
-extensions::NativeAppWindow* VivaldiAppWindowClient::CreateNativeAppWindowImpl(
+VivaldiNativeAppWindow* VivaldiAppWindowClient::CreateNativeAppWindowImpl(
     VivaldiBrowserWindow* app_window,
     const extensions::AppWindow::CreateParams& params) {
   VivaldiNativeAppWindowViewsWin* window = new VivaldiNativeAppWindowViewsWin;

@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/WebKit/common/origin_trials/trial_token.h"
+#include "third_party/blink/public/common/origin_trials/trial_token.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include "base/at_exit.h"
 #include "base/i18n/icu_util.h"
-#include "content/test/fuzzer/fuzzer_support.h"
 #include "url/gurl.h"
 
 struct TestCase {

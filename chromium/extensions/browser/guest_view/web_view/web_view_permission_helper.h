@@ -15,11 +15,9 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/media_stream_request.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 #include "content/public/browser/web_contents_delegate.h"
-
-using content::DownloadItemAction;
 
 namespace guest_view {
 class GuestViewBase;
@@ -70,17 +68,15 @@ class WebViewPermissionHelper
       content::WebContents* web_contents);
   static WebViewPermissionHelper* FromFrameID(int render_process_id,
                                               int render_frame_id);
-  virtual void RequestMediaAccessPermission(
-      content::WebContents* source,
-      const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback);
-  virtual bool CheckMediaAccessPermission(content::WebContents* source,
+  virtual void RequestMediaAccessPermission(content::WebContents* source,
+                                    const content::MediaStreamRequest& request,
+                                    content::MediaResponseCallback callback);
+  virtual bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type);
   virtual void CanDownload(const GURL& url,
                    const std::string& request_method,
-                   const content::DownloadInformation& info,
-                   const base::Callback<void(const content::DownloadItemAction&)>& callback);
+                   const base::Callback<void(bool)>& callback);
   virtual void RequestPointerLockPermission(bool user_gesture,
                                     bool last_unlocked_by_target,
                                     const base::Callback<void(bool)>& callback);
@@ -137,9 +133,19 @@ class WebViewPermissionHelper
 
   guest_view::GuestViewBase* web_view_guest() { return web_view_guest_; }
 
+  void set_default_media_access_permission(bool allow_media_access) {
+    default_media_access_permission_ = allow_media_access;
+  }
+
+  void SetDownloadInformation(const content::DownloadInformation& info);
+
+ protected:
+  // vivaldi download information
+  content::DownloadInformation download_info_;
+
  private:
   virtual void OnMediaPermissionResponse(const content::MediaStreamRequest& request,
-                                 const content::MediaResponseCallback& callback,
+                                 content::MediaResponseCallback callback,
                                  bool allow,
                                  const std::string& user_input);
 
@@ -159,6 +165,8 @@ class WebViewPermissionHelper
       web_view_permission_helper_delegate_;
 
   GuestViewBase* const web_view_guest_;
+
+  bool default_media_access_permission_;
 
   base::WeakPtrFactory<WebViewPermissionHelper> weak_factory_;
 

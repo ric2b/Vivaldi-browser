@@ -11,6 +11,7 @@
 #include "base/threading/thread.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/gpu/gpu.h"
+#include "services/ui/public/cpp/input_devices/input_device_client.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/event_matcher.mojom.h"
@@ -19,13 +20,13 @@
 #include "ui/aura/mus/capture_synchronizer.h"
 #include "ui/aura/mus/mus_context_factory.h"
 #include "ui/aura/mus/property_converter.h"
-#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/mojo/clipboard_client.h"
 #include "ui/views/mus/aura_init.h"
-#include "ui/views/mus/clipboard_mus.h"
+#include "ui/views/mus/ax_remote_host.h"
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/mus_property_mirror.h"
 #include "ui/views/mus/pointer_watcher_event_router.h"
@@ -64,12 +65,11 @@ namespace views {
 // static
 MusClient* MusClient::instance_ = nullptr;
 
-MusClient::MusClient(service_manager::Connector* connector,
-                     const service_manager::Identity& identity,
-                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-                     bool create_wm_state,
-                     MusClientTestingState testing_state)
-    : identity_(identity) {
+MusClient::InitParams::InitParams() = default;
+
+MusClient::InitParams::~InitParams() = default;
+
+MusClient::MusClient(const InitParams& params) : identity_(params.identity) {
   DCHECK(!instance_);
   DCHECK(aura::Env::GetInstance());
   instance_ = this;
@@ -81,9 +81,12 @@ MusClient::MusClient(service_manager::Connector* connector,
   // instance. Partially initialize the ozone cursor internals here, like we
   // partially initialize other ozone subsystems in
   // ChromeBrowserMainExtraPartsViews.
-  cursor_factory_ozone_ = std::make_unique<ui::CursorDataFactoryOzone>();
+  if (params.create_cursor_factory)
+    cursor_factory_ozone_ = std::make_unique<ui::CursorDataFactoryOzone>();
 #endif
 
+  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
+      params.io_task_runner;
   if (!io_task_runner) {
     io_thread_ = std::make_unique<base::Thread>("IOThread");
     base::Thread::Options thread_options(base::MessageLoop::TYPE_IO, 0);
@@ -92,37 +95,56 @@ MusClient::MusClient(service_manager::Connector* connector,
     io_task_runner = io_thread_->task_runner();
   }
 
-  // TODO(msw): Avoid this... use some default value? Allow clients to extend?
   property_converter_ = std::make_unique<aura::PropertyConverter>();
   property_converter_->RegisterPrimitiveProperty(
-      wm::kShadowElevationKey,
+      ::wm::kShadowElevationKey,
       ui::mojom::WindowManager::kShadowElevation_Property,
-      base::Bind(&wm::IsValidShadowElevation));
+      aura::PropertyConverter::CreateAcceptAnyValueCallback());
 
-  if (create_wm_state)
+  if (params.create_wm_state)
     wm_state_ = std::make_unique<wm::WMState>();
 
-  if (testing_state == MusClientTestingState::CREATE_TESTING_STATE) {
-    connector->BindInterface(ui::mojom::kServiceName, &server_test_ptr_);
-    connector->BindInterface(ui::mojom::kServiceName,
-                             &remote_event_dispatcher_ptr_);
+  service_manager::Connector* connector = params.connector;
+  if (params.bind_test_ws_interfaces)
+    connector->BindInterface(ui::mojom::kServiceName, &event_injector_);
+
+  if (!params.window_tree_client) {
+    DCHECK(io_task_runner);
+    owned_window_tree_client_ =
+        aura::WindowTreeClient::CreateForWindowTreeFactory(
+            connector, this, true, std::move(io_task_runner),
+            params.wtc_config);
+    window_tree_client_ = owned_window_tree_client_.get();
+    aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client_);
+  } else {
+    window_tree_client_ = params.window_tree_client;
   }
 
-  window_tree_client_ = std::make_unique<aura::WindowTreeClient>(
-      connector, this, nullptr /* window_manager_delegate */,
-      nullptr /* window_tree_client_request */, std::move(io_task_runner));
-  aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client_.get());
-  window_tree_client_->ConnectViaWindowTreeFactory();
-
   pointer_watcher_event_router_ =
-      std::make_unique<PointerWatcherEventRouter>(window_tree_client_.get());
+      std::make_unique<PointerWatcherEventRouter>(window_tree_client_);
 
-  screen_ = std::make_unique<ScreenMus>(this);
-  screen_->Init(connector);
+  if (connector) {
+    input_device_client_ = std::make_unique<ui::InputDeviceClient>();
+    ui::mojom::InputDeviceServerPtr input_device_server;
+    connector->BindInterface(ui::mojom::kServiceName, &input_device_server);
+    input_device_client_->Connect(std::move(input_device_server));
 
-  std::unique_ptr<ClipboardMus> clipboard = std::make_unique<ClipboardMus>();
-  clipboard->Init(connector);
-  ui::Clipboard::SetClipboardForCurrentThread(std::move(clipboard));
+    screen_ = std::make_unique<ScreenMus>(this);
+    if (params.wtc_config == aura::WindowTreeClient::Config::kMashDeprecated)
+      screen_->InitDeprecated(connector);
+    else
+      window_tree_client_->WaitForDisplays();
+
+    ui::mojom::ClipboardHostPtr clipboard_host_ptr;
+    connector->BindInterface(ui::mojom::kServiceName, &clipboard_host_ptr);
+    ui::Clipboard::SetClipboardForCurrentThread(
+        std::make_unique<ui::ClipboardClient>(std::move(clipboard_host_ptr)));
+
+    if (params.use_accessibility_host) {
+      ax_remote_host_ = std::make_unique<AXRemoteHost>();
+      ax_remote_host_->Init(connector);
+    }
+  }
 
   ViewsDelegate::GetInstance()->set_native_widget_factory(
       base::Bind(&MusClient::CreateNativeWidget, base::Unretained(this)));
@@ -133,7 +155,8 @@ MusClient::MusClient(service_manager::Connector* connector,
 MusClient::~MusClient() {
   // ~WindowTreeClient calls back to us (we're its delegate), destroy it while
   // we are still valid.
-  window_tree_client_.reset();
+  owned_window_tree_client_.reset();
+  window_tree_client_ = nullptr;
   ui::OSExchangeDataProviderFactory::SetFactory(nullptr);
   ui::Clipboard::DestroyClipboardForCurrentThread();
 
@@ -158,6 +181,16 @@ bool MusClient::ShouldCreateDesktopNativeWidgetAura(
 }
 
 // static
+bool MusClient::ShouldMakeWidgetWindowsTranslucent(
+    const Widget::InitParams& params) {
+  // |TYPE_WINDOW| and |TYPE_PANEL| are forced to translucent so that the
+  // window manager can draw the client decorations.
+  return params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW ||
+         params.type == Widget::InitParams::TYPE_WINDOW ||
+         params.type == Widget::InitParams::TYPE_PANEL;
+}
+
+// static
 std::map<std::string, std::vector<uint8_t>>
 MusClient::ConfigurePropertiesFromParams(
     const Widget::InitParams& init_params) {
@@ -175,8 +208,8 @@ MusClient::ConfigurePropertiesFromParams(
       mojo::ConvertTo<TransportType>(init_params.CanActivate());
 
   properties[WindowManager::kTranslucent_InitProperty] =
-      mojo::ConvertTo<TransportType>(init_params.opacity ==
-                                     Widget::InitParams::TRANSLUCENT_WINDOW);
+      mojo::ConvertTo<TransportType>(
+          ShouldMakeWidgetWindowsTranslucent(init_params));
 
   if (!init_params.bounds.IsEmpty()) {
     properties[WindowManager::kBounds_InitProperty] =
@@ -195,6 +228,12 @@ MusClient::ConfigurePropertiesFromParams(
   properties[WindowManager::kRemoveStandardFrame_InitProperty] =
       mojo::ConvertTo<TransportType>(init_params.remove_standard_frame);
 
+  if (init_params.corner_radius) {
+    properties[WindowManager::kWindowCornerRadius_Property] =
+        mojo::ConvertTo<TransportType>(
+            static_cast<PrimitiveType>(*init_params.corner_radius));
+  }
+
   if (!Widget::RequiresNonClientView(init_params.type))
     return properties;
 
@@ -205,6 +244,18 @@ MusClient::ConfigurePropertiesFromParams(
               init_params.delegate->GetResizeBehavior()));
     }
 
+    if (init_params.delegate->ShouldShowWindowTitle()) {
+      properties[WindowManager::kWindowTitleShown_Property] =
+          mojo::ConvertTo<TransportType>(static_cast<PrimitiveType>(
+              init_params.delegate->ShouldShowWindowTitle()));
+    }
+
+    if (!init_params.delegate->GetWindowTitle().empty()) {
+      properties[WindowManager::kWindowTitle_Property] =
+          mojo::ConvertTo<TransportType>(
+              init_params.delegate->GetWindowTitle());
+    }
+
     // TODO(crbug.com/667566): Support additional scales or gfx::Image[Skia].
     gfx::ImageSkia app_icon = init_params.delegate->GetWindowAppIcon();
     SkBitmap app_bitmap = app_icon.GetRepresentation(1.f).sk_bitmap();
@@ -212,6 +263,7 @@ MusClient::ConfigurePropertiesFromParams(
       properties[WindowManager::kAppIcon_Property] =
           mojo::ConvertTo<TransportType>(app_bitmap);
     }
+
     // TODO(crbug.com/667566): Support additional scales or gfx::Image[Skia].
     gfx::ImageSkia window_icon = init_params.delegate->GetWindowIcon();
     SkBitmap window_bitmap = window_icon.GetRepresentation(1.f).sk_bitmap();
@@ -244,6 +296,12 @@ NativeWidget* MusClient::CreateNativeWidget(
   return native_widget;
 }
 
+void MusClient::OnWidgetInitDone(Widget* widget) {
+  // Start tracking the widget for accessibility.
+  if (ax_remote_host_)
+    ax_remote_host_->StartMonitoringWidget(widget);
+}
+
 void MusClient::OnCaptureClientSet(
     aura::client::CaptureClient* capture_client) {
   pointer_watcher_event_router_->AttachToCaptureClient(capture_client);
@@ -265,6 +323,7 @@ void MusClient::AddObserver(MusClientObserver* observer) {
 void MusClient::RemoveObserver(MusClientObserver* observer) {
   observer_list_.RemoveObserver(observer);
 }
+
 void MusClient::SetMusPropertyMirror(
     std::unique_ptr<MusPropertyMirror> mirror) {
   mus_property_mirror_ = std::move(mirror);
@@ -278,16 +337,9 @@ void MusClient::CloseAllWidgets() {
   }
 }
 
-ui::mojom::WindowServerTest* MusClient::GetTestingInterface() const {
-  // This will only be set in tests. CHECK to ensure it doesn't get used
-  // elsewhere.
-  CHECK(server_test_ptr_);
-  return server_test_ptr_.get();
-}
-
-ui::mojom::RemoteEventDispatcher* MusClient::GetTestingEventDispater() const {
-  CHECK(remote_event_dispatcher_ptr_);
-  return remote_event_dispatcher_ptr_.get();
+ui::mojom::EventInjector* MusClient::GetTestingEventInjector() const {
+  CHECK(event_injector_);
+  return event_injector_.get();
 }
 
 std::unique_ptr<DesktopWindowTreeHost> MusClient::CreateDesktopWindowTreeHost(
@@ -318,8 +370,18 @@ void MusClient::OnEmbedRootDestroyed(
 }
 
 void MusClient::OnPointerEventObserved(const ui::PointerEvent& event,
+                                       int64_t display_id,
                                        aura::Window* target) {
-  pointer_watcher_event_router_->OnPointerEventObserved(event, target);
+  pointer_watcher_event_router_->OnPointerEventObserved(event, display_id,
+                                                        target);
+}
+
+void MusClient::OnDisplaysChanged(
+    std::vector<ui::mojom::WsDisplayPtr> ws_displays,
+    int64_t primary_display_id,
+    int64_t internal_display_id) {
+  screen_->OnDisplaysChanged(std::move(ws_displays), primary_display_id,
+                             internal_display_id);
 }
 
 void MusClient::OnWindowManagerFrameValuesChanged() {

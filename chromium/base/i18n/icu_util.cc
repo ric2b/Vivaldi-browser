@@ -37,6 +37,10 @@
 #include "base/mac/foundation_util.h"
 #endif
 
+#if defined(OS_FUCHSIA)
+#include "base/base_paths_fuchsia.h"
+#endif
+
 namespace base {
 namespace i18n {
 
@@ -98,32 +102,26 @@ void LazyInitIcuDataFile() {
 #endif  // defined(OS_ANDROID)
 #if !defined(OS_MACOSX)
   FilePath data_path;
+  if (!PathService::Get(DIR_ASSETS, &data_path)) {
+    LOG(ERROR) << "Can't find " << kIcuDataFileName;
+    return;
+  }
 #if defined(OS_WIN)
-  // The data file will be in the same directory as the current module.
-  bool path_ok = PathService::Get(DIR_MODULE, &data_path);
+  // TODO(brucedawson): http://crbug.com/445616
   wchar_t tmp_buffer[_MAX_PATH] = {0};
   wcscpy_s(tmp_buffer, data_path.value().c_str());
   debug::Alias(tmp_buffer);
-  CHECK(path_ok);  // TODO(scottmg): http://crbug.com/445616
-#elif defined(OS_ANDROID)
-  bool path_ok = PathService::Get(DIR_ANDROID_APP_DATA, &data_path);
-#else
-  // For now, expect the data file to be alongside the executable.
-  // This is sufficient while we work on unit tests, but will eventually
-  // likely live in a data directory.
-  bool path_ok = PathService::Get(DIR_EXE, &data_path);
 #endif
-  DCHECK(path_ok);
   data_path = data_path.AppendASCII(kIcuDataFileName);
 
 #if defined(OS_WIN)
-  // TODO(scottmg): http://crbug.com/445616
+  // TODO(brucedawson): http://crbug.com/445616
   wchar_t tmp_buffer2[_MAX_PATH] = {0};
   wcscpy_s(tmp_buffer2, data_path.value().c_str());
   debug::Alias(tmp_buffer2);
 #endif
 
-#else
+#else  // !defined(OS_MACOSX)
   // Assume it is in the framework bundle's Resources directory.
   ScopedCFTypeRef<CFStringRef> data_file_name(
       SysUTF8ToCFStringRef(kIcuDataFileName));
@@ -141,7 +139,7 @@ void LazyInitIcuDataFile() {
 #endif  // !defined(OS_MACOSX)
   File file(data_path, File::FLAG_OPEN | File::FLAG_READ);
   if (file.IsValid()) {
-    // TODO(scottmg): http://crbug.com/445616.
+    // TODO(brucedawson): http://crbug.com/445616.
     g_debug_icu_pf_last_error = 0;
     g_debug_icu_pf_error_details = 0;
 #if defined(OS_WIN)
@@ -153,7 +151,7 @@ void LazyInitIcuDataFile() {
   }
 #if defined(OS_WIN)
   else {
-    // TODO(scottmg): http://crbug.com/445616.
+    // TODO(brucedawson): http://crbug.com/445616.
     g_debug_icu_pf_last_error = ::GetLastError();
     g_debug_icu_pf_error_details = file.error_details();
     wcscpy_s(g_debug_icu_pf_filename, data_path.value().c_str());
@@ -263,9 +261,8 @@ bool InitializeICU() {
 
   bool result;
 #if (ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_SHARED)
-  // We expect to find the ICU data module alongside the current module.
   FilePath data_path;
-  PathService::Get(DIR_MODULE, &data_path);
+  PathService::Get(DIR_ASSETS, &data_path);
   data_path = data_path.AppendASCII(ICU_UTIL_DATA_SHARED_MODULE_NAME);
 
   HMODULE module = LoadLibrary(data_path.value().c_str());
@@ -309,7 +306,7 @@ bool InitializeICU() {
   wchar_t debug_icu_pf_filename[_MAX_PATH] = {0};
   wcscpy_s(debug_icu_pf_filename, g_debug_icu_pf_filename);
   debug::Alias(&debug_icu_pf_filename);
-  CHECK(result);  // TODO(scottmg): http://crbug.com/445616
+  CHECK(result);  // TODO(brucedawson): http://crbug.com/445616
 #endif
 #endif
 

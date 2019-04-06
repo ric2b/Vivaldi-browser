@@ -7,17 +7,18 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/native_library.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/version.h"
 #include "build/build_config.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
-#include "chrome/common/features.h"
 #include "media/cdm/cdm_paths.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/path_utils.h"
@@ -75,6 +76,8 @@ const base::FilePath::CharType kComponentUpdatedFlashHint[] =
 #if defined(OS_CHROMEOS)
 const base::FilePath::CharType kChromeOSComponentFlash[] = FILE_PATH_LITERAL(
     "/run/imageloader/PepperFlashPlayer/libpepflashplayer.so");
+const base::FilePath::CharType kChromeOSTPMFirmwareUpdateLocation[] =
+    FILE_PATH_LITERAL("/run/tpm_firmware_update_location");
 #endif  // defined(OS_CHROMEOS)
 
 static base::LazyInstance<base::FilePath>::DestructorAtExit
@@ -95,7 +98,7 @@ bool GetInternalPluginsDirectory(base::FilePath* result) {
 #endif
 
   // The rest of the world expects plugins in the module directory.
-  return PathService::Get(base::DIR_MODULE, result);
+  return base::PathService::Get(base::DIR_MODULE, result);
 }
 
 // Gets the path for bundled implementations of components. Note that these
@@ -114,7 +117,7 @@ bool GetComponentDirectory(base::FilePath* result) {
 #endif
 
   // The rest of the world expects components in the module directory.
-  return PathService::Get(base::DIR_MODULE, result);
+  return base::PathService::Get(base::DIR_MODULE, result);
 }
 
 #if defined(OS_WIN)
@@ -143,25 +146,25 @@ bool PathProvider(int key, base::FilePath* result) {
   // Some keys are just aliases...
   switch (key) {
     case chrome::DIR_APP:
-      return PathService::Get(base::DIR_MODULE, result);
+      return base::PathService::Get(base::DIR_MODULE, result);
     case chrome::DIR_LOGS:
 #ifdef NDEBUG
       // Release builds write to the data dir
-      return PathService::Get(chrome::DIR_USER_DATA, result);
+      return base::PathService::Get(chrome::DIR_USER_DATA, result);
 #else
       // Debug builds write next to the binary (in the build tree)
 #if defined(OS_MACOSX)
       // Apps may not write into their own bundle.
       if (base::mac::AmIBundled()) {
-        return PathService::Get(chrome::DIR_USER_DATA, result);
+        return base::PathService::Get(chrome::DIR_USER_DATA, result);
       }
-      return PathService::Get(base::DIR_EXE, result);
+      return base::PathService::Get(base::DIR_EXE, result);
 #else
-      return PathService::Get(base::DIR_EXE, result);
+      return base::PathService::Get(base::DIR_EXE, result);
 #endif  // defined(OS_MACOSX)
 #endif  // NDEBUG
     case chrome::FILE_RESOURCE_MODULE:
-      return PathService::Get(base::FILE_MODULE, result);
+      return base::PathService::Get(base::FILE_MODULE, result);
   }
 
   // Assume that we will not need to create the directory if it does not exist.
@@ -259,13 +262,13 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = base::mac::FrameworkBundlePath();
       cur = cur.Append(FILE_PATH_LITERAL("Resources"));
 #else
-      if (!PathService::Get(chrome::DIR_APP, &cur))
+      if (!base::PathService::Get(chrome::DIR_APP, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("resources"));
 #endif
       break;
     case chrome::DIR_INSPECTOR_DEBUG:
-      if (!PathService::Get(chrome::DIR_RESOURCES, &cur))
+      if (!base::PathService::Get(chrome::DIR_RESOURCES, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("inspector"))
                .Append(FILE_PATH_LITERAL("debug"));
@@ -276,10 +279,10 @@ bool PathProvider(int key, base::FilePath* result) {
       // alongside the safe browsing database in the user data dir.
       // And we don't want to write into the bundle on the Mac, so push
       // it to the user data dir there also.
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
 #else
-      if (!PathService::Get(base::DIR_EXE, &cur))
+      if (!base::PathService::Get(base::DIR_EXE, &cur))
         return false;
 #endif
       cur = cur.Append(FILE_PATH_LITERAL("Dictionaries"));
@@ -299,7 +302,7 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = cur.Append(kPepperFlashBaseDirectory);
       break;
     case chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(kPepperFlashBaseDirectory);
       break;
@@ -313,8 +316,8 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = cur.Append(kPepperFlashSystemBaseDirectory);
       cur = cur.Append(chrome::kPepperFlashPluginFilename);
 #elif defined(OS_LINUX)
-      cur = cur.Append(
-        FILE_PATH_LITERAL("/usr/lib/adobe-flashplugin/libpepflashplayer.so"));
+      cur = base::FilePath(
+          FILE_PATH_LITERAL("/usr/lib/adobe-flashplugin/libpepflashplayer.so"));
 #else
       // Chrome on iOS does not supports PPAPI binaries, return false.
       // TODO(wfh): If Adobe release PPAPI binaries for Linux, add support here.
@@ -322,17 +325,17 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif
       break;
     case chrome::FILE_LOCAL_STATE:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(chrome::kLocalStateFilename);
       break;
     case chrome::FILE_RECORDED_SCRIPT:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("script.log"));
       break;
     case chrome::FILE_PEPPER_FLASH_PLUGIN:
-      if (!PathService::Get(chrome::DIR_PEPPER_FLASH_PLUGIN, &cur))
+      if (!base::PathService::Get(chrome::DIR_PEPPER_FLASH_PLUGIN, &cur))
         return false;
       cur = cur.Append(chrome::kPepperFlashPluginFilename);
       break;
@@ -349,7 +352,7 @@ bool PathProvider(int key, base::FilePath* result) {
     // installation via component updater.  DIR_PNACL_COMPONENT will be
     // the final location of pnacl, which is a subdir of DIR_PNACL_BASE.
     case chrome::DIR_PNACL_BASE:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("pnacl"));
       break;
@@ -363,7 +366,7 @@ bool PathProvider(int key, base::FilePath* result) {
       // copying it there would result in the files also being shipped, which
       // we don't want yet. So for now, just find them in the directory where
       // they get built.
-      if (!PathService::Get(base::DIR_EXE, &cur))
+      if (!base::PathService::Get(base::DIR_EXE, &cur))
         return false;
       if (base::mac::AmIBundled()) {
         // If we're called from chrome, it's beside the app (outside the
@@ -381,15 +384,15 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = cur.Append(FILE_PATH_LITERAL("pnacl"));
       break;
 #if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
-    // TODO(xhwang): FILE_WIDEVINE_CDM_ADAPTER has different meanings.
-    // In the component case, this is the source adapter. Otherwise, it is the
-    // actual Pepper module that gets loaded.
-    case chrome::FILE_WIDEVINE_CDM_ADAPTER:
+    // TODO(crbug.com/663554): Remove this after component updated CDM is
+    // supported on Linux and ChromeOS.
+    case chrome::FILE_WIDEVINE_CDM:
       if (!GetComponentDirectory(&cur))
         return false;
-      cur = cur.Append(
-          media::GetPlatformSpecificDirectory(kWidevineCdmBaseDirectory));
-      cur = cur.AppendASCII(kWidevineCdmAdapterFileName);
+      cur =
+          cur.Append(
+                 media::GetPlatformSpecificDirectory(kWidevineCdmBaseDirectory))
+              .AppendASCII(base::GetNativeLibraryName(kWidevineCdmLibraryName));
       break;
 #endif  // defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
     case chrome::FILE_RESOURCES_PACK:
@@ -399,29 +402,29 @@ bool PathProvider(int key, base::FilePath* result) {
                .Append(FILE_PATH_LITERAL("resources.pak"));
       break;
 #elif defined(OS_ANDROID)
-      if (!PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &cur))
+      if (!base::PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &cur))
         return false;
 #else
       // If we're not bundled on mac or Android, resources.pak should be next
       // to the binary (e.g., for unit tests).
-      if (!PathService::Get(base::DIR_MODULE, &cur))
+      if (!base::PathService::Get(base::DIR_MODULE, &cur))
         return false;
 #endif
       cur = cur.Append(FILE_PATH_LITERAL("resources.pak"));
       break;
 #if defined(OS_CHROMEOS)
     case chrome::DIR_CHROMEOS_WALLPAPERS:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("wallpapers"));
       break;
     case chrome::DIR_CHROMEOS_WALLPAPER_THUMBNAILS:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("wallpaper_thumbnails"));
       break;
     case chrome::DIR_CHROMEOS_CUSTOM_WALLPAPERS:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("custom_wallpapers"));
       break;
@@ -429,13 +432,15 @@ bool PathProvider(int key, base::FilePath* result) {
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #if defined(OS_LINUX)
     case chrome::DIR_SUPERVISED_USERS_DEFAULT_APPS:
-      if (!PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS, &cur))
+      if (!base::PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS,
+                                  &cur)) {
         return false;
+      }
       cur = cur.Append(FILE_PATH_LITERAL("managed_users"));
       break;
 #endif
     case chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("SupervisedUserInstalledWhitelists"));
       break;
@@ -447,10 +452,10 @@ bool PathProvider(int key, base::FilePath* result) {
 #if defined(OS_ANDROID)
       // On Android, our tests don't have permission to write to DIR_MODULE.
       // gtest/test_runner.py pushes data to external storage.
-      if (!PathService::Get(base::DIR_SOURCE_ROOT, &cur))
+      if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &cur))
         return false;
 #else
-      if (!PathService::Get(base::DIR_MODULE, &cur))
+      if (!base::PathService::Get(base::DIR_MODULE, &cur))
         return false;
 #endif
       cur = cur.Append(FILE_PATH_LITERAL("test_data"));
@@ -458,7 +463,7 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       break;
     case chrome::DIR_TEST_DATA:
-      if (!PathService::Get(base::DIR_SOURCE_ROOT, &cur))
+      if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("chrome"));
       cur = cur.Append(FILE_PATH_LITERAL("test"));
@@ -467,7 +472,7 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       break;
     case chrome::DIR_TEST_TOOLS:
-      if (!PathService::Get(base::DIR_SOURCE_ROOT, &cur))
+      if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("chrome"));
       cur = cur.Append(FILE_PATH_LITERAL("tools"));
@@ -488,7 +493,7 @@ bool PathProvider(int key, base::FilePath* result) {
 #if defined(OS_CHROMEOS) || (defined(OS_LINUX) && defined(CHROMIUM_BUILD)) || \
     defined(OS_MACOSX)
     case chrome::DIR_USER_EXTERNAL_EXTENSIONS: {
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("External Extensions"));
       break;
@@ -510,7 +515,7 @@ bool PathProvider(int key, base::FilePath* result) {
                .Append(FILE_PATH_LITERAL("External Extensions"));
       create_dir = false;
 #else
-      if (!PathService::Get(base::DIR_MODULE, &cur))
+      if (!base::PathService::Get(base::DIR_MODULE, &cur))
         return false;
 
       cur = cur.Append(FILE_PATH_LITERAL("extensions"));
@@ -523,7 +528,7 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = base::mac::FrameworkBundlePath();
       cur = cur.Append(FILE_PATH_LITERAL("Default Apps"));
 #else
-      if (!PathService::Get(chrome::DIR_APP, &cur))
+      if (!base::PathService::Get(chrome::DIR_APP, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("default_apps"));
 #endif
@@ -551,14 +556,14 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
 
     case chrome::DIR_USER_NATIVE_MESSAGING:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("NativeMessagingHosts"));
       break;
 #endif  // defined(OS_LINUX) || defined(OS_MACOSX)
 #if !defined(OS_ANDROID)
     case chrome::DIR_GLOBAL_GCM_STORE:
-      if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
       cur = cur.Append(kGCMStoreDirname);
       break;
@@ -567,9 +572,8 @@ bool PathProvider(int key, base::FilePath* result) {
     case chrome::FILE_COMPONENT_FLASH_HINT:
     {
       std::unique_ptr<base::Environment> env(base::Environment::Create());
-      cur = cur.Append(base::nix::GetXDGDirectory(env.get(),
-                                              base::nix::kXdgConfigHomeEnvVar,
-                                              base::nix::kDotConfigDir));
+      cur = base::nix::GetXDGDirectory(
+          env.get(), base::nix::kXdgConfigHomeEnvVar, base::nix::kDotConfigDir);
       cur = cur.Append("google-chrome");
       cur = cur.Append(kPepperFlashBaseDirectory);
       cur = cur.Append(kComponentUpdatedFlashHint);
@@ -582,9 +586,15 @@ bool PathProvider(int key, base::FilePath* result) {
       create_dir = false;
       break;
     case chrome::DIR_CHILD_USERS_DEFAULT_APPS:
-      if (!PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS, &cur))
+      if (!base::PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS,
+                                  &cur)) {
         return false;
+      }
       cur = cur.Append(FILE_PATH_LITERAL("child_users"));
+      break;
+    case chrome::FILE_CHROME_OS_TPM_FIRMWARE_UPDATE_LOCATION:
+      cur = base::FilePath(kChromeOSTPMFirmwareUpdateLocation);
+      create_dir = false;
       break;
 #endif  // defined(OS_CHROMEOS)
 
@@ -605,7 +615,7 @@ bool PathProvider(int key, base::FilePath* result) {
 // This cannot be done as a static initializer sadly since Visual Studio will
 // eliminate this object file if there is no direct entry point into it.
 void RegisterPathProvider() {
-  PathService::RegisterProvider(PathProvider, PATH_START, PATH_END);
+  base::PathService::RegisterProvider(PathProvider, PATH_START, PATH_END);
 }
 
 void SetInvalidSpecifiedUserDataDir(const base::FilePath& user_data_dir) {

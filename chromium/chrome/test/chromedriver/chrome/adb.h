@@ -16,8 +16,8 @@ class Adb {
 
   virtual Status GetDevices(std::vector<std::string>* devices) = 0;
   virtual Status ForwardPort(const std::string& device_serial,
-                             int local_port,
-                             const std::string& remote_abstract) = 0;
+                             const std::string& remote_abstract,
+                             int* local_port_output) = 0;
   virtual Status SetCommandLineFile(const std::string& device_serial,
                                     const std::string& command_line_file,
                                     const std::string& exec_name,
@@ -36,6 +36,9 @@ class Adb {
   virtual Status GetPidByName(const std::string& device_serial,
                               const std::string& process_name,
                               int* pid) = 0;
+  virtual Status GetSocketByPattern(const std::string& device_serial,
+                                    const std::string& grep_pattern,
+                                    std::string* socket_name) = 0;
 };
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CHROME_ADB_H_

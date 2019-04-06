@@ -5,15 +5,9 @@
 #include "chrome/browser/vr/test/ui_pixel_test.h"
 
 #include "build/build_config.h"
-#include "chrome/browser/vr/browser_ui_interface.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
-#include "chrome/browser/vr/ui_browser_interface.h"
-#include "chrome/browser/vr/ui_input_manager.h"
-#include "chrome/browser/vr/ui_renderer.h"
-#include "chrome/browser/vr/ui_scene.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/skia/include/core/SkImageEncoder.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "ui/gl/gl_bindings.h"
@@ -35,6 +29,8 @@ void UiPixelTest::SetUp() {
 
   // Make content texture.
   content_texture_ = gl::GLTestHelper::CreateTexture(GL_TEXTURE_2D);
+  content_overlay_texture_ = gl::GLTestHelper::CreateTexture(GL_TEXTURE_2D);
+
   // TODO(tiborg): Make GL_TEXTURE_EXTERNAL_OES texture for content and fill it
   // with fake content.
   ASSERT_EQ(glGetError(), (GLenum)GL_NO_ERROR);
@@ -55,10 +51,12 @@ void UiPixelTest::TearDown() {
 
 void UiPixelTest::MakeUi(const UiInitialState& ui_initial_state,
                          const ToolbarState& toolbar_state) {
-  ui_ = std::make_unique<Ui>(browser_.get(), nullptr, nullptr, nullptr,
+  ui_ = std::make_unique<Ui>(browser_.get(), nullptr, nullptr, nullptr, nullptr,
                              ui_initial_state);
   ui_->OnGlInitialized(content_texture_,
-                       vr::UiElementRenderer::kTextureLocationLocal, true);
+                       vr::UiElementRenderer::kTextureLocationLocal,
+                       content_overlay_texture_,
+                       vr::UiElementRenderer::kTextureLocationLocal, 0);
   ui_->GetBrowserUiWeakPtr()->SetToolbarState(toolbar_state);
 }
 
@@ -83,19 +81,17 @@ void UiPixelTest::DrawUi(const gfx::Vector3dF& laser_direction,
   render_info.left_eye_model.proj_matrix = proj_matrix;
   render_info.left_eye_model.view_proj_matrix = proj_matrix * view_matrix;
   render_info.right_eye_model = render_info.left_eye_model;
-  render_info.surface_texture_size = frame_buffer_size_;
   render_info.left_eye_model.viewport = {0, 0, frame_buffer_size_.width(),
                                          frame_buffer_size_.height()};
   render_info.right_eye_model.viewport = {0, 0, 0, 0};
 
-  GestureList gesture_list;
+  InputEventList input_event_list;
   ReticleModel reticle_model;
-  EXPECT_TRUE(
-      ui_->scene()->OnBeginFrame(base::TimeTicks(), render_info.head_pose));
-  ui_->input_manager()->HandleInput(MsToTicks(1), controller_model,
-                                    &reticle_model, &gesture_list);
+  EXPECT_TRUE(ui_->OnBeginFrame(base::TimeTicks(), render_info.head_pose));
+  ui_->HandleInput(MsToTicks(1), render_info, controller_model, &reticle_model,
+                   &input_event_list);
   ui_->OnControllerUpdated(controller_model, reticle_model);
-  ui_->ui_renderer()->Draw(render_info);
+  ui_->Draw(render_info);
 
   // We produce GL errors while rendering. Clear them all so that we can check
   // for errors of subsequent calls.

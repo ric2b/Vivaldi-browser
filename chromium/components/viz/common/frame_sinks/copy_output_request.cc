@@ -31,17 +31,23 @@ CopyOutputRequest::~CopyOutputRequest() {
 
 void CopyOutputRequest::SetScaleRatio(const gfx::Vector2d& scale_from,
                                       const gfx::Vector2d& scale_to) {
-  DCHECK_GT(scale_from.x(), 0);
-  DCHECK_GT(scale_from.y(), 0);
-  DCHECK_GT(scale_to.x(), 0);
-  DCHECK_GT(scale_to.y(), 0);
+  // These are CHECKs, and not DCHECKs, because it's critical that crash report
+  // bugs be tied to the client callpoint rather than the later mojo or service-
+  // side processing of the CopyOutputRequest.
+  CHECK_GT(scale_from.x(), 0);
+  CHECK_GT(scale_from.y(), 0);
+  CHECK_GT(scale_to.x(), 0);
+  CHECK_GT(scale_to.y(), 0);
+
   scale_from_ = scale_from;
   scale_to_ = scale_to;
 }
 
 void CopyOutputRequest::SetUniformScaleRatio(int scale_from, int scale_to) {
-  DCHECK_GT(scale_from, 0);
-  DCHECK_GT(scale_to, 0);
+  // See note in SetScaleRatio() as to why these are CHECKs and not DCHECKs.
+  CHECK_GT(scale_from, 0);
+  CHECK_GT(scale_to, 0);
+
   scale_from_ = gfx::Vector2d(scale_from, scale_from);
   scale_to_ = gfx::Vector2d(scale_to, scale_to);
 }
@@ -62,14 +68,6 @@ void CopyOutputRequest::SendResult(std::unique_ptr<CopyOutputResult> result) {
 bool CopyOutputRequest::SendsResultsInCurrentSequence() const {
   return !result_task_runner_ ||
          result_task_runner_->RunsTasksInCurrentSequence();
-}
-
-void CopyOutputRequest::SetMailbox(const gpu::Mailbox& mailbox,
-                                   const gpu::SyncToken& sync_token) {
-  DCHECK_EQ(result_format_, ResultFormat::RGBA_TEXTURE);
-  DCHECK(!mailbox.IsZero());
-  mailbox_ = mailbox;
-  sync_token_ = sync_token;
 }
 
 // static

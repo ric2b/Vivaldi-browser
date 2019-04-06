@@ -14,15 +14,17 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/prefs/pref_service.h"
+#include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "contact/contact_model_loaded_observer.h"
 #include "contact/contact_service_factory.h"
 #include "content/public/common/content_switches.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_loaded_observer.h"
 #include "notes/notesnode.h"
+#include "ui/lazy_load_service_factory.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -60,6 +62,7 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 
 void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  translate::TranslateLanguageList::DisableUpdate();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::CalendarAPI::GetFactoryInstance();
   extensions::ContactsAPI::GetFactoryInstance();
@@ -104,6 +107,8 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
 
   if (!vivaldi::IsVivaldiRunning())
     return;
+
+  vivaldi::LazyLoadServiceFactory::GetForProfile(profile);
 
   PrefService* pref_service = profile->GetPrefs();
   pref_service->SetBoolean(prefs::kOfferTranslateEnabled, false);

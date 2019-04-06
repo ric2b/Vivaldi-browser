@@ -15,6 +15,8 @@
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
 
+#include "chrome/installer/setup/buildflags.h"
+
 /////////////////////////////////////////////////////////////////////////////
 // English (U.S.) resources
 
@@ -173,4 +175,17 @@ CONTROL         "", IDC_PROGRESS1, "msctls_progress32", PBS_MARQUEE, 6, 10, 301,
 END
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Resources of the "PATCHERTYPE" type indicate supported patch formats based
+// on their integer resource names.
+//
+#define IDR_PATCHER_TYPE_COURGETTE 1
+#define IDR_PATCHER_TYPE_ZUCCHINI 2
+
+IDR_PATCHER_TYPE_COURGETTE PATCHERTYPE { 0L }
+#if BUILDFLAG(ZUCCHINI)
+IDR_PATCHER_TYPE_ZUCCHINI PATCHERTYPE { 0L }
+#endif  // BUILDFLAG(ZUCCHINI)
 

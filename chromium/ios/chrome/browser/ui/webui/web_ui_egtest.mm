@@ -7,18 +7,18 @@
 #include "base/mac/foundation_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
-#include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/web_client.h"
 #include "ui/base/device_form_factor.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -50,8 +50,8 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
     }
     OmniboxTextFieldIOS* omnibox =
         base::mac::ObjCCast<OmniboxTextFieldIOS>(view);
-    GREYAssert(testing::WaitUntilConditionOrTimeout(
-                   testing::kWaitForUIElementTimeout,
+    GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                   base::test::ios::kWaitForUIElementTimeout,
                    ^{
                      return base::SysNSStringToUTF8(omnibox.text) == text;
                    }),
@@ -100,7 +100,8 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
   LoadWebUIUrl(kChromeUIChromeURLsHost);
 
   // Tap on chrome://terms link on the page.
-  chrome_test_util::TapWebViewElementWithId(kChromeUITermsHost);
+  GREYAssert(TapWebViewElementWithId(kChromeUITermsHost), @"Failed to tap %s",
+             kChromeUITermsHost);
 
   // Verify that the resulting page is chrome://terms.
   [[EarlGrey selectElementWithMatcher:WaitForOmniboxText("chrome://terms")]
@@ -115,7 +116,8 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
   LoadWebUIUrl(kChromeUIChromeURLsHost);
 
   // Tap on chrome://version link on the page.
-  chrome_test_util::TapWebViewElementWithId(kChromeUIVersionHost);
+  GREYAssert(TapWebViewElementWithId(kChromeUIVersionHost), @"Failed to tap %s",
+             kChromeUIVersionHost);
 
   // Verify that the resulting page is chrome://version.
   [[EarlGrey selectElementWithMatcher:WaitForOmniboxText("chrome://version")]
@@ -200,6 +202,39 @@ id<GREYMatcher> WaitForOmniboxText(std::string text) {
   id<GREYMatcher> messageMatcher = [GREYMatchers matcherForText:kError];
   [[EarlGrey selectElementWithMatcher:messageMatcher]
       assertWithMatcher:grey_notNil()];
+}
+
+// Tests that repeated back/forward navigation from web URL is allowed.
+- (void)testBackForwardFromWebURL {
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+
+  // Not using kChromeUIVersionURL because it has a final "/" that is not
+  // displayed in Omnibox.
+  const char kChromeVersionURL[] = "chrome://version";
+  const char kChromeVersionWebText[] = "The Chromium Authors";
+  const char kWebPageText[] = "pony";
+
+  LoadWebUIUrl(kChromeUIVersionHost);
+  [[EarlGrey selectElementWithMatcher:WaitForOmniboxText(kChromeVersionURL)]
+      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kChromeVersionWebText];
+
+  GURL webURL = self.testServer->GetURL("/pony.html");
+  [ChromeEarlGrey loadURL:webURL];
+  [ChromeEarlGrey waitForWebViewContainingText:kWebPageText];
+
+  [ChromeEarlGrey goBack];
+  [[EarlGrey selectElementWithMatcher:WaitForOmniboxText(kChromeVersionURL)]
+      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kChromeVersionWebText];
+
+  [ChromeEarlGrey goForward];
+  [ChromeEarlGrey waitForWebViewContainingText:kWebPageText];
+
+  [ChromeEarlGrey goBack];
+  [[EarlGrey selectElementWithMatcher:WaitForOmniboxText(kChromeVersionURL)]
+      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kChromeVersionWebText];
 }
 
 @end

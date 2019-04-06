@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/ash/network/networking_config_delegate_chromeos.h"
 
-#include "ash/ash_view_ids.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/public/interfaces/system_tray_test_api.mojom.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -20,7 +20,7 @@
 
 namespace {
 
-using NetworkingConfigDelegateChromeosTest = ExtensionBrowserTest;
+using NetworkingConfigDelegateChromeosTest = extensions::ExtensionBrowserTest;
 
 // Tests that an extension registering itself as handling a Wi-Fi SSID updates
 // the ash system tray network item.

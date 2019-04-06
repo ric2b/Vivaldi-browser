@@ -113,7 +113,7 @@ class ExtensionHost : public DeferredStartRenderHost,
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -122,8 +122,8 @@ class ExtensionHost : public DeferredStartRenderHost,
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) override;
-  bool CheckMediaAccessPermission(content::WebContents* web_contents,
+      content::MediaResponseCallback callback) override;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) override;
   bool IsNeverVisible(content::WebContents* web_contents) override;
@@ -135,9 +135,6 @@ class ExtensionHost : public DeferredStartRenderHost,
                            const Extension* extension,
                            UnloadedExtensionReason reason) override;
 
-  // ExtensionFunctionDispatcher::Delegate
-  content::WebContents* GetAssociatedWebContents() const override;
-
  protected:
   // Called each time this ExtensionHost completes a load finishes loading,
   // before any stop-loading notifications or observer methods are called.
@@ -148,13 +145,6 @@ class ExtensionHost : public DeferredStartRenderHost,
 
   // Returns true if we're hosting a background page.
   virtual bool IsBackgroundPage() const;
-
-#ifdef VIVALDI_BUILD
-  // Sets the |host_contents_| and |render_view_| members.
-  void SetHostContentsAndRenderView(content::WebContents *web_contents);
-  // Releases the |host_contents_| member.
-  void ReleaseHostContents();
-#endif //VIVALDI_BUILD
 
  private:
   // DeferredStartRenderHost:
@@ -186,9 +176,6 @@ class ExtensionHost : public DeferredStartRenderHost,
 
   // The host for our HTML content.
   std::unique_ptr<content::WebContents> host_contents_;
-
-  // NOTE(andre@vivaldi.com): The owner used when creating guest WebContents.
-  std::unique_ptr<content::WebContents> guest_owner_contents_;
 
   // A weak pointer to the current or pending RenderViewHost. We don't access
   // this through the host_contents because we want to deal with the pending

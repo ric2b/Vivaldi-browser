@@ -34,7 +34,6 @@
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -44,6 +43,31 @@ namespace {
 
 // Maximum number of sessions we're going to display on the NTP
 const size_t kMaxSessionsToShow = 10;
+
+// Converts the DeviceType enum value to a string. This is used
+// in the NTP handler for foreign sessions for matching session
+// types to an icon style.
+std::string DeviceTypeToString(sync_pb::SyncEnums::DeviceType device_type) {
+  switch (device_type) {
+    case sync_pb::SyncEnums::TYPE_UNSET:
+      break;
+    case sync_pb::SyncEnums::TYPE_WIN:
+      return "win";
+    case sync_pb::SyncEnums::TYPE_MAC:
+      return "macosx";
+    case sync_pb::SyncEnums::TYPE_LINUX:
+      return "linux";
+    case sync_pb::SyncEnums::TYPE_CROS:
+      return "chromeos";
+    case sync_pb::SyncEnums::TYPE_OTHER:
+      return "other";
+    case sync_pb::SyncEnums::TYPE_PHONE:
+      return "phone";
+    case sync_pb::SyncEnums::TYPE_TABLET:
+      return "tablet";
+  }
+  return std::string();
+}
 
 // Helper method to create JSON compatible objects from Session objects.
 std::unique_ptr<base::DictionaryValue> SessionTabToValue(
@@ -78,7 +102,7 @@ std::unique_ptr<base::DictionaryValue> SessionTabToValue(
 // Helper for initializing a boilerplate SessionWindow JSON compatible object.
 std::unique_ptr<base::DictionaryValue> BuildWindowData(
     base::Time modification_time,
-    SessionID::id_type window_id) {
+    SessionID window_id) {
   std::unique_ptr<base::DictionaryValue> dictionary(
       new base::DictionaryValue());
   // The items which are to be written into |dictionary| are also described in
@@ -86,17 +110,8 @@ std::unique_ptr<base::DictionaryValue> BuildWindowData(
   // Please update it whenever you add or remove any keys here.
   dictionary->SetString("type", "window");
   dictionary->SetDouble("timestamp", modification_time.ToInternalValue());
-  const base::TimeDelta last_synced = base::Time::Now() - modification_time;
-  // If clock skew leads to a future time, or we last synced less than a minute
-  // ago, output "Just now".
-  dictionary->SetString(
-      "userVisibleTimestamp",
-      last_synced < base::TimeDelta::FromMinutes(1)
-          ? l10n_util::GetStringUTF16(IDS_SYNC_TIME_JUST_NOW)
-          : ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
-                                   ui::TimeFormat::LENGTH_SHORT, last_synced));
 
-  dictionary->SetInteger("sessionId", window_id);
+  dictionary->SetInteger("sessionId", window_id.id());
   return dictionary;
 }
 
@@ -120,7 +135,7 @@ std::unique_ptr<base::DictionaryValue> SessionWindowToValue(
   if (tab_values->GetSize() == 0)
     return nullptr;
   std::unique_ptr<base::DictionaryValue> dictionary(
-      BuildWindowData(window.timestamp, window.window_id.id()));
+      BuildWindowData(window.timestamp, window.window_id));
   dictionary->Set("tabs", std::move(tab_values));
   return dictionary;
 }
@@ -143,15 +158,15 @@ void ForeignSessionHandler::RegisterProfilePrefs(
 void ForeignSessionHandler::OpenForeignSessionTab(
     content::WebUI* web_ui,
     const std::string& session_string_value,
-    SessionID::id_type window_num,
-    SessionID::id_type tab_id,
+    int window_num,
+    SessionID tab_id,
     const WindowOpenDisposition& disposition) {
   sync_sessions::OpenTabsUIDelegate* open_tabs = GetOpenTabsUIDelegate(web_ui);
   if (!open_tabs)
     return;
 
   // We don't actually care about |window_num|, this is just a sanity check.
-  DCHECK_LT(kInvalidId, window_num);
+  DCHECK_LE(0, window_num);
   const ::sessions::SessionTab* tab;
   if (!open_tabs->GetForeignTab(session_string_value, tab_id, &tab)) {
     LOG(ERROR) << "Failed to load foreign tab.";
@@ -169,7 +184,7 @@ void ForeignSessionHandler::OpenForeignSessionTab(
 void ForeignSessionHandler::OpenForeignSessionWindows(
     content::WebUI* web_ui,
     const std::string& session_string_value,
-    SessionID::id_type window_num) {
+    int window_num) {
   sync_sessions::OpenTabsUIDelegate* open_tabs = GetOpenTabsUIDelegate(web_ui);
   if (!open_tabs)
     return;
@@ -182,11 +197,12 @@ void ForeignSessionHandler::OpenForeignSessionWindows(
     return;
   }
   std::vector<const ::sessions::SessionWindow*>::const_iterator iter_begin =
-      windows.begin() + (window_num == kInvalidId ? 0 : window_num);
+      windows.begin() + (window_num < 0 ? 0 : window_num);
   std::vector<const ::sessions::SessionWindow*>::const_iterator iter_end =
-      window_num == kInvalidId ?
-      std::vector<const ::sessions::SessionWindow*>::const_iterator(
-          windows.end()) : iter_begin + 1;
+      window_num < 0
+          ? std::vector<const ::sessions::SessionWindow*>::const_iterator(
+                windows.end())
+          : iter_begin + 1;
   SessionRestore::RestoreForeignSessionWindows(Profile::FromWebUI(web_ui),
                                                iter_begin, iter_end);
 }
@@ -215,18 +231,23 @@ void ForeignSessionHandler::RegisterMessages() {
   if (service)
     scoped_observer_.Add(service);
 
-  web_ui()->RegisterMessageCallback("deleteForeignSession",
-      base::Bind(&ForeignSessionHandler::HandleDeleteForeignSession,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("getForeignSessions",
-      base::Bind(&ForeignSessionHandler::HandleGetForeignSessions,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("openForeignSession",
-      base::Bind(&ForeignSessionHandler::HandleOpenForeignSession,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("setForeignSessionCollapsed",
-      base::Bind(&ForeignSessionHandler::HandleSetForeignSessionCollapsed,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "deleteForeignSession",
+      base::BindRepeating(&ForeignSessionHandler::HandleDeleteForeignSession,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getForeignSessions",
+      base::BindRepeating(&ForeignSessionHandler::HandleGetForeignSessions,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "openForeignSession",
+      base::BindRepeating(&ForeignSessionHandler::HandleOpenForeignSession,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setForeignSessionCollapsed",
+      base::BindRepeating(
+          &ForeignSessionHandler::HandleSetForeignSessionCollapsed,
+          base::Unretained(this)));
 }
 
 void ForeignSessionHandler::OnSyncConfigurationCompleted(
@@ -284,7 +305,8 @@ void ForeignSessionHandler::HandleGetForeignSessions(
       // remove any keys here.
       session_data->SetString("tag", session_tag);
       session_data->SetString("name", session->session_name);
-      session_data->SetString("deviceType", session->DeviceTypeAsString());
+      session_data->SetString("deviceType",
+                              DeviceTypeToString(session->device_type));
       session_data->SetString("modifiedTime",
                               FormatSessionTime(session->modified_time));
       session_data->SetDouble("timestamp", session->modified_time.ToJsTime());
@@ -295,37 +317,13 @@ void ForeignSessionHandler::HandleGetForeignSessions(
         current_collapsed_sessions->SetBoolean(session_tag, true);
 
       std::unique_ptr<base::ListValue> window_list(new base::ListValue());
-      const std::string group_name =
-          base::FieldTrialList::FindFullName("TabSyncByRecency");
-      if (group_name != "Enabled") {
-        // Order tabs by visual order within window.
-        for (const auto& window_pair : session->windows) {
-          std::unique_ptr<base::DictionaryValue> window_data(
-              SessionWindowToValue(window_pair.second->wrapped_window));
-          if (window_data.get())
-            window_list->Append(std::move(window_data));
-        }
-      } else {
-        // Order tabs by recency. This involves creating a synthetic singleton
-        // window that contains all the tabs of the session.
-        base::Time modification_time;
-        std::vector<const ::sessions::SessionTab*> tabs;
-        open_tabs->GetForeignSessionTabs(session_tag, &tabs);
-        std::unique_ptr<base::ListValue> tab_values(new base::ListValue());
-        for (const ::sessions::SessionTab* tab : tabs) {
-          std::unique_ptr<base::DictionaryValue> tab_value(
-              SessionTabToValue(*tab));
-          if (tab_value.get()) {
-            modification_time = std::max(modification_time, tab->timestamp);
-            tab_values->Append(std::move(tab_value));
-          }
-        }
-        if (tab_values->GetSize() != 0) {
-          std::unique_ptr<base::DictionaryValue> window_data(
-              BuildWindowData(modification_time, 1));
-          window_data->Set("tabs", std::move(tab_values));
+
+      // Order tabs by visual order within window.
+      for (const auto& window_pair : session->windows) {
+        std::unique_ptr<base::DictionaryValue> window_data(
+            SessionWindowToValue(window_pair.second->wrapped_window));
+        if (window_data)
           window_list->Append(std::move(window_data));
-        }
       }
 
       session_data->Set("windows", std::move(window_list));
@@ -358,7 +356,7 @@ void ForeignSessionHandler::HandleOpenForeignSession(
 
   // Extract window number.
   std::string window_num_str;
-  int window_num = kInvalidId;
+  int window_num = -1;
   if (num_args >= 2 && (!args->GetString(1, &window_num_str) ||
       !base::StringToInt(window_num_str, &window_num))) {
     LOG(ERROR) << "Failed to extract window number.";
@@ -367,14 +365,15 @@ void ForeignSessionHandler::HandleOpenForeignSession(
 
   // Extract tab id.
   std::string tab_id_str;
-  SessionID::id_type tab_id = kInvalidId;
+  SessionID::id_type tab_id_value = 0;
   if (num_args >= 3 && (!args->GetString(2, &tab_id_str) ||
-      !base::StringToInt(tab_id_str, &tab_id))) {
+                        !base::StringToInt(tab_id_str, &tab_id_value))) {
     LOG(ERROR) << "Failed to extract tab SessionID.";
     return;
   }
 
-  if (tab_id != kInvalidId) {
+  SessionID tab_id = SessionID::FromSerializedValue(tab_id_value);
+  if (tab_id.is_valid()) {
     WindowOpenDisposition disposition = webui::GetDispositionFromClick(args, 3);
     OpenForeignSessionTab(
         web_ui(), session_string_value, window_num, tab_id, disposition);

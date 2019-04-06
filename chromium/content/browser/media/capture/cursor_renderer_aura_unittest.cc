@@ -41,7 +41,7 @@ class CursorRendererAuraTest : public AuraTestBase {
       // Initialize the shared global resource bundle that has bitmap
       // resources needed by CursorRenderer
       base::FilePath pak_file;
-      bool r = PathService::Get(base::DIR_MODULE, &pak_file);
+      bool r = base::PathService::Get(base::DIR_MODULE, &pak_file);
       DCHECK(r);
       pak_file = pak_file.Append(FILE_PATH_LITERAL("content_shell.pak"));
       ui::ResourceBundle::InitSharedInstanceWithPakPath(pak_file);
@@ -92,18 +92,18 @@ class CursorRendererAuraTest : public AuraTestBase {
   void MoveMouseCursorWithinWindow() {
     gfx::Point point1(20, 20);
     ui::MouseEvent event1(ui::ET_MOUSE_MOVED, point1, point1, Now(), 0, 0);
-    aura::Env::GetInstance()->set_last_mouse_location(point1);
+    aura::Env::GetInstance()->SetLastMouseLocation(point1);
     cursor_renderer_->OnMouseEvent(&event1);
     gfx::Point point2(60, 60);
     ui::MouseEvent event2(ui::ET_MOUSE_MOVED, point2, point2, Now(), 0, 0);
-    aura::Env::GetInstance()->set_last_mouse_location(point2);
+    aura::Env::GetInstance()->SetLastMouseLocation(point2);
     cursor_renderer_->OnMouseEvent(&event2);
   }
 
   void MoveMouseCursorOutsideWindow() {
     gfx::Point point(1000, 1000);
     ui::MouseEvent event1(ui::ET_MOUSE_MOVED, point, point, Now(), 0, 0);
-    aura::Env::GetInstance()->set_last_mouse_location(point);
+    aura::Env::GetInstance()->SetLastMouseLocation(point);
     cursor_renderer_->OnMouseEvent(&event1);
   }
 

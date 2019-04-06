@@ -42,6 +42,7 @@
       iron-icon {
         --iron-icon-fill-color: var(--settings-nav-grey);
         -webkit-margin-end: 24px;
+        pointer-events: none;
         vertical-align: top;
       }
 
@@ -52,12 +53,15 @@
       #advancedButton {
         -webkit-padding-end: 0;
         background-color: unset;
+        border: none;
+        border-radius: initial;
         height: unset;
         margin-top: 8px;
         text-transform: none;
       }
 
       #advancedButton:focus {
+        box-shadow: none;
         outline: none;
       }
 
@@ -65,12 +69,15 @@
         outline: auto 5px -webkit-focus-ring-color;
       }
 
-      #advancedButton > span {
+      #advancedButton > span,
+      #extensionsLink > span {
         flex: 1;
       }
 
-      #advancedButton > iron-icon {
-        -webkit-margin-end: 22px;  /* 24px - 2px from margin for outline. */
+      #advancedButton > iron-icon,
+      #extensionsLink > iron-icon {
+        @apply --cr-icon-height-width;
+        -webkit-margin-end: 14px;  /* 16px - 2px from margin for outline. */
       }
 
       #menuSeparator {
@@ -80,15 +87,16 @@
         margin-top: 8px;
       }
     </style>
-    <iron-selector id="topMenu" selectable="a" attr-for-selected="href"
-        on-iron-activate="onSelectorActivate_" role="navigation">
+    <iron-selector id="topMenu" selectable="a:not(#extensionsLink)"
+        attr-for-selected="href" on-iron-activate="onSelectorActivate_"
+        role="navigation">
 <if expr="chromeos">
       <a href="/internet">
         <iron-icon icon="settings:network-wifi"></iron-icon>
         $i18n{internetPageTitle}
       </a>
       <a href="/bluetooth">
-        <iron-icon icon="settings:bluetooth"></iron-icon>
+        <iron-icon icon="cr:bluetooth"></iron-icon>
         $i18n{bluetoothPageTitle}
       </a>
 </if>
@@ -115,6 +123,12 @@
       <a href="/androidApps" hidden="[[!showAndroidApps]]">
         <iron-icon icon="settings:play-prism"></iron-icon>
         $i18n{androidAppsPageTitle}
+      </a>
+</if>
+<if expr="chromeos">
+      <a href="/crostini" hidden="[[!showCrostini]]">
+        <iron-icon icon="settings:crostini-mascot"></iron-icon>
+        $i18n{crostiniPageTitle}
       </a>
 </if>
 <if expr="not chromeos">
@@ -146,14 +160,16 @@
           </a>
 </if>
           <a href="/privacy">
-            <iron-icon icon="settings:security"></iron-icon>
+            <iron-icon icon="cr:security"></iron-icon>
             $i18n{privacyPageTitle}
           </a>
-          <a id= "passwordsAndForms" href="/passwordsAndForms"
-              hidden="[[!pageVisibility.passwordsAndForms]]">
-            <iron-icon icon="settings:assignment"></iron-icon>
-            $i18n{passwordsAndAutofillPageTitle}
-          </a>
+          <template is="dom-if" if="[[!autofillHomeEnabled]]">
+            <a id="passwordsAndForms" href="/passwordsAndForms"
+                hidden="[[!pageVisibility.passwordsAndForms]]">
+              <iron-icon icon="settings:assignment"></iron-icon>
+              $i18n{passwordsAndAutofillPageTitle}
+            </a>
+          </template>
           <a href="/languages">
             <iron-icon icon="settings:language"></iron-icon>
             $i18n{languagesPageTitle}
@@ -189,6 +205,12 @@
         </iron-selector>
       </iron-collapse>
       <div id="menuSeparator"></div>
+      <a id="extensionsLink" href="chrome://extensions" target="_blank"
+          on-click="onExtensionsLinkClick_"
+          title="$i18n{extensionsLinkTooltip}">
+        <span>$i18n{extensionsPageTitle}</span>
+        <iron-icon class="cr-icon icon-external" actionable></iron-icon>
+      </a>
       <a id="about-menu" href="/help">$i18n{aboutPageTitle}</a>
     </iron-selector>
   </template>

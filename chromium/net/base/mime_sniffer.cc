@@ -88,7 +88,9 @@
 
 #include "net/base/mime_sniffer.h"
 
+#include "base/containers/span.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "url/gurl.h"
 
@@ -348,11 +350,12 @@ static bool MatchMagicNumber(const char* content,
   return false;
 }
 
-static bool CheckForMagicNumbers(const char* content, size_t size,
-                                 const MagicNumber* magic, size_t magic_len,
+static bool CheckForMagicNumbers(const char* content,
+                                 size_t size,
+                                 base::span<const MagicNumber> magic_numbers,
                                  std::string* result) {
-  for (size_t i = 0; i < magic_len; ++i) {
-    if (MatchMagicNumber(content, size, magic[i], result))
+  for (const MagicNumber& magic : magic_numbers) {
+    if (MatchMagicNumber(content, size, magic, result))
       return true;
   }
   return false;
@@ -390,8 +393,7 @@ static bool SniffForHTML(const char* content,
       break;
   }
   // |pos| now points to first non-whitespace character (or at end).
-  return CheckForMagicNumbers(pos, end - pos, kSniffableTags,
-                              arraysize(kSniffableTags), result);
+  return CheckForMagicNumbers(pos, end - pos, kSniffableTags, result);
 }
 
 // Returns true and sets result if the content matches any of kMagicNumbers.
@@ -403,8 +405,7 @@ static bool SniffForMagicNumbers(const char* content,
   *have_enough_content &= TruncateSize(kBytesRequiredForMagic, &size);
 
   // Check our big table of Magic Numbers
-  return CheckForMagicNumbers(content, size, kMagicNumbers,
-                              arraysize(kMagicNumbers), result);
+  return CheckForMagicNumbers(content, size, kMagicNumbers, result);
 }
 
 // Returns true and sets result if the content matches any of
@@ -420,22 +421,21 @@ static bool SniffForOfficeDocs(const char* content,
   // Check our table of magic numbers for Office file types.
   std::string office_version;
   if (!CheckForMagicNumbers(content, size, kOfficeMagicNumbers,
-                            arraysize(kOfficeMagicNumbers), &office_version))
+                            &office_version))
     return false;
 
   OfficeDocType type = DOC_TYPE_NONE;
   base::StringPiece url_path = url.path_piece();
-  for (size_t i = 0; i < arraysize(kOfficeExtensionTypes); ++i) {
-    if (url_path.length() < kOfficeExtensionTypes[i].extension_len)
+  for (const auto& office_extension : kOfficeExtensionTypes) {
+    if (url_path.length() < office_extension.extension_len)
       continue;
 
-    base::StringPiece extension = url_path.substr(
-        url_path.length() - kOfficeExtensionTypes[i].extension_len);
+    base::StringPiece extension =
+        url_path.substr(url_path.length() - office_extension.extension_len);
     if (base::EqualsCaseInsensitiveASCII(
-            extension,
-            base::StringPiece(kOfficeExtensionTypes[i].extension,
-                              kOfficeExtensionTypes[i].extension_len))) {
-      type = kOfficeExtensionTypes[i].doc_type;
+            extension, base::StringPiece(office_extension.extension,
+                                         office_extension.extension_len))) {
+      type = office_extension.doc_type;
       break;
     }
   }
@@ -522,7 +522,7 @@ static bool SniffForInvalidOfficeDocs(const char* content,
   // match one, the MIME type was invalid.  Set it instead to a safe value.
   std::string office_version;
   if (!CheckForMagicNumbers(content, size, kOfficeMagicNumbers,
-                            arraysize(kOfficeMagicNumbers), &office_version)) {
+                            &office_version)) {
     *result = "application/octet-stream";
   }
 
@@ -564,29 +564,25 @@ static bool SniffXML(const char* content,
     if (!pos)
       return false;
 
-    static const char kXmlPrefix[] = "<?xml";
-    static const size_t kXmlPrefixLength = arraysize(kXmlPrefix) - 1;
-    static const char kDocTypePrefix[] = "<!DOCTYPE";
-    static const size_t kDocTypePrefixLength = arraysize(kDocTypePrefix) - 1;
+    static constexpr base::StringPiece kXmlPrefix("<?xml");
+    static constexpr base::StringPiece kDocTypePrefix("<!DOCTYPE");
 
-    if ((pos + kXmlPrefixLength <= end) &&
-        base::EqualsCaseInsensitiveASCII(
-            base::StringPiece(pos, kXmlPrefixLength),
-            base::StringPiece(kXmlPrefix, kXmlPrefixLength))) {
+    base::StringPiece current(pos, end - pos);
+    if (base::EqualsCaseInsensitiveASCII(current.substr(0, kXmlPrefix.size()),
+                                         kXmlPrefix)) {
       // Skip XML declarations.
       ++pos;
       continue;
-    } else if ((pos + kDocTypePrefixLength <= end) &&
-               base::EqualsCaseInsensitiveASCII(
-                   base::StringPiece(pos, kDocTypePrefixLength),
-                   base::StringPiece(kDocTypePrefix, kDocTypePrefixLength))) {
+    }
+
+    if (base::EqualsCaseInsensitiveASCII(
+            current.substr(0, kDocTypePrefix.size()), kDocTypePrefix)) {
       // Skip DOCTYPE declarations.
       ++pos;
       continue;
     }
 
-    if (CheckForMagicNumbers(pos, end - pos, kMagicXML, arraysize(kMagicXML),
-                             result))
+    if (CheckForMagicNumbers(pos, end - pos, kMagicXML, result))
       return true;
 
     // TODO(evanm): handle RSS 1.0, which is an RDF format and more difficult
@@ -628,8 +624,7 @@ static bool SniffBinary(const char* content,
 
   // First, we look for a BOM.
   std::string unused;
-  if (CheckForMagicNumbers(content, size, kByteOrderMark,
-                           arraysize(kByteOrderMark), &unused)) {
+  if (CheckForMagicNumbers(content, size, kByteOrderMark, &unused)) {
     // If there is BOM, we think the buffer is not binary.
     result->assign("text/plain");
     return false;
@@ -662,8 +657,8 @@ static bool IsUnknownMimeType(const std::string& mime_type) {
     // Firefox rejects a mime type if it is exactly */*
     "*/*",
   };
-  for (size_t i = 0; i < arraysize(kUnknownMimeTypes); ++i) {
-    if (mime_type == kUnknownMimeTypes[i])
+  for (const char* const unknown_mime_type : kUnknownMimeTypes) {
+    if (mime_type == unknown_mime_type)
       return true;
   }
   if (mime_type.find('/') == std::string::npos) {
@@ -687,16 +682,15 @@ static bool SniffCRX(const char* content,
   // sniffing gives us less room for error. If the version number ever changes,
   // we can just add an entry to this list.
   static const struct MagicNumber kCRXMagicNumbers[] = {
-    MAGIC_NUMBER("application/x-chrome-extension", "Cr24\x02\x00\x00\x00")
-  };
+      MAGIC_NUMBER("application/x-chrome-extension", "Cr24\x02\x00\x00\x00"),
+      MAGIC_NUMBER("application/x-chrome-extension", "Cr24\x03\x00\x00\x00")};
 
   // Only consider files that have the extension ".crx".
   if (!base::EndsWith(url.path_piece(), ".crx", base::CompareCase::SENSITIVE))
     return false;
 
   *have_enough_content &= TruncateSize(kBytesRequiredForMagic, &size);
-  return CheckForMagicNumbers(content, size, kCRXMagicNumbers,
-                              arraysize(kCRXMagicNumbers), result);
+  return CheckForMagicNumbers(content, size, kCRXMagicNumbers, result);
 }
 
 bool ShouldSniffMimeType(const GURL& url, const std::string& mime_type) {
@@ -738,8 +732,8 @@ bool ShouldSniffMimeType(const GURL& url, const std::string& mime_type) {
     "application/vnd.ms-word.document.12",
     "application/vnd.msword",
   };
-  for (size_t i = 0; i < arraysize(kSniffableTypes); ++i) {
-    if (mime_type == kSniffableTypes[i])
+  for (const char* const sniffable_type : kSniffableTypes) {
+    if (mime_type == sniffable_type)
       return true;
   }
   if (IsUnknownMimeType(mime_type)) {
@@ -754,6 +748,7 @@ bool SniffMimeType(const char* content,
                    size_t content_size,
                    const GURL& url,
                    const std::string& type_hint,
+                   ForceSniffFileUrlsForHtml force_sniff_file_url_for_html,
                    std::string* result) {
   DCHECK_LT(content_size, 1000000U);  // sanity check
   DCHECK(content);
@@ -774,10 +769,13 @@ bool SniffMimeType(const char* content,
     return SniffForInvalidOfficeDocs(content, content_size, url, result);
 
   // Cache information about the type_hint
-  const bool hint_is_unknown_mime_type = IsUnknownMimeType(type_hint);
+  bool hint_is_unknown_mime_type = IsUnknownMimeType(type_hint);
 
-  // First check for HTML
-  if (hint_is_unknown_mime_type) {
+  // First check for HTML, unless it's a file URL and
+  // |allow_sniffing_files_urls_as_html| is false.
+  if (hint_is_unknown_mime_type &&
+      (!url.SchemeIsFile() ||
+       force_sniff_file_url_for_html == ForceSniffFileUrlsForHtml::kEnabled)) {
     // We're only willing to sniff HTML if the server has not supplied a mime
     // type, or if the type it did supply indicates that it doesn't know what
     // the type should be.
@@ -843,12 +841,10 @@ bool SniffMimeTypeFromLocalData(const char* content,
                                 size_t size,
                                 std::string* result) {
   // First check the extra table.
-  if (CheckForMagicNumbers(content, size, kExtraMagicNumbers,
-                           arraysize(kExtraMagicNumbers), result))
+  if (CheckForMagicNumbers(content, size, kExtraMagicNumbers, result))
     return true;
   // Finally check the original table.
-  return CheckForMagicNumbers(content, size, kMagicNumbers,
-                              arraysize(kMagicNumbers), result);
+  return CheckForMagicNumbers(content, size, kMagicNumbers, result);
 }
 
 bool LooksLikeBinary(const char* content, size_t size) {

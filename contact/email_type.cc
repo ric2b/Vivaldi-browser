@@ -23,8 +23,7 @@ void EmailAddressRow::Swap(EmailAddressRow* other) {
   std::swap(contact_id_, other->contact_id_);
   std::swap(email_address_, other->email_address_);
   std::swap(type_, other->type_);
-  std::swap(trusted_, other->trusted_);
-  std::swap(is_default_, other->is_default_);
+  std::swap(favorite_, other->favorite_);
   std::swap(obsolete_, other->obsolete_);
 }
 

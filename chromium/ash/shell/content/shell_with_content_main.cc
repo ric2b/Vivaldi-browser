@@ -14,14 +14,15 @@ int main(int argc, const char** argv) {
   base::AtExitManager exit_manager;
 
   base::FilePath log_filename;
-  PathService::Get(base::DIR_EXE, &log_filename);
+  base::PathService::Get(base::DIR_EXE, &log_filename);
   log_filename = log_filename.AppendASCII("ash_shell.log");
   logging::LoggingSettings settings;
   settings.logging_dest = logging::LOG_TO_ALL;
   settings.log_file = log_filename.value().c_str();
   settings.delete_old = logging::DELETE_OLD_LOG_FILE;
   logging::InitLogging(settings);
-
+  logging::SetLogItems(true /* process_id */, true /* thread_id */,
+                       true /* timestamp */, false /* tick_count */);
   ash::shell::ShellMainDelegate delegate;
   content::ContentMainParams params(&delegate);
   params.argc = argc;

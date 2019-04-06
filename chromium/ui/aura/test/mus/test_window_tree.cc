@@ -4,9 +4,10 @@
 
 #include "ui/aura/test/mus/test_window_tree.h"
 
+#include "base/bind.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/manager/display_manager.h"
 
 namespace aura {
 
@@ -34,25 +35,34 @@ base::Optional<std::vector<uint8_t>> TestWindowTree::GetLastPropertyValue() {
   return std::move(last_property_value_);
 }
 
-base::Optional<std::unordered_map<std::string, std::vector<uint8_t>>>
+base::Optional<base::flat_map<std::string, std::vector<uint8_t>>>
 TestWindowTree::GetLastNewWindowProperties() {
   return std::move(last_new_window_properties_);
 }
 
-void TestWindowTree::NotifyClientAboutAcceleratedWidgets(
-    display::DisplayManager* display_manager) {
-  int synth_accelerated_widget = 1;
-  for (const auto& display : display_manager->active_display_list()) {
-#if defined(OS_WIN)
-    gfx::AcceleratedWidget widget =
-        reinterpret_cast<gfx::AcceleratedWidget>(synth_accelerated_widget);
-#else
-    gfx::AcceleratedWidget widget =
-        static_cast<gfx::AcceleratedWidget>(synth_accelerated_widget);
-#endif
-    window_manager_->WmOnAcceleratedWidgetForDisplay(display.id(), widget);
-    ++synth_accelerated_widget;
-  }
+void TestWindowTree::AddScheduledEmbedToken(
+    const base::UnguessableToken& token) {
+  DCHECK_NE(token, scheduled_embed_);
+  scheduled_embed_ = token;
+}
+
+void TestWindowTree::AddEmbedRootForToken(const base::UnguessableToken& token) {
+  DCHECK_EQ(token, scheduled_embed_);
+  scheduled_embed_ = base::UnguessableToken();
+
+  ui::mojom::WindowDataPtr embedder_window_data = ui::mojom::WindowData::New();
+  const uint64_t kFakeEmbedderClientId = 1u;
+  const uint64_t kFakeEmbedderWindowId = 1u;
+  embedder_window_data->window_id =
+      (kFakeEmbedderClientId << 32) | kFakeEmbedderWindowId;
+  embedder_window_data->bounds = gfx::Rect(320, 240);
+
+  client_->OnEmbedFromToken(token, std::move(embedder_window_data), 0,
+                            base::nullopt);
+}
+
+void TestWindowTree::RemoveEmbedderWindow(ui::Id embedder_window_id) {
+  client_->OnUnembed(embedder_window_id);
 }
 
 void TestWindowTree::AckAllChanges() {
@@ -131,8 +141,8 @@ void TestWindowTree::OnChangeReceived(uint32_t change_id,
 
 void TestWindowTree::NewWindow(
     uint32_t change_id,
-    uint32_t window_id,
-    const base::Optional<std::unordered_map<std::string, std::vector<uint8_t>>>&
+    ui::Id window_id,
+    const base::Optional<base::flat_map<std::string, std::vector<uint8_t>>>&
         properties) {
   last_new_window_properties_ = properties;
   OnChangeReceived(change_id, WindowTreeChangeType::NEW_WINDOW);
@@ -140,20 +150,20 @@ void TestWindowTree::NewWindow(
 
 void TestWindowTree::NewTopLevelWindow(
     uint32_t change_id,
-    uint32_t window_id,
-    const std::unordered_map<std::string, std::vector<uint8_t>>& properties) {
+    ui::Id window_id,
+    const base::flat_map<std::string, std::vector<uint8_t>>& properties) {
   last_new_window_properties_.emplace(properties);
   window_id_ = window_id;
   OnChangeReceived(change_id, WindowTreeChangeType::NEW_TOP_LEVEL);
 }
 
-void TestWindowTree::DeleteWindow(uint32_t change_id, uint32_t window_id) {
+void TestWindowTree::DeleteWindow(uint32_t change_id, ui::Id window_id) {
   OnChangeReceived(change_id);
 }
 
 void TestWindowTree::SetWindowBounds(
     uint32_t change_id,
-    uint32_t window_id,
+    ui::Id window_id,
     const gfx::Rect& bounds,
     const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   window_id_ = window_id;
@@ -163,35 +173,34 @@ void TestWindowTree::SetWindowBounds(
 }
 
 void TestWindowTree::SetWindowTransform(uint32_t change_id,
-                                        uint32_t window_id,
+                                        ui::Id window_id,
                                         const gfx::Transform& transform) {
   OnChangeReceived(change_id, WindowTreeChangeType::TRANSFORM);
 }
 
 void TestWindowTree::SetClientArea(
-    uint32_t window_id,
+    ui::Id window_id,
     const gfx::Insets& insets,
     const base::Optional<std::vector<gfx::Rect>>& additional_client_areas) {
   last_client_area_ = insets;
 }
 
-void TestWindowTree::SetHitTestMask(uint32_t window_id,
+void TestWindowTree::SetHitTestMask(ui::Id window_id,
                                     const base::Optional<gfx::Rect>& mask) {
   last_hit_test_mask_ = mask;
 }
 
-void TestWindowTree::SetCanAcceptDrops(uint32_t window_id, bool accepts_drops) {
-}
+void TestWindowTree::SetCanAcceptDrops(ui::Id window_id, bool accepts_drops) {}
 
 void TestWindowTree::SetWindowVisibility(uint32_t change_id,
-                                         uint32_t window_id,
+                                         ui::Id window_id,
                                          bool visible) {
   OnChangeReceived(change_id, WindowTreeChangeType::VISIBLE);
 }
 
 void TestWindowTree::SetWindowProperty(
     uint32_t change_id,
-    uint32_t window_id,
+    ui::Id window_id,
     const std::string& name,
     const base::Optional<std::vector<uint8_t>>& value) {
   last_property_value_ = value;
@@ -199,30 +208,30 @@ void TestWindowTree::SetWindowProperty(
 }
 
 void TestWindowTree::SetWindowOpacity(uint32_t change_id,
-                                      uint32_t window_id,
+                                      ui::Id window_id,
                                       float opacity) {
   OnChangeReceived(change_id);
 }
 
 void TestWindowTree::AttachCompositorFrameSink(
-    uint32_t window_id,
+    ui::Id window_id,
     mojo::InterfaceRequest<viz::mojom::CompositorFrameSink> surface,
     viz::mojom::CompositorFrameSinkClientPtr client) {}
 
 void TestWindowTree::AddWindow(uint32_t change_id,
-                               uint32_t parent,
-                               uint32_t child) {
+                               ui::Id parent,
+                               ui::Id child) {
   OnChangeReceived(change_id);
 }
 
 void TestWindowTree::RemoveWindowFromParent(uint32_t change_id,
-                                            uint32_t window_id) {
+                                            ui::Id window_id) {
   OnChangeReceived(change_id);
 }
 
 void TestWindowTree::AddTransientWindow(uint32_t change_id,
-                                        uint32_t window_id,
-                                        uint32_t transient_window_id) {
+                                        ui::Id window_id,
+                                        ui::Id transient_window_id) {
   transient_data_.parent_id = window_id;
   transient_data_.child_id = transient_window_id;
   OnChangeReceived(change_id, WindowTreeChangeType::ADD_TRANSIENT);
@@ -230,37 +239,37 @@ void TestWindowTree::AddTransientWindow(uint32_t change_id,
 
 void TestWindowTree::RemoveTransientWindowFromParent(
     uint32_t change_id,
-    uint32_t transient_window_id) {
+    ui::Id transient_window_id) {
   transient_data_.parent_id = kInvalidServerId;
   transient_data_.child_id = transient_window_id;
   OnChangeReceived(change_id, WindowTreeChangeType::REMOVE_TRANSIENT);
 }
 
 void TestWindowTree::SetModalType(uint32_t change_id,
-                                  uint32_t window_id,
+                                  ui::Id window_id,
                                   ui::ModalType modal_type) {
   OnChangeReceived(change_id, WindowTreeChangeType::MODAL);
 }
 
 void TestWindowTree::SetChildModalParent(uint32_t change_id,
-                                         Id window_id,
-                                         Id parent_window_id) {}
+                                         ui::Id window_id,
+                                         ui::Id parent_window_id) {}
 
 void TestWindowTree::ReorderWindow(uint32_t change_id,
-                                   uint32_t window_id,
-                                   uint32_t relative_window_id,
+                                   ui::Id window_id,
+                                   ui::Id relative_window_id,
                                    ui::mojom::OrderDirection direction) {
   OnChangeReceived(change_id, WindowTreeChangeType::REORDER);
 }
 
-void TestWindowTree::GetWindowTree(uint32_t window_id,
-                                   const GetWindowTreeCallback& callback) {}
+void TestWindowTree::GetWindowTree(ui::Id window_id,
+                                   GetWindowTreeCallback callback) {}
 
-void TestWindowTree::SetCapture(uint32_t change_id, uint32_t window_id) {
+void TestWindowTree::SetCapture(uint32_t change_id, ui::Id window_id) {
   OnChangeReceived(change_id, WindowTreeChangeType::CAPTURE);
 }
 
-void TestWindowTree::ReleaseCapture(uint32_t change_id, uint32_t window_id) {
+void TestWindowTree::ReleaseCapture(uint32_t change_id, ui::Id window_id) {
   OnChangeReceived(change_id, WindowTreeChangeType::CAPTURE);
 }
 
@@ -268,40 +277,69 @@ void TestWindowTree::StartPointerWatcher(bool want_moves) {}
 
 void TestWindowTree::StopPointerWatcher() {}
 
-void TestWindowTree::Embed(uint32_t window_id,
+void TestWindowTree::Embed(ui::Id window_id,
                            ui::mojom::WindowTreeClientPtr client,
                            uint32_t flags,
-                           const EmbedCallback& callback) {}
+                           EmbedCallback callback) {}
 
 void TestWindowTree::ScheduleEmbed(ui::mojom::WindowTreeClientPtr client,
-                                   const ScheduleEmbedCallback& callback) {}
+                                   ScheduleEmbedCallback callback) {}
 
-void TestWindowTree::EmbedUsingToken(uint32_t window_id,
+void TestWindowTree::EmbedUsingToken(ui::Id window_id,
                                      const base::UnguessableToken& token,
                                      uint32_t embed_flags,
-                                     const EmbedUsingTokenCallback& callback) {}
+                                     EmbedUsingTokenCallback callback) {
+  if (token != scheduled_embed_) {
+    std::move(callback).Run(false);
+    return;
+  }
 
-void TestWindowTree::SetFocus(uint32_t change_id, uint32_t window_id) {
+  scheduled_embed_ = base::UnguessableToken();
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](EmbedUsingTokenCallback callback) {
+                       std::move(callback).Run(true);
+                     },
+                     std::move(callback)));
+}
+
+void TestWindowTree::ScheduleEmbedForExistingClient(
+    ui::ClientSpecificId window_id,
+    ScheduleEmbedForExistingClientCallback callback) {
+  base::UnguessableToken token = base::UnguessableToken::Create();
+  DCHECK_NE(token, scheduled_embed_);
+
+  scheduled_embed_ = token;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](ScheduleEmbedForExistingClientCallback callback,
+                        const base::UnguessableToken& token) {
+                       std::move(callback).Run(token);
+                     },
+                     std::move(callback), token));
+}
+
+void TestWindowTree::SetFocus(uint32_t change_id, ui::Id window_id) {
   OnChangeReceived(change_id, WindowTreeChangeType::FOCUS);
 }
 
-void TestWindowTree::SetCanFocus(uint32_t window_id, bool can_focus) {}
+void TestWindowTree::SetCanFocus(ui::Id window_id, bool can_focus) {}
 
 void TestWindowTree::SetEventTargetingPolicy(
-    uint32_t window_id,
+    ui::Id window_id,
     ui::mojom::EventTargetingPolicy policy) {}
 
 void TestWindowTree::SetCursor(uint32_t change_id,
-                               Id transport_window_id,
+                               ui::Id transport_window_id,
                                ui::CursorData cursor_data) {
   OnChangeReceived(change_id);
 }
 
 void TestWindowTree::SetWindowTextInputState(
-    uint32_t window_id,
+    ui::Id window_id,
     ui::mojom::TextInputStatePtr state) {}
 
-void TestWindowTree::SetImeVisibility(uint32_t window_id,
+void TestWindowTree::SetImeVisibility(ui::Id window_id,
                                       bool visible,
                                       ui::mojom::TextInputStatePtr state) {}
 
@@ -311,14 +349,15 @@ void TestWindowTree::OnWindowInputEventAck(uint32_t event_id,
   acked_events_.push_back({event_id, result});
 }
 
-void TestWindowTree::DeactivateWindow(uint32_t window_id) {}
+void TestWindowTree::DeactivateWindow(ui::Id window_id) {}
 
-void TestWindowTree::StackAbove(uint32_t change_id, uint32_t above_id,
-                                uint32_t below_id) {}
+void TestWindowTree::StackAbove(uint32_t change_id,
+                                ui::Id above_id,
+                                ui::Id below_id) {}
 
-void TestWindowTree::StackAtTop(uint32_t change_id, uint32_t window_id) {}
+void TestWindowTree::StackAtTop(uint32_t change_id, ui::Id window_id) {}
 
-void TestWindowTree::PerformWmAction(uint32_t window_id,
+void TestWindowTree::PerformWmAction(ui::Id window_id,
                                      const std::string& action) {
   last_wm_action_ = action;
 }
@@ -328,31 +367,31 @@ void TestWindowTree::GetWindowManagerClient(
 }
 
 void TestWindowTree::GetCursorLocationMemory(
-    const GetCursorLocationMemoryCallback& callback) {
-  callback.Run(mojo::ScopedSharedBufferHandle());
+    GetCursorLocationMemoryCallback callback) {
+  std::move(callback).Run(mojo::ScopedSharedBufferHandle());
 }
 
 void TestWindowTree::PerformDragDrop(
     uint32_t change_id,
-    uint32_t source_window_id,
+    ui::Id source_window_id,
     const gfx::Point& screen_location,
-    const std::unordered_map<std::string, std::vector<uint8_t>>& drag_data,
-    const SkBitmap& drag_image,
+    const base::flat_map<std::string, std::vector<uint8_t>>& drag_data,
+    const gfx::ImageSkia& drag_image,
     const gfx::Vector2d& drag_image_offset,
     uint32_t drag_operation,
     ui::mojom::PointerKind source) {
   OnChangeReceived(change_id);
 }
 
-void TestWindowTree::CancelDragDrop(uint32_t window_id) {}
+void TestWindowTree::CancelDragDrop(ui::Id window_id) {}
 
 void TestWindowTree::PerformWindowMove(uint32_t change_id,
-                                       uint32_t window_id,
+                                       ui::Id window_id,
                                        ui::mojom::MoveLoopSource source,
                                        const gfx::Point& cursor_location) {
   OnChangeReceived(change_id);
 }
 
-void TestWindowTree::CancelWindowMove(uint32_t window_id) {}
+void TestWindowTree::CancelWindowMove(ui::Id window_id) {}
 
 }  // namespace aura

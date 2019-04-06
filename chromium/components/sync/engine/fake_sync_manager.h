@@ -83,6 +83,7 @@ class FakeSyncManager : public SyncManager {
                           ModelTypeSet to_journal,
                           ModelTypeSet to_unapply) override;
   void UpdateCredentials(const SyncCredentials& credentials) override;
+  void InvalidateCredentials() override;
   void StartSyncingNormally(base::Time last_poll_time) override;
   void StartConfiguration() override;
   void ConfigureSyncer(ConfigureReason reason,
@@ -97,13 +98,13 @@ class FakeSyncManager : public SyncManager {
   void RemoveObserver(Observer* observer) override;
   SyncStatus GetDetailedStatus() const override;
   void SaveChanges() override;
-  void ShutdownOnSyncThread(ShutdownReason reason) override;
+  void ShutdownOnSyncThread() override;
   UserShare* GetUserShare() override;
   ModelTypeConnector* GetModelTypeConnector() override;
   std::unique_ptr<ModelTypeConnector> GetModelTypeConnectorProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
-  bool HasUnsyncedItems() override;
+  bool HasUnsyncedItemsForTest() override;
   SyncEncryptionHandler* GetEncryptionHandler() override;
   std::vector<std::unique_ptr<ProtocolEvent>> GetBufferedProtocolEvents()
       override;

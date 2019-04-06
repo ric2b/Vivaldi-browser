@@ -17,7 +17,6 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/posix/safe_strerror.h"
 #include "base/single_thread_task_runner.h"
@@ -272,11 +271,11 @@ void MidiManagerAlsa::StartInitialization() {
   // initialize these earlier, since they need to be destroyed by the
   // thread that calls Finalize(), not the destructor thread (and we
   // check this in the destructor).
-  in_client_.reset(in_client.release());
-  out_client_.reset(out_client.release());
-  decoder_.reset(decoder.release());
-  udev_.reset(udev.release());
-  udev_monitor_.reset(udev_monitor.release());
+  in_client_ = std::move(in_client);
+  out_client_ = std::move(out_client);
+  decoder_ = std::move(decoder);
+  udev_ = std::move(udev);
+  udev_monitor_ = std::move(udev_monitor);
 
   // Generate hotplug events for existing ports.
   // TODO(agoode): Check the return value for failure.
@@ -319,7 +318,7 @@ void MidiManagerAlsa::Finalize() {
 void MidiManagerAlsa::DispatchSendMidiData(MidiManagerClient* client,
                                            uint32_t port_index,
                                            const std::vector<uint8_t>& data,
-                                           double timestamp) {
+                                           base::TimeTicks timestamp) {
   service()->task_service()->PostBoundDelayedTask(
       kSendTaskRunner,
       base::BindOnce(&MidiManagerAlsa::SendMidiData, base::Unretained(this),
@@ -884,8 +883,7 @@ void MidiManagerAlsa::EventLoop() {
     if (pfd[0].revents & POLLIN) {
       // Read available incoming MIDI data.
       int remaining;
-      double timestamp =
-          (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
+      base::TimeTicks timestamp = base::TimeTicks::Now();
       do {
         snd_seq_event_t* event;
         err = snd_seq_event_input(in_client_.get(), &event);
@@ -952,7 +950,7 @@ void MidiManagerAlsa::EventLoop() {
 }
 
 void MidiManagerAlsa::ProcessSingleEvent(snd_seq_event_t* event,
-                                         double timestamp) {
+                                         base::TimeTicks timestamp) {
   auto source_it =
       source_map_.find(AddrToInt(event->source.client, event->source.port));
   if (source_it != source_map_.end()) {

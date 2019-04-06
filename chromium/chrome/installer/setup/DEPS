@@ -2,6 +2,7 @@ include_rules = [
   "+chrome_elf/chrome_elf_constants.h",
   "+chrome/install_static",
   "+components/base32",
+  "+components/zucchini",
   "+courgette",
 ]
 

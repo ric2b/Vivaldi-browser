@@ -381,6 +381,9 @@ TEST(URLCanonTest, Host) {
       // Maps uppercase letters to lower case letters. UTS 46 table 4 row (e)
     {"M\xc3\x9cNCHEN", L"M\xdcNCHEN", "xn--mnchen-3ya",
       Component(0, 14), CanonHostInfo::NEUTRAL, -1, ""},
+      // An already-IDNA host is not modified.
+    {"xn--mnchen-3ya", L"xn--mnchen-3ya", "xn--mnchen-3ya",
+      Component(0, 14), CanonHostInfo::NEUTRAL, -1, ""},
       // Symbol/punctuations are allowed in IDNA 2003/UTS46.
       // Not allowed in IDNA 2008. UTS 46 table 4 row (f).
     {"\xe2\x99\xa5ny.us", L"\x2665ny.us", "xn--ny-s0x.us",
@@ -503,6 +506,9 @@ TEST(URLCanonTest, Host) {
     {"12345678912345.12345678912345.de", L"12345678912345.12345678912345.de", "12345678912345.12345678912345.de", Component(0, 32), CanonHostInfo::NEUTRAL, -1, ""},
     {"1.2.0xB3A73CE5B59.de", L"1.2.0xB3A73CE5B59.de", "1.2.0xb3a73ce5b59.de", Component(0, 20), CanonHostInfo::NEUTRAL, -1, ""},
     {"12345678912345.0xde", L"12345678912345.0xde", "12345678912345.0xde", Component(0, 19), CanonHostInfo::BROKEN, -1, ""},
+    // A label that starts with "xn--" but contains non-ASCII characters should
+    // be an error. Escape the invalid characters.
+    {"xn--m\xc3\xbcnchen", L"xn--m\xfcnchen", "xn--m%C3%BCnchen", Component(0, 16), CanonHostInfo::BROKEN, -1, ""},
   };
 
   // CanonicalizeHost() non-verbose.
@@ -1427,7 +1433,8 @@ TEST(URLCanonTest, CanonicalizeStandardURL) {
     std::string out_str;
     StdStringCanonOutput output(&out_str);
     bool success = CanonicalizeStandardURL(
-        cases[i].input, url_len, parsed, NULL, &output, &out_parsed);
+        cases[i].input, url_len, parsed,
+        SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION, NULL, &output, &out_parsed);
     output.Complete();
 
     EXPECT_EQ(cases[i].expected_success, success);
@@ -1473,8 +1480,9 @@ TEST(URLCanonTest, ReplaceStandardURL) {
     std::string out_str;
     StdStringCanonOutput output(&out_str);
     Parsed out_parsed;
-    ReplaceStandardURL(replace_cases[i].base, parsed, r, NULL, &output,
-                       &out_parsed);
+    ReplaceStandardURL(replace_cases[i].base, parsed, r,
+                       SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION, NULL,
+                       &output, &out_parsed);
     output.Complete();
 
     EXPECT_EQ(replace_cases[i].expected, out_str);
@@ -1495,7 +1503,9 @@ TEST(URLCanonTest, ReplaceStandardURL) {
     std::string out_str1;
     StdStringCanonOutput output1(&out_str1);
     Parsed new_parsed;
-    ReplaceStandardURL(src, parsed, r, NULL, &output1, &new_parsed);
+    ReplaceStandardURL(src, parsed, r,
+                       SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION, NULL,
+                       &output1, &new_parsed);
     output1.Complete();
     EXPECT_STREQ("http://www.google.com/", out_str1.c_str());
 
@@ -1503,7 +1513,9 @@ TEST(URLCanonTest, ReplaceStandardURL) {
     r.SetPath(reinterpret_cast<char*>(0x00000001), Component());
     std::string out_str2;
     StdStringCanonOutput output2(&out_str2);
-    ReplaceStandardURL(src, parsed, r, NULL, &output2, &new_parsed);
+    ReplaceStandardURL(src, parsed, r,
+                       SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION, NULL,
+                       &output2, &new_parsed);
     output2.Complete();
     EXPECT_STREQ("http://www.google.com/", out_str2.c_str());
   }
@@ -1558,24 +1570,39 @@ TEST(URLCanonTest, ReplaceFileURL) {
 TEST(URLCanonTest, ReplaceFileSystemURL) {
   ReplaceCase replace_cases[] = {
       // Replace everything in the outer URL.
-    {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL, NULL, "/foo", "b", "c", "filesystem:file:///temporary/foo?b#c"},
+      {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL,
+       NULL, "/foo", "b", "c", "filesystem:file:///temporary/foo?b#c"},
       // Replace nothing
-    {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "filesystem:file:///temporary/gaba?query#ref"},
+      {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL,
+       NULL, NULL, NULL, NULL, "filesystem:file:///temporary/gaba?query#ref"},
       // Clear non-path components (common)
-    {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL, NULL, NULL, kDeleteComp, kDeleteComp, "filesystem:file:///temporary/gaba"},
+      {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL,
+       NULL, NULL, kDeleteComp, kDeleteComp,
+       "filesystem:file:///temporary/gaba"},
       // Replace path with something that doesn't begin with a slash and make
       // sure it gets added properly.
-    {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL, NULL, "interesting/", NULL, NULL, "filesystem:file:///temporary/interesting/?query#ref"},
-      // Replace scheme -- shouldn't do anything.
-    {"filesystem:http://u:p@bar.com/t/gaba?query#ref", "http", NULL, NULL, NULL, NULL, NULL, NULL, NULL, "filesystem:http://u:p@bar.com/t/gaba?query#ref"},
-      // Replace username -- shouldn't do anything.
-    {"filesystem:http://u:p@bar.com/t/gaba?query#ref", NULL, "u2", NULL, NULL, NULL, NULL, NULL, NULL, "filesystem:http://u:p@bar.com/t/gaba?query#ref"},
-      // Replace password -- shouldn't do anything.
-    {"filesystem:http://u:p@bar.com/t/gaba?query#ref", NULL, NULL, "pw2", NULL, NULL, NULL, NULL, NULL, "filesystem:http://u:p@bar.com/t/gaba?query#ref"},
-      // Replace host -- shouldn't do anything.
-    {"filesystem:http://u:p@bar.com/t/gaba?query#ref", NULL, NULL, NULL, "foo.com", NULL, NULL, NULL, NULL, "filesystem:http://u:p@bar.com/t/gaba?query#ref"},
-      // Replace port -- shouldn't do anything.
-    {"filesystem:http://u:p@bar.com:40/t/gaba?query#ref", NULL, NULL, NULL, NULL, "41", NULL, NULL, NULL, "filesystem:http://u:p@bar.com:40/t/gaba?query#ref"},
+      {"filesystem:file:///temporary/gaba?query#ref", NULL, NULL, NULL, NULL,
+       NULL, "interesting/", NULL, NULL,
+       "filesystem:file:///temporary/interesting/?query#ref"},
+      // Replace scheme -- shouldn't do anything except canonicalize.
+      {"filesystem:http://u:p@bar.com/t/gaba?query#ref", "http", NULL, NULL,
+       NULL, NULL, NULL, NULL, NULL,
+       "filesystem:http://bar.com/t/gaba?query#ref"},
+      // Replace username -- shouldn't do anything except canonicalize.
+      {"filesystem:http://u:p@bar.com/t/gaba?query#ref", NULL, "u2", NULL, NULL,
+       NULL, NULL, NULL, NULL, "filesystem:http://bar.com/t/gaba?query#ref"},
+      // Replace password -- shouldn't do anything except canonicalize.
+      {"filesystem:http://u:p@bar.com/t/gaba?query#ref", NULL, NULL, "pw2",
+       NULL, NULL, NULL, NULL, NULL,
+       "filesystem:http://bar.com/t/gaba?query#ref"},
+      // Replace host -- shouldn't do anything except canonicalize.
+      {"filesystem:http://u:p@bar.com:80/t/gaba?query#ref", NULL, NULL, NULL,
+       "foo.com", NULL, NULL, NULL, NULL,
+       "filesystem:http://bar.com/t/gaba?query#ref"},
+      // Replace port -- shouldn't do anything except canonicalize.
+      {"filesystem:http://u:p@bar.com:40/t/gaba?query#ref", NULL, NULL, NULL,
+       NULL, "41", NULL, NULL, NULL,
+       "filesystem:http://bar.com:40/t/gaba?query#ref"},
   };
 
   for (size_t i = 0; i < arraysize(replace_cases); i++) {
@@ -2305,8 +2332,6 @@ TEST(URLCanonTest, DefaultPortForScheme) {
       {"ws", 80},
       {"wss", 443},
       {"gopher", 70},
-      {"http-so", 80},
-      {"https-so", 443},
       {"fake-scheme", PORT_UNSPECIFIED},
       {"HTTP", PORT_UNSPECIFIED},
       {"HTTPS", PORT_UNSPECIFIED},
@@ -2314,8 +2339,6 @@ TEST(URLCanonTest, DefaultPortForScheme) {
       {"WS", PORT_UNSPECIFIED},
       {"WSS", PORT_UNSPECIFIED},
       {"GOPHER", PORT_UNSPECIFIED},
-      {"HTTP-SO", PORT_UNSPECIFIED},
-      {"HTTPS-SO", PORT_UNSPECIFIED},
   };
 
   for (auto& test_case : cases) {
@@ -2323,6 +2346,57 @@ TEST(URLCanonTest, DefaultPortForScheme) {
     EXPECT_EQ(test_case.expected_port,
               DefaultPortForScheme(test_case.scheme, strlen(test_case.scheme)));
   }
+}
+
+TEST(URLCanonTest, IDNToASCII) {
+  RawCanonOutputW<1024> output;
+
+  // Basic ASCII test.
+  base::string16 str = base::UTF8ToUTF16("hello");
+  EXPECT_TRUE(IDNToASCII(str.data(), str.length(), &output));
+  EXPECT_EQ(base::UTF8ToUTF16("hello"), base::string16(output.data()));
+  output.set_length(0);
+
+  // Mixed ASCII/non-ASCII.
+  str = base::UTF8ToUTF16("hellö");
+  EXPECT_TRUE(IDNToASCII(str.data(), str.length(), &output));
+  EXPECT_EQ(base::UTF8ToUTF16("xn--hell-8qa"), base::string16(output.data()));
+  output.set_length(0);
+
+  // All non-ASCII.
+  str = base::UTF8ToUTF16("你好");
+  EXPECT_TRUE(IDNToASCII(str.data(), str.length(), &output));
+  EXPECT_EQ(base::UTF8ToUTF16("xn--6qq79v"), base::string16(output.data()));
+  output.set_length(0);
+
+  // Characters that need mapping (the resulting Punycode is the encoding for
+  // "1⁄4").
+  str = base::UTF8ToUTF16("¼");
+  EXPECT_TRUE(IDNToASCII(str.data(), str.length(), &output));
+  EXPECT_EQ(base::UTF8ToUTF16("xn--14-c6t"), base::string16(output.data()));
+  output.set_length(0);
+
+  // String to encode already starts with "xn--", and all ASCII. Should not
+  // modify the string.
+  str = base::UTF8ToUTF16("xn--hell-8qa");
+  EXPECT_TRUE(IDNToASCII(str.data(), str.length(), &output));
+  EXPECT_EQ(base::UTF8ToUTF16("xn--hell-8qa"), base::string16(output.data()));
+  output.set_length(0);
+
+  // String to encode already starts with "xn--", and mixed ASCII/non-ASCII.
+  // Should fail, due to a special case: if the label starts with "xn--", it
+  // should be parsed as Punycode, which must be all ASCII.
+  str = base::UTF8ToUTF16("xn--hellö");
+  EXPECT_FALSE(IDNToASCII(str.data(), str.length(), &output));
+  output.set_length(0);
+
+  // String to encode already starts with "xn--", and mixed ASCII/non-ASCII.
+  // This tests that there is still an error for the character '⁄' (U+2044),
+  // which would be a valid ASCII character, U+0044, if the high byte were
+  // ignored.
+  str = base::UTF8ToUTF16("xn--1⁄4");
+  EXPECT_FALSE(IDNToASCII(str.data(), str.length(), &output));
+  output.set_length(0);
 }
 
 }  // namespace url

@@ -8,21 +8,22 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/optional.h"
-#include "mojo/public/cpp/base/mojo_base_export.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "mojo/public/cpp/system/buffer.h"
 
 namespace mojo_base {
 
 class BigBuffer;
+class BigBufferView;
 
 namespace internal {
 
 // Internal helper used by BigBuffer when backed by shared memory.
-class MOJO_BASE_EXPORT BigBufferSharedMemoryRegion {
+class COMPONENT_EXPORT(MOJO_BASE) BigBufferSharedMemoryRegion {
  public:
   BigBufferSharedMemoryRegion();
   BigBufferSharedMemoryRegion(mojo::ScopedSharedBufferHandle buffer_handle,
@@ -39,6 +40,7 @@ class MOJO_BASE_EXPORT BigBufferSharedMemoryRegion {
 
  private:
   friend class mojo_base::BigBuffer;
+  friend class mojo_base::BigBufferView;
 
   size_t size_;
   mojo::ScopedSharedBufferHandle buffer_handle_;
@@ -60,7 +62,7 @@ class MOJO_BASE_EXPORT BigBufferSharedMemoryRegion {
 // exposes simple |data()| and |size()| accessors akin to what common container
 // types provide. Users do not need to be concerned with the actual backing
 // storage used to implement this interface.
-class MOJO_BASE_EXPORT BigBuffer {
+class COMPONENT_EXPORT(MOJO_BASE) BigBuffer {
  public:
   static constexpr size_t kMaxInlineBytes = 64 * 1024;
 
@@ -111,11 +113,65 @@ class MOJO_BASE_EXPORT BigBuffer {
   }
 
  private:
+  friend class BigBufferView;
+
   StorageType storage_type_;
   std::vector<uint8_t> bytes_;
   base::Optional<internal::BigBufferSharedMemoryRegion> shared_memory_;
 
   DISALLOW_COPY_AND_ASSIGN(BigBuffer);
+};
+
+// Similar to BigBuffer, but doesn't *necessarily* own the buffer storage.
+// Namely, if constructed over a small enough span of memory, it will simply
+// retain a reference to that memory. This is generally only safe to use for
+// serialization and deserialization.
+class COMPONENT_EXPORT(MOJO_BASE) BigBufferView {
+ public:
+  BigBufferView();
+  BigBufferView(BigBufferView&& other);
+
+  // Constructs a BigBufferView over |bytes|. If |bytes| is large enough, this
+  // will allocate shared memory and copy the contents there. Otherwise this
+  // will retain an unsafe reference to |bytes| and must therefore not outlive
+  // |bytes|.
+  explicit BigBufferView(base::span<const uint8_t> bytes);
+  ~BigBufferView();
+
+  BigBufferView& operator=(BigBufferView&& other);
+
+  base::span<const uint8_t> data() const;
+
+  // Explicitly retains a reference to |bytes| as the backing storage for this
+  // view. Does not copy and therefore |bytes| must remain valid throughout the
+  // view's lifetime. Used for deserialization.
+  void SetBytes(base::span<const uint8_t> bytes);
+
+  // Explictly adopts |shared_memory| as the backing storage for this view. Used
+  // for deserialization.
+  void SetSharedMemory(internal::BigBufferSharedMemoryRegion shared_memory);
+
+  // Converts to a BigBuffer which owns the viewed data. May have to copy data.
+  static BigBuffer ToBigBuffer(BigBufferView view) WARN_UNUSED_RESULT;
+
+  BigBuffer::StorageType storage_type() const { return storage_type_; }
+
+  base::span<const uint8_t> bytes() const {
+    DCHECK_EQ(storage_type_, BigBuffer::StorageType::kBytes);
+    return bytes_;
+  }
+
+  internal::BigBufferSharedMemoryRegion& shared_memory() {
+    DCHECK_EQ(storage_type_, BigBuffer::StorageType::kSharedMemory);
+    return shared_memory_.value();
+  }
+
+ private:
+  BigBuffer::StorageType storage_type_;
+  base::span<const uint8_t> bytes_;
+  base::Optional<internal::BigBufferSharedMemoryRegion> shared_memory_;
+
+  DISALLOW_COPY_AND_ASSIGN(BigBufferView);
 };
 
 }  // namespace mojo_base

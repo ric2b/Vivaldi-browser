@@ -21,8 +21,8 @@ import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.test.ChromeActivityTestRule;
-import org.chromium.content.browser.test.util.ApplicationUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -210,9 +210,13 @@ public class DownloadTestRule extends ChromeActivityTestRule<ChromeActivity> {
     private void setUp() throws Exception {
         mActivityStart.customMainActivityStart();
 
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            PrefServiceBridge.getInstance().setPromptForDownloadAndroid(
+                    DownloadPromptStatus.DONT_SHOW);
+        });
+
         cleanUpAllDownloads();
 
-        ApplicationUtils.waitForLibraryDependencies(InstrumentationRegistry.getInstrumentation());
         final Context context = InstrumentationRegistry.getTargetContext().getApplicationContext();
 
         ThreadUtils.runOnUiThreadBlocking(() -> {

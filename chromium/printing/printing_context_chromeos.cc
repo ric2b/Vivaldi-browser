@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -134,11 +133,11 @@ void SetPrintableArea(PrintSettings* settings,
                       const PrintSettings::RequestedMedia& media,
                       bool flip) {
   if (!media.size_microns.IsEmpty()) {
-    float deviceMicronsPerDeviceUnit =
-        (kHundrethsMMPerInch * 10.0f) / settings->device_units_per_inch();
+    float device_microns_per_device_unit =
+        static_cast<float>(kMicronsPerInch) / settings->device_units_per_inch();
     gfx::Size paper_size =
-        gfx::Size(media.size_microns.width() / deviceMicronsPerDeviceUnit,
-                  media.size_microns.height() / deviceMicronsPerDeviceUnit);
+        gfx::Size(media.size_microns.width() / device_microns_per_device_unit,
+                  media.size_microns.height() / device_microns_per_device_unit);
 
     gfx::Rect paper_rect(0, 0, paper_size.width(), paper_size.height());
     settings->SetPrinterPrintableArea(paper_size, paper_rect, flip);
@@ -149,7 +148,7 @@ void SetPrintableArea(PrintSettings* settings,
 
 // static
 std::unique_ptr<PrintingContext> PrintingContext::Create(Delegate* delegate) {
-  return base::MakeUnique<PrintingContextChromeos>(delegate);
+  return std::make_unique<PrintingContextChromeos>(delegate);
 }
 
 PrintingContextChromeos::PrintingContextChromeos(Delegate* delegate)
@@ -164,7 +163,7 @@ void PrintingContextChromeos::AskUserForSettings(
     int max_pages,
     bool has_selection,
     bool is_scripted,
-    const PrintSettingsCallback& callback) {
+    PrintSettingsCallback callback) {
   // We don't want to bring up a dialog here.  Ever.  This should not be called.
   NOTREACHED();
 }
@@ -222,8 +221,7 @@ gfx::Size PrintingContextChromeos::GetPdfPaperSizeDeviceUnits() {
   } else {
     // ulocdata_getPaperSize returns the width and height in mm.
     // Convert this to pixels based on the dpi.
-    float multiplier = 100 * settings_.device_units_per_inch();
-    multiplier /= kHundrethsMMPerInch;
+    float multiplier = settings_.device_units_per_inch() / kMicronsPerMil;
     width *= multiplier;
     height *= multiplier;
   }

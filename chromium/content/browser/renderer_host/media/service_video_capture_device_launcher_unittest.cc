@@ -11,7 +11,7 @@
 #include "content/browser/renderer_host/media/service_launched_video_capture_device.h"
 #include "content/browser/renderer_host/media/video_capture_factory_delegate.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/video_capture/public/interfaces/device_factory.mojom.h"
+#include "services/video_capture/public/mojom/device_factory.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -37,11 +37,19 @@ class MockDeviceFactory : public video_capture::mojom::DeviceFactory {
     DoGetDeviceInfos(callback);
   }
 
-  void AddVirtualDevice(const media::VideoCaptureDeviceInfo& device_info,
-                        video_capture::mojom::ProducerPtr producer,
-                        video_capture::mojom::VirtualDeviceRequest
-                            virtual_device_request) override {
-    DoAddVirtualDevice(device_info, producer.get(), &virtual_device_request);
+  void AddSharedMemoryVirtualDevice(
+      const media::VideoCaptureDeviceInfo& device_info,
+      video_capture::mojom::ProducerPtr producer,
+      bool send_buffer_handles_to_producer_as_raw_file_descriptors,
+      video_capture::mojom::SharedMemoryVirtualDeviceRequest virtual_device)
+      override {
+    DoAddVirtualDevice(device_info, producer.get(), &virtual_device);
+  }
+
+  void AddTextureVirtualDevice(const media::VideoCaptureDeviceInfo& device_info,
+                               video_capture::mojom::TextureVirtualDeviceRequest
+                                   virtual_device) override {
+    NOTIMPLEMENTED();
   }
 
   MOCK_METHOD1(DoGetDeviceInfos, void(GetDeviceInfosCallback& callback));
@@ -49,11 +57,11 @@ class MockDeviceFactory : public video_capture::mojom::DeviceFactory {
                void(const std::string& device_id,
                     video_capture::mojom::DeviceRequest* device_request,
                     CreateDeviceCallback& callback));
-  MOCK_METHOD3(
-      DoAddVirtualDevice,
-      void(const media::VideoCaptureDeviceInfo& device_info,
-           video_capture::mojom::ProducerProxy* producer,
-           video_capture::mojom::VirtualDeviceRequest* virtual_device_request));
+  MOCK_METHOD3(DoAddVirtualDevice,
+               void(const media::VideoCaptureDeviceInfo& device_info,
+                    video_capture::mojom::ProducerProxy* producer,
+                    video_capture::mojom::SharedMemoryVirtualDeviceRequest*
+                        virtual_device_request));
 };
 
 class MockVideoCaptureDeviceLauncherCallbacks

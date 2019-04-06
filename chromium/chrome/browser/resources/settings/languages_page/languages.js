@@ -35,6 +35,10 @@ const kTranslateLanguageSynonyms = {
   'jv': 'jw',
 };
 
+// The fake language name used for ARC IMEs. The value must be in sync with the
+// one in ui/base/ime/chromeos/extension_ime_util.h.
+const kArcImeLanguage = '_arc_ime_language_';
+
 const preferredLanguagesPrefName = cr.isChromeOS ?
     'settings.language.preferred_languages' :
     'intl.accept_languages';
@@ -156,6 +160,11 @@ Polymer({
   /** @private {?Function} */
   boundOnInputMethodChanged_: null,
 
+  // <if expr="not is_macosx">
+  /** @private {?Function} */
+  boundOnSpellcheckDictionariesChanged_: null,
+  // </if>
+
   /** @private {?settings.LanguagesBrowserProxy} */
   browserProxy_: null,
 
@@ -217,14 +226,24 @@ Polymer({
 
     Promise.all(promises).then(results => {
       if (!this.isConnected) {
-        // Return early if this element was detached from the DOM before this
-        // async callback executes (can happen during testing).
+        // Return early if this element was detached from the DOM before
+        // this async callback executes (can happen during testing).
         return;
       }
 
       // TODO(dpapad): Cleanup this code. It uses results[3] and results[4]
       // which only exist for ChromeOS.
       this.createModel_(results[1], results[2], results[3], results[4]);
+
+      // <if expr="not is_macosx">
+      this.boundOnSpellcheckDictionariesChanged_ =
+          this.onSpellcheckDictionariesChanged_.bind(this);
+      this.languageSettingsPrivate_.onSpellcheckDictionariesChanged.addListener(
+          this.boundOnSpellcheckDictionariesChanged_);
+      this.languageSettingsPrivate_.getSpellcheckDictionaryStatuses(
+          this.boundOnSpellcheckDictionariesChanged_);
+      // </if>
+
       this.resolver_.resolve();
     });
 
@@ -242,6 +261,14 @@ Polymer({
           assert(this.boundOnInputMethodChanged_));
       this.boundOnInputMethodChanged_ = null;
     }
+
+    // <if expr="not is_macosx">
+    if (this.boundOnSpellcheckDictionariesChanged_) {
+      this.languageSettingsPrivate_.onSpellcheckDictionariesChanged
+          .removeListener(this.boundOnSpellcheckDictionariesChanged_);
+      this.boundOnSpellcheckDictionariesChanged_ = null;
+    }
+    // </if>
   },
 
   /**
@@ -260,6 +287,9 @@ Polymer({
    * @private
    */
   preferredLanguagesPrefChanged_: function() {
+    if (this.prefs == undefined || this.languages == undefined)
+      return;
+
     const enabledLanguageStates = this.getEnabledLanguageStates_(
         this.languages.translateTarget, this.languages.prospectiveUILanguage);
 
@@ -269,6 +299,13 @@ Polymer({
       this.enabledLanguageSet_.add(enabledLanguageStates[i].language.code);
 
     this.set('languages.enabled', enabledLanguageStates);
+
+    // <if expr="not is_macosx">
+    if (this.boundOnSpellcheckDictionariesChanged_) {
+      this.languageSettingsPrivate_.getSpellcheckDictionaryStatuses(
+          this.boundOnSpellcheckDictionariesChanged_);
+    }
+    // </if>
   },
 
   /**
@@ -276,6 +313,9 @@ Polymer({
    * @private
    */
   spellCheckDictionariesPrefChanged_: function() {
+    if (this.prefs == undefined || this.languages == undefined)
+      return;
+
     const spellCheckSet = this.makeSetFromArray_(/** @type {!Array<string>} */ (
         this.getPref('spellcheck.dictionaries').value));
     const spellCheckForcedSet =
@@ -314,7 +354,11 @@ Polymer({
     for (let i = 0; i < spellCheckForcedDictionaries.length; i++) {
       const code = spellCheckForcedDictionaries[i];
       if (!enabledSet.has(code) && this.supportedLanguageMap_.has(code)) {
-        forcedLanguages.push(this.supportedLanguageMap_.get(code));
+        forcedLanguages.push({
+          language: this.supportedLanguageMap_.get(code),
+          isManaged: true,
+          downloadDictionaryFailureCount: 0,
+        });
       }
     }
     return forcedLanguages;
@@ -322,6 +366,9 @@ Polymer({
 
   /** @private */
   translateLanguagesPrefChanged_: function() {
+    if (this.prefs == undefined || this.languages == undefined)
+      return;
+
     const translateBlockedPref = this.getPref('translate_blocked_languages');
     const translateBlockedSet = this.makeSetFromArray_(
         /** @type {!Array<string>} */ (translateBlockedPref.value));
@@ -362,6 +409,7 @@ Polymer({
       language.supportsUI = !!language.supportsUI;
       language.supportsTranslate = !!language.supportsTranslate;
       language.supportsSpellcheck = !!language.supportsSpellcheck;
+      language.isProhibitedUILocale = !!language.isProhibitedUILocale;
       this.supportedLanguageMap_.set(language.code, language);
     }
 
@@ -370,6 +418,7 @@ Polymer({
       for (let j = 0; j < supportedInputMethods.length; j++) {
         const inputMethod = supportedInputMethods[j];
         inputMethod.enabled = !!inputMethod.enabled;
+        inputMethod.isProhibitedByPolicy = !!inputMethod.isProhibitedByPolicy;
         // Add the input method to the map of IDs.
         this.supportedInputMethodMap_.set(inputMethod.id, inputMethod);
         // Add the input method to the list of input methods for each language
@@ -470,10 +519,51 @@ Polymer({
           translateCode != translateTarget &&
           (!prospectiveUILanguage || code != prospectiveUILanguage);
       languageState.isManaged = !!spellCheckForcedSet.has(code);
+      languageState.downloadDictionaryFailureCount = 0;
       enabledLanguageStates.push(languageState);
     }
     return enabledLanguageStates;
   },
+
+  // <if expr="not is_macosx">
+  /**
+   * Updates the dictionary download status for languages in
+   * |this.languages.enabled| and |this.languages.forcedSpellCheckLanguages| in
+   * order to track the number of times a spell check dictionary download has
+   * failed.
+   * @param {!Array<!chrome.languageSettingsPrivate.SpellcheckDictionaryStatus>}
+   *     statuses
+   * @private
+   */
+  onSpellcheckDictionariesChanged_: function(statuses) {
+    const statusMap = new Map();
+    statuses.forEach(status => {
+      statusMap.set(status.languageCode, status);
+    });
+
+    ['enabled', 'forcedSpellCheckLanguages'].forEach(collectionName => {
+      this.languages[collectionName].forEach((languageState, index) => {
+        const status = statusMap.get(languageState.language.code);
+        if (!status)
+          return;
+
+        const previousStatus = languageState.downloadDictionaryStatus;
+        const keyPrefix = `languages.${collectionName}.${index}`;
+        this.set(`${keyPrefix}.downloadDictionaryStatus`, status);
+
+        const failureCountKey = `${keyPrefix}.downloadDictionaryFailureCount`;
+        if (status.downloadFailed &&
+            !(previousStatus && previousStatus.downloadFailed)) {
+          const failureCount = languageState.downloadDictionaryFailureCount + 1;
+          this.set(failureCountKey, failureCount);
+        } else if (
+            status.isReady && !(previousStatus && previousStatus.isReady)) {
+          this.set(failureCountKey, 0);
+        }
+      });
+    });
+  },
+  // </if>
 
   /**
    * Returns a list of enabled input methods.
@@ -518,7 +608,9 @@ Polymer({
    * @private
    */
   updateRemovableLanguages_: function() {
-    assert(this.languages);
+    if (this.prefs == undefined || this.languages == undefined)
+      return;
+
     // TODO(michaelpg): Enabled input methods can affect which languages are
     // removable, so run updateEnabledInputMethods_ first (if it has been
     // scheduled).
@@ -572,6 +664,21 @@ Polymer({
         this.languages.prospectiveUILanguage;
   },
   // </if>
+
+  /**
+   * @return {string} The language code for ARC IMEs.
+   */
+  getArcImeLanguageCode: function() {
+    return kArcImeLanguage;
+  },
+
+  /**
+   * @param {string} languageCode
+   * @return {boolean} True if the language is for ARC IMEs.
+   */
+  isLanguageCodeForArcIme: function(languageCode) {
+    return languageCode == kArcImeLanguage;
+  },
 
   /**
    * @param {string} languageCode
@@ -671,7 +778,6 @@ Polymer({
     } else {
       this.languageSettingsPrivate_.moveLanguage(languageCode, MoveType.DOWN);
     }
-
   },
 
   /**
@@ -768,6 +874,14 @@ Polymer({
    */
   getLanguage: function(languageCode) {
     return this.supportedLanguageMap_.get(languageCode);
+  },
+
+  /**
+   * Retries downloading the dictionary for |languageCode|.
+   * @param {string} languageCode
+   */
+  retryDownloadDictionary: function(languageCode) {
+    this.languageSettingsPrivate_.retryDownloadDictionary(languageCode);
   },
 
   // <if expr="chromeos">

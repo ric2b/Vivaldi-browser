@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -144,8 +145,8 @@ class NetworkCertMigrator::MigrationTask
   void SendPropertiesToShill(const std::string& service_path,
                              const base::DictionaryValue& properties) {
     DBusThreadManager::Get()->GetShillServiceClient()->SetProperties(
-        dbus::ObjectPath(service_path), properties,
-        base::Bind(&base::DoNothing), base::Bind(&LogError, service_path));
+        dbus::ObjectPath(service_path), properties, base::DoNothing(),
+        base::Bind(&LogError, service_path));
   }
 
   static void LogError(const std::string& service_path,

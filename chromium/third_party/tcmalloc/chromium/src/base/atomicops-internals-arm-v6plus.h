@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2011, Google Inc.
 // All rights reserved.
 //
@@ -40,7 +41,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "base/abort.h"
 #include "base/basictypes.h"  // For COMPILE_ASSERT
 
 // The LDREXD and STREXD instructions in ARM all v7 variants or above.  In v6,
@@ -95,41 +95,26 @@ inline Atomic32 NoBarrier_AtomicExchange(volatile Atomic32* ptr,
   return old;
 }
 
-inline Atomic32 NoBarrier_AtomicIncrement(volatile Atomic32* ptr,
-                                          Atomic32 increment) {
-  Atomic32 tmp, res;
-  __asm__ __volatile__(
-      "1:\n"
-      "ldrex  %1, [%2]\n"
-      "add    %1, %1, %3\n"
-      "strex  %0, %1, [%2]\n"
-      "teq    %0, #0\n"
-      "bne    1b"
-      : "=&r" (tmp), "=&r"(res)
-      : "r" (ptr), "r"(increment)
-      : "cc", "memory");
-  return res;
-}
-
 inline void MemoryBarrier() {
+#if !defined(ARMV7)
+  uint32_t dest = 0;
+  __asm__ __volatile__("mcr p15,0,%0,c7,c10,5" :"=&r"(dest) : : "memory");
+#else
   __asm__ __volatile__("dmb" : : : "memory");
+#endif
 }
 
-inline Atomic32 Barrier_AtomicIncrement(volatile Atomic32* ptr,
-                                        Atomic32 increment) {
-  Atomic32 tmp, res;
-  __asm__ __volatile__(
-      "1:\n"
-      "ldrex  %1, [%2]\n"
-      "add    %1, %1, %3\n"
-      "dmb\n"
-      "strex  %0, %1, [%2]\n"
-      "teq    %0, #0\n"
-      "bne    1b"
-      : "=&r" (tmp), "=&r"(res)
-      : "r" (ptr), "r"(increment)
-      : "cc", "memory");
-  return res;
+inline Atomic32 Acquire_AtomicExchange(volatile Atomic32* ptr,
+                                       Atomic32 new_value) {
+  Atomic32 old_value = NoBarrier_AtomicExchange(ptr, new_value);
+  MemoryBarrier();
+  return old_value;
+}
+
+inline Atomic32 Release_AtomicExchange(volatile Atomic32* ptr,
+                                       Atomic32 new_value) {
+  MemoryBarrier();
+  return NoBarrier_AtomicExchange(ptr, new_value);
 }
 
 inline Atomic32 Acquire_CompareAndSwap(volatile Atomic32* ptr,
@@ -221,41 +206,17 @@ inline Atomic64 NoBarrier_AtomicExchange(volatile Atomic64* ptr,
   return old;
 }
 
-inline Atomic64 NoBarrier_AtomicIncrement(volatile Atomic64* ptr,
-                                          Atomic64 increment) {
-  int store_failed;
-  Atomic64 res;
-  __asm__ __volatile__(
-      "1:\n"
-      "ldrexd  %1, [%2]\n"
-      "adds    %Q1, %Q1, %Q3\n"
-      "adc     %R1, %R1, %R3\n"
-      "strexd  %0, %1, [%2]\n"
-      "teq     %0, #0\n"
-      "bne     1b"
-      : "=&r" (store_failed), "=&r"(res)
-      : "r" (ptr), "r"(increment)
-      : "cc", "memory");
-  return res;
+inline Atomic64 Acquire_AtomicExchange(volatile Atomic64* ptr,
+                                       Atomic64 new_value) {
+  Atomic64 old_value = NoBarrier_AtomicExchange(ptr, new_value);
+  MemoryBarrier();
+  return old_value;
 }
 
-inline Atomic64 Barrier_AtomicIncrement(volatile Atomic64* ptr,
-                                        Atomic64 increment) {
-  int store_failed;
-  Atomic64 res;
-  __asm__ __volatile__(
-      "1:\n"
-      "ldrexd  %1, [%2]\n"
-      "adds    %Q1, %Q1, %Q3\n"
-      "adc     %R1, %R1, %R3\n"
-      "dmb\n"
-      "strexd  %0, %1, [%2]\n"
-      "teq     %0, #0\n"
-      "bne     1b"
-      : "=&r" (store_failed), "=&r"(res)
-      : "r" (ptr), "r"(increment)
-      : "cc", "memory");
-  return res;
+inline Atomic64 Release_AtomicExchange(volatile Atomic64* ptr,
+                                       Atomic64 new_value) {
+  MemoryBarrier();
+  return NoBarrier_AtomicExchange(ptr, new_value);
 }
 
 inline void NoBarrier_Store(volatile Atomic64* ptr, Atomic64 value) {
@@ -288,7 +249,7 @@ inline Atomic64 NoBarrier_Load(volatile const Atomic64* ptr) {
 inline void NotImplementedFatalError(const char *function_name) {
   fprintf(stderr, "64-bit %s() not implemented on this platform\n",
           function_name);
-  tcmalloc::Abort();
+  abort();
 }
 
 inline Atomic64 NoBarrier_CompareAndSwap(volatile Atomic64* ptr,
@@ -304,15 +265,15 @@ inline Atomic64 NoBarrier_AtomicExchange(volatile Atomic64* ptr,
   return 0;
 }
 
-inline Atomic64 NoBarrier_AtomicIncrement(volatile Atomic64* ptr,
-                                          Atomic64 increment) {
-  NotImplementedFatalError("NoBarrier_AtomicIncrement");
+inline Atomic64 Acquire_AtomicExchange(volatile Atomic64* ptr,
+                                       Atomic64 new_value) {
+  NotImplementedFatalError("Acquire_AtomicExchange");
   return 0;
 }
 
-inline Atomic64 Barrier_AtomicIncrement(volatile Atomic64* ptr,
-                                        Atomic64 increment) {
-  NotImplementedFatalError("Barrier_AtomicIncrement");
+inline Atomic64 Release_AtomicExchange(volatile Atomic64* ptr,
+                                       Atomic64 new_value) {
+  NotImplementedFatalError("Release_AtomicExchange");
   return 0;
 }
 

@@ -9,7 +9,6 @@
 
 #include "chrome/common/media_router/media_status.h"
 #include "chrome/common/media_router/mojo/media_status.mojom.h"
-#include "mojo/common/common_custom_types_struct_traits.h"
 
 namespace mojo {
 
@@ -56,11 +55,6 @@ struct StructTraits<media_router::mojom::MediaStatusDataView,
 
   static const std::string& title(const media_router::MediaStatus& status) {
     return status.title;
-  }
-
-  static const std::string& description(
-      const media_router::MediaStatus& status) {
-    return status.description;
   }
 
   static bool can_play_pause(const media_router::MediaStatus& status) {

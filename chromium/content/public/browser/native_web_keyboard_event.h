@@ -10,7 +10,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
+#include "third_party/blink/public/platform/web_keyboard_event.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
@@ -29,9 +29,6 @@ struct CONTENT_EXPORT NativeWebKeyboardEvent : public blink::WebKeyboardEvent {
   NativeWebKeyboardEvent(blink::WebInputEvent::Type type,
                          int modifiers,
                          base::TimeTicks timestamp);
-  NativeWebKeyboardEvent(blink::WebInputEvent::Type type,
-                         int modifiers,
-                         double timestampSeconds);
 
   // Creates a native web keyboard event from a WebKeyboardEvent. The |os_event|
   // member may be a synthetic event, and possibly incomplete.
@@ -46,7 +43,7 @@ struct CONTENT_EXPORT NativeWebKeyboardEvent : public blink::WebKeyboardEvent {
       const base::android::JavaRef<jobject>& android_key_event,
       blink::WebInputEvent::Type type,
       int modifiers,
-      double time_secs,
+      base::TimeTicks timestamp,
       int keycode,
       int scancode,
       int unicode_character,

@@ -26,16 +26,9 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_switches.h"
 #include "media/filters/frame_buffer_pool.h"
-
-// Include libvpx header files.
-// VPX_CODEC_DISABLE_COMPAT excludes parts of the libvpx API that provide
-// backwards compatibility for legacy applications using the library.
-#define VPX_CODEC_DISABLE_COMPAT 1
-extern "C" {
 #include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"
 #include "third_party/libvpx/source/libvpx/vpx/vpx_decoder.h"
 #include "third_party/libvpx/source/libvpx/vpx/vpx_frame_buffer.h"
-}
 
 #include "third_party/libyuv/include/libyuv/convert.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
@@ -138,11 +131,13 @@ std::string VpxVideoDecoder::GetDisplayName() const {
   return "VpxVideoDecoder";
 }
 
-void VpxVideoDecoder::Initialize(const VideoDecoderConfig& config,
-                                 bool /* low_delay */,
-                                 CdmContext* /* cdm_context */,
-                                 const InitCB& init_cb,
-                                 const OutputCB& output_cb) {
+void VpxVideoDecoder::Initialize(
+    const VideoDecoderConfig& config,
+    bool /* low_delay */,
+    CdmContext* /* cdm_context */,
+    const InitCB& init_cb,
+    const OutputCB& output_cb,
+    const WaitingForDecryptionKeyCB& /* waiting_for_decryption_key_cb */) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(config.IsValidConfig());
 
@@ -161,8 +156,9 @@ void VpxVideoDecoder::Initialize(const VideoDecoderConfig& config,
   bound_init_cb.Run(true);
 }
 
-void VpxVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void VpxVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                              const DecodeCB& decode_cb) {
+  DVLOG(3) << __func__ << ": " << buffer->AsHumanReadableString();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(buffer);
   DCHECK(!decode_cb.is_null());
@@ -379,7 +375,7 @@ bool VpxVideoDecoder::VpxDecode(const DecoderBuffer* buffer,
       ->metadata()
       ->SetInteger(VideoFrameMetadata::COLOR_SPACE, color_space);
 
-  if (config_.color_space_info() != VideoColorSpace()) {
+  if (config_.color_space_info().IsSpecified()) {
     // config_.color_space_info() comes from the color tag which is
     // more expressive than the bitstream, so prefer it over the
     // bitstream data below.

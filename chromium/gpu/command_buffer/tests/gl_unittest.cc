@@ -103,7 +103,7 @@ TEST_F(GLTest, SimpleShader) {
 
 TEST_F(GLTest, FeatureFlagsMatchCapabilities) {
   scoped_refptr<gles2::FeatureInfo> features =
-      new gles2::FeatureInfo(gl_.workarounds());
+      new gles2::FeatureInfo(gl_.workarounds(), GpuFeatureInfo());
   features->InitializeForTesting();
   const auto& caps = gl_.GetCapabilities();
   const auto& flags = features->feature_flags();
@@ -121,6 +121,8 @@ TEST_F(GLTest, FeatureFlagsMatchCapabilities) {
   EXPECT_EQ(caps.texture_rg, flags.ext_texture_rg);
   EXPECT_EQ(caps.image_ycbcr_422, flags.chromium_image_ycbcr_422);
   EXPECT_EQ(caps.image_ycbcr_420v, flags.chromium_image_ycbcr_420v);
+  EXPECT_EQ(caps.image_xr30, flags.chromium_image_xr30);
+  EXPECT_EQ(caps.image_xb30, flags.chromium_image_xb30);
   EXPECT_EQ(caps.render_buffer_format_bgra8888,
             flags.ext_render_buffer_format_bgra8888);
   EXPECT_EQ(caps.occlusion_query_boolean, flags.occlusion_query_boolean);

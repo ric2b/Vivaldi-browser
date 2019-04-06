@@ -30,4 +30,9 @@ void UtilitiesGetUniqueUserIdFunction::WriteUserIdToOSProfile(
   [userDefaults setObject:value forKey:vivaldi_uuid_key];
   [userDefaults synchronize];
 }
+
+bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
+    vivaldi::utilities::DateFormats* date_formats) {
+  return false;
+}
 }  // namespace extensions

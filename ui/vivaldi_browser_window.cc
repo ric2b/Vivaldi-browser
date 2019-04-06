@@ -21,6 +21,9 @@
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/window_controller.h"
+#include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/browser.h"
@@ -36,8 +39,10 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
+#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/site_instance.h"
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -51,6 +56,7 @@
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "extensions/schema/devtools_private.h"
 #include "extensions/schema/window_private.h"
+#include "renderer/vivaldi_render_messages.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/vivaldi_app_window_client.h"
@@ -72,10 +78,8 @@ VivaldiAppWindowContentsImpl::VivaldiAppWindowContentsImpl(
     VivaldiWindowEventDelegate* delegate,
     AppDelegate* app_delegate)
     : host_(host),
-      is_blocking_requests_(false),
-      is_window_ready_(false),
       delegate_(delegate),
-      load_timeout_(true, false),
+      load_timeout_(),
       app_delegate_(app_delegate) {}
 
 VivaldiAppWindowContentsImpl::~VivaldiAppWindowContentsImpl() {}
@@ -96,7 +100,17 @@ void VivaldiAppWindowContentsImpl::Initialize(
   create_params.opener_render_frame_id =
       creator_frame ? creator_frame->GetRoutingID() : 0;
 
-  web_contents_.reset(content::WebContents::Create(create_params));
+  web_contents_ = content::WebContents::Create(create_params);
+
+  content::RendererPreferences* render_prefs =
+      web_contents_->GetMutableRendererPrefs();
+  DCHECK(render_prefs);
+
+  // We must update from system settings otherwise many settings would fallback
+  // to default values when syncing below.  Guest views use these values from
+  // the owner as default values in BrowserPluginGuest::InitInternal().
+  Profile* profile = Profile::FromBrowserContext(context);
+  renderer_preferences_util::UpdateFromSystemSettings(render_prefs, profile);
 
   WebContentsObserver::Observe(web_contents_.get());
   web_contents_->GetMutableRendererPrefs()
@@ -109,23 +123,16 @@ void VivaldiAppWindowContentsImpl::Initialize(
 }
 
 void VivaldiAppWindowContentsImpl::LoadContents(int32_t creator_process_id) {
-  // If the new view is in the same process as the creator, block the created
-  // RVH from loading anything until the background page has had a chance to
-  // do any initialization it wants. If it's a different process, the new RVH
-  // shouldn't communicate with the background page anyway (e.g. sandboxed).
-  if (web_contents_->GetMainFrame()->GetProcess()->GetID() ==
+  // Sandboxed page that are not in the Chrome App package are loaded in a
+  // different process.
+  if (web_contents_->GetMainFrame()->GetProcess()->GetID() !=
       creator_process_id) {
-  } else {
     VLOG(1) << "AppWindow created in new process ("
             << web_contents_->GetMainFrame()->GetProcess()->GetID()
             << ") != creator (" << creator_process_id << "). Routing disabled.";
   }
-
   web_contents_->GetController().LoadURL(
       url_, content::Referrer(), ui::PAGE_TRANSITION_LINK, std::string());
-
-  // TODO(pettern): Fix background.
-  //  OnWindowReady();
 
   // Ensure we force show the window after some time no matter what.
   load_timeout_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(5000),
@@ -160,14 +167,6 @@ void VivaldiAppWindowContentsImpl::NativeWindowClosed(bool send_onclosed) {
   web_contents_.reset(nullptr);
 }
 
-void VivaldiAppWindowContentsImpl::OnWindowReady() {
-  is_window_ready_ = true;
-  if (is_blocking_requests_) {
-    is_blocking_requests_ = false;
-    web_contents_->GetMainFrame()->ResumeBlockedRequestsForFrame();
-  }
-}
-
 content::WebContents* VivaldiAppWindowContentsImpl::GetWebContents() const {
   return web_contents_.get();
 }
@@ -185,12 +184,13 @@ void VivaldiAppWindowContentsImpl::HandleKeyboardEvent(
 bool VivaldiAppWindowContentsImpl::PreHandleGestureEvent(
     content::WebContents* source,
     const blink::WebGestureEvent& event) {
-  // NOTE(arnar@vivaldi.com): Disable pinch touchscreen zoom for windows/linux
-#if defined(OS_WIN) || OS_LINUX
-  return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
-#else
-  return false;
+  // When called this means the user has attempted a gesture on the UI. We do
+  // not allow that.
+#ifdef OS_MACOSX
+  if (event.GetType() == blink::WebInputEvent::kGestureDoubleTap)
+    return true;
 #endif
+  return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
 }
 
 content::ColorChooser* VivaldiAppWindowContentsImpl::OpenColorChooser(
@@ -218,17 +218,16 @@ void VivaldiAppWindowContentsImpl::NavigationStateChanged(
 void VivaldiAppWindowContentsImpl::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback) {
+    content::MediaResponseCallback callback) {
   DCHECK_EQ(web_contents_.get(), web_contents);
-  helper_->RequestMediaAccessPermission(request, callback);
+  helper_->RequestMediaAccessPermission(request, std::move(callback));
 }
 
 bool VivaldiAppWindowContentsImpl::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type) {
-  DCHECK_EQ(web_contents_.get(), web_contents);
-  return helper_->CheckMediaAccessPermission(security_origin, type);
+  return helper_->CheckMediaAccessPermission(render_frame_host, security_origin, type);
 }
 
 void VivaldiAppWindowContentsImpl::RenderViewCreated(
@@ -279,6 +278,13 @@ void VivaldiAppWindowContentsImpl::RenderViewCreated(
   }
 }
 
+void VivaldiAppWindowContentsImpl::RenderProcessGone(
+    base::TerminationStatus status) {
+  if (status == base::TerminationStatus::TERMINATION_STATUS_PROCESS_CRASHED) {
+    chrome::AttemptRestart();
+  }
+}
+
 bool VivaldiAppWindowContentsImpl::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* sender) {
@@ -292,10 +298,19 @@ bool VivaldiAppWindowContentsImpl::OnMessageReceived(
   return handled;
 }
 
-void VivaldiAppWindowContentsImpl::ReadyToCommitNavigation(
-    content::NavigationHandle* handle) {
-  if (!is_window_ready_)
-    host_->OnReadyToCommitFirstNavigation();
+void VivaldiAppWindowContentsImpl::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  // ExtensionFrameHelper::DidStartProvisionalLoad() will suspend the parser
+  // to avoid a race condition reported in
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=822650.
+  // We need to resume the parser here as we do not use the app window bindings.
+  content::RenderFrameHostImpl* host =
+      static_cast<content::RenderFrameHostImpl*>(
+          navigation_handle->GetRenderFrameHost());
+  DCHECK(host);
+  if (host->GetParent() == nullptr) {
+    host->Send(new VivaldiFrameHostMsg_ResumeParser(host->routing_id()));
+  }
 }
 
 void VivaldiAppWindowContentsImpl::UpdateDraggableRegions(
@@ -305,16 +320,6 @@ void VivaldiAppWindowContentsImpl::UpdateDraggableRegions(
   if (!sender->GetParent()) {
     host_->UpdateDraggableRegions(regions);
   }
-}
-
-void VivaldiAppWindowContentsImpl::SuspendRenderFrameHost(
-    content::RenderFrameHost* rfh) {
-  DCHECK(rfh);
-  // Don't bother blocking requests if the renderer side is already good to go.
-  if (is_window_ready_)
-    return;
-  is_blocking_requests_ = true;
-  rfh->BlockRequestsForFrame();
 }
 
 void VivaldiAppWindowContentsImpl::DidFinishLoad(
@@ -334,7 +339,8 @@ void VivaldiAppWindowContentsImpl::ForceShowWindow() {
 
 // VivaldiBrowserWindow --------------------------------------------------------
 
-VivaldiBrowserWindow::VivaldiBrowserWindow() {}
+VivaldiBrowserWindow::VivaldiBrowserWindow() {
+}
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
   // Explicitly set browser_ to NULL.
@@ -353,9 +359,18 @@ void VivaldiBrowserWindow::Init(Browser* browser,
         browser, &params_.content_spec.bounds, &initial_state_);
     params_.state = initial_state_;
 
+    location_bar_.reset(new VivaldiLocationBar(browser_->profile(), browser));
+
     // No need to delay creating the web contents, we have a browser.
     CreateWebContents(nullptr);
   }
+}
+
+void VivaldiBrowserWindow::set_browser(Browser* browser) {
+  browser_.reset(browser);
+
+  DCHECK(!location_bar_);
+  location_bar_.reset(new VivaldiLocationBar(browser_->profile(), browser));
 }
 
 // static
@@ -395,10 +410,6 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
 void VivaldiBrowserWindow::UpdateDraggableRegions(
     const std::vector<extensions::DraggableRegion>& regions) {
   native_app_window_->UpdateDraggableRegions(regions);
-}
-
-void VivaldiBrowserWindow::OnReadyToCommitFirstNavigation() {
-  // TODO(pettern): Might need this implemented.
 }
 
 void VivaldiBrowserWindow::CreateWebContents(content::RenderFrameHost* host) {
@@ -446,6 +457,10 @@ void VivaldiBrowserWindow::CreateWebContents(content::RenderFrameHost* host) {
   VivaldiAppWindowClient* app_window_client = VivaldiAppWindowClient::Get();
   native_app_window_.reset(
       app_window_client->CreateNativeAppWindow(this, &params_));
+
+  // The infobar container must come after the toolbar so its arrow paints on
+  // top.
+  infobar_container_ = new vivaldi::InfoBarContainerWebProxy(this);
 
   // TODO(pettern): Crashes on shutdown, fix.
   // extensions::ExtensionRegistry::Get(browser_->profile())->AddObserver(this);
@@ -519,6 +534,11 @@ void VivaldiBrowserWindow::Hide() {
   app_delegate_->OnHide();
 }
 
+bool VivaldiBrowserWindow::IsVisible() const {
+  return GetBaseWindow()->IsVisible();
+}
+
+
 void VivaldiBrowserWindow::SetBounds(const gfx::Rect& bounds) {
   if (native_app_window_)
     native_app_window_->SetBounds(bounds);
@@ -550,7 +570,8 @@ void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
   for (int i = 0; i < tab_strip_model->count(); ++i) {
     if (tab_strip_model->IsTabPinned(i)) {
       tabs_to_move.push_back(
-          SessionTabHelper::IdForTab(tab_strip_model->GetWebContentsAt(i)));
+          SessionTabHelper::IdForTab(tab_strip_model->GetWebContentsAt(i))
+              .id());
     }
   }
   int index = 0;
@@ -670,7 +691,7 @@ bool VivaldiBrowserWindow::IsFullscreenBubbleVisible() const {
 }
 
 LocationBar* VivaldiBrowserWindow::GetLocationBar() const {
-  return NULL;
+  return location_bar_.get();
 }
 
 ToolbarActionsBar* VivaldiBrowserWindow::GetToolbarActionsBar() {
@@ -685,10 +706,25 @@ VivaldiBrowserWindow::PreHandleKeyboardEvent(
 
 void VivaldiBrowserWindow::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
+
+  // Ideally we should test for blink::WebInputEvent::kIsAutoRepeat field
+  // in the modifier field of the event, but it is not 100% reliable (at least
+  // on Linux). Try pressing F1 for a while and switch to F2. The first auto
+  // repeat is not flagged as such. Works on Mac.
+  // (event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat)
+  bool is_auto_repeat = false;
+  if (event.GetType() == blink::WebInputEvent::kRawKeyDown) {
+    is_auto_repeat = event.windows_key_code == last_key_code_;
+    last_key_code_ = event.windows_key_code;
+  } else if (event.GetType() != blink::WebInputEvent::kKeyDown &&
+             event.GetType() != blink::WebInputEvent::kChar) {
+    last_key_code_ = 0;
+  }
+
   extensions::TabsPrivateAPI* api =
       extensions::TabsPrivateAPI::GetFactoryInstance()->Get(
           browser_->profile());
-  api->SendKeyboardShortcutEvent(event);
+  api->SendKeyboardShortcutEvent(event, is_auto_repeat);
 
   native_app_window_->HandleKeyboardEvent(event);
 }
@@ -741,11 +777,6 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
                                      security_info, browser_.get(),
                                      GetNativeWindow());
 #endif
-}
-
-WindowOpenDisposition VivaldiBrowserWindow::GetDispositionForPopupBounds(
-    const gfx::Rect& bounds) {
-  return WindowOpenDisposition::NEW_POPUP;
 }
 
 FindBar* VivaldiBrowserWindow::CreateFindBar() {
@@ -802,7 +833,8 @@ Profile* VivaldiBrowserWindow::GetProfile() {
 void VivaldiBrowserWindow::UpdateExclusiveAccessExitBubbleContent(
     const GURL& url,
     ExclusiveAccessBubbleType bubble_type,
-    ExclusiveAccessBubbleHideCallback bubble_first_hide_callback) {}
+    ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
+    bool force_update) {}
 
 void VivaldiBrowserWindow::OnExclusiveAccessUserInput() {}
 
@@ -835,7 +867,7 @@ void VivaldiBrowserWindow::UpdateDevTools() {
 
   // DevToolsWindow code has already activated the tab.
   content::WebContents* contents = tab_strip_model->GetActiveWebContents();
-  int tab_id = SessionTabHelper::IdForTab(contents);
+  int tab_id = SessionTabHelper::IdForTab(contents).id();
   extensions::DevtoolsConnectorAPI* api =
       extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
           browser_->profile());
@@ -851,7 +883,7 @@ void VivaldiBrowserWindow::UpdateDevTools() {
     DevToolsWindow* w =
         DevToolsWindow::GetInstanceForInspectedWebContents(inspected_contents);
     if (w && w->IsClosing()) {
-      int id = SessionTabHelper::IdForTab(inspected_contents);
+      int id = SessionTabHelper::IdForTab(inspected_contents).id();
       std::unique_ptr<base::ListValue> args =
         extensions::vivaldi::devtools_private::OnClosed::Create(id);
 
@@ -959,8 +991,17 @@ void VivaldiBrowserWindow::DeleteThis() {
   delete this;
 }
 
-void VivaldiBrowserWindow::OnNativeWindowActivated() {
-  BrowserList::SetLastActive(browser_.get());
+void VivaldiBrowserWindow::OnNativeWindowActivationChanged(bool active) {
+  UpdateActivation(active);
+  if (active)
+    BrowserList::SetLastActive(browser_.get());
+}
+
+void VivaldiBrowserWindow::UpdateActivation(bool is_active) {
+  if (is_active_ != is_active) {
+    is_active_ = is_active;
+    OnActivationChanged(is_active_);
+  }
 }
 
 void VivaldiBrowserWindow::UpdateTitleBar() {
@@ -984,6 +1025,7 @@ base::string16 VivaldiBrowserWindow::GetTitle() {
   } else {
     title = web_contents()->GetTitle();
   }
+  title += base::UTF8ToUTF16(" - Vivaldi");
   base::RemoveChars(title, base::ASCIIToUTF16("\n"), &title);
   return title;
 }
@@ -994,6 +1036,9 @@ void VivaldiBrowserWindow::OnActiveTabChanged(
     int index,
     int reason) {
   UpdateTitleBar();
+
+  infobar_container_->ChangeInfoBarManager(
+      InfoBarService::FromWebContents(new_contents));
 
 #if !defined(OS_MACOSX)
 
@@ -1071,6 +1116,9 @@ content::WebContents* VivaldiBrowserWindow::GetAssociatedWebContents() const {
   return web_contents();
 }
 
+// infobars::InfoBarContainer::Delegate, none of these methods are used by us.
+void VivaldiBrowserWindow::InfoBarContainerStateChanged(bool is_animating) {}
+
 content::WebContents* VivaldiBrowserWindow::GetActiveWebContents() const {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
@@ -1119,7 +1167,30 @@ void VivaldiBrowserWindow::OnFullscreenChanged(bool fullscreen) {
           browser_->session_id().id(), fullscreen));
 }
 
+void VivaldiBrowserWindow::OnActivationChanged(bool activated) {
+  vivaldi::DispatchEvent(
+      browser_->profile(),
+      extensions::vivaldi::window_private::OnActivated::kEventName,
+      extensions::vivaldi::window_private::OnActivated::Create(
+          browser_->session_id().id(), activated));
+}
+
 void VivaldiBrowserWindow::OnDocumentLoaded() {
   has_loaded_document_ = true;
   Show();
+}
+
+PageActionIconContainer* VivaldiBrowserWindow::GetPageActionIconContainer() {
+  return nullptr;
+}
+
+ExclusiveAccessBubbleViews* VivaldiBrowserWindow::GetExclusiveAccessBubble() {
+  return nullptr;
+}
+autofill::LocalCardMigrationBubble*
+VivaldiBrowserWindow::ShowLocalCardMigrationBubble(
+    content::WebContents* contents,
+    autofill::LocalCardMigrationBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
 }

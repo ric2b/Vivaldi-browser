@@ -29,7 +29,8 @@ class FullscreenModelTest : public PlatformTest {
     model_.AddObserver(&observer_);
     // Set the toolbar height to kToolbarHeight, and simulate a page load that
     // finishes with a 0.0 y content offset.
-    model_.SetToolbarHeight(kToolbarHeight);
+    model_.SetCollapsedToolbarHeight(0.0);
+    model_.SetExpandedToolbarHeight(kToolbarHeight);
     model_.SetScrollViewHeight(kScrollViewHeight);
     model_.SetContentHeight(kContentHeight);
     model_.ResetForNavigation();
@@ -91,6 +92,30 @@ TEST_F(FullscreenModelTest, ResetForNavigation) {
   EXPECT_EQ(observer().progress(), 1.0);
 }
 
+// Tests that the progress value is not updated if the current scroll is being
+// ignored.
+TEST_F(FullscreenModelTest, IgnoreRemainderOfCurrentScroll) {
+  ASSERT_EQ(model().progress(), 1.0);
+  // Simulate a scroll to a 0.0 progress value in two halves.
+  const CGFloat kHalfProgress = 0.5;
+  const CGFloat kHalfProgressDelta =
+      GetFullscreenOffsetDeltaForProgress(&model(), kHalfProgress);
+  model().SetScrollViewIsDragging(true);
+  model().SetScrollViewIsScrolling(true);
+  model().SetYContentOffset(model().GetYContentOffset() + kHalfProgressDelta);
+  model().SetScrollViewIsDragging(false);
+  ASSERT_EQ(model().progress(), kHalfProgress);
+  // Begin ignoring the scroll while the decelerating.
+  model().IgnoreRemainderOfCurrentScroll();
+  model().SetYContentOffset(model().GetYContentOffset() + kHalfProgressDelta);
+  model().SetScrollViewIsScrolling(false);
+  EXPECT_EQ(model().progress(), kHalfProgress);
+  // Simulate another scroll and verify that the model is no longer ignoring
+  // from the previous call to IgnoreRemainderOfCurrentScroll().
+  SimulateFullscreenUserScrollForProgress(&model(), 1.0);
+  ASSERT_EQ(model().progress(), 1.0);
+}
+
 // Tests that the end progress value of a scroll adjustment animation is used
 // as the model's progress.
 TEST_F(FullscreenModelTest, AnimationEnded) {
@@ -114,7 +139,7 @@ TEST_F(FullscreenModelTest, AnimationEnded) {
 TEST_F(FullscreenModelTest, UpdateToolbarHeight) {
   // Reset the toolbar height and verify that the base offset is reset and that
   // the toolbar is fully visible.
-  model().SetToolbarHeight(2.0 * kToolbarHeight);
+  model().SetExpandedToolbarHeight(2.0 * kToolbarHeight);
   EXPECT_FALSE(model().has_base_offset());
   EXPECT_EQ(observer().progress(), 1.0);
   // Simulate a page load to a 0.0 y content offset.
@@ -173,7 +198,7 @@ TEST_F(FullscreenModelTest, ZoomScroll) {
 // Tests that updating the y content offset while the toolbar height is 0 only
 // updates the model's base offset.
 TEST_F(FullscreenModelTest, NoToolbarScroll) {
-  model().SetToolbarHeight(0.0);
+  model().SetExpandedToolbarHeight(0.0);
   model().SetYContentOffset(100);
   EXPECT_EQ(observer().progress(), 1.0);
   EXPECT_EQ(model().base_offset(), 100);

@@ -18,12 +18,12 @@ rootWebArea name='Action verbs'
 ++radioButton defaultActionVerb=check checkedState=false
 ++switch name='ARIA Switch' defaultActionVerb=check checkedState=false
 ++details
-++++disclosureTriangle name='Summary' defaultActionVerb=press
+++++disclosureTriangle collapsed name='Summary' defaultActionVerb=press
 ++++++staticText name='Summary'
 ++++++++inlineTextBox name='Summary'
-++popUpButton collapsed haspopup defaultActionVerb=open
-++++menuListPopup invisible activedescendantId=menuListOption
-++++++menuListOption selectable selected name='Pop-up button' defaultActionVerb=select
+++popUpButton collapsed value='Pop-up button' defaultActionVerb=open haspopup=menu
+++++menuListPopup invisible
+++++++menuListOption name='Pop-up button' defaultActionVerb=select selected=true
 ++genericContainer defaultActionVerb=click
 ++++staticText name='Div with click handler' defaultActionVerb=clickAncestor
 ++++++inlineTextBox name='Div with click handler'

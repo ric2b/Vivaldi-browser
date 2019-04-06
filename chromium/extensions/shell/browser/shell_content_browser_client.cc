@@ -8,27 +8,31 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "components/guest_view/browser/guest_view_message_filter.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
+#include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/extension_message_filter.h"
 #include "extensions/browser/extension_navigation_throttle.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/extension_protocols.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/extensions_guest_view_message_filter.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/io_thread_extension_message_filter.h"
 #include "extensions/browser/process_map.h"
@@ -47,8 +51,8 @@
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/nacl_host_message_filter.h"
 #include "components/nacl/browser/nacl_process_host.h"
-#include "components/nacl/common/nacl_process_type.h"
-#include "components/nacl/common/nacl_switches.h"
+#include "components/nacl/common/nacl_process_type.h"  // nogncheck
+#include "components/nacl/common/nacl_switches.h"      // nogncheck
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/child_process_data.h"
 #endif
@@ -93,7 +97,8 @@ content::BrowserMainParts* ShellContentBrowserClient::CreateBrowserMainParts(
 }
 
 void ShellContentBrowserClient::RenderProcessWillLaunch(
-    content::RenderProcessHost* host) {
+    content::RenderProcessHost* host,
+    service_manager::mojom::ServiceRequest* service_request) {
   int render_process_id = host->GetID();
   BrowserContext* browser_context = browser_main_parts_->browser_context();
   host->AddFilter(
@@ -107,10 +112,8 @@ void ShellContentBrowserClient::RenderProcessWillLaunch(
   // the concept of disabled plugins.
 #if BUILDFLAG(ENABLE_NACL)
   host->AddFilter(new nacl::NaClHostMessageFilter(
-      render_process_id,
-      browser_context->IsOffTheRecord(),
-      browser_context->GetPath(),
-      host->GetStoragePartition()->GetURLRequestContext()));
+      render_process_id, browser_context->IsOffTheRecord(),
+      browser_context->GetPath()));
 #endif
 }
 
@@ -259,6 +262,51 @@ std::unique_ptr<content::NavigationUIData>
 ShellContentBrowserClient::GetNavigationUIData(
     content::NavigationHandle* navigation_handle) {
   return std::make_unique<ShellNavigationUIData>(navigation_handle);
+}
+
+void ShellContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
+    int frame_tree_node_id,
+    NonNetworkURLLoaderFactoryMap* factories) {
+  content::WebContents* web_contents =
+      content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+  factories->emplace(
+      extensions::kExtensionScheme,
+      extensions::CreateExtensionNavigationURLLoaderFactory(
+          web_contents->GetBrowserContext(),
+          !!extensions::WebViewGuest::FromWebContents(web_contents)));
+}
+
+void ShellContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
+    int render_process_id,
+    int render_frame_id,
+    NonNetworkURLLoaderFactoryMap* factories) {
+  auto factory = extensions::CreateExtensionURLLoaderFactory(render_process_id,
+                                                             render_frame_id);
+  if (factory)
+    factories->emplace(extensions::kExtensionScheme, std::move(factory));
+}
+
+bool ShellContentBrowserClient::WillCreateURLLoaderFactory(
+    content::BrowserContext* browser_context,
+    content::RenderFrameHost* frame,
+    bool is_navigation,
+    network::mojom::URLLoaderFactoryRequest* factory_request) {
+  auto* web_request_api =
+      extensions::BrowserContextKeyedAPIFactory<extensions::WebRequestAPI>::Get(
+          browser_context);
+  return web_request_api->MaybeProxyURLLoaderFactory(frame, is_navigation,
+                                                     factory_request);
+}
+
+bool ShellContentBrowserClient::HandleExternalProtocol(
+    const GURL& url,
+    content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+    int child_id,
+    content::NavigationUIData* navigation_data,
+    bool is_main_frame,
+    ui::PageTransition page_transition,
+    bool has_user_gesture) {
+  return false;
 }
 
 ShellBrowserMainParts* ShellContentBrowserClient::CreateShellBrowserMainParts(

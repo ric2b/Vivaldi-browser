@@ -14,9 +14,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/push_messaging.mojom.h"
-#include "content/common/service_worker/service_worker_status_code.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -64,25 +64,28 @@ class PushMessagingManager : public mojom::PushMessaging {
 
   void DidCheckForExistingRegistration(
       RegisterData data,
-      const std::vector<std::string>& push_registration_id,
-      ServiceWorkerStatusCode service_worker_status);
+      const std::vector<std::string>& subscription_id_and_sender_id,
+      blink::ServiceWorkerStatusCode service_worker_status);
 
-  void DidGetSenderIdFromStorage(RegisterData data,
-                                 const std::vector<std::string>& sender_id,
-                                 ServiceWorkerStatusCode service_worker_status);
+  void DidGetSenderIdFromStorage(
+      RegisterData data,
+      const std::vector<std::string>& sender_id,
+      blink::ServiceWorkerStatusCode service_worker_status);
 
   // Called via PostTask from UI thread.
   void PersistRegistrationOnIO(RegisterData data,
-                               const std::string& push_registration_id,
+                               const std::string& push_subscription_id,
                                const std::vector<uint8_t>& p256dh,
-                               const std::vector<uint8_t>& auth);
+                               const std::vector<uint8_t>& auth,
+                               mojom::PushRegistrationStatus status);
 
   void DidPersistRegistrationOnIO(
       RegisterData data,
-      const std::string& push_registration_id,
+      const std::string& push_subscription_id,
       const std::vector<uint8_t>& p256dh,
       const std::vector<uint8_t>& auth,
-      ServiceWorkerStatusCode service_worker_status);
+      mojom::PushRegistrationStatus push_registration_status,
+      blink::ServiceWorkerStatusCode service_worker_status);
 
   // Called both from IO thread, and via PostTask from UI thread.
   void SendSubscriptionError(RegisterData data,
@@ -99,7 +102,7 @@ class PushMessagingManager : public mojom::PushMessaging {
       int64_t service_worker_registration_id,
       const GURL& requesting_origin,
       const std::vector<std::string>& sender_id,
-      ServiceWorkerStatusCode service_worker_status);
+      blink::ServiceWorkerStatusCode service_worker_status);
 
   // Called both from IO thread, and via PostTask from UI thread.
   void DidUnregister(UnsubscribeCallback callback,
@@ -109,7 +112,7 @@ class PushMessagingManager : public mojom::PushMessaging {
       GetSubscriptionCallback callback,
       int64_t service_worker_registration_id,
       const std::vector<std::string>& push_subscription_id_and_sender_info,
-      ServiceWorkerStatusCode service_worker_status);
+      blink::ServiceWorkerStatusCode service_worker_status);
 
   // Helper methods on either thread -------------------------------------------
 

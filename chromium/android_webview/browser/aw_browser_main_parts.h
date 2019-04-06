@@ -26,10 +26,13 @@ class AwBrowserMainParts : public content::BrowserMainParts {
   ~AwBrowserMainParts() override;
 
   // Overriding methods from content::BrowserMainParts.
+  bool ShouldContentCreateFeatureList() override;
   int PreEarlyInitialization() override;
   int PreCreateThreads() override;
   void PreMainMessageLoopRun() override;
   bool MainMessageLoopRun(int* result_code) override;
+  void ServiceManagerConnectionStarted(
+      content::ServiceManagerConnection* connection) override;
 
  private:
   // Android specific UI MessageLoop.

@@ -99,8 +99,12 @@ class AutofillProfile : public AutofillDataModel,
   bool EqualsSansOrigin(const AutofillProfile& profile) const;
 
   // Same as operator==, but ignores differences in guid and cares about
-  // differences in usage stats and validity state.
+  // differences in usage stats.
   bool EqualsForSyncPurposes(const AutofillProfile& profile) const;
+
+  // Same as operator==, but cares about differences in usage stats.
+  bool EqualsIncludingUsageStatsForTesting(
+      const AutofillProfile& profile) const;
 
   // Equality operators compare GUIDs, origins, language code, and the contents
   // in the comparison. Usage metadata (use count, use date, modification date)
@@ -117,6 +121,10 @@ class AutofillProfile : public AutofillDataModel,
   bool IsSubsetOfForFieldSet(const AutofillProfile& profile,
                              const std::string& app_locale,
                              const ServerFieldTypeSet& types) const;
+
+  // Overwrites the data of |this| profile with data from the given |profile|.
+  // Expects that the profiles have the same guid.
+  void OverwriteDataFrom(const AutofillProfile& profile);
 
   // Merges the data from |this| profile and the given |profile| into |this|
   // profile. Expects that |this| and |profile| have already been deemed
@@ -203,7 +211,7 @@ class AutofillProfile : public AutofillDataModel,
   void SetValidityState(ServerFieldType type, ValidityState validity);
 
   // Returns whether autofill does the validation of the specified |type|.
-  bool IsValidationSupportedForType(ServerFieldType type) const;
+  static bool IsValidationSupportedForType(ServerFieldType type);
 
   // Returns the bitfield value representing the validity state of this profile.
   int GetValidityBitfieldValue() const;

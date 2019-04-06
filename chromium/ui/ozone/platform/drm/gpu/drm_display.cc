@@ -7,7 +7,6 @@
 #include <xf86drmMode.h>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
@@ -173,14 +172,18 @@ bool DrmDisplay::SetHDCPState(display::HDCPState state) {
       GetContentProtectionValue(hdcp_property.get(), state));
 }
 
-void DrmDisplay::SetColorCorrection(
+void DrmDisplay::SetColorMatrix(const std::vector<float>& color_matrix) {
+  if (!drm_->plane_manager()->SetColorMatrix(crtc_, color_matrix)) {
+    LOG(ERROR) << "Failed to set color matrix for display: crtc_id = " << crtc_;
+  }
+}
+
+void DrmDisplay::SetGammaCorrection(
     const std::vector<display::GammaRampRGBEntry>& degamma_lut,
-    const std::vector<display::GammaRampRGBEntry>& gamma_lut,
-    const std::vector<float>& correction_matrix) {
-  if (!drm_->SetColorCorrection(crtc_, degamma_lut, gamma_lut,
-                                correction_matrix)) {
-    LOG(ERROR) << "Failed to set color correction for display: crtc_id = "
-               << crtc_;
+    const std::vector<display::GammaRampRGBEntry>& gamma_lut) {
+  if (!drm_->plane_manager()->SetGammaCorrection(crtc_, degamma_lut,
+                                                 gamma_lut)) {
+    LOG(ERROR) << "Failed to set gamma tables for display: crtc_id = " << crtc_;
   }
 }
 

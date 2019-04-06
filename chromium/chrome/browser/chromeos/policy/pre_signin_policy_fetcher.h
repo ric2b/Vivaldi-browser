@@ -17,9 +17,9 @@
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "third_party/cros_system_api/dbus/cryptohome/dbus-constants.h"
 
 namespace base {
@@ -149,7 +149,7 @@ class PreSigninPolicyFetcher : public CloudPolicyClient::Observer {
 
   // A timer that puts a hard limit on the maximum time to wait for the fresh
   // policy fetch.
-  base::Timer policy_fetch_timeout_{false, false};
+  base::OneShotTimer policy_fetch_timeout_;
 
   // Used to load the policy key provided by session manager as a file.
   std::unique_ptr<CachedPolicyKeyLoaderChromeOS> cached_policy_key_loader_;

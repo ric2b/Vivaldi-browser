@@ -12,13 +12,18 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/local_discovery/test_service_discovery_client.h"
+#include "chrome/browser/media/router/providers/cast/dual_media_sink_service.h"
+#include "chrome/browser/media/router/test/noop_dual_media_sink_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -28,14 +33,15 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/base/web_ui_browser_test.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_status.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/common/pref_names.h"
@@ -282,7 +288,6 @@ const char kURLRegisterComplete[] =
     "http://1.2.3.4:8888/privet/register?action=complete&"
     "user=user%40consumer.example.com";
 
-const char kSampleGaiaId[] = "12345";
 const char kSampleUser[] = "user@consumer.example.com";
 
 class TestMessageLoopCondition {
@@ -348,11 +353,23 @@ class MockableFakeURLFetcherCreator {
 
 class LocalDiscoveryUITest : public WebUIBrowserTest {
  public:
-  LocalDiscoveryUITest() : fake_fetcher_factory_(
-      &fetcher_impl_factory_,
-      fake_url_fetcher_creator_.callback()) {
-  }
+  LocalDiscoveryUITest()
+      : test_shared_loader_factory_(
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_)),
+        fake_fetcher_factory_(&fetcher_impl_factory_,
+                              fake_url_fetcher_creator_.callback()) {}
   ~LocalDiscoveryUITest() override {
+  }
+
+  void SetUp() override {
+    // We need to stub out DualMediaSinkService here, because the profile setup
+    // instantiates DualMediaSinkService, which in turn sets
+    // |g_service_discovery_client| with a real instance. This causes
+    // a DCHECK during TestServiceDiscoveryClient construction.
+    media_router::DualMediaSinkService::SetInstanceForTest(
+        new media_router::NoopDualMediaSinkService());
+    WebUIBrowserTest::SetUp();
   }
 
   void SetUpOnMainThread() override {
@@ -368,11 +385,10 @@ class LocalDiscoveryUITest : public WebUIBrowserTest {
                                     &TestMessageLoopCondition::Signal))
         .WillRepeatedly(Return());
 
-    SigninManagerBase* signin_manager =
-        SigninManagerFactory::GetForProfile(browser()->profile());
-
-    DCHECK(signin_manager);
-    signin_manager->SetAuthenticatedAccountInfo(kSampleGaiaId, kSampleUser);
+    test_url_loader_factory_.AddResponse(
+        GaiaUrls::GetInstance()->oauth2_token_url().spec(), kResponseGaiaToken);
+    test_url_loader_factory_.AddResponse(
+        GaiaUrls::GetInstance()->oauth_user_info_url().spec(), kResponseGaiaId);
 
     fake_fetcher_factory().SetFakeResponse(
         GURL(kURLInfo),
@@ -423,18 +439,23 @@ class LocalDiscoveryUITest : public WebUIBrowserTest {
     EXPECT_CALL(fake_url_fetcher_creator(), OnCreateFakeURLFetcher(
         GaiaUrls::GetInstance()->oauth_user_info_url().spec()))
         .Times(AnyNumber());
-
-    ProfileOAuth2TokenService* token_service =
-        ProfileOAuth2TokenServiceFactory::GetForProfile(browser()->profile());
-
-    token_service->UpdateCredentials(
-        signin_manager->GetAuthenticatedAccountId(), "MyFakeToken");
+    identity::MakePrimaryAccountAvailable(
+        SigninManagerFactory::GetForProfile(browser()->profile()),
+        ProfileOAuth2TokenServiceFactory::GetForProfile(browser()->profile()),
+        IdentityManagerFactory::GetForProfile(browser()->profile()),
+        kSampleUser);
 
     AddLibrary(base::FilePath(FILE_PATH_LITERAL("local_discovery_ui_test.js")));
+
+    ChromeSigninClient* signin_client = static_cast<ChromeSigninClient*>(
+        ChromeSigninClientFactory::GetForProfile(
+            ProfileManager::GetActiveUserProfile()));
+    signin_client->SetURLLoaderFactoryForTest(test_shared_loader_factory_);
   }
 
   void TearDownOnMainThread() override {
     test_service_discovery_client_ = nullptr;
+    test_shared_loader_factory_->Detach();
     WebUIBrowserTest::TearDownOnMainThread();
   }
 
@@ -481,6 +502,10 @@ class LocalDiscoveryUITest : public WebUIBrowserTest {
   scoped_refptr<TestServiceDiscoveryClient> test_service_discovery_client_;
   TestMessageLoopCondition condition_devices_listed_;
 
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+      test_shared_loader_factory_;
+
   net::URLFetcherImplFactory fetcher_impl_factory_;
   StrictMock<MockableFakeURLFetcherCreator> fake_url_fetcher_creator_;
   net::FakeURLFetcherFactory fake_fetcher_factory_;
@@ -519,8 +544,7 @@ IN_PROC_BROWSER_TEST_F(LocalDiscoveryUITest, AddRowTest) {
 IN_PROC_BROWSER_TEST_F(LocalDiscoveryUITest, RegisterTest) {
   TestMessageLoopCondition condition_token_claimed;
 
-  ui_test_utils::NavigateToURL(browser(), GURL(
-      chrome::kChromeUIDevicesURL));
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIDevicesURL));
   condition_devices_listed().Wait();
 
   test_service_discovery_client()->SimulateReceive(

@@ -31,8 +31,8 @@ cr.define('settings_people_page_manage_profile', function() {
       this.methodCalled('getAvailableIcons');
       return Promise.resolve([
         {url: 'fake-icon-1.png', label: 'fake-icon-1'},
-        {url: 'fake-icon-2.png', label: 'fake-icon-2'},
-        {url: 'gaia-icon.png', label: 'gaia-icon', isGaiaAvatar: true}
+        {url: 'fake-icon-2.png', label: 'fake-icon-2', selected: true},
+        {url: 'gaia-icon.png', label: 'gaia-icon', isGaiaAvatar: true},
       ]);
     }
 
@@ -84,7 +84,9 @@ cr.define('settings_people_page_manage_profile', function() {
       settings.navigateTo(settings.routes.MANAGE_PROFILE);
     });
 
-    teardown(function() { manageProfile.remove(); });
+    teardown(function() {
+      manageProfile.remove();
+    });
 
     // Tests that the manage profile subpage
     //  - gets and receives all the available icons
@@ -94,23 +96,22 @@ cr.define('settings_people_page_manage_profile', function() {
       return browserProxy.whenCalled('getAvailableIcons')
           .then(function() {
             Polymer.dom.flush();
-            items = manageProfile.$.selector.$['avatar-grid'].
-                querySelectorAll('.avatar');
+            items = manageProfile.$.selector.$['avatar-grid'].querySelectorAll(
+                '.avatar');
 
-            // Initially no item is selected, because of crbug.com/710660.
             assertFalse(!!manageProfile.profileAvatar);
             assertEquals(3, items.length);
             assertFalse(items[0].classList.contains('iron-selected'));
-            assertFalse(items[1].classList.contains('iron-selected'));
+            assertTrue(items[1].classList.contains('iron-selected'));
             assertFalse(items[2].classList.contains('iron-selected'));
 
-            MockInteractions.tap(items[1]);
+            items[1].click();
             return browserProxy.whenCalled('setProfileIconToDefaultAvatar');
           })
           .then(function(args) {
             assertEquals('fake-icon-2.png', args[0]);
 
-            MockInteractions.tap(items[2]);
+            items[2].click();
             return browserProxy.whenCalled('setProfileIconToGaiaAvatar');
           });
     });
@@ -125,10 +126,9 @@ cr.define('settings_people_page_manage_profile', function() {
       nameField.value = 'New Name';
       nameField.fire('change');
 
-      return browserProxy.whenCalled('setProfileName').then(
-          function(args) {
-            assertEquals('New Name', args[0]);
-          });
+      return browserProxy.whenCalled('setProfileName').then(function(args) {
+        assertEquals('New Name', args[0]);
+      });
     });
 
     test('ProfileNameIsDisabledForSupervisedUser', function() {
@@ -182,7 +182,9 @@ cr.define('settings_people_page_manage_profile', function() {
       document.body.appendChild(manageProfile);
     });
 
-    teardown(function() { manageProfile.remove(); });
+    teardown(function() {
+      manageProfile.remove();
+    });
 
     // Tests profile shortcut toggle is visible and toggling it removes and
     // creates the profile shortcut respectively.
@@ -194,28 +196,28 @@ cr.define('settings_people_page_manage_profile', function() {
 
       return browserProxy.whenCalled('getProfileShortcutStatus')
           .then(function() {
-        Polymer.dom.flush();
+            Polymer.dom.flush();
 
-        const hasShortcutToggle = manageProfile.$$('#hasShortcutToggle');
-        assertTrue(!!hasShortcutToggle);
+            const hasShortcutToggle = manageProfile.$$('#hasShortcutToggle');
+            assertTrue(!!hasShortcutToggle);
 
-        // The profile shortcut toggle is checked.
-        assertTrue(hasShortcutToggle.checked);
+            // The profile shortcut toggle is checked.
+            assertTrue(hasShortcutToggle.checked);
 
-        // Simulate tapping the profile shortcut toggle.
-        MockInteractions.tap(hasShortcutToggle);
-        return browserProxy.whenCalled('removeProfileShortcut')
-            .then(function() {
-          Polymer.dom.flush();
+            // Simulate tapping the profile shortcut toggle.
+            hasShortcutToggle.click();
+            return browserProxy.whenCalled('removeProfileShortcut')
+                .then(function() {
+                  Polymer.dom.flush();
 
-          // The profile shortcut toggle is checked.
-          assertFalse(hasShortcutToggle.checked);
+                  // The profile shortcut toggle is checked.
+                  assertFalse(hasShortcutToggle.checked);
 
-          // Simulate tapping the profile shortcut toggle.
-          MockInteractions.tap(hasShortcutToggle);
-          return browserProxy.whenCalled('addProfileShortcut');
-        });
-      });
+                  // Simulate tapping the profile shortcut toggle.
+                  hasShortcutToggle.click();
+                  return browserProxy.whenCalled('addProfileShortcut');
+                });
+          });
     });
 
     // Tests profile shortcut toggle is visible and toggled off when no
@@ -231,13 +233,13 @@ cr.define('settings_people_page_manage_profile', function() {
 
       return browserProxy.whenCalled('getProfileShortcutStatus')
           .then(function() {
-        Polymer.dom.flush();
+            Polymer.dom.flush();
 
-        const hasShortcutToggle = manageProfile.$$('#hasShortcutToggle');
-        assertTrue(!!hasShortcutToggle);
+            const hasShortcutToggle = manageProfile.$$('#hasShortcutToggle');
+            assertTrue(!!hasShortcutToggle);
 
-        assertFalse(hasShortcutToggle.checked);
-      });
+            assertFalse(hasShortcutToggle.checked);
+          });
     });
 
     // Tests the case when the profile shortcut setting is hidden. This can
@@ -253,10 +255,10 @@ cr.define('settings_people_page_manage_profile', function() {
 
       return browserProxy.whenCalled('getProfileShortcutStatus')
           .then(function() {
-        Polymer.dom.flush();
+            Polymer.dom.flush();
 
-        assertFalse(!!manageProfile.$$('#hasShortcutToggle'));
-      });
+            assertFalse(!!manageProfile.$$('#hasShortcutToggle'));
+          });
     });
   });
 });

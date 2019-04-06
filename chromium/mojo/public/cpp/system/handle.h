@@ -84,8 +84,9 @@ class ScopedHandleBase {
       : handle_(other.release()) {}
 
   // Move-only constructor and operator=.
-  ScopedHandleBase(ScopedHandleBase&& other) : handle_(other.release()) {}
-  ScopedHandleBase& operator=(ScopedHandleBase&& other) {
+  ScopedHandleBase(ScopedHandleBase&& other) noexcept
+      : handle_(other.release()) {}
+  ScopedHandleBase& operator=(ScopedHandleBase&& other) noexcept {
     if (&other != this) {
       CloseIfNecessary();
       handle_ = other.release();
@@ -94,7 +95,10 @@ class ScopedHandleBase {
   }
 
   const HandleType& get() const { return handle_; }
-  const HandleType* operator->() const { return &handle_; }
+  const HandleType* operator->() const {
+    DCHECK(handle_.is_valid());
+    return &handle_;
+  }
 
   template <typename PassedHandleType>
   static ScopedHandleBase<HandleType> From(

@@ -7,7 +7,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/callback.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/permissions/permission_request_id.h"

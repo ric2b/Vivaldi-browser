@@ -27,17 +27,24 @@
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "components/safe_browsing/db/database_manager.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "components/sessions/core/session_id.h"
 #include "url/gurl.h"
 
 namespace content {
-class DownloadItem;
 class PageNavigator;
 }  // namespace content
+
+namespace download {
+class DownloadItem;
+}
 
 namespace net {
 class X509Certificate;
 }  // namespace net
+
+namespace network {
+class SharedURLLoaderFactory;
+}
 
 class Profile;
 
@@ -70,7 +77,7 @@ class DownloadProtectionService {
   // method must be called on the UI thread, and the callback will also be
   // invoked on the UI thread.  This method must be called once the download
   // is finished and written to disk.
-  virtual void CheckClientDownload(content::DownloadItem* item,
+  virtual void CheckClientDownload(download::DownloadItem* item,
                                    const CheckDownloadCallback& callback);
 
   // Checks whether any of the URLs in the redirect chain of the
@@ -78,12 +85,12 @@ class DownloadProtectionService {
   // delivered asynchronously via the given callback.  This method must be
   // called on the UI thread, and the callback will also be invoked on the UI
   // thread.  Pre-condition: !info.download_url_chain.empty().
-  virtual void CheckDownloadUrl(content::DownloadItem* item,
+  virtual void CheckDownloadUrl(download::DownloadItem* item,
                                 const CheckDownloadCallback& callback);
 
   // Returns true iff the download specified by |info| should be scanned by
   // CheckClientDownload() for malicious content.
-  virtual bool IsSupportedDownload(const content::DownloadItem& item,
+  virtual bool IsSupportedDownload(const download::DownloadItem& item,
                                    const base::FilePath& target_path) const;
 
   virtual void CheckPPAPIDownloadRequest(
@@ -98,7 +105,7 @@ class DownloadProtectionService {
   // Display more information to the user regarding the download specified by
   // |info|. This method is invoked when the user requests more information
   // about a download that was marked as malicious.
-  void ShowDetailsForDownload(const content::DownloadItem& item,
+  void ShowDetailsForDownload(const download::DownloadItem& item,
                               content::PageNavigator* navigator);
 
   // Enables or disables the service.  This is usually called by the
@@ -135,18 +142,19 @@ class DownloadProtectionService {
     return navigation_observer_manager_;
   }
 
-  static void SetDownloadPingToken(content::DownloadItem* item,
+  static void SetDownloadPingToken(download::DownloadItem* item,
                                    const std::string& token);
 
-  static std::string GetDownloadPingToken(const content::DownloadItem* item);
+  static std::string GetDownloadPingToken(const download::DownloadItem* item);
 
   // Sends dangerous download opened report when download is opened or
   // shown in folder, and if the following conditions are met:
   // (1) it is a dangerous download.
   // (2) user is NOT in incognito mode.
   // (3) user is opted-in for extended reporting.
-  void MaybeSendDangerousDownloadOpenedReport(const content::DownloadItem* item,
-                                              bool show_download_in_folder);
+  void MaybeSendDangerousDownloadOpenedReport(
+      const download::DownloadItem* item,
+      bool show_download_in_folder);
 
  private:
   // todo(jialiul): Remove the need for non-test friending.
@@ -226,7 +234,7 @@ class DownloadProtectionService {
   // Identify referrer chain info of a download. This function also records UMA
   // stats of download attribution result.
   std::unique_ptr<ReferrerChainData> IdentifyReferrerChain(
-      const content::DownloadItem& item);
+      const download::DownloadItem& item);
 
   // Identify referrer chain of the PPAPI download based on the frame URL where
   // the download is initiated. Then add referrer chain info to
@@ -235,9 +243,12 @@ class DownloadProtectionService {
   void AddReferrerChainToPPAPIClientDownloadRequest(
       const GURL& initiating_frame_url,
       const GURL& initiating_main_frame_url,
-      int tab_id,
+      SessionID tab_id,
       bool has_user_gesture,
       ClientDownloadRequest* out_request);
+
+  void OnDangerousDownloadOpened(const download::DownloadItem* item,
+                                 Profile* profile);
 
   SafeBrowsingService* sb_service_;
   // These pointers may be NULL if SafeBrowsing is disabled.
@@ -246,8 +257,8 @@ class DownloadProtectionService {
   scoped_refptr<SafeBrowsingNavigationObserverManager>
       navigation_observer_manager_;
 
-  // The context we use to issue network requests.
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
+  // The loader factory we use to issue network requests.
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // Set of pending server requests for DownloadManager mediated downloads.
   std::set<scoped_refptr<CheckClientDownloadRequest>> download_requests_;

@@ -15,7 +15,12 @@
 #include "chrome/browser/ui/pdf/adobe_reader_info_win.h"
 #endif
 
-using content::DownloadItem;
+using download::DownloadItem;
+
+bool DownloadShelfContextMenu::WantsContextMenu(
+    const DownloadItemModel& download_model) {
+  return !download_model.IsDangerous() || download_model.MightBeMalicious();
+}
 
 DownloadShelfContextMenu::~DownloadShelfContextMenu() {
   DetachFromDownloadItem();
@@ -35,9 +40,8 @@ ui::SimpleMenuModel* DownloadShelfContextMenu::GetMenuModel() {
     return NULL;
 
   DownloadItemModel download_model(download_item_);
-  // We shouldn't be opening a context menu for a dangerous download, unless it
-  // is a malicious download.
-  DCHECK(!download_model.IsDangerous() || download_model.MightBeMalicious());
+
+  DCHECK(WantsContextMenu(download_model));
 
   if (download_model.IsMalicious())
     model = GetMaliciousMenuModel();

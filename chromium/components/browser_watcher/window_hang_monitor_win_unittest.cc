@@ -5,11 +5,13 @@
 #include "components/browser_watcher/window_hang_monitor_win.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/base_paths.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
@@ -173,7 +175,7 @@ class MonitoredProcessClient {
                             LPARAM lparam,
                             LRESULT* result) {
     EXPECT_EQ(message_window_thread_.message_loop(),
-              base::MessageLoop::current());
+              base::MessageLoopCurrent::Get());
     return false;  // Pass through to DefWindowProc.
   }
 
@@ -185,13 +187,13 @@ class MonitoredProcessClient {
     // user data directory, the hang watcher verifies that the window name is an
     // existing directory. DIR_CURRENT is used to meet this constraint.
     base::FilePath existing_dir;
-    CHECK(PathService::Get(base::DIR_CURRENT, &existing_dir));
+    CHECK(base::PathService::Get(base::DIR_CURRENT, &existing_dir));
 
     message_window_.reset(new base::win::MessageWindow);
     *success = message_window_->CreateNamed(
         base::Bind(&MonitoredProcessClient::EmptyMessageCallback,
                    base::Unretained(this)),
-        existing_dir.value().c_str());
+        existing_dir.value());
     created->Signal();
   }
 
@@ -249,7 +251,7 @@ class HangMonitorThread {
         thread_("Hang monitor thread") {}
 
   ~HangMonitorThread() {
-    if (hang_monitor_.get())
+    if (hang_monitor_)
       DestroyWatcher();
   }
 
@@ -266,9 +268,9 @@ class HangMonitorThread {
         base::WaitableEvent::InitialState::NOT_SIGNALED);
     if (!thread_.task_runner()->PostTask(
             FROM_HERE,
-            base::Bind(&HangMonitorThread::StartupOnThread,
-                       base::Unretained(this), base::Passed(std::move(process)),
-                       base::Unretained(&complete)))) {
+            base::BindOnce(&HangMonitorThread::StartupOnThread,
+                           base::Unretained(this), std::move(process),
+                           base::Unretained(&complete)))) {
       return false;
     }
 

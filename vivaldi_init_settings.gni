@@ -23,7 +23,7 @@ declare_overrides() {
     }
   }
 
-  use_v8_context_snapshot = is_mac
+  use_v8_context_snapshot = is_mac || is_win
 
   exclude_unwind_tables = is_official_build
 
@@ -39,9 +39,13 @@ declare_overrides() {
 
   enable_precompiled_headers = !is_official_build && !use_cc_wrapper
 
-  if (is_mac && !is_component_build) {
-    # We need to force SDK 10.12 for Mac builds due to VB-40761
-    # Static builds are mostly built by the builder
-    mac_use_sdk = "10.12"
+  if (is_win) {
+    skip_archive_compression = is_component_build
   }
+
+  #if (is_mac && !is_component_build) {
+  #  # We need to force SDK 10.12 for Mac builds due to VB-40761
+  #  # Static builds are mostly built by the builder
+  #  mac_use_sdk = "10.13"
+  #}
 }

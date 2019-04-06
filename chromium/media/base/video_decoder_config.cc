@@ -10,6 +10,7 @@
 #include "media/base/media_util.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
+#include "media/base/video_util.h"
 
 namespace media {
 
@@ -47,7 +48,9 @@ VideoCodec VideoCodecProfileToVideoCodec(VideoCodecProfile profile) {
       return kCodecDolbyVision;
     case THEORAPROFILE_ANY:
       return kCodecTheora;
-    case AV1PROFILE_PROFILE0:
+    case AV1PROFILE_PROFILE_MAIN:
+    case AV1PROFILE_PROFILE_HIGH:
+    case AV1PROFILE_PROFILE_PRO:
       return kCodecAV1;
   }
   NOTREACHED();
@@ -136,11 +139,10 @@ void VideoDecoderConfig::Initialize(VideoCodec codec,
 }
 
 bool VideoDecoderConfig::IsValidConfig() const {
-  return codec_ != kUnknownVideoCodec &&
-      natural_size_.width() > 0 &&
-      natural_size_.height() > 0 &&
-      VideoFrame::IsValidConfig(format_, VideoFrame::STORAGE_UNOWNED_MEMORY,
-                                coded_size_, visible_rect_, natural_size_);
+  return codec_ != kUnknownVideoCodec && natural_size_.width() > 0 &&
+         natural_size_.height() > 0 &&
+         VideoFrame::IsValidConfig(format_, VideoFrame::STORAGE_UNOWNED_MEMORY,
+                                   coded_size_, visible_rect_, natural_size_);
 }
 
 bool VideoDecoderConfig::Matches(const VideoDecoderConfig& config) const {
@@ -166,9 +168,13 @@ std::string VideoDecoderConfig::AsHumanReadableString() const {
     << " natural size: [" << natural_size().width() << ","
     << natural_size().height() << "]"
     << " has extra data? " << (extra_data().empty() ? "false" : "true")
-    << " encrypted? " << (is_encrypted() ? "true" : "false")
+    << " encryption scheme: " << encryption_scheme()
     << " rotation: " << VideoRotationToString(video_rotation());
   return s.str();
+}
+
+double VideoDecoderConfig::GetPixelAspectRatio() const {
+  return ::media::GetPixelAspectRatio(visible_rect_, natural_size_);
 }
 
 void VideoDecoderConfig::SetExtraData(const std::vector<uint8_t>& extra_data) {

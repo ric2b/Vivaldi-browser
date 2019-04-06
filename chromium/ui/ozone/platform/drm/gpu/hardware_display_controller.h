@@ -18,8 +18,8 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "ui/gfx/swap_result.h"
+#include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
-#include "ui/ozone/platform/drm/gpu/overlay_plane.h"
 #include "ui/ozone/public/swap_completion_callback.h"
 
 namespace gfx {
@@ -94,10 +94,10 @@ class HardwareDisplayController {
 
   // Performs the initial CRTC configuration. If successful, it will display the
   // framebuffer for |primary| with |mode|.
-  bool Modeset(const OverlayPlane& primary, drmModeModeInfo mode);
+  bool Modeset(const DrmOverlayPlane& primary, drmModeModeInfo mode);
 
   // Performs a CRTC configuration re-using the modes from the CRTCs.
-  bool Enable(const OverlayPlane& primary);
+  bool Enable(const DrmOverlayPlane& primary);
 
   // Disables the CRTC.
   void Disable();
@@ -116,18 +116,25 @@ class HardwareDisplayController {
   //
   // Note that this function does not block. Also, this function should not be
   // called again before the page flip occurrs.
-  bool SchedulePageFlip(const OverlayPlaneList& plane_list,
-                        SwapCompletionOnceCallback callback);
+  void SchedulePageFlip(DrmOverlayPlaneList plane_list,
+                        SwapCompletionOnceCallback submission_callback,
+                        PresentationOnceCallback presentation_callback);
 
   // Returns true if the page flip with the |plane_list| would succeed. This
   // doesn't change any state.
-  bool TestPageFlip(const OverlayPlaneList& plane_list);
-
-  bool IsFormatSupported(uint32_t fourcc_format, uint32_t z_order) const;
+  bool TestPageFlip(const DrmOverlayPlaneList& plane_list);
 
   // Return the supported modifiers for |fourcc_format| for this
   // controller.
   std::vector<uint64_t> GetFormatModifiers(uint32_t fourcc_format);
+
+  // Return the supported modifiers for |fourcc_format| for this
+  // controller to be used for modeset buffers. Currently, this only exists
+  // because we can't provide valid AFBC buffers during modeset.
+  // See https://crbug.com/852675
+  // TODO: Remove this.
+  std::vector<uint64_t> GetFormatModifiersForModesetting(
+      uint32_t fourcc_format);
 
   // Set the hardware cursor to show the contents of |surface|.
   bool SetCursor(const scoped_refptr<ScanoutBuffer>& buffer);
@@ -149,21 +156,27 @@ class HardwareDisplayController {
   gfx::Point origin() const { return origin_; }
   void set_origin(const gfx::Point& origin) { origin_ = origin; }
 
+  uint32_t GetRefreshRate() const;
+  base::TimeDelta GetRefreshInterval() const;
   base::TimeTicks GetTimeOfLastFlip() const;
 
   const std::vector<std::unique_ptr<CrtcController>>& crtc_controllers() const {
     return crtc_controllers_;
   }
 
-  scoped_refptr<DrmDevice> GetAllocationDrmDevice() const;
+  scoped_refptr<DrmDevice> GetDrmDevice() const;
+
+  void OnPageFlipComplete(
+      DrmOverlayPlaneList pending_planes,
+      const gfx::PresentationFeedback& presentation_feedback);
 
  private:
-  bool ActualSchedulePageFlip(const OverlayPlaneList& plane_list,
-                              bool test_only,
-                              SwapCompletionOnceCallback callback);
+  void OnModesetComplete(const DrmOverlayPlane& primary);
+  bool ScheduleOrTestPageFlip(const DrmOverlayPlaneList& plane_list,
+                              scoped_refptr<PageFlipRequest> page_flip_request,
+                              std::unique_ptr<gfx::GpuFence>* out_fence);
 
-  std::unordered_map<DrmDevice*, std::unique_ptr<HardwareDisplayPlaneList>>
-      owned_hardware_planes_;
+  HardwareDisplayPlaneList owned_hardware_planes_;
 
   // Stores the CRTC configuration. This is used to identify monitors and
   // configure them.
@@ -172,7 +185,13 @@ class HardwareDisplayController {
   // Location of the controller on the screen.
   gfx::Point origin_;
 
+  scoped_refptr<PageFlipRequest> page_flip_request_;
+  DrmOverlayPlaneList current_planes_;
+  base::TimeTicks time_of_last_flip_;
+
   bool is_disabled_;
+
+  base::WeakPtrFactory<HardwareDisplayController> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(HardwareDisplayController);
 };

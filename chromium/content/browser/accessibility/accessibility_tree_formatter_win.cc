@@ -14,7 +14,6 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -314,7 +313,7 @@ void AccessibilityTreeFormatterWin::RecursiveBuildAccessibilityTree(
     if (child_variant.type() == VT_DISPATCH) {
       dispatch = V_DISPATCH(child_variant.ptr());
     } else if (child_variant.type() == VT_I4) {
-      HRESULT hr = node->get_accChild(child_variant, dispatch.GetAddressOf());
+      hr = node->get_accChild(child_variant, dispatch.GetAddressOf());
       if (FAILED(hr)) {
         child_dict->SetString("error",
                               base::ASCIIToUTF16("[Error retrieving child]"));

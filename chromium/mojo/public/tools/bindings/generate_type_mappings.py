@@ -61,7 +61,12 @@ import argparse
 import json
 import os
 import re
+import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "pylib"))
+
+from mojom.generate.generator import WriteFile
 
 def ReadTypemap(path):
   with open(path) as f:
@@ -106,14 +111,17 @@ def ParseTypemap(typemap):
         (result[mojom_type]['typename'], native_type, mojom_type))
 
     result[mojom_type] = {
-        'typename': native_type,
-        'non_copyable_non_movable': 'non_copyable_non_movable' in attributes,
-        'move_only': 'move_only' in attributes,
-        'copyable_pass_by_value': 'copyable_pass_by_value' in attributes,
-        'nullable_is_same_type': 'nullable_is_same_type' in attributes,
-        'hashable': 'hashable' in attributes,
         'public_headers': values['public_headers'],
         'traits_headers': values['traits_headers'],
+        'typename': native_type,
+
+        # Attributes supported for individual mappings.
+        'copyable_pass_by_value': 'copyable_pass_by_value' in attributes,
+        'force_serialize': 'force_serialize' in attributes,
+        'hashable': 'hashable' in attributes,
+        'move_only': 'move_only' in attributes,
+        'non_copyable_non_movable': 'non_copyable_non_movable' in attributes,
+        'nullable_is_same_type': 'nullable_is_same_type' in attributes,
     }
   return result
 
@@ -140,8 +148,8 @@ def main():
     raise IOError('Missing dependencies: %s' % ', '.join(missing))
   for path in params.dependency:
     typemaps.update(ReadTypemap(path))
-  with open(params.output, 'w') as f:
-    json.dump({'c++': typemaps}, f, indent=2)
+
+  WriteFile(json.dumps({'c++': typemaps}, indent=2), params.output)
 
 
 if __name__ == '__main__':

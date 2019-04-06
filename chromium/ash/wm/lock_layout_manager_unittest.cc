@@ -10,16 +10,16 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
-#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/test/keyboard_test_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -58,12 +58,12 @@ class LockLayoutManagerTest : public AshTestBase {
         keyboard::switches::kEnableVirtualKeyboard);
     AshTestBase::SetUp();
     Shell::GetPrimaryRootWindowController()->ActivateKeyboard(
-        keyboard::KeyboardController::GetInstance());
+        keyboard::KeyboardController::Get());
   }
 
   void TearDown() override {
     Shell::GetPrimaryRootWindowController()->DeactivateKeyboard(
-        keyboard::KeyboardController::GetInstance());
+        keyboard::KeyboardController::Get());
     AshTestBase::TearDown();
   }
 
@@ -84,25 +84,25 @@ class LockLayoutManagerTest : public AshTestBase {
 
   // Show or hide the keyboard.
   void ShowKeyboard(bool show) {
-    keyboard::KeyboardController* keyboard =
-        keyboard::KeyboardController::GetInstance();
-    ASSERT_TRUE(keyboard);
-    if (show == keyboard->keyboard_visible())
+    auto* keyboard = keyboard::KeyboardController::Get();
+    ASSERT_TRUE(keyboard->enabled());
+    if (show == keyboard->IsKeyboardVisible())
       return;
 
     if (show) {
       keyboard->ShowKeyboard(false);
-      if (keyboard->ui()->GetContentsWindow()->bounds().height() == 0) {
-        keyboard->ui()->GetContentsWindow()->SetBounds(
+      if (keyboard->ui()->GetKeyboardWindow()->bounds().height() == 0) {
+        keyboard->ui()->GetKeyboardWindow()->SetBounds(
             keyboard::KeyboardBoundsFromRootBounds(
                 Shell::GetPrimaryRootWindow()->bounds(),
                 kVirtualKeyboardHeight));
+        keyboard->NotifyKeyboardWindowLoaded();
       }
     } else {
-      keyboard->HideKeyboard(keyboard::KeyboardController::HIDE_REASON_MANUAL);
+      keyboard->HideKeyboardByUser();
     }
 
-    DCHECK_EQ(show, keyboard->keyboard_visible());
+    DCHECK_EQ(show, keyboard->IsKeyboardVisible());
   }
 };
 
@@ -186,8 +186,8 @@ TEST_F(LockLayoutManagerTest, AccessibilityPanel) {
   ASSERT_TRUE(shelf_layout_manager);
 
   // Set the accessibility panel height.
-  int chromevox_panel_height = 45;
-  shelf_layout_manager->SetChromeVoxPanelHeight(chromevox_panel_height);
+  int accessibility_panel_height = 45;
+  shelf_layout_manager->SetAccessibilityPanelHeight(accessibility_panel_height);
 
   views::Widget::InitParams widget_params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -199,18 +199,18 @@ TEST_F(LockLayoutManagerTest, AccessibilityPanel) {
       display::Screen::GetScreen()->GetPrimaryDisplay();
 
   gfx::Rect target_bounds = primary_display.bounds();
-  target_bounds.Inset(0 /* left */, chromevox_panel_height /* top */,
+  target_bounds.Inset(0 /* left */, accessibility_panel_height /* top */,
                       0 /* right */, 0 /* bottom */);
 
   EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
 
   // Update the accessibility panel height, and verify the window bounds are
   // updated accordingly.
-  chromevox_panel_height = 25;
-  shelf_layout_manager->SetChromeVoxPanelHeight(chromevox_panel_height);
+  accessibility_panel_height = 25;
+  shelf_layout_manager->SetAccessibilityPanelHeight(accessibility_panel_height);
 
   target_bounds = primary_display.bounds();
-  target_bounds.Inset(0 /* left */, chromevox_panel_height /* top */,
+  target_bounds.Inset(0 /* left */, accessibility_panel_height /* top */,
                       0 /* right */, 0 /* bottom */);
 
   EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
@@ -236,7 +236,7 @@ TEST_F(LockLayoutManagerTest, KeyboardBounds) {
   ShowKeyboard(true);
   EXPECT_EQ(screen_bounds.ToString(), window->GetBoundsInScreen().ToString());
   gfx::Rect keyboard_bounds =
-      keyboard::KeyboardController::GetInstance()->current_keyboard_bounds();
+      keyboard::KeyboardController::Get()->visual_bounds_in_screen();
   EXPECT_NE(keyboard_bounds, gfx::Rect());
   ShowKeyboard(false);
 
@@ -251,34 +251,35 @@ TEST_F(LockLayoutManagerTest, KeyboardBounds) {
   ShowKeyboard(false);
   display_manager()->SetDisplayRotation(
       primary_display.id(), display::Display::ROTATE_90,
-      display::Display::ROTATION_SOURCE_ACTIVE);
+      display::Display::RotationSource::ACTIVE);
   primary_display = display::Screen::GetScreen()->GetPrimaryDisplay();
   screen_bounds = primary_display.bounds();
   EXPECT_EQ(screen_bounds.ToString(), window->GetBoundsInScreen().ToString());
   display_manager()->SetDisplayRotation(
       primary_display.id(), display::Display::ROTATE_0,
-      display::Display::ROTATION_SOURCE_ACTIVE);
+      display::Display::RotationSource::ACTIVE);
 
   // When virtual keyboard overscroll is disabled keyboard bounds do
   // affect window bounds.
   keyboard::SetKeyboardOverscrollOverride(
       keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_DISABLED);
   ShowKeyboard(true);
-  keyboard::KeyboardController* keyboard =
-      keyboard::KeyboardController::GetInstance();
+  keyboard::KeyboardController* keyboard = keyboard::KeyboardController::Get();
   primary_display = display::Screen::GetScreen()->GetPrimaryDisplay();
   screen_bounds = primary_display.bounds();
   gfx::Rect target_bounds(screen_bounds);
   target_bounds.set_height(
       target_bounds.height() -
-      keyboard->ui()->GetContentsWindow()->bounds().height());
+      keyboard->ui()->GetKeyboardWindow()->bounds().height());
   EXPECT_EQ(target_bounds.ToString(), window->GetBoundsInScreen().ToString());
   ShowKeyboard(false);
 
   keyboard::SetKeyboardOverscrollOverride(
       keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_NONE);
 
-  keyboard->SetContainerType(keyboard::ContainerType::FLOATING);
+  keyboard->SetContainerType(keyboard::ContainerType::FLOATING,
+                             base::nullopt /* target_bounds */,
+                             base::BindOnce([](bool success) {}));
   ShowKeyboard(true);
   primary_display = display::Screen::GetScreen()->GetPrimaryDisplay();
   screen_bounds = primary_display.bounds();
@@ -342,8 +343,8 @@ TEST_F(LockLayoutManagerTest, AccessibilityPanelWithMultipleMonitors) {
       GetPrimaryShelf()->shelf_layout_manager();
   ASSERT_TRUE(shelf_layout_manager);
 
-  int chromevox_panel_height = 45;
-  shelf_layout_manager->SetChromeVoxPanelHeight(chromevox_panel_height);
+  int accessibility_panel_height = 45;
+  shelf_layout_manager->SetAccessibilityPanelHeight(accessibility_panel_height);
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -357,7 +358,7 @@ TEST_F(LockLayoutManagerTest, AccessibilityPanelWithMultipleMonitors) {
 
   gfx::Rect target_bounds =
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
-  target_bounds.Inset(0, chromevox_panel_height, 0, 0);
+  target_bounds.Inset(0, accessibility_panel_height, 0, 0);
   EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
 
   // Restore window with bounds in the second display, the window should be

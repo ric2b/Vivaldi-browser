@@ -31,7 +31,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/image/image.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
@@ -67,14 +67,8 @@ ScopedJavaLocalRef<jobject> JNI_NotificationPlatformBridge_ConvertToJavaBitmap(
 
 NotificationActionType GetNotificationActionType(
     message_center::ButtonInfo button) {
-  switch (button.type) {
-    case message_center::ButtonType::BUTTON:
-      return NotificationActionType::BUTTON;
-    case message_center::ButtonType::TEXT:
-      return NotificationActionType::TEXT;
-  }
-  NOTREACHED();
-  return NotificationActionType::TEXT;
+  return button.placeholder ? NotificationActionType::TEXT
+                            : NotificationActionType::BUTTON;
 }
 
 ScopedJavaLocalRef<jobjectArray> ConvertToJavaActionInfos(
@@ -91,8 +85,11 @@ ScopedJavaLocalRef<jobjectArray> ConvertToJavaActionInfos(
     ScopedJavaLocalRef<jstring> title =
         base::android::ConvertUTF16ToJavaString(env, button.title);
     int type = GetNotificationActionType(button);
-    ScopedJavaLocalRef<jstring> placeholder =
-        base::android::ConvertUTF16ToJavaString(env, button.placeholder);
+    ScopedJavaLocalRef<jstring> placeholder;
+    if (button.placeholder) {
+      placeholder =
+          base::android::ConvertUTF16ToJavaString(env, *button.placeholder);
+    }
     ScopedJavaLocalRef<jobject> icon =
         JNI_NotificationPlatformBridge_ConvertToJavaBitmap(env, button.icon);
     ScopedJavaLocalRef<jobject> action_info = Java_ActionInfo_createActionInfo(
@@ -101,31 +98,6 @@ ScopedJavaLocalRef<jobjectArray> ConvertToJavaActionInfos(
   }
 
   return ScopedJavaLocalRef<jobjectArray>(env, actions);
-}
-
-// Callback to run once the profile has been loaded in order to perform a
-// given |operation| in a notification.
-// TODO(miguelg) move it to notification_common?
-void ProfileLoadedCallback(NotificationCommon::Operation operation,
-                           NotificationHandler::Type notification_type,
-                           const GURL& origin,
-                           const std::string& notification_id,
-                           const base::Optional<int>& action_index,
-                           const base::Optional<base::string16>& reply,
-                           const base::Optional<bool>& by_user,
-                           Profile* profile) {
-  if (!profile) {
-    // TODO(miguelg): Add UMA for this condition.
-    // Perhaps propagate this through PersistentNotificationStatus.
-    LOG(WARNING) << "Profile not loaded correctly";
-    return;
-  }
-
-  NotificationDisplayServiceImpl* display_service =
-      NotificationDisplayServiceImpl::GetForProfile(profile);
-  display_service->ProcessNotificationOperation(operation, notification_type,
-                                                origin, notification_id,
-                                                action_index, reply, by_user);
 }
 
 }  // namespace
@@ -167,13 +139,11 @@ void NotificationPlatformBridgeAndroid::OnNotificationClicked(
     const JavaParamRef<jstring>& java_scope_url,
     const JavaParamRef<jstring>& java_profile_id,
     jboolean incognito,
-    const JavaParamRef<jstring>& java_tag,
     const JavaParamRef<jstring>& java_webapk_package,
     jint java_action_index,
     const JavaParamRef<jstring>& java_reply) {
   std::string notification_id =
       ConvertJavaStringToUTF8(env, java_notification_id);
-  std::string tag = ConvertJavaStringToUTF8(env, java_tag);
   std::string profile_id = ConvertJavaStringToUTF8(env, java_profile_id);
   std::string webapk_package =
       ConvertJavaStringToUTF8(env, java_webapk_package);
@@ -185,7 +155,7 @@ void NotificationPlatformBridgeAndroid::OnNotificationClicked(
   GURL origin(ConvertJavaStringToUTF8(env, java_origin));
   GURL scope_url(ConvertJavaStringToUTF8(env, java_scope_url));
   regenerated_notification_infos_[notification_id] =
-      RegeneratedNotificationInfo(origin, scope_url, tag, webapk_package);
+      RegeneratedNotificationInfo(scope_url, webapk_package);
 
   base::Optional<int> action_index;
   if (java_action_index != kNotificationInvalidButtonIndex)
@@ -196,7 +166,8 @@ void NotificationPlatformBridgeAndroid::OnNotificationClicked(
 
   profile_manager->LoadProfile(
       profile_id, incognito,
-      base::Bind(&ProfileLoadedCallback, NotificationCommon::CLICK,
+      base::Bind(&NotificationDisplayServiceImpl::ProfileLoadedCallback,
+                 NotificationCommon::OPERATION_CLICK,
                  NotificationHandler::Type::WEB_PERSISTENT, origin,
                  notification_id, std::move(action_index), std::move(reply),
                  base::nullopt /* by_user */));
@@ -217,7 +188,7 @@ void NotificationPlatformBridgeAndroid::
   const RegeneratedNotificationInfo& info = iterator->second;
   regenerated_notification_infos_[notification_id] =
       RegeneratedNotificationInfo(
-          info.origin, info.service_worker_scope, info.tag,
+          info.service_worker_scope,
           ConvertJavaStringToUTF8(env, java_webapk_package));
 }
 
@@ -228,7 +199,6 @@ void NotificationPlatformBridgeAndroid::OnNotificationClosed(
     const JavaParamRef<jstring>& java_origin,
     const JavaParamRef<jstring>& java_profile_id,
     jboolean incognito,
-    const JavaParamRef<jstring>& java_tag,
     jboolean by_user) {
   std::string profile_id = ConvertJavaStringToUTF8(env, java_profile_id);
   std::string notification_id =
@@ -242,7 +212,8 @@ void NotificationPlatformBridgeAndroid::OnNotificationClosed(
 
   profile_manager->LoadProfile(
       profile_id, incognito,
-      base::Bind(&ProfileLoadedCallback, NotificationCommon::CLOSE,
+      base::Bind(&NotificationDisplayServiceImpl::ProfileLoadedCallback,
+                 NotificationCommon::OPERATION_CLOSE,
                  NotificationHandler::Type::WEB_PERSISTENT,
                  GURL(ConvertJavaStringToUTF8(env, java_origin)),
                  notification_id, base::nullopt /* action index */,
@@ -251,8 +222,7 @@ void NotificationPlatformBridgeAndroid::OnNotificationClosed(
 
 void NotificationPlatformBridgeAndroid::Display(
     NotificationHandler::Type notification_type,
-    const std::string& profile_id,
-    bool incognito,
+    Profile* profile,
     const message_center::Notification& notification,
     std::unique_ptr<NotificationCommon::Metadata> metadata) {
   JNIEnv* env = AttachCurrentThread();
@@ -275,10 +245,6 @@ void NotificationPlatformBridgeAndroid::Display(
       ConvertUTF8ToJavaString(env, notification.id());
   ScopedJavaLocalRef<jstring> j_origin =
       ConvertUTF8ToJavaString(env, origin_url.spec());
-  // TODO(https://crbug.com/801535): remove the tag field from Java and just use
-  // the notification id.
-  ScopedJavaLocalRef<jstring> tag =
-      ConvertUTF8ToJavaString(env, notification.id());
   ScopedJavaLocalRef<jstring> title =
       ConvertUTF16ToJavaString(env, notification.title());
   ScopedJavaLocalRef<jstring> body =
@@ -306,21 +272,20 @@ void NotificationPlatformBridgeAndroid::Display(
       base::android::ToJavaIntArray(env, notification.vibration_pattern());
 
   ScopedJavaLocalRef<jstring> j_profile_id =
-      ConvertUTF8ToJavaString(env, profile_id);
+      ConvertUTF8ToJavaString(env, GetProfileId(profile));
 
   Java_NotificationPlatformBridge_displayNotification(
       env, java_object_, j_notification_id, j_origin, j_scope_url, j_profile_id,
-      incognito, tag, title, body, image, notification_icon, badge,
+      profile->IsOffTheRecord(), title, body, image, notification_icon, badge,
       vibration_pattern, notification.timestamp().ToJavaTime(),
       notification.renotify(), notification.silent(), actions);
 
   regenerated_notification_infos_[notification.id()] =
-      RegeneratedNotificationInfo(origin_url, scope_url, notification.id(),
-                                  base::nullopt);
+      RegeneratedNotificationInfo(scope_url, base::nullopt);
 }
 
 void NotificationPlatformBridgeAndroid::Close(
-    const std::string& profile_id,
+    Profile* profile,
     const std::string& notification_id) {
   const auto iterator = regenerated_notification_infos_.find(notification_id);
   if (iterator == regenerated_notification_infos_.end())
@@ -353,14 +318,14 @@ void NotificationPlatformBridgeAndroid::Close(
 }
 
 void NotificationPlatformBridgeAndroid::GetDisplayed(
-    const std::string& profile_id,
-    bool incognito,
-    const GetDisplayedNotificationsCallback& callback) const {
+    Profile* profile,
+    GetDisplayedNotificationsCallback callback) const {
   auto displayed_notifications = std::make_unique<std::set<std::string>>();
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(callback, base::Passed(&displayed_notifications),
-                 false /* supports_synchronization */));
+      base::BindOnce(std::move(callback),
+                     base::Passed(&displayed_notifications),
+                     false /* supports_synchronization */));
 }
 
 void NotificationPlatformBridgeAndroid::SetReadyCallback(
@@ -379,13 +344,9 @@ NotificationPlatformBridgeAndroid::RegeneratedNotificationInfo::
 
 NotificationPlatformBridgeAndroid::RegeneratedNotificationInfo::
     RegeneratedNotificationInfo(
-        const GURL& origin,
         const GURL& service_worker_scope,
-        const std::string& tag,
         const base::Optional<std::string>& webapk_package)
-    : origin(origin),
-      service_worker_scope(service_worker_scope),
-      tag(tag),
+    : service_worker_scope(service_worker_scope),
       webapk_package(webapk_package) {}
 
 NotificationPlatformBridgeAndroid::RegeneratedNotificationInfo::

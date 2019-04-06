@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_COCOA_BROWSER_DIALOGS_VIEWS_MAC_H_
 
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
 #include "ui/gfx/native_widget_types.h"
 
 class Browser;
@@ -43,7 +44,8 @@ bool ShowAllDialogsWithViewsToolkit();
 void ShowPageInfoBubbleViews(Browser* browser,
                              content::WebContents* web_contents,
                              const GURL& virtual_url,
-                             const security_state::SecurityInfo& security_info);
+                             const security_state::SecurityInfo& security_info,
+                             bubble_anchor_util::Anchor anchor);
 
 // Show a Views bookmark bubble at the given point. This occurs when the
 // bookmark star is clicked or "Bookmark This Page..." is selected from a menu
@@ -103,6 +105,7 @@ void ShowFirstRunBubbleViews(Browser* browser);
 void ShowPasswordReuseWarningDialog(
     content::WebContents* web_contents,
     safe_browsing::ChromePasswordProtectionService* service,
+    safe_browsing::ReusedPasswordType password_type,
     safe_browsing::OnWarningDone done_callback);
 
 }  // namespace chrome

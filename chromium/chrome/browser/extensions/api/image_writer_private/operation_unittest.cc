@@ -6,7 +6,6 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/image_writer_private/error_messages.h"
@@ -260,7 +259,7 @@ TEST_F(ImageWriterOperationTest, VerifyFileFailure) {
       test_utils_.GetDevicePath(), kDevicePattern, kTestFileSize);
 
   operation_->Start();
-  operation_->VerifyWrite(base::Bind(&base::DoNothing));
+  operation_->VerifyWrite(base::DoNothing());
   content::RunAllTasksUntilIdle();
 }
 #endif  // !defined(OS_CHROMEOS)

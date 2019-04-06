@@ -60,6 +60,10 @@ const char kNotesRootTag[] = "main_notes";
 const char kNotesOtherTag[] = "other_notes";
 const char kNotesTrashTag[] = "trash_notes";
 
+// Maximum number of bytes to allow in a title (must match sync's internal
+// limits; see write_node.cc).
+const int kTitleLimitBytes = 255;
+
 // Provides the following abstraction: given a parent notes node, find best
 // matching child node for many sync nodes.
 class NotesNodeFinder {
@@ -73,6 +77,7 @@ class NotesNodeFinder {
   const Notes_Node* FindNotesNode(const GURL& url,
                                   const std::string& title,
                                   const std::string& content,
+                                  int special_node_type,
                                   bool is_folder,
                                   int64_t preferred_id);
 
@@ -91,6 +96,11 @@ class NotesNodeFinder {
   typedef base::hash_multimap<std::string, const Notes_Node*> NotesNodeMap;
   typedef std::pair<NotesNodeMap::iterator, NotesNodeMap::iterator>
       NotesNodeRange;
+
+  // Converts and truncates note titles in the form sync does internally
+  // to avoid mismatches due to sync munging titles.
+  static void ConvertTitleToSyncInternalFormat(const std::string& input,
+                                               std::string* output);
 
   const Notes_Node* parent_node_;
   NotesNodeMap child_nodes_;
@@ -127,6 +137,7 @@ NotesNodeFinder::NotesNodeFinder(const Notes_Node* parent_node)
 const Notes_Node* NotesNodeFinder::FindNotesNode(const GURL& url,
                                                  const std::string& title,
                                                  const std::string& content,
+                                                 int special_node_type,
                                                  bool is_folder,
                                                  int64_t preferred_id) {
   const Notes_Node* match = nullptr;
@@ -139,18 +150,27 @@ const Notes_Node* NotesNodeFinder::FindNotesNode(const GURL& url,
     // Then within the range match the node by the folder bit
     // and the url.
     const Notes_Node* node = iter->second;
-    if (is_folder == node->is_folder() && url == node->GetURL()) {
-      if (node->id() == preferred_id || preferred_id == 0) {
-        // Preferred match - use this node.
+    if (is_folder != node->is_folder())
+      continue;
+    if (url != node->GetURL())
+      continue;
+    if (node->is_trash() &&
+        special_node_type != sync_pb::NotesSpecifics::TRASH_NODE)
+      continue;
+    if (node->is_separator() &&
+        special_node_type != sync_pb::NotesSpecifics::SEPARATOR)
+      continue;
+
+    if (node->id() == preferred_id || preferred_id == 0) {
+      // Preferred match - use this node.
+      match = node;
+      match_iter = iter;
+      break;
+    } else if (match == nullptr) {
+      if (base::UTF16ToUTF8(node->GetContent()) == content) {
+        // First match - continue iterating.
         match = node;
         match_iter = iter;
-        break;
-      } else if (match == nullptr) {
-        if (base::UTF16ToUTF8(node->GetContent()) == content) {
-          // First match - continue iterating.
-          match = node;
-          match_iter = iter;
-        }
       }
     }
   }
@@ -169,12 +189,29 @@ bool NotesNodeFinder::NodeMatches(const Notes_Node* notes_node,
                                   const std::string& title,
                                   const std::string& content,
                                   bool is_folder) {
-  if (url != notes_node->GetURL() || is_folder != notes_node->is_folder()) {
+  if (url != notes_node->GetURL() || is_folder != notes_node->is_folder() ||
+      content != base::UTF16ToUTF8(notes_node->GetContent())) {
     return false;
   }
 
-  return title == base::UTF16ToUTF8(notes_node->GetTitle()) &&
-         content == base::UTF16ToUTF8(notes_node->GetContent());
+  std::string note_title = base::UTF16ToUTF8(notes_node->GetTitle());
+
+  // We used to skip converting the title upon saving encrypted notes,
+  // this is a fix to support that.
+  if (title.empty() && note_title.empty())
+
+  // The title passed to this method comes from a sync directory entry.
+  // The following line is needed to make the native note title comparable.
+  ConvertTitleToSyncInternalFormat(note_title, &note_title);
+  return title == note_title;
+}
+
+/* static */
+void NotesNodeFinder::ConvertTitleToSyncInternalFormat(
+    const std::string& input,
+    std::string* output) {
+  syncer::SyncAPINameToServerName(input, output);
+  base::TruncateUTF8ToByteSize(*output, kTitleLimitBytes, output);
 }
 
 NotesModelAssociator::Context::Context(
@@ -632,10 +669,11 @@ syncer::SyncError NotesModelAssociator::BuildAssociations(
 
     int64_t external_id = sync_child_node.GetExternalId();
     GURL url(sync_child_node.GetNotesSpecifics().url());
-    const Notes_Node* child_node =
-        node_finder.FindNotesNode(url, sync_child_node.GetTitle(),
-                                  sync_child_node.GetNotesSpecifics().content(),
-                                  sync_child_node.GetIsFolder(), external_id);
+    const Notes_Node* child_node = node_finder.FindNotesNode(
+        url, sync_child_node.GetTitle(),
+        sync_child_node.GetNotesSpecifics().content(),
+        sync_child_node.GetNotesSpecifics().special_node_type(),
+        sync_child_node.GetIsFolder(), external_id);
     if (child_node) {
       // Skip local node update if the local model version matches and
       // the node is already associated and in the right position.

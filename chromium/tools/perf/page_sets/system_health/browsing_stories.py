@@ -172,6 +172,7 @@ class NytimesDesktopStory(_ArticleBrowsingStory):
   URL = 'http://www.nytimes.com'
   ITEM_SELECTOR = '.story-heading > a'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
+  COMPLETE_STATE_WAIT_TIMEOUT = 150  # crbug.com/865247
 
 
 # Desktop qq.com opens a news item in a separate tab, for which the back button
@@ -462,6 +463,7 @@ class TumblrDesktopStory(_MediaBrowsingStory):
 
   def _ViewMediaItem(self, action_runner, index):
     super(TumblrDesktopStory, self)._ViewMediaItem(action_runner, index)
+    action_runner.Wait(5)  # Give the lightbox time to appear
     action_runner.MouseClick(selector='#tumblr_lightbox_center_image')
     action_runner.Wait(1)  # To make browsing more realistic.
 
@@ -706,7 +708,7 @@ class GoogleMapsStory(_BrowsingStory):
     action_runner.ClickElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
     action_runner.WaitForJavaScriptCondition(
         self._CHECK_RESTAURANTS_UPDATED,
-        old_restaurant=prev_restaurant_hash)
+        old_restaurant=prev_restaurant_hash, timeout=90)
     # This wait is required to fetch the data for all the tiles in the map.
     action_runner.Wait(1)
 
@@ -715,7 +717,7 @@ class GoogleMapsStory(_BrowsingStory):
     action_runner.ClickElement(selector=self._MAPS_ZOOM_IN_SELECTOR)
     action_runner.WaitForJavaScriptCondition(
         self._CHECK_RESTAURANTS_UPDATED,
-        old_restaurant=prev_restaurant_hash)
+        old_restaurant=prev_restaurant_hash, timeout=90)
     # This wait is required to fetch the data for all the tiles in the map.
     action_runner.Wait(1)
 
@@ -730,7 +732,7 @@ class GoogleMapsStory(_BrowsingStory):
         repeat_count=2, speed=500, timeout=120, repeat_delay_ms=2000)
     action_runner.WaitForJavaScriptCondition(
         self._CHECK_RESTAURANTS_UPDATED,
-        old_restaurant=prev_restaurant_hash)
+        old_restaurant=prev_restaurant_hash, timeout=90)
 
     prev_restaurant_hash = action_runner.EvaluateJavaScript(
         self._GET_RESTAURANT_RESPONSE_HASH)
@@ -739,7 +741,7 @@ class GoogleMapsStory(_BrowsingStory):
         repeat_count=2, speed=500, timeout=120, repeat_delay_ms=2000)
     action_runner.WaitForJavaScriptCondition(
         self._CHECK_RESTAURANTS_UPDATED,
-        old_restaurant=prev_restaurant_hash)
+        old_restaurant=prev_restaurant_hash, timeout=90)
 
     # To make the recording more realistic.
     action_runner.Wait(1)

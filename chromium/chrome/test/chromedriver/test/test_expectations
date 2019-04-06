@@ -85,11 +85,6 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'WindowTest.testCanMaximizeTheWindow',
     # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=528
     'PageLoadingTest.testShouldDoNothingIfThereIsNothingToGoBackTo',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=653
-    'PageLoadingTest.testShouldBeAbleToNavigateBackInTheBrowserHistoryInPresenceOfIframes',
-    'PageLoadingTest.testShouldBeAbleToNavigateBackInTheBrowserHistory',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1117
-    'PageLoadingTest.testShouldBeAbleToAccessPagesWithAnInsecureSslCertificate',
     # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=1113
     'FrameSwitchingTest.testShouldNotSwitchMagicallyToTheTopWindow',
     # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=1151
@@ -107,61 +102,14 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'AlertsTest.testPromptShouldUseDefaultValueIfNoKeysSent',
     'UnexpectedAlertBehaviorTest.canAcceptUnhandledAlert',
     'UnexpectedAlertBehaviorTest.canSpecifyUnhandledAlertBehaviourUsingCapabilities',
-    # https://bugs.chromium.org/p/chromium/issues/detail?id=764519
-    'FrameSwitchingTest.testShouldBeAbleToClickInAFrameThatRewritesTopWindowLocation',
 ]
-
-_REVISION_NEGATIVE_FILTER['64'] = (
-    _REVISION_NEGATIVE_FILTER['HEAD'] + [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
-    'PageLoadingTest.testShouldBeAbleToGetAFragmentOnTheCurrentPage',
-    ]
-)
-
-_REVISION_NEGATIVE_FILTER['63'] = (
-    _REVISION_NEGATIVE_FILTER['HEAD'] + [
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
-        'MiscTest.testStimulatesStrangeOnloadInteractionInFirefox',
-        'PageLoadingTest.testShouldNotHangIfDocumentOpenCallIsNeverFollowedByDocumentCloseCall',
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
-        'PageLoadingTest.testShouldBeAbleToGetAFragmentOnTheCurrentPage',
-    ]
-)
 
 _OS_NEGATIVE_FILTER = {}
 _OS_NEGATIVE_FILTER['win'] = [
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=373
-    'RenderedWebElementTest.testHoverPersists',
-    'RenderedWebElementTest.canClickOnASuckerFishStyleMenu',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=416
-    'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePageAfterSwitching',
-    'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePage',
 ]
 _OS_NEGATIVE_FILTER['linux'] = [
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=416
-    'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePage',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=1148
-    'CombinedInputActionsTest.testCombiningShiftAndClickResultsInANewWindow',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=1150
-    'BasicKeyboardInterfaceTest.testBasicKeyboardInputOnActiveElement',
 ]
 _OS_NEGATIVE_FILTER['mac'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=26
-    'AlertsTest.testAlertShouldNotAllowAdditionalCommandsIfDismissed',
-    'AlertsTest.testShouldAllowUsersToDismissAnAlertManually',
-    'FormHandlingTest.handleFormWithJavascriptAction',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=354
-    'AlertsTest.testShouldAllowUsersToAcceptAnAlertInAFrame',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=375
-    'PageLoadingTest.testShouldBeAbleToNavigateBackInTheBrowserHistoryInPresenceOfIframes',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=416
-    'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePage',
-    # Flaky: https://bugs.chromium.org/p/chromedriver/issues/detail?id=1149
-    'ChromeDriverTests.testShouldAllowTheUserToSwitchToAnIFrameAndRemainFocusedOnIt',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1857
-    'TakesScreenshotTest.testShouldCaptureScreenshot',
-    'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePageAfterSwitching',
-    'TakesScreenshotTest.testShouldCaptureScreenshotAtIFramePageAfterSwitching',
 ]
 
 _SPECIFIC_OS_REVISION_NEGATIVE_FILTER = {}
@@ -194,6 +142,8 @@ _OS_NEGATIVE_FILTER['android:chrome'] = [
     'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePage',
     'TakesScreenshotTest.testShouldCaptureScreenshotAtFramePageAfterSwitching',
     'TakesScreenshotTest.testShouldCaptureScreenshotAtIFramePageAfterSwitching',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2376
+    'ImplicitWaitTest.testShouldImplicitlyWaitForASingleElement',
 
     # Alerts are not yet supported on Android.
     'AlertsTest.*',
@@ -264,53 +214,48 @@ _OS_NEGATIVE_FILTER['android:chrome'] = [
     'BasicMouseInterfaceTest.testMoveAndClick',
     'BasicMouseInterfaceTest.testShouldClickElementInIFrame',
     'CombinedInputActionsTest.testCanClickOnLinks',
-
-     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=998
-    'ImplicitWaitTest.testShouldImplicitlyWaitForASingleElement',
 ]
 _OS_NEGATIVE_FILTER['android:chrome_stable'] = (
-    _OS_NEGATIVE_FILTER['android:chrome'] + [
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2076
-        'CorrectEventFiringTest.testShouldReportTheXAndYCoordinatesWhenClicking',
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2077
-        'CorrectEventFiringTest.testShouldEmitClickEventWhenClickingOnATextInputElement',
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
-        'MiscTest.testStimulatesStrangeOnloadInteractionInFirefox',
-        'PageLoadingTest.testShouldNotHangIfDocumentOpenCallIsNeverFollowedByDocumentCloseCall',
-    ]
-)
-
-_OS_NEGATIVE_FILTER['android:chromium'] = (
     _OS_NEGATIVE_FILTER['android:chrome'] + [
     ]
 )
 _OS_NEGATIVE_FILTER['android:chrome_beta'] = (
     _OS_NEGATIVE_FILTER['android:chrome'] + [
-         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
-        'PageLoadingTest.testShouldBeAbleToGetAFragmentOnTheCurrentPage',
-         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2076
-        'CorrectEventFiringTest.testShouldReportTheXAndYCoordinatesWhenClicking',
-	 # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2077
-        'CorrectEventFiringTest.testShouldEmitClickEventWhenClickingOnATextInputElement',
+    ]
+)
+_OS_NEGATIVE_FILTER['android:chromium'] = (
+    _OS_NEGATIVE_FILTER['android:chrome'] + [
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2286
+        'CorrectEventFiringTest.*',
+        'FormHandlingTest.testShouldSubmitAFormUsingTheEnterKey',
+        'FormHandlingTest.testShouldSubmitAFormUsingTheNewlineLiteral',
+        'JavascriptEnabledDriverTest.testShouldBeAbleToFindElementAfterJavascriptCausesANewPageToLoad',
+        'JavascriptEnabledDriverTest.testShouldBeAbleToDetermineTheLocationOfAnElement',
+        'JavascriptEnabledDriverTest.testShouldBeAbleToSwitchToFocusedElement',
+        'JavascriptEnabledDriverTest.testIfNoElementHasFocusTheActiveElementIsTheBody',
+        'JavascriptEnabledDriverTest.testShouldWaitForLoadsToCompleteAfterJavascriptCausesANewPageToLoad',
+        'TypingTest.testShouldBeAbleToUseArrowKeys',
+        'TypingTest.testShouldReportKeyCodeOfArrowKeysUpDownEvents',
+        'TypingTest.testShouldBeAbleToMixUpperAndLowerCaseLetters',
+        'BasicMouseInterfaceTest.testDoubleClickThenGet',
+        'MiscTest.testShouldReturnTheSourceOfAPage',
+        'MiscTest.testClickingShouldNotTrampleWOrHInGlobalScope',
+        'MiscTest.testShouldReportTheCurrentUrlCorrectly',
+        'MiscTest.testStimulatesStrangeOnloadInteractionInFirefox',
+        'ElementAttributeTest.testShouldCorrectlyReportValueOfColspan',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2376
+        'ImplicitWaitTest.*',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2401
+        'JavascriptEnabledDriverTest.testIssue80ClickShouldGenerateClickEvent',
     ]
 )
 _OS_NEGATIVE_FILTER['android:chromedriver_webview_shell'] = (
     _OS_NEGATIVE_FILTER['android:chrome'] + [
-         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=645
-        'ClickScrollingTest.testShouldBeAbleToClickElementInAFrameThatIsOutOfView',
-        'ClickScrollingTest.testShouldBeAbleToClickElementThatIsOutOfViewInAFrameThatIsOutOfView',
-        'FormHandlingTest.handleFormWithJavascriptAction',
-        'TypingTest.testShouldReportKeyCodeOfArrowKeysUpDownEvents',
-        'TypingTest.testShouldReportKeyCodeOfArrowKeys',
-         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1006
-        'ClickScrollingTest.testShouldBeAbleToClickElementThatIsOutOfViewInANestedFrameThatIsOutOfView',
+         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2330
+        'VisibilityTest.testShouldModifyTheVisibilityOfAnElementDynamically',
          # Not applicable on ChromeDriverWebViewShell (doesn't support tabs).
         'WindowSwitchingTest.*',
-
         'TakesScreenshotTest.testShouldCaptureScreenshot',
-        # TODO(gmanikpure): re-enable this test when we stop supporting
-        # WebView on KitKat.
-        'ClickTest.testCanClickAnImageMapArea',
     ]
 )
 

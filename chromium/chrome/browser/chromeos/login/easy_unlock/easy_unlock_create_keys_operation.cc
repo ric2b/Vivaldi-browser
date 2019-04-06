@@ -16,13 +16,13 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_manager.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_types.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/cryptohome/homedir_methods.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/easy_unlock_client.h"
 #include "chromeos/login/auth/key.h"
-#include "components/proximity_auth/logging/logging.h"
 #include "crypto/encryptor.h"
 #include "crypto/random.h"
 #include "crypto/symmetric_key.h"
@@ -83,7 +83,7 @@ class EasyUnlockCreateKeysOperation::ChallengeCreator {
   std::string esk_;
 
   // Owned by DBusThreadManager
-  chromeos::EasyUnlockClient* easy_unlock_client_;
+  EasyUnlockClient* easy_unlock_client_;
 
   base::WeakPtrFactory<ChallengeCreator> weak_ptr_factory_;
 
@@ -101,8 +101,7 @@ EasyUnlockCreateKeysOperation::ChallengeCreator::ChallengeCreator(
       tpm_pub_key_(tpm_pub_key),
       device_(device),
       callback_(callback),
-      easy_unlock_client_(
-          chromeos::DBusThreadManager::Get()->GetEasyUnlockClient()),
+      easy_unlock_client_(DBusThreadManager::Get()->GetEasyUnlockClient()),
       weak_ptr_factory_(this) {}
 
 EasyUnlockCreateKeysOperation::ChallengeCreator::~ChallengeCreator() {}
@@ -318,9 +317,9 @@ void EasyUnlockCreateKeysOperation::OnGetSystemSalt(
   user_key.Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF, system_salt);
 
   EasyUnlockDeviceKeyData* device = &devices_[index];
-  cryptohome::KeyDefinition key_def(user_key.GetSecret(),
-                                    EasyUnlockKeyManager::GetKeyLabel(index),
-                                    kEasyUnlockKeyPrivileges);
+  auto key_def = cryptohome::KeyDefinition::CreateForPassword(
+      user_key.GetSecret(), EasyUnlockKeyManager::GetKeyLabel(index),
+      kEasyUnlockKeyPrivileges);
   key_def.revision = kEasyUnlockKeyRevision;
   key_def.provider_data.push_back(cryptohome::KeyDefinition::ProviderData(
       kEasyUnlockKeyMetaNameBluetoothAddress, device->bluetooth_address));
@@ -338,6 +337,12 @@ void EasyUnlockCreateKeysOperation::OnGetSystemSalt(
   key_def.provider_data.push_back(cryptohome::KeyDefinition::ProviderData(
       kEasyUnlockKeyMetaNameSerializedBeaconSeeds,
       device->serialized_beacon_seeds));
+  // ProviderData only has std::string and int64_t fields for persistence -- use
+  // the int64_t field to store this boolean. The boolean is stored as either a
+  // 1 or 0 in as an int64_t.
+  key_def.provider_data.push_back(cryptohome::KeyDefinition::ProviderData(
+      kEasyUnlockKeyMetaNameUnlockKey,
+      static_cast<int64_t>(device->unlock_key)));
 
   std::unique_ptr<Key> auth_key(new Key(*user_context_.GetKey()));
   if (auth_key->GetKeyType() == Key::KEY_TYPE_PASSWORD_PLAIN)

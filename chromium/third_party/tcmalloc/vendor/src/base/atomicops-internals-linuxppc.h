@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2008, Google Inc.
  * All rights reserved.
  * 
@@ -163,14 +164,24 @@ inline Atomic32 NoBarrier_AtomicExchange(volatile Atomic32 *ptr,
   return old_value;
 }
 
-inline Atomic32 NoBarrier_AtomicIncrement(volatile Atomic32 *ptr,
-                                          Atomic32 increment) {
-  return OSAtomicAdd32(increment, const_cast<Atomic32*>(ptr));
+inline Atomic32 Acquire_AtomicExchange(volatile Atomic32 *ptr,
+                                       Atomic32 new_value) {
+  Atomic32 old_value;
+  do {
+    old_value = *ptr;
+  } while (!OSAtomicCompareAndSwap32Acquire(old_value, new_value,
+                                            const_cast<Atomic32*>(ptr)));
+  return old_value;
 }
 
-inline Atomic32 Barrier_AtomicIncrement(volatile Atomic32 *ptr,
-                                        Atomic32 increment) {
-  return OSAtomicAdd32Barrier(increment, const_cast<Atomic32*>(ptr));
+inline Atomic32 Release_AtomicExchange(volatile Atomic32 *ptr,
+                                       Atomic32 new_value) {
+  Atomic32 old_value;
+  do {
+    old_value = *ptr;
+  } while (!OSAtomicCompareAndSwap32Release(old_value, new_value,
+                                            const_cast<Atomic32*>(ptr)));
+  return old_value;
 }
 
 inline Atomic32 Acquire_CompareAndSwap(volatile Atomic32 *ptr,
@@ -237,7 +248,7 @@ static inline bool OSAtomicCompareAndSwap64(Atomic64 old_value,
   Atomic64 prev;
   __asm__ __volatile__(
 "1:		ldarx   %0,0,%2\n\
-		cmpw    0,%0,%3\n\
+		cmpd    0,%0,%3\n\
 		bne-    2f\n\
 		stdcx.  %4,0,%2\n\
 		bne-    1b\n\
@@ -294,14 +305,24 @@ inline Atomic64 NoBarrier_AtomicExchange(volatile Atomic64 *ptr,
   return old_value;
 }
 
-inline Atomic64 NoBarrier_AtomicIncrement(volatile Atomic64 *ptr,
-                                          Atomic64 increment) {
-  return OSAtomicAdd64(increment, const_cast<Atomic64*>(ptr));
+inline Atomic64 Acquire_AtomicExchange(volatile Atomic64 *ptr,
+                                       Atomic64 new_value) {
+  Atomic64 old_value;
+  do {
+    old_value = *ptr;
+  } while (!OSAtomicCompareAndSwap64Acquire(old_value, new_value,
+                                            const_cast<Atomic64*>(ptr)));
+  return old_value;
 }
 
-inline Atomic64 Barrier_AtomicIncrement(volatile Atomic64 *ptr,
-                                        Atomic64 increment) {
-  return OSAtomicAdd64Barrier(increment, const_cast<Atomic64*>(ptr));
+inline Atomic64 Release_AtomicExchange(volatile Atomic64 *ptr,
+                                       Atomic64 new_value) {
+  Atomic64 old_value;
+  do {
+    old_value = *ptr;
+  } while (!OSAtomicCompareAndSwap64Release(old_value, new_value,
+                                            const_cast<Atomic64*>(ptr)));
+  return old_value;
 }
 
 inline Atomic64 Acquire_CompareAndSwap(volatile Atomic64 *ptr,

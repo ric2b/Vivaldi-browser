@@ -4,13 +4,15 @@
 
 #include "chromecast/media/base/media_caps.h"
 
+#include "base/command_line.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "chromecast/base/chromecast_switches.h"
 #include "chromecast/public/avsettings.h"
 
 namespace chromecast {
 namespace media {
 
-unsigned int MediaCapabilities::g_hdmi_codecs = 0;
 int MediaCapabilities::g_hdcp_version = 0;
 int MediaCapabilities::g_supported_eotfs = 0;
 int MediaCapabilities::g_dolby_vision_flags = 0;
@@ -18,33 +20,28 @@ bool MediaCapabilities::g_cur_mode_supports_hdr = false;
 bool MediaCapabilities::g_cur_mode_supports_dv = false;
 gfx::Size MediaCapabilities::g_screen_resolution(0, 0);
 
-void MediaCapabilities::SetHdmiSinkCodecs(unsigned int codecs_mask) {
-  g_hdmi_codecs = codecs_mask;
-}
-
-bool MediaCapabilities::HdmiSinkSupportsAC3() {
-  return g_hdmi_codecs & HdmiSinkCodec::kSinkCodecAc3;
-}
-
-bool MediaCapabilities::HdmiSinkSupportsDTS() {
-  return g_hdmi_codecs & HdmiSinkCodec::kSinkCodecDts;
-}
-
-bool MediaCapabilities::HdmiSinkSupportsDTSHD() {
-  return g_hdmi_codecs & HdmiSinkCodec::kSinkCodecDtsHd;
-}
-
-bool MediaCapabilities::HdmiSinkSupportsEAC3() {
-  return g_hdmi_codecs & HdmiSinkCodec::kSinkCodecEac3;
-}
-
-bool MediaCapabilities::HdmiSinkSupportsPcmSurroundSound() {
-  return g_hdmi_codecs & HdmiSinkCodec::kSinkCodecPcmSurroundSound;
-}
-
 void MediaCapabilities::ScreenResolutionChanged(const gfx::Size& res) {
   VLOG(1) << __FUNCTION__ << " resolution=" << res.ToString();
   g_screen_resolution = res;
+
+  auto* cmd_line = base::CommandLine::ForCurrentProcess();
+  const auto& kHeightSwitch = switches::kForceMediaResolutionHeight;
+  int height = 0;
+  if (cmd_line->HasSwitch(kHeightSwitch) &&
+      base::StringToInt(cmd_line->GetSwitchValueASCII(kHeightSwitch),
+                        &height) &&
+      height > 0) {
+    LOG(INFO) << __func__ << ": overridden screen height=" << height;
+    g_screen_resolution.set_height(height);
+  }
+  const auto& kWidthSwitch = switches::kForceMediaResolutionWidth;
+  int width = 0;
+  if (cmd_line->HasSwitch(kWidthSwitch) &&
+      base::StringToInt(cmd_line->GetSwitchValueASCII(kWidthSwitch), &width) &&
+      width > 0) {
+    LOG(INFO) << __func__ << ": overridden screen width=" << width;
+    g_screen_resolution.set_width(width);
+  }
 }
 
 void MediaCapabilities::ScreenInfoChanged(int hdcp_version,

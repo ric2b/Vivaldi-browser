@@ -80,6 +80,10 @@ bool DummyTextInputClient::HasCompositionText() const {
   return false;
 }
 
+ui::TextInputClient::FocusReason DummyTextInputClient::GetFocusReason() const {
+  return ui::TextInputClient::FOCUS_REASON_OTHER;
+}
+
 bool DummyTextInputClient::GetTextRange(gfx::Range* range) const {
   return false;
 }
@@ -127,8 +131,12 @@ bool DummyTextInputClient::IsTextEditCommandEnabled(
 void DummyTextInputClient::SetTextEditCommandForNextKeyEvent(
     TextEditCommand command) {}
 
-const std::string& DummyTextInputClient::GetClientSourceInfo() const {
-  return base::EmptyString();
+ukm::SourceId DummyTextInputClient::GetClientSourceForMetrics() const {
+  return ukm::SourceId{};
+}
+
+bool DummyTextInputClient::ShouldDoLearning() {
+  return false;
 }
 
 }  // namespace ui

@@ -21,13 +21,17 @@ class RenderFrameHost;
 namespace extensions {
 
 // An ExtensionWebContentsObserver that adds support for the extension error
-// console, reloading crashed extensions and routing extension messages between
-// renderers.
+// console, reloading crashed extensions, routing extension messages between
+// renderers and updating autoplay policy.
 class ChromeExtensionWebContentsObserver
     : public ExtensionWebContentsObserver,
       public content::WebContentsUserData<ChromeExtensionWebContentsObserver> {
  public:
   ~ChromeExtensionWebContentsObserver() override;
+
+  // Creates and initializes an instance of this class for the given
+  // |web_contents|, if it doesn't already exist.
+  static void CreateForWebContents(content::WebContents* web_contents);
 
  private:
   friend class content::WebContentsUserData<ChromeExtensionWebContentsObserver>;
@@ -42,6 +46,8 @@ class ChromeExtensionWebContentsObserver
   // content::WebContentsObserver overrides.
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
   void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
 
   // Silence a warning about hiding a virtual function.

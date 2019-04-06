@@ -42,8 +42,6 @@ class LayerTreeFrameSinkLocal : public cc::LayerTreeFrameSink,
   // Set a callback which will be called when the surface is changed.
   void SetSurfaceChangedCallback(const SurfaceChangedCallback& callback);
 
-  base::WeakPtr<LayerTreeFrameSinkLocal> GetWeakPtr();
-
   const viz::LocalSurfaceId& local_surface_id() const {
     return local_surface_id_;
   }
@@ -54,15 +52,16 @@ class LayerTreeFrameSinkLocal : public cc::LayerTreeFrameSink,
   void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override;
   void SubmitCompositorFrame(viz::CompositorFrame frame) override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
+  void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
+                               const viz::SharedBitmapId& id) override;
+  void DidDeleteSharedBitmap(const viz::SharedBitmapId& id) override;
 
   // viz::mojom::CompositorFrameSinkClient:
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
-  void DidPresentCompositorFrame(uint32_t presentation_token,
-                                 base::TimeTicks time,
-                                 base::TimeDelta refresh,
-                                 uint32_t flags) override;
-  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
+  void DidPresentCompositorFrame(
+      uint32_t presentation_token,
+      const gfx::PresentationFeedback& feedback) override;
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
@@ -84,7 +83,6 @@ class LayerTreeFrameSinkLocal : public cc::LayerTreeFrameSink,
   std::unique_ptr<viz::ExternalBeginFrameSource> begin_frame_source_;
   std::unique_ptr<base::ThreadChecker> thread_checker_;
   SurfaceChangedCallback surface_changed_callback_;
-  base::WeakPtrFactory<LayerTreeFrameSinkLocal> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeFrameSinkLocal);
 };

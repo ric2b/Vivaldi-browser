@@ -75,7 +75,7 @@ Polymer({
     /**
      * Set to true when the user is dragging the volume bar. Volume updates from
      * the browser will be ignored when set to true.
-     * @private {boolean}
+     * @private
      */
     isVolumeChanging_: {
       type: Boolean,
@@ -84,7 +84,7 @@ Polymer({
 
     /**
      * The timestamp for when the controller last submitted a seek request.
-     * @private {number}
+     * @private
      */
     lastSeekByUser_: {
       type: Number,
@@ -93,7 +93,7 @@ Polymer({
 
     /**
      * The timestamp for when |routeStatus| was last updated.
-     * @private {number}
+     * @private
      */
     lastStatusUpdate_: {
       type: Number,
@@ -103,7 +103,7 @@ Polymer({
     /**
      * The timestamp for when the controller last submitted a volume change
      * request.
-     * @private {boolean}
+     * @private
      */
     lastVolumeChangeByUser_: {
       type: Number,
@@ -112,7 +112,7 @@ Polymer({
 
     /**
      * Keep in sync with media remoting individual user setting.
-     * @private {boolean}
+     * @private
      */
     mediaRemotingEnabled_: {
       type: Boolean,
@@ -165,6 +165,15 @@ Polymer({
     timeIncrementsTimeoutId_: {
       type: Number,
       value: 0,
+    },
+
+    /**
+     * Whether the controls should show the media title.
+     * @private {boolean}
+     */
+    shouldShowRouteStatusTitle_: {
+      type: Boolean,
+      value: false,
     },
   },
 
@@ -245,7 +254,8 @@ Polymer({
    * @private
    */
   getMuteUnmuteIcon_: function(routeStatus) {
-    return routeStatus.isMuted ? 'av:volume-off' : 'av:volume-up';
+    return routeStatus.isMuted ? 'route-controls:volume-off' :
+                                 'route-controls:volume-up';
   },
 
   /**
@@ -265,8 +275,8 @@ Polymer({
    */
   getPlayPauseIcon_: function(routeStatus) {
     return routeStatus.playState === media_router.PlayState.PAUSED ?
-        'av:play-arrow' :
-        'av:pause';
+        'route-controls:play-arrow' :
+        'route-controls:pause';
   },
 
   /**
@@ -327,7 +337,7 @@ Polymer({
 
   /**
    * Called when the "smooth motion" box for Hangouts is changed by the user.
-   * @param {!{target: !PaperCheckboxElement}} e
+   * @param {!{target: !HTMLElement}} e
    * @private
    */
   onHangoutsLocalPresentChange_: function(e) {
@@ -370,9 +380,6 @@ Polymer({
     if (this.shouldAcceptVolumeUpdates_()) {
       this.displayedVolume_ = Math.round(newRouteStatus.volume * 100) / 100;
     }
-    if (newRouteStatus.description !== '') {
-      this.routeDescription_ = newRouteStatus.description;
-    }
     if (!this.initialLoadTime_) {
       this.initialLoadTime_ = Date.now();
       media_router.browserApi.reportWebUIRouteControllerLoaded(
@@ -395,6 +402,9 @@ Polymer({
           this.FullscreenVideoOption_.REMOTE_SCREEN :
           this.FullscreenVideoOption_.BOTH_SCREENS;
     }
+    this.shouldShowRouteStatusTitle_ = !!newRouteStatus.title &&
+        newRouteStatus.title != '' &&
+        newRouteStatus.title != this.routeDescription_;
   },
 
   /**
@@ -407,7 +417,7 @@ Polymer({
     if (!route) {
       this.stopIncrementingCurrentTime_();
     }
-    if (route && this.routeStatus.description === '') {
+    if (route) {
       this.routeDescription_ = route.description;
     }
   },

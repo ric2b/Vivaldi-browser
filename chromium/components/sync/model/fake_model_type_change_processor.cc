@@ -4,6 +4,8 @@
 
 #include "components/sync/model/fake_model_type_change_processor.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "components/sync/model/metadata_batch.h"
@@ -12,14 +14,12 @@
 
 namespace syncer {
 
-// static
-std::unique_ptr<ModelTypeChangeProcessor> FakeModelTypeChangeProcessor::Create(
-    ModelType type,
-    ModelTypeSyncBridge* bridge) {
-  return base::WrapUnique(new FakeModelTypeChangeProcessor());
-}
+FakeModelTypeChangeProcessor::FakeModelTypeChangeProcessor()
+    : FakeModelTypeChangeProcessor(nullptr) {}
 
-FakeModelTypeChangeProcessor::FakeModelTypeChangeProcessor() = default;
+FakeModelTypeChangeProcessor::FakeModelTypeChangeProcessor(
+    base::WeakPtr<ModelTypeControllerDelegate> delegate)
+    : delegate_(delegate) {}
 
 FakeModelTypeChangeProcessor::~FakeModelTypeChangeProcessor() {
   // If this fails we were expecting an error but never got one.
@@ -43,31 +43,27 @@ void FakeModelTypeChangeProcessor::UpdateStorageKey(
 void FakeModelTypeChangeProcessor::UntrackEntity(
     const EntityData& entity_data) {}
 
+void FakeModelTypeChangeProcessor::UntrackEntityForStorageKey(
+    const std::string& storage_key) {}
+
+void FakeModelTypeChangeProcessor::OnModelStarting(
+    ModelTypeSyncBridge* bridge) {}
+
 void FakeModelTypeChangeProcessor::ModelReadyToSync(
     std::unique_ptr<MetadataBatch> batch) {}
-
-void FakeModelTypeChangeProcessor::OnSyncStarting(
-    const ModelErrorHandler& error_handler,
-    const StartCallback& callback) {
-  if (!callback.is_null()) {
-    callback.Run(nullptr);
-  }
-}
-
-void FakeModelTypeChangeProcessor::DisableSync() {}
 
 bool FakeModelTypeChangeProcessor::IsTrackingMetadata() {
   return true;
 }
 
 void FakeModelTypeChangeProcessor::ReportError(const ModelError& error) {
-  EXPECT_TRUE(expect_error_);
+  EXPECT_TRUE(expect_error_) << error.ToString();
   expect_error_ = false;
 }
 
-void FakeModelTypeChangeProcessor::ReportError(const base::Location& location,
-                                               const std::string& message) {
-  ReportError(ModelError(location, message));
+base::WeakPtr<ModelTypeControllerDelegate>
+FakeModelTypeChangeProcessor::GetControllerDelegateOnUIThread() {
+  return delegate_;
 }
 
 void FakeModelTypeChangeProcessor::ExpectError() {

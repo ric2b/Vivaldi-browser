@@ -49,7 +49,7 @@ if (host_os == "win") {
 # When the compilers are run via goma or ccache rather than directly by
 # GN/Ninja, the goma/ccache wrapper handles .bat files but gets confused
 # by being given the scriptprefix.
-if (host_os == "win" && !use_goma && (!use_cc_wrapper || cc_wrapper == "")) {
+if (host_os == "win" && !use_goma && cc_wrapper == "") {
   compiler_scriptprefix = scriptprefix
 } else {
   compiler_scriptprefix = ""
@@ -87,6 +87,7 @@ template("pnacl_toolchain") {
     toolchain_args = {
       is_clang = true
       current_cpu = "pnacl"
+      use_lld = false
     }
   }
 }
@@ -141,6 +142,7 @@ template("nacl_glibc_toolchain") {
       current_cpu = toolchain_cpu
       is_clang = false
       is_nacl_glibc = true
+      use_lld = false
     }
   }
 }
@@ -191,6 +193,7 @@ template("nacl_clang_toolchain") {
     toolchain_args = {
       current_cpu = toolchain_cpu
       is_clang = true
+      use_lld = false
     }
   }
 }
@@ -229,6 +232,7 @@ template("nacl_irt_toolchain") {
     toolchain_args = {
       current_cpu = toolchain_cpu
       is_clang = true
+      use_lld = false
     }
 
     # TODO(ncbray): depend on link script

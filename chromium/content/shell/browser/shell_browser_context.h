@@ -25,7 +25,7 @@ namespace content {
 
 class BackgroundSyncController;
 class DownloadManagerDelegate;
-class PermissionManager;
+class PermissionControllerDelegate;
 class ShellDownloadManagerDelegate;
 #if !defined(OS_ANDROID)
 class ZoomLevelDelegate;
@@ -33,7 +33,11 @@ class ZoomLevelDelegate;
 
 class ShellBrowserContext : public BrowserContext {
  public:
-  ShellBrowserContext(bool off_the_record, net::NetLog* net_log);
+  // If |delay_services_creation| is true, the owner is responsible for calling
+  // CreateBrowserContextServices() for this BrowserContext.
+  ShellBrowserContext(bool off_the_record,
+                      net::NetLog* net_log,
+                      bool delay_services_creation = false);
   ~ShellBrowserContext() override;
 
   void set_guest_manager_for_testing(
@@ -54,7 +58,7 @@ class ShellBrowserContext : public BrowserContext {
   storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override;
   PushMessagingService* GetPushMessagingService() override;
   SSLHostStateDelegate* GetSSLHostStateDelegate() override;
-  PermissionManager* GetPermissionManager() override;
+  PermissionControllerDelegate* GetPermissionControllerDelegate() override;
   BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   BackgroundSyncController* GetBackgroundSyncController() override;
   BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate() override;
@@ -79,7 +83,6 @@ class ShellBrowserContext : public BrowserContext {
     ~ShellResourceContext() override;
 
     // ResourceContext implementation:
-    net::HostResolver* GetHostResolver() override;
     net::URLRequestContext* GetRequestContext() override;
 
     void set_url_request_context_getter(ShellURLRequestContextGetter* getter) {
@@ -110,7 +113,7 @@ class ShellBrowserContext : public BrowserContext {
 
   std::unique_ptr<ShellResourceContext> resource_context_;
   std::unique_ptr<ShellDownloadManagerDelegate> download_manager_delegate_;
-  std::unique_ptr<PermissionManager> permission_manager_;
+  std::unique_ptr<PermissionControllerDelegate> permission_manager_;
   std::unique_ptr<BackgroundSyncController> background_sync_controller_;
 
  private:
@@ -124,6 +127,8 @@ class ShellBrowserContext : public BrowserContext {
   base::FilePath path_;
   BrowserPluginGuestManager* guest_manager_;
   scoped_refptr<ShellURLRequestContextGetter> url_request_getter_;
+  std::map<base::FilePath, scoped_refptr<ShellURLRequestContextGetter>>
+      isolated_url_request_getters_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellBrowserContext);
 };

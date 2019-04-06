@@ -22,7 +22,8 @@
 #include "storage/browser/quota/quota_task.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "storage/browser/storage_browser_export.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
+#include "url/origin.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -35,27 +36,27 @@ namespace storage {
 class STORAGE_EXPORT QuotaManagerProxy
     : public base::RefCountedThreadSafe<QuotaManagerProxy> {
  public:
-  typedef QuotaManager::UsageAndQuotaCallback UsageAndQuotaCallback;
+  using UsageAndQuotaCallback = QuotaManager::UsageAndQuotaCallback;
 
   virtual void RegisterClient(QuotaClient* client);
   virtual void NotifyStorageAccessed(QuotaClient::ID client_id,
-                                     const GURL& origin,
+                                     const url::Origin& origin,
                                      blink::mojom::StorageType type);
   virtual void NotifyStorageModified(QuotaClient::ID client_id,
-                                     const GURL& origin,
+                                     const url::Origin& origin,
                                      blink::mojom::StorageType type,
                                      int64_t delta);
-  virtual void NotifyOriginInUse(const GURL& origin);
-  virtual void NotifyOriginNoLongerInUse(const GURL& origin);
+  virtual void NotifyOriginInUse(const url::Origin& origin);
+  virtual void NotifyOriginNoLongerInUse(const url::Origin& origin);
 
   virtual void SetUsageCacheEnabled(QuotaClient::ID client_id,
-                                    const GURL& origin,
+                                    const url::Origin& origin,
                                     blink::mojom::StorageType type,
                                     bool enabled);
   virtual void GetUsageAndQuota(base::SequencedTaskRunner* original_task_runner,
-                                const GURL& origin,
+                                const url::Origin& origin,
                                 blink::mojom::StorageType type,
-                                const UsageAndQuotaCallback& callback);
+                                UsageAndQuotaCallback callback);
 
   // This method may only be called on the IO thread.
   // It may return NULL if the manager has already been deleted.

@@ -120,9 +120,7 @@ class SimulatorTestRunnerTest(TestCase):
     def install_xcode(build, mac_toolchain_cmd, xcode_app_path):
       return True
 
-    self.mock(test_runner.find_xcode, 'find_xcode',
-              lambda _: {'found': True})
-    self.mock(test_runner.find_xcode, 'get_current_xcode_info', lambda: {
+    self.mock(test_runner, 'get_current_xcode_info', lambda: {
         'version': 'test version', 'build': 'test build', 'path': 'test/path'})
     self.mock(test_runner, 'install_xcode', install_xcode)
     self.mock(test_runner.subprocess, 'check_output',
@@ -181,7 +179,7 @@ class SimulatorTestRunnerTest(TestCase):
       return
 
     @staticmethod
-    def _run(command):
+    def _run(cmd, shards=None):
       return collections.namedtuple('result', ['crashed', 'crashed_test'])(
           crashed=True, crashed_test=None)
 
@@ -204,8 +202,62 @@ class SimulatorTestRunnerTest(TestCase):
     with self.assertRaises(test_runner.AppLaunchError):
       tr.launch()
 
+  def test_run(self):
+    """Ensures the _run method is correct with test sharding."""
+    def shard_xctest(object_path, shards, test_cases=None):
+      return [['a/1', 'b/2'], ['c/3', 'd/4'], ['e/5']]
+
+    def run_tests(self, test_shard=None):
+      out = []
+      for test in test_shard:
+        testname = test.split('/')
+        out.append('Test Case \'-[%s %s]\' started.' %
+                   (testname[0], testname[1]))
+        out.append('Test Case \'-[%s %s]\' passed (0.1 seconds)' %
+                   (testname[0], testname[1]))
+      return (out, 0, 0)
+
+    tr = test_runner.SimulatorTestRunner(
+      'fake-app',
+      'fake-iossim',
+      'platform',
+      'os',
+      'xcode-version',
+      'xcode-build',
+      'out-dir',
+    )
+    self.mock(test_runner, 'shard_xctest', shard_xctest)
+    self.mock(test_runner.SimulatorTestRunner, 'run_tests', run_tests)
+
+    tr.xctest_path = 'fake.xctest'
+    cmd = tr.get_launch_command()
+    result = tr._run(cmd=cmd, shards=3)
+    self.assertIn('a/1', result.passed_tests)
+    self.assertIn('b/2', result.passed_tests)
+    self.assertIn('c/3', result.passed_tests)
+    self.assertIn('d/4', result.passed_tests)
+    self.assertIn('e/5', result.passed_tests)
+
+  def test_run_with_system_alert(self):
+    """Ensures SystemAlertPresentError is raised when warning 'System alert
+      view is present, so skipping all tests' is in the output."""
+    with self.assertRaises(test_runner.SystemAlertPresentError):
+      tr = test_runner.SimulatorTestRunner(
+        'fake-app',
+        'fake-iossim',
+        'platform',
+        'os',
+        'xcode-version',
+        'xcode-build',
+        'out-dir',
+      )
+      tr.xctest_path = 'fake.xctest'
+      cmd = ['echo', 'System alert view is present, so skipping all tests!']
+      result = tr._run(cmd=cmd)
+
   def test_get_launch_command(self):
-    """Ensures test filters are set correctly for launch command"""
+    """Ensures launch command is correct with test_filters, test sharding and
+      test_cases."""
     tr = test_runner.SimulatorTestRunner(
       'fake-app',
       'fake-iossim',
@@ -245,7 +297,7 @@ class SimulatorTestRunnerTest(TestCase):
       return
 
     @staticmethod
-    def _run(command):
+    def _run(cmd, shards=None):
       result = collections.namedtuple(
           'result', [
               'crashed',
@@ -255,7 +307,7 @@ class SimulatorTestRunnerTest(TestCase):
               'passed_tests',
           ],
       )
-      if '-e' not in command:
+      if '-e' not in cmd:
         # First run, has no test filter supplied. Mock a crash.
         return result(
             crashed=True,
@@ -300,9 +352,7 @@ class DeviceTestRunnerTest(TestCase):
     def install_xcode(build, mac_toolchain_cmd, xcode_app_path):
       return True
 
-    self.mock(test_runner.find_xcode, 'find_xcode',
-              lambda _: {'found': True})
-    self.mock(test_runner.find_xcode, 'get_current_xcode_info', lambda: {
+    self.mock(test_runner, 'get_current_xcode_info', lambda: {
         'version': 'test version', 'build': 'test build', 'path': 'test/path'})
     self.mock(test_runner, 'install_xcode', install_xcode)
     self.mock(test_runner.subprocess, 'check_output',

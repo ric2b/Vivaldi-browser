@@ -15,8 +15,10 @@ cr.define('extensions', function() {
         'reloadItem',
         'setProfileInDevMode',
         'setShortcutHandlingSuspended',
+        'shouldIgnoreUpdate',
         'updateAllExtensions',
-        'updateExtensionCommand',
+        'updateExtensionCommandKeybinding',
+        'updateExtensionCommandScope',
       ]);
 
       this.itemStateChangedTarget = new FakeChromeEvent();
@@ -77,9 +79,20 @@ cr.define('extensions', function() {
     }
 
     /** @override */
-    updateExtensionCommand(item, commandName, keybinding) {
+    shouldIgnoreUpdate(extensionId, eventType) {
+      this.methodCalled('shouldIgnoreUpdate', [extensionId, eventType]);
+    }
+
+    /** @override */
+    updateExtensionCommandKeybinding(item, commandName, keybinding) {
       this.methodCalled(
-          'updateExtensionCommand', [item, commandName, keybinding]);
+          'updateExtensionCommandKeybinding', [item, commandName, keybinding]);
+    }
+
+    /** @override */
+    updateExtensionCommandScope(item, commandName, scope) {
+      this.methodCalled(
+          'updateExtensionCommandScope', [item, commandName, scope]);
     }
 
     /** @override */

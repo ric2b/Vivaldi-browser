@@ -55,38 +55,6 @@ namespace certificate_transparency {
 
 namespace {
 
-// Enum indicating whether an SCT can be checked for inclusion and if not,
-// the reason it cannot.
-//
-// Note: The numeric values are used within a histogram and should not change
-// or be re-assigned.
-enum SCTCanBeCheckedForInclusion {
-  // If the SingleTreeTracker does not have a valid STH, then a valid STH is
-  // first required to evaluate whether the SCT can be checked for inclusion
-  // or not.
-  VALID_STH_REQUIRED = 0,
-
-  // If the STH does not cover the SCT (the timestamp in the SCT is greater than
-  // MMD + timestamp in the STH), then a newer STH is needed.
-  NEWER_STH_REQUIRED = 1,
-
-  // When an SCT is observed, if the SingleTreeTracker instance has a valid STH
-  // and the STH covers the SCT (the timestamp in the SCT is less than MMD +
-  // timestamp in the STH), then it can be checked for inclusion.
-  CAN_BE_CHECKED = 2,
-
-  // This SCT was not audited because the queue of pending entries was
-  // full.
-  NOT_AUDITED_QUEUE_FULL = 3,
-
-  // This SCT was not audited because no DNS lookup was done when first
-  // visiting the website that supplied it. It could compromise the user's
-  // privacy to do an inclusion check over DNS in this scenario.
-  NOT_AUDITED_NO_DNS_LOOKUP = 4,
-
-  SCT_CAN_BE_CHECKED_MAX
-};
-
 // Measure how often clients encounter very new SCTs, by measuring whether an
 // SCT can be checked for inclusion upon first observation.
 void LogCanBeCheckedForInclusionToUMA(
@@ -202,8 +170,9 @@ struct SingleTreeTracker::EntryAuditState {
   // Current phase of inclusion check.
   AuditState state;
 
-  // The proof to be filled in by the LogDnsClient
-  MerkleAuditProof proof;
+  // The audit proof query performed by LogDnsClient.
+  // It is null unless a query has been started.
+  std::unique_ptr<LogDnsClient::AuditProofQuery> audit_proof_query;
 
   // The root hash of the tree for which an inclusion proof was requested.
   // The root hash is needed after the inclusion proof is fetched for validating
@@ -268,7 +237,9 @@ SingleTreeTracker::SingleTreeTracker(
       &SingleTreeTracker::OnMemoryPressure, base::Unretained(this))));
 }
 
-SingleTreeTracker::~SingleTreeTracker() = default;
+SingleTreeTracker::~SingleTreeTracker() {
+  ResetPendingQueue();
+}
 
 void SingleTreeTracker::OnSCTVerified(base::StringPiece hostname,
                                       net::X509Certificate* cert,
@@ -290,12 +261,24 @@ void SingleTreeTracker::OnSCTVerified(base::StringPiece hostname,
   }
 
   EntryToAudit entry(sct->timestamp);
-  if (!GetLogEntryLeafHash(cert, sct, &entry.leaf_hash))
+  if (!GetLogEntryLeafHash(cert, sct, &entry.leaf_hash)) {
+    LogCanBeCheckedForInclusionToUMA(NOT_AUDITED_INVALID_LEAF_HASH);
     return;
+  }
 
   // Avoid queueing multiple instances of the same entry.
-  if (GetAuditedEntryInclusionStatus(entry) != SCT_NOT_OBSERVED)
-    return;
+  switch (GetAuditedEntryInclusionStatus(entry)) {
+    case SCT_NOT_OBSERVED:
+      // No need to record UMA, will be done below.
+      break;
+    case SCT_INCLUDED_IN_LOG:
+      LogCanBeCheckedForInclusionToUMA(NOT_AUDITED_ALREADY_CHECKED);
+      return;
+    default:
+      // Already pending, either due to a newer STH or in the queue.
+      LogCanBeCheckedForInclusionToUMA(NOT_AUDITED_ALREADY_PENDING_CHECK);
+      return;
+  }
 
   if (pending_entries_.size() >= kPendingEntriesQueueSize) {
     // Queue is full - cannot audit SCT.
@@ -387,7 +370,12 @@ void SingleTreeTracker::NewSTHObserved(const SignedTreeHead& sth) {
 }
 
 void SingleTreeTracker::ResetPendingQueue() {
-  pending_entries_.clear();
+  // Move entries out of pending_entries_ prior to deleting them, in case any
+  // have inclusion checks in progress. Cancelling those checks would invoke the
+  // cancellation callback (ProcessPendingEntries()), which would attempt to
+  // access pending_entries_ while it was in the process of being deleted.
+  std::map<EntryToAudit, EntryAuditState, OrderByTimestamp> pending_entries;
+  pending_entries_.swap(pending_entries);
 }
 
 SingleTreeTracker::SCTInclusionStatus
@@ -414,9 +402,9 @@ void SingleTreeTracker::ProcessPendingEntries() {
         crypto::kSHA256Length);
     net::Error result = dns_client_->QueryAuditProof(
         ct_log_->dns_domain(), leaf_hash, verified_sth_.tree_size,
-        &(it->second.proof),
+        &(it->second.audit_proof_query),
         base::Bind(&SingleTreeTracker::OnAuditProofObtained,
-                   weak_factory_.GetWeakPtr(), it->first));
+                   base::Unretained(this), it->first));
     // Handling proofs returned synchronously is not implemeted.
     DCHECK_NE(result, net::OK);
     if (result == net::ERR_IO_PENDING) {
@@ -424,9 +412,12 @@ void SingleTreeTracker::ProcessPendingEntries() {
       // and continue to the next one.
       it->second.state = INCLUSION_PROOF_REQUESTED;
     } else if (result == net::ERR_TEMPORARILY_THROTTLED) {
+      // Need to use a weak pointer here, as this callback could be triggered
+      // when the SingleTreeTracker is deleted (and pending queries are
+      // cancelled).
       dns_client_->NotifyWhenNotThrottled(
-          base::Bind(&SingleTreeTracker::ProcessPendingEntries,
-                     weak_factory_.GetWeakPtr()));
+          base::BindOnce(&SingleTreeTracker::ProcessPendingEntries,
+                         weak_factory_.GetWeakPtr()));
       // Exit the loop since all subsequent calls to QueryAuditProof
       // will be throttled.
       break;
@@ -494,8 +485,9 @@ void SingleTreeTracker::OnAuditProofObtained(const EntryToAudit& entry,
   std::string leaf_hash(reinterpret_cast<const char*>(entry.leaf_hash.data),
                         crypto::kSHA256Length);
 
-  bool verified = ct_log_->VerifyAuditProof(it->second.proof,
-                                            it->second.root_hash, leaf_hash);
+  bool verified =
+      ct_log_->VerifyAuditProof(it->second.audit_proof_query->GetProof(),
+                                it->second.root_hash, leaf_hash);
   LogAuditResultToNetLog(entry, verified);
 
   if (!verified) {
@@ -514,8 +506,9 @@ void SingleTreeTracker::OnMemoryPressure(
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
       break;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
-      pending_entries_.clear();
-    // Fall through to clearing the other cache.
+      ResetPendingQueue();
+      // Fall through to clearing the other cache.
+      FALLTHROUGH;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
       checked_entries_.Clear();
       break;

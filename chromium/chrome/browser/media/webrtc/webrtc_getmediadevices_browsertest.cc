@@ -5,6 +5,8 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_util.h"
+#include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/webrtc/webrtc_browsertest_base.h"
 #include "chrome/browser/media/webrtc/webrtc_browsertest_common.h"
 #include "chrome/browser/ui/browser.h"
@@ -13,12 +15,14 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gtest/include/gtest/gtest-param-test.h"
 
 namespace {
 
@@ -40,7 +44,18 @@ class WebRtcGetMediaDevicesBrowserTest
  public:
   WebRtcGetMediaDevicesBrowserTest()
       : has_audio_output_devices_initialized_(false),
-        has_audio_output_devices_(false) {}
+        has_audio_output_devices_(false) {
+    std::vector<base::Feature> audio_service_oop_features = {
+        features::kAudioServiceAudioStreams,
+        features::kAudioServiceOutOfProcess};
+    if (GetParam()) {
+      // Force audio service out of process to enabled.
+      audio_service_features_.InitWithFeatures(audio_service_oop_features, {});
+    } else {
+      // Force audio service out of process to disabled.
+      audio_service_features_.InitWithFeatures({}, audio_service_oop_features);
+    }
+  }
 
   void SetUpInProcessBrowserTestFixture() override {
     DetectErrorsInJavaScript();  // Look for errors in our rather complex js.
@@ -83,8 +98,7 @@ class WebRtcGetMediaDevicesBrowserTest
     bool found_audio_input = false;
     bool found_video_input = false;
 
-    for (base::ListValue::iterator it = values->begin();
-         it != values->end(); ++it) {
+    for (auto it = values->begin(); it != values->end(); ++it) {
       const base::DictionaryValue* dict;
       MediaDeviceInfo device;
       ASSERT_TRUE(it->GetAsDictionary(&dict));
@@ -111,14 +125,7 @@ class WebRtcGetMediaDevicesBrowserTest
         found_video_input = true;
       }
 
-      // enumerateDevices doesn't have group ID support for video input devices.
-      // TODO(guidou): remove this once http://crbug.com/627793 is fixed.
-      if (device.kind == kDeviceKindVideoInput) {
-        EXPECT_TRUE(device.group_id.empty());
-      } else {
-        EXPECT_FALSE(device.group_id.empty());
-      }
-
+      EXPECT_FALSE(device.group_id.empty());
       devices->push_back(device);
     }
 
@@ -128,12 +135,10 @@ class WebRtcGetMediaDevicesBrowserTest
 
   bool has_audio_output_devices_initialized_;
   bool has_audio_output_devices_;
-};
 
-static const bool kParamsToRunTestsWith[] = { false, true };
-INSTANTIATE_TEST_CASE_P(WebRtcGetMediaDevicesBrowserTests,
-                        WebRtcGetMediaDevicesBrowserTest,
-                        testing::ValuesIn(kParamsToRunTestsWith));
+ private:
+  base::test::ScopedFeatureList audio_service_features_;
+};
 
 IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
                        EnumerateDevicesWithoutAccess) {
@@ -147,9 +152,8 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   EnumerateDevices(tab, &devices);
 
   // Labels should be empty if access has not been allowed.
-  for (std::vector<MediaDeviceInfo>::iterator it = devices.begin();
-       it != devices.end(); ++it) {
-    EXPECT_TRUE(it->label.empty());
+  for (const auto& device_info : devices) {
+    EXPECT_TRUE(device_info.label.empty());
   }
 }
 
@@ -167,8 +171,55 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   EnumerateDevices(tab, &devices);
 
   // Labels should be non-empty if access has been allowed.
-  for (std::vector<MediaDeviceInfo>::iterator it = devices.begin();
-       it != devices.end(); ++it) {
-    EXPECT_TRUE(!it->label.empty());
+  for (const auto& device_info : devices) {
+    EXPECT_TRUE(!device_info.label.empty());
   }
 }
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+                       DeviceIdEqualsGroupIdDiffersAcrossTabs) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
+  ui_test_utils::NavigateToURL(browser(), url);
+  content::WebContents* tab1 =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  std::vector<MediaDeviceInfo> devices;
+  EnumerateDevices(tab1, &devices);
+
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  ui_test_utils::NavigateToURL(browser(), url);
+  content::WebContents* tab2 =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  std::vector<MediaDeviceInfo> devices2;
+  EnumerateDevices(tab2, &devices2);
+
+  EXPECT_NE(tab1, tab2);
+  EXPECT_EQ(devices.size(), devices2.size());
+  for (auto& device : devices) {
+    auto it = std::find_if(devices2.begin(), devices2.end(),
+                           [&device](const MediaDeviceInfo& device_info) {
+                             return device.device_id == device_info.device_id;
+                           });
+    EXPECT_NE(it, devices2.end());
+
+    it = std::find_if(devices2.begin(), devices2.end(),
+                      [&device](const MediaDeviceInfo& device_info) {
+                        return device.group_id == device_info.group_id;
+                      });
+    EXPECT_EQ(it, devices2.end());
+  }
+}
+
+// We run these tests with the audio service both in and out of the the browser
+// process to have waterfall coverage while the feature rolls out. It should be
+// removed after launch.
+#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX) || \
+    defined(OS_WIN)
+// Supported platforms.
+INSTANTIATE_TEST_CASE_P(, WebRtcGetMediaDevicesBrowserTest, ::testing::Bool());
+#else
+// Platforms where the out of process audio service is not supported
+INSTANTIATE_TEST_CASE_P(,
+                        WebRtcGetMediaDevicesBrowserTest,
+                        ::testing::Values(false));
+#endif

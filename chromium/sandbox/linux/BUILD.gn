@@ -37,7 +37,6 @@ group("sandbox") {
   public_deps = [
     ":sandbox_services",
   ]
-
   if (compile_suid_client || is_nacl_nonsfi) {
     public_deps += [ ":suid_sandbox_client" ]
   }
@@ -100,6 +99,7 @@ source_set("sandbox_linux_unittests_sources") {
     "services/yama_unittests.cc",
     "syscall_broker/broker_file_permission_unittest.cc",
     "syscall_broker/broker_process_unittest.cc",
+    "syscall_broker/broker_simple_message_unittest.cc",
     "tests/main.cc",
     "tests/scoped_temporary_file.cc",
     "tests/scoped_temporary_file.h",
@@ -150,6 +150,10 @@ source_set("sandbox_linux_unittests_sources") {
       "seccomp-bpf/trap_unittest.cc",
     ]
     deps += [ ":bpf_dsl_golden" ]
+
+    if (is_android) {
+      sources += [ "seccomp-bpf-helpers/baseline_policy_android_unittest.cc" ]
+    }
   }
   if (compile_credentials) {
     sources += [
@@ -197,7 +201,6 @@ action("bpf_dsl_golden") {
 test("sandbox_linux_unittests") {
   deps = [
     ":sandbox_linux_unittests_sources",
-    "//build/config:exe_and_shlib_deps",
   ]
   if (is_android) {
     use_raw_android_executable = true
@@ -286,7 +289,7 @@ if (is_android) {
 
     deps = [
       "//base",
-      "//sandbox:sandbox_features",
+      "//sandbox:sandbox_buildflags",
     ]
 
     if (use_seccomp_bpf) {
@@ -368,6 +371,8 @@ component("sandbox_services") {
     "syscall_broker/broker_permission_list.h",
     "syscall_broker/broker_process.cc",
     "syscall_broker/broker_process.h",
+    "syscall_broker/broker_simple_message.cc",
+    "syscall_broker/broker_simple_message.h",
   ]
 
   defines = [ "SANDBOX_IMPLEMENTATION" ]
@@ -417,6 +422,13 @@ component("sandbox_services") {
       "syscall_broker/broker_permission_list.h",
       "syscall_broker/broker_process.cc",
       "syscall_broker/broker_process.h",
+      "syscall_broker/broker_simple_message.cc",
+      "syscall_broker/broker_simple_message.h",
+    ]
+  } else if (!is_android) {
+    sources += [
+      "services/libc_interceptor.cc",
+      "services/libc_interceptor.h",
     ]
   }
 }

@@ -10,13 +10,13 @@
 
 #include <stddef.h>
 #include <stdio.h>
-#include <cmath>
-#include <string>
-#include <vector>
-
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
+
+#include <cmath>
+#include <string>
+#include <vector>
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
@@ -66,13 +66,12 @@ class GLHelperBenchmark : public testing::Test {
     attributes.bind_generates_resource = false;
     attributes.gpu_preference = gl::PreferDiscreteGpu;
 
-    context_ = gpu::GLInProcessContext::CreateWithoutInit();
+    context_ = std::make_unique<gpu::GLInProcessContext>();
     auto result =
         context_->Initialize(nullptr,                 /* service */
                              nullptr,                 /* surface */
                              true,                    /* offscreen */
                              gpu::kNullSurfaceHandle, /* window */
-                             nullptr,                 /* share_context */
                              attributes, gpu::SharedMemoryLimits(),
                              nullptr, /* gpu_memory_buffer_manager */
                              nullptr, /* image_factory */

@@ -12,8 +12,6 @@
 #include <utility>
 
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -84,8 +82,11 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/web_contents/web_contents_view.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
+#include "extensions/common/manifest_handlers/incognito_info.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/vivaldi_browser_window.h"
@@ -364,9 +365,8 @@ int WebViewGuest::GetOrGenerateRulesRegistryID(
   return rules_registry_id;
 }
 
-void WebViewGuest::CreateWebContents(
-    const base::DictionaryValue& create_params,
-    const WebContentsCreatedCallback& callback) {
+void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
+                                     WebContentsCreatedCallback callback) {
   RenderProcessHost* owner_render_process_host =
       owner_web_contents()->GetMainFrame()->GetProcess();
   std::string storage_partition_id;
@@ -379,16 +379,26 @@ void WebViewGuest::CreateWebContents(
   if (!base::IsStringUTF8(storage_partition_id)) {
     bad_message::ReceivedBadMessage(owner_render_process_host,
                                     bad_message::WVG_PARTITION_ID_NOT_UTF8);
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
   std::string partition_domain = GetOwnerSiteURL().host();
 
   GURL guest_site;
   std::string new_url;
-  if (IsVivaldiApp(owner_host()) &&
-    create_params.GetString(webview::kNewURL, &new_url)) {
-    guest_site = GURL(new_url);
+  if (IsVivaldiApp(owner_host())) {
+    if (create_params.GetString(webview::kNewURL, &new_url)) {
+      guest_site = GURL(new_url);
+    } else {
+      // NOTE(espen@vivaldi.com): This is a workaround for web panels. We can
+      // not use GetSiteForGuestPartitionConfig() as that will prevent loading
+      // local files later (VB-40707).
+      // In NavigationRequest::OnStartChecksComplete() we use the Starting Site
+      // Instance which is the same site as set here. Navigating from
+      // chrome-guest://mpognobbkildjkofajifpdfhcoklimli/?" which
+      // GetSiteForGuestPartitionConfig() returns fails for local file urls.
+      guest_site = GURL("file:///");
+    }
   } else {
     guest_site =
       GetSiteForGuestPartitionConfig(partition_domain, storage_partition_id,
@@ -416,30 +426,35 @@ void WebViewGuest::CreateWebContents(
   WebContents* new_contents = nullptr;
   std::string paramstr;
 
+  Profile* profile = Profile::FromBrowserContext(context);
   if (create_params.GetString("tab_id", &paramstr)) {
     // If we created the WebContents through CreateNewWindow and created this
     // guest with InitWithWebContents we cannot delete the tabstrip contents,
-    // and
-    // we don't need to recreate the webcontents either. Just use the
-    // WebContents
-    // owned by the tab-strip.
+    // and we don't need to recreate the webcontents either. Just use the
+    // WebContents owned by the tab-strip.
     int tab_id = atoi(paramstr.c_str());
     content::WebContents* tabstrip_contents = NULL;
     bool include_incognito = true;
     Browser* browser;
-    Profile* profile = Profile::FromBrowserContext(context);
     int tab_index;
 
     if (extensions::ExtensionTabUtil::GetTabById(
             tab_id, profile, include_incognito, &browser, NULL,
             &tabstrip_contents, &tab_index)) {
-      // Morph the webcontents into a guest with this webviewguest as delegate.
       new_contents = tabstrip_contents;
       content::WebContentsImpl* contentsimpl =
           static_cast<content::WebContentsImpl*>(new_contents);
 
-      content::BrowserPluginGuest::Create(contentsimpl, this);
-      contentsimpl->RecreateViewAsGuest(this);
+      content::BrowserPluginGuest::Create(contentsimpl, this)->Init();
+
+      // NOTE(andre@vivaldi.com) : Need to set this otherwise script injection
+      // can fail. See WebViewInternalExecuteCodeFunction::Init().
+      src_ = new_contents->GetURL();
+      // Fire a WebContentsCreated event informing the client that script-
+      // injection can be done.
+      auto args = std::make_unique<base::DictionaryValue>();
+      DispatchEventToView(std::make_unique<GuestViewEvent>(
+          webview::kEventWebContentsCreated, std::move(args)));
 
     } else {
       // NOTE(jarle): Get the |new_contents| using the original Chromium way.
@@ -460,7 +475,7 @@ void WebViewGuest::CreateWebContents(
       }
       WebContents::CreateParams params(context, std::move(guest_site_instance));
       params.guest_delegate = this;
-      new_contents = WebContents::Create(params);
+      new_contents = WebContents::Create(params).release();
     }
   } else if (create_params.GetString("inspect_tab_id", &paramstr)) {
     // We want to attach this guest view to the already existing WebContents
@@ -474,6 +489,14 @@ void WebViewGuest::CreateWebContents(
         content::WebContents* devtools_contents =
           DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
               inspected_contents);
+        if (devtools_contents == nullptr) {
+          // This can happen when going between docked and undocked.
+          DevToolsWindow::InspectElement(inspected_contents->GetMainFrame(), 0,
+                                         0);
+          devtools_contents =
+              DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
+                  inspected_contents);
+        }
         DCHECK(devtools_contents);
         content::WebContentsImpl* contents =
           static_cast<content::WebContentsImpl*>(devtools_contents);
@@ -489,8 +512,7 @@ void WebViewGuest::CreateWebContents(
         DCHECK(connector_item_.get());
         connector_item_->set_guest_delegate(this);
 
-        content::BrowserPluginGuest::Create(contents, this);
-        contents->RecreateViewAsGuest(connector_item_.get());
+        content::BrowserPluginGuest::Create(contents, this)->Init();
         new_contents = contents;
         inspecting_tab_id_ = tab_id;
         web_contents_is_owned_by_this_ = false;
@@ -499,7 +521,7 @@ void WebViewGuest::CreateWebContents(
     }
   } else {
     std::string window_id;
-    if (create_params.GetString("window_id", &window_id)) {
+    if (create_params.GetString(webview::kWindowID, &window_id)) {
       int windowId = atoi(window_id.c_str());
       BrowserList* list = BrowserList::GetInstance();
       for (size_t i = 0; i < list->size(); i++) {
@@ -512,11 +534,27 @@ void WebViewGuest::CreateWebContents(
           break;
         }
       }
-      task_manager::WebContentsTags::CreateForTabContents(new_contents);
+    }
+    if (profile->IsOffTheRecord()) {
+      // If storage_partition_id is set to a extension id, this is
+      // an extension popup.
+      ExtensionRegistry* registry = ExtensionRegistry::Get(context);
+      const Extension* extension = registry->GetExtensionById(
+        storage_partition_id, extensions::ExtensionRegistry::EVERYTHING);
+      if (extension && ! IncognitoInfo::IsSplitMode(extension)) {
+        // If it's not split-mode, we need to use the original
+        // profile.  See CreateViewHostForIncognito.
+        context = profile->GetOriginalProfile();
+      }
     }
     WebContents::CreateParams params =
         GetWebContentsCreateParams(context, guest_site);
-    new_contents = WebContents::Create(params);
+    // TODO(erikchen): Fix ownership semantics for guest views.
+    // https://crbug.com/832879.
+    new_contents = WebContents::Create(params).release();
+
+    if(IsVivaldiRunning())
+      task_manager::WebContentsTags::CreateForTabContents(new_contents);
   }
   DCHECK(new_contents);
   if (owner_web_contents()->IsAudioMuted()) {
@@ -529,14 +567,16 @@ void WebViewGuest::CreateWebContents(
   }
 
   // Grant access to the origin of the embedder to the guest process. This
-  // allows blob:/filesystem: URLs with the embedder origin to be created
+  // allows blob: and filesystem: URLs with the embedder origin to be created
   // inside the guest. It is possible to do this by running embedder code
   // through webview accessible_resources.
-  content::ChildProcessSecurityPolicy::GetInstance()->GrantOrigin(
+  //
+  // TODO(dcheng): Is granting commit origin really the right thing to do here?
+  content::ChildProcessSecurityPolicy::GetInstance()->GrantCommitOrigin(
       new_contents->GetMainFrame()->GetProcess()->GetID(),
       url::Origin::Create(GetOwnerSiteURL()));
 
-  callback.Run(new_contents);
+  std::move(callback).Run(new_contents);
 }
 
 bool ReloadIfThereIsAMimeHandlerViewGuest(WebViewGuest* owner,
@@ -574,12 +614,7 @@ void WebViewGuest::DidAttachToEmbedder() {
 
   LoadTabContentsIfNecessary();
 
-  // Make sure we re-draw the page if needed. This was added because of
-  // VB-20658. If the web_contents was already fully loaded when here, we
-  // would not get the page painted.
-  auto* render_widget_host = content::RenderWidgetHostImpl::From(
-      web_contents()->GetRenderViewHost()->GetWidget());
-  render_widget_host->ScheduleComposite();
+  web_contents()->ResumeLoadingCreatedWebContents();
 
 }
 
@@ -608,7 +643,6 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
     web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())
         ->SetDelegate(app_win);
   }
-  InitListeners();
 
 #endif
 
@@ -622,7 +656,7 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
   PushWebViewStateToIOThread();
 
   ApplyAttributes(create_params);
-
+  InitListeners();
 }
 
 void WebViewGuest::ClearDataInternal(base::Time remove_since,
@@ -635,29 +669,26 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
     return;
   }
 
-  content::StoragePartition::CookieMatcherFunction cookie_matcher;
+  auto cookie_delete_filter = network::mojom::CookieDeletionFilter::New();
+  // Intentionally do not set the deletion filter time interval because the
+  // time interval parameters to ClearData() will be used.
 
-  bool remove_session_cookies =
-      !!(removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_SESSION_COOKIES);
-  bool remove_persistent_cookies =
-      !!(removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_PERSISTENT_COOKIES);
-  bool remove_all_cookies =
-      (!!(removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_COOKIES)) ||
-      (remove_session_cookies && remove_persistent_cookies);
+  // TODO(cmumford): Make this (and webview::* constants) constexpr.
+  const uint32_t ALL_COOKIES_MASK =
+      webview::WEB_VIEW_REMOVE_DATA_MASK_SESSION_COOKIES |
+      webview::WEB_VIEW_REMOVE_DATA_MASK_PERSISTENT_COOKIES;
 
-  // Leaving the cookie_matcher unset will cause all cookies to be purged.
-  if (!remove_all_cookies) {
-    if (remove_session_cookies) {
-      cookie_matcher =
-          base::Bind([](const net::CanonicalCookie& cookie) -> bool {
-            return !cookie.IsPersistent();
-          });
-    } else if (remove_persistent_cookies) {
-      cookie_matcher =
-          base::Bind([](const net::CanonicalCookie& cookie) -> bool {
-            return cookie.IsPersistent();
-          });
-    }
+  if ((removal_mask & ALL_COOKIES_MASK) == ALL_COOKIES_MASK) {
+    cookie_delete_filter->session_control =
+        network::mojom::CookieDeletionSessionControl::IGNORE_CONTROL;
+  } else if (removal_mask &
+             webview::WEB_VIEW_REMOVE_DATA_MASK_SESSION_COOKIES) {
+    cookie_delete_filter->session_control =
+        network::mojom::CookieDeletionSessionControl::SESSION_COOKIES;
+  } else if (removal_mask &
+             webview::WEB_VIEW_REMOVE_DATA_MASK_PERSISTENT_COOKIES) {
+    cookie_delete_filter->session_control =
+        network::mojom::CookieDeletionSessionControl::PERSISTENT_COOKIES;
   }
 
   content::StoragePartition* partition =
@@ -667,14 +698,16 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
   partition->ClearData(
       storage_partition_removal_mask,
       content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
-      content::StoragePartition::OriginMatcherFunction(), cookie_matcher,
-      remove_since, base::Time::Now(), callback);
+      content::StoragePartition::OriginMatcherFunction(),
+      std::move(cookie_delete_filter), remove_since, base::Time::Now(),
+      callback);
 }
 
 void WebViewGuest::GuestViewDidStopLoading() {
   auto args = std::make_unique<base::DictionaryValue>();
   DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventLoadStop,
                                                        std::move(args)));
+  InitListeners();
 }
 
 void WebViewGuest::EmbedderFullscreenToggled(bool entered_fullscreen) {
@@ -711,8 +744,6 @@ void WebViewGuest::GuestDestroyed() {
       // Skip the call to RemoveWebViewStateFromIOThread.
       return;
     }
-    // Make sure the client is informed about the mediastate.
-    UpdateMediaState(TabAlertState::NONE);
   }
   RemoveWebViewStateFromIOThread(web_contents());
 }
@@ -827,14 +858,6 @@ void WebViewGuest::FindReply(WebContents* source,
                          active_match_ordinal, final_update);
 }
 
-void WebViewGuest::OnAudioStateChanged(content::WebContents* web_contents,
-                                       bool audible) {
-  auto args = std::make_unique<base::DictionaryValue>();
-  args->Set(webview::kAudible, std::make_unique<base::Value>(audible));
-  DispatchEventToView(std::make_unique<GuestViewEvent>(
-      webview::kEventAudioStateChanged, std::move(args)));
-}
-
 double WebViewGuest::GetZoom() const {
   double zoom_level =
       ZoomController::FromWebContents(web_contents())->GetZoomLevel();
@@ -886,11 +909,6 @@ void WebViewGuest::LoadAbort(bool is_top_level,
   args->SetString(guest_view::kReason, net::ErrorToShortString(error_code));
   DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventLoadAbort,
                                                        std::move(args)));
-}
-
-void WebViewGuest::SetContextMenuPosition(const gfx::Point& position) {
-  if (web_view_guest_delegate_)
-    web_view_guest_delegate_->SetContextMenuPosition(position);
 }
 
 void WebViewGuest::CreateNewGuestWebViewWindow(
@@ -950,18 +968,23 @@ void WebViewGuest::NewGuestWebViewCallback(const content::OpenURLParams& params,
 
 // TODO(fsamuel): Find a reliable way to test the 'responsive' and
 // 'unresponsive' events.
-void WebViewGuest::RendererResponsive(WebContents* source) {
+void WebViewGuest::RendererResponsive(
+    WebContents* source,
+    content::RenderWidgetHost* render_widget_host) {
   auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(webview::kProcessId,
-                   web_contents()->GetMainFrame()->GetProcess()->GetID());
+                   render_widget_host->GetProcess()->GetID());
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventResponsive, std::move(args)));
 }
 
-void WebViewGuest::RendererUnresponsive(WebContents* source) {
+void WebViewGuest::RendererUnresponsive(
+    WebContents* source,
+    content::RenderWidgetHost* render_widget_host,
+    base::RepeatingClosure hang_monitor_restarter) {
   auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(webview::kProcessId,
-                   web_contents()->GetMainFrame()->GetProcess()->GetID());
+                   render_widget_host->GetProcess()->GetID());
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventUnresponsive, std::move(args)));
 }
@@ -1000,7 +1023,7 @@ void WebViewGuest::SetUserAgentOverride(
   if (is_overriding_user_agent_) {
     base::RecordAction(UserMetricsAction("WebView.Guest.OverrideUA"));
   }
-  web_contents()->SetUserAgentOverride(user_agent_override);
+  web_contents()->SetUserAgentOverride(user_agent_override, false);
 }
 
 void WebViewGuest::Stop() {
@@ -1010,10 +1033,11 @@ void WebViewGuest::Stop() {
 void WebViewGuest::Terminate() {
   base::RecordAction(UserMetricsAction("WebView.Guest.Terminate"));
   base::ProcessHandle process_handle =
-      web_contents()->GetMainFrame()->GetProcess()->GetHandle();
-  if (process_handle)
+      web_contents()->GetMainFrame()->GetProcess()->GetProcess().Handle();
+  if (process_handle) {
     web_contents()->GetMainFrame()->GetProcess()->Shutdown(
-        content::RESULT_CODE_KILLED, false);
+        content::RESULT_CODE_KILLED);
+  }
 }
 
 bool WebViewGuest::ClearData(base::Time remove_since,
@@ -1196,6 +1220,13 @@ void WebViewGuest::FrameNameChanged(RenderFrameHost* render_frame_host,
   ReportFrameNameChange(name);
 }
 
+void WebViewGuest::OnAudioStateChanged(bool audible) {
+  auto args = std::make_unique<base::DictionaryValue>();
+  args->Set(webview::kAudible, std::make_unique<base::Value>(audible));
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventAudioStateChanged, std::move(args)));
+}
+
 void WebViewGuest::ReportFrameNameChange(const std::string& name) {
   name_ = name;
   auto args = std::make_unique<base::DictionaryValue>();
@@ -1256,27 +1287,25 @@ void WebViewGuest::RemoveWebViewStateFromIOThread(
 void WebViewGuest::RequestMediaAccessPermission(
     WebContents* source,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback) {
-  web_view_permission_helper_->RequestMediaAccessPermission(source,
-                                                            request,
-                                                            callback);
+    content::MediaResponseCallback callback) {
+  web_view_permission_helper_->RequestMediaAccessPermission(
+      source, request, std::move(callback));
 }
 
-bool WebViewGuest::CheckMediaAccessPermission(WebContents* source,
-                                              const GURL& security_origin,
-                                              content::MediaStreamType type) {
+bool WebViewGuest::CheckMediaAccessPermission(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& security_origin,
+    content::MediaStreamType type) {
   return web_view_permission_helper_->CheckMediaAccessPermission(
-      source, security_origin, type);
+      render_frame_host, security_origin, type);
 }
 
 void WebViewGuest::CanDownload(
     const GURL& url,
     const std::string& request_method,
-    const content::DownloadInformation& info,
-    const base::Callback<void(const content::DownloadItemAction&)>& callback) {
-  web_view_permission_helper_->CanDownload(url, request_method,
-                                           info,
-                                           callback);
+    const base::Callback<void(bool)>& callback) {
+  web_view_permission_helper_->SetDownloadInformation(download_info_);
+  web_view_permission_helper_->CanDownload(url, request_method, callback);
 }
 
 void WebViewGuest::RequestPointerLockPermission(
@@ -1448,13 +1477,6 @@ void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
     }
   }
 
-#ifdef VIVALDI_BUILD
-  std::string host_extension;
-  if (params.GetString(webview::kAttributeExtensionHost, &host_extension)) {
-    CreateExtensionHost(host_extension);
-  }
-#endif //VIVALDI_BUILD
-
   // Only read the src attribute if this is not a New Window API flow.
   if (!is_pending_new_window) {
     std::string src;
@@ -1528,7 +1550,7 @@ void WebViewGuest::SetTransparency() {
   if (allow_transparency_)
     view->SetBackgroundColor(SK_ColorTRANSPARENT);
   else
-    view->SetBackgroundColorToDefault();
+    view->SetBackgroundColor(SK_ColorWHITE);
 }
 
 void WebViewGuest::SetAllowScaling(bool allow) {
@@ -1579,17 +1601,17 @@ bool WebViewGuest::LoadDataWithBaseURL(const std::string& data_url,
 }
 
 void WebViewGuest::AddNewContents(WebContents* source,
-                                  WebContents* new_contents,
+                                  std::unique_ptr<WebContents> new_contents,
                                   WindowOpenDisposition disposition,
                                   const gfx::Rect& initial_rect,
                                   bool user_gesture,
                                   bool* was_blocked) {
+  // TODO(erikchen): Fix ownership semantics for WebContents inside this class.
+  // https://crbug.com/832879.
   if (was_blocked)
     *was_blocked = false;
-  RequestNewWindowPermission(disposition,
-                             initial_rect,
-                             user_gesture,
-                             new_contents);
+  RequestNewWindowPermission(disposition, initial_rect, user_gesture,
+                             new_contents.release());
 }
 
 WebContents* WebViewGuest::OpenURLFromTab(
@@ -1642,7 +1664,14 @@ WebContents* WebViewGuest::OpenURLFromTab(
       return nullptr;
     }
   }
-
+  if (IsVivaldiRunning()) {
+    // NOTE(pettern@vivaldi.com): Fix for VB-43122. Let devtools handle opening
+    // links from devtools.
+    DevToolsWindow* window = DevToolsWindow::AsDevToolsWindow(web_contents());
+    if (window) {
+      return window->OpenURLFromTab(source, params);
+    }
+  }
   // This code path is taken if RenderFrameImpl::DecidePolicyForNavigation
   // decides that a fork should happen. At the time of writing this comment,
   // the only way a well behaving guest could hit this code path is if it
@@ -1676,10 +1705,16 @@ void WebViewGuest::WebContentsCreated(WebContents* source_contents,
   guest->name_ = frame_name;
   pending_new_windows_.insert(
       std::make_pair(guest, NewWindowInfo(target_url, frame_name)));
+
+  guest->delegate_to_browser_plugin_ =
+    static_cast<content::WebContentsImpl*>(new_contents)
+    ->GetBrowserPluginGuest();
 }
 
-void WebViewGuest::EnterFullscreenModeForTab(WebContents* web_contents,
-                                             const GURL& origin) {
+void WebViewGuest::EnterFullscreenModeForTab(
+    WebContents* web_contents,
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
   // Ask the embedder for permission.
   base::DictionaryValue request_info;
   request_info.SetString(webview::kOrigin, origin.spec());
@@ -1777,7 +1812,6 @@ void WebViewGuest::LoadURLWithParams(
   load_url_params.referrer = referrer;
   load_url_params.transition_type = transition_type;
   load_url_params.extra_headers = std::string();
-  load_url_params.transferred_global_request_id = GlobalRequestID();
   if (is_overriding_user_agent_) {
     load_url_params.override_user_agent =
         content::NavigationController::UA_OVERRIDE_TRUE;
@@ -1798,7 +1832,7 @@ void WebViewGuest::LoadURLWithParams(
 }
 
 void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
-                                              const gfx::Rect &initial_bounds,
+                                              const gfx::Rect& initial_bounds,
                                               bool user_gesture,
                                               WebContents* new_contents) {
   auto* guest = WebViewGuest::FromWebContents(new_contents);
@@ -1885,7 +1919,6 @@ void WebViewGuest::OnWebViewNewWindowResponse(
     return;
 
   if (allow) {
-#ifdef VIVALDI_BUILD
     if (IsVivaldiRunning()) {
       bool foreground = true;
       bool incognito = false;
@@ -1894,12 +1927,11 @@ void WebViewGuest::OnWebViewNewWindowResponse(
       // If we are a new incognito window, don't open the tab here. Let the
       // tabs API (WindowsCreateFunction) handle that. Otherwise we would get a
       // second tab with the same URL.
-      if (!incognito)
+      if (!incognito && !src_.SchemeIs(content::kChromeDevToolsScheme))
         AddGuestToTabStripModel(guest, window_id, foreground);
       else
         guest->Destroy(true);
     }
-#endif //VIVALDI_BUILD
   } else {
     guest->Destroy(true);
   }
@@ -1932,9 +1964,12 @@ void WebViewGuest::SetFullscreenState(bool is_fullscreen) {
     DispatchEventToView(std::make_unique<GuestViewEvent>(
         webview::kEventExitFullscreen, std::move(args)));
   }
-  // Since we changed fullscreen state, sending a Resize message ensures that
-  // renderer/ sees the change.
-  web_contents()->GetRenderViewHost()->GetWidget()->WasResized();
+  // Since we changed fullscreen state, sending a SynchronizeVisualProperties
+  // message ensures that renderer/ sees the change.
+  web_contents()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->SynchronizeVisualProperties();
 }
 
 }  // namespace extensions

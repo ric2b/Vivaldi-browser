@@ -4,50 +4,53 @@
 
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 
-#include "ash/multi_profile_uma.h"
+#include <algorithm>
+#include <set>
+#include <utility>
+
 #include "ash/public/cpp/ash_pref_names.h"
-#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/remote_shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/interfaces/constants.mojom.h"
-#include "ash/resources/grit/ash_resources.h"
-#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "base/command_line.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/ash_config.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/extensions/chrome_app_icon_loader.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
+#include "chrome/browser/ui/app_list/app_sync_ui_state.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ui/ash/app_list/app_list_service_ash.h"
-#include "chrome/browser/ui/ash/app_sync_ui_state.h"
-#include "chrome/browser/ui/ash/ash_util.h"
+#include "chrome/browser/ui/app_list/crostini/crostini_app_icon_loader.h"
+#include "chrome/browser/ui/app_list/internal_app/internal_app_icon_loader.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/browser/ui/ash/launcher/app_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
-#include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/browser_status_monitor.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
+#include "chrome/browser/ui/ash/launcher/crostini_app_window_shelf_controller.h"
+#include "chrome/browser/ui/ash/launcher/internal_app_window_shelf_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_arc_app_updater.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
+#include "chrome/browser/ui/ash/launcher/launcher_crostini_app_updater.h"
 #include "chrome/browser/ui/ash/launcher/launcher_extension_app_updater.h"
 #include "chrome/browser/ui/ash/launcher/multi_profile_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/multi_profile_browser_status_monitor.h"
+#include "chrome/browser/ui/ash/launcher/shelf_spinner_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
@@ -56,14 +59,14 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
 #include "components/favicon/content/content_favicon_driver.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/user_manager.h"
@@ -71,12 +74,10 @@
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/common/extension.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "ui/app_list/presenter/app_list_presenter_impl.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/display/display.h"
-#include "ui/display/screen.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -86,21 +87,11 @@ using extension_misc::kGmailAppId;
 
 namespace {
 
-int64_t GetDisplayIDForShelf(ash::Shelf* shelf) {
-  display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(shelf->GetWindow());
-  DCHECK(display.is_valid());
-  return display.id();
-}
-
-// A callback that does nothing after shelf item selection handling.
-void NoopCallback(ash::ShelfAction, base::Optional<ash::MenuItemList>) {}
-
 // Calls ItemSelected with |source|, default arguments, and no callback.
 void SelectItemWithSource(ash::ShelfItemDelegate* delegate,
-                          ash::ShelfLaunchSource source) {
-  delegate->ItemSelected(nullptr, display::kInvalidDisplayId, source,
-                         base::BindOnce(&NoopCallback));
+                          ash::ShelfLaunchSource source,
+                          int64_t display_id) {
+  delegate->ItemSelected(nullptr, display_id, source, base::DoNothing());
 }
 
 // Returns true if the given |item| has a pinned shelf item type.
@@ -224,11 +215,9 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
   DCHECK_EQ(profile, profile_);
   model_->AddObserver(this);
 
-  if (arc::IsArcAllowedForProfile(profile))
-    arc_deferred_launcher_.reset(new ArcAppDeferredLauncherController(this));
+  shelf_spinner_controller_.reset(new ShelfSpinnerController(this));
 
-  // In multi profile mode we might have a window manager. We try to create it
-  // here. If the instantiation fails, the manager is not needed.
+  // Create either the real window manager or a stub.
   MultiUserWindowManager::CreateInstance();
 
   // On Chrome OS using multi profile we want to switch the content of the shelf
@@ -259,6 +248,14 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
   app_window_controllers_.push_back(std::move(extension_app_window_controller));
   app_window_controllers_.push_back(
       std::make_unique<ArcAppWindowLauncherController>(this));
+  if (IsCrostiniUIAllowedForProfile(profile)) {
+    std::unique_ptr<CrostiniAppWindowShelfController> crostini_controller =
+        std::make_unique<CrostiniAppWindowShelfController>(this);
+    crostini_app_window_shelf_controller_ = crostini_controller.get();
+    app_window_controllers_.emplace_back(std::move(crostini_controller));
+  }
+  app_window_controllers_.push_back(
+      std::make_unique<InternalAppWindowShelfController>(this));
 }
 
 ChromeLauncherController::~ChromeLauncherController() {
@@ -267,6 +264,9 @@ ChromeLauncherController::~ChromeLauncherController() {
 
   // Reset the app window controllers here since it has a weak pointer to this.
   app_window_controllers_.clear();
+
+  // Destroy the ShelfSpinnerController before clearing delegates.
+  shelf_spinner_controller_.reset();
 
   // Destroy local shelf item delegates; some subclasses have complex cleanup.
   model_->DestroyItemDelegates();
@@ -294,9 +294,10 @@ void ChromeLauncherController::Init() {
 
 ash::ShelfID ChromeLauncherController::CreateAppLauncherItem(
     std::unique_ptr<ash::ShelfItemDelegate> item_delegate,
-    ash::ShelfItemStatus status) {
+    ash::ShelfItemStatus status,
+    const base::string16& title) {
   return InsertAppLauncherItem(std::move(item_delegate), status,
-                               model_->item_count(), ash::TYPE_APP);
+                               model_->item_count(), ash::TYPE_APP, title);
 }
 
 const ash::ShelfItem* ChromeLauncherController::GetItem(
@@ -407,12 +408,13 @@ void ChromeLauncherController::LaunchApp(const ash::ShelfID& id,
 
 void ChromeLauncherController::ActivateApp(const std::string& app_id,
                                            ash::ShelfLaunchSource source,
-                                           int event_flags) {
+                                           int event_flags,
+                                           int64_t display_id) {
   // If there is an existing delegate for this app, select it.
   const ash::ShelfID shelf_id(app_id);
   ash::ShelfItemDelegate* delegate = model_->GetShelfItemDelegate(shelf_id);
   if (delegate) {
-    SelectItemWithSource(delegate, source);
+    SelectItemWithSource(delegate, source, display_id);
     return;
   }
 
@@ -420,9 +422,9 @@ void ChromeLauncherController::ActivateApp(const std::string& app_id,
   std::unique_ptr<AppShortcutLauncherItemController> item_delegate =
       AppShortcutLauncherItemController::Create(shelf_id);
   if (!item_delegate->GetRunningApplications().empty())
-    SelectItemWithSource(item_delegate.get(), source);
+    SelectItemWithSource(item_delegate.get(), source, display_id);
   else
-    LaunchApp(shelf_id, source, event_flags, display::kInvalidDisplayId);
+    LaunchApp(shelf_id, source, event_flags, display_id);
 }
 
 void ChromeLauncherController::SetLauncherItemImage(
@@ -449,7 +451,7 @@ void ChromeLauncherController::UpdateLauncherItemImage(
 }
 
 void ChromeLauncherController::UpdateAppState(content::WebContents* contents,
-                                              AppState app_state) {
+                                              bool remove) {
   ash::ShelfID shelf_id(launcher_controller_helper_->GetAppID(contents));
 
   // Check if the gMail app is loaded and it matches the given content.
@@ -468,7 +470,7 @@ void ChromeLauncherController::UpdateAppState(content::WebContents* contents,
     }
   }
 
-  if (app_state == APP_STATE_REMOVED)
+  if (remove)
     web_contents_to_app_id_.erase(contents);
   else
     web_contents_to_app_id_[contents] = shelf_id.app_id;
@@ -511,17 +513,13 @@ ash::ShelfAction ChromeLauncherController::ActivateWindowOrMinimizeIfActive(
       multi_user_util::GetAccountIdFromProfile(profile());
   MultiUserWindowManager* manager = MultiUserWindowManager::GetInstance();
   if (!manager->IsWindowOnDesktopOfUser(native_window, current_account_id)) {
-    ash::MultiProfileUMA::RecordTeleportAction(
-        ash::MultiProfileUMA::TELEPORT_WINDOW_RETURN_BY_LAUNCHER);
     manager->ShowWindowForUser(native_window, current_account_id);
     window->Activate();
     return ash::SHELF_ACTION_WINDOW_ACTIVATED;
   }
 
-  const app_list::AppListPresenterImpl* app_list_presenter =
-      AppListServiceAsh::GetInstance()->GetAppListPresenter();
   if (window->IsActive() && allow_minimize &&
-      (!app_list_presenter || !app_list_presenter->IsVisible())) {
+      !AppListClientImpl::GetInstance()->app_list_target_visibility()) {
     window->Minimize();
     return ash::SHELF_ACTION_WINDOW_MINIMIZED;
   }
@@ -554,12 +552,6 @@ void ChromeLauncherController::ActiveUserChanged(
   // Restore the order of running, but unpinned applications for the activated
   // user.
   RestoreUnpinnedRunningApplicationOrder(user_email);
-  // TODO(crbug.com/557406): Fix this interaction pattern in Mash.
-  if (!ash_util::IsRunningInMash()) {
-    // Force on-screen keyboard to reset.
-    if (keyboard::IsKeyboardEnabled())
-      ash::Shell::Get()->CreateKeyboard();
-  }
 }
 
 void ChromeLauncherController::AdditionalUserAddedToSession(Profile* profile) {
@@ -668,45 +660,13 @@ ChromeLauncherController::GetBrowserShortcutLauncherItemController() {
   return static_cast<BrowserShortcutLauncherItemController*>(delegate);
 }
 
-bool ChromeLauncherController::ShelfBoundsChangesProbablyWithUser(
-    ash::Shelf* shelf,
-    const AccountId& account_id) const {
-  Profile* other_profile = multi_user_util::GetProfileFromAccountId(account_id);
-  if (!other_profile || other_profile == profile())
-    return false;
-
-  // Note: The Auto hide state from preferences is not the same as the actual
-  // visibility of the shelf. Depending on all the various states (full screen,
-  // no window on desktop, multi user, ..) the shelf could be shown - or not.
-  PrefService* prefs = profile()->GetPrefs();
-  PrefService* other_prefs = other_profile->GetPrefs();
-  // If ash prefs have not been registered with Chrome yet, Chrome cannot know
-  // whether the shelf bounds will change; err on the side of false positives.
-  if (!ash::AreShelfPrefsAvailable(prefs) ||
-      !ash::AreShelfPrefsAvailable(other_prefs)) {
-    return true;
-  }
-  const int64_t display = GetDisplayIDForShelf(shelf);
-  const bool currently_shown =
-      ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
-      ash::GetShelfAutoHideBehaviorPref(prefs, display);
-  const bool other_shown =
-      ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
-      ash::GetShelfAutoHideBehaviorPref(other_prefs, display);
-
-  return currently_shown != other_shown ||
-         ash::GetShelfAlignmentPref(prefs, display) !=
-             ash::GetShelfAlignmentPref(other_prefs, display);
-}
-
 void ChromeLauncherController::OnUserProfileReadyToSwitch(Profile* profile) {
   if (user_switch_observer_.get())
     user_switch_observer_->OnUserProfileReadyToSwitch(profile);
 }
 
-ArcAppDeferredLauncherController*
-ChromeLauncherController::GetArcDeferredLauncher() {
-  return arc_deferred_launcher_.get();
+ShelfSpinnerController* ChromeLauncherController::GetShelfSpinnerController() {
+  return shelf_spinner_controller_.get();
 }
 
 ChromeLauncherController::ScopedPinSyncDisabler
@@ -803,13 +763,12 @@ void ChromeLauncherController::OnAppImageUpdated(const std::string& app_id,
   for (int index = 0; index < model_->item_count(); ++index) {
     ash::ShelfItem item = model_->items()[index];
     ash::ShelfItemDelegate* delegate = model_->GetShelfItemDelegate(item.id);
-    if (item.type == ash::TYPE_APP_PANEL || !delegate ||
-        delegate->image_set_by_controller() || item.id.app_id != app_id) {
+    if (!delegate || delegate->image_set_by_controller() ||
+        item.id.app_id != app_id) {
       continue;
     }
     item.image = image;
-    if (arc_deferred_launcher_)
-      arc_deferred_launcher_->MaybeApplySpinningEffect(app_id, &item.image);
+    shelf_spinner_controller_->MaybeApplySpinningEffect(app_id, &item.image);
     // Update the image in Ash's ShelfModel, ShelfItemChanged strips images.
     if (shelf_controller_)
       shelf_controller_->UpdateShelfItem(item);
@@ -823,15 +782,6 @@ void ChromeLauncherController::OnAppImageUpdated(const std::string& app_id,
 // ChromeLauncherController protected:
 
 bool ChromeLauncherController::ConnectToShelfController() {
-  // Synchronization is required in the Mash config, since Chrome and Ash run in
-  // separate processes; it's optional via kAshDisableShelfModelSynchronization
-  // in the Classic Ash config, where Chrome can uses Ash's ShelfModel directly.
-  if (!ash_util::IsRunningInMash() &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ash::switches::kAshDisableShelfModelSynchronization)) {
-    return false;
-  }
-
   if (shelf_controller_.is_bound())
     return true;
 
@@ -1048,12 +998,12 @@ void ChromeLauncherController::SetVirtualKeyboardBehaviorFromPrefs() {
                : keyboard::KEYBOARD_SHOW_OVERRIDE_DISABLED);
   }
   // TODO(crbug.com/557406): Fix this interaction pattern in Mash.
-  if (!ash_util::IsRunningInMash()) {
+  if (features::IsAshInBrowserProcess()) {
     const bool is_enabled = keyboard::IsKeyboardEnabled();
     if (was_enabled && !is_enabled)
-      ash::Shell::Get()->DestroyKeyboard();
+      ash::Shell::Get()->DisableKeyboard();
     else if (is_enabled && !was_enabled)
-      ash::Shell::Get()->CreateKeyboard();
+      ash::Shell::Get()->EnableKeyboard();
   }
 }
 
@@ -1078,15 +1028,15 @@ ash::ShelfID ChromeLauncherController::InsertAppLauncherItem(
     std::unique_ptr<ash::ShelfItemDelegate> item_delegate,
     ash::ShelfItemStatus status,
     int index,
-    ash::ShelfItemType shelf_item_type) {
+    ash::ShelfItemType shelf_item_type,
+    const base::string16& title) {
   CHECK(item_delegate);
   CHECK(!GetItem(item_delegate->shelf_id()));
-  // Ash's ShelfWindowWatcher handles app panel windows separately.
-  DCHECK_NE(ash::TYPE_APP_PANEL, shelf_item_type);
   ash::ShelfItem item;
   item.status = status;
   item.type = shelf_item_type;
   item.id = item_delegate->shelf_id();
+  item.title = title;
   // Set the delegate first to avoid constructing one in ShelfItemAdded.
   model_->SetShelfItemDelegate(item.id, std::move(item_delegate));
   model_->AddAt(index, item);
@@ -1186,6 +1136,18 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
     app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
   }
 
+  std::unique_ptr<AppIconLoader> internal_app_icon_loader =
+      std::make_unique<InternalAppIconLoader>(
+          profile_, extension_misc::EXTENSION_ICON_SMALL, this);
+  app_icon_loaders_.push_back(std::move(internal_app_icon_loader));
+
+  if (IsCrostiniUIAllowedForProfile(profile_)) {
+    std::unique_ptr<AppIconLoader> crostini_app_icon_loader =
+        std::make_unique<CrostiniAppIconLoader>(
+            profile_, extension_misc::EXTENSION_ICON_SMALL, this);
+    app_icon_loaders_.push_back(std::move(crostini_app_icon_loader));
+  }
+
   pref_change_registrar_.Init(profile()->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kPolicyPinnedLauncherApps,
@@ -1211,6 +1173,12 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
     std::unique_ptr<LauncherAppUpdater> arc_app_updater(
         new LauncherArcAppUpdater(this, profile()));
     app_updaters_.push_back(std::move(arc_app_updater));
+  }
+
+  if (IsCrostiniUIAllowedForProfile(profile())) {
+    std::unique_ptr<LauncherAppUpdater> crostini_app_updater(
+        new LauncherCrostiniAppUpdater(this, profile()));
+    app_updaters_.push_back(std::move(crostini_app_updater));
   }
 
   app_list::AppListSyncableService* app_service =
@@ -1338,6 +1306,16 @@ void ChromeLauncherController::ShelfItemAdded(int index) {
   // Perform item init, and ensure these changes are reported to Ash.
   base::AutoReset<bool> reset(&applying_remote_shelf_model_changes_, false);
 
+  ash::ShelfItem item = model_->items()[index];
+  // Construct a ShelfItemDelegate for the item if one does not yet exist.
+  // The delegate needs to be set before FetchImage() so that shelf item
+  // icon could be set properly when FetchImage() calls OnAppImageUpdated()
+  // synchronously.
+  if (!model_->GetShelfItemDelegate(item.id)) {
+    model_->SetShelfItemDelegate(
+        item.id, AppShortcutLauncherItemController::Create(item.id));
+  }
+
   // Fetch the app icon, this may synchronously update the item's image.
   const std::string& app_id = model_->items()[index].id.app_id;
   AppIconLoader* app_icon_loader = GetAppIconLoaderForApp(app_id);
@@ -1345,7 +1323,6 @@ void ChromeLauncherController::ShelfItemAdded(int index) {
     app_icon_loader->FetchImage(app_id);
 
   // Update the item with any other missing Chrome-specific info.
-  ash::ShelfItem item = model_->items()[index];
   if (item.type == ash::TYPE_APP || item.type == ash::TYPE_PINNED_APP) {
     bool needs_update = false;
     if (item.title.empty()) {
@@ -1362,12 +1339,6 @@ void ChromeLauncherController::ShelfItemAdded(int index) {
       base::AutoReset<bool> reset(&applying_remote_shelf_model_changes_, false);
       model_->Set(index, item);
     }
-  }
-
-  // Construct a ShelfItemDelegate for the item if one does not yet exist.
-  if (!model_->GetShelfItemDelegate(item.id)) {
-    model_->SetShelfItemDelegate(
-        item.id, AppShortcutLauncherItemController::Create(item.id));
   }
 
   // Update the pin position preference as needed.

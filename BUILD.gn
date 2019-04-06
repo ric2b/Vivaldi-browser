@@ -1,26 +1,14 @@
 import("//vivaldi/vivaldi_init_settings.gni")
+import("//build/config/chrome_build.gni")
 
 assert(is_vivaldi)
 
-#import("//build/config/compiler/compiler.gni")
-#import("//build/config/features.gni")
-#import("//build/config/android/config.gni")
-#import("//build/config/arm.gni")
-#import("//build/config/dcheck_always_on.gni")
-#import("//build/config/mips.gni")
-#import("//build/config/sanitizers/sanitizers.gni")
-#import("//v8/snapshot_toolchain.gni")
 import("//build/config/ui.gni")
-#import("//media/media_options.gni")
-#import("//third_party/openh264/openh264_args.gni")
-#import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/compile_updates.gni")
 import("//vivaldi/gn/source_updates.gni")
-
-import("//vivaldi/gn/disabled_targets.gni")
 
 import("//vivaldi/gn/product_updates.gni")
 import("//vivaldi/gn/deps_updates.gni")
@@ -104,9 +92,6 @@ group("All") {
         ":linux_crash_reporting",
       ]
     }
-    if (enable_ipc_fuzzer) {
-      deps += [ "//tools/ipc_fuzzer:ipc_fuzzer_all" ]
-    }
     if (use_dbus) {
       deps += [ "//dbus" ]
     }
@@ -133,9 +118,6 @@ group("All") {
 }
 
 group("vivaldi") {
-  if (is_win) {
-    output_name = "vivaldi.exe"
-  }
   deps = [
     ":standalone",
     "//chrome:chrome",

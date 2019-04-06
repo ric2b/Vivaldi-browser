@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/extensions/extension_installed_notification.h"
 
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/notifications/notification_common.h"
@@ -20,8 +20,7 @@
 #include "extensions/common/extension_urls.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/gfx/paint_vector_icon.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace {
 const char* kNotifierId = "app.downloaded-notification";
@@ -51,7 +50,7 @@ ExtensionInstalledNotification::ExtensionInstalledNotification(
           GURL(extension_urls::kChromeWebstoreBaseURL) /* origin_url */,
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT, kNotifierId),
-          {}, this, kNotificationInstalledIcon,
+          {}, this, ash::kNotificationInstalledIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);
 
   NotificationDisplayService::GetForProfile(profile_)->Display(
@@ -60,7 +59,9 @@ ExtensionInstalledNotification::ExtensionInstalledNotification(
 
 ExtensionInstalledNotification::~ExtensionInstalledNotification() {}
 
-void ExtensionInstalledNotification::Click() {
+void ExtensionInstalledNotification::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
   if (!extensions::util::IsAppLaunchable(extension_id_, profile_))
     return;
 

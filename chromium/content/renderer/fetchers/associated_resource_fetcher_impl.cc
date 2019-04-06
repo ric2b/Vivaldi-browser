@@ -10,19 +10,19 @@
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebHTTPBody.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebAssociatedURLLoader.h"
-#include "third_party/WebKit/public/web/WebAssociatedURLLoaderClient.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_http_body.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_associated_url_loader.h"
+#include "third_party/blink/public/web/web_associated_url_loader_client.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_security_policy.h"
 
 namespace content {
 
@@ -63,8 +63,9 @@ class AssociatedResourceFetcherImpl::ClientImpl
     // Take a reference to the callback as running the callback may lead to our
     // destruction.
     Callback callback = callback_;
-    callback.Run(status_ == LOAD_FAILED ? blink::WebURLResponse() : response_,
-                 status_ == LOAD_FAILED ? std::string() : data_);
+    std::move(callback).Run(
+        status_ == LOAD_FAILED ? blink::WebURLResponse() : response_,
+        status_ == LOAD_FAILED ? std::string() : data_);
   }
 
   // WebAssociatedURLLoaderClient methods:
@@ -85,7 +86,7 @@ class AssociatedResourceFetcherImpl::ClientImpl
 
     data_.append(data, data_length);
   }
-  void DidFinishLoading(double finishTime) override {
+  void DidFinishLoading() override {
     // The WebAssociatedURLLoader will continue after a load failure.
     // For example, for an Access Control error.
     if (completed_)
@@ -127,12 +128,12 @@ AssociatedResourceFetcherImpl::~AssociatedResourceFetcherImpl() {
     loader_->Cancel();
 }
 
-void AssociatedResourceFetcherImpl::SetServiceWorkerMode(
-    blink::WebURLRequest::ServiceWorkerMode service_worker_mode) {
+void AssociatedResourceFetcherImpl::SetSkipServiceWorker(
+    bool skip_service_worker) {
   DCHECK(!request_.IsNull());
   DCHECK(!loader_);
 
-  request_.SetServiceWorkerMode(service_worker_mode);
+  request_.SetSkipServiceWorker(skip_service_worker);
 }
 
 void AssociatedResourceFetcherImpl::SetCacheMode(

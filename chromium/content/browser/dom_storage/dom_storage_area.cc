@@ -22,10 +22,8 @@
 #include "build/build_config.h"
 #include "content/browser/dom_storage/dom_storage_namespace.h"
 #include "content/browser/dom_storage/dom_storage_task_runner.h"
-#include "content/browser/dom_storage/local_storage_database_adapter.h"
 #include "content/browser/dom_storage/session_storage_database.h"
 #include "content/browser/dom_storage/session_storage_database_adapter.h"
-#include "content/browser/leveldb_wrapper_impl.h"
 #include "content/common/dom_storage/dom_storage_map.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/browser/browser_thread.h"
@@ -39,14 +37,10 @@ namespace content {
 
 namespace {
 
-// Delay for a moment after a value is set in anticipation
-// of other values being set, so changes are batched.
-const int kCommitDefaultDelaySecs = 5;
-
 // To avoid excessive IO we apply limits to the amount of data being written
 // and the frequency of writes. The specific values used are somewhat arbitrary.
-const int kMaxBytesPerHour = kPerStorageAreaQuota;
-const int kMaxCommitsPerHour = 60;
+constexpr int kMaxBytesPerHour = kPerStorageAreaQuota;
+constexpr int kMaxCommitsPerHour = 60;
 
 }  // namespace
 
@@ -90,7 +84,8 @@ const base::FilePath::CharType DOMStorageArea::kDatabaseFileExtension[] =
     FILE_PATH_LITERAL(".localstorage");
 
 // static
-base::FilePath DOMStorageArea::DatabaseFileNameFromOrigin(const GURL& origin) {
+base::FilePath DOMStorageArea::DatabaseFileNameFromOrigin(
+    const url::Origin& origin) {
   std::string filename = storage::GetIdentifierFromOrigin(origin);
   // There is no base::FilePath.AppendExtension() method, so start with just the
   // extension as the filename, and then InsertBeforeExtension the desired
@@ -100,7 +95,8 @@ base::FilePath DOMStorageArea::DatabaseFileNameFromOrigin(const GURL& origin) {
 }
 
 // static
-GURL DOMStorageArea::OriginFromDatabaseFileName(const base::FilePath& name) {
+url::Origin DOMStorageArea::OriginFromDatabaseFileName(
+    const base::FilePath& name) {
   DCHECK(name.MatchesExtension(kDatabaseFileExtension));
   std::string origin_id =
       name.BaseName().RemoveExtension().MaybeAsASCII();
@@ -109,48 +105,15 @@ GURL DOMStorageArea::OriginFromDatabaseFileName(const base::FilePath& name) {
 
 void DOMStorageArea::EnableAggressiveCommitDelay() {
   s_aggressive_flushing_enabled_ = true;
-  LevelDBWrapperImpl::EnableAggressiveCommitDelay();
 }
 
-DOMStorageArea::DOMStorageArea(const GURL& origin,
-                               const base::FilePath& directory,
+DOMStorageArea::DOMStorageArea(const std::string& namespace_id,
+                               std::vector<std::string> original_namespace_ids,
+                               const url::Origin& origin,
+                               SessionStorageDatabase* session_storage_backing,
                                DOMStorageTaskRunner* task_runner)
-    : namespace_id_(kLocalStorageNamespaceId),
-      origin_(origin),
-      directory_(directory),
-      task_runner_(task_runner),
-#if defined(OS_ANDROID)
-      desired_load_state_(directory.empty() ? LOAD_STATE_KEYS_AND_VALUES
-                                            : LOAD_STATE_KEYS_ONLY),
-#else
-      desired_load_state_(LOAD_STATE_KEYS_AND_VALUES),
-#endif
-      load_state_(directory.empty() ? LOAD_STATE_KEYS_AND_VALUES
-                                    : LOAD_STATE_UNLOADED),
-      map_(new DOMStorageMap(
-          kPerStorageAreaQuota + kPerStorageAreaOverQuotaAllowance,
-          desired_load_state_ == LOAD_STATE_KEYS_ONLY)),
-      is_shutdown_(false),
-      start_time_(base::TimeTicks::Now()),
-      data_rate_limiter_(kMaxBytesPerHour, base::TimeDelta::FromHours(1)),
-      commit_rate_limiter_(kMaxCommitsPerHour, base::TimeDelta::FromHours(1)) {
-  if (!directory.empty()) {
-    base::FilePath path = directory.Append(DatabaseFileNameFromOrigin(origin_));
-    backing_.reset(new LocalStorageDatabaseAdapter(path));
-  }
-}
-
-DOMStorageArea::DOMStorageArea(
-    int64_t namespace_id,
-    const std::string& persistent_namespace_id,
-    std::unique_ptr<std::vector<std::string>> original_persistent_namespace_ids,
-    const GURL& origin,
-    SessionStorageDatabase* session_storage_backing,
-    DOMStorageTaskRunner* task_runner)
     : namespace_id_(namespace_id),
-      persistent_namespace_id_(persistent_namespace_id),
-      original_persistent_namespace_ids_(
-          std::move(original_persistent_namespace_ids)),
+      original_namespace_ids_(std::move(original_namespace_ids)),
       origin_(origin),
       task_runner_(task_runner),
 #if defined(OS_ANDROID)
@@ -169,13 +132,11 @@ DOMStorageArea::DOMStorageArea(
       start_time_(base::TimeTicks::Now()),
       data_rate_limiter_(kMaxBytesPerHour, base::TimeDelta::FromHours(1)),
       commit_rate_limiter_(kMaxCommitsPerHour, base::TimeDelta::FromHours(1)) {
-  DCHECK(namespace_id != kLocalStorageNamespaceId);
+  DCHECK(!namespace_id.empty());
   if (session_storage_backing) {
-    backing_.reset(new SessionStorageDatabaseAdapter(
-        session_storage_backing, persistent_namespace_id,
-        original_persistent_namespace_ids_ ? *original_persistent_namespace_ids_
-                                           : std::vector<std::string>(),
-        origin));
+    backing_.reset(
+        new SessionStorageDatabaseAdapter(session_storage_backing, namespace_id,
+                                          original_namespace_ids_, origin));
   }
 }
 
@@ -298,23 +259,17 @@ void DOMStorageArea::FastClear() {
 }
 
 DOMStorageArea* DOMStorageArea::ShallowCopy(
-    int64_t destination_namespace_id,
-    const std::string& destination_persistent_namespace_id) {
-  DCHECK_NE(kLocalStorageNamespaceId, namespace_id_);
-  DCHECK_NE(kLocalStorageNamespaceId, destination_namespace_id);
+    const std::string& destination_namespace_id) {
+  DCHECK(!namespace_id_.empty());
+  DCHECK(!destination_namespace_id.empty());
 
-  auto original_persistent_namespace_ids =
-      std::make_unique<std::vector<std::string>>();
-  original_persistent_namespace_ids->push_back(persistent_namespace_id_);
-  if (original_persistent_namespace_ids_) {
-    original_persistent_namespace_ids->insert(
-        original_persistent_namespace_ids->end(),
-        original_persistent_namespace_ids_->begin(),
-        original_persistent_namespace_ids_->end());
-  }
+  std::vector<std::string> original_namespace_ids;
+  original_namespace_ids.push_back(namespace_id_);
+  original_namespace_ids.insert(original_namespace_ids.end(),
+                                original_namespace_ids_.begin(),
+                                original_namespace_ids_.end());
   DOMStorageArea* copy = new DOMStorageArea(
-      destination_namespace_id, destination_persistent_namespace_id,
-      std::move(original_persistent_namespace_ids), origin_,
+      destination_namespace_id, std::move(original_namespace_ids), origin_,
       session_storage_backing_.get(), task_runner_.get());
   copy->desired_load_state_ = desired_load_state_;
   copy->load_state_ = load_state_;
@@ -349,7 +304,7 @@ void DOMStorageArea::ClearShallowCopiedCommitBatches() {
          commit_batches_.back().type == CommitBatchHolder::TYPE_CLONE) {
     commit_batches_.pop_back();
   }
-  original_persistent_namespace_ids_ = nullptr;
+  original_namespace_ids_.clear();
 }
 
 void DOMStorageArea::SetCacheOnlyKeys(bool only_keys) {
@@ -365,29 +320,6 @@ void DOMStorageArea::SetCacheOnlyKeys(bool only_keys) {
   // immediately. The reload only happens when required.
   if (!map_->Length() || desired_load_state_ == LOAD_STATE_KEYS_AND_VALUES)
     UnloadMapIfDesired();
-}
-
-void DOMStorageArea::DeleteOrigin() {
-  DCHECK(!is_shutdown_);
-  // This function shouldn't be called for sessionStorage.
-  DCHECK(!session_storage_backing_.get());
-  if (HasUncommittedChanges()) {
-    // TODO(michaeln): This logically deletes the data immediately,
-    // and in a matter of a second, deletes the rows from the backing
-    // database file, but the file itself will linger until shutdown
-    // or purge time. Ideally, this should delete the file more
-    // quickly.
-    Clear();
-    return;
-  }
-  map_ = new DOMStorageMap(
-      kPerStorageAreaQuota + kPerStorageAreaOverQuotaAllowance,
-      desired_load_state_ == LOAD_STATE_KEYS_ONLY);
-  if (backing_) {
-    load_state_ = LOAD_STATE_UNLOADED;
-    backing_->Reset();
-    backing_->DeleteFiles();
-  }
 }
 
 void DOMStorageArea::PurgeMemory() {
@@ -469,7 +401,7 @@ void DOMStorageArea::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
     return;
 
   // Limit the url length to 50 and strip special characters.
-  std::string url = origin_.spec().substr(0, 50);
+  std::string url = origin_.GetURL().spec().substr(0, 50);
   for (size_t index = 0; index < url.size(); ++index) {
     if (!std::isalnum(url[index]))
       url[index] = '_';
@@ -493,11 +425,6 @@ void DOMStorageArea::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
     if (system_allocator_name)
       pmd->AddSuballocation(commit_batch_mad->guid(), system_allocator_name);
   }
-
-  // Report memory usage for local storage backing. The session storage usage
-  // will be reported by DOMStorageContextImpl.
-  if (namespace_id_ == kLocalStorageNamespaceId && backing_)
-    backing_->ReportMemoryUsage(pmd, name + "/local_storage");
 
   // Do not add storage map usage if less than 1KB.
   if (map_->memory_used() < 1024)
@@ -648,11 +575,16 @@ base::TimeDelta DOMStorageArea::ComputeCommitDelay() const {
   if (s_aggressive_flushing_enabled_)
     return base::TimeDelta::FromSeconds(1);
 
+  // Delay for a moment after a value is set in anticipation
+  // of other values being set, so changes are batched.
+  static constexpr base::TimeDelta kCommitDefaultDelaySecs =
+      base::TimeDelta::FromSeconds(5);
+
   base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time_;
-  base::TimeDelta delay = std::max(
-      base::TimeDelta::FromSeconds(kCommitDefaultDelaySecs),
-      std::max(commit_rate_limiter_.ComputeDelayNeeded(elapsed_time),
-               data_rate_limiter_.ComputeDelayNeeded(elapsed_time)));
+  base::TimeDelta delay =
+      std::max(kCommitDefaultDelaySecs,
+               std::max(commit_rate_limiter_.ComputeDelayNeeded(elapsed_time),
+                        data_rate_limiter_.ComputeDelayNeeded(elapsed_time)));
   UMA_HISTOGRAM_LONG_TIMES("LocalStorage.CommitDelay", delay);
   return delay;
 }

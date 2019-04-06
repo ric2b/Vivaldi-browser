@@ -4,7 +4,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/c/main.h"
@@ -14,7 +13,7 @@
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 #include "services/service_manager/public/cpp/service_runner.h"
-#include "services/service_manager/public/interfaces/connector.mojom.h"
+#include "services/service_manager/public/mojom/connector.mojom.h"
 #include "services/service_manager/tests/connect/connect_test.mojom.h"
 
 namespace service_manager {

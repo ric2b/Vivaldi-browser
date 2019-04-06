@@ -1,11 +1,5 @@
 {
   "flags": {
-    "hue_integration": {
-      "friendly_name": "Philips Hue Integration",
-      "description": "Lets Vivaldi integrate with an existing Philips Hue Lighting system.",
-      "value": "true",
-      "internal_value": "true"
-    },
     "bookmark_menu": {
       "friendly_name": "Bookmark menu",
       "description": "Enables a bookmark entry in the main menu for Windows and Linux. Always enabled for Mac.",
@@ -21,8 +15,8 @@
     "sync": {
       "friendly_name": "Sync",
       "description": "Enables the synchronization functionality",
-      "value": "false",
-      "internal_value": "false"
+      "value": "true",
+      "internal_value": "true"
     }
   }
 }

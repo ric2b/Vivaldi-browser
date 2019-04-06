@@ -5,6 +5,7 @@ source_set("tools") {
   ]
   deps = [
     "//components/google/core/browser:browser",
+    "//extensions/buildflags",
     "//net:net"
   ]
 }

@@ -26,6 +26,7 @@
 #include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
+#include "net/base/proxy_server.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_progress.h"
 #include "net/cookies/canonical_cookie.h"
@@ -33,10 +34,11 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
+#include "net/log/net_log_event_type.h"
 #include "net/log/net_log_with_source.h"
-#include "net/net_features.h"
-#include "net/proxy/proxy_server.h"
+#include "net/net_buildflags.h"
 #include "net/socket/connection_attempts.h"
+#include "net/socket/socket_tag.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
@@ -284,6 +286,13 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // This method may only be called before Start().
   void set_site_for_cookies(const GURL& site_for_cookies);
 
+  // Indicate whether SameSite cookies should be attached even though the
+  // request is cross-site.
+  bool attach_same_site_cookies() const { return attach_same_site_cookies_; }
+  void set_attach_same_site_cookies(bool attach) {
+    attach_same_site_cookies_ = attach;
+  }
+
   // The first-party URL policy to apply when updating the first party URL
   // during redirects. The first-party URL policy may only be changed before
   // Start() is called.
@@ -352,6 +361,16 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // before creating its delegate.  |delegate| must be non-NULL and the request
   // must not yet have a Delegate set.
   void set_delegate(Delegate* delegate);
+
+  // Sets whether credentials are allowed.
+  // If credentials are allowed, the request will send and save HTTP
+  // cookies, as well as authentication to the origin server. If not,
+  // they will not be sent, however proxy-level authentication will
+  // still occur.
+  // Setting this to false is equivalent to setting the
+  // LOAD_DO_NOT_SAVE_COOKIES, LOAD_DO_NOT_SEND_COOKIES, and
+  // LOAD_DO_NOT_SEND_AUTH_DATA flags. See https://crbug.com/799935.
+  void set_allow_credentials(bool allow_credentials);
 
   // Sets the upload data.
   void set_upload(std::unique_ptr<UploadDataStream> upload);
@@ -601,8 +620,11 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   void StopCaching();
 
   // This method may be called to follow a redirect that was deferred in
-  // response to an OnReceivedRedirect call.
-  void FollowDeferredRedirect();
+  // response to an OnReceivedRedirect call. If non-null,
+  // |modified_request_headers| are changes applied to the request headers after
+  // updating them for the redirect.
+  void FollowDeferredRedirect(
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers);
 
   // One of the following two methods should be called in response to an
   // OnAuthRequired() callback (and only then).
@@ -693,6 +715,25 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // called with a response from the server.
   void SetResponseHeadersCallback(ResponseHeadersCallback callback);
 
+  // Sets socket tag to be applied to all sockets used to execute this request.
+  // Must be set before Start() is called.  Only currently supported for HTTP
+  // and HTTPS requests on Android; UID tagging requires
+  // MODIFY_NETWORK_ACCOUNTING permission.
+  // NOTE(pauljensen): Setting a tag disallows sharing of sockets with requests
+  // with other tags, which may adversely effect performance by prohibiting
+  // connection sharing. In other words use of multiplexed sockets (e.g. HTTP/2
+  // and QUIC) will only be allowed if all requests have the same socket tag.
+  void set_socket_tag(const SocketTag& socket_tag);
+  const SocketTag& socket_tag() const { return socket_tag_; }
+
+  // |upgrade_if_insecure| should be set to true if this request (including
+  // redirects) should be upgraded to HTTPS due to an Upgrade-Insecure-Requests
+  // requirement.
+  void set_upgrade_if_insecure(bool upgrade_if_insecure) {
+    upgrade_if_insecure_ = upgrade_if_insecure;
+  }
+  bool upgrade_if_insecure() const { return upgrade_if_insecure_; }
+
  protected:
   // Allow the URLRequestJob class to control the is_pending() flag.
   void set_is_pending(bool value) { is_pending_ = value; }
@@ -700,8 +741,12 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // Allow the URLRequestJob class to set our status too.
   void set_status(URLRequestStatus status);
 
-  // Allow the URLRequestJob to redirect this request.
-  void Redirect(const RedirectInfo& redirect_info);
+  // Allow the URLRequestJob to redirect this request. If non-null,
+  // |modified_request_headers| are changes applied to the request headers after
+  // updating them for the redirect.
+  void Redirect(
+      const RedirectInfo& redirect_info,
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers);
 
   // Called by URLRequestJob to allow interception when a redirect occurs.
   void NotifyReceivedRedirect(const RedirectInfo& redirect_info,
@@ -778,13 +823,16 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
                     CookieOptions* options) const;
   bool CanEnablePrivacyMode() const;
 
-  // Called just before calling a delegate that may block a request.
-  void OnCallToDelegate();
+  // Called just before calling a delegate that may block a request. |type|
+  // should be the delegate's event type,
+  // e.g. NetLogEventType::NETWORK_DELEGATE_AUTH_REQUIRED.
+  void OnCallToDelegate(NetLogEventType type);
   // Called when the delegate lets a request continue.  Also called on
   // cancellation.
   void OnCallToDelegateComplete();
 
 #if BUILDFLAG(ENABLE_REPORTING)
+  std::string GetUserAgent() const;
   void MaybeGenerateNetworkErrorLoggingReport();
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
@@ -803,6 +851,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   std::vector<GURL> url_chain_;
   GURL site_for_cookies_;
+  bool attach_same_site_cookies_;
   base::Optional<url::Origin> initiator_;
   GURL delegate_redirect_url_;
   std::string method_;  // "GET", "POST", etc. Should be all uppercase.
@@ -858,6 +907,10 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // A globally unique identifier for this request.
   const uint64_t identifier_;
 
+  // If |calling_delegate_| is true, the event type of the delegate being
+  // called.
+  NetLogEventType delegate_event_type_;
+
   // True if this request is currently calling a delegate, or is blocked waiting
   // for the URL request or network delegate to resume it.
   bool calling_delegate_;
@@ -868,10 +921,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   bool use_blocked_by_as_load_param_;
 
   base::debug::LeakTracker<URLRequest> leak_tracker_;
-
-  // Callback passed to the network delegate to notify us when a blocked request
-  // is ready to be resumed or canceled.
-  CompletionCallback before_request_callback_;
 
   // Safe-guard to ensure that we do not send multiple "I am completed"
   // messages to network delegate.
@@ -904,9 +953,13 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   const NetworkTrafficAnnotationTag traffic_annotation_;
 
+  SocketTag socket_tag_;
+
   // See Set{Request|Response}HeadersCallback() above for details.
   RequestHeadersCallback request_headers_callback_;
   ResponseHeadersCallback response_headers_callback_;
+
+  bool upgrade_if_insecure_;
 
   THREAD_CHECKER(thread_checker_);
 

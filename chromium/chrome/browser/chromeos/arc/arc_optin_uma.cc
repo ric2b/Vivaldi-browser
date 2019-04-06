@@ -8,7 +8,10 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/arc/arc_util.h"
 
 namespace arc {
@@ -18,11 +21,40 @@ namespace {
 // Adds a suffix to the name based on the account type.
 std::string GetHistogramName(const std::string& base_name,
                              const Profile* profile) {
+  if (IsRobotOrOfflineDemoAccountMode()) {
+    chromeos::DemoSession* demo_session = chromeos::DemoSession::Get();
+    if (demo_session && demo_session->started()) {
+      return demo_session->offline_enrolled() ? base_name + "OfflineDemoMode"
+                                              : base_name + "DemoMode";
+    }
+    return base_name + "RobotAccount";
+  }
+  if (profile->IsChild())
+    return base_name + "Child";
+  if (IsActiveDirectoryUserForProfile(profile))
+    return base_name + "ActiveDirectory";
   return base_name +
-         (IsRobotAccountMode()
-              ? "RobotAccount"
-              : (policy_util::IsAccountManaged(profile) ? "Managed"
-                                                        : "Unmanaged"));
+         (policy_util::IsAccountManaged(profile) ? "Managed" : "Unmanaged");
+}
+
+ArcEnabledState ComputeEnabledState(bool enabled, const Profile* profile) {
+  if (!IsArcAllowedForProfile(profile)) {
+    return enabled ? ArcEnabledState::ENABLED_NOT_ALLOWED
+                   : ArcEnabledState::DISABLED_NOT_ALLOWED;
+  }
+
+  if (!IsArcPlayStoreEnabledPreferenceManagedForProfile(profile)) {
+    return enabled ? ArcEnabledState::ENABLED_NOT_MANAGED
+                   : ArcEnabledState::DISABLED_NOT_MANAGED;
+  }
+
+  if (IsArcPlayStoreEnabledForProfile(profile)) {
+    return enabled ? ArcEnabledState::ENABLED_MANAGED_ON
+                   : ArcEnabledState::DISABLED_MANAGED_ON;
+  }
+
+  DCHECK(!enabled);
+  return ArcEnabledState::DISABLED_MANAGED_OFF;
 }
 
 }  // namespace
@@ -40,6 +72,12 @@ void UpdateOptInCancelUMA(OptInCancelReason reason) {
 void UpdateEnabledStateUMA(bool enabled) {
   // Equivalent to UMA_HISTOGRAM_BOOLEAN with the stability flag set.
   UMA_STABILITY_HISTOGRAM_ENUMERATION("Arc.State", enabled ? 1 : 0, 2);
+}
+
+void UpdateEnabledStateByUserTypeUMA(bool enabled, const Profile* profile) {
+  base::UmaHistogramEnumeration(
+      GetHistogramName("Arc.StateByUserType.", profile),
+      ComputeEnabledState(enabled, profile), ArcEnabledState::SIZE);
 }
 
 void UpdateOptInFlowResultUMA(OptInFlowResult result) {
@@ -103,6 +141,11 @@ void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status) {
 
 void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state) {
   base::UmaHistogramSparse("Arc.OptInSilentAuthCode", static_cast<int>(state));
+}
+
+void UpdateSupervisionTransitionResultUMA(
+    mojom::SupervisionChangeStatus result) {
+  UMA_HISTOGRAM_ENUMERATION("Arc.Supervision.Transition.Result", result);
 }
 
 void UpdateReauthorizationSilentAuthCodeUMA(OptInSilentAuthCode state) {

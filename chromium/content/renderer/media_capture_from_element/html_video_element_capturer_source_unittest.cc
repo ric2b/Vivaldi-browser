@@ -3,6 +3,10 @@
 // found in the LICENSE file.
 
 #include "content/renderer/media_capture_from_element/html_video_element_capturer_source.h"
+
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
@@ -11,9 +15,9 @@
 #include "media/base/limits.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_media_player.h"
+#include "third_party/blink/public/platform/web_string.h"
 
 using ::testing::_;
 using ::testing::InSequence;
@@ -33,12 +37,20 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
   MockWebMediaPlayer()  = default;
   ~MockWebMediaPlayer() override = default;
 
-  void Load(LoadType, const blink::WebMediaPlayerSource&, CORSMode) override {}
+  LoadTiming Load(LoadType,
+                  const blink::WebMediaPlayerSource&,
+                  CORSMode) override {
+    return LoadTiming::kImmediate;
+  }
   void Play() override {}
   void Pause() override {}
   void Seek(double seconds) override {}
   void SetRate(double) override {}
   void SetVolume(double) override {}
+  void EnterPictureInPicture(PipWindowOpenedCallback) override {}
+  void ExitPictureInPicture(PipWindowClosedCallback) override {}
+  void RegisterPictureInPictureWindowResizeCallback(
+      PipWindowResizedCallback) override {}
   blink::WebTimeRanges Buffered() const override {
     return blink::WebTimeRanges();
   }
@@ -46,7 +58,6 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
     return blink::WebTimeRanges();
   }
   void SetSinkId(const blink::WebString& sinkId,
-                 const blink::WebSecurityOrigin&,
                  blink::WebSetSinkIdCallbacks*) override {}
   bool HasVideo() const override { return true; }
   bool HasAudio() const override { return false; }
@@ -73,7 +84,7 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
   size_t AudioDecodedByteCount() const override { return 0; }
   size_t VideoDecodedByteCount() const override { return 0; }
 
-  void Paint(blink::WebCanvas* canvas,
+  void Paint(cc::PaintCanvas* canvas,
              const blink::WebRect& paint_rectangle,
              cc::PaintFlags&,
              int already_uploaded_id,
@@ -145,7 +156,8 @@ TEST_F(HTMLVideoElementCapturerSourceTest, GetFormatsAndStartAndStop) {
   EXPECT_CALL(*this, DoOnDeliverFrame(_, _)).WillOnce(SaveArg<0>(&first_frame));
   EXPECT_CALL(*this, DoOnDeliverFrame(_, _))
       .Times(1)
-      .WillOnce(DoAll(SaveArg<0>(&second_frame), RunClosure(quit_closure)));
+      .WillOnce(DoAll(SaveArg<0>(&second_frame),
+                      RunClosure(std::move(quit_closure))));
 
   html_video_capturer_->StartCapture(
       params, base::Bind(&HTMLVideoElementCapturerSourceTest::OnDeliverFrame,

@@ -7,14 +7,18 @@
 
 #include <stdint.h>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/metrics/leak_detector/leak_detector_controller.h"
 #include "chrome/browser/metrics/perf/perf_provider_chromeos.h"
 #include "components/metrics/metrics_provider.h"
 
 namespace device {
 class BluetoothAdapter;
+}
+
+namespace features {
+extern const base::Feature kUmaShortHWClass;
 }
 
 namespace metrics {
@@ -49,7 +53,7 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
 
   // Loads hardware class information. When this task is complete, |callback|
   // is run.
-  void InitTaskGetHardwareClass(const base::Closure& callback);
+  void InitTaskGetFullHardwareClass(const base::Closure& callback);
 
   // Creates the Bluetooth adapter. When this task is complete, |callback| is
   // run.
@@ -80,8 +84,9 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   void SetBluetoothAdapter(base::Closure callback,
                            scoped_refptr<device::BluetoothAdapter> adapter);
 
-  // Sets the hardware class, then calls the callback.
-  void SetHardwareClass(base::Closure callback, std::string hardware_class);
+  // Sets the full hardware class, then calls the callback.
+  void SetFullHardwareClass(base::Closure callback,
+                            std::string full_hardware_class);
 
   // Writes info about paired Bluetooth devices on this system.
   void WriteBluetoothProto(metrics::SystemProfileProto* system_profile_proto);
@@ -95,9 +100,6 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   // For collecting systemwide perf data.
   metrics::PerfProvider perf_provider_;
 
-  // Enables runtime memory leak detection and gets notified of leak reports.
-  std::unique_ptr<metrics::LeakDetectorController> leak_detector_controller_;
-
   // Bluetooth Adapter instance for collecting information about paired devices.
   scoped_refptr<device::BluetoothAdapter> adapter_;
 
@@ -109,9 +111,12 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   // true.
   uint64_t user_count_at_log_initialization_;
 
-  // Hardware class (e.g., hardware qualification ID). This class identifies
-  // the configured system components such as CPU, WiFi adapter, etc.
+  // Short Hardware class. This value identifies the board of the hardware.
   std::string hardware_class_;
+
+  // Hardware class (e.g., hardware qualification ID). This value identifies
+  // the configured system components such as CPU, WiFi adapter, etc.
+  std::string full_hardware_class_;
 
   base::WeakPtrFactory<ChromeOSMetricsProvider> weak_ptr_factory_;
 

@@ -55,7 +55,7 @@ class PassThroughDecoderImpl {
   void Initialize(const DecoderConfig& config,
                   const InitCB& init_cb,
                   const OutputCB& output_cb);
-  void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb);
   void Reset(const base::Closure& closure);
 

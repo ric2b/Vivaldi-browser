@@ -95,6 +95,9 @@ class AsyncDocumentSubresourceFilter {
   // with the current thread. If MemoryMappedRuleset is not present or
   // malformed, then a default ActivationState is reported (with ActivationLevel
   // equal to DISABLED).
+  //
+  // If deleted before |activation_state_callback| is called, the callback will
+  // never be called.
   AsyncDocumentSubresourceFilter(
       VerifiedRuleset::Handle* ruleset_handle,
       InitializationParams params,
@@ -112,6 +115,16 @@ class AsyncDocumentSubresourceFilter {
   // call DocumentSubresourceFilter::reportDisallowedCallback() on the
   // |task_runner|.
   void ReportDisallowedLoad();
+
+  // Should only be called for main frames. Updates |activation_state_| with the
+  // more accurate |updated_page_state|, but retains ruleset specific properties
+  // like document whitelisting. Must be called after initial activation state
+  // is computed.
+  //
+  // Posts a task to update the state in |core_|, so any calls to
+  // GetLoadPolicyForSubdocument that are called before this will get the old
+  // state.
+  void UpdateWithMoreAccurateState(const ActivationState& updated_page_state);
 
   // Must be called after activation state computation is finished.
   const ActivationState& activation_state() const;
@@ -159,6 +172,9 @@ class AsyncDocumentSubresourceFilter::Core {
 
  private:
   friend class AsyncDocumentSubresourceFilter;
+
+  // Updates the ActivationState in |filter_|.
+  void SetActivationState(const ActivationState& state);
 
   // Computes ActivationState from |params| and initializes a DSF using it.
   // Returns the computed activation state.

@@ -1,3 +1,0 @@
-include_rules = [
-  "+media/capture/mojo/image_capture.mojom-blink.h",
-]

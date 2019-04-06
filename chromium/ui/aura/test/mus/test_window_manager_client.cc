@@ -29,20 +29,21 @@ size_t TestWindowManagerClient::IndexOfFirstChangeOfType(
                                 : iter - changes_.begin();
 }
 
-void TestWindowManagerClient::AddActivationParent(Id transport_window_id) {
+void TestWindowManagerClient::AddActivationParent(ui::Id transport_window_id) {
   changes_.push_back(WindowManagerClientChangeType::ADD_ACTIVATION_PARENT);
 }
 
-void TestWindowManagerClient::RemoveActivationParent(Id transport_window_id) {}
+void TestWindowManagerClient::RemoveActivationParent(
+    ui::Id transport_window_id) {}
 
 void TestWindowManagerClient::SetExtendedHitRegionForChildren(
-    Id window_id,
+    ui::Id window_id,
     const gfx::Insets& mouse_insets,
     const gfx::Insets& touch_insets) {}
 
 void TestWindowManagerClient::AddAccelerators(
     std::vector<ui::mojom::WmAcceleratorPtr> accelerators,
-    const AddAcceleratorsCallback& callback) {}
+    AddAcceleratorsCallback callback) {}
 
 void TestWindowManagerClient::RemoveAccelerator(uint32_t id) {}
 
@@ -53,9 +54,9 @@ void TestWindowManagerClient::SetDisplayRoot(
     const display::Display& display,
     ui::mojom::WmViewportMetricsPtr viewport_metrics,
     bool is_primary_display,
-    Id window_id,
+    ui::Id window_id,
     const std::vector<display::Display>& mirrors,
-    const SetDisplayRootCallback& callback) {}
+    SetDisplayRootCallback callback) {}
 
 void TestWindowManagerClient::SetDisplayConfiguration(
     const std::vector<display::Display>& displays,
@@ -63,7 +64,7 @@ void TestWindowManagerClient::SetDisplayConfiguration(
     int64_t primary_display_id,
     int64_t internal_display_id,
     const std::vector<display::Display>& mirrors,
-    const SetDisplayConfigurationCallback& callback) {
+    SetDisplayConfigurationCallback callback) {
   last_internal_display_id_ = internal_display_id;
   changes_.push_back(WindowManagerClientChangeType::SET_DISPLAY_CONFIGURATION);
 }
@@ -71,24 +72,24 @@ void TestWindowManagerClient::SetDisplayConfiguration(
 void TestWindowManagerClient::SwapDisplayRoots(
     int64_t display_id1,
     int64_t display_id2,
-    const SwapDisplayRootsCallback& callback) {}
+    SwapDisplayRootsCallback callback) {}
 
 void TestWindowManagerClient::SetBlockingContainers(
     std::vector<ui::mojom::BlockingContainersPtr> blocking_containers,
-    const SetBlockingContainersCallback& callback) {}
+    SetBlockingContainersCallback callback) {}
 
 void TestWindowManagerClient::WmResponse(uint32_t change_id, bool response) {}
 
 void TestWindowManagerClient::WmSetBoundsResponse(uint32_t change_id) {}
 
-void TestWindowManagerClient::WmRequestClose(Id transport_window_id) {}
+void TestWindowManagerClient::WmRequestClose(ui::Id transport_window_id) {}
 
 void TestWindowManagerClient::WmSetFrameDecorationValues(
     ui::mojom::FrameDecorationValuesPtr values) {
   changes_.push_back(WindowManagerClientChangeType::SET_FRAME_DECORATIONS);
 }
 
-void TestWindowManagerClient::WmSetNonClientCursor(uint32_t window_id,
+void TestWindowManagerClient::WmSetNonClientCursor(ui::Id window_id,
                                                    ui::CursorData cursor_data) {
 }
 
@@ -115,11 +116,11 @@ void TestWindowManagerClient::WmSetCursorTouchVisible(bool enabled) {}
 
 void TestWindowManagerClient::OnWmCreatedTopLevelWindow(
     uint32_t change_id,
-    Id transport_window_id) {}
+    ui::Id transport_window_id) {}
 
 void TestWindowManagerClient::OnAcceleratorAck(
     uint32_t event_id,
     ui::mojom::EventResult result,
-    const std::unordered_map<std::string, std::vector<uint8_t>>& properties) {}
+    const base::flat_map<std::string, std::vector<uint8_t>>& properties) {}
 
 }  // namespace aura

@@ -4,19 +4,16 @@
 
 #include "extensions/browser/extensions_test.h"
 
-#include "base/memory/ptr_util.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service_factory.h"
 #include "components/prefs/testing_pref_store.h"
-#include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "content/public/test/test_browser_context.h"
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/test_extensions_browser_client.h"
-#include "extensions/test/test_content_browser_client.h"
 #include "extensions/test/test_content_utility_client.h"
 
 namespace {
@@ -33,12 +30,12 @@ std::unique_ptr<content::TestBrowserContext> CreateTestIncognitoContext() {
 namespace extensions {
 
 ExtensionsTest::ExtensionsTest()
-    : rvh_test_enabler_(
-          std::make_unique<content::RenderViewHostTestEnabler>()) {}
+    : ExtensionsTest(content::TestBrowserThreadBundle::Options::DEFAULT) {}
 
 ExtensionsTest::ExtensionsTest(
-    std::unique_ptr<content::TestBrowserThreadBundle> thread_bundle)
-    : thread_bundle_(std::move(thread_bundle)),
+    content::TestBrowserThreadBundle::Options thread_options)
+    : thread_bundle_(
+          std::make_unique<content::TestBrowserThreadBundle>(thread_options)),
       rvh_test_enabler_(
           std::make_unique<content::RenderViewHostTestEnabler>()) {}
 
@@ -47,7 +44,6 @@ ExtensionsTest::~ExtensionsTest() {
   // posted tasks may use them.
   rvh_test_enabler_.reset();
   thread_bundle_.reset();
-  content::SetBrowserClientForTesting(nullptr);
   content::SetUtilityClientForTesting(nullptr);
 }
 
@@ -59,7 +55,6 @@ void ExtensionsTest::SetExtensionsBrowserClient(
 }
 
 void ExtensionsTest::SetUp() {
-  content_browser_client_ = std::make_unique<TestContentBrowserClient>();
   content_utility_client_ = std::make_unique<TestContentUtilityClient>();
   browser_context_ = std::make_unique<content::TestBrowserContext>();
   incognito_context_ = CreateTestIncognitoContext();
@@ -70,9 +65,6 @@ void ExtensionsTest::SetUp() {
   }
   extensions_browser_client_->SetMainContext(browser_context_.get());
 
-  BrowserContextDependencyManager::GetInstance()->MarkBrowserContextLive(
-      browser_context_.get());
-  content::SetBrowserClientForTesting(content_browser_client_.get());
   content::SetUtilityClientForTesting(content_utility_client_.get());
   ExtensionsBrowserClient::Set(extensions_browser_client_.get());
   extensions_browser_client_->set_extension_system_factory(
@@ -102,6 +94,8 @@ void ExtensionsTest::SetUp() {
   // Crashing here? Don't use this class in Chrome's unit_tests. See header.
   BrowserContextDependencyManager::GetInstance()
       ->CreateBrowserContextServicesForTest(browser_context_.get());
+  BrowserContextDependencyManager::GetInstance()
+      ->CreateBrowserContextServicesForTest(incognito_context_.get());
 }
 
 void ExtensionsTest::TearDown() {
@@ -109,13 +103,15 @@ void ExtensionsTest::TearDown() {
   // as member variables instead of singletons. The individual services will be
   // cleaned up before the factories are destroyed.
   BrowserContextDependencyManager::GetInstance()->DestroyBrowserContextServices(
+      incognito_context_.get());
+  BrowserContextDependencyManager::GetInstance()->DestroyBrowserContextServices(
       browser_context_.get());
 
   extensions_browser_client_.reset();
   ExtensionsBrowserClient::Set(nullptr);
 
-  browser_context_.reset();
   incognito_context_.reset();
+  browser_context_.reset();
   pref_service_.reset();
 }
 

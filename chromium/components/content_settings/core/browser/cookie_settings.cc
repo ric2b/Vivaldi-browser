@@ -13,26 +13,10 @@
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/base/net_errors.h"
 #include "net/base/static_cookie_policy.h"
 #include "url/gurl.h"
-
-namespace {
-
-bool IsValidSetting(ContentSetting setting) {
-  return (setting == CONTENT_SETTING_ALLOW ||
-          setting == CONTENT_SETTING_SESSION_ONLY ||
-          setting == CONTENT_SETTING_BLOCK);
-}
-
-bool IsAllowed(ContentSetting setting) {
-  DCHECK(IsValidSetting(setting));
-  return (setting == CONTENT_SETTING_ALLOW ||
-          setting == CONTENT_SETTING_SESSION_ONLY);
-}
-
-}  // namespace
 
 namespace content_settings {
 
@@ -55,28 +39,6 @@ ContentSetting CookieSettings::GetDefaultCookieSetting(
     std::string* provider_id) const {
   return host_content_settings_map_->GetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_COOKIES, provider_id);
-}
-
-bool CookieSettings::IsCookieAccessAllowed(const GURL& url,
-                                           const GURL& first_party_url) const {
-  ContentSetting setting;
-  GetCookieSetting(url, first_party_url, nullptr, &setting);
-  return IsAllowed(setting);
-}
-
-bool CookieSettings::IsCookieSessionOnly(const GURL& origin) const {
-  ContentSetting setting;
-  GetCookieSetting(origin, origin, nullptr, &setting);
-  DCHECK(IsValidSetting(setting));
-  return (setting == CONTENT_SETTING_SESSION_ONLY);
-}
-
-bool CookieSettings::IsCookieSessionOnlyOrBlocked(const GURL& origin) const {
-  ContentSetting setting;
-  GetCookieSetting(origin, origin, nullptr, &setting);
-  DCHECK(IsValidSetting(setting));
-  return (setting == CONTENT_SETTING_SESSION_ONLY) ||
-         (setting == CONTENT_SETTING_BLOCK);
 }
 
 void CookieSettings::GetCookieSettings(
@@ -166,7 +128,7 @@ void CookieSettings::GetCookieSetting(const GURL& url,
       net::StaticCookiePolicy::BLOCK_ALL_THIRD_PARTY_COOKIES);
 
   // We should always have a value, at least from the default provider.
-  DCHECK(value.get());
+  DCHECK(value);
   ContentSetting setting = ValueToContentSetting(value.get());
   bool block =
       block_third && policy.CanAccessCookies(url, first_party_url) != net::OK;

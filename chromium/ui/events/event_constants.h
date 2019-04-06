@@ -5,6 +5,8 @@
 #ifndef UI_EVENTS_EVENT_CONSTANTS_H_
 #define UI_EVENTS_EVENT_CONSTANTS_H_
 
+#include "build/build_config.h"
+
 namespace ui {
 
 // Event types. (prefixed because of a conflict with windows headers)
@@ -87,36 +89,45 @@ enum EventType {
 // this list and/or reorder it, but make sure you also touch the various other
 // enums/constants that want to stay in sync with this.
 enum EventFlags {
-  EF_NONE                 = 0,       // Used to denote no flags explicitly
+  EF_NONE = 0,  // Used to denote no flags explicitly
 
   // Universally applicable status bits.
-  EF_IS_SYNTHESIZED       = 1 << 0,
+  EF_IS_SYNTHESIZED = 1 << 0,
 
   // Modifier key state.
-  EF_SHIFT_DOWN           = 1 << 1,
-  EF_CONTROL_DOWN         = 1 << 2,
-  EF_ALT_DOWN             = 1 << 3,
-  EF_COMMAND_DOWN         = 1 << 4,  // GUI Key (e.g. Command on OS X
-                                     // keyboards, Search on Chromebook
-                                     // keyboards, Windows on MS-oriented
-                                     // keyboards)
-  EF_ALTGR_DOWN           = 1 << 5,
-  EF_MOD3_DOWN            = 1 << 6,
+  EF_SHIFT_DOWN = 1 << 1,
+  EF_CONTROL_DOWN = 1 << 2,
+  EF_ALT_DOWN = 1 << 3,
+  EF_COMMAND_DOWN = 1 << 4,  // GUI Key (e.g. Command on OS X
+                             // keyboards, Search on Chromebook
+                             // keyboards, Windows on MS-oriented
+                             // keyboards)
+  EF_ALTGR_DOWN = 1 << 5,
+  EF_MOD3_DOWN = 1 << 6,
 
-  // Other keyboard state.
-  EF_NUM_LOCK_ON          = 1 << 7,
-  EF_CAPS_LOCK_ON         = 1 << 8,
-  EF_SCROLL_LOCK_ON       = 1 << 9,
+  // Other keyboard states.
+  EF_NUM_LOCK_ON = 1 << 7,
+  EF_CAPS_LOCK_ON = 1 << 8,
+  EF_SCROLL_LOCK_ON = 1 << 9,
 
   // Mouse buttons.
-  EF_LEFT_MOUSE_BUTTON    = 1 << 10,
-  EF_MIDDLE_MOUSE_BUTTON  = 1 << 11,
-  EF_RIGHT_MOUSE_BUTTON   = 1 << 12,
-  EF_BACK_MOUSE_BUTTON    = 1 << 13,
+  EF_LEFT_MOUSE_BUTTON = 1 << 10,
+  EF_MIDDLE_MOUSE_BUTTON = 1 << 11,
+  EF_RIGHT_MOUSE_BUTTON = 1 << 12,
+  EF_BACK_MOUSE_BUTTON = 1 << 13,
   EF_FORWARD_MOUSE_BUTTON = 1 << 14,
+
+// An artificial value used to bridge platform differences.
+// Many commands on Mac as Cmd+Key are the counterparts of
+// Ctrl+Key on other platforms.
+#if defined(OS_MACOSX)
+  EF_PLATFORM_ACCELERATOR = EF_COMMAND_DOWN,
+#else
+  EF_PLATFORM_ACCELERATOR = EF_CONTROL_DOWN,
+#endif
 };
 
-// Flags specific to key events
+// Flags specific to key events.
 enum KeyEventFlags {
   EF_IME_FABRICATED_KEY = 1 << 15,  // Key event fabricated by the underlying
                                     // IME without a user action.
@@ -127,7 +138,7 @@ enum KeyEventFlags {
   EF_IS_EXTENDED_KEY    = 1 << 18,  // Windows extended key (see WM_KEYDOWN doc)
 };
 
-// Flags specific to mouse events
+// Flags specific to mouse events.
 enum MouseEventFlags {
   EF_IS_DOUBLE_CLICK = 1 << 15,
   EF_IS_TRIPLE_CLICK = 1 << 16,
@@ -139,6 +150,9 @@ enum MouseEventFlags {
   EF_CURSOR_HIDE = 1 << 20,          // Indicates this mouse event is generated
                                      // because the cursor was just hidden. This
                                      // can be used to update hover state.
+  EF_PRECISION_SCROLLING_DELTA =     // Indicates this mouse event is from high
+  1 << 21,                           // precision touchpad and will come with a
+                                     // high precision delta.
 };
 
 // Result of dispatching an event.
@@ -165,12 +179,40 @@ enum EventPhase {
   EP_POSTDISPATCH
 };
 
+// Phase information used for a ScrollEvent. ScrollEventPhase is for scroll
+// stream from user gesture, EventMomentumPhase is for inertia scroll stream
+// after user gesture.
+enum class ScrollEventPhase {
+  // Event has no phase information. eg. the Event is not in a scroll stream.
+  kNone,
+
+  // Event is the beginning of a scroll event stream.
+  kBegan,
+
+  // Event is a scroll event with phase information.
+  kUpdate,
+
+  // Event is the end of the current scroll event stream.
+  kEnd,
+};
+
 // Momentum phase information used for a ScrollEvent.
 enum class EventMomentumPhase {
   // Event is a non-momentum update to an event stream already begun.
   NONE,
 
   // Event is the beginning of an event stream that may result in momentum.
+  // BEGAN vs MAY_BEGIN:
+  // - BEGAN means we already know the inertia scroll stream must happen after
+  //   BEGAN event. On Windows touchpad, we sent this when receive the first
+  //   inertia scroll event or Direct Manipulation state change to INERTIA.
+  // - MAY_BEGIN means the inertia scroll stream may happen after MAY_BEGIN
+  //   event. On Mac, we send this when receive releaseTouches, but we do not
+  //   know the inertia scroll stream will happen or not at that time.
+  BEGAN,
+
+  // Event maybe the beginning of an event stream that may result in momentum.
+  // This state used on Mac.
   MAY_BEGIN,
 
   // Event is an update while in a momentum phase. A "begin" event for the

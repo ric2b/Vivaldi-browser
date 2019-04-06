@@ -10,14 +10,14 @@
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "content/common/input/ime_text_span_conversions.h"
-#include "content/renderer/gpu/render_widget_compositor.h"
+#include "content/renderer/gpu/layer_tree_view.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/widget_input_handler_manager.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget.h"
-#include "third_party/WebKit/public/web/WebInputMethodController.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_input_method_controller.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace content {
 
@@ -33,7 +33,8 @@ FrameInputHandlerImpl::FrameInputHandlerImpl(
   weak_this_ = weak_ptr_factory_.GetWeakPtr();
   // If we have created an input event queue move the mojo request over to the
   // compositor thread.
-  if (RenderThreadImpl::current()->compositor_task_runner() &&
+  if (RenderThreadImpl::current() &&
+      RenderThreadImpl::current()->compositor_task_runner() &&
       input_event_queue_) {
     // Mojo channel bound on compositor thread.
     RenderThreadImpl::current()->compositor_task_runner()->PostTask(
@@ -80,19 +81,9 @@ void FrameInputHandlerImpl::SetCompositionFromExistingText(
     return;
 
   ImeEventGuard guard(render_frame_->GetRenderWidget());
-  std::vector<blink::WebImeTextSpan> ime_text_spans;
-  for (const auto& ime_text_span : ui_ime_text_spans) {
-    blink::WebImeTextSpan blink_ime_text_span(
-        ConvertUiImeTextSpanTypeToWebType(ime_text_span.type),
-        ime_text_span.start_offset, ime_text_span.end_offset,
-        ime_text_span.underline_color, ime_text_span.thick,
-        ime_text_span.background_color,
-        ime_text_span.suggestion_highlight_color, ime_text_span.suggestions);
-    ime_text_spans.push_back(blink_ime_text_span);
-  }
 
-  render_frame_->GetWebFrame()->SetCompositionFromExistingText(start, end,
-                                                               ime_text_spans);
+  render_frame_->GetWebFrame()->SetCompositionFromExistingText(
+      start, end, ConvertUiImeTextSpansToBlinkImeTextSpans(ui_ime_text_spans));
 }
 
 void FrameInputHandlerImpl::ExtendSelectionAndDelete(int32_t before,
@@ -289,11 +280,11 @@ void FrameInputHandlerImpl::SelectRange(const gfx::Point& base,
 
   if (!render_frame_)
     return;
-  RenderViewImpl* render_view = render_frame_->render_view();
+  RenderWidget* window_widget = render_frame_->render_view()->GetWidget();
   HandlingState handling_state(render_frame_, UpdateState::kIsSelectingRange);
   render_frame_->GetWebFrame()->SelectRange(
-      render_view->ConvertWindowPointToViewport(base),
-      render_view->ConvertWindowPointToViewport(extent));
+      window_widget->ConvertWindowPointToViewport(base),
+      window_widget->ConvertWindowPointToViewport(extent));
 }
 
 void FrameInputHandlerImpl::AdjustSelectionByCharacterOffset(
@@ -343,7 +334,8 @@ void FrameInputHandlerImpl::MoveRangeSelectionExtent(const gfx::Point& extent) {
     return;
   HandlingState handling_state(render_frame_, UpdateState::kIsSelectingRange);
   render_frame_->GetWebFrame()->MoveRangeSelectionExtent(
-      render_frame_->render_view()->ConvertWindowPointToViewport(extent));
+      render_frame_->render_view()->GetWidget()->ConvertWindowPointToViewport(
+          extent));
 }
 
 void FrameInputHandlerImpl::ScrollFocusedEditableNodeIntoRect(
@@ -371,9 +363,9 @@ void FrameInputHandlerImpl::MoveCaret(const gfx::Point& point) {
   if (!render_frame_)
     return;
 
-  RenderViewImpl* render_view = render_frame_->render_view();
   render_frame_->GetWebFrame()->MoveCaretSelection(
-      render_view->ConvertWindowPointToViewport(point));
+      render_frame_->render_view()->GetWidget()->ConvertWindowPointToViewport(
+          point));
 }
 
 void FrameInputHandlerImpl::GetWidgetInputHandler(
@@ -431,6 +423,7 @@ FrameInputHandlerImpl::HandlingState::HandlingState(
   switch (state) {
     case UpdateState::kIsPasting:
       render_frame->set_is_pasting(true);
+      FALLTHROUGH;  // Matches RenderFrameImpl::OnPaste() which sets both.
     case UpdateState::kIsSelectingRange:
       render_frame->set_handling_select_range(true);
       break;

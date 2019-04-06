@@ -122,6 +122,13 @@
 // linker's actions, so to avoid clashing with it we may need to try and
 // move 'r_map' updates to a different thread, to serialize them with
 // other system linker activity.
+//
+// TECHNICAL NOTE: If CRAZY_DISABLE_R_BRK is defined at compile time,
+// then the crazy linker will never try to call the r_brk() GDB Hook
+// function. This can be useful to avoid runtime crashes on certain
+// Android devices with x86 processors, running ARM binaries with
+// a machine translator like Houdini. See http://crbug.com/796938
+//
 namespace crazy {
 
 struct link_map_t {
@@ -195,7 +202,9 @@ class RDebug {
     post_for_later_execution_context_ = context;
   }
 
-  r_debug* GetAddress() { return r_debug_; }
+  // Return address of current global _r_debug variable, or nullptr if not
+  // available.
+  r_debug* GetAddress();
 
  private:
   // Try to find the address of the global _r_debug variable, even
@@ -233,6 +242,13 @@ class RDebug {
     if (!PostCallback(handler, entry, is_blocking))
       (*handler)(this, entry);
   }
+
+  // Call the debugger hook function |r_debug_->r_brk|.
+  // |state| is the value to write to |r_debug_->r_state|
+  // before that. This is done to coordinate with the
+  // debugger when modifications of the global |r_debug_|
+  // list are performed.
+  void CallRBrk(int state);
 
   RDebug(const RDebug&);
   RDebug& operator=(const RDebug&);

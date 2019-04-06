@@ -60,6 +60,12 @@ class AURA_EXPORT WindowTargeter : public ui::EventTargeter {
   virtual std::unique_ptr<HitTestRects> GetExtraHitTestShapeRects(
       Window* target) const;
 
+  // Sets additional mouse and touch insets that are factored into the hit-test
+  // regions returned by GetHitTestRects.
+  void SetInsets(const gfx::Insets& mouse_and_touch_extend);
+  void SetInsets(const gfx::Insets& mouse_extend,
+                 const gfx::Insets& touch_extend);
+
   // If there is a target that takes priority over normal WindowTargeter (such
   // as a capture window) this returns it.
   Window* GetPriorityTargetInRootWindow(Window* root_window,
@@ -83,8 +89,8 @@ class AURA_EXPORT WindowTargeter : public ui::EventTargeter {
 
  protected:
   // Same as FindTargetForEvent(), but used for positional events. The location
-  // etc. of |event| are in |root|'s coordinate system. When finding the target
-  // for the event, the targeter can mutate the |event| (e.g. change the
+  // etc. of |event| are in |window|'s coordinate system. When finding the
+  // target for the event, the targeter can mutate the |event| (e.g. change the
   // coordinate to be in the returned target's coordinate system) so that it can
   // be dispatched to the target without any further modification.
   virtual Window* FindTargetForLocatedEvent(Window* window,
@@ -114,11 +120,6 @@ class AURA_EXPORT WindowTargeter : public ui::EventTargeter {
   // supplied insets are the values before the call to SetInsets().
   virtual void OnSetInsets(const gfx::Insets& last_mouse_extend,
                            const gfx::Insets& last_touch_extend);
-
-  // Sets additional mouse and touch insets that are factored into the hit-test
-  // regions returned by GetHitTestRects.
-  void SetInsets(const gfx::Insets& mouse_extend,
-                 const gfx::Insets& touch_extend);
 
   const gfx::Insets& mouse_extend() const { return mouse_extend_; }
   const gfx::Insets& touch_extend() const { return touch_extend_; }

@@ -251,8 +251,6 @@ std::unique_ptr<base::Value> AsValue(const SkPaint& paint) {
 std::unique_ptr<base::Value> SaveLayerFlagsAsValue(
     SkCanvas::SaveLayerFlags flags) {
   FlagsBuilder builder('|');
-  builder.addFlag(flags & SkCanvas::kIsOpaque_SaveLayerFlag,
-                  "kIsOpaque");
   builder.addFlag(flags & SkCanvas::kPreserveLCDText_SaveLayerFlag,
                   "kPreserveLCDText");
 
@@ -388,7 +386,7 @@ public:
 
    op_record_->SetString("cmd_string", op_name);
    op_params_ =
-       op_record_->SetList("info", base::MakeUnique<base::ListValue>());
+       op_record_->SetList("info", std::make_unique<base::ListValue>());
 
    if (paint) {
      this->addParam("paint", AsValue(*paint));

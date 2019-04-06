@@ -5,6 +5,7 @@
 #ifndef CONTENT_PUBLIC_BROWSER_BROWSER_MAIN_PARTS_H_
 #define CONTENT_PUBLIC_BROWSER_BROWSER_MAIN_PARTS_H_
 
+#include "base/callback.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -30,7 +31,7 @@ class ServiceManagerConnection;
 //    things which should be done immediately before the start of the main
 //    message loop should go in |PreMainMessageLoopStart()|.
 //  - RunMainMessageLoopParts:  things to be done before and after invoking the
-//    main message loop run method (e.g. MessageLoopForUI::current()->Run()).
+//    main message loop run method (e.g. MessageLoopCurrentForUI::Get()->Run()).
 //
 // How to add stuff (to existing parts):
 //  - Figure out when your new code should be executed. What must happen
@@ -53,6 +54,11 @@ class CONTENT_EXPORT BrowserMainParts {
   BrowserMainParts() {}
   virtual ~BrowserMainParts() {}
 
+  // Returns true if content should create a FeatureList. Default
+  // implementation returns true. Embedders that need to control when and/or
+  // how FeatureList should be created should override and return false.
+  virtual bool ShouldContentCreateFeatureList();
+
   // A return value other than RESULT_CODE_NORMAL_EXIT indicates error and is
   // used as the exit status.
   virtual int PreEarlyInitialization();
@@ -74,6 +80,10 @@ class CONTENT_EXPORT BrowserMainParts {
   // (or 0 if no error).
   virtual int PreCreateThreads();
 
+  // This is called right after all child threads owned by the content framework
+  // are created.
+  virtual void PostCreateThreads() {}
+
   virtual void ServiceManagerConnectionStarted(
       ServiceManagerConnection* connection) {}
 
@@ -85,6 +95,10 @@ class CONTENT_EXPORT BrowserMainParts {
   // If this returns false, the default implementation will be run.
   // May set |result_code|, which will be returned by |BrowserMain()|.
   virtual bool MainMessageLoopRun(int* result_code);
+
+  // Provides an embedder with a Closure which will quit the default main
+  // message loop. This is call only if MainMessageLoopRun returns false.
+  virtual void PreDefaultMainMessageLoopRun(base::OnceClosure quit_closure) {}
 
   // This happens after the main message loop has stopped, but before
   // threads are stopped.

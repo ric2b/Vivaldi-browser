@@ -6,6 +6,8 @@
 
 #include <algorithm>
 
+#include "base/trace_event/memory_usage_estimator.h"
+
 namespace history {
 
 URLRow::URLRow() {
@@ -18,21 +20,13 @@ URLRow::URLRow(const GURL& url, URLID id) : id_(id), url_(url) {}
 
 URLRow::URLRow(const URLRow& other) = default;
 
-// TODO(bug 706963) this should be implemented as "= default" when Android
-// toolchain is updated.
-URLRow::URLRow(URLRow&& other) noexcept
-    : id_(other.id_),
-      url_(std::move(other.url_)),
-      title_(std::move(other.title_)),
-      visit_count_(other.visit_count_),
-      typed_count_(other.typed_count_),
-      last_visit_(other.last_visit_),
-      hidden_(other.hidden_) {}
+URLRow::URLRow(URLRow&& other) noexcept = default;
 
 URLRow::~URLRow() {
 }
 
 URLRow& URLRow::operator=(const URLRow& other) = default;
+URLRow& URLRow::operator=(URLRow&& other) = default;
 
 void URLRow::Swap(URLRow* other) {
   std::swap(id_, other->id_);
@@ -42,6 +36,11 @@ void URLRow::Swap(URLRow* other) {
   std::swap(typed_count_, other->typed_count_);
   std::swap(last_visit_, other->last_visit_);
   std::swap(hidden_, other->hidden_);
+}
+
+size_t URLRow::EstimateMemoryUsage() const {
+  return base::trace_event::EstimateMemoryUsage(url_) +
+         base::trace_event::EstimateMemoryUsage(title_);
 }
 
 URLResult::URLResult() {}

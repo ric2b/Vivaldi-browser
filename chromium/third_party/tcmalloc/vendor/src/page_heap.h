@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2008, Google Inc.
 // All rights reserved.
 //
@@ -82,14 +83,24 @@ namespace tcmalloc {
 template <int BITS> class MapSelector {
  public:
   typedef TCMalloc_PageMap3<BITS-kPageShift> Type;
-  typedef PackedCache<BITS-kPageShift, uint64_t> CacheType;
 };
+
+#ifndef TCMALLOC_SMALL_BUT_SLOW
+// x86-64 and arm64 are using 48 bits of address space. So we can use
+// just two level map, but since initial ram consumption of this mode
+// is a bit on the higher side, we opt-out of it in
+// TCMALLOC_SMALL_BUT_SLOW mode.
+template <> class MapSelector<48> {
+ public:
+  typedef TCMalloc_PageMap2<48-kPageShift> Type;
+};
+
+#endif // TCMALLOC_SMALL_BUT_SLOW
 
 // A two-level map for 32-bit machines
 template <> class MapSelector<32> {
  public:
   typedef TCMalloc_PageMap2<32-kPageShift> Type;
-  typedef PackedCache<32-kPageShift, uint16_t> CacheType;
 };
 
 // -------------------------------------------------------------------------
@@ -118,7 +129,7 @@ class PERFTOOLS_DLL_DECL PageHeap {
   // specified size-class.
   // REQUIRES: span was returned by an earlier call to New()
   //           and has not yet been deleted.
-  void RegisterSizeClass(Span* span, size_t sc);
+  void RegisterSizeClass(Span* span, uint32 sc);
 
   // Split an allocated span into two spans: one of length "n" pages
   // followed by another span of length "span->length - n" pages.
@@ -132,7 +143,8 @@ class PERFTOOLS_DLL_DECL PageHeap {
 
   // Return the descriptor for the specified page.  Returns NULL if
   // this PageID was not allocated previously.
-  inline Span* GetDescriptor(PageID p) const {
+  inline ATTRIBUTE_ALWAYS_INLINE
+  Span* GetDescriptor(PageID p) const {
     return reinterpret_cast<Span*>(pagemap_.get(p));
   }
 
@@ -142,16 +154,32 @@ class PERFTOOLS_DLL_DECL PageHeap {
 
   // Page heap statistics
   struct Stats {
-    Stats() : system_bytes(0), free_bytes(0), unmapped_bytes(0) {}
+    Stats() : system_bytes(0), free_bytes(0), unmapped_bytes(0), committed_bytes(0),
+        scavenge_count(0), commit_count(0), total_commit_bytes(0),
+        decommit_count(0), total_decommit_bytes(0),
+        reserve_count(0), total_reserve_bytes(0) {}
     uint64_t system_bytes;    // Total bytes allocated from system
     uint64_t free_bytes;      // Total bytes on normal freelists
     uint64_t unmapped_bytes;  // Total bytes on returned freelists
+    uint64_t committed_bytes;  // Bytes committed, always <= system_bytes_.
+
+    uint64_t scavenge_count;   // Number of times scavagened flush pages
+
+    uint64_t commit_count;          // Number of virtual memory commits
+    uint64_t total_commit_bytes;    // Bytes committed in lifetime of process
+    uint64_t decommit_count;        // Number of virtual memory decommits
+    uint64_t total_decommit_bytes;  // Bytes decommitted in lifetime of process
+
+    uint64_t reserve_count;         // Number of virtual memory reserves
+    uint64_t total_reserve_bytes;   // Bytes reserved in lifetime of process
   };
   inline Stats stats() const { return stats_; }
 
   struct SmallSpanStats {
     // For each free list of small spans, the length (in spans) of the
     // normal and returned free lists for that size.
+    //
+    // NOTE: index 'i' accounts the number of spans of length 'i + 1'.
     int64 normal_length[kMaxPages];
     int64 returned_length[kMaxPages];
   };
@@ -170,6 +198,7 @@ class PERFTOOLS_DLL_DECL PageHeap {
   bool CheckExpensive();
   bool CheckList(Span* list, Length min_pages, Length max_pages,
                  int freelist);  // ON_NORMAL_FREELIST or ON_RETURNED_FREELIST
+  bool CheckSet(SpanSet *s, Length min_pages, int freelist);
 
   // Try to release at least num_pages for reuse by the OS.  Returns
   // the actual number of pages released, which may be less than
@@ -179,15 +208,27 @@ class PERFTOOLS_DLL_DECL PageHeap {
   // smaller released and unreleased ranges.
   Length ReleaseAtLeastNPages(Length num_pages);
 
-  // Return 0 if we have no information, or else the correct sizeclass for p.
   // Reads and writes to pagemap_cache_ do not require locking.
-  // The entries are 64 bits on 64-bit hardware and 16 bits on
-  // 32-bit hardware, and we don't mind raciness as long as each read of
-  // an entry yields a valid entry, not a partially updated entry.
-  size_t GetSizeClassIfCached(PageID p) const {
-    return pagemap_cache_.GetOrDefault(p, 0);
+  bool TryGetSizeClass(PageID p, uint32* out) const {
+    return pagemap_cache_.TryGet(p, out);
   }
-  void CacheSizeClass(PageID p, size_t cl) const { pagemap_cache_.Put(p, cl); }
+  void SetCachedSizeClass(PageID p, uint32 cl) {
+    ASSERT(cl != 0);
+    pagemap_cache_.Put(p, cl);
+  }
+  void InvalidateCachedSizeClass(PageID p) { pagemap_cache_.Invalidate(p); }
+  uint32 GetSizeClassOrZero(PageID p) const {
+    uint32 cached_value;
+    if (!TryGetSizeClass(p, &cached_value)) {
+      cached_value = 0;
+    }
+    return cached_value;
+  }
+
+  bool GetAggressiveDecommit(void) {return aggressive_decommit_;}
+  void SetAggressiveDecommit(bool aggressive_decommit) {
+    aggressive_decommit_ = aggressive_decommit;
+  }
 
  private:
   // Allocates a big block of memory for the pagemap once we reach more than
@@ -214,9 +255,9 @@ class PERFTOOLS_DLL_DECL PageHeap {
 
   // Pick the appropriate map and cache types based on pointer size
   typedef MapSelector<kAddressBits>::Type PageMap;
-  typedef MapSelector<kAddressBits>::CacheType PageMapCache;
-  PageMap pagemap_;
+  typedef PackedCache<kAddressBits - kPageShift> PageMapCache;
   mutable PageMapCache pagemap_cache_;
+  PageMap pagemap_;
 
   // We segregate spans of a given size into two circular linked
   // lists: one for normal spans, and one for spans whose memory
@@ -226,10 +267,16 @@ class PERFTOOLS_DLL_DECL PageHeap {
     Span        returned;
   };
 
-  // List of free spans of length >= kMaxPages
-  SpanList large_;
+  // Sets of spans with length > kMaxPages.
+  //
+  // Rather than using a linked list, we use sets here for efficient
+  // best-fit search.
+  SpanSet large_normal_;
+  SpanSet large_returned_;
 
   // Array mapping from span length to a doubly linked list of free spans
+  //
+  // NOTE: index 'i' stores spans of length 'i + 1'.
   SpanList free_[kMaxPages];
 
   // Statistics on system, free, and unmapped bytes
@@ -263,6 +310,12 @@ class PERFTOOLS_DLL_DECL PageHeap {
   // appropriate free list, and adjust stats.
   void MergeIntoFreeList(Span* span);
 
+  // Commit the span.
+  void CommitSpan(Span* span);
+
+  // Decommit the span.
+  bool DecommitSpan(Span* span);
+
   // Prepends span to appropriate free list, and adjusts stats.
   void PrependToFreeList(Span* span);
 
@@ -273,16 +326,27 @@ class PERFTOOLS_DLL_DECL PageHeap {
   // IncrementalScavenge(n) is called whenever n pages are freed.
   void IncrementalScavenge(Length n);
 
-  // Release the last span on the normal portion of this list.
-  // Return the length of that span.
-  Length ReleaseLastNormalSpan(SpanList* slist);
+  // Attempts to decommit 's' and move it to the returned freelist.
+  //
+  // Returns the length of the Span or zero if release failed.
+  //
+  // REQUIRES: 's' must be on the NORMAL freelist.
+  Length ReleaseSpan(Span *s);
 
+  // Checks if we are allowed to take more memory from the system.
+  // If limit is reached and allowRelease is true, tries to release
+  // some unused spans.
+  bool EnsureLimit(Length n, bool allowRelease = true);
+
+  Span* CheckAndHandlePreMerge(Span *span, Span *other);
 
   // Number of pages to deallocate before doing more scavenging
   int64_t scavenge_counter_;
 
   // Index of last free list where we released memory to the OS.
   int release_index_;
+
+  bool aggressive_decommit_;
 };
 
 }  // namespace tcmalloc

@@ -16,7 +16,7 @@
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/common/previews_state.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 class DownloadRequestLimiter;
 
@@ -32,6 +32,10 @@ namespace net {
 class URLRequest;
 }
 
+namespace previews {
+class PreviewsDecider;
+}
+
 namespace safe_browsing {
 class SafeBrowsingService;
 }
@@ -45,10 +49,6 @@ class ChromeResourceDispatcherHostDelegate
   ~ChromeResourceDispatcherHostDelegate() override;
 
   // ResourceDispatcherHostDelegate implementation.
-  bool ShouldBeginRequest(const std::string& method,
-                          const GURL& url,
-                          content::ResourceType resource_type,
-                          content::ResourceContext* resource_context) override;
   void RequestBeginning(net::URLRequest* request,
                         content::ResourceContext* resource_context,
                         content::AppCacheService* appcache_service,
@@ -62,13 +62,7 @@ class ChromeResourceDispatcherHostDelegate
                         bool is_new_request,
                         std::vector<std::unique_ptr<content::ResourceThrottle>>*
                             throttles) override;
-  content::ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
-      net::AuthChallengeInfo* auth_info,
-      net::URLRequest* request) override;
-  bool HandleExternalProtocol(const GURL& url,
-                              content::ResourceRequestInfo* info) override;
   bool ShouldInterceptResourceAsStream(net::URLRequest* request,
-                                       const base::FilePath& plugin_path,
                                        const std::string& mime_type,
                                        GURL* origin,
                                        std::string* payload) override;
@@ -90,13 +84,6 @@ class ChromeResourceDispatcherHostDelegate
       content::PreviewsState previews_to_allow) override;
   content::NavigationData* GetNavigationData(
       net::URLRequest* request) const override;
-  std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
-      content::ResourceContext* resource_context) override;
-
-  // Called on the UI thread. Allows switching out the
-  // ExternalProtocolHandler::Delegate for testing code.
-  static void SetExternalProtocolHandlerDelegateForTesting(
-      ExternalProtocolHandler::Delegate* delegate);
 
  protected:
   // Virtual for testing.
@@ -121,6 +108,7 @@ class ChromeResourceDispatcherHostDelegate
   // attached to |request|.
   static content::PreviewsState DetermineCommittedPreviews(
       const net::URLRequest* request,
+      const previews::PreviewsDecider* previews_decider,
       content::PreviewsState initial_state);
 
   scoped_refptr<DownloadRequestLimiter> download_request_limiter_;

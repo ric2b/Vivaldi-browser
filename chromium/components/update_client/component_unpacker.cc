@@ -21,10 +21,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/crx_file/crx_verifier.h"
+#include "components/services/unzip/public/cpp/unzip.h"
 #include "components/update_client/component_patcher.h"
 #include "components/update_client/update_client.h"
 #include "components/update_client/update_client_errors.h"
-#include "third_party/zlib/google/zip.h"
 
 namespace update_client {
 
@@ -33,7 +33,7 @@ ComponentUnpacker::Result::Result() {}
 ComponentUnpacker::ComponentUnpacker(
     const std::vector<uint8_t>& pk_hash,
     const base::FilePath& path,
-    const scoped_refptr<CrxInstaller>& installer,
+    scoped_refptr<CrxInstaller> installer,
     std::unique_ptr<service_manager::Connector> connector)
     : pk_hash_(pk_hash),
       path_(path),
@@ -45,13 +45,9 @@ ComponentUnpacker::ComponentUnpacker(
 
 ComponentUnpacker::~ComponentUnpacker() {}
 
-bool ComponentUnpacker::UnpackInternal() {
-  return Verify() && Unzip() && BeginPatching();
-}
-
 void ComponentUnpacker::Unpack(Callback callback) {
   callback_ = std::move(callback);
-  if (!UnpackInternal())
+  if (!Verify() || !BeginUnzipping())
     EndUnpacking();
 }
 
@@ -76,7 +72,7 @@ bool ComponentUnpacker::Verify() {
   return true;
 }
 
-bool ComponentUnpacker::Unzip() {
+bool ComponentUnpacker::BeginUnzipping() {
   // Mind the reference to non-const type, passed as an argument below.
   base::FilePath& destination = is_delta_ ? unpack_diff_path_ : unpack_path_;
   if (!base::CreateNewTempDirectory(base::FilePath::StringType(),
@@ -86,13 +82,20 @@ bool ComponentUnpacker::Unzip() {
     return false;
   }
   VLOG(1) << "Unpacking in: " << destination.value();
-  if (!zip::Unzip(path_, destination)) {
+  unzip::Unzip(connector_->Clone(), path_, destination,
+               base::BindOnce(&ComponentUnpacker::EndUnzipping, this));
+  return true;
+}
+
+void ComponentUnpacker::EndUnzipping(bool result) {
+  if (!result) {
     VLOG(1) << "Unzipping failed.";
     error_ = UnpackerError::kUnzipFailed;
-    return false;
+    EndUnpacking();
+    return;
   }
   VLOG(1) << "Unpacked successfully";
-  return true;
+  BeginPatching();
 }
 
 bool ComponentUnpacker::BeginPatching() {

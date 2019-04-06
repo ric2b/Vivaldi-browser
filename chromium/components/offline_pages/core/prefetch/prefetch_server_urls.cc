@@ -13,6 +13,7 @@ namespace offline_pages {
 
 const char kPrefetchServer[] = "https://offlinepages-pa.googleapis.com/";
 const char kPrefetchExperimentHeaderName[] = "X-Offline-Prefetch-Experiment";
+const char kPrefetchOperationHeaderName[] = "X-Offline-Prefetch-Operation";
 
 namespace {
 
@@ -32,9 +33,7 @@ GURL GetServerURL() {
       offline_pages::kPrefetchingOfflinePagesFeature, kOfflinePagesBackend));
 
   // |is_valid| returns false for bad URLs and also for empty URLs.
-  return endpoint.is_valid() && endpoint.SchemeIsCryptographic()
-             ? endpoint
-             : GURL(kPrefetchServer);
+  return endpoint.is_valid() ? endpoint : GURL(kPrefetchServer);
 }
 
 GURL GetServerURLForPath(const std::string& url_path) {

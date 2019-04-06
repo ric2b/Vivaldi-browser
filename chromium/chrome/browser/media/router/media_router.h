@@ -13,15 +13,17 @@
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/cast_remoting_connector.h"
 #include "chrome/browser/media/router/route_message_observer.h"
-#include "chrome/common/media_router/discovery/media_sink_internal.h"
 #include "chrome/common/media_router/media_route.h"
 #include "chrome/common/media_router/media_sink.h"
 #include "chrome/common/media_router/media_source.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/sessions/core/session_id.h"
 #include "content/public/browser/presentation_service_delegate.h"
+#include "media/base/media_controller.h"
 
 namespace content {
 class WebContents;
@@ -188,6 +190,11 @@ class MediaRouter : public KeyedService {
   // there is a change to the media routes, subclass MediaRoutesObserver.
   virtual std::vector<MediaRoute> GetCurrentRoutes() const = 0;
 
+  // Returns a controller that directly sends commands to media within a route.
+  // Returns a nullptr if no controller can be be found from |route_id|.
+  virtual std::unique_ptr<media::MediaController> GetMediaController(
+      const MediaRoute::Id& route_id) = 0;
+
 #if !defined(OS_ANDROID)
   // Returns a controller for sending media commands to a route. Returns a
   // nullptr if no MediaRoute exists for the given |route_id|.
@@ -199,9 +206,13 @@ class MediaRouter : public KeyedService {
   // given |tab_id|, only one CastRemotingConnector can be registered. The
   // registered CastRemotingConnector should be removed before it is destroyed.
   virtual void RegisterRemotingSource(
-      int32_t tab_id,
+      SessionID tab_id,
       CastRemotingConnector* remoting_source) = 0;
-  virtual void UnregisterRemotingSource(int32_t tab_id) = 0;
+  virtual void UnregisterRemotingSource(SessionID tab_id) = 0;
+
+  // Returns media router state as a JSON string represented by base::Vaule.
+  // Used by media-router-internals page.
+  virtual base::Value GetState() const = 0;
 
  private:
   friend class IssuesObserver;

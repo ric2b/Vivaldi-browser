@@ -32,7 +32,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
-#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/find_bar/find_notification_details.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
@@ -43,11 +42,11 @@
 #include "components/app_modal/app_modal_dialog_queue.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/download/public/common/download_item.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -61,25 +60,21 @@
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
-#include "device/geolocation/geolocation_provider.h"
-#include "device/geolocation/public/interfaces/geoposition.mojom.h"
 #include "net/base/filename_util.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/test/python_utils.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/device/public/mojom/geoposition.mojom.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
-#endif
-
-#if defined(USE_AURA)
-#include "ash/shell.h"
-#include "ui/aura/window_event_dispatcher.h"
 #endif
 
 using content::NavigationController;
@@ -173,7 +168,7 @@ bool GetCurrentTabTitle(const Browser* browser, base::string16* title) {
 
 void NavigateToURL(NavigateParams* params) {
   Navigate(params);
-  content::WaitForLoadStop(params->target_contents);
+  content::WaitForLoadStop(params->navigated_or_inserted_contents);
 }
 
 void NavigateToURLWithPost(Browser* browser, const GURL& url) {
@@ -279,7 +274,7 @@ base::FilePath GetTestFilePath(const base::FilePath& dir,
                                const base::FilePath& file) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::FilePath path;
-  PathService::Get(chrome::DIR_TEST_DATA, &path);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &path);
   return path.Append(dir).Append(file);
 }
 
@@ -295,7 +290,7 @@ bool GetRelativeBuildDirectory(base::FilePath* build_dir) {
   base::FilePath exe_dir =
       base::CommandLine::ForCurrentProcess()->GetProgram().DirName();
   base::FilePath src_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
     return false;
 
   // We must first generate absolute paths to SRC and EXE and from there
@@ -361,12 +356,6 @@ int FindInPage(WebContents* tab,
 }
 
 void DownloadURL(Browser* browser, const GURL& download_url) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  base::ScopedTempDir downloads_directory;
-  ASSERT_TRUE(downloads_directory.CreateUniqueTempDir());
-  browser->profile()->GetPrefs()->SetFilePath(prefs::kDownloadDefaultDirectory,
-                                              downloads_directory.GetPath());
-
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(browser->profile());
   std::unique_ptr<content::DownloadTestObserver> observer(
@@ -402,22 +391,11 @@ Browser* GetBrowserNotInSet(const std::set<Browser*>& excluded_browsers) {
 
 namespace {
 
-void GetCookiesCallback(base::WaitableEvent* event,
-                        std::string* cookies,
-                        const std::string& cookie_line) {
-  *cookies = cookie_line;
-  event->Signal();
-}
-
-void GetCookiesOnIOThread(
-    const GURL& url,
-    const scoped_refptr<net::URLRequestContextGetter>& context_getter,
-    base::WaitableEvent* event,
-    std::string* cookies) {
-  context_getter->GetURLRequestContext()->cookie_store()->
-      GetCookiesWithOptionsAsync(
-          url, net::CookieOptions(),
-          base::Bind(&GetCookiesCallback, event, cookies));
+void GetCookieCallback(base::RepeatingClosure callback,
+                       net::CookieList* cookies,
+                       const net::CookieList& cookie_list) {
+  *cookies = cookie_list;
+  callback.Run();
 }
 
 }  // namespace
@@ -428,18 +406,17 @@ void GetCookies(const GURL& url,
                 std::string* value) {
   *value_size = -1;
   if (url.is_valid() && contents) {
-    scoped_refptr<net::URLRequestContextGetter> context_getter =
-        contents->GetMainFrame()
-            ->GetProcess()
-            ->GetStoragePartition()
-            ->GetURLRequestContext();
-    base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
-                              base::WaitableEvent::InitialState::NOT_SIGNALED);
-    CHECK(content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&GetCookiesOnIOThread, url, context_getter, &event, value)));
-    event.Wait();
+    base::RunLoop loop;
+    auto* storage_partition =
+        contents->GetMainFrame()->GetProcess()->GetStoragePartition();
+    net::CookieOptions options;
+    net::CookieList cookie_list;
+    storage_partition->GetCookieManagerForBrowserProcess()->GetCookieList(
+        url, options,
+        base::BindOnce(GetCookieCallback, loop.QuitClosure(), &cookie_list));
+    loop.Run();
 
+    *value = net::CanonicalCookie::BuildCookieLine(cookie_list);
     *value_size = static_cast<int>(value->size());
   }
 }
@@ -494,17 +471,6 @@ Browser* BrowserAddedObserver::WaitForSingleNewBrowser() {
   // Ensure that only a single new browser has appeared.
   EXPECT_EQ(original_browsers_.size() + 1, chrome::GetTotalBrowserCount());
   return GetBrowserNotInSet(original_browsers_);
-}
-
-void OverrideGeolocation(double latitude, double longitude) {
-  device::mojom::Geoposition position;
-  position.latitude = latitude;
-  position.longitude = longitude;
-  position.altitude = 0.;
-  position.accuracy = 0.;
-  position.timestamp = base::Time::Now();
-  device::GeolocationProvider::GetInstance()->OverrideLocationForTesting(
-      position);
 }
 
 HistoryEnumerator::HistoryEnumerator(Profile* profile) {
@@ -569,34 +535,6 @@ void WaitForHistoryToLoad(history::HistoryService* history_service) {
     scoped_observer.Add(history_service);
     runner->Run();
   }
-}
-
-BrowserActivationWaiter::BrowserActivationWaiter(const Browser* browser)
-    : browser_(browser), observed_(false) {
-  if (chrome::FindLastActive() == browser_) {
-    observed_ = true;
-    return;
-  }
-  BrowserList::AddObserver(this);
-}
-
-BrowserActivationWaiter::~BrowserActivationWaiter() {}
-
-void BrowserActivationWaiter::WaitForActivation() {
-  if (observed_)
-    return;
-  message_loop_runner_ = new content::MessageLoopRunner;
-  message_loop_runner_->Run();
-}
-
-void BrowserActivationWaiter::OnBrowserSetLastActive(Browser* browser) {
-  if (browser != browser_)
-    return;
-
-  observed_ = true;
-  BrowserList::RemoveObserver(this);
-  if (message_loop_runner_.get() && message_loop_runner_->loop_running())
-    message_loop_runner_->Quit();
 }
 
 }  // namespace ui_test_utils

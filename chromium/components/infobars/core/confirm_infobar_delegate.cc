@@ -19,6 +19,10 @@ InfoBarDelegate::InfoBarAutomationType
   return CONFIRM_INFOBAR;
 }
 
+gfx::ElideBehavior ConfirmInfoBarDelegate::GetMessageElideBehavior() const {
+  return gfx::ELIDE_TAIL;
+}
+
 int ConfirmInfoBarDelegate::GetButtons() const {
   return BUTTON_OK | BUTTON_CANCEL;
 }
@@ -54,9 +58,7 @@ bool ConfirmInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
   return false;
 }
 
-ConfirmInfoBarDelegate::ConfirmInfoBarDelegate()
-    : InfoBarDelegate() {
-}
+ConfirmInfoBarDelegate::ConfirmInfoBarDelegate() {}
 
 bool ConfirmInfoBarDelegate::EqualsDelegate(InfoBarDelegate* delegate) const {
   ConfirmInfoBarDelegate* confirm_delegate =

@@ -10,7 +10,7 @@
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/common/url_constants.h"
 #include "components/sessions/content/content_live_tab.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/tab_helper.h"
@@ -79,10 +79,9 @@ ChromeTabRestoreServiceClient::FindLiveTabContextForTab(
 }
 
 sessions::LiveTabContext*
-ChromeTabRestoreServiceClient::FindLiveTabContextWithID(
-    SessionID::id_type desired_id) {
+ChromeTabRestoreServiceClient::FindLiveTabContextWithID(SessionID desired_id) {
 #if defined(OS_ANDROID)
-  return AndroidLiveTabContext::FindContextWithID(desired_id);;
+  return AndroidLiveTabContext::FindContextWithID(desired_id);
 #else
   return BrowserLiveTabContext::FindContextWithID(desired_id);
 #endif

@@ -11,7 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "content/browser/appcache/appcache_service_impl.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 using blink::mojom::StorageType;
 using storage::QuotaClient;
@@ -63,81 +63,79 @@ void AppCacheQuotaClient::OnQuotaManagerDestroyed() {
     delete this;
 }
 
-void AppCacheQuotaClient::GetOriginUsage(const GURL& origin,
+void AppCacheQuotaClient::GetOriginUsage(const url::Origin& origin,
                                          StorageType type,
-                                         const GetUsageCallback& callback) {
+                                         GetUsageCallback callback) {
   DCHECK(!callback.is_null());
   DCHECK(!quota_manager_is_destroyed_);
 
   if (!service_) {
-    callback.Run(0);
+    std::move(callback).Run(0);
     return;
   }
 
   if (!appcache_is_ready_) {
-    pending_batch_requests_.push_back(
-        base::BindOnce(&AppCacheQuotaClient::GetOriginUsage,
-                       base::Unretained(this), origin, type, callback));
+    pending_batch_requests_.push_back(base::BindOnce(
+        &AppCacheQuotaClient::GetOriginUsage, base::Unretained(this), origin,
+        type, std::move(callback)));
     return;
   }
 
   if (type != StorageType::kTemporary) {
-    callback.Run(0);
+    std::move(callback).Run(0);
     return;
   }
 
   const AppCacheStorage::UsageMap* map = GetUsageMap();
-  AppCacheStorage::UsageMap::const_iterator found = map->find(origin);
+  auto found = map->find(origin);
   if (found == map->end()) {
-    callback.Run(0);
+    std::move(callback).Run(0);
     return;
   }
-  callback.Run(found->second);
+  std::move(callback).Run(found->second);
 }
 
-void AppCacheQuotaClient::GetOriginsForType(
-    StorageType type,
-    const GetOriginsCallback& callback) {
-  GetOriginsHelper(type, std::string(), callback);
+void AppCacheQuotaClient::GetOriginsForType(StorageType type,
+                                            GetOriginsCallback callback) {
+  GetOriginsHelper(type, std::string(), std::move(callback));
 }
 
-void AppCacheQuotaClient::GetOriginsForHost(
-    StorageType type,
-    const std::string& host,
-    const GetOriginsCallback& callback) {
+void AppCacheQuotaClient::GetOriginsForHost(StorageType type,
+                                            const std::string& host,
+                                            GetOriginsCallback callback) {
   DCHECK(!callback.is_null());
   if (host.empty()) {
-    callback.Run(std::set<GURL>());
+    std::move(callback).Run(std::set<url::Origin>());
     return;
   }
-  GetOriginsHelper(type, host, callback);
+  GetOriginsHelper(type, host, std::move(callback));
 }
 
-void AppCacheQuotaClient::DeleteOriginData(const GURL& origin,
+void AppCacheQuotaClient::DeleteOriginData(const url::Origin& origin,
                                            StorageType type,
-                                           const DeletionCallback& callback) {
+                                           DeletionCallback callback) {
   DCHECK(!quota_manager_is_destroyed_);
 
   if (!service_) {
-    callback.Run(blink::mojom::QuotaStatusCode::kErrorAbort);
+    std::move(callback).Run(blink::mojom::QuotaStatusCode::kErrorAbort);
     return;
   }
 
   if (!appcache_is_ready_ || !current_delete_request_callback_.is_null()) {
-    pending_serial_requests_.push_back(
-        base::BindOnce(&AppCacheQuotaClient::DeleteOriginData,
-                       base::Unretained(this), origin, type, callback));
+    pending_serial_requests_.push_back(base::BindOnce(
+        &AppCacheQuotaClient::DeleteOriginData, base::Unretained(this), origin,
+        type, std::move(callback)));
     return;
   }
 
-  current_delete_request_callback_ = callback;
+  current_delete_request_callback_ = std::move(callback);
   if (type != StorageType::kTemporary) {
     DidDeleteAppCachesForOrigin(net::OK);
     return;
   }
 
-  service_->DeleteAppCachesForOrigin(
-      origin, GetServiceDeleteCallback()->callback());
+  service_->DeleteAppCachesForOrigin(origin,
+                                     GetServiceDeleteCallback()->callback());
 }
 
 bool AppCacheQuotaClient::DoesSupport(StorageType type) const {
@@ -150,8 +148,8 @@ void AppCacheQuotaClient::DidDeleteAppCachesForOrigin(int rv) {
     return;
 
   // Finish the request by calling our callers callback.
-  current_delete_request_callback_.Run(NetErrorCodeToQuotaStatus(rv));
-  current_delete_request_callback_.Reset();
+  std::move(current_delete_request_callback_)
+      .Run(NetErrorCodeToQuotaStatus(rv));
   if (pending_serial_requests_.empty())
     return;
 
@@ -161,35 +159,33 @@ void AppCacheQuotaClient::DidDeleteAppCachesForOrigin(int rv) {
 
 void AppCacheQuotaClient::GetOriginsHelper(StorageType type,
                                            const std::string& opt_host,
-                                           const GetOriginsCallback& callback) {
+                                           GetOriginsCallback callback) {
   DCHECK(!callback.is_null());
   DCHECK(!quota_manager_is_destroyed_);
 
   if (!service_) {
-    callback.Run(std::set<GURL>());
+    std::move(callback).Run(std::set<url::Origin>());
     return;
   }
 
   if (!appcache_is_ready_) {
-    pending_batch_requests_.push_back(
-        base::BindOnce(&AppCacheQuotaClient::GetOriginsHelper,
-                       base::Unretained(this), type, opt_host, callback));
+    pending_batch_requests_.push_back(base::BindOnce(
+        &AppCacheQuotaClient::GetOriginsHelper, base::Unretained(this), type,
+        opt_host, std::move(callback)));
     return;
   }
 
   if (type != StorageType::kTemporary) {
-    callback.Run(std::set<GURL>());
+    std::move(callback).Run(std::set<url::Origin>());
     return;
   }
 
-  const AppCacheStorage::UsageMap* map = GetUsageMap();
-  std::set<GURL> origins;
-  for (AppCacheStorage::UsageMap::const_iterator iter = map->begin();
-       iter != map->end(); ++iter) {
-    if (opt_host.empty() || iter->first.host_piece() == opt_host)
-      origins.insert(iter->first);
+  std::set<url::Origin> origins;
+  for (const auto& pair : *GetUsageMap()) {
+    if (opt_host.empty() || pair.first.host() == opt_host)
+      origins.insert(pair.first);
   }
-  callback.Run(origins);
+  std::move(callback).Run(origins);
 }
 
 void AppCacheQuotaClient::ProcessPendingRequests() {
@@ -241,9 +237,8 @@ void AppCacheQuotaClient::NotifyAppCacheDestroyed() {
     RunFront(&pending_serial_requests_);
 
   if (!current_delete_request_callback_.is_null()) {
-    current_delete_request_callback_.Run(
-        blink::mojom::QuotaStatusCode::kErrorAbort);
-    current_delete_request_callback_.Reset();
+    std::move(current_delete_request_callback_)
+        .Run(blink::mojom::QuotaStatusCode::kErrorAbort);
     GetServiceDeleteCallback()->Cancel();
   }
 

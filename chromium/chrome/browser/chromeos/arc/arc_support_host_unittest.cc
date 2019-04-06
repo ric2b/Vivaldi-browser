@@ -4,11 +4,20 @@
 
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 
+#include <vector>
+
 #include "chrome/browser/chromeos/arc/extensions/fake_arc_support.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/consent_auditor/consent_auditor_factory.h"
+#include "chrome/browser/consent_auditor/consent_auditor_test_utils.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/consent_auditor/fake_consent_auditor.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -54,17 +63,22 @@ class MockErrorDelegateNonStrict : public ArcSupportHost::ErrorDelegate {
 
 using MockErrorDelegate = StrictMock<MockErrorDelegateNonStrict>;
 
-class ArcSupportHostTest : public testing::Test {
+}  // namespace
+
+class ArcSupportHostTest : public BrowserWithTestWindowTest {
  public:
   ArcSupportHostTest() = default;
   ~ArcSupportHostTest() override = default;
 
   void SetUp() override {
+    BrowserWithTestWindowTest::SetUp();
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
         std::make_unique<chromeos::FakeChromeUserManager>());
+    IdentityManagerFactory::GetForProfile(profile())
+        ->SetPrimaryAccountSynchronously("gaia_id", "testing@account.com",
+                                         /*refresh_token=*/std::string());
 
-    profile_ = std::make_unique<TestingProfile>();
-    support_host_ = std::make_unique<ArcSupportHost>(profile_.get());
+    support_host_ = std::make_unique<ArcSupportHost>(profile());
     fake_arc_support_ = std::make_unique<FakeArcSupport>(support_host_.get());
   }
 
@@ -75,8 +89,9 @@ class ArcSupportHostTest : public testing::Test {
 
     fake_arc_support_.reset();
     support_host_.reset();
-    profile_.reset();
     user_manager_enabler_.reset();
+
+    BrowserWithTestWindowTest::TearDown();
   }
 
   ArcSupportHost* support_host() { return support_host_.get(); }
@@ -107,11 +122,17 @@ class ArcSupportHostTest : public testing::Test {
                                             kFakeActiveDirectoryPrefix);
   }
 
- private:
-  // Fake as if the current testing thread is UI thread.
-  content::TestBrowserThreadBundle bundle_;
+  consent_auditor::FakeConsentAuditor* consent_auditor() {
+    return static_cast<consent_auditor::FakeConsentAuditor*>(
+        ConsentAuditorFactory::GetForProfile(profile()));
+  }
 
-  std::unique_ptr<TestingProfile> profile_;
+  // BrowserWithTestWindowTest:
+  TestingProfile::TestingFactories GetTestingFactories() override {
+    return {{ConsentAuditorFactory::GetInstance(), BuildFakeConsentAuditor}};
+  }
+
+ private:
   std::unique_ptr<ArcSupportHost> support_host_;
   std::unique_ptr<FakeArcSupport> fake_arc_support_;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
@@ -122,6 +143,8 @@ class ArcSupportHostTest : public testing::Test {
 
   DISALLOW_COPY_AND_ASSIGN(ArcSupportHostTest);
 };
+
+namespace {
 
 TEST_F(ArcSupportHostTest, AuthSucceeded) {
   MockAuthDelegate* auth_delegate = CreateMockAuthDelegate();
@@ -245,6 +268,21 @@ TEST_F(ArcSupportHostTest, SendFeedbackOnError) {
 
   EXPECT_CALL(*error_delegate, OnSendFeedbackClicked());
   fake_arc_support()->ClickSendFeedbackButton();
+}
+
+TEST_F(ArcSupportHostTest, CalculateToSHashInRightOrder) {
+  std::vector<int> output = ArcSupportHost::ComputePlayToSConsentIds(
+      "The quick brown fox jumps over the lazy dog");
+  // Expect length and 5 ints for the hash.
+  EXPECT_EQ(6, static_cast<int>(output.size()));
+  // Check string length.
+  EXPECT_EQ(43, output[0]);
+  // Verify the hash: 2fd4e1c6 7a2d28fc ed849ee1 bb76e739 1b93eb12.
+  EXPECT_EQ(static_cast<int>(0x2fd4e1c6), output[1]);
+  EXPECT_EQ(static_cast<int>(0x7a2d28fc), output[2]);
+  EXPECT_EQ(static_cast<int>(0xed849ee1), output[3]);
+  EXPECT_EQ(static_cast<int>(0xbb76e739), output[4]);
+  EXPECT_EQ(static_cast<int>(0x1b93eb12), output[5]);
 }
 
 }  // namespace

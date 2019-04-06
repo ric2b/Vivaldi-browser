@@ -48,12 +48,6 @@ class ExternalProcessImporterHost
   virtual void StartImportSettings(
       const importer::SourceProfile& source_profile,
       Profile* target_profile,
-      const importer::ImportConfig &import_config,
-      ProfileWriter* writer);
-
-  virtual void StartImportSettings(
-      const importer::SourceProfile& source_profile,
-      Profile* target_profile,
       uint16_t items,
       ProfileWriter* writer);
 
@@ -168,7 +162,8 @@ class ExternalProcessImporterHost
   // Information about a profile needed for importing.
   importer::SourceProfile source_profile_;
 
-  importer::ImportConfig import_config_;
+  // Bitmask of items to be imported (see importer::ImportItem enum).
+  uint16_t items_;
 
   // True if the import process has been cancelled.
   bool cancelled_;

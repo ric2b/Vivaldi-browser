@@ -17,19 +17,15 @@
 #include "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_layout.h"
-#import "chrome/browser/ui/cocoa/browser_window_touch_bar.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
+#import "chrome/browser/ui/cocoa/touchbar/browser_window_touch_bar_controller.h"
 #include "chrome/grit/theme_resources.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/cocoa/nsgraphics_context_additions.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #import "ui/base/cocoa/touch_bar_forward_declarations.h"
-
-@interface FramedBrowserWindow ()
-- (void)childWindowsDidChange;
-@end
 
 @implementation FramedBrowserWindow
 
@@ -88,8 +84,7 @@
 
 - (BOOL)makeFirstResponder:(NSResponder*)responder {
   BrowserWindowController* bwc =
-      base::mac::ObjCCastStrict<BrowserWindowController>(
-          [self windowController]);
+      [BrowserWindowController browserWindowControllerForWindow:self];
   [bwc firstResponderUpdated:responder];
   return [super makeFirstResponder:responder];
 }
@@ -192,9 +187,8 @@
 - (NSTouchBar*)makeTouchBar {
   if (@available(macOS 10.12.2, *)) {
     BrowserWindowController* bwc =
-        base::mac::ObjCCastStrict<BrowserWindowController>(
-            [self windowController]);
-    return [[bwc browserWindowTouchBar] makeTouchBar];
+        [BrowserWindowController browserWindowControllerForWindow:self];
+    return [[bwc browserWindowTouchBarController] makeTouchBar];
   } else {
     return nil;
   }
@@ -212,23 +206,6 @@
     return [NSColor whiteColor];
   else
     return [NSColor windowFrameTextColor];
-}
-
-- (void)addChildWindow:(NSWindow*)childWindow
-               ordered:(NSWindowOrderingMode)orderingMode {
-  [super addChildWindow:childWindow ordered:orderingMode];
-  [self childWindowsDidChange];
-}
-
-- (void)removeChildWindow:(NSWindow*)childWindow {
-  [super removeChildWindow:childWindow];
-  [self childWindowsDidChange];
-}
-
-- (void)childWindowsDidChange {
-  id delegate = [self delegate];
-  if ([delegate respondsToSelector:@selector(childWindowsDidChange)])
-    [delegate childWindowsDidChange];
 }
 
 @end

@@ -3,17 +3,17 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
+#include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
-#include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
+#include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
-#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_error_factory.h"
 #include "components/sync/model/sync_error_factory_mock.h"
@@ -87,16 +87,19 @@ const std::string kParentId() {
   return GenerateId("parent_id");
 }
 
-syncer::SyncData CreateAppRemoteData(const std::string& id,
-                                     const std::string& name,
-                                     const std::string& parent_id,
-                                     const std::string& item_ordinal,
-                                     const std::string& item_pin_ordinal) {
+syncer::SyncData CreateAppRemoteData(
+    const std::string& id,
+    const std::string& name,
+    const std::string& parent_id,
+    const std::string& item_ordinal,
+    const std::string& item_pin_ordinal,
+    sync_pb::AppListSpecifics_AppListItemType item_type =
+        sync_pb::AppListSpecifics_AppListItemType_TYPE_APP) {
   sync_pb::EntitySpecifics specifics;
   sync_pb::AppListSpecifics* app_list = specifics.mutable_app_list();
   if (id != kUnset)
     app_list->set_item_id(id);
-  app_list->set_item_type(sync_pb::AppListSpecifics_AppListItemType_TYPE_APP);
+  app_list->set_item_type(item_type);
   if (name != kUnset)
     app_list->set_item_name(name);
   if (parent_id != kUnset)
@@ -106,10 +109,8 @@ syncer::SyncData CreateAppRemoteData(const std::string& id,
   if (item_pin_ordinal != kUnset)
     app_list->set_item_pin_ordinal(item_pin_ordinal);
 
-  return syncer::SyncData::CreateRemoteData(
-      std::hash<std::string>{}(id), specifics, base::Time(),
-      syncer::AttachmentIdList(),
-      syncer::AttachmentServiceProxyForTest::Create());
+  return syncer::SyncData::CreateRemoteData(std::hash<std::string>{}(id),
+                                            specifics, base::Time());
 }
 
 syncer::SyncDataList CreateBadAppRemoteData(const std::string& id) {
@@ -177,6 +178,13 @@ class AppListSyncableServiceTest : public AppListTestBase {
     extensions::ExtensionSystem* extension_system =
         extensions::ExtensionSystem::Get(profile_.get());
     DCHECK(extension_system);
+
+    model_updater_factory_scope_ = std::make_unique<
+        app_list::AppListSyncableService::ScopedModelUpdaterFactoryForTest>(
+        base::Bind([]() -> std::unique_ptr<AppListModelUpdater> {
+          return std::make_unique<FakeAppListModelUpdater>();
+        }));
+
     app_list_syncable_service_ =
         std::make_unique<app_list::AppListSyncableService>(profile_.get(),
                                                            extension_system);
@@ -186,7 +194,7 @@ class AppListSyncableServiceTest : public AppListTestBase {
 
   void TearDown() override { app_list_syncable_service_.reset(); }
 
-  ChromeAppListModelUpdater* model_updater() {
+  AppListModelUpdater* model_updater() {
     return app_list_syncable_service_->GetModelUpdater();
   }
 
@@ -204,10 +212,25 @@ class AppListSyncableServiceTest : public AppListTestBase {
     return app_list_syncable_service_.get();
   }
 
+  // Remove all existing sync items.
+  void RemoveAllExistingItems() {
+    std::vector<std::string> existing_item_ids;
+    for (const auto& pair : app_list_syncable_service()->sync_items()) {
+      existing_item_ids.emplace_back(pair.first);
+    }
+    for (std::string& id : existing_item_ids) {
+      app_list_syncable_service()->RemoveItem(id);
+    }
+    content::RunAllTasksUntilIdle();
+  }
+
  private:
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<AppListModelUpdater::TestApi> model_updater_test_api_;
   std::unique_ptr<app_list::AppListSyncableService> app_list_syncable_service_;
+  std::unique_ptr<
+      app_list::AppListSyncableService::ScopedModelUpdaterFactoryForTest>
+      model_updater_factory_scope_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListSyncableServiceTest);
 };
@@ -254,11 +277,9 @@ TEST_F(AppListSyncableServiceTest, OEMFolderForConflictingPos) {
   // OEM item is not top level element.
   ChromeAppListItem* oem_app_item = model_updater()->FindItem(oem_app_id);
   EXPECT_NE(nullptr, oem_app_item);
-  EXPECT_EQ(oem_app_item->folder_id(),
-            app_list::AppListSyncableService::kOemFolderId);
+  EXPECT_EQ(oem_app_item->folder_id(), ash::kOemFolderId);
   // But OEM folder is.
-  ChromeAppListItem* oem_folder =
-      model_updater()->FindItem(app_list::AppListSyncableService::kOemFolderId);
+  ChromeAppListItem* oem_folder = model_updater()->FindItem(ash::kOemFolderId);
   EXPECT_NE(nullptr, oem_folder);
   EXPECT_EQ(oem_folder->folder_id(), "");
 }
@@ -439,4 +460,170 @@ TEST_F(AppListSyncableServiceTest, InitialMerge_NoDriveAppData) {
   content::RunAllTasksUntilIdle();
 
   ASSERT_FALSE(GetSyncItem(kDriveAppItemId));
+}
+
+TEST_F(AppListSyncableServiceTest, PruneEmptySyncFolder) {
+  // Add a folder item and an item that is parented to the folder item.
+  const std::string kFolderItemId = GenerateId("folder_item_id");
+  const std::string kItemId = GenerateId("item_id");
+
+  syncer::SyncDataList sync_list;
+  sync_list.push_back(CreateAppRemoteData(
+      kFolderItemId, "folder_item_name", kParentId(), "ordinal", "pinordinal",
+      sync_pb::AppListSpecifics_AppListItemType_TYPE_FOLDER));
+  sync_list.push_back(CreateAppRemoteData(kItemId, "item_name", kFolderItemId,
+                                          "ordinal", "pinordinal"));
+
+  app_list_syncable_service()->MergeDataAndStartSyncing(
+      syncer::APP_LIST, sync_list,
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
+  content::RunAllTasksUntilIdle();
+
+  ASSERT_TRUE(GetSyncItem(kFolderItemId));
+  ASSERT_TRUE(GetSyncItem(kItemId));
+
+  // Remove the item, the empty folder item should be removed as well.
+  app_list_syncable_service()->RemoveItem(kItemId);
+  content::RunAllTasksUntilIdle();
+
+  ASSERT_FALSE(GetSyncItem(kFolderItemId));
+  ASSERT_FALSE(GetSyncItem(kItemId));
+}
+
+TEST_F(AppListSyncableServiceTest, AddPageBreakItems) {
+  RemoveAllExistingItems();
+
+  // Populate item list with 2 items.
+  const std::string kItemId1 = GenerateId("item_id1");
+  const std::string kItemId2 = GenerateId("item_id2");
+
+  syncer::SyncDataList sync_list;
+  sync_list.push_back(CreateAppRemoteData(kItemId1, "item_name",
+                                          "" /* parent_id */, "c" /* ordinal */,
+                                          "pinordinal"));
+  sync_list.push_back(CreateAppRemoteData(kItemId2, "item_name",
+                                          "" /* parent_id */, "d" /* ordinal */,
+                                          "pinordinal"));
+
+  app_list_syncable_service()->MergeDataAndStartSyncing(
+      syncer::APP_LIST, sync_list,
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
+  content::RunAllTasksUntilIdle();
+
+  ASSERT_TRUE(GetSyncItem(kItemId1));
+  ASSERT_TRUE(GetSyncItem(kItemId2));
+
+  // Add a "page break" items before 1st item, after 1st item and after 2nd
+  // item.
+  const std::string kPageBreakItemId1 = GenerateId("page_break_item_id1");
+  const std::string kPageBreakItemId2 = GenerateId("page_break_item_id2");
+  const std::string kPageBreakItemId3 = GenerateId("page_break_item_id3");
+  std::unique_ptr<ChromeAppListItem> page_break_item1 =
+      std::make_unique<ChromeAppListItem>(profile_.get(), kPageBreakItemId1,
+                                          model_updater());
+  std::unique_ptr<ChromeAppListItem> page_break_item2 =
+      std::make_unique<ChromeAppListItem>(profile_.get(), kPageBreakItemId2,
+                                          model_updater());
+  std::unique_ptr<ChromeAppListItem> page_break_item3 =
+      std::make_unique<ChromeAppListItem>(profile_.get(), kPageBreakItemId3,
+                                          model_updater());
+  page_break_item1->SetPosition(syncer::StringOrdinal("bm"));
+  page_break_item1->SetIsPageBreak(true);
+  page_break_item2->SetPosition(syncer::StringOrdinal("cm"));
+  page_break_item2->SetIsPageBreak(true);
+  page_break_item3->SetPosition(syncer::StringOrdinal("dm"));
+  page_break_item3->SetIsPageBreak(true);
+  app_list_syncable_service()->AddItem(std::move(page_break_item1));
+  app_list_syncable_service()->AddItem(std::move(page_break_item2));
+  app_list_syncable_service()->AddItem(std::move(page_break_item3));
+  content::RunAllTasksUntilIdle();
+
+  // Only 2nd "page break" item remains.
+  ASSERT_FALSE(GetSyncItem(kPageBreakItemId1));
+  ASSERT_TRUE(GetSyncItem(kItemId1));
+  ASSERT_TRUE(GetSyncItem(kPageBreakItemId2));
+  ASSERT_TRUE(GetSyncItem(kItemId2));
+  ASSERT_FALSE(GetSyncItem(kPageBreakItemId3));
+}
+
+TEST_F(AppListSyncableServiceTest, PruneRedundantPageBreakItems) {
+  RemoveAllExistingItems();
+
+  // Populate item list with items and leading, trailing and duplicate "page
+  // break" items.
+  const std::string kPageBreakItemId1 = GenerateId("page_break_item_id1");
+  const std::string kItemId1 = GenerateId("item_id1");
+  const std::string kFolderItemId = GenerateId("folder_item_id");
+  const std::string kPageBreakItemId2 = GenerateId("page_break_item_id2");
+  const std::string kItemInFolderId = GenerateId("item_in_folder_id");
+  const std::string kPageBreakItemId3 = GenerateId("page_break_item_id3");
+  const std::string kPageBreakItemId4 = GenerateId("page_break_item_id4");
+  const std::string kItemId2 = GenerateId("item_id2");
+  const std::string kPageBreakItemId5 = GenerateId("page_break_item_id5");
+
+  syncer::SyncDataList sync_list;
+  sync_list.push_back(CreateAppRemoteData(
+      kPageBreakItemId1, "page_break_item_name", "" /* parent_id */,
+      "b" /* ordinal */, "pinordinal",
+      sync_pb::AppListSpecifics_AppListItemType_TYPE_PAGE_BREAK));
+  sync_list.push_back(CreateAppRemoteData(kItemId1, "item_name",
+                                          "" /* parent_id */, "c" /* ordinal */,
+                                          "pinordinal"));
+  sync_list.push_back(CreateAppRemoteData(kFolderItemId, "folder_item_name",
+                                          "" /* parent_id */, "d" /* ordinal */,
+                                          "pinordinal"));
+  sync_list.push_back(CreateAppRemoteData(
+      kPageBreakItemId2, "page_break_item_name", "" /* parent_id */,
+      "e" /* ordinal */, "pinordinal",
+      sync_pb::AppListSpecifics_AppListItemType_TYPE_PAGE_BREAK));
+  sync_list.push_back(CreateAppRemoteData(
+      kItemInFolderId, "item_in_folder_name", kFolderItemId /* parent_id */,
+      "f" /* ordinal */, "pinordinal"));
+  sync_list.push_back(CreateAppRemoteData(
+      kPageBreakItemId3, "page_break_item_name", "" /* parent_id */,
+      "g" /* ordinal */, "pinordinal",
+      sync_pb::AppListSpecifics_AppListItemType_TYPE_PAGE_BREAK));
+  sync_list.push_back(CreateAppRemoteData(
+      kPageBreakItemId4, "page_break_item_name", "" /* parent_id */,
+      "h" /* ordinal */, "pinordinal",
+      sync_pb::AppListSpecifics_AppListItemType_TYPE_PAGE_BREAK));
+  sync_list.push_back(CreateAppRemoteData(kItemId2, "item_name",
+                                          "" /* parent_id */, "i" /* ordinal */,
+                                          "pinordinal"));
+  sync_list.push_back(CreateAppRemoteData(
+      kPageBreakItemId5, "page_break_item_name", "" /* parent_id */,
+      "j" /* ordinal */, "pinordinal",
+      sync_pb::AppListSpecifics_AppListItemType_TYPE_PAGE_BREAK));
+
+  app_list_syncable_service()->MergeDataAndStartSyncing(
+      syncer::APP_LIST, sync_list,
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
+  content::RunAllTasksUntilIdle();
+
+  ASSERT_TRUE(GetSyncItem(kPageBreakItemId1));
+  ASSERT_TRUE(GetSyncItem(kItemId1));
+  ASSERT_TRUE(GetSyncItem(kFolderItemId));
+  ASSERT_TRUE(GetSyncItem(kPageBreakItemId2));
+  ASSERT_TRUE(GetSyncItem(kItemInFolderId));
+  ASSERT_TRUE(GetSyncItem(kPageBreakItemId3));
+  ASSERT_TRUE(GetSyncItem(kPageBreakItemId4));
+  ASSERT_TRUE(GetSyncItem(kItemId2));
+  ASSERT_TRUE(GetSyncItem(kPageBreakItemId5));
+
+  // Remove a item, which triggers removing redundant "page break" items.
+  app_list_syncable_service()->RemoveItem(kItemId1);
+  content::RunAllTasksUntilIdle();
+
+  ASSERT_FALSE(GetSyncItem(kPageBreakItemId1));
+  ASSERT_FALSE(GetSyncItem(kItemId1));
+  ASSERT_TRUE(GetSyncItem(kFolderItemId));
+  ASSERT_TRUE(GetSyncItem(kPageBreakItemId2));
+  ASSERT_TRUE(GetSyncItem(kItemInFolderId));
+  ASSERT_FALSE(GetSyncItem(kPageBreakItemId3));
+  ASSERT_FALSE(GetSyncItem(kPageBreakItemId4));
+  ASSERT_TRUE(GetSyncItem(kItemId2));
+  ASSERT_FALSE(GetSyncItem(kPageBreakItemId5));
 }

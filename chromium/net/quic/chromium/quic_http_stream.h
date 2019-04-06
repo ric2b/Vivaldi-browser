@@ -14,6 +14,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/net_export.h"
@@ -22,9 +23,9 @@
 #include "net/log/net_log_with_source.h"
 #include "net/quic/chromium/quic_chromium_client_session.h"
 #include "net/quic/chromium/quic_chromium_client_stream.h"
-#include "net/quic/core/quic_client_push_promise_index.h"
-#include "net/quic/core/quic_packets.h"
-#include "net/spdy/chromium/multiplexed_http_stream.h"
+#include "net/spdy/multiplexed_http_stream.h"
+#include "net/third_party/quic/core/quic_client_push_promise_index.h"
+#include "net/third_party/quic/core/quic_packets.h"
 
 namespace net {
 
@@ -47,14 +48,14 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
                        bool can_send_early,
                        RequestPriority priority,
                        const NetLogWithSource& net_log,
-                       const CompletionCallback& callback) override;
+                       CompletionOnceCallback callback) override;
   int SendRequest(const HttpRequestHeaders& request_headers,
                   HttpResponseInfo* response,
-                  const CompletionCallback& callback) override;
-  int ReadResponseHeaders(const CompletionCallback& callback) override;
+                  CompletionOnceCallback callback) override;
+  int ReadResponseHeaders(CompletionOnceCallback callback) override;
   int ReadResponseBody(IOBuffer* buf,
                        int buf_len,
-                       const CompletionCallback& callback) override;
+                       CompletionOnceCallback callback) override;
   void Close(bool not_reusable) override;
   bool IsResponseBodyComplete() const override;
   bool IsConnectionReused() const override;
@@ -67,7 +68,7 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
   void SetPriority(RequestPriority priority) override;
 
   static HttpResponseInfo::ConnectionInfo ConnectionInfoFromQuicVersion(
-      QuicTransportVersion quic_version);
+      quic::QuicTransportVersion quic_version);
 
  private:
   friend class test::QuicHttpStreamPeer;
@@ -105,7 +106,7 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
   int DoSendBodyComplete(int rv);
 
   void OnReadResponseHeadersComplete(int rv);
-  int ProcessResponseHeaders(const SpdyHeaderBlock& headers);
+  int ProcessResponseHeaders(const spdy::SpdyHeaderBlock& headers);
   void ReadTrailingHeaders();
   void OnReadTrailingHeadersComplete(int rv);
 
@@ -171,12 +172,12 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
   int response_status_;
 
   // Serialized request headers.
-  SpdyHeaderBlock request_headers_;
+  spdy::SpdyHeaderBlock request_headers_;
 
-  SpdyHeaderBlock response_header_block_;
+  spdy::SpdyHeaderBlock response_header_block_;
   bool response_headers_received_;
 
-  SpdyHeaderBlock trailing_header_block_;
+  spdy::SpdyHeaderBlock trailing_header_block_;
   bool trailing_headers_received_;
 
   // Number of bytes received by the headers stream on behalf of this stream.
@@ -194,7 +195,7 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
   bool closed_is_first_stream_;
 
   // The caller's callback to be used for asynchronous operations.
-  CompletionCallback callback_;
+  CompletionOnceCallback callback_;
 
   // Caller provided buffer for the ReadResponseBody() response.
   scoped_refptr<IOBuffer> user_buffer_;

@@ -7,12 +7,12 @@ module content.mojom;
 import "content/common/native_types.mojom";
 import "content/common/service_worker/embedded_worker.mojom";
 import "ipc/constants.mojom";
-import "mojo/common/time.mojom";
-import "mojo/common/unguessable_token.mojom";
-import "services/network/public/interfaces/network_types.mojom";
-import "services/service_manager/public/interfaces/interface_provider.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+import "services/network/public/mojom/network_types.mojom";
+import "services/service_manager/public/mojom/interface_provider.mojom";
+import "services/service_manager/public/mojom/service.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
-import "ui/gfx/mojo/icc_profile.mojom";
 
 struct CreateViewParams {
   // Renderer-wide preferences.
@@ -39,7 +39,7 @@ struct CreateViewParams {
   int32 main_frame_widget_routing_id = IPC.mojom.kRoutingIdNone;
 
   // The session storage namespace ID this view should use.
-  int64 session_storage_namespace_id;
+  string session_storage_namespace_id;
 
   // The route ID of the opener RenderFrame or RenderFrameProxy, if we need to
   // set one (MSG_ROUTING_NONE otherwise).
@@ -60,7 +60,7 @@ struct CreateViewParams {
   // attribute them to the context frame.
   // |devtools_main_frame_token| is only defined by the browser and is never
   // sent back from the renderer in the control calls.
-  mojo.common.mojom.UnguessableToken devtools_main_frame_token;
+  mojo_base.mojom.UnguessableToken devtools_main_frame_token;
 
   // The ID of the proxy object for the main frame in this view. It is only
   // used if |swapped_out| is true.
@@ -79,19 +79,7 @@ struct CreateViewParams {
   bool has_committed_real_load;
 
   // The initial renderer size.
-  ResizeParams initial_size;
-
-  // Whether to enable auto-resize.
-  bool enable_auto_resize;
-
-  // The minimum size to layout the page if auto-resize is enabled.
-  gfx.mojom.Size min_size;
-
-  // The maximum size to layout the page if auto-resize is enabled.
-  gfx.mojom.Size max_size;
-
-  // The page zoom level.
-  double page_zoom_level;
+  VisualProperties visual_properties;
 
   // Whether lookup of frames in the created RenderView (e.g. lookup via
   // window.open or via <a target=...>) should be renderer-wide (i.e. going
@@ -147,7 +135,7 @@ struct CreateFrameParams {
   // attribute them to the context frame.
   // |devtools_frame_token| is only defined by the browser and is never
   // sent back from the renderer in the control calls.
-  mojo.common.mojom.UnguessableToken devtools_frame_token;
+  mojo_base.mojom.UnguessableToken devtools_frame_token;
 
   // When the new frame has a parent, |frame_owner_properties| holds the
   // properties of the HTMLFrameOwnerElement from the parent process.
@@ -177,18 +165,17 @@ struct UpdateScrollbarThemeParams {
 // This should be used for implementing browser-to-renderer control messages
 // which need to retain FIFO with respect to legacy IPC messages.
 interface Renderer {
+  // Tells the renderer to ask its embedder to bind |service_request| to an
+  // embedder-provided renderer-side service implementation. This is required to
+  // ensure that embedder-provided renderer-side service is initialized at the
+  // appropriate time.
+  CreateEmbedderRendererService(service_manager.mojom.Service& service_request);
+
   // Tells the renderer to create a new view.
   CreateView(CreateViewParams params);
 
   // Tells the renderer to create a new RenderFrame.
   CreateFrame(CreateFrameParams params);
-
-  // Tells the renderer to create an EmbeddedWorkerInstanceClient, which is what
-  // manages service worker startup and shutdown.
-  // TODO(shimazu): Create a service worker's execution context by this method
-  // instead of just creating an instance of EmbeddedWorkerInstanceClient.
-  SetUpEmbeddedWorkerChannelForServiceWorker(
-      associated EmbeddedWorkerInstanceClient& client_request);
 
   // Tells the renderer to create a new RenderFrameProxy object with
   // |routing_id|.  |render_view_routing_id| identifies the
@@ -197,9 +184,20 @@ interface Renderer {
   // is MSG_ROUTING_NONE.  The new proxy should be created as a child of the
   // object identified by |parent_routing_id| or as top level if that is
   // MSG_ROUTING_NONE.
+  // |devtools_frame_token| is used for devtools instrumentation
+  // and trace-ability. It is defined by the browser and is never
+  // sent back from the renderer in the control calls.
   CreateFrameProxy(int32 routing_id, int32 render_view_routing_id,
                    int32 opener_routing_id, int32 parent_routing_id,
-                   FrameReplicationState replication_state);
+                   FrameReplicationState replication_state,
+                   mojo_base.mojom.UnguessableToken devtools_frame_token);
+
+  // Tells the renderer to create an EmbeddedWorkerInstanceClient, which is what
+  // manages service worker startup and shutdown.
+  // TODO(shimazu): Send all params for starting service worker to reduce the
+  // number of IPCs.
+  SetUpEmbeddedWorkerChannelForServiceWorker(
+      EmbeddedWorkerInstanceClient& client_request);
 
   // Tells the renderer that the network type has changed so that
   // navigator.onLine and navigator.connection can be updated.
@@ -215,13 +213,19 @@ interface Renderer {
   // unavailable, it will be set to net::nqe::internal::INVALID_RTT_THROUGHPUT.
   OnNetworkQualityChanged(
       network.mojom.EffectiveConnectionType effective_connection_type,
-      mojo.common.mojom.TimeDelta http_rtt,
-      mojo.common.mojom.TimeDelta transport_rtt,
+      mojo_base.mojom.TimeDelta http_rtt,
+      mojo_base.mojom.TimeDelta transport_rtt,
       double bandwidth_kbps);
 
   // Tells the renderer to suspend/resume the webkit timers. Only for use on
   // Android.
   SetWebKitSharedTimersSuspended(bool suspend);
+
+  // Sets the user-agent string. This is needed because getting the value in the
+  // renderer from the system leads to a wrong value due to sandboxing. This
+  // must be called as early as possible, during the renderer process
+  // initialization.
+  SetUserAgent(string user_agent);
 
   // Tells the renderer about a scrollbar appearance change. Only for use on
   // OS X.
@@ -237,7 +241,6 @@ interface Renderer {
 
 
   // Tells the renderer process to enter or leave background mode.
-  // TODO(crbug:676224) Make this conditional on IPC_MESSAGE_LOG_ENABLED.
   SetProcessBackgrounded(bool background);
 
   // Tells the scheduler about "keep-alive" state which can be due to:
@@ -247,4 +250,16 @@ interface Renderer {
 
   // Tells the renderer process to purge and suspend.
   ProcessPurgeAndSuspend();
+
+  // Tells the renderer process that it has been locked to a site (i.e., a
+  // scheme plus eTLD+1, such as https://google.com), or to a more specific
+  // origin.
+  SetIsLockedToSite();
+
+  // Tells the renderer to enable V8's memory saving mode when possible.
+  // This is only used when site-per-process is enabled. If the process
+  // only contains subframes, V8's low memory mode will be enabled.
+  // If a main frame exists or is created, the low memory mode will
+  // be disabled.
+  EnableV8LowMemoryMode();
 };

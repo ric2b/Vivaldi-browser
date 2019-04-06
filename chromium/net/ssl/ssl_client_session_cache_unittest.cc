@@ -4,9 +4,9 @@
 
 #include "net/ssl/ssl_client_session_cache.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump.h"
@@ -61,6 +61,10 @@ class SSLClientSessionCacheTest : public testing::Test {
 
 }  // namespace
 
+// These tests rely on memory corruption detectors to verify that
+// SSL_SESSION reference counts were correctly managed and no sessions
+// leaked or were accessed after free.
+
 // Test basic insertion and lookup operations.
 TEST_F(SSLClientSessionCacheTest, Basic) {
   SSLClientSessionCache::Config config;
@@ -69,9 +73,6 @@ TEST_F(SSLClientSessionCacheTest, Basic) {
   bssl::UniquePtr<SSL_SESSION> session1 = NewSSLSession();
   bssl::UniquePtr<SSL_SESSION> session2 = NewSSLSession();
   bssl::UniquePtr<SSL_SESSION> session3 = NewSSLSession();
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(1u, session2->references);
-  EXPECT_EQ(1u, session3->references);
 
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
@@ -87,27 +88,16 @@ TEST_F(SSLClientSessionCacheTest, Basic) {
   EXPECT_EQ(session2.get(), cache.Lookup("key2").get());
   EXPECT_EQ(2u, cache.size());
 
-  EXPECT_EQ(2u, session1->references);
-  EXPECT_EQ(2u, session2->references);
-
   cache.Insert("key1", session3.get());
   EXPECT_EQ(session3.get(), cache.Lookup("key1").get());
   EXPECT_EQ(session2.get(), cache.Lookup("key2").get());
   EXPECT_EQ(2u, cache.size());
-
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(2u, session2->references);
-  EXPECT_EQ(2u, session3->references);
 
   cache.Flush();
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
   EXPECT_EQ(nullptr, cache.Lookup("key3").get());
   EXPECT_EQ(0u, cache.size());
-
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(1u, session2->references);
-  EXPECT_EQ(1u, session3->references);
 }
 
 // Test basic insertion and lookup operations with single-use sessions.
@@ -118,9 +108,6 @@ TEST_F(SSLClientSessionCacheTest, BasicSingleUse) {
   bssl::UniquePtr<SSL_SESSION> session1 = NewSSLSession(TLS1_3_VERSION);
   bssl::UniquePtr<SSL_SESSION> session2 = NewSSLSession(TLS1_3_VERSION);
   bssl::UniquePtr<SSL_SESSION> session3 = NewSSLSession(TLS1_3_VERSION);
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(1u, session2->references);
-  EXPECT_EQ(1u, session3->references);
 
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
@@ -136,9 +123,6 @@ TEST_F(SSLClientSessionCacheTest, BasicSingleUse) {
   cache.Insert("key1", session1.get());
   cache.Insert("key1", session1.get());
   cache.Insert("key2", session2.get());
-
-  EXPECT_EQ(3u, session1->references);
-  EXPECT_EQ(2u, session2->references);
 
   EXPECT_EQ(session1.get(), cache.Lookup("key1").get());
   EXPECT_EQ(session2.get(), cache.Lookup("key2").get());
@@ -147,9 +131,6 @@ TEST_F(SSLClientSessionCacheTest, BasicSingleUse) {
   EXPECT_EQ(session1.get(), cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
 
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(1u, session2->references);
-
   cache.Insert("key1", session1.get());
   cache.Insert("key1", session3.get());
   cache.Insert("key2", session2.get());
@@ -157,10 +138,6 @@ TEST_F(SSLClientSessionCacheTest, BasicSingleUse) {
   EXPECT_EQ(session1.get(), cache.Lookup("key1").get());
   EXPECT_EQ(session2.get(), cache.Lookup("key2").get());
   EXPECT_EQ(0u, cache.size());
-
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(1u, session2->references);
-  EXPECT_EQ(1u, session3->references);
 
   cache.Flush();
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
@@ -171,16 +148,9 @@ TEST_F(SSLClientSessionCacheTest, BasicSingleUse) {
   cache.Insert("key1", session1.get());
   cache.Insert("key1", session2.get());
   cache.Insert("key1", session3.get());
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(2u, session2->references);
-  EXPECT_EQ(2u, session3->references);
   EXPECT_EQ(session3.get(), cache.Lookup("key1").get());
   EXPECT_EQ(session2.get(), cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
-
-  EXPECT_EQ(1u, session1->references);
-  EXPECT_EQ(1u, session2->references);
-  EXPECT_EQ(1u, session3->references);
 }
 
 // Test insertion and lookup operations with both single-use and reusable
@@ -191,8 +161,6 @@ TEST_F(SSLClientSessionCacheTest, MixedUse) {
 
   bssl::UniquePtr<SSL_SESSION> session_single = NewSSLSession(TLS1_3_VERSION);
   bssl::UniquePtr<SSL_SESSION> session_reuse = NewSSLSession(TLS1_2_VERSION);
-  EXPECT_EQ(1u, session_single->references);
-  EXPECT_EQ(1u, session_reuse->references);
 
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
   EXPECT_EQ(0u, cache.size());
@@ -205,9 +173,6 @@ TEST_F(SSLClientSessionCacheTest, MixedUse) {
   EXPECT_EQ(session_single.get(), cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
   EXPECT_EQ(0u, cache.size());
-
-  EXPECT_EQ(1u, session_single->references);
-  EXPECT_EQ(1u, session_reuse->references);
 
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
   EXPECT_EQ(0u, cache.size());
@@ -226,9 +191,6 @@ TEST_F(SSLClientSessionCacheTest, MixedUse) {
   EXPECT_EQ(session_reuse.get(), cache.Lookup("key2").get());
   EXPECT_EQ(session_reuse.get(), cache.Lookup("key2").get());
   EXPECT_EQ(1u, cache.size());
-
-  EXPECT_EQ(2u, session_single->references);
-  EXPECT_EQ(2u, session_reuse->references);
 }
 
 // Test that a session may be inserted at two different keys. This should never
@@ -238,7 +200,6 @@ TEST_F(SSLClientSessionCacheTest, DoubleInsert) {
   SSLClientSessionCache cache(config);
 
   bssl::UniquePtr<SSL_SESSION> session = NewSSLSession();
-  EXPECT_EQ(1u, session->references);
 
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
@@ -249,21 +210,15 @@ TEST_F(SSLClientSessionCacheTest, DoubleInsert) {
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
   EXPECT_EQ(1u, cache.size());
 
-  EXPECT_EQ(2u, session->references);
-
   cache.Insert("key2", session.get());
   EXPECT_EQ(session.get(), cache.Lookup("key1").get());
   EXPECT_EQ(session.get(), cache.Lookup("key2").get());
   EXPECT_EQ(2u, cache.size());
 
-  EXPECT_EQ(3u, session->references);
-
   cache.Flush();
   EXPECT_EQ(nullptr, cache.Lookup("key1").get());
   EXPECT_EQ(nullptr, cache.Lookup("key2").get());
   EXPECT_EQ(0u, cache.size());
-
-  EXPECT_EQ(1u, session->references);
 }
 
 // Tests that the session cache's size is correctly bounded.
@@ -402,6 +357,8 @@ TEST_F(SSLClientSessionCacheTest, LookupExpirationCheck) {
 
 // Test that SSL cache is flushed on low memory notifications
 TEST_F(SSLClientSessionCacheTest, TestFlushOnMemoryNotifications) {
+  base::test::ScopedTaskEnvironment scoped_task_environment;
+
   // kExpirationCheckCount is set to a suitably large number so the automated
   // pruning never triggers.
   const size_t kExpirationCheckCount = 1000;
@@ -477,7 +434,7 @@ TEST_P(SSLClientSessionCacheMemoryDumpTest, TestDumpMemoryStats) {
 
   base::trace_event::MemoryDumpArgs dump_args = {GetParam()};
   std::unique_ptr<base::trace_event::ProcessMemoryDump> process_memory_dump(
-      new base::trace_event::ProcessMemoryDump(nullptr, dump_args));
+      new base::trace_event::ProcessMemoryDump(dump_args));
   cache.DumpMemoryStats(process_memory_dump.get());
 
   using Entry = base::trace_event::MemoryAllocatorDump::Entry;

@@ -4,8 +4,9 @@
 
 #include "ui/views/widget/widget_delegate.h"
 
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
 #include "ui/views/views_delegate.h"
@@ -17,9 +18,9 @@ namespace views {
 ////////////////////////////////////////////////////////////////////////////////
 // WidgetDelegate:
 
-WidgetDelegate::WidgetDelegate()
-    : default_contents_view_(NULL),
-      can_activate_(true) {
+WidgetDelegate::WidgetDelegate() = default;
+WidgetDelegate::~WidgetDelegate() {
+  CHECK(can_delete_this_) << "A WidgetDelegate must outlive its Widget";
 }
 
 void WidgetDelegate::OnWidgetMove() {
@@ -74,8 +75,8 @@ ui::ModalType WidgetDelegate::GetModalType() const {
   return ui::MODAL_TYPE_NONE;
 }
 
-ui::AXRole WidgetDelegate::GetAccessibleWindowRole() const {
-  return ui::AX_ROLE_WINDOW;
+ax::mojom::Role WidgetDelegate::GetAccessibleWindowRole() const {
+  return ax::mojom::Role::kWindow;
 }
 
 base::string16 WidgetDelegate::GetAccessibleWindowTitle() const {
@@ -94,14 +95,6 @@ bool WidgetDelegate::ShouldShowCloseButton() const {
   return true;
 }
 
-bool WidgetDelegate::ShouldHandleSystemCommands() const {
-  const Widget* widget = GetWidget();
-  if (!widget)
-    return false;
-
-  return widget->non_client_view() != NULL;
-}
-
 gfx::ImageSkia WidgetDelegate::GetWindowAppIcon() {
   // Use the window icon as app icon by default.
   return GetWindowIcon();
@@ -118,9 +111,6 @@ bool WidgetDelegate::ShouldShowWindowIcon() const {
 
 bool WidgetDelegate::ExecuteWindowsCommand(int command_id) {
   return false;
-}
-
-void WidgetDelegate::HandleKeyboardCode(ui::KeyboardCode code) {
 }
 
 std::string WidgetDelegate::GetWindowName() const {

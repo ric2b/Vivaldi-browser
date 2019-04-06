@@ -8,6 +8,9 @@
 #include <memory>
 #include <string>
 
+#include "base/optional.h"
+#include "extensions/common/constants.h"
+
 namespace base {
 class DictionaryValue;
 }
@@ -20,6 +23,8 @@ namespace gfx {
 class ImageSkia;
 }
 
+class Browser;
+class GURL;
 class Profile;
 
 namespace extensions {
@@ -108,6 +113,17 @@ bool CanHostedAppsOpenInWindows();
 
 // Returns true for custodian-installed extensions in a supervised profile.
 bool IsExtensionSupervised(const Extension* extension, Profile* profile);
+
+// Finds the first PWA with |url| in its scope, returns nullptr if there are
+// none.
+const Extension* GetInstalledPwaForUrl(
+    content::BrowserContext* context,
+    const GURL& url,
+    base::Optional<LaunchContainer> launch_container_filter = base::nullopt);
+
+// Finds the first PWA with the active tab's url in its scope, returns nullptr
+// if there are none or the tab's is not secure.
+const Extension* GetPwaForSecureActiveTab(Browser* browser);
 
 }  // namespace util
 }  // namespace extensions

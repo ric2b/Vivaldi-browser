@@ -102,33 +102,31 @@ class MEDIA_EXPORT AudioDecoderConfig {
     should_discard_decoder_delay_ = false;
   }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
-  // The sampling rate on decoder input.  Note that |samples_per_second| refers
-  // to the output sampling rate.
-  // TODO(wdzierzanowski): This should become unnecessary when DNA-35764 is
-  // fixed.
-  int input_samples_per_second() const {
-    return input_samples_per_second_ > 0 ? input_samples_per_second_
-                                         : samples_per_second_;
+  // Optionally set by renderer to provide hardware layout when playback
+  // starts. Intentionally not part of IsValid(). Layout is not updated for
+  // device changes - use with care!
+  void set_target_output_channel_layout(ChannelLayout output_layout) {
+    target_output_channel_layout_ = output_layout;
   }
-  void set_input_samples_per_second(int input_samples_per_second) {
-    input_samples_per_second_ = input_samples_per_second;
+  ChannelLayout target_output_channel_layout() const {
+    return target_output_channel_layout_;
   }
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
  private:
-  AudioCodec codec_;
-  SampleFormat sample_format_;
-  int bytes_per_channel_;
-  ChannelLayout channel_layout_;
-  int channels_;
-  int samples_per_second_;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
-  int input_samples_per_second_;
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  int bytes_per_frame_;
+  AudioCodec codec_ = kUnknownAudioCodec;
+  SampleFormat sample_format_ = kUnknownSampleFormat;
+  int bytes_per_channel_ = 0;
+  int samples_per_second_ = 0;
+  int bytes_per_frame_ = 0;
   std::vector<uint8_t> extra_data_;
   EncryptionScheme encryption_scheme_;
+
+  // Layout and count of the *stream* being decoded.
+  ChannelLayout channel_layout_ = CHANNEL_LAYOUT_UNSUPPORTED;
+  int channels_ = 0;
+
+  // Layout of the output hardware. Optionally set. See setter comments.
+  ChannelLayout target_output_channel_layout_ = CHANNEL_LAYOUT_NONE;
 
   // |seek_preroll_| is the duration of the data that the decoder must decode
   // before the decoded data is valid.
@@ -137,11 +135,11 @@ class MEDIA_EXPORT AudioDecoderConfig {
   // |codec_delay_| is the number of frames the decoder should discard before
   // returning decoded data.  This value can include both decoder delay as well
   // as padding added during encoding.
-  int codec_delay_;
+  int codec_delay_ = 0;
 
   // Indicates if a decoder should implicitly discard decoder delay without it
   // being explicitly marked in discard padding.
-  bool should_discard_decoder_delay_;
+  bool should_discard_decoder_delay_ = true;
 
   // Not using DISALLOW_COPY_AND_ASSIGN here intentionally to allow the compiler
   // generated copy constructor and assignment operator. Since the extra data is

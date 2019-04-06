@@ -8,7 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
-#include "device/bluetooth/public/interfaces/test/fake_bluetooth.mojom.h"
+#include "device/bluetooth/public/mojom/test/fake_bluetooth.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace bluetooth {
@@ -43,7 +43,11 @@ void FakeBluetooth::SimulateCentral(mojom::CentralState state,
 
 void FakeBluetooth::AllResponsesConsumed(
     AllResponsesConsumedCallback callback) {
-  std::move(callback).Run(fake_central_->AllResponsesConsumed());
+  if (fake_central_) {
+    std::move(callback).Run(fake_central_->AllResponsesConsumed());
+    return;
+  }
+  std::move(callback).Run(true);
 }
 
 }  // namespace bluetooth

@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -14,7 +16,7 @@
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_info.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/common/service_worker/service_worker_provider_type.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_provider_type.mojom.h"
 
 namespace content {
 
@@ -52,7 +54,7 @@ class CONTENT_EXPORT ServiceWorkerContextWatcher
 
   void GetStoredRegistrationsOnIOThread();
   void OnStoredRegistrationsOnIOThread(
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       const std::vector<ServiceWorkerRegistrationInfo>& stored_registrations);
   void StopOnIOThread();
 
@@ -96,24 +98,16 @@ class CONTENT_EXPORT ServiceWorkerContextWatcher
       base::Time script_response_time,
       base::Time script_last_modified) override;
   void OnErrorReported(int64_t version_id,
-                       int process_id,
-                       int thread_id,
                        const ErrorInfo& info) override;
   void OnReportConsoleMessage(int64_t version_id,
-                              int process_id,
-                              int thread_id,
                               const ConsoleMessage& message) override;
-  void OnControlleeAdded(
-      int64_t version_id,
-      const std::string& uuid,
-      int process_id,
-      int route_id,
-      const base::Callback<WebContents*(void)>& web_contents_getter,
-      blink::mojom::ServiceWorkerProviderType type) override;
+  void OnControlleeAdded(int64_t version_id,
+                         const std::string& uuid,
+                         const ServiceWorkerClientInfo& info) override;
   void OnControlleeRemoved(int64_t version_id,
                            const std::string& uuid) override;
-  void OnRegistrationStored(int64_t registration_id,
-                            const GURL& pattern) override;
+  void OnRegistrationCompleted(int64_t registration_id,
+                               const GURL& pattern) override;
   void OnRegistrationDeleted(int64_t registration_id,
                              const GURL& pattern) override;
 

@@ -7,11 +7,13 @@
 
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
 #include "ui/base/ui_base_types.h"
 
 namespace content {
+
+class RenderWidgetHostViewBase;
 
 // Emulates touch input with mouse and keyboard.
 class CONTENT_EXPORT TouchEmulatorClient {
@@ -20,7 +22,8 @@ class CONTENT_EXPORT TouchEmulatorClient {
 
   virtual void ForwardEmulatedGestureEvent(
       const blink::WebGestureEvent& event) = 0;
-  virtual void ForwardEmulatedTouchEvent(const blink::WebTouchEvent& event) = 0;
+  virtual void ForwardEmulatedTouchEvent(const blink::WebTouchEvent& event,
+                                         RenderWidgetHostViewBase* target) = 0;
   virtual void SetCursor(const WebCursor& cursor) = 0;
   virtual void ShowContextMenuAtPoint(const gfx::Point& point,
                                       const ui::MenuSourceType source_type) = 0;

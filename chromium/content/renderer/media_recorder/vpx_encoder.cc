@@ -45,8 +45,11 @@ void VpxEncoder::ShutdownEncoder(std::unique_ptr<base::Thread> encoding_thread,
 VpxEncoder::VpxEncoder(
     bool use_vp9,
     const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
-    int32_t bits_per_second)
-    : VideoTrackRecorder::Encoder(on_encoded_video_callback, bits_per_second),
+    int32_t bits_per_second,
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner)
+    : VideoTrackRecorder::Encoder(on_encoded_video_callback,
+                                  bits_per_second,
+                                  std::move(main_task_runner)),
       use_vp9_(use_vp9) {
   codec_config_.g_timebase.den = 0;        // Not initialized.
   alpha_codec_config_.g_timebase.den = 0;  // Not initialized.
@@ -56,8 +59,8 @@ VpxEncoder::VpxEncoder(
 VpxEncoder::~VpxEncoder() {
   main_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&VpxEncoder::ShutdownEncoder,
-                     base::Passed(&encoding_thread_), base::Passed(&encoder_)));
+      base::BindOnce(&VpxEncoder::ShutdownEncoder, std::move(encoding_thread_),
+                     std::move(encoder_)));
 }
 
 bool VpxEncoder::CanEncodeAlphaChannel() {
@@ -66,7 +69,7 @@ bool VpxEncoder::CanEncodeAlphaChannel() {
 
 void VpxEncoder::EncodeOnEncodingTaskRunner(scoped_refptr<VideoFrame> frame,
                                             base::TimeTicks capture_timestamp) {
-  TRACE_EVENT0("video", "VpxEncoder::EncodeOnEncodingTaskRunner");
+  TRACE_EVENT0("media", "VpxEncoder::EncodeOnEncodingTaskRunner");
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
 
   const gfx::Size frame_size = frame->visible_rect().size();
@@ -131,8 +134,8 @@ void VpxEncoder::EncodeOnEncodingTaskRunner(scoped_refptr<VideoFrame> frame,
   origin_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(OnFrameEncodeCompleted, on_encoded_video_callback_,
-                     video_params, base::Passed(&data),
-                     base::Passed(&alpha_data), capture_timestamp, keyframe));
+                     video_params, std::move(data), std::move(alpha_data),
+                     capture_timestamp, keyframe));
 }
 
 void VpxEncoder::DoEncode(vpx_codec_ctx_t* const encoder,

@@ -14,10 +14,9 @@ group("all") {
 
   deps = [
     ":mash_catalog",
-    "//components/leveldb",
+    "//components/services/leveldb",
     "//mash/catalog_viewer",
     "//mash/example",
-    "//mash/quick_launch",
     "//mash/runner",
     "//mash/session",
     "//mash/simple_wm",
@@ -27,9 +26,8 @@ group("all") {
   # Build on platforms that support ash.
   if (is_chromeos) {
     deps += [
-      "//ash/autoclick/mus:accessibility_autoclick",
-      "//ash/standalone:ash_standalone",
-      "//ash/touch_hud/mus:touch_hud",
+      "//ash/components/autoclick:autoclick_app",
+      "//ash/components/quick_launch:quick_launch_app",
       "//mash:mash_unittests",
     ]
   }
@@ -41,13 +39,10 @@ catalog("catalog") {
   testonly = true
 
   standalone_services = [
-    "//components/leveldb:manifest",
+    "//components/services/leveldb:manifest",
     "//mash/catalog_viewer:manifest",
-    "//mash/quick_launch:manifest",
     "//mash/session:manifest",
     "//mash/task_viewer:manifest",
-    "//services/ui:manifest",
-    "//services/ui/demo:manifest",
     "//services/ui/ime/test_ime_driver:manifest",
     "//services/viz:manifest",
   ]
@@ -59,12 +54,12 @@ catalog("catalog") {
   if (is_chromeos) {
     standalone_services += [
       "//ash:manifest",
-      "//ash/standalone:manifest",
+      "//ash/components/quick_launch:manifest",
     ]
   }
 
-  if (is_linux && !is_android) {
-    standalone_services += [ "//components/font_service:manifest" ]
+  if (is_linux) {
+    standalone_services += [ "//components/services/font:manifest" ]
   }
 
   if (enable_nacl) {
@@ -104,7 +99,7 @@ if (is_chromeos) {
       "//cc",
       "//cc:test_support",
       "//components/viz/service",
-      "//mojo/edk/system",
+      "//mojo/core/embedder",
       "//services/catalog:lib",
       "//ui/aura",
       "//ui/base",

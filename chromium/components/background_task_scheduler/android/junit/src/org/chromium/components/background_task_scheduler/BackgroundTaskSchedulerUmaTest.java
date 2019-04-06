@@ -18,17 +18,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.Set;
 
 /** Unit tests for {@link BackgroundTaskSchedulerUma}. */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class BackgroundTaskSchedulerUmaTest {
     @Spy
@@ -37,7 +36,6 @@ public class BackgroundTaskSchedulerUmaTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
         BackgroundTaskSchedulerUma.setInstanceForTesting(mUmaSpy);
         doNothing().when(mUmaSpy).assertNativeIsLoaded();
     }
@@ -84,7 +82,12 @@ public class BackgroundTaskSchedulerUmaTest {
         assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_DOWNLOAD_RESUMPTION,
                 BackgroundTaskSchedulerUma.toUmaEnumValueFromTaskId(
                         TaskIds.DOWNLOAD_RESUMPTION_JOB_ID));
-        assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_COUNT, 14);
+        assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_FEED_REFRESH,
+                BackgroundTaskSchedulerUma.toUmaEnumValueFromTaskId(TaskIds.FEED_REFRESH_JOB_ID));
+        assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_COMPONENT_UPDATE,
+                BackgroundTaskSchedulerUma.toUmaEnumValueFromTaskId(
+                        TaskIds.COMPONENT_UPDATE_JOB_ID));
+        assertEquals(BackgroundTaskSchedulerUma.BACKGROUND_TASK_COUNT, 16);
     }
 
     @Test

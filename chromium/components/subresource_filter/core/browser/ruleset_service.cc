@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_enumerator.h"
-#include "base/files/file_proxy.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -21,15 +20,17 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/trace_event/trace_event.h"
+#include "base/trace_event/trace_event_argument.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/subresource_filter/core/browser/copying_file_stream.h"
 #include "components/subresource_filter/core/browser/ruleset_service_delegate.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
 #include "components/subresource_filter/core/common/time_measurements.h"
-#include "components/url_pattern_index/copying_file_stream.h"
+#include "components/subresource_filter/core/common/unindexed_ruleset.h"
 #include "components/url_pattern_index/proto/rules.pb.h"
-#include "components/url_pattern_index/unindexed_ruleset.h"
 #include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h"
 
 namespace subresource_filter {
@@ -137,6 +138,14 @@ void IndexedRulesetVersion::SaveToPrefs(PrefService* local_state) const {
                          content_version);
 }
 
+std::unique_ptr<base::trace_event::TracedValue>
+IndexedRulesetVersion::ToTracedValue() const {
+  auto value = std::make_unique<base::trace_event::TracedValue>();
+  value->SetString("content_version", content_version);
+  value->SetInteger("format_version", format_version);
+  return value;
+}
+
 // IndexedRulesetLocator ------------------------------------------------------
 
 // static
@@ -214,11 +223,11 @@ decltype(&base::ReplaceFile) RulesetService::g_replace_file_func =
 
 RulesetService::RulesetService(
     PrefService* local_state,
-    scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner,
     RulesetServiceDelegate* delegate,
     const base::FilePath& indexed_ruleset_base_dir)
     : local_state_(local_state),
-      blocking_task_runner_(blocking_task_runner),
+      background_task_runner_(std::move(background_task_runner)),
       delegate_(delegate),
       is_after_startup_(false),
       indexed_ruleset_base_dir_(indexed_ruleset_base_dir) {
@@ -228,6 +237,9 @@ RulesetService::RulesetService(
 
   IndexedRulesetVersion most_recently_indexed_version;
   most_recently_indexed_version.ReadFromPrefs(local_state_);
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("loading"),
+               "RulesetService::RulesetService", "prefs_version",
+               most_recently_indexed_version.ToTracedValue());
   if (most_recently_indexed_version.IsValid() &&
       most_recently_indexed_version.IsCurrentFormatVersion()) {
     OpenAndPublishRuleset(most_recently_indexed_version);
@@ -351,11 +363,10 @@ bool RulesetService::IndexRuleset(base::File unindexed_ruleset_file,
   int64_t unindexed_ruleset_size = unindexed_ruleset_file.GetLength();
   if (unindexed_ruleset_size < 0)
     return false;
-  url_pattern_index::CopyingFileInputStream copying_stream(
-      std::move(unindexed_ruleset_file));
+  CopyingFileInputStream copying_stream(std::move(unindexed_ruleset_file));
   google::protobuf::io::CopyingInputStreamAdaptor zero_copy_stream_adaptor(
       &copying_stream, 4096 /* buffer_size */);
-  url_pattern_index::UnindexedRulesetReader reader(&zero_copy_stream_adaptor);
+  UnindexedRulesetReader reader(&zero_copy_stream_adaptor);
 
   size_t num_unsupported_rules = 0;
   url_pattern_index::proto::FilteringRules ruleset_chunk;
@@ -434,7 +445,7 @@ void RulesetService::InitializeAfterStartup() {
 
   IndexedRulesetVersion most_recently_indexed_version;
   most_recently_indexed_version.ReadFromPrefs(local_state_);
-  blocking_task_runner_->PostTask(
+  background_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&IndexedRulesetLocator::DeleteObsoleteRulesets,
                  indexed_ruleset_base_dir_, most_recently_indexed_version));
@@ -452,7 +463,7 @@ void RulesetService::IndexAndStoreRuleset(
     const WriteRulesetCallback& success_callback) {
   DCHECK(!unindexed_ruleset_info.content_version.empty());
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(), FROM_HERE,
+      background_task_runner_.get(), FROM_HERE,
       base::Bind(&RulesetService::IndexAndWriteRuleset,
                  indexed_ruleset_base_dir_, unindexed_ruleset_info),
       base::Bind(&RulesetService::OnWrittenRuleset, AsWeakPtr(),
@@ -471,38 +482,26 @@ void RulesetService::OnWrittenRuleset(
 
 void RulesetService::OpenAndPublishRuleset(
     const IndexedRulesetVersion& version) {
-  ruleset_data_.reset(new base::FileProxy(blocking_task_runner_.get()));
-  // On Windows, open the file with FLAG_SHARE_DELETE to allow deletion while
-  // there are handles to it still open. Note that creating a new file at the
-  // same path would still be impossible until after the last handle is closed.
-  ruleset_data_->CreateOrOpen(
+  const base::FilePath file_path =
       IndexedRulesetLocator::GetRulesetDataFilePath(
           IndexedRulesetLocator::GetSubdirectoryPathForVersion(
-              indexed_ruleset_base_dir_, version)),
-      base::File::FLAG_OPEN | base::File::FLAG_READ |
-          base::File::FLAG_SHARE_DELETE,
-      base::Bind(&RulesetService::OnOpenedRuleset, AsWeakPtr()));
+              indexed_ruleset_base_dir_, version));
+
+  delegate_->TryOpenAndSetRulesetFile(
+      file_path, base::BindOnce(&RulesetService::OnRulesetSet, AsWeakPtr()));
 }
 
-void RulesetService::OnOpenedRuleset(base::File::Error error) {
+void RulesetService::OnRulesetSet(base::File file) {
   // The file has just been successfully written, so a failure here is unlikely
   // unless |indexed_ruleset_base_dir_| has been tampered with or there are disk
   // errors. Still, restore the invariant that a valid version in preferences
   // always points to an existing version of disk by invalidating the prefs.
-  if (error != base::File::FILE_OK) {
+  if (!file.IsValid()) {
     IndexedRulesetVersion().SaveToPrefs(local_state_);
     return;
   }
 
-  // A second call to OpenAndPublishRuleset() may have reset |ruleset_data_| to
-  // a new instance that is in the process of calling CreateOrOpen() on a newer
-  // version. Bail out.
-  DCHECK(ruleset_data_);
-  if (!ruleset_data_->IsValid())
-    return;
-
-  DCHECK_EQ(error, base::File::Error::FILE_OK);
-  delegate_->PublishNewRulesetVersion(ruleset_data_->DuplicateFile());
+  delegate_->PublishNewRulesetVersion(std::move(file));
 }
 
 }  // namespace subresource_filter

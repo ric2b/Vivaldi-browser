@@ -21,6 +21,10 @@ class WindowParentingClient;
 }
 }
 
+namespace ui {
+enum class DomCode;
+}
+
 namespace headless {
 
 class HeadlessWindowTreeHost : public aura::WindowTreeHost,
@@ -42,10 +46,16 @@ class HeadlessWindowTreeHost : public aura::WindowTreeHost,
   void ShowImpl() override;
   void HideImpl() override;
   gfx::Rect GetBoundsInPixels() const override;
-  void SetBoundsInPixels(const gfx::Rect& bounds) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds,
+                         const viz::LocalSurfaceId& local_surface_id) override;
   gfx::Point GetLocationOnScreenInPixels() const override;
   void SetCapture() override;
   void ReleaseCapture() override;
+  bool CaptureSystemKeyEventsImpl(
+      base::Optional<base::flat_set<ui::DomCode>> codes) override;
+  void ReleaseSystemKeyEventCapture() override;
+  bool IsKeyLocked(ui::DomCode dom_code) override;
+  base::flat_map<std::string, std::string> GetKeyboardLayoutMap() override;
   void SetCursorNative(gfx::NativeCursor cursor_type) override;
   void MoveCursorToScreenLocationInPixels(const gfx::Point& location) override;
   void OnCursorVisibilityChangedNative(bool show) override;

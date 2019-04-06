@@ -7,10 +7,8 @@
 #include "base/bind.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
-#include "printing/features/features.h"
-#include "third_party/WebKit/public/web/WebContextMenuData.h"
-
-#include "app/vivaldi_apptools.h"
+#include "printing/buildflags/buildflags.h"
+#include "third_party/blink/public/web/web_context_menu_data.h"
 
 using blink::WebContextMenuData;
 using content::WebContents;
@@ -65,10 +63,9 @@ bool ContextMenuContentType::SupportsGroup(int group) {
   if (IsDevToolsURL(params_.page_url)) {
     // DevTools mostly provides custom context menu and uses
     // only the following default options.
-    if (group != ITEM_GROUP_CUSTOM &&
-        group != ITEM_GROUP_EDITABLE &&
-        group != ITEM_GROUP_COPY &&
-        group != ITEM_GROUP_DEVELOPER) {
+    if (group != ITEM_GROUP_CUSTOM && group != ITEM_GROUP_EDITABLE &&
+        group != ITEM_GROUP_COPY && group != ITEM_GROUP_DEVELOPER &&
+        group != ITEM_GROUP_SEARCH_PROVIDER) {
       return false;
     }
   }
@@ -106,6 +103,9 @@ bool ContextMenuContentType::SupportsGroupInternal(int group) {
 
     case ITEM_GROUP_LINK:
       return has_link;
+
+    case ITEM_GROUP_SMART_SELECTION:
+      return has_selection && !has_link;
 
     case ITEM_GROUP_MEDIA_IMAGE:
       return params_.media_type == WebContextMenuData::kMediaTypeImage;

@@ -13,10 +13,7 @@
 #include "ui/views/controls/button/button.h"
 
 class Profile;
-
-namespace gfx {
-class FontList;
-}
+enum class OmniboxTint;
 
 namespace views {
 class Label;
@@ -35,25 +32,27 @@ class KeywordHintView : public views::Button {
  public:
   KeywordHintView(views::ButtonListener* listener,
                   Profile* profile,
-                  const gfx::FontList& font_list,
-                  const gfx::FontList& chip_font_list,
-                  SkColor text_color,
-                  SkColor background_color);
+                  OmniboxTint tint);
   ~KeywordHintView() override;
 
-  void SetKeyword(const base::string16& keyword);
+  void SetKeyword(const base::string16& keyword,
+                  bool popup_open,
+                  OmniboxTint tint);
 
- private:
   // views::View:
-  gfx::Size CalculatePreferredSize() const override;
+  gfx::Insets GetInsets() const override;
   // The minimum size is just big enough to show the tab.
   gfx::Size GetMinimumSize() const override;
-  void Layout() override;
   const char* GetClassName() const override;
+  void Layout() override;
+  gfx::Size CalculatePreferredSize() const override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
-  views::Label* CreateLabel(const gfx::FontList& font_list,
-                            SkColor text_color,
-                            SkColor background_color);
+ private:
+  // Creates a label for non-chip text.
+  views::Label* CreateLabel(SkColor text_color, SkColor background_color);
+
+  int GetCornerRadius() const;
 
   Profile* profile_;
 

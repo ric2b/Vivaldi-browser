@@ -18,8 +18,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
@@ -41,7 +39,6 @@ import java.util.concurrent.Callable;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure // crbug.com/637448
 public class TypedUrlsTest {
     @Rule
     public SyncTestRule mSyncTestRule = new SyncTestRule();
@@ -76,13 +73,10 @@ public class TypedUrlsTest {
         assertServerTypedUrlCountWithName(0, URL);
     }
 
-    /*
     // Test syncing a typed URL from client to server.
+    @Test
     @LargeTest
     @Feature({"Sync"})
-    */
-    @Test
-    @FlakyTest(message = "https://crbug.com/592437")
     public void testUploadTypedUrl() {
         loadUrlByTyping(URL);
         waitForClientTypedUrlCount(1);
@@ -134,12 +128,16 @@ public class TypedUrlsTest {
     }
 
     private void addServerTypedUrl(String url) throws InterruptedException {
-        EntitySpecifics specifics = new EntitySpecifics();
-        specifics.typedUrl = new TypedUrlSpecifics();
-        specifics.typedUrl.url = url;
-        specifics.typedUrl.title = url;
-        specifics.typedUrl.visits = new long[] {getCurrentTimeInMicroseconds()};
-        specifics.typedUrl.visitTransitions = new int[]{SyncEnums.TYPED};
+        EntitySpecifics specifics =
+                EntitySpecifics.newBuilder()
+                        .setTypedUrl(TypedUrlSpecifics.newBuilder()
+                                             .setUrl(url)
+                                             .setTitle(url)
+                                             .addVisits(getCurrentTimeInMicroseconds())
+                                             .addVisitTransitions(
+                                                     SyncEnums.PageTransition.TYPED.getNumber())
+                                             .build())
+                        .build();
         mSyncTestRule.getFakeServerHelper().injectUniqueClientEntity(url /* name */, specifics);
     }
 

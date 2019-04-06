@@ -6,11 +6,10 @@
 
 #import <UIKit/UIKit.h>
 
-#include "base/mac/bind_objc_block.h"
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/ios/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #include "base/values.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/test/fakes/test_web_state_delegate.h"
 #import "ios/web/public/test/web_test_with_web_state.h"
@@ -21,8 +20,8 @@
 #error "This file requires ARC support."
 #endif
 
-using testing::WaitUntilConditionOrTimeout;
-using testing::kWaitForJSCompletionTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForJSCompletionTimeout;
 
 namespace web {
 
@@ -31,7 +30,7 @@ typedef web::WebTestWithWebState WebStateTest;
 
 // Tests script execution with and without callback.
 TEST_F(WebStateTest, ScriptExecution) {
-  LoadHtml("<html></html>");
+  ASSERT_TRUE(LoadHtml("<html></html>"));
 
   // Execute script without callback.
   web_state()->ExecuteJavaScript(base::UTF8ToUTF16("window.foo = 'bar'"));
@@ -39,12 +38,11 @@ TEST_F(WebStateTest, ScriptExecution) {
   // Execute script with callback.
   __block std::unique_ptr<base::Value> execution_result;
   __block bool execution_complete = false;
-  web_state()->ExecuteJavaScript(
-      base::UTF8ToUTF16("window.foo"),
-      base::BindBlockArc(^(const base::Value* value) {
-        execution_result = value->CreateDeepCopy();
-        execution_complete = true;
-      }));
+  web_state()->ExecuteJavaScript(base::UTF8ToUTF16("window.foo"),
+                                 base::BindOnce(^(const base::Value* value) {
+                                   execution_result = value->CreateDeepCopy();
+                                   execution_complete = true;
+                                 }));
   WaitForCondition(^{
     return execution_complete;
   });
@@ -61,7 +59,7 @@ TEST_F(WebStateTest, UserScriptExecution) {
   web_state()->SetDelegate(&delegate);
   ASSERT_TRUE(delegate.child_windows().empty());
 
-  LoadHtml("<html></html>");
+  ASSERT_TRUE(LoadHtml("<html></html>"));
   web_state()->ExecuteUserJavaScript(@"window.open('', target='_blank');");
 
   web::TestWebStateDelegate* delegate_ptr = &delegate;
@@ -77,7 +75,7 @@ TEST_F(WebStateTest, UserScriptExecution) {
 // Tests loading progress.
 TEST_F(WebStateTest, LoadingProgress) {
   EXPECT_FLOAT_EQ(0.0, web_state()->GetLoadingProgress());
-  LoadHtml("<html></html>");
+  ASSERT_TRUE(LoadHtml("<html></html>"));
   WaitForCondition(^bool() {
     return web_state()->GetLoadingProgress() == 1.0;
   });
@@ -88,8 +86,9 @@ TEST_F(WebStateTest, LoadingProgress) {
 TEST_F(WebStateTest, OverridingWebKitObject) {
   // Add a script command handler.
   __block bool message_received = false;
-  const web::WebState::ScriptCommandCallback callback = base::BindBlockArc(
-      ^bool(const base::DictionaryValue&, const GURL&, bool) {
+  const web::WebState::ScriptCommandCallback callback =
+      base::BindRepeating(^bool(const base::DictionaryValue&, const GURL&,
+                                /*interacted*/ bool, /*is_main_frame*/ bool) {
         message_received = true;
         return true;
       });
@@ -97,11 +96,11 @@ TEST_F(WebStateTest, OverridingWebKitObject) {
 
   // Load the page which overrides window.webkit object and wait until the
   // test message is received.
-  LoadHtml(
+  ASSERT_TRUE(LoadHtml(
       "<script>"
       "  webkit = undefined;"
       "  __gCrWeb.message.invokeOnHost({'command': 'test.webkit-overriding'});"
-      "</script>");
+      "</script>"));
 
   WaitForCondition(^{
     return message_received;
@@ -143,9 +142,9 @@ TEST_F(WebStateTest, ReloadWithOriginalTypeWithEmptyNavigationManager) {
 
 // Tests that the snapshot method returns an image of a rendered html page.
 TEST_F(WebStateTest, Snapshot) {
-  LoadHtml(
-      "<html><div style='background-color:#FF0000; width:50%; "
-      "height:100%;'></div></html>");
+  ASSERT_TRUE(
+      LoadHtml("<html><div style='background-color:#FF0000; width:50%; "
+               "height:100%;'></div></html>"));
   __block bool snapshot_complete = false;
   [[[UIApplication sharedApplication] keyWindow]
       addSubview:web_state()->GetView()];
@@ -154,7 +153,7 @@ TEST_F(WebStateTest, Snapshot) {
   base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.2));
   CGSize target_size = CGSizeMake(100.0f, 100.0f);
   web_state()->TakeSnapshot(
-      base::BindBlockArc(^(const gfx::Image& snapshot) {
+      base::BindOnce(^(gfx::Image snapshot) {
         ASSERT_FALSE(snapshot.IsEmpty());
         EXPECT_EQ(snapshot.Width(), target_size.width);
         EXPECT_EQ(snapshot.Height(), target_size.height);
@@ -172,6 +171,79 @@ TEST_F(WebStateTest, Snapshot) {
   WaitForCondition(^{
     return snapshot_complete;
   });
+}
+
+// Tests that message sent from main frame triggers the ScriptCommandCallback
+// with |is_main_frame| = true.
+TEST_F(WebStateTest, MessageFromMainFrame) {
+  // Add a script command handler.
+  __block bool message_received = false;
+  __block bool message_from_main_frame = false;
+  __block base::Value message_value;
+  const web::WebState::ScriptCommandCallback callback =
+      base::BindRepeating(^bool(const base::DictionaryValue& value, const GURL&,
+                                bool user_interacted, bool is_main_frame) {
+        message_received = true;
+        message_from_main_frame = is_main_frame;
+        message_value = value.Clone();
+        return true;
+      });
+  web_state()->AddScriptCommandCallback(callback, "test");
+
+  ASSERT_TRUE(LoadHtml(
+      "<script>"
+      "  __gCrWeb.message.invokeOnHost({'command': 'test.from-main-frame'});"
+      "</script>"));
+
+  WaitForCondition(^{
+    return message_received;
+  });
+  web_state()->RemoveScriptCommandCallback("test");
+  EXPECT_TRUE(message_from_main_frame);
+  EXPECT_TRUE(message_value.is_dict());
+  EXPECT_EQ(message_value.DictSize(), size_t(1));
+  base::Value* command = message_value.FindKey("command");
+  EXPECT_NE(command, nullptr);
+  EXPECT_TRUE(command->is_string());
+  EXPECT_EQ(command->GetString(), "test.from-main-frame");
+}
+
+// Tests that message sent from main frame triggers the ScriptCommandCallback
+// with |is_main_frame| = false.
+// TODO(crbug.com/857129): Re-enable this test.
+TEST_F(WebStateTest, DISABLED_MessageFromIFrame) {
+  // Add a script command handler.
+  __block bool message_received = false;
+  __block bool message_from_main_frame = false;
+  __block base::Value message_value;
+  const web::WebState::ScriptCommandCallback callback =
+      base::BindRepeating(^bool(const base::DictionaryValue& value, const GURL&,
+                                bool user_interacted, bool is_main_frame) {
+        message_received = true;
+        message_from_main_frame = is_main_frame;
+        message_value = value.Clone();
+        return true;
+      });
+  web_state()->AddScriptCommandCallback(callback, "test");
+
+  ASSERT_TRUE(LoadHtml(
+      "<iframe srcdoc='"
+      "<script>"
+      "  __gCrWeb.message.invokeOnHost({\"command\": \"test.from-iframe\"});"
+      "</script>"
+      "'/>"));
+
+  WaitForCondition(^{
+    return message_received;
+  });
+  web_state()->RemoveScriptCommandCallback("test");
+  EXPECT_FALSE(message_from_main_frame);
+  EXPECT_TRUE(message_value.is_dict());
+  EXPECT_EQ(message_value.DictSize(), size_t(1));
+  base::Value* command = message_value.FindKey("command");
+  EXPECT_NE(command, nullptr);
+  EXPECT_TRUE(command->is_string());
+  EXPECT_EQ(command->GetString(), "test.from-iframe");
 }
 
 // Tests that the web state has an opener after calling SetHasOpener().

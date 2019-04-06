@@ -20,8 +20,16 @@ void TestInkDrop::AnimateToState(InkDropState ink_drop_state) {
   state_ = ink_drop_state;
 }
 
+void TestInkDrop::SetHoverHighlightFadeDurationMs(int duration_ms) {}
+
+void TestInkDrop::UseDefaultHoverHighlightFadeDuration() {}
+
 void TestInkDrop::SnapToActivated() {
   state_ = InkDropState::ACTIVATED;
+}
+
+void TestInkDrop::SnapToHidden() {
+  state_ = InkDropState::HIDDEN;
 }
 
 void TestInkDrop::SetHovered(bool is_hovered) {

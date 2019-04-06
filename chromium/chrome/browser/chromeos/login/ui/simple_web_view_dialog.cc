@@ -4,10 +4,7 @@
 
 #include "chrome/browser/chromeos/login/ui/simple_web_view_dialog.h"
 
-#include "ash/public/cpp/shell_window_ids.h"
-#include "ash/shell.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chromeos/login/helper.h"
@@ -191,7 +188,7 @@ void SimpleWebViewDialog::Init() {
                                       this, true);
 
   // Reload button.
-  reload_ = new ReloadButton(profile_, command_updater_.get());
+  reload_ = new ReloadButton(command_updater_.get());
   reload_->set_triggerable_event_flags(ui::EF_LEFT_MOUSE_BUTTON |
                                        ui::EF_MIDDLE_MOUSE_BUTTON);
   reload_->set_tag(IDC_RELOAD);

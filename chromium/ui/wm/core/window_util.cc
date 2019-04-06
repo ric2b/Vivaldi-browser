@@ -4,12 +4,13 @@
 
 #include "ui/wm/core/window_util.h"
 
-#include "base/memory/ptr_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/wm/core/transient_window_manager.h"
+#include "ui/wm/core/window_properties.h"
 #include "ui/wm/public/activation_client.h"
 
 namespace {
@@ -131,11 +132,6 @@ void Unminimize(aura::Window* window) {
   window->SetProperty(
       aura::client::kShowStateKey,
       window->GetProperty(aura::client::kPreMinimizedShowStateKey));
-  // Clear the property only when the window is actually unminimized.
-  if (window->GetProperty(aura::client::kShowStateKey) !=
-      ui::SHOW_STATE_MINIMIZED) {
-    window->ClearProperty(aura::client::kPreMinimizedShowStateKey);
-  }
 }
 
 aura::Window* GetActivatableWindow(aura::Window* window) {
@@ -211,6 +207,37 @@ bool HasTransientAncestor(const aura::Window* window,
     return true;
   return transient_parent ?
       HasTransientAncestor(transient_parent, ancestor) : false;
+}
+
+void SnapWindowToPixelBoundary(aura::Window* window) {
+  // TODO(malaykeshav): We want to snap each window layer to its parent window
+  // layer. See https://crbug.com/863268 for more info.
+
+  // Root window is already snapped by default.
+  if (window->IsRootWindow()) {
+    window->SetProperty(wm::kSnapChildrenToPixelBoundary, true);
+    return;
+  }
+
+  aura::Window* ancestor_window = window->parent();
+  while (ancestor_window) {
+    bool is_ancestor_window_snapped =
+        ancestor_window->GetProperty(wm::kSnapChildrenToPixelBoundary);
+
+    // Root windows are already snapped by default. Just mark them as snapped.
+    if (ancestor_window->IsRootWindow() && !is_ancestor_window_snapped) {
+      ancestor_window->SetProperty(wm::kSnapChildrenToPixelBoundary, true);
+      is_ancestor_window_snapped = true;
+    }
+
+    if (is_ancestor_window_snapped) {
+      window->SetProperty(wm::kSnapChildrenToPixelBoundary, true);
+      ui::SnapLayerToPhysicalPixelBoundary(ancestor_window->layer(),
+                                           window->layer());
+      return;
+    }
+    ancestor_window = ancestor_window->parent();
+  }
 }
 
 }  // namespace wm

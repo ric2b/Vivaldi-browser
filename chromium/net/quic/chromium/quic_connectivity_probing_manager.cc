@@ -4,6 +4,7 @@
 
 #include "net/quic/chromium/quic_connectivity_probing_manager.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "net/log/net_log.h"
@@ -29,7 +30,7 @@ std::unique_ptr<base::Value> NetLogQuicConnectivityProbingTriggerCallback(
 std::unique_ptr<base::Value> NetLogQuicConnectivityProbingResponseCallback(
     NetworkChangeNotifier::NetworkHandle network,
     IPEndPoint* self_address,
-    QuicSocketAddress* peer_address,
+    quic::QuicSocketAddress* peer_address,
     NetLogCaptureMode capture_mode) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("network", base::Int64ToString(network));
@@ -46,6 +47,7 @@ QuicConnectivityProbingManager::QuicConnectivityProbingManager(
     : delegate_(delegate),
       network_(NetworkChangeNotifier::kInvalidNetworkHandle),
       retry_count_(0),
+      probe_start_time_(base::TimeTicks()),
       task_runner_(task_runner),
       weak_factory_(this) {
   retransmit_timer_.SetTaskRunner(task_runner_);
@@ -89,18 +91,19 @@ void QuicConnectivityProbingManager::CancelProbingIfAny() {
         NetLog::Int64Callback("network", network_));
   }
   network_ = NetworkChangeNotifier::kInvalidNetworkHandle;
-  peer_address_ = QuicSocketAddress();
+  peer_address_ = quic::QuicSocketAddress();
   socket_.reset();
   writer_.reset();
   reader_.reset();
   retry_count_ = 0;
+  probe_start_time_ = base::TimeTicks();
   initial_timeout_ = base::TimeDelta();
   retransmit_timer_.Stop();
 }
 
 void QuicConnectivityProbingManager::StartProbing(
     NetworkChangeNotifier::NetworkHandle network,
-    const QuicSocketAddress& peer_address,
+    const quic::QuicSocketAddress& peer_address,
     std::unique_ptr<DatagramClientSocket> socket,
     std::unique_ptr<QuicChromiumPacketWriter> writer,
     std::unique_ptr<QuicChromiumPacketReader> reader,
@@ -121,6 +124,7 @@ void QuicConnectivityProbingManager::StartProbing(
   socket_ = std::move(socket);
   writer_ = std::move(writer);
   net_log_ = net_log;
+  probe_start_time_ = base::TimeTicks::Now();
 
   // |this| will listen to all socket write events for the probing
   // packet writer.
@@ -137,8 +141,8 @@ void QuicConnectivityProbingManager::StartProbing(
 }
 
 void QuicConnectivityProbingManager::OnConnectivityProbingReceived(
-    const QuicSocketAddress& self_address,
-    const QuicSocketAddress& peer_address) {
+    const quic::QuicSocketAddress& self_address,
+    const quic::QuicSocketAddress& peer_address) {
   if (!socket_) {
     DVLOG(1) << "Probing response is ignored as probing was cancelled "
              << "or succeeded.";
@@ -152,7 +156,7 @@ void QuicConnectivityProbingManager::OnConnectivityProbingReceived(
            << local_address.ToString() << ", to peer ip:port "
            << peer_address_.ToString();
 
-  if (QuicSocketAddressImpl(local_address) != self_address.impl() ||
+  if (quic::QuicSocketAddressImpl(local_address) != self_address.impl() ||
       peer_address_ != peer_address) {
     DVLOG(1) << "Received probing response from peer ip:port "
              << peer_address.ToString() << ", to self ip:port "
@@ -165,7 +169,12 @@ void QuicConnectivityProbingManager::OnConnectivityProbingReceived(
       base::Bind(&NetLogQuicConnectivityProbingResponseCallback, network_,
                  &local_address, &peer_address_));
 
-  // TODO(zhongyi): add metrics collection.
+  UMA_HISTOGRAM_COUNTS_100("Net.QuicSession.ProbingRetryCountUntilSuccess",
+                           retry_count_);
+
+  UMA_HISTOGRAM_TIMES("Net.QuicSession.ProbingTimeInMillisecondsUntilSuccess",
+                      base::TimeTicks::Now() - probe_start_time_);
+
   // Notify the delegate that the probe succeeds and reset everything.
   delegate_->OnProbeNetworkSucceeded(network_, self_address, std::move(socket_),
                                      std::move(writer_), std::move(reader_));

@@ -4,7 +4,6 @@
 
 #include "chrome/browser/budget_service/budget_service_impl.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/budget_service/budget_manager.h"
 #include "chrome/browser/budget_service/budget_manager_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -25,7 +24,7 @@ void BudgetServiceImpl::Create(blink::mojom::BudgetServiceRequest request,
                                content::RenderProcessHost* host,
                                const url::Origin& origin) {
   mojo::MakeStrongBinding(
-      base::MakeUnique<BudgetServiceImpl>(host->GetID(), origin),
+      std::make_unique<BudgetServiceImpl>(host->GetID(), origin),
       std::move(request));
 }
 

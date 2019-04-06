@@ -5,12 +5,17 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_web_state_observer.h"
 
 #include "base/logging.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_web_view_proxy_observer.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/ssl_status.h"
+#include "ios/web/public/url_util.h"
+#import "ios/web/public/web_state/navigation_context.h"
+#import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -20,14 +25,18 @@
 namespace {
 // Returns whether fullscreen should be disabled for |web_state|'s SSL status.
 // This will return true if the visible NavigationItem's SSL has a broken
-// security style or is showing mixed content.
+// security style or is showing mixed content.  If the UI refresh is enabled,
+// fullscreen does not need to be disabled for certificate issues, as the
+// omnibox security indicator is never fully hidden in fullscreen mode.
 bool ShouldDisableFullscreenForWebStateSSL(web::WebState* web_state) {
+  if (IsUIRefreshPhase1Enabled())
+    return false;
   if (!web_state)
     return false;
   web::NavigationManager* manager = web_state->GetNavigationManager();
   if (!manager)
     return false;
-  web::NavigationItem* item = manager->GetVisibleItem();
+  const web::NavigationItem* item = manager->GetVisibleItem();
   if (!item)
     return false;
   const web::SSLStatus& ssl = item->GetSSL();
@@ -73,12 +82,40 @@ void FullscreenWebStateObserver::SetWebState(web::WebState* web_state) {
 void FullscreenWebStateObserver::DidFinishNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
-  model_->ResetForNavigation();
+  const GURL& navigation_url = navigation_context->GetUrl();
+  bool url_changed = web::GURLByRemovingRefFromGURL(navigation_url) !=
+                     web::GURLByRemovingRefFromGURL(last_navigation_url_);
+  last_navigation_url_ = navigation_url;
+  // Due to limitations in WKWebView's rendering, different MIME types must be
+  // inset using different techniques:
+  // - PDFs need to be inset using the scroll view's |contentInset| property or
+  //   the floating page indicator is laid out incorrectly.
+  // - For normal pages, using |contentInset| breaks the layout of fixed-
+  //   position DOM elements, so top padding must be accomplished by updating
+  //   the WKWebView's frame.
+  bool force_content_inset =
+      fullscreen::features::GetActiveViewportExperiment() ==
+      fullscreen::features::ViewportAdjustmentExperiment::CONTENT_INSET;
+  web_state->GetWebViewProxy().shouldUseViewContentInset =
+      force_content_inset ||
+      web_state->GetContentsMimeType() == "application/pdf";
+  // Only reset the model for document-changing navigations or same-document
+  // navigations that update the visible URL.
+  if (!navigation_context->IsSameDocument() || url_changed)
+    model_->ResetForNavigation();
+  // Disable fullscreen if there is a problem with the SSL status.
   SetDisableFullscreenForSSL(ShouldDisableFullscreenForWebStateSSL(web_state));
 }
 
 void FullscreenWebStateObserver::DidStartLoading(web::WebState* web_state) {
   SetIsLoading(true);
+  if (IsUIRefreshPhase1Enabled()) {
+    // This is done to show the toolbar when navigating to a page that is
+    // considered as being in the SameDocument by the NavigationContext, so the
+    // toolbar isn't shown in the DidFinishNavigation. For example this is
+    // needed to load AMP pages from Google Search Result Page.
+    controller_->ResetModel();
+  }
 }
 
 void FullscreenWebStateObserver::DidStopLoading(web::WebState* web_state) {
@@ -104,6 +141,9 @@ void FullscreenWebStateObserver::SetDisableFullscreenForSSL(bool disable) {
 }
 
 void FullscreenWebStateObserver::SetIsLoading(bool loading) {
+  if (IsUIRefreshPhase1Enabled())
+    return;
+
   if (!!loading_disabler_.get() == loading)
     return;
   loading_disabler_ =

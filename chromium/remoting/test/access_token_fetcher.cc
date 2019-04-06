@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/google_api_keys.h"
@@ -80,8 +79,7 @@ void AccessTokenFetcher::GetAccessTokenFromRefreshToken(
 void AccessTokenFetcher::CreateNewGaiaOAuthClientInstance() {
   scoped_refptr<remoting::URLRequestContextGetter> request_context_getter;
   request_context_getter = new remoting::URLRequestContextGetter(
-      base::ThreadTaskRunnerHandle::Get(),   // network_runner
-      base::ThreadTaskRunnerHandle::Get());  // file_runner
+      base::ThreadTaskRunnerHandle::Get());
 
   auth_client_.reset(new gaia::GaiaOAuthClient(request_context_getter.get()));
 }

@@ -16,7 +16,7 @@
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "content/public/common/content_switches.h"
-#include "net/proxy/proxy_config_service_common_unittest.h"
+#include "net/proxy_resolution/proxy_config_service_common_unittest.h"
 #include "url/gurl.h"
 
 namespace {
@@ -159,7 +159,7 @@ class ChromeCommandLinePrefStoreProxyTest
   ChromeCommandLinePrefStoreProxyTest()
       : command_line_(base::CommandLine::NO_PROGRAM) {}
 
-  net::ProxyConfig* proxy_config() { return &proxy_config_; }
+  net::ProxyConfigWithAnnotation* proxy_config() { return &proxy_config_; }
 
   void SetUp() override {
     for (size_t i = 0; i < arraysize(GetParam().switches); i++) {
@@ -183,13 +183,14 @@ class ChromeCommandLinePrefStoreProxyTest
  private:
   base::CommandLine command_line_;
   std::unique_ptr<PrefService> pref_service_;
-  net::ProxyConfig proxy_config_;
+  net::ProxyConfigWithAnnotation proxy_config_;
 };
 
 TEST_P(ChromeCommandLinePrefStoreProxyTest, CommandLine) {
-  EXPECT_EQ(GetParam().auto_detect, proxy_config()->auto_detect());
-  EXPECT_EQ(GetParam().pac_url, proxy_config()->pac_url());
-  EXPECT_TRUE(GetParam().proxy_rules.Matches(proxy_config()->proxy_rules()));
+  EXPECT_EQ(GetParam().auto_detect, proxy_config()->value().auto_detect());
+  EXPECT_EQ(GetParam().pac_url, proxy_config()->value().pac_url());
+  EXPECT_TRUE(
+      GetParam().proxy_rules.Matches(proxy_config()->value().proxy_rules()));
 }
 
 INSTANTIATE_TEST_CASE_P(ChromeCommandLinePrefStoreProxyTestInstance,

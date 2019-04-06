@@ -12,6 +12,7 @@
 #include "base/synchronization/lock.h"
 #include "base/sys_byteorder.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/receiver/audio_decoder.h"
 #include "media/cast/test/utility/audio_utility.h"
@@ -237,6 +238,7 @@ TEST_P(AudioDecoderTest, RecoversFromDroppedFrames) {
   WaitForAllAudioToBeDecoded();
 }
 
+#if !defined(OS_ANDROID)  // https://crbug.com/831999
 INSTANTIATE_TEST_CASE_P(
     AudioDecoderTestScenarios,
     AudioDecoderTest,
@@ -245,6 +247,7 @@ INSTANTIATE_TEST_CASE_P(
          TestScenario(CODEC_AUDIO_PCM16, 2, 48000),
          TestScenario(CODEC_AUDIO_OPUS, 1, 8000),
          TestScenario(CODEC_AUDIO_OPUS, 2, 48000)));
+#endif
 
 }  // namespace cast
 }  // namespace media

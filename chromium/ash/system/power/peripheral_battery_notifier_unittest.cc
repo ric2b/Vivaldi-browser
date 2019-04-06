@@ -14,7 +14,7 @@
 #include "services/ui/public/cpp/input_devices/input_device_client_test_api.h"
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace {
 
@@ -167,7 +167,7 @@ TEST_F(PeripheralBatteryNotifierTest, ExtractBluetoothAddress) {
   EXPECT_TRUE(non_bluetooth_device_info.bluetooth_address.empty());
 }
 
-// TODO(crbug.com/765794): Flaky on ash_unittests --mus.
+// TODO(crbug.com/765794): Flaky on ash_unittests with mus.
 TEST_F(PeripheralBatteryNotifierTest, DISABLED_DeviceRemove) {
   message_center::MessageCenter* message_center =
       message_center::MessageCenter::Get();
@@ -183,7 +183,7 @@ TEST_F(PeripheralBatteryNotifierTest, DISABLED_DeviceRemove) {
               nullptr);
 }
 
-// TODO(crbug.com/765794): Flaky on ash_unittests --mus.
+// TODO(crbug.com/765794): Flaky on ash_unittests with mus.
 TEST_F(PeripheralBatteryNotifierTest, DISABLED_StylusNotification) {
   const std::string kTestStylusBatteryPath =
       "/sys/class/power_supply/hid-AAAA:BBBB:CCCC.DDDD-battery";

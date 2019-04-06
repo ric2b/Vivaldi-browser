@@ -93,7 +93,7 @@ WelcomeWin10UI::WelcomeWin10UI(content::WebUI* web_ui, const GURL& url)
   AddLocalizedStrings(html_source, is_first_run);
 
   // Controls the accelerated default browser flow experiment.
-  html_source->AddBoolean("accelerated_flow_enabled",
+  html_source->AddBoolean("acceleratedFlowEnabled",
                           base::FeatureList::IsEnabled(
                               features::kWin10AcceleratedDefaultBrowserFlow));
 

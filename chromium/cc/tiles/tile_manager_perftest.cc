@@ -7,7 +7,6 @@
 
 #include "base/lazy_instance.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "cc/base/lap_timer.h"
@@ -46,9 +45,9 @@ class TileManagerPerfTest : public TestLayerTreeHostBase {
                base::TimeDelta::FromMilliseconds(kTimeLimitMillis),
                kTimeCheckInterval) {}
 
-  void InitializeRenderer() override {
+  void InitializeFrameSink() override {
     host_impl()->SetVisible(true);
-    host_impl()->InitializeRenderer(layer_tree_frame_sink());
+    host_impl()->InitializeFrameSink(layer_tree_frame_sink());
     tile_manager()->SetTileTaskManagerForTesting(
         std::make_unique<FakeTileTaskManagerImpl>());
   }

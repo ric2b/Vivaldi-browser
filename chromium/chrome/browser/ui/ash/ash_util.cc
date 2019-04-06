@@ -5,64 +5,29 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/mojo_interface_factory.h"
 #include "ash/public/cpp/config.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/interfaces/event_properties.mojom.h"
 #include "ash/shell.h"
 #include "base/macros.h"
-#include "chrome/browser/chromeos/ash_config.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/service.h"
-#include "services/service_manager/public/interfaces/interface_provider_spec.mojom.h"
+#include "content/public/common/service_manager_connection.h"
+#include "mojo/public/cpp/bindings/type_converter.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/ui_base_features.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 
 namespace ash_util {
 
-namespace {
-
-class EmbeddedAshService : public service_manager::Service {
- public:
-  explicit EmbeddedAshService(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-      : task_runner_(task_runner) {}
-  ~EmbeddedAshService() override {}
-
-  // service_manager::Service:
-  void OnStart() override {
-    ash::mojo_interface_factory::RegisterInterfaces(&interfaces_, task_runner_);
-  }
-
-  void OnBindInterface(const service_manager::BindSourceInfo& remote_info,
-                       const std::string& interface_name,
-                       mojo::ScopedMessagePipeHandle handle) override {
-    interfaces_.BindInterface(interface_name, std::move(handle));
-  }
-
- private:
-  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  service_manager::BinderRegistry interfaces_;
-
-  DISALLOW_COPY_AND_ASSIGN(EmbeddedAshService);
-};
-
-}  // namespace
-
-std::unique_ptr<service_manager::Service> CreateEmbeddedAshService(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
-  return std::make_unique<EmbeddedAshService>(task_runner);
-}
-
 bool ShouldOpenAshOnStartup() {
-  return !IsRunningInMash();
-}
-
-bool IsRunningInMash() {
-  return chromeos::GetAshConfig() == ash::Config::MASH;
+  return features::IsAshInBrowserProcess();
 }
 
 bool IsAcceleratorDeprecated(const ui::Accelerator& accelerator) {
   // When running in mash the browser doesn't handle ash accelerators.
-  if (IsRunningInMash())
+  if (!features::IsAshInBrowserProcess())
     return false;
 
   return ash::Shell::Get()->accelerator_controller()->IsDeprecated(accelerator);
@@ -72,6 +37,32 @@ bool WillAshProcessAcceleratorForEvent(const ui::KeyEvent& key_event) {
   return key_event.properties() &&
          key_event.properties()->count(
              ash::mojom::kWillProcessAccelerator_KeyEventProperty);
+}
+
+void SetupWidgetInitParamsForContainer(views::Widget::InitParams* params,
+                                       int container_id) {
+  DCHECK_GE(container_id, ash::kShellWindowId_MinContainer);
+  DCHECK_LE(container_id, ash::kShellWindowId_MaxContainer);
+
+  if (!features::IsAshInBrowserProcess()) {
+    using ui::mojom::WindowManager;
+    params->mus_properties[WindowManager::kContainerId_InitProperty] =
+        mojo::ConvertTo<std::vector<uint8_t>>(container_id);
+    params->mus_properties[WindowManager::kDisplayId_InitProperty] =
+        mojo::ConvertTo<std::vector<uint8_t>>(
+            display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  } else {
+    params->parent = ash::Shell::GetContainer(
+        ash::Shell::GetPrimaryRootWindow(), container_id);
+  }
+}
+
+service_manager::Connector* GetServiceManagerConnector() {
+  content::ServiceManagerConnection* manager_connection =
+      content::ServiceManagerConnection::GetForProcess();
+  if (!manager_connection)
+    return nullptr;
+  return manager_connection->GetConnector();
 }
 
 }  // namespace ash_util

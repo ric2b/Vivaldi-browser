@@ -75,8 +75,9 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                                const std::string& filesystem_id) override;
   void GrantDeleteFromFileSystem(int child_id,
                                  const std::string& filesystem_id) override;
-  void GrantOrigin(int child_id, const url::Origin& origin) override;
-  void GrantScheme(int child_id, const std::string& scheme) override;
+  void GrantCommitOrigin(int child_id, const url::Origin& origin) override;
+  void GrantRequestOrigin(int child_id, const url::Origin& origin) override;
+  void GrantRequestScheme(int child_id, const std::string& scheme) override;
   bool CanRequestURL(int child_id, const GURL& url) override;
   bool CanCommitURL(int child_id, const GURL& url) override;
   bool CanReadFile(int child_id, const base::FilePath& file) override;
@@ -93,8 +94,6 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   bool HasWebUIBindings(int child_id) override;
   void GrantSendMidiSysExMessage(int child_id) override;
   bool CanAccessDataForOrigin(int child_id, const GURL& url) override;
-  bool HasSpecificPermissionForOrigin(int child_id,
-                                      const url::Origin& origin) override;
   bool GetMatchingIsolatedOrigin(const url::Origin& origin,
                                  url::Origin* result) override;
 
@@ -137,11 +136,11 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // this method exactly once.
   void Remove(int child_id);
 
-  // Whenever the browser processes commands the child process to request a URL,
+  // Whenever the browser processes commands the child process to commit a URL,
   // it should call this method to grant the child process the capability to
-  // request the URL, along with permission to request all URLs of the same
-  // scheme.
-  void GrantRequestURL(int child_id, const GURL& url);
+  // commit anything from the URL's origin, along with permission to request all
+  // URLs of the same scheme.
+  void GrantCommitURL(int child_id, const GURL& url);
 
   // Whenever the browser process drops a file icon on a tab, it should call
   // this method to grant the child process the capability to request this one
@@ -151,8 +150,9 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // Revokes all permissions granted to the given file.
   void RevokeAllPermissionsForFile(int child_id, const base::FilePath& file);
 
-  // Grant the child process the ability to use Web UI Bindings.
-  void GrantWebUIBindings(int child_id);
+  // Grant the child process the ability to use Web UI Bindings where |bindings|
+  // is either BINDINGS_POLICY_WEB_UI or BINDINGS_POLICY_MOJO_WEB_UI or both.
+  void GrantWebUIBindings(int child_id, int bindings);
 
   // Grant the child process the ability to read raw cookies.
   void GrantReadRawCookies(int child_id);
@@ -161,7 +161,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   void RevokeReadRawCookies(int child_id);
 
   // Whether the given origin is valid for an origin header. Valid origin
-  // headers are commitable URLs plus suborigin URLs.
+  // headers are commitable URLs.
   bool CanSetAsOriginHeader(int child_id, const GURL& url);
 
   // Explicit permissions checks for FileSystemURL specified files.
@@ -183,8 +183,9 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   bool CanReadRawCookies(int child_id);
 
   // Sets the process as only permitted to use and see the cookies for the
-  // given origin.
-  void LockToOrigin(int child_id, const GURL& gurl);
+  // given origin. Most callers should use RenderProcessHostImpl::LockToOrigin
+  // instead of calling this directly.
+  void LockToOrigin(int child_id, const GURL& lock_url);
 
   // Used to indicate the result of comparing a process's origin lock to
   // another value:
@@ -227,15 +228,14 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // of the site for https://isolated.foo.com.
   //
   // Note that origins from |origins| must not be unique - URLs that render with
-  // unique origins, such as data: URLs, are not supported.  Suborigins (see
-  // https://w3c.github.io/webappsec-suborigins/ -- not to be confused with
-  // subdomains) and non-standard schemes are also not supported.  Sandboxed
-  // frames (e.g., <iframe sandbox>) *are* supported, since process placement
-  // decisions will be based on the URLs such frames navigate to, and not the
-  // origin of committed documents (which might be unique).  If an isolated
-  // origin opens an about:blank popup, it will stay in the isolated origin's
-  // process. Nested URLs (filesystem: and blob:) retain process isolation
-  // behavior of their inner origin.
+  // unique origins, such as data: URLs, are not supported. Non-standard
+  // schemes are also not supported.  Sandboxed frames (e.g., <iframe sandbox>)
+  // *are* supported, since process placement decisions will be based on the
+  // URLs such frames navigate to, and not the origin of committed documents
+  // (which might be unique).  If an isolated origin opens an about:blank
+  // popup, it will stay in the isolated origin's process. Nested URLs
+  // (filesystem: and blob:) retain process isolation behavior of their inner
+  // origin.
   //
   // Note that it is okay if |origins| contains duplicates - the set of origins
   // will be deduplicated inside the method.

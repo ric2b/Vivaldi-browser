@@ -6,8 +6,10 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/bind.h"
 #import "base/mac/scoped_nsobject.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/location_bar/manage_passwords_decoration.h"
@@ -31,17 +33,31 @@ class BubbleAnchorHelper final : public views::WidgetObserver {
                      AnchorType type);
 
  private:
-  // Observe |name| on the bubble parent window with a block to call ReAnchor().
-  void Observe(NSString* name);
+  // Observe |notification| on the bubble parent window with a block to call
+  // RepositionFromAnchor().
+  void ObserveParentWindow(NSString* notification);
+
+  // Observe |notification| on the bubble window with a block to call
+  // RecalculateAnchor();
+  void ObserveBubbleWindow(NSString* notification);
+
+  // Use |callback| to observe |notification| on |window|.
+  void ObserveWindow(NSWindow* window,
+                     NSString* notification,
+                     base::RepeatingClosure callback);
 
   // Whether offset from the left of the parent window is fixed.
   bool IsMinXFixed() const {
-    return views::BubbleBorder::is_arrow_on_left(bubble_->arrow());
+    return cocoa_l10n_util::ShouldDoExperimentalRTLLayout() !=
+           views::BubbleBorder::is_arrow_on_left(bubble_->arrow());
   }
 
   // Re-positions |bubble_| so that the offset to the parent window at
   // construction time is preserved.
-  void ReAnchor();
+  void RepositionFromAnchor();
+
+  // Recalculates the offsets for |bubble_|.
+  void RecalculateAnchor();
 
   // WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -101,40 +117,54 @@ BubbleAnchorHelper::BubbleAnchorHelper(views::BubbleDialogDelegateView* bubble,
   if (type == IGNORE_PARENT)
     return;
 
-  NSRect parent_frame = [[bubble->parent_window() window] frame];
-  NSRect bubble_frame = [bubble->GetWidget()->GetNativeWindow() frame];
+  RecalculateAnchor();
 
-  // Note: when anchored on the right, this doesn't support changes to the
-  // bubble size, just the parent size.
-  horizontal_offset_ =
-      (IsMinXFixed() ? NSMinX(parent_frame) : NSMaxX(parent_frame)) -
-      NSMinX(bubble_frame);
-  vertical_offset_ = NSMaxY(parent_frame) - NSMinY(bubble_frame);
-
-  Observe(NSWindowDidEnterFullScreenNotification);
-  Observe(NSWindowDidExitFullScreenNotification);
-  Observe(NSWindowDidResizeNotification);
+  ObserveParentWindow(NSWindowDidEnterFullScreenNotification);
+  ObserveParentWindow(NSWindowDidExitFullScreenNotification);
+  ObserveParentWindow(NSWindowDidResizeNotification);
 
   // Also monitor move. Note that for user-initiated window moves this is not
   // necessary: the bubble's child window status keeps the position pinned to
   // the parent during the move (which is handy since AppKit doesn't send out
   // notifications until the move completes). Programmatic -[NSWindow
   // setFrame:..] calls, however, do not update child window positions for us.
-  Observe(NSWindowDidMoveNotification);
+  ObserveParentWindow(NSWindowDidMoveNotification);
+
+  ObserveBubbleWindow(NSWindowDidResizeNotification);
+  // Don't ObserveBubbleWindow(NSWindowDidMoveNotification) unless it is
+  // possible to distinguish between when BubbleAnchorHelper sets the position
+  // of the bubble and when the existing NSWindow machinery sets the position of
+  // the bubble. The NSWindow adjustments only occur if |bubble| is an actual
+  // child of bubble->parent_window(). As of High Sierra, the BubbleAnchorHelper
+  // and NSWindow disagree on the final positioning.
 }
 
-void BubbleAnchorHelper::Observe(NSString* name) {
+void BubbleAnchorHelper::ObserveParentWindow(NSString* notification) {
+  ObserveWindow([bubble_->parent_window() window], notification,
+                base::BindRepeating(&BubbleAnchorHelper::RepositionFromAnchor,
+                                    base::Unretained(this)));
+}
+
+void BubbleAnchorHelper::ObserveBubbleWindow(NSString* notification) {
+  ObserveWindow(bubble_->GetWidget()->GetNativeWindow(), notification,
+                base::BindRepeating(&BubbleAnchorHelper::RecalculateAnchor,
+                                    base::Unretained(this)));
+}
+
+void BubbleAnchorHelper::ObserveWindow(NSWindow* window,
+                                       NSString* notification,
+                                       base::RepeatingClosure callback) {
   NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
-  id token = [center addObserverForName:name
-                                 object:[bubble_->parent_window() window]
+  id token = [center addObserverForName:notification
+                                 object:window
                                   queue:nil
                              usingBlock:^(NSNotification* notification) {
-                               ReAnchor();
+                               callback.Run();
                              }];
   [observer_tokens_ addObject:token];
 }
 
-void BubbleAnchorHelper::ReAnchor() {
+void BubbleAnchorHelper::RepositionFromAnchor() {
   NSRect bubble_frame = [bubble_->GetWidget()->GetNativeWindow() frame];
   NSRect parent_frame = [[bubble_->parent_window() window] frame];
   if (IsMinXFixed())
@@ -145,6 +175,15 @@ void BubbleAnchorHelper::ReAnchor() {
   [bubble_->GetWidget()->GetNativeWindow() setFrame:bubble_frame
                                             display:YES
                                             animate:NO];
+}
+
+void BubbleAnchorHelper::RecalculateAnchor() {
+  NSRect parent_frame = [[bubble_->parent_window() window] frame];
+  NSRect bubble_frame = [bubble_->GetWidget()->GetNativeWindow() frame];
+  horizontal_offset_ =
+      (IsMinXFixed() ? NSMinX(parent_frame) : NSMaxX(parent_frame)) -
+      NSMinX(bubble_frame);
+  vertical_offset_ = NSMaxY(parent_frame) - NSMinY(bubble_frame);
 }
 
 void BubbleAnchorHelper::OnWidgetDestroying(views::Widget* widget) {

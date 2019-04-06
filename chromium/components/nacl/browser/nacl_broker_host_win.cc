@@ -4,6 +4,10 @@
 
 #include "components/nacl/browser/nacl_broker_host_win.h"
 
+#include <windows.h>
+
+#include <memory>
+
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -19,9 +23,7 @@
 #include "content/public/browser/child_process_data.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "mojo/edk/embedder/embedder.h"
 
 namespace {
 // NOTE: changes to this class need to be reviewed by the security team.
@@ -69,9 +71,8 @@ bool NaClBrokerHost::Init() {
     cmd_line->AppendSwitch(switches::kNoErrorDialogs);
 
   process_->Launch(
-      base::MakeUnique<NaClBrokerSandboxedProcessLauncherDelegate>(),
-      base::WrapUnique(cmd_line),
-      true);
+      std::make_unique<NaClBrokerSandboxedProcessLauncherDelegate>(),
+      base::WrapUnique(cmd_line), true);
   return true;
 }
 

@@ -18,7 +18,7 @@
   <template>
     <style include="settings-shared action-link iron-flex">
       .list-frame {
-        @apply(--settings-list-frame-padding);
+        @apply --settings-list-frame-padding;
       }
 
       .list-frame > div {
@@ -26,7 +26,7 @@
       }
 
       #outer {
-        @apply(--settings-list-frame-padding);
+        @apply --settings-list-frame-padding;
         max-height: 355px;  /** Enough height to show six entries. */
       }
 
@@ -53,13 +53,13 @@
       <template is="dom-if" if="[[shouldAllowUrlsEdit_(
           prefs.session.startup_urls.enforcement)]]" restamp>
         <div class="list-item" id="addPage">
-          <a is="action-link" class="list-button" on-tap="onAddPageTap_">
+          <a is="action-link" class="list-button" on-click="onAddPageTap_">
             $i18n{onStartupAddNewPage}
           </a>
         </div>
         <div class="list-item" id="useCurrentPages">
           <a is="action-link" class="list-button"
-              on-tap="onUseCurrentPagesTap_">
+              on-click="onUseCurrentPagesTap_">
             $i18n{onStartupUseCurrent}
           </a>
         </div>

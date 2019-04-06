@@ -33,23 +33,24 @@ class DISPLAY_MANAGER_EXPORT ForwardingDisplayDelegate
 
   // display::NativeDisplayDelegate:
   void Initialize() override;
-  void TakeDisplayControl(const DisplayControlCallback& callback) override;
-  void RelinquishDisplayControl(
-      const DisplayControlCallback& callback) override;
-  void GetDisplays(const GetDisplaysCallback& callback) override;
+  void TakeDisplayControl(DisplayControlCallback callback) override;
+  void RelinquishDisplayControl(DisplayControlCallback callback) override;
+  void GetDisplays(GetDisplaysCallback callback) override;
   void Configure(const DisplaySnapshot& output,
                  const DisplayMode* mode,
                  const gfx::Point& origin,
-                 const ConfigureCallback& callback) override;
+                 ConfigureCallback callback) override;
   void GetHDCPState(const DisplaySnapshot& output,
-                    const GetHDCPStateCallback& callback) override;
+                    GetHDCPStateCallback callback) override;
   void SetHDCPState(const DisplaySnapshot& output,
                     HDCPState state,
-                    const SetHDCPStateCallback& callback) override;
-  bool SetColorCorrection(const DisplaySnapshot& output,
-                          const std::vector<GammaRampRGBEntry>& degamma_lut,
-                          const std::vector<GammaRampRGBEntry>& gamma_lut,
-                          const std::vector<float>& correction_matrix) override;
+                    SetHDCPStateCallback callback) override;
+  bool SetColorMatrix(int64_t display_id,
+                      const std::vector<float>& color_matrix) override;
+  bool SetGammaCorrection(
+      int64_t display_id,
+      const std::vector<display::GammaRampRGBEntry>& degamma_lut,
+      const std::vector<display::GammaRampRGBEntry>& gamma_lut) override;
   void AddObserver(display::NativeDisplayObserver* observer) override;
   void RemoveObserver(display::NativeDisplayObserver* observer) override;
   FakeDisplayController* GetFakeDisplayController() override;
@@ -60,11 +61,11 @@ class DISPLAY_MANAGER_EXPORT ForwardingDisplayDelegate
  private:
   // Stores display snapshots and forwards pointers to |callback|.
   void StoreAndForwardDisplays(
-      const GetDisplaysCallback& callback,
+      GetDisplaysCallback callback,
       std::vector<std::unique_ptr<DisplaySnapshot>> snapshots);
 
   // Forwards display snapshot pointers to |callback|.
-  void ForwardDisplays(const GetDisplaysCallback& callback);
+  void ForwardDisplays(GetDisplaysCallback callback);
 
   // True if we should use |delegate_|. This will be false if synchronous
   // GetDisplays() and Configure() are required.

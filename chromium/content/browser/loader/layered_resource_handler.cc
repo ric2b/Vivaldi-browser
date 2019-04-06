@@ -38,25 +38,15 @@ void LayeredResourceHandler::OnRequestRedirected(
 void LayeredResourceHandler::OnResponseStarted(
     network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
-  //return OnResponseStarted(response, std::move(controller), false, false);
-  // Vivaldi specific save info override.
-  ResourceRequestInfoImpl* info = GetRequestInfo();
-  return OnResponseStarted(response, std::move(controller),
-                           info != nullptr && info->open_when_downloaded(),
-                           info != nullptr && info->ask_for_save_target());
-}
-
-void LayeredResourceHandler::OnResponseStarted(
-    network::ResourceResponse* response,
-    std::unique_ptr<ResourceController> controller,
-    bool open_when_done,
-    bool ask_for_target) {
-  /*
   DCHECK(next_handler_.get());
-  next_handler_->OnResponseStarted(response, std::move(controller),
-                                   open_when_done, ask_for_target);
-                                          */
-  return OnResponseStarted(response, std::move(controller));
+
+  // <Vivaldi>
+  ResourceRequestInfoImpl* info = GetRequestInfo();
+  if (info)
+    SetOpenFlags(info->open_when_downloaded(), info->ask_for_save_target());
+  // </Vivaldi>
+
+  next_handler_->OnResponseStarted(response, std::move(controller));
 }
 
 void LayeredResourceHandler::OnWillStart(
@@ -86,11 +76,6 @@ void LayeredResourceHandler::OnResponseCompleted(
     std::unique_ptr<ResourceController> controller) {
   DCHECK(next_handler_.get());
   next_handler_->OnResponseCompleted(status, std::move(controller));
-}
-
-void LayeredResourceHandler::OnDataDownloaded(int bytes_downloaded) {
-  DCHECK(next_handler_.get());
-  next_handler_->OnDataDownloaded(bytes_downloaded);
 }
 
 }  // namespace content

@@ -10,11 +10,13 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/api/virtual_keyboard.h"
 #include "extensions/common/api/virtual_keyboard_private.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace extensions {
 
@@ -24,6 +26,8 @@ class VirtualKeyboardDelegate {
 
   using OnKeyboardSettingsCallback =
       base::Callback<void(std::unique_ptr<base::DictionaryValue> settings)>;
+
+  using OnSetModeCallback = base::OnceCallback<void(bool success)>;
 
   // Fetch information about the preferred configuration of the keyboard. On
   // exit, |settings| is populated with the keyboard configuration if execution
@@ -74,7 +78,10 @@ class VirtualKeyboardDelegate {
   virtual bool ShowLanguageSettings() = 0;
 
   // Sets virtual keyboard window mode.
-  virtual bool SetVirtualKeyboardMode(int mode_enum) = 0;
+  virtual bool SetVirtualKeyboardMode(
+      int mode_enum,
+      base::Optional<gfx::Rect> target_bounds,
+      OnSetModeCallback on_set_mode_callback) = 0;
 
   // Sets virtual keyboard draggable area bounds.
   // Returns whether the draggable area is set successful.
@@ -83,6 +90,12 @@ class VirtualKeyboardDelegate {
 
   // Sets requested virtual keyboard state.
   virtual bool SetRequestedKeyboardState(int state_enum) = 0;
+
+  // Sets the area on the screen that is occluded by the keyboard.
+  virtual bool SetOccludedBounds(const std::vector<gfx::Rect>& bounds) = 0;
+
+  // Sets the areas on the keyboard window where events are handled.
+  virtual bool SetHitTestBounds(const std::vector<gfx::Rect>& bounds) = 0;
 
   // Restricts the virtual keyboard IME features.
   // Returns the values which were updated.

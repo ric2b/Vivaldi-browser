@@ -74,7 +74,6 @@ NSSCertDatabase::NSSCertDatabase(crypto::ScopedPK11Slot public_slot,
       weak_factory_(this) {
   CHECK(public_slot_);
 
-  // This also makes sure that NSS has been initialized.
   CertDatabase* cert_db = CertDatabase::GetInstance();
   cert_notification_forwarder_.reset(new CertNotificationForwarder(cert_db));
   AddObserver(cert_notification_forwarder_.get());
@@ -134,7 +133,7 @@ void NSSCertDatabase::ListModules(std::vector<crypto::ScopedPK11Slot>* modules,
       PK11_GetAllTokens(CKM_INVALID_MECHANISM,
                         need_rw ? PR_TRUE : PR_FALSE,  // needRW
                         PR_TRUE,                       // loadCerts (unused)
-                        NULL));                        // wincx
+                        nullptr));                     // wincx
   if (!slot_list) {
     LOG(ERROR) << "PK11_GetAllTokens failed: " << PORT_GetError();
     return;
@@ -187,10 +186,15 @@ CERTCertificate* NSSCertDatabase::FindRootInList(
   CERTCertificate* certn_2 = certificates[certificates.size() - 2].get();
   CERTCertificate* certn_1 = certificates[certificates.size() - 1].get();
 
-  if (CERT_CompareName(&cert1->issuer, &cert0->subject) == SECEqual)
+  // Using CERT_CompareName is an alternative, except that it is broken until
+  // NSS 3.32 (see https://bugzilla.mozilla.org/show_bug.cgi?id=1361197 ).
+  if (SECITEM_CompareItem(&cert1->derIssuer, &cert0->derSubject) == SECEqual)
     return cert0;
-  if (CERT_CompareName(&certn_2->issuer, &certn_1->subject) == SECEqual)
+
+  if (SECITEM_CompareItem(&certn_2->derIssuer, &certn_1->derSubject) ==
+      SECEqual) {
     return certn_1;
+  }
 
   LOG(WARNING) << "certificate list is not a hierarchy";
   return cert0;
@@ -226,6 +230,7 @@ bool NSSCertDatabase::ImportCACerts(
     ImportCertFailureList* not_imported) {
   crypto::ScopedPK11Slot slot(GetPublicSlot());
   CERTCertificate* root = FindRootInList(certificates);
+
   bool success = psm::ImportCACerts(slot.get(), certificates, root, trust_bits,
                                     not_imported);
   if (success)
@@ -333,7 +338,7 @@ bool NSSCertDatabase::IsUntrusted(const CERTCertificate* cert) const {
   // Self-signed certificates that don't have any trust bits set are untrusted.
   // Other certificates that don't have any trust bits set may still be trusted
   // if they chain up to a trust anchor.
-  if (CERT_CompareName(&cert->issuer, &cert->subject) == SECEqual) {
+  if (SECITEM_CompareItem(&cert->derIssuer, &cert->derSubject) == SECEqual) {
     return (nsstrust.sslFlags & kTrusted) == 0 &&
            (nsstrust.emailFlags & kTrusted) == 0 &&
            (nsstrust.objectSigningFlags & kTrusted) == 0;
@@ -381,6 +386,9 @@ bool NSSCertDatabase::IsHardwareBacked(const CERTCertificate* cert) const {
   return slot && PK11_IsHW(slot);
 }
 
+void NSSCertDatabase::LogUserCertificates(const std::string& log_reason) const {
+}
+
 void NSSCertDatabase::AddObserver(Observer* observer) {
   observer_list_->AddObserver(observer);
 }
@@ -399,11 +407,11 @@ ScopedCERTCertificateList NSSCertDatabase::ListCertsImpl(
   base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
   ScopedCERTCertificateList certs;
-  CERTCertList* cert_list = NULL;
+  CERTCertList* cert_list = nullptr;
   if (slot)
     cert_list = PK11_ListCertsInSlot(slot.get());
   else
-    cert_list = PK11_ListCerts(PK11CertListUnique, NULL);
+    cert_list = PK11_ListCerts(PK11CertListUnique, nullptr);
 
   CERTCertListNode* node;
   for (node = CERT_LIST_HEAD(cert_list); !CERT_LIST_END(node, cert_list);
@@ -423,7 +431,22 @@ void NSSCertDatabase::NotifyCertRemovalAndCallBack(
 }
 
 void NSSCertDatabase::NotifyObserversCertDBChanged() {
+  LogUserCertificates("DBChanged");
+
   observer_list_->Notify(FROM_HERE, &Observer::OnCertDBChanged);
+}
+
+// static
+std::string NSSCertDatabase::GetCertIssuerCommonName(
+    const CERTCertificate* cert) {
+  char* nss_issuer_name = CERT_GetCommonName(&cert->issuer);
+  if (!nss_issuer_name)
+    return std::string();
+
+  std::string issuer_name = nss_issuer_name;
+  PORT_Free(nss_issuer_name);
+
+  return issuer_name;
 }
 
 // static
@@ -434,14 +457,22 @@ bool NSSCertDatabase::DeleteCertAndKeyImpl(CERTCertificate* cert) {
   // capacity if this method takes too much time to run.
   base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
+#if defined(OS_CHROMEOS)
+  // TODO(https://crbug.com/844537): Remove this after we've collected logs that
+  // show device-wide certificates disappearing.
+  std::string issuer_name = GetCertIssuerCommonName(cert);
+  VLOG(0) << "UserCertLogging: Deleting a certificate with issuer_name="
+          << issuer_name;
+#endif  // defined(OS_CHROMEOS)
+
   // For some reason, PK11_DeleteTokenCertAndKey only calls
   // SEC_DeletePermCertificate if the private key is found.  So, we check
   // whether a private key exists before deciding which function to call to
   // delete the cert.
-  SECKEYPrivateKey* privKey = PK11_FindKeyByAnyCert(cert, NULL);
+  SECKEYPrivateKey* privKey = PK11_FindKeyByAnyCert(cert, nullptr);
   if (privKey) {
     SECKEY_DestroyPrivateKey(privKey);
-    if (PK11_DeleteTokenCertAndKey(cert, NULL)) {
+    if (PK11_DeleteTokenCertAndKey(cert, nullptr)) {
       LOG(ERROR) << "PK11_DeleteTokenCertAndKey failed: " << PORT_GetError();
       return false;
     }

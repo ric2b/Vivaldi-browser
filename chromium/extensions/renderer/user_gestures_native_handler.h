@@ -13,10 +13,12 @@ class UserGesturesNativeHandler : public ObjectBackedNativeHandler {
  public:
   explicit UserGesturesNativeHandler(ScriptContext* context);
 
+  // ObjectBackedNativeHandler:
+  void AddRoutes() override;
+
  private:
   void IsProcessingUserGesture(const v8::FunctionCallbackInfo<v8::Value>& args);
   void RunWithUserGesture(const v8::FunctionCallbackInfo<v8::Value>& args);
-  void RunWithoutUserGesture(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
 
 }  // namespace extensions

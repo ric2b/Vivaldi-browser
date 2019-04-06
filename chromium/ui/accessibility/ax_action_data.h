@@ -5,8 +5,7 @@
 #ifndef UI_ACCESSIBILITY_AX_ACTION_DATA_H_
 #define UI_ACCESSIBILITY_AX_ACTION_DATA_H_
 
-#include "base/strings/string16.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -17,19 +16,19 @@ namespace ui {
 struct AX_EXPORT AXActionData {
   AXActionData();
   AXActionData(const AXActionData& other);
-  virtual ~AXActionData();
+  ~AXActionData();
 
   // Return a string representation of this data, for debugging.
-  virtual std::string ToString() const;
+  std::string ToString() const;
 
   // This is a simple serializable struct. All member variables should be
   // public and copyable.
 
-  // See the AXAction enums in ax_enums.idl for explanations of which
+  // See the ax::mojom::Action enums in ax_enums.idl for explanations of which
   // parameters apply.
 
   // The action to take.
-  AXAction action = AX_ACTION_NONE;
+  ax::mojom::Action action = ax::mojom::Action::kNone;
 
   // The ID of the tree that this action should be performed on.
   int target_tree_id = -1;
@@ -43,7 +42,7 @@ struct AX_EXPORT AXActionData {
   // The request id of this action tracked by the client.
   int request_id = -1;
 
-  // Use enums from AXActionFlags
+  // Use enums from ax::mojom::ActionFlags
   int flags = 0;
 
   // For an action that creates a selection, the selection anchor and focus
@@ -63,11 +62,11 @@ struct AX_EXPORT AXActionData {
   // The target point for the action.
   gfx::Point target_point;
 
-  // The new value for a node, for the SET_VALUE action.
-  base::string16 value;
+  // The new value for a node, for the SET_VALUE action. UTF-8 encoded.
+  std::string value;
 
   // The event to fire in response to a HIT_TEST action.
-  AXEvent hit_test_event_to_fire = AX_EVENT_NONE;
+  ax::mojom::Event hit_test_event_to_fire = ax::mojom::Event::kNone;
 };
 
 }  // namespace ui

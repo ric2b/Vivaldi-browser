@@ -33,9 +33,9 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
-class ExtensionPreferenceApiTest : public ExtensionApiTest {
+class ExtensionPreferenceApiTest : public extensions::ExtensionApiTest {
  protected:
   ExtensionPreferenceApiTest() : profile_(NULL) {}
 
@@ -80,7 +80,7 @@ class ExtensionPreferenceApiTest : public ExtensionApiTest {
   }
 
   void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
 
     // The browser might get closed later (and therefore be destroyed), so we
     // save the profile.
@@ -101,7 +101,7 @@ class ExtensionPreferenceApiTest : public ExtensionApiTest {
                                   base::Unretained(&keep_alive_), nullptr));
     content::RunAllPendingInMessageLoop();
 
-    ExtensionApiTest::TearDownOnMainThread();
+    extensions::ExtensionApiTest::TearDownOnMainThread();
   }
 
   Profile* profile_;
@@ -127,12 +127,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, MAYBE_Standard) {
   prefs->SetBoolean(password_manager::prefs::kCredentialsEnableService, false);
   prefs->SetBoolean(prefs::kSafeBrowsingEnabled, false);
   prefs->SetBoolean(prefs::kSearchSuggestEnabled, false);
-#if BUILDFLAG(ENABLE_WEBRTC)
   prefs->SetBoolean(prefs::kWebRTCMultipleRoutesEnabled, false);
   prefs->SetBoolean(prefs::kWebRTCNonProxiedUdpEnabled, false);
   prefs->SetString(prefs::kWebRTCIPHandlingPolicy,
                    content::kWebRTCIPHandlingDefaultPublicInterfaceOnly);
-#endif
 
   const char kExtensionPath[] = "preference/standard";
 

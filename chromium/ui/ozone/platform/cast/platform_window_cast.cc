@@ -8,52 +8,35 @@
 #include "ui/events/event.h"
 #include "ui/events/ozone/events_ozone.h"
 #include "ui/events/platform/platform_event_source.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
 namespace ui {
 
 PlatformWindowCast::PlatformWindowCast(PlatformWindowDelegate* delegate,
                                        const gfx::Rect& bounds)
-    : delegate_(delegate), bounds_(bounds) {
-  widget_ = (bounds.width() << 16) + bounds.height();
-  delegate_->OnAcceleratedWidgetAvailable(widget_, 1.f);
+    : StubWindow(delegate, false, bounds) {
+  gfx::AcceleratedWidget widget = (bounds.width() << 16) + bounds.height();
+  delegate->OnAcceleratedWidgetAvailable(widget, 1.f);
 
-  if (ui::PlatformEventSource::GetInstance()) {
-    ui::PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
-  }
+  if (PlatformEventSource::GetInstance())
+    PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
 }
 
 PlatformWindowCast::~PlatformWindowCast() {
-  if (ui::PlatformEventSource::GetInstance()) {
-    ui::PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
-  }
+  if (PlatformEventSource::GetInstance())
+    PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
 }
 
-gfx::Rect PlatformWindowCast::GetBounds() {
-  return bounds_;
-}
-
-void PlatformWindowCast::SetBounds(const gfx::Rect& bounds) {
-  bounds_ = bounds;
-  delegate_->OnBoundsChanged(bounds);
-}
-
-void PlatformWindowCast::SetTitle(const base::string16& title) {
-}
-
-PlatformImeController* PlatformWindowCast::GetPlatformImeController() {
-  return nullptr;
-}
-
-bool PlatformWindowCast::CanDispatchEvent(const ui::PlatformEvent& ne) {
+bool PlatformWindowCast::CanDispatchEvent(const PlatformEvent& ne) {
   return true;
 }
 
-uint32_t PlatformWindowCast::DispatchEvent(
-    const ui::PlatformEvent& native_event) {
+uint32_t PlatformWindowCast::DispatchEvent(const PlatformEvent& native_event) {
   DispatchEventFromNativeUiEvent(
       native_event, base::BindOnce(&PlatformWindowDelegate::DispatchEvent,
-                                   base::Unretained(delegate_)));
+                                   base::Unretained(delegate())));
 
   return ui::POST_DISPATCH_STOP_PROPAGATION;
 }

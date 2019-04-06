@@ -14,8 +14,10 @@
 #include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/sys_byteorder.h"
-#include "content/browser/renderer_host/font_utils_linux.h"
+#include "build/build_config.h"
+#include "components/services/font/ppapi_fontconfig_matching.h"
 #include "content/public/common/common_sandbox_support_linux.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ppapi/c/dev/ppb_truetype_font_dev.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/trusted/ppb_browser_font_trusted.h"
@@ -74,12 +76,10 @@ int32_t PepperTrueTypeFontLinux::Initialize(
     }
   }
 
-  fd_.reset(
-      MatchFontFaceWithFallback(desc->family,
-                                desc->weight >= PP_TRUETYPEFONTWEIGHT_BOLD,
-                                desc->style & PP_TRUETYPEFONTSTYLE_ITALIC,
-                                desc->charset,
-                                PP_BROWSERFONT_TRUSTED_FAMILY_DEFAULT));
+  fd_.reset(font_service::MatchFontFaceWithFallback(
+      desc->family, desc->weight >= PP_TRUETYPEFONTWEIGHT_BOLD,
+      desc->style & PP_TRUETYPEFONTSTYLE_ITALIC, desc->charset,
+      PP_BROWSERFONT_TRUSTED_FAMILY_DEFAULT));
   // TODO(bbudge) Modify content API to return results of font matching and
   // fallback, so we can update |desc| to reflect that.
   return fd_.is_valid() ? PP_OK : PP_ERROR_FAILED;
@@ -91,11 +91,9 @@ int32_t PepperTrueTypeFontLinux::GetTableTags(std::vector<uint32_t>* tags) {
   // Get the 2 byte numTables field at an offset of 4 in the font.
   uint8_t num_tables_buf[2];
   size_t output_length = sizeof(num_tables_buf);
-  if (!GetFontTable(fd_.get(),
-                    0 /* tag */,
-                    4 /* offset */,
-                    reinterpret_cast<uint8_t*>(&num_tables_buf),
-                    &output_length))
+  if (!content::GetFontTable(fd_.get(), 0 /* tag */, 4 /* offset */,
+                             reinterpret_cast<uint8_t*>(&num_tables_buf),
+                             &output_length))
     return PP_ERROR_FAILED;
   DCHECK(output_length == sizeof(num_tables_buf));
   // Font data is stored in big-endian order.
@@ -107,11 +105,9 @@ int32_t PepperTrueTypeFontLinux::GetTableTags(std::vector<uint32_t>* tags) {
   output_length = num_tables * kTableEntrySize;
   std::unique_ptr<uint8_t[]> table_entries(new uint8_t[output_length]);
   // Get the table directory entries, which follow the font header.
-  if (!GetFontTable(fd_.get(),
-                    0 /* tag */,
-                    kFontHeaderSize /* offset */,
-                    table_entries.get(),
-                    &output_length))
+  if (!content::GetFontTable(fd_.get(), 0 /* tag */,
+                             kFontHeaderSize /* offset */, table_entries.get(),
+                             &output_length))
     return PP_ERROR_FAILED;
   DCHECK(output_length == num_tables * kTableEntrySize);
 
@@ -138,16 +134,15 @@ int32_t PepperTrueTypeFontLinux::GetTable(uint32_t table_tag,
   size_t table_size = 0;
   // Tags are byte swapped on Linux.
   table_tag = base::ByteSwap(table_tag);
-  if (!GetFontTable(fd_.get(), table_tag, offset, nullptr, &table_size))
+  if (!content::GetFontTable(fd_.get(), table_tag, offset, nullptr,
+                             &table_size))
     return PP_ERROR_FAILED;
   // Only retrieve as much as the caller requested.
   table_size = std::min(table_size, static_cast<size_t>(max_data_length));
   data->resize(table_size);
-  if (!GetFontTable(fd_.get(),
-                    table_tag,
-                    offset,
-                    reinterpret_cast<uint8_t*>(&(*data)[0]),
-                    &table_size))
+  if (!content::GetFontTable(fd_.get(), table_tag, offset,
+                             reinterpret_cast<uint8_t*>(&(*data)[0]),
+                             &table_size))
     return PP_ERROR_FAILED;
 
   return base::checked_cast<int32_t>(table_size);

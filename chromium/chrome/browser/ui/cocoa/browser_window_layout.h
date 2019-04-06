@@ -69,12 +69,7 @@ struct LayoutParameters {
   BOOL placeBookmarkBarBelowInfoBar;
   CGFloat bookmarkBarHeight;
 
-  // The height of the info bar, not including the top arrow.
   CGFloat infoBarHeight;
-  // The distance from the bottom of the location icon to the bottom of the
-  // toolbar. Only needs to be set if infoBarHeight is not 0 and hasToolbar is
-  // YES.
-  CGFloat infoBarAnchorPointY;
 
   BOOL hasDownloadShelf;
   CGFloat downloadShelfHeight;
@@ -87,11 +82,12 @@ struct LayoutParameters {
 struct TabStripLayout {
   // The frame of the tab strip in window coordinates.
   NSRect frame;
-  // The leading indent for the controls of the TabStripController.
+  // The leading indent for the controls of the TabStripControllerCocoa.
   CGFloat leadingIndent;
-  // The trailing indent for the controls of the TabStripController.
+  // The trailing indent for the controls of the TabStripControllerCocoa.
   CGFloat trailingIndent;
-  // Whether the TabStripController needs to add custom traffic light buttons.
+  // Whether the TabStripControllerCocoa needs to add custom traffic light
+  // buttons.
   BOOL addCustomWindowControls;
   // The frame of the avatar in window coordinates.
   NSRect avatarFrame;
@@ -108,7 +104,6 @@ struct LayoutOutput {
   NSRect fullscreenBackingBarFrame;
   CGFloat findBarMaxY;
   NSRect infoBarFrame;
-  CGFloat infoBarMaxTopArrowHeight;
   NSRect downloadShelfFrame;
   NSRect contentAreaFrame;
 };
@@ -173,10 +168,7 @@ struct LayoutOutput {
 - (void)setPlaceBookmarkBarBelowInfoBar:(BOOL)placeBookmarkBarBelowInfoBar;
 - (void)setBookmarkBarHeight:(CGFloat)bookmarkBarHeight;
 
-// The height of the info bar, not including the top arrow.
 - (void)setInfoBarHeight:(CGFloat)infoBarHeight;
-// The min Y of the infobar anchor point, relative to the toolbar.
-- (void)setInfoBarAnchorPointY:(CGFloat)infoBarAnchorPointY;
 
 - (void)setHasDownloadShelf:(BOOL)hasDownloadShelf;
 - (void)setDownloadShelfHeight:(CGFloat)downloadShelfHeight;

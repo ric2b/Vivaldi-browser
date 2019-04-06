@@ -10,6 +10,7 @@
 
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/multi_profile_uma.h"
+#include "ash/public/cpp/ash_typography.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
@@ -24,20 +25,27 @@
 #include "ash/system/user/login_status.h"
 #include "ash/system/user/rounded_image_view.h"
 #include "ash/system/user/user_card_view.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/animation/ink_drop_mask.h"
+#include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
+#include "ui/views/focus/focus_search.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/painter.h"
+#include "ui/views/view_model.h"
+#include "ui/wm/core/transient_window_manager.h"
 
 namespace ash {
 namespace tray {
@@ -46,6 +54,59 @@ namespace {
 
 // Vertical mergin for the top/bottom edges of the view.
 constexpr size_t kVerticalMargin = 2;
+
+// Button that appears in the top-right of the system tray popup. Usually says
+// "Sign out".
+class LogoutButton : public views::LabelButton {
+ public:
+  // Creates a button with CONTEXT_TRAY_POPUP_BUTTON to get the right font.
+  LogoutButton(views::ButtonListener* listener, const base::string16& text)
+      : LabelButton(listener, text, CONTEXT_TRAY_POPUP_BUTTON) {
+    const int kHorizontalPadding = 20;
+    SetBorder(views::CreateEmptyBorder(gfx::Insets(0, kHorizontalPadding)));
+    SetHorizontalAlignment(gfx::ALIGN_CENTER);
+    SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
+    TrayPopupUtils::ConfigureTrayPopupButton(this);
+
+    // By a series of consequences (see https://crbug.com/779732#c21 ), this
+    // button was using gfx::kChromeIconGrey, but unrelated flags would change
+    // that. Ideally, the LabelButton constructor would take an appropriate
+    // views::style constant, but this is currently the only LabelButton wanting
+    // this behavior, and https://crbug.com/842079 removes this entire button.
+    SetEnabledTextColors(gfx::kChromeIconGrey);
+  }
+
+  ~LogoutButton() override = default;
+
+  // views::LabelButton:
+  int GetHeightForWidth(int width) const override { return kMenuButtonSize; }
+
+ private:
+  // TODO(estade,bruthig): there's a lot in common here with ActionableView.
+  // Find a way to share. See related TODO on InkDropHostView::SetInkDropMode().
+  std::unique_ptr<views::InkDrop> CreateInkDrop() override {
+    return TrayPopupUtils::CreateInkDrop(this);
+  }
+
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
+    return TrayPopupUtils::CreateInkDropRipple(
+        TrayPopupInkDropStyle::INSET_BOUNDS, this,
+        GetInkDropCenterBasedOnLastEvent());
+  }
+
+  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
+      const override {
+    return TrayPopupUtils::CreateInkDropHighlight(
+        TrayPopupInkDropStyle::INSET_BOUNDS, this);
+  }
+
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override {
+    return TrayPopupUtils::CreateInkDropMask(
+        TrayPopupInkDropStyle::INSET_BOUNDS, this);
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(LogoutButton);
+};
 
 // Switch to a user with the given |user_index|.
 void SwitchUser(UserIndex user_index) {
@@ -85,15 +146,14 @@ bool IsUserDropdownEnabled() {
 
 // Creates the view shown in the user switcher popup ("AddUserMenuOption").
 views::View* CreateAddUserView(AddUserSessionPolicy policy) {
-  auto* view = new views::View;
+  auto* view = new views::View();
   const int icon_padding = (kMenuButtonSize - kMenuIconSize) / 2;
   auto layout = std::make_unique<views::BoxLayout>(
       views::BoxLayout::kHorizontal, gfx::Insets(),
       kTrayPopupLabelHorizontalPadding + icon_padding);
   layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
   view->SetLayoutManager(std::move(layout));
-  view->SetBackground(views::CreateThemedSolidBackground(
-      view, ui::NativeTheme::kColorId_BubbleBackground));
+  view->SetBackground(views::CreateSolidBackground(SK_ColorTRANSPARENT));
 
   base::string16 message;
   switch (policy) {
@@ -146,27 +206,86 @@ views::View* CreateAddUserView(AddUserSessionPolicy policy) {
 // A view that acts as the contents of the widget that appears when clicking
 // the active user. If the mouse exits this view or an otherwise unhandled
 // click is detected, it will invoke a closure passed at construction time.
-class UserDropdownWidgetContents : public views::View {
+class UserDropdownWidgetContents : public views::View,
+                                   public views::FocusTraversable {
  public:
-  explicit UserDropdownWidgetContents(const base::Closure& close_widget)
-      : close_widget_(close_widget) {
+  explicit UserDropdownWidgetContents(base::OnceClosure close_widget_callback)
+      : close_widget_callback_(std::move(close_widget_callback)),
+        view_model_(std::make_unique<views::ViewModel>()),
+        focus_search_(
+            std::make_unique<DropDownFocusSearch>(this, view_model_.get())) {
     // Don't want to receive a mouse exit event when the cursor enters a child.
     set_notify_enter_exit_on_child(true);
   }
 
   ~UserDropdownWidgetContents() override = default;
 
+  void CloseWidget() { std::move(close_widget_callback_).Run(); }
+
+  views::ViewModel* view_model() { return view_model_.get(); }
+
+  // views::View:
+  FocusTraversable* GetPaneFocusTraversable() override { return this; }
   bool OnMousePressed(const ui::MouseEvent& event) override { return true; }
-  void OnMouseReleased(const ui::MouseEvent& event) override {
-    close_widget_.Run();
-  }
-  void OnMouseExited(const ui::MouseEvent& event) override {
-    close_widget_.Run();
-  }
-  void OnGestureEvent(ui::GestureEvent* event) override { close_widget_.Run(); }
+  void OnMouseReleased(const ui::MouseEvent& event) override { CloseWidget(); }
+  void OnMouseExited(const ui::MouseEvent& event) override { CloseWidget(); }
+  void OnGestureEvent(ui::GestureEvent* event) override { CloseWidget(); }
+
+  // views::FocusTraversable:
+  views::FocusSearch* GetFocusSearch() override { return focus_search_.get(); }
+  FocusTraversable* GetFocusTraversableParent() override { return nullptr; }
+  View* GetFocusTraversableParentView() override { return nullptr; }
 
  private:
-  base::Closure close_widget_;
+  // Custom FocusSearch used to navigate the drop down widget. The navigation is
+  // according to the view model, which should be populated the same order the
+  // views are added, but this search also closes the widget when tabbing past
+  // the boudaries.
+  class DropDownFocusSearch : public views::FocusSearch {
+   public:
+    DropDownFocusSearch(UserDropdownWidgetContents* owner,
+                        views::ViewModel* view_model)
+        : views::FocusSearch(nullptr, true, true),
+          owner_(owner),
+          view_model_(view_model) {}
+    ~DropDownFocusSearch() override = default;
+
+    // views::FocusSearch:
+    views::View* FindNextFocusableView(
+        views::View* starting_view,
+        SearchDirection search_direction,
+        TraversalDirection traversal_direction,
+        StartingViewPolicy check_starting_view,
+        AnchoredDialogPolicy can_go_into_anchored_dialog,
+        views::FocusTraversable** focus_traversable,
+        views::View** focus_traversable_view) override {
+      int index = view_model_->GetIndexOfView(starting_view);
+      index += search_direction == SearchDirection::kForwards ? 1 : -1;
+      if (index == -1 || index == view_model_->view_size()) {
+        // |close_widget_| will delete the widget which has the view which owns
+        // this custom search, so do not run callback immediately.
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::BindOnce(&DropDownFocusSearch::CloseWidget,
+                                      base::Unretained(this)));
+        return nullptr;
+      }
+      return view_model_->view_at(index);
+    }
+
+   private:
+    void CloseWidget() { owner_->CloseWidget(); }
+
+    UserDropdownWidgetContents* owner_;
+    views::ViewModel* view_model_;
+
+    DISALLOW_COPY_AND_ASSIGN(DropDownFocusSearch);
+  };
+
+  base::OnceClosure close_widget_callback_;
+  // Used to manage the focusable items in the drop down widget. There is a
+  // view per item in |view_model_|.
+  std::unique_ptr<views::ViewModel> view_model_;
+  std::unique_ptr<DropDownFocusSearch> focus_search_;
 
   DISALLOW_COPY_AND_ASSIGN(UserDropdownWidgetContents);
 };
@@ -250,7 +369,7 @@ void UserView::ButtonPressed(views::Button* sender, const ui::Event& event) {
     HideUserDropdownWidget();
     Shell::Get()->session_controller()->RequestSignOut();
   } else if (sender == user_card_container_ && IsUserDropdownEnabled()) {
-    ToggleUserDropdownWidget();
+    ToggleUserDropdownWidget(event.IsKeyEvent());
   } else if (user_dropdown_widget_ &&
              sender->GetWidget() == user_dropdown_widget_.get()) {
     DCHECK_EQ(Shell::Get()->session_controller()->NumberOfLoggedInUsers(),
@@ -282,7 +401,7 @@ void UserView::OnDidChangeFocus(View* focused_before, View* focused_now) {
 
 void UserView::AddLogoutButton(LoginStatus login) {
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
-  logout_button_ = TrayPopupUtils::CreateTrayPopupBorderlessButton(
+  logout_button_ = new LogoutButton(
       this, user::GetLocalizedSignOutStringForStatus(login, true));
   AddChildView(logout_button_);
 }
@@ -301,7 +420,8 @@ void UserView::AddUserCard(LoginStatus login) {
   AddChildViewAt(user_card_container_, 0);
 }
 
-void UserView::ToggleUserDropdownWidget() {
+void UserView::ToggleUserDropdownWidget(bool toggled_by_key_event) {
+  user_dropdown_widget_toggled_by_key_event_ = toggled_by_key_event;
   if (user_dropdown_widget_) {
     HideUserDropdownWidget();
     return;
@@ -309,17 +429,20 @@ void UserView::ToggleUserDropdownWidget() {
 
   // Note: We do not need to install a global event handler to delete this
   // item since it will destroyed automatically before the menu / user menu item
-  // gets destroyed..
+  // gets destroyed.
   user_dropdown_widget_.reset(new views::Widget);
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_MENU;
   params.keep_on_top = true;
   params.accept_events = true;
+  params.activatable = views::Widget::InitParams::ACTIVATABLE_YES;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.name = "AddUserMenuOption";
+  // Use |kShellWindowId_SettingBubbleContainer| as the widget has to be
+  // activatable.
   params.parent = GetWidget()->GetNativeWindow()->GetRootWindow()->GetChildById(
-      kShellWindowId_DragImageAndTooltipContainer);
+      kShellWindowId_SettingBubbleContainer);
   user_dropdown_widget_->Init(params);
 
   const SessionController* const session_controller =
@@ -335,8 +458,9 @@ void UserView::ToggleUserDropdownWidget() {
   bounds.set_width(bounds.width() + kSeparatorWidth);
   int row_height = bounds.height();
 
-  views::View* container = new UserDropdownWidgetContents(
-      base::Bind(&UserView::HideUserDropdownWidget, base::Unretained(this)));
+  UserDropdownWidgetContents* container =
+      new UserDropdownWidgetContents(base::BindOnce(
+          &UserView::HideUserDropdownWidget, base::Unretained(this)));
   views::View* add_user_view = CreateAddUserView(add_user_policy);
   const SkColor bg_color = add_user_view->background()->get_color();
   container->SetBorder(views::CreatePaddedBorder(
@@ -359,11 +483,26 @@ void UserView::ToggleUserDropdownWidget() {
   separator->SetBorder(views::CreateEmptyBorder(
       0, separator_horizontal_padding, 0, separator_horizontal_padding));
   user_dropdown_padding->AddChildView(separator);
+  user_dropdown_padding->SetBackground(views::CreateThemedSolidBackground(
+      user_dropdown_padding, ui::NativeTheme::kColorId_BubbleBackground));
 
   // Add other logged in users.
+  // Helper function to add a descendant view of |widget_content_view| which
+  // will need to grab focus with the custom search.
+  auto add_focusable_child = [](views::View* parent, views::View* child,
+                                UserDropdownWidgetContents* widget_content_view,
+                                int* out_model_index) {
+    DCHECK(out_model_index);
+    parent->AddChildView(child);
+    widget_content_view->view_model()->Add(child, *out_model_index);
+    ++(*out_model_index);
+  };
+
+  int model_index = 0;
   for (int i = 1; i < session_controller->NumberOfLoggedInUsers(); ++i) {
-    user_dropdown_padding->AddChildView(new ButtonFromView(
-        new UserCardView(i), this, TrayPopupInkDropStyle::INSET_BOUNDS));
+    auto* button = new ButtonFromView(new UserCardView(i), this,
+                                      TrayPopupInkDropStyle::INSET_BOUNDS);
+    add_focusable_child(user_dropdown_padding, button, container, &model_index);
   }
 
   // Add the "add user" option or the "can't add another user" message.
@@ -372,7 +511,7 @@ void UserView::ToggleUserDropdownWidget() {
                                       TrayPopupInkDropStyle::INSET_BOUNDS);
     button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
-    user_dropdown_padding->AddChildView(button);
+    add_focusable_child(user_dropdown_padding, button, container, &model_index);
   } else {
     user_dropdown_padding->AddChildView(add_user_view);
   }
@@ -388,9 +527,19 @@ void UserView::ToggleUserDropdownWidget() {
   // is open (the icon will appear in the specific user rows).
   user_card_view_->SetSuppressCaptureIcon(true);
 
+  // Make |user_dropdown_widget_| a transient child of the tray bubble, so that
+  // the bubble does not close when |user_dropdown_widget_| loses activation.
+  ::wm::TransientWindowManager::GetOrCreate(
+      GetBubbleWidget()->GetNativeWindow())
+      ->AddTransientChild(user_dropdown_widget_->GetNativeWindow());
+
   // Show the content.
   user_dropdown_widget_->SetAlwaysOnTop(true);
   user_dropdown_widget_->Show();
+  if (toggled_by_key_event && container->view_model()->view_size() > 0) {
+    user_dropdown_widget_->GetFocusManager()->SetFocusedView(
+        container->view_model()->view_at(0));
+  }
 
   // Install a listener to focus changes so that we can remove the card when
   // the focus gets changed. When called through the destruction of the bubble,
@@ -404,10 +553,26 @@ void UserView::HideUserDropdownWidget() {
     return;
   focus_manager_->RemoveFocusChangeListener(this);
   focus_manager_ = nullptr;
-  if (user_card_container_->GetFocusManager())
+  if (user_card_container_->GetFocusManager()) {
+    // Return activation to bubble before destroying |user_dropdown_widget_|,
+    // otherwise tray_bubble_wrapper will not know |user_dropdown_widget_| is
+    // a transient child of the bubble.
+    if (GetBubbleWidget())
+      GetBubbleWidget()->Activate();
     user_card_container_->GetFocusManager()->ClearFocus();
+    if (user_dropdown_widget_toggled_by_key_event_) {
+      user_card_container_->GetFocusManager()->SetFocusedView(
+          user_card_container_);
+    }
+  }
   user_card_view_->SetSuppressCaptureIcon(false);
   user_dropdown_widget_.reset();
+}
+
+views::Widget* UserView::GetBubbleWidget() {
+  if (!owner_->system_tray()->GetSystemBubble())
+    return nullptr;
+  return owner_->system_tray()->GetSystemBubble()->bubble_view()->GetWidget();
 }
 
 }  // namespace tray

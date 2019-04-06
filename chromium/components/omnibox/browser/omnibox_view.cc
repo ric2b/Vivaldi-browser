@@ -14,13 +14,19 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "components/grit/components_scaled_resources.h"
+#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/toolbar/toolbar_model.h"
 #include "extensions/common/constants.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
+
+#if !defined(OS_IOS)
+#include "ui/gfx/paint_vector_icon.h"
+#endif
 
 // static
 base::string16 OmniboxView::StripJavascriptSchemas(const base::string16& text) {
@@ -87,11 +93,6 @@ void OmniboxView::OpenMatch(const AutocompleteMatch& match,
   // Invalid URLs such as chrome://history can end up here.
   if (!match.destination_url.is_valid() || !model_)
     return;
-  // Unless user requests navigation, change disposition for this match type
-  // so downstream will switch tabs.
-  if (match.type == AutocompleteMatchType::TAB_SEARCH && !shift_key_down_ &&
-      disposition == WindowOpenDisposition::CURRENT_TAB)
-    disposition = WindowOpenDisposition::SWITCH_TO_TAB;
   model_->OpenMatch(
       match, disposition, alternate_nav_url, pasted_text, selected_line);
 }
@@ -101,13 +102,68 @@ bool OmniboxView::IsEditingOrEmpty() const {
       (GetOmniboxTextLength() == 0);
 }
 
-const gfx::VectorIcon& OmniboxView::GetVectorIcon() const {
-  if (!IsEditingOrEmpty())
-    return controller_->GetToolbarModel()->GetVectorIcon();
+// TODO (manukh) OmniboxView::GetIcon is very similar to
+// OmniboxPopupModel::GetMatchIcon. They contain certain inconsistencies
+// concerning what flags are required to display url favicons and bookmark star
+// icons. OmniboxPopupModel::GetMatchIcon also doesn't display default search
+// provider icons. It's possible they have other inconsistencies as well. In the
+// future, once the Material and Favicon flags are always enabled, we may want
+// to consider reusing the same code for both the popup and omnibox icons.
+gfx::ImageSkia OmniboxView::GetIcon(int dip_size,
+                                    SkColor color,
+                                    IconFetchedCallback on_icon_fetched) const {
+#if defined(OS_IOS)
+  // OmniboxViewIOS provides its own icon logic. The iOS build also does not
+  // link in the vector icon rendering code.
+  return gfx::ImageSkia();
+#else   // !defined(OS_IOS)
+  if (!IsEditingOrEmpty()) {
+    return gfx::CreateVectorIcon(
+        controller_->GetToolbarModel()->GetVectorIcon(), dip_size, color);
+  }
 
-  return AutocompleteMatch::TypeToVectorIcon(
-      model_ ? model_->CurrentTextType()
-             : AutocompleteMatchType::URL_WHAT_YOU_TYPED);
+  // For tests, model_ will be null.
+  if (!model_) {
+    const gfx::VectorIcon& vector_icon = AutocompleteMatch::TypeToVectorIcon(
+        AutocompleteMatchType::URL_WHAT_YOU_TYPED, false /*is_bookmark*/,
+        false /*is_tab_match*/);
+    return gfx::CreateVectorIcon(vector_icon, dip_size, color);
+  }
+
+  AutocompleteMatch match = model_->CurrentMatch(nullptr);
+  bool is_bookmarked = false;
+
+  if (ui::MaterialDesignController::IsNewerMaterialUi()) {
+    gfx::Image favicon;
+
+    if (AutocompleteMatch::IsSearchType(match.type)) {
+      // For search queries, display default search engine's favicon.
+      favicon = model_->client()->GetFaviconForDefaultSearchProvider(
+          std::move(on_icon_fetched));
+
+    } else if (OmniboxFieldTrial::IsShowSuggestionFaviconsEnabled()) {
+      // For site suggestions, display site's favicon.
+      favicon = model_->client()->GetFaviconForPageUrl(
+          match.destination_url, std::move(on_icon_fetched));
+    }
+
+    if (!favicon.IsEmpty())
+      return model_->client()->GetSizedIcon(favicon).AsImageSkia();
+    // If the client returns an empty favicon, fall through to provide the
+    // generic vector icon. |on_icon_fetched| may or may not be called later.
+    // If it's never called, the vector icon we provide below should remain.
+
+    // For bookmarked suggestions, display bookmark icon.
+    bookmarks::BookmarkModel* bookmark_model =
+        model_->client()->GetBookmarkModel();
+    is_bookmarked =
+        bookmark_model && bookmark_model->IsBookmarked(match.destination_url);
+  }
+
+  const gfx::VectorIcon& vector_icon = AutocompleteMatch::TypeToVectorIcon(
+      match.type, is_bookmarked, false /*is_tab_match*/);
+  return gfx::CreateVectorIcon(vector_icon, dip_size, color);
+#endif  // defined(OS_IOS)
 }
 
 void OmniboxView::SetUserText(const base::string16& text) {
@@ -116,20 +172,20 @@ void OmniboxView::SetUserText(const base::string16& text) {
 
 void OmniboxView::SetUserText(const base::string16& text,
                               bool update_popup) {
-  if (model_.get())
+  if (model_)
     model_->SetUserText(text);
   SetWindowTextAndCaretPos(text, text.length(), update_popup, true);
 }
 
 void OmniboxView::RevertAll() {
   CloseOmniboxPopup();
-  if (model_.get())
+  if (model_)
     model_->Revert();
   TextChanged();
 }
 
 void OmniboxView::CloseOmniboxPopup() {
-  if (model_.get())
+  if (model_)
     model_->StopAutocomplete();
 }
 
@@ -140,8 +196,9 @@ bool OmniboxView::IsImeShowingPopup() const {
   return false;
 }
 
-void OmniboxView::ShowImeIfNeeded() {
-}
+void OmniboxView::ShowVirtualKeyboardIfEnabled() {}
+
+void OmniboxView::HideImeIfNeeded() {}
 
 bool OmniboxView::IsIndicatingQueryRefinement() const {
   // The default implementation always returns false.  Mobile ports can override
@@ -192,7 +249,7 @@ OmniboxView::StateChanges OmniboxView::GetStateChanges(const State& before,
 
 OmniboxView::OmniboxView(OmniboxEditController* controller,
                          std::unique_ptr<OmniboxClient> client)
-    : controller_(controller), shift_key_down_(false) {
+    : controller_(controller) {
   // |client| can be null in tests.
   if (client) {
     model_.reset(new OmniboxEditModel(this, controller, std::move(client)));
@@ -201,12 +258,13 @@ OmniboxView::OmniboxView(OmniboxEditController* controller,
 
 void OmniboxView::TextChanged() {
   EmphasizeURLComponents();
-  if (model_.get())
+  if (model_)
     model_->OnChanged();
 }
 
 void OmniboxView::UpdateTextStyle(
     const base::string16& display_text,
+    const bool text_is_url,
     const AutocompleteSchemeClassifier& classifier) {
   enum DemphasizeComponents {
     EVERYTHING,
@@ -219,7 +277,7 @@ void OmniboxView::UpdateTextStyle(
   AutocompleteInput::ParseForEmphasizeComponents(display_text, classifier,
                                                  &scheme, &host);
 
-  if (model_->CurrentTextIsURL()) {
+  if (text_is_url) {
     const base::string16 url_scheme =
         display_text.substr(scheme.begin, scheme.len);
     // Extension IDs are not human-readable, so deemphasize everything to draw

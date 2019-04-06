@@ -10,7 +10,7 @@
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "third_party/WebKit/public/platform/site_engagement.mojom.h"
+#include "third_party/blink/public/platform/site_engagement.mojom.h"
 
 class GURL;
 
@@ -65,7 +65,7 @@ class SiteEngagementService::Helper
     bool IsTimerRunning();
 
     // Set the timer object for testing.
-    void SetPauseTimerForTesting(std::unique_ptr<base::Timer> timer);
+    void SetPauseTimerForTesting(std::unique_ptr<base::OneShotTimer> timer);
 
     SiteEngagementService::Helper* helper() { return helper_; }
 
@@ -84,7 +84,7 @@ class SiteEngagementService::Helper
 
    private:
     SiteEngagementService::Helper* helper_;
-    std::unique_ptr<base::Timer> pause_timer_;
+    std::unique_ptr<base::OneShotTimer> pause_timer_;
 
     DISALLOW_COPY_AND_ASSIGN(PeriodicTracker);
   };
@@ -150,10 +150,7 @@ class SiteEngagementService::Helper
         const MediaPlayerInfo& media_info,
         const MediaPlayerId& id,
         WebContentsObserver::MediaStoppedReason reason) override;
-    void WasShown() override;
-    void WasHidden() override;
 
-    bool is_hidden_;
     std::vector<MediaPlayerId> active_media_players_;
 
     DISALLOW_COPY_AND_ASSIGN(MediaTracker);
@@ -182,8 +179,7 @@ class SiteEngagementService::Helper
   // content::WebContentsObserver overrides.
   void DidFinishNavigation(content::NavigationHandle* handle) override;
   void ReadyToCommitNavigation(content::NavigationHandle* handle) override;
-  void WasShown() override;
-  void WasHidden() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
 
   InputTracker input_tracker_;
   MediaTracker media_tracker_;

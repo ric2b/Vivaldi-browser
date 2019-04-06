@@ -25,6 +25,7 @@
 #include "components/autofill/core/browser/address.h"
 #include "components/autofill/core/browser/address_i18n.h"
 #include "components/autofill/core/browser/autofill_country.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_profile_comparator.h"
@@ -35,6 +36,7 @@
 #include "components/autofill/core/browser/state_names.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_l10n_util.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/strings/grit/components_strings.h"
@@ -192,10 +194,10 @@ void GetFieldsForDistinguishingProfiles(
 }
 
 // Constants for the validity bitfield.
-static const size_t kValidityBitsPerType = 2;
+const size_t kValidityBitsPerType = 2;
 // The order is important to ensure a consistent bitfield value. New values
 // should be added at the end NOT at the start or middle.
-static const ServerFieldType kSupportedTypesForValidation[] = {
+const ServerFieldType kSupportedTypesForValidation[] = {
     ADDRESS_HOME_COUNTRY,
     ADDRESS_HOME_STATE,
     ADDRESS_HOME_ZIP,
@@ -204,12 +206,21 @@ static const ServerFieldType kSupportedTypesForValidation[] = {
     EMAIL_ADDRESS,
     PHONE_HOME_WHOLE_NUMBER};
 
-static const size_t kNumSupportedTypesForValidation =
+const size_t kNumSupportedTypesForValidation =
     sizeof(kSupportedTypesForValidation) /
     sizeof(kSupportedTypesForValidation[0]);
 
 static_assert(kNumSupportedTypesForValidation * kValidityBitsPerType <= 64,
               "Not enough bits to encode profile validity information!");
+
+// Some types are specializations of other types. Normalize these back to the
+// main stored type for used to mark field validity .
+ServerFieldType NormalizeTypeForValidityCheck(ServerFieldType type) {
+  auto field_type_group = AutofillType(type).group();
+  if (field_type_group == PHONE_HOME || field_type_group == PHONE_BILLING)
+    return PHONE_HOME_WHOLE_NUMBER;
+  return type;
+}
 
 }  // namespace
 
@@ -244,13 +255,13 @@ AutofillProfile::~AutofillProfile() {
 }
 
 AutofillProfile& AutofillProfile::operator=(const AutofillProfile& profile) {
+  if (this == &profile)
+    return *this;
+
   set_use_count(profile.use_count());
   set_use_date(profile.use_date());
   set_previous_use_date(profile.previous_use_date());
   set_modification_date(profile.modification_date());
-
-  if (this == &profile)
-    return *this;
 
   set_guid(profile.guid());
   set_origin(profile.origin());
@@ -278,9 +289,22 @@ void AutofillProfile::GetMatchingTypes(
     const base::string16& text,
     const std::string& app_locale,
     ServerFieldTypeSet* matching_types) const {
+  ServerFieldTypeSet matching_types_in_this_profile;
   FormGroupList info = FormGroups();
   for (const auto* form_group : info) {
-    form_group->GetMatchingTypes(text, app_locale, matching_types);
+    form_group->GetMatchingTypes(text, app_locale,
+                                 &matching_types_in_this_profile);
+  }
+  for (auto type : matching_types_in_this_profile) {
+    if (GetValidityState(type) == INVALID) {
+      bool vote_using_invalid_data =
+          base::FeatureList::IsEnabled(kAutofillVoteUsingInvalidProfileData);
+      UMA_HISTOGRAM_BOOLEAN("Autofill.InvalidProfileData.UsedForMetrics",
+                            vote_using_invalid_data);
+      if (!vote_using_invalid_data)
+        continue;
+    }
+    matching_types->insert(type);
   }
 }
 
@@ -380,6 +404,12 @@ bool AutofillProfile::EqualsForSyncPurposes(const AutofillProfile& profile)
          EqualsSansGuid(profile);
 }
 
+bool AutofillProfile::EqualsIncludingUsageStatsForTesting(
+    const AutofillProfile& profile) const {
+  return use_count() == profile.use_count() &&
+         use_date() == profile.use_date() && *this == profile;
+}
+
 bool AutofillProfile::operator==(const AutofillProfile& profile) const {
   return guid() == profile.guid() && EqualsSansGuid(profile);
 }
@@ -434,6 +464,30 @@ bool AutofillProfile::IsSubsetOfForFieldSet(
   }
 
   return true;
+}
+
+void AutofillProfile::OverwriteDataFrom(const AutofillProfile& profile) {
+  // Verified profiles should never be overwritten with unverified data.
+  DCHECK(!IsVerified() || profile.IsVerified());
+  DCHECK_EQ(guid(), profile.guid());
+
+  // Some fields should not got overwritten by empty values; back-up the
+  // values.
+  std::string language_code_value = language_code();
+  std::string origin_value = origin();
+  int validity_bitfield_value = GetValidityBitfieldValue();
+  base::string16 name_full_value = GetRawInfo(NAME_FULL);
+
+  *this = profile;
+
+  if (origin().empty())
+    set_origin(origin_value);
+  if (language_code().empty())
+    set_language_code(language_code_value);
+  if (GetValidityBitfieldValue() == 0)
+    SetValidityFromBitfieldValue(validity_bitfield_value);
+  if (!HasRawInfo(NAME_FULL))
+    SetRawInfo(NAME_FULL, name_full_value);
 }
 
 bool AutofillProfile::MergeDataFrom(const AutofillProfile& profile,
@@ -707,6 +761,7 @@ void AutofillProfile::RecordAndLogUse() {
 
 AutofillProfile::ValidityState AutofillProfile::GetValidityState(
     ServerFieldType type) const {
+  type = NormalizeTypeForValidityCheck(type);
   // Return UNSUPPORTED for types that autofill does not validate.
   if (!IsValidationSupportedForType(type))
     return UNSUPPORTED;
@@ -724,7 +779,8 @@ void AutofillProfile::SetValidityState(ServerFieldType type,
   validity_states_[type] = validity;
 }
 
-bool AutofillProfile::IsValidationSupportedForType(ServerFieldType type) const {
+// static
+bool AutofillProfile::IsValidationSupportedForType(ServerFieldType type) {
   for (auto supported_type : kSupportedTypesForValidation) {
     if (type == supported_type)
       return true;
@@ -919,6 +975,7 @@ FormGroup* AutofillProfile::MutableFormGroupForType(const AutofillType& type) {
     case PASSWORD_FIELD:
     case USERNAME_FIELD:
     case TRANSACTION:
+    case UNFILLABLE:
       return nullptr;
   }
 
@@ -933,9 +990,9 @@ bool AutofillProfile::EqualsSansGuid(const AutofillProfile& profile) const {
          Compare(profile) == 0;
 }
 
-// So we can compare AutofillProfiles with EXPECT_EQ().
 std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
   return os << profile.guid() << " " << profile.origin() << " "
+            << UTF16ToUTF8(profile.GetRawInfo(NAME_FULL)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(NAME_FIRST)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(NAME_MIDDLE)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(NAME_LAST)) << " "
@@ -943,6 +1000,7 @@ std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
             << UTF16ToUTF8(profile.GetRawInfo(COMPANY_NAME)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_LINE1)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_LINE2)) << " "
+            << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_LINE3)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY))
             << " " << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_CITY)) << " "
             << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_STATE)) << " "
@@ -951,7 +1009,8 @@ std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
             << UTF16ToUTF8(profile.GetRawInfo(ADDRESS_HOME_COUNTRY)) << " "
             << profile.language_code() << " "
             << UTF16ToUTF8(profile.GetRawInfo(PHONE_HOME_WHOLE_NUMBER)) << " "
-            << profile.GetValidityBitfieldValue();
+            << profile.GetValidityBitfieldValue() << " " << profile.use_count()
+            << " " << profile.use_date();
 }
 
 }  // namespace autofill

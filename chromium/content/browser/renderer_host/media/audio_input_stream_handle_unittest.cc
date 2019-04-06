@@ -8,8 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/shared_memory.h"
-#include "base/memory/shared_memory_handle.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sync_socket.h"
@@ -36,6 +35,7 @@ class FakeAudioInputDelegate : public media::AudioInputDelegate {
   int GetStreamId() override { return 0; };
   void OnRecordStream() override{};
   void OnSetVolume(double volume) override{};
+  void OnSetOutputDeviceForAec(const std::string& output_device_id) override{};
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakeAudioInputDelegate);
@@ -46,11 +46,13 @@ class MockRendererAudioInputStreamFactoryClient
  public:
   MOCK_METHOD0(Created, void());
 
-  void StreamCreated(media::mojom::AudioInputStreamPtr input_stream,
-                     media::mojom::AudioInputStreamClientRequest client_request,
-                     mojo::ScopedSharedBufferHandle shared_buffer,
-                     mojo::ScopedHandle socket_descriptor,
-                     bool initially_muted) override {
+  void StreamCreated(
+      media::mojom::AudioInputStreamPtr input_stream,
+      media::mojom::AudioInputStreamClientRequest client_request,
+      media::mojom::ReadOnlyAudioDataPipePtr data_pipe,
+      bool initially_muted,
+      const base::Optional<base::UnguessableToken>& stream_id) override {
+    EXPECT_TRUE(stream_id.has_value());
     input_stream_ = std::move(input_stream);
     client_request_ = std::move(client_request);
     Created();
@@ -90,11 +92,9 @@ class AudioInputStreamHandleTest : public Test {
     EXPECT_TRUE(event_handler_);
 
     const size_t kSize = 1234;
-    base::SharedMemoryCreateOptions shmem_options;
-    shmem_options.size = kSize;
-    shmem_options.share_read_only = true;
-    shared_memory_.Create(shmem_options);
-    shared_memory_.Map(kSize);
+    shared_memory_region_ =
+        base::ReadOnlySharedMemoryRegion::Create(kSize).region;
+    EXPECT_TRUE(shared_memory_region_.IsValid());
     EXPECT_TRUE(
         base::CancelableSyncSocket::CreatePair(local_.get(), remote_.get()));
   }
@@ -102,7 +102,8 @@ class AudioInputStreamHandleTest : public Test {
   void SendCreatedNotification() {
     const int kIrrelevantStreamId = 0;
     const bool kInitiallyMuted = false;
-    event_handler_->OnStreamCreated(kIrrelevantStreamId, &shared_memory_,
+    event_handler_->OnStreamCreated(kIrrelevantStreamId,
+                                    std::move(shared_memory_region_),
                                     std::move(remote_), kInitiallyMuted);
   }
 
@@ -129,7 +130,7 @@ class AudioInputStreamHandleTest : public Test {
   media::AudioInputDelegate::EventHandler* event_handler_ = nullptr;
   std::unique_ptr<AudioInputStreamHandle> handle_;
 
-  base::SharedMemory shared_memory_;
+  base::ReadOnlySharedMemoryRegion shared_memory_region_;
   std::unique_ptr<base::CancelableSyncSocket> local_;
   std::unique_ptr<base::CancelableSyncSocket> remote_;
 };

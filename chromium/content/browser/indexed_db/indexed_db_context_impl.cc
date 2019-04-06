@@ -12,7 +12,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
@@ -36,7 +35,7 @@
 #include "content/public/common/content_switches.h"
 #include "storage/browser/database/database_util.h"
 #include "storage/common/database/database_identifier.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "url/origin.h"
 
@@ -76,8 +75,7 @@ void GetAllOriginsAndPaths(const base::FilePath& indexeddb_path,
         file_path.RemoveExtension().Extension() == kIndexedDBExtension) {
       std::string origin_id = file_path.BaseName().RemoveExtension()
           .RemoveExtension().MaybeAsASCII();
-      origins->push_back(
-          Origin::Create(storage::GetOriginFromIdentifier(origin_id)));
+      origins->push_back(storage::GetOriginFromIdentifier(origin_id));
       if (file_paths)
         file_paths->push_back(file_path);
     }
@@ -179,13 +177,15 @@ base::ListValue* IndexedDBContextImpl::GetAllOriginsDetails() {
     info->SetString("url", origin.Serialize());
     info->SetString("size", ui::FormatBytes(GetOriginDiskUsage(origin)));
     info->SetDouble("last_modified", GetOriginLastModified(origin).ToJsTime());
+
+    auto paths = std::make_unique<base::ListValue>();
     if (!is_incognito()) {
-      std::unique_ptr<base::ListValue> paths(
-          std::make_unique<base::ListValue>());
       for (const base::FilePath& path : GetStoragePaths(origin))
         paths->AppendString(path.value());
-      info->Set("paths", std::move(paths));
+    } else {
+      paths->AppendString("N/A");
     }
+    info->Set("paths", std::move(paths));
     info->SetDouble("connection_count", GetConnectionCount(origin));
 
     // This ends up being O(n^2) since we iterate over all open databases
@@ -292,22 +292,27 @@ int IndexedDBContextImpl::GetOriginBlobFileCount(const Origin& origin) {
   return count;
 }
 
-// TODO(jsbell): Update callers to use url::Origin overload and remove.
-int64_t IndexedDBContextImpl::GetOriginDiskUsage(const GURL& origin_url) {
-  return GetOriginDiskUsage(Origin::Create(origin_url));
-}
-
 int64_t IndexedDBContextImpl::GetOriginDiskUsage(const Origin& origin) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
-  if (data_path_.empty() || !HasOrigin(origin))
+  if (!HasOrigin(origin))
     return 0;
+
   EnsureDiskUsageCacheInitialized(origin);
   return origin_size_map_[origin];
 }
 
 base::Time IndexedDBContextImpl::GetOriginLastModified(const Origin& origin) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
-  if (data_path_.empty() || !HasOrigin(origin))
+  if (!HasOrigin(origin))
+    return base::Time();
+
+  if (is_incognito()) {
+    if (!factory_)
+      return base::Time();
+    return factory_->GetLastModified(origin);
+  }
+
+  if (data_path_.empty())
     return base::Time();
   base::FilePath idb_directory = GetLevelDBPath(origin);
   base::File::Info file_info;
@@ -402,7 +407,7 @@ void IndexedDBContextImpl::ForceClose(const Origin origin,
 
 size_t IndexedDBContextImpl::GetConnectionCount(const Origin& origin) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
-  if (data_path_.empty() || !HasOrigin(origin))
+  if (!HasOrigin(origin))
     return 0;
 
   if (!factory_.get())
@@ -444,7 +449,7 @@ void IndexedDBContextImpl::ConnectionOpened(const Origin& origin,
                                             IndexedDBConnection* connection) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
   quota_manager_proxy()->NotifyStorageAccessed(
-      storage::QuotaClient::kIndexedDatabase, origin.GetURL(),
+      storage::QuotaClient::kIndexedDatabase, origin,
       blink::mojom::StorageType::kTemporary);
   if (AddToOriginSet(origin)) {
     // A newly created db, notify the quota system.
@@ -458,7 +463,7 @@ void IndexedDBContextImpl::ConnectionClosed(const Origin& origin,
                                             IndexedDBConnection* connection) {
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
   quota_manager_proxy()->NotifyStorageAccessed(
-      storage::QuotaClient::kIndexedDatabase, origin.GetURL(),
+      storage::QuotaClient::kIndexedDatabase, origin,
       blink::mojom::StorageType::kTemporary);
   if (factory_.get() && factory_->GetConnectionCount(origin) == 0)
     QueryDiskAndUpdateQuotaUsage(origin);
@@ -508,7 +513,7 @@ IndexedDBContextImpl::~IndexedDBContextImpl() {
   if (factory_.get()) {
     TaskRunner()->PostTask(FROM_HERE,
                            base::BindOnce(&IndexedDBFactory::ContextDestroyed,
-                                          base::Passed(&factory_)));
+                                          std::move(factory_)));
   }
 
   if (data_path_.empty())
@@ -533,7 +538,7 @@ IndexedDBContextImpl::~IndexedDBContextImpl() {
 // static
 base::FilePath IndexedDBContextImpl::GetBlobStoreFileName(
     const Origin& origin) {
-  std::string origin_id = storage::GetIdentifierFromOrigin(origin.GetURL());
+  std::string origin_id = storage::GetIdentifierFromOrigin(origin);
   return base::FilePath()
       .AppendASCII(origin_id)
       .AddExtension(kIndexedDBExtension)
@@ -542,7 +547,7 @@ base::FilePath IndexedDBContextImpl::GetBlobStoreFileName(
 
 // static
 base::FilePath IndexedDBContextImpl::GetLevelDBFileName(const Origin& origin) {
-  std::string origin_id = storage::GetIdentifierFromOrigin(origin.GetURL());
+  std::string origin_id = storage::GetIdentifierFromOrigin(origin);
   return base::FilePath()
       .AppendASCII(origin_id)
       .AddExtension(kIndexedDBExtension)
@@ -562,8 +567,12 @@ base::FilePath IndexedDBContextImpl::GetLevelDBPath(
 }
 
 int64_t IndexedDBContextImpl::ReadUsageFromDisk(const Origin& origin) const {
-  if (data_path_.empty())
-    return 0;
+  if (is_incognito()) {
+    if (!factory_)
+      return 0;
+    return factory_->GetInMemoryDBSize(origin);
+  }
+
   int64_t total_size = 0;
   for (const base::FilePath& path : GetStoragePaths(origin))
     total_size += base::ComputeDirectorySize(path);
@@ -583,7 +592,7 @@ void IndexedDBContextImpl::QueryDiskAndUpdateQuotaUsage(const Origin& origin) {
   if (difference) {
     origin_size_map_[origin] = current_disk_usage;
     quota_manager_proxy()->NotifyStorageModified(
-        storage::QuotaClient::kIndexedDatabase, origin.GetURL(),
+        storage::QuotaClient::kIndexedDatabase, origin,
         blink::mojom::StorageType::kTemporary, difference);
     NotifyIndexedDBListChanged(origin);
   }

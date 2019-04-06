@@ -34,7 +34,8 @@ class CompositorTimingHistory;
 
 class SchedulerClient {
  public:
-  virtual void WillBeginImplFrame(const viz::BeginFrameArgs& args) = 0;
+  // Returns whether the frame has damage.
+  virtual bool WillBeginImplFrame(const viz::BeginFrameArgs& args) = 0;
   virtual void ScheduledActionSendBeginMainFrame(
       const viz::BeginFrameArgs& args) = 0;
   virtual DrawResult ScheduledActionDrawIfPossible() = 0;
@@ -43,7 +44,8 @@ class SchedulerClient {
   virtual void ScheduledActionActivateSyncTree() = 0;
   virtual void ScheduledActionBeginLayerTreeFrameSinkCreation() = 0;
   virtual void ScheduledActionPrepareTiles() = 0;
-  virtual void ScheduledActionInvalidateLayerTreeFrameSink() = 0;
+  virtual void ScheduledActionInvalidateLayerTreeFrameSink(
+      bool needs_redraw) = 0;
   virtual void ScheduledActionPerformImplSideInvalidation() = 0;
   virtual void DidFinishImplFrame() = 0;
   virtual void DidNotProduceFrame(const viz::BeginFrameAck& ack) = 0;
@@ -54,7 +56,8 @@ class SchedulerClient {
   // Functions used for reporting anmation targeting UMA, crbug.com/758439.
   virtual size_t CompositedAnimationsCount() const = 0;
   virtual size_t MainThreadAnimationsCount() const = 0;
-  virtual size_t MainThreadCompositableAnimationsCount() const = 0;
+  virtual bool CurrentFrameHadRAF() const = 0;
+  virtual bool NextFrameHasPendingRAF() const = 0;
 
  protected:
   virtual ~SchedulerClient() {}
@@ -77,7 +80,8 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   void OnBeginFrameSourcePausedChanged(bool paused) override;
   bool OnBeginFrameDerivedImpl(const viz::BeginFrameArgs& args) override;
 
-  void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw);
+  void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw,
+                                   bool skip_draw);
 
   const SchedulerSettings& settings() const { return settings_; }
 
@@ -170,7 +174,7 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   viz::BeginFrameAck CurrentBeginFrameAckForActiveTree() const;
 
-  void ClearHistoryOnNavigation();
+  void ClearHistory();
 
  protected:
   // Virtual for testing.

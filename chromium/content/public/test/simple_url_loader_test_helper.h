@@ -11,10 +11,8 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "base/run_loop.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/common/simple_url_loader.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 
 namespace content {
 
@@ -27,13 +25,10 @@ class SimpleURLLoaderTestHelper {
 
   // Returns a BodyAsStringCallback for use with a SimpleURLLoader. May be
   // called only once.
-  SimpleURLLoader::BodyAsStringCallback GetCallback();
+  network::SimpleURLLoader::BodyAsStringCallback GetCallback();
 
   // Waits until the callback returned by GetCallback() is invoked.
   void WaitForCallback();
-
-  // Specify the thread to quit the runloop.
-  void SetRunLoopQuitThread(BrowserThread::ID);
 
   // Response body passed to the callback returned by GetCallback, if there was
   // one.
@@ -50,10 +45,6 @@ class SimpleURLLoaderTestHelper {
   bool wait_started_ = false;
 
   base::RunLoop run_loop_;
-
-  // When set, will post |run_loop_.Quit()| to |run_loop_quit_thread_| if it's
-  // not current thread.
-  base::Optional<BrowserThread::ID> run_loop_quit_thread_;
 
   std::unique_ptr<std::string> response_body_;
 

@@ -15,7 +15,6 @@
 namespace media {
 namespace remoting {
 
-class SharedSession;
 class RendererController;
 class CourierRenderer;
 class Receiver;
@@ -38,6 +37,14 @@ class End2EndTestRenderer final : public Renderer {
   void SetVolume(float volume) override;
   base::TimeDelta GetMediaTime() override;
 
+  void OnSelectedVideoTracksChanged(
+      const std::vector<DemuxerStream*>& enabled_tracks,
+      base::OnceClosure change_completed_cb) override;
+
+  void OnEnabledAudioTracksChanged(
+      const std::vector<DemuxerStream*>& enabled_tracks,
+      base::OnceClosure change_completed_cb) override;
+
  private:
   // Called to send RPC messages to |receiver_|.
   void SendMessageToSink(const std::vector<uint8_t>& message);
@@ -49,8 +56,6 @@ class End2EndTestRenderer final : public Renderer {
   // Called when receives RPC messages from |receiver_|.
   void OnMessageFromSink(std::unique_ptr<std::vector<uint8_t>> message);
 
-  // The session that is used by |controller_| to create the data pipes.
-  scoped_refptr<SharedSession> shared_session_;
   std::unique_ptr<RendererController> controller_;
   std::unique_ptr<CourierRenderer> courier_renderer_;
 

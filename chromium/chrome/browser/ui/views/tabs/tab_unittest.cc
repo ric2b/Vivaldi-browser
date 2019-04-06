@@ -15,12 +15,14 @@
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_icon.h"
 #include "chrome/grit/theme_resources.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/list_selection_model.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 
 using views::Widget;
@@ -38,9 +40,11 @@ class FakeTabController : public TabController {
     return selection_model_;
   }
   bool SupportsMultipleSelection() override { return false; }
-  bool ShouldHideCloseButtonForInactiveTabs() override {
-    return false;
+  NewTabButtonPosition GetNewTabButtonPosition() const override {
+    return LEADING;
   }
+  bool ShouldHideCloseButtonForTab(Tab* tab) const override { return false; }
+  bool ShouldShowCloseButtonOnHover() override { return false; }
   bool MaySetClip() override { return false; }
   void SelectTab(Tab* tab) override {}
   void ExtendSelectionTo(Tab* tab) override {}
@@ -54,6 +58,10 @@ class FakeTabController : public TabController {
   bool IsActiveTab(const Tab* tab) const override { return active_tab_; }
   bool IsTabSelected(const Tab* tab) const override { return false; }
   bool IsTabPinned(const Tab* tab) const override { return false; }
+  bool IsFirstVisibleTab(const Tab* tab) const override { return false; }
+  bool IsLastVisibleTab(const Tab* tab) const override { return false; }
+  bool SingleTabMode() const override { return false; }
+  bool IsIncognito() const override { return false; }
   void MaybeStartDrag(
       Tab* tab,
       const ui::LocatedEvent& event,
@@ -61,28 +69,48 @@ class FakeTabController : public TabController {
   void ContinueDrag(views::View* view, const ui::LocatedEvent& event) override {
   }
   bool EndDrag(EndDragReason reason) override { return false; }
-  Tab* GetTabAt(Tab* tab, const gfx::Point& tab_in_tab_coordinates) override {
-    return NULL;
-  }
+  Tab* GetTabAt(const gfx::Point& point) override { return nullptr; }
+  const Tab* GetSubsequentTab(const Tab* tab) override { return nullptr; }
   void OnMouseEventInTab(views::View* source,
                          const ui::MouseEvent& event) override {}
   bool ShouldPaintTab(
       const Tab* tab,
-      const base::Callback<gfx::Path(const gfx::Size&)>& border_callback,
+      const base::RepeatingCallback<gfx::Path(const gfx::Rect&)>&
+          border_callback,
       gfx::Path* clip) override {
     return true;
+  }
+  int GetStrokeThickness() const override {
+    return ui::MaterialDesignController::IsRefreshUi() ? 0 : 1;
   }
   bool CanPaintThrobberToLayer() const override {
     return paint_throbber_to_layer_;
   }
+  bool HasVisibleBackgroundTabShapes() const override { return false; }
   SkColor GetToolbarTopSeparatorColor() const override { return SK_ColorBLACK; }
-  int GetBackgroundResourceId(bool* custom_image) const override {
-    *custom_image = false;
+  SkColor GetTabSeparatorColor() const override { return SK_ColorBLACK; }
+  SkColor GetTabBackgroundColor(TabState state, bool opaque) const override {
+    return gfx::kPlaceholderColor;
+  }
+  SkColor GetTabForegroundColor(TabState state) const override {
+    return gfx::kPlaceholderColor;
+  }
+  int GetBackgroundResourceId(
+      bool* has_custom_image,
+      BrowserNonClientFrameView::ActiveState active_state) const override {
+    *has_custom_image = false;
     return IDR_THEME_TAB_BACKGROUND;
+  }
+  gfx::Rect GetTabAnimationTargetBounds(const Tab* tab) override {
+    return tab->bounds();
   }
   base::string16 GetAccessibleTabName(const Tab* tab) const override {
     return base::string16();
   }
+  float GetHoverOpacityForTab(float range_parameter) const override {
+    return 1.0f;
+  }
+  float GetHoverOpacityForRadialHighlight() const override { return 1.0f; }
 
  private:
   ui::ListSelectionModel selection_model_;
@@ -92,103 +120,110 @@ class FakeTabController : public TabController {
   DISALLOW_COPY_AND_ASSIGN(FakeTabController);
 };
 
-class TabTest : public views::ViewsTestBase {
+class TabTest : public ChromeViewsTestBase {
  public:
   TabTest() {}
   ~TabTest() override {}
+
+  static TabIcon* GetTabIcon(const Tab& tab) { return tab.icon_; }
+
+  static views::Label* GetTabTitle(const Tab& tab) { return tab.title_; }
+
+  static views::ImageButton* GetAlertIndicator(const Tab& tab) {
+    return tab.alert_indicator_button_;
+  }
 
   static views::ImageButton* GetCloseButton(const Tab& tab) {
     return tab.close_button_;
   }
 
-  static TabIcon* GetTabIcon(const Tab& tab) { return tab.icon_; }
-
   static int GetTitleWidth(const Tab& tab) {
     return tab.title_->bounds().width();
   }
 
+  static void EndTitleAnimation(Tab& tab) { tab.title_animation_.End(); }
+
   static void LayoutTab(Tab* tab) { tab->Layout(); }
+
+  static int VisibleIconCount(const Tab& tab) {
+    return tab.showing_icon_ + tab.showing_alert_indicator_ +
+           tab.showing_close_button_;
+  }
 
   static void CheckForExpectedLayoutAndVisibilityOfElements(const Tab& tab) {
     // Check whether elements are visible when they are supposed to be, given
     // Tab size and TabRendererData state.
     if (tab.data_.pinned) {
-      EXPECT_EQ(1, tab.IconCapacity());
+      EXPECT_EQ(1, VisibleIconCount(tab));
       if (tab.data_.alert_state != TabAlertState::NONE) {
-        EXPECT_FALSE(tab.ShouldShowIcon());
-        EXPECT_TRUE(tab.ShouldShowAlertIndicator());
+        EXPECT_FALSE(tab.showing_icon_);
+        EXPECT_TRUE(tab.showing_alert_indicator_);
       } else {
-        EXPECT_TRUE(tab.ShouldShowIcon());
-        EXPECT_FALSE(tab.ShouldShowAlertIndicator());
+        EXPECT_TRUE(tab.showing_icon_);
+        EXPECT_FALSE(tab.showing_alert_indicator_);
       }
       EXPECT_FALSE(tab.title_->visible());
-      EXPECT_FALSE(tab.ShouldShowCloseBox());
+      EXPECT_FALSE(tab.showing_close_button_);
     } else if (tab.IsActive()) {
-      EXPECT_TRUE(tab.ShouldShowCloseBox());
-      switch (tab.IconCapacity()) {
-        case 0:
+      EXPECT_TRUE(tab.showing_close_button_);
+      switch (VisibleIconCount(tab)) {
         case 1:
-          EXPECT_FALSE(tab.ShouldShowIcon());
-          EXPECT_FALSE(tab.ShouldShowAlertIndicator());
+          EXPECT_FALSE(tab.showing_icon_);
+          EXPECT_FALSE(tab.showing_alert_indicator_);
           break;
         case 2:
           if (tab.data_.alert_state != TabAlertState::NONE) {
-            EXPECT_FALSE(tab.ShouldShowIcon());
-            EXPECT_TRUE(tab.ShouldShowAlertIndicator());
+            EXPECT_FALSE(tab.showing_icon_);
+            EXPECT_TRUE(tab.showing_alert_indicator_);
           } else {
-            EXPECT_TRUE(tab.ShouldShowIcon());
-            EXPECT_FALSE(tab.ShouldShowAlertIndicator());
+            EXPECT_TRUE(tab.showing_icon_);
+            EXPECT_FALSE(tab.showing_alert_indicator_);
           }
           break;
         default:
-          EXPECT_LE(3, tab.IconCapacity());
-          EXPECT_TRUE(tab.ShouldShowIcon());
-          if (tab.data_.alert_state != TabAlertState::NONE)
-            EXPECT_TRUE(tab.ShouldShowAlertIndicator());
-          else
-            EXPECT_FALSE(tab.ShouldShowAlertIndicator());
+          EXPECT_EQ(3, VisibleIconCount(tab));
+          EXPECT_TRUE(tab.data_.alert_state != TabAlertState::NONE);
           break;
       }
     } else {  // Tab not active and not pinned tab.
-      switch (tab.IconCapacity()) {
-        case 0:
-          EXPECT_FALSE(tab.ShouldShowCloseBox());
-          EXPECT_FALSE(tab.ShouldShowIcon());
-          EXPECT_FALSE(tab.ShouldShowAlertIndicator());
-          break;
+      switch (VisibleIconCount(tab)) {
         case 1:
-          EXPECT_FALSE(tab.ShouldShowCloseBox());
-          if (tab.data_.alert_state != TabAlertState::NONE) {
-            EXPECT_FALSE(tab.ShouldShowIcon());
-            EXPECT_TRUE(tab.ShouldShowAlertIndicator());
-          } else {
-            EXPECT_TRUE(tab.ShouldShowIcon());
-            EXPECT_FALSE(tab.ShouldShowAlertIndicator());
-          }
+          EXPECT_FALSE(tab.showing_close_button_);
+          if (tab.data_.alert_state == TabAlertState::NONE ||
+              tab.center_favicon_)
+            EXPECT_FALSE(tab.showing_alert_indicator_);
+          if (tab.center_favicon_)
+            EXPECT_TRUE(tab.showing_icon_);
+          break;
+        case 2:
+          EXPECT_TRUE(tab.showing_icon_);
+          if (tab.data_.alert_state != TabAlertState::NONE)
+            EXPECT_TRUE(tab.showing_alert_indicator_);
+          else
+            EXPECT_FALSE(tab.showing_alert_indicator_);
           break;
         default:
-          EXPECT_LE(2, tab.IconCapacity());
-          EXPECT_TRUE(tab.ShouldShowIcon());
-          if (tab.data_.alert_state != TabAlertState::NONE)
-            EXPECT_TRUE(tab.ShouldShowAlertIndicator());
-          else
-            EXPECT_FALSE(tab.ShouldShowAlertIndicator());
-          break;
+          EXPECT_EQ(3, VisibleIconCount(tab));
+          EXPECT_TRUE(tab.data_.alert_state != TabAlertState::NONE);
       }
     }
 
     // Check positioning of elements with respect to each other, and that they
     // are fully within the contents bounds.
     const gfx::Rect contents_bounds = tab.GetContentsBounds();
-    if (tab.ShouldShowIcon()) {
-      EXPECT_LE(contents_bounds.x(), tab.icon_->x());
+    if (tab.showing_icon_) {
+      if (tab.center_favicon_) {
+        EXPECT_LE(tab.icon_->x(), contents_bounds.x());
+      } else {
+        EXPECT_LE(contents_bounds.x(), tab.icon_->x());
+      }
       if (tab.title_->visible())
         EXPECT_LE(tab.icon_->bounds().right(), tab.title_->x());
       EXPECT_LE(contents_bounds.y(), tab.icon_->y());
       EXPECT_LE(tab.icon_->bounds().bottom(), contents_bounds.bottom());
     }
 
-    if (tab.ShouldShowIcon() && tab.ShouldShowAlertIndicator()) {
+    if (tab.showing_icon_ && tab.showing_alert_indicator_) {
       // When checking for overlap, other views should not overlap the main
       // favicon (covered by kFaviconSize) but can overlap the extra space
       // reserved for the attention indicator.
@@ -196,7 +231,7 @@ class TabTest : public views::ViewsTestBase {
       EXPECT_LE(icon_visual_right, GetAlertIndicatorBounds(tab).x());
     }
 
-    if (tab.ShouldShowAlertIndicator()) {
+    if (tab.showing_alert_indicator_) {
       if (tab.title_->visible()) {
         EXPECT_LE(tab.title_->bounds().right(),
                   GetAlertIndicatorBounds(tab).x());
@@ -206,14 +241,14 @@ class TabTest : public views::ViewsTestBase {
       EXPECT_LE(GetAlertIndicatorBounds(tab).bottom(),
                 contents_bounds.bottom());
     }
-    if (tab.ShouldShowAlertIndicator() && tab.ShouldShowCloseBox()) {
+    if (tab.showing_alert_indicator_ && tab.showing_close_button_) {
       // Note: The alert indicator can overlap the left-insets of the close box,
       // but should otherwise be to the left of the close button.
       EXPECT_LE(GetAlertIndicatorBounds(tab).right(),
                 tab.close_button_->bounds().x() +
                     tab.close_button_->GetInsets().left());
     }
-    if (tab.ShouldShowCloseBox()) {
+    if (tab.showing_close_button_) {
       // Note: The title bounds can overlap the left-insets of the close box,
       // but should otherwise be to the left of the close button.
       if (tab.title_->visible()) {
@@ -269,7 +304,7 @@ TEST_F(TabTest, HitTestTopPixel) {
   FakeTabController tab_controller;
   Tab tab(&tab_controller, nullptr);
   widget.GetContentsView()->AddChildView(&tab);
-  tab.SetBoundsRect(gfx::Rect(gfx::Point(0, 0), Tab::GetStandardSize()));
+  tab.SizeToPreferredSize();
 
   // Tabs are slanted, so a click halfway down the left edge won't hit it.
   int middle_y = tab.height() / 2;
@@ -292,8 +327,9 @@ TEST_F(TabTest, HitTestTopPixel) {
 
 TEST_F(TabTest, LayoutAndVisibilityOfElements) {
   static const TabAlertState kAlertStatesToTest[] = {
-      TabAlertState::NONE, TabAlertState::TAB_CAPTURING,
+      TabAlertState::NONE,          TabAlertState::TAB_CAPTURING,
       TabAlertState::AUDIO_PLAYING, TabAlertState::AUDIO_MUTING,
+      TabAlertState::PIP_PLAYING,
   };
 
   Widget widget;
@@ -326,20 +362,19 @@ TEST_F(TabTest, LayoutAndVisibilityOfElements) {
         StopFadeAnimationIfNecessary(tab);
 
         // Test layout for every width from standard to minimum.
-        gfx::Rect bounds(gfx::Point(0, 0), Tab::GetStandardSize());
-        int min_width;
+        int width, min_width;
         if (is_pinned_tab) {
-          bounds.set_width(Tab::GetPinnedWidth());
-          min_width = Tab::GetPinnedWidth();
+          width = min_width = Tab::GetPinnedWidth();
         } else {
-          min_width = is_active_tab ? Tab::GetMinimumActiveSize().width()
-                                    : Tab::GetMinimumInactiveSize().width();
+          width = Tab::GetStandardWidth();
+          min_width = is_active_tab ? Tab::GetMinimumActiveWidth()
+                                    : Tab::GetMinimumInactiveWidth();
         }
-        while (bounds.width() >= min_width) {
-          SCOPED_TRACE(::testing::Message() << "bounds=" << bounds.ToString());
-          tab.SetBoundsRect(bounds);  // Invokes Tab::Layout().
+        const int height = GetLayoutConstant(TAB_HEIGHT);
+        for (; width >= min_width; --width) {
+          SCOPED_TRACE(::testing::Message() << "width=" << width);
+          tab.SetBounds(0, 0, width, height);  // Invokes Tab::Layout().
           CheckForExpectedLayoutAndVisibilityOfElements(tab);
-          bounds.set_width(bounds.width() - 1);
         }
       }
     }
@@ -356,7 +391,7 @@ TEST_F(TabTest, TooltipProvidedByTab) {
   FakeTabController controller;
   Tab tab(&controller, nullptr);
   widget.GetContentsView()->AddChildView(&tab);
-  tab.SetBoundsRect(gfx::Rect(Tab::GetStandardSize()));
+  tab.SizeToPreferredSize();
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(16, 16);
@@ -449,7 +484,7 @@ TEST_F(TabTest, LayeredThrobber) {
   FakeTabController tab_controller;
   Tab tab(&tab_controller, nullptr);
   widget.GetContentsView()->AddChildView(&tab);
-  tab.SetBoundsRect(gfx::Rect(Tab::GetStandardSize()));
+  tab.SizeToPreferredSize();
 
   TabIcon* icon = GetTabIcon(tab);
   TabRendererData data;
@@ -547,4 +582,120 @@ TEST_F(TabTest, TitleHiddenWhenSmall) {
   EXPECT_GT(GetTitleWidth(tab), 0);
   tab.SetBounds(0, 0, 0, 50);
   EXPECT_EQ(0, GetTitleWidth(tab));
+}
+
+TEST_F(TabTest, FaviconDoesntMoveWhenShowingAlertIndicator) {
+  Widget widget;
+  InitWidget(&widget);
+
+  for (bool is_active_tab : {false, true}) {
+    FakeTabController controller;
+    controller.set_active_tab(is_active_tab);
+    Tab tab(&controller, nullptr);
+    widget.GetContentsView()->AddChildView(&tab);
+    tab.SizeToPreferredSize();
+
+    views::View* icon = GetTabIcon(tab);
+    int icon_x = icon->x();
+    TabRendererData data;
+    data.alert_state = TabAlertState::AUDIO_PLAYING;
+    tab.SetData(data);
+    EXPECT_EQ(icon_x, icon->x());
+  }
+}
+
+TEST_F(TabTest, SmallTabsHideCloseButton) {
+  Widget widget;
+  InitWidget(&widget);
+
+  FakeTabController controller;
+  controller.set_active_tab(false);
+  Tab tab(&controller, nullptr);
+  widget.GetContentsView()->AddChildView(&tab);
+  const int width = Tab::GetContentsHorizontalInsets().width() +
+                    Tab::kMinimumContentsWidthForCloseButtons;
+  tab.SetBounds(0, 0, width, 50);
+  const views::View* close = GetCloseButton(tab);
+  EXPECT_TRUE(close->visible());
+
+  const views::View* icon = GetTabIcon(tab);
+  const int icon_x = icon->x();
+  // Shrink the tab. The close button should disappear.
+  tab.SetBounds(0, 0, width - 1, 50);
+  EXPECT_FALSE(close->visible());
+  // The favicon moves left because the extra padding disappears too.
+  EXPECT_LT(icon->x(), icon_x);
+}
+
+TEST_F(TabTest, ExtraLeftPaddingNotShownOnSmallActiveTab) {
+  Widget widget;
+  InitWidget(&widget);
+
+  FakeTabController controller;
+  controller.set_active_tab(true);
+  Tab tab(&controller, nullptr);
+  widget.GetContentsView()->AddChildView(&tab);
+  tab.SetBounds(0, 0, 200, 50);
+  const views::View* close = GetCloseButton(tab);
+  EXPECT_TRUE(close->visible());
+
+  const views::View* icon = GetTabIcon(tab);
+  const int icon_x = icon->x();
+
+  tab.SetBounds(0, 0, 40, 50);
+  EXPECT_TRUE(close->visible());
+  // The favicon moves left because the extra padding disappears.
+  EXPECT_LT(icon->x(), icon_x);
+}
+
+TEST_F(TabTest, ExtraLeftPaddingShownOnSiteWithoutFavicon) {
+  Widget widget;
+  InitWidget(&widget);
+
+  FakeTabController controller;
+  Tab tab(&controller, nullptr);
+  widget.GetContentsView()->AddChildView(&tab);
+
+  tab.SizeToPreferredSize();
+  const views::View* icon = GetTabIcon(tab);
+  const int icon_x = icon->x();
+
+  // Remove the favicon.
+  TabRendererData data;
+  data.show_icon = false;
+  tab.SetData(data);
+  EndTitleAnimation(tab);
+  EXPECT_FALSE(icon->visible());
+  // Title should be placed where the favicon was.
+  EXPECT_EQ(icon_x, GetTabTitle(tab)->x());
+}
+
+TEST_F(TabTest, ExtraAlertPaddingNotShownOnSmallActiveTab) {
+  if (!ui::MaterialDesignController::IsRefreshUi()) {
+    // Extra alert padding not shown pre-Refresh.
+    return;
+  }
+
+  Widget widget;
+  InitWidget(&widget);
+
+  FakeTabController controller;
+  controller.set_active_tab(true);
+  Tab tab(&controller, nullptr);
+  widget.GetContentsView()->AddChildView(&tab);
+  TabRendererData data;
+  data.alert_state = TabAlertState::AUDIO_PLAYING;
+  tab.SetData(data);
+
+  tab.SetBounds(0, 0, 200, 50);
+  const views::View* close = GetCloseButton(tab);
+  const views::View* alert = GetAlertIndicator(tab);
+  const int original_spacing = close->x() - alert->bounds().right();
+
+  tab.SetBounds(0, 0, 60, 50);
+  EXPECT_FALSE(GetTabIcon(tab)->visible());
+  EXPECT_TRUE(close->visible());
+  EXPECT_TRUE(alert->visible());
+  // The alert indicator moves closer because the extra padding is gone.
+  EXPECT_LT(close->x() - alert->bounds().right(), original_spacing);
 }

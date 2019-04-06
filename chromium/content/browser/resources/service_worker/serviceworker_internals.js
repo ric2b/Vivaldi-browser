@@ -198,8 +198,6 @@ cr.define('serviceworker', function() {
 
   function onErrorReported(partition_id,
                            version_id,
-                           process_id,
-                           thread_id,
                            error_info) {
     outputLogMessage(partition_id,
                      version_id,
@@ -208,8 +206,6 @@ cr.define('serviceworker', function() {
 
   function onConsoleMessageReported(partition_id,
                                     version_id,
-                                    process_id,
-                                    thread_id,
                                     message) {
     outputLogMessage(partition_id,
                      version_id,
@@ -220,7 +216,7 @@ cr.define('serviceworker', function() {
     update();
   }
 
-  function onRegistrationStored(scope) {
+  function onRegistrationCompleted(scope) {
     update();
   }
 
@@ -258,7 +254,7 @@ cr.define('serviceworker', function() {
     onErrorReported: onErrorReported,
     onConsoleMessageReported: onConsoleMessageReported,
     onVersionStateChanged: onVersionStateChanged,
-    onRegistrationStored: onRegistrationStored,
+    onRegistrationCompleted: onRegistrationCompleted,
     onRegistrationDeleted: onRegistrationDeleted,
   };
 });

@@ -9,13 +9,15 @@
 
 #include "base/macros.h"
 #include "components/bubble/bubble_reference.h"
-#include "device/usb/public/interfaces/chooser_service.mojom.h"
+#include "device/usb/public/mojom/chooser_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 
 namespace content {
 class RenderFrameHost;
 }
+
+class UsbChooserController;
 
 // Implementation of the public device::usb::ChooserService interface.
 // This interface can be used by a webpage to request permission from user
@@ -26,17 +28,21 @@ class WebUsbChooserService : public device::mojom::UsbChooserService {
 
   ~WebUsbChooserService() override;
 
-  // device::usb::ChooserService:
+  // device::mojom::UsbChooserService implementation
   void GetPermission(
       std::vector<device::mojom::UsbDeviceFilterPtr> device_filters,
       GetPermissionCallback callback) override;
 
   void Bind(device::mojom::UsbChooserServiceRequest request);
 
+  virtual void ShowChooser(
+      std::unique_ptr<UsbChooserController> controller) = 0;
+
+  content::RenderFrameHost* render_frame_host() { return render_frame_host_; }
+
  private:
   content::RenderFrameHost* const render_frame_host_;
   mojo::BindingSet<device::mojom::UsbChooserService> bindings_;
-  std::vector<BubbleReference> bubbles_;
 
   DISALLOW_COPY_AND_ASSIGN(WebUsbChooserService);
 };

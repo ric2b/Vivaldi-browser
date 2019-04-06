@@ -24,8 +24,11 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/process_map.h"
+#include "extensions/browser/view_type_utils.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_provider.h"
+
+#include "app/vivaldi_apptools.h"
 
 using guest_view::GuestViewBase;
 using guest_view::GuestViewManager;
@@ -38,6 +41,15 @@ ExtensionsGuestViewManagerDelegate::ExtensionsGuestViewManagerDelegate(
 }
 
 ExtensionsGuestViewManagerDelegate::~ExtensionsGuestViewManagerDelegate() {
+}
+
+void ExtensionsGuestViewManagerDelegate::OnGuestAdded(
+    content::WebContents* guest_web_contents) const {
+  if (!vivaldi::IsVivaldiRunning())
+  // Set the view type so extensions sees the guest view as a foreground page.
+  // NOTE(jarle@vivaldi.com): In Vivaldi, a guest view should not be treated
+  // as a VIEW_TYPE_EXTENSION_GUEST. Ref. VB-40755.
+  SetViewType(guest_web_contents, VIEW_TYPE_EXTENSION_GUEST);
 }
 
 void ExtensionsGuestViewManagerDelegate::DispatchEvent(

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Next MinVersion: 3
+// Next MinVersion: 4
 
 module arc.mojom;
 
@@ -36,39 +36,31 @@ struct ClipData {
   array<ClipRepresentation> representations@0;
 };
 
-// Next method ID: 4
-// IDs to be removed 18 weeks after being up revved: 0, 1
+// Next method ID: 5
+// Deprecated method IDs: 0, 1, 3
 interface ClipboardHost {
-  // Tells the host to change its content, usually when the user initiates
-  // a 'copy' action.
-  SetTextContentDeprecated@0(string text);
-
-  // Tells the host to return its content, usually when the user initiates
-  // a 'paste' action or when the instance needs to re-sync its clipboard
-  // content with the host.
-  GetTextContentDeprecated@1();
-
   // Tells the host to update its clipboard content, usually when the user
   // initiates a 'copy' action.
   [MinVersion=1] SetClipContent@2(ClipData data);
 
+  // DEPRECATED: Please use GetClipContent@4 instead. Clean up after Aug 1 2018.
+  // This version of ClipboardInstance can't handle a ClipData larger than 800K.
+  [MinVersion=1] GetClipContentDeprecated@3() => (ClipData data);
+
   // Tells the host to return its clipboard content, usually when the user
   // initiates a 'paste' action or when the instance needs to re-sync its
   // clipboard content with the host.
-  [MinVersion=1] GetClipContent@3() => (ClipData data);
+  [MinVersion=3] GetClipContent@4() => (ClipData data);
 };
 
 // Next method ID: 4
-// IDs to be removed 18 weeks after being up revved: 1
+// Deprecated method IDs: 1
 interface ClipboardInstance {
   // DEPRECATED: Please use Init@3 instead.
   InitDeprecated@0(ClipboardHost host_ptr);
 
   // Establishes full-duplex communication with the host.
   [MinVersion=2] Init@3(ClipboardHost host_ptr) => ();
-
-  // Passes the result of ClipboardHost.GetTextContentDeprecated().
-  OnGetTextContentDeprecated@1(string returned_text);
 
   // Tells that the Host clipboard has been updated.
   [MinVersion=1] OnHostClipboardUpdated@2();

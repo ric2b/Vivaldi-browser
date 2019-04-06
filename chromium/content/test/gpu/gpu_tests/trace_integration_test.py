@@ -99,7 +99,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     timeline_model = model_module.TimelineModel(timeline_data)
     category_name = args[0]
     event_iter = timeline_model.IterAllEvents(
-        event_type_predicate=model_module.IsSliceOrAsyncSlice)
+        event_type_predicate=timeline_model.IsSliceOrAsyncSlice)
     for event in event_iter:
       if (event.args.get('gl_category', None) == TOPLEVEL_GL_CATEGORY and
           event.category == category_name):
@@ -121,7 +121,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     path_util.SetupTelemetryPaths()
     cls.CustomizeBrowserArgs([
       '--enable-logging',
-      '--enable-experimental-canvas-features'])
+      '--enable-experimental-web-platform-features'])
     cls.StartBrowser()
     cls.SetStaticServerDirs(data_paths)
 

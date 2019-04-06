@@ -61,8 +61,7 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
   bool ShouldSendClientAreaToServer() const;
 
   // DesktopWindowTreeHost:
-  void Init(aura::Window* content_window,
-            const Widget::InitParams& params) override;
+  void Init(const Widget::InitParams& params) override;
   void OnNativeWidgetCreated(const Widget::InitParams& params) override;
   void OnActiveWindowChanged(bool active) override;
   void OnWidgetInitDone() override;
@@ -115,6 +114,7 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
   void SetFullscreen(bool fullscreen) override;
   bool IsFullscreen() const override;
   void SetOpacity(float opacity) override;
+  void SetAspectRatio(const gfx::SizeF& aspect_ratio) override {}
   void SetWindowIcons(const gfx::ImageSkia& window_icon,
                       const gfx::ImageSkia& app_icon) override;
   void InitModalType(ui::ModalType modal_type) override;
@@ -141,7 +141,11 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
   // aura::WindowTreeHostMus:
   void ShowImpl() override;
   void HideImpl() override;
-  void SetBoundsInPixels(const gfx::Rect& bounds_in_pixels) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds_in_pixels,
+                         const viz::LocalSurfaceId& local_surface_id) override;
+
+  // Accessor for DesktopNativeWidgetAura::content_window().
+  aura::Window* content_window();
 
   internal::NativeWidgetDelegate* native_widget_delegate_;
 

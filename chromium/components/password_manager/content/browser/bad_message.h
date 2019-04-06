@@ -5,8 +5,14 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CONTENT_BROWSER_BAD_MESSAGE_H_
 #define COMPONENTS_PASSWORD_MANAGER_CONTENT_BROWSER_BAD_MESSAGE_H_
 
+#include <vector>
+
+namespace autofill {
+struct PasswordForm;
+}
+
 namespace content {
-class RenderProcessHost;
+class RenderFrameHost;
 }
 
 namespace password_manager {
@@ -28,6 +34,10 @@ enum class BadMessageReason {
   CPMD_BAD_ORIGIN_PRESAVE_GENERATED_PASSWORD = 7,
   CPMD_BAD_ORIGIN_SAVE_GENERATION_FIELD_DETECTED_BY_CLASSIFIER = 8,
   CPMD_BAD_ORIGIN_SHOW_FALLBACK_FOR_SAVING = 9,
+  CPMD_BAD_ORIGIN_AUTOMATIC_GENERATION_STATUS_CHANGED = 10,
+  CPMD_BAD_ORIGIN_SHOW_MANUAL_PASSWORD_GENERATION_POPUP = 11,
+  CPMD_BAD_ORIGIN_SHOW_PASSWORD_EDITING_POPUP = 12,
+  CPMD_BAD_ORIGIN_GENERATION_AVAILABLE_FOR_FORM = 13,
 
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. ContentPasswordManagerDriver becomes CPMD) plus a unique
@@ -38,11 +48,19 @@ enum class BadMessageReason {
 };
 
 namespace bad_message {
-// Called when the browser receives a bad IPC message from a renderer process on
-// the UI thread. Logs the event, records a histogram metric for the |reason|,
-// and terminates the process for |host|.
-void ReceivedBadMessage(content::RenderProcessHost* host,
-                        BadMessageReason reason);
+// Returns true if the renderer for |frame| is allowed to perform an operation
+// on |password_form|. If the origin mismatches, the process for |frame| is
+// terminated and the function returns false.
+bool CheckChildProcessSecurityPolicy(
+    content::RenderFrameHost* frame,
+    const autofill::PasswordForm& password_form,
+    BadMessageReason reason);
+
+// Same as above but checks every form in |forms|.
+bool CheckChildProcessSecurityPolicy(
+    content::RenderFrameHost* frame,
+    const std::vector<autofill::PasswordForm>& forms,
+    BadMessageReason reason);
 
 }  // namespace bad_message
 }  // namespace password_manager

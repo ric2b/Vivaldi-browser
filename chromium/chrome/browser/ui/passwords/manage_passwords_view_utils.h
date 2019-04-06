@@ -44,13 +44,7 @@ std::pair<base::string16, base::string16> GetCredentialLabelsForAccountChooser(
 // Sets the formatted |title| in the Save Password bubble or the Update Password
 // bubble (depending on |dialog_type|). If the registry controlled domain of
 // |user_visible_url| (i.e. the one seen in the omnibox) differs from the
-// registry controlled domain of |form_origin_url|, sets
-// |IDS_SAVE_PASSWORD_TITLE| as the |title| so that it replaces "this site" in
-// title text with output of |FormatUrlForSecurityDisplay(form_origin_url)|.
-// Otherwise, sets |IDS_SAVE_PASSWORD| as the |title| having "this site".
-// If |is_smartlock_branding_enabled| is true, sets the |title_link_range| for
-// the "Google Smart Lock" text range to be set visibly as a hyperlink in the
-// dialog bubble.
+// registry controlled domain of |form_origin_url|, it adds the site name.
 void GetSavePasswordDialogTitleTextAndLinkRange(
     const GURL& user_visible_url,
     const GURL& form_origin_url,
@@ -62,13 +56,17 @@ void GetSavePasswordDialogTitleTextAndLinkRange(
 // Sets the formatted |title| in the Manage Passwords bubble. If the registry
 // controlled domain of |user_visible_url| (i.e. the one seen in the omnibox)
 // differs from the domain of the managed password origin URL
-// |password_origin_url|, sets |IDS_MANAGE_PASSWORDS_TITLE_DIFFERENT_DOMAIN| as
+// |password_origin_url|, sets |IDS_MANAGE_PASSWORDS_DIFFERENT_DOMAIN_TITLE| or
+// |IDS_MANAGE_PASSWORDS_DIFFERENT_DOMAIN_NO_PASSWORDS_TITLE| as
 // the |title| so that it replaces "this site" in title text with output of
 // |FormatUrlForSecurityDisplay(password_origin_url)|.
-// Otherwise, sets |IDS_MANAGE_PASSWORDS_TITLE| as the |title| having
-// "this site".
+// Otherwise, sets |IDS_MANAGE_PASSWORDS_TITLE| or
+// |IDS_MANAGE_PASSWORDS_NO_PASSWORDS_TITLE| as |title| having "this site".
+// The *_NO_PASSWORDS_* variants of the title strings are used when no
+// credentials are present.
 void GetManagePasswordsDialogTitleText(const GURL& user_visible_url,
                                        const GURL& password_origin_url,
+                                       bool has_credentials,
                                        base::string16* title);
 
 // Sets the formatted |title| in the Account Chooser UI.

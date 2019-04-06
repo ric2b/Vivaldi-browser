@@ -5,12 +5,19 @@
 module content.mojom;
 
 import "content/common/service_worker/controller_service_worker.mojom";
-import "mojo/common/string16.mojom";
-import "third_party/WebKit/common/service_worker/service_worker_error_type.mojom";
-import "third_party/WebKit/common/service_worker/service_worker_object.mojom";
-import "third_party/WebKit/common/service_worker/service_worker_registration.mojom";
-import "third_party/WebKit/public/platform/web_feature.mojom";
-import "url/mojo/url.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "third_party/blink/public/mojom/message_port/message_port.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_object.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom";
+import "third_party/blink/public/platform/web_feature.mojom";
+import "url/mojom/url.mojom";
+
+// Used for EnsureControllerServiceWorker() to indicate why a controllee needs
+// a controller ServiceWorker.
+enum ControllerServiceWorkerPurpose {
+  FETCH_SUB_RESOURCE
+};
 
 // mojom::ServiceWorkerContainerHost is a browser-side interface. The renderer
 // process uses this interface to request the browser process to do operations
@@ -55,7 +62,7 @@ interface ServiceWorkerContainerHost {
     => (blink.mojom.ServiceWorkerRegistrationObjectInfo? registration);
 
   // S13nServiceWorker:
-  // Gets a Mojo end point to the controller ServiceWorker. This may start a
+  // Returns a Mojo end point to the controller ServiceWorker. This may start a
   // service worker instance in a renderer process if the corresponding
   // instance is not alive.
   // This method must be called only by the controllees.
@@ -63,12 +70,27 @@ interface ServiceWorkerContainerHost {
   // connection error of the returned pipe. The detailed error reasons are not
   // reported to the controllees, but the browser process is responsible for
   // properly handling the failure and recording the reasons.
-  GetControllerServiceWorker(ControllerServiceWorker& controller);
+  // |purpose| is used for UMA.
+  EnsureControllerServiceWorker(ControllerServiceWorker& controller,
+                                ControllerServiceWorkerPurpose purpose);
 
   // S13nServiceWorker:
   // Clones the Mojo end point to the ServiceWorker container host. This is
   // used to communicate with the host from dedicated and shared workers.
   CloneForWorker(ServiceWorkerContainerHost& container_host_for_worker);
+
+  // Does nothing but calls the callback. Useful for pumping the message pipe
+  // for this interface and associated interfaces: when the callback is called,
+  // you know all incoming messages up to the Ping() call have been received.
+  Ping() => ();
+
+  // S13nServiceWorker:
+  // Gives a hint to the browser process to update the service worker after a
+  // controlled page load. This message is meant to be sent at a time when page
+  // load is no longer busy, so update doesn't adversely affect performance.
+  // The browser process can possibly coalesce hints for the same service
+  // worker into a single update.
+  HintToUpdateServiceWorker();
 };
 
 // mojom::ServiceWorkerContainer is a renderer-side interface.
@@ -85,7 +107,7 @@ interface ServiceWorkerContainerHost {
 // to use this name.
 interface ServiceWorkerContainer {
   // Corresponds to setting ServiceWorkerContainer#controller.
-  // If |controller_info| is invalid (its |handle_id| is invalid), then
+  // If |controller_info| is invalid (its |object_info| is null), then
   // ServiceWorkerContainer#controller is cleared.
   // If |controller_info| is valid, |used_features| is the set of
   // features the controller has used, for UseCounter purposes.
@@ -98,10 +120,8 @@ interface ServiceWorkerContainer {
   // Corresponds to Client#postMessage().
   // Sends |message| from the service worker |source| to this service worker
   // client.
-  // TODO(xiaofeng.zhang): Use blink.mojom.TransferableMessage as the parameter.
   PostMessageToClient(blink.mojom.ServiceWorkerObjectInfo source,
-                      mojo.common.mojom.String16 message,
-                      array<handle<message_pipe>> message_ports);
+                      blink.mojom.TransferableMessage message);
 
   // Notifies this service worker client that its controller used a |feature|,
   // for UseCounter purposes.

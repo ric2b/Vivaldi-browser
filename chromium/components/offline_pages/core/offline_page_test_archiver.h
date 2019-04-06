@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -46,7 +47,15 @@ class OfflinePageTestArchiver : public OfflinePageArchiver {
   // OfflinePageArchiver implementation:
   void CreateArchive(const base::FilePath& archives_dir,
                      const CreateArchiveParams& create_archive_params,
-                     const CreateArchiveCallback& callback) override;
+                     content::WebContents* web_contents,
+                     CreateArchiveCallback callback) override;
+
+  void PublishArchive(
+      const OfflinePageItem& offline_page,
+      const scoped_refptr<base::SequencedTaskRunner>& background_task_runner,
+      const base::FilePath& publish_directory,
+      SystemDownloadManager* download_manager,
+      PublishArchiveDoneCallback publish_done_callback) override;
 
   // Completes the creation of archive. Should be used with |set_delayed| set to
   // true.
@@ -67,6 +76,10 @@ class OfflinePageTestArchiver : public OfflinePageArchiver {
 
   bool create_archive_called() const { return create_archive_called_; }
 
+  void set_archive_attempt_failure(bool fail) {
+    archive_attempt_failure_ = fail;
+  }
+
  private:
   // Not owned. Outlives OfflinePageTestArchiver.
   Observer* observer_;
@@ -77,6 +90,8 @@ class OfflinePageTestArchiver : public OfflinePageArchiver {
   ArchiverResult result_;
   int64_t size_to_report_;
   bool create_archive_called_;
+  bool publish_archive_called_;
+  bool archive_attempt_failure_;
   bool delayed_;
   base::string16 result_title_;
   std::string digest_to_report_;

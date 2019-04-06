@@ -15,6 +15,9 @@
  *   spellCheckEnabled: boolean,
  *   translateEnabled: boolean,
  *   isManaged: boolean,
+ *   downloadDictionaryFailureCount: number,
+ *   downloadDictionaryStatus:
+ *       ?chrome.languageSettingsPrivate.SpellcheckDictionaryStatus,
  * }}
  */
 let LanguageState;
@@ -24,6 +27,9 @@ let LanguageState;
  * @typedef {{
  *   language: !chrome.languageSettingsPrivate.Language,
  *   isManaged: boolean,
+ *   downloadDictionaryFailureCount: number,
+ *   downloadDictionaryStatus:
+ *       ?chrome.languageSettingsPrivate.SpellcheckDictionaryStatus,
  * }}
  */
 let ForcedLanguageState;
@@ -61,7 +67,7 @@ let InputMethodsModel;
  *   translateTarget: string,
  *   prospectiveUILanguage: (string|undefined),
  *   inputMethods: (!InputMethodsModel|undefined),
- *   forcedSpellCheckLanguages: !Array<!chrome.languageSettingsPrivate.Language>
+ *   forcedSpellCheckLanguages: !Array<!ForcedLanguageState>,
  * }}
  */
 let LanguagesModel;
@@ -70,12 +76,9 @@ let LanguagesModel;
  * Helper methods for reading and writing language settings.
  * @interface
  */
-const LanguageHelper = function() {};
-
-LanguageHelper.prototype = {
-
+class LanguageHelper {
   /** @return {!Promise} */
-  whenReady: assertNotReached,
+  whenReady() {}
 
   // <if expr="chromeos or is_win">
   /**
@@ -83,38 +86,50 @@ LanguageHelper.prototype = {
    * the actual UI language until a restart.
    * @param {string} languageCode
    */
-  setProspectiveUILanguage: assertNotReached,
+  setProspectiveUILanguage(languageCode) {}
 
   /**
    * True if the prospective UI language has been changed.
    * @return {boolean}
    */
-  requiresRestart: assertNotReached,
+  requiresRestart() {}
+
   // </if>
+
+  /**
+   * @return {string} The language code for ARC IMEs.
+   */
+  getArcImeLanguageCode() {}
 
   /**
    * @param {string} languageCode
    * @return {boolean}
    */
-  isLanguageEnabled: assertNotReached,
+  isLanguageCodeForArcIme(languageCode) {}
+
+  /**
+   * @param {string} languageCode
+   * @return {boolean}
+   */
+  isLanguageEnabled(languageCode) {}
 
   /**
    * Enables the language, making it available for spell check and input.
    * @param {string} languageCode
    */
-  enableLanguage: assertNotReached,
+  enableLanguage(languageCode) {}
 
   /**
    * Disables the language.
    * @param {string} languageCode
    */
-  disableLanguage: assertNotReached,
+  disableLanguage(languageCode) {}
 
   /**
    * @param {string} languageCode Language code for an enabled language.
    * @return {boolean}
    */
-  canDisableLanguage: assertNotReached,
+  canDisableLanguage(languageCode) {}
 
   /**
    * Moves the language in the list of enabled languages by the given offset.
@@ -122,34 +137,34 @@ LanguageHelper.prototype = {
    * @param {boolean} upDirection True if we need to move toward the front,
    *     false if we need to move toward the back.
    */
-  moveLanguage: assertNotReached,
+  moveLanguage(languageCode, upDirection) {}
 
   /**
    * Moves the language directly to the front of the list of enabled languages.
    * @param {string} languageCode
    */
-  moveLanguageToFront: assertNotReached,
+  moveLanguageToFront(languageCode) {}
 
   /**
    * Enables translate for the given language by removing the translate
    * language from the blocked languages preference.
    * @param {string} languageCode
    */
-  enableTranslateLanguage: assertNotReached,
+  enableTranslateLanguage(languageCode) {}
 
   /**
    * Disables translate for the given language by adding the translate
    * language to the blocked languages preference.
    * @param {string} languageCode
    */
-  disableTranslateLanguage: assertNotReached,
+  disableTranslateLanguage(languageCode) {}
 
   /**
    * Enables or disables spell check for the given language.
    * @param {string} languageCode
    * @param {boolean} enable
    */
-  toggleSpellCheck: assertNotReached,
+  toggleSpellCheck(languageCode, enable) {}
 
   /**
    * Converts the language code for translate. There are some differences
@@ -158,7 +173,7 @@ LanguageHelper.prototype = {
    * @param {string} languageCode
    * @return {string} The converted language code.
    */
-  convertLanguageCodeForTranslate: assertNotReached,
+  convertLanguageCodeForTranslate(languageCode) {}
 
   /**
    * Given a language code, returns just the base language. E.g., converts
@@ -166,37 +181,40 @@ LanguageHelper.prototype = {
    * @param {string} languageCode
    * @return {string}
    */
-  getLanguageCodeWithoutRegion: assertNotReached,
+  getLanguageCodeWithoutRegion(languageCode) {}
 
   /**
    * @param {string} languageCode
    * @return {!chrome.languageSettingsPrivate.Language|undefined}
    */
-  getLanguage: assertNotReached,
+  getLanguage(languageCode) {}
+
+  /** @param {string} languageCode */
+  retryDownloadDictionary(languageCode) {}
 
   // <if expr="chromeos">
   /** @param {string} id */
-  addInputMethod: assertNotReached,
+  addInputMethod(id) {}
 
   /** @param {string} id */
-  removeInputMethod: assertNotReached,
+  removeInputMethod(id) {}
 
   /** @param {string} id */
-  setCurrentInputMethod: assertNotReached,
+  setCurrentInputMethod(id) {}
 
   /**
    * @param {string} languageCode
    * @return {!Array<!chrome.languageSettingsPrivate.InputMethod>}
    */
-  getInputMethodsForLanguage: assertNotReached,
+  getInputMethodsForLanguage(languageCode) {}
 
   /**
    * @param {!chrome.languageSettingsPrivate.InputMethod} inputMethod
    * @return {boolean}
    */
-  isComponentIme: assertNotReached,
+  isComponentIme(inputMethod) {}
 
   /** @param {string} id Input method ID. */
-  openInputMethodOptions: assertNotReached,
+  openInputMethodOptions(id) {}
   // </if>
-};
+}

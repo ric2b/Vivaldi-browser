@@ -6,23 +6,29 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/i18n/timezone.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/sha1.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/consent_auditor/consent_auditor.h"
+#include "components/signin/core/browser/signin_manager_base.h"
 #include "components/user_manager/known_user.h"
 #include "extensions/browser/extension_registry.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -77,15 +83,27 @@ constexpr char kEventOnAuthSucceeded[] = "onAuthSucceeded";
 constexpr char kEventOnAuthFailed[] = "onAuthFailed";
 constexpr char kAuthErrorMessage[] = "errorMessage";
 
-// "onAgree" is fired when a user clicks "Agree" button.
-// The message should have the following three fields:
+// "onAgreed" is fired when a user clicks "Agree" button.
+// The message should have the following fields:
+// - tosContent
+// - tosShown
 // - isMetricsEnabled
 // - isBackupRestoreEnabled
+// - isBackupRestoreManaged
 // - isLocationServiceEnabled
+// - isLocationServiceManaged
 constexpr char kEventOnAgreed[] = "onAgreed";
+constexpr char kTosContent[] = "tosContent";
+constexpr char kTosShown[] = "tosShown";
 constexpr char kIsMetricsEnabled[] = "isMetricsEnabled";
 constexpr char kIsBackupRestoreEnabled[] = "isBackupRestoreEnabled";
+constexpr char kIsBackupRestoreManaged[] = "isBackupRestoreManaged";
 constexpr char kIsLocationServiceEnabled[] = "isLocationServiceEnabled";
+constexpr char kIsLocationServiceManaged[] = "isLocationServiceManaged";
+
+// "onCanceled" is fired when user clicks "Cancel" button.
+// The message should have the same fields as "onAgreed" above.
+constexpr char kEventOnCanceled[] = "onCanceled";
 
 // "onRetryClicked" is fired when a user clicks "RETRY" button on the error
 // page.
@@ -94,8 +112,10 @@ constexpr char kEventOnRetryClicked[] = "onRetryClicked";
 // "onSendFeedbackClicked" is fired when a user clicks "Send Feedback" button.
 constexpr char kEventOnSendFeedbackClicked[] = "onSendFeedbackClicked";
 
-// "onOpenSettingsPageClicked" is fired when a user clicks settings link.
-constexpr char kEventOnOpenSettingsPageClicked[] = "onOpenSettingsPageClicked";
+// "onOpenPrivacySettingsPageClicked" is fired when a user clicks privacy
+// settings link.
+constexpr char kEventOnOpenPrivacySettingsPageClicked[] =
+    "onOpenPrivacySettingsPageClicked";
 
 void RequestOpenApp(Profile* profile) {
   const extensions::Extension* extension =
@@ -157,6 +177,28 @@ std::ostream& operator<<(std::ostream& os, ArcSupportHost::Error error) {
 }
 
 }  // namespace
+
+// static
+std::vector<int> ArcSupportHost::ComputePlayToSConsentIds(
+    const std::string& content) {
+  std::vector<int> result;
+
+  // Record the content length and the SHA1 hash of the content, rather than
+  // wastefully copying the entire content which is dynamically loaded from
+  // Play, rather than included in the Chrome build itself.
+  result.push_back(static_cast<int>(content.length()));
+
+  uint8_t hash[base::kSHA1Length];
+  base::SHA1HashBytes(reinterpret_cast<const uint8_t*>(content.c_str()),
+                      content.size(), hash);
+  for (size_t i = 0; i < base::kSHA1Length; i += 4) {
+    uint32_t acc =
+        hash[i] << 24 | hash[i + 1] << 16 | hash[i + 2] << 8 | hash[i + 3];
+    result.push_back(static_cast<int>(acc));
+  }
+
+  return result;
+}
 
 ArcSupportHost::ArcSupportHost(Profile* profile)
     : profile_(profile),
@@ -482,6 +524,11 @@ bool ArcSupportHost::Initialize() {
   loadtime_data->SetString(
       "textBackupRestore",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE));
+  loadtime_data->SetString("textPaiService",
+                           l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_PAI));
+  loadtime_data->SetString(
+      "textGoogleServiceConfirmation",
+      l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_GOOGLE_SERVICE_CONFIRMATION));
   loadtime_data->SetString(
       "textLocationService",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_LOCATION_SETTING));
@@ -501,6 +548,9 @@ bool ArcSupportHost::Initialize() {
       "learnMoreLocationServices",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_LEARN_MORE_LOCATION_SERVICES));
   loadtime_data->SetString(
+      "learnMorePaiService",
+      l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_LEARN_MORE_PAI_SERVICE));
+  loadtime_data->SetString(
       "overlayClose",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_LEARN_MORE_CLOSE));
   loadtime_data->SetString(
@@ -512,6 +562,8 @@ bool ArcSupportHost::Initialize() {
   loadtime_data->SetString(
       "activeDirectoryAuthDesc",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_ACTIVE_DIRECTORY_AUTH_DESC));
+  loadtime_data->SetString(
+      "overlayLoading", l10n_util::GetStringUTF16(IDS_ARC_POPUP_HELP_LOADING));
 
   loadtime_data->SetBoolean(kArcManaged, is_arc_managed_);
   loadtime_data->SetBoolean("isOwnerProfile",
@@ -579,21 +631,84 @@ void ArcSupportHost::OnMessage(const base::DictionaryValue& message) {
     LOG_IF(ERROR, !auth_delegate_)
         << "auth_delegate_ is NULL, error: " << error_message;
     auth_delegate_->OnAuthFailed(error_message);
-  } else if (event == kEventOnAgreed) {
+  } else if (event == kEventOnAgreed || event == kEventOnCanceled) {
     DCHECK(tos_delegate_);
+    bool tos_shown;
+    std::string tos_content;
     bool is_metrics_enabled;
     bool is_backup_restore_enabled;
+    bool is_backup_restore_managed;
     bool is_location_service_enabled;
-    if (!message.GetBoolean(kIsMetricsEnabled, &is_metrics_enabled) ||
+    bool is_location_service_managed;
+    if (!message.GetString(kTosContent, &tos_content) ||
+        !message.GetBoolean(kTosShown, &tos_shown) ||
+        !message.GetBoolean(kIsMetricsEnabled, &is_metrics_enabled) ||
         !message.GetBoolean(kIsBackupRestoreEnabled,
                             &is_backup_restore_enabled) ||
+        !message.GetBoolean(kIsBackupRestoreManaged,
+                            &is_backup_restore_managed) ||
         !message.GetBoolean(kIsLocationServiceEnabled,
-                            &is_location_service_enabled)) {
+                            &is_location_service_enabled) ||
+        !message.GetBoolean(kIsLocationServiceManaged,
+                            &is_location_service_managed)) {
       NOTREACHED();
       return;
     }
-    tos_delegate_->OnTermsAgreed(is_metrics_enabled, is_backup_restore_enabled,
-                                 is_location_service_enabled);
+
+    bool accepted = event == kEventOnAgreed;
+    if (!accepted) {
+      // Cancel is equivalent to not granting consent to the individual
+      // features, so ensure we don't record consent.
+      is_backup_restore_enabled = false;
+      is_location_service_enabled = false;
+    }
+
+    SigninManagerBase* signin_manager =
+        SigninManagerFactory::GetForProfile(profile_);
+    DCHECK(signin_manager->IsAuthenticated());
+    std::string account_id = signin_manager->GetAuthenticatedAccountId();
+
+    // Record acceptance of ToS if it was shown to the user, otherwise simply
+    // record acceptance of an empty ToS.
+    // TODO(jhorwich): Replace this approach when passing |is_managed| boolean
+    // is supported by the underlying consent protos.
+    if (!tos_shown)
+      tos_content.clear();
+    ConsentAuditorFactory::GetForProfile(profile_)->RecordGaiaConsent(
+        account_id, consent_auditor::Feature::PLAY_STORE,
+        ComputePlayToSConsentIds(tos_content),
+        IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE,
+        accepted ? consent_auditor::ConsentStatus::GIVEN
+                 : consent_auditor::ConsentStatus::NOT_GIVEN);
+
+    // If the user - not policy - controls Backup and Restore setting, record
+    // whether consent was given.
+    if (!is_backup_restore_managed) {
+      ConsentAuditorFactory::GetForProfile(profile_)->RecordGaiaConsent(
+          account_id, consent_auditor::Feature::BACKUP_AND_RESTORE,
+          {IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE},
+          IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE,
+          is_backup_restore_enabled
+              ? consent_auditor::ConsentStatus::GIVEN
+              : consent_auditor::ConsentStatus::NOT_GIVEN);
+    }
+
+    // If the user - not policy - controls Location Services setting, record
+    // whether consent was given.
+    if (!is_location_service_managed) {
+      ConsentAuditorFactory::GetForProfile(profile_)->RecordGaiaConsent(
+          account_id, consent_auditor::Feature::GOOGLE_LOCATION_SERVICE,
+          {IDS_ARC_OPT_IN_LOCATION_SETTING}, IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE,
+          is_location_service_enabled
+              ? consent_auditor::ConsentStatus::GIVEN
+              : consent_auditor::ConsentStatus::NOT_GIVEN);
+    }
+
+    if (accepted) {
+      tos_delegate_->OnTermsAgreed(is_metrics_enabled,
+                                   is_backup_restore_enabled,
+                                   is_location_service_enabled);
+    }
   } else if (event == kEventOnRetryClicked) {
     // If ToS negotiation or manual authentication is ongoing, call the
     // corresponding delegate.  Otherwise, call the general retry function.
@@ -608,8 +723,8 @@ void ArcSupportHost::OnMessage(const base::DictionaryValue& message) {
   } else if (event == kEventOnSendFeedbackClicked) {
     DCHECK(error_delegate_);
     error_delegate_->OnSendFeedbackClicked();
-  } else if (event == kEventOnOpenSettingsPageClicked) {
-    chrome::ShowSettingsSubPageForProfile(profile_, std::string());
+  } else if (event == kEventOnOpenPrivacySettingsPageClicked) {
+    chrome::ShowSettingsSubPageForProfile(profile_, "privacy");
   } else {
     LOG(ERROR) << "Unknown message: " << event;
     NOTREACHED();

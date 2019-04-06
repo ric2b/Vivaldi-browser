@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.media.router;
 
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.media.router.cast.MediaSink;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -175,5 +174,10 @@ public class MockMediaRouteProvider implements MediaRouteProvider {
         } else {
             mManager.onMessage(routeId, "Pong: " + message);
         }
+    }
+
+    @Override
+    public MediaController getMediaController(String routeId) {
+        return null;
     }
 }

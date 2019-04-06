@@ -9,10 +9,11 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "chrome/browser/ssl/cert_verifier_browser_test.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "net/cert/mock_cert_verifier.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace autofill {
@@ -58,11 +59,12 @@ class NavigationObserver : public content::WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(NavigationObserver);
 };
 
-// Observes the save password prompt for a specified WebContents, keeps track of
-// whether or not it is currently shown, and allows accepting saving passwords
-// through it.
+// Checks the save password prompt for a specified WebContents and allows
+// accepting saving passwords through it.
 class BubbleObserver {
  public:
+  // The constructor doesn't start tracking |web_contents|. To check the status
+  // of the prompt one can even construct a temporary BubbleObserver.
   explicit BubbleObserver(content::WebContents* web_contents);
 
   // Checks if the save prompt is being currently available due to either manual
@@ -127,7 +129,7 @@ class BubbleObserver {
   DISALLOW_COPY_AND_ASSIGN(BubbleObserver);
 };
 
-class PasswordManagerBrowserTestBase : public InProcessBrowserTest {
+class PasswordManagerBrowserTestBase : public CertVerifierBrowserTest {
  public:
   PasswordManagerBrowserTestBase();
   ~PasswordManagerBrowserTestBase() override;
@@ -135,7 +137,6 @@ class PasswordManagerBrowserTestBase : public InProcessBrowserTest {
   // InProcessBrowserTest:
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
-  void SetUpInProcessBrowserTestFixture() override;
   void TearDownInProcessBrowserTestFixture() override;
 
  protected:
@@ -145,14 +146,6 @@ class PasswordManagerBrowserTestBase : public InProcessBrowserTest {
   // would sometimes see the DidFinishLoad event from a previous navigation and
   // return immediately.
   void NavigateToFile(const std::string& path);
-
-  // Navigates to |filename| and runs |submission_script| to submit. Navigates
-  // back to |filename| and then verifies that |expected_element| has
-  // |expected_value|.
-  void VerifyPasswordIsSavedAndFilled(const std::string& filename,
-                                      const std::string& submission_script,
-                                      const std::string& expected_element,
-                                      const std::string& expected_value);
 
   // Waits until the "value" attribute of the HTML element with |element_id| is
   // equal to |expected_value|. If the current value is not as expected, this
@@ -176,6 +169,11 @@ class PasswordManagerBrowserTestBase : public InProcessBrowserTest {
                            size_t element_index,
                            const std::string& expected_value);
 
+  // Same as above except the element is selected with |element_selector| JS
+  // expression.
+  void WaitForJsElementValue(const std::string& element_selector,
+                             const std::string& expected_value);
+
   // Make sure that the password store processed all the previous calls which
   // are executed on another thread.
   void WaitForPasswordStore();
@@ -193,20 +191,18 @@ class PasswordManagerBrowserTestBase : public InProcessBrowserTest {
 
   // Checks that |password_store| stores only one credential with |username| and
   // |password|.
-  void CheckThatCredentialsStored(const base::string16& username,
-                                  const base::string16& password);
+  void CheckThatCredentialsStored(const std::string& username,
+                                  const std::string& password);
 
   // Accessors
   // Return the first created tab with a custom ManagePasswordsUIController.
-  content::WebContents* WebContents();
-  content::RenderViewHost* RenderViewHost();
-  content::RenderFrameHost* RenderFrameHost();
+  content::WebContents* WebContents() const;
+  content::RenderFrameHost* RenderFrameHost() const;
   net::EmbeddedTestServer& https_test_server() { return https_test_server_; }
-  net::MockCertVerifier& mock_cert_verifier() { return mock_cert_verifier_; }
 
  private:
+  test::ScopedMacViewsBrowserMode views_mode_{true};
   net::EmbeddedTestServer https_test_server_;
-  net::MockCertVerifier mock_cert_verifier_;
   // A tab with some hooks injected.
   content::WebContents* web_contents_;
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerBrowserTestBase);

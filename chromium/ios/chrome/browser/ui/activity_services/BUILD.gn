@@ -17,10 +17,6 @@ source_set("activity_services") {
     "chrome_activity_item_source.mm",
     "chrome_activity_item_thumbnail_generator.h",
     "chrome_activity_item_thumbnail_generator.mm",
-    "print_activity.h",
-    "print_activity.mm",
-    "reading_list_activity.h",
-    "reading_list_activity.mm",
     "share_protocol.h",
     "share_to_data.h",
     "share_to_data.mm",
@@ -28,17 +24,18 @@ source_set("activity_services") {
     "share_to_data_builder.mm",
   ]
   deps = [
-    "resources:activity_services_print",
-    "resources:activity_services_reading_list",
     "//base",
+    "//components/bookmarks/browser",
     "//components/ui_metrics",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/snapshots",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/activity_services/activities",
     "//ios/chrome/browser/ui/activity_services/requirements",
     "//ios/chrome/browser/ui/commands",
     "//ios/web",
@@ -63,7 +60,6 @@ source_set("coordinator") {
   ]
   deps = [
     ":activity_services",
-    ":features",
     "//base",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
@@ -90,15 +86,20 @@ source_set("unit_tests") {
     ":activity_services",
     "//base",
     "//base/test:test_support",
+    "//components/bookmarks/browser",
+    "//components/bookmarks/test",
     "//components/ui_metrics",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/snapshots",
     "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/ui:feature_flags",
+    "//ios/chrome/browser/ui:ui_util",
+    "//ios/chrome/browser/ui/activity_services/activities",
     "//ios/chrome/browser/ui/activity_services/requirements",
     "//ios/chrome/browser/ui/commands",
-    "//ios/testing:ios_test_support",
     "//ios/testing:ocmock_support",
     "//ios/web",
     "//ios/web/public/test",
@@ -132,15 +133,4 @@ source_set("eg_tests") {
     "//ui/base",
   ]
   libs = [ "XCTest.framework" ]
-}
-
-source_set("features") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  sources = [
-    "canonical_url_feature.cc",
-    "canonical_url_feature.h",
-  ]
-  deps = [
-    "//base",
-  ]
 }

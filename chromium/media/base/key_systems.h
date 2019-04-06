@@ -10,9 +10,10 @@
 #include <string>
 #include <vector>
 
+#include "media/base/decrypt_config.h"
 #include "media/base/eme_constants.h"
 #include "media/base/media_export.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 namespace media {
 
@@ -30,10 +31,18 @@ class MEDIA_EXPORT KeySystems {
   // Returns whether |key_system| is a supported key system.
   virtual bool IsSupportedKeySystem(const std::string& key_system) const = 0;
 
+  // Returns whether AesDecryptor can be used for the given |key_system|.
+  virtual bool CanUseAesDecryptor(const std::string& key_system) const = 0;
+
   // Returns whether |init_data_type| is supported by |key_system|.
   virtual bool IsSupportedInitDataType(
       const std::string& key_system,
       EmeInitDataType init_data_type) const = 0;
+
+  // Returns the configuration rule for supporting |encryption_scheme|.
+  virtual EmeConfigRule GetEncryptionSchemeConfigRule(
+      const std::string& key_system,
+      EncryptionMode encryption_scheme) const = 0;
 
   // Returns the configuration rule for supporting a container and list of
   // codecs.
@@ -53,9 +62,9 @@ class MEDIA_EXPORT KeySystems {
   virtual EmeSessionTypeSupport GetPersistentLicenseSessionSupport(
       const std::string& key_system) const = 0;
 
-  // Returns the support |key_system| provides for persistent-release-message
+  // Returns the support |key_system| provides for persistent-usage-record
   // sessions.
-  virtual EmeSessionTypeSupport GetPersistentReleaseMessageSessionSupport(
+  virtual EmeSessionTypeSupport GetPersistentUsageRecordSessionSupport(
       const std::string& key_system) const = 0;
 
   // Returns the support |key_system| provides for persistent state.
@@ -82,12 +91,6 @@ MEDIA_EXPORT std::string GetKeySystemNameForUMA(const std::string& key_system);
 
 // Returns whether AesDecryptor can be used for the given |key_system|.
 MEDIA_EXPORT bool CanUseAesDecryptor(const std::string& key_system);
-
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-// Returns the Pepper MIME type for |key_system|.
-// Returns empty string if |key_system| is unknown or not Pepper-based.
-MEDIA_EXPORT std::string GetPepperType(const std::string& key_system);
-#endif
 
 #if defined(UNIT_TEST)
 // Helper functions to add container/codec types for testing purposes.

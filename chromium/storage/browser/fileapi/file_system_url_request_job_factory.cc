@@ -25,6 +25,10 @@ class FileSystemProtocolHandler
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate) const override;
 
+  bool IsSafeRedirectTarget(const GURL& location) const override {
+    return false;
+  }
+
  private:
   const std::string storage_domain_;
 
@@ -62,10 +66,11 @@ net::URLRequestJob* FileSystemProtocolHandler::MaybeCreateJob(
 
 }  // anonymous namespace
 
-net::URLRequestJobFactory::ProtocolHandler* CreateFileSystemProtocolHandler(
-    const std::string& storage_domain, FileSystemContext* context) {
+std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>
+CreateFileSystemProtocolHandler(const std::string& storage_domain,
+                                FileSystemContext* context) {
   DCHECK(context);
-  return new FileSystemProtocolHandler(storage_domain, context);
+  return std::make_unique<FileSystemProtocolHandler>(storage_domain, context);
 }
 
 }  // namespace storage

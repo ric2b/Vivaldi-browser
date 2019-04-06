@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "components/favicon/core/favicon_url.h"
 #include "components/favicon/ios/favicon_url_util.h"
 #include "ios/web/public/browser_state.h"
@@ -16,6 +15,7 @@
 #include "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_state/navigation_context.h"
 #include "ios/web/public/web_state/web_state.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "skia/ext/skia_utils_ios.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image.h"
@@ -74,8 +74,9 @@ int WebFaviconDriver::DownloadImage(const GURL& url,
   int local_download_id = ++downloaded_image_count;
 
   GURL local_url(url);
+  __block ImageDownloadCallback local_callback = std::move(callback);
 
-  image_fetcher::IOSImageDataFetcherCallback local_callback =
+  image_fetcher::ImageDataFetcherBlock ios_callback =
       ^(NSData* data, const image_fetcher::RequestMetadata& metadata) {
         if (metadata.http_response_code ==
             image_fetcher::RequestMetadata::RESPONSE_CODE_INVALID)
@@ -89,10 +90,11 @@ int WebFaviconDriver::DownloadImage(const GURL& url,
             sizes.push_back(gfx::Size(frame.width(), frame.height()));
           }
         }
-        callback.Run(local_download_id, metadata.http_response_code, local_url,
-                     frames, sizes);
+        std::move(local_callback)
+            .Run(local_download_id, metadata.http_response_code, local_url,
+                 frames, sizes);
       };
-  image_fetcher_.FetchImageDataWebpDecoded(url, local_callback);
+  image_fetcher_.FetchImageDataWebpDecoded(url, ios_callback);
 
   return downloaded_image_count;
 }
@@ -153,7 +155,7 @@ WebFaviconDriver::WebFaviconDriver(web::WebState* web_state,
                                    FaviconService* favicon_service,
                                    history::HistoryService* history_service)
     : FaviconDriverImpl(favicon_service, history_service),
-      image_fetcher_(web_state->GetBrowserState()->GetRequestContext()),
+      image_fetcher_(web_state->GetBrowserState()->GetSharedURLLoaderFactory()),
       web_state_(web_state) {
   web_state_->AddObserver(this);
 }

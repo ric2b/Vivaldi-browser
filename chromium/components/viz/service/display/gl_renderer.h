@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_GL_RENDERER_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_GL_RENDERER_H_
 
+#include <map>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -23,6 +25,7 @@
 #include "components/viz/service/display/gl_renderer_draw_cache.h"
 #include "components/viz/service/display/program_binding.h"
 #include "components/viz/service/display/scoped_gpu_memory_buffer_texture.h"
+#include "components/viz/service/display/sync_query_collection.h"
 #include "components/viz/service/display/texture_deleter.h"
 #include "components/viz/service/viz_service_export.h"
 #include "ui/gfx/geometry/quad_f.h"
@@ -31,12 +34,6 @@
 namespace base {
 class SingleThreadTaskRunner;
 }
-
-namespace cc {
-class GLRendererShaderTest;
-class OutputSurface;
-class StreamVideoDrawQuad;
-}  // namespace cc
 
 namespace gpu {
 namespace gles2 {
@@ -47,10 +44,12 @@ class GLES2Interface;
 namespace viz {
 
 class DynamicGeometryBinding;
+class GLRendererShaderTest;
+class OutputSurface;
 class ScopedRenderPassTexture;
 class StaticGeometryBinding;
+class StreamVideoDrawQuad;
 class TextureDrawQuad;
-struct DrawRenderPassDrawQuadParams;
 
 // Class that handles drawing of composited render layers using GL.
 class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
@@ -59,13 +58,14 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
 
   GLRenderer(const RendererSettings* settings,
              OutputSurface* output_surface,
-             cc::DisplayResourceProvider* resource_provider,
+             DisplayResourceProvider* resource_provider,
              scoped_refptr<base::SingleThreadTaskRunner> current_task_runner);
   ~GLRenderer() override;
 
   bool use_swap_with_bounds() const { return use_swap_with_bounds_; }
 
-  void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) override;
+  void SwapBuffers(std::vector<ui::LatencyInfo> latency_info,
+                   bool need_presentation_feedback) override;
   void SwapBuffersComplete() override;
 
   void DidReceiveTextureInUseResponses(
@@ -104,7 +104,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
       const RenderPassRequirements& requirements) override;
   bool IsRenderPassResourceAllocated(
       const RenderPassId& render_pass_id) const override;
-  gfx::Size GetRenderPassTextureSize(
+  gfx::Size GetRenderPassBackingPixelSize(
       const RenderPassId& render_pass_id) override;
   void BindFramebufferToOutputSurface() override;
   void BindFramebufferToTexture(const RenderPassId render_pass_id) override;
@@ -154,7 +154,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   friend class GLRendererTest;
 
   using OverlayResourceLock =
-      std::unique_ptr<cc::DisplayResourceProvider::ScopedReadLockGL>;
+      std::unique_ptr<DisplayResourceProvider::ScopedReadLockGL>;
   using OverlayResourceLockList = std::vector<OverlayResourceLock>;
 
   // If a RenderPass is used as an overlay, we render the RenderPass with any
@@ -166,6 +166,8 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
     ScopedGpuMemoryBufferTexture texture;
     int frames_waiting_for_reuse = 0;
   };
+
+  struct DrawRenderPassDrawQuadParams;
 
   // If any of the following functions returns false, then it means that drawing
   // is not possible.
@@ -241,9 +243,8 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
                            const gfx::QuadF* clip_region);
   void DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
                         const gfx::QuadF* clip_region);
-  void DrawOverlayCandidateQuadBorder(float* gl_matrix);
 
-  void SetShaderOpacity(const DrawQuad* quad);
+  void SetShaderOpacity(float opacity);
   void SetShaderQuadF(const gfx::QuadF& quad);
   void SetShaderMatrix(const gfx::Transform& transform);
   void SetShaderColor(SkColor color, float opacity);
@@ -254,6 +255,9 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   void DrawQuadGeometry(const gfx::Transform& projection_matrix,
                         const gfx::Transform& draw_transform,
                         const gfx::RectF& quad_rect);
+  void DrawQuadGeometryWithAA(const DrawQuad* quad,
+                              gfx::QuadF* local_quad,
+                              const gfx::Rect& tile_rect);
 
   // If |dst_color_space| is invalid, then no color conversion (apart from
   // YUV to RGB conversion) is performed. This explicit argument is available
@@ -374,10 +378,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
 
   ScopedRenderPassTexture* current_framebuffer_texture_;
 
-  class SyncQuery;
-  base::circular_deque<std::unique_ptr<SyncQuery>> pending_sync_queries_;
-  base::circular_deque<std::unique_ptr<SyncQuery>> available_sync_queries_;
-  std::unique_ptr<SyncQuery> current_sync_query_;
+  SyncQueryCollection sync_queries_;
   bool use_discard_framebuffer_ = false;
   bool use_sync_query_ = false;
   bool use_blend_equation_advanced_ = false;

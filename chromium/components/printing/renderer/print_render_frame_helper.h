@@ -15,17 +15,19 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_canvas.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/pdf_metafile_skia.h"
-#include "third_party/WebKit/public/platform/WebCanvas.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebPrintParams.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_print_params.h"
 #include "ui/gfx/geometry/size.h"
 
 struct PrintMsg_Print_Params;
 struct PrintMsg_PrintPages_Params;
+struct PrintMsg_PrintFrame_Params;
+struct PrintHostMsg_DidPrintContent_Params;
 struct PrintHostMsg_SetOptionsFromDocument_Params;
 
 // RenderViewTest-based tests crash on Android
@@ -99,10 +101,6 @@ class PrintRenderFrameHelper
 
     virtual bool IsPrintPreviewEnabled() = 0;
 
-    // If true, the user can be asked to provide print settings.
-    // The default implementation returns |true|.
-    virtual bool IsAskPrintSettingsEnabled();
-
     // If false, window.print() won't do anything.
     // The default implementation returns |true|.
     virtual bool IsScriptedPrintEnabled();
@@ -129,6 +127,10 @@ class PrintRenderFrameHelper
 
   void PrintNode(const blink::WebNode& node);
 
+  // Get the scale factor. Returns |input_scale_factor| if it is valid and
+  // |is_pdf| is false, and 1.0f otherwise.
+  static double GetScaleFactor(double input_scale_factor, bool is_pdf);
+
  private:
   friend class PrintRenderFrameHelperTestBase;
   FRIEND_TEST_ALL_PREFIXES(MAYBE_PrintRenderFrameHelperPreviewTest,
@@ -153,15 +155,17 @@ class PrintRenderFrameHelper
 #endif
   };
 
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
   enum PrintPreviewErrorBuckets {
-    PREVIEW_ERROR_NONE,  // Always first.
-    PREVIEW_ERROR_BAD_SETTING,
-    PREVIEW_ERROR_METAFILE_COPY_FAILED,
-    PREVIEW_ERROR_METAFILE_INIT_FAILED_DEPRECATED,
-    PREVIEW_ERROR_ZERO_PAGES,
-    PREVIEW_ERROR_MAC_DRAFT_METAFILE_INIT_FAILED_DEPRECATED,
-    PREVIEW_ERROR_PAGE_RENDERED_WITHOUT_METAFILE,
-    PREVIEW_ERROR_INVALID_PRINTER_SETTINGS,
+    PREVIEW_ERROR_NONE = 0,  // Always first.
+    PREVIEW_ERROR_BAD_SETTING = 1,
+    PREVIEW_ERROR_METAFILE_COPY_FAILED = 2,
+    PREVIEW_ERROR_METAFILE_INIT_FAILED_DEPRECATED = 3,
+    PREVIEW_ERROR_ZERO_PAGES = 4,
+    PREVIEW_ERROR_MAC_DRAFT_METAFILE_INIT_FAILED_DEPRECATED = 5,
+    PREVIEW_ERROR_PAGE_RENDERED_WITHOUT_METAFILE_DEPRECATED = 6,
+    PREVIEW_ERROR_INVALID_PRINTER_SETTINGS = 7,
     PREVIEW_ERROR_LAST_ENUM  // Always last.
   };
 
@@ -182,15 +186,14 @@ class PrintRenderFrameHelper
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // Message handlers ---------------------------------------------------------
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnPrintPages();
   void OnPrintForSystemDialog();
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnInitiatePrintPreview(bool has_selection);
   void OnPrintPreview(const base::DictionaryValue& settings);
   void OnClosePrintPreviewDialog();
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+  void OnPrintFrameContent(const PrintMsg_PrintFrame_Params& params);
   void OnPrintingDone(bool success);
 
   // Get |page_size| and |content_area| information from
@@ -220,6 +223,9 @@ class PrintRenderFrameHelper
 
   // Finalize the print ready preview document.
   bool FinalizePrintReadyDocument();
+
+  // Helper method to calculate the scale factor for fit-to-page.
+  int GetFitToPageScaleFactor(const gfx::Rect& printable_area_in_points);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   // Enable/Disable printing.
@@ -227,14 +233,12 @@ class PrintRenderFrameHelper
 
   // Main printing code -------------------------------------------------------
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Print with the system dialog.
   // |is_scripted| should be true when the call is coming from window.print().
   // WARNING: |this| may be gone after this method returns.
   void Print(blink::WebLocalFrame* frame,
              const blink::WebNode& node,
              bool is_scripted);
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Notification when printing is done - signal tear-down/free resources.
   void DidFinishPrinting(PrintingResult result);
@@ -263,7 +267,6 @@ class PrintRenderFrameHelper
                            const base::DictionaryValue& passed_job_settings);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Get final print settings from the user.
   // WARNING: |this| may be gone after this method returns.
   void GetPrintSettingsFromUser(blink::WebLocalFrame* frame,
@@ -271,24 +274,24 @@ class PrintRenderFrameHelper
                                 int expected_pages_count,
                                 bool is_scripted,
                                 PrintMsg_PrintPages_Params* print_settings);
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Page Printing / Rendering ------------------------------------------------
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnFramePreparedForPrintPages();
   void PrintPages();
-  bool PrintPagesNative(blink::WebLocalFrame* frame, int page_count);
+  bool PrintPagesNative(blink::WebLocalFrame* frame,
+                        int page_count,
+                        bool is_pdf);
   void FinishFramePrinting();
   // Render the frame for printing.
   bool RenderPagesForPrint(blink::WebLocalFrame* frame,
                            const blink::WebNode& node);
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Platform-specific helper function for rendering page(s) to |metafile|.
   void PrintPageInternal(const PrintMsg_Print_Params& params,
                          int page_number,
                          int page_count,
+                         double scale_factor,
                          blink::WebLocalFrame* frame,
                          PdfMetafileSkia* metafile,
                          gfx::Size* page_size_in_dpi,
@@ -303,13 +306,13 @@ class PrintRenderFrameHelper
                                  const gfx::Rect& canvas_area,
                                  const gfx::Rect& content_area,
                                  double scale_factor,
-                                 blink::WebCanvas* canvas);
+                                 cc::PaintCanvas* canvas);
 
   // Helper methods -----------------------------------------------------------
 
   bool CopyMetafileDataToReadOnlySharedMem(
       const PdfMetafileSkia& metafile,
-      base::SharedMemoryHandle* read_only_shared_mem_handle);
+      PrintHostMsg_DidPrintContent_Params* params);
 
   // Helper method to get page layout in points and fit to page if needed.
   static void ComputePageLayoutInPointsForCss(
@@ -331,7 +334,7 @@ class PrintRenderFrameHelper
 
   // Given the |device| and |canvas| to draw on, prints the appropriate headers
   // and footers using strings from |header_footer_info| on to the canvas.
-  static void PrintHeaderAndFooter(blink::WebCanvas* canvas,
+  static void PrintHeaderAndFooter(cc::PaintCanvas* canvas,
                                    int page_number,
                                    int total_pages,
                                    const blink::WebLocalFrame& source_frame,
@@ -359,12 +362,13 @@ class PrintRenderFrameHelper
   // Returns true if canceling, false if continuing.
   bool CheckForCancel();
 
-  // Notifies the browser a print preview page has been rendered.
+  // Notifies the browser a print preview page has been rendered for modifiable
+  // content.
   // |page_number| is 0-based.
-  // For a valid |page_number| with modifiable content,
-  // |metafile| is the rendered page. Otherwise |metafile| is NULL.
+  // |metafile| is the rendered page and should be valid.
   // Returns true if print preview should continue, false on failure.
-  bool PreviewPageRendered(int page_number, PdfMetafileSkia* metafile);
+  bool PreviewPageRendered(int page_number,
+                           std::unique_ptr<PdfMetafileSkia> metafile);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   void SetPrintPagesParams(const PrintMsg_PrintPages_Params& settings);
@@ -407,7 +411,8 @@ class PrintRenderFrameHelper
     bool CreatePreviewDocument(
         std::unique_ptr<PrepareFrameAndViewForPrint> prepared_frame,
         const std::vector<int>& pages,
-        SkiaDocumentType doc_type);
+        SkiaDocumentType doc_type,
+        int document_cookie);
 
     // Called after a page gets rendered. |page_time| is how long the
     // rendering took.
@@ -434,7 +439,6 @@ class PrintRenderFrameHelper
     bool IsFinalPageRendered() const;
 
     // Setters
-    void set_generate_draft_pages(bool generate_draft_pages);
     void set_error(enum PrintPreviewErrorBuckets error);
 
     // Getters
@@ -451,7 +455,6 @@ class PrintRenderFrameHelper
     const blink::WebNode& prepared_node() const;
 
     int total_page_count() const;
-    bool generate_draft_pages() const;
     PdfMetafileSkia* metafile();
     int last_error() const;
 
@@ -483,9 +486,6 @@ class PrintRenderFrameHelper
 
     // List of page indices that need to be rendered.
     std::vector<int> pages_to_render_;
-
-    // True, when draft pages needs to be generated.
-    bool generate_draft_pages_;
 
     // True, if the document source is modifiable. e.g. HTML and not PDF.
     bool is_modifiable_;

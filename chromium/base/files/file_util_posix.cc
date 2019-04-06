@@ -69,26 +69,25 @@ namespace base {
 namespace {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_ANDROID) && __ANDROID_API__ < 21
-static int CallStat(const char *path, stat_wrapper_t *sb) {
+  defined(OS_FUCHSIA) || (defined(OS_ANDROID) && __ANDROID_API__ < 21)
+int CallStat(const char* path, stat_wrapper_t* sb) {
   AssertBlockingAllowed();
   return stat(path, sb);
 }
-static int CallLstat(const char *path, stat_wrapper_t *sb) {
+int CallLstat(const char* path, stat_wrapper_t* sb) {
   AssertBlockingAllowed();
   return lstat(path, sb);
 }
-#else  //  defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) ||
-//  defined(OS_ANDROID) && __ANDROID_API__ < 21
-static int CallStat(const char *path, stat_wrapper_t *sb) {
+#else
+int CallStat(const char* path, stat_wrapper_t* sb) {
   AssertBlockingAllowed();
   return stat64(path, sb);
 }
-static int CallLstat(const char *path, stat_wrapper_t *sb) {
+int CallLstat(const char* path, stat_wrapper_t* sb) {
   AssertBlockingAllowed();
   return lstat64(path, sb);
 }
-#endif  // !(defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL))
+#endif
 
 #if !defined(OS_NACL_NONSFI)
 // Helper for VerifyPathControlledByUser.
@@ -103,14 +102,12 @@ bool VerifySpecificPathControlledByUser(const FilePath& path,
   }
 
   if (S_ISLNK(stat_info.st_mode)) {
-    DLOG(ERROR) << "Path " << path.value()
-               << " is a symbolic link.";
+    DLOG(ERROR) << "Path " << path.value() << " is a symbolic link.";
     return false;
   }
 
   if (stat_info.st_uid != owner_uid) {
-    DLOG(ERROR) << "Path " << path.value()
-                << " is owned by the wrong user.";
+    DLOG(ERROR) << "Path " << path.value() << " is owned by the wrong user.";
     return false;
   }
 
@@ -122,8 +119,7 @@ bool VerifySpecificPathControlledByUser(const FilePath& path,
   }
 
   if (stat_info.st_mode & S_IWOTH) {
-    DLOG(ERROR) << "Path " << path.value()
-                << " is writable by any user.";
+    DLOG(ERROR) << "Path " << path.value() << " is writable by any user.";
     return false;
   }
 
@@ -143,35 +139,6 @@ std::string TempFileName() {
   return std::string(".org.chromium.Chromium.XXXXXX");
 #endif
 }
-
-#if defined(OS_LINUX) || defined(OS_AIX)
-// Determine if /dev/shm files can be mapped and then mprotect'd PROT_EXEC.
-// This depends on the mount options used for /dev/shm, which vary among
-// different Linux distributions and possibly local configuration.  It also
-// depends on details of kernel--ChromeOS uses the noexec option for /dev/shm
-// but its kernel allows mprotect with PROT_EXEC anyway.
-bool DetermineDevShmExecutable() {
-  bool result = false;
-  FilePath path;
-
-  ScopedFD fd(
-      CreateAndOpenFdForTemporaryFileInDir(FilePath("/dev/shm"), &path));
-  if (fd.is_valid()) {
-    DeleteFile(path, false);
-    long sysconf_result = sysconf(_SC_PAGESIZE);
-    CHECK_GE(sysconf_result, 0);
-    size_t pagesize = static_cast<size_t>(sysconf_result);
-    CHECK_GE(sizeof(pagesize), sizeof(sysconf_result));
-    void* mapping = mmap(nullptr, pagesize, PROT_READ, MAP_SHARED, fd.get(), 0);
-    if (mapping != MAP_FAILED) {
-      if (mprotect(mapping, pagesize, PROT_READ | PROT_EXEC) == 0)
-        result = true;
-      munmap(mapping, pagesize);
-    }
-  }
-  return result;
-}
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
 
 bool AdvanceEnumeratorWithStat(FileEnumerator* traversal,
                                FilePath* out_next_path,
@@ -229,15 +196,13 @@ bool DoCopyDirectory(const FilePath& from_path,
 
   // This function does not properly handle destinations within the source
   FilePath real_to_path = to_path;
-  if (PathExists(real_to_path)) {
+  if (PathExists(real_to_path))
     real_to_path = MakeAbsoluteFilePath(real_to_path);
-    if (real_to_path.empty())
-      return false;
-  } else {
+  else
     real_to_path = MakeAbsoluteFilePath(real_to_path.DirName());
-    if (real_to_path.empty())
-      return false;
-  }
+  if (real_to_path.empty())
+    return false;
+
   FilePath real_from_path = MakeAbsoluteFilePath(from_path);
   if (real_from_path.empty())
     return false;
@@ -298,7 +263,7 @@ bool DoCopyDirectory(const FilePath& from_path,
     }
 
     // Add O_NONBLOCK so we can't block opening a pipe.
-    base::File infile(open(current.value().c_str(), O_RDONLY | O_NONBLOCK));
+    File infile(open(current.value().c_str(), O_RDONLY | O_NONBLOCK));
     if (!infile.IsValid()) {
       DPLOG(ERROR) << "CopyDirectory() couldn't open file: " << current.value();
       return false;
@@ -338,7 +303,7 @@ bool DoCopyDirectory(const FilePath& from_path,
 #else
     int mode = 0600;
 #endif
-    base::File outfile(open(target_path.value().c_str(), open_flags, mode));
+    File outfile(open(target_path.value().c_str(), open_flags, mode));
     if (!outfile.IsValid()) {
       DPLOG(ERROR) << "CopyDirectory() couldn't create file: "
                    << target_path.value();
@@ -397,7 +362,7 @@ bool DeleteFile(const FilePath& path, bool recursive) {
     return (rmdir(path_str) == 0);
 
   bool success = true;
-  base::stack<std::string> directories;
+  stack<std::string> directories;
   directories.push(path.value());
   FileEnumerator traversal(path, true,
       FileEnumerator::FILES | FileEnumerator::DIRECTORIES |
@@ -626,14 +591,15 @@ bool GetTempDir(FilePath* path) {
   const char* tmp = getenv("TMPDIR");
   if (tmp) {
     *path = FilePath(tmp);
-  } else {
-#if defined(OS_ANDROID)
-    return PathService::Get(base::DIR_CACHE, path);
-#else
-    *path = FilePath("/tmp");
-#endif
+    return true;
   }
+
+#if defined(OS_ANDROID)
+  return PathService::Get(DIR_CACHE, path);
+#else
+  *path = FilePath("/tmp");
   return true;
+#endif
 }
 #endif  // !defined(OS_MACOSX)
 
@@ -1002,8 +968,14 @@ bool VerifyPathControlledByAdmin(const FilePath& path) {
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
 int GetMaximumPathComponentLength(const FilePath& path) {
+#if defined(OS_FUCHSIA)
+  // Return a value we do not expect anyone ever to reach, but which is small
+  // enough to guard against e.g. bugs causing multi-megabyte paths.
+  return 1024;
+#else
   AssertBlockingAllowed();
   return pathconf(path.value().c_str(), _PC_NAME_MAX);
+#endif
 }
 
 #if !defined(OS_ANDROID)
@@ -1017,7 +989,8 @@ bool GetShmemTempDir(bool executable, FilePath* path) {
 #endif
   bool use_dev_shm = true;
   if (executable) {
-    static const bool s_dev_shm_executable = DetermineDevShmExecutable();
+    static const bool s_dev_shm_executable =
+        IsPathExecutable(FilePath("/dev/shm"));
     use_dev_shm = s_dev_shm_executable;
   }
   if (use_dev_shm && !disable_dev_shm) {
@@ -1060,17 +1033,15 @@ namespace internal {
 
 bool MoveUnsafe(const FilePath& from_path, const FilePath& to_path) {
   AssertBlockingAllowed();
-  // Windows compatibility: if to_path exists, from_path and to_path
+  // Windows compatibility: if |to_path| exists, |from_path| and |to_path|
   // must be the same type, either both files, or both directories.
   stat_wrapper_t to_file_info;
   if (CallStat(to_path.value().c_str(), &to_file_info) == 0) {
     stat_wrapper_t from_file_info;
-    if (CallStat(from_path.value().c_str(), &from_file_info) == 0) {
-      if (S_ISDIR(to_file_info.st_mode) != S_ISDIR(from_file_info.st_mode))
-        return false;
-    } else {
+    if (CallStat(from_path.value().c_str(), &from_file_info) != 0)
       return false;
-    }
+    if (S_ISDIR(to_file_info.st_mode) != S_ISDIR(from_file_info.st_mode))
+      return false;
   }
 
   if (rename(from_path.value().c_str(), to_path.value().c_str()) == 0)
@@ -1086,4 +1057,28 @@ bool MoveUnsafe(const FilePath& from_path, const FilePath& to_path) {
 }  // namespace internal
 
 #endif  // !defined(OS_NACL_NONSFI)
+
+#if defined(OS_LINUX) || defined(OS_AIX)
+BASE_EXPORT bool IsPathExecutable(const FilePath& path) {
+  bool result = false;
+  FilePath tmp_file_path;
+
+  ScopedFD fd(CreateAndOpenFdForTemporaryFileInDir(path, &tmp_file_path));
+  if (fd.is_valid()) {
+    DeleteFile(tmp_file_path, false);
+    long sysconf_result = sysconf(_SC_PAGESIZE);
+    CHECK_GE(sysconf_result, 0);
+    size_t pagesize = static_cast<size_t>(sysconf_result);
+    CHECK_GE(sizeof(pagesize), sizeof(sysconf_result));
+    void* mapping = mmap(nullptr, pagesize, PROT_READ, MAP_SHARED, fd.get(), 0);
+    if (mapping != MAP_FAILED) {
+      if (mprotect(mapping, pagesize, PROT_READ | PROT_EXEC) == 0)
+        result = true;
+      munmap(mapping, pagesize);
+    }
+  }
+  return result;
+}
+#endif  // defined(OS_LINUX) || defined(OS_AIX)
+
 }  // namespace base

@@ -11,7 +11,7 @@
 #include "media/capture/video/video_capture_system.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
-#include "services/video_capture/public/interfaces/device_factory.mojom.h"
+#include "services/video_capture/public/mojom/device_factory.mojom.h"
 
 namespace video_capture {
 
@@ -26,8 +26,8 @@ class DeviceFactoryMediaToMojoAdapter : public mojom::DeviceFactory {
   DeviceFactoryMediaToMojoAdapter(
       std::unique_ptr<service_manager::ServiceContextRef> service_ref,
       std::unique_ptr<media::VideoCaptureSystem> capture_system,
-      const media::VideoCaptureJpegDecoderFactoryCB&
-          jpeg_decoder_factory_callback);
+      media::MojoJpegDecodeAcceleratorFactoryCB jpeg_decoder_factory_callback,
+      scoped_refptr<base::SequencedTaskRunner> jpeg_decoder_task_runner);
   ~DeviceFactoryMediaToMojoAdapter() override;
 
   // mojom::DeviceFactory implementation.
@@ -35,9 +35,14 @@ class DeviceFactoryMediaToMojoAdapter : public mojom::DeviceFactory {
   void CreateDevice(const std::string& device_id,
                     mojom::DeviceRequest device_request,
                     CreateDeviceCallback callback) override;
-  void AddVirtualDevice(const media::VideoCaptureDeviceInfo& device_info,
-                        mojom::ProducerPtr producer,
-                        mojom::VirtualDeviceRequest virtual_device) override;
+  void AddSharedMemoryVirtualDevice(
+      const media::VideoCaptureDeviceInfo& device_info,
+      mojom::ProducerPtr producer,
+      bool send_buffer_handles_to_producer_as_raw_file_descriptors,
+      mojom::SharedMemoryVirtualDeviceRequest virtual_device) override;
+  void AddTextureVirtualDevice(
+      const media::VideoCaptureDeviceInfo& device_info,
+      mojom::TextureVirtualDeviceRequest virtual_device) override;
 
  private:
   struct ActiveDeviceEntry {
@@ -60,7 +65,9 @@ class DeviceFactoryMediaToMojoAdapter : public mojom::DeviceFactory {
 
   const std::unique_ptr<service_manager::ServiceContextRef> service_ref_;
   const std::unique_ptr<media::VideoCaptureSystem> capture_system_;
-  const media::VideoCaptureJpegDecoderFactoryCB jpeg_decoder_factory_callback_;
+  const media::MojoJpegDecodeAcceleratorFactoryCB
+      jpeg_decoder_factory_callback_;
+  scoped_refptr<base::SequencedTaskRunner> jpeg_decoder_task_runner_;
   std::map<std::string, ActiveDeviceEntry> active_devices_by_id_;
   bool has_called_get_device_infos_;
 

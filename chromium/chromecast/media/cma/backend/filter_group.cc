@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chromecast/media/cma/backend/mixer_input.h"
 #include "chromecast/media/cma/backend/post_processing_pipeline.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_sample_types.h"
@@ -52,17 +53,27 @@ void FilterGroup::Initialize(int output_samples_per_second) {
   output_samples_per_second_ = output_samples_per_second;
   CHECK(post_processing_pipeline_->SetSampleRate(output_samples_per_second));
   post_processing_pipeline_->SetContentType(content_type_);
+  active_inputs_.clear();
 }
 
-bool FilterGroup::CanProcessInput(StreamMixer::InputQueue* input) {
-  return !(device_ids_.find(input->device_id()) == device_ids_.end());
+bool FilterGroup::CanProcessInput(const std::string& input_device_id) {
+  return !(device_ids_.find(input_device_id) == device_ids_.end());
 }
 
-void FilterGroup::AddActiveInput(StreamMixer::InputQueue* input) {
-  active_inputs_.push_back(input);
+void FilterGroup::AddInput(MixerInput* input) {
+  active_inputs_.insert(input);
+  if (mixed_) {
+    AddTempBuffer(input->num_channels(), mixed_->frames());
+  }
 }
 
-float FilterGroup::MixAndFilter(int num_frames) {
+void FilterGroup::RemoveInput(MixerInput* input) {
+  active_inputs_.erase(input);
+}
+
+float FilterGroup::MixAndFilter(
+    int num_frames,
+    MediaPipelineBackend::AudioDecoder::RenderingDelay rendering_delay) {
   DCHECK_NE(output_samples_per_second_, 0);
 
   bool resize_needed = ResizeBuffersIfNecessary(num_frames);
@@ -70,9 +81,12 @@ float FilterGroup::MixAndFilter(int num_frames) {
   float volume = 0.0f;
   AudioContentType content_type = static_cast<AudioContentType>(-1);
 
+  rendering_delay.delay_microseconds += GetRenderingDelayMicroseconds();
+
   // Recursively mix inputs.
   for (auto* filter_group : mixed_inputs_) {
-    volume = std::max(volume, filter_group->MixAndFilter(num_frames));
+    volume = std::max(volume,
+                      filter_group->MixAndFilter(num_frames, rendering_delay));
     content_type = std::max(content_type, filter_group->content_type());
   }
 
@@ -102,14 +116,25 @@ float FilterGroup::MixAndFilter(int num_frames) {
 
   // Mix InputQueues
   mixed_->ZeroFramesPartial(0, num_frames);
-  for (StreamMixer::InputQueue* input : active_inputs_) {
-    input->GetResampledData(temp_.get(), num_frames);
-    for (int c = 0; c < num_channels_; ++c) {
-      input->VolumeScaleAccumulate(c != 0, temp_->channel(c), num_frames,
-                                   mixed_->channel(c));
+  for (MixerInput* input : active_inputs_) {
+    DCHECK_LT(input->num_channels(), static_cast<int>(temp_buffers_.size()));
+    DCHECK(temp_buffers_[input->num_channels()]);
+    ::media::AudioBus* temp = temp_buffers_[input->num_channels()].get();
+    int filled = input->FillAudioData(num_frames, rendering_delay, temp);
+    if (filled > 0) {
+      int in_c = 0;
+      for (int out_c = 0; out_c < num_channels_; ++out_c) {
+        input->VolumeScaleAccumulate(temp->channel(in_c), filled,
+                                     mixed_->channel(out_c));
+        ++in_c;
+        if (in_c >= input->num_channels()) {
+          in_c = 0;
+        }
+      }
+
+      volume = std::max(volume, input->InstantaneousVolume());
+      content_type = std::max(content_type, input->content_type());
     }
-    volume = std::max(volume, input->InstantaneousVolume());
-    content_type = std::max(content_type, input->content_type());
   }
 
   mixed_->ToInterleaved<::media::FloatSampleTypeTraits<float>>(
@@ -177,10 +202,6 @@ int64_t FilterGroup::GetRenderingDelayMicroseconds() {
          output_samples_per_second_;
 }
 
-void FilterGroup::ClearActiveInputs() {
-  active_inputs_.clear();
-}
-
 int FilterGroup::GetOutputChannelCount() {
   return post_processing_pipeline_->NumOutputChannels();
 }
@@ -190,11 +211,24 @@ bool FilterGroup::ResizeBuffersIfNecessary(int num_frames) {
     return false;
   }
   mixed_ = ::media::AudioBus::Create(num_channels_, num_frames);
-  temp_ = ::media::AudioBus::Create(num_channels_, num_frames);
+  temp_buffers_.clear();
+  for (MixerInput* input : active_inputs_) {
+    AddTempBuffer(input->num_channels(), num_frames);
+  }
   interleaved_.reset(static_cast<float*>(
       base::AlignedAlloc(num_frames * num_channels_ * sizeof(float),
                          ::media::AudioBus::kChannelAlignment)));
   return true;
+}
+
+void FilterGroup::AddTempBuffer(int num_channels, int num_frames) {
+  if (static_cast<int>(temp_buffers_.size()) <= num_channels) {
+    temp_buffers_.resize(num_channels + 1);
+  }
+  if (!temp_buffers_[num_channels]) {
+    temp_buffers_[num_channels] =
+        ::media::AudioBus::Create(num_channels, num_frames);
+  }
 }
 
 void FilterGroup::SetPostProcessorConfig(const std::string& name,

@@ -8,14 +8,14 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/media_stream_video_capturer_source.h"
+#include "content/renderer/media/stream/media_stream_video_capturer_source.h"
 #include "media/base/limits.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/web/web_heap.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -181,7 +181,7 @@ TEST_P(CanvasCaptureHandlerTest, GetFormatsStartAndStop) {
   EXPECT_CALL(*this, DoOnRunning(true)).Times(1);
   EXPECT_CALL(*this, DoOnDeliverFrame(_, _))
       .Times(1)
-      .WillOnce(RunClosure(quit_closure));
+      .WillOnce(RunClosure(std::move(quit_closure)));
   source->StartCapture(
       params, base::Bind(&CanvasCaptureHandlerTest::OnDeliverFrame,
                          base::Unretained(this)),

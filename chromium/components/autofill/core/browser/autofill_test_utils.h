@@ -30,6 +30,8 @@ struct FormFieldData;
 // Common utilities shared amongst Autofill tests.
 namespace test {
 
+const char kEmptyOrigin[] = "";
+
 // The following methods return a PrefService that can be used for
 // Autofill-related testing in contexts where the PrefService would otherwise
 // have to be constructed manually (e.g., in unit tests within Autofill core
@@ -65,6 +67,18 @@ void CreateTestSelectField(const std::vector<const char*>& values,
 void CreateTestAddressFormData(FormData* form);
 void CreateTestAddressFormData(FormData* form,
                                std::vector<ServerFieldTypeSet>* types);
+
+// Populates |form| with data corresponding to a simple personal information
+// form, including name and email, but no address-related fields.
+void CreateTestPersonalInformationFormData(FormData* form);
+
+// Populates |form| with data corresponding to a simple credit card form.
+// Note that this actually appends fields to the form data, which can be
+// useful for building up more complex test forms.
+void CreateTestCreditCardFormData(FormData* form,
+                                  bool is_https,
+                                  bool use_month_type,
+                                  bool split_names = false);
 
 // Returns a full profile with valid info according to rules for Canada.
 AutofillProfile GetFullValidProfileForCanada();
@@ -199,6 +213,11 @@ void FillQueryField(AutofillQueryContents::Form::Field* field,
 // delegate to display a popup.
 void GenerateTestAutofillPopup(
     AutofillExternalDelegate* autofill_external_delegate);
+
+std::string ObfuscatedCardDigitsAsUTF8(const std::string& str);
+
+std::string NextYear();
+std::string LastYear();
 
 }  // namespace test
 }  // namespace autofill

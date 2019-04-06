@@ -6,10 +6,12 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -21,7 +23,6 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
-#include "ui/message_center/message_center.h"
 
 #if defined(OS_WIN)
 #include "components/metrics/metrics_pref_names.h"
@@ -33,10 +34,7 @@ namespace {
 
 // Helper function to iterate and count all the tabs.
 size_t CountAllTabs() {
-  size_t count = 0;
-  for (TabContentsIterator iterator; !iterator.done(); iterator.Next())
-    ++count;
-  return count;
+  return std::distance(AllTabContentses().begin(), AllTabContentses().end());
 }
 
 }  // namespace
@@ -51,8 +49,8 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyCount) {
   Browser::CreateParams native_params(profile(), true);
   std::unique_ptr<Browser> browser2(
       CreateBrowserWithTestWindowForParams(&native_params));
-  // Create browser 3 and 4 on the Ash desktop (the TabContentsIterator
-  // shouldn't see the difference).
+  // Create browser 3 and 4 on the Ash desktop (the iterator shouldn't see the
+  // difference).
   Browser::CreateParams ash_params(profile(), true);
   std::unique_ptr<Browser> browser3(
       CreateBrowserWithTestWindowForParams(&ash_params));
@@ -97,8 +95,8 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyBrowser) {
   Browser::CreateParams native_params(profile(), true);
   std::unique_ptr<Browser> browser2(
       CreateBrowserWithTestWindowForParams(&native_params));
-  // Create browser 3 on the Ash desktop (the TabContentsIterator shouldn't see
-  // the difference).
+  // Create browser 3 on the Ash desktop (the iterator shouldn't see the
+  // difference).
   Browser::CreateParams ash_params(profile(), true);
   std::unique_ptr<Browser> browser3(
       CreateBrowserWithTestWindowForParams(&ash_params));
@@ -118,8 +116,9 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyBrowser) {
     chrome::NewTab(browser3.get());
 
   size_t count = 0;
-  for (TabContentsIterator iterator; !iterator.done(); iterator.Next(),
-                                                       ++count) {
+  auto& all_tabs = AllTabContentses();
+  for (auto iterator = all_tabs.begin(), end = all_tabs.end(); iterator != end;
+       ++iterator, ++count) {
     if (count < 3)
       EXPECT_EQ(browser2.get(), iterator.browser());
     else if (count < 5)
@@ -133,8 +132,8 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyBrowser) {
   browser3->tab_strip_model()->CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
 
   count = 0;
-  for (TabContentsIterator iterator; !iterator.done(); iterator.Next(),
-                                                       ++count) {
+  for (auto iterator = all_tabs.begin(), end = all_tabs.end(); iterator != end;
+       ++iterator, ++count) {
     if (count == 0)
       EXPECT_EQ(browser3.get(), iterator.browser());
     else
@@ -146,8 +145,8 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyBrowser) {
   chrome::NewTab(browser2.get());
 
   count = 0;
-  for (TabContentsIterator iterator; !iterator.done(); iterator.Next(),
-                                                       ++count) {
+  for (auto iterator = all_tabs.begin(), end = all_tabs.end(); iterator != end;
+       ++iterator, ++count) {
     if (count == 0)
       EXPECT_EQ(browser(), iterator.browser());
     else if (count == 1)
@@ -175,7 +174,6 @@ TEST_F(BrowserListTest, MAYBE_AttemptRestart) {
   TestingPrefServiceSimple* testing_pref_service =
       profile_manager()->local_state()->Get();
 
-  message_center::MessageCenter::Initialize();
   EXPECT_FALSE(testing_pref_service->GetBoolean(prefs::kWasRestarted));
   chrome::AttemptRestart();
   EXPECT_TRUE(testing_pref_service->GetBoolean(prefs::kWasRestarted));

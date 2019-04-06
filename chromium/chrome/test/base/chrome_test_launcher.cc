@@ -13,7 +13,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/process/process_metrics.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -67,12 +66,6 @@ ChromeTestSuiteRunner::ChromeTestSuiteRunner() {}
 ChromeTestSuiteRunner::~ChromeTestSuiteRunner() {}
 
 int ChromeTestSuiteRunner::RunTestSuite(int argc, char** argv) {
-#if defined(USE_AURA)
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(service_manager::switches::kServicePipeToken))
-    content::GetContentMainParams()->env_mode = aura::Env::Mode::MUS;
-#endif  // defined(USE_AURA)
-
   return ChromeTestSuite(argc, argv).Run();
 }
 

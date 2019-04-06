@@ -46,21 +46,21 @@ class CONTENT_EXPORT ThrottlingResourceHandler
       std::unique_ptr<ResourceController> controller) override;
   void OnResponseStarted(
       network::ResourceResponse* response,
-      std::unique_ptr<ResourceController> controller,
-      bool open_when_done,
-      bool ask_for_target) override;
+      std::unique_ptr<ResourceController> controller) override;
   void OnWillStart(const GURL& url,
                    std::unique_ptr<ResourceController> controller) override;
 
   // ResourceThrottle::Delegate implementation:
   void Cancel() override;
   void CancelWithError(int error_code) override;
-  void Resume(bool open_when_done=false, bool ask_for_target=false) override;
+  void Resume() override;
+
+  void SetDelegateOpenFlags(bool open_when_done, bool ask_for_target) override;
 
  private:
   void ResumeStart();
   void ResumeRedirect();
-  void ResumeResponse(bool open_when_done, bool ask_for_target);
+  void ResumeResponse();
 
   // Called when the throttle at |throttle_index| defers a request.  Logs the
   // name of the throttle that delayed the request.

@@ -18,11 +18,15 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/resource_coordinator/resource_coordinator_web_contents_observer.h"
+#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
+#include "chrome/browser/resource_coordinator/tab_helper.h"
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
 #include "chrome/browser/resource_coordinator/time.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "components/metrics/system_memory_stats_recorder.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/swap_metrics_driver.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -30,6 +34,8 @@
 namespace resource_coordinator {
 
 namespace {
+
+using LoadingState = TabLoadTracker::LoadingState;
 
 const char* kSessionTypeName[] = {"SessionRestore", "BackgroundTabOpening"};
 
@@ -58,8 +64,9 @@ bool ShouldReportExpectedTaskQueueingDurationToUKM(
 }
 
 ukm::SourceId GetUkmSourceId(content::WebContents* contents) {
-  ResourceCoordinatorWebContentsObserver* observer =
-      ResourceCoordinatorWebContentsObserver::FromWebContents(contents);
+  resource_coordinator::ResourceCoordinatorTabHelper* observer =
+      resource_coordinator::ResourceCoordinatorTabHelper::FromWebContents(
+          contents);
   if (!observer)
     return ukm::kInvalidSourceId;
 
@@ -168,21 +175,23 @@ void TabManagerStatsCollector::RecordSwitchToTab(
   DCHECK(new_data);
 
   if (is_session_restore_loading_tabs_) {
-    UMA_HISTOGRAM_ENUMERATION(kHistogramSessionRestoreSwitchToTab,
-                              new_data->tab_loading_state(),
-                              TAB_LOADING_STATE_MAX);
+    UMA_HISTOGRAM_ENUMERATION(
+        kHistogramSessionRestoreSwitchToTab,
+        static_cast<int32_t>(new_data->tab_loading_state()),
+        static_cast<int32_t>(LoadingState::kMaxValue) + 1);
   }
   if (is_in_background_tab_opening_session_) {
-    UMA_HISTOGRAM_ENUMERATION(kHistogramBackgroundTabOpeningSwitchToTab,
-                              new_data->tab_loading_state(),
-                              TAB_LOADING_STATE_MAX);
+    UMA_HISTOGRAM_ENUMERATION(
+        kHistogramBackgroundTabOpeningSwitchToTab,
+        static_cast<int32_t>(new_data->tab_loading_state()),
+        static_cast<int32_t>(LoadingState::kMaxValue) + 1);
   }
 
   if (old_contents)
     foreground_contents_switched_to_times_.erase(old_contents);
   DCHECK(
       !base::ContainsKey(foreground_contents_switched_to_times_, new_contents));
-  if (new_data->tab_loading_state() != TAB_IS_LOADED) {
+  if (new_data->tab_loading_state() != LoadingState::LOADED) {
     foreground_contents_switched_to_times_.insert(
         std::make_pair(new_contents, NowTicks()));
   }
@@ -193,7 +202,8 @@ void TabManagerStatsCollector::RecordExpectedTaskQueueingDuration(
     base::TimeDelta queueing_time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!contents->IsVisible())
+  // TODO(fdoray): Consider not recording this for occluded tabs.
+  if (contents->GetVisibility() == content::Visibility::HIDDEN)
     return;
 
   if (IsInOverlappedSession())
@@ -264,6 +274,111 @@ void TabManagerStatsCollector::RecordBackgroundTabCount() {
         kHistogramBackgroundTabOpeningTabLoadUserInitiatedCount,
         background_tab_count_stats_.tab_load_user_initiated_count);
   }
+}
+
+namespace {
+
+using LifecycleUnitStateChangeReason = ::mojom::LifecycleUnitStateChangeReason;
+
+LifecycleUnitStateChangeReason DiscardReasonToLifecycleUnitStateChangeReason(
+    DiscardReason reason) {
+  // TODO(chrisha): Do away with DiscardReason, and use the mojo enum
+  // everywhere.
+  switch (reason) {
+    case DiscardReason::kExternal:
+      return LifecycleUnitStateChangeReason::EXTENSION_INITIATED;
+
+    case DiscardReason::kProactive:
+      return LifecycleUnitStateChangeReason::BROWSER_INITIATED;
+
+    case DiscardReason::kUrgent:
+      return LifecycleUnitStateChangeReason::SYSTEM_MEMORY_PRESSURE;
+  }
+
+  NOTREACHED();
+  return LifecycleUnitStateChangeReason::BROWSER_INITIATED;
+}
+
+void RecordLifecycleStateChangeUkm(
+    LifecycleUnit* lifecycle_unit,
+    const DecisionDetails& decision_details,
+    LifecycleUnitState old_state,
+    LifecycleUnitState new_state,
+    LifecycleUnitStateChangeReason change_reason) {
+  ukm::SourceId ukm_source_id = lifecycle_unit->GetUkmSourceId();
+  if (ukm_source_id == ukm::kInvalidSourceId)
+    return;
+
+  ukm::builders::TabManager_LifecycleStateChange builder(ukm_source_id);
+
+  builder.SetOldLifecycleState(static_cast<int64_t>(old_state));
+  builder.SetNewLifecycleState(static_cast<int64_t>(new_state));
+  builder.SetLifecycleStateChangeReason(static_cast<int64_t>(change_reason));
+
+  // We only currently report transitions for tabs, so this lookup should never
+  // fail. It will start failing once we add ARC processes as LifecycleUnits.
+  // TODO(chrisha): This should be time since the navigation was committed (the
+  // load started), but that information is currently only persisted inside the
+  // CU-graph. Using time since navigation finished is a cheap approximation for
+  // the time being.
+  auto* tab = lifecycle_unit->AsTabLifecycleUnitExternal();
+  auto* contents = tab->GetWebContents();
+  auto* nav_entry = contents->GetController().GetLastCommittedEntry();
+  if (nav_entry) {
+    auto timestamp = nav_entry->GetTimestamp();
+    if (!timestamp.is_null()) {
+      base::TimeDelta time_since_load = base::Time::Now() - timestamp;
+      builder.SetTimeSinceNavigationMs(time_since_load.InMilliseconds());
+    }
+  }
+
+  // Set all visibility related fields.
+  //
+  // |time_since_visible| is:
+  // - Zero if the LifecycleUnit is currently visible.
+  // - Time since creation if the LifecycleUnit was never visible.
+  // - Time since visible if the LifecycleUnit was visible in the past.
+  auto visibility = lifecycle_unit->GetVisibility();
+  base::TimeDelta time_since_visible;  // Zero.
+  if (visibility != content::Visibility::VISIBLE)
+    time_since_visible = NowTicks() - lifecycle_unit->GetWallTimeWhenHidden();
+  builder.SetTimeSinceVisibilityStateChangeMs(
+      time_since_visible.InMilliseconds());
+  builder.SetVisibilityState(static_cast<int64_t>(visibility));
+
+  // TODO(chrisha): Fix logging to occur when the transition is finalized so
+  // that this is actually known.
+  builder.SetTransitionForced(false);
+
+  // This populates all of the relevant Success/Failure fields, as well as
+  // Outcome.
+  decision_details.Populate(&builder);
+
+  builder.Record(ukm::UkmRecorder::Get());
+}
+
+}  // namespace
+
+// static
+void TabManagerStatsCollector::RecordFreezeDecision(
+    LifecycleUnit* lifecycle_unit,
+    const DecisionDetails& decision_details,
+    LifecycleUnitState old_state) {
+  RecordLifecycleStateChangeUkm(
+      lifecycle_unit, decision_details, old_state, LifecycleUnitState::FROZEN,
+      LifecycleUnitStateChangeReason::BROWSER_INITIATED);
+}
+
+// static
+void TabManagerStatsCollector::RecordDiscardDecision(
+    LifecycleUnit* lifecycle_unit,
+    const DecisionDetails& decision_details,
+    LifecycleUnitState old_state,
+    DiscardReason reason) {
+  RecordLifecycleStateChangeUkm(
+      lifecycle_unit, decision_details, old_state,
+      LifecycleUnitState::DISCARDED,
+      DiscardReasonToLifecycleUnitStateChangeReason(reason));
 }
 
 void TabManagerStatsCollector::OnSessionRestoreStartedLoadingTabs() {

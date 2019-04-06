@@ -68,7 +68,9 @@ class StartupBrowserCreatorImpl {
   FRIEND_TEST_ALL_PREFIXES(BrowserTest, AppIdSwitch);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorImplTest, DetermineStartupTabs);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorImplTest,
-                           DetermineStartupTabs_IncognitoOrCrash);
+                           DetermineStartupTabs_Incognito);
+  FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorImplTest,
+                           DetermineStartupTabs_Crash);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorImplTest,
                            DetermineStartupTabs_MasterPrefs);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorImplTest,
@@ -146,7 +148,8 @@ class StartupBrowserCreatorImpl {
                                    bool process_startup,
                                    bool is_ephemeral_profile,
                                    bool is_post_crash_launch,
-                                   bool are_startup_urls_managed);
+                                   bool has_incompatible_applications,
+                                   bool promotional_tabs_enabled);
 
   // Begins an asynchronous session restore if current state allows it (e.g.,
   // this is not process startup) and SessionService indicates that one is

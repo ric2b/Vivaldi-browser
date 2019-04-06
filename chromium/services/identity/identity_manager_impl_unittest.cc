@@ -10,17 +10,16 @@
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "google_apis/gaia/fake_oauth2_token_service_delegate.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/identity/identity_service.h"
 #include "services/identity/public/cpp/account_state.h"
 #include "services/identity/public/cpp/scope_set.h"
-#include "services/identity/public/interfaces/constants.mojom.h"
-#include "services/identity/public/interfaces/identity_manager.mojom.h"
+#include "services/identity/public/mojom/constants.mojom.h"
+#include "services/identity/public/mojom/identity_manager.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
-#include "services/service_manager/public/interfaces/service_factory.mojom.h"
+#include "services/service_manager/public/mojom/service_factory.mojom.h"
 
 namespace identity {
 namespace {
@@ -554,10 +553,7 @@ TEST_F(IdentityManagerImplTest,
   signin_manager()->SetAuthenticatedAccountInfo(kTestGaiaId, kTestEmail);
   token_service()->UpdateCredentials(
       signin_manager()->GetAuthenticatedAccountId(), kTestRefreshToken);
-  FakeOAuth2TokenServiceDelegate* delegate =
-      static_cast<FakeOAuth2TokenServiceDelegate*>(
-          token_service()->GetDelegate());
-  delegate->SetLastErrorForAccount(
+  token_service()->UpdateAuthErrorForTesting(
       signin_manager()->GetAuthenticatedAccountId(),
       GoogleServiceAuthError(
           GoogleServiceAuthError::State::INVALID_GAIA_CREDENTIALS));
@@ -576,7 +572,7 @@ TEST_F(IdentityManagerImplTest,
 
   // Clear the auth error, update credentials, and check that the callback
   // fires.
-  delegate->SetLastErrorForAccount(
+  token_service()->UpdateAuthErrorForTesting(
       signin_manager()->GetAuthenticatedAccountId(), GoogleServiceAuthError());
   token_service()->UpdateCredentials(
       signin_manager()->GetAuthenticatedAccountId(), kTestRefreshToken);

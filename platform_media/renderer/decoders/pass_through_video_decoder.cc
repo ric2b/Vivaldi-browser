@@ -21,12 +21,13 @@ void PassThroughVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                          bool low_delay,
                                          CdmContext* cdm_context,
                                          const InitCB& init_cb,
-                                         const OutputCB& output_cb) {
+                                         const OutputCB& output_cb,
+                                         const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
   impl_.Initialize(config, init_cb, output_cb);
 }
 
 void PassThroughVideoDecoder::Decode(
-    const scoped_refptr<DecoderBuffer>& buffer,
+    scoped_refptr<DecoderBuffer> buffer,
     const DecodeCB& decode_cb) {
   impl_.Decode(buffer, decode_cb);
 }

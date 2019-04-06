@@ -24,9 +24,482 @@ Note: If paths to input files are passed in this way, it is important that:
   2. Either (a) or (b)
     a. inputs/deps ensure that the action runs whenever one of the files changes
     b. the files are added to the action's depfile
+
+NOTE: All paths within .build_config files are relative to $OUTPUT_CHROMIUM_DIR.
+
+This is a technical note describing the format of .build_config files.
+Please keep it updated when changing this script. For extraction and
+visualization instructions, see build/android/docs/build_config.md
+
+------------- BEGIN_MARKDOWN ---------------------------------------------------
+The .build_config file format
+===
+
+# Introduction
+
+This document tries to explain the format of `.build_config` generated during
+the Android build of Chromium. For a higher-level explanation of these files,
+please read
+[build/android/docs/build_config.md](build/android/docs/build_config.md).
+
+# The `deps_info` top-level dictionary:
+
+All `.build_config` files have a required `'deps_info'` key, whose value is a
+dictionary describing the target and its dependencies. The latter has the
+following required keys:
+
+## Required keys in `deps_info`:
+
+* `deps_info['type']`: The target type as a string.
+
+    The following types are known by the internal GN build rules and the
+    build scripts altogether:
+
+    * [java_binary](#target_java_binary)
+    * [java_annotation_processor](#target_java_annotation_processor)
+    * [junit_binary](#target_junit_binary)
+    * [java_library](#target_java_library)
+    * [android_assets](#target_android_assets)
+    * [android_resources](#target_android_resources)
+    * [android_apk](#target_android_apk)
+    * [dist_jar](#target_dist_jar)
+    * [dist_aar](#target_dist_aar)
+    * [resource_rewriter](#target_resource_rewriter)
+    * [group](#target_group)
+
+    See later sections for more details of some of these.
+
+* `deps_info['path']`: Path to the target's `.build_config` file.
+
+* `deps_info['name']`: Nothing more than the basename of `deps_info['path']`
+at the moment.
+
+* `deps_info['deps_configs']`: List of paths to the `.build_config` files of
+all *direct* dependencies of the current target.
+
+    NOTE: Because the `.build_config` of a given target is always generated
+    after the `.build_config` of its dependencies, the `write_build_config.py`
+    script can use chains of `deps_configs` to compute transitive dependencies
+    for each target when needed.
+
+## Optional keys in `deps_info`:
+
+The following keys will only appear in the `.build_config` files of certain
+target types:
+
+* `deps_info['requires_android']`: True to indicate that the corresponding
+code uses Android-specific APIs, and thus cannot run on the host within a
+regular JVM. May only appear in Java-related targets.
+
+* `deps_info['supports_android']`:
+May appear in Java-related targets, and indicates that
+the corresponding code doesn't use Java APIs that are not available on
+Android. As such it may run either on the host or on an Android device.
+
+* `deps_info['assets']`:
+Only seen for the [`android_assets`](#target_android_assets) type. See below.
+
+* `deps_info['package_name']`: Java package name associated with this target.
+
+    NOTE: For `android_resources` targets,
+    this is the package name for the corresponding R class. For `android_apk`
+    targets, this is the corresponding package name. This does *not* appear for
+    other target types.
+
+* `deps_info['android_manifest']`:
+Path to an AndroidManifest.xml file related to the current target.
+
+# Top-level `resources` dictionary:
+
+This dictionary only appears for a few target types that can contain or
+relate to Android resources (e.g. `android_resources` or `android_apk`):
+
+* `resources['dependency_zips']`:
+List of `deps_info['resources_zip']` entries for all `android_resources`
+dependencies for the current target.
+
+* `resource['extra_package_names']`:
+Always empty for `android_resources` types. Otherwise,
+the list of `deps_info['package_name']` entries for all `android_resources`
+dependencies for the current target. Computed automatically by
+`write_build_config.py`.
+
+* `resources['extra_r_text_files']`:
+Always empty for `android_resources` types. Otherwise, the list of
+`deps_info['r_text']` entries for all `android_resources` dependencies for
+the current target. Computed automatically.
+
+
+# `.build_config` target types description:
+
+## <a name="target_group">Target type `group`</a>:
+
+This type corresponds to a simple target that is only used to group
+dependencies. It matches the `java_group()` GN template. Its only top-level
+`deps_info` keys are `supports_android` (always True), and `deps_configs`.
+
+
+## <a name="target_android_resources">Target type `android_resources`</a>:
+
+This type corresponds to targets that are used to group Android resource files.
+For example, all `android_resources` dependencies of an `android_apk` will
+end up packaged into the final APK by the build system.
+
+It uses the following keys:
+
+* `deps_info['resource_dirs']`:
+List of paths to the source directories containing the resources for this
+target. This key is optional, because some targets can refer to prebuilt
+`.aar` archives.
+
+
+* `deps_info['resources_zip']`:
+*Required*. Path to the `.resources.zip` file that contains all raw/uncompiled
+resource files for this target (and also no `R.txt`, `R.java` or `R.class`).
+
+    If `deps_info['resource_dirs']` is missing, this must point to a prebuilt
+    `.aar` archive containing resources. Otherwise, this will point to a
+    zip archive generated at build time, wrapping the content of
+    `deps_info['resource_dirs']` into a single zip file.
+
+* `deps_info['package_name']`:
+Java package name that the R class for this target belongs to.
+
+* `deps_info['android_manifest']`:
+Optional. Path to the top-level Android manifest file associated with these
+resources (if not provided, an empty manifest will be used to generate R.txt).
+
+* `deps_info['r_text']`:
+Provide the path to the `R.txt` file that describes the resources wrapped by
+this target. Normally this file is generated from the content of the resource
+directories or zip file, but some targets can provide their own `R.txt` file
+if they want.
+
+* `deps_info['srcjar_path']`:
+Path to the `.srcjar` file that contains the auto-generated `R.java` source
+file corresponding to the content of `deps_info['r_text']`. This is *always*
+generated from the content of `deps_info['r_text']` by the
+`build/android/gyp/process_resources.py` script.
+
+
+## <a name="target_android_assets">Target type `android_assets`</a>:
+
+This type corresponds to targets used to group Android assets, i.e. liberal
+files that will be placed under `//assets/` within the final APK.
+
+These use an `deps_info['assets']` key to hold a dictionary of values related
+to assets covered by this target.
+
+* `assets['sources']`:
+The list of all asset source paths for this target. Each source path can
+use an optional `:<zipPath>` suffix, where `<zipPath>` is the final location
+of the assets (relative to `//assets/`) within the APK.
+
+* `assets['outputs']`:
+Optional. Some of the sources might be renamed before being stored in the
+final //assets/ sub-directory. When this happens, this contains a list of
+all renamed output file paths
+
+    NOTE: When not empty, the first items of `assets['sources']` must match
+    every item in this list. Extra sources correspond to non-renamed sources.
+
+    NOTE: This comes from the `asset_renaming_destinations` parameter for the
+    `android_assets()` GN template.
+
+* `assets['disable_compression']`:
+Optional. Will be True to indicate that these assets should be stored
+uncompressed in the final APK. For example, this is necessary for locale
+.pak files used by the System WebView feature.
+
+* `assets['treat_as_locale_paks']`:
+Optional. Will be True to indicate that these assets are locale `.pak` files
+(containing localized strings for C++). These are later processed to generate
+a special ``.build_config`.java` source file, listing all supported Locales in
+the current build.
+
+
+## <a name="target_java_library">Target type `java_library`</a>:
+
+This type is used to describe target that wrap Java bytecode, either created
+by compiling sources, or providing them with a prebuilt jar.
+
+* `deps_info['unprocessed_jar_path']`:
+Path to the original .jar file for this target, before any kind of processing
+through Proguard or other tools. For most targets this is generated
+from sources, with a name like `$target_name.javac.jar`. However, when using
+a prebuilt jar, this will point to the source archive directly.
+
+* `deps_info['jar_path']`:
+Path to a file that is the result of processing
+`deps_info['unprocessed_jar_path']` with various tools.
+
+* `deps_info['interface_jar_path']:
+Path to the interface jar generated for this library. This corresponds to
+a jar file that only contains declarations. Generated by running the `ijar`
+tool on `deps_info['jar_path']`
+
+* `deps_info['dex_path']`:
+Path to the `.dex` file generated for this target, from `deps_info['jar_path']`
+unless this comes from a prebuilt `.aar` archive.
+
+* `deps_info['is_prebuilt']`:
+True to indicate that this target corresponds to a prebuilt `.jar` file.
+In this case, `deps_info['unprocessed_jar_path']` will point to the source
+`.jar` file. Otherwise, it will be point to a build-generated file.
+
+* `deps_info['java_sources_file']`:
+Path to a single `.sources` file listing all the Java sources that were used
+to generate the library (simple text format, one `.jar` path per line).
+
+* `deps_info['owned_resource_dirs']`:
+List of all resource directories belonging to all resource dependencies for
+this target.
+
+* `deps_info['owned_resource_zips']`:
+List of all resource zip files belonging to all resource dependencies for this
+target.
+
+* `deps_info['owned_resource_srcjars']`:
+List of all .srcjar files belonging to all resource dependencies for this
+target.
+
+* `deps_info['javac']`:
+A dictionary containing information about the way the sources in this library
+are compiled. Appears also on other Java-related targets. See the [dedicated
+section about this](#dict_javac) below for details.
+
+* `deps_info['javac_full_classpath']`:
+The classpath used when performing bytecode processing. Essentially the
+collection of all `deps_info['unprocessed_jar_path']` entries for the target
+and all its dependencies.
+
+* `deps_info['javac_full_interface_classpath']`:
+The classpath used when using the errorprone compiler.
+
+* `deps_info['proguard_enabled"]`:
+True to indicate that ProGuard processing is enabled for this target.
+
+* `deps_info['proguard_configs"]`:
+A list of paths to ProGuard configuration files related to this library.
+
+* `deps_info['extra_classpath_jars']:
+For some Java related types, a list of extra `.jar` files to use at build time
+but not at runtime.
+
+## <a name="target_java_binary">Target type `java_binary`</a>:
+
+This type corresponds to a Java binary, which is nothing more than a
+`java_library` target that also provides a main class name. It thus inherits
+all entries from the `java_library` type, and adds:
+
+* `deps_info['main_class']`:
+Name of the main Java class that serves as an entry point for the binary.
+
+* `deps_info['java_runtime_classpath']`:
+The classpath used when running a Java or Android binary. Essentially the
+collection of all `deps_info['jar_path']` entries for the target and all its
+dependencies.
+
+
+## <a name="target_junit_binary">Target type `junit_binary`</a>:
+
+A target type for JUnit-specific binaries. Identical to
+[`java_binary`](#target_java_binary) in the context of `.build_config` files,
+except the name.
+
+
+## <a name="target_java_annotation_processor">Target type \
+`java_annotation_processor`</a>:
+
+A target type for Java annotation processors. Identical to
+[`java_binary`](#target_java_binary) in the context of `.build_config` files,
+except the name, except that it requires a `deps_info['main_class']` entry.
+
+
+## <a name="target_android_apk">Target type `android_apk`</a>:
+
+Corresponds to an Android APK. Inherits from the
+[`java_binary`](#target_java_binary) type and adds:
+
+* `deps_info['apk_path']`:
+Path to the raw, unsigned, APK generated by this target.
+
+* `deps_info['incremental_apk_path']`:
+Path to the raw, unsigned, incremental APK generated by this target.
+
+* `deps_info['incremental_install_json_path']`:
+Path to the JSON file with per-apk details for incremental install.
+See `build/android/gyp/incremental/write_installer_json.py` for more
+details about its content.
+
+* `deps_info['dist_jar']['all_interface_jars']`:
+For `android_apk` and `dist_jar` targets, a list of all interface jar files
+that will be merged into the final `.jar` file for distribution.
+
+* `deps_info['final_dex']['path']:
+Path to the final classes.dex file (or classes.zip in case of multi-dex)
+for this APK.
+
+* `deps_info['final_dex']['dependency_dex_files']`:
+The list of paths to all `deps_info['dex_path']` entries for all library
+dependencies for this APK.
+
+* `deps_info['proto_resources_path']`:
+The path of an zip archive containing the APK's resources compiled to the
+protocol buffer format (instead of regular binary xml + resources.arsc).
+
+* `native['libraries']`
+List of native libraries for the primary ABI to be embedded in this APK.
+E.g. [ "libchrome.so" ] (i.e. this doesn't include any ABI sub-directory
+prefix).
+
+* `native['java_libraries_list']`
+The same list as `native['libraries']` as a string holding a Java source
+fragment, e.g. `"{\"chrome\"}"`, without any `lib` prefix, and `.so`
+suffix (as expected by `System.loadLibrary()`).
+
+* `native['second_abi_libraries']`
+List of native libraries for the secondary ABI to be embedded in this APK.
+Empty if only a single ABI is supported.
+
+* `native['secondary_abi_java_libraries_list']`
+The same list as `native['second_abi_libraries']` as a Java source string.
+
+* `native['uncompress_shared_libraries']`
+A boolean indicating whether native libraries are stored uncompressed in the
+APK.
+
+* `native['extra_shared_libraries']`
+A list of native libraries to store within the APK, in addition to those from
+`native['libraries']`. These correspond to things like the Chromium linker
+or instrumentation libraries.
+
+* `assets`
+A list of assets stored compressed in the APK. Each entry has the format
+`<source-path>:<destination-path>`, where `<source-path>` is relative to
+`$CHROMIUM_OUTPUT_DIR`, and `<destination-path>` is relative to `//assets/`
+within the APK.
+
+NOTE: Not to be confused with the `deps_info['assets']` dictionary that
+belongs to `android_assets` targets only.
+
+* `uncompressed_assets`
+A list of uncompressed assets stored in the APK. Each entry has the format
+`<source-path>:<destination-path>` too.
+
+* `compressed_locales_java_list`
+A string holding a Java source fragment that gives the list of locales stored
+compressed in the `//assets/` directory. E.g. `"{\"am\","\ar\",\"en-US\"}"`.
+Note that the files will be stored with the `.pak` extension (e.g.
+`//assets/en-US.pak`).
+
+* `uncompressed_locales_java_list`
+A string holding a Java source fragment that gives the list of locales stored
+uncompressed in the `//assets/stored-locales/` directory. These are used for
+the System WebView feature only. Note that the files will be stored with the
+`.pak` extension (e.g. `//assets/stored-locales/en-US.apk`).
+
+* `extra_android_manifests`
+A list of `deps_configs['android_manifest]` entries, for all resource
+dependencies for this target. I.e. a list of paths to manifest files for
+all the resources in this APK. These will be merged with the root manifest
+file to generate the final one used to build the APK.
+
+* `java_resources_jars`
+This is a list of `.jar` files whose *Java* resources should be included in
+the final APK. For example, this is used to copy the `.res` files from the
+EMMA Coverage tool. The copy will omit any `.class` file and the top-level
+`//meta-inf/` directory from the input jars. Everything else will be copied
+into the final APK as-is.
+
+NOTE: This has nothing to do with *Android* resources.
+
+* `jni['all_source']`
+The list of all `deps_info['java_sources_file']` entries for all library
+dependencies for this APK. Note: this is a list of files, where each file
+contains a list of Java source files. This is used for JNI registration.
+
+* `deps_info['proguard_all_configs"]`:
+The collection of all 'deps_info['proguard_configs']` values from this target
+and all its dependencies.
+
+* `deps_info['proguard_all_extra_jars"]`:
+The collection of all 'deps_info['extra_classpath_jars']` values from all
+dependencies.
+
+* `deps_info['proguard_under_test_mapping"]`:
+Applicable to apks with proguard enabled that have an apk_under_test. This is
+the path to the apk_under_test's output proguard .mapping file.
+
+## <a name="target_dist_aar">Target type `dist_aar`</a>:
+
+This type corresponds to a target used to generate an `.aar` archive for
+distribution. The archive's content is determined by the target's dependencies.
+
+This always has the following entries:
+
+  * `deps_info['supports_android']` (always True).
+  * `deps_info['requires_android']` (always True).
+  * `deps_info['proguard_configs']` (optional).
+
+
+## <a name="target_dist_jar">Target type `dist_jar`</a>:
+
+This type is similar to [`dist_aar`](#target_dist_aar) but is not
+Android-specific, and used to create a `.jar` file that can be later
+redistributed.
+
+This always has the following entries:
+
+  * `deps_info['proguard_enabled']` (False by default).
+  * `deps_info['proguard_configs']` (optional).
+  * `deps_info['supports_android']` (True by default).
+  * `deps_info['requires_android']` (False by default).
+
+
+
+## <a name="target_resource_rewriter">Target type `resource_rewriter`</a>:
+
+The ResourceRewriter Java class is in charge of rewriting resource IDs at
+runtime, for the benefit of the System WebView feature. This is a special
+target type for it.
+
+Its `.build_config` only keeps a list of dependencies in its
+`deps_info['deps_configs']` key.
+
+## <a name="dict_javac">The `deps_info['javac']` dictionary</a>:
+
+This dictionary appears in Java-related targets (e.g. `java_library`,
+`android_apk` and others), and contains information related to the compilation
+of Java sources, class files, and jars.
+
+* `javac['resource_packages']`
+For `java_library` targets, this is the list of package names for all resource
+dependencies for the current target. Order must match the one from
+`javac['srcjars']`. For other target types, this key does not exist.
+
+* `javac['classpath']`
+The classpath used to compile this target when annotation processors are
+present.
+
+* `javac['interface_classpath']`
+The classpath used to compile this target when annotation processors are
+not present. These are also always used to known when a target needs to be
+rebuilt.
+
+* `javac['processor_classpath']`
+The classpath listing the jars used for annotation processors. I.e. sent as
+`-processorpath` when invoking `javac`.
+
+* `javac['processor_classes']`
+The list of annotation processor main classes. I.e. sent as `-processor' when
+invoking `javac`.
+
+--------------- END_MARKDOWN ---------------------------------------------------
 """
 
 import itertools
+import json
 import optparse
 import os
 import sys
@@ -38,8 +511,27 @@ from util import build_utils
 _ROOT_TYPES = ('android_apk', 'java_binary',
                'java_annotation_processor', 'junit_binary', 'resource_rewriter')
 # Types that should not allow code deps to pass through.
-_RESOURCE_TYPES = ('android_assets', 'android_resources')
+_RESOURCE_TYPES = ('android_assets', 'android_resources', 'system_java_library')
 
+
+def _ExtractMarkdownDocumentation(input_text):
+  """Extract Markdown documentation from a list of input strings lines.
+
+     This generates a list of strings extracted from |input_text|, by looking
+     for '-- BEGIN_MARKDOWN --' and '-- END_MARKDOWN --' line markers."""
+  in_markdown = False
+  result = []
+  for line in input_text.splitlines():
+    if in_markdown:
+      if '-- END_MARKDOWN --' in line:
+        in_markdown = False
+      else:
+        result.append(line)
+    else:
+      if '-- BEGIN_MARKDOWN --' in line:
+        in_markdown = True
+
+  return result
 
 class AndroidManifest(object):
   def __init__(self, path):
@@ -74,7 +566,8 @@ class AndroidManifest(object):
 dep_config_cache = {}
 def GetDepConfig(path):
   if not path in dep_config_cache:
-    dep_config_cache[path] = build_utils.ReadJson(path)['deps_info']
+    with open(path) as jsonfile:
+      dep_config_cache[path] = json.load(jsonfile)['deps_info']
   return dep_config_cache[path]
 
 
@@ -84,7 +577,7 @@ def DepsOfType(wanted_type, configs):
 
 def GetAllDepsConfigsInOrder(deps_config_paths):
   def GetDeps(path):
-    return set(GetDepConfig(path)['deps_configs'])
+    return GetDepConfig(path)['deps_configs']
   return build_utils.GetSortedTransitiveDependencies(deps_config_paths, GetDeps)
 
 
@@ -238,11 +731,22 @@ def _CreateJavaLibrariesList(library_paths):
   return ('{%s}' % ','.join(['"%s"' % s[3:-3] for s in library_paths]))
 
 
-def _CreateLocalePaksAssetJavaList(assets, locale_paks):
-  """Returns a java literal array from a list of assets in the form src:dst."""
-  asset_paths = [a.split(':')[1] for a in assets]
-  return '{%s}' % ','.join(
-      sorted('"%s"' % a[:-4] for a in asset_paths if a in locale_paks))
+def _CreateJavaLocaleListFromAssets(assets, locale_paks):
+  """Returns a java literal array from a list of locale assets.
+
+  Args:
+    assets: A list of all APK asset paths in the form 'src:dst'
+    locale_paks: A list of asset paths that correponds to the locale pak
+      files of interest. Each |assets| entry will have its 'dst' part matched
+      against it to determine if they are part of the result.
+  Returns:
+    A string that is a Java source literal array listing the locale names
+    of the corresponding asset files, without directory or .pak suffix.
+    E.g. '{"en-GB", "en-US", "es-ES", "fr", ... }'
+  """
+  assets_paths = [a.split(':')[1] for a in assets]
+  locales = [os.path.basename(a)[:-4] for a in assets_paths if a in locale_paks]
+  return '{%s}' % ','.join(['"%s"' % l for l in sorted(locales)])
 
 
 def main(argv):
@@ -313,7 +817,6 @@ def main(argv):
                     help='Path to JAR that contains java resources. Everything '
                     'from this JAR except meta-inf/ content and .class files '
                     'will be added to the final APK.')
-  parser.add_option('--bootclasspath', help='Path to custom android.jar/rt.jar')
 
   # android library options
   parser.add_option('--dex-path', help='Path to target\'s dex output.')
@@ -325,11 +828,12 @@ def main(argv):
   parser.add_option('--secondary-abi-shared-libraries-runtime-deps',
                     help='Path to file containing runtime deps for secondary '
                          'abi shared libraries.')
-  parser.add_option('--non-native-packed-relocations',
-                    action='store_true', default=False,
-                    help='Whether relocation packing was applied using the '
-                         'Android relocation_packer tool.')
-
+  parser.add_option('--uncompress-shared-libraries', default=False,
+                    action='store_true',
+                    help='Whether to store native libraries uncompressed')
+  parser.add_option('--extra-shared-libraries',
+                    help='GN-list of paths to extra native libraries stored '
+                    'in the APK.')
   # apk options
   parser.add_option('--apk-path', help='Path to the target\'s apk output.')
   parser.add_option('--incremental-apk-path',
@@ -345,37 +849,67 @@ def main(argv):
       help='Whether proguard is enabled for this apk.')
   parser.add_option('--proguard-configs',
       help='GN-list of proguard flag files to use in final apk.')
-  parser.add_option('--proguard-info',
-      help='Path to the proguard .info output for this apk.')
+  parser.add_option('--proguard-output-jar-path',
+      help='Path to jar created by ProGuard step')
   parser.add_option('--fail',
       help='GN-list of error message lines to fail with.')
+
+  parser.add_option('--final-dex-path',
+                    help='Path to final input classes.dex (or classes.zip) to '
+                    'use in final apk.')
+  parser.add_option('--apk-proto-resources',
+                    help='Path to resources compiled in protocol buffer format '
+                         ' for this apk.')
+
+  parser.add_option('--generate-markdown-format-doc', action='store_true',
+                    help='Dump the Markdown .build_config format documentation '
+                    'then exit immediately.')
 
   options, args = parser.parse_args(argv)
 
   if args:
     parser.error('No positional arguments should be given.')
+
+  if options.generate_markdown_format_doc:
+    doc_lines = _ExtractMarkdownDocumentation(__doc__)
+    for line in doc_lines:
+        print(line)
+    return 0
+
   if options.fail:
     parser.error('\n'.join(build_utils.ParseGnList(options.fail)))
 
   jar_path_options = ['jar_path', 'unprocessed_jar_path', 'interface_jar_path']
   required_options_map = {
-      'java_binary': ['build_config'],
-      'java_annotation_processor': ['build_config', 'main_class'],
-      'junit_binary': ['build_config'],
-      'java_library': ['build_config'] + jar_path_options,
+      'android_apk': ['build_config', 'dex_path', 'final_dex_path'] + \
+          jar_path_options,
       'android_assets': ['build_config'],
       'android_resources': ['build_config', 'resources_zip'],
-      'android_apk': ['build_config','dex_path'] + jar_path_options,
-      'dist_jar': ['build_config'],
       'dist_aar': ['build_config'],
-      'resource_rewriter': ['build_config'],
+      'dist_jar': ['build_config'],
       'group': ['build_config'],
+      'java_annotation_processor': ['build_config', 'main_class'],
+      'java_binary': ['build_config'],
+      'java_library': ['build_config'] + jar_path_options,
+      'junit_binary': ['build_config'],
+      'resource_rewriter': ['build_config'],
+      'system_java_library': ['build_config'],
   }
   required_options = required_options_map.get(options.type)
   if not required_options:
     raise Exception('Unknown type: <%s>' % options.type)
 
   build_utils.CheckOptions(options, parser, required_options)
+
+  if options.apk_proto_resources:
+    if options.type != 'android_apk':
+      raise Exception('--apk-proto-resources can only be used with '
+                      '--type=android_apk')
+
+  if options.uncompress_shared_libraries:
+    if options.type != 'android_apk':
+      raise Exception('--uncompressed-shared-libraries can only be used '
+                      'with --type=android_apk')
 
   if options.jar_path and options.supports_android and not options.dex_path:
     raise Exception('java_library that supports Android requires a dex path.')
@@ -390,7 +924,8 @@ def main(argv):
 
   is_java_target = options.type in (
       'java_binary', 'junit_binary', 'java_annotation_processor',
-      'java_library', 'android_apk', 'dist_aar', 'dist_jar')
+      'java_library', 'android_apk', 'dist_aar', 'dist_jar',
+      'system_java_library')
 
   deps = _DepsFromPaths(
       build_utils.ParseGnList(options.deps_configs), options.type)
@@ -405,10 +940,9 @@ def main(argv):
                           processor_deps.AllConfigPaths() +
                           classpath_deps.AllConfigPaths()))
 
+  system_library_deps = deps.Direct('system_java_library')
   direct_library_deps = deps.Direct('java_library')
   all_library_deps = deps.All('java_library')
-
-  direct_resources_deps = deps.Direct('android_resources')
   all_resources_deps = deps.All('android_resources')
 
   # Initialize some common config.
@@ -453,8 +987,6 @@ def main(argv):
     gradle['dependent_java_projects'] = []
     gradle['dependent_prebuilt_jars'] = deps.GradlePrebuiltJarPaths()
 
-    if options.bootclasspath:
-      gradle['bootclasspath'] = options.bootclasspath
     if options.main_class:
       deps_info['main_class'] = options.main_class
 
@@ -472,9 +1004,12 @@ def main(argv):
       all_java_sources.append(options.java_sources_file)
     config['jni']['all_source'] = all_java_sources
 
+    if options.apk_proto_resources:
+      deps_info['proto_resources_path'] = options.apk_proto_resources
+
   if is_java_target:
-    deps_info['requires_android'] = options.requires_android
-    deps_info['supports_android'] = options.supports_android
+    deps_info['requires_android'] = bool(options.requires_android)
+    deps_info['supports_android'] = bool(options.supports_android)
 
     if not options.bypass_platform_checks:
       deps_require_android = (all_resources_deps +
@@ -504,27 +1039,6 @@ def main(argv):
       deps_info['incremental_apk_path'] = options.incremental_apk_path
       deps_info['incremental_install_json_path'] = (
           options.incremental_install_json_path)
-      deps_info['non_native_packed_relocations'] = str(
-          options.non_native_packed_relocations)
-
-    if options.type == 'java_library':
-      # android_resources targets use this srcjars field to expose R.java files.
-      # Since there is no java_library associated with an android_resources(),
-      # Each java_library recompiles the R.java files.
-      # junit_binary and android_apk create their own R.java srcjars, so should
-      # not pull them in from deps here.
-      config['javac']['srcjars'] = [
-          c['srcjar'] for c in all_resources_deps if 'srcjar' in c]
-
-      # Used to strip out R.class for android_prebuilt()s.
-      config['javac']['resource_packages'] = [
-          c['package_name'] for c in all_resources_deps if 'package_name' in c]
-    else:
-      # Apks will get their resources srcjar explicitly passed to the java step
-      config['javac']['srcjars'] = []
-      # Gradle may need to generate resources for some apks.
-      gradle['srcjars'] = [
-          c['srcjar'] for c in direct_resources_deps if 'srcjar' in c]
 
   if options.type == 'android_assets':
     all_asset_sources = []
@@ -562,11 +1076,11 @@ def main(argv):
       for gyp_list in options.resource_dirs:
         deps_info['resources_dirs'].extend(build_utils.ParseGnList(gyp_list))
 
-  if options.supports_android and options.type in ('android_apk',
-                                                   'java_library'):
+  if options.requires_android and is_java_target:
     # Lint all resources that are not already linted by a dependent library.
     owned_resource_dirs = set()
     owned_resource_zips = set()
+    owned_resource_srcjars = set()
     for c in all_resources_deps:
       # Always use resources_dirs in favour of resources_zips so that lint error
       # messages have paths that are closer to reality (and to avoid needing to
@@ -575,13 +1089,29 @@ def main(argv):
         owned_resource_dirs.update(c['resources_dirs'])
       else:
         owned_resource_zips.add(c['resources_zip'])
+      srcjar = c.get('srcjar')
+      if srcjar:
+        owned_resource_srcjars.add(srcjar)
 
     for c in all_library_deps:
-      if c['supports_android']:
+      if c['requires_android']:
         owned_resource_dirs.difference_update(c['owned_resources_dirs'])
         owned_resource_zips.difference_update(c['owned_resources_zips'])
+        # Many .aar files include R.class files in them, as it makes it easier
+        # for IDEs to resolve symbols. However, including them is not required
+        # and not all prebuilts do. Rather than try to detect their presense,
+        # just assume they are not there. The only consequence is redundant
+        # compilation of the R.class.
+        if not c['is_prebuilt']:
+          owned_resource_srcjars.difference_update(c['owned_resource_srcjars'])
     deps_info['owned_resources_dirs'] = sorted(owned_resource_dirs)
     deps_info['owned_resources_zips'] = sorted(owned_resource_zips)
+    deps_info['owned_resource_srcjars'] = sorted(owned_resource_srcjars)
+
+    if options.type == 'java_library':
+      # Used to strip out R.class for android_prebuilt()s.
+      config['javac']['resource_packages'] = [
+          c['package_name'] for c in all_resources_deps if 'package_name' in c]
 
   if options.type in (
       'android_resources', 'android_apk', 'junit_binary', 'resource_rewriter',
@@ -606,7 +1136,8 @@ def main(argv):
   if is_java_target:
     # The classpath used to compile this target when annotation processors are
     # present.
-    javac_classpath = [c['unprocessed_jar_path'] for c in direct_library_deps]
+    javac_classpath = [
+        c['unprocessed_jar_path'] for c in direct_library_deps]
     # The classpath used to compile this target when annotation processors are
     # not present. These are also always used to know when a target needs to be
     # rebuilt.
@@ -616,7 +1147,8 @@ def main(argv):
     javac_full_interface_classpath = [
         c['interface_jar_path'] for c in all_library_deps]
     # The classpath used for bytecode-rewritting.
-    javac_full_classpath = [c['unprocessed_jar_path'] for c in all_library_deps]
+    javac_full_classpath = [
+        c['unprocessed_jar_path'] for c in all_library_deps]
     # The classpath to use to run this target (or as an input to ProGuard).
     java_full_classpath = []
     if options.jar_path:
@@ -642,6 +1174,24 @@ def main(argv):
     if extra_jars:
       deps_info['extra_classpath_jars'] = extra_jars
 
+  if options.proguard_configs:
+    deps_info['proguard_configs'] = (
+        build_utils.ParseGnList(options.proguard_configs))
+
+  if options.type in ('android_apk', 'dist_aar', 'dist_jar'):
+    all_configs = deps_info.get('proguard_configs', [])
+    extra_jars = []
+    for c in all_library_deps:
+      all_configs.extend(
+          p for p in c.get('proguard_configs', []) if p not in all_configs)
+      extra_jars.extend(
+          p for p in c.get('extra_classpath_jars', []) if p not in extra_jars)
+    deps_info['proguard_all_configs'] = all_configs
+    deps_info['proguard_all_extra_jars'] = extra_jars
+    deps_info['proguard_enabled'] = options.proguard_enabled
+    if options.proguard_output_jar_path:
+      deps_info['proguard_output_jar_path'] = options.proguard_output_jar_path
+
   # The java code for an instrumentation test apk is assembled differently for
   # ProGuard vs. non-ProGuard.
   #
@@ -662,6 +1212,18 @@ def main(argv):
     if tested_apk_config['proguard_enabled']:
       assert options.proguard_enabled, ('proguard must be enabled for '
           'instrumentation apks if it\'s enabled for the tested apk.')
+      # Mutating lists, so no need to explicitly re-assign to dict.
+      all_configs.extend(p for p in tested_apk_config['proguard_all_configs']
+                         if p not in all_configs)
+      extra_jars.extend(p for p in tested_apk_config['proguard_all_extra_jars']
+                        if p not in extra_jars)
+      tested_apk_config = GetDepConfig(options.tested_apk_config)
+      deps_info['proguard_under_test_mapping'] = (
+          tested_apk_config['proguard_output_jar_path'] + '.mapping')
+    elif options.proguard_enabled:
+      # Not sure why you'd want to proguard the test apk when the under-test apk
+      # is not proguarded, but it's easy enough to support.
+      deps_info['proguard_under_test_mapping'] = ''
 
     expected_tested_package = tested_apk_config['package_name']
     AndroidManifest(options.android_manifest).CheckInstrumentationElements(
@@ -695,32 +1257,23 @@ def main(argv):
     deps_dex_files = [
         p for p in deps_dex_files if not p in tested_apk_deps_dex_files]
 
-  if options.proguard_configs:
-    deps_info['proguard_configs'] = (
-        build_utils.ParseGnList(options.proguard_configs))
-
-  if options.type in ('android_apk', 'dist_aar', 'dist_jar'):
-    deps_info['proguard_enabled'] = options.proguard_enabled
-    deps_info['proguard_info'] = options.proguard_info
-    config['proguard'] = {}
-    proguard_config = config['proguard']
-    extra_jars = []
-    all_configs = deps_info.get('proguard_configs', [])
-    for c in all_library_deps:
-      extra_jars.extend(
-          p for p in c.get('extra_classpath_jars', []) if p not in extra_jars)
-      all_configs.extend(
-          p for p in c.get('proguard_configs', []) if p not in all_configs)
-    proguard_config['extra_jars'] = extra_jars
-    proguard_config['all_configs'] = all_configs
-
   # Dependencies for the final dex file of an apk.
   if options.type == 'android_apk':
     config['final_dex'] = {}
     dex_config = config['final_dex']
     dex_config['dependency_dex_files'] = deps_dex_files
+    dex_config['path'] = options.final_dex_path
+
+  system_jars = [c['jar_path'] for c in system_library_deps]
+  system_interface_jars = [c['interface_jar_path'] for c in system_library_deps]
+  if system_library_deps:
+    config['android'] = {}
+    config['android']['sdk_interface_jars'] = system_interface_jars
+    config['android']['sdk_jars'] = system_jars
+    gradle['bootclasspath'] = system_jars
 
   if is_java_target:
+    config['javac']['bootclasspath'] = system_jars
     config['javac']['classpath'] = javac_classpath
     config['javac']['interface_classpath'] = javac_interface_classpath
     # Direct() will be of type 'java_annotation_processor'.
@@ -771,18 +1324,23 @@ def main(argv):
       secondary_abi_java_libraries_list = _CreateJavaLibrariesList(
           secondary_abi_library_paths)
 
+    extra_shared_libraries = build_utils.ParseGnList(
+        options.extra_shared_libraries)
+
     all_inputs.extend(runtime_deps_files)
     config['native'] = {
       'libraries': library_paths,
       'secondary_abi_libraries': secondary_abi_library_paths,
       'java_libraries_list': java_libraries_list,
       'secondary_abi_java_libraries_list': secondary_abi_java_libraries_list,
+      'uncompress_shared_libraries': options.uncompress_shared_libraries,
+      'extra_shared_libraries': extra_shared_libraries,
     }
     config['assets'], config['uncompressed_assets'], locale_paks = (
         _MergeAssets(deps.All('android_assets')))
-    config['compressed_locales_java_list'] = _CreateLocalePaksAssetJavaList(
+    config['compressed_locales_java_list'] = _CreateJavaLocaleListFromAssets(
         config['assets'], locale_paks)
-    config['uncompressed_locales_java_list'] = _CreateLocalePaksAssetJavaList(
+    config['uncompressed_locales_java_list'] = _CreateJavaLocaleListFromAssets(
         config['uncompressed_assets'], locale_paks)
 
     config['extra_android_manifests'] = filter(None, (
@@ -805,7 +1363,8 @@ def main(argv):
   build_utils.WriteJson(config, options.build_config, only_if_changed=True)
 
   if options.depfile:
-    build_utils.WriteDepfile(options.depfile, options.build_config, all_inputs)
+    build_utils.WriteDepfile(options.depfile, options.build_config, all_inputs,
+                             add_pydeps=False)  # pydeps listed in GN.
 
 
 if __name__ == '__main__':

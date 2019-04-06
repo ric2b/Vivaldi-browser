@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/completion_event.h"
@@ -19,6 +18,7 @@
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/proxy_impl.h"
+#include "cc/trees/render_frame_metadata_observer.h"
 #include "cc/trees/scoped_abort_remaining_swap_promises.h"
 #include "cc/trees/swap_promise.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -300,7 +300,7 @@ void ProxyMain::BeginMainFrame(
   // commit.
   ui::LatencyInfo new_latency_info(ui::SourceEventType::FRAME);
   new_latency_info.AddLatencyNumberWithTimestamp(
-      ui::LATENCY_BEGIN_FRAME_RENDERER_MAIN_COMPONENT, 0, 0,
+      ui::LATENCY_BEGIN_FRAME_RENDERER_MAIN_COMPONENT,
       begin_main_frame_state->begin_frame_args.frame_time, 1);
   layer_tree_host_->QueueSwapPromise(
       std::make_unique<LatencyInfoSwapPromise>(new_latency_info));
@@ -331,12 +331,12 @@ void ProxyMain::BeginMainFrame(
   layer_tree_host_->DidBeginMainFrame();
 }
 
-void ProxyMain::DidPresentCompositorFrame(const std::vector<int>& source_frames,
-                                          base::TimeTicks time,
-                                          base::TimeDelta refresh,
-                                          uint32_t flags) {
-  layer_tree_host_->DidPresentCompositorFrame(source_frames, time, refresh,
-                                              flags);
+void ProxyMain::DidPresentCompositorFrame(
+    uint32_t frame_token,
+    std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
+    const gfx::PresentationFeedback& feedback) {
+  layer_tree_host_->DidPresentCompositorFrame(frame_token, std::move(callbacks),
+                                              feedback);
 }
 
 bool ProxyMain::IsStarted() const {
@@ -418,6 +418,10 @@ void ProxyMain::SetNextCommitWaitsForActivation() {
   commit_waits_for_activation_ = true;
 }
 
+bool ProxyMain::RequestedAnimatePending() {
+  return max_requested_pipeline_stage_ >= ANIMATE_PIPELINE_STAGE;
+}
+
 void ProxyMain::NotifyInputThrottledUntilCommit() {
   DCHECK(IsMainThread());
   ImplThreadTaskRunner()->PostTask(
@@ -448,13 +452,6 @@ bool ProxyMain::CommitRequested() const {
   // CommitInProgress().
   return current_pipeline_stage_ != NO_PIPELINE_STAGE ||
          max_requested_pipeline_stage_ >= COMMIT_PIPELINE_STAGE;
-}
-
-void ProxyMain::MainThreadHasStoppedFlinging() {
-  DCHECK(IsMainThread());
-  ImplThreadTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&ProxyImpl::MainThreadHasStoppedFlingingOnImpl,
-                                base::Unretained(proxy_impl_.get())));
 }
 
 void ProxyMain::Start() {
@@ -597,11 +594,19 @@ void ProxyMain::SetURLForUkm(const GURL& url) {
                                 base::Unretained(proxy_impl_.get()), url));
 }
 
-void ProxyMain::ClearHistoryOnNavigation() {
+void ProxyMain::ClearHistory() {
   // Must only be called from the impl thread during commit.
   DCHECK(task_runner_provider_->IsImplThread());
   DCHECK(task_runner_provider_->IsMainThreadBlocked());
-  proxy_impl_->ClearHistoryOnNavigation();
+  proxy_impl_->ClearHistory();
+}
+
+void ProxyMain::SetRenderFrameObserver(
+    std::unique_ptr<RenderFrameMetadataObserver> observer) {
+  ImplThreadTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ProxyImpl::SetRenderFrameObserver,
+                     base::Unretained(proxy_impl_.get()), std::move(observer)));
 }
 
 }  // namespace cc

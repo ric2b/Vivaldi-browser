@@ -74,6 +74,7 @@
 
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -89,6 +90,7 @@ class BooleanHistogram;
 class CustomHistogram;
 class DelayedPersistentAllocation;
 class Histogram;
+class HistogramTest;
 class LinearHistogram;
 class Pickle;
 class PickleIterator;
@@ -124,10 +126,15 @@ class BASE_EXPORT Histogram : public HistogramBase {
                                        base::TimeDelta maximum,
                                        uint32_t bucket_count,
                                        int32_t flags);
+  static HistogramBase* FactoryMicrosecondsTimeGet(const std::string& name,
+                                                   base::TimeDelta minimum,
+                                                   base::TimeDelta maximum,
+                                                   uint32_t bucket_count,
+                                                   int32_t flags);
 
-  // Overloads of the above two functions that take a const char* |name| param,
-  // to avoid code bloat from the std::string constructor being inlined into
-  // call sites.
+  // Overloads of the above functions that take a const char* |name| param, to
+  // avoid code bloat from the std::string constructor being inlined into call
+  // sites.
   static HistogramBase* FactoryGet(const char* name,
                                    Sample minimum,
                                    Sample maximum,
@@ -138,6 +145,11 @@ class BASE_EXPORT Histogram : public HistogramBase {
                                        base::TimeDelta maximum,
                                        uint32_t bucket_count,
                                        int32_t flags);
+  static HistogramBase* FactoryMicrosecondsTimeGet(const char* name,
+                                                   base::TimeDelta minimum,
+                                                   base::TimeDelta maximum,
+                                                   uint32_t bucket_count,
+                                                   int32_t flags);
 
   // Create a histogram using data in persistent storage.
   static std::unique_ptr<HistogramBase> PersistentCreate(
@@ -208,14 +220,9 @@ class BASE_EXPORT Histogram : public HistogramBase {
   void WriteHTMLGraph(std::string* output) const override;
   void WriteAscii(std::string* output) const override;
 
-  // Validates the histogram contents. If |crash_if_invalid| is true and the
-  // histogram is invalid, this will trigger a CHECK. Otherwise, it will return
-  // a bool indicating if the histogram is valid. |corrupted_count| is extra
-  // information the caller can provide about the number of corrupt histograms
-  // if available.
-  // TODO(bcwhite): Remove this after crbug/736675.
-  bool ValidateHistogramContents(bool crash_if_invalid,
-                                 int identifier) const override;
+  // Validates the histogram contents and CHECKs on errors.
+  // TODO(bcwhite): Remove this after https://crbug/836875.
+  void ValidateHistogramContents() const override;
 
  protected:
   // This class, defined entirely within the .cc file, contains all the
@@ -263,6 +270,7 @@ class BASE_EXPORT Histogram : public HistogramBase {
 
  private:
   // Allow tests to corrupt our innards for testing purposes.
+  friend class HistogramTest;
   FRIEND_TEST_ALL_PREFIXES(HistogramTest, BoundsTest);
   FRIEND_TEST_ALL_PREFIXES(HistogramTest, BucketPlacementTest);
   FRIEND_TEST_ALL_PREFIXES(HistogramTest, CorruptSampleCounts);
@@ -317,13 +325,6 @@ class BASE_EXPORT Histogram : public HistogramBase {
 
   // Accumulation of all samples that have been logged with SnapshotDelta().
   std::unique_ptr<SampleVectorBase> logged_samples_;
-
-  // This is a dummy field placed where corruption is frequently seen on
-  // current Android builds. The hope is that it will mitigate the problem
-  // sufficiently to continue with the M61 beta branch while investigation
-  // into the true problem continues.
-  // TODO(bcwhite): Remove this once crbug/736675 is fixed.
-  const uintptr_t dummy_;
 
 #if DCHECK_IS_ON()  // Don't waste memory if it won't be used.
   // Flag to indicate if PrepareFinalDelta has been previously called. It is
@@ -448,6 +449,55 @@ class BASE_EXPORT LinearHistogram : public Histogram {
 
 //------------------------------------------------------------------------------
 
+// ScaledLinearHistogram is a wrapper around a linear histogram that scales the
+// counts down by some factor. Remainder values are kept locally but lost when
+// uploaded or serialized. The integral counts are rounded up/down so should
+// average to the correct value when many reports are added.
+//
+// This is most useful when adding many counts at once via AddCount() that can
+// cause overflows of the 31-bit counters, usually with an enum as the value.
+class BASE_EXPORT ScaledLinearHistogram {
+  using AtomicCount = Histogram::AtomicCount;
+  using Sample = Histogram::Sample;
+
+ public:
+  // Currently only works with "exact" linear histograms: minimum=1, maximum=N,
+  // and bucket_count=N+1.
+  ScaledLinearHistogram(const char* name,
+                        Sample minimum,
+                        Sample maximum,
+                        uint32_t bucket_count,
+                        int32_t scale,
+                        int32_t flags);
+
+  ~ScaledLinearHistogram();
+
+  // Like AddCount() but actually accumulates |count|/|scale| and increments
+  // the accumulated remainder by |count|%|scale|. An additional increment
+  // is done when the remainder has grown sufficiently large.
+  void AddScaledCount(Sample value, int count);
+
+  int32_t scale() const { return scale_; }
+  LinearHistogram* histogram() { return histogram_; }
+
+ private:
+  // Pointer to the underlying histogram. Ownership of it remains with
+  // the statistics-recorder.
+  LinearHistogram* const histogram_;
+
+  // The scale factor of the sample counts.
+  const int32_t scale_;
+
+  // A vector of "remainder" counts indexed by bucket number. These values
+  // may be negative as the scaled count is actually bumped once the
+  // remainder is 1/2 way to the scale value (thus "rounding").
+  std::vector<AtomicCount> remainders_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScaledLinearHistogram);
+};
+
+//------------------------------------------------------------------------------
+
 // BooleanHistogram is a histogram for booleans.
 class BASE_EXPORT BooleanHistogram : public LinearHistogram {
  public:
@@ -525,9 +575,9 @@ class BASE_EXPORT CustomHistogram : public Histogram {
   // This function ensures that a guard bucket exists right after any
   // valid sample value (unless the next higher sample is also a valid value),
   // so that invalid samples never fall into the same bucket as valid samples.
-  // TODO(kaiwang): Change name to ArrayToCustomEnumRanges.
-  static std::vector<Sample> ArrayToCustomRanges(const Sample* values,
-                                                 uint32_t num_values);
+  static std::vector<Sample> ArrayToCustomEnumRanges(
+      base::span<const Sample> values);
+
  protected:
   class Factory;
 

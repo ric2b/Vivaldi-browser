@@ -131,12 +131,6 @@ class BASE_EXPORT SysInfo {
   // details.
   static std::string GetLsbReleaseBoard();
 
-  // DEPRECATED: Please see GetLsbReleaseBoard's comment.
-  // Convenience function for GetLsbReleaseBoard() removing trailing "-signed-*"
-  // if present. Returns "unknown" if CHROMEOS_RELEASE_BOARD is not set.
-  // TODO(derat): Delete this after October 2017.
-  static std::string GetStrippedReleaseBoard();
-
   // Returns the creation time of /etc/lsb-release. (Used to get the date and
   // time of the Chrome OS build).
   static Time GetLsbReleaseTime();
@@ -147,6 +141,9 @@ class BASE_EXPORT SysInfo {
   // Test method to force re-parsing of lsb-release.
   static void SetChromeOSVersionInfoForTest(const std::string& lsb_release,
                                             const Time& lsb_release_time);
+
+  // Returns the kernel version of the host operating system.
+  static std::string KernelVersion();
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_ANDROID)
@@ -172,6 +169,7 @@ class BASE_EXPORT SysInfo {
 
   static int64_t AmountOfPhysicalMemoryImpl();
   static int64_t AmountOfAvailablePhysicalMemoryImpl();
+  static bool IsLowEndDeviceImpl();
 
 #if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_AIX)
   static int64_t AmountOfAvailablePhysicalMemory(

@@ -13,10 +13,10 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/debug/profiler.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "cc/layers/layer.h"
 #include "cc/paint/skia_paint_canvas.h"
@@ -33,7 +33,7 @@
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/v8_value_converter.h"
 #include "content/renderer/gpu/actions_parser.h"
-#include "content/renderer/gpu/render_widget_compositor.h"
+#include "content/renderer/gpu/layer_tree_view.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/skia_benchmarking_extension.h"
@@ -43,19 +43,17 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
-#include "third_party/WebKit/public/web/WebImageCache.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPrintParams.h"
-#include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_image_cache.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_print_params.h"
+#include "third_party/blink/public/web/web_settings.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
-#include "third_party/skia/include/core/SkSerialProcs.h"
-#include "third_party/skia/include/core/SkStream.h"
 // Note that headers in third_party/skia/src are fragile.  This is
 // an experimental, fragile, and diagnostic-only document type.
 #include "third_party/skia/src/utils/SkMultiPictureDocument.h"
@@ -63,12 +61,16 @@
 #include "v8/include/v8.h"
 
 #if defined(OS_WIN) && !defined(NDEBUG)
+// XpsObjectModel.h indirectly includes <wincrypt.h> which is
+// incompatible with Chromium's OpenSSL. By including wincrypt_shim.h
+// first, problems are avoided.
+#include "crypto/wincrypt_shim.h"
+
 #include <XpsObjectModel.h>
 #include <objbase.h>
 #include <wrl/client.h>
 #endif
 
-using blink::WebCanvas;
 using blink::WebLocalFrame;
 using blink::WebImageCache;
 using blink::WebPrivatePtr;
@@ -108,20 +110,7 @@ class SkPictureSerializer {
       SkFILEWStream file(filepath.c_str());
       DCHECK(file.isValid());
 
-      SkSerialProcs procs;
-      procs.fImageProc = [](SkImage* image, void*) {
-        auto data = image->refEncodedData();
-        if (!data) {
-          const base::CommandLine& commandLine =
-              *base::CommandLine::ForCurrentProcess();
-          if (commandLine.HasSwitch(switches::kSkipReencodingOnSKPCapture)) {
-            data = SkData::MakeEmpty();
-          }
-          // else data is null, which triggers skia's default PNG encode
-        }
-        return data;
-      };
-      auto data = picture->serialize(&procs);
+      auto data = picture->serialize();
       file.write(data->data(), data->size());
       file.fsync();
     }
@@ -198,11 +187,7 @@ class CallbackAndContext : public base::RefCounted<CallbackAndContext> {
 
 class GpuBenchmarkingContext {
  public:
-  GpuBenchmarkingContext()
-      : web_frame_(nullptr),
-        web_view_(nullptr),
-        render_view_impl_(nullptr),
-        compositor_(nullptr) {}
+  GpuBenchmarkingContext() = default;
 
   bool Init(bool init_compositor) {
     web_frame_ = WebLocalFrame::FrameForCurrentContext();
@@ -225,8 +210,8 @@ class GpuBenchmarkingContext {
     if (!init_compositor)
       return true;
 
-    compositor_ = render_view_impl_->GetWidget()->compositor();
-    if (!compositor_) {
+    layer_tree_view_ = render_view_impl_->GetWidget()->layer_tree_view();
+    if (!layer_tree_view_) {
       web_frame_ = nullptr;
       web_view_ = nullptr;
       render_view_impl_ = nullptr;
@@ -248,16 +233,16 @@ class GpuBenchmarkingContext {
     DCHECK(render_view_impl_ != nullptr);
     return render_view_impl_;
   }
-  RenderWidgetCompositor* compositor() const {
-    DCHECK(compositor_ != nullptr);
-    return compositor_;
+  LayerTreeView* layer_tree_view() const {
+    DCHECK(layer_tree_view_ != nullptr);
+    return layer_tree_view_;
   }
 
  private:
-  WebLocalFrame* web_frame_;
-  WebView* web_view_;
-  RenderViewImpl* render_view_impl_;
-  RenderWidgetCompositor* compositor_;
+  WebLocalFrame* web_frame_ = nullptr;
+  WebView* web_view_ = nullptr;
+  RenderViewImpl* render_view_impl_ = nullptr;
+  LayerTreeView* layer_tree_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(GpuBenchmarkingContext);
 };
@@ -311,16 +296,13 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
   }
 
   if (gesture_source_type == SyntheticGestureParams::MOUSE_INPUT) {
-    // Ensure the mouse is centered and visible, in case it will
+    // Ensure the mouse is visible and move to start position, in case it will
     // trigger any hover or mousemove effects.
     context->web_view()->SetIsActive(true);
-    blink::WebRect content_rect =
-        context->render_view_impl()->GetWidget()->ViewRect();
-    blink::WebMouseEvent mouseMove(
-        blink::WebInputEvent::kMouseMove, blink::WebInputEvent::kNoModifiers,
-        ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-    mouseMove.SetPositionInWidget((content_rect.x + content_rect.width / 2.0),
-                                  (content_rect.y + content_rect.height / 2.0));
+    blink::WebMouseEvent mouseMove(blink::WebInputEvent::kMouseMove,
+                                   blink::WebInputEvent::kNoModifiers,
+                                   ui::EventTimeForNow());
+    mouseMove.SetPositionInWidget(start_x, start_y);
     context->web_view()->HandleInputEvent(
         blink::WebCoalescedInputEvent(mouseMove));
     context->web_view()->SetCursorVisibilityState(true);
@@ -566,7 +548,10 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
       .SetMethod("hasGpuChannel", &GpuBenchmarking::HasGpuChannel)
       .SetMethod("hasGpuProcess", &GpuBenchmarking::HasGpuProcess)
       .SetMethod("getGpuDriverBugWorkarounds",
-                 &GpuBenchmarking::GetGpuDriverBugWorkarounds);
+                 &GpuBenchmarking::GetGpuDriverBugWorkarounds)
+      .SetMethod("startProfiling", &GpuBenchmarking::StartProfiling)
+      .SetMethod("stopProfiling", &GpuBenchmarking::StopProfiling)
+      .SetMethod("freeze", &GpuBenchmarking::Freeze);
 }
 
 void GpuBenchmarking::SetNeedsDisplayOnAllLayers() {
@@ -574,7 +559,7 @@ void GpuBenchmarking::SetNeedsDisplayOnAllLayers() {
   if (!context.Init(true))
     return;
 
-  context.compositor()->SetNeedsDisplayOnAllLayers();
+  context.layer_tree_view()->SetNeedsDisplayOnAllLayers();
 }
 
 void GpuBenchmarking::SetRasterizeOnlyVisibleContent() {
@@ -582,7 +567,7 @@ void GpuBenchmarking::SetRasterizeOnlyVisibleContent() {
   if (!context.Init(true))
     return;
 
-  context.compositor()->SetRasterizeOnlyVisibleContent();
+  context.layer_tree_view()->SetRasterizeOnlyVisibleContent();
 }
 
 namespace {
@@ -612,7 +597,7 @@ void GpuBenchmarking::PrintToSkPicture(v8::Isolate* isolate,
   if (!context.Init(true))
     return;
 
-  const cc::Layer* root_layer = context.compositor()->GetRootLayer();
+  const cc::Layer* root_layer = context.layer_tree_view()->GetRootLayer();
   if (!root_layer)
     return;
 
@@ -816,12 +801,12 @@ bool GpuBenchmarking::PinchBy(gin::Arguments* args) {
   float anchor_y;
   v8::Local<v8::Function> callback;
   float relative_pointer_speed_in_pixels_s = 800;
+  int gesture_source_type = SyntheticGestureParams::DEFAULT_INPUT;
 
-  if (!GetArg(args, &scale_factor) ||
-      !GetArg(args, &anchor_x) ||
-      !GetArg(args, &anchor_y) ||
-      !GetOptionalArg(args, &callback) ||
-      !GetOptionalArg(args, &relative_pointer_speed_in_pixels_s)) {
+  if (!GetArg(args, &scale_factor) || !GetArg(args, &anchor_x) ||
+      !GetArg(args, &anchor_y) || !GetOptionalArg(args, &callback) ||
+      !GetOptionalArg(args, &relative_pointer_speed_in_pixels_s) ||
+      !GetOptionalArg(args, &gesture_source_type)) {
     return false;
   }
 
@@ -838,6 +823,27 @@ bool GpuBenchmarking::PinchBy(gin::Arguments* args) {
   gesture_params.anchor.SetPoint(anchor_x, anchor_y);
   gesture_params.relative_pointer_speed_in_pixels_s =
       relative_pointer_speed_in_pixels_s;
+
+  if (gesture_source_type < 0 ||
+      gesture_source_type > SyntheticGestureParams::GESTURE_SOURCE_TYPE_MAX) {
+    args->ThrowTypeError("Unknown gesture source type");
+    return false;
+  }
+
+  gesture_params.gesture_source_type =
+      static_cast<SyntheticGestureParams::GestureSourceType>(
+          gesture_source_type);
+
+  switch (gesture_params.gesture_source_type) {
+    case SyntheticGestureParams::DEFAULT_INPUT:
+    case SyntheticGestureParams::TOUCH_INPUT:
+    case SyntheticGestureParams::MOUSE_INPUT:
+      break;
+    case SyntheticGestureParams::PEN_INPUT:
+      args->ThrowTypeError(
+          "Gesture is not implemented for the given source type");
+      return false;
+  }
 
   scoped_refptr<CallbackAndContext> callback_and_context =
       new CallbackAndContext(args->isolate(), callback,
@@ -869,8 +875,9 @@ void GpuBenchmarking::SetBrowserControlsShown(bool show) {
   if (!context.Init(false))
     return;
   context.web_view()->UpdateBrowserControlsState(
-      blink::kWebBrowserControlsBoth,
-      show ? blink::kWebBrowserControlsShown : blink::kWebBrowserControlsHidden,
+      cc::BrowserControlsState::kBoth,
+      show ? cc::BrowserControlsState::kShown
+           : cc::BrowserControlsState::kHidden,
       false);
 }
 
@@ -880,7 +887,7 @@ float GpuBenchmarking::VisualViewportY() {
     return 0.0;
   float y = context.web_view()->VisualViewportOffset().y;
   blink::WebRect rect(0, y, 0, 0);
-  context.render_view_impl()->ConvertViewportToWindow(&rect);
+  context.render_view_impl()->WidgetClient()->ConvertViewportToWindow(&rect);
   return rect.y;
 }
 
@@ -890,7 +897,7 @@ float GpuBenchmarking::VisualViewportX() {
     return 0.0;
   float x = context.web_view()->VisualViewportOffset().x;
   blink::WebRect rect(x, 0, 0, 0);
-  context.render_view_impl()->ConvertViewportToWindow(&rect);
+  context.render_view_impl()->WidgetClient()->ConvertViewportToWindow(&rect);
   return rect.x;
 }
 
@@ -900,7 +907,7 @@ float GpuBenchmarking::VisualViewportHeight() {
     return 0.0;
   float height = context.web_view()->VisualViewportSize().height;
   blink::WebRect rect(0, 0, 0, height);
-  context.render_view_impl()->ConvertViewportToWindow(&rect);
+  context.render_view_impl()->WidgetClient()->ConvertViewportToWindow(&rect);
   return rect.height;
 }
 
@@ -910,7 +917,7 @@ float GpuBenchmarking::VisualViewportWidth() {
     return 0.0;
   float width = context.web_view()->VisualViewportSize().width;
   blink::WebRect rect(0, 0, width, 0);
-  context.render_view_impl()->ConvertViewportToWindow(&rect);
+  context.render_view_impl()->WidgetClient()->ConvertViewportToWindow(&rect);
   return rect.width;
 }
 
@@ -985,8 +992,12 @@ bool GpuBenchmarking::PointerActionSequence(gin::Arguments* args) {
   // Get all the pointer actions from the user input and wrap them into a
   // SyntheticPointerActionListParams object.
   ActionsParser actions_parser(value.get());
-  if (!actions_parser.ParsePointerActionSequence())
+  if (!actions_parser.ParsePointerActionSequence()) {
+    // TODO(dtapuska): Throw an error here, some layout tests start
+    // failing when this is done though.
+    // args->ThrowTypeError(actions_parser.error_message());
     return false;
+  }
 
   if (!GetOptionalArg(args, &callback)) {
     args->ThrowError();
@@ -1031,10 +1042,10 @@ int GpuBenchmarking::RunMicroBenchmark(gin::Arguments* args) {
   std::unique_ptr<base::Value> value =
       V8ValueConverter::Create()->FromV8Value(arguments, v8_context);
 
-  return context.compositor()->ScheduleMicroBenchmark(
+  return context.layer_tree_view()->ScheduleMicroBenchmark(
       name, std::move(value),
-      base::Bind(&OnMicroBenchmarkCompleted,
-                 base::RetainedRef(callback_and_context)));
+      base::BindOnce(&OnMicroBenchmarkCompleted,
+                     base::RetainedRef(callback_and_context)));
 }
 
 bool GpuBenchmarking::SendMessageToMicroBenchmark(
@@ -1049,8 +1060,8 @@ bool GpuBenchmarking::SendMessageToMicroBenchmark(
   std::unique_ptr<base::Value> value =
       V8ValueConverter::Create()->FromV8Value(message, v8_context);
 
-  return context.compositor()->SendMessageToMicroBenchmark(id,
-                                                           std::move(value));
+  return context.layer_tree_view()->SendMessageToMicroBenchmark(
+      id, std::move(value));
 }
 
 bool GpuBenchmarking::HasGpuChannel() {
@@ -1085,6 +1096,34 @@ void GpuBenchmarking::GetGpuDriverBugWorkarounds(gin::Arguments* args) {
   v8::Local<v8::Value> result;
   if (gin::TryConvertToV8(args->isolate(), gpu_driver_bug_workarounds, &result))
     args->Return(result);
+}
+
+void GpuBenchmarking::StartProfiling(gin::Arguments* args) {
+  if (base::debug::BeingProfiled())
+    return;
+  std::string file_name;
+  if (!GetOptionalArg(args, &file_name))
+    return;
+  if (!file_name.length())
+    file_name = "profile.pb";
+  base::debug::StartProfiling(file_name);
+  base::debug::RestartProfilingAfterFork();
+}
+
+void GpuBenchmarking::StopProfiling() {
+  if (base::debug::BeingProfiled())
+    base::debug::StopProfiling();
+}
+
+void GpuBenchmarking::Freeze() {
+  GpuBenchmarkingContext context;
+  if (!context.Init(true))
+    return;
+  // TODO(fmeawad): Instead of forcing a visibility change, only allow
+  // freezing a page if it was already hidden.
+  context.web_view()->SetVisibilityState(
+      blink::mojom::PageVisibilityState::kHidden, false);
+  context.web_view()->SetPageFrozen(true);
 }
 
 }  // namespace content

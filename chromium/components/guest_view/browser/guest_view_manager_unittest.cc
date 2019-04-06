@@ -19,16 +19,6 @@ using content::WebContentsTester;
 
 namespace guest_view {
 
-// Vivaldi helper function that is defined multiple places.
-// Returns true if a Browser object owns and manage the lifecycle of the
-// |content::WebContents|
-
-bool HandOverToBrowser(WebContents* contents) {
-  return false;
-}
-
-void AttachWebContentsObservers(WebContents* contents) { }
-
 namespace {
 
 class GuestViewManagerTest : public content::RenderViewHostTestHarness {
@@ -37,8 +27,7 @@ class GuestViewManagerTest : public content::RenderViewHostTestHarness {
   ~GuestViewManagerTest() override {}
 
   std::unique_ptr<WebContents> CreateWebContents() {
-    return std::unique_ptr<WebContents>(
-        WebContentsTester::CreateTestWebContents(browser_context(), nullptr));
+    return WebContentsTester::CreateTestWebContents(browser_context(), nullptr);
   }
 
  private:

@@ -23,7 +23,7 @@ class ChromeBrowserState;
 @protocol BrowserCommands;
 @protocol CRWSwipeRecognizerProvider;
 @class GoogleLandingViewController;
-@protocol IncognitoViewControllerDelegate;
+@protocol NewTabPageControllerDelegate;
 @protocol NewTabPagePanelProtocol;
 @protocol OmniboxFocuser;
 @protocol FakeboxFocuser;
@@ -58,13 +58,17 @@ class ChromeBrowserState;
 @property(nonatomic, weak) id<CRWSwipeRecognizerProvider>
     swipeRecognizerProvider;
 
+// Exposes content inset of contentSuggestions collectionView to ensure all of
+// content is visible under the bottom toolbar in ui refresh.
+@property(nonatomic) UIEdgeInsets contentInset;
+
 // Init with the given url (presumably "chrome://newtab") and loader object.
 // |loader| may be nil, but isn't retained so it must outlive this controller.
 - (id)initWithUrl:(const GURL&)url
                   loader:(id<UrlLoader>)loader
                  focuser:(id<OmniboxFocuser>)focuser
             browserState:(ios::ChromeBrowserState*)browserState
-         toolbarDelegate:(id<IncognitoViewControllerDelegate>)toolbarDelegate
+         toolbarDelegate:(id<NewTabPageControllerDelegate>)toolbarDelegate
                 tabModel:(TabModel*)tabModel
     parentViewController:(UIViewController*)parentViewController
               dispatcher:(id<ApplicationCommands,
@@ -74,10 +78,6 @@ class ChromeBrowserState;
                              SnackbarCommands,
                              UrlLoader>)dispatcher
            safeAreaInset:(UIEdgeInsets)safeAreaInset;
-
-// Returns |YES| if the current visible controller should show the keyboard
-// shield.
-- (BOOL)wantsKeyboardShield;
 
 // Returns |YES| if the current visible controller allows showing the location
 // bar hint text.

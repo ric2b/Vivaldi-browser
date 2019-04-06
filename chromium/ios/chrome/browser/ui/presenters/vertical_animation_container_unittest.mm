@@ -13,13 +13,20 @@
 #error "This file requires ARC support."
 #endif
 
-// Test delegate helper; the delegate callback sets the |dismissed| property.
+// Test delegate helper; the delegate callback sets the |presented| and
+// |dismissed| property.
 @interface TestContainedPresenterDelegate : NSObject<ContainedPresenterDelegate>
+@property(nonatomic) BOOL presented;
 @property(nonatomic) BOOL dismissed;
 @end
 
 @implementation TestContainedPresenterDelegate
+@synthesize presented = _presented;
 @synthesize dismissed = _dismissed;
+
+- (void)containedPresenterDidPresent:(id<ContainedPresenter>)presenter {
+  self.presented = YES;
+}
 
 - (void)containedPresenterDidDismiss:(id<ContainedPresenter>)presenter {
   self.dismissed = YES;
@@ -49,6 +56,11 @@ class VerticalAnimationContainerTest : public PlatformTest {
 };
 
 TEST_F(VerticalAnimationContainerTest, TestPreparation) {
+  // Presenter does not set width constrains, so set them manually.
+  const CGFloat base_view_width = base_.view.frame.size.width;
+  [presented_.view.widthAnchor constraintEqualToConstant:base_view_width]
+      .active = YES;
+
   [presenter_ prepareForPresentation];
 
   // General expectations for presentation prep.
@@ -57,9 +69,12 @@ TEST_F(VerticalAnimationContainerTest, TestPreparation) {
 
   // For vertical animation, the presented view should start below the
   // base view controller's view, and be the same width.
-  EXPECT_EQ(base_.view.frame.size.width, presented_.view.bounds.size.width);
+  EXPECT_EQ(base_view_width, CGRectGetWidth(presented_.view.bounds));
   EXPECT_EQ(presented_.view.frame.origin.x, 0);
   EXPECT_GE(presented_.view.frame.origin.y, base_.view.bounds.size.height);
+
+  // The presentation did not finish yet.
+  EXPECT_FALSE(delegate_.presented);
 }
 
 TEST_F(VerticalAnimationContainerTest, TestPresentation) {
@@ -71,6 +86,7 @@ TEST_F(VerticalAnimationContainerTest, TestPresentation) {
   EXPECT_TRUE(CGRectContainsRect(base_.view.bounds, presented_.view.frame));
   EXPECT_EQ(CGRectGetMaxY(base_.view.bounds),
             CGRectGetMaxY(presented_.view.frame));
+  EXPECT_TRUE(delegate_.presented);
   // The delegate method should not be called here.
   EXPECT_FALSE(delegate_.dismissed);
 }

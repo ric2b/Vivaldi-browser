@@ -7,12 +7,15 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/timer/mock_timer.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/fake_active_host.h"
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
 #include "chromeos/components/tether/fake_host_scan_cache.h"
 #include "chromeos/components/tether/proto_test_util.h"
+#include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
+#include "chromeos/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -32,10 +35,16 @@ class OperationDeletedHandler {
 
 class FakeKeepAliveOperation : public KeepAliveOperation {
  public:
-  FakeKeepAliveOperation(const cryptauth::RemoteDevice& device_to_connect,
-                         BleConnectionManager* connection_manager,
-                         OperationDeletedHandler* handler)
-      : KeepAliveOperation(device_to_connect, connection_manager),
+  FakeKeepAliveOperation(
+      cryptauth::RemoteDeviceRef device_to_connect,
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
+      BleConnectionManager* connection_manager,
+      OperationDeletedHandler* handler)
+      : KeepAliveOperation(device_to_connect,
+                           device_sync_client,
+                           secure_channel_client,
+                           connection_manager),
         handler_(handler),
         remote_device_(device_to_connect) {}
 
@@ -46,11 +55,11 @@ class FakeKeepAliveOperation : public KeepAliveOperation {
     OnOperationFinished();
   }
 
-  cryptauth::RemoteDevice remote_device() { return remote_device_; }
+  cryptauth::RemoteDeviceRef remote_device() { return remote_device_; }
 
  private:
   OperationDeletedHandler* handler_;
-  const cryptauth::RemoteDevice remote_device_;
+  const cryptauth::RemoteDeviceRef remote_device_;
 };
 
 class FakeKeepAliveOperationFactory final : public KeepAliveOperation::Factory,
@@ -70,11 +79,14 @@ class FakeKeepAliveOperationFactory final : public KeepAliveOperation::Factory,
 
  protected:
   std::unique_ptr<KeepAliveOperation> BuildInstance(
-      const cryptauth::RemoteDevice& device_to_connect,
+      cryptauth::RemoteDeviceRef device_to_connect,
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
       BleConnectionManager* connection_manager) override {
     num_created_++;
-    last_created_ =
-        new FakeKeepAliveOperation(device_to_connect, connection_manager, this);
+    last_created_ = new FakeKeepAliveOperation(
+        device_to_connect, device_sync_client, secure_channel_client,
+        connection_manager, this);
     return base::WrapUnique(last_created_);
   }
 
@@ -89,16 +101,19 @@ class FakeKeepAliveOperationFactory final : public KeepAliveOperation::Factory,
 class KeepAliveSchedulerTest : public testing::Test {
  protected:
   KeepAliveSchedulerTest()
-      : test_devices_(cryptauth::GenerateTestRemoteDevices(2)) {}
+      : test_devices_(cryptauth::CreateRemoteDeviceRefListForTest(2)) {}
 
   void SetUp() override {
+    fake_device_sync_client_ =
+        std::make_unique<device_sync::FakeDeviceSyncClient>();
+    fake_secure_channel_client_ =
+        std::make_unique<secure_channel::FakeSecureChannelClient>();
     fake_active_host_ = std::make_unique<FakeActiveHost>();
     fake_ble_connection_manager_ = std::make_unique<FakeBleConnectionManager>();
     fake_host_scan_cache_ = std::make_unique<FakeHostScanCache>();
     device_id_tether_network_guid_map_ =
         std::make_unique<DeviceIdTetherNetworkGuidMap>();
-    mock_timer_ = new base::MockTimer(true /* retain_user_task */,
-                                      true /* is_repeating */);
+    mock_timer_ = new base::MockRepeatingTimer();
 
     fake_operation_factory_ =
         base::WrapUnique(new FakeKeepAliveOperationFactory());
@@ -106,6 +121,7 @@ class KeepAliveSchedulerTest : public testing::Test {
         fake_operation_factory_.get());
 
     scheduler_ = base::WrapUnique(new KeepAliveScheduler(
+        fake_device_sync_client_.get(), fake_secure_channel_client_.get(),
         fake_active_host_.get(), fake_ble_connection_manager_.get(),
         fake_host_scan_cache_.get(), device_id_tether_network_guid_map_.get(),
         base::WrapUnique(mock_timer_)));
@@ -130,7 +146,7 @@ class KeepAliveSchedulerTest : public testing::Test {
             cell_provider, battery_percentage, connection_strength)));
   }
 
-  void VerifyCacheUpdated(const cryptauth::RemoteDevice& remote_device,
+  void VerifyCacheUpdated(cryptauth::RemoteDeviceRef remote_device,
                           const std::string& carrier,
                           int battery_percentage,
                           int signal_strength) {
@@ -143,15 +159,18 @@ class KeepAliveSchedulerTest : public testing::Test {
     EXPECT_EQ(signal_strength, entry->signal_strength);
   }
 
-  const std::vector<cryptauth::RemoteDevice> test_devices_;
+  const cryptauth::RemoteDeviceRefList test_devices_;
 
+  std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
+  std::unique_ptr<secure_channel::SecureChannelClient>
+      fake_secure_channel_client_;
   std::unique_ptr<FakeActiveHost> fake_active_host_;
   std::unique_ptr<FakeBleConnectionManager> fake_ble_connection_manager_;
   std::unique_ptr<FakeHostScanCache> fake_host_scan_cache_;
   // TODO(hansberry): Use a fake for this when a real mapping scheme is created.
   std::unique_ptr<DeviceIdTetherNetworkGuidMap>
       device_id_tether_network_guid_map_;
-  base::MockTimer* mock_timer_;
+  base::MockRepeatingTimer* mock_timer_;
 
   std::unique_ptr<FakeKeepAliveOperationFactory> fake_operation_factory_;
 
@@ -298,4 +317,4 @@ TEST_F(KeepAliveSchedulerTest, TestSendTickle_MultipleActiveHosts) {
 
 }  // namespace tether
 
-}  // namespace cryptauth
+}  // namespace chromeos

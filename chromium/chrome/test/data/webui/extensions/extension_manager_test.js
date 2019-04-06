@@ -5,7 +5,7 @@
 /** @fileoverview Suite of tests for extension-sidebar. */
 cr.define('extension_manager_tests', function() {
   /** @enum {string} */
-  var TestNames = {
+  const TestNames = {
     ChangePages: 'change pages',
     ItemListVisibility: 'item list visibility',
     SplitItems: 'split items',
@@ -13,14 +13,16 @@ cr.define('extension_manager_tests', function() {
   };
 
   function getDataByName(list, name) {
-    return assert(list.find(function(el) { return el.name == name; }));
+    return assert(list.find(function(el) {
+      return el.name == name;
+    }));
   }
 
-  var suiteName = 'ExtensionManagerTest';
+  const suiteName = 'ExtensionManagerTest';
 
   suite(suiteName, function() {
     /** @type {extensions.Manager} */
-    var manager;
+    let manager;
 
     /** @param {string} viewElement */
     function assertViewActive(tagName) {
@@ -32,10 +34,10 @@ cr.define('extension_manager_tests', function() {
     });
 
     test(assert(TestNames.ItemListVisibility), function() {
-      var extension = getDataByName(manager.extensions_, 'My extension 1');
+      const extension = getDataByName(manager.extensions_, 'My extension 1');
 
-      var list = manager.$['items-list'];
-      var listHasItemWithName = (name) =>
+      const list = manager.$['items-list'];
+      const listHasItemWithName = (name) =>
           !!list.extensions.find(el => el.name == name);
 
       expectEquals(manager.extensions_, manager.$['items-list'].extensions);
@@ -51,7 +53,7 @@ cr.define('extension_manager_tests', function() {
     });
 
     test(assert(TestNames.SplitItems), function() {
-      var sectionHasItemWithName = function(section, name) {
+      const sectionHasItemWithName = function(section, name) {
         return !!manager[section].find(function(el) {
           return el.name == name;
         });
@@ -81,7 +83,7 @@ cr.define('extension_manager_tests', function() {
       assertViewActive('extensions-keyboard-shortcuts');
 
       // Switch: item list -> detail view.
-      var item = manager.$['items-list'].$$('extensions-item');
+      const item = manager.$['items-list'].$$('extensions-item');
       assert(item);
       item.onDetailsTap_();
       Polymer.dom.flush();
@@ -100,7 +102,7 @@ cr.define('extension_manager_tests', function() {
 
     test(assert(TestNames.UrlNavigationToDetails), function() {
       assertViewActive('extensions-detail-view');
-      var detailsView = manager.$$('extensions-detail-view');
+      const detailsView = manager.$$('extensions-detail-view');
       expectEquals('ldnnhddmnhbkjipkidpdiheffobcpfmf', detailsView.data.id);
 
       // Try to open detail view for invalid ID.

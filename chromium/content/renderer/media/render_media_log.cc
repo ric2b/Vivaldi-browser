@@ -17,10 +17,6 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_thread.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/common/pipeline_stats.h"
-#endif
-
 #ifndef MEDIA_EVENT_LOG_UTILITY
 #define MEDIA_EVENT_LOG_UTILITY DVLOG(1)
 #endif
@@ -43,9 +39,11 @@ void Log(media::MediaLogEvent* event) {
 
 namespace content {
 
-RenderMediaLog::RenderMediaLog(const GURL& security_origin)
+RenderMediaLog::RenderMediaLog(
+    const GURL& security_origin,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : security_origin_(security_origin),
-      task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      task_runner_(std::move(task_runner)),
       tick_clock_(base::DefaultTickClock::GetInstance()),
       last_ipc_send_time_(tick_clock_->NowTicks()),
       ipc_send_pending_(false),
@@ -68,9 +66,6 @@ RenderMediaLog::~RenderMediaLog() {
 }
 
 void RenderMediaLog::AddEvent(std::unique_ptr<media::MediaLogEvent> event) {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  media::pipeline_stats::SerializeInto(&event->params);
-#endif
   Log(event.get());
 
   // For enforcing delay until it's been a second since the last ipc message was
@@ -189,7 +184,7 @@ void RenderMediaLog::SendQueuedMediaEvents() {
   RenderThread::Get()->Send(new ViewHostMsg_MediaLogEvents(events_to_send));
 }
 
-void RenderMediaLog::SetTickClockForTesting(base::TickClock* tick_clock) {
+void RenderMediaLog::SetTickClockForTesting(const base::TickClock* tick_clock) {
   base::AutoLock auto_lock(lock_);
   tick_clock_ = tick_clock;
   last_ipc_send_time_ = tick_clock_->NowTicks();

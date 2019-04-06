@@ -139,11 +139,11 @@ void FakeBiodClient::StartEnrollSession(const std::string& user_id,
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(callback, dbus::ObjectPath(kEnrollSessionObjectPath)));
+      base::BindOnce(callback, dbus::ObjectPath(kEnrollSessionObjectPath)));
 }
 
 void FakeBiodClient::GetRecordsForUser(const std::string& user_id,
-                                       const UserRecordsCallback& callback) {
+                                       UserRecordsCallback callback) {
   std::vector<dbus::ObjectPath> records_object_paths;
   for (const auto& record : records_) {
     if (record.second->user_id == user_id)
@@ -151,7 +151,7 @@ void FakeBiodClient::GetRecordsForUser(const std::string& user_id,
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, records_object_paths));
+      FROM_HERE, base::BindOnce(std::move(callback), records_object_paths));
 }
 
 void FakeBiodClient::DestroyAllRecords(VoidDBusMethodCallback callback) {
@@ -167,15 +167,15 @@ void FakeBiodClient::StartAuthSession(const ObjectPathCallback& callback) {
   current_session_ = FingerprintSession::AUTH;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(callback, dbus::ObjectPath(kAuthSessionObjectPath)));
+      base::BindOnce(callback, dbus::ObjectPath(kAuthSessionObjectPath)));
 }
 
 void FakeBiodClient::RequestType(const BiometricTypeCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(callback,
-                 static_cast<uint32_t>(
-                     biod::BiometricType::BIOMETRIC_TYPE_FINGERPRINT)));
+      base::BindOnce(callback,
+                     static_cast<uint32_t>(
+                         biod::BiometricType::BIOMETRIC_TYPE_FINGERPRINT)));
 }
 
 void FakeBiodClient::CancelEnrollSession(VoidDBusMethodCallback callback) {
@@ -217,13 +217,13 @@ void FakeBiodClient::RemoveRecord(const dbus::ObjectPath& record_path,
 }
 
 void FakeBiodClient::RequestRecordLabel(const dbus::ObjectPath& record_path,
-                                        const LabelCallback& callback) {
+                                        LabelCallback callback) {
   std::string record_label;
   if (records_.find(record_path) != records_.end())
     record_label = records_[record_path]->label;
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, record_label));
+      FROM_HERE, base::BindOnce(std::move(callback), record_label));
 }
 
 }  // namespace chromeos

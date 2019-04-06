@@ -11,18 +11,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "components/invalidation/impl/invalidation_service_util.h"
-#include "components/signin/core/browser/profile_identity_provider.h"
-#include "sync/vivaldi_profile_oauth2_token_service_factory.h"
-#include "sync/vivaldi_signin_manager_factory.h"
+#include "components/invalidation/impl/profile_identity_provider.h"
 
 namespace vivaldi {
 
 VivaldiInvalidationService::VivaldiInvalidationService(Profile* profile)
-    : client_id_(invalidation::GenerateInvalidatorClientId()),
-      identity_provider_(new ProfileIdentityProvider(
-          VivaldiSigninManagerFactory::GetForProfile(profile),
-          VivaldiProfileOAuth2TokenServiceFactory::GetForProfile(profile),
-          base::Closure())) {}
+    : client_id_(invalidation::GenerateInvalidatorClientId()) {}
 
 VivaldiInvalidationService::~VivaldiInvalidationService() {}
 
@@ -60,10 +54,6 @@ void VivaldiInvalidationService::RequestDetailedStatus(
     base::Callback<void(const base::DictionaryValue&)> caller) const {
   base::DictionaryValue value;
   caller.Run(value);
-}
-
-IdentityProvider* VivaldiInvalidationService::GetIdentityProvider() {
-  return identity_provider_.get();
 }
 
 void VivaldiInvalidationService::PerformInvalidation(

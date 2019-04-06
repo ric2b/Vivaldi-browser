@@ -1,5 +1,4 @@
 include_rules = [
-  # TODO(mash): Remove. http://crbug.com/723882
-  "+ash",
   "+dbus",
+  "+ui/message_center",
 ]

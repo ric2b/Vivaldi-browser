@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -22,6 +21,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "components/component_updater/component_updater_paths.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/update_client/component_unpacker.h"
@@ -105,7 +105,7 @@ Result ComponentInstaller::InstallHelper(
   if (current_version_.CompareTo(manifest_version) > 0)
     return Result(InstallError::VERSION_NOT_UPGRADED);
   base::FilePath local_install_path;
-  if (!PathService::Get(DIR_COMPONENT_USER, &local_install_path))
+  if (!base::PathService::Get(DIR_COMPONENT_USER, &local_install_path))
     return Result(InstallError::NO_DIR_COMPONENT_USER);
   local_install_path =
       local_install_path.Append(installer_policy_->GetRelativeInstallDir())
@@ -182,7 +182,7 @@ void ComponentInstaller::Install(const base::FilePath& unpack_path,
   // returned.
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&ComponentInstaller::ComponentReady, this,
-                                base::Passed(std::move(manifest))));
+                                std::move(manifest)));
   main_task_runner_->PostTask(FROM_HERE,
                               base::BindOnce(std::move(callback), result));
 }
@@ -205,7 +205,7 @@ bool ComponentInstaller::Uninstall() {
 
 bool ComponentInstaller::FindPreinstallation(
     const base::FilePath& root,
-    const scoped_refptr<RegistrationInfo>& registration_info) {
+    scoped_refptr<RegistrationInfo> registration_info) {
   base::FilePath path = root.Append(installer_policy_->GetRelativeInstallDir());
   if (!base::PathExists(path)) {
     DVLOG(1) << "Relative install dir does not exist: " << path.MaybeAsASCII();
@@ -248,16 +248,16 @@ bool ComponentInstaller::FindPreinstallation(
 }
 
 void ComponentInstaller::StartRegistration(
-    const scoped_refptr<RegistrationInfo>& registration_info) {
+    scoped_refptr<RegistrationInfo> registration_info) {
   VLOG(1) << __func__ << " for " << installer_policy_->GetName();
-  DCHECK(task_runner_.get());
+  DCHECK(task_runner_);
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::Version latest_version(kNullVersion);
 
   // First check for an installation set up alongside Chrome itself.
   base::FilePath root;
-  if (PathService::Get(DIR_COMPONENT_PREINSTALLED, &root) &&
+  if (base::PathService::Get(DIR_COMPONENT_PREINSTALLED, &root) &&
       FindPreinstallation(root, registration_info)) {
     latest_version = registration_info->version;
   }
@@ -265,7 +265,7 @@ void ComponentInstaller::StartRegistration(
   // If there is a distinct alternate root, check there as well, and override
   // anything found in the basic root.
   base::FilePath root_alternate;
-  if (PathService::Get(DIR_COMPONENT_PREINSTALLED_ALT, &root_alternate) &&
+  if (base::PathService::Get(DIR_COMPONENT_PREINSTALLED_ALT, &root_alternate) &&
       root != root_alternate &&
       FindPreinstallation(root_alternate, registration_info)) {
     latest_version = registration_info->version;
@@ -275,7 +275,7 @@ void ComponentInstaller::StartRegistration(
   base::FilePath latest_path;
   std::unique_ptr<base::DictionaryValue> latest_manifest;
   base::FilePath base_component_dir;
-  if (!PathService::Get(DIR_COMPONENT_USER, &base_component_dir))
+  if (!base::PathService::Get(DIR_COMPONENT_USER, &base_component_dir))
     return;
   base::FilePath base_dir =
       base_component_dir.Append(installer_policy_->GetRelativeInstallDir());
@@ -353,12 +353,12 @@ void ComponentInstaller::StartRegistration(
 }
 
 void ComponentInstaller::UninstallOnTaskRunner() {
-  DCHECK(task_runner_.get());
+  DCHECK(task_runner_);
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // Only try to delete any files that are in our user-level install path.
   base::FilePath userInstallPath;
-  if (!PathService::Get(DIR_COMPONENT_USER, &userInstallPath))
+  if (!base::PathService::Get(DIR_COMPONENT_USER, &userInstallPath))
     return;
   if (!userInstallPath.IsParent(current_install_dir_))
     return;
@@ -390,7 +390,7 @@ void ComponentInstaller::UninstallOnTaskRunner() {
 }
 
 void ComponentInstaller::FinishRegistration(
-    const scoped_refptr<RegistrationInfo>& registration_info,
+    scoped_refptr<RegistrationInfo> registration_info,
     ComponentUpdateService* cus,
     base::OnceClosure callback) {
   VLOG(1) << __func__ << " for " << installer_policy_->GetName();

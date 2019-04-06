@@ -22,13 +22,12 @@
 
 namespace base {
 class CancellationFlag;
-class ScopedClosureRunner;
 class SequencedTaskRunner;
 class Time;
 }  // namespace base
 
 namespace google_apis {
-class AboutResource;
+class StartPageToken;
 }  // namespace google_apis
 
 namespace drive {
@@ -38,92 +37,13 @@ class JobScheduler;
 
 namespace internal {
 
+class RootFolderIdLoader;
 class ChangeList;
 class ChangeListLoaderObserver;
 class ChangeListProcessor;
+class LoaderController;
 class ResourceMetadata;
-
-// Delays execution of tasks as long as more than one lock is alive.
-// Used to ensure that ChangeListLoader does not cause race condition by adding
-// new entries created by sync tasks before they do.
-// All code which may add entries found on the server to the local metadata
-// should use this class.
-class LoaderController {
- public:
-  LoaderController();
-  ~LoaderController();
-
-  // Increments the lock count and returns an object which decrements the count
-  // on its destruction.
-  // While the lock count is positive, tasks will be pending.
-  std::unique_ptr<base::ScopedClosureRunner> GetLock();
-
-  // Runs the task if the lock count is 0, otherwise it will be pending.
-  void ScheduleRun(const base::Closure& task);
-
- private:
-  // Decrements the lock count.
-  void Unlock();
-
-  int lock_count_;
-  std::vector<base::Closure> pending_tasks_;
-
-  base::ThreadChecker thread_checker_;
-
-  base::WeakPtrFactory<LoaderController> weak_ptr_factory_;
-  DISALLOW_COPY_AND_ASSIGN(LoaderController);
-};
-
-// This class is responsible to load AboutResource from the server and cache it.
-class AboutResourceLoader {
- public:
-  explicit AboutResourceLoader(JobScheduler* scheduler);
-  ~AboutResourceLoader();
-
-  // Returns the cached about resource.
-  // NULL is returned if the cache is not available.
-  const google_apis::AboutResource* cached_about_resource() const {
-    return cached_about_resource_.get();
-  }
-
-  // Gets the 'latest' about resource and asynchronously runs |callback|. I.e.,
-  // 1) If the last call to UpdateAboutResource call is in-flight, wait for it.
-  // 2) Otherwise, if the resource is cached, just returns the cached value.
-  // 3) If neither of the above hold, queries the API server by calling
-  //   |UpdateAboutResource|.
-  void GetAboutResource(const google_apis::AboutResourceCallback& callback);
-
-  // Gets the about resource from the server, and caches it if successful. This
-  // function calls JobScheduler::GetAboutResource internally. The cache will be
-  // used in |GetAboutResource|.
-  void UpdateAboutResource(const google_apis::AboutResourceCallback& callback);
-
- private:
-  // Part of UpdateAboutResource().
-  // This function should be called when the latest about resource is being
-  // fetched from the server. The retrieved about resource is cloned, and one is
-  // cached and the other is passed to callbacks associated with |task_id|.
-  void UpdateAboutResourceAfterGetAbout(
-      int task_id,
-      google_apis::DriveApiErrorCode status,
-      std::unique_ptr<google_apis::AboutResource> about_resource);
-
-  JobScheduler* scheduler_;
-  std::unique_ptr<google_apis::AboutResource> cached_about_resource_;
-
-  // Identifier to denote the latest UpdateAboutResource call.
-  int current_update_task_id_;
-  // Mapping from each UpdateAboutResource task ID to the corresponding
-  // callbacks. Note that there will be multiple callbacks for a single task
-  // when GetAboutResource is called before the task completes.
-  std::map<int, std::vector<google_apis::AboutResourceCallback> >
-      pending_callbacks_;
-
-  base::ThreadChecker thread_checker_;
-
-  base::WeakPtrFactory<AboutResourceLoader> weak_ptr_factory_;
-  DISALLOW_COPY_AND_ASSIGN(AboutResourceLoader);
-};
+class StartPageTokenLoader;
 
 // ChangeListLoader is used to load the change list, the full resource list,
 // and directory contents, from Google Drive API.  The class also updates the
@@ -143,8 +63,11 @@ class ChangeListLoader {
                    base::SequencedTaskRunner* blocking_task_runner,
                    ResourceMetadata* resource_metadata,
                    JobScheduler* scheduler,
-                   AboutResourceLoader* about_resource_loader,
-                   LoaderController* apply_task_controller);
+                   RootFolderIdLoader* root_folder_id_loader,
+                   StartPageTokenLoader* start_page_token_loader,
+                   LoaderController* apply_task_controller,
+                   const std::string& team_drive_id,
+                   const base::FilePath& root_entry_path);
   ~ChangeListLoader();
 
   // Indicates whether there is a request for full resource list or change
@@ -174,36 +97,49 @@ class ChangeListLoader {
  private:
   // Starts the resource metadata loading and calls |callback| when it's done.
   void Load(const FileOperationCallback& callback);
-  void LoadAfterGetLargestChangestamp(bool is_initial_load,
-                                      const int64_t* local_changestamp,
-                                      FileError error);
-  void LoadAfterGetAboutResource(
-      int64_t local_changestamp,
+  void LoadAfterGetLocalStartPageToken(
+      bool is_initial_load,
+      const std::string* local_start_page_token,
+      FileError error);
+  void LoadAfterGetRootFolderId(const std::string& local_start_page_token,
+                                FileError error,
+                                base::Optional<std::string> root_folder_id);
+
+  void LoadAfterGetStartPageToken(
+      const std::string& local_start_page_token,
+      const std::string& root_folder_id,
       google_apis::DriveApiErrorCode status,
-      std::unique_ptr<google_apis::AboutResource> about_resource);
+      std::unique_ptr<google_apis::StartPageToken> start_page_token);
 
   // Part of Load().
   // This function should be called when the change list load is complete.
   // Flushes the callbacks for change list loading and all directory loading.
   void OnChangeListLoadComplete(FileError error);
 
-  // Called when the loading about_resource_loader_->UpdateAboutResource is
-  // completed.
-  void OnAboutResourceUpdated(
+  // Called when loading the start page token is completed.
+  void OnStartPageTokenLoaderUpdated(
       google_apis::DriveApiErrorCode error,
-      std::unique_ptr<google_apis::AboutResource> resource);
+      std::unique_ptr<google_apis::StartPageToken> start_page_token);
 
   // ================= Implementation for change list loading =================
 
   // Part of LoadFromServerIfNeeded().
-  // Starts loading the change list since |start_changestamp|, or the full
-  // resource list if |start_changestamp| is zero.
-  void LoadChangeListFromServer(int64_t start_changestamp);
+  // Starts loading the change list since |local_start_page_token|, or the full
+  // resource list if |local_start_page_token| is empty. If there's no changes
+  // since then, and there are no new team drives changes to apply from
+  // team_drives_change_lists, finishes early.
+  // TODO(sashab): Currently, team_drives_change_lists always contains all of
+  // the team drives. Update this so team_drives_change_lists is only filled
+  // when the TD flag is newly turned on or local data cleared. crbug.com/829154
+  void LoadChangeListFromServer(const std::string& remote_start_page_token,
+                                const std::string& local_start_page_token,
+                                const std::string& root_resource_id);
 
   // Part of LoadChangeListFromServer().
   // Called when the entire change list is loaded.
   void LoadChangeListFromServerAfterLoadChangeList(
-      std::unique_ptr<google_apis::AboutResource> about_resource,
+      const std::string& start_page_token,
+      const std::string& root_resource_id,
       bool is_delta_update,
       FileError error,
       std::vector<std::unique_ptr<ChangeList>> change_lists);
@@ -221,20 +157,34 @@ class ChangeListLoader {
   std::unique_ptr<base::CancellationFlag> in_shutdown_;
   ResourceMetadata* resource_metadata_;  // Not owned.
   JobScheduler* scheduler_;  // Not owned.
-  AboutResourceLoader* about_resource_loader_;  // Not owned.
+  RootFolderIdLoader* root_folder_id_loader_;      // Not owned.
+  StartPageTokenLoader* start_page_token_loader_;  // Not owned.
   LoaderController* loader_controller_;  // Not owned.
   base::ObserverList<ChangeListLoaderObserver> observers_;
   std::vector<FileOperationCallback> pending_load_callback_;
   FileOperationCallback pending_update_check_callback_;
 
   // Running feed fetcher.
+  // TODO(slangley): Do not make this stateful by changing the feed_fetcher
+  // to be base::Owned by the callback.
   std::unique_ptr<FeedFetcher> change_feed_fetcher_;
 
   // True if the full resource list is loaded (i.e. the resource metadata is
   // stored locally).
   bool loaded_;
 
-  base::ThreadChecker thread_checker_;
+  // The team drive id for the changes being loaded by this change list loader.
+  const std::string team_drive_id_;
+
+  // The formatted team drive id message used for logging.
+  const std::string team_drive_msg_;
+
+  // The root entry path for changes being loaded by this change list loader.
+  // Can be a team drive root entry or for the users default corpus will be the
+  // drive root entry.
+  const base::FilePath root_entry_path_;
+
+  THREAD_CHECKER(thread_checker_);
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

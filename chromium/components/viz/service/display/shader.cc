@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/strings/char_traits.h"
 #include "base/strings/stringprintf.h"
 #include "components/viz/service/display/static_geometry_binding.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -18,29 +19,18 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 
-constexpr bool ConstexprEqual(const char* a, const char* b, size_t length) {
-  for (size_t i = 0; i < length; i++) {
-    if (a[i] != b[i])
-      return false;
-  }
-  return true;
-}
-
 constexpr base::StringPiece StripLambda(base::StringPiece shader) {
-  // Must contain at least "[]() {}" and trailing null (included in size).
-  // TODO(jbroman): Simplify this once we're in a post-C++17 world, where
-  // starts_with and ends_with can easily be made constexpr.
-  DCHECK(shader.size() >= 7);  // NOLINT
-  DCHECK(ConstexprEqual(shader.data(), "[]() {", 6));
+  // Must contain at least "[]() {}".
+  DCHECK(shader.starts_with("[]() {"));
+  DCHECK(shader.ends_with("}"));
   shader.remove_prefix(6);
-  DCHECK(shader[shader.size() - 1] == '}');  // NOLINT
   shader.remove_suffix(1);
   return shader;
 }
 
 // Shaders are passed in with lambda syntax, which tricks clang-format into
 // handling them correctly. StripLambda removes this.
-#define SHADER0(Src) StripLambda(base::StringPiece(#Src, sizeof(#Src) - 1))
+#define SHADER0(Src) StripLambda(#Src)
 
 #define HDR(x)        \
   do {                \
@@ -207,8 +197,7 @@ void VertexShader::Init(GLES2Interface* context,
     uniforms.push_back("uvTexScale");
     uniforms.push_back("uvTexOffset");
   }
-  if (has_matrix_)
-    uniforms.push_back("matrix");
+  uniforms.push_back("matrix");
   if (has_vertex_opacity_)
     uniforms.push_back("opacity");
   if (aa_mode_ == USE_AA) {
@@ -241,8 +230,7 @@ void VertexShader::Init(GLES2Interface* context,
     uv_tex_scale_location_ = locations[index++];
     uv_tex_offset_location_ = locations[index++];
   }
-  if (has_matrix_)
-    matrix_location_ = locations[index++];
+  matrix_location_ = locations[index++];
   if (has_vertex_opacity_)
     vertex_opacity_location_ = locations[index++];
   if (aa_mode_ == USE_AA) {
@@ -290,7 +278,6 @@ std::string VertexShader::GetShaderString() const {
       SRC("vec4 pos = vec4(quad[vertex_index], a_position.z, a_position.w);");
       break;
   }
-  if (has_matrix_) {
     if (use_uniform_arrays_) {
       HDR("uniform mat4 matrix[NUM_QUADS];");
       SRC("gl_Position = matrix[quad_index] * pos;");
@@ -298,9 +285,6 @@ std::string VertexShader::GetShaderString() const {
       HDR("uniform mat4 matrix;");
       SRC("gl_Position = matrix * pos;");
     }
-  } else {
-    SRC("gl_Position = pos;");
-  }
 
   // Compute the anti-aliasing edge distances.
   if (aa_mode_ == USE_AA) {
@@ -348,7 +332,7 @@ std::string VertexShader::GetShaderString() const {
         break;
       case TEX_COORD_TRANSFORM_TRANSLATED_VEC4:
         SRC("texCoord = texCoord + vec2(0.5);");
-      // Fall through...
+        FALLTHROUGH;
       case TEX_COORD_TRANSFORM_VEC4:
         if (use_uniform_arrays_) {
           HDR("uniform TexCoordPrecision vec4 vertexTexTransform[NUM_QUADS];");
@@ -541,11 +525,7 @@ void FragmentShader::Init(GLES2Interface* context,
 }
 
 void FragmentShader::SetBlendModeFunctions(std::string* shader_string) const {
-  if (shader_string->find("ApplyBlendMode") == std::string::npos)
-    return;
-
   if (!has_blend_mode()) {
-    shader_string->insert(0, "#define ApplyBlendMode(X, Y) (X)\n");
     return;
   }
 
@@ -555,39 +535,31 @@ void FragmentShader::SetBlendModeFunctions(std::string* shader_string) const {
     uniform TexCoordPrecision vec4 backdropRect;
   });
 
-  base::StringPiece mixFunction;
+  base::StringPiece function_apply_blend_mode;
   if (mask_for_background_) {
-    static constexpr base::StringPiece kMixFunctionWithMask = SHADER0([]() {
-      vec4 MixBackdrop(TexCoordPrecision vec2 bgTexCoord, float mask) {
+    static constexpr base::StringPiece kFunctionApplyBlendMode = SHADER0([]() {
+      vec4 ApplyBlendMode(vec4 src, float mask) {
+        TexCoordPrecision vec2 bgTexCoord = gl_FragCoord.xy - backdropRect.xy;
+        bgTexCoord *= backdropRect.zw;
         vec4 backdrop = texture2D(s_backdropTexture, bgTexCoord);
         vec4 original_backdrop =
             texture2D(s_originalBackdropTexture, bgTexCoord);
-        return mix(original_backdrop, backdrop, mask);
+        vec4 dst = mix(original_backdrop, backdrop, mask);
+        return Blend(src, dst);
       }
     });
-    mixFunction = kMixFunctionWithMask;
+    function_apply_blend_mode = kFunctionApplyBlendMode;
   } else {
-    static constexpr base::StringPiece kMixFunctionWithoutMask = SHADER0([]() {
-      vec4 MixBackdrop(TexCoordPrecision vec2 bgTexCoord, float mask) {
-        return texture2D(s_backdropTexture, bgTexCoord);
+    static constexpr base::StringPiece kFunctionApplyBlendMode = SHADER0([]() {
+      vec4 ApplyBlendMode(vec4 src) {
+        TexCoordPrecision vec2 bgTexCoord = gl_FragCoord.xy - backdropRect.xy;
+        bgTexCoord *= backdropRect.zw;
+        vec4 dst = texture2D(s_backdropTexture, bgTexCoord);
+        return Blend(src, dst);
       }
     });
-    mixFunction = kMixFunctionWithoutMask;
+    function_apply_blend_mode = kFunctionApplyBlendMode;
   }
-
-  static constexpr base::StringPiece kFunctionApplyBlendMode = SHADER0([]() {
-    vec4 GetBackdropColor(float mask) {
-      TexCoordPrecision vec2 bgTexCoord = gl_FragCoord.xy - backdropRect.xy;
-      bgTexCoord.x /= backdropRect.z;
-      bgTexCoord.y /= backdropRect.w;
-      return MixBackdrop(bgTexCoord, mask);
-    }
-
-    vec4 ApplyBlendMode(vec4 src, float mask) {
-      vec4 dst = GetBackdropColor(mask);
-      return Blend(src, dst);
-    }
-  });
 
   std::string shader;
   shader.reserve(shader_string->size() + 1024);
@@ -595,8 +567,7 @@ void FragmentShader::SetBlendModeFunctions(std::string* shader_string) const {
   AppendHelperFunctions(&shader);
   AppendBlendFunction(&shader);
   kUniforms.AppendToString(&shader);
-  mixFunction.AppendToString(&shader);
-  kFunctionApplyBlendMode.AppendToString(&shader);
+  function_apply_blend_mode.AppendToString(&shader);
   shader += *shader_string;
   *shader_string = std::move(shader);
 }
@@ -944,7 +915,7 @@ std::string FragmentShader::GetShaderSource() const {
       break;
   }
 
-  // Apply LUT based color conversion.
+  // Apply color conversion.
   switch (color_conversion_mode_) {
     case COLOR_CONVERSION_MODE_LUT:
       HDR("uniform sampler2D lut_texture;");
@@ -961,13 +932,30 @@ std::string FragmentShader::GetShaderSource() const {
       HDR("             LutLookup(sampler, pos.xy + vec2(0, 1.0 / size)),");
       HDR("             pos.z - layer);");
       HDR("}");
+      // Un-premultiply by alpha.
+      if (premultiply_alpha_mode_ != NON_PREMULTIPLIED_ALPHA) {
+        SRC("// un-premultiply alpha");
+        SRC("if (texColor.a > 0.0) texColor.rgb /= texColor.a;");
+      }
       SRC("texColor.rgb = LUT(lut_texture, texColor.xyz, lut_size).xyz;");
+      SRC("texColor.rgb *= texColor.a;");
       break;
     case COLOR_CONVERSION_MODE_SHADER:
       header += color_transform_->GetShaderSource();
+      // Un-premultiply by alpha.
+      if (premultiply_alpha_mode_ != NON_PREMULTIPLIED_ALPHA) {
+        SRC("// un-premultiply alpha");
+        SRC("if (texColor.a > 0.0) texColor.rgb /= texColor.a;");
+      }
       SRC("texColor.rgb = DoColorConversion(texColor.xyz);");
+      SRC("texColor.rgb *= texColor.a;");
       break;
     case COLOR_CONVERSION_MODE_NONE:
+      // Premultiply by alpha.
+      if (premultiply_alpha_mode_ == NON_PREMULTIPLIED_ALPHA) {
+        SRC("// Premultiply alpha");
+        SRC("texColor.rgb *= texColor.a;");
+      }
       break;
   }
 
@@ -1002,12 +990,6 @@ std::string FragmentShader::GetShaderSource() const {
     SRC("vec4 d4 = min(edge_dist[0], edge_dist[1]);");
     SRC("vec2 d2 = min(d4.xz, d4.yw);");
     SRC("float aa = clamp(gl_FragCoord.w * min(d2.x, d2.y), 0.0, 1.0);");
-  }
-
-  // Premultiply by alpha.
-  if (premultiply_alpha_mode_ == NON_PREMULTIPLIED_ALPHA) {
-    SRC("// Premultiply alpha");
-    SRC("texColor.rgb *= texColor.a;");
   }
 
   // Apply background texture.
@@ -1076,10 +1058,16 @@ std::string FragmentShader::GetShaderSource() const {
       SRC("gl_FragColor = vec4(texColor.rgb, 1.0);");
       break;
     case FRAG_COLOR_MODE_APPLY_BLEND_MODE:
-      if (mask_mode_ != NO_MASK)
-        SRC("gl_FragColor = ApplyBlendMode(texColor, maskColor.w);");
-      else
-        SRC("gl_FragColor = ApplyBlendMode(texColor, 0.0);");
+      if (!has_blend_mode()) {
+        SRC("gl_FragColor = texColor;");
+      } else if (mask_mode_ != NO_MASK) {
+        if (mask_for_background_)
+          SRC("gl_FragColor = ApplyBlendMode(texColor, maskColor.w);");
+        else
+          SRC("gl_FragColor = ApplyBlendMode(texColor);");
+      } else {
+        SRC("gl_FragColor = ApplyBlendMode(texColor);");
+      }
       break;
   }
   source += "}\n";

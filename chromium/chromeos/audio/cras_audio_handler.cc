@@ -102,13 +102,16 @@ void CrasAudioHandler::AudioObserver::OnActiveOutputNodeChanged() {
 void CrasAudioHandler::AudioObserver::OnActiveInputNodeChanged() {
 }
 
-void CrasAudioHandler::AudioObserver::OnOuputChannelRemixingChanged(
-    bool /* mono_on */) {
-}
+void CrasAudioHandler::AudioObserver::OnOutputChannelRemixingChanged(
+    bool /* mono_on */) {}
 
 void CrasAudioHandler::AudioObserver::OnHotwordTriggered(
     uint64_t /* tv_sec */,
     uint64_t /* tv_nsec */) {}
+
+void CrasAudioHandler::AudioObserver::OnOutputStarted() {}
+
+void CrasAudioHandler::AudioObserver::OnOutputStopped() {}
 
 // static
 void CrasAudioHandler::Initialize(
@@ -496,7 +499,7 @@ void CrasAudioHandler::SetOutputMonoEnabled(bool enabled) {
   }
 
   for (auto& observer : observers_)
-    observer.OnOuputChannelRemixingChanged(enabled);
+    observer.OnOutputChannelRemixingChanged(enabled);
 }
 
 bool CrasAudioHandler::has_alternative_input() const {
@@ -782,6 +785,10 @@ void CrasAudioHandler::HotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec) {
     observer.OnHotwordTriggered(tv_sec, tv_nsec);
 }
 
+void CrasAudioHandler::NumberOfActiveStreamsChanged() {
+  GetNumberOfOutputStreams();
+}
+
 void CrasAudioHandler::OnAudioPolicyPrefChanged() {
   ApplyAudioPolicy();
 }
@@ -888,9 +895,9 @@ void CrasAudioHandler::InitializeAudioState() {
 
   // Defer querying cras for GetNodes until cras service becomes available.
   cras_service_available_ = false;
-  GetCrasAudioClient()->WaitForServiceToBeAvailable(
-      base::Bind(&CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable,
-                 weak_ptr_factory_.GetWeakPtr()));
+  GetCrasAudioClient()->WaitForServiceToBeAvailable(base::BindOnce(
+      &CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable,
+      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
@@ -903,7 +910,9 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
 
   cras_service_available_ = true;
   GetDefaultOutputBufferSizeInternal();
+  GetSystemAecSupported();
   GetNodes();
+  GetNumberOfOutputStreams();
 }
 
 void CrasAudioHandler::ApplyAudioPolicy() {
@@ -986,6 +995,12 @@ void CrasAudioHandler::SetInputMuteInternal(bool mute_on) {
 void CrasAudioHandler::GetNodes() {
   GetCrasAudioClient()->GetNodes(base::BindOnce(
       &CrasAudioHandler::HandleGetNodes, weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CrasAudioHandler::GetNumberOfOutputStreams() {
+  GetCrasAudioClient()->GetNumberOfActiveOutputStreams(
+      base::BindOnce(&CrasAudioHandler::HandleGetNumActiveOutputStreams,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 bool CrasAudioHandler::ChangeActiveDevice(
@@ -1233,7 +1248,7 @@ void CrasAudioHandler::HandleHotPlugDevice(
   // device.
   if (hotplug_device.type == AUDIO_TYPE_HEADPHONE ||
       hotplug_device.type == AUDIO_TYPE_MIC) {
-    SwitchToDevice(hotplug_device, true, ACTIVATE_BY_USER);
+    SwitchToDevice(hotplug_device, true, ACTIVATE_BY_PRIORITY);
     return;
   }
 
@@ -1462,6 +1477,24 @@ void CrasAudioHandler::HandleGetNodes(
     observer.OnAudioNodesChanged();
 }
 
+void CrasAudioHandler::HandleGetNumActiveOutputStreams(
+    base::Optional<int> new_output_streams_count) {
+  if (!new_output_streams_count.has_value()) {
+    LOG(ERROR) << "Failed to retrieve number of active output streams";
+    return;
+  }
+
+  DCHECK(*new_output_streams_count >= 0);
+  if (*new_output_streams_count > 0 && num_active_output_streams_ == 0) {
+    for (auto& observer : observers_)
+      observer.OnOutputStarted();
+  } else if (*new_output_streams_count == 0 && num_active_output_streams_ > 0) {
+    for (auto& observer : observers_)
+      observer.OnOutputStopped();
+  }
+  num_active_output_streams_ = *new_output_streams_count;
+}
+
 void CrasAudioHandler::AddAdditionalActiveNode(uint64_t node_id, bool notify) {
   const AudioDevice* device = GetDeviceFromId(node_id);
   if (!device) {
@@ -1629,8 +1662,8 @@ bool CrasAudioHandler::HasExternalDevice(bool is_input) const {
 
 void CrasAudioHandler::GetDefaultOutputBufferSizeInternal() {
   GetCrasAudioClient()->GetDefaultOutputBufferSize(
-      base::Bind(&CrasAudioHandler::HandleGetDefaultOutputBufferSize,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&CrasAudioHandler::HandleGetDefaultOutputBufferSize,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CrasAudioHandler::HandleGetDefaultOutputBufferSize(
@@ -1641,6 +1674,30 @@ void CrasAudioHandler::HandleGetDefaultOutputBufferSize(
   }
 
   default_output_buffer_size_ = buffer_size.value();
+}
+
+bool CrasAudioHandler::system_aec_supported() const {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  return system_aec_supported_;
+}
+
+// GetSystemAecSupported() is only called in the same thread
+// as the CrasAudioHanler constructor. We are safe here without
+// thread check, because unittest may not have the task runner
+// for the current thread.
+void CrasAudioHandler::GetSystemAecSupported() {
+  GetCrasAudioClient()->GetSystemAecSupported(
+      base::BindOnce(&CrasAudioHandler::HandleGetSystemAecSupported,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CrasAudioHandler::HandleGetSystemAecSupported(
+    base::Optional<bool> system_aec_supported) {
+  if (!system_aec_supported.has_value()) {
+    LOG(ERROR) << "Failed to retrieve system aec supported";
+    return;
+  }
+  system_aec_supported_ = system_aec_supported.value();
 }
 
 }  // namespace chromeos

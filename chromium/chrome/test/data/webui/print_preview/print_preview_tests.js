@@ -79,8 +79,8 @@ cr.define('print_preview_test', function() {
    */
   function waitForPrinterToUpdatePreview() {
     return Promise.all([
-        nativeLayer.whenCalled('getPrinterCapabilities'),
-        nativeLayer.whenCalled('getPreview'),
+      nativeLayer.whenCalled('getPrinterCapabilities'),
+      nativeLayer.whenCalled('getPreview'),
     ]);
   }
 
@@ -92,8 +92,8 @@ cr.define('print_preview_test', function() {
   function checkSectionVisible(section, visible) {
     assertNotEquals(null, section);
     expectEquals(
-        visible,
-        section.classList.contains('visible'), 'section=' + section.id);
+        visible, section.classList.contains('visible'),
+        'section=' + section.id);
   }
 
   /**
@@ -102,9 +102,9 @@ cr.define('print_preview_test', function() {
    */
   function checkElementDisplayed(el, isDisplayed) {
     assertNotEquals(null, el);
-    expectEquals(isDisplayed,
-                 !el.hidden,
-                 'element="' + el.id + '" of class "' + el.classList + '"');
+    expectEquals(
+        isDisplayed, !el.hidden,
+        'element="' + el.id + '" of class "' + el.classList + '"');
   }
 
   /**
@@ -121,24 +121,18 @@ cr.define('print_preview_test', function() {
         printer: {
           page_orientation: {
             option: [
-              {type: 'AUTO', is_default: true},
-              {type: 'PORTRAIT'},
+              {type: 'AUTO', is_default: true}, {type: 'PORTRAIT'},
               {type: 'LANDSCAPE'}
             ]
           },
-          color: {
-            option: [
-              {type: 'STANDARD_COLOR', is_default: true}
-            ]
-          },
+          color: {option: [{type: 'STANDARD_COLOR', is_default: true}]},
           media_size: {
-            option: [
-              { name: 'NA_LETTER',
-                width_microns: 0,
-                height_microns: 0,
-                is_default: true
-              }
-            ]
+            option: [{
+              name: 'NA_LETTER',
+              width_microns: 0,
+              height_microns: 0,
+              is_default: true
+            }]
           }
         }
       }
@@ -154,97 +148,55 @@ cr.define('print_preview_test', function() {
     const cdd =
         print_preview_test_utils.getCddTemplate('ID1', 'One').capabilities;
     return JSON.stringify({
-        version: 2,
-        recentDestinations: [
-          {
-            id: 'ID1',
-            origin: origin,
-            account: '',
-            capabilities: cdd,
-            displayName: 'One',
-            extensionId: '',
-            extensionName: '',
-          }, {
-            id: 'ID2',
-            origin: origin,
-            account: '',
-            capabilities: cdd,
-            displayName: 'Two',
-            extensionId: '',
-            extensionName: '',
-          }, {
-            id: 'ID3',
-            origin: origin,
-            account: '',
-            capabilities: cdd,
-            displayName: 'Three',
-            extensionId: '',
-            extensionName: '',
-          },
-        ],
-        dpi: {horizontal_dpi: 100, vertical_dpi: 100},
-        mediaSize: {name: 'CUSTOM_SQUARE',
-                    width_microns: 215900,
-                    height_microns: 215900,
-                    custom_display_name: 'CUSTOM_SQUARE'},
-        customMargins: {top: 74, right: 74, bottom: 74, left: 74},
-        vendorOptions: {},
-        marginsType: print_preview.ticket_items.MarginsTypeValue.CUSTOM,
-        scaling: '90',
-        isHeaderFooterEnabled: true,
-        isCssBackgroundEnabled: true,
-        isFitToPageEnabled: true,
-        isCollateEnabled: true,
-        isDuplexEnabled: true,
-        isLandscapeEnabled: true,
-        isColorEnabled: true,
-    });
-  }
-
-  /**
-   * Get the default media size for |device|.
-   * @param {!print_preview.PrinterCapabilitiesResponse} device
-   * @return {{width_microns: number,
-   *           height_microns: number}} The width and height of the default
-   *     media.
-   */
-  function getDefaultMediaSize(device) {
-    const size = device.capabilities.printer.media_size.option.find(
-        function(opt) { return opt.is_default; });
-    return { width_microns: size.width_microns,
-             height_microns: size.height_microns };
-  }
-
-  /**
-   * Get the default page orientation for |device|.
-   * @param {!print_preview.PrinterCapabilitiesResponse} device
-   * @return {string} The default orientation.
-   */
-  function getDefaultOrientation(device) {
-    return device.capabilities.printer.page_orientation.option.find(
-        function(opt) { return opt.is_default; }).type;
-  }
-
-
-  /**
-   * @param {string} printerId
-   * @return {!Object}
-   */
-  function getCddTemplateWithAdvancedSettings(printerId) {
-    const template = print_preview_test_utils.getCddTemplate(printerId);
-    template.capabilities.printer.vendor_capability = [{
-      display_name: 'Print Area',
-      id: 'Print Area',
-      type: 'SELECT',
-      select_cap: {
-        option: [
-          {display_name: 'A4', value: 4, is_default: true},
-          {display_name: 'A6', value: 6},
-          {display_name: 'A7', value: 7},
-        ],
+      version: 2,
+      recentDestinations: [
+        {
+          id: 'ID1',
+          origin: origin,
+          account: '',
+          capabilities: cdd,
+          displayName: 'One',
+          extensionId: '',
+          extensionName: '',
+        },
+        {
+          id: 'ID2',
+          origin: origin,
+          account: '',
+          capabilities: cdd,
+          displayName: 'Two',
+          extensionId: '',
+          extensionName: '',
+        },
+        {
+          id: 'ID3',
+          origin: origin,
+          account: '',
+          capabilities: cdd,
+          displayName: 'Three',
+          extensionId: '',
+          extensionName: '',
+        },
+      ],
+      dpi: {horizontal_dpi: 100, vertical_dpi: 100},
+      mediaSize: {
+        name: 'CUSTOM_SQUARE',
+        width_microns: 215900,
+        height_microns: 215900,
+        custom_display_name: 'CUSTOM_SQUARE'
       },
-    }];
-    return template;
+      customMargins: {top: 74, right: 74, bottom: 74, left: 74},
+      vendorOptions: {},
+      marginsType: print_preview.ticket_items.MarginsTypeValue.CUSTOM,
+      scaling: '90',
+      isHeaderFooterEnabled: true,
+      isCssBackgroundEnabled: true,
+      isFitToPageEnabled: true,
+      isCollateEnabled: true,
+      isDuplexEnabled: true,
+      isLandscapeEnabled: true,
+      isColorEnabled: true,
+    });
   }
 
   /**
@@ -289,8 +241,8 @@ cr.define('print_preview_test', function() {
   function openAdvancedSettings() {
     // Check for button and click to view advanced settings section.
     const advancedOptionsSettingsButton =
-        $('advanced-options-settings').
-        querySelector('.advanced-options-settings-button');
+        $('advanced-options-settings')
+            .querySelector('.advanced-options-settings-button');
     checkElementDisplayed(advancedOptionsSettingsButton, true);
     // Button is disabled during testing due to test version of
     // testPluginCompatibility() being set to always return false. Enable button
@@ -316,33 +268,50 @@ cr.define('print_preview_test', function() {
 
     // Check advanced settings overlay is visible by checking that the close
     // button is displayed.
-    const advancedSettingsCloseButton = $('advanced-settings').
-        querySelector('.close-button');
+    const advancedSettingsCloseButton =
+        $('advanced-settings').querySelector('.close-button');
     checkElementDisplayed(advancedSettingsCloseButton, true);
+  }
+
+  /**
+   * Performs some setup for invalid certificate tests using 2 destinations
+   * in |printers|. printers[0] will be set as the most recent destination,
+   * and printers[1] will be the second most recent destination. Sets up
+   * cloud print interface, user info, and runs initialize().
+   * @param {!Array<!print_preview.Destination>} printers
+   */
+  function setupInvalidCertificateTest(printers) {
+    initialSettings.printerName = '';
+    initialSettings.serializedAppStateStr = JSON.stringify({
+      version: 2,
+      recentDestinations: [
+        print_preview.makeRecentDestination(printers[0]),
+        print_preview.makeRecentDestination(printers[1]),
+      ],
+    });
+
+    nativeLayer.setInitialSettings(initialSettings);
+    localDestinationInfos = [];
+    nativeLayer.setLocalDestinations(localDestinationInfos);
+    printPreview.userInfo_.setUsers('foo@chromium.org', ['foo@chromium.org']);
+    printPreview.initialize();
+    cr.webUIListenerCallback('use-cloud-print', 'cloudprint url', false);
+    printers.forEach(printer => {
+      printPreview.cloudPrintInterface_.setPrinter(printer.id, printer);
+    });
   }
 
   /** @return {boolean} */
   function isPrintAsImageEnabled() {
     // Should be enabled by default on non Windows/Mac.
-    return (!cr.isWindows && !cr.isMac &&
-            loadTimeData.getBoolean('printPdfAsImageEnabled'));
+    return !cr.isWindows && !cr.isMac;
   }
 
   const suiteName = 'PrintPreview';
 
   suite(suiteName, function() {
     suiteSetup(function() {
-      function CloudPrintInterfaceStub() {
-        cr.EventTarget.call(this);
-      }
-      CloudPrintInterfaceStub.prototype = {
-        __proto__: cr.EventTarget.prototype,
-        search: function(isRecent) {}
-      };
-      const oldCpInterfaceEventType = cloudprint.CloudPrintInterfaceEventType;
-      cloudprint.CloudPrintInterface = CloudPrintInterfaceStub;
-      cloudprint.CloudPrintInterfaceEventType = oldCpInterfaceEventType;
-
+      cloudprint.CloudPrintInterface = print_preview.CloudPrintInterfaceStub;
       print_preview.PreviewArea.prototype.checkPluginCompatibility_ =
           function() {
         return true;
@@ -350,31 +319,17 @@ cr.define('print_preview_test', function() {
     });
 
     setup(function() {
-      initialSettings = {
-        isInKioskAutoPrintMode: false,
-        isInAppKioskMode: false,
-        thousandsDelimeter: ',',
-        decimalDelimeter: '.',
-        unitType: 1,
-        previewModifiable: true,
-        documentTitle: 'title',
-        documentHasSelection: true,
-        shouldPrintSelectionOnly: false,
-        printerName: 'FooDevice',
-        serializedAppStateStr: null,
-        serializedDefaultDestinationSelectionRulesStr: null
-      };
-
+      initialSettings = print_preview_test_utils.getDefaultInitialSettings();
       localDestinationInfos = [
-        { printerName: 'FooName', deviceName: 'FooDevice' },
-        { printerName: 'BarName', deviceName: 'BarDevice' },
+        {printerName: 'FooName', deviceName: 'FooDevice'},
+        {printerName: 'BarName', deviceName: 'BarDevice'},
       ];
 
       nativeLayer = new print_preview.NativeLayerStub();
       print_preview.NativeLayer.setInstance(nativeLayer);
       printPreview = new print_preview.PrintPreview();
       previewArea = printPreview.getPreviewArea();
-      previewArea.plugin_ = new print_preview.PDFPluginStub(previewArea);
+      previewArea.plugin_ = new print_preview.PDFPluginStub();
       previewArea.plugin_.setLoadCallback(
           previewArea.onPluginLoad_.bind(previewArea));
     });
@@ -388,66 +343,28 @@ cr.define('print_preview_test', function() {
             $('destination-search').querySelector('.print-list ul');
         assertNotEquals(null, recentList);
         assertEquals(1, recentList.childNodes.length);
-        assertEquals('FooName',
-                     recentList.childNodes.item(0).querySelector(
-                         '.destination-list-item-name').textContent);
+        assertEquals(
+            'FooName',
+            recentList.childNodes.item(0)
+                .querySelector('.destination-list-item-name')
+                .textContent);
         assertNotEquals(null, printList);
         assertEquals(3, printList.childNodes.length);
         assertEquals(
             'Save as PDF',
-            printList.childNodes.item(PDF_INDEX).
-            querySelector('.destination-list-item-name').textContent);
+            printList.childNodes.item(PDF_INDEX)
+                .querySelector('.destination-list-item-name')
+                .textContent);
         assertEquals(
             'FooName',
-            printList.childNodes.item(FOO_INDEX).
-            querySelector('.destination-list-item-name').textContent);
+            printList.childNodes.item(FOO_INDEX)
+                .querySelector('.destination-list-item-name')
+                .textContent);
         assertEquals(
             'BarName',
-            printList.childNodes.item(BAR_INDEX).
-            querySelector('.destination-list-item-name').textContent);
-      });
-    });
-
-    // Test that the printer list is structured correctly after calling
-    // addCloudPrinters with an empty list.
-    test('PrinterListCloudEmpty', function() {
-      return setupSettingsAndDestinationsWithCapabilities().then(function() {
-        cr.webUIListenerCallback('use-cloud-print', 'cloudprint url', false);
-        const searchDoneEvent =
-            new Event(cloudprint.CloudPrintInterfaceEventType.SEARCH_DONE);
-        searchDoneEvent.printers = [];
-        searchDoneEvent.isRecent = true;
-        searchDoneEvent.email = 'foo@chromium.org';
-        printPreview.cloudPrintInterface_.dispatchEvent(searchDoneEvent);
-
-        const recentList =
-            $('destination-search').querySelector('.recent-list ul');
-        const printList =
-            $('destination-search').querySelector('.print-list ul');
-
-        assertNotEquals(null, recentList);
-        assertEquals(1, recentList.childNodes.length);
-        assertEquals('FooName',
-                     recentList.childNodes.item(0).
-                         querySelector('.destination-list-item-name').
-                         textContent);
-
-        assertNotEquals(null, printList);
-        assertEquals(3, printList.childNodes.length);
-        assertEquals('Save as PDF',
-            printList.childNodes.item(PDF_INDEX).
-                         querySelector('.destination-list-item-name').
-                         textContent);
-        assertEquals('FooName',
-            printList.childNodes.
-                         item(FOO_INDEX).
-                         querySelector('.destination-list-item-name').
-                         textContent);
-        assertEquals('BarName',
-            printList.childNodes.
-                         item(BAR_INDEX).
-                         querySelector('.destination-list-item-name').
-                         textContent);
+            printList.childNodes.item(BAR_INDEX)
+                .querySelector('.destination-list-item-name')
+                .textContent);
       });
     });
 
@@ -478,10 +395,10 @@ cr.define('print_preview_test', function() {
       // Set all three of these destinations in the local destination infos
       // (represents currently available printers), plus an extra destination.
       localDestinationInfos = [
-        { printerName: 'One', deviceName: 'ID1' },
-        { printerName: 'Two', deviceName: 'ID2' },
-        { printerName: 'Three', deviceName: 'ID3' },
-        { printerName: 'Four', deviceName: 'ID4' }
+        {printerName: 'One', deviceName: 'ID1'},
+        {printerName: 'Two', deviceName: 'ID2'},
+        {printerName: 'Three', deviceName: 'ID3'},
+        {printerName: 'Four', deviceName: 'ID4'}
       ];
 
       // Set up capabilities for ID1. This should be the device that should hav
@@ -522,10 +439,10 @@ cr.define('print_preview_test', function() {
       // Set all three of these destinations in the local destination infos
       // (represents currently available printers), plus an extra destination.
       localDestinationInfos = [
-        { printerName: 'One', deviceName: 'ID1' },
-        { printerName: 'Two', deviceName: 'ID2' },
-        { printerName: 'Three', deviceName: 'ID3' },
-        { printerName: 'Four', deviceName: 'ID4' }
+        {printerName: 'One', deviceName: 'ID1'},
+        {printerName: 'Two', deviceName: 'ID2'},
+        {printerName: 'Three', deviceName: 'ID3'},
+        {printerName: 'Four', deviceName: 'ID4'}
       ];
 
       initialSettings.printerName = 'ID3';
@@ -535,63 +452,70 @@ cr.define('print_preview_test', function() {
           print_preview_test_utils.getCddTemplate('ID1', 'One'));
       nativeLayer.setLocalDestinationCapabilities(
           print_preview_test_utils.getCddTemplate('ID2', 'Two'));
-      return setupSettingsAndDestinationsWithCapabilities(device).then(
-          function() {
-        nativeLayer.reset();
-        // Select ID2 then ID1 so that recent destinations will be 1, 2, 3
-        const destination2 =
-            printPreview.destinationStore_.destinations().find(
-                d => d.id == 'ID2');
-        printPreview.destinationStore_.selectDestination(destination2);
-        return waitForPrinterToUpdatePreview();
-      }).then(function() {
-        nativeLayer.reset();
-        const destination1 =
-            printPreview.destinationStore_.destinations().find(
-                d => d.id == 'ID1');
-        printPreview.destinationStore_.selectDestination(destination1);
-        return waitForPrinterToUpdatePreview();
-      }).then(function() {
-        // Update the persisted ticket items.
-        printPreview.printTicketStore_.mediaSize.updateValue(
-            {name: 'CUSTOM_SQUARE',
-             width_microns: 215900,
-             height_microns: 215900,
-             custom_display_name: 'CUSTOM_SQUARE'});
-        printPreview.printTicketStore_.scaling.updateValue('90');
-        printPreview.printTicketStore_.dpi.updateValue(
-            {horizontal_dpi: 100, vertical_dpi: 100});
-        printPreview.printTicketStore_.headerFooter.updateValue(true);
-        printPreview.printTicketStore_.cssBackground.updateValue(true);
-        printPreview.printTicketStore_.fitToPage.updateValue(true);
-        printPreview.printTicketStore_.collate.updateValue(true);
-        printPreview.printTicketStore_.duplex.updateValue(true);
-        printPreview.printTicketStore_.landscape.updateValue(true);
-        printPreview.printTicketStore_.color.updateValue(true);
-        printPreview.printTicketStore_.marginsType.updateValue(
-        print_preview.ticket_items.MarginsTypeValue.CUSTOM);
-        nativeLayer.resetResolver('saveAppState');
-        printPreview.printTicketStore_.customMargins.updateValue(
-            new print_preview.Margins(74, 74, 74, 74));
-        return nativeLayer.whenCalled('saveAppState');
-      }).then(function(state) {  // validate state serialized correctly.
-        expectEquals(getAppStateString(), state);
-      });
+      return setupSettingsAndDestinationsWithCapabilities(device)
+          .then(function() {
+            nativeLayer.reset();
+            // Select ID2 then ID1 so that recent destinations will be 1, 2, 3
+            const destination2 =
+                printPreview.destinationStore_.destinations().find(
+                    d => d.id == 'ID2');
+            printPreview.destinationStore_.selectDestination(destination2);
+            return waitForPrinterToUpdatePreview();
+          })
+          .then(function() {
+            nativeLayer.reset();
+            const destination1 =
+                printPreview.destinationStore_.destinations().find(
+                    d => d.id == 'ID1');
+            printPreview.destinationStore_.selectDestination(destination1);
+            return waitForPrinterToUpdatePreview();
+          })
+          .then(function() {
+            // Update the persisted ticket items.
+            printPreview.printTicketStore_.mediaSize.updateValue({
+              name: 'CUSTOM_SQUARE',
+              width_microns: 215900,
+              height_microns: 215900,
+              custom_display_name: 'CUSTOM_SQUARE'
+            });
+            printPreview.printTicketStore_.scaling.updateValue('90');
+            printPreview.printTicketStore_.dpi.updateValue(
+                {horizontal_dpi: 100, vertical_dpi: 100});
+            printPreview.printTicketStore_.headerFooter.updateValue(true);
+            printPreview.printTicketStore_.cssBackground.updateValue(true);
+            printPreview.printTicketStore_.fitToPage.updateValue(true);
+            printPreview.printTicketStore_.collate.updateValue(true);
+            printPreview.printTicketStore_.duplex.updateValue(true);
+            printPreview.printTicketStore_.landscape.updateValue(true);
+            printPreview.printTicketStore_.color.updateValue(true);
+            printPreview.printTicketStore_.marginsType.updateValue(
+                print_preview.ticket_items.MarginsTypeValue.CUSTOM);
+            nativeLayer.resetResolver('saveAppState');
+            printPreview.printTicketStore_.customMargins.updateValue(
+                new print_preview.Margins(74, 74, 74, 74));
+            return nativeLayer.whenCalled('saveAppState');
+          })
+          .then(function(state) {  // validate state serialized correctly.
+            expectEquals(getAppStateString(), state);
+          });
     });
 
     test('RestoreAppState', function() {
       initialSettings.serializedAppStateStr = getAppStateString();
       // Set up destinations from app state.
       localDestinationInfos = [
-        { printerName: 'One', deviceName: 'ID1' },
-        { printerName: 'Two', deviceName: 'ID2' },
-        { printerName: 'Three', deviceName: 'ID3' },
+        {printerName: 'One', deviceName: 'ID1'},
+        {printerName: 'Two', deviceName: 'ID2'},
+        {printerName: 'Three', deviceName: 'ID3'},
       ];
       const device = print_preview_test_utils.getCddTemplate('ID1', 'One');
 
-      return Promise.all([
-          setupSettingsAndDestinationsWithCapabilities(device),
-          nativeLayer.whenCalled('getPreview')]).then(function(args) {
+      return Promise
+          .all([
+            setupSettingsAndDestinationsWithCapabilities(device),
+            nativeLayer.whenCalled('getPreview')
+          ])
+          .then(function(args) {
             // Check printer 1 was selected.
             assertEquals(
                 'ID1', printPreview.destinationStore_.selectedDestination.id);
@@ -605,12 +529,14 @@ cr.define('print_preview_test', function() {
             expectTrue(ticket.shouldPrintBackgrounds);
             expectTrue(ticket.fitToPageEnabled);
             expectTrue(ticket.collate);
-            expectEquals(ticket.duplex,
-                         print_preview.PreviewGenerator.DuplexMode.LONG_EDGE);
+            expectEquals(
+                ticket.duplex,
+                print_preview.PreviewGenerator.DuplexMode.LONG_EDGE);
             expectTrue(ticket.landscape);
             expectEquals(ticket.color, print_preview.ColorMode.COLOR);
-            expectEquals(print_preview.ticket_items.MarginsTypeValue.CUSTOM,
-                         ticket.marginsType);
+            expectEquals(
+                print_preview.ticket_items.MarginsTypeValue.CUSTOM,
+                ticket.marginsType);
             expectEquals(74, ticket.marginsCustom.marginTop);
 
             // Change scaling (a persisted ticket item value)
@@ -633,7 +559,7 @@ cr.define('print_preview_test', function() {
               // Validate that the re-serialized app state string matches.
               expectEquals(getAppStateString(), state);
             });
-        });
+          });
     });
 
     test('DefaultDestinationSelectionRules', function() {
@@ -644,8 +570,9 @@ cr.define('print_preview_test', function() {
                  print_preview_test_utils.getCddTemplate(
                      'BarDevice', 'BarName'))
           .then(function() {
-            assertEquals('BarDevice',
-                         printPreview.destinationStore_.selectedDestination.id);
+            assertEquals(
+                'BarDevice',
+                printPreview.destinationStore_.selectedDestination.id);
           });
     });
 
@@ -655,13 +582,12 @@ cr.define('print_preview_test', function() {
       nativeLayer.setLocalDestinationCapabilities(
           print_preview_test_utils.getCddTemplate('FooDevice'));
       setInitialSettings();
-      return nativeLayer.whenCalled('getInitialSettings').then(
-          function() {
-            if (cr.isChromeOS)
-              assertEquals(null, $('system-dialog-link'));
-            else
-              checkElementDisplayed($('system-dialog-link'), false);
-          });
+      return nativeLayer.whenCalled('getInitialSettings').then(function() {
+        if (cr.isChromeOS)
+          assertEquals(null, $('system-dialog-link'));
+        else
+          checkElementDisplayed($('system-dialog-link'), false);
+      });
     });
 
     test('SectionsDisabled', function() {
@@ -674,14 +600,14 @@ cr.define('print_preview_test', function() {
       };
       delete device.capabilities.printer.copies;
 
-      return setupSettingsAndDestinationsWithCapabilities(device)
-        .then(function() {
-          checkSectionVisible($('layout-settings'), true);
-          checkSectionVisible($('color-settings'), false);
-          checkSectionVisible($('copies-settings'), false);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('layout-settings'), true);
+            checkSectionVisible($('color-settings'), false);
+            checkSectionVisible($('copies-settings'), false);
 
-          return whenAnimationDone('other-options-collapsible');
-        });
+            return whenAnimationDone('other-options-collapsible');
+          });
     });
 
     // When the source is 'PDF' and 'Save as PDF' option is selected, we hide
@@ -695,23 +621,25 @@ cr.define('print_preview_test', function() {
       nativeLayer.setLocalDestinationCapabilities(getPdfPrinter());
 
       setInitialSettings();
-      return nativeLayer.whenCalled('getInitialSettings').then(function() {
-        return nativeLayer.whenCalled('getPrinterCapabilities');
-      }).then(function() {
-        const otherOptions = $('other-options-settings');
-        const scalingSettings = $('scaling-settings');
-        // If rasterization is an option, other options should be visible.
-        // If not, there should be no available other options.
-        checkSectionVisible(otherOptions, isPrintAsImageEnabled());
-        if (isPrintAsImageEnabled()) {
-          checkElementDisplayed(
-              otherOptions.querySelector('#rasterize-container'), true);
-        }
-        checkSectionVisible($('media-size-settings'), false);
-        checkSectionVisible(scalingSettings, false);
-        checkElementDisplayed(
-            scalingSettings.querySelector('#fit-to-page-container'), false);
-      });
+      return nativeLayer.whenCalled('getInitialSettings')
+          .then(function() {
+            return nativeLayer.whenCalled('getPrinterCapabilities');
+          })
+          .then(function() {
+            const otherOptions = $('other-options-settings');
+            const scalingSettings = $('scaling-settings');
+            // If rasterization is an option, other options should be visible.
+            // If not, there should be no available other options.
+            checkSectionVisible(otherOptions, isPrintAsImageEnabled());
+            if (isPrintAsImageEnabled()) {
+              checkElementDisplayed(
+                  otherOptions.querySelector('#rasterize-container'), true);
+            }
+            checkSectionVisible($('media-size-settings'), false);
+            checkSectionVisible(scalingSettings, false);
+            checkElementDisplayed(
+                scalingSettings.querySelector('#fit-to-page-container'), false);
+          });
     });
 
     // When the source is 'HTML', we always hide the fit to page option and show
@@ -760,20 +688,18 @@ cr.define('print_preview_test', function() {
         let rasterizeContainer;
         if (isPrintAsImageEnabled()) {
           rasterizeContainer =
-            otherOptions.querySelector('#rasterize-container');
+              otherOptions.querySelector('#rasterize-container');
         }
 
         checkSectionVisible(otherOptions, true);
         checkElementDisplayed(fitToPageContainer, true);
         if (isPrintAsImageEnabled())
           checkElementDisplayed(rasterizeContainer, false);
-        expectTrue(
-            fitToPageContainer.querySelector('.checkbox').checked);
+        expectTrue(fitToPageContainer.querySelector('.checkbox').checked);
         expandMoreSettings();
         if (isPrintAsImageEnabled()) {
           checkElementDisplayed(rasterizeContainer, true);
-          expectFalse(
-              rasterizeContainer.querySelector('.checkbox').checked);
+          expectFalse(rasterizeContainer.querySelector('.checkbox').checked);
         }
         checkSectionVisible($('media-size-settings'), true);
         checkSectionVisible(scalingSettings, true);
@@ -787,45 +713,49 @@ cr.define('print_preview_test', function() {
     test('ScalingUnchecksFitToPage', function() {
       initialSettings.previewModifiable = false;
       // Wait for preview to load.
-      return Promise.all([setupSettingsAndDestinationsWithCapabilities(),
-                          nativeLayer.whenCalled('getPreview')]).then(
-        function(args) {
-          const scalingSettings = $('scaling-settings');
-          checkSectionVisible(scalingSettings, true);
-          const fitToPageContainer =
-              scalingSettings.querySelector('#fit-to-page-container');
-          checkElementDisplayed(fitToPageContainer, true);
-          const ticket = JSON.parse(args[1].printTicket);
-          expectTrue(ticket.fitToPageEnabled);
-          expectEquals(100, ticket.scaleFactor);
-          expectTrue(fitToPageContainer.querySelector('.checkbox').checked);
-          expandMoreSettings();
-          checkSectionVisible($('media-size-settings'), true);
-          checkSectionVisible(scalingSettings, true);
-          nativeLayer.resetResolver('getPreview');
+      return Promise
+          .all([
+            setupSettingsAndDestinationsWithCapabilities(),
+            nativeLayer.whenCalled('getPreview')
+          ])
+          .then(function(args) {
+            const scalingSettings = $('scaling-settings');
+            checkSectionVisible(scalingSettings, true);
+            const fitToPageContainer =
+                scalingSettings.querySelector('#fit-to-page-container');
+            checkElementDisplayed(fitToPageContainer, true);
+            const ticket = JSON.parse(args[1].printTicket);
+            expectTrue(ticket.fitToPageEnabled);
+            expectEquals(100, ticket.scaleFactor);
+            expectTrue(fitToPageContainer.querySelector('.checkbox').checked);
+            expandMoreSettings();
+            checkSectionVisible($('media-size-settings'), true);
+            checkSectionVisible(scalingSettings, true);
+            nativeLayer.resetResolver('getPreview');
 
-          // Change scaling input
-          const scalingInput = scalingSettings.querySelector('.user-value');
-          expectEquals('100', scalingInput.value);
-          scalingInput.stepUp(5);
-          expectEquals('105', scalingInput.value);
+            // Change scaling input
+            const scalingInput = scalingSettings.querySelector('.user-value');
+            expectEquals('100', scalingInput.value);
+            scalingInput.stepUp(5);
+            expectEquals('105', scalingInput.value);
 
-          // Trigger the event
-          const enterEvent = document.createEvent('Event');
-          enterEvent.initEvent('keydown');
-          enterEvent.keyCode = 'Enter';
-          scalingInput.dispatchEvent(enterEvent);
+            // Trigger the event
+            const enterEvent = document.createEvent('Event');
+            enterEvent.initEvent('keydown');
+            enterEvent.keyCode = 'Enter';
+            scalingInput.dispatchEvent(enterEvent);
 
-          // Wait for the preview to refresh and verify print ticket and
-          // display. There will be 2 preview requests. Since we only catch
-          // the first one, only verify fit to page in print ticket.
-          return nativeLayer.whenCalled('getPreview').then(function(args) {
-            const updatedTicket = JSON.parse(args.printTicket);
-            expectFalse(updatedTicket.fitToPageEnabled);
-            expectFalse(fitToPageContainer.querySelector('.checkbox').checked);
-            return whenAnimationDone('more-settings');
+            // Wait for the preview to refresh and verify print ticket and
+            // display. There will be 2 preview requests. Since we only catch
+            // the first one, only verify fit to page in print ticket.
+            return nativeLayer.whenCalled('getPreview').then(function(args) {
+              const updatedTicket = JSON.parse(args.printTicket);
+              expectFalse(updatedTicket.fitToPageEnabled);
+              expectFalse(
+                  fitToPageContainer.querySelector('.checkbox').checked);
+              return whenAnimationDone('more-settings');
+            });
           });
-        });
     });
 
     // When the number of copies print preset is set for source 'PDF', we update
@@ -856,8 +786,7 @@ cr.define('print_preview_test', function() {
         cr.webUIListenerCallback('print-preset-options', false, 1, 1);
         const otherOptions = $('other-options-settings');
         checkSectionVisible(otherOptions, true);
-        const duplexContainer =
-            otherOptions.querySelector('#duplex-container');
+        const duplexContainer = otherOptions.querySelector('#duplex-container');
         checkElementDisplayed(duplexContainer, true);
         expectTrue(duplexContainer.querySelector('.checkbox').checked);
 
@@ -994,42 +923,50 @@ cr.define('print_preview_test', function() {
       const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.media_size = {
         'option': [
-          {'name': 'SmallLabel', 'width_microns': 38100,
-            'height_microns': 12700, 'is_default': false},
-          {'name': 'BigLabel', 'width_microns': 50800,
-            'height_microns': 76200, 'is_default': true}
+          {
+            'name': 'SmallLabel',
+            'width_microns': 38100,
+            'height_microns': 12700,
+            'is_default': false
+          },
+          {
+            'name': 'BigLabel',
+            'width_microns': 50800,
+            'height_microns': 76200,
+            'is_default': true
+          }
         ]
       };
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        const otherOptions = $('other-options-settings');
-        const headerFooter =
-            otherOptions.querySelector('#header-footer-container');
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            const otherOptions = $('other-options-settings');
+            const headerFooter =
+                otherOptions.querySelector('#header-footer-container');
 
-        // Check that options are collapsed (section is visible, because
-        // duplex is available).
-        checkSectionVisible(otherOptions, true);
-        checkElementDisplayed(headerFooter, false);
+            // Check that options are collapsed (section is visible, because
+            // duplex is available).
+            checkSectionVisible(otherOptions, true);
+            checkElementDisplayed(headerFooter, false);
 
-        expandMoreSettings();
+            expandMoreSettings();
 
-        // Big label should have header/footer
-        checkElementDisplayed(headerFooter, true);
+            // Big label should have header/footer
+            checkElementDisplayed(headerFooter, true);
 
-        // Small label should not
-        nativeLayer.resetResolver('getPreview');
-        printPreview.printTicketStore_.mediaSize.updateValue(
-            device.capabilities.printer.media_size.option[0]);
-        return nativeLayer.whenCalled('getPreview').then(function() {
-          checkElementDisplayed(headerFooter, false);
+            // Small label should not
+            nativeLayer.resetResolver('getPreview');
+            printPreview.printTicketStore_.mediaSize.updateValue(
+                device.capabilities.printer.media_size.option[0]);
+            return nativeLayer.whenCalled('getPreview').then(function() {
+              checkElementDisplayed(headerFooter, false);
 
-          // Oriented in landscape, there should be enough space for
-          // header/footer.
-          nativeLayer.resetResolver('getPreview');
-          printPreview.printTicketStore_.landscape.updateValue(true);
-          return checkHeaderFooterOnLoad(headerFooter, true);
-        });
-      });
+              // Oriented in landscape, there should be enough space for
+              // header/footer.
+              nativeLayer.resetResolver('getPreview');
+              printPreview.printTicketStore_.landscape.updateValue(true);
+              return checkHeaderFooterOnLoad(headerFooter, true);
+            });
+          });
     });
 
     // Test that the color settings, one option, standard monochrome.
@@ -1037,17 +974,15 @@ cr.define('print_preview_test', function() {
       // Only one option, standard monochrome.
       const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
-        'option': [
-          {'is_default': true, 'type': 'STANDARD_MONOCHROME'}
-        ]
+        'option': [{'is_default': true, 'type': 'STANDARD_MONOCHROME'}]
       };
 
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        checkSectionVisible($('color-settings'), false);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('color-settings'), false);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that the color settings, one option, custom monochrome.
@@ -1055,51 +990,49 @@ cr.define('print_preview_test', function() {
       // Only one option, standard monochrome.
       const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
-        'option': [
-          {'is_default': true, 'type': 'CUSTOM_MONOCHROME',
-           'vendor_id': '42'}
-        ]
+        'option': [{
+          'is_default': true,
+          'type': 'CUSTOM_MONOCHROME',
+          'vendor_id': '42'
+        }]
       };
 
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        checkSectionVisible($('color-settings'), false);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('color-settings'), false);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that the color settings, one option, standard color.
     test('ColorSettingsColor', function() {
       const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
-        'option': [
-          {'is_default': true, 'type': 'STANDARD_COLOR'}
-        ]
+        'option': [{'is_default': true, 'type': 'STANDARD_COLOR'}]
       };
 
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        checkSectionVisible($('color-settings'), false);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('color-settings'), false);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that the color settings, one option, custom color.
     test('ColorSettingsCustomColor', function() {
       const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
-        'option': [
-          {'is_default': true, 'type': 'CUSTOM_COLOR', 'vendor_id': '42'}
-        ]
+        'option':
+            [{'is_default': true, 'type': 'CUSTOM_COLOR', 'vendor_id': '42'}]
       };
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        checkSectionVisible($('color-settings'), false);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('color-settings'), false);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that the color settings, two options, both standard, defaults to
@@ -1112,16 +1045,17 @@ cr.define('print_preview_test', function() {
           {'is_default': true, 'type': 'STANDARD_COLOR'}
         ]
       };
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        checkSectionVisible($('color-settings'), true);
-        expectEquals(
-            'color',
-            $('color-settings').querySelector(
-                '.color-settings-select').value);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('color-settings'), true);
+            expectEquals(
+                'color',
+                $('color-settings')
+                    .querySelector('.color-settings-select')
+                    .value);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that the color settings, two options, both standard, defaults to
@@ -1134,16 +1068,17 @@ cr.define('print_preview_test', function() {
           {'type': 'STANDARD_COLOR'}
         ]
       };
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        checkSectionVisible($('color-settings'), true);
-        expectEquals(
-            'bw',
-            $('color-settings').querySelector(
-                '.color-settings-select').value);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('color-settings'), true);
+            expectEquals(
+                'bw',
+                $('color-settings')
+                    .querySelector('.color-settings-select')
+                    .value);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that the color settings, two options, both custom, defaults to
@@ -1156,16 +1091,17 @@ cr.define('print_preview_test', function() {
           {'is_default': true, 'type': 'CUSTOM_COLOR', 'vendor_id': '43'}
         ]
       };
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        checkSectionVisible($('color-settings'), true);
-        expectEquals(
-            'color',
-            $('color-settings').querySelector(
-                '.color-settings-select').value);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            checkSectionVisible($('color-settings'), true);
+            expectEquals(
+                'color',
+                $('color-settings')
+                    .querySelector('.color-settings-select')
+                    .value);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test to verify that duplex settings are set according to the printer
@@ -1187,52 +1123,53 @@ cr.define('print_preview_test', function() {
     test('DuplexSettingsFalse', function() {
       const device = print_preview_test_utils.getCddTemplate('FooDevice');
       delete device.capabilities.printer.duplex;
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        // Check that it is collapsed.
-        const otherOptions = $('other-options-settings');
-        checkSectionVisible(otherOptions, false);
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            // Check that it is collapsed.
+            const otherOptions = $('other-options-settings');
+            checkSectionVisible(otherOptions, false);
 
-        expandMoreSettings();
+            expandMoreSettings();
 
-        // Now it should be visible.
-        checkSectionVisible(otherOptions, true);
-        expectTrue(otherOptions.querySelector('#duplex-container').hidden);
+            // Now it should be visible.
+            checkSectionVisible(otherOptions, true);
+            expectTrue(otherOptions.querySelector('#duplex-container').hidden);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that changing the selected printer updates the preview.
     test('PrinterChangeUpdatesPreview', function() {
-      return Promise.all([
-          setupSettingsAndDestinationsWithCapabilities(),
-          nativeLayer.whenCalled('getPreview'),
-      ]).then(function(args) {
-        const ticket = JSON.parse(args[1].printTicket);
-        expectEquals(0, ticket.requestID);
-        expectEquals('FooDevice', ticket.deviceName);
-        nativeLayer.reset();
+      return Promise
+          .all([
+            setupSettingsAndDestinationsWithCapabilities(),
+            nativeLayer.whenCalled('getPreview'),
+          ])
+          .then(function(args) {
+            const ticket = JSON.parse(args[1].printTicket);
+            expectEquals(0, ticket.requestID);
+            expectEquals('FooDevice', ticket.deviceName);
+            nativeLayer.reset();
 
-        // Setup capabilities for BarDevice.
-        const device = print_preview_test_utils.getCddTemplate('BarDevice');
-        device.capabilities.printer.color = {
-          'option': [
-            {'is_default': true, 'type': 'STANDARD_MONOCHROME'}
-          ]
-        };
-        nativeLayer.setLocalDestinationCapabilities(device);
-        // Select BarDevice
-        const barDestination =
-            printPreview.destinationStore_.destinations().find(
-                d => d.id == 'BarDevice');
-        printPreview.destinationStore_.selectDestination(barDestination);
-        return waitForPrinterToUpdatePreview();
-      }).then(function(args) {
-        const ticket = JSON.parse(args[1].printTicket);
-        expectEquals(1, ticket.requestID);
-        expectEquals('BarDevice', ticket.deviceName);
-      });
+            // Setup capabilities for BarDevice.
+            const device = print_preview_test_utils.getCddTemplate('BarDevice');
+            device.capabilities.printer.color = {
+              'option': [{'is_default': true, 'type': 'STANDARD_MONOCHROME'}]
+            };
+            nativeLayer.setLocalDestinationCapabilities(device);
+            // Select BarDevice
+            const barDestination =
+                printPreview.destinationStore_.destinations().find(
+                    d => d.id == 'BarDevice');
+            printPreview.destinationStore_.selectDestination(barDestination);
+            return waitForPrinterToUpdatePreview();
+          })
+          .then(function(args) {
+            const ticket = JSON.parse(args[1].printTicket);
+            expectEquals(1, ticket.requestID);
+            expectEquals('BarDevice', ticket.deviceName);
+          });
     });
 
     // Test that error message is displayed when plugin doesn't exist.
@@ -1246,23 +1183,20 @@ cr.define('print_preview_test', function() {
       return nativeLayer.whenCalled('getInitialSettings').then(function() {
         const previewAreaEl = $('preview-area');
 
-        const loadingMessageEl =
-            previewAreaEl.
-            getElementsByClassName('preview-area-loading-message')[0];
+        const loadingMessageEl = previewAreaEl.getElementsByClassName(
+            'preview-area-loading-message')[0];
         expectTrue(loadingMessageEl.hidden);
 
         const previewFailedMessageEl = previewAreaEl.getElementsByClassName(
             'preview-area-preview-failed-message')[0];
         expectTrue(previewFailedMessageEl.hidden);
 
-        const printFailedMessageEl =
-            previewAreaEl.
-            getElementsByClassName('preview-area-print-failed')[0];
+        const printFailedMessageEl = previewAreaEl.getElementsByClassName(
+            'preview-area-print-failed')[0];
         expectTrue(printFailedMessageEl.hidden);
 
-        const customMessageEl =
-            previewAreaEl.
-            getElementsByClassName('preview-area-custom-message')[0];
+        const customMessageEl = previewAreaEl.getElementsByClassName(
+            'preview-area-custom-message')[0];
         expectFalse(customMessageEl.hidden);
       });
     });
@@ -1275,17 +1209,17 @@ cr.define('print_preview_test', function() {
       const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.media_size = {
         option: [
-          { name: 'CUSTOM',
+          {
+            name: 'CUSTOM',
             width_microns: 15900,
             height_microns: 79400,
             is_default: true,
             custom_display_name_localized: [
-              { locale: navigator.language,
-                value: customLocalizedMediaName
-              }
+              {locale: navigator.language, value: customLocalizedMediaName}
             ]
           },
-          { name: 'CUSTOM',
+          {
+            name: 'CUSTOM',
             width_microns: 15900,
             height_microns: 79400,
             custom_display_name: customMediaName
@@ -1293,67 +1227,59 @@ cr.define('print_preview_test', function() {
         ]
       };
 
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        expandMoreSettings();
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            expandMoreSettings();
 
-        checkSectionVisible($('media-size-settings'), true);
-        const mediaSelect =
-            $('media-size-settings').querySelector('.settings-select');
-        // Check the default media item.
-        expectEquals(
-            customLocalizedMediaName,
-            mediaSelect.options[mediaSelect.selectedIndex].text);
-        // Check the other media item.
-        expectEquals(
-            customMediaName,
-            mediaSelect.options[mediaSelect.selectedIndex == 0 ? 1 : 0].text);
+            checkSectionVisible($('media-size-settings'), true);
+            const mediaSelect =
+                $('media-size-settings').querySelector('.settings-select');
+            // Check the default media item.
+            expectEquals(
+                customLocalizedMediaName,
+                mediaSelect.options[mediaSelect.selectedIndex].text);
+            // Check the other media item.
+            expectEquals(
+                customMediaName,
+                mediaSelect.options[mediaSelect.selectedIndex == 0 ? 1 : 0]
+                    .text);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test advanced settings with 1 capability (should not display settings
     // search box).
     test('AdvancedSettings1Option', function() {
-      const device = getCddTemplateWithAdvancedSettings('FooDevice');
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        startAdvancedSettingsTest(device);
-        checkElementDisplayed($('advanced-settings').
-            querySelector('.search-box-area'), false);
+      const device =
+          print_preview_test_utils.getCddTemplateWithAdvancedSettings(
+              1, 'FooDevice');
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            startAdvancedSettingsTest(device);
+            checkElementDisplayed(
+                $('advanced-settings').querySelector('.search-box-area'),
+                false);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
-
 
     // Test advanced settings with 2 capabilities (should have settings search
     // box).
     test('AdvancedSettings2Options', function() {
-      const device = getCddTemplateWithAdvancedSettings('FooDevice');
-       // Add new capability.
-      device.capabilities.printer.vendor_capability.push({
-          display_name: 'Paper Type',
-          id: 'Paper Type',
-          type: 'SELECT',
-          select_cap: {
-              option: [
-                  {display_name: 'Standard', value: 0, is_default: true},
-                  {display_name: 'Recycled', value: 1},
-                  {display_name: 'Special', value: 2}
-              ]
-          }
-      });
-      return setupSettingsAndDestinationsWithCapabilities(device)
-          .then(function() {
-        startAdvancedSettingsTest(device);
+      const device =
+          print_preview_test_utils.getCddTemplateWithAdvancedSettings(
+              2, 'FooDevice');
+      return setupSettingsAndDestinationsWithCapabilities(device).then(
+          function() {
+            startAdvancedSettingsTest(device);
 
-        checkElementDisplayed($('advanced-settings').
-          querySelector('.search-box-area'), true);
+            checkElementDisplayed(
+                $('advanced-settings').querySelector('.search-box-area'), true);
 
-        return whenAnimationDone('more-settings');
-      });
+            return whenAnimationDone('more-settings');
+          });
     });
 
     // Test that initialization with saved destination only issues one call
@@ -1391,16 +1317,20 @@ cr.define('print_preview_test', function() {
       // request. Ensure this is also ID1.
       setInitialSettings();
       const initialSettingsSet = nativeLayer.whenCalled('getInitialSettings');
-      return initialSettingsSet.then(function() {
-        return nativeLayer.whenCalled('getPrinterCapabilities');
-      }).then(function(id) {
-        expectEquals('ID1', id);
-        return nativeLayer.whenCalled('getPreview');
-      }).then(function(previewArgs) {
-        const ticket = JSON.parse(previewArgs.printTicket);
-        expectEquals(0, ticket.requestID);
-        expectEquals('ID1', ticket.deviceName);
-      });
+      return initialSettingsSet
+          .then(function() {
+            return nativeLayer.whenCalled('getPrinterCapabilities');
+          })
+          .then(function(args) {
+            expectEquals('ID1', args.destinationId);
+            expectEquals(print_preview.PrinterType.LOCAL, args.type);
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function(previewArgs) {
+            const ticket = JSON.parse(previewArgs.printTicket);
+            expectEquals(0, ticket.requestID);
+            expectEquals('ID1', ticket.deviceName);
+          });
     });
 
     // Test that invalid settings errors disable the print preview and display
@@ -1413,98 +1343,283 @@ cr.define('print_preview_test', function() {
       // FooDevice is the default printer, so will be selected for the initial
       // preview request.
       nativeLayer.setInvalidPrinterId('FooDevice');
-      return Promise.all([
-          setupSettingsAndDestinationsWithCapabilities(),
-          nativeLayer.whenCalled('getPreview'),
-      ]).then(function() {
-        // Print preview should have failed with invalid settings, since
-        // FooDevice was set as an invalid printer.
-        const previewAreaEl = $('preview-area');
-        const customMessageEl =
-            previewAreaEl.
-            getElementsByClassName('preview-area-custom-message')[0];
-        expectFalse(customMessageEl.hidden);
-        const expectedMessageStart = 'The selected printer is not available or '
-            + 'not installed correctly.';
-        expectTrue(customMessageEl.textContent.includes(
-            expectedMessageStart));
+      return Promise
+          .all([
+            setupSettingsAndDestinationsWithCapabilities(),
+            nativeLayer.whenCalled('getPreview'),
+          ])
+          .then(function() {
+            // Print preview should have failed with invalid settings, since
+            // FooDevice was set as an invalid printer.
+            const previewAreaEl = $('preview-area');
+            const customMessageEl = previewAreaEl.getElementsByClassName(
+                'preview-area-custom-message')[0];
+            expectFalse(customMessageEl.hidden);
+            const expectedMessageStart =
+                'The selected printer is not available or ' +
+                'not installed correctly.';
+            expectTrue(
+                customMessageEl.textContent.includes(expectedMessageStart));
 
-        // Verify that the print button is disabled
-        const printButton = $('print-header').querySelector('button.print');
-        checkElementDisplayed(printButton, true);
-        expectTrue(printButton.disabled);
+            // Verify that the print button is disabled
+            const printButton = $('print-header').querySelector('button.print');
+            checkElementDisplayed(printButton, true);
+            expectTrue(printButton.disabled);
 
-        // Reset
-        nativeLayer.reset();
+            // Reset
+            nativeLayer.reset();
 
-        // Select a new destination
-        const barDestination =
-            printPreview.destinationStore_.destinations().find(
-                d => d.id == 'BarDevice');
-        printPreview.destinationStore_.selectDestination(barDestination);
-        return waitForPrinterToUpdatePreview();
-      }).then(function() {
-        // Has active print button and successfully 'prints', indicating
-        // recovery from error state.
-        const printButton = $('print-header').querySelector('button.print');
-        expectFalse(printButton.disabled);
-        printButton.click();
-        // This should result in a call to print.
-        return nativeLayer.whenCalled('print');
-      }).then(
-          /**
-           * @param {string} printTicket The print ticket print() was called
-           *     for.
-           */
-          function(printTicket) {
-            // Sanity check some printing argument values.
-            const ticket = JSON.parse(printTicket);
-            expectEquals(barDevice.printer.deviceName, ticket.deviceName);
-            expectEquals(
-                getDefaultOrientation(barDevice) == 'LANDSCAPE',
-                ticket.landscape);
-            expectEquals(1, ticket.copies);
-            const mediaDefault = getDefaultMediaSize(barDevice);
-            expectEquals(
-                mediaDefault.width_microns, ticket.mediaSize.width_microns);
-            expectEquals(
-                mediaDefault.height_microns, ticket.mediaSize.height_microns);
-            return nativeLayer.whenCalled('dialogClose');
+            // Select a new destination
+            const barDestination =
+                printPreview.destinationStore_.destinations().find(
+                    d => d.id == 'BarDevice');
+            printPreview.destinationStore_.selectDestination(barDestination);
+            return waitForPrinterToUpdatePreview();
+          })
+          .then(function() {
+            // Has active print button and successfully 'prints', indicating
+            // recovery from error state.
+            const printButton = $('print-header').querySelector('button.print');
+            expectFalse(printButton.disabled);
+            printButton.click();
+            // This should result in a call to print.
+            return nativeLayer.whenCalled('print');
+          })
+          .then(
+              /**
+               * @param {string} printTicket The print ticket print() was called
+               *     for.
+               */
+              function(printTicket) {
+                // Sanity check some printing argument values.
+                const ticket = JSON.parse(printTicket);
+                expectEquals(barDevice.printer.deviceName, ticket.deviceName);
+                expectEquals(
+                    print_preview_test_utils.getDefaultOrientation(barDevice) ==
+                        'LANDSCAPE',
+                    ticket.landscape);
+                expectEquals(1, ticket.copies);
+                const mediaDefault =
+                    print_preview_test_utils.getDefaultMediaSize(barDevice);
+                expectEquals(
+                    mediaDefault.width_microns, ticket.mediaSize.width_microns);
+                expectEquals(
+                    mediaDefault.height_microns,
+                    ticket.mediaSize.height_microns);
+                return nativeLayer.whenCalled('dialogClose');
+              });
+    });
+
+    // Test that GCP invalid certificate printers disable the print preview when
+    // selected and display an error and that the preview dialog can be
+    // recovered by selecting a new destination. Verifies this works when the
+    // invalid printer is the most recent destination and is selected by
+    // default.
+    test('InvalidCertificateError', function() {
+      const invalidPrinter =
+          print_preview_test_utils.createDestinationWithCertificateStatus(
+              'FooDevice', 'FooName', true);
+      const validPrinter =
+          print_preview_test_utils.createDestinationWithCertificateStatus(
+              'BarDevice', 'BarName', false);
+      setupInvalidCertificateTest([invalidPrinter, validPrinter]);
+
+      // Get references to a few elements for testing.
+      const printButton = $('print-header').querySelector('button.print');
+      const previewAreaEl = $('preview-area');
+      const overlayEl =
+          previewAreaEl.getElementsByClassName('preview-area-overlay-layer')[0];
+      const cloudPrintMessageEl = previewAreaEl.getElementsByClassName(
+          'preview-area-unsupported-cloud-printer')[0];
+
+      return nativeLayer.whenCalled('getInitialSettings')
+          .then(function() {
+            printPreview.destinationStore_.startLoadCloudDestinations();
+
+            // FooDevice will be selected since it is the most recently used
+            // printer, so the invalid certificate error should be shown.
+            // The overlay must be visible for the message to be seen.
+            expectFalse(overlayEl.classList.contains('invisible'));
+
+            // Verify that the correct message is shown.
+            expectFalse(cloudPrintMessageEl.hidden);
+            const expectedMessageStart =
+                'The selected Google Cloud Print device ' +
+                'is no longer supported. Try setting up the printer in your ' +
+                'computer\'s system settings.';
+            expectTrue(
+                cloudPrintMessageEl.textContent.includes(expectedMessageStart));
+
+            // Verify that the print button is disabled
+            checkElementDisplayed(printButton, true);
+            expectTrue(printButton.disabled);
+
+            // Reset
+            nativeLayer.reset();
+
+            // Select a new, valid cloud destination.
+            printPreview.destinationStore_.selectDestination(validPrinter);
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function() {
+            // Has active print button, indicating recovery from error state.
+            expectFalse(printButton.disabled);
+
+            // Note: because in the test it is generally true that the preview
+            // request is resolved before the 200ms timeout to show the loading
+            // message expires, the message element may not be hidden. It will
+            // be hidden the next time a different message, e.g. 'Loading...',
+            // is shown in the overlay. However, if this is the case, the
+            // overlay should not be visible, so that the message is no longer
+            // visible to the user.
+            expectTrue(
+                cloudPrintMessageEl.hidden ||
+                overlayEl.classList.contains('invisible'));
           });
     });
 
-    // Test the preview generator to make sure the generate draft parameter is
-    // set correctly. It should be false if the only change is the page range.
-    test('GenerateDraft', function() {
-      return Promise.all([
-          setupSettingsAndDestinationsWithCapabilities(),
-          nativeLayer.whenCalled('getPreview'),
-      ]).then(function(args) {
-        // The first request should generate draft because there was no
-        // previous print preview draft.
-        const ticket = JSON.parse(args[1].printTicket);
-        expectTrue(ticket.generateDraft);
-        expectEquals(0, ticket.requestID);
-        nativeLayer.resetResolver('getPreview');
+    // Test that GCP invalid certificate printers disable the print preview when
+    // selected and display an error and that the preview dialog can be
+    // recovered by selecting a new destination. Tests that even if destination
+    // was previously selected, the error is cleared.
+    test('InvalidCertificateErrorReselectDestination', function() {
+      const invalidPrinter =
+          print_preview_test_utils.createDestinationWithCertificateStatus(
+              'FooDevice', 'FooName', true);
+      const validPrinter =
+          print_preview_test_utils.createDestinationWithCertificateStatus(
+              'BarDevice', 'BarName', false);
+      setupInvalidCertificateTest([validPrinter, invalidPrinter]);
 
-        // Change the page range - no new draft needed.
-        printPreview.printTicketStore_.pageRange.updateValue('2');
-        return nativeLayer.whenCalled('getPreview');
-      }).then(function(args) {
-        const ticket = JSON.parse(args.printTicket);
-        expectFalse(ticket.generateDraft);
-        expectEquals(1, ticket.requestID);
-        nativeLayer.resetResolver('getPreview');
+      // Get references to a few elements for testing.
+      const printButton = $('print-header').querySelector('button.print');
+      const previewAreaEl = $('preview-area');
+      const overlayEl =
+          previewAreaEl.getElementsByClassName('preview-area-overlay-layer')[0];
+      const cloudPrintMessageEl = previewAreaEl.getElementsByClassName(
+          'preview-area-unsupported-cloud-printer')[0];
 
-        // Change the margin type - need to regenerate again.
-        printPreview.printTicketStore_.marginsType.updateValue(
-            print_preview.ticket_items.MarginsTypeValue.NO_MARGINS);
-        return nativeLayer.whenCalled('getPreview');
-      }).then(function(args) {
-        const ticket = JSON.parse(args.printTicket);
-        expectTrue(ticket.generateDraft);
-        expectEquals(2, ticket.requestID);
-      });
+      return nativeLayer.whenCalled('getInitialSettings')
+          .then(function() {
+            // Start loading cloud destinations so that the printer capabilities
+            // arrive.
+            printPreview.destinationStore_.startLoadCloudDestinations();
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function() {
+            // Has active print button.
+            expectFalse(printButton.disabled);
+            // No error message.
+            expectTrue(
+                cloudPrintMessageEl.hidden ||
+                overlayEl.classList.contains('invisible'));
+
+            // Select the invalid destination and wait for the event.
+            const whenInvalid = test_util.eventToPromise(
+                print_preview.DestinationStore.EventType
+                    .SELECTED_DESTINATION_UNSUPPORTED,
+                printPreview.destinationStore_);
+            printPreview.destinationStore_.selectDestination(invalidPrinter);
+            return whenInvalid;
+          })
+          .then(function() {
+            // Should have error message.
+            expectFalse(overlayEl.classList.contains('invisible'));
+            expectFalse(cloudPrintMessageEl.hidden);
+
+            // Reset
+            nativeLayer.reset();
+
+            // Reselect the valid cloud destination.
+            const whenSelected = test_util.eventToPromise(
+                print_preview.DestinationStore.EventType.DESTINATION_SELECT,
+                printPreview.destinationStore_);
+            printPreview.destinationStore_.selectDestination(validPrinter);
+            return whenSelected;
+          })
+          .then(function() {
+            // Has active print button.
+            expectFalse(printButton.disabled);
+            // No error message.
+            expectTrue(
+                cloudPrintMessageEl.hidden ||
+                overlayEl.classList.contains('invisible'));
+          });
+    });
+
+    // Test that GCP invalid certificate printers disable the print preview when
+    // selected and display an error. Verifies that the error prevents the
+    // preview from regenerating when settings are toggled.
+    test('InvalidCertificateErrorNoPreview', function() {
+      const invalidPrinter =
+          print_preview_test_utils.createDestinationWithCertificateStatus(
+              'FooDevice', 'FooName', true);
+      const validPrinter =
+          print_preview_test_utils.createDestinationWithCertificateStatus(
+              'BarDevice', 'BarName', false);
+
+      // Set the valid printer first. If the invalid printer is the first
+      // printer loaded the bug does not occur since the print ticket store is
+      // never initialized.
+      setupInvalidCertificateTest([validPrinter, invalidPrinter]);
+
+      // Get references to a few elements for testing.
+      const printButton = $('print-header').querySelector('button.print');
+      const previewAreaEl = $('preview-area');
+      const overlayEl =
+          previewAreaEl.getElementsByClassName('preview-area-overlay-layer')[0];
+      const cloudPrintMessageEl = previewAreaEl.getElementsByClassName(
+          'preview-area-unsupported-cloud-printer')[0];
+
+      return nativeLayer.whenCalled('getInitialSettings')
+          .then(function() {
+            printPreview.destinationStore_.startLoadCloudDestinations();
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function() {
+            // Select the invalid destination and wait for the event.
+            const whenInvalid = test_util.eventToPromise(
+                print_preview.DestinationStore.EventType
+                    .SELECTED_DESTINATION_UNSUPPORTED,
+                printPreview.destinationStore_);
+            printPreview.destinationStore_.selectDestination(invalidPrinter);
+            return whenInvalid;
+          })
+          .then(function() {
+            // FooDevice will be selected since it is the most recently used
+            // printer, so the invalid certificate error should be shown.
+            // The overlay must be visible for the message to be seen.
+            expectFalse(overlayEl.classList.contains('invisible'));
+            expectFalse(cloudPrintMessageEl.hidden);
+
+            // Verify that the print button is disabled
+            checkElementDisplayed(printButton, true);
+            expectTrue(printButton.disabled);
+
+            // Reset
+            nativeLayer.resetResolver('getPreview');
+
+            // Update the print ticket by changing portrait to landscape and
+            // wait for the event to fire.
+            const whenTicketChanged = test_util.eventToPromise(
+                print_preview.ticket_items.TicketItem.EventType.CHANGE,
+                printPreview.printTicketStore_.landscape);
+            const promise = nativeLayer.whenCalled('getPreview');
+            promise.then(function() {
+              assertTrue(false);
+            });
+            assertFalse(printPreview.printTicketStore_.landscape.getValue());
+            printPreview.printTicketStore_.landscape.updateValue(true);
+            // Wait for update. It should not result in a call to getPreview().
+            return whenTicketChanged;
+          })
+          .then(function() {
+            // Still disabled.
+            expectTrue(printButton.disabled);
+            // Overlay still visible.
+            expectFalse(overlayEl.classList.contains('invisible'));
+            expectFalse(cloudPrintMessageEl.hidden);
+          });
     });
 
     // Test that the policy to use the system default printer by default
@@ -1528,8 +1643,8 @@ cr.define('print_preview_test', function() {
 
       // Setup local destinations with the system default + recent.
       localDestinationInfos = [
-        { printerName: 'One', deviceName: 'ID1' },
-        { printerName: 'FooName', deviceName: 'FooDevice' }
+        {printerName: 'One', deviceName: 'ID1'},
+        {printerName: 'FooName', deviceName: 'FooDevice'}
       ];
       nativeLayer.setLocalDestinationCapabilities(
           print_preview_test_utils.getCddTemplate('ID1', 'One'));
@@ -1538,8 +1653,7 @@ cr.define('print_preview_test', function() {
         // The system default destination should be used instead of the
         // most recent destination.
         assertEquals(
-            'FooDevice',
-            printPreview.destinationStore_.selectedDestination.id);
+            'FooDevice', printPreview.destinationStore_.selectedDestination.id);
       });
     });
 
@@ -1549,19 +1663,21 @@ cr.define('print_preview_test', function() {
       test('MacOpenPDFInPreview', function() {
         const device = getPdfPrinter();
         initialSettings.printerName = device.printer.deviceName;
-        return setupSettingsAndDestinationsWithCapabilities(device).
-            then(function() {
+        return setupSettingsAndDestinationsWithCapabilities(device)
+            .then(function() {
               assertEquals(
-                device.printer.deviceName,
-                printPreview.destinationStore_.selectedDestination.id);
+                  device.printer.deviceName,
+                  printPreview.destinationStore_.selectedDestination.id);
               return nativeLayer.whenCalled('getPreview');
-            }).then(function() {
+            })
+            .then(function() {
               const openPdfPreviewLink = $('open-pdf-in-preview-link');
               checkElementDisplayed(openPdfPreviewLink, true);
               openPdfPreviewLink.click();
               // Should result in a print call and dialog should close.
               return nativeLayer.whenCalled('print');
-            }).then(
+            })
+            .then(
                 /**
                  * @param {string} printTicket The print ticket print() was
                  *     called for.
@@ -1577,53 +1693,66 @@ cr.define('print_preview_test', function() {
       test('MacOpenPDFInPreviewBadPrintTicket', function() {
         const device = getPdfPrinter();
         initialSettings.printerName = device.printer.deviceName;
-        return Promise.all([
-          setupSettingsAndDestinationsWithCapabilities(device),
-          nativeLayer.whenCalled('getPreview')
-        ]).then(function() {
-          const openPdfPreviewLink = $('open-pdf-in-preview-link');
-          checkElementDisplayed(openPdfPreviewLink, true);
-          expectFalse(openPdfPreviewLink.disabled);
-          const pageSettings = $('page-settings');
-          checkSectionVisible(pageSettings, true);
-          nativeLayer.resetResolver('getPreview');
+        const openPdfPreviewLink = $('open-pdf-in-preview-link');
+        return Promise
+            .all([
+              setupSettingsAndDestinationsWithCapabilities(device),
+              nativeLayer.whenCalled('getPreview')
+            ])
+            .then(function() {
+              checkElementDisplayed(openPdfPreviewLink, true);
+              expectFalse(openPdfPreviewLink.disabled);
+              const pageSettings = $('page-settings');
+              checkSectionVisible(pageSettings, true);
+              nativeLayer.resetResolver('getPreview');
 
-          // Set page settings to a bad value
-          pageSettings.querySelector('.page-settings-custom-input').value =
-              'abc';
-          pageSettings.querySelector('.page-settings-custom-radio').click();
+              // Wait for ticket change.
+              const whenTicketChange = test_util.eventToPromise(
+                  print_preview.ticket_items.TicketItem.EventType.CHANGE,
+                  printPreview.printTicketStore_.pageRange);
 
-          // No new preview
-          nativeLayer.whenCalled('getPreview').then(function() {
-            assertTrue(false);
-          });
+              // Set page settings to a bad value
+              pageSettings.querySelector('.page-settings-custom-input').value =
+                  'abc';
+              pageSettings.querySelector('.page-settings-custom-radio').click();
 
-          // Expect disabled print button and Pdf in preview link
-          const printButton = $('print-header').querySelector('button.print');
-          checkElementDisplayed(printButton, true);
-          expectTrue(printButton.disabled);
-          checkElementDisplayed(openPdfPreviewLink, true);
-          expectTrue(openPdfPreviewLink.disabled);
-        });
+              // No new preview
+              nativeLayer.whenCalled('getPreview').then(function() {
+                assertTrue(false);
+              });
+
+              return whenTicketChange;
+            })
+            .then(function() {
+              // Expect disabled print button and Pdf in preview link
+              const printButton =
+                  $('print-header').querySelector('button.print');
+              checkElementDisplayed(printButton, true);
+              expectTrue(printButton.disabled);
+              checkElementDisplayed(openPdfPreviewLink, true);
+              expectTrue(openPdfPreviewLink.disabled);
+            });
       });
     }  // cr.isMac
 
     // Test that the system dialog link works correctly on Windows
     if (cr.isWindows) {
       test('WinSystemDialogLink', function() {
-        return setupSettingsAndDestinationsWithCapabilities().
-            then(function() {
+        return setupSettingsAndDestinationsWithCapabilities()
+            .then(function() {
               assertEquals(
-                'FooDevice',
-                printPreview.destinationStore_.selectedDestination.id);
+                  'FooDevice',
+                  printPreview.destinationStore_.selectedDestination.id);
               return nativeLayer.whenCalled('getPreview');
-            }).then(function() {
+            })
+            .then(function() {
               const systemDialogLink = $('system-dialog-link');
               checkElementDisplayed(systemDialogLink, true);
               systemDialogLink.click();
               // Should result in a print call and dialog should close.
               return nativeLayer.whenCalled('print');
-            }).then(
+            })
+            .then(
                 /**
                  * @param {string} printTicket The print ticket print() was
                  *     called for.
@@ -1637,35 +1766,45 @@ cr.define('print_preview_test', function() {
       // Test that the System Dialog link is correctly disabled when the
       // print ticket is invalid.
       test('WinSystemDialogLinkBadPrintTicket', function() {
-        return Promise.all([
-          setupSettingsAndDestinationsWithCapabilities(),
-          nativeLayer.whenCalled('getPreview')
-        ]).then(function() {
-          const systemDialogLink = $('system-dialog-link');
-          checkElementDisplayed(systemDialogLink, true);
-          expectFalse(systemDialogLink.disabled);
+        const systemDialogLink = $('system-dialog-link');
+        return Promise
+            .all([
+              setupSettingsAndDestinationsWithCapabilities(),
+              nativeLayer.whenCalled('getPreview')
+            ])
+            .then(function() {
+              checkElementDisplayed(systemDialogLink, true);
+              expectFalse(systemDialogLink.disabled);
 
-          const pageSettings = $('page-settings');
-          checkSectionVisible(pageSettings, true);
-          nativeLayer.resetResolver('getPreview');
+              const pageSettings = $('page-settings');
+              checkSectionVisible(pageSettings, true);
+              nativeLayer.resetResolver('getPreview');
 
-          // Set page settings to a bad value
-          pageSettings.querySelector('.page-settings-custom-input').value =
-              'abc';
-          pageSettings.querySelector('.page-settings-custom-radio').click();
+              // Wait for ticket change.
+              const whenTicketChange = test_util.eventToPromise(
+                  print_preview.ticket_items.TicketItem.EventType.CHANGE,
+                  printPreview.printTicketStore_.pageRange);
 
-          // No new preview
-          nativeLayer.whenCalled('getPreview').then(function() {
-            assertTrue(false);
-          });
+              // Set page settings to a bad value
+              pageSettings.querySelector('.page-settings-custom-input').value =
+                  'abc';
+              pageSettings.querySelector('.page-settings-custom-radio').click();
 
-          // Expect disabled print button and Pdf in preview link
-          const printButton = $('print-header').querySelector('button.print');
-          checkElementDisplayed(printButton, true);
-          expectTrue(printButton.disabled);
-          checkElementDisplayed(systemDialogLink, true);
-          expectTrue(systemDialogLink.disabled);
-        });
+              // No new preview
+              nativeLayer.whenCalled('getPreview').then(function() {
+                assertTrue(false);
+              });
+              return whenTicketChange;
+            })
+            .then(function() {
+              // Expect disabled print button and Pdf in preview link
+              const printButton =
+                  $('print-header').querySelector('button.print');
+              checkElementDisplayed(printButton, true);
+              expectTrue(printButton.disabled);
+              checkElementDisplayed(systemDialogLink, true);
+              expectTrue(systemDialogLink.disabled);
+            });
       });
     }  // cr.isWindows
   });

@@ -29,7 +29,6 @@ ios_eg_test("ios_web_shell_egtests") {
     ":earl_grey_test_support",
     "//base",
     "//base/test:test_support",
-    "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/web",
     "//ios/web:earl_grey_test_support",
@@ -40,13 +39,9 @@ ios_eg_test("ios_web_shell_egtests") {
     "//ios/web/shell:shell_interfaces",
     "//net",
     "//services/service_manager/public/cpp",
-    "//services/test/echo/public/interfaces",
-    "//services/test/user_id/public/interfaces",
+    "//services/test/echo/public/mojom",
+    "//services/test/user_id/public/mojom",
     "//url",
-
-    # All shared libraries must have the sanitizer deps to properly link in
-    # asan mode (this target will be empty in other cases).
-    "//build/config:exe_and_shlib_deps",
   ]
 
   bundle_deps = [ ":bundle" ]
@@ -62,7 +57,6 @@ source_set("earl_grey_test_support") {
   deps = [
     "//base",
     "//base/test:test_support",
-    "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey:earl_grey+link",
     "//ios/web",

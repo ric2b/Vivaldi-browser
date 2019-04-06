@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "components/infobars/core/infobar.h"
+#include "components/language/core/browser/language_model_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
@@ -28,7 +29,7 @@
 #include "ios/chrome/browser/infobars/infobar.h"
 #include "ios/chrome/browser/infobars/infobar_controller.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
-#include "ios/chrome/browser/language/language_model_factory.h"
+#include "ios/chrome/browser/language/language_model_manager_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #import "ios/chrome/browser/translate/after_translate_infobar_controller.h"
@@ -73,9 +74,10 @@ ChromeIOSTranslateClient::ChromeIOSTranslateClient(
           translate::TranslateRankerFactory::GetForBrowserState(
               ios::ChromeBrowserState::FromBrowserState(
                   web_state->GetBrowserState())),
-          LanguageModelFactory::GetForBrowserState(
+          LanguageModelManagerFactory::GetForBrowserState(
               ios::ChromeBrowserState::FromBrowserState(
-                  web_state->GetBrowserState())))),
+                  web_state->GetBrowserState()))
+              ->GetDefaultModel())),
       translate_driver_(web_state,
                         web_state->GetNavigationManager(),
                         translate_manager_.get()),
@@ -105,35 +107,33 @@ std::unique_ptr<infobars::InfoBar> ChromeIOSTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
   translate::TranslateStep step = delegate->translate_step();
 
-  std::unique_ptr<InfoBarIOS> infobar(new InfoBarIOS(std::move(delegate)));
   InfoBarController* controller;
   switch (step) {
     case translate::TRANSLATE_STEP_AFTER_TRANSLATE:
       controller = [[AfterTranslateInfoBarController alloc]
-          initWithDelegate:infobar.get()];
+          initWithInfoBarDelegate:delegate.get()];
       break;
     case translate::TRANSLATE_STEP_BEFORE_TRANSLATE: {
       BeforeTranslateInfoBarController* beforeController =
           [[BeforeTranslateInfoBarController alloc]
-              initWithDelegate:infobar.get()];
+              initWithInfoBarDelegate:delegate.get()];
       beforeController.languageSelectionHandler = language_selection_handler_;
       controller = beforeController;
       break;
     }
     case translate::TRANSLATE_STEP_NEVER_TRANSLATE:
       controller = [[NeverTranslateInfoBarController alloc]
-          initWithDelegate:infobar.get()];
+          initWithInfoBarDelegate:delegate.get()];
       break;
     case translate::TRANSLATE_STEP_TRANSLATING:
     case translate::TRANSLATE_STEP_TRANSLATE_ERROR:
       controller = [[TranslateMessageInfoBarController alloc]
-          initWithDelegate:infobar.get()];
+          initWithInfoBarDelegate:delegate.get()];
       break;
     default:
       NOTREACHED();
   }
-  infobar->SetController(controller);
-  return infobar;
+  return std::make_unique<InfoBarIOS>(controller, std::move(delegate));
 }
 
 void ChromeIOSTranslateClient::RecordTranslateEvent(
@@ -163,7 +163,7 @@ void ChromeIOSTranslateClient::RecordTranslateEvent(
   }
 }
 
-void ChromeIOSTranslateClient::ShowTranslateUI(
+bool ChromeIOSTranslateClient::ShowTranslateUI(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
@@ -180,6 +180,8 @@ void ChromeIOSTranslateClient::ShowTranslateUI(
       InfoBarManagerImpl::FromWebState(web_state_),
       web_state_->GetBrowserState()->IsOffTheRecord(), step, source_language,
       target_language, error_type, triggered_from_menu);
+
+  return true;
 }
 
 translate::IOSTranslateDriver* ChromeIOSTranslateClient::GetTranslateDriver() {

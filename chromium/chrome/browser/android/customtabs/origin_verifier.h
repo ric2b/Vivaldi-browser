@@ -10,11 +10,8 @@
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 
-namespace base {
-class DictionaryValue;
-}
-
 namespace digital_asset_links {
+enum class RelationshipCheckResult;
 class DigitalAssetLinksHandler;
 }
 
@@ -39,14 +36,18 @@ class OriginVerifier {
 
   void Destroy(JNIEnv* env, const base::android::JavaRef<jobject>& obj);
 
+  static void ClearBrowsingData();
+  static int GetClearBrowsingDataCallCountForTesting();
  private:
   void OnRelationshipCheckComplete(
-      std::unique_ptr<base::DictionaryValue> response);
+      digital_asset_links::RelationshipCheckResult result);
 
   std::unique_ptr<digital_asset_links::DigitalAssetLinksHandler>
       asset_link_handler_;
 
   base::android::ScopedJavaGlobalRef<jobject> jobject_;
+
+  static int clear_browsing_data_call_count_for_tests_;
 
   DISALLOW_COPY_AND_ASSIGN(OriginVerifier);
 };

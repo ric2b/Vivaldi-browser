@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "crypto/secure_hash.h"
@@ -204,7 +205,7 @@ class CTLogVerifierTest : public ::testing::Test {
  public:
   void SetUp() override {
     log_ = CTLogVerifier::Create(ct::GetTestPublicKey(), "testlog",
-                                 "https://ct.example.com", "ct.example.com");
+                                 "ct.example.com");
 
     ASSERT_TRUE(log_);
     EXPECT_EQ(ct::GetTestPublicKeyId(), log_->key_id());
@@ -465,8 +466,8 @@ TEST_F(CTLogVerifierTest, ExcessDataInPublicKey) {
   std::string key = ct::GetTestPublicKey();
   key += "extra";
 
-  scoped_refptr<const CTLogVerifier> log = CTLogVerifier::Create(
-      key, "testlog", "https://ct.example.com", "ct.example.com");
+  scoped_refptr<const CTLogVerifier> log =
+      CTLogVerifier::Create(key, "testlog", "ct.example.com");
   EXPECT_FALSE(log);
 }
 
@@ -545,7 +546,7 @@ TEST_P(CTLogVerifierConsistencyProofTest, VerifiesValidConsistencyProof) {
 INSTANTIATE_TEST_CASE_P(KnownGoodProofs,
                         CTLogVerifierConsistencyProofTest,
                         ::testing::Range(size_t(0),
-                                         arraysize(kConsistencyProofs)));
+                                         base::size(kConsistencyProofs)));
 
 class CTLogVerifierAuditProofTest
     : public CTLogVerifierTest,
@@ -564,7 +565,7 @@ TEST_P(CTLogVerifierAuditProofTest, VerifiesValidAuditProofs) {
 
 INSTANTIATE_TEST_CASE_P(KnownGoodProofs,
                         CTLogVerifierAuditProofTest,
-                        ::testing::Range(size_t(0), arraysize(kAuditProofs)));
+                        ::testing::Range(size_t(0), base::size(kAuditProofs)));
 
 TEST_F(CTLogVerifierTest, VerifiesAuditProofEdgeCases_InvalidLeafIndex) {
   std::vector<std::string> proof;

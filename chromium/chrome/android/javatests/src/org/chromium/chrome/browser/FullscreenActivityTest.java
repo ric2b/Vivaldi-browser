@@ -19,15 +19,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
@@ -69,24 +68,6 @@ public class FullscreenActivityTest {
     }
 
     /**
-     * Waits for an Activity of the given class to be started and for it to have a Tab.
-     * @return The Activity.
-     */
-    @SuppressWarnings("unchecked")
-    private static <T extends ChromeActivity> T waitForActivity(final Class<T> activityClass) {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
-                if (lastActivity.getClass() != activityClass) return false;
-
-                return ((ChromeActivity) lastActivity).getActivityTab() != null;
-            }
-        });
-        return (T) ApplicationStatus.getLastTrackedFocusedActivity();
-    }
-
-    /**
      * Tests that the window system visibility has flags set that indicate it is fullscreen. This is
      * useful because there is a slight discrepancy between when the webpage thinks it is fullscreen
      * and when the window thinks it is fullscreen that can lead to a race condition during tests.
@@ -102,23 +83,24 @@ public class FullscreenActivityTest {
      */
     private FullscreenActivity enterFullscreen() throws Throwable {
         // Start playback to guarantee it's properly loaded.
-        WebContents webContents = mActivity.getCurrentContentViewCore().getWebContents();
+        WebContents webContents = mActivity.getCurrentWebContents();
         Assert.assertTrue(DOMUtils.isMediaPaused(webContents, VIDEO_ID));
         DOMUtils.playMedia(webContents, VIDEO_ID);
         DOMUtils.waitForMediaPlay(webContents, VIDEO_ID);
 
         // Trigger requestFullscreen() via a click on a button.
-        Assert.assertTrue(DOMUtils.clickNode(mActivity.getCurrentContentViewCore(), "fullscreen"));
+        Assert.assertTrue(DOMUtils.clickNode(webContents, "fullscreen"));
 
-        final FullscreenActivity fullscreenActivity = waitForActivity(FullscreenActivity.class);
+        final FullscreenActivity fullscreenActivity =
+                ChromeActivityTestRule.waitFor(FullscreenActivity.class);
 
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
-                    ContentViewCore cvc = fullscreenActivity.getCurrentContentViewCore();
-                    return DOMUtils.isFullscreen(cvc.getWebContents())
-                            && hasFullscreenFlags(cvc.getContainerView());
+                    Tab tab = fullscreenActivity.getActivityTab();
+                    return DOMUtils.isFullscreen(tab.getWebContents())
+                            && hasFullscreenFlags(tab.getContentView());
                 } catch (InterruptedException | TimeoutException e) {
                     throw new RuntimeException(e);
                 }
@@ -143,7 +125,7 @@ public class FullscreenActivityTest {
 
         exit.onResult(fullscreenActivity);
 
-        ChromeTabbedActivity activity = waitForActivity(ChromeTabbedActivity.class);
+        ChromeTabbedActivity activity = ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class);
 
         // Ensure we haven't started a new ChromeTabbedActivity, https://crbug.com/729805,
         // https://crbug.com/729932.
@@ -157,8 +139,8 @@ public class FullscreenActivityTest {
     @Test
     @MediumTest
     public void testFullscreen() throws Throwable {
-        testFullscreenAndExit(activity ->
-                DOMUtils.exitFullscreen(activity.getCurrentContentViewCore().getWebContents()));
+        testFullscreenAndExit(
+                activity -> DOMUtils.exitFullscreen(activity.getCurrentWebContents()));
     }
 
     /**
@@ -185,9 +167,9 @@ public class FullscreenActivityTest {
         int old = mActivity.getTabsView().getSystemUiVisibility();
 
         FullscreenActivity fullscreenActivity = enterFullscreen();
-        DOMUtils.exitFullscreen(fullscreenActivity.getCurrentContentViewCore().getWebContents());
+        DOMUtils.exitFullscreen(fullscreenActivity.getCurrentWebContents());
 
-        waitForActivity(ChromeTabbedActivity.class);
+        ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class);
 
         Assert.assertEquals(old, mActivity.getTabsView().getSystemUiVisibility());
     }
@@ -204,8 +186,12 @@ public class FullscreenActivityTest {
         Tab tab = mActivity.getActivityTab();
         tab.addObserver(new EmptyTabObserver() {
             @Override
-            public void onToggleFullscreenMode(Tab tab, boolean enable) {
-                isTabFullscreen[0] = enable;
+            public void onEnterFullscreenMode(Tab tab, FullscreenOptions options) {
+                isTabFullscreen[0] = true;
+            }
+            @Override
+            public void onExitFullscreenMode(Tab tab) {
+                isTabFullscreen[0] = false;
             }
         });
 

@@ -84,6 +84,7 @@ class CONTENT_EXPORT TouchSelectionControllerClientAura
   void SelectBetweenCoordinates(const gfx::PointF& base,
                                 const gfx::PointF& extent) override;
   void OnSelectionEvent(ui::SelectionEventType event) override;
+  void OnDragUpdate(const gfx::PointF& position) override;
   std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
   void DidScroll() override;
 
@@ -107,6 +108,7 @@ class CONTENT_EXPORT TouchSelectionControllerClientAura
     void SelectBetweenCoordinates(const gfx::PointF& base,
                                   const gfx::PointF& extent) final;
     void OnSelectionEvent(ui::SelectionEventType event) final;
+    void OnDragUpdate(const gfx::PointF& position) final;
     std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() final;
     void DidScroll() override;
 
@@ -123,7 +125,7 @@ class CONTENT_EXPORT TouchSelectionControllerClientAura
   base::ObserverList<TouchSelectionControllerClientManager::Observer>
       observers_;
 
-  base::Timer quick_menu_timer_;
+  base::RetainingOneShotTimer quick_menu_timer_;
   bool quick_menu_requested_;
   bool touch_down_;
   bool scroll_in_progress_;

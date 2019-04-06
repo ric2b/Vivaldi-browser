@@ -6,7 +6,6 @@ import("//testing/test.gni")
 
 defines = [ "LEVELDB_PLATFORM_CHROMIUM=1" ]
 
-
 config("leveldb_config") {
   include_dirs = [
     ".",
@@ -23,6 +22,7 @@ config("leveldb_config") {
     # Define the macro everywhere, to avoid reasoning about which headers bring
     # windows.h in.
     defines += [ "DeleteFile=DeleteFileW" ]
+
     # OS_WIN is defined in base_export.h, but needs to be defined earlier for
     # leveldb to use it.
     defines += [ "OS_WIN" ]
@@ -350,7 +350,6 @@ if (!is_ios && !is_android) {
     configs += [ "//build/config/compiler:no_chromium_code" ]
     deps = [
       ":leveldb",
-      "//build/config:exe_and_shlib_deps",
     ]
   }
 

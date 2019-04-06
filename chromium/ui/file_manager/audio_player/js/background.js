@@ -7,20 +7,25 @@
  * TODO(yoshiki): Consider providing an exact size icon, instead of relying
  * on downsampling by ash.
  *
- * @type {string}
+ * @type {!string}
  * @const
  */
 var AUDIO_PLAYER_ICON = 'icons/audio-player-64.png';
 
+/**
+ * HTML source of the audio player.
+ * @type {!string}
+ * @const
+ */
 var AUDIO_PLAYER_APP_URL = 'audio_player.html';
 
 /**
- * Configuration of the audio player panel.
- * @type {Object}
+ * Configuration of the audio player.
+ * @type {!Object}
+ * @const
  */
 var audioPlayerCreateOptions = {
   id: 'audio-player',
-  type: 'panel',
   minHeight: 4 + 48 + 96,  // 4px: border-top, 48px: track, 96px: controller
   minWidth: 320,
   height: 4 + 48 + 96,  // collapsed
@@ -41,7 +46,7 @@ function AudioPlayerBackground() {
 AudioPlayerBackground.prototype.__proto__ = BackgroundBase.prototype;
 
 /**
- * Called when an app is restarted.
+ * Called when an audio player app is restarted.
  */
 AudioPlayerBackground.prototype.onRestarted_ = function() {
   audioPlayer.reopen(function() {
@@ -52,22 +57,21 @@ AudioPlayerBackground.prototype.onRestarted_ = function() {
   });
 };
 
-
 /**
  * Backgound object. This is necessary for AppWindowWrapper.
- * @type {BackgroundBase}
+ * @type {!AudioPlayerBackground}
  */
 var background = new AudioPlayerBackground();
 
 /**
- * Wrapper of audio player window.
- * @type {SingletonAppWindowWrapper}
+ * Audio player app window wrapper.
+ * @type {!SingletonAppWindowWrapper}
  */
 var audioPlayer = new SingletonAppWindowWrapper(AUDIO_PLAYER_APP_URL,
                                                 audioPlayerCreateOptions);
 
 /**
- * Opens player window.
+ * Opens the audio player window.
  * @param {!Array<string>} urls List of audios to play and index to start
  *     playing.
  * @return {!Promise} Promise to be fulfilled on success, or rejected on error.
@@ -113,7 +117,7 @@ function open(urls) {
     if (maybePosition !== -1)
       position = maybePosition;
 
-    // Opens the audio player panel.
+    // Opens the audio player.
     return new Promise(function(fulfill, reject) {
       var urls = util.entriesToURLs(audioEntries);
       audioPlayer.launch({items: urls, position: position},

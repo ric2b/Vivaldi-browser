@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,7 +56,7 @@ class SystemInfoUIHTMLSource : public content::URLDataSource{
     return "text/html";
   }
   std::string GetContentSecurityPolicyScriptSrc() const override {
-    // 'unsafe-inline' is added to script-src.
+    // 'unsafe-eval' and 'unsafe-inline' are added to script-src.
     return "script-src 'self' chrome://resources 'unsafe-eval' "
         "'unsafe-inline';";
   }

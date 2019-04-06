@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.ntp;
 
-import android.app.Activity;
 import android.net.Uri;
+import android.support.annotation.IntDef;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -16,14 +16,15 @@ import org.chromium.chrome.browser.TabLoadStatus;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.bookmarks.BookmarkPage;
 import org.chromium.chrome.browser.download.DownloadPage;
+import org.chromium.chrome.browser.feed.FeedNewTabPage;
 import org.chromium.chrome.browser.history.HistoryPage;
-import org.chromium.chrome.browser.physicalweb.PhysicalWebDiagnosticsPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
 import org.chromium.content_public.browser.LoadUrlParams;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Creates NativePage objects to show chrome-native:// URLs using the native Android view system.
@@ -35,27 +36,26 @@ public class NativePageFactory {
     static class NativePageBuilder {
         protected NativePage buildNewTabPage(ChromeActivity activity, Tab tab,
                 TabModelSelector tabModelSelector) {
-            if (activity.getBottomSheet() != null) {
-                BottomSheet sheet = activity.getBottomSheet();
-                sheet.getBottomSheetMetrics().recordNativeNewTabPageShown();
-                sheet.setSheetState(BottomSheet.SHEET_STATE_FULL, true, StateChangeReason.NEW_TAB);
-                return null;
-            } else if (tab.isIncognito()) {
-                return new IncognitoNewTabPage(activity);
-            } else {
-                return new NewTabPage(activity, new TabShim(tab), tabModelSelector);
+            if (tab.isIncognito()) {
+                return new IncognitoNewTabPage(activity, new TabShim(tab));
             }
+
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)) {
+                return new FeedNewTabPage(activity, new TabShim(tab), tabModelSelector);
+            }
+
+            return new NewTabPage(activity, new TabShim(tab), tabModelSelector);
         }
 
-        protected NativePage buildBookmarksPage(Activity activity, Tab tab) {
+        protected NativePage buildBookmarksPage(ChromeActivity activity, Tab tab) {
             return new BookmarkPage(activity, new TabShim(tab));
         }
 
-        protected NativePage buildDownloadsPage(Activity activity, Tab tab) {
+        protected NativePage buildDownloadsPage(ChromeActivity activity, Tab tab) {
             return new DownloadPage(activity, new TabShim(tab));
         }
 
-        protected NativePage buildHistoryPage(Activity activity, Tab tab) {
+        protected NativePage buildHistoryPage(ChromeActivity activity, Tab tab) {
             return new HistoryPage(activity, new TabShim(tab));
         }
 
@@ -64,18 +64,24 @@ public class NativePageFactory {
                     new RecentTabsManager(tab, tab.getProfile(), activity);
             return new RecentTabsPage(activity, recentTabsManager);
         }
-
-        protected NativePage buildPhysicalWebDiagnosticsPage(Activity activity, Tab tab) {
-            return new PhysicalWebDiagnosticsPage(activity, new TabShim(tab));
-        }
     }
 
-    enum NativePageType {
-        NONE, CANDIDATE, NTP, BOOKMARKS, RECENT_TABS, PHYSICAL_WEB, DOWNLOADS, HISTORY,
+    @IntDef({NativePageType.NONE, NativePageType.CANDIDATE, NativePageType.NTP,
+            NativePageType.BOOKMARKS, NativePageType.RECENT_TABS, NativePageType.DOWNLOADS,
+            NativePageType.HISTORY})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface NativePageType {
+        int NONE = 0;
+        int CANDIDATE = 1;
+        int NTP = 2;
+        int BOOKMARKS = 3;
+        int RECENT_TABS = 4;
+        int DOWNLOADS = 5;
+        int HISTORY = 6;
     }
 
-    private static NativePageType nativePageType(String url, NativePage candidatePage,
-            boolean isIncognito) {
+    private static @NativePageType int nativePageType(
+            String url, NativePage candidatePage, boolean isIncognito) {
         if (url == null) return NativePageType.NONE;
 
         Uri uri = Uri.parse(url);
@@ -98,12 +104,6 @@ public class NativePageFactory {
             return NativePageType.HISTORY;
         } else if (UrlConstants.RECENT_TABS_HOST.equals(host) && !isIncognito) {
             return NativePageType.RECENT_TABS;
-        } else if (UrlConstants.PHYSICAL_WEB_DIAGNOSTICS_HOST.equals(host)) {
-            if (ChromeFeatureList.isEnabled("PhysicalWeb")) {
-                return NativePageType.PHYSICAL_WEB;
-            } else {
-                return NativePageType.NONE;
-            }
         } else {
             return NativePageType.NONE;
         }
@@ -134,28 +134,25 @@ public class NativePageFactory {
         NativePage page;
 
         switch (nativePageType(url, candidatePage, isIncognito)) {
-            case NONE:
+            case NativePageType.NONE:
                 return null;
-            case CANDIDATE:
+            case NativePageType.CANDIDATE:
                 page = candidatePage;
                 break;
-            case NTP:
+            case NativePageType.NTP:
                 page = sNativePageBuilder.buildNewTabPage(activity, tab, tabModelSelector);
                 break;
-            case BOOKMARKS:
+            case NativePageType.BOOKMARKS:
                 page = sNativePageBuilder.buildBookmarksPage(activity, tab);
                 break;
-            case DOWNLOADS:
+            case NativePageType.DOWNLOADS:
                 page = sNativePageBuilder.buildDownloadsPage(activity, tab);
                 break;
-            case HISTORY:
+            case NativePageType.HISTORY:
                 page = sNativePageBuilder.buildHistoryPage(activity, tab);
                 break;
-            case RECENT_TABS:
+            case NativePageType.RECENT_TABS:
                 page = sNativePageBuilder.buildRecentTabsPage(activity, tab);
-                break;
-            case PHYSICAL_WEB:
-                page = sNativePageBuilder.buildPhysicalWebDiagnosticsPage(activity, tab);
                 break;
             default:
                 assert false;

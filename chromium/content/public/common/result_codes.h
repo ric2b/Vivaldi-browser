@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_COMMON_RESULT_CODES_H_
 #define CONTENT_PUBLIC_COMMON_RESULT_CODES_H_
 
+#include "services/service_manager/embedder/result_codes.h"
+
 namespace content {
 
 // This file consolidates all the return codes for the browser and renderer
@@ -19,12 +21,19 @@ namespace content {
 //
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.content_public.common
+//
+// IMPORTANT: This needs to stay in sync with <enum name="CrashExitCodes"> and
+// <enum name="WindowsExitCode"> in tools/metrics/histograms/enums.xml. Due to
+// chrome::ResultCode's dependency on the enum values, do not add any new values
+// here, and mark obsolete values are unused instead of removing them. See
+// https://crrev.com/c/885090 for context.
+// TODO(wfh): Break the dependency so it is possible to add more values.
+
 enum ResultCode {
-  // Process terminated normally.
-  RESULT_CODE_NORMAL_EXIT,
+  RESULT_CODE_CONTENT_START = service_manager::RESULT_CODE_LAST_CODE,
 
   // Process was killed by user or system.
-  RESULT_CODE_KILLED,
+  RESULT_CODE_KILLED = RESULT_CODE_CONTENT_START,
 
   // Process hung.
   RESULT_CODE_HUNG,
@@ -38,6 +47,9 @@ enum ResultCode {
   // Last return code (keep this last).
   RESULT_CODE_LAST_CODE
 };
+
+static_assert(RESULT_CODE_LAST_CODE == 5,
+              "This enum is frozen - see the IMPORTANT note above.");
 
 }  // namespace content
 

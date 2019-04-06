@@ -81,6 +81,11 @@ void ExtensionLocalizationPeer::OnReceivedResponse(
   response_info_ = info;
 }
 
+void ExtensionLocalizationPeer::OnStartLoadingResponseBody(
+    mojo::ScopedDataPipeConsumerHandle body) {
+  original_peer_->OnStartLoadingResponseBody(std::move(body));
+}
+
 void ExtensionLocalizationPeer::OnReceivedData(
     std::unique_ptr<ReceivedData> data) {
   data_.append(data->payload(), data->length());
@@ -106,7 +111,7 @@ void ExtensionLocalizationPeer::OnCompletedRequest(
 
   original_peer_->OnReceivedResponse(response_info_);
   if (!data_.empty())
-    original_peer_->OnReceivedData(base::MakeUnique<StringData>(data_));
+    original_peer_->OnReceivedData(std::make_unique<StringData>(data_));
   original_peer_->OnCompletedRequest(status);
 }
 

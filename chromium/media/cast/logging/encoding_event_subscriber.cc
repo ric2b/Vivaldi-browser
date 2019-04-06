@@ -43,7 +43,7 @@ BasePacketEvent* GetNewBasePacketEvent(AggregatedPacketEvent* event_proto,
   return base;
 }
 
-}
+}  // namespace
 
 namespace media {
 namespace cast {
@@ -68,66 +68,66 @@ void EncodingEventSubscriber::OnReceiveFrameEvent(
 
   const RtpTimeDelta relative_rtp_timestamp =
       GetRelativeRtpTimestamp(frame_event.rtp_timestamp);
-  uint32_t lower_32_bits = relative_rtp_timestamp.lower_32_bits();
-  FrameEventMap::iterator it = frame_event_map_.find(relative_rtp_timestamp);
-  linked_ptr<AggregatedFrameEvent> event_proto;
+  const uint32_t lower_32_bits = relative_rtp_timestamp.lower_32_bits();
+  AggregatedFrameEvent* event_proto_ptr = nullptr;
 
   // Look up existing entry. If not found, create a new entry and add to map.
+  FrameEventMap::iterator it = frame_event_map_.find(relative_rtp_timestamp);
   if (it == frame_event_map_.end()) {
     if (!ShouldCreateNewProto(lower_32_bits))
       return;
 
     IncrementStoredProtoCount(lower_32_bits);
-    event_proto.reset(new AggregatedFrameEvent);
+    auto event_proto = std::make_unique<AggregatedFrameEvent>();
     event_proto->set_relative_rtp_timestamp(lower_32_bits);
+    event_proto_ptr = event_proto.get();
     frame_event_map_.insert(
-        std::make_pair(relative_rtp_timestamp, event_proto));
+        std::make_pair(relative_rtp_timestamp, std::move(event_proto)));
   } else {
-    event_proto = it->second;
-    if (event_proto->event_type_size() >= kMaxEventsPerProto) {
+    if (it->second->event_type_size() >= kMaxEventsPerProto) {
       DVLOG(2) << "Too many events in frame " << frame_event.rtp_timestamp
                << ". Using new frame event proto.";
-      AddFrameEventToStorage(event_proto);
+      AddFrameEventToStorage(std::move(it->second));
       if (!ShouldCreateNewProto(lower_32_bits)) {
         frame_event_map_.erase(it);
         return;
       }
 
       IncrementStoredProtoCount(lower_32_bits);
-      event_proto.reset(new AggregatedFrameEvent);
-      event_proto->set_relative_rtp_timestamp(lower_32_bits);
-      it->second = event_proto;
+      it->second = std::make_unique<AggregatedFrameEvent>();
+      it->second->set_relative_rtp_timestamp(lower_32_bits);
     }
+    event_proto_ptr = it->second.get();
   }
 
-  event_proto->add_event_type(ToProtoEventType(frame_event.type));
-  event_proto->add_event_timestamp_ms(
+  event_proto_ptr->add_event_type(ToProtoEventType(frame_event.type));
+  event_proto_ptr->add_event_timestamp_ms(
       (frame_event.timestamp - base::TimeTicks()).InMilliseconds());
 
   if (frame_event.type == FRAME_CAPTURE_END) {
     if (frame_event.media_type == VIDEO_EVENT &&
         frame_event.width > 0 && frame_event.height > 0) {
-      event_proto->set_width(frame_event.width);
-      event_proto->set_height(frame_event.height);
+      event_proto_ptr->set_width(frame_event.width);
+      event_proto_ptr->set_height(frame_event.height);
     }
   } else if (frame_event.type == FRAME_ENCODED) {
-    event_proto->set_encoded_frame_size(frame_event.size);
+    event_proto_ptr->set_encoded_frame_size(frame_event.size);
     if (frame_event.encoder_cpu_utilization >= 0.0) {
-      event_proto->set_encoder_cpu_percent_utilized(
+      event_proto_ptr->set_encoder_cpu_percent_utilized(
           base::saturated_cast<int32_t>(
               frame_event.encoder_cpu_utilization * 100.0 + 0.5));
     }
     if (frame_event.idealized_bitrate_utilization >= 0.0) {
-      event_proto->set_idealized_bitrate_percent_utilized(
+      event_proto_ptr->set_idealized_bitrate_percent_utilized(
           base::saturated_cast<int32_t>(
               frame_event.idealized_bitrate_utilization * 100.0 + 0.5));
     }
     if (frame_event.media_type == VIDEO_EVENT) {
-      event_proto->set_key_frame(frame_event.key_frame);
-      event_proto->set_target_bitrate(frame_event.target_bitrate);
+      event_proto_ptr->set_key_frame(frame_event.key_frame);
+      event_proto_ptr->set_target_bitrate(frame_event.target_bitrate);
     }
   } else if (frame_event.type == FRAME_PLAYOUT) {
-    event_proto->set_delay_millis(frame_event.delay_delta.InMilliseconds());
+    event_proto_ptr->set_delay_millis(frame_event.delay_delta.InMilliseconds());
   }
 
   if (frame_event_map_.size() > kMaxMapSize)
@@ -149,8 +149,7 @@ void EncodingEventSubscriber::OnReceivePacketEvent(
   uint32_t lower_32_bits = relative_rtp_timestamp.lower_32_bits();
   PacketEventMap::iterator it =
       packet_event_map_.find(relative_rtp_timestamp);
-  linked_ptr<AggregatedPacketEvent> event_proto;
-  BasePacketEvent* base_packet_event_proto = NULL;
+  BasePacketEvent* base_packet_event_proto = nullptr;
 
   // Look up existing entry. If not found, create a new entry and add to map.
   if (it == packet_event_map_.end()) {
@@ -158,18 +157,17 @@ void EncodingEventSubscriber::OnReceivePacketEvent(
       return;
 
     IncrementStoredProtoCount(lower_32_bits);
-    event_proto.reset(new AggregatedPacketEvent);
+    auto event_proto = std::make_unique<AggregatedPacketEvent>();
     event_proto->set_relative_rtp_timestamp(lower_32_bits);
-    packet_event_map_.insert(
-        std::make_pair(relative_rtp_timestamp, event_proto));
     base_packet_event_proto = GetNewBasePacketEvent(
         event_proto.get(), packet_event.packet_id, packet_event.size);
+    packet_event_map_.insert(
+        std::make_pair(relative_rtp_timestamp, std::move(event_proto)));
   } else {
     // Found existing entry, now look up existing BasePacketEvent using packet
     // ID. If not found, create a new entry and add to proto.
-    event_proto = it->second;
     RepeatedPtrField<BasePacketEvent>* field =
-        event_proto->mutable_base_packet_event();
+        it->second->mutable_base_packet_event();
     for (RepeatedPtrField<BasePacketEvent>::pointer_iterator base_it =
              field->pointer_begin();
          base_it != field->pointer_end();
@@ -180,41 +178,39 @@ void EncodingEventSubscriber::OnReceivePacketEvent(
       }
     }
     if (!base_packet_event_proto) {
-      if (event_proto->base_packet_event_size() >= kMaxPacketsPerFrame) {
+      if (it->second->base_packet_event_size() >= kMaxPacketsPerFrame) {
         DVLOG(3) << "Too many packets in AggregatedPacketEvent "
                  << packet_event.rtp_timestamp << ". "
                  << "Using new packet event proto.";
-        AddPacketEventToStorage(event_proto);
+        AddPacketEventToStorage(std::move(it->second));
         if (!ShouldCreateNewProto(lower_32_bits)) {
           packet_event_map_.erase(it);
           return;
         }
 
         IncrementStoredProtoCount(lower_32_bits);
-        event_proto.reset(new AggregatedPacketEvent);
-        event_proto->set_relative_rtp_timestamp(lower_32_bits);
-        it->second = event_proto;
+        it->second = std::make_unique<AggregatedPacketEvent>();
+        it->second->set_relative_rtp_timestamp(lower_32_bits);
       }
 
       base_packet_event_proto = GetNewBasePacketEvent(
-          event_proto.get(), packet_event.packet_id, packet_event.size);
+          it->second.get(), packet_event.packet_id, packet_event.size);
     } else if (base_packet_event_proto->event_type_size() >=
                kMaxEventsPerProto) {
       DVLOG(3) << "Too many events in packet "
                << packet_event.rtp_timestamp << ", "
                << packet_event.packet_id << ". Using new packet event proto.";
-      AddPacketEventToStorage(event_proto);
+      AddPacketEventToStorage(std::move(it->second));
       if (!ShouldCreateNewProto(lower_32_bits)) {
         packet_event_map_.erase(it);
         return;
       }
 
       IncrementStoredProtoCount(lower_32_bits);
-      event_proto.reset(new AggregatedPacketEvent);
-      event_proto->set_relative_rtp_timestamp(lower_32_bits);
-      it->second = event_proto;
+      it->second = std::make_unique<AggregatedPacketEvent>();
+      it->second->set_relative_rtp_timestamp(lower_32_bits);
       base_packet_event_proto = GetNewBasePacketEvent(
-          event_proto.get(), packet_event.packet_id, packet_event.size);
+          it->second.get(), packet_event.packet_id, packet_event.size);
     }
   }
 
@@ -245,9 +241,9 @@ void EncodingEventSubscriber::GetEventsAndReset(LogMetadata* metadata,
   TransferFrameEvents(frame_event_map_.size());
   TransferPacketEvents(packet_event_map_.size());
   std::sort(frame_event_storage_.begin(), frame_event_storage_.end(),
-            &IsRtpTimestampLessThan<linked_ptr<AggregatedFrameEvent> >);
+            &IsRtpTimestampLessThan<std::unique_ptr<AggregatedFrameEvent>>);
   std::sort(packet_event_storage_.begin(), packet_event_storage_.end(),
-            &IsRtpTimestampLessThan<linked_ptr<AggregatedPacketEvent> >);
+            &IsRtpTimestampLessThan<std::unique_ptr<AggregatedPacketEvent>>);
 
   metadata->set_is_audio(event_media_type_ == AUDIO_EVENT);
   metadata->set_first_rtp_timestamp(first_rtp_timestamp_.lower_32_bits());
@@ -267,7 +263,7 @@ void EncodingEventSubscriber::TransferFrameEvents(size_t max_num_entries) {
   for (size_t i = 0;
        i < max_num_entries && it != frame_event_map_.end();
        i++, ++it) {
-    AddFrameEventToStorage(it->second);
+    AddFrameEventToStorage(std::move(it->second));
   }
 
   frame_event_map_.erase(frame_event_map_.begin(), it);
@@ -278,33 +274,33 @@ void EncodingEventSubscriber::TransferPacketEvents(size_t max_num_entries) {
   for (size_t i = 0;
        i < max_num_entries && it != packet_event_map_.end();
        i++, ++it) {
-    AddPacketEventToStorage(it->second);
+    AddPacketEventToStorage(std::move(it->second));
   }
 
   packet_event_map_.erase(packet_event_map_.begin(), it);
 }
 
 void EncodingEventSubscriber::AddFrameEventToStorage(
-    const linked_ptr<AggregatedFrameEvent>& frame_event_proto) {
+    std::unique_ptr<AggregatedFrameEvent> frame_event_proto) {
   if (frame_event_storage_.size() >= max_frames_) {
     auto& entry = frame_event_storage_[frame_event_storage_index_];
     DecrementStoredProtoCount(entry->relative_rtp_timestamp());
-    entry = frame_event_proto;
+    entry = std::move(frame_event_proto);
   } else {
-    frame_event_storage_.push_back(frame_event_proto);
+    frame_event_storage_.push_back(std::move(frame_event_proto));
   }
 
   frame_event_storage_index_ = (frame_event_storage_index_ + 1) % max_frames_;
 }
 
 void EncodingEventSubscriber::AddPacketEventToStorage(
-    const linked_ptr<AggregatedPacketEvent>& packet_event_proto) {
+    std::unique_ptr<AggregatedPacketEvent> packet_event_proto) {
   if (packet_event_storage_.size() >= max_frames_) {
     auto& entry = packet_event_storage_[packet_event_storage_index_];
     DecrementStoredProtoCount(entry->relative_rtp_timestamp());
-    entry = packet_event_proto;
+    entry = std::move(packet_event_proto);
   } else {
-    packet_event_storage_.push_back(packet_event_proto);
+    packet_event_storage_.push_back(std::move(packet_event_proto));
   }
 
   packet_event_storage_index_ = (packet_event_storage_index_ + 1) % max_frames_;

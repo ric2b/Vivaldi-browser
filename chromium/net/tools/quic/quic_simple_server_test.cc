@@ -4,14 +4,15 @@
 
 #include "net/tools/quic/quic_simple_server.h"
 
-#include "net/quic/core/crypto/quic_random.h"
-#include "net/quic/core/quic_crypto_stream.h"
-#include "net/quic/core/quic_utils.h"
-#include "net/quic/core/tls_server_handshaker.h"
-#include "net/quic/platform/api/quic_test.h"
-#include "net/quic/test_tools/crypto_test_utils.h"
-#include "net/quic/test_tools/mock_quic_dispatcher.h"
-#include "net/quic/test_tools/quic_test_utils.h"
+#include "net/third_party/quic/core/crypto/quic_random.h"
+#include "net/third_party/quic/core/quic_crypto_stream.h"
+#include "net/third_party/quic/core/quic_utils.h"
+#include "net/third_party/quic/core/tls_server_handshaker.h"
+#include "net/third_party/quic/platform/api/quic_test.h"
+#include "net/third_party/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quic/test_tools/mock_quic_dispatcher.h"
+#include "net/third_party/quic/test_tools/quic_test_utils.h"
+#include "net/third_party/quic/tools/quic_memory_cache_backend.h"
 #include "net/tools/quic/quic_simple_server_session_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -25,36 +26,38 @@ class QuicChromeServerDispatchPacketTest : public QuicTest {
  public:
   QuicChromeServerDispatchPacketTest()
       : crypto_config_("blah",
-                       QuicRandom::GetInstance(),
-                       crypto_test_utils::ProofSourceForTesting(),
-                       TlsServerHandshaker::CreateSslCtx()),
-        version_manager_(AllSupportedVersions()),
-        dispatcher_(
-            config_,
-            &crypto_config_,
-            &version_manager_,
-            std::unique_ptr<MockQuicConnectionHelper>(
-                new net::test::MockQuicConnectionHelper),
-            std::unique_ptr<QuicCryptoServerStream::Helper>(
-                new QuicSimpleServerSessionHelper(QuicRandom::GetInstance())),
-            std::unique_ptr<MockAlarmFactory>(new net::test::MockAlarmFactory),
-            &response_cache_) {
+                       quic::QuicRandom::GetInstance(),
+                       quic::test::crypto_test_utils::ProofSourceForTesting(),
+                       quic::TlsServerHandshaker::CreateSslCtx()),
+        version_manager_(quic::AllSupportedVersions()),
+        dispatcher_(config_,
+                    &crypto_config_,
+                    &version_manager_,
+                    std::unique_ptr<quic::test::MockQuicConnectionHelper>(
+                        new quic::test::MockQuicConnectionHelper),
+                    std::unique_ptr<quic::QuicCryptoServerStream::Helper>(
+                        new QuicSimpleServerSessionHelper(
+                            quic::QuicRandom::GetInstance())),
+                    std::unique_ptr<quic::test::MockAlarmFactory>(
+                        new quic::test::MockAlarmFactory),
+                    &memory_cache_backend_) {
     dispatcher_.InitializeWithWriter(nullptr);
   }
 
-  void DispatchPacket(const QuicReceivedPacket& packet) {
+  void DispatchPacket(const quic::QuicReceivedPacket& packet) {
     IPEndPoint client_addr, server_addr;
     dispatcher_.ProcessPacket(
-        QuicSocketAddress(QuicSocketAddressImpl(server_addr)),
-        QuicSocketAddress(QuicSocketAddressImpl(client_addr)), packet);
+        quic::QuicSocketAddress(quic::QuicSocketAddressImpl(server_addr)),
+        quic::QuicSocketAddress(quic::QuicSocketAddressImpl(client_addr)),
+        packet);
   }
 
  protected:
-  QuicConfig config_;
-  QuicCryptoServerConfig crypto_config_;
-  QuicVersionManager version_manager_;
-  net::test::MockQuicDispatcher dispatcher_;
-  QuicHttpResponseCache response_cache_;
+  quic::QuicConfig config_;
+  quic::QuicCryptoServerConfig crypto_config_;
+  quic::QuicVersionManager version_manager_;
+  quic::test::MockQuicDispatcher dispatcher_;
+  quic::QuicMemoryCacheBackend memory_cache_backend_;
 };
 
 TEST_F(QuicChromeServerDispatchPacketTest, DispatchPacket) {
@@ -67,9 +70,9 @@ TEST_F(QuicChromeServerDispatchPacketTest, DispatchPacket) {
                                   0xBC, 0x9A, 0x78, 0x56, 0x34, 0x12,
                                   // private flags
                                   0x00};
-  QuicReceivedPacket encrypted_valid_packet(
+  quic::QuicReceivedPacket encrypted_valid_packet(
       reinterpret_cast<char*>(valid_packet), arraysize(valid_packet),
-      QuicTime::Zero(), false);
+      quic::QuicTime::Zero(), false);
 
   EXPECT_CALL(dispatcher_, ProcessPacket(_, _, _)).Times(1);
   DispatchPacket(encrypted_valid_packet);

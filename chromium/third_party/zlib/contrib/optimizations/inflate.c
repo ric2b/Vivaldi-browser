@@ -85,7 +85,6 @@
 #include "inflate.h"
 #include "contrib/optimizations/inffast_chunk.h"
 #include "contrib/optimizations/chunkcopy.h"
-#include "x86.h"
 
 #ifdef MAKEFIXED
 #  ifndef BUILDFIXED
@@ -202,8 +201,6 @@ int stream_size;
 {
     int ret;
     struct inflate_state FAR *state;
-
-    x86_check_features();
 
     if (version == Z_NULL || version[0] != ZLIB_VERSION[0] ||
         stream_size != (int)(sizeof(z_stream)))
@@ -1057,7 +1054,8 @@ int flush;
         case LEN_:
             state->mode = LEN;
         case LEN:
-            if (have >= 6 && left >= 258) {
+            if (have >= INFLATE_FAST_MIN_INPUT &&
+                left >= INFLATE_FAST_MIN_OUTPUT) {
                 RESTORE();
                 inflate_fast_chunk_(strm, out);
                 LOAD();

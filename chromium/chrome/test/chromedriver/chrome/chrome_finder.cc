@@ -29,11 +29,11 @@ namespace {
 void GetApplicationDirs(std::vector<base::FilePath>* locations) {
   std::vector<base::FilePath> installation_locations;
   base::FilePath local_app_data, program_files, program_files_x86;
-  if (PathService::Get(base::DIR_LOCAL_APP_DATA, &local_app_data))
+  if (base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local_app_data))
     installation_locations.push_back(local_app_data);
-  if (PathService::Get(base::DIR_PROGRAM_FILES, &program_files))
+  if (base::PathService::Get(base::DIR_PROGRAM_FILES, &program_files))
     installation_locations.push_back(program_files);
-  if (PathService::Get(base::DIR_PROGRAM_FILESX86, &program_files_x86))
+  if (base::PathService::Get(base::DIR_PROGRAM_FILESX86, &program_files_x86))
     installation_locations.push_back(program_files_x86);
 
   for (size_t i = 0; i < installation_locations.size(); ++i) {
@@ -47,13 +47,16 @@ void GetApplicationDirs(std::vector<base::FilePath>* locations) {
 }
 #elif defined(OS_LINUX)
 void GetApplicationDirs(std::vector<base::FilePath>* locations) {
-  locations->push_back(base::FilePath("/opt/google/chrome"));
-  locations->push_back(base::FilePath("/usr/local/bin"));
+  // TODO: Respect users' PATH variables.
+  // Until then, we use an approximation of the most common defaults.
   locations->push_back(base::FilePath("/usr/local/sbin"));
-  locations->push_back(base::FilePath("/usr/bin"));
+  locations->push_back(base::FilePath("/usr/local/bin"));
   locations->push_back(base::FilePath("/usr/sbin"));
-  locations->push_back(base::FilePath("/bin"));
+  locations->push_back(base::FilePath("/usr/bin"));
   locations->push_back(base::FilePath("/sbin"));
+  locations->push_back(base::FilePath("/bin"));
+  // Lastly, try the default installation location.
+  locations->push_back(base::FilePath("/opt/google/chrome"));
 }
 #elif defined(OS_ANDROID)
 void GetApplicationDirs(std::vector<base::FilePath>* locations) {
@@ -109,7 +112,7 @@ bool FindChrome(base::FilePath* browser_exe) {
   std::vector<base::FilePath> browser_exes(
       browser_exes_array, browser_exes_array + arraysize(browser_exes_array));
   base::FilePath module_dir;
-  if (PathService::Get(base::DIR_MODULE, &module_dir)) {
+  if (base::PathService::Get(base::DIR_MODULE, &module_dir)) {
     for (size_t i = 0; i < browser_exes.size(); ++i) {
       base::FilePath path = module_dir.Append(browser_exes[i]);
       if (base::PathExists(path)) {

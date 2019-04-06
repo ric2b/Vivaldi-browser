@@ -91,7 +91,7 @@ class ExtensionActionRunner : public content::WebContentsObserver,
 
 #if defined(UNIT_TEST)
   // Only used in tests.
-  PermissionsData::AccessType RequiresUserConsentForScriptInjectionForTesting(
+  PermissionsData::PageAccess RequiresUserConsentForScriptInjectionForTesting(
       const Extension* extension,
       UserScript::InjectionType type) {
     return RequiresUserConsentForScriptInjection(extension, type);
@@ -123,7 +123,7 @@ class ExtensionActionRunner : public content::WebContentsObserver,
   // Returns true if the extension requesting script injection requires
   // user consent. If this is true, the caller should then register a request
   // via RequestScriptInjection().
-  PermissionsData::AccessType RequiresUserConsentForScriptInjection(
+  PermissionsData::PageAccess RequiresUserConsentForScriptInjection(
       const Extension* extension,
       UserScript::InjectionType type);
 
@@ -166,6 +166,7 @@ class ExtensionActionRunner : public content::WebContentsObserver,
                          content::RenderFrameHost* render_frame_host) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void WebContentsDestroyed() override;
 
   // ExtensionRegistryObserver:
   void OnExtensionUnloaded(content::BrowserContext* browser_context,

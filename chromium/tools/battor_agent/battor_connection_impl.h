@@ -16,7 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/tick_clock.h"
-#include "services/device/public/interfaces/serial.mojom.h"
+#include "services/device/public/mojom/serial.mojom.h"
 #include "tools/battor_agent/battor_connection.h"
 #include "tools/battor_agent/battor_error.h"
 #include "tools/battor_agent/battor_protocol_types.h"
@@ -43,12 +43,19 @@ class BattOrConnectionImpl
 
   void Open() override;
   void Close() override;
+  bool IsOpen() override;
   void SendBytes(BattOrMessageType type,
                  const void* buffer,
                  size_t bytes_to_send) override;
   void ReadMessage(BattOrMessageType type) override;
   void CancelReadMessage() override;
   void LogSerial(const std::string& str) override;
+
+  // Flushes the serial connection to the BattOr, reading and throwing away
+  // bytes from the serial connection until the connection is quiet for a
+  // sufficiently long time. This also discards any trailing bytes from past
+  // successful reads.
+  void Flush() override;
 
  protected:
   // Overridden by the test to use a fake serial connection.
@@ -57,7 +64,7 @@ class BattOrConnectionImpl
   // IO handler capable of reading and writing from the serial connection.
   scoped_refptr<device::SerialIoHandler> io_handler_;
 
-  std::unique_ptr<base::TickClock> tick_clock_;
+  const base::TickClock* tick_clock_;
 
  private:
   void OnOpened(bool success);
@@ -74,12 +81,6 @@ class BattOrConnectionImpl
   void EndReadBytesForMessage(bool success,
                               BattOrMessageType type,
                               std::unique_ptr<std::vector<char>> data);
-
-  // Flushes the serial connection to the BattOr, reading and throwing away
-  // bytes from the serial connection until the connection is quiet for a
-  // sufficiently long time. This also discards any trailing bytes from past
-  // successful reads.
-  void Flush();
 
   void BeginReadBytesForFlush();
   void OnBytesReadForFlush(int bytes_read,
@@ -105,6 +106,9 @@ class BattOrConnectionImpl
 
   // The path of the BattOr.
   std::string path_;
+
+  // Indicates whether the connection is currently open.
+  bool is_open_;
 
   // All bytes that have already been read from the serial stream, but have not
   // yet been given to the listener as a complete message.

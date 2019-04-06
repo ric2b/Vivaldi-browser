@@ -23,7 +23,7 @@
 #include "base/mac/scoped_mach_port.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <list>
 #include <utility>
 
@@ -64,7 +64,8 @@ class BASE_EXPORT WaitableEvent {
 
   // Constructs a WaitableEvent with policy and initial state as detailed in
   // the above enums.
-  WaitableEvent(ResetPolicy reset_policy, InitialState initial_state);
+  WaitableEvent(ResetPolicy reset_policy = ResetPolicy::MANUAL,
+                InitialState initial_state = InitialState::NOT_SIGNALED);
 
 #if defined(OS_WIN)
   // Create a WaitableEvent from an Event HANDLE which has already been
@@ -229,7 +230,7 @@ class BASE_EXPORT WaitableEvent {
   // the event, unlike the receive right, since a deleted event cannot be
   // signaled.
   mac::ScopedMachSendRight send_right_;
-#else
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   // On Windows, you must not close a HANDLE which is currently being waited on.
   // The MSDN documentation says that the resulting behaviour is 'undefined'.
   // To solve that issue each WaitableEventWatcher duplicates the given event

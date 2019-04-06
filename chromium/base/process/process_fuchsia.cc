@@ -4,11 +4,13 @@
 
 #include "base/process/process.h"
 
+#include <lib/zx/process.h>
 #include <zircon/process.h>
 #include <zircon/syscalls.h>
 
 #include "base/debug/activity_tracker.h"
 #include "base/fuchsia/default_job.h"
+#include "base/fuchsia/fuchsia_logging.h"
 #include "base/strings/stringprintf.h"
 
 namespace base {
@@ -48,15 +50,15 @@ Process Process::Open(ProcessId pid) {
     return Current();
 
   // While a process with object id |pid| might exist, the job returned by
-  // zx_job_default() might not contain it, so this call can fail.
-  ScopedZxHandle handle;
-  zx_status_t status = zx_object_get_child(
-      GetDefaultJob(), pid, ZX_RIGHT_SAME_RIGHTS, handle.receive());
+  // zx::job::default_job() might not contain it, so this call can fail.
+  zx::process process;
+  zx_status_t status =
+      GetDefaultJob()->get_child(pid, ZX_RIGHT_SAME_RIGHTS, &process);
   if (status != ZX_OK) {
-    DLOG(ERROR) << "zx_object_get_child failed: " << status;
+    ZX_DLOG(ERROR, status) << "zx_object_get_child";
     return Process();
   }
-  return Process(handle.release());
+  return Process(process.release());
 }
 
 // static
@@ -68,10 +70,11 @@ Process Process::OpenWithExtraPrivileges(ProcessId pid) {
 // static
 Process Process::DeprecatedGetProcessFromHandle(ProcessHandle handle) {
   DCHECK_NE(handle, GetCurrentProcessHandle());
-  ScopedZxHandle out;
-  if (zx_handle_duplicate(handle, ZX_RIGHT_SAME_RIGHTS, out.receive()) !=
-      ZX_OK) {
-    DLOG(ERROR) << "zx_handle_duplicate failed: " << handle;
+  zx::process out;
+  zx_status_t result =
+      zx::unowned_process(handle)->duplicate(ZX_RIGHT_SAME_RIGHTS, &out);
+  if (result != ZX_OK) {
+    ZX_DLOG(ERROR, result) << "zx_handle_duplicate(from_handle)";
     return Process();
   }
 
@@ -103,10 +106,10 @@ Process Process::Duplicate() const {
   if (!IsValid())
     return Process();
 
-  ScopedZxHandle out;
-  if (zx_handle_duplicate(process_.get(), ZX_RIGHT_SAME_RIGHTS,
-                          out.receive()) != ZX_OK) {
-    DLOG(ERROR) << "zx_handle_duplicate failed: " << process_.get();
+  zx::process out;
+  zx_status_t result = process_.duplicate(ZX_RIGHT_SAME_RIGHTS, &out);
+  if (result != ZX_OK) {
+    ZX_DLOG(ERROR, result) << "zx_handle_duplicate";
     return Process();
   }
 
@@ -130,19 +133,17 @@ void Process::Close() {
 bool Process::Terminate(int exit_code, bool wait) const {
   // exit_code isn't supportable. https://crbug.com/753490.
   zx_status_t status = zx_task_kill(Handle());
-  // TODO(scottmg): Put these LOG/CHECK back to DLOG/DCHECK after
-  // https://crbug.com/750756 is diagnosed.
   if (status == ZX_OK && wait) {
     zx_signals_t signals;
     status = zx_object_wait_one(Handle(), ZX_TASK_TERMINATED,
                                 zx_deadline_after(ZX_SEC(60)), &signals);
     if (status != ZX_OK) {
-      LOG(ERROR) << "Error waiting for process exit: " << status;
+      ZX_DLOG(ERROR, status) << "zx_object_wait_one(terminate)";
     } else {
       CHECK(signals & ZX_TASK_TERMINATED);
     }
   } else if (status != ZX_OK) {
-    LOG(ERROR) << "Unable to terminate process: " << status;
+    ZX_DLOG(ERROR, status) << "zx_task_kill";
   }
 
   return status >= 0;
@@ -162,28 +163,11 @@ bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
   zx_time_t deadline = timeout == TimeDelta::Max()
                            ? ZX_TIME_INFINITE
                            : (TimeTicks::Now() + timeout).ToZxTime();
-  // TODO(scottmg): https://crbug.com/755282
-  const bool kOnBot = getenv("CHROME_HEADLESS") != nullptr;
-  if (kOnBot) {
-    LOG(ERROR) << base::StringPrintf(
-        "going to wait for process %x (deadline=%zu, now=%zu)", process_.get(),
-        deadline, TimeTicks::Now().ToZxTime());
-  }
   zx_signals_t signals_observed = 0;
   zx_status_t status = zx_object_wait_one(process_.get(), ZX_TASK_TERMINATED,
                                           deadline, &signals_observed);
-
-  // TODO(scottmg): Make these LOGs into DLOGs after https://crbug.com/750756 is
-  // fixed.
-  if (status != ZX_OK && status != ZX_ERR_TIMED_OUT) {
-    LOG(ERROR) << "zx_object_wait_one failed, status=" << status;
-    return false;
-  }
-  if (status == ZX_ERR_TIMED_OUT) {
-    zx_time_t now = TimeTicks::Now().ToZxTime();
-    LOG(ERROR) << "zx_object_wait_one timed out, signals=" << signals_observed
-               << ", deadline=" << deadline << ", now=" << now
-               << ", delta=" << (now - deadline);
+  if (status != ZX_OK) {
+    ZX_DLOG(ERROR, status) << "zx_object_wait_one";
     return false;
   }
 
@@ -191,7 +175,7 @@ bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
   status = zx_object_get_info(process_.get(), ZX_INFO_PROCESS, &proc_info,
                               sizeof(proc_info), nullptr, nullptr);
   if (status != ZX_OK) {
-    LOG(ERROR) << "zx_object_get_info failed, status=" << status;
+    ZX_DLOG(ERROR, status) << "zx_object_get_info";
     if (exit_code)
       *exit_code = -1;
     return false;

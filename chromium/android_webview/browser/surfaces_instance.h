@@ -66,21 +66,24 @@ class SurfacesInstance : public base::RefCounted<SurfacesInstance>,
   void DisplayDidDrawAndSwap() override {}
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override {}
+  void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {}
+  void DidSwapAfterSnapshotRequestReceived(
+      const std::vector<ui::LatencyInfo>& latency_info) override {}
 
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
-  void DidPresentCompositorFrame(uint32_t presentation_token,
-                                 base::TimeTicks time,
-                                 base::TimeDelta refresh,
-                                 uint32_t flags) override;
-  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
+  void DidPresentCompositorFrame(
+      uint32_t presentation_token,
+      const gfx::PresentationFeedback& feedback) override {}
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void OnBeginFramePausedChanged(bool paused) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
 
   void SetSolidColorRootFrame();
+
+  std::vector<viz::SurfaceRange> GetChildIdsRanges();
 
   viz::FrameSinkIdAllocator frame_sink_id_allocator_;
 
@@ -101,8 +104,6 @@ class SurfacesInstance : public base::RefCounted<SurfacesInstance>,
   ParentOutputSurface* output_surface_;
 
   gfx::Size surface_size_;
-
-  uint64_t swap_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(SurfacesInstance);
 };

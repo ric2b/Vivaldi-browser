@@ -10,7 +10,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/browser/cast_media_blocker.h"
 #include "chromecast/browser/test/cast_browser_test.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"

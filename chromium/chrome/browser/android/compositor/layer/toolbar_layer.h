@@ -57,10 +57,11 @@ class ToolbarLayer : public Layer {
   ~ToolbarLayer() override;
 
  private:
+  int GetIndexOfLayer(scoped_refptr<cc::Layer> layer);
+
   ui::ResourceManager* resource_manager_;
 
   scoped_refptr<cc::Layer> layer_;
-  scoped_refptr<cc::Layer> toolbar_root_;
   scoped_refptr<cc::SolidColorLayer> toolbar_background_layer_;
   scoped_refptr<cc::NinePatchLayer> url_bar_background_layer_;
   scoped_refptr<cc::UIResourceLayer> bitmap_layer_;

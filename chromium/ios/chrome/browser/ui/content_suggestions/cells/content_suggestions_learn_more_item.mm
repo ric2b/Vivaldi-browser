@@ -6,8 +6,8 @@
 
 #include "base/logging.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/common/string_util.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
@@ -112,8 +112,11 @@ const int kLinkColorRGB = 0x5595FE;
 + (void)configureLabel:(UILabel*)label withText:(NSString*)text {
   label.numberOfLines = 0;
   label.textColor = [[MDCPalette greyPalette] tint700];
-  label.font = [MDCTypography italicFontFromFont:[MDCTypography captionFont]];
-
+  if (IsUIRefreshPhase1Enabled()) {
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+  } else {
+    label.font = [MDCTypography italicFontFromFont:[MDCTypography captionFont]];
+  }
   NSRange linkRange;
   NSString* strippedText = ParseStringWithLink(text, &linkRange);
   DCHECK_NE(NSNotFound, static_cast<NSInteger>(linkRange.location));

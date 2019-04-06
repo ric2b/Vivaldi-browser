@@ -7,6 +7,7 @@
 
 #include "content/common/content_export.h"
 #include "net/base/completion_callback.h"
+#include "net/dns/host_resolver.h"
 #include "net/http/http_request_info.h"
 #include "url/gurl.h"
 
@@ -16,6 +17,9 @@ namespace net {
 class URLRequestContextGetter;
 }
 
+// TODO(https://crbug.com/565719): Resource hints aren't used nor implemented in
+// content/. Either the preconnect/preresolve code should be moved to content/
+// or this should be moved outside of content/.
 namespace content {
 
 // A Preconnect instance maintains state while a TCP/IP connection is made, and
@@ -27,19 +31,19 @@ namespace content {
 // coalesce. |allow_credentials| corresponds to the fetch spec.
 // Note: This should only be called on the IO thread, with a valid
 // URLRequestContextGetter.
-CONTENT_EXPORT void PreconnectUrl(
-    net::URLRequestContextGetter* getter,
-    const GURL& url,
-    const GURL& site_for_cookies,
-    int count,
-    bool allow_credentials,
-    net::HttpRequestInfo::RequestMotivation motivation);
+CONTENT_EXPORT void PreconnectUrl(net::URLRequestContextGetter* getter,
+                                  const GURL& url,
+                                  const GURL& site_for_cookies,
+                                  int count,
+                                  bool allow_credentials);
 
 // Issues a DNS request to |url|. Note that these requests are sent to the host
 // resolver with priority net::IDLE.
-CONTENT_EXPORT int PreresolveUrl(net::URLRequestContextGetter* getter,
-                                 const GURL& url,
-                                 const net::CompletionCallback& callback);
+CONTENT_EXPORT int PreresolveUrl(
+    net::URLRequestContextGetter* getter,
+    const GURL& url,
+    const net::CompletionCallback& callback,
+    std::unique_ptr<net::HostResolver::Request>* out_req);
 
 }  // namespace content
 

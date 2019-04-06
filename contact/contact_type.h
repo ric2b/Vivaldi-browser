@@ -43,6 +43,7 @@ enum UpdateContactFields {
   AVATAR_URL = 1 << 4,
   SEPARATOR = 1 << 5,
   GENERATED_FROM_SENT_MAIL = 1 << 6,
+  TRUSTED = 1 << 7,
 };
 
 // Represents a simplified version of a Contact.
@@ -58,6 +59,7 @@ struct Contact {
   base::string16 avatar_url;
   bool separator;
   bool generated_from_sent_mail;
+  bool trusted;
   int updateFields;
 };
 
@@ -73,7 +75,7 @@ class AddPropertyObject {
   ContactID contact_id;
   base::string16 value;
   std::string type;
-  bool is_default;
+  bool favorite;
 };
 
 class UpdatePropertyObject {
@@ -89,7 +91,7 @@ class UpdatePropertyObject {
   PropertyID property_id;
   base::string16 value;
   std::string type;
-  bool is_default;
+  bool favorite;
 };
 
 class RemovePropertyObject {
@@ -147,6 +149,9 @@ class ContactRow {
     generated_from_sent_mail_ = generated_from_sent_mail;
   }
 
+  bool trusted() const { return trusted_; }
+  void set_trusted(bool is_trusted) { trusted_ = is_trusted; }
+
   ContactID contact_id_;
   base::string16 name_;
   base::Time birthday_;
@@ -157,6 +162,7 @@ class ContactRow {
   base::string16 avatar_url_;
   bool separator_;
   bool generated_from_sent_mail_;
+  bool trusted_;
 
  protected:
   void Swap(ContactRow* other);
@@ -224,6 +230,16 @@ struct ContactResults {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ContactResults);
+};
+
+class CreateContactsResult {
+ public:
+  CreateContactsResult() = default;
+  int number_failed;
+  int number_success;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CreateContactsResult);
 };
 
 }  // namespace contact

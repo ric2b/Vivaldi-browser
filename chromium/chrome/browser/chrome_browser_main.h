@@ -6,21 +6,18 @@
 #define CHROME_BROWSER_CHROME_BROWSER_MAIN_H_
 
 #include <memory>
-#include <vector>
 
 #include "base/macros.h"
-#include "base/metrics/field_trial.h"
-#include "base/profiler/stack_sampling_profiler.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_field_trials.h"
 #include "chrome/browser/chrome_process_singleton.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/process_singleton.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
-#include "chrome/common/stack_sampling_configuration.h"
-#include "components/metrics/call_stack_profile_params.h"
+#include "chrome/common/thread_profiler.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/common/main_function_params.h"
+#include "ui/base/resource/data_pack.h"
 
 class BrowserProcessImpl;
 class ChromeBrowserMainExtraParts;
@@ -30,8 +27,11 @@ class Profile;
 class StartupBrowserCreator;
 class StartupTimeBomb;
 class ShutdownWatcherHelper;
-class ThreeDAPIObserver;
 class WebUsbDetector;
+
+namespace base {
+class SequencedTaskRunner;
+}
 
 namespace chrome_browser {
 // For use by ShowMissingLocaleMessageBox.
@@ -51,11 +51,19 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   // Add additional ChromeBrowserMainExtraParts.
   virtual void AddParts(ChromeBrowserMainExtraParts* parts);
 
+#if !defined(OS_ANDROID)
+  // Returns the RunLoop that would be run by MainMessageLoopRun. This is used
+  // by InProcessBrowserTests to allow them to run until the BrowserProcess is
+  // ready for the browser to exit.
+  static std::unique_ptr<base::RunLoop> TakeRunLoopForTest();
+#endif
+
  protected:
-  explicit ChromeBrowserMainParts(
-      const content::MainFunctionParams& parameters);
+  explicit ChromeBrowserMainParts(const content::MainFunctionParams& parameters,
+                                  std::unique_ptr<ui::DataPack> data_pack);
 
   // content::BrowserMainParts overrides.
+  bool ShouldContentCreateFeatureList() override;
   // These are called in-order by content::BrowserMainLoop.
   // Each stage calls the same stages in any ChromeBrowserMainExtraParts added
   // with AddParts() from ChromeContentBrowserClient::CreateBrowserMainParts.
@@ -65,6 +73,7 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   void PreMainMessageLoopStart() override;
   void PostMainMessageLoopStart() override;
   int PreCreateThreads() override;
+  void PostCreateThreads() override;
   void ServiceManagerConnectionStarted(
       content::ServiceManagerConnection* connection) override;
   void PreMainMessageLoopRun() override;
@@ -96,6 +105,8 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   Profile* profile() { return profile_; }
 
  private:
+  friend class ChromeBrowserMainPartsTestApi;
+
   // Sets up the field trials and related initialization. Call only after
   // about:flags have been converted to switches.
   void SetupFieldTrials();
@@ -114,6 +125,19 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   // for child processes.
   void SetupOriginTrialsCommandLine(PrefService* local_state);
 
+  // Calling during PreEarlyInitialization() to load local state. Return value
+  // is an exit status, RESULT_CODE_NORMAL_EXIT indicates success.
+  // If the return value is RESULT_CODE_MISSING_DATA, then
+  // |failed_to_load_resource_bundle| indicates if the ResourceBundle couldn't
+  // be loaded.
+  int LoadLocalState(base::SequencedTaskRunner* local_state_task_runner,
+                     bool* failed_to_load_resource_bundle);
+
+  // Applies any preferences (to local state) needed for first run. This is
+  // always called and early outs if not first-run. Return value is an exit
+  // status, RESULT_CODE_NORMAL_EXIT indicates success.
+  int ApplyFirstRunPrefs();
+
   // Methods for Main Message Loop -------------------------------------------
 
   int PreCreateThreadsImpl();
@@ -122,9 +146,14 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   // Members initialized on construction ---------------------------------------
 
   const content::MainFunctionParams parameters_;
+  // TODO(sky): remove this. This class (and related calls), may mutate the
+  // CommandLine, so it is misleading keeping a const ref here.
   const base::CommandLine& parsed_command_line_;
   int result_code_;
 
+  ChromeBrowserFieldTrials browser_field_trials_;
+
+#if !defined(OS_ANDROID)
   // Create StartupTimeBomb object for watching jank during startup.
   std::unique_ptr<StartupTimeBomb> startup_watcher_;
 
@@ -133,23 +162,20 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   // it is destroyed last.
   std::unique_ptr<ShutdownWatcherHelper> shutdown_watcher_;
 
-  // Statistical testing infrastructure for the entire browser. nullptr until
-  // |SetupFieldTrials()| is called.
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
-
-  ChromeBrowserFieldTrials browser_field_trials_;
-
-#if !defined(OS_ANDROID)
   std::unique_ptr<WebUsbDetector> web_usb_detector_;
-#endif
+#endif  // !defined(OS_ANDROID)
 
   // Vector of additional ChromeBrowserMainExtraParts.
   // Parts are deleted in the inverse order they are added.
   std::vector<ChromeBrowserMainExtraParts*> chrome_extra_parts_;
 
-  // A profiler that periodically samples stack traces. Used to sample startup
-  // behavior.
-  base::StackSamplingProfiler sampling_profiler_;
+  // A profiler that periodically samples stack traces on the UI thread.
+  std::unique_ptr<ThreadProfiler> ui_thread_profiler_;
+
+  // Whether PerformPreMainMessageLoopStartup() is called on VariationsService.
+  // Initialized to true if |MainFunctionParams::ui_task| is null (meaning not
+  // running browser_tests), but may be forced to true for tests.
+  bool should_call_pre_main_loop_start_startup_on_variations_service_;
 
   // Members initialized after / released before main_message_loop_ ------------
 
@@ -175,12 +201,15 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
 
   Profile* profile_;
   bool run_message_loop_;
-  std::unique_ptr<ThreeDAPIObserver> three_d_observer_;
 
   // Initialized in |SetupFieldTrials()|.
   scoped_refptr<FieldTrialSynchronizer> field_trial_synchronizer_;
 
   base::FilePath user_data_dir_;
+
+  // This is used to store the ui data pack. The data pack is moved when
+  // resource bundle gets created.
+  std::unique_ptr<ui::DataPack> service_manifest_data_pack_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainParts);
 };

@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_discovery_filter.h"
 
@@ -25,7 +26,7 @@ BluetoothDiscoverySession::BluetoothDiscoverySession(
 
 BluetoothDiscoverySession::~BluetoothDiscoverySession() {
   if (active_) {
-    Stop(base::Bind(&base::DoNothing), base::Bind(&base::DoNothing));
+    Stop(base::DoNothing(), base::DoNothing());
     MarkAsInactive();
   }
 }

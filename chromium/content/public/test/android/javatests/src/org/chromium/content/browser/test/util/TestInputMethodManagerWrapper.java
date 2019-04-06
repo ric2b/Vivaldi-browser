@@ -13,10 +13,10 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
 import org.chromium.base.Log;
-import org.chromium.base.annotations.UsedByReflection;
-import org.chromium.content.browser.input.InputMethodManagerWrapper;
+import org.chromium.content.browser.input.ImeAdapterImpl;
 import org.chromium.content.browser.input.Range;
 import org.chromium.content_public.browser.ImeAdapter;
+import org.chromium.content_public.browser.InputMethodManagerWrapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,8 +24,7 @@ import java.util.List;
 /**
  * Overrides InputMethodManagerWrapper for testing purposes.
  */
-@UsedByReflection("ThreadedInputConnectionFactory.java")
-public class TestInputMethodManagerWrapper extends InputMethodManagerWrapper {
+public class TestInputMethodManagerWrapper implements InputMethodManagerWrapper {
     private static final String TAG = "cr_Ime";
 
     private final InputConnectionProvider mInputConnectionProvider;
@@ -59,11 +58,12 @@ public class TestInputMethodManagerWrapper extends InputMethodManagerWrapper {
      */
     public static InputConnectionProvider defaultInputConnectionProvider(
             final ImeAdapter imeAdapter) {
-        return new InputConnectionProvider() {
-            @Override
-            public InputConnection create(EditorInfo info) {
-                return imeAdapter.onCreateInputConnection(info);
-            }
+        return (EditorInfo info) -> {
+            ImeAdapterImpl imeAdapterImpl = (ImeAdapterImpl) imeAdapter;
+            imeAdapterImpl.setTriggerDelayedOnCreateInputConnectionForTest(false);
+            InputConnection connection = imeAdapter.onCreateInputConnection(info);
+            imeAdapterImpl.setTriggerDelayedOnCreateInputConnectionForTest(true);
+            return connection;
         };
     }
 
@@ -75,7 +75,6 @@ public class TestInputMethodManagerWrapper extends InputMethodManagerWrapper {
     }
 
     public TestInputMethodManagerWrapper(InputConnectionProvider provider) {
-        super(null);
         Log.d(TAG, "TestInputMethodManagerWrapper constructor");
         mInputConnectionProvider = provider;
         mUpdateSelectionList = new ArrayList<>();
@@ -141,6 +140,10 @@ public class TestInputMethodManagerWrapper extends InputMethodManagerWrapper {
         mComposition.set(candidatesStart, candidatesEnd);
         onUpdateSelection(lastSelection, lastComposition, mSelection, mComposition);
     }
+
+    @Override
+    public void updateExtractedText(
+            View view, int token, android.view.inputmethod.ExtractedText text) {}
 
     @Override
     public void notifyUserAction() {}

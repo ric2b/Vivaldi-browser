@@ -14,6 +14,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -67,7 +68,7 @@ class RedirectTest : public InProcessBrowserTest {
                                const history::RedirectList* redirects) {
     rv->insert(rv->end(), redirects->begin(), redirects->end());
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+        FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
   }
 
   // Tracker for asynchronous history queries.
@@ -138,9 +139,7 @@ IN_PROC_BROWSER_TEST_F(RedirectTest, ClientEmptyReferer) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_directory;
   ASSERT_TRUE(temp_directory.CreateUniqueTempDir());
-  base::FilePath temp_file;
-  ASSERT_TRUE(
-      base::CreateTemporaryFileInDir(temp_directory.GetPath(), &temp_file));
+  base::FilePath temp_file = temp_directory.GetPath().AppendASCII("foo.html");
   ASSERT_EQ(static_cast<int>(file_redirect_contents.size()),
             base::WriteFile(temp_file,
                             file_redirect_contents.data(),

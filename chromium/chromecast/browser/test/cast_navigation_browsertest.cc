@@ -6,7 +6,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromecast/browser/test/cast_browser_test.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "content/public/test/browser_test_utils.h"
 #include "media/base/test_data_util.h"
 #include "url/gurl.h"
@@ -76,7 +76,9 @@ IN_PROC_BROWSER_TEST_F(CastNavigationBrowserTest, EmptyTest) {
   LoadAboutBlank();
 }
 
-IN_PROC_BROWSER_TEST_F(CastNavigationBrowserTest, AudioPlaybackWavPcm) {
+// Disabled due to flakiness. See crbug.com/813481.
+IN_PROC_BROWSER_TEST_F(CastNavigationBrowserTest,
+                       DISABLED_AudioPlaybackWavPcm) {
   PlayAudio("bear_pcm.wav");
 }
 

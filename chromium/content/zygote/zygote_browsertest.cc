@@ -12,6 +12,8 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "services/service_manager/embedder/switches.h"
+#include "services/service_manager/sandbox/switches.h"
 
 namespace content {
 
@@ -49,7 +51,7 @@ class LinuxZygoteDisabledBrowserTest : public ContentBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ContentBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kNoZygote);
-    command_line->AppendSwitch(switches::kNoSandbox);
+    command_line->AppendSwitch(service_manager::switches::kNoSandbox);
   }
 
  private:

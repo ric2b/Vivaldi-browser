@@ -17,6 +17,7 @@
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -57,7 +58,7 @@ const unsigned char kAuthorityRootDN[] = {
 //                        const SSLCertRequestInfo& cert_request_info,
 //                        ClientCertIdentityList* selected_identities);
 template <typename T>
-class ClientCertStoreTest : public ::testing::Test {
+class ClientCertStoreTest : public TestWithScopedTaskEnvironment {
  public:
   T delegate_;
 };
@@ -91,7 +92,8 @@ TYPED_TEST_P(ClientCertStoreTest, AllIssuersAllowed) {
                                               &selected_identities);
   EXPECT_TRUE(rv);
   ASSERT_EQ(1u, selected_identities.size());
-  EXPECT_TRUE(selected_identities[0]->certificate()->Equals(cert.get()));
+  EXPECT_TRUE(
+      selected_identities[0]->certificate()->EqualsExcludingChain(cert.get()));
 }
 
 // Verify that certificates are correctly filtered against CertRequestInfo with
@@ -127,7 +129,8 @@ TYPED_TEST_P(ClientCertStoreTest, DISABLED_CertAuthorityFiltering) {
                                               &selected_identities);
   EXPECT_TRUE(rv);
   ASSERT_EQ(1u, selected_identities.size());
-  EXPECT_TRUE(selected_identities[0]->certificate()->Equals(cert_1.get()));
+  EXPECT_TRUE(selected_identities[0]->certificate()->EqualsExcludingChain(
+      cert_1.get()));
 }
 
 TYPED_TEST_P(ClientCertStoreTest, PrintableStringContainingUTF8) {
@@ -163,7 +166,8 @@ TYPED_TEST_P(ClientCertStoreTest, PrintableStringContainingUTF8) {
                                               &selected_identities);
   EXPECT_TRUE(rv);
   ASSERT_EQ(1u, selected_identities.size());
-  EXPECT_TRUE(selected_identities[0]->certificate()->Equals(cert.get()));
+  EXPECT_TRUE(
+      selected_identities[0]->certificate()->EqualsExcludingChain(cert.get()));
 }
 
 REGISTER_TYPED_TEST_CASE_P(ClientCertStoreTest,

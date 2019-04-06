@@ -9,13 +9,15 @@
 
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
+#include "content/common/content_param_traits.h"
 #include "content/common/view_message_enums.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_param_traits.h"
 #include "ipc/param_traits_macros.h"
-#include "third_party/WebKit/public/web/WebAXEnums.h"
+#include "third_party/blink/public/web/web_ax_enums.h"
 #include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_event.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_relative_bounds.h"
 #include "ui/accessibility/ax_tree_update.h"
@@ -28,7 +30,7 @@
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::AXContentIntAttribute,
                           content::AX_CONTENT_INT_ATTRIBUTE_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(ui::AXAction, ui::AX_ACTION_LAST)
+IPC_ENUM_TRAITS_MAX_VALUE(ax::mojom::Action, ax::mojom::Action::kMaxValue)
 
 IPC_STRUCT_TRAITS_BEGIN(ui::AXActionData)
   IPC_STRUCT_TRAITS_MEMBER(action)
@@ -93,23 +95,15 @@ IPC_STRUCT_TRAITS_BEGIN(content::AXContentTreeUpdate)
   IPC_STRUCT_TRAITS_MEMBER(node_id_to_clear)
   IPC_STRUCT_TRAITS_MEMBER(root_id)
   IPC_STRUCT_TRAITS_MEMBER(nodes)
+  IPC_STRUCT_TRAITS_MEMBER(event_from)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_BEGIN(AccessibilityHostMsg_EventParams)
-  // The tree update.
-  IPC_STRUCT_MEMBER(content::AXContentTreeUpdate, update)
+IPC_STRUCT_BEGIN(AccessibilityHostMsg_EventBundleParams)
+  // Zero or more updates to the accessibility tree to apply first.
+  IPC_STRUCT_MEMBER(std::vector<content::AXContentTreeUpdate>, updates)
 
-  // Type of event.
-  IPC_STRUCT_MEMBER(ui::AXEvent, event_type)
-
-  // ID of the node that the event applies to.
-  IPC_STRUCT_MEMBER(int, id)
-
-  // The source of this event.
-  IPC_STRUCT_MEMBER(ui::AXEventFrom, event_from)
-
-  // ID of the action request triggering this event.
-  IPC_STRUCT_MEMBER(int, action_request_id)
+  // Zero or more events to fire after the tree updates have been applied.
+  IPC_STRUCT_MEMBER(std::vector<ui::AXEvent>, events)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(AccessibilityHostMsg_LocationChangeParams)
@@ -156,14 +150,14 @@ IPC_MESSAGE_ROUTED1(AccessibilityMsg_PerformAction,
 // it fires an accessibility event of type |event_to_fire| on the target.
 IPC_MESSAGE_ROUTED3(AccessibilityMsg_HitTest,
                     gfx::Point /* location to test */,
-                    ui::AXEvent /* event to fire */,
+                    ax::mojom::Event /* event to fire */,
                     int /* action request id */)
 
-// Tells the render view that a AccessibilityHostMsg_Events
-// message was processed and it can send additional events. The argument
-// must be the same as the ack_token passed to AccessibilityHostMsg_Events.
-IPC_MESSAGE_ROUTED1(AccessibilityMsg_Events_ACK,
-                    int /* ack_token */)
+// Tells the render view that a AccessibilityHostMsg_EventBundle
+// message was processed and it can send additional updates. The argument
+// must be the same as the ack_token passed to
+// AccessibilityHostMsg_EventBundle.
+IPC_MESSAGE_ROUTED1(AccessibilityMsg_EventBundle_ACK, int /* ack_token */)
 
 // Tell the renderer to reset and send a new accessibility tree from
 // scratch because the browser is out of sync. It passes a sequential
@@ -182,23 +176,23 @@ IPC_MESSAGE_ROUTED0(AccessibilityMsg_FatalError)
 // Request a one-time snapshot of the accessibility tree without
 // enabling accessibility if it wasn't already enabled. The passed id
 // will be returned in the AccessibilityHostMsg_SnapshotResponse message.
-IPC_MESSAGE_ROUTED1(AccessibilityMsg_SnapshotTree,
-                    int /* callback id */)
+IPC_MESSAGE_ROUTED2(AccessibilityMsg_SnapshotTree,
+                    int /* callback id */,
+                    ui::AXMode /* ax_mode */)
 
 // Messages sent from the renderer to the browser.
 
 // Sent to notify the browser about renderer accessibility events.
-// The browser responds with a AccessibilityMsg_Events_ACK with the same
+// The browser responds with a AccessibilityMsg_EventBundle_ACK with the same
 // ack_token.
-// The second parameter, reset_token, is set if this IPC was sent in response
+// The |reset_token| parameter is set if this IPC was sent in response
 // to a reset request from the browser. When the browser requests a reset,
 // it ignores incoming IPCs until it sees one with the correct reset token.
 // Any other time, it ignores IPCs with a reset token.
-IPC_MESSAGE_ROUTED3(
-    AccessibilityHostMsg_Events,
-    std::vector<AccessibilityHostMsg_EventParams> /* events */,
-    int /* reset_token */,
-    int /* ack_token */)
+IPC_MESSAGE_ROUTED3(AccessibilityHostMsg_EventBundle,
+                    AccessibilityHostMsg_EventBundleParams /* params */,
+                    int /* reset_token */,
+                    int /* ack_token */)
 
 // Sent to update the browser of the location of accessibility objects.
 IPC_MESSAGE_ROUTED1(
@@ -216,7 +210,7 @@ IPC_MESSAGE_ROUTED5(AccessibilityHostMsg_ChildFrameHitTestResult,
                     gfx::Point /* location tested */,
                     int /* routing id of child frame */,
                     int /* browser plugin instance id of child frame */,
-                    ui::AXEvent /* event to fire */)
+                    ax::mojom::Event /* event to fire */)
 
 // Sent in response to AccessibilityMsg_SnapshotTree. The callback id that was
 // passed to the request will be returned in |callback_id|, along with

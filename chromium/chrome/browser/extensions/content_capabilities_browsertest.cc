@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -13,17 +14,18 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/crx_file/id_util.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest_handlers/content_capabilities_handler.h"
 #include "extensions/common/switches.h"
 #include "extensions/common/url_pattern.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "storage/browser/quota/special_storage_policy.h"
@@ -33,10 +35,10 @@ using extensions::Extension;
 using extensions::ExtensionBuilder;
 using extensions::ListBuilder;
 
-class ContentCapabilitiesTest : public ExtensionApiTest {
+class ContentCapabilitiesTest : public extensions::ExtensionApiTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
+    extensions::ExtensionApiTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(
         extensions::switches::kWhitelistedExtensionID,
         crx_file::id_util::GenerateIdForPath(
@@ -44,9 +46,9 @@ class ContentCapabilitiesTest : public ExtensionApiTest {
   }
 
   void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
     base::FilePath test_data;
-    EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data));
+    EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data));
     embedded_test_server()->ServeFilesFromDirectory(
         test_data.AppendASCII("extensions/content_capabilities"));
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -200,9 +202,14 @@ IN_PROC_BROWSER_TEST_F(ContentCapabilitiesTest, ClipboardWrite) {
   // script without a user gesture.
   EXPECT_TRUE(
       CanWriteClipboard(extension.get(), GetTestURLFor("bar.example.com")));
-  EXPECT_TRUE(
-      CanWriteClipboardInAboutBlankFrame(extension.get(),
-                                          GetTestURLFor("bar.example.com")));
+  if (!base::FeatureList::IsEnabled(features::kUserActivationV2)) {
+    EXPECT_TRUE(CanWriteClipboardInAboutBlankFrame(
+        extension.get(), GetTestURLFor("bar.example.com")));
+  } else {
+    // In UserActivationV2, acitvation doesn't propagate to a child frame.
+    EXPECT_FALSE(CanWriteClipboardInAboutBlankFrame(
+        extension.get(), GetTestURLFor("bar.example.com")));
+  }
 
   EXPECT_FALSE(
       CanReadClipboard(extension.get(), GetTestURLFor("foo.example.com")));

@@ -16,8 +16,8 @@ const char kSwitchValueTrue[] = "true";
 const char kSwitchValueFalse[] = "false";
 
 // Server url to upload crash data to.
-// Default is "http://clients2.google.com/cr/report" for prod devices.
-// Default is "http://clients2.google.com/cr/staging_report" for non prod.
+// Default is "https://clients2.google.com/cr/report" for prod devices.
+// Default is "https://clients2.google.com/cr/staging_report" for non prod.
 const char kCrashServerUrl[] = "crash-server-url";
 
 // Enable file accesses. It should not be enabled for most Cast devices.
@@ -28,9 +28,6 @@ const char kOverrideMetricsUploadUrl[] = "override-metrics-upload-url";
 
 // Disable features that require WiFi management.
 const char kNoWifi[] = "no-wifi";
-
-// Allows media playback for hidden WebContents
-const char kAllowHiddenMediaPlayback[] = "allow-hidden-media-playback";
 
 // Pass the app id information to the renderer process, to be used for logging.
 // last-launched-app should be the app that just launched and is spawning the
@@ -130,8 +127,45 @@ const char kVSyncInterval[] = "vsync-interval";
 // resolution is high enough).  Otherwise, cast_shell defaults to 720p.
 const char kDesktopWindow1080p[] = "desktop-window-1080p";
 
+// When present overrides the screen resolution used by CanDisplayType API,
+// instead of using the values obtained from avsettings.
+const char kForceMediaResolutionHeight[] = "force-media-resolution-height";
+const char kForceMediaResolutionWidth[] = "force-media-resolution-width";
+
 // Enables input event handling by the window manager.
 const char kEnableInput[] = "enable-input";
+
+// Background color used when Chromium hasn't rendered anything yet.
+const char kCastAppBackgroundColor[] = "cast-app-background-color";
+
+// The number of pixels from the very left or right of the screen to consider as
+// a valid origin for the left or right swipe gesture.  Overrides the default
+// value in cast_system_gesture_handler.cc.
+const char kSystemGestureStartWidth[] = "system-gesture-start-width";
+
+// The number of pixels from the very top or bottom of the screen to consider as
+// a valid origin for the top or bottom swipe gesture. Overrides the default
+// value in cast_system_gesture_handler.cc.
+const char kSystemGestureStartHeight[] = "system-gesture-start-height";
+
+// The number of pixels up from the bottom of the screen to consider as a valid
+// origin for a bottom swipe gesture. If set, overrides the value of both the
+// above system-gesture-start-height flag and the default value in
+// cast_system_gesture_handler.cc.
+const char kBottomSystemGestureStartHeight[] = "bottom-gesture-start-height";
+
+// The number of pixels from the start of a left swipe gesture to consider as a
+// 'back' gesture.
+const char kBackGestureHorizontalThreshold[] =
+    "back-gesture-horizontal-threshold";
+
+// Whether to enable detection and dispatch of a 'drag from the top' gesture.
+const char kEnableTopDragGesture[] = "enable-top-drag-gesture";
+
+extern const char kCastMemoryPressureCriticalFraction[] =
+    "memory-pressure-critical-fraction";
+extern const char kCastMemoryPressureModerateFraction[] =
+    "memory-pressure-moderate-fraction";
 
 }  // namespace switches
 
@@ -185,6 +219,43 @@ int GetSwitchValueNonNegativeInt(const std::string& switch_name,
     return default_value;
   }
   return value;
+}
+
+double GetSwitchValueDouble(const std::string& switch_name,
+                            const double default_value) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switch_name)) {
+    return default_value;
+  }
+
+  double arg_value;
+  if (!base::StringToDouble(command_line->GetSwitchValueASCII(switch_name),
+                            &arg_value)) {
+    LOG(DFATAL) << "--" << switch_name << " only accepts numbers as arguments";
+    return default_value;
+  }
+  return arg_value;
+}
+
+uint32_t GetSwitchValueColor(const std::string& switch_name,
+                             const uint32_t default_value) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switch_name)) {
+    return default_value;
+  }
+
+  uint32_t arg_value = 0;
+  if (!base::HexStringToUInt(
+          command_line->GetSwitchValueASCII(switch_name).substr(1),
+          &arg_value)) {
+    LOG(ERROR) << "Invalid value for " << switch_name << " ("
+               << command_line->GetSwitchValueASCII(switch_name)
+               << "), using default.";
+    return default_value;
+  }
+  return arg_value;
 }
 
 }  // namespace chromecast

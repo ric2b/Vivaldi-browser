@@ -27,7 +27,7 @@ struct HttpRequest;
 }
 }
 
-class WebstoreInstallerTest : public ExtensionBrowserTest {
+class WebstoreInstallerTest : public extensions::ExtensionBrowserTest {
  public:
   WebstoreInstallerTest(const std::string& webstore_domain,
                         const std::string& test_data_path,
@@ -77,8 +77,6 @@ class WebstoreInstallerTest : public ExtensionBrowserTest {
   std::string verified_domain_;
   std::string unverified_domain_;
   std::string test_gallery_url_;
-
-  base::ScopedTempDir download_directory_;
 
   std::unique_ptr<extensions::ScopedTestDialogAutoConfirm>
       install_auto_confirm_;

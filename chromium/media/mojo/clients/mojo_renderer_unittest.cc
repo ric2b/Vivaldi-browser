@@ -12,13 +12,11 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/elapsed_timer.h"
-#include "media/base/audio_renderer_sink.h"
 #include "media/base/cdm_config.h"
 #include "media/base/cdm_context.h"
 #include "media/base/gmock_callback_support.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
-#include "media/base/video_renderer_sink.h"
 #include "media/cdm/default_cdm_factory.h"
 #include "media/mojo/clients/mojo_renderer.h"
 #include "media/mojo/common/media_type_converters.h"
@@ -61,7 +59,7 @@ void WaitFor(base::TimeDelta duration) {
 class MojoRendererTest : public ::testing::Test {
  public:
   MojoRendererTest()
-      : mojo_cdm_service_(&mojo_cdm_service_context_, &cdm_factory_),
+      : mojo_cdm_service_(&cdm_factory_, &mojo_cdm_service_context_),
         cdm_binding_(&mojo_cdm_service_) {
     std::unique_ptr<StrictMock<MockRenderer>> mock_renderer(
         new StrictMock<MockRenderer>());
@@ -69,7 +67,7 @@ class MojoRendererTest : public ::testing::Test {
 
     mojom::RendererPtr remote_renderer;
     renderer_binding_ = MojoRendererService::Create(
-        &mojo_cdm_service_context_, nullptr, nullptr, std::move(mock_renderer),
+        &mojo_cdm_service_context_, std::move(mock_renderer),
         MojoRendererService::InitiateSurfaceRequestCB(),
         mojo::MakeRequest(&remote_renderer));
 
@@ -86,7 +84,7 @@ class MojoRendererTest : public ::testing::Test {
         .WillRepeatedly(Return(base::TimeDelta()));
   }
 
-  virtual ~MojoRendererTest() = default;
+  ~MojoRendererTest() override = default;
 
   void Destroy() {
     mojo_renderer_.reset();

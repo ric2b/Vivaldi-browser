@@ -24,6 +24,7 @@
 #include "chrome/browser/task_manager/sampling/task_manager_io_thread_helper.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
 #include "gpu/ipc/common/memory_stats.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
 
 namespace task_manager {
@@ -46,9 +47,6 @@ class TaskManagerImpl : public TaskManagerInterface,
   base::Time GetStartTime(TaskId task_id) const override;
   base::TimeDelta GetCpuTime(TaskId task_id) const override;
   int64_t GetMemoryFootprintUsage(TaskId task_id) const override;
-  int64_t GetPhysicalMemoryUsage(TaskId task_id) const override;
-  int64_t GetPrivateMemoryUsage(TaskId task_id) const override;
-  int64_t GetSharedMemoryUsage(TaskId task_id) const override;
   int64_t GetSwappedMemoryUsage(TaskId task_id) const override;
   int64_t GetGpuMemoryUsage(TaskId task_id,
                             bool* has_duplicates) const override;
@@ -71,7 +69,7 @@ class TaskManagerImpl : public TaskManagerInterface,
   const base::ProcessHandle& GetProcessHandle(TaskId task_id) const override;
   const base::ProcessId& GetProcessId(TaskId task_id) const override;
   Task::Type GetType(TaskId task_id) const override;
-  int GetTabId(TaskId task_id) const override;
+  SessionID GetTabId(TaskId task_id) const override;
   int GetChildProcessUniqueId(TaskId task_id) const override;
   void GetTerminationStatus(TaskId task_id,
                             base::TerminationStatus* out_status,
@@ -99,10 +97,16 @@ class TaskManagerImpl : public TaskManagerInterface,
   void TaskRemoved(Task* task) override;
   void TaskUnresponsive(Task* task) override;
 
+  // Used when Network Service is disabled.
   // The notification method on the UI thread when multiple bytes are
   // transferred from URLRequests. This will be called by the
-  // |io_thread_helper_|
+  // |io_thread_helper_|.
   static void OnMultipleBytesTransferredUI(BytesTransferredMap params);
+
+  // Used when Network Service is enabled.
+  // Receives total network usages from |NetworkService|.
+  void OnTotalNetworkUsages(
+      std::vector<network::mojom::NetworkUsagePtr> total_network_usages);
 
  private:
   friend struct base::LazyInstanceTraitsBase<TaskManagerImpl>;
@@ -151,10 +155,16 @@ class TaskManagerImpl : public TaskManagerInterface,
   // A cached sorted list of the task IDs.
   mutable std::vector<TaskId> sorted_task_ids_;
 
+  // Used when Network Service is disabled.
   // The manager of the IO thread helper used to handle network bytes
   // notifications on IO thread. The manager itself lives on the UI thread, but
   // the IO thread helper lives entirely on the IO thread.
   std::unique_ptr<IoThreadHelperManager> io_thread_helper_manager_;
+
+  // Used when Network Service is enabled.
+  // Stores the total network usages per |process_id, routing_id| from last
+  // refresh.
+  BytesTransferredMap last_refresh_total_network_usages_map_;
 
   // The list of the task providers that are owned and observed by this task
   // manager implementation.

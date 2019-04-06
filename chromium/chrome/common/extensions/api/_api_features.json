@@ -35,7 +35,8 @@
        "4F25792AF1AA7483936DE29C07806F203C7170A0",  // http://crbug.com/717501
        "BD8781D757D830FC2E85470A1B6E8A718B7EE0D9",  // http://crbug.com/717501
        "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/717501
-       "81986D4F846CEDDDB962643FA501D1780DD441BB"   // http://crbug.com/717501
+       "81986D4F846CEDDDB962643FA501D1780DD441BB",  // http://crbug.com/717501
+       "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7"   // http://crbug.com/839189
     ]
   },
   "accessibilityPrivate.onTwoFingerTouchStop": {
@@ -52,7 +53,8 @@
        "4F25792AF1AA7483936DE29C07806F203C7170A0",  // http://crbug.com/717501
        "BD8781D757D830FC2E85470A1B6E8A718B7EE0D9",  // http://crbug.com/717501
        "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/717501
-       "81986D4F846CEDDDB962643FA501D1780DD441BB"   // http://crbug.com/717501
+       "81986D4F846CEDDDB962643FA501D1780DD441BB",  // http://crbug.com/717501
+       "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7"   // http://crbug.com/839189
     ]
   },
   "action": {
@@ -349,10 +351,6 @@
     "dependencies": ["manifest:devtools_page"],
     "contexts": ["blessed_extension"]
   },
-  "dial": {
-    "dependencies": ["permission:dial"],
-    "contexts": ["blessed_extension"]
-  },
   "downloads": {
     "dependencies": ["permission:downloads"],
     "contexts": ["blessed_extension"]
@@ -387,8 +385,8 @@
     "dependencies": ["permission:enterprise.platformKeysPrivate"],
     "contexts": ["blessed_extension"]
   },
-  "experienceSamplingPrivate": {
-    "dependencies": ["permission:experienceSamplingPrivate"],
+  "enterprise.reportingPrivate": {
+    "dependencies": ["permission:enterprise.reportingPrivate"],
     "contexts": ["blessed_extension"]
   },
   "experimental.devtools.audits": {
@@ -467,7 +465,7 @@
   "screenlockPrivate": {
     "dependencies": ["permission:screenlockPrivate"],
     "extension_types": ["platform_app"],
-    "contexts": ["blessed_extension", "unblessed_extension"]
+    "contexts": ["blessed_extension"]
   },
   "fileManagerPrivate": {
     "dependencies": ["permission:fileManagerPrivate"],
@@ -686,6 +684,10 @@
     "dependencies": ["permission:rtcPrivate"],
     "contexts": ["blessed_extension"]
   },
+  "safeBrowsingPrivate": {
+    "dependencies": ["permission:safeBrowsingPrivate"],
+    "contexts": ["blessed_extension"]
+  },
   "sessions": {
     "dependencies": ["permission:sessions"],
     "contexts": ["blessed_extension"]
@@ -760,7 +762,8 @@
   },
   "usersPrivate": [{
     "dependencies": ["permission:usersPrivate"],
-    "contexts": ["blessed_extension"]
+    "contexts": ["blessed_extension"],
+    "platforms": ["chromeos"]
   }, {
     "channel": "stable",
     "contexts": ["webui"],

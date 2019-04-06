@@ -27,8 +27,7 @@ namespace ash {
 
 namespace {
 
-// We need to keep this in order for unittests to tell if
-// the object in display::Screen::GetScreenByType is for shutdown.
+// Intentionally leaked in production.
 display::Screen* screen_for_shutdown = nullptr;
 
 display::DisplayManager* GetDisplayManager() {
@@ -165,6 +164,17 @@ display::Display ScreenAsh::GetDisplayMatching(
 }
 
 display::Display ScreenAsh::GetPrimaryDisplay() const {
+  if (!WindowTreeHostManager::HasValidPrimaryDisplayId()) {
+    // This should only be allowed temporarily when there are no displays
+    // available and hence no primary display. In this case we return a default
+    // display to avoid crashes for display observers trying to get the primary
+    // display when notified with the removal of the last display.
+    // https://crbug.com/866714.
+    DCHECK(
+        Shell::Get()->window_tree_host_manager()->GetAllRootWindows().empty());
+    return display::Display::GetDefaultDisplay();
+  }
+
   return GetDisplayManager()->GetDisplayForId(
       WindowTreeHostManager::GetPrimaryDisplayId());
 }
@@ -200,6 +210,14 @@ void ScreenAsh::CreateScreenForShutdown() {
   delete screen_for_shutdown;
   screen_for_shutdown = new ScreenForShutdown(display::Screen::GetScreen());
   display::Screen::SetScreenInstance(screen_for_shutdown);
+}
+
+// static
+void ScreenAsh::DeleteScreenForShutdown() {
+  if (display::Screen::GetScreen() == screen_for_shutdown)
+    display::Screen::SetScreenInstance(nullptr);
+  delete screen_for_shutdown;
+  screen_for_shutdown = nullptr;
 }
 
 }  // namespace ash

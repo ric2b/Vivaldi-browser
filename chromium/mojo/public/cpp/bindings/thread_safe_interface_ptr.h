@@ -152,7 +152,8 @@ class ThreadSafeForwarder : public MessageReceiverWithResponder {
     bool event_signaled = false;
     SyncEventWatcher watcher(&response->event,
                              base::Bind(assign_true, &event_signaled));
-    watcher.SyncWatch(&event_signaled);
+    const bool* stop_flags[] = {&event_signaled};
+    watcher.SyncWatch(stop_flags, 1);
 
     {
       base::AutoLock l(sync_calls->lock);
@@ -191,7 +192,7 @@ class ThreadSafeForwarder : public MessageReceiverWithResponder {
         response_->event.Signal();
     }
 
-    bool Accept(Message* message) {
+    bool Accept(Message* message) override {
       response_->message = std::move(*message);
       response_->received = true;
       response_->event.Signal();

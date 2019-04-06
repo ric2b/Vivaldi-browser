@@ -37,12 +37,11 @@ gfx::Font::Weight GetValueBolderThan(gfx::Font::Weight weight) {
 gfx::Font::Weight TypographyProvider::MediumWeightForUI() {
 #if defined(OS_MACOSX)
   // System fonts are not user-configurable on Mac, so there's a simpler check.
-  // However, 10.9 and 10.11 do not ship with a MEDIUM weight system font.  In
-  // that case, trying to use MEDIUM there will give a bold font, which will
-  // look worse with the surrounding NORMAL text than just using NORMAL.
-  return (base::mac::IsOS10_9() || base::mac::IsOS10_11())
-             ? gfx::Font::Weight::NORMAL
-             : gfx::Font::Weight::MEDIUM;
+  // However, 10.11 do not ship with a MEDIUM weight system font. In that
+  // case, trying to use MEDIUM there will give a bold font, which will look
+  // worse with the surrounding NORMAL text than just using NORMAL.
+  return base::mac::IsOS10_11() ? gfx::Font::Weight::NORMAL
+                                : gfx::Font::Weight::MEDIUM;
 #else
   // NORMAL may already have at least MEDIUM weight. Return NORMAL in that case
   // since trying to return MEDIUM would actually make the font lighter-weight
@@ -116,7 +115,7 @@ void DefaultTypographyProvider::GetDefaultFont(int context,
       *size_delta = ui::kTitleFontSizeDelta;
       break;
     case style::CONTEXT_TOUCH_MENU:
-      *size_delta = -1;
+      *size_delta = 2;
       break;
     default:
       *size_delta = ui::kLabelFontSizeDelta;

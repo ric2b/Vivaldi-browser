@@ -24,11 +24,13 @@ TEST(ChannelMixerTest, ConstructAllPossibleLayouts) {
     for (ChannelLayout output_layout = CHANNEL_LAYOUT_MONO;
          output_layout <= CHANNEL_LAYOUT_MAX;
          output_layout = static_cast<ChannelLayout>(output_layout + 1)) {
-      // DISCRETE can't be tested here based on the current approach.
+      // DISCRETE, BITSTREAM can't be tested here based on the current approach.
       // CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC is not mixable.
       // Stereo down mix should never be the output layout.
-      if (input_layout == CHANNEL_LAYOUT_DISCRETE ||
+      if (input_layout == CHANNEL_LAYOUT_BITSTREAM ||
+          input_layout == CHANNEL_LAYOUT_DISCRETE ||
           input_layout == CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC ||
+          output_layout == CHANNEL_LAYOUT_BITSTREAM ||
           output_layout == CHANNEL_LAYOUT_DISCRETE ||
           output_layout == CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC ||
           output_layout == CHANNEL_LAYOUT_STEREO_DOWNMIX) {
@@ -104,7 +106,7 @@ TEST_P(ChannelMixerTest, Mixing) {
   std::unique_ptr<AudioBus> input_bus =
       AudioBus::Create(input_channels, kFrames);
   AudioParameters input_audio(AudioParameters::AUDIO_PCM_LINEAR, input_layout,
-                              AudioParameters::kAudioCDSampleRate, 16, kFrames);
+                              AudioParameters::kAudioCDSampleRate, kFrames);
   if (input_layout == CHANNEL_LAYOUT_DISCRETE)
     input_audio.set_channels_for_discrete(input_channels);
 
@@ -113,8 +115,7 @@ TEST_P(ChannelMixerTest, Mixing) {
   std::unique_ptr<AudioBus> output_bus =
       AudioBus::Create(output_channels, kFrames);
   AudioParameters output_audio(AudioParameters::AUDIO_PCM_LINEAR, output_layout,
-                               AudioParameters::kAudioCDSampleRate, 16,
-                               kFrames);
+                               AudioParameters::kAudioCDSampleRate, kFrames);
   if (output_layout == CHANNEL_LAYOUT_DISCRETE)
     output_audio.set_channels_for_discrete(output_channels);
 

@@ -11,6 +11,7 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
+#import "ios/chrome/browser/ui/ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -20,14 +21,33 @@
 namespace {
 // The color of the main text of a suggest cell.
 UIColor* SuggestionTextColor() {
-  return [UIColor colorWithWhite:(51 / 255.0) alpha:1.0];
+  if (IsUIRefreshPhase1Enabled()) {
+    return [UIColor blackColor];
+  } else {
+    return [UIColor colorWithWhite:(51 / 255.0) alpha:1.0];
+  }
 }
 // The color of the detail text of a suggest cell.
 UIColor* SuggestionDetailTextColor() {
-  return [UIColor colorWithRed:(85 / 255.0)
-                         green:(149 / 255.0)
-                          blue:(254 / 255.0)
-                         alpha:1.0];
+  if (IsUIRefreshPhase1Enabled()) {
+    return [UIColor colorWithWhite:0 alpha:0.41];
+  } else {
+    return [UIColor colorWithRed:(85 / 255.0)
+                           green:(149 / 255.0)
+                            blue:(254 / 255.0)
+                           alpha:1.0];
+  }
+}
+// The color of the detail text of a suggest cell.
+UIColor* SuggestionDetailTextColorIncognito() {
+  if (IsUIRefreshPhase1Enabled()) {
+    return [UIColor colorWithWhite:1 alpha:0.5];
+  } else {
+    return [UIColor colorWithRed:(85 / 255.0)
+                           green:(149 / 255.0)
+                            blue:(254 / 255.0)
+                           alpha:1.0];
+  }
 }
 // The color of the text in the portion of a search suggestion that matches the
 // omnibox input text.
@@ -37,6 +57,7 @@ UIColor* DimColor() {
 UIColor* SuggestionTextColorIncognito() {
   return [UIColor whiteColor];
 }
+
 UIColor* DimColorIncognito() {
   return [UIColor whiteColor];
 }
@@ -111,7 +132,9 @@ UIColor* DimColorIncognito() {
       suggestionDetailTextColor =
           _incognito ? SuggestionTextColorIncognito() : SuggestionTextColor();
     } else {
-      suggestionDetailTextColor = SuggestionDetailTextColor();
+      suggestionDetailTextColor = _incognito
+                                      ? SuggestionDetailTextColorIncognito()
+                                      : SuggestionDetailTextColor();
     }
     DCHECK(suggestionDetailTextColor);
     detailAttributedText =
@@ -168,11 +191,26 @@ UIColor* DimColorIncognito() {
   return attributedText;
 }
 
+// The primary purpose of this list is to omit the "what you typed" types, since
+// those are simply the input in the omnibox and copying the text back to the
+// omnibox would be a noop. However, this list also omits other types that are
+// deprecated or not launched on iOS.
 - (BOOL)isAppendable {
-  return _match.type == AutocompleteMatchType::SEARCH_HISTORY ||
+  return _match.type == AutocompleteMatchType::BOOKMARK_TITLE ||
+         _match.type == AutocompleteMatchType::CALCULATOR ||
+         _match.type == AutocompleteMatchType::HISTORY_BODY ||
+         _match.type == AutocompleteMatchType::HISTORY_KEYWORD ||
+         _match.type == AutocompleteMatchType::HISTORY_TITLE ||
+         _match.type == AutocompleteMatchType::HISTORY_URL ||
+         _match.type == AutocompleteMatchType::NAVSUGGEST ||
+         _match.type == AutocompleteMatchType::NAVSUGGEST_PERSONALIZED ||
+         _match.type == AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED ||
+         _match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL ||
          _match.type == AutocompleteMatchType::SEARCH_SUGGEST ||
          _match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
-         _match.type == AutocompleteMatchType::PHYSICAL_WEB;
+         _match.type == AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED ||
+         _match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL ||
+         _match.type == AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED;
 }
 
 - (GURL)imageURL {
@@ -180,8 +218,24 @@ UIColor* DimColorIncognito() {
 }
 
 - (int)imageID {
+  // This method returns old icons. It should only be used in pre-UI Refresh.
+  DCHECK(!IsUIRefreshPhase1Enabled());
+
   return GetIconForAutocompleteMatchType(_match.type, self.isStarred,
                                          self.isIncognito);
+}
+
+- (UIImage*)suggestionTypeIcon {
+  DCHECK(IsUIRefreshPhase1Enabled());
+  DCHECK(
+      !(self.isIncognito && _match.type == AutocompleteMatchType::CALCULATOR))
+      << "Calculator answers are never shown in incognito mode because input "
+         "is never sent to the search provider.";
+  NSString* imageName = base::SysUTF8ToNSString(
+      GetResourceNameForAutocompleteMatchType(_match.type, self.isStarred));
+  UIImage* icon = [[UIImage imageNamed:imageName]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  return icon;
 }
 
 #pragma mark helpers
@@ -226,14 +280,20 @@ UIColor* DimColorIncognito() {
   switch (type) {
     case SuggestionAnswer::TOP_ALIGNED:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:12],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:12]
+                : [[MDCTypography fontLoader] regularFontOfSize:12],
         NSBaselineOffsetAttributeName : @10.0f,
         NSForegroundColorAttributeName : [UIColor grayColor],
       };
       break;
     case SuggestionAnswer::DESCRIPTION_POSITIVE:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:16],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:16]
+                : [[MDCTypography fontLoader] regularFontOfSize:16],
         NSForegroundColorAttributeName : [UIColor colorWithRed:11 / 255.0
                                                          green:128 / 255.0
                                                           blue:67 / 255.0
@@ -242,7 +302,10 @@ UIColor* DimColorIncognito() {
       break;
     case SuggestionAnswer::DESCRIPTION_NEGATIVE:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:16],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:16]
+                : [[MDCTypography fontLoader] regularFontOfSize:16],
         NSForegroundColorAttributeName : [UIColor colorWithRed:197 / 255.0
                                                          green:57 / 255.0
                                                           blue:41 / 255.0
@@ -251,30 +314,45 @@ UIColor* DimColorIncognito() {
       break;
     case SuggestionAnswer::PERSONALIZED_SUGGESTION:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:16],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:16]
+                : [[MDCTypography fontLoader] regularFontOfSize:16],
       };
       break;
     case SuggestionAnswer::ANSWER_TEXT_MEDIUM:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:20],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:20]
+                : [[MDCTypography fontLoader] regularFontOfSize:20],
         NSForegroundColorAttributeName : [UIColor grayColor],
       };
       break;
     case SuggestionAnswer::ANSWER_TEXT_LARGE:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:24],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:24]
+                : [[MDCTypography fontLoader] regularFontOfSize:24],
         NSForegroundColorAttributeName : [UIColor grayColor],
       };
       break;
     case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_SMALL:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:12],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:12]
+                : [[MDCTypography fontLoader] regularFontOfSize:12],
         NSForegroundColorAttributeName : [UIColor grayColor],
       };
       break;
     case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_MEDIUM:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:14],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:14]
+                : [[MDCTypography fontLoader] regularFontOfSize:14],
         NSForegroundColorAttributeName : [UIColor grayColor],
       };
       break;
@@ -282,7 +360,10 @@ UIColor* DimColorIncognito() {
     // Fall through.
     default:
       attributes = @{
-        NSFontAttributeName : [[MDCTypography fontLoader] regularFontOfSize:16],
+        NSFontAttributeName :
+            IsUIRefreshPhase1Enabled()
+                ? [UIFont systemFontOfSize:16]
+                : [[MDCTypography fontLoader] regularFontOfSize:16],
       };
   }
 
@@ -312,6 +393,10 @@ attributedStringWithString:(NSString*)text
 
   UIFont* fontRef =
       smallFont ? [MDCTypography body1Font] : [MDCTypography subheadFont];
+  if (IsUIRefreshPhase1Enabled()) {
+    fontRef =
+        smallFont ? [UIFont systemFontOfSize:12] : [UIFont systemFontOfSize:17];
+  }
 
   NSMutableAttributedString* styledText =
       [[NSMutableAttributedString alloc] initWithString:text];
@@ -326,6 +411,10 @@ attributedStringWithString:(NSString*)text
   if (classifications != NULL) {
     UIFont* boldFontRef =
         [[MDCTypography fontLoader] mediumFontOfSize:fontRef.pointSize];
+    if (IsUIRefreshPhase1Enabled()) {
+      boldFontRef =
+          [UIFont systemFontOfSize:fontRef.pointSize weight:UIFontWeightMedium];
+    }
 
     for (ACMatchClassifications::const_iterator i = classifications->begin();
          i != classifications->end(); ++i) {

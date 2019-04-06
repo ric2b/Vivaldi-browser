@@ -15,7 +15,8 @@ class SystemTrayView : public views::View {
  public:
   enum SystemTrayType { SYSTEM_TRAY_TYPE_DEFAULT, SYSTEM_TRAY_TYPE_DETAILED };
 
-  SystemTrayView(SystemTrayType system_tray_type,
+  SystemTrayView(SystemTray* system_tray,
+                 SystemTrayType system_tray_type,
                  const std::vector<ash::SystemTrayItem*>& items);
   ~SystemTrayView() override;
 
@@ -39,7 +40,10 @@ class SystemTrayView : public views::View {
 
  private:
   // Tracks the views created in the last call to CreateItemViews().
-  std::map<SystemTrayItem::UmaType, views::View*> tray_item_view_map_;
+  std::map<SystemTrayItemUmaType, views::View*> tray_item_view_map_;
+
+  std::unique_ptr<ui::EventHandler> time_to_click_recorder_;
+  std::unique_ptr<ui::EventHandler> interacted_by_tap_recorder_;
 
   std::vector<ash::SystemTrayItem*> items_;
 

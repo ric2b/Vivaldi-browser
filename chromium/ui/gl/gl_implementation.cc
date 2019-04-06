@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/memory/protected_memory.h"
 #include "base/memory/protected_memory_cfi.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -39,7 +38,8 @@ const struct {
     {kGLImplementationAppleName, kGLImplementationAppleGL},
 #endif
     {kGLImplementationEGLName, kGLImplementationEGLGLES2},
-    {kGLImplementationMockName, kGLImplementationMockGL}};
+    {kGLImplementationMockName, kGLImplementationMockGL},
+    {kGLImplementationDisabledName, kGLImplementationDisabled}};
 
 typedef std::vector<base::NativeLibrary> LibraryArray;
 
@@ -54,32 +54,31 @@ void CleanupNativeLibraries(void* due_to_fallback) {
   if (g_libraries) {
     // We do not call base::UnloadNativeLibrary() for these libraries as
     // unloading libGL without closing X display is not allowed. See
-    // crbug.com/250813 for details.
-    bool unload_libraries = false;
-#if defined(OS_WIN)
-    // However during fallback from ANGLE to SwiftShader ANGLE library needs to
+    // https://crbug.com/250813 for details.
+    // However, if we fallback to a software renderer (e.g., SwiftShader),
+    // then the above concern becomes irrelevant.
+    // During fallback from ANGLE to SwiftShader ANGLE library needs to
     // be unloaded, otherwise software SwiftShader loading will fail. See
-    // crbug.com/760063 for details.
-    unload_libraries = due_to_fallback &&
-                       *static_cast<bool*>(due_to_fallback) &&
-                       GetGLImplementation() == kGLImplementationEGLGLES2;
-#endif
-    if (unload_libraries) {
+    // https://crbug.com/760063 for details.
+    // During fallback from VMware mesa to SwiftShader mesa libraries need
+    // to be unloaded. See https://crbug.com/852537 for details.
+    if (due_to_fallback && *static_cast<bool*>(due_to_fallback)) {
       for (auto* library : *g_libraries)
         base::UnloadNativeLibrary(library);
     }
     delete g_libraries;
-    g_libraries = NULL;
+    g_libraries = nullptr;
   }
 }
 
-ExtensionSet GetGLExtensionsFromCurrentContext(GLApi* api,
-                                               GLenum extensions_enum,
-                                               GLenum num_extensions_enum) {
+gfx::ExtensionSet GetGLExtensionsFromCurrentContext(
+    GLApi* api,
+    GLenum extensions_enum,
+    GLenum num_extensions_enum) {
   if (WillUseGLGetStringForExtensions(api)) {
     const char* extensions =
         reinterpret_cast<const char*>(api->glGetStringFn(extensions_enum));
-    return extensions ? MakeExtensionSet(extensions) : ExtensionSet();
+    return extensions ? gfx::MakeExtensionSet(extensions) : gfx::ExtensionSet();
   }
 
   GLint num_extensions = 0;
@@ -92,7 +91,7 @@ ExtensionSet GetGLExtensionsFromCurrentContext(GLApi* api,
     DCHECK(extension != NULL);
     exts[i] = extension;
   }
-  return ExtensionSet(exts);
+  return gfx::ExtensionSet(exts);
 }
 
 }  // namespace
@@ -122,7 +121,9 @@ GLImplementation GetNamedGLImplementation(const std::string& name) {
 }
 
 GLImplementation GetSoftwareGLImplementation() {
-#if (defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(USE_OZONE)))
+#if (defined(OS_WIN) ||                                                     \
+     (defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(USE_OZONE)) || \
+     (defined(OS_MACOSX) && defined(USE_EGL)))
   return kGLImplementationSwiftShaderGL;
 #else
   return kGLImplementationOSMesaGL;
@@ -257,11 +258,11 @@ std::string GetGLExtensionsFromCurrentContext(GLApi* api) {
   return base::JoinString(exts, " ");
 }
 
-ExtensionSet GetRequestableGLExtensionsFromCurrentContext() {
+gfx::ExtensionSet GetRequestableGLExtensionsFromCurrentContext() {
   return GetRequestableGLExtensionsFromCurrentContext(g_current_gl_context);
 }
 
-ExtensionSet GetRequestableGLExtensionsFromCurrentContext(GLApi* api) {
+gfx::ExtensionSet GetRequestableGLExtensionsFromCurrentContext(GLApi* api) {
   return GetGLExtensionsFromCurrentContext(api, GL_REQUESTABLE_EXTENSIONS_ANGLE,
                                            GL_NUM_REQUESTABLE_EXTENSIONS_ANGLE);
 }
@@ -273,11 +274,9 @@ bool WillUseGLGetStringForExtensions() {
 bool WillUseGLGetStringForExtensions(GLApi* api) {
   const char* version_str =
       reinterpret_cast<const char*>(api->glGetStringFn(GL_VERSION));
-  unsigned major_version, minor_version;
-  bool is_es, is_es2, is_es3;
-  GLVersionInfo::ParseVersionString(version_str, &major_version, &minor_version,
-                                    &is_es, &is_es2, &is_es3);
-  return is_es || major_version < 3;
+  gfx::ExtensionSet extensions;
+  GLVersionInfo version_info(version_str, nullptr, extensions);
+  return version_info.is_es || version_info.major_version < 3;
 }
 
 base::NativeLibrary LoadLibraryAndPrintError(

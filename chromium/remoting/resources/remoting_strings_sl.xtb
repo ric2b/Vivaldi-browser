@@ -3,9 +3,6 @@
 <translationbundle lang="sl">
 <translation id="1002108253973310084">Zaznana je bila nezdružljiva različica protokola. Poskrbite, da ste v obeh računalnikih nameščeni najnovejši različici, in poskusite znova.</translation>
 <translation id="1050693411695664090">Slaba</translation>
-<translation id="1059802506829356230">• Novi videz in občutek.
-• Izboljšano delovanje, odzivnost in zanesljivost.
-• Podpora za predvajanje zvoka v računalnikih s sistemom Windows ali Linux.</translation>
 <translation id="1152528166145813711">Izberite …</translation>
 <translation id="1199593201721843963">Onemogoči oddaljene povezave</translation>
 <translation id="1291443878853470558">Če želite do računalnika dostopati z Oddaljenim povezovanjem s Chromom, omogočite oddaljene povezave.</translation>
@@ -141,10 +138,12 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 <translation id="4145029455188493639">Prijavljen kot <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Ni nekaterih zahtevanih delov. Preverite, ali imate najnovejšo različico programske opreme in poskusite znova.</translation>
 <translation id="4156740505453712750">Če želite zaščititi dostop do tega računalnika, izberite vsaj <ph name="BOLD_START" />šestmestni<ph name="BOLD_END" /> PIN. Ta bo zahtevan pri povezovanju z drugega mesta.</translation>
+<translation id="4169432154993690151">Če želite izbrati sliko profila, omogočite Oddaljenemu namizju za Chrome dostop do fotoaparata.</translation>
 <translation id="4176825807642096119">Koda za dostop</translation>
 <translation id="4207623512727273241">Zaženite namestitveni program, preden nadaljujete.</translation>
 <translation id="4227991223508142681">Orodje za pripravljanje gostitelja</translation>
 <translation id="4240294130679914010">Odstranitveni program gostitelja za Oddaljeno povezovanje s Chromom</translation>
+<translation id="4249741460382919890">Splošni popravki in izboljšave stabilnosti</translation>
 <translation id="4277463233460010382">Ta računalnik je nastavljen tako, da enemu ali več odjemalcem dovoli povezovanje brez vnosa kode PIN.</translation>
 <translation id="4277736576214464567">Koda za dostop je neveljavna. Poskusite znova.</translation>
 <translation id="4361728918881830843">Če želite omogočiti oddaljene povezave z drugim računalnikom, vanj namestite Oddaljeno namizje za Chrome in kliknite »<ph name="BUTTON_NAME" />«.</translation>
@@ -186,6 +185,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (brez povezave)</translation>
 <translation id="5070121137485264635">Oddaljeni gostitelj zahteva, da previte pristnost na spletnem mestu tretje osebe. Če želite nadaljevati, morate Oddaljenemu namizju za Chrome dodeliti dodatna dovoljenja za dostop do tega naslova:</translation>
 <translation id="507204348399810022">Ali ste prepričani, da želite onemogočiti oddaljene povezave z gostiteljem <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">S strežnikom ni mogoče komunicirati: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">V polji vnesite isto kodo PIN.</translation>
 <translation id="5170982930780719864">Neveljaven ID gostitelja.</translation>
 <translation id="518094545883702183">Te informacije uporabljamo samo za diagnosticiranje težave, ki ste jo prijavili, na voljo so samo osebi, ki preučuje vašo prijavo, in hranimo jih največ 30 dni.</translation>
@@ -231,6 +231,7 @@ PC</translation>
 <translation id="6381670701864002291">Nekaj drugega.</translation>
 <translation id="6398765197997659313">Izhod iz celozaslonskega načina</translation>
 <translation id="6441316101718669559">Integracija namizja v tem okolju ni podprta. Aplikacijo lahko še vedno uporabljate, vendar bo uporabniška izkušnja okrnjena.</translation>
+<translation id="6502629188777329097">Dostopajte do računalnika</translation>
 <translation id="652218476070540101">PIN za ta računalnik se posodablja ...</translation>
 <translation id="6527303717912515753">Skupna raba</translation>
 <translation id="6541219117979389420">Dnevniki aplikacij morda vsebujejo zasebne podatke, vključno z vašo identiteto (e-poštni naslov), in imena ter lastnosti datotek in map v Googlu Drive.</translation>
@@ -247,6 +248,7 @@ PC</translation>
 <translation id="6748108480210050150">Od</translation>
 <translation id="677755392401385740">Gostitelj zagnan za uporabnika: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Ogled/urejanje</translation>
+<translation id="6913710942997637770">Če želite izbrati sliko profila, omogočite Oddaljenemu namizju za Chrome dostop do fotografij.</translation>
 <translation id="6930242544192836755">Trajanje</translation>
 <translation id="6939719207673461467">Pokaži/skrij tipkovnico.</translation>
 <translation id="6944854424004126054">Obnovi okno</translation>
@@ -277,6 +279,7 @@ PC</translation>
 <translation id="7672203038394118626">Oddaljene povezave za ta računalnik so onemogočene.</translation>
 <translation id="7678209621226490279">Zasidranje levo</translation>
 <translation id="7693372326588366043">Osveži seznam gostiteljev</translation>
+<translation id="7714222945760997814">Prijavite to</translation>
 <translation id="7782471917492991422">Preverite nastavitve računalnika za upravljanje porabe in zagotovite, da za čas nedejavnosti ni določeno stanje pripravljenosti.</translation>
 <translation id="7810127880729796595">Prikaži statistične podatke (povezava: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Ni nekaterih zahtevanih delov. Preverite, ali imate najnovejšo različico Chroma in poskusite znova.</translation>

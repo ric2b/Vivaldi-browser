@@ -10,33 +10,32 @@ import os
 import shutil
 import re
 import sys
+import zipfile
 
 from util import build_utils
 from util import md5_check
+from util import jar_info_utils
 
 import jar
 
-sys.path.append(build_utils.COLORAMA_ROOT)
+sys.path.append(
+    os.path.join(build_utils.DIR_SOURCE_ROOT, 'third_party', 'colorama', 'src'))
 import colorama
 
 
 ERRORPRONE_WARNINGS_TO_TURN_OFF = [
-  # TODO(crbug.com/801208): Follow steps in bug.
-  'FloatingPointLiteralPrecision',
+  # TODO(crbug.com/834807): Follow steps in bug
+  'DoubleBraceInitialization',
+  # TODO(crbug.com/834790): Follow steps in bug.
+  'CatchAndPrintStackTrace',
   # TODO(crbug.com/801210): Follow steps in bug.
   'SynchronizeOnNonFinalField',
-  # TODO(crbug.com/801253): Follow steps in bug.
-  'JavaLangClash',
-  # TODO(crbug.com/801256): Follow steps in bug.
-  'ParameterName',
-  # TODO(crbug.com/801261): Follow steps in bug
-  'ArgumentSelectionDefectChecker',
-  # TODO(crbug.com/801268): Follow steps in bug.
-  'NarrowingCompoundAssignment',
   # TODO(crbug.com/802073): Follow steps in bug.
   'TypeParameterUnusedInFormals',
-  # TODO(crbug.com/802075): Follow steps in bug
-  'ReferenceEquality',
+  # TODO(crbug.com/803484): Follow steps in bug.
+  'CatchFail',
+  # TODO(crbug.com/803485): Follow steps in bug.
+  'JUnitAmbiguousTestClass',
   # Android platform default is always UTF-8.
   # https://developer.android.com/reference/java/nio/charset/Charset.html#defaultCharset()
   'DefaultCharset',
@@ -50,9 +49,9 @@ ERRORPRONE_WARNINGS_TO_TURN_OFF = [
   'OperatorPrecedence',
   # Just false positives in our code.
   'ThreadJoinLoop',
-  # Alias of ParameterName warning.
-  'NamedParameters',
   # Low priority corner cases with String.split.
+  # Linking Guava and using Splitter was rejected
+  # in the https://chromium-review.googlesource.com/c/chromium/src/+/871630.
   'StringSplitter',
   # Preferred to use another method since it propagates exceptions better.
   'ClassNewInstance',
@@ -78,20 +77,49 @@ ERRORPRONE_WARNINGS_TO_TURN_OFF = [
   'TypeParameterShadowing',
   # Good to have immutable enums, also low priority.
   'ImmutableEnumChecker',
+  # False positives for testing.
+  'InputStreamSlowMultibyteRead',
+  # Nice to have better primitives.
+  'BoxedPrimitiveConstructor',
+  # Not necessary for tests.
+  'OverrideThrowableToString',
+  # Nice to have better type safety.
+  'CollectionToArraySafeParameter',
 ]
 
 ERRORPRONE_WARNINGS_TO_ERROR = [
   # Add warnings to this after fixing/suppressing all instances in our codebase.
+  'ArgumentSelectionDefectChecker',
+  'AssertionFailureIgnored',
+  'FloatingPointLiteralPrecision',
+  'JavaLangClash',
+  'MissingFail',
+  'MissingOverride',
+  'NarrowingCompoundAssignment',
+  'ParameterName',
+  'ParcelableCreator',
+  'ReferenceEquality',
+  'StaticGuardedByInstance',
+  'StaticQualifiedUsingExpression',
+  'UseCorrectAssertInTests',
 ]
 
 
-def ColorJavacOutput(output):
+def ProcessJavacOutput(output):
   fileline_prefix = r'(?P<fileline>(?P<file>[-.\w/\\]+.java):(?P<line>[0-9]+):)'
   warning_re = re.compile(
       fileline_prefix + r'(?P<full_message> warning: (?P<message>.*))$')
   error_re = re.compile(
       fileline_prefix + r'(?P<full_message> (?P<message>.*))$')
   marker_re = re.compile(r'\s*(?P<marker>\^)\s*$')
+
+  # These warnings cannot be suppressed even for third party code. Deprecation
+  # warnings especially do not help since we must support older android version.
+  deprecated_re = re.compile(
+      r'(Note: .* uses? or overrides? a deprecated API.)$')
+  unchecked_re = re.compile(
+      r'(Note: .* uses? unchecked or unsafe operations.)$')
+  recompile_re = re.compile(r'(Note: Recompile with -Xlint:.* for details.)$')
 
   warning_color = ['full_message', colorama.Fore.YELLOW + colorama.Style.DIM]
   error_color = ['full_message', colorama.Fore.MAGENTA + colorama.Style.BRIGHT]
@@ -106,7 +134,12 @@ def ColorJavacOutput(output):
             + colorama.Fore.RESET + colorama.Style.RESET_ALL
             + line[end:])
 
-  def ApplyColor(line):
+  def ApplyFilters(line):
+    return not (deprecated_re.match(line)
+        or unchecked_re.match(line)
+        or recompile_re.match(line))
+
+  def ApplyColors(line):
     if warning_re.match(line):
       line = Colorize(line, warning_re, warning_color)
     elif error_re.match(line):
@@ -115,7 +148,7 @@ def ColorJavacOutput(output):
       line = Colorize(line, marker_re, marker_color)
     return line
 
-  return '\n'.join(map(ApplyColor, output.split('\n')))
+  return '\n'.join(map(ApplyColors, filter(ApplyFilters, output.split('\n'))))
 
 
 def _ExtractClassFiles(jar_path, dest_dir, java_files):
@@ -167,9 +200,9 @@ def _FixTempPathsInIncrementalMetadata(pdb_path, temp_dir):
       fileobj.write(re.sub(r'/tmp/[^/]*', temp_dir, pdb_data))
 
 
-def _CheckPathMatchesClassName(java_file):
+def _ParsePackageAndClassNames(java_file):
   package_name = ''
-  class_name = None
+  class_names = []
   with open(java_file) as f:
     for l in f:
       # Strip unindented comments.
@@ -185,17 +218,11 @@ def _CheckPathMatchesClassName(java_file):
       # In order to not match nested classes, it just checks for lack of indent.
       m = re.match(r'(?:\S.*?)?(?:class|@?interface|enum)\s+(.+?)\b', l)
       if m:
-        if class_name:
-          raise Exception(('File defines multiple top-level classes:\n    %s\n'
-                           'This confuses compiles with '
-                           'enable_incremental_javac=true.\n'
-                           'classes=%s,%s\n') %
-                          (java_file, class_name, m.groups(1)))
-        class_name = m.group(1)
+        class_names.append(m.group(1))
+  return package_name, class_names
 
-  if class_name is None:
-    raise Exception('Unable to find a class within %s' % java_file)
 
+def _CheckPathMatchesClassName(java_file, package_name, class_name):
   parts = package_name.split('.') + [class_name + '.java']
   expected_path_suffix = os.path.sep.join(parts)
   if not java_file.endswith(expected_path_suffix):
@@ -204,17 +231,37 @@ def _CheckPathMatchesClassName(java_file):
                     (java_file, expected_path_suffix))
 
 
+def _CreateInfoFile(java_files, options, srcjar_files):
+  """Writes a .jar.info file.
+
+  This maps fully qualified names for classes to either the java file that they
+  are defined in or the path of the srcjar that they came from.
+
+  For apks this also produces a coalesced .apk.jar.info file combining all the
+  .jar.info files of its transitive dependencies.
+  """
+  info_data = dict()
+  for java_file in java_files:
+    package_name, class_names = _ParsePackageAndClassNames(java_file)
+    for class_name in class_names:
+      fully_qualified_name = '{}.{}'.format(package_name, class_name)
+      info_data[fully_qualified_name] = java_file
+    # Skip aidl srcjars since they don't indent code correctly.
+    source = srcjar_files.get(java_file, java_file)
+    if source.endswith('_aidl.srcjar'):
+      continue
+    assert not options.chromium_code or len(class_names) == 1, (
+        'Chromium java files must only have one class: {}'.format(source))
+    if options.chromium_code:
+      _CheckPathMatchesClassName(java_file, package_name, class_names[0])
+  with build_utils.AtomicOutput(options.jar_path + '.info') as f:
+    jar_info_utils.WriteJarInfoFile(f.name, info_data, srcjar_files)
+
+
 def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
                 classpath):
-  incremental = options.incremental
-  # Don't bother enabling incremental compilation for third_party code, since
-  # _CheckPathMatchesClassName() fails on some of it, and it's not really much
-  # benefit.
-  for java_file in java_files:
-    if 'third_party' in java_file:
-      incremental = False
-    else:
-      _CheckPathMatchesClassName(java_file)
+  # Don't bother enabling incremental compilation for non-chromium code.
+  incremental = options.incremental and options.chromium_code
 
   with build_utils.TempDir() as temp_dir:
     srcjars = options.java_srcjars
@@ -251,6 +298,7 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
       if srcjars:
         _FixTempPathsInIncrementalMetadata(pdb_path, temp_dir)
 
+    srcjar_files = dict()
     if srcjars:
       java_dir = os.path.join(temp_dir, 'java')
       os.makedirs(java_dir)
@@ -258,7 +306,10 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
         if changed_paths:
           changed_paths.update(os.path.join(java_dir, f)
                                for f in changes.IterChangedSubpaths(srcjar))
-        build_utils.ExtractAll(srcjar, path=java_dir, pattern='*.java')
+        extracted_files = build_utils.ExtractAll(
+            srcjar, path=java_dir, pattern='*.java')
+        for path in extracted_files:
+          srcjar_files[path] = srcjar
       jar_srcs = build_utils.FindInDirectory(java_dir, '*.java')
       java_files.extend(jar_srcs)
       if changed_paths:
@@ -266,6 +317,8 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
         # files to tell jmake which files are stale.
         for path in jar_srcs:
           os.utime(path, (0, 0))
+
+    _CreateInfoFile(java_files, options, srcjar_files)
 
     if java_files:
       if changed_paths:
@@ -290,10 +343,7 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
       # Pass classpath and source paths as response files to avoid extremely
       # long command lines that are tedius to debug.
       if classpath:
-        classpath_rsp_path = os.path.join(temp_dir, 'classpath.txt')
-        with open(classpath_rsp_path, 'w') as f:
-          f.write(':'.join(classpath))
-        cmd += ['-classpath', '@' + classpath_rsp_path]
+        cmd += ['-classpath', ':'.join(classpath)]
 
       java_files_rsp_path = os.path.join(temp_dir, 'files_list.txt')
       with open(java_files_rsp_path, 'w') as f:
@@ -310,12 +360,13 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
           cmd,
           print_stdout=options.chromium_code,
           stdout_filter=stdout_filter,
-          stderr_filter=ColorJavacOutput)
+          stderr_filter=ProcessJavacOutput)
       try:
         attempt_build()
       except build_utils.CalledProcessError as e:
         # Work-around for a bug in jmake (http://crbug.com/551449).
-        if 'project database corrupted' not in e.output:
+        if ('project database corrupted' not in e.output
+            and 'jmake: internal Java exception' not in e.output):
           raise
         print ('Applying work-around for jmake project database corrupted '
                '(http://crbug.com/551449).')
@@ -326,10 +377,11 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
       # Make sure output exists.
       build_utils.Touch(pdb_path)
 
-    jar.JarDirectory(classes_dir,
-                     options.jar_path,
-                     provider_configurations=options.provider_configurations,
-                     additional_files=options.additional_jar_files)
+    with build_utils.AtomicOutput(options.jar_path) as f:
+      jar.JarDirectory(classes_dir,
+                       f.name,
+                       provider_configurations=options.provider_configurations,
+                       additional_files=options.additional_jar_files)
 
 
 def _ParseAndFlattenGnLists(gn_lists):
@@ -358,7 +410,7 @@ def _ParseOptions(argv):
       '--java-version',
       help='Java language version to use in -source and -target args to javac.')
   parser.add_option(
-      '--classpath',
+      '--full-classpath',
       action='append',
       help='Classpath to use when annotation processors are present.')
   parser.add_option(
@@ -416,7 +468,7 @@ def _ParseOptions(argv):
   build_utils.CheckOptions(options, parser, required=('jar_path',))
 
   options.bootclasspath = _ParseAndFlattenGnLists(options.bootclasspath)
-  options.classpath = _ParseAndFlattenGnLists(options.classpath)
+  options.full_classpath = _ParseAndFlattenGnLists(options.full_classpath)
   options.interface_classpath = _ParseAndFlattenGnLists(
       options.interface_classpath)
   options.processorpath = _ParseAndFlattenGnLists(options.processorpath)
@@ -486,7 +538,7 @@ def main(argv):
     ])
 
   if options.chromium_code:
-    javac_cmd.extend(['-Xlint:unchecked', '-Xlint:deprecation'])
+    javac_cmd.extend(['-Xlint:unchecked', '-Werror'])
   else:
     # XDignore.symbol.file makes javac compile against rt.jar instead of
     # ct.sym. This means that using a java internal package/class will not
@@ -501,7 +553,8 @@ def main(argv):
 
   # Annotation processors crash when given interface jars.
   active_classpath = (
-      options.classpath if options.processors else options.interface_classpath)
+      options.full_classpath
+      if options.processors else options.interface_classpath)
   classpath = []
   if active_classpath:
     classpath.extend(active_classpath)
@@ -518,11 +571,12 @@ def main(argv):
                       options.processorpath)
   # GN already knows of java_files, so listing them just make things worse when
   # they change.
-  depfile_deps = [javac_path] + classpath_inputs + options.java_srcjars
+  depfile_deps = ([javac_path] + classpath_inputs + options.java_srcjars)
   input_paths = depfile_deps + java_files
 
   output_paths = [
       options.jar_path,
+      options.jar_path + '.info',
   ]
   if options.incremental:
     output_paths.append(options.jar_path + '.pdb')

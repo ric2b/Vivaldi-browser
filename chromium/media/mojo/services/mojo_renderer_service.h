@@ -25,12 +25,10 @@
 
 namespace media {
 
-class AudioRendererSink;
+class CdmContextRef;
 class MediaResourceShim;
-class ContentDecryptionModule;
 class MojoCdmServiceContext;
 class Renderer;
-class VideoRendererSink;
 
 // A mojom::Renderer implementation that use a media::Renderer to render
 // media streams.
@@ -43,17 +41,13 @@ class MEDIA_MOJO_EXPORT MojoRendererService : public mojom::Renderer,
   // which is safely accessible via the returned StrongBindingPtr.
   static mojo::StrongBindingPtr<mojom::Renderer> Create(
       MojoCdmServiceContext* mojo_cdm_service_context,
-      scoped_refptr<AudioRendererSink> audio_sink,
-      std::unique_ptr<VideoRendererSink> video_sink,
       std::unique_ptr<media::Renderer> renderer,
-      InitiateSurfaceRequestCB initiate_surface_request_cb,
+      const InitiateSurfaceRequestCB& initiate_surface_request_cb,
       mojo::InterfaceRequest<mojom::Renderer> request);
 
   // |mojo_cdm_service_context| can be used to find the CDM to support
   // encrypted media. If null, encrypted media is not supported.
   MojoRendererService(MojoCdmServiceContext* mojo_cdm_service_context,
-                      scoped_refptr<AudioRendererSink> audio_sink,
-                      std::unique_ptr<VideoRendererSink> video_sink,
                       std::unique_ptr<media::Renderer> renderer,
                       InitiateSurfaceRequestCB initiate_surface_request_cb);
 
@@ -119,9 +113,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService : public mojom::Renderer,
   void OnFlushCompleted(FlushCallback callback);
 
   // Callback executed once SetCdm() completes.
-  void OnCdmAttached(scoped_refptr<ContentDecryptionModule> cdm,
-                     base::OnceCallback<void(bool)> callback,
-                     bool success);
+  void OnCdmAttached(base::OnceCallback<void(bool)> callback, bool success);
 
   MojoCdmServiceContext* const mojo_cdm_service_context_ = nullptr;
 
@@ -135,18 +127,12 @@ class MEDIA_MOJO_EXPORT MojoRendererService : public mojom::Renderer,
 
   mojom::RendererClientAssociatedPtr client_;
 
-  // Hold a reference to the CDM set on the |renderer_| so that the CDM won't be
-  // destructed while the |renderer_| is still using it.
-  scoped_refptr<ContentDecryptionModule> cdm_;
-
-  // Audio and Video sinks.
-  // May be null if underlying |renderer_| does not use them.
-  scoped_refptr<AudioRendererSink> audio_sink_;
-  std::unique_ptr<VideoRendererSink> video_sink_;
+  // Holds the CdmContextRef to keep the CdmContext alive for the lifetime of
+  // the |renderer_|.
+  std::unique_ptr<CdmContextRef> cdm_context_ref_;
 
   // Note: Destroy |renderer_| first to avoid access violation into other
-  // members, e.g. |media_resource_|, |cdm_|, |audio_sink_|, and
-  // |video_sink_|.
+  // members, e.g. |media_resource_| and |cdm_|.
   // Must use "media::" because "Renderer" is ambiguous.
   std::unique_ptr<media::Renderer> renderer_;
 

@@ -19,26 +19,34 @@ class HardwareDisplayPlaneManagerAtomic : public HardwareDisplayPlaneManager {
 
   // HardwareDisplayPlaneManager:
   bool Commit(HardwareDisplayPlaneList* plane_list,
-              bool test_only) override;
+              scoped_refptr<PageFlipRequest> page_flip_request,
+              std::unique_ptr<gfx::GpuFence>* out_fence) override;
   bool DisableOverlayPlanes(HardwareDisplayPlaneList* plane_list) override;
 
-  bool ValidatePrimarySize(const OverlayPlane& primary,
+  bool SetColorCorrectionOnAllCrtcPlanes(
+      uint32_t crtc_id,
+      ScopedDrmColorCtmPtr ctm_blob_data) override;
+
+  bool ValidatePrimarySize(const DrmOverlayPlane& primary,
                            const drmModeModeInfo& mode) override;
 
-  void RequestPlanesReadyCallback(const OverlayPlaneList& planes,
-                                  base::OnceClosure callback) override;
-
- private:
+  void RequestPlanesReadyCallback(
+      DrmOverlayPlaneList planes,
+      base::OnceCallback<void(DrmOverlayPlaneList planes)> callback) override;
   bool SetPlaneData(HardwareDisplayPlaneList* plane_list,
                     HardwareDisplayPlane* hw_plane,
-                    const OverlayPlane& overlay,
+                    const DrmOverlayPlane& overlay,
                     uint32_t crtc_id,
                     const gfx::Rect& src_rect,
                     CrtcController* crtc) override;
 
-  std::unique_ptr<HardwareDisplayPlane> CreatePlane(
-      uint32_t plane_id,
-      uint32_t possible_crtcs) override;
+ private:
+  std::unique_ptr<HardwareDisplayPlane> CreatePlane(uint32_t plane_id) override;
+  bool CommitColorMatrix(const CrtcProperties& crtc_props) override;
+  bool CommitGammaCorrection(const CrtcProperties& crtc_props) override;
+  bool AddOutFencePtrProperties(drmModeAtomicReqPtr property_set,
+                                const std::vector<CrtcController*>& crtcs,
+                                std::vector<base::ScopedFD>* out_fence_fds);
 
   DISALLOW_COPY_AND_ASSIGN(HardwareDisplayPlaneManagerAtomic);
 };

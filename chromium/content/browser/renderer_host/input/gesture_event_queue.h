@@ -17,7 +17,7 @@
 #include "content/common/content_export.h"
 #include "content/public/common/input_event_ack_source.h"
 #include "content/public/common/input_event_ack_state.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace content {
 class GestureEventQueueTest;
@@ -72,15 +72,18 @@ class CONTENT_EXPORT GestureEventQueue {
 
   // Both |client| and |touchpad_client| must outlive the GestureEventQueue.
   GestureEventQueue(GestureEventQueueClient* client,
-                    TouchpadTapSuppressionControllerClient* touchpad_client,
-                    FlingControllerClient* fling_client,
+                    FlingControllerEventSenderClient* fling_event_sender_client,
+                    FlingControllerSchedulerClient* fling_scheduler_client,
                     const Config& config);
   ~GestureEventQueue();
 
-  // Adds a gesture to the queue if it passes the relevant filters. If
-  // there are no events currently queued, the event will be forwarded
-  // immediately. Returns false if the event wasn't queued and was filtered.
-  bool QueueEvent(const GestureEventWithLatencyInfo&);
+  // Uses fling controller to filter the gesture event. Returns true if the
+  // event wasn't queued and was filtered.
+  bool FlingControllerFilterEvent(const GestureEventWithLatencyInfo&);
+
+  // Check for debouncing, or add the gesture event to the queue. Returns false
+  // if the event wasn't queued.
+  bool DebounceOrQueueEvent(const GestureEventWithLatencyInfo&);
 
   // Indicates that the caller has received an acknowledgement from the renderer
   // with state |ack_result| and event |type|. May send events if the queue is
@@ -109,12 +112,14 @@ class CONTENT_EXPORT GestureEventQueue {
   bool ShouldDiscardFlingCancelEvent(
       const GestureEventWithLatencyInfo& gesture_event) const;
 
-  // Calls |fling_controller_.ProgressFling| to advance an active fling on every
-  // begin frame.
-  void ProgressFling(base::TimeTicks current_time);
-
   // Calls |fling_controller_.StopFling| to halt an active fling if such exists.
   void StopFling();
+
+  bool FlingCancellationIsDeferred() const;
+
+  bool TouchscreenFlingInProgress() const;
+
+  gfx::Vector2dF CurrentFlingVelocity() const;
 
   void set_debounce_interval_time_ms_for_testing(int interval_ms) {
     debounce_interval_ = base::TimeDelta::FromMilliseconds(interval_ms);

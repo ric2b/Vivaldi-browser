@@ -4,11 +4,12 @@
 
 #include "components/metrics/persistent_system_profile.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/rand_util.h"
-#include "components/variations/metrics_util.h"
+#include "components/variations/hashing.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace metrics {
@@ -21,9 +22,9 @@ class PersistentSystemProfileTest : public testing::Test {
   ~PersistentSystemProfileTest() override {}
 
   void SetUp() override {
-    memory_allocator_ = base::MakeUnique<base::LocalPersistentMemoryAllocator>(
+    memory_allocator_ = std::make_unique<base::LocalPersistentMemoryAllocator>(
         kAllocatorMemorySize, 0, "");
-    records_ = base::MakeUnique<PersistentSystemProfile::RecordAllocator>(
+    records_ = std::make_unique<PersistentSystemProfile::RecordAllocator>(
         memory_allocator_.get());
     persistent_profile_.RegisterPersistentAllocator(memory_allocator_.get());
   }
@@ -153,8 +154,8 @@ TEST_F(PersistentSystemProfileTest, ProfileExtensions) {
   ASSERT_EQ(2, fetched.field_trial_size());
   EXPECT_EQ(123U, fetched.field_trial(0).name_id());
   EXPECT_EQ(456U, fetched.field_trial(0).group_id());
-  EXPECT_EQ(metrics::HashName("sna"), fetched.field_trial(1).name_id());
-  EXPECT_EQ(metrics::HashName("foo"), fetched.field_trial(1).group_id());
+  EXPECT_EQ(variations::HashName("sna"), fetched.field_trial(1).name_id());
+  EXPECT_EQ(variations::HashName("foo"), fetched.field_trial(1).group_id());
 
   persistent_profile()->AddFieldTrial("foo", "bar");
   ASSERT_TRUE(
@@ -162,10 +163,10 @@ TEST_F(PersistentSystemProfileTest, ProfileExtensions) {
   ASSERT_EQ(3, fetched.field_trial_size());
   EXPECT_EQ(123U, fetched.field_trial(0).name_id());
   EXPECT_EQ(456U, fetched.field_trial(0).group_id());
-  EXPECT_EQ(metrics::HashName("sna"), fetched.field_trial(1).name_id());
-  EXPECT_EQ(metrics::HashName("foo"), fetched.field_trial(1).group_id());
-  EXPECT_EQ(metrics::HashName("foo"), fetched.field_trial(2).name_id());
-  EXPECT_EQ(metrics::HashName("bar"), fetched.field_trial(2).group_id());
+  EXPECT_EQ(variations::HashName("sna"), fetched.field_trial(1).name_id());
+  EXPECT_EQ(variations::HashName("foo"), fetched.field_trial(1).group_id());
+  EXPECT_EQ(variations::HashName("foo"), fetched.field_trial(2).name_id());
+  EXPECT_EQ(variations::HashName("bar"), fetched.field_trial(2).group_id());
 }
 
 }  // namespace metrics

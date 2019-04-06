@@ -11,7 +11,6 @@
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/user_metrics.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_action.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #include "chrome/browser/ui/cocoa/browser_window_cocoa.h"
@@ -123,44 +123,8 @@ bool ExtensionInstalledBubble::ShouldShow() {
 
 gfx::Point ExtensionInstalledBubble::GetAnchorPoint(
     gfx::NativeWindow window) const {
-  BrowserWindowController* windowController =
-      [BrowserWindowController browserWindowControllerForWindow:window];
-
-  auto getAppMenuButtonAnchorPoint = [windowController]() {
-    // Point at the bottom of the app menu menu.
-    NSView* appMenuButton =
-        [[windowController toolbarController] appMenuButton];
-    const NSRect bounds = [appMenuButton bounds];
-    NSPoint anchor = NSMakePoint(NSMidX(bounds), NSMaxY(bounds));
-    return [appMenuButton convertPoint:anchor toView:nil];
-  };
-
-  NSPoint arrowPoint;
-  switch (anchor_position()) {
-    case ExtensionInstalledBubble::ANCHOR_ACTION: {
-      BrowserActionsController* controller =
-          [[windowController toolbarController] browserActionsController];
-      arrowPoint = [controller popupPointForId:extension()->id()];
-      break;
-    }
-    case ExtensionInstalledBubble::ANCHOR_OMNIBOX: {
-      LocationBarViewMac* locationBarView =
-          [windowController locationBarBridge];
-      arrowPoint = locationBarView->GetPageInfoBubblePoint();
-      break;
-    }
-    case ExtensionInstalledBubble::ANCHOR_APP_MENU: {
-      arrowPoint = getAppMenuButtonAnchorPoint();
-      break;
-    }
-    default: {
-      NOTREACHED();
-      break;
-    }
-  }
-  // Convert to screen coordinates.
-  arrowPoint = ui::ConvertPointFromWindowToScreen(window, arrowPoint);
-  return gfx::ScreenPointFromNSPoint(arrowPoint);
+  return bubble_anchor_util::GetExtensionInstalledAnchorPointCocoa(window,
+                                                                   this);
 }
 
 // Implemented here to create the platform specific instance of the BubbleUi.
@@ -252,7 +216,7 @@ std::unique_ptr<BubbleUi> ExtensionInstalledBubble::BuildBubbleUi() {
       static_cast<BrowserWindowCocoa*>(browser_->window());
   if (type_ == extension_installed_bubble::kApp) {
     TabStripView* view = [window->cocoa_controller() tabStripView];
-    NewTabButton* button = [view getNewTabButton];
+    NewTabButtonCocoa* button = [view getNewTabButton];
     NSRect bounds = [button bounds];
     NSPoint anchor = NSMakePoint(
         NSMidX(bounds),
@@ -270,15 +234,6 @@ std::unique_ptr<BubbleUi> ExtensionInstalledBubble::BuildBubbleUi() {
 // set up UI elements.
 - (void)showWindow:(id)sender {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  if (browser_->is_vivaldi()) {
-    // tomas@vivaldi - TODO:
-    // to stop the browser from crashing just return here and not show a popup.
-    // If we want to show a popup when an extension is installed we need to
-    // determine the anchorpoint coordinates without needing the chrome toolbar
-    // controller (see calculateArrowPoint).
-    return;
-  }
 
   // Load nib and calculate height based on messages to be shown.
   NSWindow* window = [self initializeWindow];
@@ -299,8 +254,8 @@ std::unique_ptr<BubbleUi> ExtensionInstalledBubble::BuildBubbleUi() {
   [self updateAnchorPosition];
 
   if (syncPromoController_) {
-    base::RecordAction(base::UserMetricsAction(
-        "Signin_Impression_FromExtensionInstallBubble"));
+    signin_metrics::RecordSigninImpressionUserActionForAccessPoint(
+        signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
   }
   [super showWindow:sender];
 }

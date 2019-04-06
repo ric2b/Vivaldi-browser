@@ -4,10 +4,11 @@
 
 #include "components/data_use_measurement/core/data_use_network_delegate.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/data_use_measurement/core/data_use_ascriber.h"
 #include "components/data_use_measurement/core/url_request_classifier.h"
 #include "components/metrics/data_use_tracker.h"
@@ -26,15 +27,6 @@ class TestURLRequestClassifier : public base::SupportsUserData::Data,
                                  public URLRequestClassifier {
  public:
   static const void* const kUserDataKey;
-
-  bool IsUserRequest(const net::URLRequest& request) const override {
-    return request.GetUserData(kUserDataKey) != nullptr;
-  }
-
-  static void MarkAsUserRequest(net::URLRequest* request) {
-    request->SetUserData(kUserDataKey,
-                         base::MakeUnique<TestURLRequestClassifier>());
-  }
 
   DataUseUserData::DataUseContentType GetContentType(
       const net::URLRequest& request,
@@ -90,7 +82,7 @@ std::unique_ptr<net::URLRequest> RequestURL(
       net::MockRead(net::SYNCHRONOUS, net::OK),
   };
   net::StaticSocketDataProvider redirect_socket_data_provider(
-      redirect_mock_reads, arraysize(redirect_mock_reads), nullptr, 0);
+      redirect_mock_reads, base::span<net::MockWrite>());
 
   if (redirect)
     socket_factory->AddSocketDataProvider(&redirect_socket_data_provider);
@@ -98,26 +90,29 @@ std::unique_ptr<net::URLRequest> RequestURL(
       net::MockRead("HTTP/1.1 200 OK\r\n\r\n"), net::MockRead("response body"),
       net::MockRead(net::SYNCHRONOUS, net::OK),
   };
+  const auto traffic_annotation =
+      from_user ? net::DefineNetworkTrafficAnnotation("blink_resource_loader",
+                                                      "blink resource loaded "
+                                                      "will be treated as "
+                                                      "user-initiated request")
+                : TRAFFIC_ANNOTATION_FOR_TESTS;
   net::StaticSocketDataProvider response_socket_data_provider(
-      response_mock_reads, arraysize(response_mock_reads), nullptr, 0);
+      response_mock_reads, base::span<net::MockWrite>());
   socket_factory->AddSocketDataProvider(&response_socket_data_provider);
   net::TestDelegate test_delegate;
-  test_delegate.set_quit_on_complete(true);
   std::unique_ptr<net::URLRequest> request(
       context->CreateRequest(GURL("http://example.com"), net::DEFAULT_PRIORITY,
-                             &test_delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
+                             &test_delegate, traffic_annotation));
 
-  if (from_user) {
-    TestURLRequestClassifier::MarkAsUserRequest(request.get());
-  } else {
+  if (!from_user) {
     request->SetUserData(
         data_use_measurement::DataUseUserData::kUserDataKey,
-        base::MakeUnique<data_use_measurement::DataUseUserData>(
+        std::make_unique<data_use_measurement::DataUseUserData>(
             data_use_measurement::DataUseUserData::SUGGESTIONS,
             data_use_measurement::DataUseUserData::FOREGROUND));
   }
   request->Start();
-  base::RunLoop().RunUntilIdle();
+  test_delegate.RunUntilComplete();
   return request;
 }
 
@@ -125,9 +120,9 @@ class DataUseNetworkDelegateTest : public testing::Test {
  public:
   DataUseNetworkDelegateTest()
       : context_(true),
-        data_use_network_delegate_(base::MakeUnique<net::TestNetworkDelegate>(),
+        data_use_network_delegate_(std::make_unique<net::TestNetworkDelegate>(),
                                    &test_data_use_ascriber_,
-                                   base::MakeUnique<TestURLRequestClassifier>(),
+                                   std::make_unique<TestURLRequestClassifier>(),
                                    metrics::UpdateUsagePrefCallbackType()) {
     context_.set_client_socket_factory(&mock_socket_factory_);
     context_.set_network_delegate(&data_use_network_delegate_);
@@ -149,9 +144,8 @@ class DataUseNetworkDelegateTest : public testing::Test {
 
 // This function tests data use measurement for requests by services. it makes a
 // query which is similar to a query of a service, so it should affect
-// DataUse.TrafficSize.System.Dimensions and DataUse.MessageSize.ServiceName
-// histograms. AppState and ConnectionType dimensions are always Foreground and
-// NotCellular respectively.
+// DataUse.TrafficSize.System.Dimensions histogram. AppState and ConnectionType
+// dimensions are always Foreground and NotCellular respectively.
 TEST_F(DataUseNetworkDelegateTest, DataUseMeasurementServiceTest) {
   base::HistogramTester histogram_tester;
 
@@ -164,9 +158,6 @@ TEST_F(DataUseNetworkDelegateTest, DataUseMeasurementServiceTest) {
           .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.System.Upstream.Foreground.NotCellular", 1);
-  EXPECT_FALSE(histogram_tester
-                   .GetTotalCountsForPrefix("DataUse.MessageSize.Suggestions")
-                   .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular", 0);
   histogram_tester.ExpectTotalCount(
@@ -193,14 +184,13 @@ TEST_F(DataUseNetworkDelegateTest, DataUseMeasurementUserTest) {
       "DataUse.TrafficSize.System.Downstream.Foreground.NotCellular", 0);
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.System.Upstream.Foreground.NotCellular", 0);
-  histogram_tester.ExpectTotalCount("DataUse.MessageSize.Suggestions", 0);
 }
 
 // This function tests data use measurement for requests by services in case the
 // request is redirected once. it makes a query which is similar to a query of a
 // service, so it should affect DataUse.TrafficSize.System.Dimensions and
-// DataUse.MessageSize.ServiceName histograms. AppState and ConnectionType
-// dimensions are always Foreground and NotCellular respectively.
+// histogram. AppState and ConnectionType dimensions are always Foreground and
+// NotCellular respectively.
 TEST_F(DataUseNetworkDelegateTest, DataUseMeasurementServiceTestWithRedirect) {
   base::HistogramTester histogram_tester;
 
@@ -214,9 +204,6 @@ TEST_F(DataUseNetworkDelegateTest, DataUseMeasurementServiceTestWithRedirect) {
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.System.Upstream.Foreground.NotCellular", 2);
   // Two uploads and two downloads message, so totalCount should be 4.
-  EXPECT_FALSE(histogram_tester
-                   .GetTotalCountsForPrefix("DataUse.MessageSize.Suggestions")
-                   .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular", 0);
   histogram_tester.ExpectTotalCount(
@@ -244,7 +231,6 @@ TEST_F(DataUseNetworkDelegateTest, DataUseMeasurementUserTestWithRedirect) {
       "DataUse.TrafficSize.System.Downstream.Foreground.NotCellular", 0);
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.System.Upstream.Foreground.NotCellular", 0);
-  histogram_tester.ExpectTotalCount("DataUse.MessageSize.Suggestions", 0);
 }
 
 }  // namespace

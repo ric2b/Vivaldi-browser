@@ -8,17 +8,18 @@
 
 #include "components/blink/vivaldi_add_search_context_menu.h"
 
-#include "core/dom/ElementTraversal.h"
-#include "core/dom/Node.h"
-#include "core/dom/NodeTraversal.h"
-#include "core/editing/FrameSelection.h"
-#include "core/editing/VisibleSelection.h"
-#include "core/html/HTMLElement.h"
-#include "core/html/HTMLFrameElementBase.h"
-#include "core/html/forms/HTMLFormElement.h"
-#include "public/platform/WebURL.h"
-#include "public/web/WebSearchableFormData.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_form_element.h"
+#include "third_party/blink/renderer/core/dom/element_traversal.h"
+#include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/node_traversal.h"
+#include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/visible_selection.h"
+#include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/html/html_frame_element_base.h"
+#include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_searchable_form_data.h"
+#include "third_party/blink/public/web/web_form_element.h"
 
 using blink::FrameSelection;
 using blink::HTMLElement;

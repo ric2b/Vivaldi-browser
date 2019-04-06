@@ -11,7 +11,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -33,8 +32,10 @@ constexpr uint32_t kSMSStateReceived = 3;  // MM_SMS_STATE_RECEIVED
 class SMSReceiveHandler {
  public:
   SMSReceiveHandler(dbus::ObjectProxy* object_proxy,
-                    const SMSClient::GetAllCallback& callback)
-      : callback_(callback), sms_received_(false), weak_ptr_factory_(this) {
+                    SMSClient::GetAllCallback callback)
+      : callback_(std::move(callback)),
+        sms_received_(false),
+        weak_ptr_factory_(this) {
     property_set_ = std::make_unique<dbus::PropertySet>(
         object_proxy, modemmanager::kModemManager1SmsInterface,
         base::Bind(&SMSReceiveHandler::OnPropertyChanged,
@@ -107,12 +108,12 @@ class SMSClientImpl : public SMSClient {
   // Calls GetAll method.  |callback| is called after the method call succeeds.
   void GetAll(const std::string& service_name,
               const dbus::ObjectPath& object_path,
-              const GetAllCallback& callback) override {
+              GetAllCallback callback) override {
     dbus::ObjectProxy* proxy = bus_->GetObjectProxy(service_name, object_path);
     sms_receive_handlers_[object_path] = std::make_unique<SMSReceiveHandler>(
-        proxy,
-        base::Bind(&SMSClientImpl::OnSMSReceived,
-                   weak_ptr_factory_.GetWeakPtr(), object_path, callback));
+        proxy, base::BindOnce(&SMSClientImpl::OnSMSReceived,
+                              weak_ptr_factory_.GetWeakPtr(), object_path,
+                              std::move(callback)));
   }
 
  protected:
@@ -120,10 +121,10 @@ class SMSClientImpl : public SMSClient {
 
  private:
   void OnSMSReceived(const dbus::ObjectPath& object_path,
-                     const GetAllCallback& callback,
+                     GetAllCallback callback,
                      const base::DictionaryValue& sms) {
     sms_receive_handlers_.erase(object_path);
-    callback.Run(sms);
+    std::move(callback).Run(sms);
   }
 
   dbus::Bus* bus_;

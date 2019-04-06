@@ -5,10 +5,11 @@
 #include "extensions/renderer/bindings/api_event_handler.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/mock_callback.h"
 #include "base/values.h"
 #include "extensions/common/event_filtering_info.h"
@@ -31,13 +32,30 @@ const char kRemoveListenerFunction[] =
     "(function(event, listener) { event.removeListener(listener); })";
 
 using MockEventChangeHandler = ::testing::StrictMock<
-    base::MockCallback<APIEventHandler::EventListenersChangedMethod>>;
+    base::MockCallback<APIEventListeners::ListenersUpdated>>;
 
-void DoNothingOnEventListenersChanged(const std::string& event_name,
-                                      binding::EventListenersChanged change,
-                                      const base::DictionaryValue* value,
-                                      bool was_manual,
-                                      v8::Local<v8::Context> context) {}
+std::string GetContextOwner(v8::Local<v8::Context> context) {
+  return std::string();
+}
+
+// TODO(devlin): Use these handy functions more places.
+void AddListener(v8::Local<v8::Context> context,
+                 v8::Local<v8::Function> listener,
+                 v8::Local<v8::Object> event) {
+  v8::Local<v8::Function> add_listener =
+      FunctionFromString(context, kAddListenerFunction);
+  v8::Local<v8::Value> argv[] = {event, listener};
+  RunFunction(add_listener, context, base::size(argv), argv);
+}
+
+void RemoveListener(v8::Local<v8::Context> context,
+                    v8::Local<v8::Function> listener,
+                    v8::Local<v8::Object> event) {
+  v8::Local<v8::Function> remove_listener =
+      FunctionFromString(context, kRemoveListenerFunction);
+  v8::Local<v8::Value> argv[] = {event, listener};
+  RunFunction(remove_listener, context, base::size(argv), argv);
+}
 
 class APIEventHandlerTest : public APIBindingTest {
  protected:
@@ -47,7 +65,7 @@ class APIEventHandlerTest : public APIBindingTest {
   void SetUp() override {
     APIBindingTest::SetUp();
     handler_ = std::make_unique<APIEventHandler>(
-        base::Bind(&DoNothingOnEventListenersChanged), nullptr);
+        base::DoNothing(), base::BindRepeating(&GetContextOwner), nullptr);
   }
 
   void TearDown() override {
@@ -397,14 +415,10 @@ TEST_F(APIEventHandlerTest, DifferentCallingMethods) {
       "})";
   {
     v8::Local<v8::Value> args[] = {event};
-    // TODO(devlin): This is the generic type error that gin throws. It's not
-    // very descriptive, nor does it match the web (which would just say e.g.
-    // "Illegal invocation"). Might be worth updating later.
     RunFunctionAndExpectError(
-        FunctionFromString(context, kAddListenerOnNull),
-        context, 1, args,
-        "Uncaught TypeError: Error processing argument at index -1,"
-        " conversion failure from undefined");
+        FunctionFromString(context, kAddListenerOnNull), context, 1, args,
+        "Uncaught TypeError: Illegal invocation: Function must be called on "
+        "an object of type Event");
   }
   EXPECT_EQ(0u, handler()->GetNumEventListenersForTesting(kEventName, context));
 
@@ -537,7 +551,8 @@ TEST_F(APIEventHandlerTest, TestEventListenersThrowingExceptions) {
   std::vector<std::string> logged_errors;
   ExceptionHandler exception_handler(base::Bind(log_error, &logged_errors));
   SetHandler(std::make_unique<APIEventHandler>(
-      base::Bind(&DoNothingOnEventListenersChanged), &exception_handler));
+      base::DoNothing(), base::BindRepeating(&GetContextOwner),
+      &exception_handler));
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -592,7 +607,8 @@ TEST_F(APIEventHandlerTest, TestEventListenersThrowingExceptions) {
 // Tests being notified as listeners are added or removed from events.
 TEST_F(APIEventHandlerTest, CallbackNotifications) {
   MockEventChangeHandler change_handler;
-  SetHandler(std::make_unique<APIEventHandler>(change_handler.Get(), nullptr));
+  SetHandler(std::make_unique<APIEventHandler>(
+      change_handler.Get(), base::BindRepeating(&GetContextOwner), nullptr));
 
   v8::HandleScope handle_scope(isolate());
 
@@ -619,7 +635,9 @@ TEST_F(APIEventHandlerTest, CallbackNotifications) {
       FunctionFromString(context_a, "(function() {})");
   {
     EXPECT_CALL(change_handler,
-                Run(kEventName1, binding::EventListenersChanged::HAS_LISTENERS,
+                Run(kEventName1,
+                    binding::EventListenersChanged::
+                        kFirstUnfilteredListenerForContextOwnerAdded,
                     nullptr, true, context_a))
         .Times(1);
     v8::Local<v8::Value> argv[] = {event1_a, listener1};
@@ -656,7 +674,9 @@ TEST_F(APIEventHandlerTest, CallbackNotifications) {
   // event no longer has listeners.
   {
     EXPECT_CALL(change_handler,
-                Run(kEventName1, binding::EventListenersChanged::NO_LISTENERS,
+                Run(kEventName1,
+                    binding::EventListenersChanged::
+                        kLastUnfilteredListenerForContextOwnerRemoved,
                     nullptr, true, context_a))
         .Times(1);
     v8::Local<v8::Value> argv[] = {event1_a, listener2};
@@ -672,7 +692,9 @@ TEST_F(APIEventHandlerTest, CallbackNotifications) {
       FunctionFromString(context_a, "(function() {})");
   {
     EXPECT_CALL(change_handler,
-                Run(kEventName2, binding::EventListenersChanged::HAS_LISTENERS,
+                Run(kEventName2,
+                    binding::EventListenersChanged::
+                        kFirstUnfilteredListenerForContextOwnerAdded,
                     nullptr, true, context_a))
         .Times(1);
     v8::Local<v8::Value> argv[] = {event2_a, listener3};
@@ -684,7 +706,9 @@ TEST_F(APIEventHandlerTest, CallbackNotifications) {
 
   {
     EXPECT_CALL(change_handler,
-                Run(kEventName1, binding::EventListenersChanged::HAS_LISTENERS,
+                Run(kEventName1,
+                    binding::EventListenersChanged::
+                        kFirstUnfilteredListenerForContextOwnerAdded,
                     nullptr, true, context_b))
         .Times(1);
     // And add a listener to an event in a different context to make sure the
@@ -704,14 +728,18 @@ TEST_F(APIEventHandlerTest, CallbackNotifications) {
   // notifications. Additionally, since this was the context being torn down,
   // rather than a removeListener call, was_manual should be false.
   EXPECT_CALL(change_handler,
-              Run(kEventName2, binding::EventListenersChanged::NO_LISTENERS,
+              Run(kEventName2,
+                  binding::EventListenersChanged::
+                      kLastUnfilteredListenerForContextOwnerRemoved,
                   nullptr, false, context_a))
       .Times(1);
   DisposeContext(context_a);
   ::testing::Mock::VerifyAndClearExpectations(&change_handler);
 
   EXPECT_CALL(change_handler,
-              Run(kEventName1, binding::EventListenersChanged::NO_LISTENERS,
+              Run(kEventName1,
+                  binding::EventListenersChanged::
+                      kLastUnfilteredListenerForContextOwnerRemoved,
                   nullptr, false, context_b))
       .Times(1);
   DisposeContext(context_b);
@@ -865,7 +893,8 @@ TEST_F(APIEventHandlerTest, TestCreateCustomEvent) {
   v8::Local<v8::Context> context = MainContext();
 
   MockEventChangeHandler change_handler;
-  APIEventHandler handler(change_handler.Get(), nullptr);
+  APIEventHandler handler(change_handler.Get(),
+                          base::BindRepeating(&GetContextOwner), nullptr);
 
   v8::Local<v8::Object> event = handler.CreateAnonymousEventInstance(context);
   ASSERT_FALSE(event.IsEmpty());
@@ -912,7 +941,8 @@ TEST_F(APIEventHandlerTest, TestCreateCustomEventWithCyclicDependency) {
   v8::Local<v8::Context> context = MainContext();
 
   MockEventChangeHandler change_handler;
-  APIEventHandler handler(change_handler.Get(), nullptr);
+  APIEventHandler handler(change_handler.Get(),
+                          base::BindRepeating(&GetContextOwner), nullptr);
 
   v8::Local<v8::Object> event = handler.CreateAnonymousEventInstance(context);
   ASSERT_FALSE(event.IsEmpty());
@@ -937,7 +967,8 @@ TEST_F(APIEventHandlerTest, TestUnmanagedEvents) {
          const base::DictionaryValue* filter, bool was_manual,
          v8::Local<v8::Context> context) { ADD_FAILURE(); };
 
-  APIEventHandler handler(base::Bind(fail_on_notified), nullptr);
+  APIEventHandler handler(base::Bind(fail_on_notified),
+                          base::BindRepeating(&GetContextOwner), nullptr);
 
   const char kEventName[] = "alpha";
   v8::Local<v8::Object> event = handler.CreateEventInstance(
@@ -979,7 +1010,8 @@ TEST_F(APIEventHandlerTest, TestUnmanagedEvents) {
 // Test callback notifications for events that don't support lazy listeners.
 TEST_F(APIEventHandlerTest, TestEventsWithoutLazyListeners) {
   MockEventChangeHandler change_handler;
-  APIEventHandler handler(change_handler.Get(), nullptr);
+  APIEventHandler handler(change_handler.Get(),
+                          base::BindRepeating(&GetContextOwner), nullptr);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -1001,8 +1033,9 @@ TEST_F(APIEventHandlerTest, TestEventsWithoutLazyListeners) {
   {
     EXPECT_CALL(change_handler,
                 Run(kLazyListenersSupported,
-                    binding::EventListenersChanged::HAS_LISTENERS, nullptr,
-                    true, context))
+                    binding::EventListenersChanged::
+                        kFirstUnfilteredListenerForContextOwnerAdded,
+                    nullptr, true, context))
         .Times(1);
     v8::Local<v8::Value> argv[] = {lazy_listeners_supported, listener};
     RunFunction(add_listener, context, arraysize(argv), argv);
@@ -1012,8 +1045,9 @@ TEST_F(APIEventHandlerTest, TestEventsWithoutLazyListeners) {
   {
     EXPECT_CALL(change_handler,
                 Run(kLazyListenersNotSupported,
-                    binding::EventListenersChanged::HAS_LISTENERS, nullptr,
-                    false, context))
+                    binding::EventListenersChanged::
+                        kFirstUnfilteredListenerForContextOwnerAdded,
+                    nullptr, false, context))
         .Times(1);
     v8::Local<v8::Value> argv[] = {lazy_listeners_not_supported, listener};
     RunFunction(add_listener, context, arraysize(argv), argv);
@@ -1025,8 +1059,9 @@ TEST_F(APIEventHandlerTest, TestEventsWithoutLazyListeners) {
   {
     EXPECT_CALL(change_handler,
                 Run(kLazyListenersSupported,
-                    binding::EventListenersChanged::NO_LISTENERS, nullptr, true,
-                    context))
+                    binding::EventListenersChanged::
+                        kLastUnfilteredListenerForContextOwnerRemoved,
+                    nullptr, true, context))
         .Times(1);
     v8::Local<v8::Value> argv[] = {lazy_listeners_supported, listener};
     RunFunction(remove_listener, context, arraysize(argv), argv);
@@ -1036,8 +1071,9 @@ TEST_F(APIEventHandlerTest, TestEventsWithoutLazyListeners) {
   {
     EXPECT_CALL(change_handler,
                 Run(kLazyListenersNotSupported,
-                    binding::EventListenersChanged::NO_LISTENERS, nullptr,
-                    false, context))
+                    binding::EventListenersChanged::
+                        kLastUnfilteredListenerForContextOwnerRemoved,
+                    nullptr, false, context))
         .Times(1);
     v8::Local<v8::Value> argv[] = {lazy_listeners_not_supported, listener};
     RunFunction(remove_listener, context, arraysize(argv), argv);
@@ -1095,7 +1131,7 @@ TEST_F(APIEventHandlerTest,
   ExceptionHandler exception_handler(
       base::BindRepeating(log_error, &logged_errors));
   SetHandler(std::make_unique<APIEventHandler>(
-      base::BindRepeating(&DoNothingOnEventListenersChanged),
+      base::DoNothing(), base::BindRepeating(&GetContextOwner),
       &exception_handler));
 
   const char kEventName[] = "alpha";
@@ -1211,6 +1247,115 @@ TEST_F(APIEventHandlerTest,
                                                      "eventFired1"));
   EXPECT_EQ("true", GetStringPropertyFromObject(context->Global(), context,
                                                 "eventFired2"));
+}
+
+// Test that notifications are properly fired for multiple events with the
+// same context owner.
+TEST_F(APIEventHandlerTest,
+       TestListenersFromDifferentContextsWithTheSameOwner) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context_alpha1 = MainContext();
+  v8::Local<v8::Context> context_alpha2 = AddContext();
+  v8::Local<v8::Context> context_beta1 = AddContext();
+
+  // Associate two v8::Contexts with the same owner, and a third with a separate
+  // owner.
+  auto get_context_owner = [context_alpha1, context_alpha2,
+                            context_beta1](v8::Local<v8::Context> context) {
+    if (context == context_alpha1 || context == context_alpha2)
+      return std::string("alpha");
+    if (context == context_beta1)
+      return std::string("beta");
+    ADD_FAILURE();
+    return std::string();
+  };
+
+  MockEventChangeHandler change_handler;
+  APIEventHandler handler(change_handler.Get(),
+                          base::BindLambdaForTesting(get_context_owner),
+                          nullptr);
+
+  const char kEventName[] = "alpha";
+  v8::Local<v8::Object> event_alpha1 = handler.CreateEventInstance(
+      kEventName, false, true, binding::kNoListenerMax, true, context_alpha1);
+  ASSERT_FALSE(event_alpha1.IsEmpty());
+  v8::Local<v8::Object> event_alpha2 = handler.CreateEventInstance(
+      kEventName, false, true, binding::kNoListenerMax, true, context_alpha2);
+  ASSERT_FALSE(event_alpha2.IsEmpty());
+  v8::Local<v8::Object> event_beta1 = handler.CreateEventInstance(
+      kEventName, false, true, binding::kNoListenerMax, true, context_beta1);
+  ASSERT_FALSE(event_beta1.IsEmpty());
+
+  // Add a listener to the first event. The APIEventHandler should notify
+  // since it's a change in state (no listeners -> listeners).
+  v8::Local<v8::Function> listener_alpha1 =
+      FunctionFromString(context_alpha1, "(function() {})");
+  EXPECT_CALL(change_handler,
+              Run(kEventName,
+                  binding::EventListenersChanged::
+                      kFirstUnfilteredListenerForContextOwnerAdded,
+                  nullptr, true, context_alpha1))
+      .Times(1);
+  AddListener(context_alpha1, listener_alpha1, event_alpha1);
+  ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+
+  // Adding a listener to the same event in a different context that is still
+  // associated with the same owner should fire a notification for the context,
+  // but not the context owner.
+  EXPECT_CALL(change_handler, Run(kEventName,
+                                  binding::EventListenersChanged::
+                                      kFirstUnfilteredListenerForContextAdded,
+                                  nullptr, true, context_alpha2))
+      .Times(1);
+  v8::Local<v8::Function> listener_alpha2 =
+      FunctionFromString(context_alpha2, "(function() {})");
+  AddListener(context_alpha2, listener_alpha2, event_alpha2);
+  ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+
+  // Adding a listener in a separate context should fire a notification.
+  v8::Local<v8::Function> listener_beta1 =
+      FunctionFromString(context_alpha1, "(function() {})");
+  EXPECT_CALL(change_handler,
+              Run(kEventName,
+                  binding::EventListenersChanged::
+                      kFirstUnfilteredListenerForContextOwnerAdded,
+                  nullptr, true, context_beta1))
+      .Times(1);
+  AddListener(context_beta1, listener_beta1, event_beta1);
+  ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+
+  // Removing one of the listeners from the alpha context should notify about
+  // the context, but not the context owner (since there are multiple listeners
+  // for the context owner).
+  EXPECT_CALL(change_handler, Run(kEventName,
+                                  binding::EventListenersChanged::
+                                      kLastUnfilteredListenerForContextRemoved,
+                                  nullptr, true, context_alpha1))
+      .Times(1);
+  RemoveListener(context_alpha1, listener_alpha1, event_alpha1);
+  ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+
+  // Removing the final listener should fire a notification for the context
+  // owner.
+  EXPECT_CALL(change_handler,
+              Run(kEventName,
+                  binding::EventListenersChanged::
+                      kLastUnfilteredListenerForContextOwnerRemoved,
+                  nullptr, true, context_alpha2))
+      .Times(1);
+  RemoveListener(context_alpha2, listener_alpha2, event_alpha2);
+  ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+
+  // And removing the only listener for the beta context should fire a
+  // notification.
+  EXPECT_CALL(change_handler,
+              Run(kEventName,
+                  binding::EventListenersChanged::
+                      kLastUnfilteredListenerForContextOwnerRemoved,
+                  nullptr, true, context_beta1))
+      .Times(1);
+  RemoveListener(context_beta1, listener_beta1, event_beta1);
+  ::testing::Mock::VerifyAndClearExpectations(&change_handler);
 }
 
 }  // namespace extensions

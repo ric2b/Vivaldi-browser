@@ -8,8 +8,10 @@
 #include <limits>
 #include <memory>
 
+#include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "net/base/net_export.h"
 #include "net/log/net_log.h"
 
@@ -37,7 +39,7 @@ class NetLogCaptureMode;
 class NET_EXPORT FileNetLogObserver : public NetLog::ThreadSafeObserver {
  public:
   // Special value meaning "can use an unlimited number of bytes".
-  static constexpr size_t kNoLimit = std::numeric_limits<size_t>::max();
+  static constexpr uint64_t kNoLimit = std::numeric_limits<uint64_t>::max();
 
   // Creates an instance of FileNetLogObserver that writes observed netlog
   // events to |log_path|.
@@ -56,12 +58,28 @@ class NET_EXPORT FileNetLogObserver : public NetLog::ThreadSafeObserver {
   // If not present, the output of GetNetConstants() will be used.
   static std::unique_ptr<FileNetLogObserver> CreateBounded(
       const base::FilePath& log_path,
-      size_t max_total_size,
+      uint64_t max_total_size,
       std::unique_ptr<base::Value> constants);
 
   // Shortcut for calling CreateBounded() with kNoLimit.
   static std::unique_ptr<FileNetLogObserver> CreateUnbounded(
       const base::FilePath& log_path,
+      std::unique_ptr<base::Value> constants);
+
+  // Creates a bounded log that writes to a pre-existing file (truncating
+  // it to start with, and closing it upon completion).  |inprogress_dir_path|
+  // will be used as a scratch directory, for temporary files (with predictable
+  // names).
+  static std::unique_ptr<FileNetLogObserver> CreateBoundedPreExisting(
+      const base::FilePath& inprogress_dir_path,
+      base::File output_file,
+      uint64_t max_total_size,
+      std::unique_ptr<base::Value> constants);
+
+  // Creates an unbounded log that writes to a pre-existing file (truncating
+  // it to start with, and closing it upon completion).
+  static std::unique_ptr<FileNetLogObserver> CreateUnboundedPreExisting(
+      base::File output_file,
       std::unique_ptr<base::Value> constants);
 
   ~FileNetLogObserver() override;
@@ -71,10 +89,11 @@ class NET_EXPORT FileNetLogObserver : public NetLog::ThreadSafeObserver {
 
   // Stops observing net_log() and closes the output file(s). Must be called
   // after StartObserving. Should be called before destruction of the
-  // FileNetLogObserver and the NetLog, or the NetLog files will be deleted when
-  // the observer is destroyed. Note that it is OK to destroy |this| immediately
-  // after calling StopObserving() - the callback will still be called once the
-  // file writing has completed.
+  // FileNetLogObserver and the NetLog, or the NetLog files (except for an
+  // externally provided output_file) will be deleted when the observer is
+  // destroyed. Note that it is OK to destroy |this| immediately after calling
+  // StopObserving() - the callback will still be called once the file writing
+  // has completed.
   //
   // |polled_data| is an optional argument used to add additional network stack
   // state to the log.
@@ -92,7 +111,7 @@ class NET_EXPORT FileNetLogObserver : public NetLog::ThreadSafeObserver {
   // |total_num_event_files|.
   static std::unique_ptr<FileNetLogObserver> CreateBoundedForTests(
       const base::FilePath& log_path,
-      size_t max_total_size,
+      uint64_t max_total_size,
       size_t total_num_event_files,
       std::unique_ptr<base::Value> constants);
 
@@ -100,9 +119,11 @@ class NET_EXPORT FileNetLogObserver : public NetLog::ThreadSafeObserver {
   class WriteQueue;
   class FileWriter;
 
-  static std::unique_ptr<FileNetLogObserver> CreateBoundedInternal(
+  static std::unique_ptr<FileNetLogObserver> CreateInternal(
       const base::FilePath& log_path,
-      size_t max_total_size,
+      const base::FilePath& inprogress_dir_path,
+      base::Optional<base::File> pre_existing_out_file,
+      uint64_t max_total_size,
       size_t total_num_event_files,
       std::unique_ptr<base::Value> constants);
 

@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
-#include "base/message_loop/message_loop.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/fake_single_thread_task_runner.h"
 #include "media/base/test_random.h"
@@ -254,9 +253,6 @@ class MultiBufferTest : public testing::Test {
   scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
   scoped_refptr<MultiBuffer::GlobalLRU> lru_;
   TestMultiBuffer multibuffer_;
-
-  // TODO(hubbe): Make MultiBufferReader take a task_runner_
-  base::MessageLoop message_loop_;
 };
 
 TEST_F(MultiBufferTest, ReadAll) {

@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/app_list/search/app_result.h"
 
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/time/time.h"
-#include "ui/app_list/app_list_switches.h"
 
 namespace app_list {
 
@@ -16,8 +16,10 @@ AppResult::AppResult(Profile* profile,
     : profile_(profile),
       app_id_(app_id),
       controller_(controller) {
-  set_display_type(is_recommendation ? DISPLAY_RECOMMENDATION : DISPLAY_TILE);
-  set_result_type(RESULT_INSTALLED_APP);
+  SetDisplayType(is_recommendation
+                     ? ash::SearchResultDisplayType::kRecommendation
+                     : ash::SearchResultDisplayType::kTile);
+  SetResultType(ash::SearchResultType::kInstalledApp);
 }
 
 AppResult::~AppResult() {

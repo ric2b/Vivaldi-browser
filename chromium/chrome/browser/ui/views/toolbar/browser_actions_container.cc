@@ -8,19 +8,20 @@
 
 #include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/ranges.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
+#include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/extensions/command.h"
@@ -30,23 +31,16 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/nine_image_painter_factory.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/theme_provider.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/resize_area.h"
-#include "ui/views/painter.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/widget/widget.h"
-
-namespace {
-
-// Returns the ToolbarView for the given |browser|.
-ToolbarView* GetToolbarView(Browser* browser) {
-  return BrowserView::GetBrowserViewForBrowser(browser)->toolbar();
-}
-
-}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserActionsContainer::DropPosition
@@ -71,24 +65,32 @@ BrowserActionsContainer::DropPosition::DropPosition(
 
 BrowserActionsContainer::BrowserActionsContainer(
     Browser* browser,
-    BrowserActionsContainer* main_container)
-    : toolbar_actions_bar_(new ToolbarActionsBar(
-          this,
-          browser,
-          main_container ? main_container->toolbar_actions_bar_.get()
-                         : nullptr)),
+    BrowserActionsContainer* main_container,
+    Delegate* delegate,
+    bool interactive)
+    : delegate_(delegate),
       browser_(browser),
-      main_container_(main_container) {
+      main_container_(main_container),
+      interactive_(interactive) {
   set_id(VIEW_ID_BROWSER_ACTION_TOOLBAR);
 
-  if (!ShownInsideMenu()) {
-    resize_animation_.reset(new gfx::SlideAnimation(this));
-    resize_area_ = new views::ResizeArea(this);
-    AddChildView(resize_area_);
+  toolbar_actions_bar_ = delegate_->CreateToolbarActionsBar(
+      this, browser,
+      main_container ? main_container->toolbar_actions_bar_.get() : nullptr);
 
-    const int kWarningImages[] = IMAGE_GRID(IDR_DEVELOPER_MODE_HIGHLIGHT);
-    warning_highlight_painter_ =
-        views::Painter::CreateImageGridPainter(kWarningImages);
+  if (!ShownInsideMenu()) {
+    if (interactive_) {
+      resize_area_ = new views::ResizeArea(this);
+      AddChildView(resize_area_);
+    }
+    resize_animation_.reset(new gfx::SlideAnimation(this));
+
+    if (GetSeparatorAreaWidth() > 0) {
+      separator_ = new views::Separator();
+      separator_->SetSize(gfx::Size(views::Separator::kThickness,
+                                    GetLayoutConstant(LOCATION_BAR_ICON_SIZE)));
+      AddChildView(separator_);
+    }
   }
 }
 
@@ -134,7 +136,7 @@ size_t BrowserActionsContainer::VisibleBrowserActionsAfterAnimation() const {
   if (!animating())
     return VisibleBrowserActions();
 
-  return toolbar_actions_bar_->WidthToIconCount(animation_target_size_);
+  return WidthToIconCount(animation_target_size_);
 }
 
 bool BrowserActionsContainer::ShownInsideMenu() const {
@@ -146,8 +148,11 @@ void BrowserActionsContainer::OnToolbarActionViewDragDone() {
 }
 
 views::MenuButton* BrowserActionsContainer::GetOverflowReferenceView() {
-  return static_cast<views::MenuButton*>(
-      GetToolbarView(browser_)->app_menu_button());
+  return delegate_->GetOverflowReferenceView();
+}
+
+gfx::Size BrowserActionsContainer::GetToolbarActionSize() {
+  return toolbar_actions_bar_->GetViewSize();
 }
 
 void BrowserActionsContainer::AddViewForAction(
@@ -206,17 +211,26 @@ void BrowserActionsContainer::Redraw(bool order_changed) {
     }
   }
 
+  if (separator_)
+    ReorderChildView(separator_, -1);
+
   Layout();
 }
 
 void BrowserActionsContainer::ResizeAndAnimate(gfx::Tween::Type tween_type,
                                                int target_width) {
+  // TODO(pbos): Make this method show N icons and derive target_width using
+  // GetWidthForIconCount.
+  if (toolbar_actions_bar_->WidthToIconCount(target_width) > 0)
+    target_width += GetSeparatorAreaWidth();
+  target_width += GetResizeAreaWidth();
+
   if (resize_animation_ && !toolbar_actions_bar_->suppress_animation()) {
     if (!ShownInsideMenu()) {
       // Make sure we don't try to animate to wider than the allowed width.
-      int max_width = GetToolbarView(browser_)->GetMaxBrowserActionsWidth();
-      if (target_width > max_width)
-        target_width = GetWidthForMaxWidth(max_width);
+      base::Optional<int> max_width = delegate_->GetMaxBrowserActionsWidth();
+      if (max_width && target_width > max_width.value())
+        target_width = GetWidthForMaxWidth(max_width.value());
     }
     // Animate! We have to set the animation_target_size_ after calling Reset(),
     // because that could end up calling AnimationEnded which clears the value.
@@ -226,16 +240,28 @@ void BrowserActionsContainer::ResizeAndAnimate(gfx::Tween::Type tween_type,
     animation_target_size_ = target_width;
     resize_animation_->Show();
   } else {
+    if (resize_animation_)
+      resize_animation_->Reset();
     animation_target_size_ = target_width;
     AnimationEnded(resize_animation_.get());
   }
 }
 
 int BrowserActionsContainer::GetWidth(GetWidthTime get_width_time) const {
-  return get_width_time == GET_WIDTH_AFTER_ANIMATION &&
-                 animation_target_size_ > 0
-             ? animation_target_size_
-             : width();
+  // This call originates from ToolbarActionsBar which wants to know how much
+  // space is / will be used for action icons (excluding the separator).
+  const int target_width =
+      get_width_time == GET_WIDTH_AFTER_ANIMATION && animating()
+          ? animation_target_size_
+          : width();
+  const int icon_area_width =
+      target_width - GetSeparatorAreaWidth() - GetResizeAreaWidth();
+  // This needs to be clamped to non-zero as ToolbarActionsBar::ResizeDelegate
+  // uses this value to distinguish between an empty bar without items and a bar
+  // that is showing no items.
+  // TODO(pbos): This is landed to fix to https://crbug.com/836182. Remove the
+  // need for this when ToolbarActionsBar and BrowserActionsContainer merges.
+  return std::max(toolbar_actions_bar_->GetMinimumWidth(), icon_area_width);
 }
 
 bool BrowserActionsContainer::IsAnimating() const {
@@ -264,8 +290,8 @@ void BrowserActionsContainer::ShowToolbarActionBubble(
       anchored_to_action_view = true;
     } else {
       anchor_view = BrowserView::GetBrowserViewForBrowser(browser_)
-                        ->toolbar()
-                        ->app_menu_button();
+                        ->toolbar_button_provider()
+                        ->GetAppMenuButton();
     }
   } else {
     anchor_view = this;
@@ -291,14 +317,21 @@ void BrowserActionsContainer::OnWidgetDestroying(views::Widget* widget) {
 int BrowserActionsContainer::GetWidthForMaxWidth(int max_width) const {
   int preferred_width = GetPreferredSize().width();
   if (preferred_width > max_width) {
-    // If we can't even show the minimum width, just throw in the towel (and
+    // If we can't even show the resize area width, just throw in the towel (and
     // show nothing).
-    if (max_width < toolbar_actions_bar_->GetMinimumWidth())
+    // TODO(pbos): Consider making this the size of one item + resize area +
+    // separator, since it doesn't make that much sense to have a drag handle if
+    // there's not enough room to drag anything out.
+    if (max_width < GetResizeAreaWidth())
       return 0;
-    preferred_width = toolbar_actions_bar_->IconCountToWidth(
-        toolbar_actions_bar_->WidthToIconCount(max_width));
+    preferred_width = GetWidthForIconCount(WidthToIconCount(max_width));
   }
   return preferred_width;
+}
+
+void BrowserActionsContainer::SetSeparatorColor(SkColor color) {
+  if (separator_)
+    separator_->SetColor(color);
 }
 
 gfx::Size BrowserActionsContainer::CalculatePreferredSize() const {
@@ -309,16 +342,25 @@ gfx::Size BrowserActionsContainer::CalculatePreferredSize() const {
   if (toolbar_action_views_.empty())
     return gfx::Size();
 
-  // When resizing, preferred width is the starting width - resize amount.
-  // Otherwise, use the normal preferred width.
-  int preferred_width = resize_starting_width_ == -1
-                            ? toolbar_actions_bar_->GetFullSize().width()
-                            : resize_starting_width_ - resize_amount_;
-  // In either case, clamp it within the max/min bounds.
-  preferred_width = std::min(
-      std::max(toolbar_actions_bar_->GetMinimumWidth(), preferred_width),
-      toolbar_actions_bar_->GetMaximumWidth());
-  return gfx::Size(preferred_width, ToolbarActionsBar::IconHeight());
+  int preferred_width;
+  if (resize_starting_width_) {
+    // When resizing, preferred width is the starting width - resize amount.
+    preferred_width = *resize_starting_width_ - resize_amount_;
+  } else {
+    // Otherwise, use the normal preferred width.
+    preferred_width =
+        GetResizeAreaWidth() + toolbar_actions_bar_->GetFullSize().width();
+    if (toolbar_actions_bar_->GetIconCount() > 0)
+      preferred_width += GetSeparatorAreaWidth();
+  }
+
+  // The view should never be resized past the largest size or smaller than the
+  // empty width (including drag handle), clamp preferred size to reflect this.
+  preferred_width = base::ClampToRange(preferred_width, GetResizeAreaWidth(),
+                                       GetWidthWithAllActionsVisible());
+
+  return gfx::Size(preferred_width,
+                   toolbar_actions_bar_->GetViewSize().height());
 }
 
 int BrowserActionsContainer::GetHeightForWidth(int width) const {
@@ -328,12 +370,13 @@ int BrowserActionsContainer::GetHeightForWidth(int width) const {
 }
 
 gfx::Size BrowserActionsContainer::GetMinimumSize() const {
-  return gfx::Size(toolbar_actions_bar_->GetMinimumWidth(),
-                   ToolbarActionsBar::IconHeight());
+  DCHECK(interactive_);
+  return gfx::Size(GetResizeAreaWidth(),
+                   toolbar_actions_bar_->GetViewSize().height());
 }
 
 void BrowserActionsContainer::Layout() {
-  if (toolbar_actions_bar_->suppress_layout())
+  if (toolbar_actions_bar()->suppress_layout())
     return;
 
   if (toolbar_action_views_.empty()) {
@@ -343,12 +386,12 @@ void BrowserActionsContainer::Layout() {
 
   SetVisible(true);
   if (resize_area_)
-    resize_area_->SetBounds(0, 0, platform_settings().item_spacing, height());
+    resize_area_->SetBounds(0, 0, GetResizeAreaWidth(), height());
 
   // The range of visible icons, from start_index (inclusive) to end_index
   // (exclusive).
-  size_t start_index = toolbar_actions_bar_->GetStartIndexInBounds();
-  size_t end_index = toolbar_actions_bar_->GetEndIndexInBounds();
+  size_t start_index = toolbar_actions_bar()->GetStartIndexInBounds();
+  size_t end_index = toolbar_actions_bar()->GetEndIndexInBounds();
 
   // Now draw the icons for the actions in the available space. Once all the
   // variables are in place, the layout works equally well for the main and
@@ -358,8 +401,31 @@ void BrowserActionsContainer::Layout() {
     if (i < start_index || i >= end_index) {
       view->SetVisible(false);
     } else {
-      view->SetBoundsRect(toolbar_actions_bar_->GetFrameForIndex(i));
+      gfx::Rect bounds = toolbar_actions_bar()->GetFrameForIndex(i);
+      // Offset all icons by GetResizeAreaWidth() so that they start on the
+      // resize area's right edge. ToolbarActionsBar is not aware of the
+      // separate resize area.
+      // TODO(pbos): Remove this workaround when the files merge.
+      bounds.set_x(bounds.x() + GetResizeAreaWidth());
+      view->SetBoundsRect(bounds);
       view->SetVisible(true);
+      if (!ShownInsideMenu()) {
+        view->AnimateInkDrop(toolbar_actions_bar()->is_highlighting()
+                                 ? views::InkDropState::ACTIVATED
+                                 : views::InkDropState::HIDDEN,
+                             nullptr);
+      }
+    }
+  }
+  if (separator_) {
+    if (width() < GetResizeAreaWidth() + GetSeparatorAreaWidth()) {
+      separator_->SetVisible(false);
+    } else {
+      // Position separator_ in the center of the separator area.
+      separator_->SetPosition(gfx::Point(
+          width() - GetSeparatorAreaWidth() / 2 - separator_->width(),
+          (height() - separator_->height()) / 2));
+      separator_->SetVisible(true);
     }
   }
 }
@@ -375,7 +441,8 @@ bool BrowserActionsContainer::AreDropTypesRequired() {
 }
 
 bool BrowserActionsContainer::CanDrop(const OSExchangeData& data) {
-  return BrowserActionDragData::CanDrop(data, browser_->profile());
+  return interactive_ &&
+         BrowserActionDragData::CanDrop(data, browser_->profile());
 }
 
 int BrowserActionsContainer::OnDragUpdated(
@@ -385,53 +452,32 @@ int BrowserActionsContainer::OnDragUpdated(
   // If there are no visible actions (such as when dragging an icon to an empty
   // overflow/main container), then 0, 0 for row, column is correct.
   if (VisibleBrowserActions() != 0) {
-    // Figure out where to display the indicator. This is a complex calculation:
+    // Figure out where to display the indicator.
 
-    // First, we subtract out the padding to the left of the icon area. If
-    // we're right-to-left, we also mirror the event.x() so that our
-    // calculations are consistent with left-to-right.
-    int offset_into_icon_area =
-        GetMirroredXInView(event.x()) -
-            GetLayoutConstant(TOOLBAR_STANDARD_SPACING);
+    // First, since we want to switch from displaying the indicator before an
+    // icon to after it when the event passes the midpoint of the icon, add
+    // (icon width / 2) and divide by the icon width. This will convert the
+    // event coordinate into the index of the icon we want to display the
+    // indicator before. We also mirror the event.x() so that our calculations
+    // are consistent with left-to-right.
+    const auto size = toolbar_actions_bar_->GetViewSize();
+    const int offset_into_icon_area = GetMirroredXInView(event.x()) -
+                                      GetResizeAreaWidth() + (size.width() / 2);
+    const int before_icon_unclamped = offset_into_icon_area / size.width();
 
     // Next, figure out what row we're on. This only matters for overflow mode,
     // but the calculation is the same for both.
-    row_index = event.y() / ToolbarActionsBar::IconHeight();
+    row_index = event.y() / size.height();
 
     // Sanity check - we should never be on a different row in the main
     // container.
     DCHECK(ShownInsideMenu() || row_index == 0);
 
-    // Next, we determine which icon to place the indicator in front of. We want
-    // to place the indicator in front of icon n when the cursor is between the
-    // midpoints of icons (n - 1) and n.  To do this we take the offset into the
-    // icon area and transform it as follows:
-    //
-    // Real icon area:
-    //   0   a     *  b        c
-    //   |   |        |        |
-    //   |[IC|ON]  [IC|ON]  [IC|ON]
-    // We want to be before icon 0 for 0 < x <= a, icon 1 for a < x <= b, etc.
-    // Here the "*" represents the offset into the icon area, and since it's
-    // between a and b, we want to return "1".
-    //
-    // Transformed "icon area":
-    //   0        a     *  b        c
-    //   |        |        |        |
-    //   |[ICON]  |[ICON]  |[ICON]  |
-    // If we shift both our offset and our divider points later by half an icon
-    // plus one spacing unit, then it becomes very easy to calculate how many
-    // divider points we've passed, because they're the multiples of "one icon
-    // plus padding".
-    int before_icon_unclamped =
-        (offset_into_icon_area + (ToolbarActionsBar::IconWidth(false) / 2) +
-        platform_settings().item_spacing) / ToolbarActionsBar::IconWidth(true);
-
     // We need to figure out how many icons are visible on the relevant row.
     // In the main container, this will just be the visible actions.
     int visible_icons_on_row = VisibleBrowserActionsAfterAnimation();
     if (ShownInsideMenu()) {
-      int icons_per_row = platform_settings().icons_per_overflow_menu_row;
+      const int icons_per_row = platform_settings().icons_per_overflow_menu_row;
       // If this is the final row of the overflow, then this is the remainder of
       // visible icons. Otherwise, it's a full row (kIconsPerRow).
       visible_icons_on_row =
@@ -445,13 +491,14 @@ int BrowserActionsContainer::OnDragUpdated(
     // not (num icons - 1), because we represent the indicator being past the
     // last icon as being "before the (last + 1) icon".
     before_icon_in_row =
-        std::min(std::max(before_icon_unclamped, 0), visible_icons_on_row);
+        base::ClampToRange(before_icon_unclamped, 0, visible_icons_on_row);
   }
 
   if (!drop_position_.get() ||
       !(drop_position_->row == row_index &&
         drop_position_->icon_in_row == before_icon_in_row)) {
-    drop_position_.reset(new DropPosition(row_index, before_icon_in_row));
+    drop_position_ =
+        std::make_unique<DropPosition>(row_index, before_icon_in_row);
     SchedulePaint();
   }
 
@@ -497,14 +544,13 @@ int BrowserActionsContainer::OnPerformDrop(
 }
 
 void BrowserActionsContainer::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_GROUP;
+  node_data->role = ax::mojom::Role::kGroup;
   node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_EXTENSIONS));
 }
 
 void BrowserActionsContainer::WriteDragDataForView(View* sender,
                                                    const gfx::Point& press_pt,
                                                    OSExchangeData* data) {
-  toolbar_actions_bar_->OnDragStarted();
   DCHECK(data);
 
   auto it =
@@ -513,15 +559,19 @@ void BrowserActionsContainer::WriteDragDataForView(View* sender,
                      return ptr.get() == sender;
                    });
   DCHECK(it != toolbar_action_views_.cend());
+
+  size_t index = it - toolbar_action_views_.cbegin();
+  toolbar_actions_bar_->OnDragStarted(index);
+
   ToolbarActionViewController* view_controller = (*it)->view_controller();
-  gfx::Size size(ToolbarActionsBar::IconWidth(false),
-                 ToolbarActionsBar::IconHeight());
   data->provider().SetDragImage(
-      view_controller->GetIcon(GetCurrentWebContents(), size).AsImageSkia(),
+      view_controller
+          ->GetIcon(GetCurrentWebContents(),
+                    toolbar_actions_bar_->GetViewSize())
+          .AsImageSkia(),
       press_pt.OffsetFromOrigin());
   // Fill in the remaining info.
-  BrowserActionDragData drag_data(view_controller->GetId(),
-                                  it - toolbar_action_views_.cbegin());
+  BrowserActionDragData drag_data(view_controller->GetId(), index);
   drag_data.Write(browser_->profile(), data);
 }
 
@@ -534,7 +584,7 @@ bool BrowserActionsContainer::CanStartDragForView(View* sender,
                                                   const gfx::Point& press_pt,
                                                   const gfx::Point& p) {
   // We don't allow dragging while we're highlighting.
-  return !toolbar_actions_bar_->is_highlighting();
+  return interactive_ && !toolbar_actions_bar_->is_highlighting();
 }
 
 void BrowserActionsContainer::OnResize(int resize_amount, bool done_resizing) {
@@ -548,32 +598,37 @@ void BrowserActionsContainer::OnResize(int resize_amount, bool done_resizing) {
 
   // If this is the start of the resize gesture, initialize the starting
   // width.
-  if (resize_starting_width_ == -1)
+  if (!resize_starting_width_)
     resize_starting_width_ = width();
 
+  resize_amount_ = resize_amount;
+
   if (!done_resizing) {
-    resize_amount_ = resize_amount;
-    parent()->Layout();
+    PreferredSizeChanged();
     return;
   }
 
   // Up until now we've only been modifying the resize_amount, but now it is
   // time to set the container size to the size we have resized to, and then
   // animate to the nearest icon count size if necessary (which may be 0).
-  int ending_width =
-      std::min(std::max(toolbar_actions_bar_->GetMinimumWidth(),
-                        resize_starting_width_ - resize_amount),
-               toolbar_actions_bar_->GetMaximumWidth());
-  resize_starting_width_ = -1;
-  toolbar_actions_bar_->OnResizeComplete(ending_width);
+  int icon_area_width =
+      std::max(toolbar_actions_bar_->GetMinimumWidth(),
+               CalculatePreferredSize().width() - GetSeparatorAreaWidth() -
+                   GetResizeAreaWidth());
+  // As we're done resizing, reset the starting width to reflect this after
+  // calculating the final size based on it.
+  resize_starting_width_.reset();
+  toolbar_actions_bar_->OnResizeComplete(icon_area_width);
 }
 
 void BrowserActionsContainer::AnimationProgressed(
     const gfx::Animation* animation) {
   DCHECK_EQ(resize_animation_.get(), animation);
-  resize_amount_ = static_cast<int>(resize_animation_->GetCurrentValue() *
-      (resize_starting_width_ - animation_target_size_));
-  parent()->Layout();
+  DCHECK(resize_starting_width_);
+  resize_amount_ =
+      static_cast<int>(resize_animation_->GetCurrentValue() *
+                       (*resize_starting_width_ - animation_target_size_));
+  PreferredSizeChanged();
 }
 
 void BrowserActionsContainer::AnimationCanceled(
@@ -584,8 +639,8 @@ void BrowserActionsContainer::AnimationCanceled(
 void BrowserActionsContainer::AnimationEnded(const gfx::Animation* animation) {
   animation_target_size_ = 0;
   resize_amount_ = 0;
-  resize_starting_width_ = -1;
-  parent()->Layout();
+  resize_starting_width_.reset();
+  PreferredSizeChanged();
 
   toolbar_actions_bar_->OnAnimationEnded();
 }
@@ -595,42 +650,47 @@ content::WebContents* BrowserActionsContainer::GetCurrentWebContents() {
 }
 
 void BrowserActionsContainer::OnPaint(gfx::Canvas* canvas) {
-  // If the views haven't been initialized yet, wait for the next call to
-  // paint (one will be triggered by entering highlight mode).
-  if (toolbar_actions_bar_->is_highlighting() &&
-      !toolbar_action_views_.empty() && !ShownInsideMenu()) {
-    views::Painter::PaintPainterAt(canvas, warning_highlight_painter_.get(),
-                                   GetLocalBounds());
-  }
-
   // TODO(sky/glen): Instead of using a drop indicator, animate the icons while
   // dragging (like we do for tab dragging).
-  if (drop_position_.get()) {
+  if (drop_position_) {
     // The two-pixel width drop indicator.
-    static const int kDropIndicatorWidth = 2;
+    constexpr int kDropIndicatorWidth = 2;
 
     // Convert back to a pixel offset into the container.  First find the X
     // coordinate of the drop icon.
-    const int drop_icon_x = GetLayoutConstant(TOOLBAR_STANDARD_SPACING) +
-        (drop_position_->icon_in_row * ToolbarActionsBar::IconWidth(true));
-    // Next, find the space before the drop icon.
-    const int space_before_drop_icon = platform_settings().item_spacing;
-    // Now place the drop indicator halfway between this and the end of the
-    // previous icon.  If there is an odd amount of available space between the
-    // two icons (or the icon and the address bar) after subtracting the drop
-    // indicator width, this calculation puts the extra pixel on the left side
-    // of the indicator, since when the indicator is between the address bar and
-    // the first icon, it looks better closer to the icon.
-    const int drop_indicator_x = drop_icon_x -
-        ((space_before_drop_icon + kDropIndicatorWidth) / 2);
-    const int row_height = ToolbarActionsBar::IconHeight();
+    const auto size = toolbar_actions_bar_->GetViewSize();
+    // TODO(pbos): The drag/drop separator and view placement should share code
+    // after ToolbarActionsBar and BrowserActionsContainer merge.
+    const int drop_icon_x = GetResizeAreaWidth() +
+                            drop_position_->icon_in_row * size.width() -
+                            (kDropIndicatorWidth / 2);
+
+    // Next, clamp so the indicator doesn't touch the adjoining toolbar items.
+    const int drop_indicator_x =
+        base::ClampToRange(drop_icon_x, 1, width() - kDropIndicatorWidth - 1);
+
+    const int row_height = size.height();
     const int drop_indicator_y = row_height * drop_position_->row;
     gfx::Rect indicator_bounds = GetMirroredRect(gfx::Rect(
         drop_indicator_x, drop_indicator_y, kDropIndicatorWidth, row_height));
 
     // Color of the drop indicator.
-    static const SkColor kDropIndicatorColor = SK_ColorBLACK;
-    canvas->FillRect(indicator_bounds, kDropIndicatorColor);
+    // Always get the theme provider of the browser widget, since if this view
+    // is shown within the menu widget, GetThemeProvider() would return the
+    // ui::DefaultThemeProvider which doesn't return the correct colors.
+    // https://crbug.com/831510.
+    const ui::ThemeProvider* theme_provider =
+        BrowserView::GetBrowserViewForBrowser(browser_)
+            ->frame()
+            ->GetThemeProvider();
+
+    // TODO(afakhry): This operation is done in several places, try to find a
+    // centeral location for it. Part of themes work for
+    // https://crbug.com/820495.
+    const SkColor drop_indicator_color = color_utils::BlendTowardOppositeLuma(
+        theme_provider->GetColor(ThemeProperties::COLOR_TOOLBAR),
+        SK_AlphaOPAQUE);
+    canvas->FillRect(indicator_bounds, drop_indicator_color);
   }
 }
 
@@ -656,4 +716,41 @@ void BrowserActionsContainer::ClearActiveBubble(views::Widget* widget) {
   widget->RemoveObserver(this);
   active_bubble_ = nullptr;
   toolbar_actions_bar_->OnBubbleClosed();
+}
+
+size_t BrowserActionsContainer::WidthToIconCount(int width) const {
+  // TODO(pbos): Ideally we would just calculate the icon count ourselves, but
+  // until that point we need to subtract the separator width before asking
+  // |toolbar_actions_bar_| how many icons to show, so that it doesn't try to
+  // place an icon over the separator.
+  return toolbar_actions_bar_->WidthToIconCount(width -
+                                                GetSeparatorAreaWidth());
+}
+
+int BrowserActionsContainer::GetWidthForIconCount(size_t num_icons) const {
+  if (num_icons == 0)
+    return 0;
+  return GetResizeAreaWidth() + GetSeparatorAreaWidth() +
+         num_icons * toolbar_actions_bar_->GetViewSize().width();
+}
+
+int BrowserActionsContainer::GetWidthWithAllActionsVisible() const {
+  return GetWidthForIconCount(
+      toolbar_actions_bar_->toolbar_actions_unordered().size());
+}
+
+int BrowserActionsContainer::GetResizeAreaWidth() const {
+  if (!resize_area_)
+    return 0;
+  return platform_settings().item_spacing;
+}
+
+int BrowserActionsContainer::GetSeparatorAreaWidth() const {
+  // The separator is not applicable to the app menu, and is only available in
+  // Material refresh.
+  if (ShownInsideMenu() || !ui::MaterialDesignController::IsRefreshUi()) {
+    return 0;
+  }
+  return 2 * GetLayoutConstant(TOOLBAR_STANDARD_SPACING) +
+         views::Separator::kThickness;
 }

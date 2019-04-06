@@ -27,23 +27,20 @@ class LoadingDesktopStorySet(story.StorySet):
     # Passed as (story, name) tuple.
     self.AddStories(
         ['intl_ar_fa_he', 'international'],
-        [('http://ynet.co.il/', 'Ynet'),
-         ('http://farsnews.com/', 'FarsNews'),
+        [('http://farsnews.com/', 'FarsNews'),
          ('http://www.aljayyash.net/', 'Aljayyash'),
          ('http://haraj.com.sa', 'Haraj')], cache_temperatures)
     self.AddStories(
         ['intl_es_fr_pt_BR', 'international'],
         [('http://elmundo.es/', 'Elmundo'),
          ('http://www.free.fr/adsl/index.html', 'Free.fr'),
-         ('http://www.leboncoin.fr/annonces/offres/limousin/', 'Leboncoin'),
          ('http://www.orange.fr/', 'Orange'),
          ('http://www.uol.com.br/', 'uol.com.br'),
          ('http://www.mercadolivre.com.br/', 'Mercadolivre')],
         cache_temperatures)
     self.AddStories(
         ['intl_hi_ru', 'international'],
-        [('http://www.rambler.ru/', 'Rambler'),
-         ('https://yandex.ru/search/?text=google', 'Yandex'),
+        [('https://yandex.ru/search/?text=google', 'Yandex'),
          ('https://ru.wikipedia.org/wiki/%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0',
              'ru.wikipedia'),
          ('http://www.indiatimes.com/', 'IndiaTimes'),
@@ -52,9 +49,7 @@ class LoadingDesktopStorySet(story.StorySet):
     self.AddStories(
         ['intl_ja_zh', 'international'],
         [('http://www.amazon.co.jp', 'amazon.co.jp'),
-         ('http://potato.2ch.net/test/read.cgi/software/1475288157/', '2ch'),
          ('http://b.hatena.ne.jp/hotentry', 'HatenaBookmark'),
-         ('http://goo.ne.jp/', 'goo.ne.jp'),
          ('http://www.yahoo.co.jp/', 'yahoo.co.jp'),
          ('http://fc2information.blog.fc2.com/', 'FC2Blog'),
          ('http://kakaku.com/', 'Kakaku'),
@@ -88,23 +83,28 @@ class LoadingDesktopStorySet(story.StorySet):
          ('http://allrecipes.com/recipe/239896/crunchy-french-onion-chicken',
              'AllRecipes'),
          ('http://www.html5rocks.com/en/', 'HTML5Rocks'),
-         ('http://www.mlb.com/', 'MLB'),
          ('http://www.imdb.com/title/tt0910970/', 'IMDB'),
          ('http://www.flickr.com/search/?q=monkeys&f=hp', 'Flickr'),
          ('http://money.cnn.com/', 'money.cnn'),
-         ('http://www.nationalgeographic.com/', 'NatGeo'),
          ('http://premierleague.com', 'PremierLeague'),
          ('http://walgreens.com', 'Walgreens'),
          ('http://colorado.edu', 'Colorado.edu'),
          ('http://www.ticketmaster.com/', 'TicketMaster'),
          ('http://www.theverge.com/', 'TheVerge'),
          ('http://www.airbnb.com/', 'AirBnB'),
-         ('http://www.ign.com/', 'IGN'),
-         ('http://www.fda.gov', 'FDA')], cache_temperatures)
+         ('http://www.ign.com/', 'IGN')], cache_temperatures)
 
   def AddStories(self, tags, urls, cache_temperatures):
     for url, name in urls:
       for temp in cache_temperatures:
-          self.AddStory(page_cycler_story.PageCyclerStory(url, self,
-              shared_page_state_class=shared_page_state.SharedMobilePageState,
-              cache_temperature=temp, tags=tags, name=name))
+        if temp == cache_temperature_module.COLD:
+          page_name = name + '_cold'
+          tags.append('cache_temperature_cold')
+        elif temp == cache_temperature_module.WARM:
+          page_name = name + '_warm'
+          tags.append('cache_temperature_warm')
+        else:
+          raise NotImplementedError
+        self.AddStory(page_cycler_story.PageCyclerStory(url, self,
+            shared_page_state_class=shared_page_state.SharedDesktopPageState,
+            cache_temperature=temp, tags=tags, name=page_name))

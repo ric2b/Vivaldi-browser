@@ -22,6 +22,10 @@ namespace base {
 class RefCountedMemory;
 }
 
+namespace blink {
+class OriginTrialPolicy;
+}
+
 namespace IPC {
 class Message;
 }
@@ -46,7 +50,6 @@ class ContentClient;
 class ContentGpuClient;
 class ContentRendererClient;
 class ContentUtilityClient;
-class OriginTrialPolicy;
 class ServiceManagerConnection;
 struct CdmInfo;
 struct PepperPluginInfo;
@@ -129,7 +132,9 @@ class CONTENT_EXPORT ContentClient {
     std::vector<std::string> csp_bypassing_schemes;
     // See https://www.w3.org/TR/powerful-features/#is-origin-trustworthy.
     std::vector<std::string> secure_schemes;
-    std::vector<url::Origin> secure_origins;
+    // Registers a serialized origin or a hostname pattern that should be
+    // considered trustworthy.
+    std::vector<std::string> secure_origins;
     // Registers a URL scheme as strictly empty documents, allowing them to
     // commit synchronously.
     std::vector<std::string> empty_document_schemes;
@@ -146,6 +151,7 @@ class CONTENT_EXPORT ContentClient {
   virtual std::string GetProduct() const;
 
   // Returns the user agent.  Content may cache this value.
+  // TODO(yhirano): Move this to ContentBrowserClient.
   virtual std::string GetUserAgent() const;
 
   // Returns a string resource given its id.
@@ -173,7 +179,7 @@ class CONTENT_EXPORT ContentClient {
 
   // Returns the origin trial policy, or nullptr if origin trials are not
   // supported by the embedder.
-  virtual OriginTrialPolicy* GetOriginTrialPolicy();
+  virtual blink::OriginTrialPolicy* GetOriginTrialPolicy();
 
 #if defined(OS_ANDROID)
   // Returns true for clients like Android WebView that uses synchronous

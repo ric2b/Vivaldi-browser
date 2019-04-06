@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_type_info.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -133,18 +135,31 @@ bool FetchWarmupProbeURLEnabled();
 // Returns the warmup URL.
 GURL GetWarmupURL();
 
-}  // namespace params
+// Returns true if the |http_response_code| is in the whitelist of HTTP response
+// codes that are considered as successful for fetching the warmup probe URL.
+// If this method returns false, then the probe should be considered as
+// unsuccessful.
+bool IsWhitelistedHttpResponseCodeForProbes(int http_response_code);
 
-// Contains information about a given proxy server. |proxies_for_http| contains
-// the configured data reduction proxy servers. |proxy_index| notes the index
-// of the data reduction proxy used in the list of all data reduction proxies.
-struct DataReductionProxyTypeInfo {
-  DataReductionProxyTypeInfo();
-  DataReductionProxyTypeInfo(const DataReductionProxyTypeInfo& other);
-  ~DataReductionProxyTypeInfo();
-  std::vector<net::ProxyServer> proxy_servers;
-  size_t proxy_index;
-};
+// Returns the experiment parameter name to enable the warmup fetch callback.
+const char* GetWarmupCallbackParamName();
+
+// Returns the experiment parameter name to disable missing via header bypasses.
+const char* GetMissingViaBypassParamName();
+
+// Returns if site-breakdown metrics should be recorded using the page load
+// metrics harness.
+bool IsDataSaverSiteBreakdownUsingPLMEnabled();
+
+// Returns the experiment parameter name to discard the cached result for canary
+// check probe.
+const char* GetDiscardCanaryCheckResultParam();
+
+// Returns true if canary check result should not be cached or reused across
+// network changes.
+bool ShouldDiscardCanaryCheckResult();
+
+}  // namespace params
 
 // Provides initialization parameters. Proxy origins, and the secure proxy
 // check url are are taken from flags if available and from preprocessor
@@ -165,6 +180,17 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
 
   const std::vector<DataReductionProxyServer>& proxies_for_http()
       const override;
+
+  // Finds the first proxy in |proxies_for_http()| that matches |proxy_server|
+  // if any exist.
+  base::Optional<DataReductionProxyTypeInfo> FindConfiguredDataReductionProxy(
+      const net::ProxyServer& proxy_server) const override;
+
+  // Helper function to locate |proxy_server| in |proxies| if it exists. This
+  // function is exposed publicly so that DataReductionProxyParams can use it.
+  static base::Optional<DataReductionProxyTypeInfo> FindConfiguredProxyInVector(
+      const std::vector<DataReductionProxyServer>& proxies,
+      const net::ProxyServer& proxy_server);
 
  private:
   std::vector<DataReductionProxyServer> proxies_for_http_;

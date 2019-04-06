@@ -5,38 +5,47 @@
 #ifndef CONTENT_BROWSER_WEBSOCKETS_WEBSOCKET_MANAGER_H_
 #define CONTENT_BROWSER_WEBSOCKETS_WEBSOCKET_MANAGER_H_
 
+#include <memory>
 #include <set>
 
 #include "base/compiler_specific.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/timer/timer.h"
-#include "content/browser/websockets/websocket_impl.h"
 #include "content/common/content_export.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_context_getter_observer.h"
+#include "services/network/websocket.h"
+#include "services/network/websocket_throttler.h"
 
 namespace content {
 class StoragePartition;
 
 // The WebSocketManager is a per child process instance that manages the
-// lifecycle of WebSocketImpl objects. It is responsible for creating
-// WebSocketImpl objects for each WebSocketRequest and throttling the number of
-// WebSocketImpl objects in use.
+// lifecycle of network::WebSocket objects. It is responsible for creating
+// network::WebSocket objects for each WebSocketRequest and throttling the
+// number of network::WebSocket objects in use.
 class CONTENT_EXPORT WebSocketManager
-    : public WebSocketImpl::Delegate,
-      public net::URLRequestContextGetterObserver {
+    : public net::URLRequestContextGetterObserver {
  public:
-  // Called on the UI thread:
+  // Called on the UI thread: create a websocket.
+  // - For frames, |frame_id| should be their own id.
+  // - For dedicated workers, |frame_id| should be its parent frame's id.
+  // - For shared workers and service workers, |frame_id| should be
+  //   MSG_ROUTING_NONE because they do not have a frame.
   static void CreateWebSocket(
       int process_id,
       int frame_id,
-      blink::mojom::WebSocketRequest request);
+      url::Origin origin,
+      network::mojom::AuthenticationHandlerPtr auth_handler,
+      network::mojom::WebSocketRequest request);
 
   // net::URLRequestContextGetterObserver implementation.
   void OnContextShuttingDown() override;
 
  protected:
+  class Delegate;
   class Handle;
   friend class base::DeleteHelper<WebSocketManager>;
 
@@ -46,46 +55,36 @@ class CONTENT_EXPORT WebSocketManager
   // All other methods must run on the IO thread.
 
   ~WebSocketManager() override;
-  void DoCreateWebSocket(int frame_id, blink::mojom::WebSocketRequest request);
-  base::TimeDelta CalculateDelay() const;
+  void DoCreateWebSocket(int frame_id,
+                         url::Origin origin,
+                         network::mojom::WebSocketRequest request);
   void ThrottlingPeriodTimerCallback();
 
   // This is virtual to support testing.
-  virtual WebSocketImpl* CreateWebSocketImpl(
-      WebSocketImpl::Delegate* delegate,
-      blink::mojom::WebSocketRequest request,
+  virtual std::unique_ptr<network::WebSocket> DoCreateWebSocketInternal(
+      std::unique_ptr<network::WebSocket::Delegate> delegate,
+      network::mojom::WebSocketRequest request,
+      network::WebSocketThrottler::PendingConnection pending_connection_tracker,
       int child_id,
       int frame_id,
+      url::Origin origin,
       base::TimeDelta delay);
 
-  // WebSocketImpl::Delegate methods:
-  int GetClientProcessId() override;
-  net::URLRequestContext* GetURLRequestContext() override;
-  void OnReceivedResponseFromServer(WebSocketImpl* impl) override;
-  void OnLostConnectionToClient(WebSocketImpl* impl) override;
+  net::URLRequestContext* GetURLRequestContext();
+  virtual void OnLostConnectionToClient(network::WebSocket* impl);
 
   void ObserveURLRequestContextGetter();
 
   int process_id_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
-  std::set<WebSocketImpl*> impls_;
+  std::set<std::unique_ptr<network::WebSocket>, base::UniquePtrComparator>
+      impls_;
 
   // Timer and counters for per-renderer WebSocket throttling.
   base::RepeatingTimer throttling_period_timer_;
 
-  // The current number of pending connections.
-  int num_pending_connections_;
-
-  // The number of handshakes that failed in the current and previous time
-  // period.
-  int64_t num_current_succeeded_connections_;
-  int64_t num_previous_succeeded_connections_;
-
-  // The number of handshakes that succeeded in the current and previous time
-  // period.
-  int64_t num_current_failed_connections_;
-  int64_t num_previous_failed_connections_;
+  network::WebSocketPerProcessThrottler throttler_;
 
   bool context_destroyed_;
 

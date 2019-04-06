@@ -4,13 +4,7 @@
 
 package org.chromium.base.process_launcher;
 
-import android.content.ComponentName;
-import android.content.Intent;
-import android.os.Binder;
-import android.os.Bundle;
-import android.os.IBinder;
-import android.os.RemoteException;
-
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -27,6 +21,13 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.content.ComponentName;
+import android.content.Intent;
+import android.os.Binder;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.RemoteException;
+
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -38,10 +39,11 @@ import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.base.ChildBindingState;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 
 /** Unit tests for ChildProcessConnection. */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class ChildProcessConnectionTest {
     private static class ChildServiceConnectionMock
@@ -193,7 +195,7 @@ public class ChildProcessConnectionTest {
         ChildProcessConnection connection = createDefaultTestConnection();
         assertNotNull(mFirstServiceConnection);
         connection.start(false /* useStrongBinding */, mServiceCallback);
-        Assert.assertTrue(connection.isInitialBindingBound());
+        Assert.assertTrue(connection.isModerateBindingBound());
         Assert.assertFalse(connection.didOnServiceConnectedForTesting());
         verify(mServiceCallback, never()).onChildStarted();
         verify(mServiceCallback, never()).onChildStartFailed(any());
@@ -216,7 +218,7 @@ public class ChildProcessConnectionTest {
         doReturn(false).when(mFirstServiceConnection).bind();
         connection.start(false /* useStrongBinding */, mServiceCallback);
 
-        Assert.assertFalse(connection.isInitialBindingBound());
+        Assert.assertFalse(connection.isModerateBindingBound());
         Assert.assertFalse(connection.didOnServiceConnectedForTesting());
         verify(mServiceCallback, never()).onChildStarted();
         verify(mServiceCallback, never()).onChildStartFailed(any());
@@ -321,5 +323,103 @@ public class ChildProcessConnectionTest {
         assertNotNull(mConnectionPidCallback);
         mConnectionPidCallback.call(34 /* pid */);
         verify(mConnectionCallback, times(1)).onConnected(connection);
+    }
+
+    @Test
+    public void testKill() throws RemoteException {
+        ChildProcessConnection connection = createDefaultTestConnection();
+        assertNotNull(mFirstServiceConnection);
+        connection.start(false /* useStrongBinding */, null /* serviceCallback */);
+        mFirstServiceConnection.notifyServiceConnected(mChildProcessServiceBinder);
+        connection.setupConnection(
+                null /* connectionBundle */, null /* callback */, mConnectionCallback);
+        verify(mConnectionCallback, never()).onConnected(any());
+        ShadowLooper.runUiThreadTasks();
+        assertNotNull(mConnectionPidCallback);
+        mConnectionPidCallback.call(34 /* pid */);
+        verify(mConnectionCallback, times(1)).onConnected(connection);
+
+        // Add strong binding so that connection is oom protected.
+        connection.removeModerateBinding();
+        assertEquals(ChildBindingState.WAIVED, connection.bindingStateCurrentOrWhenDied());
+        connection.addModerateBinding();
+        assertEquals(ChildBindingState.MODERATE, connection.bindingStateCurrentOrWhenDied());
+        connection.addStrongBinding();
+        assertEquals(ChildBindingState.STRONG, connection.bindingStateCurrentOrWhenDied());
+
+        // Kill and verify state.
+        connection.kill();
+        verify(mIChildProcessService).forceKill();
+        assertEquals(ChildBindingState.STRONG, connection.bindingStateCurrentOrWhenDied());
+        Assert.assertTrue(connection.isKilledByUs());
+    }
+
+    @Test
+    public void testBindingStateCounts() throws RemoteException {
+        ChildProcessConnection.resetBindingStateCountsForTesting();
+        ChildProcessConnection connection0 = createDefaultTestConnection();
+        ChildServiceConnectionMock connectionMock0 = mFirstServiceConnection;
+        mFirstServiceConnection = null;
+        ChildProcessConnection connection1 = createDefaultTestConnection();
+        ChildServiceConnectionMock connectionMock1 = mFirstServiceConnection;
+        mFirstServiceConnection = null;
+        ChildProcessConnection connection2 = createDefaultTestConnection();
+        ChildServiceConnectionMock connectionMock2 = mFirstServiceConnection;
+        mFirstServiceConnection = null;
+
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 0, 0});
+
+        connection0.start(false /* useStrongBinding */, null /* serviceCallback */);
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 0});
+
+        connection1.start(true /* useStrongBinding */, null /* serviceCallback */);
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+
+        connection2.start(false /* useStrongBinding */, null /* serviceCallback */);
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 2, 1});
+
+        Binder binder0 = new Binder();
+        Binder binder1 = new Binder();
+        Binder binder2 = new Binder();
+        binder0.attachInterface(mIChildProcessService, IChildProcessService.class.getName());
+        binder1.attachInterface(mIChildProcessService, IChildProcessService.class.getName());
+        binder2.attachInterface(mIChildProcessService, IChildProcessService.class.getName());
+        connectionMock0.notifyServiceConnected(binder0);
+        connectionMock1.notifyServiceConnected(binder1);
+        connectionMock2.notifyServiceConnected(binder2);
+        ShadowLooper.runUiThreadTasks();
+
+        // Add and remove moderate binding works as expected.
+        connection2.removeModerateBinding();
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 1, 1, 1});
+        connection2.addModerateBinding();
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 2, 1});
+
+        // Add and remove strong binding works as expected.
+        connection0.addStrongBinding();
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 2});
+        connection0.removeStrongBinding();
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 2, 1});
+
+        // Stopped connection should no longe update.
+        connection0.stop();
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+        assertArrayEquals(
+                connection1.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+
+        connection2.removeModerateBinding();
+        assertArrayEquals(
+                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+        assertArrayEquals(
+                connection1.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 1, 0, 1});
     }
 }

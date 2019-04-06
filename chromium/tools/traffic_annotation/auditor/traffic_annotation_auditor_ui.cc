@@ -52,9 +52,11 @@ Options:
   --test-only         Optional flag to request just running tests and not
                       updating any file. If not specified,
                       'tools/traffic_annotation/summary/annotations.xml' might
-                      get updated and if it does, 'tools/traffic_annotation/
-                      scripts/annotations_xml_downstream_updater.py will
-                      be called to update downstream files.
+                      get updated.
+  --errors-file       Optional file path for possible errors. If not specified,
+                      errors are dumped to LOG(ERROR).
+  --no-missing-error  Optional argument, resulting in just issuing a warning for
+                      functions that miss annotation and not an error.
   --summary-file      Optional path to the output file with all annotations.
   --annotations-file  Optional path to a TSV output file with all annotations.
   --limit             Limit for the maximum number of returned errors.
@@ -70,37 +72,9 @@ Example:
   traffic_annotation_auditor --build-path=out/Release
 )";
 
-const base::FilePath kDownstreamUpdater =
-    base::FilePath(FILE_PATH_LITERAL("tools"))
-        .Append(FILE_PATH_LITERAL("traffic_annotation"))
-        .Append(FILE_PATH_LITERAL("scripts"))
-        .Append(FILE_PATH_LITERAL("annotations_xml_downstream_caller.py"));
-
 const std::string kCodeSearchLink("https://cs.chromium.org/chromium/src/");
 
 }  // namespace
-
-// Calls |kDownstreamUpdater| script to update files that depend on
-// annotations.xml.
-bool RunAnnotationDownstreamUpdater(const base::FilePath& source_path) {
-  base::CommandLine cmdline(source_path.Append(kDownstreamUpdater));
-  int exit_code;
-
-#if defined(OS_WIN)
-  cmdline.PrependWrapper(L"python");
-  exit_code =
-      system(base::UTF16ToASCII(cmdline.GetCommandLineString()).c_str());
-#else
-  exit_code = system(cmdline.GetCommandLineString().c_str());
-#endif
-
-  if (exit_code) {
-    LOG(ERROR) << "Running " << kDownstreamUpdater.MaybeAsASCII()
-               << " failed with exit code: " << exit_code;
-    return false;
-  }
-  return true;
-}
 
 // Writes a summary of annotations, calls, and errors.
 bool WriteSummaryFile(const base::FilePath& filepath,
@@ -181,11 +155,12 @@ std::string PolicyToText(std::string debug_string) {
     }
   }
 
-  // Trim trailing spaces and curly bracket.
+  // Trim trailing spaces and at most one curly bracket.
   base::TrimString(output, " ", &output);
   DCHECK(!output.empty());
   if (output[output.length() - 1] == '}')
     output.pop_back();
+  base::TrimString(output, " ", &output);
 
   return output;
 }
@@ -197,9 +172,8 @@ bool WriteAnnotationsFile(const base::FilePath& filepath,
   std::vector<std::string> lines;
   std::string title =
       "Unique ID\tLast Update\tSender\tDescription\tTrigger\tData\t"
-      "Destination\tEmpty Policy Justification\tCookies Allowed\t"
-      "Cookies Store\tSetting\tChrome Policy\tComments\tSource File\t"
-      "ID Hash Code\tContent Hash Code";
+      "Destination\tCookies Allowed\tCookies Store\tSetting\tChrome Policy\t"
+      "Comments\tSource File\tID Hash Code\tContent Hash Code";
 
   for (auto& instance : annotations) {
     if (instance.type != AnnotationInstance::Type::ANNOTATION_COMPLETE)
@@ -250,8 +224,6 @@ bool WriteAnnotationsFile(const base::FilePath& filepath,
 
     // Policy.
     const auto policy = instance.proto.policy();
-    line +=
-        base::StringPrintf("\t%s", policy.empty_policy_justification().c_str());
     line +=
         policy.cookies_allowed() ==
                 traffic_annotation::
@@ -316,7 +288,9 @@ int wmain(int argc, wchar_t* argv[]) {
 #else
 int main(int argc, char* argv[]) {
 #endif
-  printf("Starting traffic annotation auditor. This may take a few minutes.\n");
+  printf(
+      "Starting traffic annotation auditor. This may take from a few "
+      "minutes to a few hours based on the scope of the test.\n");
 
   // Parse switches.
   base::CommandLine command_line = base::CommandLine(argc, argv);
@@ -333,9 +307,11 @@ int main(int argc, char* argv[]) {
       command_line.GetSwitchValuePath("extractor-output");
   base::FilePath extractor_input =
       command_line.GetSwitchValuePath("extractor-input");
+  base::FilePath errors_file = command_line.GetSwitchValuePath("errors-file");
   bool filter_files = !command_line.HasSwitch("no-filtering");
   bool all_files = command_line.HasSwitch("all-files");
   bool test_only = command_line.HasSwitch("test-only");
+  bool no_missing_error = command_line.HasSwitch("no-missing-error");
   base::FilePath summary_file = command_line.GetSwitchValuePath("summary-file");
   base::FilePath annotations_file =
       command_line.GetSwitchValuePath("annotations-file");
@@ -355,7 +331,8 @@ int main(int argc, char* argv[]) {
 
   // If 'error-resilient' switch is provided, 0 will be returned in case of
   // operational errors, otherwise 1.
-  int error_value = command_line.HasSwitch("error-resilient") ? 0 : 1;
+  bool error_resilient = command_line.HasSwitch("error-resilient");
+  int error_value = error_resilient ? 0 : 1;
 
 #if defined(OS_WIN)
   for (const auto& path : command_line.GetArgs()) {
@@ -372,16 +349,6 @@ int main(int argc, char* argv[]) {
   if (tool_path.empty())
     tool_path = command_line.GetProgram().DirName();
 
-  // If source path is not provided, guess it using build path or current
-  // directory.
-  if (source_path.empty()) {
-    if (build_path.empty())
-      base::GetCurrentDirectory(&source_path);
-    else
-      source_path = build_path.Append(base::FilePath::kParentDirectory)
-                        .Append(base::FilePath::kParentDirectory);
-  }
-
   // Get build directory, if it is empty issue an error.
   if (build_path.empty()) {
     LOG(ERROR)
@@ -391,11 +358,18 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  // If source path is not provided, guess it using build path.
+  if (source_path.empty()) {
+    source_path = build_path.Append(base::FilePath::kParentDirectory)
+                      .Append(base::FilePath::kParentDirectory);
+  }
+
   TrafficAnnotationAuditor auditor(source_path, build_path, tool_path);
 
   // Extract annotations.
   if (extractor_input.empty()) {
-    if (!auditor.RunClangTool(path_filters, filter_files, all_files)) {
+    if (!auditor.RunClangTool(path_filters, filter_files, all_files,
+                              !error_resilient, errors_file)) {
       LOG(ERROR) << "Failed to run clang tool.";
       return error_value;
     }
@@ -446,27 +420,53 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  const std::vector<AuditorResult>& errors = auditor.errors();
+  const std::vector<AuditorResult>& raw_errors = auditor.errors();
+
+  std::vector<AuditorResult> errors;
+  std::vector<AuditorResult> warnings;
+  std::set<AuditorResult::Type> warning_types;
+
+  if (no_missing_error) {
+    warning_types.insert(AuditorResult::Type::ERROR_MISSING_ANNOTATION);
+    warning_types.insert(AuditorResult::Type::ERROR_NO_ANNOTATION);
+  }
+
+  for (const AuditorResult& result : raw_errors) {
+    if (base::ContainsKey(warning_types, result.type()))
+      warnings.push_back(result);
+    else
+      errors.push_back(result);
+  }
 
   // Update annotations.xml if everything else is OK and the auditor is not
   // run in test-only mode.
-  if (errors.empty() && !test_only && auditor.exporter().modified()) {
-    if (!auditor.exporter().SaveAnnotationsXML() ||
-        !RunAnnotationDownstreamUpdater(source_path)) {
-      LOG(ERROR) << "Could not update annotations XML or downstream files.";
+  if (errors.empty() && !test_only) {
+    if (!auditor.exporter().SaveAnnotationsXML()) {
+      LOG(ERROR) << "Could not update annotations XML.";
       return error_value;
     }
   }
 
-  // Dump Errors to stdout.
+  // Dump Warnings and Errors to stdout.
+  int remaining_outputs =
+      outputs_limit ? outputs_limit
+                    : static_cast<int>(errors.size() + warnings.size());
   if (errors.size()) {
     printf("[Errors]\n");
-    for (int i = 0; i < static_cast<int>(errors.size()); i++) {
+    for (int i = 0; i < static_cast<int>(errors.size()) && remaining_outputs;
+         i++, remaining_outputs--) {
       printf("  (%i)\t%s\n", i + 1, errors[i].ToText().c_str());
-      if (i + 1 == outputs_limit)
-        break;
     }
   }
+  if (warnings.size() && remaining_outputs) {
+    printf("[Warnings]\n");
+    for (int i = 0; i < static_cast<int>(warnings.size()) && remaining_outputs;
+         i++, remaining_outputs--) {
+      printf("  (%i)\t%s\n", i + 1, warnings[i].ToText().c_str());
+    }
+  }
+  if (warnings.empty() && errors.empty())
+    printf("Traffic annotations are all OK.\n");
 
   return static_cast<int>(errors.size());
 }

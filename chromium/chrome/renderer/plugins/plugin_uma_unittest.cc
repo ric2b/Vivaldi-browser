@@ -5,8 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "chrome/renderer/plugins/plugin_uma.h"
-#include "media/media_features.h"
-#include "ppapi/features/features.h"
+#include "media/media_buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
 
 class PluginUMATest : public testing::Test {
  public:
@@ -101,22 +101,6 @@ TEST_F(PluginUMATest, ShockwaveFlash) {
                    GURL("some url"));
   ExpectPluginType(PluginUMAReporter::UNSUPPORTED_MIMETYPE,
                    "application/shockwave-flash",
-                   GURL("some url"));
-}
-
-TEST_F(PluginUMATest, WidevineCdm) {
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  ExpectPluginType(PluginUMAReporter::WIDEVINE_CDM,
-#else
-  ExpectPluginType(PluginUMAReporter::UNSUPPORTED_MIMETYPE,
-#endif
-                   "application/x-ppapi-widevine-cdm",
-                   GURL("some url"));
-  ExpectPluginType(PluginUMAReporter::UNSUPPORTED_MIMETYPE,
-                   "application/x-ppapi-widevine-cdm-sufix",
-                   GURL("some url"));
-  ExpectPluginType(PluginUMAReporter::UNSUPPORTED_MIMETYPE,
-                   "prefix-application/x-ppapi-widevine-cdm",
                    GURL("some url"));
 }
 

@@ -44,10 +44,6 @@ class MEDIA_EXPORT PlatformMediaPipeline {
                           const PlatformMediaTimeInfo& time_info,
                           const PlatformAudioConfig& audio_config,
                           const PlatformVideoConfig& video_config)>;
-  // A type of a callback ensuring that valid GL context is present. Relevant
-  // for methods which use OpenGL API (e.g. dealing with hardware accelerated
-  // video decoding). Return value indicates if GL context is available to use.
-  using MakeGLContextCurrentCB = base::Callback<bool(void)>;
   // Passing a NULL |buffer| indicates a read/decoding error.
   using ReadDataCB =
       base::Callback<void(const scoped_refptr<DataBuffer>& buffer)>;
@@ -59,9 +55,7 @@ class MEDIA_EXPORT PlatformMediaPipeline {
                           const InitializeCB& initialize_cb) = 0;
 
   virtual void ReadAudioData(const ReadDataCB& read_audio_data_cb) = 0;
-  // |texture_id| is meaningful only when hardware accelerated decoding is used.
-  virtual void ReadVideoData(const ReadDataCB& read_video_data_cb,
-                             uint32_t texture_id) = 0;
+  virtual void ReadVideoData(const ReadDataCB& read_video_data_cb) = 0;
 
   virtual void WillSeek() = 0;
   virtual void Seek(base::TimeDelta time, const SeekCB& seek_cb) = 0;

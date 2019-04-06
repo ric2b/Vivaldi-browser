@@ -9,6 +9,9 @@ assert(is_chromeos)
 
 grit("strings") {
   source = "../ash_strings.grd"
+
+  defines = [ "is_chrome_branded=$is_chrome_branded" ]
+
   outputs = [
     "grit/ash_strings.h",
     "ash_strings_am.pak",
@@ -76,6 +79,7 @@ template("repack_one_locale_ash") {
   repack(target_name) {
     # Each input pak file should also have a deps line for completeness.
     sources = [
+      "$root_gen_dir/ash/components/strings/ash_components_strings_${locale}.pak",
       "$root_gen_dir/ash/strings/ash_strings_${locale}.pak",
       "$root_gen_dir/components/strings/components_strings_${locale}.pak",
       "$root_gen_dir/device/bluetooth/strings/bluetooth_strings_${locale}.pak",
@@ -85,6 +89,7 @@ template("repack_one_locale_ash") {
     ]
 
     deps = [
+      "//ash/components/strings",
       "//ash/strings",
       "//components/strings",
       "//device/bluetooth/strings",

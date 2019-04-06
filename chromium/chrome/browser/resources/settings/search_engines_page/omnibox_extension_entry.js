@@ -39,7 +39,7 @@ Polymer({
 
   /** @private */
   closePopupMenu_: function() {
-    this.$$('dialog[is=cr-action-menu]').close();
+    this.$$('cr-action-menu').close();
   },
 
   /**
@@ -53,7 +53,7 @@ Polymer({
 
   /** @private */
   onDotsTap_: function() {
-    /** @type {!CrActionMenuElement} */ (this.$$('dialog[is=cr-action-menu]'))
-        .showAt(assert(this.$$('button[is="paper-icon-button-light"]')));
+    /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu'))
+        .showAt(assert(this.$$('paper-icon-button-light button')));
   },
 });

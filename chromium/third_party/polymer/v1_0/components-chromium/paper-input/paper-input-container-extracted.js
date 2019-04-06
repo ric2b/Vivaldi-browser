@@ -69,7 +69,7 @@ Polymer({
 
       _inputSelector: {
         type: String,
-        value: 'input,textarea,.paper-input-input'
+        value: 'input,iron-input,textarea,.paper-input-input'
       },
 
       _boundOnFocus: {
@@ -123,6 +123,12 @@ Polymer({
     },
 
     ready: function() {
+      // Paper-input treats a value of undefined differently at startup than
+      // the rest of the time (specifically: it does not validate it at startup, but
+      // it does after that. We need to track whether the first time we encounter
+      // the value is basically this first time, so that we can validate it
+      // correctly the rest of the time. See https://github.com/PolymerElements/paper-input/issues/605
+      this.__isFirstValueUpdate = true;
       if (!this._addons) {
         this._addons = [];
       }
@@ -138,13 +144,14 @@ Polymer({
       }
 
       // Only validate when attached if the input already has a value.
-      if (this._inputElementValue != '') {
+      if (this._inputElementValue && this._inputElementValue != '') {
         this._handleValueAndAutoValidate(this._inputElement);
       } else {
         this._handleValue(this._inputElement);
       }
     },
 
+    /** @private */
     _onAddonAttached: function(event) {
       if (!this._addons) {
         this._addons = [];
@@ -158,23 +165,41 @@ Polymer({
       }
     },
 
+    /** @private */
     _onFocus: function() {
       this._setFocused(true);
     },
 
+    /** @private */
     _onBlur: function() {
       this._setFocused(false);
       this._handleValueAndAutoValidate(this._inputElement);
     },
 
+    /** @private */
     _onInput: function(event) {
       this._handleValueAndAutoValidate(event.target);
     },
 
+    /** @private */
     _onValueChanged: function(event) {
+      var input = event.target;
+
+      // Paper-input treats a value of undefined differently at startup than
+      // the rest of the time (specifically: it does not validate it at startup, but
+      // it does after that. If this is in fact the bootup case, ignore validation,
+      // just this once.
+      if (this.__isFirstValueUpdate) {
+        this.__isFirstValueUpdate = false;
+        if (input.value === undefined) {
+          return;
+        }
+      }
+
       this._handleValueAndAutoValidate(event.target);
     },
 
+    /** @private */
     _handleValue: function(inputElement) {
       var value = this._inputElementValue;
 
@@ -192,9 +217,11 @@ Polymer({
       });
     },
 
+    /** @private */
     _handleValueAndAutoValidate: function(inputElement) {
-      if (this.autoValidate) {
+      if (this.autoValidate && inputElement) {
         var valid;
+
         if (inputElement.validate) {
           valid = inputElement.validate(this._inputElementValue);
         } else {
@@ -207,10 +234,12 @@ Polymer({
       this._handleValue(inputElement);
     },
 
+    /** @private */
     _onIronInputValidate: function(event) {
       this.invalid = this._inputElement.invalid;
     },
 
+    /** @private */
     _invalidChanged: function() {
       if (this._addons) {
         this.updateAddons({invalid: this.invalid});
@@ -227,6 +256,7 @@ Polymer({
       }
     },
 
+    /** @private */
     _computeInputContentClass: function(noLabelFloat, alwaysFloatLabel, focused, invalid, _inputHasContent) {
       var cls = 'input-content';
       if (!noLabelFloat) {
@@ -248,15 +278,25 @@ Polymer({
           if (label) {
             this.$.labelAndInputContainer.style.position = 'relative';
           }
+          if (invalid) {
+            cls += ' is-invalid';
+          }
         }
       } else {
         if (_inputHasContent) {
           cls += ' label-is-hidden';
         }
+        if (invalid) {
+          cls += ' is-invalid';
+        }
+      }
+      if (focused) {
+        cls += ' focused';
       }
       return cls;
     },
 
+    /** @private */
     _computeUnderlineClass: function(focused, invalid) {
       var cls = 'underline';
       if (invalid) {
@@ -267,6 +307,7 @@ Polymer({
       return cls;
     },
 
+    /** @private */
     _computeAddOnContentClass: function(focused, invalid) {
       var cls = 'add-on-content';
       if (invalid) {

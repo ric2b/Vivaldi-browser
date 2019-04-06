@@ -40,21 +40,20 @@ chrome.test.getConfig(function(config) {
         if (requestStatus === 200) {
           wallpaperJpeg = response;
           chrome.wallpaperPrivate.setWallpaper(
-              wallpaperJpeg, 'CENTER_CROPPED', url, pass());
+              wallpaperJpeg, 'CENTER_CROPPED', url, false /*previewMode=*/,
+              pass());
         } else {
           chrome.test.fail('Failed to load test.jpg from local server.');
         }
       });
     },
     function setCustomJpegWallpaper() {
-      chrome.wallpaperPrivate.setCustomWallpaper(wallpaperJpeg,
-                                                 'CENTER_CROPPED',
-                                                 true,
-                                                 '123',
-                                                 pass(function(thumbnail) {
-        chrome.wallpaperPrivate.setCustomWallpaperLayout('CENTER',
-                                                         pass(function() {}));
-      }));
+      chrome.wallpaperPrivate.setCustomWallpaper(
+          wallpaperJpeg, 'CENTER_CROPPED', true /*generateThumbnail=*/, '123',
+          false /*previewMode=*/, pass(function(thumbnail) {
+            chrome.wallpaperPrivate.setCustomWallpaperLayout(
+                'CENTER', pass(function() {}));
+          }));
     },
     function setCustomPngWallpaper() {
       var url = "http://a.com:PORT/extensions/api_test" +
@@ -63,15 +62,12 @@ chrome.test.getConfig(function(config) {
       requestImage(url, function(requestStatus, response) {
         if (requestStatus === 200) {
           wallpaperPng = response;
-          chrome.wallpaperPrivate.setCustomWallpaper(wallpaperPng,
-                                                     'CENTER_CROPPED',
-                                                     true,
-                                                     '123',
-                                                     pass(function(thumbnail) {
-            chrome.wallpaperPrivate.setCustomWallpaperLayout('CENTER',
-                                                             pass(function() {
-            }));
-          }));
+          chrome.wallpaperPrivate.setCustomWallpaper(
+              wallpaperPng, 'CENTER_CROPPED', true /*generateThumbnail=*/,
+              '123', false /*previewMode=*/, pass(function(thumbnail) {
+                chrome.wallpaperPrivate.setCustomWallpaperLayout(
+                    'CENTER', pass(function() {}));
+              }));
         } else {
           chrome.test.fail('Failed to load test.png from local server.');
         }
@@ -84,8 +80,15 @@ chrome.test.getConfig(function(config) {
       requestImage(url, function(requestStatus, response) {
         if (requestStatus === 200) {
           var badWallpaper = response;
-          chrome.wallpaperPrivate.setCustomWallpaper(badWallpaper,
-              'CENTER_CROPPED', false, '123',
+          // Attempt to set the bad wallpaper should fail.
+          chrome.wallpaperPrivate.setCustomWallpaper(
+              badWallpaper, 'CENTER_CROPPED', false /*generateThumbnail=*/,
+              '123', false /*previewMode=*/,
+              fail(wallpaperStrings.invalidWallpaper));
+          // Attempt to preview the bad wallpaper should also fail.
+          chrome.wallpaperPrivate.setCustomWallpaper(
+              badWallpaper, 'CENTER_CROPPED', false /*generateThumbnail=*/,
+              '123', true /*previewMode=*/,
               fail(wallpaperStrings.invalidWallpaper));
         } else {
           chrome.test.fail('Failed to load test_bad.jpg from local server.');
@@ -96,13 +99,21 @@ chrome.test.getConfig(function(config) {
       var url = "http://a.com:PORT/extensions/api_test" +
           "/wallpaper_manager/test.jpg";
       url = url.replace(/PORT/, config.testServer.port);
-      chrome.wallpaperPrivate.setWallpaperIfExists(url, 'CENTER_CROPPED',
-                                                   pass(function(exists) {
-        chrome.test.assertTrue(exists);
-        chrome.wallpaperPrivate.setWallpaperIfExists(
-            'http://dummyurl/test1.jpg', 'CENTER_CROPPED',
-            fail('Failed to set wallpaper test1.jpg from file system.'));
-      }));
+      chrome.wallpaperPrivate.setWallpaperIfExists(
+          url, 'CENTER_CROPPED', false /*previewMode=*/, pass(function(exists) {
+            chrome.test.assertTrue(exists);
+            // Attempt to set wallpaper from a non-existent file should fail.
+            chrome.wallpaperPrivate.setWallpaperIfExists(
+                'http://dummyurl/test1.jpg', 'CENTER_CROPPED',
+                false /*previewMode=*/,
+                fail('The wallpaper doesn\'t exist in local file system.'));
+            // Attempt to preview wallpaper from a non-existent file should
+            // also fail.
+            chrome.wallpaperPrivate.setWallpaperIfExists(
+                'http://dummyurl/test1.jpg', 'CENTER_CROPPED',
+                true /*previewMode=*/,
+                fail('The wallpaper doesn\'t exist in local file system.'));
+          }));
     },
     function getAndSetThumbnail() {
       var url = "http://a.com:PORT/extensions/api_test" +
@@ -129,19 +140,8 @@ chrome.test.getConfig(function(config) {
     function getOfflineWallpaperList() {
       chrome.wallpaperPrivate.getOfflineWallpaperList(pass(function(list) {
         // We have previously saved test.jpg in wallpaper directory.
+        chrome.test.assertEq(1, list.length);
         chrome.test.assertEq('test.jpg', list[0]);
-        // Saves the same wallpaper to wallpaper directory but name it as
-        // test1.jpg.
-        chrome.wallpaperPrivate.setWallpaper(wallpaperJpeg,
-                                             'CENTER_CROPPED',
-                                             'http://dummyurl/test1.jpg',
-                                             pass(function() {
-          chrome.wallpaperPrivate.getOfflineWallpaperList(pass(function(list) {
-            list = list.sort();
-            chrome.test.assertEq('test.jpg', list[0]);
-            chrome.test.assertEq('test1.jpg', list[1]);
-          }));
-        }));
       }));
     }
   ]);

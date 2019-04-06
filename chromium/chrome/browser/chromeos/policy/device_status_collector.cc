@@ -10,8 +10,10 @@
 #include <algorithm>
 #include <cstdio>
 #include <limits>
+#include <set>
 #include <sstream>
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_enumerator.h"
@@ -23,10 +25,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "chrome/browser/browser_process.h"
@@ -42,10 +44,12 @@
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/update_engine_client.h"
+#include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/device_state.h"
@@ -53,12 +57,14 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "chromeos/settings/timezone_settings.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/common/enterprise_reporting.mojom.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -80,11 +86,11 @@ namespace {
 // How many seconds of inactivity triggers the idle state.
 const int kIdleStateThresholdSeconds = 300;
 
-// How many days in the past to store active periods for.
-const unsigned int kMaxStoredPastActivityDays = 30;
+// How much time in the past to store active periods for.
+constexpr TimeDelta kMaxStoredPastActivityInterval = TimeDelta::FromDays(30);
 
-// How many days in the future to store active periods for.
-const unsigned int kMaxStoredFutureActivityDays = 2;
+// How much time in the future to store active periods for.
+constexpr TimeDelta kMaxStoredFutureActivityInterval = TimeDelta::FromDays(2);
 
 // How often, in seconds, to sample the hardware resource usage.
 const unsigned int kResourceUsageSampleIntervalSeconds = 120;
@@ -98,16 +104,9 @@ const char kDeviceDir[] = "device";
 const char kHwmonDirectoryPattern[] = "hwmon*";
 const char kCPUTempFilePattern[] = "temp*_input";
 
-// Determine the day key (milliseconds since epoch for corresponding day in UTC)
-// for a given |timestamp|.
-int64_t TimestampToDayKey(Time timestamp) {
-  Time::Exploded exploded;
-  timestamp.LocalMidnight().LocalExplode(&exploded);
-  Time out_time;
-  bool conversion_success = Time::FromUTCExploded(exploded, &out_time);
-  DCHECK(conversion_success);
-  return out_time.ToJavaTime();
-}
+// Activity periods are keyed with day and user in format:
+// '<day_timestamp>:<BASE64 encoded user email>'
+constexpr char kActivityKeySeparator = ':';
 
 // Helper function (invoked via blocking pool) to fetch information about
 // mounted disks.
@@ -429,16 +428,286 @@ class GetStatusState : public base::RefCountedThreadSafe<GetStatusState> {
       std::make_unique<em::SessionStatusReportRequest>();
 };
 
+// Handles storing activity time periods needed for reporting. Provides
+// filtering of the user identifying data.
+class DeviceStatusCollector::ActivityStorage {
+ public:
+  // Stored activity period.
+  struct ActivityPeriod {
+    // Email can be empty.
+    std::string user_email;
+
+    // Timestamp dating the beginning of the captured activity.
+    int64_t start_timestamp;
+
+    // User's activity in milliseconds.
+    int activity_milliseconds;
+  };
+
+  // Creates activity storage. Activity data will be stored in the given
+  // |pref_service| under |pref_name| preference. Activity data are aggregated
+  // by day. The start of the new day is counted from |activity_day_start| that
+  // represents the distance from midnight.
+  ActivityStorage(PrefService* pref_service,
+                  const std::string& pref_name,
+                  TimeDelta activity_day_start);
+  ~ActivityStorage();
+
+  // Adds an activity period. Accepts empty |active_user_email| if it should not
+  // be stored.
+  void AddActivityPeriod(Time start,
+                         Time end,
+                         const std::string& active_user_email);
+
+  // Clears stored activity periods outside of storage range defined by
+  // |max_past_activity_interval| and |max_future_activity_interval| from
+  // |base_time|.
+  void PruneActivityPeriods(Time base_time,
+                            TimeDelta max_past_activity_interval,
+                            TimeDelta max_future_activity_interval);
+
+  // Trims the store activity periods to only retain data within the
+  // [|min_day_key|, |max_day_key|). The record for |min_day_key| will be
+  // adjusted by subtracting |min_day_trim_duration|.
+  void TrimActivityPeriods(int64_t min_day_key,
+                           int min_day_trim_duration,
+                           int64_t max_day_key);
+
+  // Updates stored activity period according to users' reporting preferences.
+  // Removes user's email and aggregates the activity data if user's information
+  // should no longer be reported.
+  void FilterActivityPeriodsByUsers(
+      const std::vector<std::string>& reporting_users);
+
+  // Returns the list of stored activity periods. Aggregated data are returned
+  // without email addresses if |omit_emails| is set.
+  std::vector<ActivityPeriod> GetFilteredActivityPeriods(bool omit_emails);
+
+ private:
+  static std::string MakeActivityPeriodPrefKey(int64_t start,
+                                               const std::string& user_email);
+  static bool ParseActivityPeriodPrefKey(const std::string& key,
+                                         int64_t* start_timestamp,
+                                         std::string* user_email);
+  void ProcessActivityPeriods(const base::DictionaryValue& activity_times,
+                              const std::vector<std::string>& reporting_users,
+                              base::DictionaryValue* const filtered_times);
+
+  // Determine the day key (milliseconds since epoch for corresponding
+  // |day_start_| in UTC) for a given |timestamp|.
+  int64_t TimestampToDayKey(Time timestamp);
+
+  PrefService* const pref_service_ = nullptr;
+  const std::string pref_name_;
+
+  // New day start time used for aggregating data represented by the distance
+  // from midnight.
+  const TimeDelta day_start_;
+
+  DISALLOW_COPY_AND_ASSIGN(ActivityStorage);
+};
+
+DeviceStatusCollector::ActivityStorage::ActivityStorage(
+    PrefService* pref_service,
+    const std::string& pref_name,
+    TimeDelta activity_day_start)
+    : pref_service_(pref_service),
+      pref_name_(pref_name),
+      day_start_(activity_day_start) {
+  DCHECK(pref_service_);
+  const PrefService::PrefInitializationStatus pref_service_status =
+      pref_service_->GetInitializationStatus();
+  DCHECK(pref_service_status != PrefService::INITIALIZATION_STATUS_WAITING &&
+         pref_service_status != PrefService::INITIALIZATION_STATUS_ERROR);
+}
+
+DeviceStatusCollector::ActivityStorage::~ActivityStorage() = default;
+
+void DeviceStatusCollector::ActivityStorage::AddActivityPeriod(
+    Time start,
+    Time end,
+    const std::string& active_user_email) {
+  DCHECK(start <= end);
+
+  // Maintain the list of active periods in a local_state pref.
+  DictionaryPrefUpdate update(pref_service_, pref_name_);
+  base::DictionaryValue* activity_times = update.Get();
+
+  // Assign the period to day buckets in local time.
+  Time day_start = start.LocalMidnight() + day_start_;
+  if (start < day_start)
+    day_start -= TimeDelta::FromDays(1);
+  while (day_start < end) {
+    day_start += TimeDelta::FromDays(1);
+    int64_t activity = (std::min(end, day_start) - start).InMilliseconds();
+    const std::string key =
+        MakeActivityPeriodPrefKey(TimestampToDayKey(start), active_user_email);
+    int previous_activity = 0;
+    activity_times->GetInteger(key, &previous_activity);
+    activity_times->SetInteger(key, previous_activity + activity);
+    start = day_start;
+  }
+}
+
+void DeviceStatusCollector::ActivityStorage::PruneActivityPeriods(
+    Time base_time,
+    TimeDelta max_past_activity_interval,
+    TimeDelta max_future_activity_interval) {
+  Time min_time = base_time - max_past_activity_interval;
+  Time max_time = base_time + max_future_activity_interval;
+  TrimActivityPeriods(TimestampToDayKey(min_time), 0,
+                      TimestampToDayKey(max_time));
+}
+
+void DeviceStatusCollector::ActivityStorage::TrimActivityPeriods(
+    int64_t min_day_key,
+    int min_day_trim_duration,
+    int64_t max_day_key) {
+  const base::DictionaryValue* activity_times =
+      pref_service_->GetDictionary(pref_name_);
+
+  std::unique_ptr<base::DictionaryValue> copy(activity_times->DeepCopy());
+  for (base::DictionaryValue::Iterator it(*activity_times); !it.IsAtEnd();
+       it.Advance()) {
+    int64_t timestamp;
+    std::string active_user_email;
+    if (ParseActivityPeriodPrefKey(it.key(), &timestamp, &active_user_email)) {
+      // Remove data that is too old, or too far in the future.
+      if (timestamp >= min_day_key && timestamp < max_day_key) {
+        if (timestamp == min_day_key) {
+          int new_activity_duration = 0;
+          if (it.value().GetAsInteger(&new_activity_duration)) {
+            new_activity_duration =
+                std::max(new_activity_duration - min_day_trim_duration, 0);
+          }
+          copy->SetInteger(it.key(), new_activity_duration);
+        }
+        continue;
+      }
+    }
+    // The entry is out of range or couldn't be parsed. Remove it.
+    copy->Remove(it.key(), NULL);
+  }
+  pref_service_->Set(pref_name_, *copy);
+}
+
+void DeviceStatusCollector::ActivityStorage::FilterActivityPeriodsByUsers(
+    const std::vector<std::string>& reporting_users) {
+  const base::DictionaryValue* stored_activity_periods =
+      pref_service_->GetDictionary(pref_name_);
+  base::DictionaryValue filtered_activity_periods;
+  ProcessActivityPeriods(*stored_activity_periods, reporting_users,
+                         &filtered_activity_periods);
+  pref_service_->Set(pref_name_, filtered_activity_periods);
+}
+
+std::vector<DeviceStatusCollector::ActivityStorage::ActivityPeriod>
+DeviceStatusCollector::ActivityStorage::GetFilteredActivityPeriods(
+    bool omit_emails) {
+  DictionaryPrefUpdate update(pref_service_, pref_name_);
+  base::DictionaryValue* stored_activity_periods = update.Get();
+
+  base::DictionaryValue filtered_activity_periods;
+  if (omit_emails) {
+    std::vector<std::string> empty_user_list;
+    ProcessActivityPeriods(*stored_activity_periods, empty_user_list,
+                           &filtered_activity_periods);
+    stored_activity_periods = &filtered_activity_periods;
+  }
+
+  std::vector<ActivityPeriod> activity_periods;
+  for (base::DictionaryValue::Iterator it(*stored_activity_periods);
+       !it.IsAtEnd(); it.Advance()) {
+    ActivityPeriod activity_period;
+    if (ParseActivityPeriodPrefKey(it.key(), &activity_period.start_timestamp,
+                                   &activity_period.user_email) &&
+        it.value().GetAsInteger(&activity_period.activity_milliseconds)) {
+      activity_periods.push_back(activity_period);
+    }
+  }
+  return activity_periods;
+}
+
+// static
+std::string DeviceStatusCollector::ActivityStorage::MakeActivityPeriodPrefKey(
+    int64_t start,
+    const std::string& user_email) {
+  const std::string day_key = base::Int64ToString(start);
+  if (user_email.empty())
+    return day_key;
+
+  std::string encoded_email;
+  base::Base64Encode(user_email, &encoded_email);
+  return day_key + kActivityKeySeparator + encoded_email;
+}
+
+// static
+bool DeviceStatusCollector::ActivityStorage::ParseActivityPeriodPrefKey(
+    const std::string& key,
+    int64_t* start_timestamp,
+    std::string* user_email) {
+  auto separator_pos = key.find(kActivityKeySeparator);
+  if (separator_pos == std::string::npos) {
+    user_email->clear();
+    return base::StringToInt64(key, start_timestamp);
+  }
+  return base::StringToInt64(key.substr(0, separator_pos), start_timestamp) &&
+         base::Base64Decode(key.substr(separator_pos + 1), user_email);
+}
+
+void DeviceStatusCollector::ActivityStorage::ProcessActivityPeriods(
+    const base::DictionaryValue& activity_times,
+    const std::vector<std::string>& reporting_users,
+    base::DictionaryValue* const filtered_times) {
+  std::set<std::string> reporting_users_set(reporting_users.begin(),
+                                            reporting_users.end());
+  const std::string empty;
+  for (const auto& it : activity_times.DictItems()) {
+    DCHECK(it.second.is_int());
+    int64_t timestamp;
+    std::string user_email;
+    if (!ParseActivityPeriodPrefKey(it.first, &timestamp, &user_email))
+      continue;
+    if (!user_email.empty() && reporting_users_set.count(user_email) == 0) {
+      int value = 0;
+      std::string timestamp_str = MakeActivityPeriodPrefKey(timestamp, empty);
+      const base::Value* prev_value = filtered_times->FindKeyOfType(
+          timestamp_str, base::Value::Type::INTEGER);
+      if (prev_value)
+        value = prev_value->GetInt();
+      filtered_times->SetKey(timestamp_str,
+                             base::Value(value + it.second.GetInt()));
+    } else {
+      filtered_times->SetKey(it.first, it.second.Clone());
+    }
+  }
+}
+
+int64_t DeviceStatusCollector::ActivityStorage::TimestampToDayKey(
+    Time timestamp) {
+  Time::Exploded exploded;
+  Time day_start = timestamp.LocalMidnight() + day_start_;
+  if (timestamp < day_start)
+    day_start -= TimeDelta::FromDays(1);
+  day_start.LocalExplode(&exploded);
+  Time out_time;
+  bool conversion_success = Time::FromUTCExploded(exploded, &out_time);
+  DCHECK(conversion_success);
+  return out_time.ToJavaTime();
+}
+
 DeviceStatusCollector::DeviceStatusCollector(
-    PrefService* local_state,
+    PrefService* pref_service,
     chromeos::system::StatisticsProvider* provider,
     const VolumeInfoFetcher& volume_info_fetcher,
     const CPUStatisticsFetcher& cpu_statistics_fetcher,
     const CPUTempFetcher& cpu_temp_fetcher,
-    const AndroidStatusFetcher& android_status_fetcher)
-    : max_stored_past_activity_days_(kMaxStoredPastActivityDays),
-      max_stored_future_activity_days_(kMaxStoredFutureActivityDays),
-      local_state_(local_state),
+    const AndroidStatusFetcher& android_status_fetcher,
+    TimeDelta activity_day_start,
+    bool is_enterprise_reporting)
+    : max_stored_past_activity_interval_(kMaxStoredPastActivityInterval),
+      max_stored_future_activity_interval_(kMaxStoredFutureActivityInterval),
+      pref_service_(pref_service),
       last_idle_check_(Time()),
       volume_info_fetcher_(volume_info_fetcher),
       cpu_statistics_fetcher_(cpu_statistics_fetcher),
@@ -446,6 +715,7 @@ DeviceStatusCollector::DeviceStatusCollector(
       android_status_fetcher_(android_status_fetcher),
       statistics_provider_(provider),
       cros_settings_(chromeos::CrosSettings::Get()),
+      is_enterprise_reporting_(is_enterprise_reporting),
       task_runner_(nullptr),
       weak_factory_(this) {
   // Get the task runner of the current thread, so we can queue status responses
@@ -514,6 +784,26 @@ DeviceStatusCollector::DeviceStatusCollector(
   chromeos::version_loader::GetTpmVersion(
       base::BindOnce(&DeviceStatusCollector::OnTpmVersion,
                      weak_factory_.GetWeakPtr()));
+
+  // If doing enterprise device-level reporting, observe the list of users to be
+  // reported. Consumer reporting is enforced for the signed-in registered user
+  // therefore this preference is not observed.
+  if (is_enterprise_reporting_) {
+    pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
+    pref_change_registrar_->Init(pref_service_);
+    pref_change_registrar_->Add(
+        prefs::kReportingUsers,
+        base::BindRepeating(&DeviceStatusCollector::ReportingUsersChanged,
+                            weak_factory_.GetWeakPtr()));
+  }
+
+  DCHECK(pref_service_->GetInitializationStatus() !=
+         PrefService::INITIALIZATION_STATUS_WAITING);
+  activity_storage_ = std::make_unique<ActivityStorage>(
+      pref_service_,
+      (is_enterprise_reporting_ ? prefs::kDeviceActivityTimes
+                                : prefs::kUserActivityTimes),
+      activity_day_start);
 }
 
 DeviceStatusCollector::~DeviceStatusCollector() {
@@ -528,6 +818,8 @@ void DeviceStatusCollector::RegisterPrefs(PrefRegistrySimple* registry) {
 // static
 void DeviceStatusCollector::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kReportArcStatusEnabled, false);
+  registry->RegisterDictionaryPref(prefs::kUserActivityTimes,
+                                   std::make_unique<base::DictionaryValue>());
 }
 
 void DeviceStatusCollector::CheckIdleState() {
@@ -547,38 +839,41 @@ void DeviceStatusCollector::UpdateReportingSettings() {
     return;
   }
 
-  // All reporting settings default to 'enabled'.
   if (!cros_settings_->GetBoolean(
           chromeos::kReportDeviceVersionInfo, &report_version_info_)) {
     report_version_info_ = true;
   }
-  if (!cros_settings_->GetBoolean(
-          chromeos::kReportDeviceActivityTimes, &report_activity_times_)) {
+  if (!is_enterprise_reporting_) {
+    // Only report activity times for consumer if time limit is enabled.
+    report_activity_times_ =
+        base::FeatureList::IsEnabled(features::kUsageTimeLimitPolicy);
+  } else if (!cros_settings_->GetBoolean(chromeos::kReportDeviceActivityTimes,
+                                         &report_activity_times_)) {
     report_activity_times_ = true;
   }
   if (!cros_settings_->GetBoolean(
           chromeos::kReportDeviceBootMode, &report_boot_mode_)) {
     report_boot_mode_ = true;
   }
-  if (!cros_settings_->GetBoolean(
-          chromeos::kReportDeviceNetworkInterfaces,
-          &report_network_interfaces_)) {
-    report_network_interfaces_ = true;
-  }
-  if (!cros_settings_->GetBoolean(
-          chromeos::kReportDeviceUsers, &report_users_)) {
-    report_users_ = true;
-  }
-
-  const bool already_reporting_hardware_status = report_hardware_status_;
-  if (!cros_settings_->GetBoolean(
-          chromeos::kReportDeviceHardwareStatus, &report_hardware_status_)) {
-    report_hardware_status_ = true;
-  }
-
   if (!cros_settings_->GetBoolean(chromeos::kReportDeviceSessionStatus,
                                   &report_kiosk_session_status_)) {
     report_kiosk_session_status_ = true;
+  }
+  // Network interfaces are reported for enterprise devices only by default.
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceNetworkInterfaces,
+                                  &report_network_interfaces_)) {
+    report_network_interfaces_ = is_enterprise_reporting_;
+  }
+  // Device users are reported for enterprise devices only by default.
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceUsers,
+                                  &report_users_)) {
+    report_users_ = is_enterprise_reporting_;
+  }
+  // Hardware status is reported for enterprise devices only by default.
+  const bool already_reporting_hardware_status = report_hardware_status_;
+  if (!cros_settings_->GetBoolean(
+          chromeos::kReportDeviceHardwareStatus, &report_hardware_status_)) {
+    report_hardware_status_ = is_enterprise_reporting_;
   }
 
   if (!report_hardware_status_) {
@@ -604,66 +899,6 @@ Time DeviceStatusCollector::GetCurrentTime() {
   return Time::Now();
 }
 
-// Remove all out-of-range activity times from the local store.
-void DeviceStatusCollector::PruneStoredActivityPeriods(Time base_time) {
-  Time min_time =
-      base_time - TimeDelta::FromDays(max_stored_past_activity_days_);
-  Time max_time =
-      base_time + TimeDelta::FromDays(max_stored_future_activity_days_);
-  TrimStoredActivityPeriods(TimestampToDayKey(min_time), 0,
-                            TimestampToDayKey(max_time));
-}
-
-void DeviceStatusCollector::TrimStoredActivityPeriods(int64_t min_day_key,
-                                                      int min_day_trim_duration,
-                                                      int64_t max_day_key) {
-  const base::DictionaryValue* activity_times =
-      local_state_->GetDictionary(prefs::kDeviceActivityTimes);
-
-  std::unique_ptr<base::DictionaryValue> copy(activity_times->DeepCopy());
-  for (base::DictionaryValue::Iterator it(*activity_times); !it.IsAtEnd();
-       it.Advance()) {
-    int64_t timestamp;
-    if (base::StringToInt64(it.key(), &timestamp)) {
-      // Remove data that is too old, or too far in the future.
-      if (timestamp >= min_day_key && timestamp < max_day_key) {
-        if (timestamp == min_day_key) {
-          int new_activity_duration = 0;
-          if (it.value().GetAsInteger(&new_activity_duration)) {
-            new_activity_duration =
-                std::max(new_activity_duration - min_day_trim_duration, 0);
-          }
-          copy->SetInteger(it.key(), new_activity_duration);
-        }
-        continue;
-      }
-    }
-    // The entry is out of range or couldn't be parsed. Remove it.
-    copy->Remove(it.key(), NULL);
-  }
-  local_state_->Set(prefs::kDeviceActivityTimes, *copy);
-}
-
-void DeviceStatusCollector::AddActivePeriod(Time start, Time end) {
-  DCHECK(start < end);
-
-  // Maintain the list of active periods in a local_state pref.
-  DictionaryPrefUpdate update(local_state_, prefs::kDeviceActivityTimes);
-  base::DictionaryValue* activity_times = update.Get();
-
-  // Assign the period to day buckets in local time.
-  Time midnight = start.LocalMidnight();
-  while (midnight < end) {
-    midnight += TimeDelta::FromDays(1);
-    int64_t activity = (std::min(end, midnight) - start).InMilliseconds();
-    std::string day_key = base::Int64ToString(TimestampToDayKey(start));
-    int previous_activity = 0;
-    activity_times->GetInteger(day_key, &previous_activity);
-    activity_times->SetInteger(day_key, previous_activity + activity);
-    start = midnight;
-  }
-}
-
 void DeviceStatusCollector::ClearCachedResourceUsage() {
   resource_usage_.clear();
   last_cpu_active_ = 0;
@@ -679,19 +914,27 @@ void DeviceStatusCollector::IdleStateCallback(ui::IdleState state) {
 
   // For kiosk apps we report total uptime instead of active time.
   if (state == ui::IDLE_STATE_ACTIVE || IsKioskApp()) {
+    // Child user is the consumer user registered with DMServer and
+    // therefore eligible for non-enterprise reporting.
+    CHECK(is_enterprise_reporting_ ||
+          user_manager::UserManager::Get()->IsLoggedInAsChildUser());
+    std::string user_email = GetUserForActivityReporting();
     // If it's been too long since the last report, or if the activity is
     // negative (which can happen when the clock changes), assume a single
     // interval of activity.
     int active_seconds = (now - last_idle_check_).InSeconds();
     if (active_seconds < 0 ||
         active_seconds >= static_cast<int>((2 * kIdlePollIntervalSeconds))) {
-      AddActivePeriod(now - TimeDelta::FromSeconds(kIdlePollIntervalSeconds),
-                      now);
+      activity_storage_->AddActivityPeriod(
+          now - TimeDelta::FromSeconds(kIdlePollIntervalSeconds), now,
+          user_email);
     } else {
-      AddActivePeriod(last_idle_check_, now);
+      activity_storage_->AddActivityPeriod(last_idle_check_, now, user_email);
     }
 
-    PruneStoredActivityPeriods(now);
+    activity_storage_->PruneActivityPeriods(
+        now, max_stored_past_activity_interval_,
+        max_stored_future_activity_interval_);
   }
   last_idle_check_ = now;
 }
@@ -788,43 +1031,82 @@ void DeviceStatusCollector::ReceiveCPUStatistics(const std::string& stats) {
     resource_usage_.pop_front();
 }
 
+void DeviceStatusCollector::ReportingUsersChanged() {
+  std::vector<std::string> reporting_users;
+  for (auto& value :
+       pref_service_->GetList(prefs::kReportingUsers)->GetList()) {
+    if (value.is_string())
+      reporting_users.push_back(value.GetString());
+  }
+  activity_storage_->FilterActivityPeriodsByUsers(reporting_users);
+}
+
+std::string DeviceStatusCollector::GetUserForActivityReporting() const {
+  // Primary user is used as unique identifier of a single session, even for
+  // multi-user sessions.
+  const user_manager::User* const primary_user =
+      user_manager::UserManager::Get()->GetPrimaryUser();
+  if (!primary_user || !primary_user->HasGaiaAccount())
+    return std::string();
+
+  // Report only affiliated users for enterprise reporting and signed-in user
+  // for consumer reporting.
+  std::string primary_user_email = primary_user->GetAccountId().GetUserEmail();
+  if (is_enterprise_reporting_ &&
+      !chromeos::ChromeUserManager::Get()->ShouldReportUser(
+          primary_user_email)) {
+    return std::string();
+  }
+  return primary_user_email;
+}
+
+bool DeviceStatusCollector::IncludeEmailsInActivityReports() const {
+  // In enterprise reporting including users' emails depends on
+  // kReportDeviceUsers preference. In consumer reporting only current user is
+  // reported and email address is always included.
+  return !is_enterprise_reporting_ || report_users_;
+}
+
 bool DeviceStatusCollector::GetActivityTimes(
     em::DeviceStatusReportRequest* status) {
-  DictionaryPrefUpdate update(local_state_, prefs::kDeviceActivityTimes);
-  base::DictionaryValue* activity_times = update.Get();
+  // If user reporting is off, data should be aggregated per day.
+  // Signed-in user is reported in non-enterprise reporting.
+  std::vector<ActivityStorage::ActivityPeriod> activity_times =
+      activity_storage_->GetFilteredActivityPeriods(
+          !IncludeEmailsInActivityReports());
 
   bool anything_reported = false;
-  for (base::DictionaryValue::Iterator it(*activity_times); !it.IsAtEnd();
-       it.Advance()) {
-    int64_t start_timestamp;
-    int activity_milliseconds;
-    if (base::StringToInt64(it.key(), &start_timestamp) &&
-        it.value().GetAsInteger(&activity_milliseconds)) {
-      // This is correct even when there are leap seconds, because when a leap
-      // second occurs, two consecutive seconds have the same timestamp.
-      int64_t end_timestamp = start_timestamp + Time::kMillisecondsPerDay;
+  for (const auto& activity_period : activity_times) {
+    // This is correct even when there are leap seconds, because when a leap
+    // second occurs, two consecutive seconds have the same timestamp.
+    int64_t end_timestamp =
+        activity_period.start_timestamp + Time::kMillisecondsPerDay;
 
-      em::ActiveTimePeriod* active_period = status->add_active_period();
-      em::TimePeriod* period = active_period->mutable_time_period();
-      period->set_start_timestamp(start_timestamp);
-      period->set_end_timestamp(end_timestamp);
-      active_period->set_active_duration(activity_milliseconds);
-      if (start_timestamp >= last_reported_day_) {
-        last_reported_day_ = start_timestamp;
-        duration_for_last_reported_day_ = activity_milliseconds;
-      }
-      anything_reported = true;
-    } else {
-      NOTREACHED();
+    em::ActiveTimePeriod* active_period = status->add_active_period();
+    em::TimePeriod* period = active_period->mutable_time_period();
+    period->set_start_timestamp(activity_period.start_timestamp);
+    period->set_end_timestamp(end_timestamp);
+    active_period->set_active_duration(activity_period.activity_milliseconds);
+    // Report user email only if users reporting is turned on.
+    if (!activity_period.user_email.empty())
+      active_period->set_user_email(activity_period.user_email);
+    if (activity_period.start_timestamp >= last_reported_day_) {
+      last_reported_day_ = activity_period.start_timestamp;
+      duration_for_last_reported_day_ = activity_period.activity_milliseconds;
     }
+    anything_reported = true;
   }
   return anything_reported;
 }
 
 bool DeviceStatusCollector::GetVersionInfo(
     em::DeviceStatusReportRequest* status) {
-  status->set_browser_version(version_info::GetVersionNumber());
   status->set_os_version(os_version_);
+  if (!is_enterprise_reporting_)
+    return true;
+
+  // Enterprise-only version reporting below.
+  status->set_browser_version(version_info::GetVersionNumber());
   status->set_firmware_version(firmware_version_);
 
   em::TpmVersionInfo* const tpm_version_info =
@@ -1210,6 +1492,16 @@ bool DeviceStatusCollector::GetSessionStatusForUser(
     anything_reported_user |= GetAndroidStatus(status, state);
   if (anything_reported_user && !user->IsDeviceLocalAccount())
     status->set_user_dm_token(GetDMTokenForProfile(profile));
+
+  // Time zone is not reported in enterprise reports.
+  if (!is_enterprise_reporting_) {
+    const std::string current_timezone =
+        base::UTF16ToUTF8(chromeos::system::TimezoneSettings::GetInstance()
+                              ->GetCurrentTimezoneID());
+    status->set_time_zone(current_timezone);
+    anything_reported_user = true;
+  }
+
   return anything_reported_user;
 }
 
@@ -1224,10 +1516,11 @@ void DeviceStatusCollector::GetSessionStatus(
   if (report_kiosk_session_status_)
     anything_reported |= GetKioskSessionStatus(status);
 
-  // Only report user data for affiliated users. Note that device-local
-  // accounts are also affiliated.
-  // Currently we only report for the primary user.
-  if (primary_user && primary_user->IsAffiliated()) {
+  // Only report affiliated users' data in enterprise reporting and registered
+  // user data in consumer reporting. Note that device-local accounts are also
+  // affiliated. Currently we only report for the primary user.
+  if (primary_user &&
+      (!is_enterprise_reporting_ || primary_user->IsAffiliated())) {
     anything_reported |= GetSessionStatusForUser(state, status, primary_user);
   }
 
@@ -1288,8 +1581,9 @@ std::string DeviceStatusCollector::GetAppVersion(
 }
 
 void DeviceStatusCollector::OnSubmittedSuccessfully() {
-  TrimStoredActivityPeriods(last_reported_day_, duration_for_last_reported_day_,
-                            std::numeric_limits<int64_t>::max());
+  activity_storage_->TrimActivityPeriods(last_reported_day_,
+                                         duration_for_last_reported_day_,
+                                         std::numeric_limits<int64_t>::max());
 }
 
 void DeviceStatusCollector::OnOSVersion(const std::string& version) {

@@ -8,7 +8,6 @@
 
 #import "base/auto_reset.h"
 #include "base/command_line.h"
-#include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #import "base/mac/scoped_nsobject.h"
@@ -31,7 +30,7 @@
 #import "chrome/browser/ui/cocoa/find_bar/find_bar_cocoa_controller.h"
 #import "chrome/browser/ui/cocoa/floating_bar_backing_view.h"
 #import "chrome/browser/ui/cocoa/framed_browser_window.h"
-#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
+#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller_cocoa.h"
 #import "chrome/browser/ui/cocoa/fullscreen_window.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
 #include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
@@ -58,7 +57,7 @@
 using content::RenderWidgetHostView;
 using content::WebContents;
 
-@interface NSView (PrivateAPI)
+@interface NSView (PrivateBrowserWindowControllerAPI)
 // Returns the fullscreen button's origin in window coordinates. This method is
 // only available on NSThemeFrame (the contentView's superview), and it should
 // not be relied on to exist on macOS >10.9 (which doesn't have a separate
@@ -81,7 +80,7 @@ enum WindowLocation {
 
 }  // namespace
 
-@interface NSWindow (NSPrivateApis)
+@interface NSWindow (NSPrivateBrowserWindowControllerApis)
 // Note: These functions are private, use -[NSObject respondsToSelector:]
 // before calling them.
 - (NSWindow*)_windowForToolbar;
@@ -93,7 +92,7 @@ enum WindowLocation {
 - (void)createTabStripController {
   DCHECK([overlayableContentsController_ activeContainer]);
   DCHECK([[overlayableContentsController_ activeContainer] window]);
-  tabStripController_.reset([[TabStripController alloc]
+  tabStripController_.reset([[TabStripControllerCocoa alloc]
       initWithView:[self tabStripView]
         switchView:[overlayableContentsController_ activeContainer]
            browser:browser_.get()
@@ -108,7 +107,7 @@ enum WindowLocation {
   // This ensures the fullscreen button is appropriately positioned. It must
   // be done before calling layoutSubviews because the new avatar button's
   // position depends on the fullscreen button's position, as well as
-  // TabStripController's trailingIndentForControls.
+  // TabStripControllerCocoa's trailingIndentForControls.
   // The fullscreen button's position may depend on the old avatar button's
   // width, but that does not require calling layoutSubviews first.
   NSWindow* window = [self window];
@@ -360,7 +359,7 @@ willPositionSheet:(NSWindow*)sheet
   // Have to do this here, otherwise later calls can crash because the window
   // has no delegate.
   [sourceWindow setDelegate:nil];
-  [destWindow setDelegate:self];
+  [destWindow setDelegate:[self nsWindowController]];
 
   // With this call, valgrind complains that a "Conditional jump or move depends
   // on uninitialised value(s)".  The error happens in -[NSThemeFrame
@@ -389,7 +388,7 @@ willPositionSheet:(NSWindow*)sheet
 
   [sourceWindow setWindowController:nil];
   [self setWindow:destWindow];
-  [destWindow setWindowController:self];
+  [destWindow setWindowController:[self nsWindowController]];
 
   // Move the status bubble over, if we have one.
   if (statusBubble_)
@@ -608,39 +607,12 @@ willPositionSheet:(NSWindow*)sheet
 
       NSWindow* windowForToolbar = [window _windowForToolbar];
       if ([windowForToolbar isKindOfClass:[FramedBrowserWindow class]]) {
-        BrowserWindowController* bwc =
-            base::mac::ObjCCastStrict<BrowserWindowController>(
-                [windowForToolbar windowController]);
+        BrowserWindowController* bwc = [BrowserWindowController
+            browserWindowControllerForWindow:windowForToolbar];
         if ([bwc hasToolbar])
           [[window contentView] setHidden:YES];
       }
     }
-  }
-
-  if ([self shouldUseMavericksAppKitFullscreenHack]) {
-    // Apply a hack to fix the size of the window. This is the last run of the
-    // MessageLoop where the hack will not work, so dispatch the hack to the
-    // top of the MessageLoop.
-    base::Callback<void(void)> callback = base::BindBlock(^{
-        if (![self isInAppKitFullscreen])
-          return;
-
-        // The window's frame should be exactly 22 points too short.
-        CGFloat kExpectedHeightDifference = 22;
-        NSRect currentFrame = [[self window] frame];
-        NSRect expectedFrame = [[[self window] screen] frame];
-        if (!NSEqualPoints(currentFrame.origin, expectedFrame.origin))
-          return;
-        if (currentFrame.size.width != expectedFrame.size.width)
-          return;
-        CGFloat heightDelta =
-            expectedFrame.size.height - currentFrame.size.height;
-        if (fabs(heightDelta - kExpectedHeightDifference) > 0.01)
-          return;
-
-        [[self window] setFrame:expectedFrame display:YES];
-    });
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, callback);
   }
 
   if (notification)  // For System Fullscreen when non-nil.
@@ -651,8 +623,6 @@ willPositionSheet:(NSWindow*)sheet
   [self resetCustomAppKitFullscreenVariables];
   [[tabStripController_ activeTabContentsController]
       updateFullscreenWidgetFrame];
-
-  [self invalidateTouchBar];
 
   [self showFullscreenExitBubbleIfNecessary];
   browser_->WindowFullscreenStateChanged();
@@ -741,8 +711,6 @@ willPositionSheet:(NSWindow*)sheet
 
   [self resetCustomAppKitFullscreenVariables];
 
-  [self invalidateTouchBar];
-
   // Ensures that the permission bubble shows up properly at the front.
   PermissionRequestManager* manager = [self permissionRequestManager];
   if (manager && manager->IsBubbleVisible()) {
@@ -795,8 +763,8 @@ willPositionSheet:(NSWindow*)sheet
 - (void)adjustUIForEnteringFullscreen {
   DCHECK([self isInAnyFullscreenMode]);
   if (!fullscreenToolbarController_) {
-    fullscreenToolbarController_.reset(
-        [[FullscreenToolbarController alloc] initWithBrowserController:self]);
+    fullscreenToolbarController_.reset([[FullscreenToolbarControllerCocoa alloc]
+        initWithBrowserController:self]);
   }
 
   [fullscreenToolbarController_ enterFullscreenMode];
@@ -849,25 +817,6 @@ willPositionSheet:(NSWindow*)sheet
 
 - (CGFloat)toolbarDividerOpacity {
   return [bookmarkBarController_ toolbarDividerOpacity];
-}
-
-- (void)updateInfoBarTipVisibility {
-  // If there's no toolbar then hide the infobar tip.
-  [infoBarContainerController_
-      setShouldSuppressTopInfoBarTip:![self hasToolbar]];
-}
-
-- (NSInteger)infoBarAnchorPointY {
-  LocationBarViewMac* locationBarView = [self locationBarBridge];
-
-  // The point, in window coordinates.
-  NSPoint iconBottom = locationBarView->GetInfoBarAnchorPoint();
-
-  // The toolbar, in window coordinates.
-  NSView* toolbar = [toolbarController_ view];
-  CGFloat toolbarY = NSMinY([toolbar convertRect:[toolbar bounds] toView:nil]);
-
-  return iconBottom.y - toolbarY;
 }
 
 - (void)enterAppKitFullscreen {
@@ -951,7 +900,6 @@ willPositionSheet:(NSWindow*)sheet
       NSHeight([[bookmarkBarController_ view] bounds])];
 
   [layout setInfoBarHeight:[infoBarContainerController_ heightOfInfoBars]];
-  [layout setInfoBarAnchorPointY:[self infoBarAnchorPointY]];
 
   [layout setHasDownloadShelf:(downloadShelfController_.get() != nil)];
   [layout setDownloadShelfHeight:
@@ -972,10 +920,6 @@ willPositionSheet:(NSWindow*)sheet
 
   // The info bar is never hidden. Sometimes it has zero effective height.
   [[infoBarContainerController_ view] setFrame:output.infoBarFrame];
-  [infoBarContainerController_
-      setMaxTopArrowHeight:output.infoBarMaxTopArrowHeight];
-  [infoBarContainerController_
-      setInfobarArrowX:[self locationBarBridge]->GetInfoBarAnchorPoint().x];
 
   [[downloadShelfController_ view] setFrame:output.downloadShelfFrame];
 
@@ -1108,45 +1052,19 @@ willPositionSheet:(NSWindow*)sheet
   }
 }
 
-+ (BOOL)systemSettingsRequireMavericksAppKitFullscreenHack {
-  if (!base::mac::IsOS10_9())
-    return NO;
-  return [NSScreen respondsToSelector:@selector(screensHaveSeparateSpaces)] &&
-         [NSScreen screensHaveSeparateSpaces];
-}
-
-- (BOOL)shouldUseMavericksAppKitFullscreenHack {
-  if (![[self class] systemSettingsRequireMavericksAppKitFullscreenHack])
-    return NO;
-  if (!enteringAppKitFullscreen_)
-    return NO;
-  if (enteringAppKitFullscreenOnPrimaryScreen_)
-    return NO;
-
-  return YES;
-}
-
 - (BOOL)shouldUseCustomAppKitFullscreenTransition:(BOOL)enterFullScreen {
   // Use the native transition on 10.13+: https://crbug.com/741478.
   if (base::mac::IsAtLeastOS10_13())
     return NO;
 
-  // Disable the custom exit animation in OSX 10.9: http://crbug.com/526327#c3.
-  if (base::mac::IsOS10_9() && !enterFullScreen)
+  // Disable the custom exit animation in Mac OSX 10.11:
+  // http://crbug.com/823191.
+  if (base::mac::IsOS10_11() && !enterFullScreen)
     return NO;
 
   NSView* root = [[self.window contentView] superview];
   if (!root.layer)
     return NO;
-
-  // AppKit on OSX 10.9 has a bug for applications linked against OSX 10.8 SDK
-  // and earlier. Under specific circumstances, it prevents the custom AppKit
-  // transition from working well. See http://crbug.com/396980 for more
-  // details.
-  if ([[self class] systemSettingsRequireMavericksAppKitFullscreenHack] &&
-      ![[[self window] screen] isEqual:[[NSScreen screens] firstObject]]) {
-    return NO;
-  }
 
   return YES;
 }

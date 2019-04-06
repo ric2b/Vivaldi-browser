@@ -31,11 +31,33 @@ cr.define('extensions', function() {
 
       /** Whether "allow in incognito" option should be shown. */
       incognitoAvailable: Boolean,
+
+      /**
+       * Proxying the enum to be used easily by the html template.
+       * @private
+       */
+      HostAccess_: {
+        type: Object,
+        value: chrome.developerPrivate.HostAccess,
+      },
     },
 
     observers: [
       'onItemIdChanged_(data.id, delegate)',
     ],
+
+    listeners: {
+      'view-enter-start': 'onViewEnterStart_',
+    },
+
+    /**
+     * Focuses the back button when page is loaded.
+     * @private
+     */
+    onViewEnterStart_: function() {
+      Polymer.RenderStatus.afterNextRender(
+          this, () => cr.ui.focusWithoutInk(this.$.closeButton));
+    },
 
     /** @private */
     onItemIdChanged_: function() {
@@ -60,6 +82,22 @@ cr.define('extensions', function() {
     /** @private */
     onCloseButtonTap_: function() {
       extensions.navigation.navigateTo({page: Page.LIST});
+    },
+
+    /**
+     * @param {!Event} event
+     * @private
+     */
+    onHostAccessChanged_: function(event) {
+      const select = /** @type {!HTMLSelectElement} */ (event.target);
+      const access =
+          /** @type {chrome.developerPrivate.HostAccess} */ (select.value);
+      this.delegate.setItemHostAccess(this.data.id, access);
+      // Force the UI to update (in order to potentially hide or show the
+      // specific runtime hosts).
+      // TODO(devlin): Perhaps this should be handled by the backend updating
+      // and sending an onItemStateChanged event?
+      this.set('data.permissions.hostAccess', access);
     },
 
     /**
@@ -101,7 +139,8 @@ cr.define('extensions', function() {
     hasWarnings_: function() {
       return this.data.disableReasons.corruptInstall ||
           this.data.disableReasons.suspiciousInstall ||
-          this.data.disableReasons.updateRequired || !!this.data.blacklistText;
+          this.data.disableReasons.updateRequired ||
+          !!this.data.blacklistText || this.data.runtimeWarnings.length > 0;
     },
 
     /**
@@ -147,8 +186,7 @@ cr.define('extensions', function() {
      */
     shouldShowOptionsSection_: function() {
       return this.data.incognitoAccess.isEnabled ||
-          this.data.fileAccess.isEnabled || this.data.runOnAllUrls.isEnabled ||
-          this.data.errorCollection.isEnabled;
+          this.data.fileAccess.isEnabled || this.data.errorCollection.isEnabled;
     },
 
     /**
@@ -179,6 +217,13 @@ cr.define('extensions', function() {
     },
 
     /** @private */
+    onReloadTap_: function() {
+      this.delegate.reloadItem(this.data.id).catch(loadError => {
+        this.fire('load-error', loadError);
+      });
+    },
+
+    /** @private */
     onRemoveTap_: function() {
       this.delegate.deleteItem(this.data.id);
     },
@@ -203,12 +248,6 @@ cr.define('extensions', function() {
     onAllowOnFileUrlsChange_: function() {
       this.delegate.setItemAllowedOnFileUrls(
           this.data.id, this.$$('#allow-on-file-urls').checked);
-    },
-
-    /** @private */
-    onAllowOnAllSitesChange_: function() {
-      this.delegate.setItemAllowedOnAllSites(
-          this.data.id, this.$$('#allow-on-all-sites').checked);
     },
 
     /** @private */
@@ -261,6 +300,33 @@ cr.define('extensions', function() {
         default:
           return '';
       }
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    hasPermissions_: function() {
+      return this.data.permissions.simplePermissions.length > 0 ||
+          !!this.data.permissions.hostAccess;
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    showRuntimeHostPermissions_: function() {
+      return !!this.data.permissions.hostAccess;
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    showSpecificSites_: function() {
+      return this.data.permissions &&
+          this.data.permissions.hostAccess ==
+          chrome.developerPrivate.HostAccess.ON_SPECIFIC_SITES;
     },
   });
 

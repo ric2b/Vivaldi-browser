@@ -251,6 +251,7 @@ bool UpdateNotifierWindow::HandleMessage(UINT message,
         switch (LOWORD(wparam)) {
           case kUpdateMenuItemId: {
             UpdateNotifierManager::GetInstance()->TriggerUpdate();
+            FALLTHROUGH;
           }
           // Fall through
           case kIgnoreMenuItemId: {

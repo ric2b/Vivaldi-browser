@@ -74,7 +74,7 @@ TODO(miu, chfemer): Fill in this section.
 
 # mojo
 
-TODO(xhwang): Fill in this section.
+See [media/mojo documentation](/media/mojo).
 
 
 
@@ -151,3 +151,38 @@ issues, it's helpful to review the internal logs at chrome://media-internals.
 The internals page contains information about active
 `media::WebMediaPlayerImpl`, `media::AudioInputController`,
 `media::AudioOutputController`, and `media::AudioOutputStream` instances.
+
+
+
+# Logging
+
+Media playback typically involves multiple threads, in many cases even multiple
+processes. Media operations are often asynchronous running in a sandbox. These
+make attaching a debugger (e.g. GDB) sometimes less efficient than other
+mechanisms like logging.
+
+## DVLOG
+
+In media we use DVLOG() a lot. It makes filename-based filtering super easy.
+Within one file, not all logs are created equal. To make log filtering
+more convenient, use appropriate log levels. Here are some general
+recommendations:
+
+* DVLOG(1): Once per playback events or other important events, e.g.
+  construction/destruction, initialization, playback start/end, suspend/resume,
+  any error conditions.
+* DVLOG(2): Recurring events per playback, e.g. seek/reset/flush, config change.
+* DVLOG(3): Frequent events, e.g. demuxer read, audio/video buffer decrypt or
+  decode, audio/video frame rendering.
+
+## MediaLog
+
+MediaLog will send logs to `about://media-internals`, which is easily accessible
+by developers (including web developes), testers and even users to get detailed
+information about a playback instance. For guidance on how to use MediaLog, see
+`media/base/media_log.h`.
+
+MediaLog messages should be concise and free of implementation details. Error
+messages should provide clues as to how to fix them, usually by precisely
+describing the circumstances that led to the error. Use properties, rather
+than messages, to record metadata and state changes.

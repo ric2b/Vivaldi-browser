@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
+
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/test_timeouts.h"
 #include "components/viz/common/surfaces/surface_id.h"
-#include "components/viz/common/surfaces/surface_sequence.h"
 #include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/mus_util.h"
-#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/view_messages.h"
@@ -23,7 +23,7 @@
 #include "content/test/test_content_browser_client.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "ui/base/ui_base_switches_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
@@ -76,6 +76,13 @@ class RenderWidgetHostViewChildFrameTest : public ContentBrowserTest {
               actual_frame_sink_id_.sink_id());
   }
 
+  void GiveItSomeTime() {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+
   void set_expected_frame_sink_id(viz::FrameSinkId frame_sink_id) {
     expected_frame_sink_id_ = frame_sink_id;
   }
@@ -126,27 +133,22 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest,
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetFrameTree()
                             ->root();
-  root->current_frame_host()->render_view_host()->EnableAutoResize(
-      gfx::Size(0, 0), gfx::Size(100, 100));
+  root->current_frame_host()
+      ->GetRenderWidgetHost()
+      ->GetView()
+      ->EnableAutoResize(gfx::Size(0, 0), gfx::Size(100, 100));
 
   RenderWidgetHostView* rwhv =
       root->child_at(0)->current_frame_host()->GetRenderWidgetHost()->GetView();
 
   // Fake an auto-resize update from the parent renderer.
-  int routing_id =
-      root->current_frame_host()->GetRenderWidgetHost()->GetRoutingID();
-  ViewHostMsg_ResizeOrRepaint_ACK_Params params;
-  params.view_size = gfx::Size(75, 75);
-  params.flags = 0;
-  root->current_frame_host()->GetRenderWidgetHost()->OnMessageReceived(
-      ViewHostMsg_ResizeOrRepaint_ACK(routing_id, params));
-
-  // RenderWidgetHostImpl has delayed auto-resize processing. Yield here to
-  // let it complete.
-  base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                run_loop.QuitClosure());
-  run_loop.Run();
+  viz::LocalSurfaceId local_surface_id(10, 10,
+                                       base::UnguessableToken::Create());
+  cc::RenderFrameMetadata metadata;
+  metadata.viewport_size_in_pixels = gfx::Size(75, 75);
+  metadata.local_surface_id = local_surface_id;
+  root->current_frame_host()->GetRenderWidgetHost()->DidUpdateVisualProperties(
+      metadata);
 
   // The child frame's RenderWidgetHostView should now use the auto-resize value
   // for its visible viewport.
@@ -158,7 +160,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest,
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest, ChildFrameSinkId) {
   // Only when mus hosts viz do we expect a RenderFrameProxy to provide the
   // FrameSinkId.
-  if (!switches::IsMusHostingViz())
+  if (features::IsAshInBrowserProcess())
     return;
 
   GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));
@@ -167,8 +169,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest, ChildFrameSinkId) {
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetFrameTree()
                             ->root();
-  scoped_refptr<UpdateResizeParamsMessageFilter> message_filter(
-      new UpdateResizeParamsMessageFilter());
+  scoped_refptr<SynchronizeVisualPropertiesMessageFilter> message_filter(
+      new SynchronizeVisualPropertiesMessageFilter());
   root->current_frame_host()->GetProcess()->AddFilter(message_filter.get());
 
   // Load cross-site page into iframe.
@@ -188,94 +190,35 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest, ChildFrameSinkId) {
                           base::Unretained(this)));
 }
 
-// A class to filter RequireSequence and SatisfySequence messages sent from
-// an embedding renderer for its child's Surfaces.
-class SurfaceRefMessageFilter : public BrowserMessageFilter {
- public:
-  SurfaceRefMessageFilter()
-      : BrowserMessageFilter(FrameMsgStart),
-        require_message_loop_runner_(new content::MessageLoopRunner),
-        satisfy_message_loop_runner_(new content::MessageLoopRunner),
-        satisfy_received_(false),
-        require_received_first_(false) {}
-
-  void WaitForRequire() { require_message_loop_runner_->Run(); }
-
-  void WaitForSatisfy() { satisfy_message_loop_runner_->Run(); }
-
-  bool require_received_first() { return require_received_first_; }
-
- protected:
-  ~SurfaceRefMessageFilter() override {}
-
- private:
-  // BrowserMessageFilter:
-  bool OnMessageReceived(const IPC::Message& message) override {
-    IPC_BEGIN_MESSAGE_MAP(SurfaceRefMessageFilter, message)
-      IPC_MESSAGE_HANDLER(FrameHostMsg_RequireSequence, OnRequire)
-      IPC_MESSAGE_HANDLER(FrameHostMsg_SatisfySequence, OnSatisfy)
-    IPC_END_MESSAGE_MAP()
-    return false;
-  }
-
-  void OnRequire(const viz::SurfaceId& id,
-                 const viz::SurfaceSequence sequence) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&SurfaceRefMessageFilter::OnRequireOnUI, this));
-  }
-
-  void OnRequireOnUI() {
-    if (!satisfy_received_)
-      require_received_first_ = true;
-    require_message_loop_runner_->Quit();
-  }
-
-  void OnSatisfy(const viz::SurfaceSequence sequence) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&SurfaceRefMessageFilter::OnSatisfyOnUI, this));
-  }
-
-  void OnSatisfyOnUI() {
-    satisfy_received_ = true;
-    satisfy_message_loop_runner_->Quit();
-  }
-
-  scoped_refptr<content::MessageLoopRunner> require_message_loop_runner_;
-  scoped_refptr<content::MessageLoopRunner> satisfy_message_loop_runner_;
-  bool satisfy_received_;
-  bool require_received_first_;
-
-  DISALLOW_COPY_AND_ASSIGN(SurfaceRefMessageFilter);
-};
-
-// Test that when a child frame submits its first compositor frame, the
-// embedding renderer process properly acquires and releases references to the
-// new Surface. See https://crbug.com/701175.
-// TODO(crbug.com/676384): Delete test with the rest of SurfaceSequence code.
+// Validate that OOPIFs receive presentation feedbacks.
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest,
-                       DISABLED_ChildFrameSurfaceReference) {
-  EXPECT_TRUE(NavigateToURL(
-      shell(), embedded_test_server()->GetURL(
-                   "a.com", "/cross_site_iframe_factory.html?a(a)")));
+                       PresentationFeedback) {
+  base::HistogramTester histogram_tester;
+  GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));
+  NavigateToURL(shell(), main_url);
 
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetFrameTree()
                             ->root();
-  ASSERT_EQ(1U, root->child_count());
+  // Load cross-site page into iframe.
+  GURL cross_site_url(
+      embedded_test_server()->GetURL("foo.com", "/title2.html"));
+  NavigateFrameToURL(root->child_at(0), cross_site_url);
 
-  scoped_refptr<SurfaceRefMessageFilter> filter = new SurfaceRefMessageFilter();
-  root->current_frame_host()->GetProcess()->AddFilter(filter.get());
-
-  GURL foo_url = embedded_test_server()->GetURL("foo.com", "/title1.html");
-  NavigateFrameToURL(root->child_at(0), foo_url);
-
-  // If one of these messages isn't received, this test times out.
-  filter->WaitForRequire();
-  filter->WaitForSatisfy();
-
-  EXPECT_TRUE(filter->require_received_first());
+  auto* child_rwh_impl =
+      root->child_at(0)->current_frame_host()->GetRenderWidgetHost();
+  // Hide the frame and make it visible again, to force it to record the
+  // tab-switch time, which is generated from presentation-feedback.
+  child_rwh_impl->WasHidden();
+  child_rwh_impl->WasShown(true /* record_presentation_time */);
+  // Force the child to submit a new frame.
+  ASSERT_TRUE(ExecuteScript(root->child_at(0)->current_frame_host(),
+                            "document.write('Force a new frame.');"));
+  do {
+    FetchHistogramsFromChildProcesses();
+    GiveItSomeTime();
+  } while (histogram_tester.GetAllSamples("MPArch.RWH_TabSwitchPaintDuration")
+               .size() != 1);
 }
 
 }  // namespace content

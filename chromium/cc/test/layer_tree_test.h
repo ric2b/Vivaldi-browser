@@ -18,19 +18,19 @@
 
 namespace viz {
 class BeginFrameSource;
+class TestContextProvider;
 class TestLayerTreeFrameSink;
 }
 
 namespace cc {
 
 class AnimationHost;
-class AnimationPlayer;
 class LayerImpl;
 class LayerTreeHost;
 class LayerTreeHostForTesting;
 class LayerTreeTestLayerTreeFrameSinkClient;
 class Proxy;
-class TestContextProvider;
+class SingleKeyframeEffectAnimation;
 class TestTaskGraphRunner;
 
 // Creates the virtual viewport layer hierarchy under the given root_layer.
@@ -72,14 +72,17 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   virtual void EndTest();
   void EndTestAfterDelayMs(int delay_milliseconds);
 
-  void PostAddAnimationToMainThreadPlayer(
-      AnimationPlayer* player_to_receive_animation);
-  void PostAddInstantAnimationToMainThreadPlayer(
-      AnimationPlayer* player_to_receive_animation);
-  void PostAddLongAnimationToMainThreadPlayer(
-      AnimationPlayer* player_to_receive_animation);
+  void PostAddNoDamageAnimationToMainThread(
+      SingleKeyframeEffectAnimation* animation_to_receive_animation);
+  void PostAddOpacityAnimationToMainThread(
+      SingleKeyframeEffectAnimation* animation_to_receive_animation);
+  void PostAddOpacityAnimationToMainThreadInstantly(
+      SingleKeyframeEffectAnimation* animation_to_receive_animation);
+  void PostAddOpacityAnimationToMainThreadDelayed(
+      SingleKeyframeEffectAnimation* animation_to_receive_animation);
   void PostSetLocalSurfaceIdToMainThread(
       const viz::LocalSurfaceId& local_surface_id);
+  void PostRequestNewLocalSurfaceIdToMainThread();
   void PostSetDeferCommitsToMainThread(bool defer_commits);
   void PostSetNeedsCommitToMainThread();
   void PostSetNeedsUpdateLayersToMainThread();
@@ -105,6 +108,9 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   std::unique_ptr<LayerTreeFrameSink>
   ReleaseLayerTreeFrameSinkOnLayerTreeHost();
   void SetVisibleOnLayerTreeHost(bool visible);
+  void SetInitialDeviceScaleFactor(float initial_device_scale_factor) {
+    initial_device_scale_factor_ = initial_device_scale_factor;
+  }
 
   virtual void AfterTest() = 0;
   virtual void WillBeginTest();
@@ -125,12 +131,12 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   TaskGraphRunner* task_graph_runner() const {
     return task_graph_runner_.get();
   }
-  bool TestEnded() const { return ended_; }
+  bool TestEnded() const {
+    base::AutoLock hold(test_ended_lock_);
+    return ended_;
+  }
 
   LayerTreeHost* layer_tree_host();
-  viz::SharedBitmapManager* shared_bitmap_manager() const {
-    return shared_bitmap_manager_.get();
-  }
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() {
     return gpu_memory_buffer_manager_.get();
   }
@@ -165,11 +171,18 @@ class LayerTreeTest : public testing::Test, public TestHooks {
     begin_frame_source_ = begin_frame_source;
   }
 
+  bool use_skia_renderer_ = false;
+  bool use_software_renderer_ = false;
+
  private:
-  virtual void DispatchAddAnimationToPlayer(
-      AnimationPlayer* player_to_receive_animation,
+  virtual void DispatchAddNoDamageAnimation(
+      SingleKeyframeEffectAnimation* animation_to_receive_animation,
+      double animation_duration);
+  virtual void DispatchAddOpacityAnimation(
+      SingleKeyframeEffectAnimation* animation_to_receive_animation,
       double animation_duration);
   void DispatchSetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
+  void DispatchRequestNewLocalSurfaceId();
   void DispatchSetDeferCommits(bool defer_commits);
   void DispatchSetNeedsCommit();
   void DispatchSetNeedsUpdateLayers();
@@ -182,6 +195,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   void DispatchNextCommitWaitsForActivation();
 
   LayerTreeSettings settings_;
+  float initial_device_scale_factor_ = 1.f;
 
   CompositorMode mode_;
 
@@ -194,6 +208,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   bool timed_out_ = false;
   bool scheduled_ = false;
   bool started_ = false;
+
+  mutable base::Lock test_ended_lock_;
   bool ended_ = false;
 
   int timeout_seconds_ = false;
@@ -206,39 +222,55 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner_;
   std::unique_ptr<base::Thread> impl_thread_;
   std::unique_ptr<base::Thread> image_worker_;
-  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<viz::TestGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   std::unique_ptr<TestTaskGraphRunner> task_graph_runner_;
   base::CancelableClosure timeout_;
-  scoped_refptr<TestContextProvider> compositor_contexts_;
+  scoped_refptr<viz::TestContextProvider> compositor_contexts_;
   base::WeakPtr<LayerTreeTest> main_thread_weak_ptr_;
   base::WeakPtrFactory<LayerTreeTest> weak_factory_;
 };
 
 }  // namespace cc
 
+// Do not change this macro to disable a test, it will disable half of
+// the unit test suite. Instead, comment out the usage of this macro for
+// a specific test name. eg.
+// // TODO(crbug.com/abcd): Disabled for some reasons stated here.
+// // SINGLE_AND_MULTI_THREAD_TEST_F(SomeRandomTest)
 #define SINGLE_THREAD_TEST_F(TEST_FIXTURE_NAME)                   \
   TEST_F(TEST_FIXTURE_NAME, RunSingleThread_DelegatingRenderer) { \
     RunTest(CompositorMode::SINGLE_THREADED);                     \
   }                                                               \
   class SingleThreadDelegatingImplNeedsSemicolon##TEST_FIXTURE_NAME {}
 
+// Do not change this macro to disable a test, it will disable half of
+// the unit test suite. Instead, comment out the usage of this macro for
+// a specific test name. eg.
+// // TODO(crbug.com/abcd): Disabled for some reasons stated here.
+// // SINGLE_AND_MULTI_THREAD_TEST_F(SomeRandomTest)
 #define MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME)                   \
   TEST_F(TEST_FIXTURE_NAME, RunMultiThread_DelegatingRenderer) { \
     RunTest(CompositorMode::THREADED);                           \
   }                                                              \
   class MultiThreadDelegatingImplNeedsSemicolon##TEST_FIXTURE_NAME {}
 
+// Do not change this macro to disable a test, it will disable half of
+// the unit test suite. Instead, comment out the usage of this macro for
+// a specific test name. eg.
+// // TODO(crbug.com/abcd): Disabled for some reasons stated here.
+// // SINGLE_AND_MULTI_THREAD_TEST_F(SomeRandomTest)
 #define SINGLE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME) \
   SINGLE_THREAD_TEST_F(TEST_FIXTURE_NAME);                \
   MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME)
 
-#define REMOTE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME) \
-  MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME);                 \
-  REMOTE_TEST_F(TEST_FIXTURE_NAME)
-
 // Some tests want to control when notify ready for activation occurs,
 // but this is not supported in the single-threaded case.
+//
+// Do not change this macro to disable a test, it will disable half of
+// the unit test suite. Instead, comment out the usage of this macro for
+// a specific test name. eg.
+// // TODO(crbug.com/abcd): Disabled for some reasons stated here.
+// // MULTI_THREAD_BLOCKNOTIFY_TEST_F(SomeRandomTest)
 #define MULTI_THREAD_BLOCKNOTIFY_TEST_F(TEST_FIXTURE_NAME) \
   MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME)
 

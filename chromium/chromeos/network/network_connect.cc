@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/values.h"
 #include "chromeos/login/login_state.h"
@@ -53,8 +54,6 @@ class NetworkConnectImpl : public NetworkConnect {
   // NetworkConnect
   void ConnectToNetworkId(const std::string& network_id) override;
   void DisconnectFromNetworkId(const std::string& network_id) override;
-  bool MaybeShowConfigureUI(const std::string& network_id,
-                            const std::string& connect_error) override;
   void SetTechnologyEnabled(const NetworkTypePattern& technology,
                             bool enabled_state) override;
   void ShowMobileSetup(const std::string& network_id) override;
@@ -73,8 +72,6 @@ class NetworkConnectImpl : public NetworkConnect {
   void OnConnectFailed(const std::string& network_id,
                        const std::string& error_name,
                        std::unique_ptr<base::DictionaryValue> error_data);
-  bool MaybeShowConfigureUIImpl(const std::string& network_id,
-                                const std::string& connect_error);
   bool GetNetworkProfilePath(bool shared, std::string* profile_path);
   void OnConnectSucceeded(const std::string& network_id);
   void CallConnectToNetwork(const std::string& network_id,
@@ -194,42 +191,22 @@ void NetworkConnectImpl::OnConnectFailed(
     const std::string& network_id,
     const std::string& error_name,
     std::unique_ptr<base::DictionaryValue> error_data) {
-  MaybeShowConfigureUIImpl(network_id, error_name);
-}
+  NET_LOG(ERROR) << "Connect Failed: " << error_name << " For: " << network_id;
 
-// This handles connect failures that are a direct result of a user initiated
-// connect request and result in a new UI being shown. Note: notifications are
-// handled by NetworkStateNotifier.
-bool NetworkConnectImpl::MaybeShowConfigureUIImpl(
-    const std::string& network_id,
-    const std::string& connect_error) {
-  NET_LOG_ERROR("Connect Failed: " + connect_error, network_id);
-
-  if (connect_error == NetworkConnectionHandler::kErrorBadPassphrase ||
-      connect_error == NetworkConnectionHandler::kErrorPassphraseRequired ||
-      connect_error == NetworkConnectionHandler::kErrorConfigurationRequired ||
-      connect_error == NetworkConnectionHandler::kErrorAuthenticationRequired) {
+  if (error_name == NetworkConnectionHandler::kErrorConnectFailed ||
+      error_name == NetworkConnectionHandler::kErrorBadPassphrase ||
+      error_name == NetworkConnectionHandler::kErrorPassphraseRequired ||
+      error_name == NetworkConnectionHandler::kErrorConfigurationRequired ||
+      error_name == NetworkConnectionHandler::kErrorAuthenticationRequired) {
     HandleUnconfiguredNetwork(network_id);
-    return true;
-  }
-
-  if (connect_error == NetworkConnectionHandler::kErrorCertificateRequired) {
+  } else if (error_name ==
+             NetworkConnectionHandler::kErrorCertificateRequired) {
+    // If ShowEnrollNetwork does fails, treat as an unconfigured network.
     if (!delegate_->ShowEnrollNetwork(network_id))
       HandleUnconfiguredNetwork(network_id);
-    return true;
   }
-
-  // Only show a configure dialog if there was a ConnectFailed error. The dialog
-  // allows the user to request a new connect attempt or cancel. Note: a
-  // notification may also be displayed by NetworkStateNotifier in this case.
-  if (connect_error == NetworkConnectionHandler::kErrorConnectFailed) {
-    HandleUnconfiguredNetwork(network_id);
-    return true;
-  }
-
   // Notifications for other connect failures are handled by
   // NetworkStateNotifier, so no need to do anything else here.
-  return false;
 }
 
 void NetworkConnectImpl::OnConnectSucceeded(const std::string& network_id) {
@@ -303,7 +280,7 @@ void NetworkConnectImpl::CallCreateConfiguration(
   NetworkHandler::Get()
       ->network_configuration_handler()
       ->CreateShillConfiguration(
-          *shill_properties, NetworkConfigurationObserver::SOURCE_USER_ACTION,
+          *shill_properties,
           base::Bind(&NetworkConnectImpl::OnConfigureSucceeded,
                      weak_factory_.GetWeakPtr(), connect_on_configure),
           base::Bind(&NetworkConnectImpl::OnConfigureFailed,
@@ -370,7 +347,6 @@ void NetworkConnectImpl::ConfigureSetProfileSucceeded(
   }
   NetworkHandler::Get()->network_configuration_handler()->SetShillProperties(
       network->path(), *properties_to_set,
-      NetworkConfigurationObserver::SOURCE_USER_ACTION,
       base::Bind(&NetworkConnectImpl::ClearPropertiesAndConnect,
                  weak_factory_.GetWeakPtr(), network_id, properties_to_clear),
       base::Bind(&NetworkConnectImpl::SetPropertiesFailed,
@@ -409,14 +385,7 @@ void NetworkConnectImpl::DisconnectFromNetworkId(
   if (!network)
     return;
   NetworkHandler::Get()->network_connection_handler()->DisconnectNetwork(
-      network->path(), base::Bind(&base::DoNothing),
-      base::Bind(&IgnoreDisconnectError));
-}
-
-bool NetworkConnectImpl::MaybeShowConfigureUI(
-    const std::string& network_id,
-    const std::string& connect_error) {
-  return MaybeShowConfigureUIImpl(network_id, connect_error);
+      network->path(), base::DoNothing(), base::Bind(&IgnoreDisconnectError));
 }
 
 void NetworkConnectImpl::SetTechnologyEnabled(
@@ -538,7 +507,6 @@ void NetworkConnectImpl::ConfigureNetworkIdAndConnect(
   }
   NetworkHandler::Get()->network_configuration_handler()->SetNetworkProfile(
       network->path(), profile_path,
-      NetworkConfigurationObserver::SOURCE_USER_ACTION,
       base::Bind(&NetworkConnectImpl::ConfigureSetProfileSucceeded,
                  weak_factory_.GetWeakPtr(), network_id,
                  base::Passed(&properties_to_set)),

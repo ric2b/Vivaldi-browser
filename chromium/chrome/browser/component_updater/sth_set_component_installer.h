@@ -15,16 +15,17 @@
 #include "base/memory/weak_ptr.h"
 #include "components/component_updater/component_installer.h"
 
-namespace base {
-class FilePath;
-class Value;
-}  // namespace base
-
 namespace net {
 namespace ct {
-class STHObserver;
+struct SignedTreeHead;
 }  // namespace ct
 }  // namespace net
+
+namespace network {
+namespace mojom {
+class NetworkService;
+}  // namespace mojom
+}  // namespace network
 
 namespace component_updater {
 
@@ -36,16 +37,22 @@ class ComponentUpdateService;
 // To identify the log each STH belongs to, the name of the file is
 // hex-encoded Log ID of the log that produced this STH.
 //
-// Notifications of each of the new STHs are sent to the net::ct::STHObserver,
-// so that it can take appropriate steps, including possible persistence.
+// Notifications of each of the new STHs are sent to the
+// certificate_transparency::STHObserver, on the same task runner that this
+// object is created, so that it can take appropriate steps, including possible
+// persistence.
 class STHSetComponentInstallerPolicy : public ComponentInstallerPolicy {
  public:
-  // The |sth_distributor| will be notified each time a new STH is observed.
-  explicit STHSetComponentInstallerPolicy(net::ct::STHObserver* sth_observer);
+  STHSetComponentInstallerPolicy();
   ~STHSetComponentInstallerPolicy() override;
 
  private:
   friend class STHSetComponentInstallerTest;
+  void SetNetworkServiceForTesting(
+      network::mojom::NetworkService* network_service);
+
+  // Indicates that a new STH has been loaded.
+  void OnSTHLoaded(const net::ct::SignedTreeHead& sth);
 
   // ComponentInstallerPolicy implementation.
   bool SupportsGroupPolicyEnabledComponentUpdates() const override;
@@ -65,21 +72,7 @@ class STHSetComponentInstallerPolicy : public ComponentInstallerPolicy {
   update_client::InstallerAttributes GetInstallerAttributes() const override;
   std::vector<std::string> GetMimeTypes() const override;
 
-  // Reads and parses the on-disk json.
-  void LoadSTHsFromDisk(const base::FilePath& sths_file_path,
-                        const base::Version& version);
-
-  // Handle successful parsing of JSON by distributing the new STH.
-  void OnJsonParseSuccess(const std::string& log_id,
-                          std::unique_ptr<base::Value> parsed_json);
-
-  // STH parsing failed - do nothing.
-  void OnJsonParseError(const std::string& log_id, const std::string& error);
-
-  // The observer is not owned by this class, so the code creating an instance
-  // of this class is expected to ensure the STHObserver lives as long as
-  // this class does. Typically the observer provided will be a global.
-  net::ct::STHObserver* sth_observer_;
+  network::mojom::NetworkService* network_service_for_testing_ = nullptr;
 
   base::WeakPtrFactory<STHSetComponentInstallerPolicy> weak_ptr_factory_;
 

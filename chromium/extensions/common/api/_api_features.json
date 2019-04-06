@@ -108,6 +108,10 @@
     "dependencies": ["manifest:bluetooth"],
     "contexts": ["blessed_extension"]
   },
+  "cecPrivate": {
+    "dependencies": ["permission:cecPrivate"],
+    "contexts": ["blessed_extension"]
+  },
   "clipboard": {
     "dependencies": ["permission:clipboard"],
     "contexts": ["blessed_extension"]
@@ -198,10 +202,12 @@
         "chrome://cast/*",
         "chrome://extensions-frame/*",
         "chrome://extensions/*",
+        "chrome://home/*",
         "chrome://chrome-signin/*",
         "chrome://media-router/*",
         "chrome://mobilesetup/*",
-        "chrome://oobe/*"
+        "chrome://oobe/*",
+        "chrome://assistant-optin/*"
       ]
     }
   ],
@@ -268,7 +274,8 @@
     "matches": [
       "chrome://bookmarks/*",
       "chrome://extensions/*",
-      "chrome://settings/*"
+      "chrome://settings/*",
+      "chrome://sync-confirmation/*"
     ]
   }],
   "metricsPrivate.getIsCrashReportingEnabled": {
@@ -487,6 +494,10 @@
     "dependencies": ["permission:system.network"],
     "contexts": ["blessed_extension"]
   },
+  "system.powerSource": {
+    "dependencies": ["permission:system.powerSource"],
+    "contexts": ["blessed_extension"]
+  },
   "system.storage": {
     "dependencies": ["permission:system.storage"],
     "contexts": ["blessed_extension"]
@@ -556,9 +567,11 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://chrome-signin/*",
+      "chrome://home/*",
       "chrome://media-router/*",
       "chrome://mobilesetup/*",
-      "chrome://oobe/*"
+      "chrome://oobe/*",
+      "chrome://assistant-optin/*"
     ]
   }],
   "webViewInternal": [{
@@ -571,9 +584,11 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://chrome-signin/*",
+      "chrome://home/*",
       "chrome://media-router/*",
       "chrome://mobilesetup/*",
-      "chrome://oobe/*"
+      "chrome://oobe/*",
+      "chrome://assistant-optin/*"
     ]
   }],
   "webViewRequest": [{
@@ -584,9 +599,11 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://chrome-signin/*",
+      "chrome://home/*",
       "chrome://media-router/*",
       "chrome://mobilesetup/*",
-      "chrome://oobe/*"
+      "chrome://oobe/*",
+      "chrome://assistant-optin/*"
     ]
   }]
 }

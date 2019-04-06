@@ -16,12 +16,14 @@
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
+#include "chrome/browser/password_manager/reauth_purpose.h"
 #include "chrome/browser/ui/passwords/password_access_authenticator.h"
 #include "chrome/browser/ui/passwords/password_manager_porter.h"
 #include "chrome/browser/ui/passwords/password_manager_presenter.h"
 #include "chrome/browser/ui/passwords/password_ui_view.h"
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/password_manager/core/browser/ui/export_progress_status.h"
 #include "extensions/browser/extension_function.h"
 
 class Profile;
@@ -51,7 +53,11 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   void RequestShowPassword(size_t index,
                            content::WebContents* web_contents) override;
   void ImportPasswords(content::WebContents* web_contents) override;
-  void ExportPasswords(content::WebContents* web_contents) override;
+  void ExportPasswords(base::OnceCallback<void(const std::string&)> accepted,
+                       content::WebContents* web_contents) override;
+  void CancelExportPasswords() override;
+  api::passwords_private::ExportProgressStatus GetExportProgressStatus()
+      override;
 
   // PasswordUIView implementation.
   Profile* GetProfile() override;
@@ -68,12 +74,17 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   gfx::NativeWindow GetNativeWindow() const override;
 #endif
 
+  // Callback for when the password list has been written to the destination.
+  void OnPasswordsExportProgress(password_manager::ExportProgressStatus status,
+                                 const std::string& folder_name);
+
   // KeyedService overrides:
   void Shutdown() override;
 
   // Use this in tests to mock the OS-level reauthentication.
   void SetOsReauthCallForTesting(
-      base::RepeatingCallback<bool()> os_reauth_call);
+      base::RepeatingCallback<bool(password_manager::ReauthPurpose)>
+          os_reauth_call);
 
  private:
   // Called after the lists are fetched. Once both lists have been set, the
@@ -93,7 +104,7 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
 
   // Triggers an OS-dependent UI to present OS account login challenge and
   // returns true if the user passed that challenge.
-  bool OsReauthCall();
+  bool OsReauthCall(password_manager::ReauthPurpose purpose);
 
   // Not owned by this class.
   Profile* profile_;

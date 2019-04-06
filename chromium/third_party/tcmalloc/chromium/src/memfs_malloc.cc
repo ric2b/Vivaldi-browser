@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2007, Google Inc.
 // All rights reserved.
 // 
@@ -76,7 +77,7 @@ DEFINE_int64(memfs_malloc_limit_mb,
              "specified number of MiB.  0 == no limit.");
 DEFINE_bool(memfs_malloc_abort_on_fail,
             EnvToBool("TCMALLOC_MEMFS_ABORT_ON_FAIL", false),
-            "abort whenever memfs_malloc fails to satisfy an allocation "
+            "abort() whenever memfs_malloc fails to satisfy an allocation "
             "for any reason.");
 DEFINE_bool(memfs_malloc_ignore_mmap_fail,
             EnvToBool("TCMALLOC_MEMFS_IGNORE_MMAP_FAIL", false),
@@ -110,7 +111,10 @@ private:
 
   SysAllocator* fallback_;  // Default system allocator to fall back to.
 };
-static char hugetlb_space[sizeof(HugetlbSysAllocator)];
+static union {
+  char buf[sizeof(HugetlbSysAllocator)];
+  void *ptr;
+} hugetlb_space;
 
 // No locking needed here since we assume that tcmalloc calls
 // us with an internal lock held (see tcmalloc/system-alloc.cc).
@@ -257,7 +261,8 @@ bool HugetlbSysAllocator::Initialize() {
 REGISTER_MODULE_INITIALIZER(memfs_malloc, {
   if (FLAGS_memfs_malloc_path.length()) {
     SysAllocator* alloc = MallocExtension::instance()->GetSystemAllocator();
-    HugetlbSysAllocator* hp = new (hugetlb_space) HugetlbSysAllocator(alloc);
+    HugetlbSysAllocator* hp =
+      new (hugetlb_space.buf) HugetlbSysAllocator(alloc);
     if (hp->Initialize()) {
       MallocExtension::instance()->SetSystemAllocator(hp);
     }

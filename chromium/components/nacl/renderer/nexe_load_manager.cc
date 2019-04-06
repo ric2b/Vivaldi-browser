@@ -35,9 +35,9 @@
 #include "ppapi/shared_impl/var.h"
 #include "ppapi/shared_impl/var_tracker.h"
 #include "ppapi/thunk/enter.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "v8/include/v8.h"
 
 namespace nacl {
@@ -54,9 +54,6 @@ const char* const kSrcManifestAttribute = "src";
 // MIME type because the "src" attribute is used to supply us with the resource
 // of that MIME type that we're supposed to display.
 const char* const kNaClManifestAttribute = "nacl";
-// Define an argument name to enable 'dev' interfaces. To make sure it doesn't
-// collide with any user-defined HTML attribute, make the first character '@'.
-const char* const kDevAttribute = "@dev";
 
 const char* const kNaClMIMEType = "application/x-nacl";
 const char* const kPNaClMIMEType = "application/x-pnacl";
@@ -264,6 +261,9 @@ void NexeLoadManager::NexeDidCrash() {
   // have been received and we'll just get an EOF indication.
 
   base::SharedMemory shmem(crash_info_shmem_handle_, true);
+  // When shmem goes out of scope, the handle will be closed. Invalidate
+  // our handle so our destructor doesn't try to close it again.
+  crash_info_shmem_handle_ = base::SharedMemoryHandle();
   if (shmem.Map(kNaClCrashInfoShmemSize)) {
     uint32_t crash_log_length;
     // We cast the length value to volatile here to prevent the compiler from
@@ -413,12 +413,6 @@ void NexeLoadManager::CloseTrustedPluginChannel() {
 
 bool NexeLoadManager::IsPNaCl() const {
   return mime_type_ == kPNaClMIMEType;
-}
-
-bool NexeLoadManager::DevInterfacesEnabled() const {
-  // Look for the developer attribute; if it's present, enable 'dev'
-  // interfaces.
-  return args_.find(kDevAttribute) != args_.end();
 }
 
 void NexeLoadManager::ReportDeadNexe() {

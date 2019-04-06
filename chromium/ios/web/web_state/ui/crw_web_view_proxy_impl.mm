@@ -98,12 +98,20 @@ UIView* GetFirstResponderSubview(UIView* view) {
   return [_contentView frame];
 }
 
-- (CGFloat)topContentPadding {
-  return [_contentView topContentPadding];
+- (CGPoint)contentOffset {
+  return _contentView.contentOffset;
 }
 
-- (void)setTopContentPadding:(CGFloat)newTopContentPadding {
-  [_contentView setTopContentPadding:newTopContentPadding];
+- (void)setContentOffset:(CGPoint)contentOffset {
+  _contentView.contentOffset = contentOffset;
+}
+
+- (UIEdgeInsets)contentInset {
+  return _contentView.contentInset;
+}
+
+- (void)setContentInset:(UIEdgeInsets)contentInset {
+  _contentView.contentInset = contentInset;
 }
 
 - (NSArray*)gestureRecognizers {
@@ -118,16 +126,16 @@ UIView* GetFirstResponderSubview(UIView* view) {
   [_contentView removeGestureRecognizer:gestureRecognizer];
 }
 
-- (BOOL)shouldUseInsetForTopPadding {
-  SEL shouldUseInsetSelector = @selector(shouldUseInsetForTopPadding);
+- (BOOL)shouldUseViewContentInset {
+  SEL shouldUseInsetSelector = @selector(shouldUseViewContentInset);
   return [_contentView respondsToSelector:shouldUseInsetSelector] &&
-         [_contentView shouldUseInsetForTopPadding];
+         [_contentView shouldUseViewContentInset];
 }
 
-- (void)setShouldUseInsetForTopPadding:(BOOL)shouldUseInsetForTopPadding {
+- (void)setShouldUseViewContentInset:(BOOL)shouldUseViewContentInset {
   if ([_contentView
-          respondsToSelector:@selector(setShouldUseInsetForTopPadding:)]) {
-    [_contentView setShouldUseInsetForTopPadding:shouldUseInsetForTopPadding];
+          respondsToSelector:@selector(setShouldUseViewContentInset:)]) {
+    [_contentView setShouldUseViewContentInset:shouldUseViewContentInset];
   }
 }
 

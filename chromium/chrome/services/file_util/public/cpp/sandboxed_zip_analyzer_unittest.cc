@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/safe_browsing/archive_analyzer_results.h"
@@ -80,7 +80,7 @@ class SandboxedZipAnalyzerTest : public ::testing::Test {
         connector_(test_connector_factory_->CreateConnector()) {}
 
   void SetUp() override {
-    ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &dir_test_data_));
+    ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &dir_test_data_));
     dir_test_data_ = dir_test_data_.AppendASCII("safe_browsing");
   }
 
@@ -304,6 +304,8 @@ TEST_F(SandboxedZipAnalyzerTest, ZippedArchiveNoBinaries) {
   ASSERT_EQ(1u, results.archived_archive_filenames.size());
   EXPECT_EQ(FILE_PATH_LITERAL("hello.zip"),
             results.archived_archive_filenames[0].value());
+  EXPECT_GT(results.archived_binary[0].length(), 0);
+  EXPECT_FALSE(results.archived_binary[0].digests().sha256().empty());
 }
 
 TEST_F(SandboxedZipAnalyzerTest, ZippedRarArchiveNoBinaries) {

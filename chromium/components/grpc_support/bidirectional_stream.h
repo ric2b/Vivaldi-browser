@@ -17,7 +17,7 @@
 
 namespace base {
 class Location;
-}  // namespace tracked_objects
+}  // namespace base
 
 namespace net {
 class HttpRequestHeaders;
@@ -40,14 +40,15 @@ class BidirectionalStream : public net::BidirectionalStream::Delegate {
    public:
     virtual void OnStreamReady() = 0;
 
-    virtual void OnHeadersReceived(const net::SpdyHeaderBlock& response_headers,
-                                   const char* negotiated_protocol) = 0;
+    virtual void OnHeadersReceived(
+        const spdy::SpdyHeaderBlock& response_headers,
+        const char* negotiated_protocol) = 0;
 
     virtual void OnDataRead(char* data, int size) = 0;
 
     virtual void OnDataSent(const char* data) = 0;
 
-    virtual void OnTrailersReceived(const net::SpdyHeaderBlock& trailers) = 0;
+    virtual void OnTrailersReceived(const spdy::SpdyHeaderBlock& trailers) = 0;
 
     virtual void OnSucceeded() = 0;
 
@@ -171,10 +172,11 @@ class BidirectionalStream : public net::BidirectionalStream::Delegate {
 
   // net::BidirectionalStream::Delegate implementations:
   void OnStreamReady(bool request_headers_sent) override;
-  void OnHeadersReceived(const net::SpdyHeaderBlock& response_headers) override;
+  void OnHeadersReceived(
+      const spdy::SpdyHeaderBlock& response_headers) override;
   void OnDataRead(int bytes_read) override;
   void OnDataSent() override;
-  void OnTrailersReceived(const net::SpdyHeaderBlock& trailers) override;
+  void OnTrailersReceived(const spdy::SpdyHeaderBlock& trailers) override;
   void OnFailed(int error) override;
   // Helper method to derive OnSucceeded.
   void MaybeOnSucceded();
@@ -193,7 +195,7 @@ class BidirectionalStream : public net::BidirectionalStream::Delegate {
 
   bool IsOnNetworkThread();
   void PostToNetworkThread(const base::Location& from_here,
-                           const base::Closure& task);
+                           base::OnceClosure task);
 
   // Read state is tracking reading flow. Only accessed on network thread.
   //                         | <--- READING <--- |

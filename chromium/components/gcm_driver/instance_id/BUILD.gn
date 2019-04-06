@@ -12,10 +12,15 @@ static_library("instance_id") {
     "instance_id_driver.h",
     "instance_id_impl.cc",
     "instance_id_impl.h",
+    "instance_id_profile_service.cc",
+    "instance_id_profile_service.h",
   ]
 
   deps = [
     "//base",
+    "//components/gcm_driver:gcm_buildflags",
+    "//components/keyed_service/core:core",
+    "//components/prefs:prefs",
     "//crypto",
   ]
 
@@ -46,7 +51,7 @@ static_library("test_support") {
   ]
   deps = [
     "//base",
-    "//components/gcm_driver:test_support",
+    "//components/gcm_driver",
     "//testing/gtest",
   ]
 
@@ -65,7 +70,7 @@ source_set("unit_tests") {
     ":instance_id",
     ":test_support",
     "//base",
-    "//components/gcm_driver:gcm_build_features",
+    "//components/gcm_driver:gcm_buildflags",
     "//google_apis/gcm",
     "//net:test_support",
     "//testing/gtest",

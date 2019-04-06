@@ -29,27 +29,14 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/push_event_payload.h"
 #include "content/public/common/push_messaging_status.mojom.h"
-#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/common/service_worker/service_worker_provider_type.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_provider_type.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
 namespace protocol {
 
 namespace {
-
-void ResultNoOp(bool success) {
-}
-
-void StatusNoOp(ServiceWorkerStatusCode status) {
-}
-
-void StatusNoOpKeepingRegistration(
-    scoped_refptr<content::ServiceWorkerRegistration> protect,
-    ServiceWorkerStatusCode status) {
-}
-
-void PushDeliveryNoOp(mojom::PushDeliveryStatus status) {}
 
 const std::string GetVersionRunningStatusString(
     EmbeddedWorkerStatus running_status) {
@@ -93,7 +80,7 @@ void StopServiceWorkerOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
                            int64_t version_id) {
   if (content::ServiceWorkerVersion* version =
           context->GetLiveVersion(version_id)) {
-    version->StopWorker(base::BindOnce(&base::DoNothing));
+    version->StopWorker(base::DoNothing());
   }
 }
 
@@ -127,9 +114,10 @@ void DidFindRegistrationForDispatchSyncEventOnIO(
     scoped_refptr<BackgroundSyncContext> sync_context,
     const std::string& tag,
     bool last_chance,
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     scoped_refptr<content::ServiceWorkerRegistration> registration) {
-  if (status != SERVICE_WORKER_OK || !registration->active_version())
+  if (status != blink::ServiceWorkerStatusCode::kOk ||
+      !registration->active_version())
     return;
   BackgroundSyncManager* background_sync_manager =
       sync_context->background_sync_manager();
@@ -138,7 +126,10 @@ void DidFindRegistrationForDispatchSyncEventOnIO(
   // Keep the registration while dispatching the sync event.
   background_sync_manager->EmulateDispatchSyncEvent(
       tag, std::move(version), last_chance,
-      base::BindOnce(&StatusNoOpKeepingRegistration, std::move(registration)));
+      base::BindOnce(base::DoNothing::Once<
+                         scoped_refptr<content::ServiceWorkerRegistration>,
+                         blink::ServiceWorkerStatusCode>(),
+                     std::move(registration)));
 }
 
 void DispatchSyncEventOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
@@ -149,8 +140,8 @@ void DispatchSyncEventOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
                            bool last_chance) {
   context->FindReadyRegistrationForId(
       registration_id, origin,
-      base::Bind(&DidFindRegistrationForDispatchSyncEventOnIO, sync_context,
-                 tag, last_chance));
+      base::BindOnce(&DidFindRegistrationForDispatchSyncEventOnIO, sync_context,
+                     tag, last_chance));
 }
 
 }  // namespace
@@ -158,7 +149,8 @@ void DispatchSyncEventOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
 ServiceWorkerHandler::ServiceWorkerHandler()
     : DevToolsDomainHandler(ServiceWorker::Metainfo::domainName),
       enabled_(false),
-      process_(nullptr),
+      browser_context_(nullptr),
+      storage_partition_(nullptr),
       weak_factory_(this) {}
 
 ServiceWorkerHandler::~ServiceWorkerHandler() {
@@ -169,19 +161,21 @@ void ServiceWorkerHandler::Wire(UberDispatcher* dispatcher) {
   ServiceWorker::Dispatcher::wire(dispatcher, this);
 }
 
-void ServiceWorkerHandler::SetRenderer(RenderProcessHost* process_host,
+void ServiceWorkerHandler::SetRenderer(int process_host_id,
                                        RenderFrameHostImpl* frame_host) {
-  process_ = process_host;
+  RenderProcessHost* process_host = RenderProcessHost::FromID(process_host_id);
   // Do not call UpdateHosts yet, wait for load to commit.
   if (!process_host) {
     ClearForceUpdate();
     context_ = nullptr;
     return;
   }
-  StoragePartition* partition = process_host->GetStoragePartition();
-  DCHECK(partition);
+
+  storage_partition_ =
+      static_cast<StoragePartitionImpl*>(process_host->GetStoragePartition());
+  DCHECK(storage_partition_);
   context_ = static_cast<ServiceWorkerContextWrapper*>(
-      partition->GetServiceWorkerContext());
+      storage_partition_->GetServiceWorkerContext());
 }
 
 Response ServiceWorkerHandler::Enable() {
@@ -220,7 +214,7 @@ Response ServiceWorkerHandler::Unregister(const std::string& scope_url) {
     return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
-  context_->UnregisterServiceWorker(GURL(scope_url), base::Bind(&ResultNoOp));
+  context_->UnregisterServiceWorker(GURL(scope_url), base::DoNothing());
   return Response::OK();
 }
 
@@ -229,7 +223,7 @@ Response ServiceWorkerHandler::StartWorker(const std::string& scope_url) {
     return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
-  context_->StartServiceWorker(GURL(scope_url), base::Bind(&StatusNoOp));
+  context_->StartServiceWorker(GURL(scope_url), base::DoNothing());
   return Response::OK();
 }
 
@@ -310,7 +304,7 @@ Response ServiceWorkerHandler::DeliverPushMessage(
     const std::string& data) {
   if (!enabled_)
     return CreateDomainNotEnabledErrorResponse();
-  if (!process_)
+  if (!browser_context_)
     return CreateContextErrorResponse();
   int64_t id = 0;
   if (!base::StringToInt64(registration_id, &id))
@@ -318,9 +312,10 @@ Response ServiceWorkerHandler::DeliverPushMessage(
   PushEventPayload payload;
   if (data.size() > 0)
     payload.setData(data);
-  BrowserContext::DeliverPushMessage(process_->GetBrowserContext(),
-                                     GURL(origin), id, payload,
-                                     base::Bind(&PushDeliveryNoOp));
+  BrowserContext::DeliverPushMessage(
+      browser_context_, GURL(origin), id, payload,
+      base::BindRepeating([](mojom::PushDeliveryStatus status) {}));
+
   return Response::OK();
 }
 
@@ -331,15 +326,14 @@ Response ServiceWorkerHandler::DispatchSyncEvent(
     bool last_chance) {
   if (!enabled_)
     return CreateDomainNotEnabledErrorResponse();
-  if (!process_)
+  if (!storage_partition_)
     return CreateContextErrorResponse();
   int64_t id = 0;
   if (!base::StringToInt64(registration_id, &id))
     return CreateInvalidVersionIdErrorResponse();
 
-  StoragePartitionImpl* partition =
-      static_cast<StoragePartitionImpl*>(process_->GetStoragePartition());
-  BackgroundSyncContext* sync_context = partition->GetBackgroundSyncContext();
+  BackgroundSyncContext* sync_context =
+      storage_partition_->GetBackgroundSyncContext();
 
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::BindOnce(&DispatchSyncEventOnIO, context_,

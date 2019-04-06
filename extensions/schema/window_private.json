@@ -214,6 +214,22 @@
         ]
       },
       {
+        "name": "onActivated",
+        "type": "function",
+        "description": "Fired when the window changes activation.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "boolean",
+            "name": "activated",
+            "description": "Changed activation state."
+          }
+        ]
+      },
+      {
         "name": "onFullscreen",
         "type": "function",
         "description": "Fired when the window changes fullscreen status.",

@@ -157,7 +157,7 @@ std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
 
 namespace {
 
-constexpr char kRootCertsFileFuchsia[] = "/system/data/boringssl/cert.pem";
+constexpr char kRootCertsFileFuchsia[] = "/config/ssl/cert.pem";
 
 class FuchsiaSystemCerts {
  public:
@@ -175,7 +175,7 @@ class FuchsiaSystemCerts {
     for (const auto& cert : certs) {
       CertErrors errors;
       auto parsed = ParsedCertificate::Create(
-          x509_util::DupCryptoBuffer(cert->cert_buffer()),
+          bssl::UpRef(cert->cert_buffer()),
           x509_util::DefaultParseCertificateOptions(), &errors);
       CHECK(parsed) << errors.ToDebugString();
       system_trust_store_.AddTrustAnchor(parsed);

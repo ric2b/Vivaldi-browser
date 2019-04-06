@@ -12,10 +12,11 @@ def IsNewer(old_version, new_version):
             old_version.minor < new_version.minor)))
 
 
-def CheckVersion(input_api, output_api):
+def CheckVersionAndAssetParity(input_api, output_api):
   """Checks that
   - the version was upraded if assets files were changed,
-  - the version was not downgraded.
+  - the version was not downgraded,
+  - both the google_chrome and the chromium assets have the same files.
   """
   sys.path.append(input_api.PresubmitLocalPath())
   import parse_version
@@ -24,12 +25,27 @@ def CheckVersion(input_api, output_api):
   new_version = None
   changed_assets = False
   changed_version = False
+  changed_component_list = False
+  changed_asset_files = {'google_chrome': [], 'chromium': []}
   for file in input_api.AffectedFiles():
     basename = input_api.os_path.basename(file.LocalPath())
     extension = input_api.os_path.splitext(basename)[1][1:].strip().lower()
+    basename_without_extension = input_api.os_path.splitext(basename)[
+        0].strip().lower()
+    if extension == 'sha1':
+      basename_without_extension = input_api.os_path.splitext(
+          basename_without_extension)[0]
+    dirname = input_api.os_path.basename(
+        input_api.os_path.dirname(file.LocalPath()))
+    action = file.Action()
+    if (dirname in changed_asset_files and
+        extension in {'sha1', 'png', 'wav'} and action in {'A', 'D'}):
+      changed_asset_files[dirname].append((action, basename_without_extension))
     if (extension == 'sha1' or basename == 'vr_assets_component_files.json'):
       changed_assets = True
-    if (basename == 'VERSION'):
+    if basename == 'vr_assets_component_files.json':
+      changed_component_list = True
+    if basename == 'VERSION':
       changed_version = True
       old_version = parse_version.ParseVersion(file.OldContents())
       new_version = parse_version.ParseVersion(file.NewContents())
@@ -37,6 +53,25 @@ def CheckVersion(input_api, output_api):
   local_version_filename = input_api.os_path.join(
       input_api.os_path.dirname(input_api.AffectedFiles()[0].LocalPath()),
       'VERSION')
+  local_component_list_filename = input_api.os_path.join(
+      input_api.os_path.dirname(input_api.AffectedFiles()[0].LocalPath()),
+      'vr_assets_component_files.json')
+
+  if changed_asset_files['google_chrome'] != changed_asset_files['chromium']:
+    return [
+        output_api.PresubmitError(
+            'Must have same asset files for %s in \'%s\'.' %
+            (changed_asset_files.keys(),
+             input_api.os_path.dirname(
+                 input_api.AffectedFiles()[0].LocalPath())))
+    ]
+
+  if changed_asset_files['google_chrome'] and not changed_component_list:
+    return [
+        output_api.PresubmitError(
+            'Must update \'%s\' if adding/removing assets.' %
+            local_component_list_filename)
+    ]
 
   if changed_version and (not old_version or not new_version):
     return [
@@ -61,8 +96,8 @@ def CheckVersion(input_api, output_api):
 
 
 def CheckChangeOnUpload(input_api, output_api):
-  return CheckVersion(input_api, output_api)
+  return CheckVersionAndAssetParity(input_api, output_api)
 
 
 def CheckChangeOnCommit(input_api, output_api):
-  return CheckVersion(input_api, output_api)
+  return CheckVersionAndAssetParity(input_api, output_api)

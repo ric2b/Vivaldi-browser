@@ -11,16 +11,18 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/cryptographer.h"
-#include "components/sync/engine/activation_context.h"
 #include "components/sync/engine/commit_queue.h"
+#include "components/sync/engine/data_type_activation_response.h"
 #include "components/sync/engine/model_type_processor.h"
 #include "components/sync/engine_impl/cycle/directory_type_debug_info_emitter.h"
 #include "components/sync/engine_impl/cycle/non_blocking_type_debug_info_emitter.h"
 #include "components/sync/engine_impl/directory_commit_contributor.h"
 #include "components/sync/engine_impl/directory_update_handler.h"
 #include "components/sync/engine_impl/model_type_worker.h"
+#include "components/sync/syncable/read_transaction.h"
+#include "components/sync/syncable/syncable_base_transaction.h"
 
 namespace syncer {
 
@@ -74,13 +76,13 @@ ModelTypeRegistry::~ModelTypeRegistry() {}
 
 void ModelTypeRegistry::ConnectNonBlockingType(
     ModelType type,
-    std::unique_ptr<ActivationContext> activation_context) {
+    std::unique_ptr<DataTypeActivationResponse> activation_response) {
   DCHECK(update_handler_map_.find(type) == update_handler_map_.end());
   DCHECK(commit_contributor_map_.find(type) == commit_contributor_map_.end());
   DVLOG(1) << "Enabling an off-thread sync type: " << ModelTypeToString(type);
 
   bool initial_sync_done =
-      activation_context->model_type_state.initial_sync_done();
+      activation_response->model_type_state.initial_sync_done();
   // Attempt migration if the USS initial sync hasn't been done, there is a
   // migrator function, and directory has data for this type.
   bool do_migration = !initial_sync_done && !uss_migrator_.is_null() &&
@@ -88,7 +90,8 @@ void ModelTypeRegistry::ConnectNonBlockingType(
   bool trigger_initial_sync = !initial_sync_done && !do_migration;
 
   // Save a raw pointer to the processor for connecting later.
-  ModelTypeProcessor* type_processor = activation_context->type_processor.get();
+  ModelTypeProcessor* type_processor =
+      activation_response->type_processor.get();
 
   std::unique_ptr<Cryptographer> cryptographer_copy;
   if (encrypted_types_.Has(type))
@@ -104,9 +107,9 @@ void ModelTypeRegistry::ConnectNonBlockingType(
   }
 
   auto worker = std::make_unique<ModelTypeWorker>(
-      type, activation_context->model_type_state, trigger_initial_sync,
+      type, activation_response->model_type_state, trigger_initial_sync,
       std::move(cryptographer_copy), nudge_handler_,
-      std::move(activation_context->type_processor), emitter,
+      std::move(activation_response->type_processor), emitter,
       cancelation_signal_);
 
   // Save a raw pointer and add the worker to our structures.
@@ -117,7 +120,7 @@ void ModelTypeRegistry::ConnectNonBlockingType(
 
   // Initialize Processor -> Worker communication channel.
   type_processor->ConnectSync(std::make_unique<CommitQueueProxy>(
-      worker_ptr->AsWeakPtr(), base::ThreadTaskRunnerHandle::Get()));
+      worker_ptr->AsWeakPtr(), base::SequencedTaskRunnerHandle::Get()));
 
   // Attempt migration if necessary.
   if (do_migration) {
@@ -251,6 +254,11 @@ ModelTypeSet ModelTypeRegistry::GetInitialSyncDoneNonBlockingTypes() const {
   return types;
 }
 
+const UpdateHandler* ModelTypeRegistry::GetUpdateHandler(ModelType type) const {
+  UpdateHandlerMap::const_iterator it = update_handler_map_.find(type);
+  return it == update_handler_map_.end() ? nullptr : it->second;
+}
+
 UpdateHandlerMap* ModelTypeRegistry::update_handler_map() {
   return &update_handler_map_;
 }
@@ -283,6 +291,19 @@ void ModelTypeRegistry::RequestEmitDebugInfo() {
     // They've already been asked for manually on the UI thread because USS
     // emitters don't have a working implementation yet.
   }
+}
+
+bool ModelTypeRegistry::HasUnsyncedItems() const {
+  // For model type workers, we ask them individually.
+  for (const auto& worker : model_type_workers_) {
+    if (worker->HasLocalChangesForTest()) {
+      return true;
+    }
+  }
+
+  // Verify directory state.
+  ReadTransaction trans(FROM_HERE, user_share_);
+  return trans.GetWrappedTrans()->directory()->unsynced_entity_count() != 0;
 }
 
 base::WeakPtr<ModelTypeConnector> ModelTypeRegistry::AsWeakPtr() {

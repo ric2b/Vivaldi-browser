@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/callback.h"
-#include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -20,13 +19,10 @@
 #include "media/base/media_export.h"
 
 namespace base {
-class FilePath;
 class SingleThreadTaskRunner;
 }
 
 namespace media {
-
-class AudioDebugRecordingHelper;
 
 // A manager for audio debug recording that handles registration of data
 // sources and hands them a recorder (AudioDebugRecordingHelper) to feed data
@@ -51,27 +47,31 @@ class AudioDebugRecordingHelper;
 //             ------------------  AudioManagerBase  ----------------
 //
 // AudioDebugRecordingManager is created when
-// AudioManager::InitializeDebugRecording() is called. That is done
-// in AudioManager::Create() in WebRTC enabled builds, but not in non WebRTC
-// enabled builds.
-// If AudioDebugRecordingManager is not created, neither is
+// AudioManager::InitializeDebugRecording() is called. That is done in
+// AudioManager::Create() in WebRTC enabled builds, but not in non WebRTC
+// enabled builds. If AudioDebugRecordingManager is not created, neither is
 // AudioDebugRecordingHelper or AudioDebugFileWriter. In this case the pointers
 // to AudioDebugRecordingManager and AudioDebugRecordingHelper are null.
-//
+
 class MEDIA_EXPORT AudioDebugRecordingManager {
  public:
+  using CreateWavFileCallback = base::RepeatingCallback<void(
+      AudioDebugRecordingStreamType stream_type,
+      uint32_t id,
+      base::OnceCallback<void(base::File)> reply_callback)>;
+
   AudioDebugRecordingManager(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   virtual ~AudioDebugRecordingManager();
 
   // Enables and disables debug recording.
-  virtual void EnableDebugRecording(const base::FilePath& base_file_name);
+  virtual void EnableDebugRecording(CreateWavFileCallback create_file_callback);
   virtual void DisableDebugRecording();
 
-  // Registers a source and returns a wrapped recorder. |file_name_extension| is
-  // added to the base filename, along with a unique running ID.
+  // Registers a source and returns a wrapped recorder. |stream_type| is added
+  // to the base filename, along with a unique running ID.
   std::unique_ptr<AudioDebugRecorder> RegisterDebugRecordingSource(
-      const base::FilePath::StringType& file_name_extension,
+      AudioDebugRecordingStreamType stream_type,
       const AudioParameters& params);
 
  protected:
@@ -94,22 +94,22 @@ class MEDIA_EXPORT AudioDebugRecordingManager {
   FRIEND_TEST_ALL_PREFIXES(AudioDebugRecordingManagerTest,
                            EnableRegisterDisable);
 
-  // Map type from source id to recorder and its filename extension.
+  // Map type from source id to recorder and stream type (input/output).
   using DebugRecordingHelperMap = std::map<
-      int,
-      std::pair<AudioDebugRecordingHelper*, base::FilePath::StringType>>;
+      uint32_t,
+      std::pair<AudioDebugRecordingHelper*, AudioDebugRecordingStreamType>>;
 
   // Unregisters a source.
-  void UnregisterDebugRecordingSource(int id);
+  void UnregisterDebugRecordingSource(uint32_t id);
 
   bool IsDebugRecordingEnabled();
 
   // Recorders, one per source.
   DebugRecordingHelperMap debug_recording_helpers_;
 
-  // The base file name for debug recording files. If this is non-empty, debug
+  // Callback for creating debug recording files. When this is not null, debug
   // recording is enabled.
-  base::FilePath debug_recording_base_file_name_;
+  CreateWavFileCallback create_file_callback_;
 
   base::WeakPtrFactory<AudioDebugRecordingManager> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(AudioDebugRecordingManager);

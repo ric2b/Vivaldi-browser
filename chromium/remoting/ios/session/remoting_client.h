@@ -10,6 +10,8 @@
 
 #import "remoting/ios/display/gl_display_handler.h"
 
+#include "remoting/client/feedback_data.h"
+#include "remoting/protocol/client_authentication_config.h"
 #include "remoting/protocol/connection_to_host.h"
 
 namespace remoting {
@@ -64,9 +66,18 @@ extern NSString* const kHostSessionPin;
                                      id:(NSString*)id
                                  secret:(NSString*)secret;
 
+- (void)
+fetchSecretWithPairingSupported:(BOOL)pairingSupported
+                       callback:
+                           (const remoting::protocol::SecretFetchedCallback&)
+                               secretFetchedCallback;
+
 - (void)fetchThirdPartyTokenForUrl:(NSString*)tokenUrl
                           clientId:(NSString*)clinetId
-                             scope:(NSString*)scope;
+                            scopes:(NSString*)scopes
+                          callback:(const remoting::protocol::
+                                        ThirdPartyTokenFetchedCallback&)
+                                       tokenFetchedCallback;
 
 - (void)setCapabilities:(NSString*)capabilities;
 
@@ -74,16 +85,21 @@ extern NSString* const kHostSessionPin;
 
 - (void)setHostResolution:(CGSize)dipsResolution scale:(int)scale;
 
+- (void)setVideoChannelEnabled:(BOOL)enabled;
+
+// Creates a feedback data and returns it to the callback.
+- (void)createFeedbackDataWithCallback:
+    (void (^)(const remoting::FeedbackData&))callback;
+
 // The display handler tied to the remoting client used to display the host.
 @property(nonatomic, strong) GlDisplayHandler* displayHandler;
 // The host info used to make the remoting client connection.
 @property(nonatomic, readonly) HostInfo* hostInfo;
-// The gesture interpreter used to handle gestures.
-// This is valid only after the client has connected to the host. Always use
-// RemotingClient.gestureInterpreter instead of storing the pointer separately.
+// The gesture interpreter used to handle gestures. It has no effect if the
+// session is not connected.
 @property(nonatomic, readonly) remoting::GestureInterpreter* gestureInterpreter;
 // The keyboard interpreter used to convert key events and send them to the
-// host.
+// host. It has no effect if the session is not connected.
 @property(nonatomic, readonly)
     remoting::KeyboardInterpreter* keyboardInterpreter;
 

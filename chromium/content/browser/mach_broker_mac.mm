@@ -8,11 +8,9 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
 
 namespace content {
@@ -70,25 +68,19 @@ void MachBroker::BrowserChildProcessHostDisconnected(
   InvalidateChildProcessId(data.id);
 }
 
-void MachBroker::BrowserChildProcessCrashed(const ChildProcessData& data,
-    int exit_code) {
+void MachBroker::BrowserChildProcessCrashed(
+    const ChildProcessData& data,
+    const ChildProcessTerminationInfo& info) {
   InvalidateChildProcessId(data.id);
 }
 
-void MachBroker::Observe(int type,
-                         const NotificationSource& source,
-                         const NotificationDetails& details) {
-  switch (type) {
-    case NOTIFICATION_RENDERER_PROCESS_TERMINATED:
-    case NOTIFICATION_RENDERER_PROCESS_CLOSED: {
-      RenderProcessHost* host = Source<RenderProcessHost>(source).ptr();
-      InvalidateChildProcessId(host->GetID());
-      break;
-    }
-    default:
-      NOTREACHED() << "Unexpected notification";
-      break;
-  }
+void MachBroker::RenderProcessExited(RenderProcessHost* host,
+                                     const ChildProcessTerminationInfo& info) {
+  InvalidateChildProcessId(host->GetID());
+}
+
+void MachBroker::RenderProcessHostDestroyed(RenderProcessHost* host) {
+  InvalidateChildProcessId(host->GetID());
 }
 
 // static
@@ -123,11 +115,6 @@ void MachBroker::InvalidateChildProcessId(int child_process_id) {
 }
 
 void MachBroker::RegisterNotifications() {
-  registrar_.Add(this, NOTIFICATION_RENDERER_PROCESS_CLOSED,
-                 NotificationService::AllBrowserContextsAndSources());
-  registrar_.Add(this, NOTIFICATION_RENDERER_PROCESS_TERMINATED,
-                 NotificationService::AllBrowserContextsAndSources());
-
   // No corresponding StopObservingBrowserChildProcesses,
   // we leak this singleton.
   BrowserChildProcessObserver::Add(this);

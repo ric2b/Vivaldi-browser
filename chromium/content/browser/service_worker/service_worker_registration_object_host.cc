@@ -4,17 +4,31 @@
 
 #include "content/browser/service_worker/service_worker_registration_object_host.h"
 
-#include "base/memory/ptr_util.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
-#include "content/browser/service_worker/service_worker_handle.h"
+#include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/common/service_worker_modes.h"
 #include "net/http/http_util.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
+
+namespace {
+
+// Returns an object info to send over Mojo. The info must be sent immediately.
+// See ServiceWorkerObjectHost::CreateCompleteObjectInfoToSend() for details.
+blink::mojom::ServiceWorkerObjectInfoPtr CreateCompleteObjectInfoToSend(
+    ServiceWorkerProviderHost* provider_host,
+    ServiceWorkerVersion* version) {
+  base::WeakPtr<ServiceWorkerObjectHost> service_worker_object_host =
+      provider_host->GetOrCreateServiceWorkerObjectHost(version);
+  if (!service_worker_object_host)
+    return nullptr;
+  return service_worker_object_host->CreateCompleteObjectInfoToSend();
+}
+
+}  // anonymous namespace
 
 ServiceWorkerRegistrationObjectHost::ServiceWorkerRegistrationObjectHost(
     base::WeakPtr<ServiceWorkerContextCore> context,
@@ -40,21 +54,18 @@ ServiceWorkerRegistrationObjectHost::~ServiceWorkerRegistrationObjectHost() {
 blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
 ServiceWorkerRegistrationObjectHost::CreateObjectInfo() {
   auto info = blink::mojom::ServiceWorkerRegistrationObjectInfo::New();
-  info->options = blink::mojom::ServiceWorkerRegistrationOptions::New();
-  info->options->scope = registration_->pattern();
-  // TODO(crbug.com/675540): Set update_via_cache when it is included in
-  // registration_.
+  info->options = blink::mojom::ServiceWorkerRegistrationOptions::New(
+      registration_->pattern(), registration_->update_via_cache());
   info->registration_id = registration_->id();
   bindings_.AddBinding(this, mojo::MakeRequest(&info->host_ptr_info));
-  if (!remote_registration_)
-    info->request = mojo::MakeRequest(&remote_registration_);
+  info->request = mojo::MakeRequest(&remote_registration_);
 
-  info->installing = provider_host_->GetOrCreateServiceWorkerHandle(
-      registration_->installing_version());
-  info->waiting = provider_host_->GetOrCreateServiceWorkerHandle(
-      registration_->waiting_version());
-  info->active = provider_host_->GetOrCreateServiceWorkerHandle(
-      registration_->active_version());
+  info->installing = CreateCompleteObjectInfoToSend(
+      provider_host_, registration_->installing_version());
+  info->waiting = CreateCompleteObjectInfoToSend(
+      provider_host_, registration_->waiting_version());
+  info->active = CreateCompleteObjectInfoToSend(
+      provider_host_, registration_->active_version());
   return info;
 }
 
@@ -66,6 +77,11 @@ void ServiceWorkerRegistrationObjectHost::OnVersionAttributesChanged(
   SetVersionAttributes(changed_mask, registration->installing_version(),
                        registration->waiting_version(),
                        registration->active_version());
+}
+
+void ServiceWorkerRegistrationObjectHost::OnUpdateViaCacheChanged(
+    ServiceWorkerRegistration* registration) {
+  remote_registration_->SetUpdateViaCache(registration->update_via_cache());
 }
 
 void ServiceWorkerRegistrationObjectHost::OnRegistrationFailed(
@@ -196,10 +212,10 @@ void ServiceWorkerRegistrationObjectHost::SetNavigationPreloadHeader(
 
 void ServiceWorkerRegistrationObjectHost::UpdateComplete(
     UpdateCallback callback,
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     const std::string& status_message,
     int64_t registration_id) {
-  if (status != SERVICE_WORKER_OK) {
+  if (status != blink::ServiceWorkerStatusCode::kOk) {
     std::string error_message;
     blink::mojom::ServiceWorkerErrorType error_type;
     GetServiceWorkerErrorTypeForRegistration(status, status_message,
@@ -215,8 +231,8 @@ void ServiceWorkerRegistrationObjectHost::UpdateComplete(
 
 void ServiceWorkerRegistrationObjectHost::UnregistrationComplete(
     UnregisterCallback callback,
-    ServiceWorkerStatusCode status) {
-  if (status != SERVICE_WORKER_OK) {
+    blink::ServiceWorkerStatusCode status) {
+  if (status != blink::ServiceWorkerStatusCode::kOk) {
     std::string error_message;
     blink::mojom::ServiceWorkerErrorType error_type;
     GetServiceWorkerErrorTypeForRegistration(status, std::string(), &error_type,
@@ -233,8 +249,8 @@ void ServiceWorkerRegistrationObjectHost::UnregistrationComplete(
 void ServiceWorkerRegistrationObjectHost::DidUpdateNavigationPreloadEnabled(
     bool enable,
     EnableNavigationPreloadCallback callback,
-    ServiceWorkerStatusCode status) {
-  if (status != SERVICE_WORKER_OK) {
+    blink::ServiceWorkerStatusCode status) {
+  if (status != blink::ServiceWorkerStatusCode::kOk) {
     std::move(callback).Run(
         blink::mojom::ServiceWorkerErrorType::kUnknown,
         std::string(ServiceWorkerConsts::kEnableNavigationPreloadErrorPrefix) +
@@ -251,8 +267,8 @@ void ServiceWorkerRegistrationObjectHost::DidUpdateNavigationPreloadEnabled(
 void ServiceWorkerRegistrationObjectHost::DidUpdateNavigationPreloadHeader(
     const std::string& value,
     SetNavigationPreloadHeaderCallback callback,
-    ServiceWorkerStatusCode status) {
-  if (status != SERVICE_WORKER_OK) {
+    blink::ServiceWorkerStatusCode status) {
+  if (status != blink::ServiceWorkerStatusCode::kOk) {
     std::move(callback).Run(
         blink::mojom::ServiceWorkerErrorType::kUnknown,
         std::string(
@@ -280,12 +296,12 @@ void ServiceWorkerRegistrationObjectHost::SetVersionAttributes(
   blink::mojom::ServiceWorkerObjectInfoPtr active;
   if (changed_mask.installing_changed()) {
     installing =
-        provider_host_->GetOrCreateServiceWorkerHandle(installing_version);
+        CreateCompleteObjectInfoToSend(provider_host_, installing_version);
   }
   if (changed_mask.waiting_changed())
-    waiting = provider_host_->GetOrCreateServiceWorkerHandle(waiting_version);
+    waiting = CreateCompleteObjectInfoToSend(provider_host_, waiting_version);
   if (changed_mask.active_changed())
-    active = provider_host_->GetOrCreateServiceWorkerHandle(active_version);
+    active = CreateCompleteObjectInfoToSend(provider_host_, active_version);
   DCHECK(remote_registration_);
   remote_registration_->SetVersionAttributes(
       changed_mask.changed(), std::move(installing), std::move(waiting),

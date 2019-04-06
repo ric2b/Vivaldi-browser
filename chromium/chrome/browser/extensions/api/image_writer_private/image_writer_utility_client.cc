@@ -7,11 +7,10 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/services/removable_storage_writer/public/interfaces/constants.mojom.h"
+#include "chrome/services/removable_storage_writer/public/mojom/constants.mojom.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -34,8 +33,8 @@ class ImageWriterUtilityClient::RemovableStorageWriterClientImpl
  public:
   RemovableStorageWriterClientImpl(
       ImageWriterUtilityClient* owner,
-      chrome::mojom::RemovableStorageWriterClientPtr* interface)
-      : binding_(this, mojo::MakeRequest(interface)),
+      chrome::mojom::RemovableStorageWriterClientPtr* interface_ptr)
+      : binding_(this, mojo::MakeRequest(interface_ptr)),
         image_writer_utility_client_(owner) {
     base::AssertBlockingAllowed();
 
@@ -164,7 +163,7 @@ void ImageWriterUtilityClient::BindServiceIfNeeded() {
   connector_->BindInterface(chrome::mojom::kRemovableStorageWriterServiceName,
                             mojo::MakeRequest(&removable_storage_writer_));
   removable_storage_writer_.set_connection_error_handler(
-      base::Bind(&ImageWriterUtilityClient::OnConnectionError, this));
+      base::BindOnce(&ImageWriterUtilityClient::OnConnectionError, this));
 }
 
 void ImageWriterUtilityClient::OnConnectionError() {

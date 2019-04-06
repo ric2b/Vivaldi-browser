@@ -13,13 +13,8 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "content/public/common/page_zoom.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/base/window_open_disposition.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
-#include "chrome/browser/ui/browser_dialogs.h"
-#endif
 
 class Browser;
 class CommandObserver;
@@ -105,6 +100,7 @@ bool CanBookmarkCurrentPage(const Browser* browser);
 void BookmarkAllTabs(Browser* browser);
 bool CanBookmarkAllTabs(const Browser* browser);
 void SaveCreditCard(Browser* browser);
+void MigrateLocalCards(Browser* browser);
 void Translate(Browser* browser);
 void ManagePasswordsForPage(Browser* browser);
 void SavePage(Browser* browser);
@@ -112,10 +108,10 @@ bool CanSavePage(const Browser* browser);
 void ShowFindBar(Browser* browser);
 void Print(Browser* browser);
 bool CanPrint(Browser* browser);
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
 void BasicPrint(Browser* browser);
 bool CanBasicPrint(Browser* browser);
-#endif  // ENABLE_BASIC_PRINTING
+#endif  // ENABLE_PRINTING
 bool CanRouteMedia(Browser* browser);
 void RouteMedia(Browser* browser);
 void EmailPageLocation(Browser* browser);
@@ -131,7 +127,7 @@ void FocusLocationBar(Browser* browser);
 void FocusSearch(Browser* browser);
 void FocusAppMenu(Browser* browser);
 void FocusBookmarksToolbar(Browser* browser);
-void FocusInfobars(Browser* browser);
+void FocusInactivePopupForAccessibility(Browser* browser);
 void FocusNextPane(Browser* browser);
 void FocusPreviousPane(Browser* browser);
 void ToggleDevToolsWindow(Browser* browser, DevToolsToggleAction action);
@@ -151,15 +147,10 @@ void ClearCache(Browser* browser);
 bool IsDebuggerAttachedToCurrentTab(Browser* browser);
 void CopyURL(Browser* browser);
 void OpenInChrome(Browser* browser);
-#if defined(OS_CHROMEOS)
-void QueryAndDisplayArcApps(
-    const Browser* browser,
-    const std::vector<arc::ArcNavigationThrottle::AppInfo>& app_info,
-    IntentPickerResponse callback);
-void SetIntentPickerViewVisibility(Browser* browser, bool visible);
-#endif  // defined(OS_CHROMEOS)
-
 bool CanViewSource(const Browser* browser);
+#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+void ToggleConfirmToQuitOption(Browser* browser);
+#endif
 
 void CreateBookmarkAppFromCurrentWebContents(Browser* browser);
 bool CanCreateBookmarkApp(const Browser* browser);

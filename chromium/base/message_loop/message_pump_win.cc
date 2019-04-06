@@ -9,8 +9,8 @@
 
 #include <limits>
 
+#include "base/debug/alias.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -45,10 +45,6 @@ void MessagePumpWin::Run(Delegate* delegate) {
   s.delegate = delegate;
   s.should_quit = false;
   s.run_depth = state_ ? state_->run_depth + 1 : 1;
-
-  // TODO(stanisc): crbug.com/596190: Remove this code once the bug is fixed.
-  s.schedule_work_error_count = 0;
-  s.last_schedule_work_error_time = Time();
 
   RunState* previous_state = state_;
   state_ = &s;
@@ -118,13 +114,15 @@ void MessagePumpForUI::ScheduleWork() {
   InterlockedExchange(&work_state_, READY);
   UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem", MESSAGE_POST_ERROR,
                             MESSAGE_LOOP_PROBLEM_MAX);
-  state_->schedule_work_error_count++;
-  state_->last_schedule_work_error_time = Time::Now();
 }
 
 void MessagePumpForUI::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
   delayed_work_time_ = delayed_work_time;
   RescheduleTimer();
+}
+
+void MessagePumpForUI::EnableWmQuit() {
+  enable_wm_quit_ = true;
 }
 
 //-----------------------------------------------------------------------------
@@ -209,6 +207,9 @@ void MessagePumpForUI::WaitForWork() {
     if (delay < 0)  // Negative value means no timers waiting.
       delay = INFINITE;
 
+    // Tell the optimizer to retain these values to simplify analyzing hangs.
+    base::debug::Alias(&delay);
+    base::debug::Alias(&wait_flags);
     DWORD result = MsgWaitForMultipleObjectsEx(0, nullptr, delay, QS_ALLINPUT,
                                                wait_flags);
 
@@ -311,9 +312,11 @@ void MessagePumpForUI::RescheduleTimer() {
     if (delay_msec < USER_TIMER_MINIMUM)
       delay_msec = USER_TIMER_MINIMUM;
 
+    // Tell the optimizer to retain these values to simplify analyzing hangs.
+    base::debug::Alias(&delay_msec);
     // Create a WM_TIMER event that will wake us up to check for any pending
     // timers (in case we are running within a nested, external sub-pump).
-    BOOL ret = SetTimer(message_window_.hwnd(), 0, delay_msec, nullptr);
+    UINT_PTR ret = SetTimer(message_window_.hwnd(), 0, delay_msec, nullptr);
     if (ret)
       return;
     // If we can't set timers, we are in big trouble... but cross our fingers
@@ -342,17 +345,23 @@ bool MessagePumpForUI::ProcessNextWindowsMessage() {
 }
 
 bool MessagePumpForUI::ProcessMessageHelper(const MSG& msg) {
-  TRACE_EVENT1("base", "MessagePumpForUI::ProcessMessageHelper",
+  TRACE_EVENT1("base,toplevel", "MessagePumpForUI::ProcessMessageHelper",
                "message", msg.message);
   if (WM_QUIT == msg.message) {
-    // Receiving WM_QUIT is unusual and unexpected on most message loops.
+    if (enable_wm_quit_) {
+      // Repost the QUIT message so that it will be retrieved by the primary
+      // GetMessage() loop.
+      state_->should_quit = true;
+      PostQuitMessage(static_cast<int>(msg.wParam));
+      return false;
+    }
+
+    // WM_QUIT is the standard way to exit a GetMessage() loop. Our MessageLoop
+    // has its own quit mechanism, so WM_QUIT is unexpected and should be
+    // ignored when |enable_wm_quit_| is set to false.
     UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem",
                               RECEIVED_WM_QUIT_ERROR, MESSAGE_LOOP_PROBLEM_MAX);
-    // Repost the QUIT message so that it will be retrieved by the primary
-    // GetMessage() loop.
-    state_->should_quit = true;
-    PostQuitMessage(static_cast<int>(msg.wParam));
-    return false;
+    return true;
   }
 
   // While running our main message pump, we discard kMsgHaveWork messages.
@@ -429,8 +438,6 @@ void MessagePumpForIO::ScheduleWork() {
   InterlockedExchange(&work_state_, READY);  // Clarify that we didn't succeed.
   UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem", COMPLETION_POST_ERROR,
                             MESSAGE_LOOP_PROBLEM_MAX);
-  state_->schedule_work_error_count++;
-  state_->last_schedule_work_error_time = Time::Now();
 }
 
 void MessagePumpForIO::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
@@ -440,11 +447,11 @@ void MessagePumpForIO::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
   delayed_work_time_ = delayed_work_time;
 }
 
-void MessagePumpForIO::RegisterIOHandler(HANDLE file_handle,
-                                         IOHandler* handler) {
+HRESULT MessagePumpForIO::RegisterIOHandler(HANDLE file_handle,
+                                            IOHandler* handler) {
   HANDLE port = CreateIoCompletionPort(file_handle, port_.Get(),
                                        reinterpret_cast<ULONG_PTR>(handler), 1);
-  DPCHECK(port);
+  return (port != nullptr) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
 }
 
 bool MessagePumpForIO::RegisterJobObject(HANDLE job_handle,
@@ -510,6 +517,8 @@ void MessagePumpForIO::WaitForWork() {
   if (timeout < 0)  // Negative value means no timers waiting.
     timeout = INFINITE;
 
+  // Tell the optimizer to retain these values to simplify analyzing hangs.
+  base::debug::Alias(&timeout);
   WaitForIOCompletion(timeout, nullptr);
 }
 

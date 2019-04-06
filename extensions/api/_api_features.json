@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2018 Vivaldi Technologies AS. All rights reserved
 
 // This features file defines extension APIs implemented under
 // vivaldi/vivaldi_extensions.
@@ -46,6 +46,7 @@
     "contexts": [ "blessed_extension" ]
   },
   "extensionActionUtils": {
+    "vivaldi": true,
     "dependencies": [ "permission:extensionActionUtils" ],
     "contexts": [ "blessed_extension" ]
   },
@@ -57,6 +58,16 @@
   "importData": {
     "vivaldi": true,
     "dependencies": [ "permission:importData" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "infobars": {
+    "vivaldi": true,
+    "dependencies": [ "permission:infobars" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "mailPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:mailPrivate" ],
     "contexts": [ "blessed_extension" ]
   },
   "notes": {

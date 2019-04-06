@@ -4,8 +4,8 @@
 
 #import "ios/web/web_state/session_certificate_policy_cache_impl.h"
 
-#import "base/mac/bind_objc_block.h"
-#import "ios/testing/wait_util.h"
+#include "base/bind.h"
+#import "base/test/ios/wait_util.h"
 #include "ios/web/public/certificate_policy_cache.h"
 #import "ios/web/public/crw_session_certificate_policy_cache_storage.h"
 #include "ios/web/public/test/fakes/test_browser_state.h"
@@ -21,8 +21,8 @@
 #error "This file requires ARC support."
 #endif
 
-using testing::WaitUntilConditionOrTimeout;
-using testing::kWaitForJSCompletionTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForJSCompletionTimeout;
 
 namespace {
 // Synchronously checks |cache| for the specified cert and returns the judgment.
@@ -35,7 +35,7 @@ web::CertPolicy::Judgment GetJudgmenet(
   __block web::CertPolicy::Judgment judgement =
       web::CertPolicy::Judgment::UNKNOWN;
   __block bool completed = false;
-  web::WebThread::PostTask(web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
+  web::WebThread::PostTask(web::WebThread::IO, FROM_HERE, base::BindOnce(^{
                              completed = true;
                              judgement =
                                  cache->QueryPolicy(cert.get(), host, status);

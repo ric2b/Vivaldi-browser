@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/path_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -13,11 +14,12 @@
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/pref_names.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
@@ -27,7 +29,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if defined(OS_CHROMEOS)
 #include "base/command_line.h"
@@ -131,8 +133,6 @@ Profile::Delegate::~Delegate() {
 
 // static
 const char Profile::kProfileKey[] = "__PROFILE__";
-// This must be a string which can never be a valid domain.
-const char Profile::kNoHostedDomainFound[] = "NO_HOSTED_DOMAIN";
 
 // static
 void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -156,7 +156,10 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(extensions::pref_names::kAlertsInitialized,
                                 false);
 #endif
-  registry->RegisterStringPref(prefs::kSelectFileLastDirectory, std::string());
+  base::FilePath home;
+  base::PathService::Get(base::DIR_HOME, &home);
+  registry->RegisterStringPref(prefs::kSelectFileLastDirectory,
+                               home.MaybeAsASCII());
 #if !defined(OS_ANDROID)
   registry->RegisterDictionaryPref(prefs::kPartitionDefaultZoomLevel);
   registry->RegisterDictionaryPref(prefs::kPartitionPerHostZoomLevels);
@@ -173,13 +176,13 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // In the future we may want to maintain kApplicationLocale
   // in user's profile for other platforms as well.
   registry->RegisterStringPref(
-      prefs::kApplicationLocale,
-      std::string(),
+      language::prefs::kApplicationLocale, std::string(),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   registry->RegisterStringPref(prefs::kApplicationLocaleBackup, std::string());
   registry->RegisterStringPref(prefs::kApplicationLocaleAccepted,
                                std::string());
-  registry->RegisterStringPref(prefs::kCurrentWallpaperAppName, std::string());
+  registry->RegisterListPref(prefs::kAllowedUILocales,
+                             std::make_unique<base::ListValue>());
 #endif
 
 #if defined(OS_ANDROID)
@@ -215,12 +218,12 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kMediaRouterMediaRemotingEnabled, true);
   registry->RegisterListPref(prefs::kMediaRouterTabMirroringSources);
 
-#if defined(OS_CHROMEOS)
-  registry->RegisterBooleanPref(prefs::kAllowScreenLock, true);
-#endif
-
   registry->RegisterDictionaryPref(prefs::kWebShareVisitedTargets);
   registry->RegisterDictionaryPref(prefs::kExcludedSchemes);
+
+  // Instead of registering new prefs here, please create a static method and
+  // invoke it from RegisterProfilePrefs() in
+  // chrome/browser/prefs/browser_prefs.cc.
 }
 
 std::string Profile::GetDebugName() {

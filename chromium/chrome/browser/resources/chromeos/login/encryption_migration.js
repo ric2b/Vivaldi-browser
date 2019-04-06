@@ -24,7 +24,7 @@ var EncryptionMigrationUIState = {
 Polymer({
   is: 'encryption-migration',
 
-  behaviors: [I18nBehavior],
+  behaviors: [I18nBehavior, OobeDialogHostBehavior],
 
   properties: {
     /**
@@ -151,6 +151,19 @@ Polymer({
    */
   isUpdateDisabled_: function(isEnoughBattery, isSkipped) {
     return !isEnoughBattery || isSkipped;
+  },
+
+  /**
+   * Returns true if the 'Skip' button on the initial screen should be hidden.
+   * @return {boolean}
+   */
+  isSkipHidden_: function() {
+    // TODO(fukino): Instead of checking the board name here to behave
+    // differently, it's recommended to add a command-line flag to Chrome and
+    // make session_manager pass it based on a feature-based USE flag which is
+    // set in the appropriate board overlays.
+    // https://goo.gl/BbBkzg.
+    return this.i18n('migrationBoardName').startsWith('kevin');
   },
 
   /**

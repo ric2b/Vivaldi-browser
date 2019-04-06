@@ -42,6 +42,10 @@ const char kContentShellHostWindowSize[] = "content-shell-host-window-size";
 // Hides toolbar from content_shell's host window.
 const char kContentShellHideToolbar[] = "content-shell-hide-toolbar";
 
+// Forces all navigations to go through the browser process (in a
+// non-PlzNavigate way).
+const char kContentShellAlwaysFork[] = "content-shell-always-fork";
+
 std::vector<std::string> GetSideloadFontFiles() {
   std::vector<std::string> files;
   const base::CommandLine& command_line =
@@ -54,9 +58,9 @@ std::vector<std::string> GetSideloadFontFiles() {
   return files;
 }
 
-bool IsRunLayoutTestSwitchPresent() {
+bool IsRunWebTestsSwitchPresent() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kRunLayoutTest);
+      switches::kRunWebTests);
 }
 
 }  // namespace switches

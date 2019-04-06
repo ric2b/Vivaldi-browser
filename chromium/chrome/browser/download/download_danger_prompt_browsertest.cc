@@ -6,7 +6,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_danger_prompt.h"
@@ -20,9 +19,10 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/proto/csd.pb.h"
-#include "content/public/test/mock_download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ui_base_features.h"
@@ -74,7 +74,7 @@ class DownloadDangerPromptTest
         expected_action_(DownloadDangerPrompt::CANCEL),
         did_receive_callback_(false),
         test_safe_browsing_factory_(
-            base::MakeUnique<TestSafeBrowsingServiceFactory>()) {}
+            std::make_unique<TestSafeBrowsingServiceFactory>()) {}
 
   ~DownloadDangerPromptTest() override {}
 
@@ -107,7 +107,7 @@ class DownloadDangerPromptTest
 
   void SetUpExpectations(
       const DownloadDangerPrompt::Action& expected_action,
-      const content::DownloadDangerType& danger_type,
+      const download::DownloadDangerType& danger_type,
       const ClientDownloadResponse::Verdict& download_verdict,
       const std::string& token,
       bool from_download_api) {
@@ -147,19 +147,19 @@ class DownloadDangerPromptTest
     prompt_->InvokeActionForTesting(action);
   }
 
-  content::MockDownloadItem& download() { return download_; }
+  download::MockDownloadItem& download() { return download_; }
 
   DownloadDangerPrompt* prompt() { return prompt_; }
 
  private:
   void SetUpDownloadItemExpectations(
-      const content::DownloadDangerType& danger_type,
+      const download::DownloadDangerType& danger_type,
       const std::string& token) {
     EXPECT_CALL(download_, GetFileNameToReportUser()).WillRepeatedly(Return(
         base::FilePath(FILE_PATH_LITERAL("evil.exe"))));
     EXPECT_CALL(download_, GetDangerType()).WillRepeatedly(Return(danger_type));
     auto token_obj =
-        base::MakeUnique<DownloadProtectionService::DownloadPingToken>(token);
+        std::make_unique<DownloadProtectionService::DownloadPingToken>(token);
     download_.SetUserData(DownloadProtectionService::kDownloadPingTokenKey,
                           std::move(token_obj));
   }
@@ -201,7 +201,7 @@ class DownloadDangerPromptTest
     prompt_ = nullptr;
   }
 
-  content::MockDownloadItem download_;
+  download::MockDownloadItem download_;
   DownloadDangerPrompt* prompt_;
   DownloadDangerPrompt::Action expected_action_;
   bool did_receive_callback_;
@@ -219,13 +219,12 @@ class DownloadDangerPromptTest
 #define MAYBE_TestAll TestAll
 #endif
 IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
-  // ExperienceSampling: Set default actions for DownloadItem methods we need.
   GURL download_url(kTestDownloadUrl);
   ON_CALL(download(), GetURL()).WillByDefault(ReturnRef(download_url));
   ON_CALL(download(), GetReferrerUrl())
       .WillByDefault(ReturnRef(GURL::EmptyGURL()));
-  ON_CALL(download(), GetBrowserContext())
-      .WillByDefault(Return(browser()->profile()));
+  content::DownloadItemUtils::AttachInfo(&download(), browser()->profile(),
+                                         nullptr);
   base::FilePath empty_file_path;
   ON_CALL(download(), GetTargetFilePath())
       .WillByDefault(ReturnRef(empty_file_path));
@@ -234,9 +233,8 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
 
   // Clicking the Accept button should invoke the ACCEPT action.
   SetUpExpectations(DownloadDangerPrompt::ACCEPT,
-                    content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
-                    ClientDownloadResponse::DANGEROUS,
-                    kDownloadResponseToken,
+                    download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
+                    ClientDownloadResponse::DANGEROUS, kDownloadResponseToken,
                     false);
   EXPECT_CALL(download(), IsDangerous()).WillRepeatedly(Return(true));
   SimulatePromptAction(DownloadDangerPrompt::ACCEPT);
@@ -244,10 +242,8 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
 
   // Clicking the Cancel button should invoke the CANCEL action.
   SetUpExpectations(DownloadDangerPrompt::CANCEL,
-                    content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT,
-                    ClientDownloadResponse::UNCOMMON,
-                    std::string(),
-                    false);
+                    download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT,
+                    ClientDownloadResponse::UNCOMMON, std::string(), false);
   EXPECT_CALL(download(), IsDangerous()).WillRepeatedly(Return(true));
   SimulatePromptAction(DownloadDangerPrompt::CANCEL);
   VerifyExpectations(true);
@@ -255,10 +251,9 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
   // If the download is no longer dangerous (because it was accepted), the
   // dialog should DISMISS itself.
   SetUpExpectations(DownloadDangerPrompt::DISMISS,
-                    content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED,
+                    download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED,
                     ClientDownloadResponse::POTENTIALLY_UNWANTED,
-                    kDownloadResponseToken,
-                    false);
+                    kDownloadResponseToken, false);
   EXPECT_CALL(download(), IsDangerous()).WillRepeatedly(Return(false));
   download().NotifyObserversDownloadUpdated();
   VerifyExpectations(false);
@@ -266,10 +261,9 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
   // If the download is in a terminal state then the dialog should DISMISS
   // itself.
   SetUpExpectations(DownloadDangerPrompt::DISMISS,
-                    content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST,
+                    download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST,
                     ClientDownloadResponse::DANGEROUS_HOST,
-                    kDownloadResponseToken,
-                    false);
+                    kDownloadResponseToken, false);
   EXPECT_CALL(download(), IsDangerous()).WillRepeatedly(Return(true));
   EXPECT_CALL(download(), IsDone()).WillRepeatedly(Return(true));
   download().NotifyObserversDownloadUpdated();
@@ -278,9 +272,8 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
   // If the download is dangerous and is not in a terminal state, don't dismiss
   // the dialog.
   SetUpExpectations(DownloadDangerPrompt::ACCEPT,
-                    content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT,
-                    ClientDownloadResponse::DANGEROUS,
-                    kDownloadResponseToken,
+                    download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT,
+                    ClientDownloadResponse::DANGEROUS, kDownloadResponseToken,
                     false);
   EXPECT_CALL(download(), IsDangerous()).WillRepeatedly(Return(true));
   EXPECT_CALL(download(), IsDone()).WillRepeatedly(Return(false));
@@ -291,9 +284,8 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
 
   // If the download is not dangerous, no report will be sent.
   SetUpExpectations(DownloadDangerPrompt::ACCEPT,
-                    content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-                    ClientDownloadResponse::SAFE,
-                    kDownloadResponseToken,
+                    download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+                    ClientDownloadResponse::SAFE, kDownloadResponseToken,
                     false);
   SimulatePromptAction(DownloadDangerPrompt::ACCEPT);
   VerifyExpectations(false);
@@ -301,9 +293,8 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
   // If the containing tab is closed, the dialog should DISMISS itself.
   OpenNewTab();
   SetUpExpectations(DownloadDangerPrompt::DISMISS,
-                    content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
-                    ClientDownloadResponse::DANGEROUS,
-                    kDownloadResponseToken,
+                    download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
+                    ClientDownloadResponse::DANGEROUS, kDownloadResponseToken,
                     false);
   chrome::CloseTab(browser());
   VerifyExpectations(false);
@@ -313,9 +304,8 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
   // invoke the ACCEPT action, a report will be sent with type
   // DANGEROUS_DOWNLOAD_BY_API.
   SetUpExpectations(DownloadDangerPrompt::ACCEPT,
-                    content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
-                    ClientDownloadResponse::DANGEROUS,
-                    kDownloadResponseToken,
+                    download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL,
+                    ClientDownloadResponse::DANGEROUS, kDownloadResponseToken,
                     true);
   EXPECT_CALL(download(), IsDangerous()).WillRepeatedly(Return(true));
   SimulatePromptAction(DownloadDangerPrompt::ACCEPT);
@@ -326,10 +316,8 @@ IN_PROC_BROWSER_TEST_P(DownloadDangerPromptTest, MAYBE_TestAll) {
   // invoke the CANCEL action, a report will be sent with type
   // DANGEROUS_DOWNLOAD_BY_API.
   SetUpExpectations(DownloadDangerPrompt::CANCEL,
-                    content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT,
-                    ClientDownloadResponse::UNCOMMON,
-                    std::string(),
-                    true);
+                    download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT,
+                    ClientDownloadResponse::UNCOMMON, std::string(), true);
   EXPECT_CALL(download(), IsDangerous()).WillRepeatedly(Return(true));
   SimulatePromptAction(DownloadDangerPrompt::CANCEL);
   VerifyExpectations(true);
@@ -349,7 +337,7 @@ class DownloadDangerPromptBrowserTest : public DialogBrowserTest {
   enum InvocationType { USER_INITIATED, FROM_DOWNLOAD_API };
   DownloadDangerPromptBrowserTest() : download_url_(kTestDownloadUrl) {}
 
-  void RunTest(content::DownloadDangerType danger_type,
+  void RunTest(download::DownloadDangerType danger_type,
                InvocationType invocation_type) {
     danger_type_ = danger_type;
     invocation_type_ = invocation_type;
@@ -362,8 +350,6 @@ class DownloadDangerPromptBrowserTest : public DialogBrowserTest {
     ON_CALL(download_, GetURL()).WillByDefault(ReturnRef(download_url_));
     ON_CALL(download_, GetReferrerUrl())
         .WillByDefault(ReturnRef(GURL::EmptyGURL()));
-    ON_CALL(download_, GetBrowserContext())
-        .WillByDefault(Return(browser()->profile()));
     ON_CALL(download_, GetTargetFilePath())
         .WillByDefault(ReturnRef(empty_file_path_));
     ON_CALL(download_, IsDangerous()).WillByDefault(Return(true));
@@ -372,7 +358,8 @@ class DownloadDangerPromptBrowserTest : public DialogBrowserTest {
 
     // Set up test-specific parameters
     ON_CALL(download_, GetDangerType()).WillByDefault(Return(danger_type_));
-
+    content::DownloadItemUtils::AttachInfo(&download_, browser()->profile(),
+                                           nullptr);
     DownloadDangerPrompt::Create(
         &download_, browser()->tab_strip_model()->GetActiveWebContents(),
         invocation_type_ == FROM_DOWNLOAD_API, DownloadDangerPrompt::OnDone());
@@ -381,46 +368,46 @@ class DownloadDangerPromptBrowserTest : public DialogBrowserTest {
   const GURL download_url_;
   const base::FilePath empty_file_path_;
 
-  content::DownloadDangerType danger_type_;
+  download::DownloadDangerType danger_type_;
   InvocationType invocation_type_;
-  content::MockDownloadItem download_;
+  download::MockDownloadItem download_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadDangerPromptBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
                        InvokeUi_DangerousFile) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE, USER_INITIATED);
+  RunTest(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE, USER_INITIATED);
 }
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
                        InvokeUi_DangerousFileFromApi) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE, FROM_DOWNLOAD_API);
+  RunTest(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE, FROM_DOWNLOAD_API);
 }
 
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest, InvokeUi_DangerousUrl) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, USER_INITIATED);
+  RunTest(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, USER_INITIATED);
 }
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
                        InvokeUi_DangerousUrlFromApi) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, FROM_DOWNLOAD_API);
+  RunTest(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, FROM_DOWNLOAD_API);
 }
 
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
                        InvokeUi_UncommonContent) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT, USER_INITIATED);
+  RunTest(download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT, USER_INITIATED);
 }
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
                        InvokeUi_UncommonContentFromApi) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT, FROM_DOWNLOAD_API);
+  RunTest(download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT, FROM_DOWNLOAD_API);
 }
 
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
                        InvokeUi_PotentiallyUnwanted) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED, USER_INITIATED);
+  RunTest(download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED, USER_INITIATED);
 }
 IN_PROC_BROWSER_TEST_F(DownloadDangerPromptBrowserTest,
                        InvokeUi_PotentiallyUnwantedFromApi) {
-  RunTest(content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED,
+  RunTest(download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED,
           FROM_DOWNLOAD_API);
 }
 

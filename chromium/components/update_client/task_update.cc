@@ -6,7 +6,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/update_client/update_client.h"
@@ -14,7 +13,7 @@
 
 namespace update_client {
 
-TaskUpdate::TaskUpdate(UpdateEngine* update_engine,
+TaskUpdate::TaskUpdate(scoped_refptr<UpdateEngine> update_engine,
                        bool is_foreground,
                        const std::vector<std::string>& ids,
                        UpdateClient::CrxDataCallback crx_data_callback,
@@ -37,9 +36,8 @@ void TaskUpdate::Run() {
     return;
   }
 
-  update_engine_->Update(
-      is_foreground_, ids_, std::move(crx_data_callback_),
-      base::BindOnce(&TaskUpdate::TaskComplete, base::Unretained(this)));
+  update_engine_->Update(is_foreground_, ids_, std::move(crx_data_callback_),
+                         base::BindOnce(&TaskUpdate::TaskComplete, this));
 }
 
 void TaskUpdate::Cancel() {
@@ -56,7 +54,8 @@ void TaskUpdate::TaskComplete(Error error) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback_), this, error));
+      FROM_HERE, base::BindOnce(std::move(callback_),
+                                scoped_refptr<TaskUpdate>(this), error));
 }
 
 }  // namespace update_client

@@ -8,12 +8,12 @@
 #import <WebKit/WebKit.h>
 #import <XCTest/XCTest.h>
 
-#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #include "ios/web/public/test/http_server/html_response_provider.h"
@@ -36,7 +36,7 @@
 - (void)testJavaScriptInOmnibox {
   // TODO(crbug.com/703855): Keyboard entry inside the omnibox fails only on
   // iPad running iOS 10.
-  if (IsIPadIdiom() && base::ios::IsRunningOnIOS10OrLater())
+  if (IsIPadIdiom())
     return;
 
   // Preps the http server with two URLs serving content.
@@ -62,9 +62,7 @@
   NSString* script =
       [NSString stringWithFormat:@"javascript:location.href='%s'\n",
                                  destinationURL.spec().c_str()];
-
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_typeText(script)];
+  [ChromeEarlGreyUI focusOmniboxAndType:script];
 
   // In the omnibox, the new URL should be present, without the http:// prefix.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]

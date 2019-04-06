@@ -81,6 +81,7 @@ source_set("base") {
     "byte_queue.cc",
     "byte_queue.h",
     "callback_holder.h",
+    "callback_registry.h",
     "cdm_callback_promise.cc",
     "cdm_callback_promise.h",
     "cdm_config.h",
@@ -96,6 +97,8 @@ source_set("base") {
     "cdm_promise.h",
     "cdm_promise_adapter.cc",
     "cdm_promise_adapter.h",
+    "cdm_proxy_context.cc",
+    "cdm_proxy_context.h",
     "cdm_session_tracker.cc",
     "cdm_session_tracker.h",
     "channel_mixer.cc",
@@ -132,10 +135,14 @@ source_set("base") {
     "djb2.cc",
     "djb2.h",
     "eme_constants.h",
+    "encryption_pattern.cc",
+    "encryption_pattern.h",
     "encryption_scheme.cc",
     "encryption_scheme.h",
     "fake_audio_worker.cc",
     "fake_audio_worker.h",
+    "fallback_video_decoder.cc",
+    "fallback_video_decoder.h",
     "feedback_signal_accumulator.h",
     "hdr_metadata.cc",
     "hdr_metadata.h",
@@ -155,6 +162,7 @@ source_set("base") {
     "media_client.h",
     "media_content_type.cc",
     "media_content_type.h",
+    "media_controller.h",
     "media_export.h",
     "media_log.cc",
     "media_log.h",
@@ -165,6 +173,9 @@ source_set("base") {
     "media_permission.h",
     "media_resource.cc",
     "media_resource.h",
+    "media_status.cc",
+    "media_status.h",
+    "media_status_observer.h",
     "media_switches.cc",
     "media_switches.h",
     "media_track.cc",
@@ -210,8 +221,6 @@ source_set("base") {
     "renderer_factory_selector.cc",
     "renderer_factory_selector.h",
     "routing_token_callback.h",
-    "sample_format.cc",
-    "sample_format.h",
     "sample_rates.cc",
     "sample_rates.h",
     "seekable_buffer.cc",
@@ -226,8 +235,8 @@ source_set("base") {
     "stream_parser.h",
     "stream_parser_buffer.cc",
     "stream_parser_buffer.h",
+    "subsample_entry.cc",
     "subsample_entry.h",
-    "surface_manager.h",
     "text_cue.cc",
     "text_cue.h",
     "text_ranges.cc",
@@ -241,8 +250,12 @@ source_set("base") {
     "time_delta_interpolator.h",
     "time_source.h",
     "timestamp_constants.h",
+    "unaligned_shared_memory.cc",
+    "unaligned_shared_memory.h",
     "user_input_monitor.cc",
     "user_input_monitor.h",
+    "video_bitrate_allocation.cc",
+    "video_bitrate_allocation.h",
     "video_codecs.cc",
     "video_codecs.h",
     "video_color_space.cc",
@@ -253,6 +266,8 @@ source_set("base") {
     "video_decoder_config.h",
     "video_frame.cc",
     "video_frame.h",
+    "video_frame_layout.cc",
+    "video_frame_layout.h",
     "video_frame_metadata.cc",
     "video_frame_metadata.h",
     "video_frame_pool.cc",
@@ -275,16 +290,15 @@ source_set("base") {
   defines = []
   public_deps = [
     ":video_facing",
-    "//media:media_features",
+    "//media:media_buildflags",
     "//media:shared_memory_support",
     "//ui/gfx:color_space",
   ]
   deps = [
-    "//base/allocator:features",
+    "//base/allocator:buildflags",
     "//gpu/command_buffer/common",
-    "//ppapi/features",
     "//skia",
-    "//third_party/libaom:av1_features",
+    "//third_party/libaom:av1_buildflags",
     "//third_party/libyuv",
     "//third_party/widevine/cdm:headers",
     "//ui/display:display",
@@ -342,14 +356,24 @@ source_set("base") {
     ]
   }
 
+  # Note: should also work on is_posix || is_fuchsia
+  if (is_linux) {
+    sources += [
+      "scopedfd_helper.cc",
+      "scopedfd_helper.h",
+    ]
+  }
+
   if (is_win) {
     deps += [ "//media/base/win" ]
   }
 
-  if (use_low_memory_buffer) {
-    sources += [ "demuxer_memory_limit_lowmem.cc" ]
+  if (is_chromecast) {
+    sources += [ "demuxer_memory_limit_low.cc" ]
+  } else if (is_android) {
+    sources += [ "demuxer_memory_limit_android.cc" ]
   } else {
-    sources += [ "demuxer_memory_limit.cc" ]
+    sources += [ "demuxer_memory_limit_default.cc" ]
   }
 }
 
@@ -451,6 +475,7 @@ source_set("unit_tests") {
     "bind_to_current_loop_unittest.cc",
     "bit_reader_unittest.cc",
     "callback_holder_unittest.cc",
+    "callback_registry_unittest.cc",
     "channel_mixer_unittest.cc",
     "channel_mixing_matrix_unittest.cc",
     "container_names_unittest.cc",
@@ -458,12 +483,15 @@ source_set("unit_tests") {
     "decode_capabilities_unittest.cc",
     "decoder_buffer_queue_unittest.cc",
     "decoder_buffer_unittest.cc",
+    "decrypt_config_unittest.cc",
     "djb2_unittest.cc",
     "fake_audio_worker_unittest.cc",
     "fake_demuxer_stream_unittest.cc",
+    "fallback_video_decoder_unittest.cc",
     "feedback_signal_accumulator_unittest.cc",
     "gmock_callback_support_unittest.cc",
     "key_systems_unittest.cc",
+    "media_log_unittest.cc",
     "media_url_demuxer_unittest.cc",
     "mime_util_unittest.cc",
     "moving_average_unittest.cc",
@@ -477,13 +505,18 @@ source_set("unit_tests") {
     "silent_sink_suspender_unittest.cc",
     "sinc_resampler_unittest.cc",
     "stream_parser_unittest.cc",
+    "subsample_entry_unittest.cc",
     "text_ranges_unittest.cc",
     "text_renderer_unittest.cc",
     "time_delta_interpolator_unittest.cc",
+    "unaligned_shared_memory_unittest.cc",
+    "user_input_monitor_unittest.cc",
     "vector_math_unittest.cc",
+    "video_bitrate_allocation_unittest.cc",
     "video_codecs_unittest.cc",
     "video_color_space_unittest.cc",
     "video_decoder_config_unittest.cc",
+    "video_frame_layout_unittest.cc",
     "video_frame_pool_unittest.cc",
     "video_frame_unittest.cc",
     "video_util_unittest.cc",

@@ -14,12 +14,12 @@
 #include "gpu/command_buffer/client/client_transfer_cache.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/command_buffer/service/service_transfer_cache.h"
 #include "gpu/config/gpu_switches.h"
-#include "gpu/ipc/gl_in_process_context.h"
+#include "gpu/ipc/raster_in_process_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "ui/gl/gl_implementation.h"
@@ -29,10 +29,9 @@ namespace {
 
 class TransferCacheTest : public testing::Test {
  public:
-  TransferCacheTest()
-      : testing::Test(), test_client_entry_(std::vector<uint8_t>(100)) {}
+  TransferCacheTest() : test_client_entry_(std::vector<uint8_t>(100)) {}
+
   void SetUp() override {
-    bool is_offscreen = true;
     gpu::ContextCreationAttribs attribs;
     attribs.alpha_size = -1;
     attribs.depth_size = 24;
@@ -43,21 +42,14 @@ class TransferCacheTest : public testing::Test {
     attribs.bind_generates_resource = false;
     // Enable OOP rasterization.
     attribs.enable_oop_rasterization = true;
+    attribs.enable_raster_interface = true;
+    attribs.enable_gles2_interface = false;
 
-    // Add an OOP rasterization command line flag so that we set
-    // |chromium_raster_transport| features flag.
-    // TODO(vmpstr): Is there a better way to do this?
-    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableOOPRasterization)) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kEnableOOPRasterization);
-    }
-
-    context_ = gpu::GLInProcessContext::CreateWithoutInit();
+    context_ = std::make_unique<gpu::RasterInProcessContext>();
     auto result = context_->Initialize(
-        nullptr, nullptr, is_offscreen, gpu::kNullSurfaceHandle, nullptr,
-        attribs, gpu::SharedMemoryLimits(), &gpu_memory_buffer_manager_,
-        &image_factory_, nullptr, base::ThreadTaskRunnerHandle::Get());
+        /*service=*/nullptr, attribs, gpu::SharedMemoryLimits(),
+        &gpu_memory_buffer_manager_, &image_factory_,
+        /*gpu_channel_manager_delegate=*/nullptr);
 
     ASSERT_EQ(result, gpu::ContextResult::kSuccess);
     ASSERT_TRUE(context_->GetCapabilities().supports_oop_raster);
@@ -69,84 +61,99 @@ class TransferCacheTest : public testing::Test {
     return context_->GetTransferCacheForTest();
   }
 
-  gpu::gles2::GLES2Implementation* Gl() {
-    return context_->GetImplementation();
-  }
+  int decoder_id() { return context_->GetRasterDecoderIdForTest(); }
+
+  gpu::raster::RasterInterface* ri() { return context_->GetImplementation(); }
 
   gpu::ContextSupport* ContextSupport() {
-    return context_->GetImplementation();
+    return context_->GetContextSupport();
   }
 
   const ClientRawMemoryTransferCacheEntry& test_client_entry() const {
     return test_client_entry_;
   }
+  void CreateEntry(const ClientTransferCacheEntry& entry) {
+    auto* context_support = ContextSupport();
+    size_t size = entry.SerializedSize();
+    void* data = context_support->MapTransferCacheEntry(size);
+    ASSERT_TRUE(data);
+    entry.Serialize(base::make_span(static_cast<uint8_t*>(data), size));
+    context_support->UnmapAndCreateTransferCacheEntry(entry.UnsafeType(),
+                                                      entry.Id());
+  }
 
  private:
   viz::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   TestImageFactory image_factory_;
-  std::unique_ptr<gpu::GLInProcessContext> context_;
+  std::unique_ptr<gpu::RasterInProcessContext> context_;
   gl::DisableNullDrawGLBindings enable_pixel_output_;
   ClientRawMemoryTransferCacheEntry test_client_entry_;
 };
 
 TEST_F(TransferCacheTest, Basic) {
   auto* service_cache = ServiceTransferCache();
-  auto* gl = Gl();
   auto* context_support = ContextSupport();
 
   // Create an entry.
   const auto& entry = test_client_entry();
-  context_support->CreateTransferCacheEntry(entry);
-  gl->Finish();
+  CreateEntry(entry);
+  ri()->Finish();
 
   // Validate service-side state.
-  EXPECT_NE(nullptr, service_cache->GetEntry(entry.Type(), entry.Id()));
+  EXPECT_NE(nullptr,
+            service_cache->GetEntry(gpu::ServiceTransferCache::EntryKey(
+                decoder_id(), entry.Type(), entry.Id())));
 
   // Unlock on client side and flush to service.
-  context_support->UnlockTransferCacheEntries({{entry.Type(), entry.Id()}});
-  gl->Finish();
+  context_support->UnlockTransferCacheEntries(
+      {{entry.UnsafeType(), entry.Id()}});
+  ri()->Finish();
 
   // Re-lock on client side and validate state. No need to flush as lock is
   // local.
-  EXPECT_TRUE(context_support->ThreadsafeLockTransferCacheEntry(entry.Type(),
-                                                                entry.Id()));
+  EXPECT_TRUE(context_support->ThreadsafeLockTransferCacheEntry(
+      entry.UnsafeType(), entry.Id()));
 
   // Delete on client side, flush, and validate that deletion reaches service.
-  context_support->DeleteTransferCacheEntry(entry.Type(), entry.Id());
-  gl->Finish();
-  EXPECT_EQ(nullptr, service_cache->GetEntry(entry.Type(), entry.Id()));
+  context_support->DeleteTransferCacheEntry(entry.UnsafeType(), entry.Id());
+  ri()->Finish();
+  EXPECT_EQ(nullptr,
+            service_cache->GetEntry(gpu::ServiceTransferCache::EntryKey(
+                decoder_id(), entry.Type(), entry.Id())));
 }
 
 TEST_F(TransferCacheTest, Eviction) {
   auto* service_cache = ServiceTransferCache();
-  auto* gl = Gl();
   auto* context_support = ContextSupport();
 
   const auto& entry = test_client_entry();
   // Create an entry.
-  context_support->CreateTransferCacheEntry(entry);
-  gl->Finish();
+  CreateEntry(entry);
+  ri()->Finish();
 
   // Validate service-side state.
-  EXPECT_NE(nullptr, service_cache->GetEntry(entry.Type(), entry.Id()));
+  EXPECT_NE(nullptr,
+            service_cache->GetEntry(gpu::ServiceTransferCache::EntryKey(
+                decoder_id(), entry.Type(), entry.Id())));
 
   // Unlock on client side and flush to service.
-  context_support->UnlockTransferCacheEntries({{entry.Type(), entry.Id()}});
-  gl->Finish();
+  context_support->UnlockTransferCacheEntries(
+      {{entry.UnsafeType(), entry.Id()}});
+  ri()->Finish();
 
   // Evict on the service side.
   service_cache->SetCacheSizeLimitForTesting(0);
-  EXPECT_EQ(nullptr, service_cache->GetEntry(entry.Type(), entry.Id()));
+  EXPECT_EQ(nullptr,
+            service_cache->GetEntry(gpu::ServiceTransferCache::EntryKey(
+                decoder_id(), entry.Type(), entry.Id())));
 
   // Try to re-lock on the client side. This should fail.
-  EXPECT_FALSE(context_support->ThreadsafeLockTransferCacheEntry(entry.Type(),
-                                                                 entry.Id()));
+  EXPECT_FALSE(context_support->ThreadsafeLockTransferCacheEntry(
+      entry.UnsafeType(), entry.Id()));
 }
 
 TEST_F(TransferCacheTest, RawMemoryTransfer) {
   auto* service_cache = ServiceTransferCache();
-  auto* gl = Gl();
-  auto* context_support = ContextSupport();
 
   // Create an entry with some initialized data.
   std::vector<uint8_t> data;
@@ -157,12 +164,13 @@ TEST_F(TransferCacheTest, RawMemoryTransfer) {
 
   // Add the entry to the transfer cache
   ClientRawMemoryTransferCacheEntry client_entry(data);
-  context_support->CreateTransferCacheEntry(client_entry);
-  gl->Finish();
+  CreateEntry(client_entry);
+  ri()->Finish();
 
   // Validate service-side data matches.
   ServiceTransferCacheEntry* service_entry =
-      service_cache->GetEntry(client_entry.Type(), client_entry.Id());
+      service_cache->GetEntry(gpu::ServiceTransferCache::EntryKey(
+          decoder_id(), client_entry.Type(), client_entry.Id()));
   EXPECT_EQ(service_entry->Type(), client_entry.Type());
   const std::vector<uint8_t> service_data =
       static_cast<ServiceRawMemoryTransferCacheEntry*>(service_entry)->data();
@@ -176,8 +184,6 @@ TEST_F(TransferCacheTest, ImageMemoryTransfer) {
 #endif
 
   auto* service_cache = ServiceTransferCache();
-  auto* gl = Gl();
-  auto* context_support = ContextSupport();
 
   // Create a 10x10 image.
   SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
@@ -189,13 +195,14 @@ TEST_F(TransferCacheTest, ImageMemoryTransfer) {
   SkPixmap pixmap(info, data.data(), info.minRowBytes());
 
   // Add the entry to the transfer cache
-  ClientImageTransferCacheEntry client_entry(&pixmap, nullptr);
-  context_support->CreateTransferCacheEntry(client_entry);
-  gl->Finish();
+  ClientImageTransferCacheEntry client_entry(&pixmap, nullptr, false);
+  CreateEntry(client_entry);
+  ri()->Finish();
 
   // Validate service-side data matches.
   ServiceTransferCacheEntry* service_entry =
-      service_cache->GetEntry(client_entry.Type(), client_entry.Id());
+      service_cache->GetEntry(gpu::ServiceTransferCache::EntryKey(
+          decoder_id(), client_entry.Type(), client_entry.Id()));
   EXPECT_EQ(service_entry->Type(), client_entry.Type());
   sk_sp<SkImage> service_image =
       static_cast<ServiceImageTransferCacheEntry*>(service_entry)->image();

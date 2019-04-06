@@ -5,6 +5,9 @@
 #include "chrome/browser/accessibility/accessibility_extension_api.h"
 
 #include <stddef.h>
+#include <memory>
+#include <set>
+#include <vector>
 
 #include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
@@ -21,23 +24,26 @@
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/browser_accessibility_state.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/lazy_background_task_queue.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/image_util.h"
 #include "extensions/common/manifest_handlers/background_info.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/accessibility/accessibility_focus_ring_controller.h"
+#include "ash/public/interfaces/accessibility_focus_ring_controller.mojom.h"
+#include "ash/public/interfaces/constants.mojom.h"
+#include "ash/public/interfaces/event_rewriter_controller.mojom.h"
 #include "ash/shell.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_helper_bridge.h"
+#include "services/ui/public/interfaces/accessibility_manager.mojom.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event_sink.h"
-
-using ash::AccessibilityFocusRingController;
 #endif
 
 namespace accessibility_private = extensions::api::accessibility_private;
@@ -78,18 +84,19 @@ AccessibilityPrivateSetFocusRingFunction::Run() {
     rects.push_back(gfx::Rect(rect.left, rect.top, rect.width, rect.height));
   }
 
+  auto* accessibility_manager = chromeos::AccessibilityManager::Get();
   if (params->color) {
     SkColor color;
     if (!extensions::image_util::ParseHexColorString(*(params->color), &color))
       return RespondNow(Error("Could not parse hex color"));
-    AccessibilityFocusRingController::GetInstance()->SetFocusRingColor(color);
+    accessibility_manager->SetFocusRingColor(color, extension_id());
   } else {
-    AccessibilityFocusRingController::GetInstance()->ResetFocusRingColor();
+    accessibility_manager->ResetFocusRingColor(extension_id());
   }
 
   // Move the visible focus ring to cover all of these rects.
-  AccessibilityFocusRingController::GetInstance()->SetFocusRing(
-      rects, AccessibilityFocusRingController::PERSIST_FOCUS_RING);
+  accessibility_manager->SetFocusRing(
+      rects, ash::mojom::FocusRingBehavior::PERSIST_FOCUS_RING, extension_id());
 
   // Also update the touch exploration controller so that synthesized
   // touch events are anchored within the focused object.
@@ -125,7 +132,7 @@ AccessibilityPrivateSetHighlightsFunction::Run() {
     return RespondNow(Error("Could not parse hex color"));
 
   // Set the highlights to cover all of these rects.
-  AccessibilityFocusRingController::GetInstance()->SetHighlights(rects, color);
+  chromeos::AccessibilityManager::Get()->SetHighlights(rects, color);
 
   return RespondNow(NoArguments());
 #endif  // defined(OS_CHROMEOS)
@@ -151,15 +158,16 @@ AccessibilityPrivateSetKeyboardListenerFunction::Run() {
   if (!current_id.empty() && extension()->id() != current_id)
     return RespondNow(Error("Existing keyboard listener registered."));
 
-  if (enabled) {
-    manager->SetKeyboardListenerExtensionId(extension()->id(),
-                                            details.GetProfile());
-    manager->set_keyboard_listener_capture(capture);
-  } else {
-    manager->SetKeyboardListenerExtensionId(std::string(),
-                                            details.GetProfile());
-    manager->set_keyboard_listener_capture(false);
-  }
+  manager->SetKeyboardListenerExtensionId(
+      enabled ? extension()->id() : std::string(), details.GetProfile());
+
+  ash::mojom::EventRewriterControllerPtr event_rewriter_controller_ptr;
+  content::ServiceManagerConnection* connection =
+      content::ServiceManagerConnection::GetForProcess();
+  connection->GetConnector()->BindInterface(ash::mojom::kServiceName,
+                                            &event_rewriter_controller_ptr);
+  event_rewriter_controller_ptr->CaptureAllKeysForSpokenFeedback(enabled &&
+                                                                 capture);
   return RespondNow(NoArguments());
 #endif  // defined OS_CHROMEOS
 
@@ -232,13 +240,13 @@ AccessibilityPrivateSendSyntheticKeyEventFunction::Run() {
 
   int modifiers = 0;
   if (key_data->modifiers.get()) {
-    if (key_data->modifiers->ctrl)
+    if (key_data->modifiers->ctrl && *key_data->modifiers->ctrl)
       modifiers |= ui::EF_CONTROL_DOWN;
-    if (key_data->modifiers->alt)
+    if (key_data->modifiers->alt && *key_data->modifiers->alt)
       modifiers |= ui::EF_ALT_DOWN;
-    if (key_data->modifiers->search)
+    if (key_data->modifiers->search && *key_data->modifiers->search)
       modifiers |= ui::EF_COMMAND_DOWN;
-    if (key_data->modifiers->shift)
+    if (key_data->modifiers->shift && *key_data->modifiers->shift)
       modifiers |= ui::EF_SHIFT_DOWN;
   }
 
@@ -255,6 +263,36 @@ AccessibilityPrivateSendSyntheticKeyEventFunction::Run() {
       ash::Shell::GetPrimaryRootWindow()->GetHost()->event_sink();
   if (sink->OnEventFromSource(&synthetic_key_event).dispatcher_destroyed)
     return RespondNow(Error("Unable to dispatch key "));
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateOnSelectToSpeakStateChangedFunction::Run() {
+  std::unique_ptr<accessibility_private::OnSelectToSpeakStateChanged::Params>
+      params =
+          accessibility_private::OnSelectToSpeakStateChanged::Params::Create(
+              *args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  accessibility_private::SelectToSpeakState params_state = params->state;
+  ash::mojom::SelectToSpeakState state;
+  switch (params_state) {
+    case accessibility_private::SelectToSpeakState::
+        SELECT_TO_SPEAK_STATE_SELECTING:
+      state = ash::mojom::SelectToSpeakState::kSelectToSpeakStateSelecting;
+      break;
+    case accessibility_private::SelectToSpeakState::
+        SELECT_TO_SPEAK_STATE_SPEAKING:
+      state = ash::mojom::SelectToSpeakState::kSelectToSpeakStateSpeaking;
+      break;
+    case accessibility_private::SelectToSpeakState::
+        SELECT_TO_SPEAK_STATE_INACTIVE:
+    case accessibility_private::SelectToSpeakState::SELECT_TO_SPEAK_STATE_NONE:
+      state = ash::mojom::SelectToSpeakState::kSelectToSpeakStateInactive;
+  }
+
+  auto* accessibility_manager = chromeos::AccessibilityManager::Get();
+  accessibility_manager->OnSelectToSpeakStateChanged(state);
 
   return RespondNow(NoArguments());
 }

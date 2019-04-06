@@ -24,11 +24,13 @@ class TexturedQuadRenderer : public BaseRenderer {
   // Enqueues a textured quad for rendering. The GL will ultimately be issued
   // in |Flush|.
   void AddQuad(int texture_data_handle,
+               int overlay_texture_data_handle,
                const gfx::Transform& model_view_proj_matrix,
-               const gfx::RectF& copy_rect,
+               const gfx::RectF& clip_rect,
                float opacity,
                const gfx::SizeF& element_size,
-               float corner_radius);
+               float corner_radius,
+               bool blend);
 
   void Flush() override;
 
@@ -44,11 +46,13 @@ class TexturedQuadRenderer : public BaseRenderer {
  private:
   struct QuadData {
     int texture_data_handle;
+    int overlay_texture_data_handle;
     gfx::Transform model_view_proj_matrix;
-    gfx::RectF copy_rect;
+    gfx::RectF clip_rect;
     float opacity;
     gfx::SizeF element_size;
     float corner_radius;
+    bool blend;
   };
 
   static GLuint vertex_buffer_;
@@ -58,12 +62,14 @@ class TexturedQuadRenderer : public BaseRenderer {
   GLuint model_view_proj_matrix_handle_;
   GLuint corner_offset_handle_;
   GLuint opacity_handle_;
+  GLuint overlay_opacity_handle_;
   GLuint texture_handle_;
-  GLuint copy_rect_handler_;
+  GLuint overlay_texture_handle_;
 
   // Attributes
   GLuint corner_position_handle_;
   GLuint offset_scale_handle_;
+  GLuint uses_overlay_handle_;
 
   base::queue<QuadData> quad_queue_;
 

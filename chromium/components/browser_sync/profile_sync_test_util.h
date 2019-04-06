@@ -8,27 +8,22 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
-#include "base/test/sequenced_worker_pool_owner.h"
-#include "base/time/time.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/fake_gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/sync/driver/fake_sync_client.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/model/test_model_type_store_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "components/sync_sessions/fake_sync_sessions_client.h"
-
-namespace base {
-class Time;
-class TimeDelta;
-}
+#include "components/sync_sessions/mock_sync_sessions_client.h"
+#include "services/identity/public/cpp/identity_manager.h"
+#include "services/network/test/test_url_loader_factory.h"
 
 namespace history {
 class HistoryService;
@@ -42,13 +37,11 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-namespace browser_sync {
+namespace sync_sessions {
+class LocalSessionEventRouter;
+}
 
-// An empty syncer::NetworkTimeUpdateCallback. Used in various tests to
-// instantiate ProfileSyncService.
-void EmptyNetworkTimeUpdate(const base::Time&,
-                            const base::TimeDelta&,
-                            const base::TimeDelta&);
+namespace browser_sync {
 
 // Call this to register preferences needed for ProfileSyncService creation.
 void RegisterPrefsForProfileSyncService(
@@ -87,7 +80,7 @@ class ProfileSyncServiceBundle {
     // The client will call this callback to produce the SyncableService
     // specific to |type|.
     void SetSyncableServiceCallback(
-        const base::Callback<base::WeakPtr<syncer::SyncableService>(
+        const base::RepeatingCallback<base::WeakPtr<syncer::SyncableService>(
             syncer::ModelType type)>& get_syncable_service_callback);
 
     // The client will call this callback to produce the SyncService for the
@@ -138,6 +131,10 @@ class ProfileSyncServiceBundle {
     return url_request_context_.get();
   }
 
+  network::TestURLLoaderFactory* url_loader_factory() {
+    return &test_url_loader_factory_;
+  }
+
   sync_preferences::TestingPrefServiceSyncable* pref_service() {
     return &pref_service_;
   }
@@ -146,13 +143,15 @@ class ProfileSyncServiceBundle {
 
   FakeSigninManagerType* signin_manager() { return &signin_manager_; }
 
+  identity::IdentityManager* identity_manager() { return &identity_manager_; }
+
   AccountTrackerService* account_tracker() { return &account_tracker_; }
 
   syncer::SyncApiComponentFactoryMock* component_factory() {
     return &component_factory_;
   }
 
-  sync_sessions::FakeSyncSessionsClient* sync_sessions_client() {
+  sync_sessions::MockSyncSessionsClient* sync_sessions_client() {
     return &sync_sessions_client_;
   }
 
@@ -160,26 +159,33 @@ class ProfileSyncServiceBundle {
     return &fake_invalidation_service_;
   }
 
-  base::SingleThreadTaskRunner* db_thread() { return db_thread_.get(); }
+  base::SequencedTaskRunner* db_thread() { return db_thread_.get(); }
 
   void set_db_thread(
-      const scoped_refptr<base::SingleThreadTaskRunner>& db_thread) {
+      const scoped_refptr<base::SequencedTaskRunner>& db_thread) {
     db_thread_ = db_thread;
   }
 
  private:
-  scoped_refptr<base::SingleThreadTaskRunner> db_thread_;
-  base::SequencedWorkerPoolOwner worker_pool_owner_;
+  scoped_refptr<base::SequencedTaskRunner> db_thread_;
   sync_preferences::TestingPrefServiceSyncable pref_service_;
+  syncer::TestModelTypeStoreService model_type_store_service_;
   TestSigninClient signin_client_;
   AccountTrackerService account_tracker_;
   FakeSigninManagerType signin_manager_;
   FakeProfileOAuth2TokenService auth_service_;
-  syncer::SyncApiComponentFactoryMock component_factory_;
-  sync_sessions::FakeSyncSessionsClient sync_sessions_client_;
+  FakeGaiaCookieManagerService gaia_cookie_manager_service_;
+  identity::IdentityManager identity_manager_;
+  testing::NiceMock<syncer::SyncApiComponentFactoryMock> component_factory_;
+  std::unique_ptr<sync_sessions::LocalSessionEventRouter>
+      local_session_event_router_;
+  testing::NiceMock<sync_sessions::MockSyncSessionsClient>
+      sync_sessions_client_;
   invalidation::FakeInvalidationService fake_invalidation_service_;
+  // TODO(https://crbug.com/844968): Remove references to url_request_context_
+  // once the rest of the sync engine is migrated to network service.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_;
-  base::ScopedTempDir base_directory_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSyncServiceBundle);
 };

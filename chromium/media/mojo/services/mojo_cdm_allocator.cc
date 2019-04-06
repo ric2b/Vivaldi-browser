@@ -148,7 +148,11 @@ class MojoCdmVideoFrame : public VideoFrameImpl {
             PlaneOffset(kYPlane), PlaneOffset(kUPlane), PlaneOffset(kVPlane),
             Stride(kYPlane), Stride(kUPlane), Stride(kVPlane),
             base::TimeDelta::FromMicroseconds(Timestamp()));
-    frame->SetMojoSharedBufferDoneCB(mojo_shared_buffer_done_cb_);
+
+    // |frame| could fail to be created if the memory can't be mapped into
+    // this address space.
+    if (frame)
+      frame->SetMojoSharedBufferDoneCB(mojo_shared_buffer_done_cb_);
     return frame;
   }
 

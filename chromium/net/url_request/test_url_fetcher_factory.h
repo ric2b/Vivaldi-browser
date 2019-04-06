@@ -20,9 +20,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/thread_checker.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
-#include "net/proxy/proxy_server.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_fetcher_factory.h"
 #include "net/url_request/url_request_status.h"
@@ -111,6 +111,7 @@ class TestURLFetcher : public URLFetcher {
                            bool is_last_chunk) override;
   void SetLoadFlags(int load_flags) override;
   int GetLoadFlags() const override;
+  void SetAllowCredentials(bool allow_credentials) override {}
   void SetReferrer(const std::string& referrer) override;
   void SetReferrerPolicy(URLRequest::ReferrerPolicy referrer_policy) override;
   void SetExtraRequestHeaders(

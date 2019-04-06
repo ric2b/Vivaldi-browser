@@ -16,10 +16,31 @@ table th {
 table th {
   -webkit-padding-end: 16px;
   background: rgb(224, 236, 255);
-  cursor: pointer;
   padding-bottom: 4px;
   padding-top: 4px;
   white-space: nowrap;
+}
+
+table th[data-sort-key] {
+  cursor: pointer;
+}
+
+table th div.header-cell-container {
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
+  /* Make sure mouse events pass through to the underlying <th>. */
+  pointer-events: none;
+}
+
+table th div.header-cell-container div {
+  /* Make sure mouse events pass through to the underlying <th>. */
+  pointer-events: none;
+}
+
+table th div.header-cell-container div div {
+  /* Make sure mouse events pass through to the underlying <th>. */
+  pointer-events: none;
 }
 
 table td.title-cell {
@@ -37,19 +58,11 @@ table td div.title-cell-container {
 table td div.favicon-div {
   height: 16px;
   margin: 3px;
-  padding: 0;
-  width: 16px;
-}
-
-table td div.favicon-div img {
-  height: 16px;
-  width: 16px;
+  min-width: 16px;
 }
 
 table td div.title-div {
-  margin: 0;
   overflow: hidden;
-  padding: 0;
   white-space: nowrap;
 }
 
@@ -59,13 +72,28 @@ table td.tab-url-cell {
   white-space: nowrap;
 }
 
+table td.visibility-cell {
+  width: 6em;
+}
+
+table td.loading-state-cell {
+  width: 6em;
+}
+
+table td.state-cell {
+  width: 10em;
+}
+
 table td.boolean-cell,
-table td.discard-count-cell {
+table td.discard-count-cell,
+table td.reactivation-score-cell,
+table td.site-engagement-score-cell,
+table td.utility-rank-cell {
   text-align: center;
 }
 
-table td div.is-auto-discardable-link,
-table td.discard-links-cell {
+table td div[is=action-link],
+table td.actions-cell {
   font-size: 0.6rem;
 }
 
@@ -73,12 +101,40 @@ table tr:hover {
   background: rgb(255, 255, 187);
 }
 
-th.sort-column::after {
+th div.header-cell-container::after {
   content: '▲';
-  position: absolute;
+  opacity: 0;
 }
 
-th[data-sort-reverse].sort-column::after {
+th.sort-column div.header-cell-container::after {
+  content: '▲';
+  opacity: 1;
+}
+
+th[data-sort-reverse].sort-column div.header-cell-container::after {
   content: '▼';
+  opacity: 1;
+}
+
+.tooltip-container {
+  position: relative;
+}
+
+.tooltip {
+  background: black;
+  color: white;
+  display: none;
+  font-size: 0.75rem;
+  left: 50%;
+  margin-left: -100px;
+  margin-top: 4px;
+  padding: 4px;
   position: absolute;
+  top: 100%;
+  width: 200px;
+  z-index: 1;
+}
+
+.tooltip-container:hover > .tooltip {
+  display: block;
 }

@@ -14,11 +14,11 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/auth_status_consumer.h"
 #include "chromeos/login/auth/user_context.h"
-#include "components/proximity_auth/screenlock_bridge.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -33,7 +33,7 @@ void EndReauthAttempt();
 
 // Performs the actual reauth flow and returns the user context it obtains.
 class ReauthHandler : public content::NotificationObserver,
-                      public chromeos::AuthStatusConsumer {
+                      public AuthStatusConsumer {
  public:
   explicit ReauthHandler(EasyUnlockReauth::UserContextCallback callback)
       : callback_(callback) {}
@@ -60,7 +60,7 @@ class ReauthHandler : public content::NotificationObserver,
                                 content::NotificationService::AllSources());
 
     SessionManagerClient* session_manager =
-        chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
+        DBusThreadManager::Get()->GetSessionManagerClient();
     session_manager->RequestLockScreen();
     return true;
   }
@@ -95,8 +95,8 @@ class ReauthHandler : public content::NotificationObserver,
         ->ShowUserPodCustomIcon(lock_users[0]->GetAccountId(), icon_options);
   }
 
-  // chromeos::AuthStatusConsumer:
-  void OnAuthSuccess(const chromeos::UserContext& user_context) override {
+  // AuthStatusConsumer:
+  void OnAuthSuccess(const UserContext& user_context) override {
     DCHECK(base::MessageLoopForUI::IsCurrent());
     callback_.Run(user_context);
     // Schedule deletion.
@@ -104,7 +104,7 @@ class ReauthHandler : public content::NotificationObserver,
         FROM_HERE, base::BindOnce(&EndReauthAttempt));
   }
 
-  void OnAuthFailure(const chromeos::AuthFailure& error) override {}
+  void OnAuthFailure(const AuthFailure& error) override {}
 
  private:
   content::NotificationRegistrar notification_registrar_;

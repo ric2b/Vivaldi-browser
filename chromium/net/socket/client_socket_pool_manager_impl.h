@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
+#include "net/base/net_export.h"
 #include "net/cert/cert_database.h"
 #include "net/http/http_network_session.h"
 #include "net/socket/client_socket_pool_manager.h"
@@ -40,9 +41,11 @@ class SSLClientSocketPool;
 class SSLConfigService;
 class TransportClientSocketPool;
 class TransportSecurityState;
+class WebSocketEndpointLockManager;
 
-class ClientSocketPoolManagerImpl : public ClientSocketPoolManager,
-                                    public CertDatabase::Observer {
+class NET_EXPORT_PRIVATE ClientSocketPoolManagerImpl
+    : public ClientSocketPoolManager,
+      public CertDatabase::Observer {
  public:
   ClientSocketPoolManagerImpl(
       NetLog* net_log,
@@ -57,6 +60,7 @@ class ClientSocketPoolManagerImpl : public ClientSocketPoolManager,
       CTPolicyEnforcer* ct_policy_enforcer,
       const std::string& ssl_session_cache_shard,
       SSLConfigService* ssl_config_service,
+      WebSocketEndpointLockManager* websocket_endpoint_lock_manager,
       HttpNetworkSession::SocketPoolType pool_type);
   ~ClientSocketPoolManagerImpl() override;
 
@@ -107,7 +111,7 @@ class ClientSocketPoolManagerImpl : public ClientSocketPoolManager,
   CTVerifier* const cert_transparency_verifier_;
   CTPolicyEnforcer* const ct_policy_enforcer_;
   const std::string ssl_session_cache_shard_;
-  const scoped_refptr<SSLConfigService> ssl_config_service_;
+  SSLConfigService* const ssl_config_service_;
   const HttpNetworkSession::SocketPoolType pool_type_;
 
   // Note: this ordering is important.

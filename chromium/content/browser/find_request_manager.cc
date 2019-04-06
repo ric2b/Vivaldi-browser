@@ -9,9 +9,10 @@
 #include "base/containers/queue.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/associated_interface_provider_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/input_messages.h"
 #include "content/public/browser/guest_mode.h"
+#include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 
 namespace content {
 
@@ -33,10 +34,10 @@ std::vector<FrameTreeNode*> GetChildren(FrameTreeNode* node) {
   for (size_t i = 0; i != node->child_count(); ++i)
     children[i] = node->child_at(i);
 
-  if (auto* inner_contents = WebContentsImpl::FromOuterFrameTreeNode(node)) {
-    children.push_back(inner_contents->GetMainFrame()->frame_tree_node());
+  if (auto* contents = WebContentsImpl::FromOuterFrameTreeNode(node)) {
+    children.push_back(contents->GetMainFrame()->frame_tree_node());
   } else {
-    auto* contents = WebContentsImpl::FromFrameTreeNode(node);
+    contents = WebContentsImpl::FromFrameTreeNode(node);
     if (node->IsMainFrame() && contents->GetBrowserPluginEmbedder()) {
       for (auto* inner_contents : contents->GetInnerWebContents()) {
         children.push_back(inner_contents->GetMainFrame()->frame_tree_node());
@@ -218,10 +219,8 @@ class FindRequestManager::FrameObserver : public WebContentsObserver {
 FindRequestManager::ActivateNearestFindResultState::
 ActivateNearestFindResultState() = default;
 FindRequestManager::ActivateNearestFindResultState::
-ActivateNearestFindResultState(float x, float y)
-    : current_request_id(GetNextID()),
-      x(x),
-      y(y) {}
+    ActivateNearestFindResultState(float x, float y)
+    : current_request_id(GetNextID()), point(x, y) {}
 FindRequestManager::ActivateNearestFindResultState::
 ~ActivateNearestFindResultState() {}
 
@@ -271,8 +270,13 @@ void FindRequestManager::Find(int request_id,
 
 void FindRequestManager::StopFinding(StopFindAction action) {
   for (WebContentsImpl* contents : contents_->GetWebContentsAndAllInner()) {
-    contents->SendToAllFrames(
-        new FrameMsg_StopFinding(MSG_ROUTING_NONE, action));
+    for (FrameTreeNode* node : contents->GetFrameTree()->Nodes()) {
+      RenderFrameHostImpl* rfh = node->current_frame_host();
+      if (!CheckFrame(rfh) || !rfh->IsRenderFrameLive())
+        continue;
+      rfh->GetFindInPage()->StopFinding(
+          static_cast<blink::mojom::StopFindAction>(action));
+    }
   }
 
   current_session_id_ = kInvalidId;
@@ -284,7 +288,7 @@ void FindRequestManager::StopFinding(StopFindAction action) {
 #endif
 }
 
-void FindRequestManager::OnFindReply(RenderFrameHost* rfh,
+void FindRequestManager::OnFindReply(RenderFrameHostImpl* rfh,
                                      int request_id,
                                      int number_of_matches,
                                      const gfx::Rect& selection_rect,
@@ -338,8 +342,7 @@ void FindRequestManager::OnFindReply(RenderFrameHost* rfh,
         // The new active match is in a different frame than the previous, so
         // the previous active frame needs to be informed (to clear its active
         // match highlighting).
-        active_frame_->Send(new FrameMsg_ClearActiveFindMatch(
-            active_frame_->GetRoutingID()));
+        ClearActiveFindMatch();
       }
       active_frame_ = rfh;
       relative_active_match_ordinal_ = active_match_ordinal;
@@ -372,6 +375,19 @@ void FindRequestManager::OnFindReply(RenderFrameHost* rfh,
   }
 
   FinalUpdateReceived(request_id, rfh);
+}
+
+void FindRequestManager::OnActivateNearestFindResultReply(
+    RenderFrameHostImpl* rfh,
+    int request_id,
+    const gfx::Rect& active_match_rect,
+    int number_of_matches,
+    int active_match_ordinal,
+    bool final_update) {
+  if (active_match_ordinal > 0)
+    contents_->SetFocusedFrame(rfh->frame_tree_node(), rfh->GetSiteInstance());
+  OnFindReply(rfh, request_id, number_of_matches, active_match_rect,
+              active_match_ordinal, final_update);
 }
 
 void FindRequestManager::RemoveFrame(RenderFrameHost* rfh) {
@@ -436,6 +452,10 @@ void FindRequestManager::RemoveFrame(RenderFrameHost* rfh) {
   }
 }
 
+void FindRequestManager::ClearActiveFindMatch() {
+  active_frame_->GetFindInPage()->ClearActiveFindMatch();
+}
+
 #if defined(OS_ANDROID)
 void FindRequestManager::ActivateNearestFindResult(float x, float y) {
   if (current_session_id_ == kInvalidId)
@@ -447,20 +467,24 @@ void FindRequestManager::ActivateNearestFindResult(float x, float y) {
   // frame) from the point (x, y), defined in find-in-page coordinates.
   for (WebContentsImpl* contents : contents_->GetWebContentsAndAllInner()) {
     for (FrameTreeNode* node : contents->GetFrameTree()->Nodes()) {
-      RenderFrameHost* rfh = node->current_frame_host();
+      RenderFrameHostImpl* rfh = node->current_frame_host();
 
       if (!CheckFrame(rfh) || !rfh->IsRenderFrameLive())
         continue;
 
       activate_.pending_replies.insert(rfh);
-      rfh->Send(new FrameMsg_GetNearestFindResult(rfh->GetRoutingID(),
-                                                  activate_.current_request_id,
-                                                  activate_.x, activate_.y));
+      // Lifetime of FindRequestManager > RenderFrameHost > Mojo connection,
+      // so it's safe to bind |this| and |rfh|.
+      rfh->GetFindInPage()->GetNearestFindResult(
+          activate_.point,
+          base::BindOnce(&FindRequestManager::OnGetNearestFindResultReply,
+                         base::Unretained(this), rfh,
+                         activate_.current_request_id));
     }
   }
 }
 
-void FindRequestManager::OnGetNearestFindResultReply(RenderFrameHost* rfh,
+void FindRequestManager::OnGetNearestFindResultReply(RenderFrameHostImpl* rfh,
                                                      int request_id,
                                                      float distance) {
   if (request_id != activate_.current_request_id ||
@@ -484,7 +508,7 @@ void FindRequestManager::RequestFindMatchRects(int current_version) {
   // Request the latest find match rects from each frame.
   for (WebContentsImpl* contents : contents_->GetWebContentsAndAllInner()) {
     for (FrameTreeNode* node : contents->GetFrameTree()->Nodes()) {
-      RenderFrameHost* rfh = node->current_frame_host();
+      RenderFrameHostImpl* rfh = node->current_frame_host();
 
       if (!CheckFrame(rfh) || !rfh->IsRenderFrameLive())
         continue;
@@ -493,7 +517,9 @@ void FindRequestManager::RequestFindMatchRects(int current_version) {
       auto it = match_rects_.frame_rects.find(rfh);
       int version = (it != match_rects_.frame_rects.end()) ? it->second.version
                                                            : kInvalidId;
-      rfh->Send(new FrameMsg_FindMatchRects(rfh->GetRoutingID(), version));
+      rfh->GetFindInPage()->FindMatchRects(
+          version, base::BindOnce(&FindRequestManager::OnFindMatchRectsReply,
+                                  base::Unretained(this), rfh));
     }
   }
 }
@@ -752,9 +778,14 @@ void FindRequestManager::RemoveNearestFindResultPendingReply(
   activate_.pending_replies.erase(it);
   if (activate_.pending_replies.empty() &&
       CheckFrame(activate_.nearest_frame)) {
-    activate_.nearest_frame->Send(new FrameMsg_ActivateNearestFindResult(
-        activate_.nearest_frame->GetRoutingID(),
-        current_session_id_, activate_.x, activate_.y));
+    // Lifetime of FindRequestManager > activate_.nearest_frame  > Mojo
+    // connection, so it's safe to bind |this| and |activate_.nearest_frame|
+    activate_.nearest_frame->GetFindInPage()->ActivateNearestFindResult(
+        activate_.point,
+        base::BindOnce(&FindRequestManager::OnActivateNearestFindResultReply,
+                       base::Unretained(this),
+                       base::Unretained(activate_.nearest_frame),
+                       current_session_id_));
   }
 }
 
@@ -776,11 +807,11 @@ void FindRequestManager::RemoveFindMatchRectsPendingReply(
                             true /* forward */,
                             true /* matches_only */,
                             false /* wrap */)) {
-        auto it = match_rects_.frame_rects.find(frame);
-        if (it == match_rects_.frame_rects.end())
+        auto frame_it = match_rects_.frame_rects.find(frame);
+        if (frame_it == match_rects_.frame_rects.end())
           continue;
 
-        std::vector<gfx::RectF>& frame_rects = it->second.rects;
+        std::vector<gfx::RectF>& frame_rects = frame_it->second.rects;
         aggregate_rects.insert(
             aggregate_rects.end(), frame_rects.begin(), frame_rects.end());
       }

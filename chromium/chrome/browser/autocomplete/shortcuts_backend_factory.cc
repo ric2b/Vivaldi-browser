@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -15,7 +14,7 @@
 #include "components/omnibox/browser/shortcuts_backend.h"
 #include "components/omnibox/browser/shortcuts_constants.h"
 #include "components/prefs/pref_service.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/autocomplete/shortcuts_extensions_manager.h"
@@ -93,13 +92,13 @@ scoped_refptr<ShortcutsBackend> ShortcutsBackendFactory::CreateShortcutsBackend(
     bool suppress_db) {
   scoped_refptr<ShortcutsBackend> backend(new ShortcutsBackend(
       TemplateURLServiceFactory::GetForProfile(profile),
-      base::MakeUnique<UIThreadSearchTermsData>(profile),
+      std::make_unique<UIThreadSearchTermsData>(profile),
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS),
       profile->GetPath().Append(kShortcutsDatabaseName), suppress_db));
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   auto extensions_manager =
-      base::MakeUnique<ShortcutsExtensionsManager>(profile);
+      std::make_unique<ShortcutsExtensionsManager>(profile);
   profile->SetUserData(kShortcutsExtensionsManagerKey,
                        std::move(extensions_manager));
 #endif

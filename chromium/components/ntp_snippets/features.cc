@@ -20,6 +20,7 @@ const base::Feature kRemoteSuggestionsBackendFeature{
 
 // Keep sorted, and keep nullptr at the end.
 const base::Feature* const kAllFeatures[] = {
+    &kArticleSuggestionsExpandableHeader,
     &kArticleSuggestionsFeature,
     &kBookmarkSuggestionsFeature,
     &kBreakingNewsPushFeature,
@@ -30,11 +31,11 @@ const base::Feature* const kAllFeatures[] = {
     &kIncreasedVisibility,
     &kKeepPrefetchedContentSuggestions,
     &kNotificationsFeature,
-    &kPhysicalWebPageSuggestionsFeature,
     &kPublisherFaviconsFromNewServerFeature,
-    &kRecentOfflineTabSuggestionsFeature,
-    &kRemoteSuggestionsBackendFeature,
-    nullptr};
+    &kRemoteSuggestionsBackendFeature};
+
+const base::Feature kArticleSuggestionsExpandableHeader{
+    "NTPArticleSuggestionsExpandableHeader", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kArticleSuggestionsFeature{
     "NTPArticleSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -42,14 +43,8 @@ const base::Feature kArticleSuggestionsFeature{
 const base::Feature kBookmarkSuggestionsFeature{
     "NTPBookmarkSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kRecentOfflineTabSuggestionsFeature{
-    "NTPOfflinePageSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kIncreasedVisibility{"NTPSnippetsIncreasedVisibility",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kPhysicalWebPageSuggestionsFeature{
-    "NTPPhysicalWebPageSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kForeignSessionsSuggestionsFeature{
     "NTPForeignSessionsSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -164,5 +159,11 @@ const base::Feature kKeepPrefetchedContentSuggestions{
 
 const base::Feature kContentSuggestionsDebugLog{
     "ContentSuggestionsDebugLog", base::FEATURE_DISABLED_BY_DEFAULT};
+
+std::vector<const base::Feature*> GetAllFeatures() {
+  // Skip the last feature as it's a nullptr.
+  return std::vector<const base::Feature*>(
+      kAllFeatures, kAllFeatures + arraysize(kAllFeatures));
+}
 
 }  // namespace ntp_snippets

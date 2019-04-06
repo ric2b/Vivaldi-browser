@@ -5,16 +5,16 @@
 #include "chrome/services/media_gallery_util/media_gallery_util_service.h"
 
 #include "build/build_config.h"
-#include "chrome/services/media_gallery_util/media_parser.h"
+#include "chrome/services/media_gallery_util/media_parser_factory.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace {
 
-void OnMediaParserRequest(
+void OnMediaParserFactoryRequest(
     service_manager::ServiceContextRefFactory* ref_factory,
-    chrome::mojom::MediaParserRequest request) {
+    chrome::mojom::MediaParserFactoryRequest request) {
   mojo::MakeStrongBinding(
-      std::make_unique<MediaParser>(ref_factory->CreateRef()),
+      std::make_unique<MediaParserFactory>(ref_factory->CreateRef()),
       std::move(request));
 }
 
@@ -31,9 +31,9 @@ MediaGalleryUtilService::CreateService() {
 
 void MediaGalleryUtilService::OnStart() {
   ref_factory_ = std::make_unique<service_manager::ServiceContextRefFactory>(
-      base::Bind(&service_manager::ServiceContext::RequestQuit,
-                 base::Unretained(context())));
-  registry_.AddInterface(base::Bind(&OnMediaParserRequest, ref_factory_.get()));
+      context()->CreateQuitClosure());
+  registry_.AddInterface(
+      base::Bind(&OnMediaParserFactoryRequest, ref_factory_.get()));
 }
 
 void MediaGalleryUtilService::OnBindInterface(

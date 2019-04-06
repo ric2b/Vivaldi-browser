@@ -20,11 +20,11 @@
 #include "base/logging.h"
 #include "gtest/gtest.h"
 #include "test/errors.h"
-#include "test/linux/scoped_pr_set_ptracer.h"
 #include "test/multiprocess.h"
 #include "util/linux/direct_ptrace_connection.h"
 #include "util/linux/exception_handler_client.h"
 #include "util/linux/ptrace_client.h"
+#include "util/linux/scoped_pr_set_ptracer.h"
 #include "util/synchronization/semaphore.h"
 #include "util/thread/thread.h"
 
@@ -101,25 +101,25 @@ class TestDelegate : public ExceptionHandlerServer::Delegate {
   }
 
   bool HandleException(pid_t client_process_id,
-                       VMAddress exception_information_address) override {
+                       const ClientInformation& info) override {
     DirectPtraceConnection connection;
     bool connected = connection.Initialize(client_process_id);
     EXPECT_TRUE(connected);
 
-    last_exception_address_ = exception_information_address;
+    last_exception_address_ = info.exception_information_address;
     last_client_ = client_process_id;
     sem_.Signal();
     return connected;
   }
 
   bool HandleExceptionWithBroker(pid_t client_process_id,
-                                 VMAddress exception_information_address,
+                                 const ClientInformation& info,
                                  int broker_sock) override {
     PtraceClient client;
     bool connected = client.Initialize(broker_sock, client_process_id);
     EXPECT_TRUE(connected);
 
-    last_exception_address_ = exception_information_address,
+    last_exception_address_ = info.exception_information_address,
     last_client_ = client_process_id;
     sem_.Signal();
     return connected;
@@ -141,6 +141,25 @@ class MockPtraceStrategyDecider : public PtraceStrategyDecider {
   ~MockPtraceStrategyDecider() {}
 
   Strategy ChooseStrategy(int sock, const ucred& client_credentials) override {
+    if (strategy_ == Strategy::kUseBroker) {
+      ServerToClientMessage message = {};
+      message.type = ServerToClientMessage::kTypeForkBroker;
+
+      Errno status;
+      bool result = LoggingWriteFile(sock, &message, sizeof(message)) &&
+                    LoggingReadFileExactly(sock, &status, sizeof(status));
+      EXPECT_TRUE(result);
+
+      if (!result) {
+        return Strategy::kError;
+      }
+
+      if (status != 0) {
+        errno = status;
+        ADD_FAILURE() << ErrnoMessage("Handler Client ForkBroker");
+        return Strategy::kNoPtrace;
+      }
+    }
     return strategy_;
   }
 
@@ -205,7 +224,7 @@ class ExceptionHandlerServerTest : public testing::Test {
       // If the current ptrace_scope is restricted, the broker needs to be set
       // as the ptracer for this process. Setting this process as its own
       // ptracer allows the broker to inherit this condition.
-      ScopedPrSetPtracer set_ptracer(getpid());
+      ScopedPrSetPtracer set_ptracer(getpid(), /* may_log= */ true);
 
       ExceptionHandlerClient client(server_test_->SockToHandler());
       ASSERT_EQ(client.RequestCrashDump(info), 0);
@@ -289,7 +308,7 @@ TEST_F(ExceptionHandlerServerTest, RequestCrashDumpNoPtrace) {
 }
 
 TEST_F(ExceptionHandlerServerTest, RequestCrashDumpForkBroker) {
-  ExpectCrashDumpUsingStrategy(PtraceStrategyDecider::Strategy::kForkBroker,
+  ExpectCrashDumpUsingStrategy(PtraceStrategyDecider::Strategy::kUseBroker,
                                true);
 }
 

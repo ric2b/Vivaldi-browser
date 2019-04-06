@@ -4,17 +4,17 @@
 
 #include "chrome/browser/ui/ash/network/network_state_notifier.h"
 
-#include "ash/resources/grit/ash_resources.h"
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/chromeos/net/shill_error.h"
-#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "chromeos/network/network_configuration_handler.h"
 #include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_state.h"
@@ -24,8 +24,7 @@
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/public/cpp/message_center_switches.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace chromeos {
 
@@ -65,10 +64,10 @@ base::string16 GetConnectErrorString(const std::string& error_name) {
 const gfx::VectorIcon& GetErrorNotificationVectorIcon(
     const std::string& network_type) {
   if (network_type == shill::kTypeVPN)
-    return kNotificationVpnIcon;
+    return ash::kNotificationVpnIcon;
   if (network_type == shill::kTypeCellular)
-    return kNotificationMobileDataOffIcon;
-  return kNotificationWifiOffIcon;
+    return ash::kNotificationMobileDataOffIcon;
+  return ash::kNotificationWifiOffIcon;
 }
 
 void ShowErrorNotification(const std::string& service_path,
@@ -91,8 +90,7 @@ void ShowErrorNotification(const std::string& service_path,
           GetErrorNotificationVectorIcon(network_type),
           message_center::SystemNotificationWarningLevel::CRITICAL_WARNING);
   notification->set_priority(message_center::SYSTEM_PRIORITY);
-  NotificationDisplayService::GetForSystemNotifications()->Display(
-      NotificationHandler::Type::TRANSIENT, *notification);
+  SystemNotificationHelper::GetInstance()->Display(*notification);
 }
 
 bool ShouldConnectFailedNotificationBeShown(const std::string& error_name,
@@ -290,10 +288,9 @@ void NetworkStateNotifier::UpdateCellularActivating(
   const gfx::Image& icon =
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(
           cellular->network_technology() == shill::kNetworkTechnologyLte
-              ? IDR_AURA_UBER_TRAY_NETWORK_NOTIFICATION_LTE
-              : IDR_AURA_UBER_TRAY_NETWORK_NOTIFICATION_3G);
-  NotificationDisplayService::GetForSystemNotifications()->Display(
-      NotificationHandler::Type::TRANSIENT,
+              ? IDR_NETWORK_ACTIVATED_LTE
+              : IDR_NETWORK_ACTIVATED_3G);
+  SystemNotificationHelper::GetInstance()->Display(
       *message_center::Notification::CreateSystemNotification(
           kNetworkActivateNotificationId,
           l10n_util::GetStringUTF16(IDS_NETWORK_CELLULAR_ACTIVATED_TITLE),
@@ -330,23 +327,21 @@ void NetworkStateNotifier::ShowMobileActivationErrorForGuid(
                    << guid;
     return;
   }
-  NotificationDisplayService::GetForSystemNotifications()->Display(
-      NotificationHandler::Type::TRANSIENT,
+  SystemNotificationHelper::GetInstance()->Display(
       *message_center::Notification::CreateSystemNotification(
           kNetworkActivateNotificationId,
           l10n_util::GetStringUTF16(IDS_NETWORK_ACTIVATION_ERROR_TITLE),
           l10n_util::GetStringFUTF16(IDS_NETWORK_ACTIVATION_NEEDS_CONNECTION,
                                      base::UTF8ToUTF16(cellular->name())),
           ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-              IDR_AURA_UBER_TRAY_NETWORK_FAILED_CELLULAR),
+              IDR_NETWORK_FAILED_CELLULAR),
           kNotifierNetworkError,
           base::Bind(&NetworkStateNotifier::ShowNetworkSettings,
                      weak_ptr_factory_.GetWeakPtr(), cellular->guid())));
 }
 
 void NetworkStateNotifier::RemoveConnectNotification() {
-  NotificationDisplayService::GetForSystemNotifications()->Close(
-      NotificationHandler::Type::TRANSIENT, kNetworkConnectNotificationId);
+  SystemNotificationHelper::GetInstance()->Close(kNetworkConnectNotificationId);
 }
 
 void NetworkStateNotifier::ConnectErrorPropertiesSucceeded(

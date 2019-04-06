@@ -4,6 +4,7 @@
 
 #include "chrome/browser/profiling_host/background_profiling_triggers.h"
 
+#include "base/stl_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -11,25 +12,35 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiling_host/profiling_process_host.h"
+#include "components/heap_profiling/supervisor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/process_type.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
 
-namespace profiling {
+namespace heap_profiling {
 
 namespace {
-// Check memory usage every hour. Trigger slow report if needed.
-const int kRepeatingCheckMemoryDelayInHours = 1;
-const int kThrottledReportRepeatingCheckMemoryDelayInHours = 12;
 
 #if defined(OS_ANDROID)
+// Check memory usage every 5 minutes.
+const int kRepeatingCheckMemoryDelayInMinutes = 5;
+
 const size_t kBrowserProcessMallocTriggerKb = 100 * 1024;    // 100 MB
 const size_t kGPUProcessMallocTriggerKb = 40 * 1024;         // 40 MB
 const size_t kRendererProcessMallocTriggerKb = 125 * 1024;   // 125 MB
+
+// If memory usage has increased by 50MB since the last report, send another.
+const uint32_t kHighWaterMarkThresholdKb = 50 * 1024;  // 50 MB
 #else
+// Check memory usage every 15 minutes.
+const int kRepeatingCheckMemoryDelayInMinutes = 15;
+
 const size_t kBrowserProcessMallocTriggerKb = 400 * 1024;    // 400 MB
 const size_t kGPUProcessMallocTriggerKb = 400 * 1024;        // 400 MB
 const size_t kRendererProcessMallocTriggerKb = 500 * 1024;   // 500 MB
+
+// If memory usage has increased by 500MB since the last report, send another.
+const uint32_t kHighWaterMarkThresholdKb = 500 * 1024;  // 500 MB
 #endif  // OS_ANDROID
 
 int GetContentProcessType(
@@ -74,28 +85,16 @@ void BackgroundProfilingTriggers::StartTimer() {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
   // Register a repeating timer to check memory usage periodically.
-  timer_.Start(FROM_HERE,
-               base::TimeDelta::FromHours(kRepeatingCheckMemoryDelayInHours),
-               base::BindRepeating(
-                   &BackgroundProfilingTriggers::PerformMemoryUsageChecks,
-                   weak_ptr_factory_.GetWeakPtr()));
+  timer_.Start(
+      FROM_HERE,
+      base::TimeDelta::FromMinutes(kRepeatingCheckMemoryDelayInMinutes),
+      base::BindRepeating(
+          &BackgroundProfilingTriggers::PerformMemoryUsageChecks,
+          weak_ptr_factory_.GetWeakPtr()));
 }
 
 bool BackgroundProfilingTriggers::IsAllowedToUpload() const {
-  if (!ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()) {
-    return false;
-  }
-
-  // Do not upload if there is an incognito session running in any profile.
-  std::vector<Profile*> profiles =
-      g_browser_process->profile_manager()->GetLoadedProfiles();
-  for (Profile* profile : profiles) {
-    if (profile->HasOffTheRecordProfile()) {
-      return false;
-    }
-  }
-
-  return true;
+  return ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
 }
 
 bool BackgroundProfilingTriggers::IsOverTriggerThreshold(
@@ -127,12 +126,13 @@ void BackgroundProfilingTriggers::PerformMemoryUsageChecks() {
       [](base::WeakPtr<BackgroundProfilingTriggers> weak_ptr,
          std::vector<base::ProcessId> result) {
         memory_instrumentation::MemoryInstrumentation::GetInstance()
-            ->RequestGlobalDump(
+            ->RequestPrivateMemoryFootprint(
+                base::kNullProcessId,
                 base::Bind(&BackgroundProfilingTriggers::OnReceivedMemoryDump,
                            std::move(weak_ptr), std::move(result)));
       },
       weak_ptr_factory_.GetWeakPtr());
-  host_->GetProfiledPids(std::move(callback));
+  Supervisor::GetInstance()->GetProfiledPids(std::move(callback));
 }
 
 void BackgroundProfilingTriggers::OnReceivedMemoryDump(
@@ -147,28 +147,39 @@ void BackgroundProfilingTriggers::OnReceivedMemoryDump(
 
   bool should_send_report = false;
   for (const auto& proc : dump->process_dumps()) {
-    if (std::find(profiled_pids.begin(), profiled_pids.end(), proc.pid()) ==
-        profiled_pids.end())
+    if (!base::ContainsValue(profiled_pids, proc.pid()))
       continue;
+
+    uint32_t private_footprint_kb = proc.os_dump().private_footprint_kb;
+    auto it = pmf_at_last_upload_.find(proc.pid());
+    if (it != pmf_at_last_upload_.end()) {
+      if (private_footprint_kb > it->second + kHighWaterMarkThresholdKb) {
+        should_send_report = true;
+        it->second = private_footprint_kb;
+      }
+      continue;
+    }
+
+    // No high water mark exists yet, check the trigger threshold.
     if (IsOverTriggerThreshold(GetContentProcessType(proc.process_type()),
-                               proc.os_dump().private_footprint_kb)) {
+                               private_footprint_kb)) {
       should_send_report = true;
-      break;
+      pmf_at_last_upload_[proc.pid()] = private_footprint_kb;
     }
   }
 
   if (should_send_report) {
-    TriggerMemoryReport();
+    // Clear the watermark for all non-profiled pids.
+    for (auto it = pmf_at_last_upload_.begin();
+         it != pmf_at_last_upload_.end();) {
+      if (base::ContainsValue(profiled_pids, it->first)) {
+        ++it;
+      } else {
+        it = pmf_at_last_upload_.erase(it);
+      }
+    }
 
-    // If a report was sent, throttle the memory data collection rate to
-    // kThrottledReportRepeatingCheckMemoryDelayInHours to avoid sending too
-    // many reports from a known problematic client.
-    timer_.Start(FROM_HERE,
-                 base::TimeDelta::FromHours(
-                     kThrottledReportRepeatingCheckMemoryDelayInHours),
-                 base::BindRepeating(
-                     &BackgroundProfilingTriggers::PerformMemoryUsageChecks,
-                     weak_ptr_factory_.GetWeakPtr()));
+    TriggerMemoryReport();
   }
 }
 
@@ -177,4 +188,4 @@ void BackgroundProfilingTriggers::TriggerMemoryReport() {
   host_->RequestProcessReport("MEMLOG_BACKGROUND_TRIGGER");
 }
 
-}  // namespace profiling
+}  // namespace heap_profiling

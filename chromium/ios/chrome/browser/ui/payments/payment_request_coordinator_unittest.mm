@@ -8,7 +8,7 @@
 #include "base/json/json_writer.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/ios/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
@@ -106,18 +106,6 @@ TEST_F(PaymentRequestCoordinatorTest, StartAndStop) {
   [coordinator setPaymentRequest:payment_request()];
   [coordinator setBrowserState:browser_state()];
 
-  // Mock the coordinator delegate.
-  id check_block = ^BOOL(id value) {
-    EXPECT_TRUE(value == coordinator);
-    return YES;
-  };
-  id delegate = [OCMockObject
-      mockForProtocol:@protocol(PaymentRequestCoordinatorDelegate)];
-  [[delegate expect]
-      paymentRequestCoordinatorDidStop:[OCMArg checkWithBlock:check_block]];
-
-  [coordinator setDelegate:delegate];
-
   [coordinator start];
   // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1));
@@ -137,8 +125,6 @@ TEST_F(PaymentRequestCoordinatorTest, StartAndStop) {
     return !base_view_controller.presentedViewController;
   });
   EXPECT_EQ(nil, base_view_controller.presentedViewController);
-
-  EXPECT_OCMOCK_VERIFY(delegate);
 }
 
 // Tests that calling the ShippingAddressSelectionCoordinator delegate method

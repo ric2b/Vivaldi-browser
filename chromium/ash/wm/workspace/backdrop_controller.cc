@@ -5,18 +5,23 @@
 #include "ash/wm/workspace/backdrop_controller.h"
 
 #include <memory>
+#include <utility>
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/accessibility_delegate.h"
+#include "ash/app_list/app_list_controller_impl.h"
+#include "ash/app_list/views/app_list_view.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_notifier.h"
+#include "ash/wallpaper/wallpaper_controller.h"
+#include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace/backdrop_delegate.h"
 #include "base/auto_reset.h"
 #include "chromeos/audio/chromeos_sounds.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -68,13 +73,16 @@ BackdropController::BackdropController(aura::Window* container)
     : container_(container), in_restacking_(false) {
   DCHECK(container_);
   Shell::Get()->AddShellObserver(this);
-  Shell::Get()->system_tray_notifier()->AddAccessibilityObserver(this);
+  Shell::Get()->accessibility_controller()->AddObserver(this);
+  Shell::Get()->wallpaper_controller()->AddObserver(this);
 }
 
 BackdropController::~BackdropController() {
-  Shell::Get()->system_tray_notifier()->RemoveAccessibilityObserver(this);
+  Shell::Get()->accessibility_controller()->RemoveObserver(this);
+  Shell::Get()->wallpaper_controller()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
-  // TODO: animations won't work right with mus: http://crbug.com/548396.
+  // TODO(oshima): animations won't work right with mus:
+  // http://crbug.com/548396.
   Hide();
 }
 
@@ -108,9 +116,27 @@ void BackdropController::SetBackdropDelegate(
 }
 
 void BackdropController::UpdateBackdrop() {
-  // Avoid recursive calls.
-  if (in_restacking_ || force_hidden_counter_)
+  // No need to continue update for recursive calls or in overview mode.
+  WindowSelectorController* window_selector_controller =
+      Shell::Get()->window_selector_controller();
+  if (in_restacking_ || (window_selector_controller &&
+                         window_selector_controller->IsSelecting())) {
     return;
+  }
+
+  AppListControllerImpl* app_list_controller =
+      Shell::Get()->app_list_controller();
+  // Only hide the backdrop of the display that launcher is opened at.
+  if (app_list_controller && app_list_controller->GetTargetVisibility() &&
+      app_list_controller->presenter()->GetView() &&
+      container_->GetRootWindow() == app_list_controller->presenter()
+                                         ->GetView()
+                                         ->GetWidget()
+                                         ->GetNativeView()
+                                         ->GetRootWindow()) {
+    Hide();
+    return;
+  }
 
   aura::Window* window = GetTopmostWindowWithBackdrop();
   if (!window) {
@@ -128,8 +154,7 @@ void BackdropController::UpdateBackdrop() {
   if (window->GetRootWindow() != backdrop_window_->GetRootWindow())
     return;
 
-  if (!backdrop_->IsVisible())
-    Show();
+  Show();
 
   // Since the backdrop needs to be immediately behind the window and the
   // stacking functions only guarantee a "it's above or below", we need
@@ -139,27 +164,43 @@ void BackdropController::UpdateBackdrop() {
 }
 
 void BackdropController::OnOverviewModeStarting() {
-  AddForceHidden();
+  Hide();
 }
 
 void BackdropController::OnOverviewModeEnded() {
-  RemoveForceHidden();
+  UpdateBackdrop();
 }
 
 void BackdropController::OnAppListVisibilityChanged(bool shown,
                                                     aura::Window* root_window) {
-  // Ignore the notification if it is not for this display.
-  if (container_->GetRootWindow() != root_window)
-    return;
-
-  if (shown)
-    AddForceHidden();
-  else
-    RemoveForceHidden();
+  UpdateBackdrop();
 }
 
-void BackdropController::OnAccessibilityStatusChanged(
-    AccessibilityNotificationVisibility notify) {
+void BackdropController::OnSplitViewModeStarting() {
+  Shell::Get()->split_view_controller()->AddObserver(this);
+}
+
+void BackdropController::OnSplitViewModeEnded() {
+  Shell::Get()->split_view_controller()->RemoveObserver(this);
+}
+
+void BackdropController::OnAccessibilityStatusChanged() {
+  UpdateBackdrop();
+}
+
+void BackdropController::OnSplitViewStateChanged(
+    SplitViewController::State previous_state,
+    SplitViewController::State state) {
+  UpdateBackdrop();
+}
+
+void BackdropController::OnSplitViewDividerPositionChanged() {
+  UpdateBackdrop();
+}
+
+void BackdropController::OnWallpaperPreviewStarted() {
+  wm::GetActiveWindow()->SetProperty(kBackdropWindowMode,
+                                     BackdropWindowMode::kDisabled);
   UpdateBackdrop();
 }
 
@@ -219,9 +260,12 @@ aura::Window* BackdropController::GetTopmostWindowWithBackdrop() {
 }
 
 bool BackdropController::WindowShouldHaveBackdrop(aura::Window* window) {
-  if (window->GetAllPropertyKeys().count(aura::client::kHasBackdrop) &&
-      window->GetProperty(aura::client::kHasBackdrop)) {
-    return true;
+  if (window->GetAllPropertyKeys().count(kBackdropWindowMode)) {
+    BackdropWindowMode backdrop_mode = window->GetProperty(kBackdropWindowMode);
+    if (backdrop_mode == BackdropWindowMode::kEnabled)
+      return true;
+    if (backdrop_mode == BackdropWindowMode::kDisabled)
+      return false;
   }
 
   // If |window| is the current active window and is an ARC app window, |window|
@@ -237,8 +281,12 @@ bool BackdropController::WindowShouldHaveBackdrop(aura::Window* window) {
 }
 
 void BackdropController::Show() {
+  // Makes sure that the backdrop has the correct bounds if it should not be
+  // fullscreen size.
+  backdrop_->SetFullscreen(BackdropShouldFullscreen());
+  if (!BackdropShouldFullscreen())
+    backdrop_->SetBounds(GetBackdropBounds());
   backdrop_->Show();
-  backdrop_->SetFullscreen(true);
 }
 
 void BackdropController::Hide() {
@@ -251,22 +299,36 @@ void BackdropController::Hide() {
   backdrop_event_handler_.reset();
 }
 
-void BackdropController::AddForceHidden() {
-  force_hidden_counter_++;
-  CHECK_GE(force_hidden_counter_, 0);
-  if (force_hidden_counter_)
-    Hide();
-  else
-    UpdateBackdrop();
+bool BackdropController::BackdropShouldFullscreen() {
+  aura::Window* window = GetTopmostWindowWithBackdrop();
+  SplitViewController* split_view_controller =
+      Shell::Get()->split_view_controller();
+  SplitViewController::State state = split_view_controller->state();
+  if ((state == SplitViewController::LEFT_SNAPPED &&
+       window == split_view_controller->left_window()) ||
+      (state == SplitViewController::RIGHT_SNAPPED &&
+       window == split_view_controller->right_window())) {
+    return false;
+  }
+
+  return true;
 }
 
-void BackdropController::RemoveForceHidden() {
-  force_hidden_counter_--;
-  CHECK_GE(force_hidden_counter_, 0);
-  if (force_hidden_counter_)
-    Hide();
-  else
-    UpdateBackdrop();
+gfx::Rect BackdropController::GetBackdropBounds() {
+  DCHECK(!BackdropShouldFullscreen());
+
+  SplitViewController* split_view_controller =
+      Shell::Get()->split_view_controller();
+  SplitViewController::State state = split_view_controller->state();
+  DCHECK(state == SplitViewController::LEFT_SNAPPED ||
+         state == SplitViewController::RIGHT_SNAPPED);
+  aura::Window* snapped_window =
+      split_view_controller->GetDefaultSnappedWindow();
+  SplitViewController::SnapPosition snap_position =
+      (state == SplitViewController::LEFT_SNAPPED) ? SplitViewController::LEFT
+                                                   : SplitViewController::RIGHT;
+  return split_view_controller->GetSnappedWindowBoundsInScreenUnadjusted(
+      snapped_window, snap_position);
 }
 
 }  // namespace ash

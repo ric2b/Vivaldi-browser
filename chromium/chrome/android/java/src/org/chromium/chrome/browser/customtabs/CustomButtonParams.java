@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.customtabs;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -24,6 +23,7 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 
 import org.chromium.base.Log;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.TintedDrawable;
@@ -48,6 +48,9 @@ public class CustomButtonParams {
     private String mDescription;
     private boolean mShouldTint;
     private boolean mIsOnToolbar;
+
+    @VisibleForTesting
+    static final String SHOW_ON_TOOLBAR = "android.support.customtabs.customaction.SHOW_ON_TOOLBAR";
 
     private CustomButtonParams(int id, Bitmap icon, String description,
             @Nullable PendingIntent pendingIntent, boolean tinted, boolean onToolbar) {
@@ -85,11 +88,11 @@ public class CustomButtonParams {
     /**
      * @return The drawable for the customized button.
      */
-    Drawable getIcon(Resources res) {
+    Drawable getIcon(Context context) {
         if (mShouldTint) {
-            return new TintedDrawable(res, mIcon);
+            return new TintedDrawable(context, mIcon);
         } else {
-            return new BitmapDrawable(res, mIcon);
+            return new BitmapDrawable(context.getResources(), mIcon);
         }
     }
 
@@ -115,7 +118,7 @@ public class CustomButtonParams {
      * @return Parsed list of {@link CustomButtonParams}, which is empty if the input is invalid.
      */
     ImageButton buildBottomBarButton(Context context, ViewGroup parent, OnClickListener listener) {
-        if (mIsOnToolbar) return null;
+        assert !mIsOnToolbar;
 
         ImageButton button = (ImageButton) LayoutInflater.from(context).inflate(
                 R.layout.custom_tabs_bottombar_item, parent, false);
@@ -211,7 +214,8 @@ public class CustomButtonParams {
             return null;
         }
 
-        boolean onToolbar = id == CustomTabsIntent.TOOLBAR_ACTION_BUTTON_ID;
+        boolean onToolbar = id == CustomTabsIntent.TOOLBAR_ACTION_BUTTON_ID
+                || IntentUtils.safeGetBoolean(bundle, SHOW_ON_TOOLBAR, false);
         if (onToolbar && !doesIconFitToolbar(context, bitmap)) {
             onToolbar = false;
             Log.w(TAG,

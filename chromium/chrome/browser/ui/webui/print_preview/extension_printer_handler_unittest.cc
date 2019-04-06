@@ -13,8 +13,6 @@
 
 #include "base/bind.h"
 #include "base/containers/queue.h"
-#include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
@@ -278,47 +276,38 @@ std::string RefCountedMemoryToString(
 // Fake PwgRasterConverter used in the tests.
 class FakePwgRasterConverter : public PwgRasterConverter {
  public:
-  FakePwgRasterConverter() : fail_conversion_(false), initialized_(false) {}
+  FakePwgRasterConverter() {}
   ~FakePwgRasterConverter() override = default;
 
-  // PwgRasterConverter implementation. It writes |data| to a temp file.
+  // PwgRasterConverter implementation. It writes |data| to shared memory.
   // Also, remembers conversion and bitmap settings passed into the method.
-  void Start(base::RefCountedMemory* data,
+  void Start(const base::RefCountedMemory* data,
              const printing::PdfRenderSettings& conversion_settings,
              const printing::PwgRasterSettings& bitmap_settings,
              ResultCallback callback) override {
+    base::ReadOnlySharedMemoryRegion invalid_pwg_region;
     if (fail_conversion_) {
-      std::move(callback).Run(false, base::FilePath());
+      std::move(callback).Run(std::move(invalid_pwg_region));
       return;
     }
 
-    if (!initialized_ && !temp_dir_.CreateUniqueTempDir()) {
-      ADD_FAILURE() << "Unable to create target dir for cenverter";
-      std::move(callback).Run(false, base::FilePath());
+    base::MappedReadOnlyRegion memory =
+        base::ReadOnlySharedMemoryRegion::Create(data->size());
+    if (!memory.IsValid()) {
+      ADD_FAILURE() << "Failed to create pwg raster shared memory.";
+      std::move(callback).Run(std::move(invalid_pwg_region));
       return;
     }
 
-    initialized_ = true;
-
-    path_ = temp_dir_.GetPath().AppendASCII("output.pwg");
-    std::string data_str(data->front_as<char>(), data->size());
-    int written = WriteFile(path_, data_str.c_str(), data_str.size());
-    if (written != static_cast<int>(data_str.size())) {
-      ADD_FAILURE() << "Failed to write pwg raster file.";
-      std::move(callback).Run(false, base::FilePath());
-      return;
-    }
-
+    memcpy(memory.mapping.memory(), data->front(), data->size());
     conversion_settings_ = conversion_settings;
     bitmap_settings_ = bitmap_settings;
-
-    std::move(callback).Run(true, path_);
+    std::move(callback).Run(std::move(memory.region));
   }
 
   // Makes |Start| method always return an error.
   void FailConversion() { fail_conversion_ = true; }
 
-  const base::FilePath& path() { return path_; }
   const printing::PdfRenderSettings& conversion_settings() const {
     return conversion_settings_;
   }
@@ -328,13 +317,9 @@ class FakePwgRasterConverter : public PwgRasterConverter {
   }
 
  private:
-  base::ScopedTempDir temp_dir_;
-
-  base::FilePath path_;
   printing::PdfRenderSettings conversion_settings_;
   printing::PwgRasterSettings bitmap_settings_;
-  bool fail_conversion_;
-  bool initialized_;
+  bool fail_conversion_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(FakePwgRasterConverter);
 };
@@ -675,8 +660,8 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pdf) {
   bool success = false;
   std::string status;
 
-  auto print_data =
-      base::MakeRefCounted<base::RefCountedBytes>(kPrintData, kPrintDataLength);
+  auto print_data = base::MakeRefCounted<base::RefCountedStaticMemory>(
+      kPrintData, kPrintDataLength);
   base::string16 title = base::ASCIIToUTF16("Title");
 
   extension_printer_handler_->StartPrint(
@@ -696,7 +681,6 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pdf) {
   EXPECT_EQ(title, print_job->job_title);
   EXPECT_EQ(kEmptyPrintTicket, print_job->ticket_json);
   EXPECT_EQ(kContentTypePDF, print_job->content_type);
-  EXPECT_TRUE(print_job->document_path.empty());
   ASSERT_TRUE(print_job->document_bytes);
   EXPECT_EQ(RefCountedMemoryToString(print_data),
             RefCountedMemoryToString(print_job->document_bytes));
@@ -761,7 +745,6 @@ TEST_F(ExtensionPrinterHandlerTest, Print_All) {
   EXPECT_EQ(title, print_job->job_title);
   EXPECT_EQ(kEmptyPrintTicket, print_job->ticket_json);
   EXPECT_EQ(kContentTypePDF, print_job->content_type);
-  EXPECT_TRUE(print_job->document_path.empty());
   ASSERT_TRUE(print_job->document_bytes);
   EXPECT_EQ(RefCountedMemoryToString(print_data),
             RefCountedMemoryToString(print_job->document_bytes));
@@ -801,10 +784,12 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pwg) {
   EXPECT_FALSE(pwg_raster_converter_->bitmap_settings().reverse_page_order);
   EXPECT_TRUE(pwg_raster_converter_->bitmap_settings().use_color);
 
-  EXPECT_EQ(printing::kDefaultPdfDpi,
+  EXPECT_EQ(gfx::Size(printing::kDefaultPdfDpi, printing::kDefaultPdfDpi),
             pwg_raster_converter_->conversion_settings().dpi);
   EXPECT_TRUE(pwg_raster_converter_->conversion_settings().autorotate);
-  EXPECT_EQ("0,0 208x416",  // vertically_oriented_size  * dpi / points_per_inch
+  // size = vertically_oriented_size * vertical_dpi / points_per_inch x
+  //        horizontally_oriented_size * horizontal_dpi / points_per_inch
+  EXPECT_EQ("0,0 208x416",
             pwg_raster_converter_->conversion_settings().area.ToString());
 
   const PrinterProviderPrintJob* print_job = fake_api->GetNextPendingPrintJob();
@@ -814,11 +799,9 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pwg) {
   EXPECT_EQ(title, print_job->job_title);
   EXPECT_EQ(kEmptyPrintTicket, print_job->ticket_json);
   EXPECT_EQ(kContentTypePWG, print_job->content_type);
-  EXPECT_FALSE(print_job->document_bytes);
-  EXPECT_FALSE(print_job->document_path.empty());
-  EXPECT_EQ(pwg_raster_converter_->path(), print_job->document_path);
-  EXPECT_EQ(static_cast<int64_t>(print_data->size()),
-            print_job->file_info.size);
+  ASSERT_TRUE(print_job->document_bytes);
+  EXPECT_EQ(RefCountedMemoryToString(print_data),
+            RefCountedMemoryToString(print_job->document_bytes));
 
   fake_api->TriggerNextPrintCallback(kPrintRequestSuccess);
 
@@ -855,10 +838,12 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pwg_NonDefaultSettings) {
   EXPECT_TRUE(pwg_raster_converter_->bitmap_settings().reverse_page_order);
   EXPECT_TRUE(pwg_raster_converter_->bitmap_settings().use_color);
 
-  EXPECT_EQ(200,  // max(vertical_dpi, horizontal_dpi)
+  EXPECT_EQ(gfx::Size(200, 100),
             pwg_raster_converter_->conversion_settings().dpi);
   EXPECT_TRUE(pwg_raster_converter_->conversion_settings().autorotate);
-  EXPECT_EQ("0,0 138x277",  // vertically_oriented_size  * dpi / points_per_inch
+  // size = vertically_oriented_size * vertical_dpi / points_per_inch x
+  //        horizontally_oriented_size * horizontal_dpi / points_per_inch
+  EXPECT_EQ("0,0 138x138",
             pwg_raster_converter_->conversion_settings().area.ToString());
 
   const PrinterProviderPrintJob* print_job = fake_api->GetNextPendingPrintJob();
@@ -868,11 +853,9 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pwg_NonDefaultSettings) {
   EXPECT_EQ(title, print_job->job_title);
   EXPECT_EQ(kPrintTicketWithDuplex, print_job->ticket_json);
   EXPECT_EQ(kContentTypePWG, print_job->content_type);
-  EXPECT_FALSE(print_job->document_bytes);
-  EXPECT_FALSE(print_job->document_path.empty());
-  EXPECT_EQ(pwg_raster_converter_->path(), print_job->document_path);
-  EXPECT_EQ(static_cast<int64_t>(print_data->size()),
-            print_job->file_info.size);
+  ASSERT_TRUE(print_job->document_bytes);
+  EXPECT_EQ(RefCountedMemoryToString(print_data),
+            RefCountedMemoryToString(print_job->document_bytes));
 
   fake_api->TriggerNextPrintCallback(kPrintRequestSuccess);
 

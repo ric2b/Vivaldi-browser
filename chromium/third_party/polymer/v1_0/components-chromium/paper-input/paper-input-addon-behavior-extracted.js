@@ -5,21 +5,18 @@
    * @polymerBehavior
    */
   Polymer.PaperInputAddonBehavior = {
-
-    hostAttributes: {
-      'add-on': ''
-    },
-
     attached: function() {
+      // Workaround for https://github.com/webcomponents/shadydom/issues/96
+      Polymer.dom.flush();
       this.fire('addon-attached');
     },
 
     /**
      * The function called by `<paper-input-container>` when the input value or validity changes.
      * @param {{
+     *   invalid: boolean,
      *   inputElement: (Element|undefined),
-     *   value: (string|undefined),
-     *   invalid: boolean
+     *   value: (string|undefined)
      * }} state -
      *     inputElement: The input element.
      *     value: The input value.

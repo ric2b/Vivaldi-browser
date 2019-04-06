@@ -6,19 +6,32 @@
 #define CHROME_BROWSER_UI_SCREEN_CAPTURE_NOTIFICATION_UI_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
-#include "content/public/common/media_stream_request.h"
+#include "build/build_config.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 
 // Interface for screen capture notification UI shown when content of the screen
 // is being captured.
-class ScreenCaptureNotificationUI : public content::MediaStreamUI {
+class ScreenCaptureNotificationUI : public MediaStreamUI {
  public:
-  ~ScreenCaptureNotificationUI() override {}
+  ScreenCaptureNotificationUI() = default;
+  ~ScreenCaptureNotificationUI() override = default;
 
   // Creates platform-specific screen capture notification UI. |text| specifies
   // the text that should be shown in the notification.
   static std::unique_ptr<ScreenCaptureNotificationUI> Create(
       const base::string16& text);
+
+ private:
+#if defined(OS_MACOSX)
+  // Returns a ScreenCaptureNotificationUI or nullptr if the Views version
+  // should be used instead.
+  static std::unique_ptr<ScreenCaptureNotificationUI> CreateCocoa(
+      const base::string16& text);
+#endif
+
+  DISALLOW_COPY_AND_ASSIGN(ScreenCaptureNotificationUI);
 };
 
 #endif  // CHROME_BROWSER_UI_SCREEN_CAPTURE_NOTIFICATION_UI_H_

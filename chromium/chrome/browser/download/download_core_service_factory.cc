@@ -6,6 +6,8 @@
 
 #include "chrome/browser/download/download_core_service_impl.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
+#include "chrome/browser/offline_items_collection/offline_content_aggregator_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -27,6 +29,8 @@ DownloadCoreServiceFactory::DownloadCoreServiceFactory()
           "DownloadCoreService",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(NotificationDisplayServiceFactory::GetInstance());
+  DependsOn(OfflineContentAggregatorFactory::GetInstance());
 }
 
 DownloadCoreServiceFactory::~DownloadCoreServiceFactory() {}

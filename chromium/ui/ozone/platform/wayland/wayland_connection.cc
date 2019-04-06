@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
@@ -28,7 +29,9 @@ const uint32_t kMaxXdgShellVersion = 1;
 
 WaylandConnection::WaylandConnection() : controller_(FROM_HERE) {}
 
-WaylandConnection::~WaylandConnection() {}
+WaylandConnection::~WaylandConnection() {
+  DCHECK(window_map_.empty());
+}
 
 bool WaylandConnection::Initialize() {
   static const wl_registry_listener registry_listener = {
@@ -48,7 +51,9 @@ bool WaylandConnection::Initialize() {
   }
 
   wl_registry_add_listener(registry_.get(), &registry_listener, this);
-  wl_display_roundtrip(display_.get());
+
+  while (!PrimaryOutput() || !PrimaryOutput()->is_ready())
+    wl_display_roundtrip(display_.get());
 
   if (!compositor_) {
     LOG(ERROR) << "No wl_compositor object";
@@ -78,7 +83,7 @@ bool WaylandConnection::StartProcessingEvents() {
   wl_display_flush(display_.get());
 
   DCHECK(base::MessageLoopForUI::IsCurrent());
-  if (!base::MessageLoopForUI::current()->WatchFileDescriptor(
+  if (!base::MessageLoopCurrentForUI::Get()->WatchFileDescriptor(
           wl_display_get_fd(display_.get()), true,
           base::MessagePumpLibevent::WATCH_READ, &controller_, this))
     return false;
@@ -92,7 +97,8 @@ void WaylandConnection::ScheduleFlush() {
     return;
   DCHECK(base::MessageLoopForUI::IsCurrent());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&WaylandConnection::Flush, base::Unretained(this)));
+      FROM_HERE,
+      base::BindOnce(&WaylandConnection::Flush, base::Unretained(this)));
   scheduled_flush_ = true;
 }
 
@@ -101,12 +107,23 @@ WaylandWindow* WaylandConnection::GetWindow(gfx::AcceleratedWidget widget) {
   return it == window_map_.end() ? nullptr : it->second;
 }
 
+WaylandWindow* WaylandConnection::GetCurrentFocusedWindow() {
+  for (auto entry : window_map_) {
+    WaylandWindow* window = entry.second;
+    if (window->has_pointer_focus())
+      return window;
+  }
+  return nullptr;
+}
+
 void WaylandConnection::AddWindow(gfx::AcceleratedWidget widget,
                                   WaylandWindow* window) {
   window_map_[widget] = window;
 }
 
 void WaylandConnection::RemoveWindow(gfx::AcceleratedWidget widget) {
+  if (touch_)
+    touch_->RemoveTouchPoints(window_map_[widget]);
   window_map_.erase(widget);
 }
 
@@ -128,6 +145,64 @@ int WaylandConnection::GetKeyboardModifiers() {
   if (keyboard_)
     modifiers = keyboard_->modifiers();
   return modifiers;
+}
+
+ClipboardDelegate* WaylandConnection::GetClipboardDelegate() {
+  return this;
+}
+
+void WaylandConnection::OfferClipboardData(
+    const ClipboardDelegate::DataMap& data_map,
+    ClipboardDelegate::OfferDataClosure callback) {
+  if (!data_source_) {
+    wl_data_source* data_source = data_device_manager_->CreateSource();
+    data_source_.reset(new WaylandDataSource(data_source));
+    data_source_->set_connection(this);
+    data_source_->WriteToClipboard(data_map);
+  }
+  data_source_->UpdataDataMap(data_map);
+  std::move(callback).Run();
+}
+
+void WaylandConnection::RequestClipboardData(
+    const std::string& mime_type,
+    ClipboardDelegate::DataMap* data_map,
+    ClipboardDelegate::RequestDataClosure callback) {
+  read_clipboard_closure_ = std::move(callback);
+
+  DCHECK(data_map);
+  data_map_ = data_map;
+  data_device_->RequestSelectionData(mime_type);
+}
+
+bool WaylandConnection::IsSelectionOwner() {
+  return !!data_source_;
+}
+
+void WaylandConnection::GetAvailableMimeTypes(
+    ClipboardDelegate::GetMimeTypesClosure callback) {
+  std::move(callback).Run(data_device_->GetAvailableMimeTypes());
+}
+
+void WaylandConnection::DataSourceCancelled() {
+  SetClipboardData(std::string(), std::string());
+  data_source_.reset();
+}
+
+void WaylandConnection::SetClipboardData(const std::string& contents,
+                                         const std::string& mime_type) {
+  if (!data_map_)
+    return;
+
+  (*data_map_)[mime_type] =
+      std::vector<uint8_t>(contents.begin(), contents.end());
+
+  if (!read_clipboard_closure_.is_null()) {
+    auto it = data_map_->find(mime_type);
+    DCHECK(it != data_map_->end());
+    std::move(read_clipboard_closure_).Run(it->second);
+  }
+  data_map_ = nullptr;
 }
 
 void WaylandConnection::OnDispatcherListChanged() {
@@ -178,6 +253,11 @@ void WaylandConnection::Global(void* data,
         registry, name, std::min(version, kMaxCompositorVersion));
     if (!connection->compositor_)
       LOG(ERROR) << "Failed to bind to wl_compositor global";
+  } else if (!connection->subcompositor_ &&
+             strcmp(interface, "wl_subcompositor") == 0) {
+    connection->subcompositor_ = wl::Bind<wl_subcompositor>(registry, name, 1);
+    if (!connection->subcompositor_)
+      LOG(ERROR) << "Failed to bind to wl_subcompositor global";
   } else if (!connection->shm_ && strcmp(interface, "wl_shm") == 0) {
     connection->shm_ =
         wl::Bind<wl_shm>(registry, name, std::min(version, kMaxShmVersion));
@@ -191,6 +271,19 @@ void WaylandConnection::Global(void* data,
       return;
     }
     wl_seat_add_listener(connection->seat_.get(), &seat_listener, connection);
+
+    // TODO(tonikitoo,msisov): The connection passed to WaylandInputDevice must
+    // have a valid data device manager. We should ideally be robust to the
+    // compositor advertising a wl_seat first. No known compositor does this,
+    // fortunately.
+    if (!connection->data_device_manager_) {
+      LOG(ERROR)
+          << "No data device manager. Clipboard won't be fully functional";
+      return;
+    }
+    wl_data_device* data_device = connection->data_device_manager_->GetDevice();
+    connection->data_device_.reset(
+        new WaylandDataDevice(connection, data_device));
   } else if (!connection->shell_v6_ &&
              strcmp(interface, "zxdg_shell_v6") == 0) {
     // Check for zxdg_shell_v6 first.
@@ -224,8 +317,19 @@ void WaylandConnection::Global(void* data,
     if (!connection->output_list_.empty())
       NOTIMPLEMENTED() << "Multiple screens support is not implemented";
 
-    connection->output_list_.push_back(
-        base::WrapUnique(new WaylandOutput(output.release())));
+    connection->output_list_.push_back(base::WrapUnique(new WaylandOutput(
+        connection->get_next_display_id(), output.release())));
+  } else if (!connection->data_device_manager_ &&
+             strcmp(interface, "wl_data_device_manager") == 0) {
+    wl::Object<wl_data_device_manager> data_device_manager =
+        wl::Bind<wl_data_device_manager>(registry, name, 1);
+    if (!data_device_manager) {
+      LOG(ERROR) << "Failed to bind to wl_data_device_manager global";
+      return;
+    }
+    connection->data_device_manager_.reset(
+        new WaylandDataDeviceManager(data_device_manager.release()));
+    connection->data_device_manager_->set_connection(connection);
   }
 
   connection->ScheduleFlush();
@@ -251,8 +355,8 @@ void WaylandConnection::Capabilities(void* data,
         return;
       }
       connection->pointer_ = std::make_unique<WaylandPointer>(
-          pointer, base::Bind(&WaylandConnection::DispatchUiEvent,
-                              base::Unretained(connection)));
+          pointer, base::BindRepeating(&WaylandConnection::DispatchUiEvent,
+                                       base::Unretained(connection)));
       connection->pointer_->set_connection(connection);
     }
   } else if (connection->pointer_) {
@@ -266,12 +370,27 @@ void WaylandConnection::Capabilities(void* data,
         return;
       }
       connection->keyboard_ = std::make_unique<WaylandKeyboard>(
-          keyboard, base::Bind(&WaylandConnection::DispatchUiEvent,
-                               base::Unretained(connection)));
+          keyboard, base::BindRepeating(&WaylandConnection::DispatchUiEvent,
+                                        base::Unretained(connection)));
       connection->keyboard_->set_connection(connection);
     }
   } else if (connection->keyboard_) {
     connection->keyboard_.reset();
+  }
+  if (capabilities & WL_SEAT_CAPABILITY_TOUCH) {
+    if (!connection->touch_) {
+      wl_touch* touch = wl_seat_get_touch(connection->seat_.get());
+      if (!touch) {
+        LOG(ERROR) << "Failed to get wl_touch from seat";
+        return;
+      }
+      connection->touch_ = std::make_unique<WaylandTouch>(
+          touch, base::BindRepeating(&WaylandConnection::DispatchUiEvent,
+                                     base::Unretained(connection)));
+      connection->touch_->set_connection(connection);
+    }
+  } else if (connection->touch_) {
+    connection->touch_.reset();
   }
   connection->ScheduleFlush();
 }

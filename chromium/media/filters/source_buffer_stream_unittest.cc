@@ -523,6 +523,20 @@ class SourceBufferStreamTest : public testing::TestWithParam<BufferingApi> {
   BufferingApi buffering_api_;
 
  private:
+  DemuxerStream::Type GetStreamType() {
+    switch (STREAM_OP(GetType())) {
+      case SourceBufferStreamType::kAudio:
+        return DemuxerStream::AUDIO;
+      case SourceBufferStreamType::kVideo:
+        return DemuxerStream::VIDEO;
+      case SourceBufferStreamType::kText:
+        return DemuxerStream::TEXT;
+      default:
+        NOTREACHED();
+        return DemuxerStream::UNKNOWN;
+    }
+  }
+
   base::TimeDelta ConvertToFrameDuration(int frames_per_second) {
     return base::TimeDelta::FromMicroseconds(
         base::Time::kMicrosecondsPerSecond / frames_per_second);
@@ -548,10 +562,9 @@ class SourceBufferStreamTest : public testing::TestWithParam<BufferingApi> {
     for (int i = 0; i < number_of_buffers; i++) {
       int position = starting_position + i;
       bool is_keyframe = position % keyframe_interval == 0;
-      // Buffer type and track ID are meaningless to these tests.
-      scoped_refptr<StreamParserBuffer> buffer =
-          StreamParserBuffer::CopyFrom(data, size, is_keyframe,
-                                       DemuxerStream::AUDIO, 0);
+      // Track ID is meaningless to these tests.
+      scoped_refptr<StreamParserBuffer> buffer = StreamParserBuffer::CopyFrom(
+          data, size, is_keyframe, GetStreamType(), 0);
       base::TimeDelta timestamp = frame_duration_ * position;
 
       if (i == 0)
@@ -703,12 +716,12 @@ class SourceBufferStreamTest : public testing::TestWithParam<BufferingApi> {
         buffer_timestamps.push_back(base::TimeDelta::FromMicroseconds(us));
       }
 
-      // Create buffer. Buffer type and track ID are meaningless to these tests.
-      scoped_refptr<StreamParserBuffer> buffer =
-          StreamParserBuffer::CopyFrom(&kDataA, kDataSize, is_keyframe,
-                                       DemuxerStream::AUDIO, 0);
+      // Create buffer. Track ID is meaningless to these tests
+      scoped_refptr<StreamParserBuffer> buffer = StreamParserBuffer::CopyFrom(
+          &kDataA, kDataSize, is_keyframe, GetStreamType(), 0);
       buffer->set_timestamp(buffer_timestamps[0]);
-      buffer->set_is_duration_estimated(is_duration_estimated);
+      if (is_duration_estimated)
+        buffer->set_is_duration_estimated(true);
 
       if (buffer_timestamps[1] != buffer_timestamps[0]) {
         buffer->SetDecodeTimestamp(
@@ -722,8 +735,8 @@ class SourceBufferStreamTest : public testing::TestWithParam<BufferingApi> {
       // it as the preroll.
       if (has_preroll) {
         scoped_refptr<StreamParserBuffer> preroll_buffer =
-            StreamParserBuffer::CopyFrom(
-                &kDataA, kDataSize, is_keyframe, DemuxerStream::AUDIO, 0);
+            StreamParserBuffer::CopyFrom(&kDataA, kDataSize, is_keyframe,
+                                         GetStreamType(), 0);
         preroll_buffer->set_duration(frame_duration_);
         buffer->SetPrerollBuffer(preroll_buffer);
       }
@@ -3459,7 +3472,7 @@ TEST_P(SourceBufferStreamTest, ConfigChange_Basic) {
   CheckVideoConfig(video_config_);
 
   // Signal a config change.
-  STREAM_OP(UpdateVideoConfig(new_config));
+  STREAM_OP(UpdateVideoConfig(new_config, false));
 
   // Make sure updating the config doesn't change anything since new_config
   // should not be associated with the buffer GetNextBuffer() will return.
@@ -3495,7 +3508,7 @@ TEST_P(SourceBufferStreamTest, ConfigChange_Seek) {
 
   Seek(0);
   NewCodedFrameGroupAppend(0, 5, &kDataA);
-  STREAM_OP(UpdateVideoConfig(new_config));
+  STREAM_OP(UpdateVideoConfig(new_config, false));
   NewCodedFrameGroupAppend(5, 5, &kDataB);
 
   // Seek to the start of the buffers with the new config and make sure a
@@ -4532,6 +4545,27 @@ TEST_P(SourceBufferStreamTest, Audio_NoSpliceForBadOverlap) {
   CheckNoNextBuffer();
 }
 
+TEST_P(SourceBufferStreamTest, Audio_NoSpliceForEstimatedDuration) {
+  SetAudioStream();
+  Seek(0);
+
+  // Append two buffers, the latter having estimated duration.
+  NewCodedFrameGroupAppend("0D10K 10D10EK");
+  CheckExpectedRangesByTimestamp("{ [0,20) }");
+  CheckExpectedBuffers("0D10K 10D10EK");
+  CheckNoNextBuffer();
+
+  Seek(0);
+
+  // Add a new frame in a separate coded frame group that falls in the middle of
+  // the second buffer. In spite of the overlap, no splice should be performed
+  // due to the overlapped buffer having estimated duration.
+  NewCodedFrameGroupAppend("15D10K");
+  CheckExpectedRangesByTimestamp("{ [0,25) }");
+  CheckExpectedBuffers("0D10K 10D10EK 15D10K");
+  CheckNoNextBuffer();
+}
+
 TEST_P(SourceBufferStreamTest, Audio_SpliceTrimming_ExistingTrimming) {
   const base::TimeDelta kDuration = base::TimeDelta::FromMilliseconds(4);
   const base::TimeDelta kNoDiscard = base::TimeDelta();
@@ -4675,7 +4709,7 @@ TEST_P(SourceBufferStreamTest, Audio_ConfigChangeWithPreroll) {
   NewCodedFrameGroupAppend("0K 3K 6K");
 
   // Update the configuration.
-  STREAM_OP(UpdateAudioConfig(new_config));
+  STREAM_OP(UpdateAudioConfig(new_config, false));
 
   // We haven't read any buffers at this point, so the config for the next
   // buffer at time 0 should still be the original config.
@@ -4700,6 +4734,32 @@ TEST_P(SourceBufferStreamTest, Audio_ConfigChangeWithPreroll) {
   // CheckExpectedBuffers("6P 7K 8K");
   CheckExpectedBuffers("7P 8K");
 
+  CheckNoNextBuffer();
+}
+
+TEST_P(SourceBufferStreamTest, Audio_Opus_SeekToJustBeforeRangeStart) {
+  // Seek to a time within the fudge room of seekability to a buffered Opus
+  // audio frame's range, but before the range's start. Use small seek_preroll
+  // in case the associated logic to check same config in the preroll time
+  // interval requires a nonzero seek_preroll value.
+  video_config_ = TestVideoConfig::Invalid();
+  audio_config_.Initialize(kCodecOpus, kSampleFormatPlanarF32,
+                           CHANNEL_LAYOUT_STEREO, 1000, EmptyExtraData(),
+                           Unencrypted(), base::TimeDelta::FromMilliseconds(10),
+                           0);
+  STREAM_RESET(audio_config_);
+
+  // Equivalent to 1s per frame.
+  SetStreamInfo(1, 1);
+  Seek(0);
+
+  // Append a buffer at 1.5 seconds, with duration 1 second, increasing the
+  // fudge room to 2 * 1 seconds. The pending seek to time 0 should be satisfied
+  // with this buffer's range, because that seek time is within the fudge room
+  // of 2.
+  NewCodedFrameGroupAppend("1500D1000K");
+  CheckExpectedRangesByTimestamp("{ [1500,2500) }");
+  CheckExpectedBuffers("1500K");
   CheckNoNextBuffer();
 }
 
@@ -4909,7 +4969,7 @@ TEST_P(SourceBufferStreamTest, ConfigChange_ReSeek) {
   // Append a few buffers, with a config change in the middle.
   VideoDecoderConfig new_config = TestVideoConfig::Large();
   NewCodedFrameGroupAppend("2000K 2010 2020D10");
-  STREAM_OP(UpdateVideoConfig(new_config));
+  STREAM_OP(UpdateVideoConfig(new_config, false));
   NewCodedFrameGroupAppend("2030K 2040 2050D10");
   CheckExpectedRangesByTimestamp("{ [2000,2060) }");
 
@@ -5707,6 +5767,150 @@ TEST_P(SourceBufferStreamTest, PreciselyOverlapLastAudioFrameAppended_2) {
   CheckExpectedRangesByTimestamp("{ [0,70) }");
   CheckExpectedRangeEndTimes("{ <60,70> }");
   CheckExpectedBuffers("0K 60K");
+  CheckNoNextBuffer();
+}
+
+TEST_P(SourceBufferStreamTest, ZeroDurationBuffersThenIncreasingFudgeRoom) {
+  // Appends some zero duration buffers to result in disjoint buffered ranges.
+  // Verifies that increasing the fudge room allows those that become within
+  // adjacency threshold to merge, including those for which the new fudge room
+  // is well more than sufficient to let them be adjacent.
+  SetAudioStream();
+
+  NewCodedFrameGroupAppend("0uD0K");
+  CheckExpectedRangesByTimestamp("{ [0,1) }", TimeGranularity::kMicrosecond);
+
+  NewCodedFrameGroupAppend("1uD0K");
+  CheckExpectedRangesByTimestamp("{ [0,2) }", TimeGranularity::kMicrosecond);
+
+  // Initial fudge room allows for up to 2ms gap to coalesce.
+  NewCodedFrameGroupAppend("5000uD0K");
+  CheckExpectedRangesByTimestamp("{ [0,2) [5000,5001) }",
+                                 TimeGranularity::kMicrosecond);
+  NewCodedFrameGroupAppend("2002uD0K");
+  CheckExpectedRangesByTimestamp("{ [0,2) [2002,2003) [5000,5001) }",
+                                 TimeGranularity::kMicrosecond);
+
+  // Grow the fudge room enough to coalesce the first two ranges.
+  NewCodedFrameGroupAppend("8000uD1001uK");
+  CheckExpectedRangesByTimestamp("{ [0,2003) [5000,5001) [8000,9001) }",
+                                 TimeGranularity::kMicrosecond);
+
+  // Append a buffer with duration 4ms, much larger than previous buffers. This
+  // grows the fudge room to 8ms (2 * 4ms). Expect that the first three ranges
+  // are retroactively merged due to being adjacent per the new, larger fudge
+  // room.
+  NewCodedFrameGroupAppend("100D4K");
+  CheckExpectedRangesByTimestamp("{ [0,9001) [100000,104000) }",
+                                 TimeGranularity::kMicrosecond);
+  SeekToTimestampMs(0);
+  CheckExpectedBuffers("0K 1K 2002K 5000K 8000K",
+                       TimeGranularity::kMicrosecond);
+  CheckNoNextBuffer();
+  SeekToTimestampMs(100);
+  CheckExpectedBuffers("100K");
+  CheckNoNextBuffer();
+}
+
+TEST_P(SourceBufferStreamTest, NonZeroDurationBuffersThenIncreasingFudgeRoom) {
+  // Verifies that a single fudge room increase which merges more than 2
+  // previously disjoint ranges in a row performs the merging correctly.
+  NewCodedFrameGroupAppend("0D10K");
+  NewCodedFrameGroupAppend("50D10K");
+  NewCodedFrameGroupAppend("100D10K");
+  NewCodedFrameGroupAppend("150D10K");
+  NewCodedFrameGroupAppend("500D10K");
+  CheckExpectedRangesByTimestamp(
+      "{ [0,10) [50,60) [100,110) [150,160) [500,510) }");
+
+  NewCodedFrameGroupAppend("600D30K");
+  CheckExpectedRangesByTimestamp("{ [0,160) [500,510) [600,630) }");
+  SeekToTimestampMs(0);
+  CheckExpectedBuffers("0K 50K 100K 150K");
+  CheckNoNextBuffer();
+  SeekToTimestampMs(500);
+  CheckExpectedBuffers("500K");
+  CheckNoNextBuffer();
+  SeekToTimestampMs(600);
+  CheckExpectedBuffers("600K");
+  CheckNoNextBuffer();
+}
+
+TEST_P(SourceBufferStreamTest, SapType2WithNonkeyframePtsInEarlierRange) {
+  // Buffer a standalone GOP [0,10).
+  NewCodedFrameGroupAppend("0D10K");
+  CheckExpectedRangesByTimestamp("{ [0,10) }");
+
+  // Following discontinuity (simulated by DTS gap, signalled by new coded frame
+  // group with time beyond fudge room of [0,10)), buffer 2 new GOPs in a later
+  // range: a SAP-2 GOP with a nonkeyframe with PTS belonging to the first
+  // range, and a subsequent minimal GOP.
+  NewCodedFrameGroupAppend("30D10K 1|40D10");
+  if (buffering_api_ == BufferingApi::kLegacyByDts) {
+    CheckExpectedRangesByTimestamp("{ [0,10) [30,50) }");
+  } else {
+    CheckExpectedRangesByTimestamp("{ [0,10) [30,40) }");
+  }
+
+  NewCodedFrameGroupAppend("40|50D10K");
+
+  // Verify that there are two distinct ranges, and that the SAP-2 nonkeyframe
+  // is buffered as part of the second range's first GOP.
+  if (buffering_api_ == BufferingApi::kLegacyByDts) {
+    CheckExpectedRangesByTimestamp("{ [0,10) [30,60) }");
+  } else {
+    CheckExpectedRangesByTimestamp("{ [0,10) [30,50) }");
+  }
+  SeekToTimestampMs(0);
+  CheckExpectedBuffers("0K");
+  CheckNoNextBuffer();
+  SeekToTimestampMs(30);
+  CheckExpectedBuffers("30K 1|40 40|50K");
+  CheckNoNextBuffer();
+}
+
+TEST_P(SourceBufferStreamTest,
+       MergeAllowedIfRangeEndTimeWithEstimatedDurationMatchesNextRangeStart) {
+  // Tests the edge case where fudge room is not increased when an estimated
+  // duration is increased due to overlap appends, causing two ranges to not be
+  // within fudge room of each other (nor merged), yet abutting each other.
+  // Append a GOP that has fudge room as its interval (e.g. 2 frames of same
+  // duration >= minimum 1ms).
+  NewCodedFrameGroupAppend("0D10K 10D10");
+  CheckExpectedRangesByTimestamp("{ [0,20) }");
+
+  // Trigger a DTS discontinuity so later 21ms append also is discontinuous and
+  // retains 10ms*2 fudge room.
+  NewCodedFrameGroupAppend("100D10K");
+  CheckExpectedRangesByTimestamp("{ [0,20) [100,110) }");
+
+  // Append another keyframe that starts within fudge room distance of the
+  // non-keyframe in the GOP appended, above.
+  NewCodedFrameGroupAppend("21D10K");
+  CheckExpectedRangesByTimestamp("{ [0,31) [100,110) }");
+
+  // Overlap-append the original GOP with a single estimated-duration keyframe.
+  // Though its timestamp is not within fudge room of the next keyframe, that
+  // next keyframe at time 21ms was in the overlapped range and is retained in
+  // the result of the overlap append's range.
+  NewCodedFrameGroupAppend("0D10EK");
+  CheckExpectedRangesByTimestamp("{ [0,31) [100,110) }");
+
+  // That new keyframe at time 0 now has derived estimated duration 21ms.  That
+  // increased estimated duration did *not* increase the fudge room (which is
+  // still 2 * 10ms = 20ms.) So the next line, which splices in a new frame at
+  // time 21 causes the estimated keyframe at time 0 to not have a timestamp
+  // within fudge room of the new range that starts right at 21ms, the same time
+  // that ends the first buffered range, requiring CanAppendBuffersToEnd to
+  // handle this scenario specifically.
+  NewCodedFrameGroupAppend("21D10K");
+  CheckExpectedRangesByTimestamp("{ [0,31) [100,110) }");
+
+  SeekToTimestampMs(0);
+  CheckExpectedBuffers("0D21EK 21D10K");
+  CheckNoNextBuffer();
+  SeekToTimestampMs(100);
+  CheckExpectedBuffers("100D10K");
   CheckNoNextBuffer();
 }
 

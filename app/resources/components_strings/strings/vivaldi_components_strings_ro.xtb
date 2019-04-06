@@ -144,6 +144,7 @@
 <translation id="8503813439785031346">Nume de utilizator</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;Adresa DNS&lt;/abbr&gt; pentru <ph name="HOST_NAME" /> nu a putut fi găsită. Se diagnostichează problema.</translation>
 <translation id="9001074447101275817">Proxy-ul <ph name="DOMAIN" /> necesită un nume de utilizator și o parolă.</translation>
+<translation id="9011424611726486705">Deschide setările site-ului web</translation>
 <translation id="9039213469156557790">În plus, această pagină include alte resurse care nu sunt securizate. Aceste resurse pot fi vizualizate în tranzit de către alții și pot fi modificate de un atacator pentru a schimba comportamentul paginii.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> folosește un protocol neacceptat.</translation>
 <translation id="933612690413056017">Nu există conexiune la internet</translation>

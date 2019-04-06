@@ -4,18 +4,21 @@
 
 #include "chrome/browser/offline_pages/android/evaluation/offline_page_evaluation_bridge.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/android/callback_android.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/offline_pages/android/background_scheduler_bridge.h"
-#include "chrome/browser/offline_pages/android/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/offline_pages/android/evaluation/evaluation_test_scheduler.h"
 #include "chrome/browser/offline_pages/background_loader_offliner.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
@@ -111,12 +114,7 @@ void GetAllPagesCallback(
   JNIEnv* env = base::android::AttachCurrentThread();
   JNI_OfflinePageEvaluationBridge_ToJavaOfflinePageList(env, j_result_obj,
                                                         result);
-  base::android::RunCallbackAndroid(j_callback_obj, j_result_obj);
-}
-
-void OnPushRequestsDone(const ScopedJavaGlobalRef<jobject>& j_callback_obj,
-                        bool result) {
-  base::android::RunCallbackAndroid(j_callback_obj, result);
+  base::android::RunObjectCallbackAndroid(j_callback_obj, j_result_obj);
 }
 
 void OnGetAllRequestsDone(
@@ -127,13 +125,13 @@ void OnGetAllRequestsDone(
   ScopedJavaLocalRef<jobjectArray> j_result_obj =
       JNI_OfflinePageEvaluationBridge_CreateJavaSavePageRequests(
           env, std::move(all_requests));
-  base::android::RunCallbackAndroid(j_callback_obj, j_result_obj);
+  base::android::RunObjectCallbackAndroid(j_callback_obj, j_result_obj);
 }
 
 void OnRemoveRequestsDone(const ScopedJavaGlobalRef<jobject>& j_callback_obj,
                           const MultipleItemStatuses& removed_request_results) {
-  base::android::RunCallbackAndroid(j_callback_obj,
-                                    int(removed_request_results.size()));
+  base::android::RunIntCallbackAndroid(
+      j_callback_obj, static_cast<int>(removed_request_results.size()));
 }
 
 std::unique_ptr<KeyedService> GetTestingRequestCoordinator(
@@ -157,17 +155,13 @@ std::unique_ptr<KeyedService> GetTestingRequestCoordinator(
   std::unique_ptr<OfflinePagesUkmReporter> ukm_reporter(
       new OfflinePagesUkmReporter());
   std::unique_ptr<RequestCoordinator> request_coordinator =
-      base::MakeUnique<RequestCoordinator>(
+      std::make_unique<RequestCoordinator>(
           std::move(policy), std::move(offliner), std::move(queue),
           std::move(scheduler), network_quality_estimator,
           std::move(ukm_reporter));
   request_coordinator->SetInternalStartProcessingCallbackForTest(
       base::Bind(&android::EvaluationTestScheduler::ImmediateScheduleCallback,
                  base::Unretained(scheduler.get())));
-
-  DownloadNotifyingObserver::CreateAndStartObserving(
-      request_coordinator.get(),
-      base::MakeUnique<android::OfflinePageNotificationBridge>());
 
   return std::move(request_coordinator);
 }
@@ -328,10 +322,10 @@ bool OfflinePageEvaluationBridge::PushRequestProcessing(
     const JavaParamRef<jobject>& j_callback_obj) {
   ScopedJavaGlobalRef<jobject> j_callback_ref(j_callback_obj);
   DCHECK(request_coordinator_);
-  base::android::RunCallbackAndroid(j_callback_obj, false);
+  base::android::RunBooleanCallbackAndroid(j_callback_obj, false);
 
-  return request_coordinator_->StartImmediateProcessing(
-      base::Bind(&OnPushRequestsDone, j_callback_ref));
+  return request_coordinator_->StartImmediateProcessing(base::BindRepeating(
+      &base::android::RunBooleanCallbackAndroid, j_callback_ref));
 }
 
 void OfflinePageEvaluationBridge::SavePageLater(

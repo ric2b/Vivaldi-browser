@@ -14,19 +14,17 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/common/appcache_interfaces.h"
-#include "content/common/weak_wrapper_shared_url_loader_factory.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/service_worker_modes.h"
 #include "content/public/renderer/fixed_received_data.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/public/renderer/resource_dispatcher_delegate.h"
+#include "content/renderer/loader/navigation_response_override_parameters.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/test_request_peer.h"
 #include "net/base/net_errors.h"
@@ -36,10 +34,11 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_referrer_policy.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -57,8 +56,7 @@ static constexpr char kTestPageContents[] =
 class ResourceDispatcherTest : public testing::Test,
                                public network::mojom::URLLoaderFactory {
  public:
-  ResourceDispatcherTest()
-      : dispatcher_(new ResourceDispatcher(message_loop_.task_runner())) {}
+  ResourceDispatcherTest() : dispatcher_(new ResourceDispatcher()) {}
 
   ~ResourceDispatcherTest() override {
     dispatcher_.reset();
@@ -87,7 +85,7 @@ class ResourceDispatcherTest : public testing::Test,
     head.headers = new net::HttpResponseHeaders(raw_headers);
     head.mime_type = kTestPageMimeType;
     head.charset = kTestPageCharset;
-    client->OnReceiveResponse(head, {}, {});
+    client->OnReceiveResponse(head);
   }
 
   std::unique_ptr<network::ResourceRequest> CreateResourceRequest() {
@@ -118,11 +116,12 @@ class ResourceDispatcherTest : public testing::Test,
         new TestRequestPeer(dispatcher(), peer_context));
     int request_id = dispatcher()->StartAsync(
         std::move(request), 0,
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting(), url::Origin(),
-        TRAFFIC_ANNOTATION_FOR_TESTS, false, std::move(peer),
-        base::MakeRefCounted<WeakWrapperSharedURLLoaderFactory>(this),
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+        TRAFFIC_ANNOTATION_FOR_TESTS, false, false, std::move(peer),
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(this),
         std::vector<std::unique_ptr<URLLoaderThrottle>>(),
-        network::mojom::URLLoaderClientEndpointsPtr());
+        nullptr /* navigation_response_override_params */,
+        nullptr /* continue_navigation_function */);
     peer_context->request_id = request_id;
     return request_id;
   }
@@ -182,7 +181,8 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
       response_info_ = info;
     }
 
-    void OnDownloadedData(int len, int encoded_data_length) override {}
+    void OnStartLoadingResponseBody(
+        mojo::ScopedDataPipeConsumerHandle body) override {}
 
     void OnReceivedData(std::unique_ptr<ReceivedData> data) override {
       data_.append(data->payload(), data->length());
@@ -323,7 +323,7 @@ class TimeConversionTest : public ResourceDispatcherTest {
     ASSERT_EQ(1u, loader_and_clients_.size());
     auto client = std::move(loader_and_clients_[0].second);
     loader_and_clients_.clear();
-    client->OnReceiveResponse(response_head, {}, {});
+    client->OnReceiveResponse(response_head);
   }
 
   const network::ResourceResponseInfo& response_info() const {
@@ -374,6 +374,87 @@ TEST_F(TimeConversionTest, NotInitialized) {
   EXPECT_EQ(base::TimeTicks(), response_info().load_timing.request_start);
   EXPECT_EQ(base::TimeTicks(),
             response_info().load_timing.connect_timing.dns_start);
+}
+
+class CompletionTimeConversionTest : public ResourceDispatcherTest {
+ public:
+  void PerformTest(base::TimeTicks remote_request_start,
+                   base::TimeTicks completion_time,
+                   base::TimeDelta delay) {
+    std::unique_ptr<network::ResourceRequest> request(CreateResourceRequest());
+    StartAsync(std::move(request), nullptr, &peer_context_);
+
+    ASSERT_EQ(1u, loader_and_clients_.size());
+    auto client = std::move(loader_and_clients_[0].second);
+    network::ResourceResponseHead response_head;
+    response_head.request_start = remote_request_start;
+    response_head.load_timing.request_start = remote_request_start;
+    response_head.load_timing.receive_headers_end = remote_request_start;
+    // We need to put somthing non-null time, otherwise no values will be
+    // copied.
+    response_head.load_timing.request_start_time =
+        base::Time() + base::TimeDelta::FromSeconds(99);
+    client->OnReceiveResponse(response_head);
+
+    network::URLLoaderCompletionStatus status;
+    status.completion_time = completion_time;
+
+    client->OnComplete(status);
+
+    const base::TimeTicks until = base::TimeTicks::Now() + delay;
+    while (base::TimeTicks::Now() < until)
+      base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1));
+    base::RunLoop().RunUntilIdle();
+    loader_and_clients_.clear();
+  }
+
+  base::TimeTicks request_start() const {
+    EXPECT_TRUE(peer_context_.received_response);
+    return peer_context_.last_load_timing.request_start;
+  }
+  base::TimeTicks completion_time() const {
+    EXPECT_TRUE(peer_context_.complete);
+    return peer_context_.completion_status.completion_time;
+  }
+
+ private:
+  TestRequestPeer::Context peer_context_;
+};
+
+TEST_F(CompletionTimeConversionTest, NullCompletionTimestamp) {
+  const auto remote_request_start =
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(4);
+
+  PerformTest(remote_request_start, base::TimeTicks(), base::TimeDelta());
+
+  EXPECT_EQ(base::TimeTicks(), completion_time());
+}
+
+TEST_F(CompletionTimeConversionTest, RemoteRequestStartIsUnavailable) {
+  base::TimeTicks begin = base::TimeTicks::Now();
+
+  const auto remote_completion_time =
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(8);
+
+  PerformTest(base::TimeTicks(), remote_completion_time, base::TimeDelta());
+
+  base::TimeTicks end = base::TimeTicks::Now();
+  EXPECT_LE(begin, completion_time());
+  EXPECT_LE(completion_time(), end);
+}
+
+TEST_F(CompletionTimeConversionTest, Convert) {
+  const auto remote_request_start =
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(4);
+
+  const auto remote_completion_time =
+      remote_request_start + base::TimeDelta::FromMilliseconds(3);
+
+  PerformTest(remote_request_start, remote_completion_time,
+              base::TimeDelta::FromMilliseconds(15));
+
+  EXPECT_EQ(completion_time(),
+            request_start() + base::TimeDelta::FromMilliseconds(3));
 }
 
 }  // namespace content

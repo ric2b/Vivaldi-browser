@@ -22,14 +22,14 @@ source_set("lib") {
     "//base",
     "//mojo/public/cpp/bindings",
     "//skia",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//third_party/libxml",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
 
   public_deps = [
-    "//services/data_decoder/public/interfaces",
+    "//services/data_decoder/public/mojom",
     "//services/service_manager/public/cpp",
   ]
 }
@@ -48,15 +48,19 @@ source_set("tests") {
   deps = [
     ":lib",
     "//base",
+    "//base/test:test_support",
     "//gin",
     "//gin:gin_test",
     "//services/data_decoder/public/cpp",
     "//services/data_decoder/public/cpp:test_support",
     "//skia",
     "//testing/gtest",
-    "//third_party/WebKit/public:blink",
-    "//tools/v8_context_snapshot",
+    "//third_party/blink/public:blink",
     "//ui/gfx",
+  ]
+
+  data_deps = [
+    "//tools/v8_context_snapshot",
   ]
 
   configs += [

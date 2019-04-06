@@ -73,12 +73,15 @@ class VivaldiInstallDialog {
   installer::InstallStatus ShowEULADialog();
   std::wstring GetInnerFrameEULAResource();
 
-  void ShowDlgControls(HWND hwnd_dlg, bool show = true);
   void ShowOptions(HWND hwnd_dlg, bool show = true);
   void UpdateRegisterCheckboxVisibility();
   bool IsRegisterBrowserValid() const;
 
-  void InitBkgnd(HWND hdlg, int cx, int cy);
+  void InitBkgnd(HWND hdlg);
+  void InitCtlBrushes(HWND hdlg);
+  void ClearAll();
+  void Resize(HWND hdlg);
+  void Center(HWND hdlg);
 
   BOOL OnEraseBkgnd(HDC hdc);
   HBRUSH OnCtlColor(HWND hwnd_ctl, HDC hdc);
@@ -95,36 +98,31 @@ class VivaldiInstallDialog {
   std::wstring language_code_;
   base::FilePath destination_folder_;
   base::FilePath last_standalone_folder_;
-  InstallType install_type_;
-  bool set_as_default_browser_;
-  bool register_browser_;
-
-  bool is_upgrade_;
-
-  bool dialog_ended_;
-  bool advanced_mode_;
-  HWND hdlg_;
-  HINSTANCE instance_;
-  DlgResult dlg_result_;
-
-  bool enable_set_as_default_checkbox_;
-  bool enable_register_browser_checkbox_;
-
-  Scaling dpi_scale_;
-  HBITMAP hbitmap_bkgnd_;
-  HBITMAP back_bmp_;
-  LPVOID back_bits_;
-  int back_bmp_width_;
-  int back_bmp_height_;
-
-  HBRUSH syslink_tos_brush_;
-  HBRUSH button_browse_brush_;
-  HBRUSH button_ok_brush_;
-  HBRUSH button_cancel_brush_;
-  HBRUSH checkbox_default_brush_;
-  HBRUSH checkbox_register_brush_;
-  HBRUSH button_options_brush_;
-  HBRUSH syslink_privacy_brush_;
+  InstallType install_type_ = INSTALL_UNDEFINED;
+  bool set_as_default_browser_ = false;
+  bool register_browser_ = false;
+  bool is_upgrade_ = false;
+  bool dialog_ended_ = false;
+  bool advanced_mode_ = false;
+  HWND hdlg_ = NULL;
+  HINSTANCE instance_ = NULL;
+  DlgResult dlg_result_ = INSTALL_DLG_ERROR;
+  bool enable_set_as_default_checkbox_ = false;
+  bool enable_register_browser_checkbox_ = false;
+  Scaling dpi_scale_ = DPI_NORMAL;
+  HBITMAP hbitmap_bkgnd_ = NULL;
+  HBITMAP back_bmp_ = NULL;
+  LPVOID back_bits_ = NULL;
+  LONG back_bmp_width_ = 0;
+  LONG back_bmp_height_ = 0;
+  HBRUSH syslink_tos_brush_ = NULL;
+  HBRUSH button_browse_brush_ = NULL;
+  HBRUSH button_ok_brush_ = NULL;
+  HBRUSH button_cancel_brush_ = NULL;
+  HBRUSH checkbox_default_brush_ = NULL;
+  HBRUSH checkbox_register_brush_ = NULL;
+  HBRUSH button_options_brush_ = NULL;
+  HBRUSH syslink_privacy_brush_ = NULL;
   std::vector<HGLOBAL> dibs_;
 
   static VivaldiInstallDialog* this_;

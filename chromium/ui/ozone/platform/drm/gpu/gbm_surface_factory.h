@@ -13,6 +13,7 @@
 
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/ozone/common/gl_ozone_egl.h"
@@ -22,6 +23,7 @@ namespace ui {
 
 class DrmThreadProxy;
 class GbmSurfaceless;
+class GbmOverlaySurface;
 
 class GbmSurfaceFactory : public SurfaceFactoryOzone {
  public:
@@ -36,6 +38,21 @@ class GbmSurfaceFactory : public SurfaceFactoryOzone {
   std::vector<gl::GLImplementation> GetAllowedGLImplementations() override;
   GLOzone* GetGLOzone(gl::GLImplementation implementation) override;
 
+#if BUILDFLAG(ENABLE_VULKAN)
+  std::unique_ptr<gpu::VulkanImplementation> CreateVulkanImplementation()
+      override;
+  scoped_refptr<gfx::NativePixmap> CreateNativePixmapForVulkan(
+      gfx::AcceleratedWidget widget,
+      gfx::Size size,
+      gfx::BufferFormat format,
+      gfx::BufferUsage usage,
+      VkDevice vk_device,
+      VkDeviceMemory* vk_device_memory,
+      VkImage* vk_image) override;
+#endif
+
+  std::unique_ptr<OverlaySurface> CreateOverlaySurface(
+      gfx::AcceleratedWidget window) override;
   std::vector<gfx::BufferFormat> GetScanoutFormats(
       gfx::AcceleratedWidget widget) override;
   std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(

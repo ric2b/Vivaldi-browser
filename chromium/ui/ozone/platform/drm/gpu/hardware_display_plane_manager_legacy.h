@@ -19,22 +19,33 @@ class HardwareDisplayPlaneManagerLegacy : public HardwareDisplayPlaneManager {
 
   // HardwareDisplayPlaneManager:
   bool Commit(HardwareDisplayPlaneList* plane_list,
-              bool test_only) override;
+              scoped_refptr<PageFlipRequest> page_flip_request,
+              std::unique_ptr<gfx::GpuFence>* out_fence) override;
   bool DisableOverlayPlanes(HardwareDisplayPlaneList* plane_list) override;
 
-  bool ValidatePrimarySize(const OverlayPlane& primary,
+  bool SetColorCorrectionOnAllCrtcPlanes(
+      uint32_t crtc_id,
+      ScopedDrmColorCtmPtr ctm_blob_data) override;
+
+  bool ValidatePrimarySize(const DrmOverlayPlane& primary,
                            const drmModeModeInfo& mode) override;
 
-  void RequestPlanesReadyCallback(const OverlayPlaneList& planes,
-                                  base::OnceClosure callback) override;
+  void RequestPlanesReadyCallback(
+      DrmOverlayPlaneList planes,
+      base::OnceCallback<void(DrmOverlayPlaneList)> callback) override;
 
  protected:
   bool SetPlaneData(HardwareDisplayPlaneList* plane_list,
                     HardwareDisplayPlane* hw_plane,
-                    const OverlayPlane& overlay,
+                    const DrmOverlayPlane& overlay,
                     uint32_t crtc_id,
                     const gfx::Rect& src_rect,
                     CrtcController* crtc) override;
+  bool IsCompatible(HardwareDisplayPlane* plane,
+                    const DrmOverlayPlane& overlay,
+                    uint32_t crtc_index) const override;
+  bool CommitColorMatrix(const CrtcProperties& crtc_props) override;
+  bool CommitGammaCorrection(const CrtcProperties& crtc_props) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HardwareDisplayPlaneManagerLegacy);

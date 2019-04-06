@@ -4,7 +4,7 @@
 
 module ui.mojom;
 
-import "mojo/common/time.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "skia/public/interfaces/bitmap.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
@@ -69,16 +69,16 @@ enum CursorSize {
 
 // A description of a cursor.
 struct CursorData {
-  // The type of cursor. If CUSTOM, the rest of the fields are relevant.
+  // The type of cursor. If kCustom, the rest of the fields are relevant.
   CursorType cursor_type;
 
   // The delay between cursor frames.
-  mojo.common.mojom.TimeDelta frame_delay;
+  mojo_base.mojom.TimeDelta frame_delay;
 
   // The hotspot in pixels in the source cursor frames.
   gfx.mojom.Point hotspot_in_pixels;
 
-  // The frames of the cursor.
+  // The frames of the cursor. Must be non-empty if |cursor_type| is kCustom.
   array<skia.mojom.Bitmap?> cursor_frames;
 
   // This is the image scale of this cursor.

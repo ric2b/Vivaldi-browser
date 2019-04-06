@@ -18,7 +18,6 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -32,7 +31,6 @@
 #include "components/nacl/loader/nacl_ipc_adapter.h"
 #include "components/nacl/loader/nacl_validation_db.h"
 #include "components/nacl/loader/nacl_validation_query.h"
-#include "content/public/common/mojo_channel_switches.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
@@ -42,7 +40,7 @@
 #include "services/service_manager/public/cpp/service_context.h"
 
 #if defined(OS_LINUX)
-#include "content/public/common/common_sandbox_support_linux.h"
+#include "services/service_manager/zygote/common/common_sandbox_support_linux.h"
 #endif
 
 #if defined(OS_POSIX)
@@ -82,7 +80,7 @@ void LoadStatusCallback(int load_status) {
 #if defined(OS_LINUX)
 
 int CreateMemoryObject(size_t size, int executable) {
-  return content::MakeSharedMemorySegmentViaIPC(size, executable);
+  return service_manager::MakeSharedMemorySegmentViaIPC(size, executable);
 }
 
 #elif defined(OS_WIN)
@@ -337,7 +335,7 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
           manifest_service_handle)))
     LOG(FATAL) << "Failed to send IPC channel handle to NaClProcessHost.";
 
-  trusted_listener_ = base::MakeUnique<NaClTrustedListener>(
+  trusted_listener_ = std::make_unique<NaClTrustedListener>(
       std::move(renderer_host), io_thread_.task_runner().get());
   struct NaClChromeMainArgs* args = NaClChromeMainArgsCreate();
   if (args == NULL) {

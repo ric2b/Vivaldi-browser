@@ -5,13 +5,13 @@
 #include "services/resource_coordinator/observers/coordination_unit_graph_observer.h"
 
 #include "base/process/process_handle.h"
-#include "services/resource_coordinator/coordination_unit/coordination_unit_manager.h"
+#include "services/resource_coordinator/coordination_unit/coordination_unit_graph.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_test_harness.h"
 #include "services/resource_coordinator/coordination_unit/frame_coordination_unit_impl.h"
 #include "services/resource_coordinator/coordination_unit/process_coordination_unit_impl.h"
 #include "services/resource_coordinator/public/cpp/coordination_unit_id.h"
 #include "services/resource_coordinator/public/cpp/coordination_unit_types.h"
-#include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
+#include "services/resource_coordinator/public/mojom/coordination_unit.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace resource_coordinator {
@@ -63,37 +63,31 @@ class TestCoordinationUnitGraphObserver : public CoordinationUnitGraphObserver {
 }  // namespace
 
 TEST_F(CoordinationUnitGraphObserverTest, CallbacksInvoked) {
-  EXPECT_TRUE(coordination_unit_manager().observers_for_testing().empty());
-  coordination_unit_manager().RegisterObserver(
+  EXPECT_TRUE(coordination_unit_graph()->observers_for_testing().empty());
+  coordination_unit_graph()->RegisterObserver(
       std::make_unique<TestCoordinationUnitGraphObserver>());
-  EXPECT_EQ(1u, coordination_unit_manager().observers_for_testing().size());
+  EXPECT_EQ(1u, coordination_unit_graph()->observers_for_testing().size());
 
   TestCoordinationUnitGraphObserver* observer =
       static_cast<TestCoordinationUnitGraphObserver*>(
-          coordination_unit_manager().observers_for_testing()[0].get());
+          coordination_unit_graph()->observers_for_testing()[0].get());
 
-  auto process_cu = CreateCoordinationUnit<ProcessCoordinationUnitImpl>();
-  auto root_frame_cu = CreateCoordinationUnit<FrameCoordinationUnitImpl>();
-  auto frame_cu = CreateCoordinationUnit<FrameCoordinationUnitImpl>();
+  {
+    auto process_cu = CreateCoordinationUnit<ProcessCoordinationUnitImpl>();
+    auto root_frame_cu = CreateCoordinationUnit<FrameCoordinationUnitImpl>();
+    auto frame_cu = CreateCoordinationUnit<FrameCoordinationUnitImpl>();
 
-  coordination_unit_manager().OnCoordinationUnitCreated(process_cu.get());
-  coordination_unit_manager().OnCoordinationUnitCreated(root_frame_cu.get());
-  coordination_unit_manager().OnCoordinationUnitCreated(frame_cu.get());
-  EXPECT_EQ(2u, observer->coordination_unit_created_count());
+    EXPECT_EQ(2u, observer->coordination_unit_created_count());
 
-  // The registered observer will only observe the events that happen to
-  // |root_frame_coordination_unit| and |frame_coordination_unit| because
-  // they are CoordinationUnitType::kFrame, so OnPropertyChanged
-  // will only be called for |root_frame_coordination_unit|.
-  root_frame_cu->SetPropertyForTesting(42);
-  process_cu->SetPropertyForTesting(42);
-  EXPECT_EQ(1u, observer->property_changed_count());
+    // The registered observer will only observe the events that happen to
+    // |root_frame_coordination_unit| and |frame_coordination_unit| because
+    // they are CoordinationUnitType::kFrame, so OnPropertyChanged
+    // will only be called for |root_frame_coordination_unit|.
+    root_frame_cu->SetPropertyForTesting(42);
+    process_cu->SetPropertyForTesting(42);
+    EXPECT_EQ(1u, observer->property_changed_count());
+  }
 
-  coordination_unit_manager().OnBeforeCoordinationUnitDestroyed(
-      process_cu.get());
-  coordination_unit_manager().OnBeforeCoordinationUnitDestroyed(
-      root_frame_cu.get());
-  coordination_unit_manager().OnBeforeCoordinationUnitDestroyed(frame_cu.get());
   EXPECT_EQ(2u, observer->coordination_unit_destroyed_count());
 }
 

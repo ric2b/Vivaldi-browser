@@ -30,7 +30,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/i18n/file_util_icu.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
 #include "base/nix/xdg_util.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
@@ -44,10 +43,10 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/shell_integration.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/version_info/version_info.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -100,7 +99,7 @@ bool GetChromeVersionOfScript(const std::string& script,
                               std::string* chrome_version) {
   // Get the path to the Chrome version.
   base::FilePath chrome_dir;
-  if (!PathService::Get(base::DIR_EXE, &chrome_dir))
+  if (!base::PathService::Get(base::DIR_EXE, &chrome_dir))
     return false;
 
   base::FilePath chrome_version_path = chrome_dir.Append(script);
@@ -334,7 +333,7 @@ bool CreateShortcutOnDesktop(const base::FilePath& shortcut_filename,
   DCHECK_EQ(shortcut_filename.BaseName().value(), shortcut_filename.value());
 
   base::FilePath desktop_path;
-  if (!PathService::Get(base::DIR_USER_DESKTOP, &desktop_path))
+  if (!base::PathService::Get(base::DIR_USER_DESKTOP, &desktop_path))
     return false;
 
   int desktop_fd = open(desktop_path.value().c_str(), O_RDONLY | O_DIRECTORY);
@@ -369,7 +368,7 @@ bool CreateShortcutOnDesktop(const base::FilePath& shortcut_filename,
 
 void DeleteShortcutOnDesktop(const base::FilePath& shortcut_filename) {
   base::FilePath desktop_path;
-  if (PathService::Get(base::DIR_USER_DESKTOP, &desktop_path))
+  if (base::PathService::Get(base::DIR_USER_DESKTOP, &desktop_path))
     base::DeleteFile(desktop_path.Append(shortcut_filename), false);
 }
 
@@ -558,7 +557,7 @@ base::FilePath GetChromeExePath() {
 
   // Just return the name of the executable path for Chrome.
   base::FilePath chrome_exe_path;
-  PathService::Get(base::FILE_EXE, &chrome_exe_path);
+  base::PathService::Get(base::FILE_EXE, &chrome_exe_path);
   return chrome_exe_path;
 }
 
@@ -680,7 +679,7 @@ web_app::ShortcutLocations GetExistingShortcutLocations(
     const std::string& extension_id) {
   base::FilePath desktop_path;
   // If Get returns false, just leave desktop_path empty.
-  PathService::Get(base::DIR_USER_DESKTOP, &desktop_path);
+  base::PathService::Get(base::DIR_USER_DESKTOP, &desktop_path);
   return GetExistingShortcutLocations(env, profile_path, extension_id,
                                       desktop_path);
 }
@@ -745,7 +744,7 @@ base::FilePath GetWebShortcutFilename(const GURL& url) {
   base::i18n::ReplaceIllegalCharactersInPath(&filename, '_');
 
   base::FilePath desktop_path;
-  if (!PathService::Get(base::DIR_USER_DESKTOP, &desktop_path))
+  if (!base::PathService::Get(base::DIR_USER_DESKTOP, &desktop_path))
     return base::FilePath();
 
   base::FilePath filepath = desktop_path.Append(filename);
@@ -1102,7 +1101,7 @@ void DeleteAllDesktopShortcuts(const base::FilePath& profile_path) {
 
   // Delete shortcuts from Desktop.
   base::FilePath desktop_path;
-  if (PathService::Get(base::DIR_USER_DESKTOP, &desktop_path)) {
+  if (base::PathService::Get(base::DIR_USER_DESKTOP, &desktop_path)) {
     std::vector<base::FilePath> shortcut_filenames_desktop =
         GetExistingProfileShortcutFilenames(profile_path, desktop_path);
     for (const auto& shortcut : shortcut_filenames_desktop) {

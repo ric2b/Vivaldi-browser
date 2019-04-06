@@ -15,6 +15,7 @@ SourceProfile::SourceProfile()
 SourceProfile::SourceProfile(const SourceProfile& other) = default;
 
 SourceProfile::~SourceProfile() {
+  master_password.clear();
 }
 
 ImporterIE7PasswordInfo::ImporterIE7PasswordInfo() {

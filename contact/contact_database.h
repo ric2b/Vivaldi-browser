@@ -104,7 +104,7 @@ class ContactDatabase : public ContactTable,
 
  private:
   sql::Connection& GetDB() override;
-
+  sql::InitStatus EnsureCurrentVersion();
   sql::Connection db_;
   sql::MetaTable meta_table_;
 

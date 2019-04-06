@@ -12,7 +12,6 @@
 #include "base/i18n/rtl.h"
 #include "base/i18n/time_formatting.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -108,7 +107,7 @@ TEST_F(L10nUtilTest, GetAppLocale) {
   // pak files for this test.
   base::ScopedPathOverride locale_dir_override(ui::DIR_LOCALES);
   base::FilePath new_locale_dir;
-  ASSERT_TRUE(PathService::Get(ui::DIR_LOCALES, &new_locale_dir));
+  ASSERT_TRUE(base::PathService::Get(ui::DIR_LOCALES, &new_locale_dir));
   // Make fake locale files.
   std::string filenames[] = {
       "am", "ca", "ca@valencia", "en-GB", "en-US", "es",    "es-419", "fil",

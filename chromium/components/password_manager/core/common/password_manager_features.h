@@ -18,20 +18,32 @@ namespace features {
 // alongside the definition of their values in the .cc file.
 
 extern const base::Feature kAffiliationBasedMatching;
-extern const base::Feature kEnableHtmlBasedUsernameDetector;
-extern const base::Feature kEnableManualFallbacksFilling;
-extern const base::Feature kEnableManualFallbacksFillingStandalone;
-extern const base::Feature kEnableManualFallbacksGeneration;
-extern const base::Feature kEnableManualPasswordGeneration;
-extern const base::Feature kEnableManualSaving;
+extern const base::Feature kAutofillHome;
+extern const base::Feature kHtmlBasedUsernameDetector;
+extern const base::Feature kPasswordGenerationRequirements;
+extern const base::Feature kPasswordGenerationRequirementsDomainOverrides;
 extern const base::Feature kPasswordForceSaving;
-extern const base::Feature kEnableShowAllSavedPasswordsContextMenu;
+extern const base::Feature kShowAllSavedPasswordsContextMenu;
 extern const base::Feature kFillOnAccountSelect;
+extern const base::Feature kNewPasswordFormParsing;
 extern const base::Feature kPasswordExport;
 extern const base::Feature kPasswordImport;
+extern const base::Feature kPasswordSearchMobile;
+extern const base::Feature kPasswordsKeyboardAccessory;
 extern const base::Feature kProtectSyncCredential;
 extern const base::Feature kProtectSyncCredentialOnReauth;
-extern const base::Feature kViewPasswords;
+
+// Field trial and corresponding parameters.
+// To manually override this, start Chrome with the following parameters:
+//   --enable-features=PasswordGenerationRequirements,\
+//       PasswordGenerationRequirementsDomainOverrides
+//   --force-fieldtrials=PasswordGenerationRequirements/Enabled
+//   --force-fieldtrial-params=PasswordGenerationRequirements.Enabled:\
+//       version/0/prefix_length/0/timeout/5000
+extern const char* kGenerationRequirementsFieldTrial;
+extern const char* kGenerationRequirementsVersion;
+extern const char* kGenerationRequirementsPrefixLength;
+extern const char* kGenerationRequirementsTimeout;
 
 }  // namespace features
 

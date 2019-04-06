@@ -9,7 +9,8 @@ window.metrics = {
 var mockTaskHistory = {
   getLastExecutedTime: function(id) {
     return 0;
-  }
+  },
+  recordTaskExecuted: function(id) {}
 };
 
 loadTimeData.data = {
@@ -20,6 +21,7 @@ loadTimeData.data = {
   NO_TASK_FOR_CRX: 'NO_TASK_FOR_CRX',
   NO_TASK_FOR_CRX_TITLE: 'NO_TASK_FOR_CRX_TITLE',
   OPEN_WITH_BUTTON_LABEL: 'OPEN_WITH_BUTTON_LABEL',
+  TASK_INSTALL_LINUX_PACKAGE: 'TASK_INSTALL_LINUX_PACKAGE',
   TASK_OPEN: 'TASK_OPEN',
   MORE_ACTIONS_BUTTON_LABEL: 'MORE_ACTIONS_BUTTON_LABEL'
 };
@@ -56,19 +58,20 @@ function setUp() {
 function getMockFileManager() {
   return {
     volumeManager: {
+      getLocationInfo: function(entry) {
+        return {rootType: VolumeManagerCommon.RootType.DRIVE};
+      },
       getDriveConnectionState: function() {
         return VolumeManagerCommon.DriveConnectionType.ONLINE;
       },
-      getVolumeInfo: function() {
+      getVolumeInfo: function(entry) {
         return {
           volumeType: VolumeManagerCommon.VolumeType.DRIVE
         };
       }
     },
     ui: {
-      alertDialog: {
-        showHtml: function(title, text, onOk, onCancel, onShow) {}
-      }
+      alertDialog: {showHtml: function(title, text, onOk, onCancel, onShow) {}}
     },
     metadataModel: {},
     directoryModel: {
@@ -204,15 +207,12 @@ function testOpenSuggestAppsDialogWithMetadata(callback) {
   var showByExtensionAndMimeIsCalled = new Promise(function(resolve, reject) {
     var fileSystem = new MockFileSystem('volumeId');
     var entry = new MockFileEntry(fileSystem, '/test.rtf');
+    var fileManager = getMockFileManager();
 
     FileTasks
         .create(
-            {
-              getDriveConnectionState: function() {
-                return VolumeManagerCommon.DriveConnectionType.ONLINE;
-              }
-            },
-            {}, {}, {
+            fileManager.volumeManager, fileManager.metadataModel,
+            fileManager.directoryModel, {
               taskMenuButton: document.createElement('button'),
               fileContextMenu:
                   {defaultActionMenuItem: document.createElement('div')},
@@ -244,20 +244,13 @@ function testOpenSuggestAppsDialogFailure(callback) {
   var onFailureIsCalled = new Promise(function(resolve, reject) {
     var fileSystem = new MockFileSystem('volumeId');
     var entry = new MockFileEntry(fileSystem, '/test');
+    var fileManager = getMockFileManager();
 
     FileTasks
         .create(
-            {
-              getDriveConnectionState: function() {
-                return VolumeManagerCommon.DriveConnectionType.ONLINE;
-              }
-            },
-            {}, {}, {
-              taskMenuButton: document.createElement('button'),
-              fileContextMenu:
-                  {defaultActionMenuItem: document.createElement('div')}
-            },
-            [entry], [null], mockTaskHistory)
+            fileManager.volumeManager, fileManager.metadataModel,
+            fileManager.directoryModel, fileManager.ui, [entry], [null],
+            mockTaskHistory)
         .then(function(tasks) {
           tasks.openSuggestAppsDialog(function() {}, function() {}, resolve);
         });
@@ -435,6 +428,48 @@ function testChooseZipArchiverOverZipUnpacker(callback) {
           tasks.executeDefault();
           assertEquals(zipArchiverTaskId, executedTask);
           resolve();
+        });
+  });
+  reportPromise(promise, callback);
+}
+
+function testOpenInstallLinuxPackageDialog(callback) {
+  window.chrome.fileManagerPrivate.getFileTasks = function(entries, callback) {
+    setTimeout(
+        callback.bind(
+            null,
+            [
+              {
+                taskId: 'test-extension-id|file|install-linux-package',
+                isDefault: false,
+                isGenericFileHandler: false,
+                title: '__MSG_INSTALL_LINUX_PACKAGE__',
+              },
+            ]),
+        0);
+  };
+
+  var mockFileSystem = new MockFileSystem('volumeId');
+  var mockEntry = new MockFileEntry(mockFileSystem, '/test.deb');
+  var promise = new Promise(function(resolve, reject) {
+    var fileManager = getMockFileManager();
+    fileManager.ui.installLinuxPackageDialog = {
+      showInstallLinuxPackageDialog: function(entry) {
+        resolve();
+      }
+    };
+
+    fileManager.volumeManager.getLocationInfo = function(entry) {
+      return {rootType: VolumeManagerCommon.RootType.CROSTINI};
+    };
+
+    FileTasks
+        .create(
+            fileManager.volumeManager, fileManager.metadataModel,
+            fileManager.directoryModel, fileManager.ui, [mockEntry], [null],
+            mockTaskHistory)
+        .then(function(tasks) {
+          tasks.executeDefault();
         });
   });
   reportPromise(promise, callback);

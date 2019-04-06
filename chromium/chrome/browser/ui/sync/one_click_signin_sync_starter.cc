@@ -23,6 +23,7 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_tracker_factory.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -34,15 +35,18 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
+#include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/account_id/account_id.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/unified_consent/unified_consent_service.h"
+#include "content/public/browser/storage_partition.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -99,8 +103,6 @@ OneClickSigninSyncStarter::OneClickSigninSyncStarter(
   DCHECK(profile);
   BrowserList::AddObserver(this);
   Initialize(profile, browser);
-
-  DCHECK(!signin::IsDicePrepareMigrationEnabled());
   DCHECK(!refresh_token.empty());
   SigninManagerFactory::GetForProfile(profile_)->StartSignInWithRefreshToken(
       refresh_token, gaia_id, email, password,
@@ -260,11 +262,16 @@ void OneClickSigninSyncStarter::LoadPolicyWithCachedCredentials() {
   SigninManager* signin = SigninManagerFactory::GetForProfile(profile_);
   policy::UserPolicySigninService* policy_service =
       policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
+  std::string username = signin->GetUsernameForAuthInProgress();
+  std::string gaia_id = signin->GetGaiaIdForAuthInProgress();
+  DCHECK(username.empty() == gaia_id.empty());
+  AccountId account_id =
+      username.empty() ? EmptyAccountId()
+                       : AccountId::FromUserEmailGaiaId(username, gaia_id);
   policy_service->FetchPolicyForSignedInUser(
-      signin->GetUsernameForAuthInProgress(),
-      dm_token_,
-      client_id_,
-      profile_->GetRequestContext(),
+      account_id, dm_token_, client_id_, profile_->GetRequestContext(),
+      content::BrowserContext::GetDefaultStoragePartition(profile_)
+          ->GetURLLoaderFactoryForBrowserProcess(),
       base::Bind(&OneClickSigninSyncStarter::OnPolicyFetchComplete,
                  weak_pointer_factory_.GetWeakPtr()));
 }
@@ -311,9 +318,9 @@ void OneClickSigninSyncStarter::CompleteInitForNewProfile(
       break;
     }
     case Profile::CREATE_STATUS_INITIALIZED:
-        // Pre-DICE, the refresh token is copied to the new profile and the user
-        // does not need to autehnticate in the new profile.
-        CopyCredentialsToNewProfileAndFinishSignin(new_profile);
+      // Pre-DICE, the refresh token is copied to the new profile and the user
+      // does not need to autehnticate in the new profile.
+      CopyCredentialsToNewProfileAndFinishSignin(new_profile);
       break;
     case Profile::CREATE_STATUS_REMOTE_FAIL:
     case Profile::CREATE_STATUS_CANCELED:
@@ -440,12 +447,15 @@ void OneClickSigninSyncStarter::OnSyncConfirmationUIClosed(
 
   switch (result) {
     case LoginUIService::CONFIGURE_SYNC_FIRST:
+      EnableUnifiedConsentIfNeeded();
       ShowSyncSetupSettingsSubpage();
       break;
     case LoginUIService::SYNC_WITH_DEFAULT_SETTINGS: {
       ProfileSyncService* profile_sync_service = GetProfileSyncService();
-      if (profile_sync_service)
+      if (profile_sync_service) {
         profile_sync_service->SetFirstSetupComplete();
+        EnableUnifiedConsentIfNeeded();
+      }
       FinishProfileSyncServiceSetup();
       break;
     }
@@ -458,6 +468,13 @@ void OneClickSigninSyncStarter::OnSyncConfirmationUIClosed(
   }
 
   delete this;
+}
+
+void OneClickSigninSyncStarter::EnableUnifiedConsentIfNeeded() {
+  if (IsUnifiedConsentEnabled(profile_)) {
+    UnifiedConsentServiceFactory::GetForProfile(profile_)
+        ->SetUnifiedConsentGiven(true);
+  }
 }
 
 void OneClickSigninSyncStarter::SigninFailed(
@@ -485,7 +502,9 @@ void OneClickSigninSyncStarter::SigninFailed(
 }
 
 void OneClickSigninSyncStarter::SigninSuccess() {
-  signin_metrics::LogSigninAccessPointCompleted(signin_access_point_);
+  signin_metrics::LogSigninAccessPointCompleted(
+      signin_access_point_,
+      signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
   signin_metrics::LogSigninReason(signin_reason_);
   base::RecordAction(base::UserMetricsAction("Signin_Signin_Succeed"));
 }
@@ -549,4 +568,3 @@ ProfileSyncService* OneClickSigninSyncStarter::GetProfileSyncService() {
 void OneClickSigninSyncStarter::FinishProfileSyncServiceSetup() {
   sync_blocker_.reset();
 }
-

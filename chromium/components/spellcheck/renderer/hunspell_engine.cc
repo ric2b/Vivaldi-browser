@@ -13,7 +13,7 @@
 #include "base/time/time.h"
 #include "components/spellcheck/common/spellcheck.mojom.h"
 #include "components/spellcheck/common/spellcheck_common.h"
-#include "components/spellcheck/spellcheck_build_features.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/renderer/render_thread.h"
 #include "services/service_manager/public/cpp/local_interface_provider.h"
@@ -39,6 +39,7 @@ namespace {
 #if !BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 SpellingEngine* CreateNativeSpellingEngine(
     service_manager::LocalInterfaceProvider* embedder_provider) {
+  DCHECK(embedder_provider);
   return new HunspellEngine(embedder_provider);
 }
 #endif
@@ -65,7 +66,7 @@ void HunspellEngine::Init(base::File file) {
 }
 
 void HunspellEngine::InitializeHunspell() {
-  if (hunspell_.get())
+  if (hunspell_)
     return;
 
   bdict_file_.reset(new base::MemoryMappedFile);
@@ -89,7 +90,7 @@ bool HunspellEngine::CheckSpelling(const base::string16& word_to_check,
   if (word_to_check_utf8.length() <= kMaxCheckedLen) {
     // If |hunspell_| is NULL here, an error has occurred, but it's better
     // to check rather than crash.
-    if (hunspell_.get()) {
+    if (hunspell_) {
       // |hunspell_->spell| returns 0 if the word is misspelled.
       word_correct = (hunspell_->spell(word_to_check_utf8) != 0);
     }
@@ -108,7 +109,7 @@ void HunspellEngine::FillSuggestionList(
   // If |hunspell_| is NULL here, an error has occurred, but it's better
   // to check rather than crash.
   // TODO(groby): Technically, it's not. We should track down the issue.
-  if (!hunspell_.get())
+  if (!hunspell_)
     return;
 
   std::vector<std::string> suggestions =
@@ -123,12 +124,9 @@ void HunspellEngine::FillSuggestionList(
 
 bool HunspellEngine::InitializeIfNeeded() {
   if (!initialized_ && !dictionary_requested_) {
-    // |embedder_provider_| will be nullptr in tests.
-    if (embedder_provider_) {
-      spellcheck::mojom::SpellCheckHostPtr spell_check_host;
-      embedder_provider_->GetInterface(&spell_check_host);
-      spell_check_host->RequestDictionary();
-    }
+    spellcheck::mojom::SpellCheckHostPtr spell_check_host;
+    embedder_provider_->GetInterface(&spell_check_host);
+    spell_check_host->RequestDictionary();
     dictionary_requested_ = true;
     return true;
   }

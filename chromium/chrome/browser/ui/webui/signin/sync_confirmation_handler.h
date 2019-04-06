@@ -6,10 +6,12 @@
 #define CHROME_BROWSER_UI_WEBUI_SIGNIN_SYNC_CONFIRMATION_HANDLER_H_
 
 #include <string>
+#include <unordered_map>
 
 #include "base/macros.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
+#include "components/consent_auditor/consent_auditor.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
@@ -21,7 +23,13 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
                                 public AccountTrackerService::Observer,
                                 public BrowserListObserver {
  public:
-  explicit SyncConfirmationHandler(Browser* browser);
+  // Creates a SyncConfirmationHandler for the |browser|. All strings in the
+  // corresponding Web UI should be represented in |string_to_grd_id_map| and
+  // mapped to their GRD IDs.
+  explicit SyncConfirmationHandler(
+      Browser* browser,
+      const std::unordered_map<std::string, int>& string_to_grd_id_map,
+      consent_auditor::Feature consent_feature);
   ~SyncConfirmationHandler() override;
 
   // content::WebUIMessageHandler:
@@ -55,6 +63,16 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
   // a single integer value for the height the native view should resize to.
   virtual void HandleInitializedWithSize(const base::ListValue* args);
 
+  // Records the user's consent to sync. Called from |HandleConfirm| and
+  // |HandleGoToSettings|, and expects two parameters to be passed through
+  // these methods from the WebUI:
+  // 1. List of strings (names of the string resources constituting the consent
+  //                     description as per WebUIDataSource)
+  // 2. Strings (name of the string resource of the consent confirmation)
+  // This message is sent when the user interacts with the dialog in a positive
+  // manner, i.e. clicks on the confirmation button or the settings link.
+  virtual void RecordConsent(const base::ListValue* args);
+
   // Sets the profile picture shown in the dialog to the image at |url|.
   virtual void SetUserImageURL(const std::string& url);
 
@@ -64,6 +82,10 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
   void CloseModalSigninWindow(
       LoginUIService::SyncConfirmationUIClosedResult result);
 
+  // Returns true if this is a unified consent bump dialog, and false if this is
+  // a regular sync confirmation.
+  bool IsUnifiedConsentBumpDialog();
+
  private:
   Profile* profile_;
 
@@ -72,6 +94,13 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
 
   // Records whether the user clicked on Undo, Ok, or Settings.
   bool did_user_explicitly_interact;
+
+  // Mapping between strings displayed in the UI corresponding to this handler
+  // and their respective GRD IDs.
+  std::unordered_map<std::string, int> string_to_grd_id_map_;
+
+  // Contains the features to use when the user consent decision is recorded.
+  consent_auditor::Feature consent_feature_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncConfirmationHandler);
 };

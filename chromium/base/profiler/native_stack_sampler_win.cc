@@ -4,8 +4,9 @@
 
 #include "base/profiler/native_stack_sampler.h"
 
-#include <objbase.h>
 #include <windows.h>
+
+#include <objbase.h>
 #include <stddef.h>
 #include <winternl.h>
 
@@ -20,6 +21,8 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/profiler/win32_stack_frame_unwinder.h"
+#include "base/stl_util.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,6 +31,12 @@
 #include "base/win/scoped_handle.h"
 
 namespace base {
+
+using Frame = StackSamplingProfiler::Frame;
+using InternalFrame = StackSamplingProfiler::InternalFrame;
+using Module = StackSamplingProfiler::Module;
+using InternalModule = StackSamplingProfiler::InternalModule;
+using ProfileBuilder = StackSamplingProfiler::ProfileBuilder;
 
 // Stack recording functions --------------------------------------------------
 
@@ -59,21 +68,18 @@ const TEB* GetThreadEnvironmentBlock(HANDLE thread_handle) {
   };
 
   using NtQueryInformationThreadFunction =
-      NTSTATUS (WINAPI*)(HANDLE, THREAD_INFORMATION_CLASS, PVOID, ULONG,
-                         PULONG);
+      NTSTATUS(WINAPI*)(HANDLE, THREAD_INFORMATION_CLASS, PVOID, ULONG, PULONG);
 
-  const NtQueryInformationThreadFunction nt_query_information_thread =
-      reinterpret_cast<NtQueryInformationThreadFunction>(
-          ::GetProcAddress(::GetModuleHandle(L"ntdll.dll"),
-                           "NtQueryInformationThread"));
+  const auto nt_query_information_thread =
+      reinterpret_cast<NtQueryInformationThreadFunction>(::GetProcAddress(
+          ::GetModuleHandle(L"ntdll.dll"), "NtQueryInformationThread"));
   if (!nt_query_information_thread)
     return nullptr;
 
   THREAD_BASIC_INFORMATION basic_info = {0};
-  NTSTATUS status =
-      nt_query_information_thread(thread_handle, ThreadBasicInformation,
-                                  &basic_info, sizeof(THREAD_BASIC_INFORMATION),
-                                  nullptr);
+  NTSTATUS status = nt_query_information_thread(
+      thread_handle, ThreadBasicInformation, &basic_info,
+      sizeof(THREAD_BASIC_INFORMATION), nullptr);
   if (status != 0)
     return nullptr;
 
@@ -83,9 +89,11 @@ const TEB* GetThreadEnvironmentBlock(HANDLE thread_handle) {
 #if defined(_WIN64)
 // If the value at |pointer| points to the original stack, rewrite it to point
 // to the corresponding location in the copied stack.
-void RewritePointerIfInOriginalStack(uintptr_t top, uintptr_t bottom,
-                                     void* stack_copy, const void** pointer) {
-  const uintptr_t value = reinterpret_cast<uintptr_t>(*pointer);
+void RewritePointerIfInOriginalStack(uintptr_t top,
+                                     uintptr_t bottom,
+                                     void* stack_copy,
+                                     const void** pointer) {
+  const auto value = reinterpret_cast<uintptr_t>(*pointer);
   if (value >= bottom && value < top) {
     *pointer = reinterpret_cast<const void*>(
         static_cast<unsigned char*>(stack_copy) + (value - bottom));
@@ -122,23 +130,17 @@ void CopyMemoryFromStack(void* to, const void* from, size_t length)
 // Note: this function must not access memory in the original stack as it may
 // have been changed or deallocated by this point. This is why |top| and
 // |bottom| are passed as uintptr_t.
-void RewritePointersToStackMemory(uintptr_t top, uintptr_t bottom,
-                                  CONTEXT* context, void* stack_copy) {
+void RewritePointersToStackMemory(uintptr_t top,
+                                  uintptr_t bottom,
+                                  CONTEXT* context,
+                                  void* stack_copy) {
 #if defined(_WIN64)
-  DWORD64 CONTEXT::* const nonvolatile_registers[] = {
-    &CONTEXT::R12,
-    &CONTEXT::R13,
-    &CONTEXT::R14,
-    &CONTEXT::R15,
-    &CONTEXT::Rdi,
-    &CONTEXT::Rsi,
-    &CONTEXT::Rbx,
-    &CONTEXT::Rbp,
-    &CONTEXT::Rsp
-  };
+  DWORD64 CONTEXT::*const nonvolatile_registers[] = {
+      &CONTEXT::R12, &CONTEXT::R13, &CONTEXT::R14, &CONTEXT::R15, &CONTEXT::Rdi,
+      &CONTEXT::Rsi, &CONTEXT::Rbx, &CONTEXT::Rbp, &CONTEXT::Rsp};
 
   // Rewrite pointers in the context.
-  for (size_t i = 0; i < arraysize(nonvolatile_registers); ++i) {
+  for (size_t i = 0; i < size(nonvolatile_registers); ++i) {
     DWORD64* const reg = &(context->*nonvolatile_registers[i]);
     RewritePointerIfInOriginalStack(top, bottom, stack_copy,
                                     reinterpret_cast<const void**>(reg));
@@ -159,8 +161,7 @@ struct RecordedFrame {
 
   RecordedFrame(RecordedFrame&& other)
       : instruction_pointer(other.instruction_pointer),
-        module(std::move(other.module)) {
-  }
+        module(std::move(other.module)) {}
 
   RecordedFrame& operator=(RecordedFrame&& other) {
     instruction_pointer = other.instruction_pointer;
@@ -218,16 +219,16 @@ void RecordStack(CONTEXT* context, std::vector<RecordedFrame>* stack) {
 std::string GetBuildIDForModule(HMODULE module_handle) {
   GUID guid;
   DWORD age;
-  win::PEImage(module_handle).GetDebugId(&guid, &age);
+  win::PEImage(module_handle).GetDebugId(&guid, &age, /* pdb_file= */ nullptr);
   const int kGUIDSize = 39;
-  std::wstring build_id;
+  string16 build_id;
   int result =
       ::StringFromGUID2(guid, WriteInto(&build_id, kGUIDSize), kGUIDSize);
   if (result != kGUIDSize)
     return std::string();
   RemoveChars(build_id, L"{}-", &build_id);
   build_id += StringPrintf(L"%d", age);
-  return WideToUTF8(build_id);
+  return UTF16ToUTF8(build_id);
 }
 
 // ScopedDisablePriorityBoost -------------------------------------------------
@@ -315,8 +316,7 @@ ScopedSuspendThread::~ScopedSuspendThread() {
 bool PointsToGuardPage(uintptr_t stack_pointer) {
   MEMORY_BASIC_INFORMATION memory_info;
   SIZE_T result = ::VirtualQuery(reinterpret_cast<LPCVOID>(stack_pointer),
-                                 &memory_info,
-                                 sizeof(memory_info));
+                                 &memory_info, sizeof(memory_info));
   return result != 0 && (memory_info.Protect & PAGE_GUARD);
 }
 
@@ -333,8 +333,7 @@ void SuspendThreadAndRecordStack(
     void* stack_copy_buffer,
     size_t stack_copy_buffer_size,
     std::vector<RecordedFrame>* stack,
-    NativeStackSampler::AnnotateCallback annotator,
-    StackSamplingProfiler::Sample* sample,
+    ProfileBuilder* profile_builder,
     NativeStackSamplerTestDelegate* test_delegate) {
   DCHECK(stack->empty());
 
@@ -343,7 +342,7 @@ void SuspendThreadAndRecordStack(
   // The stack bounds are saved to uintptr_ts for use outside
   // ScopedSuspendThread, as the thread's memory is not safe to dereference
   // beyond that point.
-  const uintptr_t top = reinterpret_cast<uintptr_t>(base_address);
+  const auto top = reinterpret_cast<uintptr_t>(base_address);
   uintptr_t bottom = 0u;
 
   {
@@ -369,7 +368,7 @@ void SuspendThreadAndRecordStack(
     if (PointsToGuardPage(bottom))
       return;
 
-    (*annotator)(sample);
+    profile_builder->RecordAnnotations();
 
     CopyMemoryFromStack(stack_copy_buffer,
                         reinterpret_cast<const void*>(bottom), top - bottom);
@@ -388,163 +387,126 @@ void SuspendThreadAndRecordStack(
 class NativeStackSamplerWin : public NativeStackSampler {
  public:
   NativeStackSamplerWin(win::ScopedHandle thread_handle,
-                        AnnotateCallback annotator,
                         NativeStackSamplerTestDelegate* test_delegate);
   ~NativeStackSamplerWin() override;
 
   // StackSamplingProfiler::NativeStackSampler:
-  void ProfileRecordingStarting(
-      std::vector<StackSamplingProfiler::Module>* modules) override;
-  void RecordStackSample(StackBuffer* stack_buffer,
-                         StackSamplingProfiler::Sample* sample) override;
-  void ProfileRecordingStopped(StackBuffer* stack_buffer) override;
+  void ProfileRecordingStarting() override;
+  std::vector<InternalFrame> RecordStackFrames(
+      StackBuffer* stack_buffer,
+      ProfileBuilder* profile_builder) override;
 
  private:
   // Attempts to query the module filename, base address, and id for
-  // |module_handle|, and store them in |module|. Returns true if it succeeded.
-  static bool GetModuleForHandle(HMODULE module_handle,
-                                 StackSamplingProfiler::Module* module);
+  // |module_handle|, and returns them in an InternalModule object.
+  static InternalModule GetModuleForHandle(HMODULE module_handle);
 
-  // Gets the index for the Module corresponding to |module_handle| in
-  // |modules|, adding it if it's not already present. Returns
-  // StackSamplingProfiler::Frame::kUnknownModuleIndex if no Module can be
-  // determined for |module|.
-  size_t GetModuleIndex(HMODULE module_handle,
-                        std::vector<StackSamplingProfiler::Module>* modules);
-
-  // Copies the information represented by |stack| into |sample| and |modules|.
-  void CopyToSample(const std::vector<RecordedFrame>& stack,
-                    StackSamplingProfiler::Sample* sample,
-                    std::vector<StackSamplingProfiler::Module>* modules);
+  // Creates a set of internal frames with the information represented by
+  // |stack|.
+  std::vector<InternalFrame> CreateInternalFrames(
+      const std::vector<RecordedFrame>& stack);
 
   win::ScopedHandle thread_handle_;
-
-  const AnnotateCallback annotator_;
 
   NativeStackSamplerTestDelegate* const test_delegate_;
 
   // The stack base address corresponding to |thread_handle_|.
   const void* const thread_stack_base_address_;
 
-  // Weak. Points to the modules associated with the profile being recorded
-  // between ProfileRecordingStarting() and ProfileRecordingStopped().
-  std::vector<StackSamplingProfiler::Module>* current_modules_;
-
-  // Maps a module handle to the corresponding Module's index within
-  // current_modules_.
-  std::map<HMODULE, size_t> profile_module_index_;
+  // The internal module objects, indexed by the module handle.
+  std::map<HMODULE, InternalModule> module_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeStackSamplerWin);
 };
 
 NativeStackSamplerWin::NativeStackSamplerWin(
     win::ScopedHandle thread_handle,
-    AnnotateCallback annotator,
     NativeStackSamplerTestDelegate* test_delegate)
     : thread_handle_(thread_handle.Take()),
-      annotator_(annotator),
       test_delegate_(test_delegate),
       thread_stack_base_address_(
-          GetThreadEnvironmentBlock(thread_handle_.Get())->Tib.StackBase) {
-  DCHECK(annotator_);
+          GetThreadEnvironmentBlock(thread_handle_.Get())->Tib.StackBase) {}
+
+NativeStackSamplerWin::~NativeStackSamplerWin() {}
+
+void NativeStackSamplerWin::ProfileRecordingStarting() {
+  module_cache_.clear();
 }
 
-NativeStackSamplerWin::~NativeStackSamplerWin() {
-}
-
-void NativeStackSamplerWin::ProfileRecordingStarting(
-    std::vector<StackSamplingProfiler::Module>* modules) {
-  current_modules_ = modules;
-  profile_module_index_.clear();
-}
-
-void NativeStackSamplerWin::RecordStackSample(
+std::vector<InternalFrame> NativeStackSamplerWin::RecordStackFrames(
     StackBuffer* stack_buffer,
-    StackSamplingProfiler::Sample* sample) {
+    ProfileBuilder* profile_builder) {
   DCHECK(stack_buffer);
-  DCHECK(current_modules_);
 
   std::vector<RecordedFrame> stack;
   SuspendThreadAndRecordStack(thread_handle_.Get(), thread_stack_base_address_,
                               stack_buffer->buffer(), stack_buffer->size(),
-                              &stack, annotator_, sample, test_delegate_);
-  CopyToSample(stack, sample, current_modules_);
-}
+                              &stack, profile_builder, test_delegate_);
 
-void NativeStackSamplerWin::ProfileRecordingStopped(StackBuffer* stack_buffer) {
-  current_modules_ = nullptr;
+  return CreateInternalFrames(stack);
 }
 
 // static
-bool NativeStackSamplerWin::GetModuleForHandle(
-    HMODULE module_handle,
-    StackSamplingProfiler::Module* module) {
+InternalModule NativeStackSamplerWin::GetModuleForHandle(
+    HMODULE module_handle) {
   wchar_t module_name[MAX_PATH];
   DWORD result_length =
-      GetModuleFileName(module_handle, module_name, arraysize(module_name));
+      ::GetModuleFileName(module_handle, module_name, size(module_name));
   if (result_length == 0)
-    return false;
+    return InternalModule();
 
-  module->filename = base::FilePath(module_name);
+  const std::string& module_id = GetBuildIDForModule(module_handle);
+  if (module_id.empty())
+    return InternalModule();
 
-  module->base_address = reinterpret_cast<uintptr_t>(module_handle);
-
-  module->id = GetBuildIDForModule(module_handle);
-  if (module->id.empty())
-    return false;
-
-  return true;
+  return InternalModule(reinterpret_cast<uintptr_t>(module_handle), module_id,
+                        FilePath(module_name));
 }
 
-size_t NativeStackSamplerWin::GetModuleIndex(
-    HMODULE module_handle,
-    std::vector<StackSamplingProfiler::Module>* modules) {
-  if (!module_handle)
-    return StackSamplingProfiler::Frame::kUnknownModuleIndex;
+std::vector<InternalFrame> NativeStackSamplerWin::CreateInternalFrames(
+    const std::vector<RecordedFrame>& stack) {
+  std::vector<InternalFrame> internal_frames;
+  internal_frames.reserve(stack.size());
 
-  auto loc = profile_module_index_.find(module_handle);
-  if (loc == profile_module_index_.end()) {
-    StackSamplingProfiler::Module module;
-    if (!GetModuleForHandle(module_handle, &module))
-      return StackSamplingProfiler::Frame::kUnknownModuleIndex;
-    modules->push_back(module);
-    loc = profile_module_index_.insert(std::make_pair(
-        module_handle, modules->size() - 1)).first;
+  for (const auto& frame : stack) {
+    auto frame_ip = reinterpret_cast<uintptr_t>(frame.instruction_pointer);
+
+    HMODULE module_handle = frame.module.Get();
+    if (!module_handle) {
+      internal_frames.emplace_back(frame_ip, InternalModule());
+      continue;
+    }
+
+    auto loc = module_cache_.find(module_handle);
+    if (loc != module_cache_.end()) {
+      internal_frames.emplace_back(frame_ip, loc->second);
+      continue;
+    }
+
+    InternalModule internal_module = GetModuleForHandle(module_handle);
+    if (internal_module.is_valid)
+      module_cache_.insert(std::make_pair(module_handle, internal_module));
+
+    internal_frames.emplace_back(frame_ip, std::move(internal_module));
   }
 
-  return loc->second;
-}
-
-void NativeStackSamplerWin::CopyToSample(
-    const std::vector<RecordedFrame>& stack,
-    StackSamplingProfiler::Sample* sample,
-    std::vector<StackSamplingProfiler::Module>* modules) {
-  sample->frames.clear();
-  sample->frames.reserve(stack.size());
-
-  for (const RecordedFrame& frame : stack) {
-    sample->frames.push_back(StackSamplingProfiler::Frame(
-        reinterpret_cast<uintptr_t>(frame.instruction_pointer),
-        GetModuleIndex(frame.module.Get(), modules)));
-  }
+  return internal_frames;
 }
 
 }  // namespace
 
 std::unique_ptr<NativeStackSampler> NativeStackSampler::Create(
     PlatformThreadId thread_id,
-    AnnotateCallback annotator,
     NativeStackSamplerTestDelegate* test_delegate) {
 #if _WIN64
   // Get the thread's handle.
   HANDLE thread_handle = ::OpenThread(
       THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
-      FALSE,
-      thread_id);
+      FALSE, thread_id);
 
   if (thread_handle) {
     return std::unique_ptr<NativeStackSampler>(new NativeStackSamplerWin(
-        win::ScopedHandle(thread_handle), annotator, test_delegate));
+        win::ScopedHandle(thread_handle), test_delegate));
   }
 #endif
   return std::unique_ptr<NativeStackSampler>();

@@ -11,7 +11,6 @@
 #include "base/memory/weak_ptr.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/data_type_controller.h"
-#include "components/sync/model/attachments/attachment_service.h"
 #include "components/sync/model/data_type_error_handler.h"
 #include "components/sync/model/syncable_service.h"
 
@@ -33,25 +32,14 @@ class DataTypeManager;
 class DataTypeManagerObserver;
 class LocalDeviceInfoProvider;
 class SyncEngine;
-class SyncClient;
 class SyncPrefs;
-class SyncService;
 class SyncableService;
-struct UserShare;
 
 // This factory provides sync driver code with the model type specific sync/api
 // service (like SyncableService) implementations.
 class SyncApiComponentFactory {
  public:
   virtual ~SyncApiComponentFactory() {}
-  // Callback to allow platform-specific datatypes to register themselves as
-  // data type controllers.
-  // |disabled_types| and |enabled_types| control the disable/enable state of
-  // types that are on or off by default (respectively).
-  using RegisterDataTypesMethod =
-      base::Callback<void(SyncService* sync_service,
-                          ModelTypeSet disabled_types,
-                          ModelTypeSet enabled_types)>;
 
   // The various factory methods for the data type model associators
   // and change processors all return this struct.  This is needed
@@ -63,23 +51,25 @@ class SyncApiComponentFactory {
   // weak pointer to a SyncableService. All others continue to return
   // SyncComponents. It is safe to assume that the factory methods below are
   // called on the same thread in which the datatype resides.
-  //
-  // TODO(zea): Have all datatypes using the new API switch to returning
-  // SyncableService weak pointers instead of SyncComponents (crbug.com/100114).
   struct SyncComponents {
-    AssociatorInterface* model_associator;
-    ChangeProcessor* change_processor;
-    SyncComponents(AssociatorInterface* ma, ChangeProcessor* cp)
-        : model_associator(ma), change_processor(cp) {}
+    SyncComponents();
+    SyncComponents(SyncComponents&&);
+    ~SyncComponents();
+
+    std::unique_ptr<AssociatorInterface> model_associator;
+    std::unique_ptr<ChangeProcessor> change_processor;
   };
 
-  // Creates and registers enabled datatypes with the provided SyncClient.
-  virtual void RegisterDataTypes(
-      SyncService* sync_service,
-      const RegisterDataTypesMethod& register_platform_types_method) = 0;
+  // Creates and returns enabled datatypes and their controllers.
+  // |disabled_types| allows callers to prevent certain types from being
+  // created (e.g. to honor command-line flags).
+  // TODO(crbug.com/681921): Remove |local_device_info_provider| once the
+  // migration to USS is completed.
+  virtual DataTypeController::TypeVector CreateCommonDataTypeControllers(
+      ModelTypeSet disabled_types,
+      LocalDeviceInfoProvider* local_device_info_provider) = 0;
 
-  // Creates a DataTypeManager; the return pointer is owned by the caller.
-  virtual DataTypeManager* CreateDataTypeManager(
+  virtual std::unique_ptr<DataTypeManager> CreateDataTypeManager(
       ModelTypeSet initial_types,
       const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
       const DataTypeController::TypeMap* controllers,
@@ -88,7 +78,7 @@ class SyncApiComponentFactory {
       DataTypeManagerObserver* observer) = 0;
 
   // Creating this in the factory helps us mock it out in testing.
-  virtual SyncEngine* CreateSyncEngine(
+  virtual std::unique_ptr<SyncEngine> CreateSyncEngine(
       const std::string& name,
       invalidation::InvalidationService* invalidator,
       const base::WeakPtr<SyncPrefs>& sync_prefs,
@@ -100,29 +90,6 @@ class SyncApiComponentFactory {
 
   // Legacy datatypes that need to be converted to the SyncableService API.
   virtual SyncComponents CreateBookmarkSyncComponents(
-      SyncService* sync_service,
-      std::unique_ptr<DataTypeErrorHandler> error_handler) = 0;
-
-  // Creates attachment service.
-  // Note: Should only be called from the model type thread.
-  //
-  // |store_birthday| is the store birthday.  Must not be empty.
-  //
-  // |model_type| is the model type this AttachmentService will be used with.
-  //
-  // |delegate| is optional delegate for AttachmentService to notify about
-  // asynchronous events (AttachmentUploaded). Pass null if delegate is not
-  // provided. AttachmentService doesn't take ownership of delegate, the pointer
-  // must be valid throughout AttachmentService lifetime.
-  virtual std::unique_ptr<AttachmentService> CreateAttachmentService(
-      std::unique_ptr<AttachmentStoreForSync> attachment_store,
-      const UserShare& user_share,
-      const std::string& store_birthday,
-      ModelType model_type,
-      AttachmentService::Delegate* delegate) = 0;
-
-  virtual SyncComponents CreateNotesSyncComponents(
-      SyncService* profile_sync_service,
       std::unique_ptr<DataTypeErrorHandler> error_handler) = 0;
 };
 

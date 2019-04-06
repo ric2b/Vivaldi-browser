@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/time/time.h"
+#include "chrome/browser/download/download_commands.h"
 
 @class ChromeUILocalizer;
 @class DownloadItemCell;
@@ -22,12 +23,11 @@ class DownloadShelfContextMenuMac;
 @class GTMWidthBasedTweaker;
 
 namespace content {
-class DownloadItem;
 class PageNavigator;
 }
 
-namespace extensions {
-class ExperienceSamplingEvent;
+namespace download {
+class DownloadItem;
 }
 
 namespace gfx {
@@ -109,10 +109,6 @@ class MenuModel;
     kNormal,
     kDangerous
   } state_;
-
-  // ExperienceSampling: This tracks dangerous/malicious downloads warning UI
-  // and the user's decisions about it.
-  std::unique_ptr<extensions::ExperienceSamplingEvent> sampling_event_;
 };
 
 // Weak pointer to the containing shelf. Must be set to nil when the shelf is
@@ -120,7 +116,7 @@ class MenuModel;
 @property(nonatomic, assign) DownloadShelfController* shelf;
 
 // Initialize controller for |downloadItem|.
-- (id)initWithDownload:(content::DownloadItem*)downloadItem
+- (id)initWithDownload:(download::DownloadItem*)downloadItem
              navigator:(content::PageNavigator*)navigator;
 
 // Updates the UI and menu state from |downloadModel|.
@@ -146,7 +142,7 @@ class MenuModel;
 - (NSSize)preferredSize;
 
 // Returns the DownloadItem model object belonging to this item.
-- (content::DownloadItem*)download;
+- (download::DownloadItem*)download;
 
 // Returns the MenuModel for the download item context menu. The returned
 // MenuModel is owned by the DownloadItemController and will be valid until the
@@ -162,6 +158,8 @@ class MenuModel;
 - (IBAction)saveDownload:(id)sender;
 - (IBAction)discardDownload:(id)sender;
 - (IBAction)showContextMenu:(id)sender;
+- (bool)submitDownloadToFeedbackService:(download::DownloadItem*)download
+                            withCommand:(DownloadCommands::Command)command;
 
 @end
 

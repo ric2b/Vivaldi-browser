@@ -16,8 +16,8 @@
 
 using base::TimeTicks;
 
-namespace net {
-class URLRequestContextGetter;
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace autofill {
@@ -38,20 +38,27 @@ class TestAutofillManager : public AutofillManager {
   TestAutofillManager(AutofillDriver* driver,
                       AutofillClient* client,
                       TestPersonalDataManager* personal_data);
-  // Called by CreditCardSaveManagerTest.
+  // Called by CreditCardSaveManagerTest and LocalCardMigrationManagerTest.
   TestAutofillManager(
       AutofillDriver* driver,
       AutofillClient* client,
       TestPersonalDataManager* personal_data,
       std::unique_ptr<CreditCardSaveManager> credit_card_save_manager,
-      payments::TestPaymentsClient* payments_client);
+      payments::TestPaymentsClient* payments_client,
+      std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager =
+          nullptr);
   ~TestAutofillManager() override;
 
   // AutofillManager overrides.
   bool IsAutofillEnabled() const override;
-  bool IsCreditCardAutofillEnabled() override;
+  bool IsProfileAutofillEnabled() const override;
+  bool IsCreditCardAutofillEnabled() const override;
   void UploadFormData(const FormStructure& submitted_form,
                       bool observed_submission) override;
+  bool MaybeStartVoteUploadProcess(
+      std::unique_ptr<FormStructure> form_structure,
+      const base::TimeTicks& timestamp,
+      bool observed_submission) override;
   void UploadFormDataAsyncCallback(const FormStructure* submitted_form,
                                    const base::TimeTicks& load_time,
                                    const base::TimeTicks& interaction_time,
@@ -59,14 +66,6 @@ class TestAutofillManager : public AutofillManager {
                                    bool observed_submission) override;
 
   // Unique to TestAutofillManager:
-
-  // Resets the run loop so that it can wait for an asynchronous form
-  // submission to complete.
-  void ResetRunLoop();
-  void RunRunLoop();
-
-  // Wait for the asynchronous calls within StartUploadProcess() to complete.
-  void WaitForAsyncUploadProcess();
 
   int GetPackedCreditCardID(int credit_card_id);
 
@@ -76,15 +75,13 @@ class TestAutofillManager : public AutofillManager {
 
   void AddSeenFormStructure(std::unique_ptr<FormStructure> form_structure);
 
-  // Calls AutofillManager::OnFormSubmitted and waits for it to complete.
-  void SubmitForm(const FormData& form, const TimeTicks& timestamp);
-  void SubmitForm(const FormData& form);
-
   void ClearFormStructures();
 
   const std::string GetSubmittedFormSignature();
 
   void SetAutofillEnabled(bool autofill_enabled);
+
+  void SetProfileEnabled(bool profile_enabled);
 
   void SetCreditCardEnabled(bool credit_card_enabled);
 
@@ -97,9 +94,10 @@ class TestAutofillManager : public AutofillManager {
 
  private:
   TestPersonalDataManager* personal_data_;                  // Weak reference.
-  net::URLRequestContextGetter* context_getter_ = nullptr;  // Weak reference.
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   TestFormDataImporter* test_form_data_importer_ = nullptr;
   bool autofill_enabled_ = true;
+  bool profile_enabled_ = true;
   bool credit_card_enabled_ = true;
   bool call_parent_upload_form_data_ = false;
   base::Optional<bool> expected_observed_submission_;
@@ -108,6 +106,7 @@ class TestAutofillManager : public AutofillManager {
 
   std::string submitted_form_signature_;
   std::vector<ServerFieldTypeSet> expected_submitted_field_types_;
+  AutofillClient* client_;
 
   DISALLOW_COPY_AND_ASSIGN(TestAutofillManager);
 };

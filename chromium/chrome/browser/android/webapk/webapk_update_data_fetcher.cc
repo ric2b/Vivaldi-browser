@@ -9,14 +9,17 @@
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "chrome/browser/android/color_helpers.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/webapk/webapk_icon_hasher.h"
 #include "chrome/browser/android/webapk/webapk_web_manifest_checker.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/manifest.h"
 #include "jni/WebApkUpdateDataFetcher_jni.h"
+#include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/smhasher/src/MurmurHash2.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -151,7 +154,10 @@ void WebApkUpdateDataFetcher::OnDidGetInstallableData(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 
   WebApkIconHasher::DownloadAndComputeMurmur2Hash(
-      profile->GetRequestContext(), info_.best_primary_icon_url,
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get(),
+      info_.best_primary_icon_url,
       base::Bind(&WebApkUpdateDataFetcher::OnGotPrimaryIconMurmur2Hash,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -167,7 +173,10 @@ void WebApkUpdateDataFetcher::OnGotPrimaryIconMurmur2Hash(
         Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 
     WebApkIconHasher::DownloadAndComputeMurmur2Hash(
-        profile->GetRequestContext(), info_.best_badge_icon_url,
+        content::BrowserContext::GetDefaultStoragePartition(profile)
+            ->GetURLLoaderFactoryForBrowserProcess()
+            .get(),
+        info_.best_badge_icon_url,
         base::Bind(&WebApkUpdateDataFetcher::OnDataAvailable,
                    weak_ptr_factory_.GetWeakPtr(), primary_icon_murmur2_hash,
                    true));
@@ -215,8 +224,9 @@ void WebApkUpdateDataFetcher::OnDataAvailable(
 
   Java_WebApkUpdateDataFetcher_onDataAvailable(
       env, java_ref_, java_url, java_scope, java_name, java_short_name,
-      java_primary_icon_url, java_primary_icon_murmur2_hash,
-      java_primary_icon, java_badge_icon_url, java_badge_icon_murmur2_hash,
-      java_badge_icon, java_icon_urls, info_.display, info_.orientation,
-      info_.theme_color, info_.background_color);
+      java_primary_icon_url, java_primary_icon_murmur2_hash, java_primary_icon,
+      java_badge_icon_url, java_badge_icon_murmur2_hash, java_badge_icon,
+      java_icon_urls, info_.display, info_.orientation,
+      OptionalSkColorToJavaColor(info_.theme_color),
+      OptionalSkColorToJavaColor(info_.background_color));
 }

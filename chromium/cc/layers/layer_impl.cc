@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/json/json_reader.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -24,7 +23,6 @@
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
 #include "cc/layers/layer.h"
-#include "cc/resources/layer_tree_resource_provider.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
@@ -35,6 +33,7 @@
 #include "cc/trees/proxy.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
+#include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/quads/debug_border_draw_quad.h"
 #include "components/viz/common/quads/render_pass.h"
@@ -53,7 +52,7 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       main_thread_scrolling_reasons_(
           MainThreadScrollingReason::kNotScrollingOnMain),
       scrollable_(false),
-      should_flatten_transform_from_property_tree_(false),
+      should_flatten_screen_space_transform_from_property_tree_(false),
       layer_property_changed_not_from_property_trees_(false),
       layer_property_changed_from_property_trees_(false),
       may_contain_video_(false),
@@ -75,7 +74,6 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       current_draw_mode_(DRAW_MODE_NONE),
       debug_info_(nullptr),
       has_will_change_transform_hint_(false),
-      trilinear_filtering_(false),
       needs_push_properties_(false),
       scrollbars_hidden_(false),
       needs_show_scrollbars_(false),
@@ -85,15 +83,14 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
 
   DCHECK(layer_tree_impl_);
   layer_tree_impl_->RegisterLayer(this);
-  layer_tree_impl_->AddToElementMap(this);
+  layer_tree_impl_->AddToElementLayerList(element_id_);
 
   SetNeedsPushProperties();
 }
 
 LayerImpl::~LayerImpl() {
-  DCHECK_EQ(DRAW_MODE_NONE, current_draw_mode_);
   layer_tree_impl_->UnregisterLayer(this);
-  layer_tree_impl_->RemoveFromElementMap(this);
+  layer_tree_impl_->RemoveFromElementLayerList(element_id_);
   TRACE_EVENT_OBJECT_DELETED_WITH_ID(
       TRACE_DISABLED_BY_DEFAULT("cc.debug"), "cc::LayerImpl", this);
 }
@@ -102,20 +99,12 @@ void LayerImpl::SetHasWillChangeTransformHint(bool has_will_change) {
   has_will_change_transform_hint_ = has_will_change;
 }
 
-void LayerImpl::SetTrilinearFiltering(bool trilinear_filtering) {
-  trilinear_filtering_ = trilinear_filtering;
-}
-
-MutatorHost* LayerImpl::GetMutatorHost() const {
-  return layer_tree_impl_ ? layer_tree_impl_->mutator_host() : nullptr;
-}
-
 ElementListType LayerImpl::GetElementTypeForAnimation() const {
   return IsActive() ? ElementListType::ACTIVE : ElementListType::PENDING;
 }
 
 void LayerImpl::SetDebugInfo(
-    std::unique_ptr<base::trace_event::ConvertableToTraceFormat> debug_info) {
+    std::unique_ptr<base::trace_event::TracedValue> debug_info) {
   owned_debug_info_ = std::move(debug_info);
   debug_info_ = owned_debug_info_.get();
   SetNeedsPushProperties();
@@ -176,16 +165,18 @@ void LayerImpl::PopulateScaledSharedQuadState(viz::SharedQuadState* state,
 }
 
 bool LayerImpl::WillDraw(DrawMode draw_mode,
-                         LayerTreeResourceProvider* resource_provider) {
-  // WillDraw/DidDraw must be matched.
-  DCHECK_NE(DRAW_MODE_NONE, draw_mode);
-  DCHECK_EQ(DRAW_MODE_NONE, current_draw_mode_);
+                         viz::ClientResourceProvider* resource_provider) {
+  if (visible_layer_rect().IsEmpty() ||
+      draw_properties().occlusion_in_content_space.IsOccluded(
+          visible_layer_rect())) {
+    return false;
+  }
+
   current_draw_mode_ = draw_mode;
   return true;
 }
 
-void LayerImpl::DidDraw(LayerTreeResourceProvider* resource_provider) {
-  DCHECK_NE(DRAW_MODE_NONE, current_draw_mode_);
+void LayerImpl::DidDraw(viz::ClientResourceProvider* resource_provider) {
   current_draw_mode_ = DRAW_MODE_NONE;
 }
 
@@ -295,8 +286,8 @@ std::unique_ptr<LayerImpl> LayerImpl::CreateLayerImpl(
   return LayerImpl::Create(tree_impl, layer_id_);
 }
 
-bool LayerImpl::IsSnapped() {
-  return scrollable();
+bool LayerImpl::IsSnappedToPixelGridInTarget() {
+  return false;
 }
 
 void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
@@ -310,8 +301,8 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->has_transform_node_ = has_transform_node_;
   layer->offset_to_transform_parent_ = offset_to_transform_parent_;
   layer->main_thread_scrolling_reasons_ = main_thread_scrolling_reasons_;
-  layer->should_flatten_transform_from_property_tree_ =
-      should_flatten_transform_from_property_tree_;
+  layer->should_flatten_screen_space_transform_from_property_tree_ =
+      should_flatten_screen_space_transform_from_property_tree_;
   layer->masks_to_bounds_ = masks_to_bounds_;
   layer->contents_opaque_ = contents_opaque_;
   layer->may_contain_video_ = may_contain_video_;
@@ -322,6 +313,7 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
       hit_testable_without_draws_content_;
   layer->non_fast_scrollable_region_ = non_fast_scrollable_region_;
   layer->touch_action_region_ = touch_action_region_;
+  layer->wheel_event_handler_region_ = wheel_event_handler_region_;
   layer->background_color_ = background_color_;
   layer->safe_opaque_background_color_ = safe_opaque_background_color_;
   layer->position_ = position_;
@@ -330,7 +322,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->clip_tree_index_ = clip_tree_index_;
   layer->scroll_tree_index_ = scroll_tree_index_;
   layer->has_will_change_transform_hint_ = has_will_change_transform_hint_;
-  layer->trilinear_filtering_ = trilinear_filtering_;
   layer->scrollbars_hidden_ = scrollbars_hidden_;
   if (needs_show_scrollbars_)
     layer->needs_show_scrollbars_ = needs_show_scrollbars_;
@@ -409,6 +400,9 @@ std::unique_ptr<base::DictionaryValue> LayerImpl::LayerAsJson() {
   result->SetBoolean("Is3dSorted", Is3dSorted());
   result->SetDouble("OPACITY", Opacity());
   result->SetBoolean("ContentsOpaque", contents_opaque_);
+  result->SetString(
+      "mainThreadScrollingReasons",
+      MainThreadScrollingReason::AsText(main_thread_scrolling_reasons_));
 
   if (scrollable())
     result->SetBoolean("Scrollable", true);
@@ -417,6 +411,11 @@ std::unique_ptr<base::DictionaryValue> LayerImpl::LayerAsJson() {
     std::unique_ptr<base::Value> region =
         touch_action_region_.region().AsValue();
     result->Set("TouchRegion", std::move(region));
+  }
+
+  if (!wheel_event_handler_region_.IsEmpty()) {
+    std::unique_ptr<base::Value> region = wheel_event_handler_region_.AsValue();
+    result->Set("WheelRegion", std::move(region));
   }
 
   return result;
@@ -474,7 +473,7 @@ void LayerImpl::NoteLayerPropertyChangedFromPropertyTrees() {
 
 void LayerImpl::ValidateQuadResourcesInternal(viz::DrawQuad* quad) const {
 #if DCHECK_IS_ON()
-  const LayerTreeResourceProvider* resource_provider =
+  const viz::ClientResourceProvider* resource_provider =
       layer_tree_impl_->resource_provider();
   for (viz::ResourceId resource_id : quad->resources)
     resource_provider->ValidateResource(resource_id);
@@ -492,10 +491,6 @@ void LayerImpl::ResetChangeTracking() {
 
   update_rect_.SetRect(0, 0, 0, 0);
   damage_rect_.SetRect(0, 0, 0, 0);
-}
-
-bool LayerImpl::has_copy_requests_in_target_subtree() {
-  return GetEffectTree().Node(effect_tree_index())->subtree_has_copy_request;
 }
 
 bool LayerImpl::IsActive() const {
@@ -638,10 +633,6 @@ float LayerImpl::Opacity() const {
     return 1.f;
 }
 
-const gfx::Transform& LayerImpl::Transform() const {
-  return GetTransformTree().Node(transform_tree_index())->local;
-}
-
 void LayerImpl::SetElementId(ElementId element_id) {
   if (element_id == element_id_)
     return;
@@ -649,9 +640,9 @@ void LayerImpl::SetElementId(ElementId element_id) {
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"), "LayerImpl::SetElementId",
                "element", element_id.AsValue().release());
 
-  layer_tree_impl_->RemoveFromElementMap(this);
+  layer_tree_impl_->RemoveFromElementLayerList(element_id_);
   element_id_ = element_id;
-  layer_tree_impl_->AddToElementMap(this);
+  layer_tree_impl_->AddToElementLayerList(element_id_);
 
   SetNeedsPushProperties();
 }
@@ -688,6 +679,10 @@ SimpleEnclosedRegion LayerImpl::VisibleOpaqueRegion() const {
 void LayerImpl::DidBeginTracing() {}
 
 void LayerImpl::ReleaseResources() {}
+
+void LayerImpl::OnPurgeMemory() {
+  ReleaseResources();
+}
 
 void LayerImpl::ReleaseTileResources() {}
 
@@ -759,6 +754,11 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
     touch_action_region_.region().AsValueInto(state);
     state->EndArray();
   }
+  if (!wheel_event_handler_region_.IsEmpty()) {
+    state->BeginArray("wheel_event_handler_region");
+    wheel_event_handler_region_.AsValueInto(state);
+    state->EndArray();
+  }
   if (!non_fast_scrollable_region_.IsEmpty()) {
     state->BeginArray("non_fast_scrollable_region");
     non_fast_scrollable_region_.AsValueInto(state);
@@ -771,27 +771,11 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   state->SetBoolean("has_will_change_transform_hint",
                     has_will_change_transform_hint());
 
-  state->SetBoolean("trilinear_filtering", trilinear_filtering());
+  MainThreadScrollingReason::AddToTracedValue(main_thread_scrolling_reasons_,
+                                              *state);
 
-  if (debug_info_) {
-    std::string str;
-    debug_info_->AppendAsTraceFormat(&str);
-    base::JSONReader json_reader;
-    std::unique_ptr<base::Value> debug_info_value(json_reader.ReadToValue(str));
-
-    if (debug_info_value->is_dict()) {
-      base::DictionaryValue* dictionary_value = nullptr;
-      bool converted_to_dictionary =
-          debug_info_value->GetAsDictionary(&dictionary_value);
-      DCHECK(converted_to_dictionary);
-      for (base::DictionaryValue::Iterator it(*dictionary_value); !it.IsAtEnd();
-           it.Advance()) {
-        state->SetValue(it.key().data(), it.value().CreateDeepCopy());
-      }
-    } else {
-      NOTREACHED();
-    }
-  }
+  if (debug_info_)
+    state->SetValue("debug_info", *debug_info_);
 }
 
 size_t LayerImpl::GPUMemoryUsageInBytes() const { return 0; }
@@ -945,6 +929,10 @@ void LayerImpl::EnsureValidPropertyTreeIndices() const {
   DCHECK(GetEffectTree().Node(effect_tree_index()));
   DCHECK(GetClipTree().Node(clip_tree_index()));
   DCHECK(GetScrollTree().Node(scroll_tree_index()));
+}
+
+bool LayerImpl::is_surface_layer() const {
+  return false;
 }
 
 }  // namespace cc

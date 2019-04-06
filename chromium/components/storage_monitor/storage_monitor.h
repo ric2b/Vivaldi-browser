@@ -18,15 +18,16 @@
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 #include "components/storage_monitor/storage_info.h"
+#include "services/service_manager/public/cpp/connector.h"
+
+#if defined(OS_CHROMEOS)
+#include "services/device/public/mojom/mtp_manager.mojom.h"
+#endif
 
 class MediaFileSystemRegistryTest;
 class MediaGalleriesPlatformAppBrowserTest;
 class SystemStorageApiTest;
 class SystemStorageEjectApiTest;
-
-namespace device {
-class MediaTransferProtocolManager;
-}
 
 namespace storage_monitor {
 
@@ -71,7 +72,7 @@ class StorageMonitor {
   // Instantiates the StorageMonitor singleton. This function does not
   // guarantee the complete initialization of the object. For that, see
   // |EnsureInitialized|.
-  static void Create();
+  static void Create(std::unique_ptr<service_manager::Connector> connector);
 
   // Destroys the StorageMonitor singleton.
   static void Destroy();
@@ -121,8 +122,7 @@ class StorageMonitor {
 #endif
 
 #if defined(OS_CHROMEOS)
-  virtual device::MediaTransferProtocolManager*
-      media_transfer_protocol_manager() = 0;
+  virtual device::mojom::MtpManager* media_transfer_protocol_manager() = 0;
 #endif
 
   // Returns information for all known storages on the system,
@@ -146,6 +146,9 @@ class StorageMonitor {
   friend class ::SystemStorageEjectApiTest;
 
   StorageMonitor();
+
+  // Provides the connector for service access.
+  service_manager::Connector* GetConnector();
 
   virtual Receiver* receiver() const;
 
@@ -185,6 +188,8 @@ class StorageMonitor {
 
   // Map of all known storage devices,including fixed and removable storages.
   StorageMap storage_map_;
+
+  std::unique_ptr<service_manager::Connector> connector_;
 
   std::unique_ptr<TransientDeviceIds> transient_device_ids_;
 };

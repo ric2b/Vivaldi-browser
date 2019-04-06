@@ -1,5 +1,6 @@
 include_rules = [
   "+base",
+  "+device",
   "+gin",
   "+gpu",
   "+ipc",
@@ -19,6 +20,6 @@ include_rules = [
 
 specific_include_rules = {
   "ppapi_perftests\.cc": [
-    "+mojo/edk/embedder/embedder.h",
+    "+mojo/core/embedder/embedder.h",
   ]
 }

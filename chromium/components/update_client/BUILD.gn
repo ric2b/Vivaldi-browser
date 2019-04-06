@@ -12,6 +12,8 @@ static_library("update_client") {
     "activity_data_service.h",
     "background_downloader_win.cc",
     "background_downloader_win.h",
+    "command_line_config_policy.cc",
+    "command_line_config_policy.h",
     "component.cc",
     "component.h",
     "component_patcher.cc",
@@ -67,14 +69,15 @@ static_library("update_client") {
     "//components/client_update_protocol",
     "//components/crx_file",
     "//components/data_use_measurement/core",
-    "//components/patch_service/public/cpp",
     "//components/prefs",
+    "//components/services/patch/public/cpp",
+    "//components/services/unzip/public/cpp",
     "//components/version_info:version_info",
     "//courgette:courgette_lib",
     "//crypto",
     "//net",
+    "//services/network/public/cpp:cpp",
     "//third_party/libxml",
-    "//third_party/zlib/google:zip",
     "//url",
   ]
   libs = []
@@ -90,19 +93,25 @@ static_library("test_support") {
     "test_configurator.h",
     "test_installer.cc",
     "test_installer.h",
-    "url_request_post_interceptor.cc",
-    "url_request_post_interceptor.h",
+    "url_loader_post_interceptor.cc",
+    "url_loader_post_interceptor.h",
   ]
 
   public_deps = [
     ":update_client",
   ]
+
   deps = [
     "//base",
-    "//components/patch_service:lib",
     "//components/prefs",
+    "//components/services/patch:lib",
+    "//components/services/unzip:lib",
+    "//mojo/public/cpp/bindings",
     "//net:test_support",
+    "//services/network:test_support",
+    "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp/test:test_support",
+    "//services/service_manager/public/mojom",
     "//testing/gmock",
     "//testing/gtest",
     "//url",
@@ -125,6 +134,8 @@ bundle_data("unit_tests_bundle_data") {
     "//components/test/data/update_client/updatecheck_reply_1.xml",
     "//components/test/data/update_client/updatecheck_reply_4.xml",
     "//components/test/data/update_client/updatecheck_reply_noupdate.xml",
+    "//components/test/data/update_client/updatecheck_reply_parse_error.xml",
+    "//components/test/data/update_client/updatecheck_reply_unknownapp.xml",
   ]
   outputs = [
     "{{bundle_resources_dir}}/" +
@@ -160,12 +171,13 @@ source_set("unit_tests") {
     ":update_client",
     "//base",
     "//components/crx_file",
-    "//components/patch_service:lib",
     "//components/prefs",
     "//components/prefs:test_support",
+    "//components/services/patch:lib",
     "//components/version_info:version_info",
     "//courgette:courgette_lib",
     "//net:test_support",
+    "//services/network/public/cpp:cpp_base",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp/test:test_support",
     "//testing/gmock",

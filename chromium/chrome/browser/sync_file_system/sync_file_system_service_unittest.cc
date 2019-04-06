@@ -85,7 +85,7 @@ void VerifyFileError(base::Closure callback,
 class MockSyncEventObserver : public SyncEventObserver {
  public:
   MockSyncEventObserver() {}
-  virtual ~MockSyncEventObserver() {}
+  ~MockSyncEventObserver() override {}
 
   MOCK_METHOD3(OnSyncStateUpdated,
                void(const GURL& app_origin,
@@ -131,7 +131,7 @@ class SyncFileSystemServiceTest : public testing::Test {
       : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD) {}
 
   void SetUp() override {
-    in_memory_env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    in_memory_env_ = leveldb_chrome::NewMemEnv("SyncFileSystemServiceTest");
     file_system_.reset(new CannedSyncableFileSystem(
         GURL(kOrigin), in_memory_env_.get(),
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),

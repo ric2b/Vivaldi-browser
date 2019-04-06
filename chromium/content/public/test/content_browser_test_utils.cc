@@ -12,11 +12,14 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -28,7 +31,7 @@ namespace content {
 base::FilePath GetTestFilePath(const char* dir, const char* file) {
   base::FilePath path;
   base::ThreadRestrictions::ScopedAllowIO allow_io_for_path_service;
-  PathService::Get(DIR_TEST_DATA, &path);
+  base::PathService::Get(DIR_TEST_DATA, &path);
   if (dir)
     path = path.AppendASCII(dir);
   return path.AppendASCII(file);
@@ -85,7 +88,18 @@ bool NavigateToURL(Shell* window, const GURL& url) {
   NavigateToURLBlockUntilNavigationsComplete(window, url, 1);
   if (!IsLastCommittedEntryOfPageType(window->web_contents(), PAGE_TYPE_NORMAL))
     return false;
+
   return window->web_contents()->GetLastCommittedURL() == url;
+}
+
+bool NavigateToURLFromRenderer(const ToRenderFrameHost& adapter,
+                               const GURL& url) {
+  RenderFrameHost* rfh = adapter.render_frame_host();
+  TestFrameNavigationObserver nav_observer(rfh);
+  if (!ExecuteScript(rfh, "location = '" + url.spec() + "';"))
+    return false;
+  nav_observer.Wait();
+  return nav_observer.last_committed_url() == url;
 }
 
 bool NavigateToURLAndExpectNoCommit(Shell* window, const GURL& url) {
@@ -130,12 +144,12 @@ void LookupAndLogNameAndIdOfFirstCamera() {
                         LOG(WARNING) << "No camera found";
                         return;
                       }
-                      LOG(INFO)
-                          << "Using camera " << descriptors.front().display_name
-                          << " (" << descriptors.front().model_id << ")";
-                      quit_closure.Run();
+                      LOG(INFO) << "Using camera "
+                                << descriptors.front().display_name() << " ("
+                                << descriptors.front().model_id << ")";
+                      std::move(quit_closure).Run();
                     },
-                    quit_closure));
+                    std::move(quit_closure)));
           },
           media_stream_manager, run_loop.QuitClosure()));
   run_loop.Run();

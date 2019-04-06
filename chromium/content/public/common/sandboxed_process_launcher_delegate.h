@@ -10,12 +10,12 @@
 #include "base/process/process.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "content/public/common/zygote_features.h"
 #include "services/service_manager/sandbox/sandbox_delegate.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
+#include "services/service_manager/zygote/common/zygote_buildflags.h"
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
-#include "content/public/common/zygote_handle.h"
+#include "services/service_manager/zygote/common/zygote_handle.h"  // nogncheck
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
 namespace content {
@@ -32,6 +32,7 @@ class CONTENT_EXPORT SandboxedProcessLauncherDelegate
 #if defined(OS_WIN)
   // SandboxDelegate:
   bool DisableDefaultPolicy() override;
+  bool GetAppContainerId(std::string* appcontainer_id) override;
   bool PreSpawnTarget(sandbox::TargetPolicy* policy) override;
   void PostSpawnTarget(base::ProcessHandle process) override;
 
@@ -44,7 +45,7 @@ class CONTENT_EXPORT SandboxedProcessLauncherDelegate
   // Returns the zygote used to launch the process.
   // NOTE: For now Chrome always uses the same zygote for performance reasons.
   // http://crbug.com/569191
-  virtual ZygoteHandle GetZygote();
+  virtual service_manager::ZygoteHandle GetZygote();
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
 #if defined(OS_POSIX)

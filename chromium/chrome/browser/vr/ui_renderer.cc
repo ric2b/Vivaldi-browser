@@ -22,7 +22,7 @@ UiRenderer::~UiRenderer() = default;
 // itself correctly.
 void UiRenderer::Draw(const RenderInfo& render_info) {
   glEnable(GL_CULL_FACE);
-  DrawUiView(render_info, scene_->GetVisibleElementsToDraw());
+  DrawUiView(render_info, scene_->GetElementsToDraw());
 }
 
 void UiRenderer::DrawWebVrOverlayForeground(const RenderInfo& render_info) {
@@ -32,7 +32,7 @@ void UiRenderer::DrawWebVrOverlayForeground(const RenderInfo& render_info) {
 
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
   glClear(GL_COLOR_BUFFER_BIT);
-  DrawUiView(render_info, scene_->GetVisibleWebVrOverlayElementsToDraw());
+  DrawUiView(render_info, scene_->GetWebVrOverlayElementsToDraw());
 }
 
 void UiRenderer::DrawUiView(const RenderInfo& render_info,
@@ -68,6 +68,11 @@ void UiRenderer::DrawElements(const CameraModel& camera_model,
 void UiRenderer::DrawElement(const CameraModel& camera_model,
                              const UiElement& element) {
   DCHECK_GE(element.draw_phase(), 0);
+
+  // Set default GL parameters for each element.
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
   element.Render(ui_element_renderer_, camera_model);
 }
 

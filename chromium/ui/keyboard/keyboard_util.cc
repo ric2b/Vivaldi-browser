@@ -18,6 +18,7 @@
 #include "ui/base/ime/input_method_base.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_flags.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/event_sink.h"
 #include "ui/events/event_utils.h"
@@ -71,8 +72,8 @@ bool UpdateKeyboardConfig(const KeyboardConfig& keyboard_config) {
   if (g_keyboard_config == keyboard_config)
     return false;
   g_keyboard_config = keyboard_config;
-  keyboard::KeyboardController* controller = KeyboardController::GetInstance();
-  if (controller)
+  auto* controller = KeyboardController::Get();
+  if (controller->enabled())
     controller->NotifyKeyboardConfigChanged();
   return true;
 }
@@ -142,8 +143,9 @@ bool IsKeyboardEnabled() {
 }
 
 bool IsKeyboardVisible() {
-  auto* keyboard_controller = keyboard::KeyboardController::GetInstance();
-  return keyboard_controller && keyboard_controller->keyboard_visible();
+  auto* keyboard_controller = keyboard::KeyboardController::Get();
+  return keyboard_controller->enabled() &&
+         keyboard_controller->IsKeyboardVisible();
 }
 
 bool IsKeyboardOverscrollEnabled() {
@@ -152,10 +154,9 @@ bool IsKeyboardOverscrollEnabled() {
 
   // Users of the sticky accessibility on-screen keyboard are likely to be using
   // mouse input, which may interfere with overscrolling.
-  if (keyboard::KeyboardController::GetInstance() &&
-      !keyboard::KeyboardController::GetInstance()->IsOverscrollAllowed()) {
+  if (keyboard::KeyboardController::Get()->enabled() &&
+      !keyboard::KeyboardController::Get()->IsOverscrollAllowed())
     return false;
-  }
 
   // If overscroll enabled override is set, use it instead. Currently
   // login / out-of-box disable keyboard overscroll. http://crbug.com/363635
@@ -193,6 +194,19 @@ bool IsFloatingVirtualKeyboardEnabled() {
   return base::FeatureList::IsEnabled(features::kEnableFloatingVirtualKeyboard);
 }
 
+bool IsFullscreenHandwritingVirtualKeyboardEnabled() {
+  return base::FeatureList::IsEnabled(
+      features::kEnableFullscreenHandwritingVirtualKeyboard);
+}
+
+bool IsStylusVirtualKeyboardEnabled() {
+  return base::FeatureList::IsEnabled(features::kEnableStylusVirtualKeyboard);
+}
+
+bool IsVirtualKeyboardMdUiEnabled() {
+  return base::FeatureList::IsEnabled(features::kEnableVirtualKeyboardMdUi);
+}
+
 bool IsGestureTypingEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kDisableGestureTyping);
@@ -204,8 +218,8 @@ bool IsGestureEditingEnabled() {
 }
 
 bool InsertText(const base::string16& text) {
-  KeyboardController* controller = KeyboardController::GetInstance();
-  if (!controller)
+  auto* controller = KeyboardController::Get();
+  if (!controller->enabled())
     return false;
 
   ui::InputMethod* input_method = controller->ui()->GetInputMethod();
@@ -245,12 +259,14 @@ bool SendKeyEvent(const std::string type,
       if (!input_method)
         return false;
 
+      // This can be null if no text input field is not focused.
       ui::TextInputClient* tic = input_method->GetTextInputClient();
 
       SendProcessKeyEvent(ui::ET_KEY_PRESSED, host);
 
       ui::KeyEvent char_event(key_value, code, ui::EF_NONE);
-      tic->InsertChar(char_event);
+      if (tic)
+        tic->InsertChar(char_event);
       SendProcessKeyEvent(ui::ET_KEY_RELEASED, host);
     }
   } else {

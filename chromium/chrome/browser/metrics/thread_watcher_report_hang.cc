@@ -11,7 +11,6 @@ MSVC_PUSH_DISABLE_WARNING(4748)
 
 #include "base/debug/debugger.h"
 #include "base/debug/dump_without_crashing.h"
-#include "build/build_config.h"
 
 namespace metrics {
 
@@ -28,7 +27,8 @@ NOINLINE void ReportThreadHang() {
 #endif
 }
 
-#if !defined(OS_ANDROID) || !defined(NDEBUG)
+#if !defined(OS_ANDROID)
+
 NOINLINE void StartupHang() {
   volatile int inhibit_comdat = __LINE__;
   ALLOW_UNUSED_LOCAL(inhibit_comdat);
@@ -36,7 +36,6 @@ NOINLINE void StartupHang() {
   // positive startup hang data.
   // ReportThreadHang();
 }
-#endif  // OS_ANDROID
 
 NOINLINE void ShutdownHang() {
   volatile int inhibit_comdat = __LINE__;
@@ -44,13 +43,9 @@ NOINLINE void ShutdownHang() {
   ReportThreadHang();
 }
 
-NOINLINE void ThreadUnresponsive_UI() {
-  volatile int inhibit_comdat = __LINE__;
-  ALLOW_UNUSED_LOCAL(inhibit_comdat);
-  ReportThreadHang();
-}
+#endif  // !defined(OS_ANDROID)
 
-NOINLINE void ThreadUnresponsive_PROCESS_LAUNCHER() {
+NOINLINE void ThreadUnresponsive_UI() {
   volatile int inhibit_comdat = __LINE__;
   ALLOW_UNUSED_LOCAL(inhibit_comdat);
   ReportThreadHang();
@@ -67,16 +62,9 @@ NOINLINE void CrashBecauseThreadWasUnresponsive(
   switch (thread_id) {
     case content::BrowserThread::UI:
       return ThreadUnresponsive_UI();
-    case content::BrowserThread::PROCESS_LAUNCHER:
-      return ThreadUnresponsive_PROCESS_LAUNCHER();
     case content::BrowserThread::IO:
       return ThreadUnresponsive_IO();
     case content::BrowserThread::ID_COUNT:
-    // TODO(gab): Get rid of deprecated BrowserThread IDs.
-    case content::BrowserThread::DB:
-    case content::BrowserThread::FILE:
-    case content::BrowserThread::FILE_USER_BLOCKING:
-    case content::BrowserThread::CACHE:
       NOTREACHED();
       break;
   }

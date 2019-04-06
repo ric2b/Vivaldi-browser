@@ -7,7 +7,6 @@
 #include <map>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -954,7 +953,8 @@ class FocusControllerMouseEventTest : public FocusControllerDirectTestBase {
     EXPECT_EQ(NULL, GetActiveWindow());
     aura::Window* w1 = root_window()->GetChildById(1);
     SimpleEventHandler handler;
-    root_window()->PrependPreTargetHandler(&handler);
+    root_window()->AddPreTargetHandler(&handler,
+                                       ui::EventTarget::Priority::kSystem);
     ui::test::EventGenerator generator(root_window(), w1);
     generator.ClickLeftButton();
     EXPECT_EQ(NULL, GetActiveWindow());

@@ -10,7 +10,6 @@
 #include "components/invalidation/public/invalidation_service.h"
 
 class Profile;
-class ProfileIdentityProvider;
 
 namespace invalidation {
 class InvalidationLogger;
@@ -38,12 +37,10 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
   invalidation::InvalidationLogger* GetInvalidationLogger() override;
   void RequestDetailedStatus(base::Callback<void(const base::DictionaryValue&)>
                                  post_caller) const override;
-  IdentityProvider* GetIdentityProvider() override;
 
  private:
   std::string client_id_;
   syncer::InvalidatorRegistrar invalidator_registrar_;
-  std::unique_ptr<ProfileIdentityProvider> identity_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiInvalidationService);
 };

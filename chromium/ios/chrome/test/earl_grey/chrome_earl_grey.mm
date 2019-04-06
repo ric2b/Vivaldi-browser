@@ -20,8 +20,8 @@
 #import "ios/chrome/test/app/static_html_view_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/js_test_util.h"
+#include "ios/web/public/test/element_selector.h"
 #import "ios/web/public/test/web_view_content_test_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
@@ -54,7 +54,7 @@ id ExecuteJavaScript(NSString* javascript,
                   block:^BOOL {
                     return did_complete;
                   }];
-  [condition waitWithTimeout:testing::kWaitForJSCompletionTimeout];
+  [condition waitWithTimeout:base::test::ios::kWaitForJSCompletionTimeout];
   if (!did_complete)
     return nil;
   if (out_error) {
@@ -71,7 +71,8 @@ id ExecuteJavaScript(NSString* javascript,
 #pragma mark - History Utilities
 
 + (void)clearBrowsingHistory {
-  chrome_test_util::ClearBrowsingHistory();
+  GREYAssertTrue(chrome_test_util::ClearBrowsingHistory(),
+                 @"Clearing Browsing History timed out");
   // After clearing browsing history via code, wait for the UI to be done
   // with any updates. This includes icons from the new tab page being removed.
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
@@ -157,8 +158,9 @@ id ExecuteJavaScript(NSString* javascript,
                         chrome_test_util::GetCurrentWebState(),
                         base::SysNSStringToUTF8(text));
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed to find static html view containing %@", text);
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed to find static html view containing %@", text);
 }
 
 + (void)waitForStaticHTMLViewNotContainingText:(NSString*)text {
@@ -169,8 +171,9 @@ id ExecuteJavaScript(NSString* javascript,
                         chrome_test_util::GetCurrentWebState(),
                         base::SysNSStringToUTF8(text));
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed, there was a static html view containing %@", text);
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed, there was a static html view containing %@", text);
 }
 
 + (void)waitForWebViewContainingText:(std::string)text {
@@ -180,8 +183,23 @@ id ExecuteJavaScript(NSString* javascript,
                     return web::test::IsWebViewContainingText(
                         chrome_test_util::GetCurrentWebState(), text);
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed waiting for web view containing %s", text.c_str());
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for web view containing %s", text.c_str());
+}
+
++ (void)waitForWebViewContainingElement:
+    (const web::test::ElementSelector)selector {
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:@"Wait for web view containing Element"
+                  block:^BOOL {
+                    return web::test::IsWebViewContainingElement(
+                        chrome_test_util::GetCurrentWebState(), selector);
+                  }];
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for web view containing element %s",
+      selector.GetSelectorDescription().c_str());
 }
 
 + (void)waitForWebViewNotContainingText:(std::string)text {
@@ -191,8 +209,9 @@ id ExecuteJavaScript(NSString* javascript,
                     return !web::test::IsWebViewContainingText(
                         chrome_test_util::GetCurrentWebState(), text);
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed waiting for web view not containing %s", text.c_str());
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for web view not containing %s", text.c_str());
 }
 
 + (void)waitForMainTabCount:(NSUInteger)count {
@@ -203,8 +222,9 @@ id ExecuteJavaScript(NSString* javascript,
                   block:^BOOL {
                     return chrome_test_util::GetMainTabCount() == count;
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed waiting for main tab count to become %" PRIuNS, count);
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for main tab count to become %" PRIuNS, count);
 }
 
 + (void)waitForIncognitoTabCount:(NSUInteger)count {
@@ -215,9 +235,9 @@ id ExecuteJavaScript(NSString* javascript,
                   block:^BOOL {
                     return chrome_test_util::GetIncognitoTabCount() == count;
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed waiting for incognito tab count to become %" PRIuNS,
-             count);
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for incognito tab count to become %" PRIuNS, count);
 }
 
 + (void)waitForWebViewContainingBlockedImageElementWithID:(std::string)imageID {
@@ -235,8 +255,8 @@ id ExecuteJavaScript(NSString* javascript,
 }
 
 + (void)waitForBookmarksToFinishLoading {
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
-                 testing::kWaitForUIElementTimeout,
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 base::test::ios::kWaitForUIElementTimeout,
                  ^{
                    return chrome_test_util::BookmarksLoaded();
                  }),
@@ -253,9 +273,9 @@ id ExecuteJavaScript(NSString* javascript,
                                     error:&error];
                     return error == nil;
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed waiting for element with matcher %@ to become visible",
-             matcher);
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for element with matcher %@ to become visible", matcher);
 }
 
 @end

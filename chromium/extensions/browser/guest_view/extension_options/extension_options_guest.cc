@@ -60,13 +60,13 @@ GuestViewBase* ExtensionOptionsGuest::Create(WebContents* owner_web_contents) {
 
 void ExtensionOptionsGuest::CreateWebContents(
     const base::DictionaryValue& create_params,
-    const WebContentsCreatedCallback& callback) {
+    WebContentsCreatedCallback callback) {
   // Get the extension's base URL.
   std::string extension_id;
   create_params.GetString(extensionoptions::kExtensionId, &extension_id);
 
   if (!crx_file::id_util::IdIsValid(extension_id)) {
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
@@ -74,14 +74,14 @@ void ExtensionOptionsGuest::CreateWebContents(
   if (crx_file::id_util::IdIsValid(embedder_extension_id) &&
       extension_id != embedder_extension_id) {
     // Extensions cannot embed other extensions' options pages.
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
   GURL extension_url =
       extensions::Extension::GetBaseURLFromExtensionId(extension_id);
   if (!extension_url.is_valid()) {
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
@@ -93,13 +93,13 @@ void ExtensionOptionsGuest::CreateWebContents(
   if (!extension) {
     // The ID was valid but the extension didn't exist. Typically this will
     // happen when an extension is disabled.
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
   options_page_ = extensions::OptionsPageInfo::GetOptionsPage(extension);
   if (!options_page_.is_valid()) {
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
@@ -110,9 +110,9 @@ void ExtensionOptionsGuest::CreateWebContents(
       browser_context(),
       content::SiteInstance::CreateForURL(browser_context(), extension_url));
   params.guest_delegate = this;
-  WebContents* wc = WebContents::Create(params);
-  SetViewType(wc, VIEW_TYPE_EXTENSION_GUEST);
-  callback.Run(wc);
+  // TODO(erikchen): Fix ownership semantics for guest views.
+  // https://crbug.com/832879.
+  std::move(callback).Run(WebContents::Create(params).release());
 }
 
 void ExtensionOptionsGuest::DidInitialize(
@@ -152,17 +152,23 @@ void ExtensionOptionsGuest::OnPreferredSizeChanged(const gfx::Size& pref_size) {
       options.ToValue()));
 }
 
-void ExtensionOptionsGuest::AddNewContents(WebContents* source,
-                                           WebContents* new_contents,
-                                           WindowOpenDisposition disposition,
-                                           const gfx::Rect& initial_rect,
-                                           bool user_gesture,
-                                           bool* was_blocked) {
+void ExtensionOptionsGuest::AddNewContents(
+    WebContents* source,
+    std::unique_ptr<WebContents> new_contents,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
+    bool user_gesture,
+    bool* was_blocked) {
+  // |new_contents| is potentially used as a non-embedded WebContents, so we
+  // check that it isn't a guest. The only place that this method should be
+  // called is WebContentsImpl::ViewSource - which generates a non-guest
+  // WebContents.
+  DCHECK(!ExtensionOptionsGuest::FromWebContents(new_contents.get()));
   if (!attached() || !embedder_web_contents()->GetDelegate())
     return;
 
   embedder_web_contents()->GetDelegate()->AddNewContents(
-      source, new_contents, disposition, initial_rect, user_gesture,
+      source, std::move(new_contents), disposition, initial_rect, user_gesture,
       was_blocked);
 }
 

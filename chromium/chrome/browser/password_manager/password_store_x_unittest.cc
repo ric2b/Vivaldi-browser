@@ -13,13 +13,14 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/os_crypt/os_crypt_mocker.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
@@ -98,7 +99,7 @@ class FailingBackend : public PasswordStoreX::NativeBackend {
     trash.password_value = base::ASCIIToUTF16("trash p. value");
     for (size_t i = 0; i < 3; ++i) {
       trash.origin = GURL(base::StringPrintf("http://trash%zu.com", i));
-      forms.push_back(base::MakeUnique<PasswordForm>(trash));
+      forms.push_back(std::make_unique<PasswordForm>(trash));
     }
     return forms;
   }
@@ -204,7 +205,7 @@ class MockBackend : public PasswordStoreX::NativeBackend {
                  std::vector<std::unique_ptr<PasswordForm>>* forms) override {
     for (size_t i = 0; i < all_forms_.size(); ++i)
       if (all_forms_[i].signon_realm == form.signon_realm)
-        forms->push_back(base::MakeUnique<PasswordForm>(all_forms_[i]));
+        forms->push_back(std::make_unique<PasswordForm>(all_forms_[i]));
     return true;
   }
 
@@ -212,7 +213,7 @@ class MockBackend : public PasswordStoreX::NativeBackend {
       std::vector<std::unique_ptr<PasswordForm>>* forms) override {
     for (size_t i = 0; i < all_forms_.size(); ++i)
       if (!all_forms_[i].blacklisted_by_user)
-        forms->push_back(base::MakeUnique<PasswordForm>(all_forms_[i]));
+        forms->push_back(std::make_unique<PasswordForm>(all_forms_[i]));
     return true;
   }
 
@@ -220,14 +221,14 @@ class MockBackend : public PasswordStoreX::NativeBackend {
       std::vector<std::unique_ptr<PasswordForm>>* forms) override {
     for (size_t i = 0; i < all_forms_.size(); ++i)
       if (all_forms_[i].blacklisted_by_user)
-        forms->push_back(base::MakeUnique<PasswordForm>(all_forms_[i]));
+        forms->push_back(std::make_unique<PasswordForm>(all_forms_[i]));
     return true;
   }
 
   bool GetAllLogins(
       std::vector<std::unique_ptr<PasswordForm>>* forms) override {
     for (size_t i = 0; i < all_forms_.size(); ++i)
-      forms->push_back(base::MakeUnique<PasswordForm>(all_forms_[i]));
+      forms->push_back(std::make_unique<PasswordForm>(all_forms_[i]));
     return true;
   }
 
@@ -304,9 +305,9 @@ std::unique_ptr<PasswordStoreX::NativeBackend> GetBackend(
     BackendType backend_type) {
   switch (backend_type) {
     case FAILING_BACKEND:
-      return base::MakeUnique<FailingBackend>();
+      return std::make_unique<FailingBackend>();
     case WORKING_BACKEND:
-      return base::MakeUnique<MockBackend>();
+      return std::make_unique<MockBackend>();
     default:
       return std::unique_ptr<PasswordStoreX::NativeBackend>();
   }
@@ -338,9 +339,10 @@ class PasswordStoreXTestDelegate {
 PasswordStoreXTestDelegate::PasswordStoreXTestDelegate(BackendType backend_type)
     : backend_type_(backend_type) {
   SetupTempDir();
-  store_ = new PasswordStoreX(base::MakeUnique<password_manager::LoginDatabase>(
-                                  test_login_db_file_path()),
-                              GetBackend(backend_type_));
+  auto login_db = std::make_unique<password_manager::LoginDatabase>(
+      test_login_db_file_path());
+  login_db->disable_encryption();
+  store_ = new PasswordStoreX(std::move(login_db), GetBackend(backend_type_));
   store_->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
 }
 
@@ -410,6 +412,7 @@ class PasswordStoreXTest : public testing::TestWithParam<BackendType> {
 TEST_P(PasswordStoreXTest, Notifications) {
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       new password_manager::LoginDatabase(test_login_db_file_path()));
+  login_db->disable_encryption();
   scoped_refptr<PasswordStoreX> store(
       new PasswordStoreX(std::move(login_db), GetBackend(GetParam())));
   store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
@@ -488,6 +491,7 @@ TEST_P(PasswordStoreXTest, NativeMigration) {
   const base::FilePath login_db_file = test_login_db_file_path();
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       new password_manager::LoginDatabase(login_db_file));
+  login_db->disable_encryption();
   ASSERT_TRUE(login_db->Init());
 
   // Get the initial size of the login DB file, before we populate it.
@@ -510,6 +514,7 @@ TEST_P(PasswordStoreXTest, NativeMigration) {
 
   // Initializing the PasswordStore shouldn't trigger a native migration (yet).
   login_db.reset(new password_manager::LoginDatabase(login_db_file));
+  login_db->disable_encryption();
   scoped_refptr<PasswordStoreX> store(
       new PasswordStoreX(std::move(login_db), GetBackend(GetParam())));
   store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);

@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -36,8 +37,15 @@ class TestClientControlledStateDelegate
   }
 
   void HandleBoundsRequest(WindowState* window_state,
+                           ash::mojom::WindowStateType requested_state,
                            const gfx::Rect& bounds) override {
     requested_bounds_ = bounds;
+    if (requested_state != window_state->GetStateType()) {
+      DCHECK(requested_state == ash::mojom::WindowStateType::LEFT_SNAPPED ||
+             requested_state == ash::mojom::WindowStateType::RIGHT_SNAPPED);
+      old_state_ = window_state->GetStateType();
+      new_state_ = requested_state;
+    }
   }
 
   mojom::WindowStateType old_state() const { return old_state_; }
@@ -46,7 +54,7 @@ class TestClientControlledStateDelegate
 
   const gfx::Rect& requested_bounds() const { return requested_bounds_; }
 
-  void reset() {
+  void Reset() {
     old_state_ = mojom::WindowStateType::DEFAULT;
     new_state_ = mojom::WindowStateType::DEFAULT;
     requested_bounds_.SetRect(0, 0, 0, 0);
@@ -63,6 +71,26 @@ class TestClientControlledStateDelegate
   DISALLOW_COPY_AND_ASSIGN(TestClientControlledStateDelegate);
 };
 
+class TestWidgetDelegate : public views::WidgetDelegateView {
+ public:
+  TestWidgetDelegate() = default;
+  ~TestWidgetDelegate() override = default;
+
+  // views::WidgetDelegateView:
+  bool CanResize() const override { return can_snap_; }
+  bool CanMaximize() const override { return can_snap_; }
+
+  void EnableSnap() {
+    can_snap_ = true;
+    GetWidget()->OnSizeConstraintsChanged();
+  }
+
+ private:
+  bool can_snap_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(TestWidgetDelegate);
+};
+
 }  // namespace
 
 class ClientControlledStateTest : public AshTestBase {
@@ -73,17 +101,21 @@ class ClientControlledStateTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
-    widget_ = std::make_unique<views::Widget>();
+    widget_delegate_ = new TestWidgetDelegate();
+
     views::Widget::InitParams params;
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     params.parent = Shell::GetPrimaryRootWindow()->GetChildById(
         kShellWindowId_DefaultContainer);
     params.bounds = kInitialBounds;
+    params.delegate = widget_delegate_;
+
+    widget_ = std::make_unique<views::Widget>();
     widget_->Init(params);
     wm::WindowState* window_state = wm::GetWindowState(window());
     window_state->set_allow_set_bounds_direct(true);
     auto delegate = std::make_unique<TestClientControlledStateDelegate>();
-    delegate_ = delegate.get();
+    state_delegate_ = delegate.get();
     auto state = std::make_unique<ClientControlledState>(std::move(delegate));
     state_ = state.get();
     window_state->SetStateObject(std::move(state));
@@ -95,11 +127,13 @@ class ClientControlledStateTest : public AshTestBase {
     AshTestBase::TearDown();
   }
 
+  TestWidgetDelegate* widget_delegate() { return widget_delegate_; }
+
  protected:
   aura::Window* window() { return widget_->GetNativeWindow(); }
   WindowState* window_state() { return GetWindowState(window()); }
   ClientControlledState* state() { return state_; }
-  TestClientControlledStateDelegate* delegate() { return delegate_; }
+  TestClientControlledStateDelegate* delegate() { return state_delegate_; }
   views::Widget* widget() { return widget_.get(); }
   ScreenPinningController* GetScreenPinningController() {
     return Shell::Get()->screen_pinning_controller();
@@ -107,7 +141,8 @@ class ClientControlledStateTest : public AshTestBase {
 
  private:
   ClientControlledState* state_ = nullptr;
-  TestClientControlledStateDelegate* delegate_ = nullptr;
+  TestClientControlledStateDelegate* state_delegate_ = nullptr;
+  TestWidgetDelegate* widget_delegate_ = nullptr;  // owned by itself.
   std::unique_ptr<views::Widget> widget_;
 
   DISALLOW_COPY_AND_ASSIGN(ClientControlledStateTest);
@@ -130,6 +165,11 @@ TEST_F(ClientControlledStateTest, Maximize) {
   EXPECT_TRUE(widget()->IsMaximized());
   // Bounds is controlled by client.
   EXPECT_EQ(kInitialBounds, widget()->GetWindowBoundsInScreen());
+
+  // Maximized request should be also sent. It is up to client impl
+  // how to handle it.
+  widget()->SetBounds(gfx::Rect(0, 0, 100, 100));
+  EXPECT_EQ(gfx::Rect(0, 0, 100, 100), delegate()->requested_bounds());
 
   widget()->Restore();
   EXPECT_TRUE(widget()->IsMaximized());
@@ -256,7 +296,7 @@ TEST_F(ClientControlledStateTest, IgnoreWorkspace) {
   state()->EnterNextState(window_state(), delegate()->new_state(),
                           ClientControlledState::kAnimationNone);
   EXPECT_TRUE(widget()->IsMaximized());
-  delegate()->reset();
+  delegate()->Reset();
 
   UpdateDisplay("1000x800");
 
@@ -277,6 +317,61 @@ TEST_F(ClientControlledStateTest, SetBounds) {
   widget()->SetBounds(delegate()->requested_bounds());
   state()->set_bounds_locally(false);
   EXPECT_EQ(new_bounds, widget()->GetWindowBoundsInScreen());
+}
+
+TEST_F(ClientControlledStateTest, CenterWindow) {
+  display::Screen* screen = display::Screen::GetScreen();
+  gfx::Rect bounds = screen->GetPrimaryDisplay().work_area();
+
+  const WMEvent center_event(WM_EVENT_CENTER);
+  window_state()->OnWMEvent(&center_event);
+  EXPECT_NEAR(bounds.CenterPoint().x(),
+              delegate()->requested_bounds().CenterPoint().x(), 1);
+  EXPECT_NEAR(bounds.CenterPoint().y(),
+              delegate()->requested_bounds().CenterPoint().y(), 1);
+}
+
+TEST_F(ClientControlledStateTest, SnapWindow) {
+  // Snap disabled.
+  display::Screen* screen = display::Screen::GetScreen();
+  gfx::Rect work_area = screen->GetPrimaryDisplay().work_area();
+  ASSERT_FALSE(window_state()->CanResize());
+  ASSERT_FALSE(window_state()->CanSnap());
+
+  // The event should be ignored.
+  const WMEvent snap_left_event(WM_EVENT_CYCLE_SNAP_LEFT);
+  window_state()->OnWMEvent(&snap_left_event);
+  EXPECT_FALSE(window_state()->IsSnapped());
+  EXPECT_TRUE(delegate()->requested_bounds().IsEmpty());
+
+  const WMEvent snap_right_event(WM_EVENT_CYCLE_SNAP_RIGHT);
+  window_state()->OnWMEvent(&snap_right_event);
+  EXPECT_FALSE(window_state()->IsSnapped());
+  EXPECT_TRUE(delegate()->requested_bounds().IsEmpty());
+
+  // Snap enabled.
+  widget_delegate()->EnableSnap();
+  ASSERT_TRUE(window_state()->CanResize());
+  ASSERT_TRUE(window_state()->CanSnap());
+
+  window_state()->OnWMEvent(&snap_left_event);
+  EXPECT_NEAR(work_area.CenterPoint().x(),
+              delegate()->requested_bounds().right(), 1);
+  EXPECT_EQ(work_area.height(), delegate()->requested_bounds().height());
+  EXPECT_TRUE(delegate()->requested_bounds().origin().IsOrigin());
+  EXPECT_EQ(mojom::WindowStateType::DEFAULT, delegate()->old_state());
+  EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED, delegate()->new_state());
+
+  delegate()->Reset();
+
+  window_state()->OnWMEvent(&snap_right_event);
+  EXPECT_NEAR(work_area.CenterPoint().x(), delegate()->requested_bounds().x(),
+              1);
+  EXPECT_EQ(work_area.height(), delegate()->requested_bounds().height());
+  EXPECT_EQ(work_area.bottom_right(),
+            delegate()->requested_bounds().bottom_right());
+  EXPECT_EQ(mojom::WindowStateType::DEFAULT, delegate()->old_state());
+  EXPECT_EQ(mojom::WindowStateType::RIGHT_SNAPPED, delegate()->new_state());
 }
 
 // Pin events should be applied immediately.
@@ -422,6 +517,27 @@ TEST_F(ClientControlledStateTest, MoveWindowToDisplay) {
   // coordinates.
   EXPECT_EQ(second_display_id, screen->GetDisplayNearestWindow(window()).id());
   EXPECT_EQ(gfx::Rect(0, 0, 100, 100), delegate()->requested_bounds());
+}
+
+TEST_F(ClientControlledStateTest, MoveWindowToDisplayWindowVisibility) {
+  UpdateDisplay("1000x500, 500x500");
+
+  state()->set_bounds_locally(true);
+  widget()->SetBounds(gfx::Rect(600, 0, 100, 200));
+  state()->set_bounds_locally(false);
+  EXPECT_EQ(gfx::Rect(600, 0, 100, 200), widget()->GetWindowBoundsInScreen());
+
+  display::Screen* screen = display::Screen::GetScreen();
+
+  const int64_t first_display_id = screen->GetAllDisplays()[0].id();
+  const int64_t second_display_id = screen->GetAllDisplays()[1].id();
+  EXPECT_EQ(first_display_id, screen->GetDisplayNearestWindow(window()).id());
+
+  MoveWindowToDisplay(window(), second_display_id);
+
+  // Ensure |ash::wm::kMinimumOnScreenArea + 1| window visibility for window
+  // added to a new workspace.
+  EXPECT_EQ(gfx::Rect(1474, 0, 100, 200), widget()->GetWindowBoundsInScreen());
 }
 
 }  // namespace wm

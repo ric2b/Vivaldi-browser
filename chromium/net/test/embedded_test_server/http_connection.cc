@@ -8,6 +8,7 @@
 
 #include "net/base/net_errors.h"
 #include "net/socket/stream_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 
 namespace net {
 namespace test_server {
@@ -53,7 +54,8 @@ void HttpConnection::SendInternal(const base::Closure& callback,
   while (buf->BytesRemaining() > 0) {
     int rv = socket_->Write(buf.get(), buf->BytesRemaining(),
                             base::Bind(&HttpConnection::OnSendInternalDone,
-                                       base::Unretained(this), callback, buf));
+                                       base::Unretained(this), callback, buf),
+                            TRAFFIC_ANNOTATION_FOR_TESTS);
     if (rv == ERR_IO_PENDING)
       return;
 

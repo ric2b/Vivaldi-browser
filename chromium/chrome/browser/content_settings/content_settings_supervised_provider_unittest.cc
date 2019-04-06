@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/content_settings/content_settings_mock_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
@@ -40,7 +39,7 @@ void SupervisedUserProviderTest::SetUp() {
   pref_store_->NotifyInitializationCompleted();
   service_.Init(pref_store_);
   service_.SetActive(true);
-  provider_ = base::MakeUnique<SupervisedProvider>(&service_);
+  provider_ = std::make_unique<SupervisedProvider>(&service_);
   provider_->AddObserver(&mock_observer_);
 }
 
@@ -60,7 +59,7 @@ TEST_F(SupervisedUserProviderTest, GeolocationTest) {
               OnContentSettingChanged(_, _, CONTENT_SETTINGS_TYPE_GEOLOCATION,
                                       std::string()));
   service_.SetLocalSetting(supervised_users::kGeolocationDisabled,
-                           base::MakeUnique<base::Value>(true));
+                           std::make_unique<base::Value>(true));
 
   rule_iterator = provider_->GetRuleIterator(CONTENT_SETTINGS_TYPE_GEOLOCATION,
                                              std::string(), false);
@@ -77,7 +76,7 @@ TEST_F(SupervisedUserProviderTest, GeolocationTest) {
               OnContentSettingChanged(_, _, CONTENT_SETTINGS_TYPE_GEOLOCATION,
                                       std::string()));
   service_.SetLocalSetting(supervised_users::kGeolocationDisabled,
-                           base::MakeUnique<base::Value>(false));
+                           std::make_unique<base::Value>(false));
 
   rule_iterator = provider_->GetRuleIterator(CONTENT_SETTINGS_TYPE_GEOLOCATION,
                                              std::string(), false);
@@ -94,7 +93,7 @@ TEST_F(SupervisedUserProviderTest, CookiesTest) {
               OnContentSettingChanged(_, _, CONTENT_SETTINGS_TYPE_COOKIES,
                                       std::string()));
   service_.SetLocalSetting(supervised_users::kCookiesAlwaysAllowed,
-                           base::MakeUnique<base::Value>(true));
+                           std::make_unique<base::Value>(true));
 
   rule_iterator = provider_->GetRuleIterator(CONTENT_SETTINGS_TYPE_COOKIES,
                                              std::string(), false);
@@ -111,7 +110,7 @@ TEST_F(SupervisedUserProviderTest, CookiesTest) {
               OnContentSettingChanged(_, _, CONTENT_SETTINGS_TYPE_COOKIES,
                                       std::string()));
   service_.SetLocalSetting(supervised_users::kCookiesAlwaysAllowed,
-                           base::MakeUnique<base::Value>(false));
+                           std::make_unique<base::Value>(false));
 
   rule_iterator = provider_->GetRuleIterator(CONTENT_SETTINGS_TYPE_COOKIES,
                                              std::string(), false);
@@ -135,7 +134,7 @@ TEST_F(SupervisedUserProviderTest, CameraMicTest) {
               OnContentSettingChanged(
                   _, _, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string()));
   service_.SetLocalSetting(supervised_users::kCameraMicDisabled,
-                           base::MakeUnique<base::Value>(true));
+                           std::make_unique<base::Value>(true));
 
   rule_iterator = provider_->GetRuleIterator(
       CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(), false);
@@ -166,7 +165,7 @@ TEST_F(SupervisedUserProviderTest, CameraMicTest) {
               OnContentSettingChanged(
                   _, _, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string()));
   service_.SetLocalSetting(supervised_users::kCameraMicDisabled,
-                           base::MakeUnique<base::Value>(false));
+                           std::make_unique<base::Value>(false));
 
   rule_iterator = provider_->GetRuleIterator(
       CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(), false);

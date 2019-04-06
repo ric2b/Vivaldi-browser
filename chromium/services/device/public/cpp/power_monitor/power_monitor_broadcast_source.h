@@ -7,12 +7,11 @@
 
 #include <memory>
 
-#include "base/atomicops.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/power_monitor/power_monitor_source.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/device/public/interfaces/power_monitor.mojom.h"
+#include "services/device/public/mojom/power_monitor.mojom.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -29,9 +28,16 @@ namespace device {
 class PowerMonitorBroadcastSource : public base::PowerMonitorSource {
  public:
   PowerMonitorBroadcastSource(
-      service_manager::Connector* connector,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~PowerMonitorBroadcastSource() override;
+
+  // Completes initialization by setting up the connection with the Device
+  // Service. Split out from the constructor in order to enable the client to
+  // ensure that the process-wide PowerMonitor instance is initialized before
+  // the Mojo connection is set up.
+  void Init(service_manager::Connector* connector);
+
+  void Shutdown() override;
 
  private:
   friend class PowerMonitorBroadcastSourceTest;
@@ -41,22 +47,37 @@ class PowerMonitorBroadcastSource : public base::PowerMonitorSource {
   FRIEND_TEST_ALL_PREFIXES(PowerMonitorMessageBroadcasterTest,
                            PowerMessageBroadcast);
 
+  // Client holds the mojo connection. It is created on the main thread, and
+  // destroyed on task runner's thread. Unless otherwise noted, all its methods
+  // all called on the task runner's thread.
   class Client : public device::mojom::PowerMonitorClient {
    public:
     Client();
     ~Client() override;
 
-    void Init(std::unique_ptr<service_manager::Connector> connector);
-    bool last_reported_battery_power_state();
+    // Called on main thread when the source is destroyed. Prevents data race
+    // on the power monitor and source due to use on task runner thread.
+    void Shutdown();
 
+    void Init(std::unique_ptr<service_manager::Connector> connector);
+
+    bool last_reported_on_battery_power_state() const {
+      return last_reported_on_battery_power_state_;
+    }
+
+    // device::mojom::PowerMonitorClient implementation
     void PowerStateChange(bool on_battery_power) override;
     void Suspend() override;
     void Resume() override;
 
    private:
-    volatile base::subtle::AtomicWord last_reported_battery_power_state_;
     std::unique_ptr<service_manager::Connector> connector_;
     mojo::Binding<device::mojom::PowerMonitorClient> binding_;
+
+    base::Lock is_shutdown_lock_;
+    bool is_shutdown_ = false;
+
+    bool last_reported_on_battery_power_state_ = false;
 
     DISALLOW_COPY_AND_ASSIGN(Client);
   };
@@ -64,12 +85,12 @@ class PowerMonitorBroadcastSource : public base::PowerMonitorSource {
   // This constructor is used by test code to mock the Client class.
   PowerMonitorBroadcastSource(
       std::unique_ptr<Client> client,
-      service_manager::Connector* connector,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   Client* client_for_testing() const { return client_.get(); }
 
   bool IsOnBatteryPowerImpl() override;
+
   std::unique_ptr<Client> client_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

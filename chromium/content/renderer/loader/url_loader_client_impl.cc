@@ -65,23 +65,6 @@ class URLLoaderClientImpl::DeferredOnReceiveRedirect final
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
 
-class URLLoaderClientImpl::DeferredOnDataDownloaded final
-    : public DeferredMessage {
- public:
-  DeferredOnDataDownloaded(int64_t data_length, int64_t encoded_data_length)
-      : data_length_(data_length), encoded_data_length_(encoded_data_length) {}
-
-  void HandleMessage(ResourceDispatcher* dispatcher, int request_id) override {
-    dispatcher->OnDownloadedData(request_id, data_length_,
-                                 encoded_data_length_);
-  }
-  bool IsCompletionMessage() const override { return false; }
-
- private:
-  const int64_t data_length_;
-  const int64_t encoded_data_length_;
-};
-
 class URLLoaderClientImpl::DeferredOnUploadProgress final
     : public DeferredMessage {
  public:
@@ -225,18 +208,16 @@ void URLLoaderClientImpl::FlushDeferredMessages() {
 
 void URLLoaderClientImpl::Bind(
     network::mojom::URLLoaderClientEndpointsPtr endpoints) {
-  url_loader_.Bind(std::move(endpoints->url_loader));
-  url_loader_client_binding_.Bind(std::move(endpoints->url_loader_client));
+  url_loader_.Bind(std::move(endpoints->url_loader), task_runner_);
+  url_loader_client_binding_.Bind(std::move(endpoints->url_loader_client),
+                                  task_runner_);
   url_loader_client_binding_.set_connection_error_handler(base::BindOnce(
       &URLLoaderClientImpl::OnConnectionClosed, weak_factory_.GetWeakPtr()));
 }
 
 void URLLoaderClientImpl::OnReceiveResponse(
-    const network::ResourceResponseHead& response_head,
-    const base::Optional<net::SSLInfo>& ssl_info,
-    network::mojom::DownloadedTempFilePtr downloaded_file) {
+    const network::ResourceResponseHead& response_head) {
   has_received_response_ = true;
-  downloaded_file_ = std::move(downloaded_file);
   if (NeedsStoringMessage()) {
     StoreAndDispatch(
         std::make_unique<DeferredOnReceiveResponse>(response_head));
@@ -256,17 +237,6 @@ void URLLoaderClientImpl::OnReceiveRedirect(
   } else {
     resource_dispatcher_->OnReceivedRedirect(request_id_, redirect_info,
                                              response_head, task_runner_);
-  }
-}
-
-void URLLoaderClientImpl::OnDataDownloaded(int64_t data_len,
-                                           int64_t encoded_data_len) {
-  if (NeedsStoringMessage()) {
-    StoreAndDispatch(
-        std::make_unique<DeferredOnDataDownloaded>(data_len, encoded_data_len));
-  } else {
-    resource_dispatcher_->OnDownloadedData(request_id_, data_len,
-                                           encoded_data_len);
   }
 }
 
@@ -306,6 +276,13 @@ void URLLoaderClientImpl::OnStartLoadingResponseBody(
     mojo::ScopedDataPipeConsumerHandle body) {
   DCHECK(!body_consumer_);
   DCHECK(has_received_response_);
+
+  if (pass_response_pipe_to_dispatcher_) {
+    resource_dispatcher_->OnStartLoadingResponseBody(request_id_,
+                                                     std::move(body));
+    return;
+  }
+
   body_consumer_ = new URLResponseBodyConsumer(
       request_id_, resource_dispatcher_, std::move(body), task_runner_);
 

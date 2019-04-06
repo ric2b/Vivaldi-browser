@@ -20,15 +20,26 @@
 #include "ipc/ipc_message.h"
 #include "net/http/http_request_headers.h"
 #include "net/log/net_log_event_type.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+namespace content {
+class ResourceContext;
+}  // namespace content
 
 namespace net {
 class HttpResponseHeaders;
 class URLRequest;
 }  // namespace net
 
+namespace network {
+struct ResourceResponseHead;
+}
+
 namespace extensions {
+
+class ExtensionNavigationUIData;
 
 // A URL request representation used by WebRequest API internals. This structure
 // carries information about an in-progress request.
@@ -56,9 +67,26 @@ struct WebRequestInfo {
   // extensions WebRequest-related code.
   explicit WebRequestInfo(net::URLRequest* url_request);
 
+  // Initializes a WebRequestInfo from information provided over a
+  // URLLoaderFactory interface, for use with the Network Service.
+  WebRequestInfo(uint64_t request_id,
+                 int render_process_id,
+                 int render_frame_id,
+                 std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data,
+                 int32_t routing_id,
+                 content::ResourceContext* resource_context,
+                 const network::ResourceRequest& request);
+
   ~WebRequestInfo();
 
+  // Fill in response data for this request. Only used when the Network Service
+  // is disabled.
   void AddResponseInfoFromURLRequest(net::URLRequest* url_request);
+
+  // Fill in response data for this request. Only used when the Network Service
+  // is enabled.
+  void AddResponseInfoFromResourceResponse(
+      const network::ResourceResponseHead& response);
 
   // A unique identifier for this request.
   uint64_t id = 0;
@@ -142,7 +170,13 @@ struct WebRequestInfo {
   // of Logger above. This is always non-null.
   std::unique_ptr<Logger> logger;
 
+  // The ResourceContext associated with this request. May be null.
+  content::ResourceContext* resource_context = nullptr;
+
  private:
+  void InitializeWebViewAndFrameData(
+      const ExtensionNavigationUIData* navigation_ui_data);
+
   DISALLOW_COPY_AND_ASSIGN(WebRequestInfo);
 };
 

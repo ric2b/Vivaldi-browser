@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
@@ -25,11 +24,9 @@
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/url_loader_factory_getter.h"
-#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
+#include "content/common/service_worker/service_worker.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
-#include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
@@ -41,6 +38,9 @@
 #include "net/log/net_log_event_type.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
+#include "services/network/throttling/throttling_controller.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
 
@@ -54,7 +54,15 @@ class DelegatingURLLoader final : public network::mojom::URLLoader {
       : binding_(this), loader_(std::move(loader)) {}
   ~DelegatingURLLoader() override {}
 
-  void FollowRedirect() override { loader_->FollowRedirect(); }
+  void FollowRedirect(const base::Optional<std::vector<std::string>>&
+                          to_be_removed_request_headers,
+                      const base::Optional<net::HttpRequestHeaders>&
+                          modified_request_headers) override {
+    DCHECK(!modified_request_headers.has_value())
+        << "Redirect with modified headers was not supported yet. "
+           "crbug.com/845683";
+    loader_->FollowRedirect(base::nullopt, base::nullopt);
+  }
   void ProceedWithResponse() override { NOTREACHED(); }
 
   void SetPriority(net::RequestPriority priority,
@@ -104,13 +112,13 @@ void NotifyNavigationPreloadRequestSentOnUI(
 
 void NotifyNavigationPreloadResponseReceivedOnUI(
     const GURL& url,
-    const network::ResourceResponseHead& head,
+    scoped_refptr<network::ResourceResponse> response,
     const std::pair<int, int>& worker_id,
     const std::string& request_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ServiceWorkerDevToolsManager::GetInstance()
       ->NavigationPreloadResponseReceived(worker_id.first, worker_id.second,
-                                          request_id, url, head);
+                                          request_id, url, response->head);
 }
 
 void NotifyNavigationPreloadCompletedOnUI(
@@ -135,9 +143,12 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
       : binding_(this),
         client_(std::move(client)),
         on_response_(std::move(on_response)),
-        url_(request.url) {
+        url_(request.url),
+        devtools_enabled_(request.report_raw_headers) {
+    if (!devtools_enabled_)
+      return;
     AddDevToolsCallback(
-        base::Bind(&NotifyNavigationPreloadRequestSentOnUI, request));
+        base::BindOnce(&NotifyNavigationPreloadRequestSentOnUI, request));
   }
   ~DelegatingURLLoaderClient() override {
     if (!completed_) {
@@ -145,8 +156,10 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
       network::URLLoaderCompletionStatus status;
       status.error_code = net::ERR_ABORTED;
       client_->OnComplete(status);
+      if (!devtools_enabled_)
+        return;
       AddDevToolsCallback(
-          base::Bind(&NotifyNavigationPreloadCompletedOnUI, status));
+          base::BindOnce(&NotifyNavigationPreloadCompletedOnUI, status));
     }
   }
 
@@ -156,9 +169,6 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
     MaybeRunDevToolsCallbacks();
   }
 
-  void OnDataDownloaded(int64_t data_length, int64_t encoded_length) override {
-    client_->OnDataDownloaded(data_length, encoded_length);
-  }
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
                         OnUploadProgressCallback ack_callback) override {
@@ -171,15 +181,18 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override {
     client_->OnTransferSizeUpdated(transfer_size_diff);
   }
-  void OnReceiveResponse(
-      const network::ResourceResponseHead& head,
-      const base::Optional<net::SSLInfo>& ssl_info,
-      network::mojom::DownloadedTempFilePtr downloaded_file) override {
-    client_->OnReceiveResponse(head, ssl_info, std::move(downloaded_file));
+  void OnReceiveResponse(const network::ResourceResponseHead& head) override {
+    client_->OnReceiveResponse(head);
     DCHECK(on_response_);
     std::move(on_response_).Run();
+    if (!devtools_enabled_)
+      return;
+    // Make a deep copy of ResourceResponseHead before passing it cross-thread.
+    auto resource_response = base::MakeRefCounted<network::ResourceResponse>();
+    resource_response->head = head;
     AddDevToolsCallback(
-        base::Bind(&NotifyNavigationPreloadResponseReceivedOnUI, url_, head));
+        base::BindOnce(&NotifyNavigationPreloadResponseReceivedOnUI, url_,
+                       resource_response->DeepCopy()));
   }
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const network::ResourceResponseHead& head) override {
@@ -188,11 +201,18 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
     // OnReceiveRedirect IPC and don't send OnComplete IPC. The service worker
     // will clean up the preload request when OnReceiveRedirect() is called.
     client_->OnReceiveRedirect(redirect_info, head);
+
+    if (!devtools_enabled_)
+      return;
+    // Make a deep copy of ResourceResponseHead before passing it cross-thread.
+    auto resource_response = base::MakeRefCounted<network::ResourceResponse>();
+    resource_response->head = head;
     AddDevToolsCallback(
-        base::Bind(&NotifyNavigationPreloadResponseReceivedOnUI, url_, head));
+        base::BindOnce(&NotifyNavigationPreloadResponseReceivedOnUI, url_,
+                       resource_response->DeepCopy()));
     network::URLLoaderCompletionStatus status;
     AddDevToolsCallback(
-        base::Bind(&NotifyNavigationPreloadCompletedOnUI, status));
+        base::BindOnce(&NotifyNavigationPreloadCompletedOnUI, status));
   }
   void OnStartLoadingResponseBody(
       mojo::ScopedDataPipeConsumerHandle body) override {
@@ -203,8 +223,10 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
       return;
     completed_ = true;
     client_->OnComplete(status);
+    if (!devtools_enabled_)
+      return;
     AddDevToolsCallback(
-        base::Bind(&NotifyNavigationPreloadCompletedOnUI, status));
+        base::BindOnce(&NotifyNavigationPreloadCompletedOnUI, status));
   }
 
   void Bind(network::mojom::URLLoaderClientPtr* ptr_info) {
@@ -213,7 +235,7 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
 
  private:
   void MaybeRunDevToolsCallbacks() {
-    if (!worker_id_)
+    if (!worker_id_ || !devtools_enabled_)
       return;
     while (!devtools_callbacks.empty()) {
       BrowserThread::PostTask(
@@ -224,8 +246,8 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
     }
   }
   void AddDevToolsCallback(
-      base::Callback<void(const WorkerId&, const std::string&)> callback) {
-    devtools_callbacks.push(callback);
+      base::OnceCallback<void(const WorkerId&, const std::string&)> callback) {
+    devtools_callbacks.push(std::move(callback));
     MaybeRunDevToolsCallbacks();
   }
 
@@ -234,10 +256,11 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
   base::OnceClosure on_response_;
   bool completed_ = false;
   const GURL url_;
+  const bool devtools_enabled_;
 
   base::Optional<std::pair<int, int>> worker_id_;
   std::string devtools_request_id_;
-  base::queue<base::Callback<void(const WorkerId&, const std::string&)>>
+  base::queue<base::OnceCallback<void(const WorkerId&, const std::string&)>>
       devtools_callbacks;
   DISALLOW_COPY_AND_ASSIGN(DelegatingURLLoaderClient);
 };
@@ -261,28 +284,29 @@ EventType ResourceTypeToEventType(ResourceType resource_type) {
 }
 
 std::unique_ptr<base::Value> NetLogServiceWorkerStatusCallback(
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     net::NetLogCaptureMode) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
-  dict->SetString("status", ServiceWorkerStatusToString(status));
+  dict->SetString("status", blink::ServiceWorkerStatusToString(status));
   return std::move(dict);
 }
 
 std::unique_ptr<base::Value> NetLogFetchEventCallback(
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     ServiceWorkerFetchDispatcher::FetchEventResult result,
     net::NetLogCaptureMode) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
-  dict->SetString("status", ServiceWorkerStatusToString(status));
+  dict->SetString("status", blink::ServiceWorkerStatusToString(status));
   dict->SetBoolean(
       "has_response",
       result == ServiceWorkerFetchDispatcher::FetchEventResult::kGotResponse);
   return std::move(dict);
 }
 
-void EndNetLogEventWithServiceWorkerStatus(const net::NetLogWithSource& net_log,
-                                           net::NetLogEventType type,
-                                           ServiceWorkerStatusCode status) {
+void EndNetLogEventWithServiceWorkerStatus(
+    const net::NetLogWithSource& net_log,
+    net::NetLogEventType type,
+    blink::ServiceWorkerStatusCode status) {
   net_log.EndEvent(type,
                    base::Bind(&NetLogServiceWorkerStatusCallback, status));
 }
@@ -367,14 +391,6 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
                    nullptr /* body_as_stream */, std::move(body_as_blob),
                    FetchEventResult::kGotResponse, dispatch_event_time);
   }
-  void OnResponseLegacyBlob(const ServiceWorkerResponse& response,
-                            base::Time dispatch_event_time,
-                            OnResponseLegacyBlobCallback callback) override {
-    HandleResponse(fetch_dispatcher_, version_, fetch_event_id_, response,
-                   nullptr /* body_as_stream */, nullptr /* body_as_blob */,
-                   FetchEventResult::kGotResponse, dispatch_event_time);
-    std::move(callback).Run();
-  }
   void OnResponseStream(
       const ServiceWorkerResponse& response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
@@ -431,9 +447,10 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
 class ServiceWorkerFetchDispatcher::URLLoaderAssets
     : public base::RefCounted<ServiceWorkerFetchDispatcher::URLLoaderAssets> {
  public:
-  URLLoaderAssets(network::mojom::URLLoaderFactoryPtr url_loader_factory,
-                  std::unique_ptr<network::mojom::URLLoader> url_loader,
-                  std::unique_ptr<DelegatingURLLoaderClient> url_loader_client)
+  URLLoaderAssets(
+      std::unique_ptr<network::mojom::URLLoaderFactory> url_loader_factory,
+      std::unique_ptr<network::mojom::URLLoader> url_loader,
+      std::unique_ptr<DelegatingURLLoaderClient> url_loader_client)
       : url_loader_factory_(std::move(url_loader_factory)),
         url_loader_(std::move(url_loader)),
         url_loader_client_(std::move(url_loader_client)) {}
@@ -447,21 +464,28 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
   friend class base::RefCounted<URLLoaderAssets>;
   virtual ~URLLoaderAssets() {}
 
-  network::mojom::URLLoaderFactoryPtr url_loader_factory_;
+  std::unique_ptr<network::mojom::URLLoaderFactory> url_loader_factory_;
   std::unique_ptr<network::mojom::URLLoader> url_loader_;
   std::unique_ptr<DelegatingURLLoaderClient> url_loader_client_;
 
   DISALLOW_COPY_AND_ASSIGN(URLLoaderAssets);
 };
 
-// S13nServiceWorker
 ServiceWorkerFetchDispatcher::ServiceWorkerFetchDispatcher(
     std::unique_ptr<network::ResourceRequest> request,
+    const std::string& request_body_blob_uuid,
+    uint64_t request_body_blob_size,
+    blink::mojom::BlobPtr request_body_blob,
+    const std::string& client_id,
     scoped_refptr<ServiceWorkerVersion> version,
     const net::NetLogWithSource& net_log,
     base::OnceClosure prepare_callback,
     FetchCallback fetch_callback)
     : request_(std::move(request)),
+      request_body_blob_uuid_(request_body_blob_uuid),
+      request_body_blob_size_(request_body_blob_size),
+      request_body_blob_(std::move(request_body_blob)),
+      client_id_(client_id),
       version_(std::move(version)),
       resource_type_(static_cast<ResourceType>(request_->resource_type)),
       net_log_(net_log),
@@ -469,28 +493,12 @@ ServiceWorkerFetchDispatcher::ServiceWorkerFetchDispatcher(
       fetch_callback_(std::move(fetch_callback)),
       did_complete_(false),
       weak_factory_(this) {
-  net_log_.BeginEvent(net::NetLogEventType::SERVICE_WORKER_DISPATCH_FETCH_EVENT,
-                      net::NetLog::StringCallback(
-                          "event_type", ServiceWorkerMetrics::EventTypeToString(
-                                            GetEventType())));
-}
-
-// Non-S13nServiceWorker
-ServiceWorkerFetchDispatcher::ServiceWorkerFetchDispatcher(
-    std::unique_ptr<ServiceWorkerFetchRequest> legacy_request,
-    scoped_refptr<ServiceWorkerVersion> version,
-    ResourceType resource_type,
-    const net::NetLogWithSource& net_log,
-    base::OnceClosure prepare_callback,
-    FetchCallback fetch_callback)
-    : legacy_request_(std::move(legacy_request)),
-      version_(std::move(version)),
-      resource_type_(resource_type),
-      net_log_(net_log),
-      prepare_callback_(std::move(prepare_callback)),
-      fetch_callback_(std::move(fetch_callback)),
-      did_complete_(false),
-      weak_factory_(this) {
+#if DCHECK_IS_ON()
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled()) {
+    DCHECK((request_body_blob_uuid_.empty() && request_body_blob_size_ == 0 &&
+            !request_body_blob_ && client_id_.empty()));
+  }
+#endif  // DCHECK_IS_ON()
   net_log_.BeginEvent(net::NetLogEventType::SERVICE_WORKER_DISPATCH_FETCH_EVENT,
                       net::NetLog::StringCallback(
                           "event_type", ServiceWorkerMetrics::EventTypeToString(
@@ -529,7 +537,7 @@ void ServiceWorkerFetchDispatcher::StartWorker() {
   // before we could finish activation.
   if (version_->status() != ServiceWorkerVersion::ACTIVATED) {
     DCHECK_EQ(ServiceWorkerVersion::REDUNDANT, version_->status());
-    DidFail(SERVICE_WORKER_ERROR_ACTIVATE_WORKER_FAILED);
+    DidFail(blink::ServiceWorkerStatusCode::kErrorActivateWorkerFailed);
     return;
   }
 
@@ -546,8 +554,8 @@ void ServiceWorkerFetchDispatcher::StartWorker() {
 }
 
 void ServiceWorkerFetchDispatcher::DidStartWorker(
-    ServiceWorkerStatusCode status) {
-  if (status != SERVICE_WORKER_OK) {
+    blink::ServiceWorkerStatusCode status) {
+  if (status != blink::ServiceWorkerStatusCode::kOk) {
     EndNetLogEventWithServiceWorkerStatus(
         net_log_, net::NetLogEventType::SERVICE_WORKER_START_WORKER, status);
     DidFail(status);
@@ -579,8 +587,7 @@ void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
       base::BindOnce(&ServiceWorkerFetchDispatcher::DidFailToDispatch,
                      weak_factory_.GetWeakPtr(), std::move(response_callback)));
   int event_finish_id = version_->StartRequest(
-      ServiceWorkerMetrics::EventType::FETCH_WAITUNTIL,
-      base::BindOnce(&ServiceWorkerUtils::NoOpStatusCallback));
+      ServiceWorkerMetrics::EventType::FETCH_WAITUNTIL, base::DoNothing());
   response_callback_rawptr->set_fetch_event_id(fetch_event_id);
 
   // Report navigation preload to DevTools if needed.
@@ -593,40 +600,35 @@ void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
   }
 
   // Dispatch the fetch event.
-  // |event_dispatcher| is owned by |version_|. So it is safe to pass the
+  auto params = blink::mojom::DispatchFetchEventParams::New();
+  params->request = *request_;
+  params->request_body_blob_uuid = request_body_blob_uuid_;
+  params->request_body_blob_size = request_body_blob_size_;
+  params->request_body_blob = request_body_blob_.PassInterface();
+  params->client_id = client_id_;
+  params->preload_handle = std::move(preload_handle_);
+  // |endpoint()| is owned by |version_|. So it is safe to pass the
   // unretained raw pointer of |version_| to OnFetchEventFinished callback.
   // Pass |url_loader_assets_| to the callback to keep the URL loader related
   // assets alive while the FetchEvent is ongoing in the service worker.
-  if (ServiceWorkerUtils::IsServicificationEnabled()) {
-    DCHECK(request_);
-    DCHECK(!legacy_request_);
-    version_->event_dispatcher()->DispatchFetchEvent(
-        *request_, std::move(preload_handle_), std::move(response_callback_ptr),
-        base::BindOnce(&ServiceWorkerFetchDispatcher::OnFetchEventFinished,
-                       base::Unretained(version_.get()), event_finish_id,
-                       url_loader_assets_));
-  } else {
-    DCHECK(!request_);
-    DCHECK(legacy_request_);
-    version_->event_dispatcher()->DispatchLegacyFetchEvent(
-        *legacy_request_, std::move(preload_handle_),
-        std::move(response_callback_ptr),
-        base::BindOnce(&ServiceWorkerFetchDispatcher::OnFetchEventFinished,
-                       base::Unretained(version_.get()), event_finish_id,
-                       url_loader_assets_));
-  }
+  version_->endpoint()->DispatchFetchEvent(
+      std::move(params), std::move(response_callback_ptr),
+      base::BindOnce(&ServiceWorkerFetchDispatcher::OnFetchEventFinished,
+                     base::Unretained(version_.get()), event_finish_id,
+                     url_loader_assets_));
 }
 
 void ServiceWorkerFetchDispatcher::DidFailToDispatch(
     std::unique_ptr<ResponseCallback> response_callback,
-    ServiceWorkerStatusCode status) {
+    blink::ServiceWorkerStatusCode status) {
   EndNetLogEventWithServiceWorkerStatus(
       net_log_, net::NetLogEventType::SERVICE_WORKER_FETCH_EVENT, status);
   DidFail(status);
 }
 
-void ServiceWorkerFetchDispatcher::DidFail(ServiceWorkerStatusCode status) {
-  DCHECK_NE(SERVICE_WORKER_OK, status);
+void ServiceWorkerFetchDispatcher::DidFail(
+    blink::ServiceWorkerStatusCode status) {
+  DCHECK_NE(blink::ServiceWorkerStatusCode::kOk, status);
   Complete(status, FetchEventResult::kShouldFallback, ServiceWorkerResponse(),
            nullptr /* body_as_stream */, nullptr /* body_as_blob */);
 }
@@ -638,12 +640,12 @@ void ServiceWorkerFetchDispatcher::DidFinish(
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
     blink::mojom::BlobPtr body_as_blob) {
   net_log_.EndEvent(net::NetLogEventType::SERVICE_WORKER_FETCH_EVENT);
-  Complete(SERVICE_WORKER_OK, fetch_result, response, std::move(body_as_stream),
-           std::move(body_as_blob));
+  Complete(blink::ServiceWorkerStatusCode::kOk, fetch_result, response,
+           std::move(body_as_stream), std::move(body_as_blob));
 }
 
 void ServiceWorkerFetchDispatcher::Complete(
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     FetchEventResult fetch_result,
     const ServiceWorkerResponse& response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
@@ -660,6 +662,7 @@ void ServiceWorkerFetchDispatcher::Complete(
            std::move(body_as_blob), version_);
 }
 
+// Non-S13nServiceWorker
 bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
     net::URLRequest* original_request,
     base::OnceClosure on_response) {
@@ -670,7 +673,7 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   if (!version_->navigation_preload_state().enabled)
     return false;
   // TODO(horo): Currently NavigationPreload doesn't support request body.
-  if (!legacy_request_->blob_uuid.empty())
+  if (request_body_blob_)
     return false;
 
   ResourceRequestInfoImpl* original_info =
@@ -686,11 +689,8 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
 
   DCHECK(!url_loader_assets_);
 
-  network::mojom::URLLoaderFactoryPtr url_loader_factory;
-  URLLoaderFactoryImpl::Create(
-      ResourceRequesterInfo::CreateForNavigationPreload(requester_info),
-      mojo::MakeRequest(&url_loader_factory),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+  auto url_loader_factory = std::make_unique<URLLoaderFactoryImpl>(
+      ResourceRequesterInfo::CreateForNavigationPreload(requester_info));
 
   network::ResourceRequest request;
   request.method = original_request->method();
@@ -709,12 +709,15 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   // for the service worker navigation preload request.
   request.resource_type = RESOURCE_TYPE_SUB_RESOURCE;
   request.priority = original_request->priority();
-  request.service_worker_mode = static_cast<int>(ServiceWorkerMode::NONE);
+  request.skip_service_worker = true;
   request.do_not_prompt_for_login = true;
   request.render_frame_id = original_info->GetRenderFrameID();
   request.is_main_frame = original_info->IsMainFrame();
   request.enable_load_timing = original_info->is_load_timing_enabled();
   request.report_raw_headers = original_info->ShouldReportRawHeaders();
+  request.throttling_profile_id =
+      network::ThrottlingController::GetProfileIDForNetLogSource(
+          original_request->net_log().source().id);
 
   DCHECK(net::HttpUtil::IsValidHeaderValue(
       version_->navigation_preload_state().header));
@@ -727,7 +730,7 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   const int request_id = ResourceDispatcherHostImpl::Get()->MakeRequestID();
   DCHECK_LT(request_id, -1);
 
-  preload_handle_ = mojom::FetchEventPreloadHandle::New();
+  preload_handle_ = blink::mojom::FetchEventPreloadHandle::New();
   network::mojom::URLLoaderClientPtr url_loader_client_ptr;
   preload_handle_->url_loader_client_request =
       mojo::MakeRequest(&url_loader_client_ptr);
@@ -774,8 +777,7 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreloadWithURLLoader(
   // Set to SUB_RESOURCE because we shouldn't trigger NavigationResourceThrottle
   // for the service worker navigation preload request.
   resource_request.resource_type = RESOURCE_TYPE_SUB_RESOURCE;
-  resource_request.service_worker_mode =
-      static_cast<int>(ServiceWorkerMode::NONE);
+  resource_request.skip_service_worker = true;
   resource_request.do_not_prompt_for_login = true;
   DCHECK(net::HttpUtil::IsValidHeaderValue(
       version_->navigation_preload_state().header));
@@ -788,7 +790,7 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreloadWithURLLoader(
       "Service-Worker-Navigation-Preload",
       version_->navigation_preload_state().header);
 
-  preload_handle_ = mojom::FetchEventPreloadHandle::New();
+  preload_handle_ = blink::mojom::FetchEventPreloadHandle::New();
 
   // Create the DelegatingURLLoaderClient, which becomes the
   // URLLoaderClient for the navigation preload network request.
@@ -822,17 +824,11 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreloadWithURLLoader(
   // Unlike the non-S13N code path, we don't own the URLLoaderFactory being used
   // (it's the generic network factory), so we don't need to pass it to
   // URLLoaderAssets to keep it alive.
-  network::mojom::URLLoaderFactoryPtr null_factory;
+  std::unique_ptr<network::mojom::URLLoaderFactory> null_factory;
   url_loader_assets_ = base::MakeRefCounted<URLLoaderAssets>(
       std::move(null_factory), std::move(url_loader),
       std::move(url_loader_client));
   return true;
-}
-
-ServiceWorkerFetchType ServiceWorkerFetchDispatcher::GetFetchType() const {
-  if (ServiceWorkerUtils::IsServicificationEnabled())
-    return ServiceWorkerFetchType::FETCH;
-  return legacy_request_->fetch_type;
 }
 
 ServiceWorkerMetrics::EventType ServiceWorkerFetchDispatcher::GetEventType()

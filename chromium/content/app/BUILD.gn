@@ -4,7 +4,7 @@
 
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
-import("//ppapi/features/features.gni")
+import("//ppapi/buildflags/buildflags.gni")
 
 # Implements "content_main" given the defines and visibility. On Windows this
 # is compiled with a different define for browser and child, but all code needs
@@ -16,6 +16,7 @@ template("implement_content_app") {
   extra_configs = [
     "//build/config/compiler:wexit_time_destructors",
     "//content:content_implementation",
+    "//tools/v8_context_snapshot:use_v8_context_snapshot",
     "//v8:external_startup_data",
   ]
 
@@ -29,10 +30,10 @@ template("implement_content_app") {
     "//content/public/common:service_names",
     "//crypto",
     "//services/service_manager/embedder",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//services/service_manager/runner/common",
-    "//mojo/edk/system",
-    "//ppapi/features",
+    "//mojo/core/embedder",
+    "//ppapi/buildflags",
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -51,8 +52,6 @@ template("implement_content_app") {
       "//content/public/android:jni",
       "//device/bluetooth",
       "//device/gamepad",
-      "//device/geolocation",
-      "//device/sensors",
       "//device/usb",
       "//gpu",
       "//media",
@@ -67,14 +66,14 @@ template("implement_content_app") {
     ]
   }
 
-  if (is_linux && enable_plugins) {
+  if (!is_multi_dll_chrome && enable_plugins) {
     content_app_deps += [ "//content/ppapi_plugin:ppapi_plugin_sources" ]
   }
 
-  # Compile content_main_runner.cc in a separate target to exempt from GN
-  # header checking without exempting any other source file. This file includes
-  # headers of all process types and varies significantly per platform in
-  # between browser and child. Otherwise it would require many "nogncheck"
+  # Compile content_main_runner_impl.[h, cc] in a separate target to exempt from
+  # GN header checking without exempting any other source file. These files
+  # includes headers of all process types and varies significantly per platform
+  # in between browser and child. Otherwise it would require many "nogncheck"
   # annotations that would both be useless and add noise.
   #
   # This will generate :content_main_runner_both, :content_main_runner_browser,
@@ -84,7 +83,8 @@ template("implement_content_app") {
     check_includes = false
 
     sources = [
-      "content_main_runner.cc",
+      "content_main_runner_impl.cc",
+      "content_main_runner_impl.h",
     ]
 
     configs += extra_configs
@@ -125,7 +125,7 @@ template("implement_content_app") {
         "android/library_loader_hooks.h",
       ]
       deps += [
-        "//mojo/android:libsystem_java",
+        "//mojo/public/java/system:native_support",
         "//ui/gl",
       ]
     } else {

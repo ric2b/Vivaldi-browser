@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
@@ -167,7 +166,7 @@ IN_PROC_BROWSER_TEST_F(ConditionalCacheDeletionHelperBrowserTest,
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&ConditionalCacheDeletionHelperBrowserTest::DeleteEntries,
-                     base::Unretained(this), base::ConstRef(condition)));
+                     base::Unretained(this), std::move(condition)));
   WaitForTasksOnIOThread();
 
   // Expect that only "icon2.png" and "icon3.png" were deleted.

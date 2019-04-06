@@ -6,8 +6,7 @@
 #define CHROME_BROWSER_UI_APPS_APP_INFO_DIALOG_H_
 
 #include "base/callback_forward.h"
-#include "chrome/common/features.h"
-#include "ui/gfx/native_widget_types.h"
+#include "chrome/common/buildflags.h"
 
 class Profile;
 
@@ -37,12 +36,10 @@ bool CanShowAppInfoDialog();
 
 #if BUILDFLAG(ENABLE_APP_LIST)
 // Shows the chrome app information as a frameless window for the given |app|
-// and |profile| at the given |app_list_bounds|. Appears 'inside' the app list.
-void ShowAppInfoInAppList(gfx::NativeWindow parent,
-                          const gfx::Rect& app_list_bounds,
+// and |profile| at the given |app_info_bounds|.
+void ShowAppInfoInAppList(const gfx::Rect& app_info_bounds,
                           Profile* profile,
-                          const extensions::Extension* app,
-                          const base::Closure& close_callback);
+                          const extensions::Extension* app);
 #endif
 
 // Shows the chrome app information in a native dialog box.
@@ -50,8 +47,5 @@ void ShowAppInfoInNativeDialog(content::WebContents* web_contents,
                                Profile* profile,
                                const extensions::Extension* app,
                                const base::Closure& close_callback);
-
-// Gets the callback to run after a dialog is created. Only used in tests.
-base::OnceClosure& GetAppInfoDialogCreatedCallbackForTesting();
 
 #endif  // CHROME_BROWSER_UI_APPS_APP_INFO_DIALOG_H_

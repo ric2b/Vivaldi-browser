@@ -13,7 +13,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/worker_thread.h"
 #include "extensions/common/extension_messages.h"
@@ -32,6 +31,8 @@ namespace {
 base::LazyInstance<WakeEventPage>::DestructorAtExit g_wake_event_page_instance =
     LAZY_INSTANCE_INITIALIZER;
 
+constexpr char kWakeEventPageFunctionName[] = "WakeEventPage";
+
 }  // namespace
 
 class WakeEventPage::WakeEventPageNativeHandler
@@ -39,20 +40,25 @@ class WakeEventPage::WakeEventPageNativeHandler
  public:
   // Handles own lifetime.
   WakeEventPageNativeHandler(ScriptContext* context,
-                             const std::string& name,
                              const MakeRequestCallback& make_request)
       : ObjectBackedNativeHandler(context),
         make_request_(make_request),
         weak_ptr_factory_(this) {
-    // Use Unretained not a WeakPtr because RouteFunction is tied to the
-    // lifetime of this, so there is no way for DoWakeEventPage to be called
-    // after destruction.
-    RouteFunction(name, base::Bind(&WakeEventPageNativeHandler::DoWakeEventPage,
-                                   base::Unretained(this)));
     // Delete self on invalidation. base::Unretained because by definition this
     // can't be deleted before it's deleted.
     context->AddInvalidationObserver(base::Bind(
         &WakeEventPageNativeHandler::DeleteSelf, base::Unretained(this)));
+  }
+
+  // ObjectBackedNativeHandler:
+  void AddRoutes() override {
+    // Use Unretained not a WeakPtr because RouteHandlerFunction is tied to the
+    // lifetime of this, so there is no way for DoWakeEventPage to be called
+    // after destruction.
+    RouteHandlerFunction(
+        kWakeEventPageFunctionName,
+        base::Bind(&WakeEventPageNativeHandler::DoWakeEventPage,
+                   base::Unretained(this)));
   };
 
   ~WakeEventPageNativeHandler() override {}
@@ -129,15 +135,15 @@ v8::Local<v8::Function> WakeEventPage::GetForContext(ScriptContext* context) {
       wake_event_page->IsUndefined()) {
     // Implement this using a NativeHandler, which requires a function name
     // (arbitrary in this case). Handles own lifetime.
-    const char* kFunctionName = "WakeEventPage";
     WakeEventPageNativeHandler* native_handler = new WakeEventPageNativeHandler(
-        context, kFunctionName, base::Bind(&WakeEventPage::MakeRequest,
-                                           // Safe, owned by a LazyInstance.
-                                           base::Unretained(this)));
+        context, base::Bind(&WakeEventPage::MakeRequest,
+                            // Safe, owned by a LazyInstance.
+                            base::Unretained(this)));
+    native_handler->Initialize();
 
     // Extract and cache the wake-event-page function from the native handler.
     wake_event_page = GetPropertyUnsafe(
-        v8_context, native_handler->NewInstance(), kFunctionName);
+        v8_context, native_handler->NewInstance(), kWakeEventPageFunctionName);
     v8_context->Global()
         ->SetPrivate(v8_context, kWakeEventPageKey, wake_event_page)
         .FromJust();

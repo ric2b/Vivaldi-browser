@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/files/file_util.h"
+#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -23,13 +24,15 @@
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/spellcheck/browser/spellcheck_platform.h"
 #include "components/spellcheck/common/spellcheck_common.h"
-#include "components/spellcheck/spellcheck_build_features.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
 
 #if !defined(OS_ANDROID)
@@ -40,6 +43,9 @@
 using content::BrowserThread;
 
 namespace {
+
+base::LazyInstance<GURL>::Leaky g_download_url_for_testing =
+    LAZY_INSTANCE_INITIALIZER;
 
 // Close the file.
 void CloseDictionary(base::File file) {
@@ -59,7 +65,7 @@ bool SaveDictionaryData(std::unique_ptr<std::string> data,
     bool success = false;
 #if defined(OS_WIN)
     base::FilePath dict_dir;
-    PathService::Get(chrome::DIR_USER_DATA, &dict_dir);
+    base::PathService::Get(chrome::DIR_USER_DATA, &dict_dir);
     base::FilePath fallback_file_path =
         dict_dir.Append(path.BaseName());
     bytes_written =
@@ -99,16 +105,19 @@ SpellcheckHunspellDictionary::DictionaryFile::operator=(
 
 SpellcheckHunspellDictionary::SpellcheckHunspellDictionary(
     const std::string& language,
-    net::URLRequestContextGetter* request_context_getter,
+    content::BrowserContext* browser_context,
     SpellcheckService* spellcheck_service)
     : task_runner_(
           base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()})),
       language_(language),
       use_browser_spellchecker_(false),
-      request_context_getter_(request_context_getter),
+      browser_context_(browser_context),
+#if !defined(OS_ANDROID)
       spellcheck_service_(spellcheck_service),
+#endif
       download_status_(DOWNLOAD_NONE),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+}
 
 SpellcheckHunspellDictionary::~SpellcheckHunspellDictionary() {
   if (dictionary_file_.file.IsValid()) {
@@ -148,13 +157,13 @@ void SpellcheckHunspellDictionary::Load() {
 }
 
 void SpellcheckHunspellDictionary::RetryDownloadDictionary(
-      net::URLRequestContextGetter* request_context_getter) {
+    content::BrowserContext* browser_context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (dictionary_file_.file.IsValid()) {
     NOTREACHED();
     return;
   }
-  request_context_getter_ = request_context_getter;
+  browser_context_ = browser_context;
   DownloadDictionary(GetDictionaryURL());
 }
 
@@ -192,23 +201,27 @@ bool SpellcheckHunspellDictionary::IsDownloadFailure() {
   return download_status_ == DOWNLOAD_FAILED;
 }
 
-void SpellcheckHunspellDictionary::OnURLFetchComplete(
-    const net::URLFetcher* source) {
-  DCHECK(source);
+void SpellcheckHunspellDictionary::OnSimpleLoaderComplete(
+    std::unique_ptr<std::string> data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::unique_ptr<net::URLFetcher> fetcher_destructor(fetcher_.release());
 
-  if ((source->GetResponseCode() / 100) != 2) {
+  bool is_success = simple_loader_->NetError() == net::OK;
+  int response_code = -1;
+  if (simple_loader_->ResponseInfo() && simple_loader_->ResponseInfo()->headers)
+    response_code = simple_loader_->ResponseInfo()->headers->response_code();
+
+  if (!is_success || ((response_code / 100) != 2)) {
     // Initialize will not try to download the file a second time.
     InformListenersOfDownloadFailure();
     return;
   }
 
+  // We don't need the loader anymore.
+  simple_loader_.reset();
+
   // Basic sanity check on the dictionary. There's a small chance of 200 status
   // code for a body that represents some form of failure.
-  std::unique_ptr<std::string> data(new std::string);
-  source->GetResponseAsString(data.get());
-  if (data->size() < 4 || data->compare(0, 4, "BDic") != 0) {
+  if (!data || data->size() < 4 || data->compare(0, 4, "BDic") != 0) {
     InformListenersOfDownloadFailure();
     return;
   }
@@ -227,18 +240,25 @@ void SpellcheckHunspellDictionary::OnURLFetchComplete(
 
   base::PostTaskAndReplyWithResult(
       task_runner_.get(), FROM_HERE,
-      base::BindOnce(&SaveDictionaryData, base::Passed(&data),
+      base::BindOnce(&SaveDictionaryData, std::move(data),
                      dictionary_file_.path),
       base::BindOnce(&SpellcheckHunspellDictionary::SaveDictionaryDataComplete,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
+void SpellcheckHunspellDictionary::SetDownloadURLForTesting(const GURL url) {
+  g_download_url_for_testing.Get() = url;
+}
+
 GURL SpellcheckHunspellDictionary::GetDictionaryURL() {
+  if (g_download_url_for_testing.Get() != GURL())
+    return g_download_url_for_testing.Get();
+
+  std::string bdict_file = dictionary_file_.path.BaseName().MaybeAsASCII();
+  DCHECK(!bdict_file.empty());
+
   static const char kDownloadServerUrl[] =
       "https://redirector.gvt1.com/edgedl/chrome/dict/";
-  std::string bdict_file = dictionary_file_.path.BaseName().MaybeAsASCII();
-
-  DCHECK(!bdict_file.empty());
 
   return GURL(std::string(kDownloadServerUrl) +
               base::ToLowerASCII(bdict_file));
@@ -246,7 +266,7 @@ GURL SpellcheckHunspellDictionary::GetDictionaryURL() {
 
 void SpellcheckHunspellDictionary::DownloadDictionary(GURL url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(request_context_getter_);
+  DCHECK(browser_context_);
 
   download_status_ = DOWNLOAD_IN_PROGRESS;
   for (Observer& observer : observers_)
@@ -275,37 +295,45 @@ void SpellcheckHunspellDictionary::DownloadDictionary(GURL url) {
             "Not implemented, considered not useful."
         })");
 
-  fetcher_ = net::URLFetcher::Create(url, net::URLFetcher::GET, this,
-                                     traffic_annotation);
-  data_use_measurement::DataUseUserData::AttachToFetcher(
-      fetcher_.get(), data_use_measurement::DataUseUserData::SPELL_CHECKER);
-  fetcher_->SetRequestContext(request_context_getter_);
-  fetcher_->SetLoadFlags(
-      net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES);
-  fetcher_->Start();
+  auto resource_request = std::make_unique<network::ResourceRequest>();
+  resource_request->url = url;
+  resource_request->load_flags =
+      net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES;
+  simple_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
+                                                    traffic_annotation);
+  network::mojom::URLLoaderFactory* loader_factory =
+      content::BrowserContext::GetDefaultStoragePartition(browser_context_)
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get();
+  simple_loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      loader_factory,
+      base::BindOnce(&SpellcheckHunspellDictionary::OnSimpleLoaderComplete,
+                     base::Unretained(this)));
+
   // Attempt downloading the dictionary only once.
-  request_context_getter_ = NULL;
+  browser_context_ = NULL;
 }
 
-// The default_dictionary_file can either come from the standard list of
-// hunspell dictionaries (determined in InitializeDictionaryLocation), or it
-// can be passed in via an extension. In either case, the file is checked for
-// existence so that it's not re-downloaded.
-// For systemwide installations on Windows, the default directory may not
-// have permissions for download. In that case, the alternate directory for
-// download is chrome::DIR_USER_DATA.
-//
+#if !defined(OS_ANDROID)
 // static
 SpellcheckHunspellDictionary::DictionaryFile
 SpellcheckHunspellDictionary::OpenDictionaryFile(const base::FilePath& path) {
   base::AssertBlockingAllowed();
+
+  // The default_dictionary_file can either come from the standard list of
+  // hunspell dictionaries (determined in InitializeDictionaryLocation), or it
+  // can be passed in via an extension. In either case, the file is checked for
+  // existence so that it's not re-downloaded.
+  // For systemwide installations on Windows, the default directory may not
+  // have permissions for download. In that case, the alternate directory for
+  // download is chrome::DIR_USER_DATA.
   DictionaryFile dictionary;
 
 #if defined(OS_WIN)
   // Check if the dictionary exists in the fallback location. If so, use it
   // rather than downloading anew.
   base::FilePath user_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_dir);
   base::FilePath fallback = user_dir.Append(path.BaseName());
   if (!base::PathExists(path) && base::PathExists(fallback))
     dictionary.path = fallback;
@@ -313,13 +341,12 @@ SpellcheckHunspellDictionary::OpenDictionaryFile(const base::FilePath& path) {
     dictionary.path = path;
 #else
   dictionary.path = path;
-#endif
+#endif  // defined(OS_WIN)
 
   // Read the dictionary file and scan its data to check for corruption. The
   // scoping closes the memory-mapped file before it is opened or deleted.
   bool bdict_is_valid = false;
 
-#if !defined(OS_ANDROID)
   {
     base::MemoryMappedFile map;
     bdict_is_valid =
@@ -328,7 +355,6 @@ SpellcheckHunspellDictionary::OpenDictionaryFile(const base::FilePath& path) {
         hunspell::BDict::Verify(reinterpret_cast<const char*>(map.data()),
                                 map.length());
   }
-#endif
 
   if (bdict_is_valid) {
     dictionary.file.Initialize(dictionary.path,
@@ -340,20 +366,20 @@ SpellcheckHunspellDictionary::OpenDictionaryFile(const base::FilePath& path) {
   return dictionary;
 }
 
-// The default place where the spellcheck dictionary resides is
-// chrome::DIR_APP_DICTIONARIES.
-//
 // static
 SpellcheckHunspellDictionary::DictionaryFile
 SpellcheckHunspellDictionary::InitializeDictionaryLocation(
     const std::string& language) {
   base::AssertBlockingAllowed();
 
+  // The default place where the spellcheck dictionary resides is
+  // chrome::DIR_APP_DICTIONARIES.
+  //
   // Initialize the BDICT path. Initialization should be on the blocking
   // sequence because it checks if there is a "Dictionaries" directory and
   // create it.
   base::FilePath dict_dir;
-  PathService::Get(chrome::DIR_APP_DICTIONARIES, &dict_dir);
+  base::PathService::Get(chrome::DIR_APP_DICTIONARIES, &dict_dir);
   base::FilePath dict_path =
       spellcheck::GetVersionedFileName(language, dict_dir);
 
@@ -371,11 +397,11 @@ void SpellcheckHunspellDictionary::InitializeDictionaryLocationComplete(
     // TODO(rouslan): Remove this test-only case.
     if (spellcheck_service_->SignalStatusEvent(
           SpellcheckService::BDICT_CORRUPTED)) {
-      request_context_getter_ = NULL;
+      browser_context_ = NULL;
     }
 
-    if (request_context_getter_) {
-      // Download from the UI thread to check that |request_context_getter_| is
+    if (browser_context_) {
+      // Download from the UI thread to check that |browser_context_| is
       // still valid.
       DownloadDictionary(GetDictionaryURL());
       return;
@@ -384,6 +410,7 @@ void SpellcheckHunspellDictionary::InitializeDictionaryLocationComplete(
 
   InformListenersOfInitialization();
 }
+#endif  // !defined(OS_ANDROID)
 
 void SpellcheckHunspellDictionary::SaveDictionaryDataComplete(
     bool dictionary_saved) {

@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 
 #include "base/bind.h"
@@ -15,11 +16,13 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/drive/chromeos/drive_test_util.h"
 #include "components/drive/drive_pref_names.h"
 #include "components/drive/event_logger.h"
+#include "components/drive/file_system_core_util.h"
 #include "components/drive/service/fake_drive_service.h"
 #include "components/drive/service/test_util.h"
 #include "components/prefs/testing_pref_service.h"
@@ -141,18 +144,18 @@ class JobSchedulerTest : public testing::Test {
   }
 
   void SetUp() override {
-    fake_network_change_notifier_.reset(
-        new test_util::FakeNetworkChangeNotifier);
+    fake_network_change_notifier_ =
+        std::make_unique<test_util::FakeNetworkChangeNotifier>();
 
-    logger_.reset(new EventLogger);
+    logger_ = std::make_unique<EventLogger>();
 
-    fake_drive_service_.reset(new CancelTestableFakeDriveService);
+    fake_drive_service_ = std::make_unique<CancelTestableFakeDriveService>();
     test_util::SetUpTestEntries(fake_drive_service_.get());
     fake_drive_service_->LoadAppListForDriveApi("drive/applist.json");
 
-    scheduler_.reset(new JobScheduler(
+    scheduler_ = std::make_unique<JobScheduler>(
         pref_service_.get(), logger_.get(), fake_drive_service_.get(),
-        base::ThreadTaskRunnerHandle::Get().get(), nullptr));
+        base::ThreadTaskRunnerHandle::Get().get(), nullptr);
     scheduler_->SetDisableThrottling(true);
   }
 
@@ -209,6 +212,20 @@ TEST_F(JobSchedulerTest, GetAboutResource) {
   ASSERT_TRUE(about_resource);
 }
 
+TEST_F(JobSchedulerTest, GetStartPageToken) {
+  ConnectToWifi();
+
+  google_apis::DriveApiErrorCode error = google_apis::DRIVE_OTHER_ERROR;
+  std::unique_ptr<google_apis::StartPageToken> start_page_token;
+  scheduler_->GetStartPageToken(
+      util::kTeamDriveIdDefaultCorpus,
+      google_apis::test_util::CreateCopyResultCallback(&error,
+                                                       &start_page_token));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(google_apis::HTTP_SUCCESS, error);
+  ASSERT_TRUE(start_page_token);
+}
+
 TEST_F(JobSchedulerTest, GetAppList) {
   ConnectToWifi();
 
@@ -246,6 +263,7 @@ TEST_F(JobSchedulerTest, GetAllFileList) {
   std::unique_ptr<google_apis::FileList> file_list;
 
   scheduler_->GetAllFileList(
+      util::kTeamDriveIdDefaultCorpus,
       google_apis::test_util::CreateCopyResultCallback(&error, &file_list));
   base::RunLoop().RunUntilIdle();
 
@@ -306,6 +324,38 @@ TEST_F(JobSchedulerTest, GetChangeList) {
   std::unique_ptr<google_apis::ChangeList> change_list;
   scheduler_->GetChangeList(
       old_largest_change_id + 1,
+      google_apis::test_util::CreateCopyResultCallback(&error, &change_list));
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_EQ(google_apis::HTTP_SUCCESS, error);
+  ASSERT_TRUE(change_list);
+}
+
+TEST_F(JobSchedulerTest, GetChangeListWithStartToken) {
+  ConnectToWifi();
+
+  // TODO(slangley): Find the start page token from the fake drive service
+  const std::string& start_page_token =
+      fake_drive_service_->start_page_token().start_page_token();
+
+  const std::string team_drive_id;  // Empty means users default corpus
+  google_apis::DriveApiErrorCode error = google_apis::DRIVE_OTHER_ERROR;
+
+  // Create a new directory.
+  {
+    std::unique_ptr<google_apis::FileResource> entry;
+    fake_drive_service_->AddNewDirectory(
+        fake_drive_service_->GetRootResourceId(), "new directory",
+        AddNewDirectoryOptions(),
+        google_apis::test_util::CreateCopyResultCallback(&error, &entry));
+    base::RunLoop().RunUntilIdle();
+    ASSERT_EQ(google_apis::HTTP_CREATED, error);
+  }
+
+  error = google_apis::DRIVE_OTHER_ERROR;
+  std::unique_ptr<google_apis::ChangeList> change_list;
+  scheduler_->GetChangeList(
+      team_drive_id, start_page_token,
       google_apis::test_util::CreateCopyResultCallback(&error, &change_list));
   base::RunLoop().RunUntilIdle();
 

@@ -8,18 +8,20 @@
 #include "extensions/common/features/feature.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace extensions {
 
 V8ContextNativeHandler::V8ContextNativeHandler(ScriptContext* context)
-    : ObjectBackedNativeHandler(context), context_(context) {
-  RouteFunction("GetAvailability",
-                base::Bind(&V8ContextNativeHandler::GetAvailability,
-                           base::Unretained(this)));
-  RouteFunction("GetModuleSystem",
-                base::Bind(&V8ContextNativeHandler::GetModuleSystem,
-                           base::Unretained(this)));
+    : ObjectBackedNativeHandler(context), context_(context) {}
+
+void V8ContextNativeHandler::AddRoutes() {
+  RouteHandlerFunction("GetAvailability",
+                       base::Bind(&V8ContextNativeHandler::GetAvailability,
+                                  base::Unretained(this)));
+  RouteHandlerFunction("GetModuleSystem",
+                       base::Bind(&V8ContextNativeHandler::GetModuleSystem,
+                                  base::Unretained(this)));
 }
 
 void V8ContextNativeHandler::GetAvailability(

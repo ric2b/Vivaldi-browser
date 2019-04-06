@@ -6,8 +6,6 @@
 
 #include "base/guid.h"
 #include "base/strings/string_number_conversions.h"
-#include "url/gurl.h"
-#include "sync/test/fake_server/notes_entity_builder.h"
 
 using std::string;
 
@@ -26,14 +24,6 @@ BookmarkEntityBuilder EntityBuilderFactory::NewBookmarkEntityBuilder(
   --latest_client_item_id_;
   BookmarkEntityBuilder builder(title, cache_guid_,
                                 base::Int64ToString(latest_client_item_id_));
-  return builder;
-}
-
-NotesEntityBuilder EntityBuilderFactory::NewNotesEntityBuilder(
-    const string& title, const GURL& url, const string& content) {
-  --latest_client_item_id_;
-  NotesEntityBuilder builder(title, url, content, cache_guid_,
-                             base::Int64ToString(latest_client_item_id_));
   return builder;
 }
 

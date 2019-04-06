@@ -23,6 +23,8 @@ TEST(DBusThreadManagerTest, Initialize) {
   EXPECT_TRUE(manager->GetArcMidisClient());
   EXPECT_TRUE(manager->GetArcObbMounterClient());
   EXPECT_TRUE(manager->GetArcOemCryptoClient());
+  EXPECT_TRUE(manager->GetCiceroneClient());
+  EXPECT_TRUE(manager->GetConciergeClient());
   EXPECT_TRUE(manager->GetCrasAudioClient());
   EXPECT_TRUE(manager->GetCrosDisksClient());
   EXPECT_TRUE(manager->GetCryptohomeClient());
@@ -51,7 +53,7 @@ TEST(DBusThreadManagerTest, Initialize) {
 
 // Tests that clients can be created for the browser process.
 TEST(DBusThreadManagerTest, InitializeForBrowser) {
-  DBusThreadManager::Initialize(DBusThreadManager::PROCESS_BROWSER);
+  DBusThreadManager::Initialize(DBusThreadManager::kAll);
   DBusThreadManager* manager = DBusThreadManager::Get();
   ASSERT_TRUE(manager);
 
@@ -77,6 +79,8 @@ TEST(DBusThreadManagerTest, InitializeForBrowser) {
   EXPECT_TRUE(manager->GetArcMidisClient());
   EXPECT_TRUE(manager->GetArcObbMounterClient());
   EXPECT_TRUE(manager->GetArcOemCryptoClient());
+  EXPECT_TRUE(manager->GetCiceroneClient());
+  EXPECT_TRUE(manager->GetConciergeClient());
   EXPECT_TRUE(manager->GetCrosDisksClient());
   EXPECT_TRUE(manager->GetDebugDaemonClient());
   EXPECT_TRUE(manager->GetEasyUnlockClient());
@@ -88,7 +92,7 @@ TEST(DBusThreadManagerTest, InitializeForBrowser) {
 
 // Tests that clients can be created for the ash process.
 TEST(DBusThreadManagerTest, InitializeForAsh) {
-  DBusThreadManager::Initialize(DBusThreadManager::PROCESS_ASH);
+  DBusThreadManager::Initialize(DBusThreadManager::kShared);
   DBusThreadManager* manager = DBusThreadManager::Get();
   ASSERT_TRUE(manager);
 
@@ -114,6 +118,8 @@ TEST(DBusThreadManagerTest, InitializeForAsh) {
   EXPECT_FALSE(manager->GetArcMidisClient());
   EXPECT_FALSE(manager->GetArcObbMounterClient());
   EXPECT_FALSE(manager->GetArcOemCryptoClient());
+  EXPECT_FALSE(manager->GetCiceroneClient());
+  EXPECT_FALSE(manager->GetConciergeClient());
   EXPECT_FALSE(manager->GetCrosDisksClient());
   EXPECT_FALSE(manager->GetDebugDaemonClient());
   EXPECT_FALSE(manager->GetEasyUnlockClient());

@@ -18,6 +18,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 
@@ -80,7 +81,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, WebBluetoothAfterCrash) {
       web_contents_->GetMainFrame()->GetProcess();
   content::RenderProcessHostWatcher crash_observer(
       process, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-  process->Shutdown(0, false);
+  process->Shutdown(0);
   crash_observer.Wait();
 
   // Reload tab.
@@ -176,6 +177,33 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, BlocklistShouldBlock) {
       &rejection));
   EXPECT_THAT(rejection,
               testing::MatchesRegex("SecurityError: .*blocklisted UUID.*"));
+}
+
+IN_PROC_BROWSER_TEST_F(WebBluetoothTest, NavigateWithChooserCrossOrigin) {
+  // Fake the BluetoothAdapter to say it's present.
+  scoped_refptr<device::MockBluetoothAdapter> adapter =
+      new testing::NiceMock<device::MockBluetoothAdapter>;
+  EXPECT_CALL(*adapter, IsPresent()).WillRepeatedly(Return(true));
+  auto bt_global_values =
+      device::BluetoothAdapterFactory::Get().InitGlobalValuesForTesting();
+  bt_global_values->SetLESupported(true);
+  device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::TestNavigationObserver observer(
+      web_contents, 1 /* number_of_navigations */,
+      content::MessageLoopRunner::QuitMode::DEFERRED);
+
+  EXPECT_TRUE(content::ExecuteScript(
+      web_contents,
+      "navigator.bluetooth.requestDevice({filters: [{name: 'Hello'}]});"
+      "document.location.href = \"https://google.com\";"));
+
+  observer.Wait();
+  EXPECT_EQ(0u, browser()->GetBubbleManager()->GetBubbleCountForTesting());
+  EXPECT_EQ(GURL("https://google.com"), web_contents->GetLastCommittedURL());
 }
 
 }  // namespace

@@ -29,7 +29,7 @@ const int kMaxEntries = 3;
 bool CompareEntries(const ReadingListEntry* lhs, const ReadingListEntry* rhs) {
   return lhs->UpdateTime() > rhs->UpdateTime();
 }
-}
+}  // namespace
 
 ReadingListSuggestionsProvider::ReadingListSuggestionsProvider(
     ContentSuggestionsProvider::Observer* observer,
@@ -84,6 +84,13 @@ void ReadingListSuggestionsProvider::FetchSuggestionImage(
     ImageFetchedCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), gfx::Image()));
+}
+
+void ReadingListSuggestionsProvider::FetchSuggestionImageData(
+    const ContentSuggestion::ID& suggestion_id,
+    ImageDataFetchedCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::string()));
 }
 
 void ReadingListSuggestionsProvider::Fetch(

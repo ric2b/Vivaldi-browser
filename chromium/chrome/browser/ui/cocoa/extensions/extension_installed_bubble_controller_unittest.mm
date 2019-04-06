@@ -64,10 +64,11 @@ class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
 
   // Adds a WebContents to the tab strip.
   void AddWebContents() {
-    content::WebContents* web_contents =
+    std::unique_ptr<content::WebContents> web_contents = base::WrapUnique(
         content::WebContents::Create(content::WebContents::CreateParams(
-            profile(), content::SiteInstance::Create(profile())));
-    browser()->tab_strip_model()->AppendWebContents(web_contents, true);
+            profile(), content::SiteInstance::Create(profile()))));
+    browser()->tab_strip_model()->AppendWebContents(std::move(web_contents),
+                                                    true);
   }
 
   // Create a simple extension of the given |type| and manifest |location|, and
@@ -154,7 +155,7 @@ class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
   // Load test icon from extension test directory.
   SkBitmap LoadTestIcon() {
     base::FilePath path;
-    PathService::Get(chrome::DIR_TEST_DATA, &path);
+    base::PathService::Get(chrome::DIR_TEST_DATA, &path);
     path = path.AppendASCII("extensions").AppendASCII("icon1.png");
 
     std::string file_contents;

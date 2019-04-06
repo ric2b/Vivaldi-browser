@@ -6,9 +6,6 @@
 
 namespace switches {
 
-// Passes if it's AMD switchable dual GPUs from browser process to GPU process.
-const char kAMDSwitchable[] = "amd-switchable";
-
 // Disable workarounds for various GPU driver bugs.
 const char kDisableGpuDriverBugWorkarounds[] =
     "disable-gpu-driver-bug-workarounds";
@@ -22,47 +19,6 @@ const char kDisableGpuRasterization[] = "disable-gpu-rasterization";
 // impl-side painting.
 const char kEnableGpuRasterization[] = "enable-gpu-rasterization";
 
-// Turns on out of process raster for the renderer whenever gpu raster
-// would have been used.  Enables the chromium_raster_transport extension.
-const char kEnableOOPRasterization[] = "enable-oop-rasterization";
-
-// Passes encoded GpuPreferences to GPU process.
-const char kGpuPreferences[] = "gpu-preferences";
-
-// Passes active gpu vendor id from browser process to GPU process.
-const char kGpuActiveVendorID[] = "gpu-active-vendor-id";
-
-// Passes active gpu device id from browser process to GPU process.
-const char kGpuActiveDeviceID[] = "gpu-active-device-id";
-
-// Passes gpu device_id from browser process to GPU process.
-const char kGpuDeviceID[] = "gpu-device-id";
-
-// Passes gpu driver_vendor from browser process to GPU process.
-const char kGpuDriverVendor[] = "gpu-driver-vendor";
-
-// Passes gpu driver_version from browser process to GPU process.
-const char kGpuDriverVersion[] = "gpu-driver-version";
-
-// Passes gpu driver_date from browser process to GPU process.
-const char kGpuDriverDate[] = "gpu-driver-date";
-
-// Passes secondary gpu vendor ids from browser process to GPU process.
-const char kGpuSecondaryVendorIDs[] = "gpu-secondary-vendor-ids";
-
-// Passes secondary gpu device ids from browser process to GPU process.
-const char kGpuSecondaryDeviceIDs[] = "gpu-secondary-device-ids";
-
-// Testing switch to not launch the gpu process for full gpu info collection.
-const char kGpuTestingNoCompleteInfoCollection[] =
-    "gpu-no-complete-info-collection";
-
-// Passes gpu vendor_id from browser process to GPU process.
-const char kGpuVendorID[] = "gpu-vendor-id";
-
-// Ignores GPU blacklist.
-const char kIgnoreGpuBlacklist[] = "ignore-gpu-blacklist";
-
 // Select a different set of GPU blacklist entries with the specificed
 // test_group ID.
 const char kGpuBlacklistTestGroup[] = "gpu-blacklist-test-group";
@@ -71,10 +27,34 @@ const char kGpuBlacklistTestGroup[] = "gpu-blacklist-test-group";
 // test_group ID.
 const char kGpuDriverBugListTestGroup[] = "gpu-driver-bug-list-test-group";
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
-// Attempts to turn on hardware accelerated video decoding. Relevant when
-// platform decoders are used.
-const char kEnablePlatformAcceleratedVideoDecoding[] =
-    "enable-platform-accelerated-video-decoding";
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+// Passes encoded GpuPreferences to GPU process.
+const char kGpuPreferences[] = "gpu-preferences";
+
+// Ignores GPU blacklist.
+const char kIgnoreGpuBlacklist[] = "ignore-gpu-blacklist";
+
+// Allows user to override maximum number of active WebGL contexts per
+// renderer process.
+const char kMaxActiveWebGLContexts[] = "max-active-webgl-contexts";
+
+// Allows explicitly specifying the shader disk cache size for embedded devices.
+// Default value is 6MB. On Android, 2MB is default and 128KB for low-end
+// devices.
+const char kShaderDiskCacheSizeKB[] = "shader-disk-cache-size-kb";
+
+// Use GpuFence objects to synchronize display of overlay planes.
+const char kUseGpuFencesForOverlayPlanes[] =
+    "use-gpu-fences-for-overlay-planes";
+
+// Set the antialiasing method used for webgl. (none, explicit, implicit, or
+// screenspace)
+const char kWebglAntialiasingMode[] = "webgl-antialiasing-mode";
+
+// Set a default sample count for webgl if msaa is enabled.
+const char kWebglMSAASampleCount[] = "webgl-msaa-sample-count";
+
+// Disables the non-sandboxed GPU process for DX12 and Vulkan info collection
+const char kDisableGpuProcessForDX12VulkanInfoCollection[] =
+    "disable-gpu-process-for-dx12-vulkan-info-collection";
+
 }  // namespace switches

@@ -5,7 +5,7 @@
 #include "chrome/browser/media/media_engagement_session.h"
 
 #include "base/memory/scoped_refptr.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/test/base/testing_profile.h"
@@ -113,6 +113,18 @@ class MediaEngagementSessionTest : public testing::Test {
   }
 
   base::SimpleTestClock* test_clock() { return &test_clock_; }
+
+  void SetVisitsAndPlaybacks(int visits, int media_playbacks) {
+    MediaEngagementScore score =
+        service()->CreateEngagementScore(origin().GetURL());
+    score.SetVisits(visits);
+    score.SetMediaPlaybacks(media_playbacks);
+    score.Commit();
+  }
+
+  bool ScoreIsHigh() const {
+    return service()->HasHighEngagement(origin().GetURL());
+  }
 
  private:
   const url::Origin origin_;
@@ -242,7 +254,7 @@ TEST_F(MediaEngagementSessionTest, TotalPlayers) {
 }
 
 // Checks that ukm_source_id_ is set when GetUkmRecorder is called.
-TEST_F(MediaEngagementSessionTest, GetkmRecorder_SetsUkmSourceId) {
+TEST_F(MediaEngagementSessionTest, GetUkmRecorder_SetsUkmSourceId) {
   scoped_refptr<MediaEngagementSession> session = new MediaEngagementSession(
       service(), origin(), MediaEngagementSession::RestoreType::kNotRestored);
 
@@ -253,7 +265,7 @@ TEST_F(MediaEngagementSessionTest, GetkmRecorder_SetsUkmSourceId) {
 }
 
 // Checks that GetUkmRecorder() does not return nullptr.
-TEST_F(MediaEngagementSessionTest, GetkmRecorder_NotNull) {
+TEST_F(MediaEngagementSessionTest, GetUkmRecorder_NotNull) {
   scoped_refptr<MediaEngagementSession> session = new MediaEngagementSession(
       service(), origin(), MediaEngagementSession::RestoreType::kNotRestored);
 
@@ -565,6 +577,10 @@ TEST_F(MediaEngagementSessionTest, RecordUkmMetrics) {
                      ukm_entry, Entry::kPlayer_Significant_TotalName));
     EXPECT_EQ(0, *test_ukm_recorder().GetEntryMetric(
                      ukm_entry, Entry::kPlaybacks_SecondsSinceLastName));
+    EXPECT_EQ(0, *test_ukm_recorder().GetEntryMetric(
+                     ukm_entry, Entry::kEngagement_IsHigh_ChangesName));
+    EXPECT_EQ(0, *test_ukm_recorder().GetEntryMetric(
+                     ukm_entry, Entry::kEngagement_IsHigh_ChangedName));
   }
 
   SetSignificantPlaybackRecordedForSession(session.get(), false);
@@ -598,6 +614,69 @@ TEST_F(MediaEngagementSessionTest, RecordUkmMetrics) {
                      ukm_entry, Entry::kPlayer_Significant_TotalName));
     EXPECT_EQ(0, *test_ukm_recorder().GetEntryMetric(
                      ukm_entry, Entry::kPlaybacks_SecondsSinceLastName));
+    EXPECT_EQ(0, *test_ukm_recorder().GetEntryMetric(
+                     ukm_entry, Entry::kEngagement_IsHigh_ChangesName));
+    EXPECT_EQ(0, *test_ukm_recorder().GetEntryMetric(
+                     ukm_entry, Entry::kEngagement_IsHigh_ChangedName));
+  }
+}
+
+TEST_F(MediaEngagementSessionTest, RecordUkmMetrics_Changed_NowHigh) {
+  const std::string url_string = origin().GetURL().spec();
+  using Entry = ukm::builders::Media_Engagement_SessionFinished;
+
+  // Set the visits and playbacks to just below the threshold so the next
+  // significant playback will result in the playback being high.
+  SetVisitsAndPlaybacks(19, 5);
+  EXPECT_FALSE(ScoreIsHigh());
+
+  scoped_refptr<MediaEngagementSession> session = new MediaEngagementSession(
+      service(), origin(), MediaEngagementSession::RestoreType::kNotRestored);
+
+  session->RecordSignificantPlayback();
+
+  EXPECT_EQ(0u, test_ukm_recorder().GetEntriesByName(Entry::kEntryName).size());
+
+  RecordUkmMetricsForSession(session.get());
+
+  {
+    auto ukm_entries = test_ukm_recorder().GetEntriesByName(Entry::kEntryName);
+    EXPECT_EQ(1u, ukm_entries.size());
+
+    auto* ukm_entry = ukm_entries[0];
+    test_ukm_recorder().ExpectEntrySourceHasUrl(ukm_entry, origin().GetURL());
+    EXPECT_EQ(1u, *test_ukm_recorder().GetEntryMetric(
+                      ukm_entry, Entry::kEngagement_IsHigh_ChangedName));
+  }
+}
+
+TEST_F(MediaEngagementSessionTest, RecordUkmMetrics_Changed_WasHigh) {
+  const std::string url_string = origin().GetURL().spec();
+  using Entry = ukm::builders::Media_Engagement_SessionFinished;
+
+  // Set the visits and playbacks to just above the lower threshold and the is
+  // high bit to true so the next visit will cross the threshold.
+  SetVisitsAndPlaybacks(20, 20);
+  SetVisitsAndPlaybacks(20, 4);
+  EXPECT_TRUE(ScoreIsHigh());
+
+  scoped_refptr<MediaEngagementSession> session = new MediaEngagementSession(
+      service(), origin(), MediaEngagementSession::RestoreType::kNotRestored);
+
+  CommitPendingDataForSession(session.get());
+
+  EXPECT_EQ(0u, test_ukm_recorder().GetEntriesByName(Entry::kEntryName).size());
+
+  RecordUkmMetricsForSession(session.get());
+
+  {
+    auto ukm_entries = test_ukm_recorder().GetEntriesByName(Entry::kEntryName);
+    EXPECT_EQ(1u, ukm_entries.size());
+
+    auto* ukm_entry = ukm_entries[0];
+    test_ukm_recorder().ExpectEntrySourceHasUrl(ukm_entry, origin().GetURL());
+    EXPECT_EQ(1u, *test_ukm_recorder().GetEntryMetric(
+                      ukm_entry, Entry::kEngagement_IsHigh_ChangedName));
   }
 }
 

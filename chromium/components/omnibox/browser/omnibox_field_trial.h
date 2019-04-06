@@ -14,52 +14,38 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
-
-class PrefService;
 
 namespace base {
 struct Feature;
 class TimeDelta;
 }
 
-#if defined(OS_ANDROID)
-namespace user_prefs {
-class PrefRegistrySyncable;
-}
-#endif
-
 namespace omnibox {
 
-extern const base::Feature kOmniboxEntitySuggestions;
 extern const base::Feature kOmniboxRichEntitySuggestions;
+extern const base::Feature kOmniboxNewAnswerLayout;
+extern const base::Feature kOmniboxReverseAnswers;
 extern const base::Feature kOmniboxTailSuggestions;
 extern const base::Feature kOmniboxTabSwitchSuggestions;
 extern const base::Feature kEnableClipboardProvider;
-extern const base::Feature kAndroidChromeHomePersonalizedSuggestions;
 extern const base::Feature kSearchProviderWarmUpOnFocus;
 extern const base::Feature kZeroSuggestRedirectToChrome;
 extern const base::Feature kZeroSuggestSwapTitleAndUrl;
 extern const base::Feature kDisplayTitleForCurrentUrl;
 extern const base::Feature kUIExperimentElideSuggestionUrlAfterHost;
 extern const base::Feature kUIExperimentHideSteadyStateUrlSchemeAndSubdomains;
-extern const base::Feature kUIExperimentHideSuggestionUrlScheme;
-extern const base::Feature kUIExperimentHideSuggestionUrlTrivialSubdomains;
+extern const base::Feature kUIExperimentJogTextfieldOnPopup;
 extern const base::Feature kUIExperimentMaxAutocompleteMatches;
-extern const base::Feature kUIExperimentNarrowDropdown;
 extern const base::Feature kUIExperimentShowSuggestionFavicons;
 extern const base::Feature kUIExperimentSwapTitleAndUrl;
-extern const base::Feature kUIExperimentVerticalLayout;
 extern const base::Feature kUIExperimentVerticalMargin;
 extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
 extern const base::Feature kBreakWordsAtUnderscores;
+extern const base::Feature kDocumentProvider;
 
-#if defined(OS_IOS)
-extern const base::Feature kZeroSuggestProviderIOS;
-#endif
 }  // namespace omnibox
 
 // The set of parameters customizing the HUP scoring.
@@ -98,6 +84,10 @@ struct HUPScoringParams {
     std::vector<CountMaxRelevance>& buckets() { return buckets_; }
     const std::vector<CountMaxRelevance>& buckets() const { return buckets_; }
 
+    // Estimates dynamic memory usage.
+    // See base/trace_event/memory_usage_estimator.h for more info.
+    size_t EstimateMemoryUsage() const;
+
    private:
     // History matches with relevance score greater or equal to |relevance_cap_|
     // are not affected by this experiment.
@@ -127,6 +117,10 @@ struct HUPScoringParams {
   };
 
   HUPScoringParams() {}
+
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
 
   ScoreBuckets typed_count_buckets;
 
@@ -159,10 +153,6 @@ class OmniboxFieldTrial {
     EMPHASIZE_WHEN_ONLY_TITLE_MATCHES = 2,
     EMPHASIZE_NEVER = 3
   };
-
-#if defined(OS_ANDROID)
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-#endif
 
   // ---------------------------------------------------------
   // For any experiment that's part of the bundled omnibox field trial.
@@ -198,16 +188,16 @@ class OmniboxFieldTrial {
   // Returns whether the user is in a ZeroSuggest field trial, which shows
   // most visited URLs. This is true for both "MostVisited" and
   // "MostVisitedWithoutSERP" trials.
-  static bool InZeroSuggestMostVisitedFieldTrial(PrefService* prefs);
+  static bool InZeroSuggestMostVisitedFieldTrial();
 
   // Returns whether the user is in ZeroSuggest field trial showing most
   // visited URLs except it doesn't show suggestions on Google search result
   // pages.
-  static bool InZeroSuggestMostVisitedWithoutSerpFieldTrial(PrefService* prefs);
+  static bool InZeroSuggestMostVisitedWithoutSerpFieldTrial();
 
   // Returns whether the user is in a ZeroSuggest field trial, but should
   // show recently searched-for queries instead.
-  static bool InZeroSuggestPersonalizedFieldTrial(PrefService* prefs);
+  static bool InZeroSuggestPersonalizedFieldTrial();
 
   // ---------------------------------------------------------
   // For the Zero Suggest Redirect to Chrome field trial.
@@ -419,24 +409,37 @@ class OmniboxFieldTrial {
       const AutocompleteInput& input);
 
   // ---------------------------------------------------------
-  // For PhysicalWebProvider related experiments.
+  // For tab switch suggestions related experiments.
 
-  // Returns whether the user is in a Physical Web field trial where the
-  // PhysicalWebProvider should be used to get suggestions when the user clicks
-  // on the omnibox but has not typed anything yet.
-  static bool InPhysicalWebZeroSuggestFieldTrial();
+  // Returns true if the rich entities flag and the refresh UI is enabled.
+  static bool IsRichEntitySuggestionsEnabled();
 
-  // Returns whether the user is in a Physical Web field trial and URL-based
-  // suggestions can continue to appear after the user has started typing.
-  static bool InPhysicalWebAfterTypingFieldTrial();
+  // Returns true if either (the new answer layout flag and the refresh UI) or
+  // the #upcoming-ui-features flag is enabled.
+  static bool IsNewAnswerLayoutEnabled();
 
-  // Returns the base relevance score for Physical Web omnibox suggestions when
-  // the user has clicked on the omnibox but has not typed anything yet.
-  static int GetPhysicalWebZeroSuggestBaseRelevance();
+  // Returns true if either (the reverse answers flag and the refresh UI) or
+  // the #upcoming-ui-features flag is enabled.
+  static bool IsReverseAnswersEnabled();
 
-  // Returns the base relevance score for Physical Web omnibox suggestions when
-  // the user has started typing in the omnibox.
-  static int GetPhysicalWebAfterTypingBaseRelevance();
+  // Returns true if either (the tab switch suggestions flag and the refresh UI)
+  // or the #upcoming-ui-features flag is enabled.
+  static bool IsTabSwitchSuggestionsEnabled();
+
+  // Returns true if either the steady-state elision flag or the
+  // #upcoming-ui-features flag is enabled.
+  static bool IsHideSteadyStateUrlSchemeAndSubdomainsEnabled();
+
+  // Returns true if the jog textfield flag and refresh UI are both enabled.
+  static bool IsJogTextfieldOnPopupEnabled();
+
+  // Returns true if either the show suggestion favicons flag or the
+  // #upcoming-ui-features flag is enabled.
+  static bool IsShowSuggestionFaviconsEnabled();
+
+  // Returns the size of the vertical margin that should be used in the
+  // suggestion view.
+  static int GetSuggestionVerticalMargin();
 
   // ---------------------------------------------------------
   // Clipboard URL suggestions:
@@ -475,8 +478,6 @@ class OmniboxFieldTrial {
   static const char kKeywordScoreForSufficientlyCompleteMatchRule[];
   static const char kHQPAllowDupMatchesForScoringRule[];
   static const char kEmphasizeTitlesRule[];
-  static const char kPhysicalWebZeroSuggestRule[];
-  static const char kPhysicalWebAfterTypingRule[];
 
   // Parameter names used by the HUP new scoring experiments.
   static const char kHUPNewScoringTypedCountRelevanceCapParam[];
@@ -496,10 +497,6 @@ class OmniboxFieldTrial {
   // urls indexed for suggestions.
   static const char kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevicesParam[];
   static const char kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam[];
-
-  // Parameter names used by the Physical Web experimental scoring experiments.
-  static const char kPhysicalWebZeroSuggestBaseRelevanceParam[];
-  static const char kPhysicalWebAfterTypingBaseRelevanceParam[];
 
   // Parameter names used by UI experiments.
   static const char kUIMaxAutocompleteMatchesParam[];
@@ -535,12 +532,6 @@ class OmniboxFieldTrial {
   static std::string GetValueForRuleInContext(
       const std::string& rule,
       metrics::OmniboxEventProto::PageClassification page_classification);
-
-#if defined(OS_ANDROID)
-  // Checks whether Chrome Home personalized omnibox suggestions on focus are
-  // enabled.
-  static bool InChromeHomePersonalizedZeroSuggest(PrefService* pref);
-#endif
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(OmniboxFieldTrial);
 };

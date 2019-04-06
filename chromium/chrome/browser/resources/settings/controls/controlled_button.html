@@ -14,8 +14,6 @@
     <style include="settings-shared">
       :host {
         --justify-margin: 8px;
-        -webkit-margin-end: calc(var(--cr-button-edge-spacing) * -1);
-        -webkit-margin-start: calc(var(--cr-button-edge-spacing) * -1);
         align-items: center;
         display: flex;
       }
@@ -49,7 +47,7 @@
     <paper-button disabled="[[enforced_]]">[[label]]</paper-button>
 
     <template is="dom-if" if="[[hasPrefPolicyIndicator(pref.*)]]" restamp>
-      <cr-policy-pref-indicator pref="[[pref]]" on-tap="onIndicatorTap_"
+      <cr-policy-pref-indicator pref="[[pref]]" on-click="onIndicatorTap_"
           icon-aria-label="[[label]]">
       </cr-policy-pref-indicator>
     </template>

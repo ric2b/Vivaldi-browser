@@ -12,16 +12,12 @@
 #include "base/sys_info.h"
 #include "remoting/base/util.h"
 #include "remoting/proto/video.pb.h"
+#include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
+#include "third_party/libvpx/source/libvpx/vpx/vpx_encoder.h"
 #include "third_party/libyuv/include/libyuv/convert_from_argb.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_region.h"
-
-extern "C" {
-#define VPX_CODEC_DISABLE_COMPAT 1
-#include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
-#include "third_party/libvpx/source/libvpx/vpx/vpx_encoder.h"
-}
 
 namespace remoting {
 
@@ -243,7 +239,7 @@ std::unique_ptr<VideoEncoderVpx> VideoEncoderVpx::CreateForVP9() {
 
 VideoEncoderVpx::~VideoEncoderVpx() = default;
 
-void VideoEncoderVpx::SetTickClockForTests(base::TickClock* tick_clock) {
+void VideoEncoderVpx::SetTickClockForTests(const base::TickClock* tick_clock) {
   clock_ = tick_clock;
 }
 
@@ -352,7 +348,7 @@ std::unique_ptr<VideoPacket> VideoEncoderVpx::Encode(
 VideoEncoderVpx::VideoEncoderVpx(bool use_vp9)
     : use_vp9_(use_vp9),
       encode_unchanged_frame_(false),
-      clock_(&default_tick_clock_) {}
+      clock_(base::DefaultTickClock::GetInstance()) {}
 
 void VideoEncoderVpx::Configure(const webrtc::DesktopSize& size) {
   DCHECK(use_vp9_ || !lossless_color_);

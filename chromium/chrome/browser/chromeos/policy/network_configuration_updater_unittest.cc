@@ -22,8 +22,12 @@
 #include "chromeos/network/fake_network_device_handler.h"
 #include "chromeos/network/mock_managed_network_configuration_handler.h"
 #include "chromeos/network/onc/onc_certificate_importer.h"
+#include "chromeos/network/onc/onc_parsed_certificates.h"
 #include "chromeos/network/onc/onc_test_utils.h"
 #include "chromeos/network/onc/onc_utils.h"
+#include "chromeos/system/fake_statistics_provider.h"
+#include "chromeos/system/statistics_provider.h"
+#include "components/account_id/account_id.h"
 #include "components/onc/onc_constants.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -31,7 +35,6 @@
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -57,6 +60,8 @@ namespace {
 
 const char kFakeUserEmail[] = "fake email";
 const char kFakeUsernameHash[] = "fake hash";
+const char kFakeSerialNumber[] = "FakeSerial";
+const char kFakeAssetId[] = "FakeAssetId";
 
 class FakeUser : public user_manager::User {
  public:
@@ -121,8 +126,10 @@ class FakeCertificateImporter : public chromeos::onc::CertificateImporter {
     onc_trusted_certificates_ = std::move(onc_trusted_certificates);
   }
 
-  void SetExpectedONCCertificates(const base::ListValue& certificates) {
-    expected_onc_certificates_.reset(certificates.DeepCopy());
+  void SetExpectedONCCertificates(
+      std::unique_ptr<chromeos::onc::OncParsedCertificates>
+          expected_onc_certificates) {
+    expected_onc_certificates_ = std::move(expected_onc_certificates);
   }
 
   void SetExpectedONCSource(::onc::ONCSource source) {
@@ -135,59 +142,75 @@ class FakeCertificateImporter : public chromeos::onc::CertificateImporter {
     return count;
   }
 
-  void ImportCertificates(const base::ListValue& certificates,
-                          ::onc::ONCSource source,
-                          const DoneCallback& done_callback) override {
+  void ImportCertificates(
+      std::unique_ptr<chromeos::onc::OncParsedCertificates> certificates,
+      ::onc::ONCSource source,
+      DoneCallback done_callback) override {
     if (expected_onc_source_ != ::onc::ONC_SOURCE_UNKNOWN)
       EXPECT_EQ(expected_onc_source_, source);
     if (expected_onc_certificates_) {
-      EXPECT_TRUE(chromeos::onc::test_utils::Equals(
-          expected_onc_certificates_.get(), &certificates));
+      EXPECT_EQ(expected_onc_certificates_->has_error(),
+                certificates->has_error());
+      EXPECT_EQ(expected_onc_certificates_->server_or_authority_certificates(),
+                certificates->server_or_authority_certificates());
+      EXPECT_EQ(expected_onc_certificates_->client_certificates(),
+                certificates->client_certificates());
     }
+
     ++call_count_;
-    done_callback.Run(true, net::x509_util::DupCERTCertificateList(
-                                onc_trusted_certificates_));
+    std::move(done_callback).Run(true, std::move(onc_trusted_certificates_));
   }
 
  private:
   ::onc::ONCSource expected_onc_source_;
-  std::unique_ptr<base::ListValue> expected_onc_certificates_;
+  std::unique_ptr<chromeos::onc::OncParsedCertificates>
+      expected_onc_certificates_;
   net::ScopedCERTCertificateList onc_trusted_certificates_;
   unsigned int call_count_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeCertificateImporter);
 };
 
-const char kFakeONC[] =
-    "{ \"NetworkConfigurations\": ["
-    "    { \"GUID\": \"{485d6076-dd44-6b6d-69787465725f5040}\","
-    "      \"Type\": \"WiFi\","
-    "      \"Name\": \"My WiFi Network\","
-    "      \"WiFi\": {"
-    "        \"HexSSID\": \"737369642D6E6F6E65\","  // "ssid-none"
-    "        \"Security\": \"None\" }"
-    "    }"
-    "  ],"
-    "  \"GlobalNetworkConfiguration\": {"
-    "    \"AllowOnlyPolicyNetworksToAutoconnect\": true,"
-    "  },"
-    "  \"Certificates\": ["
-    "    { \"GUID\": \"{f998f760-272b-6939-4c2beffe428697ac}\","
-    "      \"PKCS12\": \"abc\","
-    "      \"Type\": \"Client\" }"
-    "  ],"
-    "  \"Type\": \"UnencryptedConfiguration\""
-    "}";
+// Note: HexSSID 737369642D6E6F6E65 maps to "ssid-none".
+// HexSSID 7465737431323334 maps to "test1234"
+const char kFakeONC[] = R"(
+    { "NetworkConfigurations": [
+        { "GUID": "{485d6076-dd44-6b6d-69787465725f5040}",
+          "Type": "WiFi",
+          "Name": "My WiFi Network",
+          "WiFi": {
+            "HexSSID": "737369642D6E6F6E65",
+            "Security": "None" }
+        },
+        { "GUID": "{guid-for-wifi-with-device-exp}",
+          "Type": "WiFi",
+          "Name": "My WiFi with device placeholder expansions",
+          "WiFi": {
+            "EAP": {
+              "Outer": "EAP-TLS",
+              "Identity": "${DEVICE_SERIAL_NUMBER}-${DEVICE_ASSET_ID}"
+            },
+            "HexSSID": "7465737431323334",
+            "Security": "WPA-EAP",
+            "SSID": "test1234",
+          }
+        }
+      ],
+      "GlobalNetworkConfiguration": {
+        "AllowOnlyPolicyNetworksToAutoconnect": true,
+      },
+      "Certificates": [
+        { "GUID": "{f998f760-272b-6939-4c2beffe428697ac}",
+          "PKCS12": "YWJj",
+          "Type": "Client" }
+      ],
+      "Type": "UnencryptedConfiguration"
+    })";
 
 std::string ValueToString(const base::Value& value) {
   std::stringstream str;
   str << value;
   return str.str();
-}
-
-void AppendAll(const base::ListValue& from, base::ListValue* to) {
-  for (const auto& value : from)
-    to->Append(value.CreateDeepCopy());
 }
 
 // Matcher to match base::Value.
@@ -215,21 +238,18 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
   NetworkConfigurationUpdaterTest() : certificate_importer_(NULL) {}
 
   void SetUp() override {
+    fake_statistics_provider_.SetMachineStatistic(
+        chromeos::system::kSerialNumberKeyForTest, kFakeSerialNumber);
+
     EXPECT_CALL(provider_, IsInitializationComplete(_))
         .WillRepeatedly(Return(false));
     provider_.Init();
     PolicyServiceImpl::Providers providers;
     providers.push_back(&provider_);
-    policy_service_ = std::make_unique<PolicyServiceImpl>();
-    policy_service_->SetProviders(providers);
+    policy_service_ = std::make_unique<PolicyServiceImpl>(std::move(providers));
 
     std::unique_ptr<base::DictionaryValue> fake_toplevel_onc =
         chromeos::onc::ReadDictionaryFromJson(kFakeONC);
-
-    base::ListValue* network_configs = NULL;
-    fake_toplevel_onc->GetListWithoutPathExpansion(
-        onc::toplevel_config::kNetworkConfigurations, &network_configs);
-    AppendAll(*network_configs, &fake_network_configs_);
 
     base::DictionaryValue* global_config = NULL;
     fake_toplevel_onc->GetDictionaryWithoutPathExpansion(
@@ -239,10 +259,31 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
     base::ListValue* certs = NULL;
     fake_toplevel_onc->GetListWithoutPathExpansion(
         onc::toplevel_config::kCertificates, &certs);
-    AppendAll(*certs, &fake_certificates_);
+    fake_certificates_ =
+        std::make_unique<chromeos::onc::OncParsedCertificates>(*certs);
 
     certificate_importer_ = new FakeCertificateImporter;
     certificate_importer_owned_.reset(certificate_importer_);
+  }
+
+  base::Value* GetExpectedFakeNetworkConfigs(::onc::ONCSource source) {
+    std::unique_ptr<base::DictionaryValue> fake_toplevel_onc =
+        chromeos::onc::ReadDictionaryFromJson(kFakeONC);
+    fake_network_configs_ =
+        fake_toplevel_onc->FindKey(onc::toplevel_config::kNetworkConfigurations)
+            ->Clone();
+    if (source == ::onc::ONC_SOURCE_DEVICE_POLICY) {
+      std::string expected_identity =
+          std::string(kFakeSerialNumber) + "-" + std::string(kFakeAssetId);
+      SetExpectedValueInNetworkConfig(
+          &fake_network_configs_, "{guid-for-wifi-with-device-exp}",
+          {"WiFi", "EAP", "Identity"}, base::Value(expected_identity));
+    }
+    return &fake_network_configs_;
+  }
+
+  base::Value* GetExpectedFakeGlobalNetworkConfig() {
+    return &fake_global_network_config_;
   }
 
   void TearDown() override {
@@ -286,23 +327,23 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
   }
 
   void CreateNetworkConfigurationUpdaterForDevicePolicy() {
+    auto testing_device_asset_id_getter =
+        base::BindRepeating([] { return std::string(kFakeAssetId); });
     network_configuration_updater_ =
         DeviceNetworkConfigurationUpdater::CreateForDevicePolicy(
-            policy_service_.get(),
-            &network_config_handler_,
-            &network_device_handler_,
-            chromeos::CrosSettings::Get());
+            policy_service_.get(), &network_config_handler_,
+            &network_device_handler_, chromeos::CrosSettings::Get(),
+            testing_device_asset_id_getter);
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
 
-  base::ListValue fake_network_configs_;
-  base::DictionaryValue fake_global_network_config_;
-  base::ListValue fake_certificates_;
+  std::unique_ptr<chromeos::onc::OncParsedCertificates> fake_certificates_;
   StrictMock<chromeos::MockManagedNetworkConfigurationHandler>
       network_config_handler_;
   FakeNetworkDeviceHandler network_device_handler_;
   chromeos::ScopedCrosSettingsTestHelper settings_helper_;
+  chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
 
   // Ownership of certificate_importer_owned_ is passed to the
   // NetworkConfigurationUpdater. When that happens, |certificate_importer_|
@@ -319,6 +360,25 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
   TestingProfile profile_;
 
   std::unique_ptr<NetworkConfigurationUpdater> network_configuration_updater_;
+
+ private:
+  void SetExpectedValueInNetworkConfig(
+      base::Value* network_configs,
+      base::StringPiece guid,
+      std::initializer_list<base::StringPiece> path,
+      base::Value value) {
+    for (base::Value& network_config : network_configs->GetList()) {
+      const base::Value* guid_value =
+          network_config.FindKey(::onc::network_config::kGUID);
+      if (!guid_value || guid_value->GetString() != guid)
+        continue;
+      network_config.SetPath(path, std::move(value));
+      break;
+    }
+  }
+
+  base::Value fake_network_configs_;
+  base::DictionaryValue fake_global_network_config_;
 };
 
 TEST_F(NetworkConfigurationUpdaterTest, CellularAllowRoaming) {
@@ -501,11 +561,11 @@ TEST_F(NetworkConfigurationUpdaterTest,
              std::make_unique<base::Value>(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
 
+  ::onc::ONCSource source = onc::ONC_SOURCE_USER_POLICY;
   EXPECT_CALL(network_config_handler_,
-              SetPolicy(onc::ONC_SOURCE_USER_POLICY,
-                        kFakeUsernameHash,
-                        IsEqualTo(&fake_network_configs_),
-                        IsEqualTo(&fake_global_network_config_)));
+              SetPolicy(source, kFakeUsernameHash,
+                        IsEqualTo(GetExpectedFakeNetworkConfigs(source)),
+                        IsEqualTo(GetExpectedFakeGlobalNetworkConfig())));
 
   UserNetworkConfigurationUpdater* updater =
       CreateNetworkConfigurationUpdaterForUserPolicy(
@@ -516,13 +576,31 @@ TEST_F(NetworkConfigurationUpdaterTest,
   Mock::VerifyAndClearExpectations(&network_config_handler_);
   EXPECT_EQ(0u, certificate_importer_->GetAndResetImportCount());
 
-  certificate_importer_->SetExpectedONCCertificates(fake_certificates_);
+  certificate_importer_->SetExpectedONCCertificates(
+      std::move(fake_certificates_));
   certificate_importer_->SetExpectedONCSource(onc::ONC_SOURCE_USER_POLICY);
 
   ASSERT_TRUE(certificate_importer_owned_);
   updater->SetCertificateImporterForTest(
       std::move(certificate_importer_owned_));
   EXPECT_EQ(1u, certificate_importer_->GetAndResetImportCount());
+}
+
+TEST_F(NetworkConfigurationUpdaterTest, ReplaceDeviceOncPlaceholders) {
+  PolicyMap policy;
+  policy.Set(key::kDeviceOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
+             POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+             std::make_unique<base::Value>(kFakeONC), nullptr);
+  UpdateProviderPolicy(policy);
+
+  ::onc::ONCSource source = onc::ONC_SOURCE_DEVICE_POLICY;
+  EXPECT_CALL(network_config_handler_,
+              SetPolicy(source, std::string(),
+                        IsEqualTo(GetExpectedFakeNetworkConfigs(source)),
+                        IsEqualTo(GetExpectedFakeGlobalNetworkConfig())));
+
+  CreateNetworkConfigurationUpdaterForDevicePolicy();
+  MarkPolicyProviderInitialized();
 }
 
 class NetworkConfigurationUpdaterTestWithParam
@@ -569,12 +647,13 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam, InitialUpdates) {
              nullptr);
   UpdateProviderPolicy(policy);
 
-  EXPECT_CALL(network_config_handler_,
-              SetPolicy(CurrentONCSource(),
-                        ExpectedUsernameHash(),
-                        IsEqualTo(&fake_network_configs_),
-                        IsEqualTo(&fake_global_network_config_)));
-  certificate_importer_->SetExpectedONCCertificates(fake_certificates_);
+  EXPECT_CALL(
+      network_config_handler_,
+      SetPolicy(CurrentONCSource(), ExpectedUsernameHash(),
+                IsEqualTo(GetExpectedFakeNetworkConfigs(CurrentONCSource())),
+                IsEqualTo(GetExpectedFakeGlobalNetworkConfig())));
+  certificate_importer_->SetExpectedONCCertificates(
+      std::move(fake_certificates_));
   certificate_importer_->SetExpectedONCSource(CurrentONCSource());
 
   CreateNetworkConfigurationUpdater();
@@ -596,13 +675,14 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam,
   Mock::VerifyAndClearExpectations(&network_config_handler_);
   EXPECT_EQ(0u, certificate_importer_->GetAndResetImportCount());
 
-  EXPECT_CALL(network_config_handler_,
-              SetPolicy(CurrentONCSource(),
-                        ExpectedUsernameHash(),
-                        IsEqualTo(&fake_network_configs_),
-                        IsEqualTo(&fake_global_network_config_)));
+  EXPECT_CALL(
+      network_config_handler_,
+      SetPolicy(CurrentONCSource(), ExpectedUsernameHash(),
+                IsEqualTo(GetExpectedFakeNetworkConfigs(CurrentONCSource())),
+                IsEqualTo(GetExpectedFakeGlobalNetworkConfig())));
   certificate_importer_->SetExpectedONCSource(CurrentONCSource());
-  certificate_importer_->SetExpectedONCCertificates(fake_certificates_);
+  certificate_importer_->SetExpectedONCCertificates(
+      std::move(fake_certificates_));
 
   MarkPolicyProviderInitialized();
   EXPECT_EQ(ExpectedImportCertificatesCallCount(),
@@ -619,13 +699,14 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam,
              nullptr);
   UpdateProviderPolicy(policy);
 
-  EXPECT_CALL(network_config_handler_,
-              SetPolicy(CurrentONCSource(),
-                        ExpectedUsernameHash(),
-                        IsEqualTo(&fake_network_configs_),
-                        IsEqualTo(&fake_global_network_config_)));
+  EXPECT_CALL(
+      network_config_handler_,
+      SetPolicy(CurrentONCSource(), ExpectedUsernameHash(),
+                IsEqualTo(GetExpectedFakeNetworkConfigs(CurrentONCSource())),
+                IsEqualTo(GetExpectedFakeGlobalNetworkConfig())));
   certificate_importer_->SetExpectedONCSource(CurrentONCSource());
-  certificate_importer_->SetExpectedONCCertificates(fake_certificates_);
+  certificate_importer_->SetExpectedONCCertificates(
+      std::move(fake_certificates_));
 
   CreateNetworkConfigurationUpdater();
 
@@ -645,13 +726,14 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam, PolicyChange) {
             certificate_importer_->GetAndResetImportCount());
 
   // The Updater should update if policy changes.
-  EXPECT_CALL(network_config_handler_,
-              SetPolicy(CurrentONCSource(),
-                        _,
-                        IsEqualTo(&fake_network_configs_),
-                        IsEqualTo(&fake_global_network_config_)));
+  EXPECT_CALL(
+      network_config_handler_,
+      SetPolicy(CurrentONCSource(), _,
+                IsEqualTo(GetExpectedFakeNetworkConfigs(CurrentONCSource())),
+                IsEqualTo(GetExpectedFakeGlobalNetworkConfig())));
   certificate_importer_->SetExpectedONCSource(CurrentONCSource());
-  certificate_importer_->SetExpectedONCCertificates(fake_certificates_);
+  certificate_importer_->SetExpectedONCCertificates(
+      std::move(fake_certificates_));
 
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
@@ -665,7 +747,9 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam, PolicyChange) {
   // Another update is expected if the policy goes away.
   EXPECT_CALL(network_config_handler_,
               SetPolicy(CurrentONCSource(), _, IsEmpty(), IsEmpty()));
-  certificate_importer_->SetExpectedONCCertificates(base::ListValue());
+  certificate_importer_->SetExpectedONCCertificates(
+      std::make_unique<chromeos::onc::OncParsedCertificates>(
+          base::ListValue()));
 
   policy.Erase(GetParam());
   UpdateProviderPolicy(policy);

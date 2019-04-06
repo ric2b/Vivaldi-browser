@@ -9,7 +9,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/model/offline_page_model_utils.h"
-#include "components/offline_pages/core/offline_page_metadata_store_sql.h"
+#include "components/offline_pages/core/offline_page_metadata_store.h"
 #include "components/offline_pages/core/offline_store_utils.h"
 #include "sql/connection.h"
 #include "sql/statement.h"
@@ -29,7 +29,7 @@ void ReportAccessHistogram(int64_t offline_id,
   // page will be longer than one year in extreme cases so it's good enough.
   const int kMinutesPerYear = base::TimeDelta::FromDays(365).InMinutes();
 
-  const char kSql[] =
+  static const char kSql[] =
       "SELECT client_namespace, last_access_time FROM " OFFLINE_PAGES_TABLE_NAME
       " WHERE offline_id = ?";
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
@@ -61,7 +61,7 @@ bool MarkPageAccessedSync(const base::Time& access_time,
 
   ReportAccessHistogram(offline_id, access_time, db);
 
-  const char kSql[] =
+  static const char kSql[] =
       "UPDATE OR IGNORE " OFFLINE_PAGES_TABLE_NAME
       " SET last_access_time = ?, access_count = access_count + 1"
       " WHERE offline_id = ?";
@@ -76,7 +76,7 @@ bool MarkPageAccessedSync(const base::Time& access_time,
 
 }  // namespace
 
-MarkPageAccessedTask::MarkPageAccessedTask(OfflinePageMetadataStoreSQL* store,
+MarkPageAccessedTask::MarkPageAccessedTask(OfflinePageMetadataStore* store,
                                            int64_t offline_id,
                                            const base::Time& access_time)
     : store_(store),

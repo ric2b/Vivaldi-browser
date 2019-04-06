@@ -38,19 +38,17 @@ class IPCDemuxerStream : public DemuxerStream {
   bool SupportsConfigChanges() override;
   bool enabled() const;
   void set_enabled(bool enabled, base::TimeDelta timestamp);
-  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb);
 
   void Stop();
 
  private:
-  void DataReady(Status status, const scoped_refptr<DecoderBuffer>& buffer);
+  void DataReady(Status status, scoped_refptr<DecoderBuffer> buffer);
 
   Type type_;
 
   IPCMediaPipelineHost* ipc_media_pipeline_host_;
   ReadCB read_cb_;
   bool is_enabled_;
-  StreamStatusChangeCB stream_status_change_cb_;
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<IPCDemuxerStream> weak_ptr_factory_;

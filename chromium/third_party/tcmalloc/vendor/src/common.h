@@ -1,10 +1,11 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2008, Google Inc.
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
-// 
+//
 //     * Redistributions of source code must retain the above copyright
 // notice, this list of conditions and the following disclaimer.
 //     * Redistributions in binary form must reproduce the above
@@ -14,7 +15,7 @@
 //     * Neither the name of Google Inc. nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 // "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
 // LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -41,6 +42,7 @@
 #include <stdint.h>                     // for uintptr_t, uint64_t
 #endif
 #include "internal_logging.h"  // for ASSERT, etc
+#include "base/basictypes.h"   // for LIKELY, etc
 
 // Type that can hold a page number
 typedef uintptr_t PageID;
@@ -52,6 +54,16 @@ typedef uintptr_t Length;
 // Configuration
 //-------------------------------------------------------------------
 
+#if defined(TCMALLOC_ALIGN_8BYTES)
+// Unless we force to use 8 bytes alignment we use an alignment of
+// at least 16 bytes to statisfy requirements for some SSE types.
+// Keep in mind when using the 16 bytes alignment you can have a space
+// waste due alignment of 25%. (eg malloc of 24 bytes will get 32 bytes)
+static const size_t kMinAlign   = 8;
+#else
+static const size_t kMinAlign   = 16;
+#endif
+
 // Using large pages speeds up the execution at a cost of larger memory use.
 // Deallocation may speed up by a factor as the page map gets 8x smaller, so
 // lookups in the page map result in fewer L2 cache misses, which translates to
@@ -60,21 +72,22 @@ typedef uintptr_t Length;
 // the thread cache allowance to avoid passing more free ranges to and from
 // central lists.  Also, larger pages are less likely to get freed.
 // These two factors cause a bounded increase in memory use.
-
-#if defined(TCMALLOC_LARGE_PAGES)
+#if defined(TCMALLOC_32K_PAGES)
 static const size_t kPageShift  = 15;
-static const size_t kNumClasses = 78;
+#elif defined(TCMALLOC_64K_PAGES)
+static const size_t kPageShift  = 16;
 #else
 static const size_t kPageShift  = 13;
-static const size_t kNumClasses = 86;
 #endif
+
+static const size_t kClassSizesMax = 96;
+
 static const size_t kMaxThreadCacheSize = 4 << 20;
 
 static const size_t kPageSize   = 1 << kPageShift;
 static const size_t kMaxSize    = 256 * 1024;
 static const size_t kAlignment  = 8;
-static const size_t kLargeSizeClass = 0;
-// For all span-lengths < kMaxPages we keep an exact-size list.
+// For all span-lengths <= kMaxPages we keep an exact-size list in PageHeap.
 static const size_t kMaxPages = 1 << (20 - kPageShift);
 
 // Default bound on the total amount of thread caches.
@@ -107,14 +120,27 @@ static const int kMaxDynamicFreeListLength = 8192;
 
 static const Length kMaxValidPages = (~static_cast<Length>(0)) >> kPageShift;
 
-#if defined __x86_64__
-// All current and planned x86_64 processors only look at the lower 48 bits
-// in virtual to physical address translation.  The top 16 are thus unused.
-// TODO(rus): Under what operating systems can we increase it safely to 17?
-// This lets us use smaller page maps.  On first allocation, a 36-bit page map
-// uses only 96 KB instead of the 4.5 MB used by a 52-bit page map.
+#if __aarch64__ || __x86_64__ || _M_AMD64 || _M_ARM64
+// All current x86_64 processors only look at the lower 48 bits in
+// virtual to physical address translation. The top 16 are all same as
+// bit 47. And bit 47 value 1 reserved for kernel-space addresses in
+// practice. So it is actually 47 usable bits from malloc
+// perspective. This lets us use faster two level page maps on this
+// architecture.
+//
+// There is very similar story on 64-bit arms except it has full 48
+// bits for user-space. Because of that, and because in principle OSes
+// can start giving some of highest-bit-set addresses to user-space,
+// we don't bother to limit x86 to 47 bits.
+//
+// As of now there are published plans to add more bits to x86-64
+// virtual address space, but since 48 bits has been norm for long
+// time and lots of software is relying on it, it will be opt-in from
+// OS perspective. So we can keep doing "48 bits" at least for now.
 static const int kAddressBits = (sizeof(void*) < 8 ? (8 * sizeof(void*)) : 48);
 #else
+// mipsen and ppcs have more general hardware so we have to support
+// full 64-bits of addresses.
 static const int kAddressBits = 8 * sizeof(void*);
 #endif
 
@@ -134,13 +160,6 @@ int AlignmentForSize(size_t size);
 // Size-class information + mapping
 class SizeMap {
  private:
-  // Number of objects to move between a per-thread list and a central
-  // list in one shot.  We want this to be not too small so we can
-  // amortize the lock overhead for accessing the central list.  Making
-  // it too big may temporarily cause unnecessary memory wastage in the
-  // per-thread free list until the scavenger cleans up the list.
-  int num_objects_to_move_[kNumClasses];
-
   //-------------------------------------------------------------------
   // Mapping from size to size_class and vice versa
   //-------------------------------------------------------------------
@@ -168,25 +187,59 @@ class SizeMap {
       ((kMaxSize + 127 + (120 << 7)) >> 7) + 1;
   unsigned char class_array_[kClassArraySize];
 
+  static inline size_t SmallSizeClass(size_t s) {
+    return (static_cast<uint32_t>(s) + 7) >> 3;
+  }
+
+  static inline size_t LargeSizeClass(size_t s) {
+    return (static_cast<uint32_t>(s) + 127 + (120 << 7)) >> 7;
+  }
+
+  // If size is no more than kMaxSize, compute index of the
+  // class_array[] entry for it, putting the class index in output
+  // parameter idx and returning true. Otherwise return false.
+  static inline bool ATTRIBUTE_ALWAYS_INLINE ClassIndexMaybe(size_t s,
+                                                             uint32* idx) {
+    if (PREDICT_TRUE(s <= kMaxSmallSize)) {
+      *idx = (static_cast<uint32>(s) + 7) >> 3;
+      return true;
+    } else if (s <= kMaxSize) {
+      *idx = (static_cast<uint32>(s) + 127 + (120 << 7)) >> 7;
+      return true;
+    }
+    return false;
+  }
+
   // Compute index of the class_array[] entry for a given size
-  static inline int ClassIndex(int s) {
+  static inline size_t ClassIndex(size_t s) {
+    // Use unsigned arithmetic to avoid unnecessary sign extensions.
     ASSERT(0 <= s);
     ASSERT(s <= kMaxSize);
-    const bool big = (s > kMaxSmallSize);
-    const int add_amount = big ? (127 + (120<<7)) : 7;
-    const int shift_amount = big ? 7 : 3;
-    return (s + add_amount) >> shift_amount;
+    if (PREDICT_TRUE(s <= kMaxSmallSize)) {
+      return SmallSizeClass(s);
+    } else {
+      return LargeSizeClass(s);
+    }
   }
+
+  // Number of objects to move between a per-thread list and a central
+  // list in one shot.  We want this to be not too small so we can
+  // amortize the lock overhead for accessing the central list.  Making
+  // it too big may temporarily cause unnecessary memory wastage in the
+  // per-thread free list until the scavenger cleans up the list.
+  int num_objects_to_move_[kClassSizesMax];
 
   int NumMoveSize(size_t size);
 
   // Mapping from size class to max size storable in that class
-  size_t class_to_size_[kNumClasses];
+  int32 class_to_size_[kClassSizesMax];
 
   // Mapping from size class to number of pages to allocate at a time
-  size_t class_to_pages_[kNumClasses];
+  size_t class_to_pages_[kClassSizesMax];
 
  public:
+  size_t num_size_classes;
+
   // Constructor should do nothing since we rely on explicit Init()
   // call, which may or may not be called before the constructor runs.
   SizeMap() { }
@@ -194,22 +247,34 @@ class SizeMap {
   // Initialize the mapping arrays
   void Init();
 
-  inline int SizeClass(int size) {
+  inline int SizeClass(size_t size) {
     return class_array_[ClassIndex(size)];
   }
 
+  // Check if size is small enough to be representable by a size
+  // class, and if it is, put matching size class into *cl. Returns
+  // true iff matching size class was found.
+  inline bool ATTRIBUTE_ALWAYS_INLINE GetSizeClass(size_t size, uint32* cl) {
+    uint32 idx;
+    if (!ClassIndexMaybe(size, &idx)) {
+      return false;
+    }
+    *cl = class_array_[idx];
+    return true;
+  }
+
   // Get the byte-size for a specified class
-  inline size_t ByteSizeForClass(size_t cl) {
+  inline int32 ATTRIBUTE_ALWAYS_INLINE ByteSizeForClass(uint32 cl) {
     return class_to_size_[cl];
   }
 
   // Mapping from size class to max size storable in that class
-  inline size_t class_to_size(size_t cl) {
+  inline int32 class_to_size(uint32 cl) {
     return class_to_size_[cl];
   }
 
   // Mapping from size class to number of pages to allocate at a time
-  inline size_t class_to_pages(size_t cl) {
+  inline size_t class_to_pages(uint32 cl) {
     return class_to_pages_[cl];
   }
 
@@ -218,7 +283,7 @@ class SizeMap {
   // amortize the lock overhead for accessing the central list.  Making
   // it too big may temporarily cause unnecessary memory wastage in the
   // per-thread free list until the scavenger cleans up the list.
-  inline int num_objects_to_move(size_t cl) {
+  inline int num_objects_to_move(uint32 cl) {
     return num_objects_to_move_[cl];
   }
 };

@@ -10,11 +10,9 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/prefs/mock_pref_change_callback.h"
 #include "content/public/test/test_browser_context.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_test.h"
@@ -29,11 +27,7 @@ const char kWindowId2[] = "windowid2";
 
 // Create a very simple extension with id.
 scoped_refptr<Extension> CreateExtension(const std::string& id) {
-  return ExtensionBuilder()
-      .SetManifest(
-          DictionaryBuilder().Set("name", "test").Set("version", "0.1").Build())
-      .SetID(id)
-      .Build();
+  return ExtensionBuilder("test").SetID(id).Build();
 }
 
 }  // namespace
@@ -41,9 +35,6 @@ scoped_refptr<Extension> CreateExtension(const std::string& id) {
 // Base class for tests.
 class AppWindowGeometryCacheTest : public ExtensionsTest {
  public:
-  AppWindowGeometryCacheTest()
-      : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {}
-
   // testing::Test overrides:
   void SetUp() override;
   void TearDown() override;
@@ -131,13 +122,7 @@ std::string AppWindowGeometryCacheTest::AddExtensionWithPrefs(
   base::FilePath path =
       browser_context()->GetPath().AppendASCII("Extensions").AppendASCII(name);
   scoped_refptr<Extension> extension =
-      ExtensionBuilder()
-          .SetManifest(DictionaryBuilder()
-                           .Set("name", "test")
-                           .Set("version", "0.1")
-                           .Build())
-          .SetPath(path)
-          .Build();
+      ExtensionBuilder(name).SetPath(path).Build();
 
   extension_prefs_->OnExtensionInstalled(
       extension.get(),

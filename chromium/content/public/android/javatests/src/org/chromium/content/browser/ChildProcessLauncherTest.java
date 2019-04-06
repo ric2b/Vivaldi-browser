@@ -40,8 +40,8 @@ public class ChildProcessLauncherTest {
     private static final long CONDITION_WAIT_TIMEOUT_MS = 5000;
 
     private static final String SERVICE_PACKAGE_NAME = "org.chromium.content_shell_apk";
-    private static final String SERVICE_NAME_META_DATA_KEY =
-            "org.chromium.content.browser.TEST_SERVICES_NAME";
+    private static final String SERVICE_NAME =
+            "org.chromium.content_shell_apk.TestChildProcessService";
     private static final String SERVICE_COUNT_META_DATA_KEY =
             "org.chromium.content.browser.NUM_TEST_SERVICES";
 
@@ -107,7 +107,7 @@ public class ChildProcessLauncherTest {
                     public ChildConnectionAllocator call() {
                         Context context = InstrumentationRegistry.getTargetContext();
                         return ChildConnectionAllocator.create(context, LauncherThread.getHandler(),
-                                SERVICE_PACKAGE_NAME, SERVICE_NAME_META_DATA_KEY,
+                                null, SERVICE_PACKAGE_NAME, SERVICE_NAME,
                                 SERVICE_COUNT_META_DATA_KEY, false /* bindToCaller */,
                                 false /* bindAsExternalService */, false /* useStrongBinding */);
                     }
@@ -165,7 +165,6 @@ public class ChildProcessLauncherTest {
         @Override
         public void onDestroy() {
             Assert.assertEquals(0, mOnDestroyHelper.getCallCount());
-            mOnDestroyHelper.notifyCalled();
         }
 
         public void waitForOnConnectionSetupCalled() throws InterruptedException, TimeoutException {
@@ -182,10 +181,6 @@ public class ChildProcessLauncherTest {
 
         public void waitOnRunMainCalled() throws InterruptedException, TimeoutException {
             mOnRunMainHelper.waitForCallback(0 /* currentCallCount */);
-        }
-
-        public void waitOnDestroyCalled() throws InterruptedException, TimeoutException {
-            mOnDestroyHelper.waitForCallback(0 /* currentCallCount */);
         }
     };
 
@@ -306,8 +301,10 @@ public class ChildProcessLauncherTest {
                 processLauncher.stop();
             }
         });
-        // Wait for service to notify its onDestroy was called.
-        childProcessBinder.waitOnDestroyCalled();
+
+        // Note we don't wait for service to notify its onDestroy, as it may not
+        // always be called.
+
         // The client should also get a notification that the connection was lost.
         onConnectionLostHelper.waitForCallback(0 /* currentCallback */);
     }
@@ -359,7 +356,7 @@ public class ChildProcessLauncherTest {
                         new Callable<ChildConnectionAllocator>() {
                             @Override
                             public ChildConnectionAllocator call() {
-                                return ChildConnectionAllocator.createForTest(
+                                return ChildConnectionAllocator.createForTest(null,
                                         "org.chromium.wrong_package", "WrongService",
                                         2 /* serviceCount */, false /* bindToCaller */,
                                         false /* bindAsExternalService */,

@@ -47,6 +47,7 @@ class ContentSettingImageModel {
     SOUND = 13,
     FRAMEBUST = 14,
     CLIPBOARD_READ = 15,
+    SENSORS = 16,
 
     NUM_IMAGE_TYPES
   };
@@ -92,6 +93,8 @@ class ContentSettingImageModel {
       content::WebContents* web_contents);
 #endif
 
+  // Retrieve the icon that represents this content setting. Blocked content
+  // settings icons will have a blocked badge.
   gfx::Image GetIcon(SkColor icon_color) const;
 
   // Returns the resource ID of a string to show when the icon appears, or 0 if

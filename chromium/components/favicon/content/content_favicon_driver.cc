@@ -17,7 +17,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/common/favicon_url.h"
-#include "content/public/common/manifest.h"
+#include "third_party/blink/public/common/manifest/manifest.h"
 #include "ui/gfx/image/image.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(favicon::ContentFaviconDriver);
@@ -26,15 +26,15 @@ namespace favicon {
 namespace {
 
 void ExtractManifestIcons(
-    const ContentFaviconDriver::ManifestDownloadCallback& callback,
+    ContentFaviconDriver::ManifestDownloadCallback callback,
     const GURL& manifest_url,
-    const content::Manifest& manifest) {
+    const blink::Manifest& manifest) {
   std::vector<FaviconURL> candidates;
-  for (const content::Manifest::Icon& icon : manifest.icons) {
+  for (const auto& icon : manifest.icons) {
     candidates.emplace_back(icon.src, favicon_base::IconType::kWebManifestIcon,
                             icon.sizes);
   }
-  callback.Run(candidates);
+  std::move(callback).Run(candidates);
 }
 
 }  // namespace
@@ -129,12 +129,13 @@ int ContentFaviconDriver::DownloadImage(const GURL& url,
   bypass_cache_page_url_ = GURL();
 
   return web_contents()->DownloadImage(url, true, max_image_size, bypass_cache,
-                                       callback);
+                                       std::move(callback));
 }
 
 void ContentFaviconDriver::DownloadManifest(const GURL& url,
                                             ManifestDownloadCallback callback) {
-  web_contents()->GetManifest(base::Bind(&ExtractManifestIcons, callback));
+  web_contents()->GetManifest(
+      base::BindOnce(&ExtractManifestIcons, std::move(callback)));
 }
 
 bool ContentFaviconDriver::IsOffTheRecord() {

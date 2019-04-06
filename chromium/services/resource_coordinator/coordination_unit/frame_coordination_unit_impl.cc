@@ -13,8 +13,9 @@ namespace resource_coordinator {
 
 FrameCoordinationUnitImpl::FrameCoordinationUnitImpl(
     const CoordinationUnitID& id,
+    CoordinationUnitGraph* graph,
     std::unique_ptr<service_manager::ServiceContextRef> service_ref)
-    : CoordinationUnitInterface(id, std::move(service_ref)),
+    : CoordinationUnitInterface(id, graph, std::move(service_ref)),
       parent_frame_coordination_unit_(nullptr),
       page_coordination_unit_(nullptr),
       process_coordination_unit_(nullptr) {}
@@ -33,7 +34,7 @@ FrameCoordinationUnitImpl::~FrameCoordinationUnitImpl() {
 void FrameCoordinationUnitImpl::AddChildFrame(const CoordinationUnitID& cu_id) {
   DCHECK(cu_id != id());
   FrameCoordinationUnitImpl* frame_cu =
-      FrameCoordinationUnitImpl::GetCoordinationUnitByID(cu_id);
+      FrameCoordinationUnitImpl::GetCoordinationUnitByID(graph_, cu_id);
   if (!frame_cu)
     return;
   if (HasFrameCoordinationUnitInAncestors(frame_cu) ||
@@ -50,7 +51,7 @@ void FrameCoordinationUnitImpl::RemoveChildFrame(
     const CoordinationUnitID& cu_id) {
   DCHECK(cu_id != id());
   FrameCoordinationUnitImpl* frame_cu =
-      FrameCoordinationUnitImpl::GetCoordinationUnitByID(cu_id);
+      FrameCoordinationUnitImpl::GetCoordinationUnitByID(graph_, cu_id);
   if (!frame_cu)
     return;
   if (RemoveChildFrame(frame_cu)) {
@@ -66,6 +67,16 @@ void FrameCoordinationUnitImpl::SetAudibility(bool audible) {
 
 void FrameCoordinationUnitImpl::SetNetworkAlmostIdle(bool idle) {
   SetProperty(mojom::PropertyType::kNetworkAlmostIdle, idle);
+}
+
+void FrameCoordinationUnitImpl::SetLifecycleState(mojom::LifecycleState state) {
+  SetProperty(mojom::PropertyType::kLifecycleState,
+              static_cast<int64_t>(state));
+  // The page will have the same lifecycle state as the main frame.
+  if (IsMainFrame() && GetPageCoordinationUnit()) {
+    GetPageCoordinationUnit()->SetProperty(mojom::PropertyType::kLifecycleState,
+                                           static_cast<int64_t>(state));
+  }
 }
 
 void FrameCoordinationUnitImpl::OnAlertFired() {

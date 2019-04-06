@@ -41,7 +41,7 @@
 namespace {
 
 // (Square) pixel size of icon.
-constexpr int kIconSize = 18;
+constexpr int kPermissionIconSize = 18;
 
 // The type of arrow to display on the permission bubble.
 constexpr views::BubbleBorder::Arrow kPermissionAnchorArrow =
@@ -73,9 +73,7 @@ class PermissionsBubbleDialogDelegateView
 
   void CloseBubble();
 
-  // BubbleDialogDelegateView:
-  ui::AXRole GetAccessibleWindowRole() const override;
-  base::string16 GetAccessibleWindowTitle() const override;
+  // BubbleDialogDelegateView overrides.
   bool ShouldShowCloseButton() const override;
   base::string16 GetWindowTitle() const override;
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -131,8 +129,8 @@ PermissionsBubbleDialogDelegateView::PermissionsBubbleDialogDelegateView(
         provider->GetDistanceMetric(views::DISTANCE_RELATED_LABEL_HORIZONTAL)));
     views::ImageView* icon = new views::ImageView();
     const gfx::VectorIcon& vector_id = requests[index]->GetIconId();
-    icon->SetImage(
-        gfx::CreateVectorIcon(vector_id, kIconSize, gfx::kChromeIconGrey));
+    icon->SetImage(gfx::CreateVectorIcon(vector_id, kPermissionIconSize,
+                                         gfx::kChromeIconGrey));
     icon->SetTooltipText(base::string16());  // Redundant with the text fragment
     label_container->AddChildView(icon);
     views::Label* label =
@@ -176,17 +174,6 @@ void PermissionsBubbleDialogDelegateView::AddedToWidget() {
   // truncated from the least significant side. Explicitly disable multiline.
   title->SetMultiLine(false);
   GetBubbleFrameView()->SetTitleView(std::move(title));
-}
-
-ui::AXRole PermissionsBubbleDialogDelegateView::GetAccessibleWindowRole()
-    const {
-  return ui::AX_ROLE_ALERT_DIALOG;
-}
-
-base::string16 PermissionsBubbleDialogDelegateView::GetAccessibleWindowTitle()
-    const {
-  return l10n_util::GetStringFUTF16(IDS_PERMISSIONS_BUBBLE_ACCESSIBLE_TITLE,
-                                    name_or_origin_.name_or_origin);
 }
 
 bool PermissionsBubbleDialogDelegateView::ShouldShowCloseButton() const {
@@ -268,10 +255,6 @@ PermissionPromptImpl::PermissionPromptImpl(Browser* browser, Delegate* delegate)
 PermissionPromptImpl::~PermissionPromptImpl() {
   if (bubble_delegate_)
     bubble_delegate_->CloseBubble();
-}
-
-bool PermissionPromptImpl::CanAcceptRequestUpdate() {
-  return !(bubble_delegate_ && bubble_delegate_->IsMouseHovered());
 }
 
 void PermissionPromptImpl::UpdateAnchorPosition() {

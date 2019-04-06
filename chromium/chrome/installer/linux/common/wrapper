@@ -29,10 +29,10 @@ fi
 checkffmpeg () {
   if [ "$VIVALDI_FFMPEG_FOUND" = "NO" ]; then
     if [[ -n "$2" ]] && [ -e "$2" ] || [[ -z "$2" ]]; then
-      # Chromium's FFMpeg version N-89284-gba4dfad is the oldest known working version
+      # Chromium's FFMpeg version N-91124-g1d669bcae9 is the oldest known working version
       # chromium/third_party/ffmpeg/chromium/config/Chromium/linux/x64/libavutil/ffversion.h
       if [ -r "$1" ]; then
-        if [ `grep -aom1 'FFmpeg version N-[0-9]\+-' "$1" | cut -f2 -d-` -ge "89284" ]; then
+        if [[ `grep -aom1 'FFmpeg version N-[0-9]\+-' "$1" | cut -f2 -d-` -ge "91124" ]]; then
           # Check the dependencies are satisfied as the user may have obtained this from
           # another distro
           if ! LANGUAGE=en ldd "$1" 2>&1 | grep -qm1 'not \(a dynamic executable\|found\)'; then
@@ -70,12 +70,12 @@ checkffmpeg "$HERE/libffmpeg.so"
 if [ "$VIVALDI_FFMPEG_FOUND" = "NO" ]; then
 cat <<PMWARN >&2
 
-No suitable library for HTML5 MP4 (H.264/AAC) video and MP3 audio was
-found, therefore only open codecs will play.
+No suitable library for HTML5 MP4 (H.264/AAC) was found,
+therefore only open codecs will play.
 
 For assistance on how to enable proprietary media, visit:
 
-https://help.vivaldi.com/article/html5-mp4-h-264aac-video-and-mp3-audio-support-under-linux/
+https://help.vivaldi.com/article/html5-mp4-h-264-aac-support-under-linux/
 
 PMWARN
 fi

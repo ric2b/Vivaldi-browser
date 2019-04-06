@@ -9,6 +9,7 @@ mojom("interfaces") {
     "accelerator.mojom",
   ]
   public_deps = [
+    "//mojo/public/mojom/base",
     "//ui/events/mojo:interfaces",
   ]
 }
@@ -19,6 +20,7 @@ source_set("struct_traits") {
   ]
   public_deps = [
     ":interfaces",
+    "//mojo/public/mojom/base",
     "//ui/base",
     "//ui/events",
   ]

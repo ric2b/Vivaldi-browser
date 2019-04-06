@@ -24,8 +24,8 @@
 #include "extensions/renderer/script_injection.h"
 #include "extensions/renderer/user_script_injector.h"
 #include "extensions/renderer/web_ui_injection_host.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -160,8 +160,8 @@ bool UserScriptSet::UpdateUserScripts(base::SharedMemoryHandle shared_memory,
     const Extension* extension =
         RendererExtensionRegistry::Get()->GetByID(script->extension_id());
     if (whitelisted_only &&
-        (!extension ||
-         !PermissionsData::CanExecuteScriptEverywhere(extension))) {
+        (!extension || !PermissionsData::CanExecuteScriptEverywhere(
+                           extension->id(), extension->location()))) {
       continue;
     }
 
@@ -224,11 +224,8 @@ std::unique_ptr<ScriptInjection> UserScriptSet::GetInjectionForScript(
   std::unique_ptr<ScriptInjector> injector(
       new UserScriptInjector(script, this, is_declarative));
 
-  if (injector->CanExecuteOnFrame(
-          injection_host.get(),
-          web_frame,
-          tab_id) ==
-      PermissionsData::ACCESS_DENIED) {
+  if (injector->CanExecuteOnFrame(injection_host.get(), web_frame, tab_id) ==
+      PermissionsData::PageAccess::kDenied) {
     return injection;
   }
 

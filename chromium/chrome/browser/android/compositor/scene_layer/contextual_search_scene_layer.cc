@@ -17,7 +17,7 @@
 #include "jni/ContextualSearchSceneLayer_jni.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/network/public/interfaces/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -195,7 +195,8 @@ void ContextualSearchSceneLayer::FetchThumbnail(
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
   network::mojom::URLLoaderFactory* loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(profile)
-          ->GetURLLoaderFactoryForBrowserProcess();
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get();
   fetcher_ =
       std::make_unique<BitmapFetcher>(gurl, this, NO_TRAFFIC_ANNOTATION_YET);
   fetcher_->Init(

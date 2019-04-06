@@ -11,10 +11,10 @@
 #include <msi.h>
 #include <shellapi.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -56,7 +56,7 @@ base::string16 GetUninstallSurveyUrl() {
 bool NavigateToUrlWithEdge(const base::string16& url) {
   base::string16 protocol_url = L"microsoft-edge:" + url;
   SHELLEXECUTEINFO info = { sizeof(info) };
-  info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+  info.fMask = SEE_MASK_NOASYNC;
   info.lpVerb = L"open";
   info.lpFile = protocol_url.c_str();
   info.nShow = SW_SHOWNORMAL;
@@ -68,7 +68,7 @@ bool NavigateToUrlWithEdge(const base::string16& url) {
 
 void NavigateToUrlWithIExplore(const base::string16& url) {
   base::FilePath iexplore;
-  if (!PathService::Get(base::DIR_PROGRAM_FILES, &iexplore))
+  if (!base::PathService::Get(base::DIR_PROGRAM_FILES, &iexplore))
     return;
 
   iexplore = iexplore.AppendASCII("Internet Explorer");
@@ -87,7 +87,7 @@ void NavigateToUrlWithIExplore(const base::string16& url) {
 }  // namespace
 
 GoogleChromeDistribution::GoogleChromeDistribution()
-    : BrowserDistribution(base::MakeUnique<UpdatingAppRegistrationData>(
+    : BrowserDistribution(std::make_unique<UpdatingAppRegistrationData>(
           install_static::GetAppGuid())) {}
 
 void GoogleChromeDistribution::DoPostUninstallOperations(

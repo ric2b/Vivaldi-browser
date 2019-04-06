@@ -27,6 +27,7 @@
 #include "net/http/http_server_properties.h"
 
 namespace base {
+class Clock;
 class TickClock;
 }
 
@@ -37,10 +38,13 @@ class NET_EXPORT HttpServerPropertiesImpl
     : public HttpServerProperties,
       public BrokenAlternativeServices::Delegate {
  public:
-  // |clock| is used for setting expiration times and scheduling the
+  // |tick_clock| is used for setting expiration times and scheduling the
   // expiration of broken alternative services. If null, default clock will be
   // used.
-  explicit HttpServerPropertiesImpl(base::TickClock* clock);
+  // |clock| is used for converting base::TimeTicks to base::Time for
+  // wherever base::Time is preferable.
+  HttpServerPropertiesImpl(const base::TickClock* tick_clock,
+                           base::Clock* clock);
 
   // Default clock will be used.
   HttpServerPropertiesImpl();
@@ -105,7 +109,7 @@ class NET_EXPORT HttpServerPropertiesImpl
       const url::SchemeHostPort& origin,
       const AlternativeService& alternative_service,
       base::Time expiration,
-      const QuicTransportVersionVector& advertised_versions) override;
+      const quic::QuicTransportVersionVector& advertised_versions) override;
   bool SetAlternativeServices(const url::SchemeHostPort& origin,
                               const AlternativeServiceInfoVector&
                                   alternative_service_info_vector) override;
@@ -130,9 +134,10 @@ class NET_EXPORT HttpServerPropertiesImpl
   const ServerNetworkStats* GetServerNetworkStats(
       const url::SchemeHostPort& server) override;
   const ServerNetworkStatsMap& server_network_stats_map() const override;
-  bool SetQuicServerInfo(const QuicServerId& server_id,
+  bool SetQuicServerInfo(const quic::QuicServerId& server_id,
                          const std::string& server_info) override;
-  const std::string* GetQuicServerInfo(const QuicServerId& server_id) override;
+  const std::string* GetQuicServerInfo(
+      const quic::QuicServerId& server_id) override;
   const QuicServerInfoMap& quic_server_info_map() const override;
   size_t max_server_configs_stored_in_properties() const override;
   void SetMaxServerConfigsStoredInProperties(
@@ -150,7 +155,8 @@ class NET_EXPORT HttpServerPropertiesImpl
 
   typedef base::flat_map<url::SchemeHostPort, url::SchemeHostPort>
       CanonicalAltSvcMap;
-  typedef base::flat_map<HostPortPair, QuicServerId> CanonicalServerInfoMap;
+  typedef base::flat_map<HostPortPair, quic::QuicServerId>
+      CanonicalServerInfoMap;
   typedef std::vector<std::string> CanonicalSufficList;
   typedef std::set<HostPortPair> Http11ServerHostPortSet;
 
@@ -166,7 +172,7 @@ class NET_EXPORT HttpServerPropertiesImpl
   // The returned canonical host can be used to search for server info in
   // |quic_server_info_map_|. Return 'end' the host doesn't exist.
   CanonicalServerInfoMap::const_iterator GetCanonicalServerInfoHost(
-      const QuicServerId& server) const;
+      const quic::QuicServerId& server) const;
 
   // Remove the canonical alt-svc host for |server|.
   void RemoveAltSvcCanonicalHost(const url::SchemeHostPort& server);
@@ -175,7 +181,10 @@ class NET_EXPORT HttpServerPropertiesImpl
   // The |server| should have the corresponding server info associated with it
   // in |quic_server_info_map_|. If |canonical_server_info_map_| doesn't
   // have an entry associated with |server|, the method will add one.
-  void UpdateCanonicalServerInfoMap(const QuicServerId& server);
+  void UpdateCanonicalServerInfoMap(const quic::QuicServerId& server);
+
+  const base::TickClock* tick_clock_;  // Unowned
+  base::Clock* clock_;                 // Unowned
 
   SpdyServersMap spdy_servers_map_;
   Http11ServerHostPortSet http11_servers_;

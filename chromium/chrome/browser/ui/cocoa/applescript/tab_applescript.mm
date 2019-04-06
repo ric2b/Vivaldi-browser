@@ -62,8 +62,7 @@ void ResumeAppleEventAndSendReply(NSAppleEventManagerSuspensionID suspension_id,
 
 - (instancetype)init {
   if ((self = [super init])) {
-    SessionID session;
-    SessionID::id_type futureSessionIDOfTab = session.id() + 1;
+    SessionID::id_type futureSessionIDOfTab = SessionID::NewUnique().id() + 1;
     // Holds the SessionID that the new tab is going to get.
     base::scoped_nsobject<NSNumber> numID(
         [[NSNumber alloc] initWithInt:futureSessionIDOfTab]);
@@ -106,6 +105,7 @@ void ResumeAppleEventAndSendReply(NSAppleEventManagerSuspensionID suspension_id,
   webContents_ = webContents;
   SessionTabHelper* session_tab_helper =
       SessionTabHelper::FromWebContents(webContents);
+  profile_ = Profile::FromBrowserContext(webContents->GetBrowserContext());
   base::scoped_nsobject<NSNumber> numID(
       [[NSNumber alloc] initWithInt:session_tab_helper->session_id().id()]);
   [self setUniqueID:numID];
@@ -128,17 +128,18 @@ void ResumeAppleEventAndSendReply(NSAppleEventManagerSuspensionID suspension_id,
 }
 
 - (void)setURL:(NSString*)aURL {
+  // If a scripter sets a URL before |webContents_| or |profile_| is set, save
+  // it at a temporary location. Once they're set, -setURL: will be call again
+  // with the temporary URL.
+  if (!profile_ || !webContents_) {
+    [self setTempURL:aURL];
+    return;
+  }
+
   GURL url(base::SysNSStringToUTF8(aURL));
   if (!chrome::mac::IsJavaScriptEnabledForProfile(profile_) &&
       url.SchemeIs(url::kJavaScriptScheme)) {
     AppleScript::SetError(AppleScript::errJavaScriptUnsupported);
-    return;
-  }
-
-  // If a scripter sets a URL before the node is added save it at a temporary
-  // location.
-  if (!webContents_) {
-    [self setTempURL:aURL];
     return;
   }
 

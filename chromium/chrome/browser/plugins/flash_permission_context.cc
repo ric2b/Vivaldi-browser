@@ -34,7 +34,7 @@ bool PluginsEnterpriseSettingEnabled(
 FlashPermissionContext::FlashPermissionContext(Profile* profile)
     : PermissionContextBase(profile,
                             CONTENT_SETTINGS_TYPE_PLUGINS,
-                            blink::FeaturePolicyFeature::kNotFound) {}
+                            blink::mojom::FeaturePolicyFeature::kNotFound) {}
 
 FlashPermissionContext::~FlashPermissionContext() {}
 
@@ -64,6 +64,8 @@ void FlashPermissionContext::UpdateTabContext(const PermissionRequestID& id,
       content::WebContents::FromRenderFrameHost(
           content::RenderFrameHost::FromID(id.render_process_id(),
                                            id.render_frame_id()));
+  if (!web_contents)
+    return;
 
   if (PluginsEnterpriseSettingEnabled(
           HostContentSettingsMapFactory::GetForProfile(profile()))) {

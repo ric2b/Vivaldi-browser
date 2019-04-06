@@ -15,7 +15,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -452,7 +451,7 @@ GLuint GLHelper::CopyTextureToImpl::EncodeTextureAsGrayscale(
 
   helper_->InitScalerImpl();
   const std::unique_ptr<ScalerInterface> planerizer =
-      helper_->scaler_impl_.get()->CreateGrayscalePlanerizer(
+      helper_->scaler_impl_->CreateGrayscalePlanerizer(
           false, vertically_flip_texture, swizzle);
   planerizer->Scale(src_texture, src_size, gfx::Vector2dF(), dst_texture,
                     gfx::Rect(*encoded_texture_size));
@@ -879,7 +878,6 @@ void GLHelper::WaitSyncToken(const gpu::SyncToken& sync_token) {
 gpu::MailboxHolder GLHelper::ProduceMailboxHolderFromTexture(
     GLuint texture_id) {
   gpu::Mailbox mailbox;
-  gl_->GenMailboxCHROMIUM(mailbox.name);
   gl_->ProduceTextureDirectCHROMIUM(texture_id, mailbox.name);
 
   gpu::SyncToken sync_token;
@@ -953,13 +951,6 @@ gfx::Size I420Converter::GetChromaPlaneTextureSize(
     const gfx::Size& output_size) {
   return gfx::Size((output_size.width() + 7) / 8,
                    (output_size.height() + 1) / 2);
-}
-
-// static
-uint32_t ReadbackYUVInterface::GetGrGLBackendStateChanges() {
-  return kTextureBinding_GrGLBackendState | kView_GrGLBackendState |
-         kVertex_GrGLBackendState | kProgram_GrGLBackendState |
-         kRenderTarget_GrGLBackendState;
 }
 
 namespace {

@@ -11,6 +11,8 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
+#include "build/build_config.h"
+#include "mojo/public/cpp/system/buffer.h"
 #include "ui/aura/aura_export.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/events/event_handler.h"
@@ -18,23 +20,17 @@
 #include "ui/events/system_input_injector.h"
 #include "ui/gfx/geometry/point.h"
 
-#if defined(USE_OZONE)
-#include "ui/ozone/public/client_native_pixmap_factory_ozone.h"
-#endif
-
 namespace base {
 class UnguessableToken;
 }
 
-#if defined(USE_OZONE)
-namespace gfx {
-class ClientNativePixmapFactory;
-}
-#endif
-
 namespace mojo {
 template <typename MojoInterface>
 class InterfacePtr;
+}
+
+namespace service_manager {
+class Connector;
 }
 
 namespace ui {
@@ -54,8 +50,10 @@ class EnvWindowTreeClientSetter;
 class EnvInputStateController;
 class EnvObserver;
 class InputStateLookup;
+class MouseLocationManager;
 class MusMouseLocationUpdater;
 class Window;
+class WindowEventDispatcherObserver;
 class WindowPort;
 class WindowTreeClient;
 class WindowTreeHost;
@@ -76,9 +74,18 @@ class AURA_EXPORT Env : public ui::EventTarget,
 
   ~Env() override;
 
+  // Creates a new Env instance.
   // NOTE: if you pass in Mode::MUS it is expected that you call
   // SetWindowTreeClient() before any windows are created.
   static std::unique_ptr<Env> CreateInstance(Mode mode = Mode::LOCAL);
+
+#if defined(USE_OZONE)
+  // used to create a new Env that hosts the viz process. |connector| is the
+  // connector used to establish outbound connections.
+  static std::unique_ptr<Env> CreateInstanceToHostViz(
+      service_manager::Connector* connector);
+#endif
+
   static Env* GetInstance();
   static Env* GetInstanceDontCreate();
 
@@ -89,6 +96,15 @@ class AURA_EXPORT Env : public ui::EventTarget,
 
   void AddObserver(EnvObserver* observer);
   void RemoveObserver(EnvObserver* observer);
+
+  void AddWindowEventDispatcherObserver(
+      WindowEventDispatcherObserver* observer);
+  void RemoveWindowEventDispatcherObserver(
+      WindowEventDispatcherObserver* observer);
+  base::ObserverList<WindowEventDispatcherObserver>&
+  window_event_dispatcher_observers() {
+    return window_event_dispatcher_observers_;
+  }
 
   EnvInputStateController* env_controller() const {
     return env_controller_.get();
@@ -105,9 +121,15 @@ class AURA_EXPORT Env : public ui::EventTarget,
   // Gets/sets the last mouse location seen in a mouse event in the screen
   // coordinates.
   const gfx::Point& last_mouse_location() const;
-  void set_last_mouse_location(const gfx::Point& last_mouse_location) {
-    last_mouse_location_ = last_mouse_location;
-  }
+  void SetLastMouseLocation(const gfx::Point& last_mouse_location);
+
+  // Creates the MouseLocationManager if it hasn't been created yet.
+  void CreateMouseLocationManager();
+
+  // Returns a read-only handle to the shared memory which contains the global
+  // mouse position. Each call returns a new handle. This is only valid if Env
+  // was configured to create a MouseLocationManager.
+  mojo::ScopedSharedBufferHandle GetLastMouseLocationMemory();
 
   // Whether any touch device is currently down.
   bool is_touch_down() const { return is_touch_down_; }
@@ -118,6 +140,12 @@ class AURA_EXPORT Env : public ui::EventTarget,
   }
   ui::ContextFactory* context_factory() { return context_factory_; }
 
+  // Sets |initial_throttle_input_on_resize| the next time Env is created. This
+  // is only useful in tests that need to disable input resize.
+  static void set_initial_throttle_input_on_resize_for_testing(
+      bool throttle_input) {
+    initial_throttle_input_on_resize_ = throttle_input;
+  }
   void set_throttle_input_on_resize_for_testing(bool throttle_input) {
     throttle_input_on_resize_ = throttle_input;
   }
@@ -152,7 +180,7 @@ class AURA_EXPORT Env : public ui::EventTarget,
 
   explicit Env(Mode mode);
 
-  void Init();
+  void Init(service_manager::Connector* connector);
 
   // After calling this method, all OSExchangeDataProvider instances will be
   // Mus instances. We can't do this work in Init(), because our mode may
@@ -197,6 +225,12 @@ class AURA_EXPORT Env : public ui::EventTarget,
 
   base::ObserverList<EnvObserver> observers_;
 
+  // Code wanting to observe WindowEventDispatcher typically wants to observe
+  // all WindowEventDispatchers. This is made easier by having Env own all the
+  // observers.
+  base::ObserverList<WindowEventDispatcherObserver>
+      window_event_dispatcher_observers_;
+
   std::unique_ptr<EnvInputStateController> env_controller_;
   int mouse_button_flags_;
   // Location of last mouse event, in screen coordinates.
@@ -214,12 +248,6 @@ class AURA_EXPORT Env : public ui::EventTarget,
   std::unique_ptr<InputStateLookup> input_state_lookup_;
   std::unique_ptr<ui::PlatformEventSource> event_source_;
 
-#if defined(USE_OZONE)
-  // Factory for pixmaps that can use be transported from the client to the GPU
-  // process using a low-level ozone-provided platform specific mechanism.
-  std::unique_ptr<gfx::ClientNativePixmapFactory> native_pixmap_factory_;
-#endif
-
   ui::ContextFactory* context_factory_;
   ui::ContextFactoryPrivate* context_factory_private_;
 
@@ -227,7 +255,11 @@ class AURA_EXPORT Env : public ui::EventTarget,
   // creating a different WindowPort implementation.
   bool in_mus_shutdown_ = false;
 
-  bool throttle_input_on_resize_ = true;
+  static bool initial_throttle_input_on_resize_;
+  bool throttle_input_on_resize_ = initial_throttle_input_on_resize_;
+
+  // Only created if CreateMouseLocationManager() was called.
+  std::unique_ptr<MouseLocationManager> mouse_location_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(Env);
 };

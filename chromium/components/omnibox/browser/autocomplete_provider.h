@@ -40,7 +40,6 @@ typedef std::vector<metrics::OmniboxEventProto_ProviderInfo> ProvidersInfo;
 // ZERO SUGGEST (empty) input type:
 // --------------------------------------------------------------------|-----
 // Clipboard URL                                                       |  800
-// Physical Web (zero suggest)                                         |  700--
 // Zero Suggest (most visited, Android only)                           |  600--
 // Zero Suggest (default, may be overridden by server)                 |  100
 //
@@ -58,13 +57,13 @@ typedef std::vector<metrics::OmniboxEventProto_ProviderInfo> ProvidersInfo;
 // BookmarkProvider (prefix match in bookmark title or URL)            |  900+-
 // Built-in                                                            |  860++
 // Search Primary Provider (navigational suggestion)                   |  800++
-// Physical Web (prefix match in page title or URL)                    |  700--
 // Search Primary Provider (suggestion)                                |  600++
 // Keyword (inexact match)                                             |  450
 // Search Secondary Provider (what you typed)                          |  250
 // Search Secondary Provider (past query in history)                   |  200*
 // Search Secondary Provider (navigational suggestion)                 |  150++
 // Search Secondary Provider (suggestion)                              |  100++
+// Document Suggestions (*experimental): value controlled by Finch     |    *
 //
 // URL input type:
 // --------------------------------------------------------------------|-----
@@ -96,7 +95,6 @@ typedef std::vector<metrics::OmniboxEventProto_ProviderInfo> ProvidersInfo;
 // HistoryURL (inexact match)                                          |  900++
 // BookmarkProvider (prefix match in bookmark title or URL)            |  900+-
 // Search Primary Provider (navigational suggestion)                   |  800++
-// Physical Web (prefix match in page title or URL)                    |  700--
 // Search Primary Provider (suggestion)                                |  600++
 // Keyword (inexact match)                                             |  450
 // Search Secondary Provider (what you typed)                          |  250
@@ -133,16 +131,16 @@ class AutocompleteProvider
  public:
   // Different AutocompleteProvider implementations.
   enum Type {
-    TYPE_BOOKMARK         = 1 << 0,
-    TYPE_BUILTIN          = 1 << 1,
-    TYPE_HISTORY_QUICK    = 1 << 2,
-    TYPE_HISTORY_URL      = 1 << 3,
-    TYPE_KEYWORD          = 1 << 4,
-    TYPE_SEARCH           = 1 << 5,
-    TYPE_SHORTCUTS        = 1 << 6,
-    TYPE_ZERO_SUGGEST     = 1 << 7,
-    TYPE_CLIPBOARD_URL    = 1 << 8,
-    TYPE_PHYSICAL_WEB     = 1 << 9,
+    TYPE_BOOKMARK = 1 << 0,
+    TYPE_BUILTIN = 1 << 1,
+    TYPE_HISTORY_QUICK = 1 << 2,
+    TYPE_HISTORY_URL = 1 << 3,
+    TYPE_KEYWORD = 1 << 4,
+    TYPE_SEARCH = 1 << 5,
+    TYPE_SHORTCUTS = 1 << 6,
+    TYPE_ZERO_SUGGEST = 1 << 7,
+    TYPE_CLIPBOARD_URL = 1 << 8,
+    TYPE_DOCUMENT = 1 << 9,
   };
 
   explicit AutocompleteProvider(Type type);
@@ -226,6 +224,13 @@ class AutocompleteProvider
   // we have good relevance heuristics; the controller should handle all
   // culling.
   static const size_t kMaxMatches;
+
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  //
+  // Note: Subclasses that override this method must call the base class
+  // method and include the response in their estimate.
+  virtual size_t EstimateMemoryUsage() const;
 
  protected:
   friend class base::RefCountedThreadSafe<AutocompleteProvider>;

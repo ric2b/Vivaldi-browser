@@ -8,8 +8,8 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/scoped_ipc_support.h"
+#include "mojo/core/embedder/embedder.h"
+#include "mojo/core/embedder/scoped_ipc_support.h"
 #include "services/catalog/catalog.h"
 #include "services/service_manager/public/cpp/test/service_test_catalog.h"
 
@@ -23,28 +23,27 @@
 
 namespace service_manager {
 
-int InitializeAndLaunchUnitTests(
-    int argc,
-    char** argv,
-    const base::RunTestSuiteCallback& run_test_suite) {
+int InitializeAndLaunchUnitTests(int argc,
+                                 char** argv,
+                                 base::RunTestSuiteCallback run_test_suite) {
   catalog::Catalog::SetDefaultCatalogManifest(
       service_manager::test::CreateTestCatalog());
 
-  mojo::edk::Init();
+  mojo::core::Init();
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
-  mojo::edk::SetMachPortProvider(
+  mojo::core::SetMachPortProvider(
       service_manager::MachBroker::GetInstance()->port_provider());
 #endif
 
   base::Thread ipc_thread("IPC thread");
   ipc_thread.StartWithOptions(
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
-  mojo::edk::ScopedIPCSupport ipc_support(
+  mojo::core::ScopedIPCSupport ipc_support(
       ipc_thread.task_runner(),
-      mojo::edk::ScopedIPCSupport::ShutdownPolicy::CLEAN);
+      mojo::core::ScopedIPCSupport::ShutdownPolicy::CLEAN);
 
-  return base::LaunchUnitTests(argc, argv, run_test_suite);
+  return base::LaunchUnitTests(argc, argv, std::move(run_test_suite));
 }
 
 }  // namespace service_manager

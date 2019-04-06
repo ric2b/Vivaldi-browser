@@ -18,7 +18,7 @@
 #include "chrome/browser/ui/aura/tab_contents/web_drag_bookmark_handler_aura.h"
 #endif  // defined(OS_MACOSX)
 #include "extensions/api/tabs/tabs_private_api.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 
 namespace content {

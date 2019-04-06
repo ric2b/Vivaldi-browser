@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversion_utils.h"
 #include "build/build_config.h"
 #include "ui/events/keycodes/dom/dom_code.h"

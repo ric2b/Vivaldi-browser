@@ -78,10 +78,10 @@ test.util.async = {};
  * @const
  */
 test.util.TESTING_EXTENSION_IDS = [
-  'oobinhbdbiehknkpbpejbbpdbkdjmoco',  // File Manager test
-  'ejhcmmdhhpdhhgmifplfmjobgegbibkn',  // Gallery test
-  'ljoplibgfehghmibaoaepfagnmbbfiga',  // Video Player test
-  'ddabbgbggambiildohfagdkliahiecfl',  // Audio Player test
+  'oobinhbdbiehknkpbpejbbpdbkdjmoco',  // File Manager test extension.
+  'ejhcmmdhhpdhhgmifplfmjobgegbibkn',  // Gallery test extension.
+  'ljoplibgfehghmibaoaepfagnmbbfiga',  // Video Player test extension.
+  'ddabbgbggambiildohfagdkliahiecfl',  // Audio Player test extension.
 ];
 
 /**
@@ -121,48 +121,6 @@ test.util.sync.closeWindow = function(appId) {
     return true;
   }
   return false;
-};
-
-/**
- * Gets a document in the Files app's window, including iframes.
- *
- * @param {Window} contentWindow Window to be used.
- * @param {string=} opt_iframeQuery Query for the iframe.
- * @return {Document} Returns the found document or null if not found.
- * @private
- */
-test.util.sync.getDocument_ = function(contentWindow, opt_iframeQuery) {
-  if (opt_iframeQuery) {
-    var iframe = contentWindow.document.querySelector(opt_iframeQuery);
-    var doc = iframe && iframe.contentWindow && iframe.contentWindow.document;
-    return doc ? doc : null;
-  }
-
-  return contentWindow.document ? contentWindow.document : null;
-};
-
-/**
- * Gets the element specified by |targetQuery|.
- *
- * @param {Window} contentWindow Window to be used.
- * @param {string} targetQuery Query to specify the element.
- * @param {string=} opt_iframeQuery Query for the iframe.
- * @return {Element} If the specified element is not found, null is returned.
- * @private
- */
-test.util.sync.getElement_ = function(
-    contentWindow, targetQuery, opt_iframeQuery) {
-  var doc = test.util.sync.getDocument_(contentWindow, opt_iframeQuery);
-  if (!doc)
-    return null;
-
-  var target = doc.querySelector(targetQuery);
-  if (!target) {
-    console.error('Target element for ' + targetQuery + ' not found.');
-    return null;
-  }
-
-  return target;
 };
 
 /**
@@ -226,7 +184,6 @@ test.util.sync.isWindowMaximized = function(contentWindow) {
  *
  * @param {!Window} contentWindow Window to be tested.
  * @param {string} targetQuery Query to specify the element.
- * @param {?string} iframeQuery Iframe selector or null if no iframe.
  * @param {Array<string>=} opt_styleNames List of CSS property name to be
  *     obtained.
  * @return {!Array<{attributes:Object<string>, text:string,
@@ -235,9 +192,9 @@ test.util.sync.isWindowMaximized = function(contentWindow) {
  *     values, hidden attribute, and style names and values.
  */
 test.util.sync.queryAllElements = function(
-    contentWindow, targetQuery, iframeQuery, opt_styleNames) {
+    contentWindow, targetQuery, opt_styleNames) {
   return test.util.sync.deepQueryAllElements(
-      contentWindow, [targetQuery], iframeQuery, opt_styleNames);
+      contentWindow, [targetQuery], opt_styleNames);
 };
 
 /**
@@ -247,7 +204,6 @@ test.util.sync.queryAllElements = function(
  * @param {!Array<string>} targetQuery Query to specify the element.
  *   |targetQuery[0]| specifies the first element(s). |targetQuery[1]| specifies
  *   elements inside the shadow DOM of the first element, and so on.
- * @param {?string} iframeQuery Iframe selector or null if no iframe.
  * @param {Array<string>=} opt_styleNames List of CSS property name to be
  *     obtained.
  * @return {!Array<{attributes:Object<string>, text:string,
@@ -256,13 +212,12 @@ test.util.sync.queryAllElements = function(
  *     values, hidden attribute, and style names and values.
  */
 test.util.sync.deepQueryAllElements = function(
-    contentWindow, targetQuery, iframeQuery, opt_styleNames) {
-  var doc = test.util.sync.getDocument_(
-      contentWindow, iframeQuery || undefined);
-  if (!doc)
+    contentWindow, targetQuery, opt_styleNames) {
+  if (!contentWindow.document)
     return [];
 
-  var elems = test.util.sync.deepQuerySelectorAll_(doc, targetQuery);
+  var elems =
+      test.util.sync.deepQuerySelectorAll_(contentWindow.document, targetQuery);
   return elems.map(function(element) {
     return extractElementInfo(element, contentWindow, opt_styleNames);
   });
@@ -299,8 +254,6 @@ test.util.sync.deepQuerySelectorAll_ = function(root, targetQuery) {
  * Gets the information of the active element.
  *
  * @param {Window} contentWindow Window to be tested.
- * @param {string} targetQuery Query to specify the element.
- * @param {?string} iframeQuery Iframe selector or null if no iframe.
  * @param {Array<string>=} opt_styleNames List of CSS property name to be
  *     obtained.
  * @return {?{attributes:Object<string>, text:string,
@@ -309,14 +262,12 @@ test.util.sync.deepQuerySelectorAll_ = function(root, targetQuery) {
  *     values, hidden attribute, and style names and values. If there is no
  *     active element, returns null.
  */
-test.util.sync.getActiveElement = function(
-    contentWindow, targetQuery, iframeQuery, opt_styleNames) {
-  var doc = test.util.sync.getDocument_(
-      contentWindow, iframeQuery || undefined);
-  if (!doc || !doc.activeElement)
+test.util.sync.getActiveElement = function(contentWindow, opt_styleNames) {
+  if (!contentWindow.document || !contentWindow.document.activeElement)
     return null;
 
-  return extractElementInfo(doc.activeElement, contentWindow, opt_styleNames);
+  return extractElementInfo(
+      contentWindow.document.activeElement, contentWindow, opt_styleNames);
 };
 
 /**
@@ -341,25 +292,22 @@ test.util.sync.inputText = function(contentWindow, query, text) {
  *     element(s), |targetQuery[1]| specifies elements inside the shadow DOM of
  *     the first element, and so on.
  * @param {!Event} event Event to be sent.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
-test.util.sync.sendEvent = function(
-    contentWindow, targetQuery, event, opt_iframeQuery) {
-  var target;
+test.util.sync.sendEvent = function(contentWindow, targetQuery, event) {
+  if (!contentWindow.document)
+    return false;
+
+  let target;
   if (targetQuery === null) {
     target = contentWindow.document.activeElement;
   } else if (typeof targetQuery === 'string') {
-    target =
-        test.util.sync.getElement_(contentWindow, targetQuery, opt_iframeQuery);
+    target = contentWindow.document.querySelector(targetQuery);
   } else if (Array.isArray(targetQuery)) {
-    var doc = test.util.sync.getDocument_(
-        contentWindow, opt_iframeQuery || undefined);
-    if (doc) {
-      var elems = test.util.sync.deepQuerySelectorAll_(doc, targetQuery);
-      if (elems.length > 0)
-        target = elems[0];
-    }
+    let elems = test.util.sync.deepQuerySelectorAll_(
+        contentWindow.document, targetQuery);
+    if (elems.length > 0)
+      target = elems[0];
   }
 
   if (!target)
@@ -405,12 +353,10 @@ test.util.sync.fakeEvent = function(contentWindow,
  * @param {boolean} ctrl Whether CTRL should be pressed, or not.
  * @param {boolean} shift whether SHIFT should be pressed, or not.
  * @param {boolean} alt whether ALT should be pressed, or not.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
 test.util.sync.fakeKeyDown = function(
-    contentWindow, targetQuery, key, keyIdentifier, ctrl, shift, alt,
-    opt_iframeQuery) {
+    contentWindow, targetQuery, key, keyIdentifier, ctrl, shift, alt) {
   var event = new KeyboardEvent('keydown',
       {
         bubbles: true,
@@ -420,8 +366,7 @@ test.util.sync.fakeKeyDown = function(
         shiftKey: shift,
         altKey: alt
       });
-  return test.util.sync.sendEvent(
-      contentWindow, targetQuery, event, opt_iframeQuery);
+  return test.util.sync.sendEvent(contentWindow, targetQuery, event);
 };
 
 /**
@@ -435,24 +380,22 @@ test.util.sync.fakeKeyDown = function(
  *     If targetQuery is an array, |targetQuery[0]| specifies the first
  *     element(s), |targetQuery[1]| specifies elements inside the shadow DOM of
  *     the first element, and so on.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the all events are sent to the target, false
  *     otherwise.
  */
-test.util.sync.fakeMouseClick = function(
-    contentWindow, targetQuery, opt_iframeQuery) {
+test.util.sync.fakeMouseClick = function(contentWindow, targetQuery) {
   var mouseOverEvent = new MouseEvent('mouseover', {bubbles: true, detail: 1});
-  var resultMouseOver = test.util.sync.sendEvent(
-      contentWindow, targetQuery, mouseOverEvent, opt_iframeQuery);
+  var resultMouseOver =
+      test.util.sync.sendEvent(contentWindow, targetQuery, mouseOverEvent);
   var mouseDownEvent = new MouseEvent('mousedown', {bubbles: true, detail: 1});
-  var resultMouseDown = test.util.sync.sendEvent(
-      contentWindow, targetQuery, mouseDownEvent, opt_iframeQuery);
+  var resultMouseDown =
+      test.util.sync.sendEvent(contentWindow, targetQuery, mouseDownEvent);
   var mouseUpEvent = new MouseEvent('mouseup', {bubbles: true, detail: 1});
-  var resultMouseUp = test.util.sync.sendEvent(
-      contentWindow, targetQuery, mouseUpEvent, opt_iframeQuery);
+  var resultMouseUp =
+      test.util.sync.sendEvent(contentWindow, targetQuery, mouseUpEvent);
   var clickEvent = new MouseEvent('click', {bubbles: true, detail: 1});
-  var resultClick = test.util.sync.sendEvent(
-      contentWindow, targetQuery, clickEvent, opt_iframeQuery);
+  var resultClick =
+      test.util.sync.sendEvent(contentWindow, targetQuery, clickEvent);
   return resultMouseOver && resultMouseDown && resultMouseUp && resultClick;
 };
 
@@ -462,21 +405,47 @@ test.util.sync.fakeMouseClick = function(
  *
  * @param {Window} contentWindow Window to be tested.
  * @param {string} targetQuery Query to specify the element.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false
  *     otherwise.
  */
-test.util.sync.fakeMouseRightClick = function(
-    contentWindow, targetQuery, opt_iframeQuery) {
+test.util.sync.fakeMouseRightClick = function(contentWindow, targetQuery) {
+  contentWindow.document.querySelector(targetQuery).focus();
   var mouseDownEvent = new MouseEvent('mousedown', {bubbles: true, button: 2});
-  if (!test.util.sync.sendEvent(contentWindow, targetQuery, mouseDownEvent,
-        opt_iframeQuery)) {
+  if (!test.util.sync.sendEvent(contentWindow, targetQuery, mouseDownEvent)) {
     return false;
   }
 
   var contextMenuEvent = new MouseEvent('contextmenu', {bubbles: true});
-  return test.util.sync.sendEvent(contentWindow, targetQuery, contextMenuEvent,
-      opt_iframeQuery);
+  return test.util.sync.sendEvent(contentWindow, targetQuery, contextMenuEvent);
+};
+
+/**
+ * Simulates a fake touch event (touch start, touch end) on the element
+ * specified by |targetQuery|.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @param {string} targetQuery Query to specify the element.
+ * @return {boolean} True if the event is sent to the target, false
+ *     otherwise.
+ */
+test.util.sync.fakeTouchClick = function(contentWindow, targetQuery) {
+  var touchStartEvent = new TouchEvent('touchstart');
+  if (!test.util.sync.sendEvent(contentWindow, targetQuery, touchStartEvent)) {
+    return false;
+  }
+
+  var mouseDownEvent = new MouseEvent('mousedown', {bubbles: true, button: 2});
+  if (!test.util.sync.sendEvent(contentWindow, targetQuery, mouseDownEvent)) {
+    return false;
+  }
+
+  var touchEndEvent = new TouchEvent('touchend');
+  if (!test.util.sync.sendEvent(contentWindow, targetQuery, touchEndEvent)) {
+    return false;
+  }
+
+  var contextMenuEvent = new MouseEvent('contextmenu', {bubbles: true});
+  return test.util.sync.sendEvent(contentWindow, targetQuery, contextMenuEvent);
 };
 
 /**
@@ -485,29 +454,24 @@ test.util.sync.fakeMouseRightClick = function(
  *
  * @param {Window} contentWindow Window to be tested.
  * @param {string} targetQuery Query to specify the element.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
-test.util.sync.fakeMouseDoubleClick = function(
-    contentWindow, targetQuery, opt_iframeQuery) {
+test.util.sync.fakeMouseDoubleClick = function(contentWindow, targetQuery) {
   // Double click is always preceded with a single click.
-  if (!test.util.sync.fakeMouseClick(
-      contentWindow, targetQuery, opt_iframeQuery)) {
+  if (!test.util.sync.fakeMouseClick(contentWindow, targetQuery)) {
     return false;
   }
 
   // Send the second click event, but with detail equal to 2 (number of clicks)
   // in a row.
   var event = new MouseEvent('click', { bubbles: true, detail: 2 });
-  if (!test.util.sync.sendEvent(
-      contentWindow, targetQuery, event, opt_iframeQuery)) {
+  if (!test.util.sync.sendEvent(contentWindow, targetQuery, event)) {
     return false;
   }
 
   // Send the double click event.
   var event = new MouseEvent('dblclick', { bubbles: true });
-  if (!test.util.sync.sendEvent(
-      contentWindow, targetQuery, event, opt_iframeQuery)) {
+  if (!test.util.sync.sendEvent(contentWindow, targetQuery, event)) {
     return false;
   }
 
@@ -519,14 +483,11 @@ test.util.sync.fakeMouseDoubleClick = function(
  *
  * @param {Window} contentWindow Window to be tested.
  * @param {string} targetQuery Query to specify the element.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
-test.util.sync.fakeMouseDown = function(
-    contentWindow, targetQuery, opt_iframeQuery) {
+test.util.sync.fakeMouseDown = function(contentWindow, targetQuery) {
   var event = new MouseEvent('mousedown', { bubbles: true });
-  return test.util.sync.sendEvent(
-      contentWindow, targetQuery, event, opt_iframeQuery);
+  return test.util.sync.sendEvent(contentWindow, targetQuery, event);
 };
 
 /**
@@ -534,14 +495,11 @@ test.util.sync.fakeMouseDown = function(
  *
  * @param {Window} contentWindow Window to be tested.
  * @param {string} targetQuery Query to specify the element.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
-test.util.sync.fakeMouseUp = function(
-    contentWindow, targetQuery, opt_iframeQuery) {
+test.util.sync.fakeMouseUp = function(contentWindow, targetQuery) {
   var event = new MouseEvent('mouseup', { bubbles: true });
-  return test.util.sync.sendEvent(
-      contentWindow, targetQuery, event, opt_iframeQuery);
+  return test.util.sync.sendEvent(contentWindow, targetQuery, event);
 };
 
 /**
@@ -550,13 +508,13 @@ test.util.sync.fakeMouseUp = function(
  *
  * @param {Window} contentWindow Window to be tested.
  * @param {string} targetQuery Query to specify the element.
- * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if focus method of the element has been called, false
  *     otherwise.
  */
-test.util.sync.focus = function(contentWindow, targetQuery, opt_iframeQuery) {
-  var target = test.util.sync.getElement_(
-      contentWindow, targetQuery, opt_iframeQuery);
+test.util.sync.focus = function(contentWindow, targetQuery) {
+  var target = contentWindow.document &&
+      contentWindow.document.querySelector(targetQuery);
+
   if (!target)
     return false;
 

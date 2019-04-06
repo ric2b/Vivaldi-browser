@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -190,7 +191,7 @@ void PolicyApplicator::GetEntryCallback(
               << new_guid << " because the policy didn't change.";
     } else {
       const base::DictionaryValue* user_settings =
-          ui_data ? ui_data->user_settings() : NULL;
+          ui_data ? ui_data->GetUserSettingsDictionary() : nullptr;
       std::unique_ptr<base::DictionaryValue> new_shill_properties =
           policy_util::CreateShillConfiguration(profile_, new_guid,
                                                 &global_network_config_,
@@ -266,9 +267,7 @@ void PolicyApplicator::GetEntryError(const std::string& entry,
 
 void PolicyApplicator::DeleteEntry(const std::string& entry) {
   DBusThreadManager::Get()->GetShillProfileClient()->DeleteEntry(
-      dbus::ObjectPath(profile_.path),
-      entry,
-      base::Bind(&base::DoNothing),
+      dbus::ObjectPath(profile_.path), entry, base::DoNothing(),
       base::Bind(&LogErrorMessage, FROM_HERE));
 }
 

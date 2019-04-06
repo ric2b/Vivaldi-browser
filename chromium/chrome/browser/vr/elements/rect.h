@@ -6,7 +6,9 @@
 #define CHROME_BROWSER_VR_ELEMENTS_RECT_H_
 
 #include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace vr {
 
@@ -16,7 +18,7 @@ namespace vr {
 // two colors. This radial gradient is not aspect correct; it will be elliptical
 // if the rect is stretched. This is intended to serve as a background to be put
 // behind other elements.
-class Rect : public UiElement {
+class VR_UI_EXPORT Rect : public UiElement {
  public:
   Rect();
   ~Rect() override;
@@ -32,14 +34,25 @@ class Rect : public UiElement {
 
   void NotifyClientColorAnimated(SkColor color,
                                  int target_property_id,
-                                 cc::Animation* animation) override;
+                                 cc::KeyframeModel* keyframe_model) override;
 
   void Render(UiElementRenderer* renderer,
               const CameraModel& model) const override;
 
+  void SetLocalOpacity(float opacity);
+
+  void NotifyClientFloatAnimated(float value,
+                                 int target_property_id,
+                                 cc::KeyframeModel* keyframe_model) override;
+
+  float ComputedAndLocalOpacityForTest() const override;
+
  private:
   SkColor center_color_ = SK_ColorWHITE;
   SkColor edge_color_ = SK_ColorWHITE;
+
+  // This value is not inherited by descendants.
+  float local_opacity_ = 1.0f;
 
   DISALLOW_COPY_AND_ASSIGN(Rect);
 };

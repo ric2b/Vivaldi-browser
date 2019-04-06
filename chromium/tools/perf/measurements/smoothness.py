@@ -53,6 +53,8 @@ class Smoothness(legacy_page_test.LegacyPageTest):
     if self.options and self.options.extra_chrome_categories:
       config.chrome_trace_config.category_filter.AddFilterString(
           self.options.extra_chrome_categories)
+    if self.options and self.options.enable_systrace:
+      config.chrome_trace_config.SetEnableSystrace()
 
     tab.browser.platform.tracing_controller.StartTracing(config)
 
@@ -68,7 +70,7 @@ class Smoothness(legacy_page_test.LegacyPageTest):
     results.AddValue(trace_value)
 
     model = model_module.TimelineModel(trace_result)
-    renderer_thread = model.GetRendererThreadFromTabId(tab.id)
+    renderer_thread = model.GetFirstRendererThread(tab.id)
     records = _CollectRecordsFromRendererThreads(model, renderer_thread)
     metric = smoothness.SmoothnessMetric()
     metric.AddResults(model, renderer_thread, records, results)

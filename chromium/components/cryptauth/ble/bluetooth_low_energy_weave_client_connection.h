@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/cryptauth/ble/bluetooth_low_energy_characteristics_finder.h"
@@ -56,7 +57,7 @@ class BluetoothLowEnergyWeaveClientConnection
   class Factory {
    public:
     static std::unique_ptr<Connection> NewInstance(
-        const RemoteDevice& remote_device,
+        RemoteDeviceRef remote_device,
         scoped_refptr<device::BluetoothAdapter> adapter,
         const device::BluetoothUUID remote_service_uuid,
         device::BluetoothDevice* bluetooth_device,
@@ -65,7 +66,7 @@ class BluetoothLowEnergyWeaveClientConnection
 
    protected:
     virtual std::unique_ptr<Connection> BuildInstance(
-        const RemoteDevice& remote_device,
+        RemoteDeviceRef remote_device,
         scoped_refptr<device::BluetoothAdapter> adapter,
         const device::BluetoothUUID remote_service_uuid,
         device::BluetoothDevice* bluetooth_device,
@@ -91,7 +92,7 @@ class BluetoothLowEnergyWeaveClientConnection
   // Constructs the Connection object; a subsequent call to Connect() is
   // necessary to initiate the BLE connection.
   BluetoothLowEnergyWeaveClientConnection(
-      const RemoteDevice& remote_device,
+      RemoteDeviceRef remote_device,
       scoped_refptr<device::BluetoothAdapter> adapter,
       const device::BluetoothUUID remote_service_uuid,
       device::BluetoothDevice* bluetooth_device,
@@ -103,6 +104,8 @@ class BluetoothLowEnergyWeaveClientConnection
   void Connect() override;
   void Disconnect() override;
   std::string GetDeviceAddress() override;
+  void GetConnectionRssi(
+      base::OnceCallback<void(base::Optional<int32_t>)> callback) override;
 
  protected:
   enum BleWeaveConnectionResult {
@@ -134,7 +137,7 @@ class BluetoothLowEnergyWeaveClientConnection
 
   void SetupTestDoubles(
       scoped_refptr<base::TaskRunner> test_task_runner,
-      std::unique_ptr<base::Timer> test_timer,
+      std::unique_ptr<base::OneShotTimer> test_timer,
       std::unique_ptr<BluetoothLowEnergyWeavePacketGenerator> test_generator,
       std::unique_ptr<BluetoothLowEnergyWeavePacketReceiver> test_receiver);
 
@@ -172,6 +175,8 @@ class BluetoothLowEnergyWeaveClientConnection
                            ConnectSuccess);
   FRIEND_TEST_ALL_PREFIXES(CryptAuthBluetoothLowEnergyWeaveClientConnectionTest,
                            ConnectSuccessDisconnect);
+  FRIEND_TEST_ALL_PREFIXES(CryptAuthBluetoothLowEnergyWeaveClientConnectionTest,
+                           DisconnectCalledTwice);
   FRIEND_TEST_ALL_PREFIXES(CryptAuthBluetoothLowEnergyWeaveClientConnectionTest,
                            ConnectSuccessDisconnect_DoNotSetLowLatency);
   FRIEND_TEST_ALL_PREFIXES(
@@ -296,6 +301,10 @@ class BluetoothLowEnergyWeaveClientConnection
   void SetSubStatus(SubStatus status);
   void OnTimeoutForSubStatus(SubStatus status);
 
+  void OnConnectionInfo(
+      base::RepeatingCallback<void(base::Optional<int32_t>)> rssi_callback,
+      const device::BluetoothDevice::ConnectionInfo& connection_info);
+
   // These functions are used to set up the connection so that it is ready to
   // send/receive data.
   void SetConnectionLatency();
@@ -358,6 +367,8 @@ class BluetoothLowEnergyWeaveClientConnection
 
   bool should_set_low_connection_latency_;
 
+  bool has_triggered_disconnection_ = false;
+
   // Tracks if the result of this connection has been recorded (using
   // BleWeaveConnectionResult). The result of a connection should only be
   // recorded once.
@@ -370,7 +381,7 @@ class BluetoothLowEnergyWeaveClientConnection
   RemoteAttribute tx_characteristic_;
   RemoteAttribute rx_characteristic_;
   scoped_refptr<base::TaskRunner> task_runner_;
-  std::unique_ptr<base::Timer> timer_;
+  std::unique_ptr<base::OneShotTimer> timer_;
 
   // These pointers start out null and are created during the connection
   // process.

@@ -24,7 +24,6 @@ using bookmarks::BookmarkNode;
 
 namespace extensions {
 
-namespace keys = bookmark_api_constants;
 using api::bookmarks::BookmarkTreeNode;
 
 namespace bookmark_api_helpers {
@@ -145,19 +144,19 @@ bool RemoveNode(BookmarkModel* model,
                 std::string* error) {
   const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, id);
   if (!node) {
-    *error = keys::kNoNodeError;
+    *error = bookmark_api_constants::kNoNodeError;
     return false;
   }
   if (model->is_permanent_node(node)) {
-    *error = keys::kModifySpecialError;
+    *error = bookmark_api_constants::kModifySpecialError;
     return false;
   }
   if (bookmarks::IsDescendantOf(node, managed->managed_node())) {
-    *error = keys::kModifyManagedError;
+    *error = bookmark_api_constants::kModifyManagedError;
     return false;
   }
   if (node->is_folder() && !node->empty() && !recursive) {
-    *error = keys::kFolderNotEmptyError;
+    *error = bookmark_api_constants::kFolderNotEmptyError;
     return false;
   }
 
@@ -186,32 +185,6 @@ void GetMetaInfo(const BookmarkNode& node,
     }
   }
 }
-
-bool MoveNodeToTrash(BookmarkModel* model,
-                     bookmarks::ManagedBookmarkService* managed,
-                     int64_t id,
-                     int insert_pos,
-                     std::string* error) {
-  const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, id);
-  if (!node) {
-    *error = keys::kNoNodeError;
-    return false;
-  }
-  if (model->is_permanent_node(node)) {
-    *error = keys::kModifySpecialError;
-    return false;
-  }
-  if (!model->trash_node() ||
-    bookmarks::IsDescendantOf(node, model->trash_node())) {
-    // If it's already in trash, just delete it.
-    model->Remove(node);
-  } else {
-    // Place it at the given offset.
-    model->Move(node, model->trash_node(), insert_pos);
-  }
-  return true;
-}
-
 
 }  // namespace bookmark_api_helpers
 }  // namespace extensions

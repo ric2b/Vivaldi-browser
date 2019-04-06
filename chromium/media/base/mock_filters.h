@@ -68,14 +68,15 @@ class MockPipelineClient : public Pipeline::Client {
 class MockPipeline : public Pipeline {
  public:
   MockPipeline();
-  virtual ~MockPipeline();
+  ~MockPipeline() override;
 
   // Note: Start() and Resume() declarations are not actually overrides; they
   // take unique_ptr* instead of unique_ptr so that they can be mock methods.
   // Private stubs for Start() and Resume() implement the actual Pipeline
   // interface by forwarding to these mock methods.
-  MOCK_METHOD4(Start,
-               void(Demuxer*,
+  MOCK_METHOD5(Start,
+               void(StartType start_type,
+                    Demuxer*,
                     std::unique_ptr<Renderer>*,
                     Client*,
                     const PipelineStatusCB&));
@@ -86,15 +87,16 @@ class MockPipeline : public Pipeline {
                void(std::unique_ptr<Renderer>*,
                     base::TimeDelta,
                     const PipelineStatusCB&));
-
-  MOCK_METHOD1(OnEnabledAudioTracksChanged,
-               void(const std::vector<MediaTrack::Id>&));
-  MOCK_METHOD1(OnSelectedVideoTrackChanged,
-               void(base::Optional<MediaTrack::Id>));
+  MOCK_METHOD2(OnEnabledAudioTracksChanged,
+               void(const std::vector<MediaTrack::Id>&, base::OnceClosure));
+  MOCK_METHOD2(OnSelectedVideoTrackChanged,
+               void(base::Optional<MediaTrack::Id>, base::OnceClosure));
 
   // TODO(sandersd): This should automatically return true between Start() and
   // Stop(). (Or better, remove it from the interface entirely.)
   MOCK_CONST_METHOD0(IsRunning, bool());
+
+  MOCK_CONST_METHOD0(IsSuspended, bool());
 
   // TODO(sandersd): These should be regular getters/setters.
   MOCK_CONST_METHOD0(GetPlaybackRate, double());
@@ -113,7 +115,8 @@ class MockPipeline : public Pipeline {
 
  private:
   // Forwarding stubs (see comment above).
-  void Start(Demuxer* demuxer,
+  void Start(StartType start_type,
+             Demuxer* demuxer,
              std::unique_ptr<Renderer> renderer,
              Client* client,
              const PipelineStatusCB& seek_cb) override;
@@ -127,27 +130,29 @@ class MockPipeline : public Pipeline {
 class MockDemuxer : public Demuxer {
  public:
   MockDemuxer();
-  virtual ~MockDemuxer();
+  ~MockDemuxer() override;
 
   // Demuxer implementation.
-  virtual std::string GetDisplayName() const;
-  MOCK_METHOD3(Initialize,
-               void(DemuxerHost* host, const PipelineStatusCB& cb, bool));
+  std::string GetDisplayName() const override;
+  MOCK_METHOD2(Initialize, void(DemuxerHost* host, const PipelineStatusCB& cb));
   MOCK_METHOD1(StartWaitingForSeek, void(base::TimeDelta));
   MOCK_METHOD1(CancelPendingSeek, void(base::TimeDelta));
   MOCK_METHOD2(Seek, void(base::TimeDelta time, const PipelineStatusCB& cb));
   MOCK_METHOD0(Stop, void());
   MOCK_METHOD0(AbortPendingReads, void());
   MOCK_METHOD0(GetAllStreams, std::vector<DemuxerStream*>());
-  MOCK_METHOD1(SetStreamStatusChangeCB, void(const StreamStatusChangeCB& cb));
 
   MOCK_CONST_METHOD0(GetStartTime, base::TimeDelta());
   MOCK_CONST_METHOD0(GetTimelineOffset, base::Time());
   MOCK_CONST_METHOD0(GetMemoryUsage, int64_t());
-  MOCK_METHOD2(OnEnabledAudioTracksChanged,
-               void(const std::vector<MediaTrack::Id>&, base::TimeDelta));
-  MOCK_METHOD2(OnSelectedVideoTrackChanged,
-               void(base::Optional<MediaTrack::Id>, base::TimeDelta));
+  MOCK_METHOD3(OnEnabledAudioTracksChanged,
+               void(const std::vector<MediaTrack::Id>&,
+                    base::TimeDelta,
+                    TrackChangeCB));
+  MOCK_METHOD3(OnSelectedVideoTrackChanged,
+               void(const std::vector<MediaTrack::Id>&,
+                    base::TimeDelta,
+                    TrackChangeCB));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockDemuxer);
@@ -156,7 +161,7 @@ class MockDemuxer : public Demuxer {
 class MockDemuxerStream : public DemuxerStream {
  public:
   explicit MockDemuxerStream(DemuxerStream::Type type);
-  virtual ~MockDemuxerStream();
+  ~MockDemuxerStream() override;
 
   // DemuxerStream implementation.
   Type type() const override;
@@ -184,21 +189,24 @@ class MockVideoDecoder : public VideoDecoder {
  public:
   explicit MockVideoDecoder(
       const std::string& decoder_name = "MockVideoDecoder");
-  virtual ~MockVideoDecoder();
+  ~MockVideoDecoder() override;
 
   // VideoDecoder implementation.
-  virtual std::string GetDisplayName() const;
-  MOCK_METHOD5(Initialize,
-               void(const VideoDecoderConfig& config,
-                    bool low_delay,
-                    CdmContext* cdm_context,
-                    const InitCB& init_cb,
-                    const OutputCB& output_cb));
-  MOCK_METHOD2(Decode, void(const scoped_refptr<DecoderBuffer>& buffer,
-                            const DecodeCB&));
+  std::string GetDisplayName() const override;
+  MOCK_METHOD6(
+      Initialize,
+      void(const VideoDecoderConfig& config,
+           bool low_delay,
+           CdmContext* cdm_context,
+           const InitCB& init_cb,
+           const OutputCB& output_cb,
+           const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb));
+  MOCK_METHOD2(Decode,
+               void(scoped_refptr<DecoderBuffer> buffer, const DecodeCB&));
   MOCK_METHOD1(Reset, void(const base::Closure&));
-  MOCK_CONST_METHOD0(HasAlpha, bool());
+  MOCK_CONST_METHOD0(GetMaxDecodeRequests, int());
   MOCK_CONST_METHOD0(CanReadWithoutStalling, bool());
+  MOCK_CONST_METHOD0(NeedsBitstreamConversion, bool());
 
  private:
   std::string decoder_name_;
@@ -209,18 +217,19 @@ class MockAudioDecoder : public AudioDecoder {
  public:
   explicit MockAudioDecoder(
       const std::string& decoder_name = "MockAudioDecoder");
-  virtual ~MockAudioDecoder();
+  ~MockAudioDecoder() override;
 
   // AudioDecoder implementation.
-  virtual std::string GetDisplayName() const;
-  MOCK_METHOD4(Initialize,
-               void(const AudioDecoderConfig& config,
-                    CdmContext* cdm_context,
-                    const InitCB& init_cb,
-                    const OutputCB& output_cb));
+  std::string GetDisplayName() const override;
+  MOCK_METHOD5(
+      Initialize,
+      void(const AudioDecoderConfig& config,
+           CdmContext* cdm_context,
+           const InitCB& init_cb,
+           const OutputCB& output_cb,
+           const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb));
   MOCK_METHOD2(Decode,
-               void(const scoped_refptr<DecoderBuffer>& buffer,
-                    const DecodeCB&));
+               void(scoped_refptr<DecoderBuffer> buffer, const DecodeCB&));
   MOCK_METHOD1(Reset, void(const base::Closure&));
 
  private:
@@ -249,7 +258,7 @@ class MockRendererClient : public RendererClient {
 class MockVideoRenderer : public VideoRenderer {
  public:
   MockVideoRenderer();
-  virtual ~MockVideoRenderer();
+  ~MockVideoRenderer() override;
 
   // VideoRenderer implementation.
   MOCK_METHOD5(Initialize,
@@ -270,7 +279,7 @@ class MockVideoRenderer : public VideoRenderer {
 class MockAudioRenderer : public AudioRenderer {
  public:
   MockAudioRenderer();
-  virtual ~MockAudioRenderer();
+  ~MockAudioRenderer() override;
 
   // AudioRenderer implementation.
   MOCK_METHOD4(Initialize,
@@ -290,7 +299,7 @@ class MockAudioRenderer : public AudioRenderer {
 class MockRenderer : public Renderer {
  public:
   MockRenderer();
-  virtual ~MockRenderer();
+  ~MockRenderer() override;
 
   // Renderer implementation.
   MOCK_METHOD3(Initialize,
@@ -307,6 +316,10 @@ class MockRenderer : public Renderer {
   MOCK_METHOD2(SetCdm,
                void(CdmContext* cdm_context,
                     const CdmAttachedCB& cdm_attached_cb));
+  MOCK_METHOD2(OnSelectedVideoTrackChanged,
+               void(std::vector<DemuxerStream*>, base::OnceClosure));
+  MOCK_METHOD2(OnSelectedAudioTracksChanged,
+               void(std::vector<DemuxerStream*>, base::OnceClosure));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockRenderer);
@@ -315,7 +328,7 @@ class MockRenderer : public Renderer {
 class MockTimeSource : public TimeSource {
  public:
   MockTimeSource();
-  virtual ~MockTimeSource();
+  ~MockTimeSource() override;
 
   // TimeSource implementation.
   MOCK_METHOD0(StartTicking, void());
@@ -334,13 +347,14 @@ class MockTimeSource : public TimeSource {
 class MockTextTrack : public TextTrack {
  public:
   MockTextTrack();
-  virtual ~MockTextTrack();
+  ~MockTextTrack() override;
 
-  MOCK_METHOD5(addWebVTTCue, void(const base::TimeDelta& start,
-                                  const base::TimeDelta& end,
-                                  const std::string& id,
-                                  const std::string& content,
-                                  const std::string& settings));
+  MOCK_METHOD5(addWebVTTCue,
+               void(base::TimeDelta start,
+                    base::TimeDelta end,
+                    const std::string& id,
+                    const std::string& content,
+                    const std::string& settings));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockTextTrack);
@@ -360,8 +374,7 @@ class MockCdmClient {
                     const std::vector<uint8_t>& message));
   MOCK_METHOD1(OnSessionClosed, void(const std::string& session_id));
 
-  // MOCK methods don't work with move-only types like CdmKeysInfo. Add an extra
-  // OnSessionKeysChangeCalled() function to work around this.
+  // Add OnSessionKeysChangeCalled() function so we can store |keys_info|.
   MOCK_METHOD2(OnSessionKeysChangeCalled,
                void(const std::string& session_id,
                     bool has_additional_usable_key));
@@ -384,13 +397,14 @@ class MockCdmClient {
 class MockDecryptor : public Decryptor {
  public:
   MockDecryptor();
-  virtual ~MockDecryptor();
+  ~MockDecryptor() override;
 
-  MOCK_METHOD2(RegisterNewKeyCB, void(StreamType stream_type,
-                                      const NewKeyCB& new_key_cb));
-  MOCK_METHOD3(Decrypt, void(StreamType stream_type,
-                             const scoped_refptr<DecoderBuffer>& encrypted,
-                             const DecryptCB& decrypt_cb));
+  MOCK_METHOD2(RegisterNewKeyCB,
+               void(StreamType stream_type, const NewKeyCB& new_key_cb));
+  MOCK_METHOD3(Decrypt,
+               void(StreamType stream_type,
+                    scoped_refptr<DecoderBuffer> encrypted,
+                    const DecryptCB& decrypt_cb));
   MOCK_METHOD1(CancelDecrypt, void(StreamType stream_type));
   MOCK_METHOD2(InitializeAudioDecoder,
                void(const AudioDecoderConfig& config,
@@ -399,10 +413,10 @@ class MockDecryptor : public Decryptor {
                void(const VideoDecoderConfig& config,
                     const DecoderInitCB& init_cb));
   MOCK_METHOD2(DecryptAndDecodeAudio,
-               void(const scoped_refptr<media::DecoderBuffer>& encrypted,
+               void(scoped_refptr<DecoderBuffer> encrypted,
                     const AudioDecodeCB& audio_decode_cb));
   MOCK_METHOD2(DecryptAndDecodeVideo,
-               void(const scoped_refptr<media::DecoderBuffer>& encrypted,
+               void(scoped_refptr<DecoderBuffer> encrypted,
                     const VideoDecodeCB& video_decode_cb));
   MOCK_METHOD1(ResetDecoder, void(StreamType stream_type));
   MOCK_METHOD1(DeinitializeDecoder, void(StreamType stream_type));
@@ -468,52 +482,28 @@ class MockCdm : public ContentDecryptionModule {
           const SessionExpirationUpdateCB& session_expiration_update_cb);
 
   // ContentDecryptionModule implementation.
-  // As move-only parameters aren't supported by mock methods, convert promises
-  // into IDs and pass them to On... methods.
-  void SetServerCertificate(const std::vector<uint8_t>& certificate,
-                            std::unique_ptr<SimpleCdmPromise> promise) override;
-  MOCK_METHOD2(OnSetServerCertificate,
+  MOCK_METHOD2(SetServerCertificate,
                void(const std::vector<uint8_t>& certificate,
-                    std::unique_ptr<SimpleCdmPromise>& promise));
-
-  void CreateSessionAndGenerateRequest(
-      CdmSessionType session_type,
-      EmeInitDataType init_data_type,
-      const std::vector<uint8_t>& init_data,
-      std::unique_ptr<NewSessionCdmPromise> promise) override;
-  MOCK_METHOD4(OnCreateSessionAndGenerateRequest,
+                    std::unique_ptr<SimpleCdmPromise> promise));
+  MOCK_METHOD4(CreateSessionAndGenerateRequest,
                void(CdmSessionType session_type,
                     EmeInitDataType init_data_type,
                     const std::vector<uint8_t>& init_data,
-                    std::unique_ptr<NewSessionCdmPromise>& promise));
-
-  void LoadSession(CdmSessionType session_type,
-                   const std::string& session_id,
-                   std::unique_ptr<NewSessionCdmPromise> promise) override;
-  MOCK_METHOD3(OnLoadSession,
+                    std::unique_ptr<NewSessionCdmPromise> promise));
+  MOCK_METHOD3(LoadSession,
                void(CdmSessionType session_type,
                     const std::string& session_id,
-                    std::unique_ptr<NewSessionCdmPromise>& promise));
-
-  void UpdateSession(const std::string& session_id,
-                     const std::vector<uint8_t>& response,
-                     std::unique_ptr<SimpleCdmPromise> promise) override;
-  MOCK_METHOD3(OnUpdateSession,
+                    std::unique_ptr<NewSessionCdmPromise> promise));
+  MOCK_METHOD3(UpdateSession,
                void(const std::string& session_id,
                     const std::vector<uint8_t>& response,
-                    std::unique_ptr<SimpleCdmPromise>& promise));
-
-  void CloseSession(const std::string& session_id,
-                    std::unique_ptr<SimpleCdmPromise> promise) override;
-  MOCK_METHOD2(OnCloseSession,
+                    std::unique_ptr<SimpleCdmPromise> promise));
+  MOCK_METHOD2(CloseSession,
                void(const std::string& session_id,
-                    std::unique_ptr<SimpleCdmPromise>& promise));
-
-  void RemoveSession(const std::string& session_id,
-                     std::unique_ptr<SimpleCdmPromise> promise) override;
-  MOCK_METHOD2(OnRemoveSession,
+                    std::unique_ptr<SimpleCdmPromise> promise));
+  MOCK_METHOD2(RemoveSession,
                void(const std::string& session_id,
-                    std::unique_ptr<SimpleCdmPromise>& promise));
+                    std::unique_ptr<SimpleCdmPromise> promise));
 
   MOCK_METHOD0(GetCdmContext, CdmContext*());
 
@@ -588,7 +578,7 @@ class MockStreamParser : public StreamParser {
   // StreamParser interface
   MOCK_METHOD8(
       Init,
-      void(const InitCB& init_cb,
+      void(InitCB init_cb,
            const NewConfigCB& config_cb,
            const NewBuffersCB& new_buffers_cb,
            bool ignore_text_track,
@@ -597,6 +587,7 @@ class MockStreamParser : public StreamParser {
            const EndMediaSegmentCB& end_of_segment_cb,
            MediaLog* media_log));
   MOCK_METHOD0(Flush, void());
+  MOCK_CONST_METHOD0(GetGenerateTimestampsFlag, bool());
   MOCK_METHOD2(Parse, bool(const uint8_t*, int));
 
  private:

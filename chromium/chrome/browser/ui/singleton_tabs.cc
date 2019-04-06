@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/singleton_tabs.h"
 
+#include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
@@ -19,13 +20,11 @@ namespace {
 // Returns true if two URLs are equal after taking |replacements| into account.
 bool CompareURLsWithReplacements(const GURL& url,
                                  const GURL& other,
-                                 const url::Replacements<char>& replacements) {
-  if (url == other)
-    return true;
-
+                                 const url::Replacements<char>& replacements,
+                                 ChromeAutocompleteProviderClient* client) {
   GURL url_replaced = url.ReplaceComponents(replacements);
   GURL other_replaced = other.ReplaceComponents(replacements);
-  return url_replaced == other_replaced;
+  return client->StrippedURLsAreEqual(url_replaced, other_replaced, nullptr);
 }
 
 }  // namespace
@@ -37,31 +36,29 @@ void ShowSingletonTab(Browser* browser, const GURL& url) {
 
 void ShowSingletonTabRespectRef(Browser* browser, const GURL& url) {
   NavigateParams params(GetSingletonTabNavigateParams(browser, url));
-  params.ref_behavior = NavigateParams::RESPECT_REF;
   Navigate(&params);
 }
 
-void ShowSingletonTabOverwritingNTP(Browser* browser,
-                                    const NavigateParams& params) {
+void ShowSingletonTabOverwritingNTP(Browser* browser, NavigateParams params) {
   DCHECK(browser);
-  NavigateParams local_params(params);
+  DCHECK_EQ(params.disposition, WindowOpenDisposition::SINGLETON_TAB);
   content::WebContents* contents =
       browser->tab_strip_model()->GetActiveWebContents();
   if (contents) {
     const GURL& contents_url = contents->GetVisibleURL();
     if (contents_url == chrome::kChromeUINewTabURL ||
         search::IsInstantNTP(contents) || contents_url == url::kAboutBlankURL) {
-      int tab_index = GetIndexOfExistingTab(browser, local_params);
+      int tab_index = GetIndexOfExistingTab(browser, params);
       if (tab_index < 0) {
-        local_params.disposition = WindowOpenDisposition::CURRENT_TAB;
+        params.disposition = WindowOpenDisposition::CURRENT_TAB;
       } else {
-        local_params.target_contents =
+        params.switch_to_singleton_tab =
             browser->tab_strip_model()->GetWebContentsAt(tab_index);
       }
     }
   }
 
-  Navigate(&local_params);
+  Navigate(&params);
 }
 
 NavigateParams GetSingletonTabNavigateParams(Browser* browser,
@@ -89,6 +86,7 @@ int GetIndexOfExistingTab(Browser* browser, const NavigateParams& params) {
   content::BrowserURLHandler::GetInstance()->RewriteURLIfNecessary(
       &rewritten_url, browser->profile(), &reverse_on_redirect);
 
+  ChromeAutocompleteProviderClient client(browser->profile());
   // If there are several matches: prefer the active tab by starting there.
   int start_index = std::max(0, browser->tab_strip_model()->active_index());
   int tab_count = browser->tab_strip_model()->count();
@@ -109,17 +107,16 @@ int GetIndexOfExistingTab(Browser* browser, const NavigateParams& params) {
         &rewritten_tab_url, browser->profile(), &reverse_on_redirect);
 
     url::Replacements<char> replacements;
-    if (params.ref_behavior == NavigateParams::IGNORE_REF)
-      replacements.ClearRef();
-    if (params.path_behavior == NavigateParams::IGNORE_AND_NAVIGATE ||
-        params.path_behavior == NavigateParams::IGNORE_AND_STAY_PUT) {
+    replacements.ClearRef();
+    if (params.path_behavior == NavigateParams::IGNORE_AND_NAVIGATE) {
       replacements.ClearPath();
       replacements.ClearQuery();
     }
 
-    if (CompareURLsWithReplacements(tab_url, params.url, replacements) ||
+    if (CompareURLsWithReplacements(tab_url, params.url, replacements,
+                                    &client) ||
         CompareURLsWithReplacements(rewritten_tab_url, rewritten_url,
-                                    replacements)) {
+                                    replacements, &client)) {
       return tab_index;
     }
   }

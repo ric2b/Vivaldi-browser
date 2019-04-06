@@ -68,8 +68,4 @@ const std::string& ContentLiveTab::GetUserAgentOverride() const {
   return web_contents()->GetUserAgentOverride();
 }
 
-const std::string& ContentLiveTab::GetExtData() const {
-  return web_contents()->GetExtData();
-}
-
 }  // namespace sessions

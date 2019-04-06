@@ -17,8 +17,8 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,6 +30,7 @@
 #include "components/dom_distiller/core/proto/distilled_article.pb.h"
 #include "components/dom_distiller/core/proto/distilled_page.pb.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/dom_distiller_js/dom_distiller.pb.h"
@@ -242,7 +243,7 @@ class TestDistillerURLFetcher : public DistillerURLFetcher {
   }
 
   void PostCallbackTask() {
-    ASSERT_TRUE(base::MessageLoop::current());
+    ASSERT_TRUE(base::MessageLoopCurrent::Get());
     ASSERT_FALSE(callback_.is_null());
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(callback_, responses_[url_]));
@@ -268,7 +269,7 @@ class TestDistillerURLFetcherFactory : public DistillerURLFetcherFactory {
 class MockDistillerURLFetcherFactory : public DistillerURLFetcherFactory {
  public:
   MockDistillerURLFetcherFactory() : DistillerURLFetcherFactory(nullptr) {}
-  virtual ~MockDistillerURLFetcherFactory() {}
+  ~MockDistillerURLFetcherFactory() override {}
 
   MOCK_CONST_METHOD0(CreateDistillerURLFetcher, DistillerURLFetcher*());
 };
@@ -535,7 +536,7 @@ TEST_F(DistillerTest, CheckMaxPageLimitExactLimit) {
 TEST_F(DistillerTest, SinglePageDistillationFailure) {
   base::MessageLoopForUI loop;
   // To simulate failure return a null value.
-  auto null_value = base::MakeUnique<base::Value>();
+  auto null_value = std::make_unique<base::Value>();
   distiller_.reset(
       new DistillerImpl(url_fetcher_factory_, DomDistillerOptions()));
   DistillPage(kURL, CreateMockDistillerPage(null_value.get(), GURL(kURL)));
@@ -557,7 +558,7 @@ TEST_F(DistillerTest, MultiplePagesDistillationFailure) {
       distiller_data->distilled_values.begin() + failed_page_num);
   distiller_data->distilled_values.insert(
       distiller_data->distilled_values.begin() + failed_page_num,
-      base::MakeUnique<base::Value>());
+      std::make_unique<base::Value>());
   // Expect only calls till the failed page number.
   distiller_.reset(
       new DistillerImpl(url_fetcher_factory_, DomDistillerOptions()));

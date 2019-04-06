@@ -16,6 +16,8 @@
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "url/gurl.h"
 
+class ExtensionViewViews;
+
 namespace views {
 class Widget;
 }
@@ -94,8 +96,7 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
                  views::BubbleBorder::Arrow arrow,
                  ShowAction show_action);
 
-  // Called on anchor window activation (ie. user clicked the browser window).
-  void OnAnchorWindowActivation();
+  void CloseUnlessUnderInspection();
 
  private:
   static ExtensionPopup* Create(extensions::ExtensionViewHost* host,
@@ -111,6 +112,8 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
       content::DevToolsAgentHost* agent_host) override;
   void DevToolsAgentHostDetached(
       content::DevToolsAgentHost* agent_host) override;
+
+  ExtensionViewViews* GetExtensionView();
 
   // The contained host for the view.
   std::unique_ptr<extensions::ExtensionViewHost> host_;

@@ -10,6 +10,8 @@
 
 #include "importer/viv_importer_utils.h"
 
+using base::PathService;
+
 static const wchar_t* kOperaRegPath = L"Software\\Opera Software";
 static const wchar_t* kOpera = L"Opera";
 static const wchar_t* kOpera64bitFolder = L"Opera x64";

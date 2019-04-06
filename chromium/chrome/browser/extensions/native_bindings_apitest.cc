@@ -12,7 +12,6 @@
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/lazy_background_page_test_util.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -26,6 +25,7 @@
 #include "extensions/common/switches.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 
 namespace extensions {
@@ -102,7 +102,7 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, DeclarativeEvents) {
       ExtensionActionManager::Get(profile())->GetPageAction(*extension);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  int tab_id = SessionTabHelper::IdForTab(web_contents);
+  int tab_id = SessionTabHelper::IdForTab(web_contents).id();
   EXPECT_FALSE(page_action->GetIsVisible(tab_id));
   EXPECT_TRUE(page_action->GetDeclarativeIcon(tab_id).IsEmpty());
 
@@ -281,6 +281,15 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, WebUIBindings) {
   EXPECT_FALSE(api_exists("chrome.networkingPrivate"));
   EXPECT_FALSE(api_exists("chrome.sockets"));
   EXPECT_FALSE(api_exists("chrome.browserAction"));
+}
+
+// Tests creating an API from a context that hasn't been initialized yet
+// by doing so in a parent frame. Regression test for https://crbug.com/819968.
+IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, APICreationFromNewContext) {
+  embedded_test_server()->ServeFilesFromDirectory(test_data_dir_);
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionTest("native_bindings/context_initialization"))
+      << message_;
 }
 
 }  // namespace extensions

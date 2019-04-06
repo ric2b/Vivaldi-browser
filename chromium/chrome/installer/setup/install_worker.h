@@ -85,6 +85,13 @@ void AddInstallWorkItems(const InstallationState& original_state,
                          const base::Version& new_version,
                          WorkItemList* install_list);
 
+// Adds work items to |list| to register a COM server with the OS after deleting
+// the old ones, which is used to handle the toast notification activation.
+void AddNativeNotificationWorkItems(
+    HKEY root,
+    const base::FilePath& notification_helper_path,
+    WorkItemList* list);
+
 void AddSetMsiMarkerWorkItem(const InstallerState& installer_state,
                              BrowserDistribution* dist,
                              bool set,
@@ -118,6 +125,19 @@ void AddOsUpgradeWorkItems(const InstallerState& installer_state,
                            const base::Version& new_version,
                            const Product& product,
                            WorkItemList* install_list);
+
+#if defined(GOOGLE_CHROME_BUILD)
+// Adds work items to add or remove the "store-dmtoken" command to |product|'s
+// version key. This method is a no-op if this is anything other than
+// system-level Chrome. The command is used when enrolling Chrome browser
+// instances into enterprise management. |new_version| is the version of the
+// product(s) currently being installed -- can be empty on uninstall.
+void AddEnterpriseEnrollmentWorkItems(const InstallerState& installer_state,
+                                      const base::FilePath& setup_path,
+                                      const base::Version& new_version,
+                                      const Product& product,
+                                      WorkItemList* install_list);
+#endif
 
 }  // namespace installer
 

@@ -22,6 +22,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/common/referrer.h"
+#include "third_party/blink/public/common/frame/user_activation_update_type.h"
 #include "ui/base/page_transition_types.h"
 #include "url/origin.h"
 
@@ -139,8 +140,8 @@ class CONTENT_EXPORT RenderFrameHostManager
     // TODO(nasko): This should be removed once extensions no longer use
     // NotificationService. See https://crbug.com/462682.
     virtual void NotifyMainFrameSwappedFromRenderManager(
-        RenderViewHost* old_host,
-        RenderViewHost* new_host) = 0;
+        RenderFrameHost* old_host,
+        RenderFrameHost* new_host) = 0;
     virtual NavigationControllerImpl&
         GetControllerForRenderManager() = 0;
 
@@ -225,6 +226,9 @@ class CONTENT_EXPORT RenderFrameHostManager
   // that contains the inner WebContents.
   FrameTreeNode* GetOuterDelegateNode();
 
+  // Return a proxy for this frame in the parent frame's SiteInstance.  Returns
+  // nullptr if this is a main frame or if such a proxy does not exist (for
+  // example, if this frame is same-site with its parent).
   RenderFrameProxyHost* GetProxyToParent();
 
   // Returns the proxy to inner WebContents in the outer WebContents's
@@ -280,7 +284,8 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Called when a renderer's frame navigates.
   void DidNavigateFrame(RenderFrameHostImpl* render_frame_host,
-                        bool was_caused_by_user_gesture);
+                        bool was_caused_by_user_gesture,
+                        bool is_same_document_navigation);
 
   // Called when this frame's opener is changed to the frame specified by
   // |opener_routing_id| in |source_site_instance|'s process.  This change
@@ -390,10 +395,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   // skipping the parent process.
   void OnDidUpdateFrameOwnerProperties(const FrameOwnerProperties& properties);
 
-  // Notify the proxies that the active sandbox flags on the frame have been
-  // changed during page load. This happens when a CSP header sets sandbox
-  // flags.
-  void OnDidSetActiveSandboxFlags();
+  // Notify the proxies that the active sandbox flags or feature policy header
+  // on the frame have been changed during page load. Sandbox flags can change
+  // when set by a CSP header.
+  void OnDidSetFramePolicyHeaders();
 
   // Send updated origin to all frame proxies when the frame navigates to a new
   // origin.
@@ -463,7 +468,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   // match the provided |render_frame_host|.
   void CancelPendingIfNecessary(RenderFrameHostImpl* render_frame_host);
 
-  void OnSetHasReceivedUserGesture();
+  // Updates the user activation state in all proxies of this frame.  For
+  // more details, see the comment on FrameTreeNode::user_activation_state_.
+  void UpdateUserActivationState(blink::UserActivationUpdateType update_type);
+
   void OnSetHasReceivedUserGestureBeforeNavigation(bool value);
 
   // Sets up the necessary state for a new RenderViewHost.  If |proxy| is not
@@ -557,7 +565,8 @@ class CONTENT_EXPORT RenderFrameHostManager
       bool current_is_view_source_mode,
       SiteInstance* new_site_instance,
       const GURL& new_effective_url,
-      bool new_is_view_source_mode) const;
+      bool new_is_view_source_mode,
+      bool is_failure) const;
 
   // Returns the SiteInstance to use for the navigation.
   scoped_refptr<SiteInstance> GetSiteInstanceForNavigation(
@@ -566,6 +575,7 @@ class CONTENT_EXPORT RenderFrameHostManager
       SiteInstance* dest_instance,
       SiteInstance* candidate_instance,
       ui::PageTransition transition,
+      bool is_failure,
       bool dest_is_restore,
       bool dest_is_view_source_mode,
       bool was_server_redirect);
@@ -590,10 +600,32 @@ class CONTENT_EXPORT RenderFrameHostManager
       SiteInstance* current_instance,
       SiteInstance* dest_instance,
       ui::PageTransition transition,
+      bool is_failure,
       bool dest_is_restore,
       bool dest_is_view_source_mode,
       bool force_browsing_instance_swap,
       bool was_server_redirect);
+
+  // Returns true if a navigation to |dest_url| that uses the specified
+  // PageTransition in the current frame is allowed to swap BrowsingInstances.
+  // DetermineSiteInstanceForURL() uses this helper to determine when it is
+  // allowed to swap BrowsingInstances to avoid unneeded process sharing.  See
+  // https://crbug.com/803367.
+  //
+  // Note that this is different from
+  // ShouldSwapBrowsingInstancesForNavigation(), which identifies cases in
+  // which a BrowsingInstance swap is *required* (e.g., for security). This
+  // function only identifies cases where a BrowsingInstance swap *may* be
+  // performed to optimize process placement.  In particular, this is true for
+  // certain browser-initiated transitions for main frame navigations.
+  //
+  // Returning true here doesn't imply that DetermineSiteInstanceForURL() will
+  // swap BrowsingInstances.  For example, this swap will not be done for
+  // same-site navigations, for history navigations, or when starting from an
+  // uninitialized SiteInstance.
+  bool IsBrowsingInstanceSwapAllowedForPageTransition(
+      ui::PageTransition transition,
+      const GURL& dest_url);
 
   // Converts a SiteInstanceDescriptor to the actual SiteInstance it describes.
   // If a |candidate_instance| is provided (is not nullptr) and it matches the
@@ -667,7 +699,9 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Helper to call CommitPending() in all necessary cases.
   void CommitPendingIfNecessary(RenderFrameHostImpl* render_frame_host,
-                                bool was_caused_by_user_gesture);
+                                bool was_caused_by_user_gesture,
+                                bool is_same_document_navigation);
+
   // Commits any pending sandbox flag or feature policy updates when the
   // renderer's frame navigates.
   void CommitPendingFramePolicy();
@@ -696,8 +730,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Returns true if a subframe can navigate cross-process.
   bool CanSubframeSwapProcess(const GURL& dest_url,
                               SiteInstance* source_instance,
-                              SiteInstance* dest_instance,
-                              bool was_server_redirect);
+                              SiteInstance* dest_instance);
 
   // After a renderer process crash we'd have marked the host as invisible, so
   // we need to set the visibility of the new View to the correct value here

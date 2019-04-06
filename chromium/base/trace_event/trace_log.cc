@@ -17,8 +17,9 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
+#include "base/no_destructor.h"
 #include "base/process/process_info.h"
 #include "base/process/process_metrics.h"
 #include "base/stl_util.h"
@@ -29,6 +30,7 @@
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -48,19 +50,13 @@
 #include "base/trace_event/trace_event_etw_export_win.h"
 #endif
 
+#if defined(OS_ANDROID)
+// The linker assigns the virtual address of the start of current library to
+// this symbol.
+extern char __executable_start;
+#endif
+
 namespace base {
-namespace internal {
-
-class DeleteTraceLogForTesting {
- public:
-  static void Delete() {
-    Singleton<trace_event::TraceLog,
-              LeakySingletonTraits<trace_event::TraceLog>>::OnExit(nullptr);
-  }
-};
-
-}  // namespace internal
-
 namespace trace_event {
 
 namespace {
@@ -86,6 +82,8 @@ const size_t kEchoToConsoleTraceEventBufferChunks = 256;
 const size_t kTraceEventBufferSizeInBytes = 100 * 1024;
 const int kThreadFlushTimeoutMs = 3000;
 
+TraceLog* g_trace_log_for_testing = nullptr;
+
 #define MAX_TRACE_EVENT_FILTERS 32
 
 // List of TraceEventFilter objects from the most recent tracing session.
@@ -95,7 +93,9 @@ std::vector<std::unique_ptr<TraceEventFilter>>& GetCategoryGroupFilters() {
 }
 
 ThreadTicks ThreadNow() {
-  return ThreadTicks::IsSupported() ? ThreadTicks::Now() : ThreadTicks();
+  return ThreadTicks::IsSupported()
+             ? base::subtle::ThreadTicksNowIgnoringOverride()
+             : ThreadTicks();
 }
 
 template <typename T>
@@ -197,7 +197,7 @@ class TraceLog::OptionalAutoLock {
 };
 
 class TraceLog::ThreadLocalEventBuffer
-    : public MessageLoop::DestructionObserver,
+    : public MessageLoopCurrent::DestructionObserver,
       public MemoryDumpProvider {
  public:
   explicit ThreadLocalEventBuffer(TraceLog* trace_log);
@@ -217,7 +217,7 @@ class TraceLog::ThreadLocalEventBuffer
   int generation() const { return generation_; }
 
  private:
-  // MessageLoop::DestructionObserver
+  // MessageLoopCurrent::DestructionObserver
   void WillDestroyCurrentMessageLoop() override;
 
   // MemoryDumpProvider implementation.
@@ -324,6 +324,12 @@ void TraceLog::ThreadLocalEventBuffer::FlushWhileLocked() {
   // find the generation mismatch and delete this buffer soon.
 }
 
+void TraceLog::SetAddTraceEventOverride(
+    const AddTraceEventOverrideCallback& override) {
+  subtle::NoBarrier_Store(&trace_event_override_,
+                          reinterpret_cast<subtle::AtomicWord>(override));
+}
+
 struct TraceLog::RegisteredAsyncObserver {
   explicit RegisteredAsyncObserver(WeakPtr<AsyncEnabledStateObserver> observer)
       : observer(observer), task_runner(ThreadTaskRunnerHandle::Get()) {}
@@ -339,7 +345,17 @@ TraceLogStatus::~TraceLogStatus() = default;
 
 // static
 TraceLog* TraceLog::GetInstance() {
-  return Singleton<TraceLog, LeakySingletonTraits<TraceLog>>::get();
+  static base::NoDestructor<TraceLog> instance;
+  return instance.get();
+}
+
+// static
+void TraceLog::ResetForTesting() {
+  if (!g_trace_log_for_testing)
+    return;
+  CategoryRegistry::ResetForTesting();
+  g_trace_log_for_testing->~TraceLog();
+  new (g_trace_log_for_testing) TraceLog;
 }
 
 TraceLog::TraceLog()
@@ -354,6 +370,7 @@ TraceLog::TraceLog()
       thread_shared_chunk_index_(0),
       generation_(0),
       use_worker_thread_(false),
+      trace_event_override_(0),
       filter_factory_for_testing_(nullptr) {
   CategoryRegistry::Initialize();
 
@@ -369,13 +386,14 @@ TraceLog::TraceLog()
   process_creation_time_ = CurrentProcessInfo::CreationTime();
 #else
   // Use approximate time when creation time is not available.
-  process_creation_time_ = Time::Now();
+  process_creation_time_ = TRACE_TIME_NOW();
 #endif
 
   logged_events_.reset(CreateTraceBuffer());
 
   MemoryDumpManager::GetInstance()->RegisterDumpProvider(this, "TraceLog",
                                                          nullptr);
+  g_trace_log_for_testing = this;
 }
 
 TraceLog::~TraceLog() = default;
@@ -386,7 +404,7 @@ void TraceLog::InitializeThreadLocalEventBufferIfSupported() {
   // - to handle the final flush.
   // For a thread without a message loop or the message loop may be blocked, the
   // trace events will be added into the main buffer directly.
-  if (thread_blocks_message_loop_.Get() || !MessageLoop::current())
+  if (thread_blocks_message_loop_.Get() || !MessageLoopCurrent::IsSet())
     return;
   HEAP_PROFILER_SCOPED_IGNORE;
   auto* thread_local_event_buffer = thread_local_event_buffer_.Get();
@@ -541,6 +559,8 @@ void TraceLog::GetKnownCategoryGroups(
 
 void TraceLog::SetEnabled(const TraceConfig& trace_config,
                           uint8_t modes_to_enable) {
+  DCHECK(trace_config.process_filter_config().IsEnabled(process_id_));
+
   std::vector<EnabledStateObserver*> observer_list;
   std::map<AsyncEnabledStateObserver*, RegisteredAsyncObserver> observer_map;
   {
@@ -846,8 +866,8 @@ void TraceLog::FlushInternal(const TraceLog::OutputCallback& cb,
   {
     AutoLock lock(lock_);
     DCHECK(!flush_task_runner_);
-    flush_task_runner_ = ThreadTaskRunnerHandle::IsSet()
-                             ? ThreadTaskRunnerHandle::Get()
+    flush_task_runner_ = SequencedTaskRunnerHandle::IsSet()
+                             ? SequencedTaskRunnerHandle::Get()
                              : nullptr;
     DCHECK(thread_message_loops_.empty() || flush_task_runner_);
     flush_output_callback_ = cb;
@@ -948,7 +968,7 @@ void TraceLog::FinishFlush(int generation, bool discard_events) {
         {MayBlock(), TaskPriority::BACKGROUND,
          TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         BindOnce(&TraceLog::ConvertTraceEventsToTraceFormat,
-                 Passed(&previous_logged_events), flush_output_callback,
+                 std::move(previous_logged_events), flush_output_callback,
                  argument_filter_predicate));
     return;
   }
@@ -975,7 +995,7 @@ void TraceLog::FlushCurrentThread(int generation, bool discard_events) {
   // to acquiring a tracing lock. Given that posting a task requires grabbing
   // a scheduler lock, we need to post this task outside tracing lock to avoid
   // deadlocks.
-  scoped_refptr<SingleThreadTaskRunner> cached_flush_task_runner;
+  scoped_refptr<SequencedTaskRunner> cached_flush_task_runner;
   {
     AutoLock lock(lock_);
     cached_flush_task_runner = flush_task_runner_;
@@ -1030,7 +1050,7 @@ TraceEventHandle TraceLog::AddTraceEvent(
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
     unsigned int flags) {
   int thread_id = static_cast<int>(base::PlatformThread::CurrentId());
-  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeTicks now = TRACE_TIME_TICKS_NOW();
   return AddTraceEventWithThreadIdAndTimestamp(
       phase,
       category_group_enabled,
@@ -1062,7 +1082,7 @@ TraceEventHandle TraceLog::AddTraceEventWithBindId(
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
     unsigned int flags) {
   int thread_id = static_cast<int>(base::PlatformThread::CurrentId());
-  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeTicks now = TRACE_TIME_TICKS_NOW();
   return AddTraceEventWithThreadIdAndTimestamp(
       phase,
       category_group_enabled,
@@ -1093,7 +1113,7 @@ TraceEventHandle TraceLog::AddTraceEventWithProcessId(
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
     unsigned int flags) {
-  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeTicks now = TRACE_TIME_TICKS_NOW();
   return AddTraceEventWithThreadIdAndTimestamp(
       phase,
       category_group_enabled,
@@ -1217,9 +1237,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
         std::vector<StringPiece> existing_names = base::SplitStringPiece(
             existing_name->second, ",", base::KEEP_WHITESPACE,
             base::SPLIT_WANT_NONEMPTY);
-        bool found = std::find(existing_names.begin(), existing_names.end(),
-                               new_name) != existing_names.end();
-        if (!found) {
+        if (!ContainsValue(existing_names, new_name)) {
           if (!existing_names.empty())
             existing_name->second.push_back(',');
           existing_name->second.append(new_name);
@@ -1236,6 +1254,27 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
                                   num_args, arg_names, arg_types, arg_values,
                                   convertable_values);
 #endif  // OS_WIN
+
+  AddTraceEventOverrideCallback trace_event_override =
+      reinterpret_cast<AddTraceEventOverrideCallback>(
+          subtle::NoBarrier_Load(&trace_event_override_));
+  if (trace_event_override) {
+    TraceEvent new_trace_event;
+    // If we have an override in place for events, rather than sending
+    // them to the tracelog, we don't have a way of going back and updating
+    // the duration of _COMPLETE events. Instead, we emit separate _BEGIN
+    // and _END events.
+    if (phase == TRACE_EVENT_PHASE_COMPLETE)
+      phase = TRACE_EVENT_PHASE_BEGIN;
+
+    new_trace_event.Initialize(thread_id, offset_event_timestamp, thread_now,
+                               phase, category_group_enabled, name, scope, id,
+                               bind_id, num_args, arg_names, arg_types,
+                               arg_values, convertable_values, flags);
+
+    trace_event_override(new_trace_event);
+    return handle;
+  }
 
   std::string console_message;
   std::unique_ptr<TraceEvent> filtered_trace_event;
@@ -1346,8 +1385,10 @@ std::string TraceLog::EventToConsoleMessage(unsigned char phase,
   }
 
   std::string thread_name = thread_names_[thread_id];
-  if (thread_colors_.find(thread_name) == thread_colors_.end())
-    thread_colors_[thread_name] = (thread_colors_.size() % 6) + 1;
+  if (thread_colors_.find(thread_name) == thread_colors_.end()) {
+    size_t next_color = (thread_colors_.size() % 6) + 1;
+    thread_colors_[thread_name] = next_color;
+  }
 
   std::ostringstream log;
   log << base::StringPrintf("%s: \x1b[0;3%dm", thread_name.c_str(),
@@ -1422,6 +1463,26 @@ void TraceLog::UpdateTraceEventDurationExplicit(
 
   std::string console_message;
   if (category_group_enabled_local & TraceCategory::ENABLED_FOR_RECORDING) {
+    AddTraceEventOverrideCallback trace_event_override =
+        reinterpret_cast<AddTraceEventOverrideCallback>(
+            subtle::NoBarrier_Load(&trace_event_override_));
+
+    // If we send events off to an override instead of the TraceBuffer,
+    // we don't have way of updating the prior event so we'll emit a
+    // separate _END event instead.
+    if (trace_event_override) {
+      TraceEvent new_trace_event;
+      new_trace_event.Initialize(
+          static_cast<int>(base::PlatformThread::CurrentId()), now, thread_now,
+          TRACE_EVENT_PHASE_END, category_group_enabled, name,
+          trace_event_internal::kGlobalScope,
+          trace_event_internal::kNoId /* id */,
+          trace_event_internal::kNoId /* bind_id */, 0, nullptr, nullptr,
+          nullptr, nullptr, TRACE_EVENT_FLAG_NONE);
+      trace_event_override(new_trace_event);
+      return;
+    }
+
     OptionalAutoLock lock(&lock_);
 
     TraceEvent* trace_event = GetEventByHandleInternal(handle, &lock);
@@ -1492,10 +1553,17 @@ void TraceLog::AddMetadataEventsWhileLocked() {
         current_thread_id, "process_name", "name", process_name_);
   }
 
-  TimeDelta process_uptime = Time::Now() - process_creation_time_;
+  TimeDelta process_uptime = TRACE_TIME_NOW() - process_creation_time_;
   InitializeMetadataEvent(
       AddEventToThreadSharedChunkWhileLocked(nullptr, false), current_thread_id,
       "process_uptime_seconds", "uptime", process_uptime.InSeconds());
+
+#if defined(OS_ANDROID)
+  InitializeMetadataEvent(
+      AddEventToThreadSharedChunkWhileLocked(nullptr, false), current_thread_id,
+      "chrome_library_address", "start_address",
+      base::StringPrintf("%p", &__executable_start));
+#endif
 
   if (!process_labels_.empty()) {
     std::vector<base::StringPiece> labels;
@@ -1533,11 +1601,6 @@ void TraceLog::AddMetadataEventsWhileLocked() {
         current_thread_id, "trace_buffer_overflowed", "overflowed_at_ts",
         buffer_limit_reached_timestamp_);
   }
-}
-
-void TraceLog::DeleteForTesting() {
-  base::internal::DeleteTraceLogForTesting::Delete();
-  CategoryRegistry::ResetForTesting();
 }
 
 TraceEvent* TraceLog::GetEventByHandle(TraceEventHandle handle) {
@@ -1705,19 +1768,12 @@ ScopedTraceBinaryEfficient::ScopedTraceBinaryEfficient(
   if (*category_group_enabled_) {
     event_handle_ =
         TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_THREAD_ID_AND_TIMESTAMP(
-            TRACE_EVENT_PHASE_COMPLETE,
-            category_group_enabled_,
-            name,
-            trace_event_internal::kGlobalScope,  // scope
-            trace_event_internal::kNoId,  // id
+            TRACE_EVENT_PHASE_COMPLETE, category_group_enabled_, name,
+            trace_event_internal::kGlobalScope,                   // scope
+            trace_event_internal::kNoId,                          // id
             static_cast<int>(base::PlatformThread::CurrentId()),  // thread_id
-            base::TimeTicks::Now(),
-            trace_event_internal::kZeroNumArgs,
-            nullptr,
-            nullptr,
-            nullptr,
-            nullptr,
-            TRACE_EVENT_FLAG_NONE);
+            TRACE_TIME_TICKS_NOW(), trace_event_internal::kZeroNumArgs, nullptr,
+            nullptr, nullptr, nullptr, TRACE_EVENT_FLAG_NONE);
   }
 }
 

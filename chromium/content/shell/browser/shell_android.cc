@@ -27,6 +27,7 @@ void Shell::PlatformInitialize(const gfx::Size& default_window_size) {
 }
 
 void Shell::PlatformExit() {
+  DestroyShellManager();
 }
 
 void Shell::PlatformCleanUp() {
@@ -81,11 +82,6 @@ void Shell::PlatformSetTitle(const base::string16& title) {
 void Shell::LoadProgressChanged(WebContents* source, double progress) {
   JNIEnv* env = AttachCurrentThread();
   Java_Shell_onLoadProgressChanged(env, java_object_, progress);
-}
-
-ScopedJavaLocalRef<jobject> Shell::GetContentVideoViewEmbedder() {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_Shell_getContentVideoViewEmbedder(env, java_object_);
 }
 
 void Shell::SetOverlayMode(bool use_overlay_mode) {

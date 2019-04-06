@@ -35,8 +35,10 @@ class TestGpuImpl : public mojom::Gpu {
   }
 
   // ui::mojom::Gpu overrides:
-  void EstablishGpuChannel(
-      const EstablishGpuChannelCallback& callback) override {
+  void CreateGpuMemoryBufferFactory(
+      ui::mojom::GpuMemoryBufferFactoryRequest request) override {}
+
+  void EstablishGpuChannel(EstablishGpuChannelCallback callback) override {
     if (close_binding_on_request_) {
       // Don't run |callback| and trigger a connection error on the other end.
       bindings_.CloseAllBindings();
@@ -51,8 +53,8 @@ class TestGpuImpl : public mojom::Gpu {
       gpu_channel_handle_ = std::move(message_pipe.handle1);
     }
 
-    callback.Run(client_id, std::move(handle), gpu::GPUInfo(),
-                 gpu::GpuFeatureInfo());
+    std::move(callback).Run(client_id, std::move(handle), gpu::GPUInfo(),
+                            gpu::GpuFeatureInfo());
   }
 
   void CreateJpegDecodeAccelerator(
@@ -60,16 +62,6 @@ class TestGpuImpl : public mojom::Gpu {
 
   void CreateVideoEncodeAcceleratorProvider(
       media::mojom::VideoEncodeAcceleratorProviderRequest request) override {}
-
-  void CreateGpuMemoryBuffer(
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      gfx::BufferUsage usage,
-      const ui::mojom::Gpu::CreateGpuMemoryBufferCallback& callback) override {}
-
-  void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
-                              const gpu::SyncToken& sync_token) override {}
 
  private:
   bool request_will_succeed_ = true;

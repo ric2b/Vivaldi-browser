@@ -1,4 +1,3 @@
-
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -11,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -22,6 +20,7 @@
 #include "chrome/browser/net/chrome_url_request_context_getter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/pref_service.h"
@@ -29,11 +28,13 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/resource_context.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
-#include "extensions/features/features.h"
+#include "net/cookies/cookie_store.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties_impl.h"
+#include "net/net_buildflags.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/url_request_context.h"
@@ -44,6 +45,13 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/extension.h"
 #endif
+
+#if BUILDFLAG(ENABLE_REPORTING)
+#include "net/network_error_logging/network_error_logging_delegate.h"
+#include "net/network_error_logging/network_error_logging_service.h"
+#include "net/reporting/reporting_policy.h"
+#include "net/reporting/reporting_service.h"
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
 using content::BrowserThread;
 
@@ -158,6 +166,16 @@ void OffTheRecordProfileIOData::Handle::LazyInitialize() const {
       profile_->GetPrefs());
   io_data_->safe_browsing_enabled()->MoveToThread(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+  io_data_->safe_browsing_whitelist_domains()->Init(
+      prefs::kSafeBrowsingWhitelistDomains, profile_->GetPrefs());
+  io_data_->safe_browsing_whitelist_domains()->MoveToThread(
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+#if BUILDFLAG(ENABLE_PLUGINS)
+  io_data_->always_open_pdf_externally()->Init(
+      prefs::kPluginsAlwaysOpenPdfExternally, profile_->GetPrefs());
+  io_data_->always_open_pdf_externally()->MoveToThread(
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+#endif
   io_data_->InitializeOnUIThread(profile_);
 }
 
@@ -194,7 +212,7 @@ void OffTheRecordProfileIOData::InitializeInternal(
     content::URLRequestInterceptorScopedVector request_interceptors) const {
   // For incognito, we use a non-persistent channel ID store.
   std::unique_ptr<net::ChannelIDService> channel_id_service(
-      base::MakeUnique<net::ChannelIDService>(
+      std::make_unique<net::ChannelIDService>(
           new net::DefaultChannelIDStore(nullptr)));
 
   using content::CookieStoreConfig;
@@ -278,6 +296,19 @@ net::URLRequestContext* OffTheRecordProfileIOData::InitializeAppRequestContext(
       std::move(protocol_handler_interceptor), context->network_delegate(),
       context->host_resolver());
   context->SetJobFactory(std::move(top_job_factory));
+#if BUILDFLAG(ENABLE_REPORTING)
+  if (context->reporting_service()) {
+    context->SetReportingService(net::ReportingService::Create(
+        context->reporting_service()->GetPolicy(), context));
+  }
+  if (context->network_error_logging_service()) {
+    context->SetNetworkErrorLoggingService(
+        net::NetworkErrorLoggingService::Create(
+            net::NetworkErrorLoggingDelegate::Create()));
+    context->network_error_logging_service()->SetReportingService(
+        context->reporting_service());
+  }
+#endif  // BUILDFLAG(ENABLE_REPORTING)
   return context;
 }
 

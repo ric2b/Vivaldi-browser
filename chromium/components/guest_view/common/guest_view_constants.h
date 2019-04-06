@@ -34,9 +34,6 @@ extern const char kOldHeight[];
 extern const char kReason[];
 extern const char kUrl[];
 extern const char kUserGesture[];
-extern const char kFileSize[];
-extern const char kMimeType[];
-extern const char kSuggestedFilename[];
 
 // Initialization parameters.
 extern const char kParameterApi[];

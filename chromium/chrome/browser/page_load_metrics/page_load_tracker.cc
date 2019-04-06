@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/browser_process.h"
@@ -124,7 +123,7 @@ void DispatchObserverTimingCallbacks(
     const mojom::PageLoadTiming& new_timing,
     const PageLoadExtraInfo& extra_info) {
   if (!last_timing.Equals(new_timing))
-    observer->OnTimingUpdate(false /* is_subframe */, new_timing, extra_info);
+    observer->OnTimingUpdate(nullptr, new_timing, extra_info);
   if (new_timing.document_timing->dom_content_loaded_event_start &&
       !last_timing.document_timing->dom_content_loaded_event_start)
     observer->OnDomContentLoadedEventStart(new_timing, extra_info);
@@ -333,7 +332,6 @@ void PageLoadTracker::WillProcessNavigationResponse(
     content::NavigationHandle* navigation_handle) {
   DCHECK(!navigation_request_id_.has_value());
   navigation_request_id_ = navigation_handle->GetGlobalRequestID();
-  DCHECK(navigation_request_id_.value() != content::GlobalRequestID());
 }
 
 void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
@@ -593,12 +591,6 @@ void PageLoadTracker::MediaStartedPlaying(
     observer->MediaStartedPlaying(video_type, is_in_main_frame);
 }
 
-void PageLoadTracker::OnNavigationDelayComplete(base::TimeDelta scheduled_delay,
-                                                base::TimeDelta actual_delay) {
-  for (const auto& observer : observers_)
-    observer->OnNavigationDelayComplete(scheduled_delay, actual_delay);
-}
-
 void PageLoadTracker::OnTimingChanged() {
   DCHECK(!last_dispatched_merged_page_timing_->Equals(
       metrics_update_dispatcher_.timing()));
@@ -614,10 +606,12 @@ void PageLoadTracker::OnTimingChanged() {
 }
 
 void PageLoadTracker::OnSubFrameTimingChanged(
+    content::RenderFrameHost* rfh,
     const mojom::PageLoadTiming& timing) {
   PageLoadExtraInfo extra_info(ComputePageLoadExtraInfo());
+  DCHECK(rfh->GetParent());
   for (const auto& observer : observers_) {
-    observer->OnTimingUpdate(true /* is_subframe*/, timing, extra_info);
+    observer->OnTimingUpdate(rfh, timing, extra_info);
   }
 }
 
@@ -646,6 +640,14 @@ void PageLoadTracker::UpdateFeaturesUsage(
   PageLoadExtraInfo extra_info(ComputePageLoadExtraInfo());
   for (const auto& observer : observers_) {
     observer->OnFeaturesUsageObserved(new_features, extra_info);
+  }
+}
+
+void PageLoadTracker::UpdateDataUse(
+    const mojom::PageLoadDataUse& new_data_use) {
+  for (const auto& observer : observers_) {
+    observer->OnDataUseObserved(new_data_use.received_data_length,
+                                new_data_use.data_reduction_proxy_bytes_saved);
   }
 }
 

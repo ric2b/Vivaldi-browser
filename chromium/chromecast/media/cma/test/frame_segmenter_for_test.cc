@@ -275,7 +275,7 @@ void OnMediaTracksUpdated(std::unique_ptr<::media::MediaTracks> tracks) {}
 void OnNewBuffer(BufferList* buffer_list,
                  const base::Closure& finished_cb,
                  ::media::DemuxerStream::Status status,
-                 const scoped_refptr< ::media::DecoderBuffer>& buffer) {
+                 scoped_refptr<::media::DecoderBuffer> buffer) {
   CHECK_EQ(status, ::media::DemuxerStream::kOk);
   CHECK(buffer.get());
   CHECK(buffer_list);
@@ -291,11 +291,6 @@ class FakeDemuxerHost : public ::media::DemuxerHost {
   void SetDuration(base::TimeDelta duration) override {}
   void OnDemuxerError(::media::PipelineStatus error) override {
     LOG(FATAL) << "OnDemuxerError: " << error;
-  }
-  void AddTextStream(::media::DemuxerStream* text_stream,
-                     const ::media::TextTrackConfig& config) override {
-  }
-  void RemoveTextStream(::media::DemuxerStream* text_stream) override {
   }
 };
 
@@ -319,8 +314,7 @@ DemuxResult FFmpegDemuxForTest(const base::FilePath& filepath,
                                  base::Bind(&OnEncryptedMediaInitData),
                                  base::Bind(&OnMediaTracksUpdated), &media_log);
   ::media::WaitableMessageLoopEvent init_event;
-  demuxer.Initialize(&fake_demuxer_host, init_event.GetPipelineStatusCB(),
-                     false);
+  demuxer.Initialize(&fake_demuxer_host, init_event.GetPipelineStatusCB());
   init_event.RunAndWaitForStatus(::media::PIPELINE_OK);
 
   auto stream_type =

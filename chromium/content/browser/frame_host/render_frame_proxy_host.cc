@@ -8,8 +8,11 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/lazy_instance.h"
 #include "content/browser/bad_message.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -25,6 +28,8 @@
 #include "content/common/frame_owner_properties.h"
 #include "content/public/browser/browser_thread.h"
 #include "ipc/ipc_message.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace content {
 
@@ -97,7 +102,7 @@ RenderFrameProxyHost::~RenderFrameProxyHost() {
   if (!destruction_callback_.is_null())
     std::move(destruction_callback_).Run();
 
-  if (GetProcess()->HasConnection()) {
+  if (GetProcess()->IsInitializedAndNotDead()) {
     // TODO(nasko): For now, don't send this IPC for top-level frames, as
     // the top-level RenderFrame will delete the RenderFrameProxy.
     // This can be removed once we don't have a swapped out state on
@@ -113,9 +118,13 @@ RenderFrameProxyHost::~RenderFrameProxyHost() {
       RenderFrameProxyHostID(GetProcess()->GetID(), routing_id_));
 }
 
-void RenderFrameProxyHost::SetChildRWHView(RenderWidgetHostView* view) {
+void RenderFrameProxyHost::SetChildRWHView(
+    RenderWidgetHostView* view,
+    const gfx::Size* initial_frame_size) {
   cross_process_frame_connector_->SetView(
       static_cast<RenderWidgetHostViewChildFrame*>(view));
+  if (initial_frame_size)
+    cross_process_frame_connector_->SetLocalFrameSize(*initial_frame_size);
 }
 
 RenderViewHostImpl* RenderFrameProxyHost::GetRenderViewHost() {
@@ -145,10 +154,13 @@ bool RenderFrameProxyHost::OnMessageReceived(const IPC::Message& msg) {
   IPC_BEGIN_MESSAGE_MAP(RenderFrameProxyHost, msg)
     IPC_MESSAGE_HANDLER(FrameHostMsg_Detach, OnDetach)
     IPC_MESSAGE_HANDLER(FrameHostMsg_OpenURL, OnOpenURL)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_CheckCompleted, OnCheckCompleted)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RouteMessageEvent, OnRouteMessageEvent)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidChangeOpener, OnDidChangeOpener)
     IPC_MESSAGE_HANDLER(FrameHostMsg_AdvanceFocus, OnAdvanceFocus)
     IPC_MESSAGE_HANDLER(FrameHostMsg_FrameFocused, OnFrameFocused)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_PrintCrossProcessSubframe,
+                        OnPrintCrossProcessSubframe)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -164,7 +176,7 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
   // RenderFrame.  When that happens, the process will be reinitialized, and
   // all necessary proxies, including any of the ones we skipped here, will be
   // created by CreateProxiesForSiteInstance. See https://crbug.com/476846
-  if (!GetProcess()->HasConnection())
+  if (!GetProcess()->IsInitializedAndNotDead())
     return false;
 
   int parent_routing_id = MSG_ROUTING_NONE;
@@ -194,11 +206,36 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
         site_instance_.get());
   }
 
+  // Temporary debugging code for https://crbug.com/794625 to see if we're ever
+  // sending a message to create a RenderFrameProxy when one already exists.
+  // TODO(alexmos): Remove after the investigation.
+  if (render_frame_proxy_created_) {
+    SiteInstanceImpl* site_instance =
+        static_cast<SiteInstanceImpl*>(site_instance_.get());
+    GURL site_url(site_instance->GetSiteURL());
+    DEBUG_ALIAS_FOR_GURL(site_url_copy, site_url);
+    GURL current_rfh_site_url(frame_tree_node_->render_manager()
+                                  ->current_frame_host()
+                                  ->GetSiteInstance()
+                                  ->GetSiteURL());
+    DEBUG_ALIAS_FOR_GURL(current_rfh_site_url_copy, current_rfh_site_url);
+
+    int routing_id_copy = routing_id_;
+    base::debug::Alias(&routing_id_copy);
+    int parent_routing_id_copy = parent_routing_id;
+    base::debug::Alias(&parent_routing_id_copy);
+    int active_frame_count = site_instance->active_frame_count();
+    base::debug::Alias(&active_frame_count);
+
+    base::debug::DumpWithoutCrashing();
+  }
+
   int view_routing_id = frame_tree_node_->frame_tree()
       ->GetRenderViewHost(site_instance_.get())->GetRoutingID();
   GetProcess()->GetRendererInterface()->CreateFrameProxy(
       routing_id_, view_routing_id, opener_routing_id, parent_routing_id,
-      frame_tree_node_->current_replication_state());
+      frame_tree_node_->current_replication_state(),
+      frame_tree_node_->devtools_frame_token());
 
   render_frame_proxy_created_ = true;
 
@@ -238,13 +275,25 @@ void RenderFrameProxyHost::ScrollRectToVisible(
   Send(new FrameMsg_ScrollRectToVisible(routing_id_, rect_to_scroll, params));
 }
 
+void RenderFrameProxyHost::BubbleLogicalScroll(
+    blink::WebScrollDirection direction,
+    blink::WebScrollGranularity granularity) {
+  Send(new FrameMsg_BubbleLogicalScroll(routing_id_, direction, granularity));
+}
+
 void RenderFrameProxyHost::SetDestructionCallback(
     DestructionCallback destruction_callback) {
   destruction_callback_ = std::move(destruction_callback);
 }
 
 void RenderFrameProxyHost::OnDetach() {
-  if (frame_tree_node_->render_manager()->ForInnerDelegate()) {
+  // NOTE(andre@vivaldi.com) : We cannot remove outer delegate frame here if
+  // Vivaldi since we show tabs inside a WebViewGuest. If an extension injects
+  // an iframe inside the webview and this iframe closes the tab would end up
+  // closed.
+  bool remove_outer =
+      !vivaldi::IsVivaldiRunning() || frame_tree_node_->IsMainFrame();
+  if (frame_tree_node_->render_manager()->ForInnerDelegate() && remove_outer) {
     // Only main frame proxy can detach for inner WebContents.
     DCHECK(frame_tree_node_->IsMainFrame());
     frame_tree_node_->render_manager()->RemoveOuterDelegateFrame();
@@ -266,6 +315,22 @@ void RenderFrameProxyHost::OnOpenURL(
     const FrameHostMsg_OpenURL_Params& params) {
   GURL validated_url(params.url);
   GetProcess()->FilterURL(false, &validated_url);
+
+  mojo::ScopedMessagePipeHandle blob_url_token_handle(params.blob_url_token);
+  blink::mojom::BlobURLTokenPtr blob_url_token(
+      blink::mojom::BlobURLTokenPtrInfo(std::move(blob_url_token_handle),
+                                        blink::mojom::BlobURLToken::Version_));
+  scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory;
+  if (blob_url_token) {
+    if (!params.url.SchemeIsBlob()) {
+      bad_message::ReceivedBadMessage(
+          GetProcess(), bad_message::RFPH_BLOB_URL_TOKEN_FOR_NON_BLOB_URL);
+      return;
+    }
+    blob_url_loader_factory =
+        ChromeBlobStorageContext::URLLoaderFactoryForToken(
+            GetSiteInstance()->GetBrowserContext(), std::move(blob_url_token));
+  }
 
   // Verify that we are in the same BrowsingInstance as the current
   // RenderFrameHost.
@@ -292,12 +357,18 @@ void RenderFrameProxyHost::OnOpenURL(
   // RequestTransferURL method once both RenderFrameProxyHost and
   // RenderFrameHostImpl call RequestOpenURL from their OnOpenURL handlers.
   // See also https://crbug.com/647772.
-  frame_tree_node_->navigator()->RequestTransferURL(
-      current_rfh, validated_url, site_instance_.get(), std::vector<GURL>(),
-      params.referrer, ui::PAGE_TRANSITION_LINK, GlobalRequestID(),
-      params.should_replace_current_entry, params.uses_post ? "POST" : "GET",
-      params.resource_request_body, params.extra_headers,
-      params.suggested_filename);
+  // TODO(clamy): The transition should probably be changed for POST navigations
+  // to PAGE_TRANSITION_FORM_SUBMIT. See https://crbug.com/829827.
+  frame_tree_node_->navigator()->NavigateFromFrameProxy(
+      current_rfh, validated_url, site_instance_.get(), params.referrer,
+      ui::PAGE_TRANSITION_LINK, params.should_replace_current_entry,
+      params.uses_post ? "POST" : "GET", params.resource_request_body,
+      params.extra_headers, std::move(blob_url_loader_factory));
+}
+
+void RenderFrameProxyHost::OnCheckCompleted() {
+  RenderFrameHostImpl* target_rfh = frame_tree_node()->current_frame_host();
+  target_rfh->Send(new FrameMsg_CheckCompleted(target_rfh->GetRoutingID()));
 }
 
 void RenderFrameProxyHost::OnRouteMessageEvent(
@@ -327,6 +398,28 @@ void RenderFrameProxyHost::OnRouteMessageEvent(
     if (!source_rfh) {
       new_params.source_routing_id = MSG_ROUTING_NONE;
     } else {
+      // https://crbug.com/822958: If the postMessage is going to a descendant
+      // frame, ensure that any pending visual properties such as size are sent
+      // to the target frame before the postMessage, as sites might implicitly
+      // be relying on this ordering.
+      bool target_is_descendant_of_source = false;
+      for (FrameTreeNode* node = target_rfh->frame_tree_node(); node;
+           node = node->parent()) {
+        if (node == source_rfh->frame_tree_node()) {
+          target_is_descendant_of_source = true;
+          break;
+        }
+      }
+      if (target_is_descendant_of_source) {
+        target_rfh->GetRenderWidgetHost()
+            ->SynchronizeVisualPropertiesIgnoringPendingAck();
+      }
+
+      if (!source_rfh->frame_tree_node()->IsDescendantOf(
+              target_rfh->frame_tree_node())) {
+        target_rfh->did_receive_post_message_from_non_descendant();
+      }
+
       // Ensure that we have a swapped-out RVH and proxy for the source frame
       // in the target SiteInstance. If it doesn't exist, create it on demand
       // and also create its opener chain, since that will also be accessible
@@ -385,6 +478,12 @@ void RenderFrameProxyHost::OnAdvanceFocus(blink::WebFocusType type,
 void RenderFrameProxyHost::OnFrameFocused() {
   frame_tree_node_->current_frame_host()->delegate()->SetFocusedFrame(
       frame_tree_node_, GetSiteInstance());
+}
+
+void RenderFrameProxyHost::OnPrintCrossProcessSubframe(const gfx::Rect& rect,
+                                                       int document_cookie) {
+  RenderFrameHostImpl* rfh = frame_tree_node_->current_frame_host();
+  rfh->delegate()->PrintCrossProcessSubframe(rect, document_cookie, rfh);
 }
 
 }  // namespace content

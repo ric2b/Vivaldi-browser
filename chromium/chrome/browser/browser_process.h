@@ -20,14 +20,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/shell_integration.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 class BackgroundModeManager;
 class DownloadRequestLimiter;
 class DownloadStatusUpdater;
-#if defined(OS_ANDROID)
-class GpuDriverInfoManager;
-#endif
 class GpuModeManager;
 class IconManager;
 class IntranetRedirectDetector;
@@ -40,12 +37,15 @@ class ProfileManager;
 class StatusTray;
 class SystemNetworkContextManager;
 class WatchDogThread;
-#if BUILDFLAG(ENABLE_WEBRTC)
 class WebRtcLogUploader;
-#endif
 
 namespace content {
 class NetworkConnectionTracker;
+}
+
+namespace network {
+class NetworkQualityTracker;
+class SharedURLLoaderFactory;
 }
 
 namespace safe_browsing {
@@ -73,10 +73,6 @@ namespace gcm {
 class GCMDriver;
 }
 
-namespace message_center {
-class MessageCenter;
-}
-
 namespace metrics {
 class MetricsService;
 }
@@ -99,10 +95,6 @@ class NetworkTimeTracker;
 
 namespace optimization_guide {
 class OptimizationGuideService;
-}
-
-namespace physical_web {
-class PhysicalWebDataSource;
 }
 
 namespace policy {
@@ -163,6 +155,8 @@ class BrowserProcess {
   virtual ProfileManager* profile_manager() = 0;
   virtual PrefService* local_state() = 0;
   virtual net::URLRequestContextGetter* system_request_context() = 0;
+  virtual scoped_refptr<network::SharedURLLoaderFactory>
+  shared_url_loader_factory() = 0;
   virtual variations::VariationsService* variations_service() = 0;
 
   virtual BrowserProcessPlatformPart* platform_part() = 0;
@@ -175,9 +169,6 @@ class BrowserProcess {
   // NotificationPlatformBridge + NotificationDisplayService
   virtual NotificationUIManager* notification_ui_manager() = 0;
   virtual NotificationPlatformBridge* notification_platform_bridge() = 0;
-
-  // MessageCenter is a global list of currently displayed notifications.
-  virtual message_center::MessageCenter* message_center() = 0;
 
   // Returns the state object for the thread that we perform I/O
   // coordination on (network requests, communication with renderers,
@@ -199,6 +190,10 @@ class BrowserProcess {
   // network change events.
   virtual content::NetworkConnectionTracker* network_connection_tracker() = 0;
 
+  // Returns a NetworkQualityTracker that can be used to subscribe for
+  // network quality change events.
+  virtual network::NetworkQualityTracker* network_quality_tracker() = 0;
+
   // Returns the thread that is used for health check of all browser threads.
   virtual WatchDogThread* watchdog_thread() = 0;
 
@@ -213,15 +208,8 @@ class BrowserProcess {
 
   virtual GpuModeManager* gpu_mode_manager() = 0;
 
-#if defined(OS_ANDROID)
-  virtual GpuDriverInfoManager* gpu_driver_info_manager() = 0;
-#endif
+  virtual void CreateDevToolsProtocolHandler() = 0;
 
-  // Create and bind remote debugging server to a given |ip| and |port|.
-  // Passing empty |ip| results in binding to localhost:
-  // 127.0.0.1 or ::1 depending on the environment.
-  virtual void CreateDevToolsHttpProtocolHandler(const std::string& ip,
-                                                 uint16_t port) = 0;
   virtual void CreateDevToolsAutoOpener() = 0;
 
   virtual bool IsShuttingDown() = 0;
@@ -292,9 +280,7 @@ class BrowserProcess {
 
   virtual MediaFileSystemRegistry* media_file_system_registry() = 0;
 
-#if BUILDFLAG(ENABLE_WEBRTC)
   virtual WebRtcLogUploader* webrtc_log_uploader() = 0;
-#endif
 
   virtual network_time::NetworkTimeTracker* network_time_tracker() = 0;
 
@@ -308,9 +294,6 @@ class BrowserProcess {
   // process startup and now.
   virtual shell_integration::DefaultWebClientState
   CachedDefaultWebClientState() = 0;
-
-  // Returns the Physical Web data source.
-  virtual physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() = 0;
 
   virtual prefs::InProcessPrefServiceFactory* pref_service_factory() const = 0;
 

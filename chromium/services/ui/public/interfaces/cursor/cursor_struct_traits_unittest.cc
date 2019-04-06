@@ -4,8 +4,7 @@
 
 #include "services/ui/public/interfaces/cursor/cursor_struct_traits.h"
 
-#include "base/message_loop/message_loop.h"
-#include "mojo/common/time_struct_traits.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "skia/public/interfaces/bitmap_skbitmap_struct_traits.h"
@@ -113,6 +112,18 @@ TEST_F(CursorStructTraitsTest, TestEmptyCursor) {
 
   ASSERT_EQ(1u, output.cursor_frames().size());
   EXPECT_TRUE(output.cursor_frames().front().empty());
+}
+
+// For custom cursors, the frame image vector must be non-empty.
+TEST_F(CursorStructTraitsTest, TestMissingFrames) {
+  const base::TimeDelta kFrameDelay = base::TimeDelta::FromMilliseconds(15);
+  const gfx::Point kHotspot = gfx::Point(5, 2);
+  const float kScale = 2.0f;
+
+  ui::CursorData input(kHotspot, {}, kScale, kFrameDelay);
+
+  ui::CursorData output;
+  EXPECT_FALSE(EchoCursorData(input, &output));
 }
 
 }  // namespace ui

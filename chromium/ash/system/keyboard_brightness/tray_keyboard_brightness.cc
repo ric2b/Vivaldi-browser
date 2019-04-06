@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
@@ -14,16 +15,19 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
+#include "ash/system/unified/unified_slider_view.h"
 #include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -33,26 +37,6 @@
 
 namespace ash {
 namespace tray {
-
-namespace {
-
-// A slider that ignores inputs.
-class ReadOnlySlider : public views::Slider {
- public:
-  ReadOnlySlider() : Slider(nullptr) {}
-
- private:
-  // views::View:
-  bool OnMousePressed(const ui::MouseEvent& event) override { return false; }
-  bool OnMouseDragged(const ui::MouseEvent& event) override { return false; }
-  void OnMouseReleased(const ui::MouseEvent& event) override {}
-  bool OnKeyPressed(const ui::KeyEvent& event) override { return false; }
-
-  // ui::EventHandler:
-  void OnGestureEvent(ui::GestureEvent* event) override {}
-};
-
-}  // namespace
 
 class KeyboardBrightnessView : public TabletModeObserver, public views::View {
  public:
@@ -92,7 +76,7 @@ KeyboardBrightnessView::KeyboardBrightnessView(double initial_percent) {
   slider_->SetBorder(views::CreateEmptyBorder(
       gfx::Insets(0, kTrayPopupSliderHorizontalPadding)));
   slider_->SetValue(static_cast<float>(initial_percent / 100.0));
-  slider_->SetAccessibleName(
+  slider_->GetViewAccessibility().OverrideName(
       rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_KEYBOARD_BRIGHTNESS));
   tri_view->AddView(TriView::Container::CENTER, slider_);
   tri_view->SetContainerVisible(TriView::Container::END, false);
@@ -118,7 +102,8 @@ void KeyboardBrightnessView::OnBoundsChanged(const gfx::Rect& old_bounds) {
 }  // namespace tray
 
 TrayKeyboardBrightness::TrayKeyboardBrightness(SystemTray* system_tray)
-    : SystemTrayItem(system_tray, UMA_DISPLAY_BRIGHTNESS),
+    : SystemTrayItem(system_tray,
+                     SystemTrayItemUmaType::UMA_DISPLAY_BRIGHTNESS),
       weak_ptr_factory_(this) {
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
       this);
@@ -145,14 +130,18 @@ bool TrayKeyboardBrightness::ShouldShowShelf() const {
   return false;
 }
 
-void TrayKeyboardBrightness::KeyboardBrightnessChanged(int level,
-                                                       bool user_initiated) {
-  current_percent_ = static_cast<double>(level);
+void TrayKeyboardBrightness::KeyboardBrightnessChanged(
+    const power_manager::BacklightBrightnessChange& change) {
+  current_percent_ = change.percent();
 
   if (brightness_view_)
     brightness_view_->SetKeyboardBrightnessPercent(current_percent_);
 
-  if (!user_initiated)
+  if (change.cause() !=
+      power_manager::BacklightBrightnessChange_Cause_USER_REQUEST)
+    return;
+
+  if (features::IsSystemTrayUnifiedEnabled())
     return;
 
   if (brightness_view_ && brightness_view_->visible())

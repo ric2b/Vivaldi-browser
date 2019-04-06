@@ -11,17 +11,17 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>  // for memcpy() and memset().
-#include <string>
 #include <utility>
-#include <vector>
 
 #include "base/big_endian.h"
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "net/base/test_completion_callback.h"
 #include "net/log/test_net_log.h"
 #include "net/socket/socket_tag.h"
 #include "net/socket/socket_test_util.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -79,24 +79,14 @@ WebSocketMaskingKey GenerateNulMaskingKey() { return kNulMaskingKey; }
 // nul characters.
 WebSocketMaskingKey GenerateNonNulMaskingKey() { return kNonNulMaskingKey; }
 
-// Base class for WebSocketBasicStream test fixtures.
-class WebSocketBasicStreamTest : public ::testing::Test {
- protected:
-  std::unique_ptr<WebSocketBasicStream> stream_;
-  TestNetLog net_log_;
-};
-
 // A subclass of StaticSocketDataProvider modified to require that all data
 // expected to be read or written actually is.
 class StrictStaticSocketDataProvider : public StaticSocketDataProvider {
  public:
-  StrictStaticSocketDataProvider(MockRead* reads,
-                                 size_t reads_count,
-                                 MockWrite* writes,
-                                 size_t writes_count,
+  StrictStaticSocketDataProvider(base::span<const MockRead> reads,
+                                 base::span<const MockWrite> writes,
                                  bool strict_mode)
-      : StaticSocketDataProvider(reads, reads_count, writes, writes_count),
-        strict_mode_(strict_mode) {}
+      : StaticSocketDataProvider(reads, writes), strict_mode_(strict_mode) {}
 
   ~StrictStaticSocketDataProvider() override {
     if (strict_mode_) {
@@ -110,7 +100,7 @@ class StrictStaticSocketDataProvider : public StaticSocketDataProvider {
 };
 
 // A fixture for tests which only perform normal socket operations.
-class WebSocketBasicStreamSocketTest : public WebSocketBasicStreamTest {
+class WebSocketBasicStreamSocketTest : public TestWithScopedTaskEnvironment {
  protected:
   WebSocketBasicStreamSocketTest()
       : pool_(1, 1, &factory_),
@@ -123,54 +113,39 @@ class WebSocketBasicStreamSocketTest : public WebSocketBasicStreamTest {
     stream_.reset();
   }
 
-  std::unique_ptr<ClientSocketHandle> MakeTransportSocket(MockRead reads[],
-                                                          size_t reads_count,
-                                                          MockWrite writes[],
-                                                          size_t writes_count) {
-    socket_data_.reset(new StrictStaticSocketDataProvider(
-        reads, reads_count, writes, writes_count, expect_all_io_to_complete_));
+  std::unique_ptr<ClientSocketHandle> MakeTransportSocket(
+      base::span<const MockRead> reads,
+      base::span<const MockWrite> writes) {
+    socket_data_ = std::make_unique<StrictStaticSocketDataProvider>(
+        reads, writes, expect_all_io_to_complete_);
     socket_data_->set_connect_data(MockConnect(SYNCHRONOUS, OK));
     factory_.AddSocketDataProvider(socket_data_.get());
 
-    std::unique_ptr<ClientSocketHandle> transport_socket(
-        new ClientSocketHandle);
+    auto transport_socket = std::make_unique<ClientSocketHandle>();
     scoped_refptr<MockTransportSocketParams> params;
     transport_socket->Init("a", params, MEDIUM, SocketTag(),
                            ClientSocketPool::RespectLimits::ENABLED,
-                           CompletionCallback(), &pool_, net_log_.bound());
+                           CompletionCallback(), &pool_, NetLogWithSource());
     return transport_socket;
   }
 
   void SetHttpReadBuffer(const char* data, size_t size) {
-    http_read_buffer_ = new GrowableIOBuffer;
+    http_read_buffer_ = base::MakeRefCounted<GrowableIOBuffer>();
     http_read_buffer_->SetCapacity(size);
     memcpy(http_read_buffer_->data(), data, size);
     http_read_buffer_->set_offset(size);
   }
 
-  void CreateStream(MockRead reads[],
-                    size_t reads_count,
-                    MockWrite writes[],
-                    size_t writes_count) {
+  void CreateStream(base::span<const MockRead> reads,
+                    base::span<const MockWrite> writes) {
     stream_ = WebSocketBasicStream::CreateWebSocketBasicStreamForTesting(
-        MakeTransportSocket(reads, reads_count, writes, writes_count),
-        http_read_buffer_,
-        sub_protocol_,
-        extensions_,
-        generator_);
+        MakeTransportSocket(reads, writes), http_read_buffer_, sub_protocol_,
+        extensions_, generator_);
   }
-
-  template <size_t N>
-  void CreateReadOnly(MockRead (&reads)[N]) {
-    CreateStream(reads, N, NULL, 0);
-  }
-
-  void CreateNullStream() { CreateStream(NULL, 0, NULL, 0); }
 
   std::unique_ptr<SocketDataProvider> socket_data_;
   MockClientSocketFactory factory_;
   MockTransportClientSocketPool pool_;
-  BoundTestNetLog(net_log_);
   std::vector<std::unique_ptr<WebSocketFrame>> frames_;
   TestCompletionCallback cb_;
   scoped_refptr<GrowableIOBuffer> http_read_buffer_;
@@ -178,6 +153,7 @@ class WebSocketBasicStreamSocketTest : public WebSocketBasicStreamTest {
   std::string extensions_;
   WebSocketBasicStream::WebSocketMaskingKeyGeneratorFunction generator_;
   bool expect_all_io_to_complete_;
+  std::unique_ptr<WebSocketBasicStream> stream_;
 };
 
 // A test fixture for the common case of tests that only perform a single read.
@@ -186,7 +162,7 @@ class WebSocketBasicStreamSocketSingleReadTest
  protected:
   void CreateRead(const MockRead& read) {
     reads_[0] = read;
-    CreateStream(reads_, 1U, NULL, 0);
+    CreateStream(reads_, base::span<MockWrite>());
   }
 
   MockRead reads_[1];
@@ -215,24 +191,24 @@ class WebSocketBasicStreamSocketChunkedReadTest
                          const char data[],
                          size_t data_size,
                          int chunk_size,
-                         int number_of_chunks,
+                         size_t number_of_chunks,
                          LastFrameBehaviour last_frame_behaviour) {
-    reads_.reset(new MockRead[number_of_chunks]);
+    reads_.clear();
     const char* start = data;
-    for (int i = 0; i < number_of_chunks; ++i) {
+    for (size_t i = 0; i < number_of_chunks; ++i) {
       int len = chunk_size;
       const bool is_last_chunk = (i == number_of_chunks - 1);
       if ((last_frame_behaviour == LAST_FRAME_BIG && is_last_chunk) ||
           static_cast<int>(data + data_size - start) < len) {
         len = static_cast<int>(data + data_size - start);
       }
-      reads_[i] = MockRead(mode, start, len);
+      reads_.push_back(MockRead(mode, start, len));
       start += len;
     }
-    CreateStream(reads_.get(), number_of_chunks, NULL, 0);
+    CreateStream(reads_, base::span<MockWrite>());
   }
 
-  std::unique_ptr<MockRead[]> reads_;
+  std::vector<MockRead> reads_;
 };
 
 // Test fixture for write tests.
@@ -246,12 +222,12 @@ class WebSocketBasicStreamSocketWriteTest
   // Creates a WebSocketFrame with a wire format matching kWriteFrame and adds
   // it to |frames_|.
   void PrepareWriteFrame() {
-    std::unique_ptr<WebSocketFrame> frame(
-        new WebSocketFrame(WebSocketFrameHeader::kOpCodeText));
+    auto frame =
+        std::make_unique<WebSocketFrame>(WebSocketFrameHeader::kOpCodeText);
     const size_t payload_size =
         kWriteFrameSize - (WebSocketFrameHeader::kBaseHeaderSize +
                            WebSocketFrameHeader::kMaskingKeyLength);
-    frame->data = new IOBuffer(payload_size);
+    frame->data = base::MakeRefCounted<IOBuffer>(payload_size);
     memcpy(frame->data->data(),
            kWriteFrame + kWriteFrameSize - payload_size,
            payload_size);
@@ -261,16 +237,10 @@ class WebSocketBasicStreamSocketWriteTest
     header.payload_length = payload_size;
     frames_.push_back(std::move(frame));
   }
-
-  // Creates a stream that expects the listed writes.
-  template <size_t N>
-  void CreateWriteOnly(MockWrite (&writes)[N]) {
-    CreateStream(NULL, 0, writes, N);
-  }
 };
 
 TEST_F(WebSocketBasicStreamSocketTest, ConstructionWorks) {
-  CreateNullStream();
+  CreateStream(base::span<MockRead>(), base::span<MockWrite>());
 }
 
 TEST_F(WebSocketBasicStreamSocketSingleReadTest, SyncReadWorks) {
@@ -319,7 +289,7 @@ TEST_F(WebSocketBasicStreamSocketChunkedReadTest, HeaderFragmentedAsync) {
 TEST_F(WebSocketBasicStreamSocketTest, HeaderFragmentedSyncAsync) {
   MockRead reads[] = {MockRead(SYNCHRONOUS, kSampleFrame, 1),
                       MockRead(ASYNC, kSampleFrame + 1, kSampleFrameSize - 1)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
   int result = stream_->ReadFrames(&frames_, cb_.callback());
   ASSERT_THAT(result, IsError(ERR_IO_PENDING));
   EXPECT_THAT(cb_.WaitForResult(), IsOk());
@@ -333,7 +303,7 @@ TEST_F(WebSocketBasicStreamSocketTest, FragmentedLargeHeader) {
   MockRead reads[] = {
       MockRead(SYNCHRONOUS, kPartialLargeFrame, kLargeFrameHeaderSize - 1),
       MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
   EXPECT_THAT(stream_->ReadFrames(&frames_, cb_.callback()),
               IsError(ERR_IO_PENDING));
 }
@@ -369,7 +339,7 @@ TEST_F(WebSocketBasicStreamSocketTest, HeaderBodySeparated) {
       MockRead(ASYNC,
                kPartialLargeFrame + kLargeFrameHeaderSize,
                kPartialLargeFrameSize - kLargeFrameHeaderSize)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
   EXPECT_THAT(stream_->ReadFrames(&frames_, cb_.callback()), IsOk());
   ASSERT_EQ(1U, frames_.size());
   EXPECT_EQ(NULL, frames_[0]->data.get());
@@ -555,7 +525,7 @@ TEST_F(WebSocketBasicStreamSocketChunkedReadTest, CloseAfterFrame) {
 TEST_F(WebSocketBasicStreamSocketTest, AsyncCloseAfterIncompleteHeader) {
   MockRead reads[] = {MockRead(ASYNC, kSampleFrame, 1U),
                       MockRead(SYNCHRONOUS, "", 0)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
 
   ASSERT_THAT(stream_->ReadFrames(&frames_, cb_.callback()),
               IsError(ERR_IO_PENDING));
@@ -567,7 +537,7 @@ TEST_F(WebSocketBasicStreamSocketTest, AsyncCloseAfterIncompleteHeader) {
 TEST_F(WebSocketBasicStreamSocketTest, AsyncErrCloseAfterIncompleteHeader) {
   MockRead reads[] = {MockRead(ASYNC, kSampleFrame, 1U),
                       MockRead(SYNCHRONOUS, ERR_CONNECTION_CLOSED)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
 
   ASSERT_THAT(stream_->ReadFrames(&frames_, cb_.callback()),
               IsError(ERR_IO_PENDING));
@@ -590,7 +560,7 @@ TEST_F(WebSocketBasicStreamSocketTest, EmptyMiddleFrame) {
       MockRead(SYNCHRONOUS, kEmptyFirstFrame, kEmptyFirstFrameSize),
       MockRead(SYNCHRONOUS, kEmptyMiddleFrame, kEmptyMiddleFrameSize),
       MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
 
   EXPECT_THAT(stream_->ReadFrames(&frames_, cb_.callback()), IsOk());
   EXPECT_EQ(1U, frames_.size());
@@ -608,7 +578,7 @@ TEST_F(WebSocketBasicStreamSocketTest, EmptyMiddleFrameAsync) {
       // We include a pong message to verify the middle frame was actually
       // processed.
       MockRead(ASYNC, kValidPong, kValidPongSize)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
 
   EXPECT_THAT(stream_->ReadFrames(&frames_, cb_.callback()), IsOk());
   EXPECT_EQ(1U, frames_.size());
@@ -639,7 +609,7 @@ TEST_F(WebSocketBasicStreamSocketTest, ThreeFrameEmptyMessage) {
       MockRead(SYNCHRONOUS,
                kEmptyFinalContinuationFrame,
                kEmptyFinalContinuationFrameSize)};
-  CreateReadOnly(reads);
+  CreateStream(reads, base::span<MockWrite>());
 
   EXPECT_THAT(stream_->ReadFrames(&frames_, cb_.callback()), IsOk());
   ASSERT_EQ(1U, frames_.size());
@@ -654,7 +624,7 @@ TEST_F(WebSocketBasicStreamSocketTest, ThreeFrameEmptyMessage) {
 // handshake succeeded), then we should parse it.
 TEST_F(WebSocketBasicStreamSocketTest, HttpReadBufferIsUsed) {
   SetHttpReadBuffer(kSampleFrame, kSampleFrameSize);
-  CreateNullStream();
+  CreateStream(base::span<MockRead>(), base::span<MockWrite>());
 
   EXPECT_THAT(stream_->ReadFrames(&frames_, cb_.callback()), IsOk());
   ASSERT_EQ(1U, frames_.size());
@@ -885,7 +855,7 @@ TEST_F(WebSocketBasicStreamSocketChunkedReadTest, ReservedFlagCleared) {
 // Check that writing a frame all at once works.
 TEST_F(WebSocketBasicStreamSocketWriteTest, WriteAtOnce) {
   MockWrite writes[] = {MockWrite(SYNCHRONOUS, kWriteFrame, kWriteFrameSize)};
-  CreateWriteOnly(writes);
+  CreateStream(base::span<MockRead>(), writes);
 
   EXPECT_THAT(stream_->WriteFrames(&frames_, cb_.callback()), IsOk());
 }
@@ -893,7 +863,7 @@ TEST_F(WebSocketBasicStreamSocketWriteTest, WriteAtOnce) {
 // Check that completely async writing works.
 TEST_F(WebSocketBasicStreamSocketWriteTest, AsyncWriteAtOnce) {
   MockWrite writes[] = {MockWrite(ASYNC, kWriteFrame, kWriteFrameSize)};
-  CreateWriteOnly(writes);
+  CreateStream(base::span<MockRead>(), writes);
 
   ASSERT_THAT(stream_->WriteFrames(&frames_, cb_.callback()),
               IsError(ERR_IO_PENDING));
@@ -907,7 +877,7 @@ TEST_F(WebSocketBasicStreamSocketWriteTest, WriteInBits) {
   MockWrite writes[] = {MockWrite(SYNCHRONOUS, kWriteFrame, 4),
                         MockWrite(ASYNC, kWriteFrame + 4, 4),
                         MockWrite(ASYNC, kWriteFrame + 8, kWriteFrameSize - 8)};
-  CreateWriteOnly(writes);
+  CreateStream(base::span<MockRead>(), writes);
 
   ASSERT_THAT(stream_->WriteFrames(&frames_, cb_.callback()),
               IsError(ERR_IO_PENDING));
@@ -918,10 +888,10 @@ TEST_F(WebSocketBasicStreamSocketWriteTest, WriteInBits) {
 TEST_F(WebSocketBasicStreamSocketWriteTest, WriteNullPong) {
   MockWrite writes[] = {
       MockWrite(SYNCHRONOUS, kMaskedEmptyPong, kMaskedEmptyPongSize)};
-  CreateWriteOnly(writes);
+  CreateStream(base::span<MockRead>(), writes);
 
-  std::unique_ptr<WebSocketFrame> frame(
-      new WebSocketFrame(WebSocketFrameHeader::kOpCodePong));
+  auto frame =
+      std::make_unique<WebSocketFrame>(WebSocketFrameHeader::kOpCodePong);
   WebSocketFrameHeader& header = frame->header;
   header.final = true;
   header.masked = true;
@@ -939,13 +909,13 @@ TEST_F(WebSocketBasicStreamSocketTest, WriteNonNulMask) {
   MockWrite writes[] = {
       MockWrite(SYNCHRONOUS, masked_frame.data(), masked_frame.size())};
   generator_ = &GenerateNonNulMaskingKey;
-  CreateStream(NULL, 0, writes, arraysize(writes));
+  CreateStream(base::span<MockRead>(), writes);
 
-  std::unique_ptr<WebSocketFrame> frame(
-      new WebSocketFrame(WebSocketFrameHeader::kOpCodeText));
+  auto frame =
+      std::make_unique<WebSocketFrame>(WebSocketFrameHeader::kOpCodeText);
   const std::string unmasked_payload = "graphics";
   const size_t payload_size = unmasked_payload.size();
-  frame->data = new IOBuffer(payload_size);
+  frame->data = base::MakeRefCounted<IOBuffer>(payload_size);
   memcpy(frame->data->data(), unmasked_payload.data(), payload_size);
   WebSocketFrameHeader& header = frame->header;
   header.final = true;
@@ -958,14 +928,14 @@ TEST_F(WebSocketBasicStreamSocketTest, WriteNonNulMask) {
 
 TEST_F(WebSocketBasicStreamSocketTest, GetExtensionsWorks) {
   extensions_ = "inflate-uuencode";
-  CreateNullStream();
+  CreateStream(base::span<MockRead>(), base::span<MockWrite>());
 
   EXPECT_EQ("inflate-uuencode", stream_->GetExtensions());
 }
 
 TEST_F(WebSocketBasicStreamSocketTest, GetSubProtocolWorks) {
   sub_protocol_ = "cyberchat";
-  CreateNullStream();
+  CreateStream(base::span<MockRead>(), base::span<MockWrite>());
 
   EXPECT_EQ("cyberchat", stream_->GetSubProtocol());
 }

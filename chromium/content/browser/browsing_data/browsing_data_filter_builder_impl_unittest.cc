@@ -11,9 +11,14 @@
 
 #include "base/callback.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_deletion_info.h"
+#include "services/network/cookie_manager.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+using CookieDeletionInfo = net::CookieDeletionInfo;
 
 namespace content {
 
@@ -47,10 +52,11 @@ void RunTestCase(TestCase test_case,
       << test_case.url;
 }
 
-void RunTestCase(
-    TestCase test_case,
-    const base::Callback<bool(const net::CanonicalCookie&)>& filter) {
+void RunTestCase(TestCase test_case,
+                 network::mojom::CookieDeletionFilterPtr deletion_filter) {
   // Test with regular cookie, http only, domain, and secure.
+  CookieDeletionInfo delete_info =
+      network::DeletionFilterToInfo(std::move(deletion_filter));
   std::string cookie_line = "A=2";
   GURL test_url(test_case.url);
   EXPECT_TRUE(test_url.is_valid()) << test_case.url;
@@ -59,28 +65,28 @@ void RunTestCase(
   EXPECT_TRUE(cookie) << cookie_line << " from " << test_case.url
                       << " is not a valid cookie";
   if (cookie)
-    EXPECT_EQ(test_case.should_match, filter.Run(*cookie))
+    EXPECT_EQ(test_case.should_match, delete_info.Matches(*cookie))
         << cookie->DebugString();
 
   cookie_line = std::string("A=2;domain=") + test_url.host();
   cookie = net::CanonicalCookie::Create(
       test_url, cookie_line, base::Time::Now(), net::CookieOptions());
   if (cookie)
-    EXPECT_EQ(test_case.should_match, filter.Run(*cookie))
+    EXPECT_EQ(test_case.should_match, delete_info.Matches(*cookie))
         << cookie->DebugString();
 
   cookie_line = std::string("A=2; HttpOnly;") + test_url.host();
   cookie = net::CanonicalCookie::Create(
       test_url, cookie_line, base::Time::Now(), net::CookieOptions());
   if (cookie)
-    EXPECT_EQ(test_case.should_match, filter.Run(*cookie))
+    EXPECT_EQ(test_case.should_match, delete_info.Matches(*cookie))
         << cookie->DebugString();
 
   cookie_line = std::string("A=2; HttpOnly; Secure;") + test_url.host();
   cookie = net::CanonicalCookie::Create(
       test_url, cookie_line, base::Time::Now(), net::CookieOptions());
   if (cookie)
-    EXPECT_EQ(test_case.should_match, filter.Run(*cookie))
+    EXPECT_EQ(test_case.should_match, delete_info.Matches(*cookie))
         << cookie->DebugString();
 }
 
@@ -210,8 +216,6 @@ TEST(BrowsingDataFilterBuilderImplTest,
   builder.AddRegisterableDomain(std::string(kIPAddress));
   builder.AddRegisterableDomain(std::string(kUnknownRegistryDomain));
   builder.AddRegisterableDomain(std::string(kInternalHostname));
-  base::Callback<bool(const net::CanonicalCookie&)> filter =
-      builder.BuildCookieFilter();
 
   TestCase test_cases[] = {
       // Any cookie with the same registerable domain as the origins is matched.
@@ -250,7 +254,7 @@ TEST(BrowsingDataFilterBuilderImplTest,
   };
 
   for (TestCase test_case : test_cases)
-    RunTestCase(test_case, filter);
+    RunTestCase(test_case, builder.BuildCookieDeletionFilter());
 }
 
 TEST(BrowsingDataFilterBuilderImplTest,
@@ -262,8 +266,6 @@ TEST(BrowsingDataFilterBuilderImplTest,
   builder.AddRegisterableDomain(std::string(kIPAddress));
   builder.AddRegisterableDomain(std::string(kUnknownRegistryDomain));
   builder.AddRegisterableDomain(std::string(kInternalHostname));
-  base::Callback<bool(const net::CanonicalCookie&)> filter =
-      builder.BuildCookieFilter();
 
   TestCase test_cases[] = {
       // Any cookie that doesn't have the same registerable domain is matched.
@@ -302,71 +304,45 @@ TEST(BrowsingDataFilterBuilderImplTest,
   };
 
   for (TestCase test_case : test_cases)
-    RunTestCase(test_case, filter);
+    RunTestCase(test_case, builder.BuildCookieDeletionFilter());
 }
 
-TEST(BrowsingDataFilterBuilderImplTest,
-     RegistrableDomainMatchesChannelIDsWhitelist) {
+TEST(BrowsingDataFilterBuilderImplTest, NetworkServiceFilterWhitelist) {
   BrowsingDataFilterBuilderImpl builder(
       BrowsingDataFilterBuilderImpl::WHITELIST);
+  ASSERT_EQ(BrowsingDataFilterBuilderImpl::WHITELIST, builder.GetMode());
   builder.AddRegisterableDomain(std::string(kGoogleDomain));
   builder.AddRegisterableDomain(std::string(kLongETLDDomain));
   builder.AddRegisterableDomain(std::string(kIPAddress));
   builder.AddRegisterableDomain(std::string(kUnknownRegistryDomain));
   builder.AddRegisterableDomain(std::string(kInternalHostname));
-  base::Callback<bool(const std::string&)> filter =
-      builder.BuildChannelIDFilter();
+  network::mojom::ClearDataFilterPtr filter =
+      builder.BuildNetworkServiceFilter();
 
-  TestCase test_cases[] = {
-      // Channel ID server identifiers can be second level domains, ...
-      {"google.com", true},
-      {"website.sp.nom.br", true},
-      {"second-level-domain.fileserver", true},
-
-      // ... IP addresses, or internal hostnames.
-      {"192.168.1.1", true},
-      {"fileserver", true},
-
-      // Channel IDs not in the whitelist are not matched.
-      {"example.com", false},
-      {"192.168.1.2", false},
-      {"website.fileserver", false},
-  };
-
-  for (TestCase test_case : test_cases)
-    RunTestCase(test_case, filter);
+  EXPECT_EQ(network::mojom::ClearDataFilter_Type::DELETE_MATCHES, filter->type);
+  EXPECT_THAT(filter->domains, testing::UnorderedElementsAre(
+                                   kGoogleDomain, kLongETLDDomain, kIPAddress,
+                                   kUnknownRegistryDomain, kInternalHostname));
+  EXPECT_TRUE(filter->origins.empty());
 }
 
-TEST(BrowsingDataFilterBuilderImplTest,
-     RegistrableDomainMatchesChannelIDsBlacklist) {
+TEST(BrowsingDataFilterBuilderImplTest, NetworkServiceFilterBlacklist) {
   BrowsingDataFilterBuilderImpl builder(
       BrowsingDataFilterBuilderImpl::BLACKLIST);
+  ASSERT_EQ(BrowsingDataFilterBuilderImpl::BLACKLIST, builder.GetMode());
   builder.AddRegisterableDomain(std::string(kGoogleDomain));
   builder.AddRegisterableDomain(std::string(kLongETLDDomain));
   builder.AddRegisterableDomain(std::string(kIPAddress));
   builder.AddRegisterableDomain(std::string(kUnknownRegistryDomain));
   builder.AddRegisterableDomain(std::string(kInternalHostname));
-  base::Callback<bool(const std::string&)> filter =
-      builder.BuildChannelIDFilter();
+  network::mojom::ClearDataFilterPtr filter =
+      builder.BuildNetworkServiceFilter();
 
-  TestCase test_cases[] = {
-      // Channel ID server identifiers can be second level domains, ...
-      {"google.com", false},
-      {"website.sp.nom.br", false},
-      {"second-level-domain.fileserver", false},
-
-      // ...IP addresses, or internal hostnames.
-      {"192.168.1.1", false},
-      {"fileserver", false},
-
-      // Channel IDs that are not blacklisted are matched.
-      {"example.com", true},
-      {"192.168.1.2", true},
-      {"website.fileserver", true},
-  };
-
-  for (TestCase test_case : test_cases)
-    RunTestCase(test_case, filter);
+  EXPECT_EQ(network::mojom::ClearDataFilter_Type::KEEP_MATCHES, filter->type);
+  EXPECT_THAT(filter->domains, testing::UnorderedElementsAre(
+                                   kGoogleDomain, kLongETLDDomain, kIPAddress,
+                                   kUnknownRegistryDomain, kInternalHostname));
+  EXPECT_TRUE(filter->origins.empty());
 }
 
 TEST(BrowsingDataFilterBuilderImplTest,

@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include <memory>
+#include <utility>
 
 #include "base/auto_reset.h"
 #include "base/compiler_specific.h"
@@ -29,29 +29,25 @@
 // struct event (of which there is roughly one per socket).
 // The socket's struct event is created in
 // MessagePumpLibevent::WatchFileDescriptor(),
-// is owned by the FileDescriptorWatcher, and is destroyed in
+// is owned by the FdWatchController, and is destroyed in
 // StopWatchingFileDescriptor().
 // It is moved into and out of lists in struct event_base by
 // the libevent functions event_add() and event_del().
 //
 // TODO(dkegel):
-// At the moment bad things happen if a FileDescriptorWatcher
+// At the moment bad things happen if a FdWatchController
 // is active after its MessagePumpLibevent has been destroyed.
-// See MessageLoopTest.FileDescriptorWatcherOutlivesMessageLoop
+// See MessageLoopTest.FdWatchControllerOutlivesMessageLoop
 // Not clear yet whether that situation occurs in practice,
 // but if it does, we need to fix it.
 
 namespace base {
 
-MessagePumpLibevent::FileDescriptorWatcher::FileDescriptorWatcher(
+MessagePumpLibevent::FdWatchController::FdWatchController(
     const Location& from_here)
-    : event_(nullptr),
-      pump_(nullptr),
-      watcher_(nullptr),
-      was_destroyed_(nullptr),
-      created_from_location_(from_here) {}
+    : FdWatchControllerInterface(from_here) {}
 
-MessagePumpLibevent::FileDescriptorWatcher::~FileDescriptorWatcher() {
+MessagePumpLibevent::FdWatchController::~FdWatchController() {
   if (event_) {
     StopWatchingFileDescriptor();
   }
@@ -61,33 +57,30 @@ MessagePumpLibevent::FileDescriptorWatcher::~FileDescriptorWatcher() {
   }
 }
 
-bool MessagePumpLibevent::FileDescriptorWatcher::StopWatchingFileDescriptor() {
-  event* e = ReleaseEvent();
-  if (e == nullptr)
+bool MessagePumpLibevent::FdWatchController::StopWatchingFileDescriptor() {
+  std::unique_ptr<event> e = ReleaseEvent();
+  if (!e)
     return true;
 
   // event_del() is a no-op if the event isn't active.
-  int rv = event_del(e);
-  delete e;
+  int rv = event_del(e.get());
   pump_ = nullptr;
   watcher_ = nullptr;
   return (rv == 0);
 }
 
-void MessagePumpLibevent::FileDescriptorWatcher::Init(event* e) {
+void MessagePumpLibevent::FdWatchController::Init(std::unique_ptr<event> e) {
   DCHECK(e);
   DCHECK(!event_);
 
-  event_ = e;
+  event_ = std::move(e);
 }
 
-event* MessagePumpLibevent::FileDescriptorWatcher::ReleaseEvent() {
-  struct event* e = event_;
-  event_ = nullptr;
-  return e;
+std::unique_ptr<event> MessagePumpLibevent::FdWatchController::ReleaseEvent() {
+  return std::move(event_);
 }
 
-void MessagePumpLibevent::FileDescriptorWatcher::OnFileCanReadWithoutBlocking(
+void MessagePumpLibevent::FdWatchController::OnFileCanReadWithoutBlocking(
     int fd,
     MessagePumpLibevent* pump) {
   // Since OnFileCanWriteWithoutBlocking() gets called first, it can stop
@@ -97,7 +90,7 @@ void MessagePumpLibevent::FileDescriptorWatcher::OnFileCanReadWithoutBlocking(
   watcher_->OnFileCanReadWithoutBlocking(fd);
 }
 
-void MessagePumpLibevent::FileDescriptorWatcher::OnFileCanWriteWithoutBlocking(
+void MessagePumpLibevent::FdWatchController::OnFileCanWriteWithoutBlocking(
     int fd,
     MessagePumpLibevent* pump) {
   DCHECK(watcher_);
@@ -134,8 +127,8 @@ MessagePumpLibevent::~MessagePumpLibevent() {
 bool MessagePumpLibevent::WatchFileDescriptor(int fd,
                                               bool persistent,
                                               int mode,
-                                              FileDescriptorWatcher* controller,
-                                              Watcher* delegate) {
+                                              FdWatchController* controller,
+                                              FdWatcher* delegate) {
   DCHECK_GE(fd, 0);
   DCHECK(controller);
   DCHECK(delegate);
@@ -189,12 +182,9 @@ bool MessagePumpLibevent::WatchFileDescriptor(int fd,
     return false;
   }
 
-  // Transfer ownership of evt to controller.
-  controller->Init(evt.release());
-
+  controller->Init(std::move(evt));
   controller->set_watcher(delegate);
   controller->set_pump(this);
-
   return true;
 }
 
@@ -314,8 +304,7 @@ bool MessagePumpLibevent::Init() {
 void MessagePumpLibevent::OnLibeventNotification(int fd,
                                                  short flags,
                                                  void* context) {
-  FileDescriptorWatcher* controller =
-      static_cast<FileDescriptorWatcher*>(context);
+  FdWatchController* controller = static_cast<FdWatchController*>(context);
   DCHECK(controller);
   TRACE_EVENT2("toplevel", "MessagePumpLibevent::OnLibeventNotification",
                "src_file", controller->created_from_location().file_name(),

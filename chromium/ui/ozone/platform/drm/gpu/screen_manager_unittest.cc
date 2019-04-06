@@ -11,6 +11,7 @@
 #include "base/files/platform_file.h"
 #include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/gpu_fence.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
@@ -18,11 +19,11 @@
 #include "ui/ozone/platform/drm/gpu/hardware_display_controller.h"
 #include "ui/ozone/platform/drm/gpu/mock_drm_device.h"
 #include "ui/ozone/platform/drm/gpu/mock_scanout_buffer_generator.h"
+#include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
 
+namespace ui {
 namespace {
-
-void EmptySwapCallback(gfx::SwapResult, const gfx::PresentationFeedback&) {}
 
 // Create a basic mode for a 6x4 screen.
 const drmModeModeInfo kDefaultMode =
@@ -32,6 +33,10 @@ const uint32_t kPrimaryCrtc = 1;
 const uint32_t kPrimaryConnector = 2;
 const uint32_t kSecondaryCrtc = 3;
 const uint32_t kSecondaryConnector = 4;
+
+drmModeModeInfo Mode(uint16_t hdisplay, uint16_t vdisplay) {
+  return {0, hdisplay, 0, 0, 0, 0, vdisplay, 0, 0, 0, 0, 0, 0, 0, {'\0'}};
+}
 
 }  // namespace
 
@@ -51,8 +56,7 @@ class ScreenManagerTest : public testing::Test {
   }
 
   void SetUp() override {
-    drm_ = new ui::MockDrmDevice(false, std::vector<uint32_t>(1, kPrimaryCrtc),
-                                 4 /* planes per crtc */);
+    drm_ = new ui::MockDrmDevice;
     device_manager_.reset(new ui::DrmDeviceManager(nullptr));
     buffer_generator_.reset(new ui::MockScanoutBufferGenerator());
     screen_manager_.reset(new ui::ScreenManager(buffer_generator_.get()));
@@ -356,7 +360,7 @@ TEST_F(ScreenManagerTest, CheckMirrorModeAfterBeginReEnabled) {
 
 TEST_F(ScreenManagerTest,
        CheckProperConfigurationWithDifferentDeviceAndSameCrtc) {
-  scoped_refptr<ui::MockDrmDevice> drm2 = new ui::MockDrmDevice();
+  scoped_refptr<ui::MockDrmDevice> drm2 = new ui::MockDrmDevice;
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
   screen_manager_->AddDisplayController(drm2, kPrimaryCrtc, kPrimaryConnector);
@@ -500,12 +504,13 @@ TEST_F(ScreenManagerTest, EnableControllerWhenWindowHasBuffer) {
       new ui::DrmWindow(1, device_manager_.get(), screen_manager_.get()));
   window->Initialize(buffer_generator_.get());
   window->SetBounds(GetPrimaryBounds());
+
   scoped_refptr<ui::ScanoutBuffer> buffer = buffer_generator_->Create(
-      drm_, DRM_FORMAT_XRGB8888, GetPrimaryBounds().size());
-  window->SchedulePageFlip(
-      std::vector<ui::OverlayPlane>(
-          1, ui::OverlayPlane(buffer, base::kInvalidPlatformFile)),
-      base::Bind(&EmptySwapCallback));
+      drm_, DRM_FORMAT_XRGB8888, {}, GetPrimaryBounds().size());
+  ui::DrmOverlayPlaneList planes;
+  planes.push_back(ui::DrmOverlayPlane(buffer, nullptr));
+  window->SchedulePageFlip(std::move(planes), base::DoNothing(),
+                           base::DoNothing());
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
@@ -513,7 +518,7 @@ TEST_F(ScreenManagerTest, EnableControllerWhenWindowHasBuffer) {
       drm_, kPrimaryCrtc, kPrimaryConnector, GetPrimaryBounds().origin(),
       kDefaultMode);
 
-  EXPECT_EQ(buffer->GetFramebufferId(), drm_->current_framebuffer());
+  EXPECT_EQ(buffer->GetOpaqueFramebufferId(), drm_->current_framebuffer());
 
   window = screen_manager_->RemoveWindow(1);
   window->Shutdown();
@@ -529,10 +534,10 @@ TEST_F(ScreenManagerTest, RejectBufferWithIncompatibleModifiers) {
                                             I915_FORMAT_MOD_X_TILED,
                                             GetPrimaryBounds().size());
 
-  window->SchedulePageFlip(
-      std::vector<ui::OverlayPlane>(
-          1, ui::OverlayPlane(buffer, base::kInvalidPlatformFile)),
-      base::Bind(&EmptySwapCallback));
+  ui::DrmOverlayPlaneList planes;
+  planes.push_back(ui::DrmOverlayPlane(buffer, nullptr));
+  window->SchedulePageFlip(std::move(planes), base::DoNothing(),
+                           base::DoNothing());
   screen_manager_->AddWindow(1, std::move(window));
 
   screen_manager_->AddDisplayController(drm_, kPrimaryCrtc, kPrimaryConnector);
@@ -549,3 +554,111 @@ TEST_F(ScreenManagerTest, RejectBufferWithIncompatibleModifiers) {
   window = screen_manager_->RemoveWindow(1);
   window->Shutdown();
 }
+
+TEST(ScreenManagerTest2, ShouldNotHardwareMirrorDifferentDrmDevices) {
+  auto drm_device1 = base::MakeRefCounted<MockDrmDevice>();
+  auto drm_device2 = base::MakeRefCounted<MockDrmDevice>();
+  DrmDeviceManager drm_device_manager(nullptr);
+  MockScanoutBufferGenerator buffer_generator;
+  ScreenManager screen_manager(&buffer_generator);
+
+  constexpr uint32_t kCrtc19 = 19;
+  constexpr uint32_t kConnector28 = 28;
+  constexpr uint32_t kCrtc20 = 20;
+  constexpr uint32_t kConnector22 = 22;
+
+  // Two displays on different DRM devices must not join a mirror pair.
+  //
+  // However, they may have the same bounds in a transitional state.
+  //
+  // This scenario generates the same sequence of display configuration events
+  // as a panther (kernel 3.8.11) chromebox with two identical 1080p displays
+  // connected, one of them via a DisplayLink adapter.
+
+  // Both displays connect at startup.
+  {
+    auto window1 =
+        std::make_unique<DrmWindow>(1, &drm_device_manager, &screen_manager);
+    window1->Initialize(&buffer_generator);
+    screen_manager.AddWindow(1, std::move(window1));
+    screen_manager.GetWindow(1)->SetBounds(gfx::Rect(0, 0, 1920, 1080));
+    screen_manager.AddDisplayController(drm_device1, kCrtc19, kConnector28);
+    screen_manager.AddDisplayController(drm_device2, kCrtc20, kConnector22);
+    screen_manager.ConfigureDisplayController(
+        drm_device1, kCrtc19, kConnector28, gfx::Point(0, 0), Mode(1920, 1080));
+    screen_manager.ConfigureDisplayController(drm_device2, kCrtc20,
+                                              kConnector22, gfx::Point(0, 1140),
+                                              Mode(1920, 1080));
+    auto window2 =
+        std::make_unique<DrmWindow>(2, &drm_device_manager, &screen_manager);
+    window2->Initialize(&buffer_generator);
+    screen_manager.AddWindow(2, std::move(window2));
+    screen_manager.GetWindow(2)->SetBounds(gfx::Rect(0, 1140, 1920, 1080));
+  }
+
+  // Displays are stacked vertically, window per display.
+  {
+    HardwareDisplayController* controller1 =
+        screen_manager.GetWindow(1)->GetController();
+    HardwareDisplayController* controller2 =
+        screen_manager.GetWindow(2)->GetController();
+    EXPECT_NE(controller1, controller2);
+    EXPECT_TRUE(controller1->HasCrtc(drm_device1, kCrtc19));
+    EXPECT_TRUE(controller2->HasCrtc(drm_device2, kCrtc20));
+  }
+
+  // Disconnect first display. Second display moves to origin.
+  {
+    screen_manager.RemoveDisplayController(drm_device1, kCrtc19);
+    screen_manager.ConfigureDisplayController(
+        drm_device2, kCrtc20, kConnector22, gfx::Point(0, 0), Mode(1920, 1080));
+    screen_manager.GetWindow(1)->SetBounds(gfx::Rect(0, 0, 1920, 1080));
+    screen_manager.GetWindow(1)->SetBounds(gfx::Rect(0, 0, 1920, 1080));
+    screen_manager.RemoveWindow(2)->Shutdown();
+  }
+
+  // Reconnect first display. Original configuration restored.
+  {
+    screen_manager.AddDisplayController(drm_device1, kCrtc19, kConnector28);
+    screen_manager.ConfigureDisplayController(
+        drm_device1, kCrtc19, kConnector28, gfx::Point(0, 0), Mode(1920, 1080));
+    // At this point, both displays are in the same location.
+    {
+      HardwareDisplayController* controller =
+          screen_manager.GetWindow(1)->GetController();
+      EXPECT_FALSE(controller->IsMirrored());
+      // We don't really care which crtc it has, but it should have just one.
+      EXPECT_EQ(1U, controller->crtc_controllers().size());
+      EXPECT_TRUE(controller->HasCrtc(drm_device1, kCrtc19) ||
+                  controller->HasCrtc(drm_device2, kCrtc20));
+    }
+    screen_manager.ConfigureDisplayController(drm_device2, kCrtc20,
+                                              kConnector22, gfx::Point(0, 1140),
+                                              Mode(1920, 1080));
+    auto window3 =
+        std::make_unique<DrmWindow>(3, &drm_device_manager, &screen_manager);
+    window3->Initialize(&buffer_generator);
+    screen_manager.AddWindow(3, std::move(window3));
+    screen_manager.GetWindow(3)->SetBounds(gfx::Rect(0, 0, 1920, 1080));
+    screen_manager.GetWindow(1)->SetBounds(gfx::Rect(0, 1140, 1920, 1080));
+    screen_manager.GetWindow(1)->SetBounds(gfx::Rect(0, 0, 1920, 1080));
+    screen_manager.GetWindow(3)->SetBounds(gfx::Rect(0, 1140, 1920, 1080));
+  }
+
+  // Everything is restored.
+  {
+    HardwareDisplayController* controller1 =
+        screen_manager.GetWindow(1)->GetController();
+    HardwareDisplayController* controller3 =
+        screen_manager.GetWindow(3)->GetController();
+    EXPECT_NE(controller1, controller3);
+    EXPECT_TRUE(controller1->HasCrtc(drm_device1, kCrtc19));
+    EXPECT_TRUE(controller3->HasCrtc(drm_device2, kCrtc20));
+  }
+
+  // Cleanup.
+  screen_manager.RemoveWindow(1)->Shutdown();
+  screen_manager.RemoveWindow(3)->Shutdown();
+}
+
+}  // namespace ui

@@ -7,11 +7,11 @@
 
 #include "base/macros.h"
 #include "components/spellcheck/common/spellcheck_panel.mojom.h"
-#include "components/spellcheck/spellcheck_build_features.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "third_party/WebKit/public/platform/WebSpellCheckPanelHostClient.h"
+#include "third_party/blink/public/platform/web_spell_check_panel_host_client.h"
 
 #if !BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #error "Spellcheck panel should be enabled."

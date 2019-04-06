@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
+<translation id="114721135501989771">Trải nghiệm Google thông minh trong Chrome</translation>
 <translation id="1326317727527857210">Để có các tab từ các thiết bị khác của bạn, hãy đăng nhập vào Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1816764564654397850">T.báo b.mật của Google Chrome</translation>
@@ -9,9 +10,11 @@
 <translation id="2334084861041072223">Bản quyền <ph name="YEAR" /> Google Inc. Mọi quyền được bảo lưu.</translation>
 <translation id="2342981853652716282">Đăng nhập vào Chrome để nhận dấu trang, mật khẩu và nhiều nội dung khác trên tất cả các thiết bị của bạn.</translation>
 <translation id="2347208864470321755">Khi tính năng này được bật, Chrome sẽ đề xuất sử dụng Google Dịch để dịch các trang viết bằng ngôn ngữ khác. <ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" /></translation>
+<translation id="2436117022029368436">Giao tiếp với Google để cải thiện tính năng duyệt web cũng như Chrome</translation>
 <translation id="2441696206556358796">Để lưu hình ảnh, nhấn vào Cài đặt để cho phép Chrome sử dụng ảnh của bạn</translation>
 <translation id="2576431527583832481">Chrome được cải tiến hơn! Đã có phiên bản mới.</translation>
 <translation id="257708665678654955">Bạn có muốn Google Chrome đề xuất dịch các trang <ph name="LANGUAGE_NAME" /> của trang web này vào lần tiếp theo không?</translation>
+<translation id="2943166482989655199">Cải thiện Chrome và tăng cường bảo mật bằng cách gửi dữ liệu sử dụng và dữ liệu về hệ thống cho Google</translation>
 <translation id="3148434565183091099">Để nhận dấu trang trên tất cả các thiết bị của bạn, hãy đăng nhập vào Chrome.</translation>
 <translation id="3148688391461398285">Có được trải nghiệm tốt hơn trong Chrome dựa trên vị trí của bạn.</translation>
 <translation id="3167189358072330585">Tài khoản của bạn không hoạt động trên Google Chrome. Vui lòng liên hệ với quản trị viên miền của bạn hoặc sử dụng Tài khoản Google thông thường để đăng nhập.</translation>
@@ -26,12 +29,15 @@
 <translation id="4099578267706723511">Giúp cải thiện Chrome bằng cách gửi số liệu thống kê sử dụng và báo cáo sự cố cho Google.</translation>
 <translation id="415767770115540173">Nhận trải nghiệm Google tốt hơn trong Chrome dựa vào vị trí của bạn.</translation>
 <translation id="424864128008805179">Đăng xuất khỏi Chrome?</translation>
+<translation id="447252321002412580">Giúp cải thiện hiệu suất cũng như các tính năng của Chrome</translation>
 <translation id="4523886039239821078">Một số tiện ích bổ sung khiến Chrome trục trặc. Hãy gỡ cài đặt:</translation>
 <translation id="4615174829807303908">Bạn đang đăng xuất khỏi tài khoản do <ph name="SIGNOUT_MANAGED_DOMAIN" /> quản lý. Thao tác này sẽ xóa dữ liệu Chrome khỏi thiết bị này nhưng dữ liệu đó sẽ vẫn còn trong tài khoản Google của bạn.</translation>
 <translation id="5389212809648216794">Google Chrome không thể sử dụng máy ảnh của bạn do một ứng dụng khác đang dùng máy ảnh</translation>
+<translation id="5489543008378040943">Bạn có thể tùy chỉnh mục <ph name="BEGIN_LINK" />Cài đặt<ph name="END_LINK" /> bất cứ lúc nào. Google có thể sử dụng nội dung trên các trang web bạn truy cập, hoạt động và các tương tác trên trình duyệt để cá nhân hóa Chrome và các dịch vụ của Google, chẳng hạn như Dịch, Tìm kiếm và quảng cáo.</translation>
 <translation id="5639704535586432836">Mở Cài đặt &gt; Bảo mật &gt; Máy ảnh &gt; Google Chrome và bật máy ảnh.</translation>
 <translation id="5642200033778930880">Google Chrome không thể sử dụng máy ảnh của bạn ở Chế độ xem phân tách</translation>
 <translation id="5703130498371792817">Bạn thích Chrome? <ph name="BEGIN_LINK" />Xếp hạng ứng dụng này<ph name="END_LINK" /></translation>
+<translation id="5854621639439811139">Mẹo dành cho Chrome. Một số nút hiện nằm ở cuối màn hình, chẳng hạn như Quay lại, Tiến lên và Tìm kiếm.</translation>
 <translation id="6036420186814142909">Google Chrome có tính năng giúp bạn quản lý dữ liệu Internet của mình và tốc độ mà bạn có thể tải trang web.
 <ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" /></translation>
 <translation id="6573431926118603307">Các tab bạn đã mở trong Chrome trên thiết bị khác sẽ xuất hiện tại đây.</translation>
@@ -50,4 +56,5 @@
 <translation id="8459495907675268833">Dữ liệu được chọn đã bị xóa khỏi Chrome và các thiết bị được đồng bộ hóa. Tài khoản Google của bạn có thể có các dạng lịch sử duyệt web khác, chẳng hạn như tìm kiếm và hoạt động từ các dịch vụ khác của Google tại history.google.com.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8606668294522778825">Google Chrome có thể sử dụng dịch vụ web để cải thiện trải nghiệm duyệt web của bạn. Bạn có thể tùy ý vô hiệu hóa các dịch vụ này. <ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" /></translation>
+<translation id="96145293669295453">Mẹo dành cho Chrome. Để xem thêm các tùy chọn về tab, hãy nhấn và giữ nút Hiển thị tab trên thanh công cụ ở đầu hoặc cuối màn hình.</translation>
 </translationbundle>

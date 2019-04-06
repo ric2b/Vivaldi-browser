@@ -22,10 +22,10 @@
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/access_policy_delegate.h"
+#include "services/ui/ws/async_event_dispatcher.h"
 #include "services/ui/ws/drag_source.h"
 #include "services/ui/ws/drag_target_connection.h"
 #include "services/ui/ws/ids.h"
-#include "services/ui/ws/user_id.h"
 #include "services/ui/ws/window_tree_binding.h"
 #include "services/viz/public/interfaces/compositing/surface_id.mojom.h"
 #include "ui/gfx/native_widget_types.h"
@@ -56,6 +56,7 @@ class WindowManagerState;
 class WindowServer;
 
 struct EventLocation;
+struct WindowTreeAndWindowId;
 
 namespace test {
 class WindowTreeTestApi;
@@ -74,10 +75,11 @@ class WindowTree : public mojom::WindowTree,
                    public AccessPolicyDelegate,
                    public mojom::WindowManagerClient,
                    public DragSource,
-                   public DragTargetConnection {
+                   public DragTargetConnection,
+                   public AsyncEventDispatcher {
  public:
   WindowTree(WindowServer* window_server,
-             const UserId& user_id,
+             bool is_for_embedding,
              ServerWindow* root,
              std::unique_ptr<AccessPolicy> access_policy);
   ~WindowTree() override;
@@ -106,16 +108,9 @@ class WindowTree : public mojom::WindowTree,
     can_change_root_window_visibility_ = value;
   }
 
-  const UserId& user_id() const { return user_id_; }
+  bool is_for_embedding() const { return is_for_embedding_; }
 
   mojom::WindowTreeClient* client() { return binding_->client(); }
-
-  // Returns the Window with the specified id.
-  ServerWindow* GetWindow(const WindowId& id) {
-    return const_cast<ServerWindow*>(
-        const_cast<const WindowTree*>(this)->GetWindow(id));
-  }
-  const ServerWindow* GetWindow(const WindowId& id) const;
 
   // Returns the Window with the specified client id *only* if known to this
   // client, returns null if not known.
@@ -176,7 +171,7 @@ class WindowTree : public mojom::WindowTree,
   void AddRootForWindowManager(const ServerWindow* root);
 
   // Invoked when a tree is about to be destroyed.
-  void OnWindowDestroyingTreeImpl(WindowTree* tree);
+  void OnWillDestroyTree(WindowTree* tree);
 
   // Sends updated display information.
   void OnWmDisplayModified(const display::Display& display);
@@ -205,13 +200,13 @@ class WindowTree : public mojom::WindowTree,
              mojom::WindowTreeClientPtr window_tree_client,
              uint32_t flags);
 
-  // Dispatches an event to the client. |callback| is run with the result from
-  // the client.
-  using DispatchEventCallback = base::OnceCallback<void(mojom::EventResult)>;
-  void DispatchInputEvent(ServerWindow* target,
-                          const ui::Event& event,
-                          const EventLocation& event_location,
-                          DispatchEventCallback callback);
+  // Called from EmbedUsingToken() to embed an existing client that previously
+  // called ScheduleEmbedForExistingClient(). |tree_and_window_id.tree| is the
+  // client that previously called ScheduleEmbedForExistingClient() and
+  // |token| is the token returned to the client.
+  bool EmbedExistingTree(const ClientWindowId& window_id,
+                         const WindowTreeAndWindowId& tree_and_window_id,
+                         const base::UnguessableToken& token);
 
   bool IsWaitingForNewTopLevelWindow(uint32_t wm_change_id);
   viz::FrameSinkId OnWindowManagerCreatedTopLevelWindow(
@@ -227,10 +222,7 @@ class WindowTree : public mojom::WindowTree,
   // ack from the client is received |callback| is Run().
   using AcceleratorCallback = base::OnceCallback<void(
       mojom::EventResult,
-      const std::unordered_map<std::string, std::vector<uint8_t>>&)>;
-  void OnAccelerator(uint32_t accelerator_id,
-                     const ui::Event& event,
-                     AcceleratorCallback callback);
+      const base::flat_map<std::string, std::vector<uint8_t>>&)>;
   void OnEventOccurredOutsideOfModalWindow(const ServerWindow* modal_window);
 
   // Called when the cursor touch visibility bit changes. This is only called
@@ -350,8 +342,6 @@ class WindowTree : public mojom::WindowTree,
   // Returns true if |id| is a valid WindowId for a new window.
   bool IsValidIdForNewWindow(const ClientWindowId& id) const;
 
-  WindowId GenerateNewWindowId();
-
   // These functions return true if the corresponding mojom function is allowed
   // for this tree.
   bool CanReorderWindow(const ServerWindow* window,
@@ -362,10 +352,23 @@ class WindowTree : public mojom::WindowTree,
   // the tree that originated the change.
   bool DeleteWindowImpl(WindowTree* source, ServerWindow* window);
 
-  // If |window| is known does nothing. Otherwise adds |window| to |windows|,
-  // marks |window| as known and recurses.
+  // If |window| is known does nothing. Otherwise adds |window| to |windows| (if
+  // non-null) and marks |window| as known and recurses. If |window| is not
+  // known it assigned the ClientWindowId |id_for_window|, if |id_for_window|
+  // is null, then the FrameSinkId of |window| is used.
   void GetUnknownWindowsFrom(const ServerWindow* window,
-                             std::vector<const ServerWindow*>* windows);
+                             std::vector<const ServerWindow*>* windows,
+                             const ClientWindowId* id_for_window);
+
+  // Called to add |window| as an embed root. This matches a call from the
+  // client to ScheduleEmbedForExistingClient(). |client_window_id| is the
+  // ClientWindowId to use for |window|.
+  void AddRootForToken(const base::UnguessableToken& token,
+                       ServerWindow* window,
+                       const ClientWindowId& client_window_id);
+
+  void AddToMaps(const ServerWindow* window,
+                 const ClientWindowId& client_window_id);
 
   // Removes |window| from the appropriate maps. If |window| is known to this
   // client true is returned.
@@ -373,9 +376,9 @@ class WindowTree : public mojom::WindowTree,
 
   // Removes |window| and all its descendants from the necessary maps. This
   // does not recurse through windows that were created by this tree. All
-  // windows owned by this tree are added to |local_windows|.
+  // windows created by this tree are added to |created_windows|.
   void RemoveFromKnown(const ServerWindow* window,
-                       std::vector<ServerWindow*>* local_windows);
+                       std::vector<ServerWindow*>* created_windows);
 
   // Removes a root from set of roots of this tree. This does not remove
   // the window from the window tree, only from the set of roots.
@@ -410,10 +413,10 @@ class WindowTree : public mojom::WindowTree,
   // |event_ack_id_| and returns it.
   uint32_t GenerateEventAckId();
 
-  void DispatchInputEventImpl(ServerWindow* target,
-                              const ui::Event& event,
-                              const EventLocation& event_location,
-                              DispatchEventCallback callback);
+  void DispatchEventImpl(ServerWindow* target,
+                         const ui::Event& event,
+                         const EventLocation& event_location,
+                         DispatchEventCallback callback);
 
   // Returns true if the client has a pointer watcher and this event matches.
   bool EventMatchesPointerWatcher(const ui::Event& event) const;
@@ -453,16 +456,25 @@ class WindowTree : public mojom::WindowTree,
   mojom::WindowTreeClientPtr GetAndRemoveScheduledEmbedWindowTreeClient(
       const base::UnguessableToken& token);
 
+  // AsyncEventDispatcher:
+  void DispatchEvent(ServerWindow* target,
+                     const ui::Event& event,
+                     const EventLocation& event_location,
+                     DispatchEventCallback callback) override;
+  void DispatchAccelerator(uint32_t accelerator_id,
+                           const ui::Event& event,
+                           AcceleratorCallback callback) override;
+
   // WindowTree:
-  void NewWindow(uint32_t change_id,
-                 Id transport_window_id,
-                 const base::Optional<
-                     std::unordered_map<std::string, std::vector<uint8_t>>>&
-                     transport_properties) override;
+  void NewWindow(
+      uint32_t change_id,
+      Id transport_window_id,
+      const base::Optional<base::flat_map<std::string, std::vector<uint8_t>>>&
+          transport_properties) override;
   void NewTopLevelWindow(
       uint32_t change_id,
       Id transport_window_id,
-      const std::unordered_map<std::string, std::vector<uint8_t>>&
+      const base::flat_map<std::string, std::vector<uint8_t>>&
           transport_properties) override;
   void DeleteWindow(uint32_t change_id, Id transport_window_id) override;
   void AddWindow(uint32_t change_id, Id parent_id, Id child_id) override;
@@ -480,10 +492,7 @@ class WindowTree : public mojom::WindowTree,
                      Id window_id,
                      Id relative_window_id,
                      mojom::OrderDirection direction) override;
-  void GetWindowTree(
-      Id window_id,
-      const base::Callback<void(std::vector<mojom::WindowDataPtr>)>& callback)
-      override;
+  void GetWindowTree(Id window_id, GetWindowTreeCallback callback) override;
   void SetCapture(uint32_t change_id, Id window_id) override;
   void ReleaseCapture(uint32_t change_id, Id window_id) override;
   void StartPointerWatcher(bool want_moves) override;
@@ -514,13 +523,16 @@ class WindowTree : public mojom::WindowTree,
   void Embed(Id transport_window_id,
              mojom::WindowTreeClientPtr client,
              uint32_t flags,
-             const EmbedCallback& callback) override;
+             EmbedCallback callback) override;
   void ScheduleEmbed(mojom::WindowTreeClientPtr client,
-                     const ScheduleEmbedCallback& callback) override;
+                     ScheduleEmbedCallback callback) override;
   void EmbedUsingToken(Id transport_window_id,
                        const base::UnguessableToken& token,
                        uint32_t flags,
-                       const EmbedUsingTokenCallback& callback) override;
+                       EmbedUsingTokenCallback callback) override;
+  void ScheduleEmbedForExistingClient(
+      ClientSpecificId window_id,
+      ScheduleEmbedForExistingClientCallback callback) override;
   void SetFocus(uint32_t change_id, Id transport_window_id) override;
   void SetCanFocus(Id transport_window_id, bool can_focus) override;
   void SetEventTargetingPolicy(Id transport_window_id,
@@ -549,14 +561,14 @@ class WindowTree : public mojom::WindowTree,
   void GetWindowManagerClient(
       mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
       override;
-  void GetCursorLocationMemory(const GetCursorLocationMemoryCallback& callback)
-      override;
+  void GetCursorLocationMemory(
+      GetCursorLocationMemoryCallback callback) override;
   void PerformDragDrop(
       uint32_t change_id,
       Id source_window_id,
       const gfx::Point& screen_location,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& drag_data,
-      const SkBitmap& drag_image,
+      const base::flat_map<std::string, std::vector<uint8_t>>& drag_data,
+      const gfx::ImageSkia& drag_image,
       const gfx::Vector2d& drag_image_offset,
       uint32_t drag_operation,
       ui::mojom::PointerKind source) override;
@@ -569,7 +581,7 @@ class WindowTree : public mojom::WindowTree,
 
   // mojom::WindowManagerClient:
   void AddAccelerators(std::vector<mojom::WmAcceleratorPtr> accelerators,
-                       const AddAcceleratorsCallback& callback) override;
+                       AddAcceleratorsCallback callback) override;
   void RemoveAccelerator(uint32_t id) override;
   void AddActivationParent(Id transport_window_id) override;
   void RemoveActivationParent(Id transport_window_id) override;
@@ -584,26 +596,26 @@ class WindowTree : public mojom::WindowTree,
                       bool is_primary_display,
                       Id window_id,
                       const std::vector<display::Display>& mirrors,
-                      const SetDisplayRootCallback& callback) override;
+                      SetDisplayRootCallback callback) override;
   void SetDisplayConfiguration(
       const std::vector<display::Display>& displays,
       std::vector<ui::mojom::WmViewportMetricsPtr> transport_metrics,
       int64_t primary_display_id,
       int64_t internal_display_id,
       const std::vector<display::Display>& mirrors,
-      const SetDisplayConfigurationCallback& callback) override;
+      SetDisplayConfigurationCallback callback) override;
   void SwapDisplayRoots(int64_t display_id1,
                         int64_t display_id2,
-                        const SwapDisplayRootsCallback& callback) override;
+                        SwapDisplayRootsCallback callback) override;
   void SetBlockingContainers(
       std::vector<mojom::BlockingContainersPtr> blocking_containers,
-      const SetBlockingContainersCallback& callback) override;
+      SetBlockingContainersCallback callback) override;
   void WmResponse(uint32_t change_id, bool response) override;
   void WmSetBoundsResponse(uint32_t change_id) override;
   void WmRequestClose(Id transport_window_id) override;
   void WmSetFrameDecorationValues(
       mojom::FrameDecorationValuesPtr values) override;
-  void WmSetNonClientCursor(uint32_t window_id, ui::CursorData cursor) override;
+  void WmSetNonClientCursor(Id window_id, ui::CursorData cursor) override;
   void WmLockCursor() override;
   void WmUnlockCursor() override;
   void WmSetCursorVisible(bool visible) override;
@@ -617,11 +629,10 @@ class WindowTree : public mojom::WindowTree,
   void WmSetCursorTouchVisible(bool enabled) override;
   void OnWmCreatedTopLevelWindow(uint32_t change_id,
                                  Id transport_window_id) override;
-  void OnAcceleratorAck(
-      uint32_t event_id,
-      mojom::EventResult result,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& properties)
-      override;
+  void OnAcceleratorAck(uint32_t event_id,
+                        mojom::EventResult result,
+                        const base::flat_map<std::string, std::vector<uint8_t>>&
+                            properties) override;
 
   // AccessPolicyDelegate:
   bool HasRootForAccessPolicy(const ServerWindow* window) const override;
@@ -636,13 +647,12 @@ class WindowTree : public mojom::WindowTree,
   // DragSource:
   void OnDragMoved(const gfx::Point& location) override;
   void OnDragCompleted(bool success, uint32_t action_taken) override;
-  ServerWindow* GetWindowById(const WindowId& id) override;
   DragTargetConnection* GetDragTargetForWindow(
       const ServerWindow* window) override;
 
   // DragTargetConnection:
   void PerformOnDragDropStart(
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
+      const base::flat_map<std::string, std::vector<uint8_t>>& mime_data)
       override;
   void PerformOnDragEnter(
       const ServerWindow* window,
@@ -667,13 +677,12 @@ class WindowTree : public mojom::WindowTree,
 
   WindowServer* window_server_;
 
-  UserId user_id_;
+  // True if this WindowTree was created by way of Embed().
+  bool is_for_embedding_;
 
   // Id of this tree as assigned by WindowServer.
   const ClientSpecificId id_;
   std::string name_;
-
-  ClientSpecificId next_window_id_;
 
   std::unique_ptr<WindowTreeBinding> binding_;
 
@@ -684,15 +693,13 @@ class WindowTree : public mojom::WindowTree,
   std::set<const ServerWindow*> roots_;
 
   // The windows created by this tree. This tree owns these objects.
-  std::unordered_map<WindowId, ServerWindow*, WindowIdHash> created_window_map_;
+  std::set<ServerWindow*> created_windows_;
 
-  // The client is allowed to assign ids. These two maps providing the mapping
-  // from the ids native to the server (WindowId) to those understood by the
-  // client (ClientWindowId).
-  std::unordered_map<ClientWindowId, WindowId, ClientWindowIdHash>
-      client_id_to_window_id_map_;
-  std::unordered_map<WindowId, ClientWindowId, WindowIdHash>
-      window_id_to_client_id_map_;
+  // The client is allowed to assign ids.
+  std::unordered_map<ClientWindowId, const ServerWindow*, ClientWindowIdHash>
+      client_id_to_window_map_;
+  std::unordered_map<const ServerWindow*, ClientWindowId>
+      window_to_client_id_map_;
 
   // Id passed to the client and expected to be supplied back to
   // OnWindowInputEventAck() or OnAcceleratorAck().

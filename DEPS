@@ -24,10 +24,9 @@ hooks = [
     ],
   },
   {
-    # Ensure that while generating dependencies lists in .gyp files we don't
-    # accidentally reference any .pyc files whose corresponding .py files have
-    # already been deleted.
-    # We should actually try to avoid generating .pyc files, crbug.com/500078.
+    # Ensure that we don't accidentally reference any .pyc files whose
+    # corresponding .py files have since been deleted.
+    # We could actually try to avoid generating .pyc files, crbug.com/500078.
     'name': 'remove_stale_pyc_files',
     'pattern': '.',
     'action': [
@@ -39,6 +38,8 @@ hooks = [
         'vivaldi/chromium/infra',
         'vivaldi/chromium/ppapi',
         'vivaldi/chromium/printing',
+        'vivaldi/chromium/third_party/blink/renderer/build/scripts',
+        'vivaldi/chromium/third_party/blink/tools',  # See http://crbug.com/625877.
         'vivaldi/chromium/third_party/catapult',
         'vivaldi/chromium/third_party/closure_compiler/build',
         'vivaldi/chromium/third_party/WebKit/Tools/Scripts',  # See http://crbug.com/625877.
@@ -58,30 +59,45 @@ hooks = [
     ],
   },
   {
-    # Downloads the current stable linux sysroot to build/linux/ if needed.
-    # This sysroot updates at about the same rate that the chrome build deps
-    # change. This script is a no-op except for linux users who are doing
-    # official chrome builds or cross compiling.
-    'name': 'sysroot',
+    'name': 'sysroot_arm',
     'pattern': '.',
-    'condition': 'checkout_linux or host_os == "linux"',
+    'condition': 'checkout_linux and checkout_arm',
+    'action': ['python', 'vivaldi/chromium/build/linux/sysroot_scripts/install-sysroot.py',
+               '--arch=arm'],
+  },
+  {
+    'name': 'sysroot_arm64',
+    'pattern': '.',
+    'condition': 'checkout_linux and checkout_arm64',
+    'action': ['python', 'vivaldi/chromium/build/linux/sysroot_scripts/install-sysroot.py',
+               '--arch=arm64'],
+  },
+  {
+    'name': 'sysroot_x86',
+    'pattern': '.',
+    'condition': 'checkout_linux and (checkout_x86 or checkout_x64)',
+    'action': ['python', 'vivaldi/chromium/build/linux/sysroot_scripts/install-sysroot.py',
+               '--arch=x86'],
+  },
+  {
+    'name': 'sysroot_x64',
+    'pattern': '.',
+    'condition': 'checkout_linux and checkout_x64',
+    'action': ['python', 'vivaldi/chromium/build/linux/sysroot_scripts/install-sysroot.py',
+               '--arch=x64'],
+  },
+  {
+    # Case-insensitivity for the Win SDK. Must run before win_toolchain below.
+    'name': 'ciopfs_linux',
+    'pattern': '.',
+    'condition': 'checkout_win and host_os == "linux"',
     'action': [ 'python',
-      'vivaldi/chromium/build/linux/sysroot_scripts/install-sysroot.py',
-      '--running-as-hook'],
-  },
-  {
-    # Update the Windows toolchain if necessary.
-    'name': 'win_toolchain',
-    'pattern': '.',
-    'condition': 'checkout_win',
-    'action': ['python', 'vivaldi/chromium/build/vs_toolchain.py', 'update', '--force'],
-  },
-  {
-    # Update the Mac toolchain if necessary.
-    'name': 'mac_toolchain',
-    'pattern': '.',
-    'condition': 'checkout_ios or checkout_mac',
-    'action': ['python', 'vivaldi/chromium/build/mac_toolchain.py'],
+                'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-browser-clang/ciopfs',
+                '-s', 'vivaldi/chromium/build/ciopfs.sha1',
+    ]
   },
   # Pull binutils for linux, enabled debug fission for faster linking /
   # debugging when used with clang on Ubuntu Precise.
@@ -219,17 +235,16 @@ hooks = [
                 '-s', 'vivaldi/chromium/build/toolchain/win/rc/linux64/rc.sha1',
     ]
   },
-  {
-    'name': 'content_shell_fonts',
+ {
+    'name': 'test_fonts',
     'pattern': '.',
-    'condition': 'checkout_linux',
     'action': [ 'python',
       'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--extract',
                 '--no_auth',
                 '--bucket', 'chromium-fonts',
-                '-s', 'vivaldi/chromium/third_party/content_shell_fonts/content_shell_test_fonts.tar.gz.sha1',
+                '-s', 'vivaldi/chromium/third_party/test_fonts/test_fonts.tar.gz.sha1',
     ],
   },
   # Pull order files for the win/clang build.
@@ -246,6 +261,7 @@ hooks = [
     ],
   },
   # Pull luci-go binaries (isolate, swarming) using checked-in hashes.
+  # TODO(maruel): Remove, https://crbug.com/851596
   {
     'name': 'luci-go_win',
     'pattern': '.',
@@ -331,14 +347,10 @@ hooks = [
     ],
   },
   {
-    'name': 'Android CIPD Ensure',
+    'name': 'Fetch Android AFDO profile',
     'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['vivaldi/chromium/build/cipd/cipd_wrapper.py',
-               '--chromium-root', 'vivaldi/chromium',
-               '--ensure-file', 'vivaldi/chromium/build/cipd/android/android.ensure',
-               '--ensure-file', 'vivaldi/chromium/chrome/android/android.ensure',
-    ],
+    'condition': 'checkout_android or checkout_linux',
+    'action': ['python', 'vivaldi/chromium/chrome/android/profiles/update_afdo_profile.py'],
   },
   {
     # This downloads SDK extras and puts them in the
@@ -357,39 +369,60 @@ hooks = [
     'name': 'gvr_static_shim_android_arm',
     'pattern': '\\.sha1',
     'condition': 'checkout_android',
-    'action': [   'python',
-                  'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
-                  '--no_resume',
-                  '--platform=linux*',
-                  '--no_auth',
-                  '--bucket', 'chromium-gvr-static-shim',
-                  '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm.a.sha1',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-gvr-static-shim',
+                '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm.a.sha1',
     ],
   },
   {
     'name': 'gvr_static_shim_android_arm64',
     'pattern': '\\.sha1',
     'condition': 'checkout_android',
-    'action': [   'python',
-                  'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
-                  '--no_resume',
-                  '--platform=linux*',
-                  '--no_auth',
-                  '--bucket', 'chromium-gvr-static-shim',
-                  '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm64.a.sha1',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-gvr-static-shim',
+                '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm64.a.sha1',
       ],
   },
+   {
+    'name': 'gvr_static_shim_custom_libcxx_android_arm',
+    'pattern': '\\.sha1',
+    'condition': 'checkout_android',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-gvr-static-shim',
+                '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_custom_libcxx_arm.a.sha1',
+    ],
+  },
   {
+    'name': 'gvr_static_shim_custom_libcxx_android_arm64',
+    'pattern': '\\.sha1',
+    'condition': 'checkout_android',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-gvr-static-shim',
+                '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_custom_libcxx_arm64.a.sha1',
+      ],
+  },
+ {
     'name': 'vr_controller_test_api',
     'pattern': '\\.sha1',
     'condition': 'checkout_android',
-    'action': [   'python',
-                  'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
-                  '--no_resume',
-                  '--platform=linux*',
-                  '--no_auth',
-                  '--bucket', 'chromium-gvr-static-shim/controller_test_api',
-                  '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/test-libraries/controller_test_api.aar.sha1',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-gvr-static-shim/controller_test_api',
+                '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/test-libraries/controller_test_api.aar.sha1',
     ],
   },
   # Download VR test APKs only if the environment variable is set
@@ -408,6 +441,16 @@ hooks = [
     'condition': 'checkout_android',
     'action': ['python',
                'vivaldi/chromium/build/android/download_doclava.py',
+    ],
+  },
+  # Download and initialize "vpython" VirtualEnv environment packages.
+  {
+    'name': 'vpython_common',
+    'pattern': '.',
+    'condition': 'checkout_linux or checkout_mac',
+    'action': [ 'vpython',
+                '-vpython-spec', 'vivaldi/chromium/.vpython',
+                '-vpython-tool', 'install',
     ],
   },
   {

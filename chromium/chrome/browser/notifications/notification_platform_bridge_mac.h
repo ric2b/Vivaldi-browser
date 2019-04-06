@@ -35,17 +35,13 @@ class NotificationPlatformBridgeMac : public NotificationPlatformBridge {
 
   // NotificationPlatformBridge implementation.
   void Display(NotificationHandler::Type notification_type,
-               const std::string& profile_id,
-               bool incognito,
+               Profile* profile,
                const message_center::Notification& notification,
                std::unique_ptr<NotificationCommon::Metadata> metadata) override;
 
-  void Close(const std::string& profile_id,
-             const std::string& notification_id) override;
-  void GetDisplayed(
-      const std::string& profile_id,
-      bool incognito,
-      const GetDisplayedNotificationsCallback& callback) const override;
+  void Close(Profile* profile, const std::string& notification_id) override;
+  void GetDisplayed(Profile* profile,
+                    GetDisplayedNotificationsCallback callback) const override;
   void SetReadyCallback(NotificationBridgeReadyCallback callback) override;
 
   // Processes a notification response generated from a user action

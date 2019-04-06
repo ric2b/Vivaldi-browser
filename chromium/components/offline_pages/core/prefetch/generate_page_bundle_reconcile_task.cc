@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "components/offline_pages/core/prefetch/prefetch_network_request_factory.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store.h"
 #include "sql/connection.h"
@@ -79,9 +78,6 @@ bool ReconcileGenerateBundleRequests(
     std::unique_ptr<std::set<std::string>> requested_urls,
     int max_attempts,
     sql::Connection* db) {
-  if (!db)
-    return false;
-
   sql::Transaction transaction(db);
   if (!transaction.Begin())
     return false;
@@ -128,7 +124,8 @@ void GeneratePageBundleReconcileTask::Run() {
       base::BindOnce(&ReconcileGenerateBundleRequests,
                      std::move(requested_urls), kMaxGenerateBundleAttempts),
       base::BindOnce(&GeneratePageBundleReconcileTask::FinishedUpdate,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr()),
+      false);
 }
 
 void GeneratePageBundleReconcileTask::FinishedUpdate(bool success) {

@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -43,8 +44,6 @@
 #include <gperftools/malloc_extension.h>
 #include "base/logging.h"   // for perftools_vsnprintf
 #include "base/spinlock.h"              // for SpinLockHolder, SpinLock
-
-static const int kLogBufSize = 800;
 
 // Variables for storing crash output.  Allocated statically since we
 // may not be able to heap-allocate while crashing.

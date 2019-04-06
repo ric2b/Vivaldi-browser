@@ -24,11 +24,15 @@ class Bus;
 namespace chromeos {
 
 // Style Note: Clients are sorted by names.
+class ArcAppfuseProviderClient;
 class ArcMidisClient;
 class ArcObbMounterClient;
 class ArcOemCryptoClient;
 class AuthPolicyClient;
 class BiodClient;
+class CecServiceClient;
+class CiceroneClient;
+class ConciergeClient;
 class CrasAudioClient;
 class CrosDisksClient;
 class CryptohomeClient;
@@ -38,14 +42,15 @@ class DBusThreadManagerSetter;
 class DebugDaemonClient;
 class EasyUnlockClient;
 class GsmSMSClient;
+class HammerdClient;
 class ImageBurnerClient;
 class ImageLoaderClient;
 class LorgnetteManagerClient;
+class MachineLearningClient;
 class MediaAnalyticsClient;
 class ModemMessagingClient;
 class PermissionBrokerClient;
 class PowerManagerClient;
-class SMSClient;
 class SessionManagerClient;
 class ShillDeviceClient;
 class ShillIPConfigClient;
@@ -54,6 +59,7 @@ class ShillProfileClient;
 class ShillServiceClient;
 class ShillThirdPartyVpnDriverClient;
 class SmbProviderClient;
+class SMSClient;
 class SystemClockClient;
 class UpdateEngineClient;
 class UpstartClient;
@@ -82,21 +88,23 @@ class CHROMEOS_EXPORT DBusThreadManager {
   // Processes for which to create and initialize the D-Bus clients.
   // TODO(jamescook): Move creation of clients into //ash and //chrome/browser.
   // http://crbug.com/647367
-  enum ProcessMask {
-    PROCESS_ASH = 1 << 0,
-    PROCESS_BROWSER = 1 << 1,
-    PROCESS_ALL = ~0,
+  enum ClientSet {
+    // Common clients needed by both ash and the browser.
+    kShared,
+
+    // Includes the client in |kShared| as well as the clients used only by
+    // the browser (and not ash).
+    kAll
   };
   // Sets the global instance. Must be called before any calls to Get().
   // We explicitly initialize and shut down the global object, rather than
   // making it a Singleton, to ensure clean startup and shutdown.
   // This will initialize real or fake DBusClients depending on command-line
   // arguments and whether this process runs in a ChromeOS environment.
-  // Only D-Bus clients available in the processes in |process_mask| will be
-  // created.
-  static void Initialize(ProcessMask process_mask);
+  // Only D-Bus clients specified in |client_set| will be created.
+  static void Initialize(ClientSet client_set);
 
-  // Equivalent to Initialize(PROCESS_ALL).
+  // Equivalent to Initialize(kAll).
   static void Initialize();
 
   // Returns a DBusThreadManagerSetter instance that allows tests to
@@ -124,21 +132,27 @@ class CHROMEOS_EXPORT DBusThreadManager {
   // pointers after DBusThreadManager has been shut down.
   // TODO(jamescook): Replace this with calls to FooClient::Get().
   // http://crbug.com/647367
+  ArcAppfuseProviderClient* GetArcAppfuseProviderClient();
   ArcMidisClient* GetArcMidisClient();
   ArcObbMounterClient* GetArcObbMounterClient();
   ArcOemCryptoClient* GetArcOemCryptoClient();
   AuthPolicyClient* GetAuthPolicyClient();
   BiodClient* GetBiodClient();
+  CecServiceClient* GetCecServiceClient();
+  CiceroneClient* GetCiceroneClient();
+  ConciergeClient* GetConciergeClient();
   CrasAudioClient* GetCrasAudioClient();
   CrosDisksClient* GetCrosDisksClient();
   CryptohomeClient* GetCryptohomeClient();
   DebugDaemonClient* GetDebugDaemonClient();
   EasyUnlockClient* GetEasyUnlockClient();
   GsmSMSClient* GetGsmSMSClient();
+  HammerdClient* GetHammerdClient();
   ImageBurnerClient* GetImageBurnerClient();
   ImageLoaderClient* GetImageLoaderClient();
-  MediaAnalyticsClient* GetMediaAnalyticsClient();
   LorgnetteManagerClient* GetLorgnetteManagerClient();
+  MachineLearningClient* GetMachineLearningClient();
+  MediaAnalyticsClient* GetMediaAnalyticsClient();
   ModemMessagingClient* GetModemMessagingClient();
   PermissionBrokerClient* GetPermissionBrokerClient();
   PowerManagerClient* GetPowerManagerClient();
@@ -146,8 +160,8 @@ class CHROMEOS_EXPORT DBusThreadManager {
   ShillDeviceClient* GetShillDeviceClient();
   ShillIPConfigClient* GetShillIPConfigClient();
   ShillManagerClient* GetShillManagerClient();
-  ShillServiceClient* GetShillServiceClient();
   ShillProfileClient* GetShillProfileClient();
+  ShillServiceClient* GetShillServiceClient();
   ShillThirdPartyVpnDriverClient* GetShillThirdPartyVpnDriverClient();
   SmbProviderClient* GetSmbProviderClient();
   SMSClient* GetSMSClient();
@@ -159,9 +173,9 @@ class CHROMEOS_EXPORT DBusThreadManager {
  private:
   friend class DBusThreadManagerSetter;
 
-  // Creates dbus clients for all process types in |process_mask|. Creates real
-  // clients if |use_real_clients| is set, otherwise creates fakes.
-  DBusThreadManager(ProcessMask process_mask, bool use_real_clients);
+  // Creates dbus clients based on |client_set|. Creates real clients if
+  // |use_real_clients| is set, otherwise creates fakes.
+  DBusThreadManager(ClientSet client_set, bool use_real_clients);
   ~DBusThreadManager();
 
   // Initializes all currently stored DBusClients with the system bus and
@@ -190,10 +204,13 @@ class CHROMEOS_EXPORT DBusThreadManagerSetter {
 
   void SetAuthPolicyClient(std::unique_ptr<AuthPolicyClient> client);
   void SetBiodClient(std::unique_ptr<BiodClient> client);
+  void SetCiceroneClient(std::unique_ptr<CiceroneClient> client);
+  void SetConciergeClient(std::unique_ptr<ConciergeClient> client);
   void SetCrasAudioClient(std::unique_ptr<CrasAudioClient> client);
   void SetCrosDisksClient(std::unique_ptr<CrosDisksClient> client);
   void SetCryptohomeClient(std::unique_ptr<CryptohomeClient> client);
   void SetDebugDaemonClient(std::unique_ptr<DebugDaemonClient> client);
+  void SetHammerdClient(std::unique_ptr<HammerdClient> client);
   void SetShillDeviceClient(std::unique_ptr<ShillDeviceClient> client);
   void SetShillIPConfigClient(std::unique_ptr<ShillIPConfigClient> client);
   void SetShillManagerClient(std::unique_ptr<ShillManagerClient> client);

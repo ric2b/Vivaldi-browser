@@ -40,7 +40,7 @@ class MockClient {
   }
 
   // Note that this won't clear |overlay_|, which is helpful.
-  MOCK_METHOD0(UseSurfaceTexture, void(void));
+  MOCK_METHOD0(UseTextureOwner, void(void));
 
   // Let the test have the overlay.
   std::unique_ptr<AndroidOverlay> ReleaseOverlay() {
@@ -67,6 +67,7 @@ enum class IsSecure { No, Yes };
 enum class IsCCPromotable { No, Yes };
 enum class IsExpectingRelayout { No, Yes };
 enum class PromoteAggressively { No, Yes };
+enum class IsVideoRotated { No, Yes };
 
 using TestParams = std::tuple<ShouldUseOverlay,
                               ShouldBePowerEfficient,
@@ -76,7 +77,8 @@ using TestParams = std::tuple<ShouldUseOverlay,
                               IsSecure,
                               IsCCPromotable,
                               IsExpectingRelayout,
-                              PromoteAggressively>;
+                              PromoteAggressively,
+                              IsVideoRotated>;
 
 // Useful macro for instantiating tests.
 #define Either(x) Values(x::No, x::Yes)
@@ -84,8 +86,8 @@ using TestParams = std::tuple<ShouldUseOverlay,
 // Check if a parameter of type |type| is Yes.  |n| is the location of the
 // parameter of that type.
 // c++14 can remove |n|, and std::get() by type.
-#define IsYes(type, n) (::testing::get<n>(GetParam()) == type::Yes);
-#define IsIgnored(type, n) (::testing::get<n>(GetParam()) == type::Ignored);
+#define IsYes(type, n) (::testing::get<n>(GetParam()) == type::Yes)
+#define IsIgnored(type, n) (::testing::get<n>(GetParam()) == type::Ignored)
 
 }  // namespace
 
@@ -128,8 +130,10 @@ class AndroidVideoSurfaceChooserImplTest
     chooser_ = std::make_unique<AndroidVideoSurfaceChooserImpl>(allow_dynamic_,
                                                                 &tick_clock_);
     chooser_->SetClientCallbacks(
-        base::Bind(&MockClient::UseOverlayImpl, base::Unretained(&client_)),
-        base::Bind(&MockClient::UseSurfaceTexture, base::Unretained(&client_)));
+        base::BindRepeating(&MockClient::UseOverlayImpl,
+                            base::Unretained(&client_)),
+        base::BindRepeating(&MockClient::UseTextureOwner,
+                            base::Unretained(&client_)));
     chooser_->UpdateState(
         factory ? base::make_optional(std::move(factory)) : base::nullopt,
         chooser_state_);
@@ -207,28 +211,27 @@ class AndroidVideoSurfaceChooserImplTest
 };
 
 TEST_F(AndroidVideoSurfaceChooserImplTest,
-       InitializeWithoutFactoryUsesSurfaceTexture) {
+       InitializeWithoutFactoryUsesTextureOwner) {
   // Calling Initialize() with no factory should result in a callback to use
-  // surface texture.
-  EXPECT_CALL(client_, UseSurfaceTexture());
+  // texture owner.
+  EXPECT_CALL(client_, UseTextureOwner());
   StartChooser(AndroidOverlayFactoryCB());
 }
 
-TEST_F(AndroidVideoSurfaceChooserImplTest,
-       NullInitialOverlayUsesSurfaceTexture) {
+TEST_F(AndroidVideoSurfaceChooserImplTest, NullInitialOverlayUsesTextureOwner) {
   // If we provide a factory, but it fails to create an overlay, then |client_|
-  // should be notified to use a surface texture.
+  // should be notified to use a texture owner.
 
   chooser_state_.is_fullscreen = true;
   EXPECT_CALL(*this, MockOnOverlayCreated());
-  EXPECT_CALL(client_, UseSurfaceTexture());
+  EXPECT_CALL(client_, UseTextureOwner());
   StartChooser(FactoryFor(nullptr));
 }
 
 TEST_F(AndroidVideoSurfaceChooserImplTest,
-       FailedInitialOverlayUsesSurfaceTexture) {
+       FailedInitialOverlayUsesTextureOwner) {
   // If we provide a factory, but the overlay that it provides returns 'failed',
-  // then |client_| should use surface texture.  Also check that it won't retry
+  // then |client_| should use texture owner.  Also check that it won't retry
   // after a failed overlay too soon.
   chooser_state_.is_fullscreen = true;
   EXPECT_CALL(*this, MockOnOverlayCreated());
@@ -241,7 +244,7 @@ TEST_F(AndroidVideoSurfaceChooserImplTest,
   // doesn't have to be destroyed.  We just care that it hasn't been destroyed
   // before now.
   destruction_observer_ = nullptr;
-  EXPECT_CALL(client_, UseSurfaceTexture());
+  EXPECT_CALL(client_, UseTextureOwner());
   overlay_callbacks_.OverlayFailed.Run();
   testing::Mock::VerifyAndClearExpectations(&client_);
   testing::Mock::VerifyAndClearExpectations(this);
@@ -262,38 +265,38 @@ TEST_F(AndroidVideoSurfaceChooserImplTest,
   testing::Mock::VerifyAndClearExpectations(this);
 }
 
-TEST_F(AndroidVideoSurfaceChooserImplTest, NullLaterOverlayUsesSurfaceTexture) {
+TEST_F(AndroidVideoSurfaceChooserImplTest, NullLaterOverlayUsesTextureOwner) {
   // If an overlay factory is provided after startup that returns a null overlay
   // from CreateOverlay, |chooser_| should, at most, notify |client_| to use
-  // SurfaceTexture zero or more times.
+  // TextureOwner zero or more times.
 
-  // Start with SurfaceTexture.
+  // Start with TextureOwner.
   chooser_state_.is_fullscreen = true;
-  EXPECT_CALL(client_, UseSurfaceTexture());
+  EXPECT_CALL(client_, UseTextureOwner());
   allow_dynamic_ = true;
   StartChooser(AndroidOverlayFactoryCB());
   testing::Mock::VerifyAndClearExpectations(&client_);
 
   // Provide a factory that will return a null overlay.
   EXPECT_CALL(*this, MockOnOverlayCreated());
-  EXPECT_CALL(client_, UseSurfaceTexture()).Times(AnyNumber());
+  EXPECT_CALL(client_, UseTextureOwner()).Times(AnyNumber());
   chooser_->UpdateState(FactoryFor(nullptr), chooser_state_);
 }
 
 TEST_F(AndroidVideoSurfaceChooserImplTest, FailedLaterOverlayDoesNothing) {
   // If we send an overlay factory that returns an overlay, and that overlay
   // fails, then the client should not be notified except for zero or more
-  // callbacks to switch to surface texture.
+  // callbacks to switch to texture owner.
 
-  // Start with SurfaceTexture.
+  // Start with TextureOwner.
   chooser_state_.is_fullscreen = true;
-  EXPECT_CALL(client_, UseSurfaceTexture());
+  EXPECT_CALL(client_, UseTextureOwner());
   StartChooser(AndroidOverlayFactoryCB());
   testing::Mock::VerifyAndClearExpectations(&client_);
 
   // Provide a factory.
   EXPECT_CALL(*this, MockOnOverlayCreated());
-  EXPECT_CALL(client_, UseSurfaceTexture()).Times(AnyNumber());
+  EXPECT_CALL(client_, UseTextureOwner()).Times(AnyNumber());
   chooser_->UpdateState(FactoryFor(std::move(overlay_)), chooser_state_);
   testing::Mock::VerifyAndClearExpectations(&client_);
 
@@ -307,17 +310,17 @@ TEST_F(AndroidVideoSurfaceChooserImplTest,
        SuccessfulLaterOverlayNotifiesClient) {
   // |client_| is notified if we provide a factory that gets an overlay.
 
-  // Start with SurfaceTexture.
+  // Start with TextureOwner.
   chooser_state_.is_fullscreen = true;
-  EXPECT_CALL(client_, UseSurfaceTexture());
+  EXPECT_CALL(client_, UseTextureOwner());
   StartChooser(AndroidOverlayFactoryCB());
   testing::Mock::VerifyAndClearExpectations(&client_);
 
   // Provide a factory.  |chooser_| should try to create an overlay.  We don't
-  // care if a call to UseSurfaceTexture is elided or not.  Note that AVDA will
-  // ignore duplicate calls anyway (MultipleSurfaceTextureCallbacksAreIgnored).
+  // care if a call to UseTextureOwner is elided or not.  Note that AVDA will
+  // ignore duplicate calls anyway (MultipleTextureOwnerCallbacksAreIgnored).
   EXPECT_CALL(*this, MockOnOverlayCreated());
-  EXPECT_CALL(client_, UseSurfaceTexture()).Times(AnyNumber());
+  EXPECT_CALL(client_, UseTextureOwner()).Times(AnyNumber());
   chooser_->UpdateState(FactoryFor(std::move(overlay_)), chooser_state_);
   testing::Mock::VerifyAndClearExpectations(&client_);
   testing::Mock::VerifyAndClearExpectations(this);
@@ -330,7 +333,7 @@ TEST_F(AndroidVideoSurfaceChooserImplTest,
 TEST_F(AndroidVideoSurfaceChooserImplTest,
        UpdateStateAfterDeleteRetriesOverlay) {
   // Make sure that SurfaceChooser notices that we delete the overlay, and have
-  // switched back to SurfaceTexture mode.
+  // switched back to TextureOwner mode.
 
   chooser_state_.is_fullscreen = true;
   StartChooserAndProvideOverlay();
@@ -341,7 +344,7 @@ TEST_F(AndroidVideoSurfaceChooserImplTest,
 
   // Force chooser to choose again.  We expect that it will retry the overlay,
   // since the delete should have informed it that we've switched back to
-  // SurfaceTexture without a callback from SurfaceChooser.  If it didn't know
+  // TextureOwner without a callback from SurfaceChooser.  If it didn't know
   // this, then it would think that the client is still using an overlay, and
   // take no action.
 
@@ -355,7 +358,7 @@ TEST_F(AndroidVideoSurfaceChooserImplTest,
 TEST_F(AndroidVideoSurfaceChooserImplTest,
        PowerEffcientOverlayCancelsIfNotPowerEfficient) {
   // If we request a power efficient overlay that later becomes not power
-  // efficient, then the client should switch to SurfaceTexture.
+  // efficient, then the client should switch to TextureOwner.
 
   chooser_state_.promote_aggressively = true;
   MockAndroidOverlay* overlay = StartChooserAndProvideOverlay();
@@ -366,14 +369,14 @@ TEST_F(AndroidVideoSurfaceChooserImplTest,
   ASSERT_TRUE(overlay->config()->power_efficient);
 
   // Notify the chooser that it's not power efficient anymore.
-  EXPECT_CALL(client_, UseSurfaceTexture());
+  EXPECT_CALL(client_, UseTextureOwner());
   overlay_callbacks_.PowerEfficientState.Run(false);
 }
 
 TEST_P(AndroidVideoSurfaceChooserImplTest, OverlayIsUsedOrNotBasedOnState) {
   // Provide a factory, and verify that it is used when the state says that it
   // should be.  If the overlay is used, then we also verify that it does not
-  // switch to SurfaceTexture first, since pre-M requires it.
+  // switch to TextureOwner first, since pre-M requires it.
 
   const bool should_use_overlay = IsYes(ShouldUseOverlay, 0);
   const bool should_be_power_efficient = IsYes(ShouldBePowerEfficient, 1);
@@ -385,14 +388,16 @@ TEST_P(AndroidVideoSurfaceChooserImplTest, OverlayIsUsedOrNotBasedOnState) {
   chooser_state_.is_compositor_promotable = IsYes(IsCCPromotable, 6);
   chooser_state_.is_expecting_relayout = IsYes(IsExpectingRelayout, 7);
   chooser_state_.promote_aggressively = IsYes(PromoteAggressively, 8);
+  chooser_state_.video_rotation =
+      IsYes(IsVideoRotated, 9) ? VIDEO_ROTATION_90 : VIDEO_ROTATION_0;
 
   MockAndroidOverlay* overlay = overlay_.get();
 
   if (should_use_overlay) {
-    EXPECT_CALL(client_, UseSurfaceTexture()).Times(0);
+    EXPECT_CALL(client_, UseTextureOwner()).Times(0);
     EXPECT_CALL(*this, MockOnOverlayCreated());
   } else {
-    EXPECT_CALL(client_, UseSurfaceTexture());
+    EXPECT_CALL(client_, UseTextureOwner());
     EXPECT_CALL(*this, MockOnOverlayCreated()).Times(0);
   }
 
@@ -409,8 +414,8 @@ TEST_P(AndroidVideoSurfaceChooserImplTest, OverlayIsUsedOrNotBasedOnState) {
   }
 }
 
-// Unless we're promoting aggressively, we should default to SurfaceTexture.
-INSTANTIATE_TEST_CASE_P(NoFullscreenUsesSurfaceTexture,
+// Unless we're promoting aggressively, we should default to TextureOwner.
+INSTANTIATE_TEST_CASE_P(NoFullscreenUsesTextureOwner,
                         AndroidVideoSurfaceChooserImplTest,
                         Combine(Values(ShouldUseOverlay::No),
                                 Values(ShouldBePowerEfficient::Ignored),
@@ -420,7 +425,8 @@ INSTANTIATE_TEST_CASE_P(NoFullscreenUsesSurfaceTexture,
                                 Values(IsSecure::No),
                                 Either(IsCCPromotable),
                                 Either(IsExpectingRelayout),
-                                Values(PromoteAggressively::No)));
+                                Values(PromoteAggressively::No),
+                                Either(IsVideoRotated)));
 
 INSTANTIATE_TEST_CASE_P(FullscreenUsesOverlay,
                         AndroidVideoSurfaceChooserImplTest,
@@ -432,7 +438,8 @@ INSTANTIATE_TEST_CASE_P(FullscreenUsesOverlay,
                                 Values(IsSecure::No),
                                 Values(IsCCPromotable::Yes),
                                 Values(IsExpectingRelayout::No),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Values(IsVideoRotated::No)));
 
 INSTANTIATE_TEST_CASE_P(RequiredUsesOverlay,
                         AndroidVideoSurfaceChooserImplTest,
@@ -444,7 +451,8 @@ INSTANTIATE_TEST_CASE_P(RequiredUsesOverlay,
                                 Either(IsSecure),
                                 Either(IsCCPromotable),
                                 Either(IsExpectingRelayout),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Values(IsVideoRotated::No)));
 
 // Secure textures should use an overlay if the compositor will promote them.
 // We don't care about relayout, since it's transient; either behavior is okay
@@ -459,14 +467,15 @@ INSTANTIATE_TEST_CASE_P(SecureUsesOverlayIfPromotable,
                                 Values(IsSecure::Yes),
                                 Values(IsCCPromotable::Yes),
                                 Values(IsExpectingRelayout::No),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Values(IsVideoRotated::No)));
 
 // For all dynamic cases, we shouldn't use an overlay if the compositor won't
 // promote it, unless it's marked as required.  This includes secure surfaces,
-// so that L3 will fall back to SurfaceTexture.  Non-dynamic is excluded, since
+// so that L3 will fall back to TextureOwner.  Non-dynamic is excluded, since
 // we don't get (or use) compositor feedback before the first frame.  At that
 // point, we've already chosen the output surface and can't switch it.
-INSTANTIATE_TEST_CASE_P(NotCCPromotableNotRequiredUsesSurfaceTexture,
+INSTANTIATE_TEST_CASE_P(NotCCPromotableNotRequiredUsesTextureOwner,
                         AndroidVideoSurfaceChooserImplTest,
                         Combine(Values(ShouldUseOverlay::No),
                                 Values(ShouldBePowerEfficient::No),
@@ -476,11 +485,12 @@ INSTANTIATE_TEST_CASE_P(NotCCPromotableNotRequiredUsesSurfaceTexture,
                                 Either(IsSecure),
                                 Values(IsCCPromotable::No),
                                 Either(IsExpectingRelayout),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Either(IsVideoRotated)));
 
 // If we're expecting a relayout, then we should never use an overlay unless
 // it's required.
-INSTANTIATE_TEST_CASE_P(InsecureExpectingRelayoutUsesSurfaceTexture,
+INSTANTIATE_TEST_CASE_P(InsecureExpectingRelayoutUsesTextureOwner,
                         AndroidVideoSurfaceChooserImplTest,
                         Combine(Values(ShouldUseOverlay::No),
                                 Values(ShouldBePowerEfficient::No),
@@ -490,7 +500,8 @@ INSTANTIATE_TEST_CASE_P(InsecureExpectingRelayoutUsesSurfaceTexture,
                                 Either(IsSecure),
                                 Either(IsCCPromotable),
                                 Values(IsExpectingRelayout::Yes),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Either(IsVideoRotated)));
 
 // "is_fullscreen" should be enough to trigger an overlay pre-M.
 INSTANTIATE_TEST_CASE_P(NotDynamicInFullscreenUsesOverlay,
@@ -503,7 +514,8 @@ INSTANTIATE_TEST_CASE_P(NotDynamicInFullscreenUsesOverlay,
                                 Either(IsSecure),
                                 Either(IsCCPromotable),
                                 Either(IsExpectingRelayout),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Values(IsVideoRotated::No)));
 
 // "is_secure" should be enough to trigger an overlay pre-M.
 INSTANTIATE_TEST_CASE_P(NotDynamicSecureUsesOverlay,
@@ -516,7 +528,8 @@ INSTANTIATE_TEST_CASE_P(NotDynamicSecureUsesOverlay,
                                 Values(IsSecure::Yes),
                                 Either(IsCCPromotable),
                                 Either(IsExpectingRelayout),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Values(IsVideoRotated::No)));
 
 // "is_required" should be enough to trigger an overlay pre-M.
 INSTANTIATE_TEST_CASE_P(NotDynamicRequiredUsesOverlay,
@@ -529,7 +542,8 @@ INSTANTIATE_TEST_CASE_P(NotDynamicRequiredUsesOverlay,
                                 Either(IsSecure),
                                 Either(IsCCPromotable),
                                 Either(IsExpectingRelayout),
-                                Either(PromoteAggressively)));
+                                Either(PromoteAggressively),
+                                Values(IsVideoRotated::No)));
 
 // If we're promoting aggressively, then we should request power efficient.
 INSTANTIATE_TEST_CASE_P(AggressiveOverlayIsPowerEfficient,
@@ -542,6 +556,21 @@ INSTANTIATE_TEST_CASE_P(AggressiveOverlayIsPowerEfficient,
                                 Values(IsSecure::No),
                                 Values(IsCCPromotable::Yes),
                                 Values(IsExpectingRelayout::No),
-                                Values(PromoteAggressively::Yes)));
+                                Values(PromoteAggressively::Yes),
+                                Values(IsVideoRotated::No)));
+
+// Rotated video is unsupported for overlays in all cases.
+INSTANTIATE_TEST_CASE_P(IsVideoRotatedUsesTextureOwner,
+                        AndroidVideoSurfaceChooserImplTest,
+                        Combine(Values(ShouldUseOverlay::No),
+                                Either(ShouldBePowerEfficient),
+                                Either(AllowDynamic),
+                                Either(IsRequired),
+                                Either(IsFullscreen),
+                                Either(IsSecure),
+                                Either(IsCCPromotable),
+                                Either(IsExpectingRelayout),
+                                Either(PromoteAggressively),
+                                Values(IsVideoRotated::Yes)));
 
 }  // namespace media

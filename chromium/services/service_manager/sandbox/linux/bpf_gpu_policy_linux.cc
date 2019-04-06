@@ -13,7 +13,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
 #include "sandbox/linux/seccomp-bpf-helpers/syscall_parameters_restrictions.h"
@@ -61,7 +60,20 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
     case __NR_open:
 #endif  // !defined(__aarch64__)
     case __NR_faccessat:
-    case __NR_openat: {
+    case __NR_openat:
+#if defined(__NR_stat)
+    case __NR_stat:
+#endif
+#if defined(__NR_stat64)
+    case __NR_stat64:
+#endif
+#if defined(__NR_fstatat)
+    case __NR_fstatat:
+#endif
+#if defined(__NR_newfstatat)
+    case __NR_newfstatat:
+#endif
+    {
       auto* broker_process = SandboxLinux::GetInstance()->broker_process();
       DCHECK(broker_process);
       return Trap(BrokerProcess::SIGSYS_Handler, broker_process);

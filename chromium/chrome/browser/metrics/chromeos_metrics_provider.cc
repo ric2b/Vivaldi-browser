@@ -5,6 +5,8 @@
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 
 #include <stddef.h>
+#include <string>
+#include <vector>
 
 #include "base/barrier_closure.h"
 #include "base/feature_list.h"
@@ -20,11 +22,11 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/system/statistics_provider.h"
-#include "components/metrics/leak_detector/leak_detector.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
+#include "components/variations/service/variations_field_trial_creator.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -84,20 +86,29 @@ void IncrementPrefValue(const char* path) {
 }
 
 // Called on a background thread to load hardware class information.
-std::string GetHardwareClassOnBackgroundThread() {
-  std::string hardware_class;
+std::string GetFullHardwareClassOnBackgroundThread() {
+  std::string full_hardware_class;
   chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
-      "hardware_class", &hardware_class);
-  return hardware_class;
+      "hardware_class", &full_hardware_class);
+  return full_hardware_class;
 }
 
 }  // namespace
 
+namespace features {
+
+// Populates hardware class field in system_profile proto with the
+// short hardware class if enabled. If disabled, hardware class will have same
+// value as full hardware class.
+const base::Feature kUmaShortHWClass{"UmaShortHWClass",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
+}  // namespace features
+
 ChromeOSMetricsProvider::ChromeOSMetricsProvider()
     : registered_user_count_at_log_initialization_(false),
       user_count_at_log_initialization_(0),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 ChromeOSMetricsProvider::~ChromeOSMetricsProvider() {
 }
@@ -136,20 +147,16 @@ ChromeOSMetricsProvider::GetEnrollmentStatus() {
 }
 
 void ChromeOSMetricsProvider::Init() {
-  perf_provider_.Init();
-
-#if defined(ARCH_CPU_X86_64)
-  // Currently, the runtime memory leak detector is only supported on x86_64
-  // systems.
-  if (base::FeatureList::IsEnabled(features::kRuntimeMemoryLeakDetector)) {
-    leak_detector_controller_.reset(new metrics::LeakDetectorController);
+  if (base::FeatureList::IsEnabled(features::kUmaShortHWClass)) {
+    hardware_class_ =
+        variations::VariationsFieldTrialCreator::GetShortHardwareClass();
   }
-#endif
+  perf_provider_.Init();
 }
 
 void ChromeOSMetricsProvider::AsyncInit(const base::Closure& done_callback) {
-  base::Closure barrier = base::BarrierClosure(2, done_callback);
-  InitTaskGetHardwareClass(barrier);
+  base::RepeatingClosure barrier = base::BarrierClosure(2, done_callback);
+  InitTaskGetFullHardwareClass(barrier);
   InitTaskGetBluetoothAdapter(barrier);
 }
 
@@ -162,7 +169,7 @@ void ChromeOSMetricsProvider::OnDidCreateMetricsLog() {
   }
 }
 
-void ChromeOSMetricsProvider::InitTaskGetHardwareClass(
+void ChromeOSMetricsProvider::InitTaskGetFullHardwareClass(
     const base::Closure& callback) {
   // Run the (potentially expensive) task in the background to avoid blocking
   // the UI thread.
@@ -171,8 +178,8 @@ void ChromeOSMetricsProvider::InitTaskGetHardwareClass(
       {base::MayBlock(), base::WithBaseSyncPrimitives(),
        base::TaskPriority::BACKGROUND,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&GetHardwareClassOnBackgroundThread),
-      base::BindOnce(&ChromeOSMetricsProvider::SetHardwareClass,
+      base::BindOnce(&GetFullHardwareClassOnBackgroundThread),
+      base::BindOnce(&ChromeOSMetricsProvider::SetFullHardwareClass,
                      weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
@@ -191,11 +198,12 @@ void ChromeOSMetricsProvider::ProvideSystemProfileMetrics(
   metrics::SystemProfileProto::Hardware* hardware =
       system_profile_proto->mutable_hardware();
   hardware->set_hardware_class(hardware_class_);
+  hardware->set_full_hardware_class(full_hardware_class_);
   display::Display::TouchSupport has_touch =
       ui::GetInternalDisplayTouchSupport();
-  if (has_touch == display::Display::TOUCH_SUPPORT_AVAILABLE)
+  if (has_touch == display::Display::TouchSupport::AVAILABLE)
     hardware->set_internal_display_supports_touch(true);
-  else if (has_touch == display::Display::TOUCH_SUPPORT_UNAVAILABLE)
+  else if (has_touch == display::Display::TouchSupport::UNAVAILABLE)
     hardware->set_internal_display_supports_touch(false);
 }
 
@@ -240,14 +248,6 @@ void ChromeOSMetricsProvider::ProvideCurrentSessionData(
   if (perf_provider_.GetSampledProfiles(&sampled_profiles)) {
     for (auto& profile : sampled_profiles) {
       uma_proto->add_sampled_profile()->Swap(&profile);
-    }
-  }
-
-  if (leak_detector_controller_) {
-    std::vector<metrics::MemoryLeakReportProto> reports;
-    leak_detector_controller_->GetLeakReports(&reports);
-    for (auto& report : reports) {
-      uma_proto->add_memory_leak_report()->Swap(&report);
     }
   }
 
@@ -334,9 +334,14 @@ void ChromeOSMetricsProvider::SetBluetoothAdapter(
   callback.Run();
 }
 
-void ChromeOSMetricsProvider::SetHardwareClass(base::Closure callback,
-                                               std::string hardware_class) {
-  hardware_class_ = hardware_class;
+void ChromeOSMetricsProvider::SetFullHardwareClass(
+    base::Closure callback,
+    std::string full_hardware_class) {
+  if (!base::FeatureList::IsEnabled(features::kUmaShortHWClass)) {
+    DCHECK(hardware_class_.empty());
+    hardware_class_ = full_hardware_class;
+  }
+  full_hardware_class_ = full_hardware_class;
   callback.Run();
 }
 

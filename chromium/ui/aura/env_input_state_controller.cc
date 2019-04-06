@@ -47,7 +47,7 @@ void EnvInputStateController::UpdateStateForTouchEvent(
     case ui::ET_TOUCH_CANCELLED:
       if (!event.HasNativeEvent())
         break;
-    // fallthrough
+      FALLTHROUGH;
     case ui::ET_TOUCH_RELEASED:
       touch_ids_down_ = (touch_ids_down_ | (1 << event.pointer_details().id)) ^
                         (1 << event.pointer_details().id);
@@ -76,9 +76,9 @@ void EnvInputStateController::SetLastMouseLocation(
   if (client) {
     gfx::Point location_in_screen = location_in_root;
     client->ConvertPointToScreen(root_window, &location_in_screen);
-    Env::GetInstance()->set_last_mouse_location(location_in_screen);
+    Env::GetInstance()->SetLastMouseLocation(location_in_screen);
   } else {
-    Env::GetInstance()->set_last_mouse_location(location_in_root);
+    Env::GetInstance()->SetLastMouseLocation(location_in_root);
   }
 }
 

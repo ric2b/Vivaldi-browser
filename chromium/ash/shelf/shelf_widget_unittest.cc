@@ -4,6 +4,7 @@
 
 #include "ash/shelf/shelf_widget.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/login_shelf_view.h"
@@ -19,6 +20,7 @@
 #include "ash/test/ash_test_helper.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/wm/window_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/session_manager/session_manager_types.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/display/display.h"
@@ -140,7 +142,6 @@ TEST_F(ShelfWidgetTest, DontReferenceShelfAfterDeletion) {
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.bounds = gfx::Rect(0, 0, 200, 200);
-  params.context = CurrentContext();
   // Widget is now owned by the parent window.
   widget->Init(params);
   widget->SetFullscreen(true);
@@ -206,9 +207,10 @@ TEST_F(ShelfWidgetTest, ShelfEdgeOverlappingWindowHitTestMouse) {
   params.bounds = gfx::Rect(shelf_bounds.height() - kOverlapSize,
                             shelf_bounds.y() - kWindowHeight + kOverlapSize,
                             kWindowWidth, kWindowHeight);
-  params.context = CurrentContext();
   // Widget is now owned by the parent window.
   widget->Init(params);
+  // Explicitly set the bounds which will allow the widget to overlap the shelf.
+  widget->SetBounds(params.bounds);
   widget->Show();
   gfx::Rect widget_bounds = widget->GetWindowBoundsInScreen();
   EXPECT_TRUE(widget_bounds.Intersects(shelf_bounds));
@@ -285,7 +287,6 @@ TEST_F(ShelfWidgetTest, HiddenShelfHitTestTouch) {
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.bounds = gfx::Rect(0, 0, 200, 200);
-  params.context = CurrentContext();
   // Widget is now owned by the parent window.
   widget->Init(params);
   widget->Show();
@@ -361,7 +362,7 @@ TEST_F(ShelfWidgetAfterLoginTest, InitialValues) {
   ShelfWidget* shelf_widget = GetShelfWidget();
   ASSERT_NE(nullptr, shelf_widget);
   ASSERT_NE(nullptr, shelf_widget->shelf_view_for_testing());
-  ASSERT_NE(nullptr, shelf_widget->login_shelf_view_for_testing());
+  ASSERT_NE(nullptr, shelf_widget->login_shelf_view());
   ASSERT_NE(nullptr, shelf_widget->shelf_layout_manager());
 
   // Ensure settings are correct before login.
@@ -417,91 +418,109 @@ class ShelfWidgetViewsVisibilityTest : public AshTestBase {
   };
 
   void InitShelfVariables() {
-    ShelfWidget* shelf_widget = GetShelfWidget();
-    ASSERT_NE(nullptr, shelf_widget);
-    shelf_view_ = shelf_widget->shelf_view_for_testing();
-    ASSERT_NE(nullptr, shelf_view_);
-    login_shelf_view_ = shelf_widget->login_shelf_view_for_testing();
-    ASSERT_NE(nullptr, login_shelf_view_);
+    // Create setup with 2 displays primary and secondary.
+    UpdateDisplay("800x600,800x600");
+    aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+    ASSERT_EQ(2u, root_windows.size());
+    primary_shelf_widget_ = Shelf::ForWindow(root_windows[0])->shelf_widget();
+    ASSERT_NE(nullptr, primary_shelf_widget_);
+    secondary_shelf_widget_ = Shelf::ForWindow(root_windows[1])->shelf_widget();
+    ASSERT_NE(nullptr, secondary_shelf_widget_);
   };
 
   void ExpectVisible(session_manager::SessionState state,
-                     ShelfVisibility shelf_visibility) {
+                     ShelfVisibility primary_shelf_visibility,
+                     ShelfVisibility secondary_shelf_visibility) {
     GetSessionControllerClient()->SetSessionState(state);
-    EXPECT_EQ(shelf_visibility == kNone, !GetShelfWidget()->IsVisible());
-    if (shelf_visibility != kNone) {
-      EXPECT_EQ(shelf_visibility == kLoginShelf, login_shelf_view_->visible());
-      EXPECT_EQ(shelf_visibility == kShelf, shelf_view_->visible());
+    EXPECT_EQ(primary_shelf_visibility == kNone,
+              !primary_shelf_widget_->IsVisible());
+    if (primary_shelf_visibility != kNone) {
+      EXPECT_EQ(primary_shelf_visibility == kLoginShelf,
+                primary_shelf_widget_->login_shelf_view()->visible());
+      EXPECT_EQ(primary_shelf_visibility == kShelf,
+                primary_shelf_widget_->shelf_view_for_testing()->visible());
+    }
+    EXPECT_EQ(secondary_shelf_visibility == kNone,
+              !secondary_shelf_widget_->IsVisible());
+    if (secondary_shelf_visibility != kNone) {
+      EXPECT_EQ(secondary_shelf_visibility == kLoginShelf,
+                secondary_shelf_widget_->login_shelf_view()->visible());
+      EXPECT_EQ(secondary_shelf_visibility == kShelf,
+                secondary_shelf_widget_->shelf_view_for_testing()->visible());
     }
   }
 
  private:
-  LoginShelfView* login_shelf_view_;
-  ShelfView* shelf_view_;
+  ShelfWidget* primary_shelf_widget_ = nullptr;
+  ShelfWidget* secondary_shelf_widget_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfWidgetViewsVisibilityTest);
 };
 
 TEST_F(ShelfWidgetViewsVisibilityTest, LoginWebUiLockViews) {
-  // Web UI login enabled by default. Views lock enabled by default.
+  // Enable web UI login.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kShowWebUiLogin);
   ASSERT_NO_FATAL_FAILURE(InitShelfVariables());
 
   // Both shelf views are hidden when session state hasn't been initialized.
-  ExpectVisible(SessionState::UNKNOWN, kNone);
+  ExpectVisible(SessionState::UNKNOWN, kNone /*primary*/, kNone /*secondary*/);
   // Web UI login is used, so views shelf is not visible during login.
-  ExpectVisible(SessionState::OOBE, kNone);
-  ExpectVisible(SessionState::LOGIN_PRIMARY, kNone);
+  ExpectVisible(SessionState::OOBE, kNone, kNone);
+  ExpectVisible(SessionState::LOGIN_PRIMARY, kNone, kNone);
 
   SimulateUserLogin("user1@test.com");
 
-  ExpectVisible(SessionState::LOGGED_IN_NOT_ACTIVE, kNone);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
-  ExpectVisible(SessionState::LOCKED, kLoginShelf);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
-  ExpectVisible(SessionState::LOGIN_SECONDARY, kLoginShelf);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
+  ExpectVisible(SessionState::LOGGED_IN_NOT_ACTIVE, kNone, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
+  ExpectVisible(SessionState::LOCKED, kLoginShelf, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
+  ExpectVisible(SessionState::LOGIN_SECONDARY, kLoginShelf, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
 }
 
 TEST_F(ShelfWidgetViewsVisibilityTest, LoginViewsLockViews) {
   // Enable views login. Views lock enabled by default.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kShowViewsLogin);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(ash::features::kViewsLogin);
+
   ASSERT_NO_FATAL_FAILURE(InitShelfVariables());
 
-  ExpectVisible(SessionState::UNKNOWN, kNone);
-  ExpectVisible(SessionState::OOBE, kNone);
-  ExpectVisible(SessionState::LOGIN_PRIMARY, kLoginShelf);
+  ExpectVisible(SessionState::UNKNOWN, kNone /*primary*/, kNone /*secondary*/);
+  ExpectVisible(SessionState::OOBE, kNone, kNone);
+  ExpectVisible(SessionState::LOGIN_PRIMARY, kLoginShelf, kNone);
 
   SimulateUserLogin("user1@test.com");
 
-  ExpectVisible(SessionState::LOGGED_IN_NOT_ACTIVE, kLoginShelf);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
-  ExpectVisible(SessionState::LOCKED, kLoginShelf);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
-  ExpectVisible(SessionState::LOGIN_SECONDARY, kLoginShelf);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
+  ExpectVisible(SessionState::LOGGED_IN_NOT_ACTIVE, kLoginShelf, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
+  ExpectVisible(SessionState::LOCKED, kLoginShelf, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
+  ExpectVisible(SessionState::LOGIN_SECONDARY, kLoginShelf, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
 }
 
 TEST_F(ShelfWidgetViewsVisibilityTest, LoginWebUiLockWebUi) {
-  // Enable web UI lock. Web UI login enabled by default.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kShowWebUiLock);
+  // Enable web UI lock and login.
+  base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+  cl->AppendSwitch(switches::kShowWebUiLogin);
+  cl->AppendSwitch(switches::kShowWebUiLock);
   ASSERT_NO_FATAL_FAILURE(InitShelfVariables());
 
   // Views based shelf is never visible.
-  ExpectVisible(SessionState::UNKNOWN, kNone);
-  ExpectVisible(SessionState::OOBE, kNone);
-  ExpectVisible(SessionState::LOGIN_PRIMARY, kNone);
+  ExpectVisible(SessionState::UNKNOWN, kNone /*primary*/, kNone /*secondary*/);
+  ExpectVisible(SessionState::OOBE, kNone, kNone);
+  ExpectVisible(SessionState::LOGIN_PRIMARY, kNone, kNone);
 
   SimulateUserLogin("user1@test.com");
 
   // Views based shelf is only visible on non-lock screen (ACTIVE session).
-  ExpectVisible(SessionState::LOGGED_IN_NOT_ACTIVE, kNone);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
-  ExpectVisible(SessionState::LOCKED, kNone);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
-  ExpectVisible(SessionState::LOGIN_SECONDARY, kNone);
-  ExpectVisible(SessionState::ACTIVE, kShelf);
+  ExpectVisible(SessionState::LOGGED_IN_NOT_ACTIVE, kNone, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
+  ExpectVisible(SessionState::LOCKED, kNone, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
+  ExpectVisible(SessionState::LOGIN_SECONDARY, kNone, kNone);
+  ExpectVisible(SessionState::ACTIVE, kShelf, kShelf);
 }
 
 }  // namespace

@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -47,6 +48,7 @@
 #include <string>
 #include "maybe_threads.h"
 #include "base/basictypes.h"
+#include "base/logging.h"
 
 // __THROW is defined in glibc systems.  It means, counter-intuitively,
 // "This function will never throw an exception."  It's an optional
@@ -59,17 +61,38 @@
 extern "C" {
   int pthread_key_create (pthread_key_t*, void (*)(void*))
       __THROW ATTRIBUTE_WEAK;
+  int pthread_key_delete (pthread_key_t)
+      __THROW ATTRIBUTE_WEAK;
   void *pthread_getspecific(pthread_key_t)
       __THROW ATTRIBUTE_WEAK;
   int pthread_setspecific(pthread_key_t, const void*)
       __THROW ATTRIBUTE_WEAK;
   int pthread_once(pthread_once_t *, void (*)(void))
       ATTRIBUTE_WEAK;
+#ifdef HAVE_FORK
+  int pthread_atfork(void (*__prepare) (void),
+                     void (*__parent) (void),
+                     void (*__child) (void))
+    __THROW ATTRIBUTE_WEAK;
+#endif
 }
 
 #define MAX_PERTHREAD_VALS 16
 static void *perftools_pthread_specific_vals[MAX_PERTHREAD_VALS];
 static int next_key;
+
+// NOTE: it's similar to bitcast defined in basic_types.h with
+// exception of ignoring sizes mismatch
+template <typename T1, typename T2>
+static T2 memcpy_cast(const T1 &input) {
+  T2 output;
+  size_t s = sizeof(input);
+  if (sizeof(output) < s) {
+    s = sizeof(output);
+  }
+  memcpy(&output, &input, s);
+  return output;
+}
 
 int perftools_pthread_key_create(pthread_key_t *key,
                                  void (*destr_function) (void *)) {
@@ -77,7 +100,15 @@ int perftools_pthread_key_create(pthread_key_t *key,
     return pthread_key_create(key, destr_function);
   } else {
     assert(next_key < MAX_PERTHREAD_VALS);
-    *key = (pthread_key_t)(next_key++);
+    *key = memcpy_cast<int, pthread_key_t>(next_key++);
+    return 0;
+  }
+}
+
+int perftools_pthread_key_delete(pthread_key_t key) {
+  if (pthread_key_delete) {
+    return pthread_key_delete(key);
+  } else {
     return 0;
   }
 }
@@ -86,7 +117,7 @@ void *perftools_pthread_getspecific(pthread_key_t key) {
   if (pthread_getspecific) {
     return pthread_getspecific(key);
   } else {
-    return perftools_pthread_specific_vals[(int)key];
+    return perftools_pthread_specific_vals[memcpy_cast<pthread_key_t, int>(key)];
   }
 }
 
@@ -94,7 +125,7 @@ int perftools_pthread_setspecific(pthread_key_t key, void *val) {
   if (pthread_setspecific) {
     return pthread_setspecific(key, val);
   } else {
-    perftools_pthread_specific_vals[(int)key] = val;
+    perftools_pthread_specific_vals[memcpy_cast<pthread_key_t, int>(key)] = val;
     return 0;
   }
 }
@@ -131,3 +162,16 @@ int perftools_pthread_once(pthread_once_t *ctl,
     return 0;
   }
 }
+
+#ifdef HAVE_FORK
+
+void perftools_pthread_atfork(void (*before)(),
+                              void (*parent_after)(),
+                              void (*child_after)()) {
+  if (pthread_atfork) {
+    int rv = pthread_atfork(before, parent_after, child_after);
+    CHECK(rv == 0);
+  }
+}
+
+#endif

@@ -52,7 +52,7 @@ bool FindBarHost::MaybeForwardKeyEventToWebpage(
     case ui::VKEY_END:
       if (key_event.IsControlDown())
         break;
-    // Fall through.
+      FALLTHROUGH;
     default:
       return false;
   }
@@ -170,7 +170,11 @@ void FindBarHost::RestoreSavedFocus() {
 }
 
 bool FindBarHost::HasGlobalFindPasteboard() {
+#if defined(OS_MACOSX)
+  return true;
+#else
   return false;
+#endif
 }
 
 void FindBarHost::UpdateFindBarForChangedWebContents() {
@@ -265,9 +269,8 @@ gfx::Rect FindBarHost::GetDialogPosition(gfx::Rect avoid_overlapping_rect) {
   if (widget_bounds.IsEmpty())
     return gfx::Rect();
 
-  gfx::Insets insets =
-      view()->border()->GetInsets() -
-      gfx::Insets(0, BackgroundWith1PxBorder::kLocationBarBorderThicknessDip);
+  gfx::Insets insets = view()->border()->GetInsets() -
+                       gfx::Insets(0, LocationBarView::GetBorderThicknessDip());
 
   // Ask the view how large an area it needs to draw on.
   gfx::Size prefsize = view()->GetPreferredSize();

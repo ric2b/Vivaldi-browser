@@ -8,9 +8,26 @@ import("//testing/test.gni")
 
 assert(is_fuchsia)
 
-cast_source_set("fuchsia") {
+cast_source_set("media_backend") {
   sources = [
     "cast_media_shlib_fuchsia.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/cma/backend:audio_codec_support",
+    "//chromecast/media/cma/backend:av_sync_dummy",
+    "//chromecast/media/cma/backend:for_mixer_audio",
+    "//chromecast/media/cma/backend:null_video",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+  ]
+}
+
+cast_source_set("cma_backend_support") {
+  sources = [
     "fuchsia_volume_control.cc",
     "mixer_output_stream_fuchsia.cc",
     "mixer_output_stream_fuchsia.h",
@@ -19,13 +36,12 @@ cast_source_set("fuchsia") {
   deps = [
     "//base",
     "//chromecast/base",
-    "//chromecast/media/cma/backend:audio",
+    "//chromecast/media/cma/backend:public",
     "//chromecast/public",
     "//chromecast/public/media",
     "//media",
+    "//third_party/fuchsia-sdk:media",
   ]
-
-  libs = [ "media_client" ]
 }
 
 cast_source_set("unit_tests") {
@@ -33,8 +49,13 @@ cast_source_set("unit_tests") {
   sources = [
     "mixer_output_stream_fuchsia_unittest.cc",
   ]
+
+  configs += [ "//chromecast/public:public_config" ]
+
   deps = [
-    ":fuchsia",
+    ":cma_backend_support",
+    "//base",
     "//testing/gtest",
+    "//third_party/fuchsia-sdk:media",
   ]
 }

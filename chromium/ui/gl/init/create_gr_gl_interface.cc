@@ -45,8 +45,12 @@ const char* kBlacklistExtensions[] = {
 
 }  // anonymous namespace
 
-sk_sp<const GrGLInterface> CreateGrGLInterface(
-    const gl::GLVersionInfo& version_info) {
+sk_sp<GrGLInterface> CreateGrGLInterface(
+    const gl::GLVersionInfo& version_info,
+    bool use_version_es2) {
+  // Can't fake ES with desktop GL.
+  use_version_es2 &= version_info.is_es;
+
   gl::ProcsGL* gl = &gl::g_current_gl_driver->fn;
   gl::GLApi* api = gl::g_current_gl_context;
 
@@ -60,8 +64,16 @@ sk_sp<const GrGLInterface> CreateGrGLInterface(
   // handles but bindings don't.
   // TODO(piman): add bindings for missing entrypoints.
   GrGLFunction<GrGLGetStringProc> get_string;
-  if (version_info.IsAtLeastGL(3, 3) || version_info.IsAtLeastGLES(3, 1)) {
-    const char* fake_version = version_info.is_es ? "OpenGL ES 3.0" : "3.2";
+  const bool apply_version_override = use_version_es2 ||
+                                      version_info.IsAtLeastGL(3, 3) ||
+                                      version_info.IsAtLeastGLES(3, 1);
+  if (apply_version_override) {
+    const char* fake_version = nullptr;
+    if (use_version_es2) {
+      fake_version = "OpenGL ES 2.0";
+    } else {
+      fake_version = version_info.is_es ? "OpenGL ES 3.0" : "3.2";
+    }
     get_string = [fake_version](GLenum name) {
       return GetStringHook(fake_version, name);
     };
@@ -460,13 +472,8 @@ sk_sp<const GrGLInterface> CreateGrGLInterface(
 
   functions->fDebugMessageControl = gl->glDebugMessageControlFn;
   functions->fDebugMessageInsert = gl->glDebugMessageInsertFn;
-  // TODO(piman): Our GL headers are out-of-date and define GLDEBUGPROC
-  // incorrectly wrt const-ness.
-  functions->fDebugMessageCallback =
-      reinterpret_cast<GrGLDebugMessageCallbackProc>(
-          gl->glDebugMessageCallbackFn);
-  functions->fGetDebugMessageLog =
-      reinterpret_cast<GrGLGetDebugMessageLogProc>(gl->glGetDebugMessageLogFn);
+  functions->fDebugMessageCallback = gl->glDebugMessageCallbackFn;
+  functions->fGetDebugMessageLog = gl->glGetDebugMessageLogFn;
   functions->fPushDebugGroup = gl->glPushDebugGroupFn;
   functions->fPopDebugGroup = gl->glPopDebugGroupFn;
   functions->fObjectLabel = gl->glObjectLabelFn;
@@ -487,19 +494,11 @@ sk_sp<const GrGLInterface> CreateGrGLInterface(
   functions->fWaitSync = gl->glWaitSyncFn;
   functions->fDeleteSync = gl->glDeleteSyncFn;
 
-  functions->fBindImageTexture = gl->glBindImageTextureEXTFn;
-  // TODO(piman): skia type is wrong.
-  functions->fMemoryBarrier =
-      reinterpret_cast<GrGLMemoryBarrierProc>(gl->glMemoryBarrierEXTFn);
-
-  // GL 4.5 or GL_ARB_ES3_1_compatibility or ES 3.1
-  // functions->fMemoryBarrierByRegion = gl->glMemoryBarrierByRegionFn;
-
   functions->fGetInternalformativ = gl->glGetInternalformativFn;
 
   interface->fStandard = standard;
   interface->fExtensions.swap(&extensions);
-  sk_sp<const GrGLInterface> returned(interface);
+  sk_sp<GrGLInterface> returned(interface);
   return returned;
 }
 

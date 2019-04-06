@@ -5,10 +5,7 @@ include_rules = [
   "+android_webview/grit",
   "+android_webview/jni",
   "+android_webview/public/browser",
-
   "+cc",
-  "-cc/blink",
-
   "+components/autofill/android",
   "+components/autofill/content/browser",
   "+components/autofill/core/browser",
@@ -16,6 +13,8 @@ include_rules = [
   "+components/cdm/browser",
   "+components/crash/content/browser",
   "+components/crash/core",
+  "+components/download/public/common",
+  "+components/heap_profiling",
   "+components/navigation_interception",
   "+components/policy/core/browser",
   "+components/policy/core/common",
@@ -40,8 +39,6 @@ include_rules = [
   "+content/public/browser",
   "+content/public/test",
 
-  "+device/geolocation",
-
   # Explicitly disallow using SyncMessageFilter to prevent browser from
   # sending synchronous IPC messages on non-UI threads.
   "-ipc/ipc_sync_message_filter.h",
@@ -49,10 +46,11 @@ include_rules = [
   "+media/base/android",
 
   "+components/policy/policy_constants.h",
-  "+components/web_contents_delegate_android",
+  "+components/embedder_support/android",
 
   "+printing",
 
+  "+services/network/public",
   "+services/service_manager/public/cpp",
 
   "+storage/browser/quota",
@@ -68,9 +66,9 @@ include_rules = [
 
 
   # QuotaStatusCode required by AwQuotaManagerBridge.
-  "+third_party/WebKit/common/quota",
+  "+third_party/blink/public/mojom/quota",
   # POD structure required by the find-in-page IPC messages.
-  "+third_party/WebKit/public/web/WebFindOptions.h",
+  "+third_party/blink/public/web/web_find_options.h",
   # Interface required for in-process input event handling.
-  "+third_party/WebKit/public/web/WebCompositorInputHandler.h"
+  "+third_party/blink/public/web/WebCompositorInputHandler.h"
 ]

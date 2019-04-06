@@ -46,9 +46,7 @@
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/owner_flags_storage.h"
-#include "chromeos/cryptohome/cryptohome_parameters.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager_client.h"
+#include "components/account_id/account_id.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/user_manager/user_manager.h"
 #endif
@@ -61,6 +59,8 @@ namespace {
 content::WebUIDataSource* CreateFlagsUIHTMLSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIFlagsHost);
+  source->OverrideContentSecurityPolicyScriptSrc(
+      "script-src chrome://resources 'self' 'unsafe-eval';");
 
   source->AddLocalizedString(flags_ui::kFlagsRestartNotice,
                              IDS_FLAGS_UI_RELAUNCH_NOTICE);
@@ -115,6 +115,9 @@ class FlagsDOMHandler : public WebUIMessageHandler {
   // Callback for the "enableExperimentalFeature" message.
   void HandleEnableExperimentalFeatureMessage(const base::ListValue* args);
 
+  // Callback for the "setOriginListFlag" message.
+  void HandleSetOriginListFlagMessage(const base::ListValue* args);
+
   // Callback for the "restartBrowser" message. Restores all tabs on restart.
   void HandleRestartBrowser(const base::ListValue* args);
 
@@ -132,20 +135,25 @@ class FlagsDOMHandler : public WebUIMessageHandler {
 void FlagsDOMHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       flags_ui::kRequestExperimentalFeatures,
-      base::Bind(&FlagsDOMHandler::HandleRequestExperimentalFeatures,
-                 base::Unretained(this)));
+      base::BindRepeating(&FlagsDOMHandler::HandleRequestExperimentalFeatures,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       flags_ui::kEnableExperimentalFeature,
-      base::Bind(&FlagsDOMHandler::HandleEnableExperimentalFeatureMessage,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &FlagsDOMHandler::HandleEnableExperimentalFeatureMessage,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      flags_ui::kSetOriginListFlag,
+      base::BindRepeating(&FlagsDOMHandler::HandleSetOriginListFlagMessage,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       flags_ui::kRestartBrowser,
-      base::Bind(&FlagsDOMHandler::HandleRestartBrowser,
-                 base::Unretained(this)));
+      base::BindRepeating(&FlagsDOMHandler::HandleRestartBrowser,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       flags_ui::kResetAllFlags,
-      base::Bind(&FlagsDOMHandler::HandleResetAllFlags,
-                 base::Unretained(this)));
+      base::BindRepeating(&FlagsDOMHandler::HandleResetAllFlags,
+                          base::Unretained(this)));
 }
 
 void FlagsDOMHandler::Init(flags_ui::FlagsStorage* flags_storage,
@@ -211,6 +219,26 @@ void FlagsDOMHandler::HandleEnableExperimentalFeatureMessage(
                                       enable_str == "true");
 }
 
+void FlagsDOMHandler::HandleSetOriginListFlagMessage(
+    const base::ListValue* args) {
+  DCHECK(flags_storage_);
+  if (args->GetSize() != 2) {
+    NOTREACHED();
+    return;
+  }
+
+  std::string entry_internal_name;
+  std::string value_str;
+  if (!args->GetString(0, &entry_internal_name) ||
+      !args->GetString(1, &value_str) || entry_internal_name.empty()) {
+    NOTREACHED();
+    return;
+  }
+
+  about_flags::SetOriginListFlag(entry_internal_name, value_str,
+                                 flags_storage_.get());
+}
+
 void FlagsDOMHandler::HandleRestartBrowser(const base::ListValue* args) {
   DCHECK(flags_storage_);
 #if defined(OS_CHROMEOS)
@@ -223,19 +251,20 @@ void FlagsDOMHandler::HandleRestartBrowser(const base::ListValue* args) {
 
   // Apply additional switches from policy that should not be dropped when
   // applying flags..
-  chromeos::UserSessionManager::MaybeAppendPolicySwitches(&user_flags);
+  chromeos::UserSessionManager::MaybeAppendPolicySwitches(
+      Profile::FromWebUI(web_ui())->GetPrefs(), &user_flags);
 
   base::CommandLine::StringVector flags;
   // argv[0] is the program name |base::CommandLine::NO_PROGRAM|.
   flags.assign(user_flags.argv().begin() + 1, user_flags.argv().end());
   VLOG(1) << "Restarting to apply per-session flags...";
-  chromeos::DBusThreadManager::Get()
-      ->GetSessionManagerClient()
-      ->SetFlagsForUser(
-          cryptohome::Identification(user_manager::UserManager::Get()
-                                         ->GetActiveUser()
-                                         ->GetAccountId()),
-          flags);
+  AccountId account_id =
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId();
+  chromeos::UserSessionManager::GetInstance()->SetSwitchesForUser(
+      account_id,
+      chromeos::UserSessionManager::CommandLineSwitchesType::
+          kPolicyAndFlagsAndKioskControl,
+      flags);
 #endif
   chrome::AttemptRestart();
 }

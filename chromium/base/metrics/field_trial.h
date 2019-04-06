@@ -388,10 +388,15 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
 //------------------------------------------------------------------------------
 // Class with a list of all active field trials.  A trial is active if it has
 // been registered, which includes evaluating its state based on its probaility.
-// Only one instance of this class exists.
+// Only one instance of this class exists and outside of testing, will live for
+// the entire life time of the process.
 class BASE_EXPORT FieldTrialList {
  public:
   typedef SharedPersistentMemoryAllocator FieldTrialAllocator;
+
+  // Type for function pointer passed to |AllParamsToString| used to escape
+  // special characters from |input|.
+  typedef std::string (*EscapeDataFunc)(const std::string& input);
 
   // Year that is guaranteed to not be expired when instantiating a field trial
   // via |FactoryGetFieldTrial()|.  Set to two years from the build date.
@@ -510,6 +515,16 @@ class BASE_EXPORT FieldTrialList {
   // by |CreateTrialsFromString()|.
   static void AllStatesToString(std::string* output, bool include_expired);
 
+  // Creates a persistent representation of all FieldTrial params for
+  // resurrection in another process. The returned string contains the trial
+  // name and group name pairs of all registered FieldTrials including disabled
+  // based on |include_expired| separated by '.'. The pair is followed by ':'
+  // separator and list of param name and values separated by '/'. It also takes
+  // |encode_data_func| function pointer for encodeing special charactors.
+  // This string is parsed by |AssociateParamsFromString()|.
+  static std::string AllParamsToString(bool include_expired,
+                                       EscapeDataFunc encode_data_func);
+
   // Fills in the supplied vector |active_groups| (which must be empty when
   // called) with a snapshot of all registered FieldTrials for which the group
   // has been chosen and externally observed (via |group()|) and which have
@@ -599,11 +614,26 @@ class BASE_EXPORT FieldTrialList {
 
   // Add an observer to be notified when a field trial is irrevocably committed
   // to being part of some specific field_group (and hence the group_name is
-  // also finalized for that field_trial).
-  static void AddObserver(Observer* observer);
+  // also finalized for that field_trial). Returns false and does nothing if
+  // there is no FieldTrialList singleton.
+  static bool AddObserver(Observer* observer);
 
   // Remove an observer.
   static void RemoveObserver(Observer* observer);
+
+  // Similar to AddObserver(), but the passed observer will be notified
+  // synchronously when a field trial is activated and its group selected. It
+  // will be notified synchronously on the same thread where the activation and
+  // group selection happened. It is the responsibility of the observer to make
+  // sure that this is a safe operation and the operation must be fast, as this
+  // work is done synchronously as part of group() or related APIs. Only a
+  // single such observer is supported, exposed specifically for crash
+  // reporting. Must be called on the main thread before any other threads
+  // have been started.
+  static void SetSynchronousObserver(Observer* observer);
+
+  // Removes the single synchronous observer.
+  static void RemoveSynchronousObserver(Observer* observer);
 
   // Grabs the lock if necessary and adds the field trial to the allocator. This
   // should only be called from FinalizeGroupChoice().
@@ -723,6 +753,9 @@ class BASE_EXPORT FieldTrialList {
   // This should always be called after creating a new FieldTrial instance.
   static void Register(FieldTrial* trial);
 
+  // Returns all the registered trials.
+  static RegistrationMap GetRegisteredTrials();
+
   static FieldTrialList* global_;  // The singleton of this class.
 
   // This will tell us if there is an attempt to register a field
@@ -743,6 +776,9 @@ class BASE_EXPORT FieldTrialList {
 
   // List of observers to be notified when a group is selected for a FieldTrial.
   scoped_refptr<ObserverListThreadSafe<Observer> > observer_list_;
+
+  // Single synchronous observer to be notified when a trial group is chosen.
+  Observer* synchronous_observer_ = nullptr;
 
   // Allocator in shared memory containing field trial data. Used in both
   // browser and child processes, but readonly in the child.

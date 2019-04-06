@@ -16,7 +16,7 @@
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/value_builder.h"
 
-class LocationBarBrowserTest : public ExtensionBrowserTest {
+class LocationBarBrowserTest : public extensions::ExtensionBrowserTest {
  public:
   LocationBarBrowserTest() {}
   ~LocationBarBrowserTest() override {}
@@ -31,7 +31,7 @@ class LocationBarBrowserTest : public ExtensionBrowserTest {
 };
 
 void LocationBarBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
-  ExtensionBrowserTest::SetUpCommandLine(command_line);
+  extensions::ExtensionBrowserTest::SetUpCommandLine(command_line);
 
   // In order to let a vanilla extension override the bookmark star, we have to
   // enable the switch.
@@ -51,9 +51,9 @@ IN_PROC_BROWSER_TEST_F(LocationBarBrowserTest,
 
   // Create and install an extension that overrides the bookmark star.
   extensions::DictionaryBuilder chrome_ui_overrides;
-  chrome_ui_overrides.Set("bookmarks_ui", extensions::DictionaryBuilder()
-                                              .SetBoolean("remove_button", true)
-                                              .Build());
+  chrome_ui_overrides.Set(
+      "bookmarks_ui",
+      extensions::DictionaryBuilder().Set("remove_button", true).Build());
   scoped_refptr<const extensions::Extension> extension =
       extensions::ExtensionBuilder()
           .SetManifest(

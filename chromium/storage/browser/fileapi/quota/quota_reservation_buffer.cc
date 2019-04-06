@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "storage/browser/fileapi/quota/open_file_handle.h"
 #include "storage/browser/fileapi/quota/open_file_handle_context.h"
@@ -18,13 +19,13 @@ namespace storage {
 
 QuotaReservationBuffer::QuotaReservationBuffer(
     base::WeakPtr<QuotaReservationManager> reservation_manager,
-    const GURL& origin,
+    const url::Origin& origin,
     FileSystemType type)
     : reservation_manager_(reservation_manager),
       origin_(origin),
       type_(type),
       reserved_quota_(0) {
-  DCHECK(origin.is_valid());
+  DCHECK(!origin.unique());
   DCHECK(sequence_checker_.CalledOnValidSequence());
   reservation_manager_->IncrementDirtyCount(origin, type);
 }
@@ -96,11 +97,11 @@ QuotaReservationBuffer::~QuotaReservationBuffer() {
 // static
 bool QuotaReservationBuffer::DecrementDirtyCount(
     base::WeakPtr<QuotaReservationManager> reservation_manager,
-    const GURL& origin,
+    const url::Origin& origin,
     FileSystemType type,
     base::File::Error error,
     int64_t delta_unused) {
-  DCHECK(origin.is_valid());
+  DCHECK(!origin.unique());
   if (error == base::File::FILE_OK && reservation_manager) {
     reservation_manager->DecrementDirtyCount(origin, type);
     return true;

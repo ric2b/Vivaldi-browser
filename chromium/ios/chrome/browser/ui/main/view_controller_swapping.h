@@ -18,10 +18,14 @@
 // The view controller, if any, that is active.
 @property(nonatomic, readonly, strong) UIViewController* activeViewController;
 
+// The view controller that is doing the view controller swapping.
+// This may or may not be the same as |activeViewController|.
+@property(nonatomic, readonly, strong) UIViewController* viewController;
+
 // Displays the given TabSwitcher, replacing any TabSwitchers or view
 // controllers that may currently be visible.  Runs the given |completion| block
 // after the view controller is visible.
-- (void)showTabSwitcher:(UIViewController<TabSwitcher>*)tabSwitcher
+- (void)showTabSwitcher:(id<TabSwitcher>)tabSwitcher
              completion:(ProceduralBlock)completion;
 
 // Displays the given view controller, replacing any TabSwitchers or other view

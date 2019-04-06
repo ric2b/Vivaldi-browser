@@ -5,13 +5,12 @@
 #ifndef UI_MESSAGE_CENTER_UI_CONTROLLER_H_
 #define UI_MESSAGE_CENTER_UI_CONTROLLER_H_
 
-#include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/message_center_observer.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 #include "ui/message_center/ui_delegate.h"
 
 namespace message_center {
@@ -53,19 +52,21 @@ class MESSAGE_CENTER_EXPORT UiController : public MessageCenterObserver {
   bool message_center_visible() { return message_center_visible_; }
   bool popups_visible() { return popups_visible_; }
   UiDelegate* delegate() { return delegate_; }
-  const message_center::MessageCenter* message_center() const {
-    return message_center_;
+  const MessageCenter* message_center() const { return message_center_; }
+  MessageCenter* message_center() { return message_center_; }
+  void set_hide_on_last_notification(bool hide_on_last_notification) {
+    hide_on_last_notification_ = hide_on_last_notification;
   }
-  message_center::MessageCenter* message_center() { return message_center_; }
 
   // Overridden from MessageCenterObserver:
   void OnNotificationAdded(const std::string& notification_id) override;
   void OnNotificationRemoved(const std::string& notification_id,
                              bool by_user) override;
   void OnNotificationUpdated(const std::string& notification_id) override;
-  void OnNotificationClicked(const std::string& notification_id) override;
-  void OnNotificationButtonClicked(const std::string& notification_id,
-                                   int button_index) override;
+  void OnNotificationClicked(
+      const std::string& notification_id,
+      const base::Optional<int>& button_index,
+      const base::Optional<base::string16>& reply) override;
   void OnNotificationSettingsClicked(bool handled) override;
   void OnNotificationDisplayed(const std::string& notification_id,
                                const DisplaySource source) override;
@@ -77,14 +78,13 @@ class MESSAGE_CENTER_EXPORT UiController : public MessageCenterObserver {
   void NotifyUiControllerChanged();
   void HidePopupBubbleInternal();
 
-  message_center::MessageCenter* message_center_;
+  MessageCenter* message_center_;
   bool message_center_visible_ = false;
   bool popups_visible_ = false;
   UiDelegate* delegate_;
 
-#if defined(OS_CHROMEOS)
-  std::unique_ptr<base::CancelableClosure> hide_empty_message_center_callback_;
-#endif
+  // Set true to hide MessageCenterView when the last notification is dismissed.
+  bool hide_on_last_notification_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(UiController);
 };

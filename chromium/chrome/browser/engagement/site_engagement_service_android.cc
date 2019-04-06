@@ -6,7 +6,6 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "jni/SiteEngagementService_jni.h"
@@ -21,7 +20,7 @@ SiteEngagementServiceAndroid::GetOrCreate(JNIEnv* env,
   SiteEngagementServiceAndroid* android_service = service->GetAndroidService();
   if (!android_service) {
     service->SetAndroidService(
-        base::MakeUnique<SiteEngagementServiceAndroid>(env, service));
+        std::make_unique<SiteEngagementServiceAndroid>(env, service));
     android_service = service->GetAndroidService();
   }
 

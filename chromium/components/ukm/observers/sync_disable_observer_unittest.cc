@@ -6,6 +6,11 @@
 
 #include "base/observer_list.h"
 #include "components/sync/driver/fake_sync_service.h"
+#include "components/sync/driver/sync_token_status.h"
+#include "components/sync/engine/connection_status.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/unified_consent/pref_names.h"
+#include "components/unified_consent/unified_consent_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ukm {
@@ -17,20 +22,30 @@ class MockSyncService : public syncer::FakeSyncService {
   MockSyncService() {}
   ~MockSyncService() override { Shutdown(); }
 
-  void SetStatus(bool has_passphrase, bool enabled) {
+  void SetStatus(bool has_passphrase, bool history_enabled) {
     initialized_ = true;
     has_passphrase_ = has_passphrase;
     preferred_data_types_ =
-        enabled ? syncer::ModelTypeSet(syncer::HISTORY_DELETE_DIRECTIVES)
-                : syncer::ModelTypeSet();
-    for (auto& observer : observers_) {
-      observer.OnStateChanged(this);
-    }
+        history_enabled
+            ? syncer::ModelTypeSet(syncer::HISTORY_DELETE_DIRECTIVES)
+            : syncer::ModelTypeSet();
+    NotifyObserversOfStateChanged();
+  }
+
+  void SetConnectionStatus(syncer::ConnectionStatus status) {
+    connection_status_ = status;
+    NotifyObserversOfStateChanged();
   }
 
   void Shutdown() override {
     for (auto& observer : observers_) {
       observer.OnSyncShutdown(this);
+    }
+  }
+
+  void NotifyObserversOfStateChanged() {
+    for (auto& observer : observers_) {
+      observer.OnStateChanged(this);
     }
   }
 
@@ -47,9 +62,15 @@ class MockSyncService : public syncer::FakeSyncService {
   syncer::ModelTypeSet GetPreferredDataTypes() const override {
     return preferred_data_types_;
   }
+  syncer::SyncTokenStatus GetSyncTokenStatus() const override {
+    syncer::SyncTokenStatus status;
+    status.connection_status = connection_status_;
+    return status;
+  }
 
   bool initialized_ = false;
   bool has_passphrase_ = false;
+  syncer::ConnectionStatus connection_status_ = syncer::CONNECTION_OK;
   syncer::ModelTypeSet preferred_data_types_;
 
   // The list of observers of the SyncService state.
@@ -89,6 +110,17 @@ class TestSyncDisableObserver : public SyncDisableObserver {
 class SyncDisableObserverTest : public testing::Test {
  public:
   SyncDisableObserverTest() {}
+  void RegisterUrlKeyedAnonymizedDataCollectionPref(
+      sync_preferences::TestingPrefServiceSyncable& prefs) {
+    unified_consent::UnifiedConsentService::RegisterPrefs(prefs.registry());
+  }
+
+  void SetUrlKeyedAnonymizedDataCollectionEnabled(PrefService* prefs,
+                                                  bool enabled) {
+    prefs->SetBoolean(
+        unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
+        enabled);
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SyncDisableObserverTest);
@@ -98,117 +130,206 @@ class SyncDisableObserverTest : public testing::Test {
 
 TEST_F(SyncDisableObserverTest, NoProfiles) {
   TestSyncDisableObserver observer;
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_FALSE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, OneEnabled) {
+TEST_F(SyncDisableObserverTest, OneEnabled_UnifiedConsentDisabled) {
   TestSyncDisableObserver observer;
   MockSyncService sync;
   sync.SetStatus(false, true);
-  observer.ObserveServiceForSyncDisables(&sync);
-  EXPECT_TRUE(observer.IsHistorySyncEnabledOnAllProfiles());
+  observer.ObserveServiceForSyncDisables(&sync, nullptr, false);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
   EXPECT_TRUE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, Passphrase) {
-  TestSyncDisableObserver observer;
+TEST_F(SyncDisableObserverTest, OneEnabled_UnifiedConsentEnabled) {
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  RegisterUrlKeyedAnonymizedDataCollectionPref(prefs);
+  SetUrlKeyedAnonymizedDataCollectionEnabled(&prefs, true);
+  MockSyncService sync;
+  for (bool has_passphrase : {true, false}) {
+    for (bool history_enabled : {true, false}) {
+      TestSyncDisableObserver observer;
+      sync.SetStatus(has_passphrase, history_enabled);
+      observer.ObserveServiceForSyncDisables(&sync, &prefs, true);
+      EXPECT_TRUE(observer.SyncStateAllowsUkm());
+      EXPECT_TRUE(observer.ResetNotified());
+      EXPECT_FALSE(observer.ResetPurged());
+    }
+  }
+}
+
+TEST_F(SyncDisableObserverTest, Passphrased_UnifiedConsentDisabled) {
   MockSyncService sync;
   sync.SetStatus(true, true);
-  observer.ObserveServiceForSyncDisables(&sync);
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  TestSyncDisableObserver observer;
+  observer.ObserveServiceForSyncDisables(&sync, nullptr, false);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_FALSE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, HistoryDisabled) {
+TEST_F(SyncDisableObserverTest, HistoryDisabled_UnifiedConsentDisabled) {
   TestSyncDisableObserver observer;
   MockSyncService sync;
   sync.SetStatus(false, false);
-  observer.ObserveServiceForSyncDisables(&sync);
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  observer.ObserveServiceForSyncDisables(&sync, nullptr, false);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_FALSE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, MixedProfiles1) {
+TEST_F(SyncDisableObserverTest, AuthError_UnifiedConsentDisabled) {
+  TestSyncDisableObserver observer;
+  MockSyncService sync;
+  sync.SetStatus(false, true);
+  observer.ObserveServiceForSyncDisables(&sync, nullptr, false);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
+  sync.SetConnectionStatus(syncer::CONNECTION_AUTH_ERROR);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
+  sync.SetConnectionStatus(syncer::CONNECTION_OK);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
+}
+
+TEST_F(SyncDisableObserverTest, MixedProfiles1_UnifiedConsentDisabled) {
   TestSyncDisableObserver observer;
   MockSyncService sync1;
   sync1.SetStatus(false, false);
-  observer.ObserveServiceForSyncDisables(&sync1);
+  observer.ObserveServiceForSyncDisables(&sync1, nullptr, false);
   MockSyncService sync2;
   sync2.SetStatus(false, true);
-  observer.ObserveServiceForSyncDisables(&sync2);
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  observer.ObserveServiceForSyncDisables(&sync2, nullptr, false);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_FALSE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, MixedProfiles2) {
+TEST_F(SyncDisableObserverTest, MixedProfiles2_UnifiedConsentDisabled) {
   TestSyncDisableObserver observer;
   MockSyncService sync1;
   sync1.SetStatus(false, true);
-  observer.ObserveServiceForSyncDisables(&sync1);
+  observer.ObserveServiceForSyncDisables(&sync1, nullptr, false);
   EXPECT_TRUE(observer.ResetNotified());
+
   MockSyncService sync2;
   sync2.SetStatus(false, false);
-  observer.ObserveServiceForSyncDisables(&sync2);
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  observer.ObserveServiceForSyncDisables(&sync2, nullptr, false);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_TRUE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
   sync2.Shutdown();
-  EXPECT_TRUE(observer.IsHistorySyncEnabledOnAllProfiles());
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
   EXPECT_TRUE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, TwoEnabled) {
+TEST_F(SyncDisableObserverTest, TwoEnabled_UnifiedConsentDisabled) {
   TestSyncDisableObserver observer;
   MockSyncService sync1;
   sync1.SetStatus(false, true);
-  observer.ObserveServiceForSyncDisables(&sync1);
+  observer.ObserveServiceForSyncDisables(&sync1, nullptr, false);
   EXPECT_TRUE(observer.ResetNotified());
   MockSyncService sync2;
   sync2.SetStatus(false, true);
-  observer.ObserveServiceForSyncDisables(&sync2);
-  EXPECT_TRUE(observer.IsHistorySyncEnabledOnAllProfiles());
+  observer.ObserveServiceForSyncDisables(&sync2, nullptr, false);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
   EXPECT_FALSE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, OneAddRemove) {
+TEST_F(SyncDisableObserverTest, TwoEnabled_UnifiedConsentEnabled) {
+  sync_preferences::TestingPrefServiceSyncable prefs2;
+  RegisterUrlKeyedAnonymizedDataCollectionPref(prefs2);
+  TestSyncDisableObserver observer;
+
+  // First profile has sync enabled.
+  MockSyncService sync1;
+  sync1.SetStatus(false, true);
+  observer.ObserveServiceForSyncDisables(&sync1, nullptr, false);
+  EXPECT_TRUE(observer.ResetNotified());
+
+  // Second profile has URL-keyed anonymized data collection enabled.
+  MockSyncService sync2;
+  SetUrlKeyedAnonymizedDataCollectionEnabled(&prefs2, true);
+  observer.ObserveServiceForSyncDisables(&sync2, &prefs2, true);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
+  EXPECT_FALSE(observer.ResetNotified());
+  EXPECT_FALSE(observer.ResetPurged());
+}
+
+TEST_F(SyncDisableObserverTest, OneAddRemove_UnifiedConsentDisabled) {
   TestSyncDisableObserver observer;
   MockSyncService sync;
-  observer.ObserveServiceForSyncDisables(&sync);
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  observer.ObserveServiceForSyncDisables(&sync, nullptr, false);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_FALSE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
   sync.SetStatus(false, true);
-  EXPECT_TRUE(observer.IsHistorySyncEnabledOnAllProfiles());
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
   EXPECT_TRUE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
   sync.Shutdown();
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_TRUE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }
 
-TEST_F(SyncDisableObserverTest, PurgeOnDisable) {
+TEST_F(SyncDisableObserverTest, OneAddRemove_UnifiedConsentEnabled) {
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  RegisterUrlKeyedAnonymizedDataCollectionPref(prefs);
+  TestSyncDisableObserver observer;
+  MockSyncService sync;
+  observer.ObserveServiceForSyncDisables(&sync, &prefs, true);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
+  EXPECT_FALSE(observer.ResetNotified());
+  EXPECT_FALSE(observer.ResetPurged());
+  SetUrlKeyedAnonymizedDataCollectionEnabled(&prefs, true);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
+  EXPECT_TRUE(observer.ResetNotified());
+  EXPECT_FALSE(observer.ResetPurged());
+  sync.Shutdown();
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
+  EXPECT_TRUE(observer.ResetNotified());
+  EXPECT_FALSE(observer.ResetPurged());
+}
+
+TEST_F(SyncDisableObserverTest, PurgeOnDisable_UnifiedConsentDisabled) {
   TestSyncDisableObserver observer;
   MockSyncService sync;
   sync.SetStatus(false, true);
-  observer.ObserveServiceForSyncDisables(&sync);
-  EXPECT_TRUE(observer.IsHistorySyncEnabledOnAllProfiles());
+  observer.ObserveServiceForSyncDisables(&sync, nullptr, false);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
   EXPECT_TRUE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
   sync.SetStatus(false, false);
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_TRUE(observer.ResetNotified());
   EXPECT_TRUE(observer.ResetPurged());
   sync.Shutdown();
-  EXPECT_FALSE(observer.IsHistorySyncEnabledOnAllProfiles());
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
+  EXPECT_FALSE(observer.ResetNotified());
+  EXPECT_FALSE(observer.ResetPurged());
+}
+
+TEST_F(SyncDisableObserverTest, PurgeOnDisable_UnifiedConsentEnabled) {
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  RegisterUrlKeyedAnonymizedDataCollectionPref(prefs);
+  TestSyncDisableObserver observer;
+  MockSyncService sync;
+  SetUrlKeyedAnonymizedDataCollectionEnabled(&prefs, true);
+  observer.ObserveServiceForSyncDisables(&sync, &prefs, true);
+  EXPECT_TRUE(observer.SyncStateAllowsUkm());
+  EXPECT_TRUE(observer.ResetNotified());
+  EXPECT_FALSE(observer.ResetPurged());
+  SetUrlKeyedAnonymizedDataCollectionEnabled(&prefs, false);
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
+  EXPECT_TRUE(observer.ResetNotified());
+  EXPECT_TRUE(observer.ResetPurged());
+  sync.Shutdown();
+  EXPECT_FALSE(observer.SyncStateAllowsUkm());
   EXPECT_FALSE(observer.ResetNotified());
   EXPECT_FALSE(observer.ResetPurged());
 }

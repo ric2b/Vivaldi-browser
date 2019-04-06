@@ -19,6 +19,7 @@ namespace content {
 class GuestHost;
 class RenderWidgetHost;
 class SiteInstance;
+class BrowserPluginGuest;
 
 // Objects implement this interface to get notified about changes in the guest
 // WebContents and to provide necessary functionality.
@@ -67,12 +68,6 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
   // content module.
   virtual void SetGuestHost(GuestHost* guest_host) {}
 
-  // Sets the position of the context menu for the guest contents. The value
-  // reported from the guest renderer should be ignored. The reported value
-  // from the guest renderer is incorrect in situations where BrowserPlugin is
-  // subject to CSS transforms.
-  virtual void SetContextMenuPosition(const gfx::Point& position) {}
-
   // TODO(ekaramad): A short workaround to force some types of guests to use
   // a BrowserPlugin even when we are using cross process frames for guests. It
   // should be removed after resolving https://crbug.com/642826).
@@ -87,6 +82,11 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
   // Returns true if the corresponding guest is allowed to be embedded inside an
   // <iframe> which is cross process.
   virtual bool CanBeEmbeddedInsideCrossProcessFrames();
+
+  // It is always set for tab and inspected webviews that might move between
+  // embedders. Used to reset guest_host_ in between hand-overs.
+  BrowserPluginGuest* delegate_to_browser_plugin_ = nullptr;
+
 };
 
 }  // namespace content

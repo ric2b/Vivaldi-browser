@@ -15,6 +15,8 @@
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
+#include "content/browser/web_contents/web_contents_impl.h"
+
 using vivaldi::kVivaldiAppId;
 using content::WebContents;
 
@@ -25,8 +27,25 @@ EditcommandExecuteFunction::EditcommandExecuteFunction() {}
 EditcommandExecuteFunction::~EditcommandExecuteFunction() {}
 
 bool EditcommandExecuteFunction::RunAsync() {
-  WebContents* web_contents = GetAssociatedWebContents();
+  WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
   if (web_contents) {
+    // NOTE(espen@vivaldi.com): Added with ch67 when we started to use separate
+    // documents for ui and page (cross process). The api happens in the ui
+    // document while actions can take place in ui or page. So look up the
+    // focused WebContents object and use that.
+    std::vector<content::WebContentsImpl*> impls =
+      content::WebContentsImpl::GetAllWebContents();
+    for (std::vector<content::WebContentsImpl*>::iterator it = impls.begin();
+         it != impls.end(); ++it) {
+      content::WebContentsImpl* impl = *it;
+      if (impl->GetAsWebContents() == web_contents) {
+        impl = impl->GetFocusedWebContents();
+        if (impl) {
+          web_contents = impl->GetAsWebContents();
+        }
+        break;
+      }
+    }
     std::unique_ptr<vivaldi::editcommand::Execute::Params> params(
         vivaldi::editcommand::Execute::Params::Create(*args_));
 

@@ -18,7 +18,8 @@ class TestAutofillProvider : public AutofillProvider {
                                 int32_t id,
                                 const FormData& form,
                                 const FormFieldData& field,
-                                const gfx::RectF& bounding_box) override;
+                                const gfx::RectF& bounding_box,
+                                bool autoselect_first_suggestion) override;
   void OnTextFieldDidChange(AutofillHandlerProxy* handler,
                             const FormData& form,
                             const FormFieldData& field,
@@ -28,11 +29,15 @@ class TestAutofillProvider : public AutofillProvider {
                             const FormData& form,
                             const FormFieldData& field,
                             const gfx::RectF& bounding_box) override;
-  bool OnFormSubmitted(AutofillHandlerProxy* handler,
+  void OnSelectControlDidChange(AutofillHandlerProxy* handler,
+                                const FormData& form,
+                                const FormFieldData& field,
+                                const gfx::RectF& bounding_box) override;
+  void OnFormSubmitted(AutofillHandlerProxy* handler,
                        const FormData& form,
                        bool known_success,
                        SubmissionSource source,
-                       base::TimeTicks timestamp) override;
+                       base::TimeTicks timestamp) override {}
   void OnFocusNoLongerOnForm(AutofillHandlerProxy* handler) override;
   void OnFocusOnFormField(AutofillHandlerProxy* handler,
                           const FormData& form,

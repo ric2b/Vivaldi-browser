@@ -5,8 +5,23 @@
 #include "chrome/browser/profiling_host/chrome_browser_main_extra_parts_profiling.h"
 
 #include "base/command_line.h"
+#include "chrome/browser/profiling_host/chrome_client_connection_manager.h"
 #include "chrome/browser/profiling_host/profiling_process_host.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/heap_profiling/supervisor.h"
+#include "components/services/heap_profiling/public/cpp/settings.h"
+
+namespace {
+
+std::unique_ptr<heap_profiling::ClientConnectionManager>
+CreateClientConnectionManager(
+    base::WeakPtr<heap_profiling::Controller> controller_weak_ptr,
+    heap_profiling::Mode mode) {
+  return std::make_unique<heap_profiling::ChromeClientConnectionManager>(
+      controller_weak_ptr, mode);
+}
+
+}  // namespace
 
 ChromeBrowserMainExtraPartsProfiling::ChromeBrowserMainExtraPartsProfiling() =
     default;
@@ -15,19 +30,24 @@ ChromeBrowserMainExtraPartsProfiling::~ChromeBrowserMainExtraPartsProfiling() =
 
 void ChromeBrowserMainExtraPartsProfiling::ServiceManagerConnectionStarted(
     content::ServiceManagerConnection* connection) {
-#if defined(ADDRESS_SANITIZER) || defined(SYZYASAN)
+  heap_profiling::Supervisor::GetInstance()
+      ->SetClientConnectionManagerConstructor(&CreateClientConnectionManager);
+
+#if defined(ADDRESS_SANITIZER)
   // Memory sanitizers are using large memory shadow to keep track of memory
   // state. Using memlog and memory sanitizers at the same time is slowing down
   // user experience, causing the browser to be barely responsive. In theory,
   // memlog and memory sanitizers are compatible and can run at the same time.
   (void)connection;  // Unused variable.
 #else
-  profiling::ProfilingProcessHost::Mode mode =
-      profiling::ProfilingProcessHost::GetModeForStartup();
-  if (mode != profiling::ProfilingProcessHost::Mode::kNone) {
-    profiling::ProfilingProcessHost::Start(
-        connection, mode,
-        profiling::ProfilingProcessHost::GetStackModeForStartup());
+  heap_profiling::Mode mode = heap_profiling::GetModeForStartup();
+  if (mode != heap_profiling::Mode::kNone) {
+    heap_profiling::Supervisor::GetInstance()->Start(
+        connection,
+        base::BindOnce(
+            &heap_profiling::ProfilingProcessHost::Start,
+            base::Unretained(
+                heap_profiling::ProfilingProcessHost::GetInstance())));
   }
 #endif
 }

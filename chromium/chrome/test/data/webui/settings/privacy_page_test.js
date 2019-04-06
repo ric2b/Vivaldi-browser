@@ -6,7 +6,7 @@ cr.define('settings_privacy_page', function() {
   /** @implements {settings.ClearBrowsingDataBrowserProxy} */
   class TestClearBrowsingDataBrowserProxy extends TestBrowserProxy {
     constructor() {
-      super(['initialize', 'clearBrowsingData', 'getImportantSites']);
+      super(['initialize', 'clearBrowsingData']);
 
       /**
        * The promise to return from |clearBrowsingData|.
@@ -15,12 +15,6 @@ cr.define('settings_privacy_page', function() {
        * @private {?Promise}
        */
       this.clearBrowsingDataPromise_ = null;
-
-      /**
-       * Response for |getImportantSites|.
-       * @private {!Array<!ImportantSite>}
-       */
-      this.importantSites_ = [];
     }
 
     /** @param {!Promise} promise */
@@ -29,23 +23,12 @@ cr.define('settings_privacy_page', function() {
     }
 
     /** @override */
-    clearBrowsingData(dataTypes, timePeriod, importantSites) {
-      this.methodCalled(
-          'clearBrowsingData', [dataTypes, timePeriod, importantSites]);
+    clearBrowsingData(dataTypes, timePeriod) {
+      this.methodCalled('clearBrowsingData', [dataTypes, timePeriod]);
       cr.webUIListenerCallback('browsing-data-removing', true);
       return this.clearBrowsingDataPromise_ !== null ?
-          this.clearBrowsingDataPromise_ : Promise.resolve();
-    }
-
-    /** @param {!Array<!ImportantSite>} sites */
-    setImportantSites(sites) {
-      this.importantSites_ = sites;
-    }
-
-    /** @override */
-    getImportantSites() {
-      this.methodCalled('getImportantSites');
-      return Promise.resolve(this.importantSites_);
+          this.clearBrowsingDataPromise_ :
+          Promise.resolve();
     }
 
     /** @override */
@@ -115,10 +98,12 @@ cr.define('settings_privacy_page', function() {
         document.body.appendChild(page);
       });
 
-      teardown(function() { page.remove(); });
+      teardown(function() {
+        page.remove();
+      });
 
       test('NativeCertificateManager', function() {
-        MockInteractions.tap(page.$$('#manageCertificates'));
+        page.$$('#manageCertificates').click();
         return testBrowserProxy.whenCalled('showManageSSLCertificates');
       });
     });
@@ -134,14 +119,16 @@ cr.define('settings_privacy_page', function() {
         document.body.appendChild(page);
       });
 
-      teardown(function() { page.remove(); });
+      teardown(function() {
+        page.remove();
+      });
 
       test('showClearBrowsingDataDialog', function() {
-        assertFalse(!!page.$$('settings-clear-browsing-data-dialog-tabs'));
-        MockInteractions.tap(page.$$('#clearBrowsingData'));
+        assertFalse(!!page.$$('settings-clear-browsing-data-dialog'));
+        page.$$('#clearBrowsingData').click();
         Polymer.dom.flush();
 
-        const dialog = page.$$('settings-clear-browsing-data-dialog-tabs');
+        const dialog = page.$$('settings-clear-browsing-data-dialog');
         assertTrue(!!dialog);
 
         // Ensure that the dialog is fully opened before returning from this
@@ -165,18 +152,18 @@ cr.define('settings_privacy_page', function() {
         testBrowserProxy = new TestClearBrowsingDataBrowserProxy();
         settings.ClearBrowsingDataBrowserProxyImpl.instance_ = testBrowserProxy;
         PolymerTest.clearBody();
-        element =
-            document.createElement('settings-clear-browsing-data-dialog-tabs');
+        element = document.createElement('settings-clear-browsing-data-dialog');
         element.set('prefs', getClearBrowsingDataPrefs());
         document.body.appendChild(element);
         return testBrowserProxy.whenCalled('initialize');
       });
 
-      teardown(function() { element.remove(); });
+      teardown(function() {
+        element.remove();
+      });
 
       test('ClearBrowsingDataTap', function() {
         assertTrue(element.$$('#clearBrowsingDataDialog').open);
-        assertFalse(element.showImportantSitesDialog_);
 
         const cancelButton = element.$$('.cancel-button');
         assertTrue(!!cancelButton);
@@ -185,22 +172,29 @@ cr.define('settings_privacy_page', function() {
         const spinner = element.$$('paper-spinner-lite');
         assertTrue(!!spinner);
 
+        // Select a datatype for deletion to enable the clear button.
+        const cookieCheckbox = element.$$('#cookiesCheckboxBasic');
+        assertTrue(!!cookieCheckbox);
+        cookieCheckbox.$.checkbox.click();
+
         assertFalse(cancelButton.disabled);
         assertFalse(actionButton.disabled);
         assertFalse(spinner.active);
 
         const promiseResolver = new PromiseResolver();
         testBrowserProxy.setClearBrowsingDataPromise(promiseResolver.promise);
-        MockInteractions.tap(actionButton);
+        actionButton.click();
 
         return testBrowserProxy.whenCalled('clearBrowsingData')
-            .then(function([dataTypes, timePeriod, importantSites]) {
-              assertEquals(0, dataTypes.length);
+            .then(function(args) {
+              const dataTypes = args[0];
+              const timePeriod = args[1];
+              assertEquals(1, dataTypes.length);
+              assertEquals('browser.clear_data.cookies_basic', dataTypes[0]);
               assertTrue(element.$$('#clearBrowsingDataDialog').open);
               assertTrue(cancelButton.disabled);
               assertTrue(actionButton.disabled);
               assertTrue(spinner.active);
-              assertTrue(importantSites.length == 0);
 
               // Simulate signal from browser indicating that clearing has
               // completed.
@@ -216,9 +210,32 @@ cr.define('settings_privacy_page', function() {
               assertFalse(actionButton.disabled);
               assertFalse(spinner.active);
               assertFalse(!!element.$$('#notice'));
-              // Check that the dialog didn't switch to important sites.
-              assertFalse(element.showImportantSitesDialog_);
             });
+      });
+
+      test('ClearBrowsingDataClearButton', function() {
+        assertTrue(element.$$('#clearBrowsingDataDialog').open);
+
+        const actionButton = element.$$('.action-button');
+        assertTrue(!!actionButton);
+        const cookieCheckboxBasic = element.$$('#cookiesCheckboxBasic');
+        assertTrue(!!cookieCheckboxBasic);
+        const basicTab = element.$$('#basicTabTitle');
+        assertTrue(!!basicTab);
+        const advancedTab = element.$$('#advancedTabTitle');
+        assertTrue(!!advancedTab);
+        // Initially the button is disabled because all checkboxes are off.
+        assertTrue(actionButton.disabled);
+        // The button gets enabled if any checkbox is selected.
+        cookieCheckboxBasic.$.checkbox.click();
+        assertTrue(cookieCheckboxBasic.checked);
+        assertFalse(actionButton.disabled);
+        // Switching to advanced disables the button.
+        advancedTab.click();
+        assertTrue(actionButton.disabled);
+        // Switching back enables it again.
+        basicTab.click();
+        assertFalse(actionButton.disabled);
       });
 
       test('showHistoryDeletionDialog', function() {
@@ -226,12 +243,18 @@ cr.define('settings_privacy_page', function() {
         const actionButton = element.$$('.action-button');
         assertTrue(!!actionButton);
 
+        // Select a datatype for deletion to enable the clear button.
+        const cookieCheckbox = element.$$('#cookiesCheckboxBasic');
+        assertTrue(!!cookieCheckbox);
+        cookieCheckbox.$.checkbox.click();
+        assertFalse(actionButton.disabled);
+
         const promiseResolver = new PromiseResolver();
         testBrowserProxy.setClearBrowsingDataPromise(promiseResolver.promise);
-        MockInteractions.tap(actionButton);
+        actionButton.click();
 
-        return testBrowserProxy.whenCalled('clearBrowsingData').then(
-            function() {
+        return testBrowserProxy.whenCalled('clearBrowsingData')
+            .then(function() {
               // Passing showNotice = true should trigger the notice about other
               // forms of browsing history to open, and the dialog to stay open.
               promiseResolver.resolve(true /* showNotice */);
@@ -239,7 +262,8 @@ cr.define('settings_privacy_page', function() {
               // Yields to the message loop to allow the callback chain of the
               // Promise that was just resolved to execute before the
               // assertions.
-            }).then(function() {
+            })
+            .then(function() {
               Polymer.dom.flush();
               const notice = element.$$('#notice');
               assertTrue(!!notice);
@@ -249,7 +273,7 @@ cr.define('settings_privacy_page', function() {
               assertTrue(element.$$('#clearBrowsingDataDialog').open);
               assertTrue(notice.$$('#dialog').open);
 
-              MockInteractions.tap(noticeActionButton);
+              noticeActionButton.click();
 
               return new Promise(function(resolve, reject) {
                 // Tapping the action button will close the notice. Move to the
@@ -289,8 +313,7 @@ cr.define('settings_privacy_page', function() {
         testBrowserProxy.reset();
         loadTimeData.overrideValues({isSupervised: true});
 
-        element =
-            document.createElement('settings-clear-browsing-data-dialog-tabs');
+        element = document.createElement('settings-clear-browsing-data-dialog');
         document.body.appendChild(element);
         Polymer.dom.flush();
 
@@ -303,121 +326,9 @@ cr.define('settings_privacy_page', function() {
     });
   }
 
-  suite('ImportantSites', function() {
-    /** @type {settings.TestClearBrowsingDataBrowserProxy} */
-    let testBrowserProxy;
-
-    /** @type {SettingsClearBrowsingDataDialogElement} */
-    let element;
-
-    /** @type {Array<ImportantSite>} */
-    const importantSites = [
-      {registerableDomain: 'google.com', isChecked: true},
-      {registerableDomain: 'yahoo.com', isChecked: true}
-    ];
-
-    setup(function() {
-      loadTimeData.overrideValues({importantSitesInCbd: true});
-      testBrowserProxy = new TestClearBrowsingDataBrowserProxy();
-      testBrowserProxy.setImportantSites(importantSites);
-      settings.ClearBrowsingDataBrowserProxyImpl.instance_ = testBrowserProxy;
-      PolymerTest.clearBody();
-      element =
-          document.createElement('settings-clear-browsing-data-dialog-tabs');
-      element.set('prefs', getClearBrowsingDataPrefs());
-      document.body.appendChild(element);
-      return testBrowserProxy.whenCalled('initialize').then(function() {
-        return testBrowserProxy.whenCalled('getImportantSites');
-      });
-    });
-
-    teardown(function() {
-      element.remove();
-    });
-
-    test('getImportantSites', function() {
-      assertTrue(element.$$('#clearBrowsingDataDialog').open);
-      assertFalse(element.showImportantSitesDialog_);
-      // Select an entry that can have important storage.
-      element.$$('#cookiesCheckboxBasic').checked = true;
-      // Clear browsing data.
-      MockInteractions.tap(element.$$('#clearBrowsingDataConfirm'));
-      Polymer.dom.flush();
-      assertFalse(element.$$('#clearBrowsingDataDialog').open);
-      assertTrue(element.showImportantSitesDialog_);
-      return new Promise(function(resolve) { element.async(resolve); })
-          .then(function() {
-            assertTrue(element.$$('#importantSitesDialog').open);
-            const firstImportantSite = element.$$('important-site-checkbox');
-            assertTrue(!!firstImportantSite);
-            assertEquals(
-                'google.com', firstImportantSite.site.registerableDomain);
-            assertTrue(firstImportantSite.site.isChecked);
-            // Choose to keep storage for google.com.
-            MockInteractions.tap(firstImportantSite.$$('#checkbox'));
-            assertFalse(firstImportantSite.site.isChecked);
-            // Confirm deletion.
-            MockInteractions.tap(element.$$('#importantSitesConfirm'));
-            return testBrowserProxy.whenCalled('clearBrowsingData')
-                .then(function([dataTypes, timePeriod, sites]) {
-                  assertEquals(1, dataTypes.length);
-                  assertEquals(
-                      'browser.clear_data.cookies_basic', dataTypes[0]);
-                  assertEquals(2, sites.length);
-                  assertEquals('google.com', sites[0].registerableDomain);
-                  assertFalse(sites[0].isChecked);
-                  assertEquals('yahoo.com', sites[1].registerableDomain);
-                  assertTrue(sites[1].isChecked);
-                });
-          });
-    });
-  });
-
-  function registerSafeBrowsingExtendedReportingTests() {
-    suite('SafeBrowsingExtendedReporting', function() {
-      /** @type {settings.TestPrivacyPageBrowserProxy} */
-      let testBrowserProxy;
-
-      /** @type {SettingsPrivacyPageElement} */
-      let page;
-
-      setup(function() {
-        testBrowserProxy = new TestPrivacyPageBrowserProxy();
-        settings.PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
-        PolymerTest.clearBody();
-        page = document.createElement('settings-privacy-page');
-      });
-
-      teardown(function() { page.remove(); });
-
-      test('test whether extended reporting is enabled/managed', function() {
-        return testBrowserProxy.whenCalled(
-            'getSafeBrowsingExtendedReporting').then(function() {
-          Polymer.dom.flush();
-
-          // Control starts checked by default
-          const control = page.$$('#safeBrowsingExtendedReportingControl');
-          assertEquals(true, control.checked);
-
-          // Notification from browser can uncheck the box
-          cr.webUIListenerCallback('safe-browsing-extended-reporting-change',
-                                   false);
-          Polymer.dom.flush();
-          assertEquals(false, control.checked);
-
-          // Tapping on the box will check it again.
-          MockInteractions.tap(control);
-          return testBrowserProxy.whenCalled('getSafeBrowsingExtendedReporting',
-                                             true);
-        });
-      });
-    });
-  }
-
   if (cr.isMac || cr.isWin)
     registerNativeCertificateManagerTests();
 
   registerClearBrowsingDataTests();
   registerPrivacyPageTests();
-  registerSafeBrowsingExtendedReportingTests();
 });

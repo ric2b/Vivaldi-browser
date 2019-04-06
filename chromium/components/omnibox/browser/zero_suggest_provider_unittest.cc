@@ -4,6 +4,7 @@
 
 #include "components/omnibox/browser/zero_suggest_provider.h"
 
+#include <list>
 #include <map>
 #include <memory>
 #include <string>
@@ -11,6 +12,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
@@ -24,7 +26,7 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
-#include "net/url_request/test_url_fetcher_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
@@ -86,15 +88,19 @@ class FakeEmptyTopSites : public history::TopSites {
   // RefcountedKeyedService:
   void ShutdownOnUIThread() override {}
 
-  bool HasPageThumbnail(const GURL& url) override {
-    return false;
+  // Only runs a single callback, so that the test can specify a different
+  // set per call.
+  void RunACallback(const history::MostVisitedURLList& urls) {
+    DCHECK(!callbacks.empty());
+    callbacks.front().Run(urls);
+    callbacks.pop_front();
   }
 
+ protected:
   // A test-specific field for controlling when most visited callback is run
   // after top sites have been requested.
-  GetMostVisitedURLsCallback mv_callback;
+  std::list<GetMostVisitedURLsCallback> callbacks;
 
- protected:
   ~FakeEmptyTopSites() override {}
 
   DISALLOW_COPY_AND_ASSIGN(FakeEmptyTopSites);
@@ -103,11 +109,10 @@ class FakeEmptyTopSites : public history::TopSites {
 void FakeEmptyTopSites::GetMostVisitedURLs(
     const GetMostVisitedURLsCallback& callback,
     bool include_forced_urls)  {
-  mv_callback = callback;
+  callbacks.push_back(callback);
 }
 
-class FakeAutocompleteProviderClient
-    : public testing::NiceMock<MockAutocompleteProviderClient> {
+class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
  public:
   FakeAutocompleteProviderClient()
       : template_url_service_(new TemplateURLService(nullptr, 0)),
@@ -172,16 +177,20 @@ class ZeroSuggestProviderTest : public testing::Test,
 
   void CreatePersonalizedFieldTrial();
   void CreateMostVisitedFieldTrial();
+  void CreateContextualSuggestFieldTrial();
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   // Needed for OmniboxFieldTrial::ActivateStaticTrials().
   std::unique_ptr<base::FieldTrialList> field_trial_list_;
 
-  net::TestURLFetcherFactory test_factory_;
   std::unique_ptr<FakeAutocompleteProviderClient> client_;
   scoped_refptr<ZeroSuggestProvider> provider_;
   TemplateURL* default_t_url_;
+
+  network::TestURLLoaderFactory* test_loader_factory() {
+    return client_->test_url_loader_factory();
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ZeroSuggestProviderTest);
@@ -192,8 +201,6 @@ ZeroSuggestProviderTest::ZeroSuggestProviderTest() {
 }
 
 void ZeroSuggestProviderTest::SetUp() {
-  // Make sure that fetchers are automatically unregistered upon destruction.
-  test_factory_.set_remove_fetcher_on_delete(true);
   client_.reset(new FakeAutocompleteProviderClient());
 
   TemplateURLService* turl_model = client_->GetTemplateURLService();
@@ -217,7 +224,7 @@ void ZeroSuggestProviderTest::ResetFieldTrialList() {
   // a DCHECK.
   field_trial_list_.reset();
   field_trial_list_.reset(new base::FieldTrialList(
-      std::make_unique<metrics::SHA1EntropyProvider>("foo")));
+      std::make_unique<variations::SHA1EntropyProvider>("foo")));
   variations::testing::ClearAllVariationParams();
 }
 
@@ -235,6 +242,16 @@ void ZeroSuggestProviderTest::CreateMostVisitedFieldTrial() {
   std::map<std::string, std::string> params;
   params[std::string(OmniboxFieldTrial::kZeroSuggestVariantRule)] =
       "MostVisitedWithoutSERP";
+  variations::AssociateVariationParams(
+      OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A", params);
+  base::FieldTrialList::CreateFieldTrial(
+      OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A");
+}
+
+void ZeroSuggestProviderTest::CreateContextualSuggestFieldTrial() {
+  std::map<std::string, std::string> params;
+  params[std::string(OmniboxFieldTrial::kZeroSuggestVariantRule)] =
+      "ContextualSuggestions";
   variations::AssociateVariationParams(
       OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A", params);
   base::FieldTrialList::CreateFieldTrial(
@@ -263,9 +280,35 @@ TEST_F(ZeroSuggestProviderTest, TestDoesNotReturnMatchesForPrefix) {
   // in zero suggest mode.
   EXPECT_TRUE(provider_->matches().empty());
 
-  // Expect that fetcher did not get created.
-  net::TestURLFetcher* fetcher = test_factory_.GetFetcherByID(1);
-  EXPECT_FALSE(fetcher);
+  // Expect that loader did not get created.
+  EXPECT_EQ(0, test_loader_factory()->NumPending());
+}
+
+TEST_F(ZeroSuggestProviderTest, TestStartWillStopForSomeInput) {
+  CreatePersonalizedFieldTrial();
+
+  std::string input_url("http://www.cnn.com/");
+  AutocompleteInput input(base::ASCIIToUTF16(input_url),
+                          metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  input.set_current_url(GURL(input_url));
+  input.set_from_omnibox_focus(true);
+
+  provider_->Start(input, false);
+  EXPECT_FALSE(provider_->done_);
+
+  // Make sure input stops the provider.
+  input.set_from_omnibox_focus(false);
+  provider_->Start(input, false);
+  EXPECT_TRUE(provider_->done_);
+
+  // Make sure invalid input stops the provider.
+  input.set_from_omnibox_focus(true);
+  provider_->Start(input, false);
+  EXPECT_FALSE(provider_->done_);
+  AutocompleteInput input2;
+  provider_->Start(input2, false);
+  EXPECT_TRUE(provider_->done_);
 }
 
 TEST_F(ZeroSuggestProviderTest, TestMostVisitedCallback) {
@@ -286,7 +329,7 @@ TEST_F(ZeroSuggestProviderTest, TestMostVisitedCallback) {
   provider_->Start(input, false);
   EXPECT_TRUE(provider_->matches().empty());
   scoped_refptr<history::TopSites> top_sites = client_->GetTopSites();
-  static_cast<FakeEmptyTopSites*>(top_sites.get())->mv_callback.Run(urls);
+  static_cast<FakeEmptyTopSites*>(top_sites.get())->RunACallback(urls);
   // Should have verbatim match + most visited url match.
   EXPECT_EQ(2U, provider_->matches().size());
   provider_->Stop(false, false);
@@ -296,8 +339,23 @@ TEST_F(ZeroSuggestProviderTest, TestMostVisitedCallback) {
   EXPECT_TRUE(provider_->matches().empty());
   // Most visited results arriving after Stop() has been called, ensure they
   // are not displayed.
-  static_cast<FakeEmptyTopSites*>(top_sites.get())->mv_callback.Run(urls);
+  static_cast<FakeEmptyTopSites*>(top_sites.get())->RunACallback(urls);
   EXPECT_TRUE(provider_->matches().empty());
+
+  history::MostVisitedURLList urls2;
+  urls2.push_back(history::MostVisitedURL(GURL("http://bar.com/"),
+                                          base::ASCIIToUTF16("Bar")));
+  urls2.push_back(history::MostVisitedURL(GURL("http://zinga.com/"),
+                                          base::ASCIIToUTF16("Zinga")));
+  provider_->Start(input, false);
+  provider_->Stop(false, false);
+  provider_->Start(input, false);
+  static_cast<FakeEmptyTopSites*>(top_sites.get())->RunACallback(urls);
+  // Stale results should get rejected.
+  EXPECT_TRUE(provider_->matches().empty());
+  static_cast<FakeEmptyTopSites*>(top_sites.get())->RunACallback(urls2);
+  EXPECT_FALSE(provider_->matches().empty());
+  provider_->Stop(false, false);
 }
 
 TEST_F(ZeroSuggestProviderTest, TestMostVisitedNavigateToSearchPage) {
@@ -331,13 +389,13 @@ TEST_F(ZeroSuggestProviderTest, TestMostVisitedNavigateToSearchPage) {
   EXPECT_TRUE(provider_->matches().empty());
   // Most visited results arriving after a new request has been started.
   scoped_refptr<history::TopSites> top_sites = client_->GetTopSites();
-  static_cast<FakeEmptyTopSites*>(top_sites.get())->mv_callback.Run(urls);
+  static_cast<FakeEmptyTopSites*>(top_sites.get())->RunACallback(urls);
   EXPECT_TRUE(provider_->matches().empty());
 }
 
 TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestCachingFirstRun) {
   CreatePersonalizedFieldTrial();
-  EXPECT_CALL(*client_.get(), IsAuthenticated())
+  EXPECT_CALL(*client_, IsAuthenticated())
       .WillRepeatedly(testing::Return(true));
 
   // Ensure the cache is empty.
@@ -356,14 +414,13 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestCachingFirstRun) {
   EXPECT_TRUE(prefs->GetString(omnibox::kZeroSuggestCachedResults).empty());
   EXPECT_TRUE(provider_->matches().empty());
 
-  net::TestURLFetcher* fetcher = test_factory_.GetFetcherByID(1);
-  ASSERT_TRUE(fetcher);
-  fetcher->set_response_code(200);
+  const char kUrl[] = "https://www.google.com/complete/?q=";
+  EXPECT_TRUE(test_loader_factory()->IsPending(kUrl));
+
   std::string json_response("[\"\",[\"search1\", \"search2\", \"search3\"],"
       "[],[],{\"google:suggestrelevance\":[602, 601, 600],"
       "\"google:verbatimrelevance\":1300}]");
-  fetcher->SetResponseString(json_response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  test_loader_factory()->AddResponse(kUrl, json_response);
 
   base::RunLoop().RunUntilIdle();
 
@@ -374,7 +431,7 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestCachingFirstRun) {
 
 TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestHasCachedResults) {
   CreatePersonalizedFieldTrial();
-  EXPECT_CALL(*client_.get(), IsAuthenticated())
+  EXPECT_CALL(*client_, IsAuthenticated())
       .WillRepeatedly(testing::Return(true));
 
   std::string url("http://www.cnn.com/");
@@ -399,14 +456,12 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestHasCachedResults) {
   EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
   EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
 
-  net::TestURLFetcher* fetcher = test_factory_.GetFetcherByID(1);
-  ASSERT_TRUE(fetcher);
-  fetcher->set_response_code(200);
+  const char kUrl[] = "https://www.google.com/complete/?q=";
+  EXPECT_TRUE(test_loader_factory()->IsPending(kUrl));
   std::string json_response2("[\"\",[\"search4\", \"search5\", \"search6\"],"
       "[],[],{\"google:suggestrelevance\":[602, 601, 600],"
       "\"google:verbatimrelevance\":1300}]");
-  fetcher->SetResponseString(json_response2);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  test_loader_factory()->AddResponse(kUrl, json_response2);
 
   base::RunLoop().RunUntilIdle();
 
@@ -423,7 +478,7 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestHasCachedResults) {
 
 TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestReceivedEmptyResults) {
   CreatePersonalizedFieldTrial();
-  EXPECT_CALL(*client_.get(), IsAuthenticated())
+  EXPECT_CALL(*client_, IsAuthenticated())
       .WillRepeatedly(testing::Return(true));
 
   std::string url("http://www.cnn.com/");
@@ -448,12 +503,10 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestReceivedEmptyResults) {
   EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
   EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
 
-  net::TestURLFetcher* fetcher = test_factory_.GetFetcherByID(1);
-  ASSERT_TRUE(fetcher);
-  fetcher->set_response_code(200);
+  const char kUrl[] = "https://www.google.com/complete/?q=";
+  EXPECT_TRUE(test_loader_factory()->IsPending(kUrl));
   std::string empty_response("[\"\",[],[],[],{}]");
-  fetcher->SetResponseString(empty_response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  test_loader_factory()->AddResponse(kUrl, empty_response);
 
   base::RunLoop().RunUntilIdle();
 
@@ -463,4 +516,32 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestReceivedEmptyResults) {
   // Expect the new results have been stored.
   EXPECT_EQ(empty_response,
             prefs->GetString(omnibox::kZeroSuggestCachedResults));
+}
+
+TEST_F(ZeroSuggestProviderTest, RedirectToChrome) {
+  // Coverage for the URL-specific page. (Regression test for a DCHECK).
+  // This is exercising ContextualSuggestionsService::CreateExperimentalRequest,
+  // and to do that, ZeroSuggestProvider needs to be looking for
+  // DEFAULT_SERP_FOR_URL results (which needs various personalization
+  // experiments off, IsPersonalizedUrlDataCollectionActive true), and the
+  // redirect to chrome mode on.
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(omnibox::kZeroSuggestRedirectToChrome);
+  CreateContextualSuggestFieldTrial();
+
+  EXPECT_CALL(*client_, IsAuthenticated())
+      .WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, IsPersonalizedUrlDataCollectionActive())
+      .WillRepeatedly(testing::Return(true));
+
+  std::string url("http://www.cnn.com/");
+  AutocompleteInput input(base::ASCIIToUTF16(url),
+                          metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  input.set_current_url(GURL(url));
+  input.set_from_omnibox_focus(true);
+  provider_->Start(input, false);
+  EXPECT_TRUE(test_loader_factory()->IsPending(
+      "https://cuscochromeextension-pa.googleapis.com/v1/omniboxsuggestions"));
+  base::RunLoop().RunUntilIdle();
 }

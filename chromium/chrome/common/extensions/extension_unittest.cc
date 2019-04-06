@@ -9,22 +9,30 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/common/extensions/extension_test_util.h"
-#include "chrome/common/extensions/manifest_handlers/content_scripts_handler.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/manifest_handlers/content_scripts_handler.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "extensions/common/value_builder.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/base/mime_sniffer.h"
 #include "net/dns/mock_host_resolver.h"
 #include "skia/ext/image_operations.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "url/gurl.h"
 
@@ -84,6 +92,105 @@ TEST(ExtensionTest, LocationPriorityTest) {
             Manifest::GetHigherPriorityLocation(
                 Manifest::INTERNAL,
                 Manifest::EXTERNAL_PREF));
+}
+
+TEST(ExtensionTest, EnsureNewLinesInExtensionNameAreCollapsed) {
+  DictionaryBuilder manifest;
+  std::string unsanitized_name = "Test\n\n\n\n\n\n\n\n\n\n\n\nNew lines\u0085";
+  manifest.Set("name", unsanitized_name)
+      .Set("manifest_version", 2)
+      .Set("description", "some description");
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder()
+          .SetManifest(manifest.Build())
+          .MergeManifest(DictionaryBuilder().Set("version", "0.1").Build())
+          .Build();
+  ASSERT_TRUE(extension.get());
+  EXPECT_EQ("TestNew lines", extension->name());
+  // Ensure that non-localized name is not sanitized.
+  EXPECT_EQ(unsanitized_name, extension->non_localized_name());
+}
+
+TEST(ExtensionTest, EnsureWhitespacesInExtensionNameAreCollapsed) {
+  DictionaryBuilder manifest;
+  std::string unsanitized_name = "Test                        Whitespace";
+  manifest.Set("name", unsanitized_name)
+      .Set("manifest_version", 2)
+      .Set("description", "some description");
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder()
+          .SetManifest(manifest.Build())
+          .MergeManifest(DictionaryBuilder().Set("version", "0.1").Build())
+          .Build();
+  ASSERT_TRUE(extension.get());
+  EXPECT_EQ("Test Whitespace", extension->name());
+  // Ensure that non-localized name is not sanitized.
+  EXPECT_EQ(unsanitized_name, extension->non_localized_name());
+}
+
+// TODO(crbug.com/794252): Disallow empty extension names from being locally
+// loaded.
+TEST(ExtensionTest, EmptyName) {
+  DictionaryBuilder manifest1;
+  manifest1.Set("name", "")
+      .Set("manifest_version", 2)
+      .Set("description", "some description");
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder()
+          .SetManifest(manifest1.Build())
+          .MergeManifest(DictionaryBuilder().Set("version", "0.1").Build())
+          .Build();
+  ASSERT_TRUE(extension.get());
+  EXPECT_EQ("", extension->name());
+
+  DictionaryBuilder manifest2;
+  manifest2.Set("name", " ")
+      .Set("manifest_version", 2)
+      .Set("description", "some description");
+  extension =
+      ExtensionBuilder()
+          .SetManifest(manifest2.Build())
+          .MergeManifest(DictionaryBuilder().Set("version", "0.1").Build())
+          .Build();
+  ASSERT_TRUE(extension.get());
+  EXPECT_EQ("", extension->name());
+}
+
+TEST(ExtensionTest, RTLNameInLTRLocale) {
+  // Test the case when a directional override is the first character.
+  auto run_rtl_test = [](const wchar_t* name, const wchar_t* expected) {
+    SCOPED_TRACE(
+        base::StringPrintf("Name: %ls, Expected: %ls", name, expected));
+    DictionaryBuilder manifest;
+    manifest.Set("name", base::WideToUTF8(name))
+        .Set("manifest_version", 2)
+        .Set("description", "some description")
+        .Set("version",
+             "0.1");  // <NOTE> Moved this here to avoid the MergeManifest call.
+    scoped_refptr<const Extension> extension =
+        ExtensionBuilder().SetManifest(manifest.Build()).Build();
+    ASSERT_TRUE(extension);
+    const int kResourceId = IDS_EXTENSION_PERMISSIONS_PROMPT_TITLE;
+    const base::string16 expected_utf16 = base::WideToUTF16(expected);
+    EXPECT_EQ(l10n_util::GetStringFUTF16(kResourceId, expected_utf16),
+              l10n_util::GetStringFUTF16(kResourceId,
+                                         base::UTF8ToUTF16(extension->name())));
+    EXPECT_EQ(base::WideToUTF8(expected), extension->name());
+  };
+
+  run_rtl_test(L"\x202emoc.elgoog", L"\x202emoc.elgoog\x202c");
+  run_rtl_test(L"\x202egoogle\x202e.com/\x202eguest",
+               L"\x202egoogle\x202e.com/\x202eguest\x202c\x202c\x202c");
+  run_rtl_test(L"google\x202e.com", L"google\x202e.com\x202c");
+
+  run_rtl_test(L"كبير Google التطبيق",
+#if !defined(OS_WIN)
+               L"\x200e\x202bكبير Google التطبيق\x202c\x200e");
+#else
+               // On Windows for an LTR locale, no changes to the string are
+               // made.
+               L"كبير Google التطبيق");
+#endif  // !OS_WIN
 }
 
 TEST(ExtensionTest, GetResourceURLAndPath) {
@@ -202,35 +309,50 @@ TEST(ExtensionTest, IdIsValid) {
       crx_file::id_util::IdIsValid("abcdefghijklmnopabcdefghijklmno0"));
 }
 
-
 // This test ensures that the mimetype sniffing code stays in sync with the
 // actual crx files that we test other parts of the system with.
 TEST(ExtensionTest, MimeTypeSniffing) {
-  base::FilePath path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &path));
-  path = path.AppendASCII("extensions").AppendASCII("good.crx");
+  auto get_mime_type_from_crx = [](const base::FilePath& file_path) {
+    SCOPED_TRACE(file_path.AsUTF8Unsafe());
 
-  std::string data;
-  ASSERT_TRUE(base::ReadFileToString(path, &data));
+    std::string data;
+    EXPECT_TRUE(base::ReadFileToString(file_path, &data));
 
-  std::string result;
-  EXPECT_TRUE(net::SniffMimeType(data.c_str(),
-                                 data.size(),
-                                 GURL("http://www.example.com/foo.crx"),
-                                 std::string(),
-                                 &result));
-  EXPECT_EQ(std::string(Extension::kMimeType), result);
+    std::string result;
+    EXPECT_TRUE(net::SniffMimeType(
+        data.c_str(), data.size(), GURL("http://www.example.com/foo.crx"),
+        std::string(), net::ForceSniffFileUrlsForHtml::kDisabled, &result));
 
-  data.clear();
-  result.clear();
-  path = path.DirName().AppendASCII("bad_magic.crx");
-  ASSERT_TRUE(base::ReadFileToString(path, &data));
-  EXPECT_TRUE(net::SniffMimeType(data.c_str(),
-                                 data.size(),
-                                 GURL("http://www.example.com/foo.crx"),
-                                 std::string(),
-                                 &result));
-  EXPECT_EQ("application/octet-stream", result);
+    return result;
+  };
+
+  base::FilePath dir_path;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &dir_path));
+  dir_path = dir_path.AppendASCII("extensions");
+
+  // First, test an extension packed a long time ago (but in this galaxy).
+  // Specifically, this package is using the crx2 format, whereas modern chrome
+  // uses crx3.
+  EXPECT_EQ(
+      Extension::kMimeType,
+      get_mime_type_from_crx(dir_path.AppendASCII("legacy_crx_package.crx")));
+
+  // Then, an extension whose crx has a bad magic number (it should be Cr24).
+  EXPECT_EQ("application/octet-stream",
+            get_mime_type_from_crx(dir_path.AppendASCII("bad_magic.crx")));
+
+  // Finally, an extension that we pack right. This. Instant.
+  // This verifies that the modern extensions Chrome packs are always
+  // recognized as the extension mime type.
+  // Regression test for https://crbug.com/831284.
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(R"(
+      {
+        "name": "New extension",
+        "version": "0.2",
+        "manifest_version": 2
+      })");
+  EXPECT_EQ(Extension::kMimeType, get_mime_type_from_crx(test_dir.Pack()));
 }
 
 TEST(ExtensionTest, WantsFileAccess) {
@@ -243,70 +365,70 @@ TEST(ExtensionTest, WantsFileAccess) {
   // <all_urls> permission
   extension = LoadManifest("permissions", "permissions_all_urls.json");
   EXPECT_TRUE(extension->wants_file_access());
-  EXPECT_FALSE(extension->permissions_data()->CanAccessPage(
-      extension.get(), file_url, -1, nullptr));
+  EXPECT_FALSE(
+      extension->permissions_data()->CanAccessPage(file_url, -1, nullptr));
   extension = LoadManifest(
       "permissions", "permissions_all_urls.json", Extension::ALLOW_FILE_ACCESS);
   EXPECT_TRUE(extension->wants_file_access());
-  EXPECT_TRUE(extension->permissions_data()->CanAccessPage(
-      extension.get(), file_url, -1, nullptr));
+  EXPECT_TRUE(
+      extension->permissions_data()->CanAccessPage(file_url, -1, nullptr));
 
   // file:///* permission
   extension = LoadManifest("permissions", "permissions_file_scheme.json");
   EXPECT_TRUE(extension->wants_file_access());
-  EXPECT_FALSE(extension->permissions_data()->CanAccessPage(
-      extension.get(), file_url, -1, nullptr));
+  EXPECT_FALSE(
+      extension->permissions_data()->CanAccessPage(file_url, -1, nullptr));
   extension = LoadManifest("permissions",
                            "permissions_file_scheme.json",
                            Extension::ALLOW_FILE_ACCESS);
   EXPECT_TRUE(extension->wants_file_access());
-  EXPECT_TRUE(extension->permissions_data()->CanAccessPage(
-      extension.get(), file_url, -1, nullptr));
+  EXPECT_TRUE(
+      extension->permissions_data()->CanAccessPage(file_url, -1, nullptr));
 
   // http://* permission
   extension = LoadManifest("permissions", "permissions_http_scheme.json");
   EXPECT_FALSE(extension->wants_file_access());
-  EXPECT_FALSE(extension->permissions_data()->CanAccessPage(
-      extension.get(), file_url, -1, nullptr));
+  EXPECT_FALSE(
+      extension->permissions_data()->CanAccessPage(file_url, -1, nullptr));
   extension = LoadManifest("permissions",
                            "permissions_http_scheme.json",
                            Extension::ALLOW_FILE_ACCESS);
   EXPECT_FALSE(extension->wants_file_access());
-  EXPECT_FALSE(extension->permissions_data()->CanAccessPage(
-      extension.get(), file_url, -1, nullptr));
+  EXPECT_FALSE(
+      extension->permissions_data()->CanAccessPage(file_url, -1, nullptr));
 
   // <all_urls> content script match
   extension = LoadManifest("permissions", "content_script_all_urls.json");
   EXPECT_TRUE(extension->wants_file_access());
   EXPECT_FALSE(extension->permissions_data()->CanRunContentScriptOnPage(
-      extension.get(), file_url, -1, nullptr));
+      file_url, -1, nullptr));
   extension = LoadManifest("permissions", "content_script_all_urls.json",
       Extension::ALLOW_FILE_ACCESS);
   EXPECT_TRUE(extension->wants_file_access());
   EXPECT_TRUE(extension->permissions_data()->CanRunContentScriptOnPage(
-      extension.get(), file_url, -1, nullptr));
+      file_url, -1, nullptr));
 
   // file:///* content script match
   extension = LoadManifest("permissions", "content_script_file_scheme.json");
   EXPECT_TRUE(extension->wants_file_access());
   EXPECT_FALSE(extension->permissions_data()->CanRunContentScriptOnPage(
-      extension.get(), file_url, -1, nullptr));
+      file_url, -1, nullptr));
   extension = LoadManifest("permissions", "content_script_file_scheme.json",
       Extension::ALLOW_FILE_ACCESS);
   EXPECT_TRUE(extension->wants_file_access());
   EXPECT_TRUE(extension->permissions_data()->CanRunContentScriptOnPage(
-      extension.get(), file_url, -1, nullptr));
+      file_url, -1, nullptr));
 
   // http://* content script match
   extension = LoadManifest("permissions", "content_script_http_scheme.json");
   EXPECT_FALSE(extension->wants_file_access());
   EXPECT_FALSE(extension->permissions_data()->CanRunContentScriptOnPage(
-      extension.get(), file_url, -1, nullptr));
+      file_url, -1, nullptr));
   extension = LoadManifest("permissions", "content_script_http_scheme.json",
       Extension::ALLOW_FILE_ACCESS);
   EXPECT_FALSE(extension->wants_file_access());
   EXPECT_FALSE(extension->permissions_data()->CanRunContentScriptOnPage(
-      extension.get(), file_url, -1, nullptr));
+      file_url, -1, nullptr));
 }
 
 TEST(ExtensionTest, ExtraFlags) {

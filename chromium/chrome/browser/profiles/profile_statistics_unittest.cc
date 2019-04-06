@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/profiles/profile_statistics_aggregator.h"
 #include "chrome/browser/profiles/profile_statistics_common.h"
 #include "chrome/browser/profiles/profile_statistics_factory.h"
+#include "chrome/browser/sync/bookmark_sync_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -28,6 +28,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,8 +39,9 @@ std::unique_ptr<KeyedService> BuildBookmarkModelWithoutLoad(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
   std::unique_ptr<bookmarks::BookmarkModel> bookmark_model(
-      new bookmarks::BookmarkModel(base::MakeUnique<ChromeBookmarkClient>(
-          profile, ManagedBookmarkServiceFactory::GetForProfile(profile))));
+      new bookmarks::BookmarkModel(std::make_unique<ChromeBookmarkClient>(
+          profile, ManagedBookmarkServiceFactory::GetForProfile(profile),
+          BookmarkSyncServiceFactory::GetForProfile(profile))));
   return std::move(bookmark_model);
 }
 

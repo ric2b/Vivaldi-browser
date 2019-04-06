@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/client/chromoting_client_runtime.h"
@@ -21,7 +20,6 @@ TEST(ChromotingClientRuntimeTest, StartAndStop) {
   EXPECT_TRUE(runtime->network_task_runner().get());
   EXPECT_TRUE(runtime->ui_task_runner().get());
   EXPECT_TRUE(runtime->display_task_runner().get());
-  EXPECT_TRUE(runtime->file_task_runner().get());
   EXPECT_TRUE(runtime->url_requester().get());
   EXPECT_TRUE(runtime->log_writer());
 }

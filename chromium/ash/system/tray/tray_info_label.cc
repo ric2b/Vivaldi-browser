@@ -9,7 +9,6 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/layout/fill_layout.h"
-
 namespace ash {
 
 TrayInfoLabel::TrayInfoLabel(TrayInfoLabel::Delegate* delegate, int message_id)
@@ -30,6 +29,8 @@ TrayInfoLabel::TrayInfoLabel(TrayInfoLabel::Delegate* delegate, int message_id)
   tri_view->AddView(TriView::Container::CENTER, label_);
 
   AddChildView(tri_view);
+  SetFocusBehavior(IsClickable() ? FocusBehavior::ALWAYS
+                                 : FocusBehavior::NEVER);
 
   Update(message_id);
 }
@@ -55,6 +56,8 @@ void TrayInfoLabel::Update(int message_id) {
   base::string16 text = l10n_util::GetStringUTF16(message_id);
   label_->SetText(text);
   SetAccessibleName(text);
+  SetFocusBehavior(IsClickable() ? FocusBehavior::ALWAYS
+                                 : FocusBehavior::NEVER);
 }
 
 bool TrayInfoLabel::PerformAction(const ui::Event& event) {
@@ -69,7 +72,7 @@ void TrayInfoLabel::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ActionableView::GetAccessibleNodeData(node_data);
 
   if (!IsClickable())
-    node_data->role = ui::AX_ROLE_LABEL_TEXT;
+    node_data->role = ax::mojom::Role::kLabelText;
 }
 
 bool TrayInfoLabel::IsClickable() {

@@ -1,7 +1,7 @@
 # Chromoting Android Hacking
 
 This guide, which is meant to accompany the
-[compilation guide](chromoting_build_instructions.md), explains the process of
+[compilation guide](old_chromoting_build_instructions.md), explains the process of
 viewing the logs and debugging the CRD Android client. I'll assume you've
 already built the APK as described in the aforementioned guide, that you're in
 the `src/` directory, and that your binary is at
@@ -54,7 +54,7 @@ display log messages to the `LogCat` pane.
 <classpathentry kind="src" path="components/cronet/android/sample/src"/>
 <classpathentry kind="src" path="components/cronet/android/sample/javatests/src"/>
 <classpathentry kind="src" path="components/autofill/core/browser/android/java/src"/>
-<classpathentry kind="src" path="components/web_contents_delegate_android/java/src"/>
+<classpathentry kind="src" path="components/embedder_support/android/java/src"/>
 <classpathentry kind="src" path="components/dom_distiller/android/java/src"/>
 <classpathentry kind="src" path="components/navigation_interception/android/java/src"/>
 <classpathentry kind="src" path="ui/android/java/src"/>
@@ -69,9 +69,10 @@ display log messages to the `LogCat` pane.
 <classpathentry kind="src" path="sync/test/android/javatests/src"/>
 <classpathentry kind="src" path="sync/android/java/src"/>
 <classpathentry kind="src" path="sync/android/javatests/src"/>
-<classpathentry kind="src" path="mojo/public/java/src"/>
-<classpathentry kind="src" path="mojo/android/system/src"/>
-<classpathentry kind="src" path="mojo/android/javatests/src"/>
+<classpathentry kind="src" path="mojo/public/java/base/src"/>
+<classpathentry kind="src" path="mojo/public/java/bindings/src"/>
+<classpathentry kind="src" path="mojo/public/java/system/javatests/src"/>
+<classpathentry kind="src" path="mojo/public/java/system/src"/>
 <classpathentry kind="src" path="testing/android/java/src"/>
 <classpathentry kind="src" path="printing/android/java/src"/>
 <classpathentry kind="src" path="tools/binary_size/java/src"/>
@@ -79,8 +80,8 @@ display log messages to the `LogCat` pane.
 <classpathentry kind="src" path="remoting/android/java/src"/>
 <classpathentry kind="src" path="remoting/android/apk/src"/>
 <classpathentry kind="src" path="remoting/android/javatests/src"/>
-<classpathentry kind="src" path="third_party/WebKit/Source/devtools/scripts/jsdoc-validator/src"/>
-<classpathentry kind="src" path="third_party/WebKit/Source/devtools/scripts/compiler-runner/src"/>
+<classpathentry kind="src" path="third_party/blink/renderer/devtools/scripts/jsdoc-validator/src"/>
+<classpathentry kind="src" path="third_party/blink/renderer/devtools/scripts/compiler-runner/src"/>
 <classpathentry kind="src" path="third_party/webrtc/voice_engine/test/android/android_test/src"/>
 <classpathentry kind="src" path="third_party/webrtc/modules/video_capture/android/java/src"/>
 <classpathentry kind="src" path="third_party/webrtc/modules/video_render/android/java/src"/>

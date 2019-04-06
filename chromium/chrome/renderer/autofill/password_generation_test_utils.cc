@@ -10,9 +10,10 @@
 #include "components/autofill/content/renderer/test_password_generation_agent.h"
 #include "components/autofill/core/common/password_form_generation_data.h"
 #include "components/autofill/core/common/signatures_util.h"
+#include "net/base/escape.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_form_element.h"
 
 namespace autofill {
 
@@ -25,9 +26,10 @@ const char* const kEvents[] = {"focus",  "keydown", "input",
 
 void SetNotBlacklistedMessage(TestPasswordGenerationAgent* generation_agent,
                               const char* form_str) {
+  std::string escaped_form = net::EscapeQueryParamValue(form_str, false);
   autofill::PasswordForm form;
-  form.origin = form_util::StripAuthAndParams(
-      GURL(base::StringPrintf("data:text/html;charset=utf-8,%s", form_str)));
+  form.origin = form_util::StripAuthAndParams(GURL(base::StringPrintf(
+      "data:text/html;charset=utf-8,%s", escaped_form.c_str())));
   generation_agent->FormNotBlacklisted(form);
 }
 
@@ -50,6 +52,26 @@ void SetAccountCreationFormsDetectedMessage(
   forms.push_back(autofill::PasswordFormGenerationData{
       CalculateFormSignature(form_data),
       CalculateFieldSignatureForField(form_data.fields[field_index])});
+  generation_agent->FoundFormsEligibleForGeneration(forms);
+}
+
+// Sends a message that the form of unowned <inputs>s on the page is valid for
+// account creation.
+void SetAccountCreationFormsDetectedMessageForUnownedInputs(
+    TestPasswordGenerationAgent* generation_agent,
+    blink::WebDocument document) {
+  std::vector<blink::WebElement> fieldsets;
+  std::vector<blink::WebFormControlElement> control_elements =
+      form_util::GetUnownedFormFieldElements(document.All(), &fieldsets);
+  autofill::FormData form_data;
+  UnownedPasswordFormElementsAndFieldSetsToFormData(
+      fieldsets, control_elements, nullptr, document,
+      nullptr /* field_value_and_properties_map */, form_util::EXTRACT_NONE,
+      &form_data, nullptr /* FormFieldData */);
+  std::vector<autofill::PasswordFormGenerationData> forms;
+  forms.push_back(autofill::PasswordFormGenerationData{
+      CalculateFormSignature(form_data),
+      CalculateFieldSignatureForField(form_data.fields[1])});
   generation_agent->FoundFormsEligibleForGeneration(forms);
 }
 

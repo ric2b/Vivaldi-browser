@@ -61,8 +61,6 @@ jumbo_component("ime") {
     "infolist_entry.cc",
     "infolist_entry.h",
     "input_method.h",
-    "input_method_auralinux.cc",
-    "input_method_auralinux.h",
     "input_method_base.cc",
     "input_method_base.h",
     "input_method_chromeos.cc",
@@ -72,13 +70,15 @@ jumbo_component("ime") {
     "input_method_factory.h",
     "input_method_initializer.cc",
     "input_method_initializer.h",
+    "input_method_keyboard_controller.h",
+    "input_method_keyboard_controller_observer.h",
+    "input_method_keyboard_controller_stub.cc",
+    "input_method_keyboard_controller_stub.h",
     "input_method_mac.h",
     "input_method_mac.mm",
     "input_method_minimal.cc",
     "input_method_minimal.h",
     "input_method_observer.h",
-    "input_method_win.cc",
-    "input_method_win.h",
     "linux/fake_input_method_context.cc",
     "linux/fake_input_method_context.h",
     "linux/fake_input_method_context_factory.cc",
@@ -96,8 +96,18 @@ jumbo_component("ime") {
     "ui_base_ime_export.h",
     "win/imm32_manager.cc",
     "win/imm32_manager.h",
+    "win/on_screen_keyboard_display_manager_input_pane.cc",
+    "win/on_screen_keyboard_display_manager_input_pane.h",
+    "win/on_screen_keyboard_display_manager_tab_tip.cc",
+    "win/on_screen_keyboard_display_manager_tab_tip.h",
+    "win/tsf_bridge.cc",
+    "win/tsf_bridge.h",
+    "win/tsf_event_router.cc",
+    "win/tsf_event_router.h",
     "win/tsf_input_scope.cc",
     "win/tsf_input_scope.h",
+    "win/tsf_text_store.cc",
+    "win/tsf_text_store.h",
   ]
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -112,6 +122,7 @@ jumbo_component("ime") {
     "//net",
     "//third_party/icu",
     "//ui/base",
+    "//ui/base/ime/chromeos/public/interfaces",
     "//ui/display",
     "//ui/events",
     "//ui/gfx",
@@ -125,8 +136,8 @@ jumbo_component("ime") {
     "//skia",
   ]
 
-  if (!use_aura || is_chromeos || (!is_linux && !use_ozone)) {
-    sources -= [
+  if (is_desktop_linux) {
+    sources += [
       "input_method_auralinux.cc",
       "input_method_auralinux.h",
     ]
@@ -179,17 +190,25 @@ jumbo_component("ime") {
     cflags = [ "/wd4324" ]  # Structure was padded due to __declspec(align()), which is
                             # uninteresting.
 
+    sources += [
+      "input_method_win.cc",
+      "input_method_win.h",
+      "input_method_win_base.cc",
+      "input_method_win_base.h",
+      "input_method_win_tsf.cc",
+      "input_method_win_tsf.h",
+    ]
     libs = [ "imm32.lib" ]
+
+    jumbo_excluded_sources = [
+      # tsf_text_store.cc needs INITGUID to be defined before
+      # including any header to properly generate GUID objects. That
+      # is not guaranteed when included in a jumbo build.
+      "win/tsf_text_store.cc",
+    ]
   }
 
   if (is_mac) {
     libs = [ "AppKit.framework" ]
-  }
-
-  if (is_fuchsia) {
-    sources -= [
-      "input_method_auralinux.cc",
-      "input_method_auralinux.h",
-    ]
   }
 }

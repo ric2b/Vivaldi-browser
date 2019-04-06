@@ -26,6 +26,7 @@
 #include "net/socket/tcp_client_socket.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,6 +38,24 @@ using net::test::IsOk;
 namespace net {
 
 namespace {
+
+// IOBuffer with the ability to invoke a callback when destroyed. Useful for
+// checking for leaks.
+class IOBufferWithDestructionCallback : public IOBufferWithSize {
+ public:
+  explicit IOBufferWithDestructionCallback(base::OnceClosure on_destroy_closure)
+      : IOBufferWithSize(1024),
+        on_destroy_closure_(std::move(on_destroy_closure)) {
+    DCHECK(on_destroy_closure_);
+  }
+
+ protected:
+  ~IOBufferWithDestructionCallback() override {
+    std::move(on_destroy_closure_).Run();
+  }
+
+  base::OnceClosure on_destroy_closure_;
+};
 
 class TestSocketPerformanceWatcher : public SocketPerformanceWatcher {
  public:
@@ -70,7 +89,7 @@ class TestSocketPerformanceWatcher : public SocketPerformanceWatcher {
 
 const int kListenBacklog = 5;
 
-class TCPSocketTest : public PlatformTest {
+class TCPSocketTest : public PlatformTest, public WithScopedTaskEnvironment {
  protected:
   TCPSocketTest() : socket_(nullptr, nullptr, NetLogSource()) {}
 
@@ -417,6 +436,156 @@ TEST_F(TCPSocketTest, ReadWrite) {
 
   std::string received_message(buffer.begin(), buffer.end());
   ASSERT_EQ(message, received_message);
+}
+
+// Destroy a TCPSocket while there's a pending read, and make sure the read
+// IOBuffer that the socket was holding on to is destroyed.
+// See https://crbug.com/804868.
+TEST_F(TCPSocketTest, DestroyWithPendingRead) {
+  ASSERT_NO_FATAL_FAILURE(SetUpListenIPv4());
+
+  // Create a connected socket.
+
+  TestCompletionCallback connect_callback;
+  std::unique_ptr<TCPSocket> connecting_socket =
+      std::make_unique<TCPSocket>(nullptr, nullptr, NetLogSource());
+  int result = connecting_socket->Open(ADDRESS_FAMILY_IPV4);
+  ASSERT_THAT(result, IsOk());
+  int connect_result =
+      connecting_socket->Connect(local_address_, connect_callback.callback());
+
+  TestCompletionCallback accept_callback;
+  std::unique_ptr<TCPSocket> accepted_socket;
+  IPEndPoint accepted_address;
+  result = socket_.Accept(&accepted_socket, &accepted_address,
+                          accept_callback.callback());
+  ASSERT_THAT(accept_callback.GetResult(result), IsOk());
+  ASSERT_TRUE(accepted_socket.get());
+  ASSERT_THAT(connect_callback.GetResult(connect_result), IsOk());
+
+  // Try to read from the socket, but never write anything to the other end.
+  base::RunLoop run_loop;
+  scoped_refptr<IOBufferWithDestructionCallback> read_buffer(
+      base::MakeRefCounted<IOBufferWithDestructionCallback>(
+          run_loop.QuitClosure()));
+  TestCompletionCallback read_callback;
+  EXPECT_EQ(ERR_IO_PENDING,
+            connecting_socket->Read(read_buffer.get(), read_buffer->size(),
+                                    read_callback.callback()));
+
+  // Release the handle to the read buffer and destroy the socket. Make sure the
+  // read buffer is destroyed.
+  read_buffer = nullptr;
+  connecting_socket.reset();
+  run_loop.Run();
+}
+
+// Destroy a TCPSocket while there's a pending write, and make sure the write
+// IOBuffer that the socket was holding on to is destroyed.
+TEST_F(TCPSocketTest, DestroyWithPendingWrite) {
+  ASSERT_NO_FATAL_FAILURE(SetUpListenIPv4());
+
+  // Create a connected socket.
+
+  TestCompletionCallback connect_callback;
+  std::unique_ptr<TCPSocket> connecting_socket =
+      std::make_unique<TCPSocket>(nullptr, nullptr, NetLogSource());
+  int result = connecting_socket->Open(ADDRESS_FAMILY_IPV4);
+  ASSERT_THAT(result, IsOk());
+  int connect_result =
+      connecting_socket->Connect(local_address_, connect_callback.callback());
+
+  TestCompletionCallback accept_callback;
+  std::unique_ptr<TCPSocket> accepted_socket;
+  IPEndPoint accepted_address;
+  result = socket_.Accept(&accepted_socket, &accepted_address,
+                          accept_callback.callback());
+  ASSERT_THAT(accept_callback.GetResult(result), IsOk());
+  ASSERT_TRUE(accepted_socket.get());
+  ASSERT_THAT(connect_callback.GetResult(connect_result), IsOk());
+
+  // Repeatedly write to the socket until an operation does not complete
+  // synchronously.
+  base::RunLoop run_loop;
+  scoped_refptr<IOBufferWithDestructionCallback> write_buffer(
+      base::MakeRefCounted<IOBufferWithDestructionCallback>(
+          run_loop.QuitClosure()));
+  memset(write_buffer->data(), '1', write_buffer->size());
+  TestCompletionCallback write_callback;
+  while (true) {
+    int result = connecting_socket->Write(
+        write_buffer.get(), write_buffer->size(), write_callback.callback(),
+        TRAFFIC_ANNOTATION_FOR_TESTS);
+    if (result == ERR_IO_PENDING)
+      break;
+    ASSERT_LT(0, result);
+  }
+
+  // Release the handle to the read buffer and destroy the socket. Make sure the
+  // write buffer is destroyed.
+  write_buffer = nullptr;
+  connecting_socket.reset();
+  run_loop.Run();
+}
+
+// If a ReadIfReady is pending, it's legal to cancel it and start reading later.
+TEST_F(TCPSocketTest, CancelPendingReadIfReady) {
+  ASSERT_NO_FATAL_FAILURE(SetUpListenIPv4());
+
+  // Create a connected socket.
+  TestCompletionCallback connect_callback;
+  std::unique_ptr<TCPSocket> connecting_socket =
+      std::make_unique<TCPSocket>(nullptr, nullptr, NetLogSource());
+  int result = connecting_socket->Open(ADDRESS_FAMILY_IPV4);
+  ASSERT_THAT(result, IsOk());
+  int connect_result =
+      connecting_socket->Connect(local_address_, connect_callback.callback());
+
+  TestCompletionCallback accept_callback;
+  std::unique_ptr<TCPSocket> accepted_socket;
+  IPEndPoint accepted_address;
+  result = socket_.Accept(&accepted_socket, &accepted_address,
+                          accept_callback.callback());
+  ASSERT_THAT(accept_callback.GetResult(result), IsOk());
+  ASSERT_TRUE(accepted_socket.get());
+  ASSERT_THAT(connect_callback.GetResult(connect_result), IsOk());
+
+  // Try to read from the socket, but never write anything to the other end.
+  base::RunLoop run_loop;
+  scoped_refptr<IOBufferWithDestructionCallback> read_buffer(
+      base::MakeRefCounted<IOBufferWithDestructionCallback>(
+          run_loop.QuitClosure()));
+  TestCompletionCallback read_callback;
+  EXPECT_EQ(ERR_IO_PENDING, connecting_socket->ReadIfReady(
+                                read_buffer.get(), read_buffer->size(),
+                                read_callback.callback()));
+
+  // Now cancel the pending ReadIfReady().
+  connecting_socket->CancelReadIfReady();
+
+  // Send data to |connecting_socket|.
+  const char kMsg[] = "hello!";
+  scoped_refptr<StringIOBuffer> write_buffer =
+      base::MakeRefCounted<StringIOBuffer>(kMsg);
+
+  TestCompletionCallback write_callback;
+  int write_result = accepted_socket->Write(write_buffer.get(), strlen(kMsg),
+                                            write_callback.callback(),
+                                            TRAFFIC_ANNOTATION_FOR_TESTS);
+  const int msg_size = strlen(kMsg);
+  ASSERT_EQ(msg_size, write_result);
+
+  TestCompletionCallback read_callback2;
+  int read_result = connecting_socket->ReadIfReady(
+      read_buffer.get(), read_buffer->size(), read_callback2.callback());
+  if (read_result == ERR_IO_PENDING) {
+    ASSERT_EQ(OK, read_callback2.GetResult(read_result));
+    read_result = connecting_socket->ReadIfReady(
+        read_buffer.get(), read_buffer->size(), read_callback2.callback());
+  }
+
+  ASSERT_EQ(msg_size, read_result);
+  ASSERT_EQ(0, memcmp(&kMsg, read_buffer->data(), msg_size));
 }
 
 // These tests require kernel support for tcp_info struct, and so they are

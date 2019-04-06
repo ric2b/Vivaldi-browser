@@ -8,11 +8,12 @@
 #include <memory>
 
 #include "gpu/ipc/common/surface_handle.h"
+#include "services/viz/privileged/interfaces/compositing/display_private.mojom.h"
 
 namespace viz {
 
 class Display;
-class ExternalBeginFrameControllerImpl;
+class ExternalBeginFrameSource;
 class FrameSinkId;
 class RendererSettings;
 class SyntheticBeginFrameSource;
@@ -22,17 +23,22 @@ class DisplayProvider {
  public:
   virtual ~DisplayProvider() {}
 
-  // Creates a new Display for |surface_handle| with |frame_sink_id|. Will
-  // also create BeginFrameSource and return it in |begin_frame_source|.
-  // If |force_software_compositing| is true, then the resulting display
-  // compositor will not use Gpu acceleration even if it would by default.
+  // Creates a new Display for |surface_handle| with |frame_sink_id|. One of
+  // |external_begin_frame_source| or |synthetic_begin_frame_source| should be
+  // non-null. If creating a Display fails this function will return null.
   virtual std::unique_ptr<Display> CreateDisplay(
       const FrameSinkId& frame_sink_id,
       gpu::SurfaceHandle surface_handle,
-      bool force_software_compositing,
-      ExternalBeginFrameControllerImpl* external_begin_frame_controller,
+      bool gpu_compositing,
+      mojom::DisplayClient* display_client,
+      ExternalBeginFrameSource* external_begin_frame_source,
+      SyntheticBeginFrameSource* synthetic_begin_frame_source,
       const RendererSettings& renderer_settings,
-      std::unique_ptr<SyntheticBeginFrameSource>* out_begin_frame_source) = 0;
+      bool send_swap_size_notifications) = 0;
+
+  // Returns an ID that changes on each GPU process restart. This ID can be used
+  // for creating unique BeginFrameSource ids.
+  virtual uint32_t GetRestartId() const = 0;
 };
 
 }  // namespace viz

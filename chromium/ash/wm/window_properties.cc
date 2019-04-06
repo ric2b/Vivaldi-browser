@@ -14,18 +14,6 @@ namespace ash {
 
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kLockedToRootKey, false);
 
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kRenderTitleAreaProperty, false);
-
-DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(gfx::Rect, kRestoreBoundsOverrideKey, NULL);
-
-DEFINE_UI_CLASS_PROPERTY_KEY(ui::WindowShowState,
-                             kRestoreShowStateOverrideKey,
-                             ui::SHOW_STATE_DEFAULT);
-
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSnapChildrenToPixelBoundary, false);
-
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kUsesScreenCoordinatesKey, false);
-
 DEFINE_UI_CLASS_PROPERTY_KEY(WidgetCreationType,
                              kWidgetCreationTypeKey,
                              WidgetCreationType::INTERNAL);

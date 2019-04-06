@@ -18,10 +18,11 @@ namespace {
 void CallStringCallbackFromIO(
     const PushMessagingService::StringCallback& callback,
     const std::vector<std::string>& data,
-    ServiceWorkerStatusCode service_worker_status) {
+    blink::ServiceWorkerStatusCode service_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  bool success = service_worker_status == SERVICE_WORKER_OK;
-  bool not_found = service_worker_status == SERVICE_WORKER_ERROR_NOT_FOUND;
+  bool success = service_worker_status == blink::ServiceWorkerStatusCode::kOk;
+  bool not_found =
+      service_worker_status == blink::ServiceWorkerStatusCode::kErrorNotFound;
   std::string result;
   if (success) {
     DCHECK_EQ(1u, data.size());
@@ -32,7 +33,7 @@ void CallStringCallbackFromIO(
 }
 
 void CallClosureFromIO(const base::Closure& callback,
-                       ServiceWorkerStatusCode status) {
+                       blink::ServiceWorkerStatusCode status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback);
 }
@@ -45,7 +46,7 @@ void GetUserDataOnIO(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   service_worker_context_wrapper->GetRegistrationUserData(
       service_worker_registration_id, {key},
-      base::Bind(&CallStringCallbackFromIO, callback));
+      base::BindOnce(&CallStringCallbackFromIO, callback));
 }
 
 void ClearPushSubscriptionIdOnIO(
@@ -56,7 +57,7 @@ void ClearPushSubscriptionIdOnIO(
 
   service_worker_context->ClearRegistrationUserData(
       service_worker_registration_id, {kPushRegistrationIdServiceWorkerKey},
-      base::Bind(&CallClosureFromIO, callback));
+      base::BindOnce(&CallClosureFromIO, callback));
 }
 
 void StorePushSubscriptionOnIOForTesting(
@@ -72,7 +73,7 @@ void StorePushSubscriptionOnIOForTesting(
       service_worker_registration_id, origin,
       {{kPushRegistrationIdServiceWorkerKey, subscription_id},
        {kPushSenderIdServiceWorkerKey, sender_id}},
-      base::Bind(&CallClosureFromIO, callback));
+      base::BindOnce(&CallClosureFromIO, callback));
 }
 
 scoped_refptr<ServiceWorkerContextWrapper> GetServiceWorkerContext(

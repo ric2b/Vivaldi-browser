@@ -253,13 +253,14 @@ class IDLParser(object):
       p[0] = ListFromConcat(p[2], p[3])
 
   def p_Definition(self, p):
-    """Definition : CallbackOrInterface
+    """Definition : CallbackOrInterfaceOrMixin
                   | Namespace
                   | Partial
                   | Dictionary
                   | Enum
                   | Typedef
-                  | ImplementsStatement"""
+                  | ImplementsStatement
+                  | IncludesStatement"""
     p[0] = p[1]
 
   # Error recovery for definition
@@ -267,28 +268,32 @@ class IDLParser(object):
     """Definition : error ';'"""
     p[0] = self.BuildError(p, 'Definition')
 
-  def p_CallbackOrInterface(self, p):
-    """CallbackOrInterface : CALLBACK CallbackRestOrInterface
-                           | Interface"""
-    if len(p) > 2:
-      if p[2].GetClass() != 'Callback':
-        p[2].AddChildren(self.BuildTrue('CALLBACK'))
-      p[0] = p[2]
-    else:
-      p[0] = p[1]
+  def p_CallbackOrInterfaceOrMixin(self, p):
+    """CallbackOrInterfaceOrMixin : CALLBACK CallbackRestOrInterface
+                                  | INTERFACE InterfaceOrMixin"""
+    p[0] = p[2]
 
   def p_CallbackRestOrInterface(self, p):
     """CallbackRestOrInterface : CallbackRest
-                               | Interface"""
+                               | INTERFACE InterfaceRest"""
+    if len(p) < 3:
+      p[0] = p[1]
+    else:
+      p[2].AddChildren(self.BuildTrue('CALLBACK'))
+      p[0] = p[2]
+
+  def p_InterfaceOrMixin(self, p):
+    """InterfaceOrMixin : InterfaceRest
+                        | MixinRest"""
     p[0] = p[1]
 
-  def p_Interface(self, p):
-    """Interface : INTERFACE identifier Inheritance '{' InterfaceMembers '}' ';'"""
-    p[0] = self.BuildNamed('Interface', p, 2, ListFromConcat(p[3], p[5]))
+  def p_InterfaceRest(self, p):
+    """InterfaceRest : identifier Inheritance '{' InterfaceMembers '}' ';'"""
+    p[0] = self.BuildNamed('Interface', p, 1, ListFromConcat(p[2], p[4]))
 
   # Error recovery for interface.
-  def p_InterfaceError(self, p):
-    """Interface : INTERFACE identifier Inheritance '{' error"""
+  def p_InterfaceRestError(self, p):
+    """InterfaceRest : identifier Inheritance '{' error"""
     p[0] = self.BuildError(p, 'Interface')
 
   def p_Partial(self, p):
@@ -302,14 +307,22 @@ class IDLParser(object):
     p[0] = self.BuildError(p, 'Partial')
 
   def p_PartialDefinition(self, p):
-    """PartialDefinition : PartialDictionary
-                         | PartialInterface
+    """PartialDefinition : INTERFACE PartialInterfaceOrPartialMixin
+                         | PartialDictionary
                          | Namespace"""
+    if len(p) > 2:
+      p[0] = p[2]
+    else:
+      p[0] = p[1]
+
+  def p_PartialInterfaceOrPartialMixin(self, p):
+    """PartialInterfaceOrPartialMixin : PartialInterfaceRest
+                                      | MixinRest"""
     p[0] = p[1]
 
-  def p_PartialInterface(self, p):
-    """PartialInterface : INTERFACE identifier '{' InterfaceMembers '}' ';'"""
-    p[0] = self.BuildNamed('Interface', p, 2, p[4])
+  def p_PartialInterfaceRest(self, p):
+    """PartialInterfaceRest : identifier '{' InterfaceMembers '}' ';'"""
+    p[0] = self.BuildNamed('Interface', p, 1, p[3])
 
   def p_InterfaceMembers(self, p):
     """InterfaceMembers : ExtendedAttributeList InterfaceMember InterfaceMembers
@@ -335,6 +348,30 @@ class IDLParser(object):
                        | ReadWriteAttribute
                        | ReadWriteMaplike
                        | ReadWriteSetlike"""
+    p[0] = p[1]
+
+  def p_MixinRest(self, p):
+    """MixinRest : MIXIN identifier '{' MixinMembers '}' ';'"""
+    p[0] = self.BuildNamed('Interface', p, 2, p[4])
+    p[0].AddChildren(self.BuildTrue('MIXIN'))
+
+  def p_MixinMembers(self, p):
+    """MixinMembers : ExtendedAttributeList MixinMember MixinMembers
+                    |"""
+    if len(p) > 1:
+      p[2].AddChildren(p[1])
+      p[0] = ListFromConcat(p[2], p[3])
+
+  # Error recovery for InterfaceMembers
+  def p_MixinMembersError(self, p):
+    """MixinMembers : error"""
+    p[0] = self.BuildError(p, 'MixinMembers')
+
+  def p_MixinMember(self, p):
+    """MixinMember : Const
+                   | Operation
+                   | Stringifier
+                   | ReadonlyMember"""
     p[0] = p[1]
 
   def p_Dictionary(self, p):
@@ -462,6 +499,11 @@ class IDLParser(object):
     """ImplementsStatement : identifier IMPLEMENTS identifier ';'"""
     name = self.BuildAttribute('REFERENCE', p[3])
     p[0] = self.BuildNamed('Implements', p, 1, name)
+
+  def p_IncludesStatement(self, p):
+    """IncludesStatement : identifier INCLUDES identifier ';'"""
+    name = self.BuildAttribute('REFERENCE', p[3])
+    p[0] = self.BuildNamed('Includes', p, 1, name)
 
   def p_Const(self,  p):
     """Const : CONST ConstType identifier '=' ConstValue ';'"""
@@ -846,6 +888,7 @@ class IDLParser(object):
                            | ENUM
                            | GETTER
                            | IMPLEMENTS
+                           | INCLUDES
                            | INHERIT
                            | LEGACYCALLER
                            | NAMESPACE

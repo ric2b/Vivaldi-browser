@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/renderer_ppapi_host_impl.h"
 #include "content/renderer/pepper/url_request_info_util.h"
@@ -18,17 +17,17 @@
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/ppapi_globals.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebAssociatedURLLoader.h"
-#include "third_party/WebKit/public/web/WebAssociatedURLLoaderOptions.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_associated_url_loader.h"
+#include "third_party/blink/public/web/web_associated_url_loader_options.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 
 using blink::WebAssociatedURLLoader;
 using blink::WebAssociatedURLLoaderOptions;
@@ -58,8 +57,7 @@ PepperURLLoaderHost::PepperURLLoaderHost(RendererPpapiHostImpl* host,
       total_bytes_to_be_sent_(-1),
       bytes_received_(0),
       total_bytes_to_be_received_(-1),
-      pending_response_(false),
-      weak_factory_(this) {
+      pending_response_(false) {
   DCHECK((main_document_loader && !resource) ||
          (!main_document_loader && resource));
 }
@@ -168,7 +166,7 @@ void PepperURLLoaderHost::DidReceiveData(const char* data, int data_length) {
   SendUpdateToPlugin(std::move(message));
 }
 
-void PepperURLLoaderHost::DidFinishLoading(double finish_time) {
+void PepperURLLoaderHost::DidFinishLoading() {
   // Note that |loader| will be NULL for document loads.
   SendUpdateToPlugin(
       std::make_unique<PpapiPluginMsg_URLLoader_FinishedLoading>(PP_OK));
@@ -259,8 +257,7 @@ int32_t PepperURLLoaderHost::InternalOnHostMsgOpen(
 
   // Requests from plug-ins must skip service workers, see the comment in
   // CreateWebURLRequest.
-  DCHECK_EQ(web_request.GetServiceWorkerMode(),
-            WebURLRequest::ServiceWorkerMode::kNone);
+  DCHECK(web_request.GetSkipServiceWorker());
 
   WebAssociatedURLLoaderOptions options;
   if (!has_universal_access_) {
@@ -310,11 +307,13 @@ int32_t PepperURLLoaderHost::OnHostMsgClose(
 
 int32_t PepperURLLoaderHost::OnHostMsgGrantUniversalAccess(
     ppapi::host::HostMessageContext* context) {
-  // Only plugins with private permission can bypass same origin.
-  if (!host()->permissions().HasPermission(ppapi::PERMISSION_PRIVATE))
-    return PP_ERROR_FAILED;
-  has_universal_access_ = true;
-  return PP_OK;
+  // Only plugins with permission can bypass same origin.
+  if (host()->permissions().HasPermission(ppapi::PERMISSION_PDF) ||
+      host()->permissions().HasPermission(ppapi::PERMISSION_FLASH)) {
+    has_universal_access_ = true;
+    return PP_OK;
+  }
+  return PP_ERROR_FAILED;
 }
 
 void PepperURLLoaderHost::SendUpdateToPlugin(
@@ -405,19 +404,10 @@ void PepperURLLoaderHost::SaveResponse(const WebURLResponse& response) {
     DCHECK(!pending_response_);
     pending_response_ = true;
 
-    DataFromWebURLResponse(
-        renderer_ppapi_host_,
-        pp_instance(),
-        response,
-        base::Bind(&PepperURLLoaderHost::DidDataFromWebURLResponse,
-                   weak_factory_.GetWeakPtr()));
+    SendUpdateToPlugin(
+        std::make_unique<PpapiPluginMsg_URLLoader_ReceivedResponse>(
+            DataFromWebURLResponse(response)));
   }
-}
-
-void PepperURLLoaderHost::DidDataFromWebURLResponse(
-    const ppapi::URLResponseInfoData& data) {
-  SendUpdateToPlugin(
-      std::make_unique<PpapiPluginMsg_URLLoader_ReceivedResponse>(data));
 }
 
 void PepperURLLoaderHost::UpdateProgress() {

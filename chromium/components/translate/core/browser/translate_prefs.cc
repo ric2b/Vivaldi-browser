@@ -4,12 +4,13 @@
 
 #include "components/translate/core/browser/translate_prefs.h"
 
+#include <memory>
 #include <set>
 #include <utility>
 
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
-#include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -17,6 +18,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/language/core/common/language_experiments.h"
+#include "components/language/core/common/locale_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -29,6 +32,8 @@
 
 namespace translate {
 
+const char kForceTriggerTranslateCount[] =
+    "translate_force_trigger_on_english_count";
 const char TranslatePrefs::kPrefTranslateSiteBlacklist[] =
     "translate_site_blacklist";
 const char TranslatePrefs::kPrefTranslateWhitelists[] = "translate_whitelists";
@@ -100,8 +105,14 @@ void ExpandLanguageCodes(const std::vector<std::string>& languages,
 const base::Feature kImprovedLanguageSettings{"ImprovedLanguageSettings",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kRegionalLocalesAsDisplayUI{
+    "RegionalLocalesAsDisplayUI", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kTranslateRecentTarget{"TranslateRecentTarget",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kTranslateUI{"TranslateUI",
+                                 base::FEATURE_ENABLED_BY_DEFAULT};
 
 DenialTimeUpdate::DenialTimeUpdate(PrefService* prefs,
                                    const std::string& language,
@@ -130,7 +141,7 @@ base::ListValue* DenialTimeUpdate::GetDenialTimes() {
   bool has_list = has_value && denial_value->GetAsList(&time_list_);
 
   if (!has_list) {
-    auto time_list = base::MakeUnique<base::ListValue>();
+    auto time_list = std::make_unique<base::ListValue>();
     double oldest_denial_time = 0;
     bool has_old_style =
         has_value && denial_value->GetAsDouble(&oldest_denial_time);
@@ -234,15 +245,14 @@ void TranslatePrefs::AddToLanguageList(const std::string& input_language,
   // language with the same base language.
   const bool should_block =
       !base::FeatureList::IsEnabled(kImprovedLanguageSettings) ||
-      !ContainsSameBaseLanguage(languages, chrome_language);
+      !language::ContainsSameBaseLanguage(languages, chrome_language);
 
   if (force_blocked || should_block) {
     BlockLanguage(input_language);
   }
 
   // Add the language to the list.
-  if (std::find(languages.begin(), languages.end(), chrome_language) ==
-      languages.end()) {
+  if (!base::ContainsValue(languages, chrome_language)) {
     languages.push_back(chrome_language);
     UpdateLanguageList(languages);
   }
@@ -261,13 +271,19 @@ void TranslatePrefs::RemoveFromLanguageList(const std::string& input_language) {
   const auto& it =
       std::find(languages.begin(), languages.end(), chrome_language);
   if (it != languages.end()) {
+    // If the language being removed is the most recent language, erase that
+    // data so that Chrome won't try to translate to it next time Translate is
+    // triggered.
+    if (chrome_language == GetRecentTargetLanguage())
+      SetRecentTargetLanguage("");
+
     languages.erase(it);
     UpdateLanguageList(languages);
 
     if (base::FeatureList::IsEnabled(kImprovedLanguageSettings)) {
       // We should unblock the language if this was the last one from the same
       // language family.
-      if (!ContainsSameBaseLanguage(languages, chrome_language)) {
+      if (!language::ContainsSameBaseLanguage(languages, chrome_language)) {
         UnblockLanguage(input_language);
       }
     }
@@ -766,6 +782,21 @@ std::string TranslatePrefs::GetRecentTargetLanguage() const {
   return prefs_->GetString(kPrefTranslateRecentTarget);
 }
 
+int TranslatePrefs::GetForceTriggerOnEnglishPagesCount() const {
+  return prefs_->GetInteger(kForceTriggerTranslateCount);
+}
+
+void TranslatePrefs::ReportForceTriggerOnEnglishPages() {
+  int current_count = GetForceTriggerOnEnglishPagesCount();
+  prefs_->SetInteger(kForceTriggerTranslateCount, current_count + 1);
+}
+
+void TranslatePrefs::ReportAcceptedAfterForceTriggerOnEnglishPages() {
+  int current_count = GetForceTriggerOnEnglishPagesCount();
+  if (current_count > 0)
+    prefs_->SetInteger(kForceTriggerTranslateCount, current_count - 1);
+}
+
 // static
 void TranslatePrefs::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
@@ -791,6 +822,10 @@ void TranslatePrefs::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterStringPref(kPrefTranslateRecentTarget, "",
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterIntegerPref(
+      kForceTriggerTranslateCount, 0,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
 #if defined(OS_ANDROID)
   registry->RegisterDictionaryPref(
       kPrefTranslateAutoAlwaysCount,

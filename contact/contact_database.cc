@@ -40,8 +40,15 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 1;
-const int kCompatibleVersionNumber = 1;
+const int kCurrentVersionNumber = 4;
+const int kCompatibleVersionNumber = 4;
+const int kDeprecatedVersionNumber = 1;
+
+sql::InitStatus LogMigrationFailure(int from_version) {
+  LOG(ERROR) << "Contacts DB failed to migrate from version " << from_version
+             << ". Contacts API will be disabled.";
+  return sql::INIT_FAILURE;
+}
 
 }  // namespace
 
@@ -68,6 +75,10 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
   if (!db_.Open(contact_db_name))
     return sql::INIT_FAILURE;
 
+  // Clear the database if too old for upgrade.
+  DCHECK_LT(kDeprecatedVersionNumber, GetCurrentVersion());
+  sql::MetaTable::RazeIfDeprecated(&db_, kDeprecatedVersionNumber);
+
   // Wrap the rest of init in a tranaction. This will prevent the database from
   // getting corrupted if we crash in the middle of initialization or migration.
   sql::Transaction committer(&db_);
@@ -92,6 +103,12 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
       !CreatePhonenumberTable() || !CreatePostalAddressTable())
     return sql::INIT_FAILURE;
 
+  // Version check.
+  sql::InitStatus version_status = EnsureCurrentVersion();
+  if (version_status != sql::INIT_OK) {
+    return version_status;
+  }
+
   return committer.Commit() ? sql::INIT_OK : sql::INIT_FAILURE;
 }
 
@@ -112,6 +129,63 @@ void ContactDatabase::BeginTransaction() {
 
 void ContactDatabase::CommitTransaction() {
   db_.CommitTransaction();
+}
+
+// Migration -------------------------------------------------------------------
+
+sql::InitStatus ContactDatabase::EnsureCurrentVersion() {
+  // We can't read databases newer than we were designed for.
+  if (meta_table_.GetCompatibleVersionNumber() > kCurrentVersionNumber) {
+    LOG(WARNING) << "Contact database is too new.";
+    return sql::INIT_TOO_NEW;
+  }
+
+  int cur_version = meta_table_.GetVersionNumber();
+
+  if (cur_version == 2) {
+    if (!db_.DoesColumnExist("contacts", "trusted"))
+      if (!db_.Execute("ALTER TABLE contacts ADD COLUMN trusted INT"))
+        return LogMigrationFailure(cur_version);
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 3) {
+    if (db_.DoesColumnExist("email_addresses", "trusted")) {
+      if (!db_.Execute("UPDATE contacts "
+                       " SET trusted = (select max(email_addresses.trusted) "
+                       "  FROM email_addresses"
+                       " WHERE contacts.id = email_addresses.contact_id)"))
+        return LogMigrationFailure(cur_version);
+
+      if (db_.Execute(
+              "ALTER TABLE email_addresses RENAME TO email_addresses_old")) {
+        CreateEmailTable();
+      }
+      if (!db_.Execute(
+              "INSERT INTO email_addresses "
+              " (contact_id, email, type, favorite, obsolete, "
+              " created, last_modified)"
+              "  SELECT contact_id, email, type, is_default, obsolete, "
+              "    created, last_modified FROM email_addresses_old"))
+        return LogMigrationFailure(cur_version);
+
+      if (!db_.Execute("DROP TABLE email_addresses_old"))
+        return LogMigrationFailure(cur_version);
+
+      ++cur_version;
+      meta_table_.SetVersionNumber(cur_version);
+      meta_table_.SetCompatibleVersionNumber(
+          std::min(cur_version, kCompatibleVersionNumber));
+    }
+  }
+
+  LOG_IF(WARNING, cur_version < GetCurrentVersion())
+      << "Contact database version " << cur_version << " is too old to handle.";
+
+  return sql::INIT_OK;
 }
 
 void ContactDatabase::RollbackTransaction() {

@@ -20,13 +20,13 @@ bool MockExtensionSpecialStoragePolicy::IsStorageSessionOnly(
   return false;
 }
 
-bool MockExtensionSpecialStoragePolicy::IsStorageSessionOnlyOrBlocked(
-    const GURL& origin) {
+bool MockExtensionSpecialStoragePolicy::HasSessionOnlyOrigins() {
   return false;
 }
 
-bool MockExtensionSpecialStoragePolicy::HasSessionOnlyOrigins() {
-  return false;
+network::SessionCleanupCookieStore::DeleteCookiePredicate
+MockExtensionSpecialStoragePolicy::CreateDeleteCookieOnExitPredicate() {
+  return network::SessionCleanupCookieStore::DeleteCookiePredicate();
 }
 
 MockExtensionSpecialStoragePolicy::~MockExtensionSpecialStoragePolicy() {}

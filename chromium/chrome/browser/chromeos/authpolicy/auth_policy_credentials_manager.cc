@@ -4,14 +4,14 @@
 
 #include "chrome/browser/chromeos/authpolicy/auth_policy_credentials_manager.h"
 
-#include "base/files/file_util.h"
+#include "ash/public/cpp/vector_icons/vector_icons.h"
+#include "base/files/important_file_writer.h"
 #include "base/location.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -19,6 +19,7 @@
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -31,8 +32,8 @@
 #include "dbus/message.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 
 namespace {
 
@@ -53,38 +54,11 @@ constexpr char kKrb5ConfEnvName[] = "KRB5_CONFIG";
 // Kerberos config file name.
 constexpr char kKrb5ConfFile[] = "krb5.conf";
 
-// A notification delegate for the sign-out button.
-// TODO(estade): Can this be a HandleNotificationButtonClickDelegate?
-class SigninNotificationDelegate : public message_center::NotificationDelegate {
- public:
-  SigninNotificationDelegate();
-
-  // NotificationDelegate:
-  void Click() override;
-  void ButtonClick(int button_index) override;
-
- protected:
-  ~SigninNotificationDelegate() override = default;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SigninNotificationDelegate);
-};
-
-SigninNotificationDelegate::SigninNotificationDelegate() {}
-
-void SigninNotificationDelegate::Click() {
-  chrome::AttemptUserExit();
-}
-
-void SigninNotificationDelegate::ButtonClick(int button_index) {
-  chrome::AttemptUserExit();
-}
-
 // Writes |blob| into file <UserPath>/kerberos/|file_name|. First writes into
-// temporary file and then replace existing one.
+// temporary file and then replaces existing one.
 void WriteFile(const std::string& file_name, const std::string& blob) {
   base::FilePath dir;
-  PathService::Get(base::DIR_HOME, &dir);
+  base::PathService::Get(base::DIR_HOME, &dir);
   dir = dir.Append(kKrb5Directory);
   base::File::Error error;
   if (!base::CreateDirectoryAndGetError(dir, &error)) {
@@ -92,28 +66,30 @@ void WriteFile(const std::string& file_name, const std::string& blob) {
                << "' directory: " << base::File::ErrorToString(error);
     return;
   }
-
-  base::FilePath temp_file;
-  if (!base::CreateTemporaryFileInDir(dir, &temp_file))
-    return;
-
-  if (base::WriteFile(temp_file, blob.data(), blob.size()) !=
-      static_cast<int>(blob.size())) {
-    LOG(ERROR) << "Failed to write file: " << temp_file.value();
-    return;
-  }
-
   base::FilePath dest_file = dir.Append(file_name);
-  if (!base::ReplaceFile(temp_file, dest_file, &error)) {
-    LOG(ERROR) << "Failed to replace '" << dest_file.value() << "' with '"
-               << temp_file.value()
-               << "' :" << base::File::ErrorToString(error);
+  if (!base::ImportantFileWriter::WriteFileAtomically(dest_file, blob)) {
+    LOG(ERROR) << "Failed to write file " << dest_file.value();
   }
+}
+
+// Put canonicalization settings first depending on user policy. Whatever
+// setting comes first wins, so even if krb5.conf sets rdns or
+// dns_canonicalize_hostname below, it would get overridden.
+std::string AdjustConfig(const std::string& config, bool is_dns_cname_enabled) {
+  std::string adjusted_config = base::StringPrintf(
+      chromeos::kKrb5CnameSettings, is_dns_cname_enabled ? "true" : "false");
+  adjusted_config.append(config);
+  return adjusted_config;
 }
 
 }  // namespace
 
 namespace chromeos {
+
+const char* kKrb5CnameSettings =
+    "[libdefaults]\n"
+    "\tdns_canonicalize_hostname = %s\n"
+    "\trdns = false\n";
 
 AuthPolicyCredentialsManager::AuthPolicyCredentialsManager(Profile* profile)
     : profile_(profile) {
@@ -128,11 +104,17 @@ AuthPolicyCredentialsManager::AuthPolicyCredentialsManager(Profile* profile)
   // Setting environment variables for GSSAPI library.
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   base::FilePath path;
-  PathService::Get(base::DIR_HOME, &path);
+  base::PathService::Get(base::DIR_HOME, &path);
   path = path.Append(kKrb5Directory);
   env->SetVar(kKrb5CCEnvName,
               kKrb5CCFilePrefix + path.Append(kKrb5CCFile).value());
   env->SetVar(kKrb5ConfEnvName, path.Append(kKrb5ConfFile).value());
+
+  negotiate_disable_cname_lookup_.Init(
+      prefs::kDisableAuthNegotiateCnameLookup, g_browser_process->local_state(),
+      base::BindRepeating(&AuthPolicyCredentialsManager::
+                              OnDisabledAuthNegotiateCnameLookupChanged,
+                          weak_factory_.GetWeakPtr()));
 
   // Connecting to the signal sent by authpolicyd notifying that Kerberos files
   // have changed.
@@ -202,28 +184,28 @@ void AuthPolicyCredentialsManager::OnGetUserStatusCallback(
     UpdateDisplayAndGivenName(user_status.account_info());
   }
 
-  // user_status.password_status() is missing if the TGT is invalid.
-  bool password_ok = false;
+  // user_status.password_status() is missing if the TGT is invalid or device is
+  // offline.
+  bool force_online_signin = false;
   if (user_status.has_password_status()) {
     switch (user_status.password_status()) {
       case authpolicy::ActiveDirectoryUserStatus::PASSWORD_VALID:
-        password_ok = true;
         break;
       case authpolicy::ActiveDirectoryUserStatus::PASSWORD_EXPIRED:
         ShowNotification(IDS_ACTIVE_DIRECTORY_PASSWORD_EXPIRED);
+        force_online_signin = true;
         break;
       case authpolicy::ActiveDirectoryUserStatus::PASSWORD_CHANGED:
         ShowNotification(IDS_ACTIVE_DIRECTORY_PASSWORD_CHANGED);
+        force_online_signin = true;
         break;
     }
   }
 
   // user_status.tgt_status() is always present.
-  bool tgt_ok = false;
   DCHECK(user_status.has_tgt_status());
   switch (user_status.tgt_status()) {
     case authpolicy::ActiveDirectoryUserStatus::TGT_VALID:
-      tgt_ok = true;
       break;
     case authpolicy::ActiveDirectoryUserStatus::TGT_EXPIRED:
     case authpolicy::ActiveDirectoryUserStatus::TGT_NOT_FOUND:
@@ -231,8 +213,8 @@ void AuthPolicyCredentialsManager::OnGetUserStatusCallback(
       break;
   }
 
-  const bool ok = password_ok && tgt_ok;
-  user_manager::UserManager::Get()->SaveForceOnlineSignin(account_id_, !ok);
+  user_manager::UserManager::Get()->SaveForceOnlineSignin(account_id_,
+                                                          force_online_signin);
 }
 
 void AuthPolicyCredentialsManager::GetUserKerberosFiles() {
@@ -250,13 +232,20 @@ void AuthPolicyCredentialsManager::OnGetUserKerberosFilesCallback(
     const authpolicy::KerberosFiles& kerberos_files) {
   if (kerberos_files.has_krb5cc()) {
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE,
+        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
         base::BindOnce(&WriteFile, kKrb5CCFile, kerberos_files.krb5cc()));
   }
   if (kerberos_files.has_krb5conf()) {
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-        base::BindOnce(&WriteFile, kKrb5ConfFile, kerberos_files.krb5conf()));
+        FROM_HERE,
+        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(
+            &WriteFile, kKrb5ConfFile,
+            AdjustConfig(kerberos_files.krb5conf(),
+                         !negotiate_disable_cname_lookup_.GetValue())));
   }
 }
 
@@ -324,14 +313,20 @@ void AuthPolicyCredentialsManager::ShowNotification(int message_id) {
   // Set |profile_id| for multi-user notification blocker.
   notifier_id.profile_id = profile_->GetProfileUserName();
 
+  auto delegate =
+      base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
+          base::BindRepeating([](base::Optional<int> button_index) {
+            chrome::AttemptUserExit();
+          }));
+
   std::unique_ptr<message_center::Notification> notification =
       message_center::Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
           l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_BUBBLE_VIEW_TITLE),
           l10n_util::GetStringUTF16(message_id), gfx::Image(),
           l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
-          GURL(notification_id), notifier_id, data,
-          new SigninNotificationDelegate(), kNotificationWarningIcon,
+          GURL(notification_id), notifier_id, data, std::move(delegate),
+          ash::kNotificationWarningIcon,
           message_center::SystemNotificationWarningLevel::WARNING);
   notification->SetSystemPriority();
 
@@ -369,21 +364,14 @@ void AuthPolicyCredentialsManager::OnSignalConnectedCallback(
   DCHECK(success);
 }
 
+void AuthPolicyCredentialsManager::OnDisabledAuthNegotiateCnameLookupChanged() {
+  GetUserKerberosFiles();
+}
+
 // static
 AuthPolicyCredentialsManagerFactory*
 AuthPolicyCredentialsManagerFactory::GetInstance() {
   return base::Singleton<AuthPolicyCredentialsManagerFactory>::get();
-}
-
-// static
-KeyedService*
-AuthPolicyCredentialsManagerFactory::BuildForProfileIfActiveDirectory(
-    Profile* profile) {
-  const user_manager::User* user =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-  if (!user || !user->IsActiveDirectoryUser())
-    return nullptr;
-  return GetInstance()->GetServiceForBrowserContext(profile, true /* create */);
 }
 
 AuthPolicyCredentialsManagerFactory::AuthPolicyCredentialsManagerFactory()
@@ -393,9 +381,21 @@ AuthPolicyCredentialsManagerFactory::AuthPolicyCredentialsManagerFactory()
 
 AuthPolicyCredentialsManagerFactory::~AuthPolicyCredentialsManagerFactory() {}
 
+bool AuthPolicyCredentialsManagerFactory::ServiceIsCreatedWithBrowserContext()
+    const {
+  return true;
+}
+
 KeyedService* AuthPolicyCredentialsManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
+  // UserManager is usually not initialized in tests.
+  if (!user_manager::UserManager::IsInitialized())
+    return nullptr;
   Profile* profile = Profile::FromBrowserContext(context);
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  if (!user || !user->IsActiveDirectoryUser())
+    return nullptr;
   return new AuthPolicyCredentialsManager(profile);
 }
 

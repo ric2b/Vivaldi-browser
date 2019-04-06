@@ -9,6 +9,7 @@
 
 #import "base/ios/block_types.h"
 #import "ios/testing/earl_grey/matchers.h"
+#include "ios/web/public/test/element_selector.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
@@ -24,7 +25,8 @@
 #endif
 
 using testing::ButtonWithAccessibilityLabel;
-using testing::ElementToDismissContextMenu;
+using testing::ElementToDismissAlert;
+using web::test::ElementSelector;
 
 // Context menu test cases for the web shell.
 @interface ContextMenuTestCase : WebShellTestCase
@@ -53,7 +55,8 @@ using testing::ElementToDismissContextMenu;
   [ShellEarlGrey waitForWebViewContainingText:linkText];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
-      performAction:web::LongPressElementForContextMenu(linkID)];
+      performAction:web::LongPressElementForContextMenu(
+                        ElementSelector::ElementSelectorId(linkID))];
 
   id<GREYMatcher> copyItem = ButtonWithAccessibilityLabel(@"Copy Link");
 
@@ -62,7 +65,7 @@ using testing::ElementToDismissContextMenu;
       assertWithMatcher:grey_notNil()];
 
   // Dismiss the context menu.
-  [[EarlGrey selectElementWithMatcher:ElementToDismissContextMenu(@"Cancel")]
+  [[EarlGrey selectElementWithMatcher:ElementToDismissAlert(@"Cancel")]
       performAction:grey_tap()];
 
   // Context menu should go away after the tap.
@@ -94,7 +97,8 @@ using testing::ElementToDismissContextMenu;
   [ShellEarlGrey waitForWebViewContainingText:linkText];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
-      performAction:web::LongPressElementForContextMenu(linkID)];
+      performAction:web::LongPressElementForContextMenu(
+                        ElementSelector::ElementSelectorId(linkID))];
 
   id<GREYMatcher> copyItem = ButtonWithAccessibilityLabel(@"Copy Link");
 
@@ -103,7 +107,7 @@ using testing::ElementToDismissContextMenu;
       assertWithMatcher:grey_notNil()];
 
   // Dismiss the context menu.
-  [[EarlGrey selectElementWithMatcher:ElementToDismissContextMenu(@"Cancel")]
+  [[EarlGrey selectElementWithMatcher:ElementToDismissAlert(@"Cancel")]
       performAction:grey_tap()];
 
   // Context menu should go away after the tap.

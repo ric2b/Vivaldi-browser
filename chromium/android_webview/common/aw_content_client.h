@@ -17,8 +17,6 @@ namespace android_webview {
 
 std::string GetProduct();
 std::string GetUserAgent();
-// extra text to be put into the OS section of the user agent text
-std::string GetExtraOSUserAgentInfo();
 
 class AwContentClient : public content::ContentClient {
  public:
@@ -34,6 +32,8 @@ class AwContentClient : public content::ContentClient {
   void SetGpuInfo(const gpu::GPUInfo& gpu_info) override;
   bool UsingSynchronousCompositing() override;
   media::MediaDrmBridgeClient* GetMediaDrmBridgeClient() override;
+  void OnServiceManagerConnected(
+      content::ServiceManagerConnection* connection) override;
 
   const std::string& gpu_fingerprint() const { return gpu_fingerprint_; }
 

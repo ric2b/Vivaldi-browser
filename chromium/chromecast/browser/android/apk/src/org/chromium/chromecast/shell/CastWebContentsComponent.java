@@ -4,7 +4,6 @@
 
 package org.chromium.chromecast.shell;
 
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -13,9 +12,10 @@ import android.content.ServiceConnection;
 import android.net.Uri;
 import android.os.IBinder;
 import android.os.PatternMatcher;
-import android.support.v4.content.LocalBroadcastManager;
 
 import org.chromium.base.Log;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.chromecast.base.Controller;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -37,43 +37,98 @@ public class CastWebContentsComponent {
      */
     public interface OnKeyDownHandler { void onKeyDown(int keyCode); }
 
-    private interface Delegate {
-        void start(Context context, WebContents webContents);
+    /**
+     * Callback interface for when UI events occur.
+     */
+    public interface SurfaceEventHandler {
+        void onVisibilityChange(int visibilityType);
+        boolean consumeGesture(int gestureType);
+    }
+
+    /**
+     * Params to start WebContents in activity, fragment or service.
+     */
+    static class StartParams {
+        public final Context context;
+        public final WebContents webContents;
+        public final String appId;
+        public final int visibilityPriority;
+
+        public StartParams(Context context, WebContents webContents, String id, int priority) {
+            this.context = context;
+            this.webContents = webContents;
+            appId = id;
+            visibilityPriority = priority;
+        }
+    }
+
+    @VisibleForTesting
+    interface Delegate {
+        void start(StartParams params);
         void stop(Context context);
     }
 
-    private class ActivityDelegate implements Delegate {
-        private static final String TAG = "cr_CastWebComponent_AD";
-        private boolean mEnableTouchInput;
+    @VisibleForTesting
+    class ActivityDelegate implements Delegate {
+        private static final String TAG = "cr_CastWebContent_AD";
+        private boolean mStarted = false;
 
         public ActivityDelegate(boolean enableTouchInput) {
             mEnableTouchInput = enableTouchInput;
         }
 
         @Override
-        public void start(Context context, WebContents webContents) {
-            if (DEBUG) Log.d(TAG, "start");
-
-            Intent intent = new Intent(Intent.ACTION_VIEW, getInstanceUri(mInstanceId), context,
-                    CastWebContentsActivity.class);
-            intent.putExtra(ACTION_EXTRA_WEB_CONTENTS, webContents);
-            intent.putExtra(ACTION_EXTRA_TOUCH_INPUT_ENABLED, mEnableTouchInput);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            context.startActivity(intent);
+        public void start(StartParams params) {
+            if (mStarted) return; // No-op if already started.
+            if (DEBUG) Log.d(TAG, "start: SHOW_WEB_CONTENT in activity");
+            startCastActivity(params.context, params.webContents, mEnableTouchInput);
+            mStarted = true;
         }
 
         @Override
         public void stop(Context context) {
-            if (DEBUG) Log.d(TAG, "stop");
-
-            Intent intent =
-                    new Intent(CastIntents.ACTION_STOP_ACTIVITY, getInstanceUri(mInstanceId));
-            LocalBroadcastManager.getInstance(context).sendBroadcastSync(intent);
+            sendStopWebContentEvent();
+            mStarted = false;
         }
     }
 
+    private class FragmentDelegate implements Delegate {
+        private static final String TAG = "cr_CastWebContent_FD";
+
+        public FragmentDelegate(boolean enableTouchInput) {
+            mEnableTouchInput = enableTouchInput;
+        }
+
+        @Override
+        public void start(StartParams params) {
+            if (!sendIntent(CastWebContentsIntentUtils.requestStartCastFragment(params.webContents,
+                        params.appId, params.visibilityPriority, mEnableTouchInput, mInstanceId))) {
+                // No intent receiver to handle SHOW_WEB_CONTENT in fragment
+                startCastActivity(params.context, params.webContents, mEnableTouchInput);
+            }
+        }
+
+        @Override
+        public void stop(Context context) {
+            sendStopWebContentEvent();
+        }
+    }
+
+    private void startCastActivity(Context context, WebContents webContents, boolean enableTouch) {
+        Intent intent = CastWebContentsIntentUtils.requestStartCastActivity(
+                context, webContents, enableTouch, mInstanceId);
+        if (DEBUG) Log.d(TAG, "start activity by intent: " + intent);
+        context.startActivity(intent);
+    }
+
+    private void sendStopWebContentEvent() {
+        Intent intent = CastWebContentsIntentUtils.requestStopWebContents(mInstanceId);
+        if (DEBUG) Log.d(TAG, "stop: send STOP_WEB_CONTENT intent: " + intent);
+        sendIntentSync(intent);
+    }
+
     private class ServiceDelegate implements Delegate {
-        private static final String TAG = "cr_CastWebComponent_SD";
+        private static final String TAG = "cr_CastWebContent_SD";
 
         private ServiceConnection mConnection = new ServiceConnection() {
             @Override
@@ -88,124 +143,190 @@ public class CastWebContentsComponent {
         };
 
         @Override
-        public void start(Context context, WebContents webContents) {
+        public void start(StartParams params) {
             if (DEBUG) Log.d(TAG, "start");
-
-            Intent intent = new Intent(Intent.ACTION_VIEW, getInstanceUri(mInstanceId), context,
-                    CastWebContentsService.class);
-            intent.putExtra(ACTION_EXTRA_WEB_CONTENTS, webContents);
-            context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+            Intent intent = CastWebContentsIntentUtils.requestStartCastService(
+                    params.context, params.webContents, mInstanceId);
+            params.context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
         }
 
         @Override
         public void stop(Context context) {
             if (DEBUG) Log.d(TAG, "stop");
-
             context.unbindService(mConnection);
         }
     }
 
-    private class Receiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_ACTIVITY_STOPPED)) {
-                if (DEBUG) Log.d(TAG, "onReceive ACTION_ACTIVITY_STOPPED");
+    private static final String TAG = "cr_CastWebComponent";
+    private static final boolean DEBUG = true;
 
-                if (mComponentClosedHandler != null) mComponentClosedHandler.onComponentClosed();
-            } else if (intent.getAction().equals(ACTION_KEY_EVENT)) {
-                if (DEBUG) Log.d(TAG, "onReceive ACTION_KEY_EVENT");
+    private final OnComponentClosedHandler mComponentClosedHandler;
+    private final OnKeyDownHandler mKeyDownHandler;
+    private final String mInstanceId;
+    private final SurfaceEventHandler mSurfaceEventHandler;
+    private final Controller<WebContents> mHasWebContentsState = new Controller<>();
+    private Delegate mDelegate;
+    private boolean mStarted;
+    private boolean mEnableTouchInput;
 
-                int keyCode = intent.getIntExtra(ACTION_EXTRA_KEY_CODE, 0);
-                if (mKeyDownHandler != null) mKeyDownHandler.onKeyDown(keyCode);
+    public CastWebContentsComponent(String instanceId,
+            OnComponentClosedHandler onComponentClosedHandler, OnKeyDownHandler onKeyDownHandler,
+            SurfaceEventHandler surfaceEventHandler, boolean isHeadless, boolean enableTouchInput) {
+        if (DEBUG) {
+            Log.d(TAG,
+                    "New CastWebContentsComponent. Instance ID: " + instanceId + "; isHeadless: "
+                            + isHeadless + "; enableTouchInput:" + enableTouchInput);
+        }
+        mComponentClosedHandler = onComponentClosedHandler;
+        mKeyDownHandler = onKeyDownHandler;
+        mInstanceId = instanceId;
+        mSurfaceEventHandler = surfaceEventHandler;
+        if (BuildConfig.DISPLAY_WEB_CONTENTS_IN_SERVICE || isHeadless) {
+            if (DEBUG) Log.d(TAG, "Creating service delegate...");
+            mDelegate = new ServiceDelegate();
+        } else if (BuildConfig.ENABLE_CAST_FRAGMENT) {
+            if (DEBUG) Log.d(TAG, "Creating fragment delegate...");
+            mDelegate = new FragmentDelegate(enableTouchInput);
+        } else {
+            if (DEBUG) Log.d(TAG, "Creating activity delegate...");
+            mDelegate = new ActivityDelegate(enableTouchInput);
+        }
+
+        mHasWebContentsState.watch(() -> {
+            final IntentFilter filter = new IntentFilter();
+            Uri instanceUri = CastWebContentsIntentUtils.getInstanceUri(instanceId);
+            filter.addDataScheme(instanceUri.getScheme());
+            filter.addDataAuthority(instanceUri.getAuthority(), null);
+            filter.addDataPath(instanceUri.getPath(), PatternMatcher.PATTERN_LITERAL);
+            filter.addAction(CastWebContentsIntentUtils.ACTION_ACTIVITY_STOPPED);
+            filter.addAction(CastWebContentsIntentUtils.ACTION_KEY_EVENT);
+            filter.addAction(CastWebContentsIntentUtils.ACTION_ON_VISIBILITY_CHANGE);
+            filter.addAction(CastWebContentsIntentUtils.ACTION_ON_GESTURE);
+            return new LocalBroadcastReceiverScope(filter, this ::onReceiveIntent);
+        });
+    }
+
+    private void onReceiveIntent(Intent intent) {
+        if (CastWebContentsIntentUtils.isIntentOfActivityStopped(intent)) {
+            if (DEBUG) Log.d(TAG, "onReceive ACTION_ACTIVITY_STOPPED instance=" + mInstanceId);
+            if (mComponentClosedHandler != null) mComponentClosedHandler.onComponentClosed();
+        } else if (CastWebContentsIntentUtils.isIntentOfKeyEvent(intent)) {
+            if (DEBUG) Log.d(TAG, "onReceive ACTION_KEY_EVENT instance=" + mInstanceId);
+            int keyCode = CastWebContentsIntentUtils.getKeyCode(intent);
+            if (mKeyDownHandler != null) mKeyDownHandler.onKeyDown(keyCode);
+        } else if (CastWebContentsIntentUtils.isIntentOfVisibilityChange(intent)) {
+            int visibilityType = CastWebContentsIntentUtils.getVisibilityType(intent);
+            if (DEBUG) {
+                Log.d(TAG,
+                        "onReceive ACTION_ON_VISIBILITY_CHANGE instance=" + mInstanceId
+                                + "; visibilityType=" + visibilityType);
+            }
+            if (mSurfaceEventHandler != null) {
+                mSurfaceEventHandler.onVisibilityChange(visibilityType);
+            }
+        } else if (CastWebContentsIntentUtils.isIntentOfGesturing(intent)) {
+            int gestureType = CastWebContentsIntentUtils.getGestureType(intent);
+            if (DEBUG) {
+                Log.d(TAG,
+                        "onReceive ACTION_ON_GESTURE_CHANGE instance=" + mInstanceId
+                                + "; gesture=" + gestureType);
+            }
+            if (mSurfaceEventHandler != null) {
+                if (mSurfaceEventHandler.consumeGesture(gestureType)) {
+                    if (DEBUG) Log.d(TAG, "send gesture consumed instance=" + mInstanceId);
+                    sendIntentSync(CastWebContentsIntentUtils.gestureConsumed(
+                            mInstanceId, gestureType, true));
+                } else {
+                    if (DEBUG) Log.d(TAG, "send gesture NOT consumed instance=" + mInstanceId);
+                    sendIntentSync(CastWebContentsIntentUtils.gestureConsumed(
+                            mInstanceId, gestureType, false));
+                }
+            } else {
+                sendIntentSync(CastWebContentsIntentUtils.gestureConsumed(
+                        mInstanceId, gestureType, false));
             }
         }
     }
 
-    static final String ACTION_DATA_SCHEME = "cast";
-    static final String ACTION_DATA_AUTHORITY = "webcontents";
-    static final String ACTION_EXTRA_WEB_CONTENTS =
-            "com.google.android.apps.castshell.intent.extra.WEB_CONTENTS";
-    static final String ACTION_EXTRA_TOUCH_INPUT_ENABLED =
-            "com.google.android.apps.castshell.intent.extra.ENABLE_TOUCH";
-
-    private static final String TAG = "cr_CastWebComponent";
-    private static final boolean DEBUG = false;
-
-    private static final String ACTION_EXTRA_KEY_CODE =
-            "com.google.android.apps.castshell.intent.extra.KEY_CODE";
-    private static final String ACTION_KEY_EVENT =
-            "com.google.android.apps.castshell.intent.action.KEY_EVENT";
-    private static final String ACTION_ACTIVITY_STOPPED =
-            "com.google.android.apps.castshell.intent.action.ACTIVITY_STOPPED";
-
-    private Delegate mDelegate;
-    private OnComponentClosedHandler mComponentClosedHandler;
-    private OnKeyDownHandler mKeyDownHandler;
-    private Receiver mReceiver;
-    private String mInstanceId;
-    private boolean mStarted = false;
-
-    public CastWebContentsComponent(String instanceId,
-            OnComponentClosedHandler onComponentClosedHandler, OnKeyDownHandler onKeyDownHandler,
-            boolean isHeadless, boolean enableTouchInput) {
-        mComponentClosedHandler = onComponentClosedHandler;
-        mKeyDownHandler = onKeyDownHandler;
-        mInstanceId = instanceId;
-        if (BuildConfig.DISPLAY_WEB_CONTENTS_IN_SERVICE || isHeadless) {
-            mDelegate = new ServiceDelegate();
-        } else {
-            mDelegate = new ActivityDelegate(enableTouchInput);
-        }
+    @VisibleForTesting
+    boolean isStarted() {
+        return mStarted;
     }
 
-    public void start(Context context, WebContents webContents) {
-        if (DEBUG) Log.d(TAG, "start");
+    @VisibleForTesting
+    void setDelegate(Delegate delegate) {
+        mDelegate = delegate;
+    }
 
-        Uri instanceUri = getInstanceUri(mInstanceId);
-        mReceiver = new Receiver();
-        IntentFilter filter = new IntentFilter();
-        filter.addDataScheme(instanceUri.getScheme());
-        filter.addDataAuthority(instanceUri.getAuthority(), null);
-        filter.addDataPath(instanceUri.getPath(), PatternMatcher.PATTERN_LITERAL);
-        filter.addAction(ACTION_ACTIVITY_STOPPED);
-        filter.addAction(ACTION_KEY_EVENT);
-        LocalBroadcastManager.getInstance(context).registerReceiver(mReceiver, filter);
-
-        mDelegate.start(context, webContents);
-
+    public void start(StartParams params) {
+        if (DEBUG) {
+            Log.d(TAG,
+                    "Starting WebContents with delegate: " + mDelegate.getClass().getSimpleName()
+                            + "; Instance ID: " + mInstanceId + "; App ID: " + params.appId
+                            + "; Visibility Priority: " + params.visibilityPriority);
+        }
+        mHasWebContentsState.set(params.webContents);
+        mDelegate.start(params);
         mStarted = true;
     }
 
     public void stop(Context context) {
-        if (DEBUG) Log.d(TAG, "stop");
+        if (DEBUG) {
+            Log.d(TAG,
+                    "stop with delegate: " + mDelegate.getClass().getSimpleName()
+                            + "; Instance ID: " + mInstanceId);
+        }
         if (mStarted) {
-            LocalBroadcastManager.getInstance(context).unregisterReceiver(mReceiver);
+            mHasWebContentsState.reset();
+            if (DEBUG) Log.d(TAG, "Call delegate to stop");
             mDelegate.stop(context);
             mStarted = false;
         }
     }
 
-    public static void onComponentClosed(Context context, String instanceId) {
+    public void requestVisibilityPriority(int visibilityPriority) {
+        if (DEBUG) Log.d(TAG, "requestVisibilityPriority: " + mInstanceId + "; Visibility:"
+                + visibilityPriority);
+        sendIntentSync(CastWebContentsIntentUtils.requestVisibilityPriority(
+                mInstanceId, visibilityPriority));
+    }
+
+    public void requestMoveOut() {
+        if (DEBUG) Log.d(TAG, "requestMoveOut: " + mInstanceId);
+        sendIntentSync(CastWebContentsIntentUtils.requestMoveOut(mInstanceId));
+    }
+
+    public void enableTouchInput(boolean enabled) {
+        if (DEBUG) Log.d(TAG, "enableTouchInput enabled:" + enabled);
+        mEnableTouchInput = enabled;
+        sendIntentSync(CastWebContentsIntentUtils.enableTouchInput(mInstanceId, enabled));
+    }
+
+    public static void onComponentClosed(String instanceId) {
         if (DEBUG) Log.d(TAG, "onComponentClosed");
-
-        Intent intent = new Intent(ACTION_ACTIVITY_STOPPED, getInstanceUri(instanceId));
-        LocalBroadcastManager.getInstance(context).sendBroadcastSync(intent);
+        sendIntentSync(CastWebContentsIntentUtils.onActivityStopped(instanceId));
     }
 
-    public static void onKeyDown(Context context, String instanceId, int keyCode) {
+    public static void onKeyDown(String instanceId, int keyCode) {
         if (DEBUG) Log.d(TAG, "onKeyDown");
-
-        Intent intent = new Intent(ACTION_KEY_EVENT, getInstanceUri(instanceId));
-        intent.putExtra(ACTION_EXTRA_KEY_CODE, keyCode);
-        LocalBroadcastManager.getInstance(context).sendBroadcastSync(intent);
+        sendIntentSync(CastWebContentsIntentUtils.onKeyDown(instanceId, keyCode));
     }
 
-    private static Uri getInstanceUri(String instanceId) {
-        Uri instanceUri = new Uri.Builder()
-                                  .scheme(ACTION_DATA_SCHEME)
-                                  .authority(ACTION_DATA_AUTHORITY)
-                                  .path(instanceId)
-                                  .build();
-        return instanceUri;
+    public static void onVisibilityChange(String instanceId, int visibilityType) {
+        if (DEBUG) Log.d(TAG, "onVisibilityChange");
+        sendIntentSync(CastWebContentsIntentUtils.onVisibilityChange(instanceId, visibilityType));
+    }
+
+    public static void onGesture(String instanceId, int gestureType) {
+        if (DEBUG) Log.d(TAG, "onGesture: " + instanceId + "; gestureType: "+ gestureType);
+        sendIntentSync(CastWebContentsIntentUtils.onGesture(instanceId, gestureType));
+    }
+
+    private static boolean sendIntent(Intent in) {
+        return CastWebContentsIntentUtils.getLocalBroadcastManager().sendBroadcast(in);
+    }
+
+    private static void sendIntentSync(Intent in) {
+        CastWebContentsIntentUtils.getLocalBroadcastManager().sendBroadcastSync(in);
     }
 }

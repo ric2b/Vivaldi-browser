@@ -27,6 +27,33 @@ message RecordPageloadMetricsRequest {
   optional PageloadDeviceInfo device_info = 3;
 }
 
+// Information about each network transaction used to load the main frame HTML.
+message RequestInfo {
+  enum Protocol {
+    UNKNOWN = 0;
+    HTTP = 1;
+    HTTPS = 2;
+    QUIC = 3;
+  };
+
+  // The protocol used to connect to the Data Saver proxy.
+  optional Protocol protocol = 1;
+
+  // True if this request received a proxy bypass.
+  optional bool proxy_bypass = 2;
+
+  // Time to resolve DNS. e.g., to resolve proxy.googlezip.net.
+  optional Duration dns_time = 3;
+
+  // For TCP protocols, this is TCP connect + TLS setup.
+  // For 1RTT QUIC, this is the QUIC connection time (which includes TLS).
+  // For 0RTT QUIC (or TLS1.3 with fast-open), this will be zero.
+  optional Duration connect_time = 4;
+
+  // Time between sending the HTTP request and receiving the response.
+  optional Duration http_time = 5;
+}
+
 // Metrics for a single pageload.
 message PageloadMetrics {
   // Next ID: 22
@@ -44,6 +71,19 @@ message PageloadMetrics {
     EFFECTIVE_CONNECTION_TYPE_4G = 5;
   };
 
+  // The possible conntion type values. See //net/base/network_change_notifier.h
+  // for a detailed description of the enum values.
+  enum ConnectionType {
+    CONNECTION_UNKNOWN = 0;
+    CONNECTION_ETHERNET = 1;
+    CONNECTION_WIFI = 2;
+    CONNECTION_2G = 3;
+    CONNECTION_3G = 4;
+    CONNECTION_4G = 5;
+    CONNECTION_NONE = 6;
+    CONNECTION_BLUETOOTH = 7;
+  };
+
   // The various opt out states seen by server previews.
   enum PreviewsOptOut {
     // Set for non-previews navigations and app background navigations.
@@ -56,12 +96,17 @@ message PageloadMetrics {
 
   // The various server previews that can be shown.
   enum PreviewsType {
-    // No server preview was applied.
+    // No server preview was applied, but the URL/navigation was not
+    // blacklisted.
     NONE = 0;
     // Image placeholders were used on the page.
     LOFI = 1;
     // The main resource was a lite page.
     LITE_PAGE = 2;
+    // Blacklisting rules caused no server preview to be requested. It's
+    // possible in the future that client previews might be shown when server
+    // previews are blacklisted, currently this is not possible.
+    CLIENT_BLACKLIST_PREVENTED_PREVIEW = 3;
   }
 
   // What type of crash occured on the page.
@@ -101,9 +146,11 @@ message PageloadMetrics {
 
   // The sum of original-content-length values, over resources that were not
   // loaded from browser cache.
+  // Secure resources (i.e., HTTPS) that go into this sum are bucketed.
   optional int64 original_page_size_bytes = 10;
   // The sum of (compressed) content-length, over resources that were not loaded
   // from browser cache.
+  // Secure resources (i.e., HTTPS) that go into this sum are bucketed.
   optional int64 compressed_page_size_bytes = 11;
 
   // The effective connection type at the start of the navigation.
@@ -140,4 +187,27 @@ message PageloadMetrics {
 
   // The RendererCrashType for the page load.
   optional RendererCrashType renderer_crash_type = 21;
+
+  // The percent of total_page_size_bytes that were loaded from the cache. This
+  // value is in the range [0.0, 1.0].
+  optional float cached_fraction = 22;
+
+  // The connection type (Wifi, 2G, 3G, 4G, None, etc) reported by the
+  // NetworkChangeNotifier.
+  optional ConnectionType connection_type = 23;
+
+  // The sum of all bytes loaded on a page. This is compressed_page_size_bytes
+  // plus the sum of content-length for all resources loaded from the browser
+  // cache. Secure resources (i.e., HTTPS) that go into this sum are bucketed.
+  optional int64 total_page_size_bytes = 24;
+
+  // The queuing delay for the first user input on the page.
+  optional Duration first_input_delay = 25;
+
+  // Connection timing information for each network transaction to load the main
+  // frame HTML. If the main frame HTML was reached after N redirects, then this
+  // array has N+1 values. In most cases we expect this will have 1 value. The
+  // first value is the original request and each following value is the next
+  // redirect in order.
+  repeated RequestInfo main_frame_network_request = 26;
 }

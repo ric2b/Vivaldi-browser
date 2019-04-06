@@ -15,7 +15,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.provider.Browser;
@@ -34,6 +33,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
@@ -293,6 +293,9 @@ public class OMADownloadHandler extends BroadcastReceiver
             }
             manager.remove(mDownloadId);
             mFreeSpace = Environment.getExternalStorageDirectory().getUsableSpace();
+            DownloadMetrics.recordDownloadOpen(
+                    DownloadMetrics.DownloadOpenSource.ANDROID_DOWNLOAD_MANAGER,
+                    mDownloadInfo.getMimeType());
             return omaInfo;
         }
 
@@ -827,7 +830,7 @@ public class OMADownloadHandler extends BroadcastReceiver
                 if (mDownloadInfo != null) {
                     String fileName = mDownloadInfo.getFileName();
                     DownloadManagerService.getDownloadManagerService().onDownloadFailed(
-                            fileName, mFailureReason);
+                            mDownloadItem, mFailureReason);
                 }
             }
         }
@@ -882,7 +885,8 @@ public class OMADownloadHandler extends BroadcastReceiver
      */
     static void storeDownloadInfo(
             SharedPreferences sharedPrefs, String type, Set<String> downloadInfo) {
-        DownloadManagerService.storeDownloadInfo(sharedPrefs, type, downloadInfo);
+        DownloadManagerService.storeDownloadInfo(
+                sharedPrefs, type, downloadInfo, false /* forceCommit */);
     }
 
     /**

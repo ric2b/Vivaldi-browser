@@ -222,6 +222,9 @@ class ASH_PUBLIC_EXPORT ImmersiveFullscreenController
   // Returns the display bounds of the screen |widget_| is on.
   gfx::Rect GetDisplayBoundsInScreen() const;
 
+  // Test if the |widget| is the event target to control reveal state.
+  bool IsTargetForWidget(views::Widget* widget) const;
+
   // Not owned.
   ImmersiveFullscreenControllerDelegate* delegate_;
   views::View* top_container_;
@@ -263,6 +266,10 @@ class ASH_PUBLIC_EXPORT ImmersiveFullscreenController
 
   std::unique_ptr<ImmersiveFocusWatcher> immersive_focus_watcher_;
   std::unique_ptr<ImmersiveGestureHandler> immersive_gesture_handler_;
+
+  // |animations_disabled_for_test_| is initialized to this. See
+  // ImmersiveFullscreenControllerTestApi::GlobalAnimationDisabler for details.
+  static bool value_for_animations_disabled_for_test_;
 
   base::WeakPtrFactory<ImmersiveFullscreenController> weak_ptr_factory_;
 

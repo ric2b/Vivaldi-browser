@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/x/x11_util.h"
@@ -19,12 +18,13 @@
 #include "ui/ozone/common/stub_overlay_manager.h"
 #include "ui/ozone/platform/x11/x11_cursor_factory_ozone.h"
 #include "ui/ozone/platform/x11/x11_surface_factory.h"
+#include "ui/ozone/platform/x11/x11_window_manager_ozone.h"
+#include "ui/ozone/platform/x11/x11_window_ozone.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/platform_window/platform_window.h"
-#include "ui/platform_window/x11/x11_window_manager_ozone.h"
-#include "ui/platform_window/x11/x11_window_ozone.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 namespace ui {
 
@@ -64,9 +64,9 @@ class OzonePlatformX11 : public OzonePlatform {
 
   std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
-      const gfx::Rect& bounds) override {
+      PlatformWindowInitProperties properties) override {
     std::unique_ptr<X11WindowOzone> window = std::make_unique<X11WindowOzone>(
-        window_manager_.get(), delegate, bounds);
+        window_manager_.get(), delegate, properties.bounds);
     window->SetTitle(base::ASCIIToUTF16("Ozone X11"));
     return std::move(window);
   }
@@ -108,14 +108,17 @@ class OzonePlatformX11 : public OzonePlatform {
  private:
   // Performs initialization steps need by both UI and GPU.
   void InitializeCommon(const InitParams& params) {
-    // TODO(kylechar): Add DCHECK we only enter InitializeCommon() twice for
-    // single process mode.
     if (common_initialized_)
       return;
 
-    // Always initialze in multi-thread mode, since this is used only during
+    // Always initialize in multi-thread mode, since this is used only during
     // development.
     XInitThreads();
+
+    // If XOpenDisplay() failed there is nothing we can do. Crash here instead
+    // of crashing later. If you are crashing here, make sure there is an X
+    // server running and $DISPLAY is set.
+    CHECK(gfx::GetXDisplay()) << "Missing X server or $DISPLAY";
 
     ui::SetDefaultX11ErrorHandlers();
 

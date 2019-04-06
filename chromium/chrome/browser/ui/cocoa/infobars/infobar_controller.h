@@ -10,9 +10,8 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/weak_ptr.h"
 
-@protocol InfoBarContainerControllerBase;
 class InfoBarCocoa;
-@class InfoBarGradientView;
+@class InfoBarBackgroundView;
 
 namespace infobars {
 class InfoBarDelegate;
@@ -24,11 +23,10 @@ class InfoBarDelegate;
 // override addAdditionalControls to customize the UI.
 @interface InfoBarController : NSViewController<NSTextViewDelegate> {
  @private
-  id<InfoBarContainerControllerBase> containerController_;  // weak, owns us
   base::WeakPtr<InfoBarCocoa> infobar_;
 
  @protected
-  IBOutlet InfoBarGradientView* infoBarView_;
+  IBOutlet InfoBarBackgroundView* infoBarView_;
   IBOutlet NSImageView* image_;
   IBOutlet NSTextField* labelPlaceholder_;
   IBOutlet NSButton* okButton_;
@@ -42,8 +40,6 @@ class InfoBarDelegate;
   base::scoped_nsobject<NSTextView> label_;
 }
 
-@property(nonatomic, assign)
-    id<InfoBarContainerControllerBase> containerController;
 @property(nonatomic, readonly) infobars::InfoBarDelegate* delegate;
 @property(nonatomic, readonly) InfoBarCocoa* infobar;
 
@@ -87,9 +83,6 @@ class InfoBarDelegate;
 // Removes the OK and Cancel buttons and resizes the textfield to use the
 // space.
 - (void)removeButtons;
-
-// Updates the view's arrow position.
-- (void)layoutArrow;
 
 @end
 

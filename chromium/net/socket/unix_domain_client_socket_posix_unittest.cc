@@ -20,6 +20,8 @@
 #include "net/socket/socket_posix.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -106,9 +108,9 @@ int WriteSynchronously(StreamSocket* socket,
   for (int retry_count = 10;
        retry_count > 0 && write_buf->BytesRemaining() > 0;
        --retry_count) {
-    int rv = socket->Write(write_buf.get(),
-                           write_buf->BytesRemaining(),
-                           write_callback.callback());
+    int rv =
+        socket->Write(write_buf.get(), write_buf->BytesRemaining(),
+                      write_callback.callback(), TRAFFIC_ANNOTATION_FOR_TESTS);
     EXPECT_GE(write_buf->BytesRemaining(), rv);
     if (rv == ERR_IO_PENDING)
       rv = write_callback.WaitForResult();
@@ -121,7 +123,7 @@ int WriteSynchronously(StreamSocket* socket,
   return write_buf->BytesConsumed();
 }
 
-class UnixDomainClientSocketTest : public testing::Test {
+class UnixDomainClientSocketTest : public TestWithScopedTaskEnvironment {
  protected:
   UnixDomainClientSocketTest() {
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());

@@ -5,7 +5,7 @@
 module autofill.mojom;
 
 import "components/autofill/content/common/autofill_types.mojom";
-import "mojo/common/string16.mojom";
+import "mojo/public/mojom/base/string16.mojom";
 
 // There is one instance of this interface per render frame in the render
 // process. All methods are called by browser on renderer.
@@ -21,30 +21,32 @@ interface AutofillAgent {
   // Sends the heuristic and server field type predictions to the renderer.
   FieldTypePredictionsAvailable(array<FormDataPredictions> forms);
 
-  // Clears the currently displayed Autofill results.
-  ClearForm();
+  // Clears the currently displayed Autofill results of the current section.
+  // The current section is the section to which the element corresponding to
+  // the last request belongs.
+  ClearSection();
 
   // Tells the renderer that the Autofill previewed form should be cleared.
   ClearPreviewedForm();
 
   // Sets the currently selected node's value.
-  FillFieldWithValue(mojo.common.mojom.String16 value);
+  FillFieldWithValue(mojo_base.mojom.String16 value);
 
   // Sets the suggested value for the currently previewed node.
-  PreviewFieldWithValue(mojo.common.mojom.String16 value);
+  PreviewFieldWithValue(mojo_base.mojom.String16 value);
 
   // Sets the currently selected node's value to be the given data list value.
-  AcceptDataListSuggestion(mojo.common.mojom.String16 value);
+  AcceptDataListSuggestion(mojo_base.mojom.String16 value);
 
   // Tells the renderer to fill the username and password with with given
   // values.
-  FillPasswordSuggestion(mojo.common.mojom.String16 username,
-                         mojo.common.mojom.String16 password);
+  FillPasswordSuggestion(mojo_base.mojom.String16 username,
+                         mojo_base.mojom.String16 password);
 
   // Tells the renderer to preview the username and password with the given
   // values.
-  PreviewPasswordSuggestion(mojo.common.mojom.String16 username,
-                            mojo.common.mojom.String16 password);
+  PreviewPasswordSuggestion(mojo_base.mojom.String16 username,
+                            mojo_base.mojom.String16 password);
 
   // Sent when a password form is initially detected and suggestions should be
   // shown. Used by the fill-on-select experiment.
@@ -82,6 +84,10 @@ interface PasswordAutofillAgent {
   // ShowPasswordSuggestions messages to the browser.
   FillPasswordForm(int32 key, PasswordFormFillData form_data);
 
+  // Fills the given |credential| into the last focused text input.
+  FillIntoFocusedField(bool is_password, mojo_base.mojom.String16 credential)
+      => (FillingStatus status);
+
   // Notification to start (|active| == true) or stop (|active| == false)
   // logging the decisions made about saving the password.
   SetLoggingState(bool active);
@@ -95,10 +101,6 @@ interface PasswordAutofillAgent {
   // Renderer is expected to return the found password form. If no password form
   // is focused, the response will contain an empty |autofill::PasswordForm|.
   FindFocusedPasswordForm() => (PasswordForm form);
-
-  // Notifies PasswordAutofillAgent that the matching blacklisted form was
-  // found.
-  BlacklistedFormFound();
 };
 
 // There is one instance of this interface per render frame in the render
@@ -106,16 +108,12 @@ interface PasswordAutofillAgent {
 interface PasswordGenerationAgent {
   // Tells the renderer to populate the correct password fields with this
   // generated password.
-  GeneratedPasswordAccepted(mojo.common.mojom.String16 generated_password);
+  GeneratedPasswordAccepted(mojo_base.mojom.String16 generated_password);
 
   // Tells the renderer to find a focused element, and if it is a password field
   // eligible for generation then to trigger generation by responding to the
   // browser with the message |ShowPasswordGenerationPopup|.
   UserTriggeredGeneratePassword();
-
-  // Tells the renderer to populate the correct password fields with this
-  // generated password.
-  UserSelectedManualGenerationOption();
 
   // Tells the renderer that this password form is not blacklisted.  A form can
   // be blacklisted if a user chooses "never save passwords for this site".

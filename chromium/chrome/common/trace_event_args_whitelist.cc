@@ -25,6 +25,7 @@ const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "thread_name", nullptr},
     {"__metadata", "process_name", nullptr},
     {"__metadata", "process_uptime_seconds", nullptr},
+    {"__metadata", "chrome_library_address", nullptr},
     {"__metadata", "stackFrames", nullptr},
     {"__metadata", "typeNames", nullptr},
     {"ipc", "SyncChannel::Send", nullptr},
@@ -35,20 +36,21 @@ const WhitelistEntry kEventArgsWhitelist[] = {
     {TRACE_DISABLED_BY_DEFAULT("memory-infra"), "*", kMemoryDumpAllowedArgs},
     {nullptr, nullptr, nullptr}};
 
-const char* kMetadataWhitelist[] = {
-  "clock-domain",
-  "config",
-  "cpu-*",
-  "field-trials",
-  "gpu-*",
-  "highres-ticks",
-  "network-type",
-  "num-cpus",
-  "os-*",
-  "physical-memory",
-  "product-version",
-  "user-agent"
-};
+const char* kMetadataWhitelist[] = {"chrome-library-name",
+                                    "clock-domain",
+                                    "config",
+                                    "cpu-*",
+                                    "field-trials",
+                                    "gpu-*",
+                                    "highres-ticks",
+                                    "last_triggered_rule",
+                                    "network-type",
+                                    "num-cpus",
+                                    "os-*",
+                                    "physical-memory",
+                                    "product-version",
+                                    "scenario_name",
+                                    "user-agent"};
 
 }  // namespace
 

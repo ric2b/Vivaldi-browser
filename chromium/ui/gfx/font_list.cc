@@ -8,8 +8,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkTypeface.h"
-#include "third_party/skia/include/ports/SkFontMgr.h"
 #include "ui/gfx/font_list_impl.h"
 
 namespace {
@@ -25,7 +25,7 @@ bool g_default_impl_initialized = false;
 
 bool IsFontFamilyAvailable(const std::string& family, SkFontMgr* fontManager) {
 #if defined(OS_LINUX)
-  return fontManager->legacyMakeTypeface(family.c_str(), SkFontStyle());
+  return !!fontManager->legacyMakeTypeface(family.c_str(), SkFontStyle());
 #else
   sk_sp<SkFontStyleSet> set(fontManager->matchFamily(family.c_str()));
   return set && set->count();

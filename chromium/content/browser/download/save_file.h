@@ -5,15 +5,12 @@
 #ifndef CONTENT_BROWSER_DOWNLOAD_SAVE_FILE_H_
 #define CONTENT_BROWSER_DOWNLOAD_SAVE_FILE_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <memory>
 #include <string>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "content/browser/download/base_file.h"
+#include "components/download/public/common/base_file.h"
 #include "content/browser/download/save_types.h"
 
 namespace content {
@@ -26,13 +23,14 @@ namespace content {
 // represents one item in a save session.
 class SaveFile {
  public:
-  explicit SaveFile(const SaveFileCreateInfo* info, bool calculate_hash);
+  SaveFile(std::unique_ptr<SaveFileCreateInfo> info, bool calculate_hash);
   virtual ~SaveFile();
 
   // BaseFile delegated functions.
-  DownloadInterruptReason Initialize();
-  DownloadInterruptReason AppendDataToFile(const char* data, size_t data_len);
-  DownloadInterruptReason Rename(const base::FilePath& full_path);
+  download::DownloadInterruptReason Initialize();
+  download::DownloadInterruptReason AppendDataToFile(const char* data,
+                                                     size_t data_len);
+  download::DownloadInterruptReason Rename(const base::FilePath& full_path);
   void Detach();
   void Cancel();
   void Finish();
@@ -45,14 +43,14 @@ class SaveFile {
   // Accessors.
   SaveItemId save_item_id() const { return info_->save_item_id; }
   int render_process_id() const { return info_->render_process_id; }
-  int request_id() const { return info_->request_id; }
   SaveFileCreateInfo::SaveFileSource save_source() const {
     return info_->save_source;
   }
+  const SaveFileCreateInfo& create_info() const { return *info_; }
 
  private:
-  BaseFile file_;
-  std::unique_ptr<const SaveFileCreateInfo> info_;
+  download::BaseFile file_;
+  std::unique_ptr<SaveFileCreateInfo> info_;
 
   DISALLOW_COPY_AND_ASSIGN(SaveFile);
 };

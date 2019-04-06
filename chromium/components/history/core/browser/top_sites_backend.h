@@ -105,6 +105,12 @@ class TopSitesBackend : public base::RefCountedThreadSafe<TopSitesBackend> {
   // Resets the database.
   void ResetDatabaseOnDBThread(const base::FilePath& file_path);
 
+  // Vivaldi: do the vacuum on the DB thread.
+  void VacuumOnDBThread();
+ 
+  // Vivaldi: remove thumbnails on the DB thread.
+  void RemoveThumbnailForUrlOnDBThread(const GURL& url);
+
   base::FilePath db_path_;
 
   std::unique_ptr<TopSitesDatabase> db_;

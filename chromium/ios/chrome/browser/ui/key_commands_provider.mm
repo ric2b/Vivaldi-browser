@@ -7,9 +7,9 @@
 #include "base/logging.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#include "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/util/named_guide.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -67,14 +67,14 @@ keyCommandsForConsumer:(id<KeyCommandsPlumbing>)consumer
   void (^newTab)() = ^{
     OpenNewTabCommand* newTabCommand = [OpenNewTabCommand command];
     newTabCommand.shouldFocusOmnibox = YES;
-    [weakDispatcher openNewTab:newTabCommand];
+    [weakDispatcher openURL:newTabCommand];
   };
 
   void (^newIncognitoTab)() = ^{
     OpenNewTabCommand* newIncognitoTabCommand =
         [OpenNewTabCommand incognitoTabCommand];
     newIncognitoTabCommand.shouldFocusOmnibox = YES;
-    [weakDispatcher openNewTab:newIncognitoTabCommand];
+    [weakDispatcher openURL:newIncognitoTabCommand];
   };
 
   const int browseLeftDescriptionID = useRTLLayout
@@ -114,6 +114,33 @@ keyCommandsForConsumer:(id<KeyCommandsPlumbing>)consumer
   // List the commands that only appear when there is at least a tab. When they
   // appear, they are in the HUD since they have titles.
   if (hasTabs) {
+    if ([consumer isFindInPageAvailable]) {
+      [keyCommands addObjectsFromArray:@[
+
+        [UIKeyCommand
+            cr_keyCommandWithInput:@"f"
+                     modifierFlags:UIKeyModifierCommand
+                             title:l10n_util::GetNSStringWithFixup(
+                                       IDS_IOS_TOOLS_MENU_FIND_IN_PAGE)
+                            action:^{
+                              [weakDispatcher showFindInPage];
+                            }],
+        [UIKeyCommand cr_keyCommandWithInput:@"g"
+                               modifierFlags:UIKeyModifierCommand
+                                       title:nil
+                                      action:^{
+                                        [weakDispatcher findNextStringInPage];
+                                      }],
+        [UIKeyCommand
+            cr_keyCommandWithInput:@"g"
+                     modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
+                             title:nil
+                            action:^{
+                              [weakDispatcher findPreviousStringInPage];
+                            }]
+      ]];
+    }
+
     [keyCommands addObjectsFromArray:@[
       [UIKeyCommand cr_keyCommandWithInput:@"l"
                              modifierFlags:UIKeyModifierCommand
@@ -136,26 +163,6 @@ keyCommandsForConsumer:(id<KeyCommandsPlumbing>)consumer
                                      IDS_IOS_KEYBOARD_BOOKMARK_THIS_PAGE)
                           action:^{
                             [weakDispatcher bookmarkPage];
-                          }],
-      [UIKeyCommand cr_keyCommandWithInput:@"f"
-                             modifierFlags:UIKeyModifierCommand
-                                     title:l10n_util::GetNSStringWithFixup(
-                                               IDS_IOS_TOOLS_MENU_FIND_IN_PAGE)
-                                    action:^{
-                                      [weakDispatcher showFindInPage];
-                                    }],
-      [UIKeyCommand cr_keyCommandWithInput:@"g"
-                             modifierFlags:UIKeyModifierCommand
-                                     title:nil
-                                    action:^{
-                                      [weakDispatcher findNextStringInPage];
-                                    }],
-      [UIKeyCommand
-          cr_keyCommandWithInput:@"g"
-                   modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
-                           title:nil
-                          action:^{
-                            [weakDispatcher findPreviousStringInPage];
                           }],
       [UIKeyCommand cr_keyCommandWithInput:@"r"
                              modifierFlags:UIKeyModifierCommand
@@ -198,10 +205,11 @@ keyCommandsForConsumer:(id<KeyCommandsPlumbing>)consumer
                    modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
                            title:voiceSearchTitle
                           action:^{
-                            StartVoiceSearchCommand* command =
-                                [[StartVoiceSearchCommand alloc]
-                                    initWithOriginView:nil];
-                            [weakDispatcher startVoiceSearch:command];
+                            UIView* baseView = baseViewController.view;
+                            [[NamedGuide guideWithName:kVoiceSearchButtonGuide
+                                                  view:baseView]
+                                resetConstraints];
+                            [weakDispatcher startVoiceSearch];
                           }],
     ]];
   }

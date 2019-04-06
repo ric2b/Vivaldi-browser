@@ -86,6 +86,21 @@
           Go to Vivaldi notification settings
         </message>
       </if>
+      <message name="IDS_ACCESSIBLE_BETA_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window for the beta channel version of the browser">
+        <ph name="PAGE_TITLE">
+          $1<ex>Google</ex>
+        </ph> - Vivaldi Beta
+      </message>
+      <message name="IDS_ACCESSIBLE_DEV_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window for the developer (dev) channel version of the browser">
+        <ph name="PAGE_TITLE">
+          $1<ex>Google</ex>
+        </ph> - Vivaldi Dev
+      </message>
+      <message name="IDS_ACCESSIBLE_CANARY_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window for the canary (nightly build) channel version of the browser">
+        <ph name="PAGE_TITLE">
+          $1<ex>Google</ex>
+        </ph> - Vivaldi Canary
+      </message>
     </messages>
   </release>
 </grit>

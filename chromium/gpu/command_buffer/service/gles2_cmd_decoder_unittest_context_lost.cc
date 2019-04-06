@@ -2,35 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "gpu/command_buffer/service/gles2_cmd_decoder.h"
-
-#include "base/command_line.h"
-#include "base/strings/string_number_conversions.h"
-#include "gpu/command_buffer/common/gles2_cmd_format.h"
-#include "gpu/command_buffer/common/gles2_cmd_utils.h"
-#include "gpu/command_buffer/service/context_group.h"
-#include "gpu/command_buffer/service/gl_surface_mock.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_unittest.h"
-#include "gpu/command_buffer/service/gpu_switches.h"
-#include "gpu/command_buffer/service/mocks.h"
+
+#include "gpu/command_buffer/common/gles2_cmd_format.h"
+#include "gpu/command_buffer/service/gl_surface_mock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_mock.h"
 
-using ::gl::MockGLInterface;
 using ::testing::_;
-using ::testing::DoAll;
 using ::testing::InSequence;
-using ::testing::Invoke;
-using ::testing::MatcherCast;
-using ::testing::Mock;
 using ::testing::Pointee;
 using ::testing::Return;
-using ::testing::SaveArg;
-using ::testing::SetArrayArgument;
 using ::testing::SetArgPointee;
-using ::testing::SetArgPointee;
-using ::testing::StrEq;
-using ::testing::StrictMock;
 
 namespace gpu {
 namespace gles2 {
@@ -71,7 +54,7 @@ class GLES2DecoderDrawOOMTest : public GLES2DecoderManualInitTest {
 
 // Test that we lose context.
 TEST_P(GLES2DecoderDrawOOMTest, ContextLostReasonOOM) {
-  Init(false); // without robustness
+  Init(false);  // without robustness
   const error::ContextLostReason expected_reason_for_other_contexts =
       error::kOutOfMemory;
   Draw(GL_NO_ERROR, expected_reason_for_other_contexts);
@@ -81,7 +64,7 @@ TEST_P(GLES2DecoderDrawOOMTest, ContextLostReasonOOM) {
 }
 
 TEST_P(GLES2DecoderDrawOOMTest, ContextLostReasonWhenStatusIsNoError) {
-  Init(true); // with robustness
+  Init(true);  // with robustness
   // If the reset status is NO_ERROR, we should be signaling kOutOfMemory.
   const error::ContextLostReason expected_reason_for_other_contexts =
       error::kOutOfMemory;
@@ -119,7 +102,7 @@ class GLES2DecoderLostContextTest : public GLES2DecoderManualInitTest {
  protected:
   void Init(bool has_robustness) {
     InitState init;
-    init.gl_version = "opengl es 2.0";
+    init.gl_version = "OpenGL ES 2.0";
     if (has_robustness)
       init.extensions = "GL_KHR_robustness";
     InitDecoder(init);
@@ -129,7 +112,7 @@ class GLES2DecoderLostContextTest : public GLES2DecoderManualInitTest {
     gpu::GpuDriverBugWorkarounds workarounds;
     workarounds.use_virtualized_gl_contexts = true;
     InitState init;
-    init.gl_version = "opengl es 2.0";
+    init.gl_version = "OpenGL ES 2.0";
     init.extensions = "GL_KHR_robustness";
     InitDecoderWithWorkarounds(init, workarounds);
   }
@@ -159,7 +142,7 @@ class GLES2DecoderLostContextTest : public GLES2DecoderManualInitTest {
 };
 
 TEST_P(GLES2DecoderLostContextTest, LostFromMakeCurrent) {
-  Init(false); // without robustness
+  Init(false);  // without robustness
   EXPECT_CALL(*context_, MakeCurrent(surface_.get())).WillOnce(Return(false));
   // Expect the group to be lost.
   EXPECT_CALL(*mock_decoder_, MarkContextLost(error::kUnknown)).Times(1);
@@ -173,7 +156,7 @@ TEST_P(GLES2DecoderLostContextTest, LostFromMakeCurrent) {
 }
 
 TEST_P(GLES2DecoderLostContextTest, LostFromMakeCurrentWithRobustness) {
-  Init(true); // with robustness
+  Init(true);  // with robustness
   // If we can't make the context current, we cannot query the robustness
   // extension.
   EXPECT_CALL(*gl_, GetGraphicsResetStatusARB()).Times(0);
@@ -285,7 +268,7 @@ TEST_P(GLES2DecoderLostContextTest, QueryDestroyAfterLostFromMakeCurrent) {
 }
 
 TEST_P(GLES2DecoderLostContextTest, LostFromResetAfterMakeCurrent) {
-  Init(true); // with robustness
+  Init(true);  // with robustness
   InSequence seq;
   EXPECT_CALL(*context_, MakeCurrent(surface_.get())).WillOnce(Return(true));
   EXPECT_CALL(*gl_, GetGraphicsResetStatusARB())

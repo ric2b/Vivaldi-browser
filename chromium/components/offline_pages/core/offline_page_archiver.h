@@ -5,14 +5,35 @@
 #ifndef COMPONENTS_OFFLINE_PAGES_CORE_OFFLINE_PAGE_ARCHIVER_H_
 #define COMPONENTS_OFFLINE_PAGES_CORE_OFFLINE_PAGE_ARCHIVER_H_
 
-#include <stdint.h>
+#include <cstdint>
+#include <string>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/strings/string16.h"
+#include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_types.h"
 #include "url/gurl.h"
 
+namespace base {
+class SequencedTaskRunner;
+}  // namespace base
+
+namespace content {
+class WebContents;
+}  // namespace content
+
 namespace offline_pages {
+
+class SystemDownloadManager;
+
+// The results of attempting to move the offline page to a public directory, and
+// registering it with the system download manager.
+struct PublishArchiveResult {
+  SavePageResult move_result;
+  base::FilePath new_file_path;
+  int64_t download_id;
+};
 
 // Interface of a class responsible for creation of the archive for offline use.
 //
@@ -69,14 +90,17 @@ class OfflinePageArchiver {
     bool use_page_problem_detectors;
   };
 
-  typedef base::Callback<void(OfflinePageArchiver* /* archiver */,
-                              ArchiverResult /* result */,
+  using CreateArchiveCallback =
+      base::OnceCallback<void(ArchiverResult /* result */,
                               const GURL& /* url */,
                               const base::FilePath& /* file_path */,
                               const base::string16& /* title */,
                               int64_t /* file_size */,
-                              const std::string& /* digest */)>
-      CreateArchiveCallback;
+                              const std::string& /* digest */)>;
+
+  using PublishArchiveDoneCallback =
+      base::OnceCallback<void(const OfflinePageItem& /* offline_page */,
+                              PublishArchiveResult /* archive_result */)>;
 
   virtual ~OfflinePageArchiver() {}
 
@@ -85,7 +109,20 @@ class OfflinePageArchiver {
   // with the result and additional information.
   virtual void CreateArchive(const base::FilePath& archives_dir,
                              const CreateArchiveParams& create_archive_params,
-                             const CreateArchiveCallback& callback) = 0;
+                             content::WebContents* web_contents,
+                             CreateArchiveCallback callback) = 0;
+
+  // Publishes the page on a background thread, then returns to the
+  // OfflinePageModelTaskified's done callback.
+  //
+  // TODO(https://crbug.com/849424): move the publish logic out of the archiver
+  // as it doesn't depend on the embedder code as creation logic does.
+  virtual void PublishArchive(
+      const OfflinePageItem& offline_page,
+      const scoped_refptr<base::SequencedTaskRunner>& background_task_runner,
+      const base::FilePath& publish_directory,
+      SystemDownloadManager* download_manager,
+      PublishArchiveDoneCallback publish_done_callback);
 };
 
 }  // namespace offline_pages

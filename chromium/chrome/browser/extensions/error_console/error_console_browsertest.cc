@@ -9,7 +9,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
@@ -388,27 +387,30 @@ IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest,
   const ErrorList& errors =
       error_console()->GetErrorsForExtension(extension->id());
 
+  // The extension logs a message with console.log(), then another with
+  // console.warn(), and then triggers a TypeError.
+  // There should be exactly two errors (the warning and the TypeError). The
+  // error console ignores logs - this would tend to be too noisy, and doesn't
+  // jive with the big `ERRORS` button in the UI.
+  // See https://crbug.com/837401.
+  ASSERT_EQ(2u, errors.size());
+
   // The first error should be a console log.
   CheckRuntimeError(errors[0].get(), extension->id(),
                     script_url,  // The source should be the content script url.
                     false,       // Not from incognito.
-                    "Hello, World!",  // The error message is the log.
-                    logging::LOG_INFO,
+                    "warned message",  // The error message is the log.
+                    logging::LOG_WARNING,
                     GetTestURL(),  // Content scripts run in the web page.
                     2u);
 
   const StackTrace& stack_trace1 = GetStackTraceFromError(errors[0].get());
-  CheckStackFrame(stack_trace1[0],
-                  script_url,
-                  "logHelloWorld",  // function name
-                  6u,  // line number
+  CheckStackFrame(stack_trace1[0], script_url,
+                  "warnMessage",  // function name
+                  10u,            // line number
                   11u /* column number */);
 
-  CheckStackFrame(stack_trace1[1],
-                  script_url,
-                  kAnonymousFunction,
-                  9u,
-                  1u);
+  CheckStackFrame(stack_trace1[1], script_url, kAnonymousFunction, 14u, 1u);
 
   // The second error should be a runtime error.
   CheckRuntimeError(errors[1].get(), extension->id(), script_url,
@@ -419,11 +421,7 @@ IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest,
                     GetTestURL(), 1u);
 
   const StackTrace& stack_trace2 = GetStackTraceFromError(errors[1].get());
-  CheckStackFrame(stack_trace2[0],
-                  script_url,
-                  kAnonymousFunction,
-                  12u,
-                  1u);
+  CheckStackFrame(stack_trace2[0], script_url, kAnonymousFunction, 17u, 1u);
 }
 
 // Catch an error from a BrowserAction; this is more complex than a content
@@ -494,8 +492,7 @@ IN_PROC_BROWSER_TEST_F(ErrorConsoleBrowserTest, BadAPIArgumentsRuntimeError) {
     message =
         "Uncaught TypeError: Error in invocation of "
         "tabs.get(integer tabId, function callback): "
-        "Error at parameter 'tabId': Invalid type: "
-        "expected integer, found string.";
+        "No matching signature.";
   } else {
     // API calls are checked in schemaUtils.js with JS bindings.
     source = "extensions::" + std::string(kSchemaUtils);

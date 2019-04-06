@@ -6,7 +6,6 @@ package org.chromium.content.browser.test.util;
 
 import android.app.Activity;
 import android.os.SystemClock;
-import android.test.TouchUtils;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -35,7 +34,6 @@ public class TouchCommon {
      * @param x X coordinate, in screen coordinates.
      * @param y Y coordinate, in screen coordinates.
      * @param downTime When the drag was started, in millis since the epoch.
-     * @see TouchUtils
      */
     public static void dragStart(Activity activity, float x, float y, long downTime) {
         View root = getRootViewForActivity(activity);
@@ -58,7 +56,6 @@ public class TouchCommon {
      * @param toY Y coordinate of the drag destination, in screen coordinates.
      * @param stepCount How many move steps to include in the drag.
      * @param downTime When the drag was started, in millis since the epoch.
-     * @see TouchUtils
      */
     public static void dragTo(Activity activity, float fromX, float toX, float fromY,
             float toY, int stepCount, long downTime) {
@@ -88,7 +85,6 @@ public class TouchCommon {
      * @param x X coordinate, in screen coordinates.
      * @param y Y coordinate, in screen coordinates.
      * @param downTime When the drag was started, in millis since the epoch.
-     * @see TouchUtils
      */
     public static void dragEnd(Activity activity, float x, float y, long downTime) {
         View root = getRootViewForActivity(activity);
@@ -109,10 +105,26 @@ public class TouchCommon {
      * @param y Y coordinate, relative to v.
      */
     public static boolean singleClickView(View v, int x, int y) {
-        int windowXY[] = viewToWindowCoordinates(v, x, y);
+        return singleClickViewThroughTarget(v, v.getRootView(), x, y);
+    }
+
+    /**
+     * Sends a click event to the specified view, not going through the root view.
+     *
+     * This is mostly useful for tests in VR, where inputs to the root view are (in a sense)
+     * consumed by the platform, but the java test still wants to interact with, say, WebContents.
+     *
+     * @param view The view to be clicked.
+     * @param target The view to inject the input into.
+     * @param x X coordinate, relative to view.
+     * @param y Y coordinate, relative to view.
+     */
+    /* package */ static boolean singleClickViewThroughTarget(
+            View view, View target, int x, int y) {
+        int windowXY[] = viewToWindowCoordinates(view, x, y);
         int windowX = windowXY[0];
         int windowY = windowXY[1];
-        return singleClickInternal(v.getRootView(), windowX, windowY);
+        return singleClickInternal(target, windowX, windowY);
     }
 
     /**

@@ -63,7 +63,6 @@ class TestResourceHandler : public ResourceHandler {
   void OnResponseCompleted(
       const net::URLRequestStatus& status,
       std::unique_ptr<ResourceController> controller) override;
-  void OnDataDownloaded(int bytes_downloaded) override;
 
   void Resume();
   void CancelWithError(net::Error error_code);
@@ -122,12 +121,6 @@ class TestResourceHandler : public ResourceHandler {
     defer_on_response_completed_ = defer_on_response_completed;
   }
 
-  // Set if OnDataDownloaded calls are expected instead of
-  // OnWillRead/OnReadCompleted.
-  void set_expect_on_data_downloaded(bool expect_on_data_downloaded) {
-    expect_on_data_downloaded_ = expect_on_data_downloaded;
-  }
-
   // Sets whether to expect a final 0-byte read on success. Defaults to true.
   void set_expect_eof_read(bool expect_eof_read) {
     expect_eof_read_ = expect_eof_read;
@@ -154,8 +147,6 @@ class TestResourceHandler : public ResourceHandler {
     return resource_response_.get();
   };
 
-  int total_bytes_downloaded() const { return total_bytes_downloaded_; }
-
   const std::string& body() const { return body_; }
   net::URLRequestStatus final_status() const { return final_status_; }
 
@@ -168,6 +159,7 @@ class TestResourceHandler : public ResourceHandler {
   // method, behavior is undefined.
   void WaitUntilDeferred();
 
+  void WaitUntilResponseStarted();
   void WaitUntilResponseComplete();
 
   // Returns a weak pointer to |this|.  Allows testing object lifetime.
@@ -196,8 +188,6 @@ class TestResourceHandler : public ResourceHandler {
   bool defer_on_read_eof_ = false;
   bool defer_on_response_completed_ = false;
 
-  bool expect_on_data_downloaded_ = false;
-
   bool expect_eof_read_ = true;
 
   int on_will_start_called_ = 0;
@@ -210,7 +200,6 @@ class TestResourceHandler : public ResourceHandler {
 
   GURL start_url_;
   scoped_refptr<network::ResourceResponse> resource_response_;
-  int total_bytes_downloaded_ = 0;
   std::string body_;
   net::URLRequestStatus final_status_ =
       net::URLRequestStatus::FromError(net::ERR_UNEXPECTED);
@@ -225,6 +214,8 @@ class TestResourceHandler : public ResourceHandler {
   int call_depth_ = 0;
 
   std::unique_ptr<base::RunLoop> deferred_run_loop_;
+
+  base::RunLoop response_started_run_loop_;
 
   base::RunLoop response_complete_run_loop_;
 

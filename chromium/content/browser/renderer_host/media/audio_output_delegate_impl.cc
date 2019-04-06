@@ -7,19 +7,30 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
-#include "base/strings/string_piece.h"
+#include "base/callback.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/media/audio_stream_monitor.h"
 #include "content/browser/media/capture/audio_mirroring_manager.h"
 #include "content/browser/media/media_internals.h"
-#include "content/browser/renderer_host/media/audio_sync_reader.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/media_observer.h"
 #include "media/audio/audio_output_controller.h"
+#include "media/audio/audio_sync_reader.h"
 
 namespace content {
+
+namespace {
+
+// Safe to call from any thread.
+void AudioOutputLogMessage(int stream_id, const std::string& message) {
+  std::string out_message =
+      base::StringPrintf("[stream_id=%d] %s", stream_id, message.c_str());
+  content::MediaStreamManager::SendMessageToNativeLog(out_message);
+  DVLOG(1) << out_message;
+}
+
+}  // namespace
 
 const float kSilenceThresholdDBFS = -72.24719896f;
 // Desired polling frequency.  Note: If this is set too low, short-duration
@@ -81,18 +92,13 @@ void AudioOutputDelegateImpl::ControllerEventHandler::OnControllerError() {
 
 void AudioOutputDelegateImpl::ControllerEventHandler::OnLog(
     base::StringPiece message) {
-  const std::string out_message =
-      base::StringPrintf("[stream_id=%d] %.*s", stream_id_,
-                         static_cast<int>(message.size()), message.data());
-  content::MediaStreamManager::SendMessageToNativeLog(out_message);
-  DVLOG(1) << out_message;
+  AudioOutputLogMessage(stream_id_, message.as_string());
 }
 
 std::unique_ptr<media::AudioOutputDelegate> AudioOutputDelegateImpl::Create(
     EventHandler* handler,
     media::AudioManager* audio_manager,
-    media::AudioLog* audio_log,
-    AudioMirroringManager* mirroring_manager,
+    media::mojom::AudioLogPtr audio_log,
     MediaObserver* media_observer,
     int stream_id,
     int render_frame_id,
@@ -101,23 +107,24 @@ std::unique_ptr<media::AudioOutputDelegate> AudioOutputDelegateImpl::Create(
     media::mojom::AudioOutputStreamObserverPtr observer,
     const std::string& output_device_id) {
   auto socket = std::make_unique<base::CancelableSyncSocket>();
-  auto reader = AudioSyncReader::Create(params, socket.get());
+  auto reader = media::AudioSyncReader::Create(
+      base::BindRepeating(&AudioOutputLogMessage, stream_id), params,
+      socket.get());
   if (!reader)
     return nullptr;
 
   return std::make_unique<AudioOutputDelegateImpl>(
-      std::move(reader), std::move(socket), handler, audio_manager, audio_log,
-      mirroring_manager, media_observer, stream_id, render_frame_id,
+      std::move(reader), std::move(socket), handler, audio_manager,
+      std::move(audio_log), media_observer, stream_id, render_frame_id,
       render_process_id, params, std::move(observer), output_device_id);
 }
 
 AudioOutputDelegateImpl::AudioOutputDelegateImpl(
-    std::unique_ptr<AudioSyncReader> reader,
+    std::unique_ptr<media::AudioSyncReader> reader,
     std::unique_ptr<base::CancelableSyncSocket> foreign_socket,
     EventHandler* handler,
     media::AudioManager* audio_manager,
-    media::AudioLog* audio_log,
-    AudioMirroringManager* mirroring_manager,
+    media::mojom::AudioLogPtr audio_log,
     MediaObserver* media_observer,
     int stream_id,
     int render_frame_id,
@@ -126,20 +133,16 @@ AudioOutputDelegateImpl::AudioOutputDelegateImpl(
     media::mojom::AudioOutputStreamObserverPtr observer,
     const std::string& output_device_id)
     : subscriber_(handler),
-      audio_log_(audio_log),
+      audio_log_(std::move(audio_log)),
       reader_(std::move(reader)),
       foreign_socket_(std::move(foreign_socket)),
-      mirroring_manager_(mirroring_manager),
       stream_id_(stream_id),
-      render_frame_id_(render_frame_id),
-      render_process_id_(render_process_id),
       observer_(std::move(observer)),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(subscriber_);
   DCHECK(audio_manager);
   DCHECK(audio_log_);
-  DCHECK(mirroring_manager_);
   DCHECK(reader_);
   DCHECK(observer_);
   // Since the event handler never directly calls functions on |this| but rather
@@ -149,44 +152,31 @@ AudioOutputDelegateImpl::AudioOutputDelegateImpl(
       weak_factory_.GetWeakPtr(), stream_id_);
   controller_ = media::AudioOutputController::Create(
       audio_manager, controller_event_handler_.get(), params, output_device_id,
+      AudioMirroringManager::ToGroupId(render_process_id, render_frame_id),
       reader_.get());
   DCHECK(controller_);
   if (media_observer)
     media_observer->OnCreatingAudioStream(render_process_id, render_frame_id);
-  mirroring_manager_->AddDiverter(render_process_id, render_frame_id,
-                                  controller_.get());
 }
 
 AudioOutputDelegateImpl::~AudioOutputDelegateImpl() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   UpdatePlayingState(false);
-  audio_log_->OnClosed(stream_id_);
+  audio_log_->OnClosed();
 
   // Since the ownership of |controller_| is shared, we instead use its Close
   // method to stop callbacks from it. |controller_| will call the closure (on
   // the IO thread) when it's done closing, and it is only after that call that
   // we can delete |controller_event_handler_| and |reader_|. By giving the
   // closure ownership of these, we keep them alive until |controller_| is
-  // closed. |mirroring_manager_| is a lazy instance, so passing it is safe.
+  // closed.
   controller_->Close(base::BindOnce(
-      [](AudioMirroringManager* mirroring_manager,
-         std::unique_ptr<ControllerEventHandler> event_handler,
-         std::unique_ptr<AudioSyncReader> reader,
+      [](std::unique_ptr<ControllerEventHandler> event_handler,
+         std::unique_ptr<media::AudioSyncReader> reader,
          scoped_refptr<media::AudioOutputController> controller) {
-        // De-register the controller from the AudioMirroringManager now that
-        // the controller has closed the AudioOutputStream and shut itself down.
-        // This ensures that calling RemoveDiverter() here won't trigger the
-        // controller to re-start the default AudioOutputStream and cause a
-        // brief audio blip to come out the user's speakers.
-        // http://crbug.com/474432
-        //
-        // It's fine if this task is canceled during shutdown, since the
-        // mirroring manager doesn't require that all diverters are
-        // removed.
-        mirroring_manager->RemoveDiverter(controller.get());
+        // Objects pointed to by the arguments are deleted on out-of-scope here.
       },
-      mirroring_manager_, base::Passed(&controller_event_handler_),
-      base::Passed(&reader_), controller_));
+      std::move(controller_event_handler_), std::move(reader_), controller_));
 }
 
 int AudioOutputDelegateImpl::GetStreamId() {
@@ -196,13 +186,13 @@ int AudioOutputDelegateImpl::GetStreamId() {
 void AudioOutputDelegateImpl::OnPlayStream() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   controller_->Play();
-  audio_log_->OnStarted(stream_id_);
+  audio_log_->OnStarted();
 }
 
 void AudioOutputDelegateImpl::OnPauseStream() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   controller_->Pause();
-  audio_log_->OnStopped(stream_id_);
+  audio_log_->OnStopped();
 }
 
 void AudioOutputDelegateImpl::OnSetVolume(double volume) {
@@ -210,12 +200,12 @@ void AudioOutputDelegateImpl::OnSetVolume(double volume) {
   DCHECK_GE(volume, 0);
   DCHECK_LE(volume, 1);
   controller_->SetVolume(volume);
-  audio_log_->OnSetVolume(stream_id_, volume);
+  audio_log_->OnSetVolume(volume);
 }
 
 void AudioOutputDelegateImpl::SendCreatedNotification() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  subscriber_->OnStreamCreated(stream_id_, reader_->shared_memory(),
+  subscriber_->OnStreamCreated(stream_id_, reader_->TakeSharedMemoryRegion(),
                                std::move(foreign_socket_));
 }
 
@@ -253,7 +243,7 @@ void AudioOutputDelegateImpl::UpdatePlayingState(bool playing) {
 void AudioOutputDelegateImpl::OnError() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  audio_log_->OnError(stream_id_);
+  audio_log_->OnError();
   subscriber_->OnStreamError(stream_id_);
 }
 

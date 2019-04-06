@@ -19,6 +19,7 @@ using browser_sync::ProfileSyncService;
 
 namespace vivaldi {
 class VivaldiInvalidationService;
+class VivaldiSyncAuthManager;
 
 class VivaldiSyncManager : public ProfileSyncService,
                            public SyncStartupTracker::Observer {
@@ -37,10 +38,7 @@ class VivaldiSyncManager : public ProfileSyncService,
   void AddVivaldiObserver(VivaldiSyncManagerObserver* observer);
   void RemoveVivaldiObserver(VivaldiSyncManagerObserver* observer);
 
-  void SetToken(bool start_sync,
-                std::string account_id,
-                std::string token,
-                std::string expire);
+  void SetToken(bool start_sync, std::string account_id, std::string token);
   bool SetEncryptionPassword(const std::string& password);
 
   void ClearSyncData();
@@ -66,26 +64,14 @@ class VivaldiSyncManager : public ProfileSyncService,
   void OnConfigureDone(
       const syncer::DataTypeManager::ConfigureResult& result) override;
 
-  void VivaldiTokenSuccess();
-
-  syncer::SyncCredentials GetCredentials() override;
-
   // SyncStartupTracker::Observer
   void SyncStartupCompleted() override;
   void SyncStartupFailed() override;
 
- protected:
-  bool DisableNotifications() const override;
-
  private:
-  void RequestAccessToken() override;
   void ShutdownImpl(syncer::ShutdownReason reason) override;
 
-  void VivaldiDoTokenSuccess();
   void SetupConfiguration();
-
-  std::string vivaldi_access_token_;
-  base::Time expiration_time_;
 
   std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
   std::unique_ptr<SyncStartupTracker> sync_startup_tracker_;
@@ -93,6 +79,8 @@ class VivaldiSyncManager : public ProfileSyncService,
 
   // Avoid name collision with observers_ from the base class
   base::ObserverList<VivaldiSyncManagerObserver> vivaldi_observers_;
+
+  VivaldiSyncAuthManager* vivaldi_sync_auth_manager_;
 
   base::WeakPtrFactory<VivaldiSyncManager> weak_factory_;
 

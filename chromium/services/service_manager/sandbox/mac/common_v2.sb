@@ -21,7 +21,6 @@
 (define homedir-as-literal "USER_HOMEDIR_AS_LITERAL")
 (define log-file-path "LOG_FILE_PATH")
 (define os-version (string->number (param "OS_VERSION")))
-(define permitted-dir "PERMITTED_DIR")
 
 ; Backwards compatibility for 10.9
 (if (not (defined? 'path))
@@ -109,8 +108,8 @@
   (path "/dev/random")
   (path "/dev/urandom"))
 
-(if (= os-version 1013)
-  (begin (allow file-read-data (subpath "/private/var/db/timezone"))
+(if (>= os-version 1013)
+  (begin (allow file-read* (subpath "/private/var/db/timezone"))
          (allow file-read-data (subpath "/usr/share/zoneinfo.default"))))
 
 (if (< os-version 1013)
@@ -127,8 +126,7 @@
 
 ; Reads from /usr.
 (allow file-read-data
-  (subpath "/usr/share/icu")
-  (subpath "/usr/share/locale"))
+  (subpath "/usr/share/icu"))
 
 ; Access to the home directory.
 (allow file-read-data

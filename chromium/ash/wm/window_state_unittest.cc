@@ -12,19 +12,39 @@
 #include "ash/wm/window_state_util.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/wm/core/window_util.h"
 
 using ash::mojom::WindowStateType;
 
 namespace ash {
 namespace wm {
 namespace {
+
+class InitialStateTestState : public WindowState::State {
+ public:
+  explicit InitialStateTestState(WindowStateType initial_state_type)
+      : state_type_(initial_state_type) {}
+  ~InitialStateTestState() override = default;
+
+  // WindowState::State overrides:
+  void OnWMEvent(WindowState* window_state, const WMEvent* event) override {}
+  WindowStateType GetType() const override { return state_type_; }
+  void AttachState(WindowState* window_state,
+                   WindowState::State* previous_state) override {}
+  void DetachState(WindowState* window_state) override {}
+
+ private:
+  WindowStateType state_type_;
+
+  DISALLOW_COPY_AND_ASSIGN(InitialStateTestState);
+};
 
 class AlwaysMaximizeTestState : public WindowState::State {
  public:
@@ -120,8 +140,7 @@ TEST_F(WindowStateTest, SnapWindowMinimumSize) {
                 kWorkAreaBounds.width() - 1, kWorkAreaBounds.height());
   EXPECT_EQ(expected.ToString(), window->GetBoundsInScreen().ToString());
 
-  // It should not be possible to snap a window with a maximum size, or if it
-  // cannot be maximized.
+  // It should not be possible to snap a window with a maximum size defined.
   delegate.set_maximum_size(gfx::Size(kWorkAreaBounds.width() - 1, 0));
   EXPECT_FALSE(window_state->CanSnap());
   delegate.set_maximum_size(gfx::Size(0, kWorkAreaBounds.height() - 1));
@@ -129,7 +148,69 @@ TEST_F(WindowStateTest, SnapWindowMinimumSize) {
   delegate.set_maximum_size(gfx::Size());
   window->SetProperty(aura::client::kResizeBehaviorKey,
                       ui::mojom::kResizeBehaviorCanResize);
+  // It should be possible to snap a window with a maximum size, if it
+  // can be maximized.
+  EXPECT_TRUE(window_state->CanSnap());
+}
+
+// Test that a PIP window cannot be snapped.
+TEST_F(WindowStateTest, PipWindowCannotSnap) {
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithBounds(gfx::Rect(100, 100, 100, 100)));
+
+  WindowState* window_state = GetWindowState(window.get());
+  EXPECT_TRUE(window_state->CanSnap());
+
+  window_state->SetStateObject(std::unique_ptr<WindowState::State>(
+      new InitialStateTestState(mojom::WindowStateType::PIP)));
   EXPECT_FALSE(window_state->CanSnap());
+}
+
+// Test that modal window dialogs can be snapped.
+TEST_F(WindowStateTest, SnapModalWindowWithoutMaximumSizeLimit) {
+  UpdateDisplay("0+0-600x900");
+  const gfx::Rect kWorkAreaBounds =
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+
+  aura::test::TestWindowDelegate parent_delegate;
+  std::unique_ptr<aura::Window> parent_window(
+      CreateTestWindowInShellWithDelegate(
+          &parent_delegate, -1,
+          gfx::Rect(kWorkAreaBounds.width(), 0, kWorkAreaBounds.width() / 2,
+                    kWorkAreaBounds.height() - 1)));
+
+  aura::test::TestWindowDelegate delegate;
+  std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithDelegate(
+      &delegate, -1, gfx::Rect(100, 100, 400, 500)));
+
+  delegate.set_minimum_size(gfx::Size(200, 300));
+  WindowState* window_state = GetWindowState(window.get());
+  EXPECT_TRUE(window_state->CanSnap());
+
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanResize |
+                          ui::mojom::kResizeBehaviorCanMaximize);
+  delegate.set_maximum_size(gfx::Size());
+  EXPECT_TRUE(window_state->CanSnap());
+
+  ::wm::AddTransientChild(parent_window.get(), window.get());
+  EXPECT_TRUE(window_state->CanSnap());
+
+  delegate.set_maximum_size(gfx::Size());
+  EXPECT_TRUE(window_state->CanSnap());
+
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanResize);
+  EXPECT_TRUE(window_state->CanSnap());
+
+  // It should be possible to snap a modal window without maximum size.
+  window->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
+  EXPECT_TRUE(window_state->CanSnap());
+
+  delegate.set_maximum_size(gfx::Size(300, 400));
+  EXPECT_FALSE(window_state->CanSnap());
+
+  ::wm::RemoveTransientChild(parent_window.get(), window.get());
 }
 
 // Test that the minimum size specified by aura::WindowDelegate gets respected.
@@ -210,12 +291,12 @@ TEST_F(WindowStateTest, UpdateSnapWidthRatioTest) {
 
   // Drag to change snapped window width.
   const int kIncreasedWidth = 225;
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  generator.MoveMouseTo(window->bounds().right(), window->bounds().y());
-  generator.PressLeftButton();
-  generator.MoveMouseTo(window->bounds().right() + kIncreasedWidth,
-                        window->bounds().y());
-  generator.ReleaseLeftButton();
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->MoveMouseTo(window->bounds().right(), window->bounds().y());
+  generator->PressLeftButton();
+  generator->MoveMouseTo(window->bounds().right() + kIncreasedWidth,
+                         window->bounds().y());
+  generator->ReleaseLeftButton();
   expected.set_width(expected.width() + kIncreasedWidth);
   EXPECT_EQ(expected, window->GetBoundsInScreen());
   EXPECT_EQ(mojom::WindowStateType::LEFT_SNAPPED, window_state->GetStateType());

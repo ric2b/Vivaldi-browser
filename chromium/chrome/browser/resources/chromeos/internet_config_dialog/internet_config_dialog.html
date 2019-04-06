@@ -12,13 +12,15 @@
 <link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_network_icon.html">
 <link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_onc_types.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="chrome://resources/html/load_time_data.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
 
-<script src="chrome://internet-config-dialog/strings.js"></script>
+<script src="strings.js"></script>
 
 </head>
 
@@ -26,14 +28,21 @@
 
   <dom-module id="internet-config-dialog">
     <template>
-      <style include="network-shared iron-flex">
-        dialog {
-          border-radius: 0;
-          height: 100%;
-          width: 100%;
+      <style
+          include="cr-shared-style network-shared iron-flex paper-button-style">
+        :host {
+          @apply --cr-page-host;
         }
 
-        dialog [slot=body] {
+        cr-dialog {
+          --cr-dialog-native: {
+            border-radius: 0;
+            height: 100%;
+            width: 100%;
+          }
+        }
+
+        cr-dialog [slot=body] {
           /* This should match or exceed SystemWebDialogDelegate::kDialogHeight
              to ensure the content is stretched to fit. */
           height: 480px;
@@ -45,14 +54,14 @@
         }
       </style>
 
-      <dialog is="cr-dialog" id="dialog" no-cancel>
+      <cr-dialog id="dialog" no-cancel>
         <div slot="title">[[getDialogTitle_(networkProperties_)]]</div>
         <div slot="body">
           <network-config id="networkConfig" class="flex"
               networking-private="[[networkingPrivate]]"
               global-policy="[[globalPolicy_]]"
               network-properties="{{networkProperties_}}"
-              enable-connect="{{enableConnect_}}" connect-on-save
+              enable-connect="{{enableConnect_}}"
               share-allow-enable="[[shareAllowEnable_]]"
               share-default="[[shareDefault_]]"
               error="{{error_}}"
@@ -72,7 +81,7 @@
             $i18n{networkButtonConnect}
           </paper-button>
         </div>
-      </dialog>
+      </cr-dialog>
     </template>
     <script src="internet_config_dialog.js"></script>
   </dom-module>

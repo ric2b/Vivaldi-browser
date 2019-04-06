@@ -4,8 +4,10 @@
 
 #import <EarlGrey/EarlGrey.h>
 
+#include "base/ios/ios_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/showcase/content_suggestions/sc_content_suggestions_data_source.h"
@@ -66,15 +68,29 @@ NSString* ReadingListEmptySection() {
 
 @implementation SCContentSuggestionsTestCase
 
+// Per crbug.com/845186, Disable flakey iPad Retina tests that are limited
+// to iOS 10.2.
++ (NSArray*)testInvocations {
+#if TARGET_IPHONE_SIMULATOR
+  if (IsIPadIdiom() && !base::ios::IsRunningOnOrLater(10, 3, 0))
+    return @[];
+#endif  // TARGET_IPHONE_SIMULATOR
+  return [super testInvocations];
+}
+
 // Tests launching ContentSuggestionsViewController.
 - (void)testLaunch {
   showcase_utils::Open(@"ContentSuggestionsViewController");
+  NSString* section_header = l10n_util::GetNSStringWithFixup(
+      IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_HEADER);
+  if (IsUIRefreshPhase1Enabled()) {
+    section_header = [section_header uppercaseString];
+  }
+  [CellWithMatcher(chrome_test_util::StaticTextWithAccessibilityLabel(
+      section_header)) assertWithMatcher:grey_notNil()];
   [CellWithMatcher(chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_CONTENT_SUGGESTIONS_FOOTER_TITLE))
       assertWithMatcher:grey_interactable()];
-  [CellWithMatcher(chrome_test_util::StaticTextWithAccessibilityLabelId(
-      IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_HEADER))
-      assertWithMatcher:grey_notNil()];
   showcase_utils::Close();
 }
 
@@ -140,6 +156,10 @@ NSString* ReadingListEmptySection() {
 
 // Tests that swipe-to-dismiss on empty item does nothing.
 - (void)testNoSwipeToDismissEmptyItem {
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_DISABLED(
+        @"Test disabled in UI Refresh as there's no reading list.");
+  }
   showcase_utils::Open(@"ContentSuggestionsViewController");
   [CellWithID([SCContentSuggestionsDataSource titleReadingListItem])
       performAction:grey_swipeFastInDirection(kGREYDirectionLeft)];

@@ -10,20 +10,20 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
-import android.os.AsyncTask;
 import android.support.annotation.LayoutRes;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
-import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.favicon.IconType;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 
 import java.util.HashMap;
@@ -86,7 +86,7 @@ public class TileRenderer {
     }
 
     private static boolean useDecreasedMinSize() {
-        return FeatureUtilities.isChromeHomeEnabled();
+        return FeatureUtilities.isChromeModernDesignEnabled();
     }
 
     /**
@@ -180,10 +180,9 @@ public class TileRenderer {
     }
 
     public void setTileIconFromBitmap(Tile tile, Bitmap icon) {
-        RoundedBitmapDrawable roundedIcon = RoundedBitmapDrawableFactory.create(mResources, icon);
-        int cornerRadius = Math.round(ICON_CORNER_RADIUS_DP * mResources.getDisplayMetrics().density
-                * icon.getWidth() / mDesiredIconSize);
-        roundedIcon.setCornerRadius(cornerRadius);
+        RoundedBitmapDrawable roundedIcon = ViewUtils.createRoundedBitmapDrawable(icon,
+                Math.round(ICON_CORNER_RADIUS_DP * mResources.getDisplayMetrics().density
+                        * icon.getWidth() / mDesiredIconSize));
         roundedIcon.setAntiAlias(true);
         roundedIcon.setFilterBitmap(true);
 

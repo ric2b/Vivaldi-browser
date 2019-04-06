@@ -8,7 +8,9 @@
 #include "base/memory/ptr_util.h"
 #include "chromecast/media/cma/backend/audio_decoder_wrapper.h"
 #include "chromecast/media/cma/backend/media_pipeline_backend_manager.h"
+#include "chromecast/media/cma/backend/video_decoder_wrapper.h"
 #include "chromecast/public/cast_media_shlib.h"
+#include "chromecast/public/media/media_pipeline_backend.h"
 #include "chromecast/public/volume_control.h"
 
 namespace chromecast {
@@ -24,24 +26,21 @@ MediaPipelineBackendWrapper::MediaPipelineBackendWrapper(
       backend_manager_(backend_manager),
       audio_stream_type_(params.audio_type),
       content_type_(params.content_type),
-      have_video_decoder_(false),
       playing_(false) {
   DCHECK(backend_);
   DCHECK(backend_manager_);
 }
 
 MediaPipelineBackendWrapper::~MediaPipelineBackendWrapper() {
-  if (audio_decoder_)
+  if (audio_decoder_) {
     backend_manager_->DecrementDecoderCount(
         IsSfx() ? DecoderType::SFX_DECODER : DecoderType::AUDIO_DECODER);
-  if (have_video_decoder_)
-    backend_manager_->DecrementDecoderCount(DecoderType::VIDEO_DECODER);
-
-  if (playing_) {
-    LOG(WARNING) << "Destroying media backend while still in 'playing' state";
-    if (audio_decoder_) {
+    if (playing_) {
       backend_manager_->UpdatePlayingAudioCount(IsSfx(), -1);
     }
+  }
+  if (video_decoder_) {
+    backend_manager_->DecrementDecoderCount(DecoderType::VIDEO_DECODER);
   }
 }
 
@@ -53,8 +52,7 @@ void MediaPipelineBackendWrapper::LogicalResume() {
   SetPlaying(true);
 }
 
-MediaPipelineBackend::AudioDecoder*
-MediaPipelineBackendWrapper::CreateAudioDecoder() {
+CmaBackend::AudioDecoder* MediaPipelineBackendWrapper::CreateAudioDecoder() {
   DCHECK(!audio_decoder_);
 
   if (!backend_manager_->IncrementDecoderCount(
@@ -79,15 +77,19 @@ MediaPipelineBackendWrapper::CreateAudioDecoder() {
   return audio_decoder_.get();
 }
 
-MediaPipelineBackend::VideoDecoder*
-MediaPipelineBackendWrapper::CreateVideoDecoder() {
-  DCHECK(!have_video_decoder_);
+CmaBackend::VideoDecoder* MediaPipelineBackendWrapper::CreateVideoDecoder() {
+  DCHECK(!video_decoder_);
 
   if (!backend_manager_->IncrementDecoderCount(DecoderType::VIDEO_DECODER))
     return nullptr;
-  have_video_decoder_ = true;
+  MediaPipelineBackend::VideoDecoder* real_decoder =
+      backend_->CreateVideoDecoder();
+  if (!real_decoder) {
+    return nullptr;
+  }
 
-  return backend_->CreateVideoDecoder();
+  video_decoder_ = std::make_unique<VideoDecoderWrapper>(real_decoder);
+  return video_decoder_.get();
 }
 
 bool MediaPipelineBackendWrapper::Initialize() {

@@ -10,13 +10,16 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/test/events_test_utils.h"
+#include "ui/events/test/keyboard_layout.h"
 #include "ui/events/test/test_event_target.h"
 #include "ui/gfx/transform.h"
 
@@ -85,112 +88,107 @@ TEST(EventTest, ClickCount) {
 
 TEST(EventTest, RepeatedClick) {
   const gfx::Point origin(0, 0);
-  MouseEvent mouse_ev1(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(), 0,
-                       0);
-  MouseEvent mouse_ev2(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(), 0,
-                       0);
-  LocatedEventTestApi test_ev1(&mouse_ev1);
-  LocatedEventTestApi test_ev2(&mouse_ev2);
+  MouseEvent event1(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(), 0, 0);
+  MouseEvent event2(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(), 0, 0);
+  LocatedEventTestApi test_event1(&event1);
+  LocatedEventTestApi test_event2(&event2);
 
   base::TimeTicks start = base::TimeTicks();
   base::TimeTicks soon = start + base::TimeDelta::FromMilliseconds(1);
   base::TimeTicks later = start + base::TimeDelta::FromMilliseconds(1000);
 
-  // Same event.
-  test_ev1.set_location(gfx::Point(0, 0));
-  test_ev2.set_location(gfx::Point(1, 0));
-  test_ev1.set_time_stamp(start);
-  test_ev2.set_time_stamp(start);
-  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(mouse_ev1, mouse_ev2));
-  MouseEvent mouse_ev3(mouse_ev1);
-  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(mouse_ev1, mouse_ev3));
+  // Same time stamp (likely the same native event).
+  test_event1.set_location(gfx::Point(0, 0));
+  test_event2.set_location(gfx::Point(1, 0));
+  test_event1.set_time_stamp(start);
+  test_event2.set_time_stamp(start);
+  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(event1, event2));
+  MouseEvent mouse_ev3(event1);
+  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(event1, mouse_ev3));
 
   // Close point.
-  test_ev1.set_location(gfx::Point(0, 0));
-  test_ev2.set_location(gfx::Point(1, 0));
-  test_ev1.set_time_stamp(start);
-  test_ev2.set_time_stamp(soon);
-  EXPECT_TRUE(MouseEvent::IsRepeatedClickEvent(mouse_ev1, mouse_ev2));
+  test_event1.set_location(gfx::Point(0, 0));
+  test_event2.set_location(gfx::Point(1, 0));
+  test_event1.set_time_stamp(start);
+  test_event2.set_time_stamp(soon);
+  EXPECT_TRUE(MouseEvent::IsRepeatedClickEvent(event1, event2));
 
   // Too far.
-  test_ev1.set_location(gfx::Point(0, 0));
-  test_ev2.set_location(gfx::Point(10, 0));
-  test_ev1.set_time_stamp(start);
-  test_ev2.set_time_stamp(soon);
-  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(mouse_ev1, mouse_ev2));
+  test_event1.set_location(gfx::Point(0, 0));
+  test_event2.set_location(gfx::Point(10, 0));
+  test_event1.set_time_stamp(start);
+  test_event2.set_time_stamp(soon);
+  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(event1, event2));
 
   // Too long a time between clicks.
-  test_ev1.set_location(gfx::Point(0, 0));
-  test_ev2.set_location(gfx::Point(0, 0));
-  test_ev1.set_time_stamp(start);
-  test_ev2.set_time_stamp(later);
-  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(mouse_ev1, mouse_ev2));
+  test_event1.set_location(gfx::Point(0, 0));
+  test_event2.set_location(gfx::Point(0, 0));
+  test_event1.set_time_stamp(start);
+  test_event2.set_time_stamp(later);
+  EXPECT_FALSE(MouseEvent::IsRepeatedClickEvent(event1, event2));
 }
 
-// Tests that an event only increases the click count and gets marked as a
-// double click if a release event was seen for the previous click. This
-// prevents the same PRESSED event from being processed twice:
-// http://crbug.com/389162
-TEST(EventTest, DoubleClickRequiresRelease) {
-  const gfx::Point origin1(0, 0);
-  const gfx::Point origin2(100, 0);
-  std::unique_ptr<MouseEvent> ev;
-  base::TimeTicks start = base::TimeTicks();
-  base::TimeTicks soon = start + base::TimeDelta::FromMilliseconds(1);
+// Tests that re-processing the same mouse press event (detected by timestamp)
+// does not yield a double click event: http://crbug.com/389162
+TEST(EventTest, DoubleClickRequiresUniqueTimestamp) {
+  const gfx::Point point(0, 0);
+  base::TimeTicks time1 = base::TimeTicks();
+  base::TimeTicks time2 = time1 + base::TimeDelta::FromMilliseconds(1);
 
-  ev.reset(new MouseEvent(ET_MOUSE_PRESSED, origin1, origin1, EventTimeForNow(),
-                          0, 0));
-  ev->set_time_stamp(start);
-  EXPECT_EQ(1, MouseEvent::GetRepeatCount(*ev));
-  ev.reset(new MouseEvent(ET_MOUSE_PRESSED, origin1, origin1, EventTimeForNow(),
-                          0, 0));
-  ev->set_time_stamp(start);
-  EXPECT_EQ(1, MouseEvent::GetRepeatCount(*ev));
+  // Re-processing the same press doesn't yield a double-click.
+  MouseEvent event(ET_MOUSE_PRESSED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  // Processing a press with the same timestamp doesn't yield a double-click.
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  // Processing a press with a later timestamp does yield a double-click.
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time2, 0, 0);
+  EXPECT_EQ(2, MouseEvent::GetRepeatCount(event));
+  MouseEvent::ResetLastClickForTest();
 
-  ev.reset(new MouseEvent(ET_MOUSE_PRESSED, origin2, origin2, EventTimeForNow(),
-                          0, 0));
-  ev->set_time_stamp(start);
-  EXPECT_EQ(1, MouseEvent::GetRepeatCount(*ev));
-  ev.reset(new MouseEvent(ET_MOUSE_RELEASED, origin2, origin2,
-                          EventTimeForNow(), 0, 0));
-  ev->set_time_stamp(start);
-  EXPECT_EQ(1, MouseEvent::GetRepeatCount(*ev));
-  ev.reset(new MouseEvent(ET_MOUSE_PRESSED, origin2, origin2, EventTimeForNow(),
-                          0, 0));
-  ev->set_time_stamp(soon);
-  EXPECT_EQ(2, MouseEvent::GetRepeatCount(*ev));
-  ev.reset(new MouseEvent(ET_MOUSE_RELEASED, origin2, origin2,
-                          EventTimeForNow(), 0, 0));
-  ev->set_time_stamp(soon);
-  EXPECT_EQ(2, MouseEvent::GetRepeatCount(*ev));
+  // Test processing a double press and release sequence with one timestamp.
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_RELEASED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_RELEASED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  MouseEvent::ResetLastClickForTest();
+
+  // Test processing a double press and release sequence with two timestamps.
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_RELEASED, point, point, time1, 0, 0);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time2, 0, 0);
+  EXPECT_EQ(2, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_RELEASED, point, point, time2, 0, 0);
+  EXPECT_EQ(2, MouseEvent::GetRepeatCount(event));
   MouseEvent::ResetLastClickForTest();
 }
 
-// Tests that clicking right and then left clicking does not generate a double
-// click.
+// Tests that right clicking, then left clicking does not yield double clicks.
 TEST(EventTest, SingleClickRightLeft) {
-  const gfx::Point origin(0, 0);
-  std::unique_ptr<MouseEvent> ev;
-  base::TimeTicks start = base::TimeTicks();
-  base::TimeTicks soon = start + base::TimeDelta::FromMilliseconds(1);
+  const gfx::Point point(0, 0);
+  base::TimeTicks time1 = base::TimeTicks();
+  base::TimeTicks time2 = time1 + base::TimeDelta::FromMilliseconds(1);
+  base::TimeTicks time3 = time1 + base::TimeDelta::FromMilliseconds(2);
 
-  ev.reset(new MouseEvent(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(),
-                          ui::EF_RIGHT_MOUSE_BUTTON,
-                          ui::EF_RIGHT_MOUSE_BUTTON));
-  ev->set_time_stamp(start);
-  EXPECT_EQ(1, MouseEvent::GetRepeatCount(*ev));
-  ev.reset(new MouseEvent(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(),
-                          ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  ev->set_time_stamp(start);
-  EXPECT_EQ(1, MouseEvent::GetRepeatCount(*ev));
-  ev.reset(new MouseEvent(ET_MOUSE_RELEASED, origin, origin, EventTimeForNow(),
-                          ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  ev->set_time_stamp(start);
-  EXPECT_EQ(1, MouseEvent::GetRepeatCount(*ev));
-  ev.reset(new MouseEvent(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(),
-                          ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  ev->set_time_stamp(soon);
-  EXPECT_EQ(2, MouseEvent::GetRepeatCount(*ev));
+  MouseEvent event(ET_MOUSE_PRESSED, point, point, time1,
+                   ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time2,
+                     ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_RELEASED, point, point, time2,
+                     ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(1, MouseEvent::GetRepeatCount(event));
+  event = MouseEvent(ET_MOUSE_PRESSED, point, point, time3,
+                     ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(2, MouseEvent::GetRepeatCount(event));
   MouseEvent::ResetLastClickForTest();
 }
 
@@ -920,7 +918,7 @@ TEST(EventTest, MouseEventLatencyUIComponentExists) {
   const gfx::Point origin(0, 0);
   MouseEvent mouseev(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(), 0, 0);
   EXPECT_TRUE(mouseev.latency()->FindLatency(
-      ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, nullptr));
+      ui::INPUT_EVENT_LATENCY_UI_COMPONENT, nullptr));
 }
 
 TEST(EventTest, MouseWheelEventLatencyUIComponentExists) {
@@ -928,7 +926,7 @@ TEST(EventTest, MouseWheelEventLatencyUIComponentExists) {
   MouseWheelEvent mouseWheelev(gfx::Vector2d(), origin, origin,
                                EventTimeForNow(), 0, 0);
   EXPECT_TRUE(mouseWheelev.latency()->FindLatency(
-      ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, nullptr));
+      ui::INPUT_EVENT_LATENCY_UI_COMPONENT, nullptr));
 }
 
 TEST(EventTest, PointerEventToMouseEvent) {
@@ -1122,5 +1120,110 @@ TEST(EventTest, UpdateForRootTransformation) {
     EXPECT_EQ(gfx::Point(40, 40), targeted.root_location());
   }
 }
+
+#if defined(OS_WIN)
+namespace {
+
+const struct AltGraphEventTestCase {
+  KeyboardCode key_code;
+  KeyboardLayout layout;
+  std::vector<KeyboardCode> modifier_key_codes;
+  int expected_flags;
+} kAltGraphEventTestCases[] = {
+    // US English -> AltRight never behaves as AltGraph.
+    {VKEY_C,
+     KEYBOARD_LAYOUT_ENGLISH_US,
+     {VKEY_RMENU, VKEY_LCONTROL, VKEY_MENU, VKEY_CONTROL},
+     EF_ALT_DOWN | EF_CONTROL_DOWN},
+    {VKEY_E,
+     KEYBOARD_LAYOUT_ENGLISH_US,
+     {VKEY_RMENU, VKEY_LCONTROL, VKEY_MENU, VKEY_CONTROL},
+     EF_ALT_DOWN | EF_CONTROL_DOWN},
+
+    // French -> Always expect AltGraph if VKEY_RMENU is pressed.
+    {VKEY_C,
+     KEYBOARD_LAYOUT_FRENCH,
+     {VKEY_RMENU, VKEY_LCONTROL, VKEY_MENU, VKEY_CONTROL},
+     EF_ALTGR_DOWN},
+    {VKEY_E,
+     KEYBOARD_LAYOUT_FRENCH,
+     {VKEY_RMENU, VKEY_LCONTROL, VKEY_MENU, VKEY_CONTROL},
+     EF_ALTGR_DOWN},
+
+    // French -> Expect Control+Alt is AltGraph on AltGraph-shifted keys.
+    {VKEY_C,
+     KEYBOARD_LAYOUT_FRENCH,
+     {VKEY_LMENU, VKEY_LCONTROL, VKEY_MENU, VKEY_CONTROL},
+     EF_ALT_DOWN | EF_CONTROL_DOWN},
+    {VKEY_E,
+     KEYBOARD_LAYOUT_FRENCH,
+     {VKEY_LMENU, VKEY_LCONTROL, VKEY_MENU, VKEY_CONTROL},
+     EF_ALTGR_DOWN},
+};
+
+class AltGraphEventTest
+    : public testing::TestWithParam<std::tuple<UINT, AltGraphEventTestCase>> {
+ public:
+  AltGraphEventTest()
+      : msg_({nullptr, message_type(),
+              static_cast<WPARAM>(test_case().key_code)}) {
+    // Save the current keyboard layout and state, to restore later.
+    CHECK(GetKeyboardState(original_keyboard_state_));
+    original_keyboard_layout_ = GetKeyboardLayout(0);
+
+    // Configure specified layout, and update keyboard state for specified
+    // modifier keys.
+    CHECK(ActivateKeyboardLayout(GetPlatformKeyboardLayout(test_case().layout),
+                                 0));
+    BYTE test_keyboard_state[256] = {};
+    for (const auto& key_code : test_case().modifier_key_codes)
+      test_keyboard_state[key_code] = 0x80;
+    CHECK(SetKeyboardState(test_keyboard_state));
+  }
+
+  ~AltGraphEventTest() {
+    // Restore the original keyboard layout & key states.
+    CHECK(ActivateKeyboardLayout(original_keyboard_layout_, 0));
+    CHECK(SetKeyboardState(original_keyboard_state_));
+  }
+
+ protected:
+  UINT message_type() const { return std::get<0>(GetParam()); }
+  const AltGraphEventTestCase& test_case() const {
+    return std::get<1>(GetParam());
+  }
+
+  const MSG msg_;
+  BYTE original_keyboard_state_[256] = {};
+  HKL original_keyboard_layout_ = nullptr;
+};
+
+}  // namespace
+
+TEST_P(AltGraphEventTest, KeyEventAltGraphModifer) {
+  KeyEvent event(msg_);
+  if (message_type() == WM_CHAR) {
+    // By definition, if we receive a WM_CHAR message when Control and Alt are
+    // pressed, it indicates AltGraph.
+    EXPECT_EQ(event.flags() & (EF_CONTROL_DOWN | EF_ALT_DOWN | EF_ALTGR_DOWN),
+              EF_ALTGR_DOWN);
+  } else {
+    EXPECT_EQ(event.flags() & (EF_CONTROL_DOWN | EF_ALT_DOWN | EF_ALTGR_DOWN),
+              test_case().expected_flags);
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(
+    WM_KEY,
+    AltGraphEventTest,
+    ::testing::Combine(::testing::Values(WM_KEYDOWN, WM_KEYUP),
+                       ::testing::ValuesIn(kAltGraphEventTestCases)));
+INSTANTIATE_TEST_CASE_P(
+    WM_CHAR,
+    AltGraphEventTest,
+    ::testing::Combine(::testing::Values(WM_CHAR),
+                       ::testing::ValuesIn(kAltGraphEventTestCases)));
+
+#endif  // defined(OS_WIN)
 
 }  // namespace ui

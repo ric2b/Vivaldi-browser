@@ -44,17 +44,18 @@ struct BASE_EXPORT PendingTask {
   // The time when the task should be run.
   base::TimeTicks delayed_run_time;
 
-  // Task backtrace.
-  std::array<const void*, 4> task_backtrace;
+  // Chain of up-to-four symbols of the parent tasks which led to this one being
+  // posted.
+  std::array<const void*, 4> task_backtrace = {};
 
   // Secondary sort key for run time.
-  int sequence_num;
+  int sequence_num = 0;
 
   // OK to dispatch from a nested loop.
   Nestable nestable;
 
   // Needs high resolution timers.
-  bool is_high_res;
+  bool is_high_res = false;
 };
 
 using TaskQueue = base::queue<PendingTask>;

@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/api_resource_manager.h"
 #include "extensions/browser/api/async_api_function.h"
 #include "extensions/browser/extension_function.h"
@@ -22,6 +23,8 @@
 #include "net/base/network_change_notifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/socket/tcp_client_socket.h"
+#include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/udp_socket.mojom.h"
 
 #if defined(OS_CHROMEOS)
 #include "extensions/browser/api/socket/app_firewall_hole_manager.h"
@@ -29,7 +32,6 @@
 
 namespace content {
 class BrowserContext;
-class ResourceContext;
 }
 
 namespace net {
@@ -162,8 +164,7 @@ class SocketExtensionWithDnsLookupFunction : public SocketAsyncApiFunction {
  private:
   void OnDnsLookup(int resolve_result);
 
-  // Weak pointer to the resource context.
-  content::ResourceContext* resource_context_;
+  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 };
 
 class SocketCreateFunction : public SocketAsyncApiFunction {
@@ -183,6 +184,8 @@ class SocketCreateFunction : public SocketAsyncApiFunction {
   FRIEND_TEST_ALL_PREFIXES(SocketUnitTest, Create);
   enum SocketType { kSocketTypeInvalid = -1, kSocketTypeTCP, kSocketTypeUDP };
 
+  network::mojom::UDPSocketPtrInfo socket_;
+  network::mojom::UDPSocketReceiverRequest socket_receiver_request_;
   std::unique_ptr<api::socket::Create::Params> params_;
   SocketType socket_type_;
 };
@@ -254,6 +257,8 @@ class SocketBindFunction : public SocketAsyncApiFunction {
   void AsyncWorkStart() override;
 
  private:
+  void OnCompleted(int net_error);
+
   int socket_id_;
   std::string address_;
   uint16_t port_;
@@ -435,13 +440,15 @@ class SocketGetInfoFunction : public SocketAsyncApiFunction {
   std::unique_ptr<api::socket::GetInfo::Params> params_;
 };
 
-class SocketGetNetworkListFunction : public AsyncExtensionFunction {
+class SocketGetNetworkListFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("socket.getNetworkList", SOCKET_GETNETWORKLIST)
 
  protected:
   ~SocketGetNetworkListFunction() override {}
-  bool RunAsync() override;
+
+  // UIThreadExtensionFunction:
+  ResponseAction Run() override;
 
  private:
   void GetNetworkListOnFileThread();
@@ -460,9 +467,11 @@ class SocketJoinGroupFunction : public SocketAsyncApiFunction {
 
   // AsyncApiFunction
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnCompleted(int result);
+
   std::unique_ptr<api::socket::JoinGroup::Params> params_;
 };
 
@@ -477,9 +486,11 @@ class SocketLeaveGroupFunction : public SocketAsyncApiFunction {
 
   // AsyncApiFunction
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnCompleted(int result);
+
   std::unique_ptr<api::socket::LeaveGroup::Params> params_;
 };
 

@@ -4,80 +4,19 @@
 
 #include "ui/events/mojo/event_struct_traits.h"
 
-#include "mojo/common/time_struct_traits.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "ui/events/event.h"
+#include "ui/events/event_utils.h"
 #include "ui/events/gesture_event_details.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/mojo/event_constants.mojom.h"
 #include "ui/latency/mojo/latency_info_struct_traits.h"
 
 namespace mojo {
+
 namespace {
 
-ui::mojom::EventType UIEventTypeToMojo(ui::EventType type) {
-  switch (type) {
-    case ui::ET_KEY_PRESSED:
-      return ui::mojom::EventType::KEY_PRESSED;
-
-    case ui::ET_KEY_RELEASED:
-      return ui::mojom::EventType::KEY_RELEASED;
-
-    case ui::ET_POINTER_DOWN:
-      return ui::mojom::EventType::POINTER_DOWN;
-
-    case ui::ET_POINTER_MOVED:
-      return ui::mojom::EventType::POINTER_MOVE;
-
-    case ui::ET_POINTER_EXITED:
-      return ui::mojom::EventType::MOUSE_EXIT;
-
-    case ui::ET_POINTER_UP:
-      return ui::mojom::EventType::POINTER_UP;
-
-    case ui::ET_POINTER_CANCELLED:
-      return ui::mojom::EventType::POINTER_CANCEL;
-
-    case ui::ET_POINTER_WHEEL_CHANGED:
-      return ui::mojom::EventType::POINTER_WHEEL_CHANGED;
-
-    case ui::ET_GESTURE_TAP:
-      return ui::mojom::EventType::GESTURE_TAP;
-
-    default:
-      NOTREACHED() << "This unsupported event type will close the connection";
-      break;
-  }
-  return ui::mojom::EventType::UNKNOWN;
-}
-
-ui::EventType MojoPointerEventTypeToUIEvent(ui::mojom::EventType action) {
-  switch (action) {
-    case ui::mojom::EventType::POINTER_DOWN:
-      return ui::ET_POINTER_DOWN;
-
-    case ui::mojom::EventType::POINTER_UP:
-      return ui::ET_POINTER_UP;
-
-    case ui::mojom::EventType::POINTER_MOVE:
-      return ui::ET_POINTER_MOVED;
-
-    case ui::mojom::EventType::POINTER_CANCEL:
-      return ui::ET_POINTER_CANCELLED;
-
-    case ui::mojom::EventType::MOUSE_EXIT:
-      return ui::ET_POINTER_EXITED;
-
-    case ui::mojom::EventType::POINTER_WHEEL_CHANGED:
-      return ui::ET_POINTER_WHEEL_CHANGED;
-
-    default:
-      NOTREACHED();
-  }
-
-  return ui::ET_UNKNOWN;
-}
-
-ui::mojom::LocationDataPtr GetLocationData(ui::LocatedEvent* event) {
+ui::mojom::LocationDataPtr GetLocationData(const ui::LocatedEvent* event) {
   ui::mojom::LocationDataPtr location_data(ui::mojom::LocationData::New());
   location_data->x = event->location_f().x();
   location_data->y = event->location_f().y();
@@ -187,10 +126,94 @@ static_assert(ui::mojom::kEventFlagForwardMouseButton ==
                   static_cast<int32_t>(ui::EF_FORWARD_MOUSE_BUTTON),
               "EVENT_FLAGS must match");
 
+// static
+ui::mojom::EventType TypeConverter<ui::mojom::EventType,
+                                   ui::EventType>::Convert(ui::EventType type) {
+  switch (type) {
+    case ui::ET_UNKNOWN:
+      return ui::mojom::EventType::UNKNOWN;
+    case ui::ET_KEY_PRESSED:
+      return ui::mojom::EventType::KEY_PRESSED;
+    case ui::ET_KEY_RELEASED:
+      return ui::mojom::EventType::KEY_RELEASED;
+    case ui::ET_POINTER_DOWN:
+      return ui::mojom::EventType::POINTER_DOWN;
+    case ui::ET_POINTER_MOVED:
+      return ui::mojom::EventType::POINTER_MOVED;
+    case ui::ET_POINTER_UP:
+      return ui::mojom::EventType::POINTER_UP;
+    case ui::ET_POINTER_CANCELLED:
+      return ui::mojom::EventType::POINTER_CANCELLED;
+    case ui::ET_POINTER_ENTERED:
+      return ui::mojom::EventType::POINTER_ENTERED;
+    case ui::ET_POINTER_EXITED:
+      return ui::mojom::EventType::POINTER_EXITED;
+    case ui::ET_POINTER_WHEEL_CHANGED:
+      return ui::mojom::EventType::POINTER_WHEEL_CHANGED;
+    case ui::ET_POINTER_CAPTURE_CHANGED:
+      return ui::mojom::EventType::POINTER_CAPTURE_CHANGED;
+    case ui::ET_GESTURE_TAP:
+      return ui::mojom::EventType::GESTURE_TAP;
+    case ui::ET_SCROLL:
+      return ui::mojom::EventType::SCROLL;
+    case ui::ET_SCROLL_FLING_START:
+      return ui::mojom::EventType::SCROLL_FLING_START;
+    case ui::ET_SCROLL_FLING_CANCEL:
+      return ui::mojom::EventType::SCROLL_FLING_CANCEL;
+    case ui::ET_CANCEL_MODE:
+      return ui::mojom::EventType::CANCEL_MODE;
+    default:
+      NOTREACHED() << "Using unknown event types closes connections:"
+                   << ui::EventTypeName(type);
+      break;
+  }
+  return ui::mojom::EventType::UNKNOWN;
+}
+
+// static
+ui::EventType TypeConverter<ui::EventType, ui::mojom::EventType>::Convert(
+    ui::mojom::EventType type) {
+  switch (type) {
+    case ui::mojom::EventType::UNKNOWN:
+      return ui::ET_UNKNOWN;
+    case ui::mojom::EventType::KEY_PRESSED:
+      return ui::ET_KEY_PRESSED;
+    case ui::mojom::EventType::KEY_RELEASED:
+      return ui::ET_KEY_RELEASED;
+    case ui::mojom::EventType::POINTER_DOWN:
+      return ui::ET_POINTER_DOWN;
+    case ui::mojom::EventType::POINTER_MOVED:
+      return ui::ET_POINTER_MOVED;
+    case ui::mojom::EventType::POINTER_UP:
+      return ui::ET_POINTER_UP;
+    case ui::mojom::EventType::POINTER_CANCELLED:
+      return ui::ET_POINTER_CANCELLED;
+    case ui::mojom::EventType::POINTER_ENTERED:
+      return ui::ET_POINTER_ENTERED;
+    case ui::mojom::EventType::POINTER_EXITED:
+      return ui::ET_POINTER_EXITED;
+    case ui::mojom::EventType::POINTER_WHEEL_CHANGED:
+      return ui::ET_POINTER_WHEEL_CHANGED;
+    case ui::mojom::EventType::POINTER_CAPTURE_CHANGED:
+      return ui::ET_POINTER_CAPTURE_CHANGED;
+    case ui::mojom::EventType::GESTURE_TAP:
+      return ui::ET_GESTURE_TAP;
+    case ui::mojom::EventType::SCROLL:
+      return ui::ET_SCROLL;
+    case ui::mojom::EventType::SCROLL_FLING_START:
+      return ui::ET_SCROLL_FLING_START;
+    case ui::mojom::EventType::SCROLL_FLING_CANCEL:
+      return ui::ET_SCROLL_FLING_CANCEL;
+    default:
+      NOTREACHED();
+  }
+  return ui::ET_UNKNOWN;
+}
+
 ui::mojom::EventType
 StructTraits<ui::mojom::EventDataView, EventUniquePtr>::action(
     const EventUniquePtr& event) {
-  return UIEventTypeToMojo(event->type());
+  return mojo::ConvertTo<ui::mojom::EventType>(event->type());
 }
 
 int32_t StructTraits<ui::mojom::EventDataView, EventUniquePtr>::flags(
@@ -319,6 +342,24 @@ StructTraits<ui::mojom::EventDataView, EventUniquePtr>::gesture_data(
   return gesture_data;
 }
 
+ui::mojom::ScrollDataPtr
+StructTraits<ui::mojom::EventDataView, EventUniquePtr>::scroll_data(
+    const EventUniquePtr& event) {
+  if (!event->IsScrollEvent())
+    return nullptr;
+
+  ui::mojom::ScrollDataPtr scroll_data(ui::mojom::ScrollData::New());
+  scroll_data->location = GetLocationData(event->AsLocatedEvent());
+  const ui::ScrollEvent* scroll_event = event->AsScrollEvent();
+  scroll_data->x_offset = scroll_event->x_offset();
+  scroll_data->y_offset = scroll_event->y_offset();
+  scroll_data->x_offset_ordinal = scroll_event->x_offset_ordinal();
+  scroll_data->y_offset_ordinal = scroll_event->y_offset_ordinal();
+  scroll_data->finger_count = scroll_event->finger_count();
+  scroll_data->momentum_phase = scroll_event->momentum_phase();
+  return scroll_data;
+}
+
 bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
     ui::mojom::EventDataView event,
     EventUniquePtr* out) {
@@ -354,10 +395,12 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
     }
     case ui::mojom::EventType::POINTER_DOWN:
     case ui::mojom::EventType::POINTER_UP:
-    case ui::mojom::EventType::POINTER_MOVE:
-    case ui::mojom::EventType::POINTER_CANCEL:
-    case ui::mojom::EventType::MOUSE_EXIT:
-    case ui::mojom::EventType::POINTER_WHEEL_CHANGED: {
+    case ui::mojom::EventType::POINTER_MOVED:
+    case ui::mojom::EventType::POINTER_CANCELLED:
+    case ui::mojom::EventType::POINTER_ENTERED:
+    case ui::mojom::EventType::POINTER_EXITED:
+    case ui::mojom::EventType::POINTER_WHEEL_CHANGED:
+    case ui::mojom::EventType::POINTER_CAPTURE_CHANGED: {
       ui::mojom::PointerDataPtr pointer_data;
       if (!event.ReadPointerData<ui::mojom::PointerDataPtr>(&pointer_data))
         return false;
@@ -370,8 +413,10 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
                                 pointer_data->location->y);
       const gfx::Point screen_location(pointer_data->location->screen_x,
                                        pointer_data->location->screen_y);
+      // This uses the event root_location field to store screen pixel
+      // coordinates. See http://crbug.com/608547
       *out = std::make_unique<ui::PointerEvent>(
-          MojoPointerEventTypeToUIEvent(event.action()), location,
+          mojo::ConvertTo<ui::EventType>(event.action()), location,
           screen_location, event.flags(), pointer_data->changed_button_flags,
           pointer_details, time_stamp);
       break;
@@ -386,8 +431,27 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
           time_stamp, ui::GestureEventDetails(ui::ET_GESTURE_TAP));
       break;
     }
+    case ui::mojom::EventType::SCROLL:
+    case ui::mojom::EventType::SCROLL_FLING_START:
+    case ui::mojom::EventType::SCROLL_FLING_CANCEL: {
+      ui::mojom::ScrollDataPtr scroll_data;
+      if (!event.ReadScrollData<ui::mojom::ScrollDataPtr>(&scroll_data))
+        return false;
+
+      *out = std::make_unique<ui::ScrollEvent>(
+          mojo::ConvertTo<ui::EventType>(event.action()),
+          gfx::Point(scroll_data->location->x, scroll_data->location->y),
+          time_stamp, event.flags(), scroll_data->x_offset,
+          scroll_data->y_offset, scroll_data->x_offset_ordinal,
+          scroll_data->y_offset_ordinal, scroll_data->finger_count,
+          scroll_data->momentum_phase);
+      break;
+    }
+    case ui::mojom::EventType::CANCEL_MODE:
+      *out = std::make_unique<ui::CancelModeEvent>();
+      break;
     case ui::mojom::EventType::UNKNOWN:
-      NOTREACHED() << "This unsupported event type will close the connection";
+      NOTREACHED() << "Using unknown event types closes connections";
       return false;
   }
 

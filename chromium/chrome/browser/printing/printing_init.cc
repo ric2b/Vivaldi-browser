@@ -6,7 +6,7 @@
 
 #include "components/printing/browser/print_manager_utils.h"
 #include "content/public/browser/web_contents.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_preview_message_handler.h"
@@ -24,7 +24,7 @@ void InitializePrinting(content::WebContents* web_contents) {
 #else
   printing::PrintViewManagerBasic::CreateForWebContents(web_contents);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  CreateCompositeClientIfNeeded(web_contents, false /* for_preview */);
+  CreateCompositeClientIfNeeded(web_contents);
 }
 
 }  // namespace printing

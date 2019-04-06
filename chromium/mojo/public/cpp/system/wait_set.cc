@@ -16,7 +16,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
-#include "mojo/public/cpp/system/watcher.h"
+#include "mojo/public/cpp/system/trap.h"
 
 namespace mojo {
 
@@ -25,13 +25,13 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
   State()
       : handle_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                       base::WaitableEvent::InitialState::NOT_SIGNALED) {
-    MojoResult rv = CreateWatcher(&Context::OnNotification, &watcher_handle_);
+    MojoResult rv = CreateTrap(&Context::OnNotification, &trap_handle_);
     DCHECK_EQ(MOJO_RESULT_OK, rv);
   }
 
   void ShutDown() {
     // NOTE: This may immediately invoke Notify for every context.
-    watcher_handle_.reset();
+    trap_handle_.reset();
 
     cancelled_contexts_.clear();
   }
@@ -52,7 +52,7 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
   }
 
   MojoResult AddHandle(Handle handle, MojoHandleSignals signals) {
-    DCHECK(watcher_handle_.is_valid());
+    DCHECK(trap_handle_.is_valid());
 
     scoped_refptr<Context> context = new Context(this, handle);
 
@@ -68,14 +68,15 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
     }
 
     // Balanced in State::Notify() with MOJO_RESULT_CANCELLED if
-    // MojoWatch() succeeds. Otherwise balanced immediately below.
+    // MojoAddTrigger() succeeds. Otherwise balanced immediately below.
     context->AddRef();
 
     // This can notify immediately if the watcher is already armed. Don't hold
     // |lock_| while calling it.
     MojoResult rv =
-        MojoWatch(watcher_handle_.get().value(), handle.value(), signals,
-                  MOJO_WATCH_CONDITION_SATISFIED, context->context_value());
+        MojoAddTrigger(trap_handle_.get().value(), handle.value(), signals,
+                       MOJO_TRIGGER_CONDITION_SIGNALS_SATISFIED,
+                       context->context_value(), nullptr);
     if (rv == MOJO_RESULT_INVALID_ARGUMENT) {
       base::AutoLock lock(lock_);
       handle_to_context_.erase(handle);
@@ -91,7 +92,7 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
   }
 
   MojoResult RemoveHandle(Handle handle) {
-    DCHECK(watcher_handle_.is_valid());
+    DCHECK(trap_handle_.is_valid());
 
     scoped_refptr<Context> context;
     {
@@ -116,8 +117,8 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
 
     // NOTE: This may enter the notification callback immediately, so don't hold
     // |lock_| while calling it.
-    MojoResult rv = MojoCancelWatch(watcher_handle_.get().value(),
-                                    context->context_value());
+    MojoResult rv = MojoRemoveTrigger(trap_handle_.get().value(),
+                                      context->context_value(), nullptr);
 
     // We don't really care whether or not this succeeds. In either case, the
     // context was or will imminently be cancelled and moved from |contexts_|
@@ -132,7 +133,7 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
             Handle* ready_handles,
             MojoResult* ready_results,
             MojoHandleSignalsState* signals_states) {
-    DCHECK(watcher_handle_.is_valid());
+    DCHECK(trap_handle_.is_valid());
     DCHECK(num_ready_handles);
     DCHECK(ready_handles);
     DCHECK(ready_results);
@@ -144,22 +145,18 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
         handle_event_.Reset();
 
         DCHECK_LE(*num_ready_handles, std::numeric_limits<uint32_t>::max());
-        uint32_t num_ready_contexts = static_cast<uint32_t>(*num_ready_handles);
+        uint32_t num_blocking_events =
+            static_cast<uint32_t>(*num_ready_handles);
 
-        base::StackVector<uintptr_t, 4> ready_contexts;
-        ready_contexts.container().resize(num_ready_contexts);
-        base::StackVector<MojoHandleSignalsState, 4> ready_states;
-        MojoHandleSignalsState* out_states = signals_states;
-        if (!out_states) {
-          // If the caller didn't provide a buffer for signal states, we provide
-          // our own locally. MojoArmWatcher() requires one if we want to handle
-          // arming failure properly.
-          ready_states.container().resize(num_ready_contexts);
-          out_states = ready_states.container().data();
+        base::StackVector<MojoTrapEvent, 4> blocking_events;
+        blocking_events.container().resize(num_blocking_events);
+        for (size_t i = 0; i < num_blocking_events; ++i) {
+          blocking_events.container()[i].struct_size =
+              sizeof(blocking_events.container()[i]);
         }
-        MojoResult rv = MojoArmWatcher(
-            watcher_handle_.get().value(), &num_ready_contexts,
-            ready_contexts.container().data(), ready_results, out_states);
+        MojoResult rv = MojoArmTrap(trap_handle_.get().value(), nullptr,
+                                    &num_blocking_events,
+                                    blocking_events.container().data());
 
         if (rv == MOJO_RESULT_FAILED_PRECONDITION) {
           // Simulate the handles becoming ready. We do this in lieu of
@@ -167,11 +164,12 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
           // starving user events. i.e., we always want to call WaitMany()
           // below.
           handle_event_.Signal();
-          for (size_t i = 0; i < num_ready_contexts; ++i) {
-            auto it = contexts_.find(ready_contexts.container()[i]);
+          for (size_t i = 0; i < num_blocking_events; ++i) {
+            const auto& event = blocking_events.container()[i];
+            auto it = contexts_.find(event.trigger_context);
             DCHECK(it != contexts_.end());
-            ready_handles_[it->second->handle()] = {ready_results[i],
-                                                    out_states[i]};
+            ready_handles_[it->second->handle()] = {event.result,
+                                                    event.signals_state};
           }
         } else if (rv == MOJO_RESULT_NOT_FOUND) {
           // Nothing to watch. If there are no user events, always signal to
@@ -242,11 +240,9 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
       return reinterpret_cast<uintptr_t>(this);
     }
 
-    static void OnNotification(uintptr_t context,
-                               MojoResult result,
-                               MojoHandleSignalsState signals_state,
-                               MojoWatcherNotificationFlags flags) {
-      reinterpret_cast<Context*>(context)->Notify(result, signals_state);
+    static void OnNotification(const MojoTrapEvent* event) {
+      reinterpret_cast<Context*>(event->trigger_context)
+          ->Notify(event->result, event->signals_state);
     }
 
    private:
@@ -315,7 +311,7 @@ class WaitSet::State : public base::RefCountedThreadSafe<State> {
 
   // Not guarded by lock. Must only be accessed from the WaitSet's owning
   // sequence.
-  ScopedWatcherHandle watcher_handle_;
+  ScopedTrapHandle trap_handle_;
 
   base::Lock lock_;
   std::map<uintptr_t, scoped_refptr<Context>> contexts_;

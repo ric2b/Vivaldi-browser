@@ -15,8 +15,9 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/component_export.h"
 #include "base/logging.h"
-#include "mojo/public/cpp/bindings/bindings_export.h"
+#include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/lib/buffer.h"
 #include "mojo/public/cpp/bindings/lib/message_internal.h"
 #include "mojo/public/cpp/bindings/lib/unserialized_message_context.h"
@@ -34,7 +35,7 @@ using ReportBadMessageCallback =
 // Message owns its data and handles, but a consumer of Message is free to
 // mutate the data and handles. The message's data is comprised of a header
 // followed by payload.
-class MOJO_CPP_BINDINGS_EXPORT Message {
+class COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE) Message {
  public:
   static const uint32_t kFlagExpectsResponse = 1 << 0;
   static const uint32_t kFlagIsResponse = 1 << 1;
@@ -210,6 +211,16 @@ class MOJO_CPP_BINDINGS_EXPORT Message {
         generic_context.release()->template SafeCast<MessageType>());
   }
 
+#if defined(ENABLE_IPC_FUZZER)
+  const char* interface_name() const { return interface_name_; }
+  void set_interface_name(const char* interface_name) {
+    interface_name_ = interface_name;
+  }
+
+  const char* method_name() const { return method_name_; }
+  void set_method_name(const char* method_name) { method_name_ = method_name; }
+#endif
+
  private:
   ScopedMessageHandle handle_;
 
@@ -229,10 +240,15 @@ class MOJO_CPP_BINDINGS_EXPORT Message {
   // Indicates whether this Message object is serialized.
   bool serialized_ = false;
 
+#if defined(ENABLE_IPC_FUZZER)
+  const char* interface_name_ = nullptr;
+  const char* method_name_ = nullptr;
+#endif
+
   DISALLOW_COPY_AND_ASSIGN(Message);
 };
 
-class MOJO_CPP_BINDINGS_EXPORT MessageReceiver {
+class COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE) MessageReceiver {
  public:
   virtual ~MessageReceiver() {}
 
@@ -292,7 +308,8 @@ class MessageReceiverWithResponderStatus : public MessageReceiver {
                                        responder) WARN_UNUSED_RESULT = 0;
 };
 
-class MOJO_CPP_BINDINGS_EXPORT PassThroughFilter : public MessageReceiver {
+class COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE) PassThroughFilter
+    : public MessageReceiver {
  public:
   PassThroughFilter();
   ~PassThroughFilter() override;
@@ -321,7 +338,7 @@ class SyncMessageResponseSetup;
 //     if (response_value.IsBad())
 //       response_context.ReportBadMessage("Bad response_value!");
 //
-class MOJO_CPP_BINDINGS_EXPORT SyncMessageResponseContext {
+class COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE) SyncMessageResponseContext {
  public:
   SyncMessageResponseContext();
   ~SyncMessageResponseContext();
@@ -348,6 +365,7 @@ class MOJO_CPP_BINDINGS_EXPORT SyncMessageResponseContext {
 // dispatched, otherwise returns an error code if something went wrong.
 //
 // NOTE: The message hasn't been validated and may be malformed!
+COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE)
 MojoResult ReadMessage(MessagePipeHandle handle, Message* message);
 
 // Reports the currently dispatching Message as bad. Note that this is only
@@ -355,7 +373,7 @@ MojoResult ReadMessage(MessagePipeHandle handle, Message* message);
 // you need to do asynchronous work before you can determine the legitimacy of
 // a message, use GetBadMessageCallback() and retain its result until you're
 // ready to invoke or discard it.
-MOJO_CPP_BINDINGS_EXPORT
+COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE)
 void ReportBadMessage(const std::string& error);
 
 // Acquires a callback which may be run to report the currently dispatching
@@ -363,7 +381,7 @@ void ReportBadMessage(const std::string& error);
 // stack frame of a message dispatch, but the returned callback may be called
 // exactly once any time thereafter to report the message as bad. This may only
 // be called once per message.
-MOJO_CPP_BINDINGS_EXPORT
+COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE)
 ReportBadMessageCallback GetBadMessageCallback();
 
 }  // namespace mojo

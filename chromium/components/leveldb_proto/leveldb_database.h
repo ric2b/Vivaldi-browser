@@ -40,6 +40,8 @@ class LevelDB {
   explicit LevelDB(const char* client_name);
   virtual ~LevelDB();
 
+  using KeyFilter = base::RepeatingCallback<bool(const std::string& key)>;
+
   // Initializes a leveldb with the given options. If |database_dir| is
   // empty, this opens an in-memory db.
   virtual bool Init(const base::FilePath& database_dir,
@@ -47,7 +49,11 @@ class LevelDB {
 
   virtual bool Save(const base::StringPairs& pairs_to_save,
                     const std::vector<std::string>& keys_to_remove);
+  virtual bool UpdateWithRemoveFilter(const base::StringPairs& entries_to_save,
+                                      const KeyFilter& delete_key_filter);
   virtual bool Load(std::vector<std::string>* entries);
+  virtual bool LoadWithFilter(const KeyFilter& filter,
+                              std::vector<std::string>* entries);
   virtual bool LoadKeys(std::vector<std::string>* keys);
   virtual bool Get(const std::string& key, bool* found, std::string* entry);
   // Close (if currently open) and then destroy (i.e. delete) the database

@@ -8,11 +8,11 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "build/build_config.h"
@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/content_settings_usages_state.h"
@@ -34,13 +35,11 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
-#include "device/geolocation/network_location_request.h"
-#include "device/geolocation/public/cpp/scoped_geolocation_overrider.h"
-#include "device/geolocation/public/interfaces/geoposition.mojom.h"
-#include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/test_url_fetcher_factory.h"
+#include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
+#include "services/device/public/mojom/geoposition.mojom.h"
 
 namespace {
 
@@ -324,29 +323,6 @@ class GeolocationBrowserTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(GeolocationBrowserTest);
 };
 
-// This class is only used by test case of UrlWithApiKey which connects the
-// real geolocation implementation instead of the FakeGeolocation.
-// TODO(ke.he@intel.com): crbug.com/788298. Remove this class and rewrite the
-// test case of UrlWithApiKey as a services_unittest. Also remove the
-// ui_test_utils::OverrideGeolocation() then.
-class GeolocationBrowserTestWithoutOverrider : public GeolocationBrowserTest {
- public:
-  GeolocationBrowserTestWithoutOverrider();
-  ~GeolocationBrowserTestWithoutOverrider() override = default;
-  void SetUpOnMainThread() override;
-
-  DISALLOW_COPY_AND_ASSIGN(GeolocationBrowserTestWithoutOverrider);
-};
-
-GeolocationBrowserTestWithoutOverrider::
-    GeolocationBrowserTestWithoutOverrider() {
-  geolocation_overrider_.reset();
-}
-
-void GeolocationBrowserTestWithoutOverrider::SetUpOnMainThread() {
-  ui_test_utils::OverrideGeolocation(fake_latitude_, fake_longitude_);
-}
-
 // WebContentImpl tries to connect Device Service earlier than
 // of SetUpOnMainThread(), so create the |geolocation_overrider_| here.
 GeolocationBrowserTest::GeolocationBrowserTest()
@@ -511,36 +487,6 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, Geoposition) {
   ExpectPosition(fake_latitude(), fake_longitude());
 }
 
-#if defined(OS_CHROMEOS)
-// ChromeOS fails to perform network geolocation when zero wifi networks are
-// detected in a scan: https://crbug.com/767300.
-#define MAYBE_UrlWithApiKey DISABLED_UrlWithApiKey
-#else
-#define MAYBE_UrlWithApiKey UrlWithApiKey
-#endif
-// Tests that Chrome makes a network geolocation request to the correct URL
-// including Google API key query param.
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTestWithoutOverrider,
-                       MAYBE_UrlWithApiKey) {
-  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
-
-  // Unique ID (derived from Gerrit CL number):
-  device::NetworkLocationRequest::url_fetcher_id_for_tests = 675023;
-
-  // Intercept the URLFetcher from network geolocation request.
-  TestURLFetcherObserver observer(
-      device::NetworkLocationRequest::url_fetcher_id_for_tests);
-  ASSERT_TRUE(WatchPositionAndGrantPermission());
-  observer.Wait();
-  DCHECK(observer.fetcher());
-
-  // Verify full URL including Google API key.
-  const std::string expected_url =
-      "https://www.googleapis.com/geolocation/v1/geolocate?key=" +
-      net::EscapeQueryParamValue(google_apis::GetAPIKey(), true);
-  EXPECT_EQ(expected_url, observer.fetcher()->GetOriginalURL());
-}
-
 IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, ErrorOnPermissionDenied) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   EXPECT_TRUE(WatchPositionAndDenyPermission());
@@ -625,6 +571,13 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoLeakFromOffTheRecord) {
 }
 
 IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, IFramesWithFreshPosition) {
+  // When permission delegation is enabled, there isn't a way to have a pending
+  // permission prompt when permission has already been granted in another frame
+  // on the same page. That means that this test isn't relevant and can be
+  // deleted after the feature is enabled by default.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(features::kPermissionDelegation);
+
   set_html_for_tests("/geolocation/two_iframes.html");
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   LoadIFrames();
@@ -634,8 +587,8 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, IFramesWithFreshPosition) {
   ASSERT_TRUE(WatchPositionAndGrantPermission());
   ExpectPosition(fake_latitude(), fake_longitude());
 
-  // In a second iframe from a different origin with a cached position the user
-  // is prompted.
+  // In a second iframe from a different origin with a cached position the
+  // user is prompted.
   SetFrameForScriptExecution("iframe_1");
   WatchPositionAndObservePermissionRequest(true);
 
@@ -647,8 +600,8 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, IFramesWithFreshPosition) {
                                              fresh_position_longitude));
   ExpectPosition(fresh_position_latitude, fresh_position_longitude);
 
-  // When permission is granted to the second iframe the fresh position gets to
-  // the script.
+  // When permission is granted to the second iframe the fresh position gets
+  // to the script.
   SetFrameForScriptExecution("iframe_1");
   ASSERT_TRUE(WatchPositionAndGrantPermission());
   ExpectPosition(fresh_position_latitude, fresh_position_longitude);
@@ -679,6 +632,11 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, IFramesWithCachedPosition) {
 }
 
 IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, CancelPermissionForFrame) {
+  // When permission delegation is removed, iframe requests are made for the top
+  // level frame. Navigating the iframe should not cancel the request. This
+  // test can be removed after the feature is enabled by default.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(features::kPermissionDelegation);
   set_html_for_tests("/geolocation/two_iframes.html");
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   LoadIFrames();

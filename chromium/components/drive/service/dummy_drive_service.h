@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "components/drive/service/drive_service_interface.h"
@@ -36,6 +37,7 @@ class DummyDriveService : public DriveServiceInterface {
   google_apis::CancelCallback GetAllTeamDriveList(
       const google_apis::TeamDriveListCallback& callback) override;
   google_apis::CancelCallback GetAllFileList(
+      const std::string& team_drive_id,
       const google_apis::FileListCallback& callback) override;
   google_apis::CancelCallback GetFileListInDirectory(
       const std::string& directory_resource_id,
@@ -49,6 +51,10 @@ class DummyDriveService : public DriveServiceInterface {
       const google_apis::FileListCallback& callback) override;
   google_apis::CancelCallback GetChangeList(
       int64_t start_changestamp,
+      const google_apis::ChangeListCallback& callback) override;
+  google_apis::CancelCallback GetChangeListByToken(
+      const std::string& team_drive_id,
+      const std::string& start_page_token,
       const google_apis::ChangeListCallback& callback) override;
   google_apis::CancelCallback GetRemainingChangeList(
       const GURL& next_link,
@@ -68,6 +74,9 @@ class DummyDriveService : public DriveServiceInterface {
       const google_apis::GetShareUrlCallback& callback) override;
   google_apis::CancelCallback GetAboutResource(
       const google_apis::AboutResourceCallback& callback) override;
+  google_apis::CancelCallback GetStartPageToken(
+      const std::string& team_drive_id,
+      const google_apis::StartPageTokenCallback& callback) override;
   google_apis::CancelCallback GetAppList(
       const google_apis::AppListCallback& callback) override;
   google_apis::CancelCallback DeleteResource(

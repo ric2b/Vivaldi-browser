@@ -6,10 +6,11 @@
 
 #include <algorithm>
 
-#include "ash/accelerators/accelerator_table.h"
 #include "ash/content/keyboard_overlay/keyboard_overlay_delegate.h"
-#include "ash/content/shell_content_state.h"
+#include "ash/public/cpp/accelerators.h"
 #include "ash/test/ash_test_base.h"
+#include "base/stl_util.h"
+#include "content/public/test/test_browser_context.h"
 #include "ui/web_dialogs/test/test_web_contents_handler.h"
 #include "ui/web_dialogs/test/test_web_dialog_delegate.h"
 
@@ -25,9 +26,9 @@ bool operator==(const KeyboardOverlayView::KeyEventData& lhs,
 // Verifies that the accelerators that open the keyboard overlay close it.
 TEST_F(KeyboardOverlayViewTest, OpenAcceleratorsClose) {
   ui::test::TestWebDialogDelegate delegate(GURL("chrome://keyboardoverlay"));
-  KeyboardOverlayView view(
-      ShellContentState::GetInstance()->GetActiveBrowserContext(), &delegate,
-      new ui::test::TestWebContentsHandler);
+  content::TestBrowserContext browser_context;
+  KeyboardOverlayView view(&browser_context, &delegate,
+                           new ui::test::TestWebContentsHandler);
   for (size_t i = 0; i < kAcceleratorDataLength; ++i) {
     if (kAcceleratorData[i].action != SHOW_KEYBOARD_OVERLAY)
       continue;
@@ -44,9 +45,9 @@ TEST_F(KeyboardOverlayViewTest, OpenAcceleratorsClose) {
 // canceling key.
 TEST_F(KeyboardOverlayViewTest, TestCancelingKeysWithNonModifierFlags) {
   ui::test::TestWebDialogDelegate delegate(GURL("chrome://keyboardoverlay"));
-  KeyboardOverlayView view(
-      ShellContentState::GetInstance()->GetActiveBrowserContext(), &delegate,
-      new ui::test::TestWebContentsHandler);
+  content::TestBrowserContext browser_context;
+  KeyboardOverlayView view(&browser_context, &delegate,
+                           new ui::test::TestWebContentsHandler);
 
   const int kNonModifierFlags = ui::EF_IS_SYNTHESIZED | ui::EF_NUM_LOCK_ON |
                                 ui::EF_IME_FABRICATED_KEY | ui::EF_IS_REPEAT;
@@ -85,10 +86,8 @@ TEST_F(KeyboardOverlayViewTest, NoRedundantCancelingKeys) {
 
   // Other canceling keys should be same as opening keys.
   EXPECT_EQ(open_keys.size(), canceling_keys.size());
-  for (size_t i = 0; i < canceling_keys.size(); ++i) {
-    EXPECT_NE(std::find(open_keys.begin(), open_keys.end(), canceling_keys[i]),
-              open_keys.end());
-  }
+  for (size_t i = 0; i < canceling_keys.size(); ++i)
+    EXPECT_TRUE(base::ContainsValue(open_keys, canceling_keys[i]));
 }
 
 }  // namespace ash

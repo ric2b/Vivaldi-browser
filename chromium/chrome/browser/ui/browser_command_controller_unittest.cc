@@ -200,20 +200,24 @@ TEST_F(BrowserCommandControllerTest, AvatarAcceleratorEnabledOnDesktop) {
   const CommandUpdater* command_updater = &command_controller;
 
   bool enabled = true;
+  size_t profiles_count = 1U;
 #if defined(OS_CHROMEOS)
   // Chrome OS uses system tray menu to handle multi-profiles.
   enabled = false;
+  profiles_count = 2U;
 #endif
 
-  ASSERT_EQ(1U, profile_manager->GetNumberOfProfiles());
+  ASSERT_EQ(profiles_count, profile_manager->GetNumberOfProfiles());
   EXPECT_EQ(enabled, command_updater->IsCommandEnabled(IDC_SHOW_AVATAR_MENU));
 
   testing_profile_manager->CreateTestingProfile("p2");
-  ASSERT_EQ(2U, profile_manager->GetNumberOfProfiles());
+  profiles_count++;
+  ASSERT_EQ(profiles_count, profile_manager->GetNumberOfProfiles());
   EXPECT_EQ(enabled, command_updater->IsCommandEnabled(IDC_SHOW_AVATAR_MENU));
 
   testing_profile_manager->DeleteTestingProfile("p2");
-  ASSERT_EQ(1U, profile_manager->GetNumberOfProfiles());
+  profiles_count--;
+  ASSERT_EQ(profiles_count, profile_manager->GetNumberOfProfiles());
   EXPECT_EQ(enabled, command_updater->IsCommandEnabled(IDC_SHOW_AVATAR_MENU));
 }
 
@@ -274,8 +278,12 @@ class FullscreenTestBrowserWindow : public TestBrowserWindow,
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
       ExclusiveAccessBubbleType bubble_type,
-      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback) override {}
+      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
+      bool force_update) override {}
   void OnExclusiveAccessUserInput() override {}
+  ExclusiveAccessBubbleViews* GetExclusiveAccessBubble() override {
+    return nullptr;
+  }
 
   void set_toolbar_showing(bool showing) { toolbar_showing_ = showing; }
 
@@ -363,7 +371,8 @@ TEST_F(BrowserCommandControllerFullscreenTest,
     { IDC_SHOW_AS_TAB,             false,    false,     false,     false    },
   };
   const content::NativeWebKeyboardEvent key_event(
-      blink::WebInputEvent::kTypeFirst, 0, 0);
+      blink::WebInputEvent::kTypeFirst, 0,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   // Defaults for a tabbed browser.
   for (size_t i = 0; i < arraysize(commands); i++) {
     SCOPED_TRACE(commands[i].command_id);

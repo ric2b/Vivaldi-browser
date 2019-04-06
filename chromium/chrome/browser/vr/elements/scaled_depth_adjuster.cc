@@ -8,7 +8,7 @@ namespace vr {
 
 ScaledDepthAdjuster::ScaledDepthAdjuster(float delta_z) : delta_z_(delta_z) {
   SetType(kTypeScaledDepthAdjuster);
-  set_hit_testable(false);
+  set_contributes_to_parent_bounds(false);
 }
 
 ScaledDepthAdjuster::~ScaledDepthAdjuster() = default;
@@ -21,8 +21,7 @@ gfx::Transform ScaledDepthAdjuster::GetTargetLocalTransform() const {
   return transform_;
 }
 
-bool ScaledDepthAdjuster::OnBeginFrame(const base::TimeTicks& time,
-                                       const gfx::Transform& head_pose) {
+bool ScaledDepthAdjuster::OnBeginFrame(const gfx::Transform& head_pose) {
   // NB: we compute our local transform only once in the first call to
   // OnBeginFrame that occurs after this element's construction. This permits
   // ScaledDepthAdjuster elements to be added to subtrees that are later added
@@ -46,6 +45,7 @@ bool ScaledDepthAdjuster::OnBeginFrame(const base::TimeTicks& time,
   float z = -o.z() + delta_z_;
   transform_.Scale3d(z, z, z);
   transform_.Translate3d(0, 0, -1);
+  set_world_space_transform_dirty();
   return true;
 }
 
@@ -53,11 +53,13 @@ void ScaledDepthAdjuster::OnSetType() {
   DCHECK_EQ(kTypeScaledDepthAdjuster, type());
 }
 
+#ifndef NDEBUG
 void ScaledDepthAdjuster::DumpGeometry(std::ostringstream* os) const {
   gfx::Transform t = world_space_transform();
   gfx::Point3F o;
   t.TransformPoint(&o);
   *os << "tz(" << delta_z_ << ") ";
 }
+#endif
 
 }  // namespace vr

@@ -8,10 +8,6 @@
 
 login.createScreen('ResetScreen', 'reset', function() {
   var USER_ACTION_CANCEL_RESET = 'cancel-reset';
-  var USER_ACTION_RESTART_PRESSED = 'restart-pressed';
-  var USER_ACTION_LEARN_MORE_PRESSED = 'learn-more-link';
-  var USER_ACTION_SHOW_CONFIRMATION = 'show-confirmation';
-  var USER_ACTION_POWERWASH_PRESSED = 'powerwash-pressed';
   var USER_ACTION_RESET_CONFIRM_DISMISSED = 'reset-confirm-dismissed';
   var CONTEXT_KEY_ROLLBACK_AVAILABLE = 'rollback-available';
   var CONTEXT_KEY_ROLLBACK_CHECKED = 'rollback-checked';
@@ -46,16 +42,6 @@ login.createScreen('ResetScreen', 'reset', function() {
     decorate: function() {
       var self = this;
 
-      this.declareUserAction(
-          $('powerwash-help-link'),
-          {action_id: USER_ACTION_LEARN_MORE_PRESSED, event: 'click'});
-      this.declareUserAction(
-          $('reset-confirm-dismiss'),
-          {action_id: USER_ACTION_RESET_CONFIRM_DISMISSED, event: 'click'});
-      this.declareUserAction(
-          $('reset-confirm-commit'),
-          {action_id: USER_ACTION_POWERWASH_PRESSED, event: 'click'});
-
       this.context.addObserver(CONTEXT_KEY_SCREEN_STATE, function(state) {
         if (Oobe.getInstance().currentScreen != this) {
           setTimeout(function() {
@@ -79,7 +65,6 @@ login.createScreen('ResetScreen', 'reset', function() {
 
       this.context.addObserver(
           CONTEXT_KEY_IS_OFFICIAL_BUILD, function(isOfficial) {
-            $('powerwash-help-link').setAttribute('hidden', !isOfficial);
             $('oobe-reset-md').isOfficial_ = isOfficial;
           });
       this.context.addObserver(
@@ -105,18 +90,15 @@ login.createScreen('ResetScreen', 'reset', function() {
       this.context.addObserver(
           CONTEXT_KEY_IS_CONFIRMATIONAL_VIEW, function(is_confirmational) {
             if (is_confirmational) {
-              console.log(self.context.get(CONTEXT_KEY_SCREEN_STATE, 0));
               if (self.context.get(CONTEXT_KEY_SCREEN_STATE, 0) !=
-                  self.RESET_SCREEN_STATE.POWERWASH_PROPOSAL)
+                  self.RESET_SCREEN_STATE.POWERWASH_PROPOSAL) {
                 return;
-              console.log(self);
-              reset.ConfirmResetOverlay.getInstance().initializePage();
-              if (!$('reset-confirm-overlay-md').hidden)
-                $('reset-confirm-overlay-md').showModal();
+              }
+              $('overlay-reset').removeAttribute('hidden');
+              $('reset-confirm-overlay-md').open();
             } else {
               $('overlay-reset').setAttribute('hidden', true);
-              if ($('reset-confirm-overlay-md').open)
-                $('reset-confirm-overlay-md').close();
+              $('reset-confirm-overlay-md').close();
             }
           });
 
@@ -132,54 +114,10 @@ login.createScreen('ResetScreen', 'reset', function() {
     },
 
     /**
-     * Buttons in oobe wizard's button strip.
-     * @type {array} Array of Buttons.
-     */
-    get buttons() {
-      var buttons = [];
-      var restartButton = this.ownerDocument.createElement('button');
-      restartButton.id = 'reset-restart-button';
-      restartButton.textContent = loadTimeData.getString('resetButtonRestart');
-      this.declareUserAction(
-          restartButton,
-          {action_id: USER_ACTION_RESTART_PRESSED, event: 'click'});
-      buttons.push(restartButton);
-
-      // Button that leads to confirmation pop-up dialog.
-      var toConfirmButton = this.ownerDocument.createElement('button');
-      toConfirmButton.id = 'reset-toconfirm-button';
-      toConfirmButton.textContent =
-          loadTimeData.getString('resetButtonPowerwash');
-      this.declareUserAction(
-          toConfirmButton,
-          {action_id: USER_ACTION_SHOW_CONFIRMATION, event: 'click'});
-      buttons.push(toConfirmButton);
-
-      var cancelButton = this.ownerDocument.createElement('button');
-      cancelButton.id = 'reset-cancel-button';
-      cancelButton.textContent = loadTimeData.getString('cancelButton');
-      this.declareUserAction(
-          cancelButton, {action_id: USER_ACTION_CANCEL_RESET, event: 'click'});
-      buttons.push(cancelButton);
-
-      return buttons;
-    },
-
-    /**
      * Returns a control which should receive an initial focus.
      */
     get defaultControl() {
-      // choose
-      if (this.isMDMode_())
-        return $('oobe-reset-md');
-      if (this.context.get(
-              CONTEXT_KEY_SCREEN_STATE,
-              this.RESET_SCREEN_STATE.RESTART_REQUIRED) ==
-          this.RESET_SCREEN_STATE.RESTART_REQUIRED)
-        return $('reset-restart-button');
-      if (this.context.get(CONTEXT_KEY_IS_CONFIRMATIONAL_VIEW, false))
-        return $('reset-confirm-commit');
-      return $('reset-toconfirm-button');
+      return $('oobe-reset-md');
     },
 
     /**
@@ -196,39 +134,10 @@ login.createScreen('ResetScreen', 'reset', function() {
     },
 
     /**
-     * This method takes care of switching to material-design OOBE.
-     * @private
-     */
-    setMDMode_: function() {
-      var useMDOobe = this.isMDMode_();
-      $('oobe-reset-md').hidden = !useMDOobe;
-      $('reset-confirm-overlay-md').hidden = !useMDOobe;
-      $('oobe-reset').hidden = useMDOobe;
-      $('reset-confirm-overlay').hidden = useMDOobe;
-      if (useMDOobe) {
-        $('reset').setAttribute('md-mode', 'true');
-        $('overlay-reset').setAttribute('md-mode', 'true');
-      } else {
-        $('reset').removeAttribute('md-mode');
-        $('overlay-reset').removeAttribute('md-mode');
-      }
-    },
-
-    /**
-     * Returns if material-design flag is used.
-     * @private
-     */
-    isMDMode_: function() {
-      return loadTimeData.getString('newOobeUI') == 'on';
-    },
-
-    /**
      * Event handler that is invoked just before the screen in shown.
      * @param {Object} data Screen init payload.
      */
-    onBeforeShow: function(data) {
-      this.setMDMode_();
-    },
+    onBeforeShow: function(data) {},
 
     /**
      * Sets css style for corresponding state of the screen.
@@ -236,7 +145,6 @@ login.createScreen('ResetScreen', 'reset', function() {
      */
     setDialogView_: function(state) {
       state = this.ui_state;
-      var resetOverlay = $('reset-confirm-overlay');
       this.classList.toggle(
           'revert-promise-view',
           state == this.RESET_SCREEN_UI_STATE.REVERT_PROMISE);
@@ -246,13 +154,7 @@ login.createScreen('ResetScreen', 'reset', function() {
       this.classList.toggle(
           'powerwash-proposal-view',
           state == this.RESET_SCREEN_UI_STATE.POWERWASH_PROPOSAL);
-      resetOverlay.classList.toggle(
-          'powerwash-proposal-view',
-          state == this.RESET_SCREEN_UI_STATE.POWERWASH_PROPOSAL);
       this.classList.toggle(
-          'rollback-proposal-view',
-          state == this.RESET_SCREEN_UI_STATE.ROLLBACK_PROPOSAL);
-      resetOverlay.classList.toggle(
           'rollback-proposal-view',
           state == this.RESET_SCREEN_UI_STATE.ROLLBACK_PROPOSAL);
       var resetMd = $('oobe-reset-md');
@@ -282,14 +184,8 @@ login.createScreen('ResetScreen', 'reset', function() {
 
       if (this.context.get(CONTEXT_KEY_ROLLBACK_AVAILABLE, false) &&
           this.context.get(CONTEXT_KEY_ROLLBACK_CHECKED, false)) {
-        // show rollback option
-        $('reset-toconfirm-button').textContent =
-            loadTimeData.getString('resetButtonPowerwashAndRollback');
         this.ui_state = this.RESET_SCREEN_UI_STATE.ROLLBACK_PROPOSAL;
       } else {
-        // hide rollback option
-        $('reset-toconfirm-button').textContent =
-            loadTimeData.getString('resetButtonPowerwash');
         this.ui_state = this.RESET_SCREEN_UI_STATE.POWERWASH_PROPOSAL;
       }
       this.setDialogView_();

@@ -5,36 +5,32 @@
 #ifndef GPU_IPC_GL_IN_PROCESS_CONTEXT_H_
 #define GPU_IPC_GL_IN_PROCESS_CONTEXT_H_
 
-#include <stddef.h>
-#include <stdint.h>
+#include <memory>
 
-#include "base/callback.h"
-#include "base/compiler_specific.h"
 #include "base/single_thread_task_runner.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
+#include "gpu/ipc/command_buffer_task_executor.h"
 #include "gpu/ipc/gl_in_process_context_export.h"
 #include "gpu/ipc/in_process_command_buffer.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_surface.h"
-#include "ui/gl/gpu_preference.h"
 
 namespace gpu {
+class TransferBuffer;
 struct GpuFeatureInfo;
-class InProcessCommandBuffer;
-class ServiceTransferCache;
 struct SharedMemoryLimits;
 
 namespace gles2 {
+class GLES2CmdHelper;
 class GLES2Implementation;
 }
 
+// Wraps everything needed to use an in process GL context.
 class GL_IN_PROCESS_CONTEXT_EXPORT GLInProcessContext {
  public:
-  virtual ~GLInProcessContext() = default;
-
-  // TODO(danakj): Devirtualize this class and remove this, just call the
-  // constructor.
-  static std::unique_ptr<GLInProcessContext> CreateWithoutInit();
+  // You must call Initialize() before using the context.
+  GLInProcessContext();
+  ~GLInProcessContext();
 
   // Initialize the GLInProcessContext, if |is_offscreen| is true, renders to an
   // offscreen context. |attrib_list| must be null or a NONE-terminated list
@@ -45,41 +41,37 @@ class GL_IN_PROCESS_CONTEXT_EXPORT GLInProcessContext {
   // not thread safe. If |surface| is null, then the other parameters are used
   // to correctly create a surface.
   // |gpu_channel_manager| should be non-null when used in the GPU process.
-  virtual gpu::ContextResult Initialize(
-      scoped_refptr<gpu::InProcessCommandBuffer::Service> service,
+  ContextResult Initialize(
+      scoped_refptr<CommandBufferTaskExecutor> task_executor,
       scoped_refptr<gl::GLSurface> surface,
       bool is_offscreen,
       SurfaceHandle window,
-      GLInProcessContext* share_context,
-      const gpu::ContextCreationAttribs& attribs,
+      const ContextCreationAttribs& attribs,
       const SharedMemoryLimits& memory_limits,
       GpuMemoryBufferManager* gpu_memory_buffer_manager,
       ImageFactory* image_factory,
       GpuChannelManagerDelegate* gpu_channel_manager_delegate,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner) = 0;
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
-  virtual const gpu::Capabilities& GetCapabilities() const = 0;
-  virtual const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const = 0;
+  const Capabilities& GetCapabilities() const;
+  const GpuFeatureInfo& GetGpuFeatureInfo() const;
 
   // Allows direct access to the GLES2 implementation so a GLInProcessContext
   // can be used without making it current.
-  virtual gles2::GLES2Implementation* GetImplementation() = 0;
+  gles2::GLES2Implementation* GetImplementation();
 
-  virtual void SetLock(base::Lock* lock) = 0;
+  CommandBuffer* GetCommandBuffer();
 
-  virtual void SetSwapBuffersCompletionCallback(
-      const gpu::InProcessCommandBuffer::SwapBuffersCompletionCallback&
-          callback) = 0;
+  void SetUpdateVSyncParametersCallback(
+      const InProcessCommandBuffer::UpdateVSyncParametersCallback& callback);
 
-  virtual void SetUpdateVSyncParametersCallback(
-      const gpu::InProcessCommandBuffer::UpdateVSyncParametersCallback&
-          callback) = 0;
+ private:
+  std::unique_ptr<gles2::GLES2CmdHelper> gles2_helper_;
+  std::unique_ptr<TransferBuffer> transfer_buffer_;
+  std::unique_ptr<gles2::GLES2Implementation> gles2_implementation_;
+  std::unique_ptr<InProcessCommandBuffer> command_buffer_;
 
-  virtual void SetPresentationCallback(
-      const gpu::InProcessCommandBuffer::PresentationCallback& callback) = 0;
-
-  // Test only functions.
-  virtual gpu::ServiceTransferCache* GetTransferCacheForTest() const = 0;
+  DISALLOW_COPY_AND_ASSIGN(GLInProcessContext);
 };
 
 }  // namespace gpu

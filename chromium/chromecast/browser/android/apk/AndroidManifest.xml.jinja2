@@ -12,7 +12,6 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application android:name="org.chromium.chromecast.shell.CastApplication"
@@ -23,8 +22,9 @@
                   android:exported="true"
                   android:hardwareAccelerated="true"
                   android:launchMode="standard"
+                  android:screenOrientation="landscape"
                   android:taskAffinity=".CastWebContentsActivity"
-                  android:configChanges="orientation|keyboardHidden|keyboard|screenSize"
+                  android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection"
                   android:excludeFromRecents="true"
                   {% if cast_build_enable_background_activities == "true" %}
                   android:noHistory="false">
@@ -35,11 +35,9 @@
 
         <!-- The following service entries exist in order to allow us to
              start more than one sandboxed process. -->
-        {% set num_sandboxed_services = 20 %}
+        {% set num_sandboxed_services = 40 %}
         <meta-data android:name="org.chromium.content.browser.NUM_SANDBOXED_SERVICES"
                    android:value="{{ num_sandboxed_services }}"/>
-        <meta-data android:name="org.chromium.content.browser.SANDBOXED_SERVICES_NAME"
-                   android:value="org.chromium.content.app.SandboxedProcessService"/>
 
         {% for i in range(num_sandboxed_services) %}
         <service android:name="org.chromium.content.app.SandboxedProcessService{{ i }}"
@@ -51,8 +49,6 @@
         {% set num_privileged_services = 3 %}
         <meta-data android:name="org.chromium.content.browser.NUM_PRIVILEGED_SERVICES"
                    android:value="{{ num_privileged_services }}"/>
-        <meta-data android:name="org.chromium.content.browser.PRIVILEGED_SERVICES_NAME"
-                   android:value="org.chromium.content.app.PrivilegedProcessService"/>
 
         {% for i in range(num_privileged_services) %}
         <service android:name="org.chromium.content.app.PrivilegedProcessService{{ i }}"

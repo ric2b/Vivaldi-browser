@@ -8,13 +8,12 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string16.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permission_message.h"
@@ -23,7 +22,6 @@
 class GURL;
 
 namespace extensions {
-class Extension;
 class URLPatternSet;
 
 // A container for the permissions state of an extension, including active,
@@ -38,12 +36,16 @@ class URLPatternSet;
 // permissions while another thread changes them.
 class PermissionsData {
  public:
-  // The possible types of access for a given frame.
-  enum AccessType {
-    ACCESS_DENIED,   // The extension is not allowed to access the given page.
-    ACCESS_ALLOWED,  // The extension is allowed to access the given page.
-    ACCESS_WITHHELD  // The browser must determine if the extension can access
-                     // the given page.
+  // The possible types of access for a given page.
+  // TODO(devlin): Sometimes, this is used for things beyond just a "page",
+  // such as network request interception or access to a particular frame.
+  // Should we update this?  If so, we should also update the titles of the
+  // GetPageAccess()/CanAccessPage() methods below.
+  enum class PageAccess {
+    kDenied,    // The extension is not allowed to access the given page.
+    kAllowed,   // The extension is allowed to access the given page.
+    kWithheld,  // The browser must determine if the extension can access
+                // the given page.
   };
 
   using TabPermissionsMap = std::map<int, std::unique_ptr<const PermissionSet>>;
@@ -54,33 +56,36 @@ class PermissionsData {
    public:
     virtual ~PolicyDelegate() {}
 
-    // Returns false if script access should be blocked on this page.
+    // Returns true if script access should be blocked on this page.
     // Otherwise, default policy should decide.
-    virtual bool CanExecuteScriptOnPage(const Extension* extension,
-                                        const GURL& document_url,
-                                        int tab_id,
-                                        std::string* error) = 0;
+    virtual bool IsRestrictedUrl(const GURL& document_url,
+                                 std::string* error) = 0;
   };
 
   static void SetPolicyDelegate(PolicyDelegate* delegate);
 
-  explicit PermissionsData(const Extension* extension);
+  PermissionsData(const ExtensionId& extension_id,
+                  Manifest::Type manifest_type,
+                  Manifest::Location location,
+                  std::unique_ptr<const PermissionSet> initial_permissions);
   virtual ~PermissionsData();
 
   // Returns true if the extension is a COMPONENT extension or is on the
   // whitelist of extensions that can script all pages.
-  static bool CanExecuteScriptEverywhere(const Extension* extension);
-
-  // Returns true if we should skip the permissions warning for the extension
-  // with the given |extension_id|.
-  static bool ShouldSkipPermissionWarnings(const std::string& extension_id);
+  // NOTE: This is static because it is used during extension initialization,
+  // before the extension has an associated PermissionsData object.
+  static bool CanExecuteScriptEverywhere(const ExtensionId& extension_id,
+                                         Manifest::Location location);
 
   // Returns true if the given |url| is restricted for the given |extension|,
   // as is commonly the case for chrome:// urls.
   // NOTE: You probably want to use CanAccessPage().
-  static bool IsRestrictedUrl(const GURL& document_url,
-                              const Extension* extension,
-                              std::string* error);
+  bool IsRestrictedUrl(const GURL& document_url, std::string* error) const;
+
+  // Returns true if the "all_urls" meta-pattern should include access to
+  // URLs with the "chrome" scheme. Access to these URLs is limited as they
+  // are sensitive.
+  static bool AllUrlsIncludesChromeUrls(const std::string& extension_id);
 
   // Is this extension using the default scope for policy_blocked_hosts and
   // policy_allowed_hosts of the ExtensionSettings policy.
@@ -100,8 +105,8 @@ class PermissionsData {
   // of URL restrictions using SetDefaultPolicyHostRestrictions. This function
   // overrides any default host restriction policy.
   void SetPolicyHostRestrictions(
-      const URLPatternSet& runtime_blocked_hosts,
-      const URLPatternSet& runtime_allowed_hosts) const;
+      const URLPatternSet& policy_blocked_hosts,
+      const URLPatternSet& policy_allowed_hosts) const;
 
   // Marks this extension as using default enterprise policy limiting
   // which URLs extensions can interact with. A default policy can be set with
@@ -113,8 +118,8 @@ class PermissionsData {
   // extensions can interact with. This restriction can be overridden on a
   // per-extension basis with SetPolicyHostRestrictions.
   static void SetDefaultPolicyHostRestrictions(
-      const URLPatternSet& default_runtime_blocked_hosts,
-      const URLPatternSet& default_runtime_allowed_hosts);
+      const URLPatternSet& default_policy_blocked_hosts,
+      const URLPatternSet& default_policy_allowed_hosts);
 
   // Sets the active permissions, leaving withheld the same.
   void SetActivePermissions(std::unique_ptr<const PermissionSet> active) const;
@@ -171,55 +176,47 @@ class PermissionsData {
   PermissionMessages GetNewPermissionMessages(
       const PermissionSet& granted_permissions) const;
 
-  // Returns true if the extension has requested all-hosts permissions (or
-  // something close to it), but has had it withheld.
-  bool HasWithheldImpliedAllHosts() const;
-
-  // Returns true if the |extension| has permission to access and interact with
-  // the specified page, in order to do things like inject scripts or modify
-  // the content.
+  // Returns true if the associated extension has permission to access and
+  // interact with the specified page, in order to do things like inject
+  // scripts or modify the content.
   // If this returns false and |error| is non-NULL, |error| will be popualted
   // with the reason the extension cannot access the page.
-  bool CanAccessPage(const Extension* extension,
-                     const GURL& document_url,
+  bool CanAccessPage(const GURL& document_url,
                      int tab_id,
                      std::string* error) const;
   // Like CanAccessPage, but also takes withheld permissions into account.
   // TODO(rdevlin.cronin) We shouldn't have two functions, but not all callers
   // know how to wait for permission.
-  AccessType GetPageAccess(const Extension* extension,
-                           const GURL& document_url,
+  PageAccess GetPageAccess(const GURL& document_url,
                            int tab_id,
                            std::string* error) const;
 
-  // Returns true if the |extension| has permission to inject a content script
-  // on the page.
+  // Returns true if the associated extension has permission to inject a
+  // content script on the page.
   // If this returns false and |error| is non-NULL, |error| will be popualted
   // with the reason the extension cannot script the page.
   // NOTE: You almost certainly want to use CanAccessPage() instead of this
   // method.
-  bool CanRunContentScriptOnPage(const Extension* extension,
-                                 const GURL& document_url,
+  bool CanRunContentScriptOnPage(const GURL& document_url,
                                  int tab_id,
                                  std::string* error) const;
   // Like CanRunContentScriptOnPage, but also takes withheld permissions into
   // account.
   // TODO(rdevlin.cronin) We shouldn't have two functions, but not all callers
   // know how to wait for permission.
-  AccessType GetContentScriptAccess(const Extension* extension,
-                                    const GURL& document_url,
+  PageAccess GetContentScriptAccess(const GURL& document_url,
                                     int tab_id,
                                     std::string* error) const;
 
-  // Returns true if extension is allowed to obtain the contents of a page as
-  // an image. Pages may contain multiple sources (e.g., example.com may embed
-  // google.com), so simply checking the top-frame's URL is insufficient.
+  // Returns true if the associated extension is allowed to obtain the contents
+  // of a page as an image. Pages may contain multiple sources (e.g.,
+  // example.com may embed google.com), so simply checking the top-frame's URL
+  // is insufficient.
   // Instead:
   // - If the page is a chrome:// page, require activeTab.
   // - For all other pages, require host permissions to the document
   //   (GetPageAccess()) and one of either <all_urls> or granted activeTab.
   bool CanCaptureVisiblePage(const GURL& document_url,
-                             const Extension* extension,
                              int tab_id,
                              std::string* error) const;
 
@@ -265,9 +262,9 @@ class PermissionsData {
   const URLPatternSet policy_allowed_hosts() const;
 
   // Check if a specific URL is blocked by policy from extension use at runtime.
-  bool IsRuntimeBlockedHost(const GURL& url) const {
+  bool IsPolicyBlockedHost(const GURL& url) const {
     base::AutoLock auto_lock(runtime_lock_);
-    return IsRuntimeBlockedHostUnsafe(url);
+    return IsPolicyBlockedHostUnsafe(url);
   }
 
 #if defined(UNIT_TEST)
@@ -283,28 +280,20 @@ class PermissionsData {
   // Must be called with |runtime_lock_| acquired.
   const PermissionSet* GetTabSpecificPermissions(int tab_id) const;
 
-  // Returns true if the |extension| has tab-specific permission to operate on
-  // the tab specified by |tab_id| with the given |url|.
-  // Note that if this returns false, it doesn't mean the extension can't run on
-  // the given tab, only that it does not have tab-specific permission to do so.
-  // Must be called with |runtime_lock_| acquired.
-  bool HasTabSpecificPermissionToExecuteScript(int tab_id,
-                                               const GURL& url) const;
-
   // Returns whether or not the extension is permitted to run on the given page,
-  // checking against |permitted_url_patterns| in addition to blocking special
-  // sites (like the webstore or chrome:// urls).
+  // checking against |permitted_url_patterns| and |tab_url_patterns| in
+  // addition to blocking special sites (like the webstore or chrome:// urls).
   // Must be called with |runtime_lock_| acquired.
-  AccessType CanRunOnPage(const Extension* extension,
-                          const GURL& document_url,
+  PageAccess CanRunOnPage(const GURL& document_url,
                           int tab_id,
                           const URLPatternSet& permitted_url_patterns,
                           const URLPatternSet& withheld_url_patterns,
+                          const URLPatternSet* tab_url_patterns,
                           std::string* error) const;
 
   // Check if a specific URL is blocked by policy from extension use at runtime.
   // You must acquire the runtime_lock_ before calling.
-  bool IsRuntimeBlockedHostUnsafe(const GURL& url) const;
+  bool IsPolicyBlockedHostUnsafe(const GURL& url) const;
 
   // Same as policy_blocked_hosts but instead returns a reference.
   // You must acquire runtime_lock_ before calling this.
@@ -319,6 +308,9 @@ class PermissionsData {
 
   // The associated extension's manifest type.
   Manifest::Type manifest_type_;
+
+  // The associated extension's location.
+  Manifest::Location location_;
 
   mutable base::Lock runtime_lock_;
 

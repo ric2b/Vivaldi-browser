@@ -6,10 +6,13 @@
 #define CONTENT_RENDERER_PEPPER_FULLSCREEN_CONTAINER_H_
 
 namespace blink {
-class WebLayer;
 struct WebCursorInfo;
 struct WebRect;
 }  // namespace blink
+
+namespace cc {
+class Layer;
+}
 
 namespace content {
 
@@ -33,7 +36,7 @@ class FullscreenContainer {
   // Notifies the container that the mouse cursor has changed.
   virtual void PepperDidChangeCursor(const blink::WebCursorInfo& cursor) = 0;
 
-  virtual void SetLayer(blink::WebLayer* layer) = 0;
+  virtual void SetLayer(cc::Layer* layer) = 0;
 
  protected:
   virtual ~FullscreenContainer() {}

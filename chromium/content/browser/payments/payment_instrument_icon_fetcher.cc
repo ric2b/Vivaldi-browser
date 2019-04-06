@@ -11,7 +11,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/manifest_icon_downloader.h"
-#include "content/public/browser/manifest_icon_selector.h"
+#include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
@@ -28,13 +28,13 @@ const int kPaymentAppMinimumIconSize = 0;
 
 void DownloadBestMatchingIcon(
     WebContents* web_contents,
-    const std::vector<Manifest::Icon>& icons,
+    const std::vector<blink::Manifest::ImageResource>& icons,
     PaymentInstrumentIconFetcher::PaymentInstrumentIconFetcherCallback
         callback);
 
 void OnIconFetched(
     WebContents* web_contents,
-    const std::vector<Manifest::Icon>& icons,
+    const std::vector<blink::Manifest::ImageResource>& icons,
     PaymentInstrumentIconFetcher::PaymentInstrumentIconFetcherCallback callback,
     const SkBitmap& bitmap) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -64,16 +64,25 @@ void OnIconFetched(
 
 void DownloadBestMatchingIcon(
     WebContents* web_contents,
-    const std::vector<Manifest::Icon>& icons,
+    const std::vector<blink::Manifest::ImageResource>& icons,
     PaymentInstrumentIconFetcher::PaymentInstrumentIconFetcherCallback
         callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  GURL icon_url = ManifestIconSelector::FindBestMatchingIcon(
+  GURL icon_url = blink::ManifestIconSelector::FindBestMatchingIcon(
       icons, kPaymentAppIdealIconSize, kPaymentAppMinimumIconSize,
-      Manifest::Icon::IconPurpose::ANY);
+      blink::Manifest::ImageResource::Purpose::ANY);
+  if (web_contents == nullptr || !icon_url.is_valid()) {
+    // If the icon url is invalid, it's better to give the information to
+    // developers in advance unlike when fetching or decoding fails. We already
+    // checked whether they are valid in renderer side. So, if the icon url is
+    // invalid, it's something wrong.
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::BindOnce(std::move(callback), std::string()));
+    return;
+  }
 
-  std::vector<Manifest::Icon> copy_icons;
+  std::vector<blink::Manifest::ImageResource> copy_icons;
   for (const auto& icon : icons) {
     if (icon.src != icon_url) {
       copy_icons.emplace_back(icon);
@@ -85,14 +94,7 @@ void DownloadBestMatchingIcon(
       kPaymentAppMinimumIconSize,
       base::Bind(&OnIconFetched, web_contents, copy_icons,
                  base::Passed(std::move(callback))));
-  // If the icon url is invalid, it's better to give the information to
-  // developers in advance unlike when fetching or decoding fails.
-  // We already checked whether they are valid in renderer side. So, if the
-  // icon url is invalid, it's something wrong.
-  if (!can_download_icon) {
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::BindOnce(std::move(callback), std::string()));
-  }
+  DCHECK(can_download_icon);
 }
 
 WebContents* GetWebContentsFromProviderHostIds(
@@ -121,7 +123,7 @@ WebContents* GetWebContentsFromProviderHostIds(
 void StartOnUI(
     const GURL& scope,
     std::unique_ptr<std::vector<std::pair<int, int>>> provider_hosts,
-    const std::vector<Manifest::Icon>& icons,
+    const std::vector<blink::Manifest::ImageResource>& icons,
     PaymentInstrumentIconFetcher::PaymentInstrumentIconFetcherCallback
         callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -137,7 +139,7 @@ void StartOnUI(
 void PaymentInstrumentIconFetcher::Start(
     const GURL& scope,
     std::unique_ptr<std::vector<std::pair<int, int>>> provider_hosts,
-    const std::vector<Manifest::Icon>& icons,
+    const std::vector<blink::Manifest::ImageResource>& icons,
     PaymentInstrumentIconFetcherCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 

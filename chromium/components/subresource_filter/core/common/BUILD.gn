@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//testing/libfuzzer/fuzzer_test.gni")
+
 static_library("common") {
   sources = [
     "activation_decision.h",
@@ -13,6 +15,8 @@ static_library("common") {
     "activation_scope.h",
     "activation_state.cc",
     "activation_state.h",
+    "common_features.cc",
+    "common_features.h",
     "document_load_statistics.h",
     "document_subresource_filter.cc",
     "document_subresource_filter.h",
@@ -25,6 +29,8 @@ static_library("common") {
     "memory_mapped_ruleset.h",
     "scoped_timers.h",
     "time_measurements.h",
+    "unindexed_ruleset.cc",
+    "unindexed_ruleset.h",
   ]
 
   public_deps = [
@@ -65,6 +71,7 @@ source_set("unit_tests") {
     "first_party_origin_unittest.cc",
     "indexed_ruleset_unittest.cc",
     "scoped_timers_unittest.cc",
+    "unindexed_ruleset_unittest.cc",
   ]
   deps = [
     ":common",
@@ -74,6 +81,18 @@ source_set("unit_tests") {
     "//components/url_pattern_index:test_support",
     "//testing/gtest",
     "//third_party/protobuf:protobuf_lite",
+    "//url",
+  ]
+}
+
+fuzzer_test("indexed_ruleset_fuzzer") {
+  sources = [
+    "indexed_ruleset_fuzzer.cc",
+  ]
+  deps = [
+    ":common",
+    "//base",
+    "//base/test:test_support",
     "//url",
   ]
 }

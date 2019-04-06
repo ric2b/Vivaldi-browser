@@ -9,8 +9,8 @@
 
 #include <string>
 
+#include "base/component_export.h"
 #include "build/build_config.h"
-#include "ipc/ipc_export.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
 namespace IPC {
@@ -18,7 +18,7 @@ namespace IPC {
 class Message;
 
 // Implemented by consumers of a Channel to receive messages.
-class IPC_EXPORT Listener {
+class COMPONENT_EXPORT(IPC) Listener {
  public:
   // Called when a message is received.  Returns true iff the message was
   // handled.
@@ -41,7 +41,7 @@ class IPC_EXPORT Listener {
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle handle) {}
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
   // Called on the server side when a channel that listens for connections
   // denies an attempt to connect.
   virtual void OnChannelDenied() {}
@@ -49,7 +49,7 @@ class IPC_EXPORT Listener {
   // Called on the server side when a channel that listens for connections
   // has an error that causes the listening channel to close.
   virtual void OnChannelListenError() {}
-#endif  // OS_POSIX
+#endif  // OS_POSIX || OS_FUCHSIA
 
  protected:
   virtual ~Listener() {}

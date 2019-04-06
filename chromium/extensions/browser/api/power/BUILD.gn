@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 
 assert(enable_extensions,
        "Cannot depend on extensions because enable_extensions=false.")
@@ -17,7 +17,7 @@ source_set("power") {
     "//content/public/common",
     "//extensions/common/api",
     "//mojo/public/cpp/bindings",
-    "//services/device/public/interfaces",
+    "//services/device/public/mojom",
   ]
 
   public_deps = [

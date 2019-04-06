@@ -9,9 +9,19 @@
 namespace syncer {
 
 MetadataBatch::MetadataBatch() {}
+
+MetadataBatch::MetadataBatch(MetadataBatch&& other)
+    : metadata_map_(std::move(other.metadata_map_)) {
+  other.state_.Swap(&state_);
+}
+
 MetadataBatch::~MetadataBatch() {}
 
-EntityMetadataMap&& MetadataBatch::TakeAllMetadata() {
+const EntityMetadataMap& MetadataBatch::GetAllMetadata() const {
+  return metadata_map_;
+}
+
+EntityMetadataMap MetadataBatch::TakeAllMetadata() {
   return std::move(metadata_map_);
 }
 

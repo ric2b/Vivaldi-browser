@@ -9,7 +9,7 @@
 namespace fileManagerPrivate {
 // Type of the mounted volume.
 enum VolumeType { drive, downloads, removable, archive, provided, mtp,
-                  media_view, testing };
+                  media_view, crostini, android_files, testing };
 
 // Device type. Available if this is removable volume.
 enum DeviceType { usb, sd, optical, mobile, unknown };
@@ -51,9 +51,6 @@ enum MountCompletedStatus {
 // File transfer progress state.
 enum TransferState { in_progress, completed, failed };
 
-// Defines file transfer direction.
-enum TransferType { upload, download };
-
 // The type of the progress event.
 enum CopyProgressStatusType {
   // "begin_copy_entry" is fired for each entry (file or directory) before
@@ -73,6 +70,13 @@ enum CopyProgressStatusType {
 
   // "error" is fired when an error occurs.
   error
+};
+
+// The response when starting installing a Linux package.
+enum InstallLinuxPackageResponse {
+  started,
+  failed,
+  install_already_active
 };
 
 // Specifies type of event that is raised.
@@ -154,7 +158,7 @@ enum DriveShareType {
   can_view
 };
 
-// Names of properies for getEntryProperties().
+// Names of properties for getEntryProperties().
 enum EntryPropertyName {
   size,
   modificationTime,
@@ -175,7 +179,14 @@ enum EntryPropertyName {
   sharedWithMe,
   shared,
   starred,
-  externalFileUrl
+  externalFileUrl,
+  alternateUrl,
+  shareUrl,
+  canCopy,
+  canDelete,
+  canRename,
+  canAddChildren,
+  canShare
 };
 
 // Entry property visibility for setEntryTag();
@@ -301,8 +312,31 @@ dictionary EntryProperties {
   // True if the entry is starred by the user.
   boolean? starred;
 
-  // External file URL to open the file in browser.
+  // externalfile:// URL to open the file in browser.
   DOMString? externalFileUrl;
+
+  // https:// URL to open the file or folder in the Drive website.
+  DOMString? alternateUrl;
+
+  // https:// URL to open the file or folder in the Drive website with the
+  // sharing dialog open.
+  DOMString? shareUrl;
+
+  // True if the entry can be copied by the user.
+  boolean? canCopy;
+
+  // True if the entry can be deleted by the user.
+  boolean? canDelete;
+
+  // True if the entry can be renamed by the user.
+  boolean? canRename;
+
+  // True if the entry can have children added to it by the user (directories
+  // only).
+  boolean? canAddChildren;
+
+  // True if the entry can be shared by the user.
+  boolean? canShare;
 };
 
 // Information about total and remaining size on the mount point.
@@ -426,9 +460,6 @@ dictionary FileTransferStatus {
   // File transfer progress state.
   TransferState transferState;
 
-  // Defines file transfer direction.
-  TransferType transferType;
-
   // Approximated completed portion of the transfer operation.
   double processed;
 
@@ -437,6 +468,10 @@ dictionary FileTransferStatus {
 
   // Total number of jobs.
   long num_total_jobs;
+
+  // If true, hide when a job is completed when there are zero jobs in
+  // progress. Otherwise, hide when one job is in progress.
+  boolean hideWhenZeroJobs;
 };
 
 // Error during the drive sync.
@@ -628,6 +663,8 @@ callback GetEntryPropertiesCallback =
 // |sourcePath| Source path of the mount.
 callback AddMountCallback = void(DOMString sourcePath);
 
+callback MarkCacheAsMountedCallback = void();
+
 // |volumeMetadataList| The list of VolumeMetadata representing mounted volumes.
 callback GetVolumeMetadataListCallback =
     void(VolumeMetadata[] volumeMetadataList);
@@ -700,6 +737,11 @@ callback GetDirectorySizeCallback = void(double size);
 
 // |entries| Recently modified entries.
 callback GetRecentFilesCallback = void([instanceOf=Entry] object[] entries);
+
+// |status| Result of starting the install
+// |failure_reason| Reason for failure for a 'failed' status
+callback InstallLinuxPackageCallback = void(
+    InstallLinuxPackageResponse response, DOMString failure_reason);
 
 interface Functions {
   // Logout the current user for navigating to the re-authentication screen for
@@ -816,6 +858,20 @@ interface Functions {
                            boolean pin,
                            SimpleCallback callback);
 
+  // If |entry| is a Drive file, ensures the file is downloaded to the cache.
+  // Otherwise, finishes immediately in success. For example, when the file is
+  // under Downloads, MTP, removeable media, or provided by extensions for
+  // other cloud storage services than Google Drive, this does nothing.
+  // This is a workaround to avoid intermittent and duplicated downloading of
+  // a Drive file by current implementation of Drive integration when an
+  // extension reads a file sequentially but intermittently.
+  // |entry| A regular file entry to be read.
+  // |callback| Callback called after having the file in cache.
+  //     $(ref:runtime.lastError) will be set if there was an error.
+  [nocompile]
+  static void ensureFileDownloaded([instanceof=Entry] object entry,
+                           SimpleCallback callback);
+
   // Resolves entries in the isolated file system and returns corresponding
   // entries in the external file system mounted to Chrome OS file manager
   // backend. If resolving entry fails, the entry will be just ignored and the
@@ -834,6 +890,16 @@ interface Functions {
   // Unmounts a mounted resource.
   // |volumeId| An ID of the volume.
   static void removeMount(DOMString volumeId);
+
+  // Marks a cache file of Drive as mounted or unmounted.
+  // Does nothing if the file is not under Drive directory.
+  // |sourcePath| Mounted source file. Relative file path within external file
+  //     system.
+  // |isMounted| Mark as mounted if true. Mark as unmounted otherwise.
+  // |callback| Completion callback. $(ref:runtime.lastError) will be set if
+  //     there was an error.
+  static void markCacheAsMounted(DOMString sourcePath, boolean isMounted,
+      MarkCacheAsMountedCallback callback);
 
   // Get the list of mounted volumes.
   // |callback|
@@ -914,10 +980,9 @@ interface Functions {
   // |destName| Name of the destination zip file. The zip file will be created
   //     under the directory specified by |parentEntry|.
   // |callback|
-  // TODO(mtomasz): Swap order of |entries| and |parentEntry|.
   [nocompile]
-  static void zipSelection([instanceof=DirectoryEntry] object parentEntry,
-                           [instanceof=Entry] object[] entries,
+  static void zipSelection([instanceof=Entry] object[] entries,
+                           [instanceof=DirectoryEntry] object parentEntry,
                            DOMString destName,
                            ZipSelectionCallback callback);
 
@@ -980,6 +1045,10 @@ interface Functions {
   // |type| InspectionType which specifies how to open inspector.
   static void openInspector(InspectionType type);
 
+  // Opens page in Settings window.
+  // |sub_page| Name of a sub_page to show.
+  static void openSettingsSubpage(DOMString sub_page);
+
   // Computes an MD5 checksum for the given file.
   // |entry| The entry of the file to checksum.
   // |callback|
@@ -1039,6 +1108,19 @@ interface Functions {
   [nocompile]
   static void getRecentFiles(SourceRestriction restriction,
                              GetRecentFilesCallback callback);
+
+  // Returns true if crostini is enabled.
+  // |callback|
+  static void isCrostiniEnabled(BooleanCallback callback);
+
+  // Starts and mounts crostini container.
+  // |callback|
+  static void mountCrostiniContainer(SimpleCallback callback);
+
+  // Starts installation of a Linux package.
+  [nocompile]
+  static void installLinuxPackage([instanceof=Entry] object entry,
+                                  InstallLinuxPackageCallback callback);
 };
 
 interface Events {

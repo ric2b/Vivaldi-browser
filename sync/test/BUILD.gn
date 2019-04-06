@@ -1,6 +1,8 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-source_set("sync_integration_unittest"){
+import("//build/config/jumbo.gni")
+
+jumbo_source_set("sync_integration_unittest"){
   testonly = true
   sources = [
     "integration/single_client_notes_sync_test.cpp",
@@ -12,13 +14,14 @@ source_set("sync_integration_unittest"){
     ":fake_server",
   ]
   deps = [
+    "//components/reading_list/features:flags",
     "//components/sync/protocol",
     "//skia",
     "//testing/gtest",
   ]
 }
 
-source_set("sync_integration_testsupport"){
+jumbo_source_set("sync_integration_testsupport"){
   testonly = true
   sources = [
     "integration/notes_helper.cpp",
@@ -33,6 +36,7 @@ source_set("sync_integration_testsupport"){
   deps = [
     "//chrome/browser",
     "//components/invalidation/impl",
+    "//components/reading_list/features:flags",
     "//components/sync/protocol",
     "//skia",
     "//testing/gtest",
@@ -40,7 +44,7 @@ source_set("sync_integration_testsupport"){
   ]
 }
 
-source_set("fake_server"){
+jumbo_source_set("fake_server"){
   sources = [
     "fake_server/notes_entity.cpp",
     "fake_server/notes_entity.h",
@@ -48,6 +52,7 @@ source_set("fake_server"){
     "fake_server/notes_entity_builder.h",
   ]
   deps = [
+    "//components/reading_list/features:flags",
     "//components/sync/protocol",
   ]
 }

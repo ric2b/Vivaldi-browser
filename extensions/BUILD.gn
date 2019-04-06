@@ -1,6 +1,7 @@
+import("//build/config/jumbo.gni")
 import("//tools/grit/grit_rule.gni")
 
-static_library("extensions") {
+jumbo_static_library("extensions") {
   public_deps = [
     ":resources",
     "api:apis",
@@ -23,7 +24,7 @@ static_library("extensions") {
   ]
 }
 
-static_library("extensions_client") {
+jumbo_static_library("extensions_client") {
   public_deps = [
     "permissions",
 

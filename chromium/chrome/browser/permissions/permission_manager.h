@@ -14,7 +14,7 @@
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "content/public/browser/permission_manager.h"
+#include "content/public/browser/permission_controller_delegate.h"
 
 class PermissionContextBase;
 struct PermissionResult;
@@ -25,7 +25,7 @@ enum class PermissionType;
 };  // namespace content
 
 class PermissionManager : public KeyedService,
-                          public content::PermissionManager,
+                          public content::PermissionControllerDelegate,
                           public content_settings::Observer {
  public:
   static PermissionManager* Get(Profile* profile);
@@ -35,17 +35,22 @@ class PermissionManager : public KeyedService,
 
   // Converts from |url|'s actual origin to the "canonical origin" that should
   // be used for the purpose of requesting/storing permissions. For example, the
-  // origin of the local NTP gets mapped to the Google base URL instead. All the
-  // public methods below, such as RequestPermission or GetPermissionStatus,
-  // take the actual origin and do the canonicalization internally. You only
-  // need to call this directly if you do something else with the origin, such
-  // as display it in the UI.
-  GURL GetCanonicalOrigin(const GURL& url) const;
+  // origin of the local NTP gets mapped to the Google base URL instead. With
+  // Permission Delegation it will transform the requesting origin into
+  // the embedding origin because all permission checks happen on the top level
+  // origin.
+  //
+  // All the public methods below, such as RequestPermission or
+  // GetPermissionStatus, take the actual origin and do the canonicalization
+  // internally. You only need to call this directly if you do something else
+  // with the origin, such as display it in the UI.
+  GURL GetCanonicalOrigin(const GURL& requesting_origin,
+                          const GURL& embedding_origin) const;
 
   // Callers from within chrome/ should use the methods which take the
   // ContentSettingsType enum. The methods which take PermissionType values
-  // are for the content::PermissionManager overrides and shouldn't be used
-  // from chrome/.
+  // are for the content::PermissionControllerDelegate overrides and shouldn't
+  // be used from chrome/.
 
   int RequestPermission(ContentSettingsType permission,
                         content::RenderFrameHost* render_frame_host,
@@ -74,7 +79,7 @@ class PermissionManager : public KeyedService,
       content::RenderFrameHost* render_frame_host,
       const GURL& requesting_origin);
 
-  // content::PermissionManager implementation.
+  // content::PermissionControllerDelegate implementation.
   int RequestPermission(
       content::PermissionType permission,
       content::RenderFrameHost* render_frame_host,
@@ -90,7 +95,6 @@ class PermissionManager : public KeyedService,
       const base::Callback<
           void(const std::vector<blink::mojom::PermissionStatus>&)>& callback)
       override;
-  void CancelPermissionRequest(int request_id) override;
   void ResetPermission(content::PermissionType permission,
                        const GURL& requesting_origin,
                        const GURL& embedding_origin) override;
@@ -98,6 +102,10 @@ class PermissionManager : public KeyedService,
       content::PermissionType permission,
       const GURL& requesting_origin,
       const GURL& embedding_origin) override;
+  blink::mojom::PermissionStatus GetPermissionStatusForFrame(
+      content::PermissionType permission,
+      content::RenderFrameHost* render_frame_host,
+      const GURL& requesting_origin) override;
   int SubscribePermissionStatusChange(
       content::PermissionType permission,
       const GURL& requesting_origin,
@@ -142,7 +150,7 @@ class PermissionManager : public KeyedService,
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
                                ContentSettingsType content_type,
-                               std::string resource_identifier) override;
+                               const std::string& resource_identifier) override;
 
   PermissionResult GetPermissionStatusHelper(
       ContentSettingsType permission,

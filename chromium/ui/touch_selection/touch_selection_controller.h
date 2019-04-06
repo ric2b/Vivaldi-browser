@@ -33,6 +33,7 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionControllerClient {
   virtual void SelectBetweenCoordinates(const gfx::PointF& base,
                                         const gfx::PointF& extent) = 0;
   virtual void OnSelectionEvent(SelectionEventType event) = 0;
+  virtual void OnDragUpdate(const gfx::PointF& position) = 0;
   virtual std::unique_ptr<TouchHandleDrawable> CreateDrawable() = 0;
   virtual void DidScroll() = 0;
 };
@@ -65,6 +66,9 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
     // Controls whether drag selection after a longpress is enabled.
     // Defaults to false.
     bool enable_longpress_drag_selection;
+
+    // Should we hide the active handle.
+    bool hide_active_handle;
   };
 
   TouchSelectionController(TouchSelectionControllerClient* client,
@@ -120,9 +124,9 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
   gfx::RectF GetStartHandleRect() const;
   gfx::RectF GetEndHandleRect() const;
 
-  // Returns the middle point of selection bound corresponding to the active
-  // selection or insertion handle. If there is no active handle, returns (0,0).
-  gfx::PointF GetActiveHandleBoundPoint() const;
+  // Return the handle height of visible touch handle. This value will be zero
+  // when no handle is visible.
+  float GetTouchHandleHeight() const;
 
   // Returns the focal point of the start and end bounds, as defined by
   // their bottom coordinate.
@@ -173,6 +177,11 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
   bool WillHandleTouchEventForLongPressDrag(const MotionEvent& event);
   void SetTemporarilyHiddenForLongPressDrag(bool hidden);
   void RefreshHandleVisibility();
+
+  // Returns the y-coordinate of middle point of selection bound corresponding
+  // to the active selection or insertion handle. If there is no active handle,
+  // returns 0.0.
+  float GetActiveHandleMiddleY() const;
 
   void HideHandles();
 

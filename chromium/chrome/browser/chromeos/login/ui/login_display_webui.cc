@@ -7,16 +7,17 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/screens/chrome_user_selection_screen.h"
+#include "chrome/browser/chromeos/login/screens/gaia_view.h"
 #include "chrome/browser/chromeos/login/signin_screen_controller.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
@@ -40,8 +41,7 @@ LoginDisplayWebUI::~LoginDisplayWebUI() {
 
 // LoginDisplay implementation: ------------------------------------------------
 
-LoginDisplayWebUI::LoginDisplayWebUI(LoginDisplay::Delegate* delegate)
-    : LoginDisplay(delegate) {}
+LoginDisplayWebUI::LoginDisplayWebUI() = default;
 
 void LoginDisplayWebUI::ClearAndEnablePassword() {
   if (webui_handler_)
@@ -189,12 +189,6 @@ gfx::NativeWindow LoginDisplayWebUI::GetNativeWindow() const {
 }
 
 // LoginDisplayWebUI, SigninScreenHandlerDelegate implementation: --------------
-void LoginDisplayWebUI::CancelPasswordChangedFlow() {
-  DCHECK(delegate_);
-  if (delegate_)
-    delegate_->CancelPasswordChangedFlow();
-}
-
 void LoginDisplayWebUI::CancelUserAdding() {
   if (!UserAddingScreen::Get()->IsRunning()) {
     LOG(ERROR) << "User adding screen not running.";
@@ -202,32 +196,11 @@ void LoginDisplayWebUI::CancelUserAdding() {
   }
   UserAddingScreen::Get()->Cancel();
 }
-
-void LoginDisplayWebUI::CompleteLogin(const UserContext& user_context) {
-  DCHECK(delegate_);
-  if (delegate_)
-    delegate_->CompleteLogin(user_context);
-}
-
 void LoginDisplayWebUI::Login(const UserContext& user_context,
                               const SigninSpecifics& specifics) {
   DCHECK(delegate_);
   if (delegate_)
     delegate_->Login(user_context, specifics);
-}
-
-void LoginDisplayWebUI::MigrateUserData(const std::string& old_password) {
-  DCHECK(delegate_);
-  if (delegate_)
-    delegate_->MigrateUserData(old_password);
-}
-
-void LoginDisplayWebUI::LoadWallpaper(const AccountId& account_id) {
-  WallpaperManager::Get()->ShowUserWallpaper(account_id);
-}
-
-void LoginDisplayWebUI::LoadSigninWallpaper() {
-  WallpaperManager::Get()->ShowSigninWallpaper();
 }
 
 void LoginDisplayWebUI::OnSigninScreenReady() {
@@ -237,19 +210,8 @@ void LoginDisplayWebUI::OnSigninScreenReady() {
     delegate_->OnSigninScreenReady();
 }
 
-void LoginDisplayWebUI::OnGaiaScreenReady() {
-  if (delegate_)
-    delegate_->OnGaiaScreenReady();
-}
-
 void LoginDisplayWebUI::RemoveUser(const AccountId& account_id) {
   SignInScreenController::Get()->RemoveUser(account_id);
-}
-
-void LoginDisplayWebUI::ResyncUserData() {
-  DCHECK(delegate_);
-  if (delegate_)
-    delegate_->ResyncUserData();
 }
 
 void LoginDisplayWebUI::ShowEnterpriseEnrollmentScreen() {
@@ -288,12 +250,6 @@ void LoginDisplayWebUI::SetWebUIHandler(
   SignInScreenController::Get()->SetWebUIHandler(webui_handler_);
 }
 
-void LoginDisplayWebUI::ShowSigninScreenForCreds(const std::string& username,
-                                                 const std::string& password) {
-  if (webui_handler_)
-    webui_handler_->ShowSigninScreenForCreds(username, password);
-}
-
 bool LoginDisplayWebUI::IsShowGuest() const {
   return show_guest_;
 }
@@ -322,17 +278,6 @@ bool LoginDisplayWebUI::IsUserSigninCompleted() const {
   return is_signin_completed();
 }
 
-void LoginDisplayWebUI::SetDisplayEmail(const std::string& email) {
-  if (delegate_)
-    delegate_->SetDisplayEmail(email);
-}
-
-void LoginDisplayWebUI::SetDisplayAndGivenName(const std::string& display_name,
-                                               const std::string& given_name) {
-  if (delegate_)
-    delegate_->SetDisplayAndGivenName(display_name, given_name);
-}
-
 void LoginDisplayWebUI::Signout() {
   delegate_->Signout();
 }
@@ -340,13 +285,6 @@ void LoginDisplayWebUI::Signout() {
 void LoginDisplayWebUI::OnUserActivity(const ui::Event* event) {
   if (delegate_)
     delegate_->ResetAutoLoginTimer();
-}
-
-bool LoginDisplayWebUI::IsUserWhitelisted(const AccountId& account_id) {
-  DCHECK(delegate_);
-  if (delegate_)
-    return delegate_->IsUserWhitelisted(account_id);
-  return true;
 }
 
 }  // namespace chromeos

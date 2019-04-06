@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "ash/public/cpp/scale_utility.h"
-#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
@@ -17,27 +16,22 @@
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/voice_interaction/arc_voice_interaction_framework_service.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_pai_starter.h"
+#include "chrome/browser/ui/ash/assistant/assistant_context_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/connection_holder.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/accessibility/platform/ax_snapshot_node_android_platform.h"
-#include "ui/aura/window.h"
-#include "ui/aura/window_tree_host.h"
-#include "ui/gfx/geometry/dip_util.h"
-#include "ui/snapshot/snapshot.h"
-#include "ui/wm/public/activation_client.h"
+#include "ui/accessibility/ax_assistant_structure.h"
+#include "ui/accessibility/mojom/ax_assistant_structure.mojom.h"
 #include "url/gurl.h"
 
 namespace arc {
@@ -50,30 +44,33 @@ constexpr base::TimeDelta kWizardCompletedTimeout =
     base::TimeDelta::FromMinutes(1);
 
 mojom::VoiceInteractionStructurePtr CreateVoiceInteractionStructure(
-    const ui::AXSnapshotNodeAndroid& view_structure) {
+    const ui::AssistantTree& tree,
+    const ui::AssistantNode& node) {
   auto structure = mojom::VoiceInteractionStructure::New();
-  structure->text = view_structure.text;
-  structure->text_size = view_structure.text_size;
+  structure->text = node.text;
+  structure->text_size = node.text_size;
 
-  structure->bold = view_structure.bold;
-  structure->italic = view_structure.italic;
-  structure->underline = view_structure.underline;
-  structure->line_through = view_structure.line_through;
-  structure->color = view_structure.color;
-  structure->bgcolor = view_structure.bgcolor;
+  structure->bold = node.bold;
+  structure->italic = node.italic;
+  structure->underline = node.underline;
+  structure->line_through = node.line_through;
+  structure->color = node.color;
+  structure->bgcolor = node.bgcolor;
 
-  structure->role = view_structure.role;
+  structure->role = node.role;
 
-  structure->class_name = view_structure.class_name;
-  structure->rect = view_structure.rect;
+  structure->class_name = node.class_name;
+  structure->rect = node.rect;
 
-  if (view_structure.has_selection) {
-    structure->selection = gfx::Range(view_structure.start_selection,
-                                      view_structure.end_selection);
+  if (node.selection.has_value()) {
+    structure->selection =
+        gfx::Range(node.selection->start(), node.selection->end());
   }
 
-  for (auto& child : view_structure.children)
-    structure->children.push_back(CreateVoiceInteractionStructure(*child));
+  for (int child : node.children_indices) {
+    structure->children.push_back(
+        CreateVoiceInteractionStructure(tree, *tree.nodes[child]));
+  }
 
   return structure;
 }
@@ -81,25 +78,29 @@ mojom::VoiceInteractionStructurePtr CreateVoiceInteractionStructure(
 void RequestVoiceInteractionStructureCallback(
     ArcVoiceInteractionArcHomeService::GetVoiceInteractionStructureCallback
         callback,
-    const gfx::Rect& bounds,
-    const std::string& web_url,
-    const base::string16& title,
-    const ui::AXTreeUpdate& update) {
+    ax::mojom::AssistantExtraPtr assistant_extra,
+    std::unique_ptr<ui::AssistantTree> assistant_tree) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // The assist structure starts with 2 dummy nodes: Url node and title
   // node. Then we attach all nodes in view hierarchy.
   auto root = mojom::VoiceInteractionStructure::New();
-  root->rect = bounds;
+  if (!assistant_tree || !assistant_extra) {
+    std::move(callback).Run(std::move(root));
+    return;
+  }
+
+  root->rect = assistant_extra->bounds_pixel;
   root->class_name = "android.view.dummy.root.WebUrl";
-  root->text = base::UTF8ToUTF16(web_url);
+  root->text = base::UTF8ToUTF16(assistant_extra->url.spec());
 
   auto title_node = mojom::VoiceInteractionStructure::New();
-  title_node->rect = gfx::Rect(bounds.size());
+  title_node->rect = gfx::Rect(assistant_extra->bounds_pixel.size());
   title_node->class_name = "android.view.dummy.WebTitle";
-  title_node->text = title;
+  title_node->text = assistant_extra->title;
+
   title_node->children.push_back(CreateVoiceInteractionStructure(
-      *ui::AXSnapshotNodeAndroid::Create(update, false)));
+      *assistant_tree, *assistant_tree->nodes.front()));
   root->children.push_back(std::move(title_node));
   std::move(callback).Run(std::move(root));
 }
@@ -294,35 +295,9 @@ void ArcVoiceInteractionArcHomeService::GetVoiceInteractionStructure(
     std::move(callback).Run(mojom::VoiceInteractionStructure::New());
     return;
   }
-  Browser* browser = BrowserList::GetInstance()->GetLastActive();
-  if (!browser || !browser->window()->IsActive()) {
-    // TODO(muyuanli): retrieve context for apps.
-    LOG(ERROR) << "Retrieving context from apps is not implemented.";
-    std::move(callback).Run(mojom::VoiceInteractionStructure::New());
-    return;
-  }
 
-  VLOG(1) << "Retrieving voice interaction context";
-
-  content::WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  // Do not process incognito tab.
-  if (web_contents->GetBrowserContext()->IsOffTheRecord()) {
-    std::move(callback).Run(mojom::VoiceInteractionStructure::New());
-    return;
-  }
-
-  auto transform = browser->window()
-                       ->GetNativeWindow()
-                       ->GetRootWindow()
-                       ->GetHost()
-                       ->GetRootTransform();
-  float scale_factor = ash::GetScaleFactorForTransform(transform);
-  web_contents->RequestAXTreeSnapshot(base::Bind(
-      &RequestVoiceInteractionStructureCallback,
-      base::Passed(std::move(callback)),
-      gfx::ConvertRectToPixel(scale_factor, browser->window()->GetBounds()),
-      web_contents->GetLastCommittedURL().spec(), web_contents->GetTitle()));
+  RequestAssistantStructureForActiveBrowserWindow(base::BindOnce(
+      &RequestVoiceInteractionStructureCallback, std::move(callback)));
 }
 
 void ArcVoiceInteractionArcHomeService::OnVoiceInteractionOobeSetupComplete() {
@@ -334,8 +309,9 @@ void ArcVoiceInteractionArcHomeService::OnVoiceInteractionOobeSetupComplete() {
 // static
 mojom::VoiceInteractionStructurePtr
 ArcVoiceInteractionArcHomeService::CreateVoiceInteractionStructureForTesting(
-    const ui::AXSnapshotNodeAndroid& view_structure) {
-  return CreateVoiceInteractionStructure(view_structure);
+    const ui::AssistantTree& tree,
+    const ui::AssistantNode& node) {
+  return CreateVoiceInteractionStructure(tree, node);
 }
 
 }  // namespace arc

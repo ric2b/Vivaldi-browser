@@ -676,6 +676,50 @@ void FieldTrialList::AllStatesToString(std::string* output,
 }
 
 // static
+std::string FieldTrialList::AllParamsToString(bool include_expired,
+                                              EscapeDataFunc encode_data_func) {
+  FieldTrialParamAssociator* params_associator =
+      FieldTrialParamAssociator::GetInstance();
+  std::string output;
+  for (const auto& registered : GetRegisteredTrials()) {
+    FieldTrial::State trial;
+    if (!registered.second->GetStateWhileLocked(&trial, include_expired))
+      continue;
+    DCHECK_EQ(std::string::npos,
+              trial.trial_name->find(kPersistentStringSeparator));
+    DCHECK_EQ(std::string::npos,
+              trial.group_name->find(kPersistentStringSeparator));
+    std::map<std::string, std::string> params;
+    if (params_associator->GetFieldTrialParamsWithoutFallback(
+            *trial.trial_name, *trial.group_name, &params)) {
+      if (params.size() > 0) {
+        // Add comma to seprate from previous entry if it exists.
+        if (!output.empty())
+          output.append(1, ',');
+
+        output.append(encode_data_func(*trial.trial_name));
+        output.append(1, '.');
+        output.append(encode_data_func(*trial.group_name));
+        output.append(1, ':');
+
+        std::string param_str;
+        for (const auto& param : params) {
+          // Add separator from previous param information if it exists.
+          if (!param_str.empty())
+            param_str.append(1, kPersistentStringSeparator);
+          param_str.append(encode_data_func(param.first));
+          param_str.append(1, kPersistentStringSeparator);
+          param_str.append(encode_data_func(param.second));
+        }
+
+        output.append(param_str);
+      }
+    }
+  }
+  return output;
+}
+
+// static
 void FieldTrialList::GetActiveFieldTrialGroups(
     FieldTrial::ActiveGroups* active_groups) {
   DCHECK(active_groups->empty());
@@ -756,8 +800,13 @@ bool FieldTrialList::CreateTrialsFromString(
     const std::string trial_name = entry.trial_name.as_string();
     const std::string group_name = entry.group_name.as_string();
 
-    if (ContainsKey(ignored_trial_names, trial_name))
+    if (ContainsKey(ignored_trial_names, trial_name)) {
+      // This is to warn that the field trial forced through command-line
+      // input is unforcable.
+      // Use --enable-logging or --enable-logging=stderr to see this warning.
+      LOG(WARNING) << "Field trial: " << trial_name << " cannot be forced.";
       continue;
+    }
 
     FieldTrial* trial = CreateFieldTrial(trial_name, group_name);
     if (!trial)
@@ -883,6 +932,21 @@ void FieldTrialList::CopyFieldTrialStateToFlags(
     std::string switch_value = SerializeSharedMemoryHandleMetadata(
         global_->readonly_allocator_handle_);
     cmd_line->AppendSwitchASCII(field_trial_handle_switch, switch_value);
+
+    // Append --enable-features and --disable-features switches corresponding
+    // to the features enabled on the command-line, so that child and browser
+    // process command lines match and clearly show what has been specified
+    // explicitly by the user.
+    std::string enabled_features;
+    std::string disabled_features;
+    FeatureList::GetInstance()->GetCommandLineFeatureOverrides(
+        &enabled_features, &disabled_features);
+
+    if (!enabled_features.empty())
+      cmd_line->AppendSwitchASCII(enable_features_switch, enabled_features);
+    if (!disabled_features.empty())
+      cmd_line->AppendSwitchASCII(disable_features_switch, disabled_features);
+
     return;
   }
 
@@ -917,10 +981,11 @@ FieldTrial* FieldTrialList::CreateFieldTrial(
 }
 
 // static
-void FieldTrialList::AddObserver(Observer* observer) {
+bool FieldTrialList::AddObserver(Observer* observer) {
   if (!global_)
-    return;
+    return false;
   global_->observer_list_->AddObserver(observer);
+  return true;
 }
 
 // static
@@ -928,6 +993,18 @@ void FieldTrialList::RemoveObserver(Observer* observer) {
   if (!global_)
     return;
   global_->observer_list_->RemoveObserver(observer);
+}
+
+// static
+void FieldTrialList::SetSynchronousObserver(Observer* observer) {
+  DCHECK(!global_->synchronous_observer_);
+  global_->synchronous_observer_ = observer;
+}
+
+// static
+void FieldTrialList::RemoveSynchronousObserver(Observer* observer) {
+  DCHECK_EQ(global_->synchronous_observer_, observer);
+  global_->synchronous_observer_ = nullptr;
 }
 
 // static
@@ -969,6 +1046,11 @@ void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
   if (tracker) {
     tracker->RecordFieldTrial(field_trial->trial_name(),
                               field_trial->group_name_internal());
+  }
+
+  if (global_->synchronous_observer_) {
+    global_->synchronous_observer_->OnFieldTrialGroupFinalized(
+        field_trial->trial_name(), field_trial->group_name_internal());
   }
 
   global_->observer_list_->Notify(
@@ -1378,15 +1460,14 @@ void FieldTrialList::ActivateFieldTrialEntryWhileLocked(
   FieldTrialAllocator* allocator = global_->field_trial_allocator_.get();
 
   // Check if we're in the child process and return early if so.
-  if (allocator && allocator->IsReadonly())
+  if (!allocator || allocator->IsReadonly())
     return;
 
   FieldTrial::FieldTrialRef ref = field_trial->ref_;
   if (ref == FieldTrialAllocator::kReferenceNull) {
     // It's fine to do this even if the allocator hasn't been instantiated
     // yet -- it'll just return early.
-    AddToAllocatorWhileLocked(global_->field_trial_allocator_.get(),
-                              field_trial);
+    AddToAllocatorWhileLocked(allocator, field_trial);
   } else {
     // It's also okay to do this even though the callee doesn't have a lock --
     // the only thing that happens on a stale read here is a slight performance
@@ -1426,6 +1507,16 @@ void FieldTrialList::Register(FieldTrial* trial) {
   trial->AddRef();
   trial->SetTrialRegistered();
   global_->registered_[trial->trial_name()] = trial;
+}
+
+// static
+FieldTrialList::RegistrationMap FieldTrialList::GetRegisteredTrials() {
+  RegistrationMap output;
+  if (global_) {
+    AutoLock auto_lock(global_->lock_);
+    output = global_->registered_;
+  }
+  return output;
 }
 
 }  // namespace base

@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
-#include "chromeos/attestation/attestation_constants.h"
+#include "chromeos/dbus/attestation_constants.h"
 
 namespace policy {
 class CloudPolicyClient;
@@ -59,15 +59,31 @@ class EnrollmentPolicyObserver : public DeviceSettingsService::Observer {
   // Gets an enrollment certificate.
   void GetEnrollmentCertificate();
 
-  // Uploads an enrollment certificate to the policy server.
-  void UploadCertificate(const std::string& pem_certificate_chain);
+  // Gets an enrollment identifier directly.
+  void GetEnrollmentId();
 
-  // Called when a certificate upload operation completes.  On success, |status|
-  // will be true.
-  void OnUploadComplete(bool status);
+  // Handles an enrollment identifer obtained directly.
+  void HandleEnrollmentId(const std::string& enrollment_id);
+
+  // Reschedule an attempt to get an enrollment identifier directly.
+  void RescheduleGetEnrollmentId();
+
+  // Called when an enrollment identifier upload operation completes.
+  // On success, |status| will be true. The string |enrollment_id|
+  // is the identifier that was uploaded.
+  void OnUploadEnrollmentIdComplete(const std::string& enrollment_id,
+                                    bool status);
 
   // Handles a failure to get a certificate.
   void HandleGetCertificateFailure(AttestationStatus status);
+
+  // Uploads an enrollment certificate to the policy server.
+  void UploadCertificate(const std::string& pem_certificate_chain);
+
+  // Called when a certificate or enrollment identifier upload operation
+  // completes. On success, |status| will be true. The string |what| is
+  // used in logging.
+  void OnUploadComplete(const std::string& what, bool status);
 
   DeviceSettingsService* device_settings_service_;
   policy::CloudPolicyClient* policy_client_;
@@ -77,6 +93,10 @@ class EnrollmentPolicyObserver : public DeviceSettingsService::Observer {
   int num_retries_;
   int retry_limit_;
   int retry_delay_;
+  // Used to remember we uploaded an empty identifier this session for
+  // devices that can't obtain the identifier until they are powerwashed or
+  // updated and rebooted (see http://crbug.com/867724).
+  bool did_upload_empty_eid_ = false;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate the weak pointers before any other members are destroyed.

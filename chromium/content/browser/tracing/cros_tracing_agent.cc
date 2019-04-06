@@ -14,8 +14,6 @@
 #include "base/trace_event/trace_config.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/resource_coordinator/public/interfaces/service_constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace content {
@@ -25,68 +23,44 @@ const char kCrOSTraceLabel[] = "systemTraceEvents";
 }  // namespace
 
 CrOSTracingAgent::CrOSTracingAgent(service_manager::Connector* connector)
-    : binding_(this) {
-  // Connecto to the agent registry interface.
-  tracing::mojom::AgentRegistryPtr agent_registry;
-  connector->BindInterface(resource_coordinator::mojom::kServiceName,
-                           &agent_registry);
-
-  // Register this agent.
-  tracing::mojom::AgentPtr agent;
-  binding_.Bind(mojo::MakeRequest(&agent));
-  agent_registry->RegisterAgent(std::move(agent), kCrOSTraceLabel,
-                                tracing::mojom::TraceDataType::STRING,
-                                false /* supports_explicit_clock_sync */);
-}
+    : BaseAgent(connector,
+                kCrOSTraceLabel,
+                tracing::mojom::TraceDataType::STRING,
+                false /* supports_explicit_clock_sync */,
+                base::kNullProcessId) {}
 
 CrOSTracingAgent::~CrOSTracingAgent() = default;
 
 // tracing::mojom::Agent. Called by Mojo internals on the UI thread.
-void CrOSTracingAgent::StartTracing(
-    const std::string& config,
-    base::TimeTicks coordinator_time,
-    const Agent::StartTracingCallback& callback) {
+void CrOSTracingAgent::StartTracing(const std::string& config,
+                                    base::TimeTicks coordinator_time,
+                                    Agent::StartTracingCallback callback) {
   base::trace_event::TraceConfig trace_config(config);
   debug_daemon_ = chromeos::DBusThreadManager::Get()->GetDebugDaemonClient();
   if (!trace_config.IsSystraceEnabled() || !debug_daemon_) {
-    callback.Run(false /* success */);
+    std::move(callback).Run(false /* success */);
     return;
   }
-  start_tracing_callback_ = std::move(callback);
   debug_daemon_->SetStopAgentTracingTaskRunner(
       base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}));
   debug_daemon_->StartAgentTracing(
       trace_config,
-      base::BindRepeating(&CrOSTracingAgent::StartTracingCallbackProxy,
-                          base::Unretained(this)));
+      base::BindOnce(&CrOSTracingAgent::StartTracingCallbackProxy,
+                     base::Unretained(this), std::move(callback)));
 }
 
 void CrOSTracingAgent::StopAndFlush(tracing::mojom::RecorderPtr recorder) {
   DCHECK(debug_daemon_);
   recorder_ = std::move(recorder);
-  debug_daemon_->StopAgentTracing(base::BindRepeating(
-      &CrOSTracingAgent::RecorderProxy, base::Unretained(this)));
+  debug_daemon_->StopAgentTracing(
+      base::BindOnce(&CrOSTracingAgent::RecorderProxy, base::Unretained(this)));
 }
 
-void CrOSTracingAgent::RequestClockSyncMarker(
-    const std::string& sync_id,
-    const Agent::RequestClockSyncMarkerCallback& callback) {
-  NOTREACHED();
-}
-
-void CrOSTracingAgent::GetCategories(
-    const Agent::GetCategoriesCallback& callback) {
-  callback.Run("" /* categories */);
-}
-
-void CrOSTracingAgent::RequestBufferStatus(
-    const Agent::RequestBufferStatusCallback& callback) {
-  callback.Run(0 /* capacity */, 0 /* count */);
-}
-
-void CrOSTracingAgent::StartTracingCallbackProxy(const std::string& agent_name,
-                                                 bool success) {
-  start_tracing_callback_.Run(success);
+void CrOSTracingAgent::StartTracingCallbackProxy(
+    Agent::StartTracingCallback callback,
+    const std::string& agent_name,
+    bool success) {
+  std::move(callback).Run(success);
 }
 
 void CrOSTracingAgent::RecorderProxy(

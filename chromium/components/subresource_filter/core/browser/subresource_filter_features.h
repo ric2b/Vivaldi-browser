@@ -16,6 +16,7 @@
 #include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/activation_list.h"
 #include "components/subresource_filter/core/common/activation_scope.h"
+#include "components/subresource_filter/core/common/activation_state.h"
 
 namespace base {
 namespace trace_event {
@@ -63,11 +64,6 @@ struct Configuration {
     // otherwise satisfied. A greater value indicates higher priority.
     int priority = 0;
 
-    // This boolean is set to true for a navigation which has forced activation,
-    // despite other conditions not matching. It should never be possible to set
-    // this via variation params.
-    bool forced_activation = false;
-
     std::unique_ptr<base::trace_event::TracedValue> ToTracedValue() const;
   };
 
@@ -83,14 +79,6 @@ struct Configuration {
     // A number in the range [0, 1], indicating the fraction of page loads that
     // should have extended performance measurements enabled.
     double performance_measurement_rate = 0.0;
-
-    // Whether notifications indicating that a subresource was disallowed should
-    // be suppressed in the UI.
-    bool should_suppress_notifications = false;
-
-    // Whether to whitelist a site when a page loaded from that site is
-    // reloaded.
-    bool should_whitelist_site_on_reload = false;
   };
 
   // General settings that apply outside of the scope of a navigation.
@@ -118,6 +106,13 @@ struct Configuration {
 
   std::unique_ptr<base::trace_event::TracedValue> ToTracedValue() const;
 
+  // Returns the ActivationState that page loads that match this configuration
+  // should activate with. |effective_activation_level| can be different from
+  // this config's activation level due to things like warning mode or client
+  // whitelisting.
+  ActivationState GetActivationState(
+      ActivationLevel effective_activation_level) const;
+
   // Factory methods for preset configurations.
   //
   // To add a new preset:
@@ -128,10 +123,6 @@ struct Configuration {
   static Configuration MakePresetForLiveRunOnPhishingSites();
   static Configuration MakePresetForPerformanceTestingDryRunOnAllSites();
   static Configuration MakePresetForLiveRunForBetterAds();
-
-  // Not really a preset, but used as the configuration for forcing activation
-  // (e.g. via devtools).
-  static Configuration MakeForForcedActivation();
 
   ActivationConditions activation_conditions;
   ActivationOptions activation_options;
@@ -191,8 +182,8 @@ scoped_refptr<ConfigurationList> GetAndSetActivateConfigurations(
 // The master toggle to enable/disable the Safe Browsing Subresource Filter.
 extern const base::Feature kSafeBrowsingSubresourceFilter;
 
-// Enables the new experimental UI for the Subresource Filter.
-extern const base::Feature kSafeBrowsingSubresourceFilterExperimentalUI;
+// Safe Browsing Activation Throttle considers all checks in a redirect chain.
+extern const base::Feature kSafeBrowsingSubresourceFilterConsiderRedirects;
 
 // Name/values of the variation parameter controlling maximum activation level.
 extern const char kActivationLevelParameterName[];

@@ -74,6 +74,7 @@ BattOrConnectionImpl::BattOrConnectionImpl(
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner)
     : BattOrConnection(listener),
       path_(path),
+      is_open_(false),
       ui_thread_task_runner_(ui_thread_task_runner) {
   std::string serial_log_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -82,7 +83,7 @@ BattOrConnectionImpl::BattOrConnectionImpl(
     serial_log_.open(serial_log_path.c_str(),
                      std::fstream::out | std::fstream::trunc);
   }
-  tick_clock_ = std::make_unique<base::DefaultTickClock>();
+  tick_clock_ = base::DefaultTickClock::GetInstance();
 }
 
 BattOrConnectionImpl::~BattOrConnectionImpl() = default;
@@ -128,12 +129,20 @@ void BattOrConnectionImpl::OnOpened(bool success) {
     return;
   }
 
-  Flush();
+  is_open_ = true;
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&Listener::OnConnectionOpened,
+                            base::Unretained(listener_), true));
 }
 
 void BattOrConnectionImpl::Close() {
   LogSerial("Serial connection closed.");
   io_handler_ = nullptr;
+  is_open_ = false;
+}
+
+bool BattOrConnectionImpl::IsOpen() {
+  return is_open_;
 }
 
 void BattOrConnectionImpl::SendBytes(BattOrMessageType type,
@@ -163,7 +172,7 @@ void BattOrConnectionImpl::SendBytes(BattOrMessageType type,
   LogSerial(StringPrintf("Bytes sent: %s.", ByteVectorToString(data).c_str()));
 
   pending_write_length_ = data.size();
-  io_handler_->Write(base::MakeUnique<device::SendBuffer>(
+  io_handler_->Write(std::make_unique<device::SendBuffer>(
       data, base::BindOnce(&BattOrConnectionImpl::OnBytesSent, AsWeakPtr())));
 }
 
@@ -216,7 +225,7 @@ void BattOrConnectionImpl::BeginReadBytesForMessage(size_t max_bytes_to_read) {
 
   pending_read_buffer_ = base::MakeRefCounted<net::IOBuffer>(max_bytes_to_read);
 
-  io_handler_->Read(base::MakeUnique<device::ReceiveBuffer>(
+  io_handler_->Read(std::make_unique<device::ReceiveBuffer>(
       pending_read_buffer_, static_cast<uint32_t>(max_bytes_to_read),
       base::BindOnce(&BattOrConnectionImpl::OnBytesReadForMessage,
                      AsWeakPtr())));
@@ -319,7 +328,7 @@ void BattOrConnectionImpl::BeginReadBytesForFlush() {
 
   pending_read_buffer_ = base::MakeRefCounted<net::IOBuffer>(kFlushBufferSize);
 
-  io_handler_->Read(base::MakeUnique<device::ReceiveBuffer>(
+  io_handler_->Read(std::make_unique<device::ReceiveBuffer>(
       pending_read_buffer_, static_cast<uint32_t>(kFlushBufferSize),
       base::BindOnce(&BattOrConnectionImpl::OnBytesReadForFlush,
                      base::Unretained(this))));
@@ -345,7 +354,7 @@ void BattOrConnectionImpl::OnBytesReadForFlush(
         static_cast<int>(error)));
     pending_read_buffer_ = nullptr;
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&Listener::OnConnectionOpened,
+        FROM_HERE, base::Bind(&Listener::OnConnectionFlushed,
                               base::Unretained(listener_), false));
     return;
   }
@@ -361,7 +370,7 @@ void BattOrConnectionImpl::OnBytesReadForFlush(
       LogSerial("(flush) Quiet period has finished.");
       pending_read_buffer_ = nullptr;
       base::SequencedTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(&Listener::OnConnectionOpened,
+          FROM_HERE, base::Bind(&Listener::OnConnectionFlushed,
                                 base::Unretained(listener_), true));
       return;
     }

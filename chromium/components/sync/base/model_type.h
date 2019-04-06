@@ -12,7 +12,7 @@
 #include <string>
 
 #include "base/logging.h"
-#include "components/reading_list/features/reading_list_enable_flags.h"
+#include "components/reading_list/features/reading_list_buildflags.h"
 #include "components/sync/base/enum_set.h"
 
 namespace base {
@@ -108,15 +108,11 @@ enum ModelType {
   // These preferences are synced before other user types and are never
   // encrypted.
   PRIORITY_PREFERENCES,
-  // Supervised user settings.
+  // Supervised user settings. Cannot be encrypted.
   SUPERVISED_USER_SETTINGS,
-  // Supervised users. Every supervised user is a profile that is configured
-  // remotely by this user and can have restrictions applied. SUPERVISED_USERS
-  // and SUPERVISED_USER_SETTINGS can not be encrypted.
-  SUPERVISED_USERS,
-  // Supervised user shared settings. Shared settings can be modified both by
-  // the manager and the supervised user.
-  SUPERVISED_USER_SHARED_SETTINGS,
+  // Deprecated supervised user types that are not used anymore.
+  DEPRECATED_SUPERVISED_USERS,
+  DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS,
   // Distilled articles.
   ARTICLES,
   // App List items
@@ -135,6 +131,10 @@ enum ModelType {
   READING_LIST,
   // Commit only user events.
   USER_EVENTS,
+  // Shares in project Mountain.
+  MOUNTAIN_SHARES,
+  // Commit only user consents.
+  USER_CONSENTS,
 
   // Notes items
   NOTES,
@@ -160,15 +160,6 @@ enum ModelType {
   LAST_CONTROL_MODEL_TYPE = EXPERIMENTS,
   LAST_REAL_MODEL_TYPE = LAST_CONTROL_MODEL_TYPE,
 
-  // If you are adding a new sync datatype that is exposed to the user via the
-  // sync preferences UI, be sure to update the list in
-  // components/sync/driver/user_selectable_sync_type.h so that the UMA
-  // histograms for sync include your new type.  In this case, be sure to also
-  // update the UserSelectableTypes() definition in
-  // sync/syncable/model_type.cc.
-
-  // Additionally, enum SyncModelTypes and suffix SyncModelType need to be
-  // updated in histograms.xml for all new types.
   MODEL_TYPE_COUNT,
 };
 
@@ -208,6 +199,7 @@ constexpr const char* kUserSelectableDataTypeNames[] = {
 #if BUILDFLAG(ENABLE_READING_LIST)
     "readingList",
 #endif
+    "userEvents",
     "notes",
     "tabs",
 };
@@ -223,11 +215,12 @@ constexpr ModelTypeSet ProtocolTypes() {
                       HISTORY_DELETE_DIRECTIVES, SYNCED_NOTIFICATIONS,
                       SYNCED_NOTIFICATION_APP_INFO, DICTIONARY, FAVICON_IMAGES,
                       FAVICON_TRACKING, DEVICE_INFO, PRIORITY_PREFERENCES,
-                      SUPERVISED_USER_SETTINGS, SUPERVISED_USERS,
-                      SUPERVISED_USER_SHARED_SETTINGS, ARTICLES, APP_LIST,
-                      WIFI_CREDENTIALS, SUPERVISED_USER_WHITELISTS, ARC_PACKAGE,
-                      PRINTERS, READING_LIST, USER_EVENTS, NIGORI, EXPERIMENTS,
-                      NOTES);
+                      SUPERVISED_USER_SETTINGS, DEPRECATED_SUPERVISED_USERS,
+                      DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, ARTICLES,
+                      APP_LIST, WIFI_CREDENTIALS, SUPERVISED_USER_WHITELISTS,
+                      ARC_PACKAGE, PRINTERS, READING_LIST, USER_EVENTS, NIGORI,
+                      NOTES,
+                      EXPERIMENTS, MOUNTAIN_SHARES, USER_CONSENTS);
 }
 
 // These are the normal user-controlled types. This is to distinguish from
@@ -237,6 +230,11 @@ constexpr ModelTypeSet UserTypes() {
   return ModelTypeSet::FromRange(FIRST_USER_MODEL_TYPE, LAST_USER_MODEL_TYPE);
 }
 
+// User types, which are not user-controlled.
+constexpr ModelTypeSet AlwaysPreferredUserTypes() {
+  return ModelTypeSet(DEVICE_INFO, USER_CONSENTS);
+}
+
 // These are the user-selectable data types.
 constexpr ModelTypeSet UserSelectableTypes() {
   return ModelTypeSet(BOOKMARKS, PREFERENCES, PASSWORDS, AUTOFILL, THEMES,
@@ -244,6 +242,7 @@ constexpr ModelTypeSet UserSelectableTypes() {
 #if BUILDFLAG(ENABLE_READING_LIST)
                       READING_LIST,
 #endif
+                      USER_EVENTS,
                       NOTES,
                       PROXY_TABS);
 }
@@ -292,20 +291,18 @@ constexpr bool IsControlType(ModelType model_type) {
 //
 // The set of all core types.
 constexpr ModelTypeSet CoreTypes() {
-  return ModelTypeSet(
-      NIGORI, EXPERIMENTS, SUPERVISED_USERS, SUPERVISED_USER_SETTINGS,
-      SYNCED_NOTIFICATIONS, SYNCED_NOTIFICATION_APP_INFO,
-      SUPERVISED_USER_SHARED_SETTINGS, SUPERVISED_USER_WHITELISTS);
+  return ModelTypeSet(NIGORI, EXPERIMENTS, SUPERVISED_USER_SETTINGS,
+                      SYNCED_NOTIFICATIONS, SYNCED_NOTIFICATION_APP_INFO,
+                      SUPERVISED_USER_WHITELISTS);
 }
 // Those core types that have high priority (includes ControlTypes()).
 constexpr ModelTypeSet PriorityCoreTypes() {
-  return ModelTypeSet(NIGORI, EXPERIMENTS, SUPERVISED_USERS,
-                      SUPERVISED_USER_SETTINGS);
+  return ModelTypeSet(NIGORI, EXPERIMENTS, SUPERVISED_USER_SETTINGS);
 }
 
 // Types that may commit data, but should never be included in a GetUpdates.
 constexpr ModelTypeSet CommitOnlyTypes() {
-  return ModelTypeSet(USER_EVENTS);
+  return ModelTypeSet(USER_EVENTS, USER_CONSENTS);
 }
 
 ModelTypeNameMap GetUserSelectableTypeNameMap();
@@ -348,15 +345,16 @@ FullModelTypeSet ToFullModelTypeSet(ModelTypeSet in);
 const char* ModelTypeToString(ModelType model_type);
 
 // Some histograms take an integer parameter that represents a model type.
-// The mapping from ModelType to integer is defined here.  It should match
-// the mapping from integer to labels defined in histograms.xml.
+// The mapping from ModelType to integer is defined here. It should match the
+// mapping from integer to labels defined in histograms.xml.
 int ModelTypeToHistogramInt(ModelType model_type);
+
+// Returns for every model_type a positive unique integer that is stable over
+// time and thus can be used when persisting data.
+int ModelTypeToStableIdentifier(ModelType model_type);
 
 // Handles all model types, and not just real ones.
 std::unique_ptr<base::Value> ModelTypeToValue(ModelType model_type);
-
-// Converts a Value into a ModelType - complement to ModelTypeToValue().
-ModelType ModelTypeFromValue(const base::Value& value);
 
 // Returns the ModelType corresponding to the name |model_type_string|.
 ModelType ModelTypeFromString(const std::string& model_type_string);
@@ -372,13 +370,11 @@ ModelTypeSet ModelTypeSetFromString(const std::string& model_type_string);
 
 std::unique_ptr<base::ListValue> ModelTypeSetToValue(ModelTypeSet model_types);
 
-ModelTypeSet ModelTypeSetFromValue(const base::ListValue& value);
-
 // Returns a string corresponding to the syncable tag for this datatype.
 std::string ModelTypeToRootTag(ModelType type);
 
 // Returns root_tag for |model_type| in ModelTypeInfo.
-// Difference with ModelTypeToRootTag(), this just simply return toor_tag in
+// Difference with ModelTypeToRootTag(), this just simply returns root_tag in
 // ModelTypeInfo.
 const char* GetModelTypeRootTag(ModelType model_type);
 

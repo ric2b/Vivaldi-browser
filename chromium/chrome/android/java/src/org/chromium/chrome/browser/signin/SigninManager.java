@@ -14,6 +14,7 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.Promise;
@@ -184,20 +185,19 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * <p/>
      * Can only be accessed on the main thread.
      *
-     * @param context the ApplicationContext is retrieved from the context used as an argument.
      * @return a singleton instance of the SigninManager.
      */
-    public static SigninManager get(Context context) {
+    public static SigninManager get() {
         ThreadUtils.assertOnUiThread();
         if (sSigninManager == null) {
-            sSigninManager = new SigninManager(context);
+            sSigninManager = new SigninManager();
         }
         return sSigninManager;
     }
 
-    private SigninManager(Context context) {
+    private SigninManager() {
         ThreadUtils.assertOnUiThread();
-        mContext = context.getApplicationContext();
+        mContext = ContextUtils.getApplicationContext();
         mNativeSigninManagerAndroid = nativeInit();
         mSigninAllowedByPolicy = nativeIsSigninAllowedByPolicy(mNativeSigninManagerAndroid);
 
@@ -448,8 +448,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         // Cache the signed-in account name. This must be done after the native call, otherwise
         // sync tries to start without being signed in natively and crashes.
         ChromeSigninController.get().setSignedInAccountName(mSignInState.account.name);
-        AndroidSyncSettings.updateAccount(mContext, mSignInState.account);
-        AndroidSyncSettings.enableChromeSync(mContext);
+        AndroidSyncSettings.updateAccount(mSignInState.account);
+        AndroidSyncSettings.enableChromeSync();
 
         if (mSignInState.callback != null) {
             mSignInState.callback.onSignInComplete();
@@ -523,7 +523,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         // http://crbug.com/589028
         nativeSignOut(mNativeSigninManagerAndroid);
         ChromeSigninController.get().setSignedInAccountName(null);
-        AndroidSyncSettings.updateAccount(mContext, null);
+        AndroidSyncSettings.updateAccount(null);
 
         if (wipeData) {
             wipeProfileData(wipeDataHooks);

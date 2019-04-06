@@ -37,10 +37,6 @@ namespace base {
 class SequencedTaskRunner;
 }
 
-namespace net {
-class URLRequestContextGetter;
-}
-
 namespace safe_browsing {
 
 class SafeBrowsingService;
@@ -117,7 +113,6 @@ class LocalSafeBrowsingDatabaseManager
   safe_browsing::ThreatSource GetThreatSource() const override;
   bool ChecksAreAlwaysAsync() const override;
   bool CanCheckResourceType(content::ResourceType resource_type) const override;
-  bool CanCheckSubresourceFilter() const override;
   bool CanCheckUrl(const GURL& url) const override;
 
   bool CheckBrowseUrl(const GURL& url,
@@ -134,8 +129,9 @@ class LocalSafeBrowsingDatabaseManager
   bool MatchDownloadWhitelistUrl(const GURL& url) override;
   bool MatchDownloadWhitelistString(const std::string& str) override;
   void CancelCheck(Client* client) override;
-  void StartOnIOThread(net::URLRequestContextGetter* request_context_getter,
-                       const V4ProtocolConfig& config) override;
+  void StartOnIOThread(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      const V4ProtocolConfig& config) override;
   void StopOnIOThread(bool shutdown) override;
   bool IsDownloadProtectionEnabled() const override;
 
@@ -212,7 +208,7 @@ class LocalSafeBrowsingDatabaseManager
 
   // Should only be called on db thread as SafeBrowsingDatabase is not
   // threadsafe.
-  SafeBrowsingDatabase* GetDatabase();
+  SafeBrowsingDatabase* GetDatabase(bool reset_opening_database = false);
 
   // Called on the IO thread with the check result.
   void OnCheckDone(SafeBrowsingCheck* info);
@@ -334,6 +330,7 @@ class LocalSafeBrowsingDatabaseManager
   SafeBrowsingDatabase* database_;
 
   // Lock used to prevent possible data races due to compiler optimizations.
+  // Protects |database_|, |closing_database_|, and |opening_database_|.
   mutable base::Lock database_lock_;
 
   // Indicate if download_protection is enabled by command switch
@@ -369,6 +366,10 @@ class LocalSafeBrowsingDatabaseManager
   // Indicates if we're in the midst of trying to close the database.  If this
   // is true, nothing on the IO thread should access the database.
   bool closing_database_;
+
+  // Indicates if there's a task in |safe_browsing_task_runner_| to create
+  // |database_|.
+  bool opening_database_;
 
   base::circular_deque<QueuedCheck> queued_checks_;
 

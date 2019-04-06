@@ -27,16 +27,15 @@
 #include "chrome/browser/extensions/extension_sync_data.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/extension_util.h"
-#include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/test_blacklist.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/extensions/extension_test_util.h"
 #include "chrome/common/extensions/sync_helper.h"
-#include "chrome/common/features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/crx_file/id_util.h"
@@ -78,7 +77,6 @@ using extensions::ExtensionSyncData;
 using extensions::ExtensionSystem;
 using extensions::Manifest;
 using extensions::PermissionSet;
-using extensions::ScriptingPermissionsModifier;
 using extensions::WebstorePrivateIsPendingCustodianApprovalFunction;
 using syncer::SyncChange;
 using syncer::SyncChangeList;
@@ -101,10 +99,8 @@ ExtensionSyncData GetDisableSyncData(const Extension& extension,
   bool incognito_enabled = false;
   bool remote_install = false;
   bool installed_by_custodian = false;
-  ExtensionSyncData::OptionalBoolean has_all_urls =
-      ExtensionSyncData::BOOLEAN_UNSET;
   return ExtensionSyncData(extension, enabled, disable_reasons,
-                           incognito_enabled, remote_install, has_all_urls,
+                           incognito_enabled, remote_install,
                            installed_by_custodian);
 }
 
@@ -113,11 +109,9 @@ ExtensionSyncData GetEnableSyncData(const Extension& extension) {
   bool incognito_enabled = false;
   bool remote_install = false;
   bool installed_by_custodian = false;
-  ExtensionSyncData::OptionalBoolean has_all_urls =
-      ExtensionSyncData::BOOLEAN_UNSET;
   return ExtensionSyncData(
       extension, enabled, extensions::disable_reason::DISABLE_NONE,
-      incognito_enabled, remote_install, has_all_urls, installed_by_custodian);
+      incognito_enabled, remote_install, installed_by_custodian);
 }
 
 SyncChangeList MakeSyncChangeList(const std::string& id,
@@ -373,7 +367,7 @@ TEST_F(ExtensionServiceSyncTest, DisableExtensionFromSync) {
   // Then sync data arrives telling us to disable |good0|.
   ExtensionSyncData disable_good_crx(
       *extension, false, extensions::disable_reason::DISABLE_USER_ACTION, false,
-      false, ExtensionSyncData::BOOLEAN_UNSET, false);
+      false, false);
   SyncChangeList list(
       1, disable_good_crx.GetSyncChange(SyncChange::ACTION_UPDATE));
   extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
@@ -567,10 +561,10 @@ TEST_F(ExtensionServiceSyncTest, IgnoreSyncChangesWhenLocalStateIsMoreRecent) {
   // Now sync data comes in that says to disable good0 and enable good2.
   ExtensionSyncData disable_good0(
       *extension0, false, extensions::disable_reason::DISABLE_USER_ACTION,
-      false, false, ExtensionSyncData::BOOLEAN_UNSET, false);
-  ExtensionSyncData enable_good2(
-      *extension2, true, extensions::disable_reason::DISABLE_NONE, false, false,
-      ExtensionSyncData::BOOLEAN_UNSET, false);
+      false, false, false);
+  ExtensionSyncData enable_good2(*extension2, true,
+                                 extensions::disable_reason::DISABLE_NONE,
+                                 false, false, false);
   syncer::SyncDataList sync_data;
   sync_data.push_back(disable_good0.GetSyncData());
   sync_data.push_back(enable_good2.GetSyncData());
@@ -620,9 +614,9 @@ TEST_F(ExtensionServiceSyncTest, DontSelfNotify) {
     ASSERT_TRUE(extension);
 
     // Disable the extension.
-    ExtensionSyncData data(
-        *extension, false, extensions::disable_reason::DISABLE_USER_ACTION,
-        false, false, ExtensionSyncData::BOOLEAN_UNSET, false);
+    ExtensionSyncData data(*extension, false,
+                           extensions::disable_reason::DISABLE_USER_ACTION,
+                           false, false, false);
     SyncChangeList list(1, data.GetSyncChange(SyncChange::ACTION_UPDATE));
 
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
@@ -637,7 +631,7 @@ TEST_F(ExtensionServiceSyncTest, DontSelfNotify) {
     // Set incognito enabled to true.
     ExtensionSyncData data(*extension, false,
                            extensions::disable_reason::DISABLE_NONE, true,
-                           false, ExtensionSyncData::BOOLEAN_UNSET, false);
+                           false, false);
     SyncChangeList list(1, data.GetSyncChange(SyncChange::ACTION_UPDATE));
 
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
@@ -654,7 +648,7 @@ TEST_F(ExtensionServiceSyncTest, DontSelfNotify) {
         *extension, false,
         extensions::disable_reason::DISABLE_USER_ACTION |
             extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE,
-        false, false, ExtensionSyncData::BOOLEAN_UNSET, false);
+        false, false, false);
     SyncChangeList list(1, data.GetSyncChange(SyncChange::ACTION_UPDATE));
 
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
@@ -671,7 +665,7 @@ TEST_F(ExtensionServiceSyncTest, DontSelfNotify) {
         *extension, false,
         extensions::disable_reason::DISABLE_USER_ACTION |
             extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE,
-        false, false, ExtensionSyncData::BOOLEAN_UNSET, false);
+        false, false, false);
     SyncChangeList list(1, data.GetSyncChange(SyncChange::ACTION_DELETE));
 
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
@@ -702,7 +696,6 @@ TEST_F(ExtensionServiceSyncTest, GetSyncData) {
   EXPECT_EQ(service()->IsExtensionEnabled(good_crx), data->enabled());
   EXPECT_EQ(extensions::util::IsIncognitoEnabled(good_crx, profile()),
             data->incognito_enabled());
-  EXPECT_EQ(ExtensionSyncData::BOOLEAN_UNSET, data->all_urls_enabled());
   EXPECT_EQ(data->version(), extension->version());
   EXPECT_EQ(extensions::ManifestURL::GetUpdateURL(extension),
             data->update_url());
@@ -810,7 +803,6 @@ TEST_F(ExtensionServiceSyncTest, GetSyncDataTerminated) {
   EXPECT_EQ(service()->IsExtensionEnabled(good_crx), data->enabled());
   EXPECT_EQ(extensions::util::IsIncognitoEnabled(good_crx, profile()),
             data->incognito_enabled());
-  EXPECT_EQ(ExtensionSyncData::BOOLEAN_UNSET, data->all_urls_enabled());
   EXPECT_EQ(data->version(), extension->version());
   EXPECT_EQ(extensions::ManifestURL::GetUpdateURL(extension),
             data->update_url());
@@ -853,7 +845,6 @@ TEST_F(ExtensionServiceSyncTest, GetSyncExtensionDataUserSettings) {
     ASSERT_TRUE(data.get());
     EXPECT_TRUE(data->enabled());
     EXPECT_FALSE(data->incognito_enabled());
-    EXPECT_EQ(ExtensionSyncData::BOOLEAN_UNSET, data->all_urls_enabled());
   }
 
   service()->DisableExtension(good_crx,
@@ -867,14 +858,9 @@ TEST_F(ExtensionServiceSyncTest, GetSyncExtensionDataUserSettings) {
     ASSERT_TRUE(data.get());
     EXPECT_FALSE(data->enabled());
     EXPECT_FALSE(data->incognito_enabled());
-    EXPECT_EQ(ExtensionSyncData::BOOLEAN_UNSET, data->all_urls_enabled());
   }
 
   extensions::util::SetIsIncognitoEnabled(good_crx, profile(), true);
-  ScriptingPermissionsModifier permissions_modifier(
-      profile(), registry()->GetExtensionById(
-                     good_crx, extensions::ExtensionRegistry::EVERYTHING));
-  permissions_modifier.SetAllowedOnAllUrls(false);
   {
     syncer::SyncDataList list =
         extension_sync_service()->GetAllSyncData(syncer::EXTENSIONS);
@@ -884,11 +870,9 @@ TEST_F(ExtensionServiceSyncTest, GetSyncExtensionDataUserSettings) {
     ASSERT_TRUE(data.get());
     EXPECT_FALSE(data->enabled());
     EXPECT_TRUE(data->incognito_enabled());
-    EXPECT_EQ(ExtensionSyncData::BOOLEAN_FALSE, data->all_urls_enabled());
   }
 
   service()->EnableExtension(good_crx);
-  permissions_modifier.SetAllowedOnAllUrls(true);
   {
     syncer::SyncDataList list =
         extension_sync_service()->GetAllSyncData(syncer::EXTENSIONS);
@@ -898,7 +882,6 @@ TEST_F(ExtensionServiceSyncTest, GetSyncExtensionDataUserSettings) {
     ASSERT_TRUE(data.get());
     EXPECT_TRUE(data->enabled());
     EXPECT_TRUE(data->incognito_enabled());
-    EXPECT_EQ(ExtensionSyncData::BOOLEAN_TRUE, data->all_urls_enabled());
   }
 }
 
@@ -1148,19 +1131,6 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataSettings) {
   InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
   EXPECT_TRUE(service()->IsExtensionEnabled(good_crx));
   EXPECT_FALSE(extensions::util::IsIncognitoEnabled(good_crx, profile()));
-  // Returns a ScriptingPermissionsModifier for the extension. We use this
-  // because various parts of this test reload the extension, making keeping a
-  // ptr to it inviable.
-  auto get_permissions_modifier = [this]() {
-    const Extension* extension = registry()->GetExtensionById(
-        good_crx, extensions::ExtensionRegistry::EVERYTHING);
-    return std::make_unique<ScriptingPermissionsModifier>(profile(), extension);
-  };
-  EXPECT_FALSE(get_permissions_modifier()->HasSetAllowedOnAllUrls());
-  const bool kDefaultAllowedScripting =
-      ScriptingPermissionsModifier::DefaultAllowedOnAllUrls();
-  EXPECT_EQ(kDefaultAllowedScripting,
-            get_permissions_modifier()->IsAllowedOnAllUrls());
 
   sync_pb::EntitySpecifics specifics;
   sync_pb::ExtensionSpecifics* ext_specifics = specifics.mutable_extension();
@@ -1176,9 +1146,6 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataSettings) {
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
     EXPECT_FALSE(service()->IsExtensionEnabled(good_crx));
     EXPECT_FALSE(extensions::util::IsIncognitoEnabled(good_crx, profile()));
-    EXPECT_FALSE(get_permissions_modifier()->HasSetAllowedOnAllUrls());
-    EXPECT_EQ(kDefaultAllowedScripting,
-              get_permissions_modifier()->IsAllowedOnAllUrls());
   }
 
   {
@@ -1207,29 +1174,12 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataSettings) {
 
   {
     ext_specifics->set_enabled(true);
-    ext_specifics->set_all_urls_enabled(!kDefaultAllowedScripting);
 
     SyncChangeList list =
         MakeSyncChangeList(good_crx, specifics, SyncChange::ACTION_UPDATE);
 
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
     EXPECT_TRUE(service()->IsExtensionEnabled(good_crx));
-    EXPECT_TRUE(get_permissions_modifier()->HasSetAllowedOnAllUrls());
-    EXPECT_EQ(!kDefaultAllowedScripting,
-              get_permissions_modifier()->IsAllowedOnAllUrls());
-  }
-
-  {
-    ext_specifics->set_all_urls_enabled(kDefaultAllowedScripting);
-
-    SyncChangeList list =
-        MakeSyncChangeList(good_crx, specifics, SyncChange::ACTION_UPDATE);
-
-    extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
-    EXPECT_TRUE(service()->IsExtensionEnabled(good_crx));
-    EXPECT_TRUE(get_permissions_modifier()->HasSetAllowedOnAllUrls());
-    EXPECT_EQ(kDefaultAllowedScripting,
-              get_permissions_modifier()->IsAllowedOnAllUrls());
   }
 
   EXPECT_FALSE(service()->pending_extension_manager()->IsIdPending(good_crx));
@@ -1968,17 +1918,29 @@ class MockPermissionRequestCreator : public PermissionRequestCreator {
   bool IsEnabled() const override { return true; }
 
   void CreateURLAccessRequest(const GURL& url_requested,
-                              const SuccessCallback& callback) override {
+                              SuccessCallback callback) override {
     FAIL();
   }
 
-  MOCK_METHOD2(CreateExtensionInstallRequest,
-               void(const std::string& id,
-                    const SupervisedUserService::SuccessCallback& callback));
+  void CreateExtensionInstallRequest(
+      const std::string& id,
+      SupervisedUserService::SuccessCallback callback) override {
+    CreateExtensionInstallRequestInternal(id);
+  }
 
-  MOCK_METHOD2(CreateExtensionUpdateRequest,
-               void(const std::string& id,
-                    const SupervisedUserService::SuccessCallback& callback));
+  void CreateExtensionUpdateRequest(
+      const std::string& id,
+      SupervisedUserService::SuccessCallback callback) override {
+    CreateExtensionUpdateRequestInternal(id);
+  }
+
+  // TODO(crbug.com/729950): These two mock methods can be set to direct calls
+  // once gtest supports move-only objects, since SuccessCallback is move only.
+  MOCK_METHOD1(CreateExtensionInstallRequestInternal,
+               void(const std::string& id));
+
+  MOCK_METHOD1(CreateExtensionUpdateRequestInternal,
+               void(const std::string& id));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockPermissionRequestCreator);
@@ -2119,8 +2081,8 @@ TEST_F(ExtensionServiceTestSupervised,
       base::WrapUnique(creator));
   const std::string version("1.0.0.0");
 
-  EXPECT_CALL(*creator, CreateExtensionInstallRequest(
-                            RequestId(good_crx, version), testing::_));
+  EXPECT_CALL(*creator, CreateExtensionInstallRequestInternal(
+                            RequestId(good_crx, version)));
 
   // Now make the profile supervised.
   profile()->AsTestingProfile()->SetSupervisedUserId(
@@ -2153,7 +2115,7 @@ TEST_F(ExtensionServiceTestSupervised,
 
   // No request should be sent because supervised user initiated installs
   // are disabled.
-  EXPECT_CALL(*creator, CreateExtensionInstallRequest(testing::_, testing::_))
+  EXPECT_CALL(*creator, CreateExtensionInstallRequestInternal(testing::_))
       .Times(0);
 
   // Now make the profile supervised.
@@ -2186,7 +2148,7 @@ TEST_F(ExtensionServiceTestSupervised, ExtensionApprovalBeforeInstallation) {
   InstallCRX(path, INSTALL_NEW);
 
   // No approval request should be sent.
-  EXPECT_CALL(*creator, CreateExtensionInstallRequest(testing::_, testing::_))
+  EXPECT_CALL(*creator, CreateExtensionInstallRequestInternal(testing::_))
       .Times(0);
 
   // Make sure it's enabled.
@@ -2226,8 +2188,8 @@ TEST_F(ExtensionServiceTestSupervised,
   std::string id = InstallPermissionsTestExtension(true /* by_custodian */);
 
   // Update to a new version with increased permissions.
-  EXPECT_CALL(*creator, CreateExtensionUpdateRequest(
-                            RequestId(id, version2), testing::_));
+  EXPECT_CALL(*creator,
+              CreateExtensionUpdateRequestInternal(RequestId(id, version2)));
   UpdatePermissionsTestExtension(id, version2, DISABLED);
   Mock::VerifyAndClearExpectations(creator);
   EXPECT_TRUE(IsPendingCustodianApproval(id));
@@ -2245,8 +2207,8 @@ TEST_F(ExtensionServiceTestSupervised,
 
   // Attempting to re-enable an old version should result in a permission
   // request for the current version.
-  EXPECT_CALL(*creator, CreateExtensionUpdateRequest(
-                            RequestId(id, version2), testing::_));
+  EXPECT_CALL(*creator,
+              CreateExtensionUpdateRequestInternal(RequestId(id, version2)));
 
   SyncChangeList list =
       MakeSyncChangeList(id, specifics, SyncChange::ACTION_UPDATE);
@@ -2274,8 +2236,8 @@ TEST_F(ExtensionServiceTestSupervised,
 
   // Update to a new version with increased permissions.
   const std::string version2("2");
-  EXPECT_CALL(*creator, CreateExtensionUpdateRequest(
-                            RequestId(id, version2), testing::_));
+  EXPECT_CALL(*creator,
+              CreateExtensionUpdateRequestInternal(RequestId(id, version2)));
   UpdatePermissionsTestExtension(id, version2, DISABLED);
   Mock::VerifyAndClearExpectations(creator);
   EXPECT_TRUE(IsPendingCustodianApproval(id));
@@ -2311,8 +2273,8 @@ TEST_F(ExtensionServiceTestSupervised,
 
   // Update to a new version with increased permissions.
   const std::string version2("2");
-  EXPECT_CALL(*creator, CreateExtensionUpdateRequest(
-                            RequestId(id, version2), testing::_));
+  EXPECT_CALL(*creator,
+              CreateExtensionUpdateRequestInternal(RequestId(id, version2)));
   UpdatePermissionsTestExtension(id, version2, DISABLED);
   Mock::VerifyAndClearExpectations(creator);
 
@@ -2328,8 +2290,8 @@ TEST_F(ExtensionServiceTestSupervised,
   ext_specifics->set_version(version3);
 
   // This should *not* result in a new permission request.
-  EXPECT_CALL(*creator, CreateExtensionUpdateRequest(
-                            RequestId(id, version3), testing::_))
+  EXPECT_CALL(*creator,
+              CreateExtensionUpdateRequestInternal(RequestId(id, version3)))
       .Times(0);
 
   SyncChangeList list =
@@ -2358,8 +2320,8 @@ TEST_F(ExtensionServiceTestSupervised, SupervisedUserInitiatedInstalls) {
   base::FilePath path = data_dir().AppendASCII("good.crx");
   std::string version("1.0.0.0");
 
-  EXPECT_CALL(*creator, CreateExtensionInstallRequest(
-                            RequestId(good_crx, version), testing::_));
+  EXPECT_CALL(*creator, CreateExtensionInstallRequestInternal(
+                            RequestId(good_crx, version)));
 
   // Should be installed but disabled, a request for approval should be sent.
   const Extension* extension = InstallCRX(path, INSTALL_WITHOUT_LOAD);
@@ -2551,47 +2513,6 @@ TEST_F(ExtensionServiceSyncTest, SyncUninstallByCustodianSkipsPolicy) {
   // But installed_by_custodian should result in bypassing the policy check.
   EXPECT_FALSE(
       registry()->GenerateInstalledExtensionsSet()->Contains(extension_ids[1]));
-}
-
-TEST_F(ExtensionServiceSyncTest, SyncExtensionHasAllhostsWithheld) {
-  InitializeEmptyExtensionService();
-  StartSyncing(syncer::EXTENSIONS);
-
-  // Create an extension that needs all-hosts.
-  const std::string kName("extension");
-  scoped_refptr<const Extension> extension =
-      extensions::ExtensionBuilder(kName)
-          .SetLocation(Manifest::INTERNAL)
-          .AddPermission("*://*/*")
-          .Build();
-
-  // Install and enable it.
-  service()->AddExtension(extension.get());
-  service()->GrantPermissionsAndEnableExtension(extension.get());
-  const std::string id = extension->id();
-  EXPECT_TRUE(registry()->enabled_extensions().GetByID(id));
-
-  // Simulate a sync node coming in where the extension had all-hosts withheld.
-  // This means that it should have all-hosts withheld on this machine, too.
-  sync_pb::EntitySpecifics specifics;
-  sync_pb::ExtensionSpecifics* ext_specifics = specifics.mutable_extension();
-  ext_specifics->set_id(id);
-  ext_specifics->set_name(kName);
-  ext_specifics->set_version("1.0");
-  ext_specifics->set_all_urls_enabled(false);
-  ext_specifics->set_enabled(true);
-
-  SyncChangeList list =
-      MakeSyncChangeList(id, specifics, SyncChange::ACTION_UPDATE);
-
-  extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
-
-  const Extension* enabled_extension =
-      registry()->enabled_extensions().GetByID(id);
-  ASSERT_TRUE(enabled_extension);
-  ScriptingPermissionsModifier modifier(profile(), enabled_extension);
-  EXPECT_FALSE(modifier.IsAllowedOnAllUrls());
-  EXPECT_TRUE(modifier.HasSetAllowedOnAllUrls());
 }
 
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)

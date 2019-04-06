@@ -10,8 +10,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 
-#include "base/strings/string_number_conversions.h"
-
 namespace bookmarks {
 
 namespace {
@@ -28,19 +26,15 @@ const base::char16 kInvalidChars[] = {
 
 // BookmarkNode ---------------------------------------------------------------
 
+// static
 const int64_t BookmarkNode::kInvalidSyncTransactionVersion = -1;
 
-BookmarkNode::BookmarkNode(const GURL& url)
-    : url_(url) {
-  Initialize(0);
-}
+BookmarkNode::BookmarkNode(const GURL& url) : BookmarkNode(0, url, false) {}
 
-BookmarkNode::BookmarkNode(int64_t id, const GURL& url) : url_(url) {
-  Initialize(id);
-}
+BookmarkNode::BookmarkNode(int64_t id, const GURL& url)
+    : BookmarkNode(id, url, false) {}
 
-BookmarkNode::~BookmarkNode() {
-}
+BookmarkNode::~BookmarkNode() = default;
 
 void BookmarkNode::SetTitle(const base::string16& title) {
   // Replace newlines and other problematic whitespace characters in
@@ -66,86 +60,6 @@ bool BookmarkNode::GetMetaInfo(const std::string& key,
 
   *value = it->second;
   return true;
-}
-
-const base::Time BookmarkNode::date_visited() const
-{
-  std::string date;
-  int64_t date_val=0;
-
-  if (!GetMetaInfo("Visited", &date))
-	return base::Time();
-
-  if (!base::StringToInt64(date, &date_val))
-	return base::Time();
-
-  return base::Time(base::Time::FromInternalValue(date_val));
-}
-
-void BookmarkNode::set_date_visited(const base::Time& date)
-{
-  if (!date.is_null())
-    SetMetaInfo("Visited", base::Int64ToString(date.ToInternalValue()));
-}
-
-void BookmarkNode::set_nickname(const base::string16 &nick)
-{
-  SetMetaInfo("Nickname", base::UTF16ToUTF8(nick));
-}
-
-void BookmarkNode::set_thumbnail(const base::string16 &thumbnail)
-{
-  SetMetaInfo("Thumbnail", base::UTF16ToUTF8(thumbnail));
-}
-
-base::string16 BookmarkNode::GetThumbnail() const
-{
-  std::string temp;
-  if (GetMetaInfo("Thumbnail",&temp))
-    return base::UTF8ToUTF16(temp);
-
-  return base::string16();
-}
-
-void BookmarkNode::set_speeddial(bool speeddial)
-{
-  std::string temp;
-
-  temp = speeddial ? "true" : "false";
-
-  SetMetaInfo("Speeddial", temp);
-}
-
-bool BookmarkNode::GetSpeeddial() const
-{
-  std::string temp;
-  if (GetMetaInfo("Speeddial",&temp))
-    return temp == "true";
-
-  return false;
-}
-
-base::string16 BookmarkNode::GetNickName() const
-{
-  std::string temp;
-  if (GetMetaInfo("Nickname",&temp))
-    return base::UTF8ToUTF16(temp);
-
-  return base::string16();
-}
-
-void BookmarkNode::set_description(const base::string16 &desc)
-{
-  SetMetaInfo("Description", base::UTF16ToUTF8(desc));
-}
-
-base::string16 BookmarkNode::GetDescription() const
-{
-  std::string temp;
-  if (GetMetaInfo("Description",&temp))
-    return base::UTF8ToUTF16(temp);
-
-  return base::string16();
 }
 
 bool BookmarkNode::SetMetaInfo(const std::string& key,
@@ -193,16 +107,13 @@ const GURL& BookmarkNode::GetTitledUrlNodeUrl() const {
   return url_;
 }
 
-void BookmarkNode::Initialize(int64_t id) {
-  id_ = id;
-  type_ = url_.is_empty() ? FOLDER : URL;
-  date_added_ = base::Time::Now();
-  favicon_type_ = favicon_base::IconType::kInvalid;
-  favicon_state_ = INVALID_FAVICON;
-  favicon_load_task_id_ = base::CancelableTaskTracker::kBadTaskId;
-  meta_info_map_.reset();
-  sync_transaction_version_ = kInvalidSyncTransactionVersion;
-}
+BookmarkNode::BookmarkNode(int64_t id, const GURL& url, bool is_permanent_node)
+    : id_(id),
+      url_(url),
+      type_(url_.is_empty() ? FOLDER : URL),
+      date_added_(base::Time::Now()),
+      favicon_type_(favicon_base::IconType::kInvalid),
+      is_permanent_node_(is_permanent_node) {}
 
 void BookmarkNode::InvalidateFavicon() {
   icon_url_.reset();
@@ -214,10 +125,9 @@ void BookmarkNode::InvalidateFavicon() {
 // BookmarkPermanentNode -------------------------------------------------------
 
 BookmarkPermanentNode::BookmarkPermanentNode(int64_t id)
-    : BookmarkNode(id, GURL()), visible_(true) {}
+    : BookmarkNode(id, GURL(), true) {}
 
-BookmarkPermanentNode::~BookmarkPermanentNode() {
-}
+BookmarkPermanentNode::~BookmarkPermanentNode() = default;
 
 bool BookmarkPermanentNode::IsVisible() const {
   return visible_ || !empty();

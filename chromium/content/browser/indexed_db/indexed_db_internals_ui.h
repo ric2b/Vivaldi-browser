@@ -12,7 +12,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "content/public/browser/download_interrupt_reasons.h"
+#include "components/download/public/common/download_interrupt_reasons.h"
 #include "content/public/browser/indexed_db_context.h"
 #include "content/public/browser/web_ui_controller.h"
 
@@ -24,9 +24,12 @@ namespace url {
 class Origin;
 }
 
+namespace download {
+class DownloadItem;
+}
+
 namespace content {
 
-class DownloadItem;
 class IndexedDBContextImpl;
 class StoragePartition;
 
@@ -59,8 +62,8 @@ class IndexedDBInternalsUI : public WebUIController {
                          const url::Origin& origin,
                          const base::FilePath& temp_path,
                          size_t connection_count,
-                         DownloadItem* item,
-                         DownloadInterruptReason interrupt_reason);
+                         download::DownloadItem* item,
+                         download::DownloadInterruptReason interrupt_reason);
 
   void ForceCloseOrigin(const base::ListValue* args);
   void ForceCloseOriginOnIndexedDBThread(

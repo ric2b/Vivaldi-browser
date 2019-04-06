@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 
+#include "ash/public/cpp/ash_switches.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/path_service.h"
@@ -11,13 +12,15 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/chromeos/login/test/https_forwarder.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_test_impl.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -48,6 +51,7 @@ constexpr char kTestAllScopeAccessToken[] = "fake-all-scope-token";
 const char OobeBaseTest::kFakeUserEmail[] = "fake-email@gmail.com";
 const char OobeBaseTest::kFakeUserPassword[] = "fake-password";
 const char OobeBaseTest::kFakeUserGaiaId[] = "fake-gaiaId";
+const char OobeBaseTest::kEmptyUserServices[] = "[]";
 const char OobeBaseTest::kFakeSIDCookie[] = "fake-SID-cookie";
 const char OobeBaseTest::kFakeLSIDCookie[] = "fake-LSID-cookie";
 
@@ -67,7 +71,7 @@ void OobeBaseTest::RegisterAdditionalRequestHandlers() {}
 
 void OobeBaseTest::SetUp() {
   base::FilePath test_data_dir;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
 
   RegisterAdditionalRequestHandlers();
@@ -83,7 +87,7 @@ void OobeBaseTest::SetUp() {
   // SetUpCommandLine().
   InitHttpsForwarders();
 
-  ExtensionApiTest::SetUp();
+  extensions::ExtensionApiTest::SetUp();
 }
 
 void OobeBaseTest::SetUpInProcessBrowserTestFixture() {
@@ -92,7 +96,7 @@ void OobeBaseTest::SetUpInProcessBrowserTestFixture() {
   network_portal_detector_->SetDefaultNetworkForTesting(
       FakeShillManagerClient::kFakeEthernetNetworkGuid);
 
-  ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+  extensions::ExtensionApiTest::SetUpInProcessBrowserTestFixture();
 }
 
 void OobeBaseTest::SetUpOnMainThread() {
@@ -111,7 +115,7 @@ void OobeBaseTest::SetUpOnMainThread() {
       content::NotificationService::AllSources()));
 
   js_checker_.set_web_contents(
-      LoginDisplayHost::default_host()->GetWebUILoginView()->GetWebContents());
+      LoginDisplayHost::default_host()->GetOobeWebContents());
 
   test::UserSessionManagerTestApi session_manager_test_api(
       UserSessionManager::GetInstance());
@@ -126,18 +130,19 @@ void OobeBaseTest::SetUpOnMainThread() {
     run_loop.Run();
   }
 
-  ExtensionApiTest::SetUpOnMainThread();
+  extensions::ExtensionApiTest::SetUpOnMainThread();
 }
 
 void OobeBaseTest::TearDownOnMainThread() {
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
 
-  ExtensionApiTest::TearDownOnMainThread();
+  extensions::ExtensionApiTest::TearDownOnMainThread();
 }
 
 void OobeBaseTest::SetUpCommandLine(base::CommandLine* command_line) {
-  ExtensionApiTest::SetUpCommandLine(command_line);
+  extensions::ExtensionApiTest::SetUpCommandLine(command_line);
 
+  command_line->AppendSwitch(ash::switches::kShowWebUiLogin);
   command_line->AppendSwitch(chromeos::switches::kLoginManager);
   command_line->AppendSwitch(chromeos::switches::kForceLoginManagerInTests);
   if (!needs_background_networking_)
@@ -206,19 +211,30 @@ content::WebUI* OobeBaseTest::GetLoginUI() {
   return LoginDisplayHost::default_host()->GetOobeUI()->web_ui();
 }
 
-LoginDisplayWebUI* OobeBaseTest::GetLoginDisplay() {
-  ExistingUserController* controller =
-      ExistingUserController::current_controller();
-  CHECK(controller);
-  return static_cast<LoginDisplayWebUI*>(controller->login_display());
-}
-
 void OobeBaseTest::WaitForGaiaPageLoad() {
   WaitForSigninScreen();
   WaitForGaiaPageReload();
 }
 
+void OobeBaseTest::WaitForGaiaPageLoadAndPropertyUpdate() {
+  // Some tests need to checks properties such as back button visibility and
+  // #identifier in the gaia location, which are modified after the gaia page
+  // 'ready' event arrives.  To ensure that these properties are updated before
+  // they are checked, use WaitForGaiaPageBackButtonUpdate() instead of
+  // WaitForGaiaPageLoad().
+  WaitForSigninScreen();
+  WaitForGaiaPageBackButtonUpdate();
+}
+
 void OobeBaseTest::WaitForGaiaPageReload() {
+  WaitForGaiaPageEvent("ready");
+}
+
+void OobeBaseTest::WaitForGaiaPageBackButtonUpdate() {
+  WaitForGaiaPageEvent("backButton");
+}
+
+void OobeBaseTest::WaitForGaiaPageEvent(const std::string& event) {
   // Starts listening to message before executing the JS code that generates
   // the message below.
   content::DOMMessageQueue message_queue;
@@ -227,16 +243,16 @@ void OobeBaseTest::WaitForGaiaPageReload() {
       "(function() {"
       "  var authenticator = $('gaia-signin').gaiaAuthHost_;"
       "  var f = function() {"
-      "    authenticator.removeEventListener('ready', f);"
-      "    window.domAutomationController.send('GaiaReady');"
+      "    authenticator.removeEventListener('" + event + "', f);"
+      "    window.domAutomationController.send('Done');"
       "  };"
-      "  authenticator.addEventListener('ready', f);"
+      "  authenticator.addEventListener('" + event + "', f);"
       "})();");
 
   std::string message;
   do {
     ASSERT_TRUE(message_queue.WaitForMessage(&message));
-  } while (message != "\"GaiaReady\"");
+  } while (message != "\"Done\"");
 }
 
 void OobeBaseTest::WaitForSigninScreen() {

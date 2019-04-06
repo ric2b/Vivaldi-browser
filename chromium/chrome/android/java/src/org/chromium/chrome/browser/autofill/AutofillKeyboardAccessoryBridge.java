@@ -11,9 +11,10 @@ import android.support.v7.app.AlertDialog;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ResourceId;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryCoordinator;
 import org.chromium.components.autofill.AutofillDelegate;
-import org.chromium.components.autofill.AutofillKeyboardAccessory;
 import org.chromium.components.autofill.AutofillSuggestion;
 import org.chromium.ui.DropdownItem;
 import org.chromium.ui.base.WindowAndroid;
@@ -27,8 +28,9 @@ import org.chromium.ui.base.WindowAndroid;
 public class AutofillKeyboardAccessoryBridge
         implements AutofillDelegate, DialogInterface.OnClickListener {
     private long mNativeAutofillKeyboardAccessory;
-    private AutofillKeyboardAccessory mAccessoryView;
+    private KeyboardAccessoryCoordinator mKeyboardAccessory;
     private Context mContext;
+    private AutofillKeyboardSuggestions mAutofillSuggestions;
 
     private AutofillKeyboardAccessoryBridge() {
     }
@@ -80,16 +82,15 @@ public class AutofillKeyboardAccessoryBridge
     @CalledByNative
     private void init(long nativeAutofillKeyboardAccessory, WindowAndroid windowAndroid,
             int animationDurationMillis, boolean shouldLimitLabelWidth) {
-        if (windowAndroid == null || windowAndroid.getActivity().get() == null) {
-            nativeViewDismissed(nativeAutofillKeyboardAccessory);
-            dismissed();
-            return;
+        mContext = windowAndroid.getActivity().get();
+        assert mContext != null;
+        if (mContext instanceof ChromeActivity) {
+            mKeyboardAccessory = ((ChromeActivity) mContext).getKeyboardAccessory();
         }
 
         mNativeAutofillKeyboardAccessory = nativeAutofillKeyboardAccessory;
-        mAccessoryView = new AutofillKeyboardAccessory(
-                windowAndroid, this, animationDurationMillis, shouldLimitLabelWidth);
-        mContext = windowAndroid.getActivity().get();
+        mAutofillSuggestions =
+                new AutofillKeyboardSuggestions(windowAndroid, this, shouldLimitLabelWidth);
     }
 
     /**
@@ -105,8 +106,10 @@ public class AutofillKeyboardAccessoryBridge
      */
     @CalledByNative
     private void dismiss() {
-        if (mAccessoryView != null) mAccessoryView.dismiss();
+        if (mKeyboardAccessory != null) mKeyboardAccessory.dismiss();
         mContext = null;
+        mKeyboardAccessory = null;
+        mAutofillSuggestions = null;
     }
 
     /**
@@ -115,7 +118,8 @@ public class AutofillKeyboardAccessoryBridge
      */
     @CalledByNative
     private void show(AutofillSuggestion[] suggestions, boolean isRtl) {
-        if (mAccessoryView != null) mAccessoryView.showWithSuggestions(suggestions, isRtl);
+        if (mAutofillSuggestions != null) mAutofillSuggestions.setSuggestions(suggestions, isRtl);
+        if (mKeyboardAccessory != null) mKeyboardAccessory.setSuggestions(mAutofillSuggestions);
     }
 
     // Helper methods for AutofillSuggestion. These are copied from AutofillPopupBridge (which

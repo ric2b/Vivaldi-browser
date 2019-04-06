@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/format_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,29 +34,29 @@ TEST(IPAddressBytesTest, ConstructEmpty) {
 
 TEST(IPAddressBytesTest, ConstructIPv4) {
   uint8_t data[] = {192, 168, 1, 1};
-  IPAddressBytes bytes(data, arraysize(data));
-  ASSERT_EQ(arraysize(data), bytes.size());
+  IPAddressBytes bytes(data, base::size(data));
+  ASSERT_EQ(base::size(data), bytes.size());
   size_t i = 0;
   for (uint8_t byte : bytes)
     EXPECT_EQ(data[i++], byte);
-  ASSERT_EQ(arraysize(data), i);
+  ASSERT_EQ(base::size(data), i);
 }
 
 TEST(IPAddressBytesTest, ConstructIPv6) {
   uint8_t data[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-  IPAddressBytes bytes(data, arraysize(data));
-  ASSERT_EQ(arraysize(data), bytes.size());
+  IPAddressBytes bytes(data, base::size(data));
+  ASSERT_EQ(base::size(data), bytes.size());
   size_t i = 0;
   for (uint8_t byte : bytes)
     EXPECT_EQ(data[i++], byte);
-  ASSERT_EQ(arraysize(data), i);
+  ASSERT_EQ(base::size(data), i);
 }
 
 TEST(IPAddressBytesTest, Assign) {
   uint8_t data[] = {192, 168, 1, 1};
   IPAddressBytes copy;
-  copy.Assign(data, arraysize(data));
-  EXPECT_EQ(IPAddressBytes(data, arraysize(data)), copy);
+  copy.Assign(data, base::size(data));
+  EXPECT_EQ(IPAddressBytes(data, base::size(data)), copy);
 }
 
 TEST(IPAddressTest, ConstructIPv4) {
@@ -107,8 +108,8 @@ enum IPAddressReservedResult : bool { NOT_RESERVED = false, RESERVED = true };
 // Tests for the reserved IPv4 ranges and the (unreserved) blocks in between.
 // The reserved ranges are tested by checking the first and last address of each
 // range. The unreserved blocks are tested similarly. These tests cover the
-// entire IPv4 address range.
-TEST(IPAddressTest, IsReservedIPv4) {
+// entire IPv4 address range, as well as this range mapped to IPv6.
+TEST(IPAddressTest, IsPubliclyRoutableIPv4) {
   struct {
     const char* const address;
     IPAddressReservedResult is_reserved;
@@ -213,10 +214,16 @@ TEST(IPAddressTest, IsReservedIPv4) {
                {"255.255.255.255", RESERVED}};
 
   IPAddress address;
+  IPAddress mapped_address;
   for (const auto& test : tests) {
     EXPECT_TRUE(address.AssignFromIPLiteral(test.address));
     ASSERT_TRUE(address.IsValid());
-    EXPECT_EQ(!!test.is_reserved, address.IsReserved());
+    EXPECT_EQ(!test.is_reserved, address.IsPubliclyRoutable());
+
+    // Check these IPv4 addresses when mapped to IPv6. This verifies we're
+    // properly unpacking mapped addresses.
+    IPAddress mapped_address = ConvertIPv4ToIPv4MappedIPv6(address);
+    EXPECT_EQ(!test.is_reserved, mapped_address.IsPubliclyRoutable());
   }
 }
 
@@ -224,11 +231,13 @@ TEST(IPAddressTest, IsReservedIPv4) {
 // The reserved ranges are tested by checking the first and last address of each
 // range. The unreserved blocks are tested similarly. These tests cover the
 // entire IPv6 address range.
-TEST(IPAddressTest, IsReservedIPv6) {
+TEST(IPAddressTest, IsPubliclyRoutableIPv6) {
   struct {
     const char* const address;
     IPAddressReservedResult is_reserved;
-  } tests[] = {// 0000::/8
+  } tests[] = {// 0000::/8.
+               // Skip testing ::ffff:/96 explicitly since it was tested
+               // in IsPubliclyRoutableIPv4
                {"0:0:0:0:0:0:0:0", RESERVED},
                {"ff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
                // 0100::/8
@@ -289,7 +298,7 @@ TEST(IPAddressTest, IsReservedIPv6) {
   IPAddress address;
   for (const auto& test : tests) {
     EXPECT_TRUE(address.AssignFromIPLiteral(test.address));
-    EXPECT_EQ(!!test.is_reserved, address.IsReserved());
+    EXPECT_EQ(!test.is_reserved, address.IsPubliclyRoutable());
   }
 }
 
@@ -393,6 +402,20 @@ TEST(IPAddressTest, AssignFromIPLiteral_FailParse) {
   EXPECT_FALSE(address.AssignFromIPLiteral("192.168.0.1:30"));
   EXPECT_FALSE(address.AssignFromIPLiteral("  192.168.0.1  "));
   EXPECT_FALSE(address.AssignFromIPLiteral("[::1]"));
+}
+
+// Test that a failure calling AssignFromIPLiteral() has the sideffect of
+// clearing the current value.
+TEST(IPAddressTest, AssignFromIPLiteral_ResetOnFailure) {
+  IPAddress address = IPAddress::IPv6Localhost();
+
+  EXPECT_TRUE(address.IsValid());
+  EXPECT_FALSE(address.empty());
+
+  EXPECT_FALSE(address.AssignFromIPLiteral("bad value"));
+
+  EXPECT_FALSE(address.IsValid());
+  EXPECT_TRUE(address.empty());
 }
 
 // Test parsing an IPv4 literal.
@@ -499,20 +522,19 @@ TEST(IPAddressTest, IPAddressMatchesPrefix) {
       {"10.11.33.44", 16, "::ffff:0a0b:89", true},
       {"10.11.33.44", 16, "::ffff:10.12.33.44", false},
   };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    SCOPED_TRACE(base::StringPrintf("Test[%" PRIuS "]: %s, %s", i,
-                                    tests[i].cidr_literal,
-                                    tests[i].ip_literal));
+  for (const auto& test : tests) {
+    SCOPED_TRACE(
+        base::StringPrintf("%s, %s", test.cidr_literal, test.ip_literal));
 
     IPAddress ip_address;
-    EXPECT_TRUE(ip_address.AssignFromIPLiteral(tests[i].ip_literal));
+    EXPECT_TRUE(ip_address.AssignFromIPLiteral(test.ip_literal));
 
     IPAddress ip_prefix;
-    EXPECT_TRUE(ip_prefix.AssignFromIPLiteral(tests[i].cidr_literal));
+    EXPECT_TRUE(ip_prefix.AssignFromIPLiteral(test.cidr_literal));
 
-    EXPECT_EQ(tests[i].expected_to_match,
+    EXPECT_EQ(test.expected_to_match,
               IPAddressMatchesPrefix(ip_address, ip_prefix,
-                                     tests[i].prefix_length_in_bits));
+                                     test.prefix_length_in_bits));
   }
 }
 

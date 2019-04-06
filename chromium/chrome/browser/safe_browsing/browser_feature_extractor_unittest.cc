@@ -57,7 +57,7 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
   MOCK_METHOD1(MatchMalwareIP, bool(const std::string& ip_address));
 
  protected:
-  virtual ~MockSafeBrowsingDatabaseManager() {}
+  ~MockSafeBrowsingDatabaseManager() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockSafeBrowsingDatabaseManager);
@@ -72,7 +72,7 @@ class MockClientSideDetectionHost : public ClientSideDetectionHost {
     set_safe_browsing_managers(NULL, database_manager);
   }
 
-  virtual ~MockClientSideDetectionHost() {}
+  ~MockClientSideDetectionHost() override {}
 
   MOCK_METHOD1(IsBadIpAddress, bool(const std::string&));
 };
@@ -289,6 +289,24 @@ TEST_F(BrowserFeatureExtractorTest, UrlInHistory) {
   EXPECT_DOUBLE_EQ(1.0,
                    features[features::kUrlHistoryVisitCountMoreThan24hAgo]);
   EXPECT_DOUBLE_EQ(1.0, features[features::kUrlHistoryTypedCount]);
+  EXPECT_DOUBLE_EQ(1.0, features[features::kUrlHistoryLinkCount]);
+  EXPECT_DOUBLE_EQ(4.0, features[features::kHttpHostVisitCount]);
+  EXPECT_DOUBLE_EQ(2.0, features[features::kHttpsHostVisitCount]);
+  EXPECT_DOUBLE_EQ(1.0, features[features::kFirstHttpHostVisitMoreThan24hAgo]);
+  EXPECT_DOUBLE_EQ(1.0, features[features::kFirstHttpsHostVisitMoreThan24hAgo]);
+
+  request.Clear();
+  request.set_url("https://www.foo.com/gaa.html");
+  request.set_client_score(0.5);
+  EXPECT_TRUE(ExtractFeatures(&request));
+  features.clear();
+  GetFeatureMap(request, &features);
+
+  EXPECT_EQ(8U, features.size());
+  EXPECT_DOUBLE_EQ(1.0, features[features::kUrlHistoryVisitCount]);
+  EXPECT_DOUBLE_EQ(0.0,
+                   features[features::kUrlHistoryVisitCountMoreThan24hAgo]);
+  EXPECT_DOUBLE_EQ(0.0, features[features::kUrlHistoryTypedCount]);
   EXPECT_DOUBLE_EQ(1.0, features[features::kUrlHistoryLinkCount]);
   EXPECT_DOUBLE_EQ(4.0, features[features::kHttpHostVisitCount]);
   EXPECT_DOUBLE_EQ(2.0, features[features::kHttpsHostVisitCount]);
@@ -584,7 +602,8 @@ TEST_F(BrowserFeatureExtractorTest, SafeBrowsingFeatures) {
        features::kSafeBrowsingOriginalUrl,
         "http://www.good.com/")));
   EXPECT_DOUBLE_EQ(1.0, features[features::kSafeBrowsingIsSubresource]);
-  EXPECT_DOUBLE_EQ(3.0, features[features::kSafeBrowsingThreatType]);
+  EXPECT_DOUBLE_EQ(SB_THREAT_TYPE_URL_MALWARE,
+                   features[features::kSafeBrowsingThreatType]);
 }
 
 TEST_F(BrowserFeatureExtractorTest, MalwareFeatures) {

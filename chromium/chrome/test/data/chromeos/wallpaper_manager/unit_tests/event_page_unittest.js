@@ -23,15 +23,14 @@ function tearDown() {
 function testSyncCustomWallpaperSet() {
   var mockSetCustomWallpaper = mockController.createFunctionMock(
       chrome.wallpaperPrivate, 'setCustomWallpaper');
-  mockSetCustomWallpaper.addExpectation(TestConstants.FILESTRING,
-                                        'dummy',
-                                        true,
-                                        'dummy');
+  mockSetCustomWallpaper.addExpectation(
+      TestConstants.FILESTRING, 'dummy', true /*generateThumbnail=*/,
+      TestConstants.wallpaperUrl, false /*previewMode=*/);
   var syncFSChanges = {};
   syncFSChanges.status = 'synced';
   syncFSChanges.direction = 'remote_to_local';
   syncFSChanges.action = 'added';
-  syncFSChanges.fileEntry = mockSyncFS.mockTestFile('dummy');
+  syncFSChanges.fileEntry = mockSyncFS.mockTestFile(TestConstants.wallpaperUrl);
   chrome.syncFileSystem.onFileStatusChanged.dispatch(syncFSChanges);
 }
 
@@ -98,7 +97,7 @@ function testSyncOnlineWallpaper() {
   var changes = {};
   changes[Constants.AccessSyncWallpaperInfoKey] = {};
   changes[Constants.AccessSyncWallpaperInfoKey].newValue = {
-    'url': TestConstants.wallpaperURL,
+    'url': TestConstants.wallpaperUrl,
     'layout': 'custom',
     'source': Constants.WallpaperSourceEnum.Online
   };
@@ -107,7 +106,8 @@ function testSyncOnlineWallpaper() {
       chrome.wallpaperPrivate, 'setWallpaperIfExists');
   mockSetWallpaperIfExists.addExpectation(
       changes[Constants.AccessSyncWallpaperInfoKey].newValue.url,
-      changes[Constants.AccessSyncWallpaperInfoKey].newValue.layout);
+      changes[Constants.AccessSyncWallpaperInfoKey].newValue.layout,
+      false /*previewMode=*/);
   mockSetWallpaperIfExists.callbackData = [false];
 
   var mockSetWallpaper = mockController.createFunctionMock(
@@ -115,22 +115,35 @@ function testSyncOnlineWallpaper() {
   mockSetWallpaper.addExpectation(
       TestConstants.IMAGE,
       changes[Constants.AccessSyncWallpaperInfoKey].newValue.layout,
-      changes[Constants.AccessSyncWallpaperInfoKey].newValue.url);
+      changes[Constants.AccessSyncWallpaperInfoKey].newValue.url,
+      false /*previewMode=*/);
 
   chrome.storage.onChanged.dispatch(changes);
 }
 
 // Test the surprise wallpaper's UMA stats is recorded correctly.
 function testSurpriseWallpaper() {
+  TestConstants.isUsingNewWallpaperPicker = false;
   var mockSetWallpaperIfExists = mockController.createFunctionMock(
       chrome.wallpaperPrivate, 'setWallpaperIfExists');
   mockSetWallpaperIfExists.addExpectation(
-      'dummy_high_resolution.jpg',
-      'dummy');
+      TestConstants.wallpaperUrl + TestConstants.highResolutionSuffix, 'dummy',
+      false /*previewMode=*/);
   mockSetWallpaperIfExists.callbackData = [true];
 
   var mockRecordWallpaperUMA = mockController.createFunctionMock(
       chrome.wallpaperPrivate, 'recordWallpaperUMA');
+  mockRecordWallpaperUMA.addExpectation(Constants.WallpaperSourceEnum.Daily);
+
+  var dateString = new Date().toDateString();
+  SurpriseWallpaper.getInstance().setRandomWallpaper_(dateString);
+
+  // Repeat the above process for the new wallpaper picker. Test that the UMA
+  // stats is also recorded correctly.
+  TestConstants.isUsingNewWallpaperPicker = true;
+  mockSetWallpaperIfExists.addExpectation(
+      TestConstants.wallpaperUrl + TestConstants.highResolutionSuffix,
+      'CENTER_CROPPED', false /*previewMode=*/);
   mockRecordWallpaperUMA.addExpectation(Constants.WallpaperSourceEnum.Daily);
 
   var dateString = new Date().toDateString();

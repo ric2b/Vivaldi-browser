@@ -21,7 +21,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.payments.PaymentRequestTestCommon.TestPay;
+import org.chromium.chrome.browser.payments.PaymentRequestTestRule.TestPay;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
 import java.util.concurrent.ExecutionException;
@@ -89,7 +89,7 @@ public class PaymentRequestPaymentAppTest {
             throws InterruptedException, ExecutionException, TimeoutException {
         final TestPay app = new TestPay("https://bobpay.com", HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE);
         PaymentAppFactory.getInstance().addAdditionalFactory(
-                (webContents, methodNames, callback) -> {
+                (webContents, methodNames, mayCrawlUnused, callback) -> {
                     callback.onPaymentAppCreated(app);
                     callback.onAllPaymentAppsCreated();
                 });
@@ -111,7 +111,7 @@ public class PaymentRequestPaymentAppTest {
             throws InterruptedException, ExecutionException, TimeoutException {
         final TestPay app = new TestPay("https://bobpay.com", NO_INSTRUMENTS, IMMEDIATE_RESPONSE);
         PaymentAppFactory.getInstance().addAdditionalFactory(
-                (webContents, methodNames, callback) -> {
+                (webContents, methodNames, mayCrawlUnused, callback) -> {
                     callback.onPaymentAppCreated(app);
                     callback.onAllPaymentAppsCreated();
                 });

@@ -21,12 +21,13 @@ namespace content {
 
 class BackgroundSyncController;
 class DownloadManagerDelegate;
+class LayoutTestBackgroundFetchDelegate;
 class LayoutTestPermissionManager;
 class LayoutTestPushMessagingService;
-class PermissionManager;
+class PermissionControllerDelegate;
 class PushMessagingService;
 
-class LayoutTestBrowserContext : public ShellBrowserContext {
+class LayoutTestBrowserContext final : public ShellBrowserContext {
  public:
   LayoutTestBrowserContext(bool off_the_record, net::NetLog* net_log);
   ~LayoutTestBrowserContext() override;
@@ -34,7 +35,8 @@ class LayoutTestBrowserContext : public ShellBrowserContext {
   // BrowserContext implementation.
   DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   PushMessagingService* GetPushMessagingService() override;
-  PermissionManager* GetPermissionManager() override;
+  PermissionControllerDelegate* GetPermissionControllerDelegate() override;
+  BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   BackgroundSyncController* GetBackgroundSyncController() override;
 
   LayoutTestPermissionManager* GetLayoutTestPermissionManager();
@@ -46,7 +48,8 @@ class LayoutTestBrowserContext : public ShellBrowserContext {
 
  private:
   std::unique_ptr<LayoutTestPushMessagingService> push_messaging_service_;
-  std::unique_ptr<PermissionManager> permission_manager_;
+  std::unique_ptr<PermissionControllerDelegate> permission_manager_;
+  std::unique_ptr<LayoutTestBackgroundFetchDelegate> background_fetch_delegate_;
   std::unique_ptr<BackgroundSyncController> background_sync_controller_;
   std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
 

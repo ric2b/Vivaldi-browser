@@ -12,12 +12,12 @@
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "ios/chrome/test/app/history_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
-#include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #include "ios/chrome/test/scoped_block_popups_pref.h"
-#import "ios/testing/wait_util.h"
 #include "ios/web/public/test/http_server/html_response_provider.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
@@ -28,6 +28,7 @@
 #endif
 
 using chrome_test_util::GetOriginalBrowserState;
+using chrome_test_util::TapWebViewElementWithId;
 using web::test::HttpServer;
 
 namespace {
@@ -137,7 +138,8 @@ class CacheTestResponseProvider : public web::DataResponseProvider {
   [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 1"];
 
   // Navigate to another page. 2nd hit to server.
-  chrome_test_util::TapWebViewElementWithId(kCacheTestLinkID);
+  GREYAssert(chrome_test_util::TapWebViewElementWithId(kCacheTestLinkID),
+             @"Failed to tap %s", kCacheTestLinkID);
   [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 2"];
 
   // Navigate back. This should not hit the server. Verify the page has been
@@ -177,7 +179,8 @@ class CacheTestResponseProvider : public web::DataResponseProvider {
   // first allow popups.
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_ALLOW,
                                    GetOriginalBrowserState());
-  chrome_test_util::TapWebViewElementWithId(kCacheTestLinkID);
+  GREYAssert(chrome_test_util::TapWebViewElementWithId(kCacheTestLinkID),
+             @"Failed to tap %s", kCacheTestLinkID);
   [ChromeEarlGrey waitForMainTabCount:2];
   [ChromeEarlGrey waitForPageToFinishLoading];
   [ChromeEarlGrey waitForWebViewContainingText:"First Page"];
@@ -196,7 +199,8 @@ class CacheTestResponseProvider : public web::DataResponseProvider {
   web::test::SetUpHttpServer(std::make_unique<CacheTestResponseProvider>());
 
   // Clear the history to ensure expected omnibox autocomplete results.
-  chrome_test_util::ClearBrowsingHistory();
+  GREYAssertTrue(chrome_test_util::ClearBrowsingHistory(),
+                 @"Clearing Browsing History timed out");
 
   const GURL cacheTestFirstPageURL =
       HttpServer::MakeUrl(kCacheTestFirstPageURL);
@@ -207,8 +211,7 @@ class CacheTestResponseProvider : public web::DataResponseProvider {
   [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 1"];
 
   // Type a search into omnnibox and select the first suggestion (second row)
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_typeText(@"cachetestfirstpage")];
+  [ChromeEarlGreyUI focusOmniboxAndType:@"cachetestfirstpage"];
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"omnibox suggestion 1")]
       performAction:grey_tap()];

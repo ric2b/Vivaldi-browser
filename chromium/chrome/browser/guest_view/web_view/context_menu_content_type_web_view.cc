@@ -34,10 +34,6 @@ const Extension* ContextMenuContentTypeWebView::GetExtension() const {
 }
 
 bool ContextMenuContentTypeWebView::SupportsGroup(int group) {
-
-  // TODO: andre@vivaldi.com
-  // We should go through this and clean it up.
-  // Pre: m40 we were using ContextMenuContentType::SupportsGroup
   switch (group) {
     case ITEM_GROUP_PAGE:
     case ITEM_GROUP_FRAME:

@@ -6,11 +6,14 @@
 
 #include <stddef.h>
 
-#include "base/auto_reset.h"
+#include <map>
+#include <string>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -22,10 +25,10 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/webrtc_ip_handling_policy.h"
@@ -41,18 +44,19 @@
 #include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_messages.h"
 #include "content/shell/common/shell_switches.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/web/WebPresentationReceiverFlags.h"
+#include "media/media_buildflags.h"
+#include "third_party/blink/public/web/web_presentation_receiver_flags.h"
 
 namespace content {
+
+// Null until/unless the default main message loop is running.
+base::NoDestructor<base::OnceClosure> g_quit_main_message_loop;
 
 const int kDefaultTestWindowWidthDip = 800;
 const int kDefaultTestWindowHeightDip = 600;
 
 std::vector<Shell*> Shell::windows_;
 base::Callback<void(Shell*)> Shell::shell_created_callback_;
-
-bool Shell::quit_message_loop_ = true;
 
 class Shell::DevToolsWebContentsObserver : public WebContentsObserver {
  public:
@@ -72,9 +76,10 @@ class Shell::DevToolsWebContentsObserver : public WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(DevToolsWebContentsObserver);
 };
 
-Shell::Shell(WebContents* web_contents)
-    : WebContentsObserver(web_contents),
-      web_contents_(web_contents),
+Shell::Shell(std::unique_ptr<WebContents> web_contents,
+             bool should_set_delegate)
+    : WebContentsObserver(web_contents.get()),
+      web_contents_(std::move(web_contents)),
       devtools_frontend_(nullptr),
       is_fullscreen_(false),
       window_(nullptr),
@@ -83,10 +88,17 @@ Shell::Shell(WebContents* web_contents)
 #endif
       headless_(false),
       hide_toolbar_(false) {
-  web_contents_->SetDelegate(this);
+  if (should_set_delegate)
+    web_contents_->SetDelegate(this);
 
-  if (switches::IsRunLayoutTestSwitchPresent())
+  if (switches::IsRunWebTestsSwitchPresent()) {
     headless_ = true;
+    // In a headless shell, disable occlusion tracking. Otherwise, WebContents
+    // would always behave as if they were occluded, i.e. would not render
+    // frames and would not receive input events.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kDisableBackgroundingOccludedWindowsForTesting);
+  }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kContentShellHideToolbar))
@@ -110,19 +122,25 @@ Shell::~Shell() {
     }
   }
 
-  if (windows_.empty() && quit_message_loop_) {
+  if (windows_.empty()) {
     if (headless_)
       PlatformExit();
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+    for (auto it = RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
+         it.Advance()) {
+      it.GetCurrentValue()->DisableKeepAliveRefCount();
+    }
+    if (*g_quit_main_message_loop)
+      std::move(*g_quit_main_message_loop).Run();
   }
 
   web_contents_->SetDelegate(nullptr);
 }
 
-Shell* Shell::CreateShell(WebContents* web_contents,
-                          const gfx::Size& initial_size) {
-  Shell* shell = new Shell(web_contents);
+Shell* Shell::CreateShell(std::unique_ptr<WebContents> web_contents,
+                          const gfx::Size& initial_size,
+                          bool should_set_delegate) {
+  WebContents* raw_web_contents = web_contents.get();
+  Shell* shell = new Shell(std::move(web_contents), should_set_delegate);
   shell->PlatformCreateWindow(initial_size.width(), initial_size.height());
 
   shell->PlatformSetContents();
@@ -132,37 +150,50 @@ Shell* Shell::CreateShell(WebContents* web_contents,
   // Note: Do not make RenderFrameHost or RenderViewHost specific state changes
   // here, because they will be forgotten after a cross-process navigation. Use
   // RenderFrameCreated or RenderViewCreated instead.
-  if (switches::IsRunLayoutTestSwitchPresent()) {
-    web_contents->GetMutableRendererPrefs()->use_custom_colors = false;
-    web_contents->GetRenderViewHost()->SyncRendererPrefs();
+  if (switches::IsRunWebTestsSwitchPresent()) {
+    raw_web_contents->GetMutableRendererPrefs()->use_custom_colors = false;
+    raw_web_contents->GetRenderViewHost()->SyncRendererPrefs();
   }
 
-#if BUILDFLAG(ENABLE_WEBRTC)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kForceWebRtcIPHandlingPolicy)) {
-    web_contents->GetMutableRendererPrefs()->webrtc_ip_handling_policy =
+    raw_web_contents->GetMutableRendererPrefs()->webrtc_ip_handling_policy =
         command_line->GetSwitchValueASCII(
             switches::kForceWebRtcIPHandlingPolicy);
   }
-#endif
 
   return shell;
 }
 
 void Shell::CloseAllWindows() {
-  base::AutoReset<bool> auto_reset(&quit_message_loop_, false);
   DevToolsAgentHost::DetachAllClients();
   std::vector<Shell*> open_windows(windows_);
   for (size_t i = 0; i < open_windows.size(); ++i)
     open_windows[i]->Close();
+
+  // Pump the message loop to allow window teardown tasks to run.
   base::RunLoop().RunUntilIdle();
+
+  // If there were no windows open then the message loop quit closure will
+  // not have been run.
+  if (*g_quit_main_message_loop)
+    std::move(*g_quit_main_message_loop).Run();
+
   PlatformExit();
+}
+
+void Shell::SetMainMessageLoopQuitClosure(base::OnceClosure quit_closure) {
+  *g_quit_main_message_loop = std::move(quit_closure);
+}
+
+void Shell::QuitMainMessageLoopForTesting() {
+  std::move(*g_quit_main_message_loop).Run();
 }
 
 void Shell::SetShellCreatedCallback(
     base::Callback<void(Shell*)> shell_created_callback) {
   DCHECK(shell_created_callback_.is_null());
-  shell_created_callback_ = shell_created_callback;
+  shell_created_callback_ = std::move(shell_created_callback);
 }
 
 Shell* Shell::FromRenderViewHost(RenderViewHost* rvh) {
@@ -175,7 +206,6 @@ Shell* Shell::FromRenderViewHost(RenderViewHost* rvh) {
   return nullptr;
 }
 
-// static
 void Shell::Initialize() {
   PlatformInitialize(GetShellDefaultSize());
 }
@@ -197,22 +227,55 @@ Shell* Shell::CreateNewWindow(BrowserContext* browser_context,
         blink::kPresentationReceiverSandboxFlags;
   }
   create_params.initial_size = AdjustWindowSize(initial_size);
-  WebContents* web_contents = WebContents::Create(create_params);
-  Shell* shell = CreateShell(web_contents, create_params.initial_size);
+  std::unique_ptr<WebContents> web_contents =
+      WebContents::Create(create_params);
+  Shell* shell =
+      CreateShell(std::move(web_contents), create_params.initial_size,
+                  true /* should_set_delegate */);
+  if (!url.is_empty())
+    shell->LoadURL(url);
+  return shell;
+}
+
+Shell* Shell::CreateNewWindowWithSessionStorageNamespace(
+    BrowserContext* browser_context,
+    const GURL& url,
+    const scoped_refptr<SiteInstance>& site_instance,
+    const gfx::Size& initial_size,
+    scoped_refptr<SessionStorageNamespace> session_storage_namespace) {
+  WebContents::CreateParams create_params(browser_context, site_instance);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForcePresentationReceiverForTesting)) {
+    create_params.starting_sandbox_flags =
+        blink::kPresentationReceiverSandboxFlags;
+  }
+  create_params.initial_size = AdjustWindowSize(initial_size);
+  std::map<std::string, scoped_refptr<SessionStorageNamespace>>
+      session_storages;
+  session_storages[""] = session_storage_namespace;
+  std::unique_ptr<WebContents> web_contents =
+      WebContents::CreateWithSessionStorage(create_params, session_storages);
+  Shell* shell =
+      CreateShell(std::move(web_contents), create_params.initial_size,
+                  true /* should_set_delegate */);
   if (!url.is_empty())
     shell->LoadURL(url);
   return shell;
 }
 
 void Shell::LoadURL(const GURL& url) {
-  LoadURLForFrame(url, std::string());
+  LoadURLForFrame(
+      url, std::string(),
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
 }
 
-void Shell::LoadURLForFrame(const GURL& url, const std::string& frame_name) {
+void Shell::LoadURLForFrame(const GURL& url,
+                            const std::string& frame_name,
+                            ui::PageTransition transition_type) {
   NavigationController::LoadURLParams params(url);
-  params.transition_type = ui::PageTransitionFromInt(
-      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
   params.frame_name = frame_name;
+  params.transition_type = transition_type;
   web_contents_->GetController().LoadURLWithParams(params);
   web_contents_->Focus();
 }
@@ -262,14 +325,17 @@ void Shell::LoadDataWithBaseURLInternal(const GURL& url,
 }
 
 void Shell::AddNewContents(WebContents* source,
-                           WebContents* new_contents,
+                           std::unique_ptr<WebContents> new_contents,
                            WindowOpenDisposition disposition,
                            const gfx::Rect& initial_rect,
                            bool user_gesture,
                            bool* was_blocked) {
-  CreateShell(new_contents, AdjustWindowSize(initial_rect.size()));
-  if (switches::IsRunLayoutTestSwitchPresent())
-    SecondaryTestWindowObserver::CreateForWebContents(new_contents);
+  WebContents* raw_new_contents = new_contents.get();
+  CreateShell(
+      std::move(new_contents), AdjustWindowSize(initial_rect.size()),
+      !delay_popup_contents_delegate_for_testing_ /* should_set_delegate */);
+  if (switches::IsRunWebTestsSwitchPresent())
+    SecondaryTestWindowObserver::CreateForWebContents(raw_new_contents);
 }
 
 void Shell::GoBackOrForward(int offset) {
@@ -353,7 +419,7 @@ WebContents* Shell::OpenURLFromTab(WebContents* source,
                                  params.source_site_instance,
                                  gfx::Size());  // Use default size.
       target = new_window->web_contents();
-      if (switches::IsRunLayoutTestSwitchPresent())
+      if (switches::IsRunWebTestsSwitchPresent())
         SecondaryTestWindowObserver::CreateForWebContents(target);
       break;
     }
@@ -383,6 +449,7 @@ WebContents* Shell::OpenURLFromTab(WebContents* source,
   load_url_params.is_renderer_initiated = params.is_renderer_initiated;
   load_url_params.should_replace_current_entry =
       params.should_replace_current_entry;
+  load_url_params.blob_url_loader_factory = params.blob_url_loader_factory;
 
   if (params.uses_post) {
     load_url_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
@@ -399,8 +466,10 @@ void Shell::LoadingStateChanged(WebContents* source,
   PlatformSetIsLoading(source->IsLoading());
 }
 
-void Shell::EnterFullscreenModeForTab(WebContents* web_contents,
-                                      const GURL& origin) {
+void Shell::EnterFullscreenModeForTab(
+    WebContents* web_contents,
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
   ToggleFullscreenModeForTab(web_contents, true);
 }
 
@@ -413,11 +482,13 @@ void Shell::ToggleFullscreenModeForTab(WebContents* web_contents,
 #if defined(OS_ANDROID)
   PlatformToggleFullscreenModeForTab(web_contents, enter_fullscreen);
 #endif
-  if (!switches::IsRunLayoutTestSwitchPresent())
+  if (!switches::IsRunWebTestsSwitchPresent())
     return;
   if (is_fullscreen_ != enter_fullscreen) {
     is_fullscreen_ = enter_fullscreen;
-    web_contents->GetRenderViewHost()->GetWidget()->WasResized();
+    web_contents->GetRenderViewHost()
+        ->GetWidget()
+        ->SynchronizeVisualProperties();
   }
 }
 
@@ -431,12 +502,12 @@ bool Shell::IsFullscreenForTabOrPending(const WebContents* web_contents) const {
 
 blink::WebDisplayMode Shell::GetDisplayMode(
     const WebContents* web_contents) const {
- // TODO : should return blink::WebDisplayModeFullscreen wherever user puts
- // a browser window into fullscreen (not only in case of renderer-initiated
- // fullscreen mode): crbug.com/476874.
- return IsFullscreenForTabOrPending(web_contents)
-            ? blink::kWebDisplayModeFullscreen
-            : blink::kWebDisplayModeBrowser;
+  // TODO: should return blink::WebDisplayModeFullscreen wherever user puts
+  // a browser window into fullscreen (not only in case of renderer-initiated
+  // fullscreen mode): crbug.com/476874.
+  return IsFullscreenForTabOrPending(web_contents)
+             ? blink::kWebDisplayModeFullscreen
+             : blink::kWebDisplayModeBrowser;
 }
 
 void Shell::RequestToLockMouse(WebContents* web_contents,
@@ -464,7 +535,7 @@ void Shell::DidNavigateMainFramePostCommit(WebContents* web_contents) {
 JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
     WebContents* source) {
   if (!dialog_manager_) {
-    dialog_manager_.reset(switches::IsRunLayoutTestSwitchPresent()
+    dialog_manager_.reset(switches::IsRunWebTestsSwitchPresent()
                               ? new LayoutTestJavaScriptDialogManager
                               : new ShellJavaScriptDialogManager);
   }
@@ -475,7 +546,7 @@ std::unique_ptr<BluetoothChooser> Shell::RunBluetoothChooser(
     RenderFrameHost* frame,
     const BluetoothChooser::EventHandler& event_handler) {
   BlinkTestController* blink_test_controller = BlinkTestController::Get();
-  if (blink_test_controller && switches::IsRunLayoutTestSwitchPresent())
+  if (blink_test_controller && switches::IsRunWebTestsSwitchPresent())
     return blink_test_controller->RunBluetoothChooser(frame, event_handler);
   return nullptr;
 }
@@ -485,12 +556,15 @@ bool Shell::DidAddMessageToConsole(WebContents* source,
                                    const base::string16& message,
                                    int32_t line_no,
                                    const base::string16& source_id) {
-  return switches::IsRunLayoutTestSwitchPresent();
+  return switches::IsRunWebTestsSwitchPresent();
 }
 
-void Shell::RendererUnresponsive(WebContents* source) {
+void Shell::RendererUnresponsive(
+    WebContents* source,
+    RenderWidgetHost* render_widget_host,
+    base::RepeatingClosure hang_monitor_restarter) {
   BlinkTestController* blink_test_controller = BlinkTestController::Get();
-  if (blink_test_controller && switches::IsRunLayoutTestSwitchPresent())
+  if (blink_test_controller && switches::IsRunWebTestsSwitchPresent())
     blink_test_controller->RendererUnresponsive();
 }
 
@@ -505,15 +579,25 @@ bool Shell::ShouldAllowRunningInsecureContent(
     const GURL& resource_url) {
   bool allowed_by_test = false;
   BlinkTestController* blink_test_controller = BlinkTestController::Get();
-  if (blink_test_controller &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kRunLayoutTest)) {
+  if (blink_test_controller && switches::IsRunWebTestsSwitchPresent()) {
     const base::DictionaryValue& test_flags =
         blink_test_controller->accumulated_layout_test_runtime_flags_changes();
     test_flags.GetBoolean("running_insecure_content_allowed", &allowed_by_test);
   }
 
   return allowed_per_prefs || allowed_by_test;
+}
+
+gfx::Size Shell::EnterPictureInPicture(const viz::SurfaceId& surface_id,
+                                       const gfx::Size& natural_size) {
+  // During tests, returning a fake window size to pretent the window was
+  // created and allow tests to run accordingly.
+  return switches::IsRunWebTestsSwitchPresent() ? gfx::Size(42, 42)
+                                                : gfx::Size(0, 0);
+}
+
+bool Shell::ShouldResumeRequestsForCreatedWindow() {
+  return !delay_popup_contents_delegate_for_testing_;
 }
 
 gfx::Size Shell::GetShellDefaultSize() {

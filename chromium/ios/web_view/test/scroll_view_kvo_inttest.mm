@@ -5,9 +5,9 @@
 #import <ChromeWebView/ChromeWebView.h>
 #import <Foundation/Foundation.h>
 
-#import "ios/testing/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #import "ios/web_view/test/observer.h"
-#import "ios/web_view/test/web_view_int_test.h"
+#import "ios/web_view/test/web_view_inttest_base.h"
 #import "ios/web_view/test/web_view_test_util.h"
 #include "testing/gtest_mac.h"
 
@@ -19,7 +19,7 @@ namespace ios_web_view {
 
 // Tests that the KVO compliant properties of CWVScrollView correctly report
 // changes.
-typedef ios_web_view::WebViewIntTest ScrollViewKvoTest;
+typedef ios_web_view::WebViewInttestBase ScrollViewKvoTest;
 
 // Tests that CWVScrollView correctly reports |contentOffset| state.
 TEST_F(ScrollViewKvoTest, contentOffset) {
@@ -37,8 +37,8 @@ TEST_F(ScrollViewKvoTest, contentOffset) {
               observer.lastValue);
 
   [web_view_.scrollView setContentOffset:CGPointMake(30, 40) animated:YES];
-  EXPECT_TRUE(
-      testing::WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
+  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForUIElementTimeout, ^{
         return static_cast<bool>([observer.lastValue
             isEqual:[NSValue valueWithCGPoint:CGPointMake(30, 40)]]);
       }));

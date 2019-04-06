@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
 
+#include <utility>
+
 #include "base/task_runner.h"
 #include "chrome/browser/chromeos/login/users/fake_supervised_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -77,6 +79,13 @@ SupervisedUserManager* MockUserManager::GetSupervisedUserManager() {
   return supervised_user_manager_.get();
 }
 
+void MockUserManager::ScheduleResolveLocale(
+    const std::string& locale,
+    base::OnceClosure on_resolved_callback,
+    std::string* out_resolved_locale) const {
+  DoScheduleResolveLocale(locale, &on_resolved_callback, out_resolved_locale);
+}
+
 // Creates a new User instance.
 void MockUserManager::SetActiveUser(const AccountId& account_id) {
   ClearUserList();
@@ -110,13 +119,16 @@ user_manager::User* MockUserManager::CreateKioskAppUser(
 }
 
 void MockUserManager::AddUser(const AccountId& account_id) {
-  AddUserWithAffiliation(account_id, false);
+  AddUserWithAffiliationAndType(account_id, false,
+                                user_manager::USER_TYPE_REGULAR);
 }
 
-void MockUserManager::AddUserWithAffiliation(const AccountId& account_id,
-                                             bool is_affiliated) {
-  user_manager::User* user = user_manager::User::CreateRegularUser(
-      account_id, user_manager::USER_TYPE_REGULAR);
+void MockUserManager::AddUserWithAffiliationAndType(
+    const AccountId& account_id,
+    bool is_affiliated,
+    user_manager::UserType user_type) {
+  user_manager::User* user =
+      user_manager::User::CreateRegularUser(account_id, user_type);
   user->SetAffiliation(is_affiliated);
   user_list_.push_back(user);
   ProfileHelper::Get()->SetProfileToUserMappingForTesting(user);

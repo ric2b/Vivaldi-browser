@@ -4,8 +4,11 @@
 
 #include "chromecast/base/cast_sys_info_android.h"
 
+#include <sys/system_properties.h>
 #include <memory>
+#include <string>
 
+#include "base/android/apk_assets.h"
 #include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
@@ -13,47 +16,51 @@
 #include "base/sys_info.h"
 #include "chromecast/base/cast_sys_info_util.h"
 #include "chromecast/base/version.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "jni/CastSysInfoAndroid_jni.h"
 
 namespace chromecast {
 
 namespace {
-const char kBuildTypeUser[] = "user";
+const char kCastConfigAssetPath[] = "assets/cast_config";
+
+std::string GetAndroidProperty(const std::string& key,
+                               const std::string& default_value) {
+  char value[PROP_VALUE_MAX];
+  int ret = __system_property_get(key.c_str(), value);
+  if (ret <= 0) {
+    VLOG(1) << "No value set for property: " << key;
+    return default_value;
+  }
+
+  return std::string(value);
+}
+
+bool DoesCastConfigFileExist() {
+  base::MemoryMappedFile::Region config_region;
+  int config_fd =
+      base::android::OpenApkAsset(kCastConfigAssetPath, &config_region);
+  return config_fd > 0;
+}
 }  // namespace
 
-// static
-std::unique_ptr<CastSysInfo> CreateSysInfo() {
-  return std::make_unique<CastSysInfoAndroid>();
-}
-
 CastSysInfoAndroid::CastSysInfoAndroid()
-    : build_info_(base::android::BuildInfo::GetInstance()) {
-}
+    : build_info_(base::android::BuildInfo::GetInstance()) {}
 
-CastSysInfoAndroid::~CastSysInfoAndroid() {
-}
+CastSysInfoAndroid::~CastSysInfoAndroid() {}
 
 CastSysInfo::BuildType CastSysInfoAndroid::GetBuildType() {
+  // TODO(b/110375912): Update this to parse the file contents and allow
+  // selection based on the config values.  For now this is just checking for
+  // file existence.
+  if (!DoesCastConfigFileExist())
+    return BUILD_PRODUCTION;
+
   if (CAST_IS_DEBUG_BUILD())
     return BUILD_ENG;
 
-  int build_number;
-  if (!base::StringToInt(CAST_BUILD_INCREMENTAL, &build_number))
-    build_number = 0;
-
-  // Note: no way to determine which channel was used on play store.
-  if (strcmp(build_info_->build_type(), kBuildTypeUser) == 0 &&
-      build_number > 0) {
-    return BUILD_PRODUCTION;
-  }
-
-  // Dogfooders without a user system build should all still have non-Debug
-  // builds of the cast receiver APK, but with valid build numbers.
-  if (build_number > 0)
-    return BUILD_BETA;
-
-  // Default to ENG build.
-  return BUILD_ENG;
+  // Default to BETA build.
+  return BUILD_BETA;
 }
 
 std::string CastSysInfoAndroid::GetSerialNumber() {
@@ -93,11 +100,24 @@ std::string CastSysInfoAndroid::GetBoardRevision() {
 }
 
 std::string CastSysInfoAndroid::GetFactoryCountry() {
-  return "";
+  return GetAndroidProperty("ro.boot.wificountrycode", "");
 }
 
 std::string CastSysInfoAndroid::GetFactoryLocale(std::string* second_locale) {
-  return "";
+  // This duplicates the read-only property portion of
+  // frameworks/base/core/jni/AndroidRuntime.cpp in the Android tree, which is
+  // effectively the "factory locale", i.e. the locale chosen by Android
+  // assuming the other persist.sys.* properties are not set.
+  const std::string locale = GetAndroidProperty("ro.product.locale", "");
+  if (!locale.empty()) {
+    return locale;
+  }
+
+  const std::string language =
+      GetAndroidProperty("ro.product.locale.language", "en");
+  const std::string region =
+      GetAndroidProperty("ro.product.locale.region", "US");
+  return language + "-" + region;
 }
 
 std::string CastSysInfoAndroid::GetWifiInterface() {

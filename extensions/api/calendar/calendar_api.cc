@@ -13,6 +13,7 @@
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/calendar.h"
+#include "extensions/tools/vivaldi_tools.h"
 
 #include "calendar/calendar_model_observer.h"
 #include "calendar/calendar_service.h"
@@ -21,6 +22,8 @@
 using calendar::CalendarService;
 using calendar::CalendarServiceFactory;
 using calendar::RecurrenceInterval;
+using vivaldi::MilliSecondsFromTime;
+using vivaldi::GetTime;
 
 namespace {
 
@@ -57,10 +60,6 @@ namespace OnCalendarChanged = vivaldi::calendar::OnCalendarChanged;
 
 typedef std::vector<vivaldi::calendar::CalendarEvent> EventList;
 typedef std::vector<vivaldi::calendar::Calendar> CalendarList;
-
-double MilliSecondsFromTime(const base::Time& time) {
-  return 1000 * time.ToDoubleT();
-}
 
 // static
 RecurrenceInterval UiOccurrenceToEventOccurrence(
@@ -243,13 +242,12 @@ void CalendarAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<CalendarAPI>>::DestructorAtExit g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<CalendarAPI>>::
+    DestructorAtExit g_factory_calendar = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<CalendarAPI>* CalendarAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_calendar.Pointer();
 }
 
 OccurrenceInterval RecurrenceToUiRecurrence(RecurrenceInterval transition) {
@@ -354,13 +352,6 @@ void CalendarGetAllEventsFunction::GetAllEventsComplete(
 
 Profile* CalendarAsyncFunction::GetProfile() const {
   return Profile::FromBrowserContext(browser_context());
-}
-
-base::Time GetTime(double ms_from_epoch) {
-  double seconds_from_epoch = ms_from_epoch / 1000.0;
-  return (seconds_from_epoch == 0)
-             ? base::Time::UnixEpoch()
-             : base::Time::FromDoubleT(seconds_from_epoch);
 }
 
 calendar::EventRow GetEventRow(const vivaldi::calendar::CreateDetails& event) {

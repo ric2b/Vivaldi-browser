@@ -42,11 +42,10 @@ static const ElementIdType kInvalidElementId = 0;
 // scrolling element id instead of a scrolling layer id allows for more general
 // compositing where, for example, multiple layers scroll with one scroll node.
 //
-// The animation system (see: ElementAnimations and blink::ElementAnimations) is
-// another auxilliary structure to the layer tree and uses element ids as a
-// stable identifier for animation targets. A Layer's element id can change over
-// the Layer's lifetime because non-default ElementIds are only set during an
-// animation's lifetime.
+// The animation system (see ElementAnimations) is another auxilliary structure
+// to the layer tree and uses element ids as a stable identifier for animation
+// targets. A Layer's element id can change over the Layer's lifetime because
+// non-default ElementIds are only set during an animation's lifetime.
 struct CC_EXPORT ElementId {
   explicit ElementId(int id) : id_(id) {}
   ElementId() : ElementId(kInvalidElementId) {}
@@ -61,9 +60,7 @@ struct CC_EXPORT ElementId {
   void AddToTracedValue(base::trace_event::TracedValue* res) const;
   std::unique_ptr<base::Value> AsValue() const;
 
-  // Returns the element id as its underlying representation.
-  // TODO(wkorman): Remove or rename this method. http://crbug.com/752327
-  ElementIdType ToInternalValue() const;
+  ElementIdType GetInternalValue() const;
 
   std::string ToString() const;
 

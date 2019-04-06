@@ -4,8 +4,6 @@ var GuestViewAttributes = require('guestViewAttributes').GuestViewAttributes;
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 
 function TabIdAttribute(view) {
-
-
   GuestViewAttributes.Attribute.call(this,
     WebViewConstants.ATTRIBUTE_TAB_ID, view);
 }
@@ -29,18 +27,6 @@ InspectTabIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
   // nothing to do here
 };
 
-function UseNormalProfileAttribute(view) {
-  GuestViewAttributes.BooleanAttribute.call(this,
-    WebViewConstants.ATTRIBUTE_USE_NORMAL_PROFILE, view);
-}
-
-UseNormalProfileAttribute.prototype.__proto__ =
-  GuestViewAttributes.BooleanAttribute.prototype;
-
-UseNormalProfileAttribute.prototype.handleMutation = function (oldValue, newValue) {
-  // nothing to do here
-};
-
 function WasTypedAttribute(view) {
   GuestViewAttributes.BooleanAttribute.call(this,
      WebViewConstants.ATTRIBUTE_WASTYPED, view);
@@ -57,39 +43,15 @@ WasTypedAttribute.prototype.handleMutation = function (oldValue, newValue) {
   }
 };
 
-function ExtensionHostAttribute(view) {
-  GuestViewAttributes.Attribute.call(
-      this, WebViewConstants.ATTRIBUTE_EXTENSIONHOST, view);
-}
-
-ExtensionHostAttribute.prototype.__proto__ =
-  GuestViewAttributes.Attribute.prototype;
-
-ExtensionHostAttribute.prototype.handleMutation = function(oldValue, newValue) {
-  oldValue = oldValue || '';
-  newValue = newValue || '';
-  if (oldValue === newValue || !this.view.guest.getId())
-    return;
-
-  WebViewPrivate.setExtensionHost(this.view.guest.getId(), newValue);
-};
-
 function addPrivateAttributes(athis /* WebViewImpl */) {
-  athis.attributes[WebViewConstants.ATTRIBUTE_EXTENSIONHOST] =
-      new ExtensionHostAttribute(athis);
-
   athis.attributes[WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID] =
       new InspectTabIdAttribute(athis);
 
   athis.attributes[WebViewConstants.ATTRIBUTE_TAB_ID] =
       new TabIdAttribute(athis);
 
-  athis.attributes[WebViewConstants.ATTRIBUTE_USE_NORMAL_PROFILE] =
-      new UseNormalProfileAttribute(athis);
-
   athis.attributes[WebViewConstants.ATTRIBUTE_WASTYPED] =
       new WasTypedAttribute(athis);
-
 }
 
 // Exports.

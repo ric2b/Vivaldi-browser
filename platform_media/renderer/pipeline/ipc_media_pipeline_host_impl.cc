@@ -22,24 +22,12 @@
 #include "platform_media/common/feature_toggles.h"
 #include "platform_media/common/media_pipeline_messages.h"
 #include "platform_media/common/platform_logging_util.h"
-#if defined(PLATFORM_MEDIA_HWA)
-#include "platform_media/common/platform_media_pipeline_constants.h"
-#include "platform_media/renderer/decoders/pass_through_decoder_texture.h"
-#endif
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/common/video_frame_transformer.h"
 
 namespace media {
 
 namespace {
-
-struct IPCPictureBuffer {
-  IPCPictureBuffer(uint32_t texture_id, gpu::Mailbox texture_mailbox)
-      : texture_id(texture_id), texture_mailbox(texture_mailbox) {}
-
-  uint32_t texture_id;
-  gpu::Mailbox texture_mailbox;
-};
 
 const char* const kDecodedDataReadTraceEventNames[] = {"ReadAudioData",
                                                        "ReadVideoData"};
@@ -64,251 +52,9 @@ void HandleConfigChange(const ConfigType& new_config,
   params->status = MediaDataStatus::kConfigChanged;
 }
 
-// An implementation of the DataSource interface that is a wrapper around
-// DecoderBuffer.
-class IPCWrapperDataSource : public DataSource {
- public:
-  explicit IPCWrapperDataSource();
-
-  // DataSource implementation.
-  void Read(int64_t position,
-            int size,
-            uint8_t* data,
-            const DataSource::ReadCB& read_cb) override;
-  void Stop() override;
-  void Abort() override;
-  bool GetSize(int64_t* size_out) override;
-  bool IsStreaming() override;
-  void SetBitrate(int bitrate) override;
-
-  std::string mime_type() const { return mime_type_; }
-
-  void SetMimeType(const std::string& mime_type);
-
-  bool CopyBuffer(const scoped_refptr<DecoderBuffer>& buffer);
-
- private:
-
-  std::string mime_type_;
-  bool stopped_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(IPCWrapperDataSource);
-};
-
-IPCWrapperDataSource::IPCWrapperDataSource() {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-}
-
-void IPCWrapperDataSource::Read(
-    int64_t position,
-    int size,
-    uint8_t* data,
-    const DataSource::ReadCB& read_cb) {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  if (stopped_ || size < 0 || position < 0) {
-    read_cb.Run(kReadError);
-    return;
-  }
-
-  //protocol_->SetPosition(position);
-  //read_cb.Run(protocol_->Read(size, data));
-}
-
-void IPCWrapperDataSource::Stop() {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  stopped_ = true;
-}
-
-void IPCWrapperDataSource::Abort() {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  // Do nothing.
-}
-
-bool IPCWrapperDataSource::GetSize(int64_t* size_out) {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  if (size_out) {
-    *size_out = -1;
-    return true;
-  }
-  return false;
-}
-
-bool IPCWrapperDataSource::IsStreaming() {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  return true;
-}
-
-void IPCWrapperDataSource::SetBitrate(int bitrate) {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  // Do nothing.
-}
-
-void IPCWrapperDataSource::SetMimeType(
-    const std::string& mime_type) {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  mime_type_ = mime_type;
-}
-
-bool IPCWrapperDataSource::CopyBuffer(
-    const scoped_refptr<DecoderBuffer>& buffer) {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  return false;
-}
-
 }  // namespace
 
 using media::DemuxerStream;
-
-#if defined(PLATFORM_MEDIA_HWA)
-// Manages IPCPictureBuffers used for transferring video frames which were
-// decoded using hardware acceleration.
-class IPCMediaPipelineHostImpl::PictureBufferManager {
- public:
-  explicit PictureBufferManager(GpuVideoAcceleratorFactories* factories);
-  ~PictureBufferManager();
-
-  const IPCPictureBuffer* ProvidePictureBuffer(const gfx::Size& size);
-  std::unique_ptr<AutoReleasedPassThroughDecoderTexture> CreateWrappedTexture(
-      uint32_t texture_id);
-  void DismissPictureBufferInUse();
-
- private:
-  static void ReleaseMailbox(
-      base::WeakPtr<PictureBufferManager> buffer_manager,
-      GpuVideoAcceleratorFactories* factories,
-      uint32_t texture_id,
-      const gpu::SyncToken& release_sync_point);
-
-  void ReusePictureBuffer(uint32_t texture_id);
-
-  GpuVideoAcceleratorFactories* factories_;
-
-  std::unique_ptr<IPCPictureBuffer> picture_buffer_in_use_;
-  std::queue<IPCPictureBuffer> available_picture_buffers_;
-  std::map<int32_t, IPCPictureBuffer> picture_buffers_at_display_;
-
-  base::WeakPtrFactory<PictureBufferManager> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(PictureBufferManager);
-};
-
-IPCMediaPipelineHostImpl::PictureBufferManager::PictureBufferManager(
-    GpuVideoAcceleratorFactories* factories)
-    : factories_(factories), weak_ptr_factory_(this) {
-  DCHECK(factories_);
-}
-
-IPCMediaPipelineHostImpl::PictureBufferManager::~PictureBufferManager() {
-  if (picture_buffer_in_use_) {
-    factories_->DeleteTexture(picture_buffer_in_use_->texture_id);
-  }
-
-  while (!available_picture_buffers_.empty()) {
-    factories_->DeleteTexture(available_picture_buffers_.front().texture_id);
-    available_picture_buffers_.pop();
-  }
-
-  // Textures described by PictureBuffer objects stored in
-  // |picture_buffers_at_display_| are in use by an external object which is
-  // responsible to properly dispose of them, once they are no longer needed.
-}
-
-const IPCPictureBuffer*
-IPCMediaPipelineHostImpl::PictureBufferManager::ProvidePictureBuffer(
-    const gfx::Size& size) {
-  DCHECK(factories_->GetTaskRunner()->RunsTasksInCurrentSequence());
-  DCHECK(!picture_buffer_in_use_);
-
-  if (!available_picture_buffers_.empty()) {
-    picture_buffer_in_use_.reset(
-        new IPCPictureBuffer(available_picture_buffers_.front()));
-    available_picture_buffers_.pop();
-    return picture_buffer_in_use_.get();
-  }
-
-  std::vector<uint32_t> texture_ids;
-  std::vector<gpu::Mailbox> texture_mailboxes;
-  if (!factories_->CreateTextures(1, size, &texture_ids, &texture_mailboxes,
-                                  kPlatformMediaPipelineTextureTarget)) {
-    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                << " Failed to create texture.";
-    return NULL;
-  }
-  DCHECK_EQ(texture_ids.size(), 1U);
-  DCHECK_EQ(texture_mailboxes.size(), 1U);
-
-  picture_buffer_in_use_.reset(
-      new IPCPictureBuffer(texture_ids[0], texture_mailboxes[0]));
-  return picture_buffer_in_use_.get();
-}
-
-std::unique_ptr<AutoReleasedPassThroughDecoderTexture>
-IPCMediaPipelineHostImpl::PictureBufferManager::CreateWrappedTexture(
-    uint32_t texture_id) {
-  DCHECK(picture_buffer_in_use_);
-
-  if (picture_buffer_in_use_->texture_id != texture_id) {
-    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-               << " Unexpected texture id " << texture_id;
-    return NULL;
-  }
-
-  std::unique_ptr<PassThroughDecoderTexture> texture_info(
-      new PassThroughDecoderTexture);
-  texture_info->texture_id = texture_id;
-  texture_info->mailbox_holder = base::WrapUnique(new gpu::MailboxHolder(
-      picture_buffer_in_use_->texture_mailbox, gpu::SyncToken(),
-      kPlatformMediaPipelineTextureTarget));
-  // This callback has to be run when texture is no longer needed.
-  // PassThroughDecoderTextureWrapper will take care of it if no one will try to
-  // use its load.
-  texture_info->mailbox_holder_release_cb = BindToCurrentLoop(
-      base::Bind(&ReleaseMailbox, weak_ptr_factory_.GetWeakPtr(), factories_,
-                 picture_buffer_in_use_->texture_id));
-
-  picture_buffers_at_display_.insert(
-      std::make_pair(texture_id, *picture_buffer_in_use_));
-  picture_buffer_in_use_.reset();
-
-  return base::WrapUnique(
-     new AutoReleasedPassThroughDecoderTexture(std::move(texture_info)));
-}
-
-void IPCMediaPipelineHostImpl::PictureBufferManager::ReleaseMailbox(
-    base::WeakPtr<PictureBufferManager> buffer_manager,
-    GpuVideoAcceleratorFactories* factories,
-    uint32_t texture_id,
-    const gpu::SyncToken& release_sync_point) {
-  DCHECK(factories->GetTaskRunner()->BelongsToCurrentThread());
-  factories->WaitSyncToken(release_sync_point);
-
-  if (buffer_manager) {
-    buffer_manager->ReusePictureBuffer(texture_id);
-    return;
-  }
-
-  // This is the last chance to delete this texture if |buffer_manager| exists
-  // no more.
-  factories->DeleteTexture(texture_id);
-}
-
-void IPCMediaPipelineHostImpl::PictureBufferManager::ReusePictureBuffer(
-    uint32_t texture_id) {
-  auto it = picture_buffers_at_display_.find(texture_id);
-  DCHECK(it != picture_buffers_at_display_.end());
-
-  available_picture_buffers_.push(it->second);
-  picture_buffers_at_display_.erase(it);
-}
-
-void IPCMediaPipelineHostImpl::PictureBufferManager::
-    DismissPictureBufferInUse() {
-  if (picture_buffer_in_use_) {
-    available_picture_buffers_.push(*picture_buffer_in_use_);
-    picture_buffer_in_use_.reset();
-  }
-}
-#endif
 
 IPCMediaPipelineHostImpl::IPCMediaPipelineHostImpl(
     gpu::GpuChannelHost* channel,
@@ -412,12 +158,6 @@ void IPCMediaPipelineHostImpl::OnInitialized(
 
   if (video_config.is_valid()) {
     video_config_ = video_config;
-#if defined(PLATFORM_MEDIA_HWA)
-    if (video_config_.decoding_mode ==
-        PlatformMediaDecodingMode::HARDWARE) {
-      picture_buffer_manager_.reset(new PictureBufferManager(factories_));
-    }
-#endif
   } else {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Video Config is not Valid "
@@ -528,26 +268,8 @@ void IPCMediaPipelineHostImpl::ReadDecodedData(
   TRACE_EVENT_ASYNC_BEGIN0(
       "IPC_MEDIA", kDecodedDataReadTraceEventNames[type], this);
 
-  uint32_t texture_id = 0;
-
-#if defined(PLATFORM_MEDIA_HWA)
-  if (is_handling_accelerated_video_decode(type)) {
-    DCHECK(picture_buffer_manager_);
-
-    const IPCPictureBuffer* picture_buffer =
-        picture_buffer_manager_->ProvidePictureBuffer(video_config_.coded_size);
-    if (!picture_buffer) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Aborted";
-      read_cb.Run(DemuxerStream::kAborted, NULL);
-      return;
-    }
-    texture_id = picture_buffer->texture_id;
-  }
-#endif
-
-  if (!channel_->Send(new MediaPipelineMsg_ReadDecodedData(routing_id_, type,
-                                                           texture_id))) {
+  if (!channel_->Send(
+          new MediaPipelineMsg_ReadDecodedData(routing_id_, type))) {
     read_cb.Run(DemuxerStream::kAborted, NULL);
     return;
   }
@@ -576,7 +298,7 @@ bool IPCMediaPipelineHostImpl::DecodeVideo(const VideoDecoderConfig& config,
 
 void IPCMediaPipelineHostImpl::DecodedVideoReady(
         DemuxerStream::Status status,
-        const scoped_refptr<DecoderBuffer>& buffer) {
+        scoped_refptr<DecoderBuffer> buffer) {
   LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " status (" << status << ") : " << buffer->AsHumanReadableString();
   if (status == DemuxerStream::kOk) {
@@ -665,10 +387,6 @@ bool IPCMediaPipelineHostImpl::is_connected() const {
 void IPCMediaPipelineHostImpl::OnDecodedDataReady(
     const MediaPipelineMsg_DecodedDataReady_Params& params) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-#if defined(PLATFORM_MEDIA_HWA)
-  DCHECK(!is_handling_accelerated_video_decode(params.type) ||
-         picture_buffer_manager_);
-#endif
 
   if (!is_read_in_progress(params.type)) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -679,34 +397,13 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
   switch (params.status) {
     case MediaDataStatus::kOk: {
       scoped_refptr<DecoderBuffer> buffer;
-#if defined(PLATFORM_MEDIA_HWA)
-      if (is_handling_accelerated_video_decode(params.type)) {
-        std::unique_ptr<AutoReleasedPassThroughDecoderTexture>
-            wrapped_texture = picture_buffer_manager_->CreateWrappedTexture(
-                params.client_texture_id);
-        if (!wrapped_texture) {
-          LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                     << " Received invalid picture buffer id "
-                     << params.client_texture_id;
-          base::ResetAndReturn(&decoded_data_read_callbacks_[params.type])
-              .Run(DemuxerStream::kOk, new DecoderBuffer(0));
-          return;
-        }
-
-        // PassThroughDecoderImpl treats 0-sized buffers as a sign of an error.
-        buffer = new DecoderBuffer(1);
-        buffer->set_wrapped_texture(std::move(wrapped_texture));
-      } else
-#endif
-      {
-        if (!pipeline_data_.IsSufficientDecoded(params.type, params.size)) {
-          LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                     << " Unexpected call to " << __FUNCTION__;
-          return;
-        }
-        buffer = DecoderBuffer::CopyFrom(
-            pipeline_data_.MemoryDecoded(params.type), params.size);
+      if (!pipeline_data_.IsSufficientDecoded(params.type, params.size)) {
+        LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                    << " Unexpected call to " << __FUNCTION__;
+        return;
       }
+      buffer = DecoderBuffer::CopyFrom(
+          pipeline_data_.MemoryDecoded(params.type), params.size);
 
       buffer->set_timestamp(params.timestamp);
       buffer->set_duration(params.duration);
@@ -717,23 +414,11 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
     }
 
     case MediaDataStatus::kEOS:
-#if defined(PLATFORM_MEDIA_HWA)
-      if (is_handling_accelerated_video_decode(params.type)) {
-        // Necessary if the video is looped.
-        picture_buffer_manager_->DismissPictureBufferInUse();
-      }
-#endif
       base::ResetAndReturn(&decoded_data_read_callbacks_[params.type])
           .Run(DemuxerStream::kOk, DecoderBuffer::CreateEOSBuffer());
       break;
 
     case MediaDataStatus::kConfigChanged:
-#if defined(PLATFORM_MEDIA_HWA)
-      if (is_handling_accelerated_video_decode(params.type)) {
-        // Decoded data is not returned on config change.
-        picture_buffer_manager_->DismissPictureBufferInUse();
-      }
-#endif
       base::ResetAndReturn(&decoded_data_read_callbacks_[params.type])
           .Run(DemuxerStream::kConfigChanged, nullptr);
       break;
@@ -789,20 +474,14 @@ void IPCMediaPipelineHostImpl::OnVideoConfigChanged(
   }
 
   MediaPipelineMsg_DecodedDataReady_Params params;
-  if (new_video_config.decoding_mode != video_config_.decoding_mode) {
-    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-               << " New video config tries to change decoding mode.";
-    params.status = MediaDataStatus::kMediaError;
-  } else {
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << " Previous Config "
-            << Loggable(video_config_);
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << " New Config "
-            << Loggable(new_video_config);
-    HandleConfigChange<PlatformMediaDataType::PLATFORM_MEDIA_VIDEO>(new_video_config,
-                                                    &video_config_, &params);
-  }
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Previous Config "
+          << Loggable(video_config_);
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " New Config "
+          << Loggable(new_video_config);
+  HandleConfigChange<PlatformMediaDataType::PLATFORM_MEDIA_VIDEO>(new_video_config,
+                                                  &video_config_, &params);
 
   OnDecodedDataReady(params);
 }

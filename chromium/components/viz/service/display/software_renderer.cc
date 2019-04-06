@@ -4,9 +4,9 @@
 
 #include "components/viz/service/display/software_renderer.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
+#include "cc/paint/image_provider.h"
 #include "cc/paint/render_surface_filters.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -31,18 +31,43 @@
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkPoint.h"
 #include "third_party/skia/include/core/SkShader.h"
-#include "third_party/skia/include/effects/SkLayerRasterizer.h"
+#include "third_party/skia/include/effects/SkShaderMaskFilter.h"
 #include "ui/gfx/geometry/axis_transform2d.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/transform.h"
 
 namespace viz {
+namespace {
+class AnimatedImagesProvider : public cc::ImageProvider {
+ public:
+  AnimatedImagesProvider(
+      const PictureDrawQuad::ImageAnimationMap* image_animation_map)
+      : image_animation_map_(image_animation_map) {}
+  ~AnimatedImagesProvider() override = default;
 
-SoftwareRenderer::SoftwareRenderer(
-    const RendererSettings* settings,
-    OutputSurface* output_surface,
-    cc::DisplayResourceProvider* resource_provider)
+  ScopedDecodedDrawImage GetDecodedDrawImage(
+      const cc::DrawImage& draw_image) override {
+    const auto& paint_image = draw_image.paint_image();
+    auto it = image_animation_map_->find(paint_image.stable_id());
+    size_t frame_index = it == image_animation_map_->end()
+                             ? paint_image.frame_index()
+                             : it->second;
+    return ScopedDecodedDrawImage(cc::DecodedDrawImage(
+        paint_image.GetSkImageForFrame(frame_index), SkSize::Make(0, 0),
+        SkSize::Make(1.f, 1.f), draw_image.filter_quality(),
+        true /* is_budgeted */));
+  }
+
+ private:
+  const PictureDrawQuad::ImageAnimationMap* image_animation_map_;
+};
+
+}  // namespace
+
+SoftwareRenderer::SoftwareRenderer(const RendererSettings* settings,
+                                   OutputSurface* output_surface,
+                                   DisplayResourceProvider* resource_provider)
     : DirectRenderer(settings, output_surface, resource_provider),
       output_device_(output_surface->software_device()) {}
 
@@ -66,11 +91,13 @@ void SoftwareRenderer::FinishDrawingFrame() {
   output_device_->EndPaint();
 }
 
-void SoftwareRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
+void SoftwareRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info,
+                                   bool need_presentation_feedback) {
   DCHECK(visible_);
   TRACE_EVENT0("viz", "SoftwareRenderer::SwapBuffers");
   OutputSurfaceFrame output_frame;
   output_frame.latency_info = std::move(latency_info);
+  output_frame.need_presentation_feedback = need_presentation_feedback;
   output_surface_->SwapBuffers(std::move(output_frame));
 }
 
@@ -169,16 +196,7 @@ void SoftwareRenderer::PrepareSurfaceForPass(
 }
 
 bool SoftwareRenderer::IsSoftwareResource(ResourceId resource_id) const {
-  switch (resource_provider_->GetResourceType(resource_id)) {
-    case ResourceType::kGpuMemoryBuffer:
-    case ResourceType::kTexture:
-      return false;
-    case ResourceType::kBitmap:
-      return true;
-  }
-
-  LOG(FATAL) << "Invalid resource type.";
-  return false;
+  return resource_provider_->IsResourceSoftwareBacked(resource_id);
 }
 
 void SoftwareRenderer::DoDrawQuad(const DrawQuad* quad,
@@ -335,11 +353,14 @@ void SoftwareRenderer::DrawPictureQuad(const PictureDrawQuad* quad) {
   // Treat all subnormal values as zero for performance.
   cc::ScopedSubnormalFloatDisabler disabler;
 
+  // Use an image provider to select the correct frame for animated images.
+  AnimatedImagesProvider image_provider(&quad->image_animation_map);
+
   raster_canvas->save();
   raster_canvas->translate(-quad->content_rect.x(), -quad->content_rect.y());
   raster_canvas->clipRect(gfx::RectToSkRect(quad->content_rect));
   raster_canvas->scale(quad->contents_scale, quad->contents_scale);
-  quad->display_item_list->Raster(raster_canvas);
+  quad->display_item_list->Raster(raster_canvas, &image_provider);
   raster_canvas->restore();
 }
 
@@ -360,8 +381,8 @@ void SoftwareRenderer::DrawTextureQuad(const TextureDrawQuad* quad) {
   }
 
   // TODO(skaslev): Add support for non-premultiplied alpha.
-  cc::DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
-                                                          quad->resource_id());
+  DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
+                                                      quad->resource_id());
   if (!lock.valid())
     return;
   const SkImage* image = lock.sk_image();
@@ -403,8 +424,8 @@ void SoftwareRenderer::DrawTileQuad(const TileDrawQuad* quad) {
   DCHECK(resource_provider_);
   DCHECK(IsSoftwareResource(quad->resource_id()));
 
-  cc::DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
-                                                          quad->resource_id());
+  DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
+                                                      quad->resource_id());
   if (!lock.valid())
     return;
 
@@ -477,17 +498,11 @@ void SoftwareRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad) {
                                       SkShader::kClamp_TileMode, &content_mat);
   }
 
-  std::unique_ptr<cc::DisplayResourceProvider::ScopedReadLockSoftware>
-      mask_lock;
   if (quad->mask_resource_id()) {
-    mask_lock =
-        std::make_unique<cc::DisplayResourceProvider::ScopedReadLockSoftware>(
-            resource_provider_, quad->mask_resource_id());
-
-    if (!mask_lock->valid())
+    DisplayResourceProvider::ScopedReadLockSkImage mask_lock(
+        resource_provider_, quad->mask_resource_id());
+    if (!mask_lock.valid())
       return;
-
-    const SkBitmap* mask = mask_lock->sk_bitmap();
 
     // Scale normalized uv rect into absolute texel coordinates.
     SkRect mask_rect = gfx::RectFToSkRect(
@@ -497,15 +512,9 @@ void SoftwareRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad) {
     SkMatrix mask_mat;
     mask_mat.setRectToRect(mask_rect, dest_rect, SkMatrix::kFill_ScaleToFit);
 
-    SkPaint mask_paint;
-    mask_paint.setShader(
-        SkShader::MakeBitmapShader(*mask, SkShader::kClamp_TileMode,
-                                   SkShader::kClamp_TileMode, &mask_mat));
-
-    SkLayerRasterizer::Builder builder;
-    builder.addLayer(mask_paint);
-
-    current_paint_.setRasterizer(builder.detach());
+    current_paint_.setMaskFilter(
+        SkShaderMaskFilter::Make(mask_lock.sk_image()->makeShader(
+            SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &mask_mat)));
   }
 
   // If we have a background filter shader, render its results first.
@@ -514,7 +523,7 @@ void SoftwareRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad) {
   if (background_filter_shader) {
     SkPaint paint;
     paint.setShader(std::move(background_filter_shader));
-    paint.setRasterizer(current_paint_.refRasterizer());
+    paint.setMaskFilter(current_paint_.refMaskFilter());
     current_canvas_->drawRect(dest_visible_rect, paint);
   }
   current_paint_.setShader(std::move(shader));
@@ -824,7 +833,7 @@ bool SoftwareRenderer::IsRenderPassResourceAllocated(
   return it != render_pass_bitmaps_.end();
 }
 
-gfx::Size SoftwareRenderer::GetRenderPassTextureSize(
+gfx::Size SoftwareRenderer::GetRenderPassBackingPixelSize(
     const RenderPassId& render_pass_id) {
   auto it = render_pass_bitmaps_.find(render_pass_id);
   DCHECK(it != render_pass_bitmaps_.end());

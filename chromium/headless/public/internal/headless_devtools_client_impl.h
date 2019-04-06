@@ -7,9 +7,9 @@
 
 #include <unordered_map>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
-#include "content/public/browser/devtools_agent_host_client.h"
 #include "headless/public/devtools/domains/accessibility.h"
 #include "headless/public/devtools/domains/animation.h"
 #include "headless/public/devtools/domains/application_cache.h"
@@ -51,21 +51,15 @@ namespace base {
 class DictionaryValue;
 }
 
-namespace content {
-class DevToolsAgentHost;
-}
-
 namespace headless {
 
 class HEADLESS_EXPORT HeadlessDevToolsClientImpl
     : public HeadlessDevToolsClient,
-      public content::DevToolsAgentHostClient,
+      public HeadlessDevToolsChannel::Client,
       public internal::MessageDispatcher {
  public:
   HeadlessDevToolsClientImpl();
   ~HeadlessDevToolsClientImpl() override;
-
-  static HeadlessDevToolsClientImpl* From(HeadlessDevToolsClient* client);
 
   // HeadlessDevToolsClient implementation:
   accessibility::Domain* GetAccessibility() override;
@@ -103,29 +97,35 @@ class HEADLESS_EXPORT HeadlessDevToolsClientImpl
   tracing::Domain* GetTracing() override;
   void SetRawProtocolListener(
       RawProtocolListener* raw_protocol_listener) override;
+  std::unique_ptr<HeadlessDevToolsClient> CreateSession(
+      const std::string& session_id) override;
   int GetNextRawDevToolsMessageId() override;
   void SendRawDevToolsMessage(const std::string& json_message) override;
-  void SendRawDevToolsMessage(const base::DictionaryValue& message) override;
+  void DispatchMessageFromExternalHost(
+      const std::string& json_message) override;
+  void AttachToChannel(
+      std::unique_ptr<HeadlessDevToolsChannel> channel) override;
+  void DetachFromChannel() override;
 
-  // content::DevToolsAgentHostClient implementation:
-  void DispatchProtocolMessage(content::DevToolsAgentHost* agent_host,
-                               const std::string& json_message) override;
-  void AgentHostClosed(content::DevToolsAgentHost* agent_host) override;
+  // HeadlessDevToolsChannel::Client implementation.
+  void ReceiveProtocolMessage(const std::string& message) override;
+  void ChannelClosed() override;
 
   // internal::MessageDispatcher implementation:
+  void SendMessage(
+      const char* method,
+      std::unique_ptr<base::Value> params,
+      base::OnceCallback<void(const base::Value&)> callback) override;
   void SendMessage(const char* method,
                    std::unique_ptr<base::Value> params,
-                   base::Callback<void(const base::Value&)> callback) override;
-  void SendMessage(const char* method,
-                   std::unique_ptr<base::Value> params,
-                   base::Closure callback) override;
+                   base::OnceClosure callback) override;
   void RegisterEventHandler(
       const char* method,
-      base::Callback<void(const base::Value&)> callback) override;
+      base::RepeatingCallback<void(const base::Value&)> callback) override;
 
-  bool AttachToHost(content::DevToolsAgentHost* agent_host);
-  void ForceAttachToHost(content::DevToolsAgentHost* agent_host);
-  void DetachFromHost(content::DevToolsAgentHost* agent_host);
+  // TODO(dgozman): remove with ExternalHost.
+  void AttachToExternalHost(ExternalHost* external_host);
+  void InitBrowserMainThread();
 
   void SetTaskRunnerForTests(
       scoped_refptr<base::SequencedTaskRunner> task_runner) {
@@ -138,14 +138,14 @@ class HEADLESS_EXPORT HeadlessDevToolsClientImpl
   struct Callback {
     Callback();
     Callback(Callback&& other);
-    explicit Callback(base::Closure callback);
-    explicit Callback(base::Callback<void(const base::Value&)> callback);
+    explicit Callback(base::OnceClosure callback);
+    explicit Callback(base::OnceCallback<void(const base::Value&)> callback);
     ~Callback();
 
     Callback& operator=(Callback&& other);
 
-    base::Closure callback;
-    base::Callback<void(const base::Value&)> callback_with_result;
+    base::OnceClosure callback;
+    base::OnceCallback<void(const base::Value&)> callback_with_result;
   };
 
   template <typename CallbackType>
@@ -157,9 +157,13 @@ class HEADLESS_EXPORT HeadlessDevToolsClientImpl
                              std::unique_ptr<base::Value> params,
                              CallbackType callback);
 
-  bool DispatchMessageReply(const base::DictionaryValue& message_dict);
-
-  using EventHandler = base::Callback<void(const base::Value&)>;
+  bool DispatchMessageReply(std::unique_ptr<base::Value> owning_message,
+                            const base::DictionaryValue& message_dict);
+  void DispatchMessageReplyWithResultTask(
+      std::unique_ptr<base::Value> owning_message,
+      base::OnceCallback<void(const base::Value&)> callback,
+      const base::Value* result_dict);
+  using EventHandler = base::RepeatingCallback<void(const base::Value&)>;
   using EventHandlerMap = std::unordered_map<std::string, EventHandler>;
 
   bool DispatchEvent(std::unique_ptr<base::Value> owning_message,
@@ -168,15 +172,20 @@ class HEADLESS_EXPORT HeadlessDevToolsClientImpl
                          const EventHandler* event_handler,
                          const base::DictionaryValue* result_dict);
 
-  content::DevToolsAgentHost* agent_host_;      // Not owned.
-  RawProtocolListener* raw_protocol_listener_;  // Not owned.
-  int next_message_id_;
-  int next_raw_message_id_;
+  void ReceiveProtocolMessage(const std::string& json_message,
+                              std::unique_ptr<base::DictionaryValue> message);
+  void SendProtocolMessage(const base::DictionaryValue* message);
+
+  std::unique_ptr<HeadlessDevToolsChannel> channel_;
+  ExternalHost* external_host_ = nullptr;
+  RawProtocolListener* raw_protocol_listener_ = nullptr;
+
   std::unordered_map<int, Callback> pending_messages_;
-
   EventHandlerMap event_handlers_;
-
-  bool renderer_crashed_;
+  std::string session_id_;
+  HeadlessDevToolsClientImpl* parent_client_ = nullptr;
+  base::flat_map<std::string, HeadlessDevToolsClientImpl*> sessions_;
+  bool renderer_crashed_ = false;
 
   accessibility::ExperimentalDomain accessibility_domain_;
   animation::ExperimentalDomain animation_domain_;

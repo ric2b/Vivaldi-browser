@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -16,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -54,7 +54,7 @@ void TestCallback::Set(update_client::UnpackerError error, int extra_code) {
 
 base::FilePath test_file(const char* file) {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   return path.AppendASCII("components")
       .AppendASCII("test")
       .AppendASCII("data")
@@ -100,10 +100,12 @@ void ComponentUnpackerTest::UnpackComplete(
 }
 
 TEST_F(ComponentUnpackerTest, UnpackFullCrx) {
+  auto config = base::MakeRefCounted<TestConfigurator>();
   scoped_refptr<ComponentUnpacker> component_unpacker =
       base::MakeRefCounted<ComponentUnpacker>(
           std::vector<uint8_t>(std::begin(jebg_hash), std::end(jebg_hash)),
-          test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr, nullptr);
+          test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr,
+          config->CreateServiceManagerConnector());
   component_unpacker->Unpack(base::BindOnce(
       &ComponentUnpackerTest::UnpackComplete, base::Unretained(this)));
   RunThreads();

@@ -185,11 +185,11 @@ UIColor* InterpolateFromColorToColor(UIColor* firstColor,
                                      CGFloat fraction);
 
 // Whether the |environment| has a compact horizontal size class.
-bool IsCompact(id<UITraitEnvironment> environment);
+bool IsCompactWidth(id<UITraitEnvironment> environment);
 
 // Whether the main application window's rootViewController has a compact
 // horizontal size class.
-bool IsCompact();
+bool IsCompactWidth();
 
 // Whether the |environment| has a compact iPad horizontal size class.
 bool IsCompactTablet(id<UITraitEnvironment> environment);
@@ -198,13 +198,39 @@ bool IsCompactTablet(id<UITraitEnvironment> environment);
 // iPad horizontal size class.
 bool IsCompactTablet();
 
-// Returns the current first responder.
+// Whether the main application window's rootViewController has a compact
+// vertical size class.
+bool IsCompactHeight();
+
+// Whether the |environment| has a compact vertical size class.
+bool IsCompactHeight(id<UITraitEnvironment> environment);
+
+// Whether the the main application window's rootViewController has a regular
+// vertical and regular horizontal size class.
+bool IsRegularXRegularSizeClass();
+
+// Whether the |environment| has a regular vertical and regular horizontal
+// size class. the main application window's rootViewController
+bool IsRegularXRegularSizeClass(id<UITraitEnvironment> environment);
+
+// Returns whether the toolbar is split between top and bottom toolbar or if it
+// is displayed as only one toolbar.
+bool IsSplitToolbarMode();
+
+// Returns whether the |environment|'s toolbar is split between top and bottom
+// toolbar or if it is displayed as only one toolbar.
+bool IsSplitToolbarMode(id<UITraitEnvironment> environment);
+
+// Returns the current first responder for keyWindow.
 UIResponder* GetFirstResponder();
 
-// On iOS10 and above, trigger a haptic vibration for various types of
-// actions. This is a no-op for devices that do not support haptic feedback.
-void TriggerHapticFeedbackForAction();
+// Trigger a haptic vibration for various types of actions. This is a no-op for
+// devices that do not support haptic feedback.
 void TriggerHapticFeedbackForSelectionChange();
+// |impactStyle| should represent the mass of the object in the collision
+// simulated by this feedback.
+void TriggerHapticFeedbackForImpact(UIImpactFeedbackStyle impactStyle);
+// |type| represent the type of notification associated with this feedback.
 void TriggerHapticFeedbackForNotification(UINotificationFeedbackType type);
 
 // Returns the safeAreaInsets for a given view.

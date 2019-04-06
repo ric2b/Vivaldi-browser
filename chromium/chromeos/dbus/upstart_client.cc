@@ -23,6 +23,8 @@ const char kUpstartStopMethod[] = "Stop";
 const char kUpstartAuthPolicyPath[] = "/com/ubuntu/Upstart/jobs/authpolicyd";
 const char kUpstartMediaAnalyticsPath[] =
     "/com/ubuntu/Upstart/jobs/rtanalytics";
+const char kUpstartBluetoothLoggingPath[] =
+    "/com/ubuntu/Upstart/jobs/bluetoothlog";
 
 class UpstartClientImpl : public UpstartClient {
  public:
@@ -54,26 +56,26 @@ class UpstartClientImpl : public UpstartClient {
   }
 
   void StartMediaAnalytics(const std::vector<std::string>& upstart_env,
-                           const UpstartCallback& callback) override {
+                           VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartStartMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfStrings(upstart_env);
     writer.AppendBool(true /* wait for response */);
     ma_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(&UpstartClientImpl::HandleUpstartMediaAnalyticsResponse,
-                       weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&UpstartClientImpl::OnVoidMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void RestartMediaAnalytics(const UpstartCallback& callback) override {
+  void RestartMediaAnalytics(VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartRestartMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfStrings(std::vector<std::string>());
     writer.AppendBool(true /* wait for response */);
     ma_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(&UpstartClientImpl::HandleUpstartMediaAnalyticsResponse,
-                       weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&UpstartClientImpl::OnVoidMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   void StopMediaAnalytics() override {
@@ -87,15 +89,26 @@ class UpstartClientImpl : public UpstartClient {
                        weak_ptr_factory_.GetWeakPtr()));
   }
 
-  void StopMediaAnalytics(const UpstartCallback& callback) override {
+  void StopMediaAnalytics(VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(kUpstartJobInterface, kUpstartStopMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfStrings(std::vector<std::string>());
     writer.AppendBool(true /* wait for response */);
     ma_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(&UpstartClientImpl::HandleUpstartMediaAnalyticsResponse,
-                       weak_ptr_factory_.GetWeakPtr(), callback));
+        base::BindOnce(&UpstartClientImpl::OnVoidMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  void StartBluetoothLogging() override {
+    dbus::MethodCall method_call(kUpstartJobInterface, kUpstartStartMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendArrayOfStrings(std::vector<std::string>());
+    writer.AppendBool(true /* wait for response */);
+    bluetooth_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&UpstartClientImpl::HandleBluetoothLoggingResponse,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
  protected:
@@ -105,6 +118,8 @@ class UpstartClientImpl : public UpstartClient {
         kUpstartServiceName, dbus::ObjectPath(kUpstartAuthPolicyPath));
     ma_proxy_ = bus_->GetObjectProxy(
         kUpstartServiceName, dbus::ObjectPath(kUpstartMediaAnalyticsPath));
+    bluetooth_proxy_ = bus_->GetObjectProxy(
+        kUpstartServiceName, dbus::ObjectPath(kUpstartBluetoothLoggingPath));
   }
 
  private:
@@ -112,23 +127,23 @@ class UpstartClientImpl : public UpstartClient {
     LOG_IF(ERROR, !response) << "Failed to signal Upstart, response is null";
   }
 
-  void HandleUpstartMediaAnalyticsResponse(const UpstartCallback& callback,
-                                           dbus::Response* response) {
-    if (!response) {
-      LOG(ERROR) << "Failed to signal Upstart, response is null.";
-      callback.Run(false);
-      return;
-    }
-    callback.Run(true);
+  void OnVoidMethod(VoidDBusMethodCallback callback, dbus::Response* response) {
+    std::move(callback).Run(response);
   }
 
   void HandleStopMediaAnalyticsResponse(dbus::Response* response) {
     LOG_IF(ERROR, !response) << "Failed to signal Upstart, response is null";
   }
 
+  void HandleBluetoothLoggingResponse(dbus::Response* response) {
+    LOG_IF(ERROR, !response)
+        << "Failed to start bluetooth logging service, response is null";
+  }
+
   dbus::Bus* bus_ = nullptr;
   dbus::ObjectProxy* auth_proxy_ = nullptr;
   dbus::ObjectProxy* ma_proxy_ = nullptr;
+  dbus::ObjectProxy* bluetooth_proxy_ = nullptr;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

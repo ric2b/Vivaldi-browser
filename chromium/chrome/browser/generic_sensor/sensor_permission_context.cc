@@ -4,17 +4,40 @@
 
 #include "chrome/browser/generic_sensor/sensor_permission_context.h"
 
+#include "base/feature_list.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/permissions/permission_request_id.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
+#include "services/device/public/cpp/device_features.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 #include "url/gurl.h"
 
 SensorPermissionContext::SensorPermissionContext(Profile* profile)
     : PermissionContextBase(profile,
                             CONTENT_SETTINGS_TYPE_SENSORS,
-                            blink::FeaturePolicyFeature::kNotFound) {}
+                            blink::mojom::FeaturePolicyFeature::kNotFound) {}
 
 SensorPermissionContext::~SensorPermissionContext() {}
+
+void SensorPermissionContext::UpdateTabContext(const PermissionRequestID& id,
+                                               const GURL& requesting_frame,
+                                               bool allowed) {
+  // Show location bar indicator only when features::kGenericSensorExtraClasses
+  // feature is enabled.
+  if (!base::FeatureList::IsEnabled(features::kGenericSensorExtraClasses))
+    return;
+
+  auto* content_settings = TabSpecificContentSettings::GetForFrame(
+      id.render_process_id(), id.render_frame_id());
+  if (!content_settings)
+    return;
+
+  if (allowed)
+    content_settings->OnContentAllowed(CONTENT_SETTINGS_TYPE_SENSORS);
+  else
+    content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_SENSORS);
+}
 
 ContentSetting SensorPermissionContext::GetPermissionStatusInternal(
     content::RenderFrameHost* render_frame_host,
@@ -31,7 +54,12 @@ ContentSetting SensorPermissionContext::GetPermissionStatusInternal(
   // able to access sensors (which are provided by generic sensor) in
   // cross-origin iframes. The Generic Sensor API is not allowed in
   // cross-origin iframes and this is enforced by the renderer.
-  return CONTENT_SETTING_ALLOW;
+
+  // Sensors are allowed by default in content_settings_registry.cc.
+  // If cross-origin access check is required, comparison between requesting
+  // and embedding origin must be performed.
+  return PermissionContextBase::GetPermissionStatusInternal(
+      render_frame_host, requesting_origin, embedding_origin);
 }
 
 bool SensorPermissionContext::IsRestrictedToSecureOrigins() const {

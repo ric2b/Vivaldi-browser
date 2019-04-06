@@ -25,6 +25,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "media/base/timestamp_constants.h"
+#include "media/capture/mojom/image_capture_types.h"
 #import "media/capture/video/mac/video_capture_device_avfoundation_mac.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -315,7 +316,7 @@ void VideoCaptureDeviceMac::AllocateAndStart(
   client_ = std::move(client);
   if (device_descriptor_.capture_api == VideoCaptureApi::MACOSX_AVFOUNDATION)
     LogMessage("Using AVFoundation for device: " +
-               device_descriptor_.display_name);
+               device_descriptor_.display_name());
 
   NSString* deviceId =
       [NSString stringWithUTF8String:device_descriptor_.device_id.c_str()];
@@ -392,27 +393,14 @@ void VideoCaptureDeviceMac::TakePhoto(TakePhotoCallback callback) {
 void VideoCaptureDeviceMac::GetPhotoState(GetPhotoStateCallback callback) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  auto photo_state = mojom::PhotoState::New();
+  auto photo_state = mojo::CreateEmptyPhotoState();
 
-  photo_state->exposure_compensation = mojom::Range::New();
-  photo_state->color_temperature = mojom::Range::New();
-  photo_state->iso = mojom::Range::New();
-
-  photo_state->brightness = mojom::Range::New();
-  photo_state->contrast = mojom::Range::New();
-  photo_state->saturation = mojom::Range::New();
-  photo_state->sharpness = mojom::Range::New();
-
-  photo_state->zoom = mojom::Range::New();
-
-  photo_state->red_eye_reduction = mojom::RedEyeReduction::NEVER;
   photo_state->height = mojom::Range::New(
       capture_format_.frame_size.height(), capture_format_.frame_size.height(),
       capture_format_.frame_size.height(), 0 /* step */);
   photo_state->width = mojom::Range::New(
       capture_format_.frame_size.width(), capture_format_.frame_size.width(),
       capture_format_.frame_size.width(), 0 /* step */);
-  photo_state->torch = false;
 
   std::move(callback).Run(std::move(photo_state));
 }

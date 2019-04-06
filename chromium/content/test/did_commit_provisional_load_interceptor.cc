@@ -4,7 +4,6 @@
 
 #include "content/test/did_commit_provisional_load_interceptor.h"
 
-#include "base/memory/ptr_util.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/public/browser/render_frame_host.h"
@@ -41,10 +40,11 @@ class DidCommitProvisionalLoadInterceptor::FrameAgent
       std::unique_ptr<::FrameHostMsg_DidCommitProvisionalLoad_Params> params,
       ::service_manager::mojom::InterfaceProviderRequest
           interface_provider_request) override {
-    interceptor_->WillDispatchDidCommitProvisionalLoad(
-        rfhi_, params.get(), &interface_provider_request);
-    GetForwardingInterface()->DidCommitProvisionalLoad(
-        std::move(params), std::move(interface_provider_request));
+    if (interceptor_->WillDispatchDidCommitProvisionalLoad(
+            rfhi_, params.get(), &interface_provider_request)) {
+      GetForwardingInterface()->DidCommitProvisionalLoad(
+          std::move(params), std::move(interface_provider_request));
+    }
   }
 
  private:

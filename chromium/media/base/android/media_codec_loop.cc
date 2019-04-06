@@ -4,6 +4,7 @@
 
 #include "media/base/android/media_codec_loop.h"
 
+#include "base/android/build_info.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
@@ -57,7 +58,7 @@ MediaCodecLoop::~MediaCodecLoop() {
   io_timer_.Stop();
 }
 
-void MediaCodecLoop::SetTestTickClock(base::TickClock* test_tick_clock) {
+void MediaCodecLoop::SetTestTickClock(const base::TickClock* test_tick_clock) {
   test_tick_clock_ = test_tick_clock;
 }
 
@@ -65,7 +66,7 @@ void MediaCodecLoop::OnKeyAdded() {
   if (state_ == STATE_WAITING_FOR_KEY)
     SetState(STATE_READY);
 
-  DoPendingWork();
+  ExpectWork();
 }
 
 bool MediaCodecLoop::TryFlush() {
@@ -92,6 +93,13 @@ bool MediaCodecLoop::TryFlush() {
 
   SetState(STATE_READY);
   return true;
+}
+
+void MediaCodecLoop::ExpectWork() {
+  // Start / reset the timer, since we believe that progress can be made soon,
+  // even if not immediately.
+  ManageTimer(true);
+  DoPendingWork();
 }
 
 void MediaCodecLoop::DoPendingWork() {
@@ -279,7 +287,8 @@ bool MediaCodecLoop::ProcessOneOutputBuffer() {
 
         media_codec_->ReleaseOutputBuffer(out.index, false);
 
-        client_->OnDecodedEos(out);
+        if (!client_->OnDecodedEos(out))
+          SetState(STATE_ERROR);
       } else {
         if (!client_->OnDecodedFrame(out))
           SetState(STATE_ERROR);
@@ -345,7 +354,7 @@ bool MediaCodecLoop::CodecNeedsFlushWorkaround() const {
   // we have to completely destroy and recreate the codec there.
   // TODO(liberato): MediaCodecUtil implements the same function.  We should
   // call that one, except that it doesn't compile outside of android right now.
-  return sdk_int_ < 18;
+  return sdk_int_ < base::android::SDK_VERSION_JELLY_BEAN_MR2;
 }
 
 // static

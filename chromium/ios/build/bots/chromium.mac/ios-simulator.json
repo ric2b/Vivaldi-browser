@@ -10,6 +10,7 @@
     "goma_dir=\"$(goma_dir)\"",
     "is_component_build=false",
     "is_debug=true",
+    "symbol_level=1",
     "target_cpu=\"x64\"",
     "target_os=\"ios\"",
     "use_goma=true"
@@ -23,37 +24,116 @@
     {
       "include": "screen_size_dependent_tests.json",
       "device type": "iPhone 6s Plus",
-      "os": "11.2"
+      "os": "11.2",
+      "dimensions": [
+        {
+          "os": "Mac-10.12",
+          "pool": "Chrome"
+        },
+        {
+          "os": "Mac-10.13",
+          "pool": "Chrome"
+        }
+      ],
+      "priority": 29
     },
     {
       "include": "screen_size_dependent_tests.json",
       "device type": "iPhone 6s",
-      "os": "11.2"
+      "os": "11.2",
+      "dimensions": [
+        {
+          "os": "Mac-10.12",
+          "pool": "Chrome"
+        },
+        {
+          "os": "Mac-10.13",
+          "pool": "Chrome"
+        }
+      ],
+      "priority": 29
     },
     {
       "include": "common_tests.json",
       "device type": "iPhone 6s",
-      "os": "11.2"
+      "os": "11.2",
+      "dimensions": [
+        {
+          "os": "Mac-10.12",
+          "pool": "Chrome"
+        },
+        {
+          "os": "Mac-10.13",
+          "pool": "Chrome"
+        }
+      ],
+      "priority": 29
     },
     {
       "include": "screen_size_dependent_tests.json",
       "device type": "iPad Air 2",
-      "os": "11.2"
+      "os": "11.2",
+      "dimensions": [
+        {
+          "os": "Mac-10.12",
+          "pool": "Chrome"
+        },
+        {
+          "os": "Mac-10.13",
+          "pool": "Chrome"
+        }
+      ],
+      "priority": 29
     },
     {
       "include": "screen_size_dependent_tests.json",
       "device type": "iPad Air 2",
-      "os": "10.0"
+      "os": "10.3",
+      "xcode build version": "8E3004b",
+      "dimensions": [
+        {
+          "os": "Mac-10.12",
+          "pool": "Chrome"
+        },
+        {
+          "os": "Mac-10.13",
+          "pool": "Chrome"
+        }
+      ],
+      "priority": 29
     },
     {
       "include": "common_tests.json",
       "device type": "iPad Air 2",
-      "os": "10.0"
+      "os": "10.3",
+      "xcode build version": "8E3004b",
+      "dimensions": [
+        {
+          "os": "Mac-10.12",
+          "pool": "Chrome"
+        },
+        {
+          "os": "Mac-10.13",
+          "pool": "Chrome"
+        }
+      ],
+      "priority": 29
     },
     {
       "include": "eg_cq_tests.json",
       "device type": "iPhone 6s",
-      "os": "11.2"
+      "os": "11.2",
+      "dimensions": [
+        {
+          "os": "Mac-10.12",
+          "pool": "Chrome"
+        },
+        {
+          "os": "Mac-10.13",
+          "pool": "Chrome"
+        }
+      ],
+      "priority": 29
     }
   ]
 }

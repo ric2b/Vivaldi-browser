@@ -11,8 +11,8 @@
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/safe_browsing/file_type_policies.h"
-#include "content/public/browser/download_danger_type.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_danger_type.h"
+#include "components/download/public/common/download_item.h"
 
 using safe_browsing::ClientDownloadResponse;
 using safe_browsing::ClientSafeBrowsingReportRequest;
@@ -23,24 +23,25 @@ const char kDownloadDangerPromptPrefix[] = "Download.DownloadDangerPrompt";
 
 // Converts DownloadDangerType into their corresponding string.
 const char* GetDangerTypeString(
-    const content::DownloadDangerType& danger_type) {
+    const download::DownloadDangerType& danger_type) {
   switch (danger_type) {
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
       return "DangerousFile";
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
       return "DangerousURL";
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
       return "DangerousContent";
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
       return "DangerousHost";
-    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
       return "UncommonContent";
-    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
       return "PotentiallyUnwanted";
-    case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
-    case content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-    case content::DOWNLOAD_DANGER_TYPE_MAX:
+    case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+    case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+    case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
+    case download::DOWNLOAD_DANGER_TYPE_MAX:
       break;
   }
   NOTREACHED();
@@ -52,23 +53,23 @@ const char* GetDangerTypeString(
 void DownloadDangerPrompt::SendSafeBrowsingDownloadReport(
     ClientSafeBrowsingReportRequest::ReportType report_type,
     bool did_proceed,
-    const content::DownloadItem& download) {
+    const download::DownloadItem& download) {
   safe_browsing::SafeBrowsingService* sb_service =
       g_browser_process->safe_browsing_service();
   ClientSafeBrowsingReportRequest report;
   report.set_type(report_type);
   switch (download.GetDangerType()) {
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
       report.set_download_verdict(ClientDownloadResponse::DANGEROUS);
       break;
-    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
       report.set_download_verdict(ClientDownloadResponse::UNCOMMON);
       break;
-    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
       report.set_download_verdict(ClientDownloadResponse::POTENTIALLY_UNWANTED);
       break;
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
       report.set_download_verdict(ClientDownloadResponse::DANGEROUS_HOST);
       break;
     default:  // Don't send report for any other danger types.
@@ -90,11 +91,11 @@ void DownloadDangerPrompt::SendSafeBrowsingDownloadReport(
 
 void DownloadDangerPrompt::RecordDownloadDangerPrompt(
     bool did_proceed,
-    const content::DownloadItem& download) {
+    const download::DownloadItem& download) {
   int64_t file_type_uma_value =
       safe_browsing::FileTypePolicies::GetInstance()->UmaValueForFile(
           download.GetTargetFilePath());
-  content::DownloadDangerType danger_type = download.GetDangerType();
+  download::DownloadDangerType danger_type = download.GetDangerType();
 
   base::UmaHistogramSparse(
       base::StringPrintf("%s.%s.Shown", kDownloadDangerPromptPrefix,

@@ -9,10 +9,54 @@
 #include "base/optional.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/views/autofill/autofill_popup_base_view.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/font_list.h"
+#include "ui/gfx/path.h"
+
+#include <memory>
+#include <vector>
+
+namespace views {
+class BoxLayout;
+}
 
 namespace autofill {
 
 class AutofillPopupController;
+class AutofillPopupViewNativeViews;
+
+// Child view representing one row in the Autofill Popup. This could represent
+// a UI control (e.g., a suggestion which can be autofilled), or decoration like
+// separators.
+class AutofillPopupRowView : public views::View {
+ public:
+  ~AutofillPopupRowView() override = default;
+  void SetSelected(bool is_selected);
+
+  // views::View:
+  // Drags and presses on any row should be a no-op; subclasses instead rely on
+  // entry/release events. Returns true to indicate that those events have been
+  // processed (i.e., intentionally ignored).
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+
+ protected:
+  AutofillPopupRowView(AutofillPopupViewNativeViews* popup_view,
+                       int line_number);
+
+  // Init handles initialization tasks which require virtual methods. Subclasses
+  // should have private/protected constructors and implement a static Create
+  // method which calls Init before returning.
+  void Init();
+
+  virtual void CreateContent() = 0;
+  virtual void RefreshStyle() = 0;
+  virtual std::unique_ptr<views::Background> CreateBackground() = 0;
+
+  AutofillPopupViewNativeViews* popup_view_;
+  const int line_number_;
+  bool is_selected_ = false;
+};
 
 // Views implementation for the autofill and password suggestion.
 // TODO(https://crbug.com/768881): Once this implementation is complete, this
@@ -28,8 +72,21 @@ class AutofillPopupViewNativeViews : public AutofillPopupBaseView,
                                views::Widget* parent_widget);
   ~AutofillPopupViewNativeViews() override;
 
+  const std::vector<AutofillPopupRowView*>& GetRowsForTesting() {
+    return rows_;
+  }
+
+  // AutofillPopupView:
   void Show() override;
   void Hide() override;
+
+  // AutofillPopupBaseView:
+  // TODO(crbug.com/831603): Remove these overrides and the corresponding
+  // methods in AutofillPopupBaseView once deprecation of
+  // AutofillPopupViewViews is complete.
+  void OnMouseMoved(const ui::MouseEvent& event) override {}
+
+  AutofillPopupController* controller() { return controller_; }
 
  private:
   void OnSelectedRowChanged(base::Optional<int> previous_row_selection,
@@ -39,8 +96,18 @@ class AutofillPopupViewNativeViews : public AutofillPopupBaseView,
   // Creates child views based on the suggestions given by |controller_|.
   void CreateChildViews();
 
+  // Applies certain rounding rules to the given width, such as matching the
+  // element width when possible.
+  int AdjustWidth(int width) const;
+
+  // AutofillPopupBaseView:
+  void DoUpdateBoundsAndRedrawPopup() override;
+
   // Controller for this view.
   AutofillPopupController* controller_;
+  std::vector<AutofillPopupRowView*> rows_;
+  views::BoxLayout* layout_;
+  views::ScrollView* scroll_view_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillPopupViewNativeViews);
 };

@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.widget.bottomsheet;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import android.support.test.filters.MediumTest;
 
@@ -16,11 +15,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.R;
-import org.chromium.chrome.browser.bookmarks.BookmarkSheetContent;
-import org.chromium.chrome.browser.download.DownloadSheetContent;
-import org.chromium.chrome.browser.history.HistorySheetContent;
-import org.chromium.chrome.browser.suggestions.SuggestionsBottomSheetContent;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.test.BottomSheetTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -48,14 +42,14 @@ public class BottomSheetObserverTest {
     @Test
     @MediumTest
     public void testCloseEventCalledNoAnimation() throws InterruptedException, TimeoutException {
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_FULL, false);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.FULL, false);
 
         CallbackHelper closedCallbackHelper = mObserver.mClosedCallbackHelper;
 
         int initialOpenedCount = mObserver.mOpenedCallbackHelper.getCallCount();
 
         int closedCallbackCount = closedCallbackHelper.getCallCount();
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_PEEK, false);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.PEEK, false);
         closedCallbackHelper.waitForCallback(closedCallbackCount, 1);
 
         assertEquals(initialOpenedCount, mObserver.mOpenedCallbackHelper.getCallCount());
@@ -67,14 +61,14 @@ public class BottomSheetObserverTest {
     @Test
     @MediumTest
     public void testCloseEventCalledWithAnimation() throws InterruptedException, TimeoutException {
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_FULL, false);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.FULL, false);
 
         CallbackHelper closedCallbackHelper = mObserver.mClosedCallbackHelper;
 
         int initialOpenedCount = mObserver.mOpenedCallbackHelper.getCallCount();
 
         int closedCallbackCount = closedCallbackHelper.getCallCount();
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_PEEK, true);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.PEEK, true);
         closedCallbackHelper.waitForCallback(closedCallbackCount, 1);
 
         assertEquals(initialOpenedCount, mObserver.mOpenedCallbackHelper.getCallCount());
@@ -86,14 +80,14 @@ public class BottomSheetObserverTest {
     @Test
     @MediumTest
     public void testOpenedEventCalledNoAnimation() throws InterruptedException, TimeoutException {
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_PEEK, false);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.PEEK, false);
 
         CallbackHelper openedCallbackHelper = mObserver.mOpenedCallbackHelper;
 
         int initialClosedCount = mObserver.mClosedCallbackHelper.getCallCount();
 
         int openedCallbackCount = openedCallbackHelper.getCallCount();
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_FULL, false);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.FULL, false);
         openedCallbackHelper.waitForCallback(openedCallbackCount, 1);
 
         assertEquals(initialClosedCount, mObserver.mClosedCallbackHelper.getCallCount());
@@ -105,14 +99,14 @@ public class BottomSheetObserverTest {
     @Test
     @MediumTest
     public void testOpenedEventCalledWithAnimation() throws InterruptedException, TimeoutException {
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_PEEK, false);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.PEEK, false);
 
         CallbackHelper openedCallbackHelper = mObserver.mOpenedCallbackHelper;
 
         int initialClosedCount = mObserver.mClosedCallbackHelper.getCallCount();
 
         int openedCallbackCount = openedCallbackHelper.getCallCount();
-        mBottomSheetTestRule.setSheetState(BottomSheet.SHEET_STATE_FULL, true);
+        mBottomSheetTestRule.setSheetState(BottomSheet.SheetState.FULL, true);
         openedCallbackHelper.waitForCallback(openedCallbackCount, 1);
 
         assertEquals(initialClosedCount, mObserver.mClosedCallbackHelper.getCallCount());
@@ -127,15 +121,15 @@ public class BottomSheetObserverTest {
         CallbackHelper callbackHelper = mObserver.mOffsetChangedCallbackHelper;
 
         BottomSheet bottomSheet = mBottomSheetTestRule.getBottomSheet();
-        float peekHeight = bottomSheet.getPeekRatio() * bottomSheet.getSheetContainerHeight();
+        float hiddenHeight = bottomSheet.getHiddenRatio() * bottomSheet.getSheetContainerHeight();
         float fullHeight = bottomSheet.getFullRatio() * bottomSheet.getSheetContainerHeight();
 
         // The sheet's half state is not necessarily 50% of the way to the top.
-        float midPeekFull = (peekHeight + fullHeight) / 2f;
+        float midPeekFull = (hiddenHeight + fullHeight) / 2f;
 
-        // When in the peeking state, the transition value should be 0.
+        // When in the hidden state, the transition value should be 0.
         int callbackCount = callbackHelper.getCallCount();
-        mBottomSheetTestRule.setSheetOffsetFromBottom(peekHeight);
+        mBottomSheetTestRule.setSheetOffsetFromBottom(hiddenHeight);
         callbackHelper.waitForCallback(callbackCount, 1);
         assertEquals(0f, mObserver.getLastOffsetChangedValue(), MathUtils.EPSILON);
 
@@ -203,35 +197,5 @@ public class BottomSheetObserverTest {
         mBottomSheetTestRule.setSheetOffsetFromBottom(halfHeight);
         callbackHelper.waitForCallback(callbackCount, 1);
         assertEquals(1f, mObserver.getLastPeekToHalfValue(), MathUtils.EPSILON);
-    }
-
-    /**
-     * Test the onSheetContentChanged event.
-     */
-    @Test
-    @MediumTest
-    public void testSheetContentChanged() throws InterruptedException, TimeoutException {
-        CallbackHelper callbackHelper = mObserver.mContentChangedCallbackHelper;
-
-        int callbackCount = callbackHelper.getCallCount();
-        mBottomSheetTestRule.selectBottomSheetContent(R.id.action_bookmarks);
-        callbackHelper.waitForCallback(callbackCount, 1);
-        assertTrue(mBottomSheetTestRule.getBottomSheetContent() instanceof BookmarkSheetContent);
-
-        callbackCount++;
-        mBottomSheetTestRule.selectBottomSheetContent(R.id.action_history);
-        callbackHelper.waitForCallback(callbackCount, 1);
-        assertTrue(mBottomSheetTestRule.getBottomSheetContent() instanceof HistorySheetContent);
-
-        callbackCount++;
-        mBottomSheetTestRule.selectBottomSheetContent(R.id.action_downloads);
-        callbackHelper.waitForCallback(callbackCount, 1);
-        assertTrue(mBottomSheetTestRule.getBottomSheetContent() instanceof DownloadSheetContent);
-
-        callbackCount++;
-        mBottomSheetTestRule.selectBottomSheetContent(R.id.action_home);
-        callbackHelper.waitForCallback(callbackCount, 1);
-        assertTrue(mBottomSheetTestRule.getBottomSheetContent()
-                           instanceof SuggestionsBottomSheetContent);
     }
 }

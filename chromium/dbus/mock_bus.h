@@ -48,10 +48,12 @@ class MockBus : public Bus {
                                    DBusPendingCall** pending_call,
                                    int timeout_ms));
   MOCK_METHOD2(Send, void(DBusMessage* request, uint32_t* serial));
-  MOCK_METHOD2(AddFilter, void(DBusHandleMessageFunction handle_message,
-                               void* user_data));
-  MOCK_METHOD2(RemoveFilter, void(DBusHandleMessageFunction handle_message,
-                                  void* user_data));
+  MOCK_METHOD2(AddFilterFunction,
+               void(DBusHandleMessageFunction filter_function,
+                    void* user_data));
+  MOCK_METHOD2(RemoveFilterFunction,
+               void(DBusHandleMessageFunction filter_function,
+                    void* user_data));
   MOCK_METHOD2(AddMatch, void(const std::string& match_rule,
                               DBusError* error));
   MOCK_METHOD2(RemoveMatch, bool(const std::string& match_rule,
@@ -60,6 +62,11 @@ class MockBus : public Bus {
                                            const DBusObjectPathVTable* vtable,
                                            void* user_data,
                                            DBusError* error));
+  MOCK_METHOD4(TryRegisterFallback,
+               bool(const ObjectPath& object_path,
+                    const DBusObjectPathVTable* vtable,
+                    void* user_data,
+                    DBusError* error));
   MOCK_METHOD1(UnregisterObjectPath, void(const ObjectPath& object_path));
   MOCK_METHOD0(GetDBusTaskRunner, base::TaskRunner*());
   MOCK_METHOD0(GetOriginTaskRunner, base::TaskRunner*());
@@ -68,7 +75,7 @@ class MockBus : public Bus {
   MOCK_METHOD0(AssertOnDBusThread, void());
 
  protected:
-  virtual ~MockBus();
+  ~MockBus() override;
 };
 
 }  // namespace dbus

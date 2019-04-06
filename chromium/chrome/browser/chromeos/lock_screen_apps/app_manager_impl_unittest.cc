@@ -285,11 +285,10 @@ class LockScreenAppManagerImplTest
             .Build();
     std::unique_ptr<base::ListValue> action_handlers =
         ListBuilder()
-            .Append(
-                DictionaryBuilder()
-                    .Set("action", "new_note")
-                    .SetBoolean("enabled_on_lock_screen", supports_lock_screen)
-                    .Build())
+            .Append(DictionaryBuilder()
+                        .Set("action", "new_note")
+                        .Set("enabled_on_lock_screen", supports_lock_screen)
+                        .Build())
             .Build();
 
     DictionaryBuilder manifest_builder;
@@ -417,7 +416,7 @@ class LockScreenAppManagerImplTest
   void RunExtensionServiceTaskRunner(Profile* profile) {
     base::RunLoop run_loop;
     extensions::GetExtensionFileTaskRunner()->PostTaskAndReply(
-        FROM_HERE, base::Bind(&base::DoNothing), run_loop.QuitClosure());
+        FROM_HERE, base::DoNothing(), run_loop.QuitClosure());
     run_loop.Run();
   }
 

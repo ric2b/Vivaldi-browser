@@ -986,7 +986,8 @@ TEST_F(HistoryBackendDBTest, ConfirmDownloadRowCreateAndDelete) {
   db_->QueryDownloads(&results);
   ASSERT_EQ(1u, results.size());
   // Add a download slice and update the DB
-  results[0].download_slice_info.push_back(DownloadSliceInfo(id1, 500, 100));
+  results[0].download_slice_info.push_back(
+      DownloadSliceInfo(id1, 500, 100, false));
   ASSERT_TRUE(db_->UpdateDownload(results[0]));
 
   AddDownload(id2,
@@ -1017,6 +1018,7 @@ TEST_F(HistoryBackendDBTest, ConfirmDownloadRowCreateAndDelete) {
         "Select Count(*) from downloads_slices"));
     EXPECT_TRUE(statement2.Step());
     EXPECT_EQ(1, statement2.ColumnInt(0));
+    EXPECT_EQ(0, statement2.ColumnInt(3));
   }
 
   // Delete some rows and make sure the results are still correct.
@@ -1118,7 +1120,8 @@ TEST_F(HistoryBackendDBTest, ConfirmDownloadInProgressCleanup) {
   db_->QueryDownloads(&results);
   ASSERT_EQ(1u, results.size());
   // Add a download slice and update the DB
-  results[0].download_slice_info.push_back(DownloadSliceInfo(id, 500, 100));
+  results[0].download_slice_info.push_back(
+      DownloadSliceInfo(id, 500, 100, true));
   ASSERT_TRUE(db_->UpdateDownload(results[0]));
 
   // Confirm that they made it into the DB unchanged.
@@ -1205,7 +1208,7 @@ TEST_F(HistoryBackendDBTest, CreateAndUpdateDownloadingSlice) {
   download.by_ext_id = "extension-id";
   download.by_ext_name = "extension-name";
   download.download_slice_info.push_back(
-      DownloadSliceInfo(download.id, 500, download.received_bytes));
+      DownloadSliceInfo(download.id, 500, download.received_bytes, true));
 
   ASSERT_TRUE(db_->CreateDownload(download));
   std::vector<DownloadRow> results;
@@ -1259,7 +1262,7 @@ TEST_F(HistoryBackendDBTest, UpdateDownloadWithNewSlice) {
 
   // Add a new slice and call UpdateDownload().
   download.download_slice_info.push_back(
-      DownloadSliceInfo(download.id, 500, 100));
+      DownloadSliceInfo(download.id, 500, 100, true));
   ASSERT_TRUE(db_->UpdateDownload(download));
   std::vector<DownloadRow> results;
   db_->QueryDownloads(&results);
@@ -1300,14 +1303,14 @@ TEST_F(HistoryBackendDBTest, DownloadSliceDeletedIfEmpty) {
   download.by_ext_id = "extension-id";
   download.by_ext_name = "extension-name";
   download.download_slice_info.push_back(
-      DownloadSliceInfo(download.id, 0, download.received_bytes));
+      DownloadSliceInfo(download.id, 0, download.received_bytes, false));
   download.download_slice_info.push_back(
-      DownloadSliceInfo(download.id, 500, download.received_bytes));
+      DownloadSliceInfo(download.id, 500, download.received_bytes, false));
   download.download_slice_info.push_back(
-      DownloadSliceInfo(download.id, 100, download.received_bytes));
+      DownloadSliceInfo(download.id, 100, download.received_bytes, false));
   // The empty slice will not be inserted.
   download.download_slice_info.push_back(
-      DownloadSliceInfo(download.id, 1500, 0));
+      DownloadSliceInfo(download.id, 1500, 0, true));
 
   ASSERT_TRUE(db_->CreateDownload(download));
   std::vector<DownloadRow> results;
@@ -1539,6 +1542,272 @@ TEST_F(HistoryBackendDBTest, MigrateVisitSegmentNames) {
   EXPECT_THAT(results[0]->GetTitle(), testing::AnyOf(title1, title2));
   EXPECT_EQ(segment_id1, db_->GetSegmentNamed(legacy_segment_name1));
   EXPECT_EQ(0u, db_->GetSegmentNamed(legacy_segment_name2));
+}
+
+// Test to verify the finished column will be correctly added to download slices
+// table during migration to version 39.
+TEST_F(HistoryBackendDBTest, MigrateDownloadSliceFinished) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(38));
+  {
+    sql::Connection db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+  }
+  CreateBackendAndDatabase();
+  DeleteBackend();
+
+  {
+    // Re-open the db for manual manipulation.
+    sql::Connection db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+    // The version should have been updated.
+    int cur_version = HistoryDatabase::GetCurrentVersion();
+    ASSERT_LE(38, cur_version);
+    {
+      sql::Statement s(db.GetUniqueStatement(
+          "SELECT value FROM meta WHERE key = 'version'"));
+      EXPECT_TRUE(s.Step());
+      EXPECT_EQ(cur_version, s.ColumnInt(0));
+    }
+    {
+      // The downloads_slices table should have the finished column.
+      sql::Statement s1(
+          db.GetUniqueStatement("SELECT COUNT(*) from downloads_slices"));
+      EXPECT_TRUE(s1.Step());
+      EXPECT_EQ(0, s1.ColumnInt(0));
+      const char kInsertStatement[] =
+          "INSERT INTO downloads_slices "
+          "(download_id, offset, received_bytes, finished) VALUES (1, 0, 100, "
+          "1)";
+      ASSERT_TRUE(db.Execute(kInsertStatement));
+    }
+  }
+}
+
+// Test to verify the incremented_omnibox_typed_score column will be correctly
+// added to visits table during migration to version 40.
+TEST_F(HistoryBackendDBTest, MigrateVisitsWithoutIncrementedOmniboxTypedScore) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(39));
+
+  const VisitID visit_id1 = 1;
+  const VisitID visit_id2 = 2;
+  const URLID url_id1 = 3;
+  const URLID url_id2 = 4;
+  const base::Time visit_time1(base::Time::Now());
+  const base::Time visit_time2(base::Time::Now());
+  const VisitID referring_visit1 = 0;
+  const VisitID referring_visit2 = 0;
+  const ui::PageTransition transition1 = ui::PAGE_TRANSITION_LINK;
+  const ui::PageTransition transition2 = ui::PAGE_TRANSITION_TYPED;
+  const SegmentID segment_id1 = 7;
+  const SegmentID segment_id2 = 8;
+  const base::TimeDelta visit_duration1(base::TimeDelta::FromSeconds(30));
+  const base::TimeDelta visit_duration2(base::TimeDelta::FromSeconds(45));
+
+  const char kInsertStatement[] =
+      "INSERT INTO visits "
+      "(id, url, visit_time, from_visit, transition, segment_id, "
+      "visit_duration) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+  {
+    // Open the db for manual manipulation.
+    sql::Connection db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+    // Add entries to visits.
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertStatement));
+      s.BindInt64(0, visit_id1);
+      s.BindInt64(1, url_id1);
+      s.BindInt64(2, visit_time1.ToDeltaSinceWindowsEpoch().InMicroseconds());
+      s.BindInt64(3, referring_visit1);
+      s.BindInt64(4, transition1);
+      s.BindInt64(5, segment_id1);
+      s.BindInt64(6, visit_duration1.InMicroseconds());
+      ASSERT_TRUE(s.Run());
+    }
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertStatement));
+      s.BindInt64(0, visit_id2);
+      s.BindInt64(1, url_id2);
+      s.BindInt64(2, visit_time2.ToDeltaSinceWindowsEpoch().InMicroseconds());
+      s.BindInt64(3, referring_visit2);
+      s.BindInt64(4, transition2);
+      s.BindInt64(5, segment_id2);
+      s.BindInt64(6, visit_duration2.InMicroseconds());
+      ASSERT_TRUE(s.Run());
+    }
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  VisitRow visit_row1;
+  db_->GetRowForVisit(visit_id1, &visit_row1);
+  EXPECT_FALSE(visit_row1.incremented_omnibox_typed_score);
+
+  VisitRow visit_row2;
+  db_->GetRowForVisit(visit_id2, &visit_row2);
+  EXPECT_TRUE(visit_row2.incremented_omnibox_typed_score);
+}
+
+// Tests that the migration code correctly handles rows in the visit database
+// that may be in an invalid state where visit_id == referring_visit. Regression
+// test for https://crbug.com/847246.
+TEST_F(HistoryBackendDBTest,
+       MigrateVisitsWithoutIncrementedOmniboxTypedScore_BadRow) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(39));
+
+  const VisitID visit_id = 1;
+  const URLID url_id = 2;
+  const base::Time visit_time(base::Time::Now());
+  // visit_id == referring_visit will trigger DCHECK_NE in UpdateVisitRow.
+  const VisitID referring_visit = 1;
+  const ui::PageTransition transition = ui::PAGE_TRANSITION_TYPED;
+  const SegmentID segment_id = 8;
+  const base::TimeDelta visit_duration(base::TimeDelta::FromSeconds(45));
+
+  const char kInsertStatement[] =
+      "INSERT INTO visits "
+      "(id, url, visit_time, from_visit, transition, segment_id, "
+      "visit_duration) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+  {
+    // Open the db for manual manipulation.
+    sql::Connection db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+    // Add entry to visits.
+    sql::Statement s(db.GetUniqueStatement(kInsertStatement));
+    s.BindInt64(0, visit_id);
+    s.BindInt64(1, url_id);
+    s.BindInt64(2, visit_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
+    s.BindInt64(3, referring_visit);
+    s.BindInt64(4, transition);
+    s.BindInt64(5, segment_id);
+    s.BindInt64(6, visit_duration.InMicroseconds());
+    ASSERT_TRUE(s.Run());
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // Field should be false since the migration won't update it from the default
+  // due to the invalid state of the row.
+  VisitRow visit_row;
+  db_->GetRowForVisit(visit_id, &visit_row);
+  EXPECT_FALSE(visit_row.incremented_omnibox_typed_score);
+}
+
+// Test to verify the left-over typed_url sync metadata gets cleared correctly
+// during migration to version 41.
+TEST_F(HistoryBackendDBTest, MigrateTypedURLLeftoverMetadata) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(40));
+
+  // Define common uninteresting data for visits.
+  const VisitID referring_visit = 0;
+  const ui::PageTransition transition = ui::PAGE_TRANSITION_TYPED;
+  const base::Time visit_time(base::Time::Now());
+  const base::TimeDelta visit_duration(base::TimeDelta::FromSeconds(30));
+
+  // The first visit has both a DB entry and a metadata entry.
+  const VisitID visit_id1 = 1;
+  const URLID url_id1 = 10;
+  const SegmentID segment_id1 = 20;
+  const std::string metadata_value1 = "BLOB1";
+
+  // The second one as well has both a DB entry and a metadata entry.
+  const VisitID visit_id2 = 2;
+  const URLID url_id2 = 11;
+  const SegmentID segment_id2 = 21;
+  const std::string metadata_value2 = "BLOB2";
+
+  // The second visit has only a left-over metadata entry.
+  const URLID url_id3 = 12;
+  const std::string metadata_value3 = "BLOB3";
+
+  {
+    // Open the db for manual manipulation.
+    sql::Connection db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+    const char kInsertVisitStatement[] =
+        "INSERT INTO visits "
+        "(id, url, visit_time, from_visit, transition, segment_id, "
+        "visit_duration) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertVisitStatement));
+      s.BindInt64(0, visit_id1);
+      s.BindInt64(1, url_id1);
+      s.BindInt64(2, visit_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
+      s.BindInt64(3, referring_visit);
+      s.BindInt64(4, transition);
+      s.BindInt64(5, segment_id1);
+      s.BindInt64(6, visit_duration.InMicroseconds());
+      ASSERT_TRUE(s.Run());
+    }
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertVisitStatement));
+      s.BindInt64(0, visit_id2);
+      s.BindInt64(1, url_id2);
+      s.BindInt64(2, visit_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
+      s.BindInt64(3, referring_visit);
+      s.BindInt64(4, transition);
+      s.BindInt64(5, segment_id2);
+      s.BindInt64(6, visit_duration.InMicroseconds());
+      ASSERT_TRUE(s.Run());
+    }
+
+    const char kInsertMetadataStatement[] =
+        "INSERT INTO typed_url_sync_metadata (storage_key, value) VALUES (?, "
+        "?)";
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertMetadataStatement));
+      s.BindInt64(0, url_id3);
+      s.BindString(1, metadata_value3);
+      ASSERT_TRUE(s.Run());
+    }
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertMetadataStatement));
+      s.BindInt64(0, url_id2);
+      s.BindString(1, metadata_value2);
+      ASSERT_TRUE(s.Run());
+    }
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertMetadataStatement));
+      s.BindInt64(0, url_id1);
+      s.BindString(1, metadata_value1);
+      ASSERT_TRUE(s.Run());
+    }
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+  DeleteBackend();
+  {
+    // Re-open the db for manual manipulation.
+    sql::Connection db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+    {
+      // The version should have been updated.
+      sql::Statement s(db.GetUniqueStatement(
+          "SELECT value FROM meta WHERE key = 'version'"));
+      ASSERT_GE(HistoryDatabase::GetCurrentVersion(), 41);
+      EXPECT_TRUE(s.Step());
+      EXPECT_EQ(HistoryDatabase::GetCurrentVersion(), s.ColumnInt(0));
+    }
+    {
+      // Check that the left-over metadata entry is deleted.
+      sql::Statement s(db.GetUniqueStatement(
+          "SELECT storage_key FROM typed_url_sync_metadata"));
+      std::set<URLID> remaining_metadata;
+      while (s.Step()) {
+        remaining_metadata.insert(s.ColumnInt64(0));
+      }
+      EXPECT_EQ(remaining_metadata.count(url_id3), 0u);
+      EXPECT_EQ(remaining_metadata.count(url_id2), 1u);
+      EXPECT_EQ(remaining_metadata.count(url_id1), 1u);
+    }
+  }
 }
 
 bool FilterURL(const GURL& url) {

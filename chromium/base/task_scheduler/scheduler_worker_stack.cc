@@ -7,6 +7,8 @@
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/stl_util.h"
+#include "base/task_scheduler/scheduler_worker.h"
 
 namespace base {
 namespace internal {
@@ -17,6 +19,8 @@ SchedulerWorkerStack::~SchedulerWorkerStack() = default;
 
 void SchedulerWorkerStack::Push(SchedulerWorker* worker) {
   DCHECK(!Contains(worker)) << "SchedulerWorker already on stack";
+  if (!IsEmpty())
+    stack_.back()->BeginUnusedPeriod();
   stack_.push_back(worker);
 }
 
@@ -25,6 +29,8 @@ SchedulerWorker* SchedulerWorkerStack::Pop() {
     return nullptr;
   SchedulerWorker* const worker = stack_.back();
   stack_.pop_back();
+  if (!IsEmpty())
+    stack_.back()->EndUnusedPeriod();
   return worker;
 }
 
@@ -35,13 +41,16 @@ SchedulerWorker* SchedulerWorkerStack::Peek() const {
 }
 
 bool SchedulerWorkerStack::Contains(const SchedulerWorker* worker) const {
-  return std::find(stack_.begin(), stack_.end(), worker) != stack_.end();
+  return ContainsValue(stack_, worker);
 }
 
 void SchedulerWorkerStack::Remove(const SchedulerWorker* worker) {
+  DCHECK(!IsEmpty());
+  DCHECK_NE(worker, stack_.back());
   auto it = std::find(stack_.begin(), stack_.end(), worker);
-  if (it != stack_.end())
-    stack_.erase(it);
+  DCHECK(it != stack_.end());
+  DCHECK_NE(TimeTicks(), (*it)->GetLastUsedTime());
+  stack_.erase(it);
 }
 
 }  // namespace internal

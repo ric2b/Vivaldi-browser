@@ -34,8 +34,8 @@ std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildHandlerList(
     const policy::Schema& chrome_schema) {
   std::unique_ptr<policy::ConfigurationPolicyHandlerList> handlers(
       new policy::ConfigurationPolicyHandlerList(
-          base::Bind(&PopulatePolicyHandlerParameters),
-          base::Bind(&GetChromePolicyDetails)));
+          base::BindRepeating(&PopulatePolicyHandlerParameters),
+          base::BindRepeating(&GetChromePolicyDetails)));
 
   // URL Filtering
   handlers->AddHandler(std::make_unique<policy::SimplePolicyHandler>(
@@ -62,14 +62,17 @@ std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildHandlerList(
 }  // namespace
 
 AwBrowserPolicyConnector::AwBrowserPolicyConnector()
-   : BrowserPolicyConnectorBase(base::Bind(&BuildHandlerList)) {
+    : BrowserPolicyConnectorBase(base::BindRepeating(&BuildHandlerList)) {}
+
+AwBrowserPolicyConnector::~AwBrowserPolicyConnector() = default;
+
+std::vector<std::unique_ptr<policy::ConfigurationPolicyProvider>>
+AwBrowserPolicyConnector::CreatePolicyProviders() {
   std::vector<std::unique_ptr<policy::ConfigurationPolicyProvider>> providers;
   providers.push_back(
       std::make_unique<policy::android::AndroidCombinedPolicyProvider>(
           GetSchemaRegistry()));
-  SetPolicyProviders(std::move(providers));
+  return providers;
 }
-
-AwBrowserPolicyConnector::~AwBrowserPolicyConnector() {}
 
 }  // namespace android_webview

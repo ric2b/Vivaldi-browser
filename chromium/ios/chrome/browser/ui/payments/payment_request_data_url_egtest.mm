@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/ios/ios_util.h"
 #import "ios/chrome/browser/ui/payments/payment_request_egtest_base.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -28,7 +27,7 @@
                    "content=\"width=device-width, initial-scale=1, "
                    "maximum-scale=1\"></head><body><button id=\"buy\" "
                    "onclick=\"try { (new PaymentRequest([{supportedMethods: "
-                   "['basic-card']}], {total: {label: 'Total',  amount: "
+                   "'basic-card'}], {total: {label: 'Total',  amount: "
                    "{currency: 'USD', value: "
                    "'1.00'}}})).show(); } "
                    "catch(e) { document.getElementById('result').innerHTML = "

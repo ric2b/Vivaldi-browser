@@ -7,27 +7,36 @@
 #include "build/build_config.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/page_navigator.h"
+#include "content/public/browser/web_contents.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using content::GlobalRequestID;
 using content::NavigationController;
 using content::WebContents;
 
 #if defined(OS_ANDROID)
-NavigateParams::NavigateParams(WebContents* a_target_contents)
-    : target_contents(a_target_contents) {}
+NavigateParams::NavigateParams(std::unique_ptr<WebContents> contents_to_insert)
+    : contents_to_insert(std::move(contents_to_insert)) {}
 #else
 NavigateParams::NavigateParams(Browser* a_browser,
                                const GURL& a_url,
                                ui::PageTransition a_transition)
-    : url(a_url), transition(a_transition), browser(a_browser) {}
+    : url(a_url), transition(a_transition), browser(a_browser) {
+      should_create_guestframe = browser ? browser->is_vivaldi() :
+                                           vivaldi::IsVivaldiRunning();
+    }
 
 NavigateParams::NavigateParams(Browser* a_browser,
-                               WebContents* a_target_contents)
-    : target_contents(a_target_contents), browser(a_browser) {}
+                               std::unique_ptr<WebContents> contents_to_insert)
+    : contents_to_insert(std::move(contents_to_insert)), browser(a_browser) {
+      should_create_guestframe = browser ? browser->is_vivaldi() :
+                                           vivaldi::IsVivaldiRunning();
+    }
 #endif  // !defined(OS_ANDROID)
 
 NavigateParams::NavigateParams(Profile* a_profile,
@@ -37,9 +46,11 @@ NavigateParams::NavigateParams(Profile* a_profile,
       disposition(WindowOpenDisposition::NEW_FOREGROUND_TAB),
       transition(a_transition),
       window_action(SHOW_WINDOW),
-      initiating_profile(a_profile) {}
+      initiating_profile(a_profile) {
+        should_create_guestframe = vivaldi::IsVivaldiRunning();
+      }
 
-NavigateParams::NavigateParams(const NavigateParams& other) = default;
+NavigateParams::NavigateParams(NavigateParams&&) = default;
 
 NavigateParams::~NavigateParams() {}
 
@@ -57,5 +68,5 @@ void NavigateParams::FillNavigateParamsFromOpenURLParams(
   this->uses_post = params.uses_post;
   this->post_data = params.post_data;
   this->started_from_context_menu = params.started_from_context_menu;
-  this->suggested_filename = params.suggested_filename;
+  this->open_pwa_window_if_possible = params.open_app_window_if_possible;
 }

@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/observer_list.h"
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/command_updater_delegate.h"
@@ -99,6 +98,6 @@ CommandUpdaterImpl::GetCommand(int id, bool create) {
 
   DCHECK(create);
   std::unique_ptr<Command>& entry = commands_[id];
-  entry = base::MakeUnique<Command>();
+  entry = std::make_unique<Command>();
   return entry.get();
 }

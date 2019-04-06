@@ -4,8 +4,7 @@
 
 #include "extensions/browser/api/media_perception_private/conversion_utils.h"
 
-#include "base/memory/ptr_util.h"
-#include "chromeos/media_perception/media_perception.pb.h"
+#include "chromeos/dbus/media_perception/media_perception.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media_perception = extensions::api::media_perception_private;
@@ -28,6 +27,16 @@ const int kVideoStreamFrameRateForFaceDetection = 30;
 const int kVideoStreamWidthForVideoCapture = 640;
 const int kVideoStreamHeightForVideoCapture = 360;
 const int kVideoStreamFrameRateForVideoCapture = 5;
+
+constexpr float kWhiteboardTopLeftX = 0.001;
+constexpr float kWhiteboardTopLeftY = 0.0015;
+constexpr float kWhiteboardTopRightX = 0.9;
+constexpr float kWhiteboardTopRightY = 0.002;
+constexpr float kWhiteboardBottomLeftX = 0.0018;
+constexpr float kWhiteboardBottomLeftY = 0.88;
+constexpr float kWhiteboardBottomRightX = 0.85;
+constexpr float kWhiteboardBottomRightY = 0.79;
+constexpr float kWhiteboardAspectRatio = 1.76;
 
 void InitializeVideoStreamParam(media_perception::VideoStreamParam& param,
                                 const std::string& id,
@@ -52,6 +61,26 @@ void InitializeFakeAudioPerception(mri::AudioPerception* audio_perception) {
   mri::AudioHumanPresenceDetection* detection =
       audio_perception->mutable_audio_human_presence_detection();
   detection->set_human_presence_likelihood(0.4);
+
+  mri::HotwordDetection* hotword_detection =
+      audio_perception->mutable_hotword_detection();
+  mri::HotwordDetection::Hotword* hotword_one =
+      hotword_detection->add_hotwords();
+  hotword_one->set_type(mri::HotwordDetection::OK_GOOGLE);
+  hotword_one->set_frame_id(987);
+  hotword_one->set_start_timestamp_ms(10456);
+  hotword_one->set_end_timestamp_ms(234567);
+  hotword_one->set_confidence(0.9);
+  hotword_one->set_id(4567);
+
+  mri::HotwordDetection::Hotword* hotword_two =
+      hotword_detection->add_hotwords();
+  hotword_two->set_type(mri::HotwordDetection::UNKNOWN_TYPE);
+  hotword_two->set_frame_id(789);
+  hotword_two->set_start_timestamp_ms(65401);
+  hotword_two->set_end_timestamp_ms(765432);
+  hotword_two->set_confidence(0.4);
+  hotword_two->set_id(7654);
 
   mri::AudioSpectrogram* noise_spectrogram =
       detection->mutable_noise_spectrogram();
@@ -132,6 +161,16 @@ void InitializeFakeFramePerception(const int index,
   detection->set_motion_detected_likelihood(0.2);
   detection->set_light_condition(mri::VideoHumanPresenceDetection::BLACK_FRAME);
   detection->set_light_condition_likelihood(0.3);
+}
+
+std::unique_ptr<media_perception::Point> MakePointIdl(float x, float y) {
+  std::unique_ptr<media_perception::Point> point =
+      std::make_unique<media_perception::Point>();
+
+  point->x = std::make_unique<double>(x);
+  point->y = std::make_unique<double>(y);
+
+  return point;
 }
 
 void ValidateFramePerceptionResult(
@@ -266,6 +305,40 @@ void ValidateAudioPerceptionResult(
   ASSERT_TRUE(frame_spectrogram);
   ASSERT_EQ(1u, frame_spectrogram->values->size());
   EXPECT_EQ(frame_spectrogram->values->at(0), 0.3);
+
+  // Validate hotword detection.
+  const media_perception::HotwordDetection* hotword_detection =
+      audio_perception_result.hotword_detection.get();
+  ASSERT_TRUE(hotword_detection);
+  ASSERT_EQ(2u, hotword_detection->hotwords->size());
+
+  const media_perception::Hotword& hotword_one =
+      hotword_detection->hotwords->at(0);
+  EXPECT_EQ(hotword_one.type, media_perception::HOTWORD_TYPE_OK_GOOGLE);
+  ASSERT_TRUE(hotword_one.frame_id);
+  EXPECT_EQ(*hotword_one.frame_id, 987);
+  ASSERT_TRUE(hotword_one.start_timestamp_ms);
+  EXPECT_EQ(*hotword_one.start_timestamp_ms, 10456);
+  ASSERT_TRUE(hotword_one.end_timestamp_ms);
+  EXPECT_EQ(*hotword_one.end_timestamp_ms, 234567);
+  ASSERT_TRUE(hotword_one.confidence);
+  EXPECT_FLOAT_EQ(*hotword_one.confidence, 0.9);
+  ASSERT_TRUE(hotword_one.id);
+  EXPECT_EQ(*hotword_one.id, 4567);
+
+  const media_perception::Hotword& hotword_two =
+      hotword_detection->hotwords->at(1);
+  EXPECT_EQ(hotword_two.type, media_perception::HOTWORD_TYPE_UNKNOWN_TYPE);
+  ASSERT_TRUE(hotword_two.frame_id);
+  EXPECT_EQ(*hotword_two.frame_id, 789);
+  ASSERT_TRUE(hotword_two.start_timestamp_ms);
+  EXPECT_EQ(*hotword_two.start_timestamp_ms, 65401);
+  ASSERT_TRUE(hotword_two.end_timestamp_ms);
+  EXPECT_EQ(*hotword_two.end_timestamp_ms, 765432);
+  ASSERT_TRUE(hotword_two.confidence);
+  EXPECT_FLOAT_EQ(*hotword_two.confidence, 0.4);
+  ASSERT_TRUE(hotword_two.id);
+  EXPECT_EQ(*hotword_two.id, 7654);
 }
 
 void ValidateAudioVisualPerceptionResult(
@@ -301,6 +374,23 @@ void ValidateFakeImageFrameData(
   ASSERT_TRUE(image_frame_result.frame);
   EXPECT_EQ((*image_frame_result.frame).size(), 4ul);
   EXPECT_EQ(image_frame_result.format, media_perception::IMAGE_FORMAT_JPEG);
+}
+
+void ValidatePointIdl(std::unique_ptr<media_perception::Point>& point,
+                      float x,
+                      float y) {
+  ASSERT_TRUE(point);
+  ASSERT_TRUE(point->x);
+  EXPECT_EQ(*point->x, x);
+  ASSERT_TRUE(point->y);
+  EXPECT_EQ(*point->y, y);
+}
+
+void ValidatePointProto(const mri::Point& point, float x, float y) {
+  ASSERT_TRUE(point.has_x());
+  EXPECT_EQ(point.x(), x);
+  ASSERT_TRUE(point.has_y());
+  EXPECT_EQ(point.y(), y);
 }
 
 }  // namespace
@@ -374,11 +464,38 @@ TEST(MediaPerceptionConversionUtilsTest, StateProtoToIdl) {
   mri::State state;
   state.set_status(mri::State::RUNNING);
   state.set_configuration(kTestConfiguration);
+
+  state.mutable_whiteboard()->mutable_top_left()->set_x(kWhiteboardTopLeftX);
+  state.mutable_whiteboard()->mutable_top_left()->set_y(kWhiteboardTopLeftY);
+  state.mutable_whiteboard()->mutable_top_right()->set_x(kWhiteboardTopRightX);
+  state.mutable_whiteboard()->mutable_top_right()->set_y(kWhiteboardTopRightY);
+  state.mutable_whiteboard()->mutable_bottom_left()->set_x(
+      kWhiteboardBottomLeftX);
+  state.mutable_whiteboard()->mutable_bottom_left()->set_y(
+      kWhiteboardBottomLeftY);
+  state.mutable_whiteboard()->mutable_bottom_right()->set_x(
+      kWhiteboardBottomRightX);
+  state.mutable_whiteboard()->mutable_bottom_right()->set_y(
+      kWhiteboardBottomRightY);
+  state.mutable_whiteboard()->set_aspect_ratio(kWhiteboardAspectRatio);
+
   media_perception::State state_result =
       media_perception::StateProtoToIdl(state);
   EXPECT_EQ(state_result.status, media_perception::STATUS_RUNNING);
   ASSERT_TRUE(state_result.configuration);
   EXPECT_EQ(*state_result.configuration, kTestConfiguration);
+
+  ASSERT_TRUE(state_result.whiteboard);
+  ValidatePointIdl(state_result.whiteboard->top_left, kWhiteboardTopLeftX,
+                   kWhiteboardTopLeftY);
+  ValidatePointIdl(state_result.whiteboard->top_right, kWhiteboardTopRightX,
+                   kWhiteboardTopRightY);
+  ValidatePointIdl(state_result.whiteboard->bottom_left, kWhiteboardBottomLeftX,
+                   kWhiteboardBottomLeftY);
+  ValidatePointIdl(state_result.whiteboard->bottom_right,
+                   kWhiteboardBottomRightX, kWhiteboardBottomRightY);
+  ASSERT_TRUE(state_result.whiteboard->aspect_ratio);
+  EXPECT_EQ(*state_result.whiteboard->aspect_ratio, kWhiteboardAspectRatio);
 
   state.set_status(mri::State::STARTED);
   state.set_device_context(kTestDeviceContext);
@@ -405,10 +522,36 @@ TEST(MediaPerceptionConversionUtilsTest, StateIdlToProto) {
 
   state.status = media_perception::STATUS_RUNNING;
   state.configuration = std::make_unique<std::string>(kTestConfiguration);
+  state.whiteboard = std::make_unique<media_perception::Whiteboard>();
+  state.whiteboard->top_left =
+      MakePointIdl(kWhiteboardTopLeftX, kWhiteboardTopLeftY);
+  state.whiteboard->top_right =
+      MakePointIdl(kWhiteboardTopRightX, kWhiteboardTopRightY);
+  state.whiteboard->bottom_left =
+      MakePointIdl(kWhiteboardBottomLeftX, kWhiteboardBottomLeftY);
+  state.whiteboard->bottom_right =
+      MakePointIdl(kWhiteboardBottomRightX, kWhiteboardBottomRightY);
+  state.whiteboard->aspect_ratio =
+      std::make_unique<double>(kWhiteboardAspectRatio);
   state_proto = StateIdlToProto(state);
   EXPECT_EQ(state_proto.status(), mri::State::RUNNING);
   ASSERT_TRUE(state_proto.has_configuration());
   EXPECT_EQ(state_proto.configuration(), kTestConfiguration);
+  ASSERT_TRUE(state_proto.has_whiteboard());
+  ASSERT_TRUE(state_proto.whiteboard().has_top_left());
+  ValidatePointProto(state_proto.whiteboard().top_left(), kWhiteboardTopLeftX,
+                     kWhiteboardTopLeftY);
+  ASSERT_TRUE(state_proto.whiteboard().has_top_right());
+  ValidatePointProto(state_proto.whiteboard().top_right(), kWhiteboardTopRightX,
+                     kWhiteboardTopRightY);
+  ASSERT_TRUE(state_proto.whiteboard().has_bottom_left());
+  ValidatePointProto(state_proto.whiteboard().bottom_left(),
+                     kWhiteboardBottomLeftX, kWhiteboardBottomLeftY);
+  ASSERT_TRUE(state_proto.whiteboard().has_bottom_right());
+  ValidatePointProto(state_proto.whiteboard().bottom_right(),
+                     kWhiteboardBottomRightX, kWhiteboardBottomRightY);
+  ASSERT_TRUE(state_proto.whiteboard().has_aspect_ratio());
+  EXPECT_EQ(state_proto.whiteboard().aspect_ratio(), kWhiteboardAspectRatio);
 
   state.status = media_perception::STATUS_SUSPENDED;
   state.device_context = std::make_unique<std::string>(kTestDeviceContext);

@@ -5,21 +5,30 @@
 module media.mojom;
 
 import "media/mojo/interfaces/media_types.mojom";
-import "mojo/common/time.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
-import "url/mojo/origin.mojom";
+import "url/mojom/origin.mojom";
 
 // Structure describing immutable properties for the current watch time report.
 // If any of these properties change a new WatchTimeRecorder will be requested.
 struct PlaybackProperties {
-  AudioCodec audio_codec;  // Note: We may not know the codec during all
-  VideoCodec video_codec;  // playbacks (HLS, remoting, etc).
-  bool has_audio;          // Note: Due to the above, we also need these
-  bool has_video;          // booleans for audio and video presence.
-  bool is_background;      // Is report for playback in the background?
+  bool has_audio;
+  bool has_video;
+  bool is_background;  // Is report for playback in the background?
+  bool is_muted;       // Is report for muted playback?
   bool is_mse;
   bool is_eme;
   bool is_embedded_media_experience;  // Playback from 'Downloads' on Android.
+};
+
+// Structure describing mutable properties for the current watch time report.
+// The WatchTimeRecorder will use changes of these properties only for UKM
+// reporting and will not interrupt UMA reporting for changes.
+struct SecondaryPlaybackProperties {
+  AudioCodec audio_codec;  // Note: We may not know the codec during all
+  VideoCodec video_codec;  // playbacks (HLS, remoting, etc).
+  string audio_decoder_name;
+  string video_decoder_name;
   gfx.mojom.Size natural_size;  // Size of video frame; (0, 0) if audio only.
 };
 
@@ -44,7 +53,7 @@ interface WatchTimeRecorder {
   // not a delta since the last call. Any necessary relative processing should
   // be handled prior to calling this method. As described in WatchTimeReporter,
   // |watch_time| is the elapsed media (not wall clock) time for |key|.
-  RecordWatchTime(WatchTimeKey key, mojo.common.mojom.TimeDelta watch_time);
+  RecordWatchTime(WatchTimeKey key, mojo_base.mojom.TimeDelta watch_time);
 
   // Request finalization (recording to UMA) for the given keys. If no keys are
   // specified, all currently held keys will be finalized.
@@ -54,14 +63,22 @@ interface WatchTimeRecorder {
   // finalizing UKM watch time.
   OnError(PipelineStatus status);
 
-  // Lazily sets the audio or video decoder name respectively. Must only be
-  // called once. If these values change, a new recorder should be created.
+  // Updates properties that the recorder will create a new UKM BasicPlayback
+  // record for, but for which UMA will continue accruing.
+  UpdateSecondaryProperties(SecondaryPlaybackProperties secondary_properties);
+
+  // Lazily sets the autoplay status of the player. Must not be called multiple
+  // times with different values.
   //
-  // Note: We have setters for these instead of putting them in the properties
-  // structure because we don't know decoder name for cast/remoting/hls and we
-  // don't have a convenient hook to tell us those cases are engaged
-  SetAudioDecoderName(string name);
-  SetVideoDecoderName(string name);
+  // Note: this is using a setter because the status is only known when playback
+  // starts but the reporter is created before.
+  SetAutoplayInitiated(bool value);
+
+  // Updates the duration maintained by the recorder. May be called any number
+  // of times during playback. Duration is rounded to the most significant digit
+  // when greater than 1 second for privacy protection. E.g., 14s will become
+  // 10s, and 15s will become 20s. May be called any number of times.
+  OnDurationChanged(mojo_base.mojom.TimeDelta duration);
 
   // Indicates that an underflow event has occurred while collecting watch time.
   // Used to report mean values for rebuffering metrics. As with watch time,

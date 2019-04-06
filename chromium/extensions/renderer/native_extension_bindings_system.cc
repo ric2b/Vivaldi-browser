@@ -6,9 +6,9 @@
 
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
+#include "components/crx_file/id_util.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
@@ -29,16 +29,18 @@
 #include "extensions/renderer/extension_frame_helper.h"
 #include "extensions/renderer/extension_js_runner.h"
 #include "extensions/renderer/get_script_context.h"
+#include "extensions/renderer/i18n_hooks_delegate.h"
 #include "extensions/renderer/ipc_message_sender.h"
 #include "extensions/renderer/module_system.h"
+#include "extensions/renderer/runtime_hooks_delegate.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/storage_area.h"
 #include "extensions/renderer/web_request_hooks.h"
 #include "gin/converter.h"
 #include "gin/handle.h"
 #include "gin/per_context_data.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace extensions {
 
@@ -325,25 +327,12 @@ v8::Local<v8::Object> CreateFullBinding(
   return root_binding;
 }
 
-// A setter for allowing scripts to override the binding on an object. This
-// records a new set value as a private property of the object, so that the
-// accessor can check for it and return it if present.
-// This would be unnecessary if there were a SetLazyDataProperty on v8::Object
-// (rather than just v8::Template).
-void BindingSetter(v8::Local<v8::Name> property,
-                   v8::Local<v8::Value> value,
-                   const v8::PropertyCallbackInfo<void>& info) {
-  v8::Isolate* isolate = info.GetIsolate();
-  v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Object> object = info.Holder();
-  v8::Local<v8::Context> context = object->CreationContext();
-
-  v8::Local<v8::String> api_name = info.Data().As<v8::String>();
-
-  v8::Maybe<bool> success = object->SetPrivate(
-      context, v8::Private::ForApi(isolate, api_name), value);
-  DCHECK(success.IsJust());
-  DCHECK(success.FromJust());
+std::string GetContextOwner(v8::Local<v8::Context> context) {
+  ScriptContext* script_context = GetScriptContextFromV8ContextChecked(context);
+  const std::string& extension_id = script_context->GetExtensionID();
+  bool id_is_valid = crx_file::id_util::IdIsValid(extension_id);
+  CHECK(id_is_valid || script_context->url().is_valid());
+  return id_is_valid ? extension_id : script_context->url().spec();
 }
 
 }  // namespace
@@ -358,6 +347,7 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
                      base::Unretained(this)),
           base::Bind(&NativeExtensionBindingsSystem::OnEventListenerChanged,
                      base::Unretained(this)),
+          base::Bind(&GetContextOwner),
           base::Bind(&APIActivityLogger::LogAPICall),
           base::Bind(&AddConsoleError),
           APILastError(base::Bind(&GetLastErrorParents),
@@ -377,6 +367,10 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
       ->SetDelegate(std::make_unique<WebRequestHooks>());
   api_system_.GetHooksForAPI("declarativeContent")
       ->SetDelegate(std::make_unique<DeclarativeContentHooksDelegate>());
+  api_system_.GetHooksForAPI("i18n")->SetDelegate(
+      std::make_unique<I18nHooksDelegate>());
+  api_system_.GetHooksForAPI("runtime")->SetDelegate(
+      std::make_unique<RuntimeHooksDelegate>(&messaging_service_));
 }
 
 NativeExtensionBindingsSystem::~NativeExtensionBindingsSystem() {}
@@ -420,8 +414,10 @@ void NativeExtensionBindingsSystem::WillReleaseScriptContext(
     ScriptContext* context) {
   v8::HandleScope handle_scope(context->isolate());
   v8::Local<v8::Context> v8_context = context->v8_context();
-  JSRunner::ClearInstanceForContext(v8_context);
   api_system_.WillReleaseContext(v8_context);
+  // Clear the JSRunner only after everything else has been notified that the
+  // context is being released.
+  JSRunner::ClearInstanceForContext(v8_context);
 }
 
 void NativeExtensionBindingsSystem::UpdateBindingsForContext(
@@ -440,8 +436,8 @@ void NativeExtensionBindingsSystem::UpdateBindingsForContext(
                        v8_context](base::StringPiece accessor_name) {
     v8::Local<v8::String> api_name =
         gin::StringToSymbol(isolate, accessor_name);
-    v8::Maybe<bool> success = chrome->SetAccessor(
-        v8_context, api_name, &BindingAccessor, &BindingSetter, api_name);
+    v8::Maybe<bool> success = chrome->SetLazyDataProperty(
+        v8_context, api_name, &BindingAccessor, api_name);
     return success.IsJust() && success.FromJust();
   };
 
@@ -455,7 +451,7 @@ void NativeExtensionBindingsSystem::UpdateBindingsForContext(
     case Feature::SERVICE_WORKER_CONTEXT:
       DCHECK(ExtensionsClient::Get()
                  ->ExtensionAPIEnabledInExtensionServiceWorkers());
-    // Intentional fallthrough.
+      FALLTHROUGH;
     case Feature::BLESSED_EXTENSION_CONTEXT:
     case Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
     case Feature::UNBLESSED_EXTENSION_CONTEXT:
@@ -586,31 +582,17 @@ void NativeExtensionBindingsSystem::BindingAccessor(
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
   v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Object> object = info.Holder();
-  v8::Local<v8::Context> context = object->CreationContext();
+  v8::Local<v8::Context> context = info.Holder()->CreationContext();
+
+  // Force binding creation in the owning context (even if another context is
+  // calling in). This is also important to ensure that objects created through
+  // the initialization process are all instantiated for the owning context.
+  // See https://crbug.com/819968.
+  v8::Context::Scope context_scope(context);
 
   // We use info.Data() to store a real name here instead of using the provided
   // one to handle any weirdness from the caller (non-existent strings, etc).
   v8::Local<v8::String> api_name = info.Data().As<v8::String>();
-
-  v8::Local<v8::Private> key = v8::Private::ForApi(isolate, api_name);
-  v8::Maybe<bool> has_private = object->HasPrivate(context, key);
-  if (!has_private.IsJust()) {
-    NOTREACHED();
-    return;
-  }
-
-  if (has_private.FromJust()) {
-    v8::Local<v8::Value> overridden_value;
-    if (!object->GetPrivate(context, v8::Private::ForApi(isolate, api_name))
-             .ToLocal(&overridden_value)) {
-      NOTREACHED();
-      return;
-    }
-    info.GetReturnValue().Set(overridden_value);
-    return;
-  }
-
   v8::Local<v8::Object> binding = GetAPIHelper(context, api_name);
   if (!binding.IsEmpty())
     info.GetReturnValue().Set(binding);
@@ -781,48 +763,70 @@ void NativeExtensionBindingsSystem::OnEventListenerChanged(
     bool update_lazy_listeners,
     v8::Local<v8::Context> context) {
   ScriptContext* script_context = GetScriptContextFromV8ContextChecked(context);
+  // We only remove a lazy listener if the listener removal was triggered
+  // manually by the extension and the context is a lazy context.
   // Note: Check context_type() first to avoid accessing ExtensionFrameHelper on
   // a worker thread.
   bool is_lazy =
       update_lazy_listeners &&
       (script_context->context_type() == Feature::SERVICE_WORKER_CONTEXT ||
        ExtensionFrameHelper::IsContextForEventPage(script_context));
-  // We only remove a lazy listener if the listener removal was triggered
-  // manually by the extension.
 
-  if (filter) {  // Filtered event listeners.
-    DCHECK(filter);
-    if (change == binding::EventListenersChanged::HAS_LISTENERS) {
-      ipc_message_sender_->SendAddFilteredEventListenerIPC(
-          script_context, event_name, *filter, is_lazy);
-    } else {
-      DCHECK_EQ(binding::EventListenersChanged::NO_LISTENERS, change);
-      ipc_message_sender_->SendRemoveFilteredEventListenerIPC(
-          script_context, event_name, *filter, is_lazy);
-    }
-  } else {  // Unfiltered event listeners.
-    if (change == binding::EventListenersChanged::HAS_LISTENERS) {
-      // TODO(devlin): The JS bindings code only adds one listener per extension
-      // per event per process, whereas this is one listener per context per
-      // event per process. Typically, this won't make a difference, but it
-      // could if there are multiple contexts for the same extension (e.g.,
-      // multiple frames). In that case, it would result in extra IPCs being
-      // sent. I'm not sure it's a big enough deal to warrant refactoring.
+  switch (change) {
+    case binding::EventListenersChanged::
+        kFirstUnfilteredListenerForContextOwnerAdded:
+      // Send a message to add a new listener since this is the first listener
+      // for the context owner (e.g., extension).
       ipc_message_sender_->SendAddUnfilteredEventListenerIPC(script_context,
                                                              event_name);
+      // Check if we need to add a lazy listener as well.
+      FALLTHROUGH;
+    case binding::EventListenersChanged::
+        kFirstUnfilteredListenerForContextAdded: {
+      // If the listener is the first for the event page, we need to
+      // specifically add a lazy listener.
       if (is_lazy) {
         ipc_message_sender_->SendAddUnfilteredLazyEventListenerIPC(
             script_context, event_name);
       }
-    } else {
-      DCHECK_EQ(binding::EventListenersChanged::NO_LISTENERS, change);
+      break;
+    }
+    case binding::EventListenersChanged::
+        kLastUnfilteredListenerForContextOwnerRemoved:
+      // Send a message to remove a listener since this is the last listener
+      // for the context owner (e.g., extension).
       ipc_message_sender_->SendRemoveUnfilteredEventListenerIPC(script_context,
                                                                 event_name);
+      // Check if we need to remove a lazy listener as well.
+      FALLTHROUGH;
+    case binding::EventListenersChanged::
+        kLastUnfilteredListenerForContextRemoved: {
+      // If the listener was the last for the event page, we need to remove
+      // the lazy listener entry.
       if (is_lazy) {
         ipc_message_sender_->SendRemoveUnfilteredLazyEventListenerIPC(
             script_context, event_name);
       }
+      break;
     }
+    // TODO(https://crbug.com/873017): This is broken, since we'll only add or
+    // remove a lazy listener if it was the first/last for the context owner.
+    // This means that if an extension registers a filtered listener on a page
+    // and *then* adds one in the event page, we won't properly add the listener
+    // as lazy.  This is an issue for both native and JS bindings, so for now,
+    // let's settle for parity.
+    case binding::EventListenersChanged::
+        kFirstListenerWithFilterForContextOwnerAdded:
+      DCHECK(filter);
+      ipc_message_sender_->SendAddFilteredEventListenerIPC(
+          script_context, event_name, *filter, is_lazy);
+      break;
+    case binding::EventListenersChanged::
+        kLastListenerWithFilterForContextOwnerRemoved:
+      DCHECK(filter);
+      ipc_message_sender_->SendRemoveFilteredEventListenerIPC(
+          script_context, event_name, *filter, is_lazy);
+      break;
   }
 }
 

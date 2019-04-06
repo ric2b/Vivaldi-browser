@@ -14,11 +14,11 @@
 #include "base/files/file_path.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/origin_trials/chrome_origin_trial_policy.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "content/public/common/content_client.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/common/pepper_plugin_info.h"
@@ -91,7 +91,7 @@ class ChromeContentClient : public content::ContentClient {
 
   bool AllowScriptExtensionForServiceWorker(const GURL& script_url) override;
 
-  content::OriginTrialPolicy* GetOriginTrialPolicy() override;
+  blink::OriginTrialPolicy* GetOriginTrialPolicy() override;
 
 #if defined(OS_ANDROID)
   media::MediaDrmBridgeClient* GetMediaDrmBridgeClient() override;

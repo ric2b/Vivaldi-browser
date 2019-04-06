@@ -1,87 +1,102 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_H_
 #define CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_H_
 
-#include <memory>
-
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "content/browser/loader/navigation_url_loader.h"
+#include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/ssl_status.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace net {
 struct RedirectInfo;
-class SSLInfo;
-}
-
-namespace network {
-struct ResourceResponse;
 }
 
 namespace content {
 
-class AppCacheNavigationHandle;
-class NavigationURLLoaderImplCore;
 class NavigationData;
-class ServiceWorkerNavigationHandle;
-class StreamHandle;
+class ResourceContext;
+class StoragePartition;
+class NavigationLoaderInterceptor;
 struct GlobalRequestID;
 
-class NavigationURLLoaderImpl : public NavigationURLLoader {
+class CONTENT_EXPORT NavigationURLLoaderImpl : public NavigationURLLoader {
  public:
   // The caller is responsible for ensuring that |delegate| outlives the loader.
-  NavigationURLLoaderImpl(ResourceContext* resource_context,
-                          StoragePartition* storage_partition,
-                          std::unique_ptr<NavigationRequestInfo> request_info,
-                          std::unique_ptr<NavigationUIData> navigation_ui_data,
-                          ServiceWorkerNavigationHandle* service_worker_handle,
-                          AppCacheNavigationHandle* appcache_handle,
-                          NavigationURLLoaderDelegate* delegate);
+  // Note |initial_interceptors| is there for test purposes only.
+  NavigationURLLoaderImpl(
+      ResourceContext* resource_context,
+      StoragePartition* storage_partition,
+      std::unique_ptr<NavigationRequestInfo> request_info,
+      std::unique_ptr<NavigationUIData> navigation_ui_data,
+      ServiceWorkerNavigationHandle* service_worker_handle,
+      AppCacheNavigationHandle* appcache_handle,
+      NavigationURLLoaderDelegate* delegate,
+      std::vector<std::unique_ptr<NavigationLoaderInterceptor>>
+          initial_interceptors);
   ~NavigationURLLoaderImpl() override;
 
-  // NavigationURLLoader implementation.
-  void FollowRedirect() override;
+  // NavigationURLLoader implementation:
+  void FollowRedirect(const base::Optional<std::vector<std::string>>&
+                          to_be_removed_request_headers,
+                      const base::Optional<net::HttpRequestHeaders>&
+                          modified_request_headers) override;
   void ProceedWithResponse() override;
 
- private:
-  friend class NavigationURLLoaderImplCore;
-
-  // Notifies the delegate of a redirect.
-  void NotifyRequestRedirected(
-      const net::RedirectInfo& redirect_info,
-      const scoped_refptr<network::ResourceResponse>& response);
-
-  // Notifies the delegate that the response has started.
-  void NotifyResponseStarted(
-      const scoped_refptr<network::ResourceResponse>& response,
-      std::unique_ptr<StreamHandle> body,
-      const net::SSLInfo& ssl_info,
+  void OnReceiveResponse(
+      scoped_refptr<network::ResourceResponse> response,
+      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       std::unique_ptr<NavigationData> navigation_data,
-      const GlobalRequestID& request_id,
+      const GlobalRequestID& global_request_id,
       bool is_download,
       bool is_stream);
+  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
+                         scoped_refptr<network::ResourceResponse> response);
+  void OnComplete(const network::URLLoaderCompletionStatus& status);
 
-  // Notifies the delegate the the request has failed. If |net_error| is a
-  // certificate error, the caller must pass valid values for |ssl_info| and
-  // |fatal_cert_error|. If |net_error| is not a certificate error, |ssl_info|
-  // is ignored.
-  void NotifyRequestFailed(bool in_cache,
-                           int net_error,
-                           base::Optional<net::SSLInfo> ssl_info);
+  // Overrides loading of frame requests when the network service is disabled.
+  // If the callback returns true, the frame request was intercepted. Otherwise
+  // it should be loaded normally through ResourceDispatcherHost. Passing an
+  // empty callback will restore the default behavior.
+  // This method must be called either on the IO thread or before threads start.
+  // This callback is run on the IO thread.
+  using BeginNavigationInterceptor = base::RepeatingCallback<bool(
+      network::mojom::URLLoaderRequest* request,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& url_request,
+      network::mojom::URLLoaderClientPtr* client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)>;
+  static void SetBeginNavigationInterceptorForTesting(
+      const BeginNavigationInterceptor& interceptor);
 
-  // Notifies the delegate the begin navigation request was handled and a
-  // potential first network request is about to be made.
-  void NotifyRequestStarted(base::TimeTicks timestamp);
+ private:
+  class URLLoaderRequestController;
+  void OnRequestStarted(base::TimeTicks timestamp);
+
+  void BindNonNetworkURLLoaderFactoryRequest(
+      int frame_tree_node_id,
+      const GURL& url,
+      network::mojom::URLLoaderFactoryRequest factory);
 
   NavigationURLLoaderDelegate* delegate_;
 
-  // |core_| is owned by this and the NavigationResourceHandler.
-  scoped_refptr<NavigationURLLoaderImplCore> core_;
+  // Lives on the IO thread.
+  std::unique_ptr<URLLoaderRequestController> request_controller_;
+
+  bool allow_download_;
+
+  // Factories to handle navigation requests for non-network resources.
+  ContentBrowserClient::NonNetworkURLLoaderFactoryMap
+      non_network_url_loader_factories_;
 
   base::WeakPtrFactory<NavigationURLLoaderImpl> weak_factory_;
 

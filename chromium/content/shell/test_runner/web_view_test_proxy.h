@@ -16,21 +16,20 @@
 #include "content/shell/test_runner/web_view_test_client.h"
 #include "content/shell/test_runner/web_widget_test_client.h"
 #include "content/shell/test_runner/web_widget_test_proxy.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebScreenInfo.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebDOMMessageEvent.h"
-#include "third_party/WebKit/public/web/WebHistoryCommitType.h"
-#include "third_party/WebKit/public/web/WebNavigationPolicy.h"
-#include "third_party/WebKit/public/web/WebTextDirection.h"
-#include "third_party/WebKit/public/web/WebViewClient.h"
-#include "third_party/WebKit/public/web/WebWidgetClient.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_screen_info.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_dom_message_event.h"
+#include "third_party/blink/public/web/web_history_commit_type.h"
+#include "third_party/blink/public/web/web_navigation_policy.h"
+#include "third_party/blink/public/web/web_text_direction.h"
+#include "third_party/blink/public/web/web_view_client.h"
+#include "third_party/blink/public/web/web_widget_client.h"
 
 namespace blink {
 class WebDragData;
-class WebImage;
 class WebLocalFrame;
 class WebString;
 class WebView;
@@ -48,12 +47,75 @@ class TextInputController;
 class WebTestDelegate;
 class WebTestInterfaces;
 
+// A WebWidgetClient that manages calls to a client for testing, as well as a
+// real client in the WebViewTestProxy base class.
+// The |base_class_widget_client| is a real production WebWidgetClient, while
+// the |test_widget_client| is a test-only WebWidgetClient. Mostly calls are
+// forwarded to the |base_class_widget_client|, but some are intercepted and
+// sent to the |test_widget_client| instead, or to both.
+class TEST_RUNNER_EXPORT ProxyWebWidgetClient : public blink::WebWidgetClient {
+ public:
+  ProxyWebWidgetClient(blink::WebWidgetClient* base_class_widget_client,
+                       blink::WebWidgetClient* widget_test_client);
+
+  // blink::WebWidgetClient implementation.
+  void DidInvalidateRect(const blink::WebRect&) override;
+  blink::WebLayerTreeView* InitializeLayerTreeView() override;
+  bool AllowsBrokenNullLayerTreeView() const override;
+  void ScheduleAnimation() override;
+  void IntrinsicSizingInfoChanged(
+      const blink::WebIntrinsicSizingInfo&) override;
+  void DidMeaningfulLayout(blink::WebMeaningfulLayout) override;
+  void DidFirstLayoutAfterFinishedParsing() override;
+  void DidChangeCursor(const blink::WebCursorInfo&) override;
+  void AutoscrollStart(const blink::WebFloatPoint&) override;
+  void AutoscrollFling(const blink::WebFloatSize& velocity) override;
+  void AutoscrollEnd() override;
+  void CloseWidgetSoon() override;
+  void Show(blink::WebNavigationPolicy) override;
+  blink::WebRect WindowRect() override;
+  void SetWindowRect(const blink::WebRect&) override;
+  blink::WebRect ViewRect() override;
+  void SetToolTipText(const blink::WebString&,
+                      blink::WebTextDirection hint) override;
+  blink::WebScreenInfo GetScreenInfo() override;
+  bool RequestPointerLock() override;
+  void RequestPointerUnlock() override;
+  bool IsPointerLocked() override;
+  void DidHandleGestureEvent(const blink::WebGestureEvent& event,
+                             bool event_cancelled) override;
+  void DidOverscroll(const blink::WebFloatSize& overscroll_delta,
+                     const blink::WebFloatSize& accumulated_overscroll,
+                     const blink::WebFloatPoint& position_in_viewport,
+                     const blink::WebFloatSize& velocity_in_viewport,
+                     const cc::OverscrollBehavior& behavior) override;
+  void HasTouchEventHandlers(bool) override;
+  void SetNeedsLowLatencyInput(bool) override;
+  void RequestUnbufferedInputEvents() override;
+  void SetTouchAction(blink::WebTouchAction touch_action) override;
+  void ShowVirtualKeyboardOnElementFocus() override;
+  void ConvertViewportToWindow(blink::WebRect* rect) override;
+  void ConvertWindowToViewport(blink::WebFloatRect* rect) override;
+  void StartDragging(blink::WebReferrerPolicy,
+                     const blink::WebDragData&,
+                     blink::WebDragOperationsMask,
+                     const SkBitmap& drag_image,
+                     const blink::WebPoint& drag_image_offset) override;
+
+ private:
+  blink::WebWidgetClient* base_class_widget_client_;
+  blink::WebWidgetClient* widget_test_client_;
+};
+
 // WebViewTestProxyBase is the "brain" of WebViewTestProxy in the sense that
 // WebViewTestProxy does the bridge between RenderViewImpl and
 // WebViewTestProxyBase and when it requires a behavior to be different from the
 // usual, it will call WebViewTestProxyBase that implements the expected
 // behavior. See WebViewTestProxy class comments for more information.
-class TEST_RUNNER_EXPORT WebViewTestProxyBase : public WebWidgetTestProxyBase {
+//
+// Uses private inheritence to ensure that code doesn't assume WebViews are
+// WebWidgets, and gets to the WebWidget through an accessor instead.
+class TEST_RUNNER_EXPORT WebViewTestProxyBase : private WebWidgetTestProxyBase {
  public:
   blink::WebView* web_view() { return web_view_; }
   void set_web_view(blink::WebView* view) {
@@ -67,6 +129,14 @@ class TEST_RUNNER_EXPORT WebViewTestProxyBase : public WebWidgetTestProxyBase {
     DCHECK(view_test_client);
     DCHECK(!view_test_client_);
     view_test_client_ = std::move(view_test_client);
+  }
+
+  // To be called once the WebWidgetTestClient has been set up, to build the
+  // indirection used by this class.
+  void SetUpWidgetClient() {
+    DCHECK(widget_test_client());
+    proxy_widget_client_ = std::make_unique<ProxyWebWidgetClient>(
+        base_class_widget_client_, widget_test_client());
   }
 
   WebTestDelegate* delegate() { return delegate_; }
@@ -92,17 +162,31 @@ class TEST_RUNNER_EXPORT WebViewTestProxyBase : public WebWidgetTestProxyBase {
 
   void GetScreenOrientationForTesting(blink::WebScreenInfo&);
 
+  WebWidgetTestProxyBase* web_widget_test_proxy_base() { return this; }
+
  protected:
-  WebViewTestProxyBase();
+  explicit WebViewTestProxyBase(
+      blink::WebWidgetClient* base_class_widget_client);
   ~WebViewTestProxyBase();
 
   blink::WebViewClient* view_test_client() { return view_test_client_.get(); }
+  // Wraps the widget_test_client() and the base class' WidgetClient().
+  blink::WebWidgetClient* proxy_widget_client() {
+    return proxy_widget_client_.get();
+  }
 
  private:
+  // Hide widget_test_client(), the proxy_widget_client() should be used
+  // instead. Which decides to redirect some calls to the widget_test_client()
+  // as needed.
+  using WebWidgetTestProxyBase::widget_test_client;
+
   TestInterfaces* test_interfaces_;
   WebTestDelegate* delegate_;
   blink::WebView* web_view_;
   blink::WebWidget* web_widget_;
+  blink::WebWidgetClient* base_class_widget_client_;
+  std::unique_ptr<ProxyWebWidgetClient> proxy_widget_client_;
   std::unique_ptr<WebViewTestClient> view_test_client_;
   std::unique_ptr<AccessibilityController> accessibility_controller_;
   std::unique_ptr<TextInputController> text_input_controller_;
@@ -128,59 +212,15 @@ class TEST_RUNNER_EXPORT WebViewTestProxyBase : public WebWidgetTestProxyBase {
 //    override RenderViewImpl's getter and call a getter from
 //    WebViewTestProxyBase instead. In addition, WebViewTestProxyBase will have
 //    a public setter that could be called from the TestRunner.
-#if defined(OS_WIN)
-// WebViewTestProxy is a diamond-shaped hierarchy, with WebWidgetClient at the
-// root. VS warns when we inherit the WebWidgetClient method implementations
-// from RenderWidget. It's safe to ignore that warning.
-#pragma warning(disable : 4250)
-#endif
-template <class Base, typename... Args>
+template <class Base>
 class WebViewTestProxy : public Base, public WebViewTestProxyBase {
  public:
-  explicit WebViewTestProxy(Args... args) : Base(args...) {}
-
-  // WebWidgetClient implementation.
-  blink::WebScreenInfo GetScreenInfo() override {
-    blink::WebScreenInfo info = Base::GetScreenInfo();
-    blink::WebScreenInfo test_info = widget_test_client()->GetScreenInfo();
-    if (test_info.orientation_type != blink::kWebScreenOrientationUndefined) {
-      info.orientation_type = test_info.orientation_type;
-      info.orientation_angle = test_info.orientation_angle;
-    }
-    return info;
-  }
-  void ScheduleAnimation() override {
-    widget_test_client()->ScheduleAnimation();
-  }
-  bool RequestPointerLock() override {
-    return widget_test_client()->RequestPointerLock();
-  }
-  void RequestPointerUnlock() override {
-    widget_test_client()->RequestPointerUnlock();
-  }
-  bool IsPointerLocked() override {
-    return widget_test_client()->IsPointerLocked();
-  }
-  void DidFocus(blink::WebLocalFrame* calling_frame) override {
-    view_test_client()->DidFocus(calling_frame);
-    Base::DidFocus(calling_frame);
-  }
-  void SetToolTipText(const blink::WebString& text,
-                      blink::WebTextDirection hint) override {
-    widget_test_client()->SetToolTipText(text, hint);
-    Base::SetToolTipText(text, hint);
-  }
+  template <typename... Args>
+  explicit WebViewTestProxy(Args&&... args)
+      : Base(std::forward<Args>(args)...),
+        WebViewTestProxyBase(Base::WidgetClient()) {}
 
   // WebViewClient implementation.
-  void StartDragging(blink::WebReferrerPolicy policy,
-                     const blink::WebDragData& data,
-                     blink::WebDragOperationsMask mask,
-                     const blink::WebImage& image,
-                     const blink::WebPoint& point) override {
-    widget_test_client()->StartDragging(policy, data, mask, image, point);
-    // Don't forward this call to Base because we don't want to do a real
-    // drag-and-drop.
-  }
   blink::WebView* CreateView(blink::WebLocalFrame* creator,
                              const blink::WebURLRequest& request,
                              const blink::WebWindowFeatures& features,
@@ -197,11 +237,15 @@ class WebViewTestProxy : public Base, public WebViewTestProxyBase {
   void PrintPage(blink::WebLocalFrame* frame) override {
     view_test_client()->PrintPage(frame);
   }
-  blink::WebSpeechRecognizer* SpeechRecognizer() override {
-    return view_test_client()->SpeechRecognizer();
-  }
   blink::WebString AcceptLanguages() override {
     return view_test_client()->AcceptLanguages();
+  }
+  void DidFocus(blink::WebLocalFrame* calling_frame) override {
+    view_test_client()->DidFocus(calling_frame);
+    Base::DidFocus(calling_frame);
+  }
+  blink::WebWidgetClient* WidgetClient() override {
+    return proxy_widget_client();
   }
 
  private:

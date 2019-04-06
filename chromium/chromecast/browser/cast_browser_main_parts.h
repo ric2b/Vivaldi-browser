@@ -11,7 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
 #include "build/buildflag.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/common/main_function_params.h"
@@ -34,7 +34,12 @@ class NetLog;
 
 namespace chromecast {
 class CastMemoryPressureMonitor;
+
+#if defined(USE_AURA)
+class CastWindowManagerAura;
+#else
 class CastWindowManager;
+#endif  // #if defined(USE_AURA)
 
 namespace media {
 class MediaCapsImpl;
@@ -45,7 +50,6 @@ class VideoPlaneController;
 
 namespace shell {
 class CastBrowserProcess;
-class CastDisplayConfigurator;
 class URLRequestContextFactory;
 
 class CastBrowserMainParts : public content::BrowserMainParts {
@@ -71,6 +75,7 @@ class CastBrowserMainParts : public content::BrowserMainParts {
   content::BrowserContext* browser_context();
 
   // content::BrowserMainParts implementation:
+  bool ShouldContentCreateFeatureList() override;
   void PreMainMessageLoopStart() override;
   void PostMainMessageLoopStart() override;
   void ToolkitInitialized() override;
@@ -88,10 +93,12 @@ class CastBrowserMainParts : public content::BrowserMainParts {
   std::unique_ptr<net::NetLog> net_log_;
   std::unique_ptr<media::VideoPlaneController> video_plane_controller_;
   std::unique_ptr<media::MediaCapsImpl> media_caps_;
-  std::unique_ptr<CastWindowManager> window_manager_;
+
 #if defined(USE_AURA)
-  std::unique_ptr<CastDisplayConfigurator> display_configurator_;
-#endif
+  std::unique_ptr<CastWindowManagerAura> window_manager_;
+#else
+  std::unique_ptr<CastWindowManager> window_manager_;
+#endif  //  defined(USE_AURA)
 
 #if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
   // CMA thread used by AudioManager, MojoRenderer, and MediaPipelineBackend.

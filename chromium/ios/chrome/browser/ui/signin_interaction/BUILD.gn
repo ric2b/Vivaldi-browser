@@ -21,6 +21,7 @@ source_set("signin_interaction") {
     "//ios/chrome/browser/ui/alert_coordinator",
     "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/unified_consent",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/signin",
   ]
@@ -49,7 +50,6 @@ source_set("eg_tests") {
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
-    "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey:earl_grey+link",
   ]

@@ -22,11 +22,9 @@
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
-#include "chromeos/login/auth/authpolicy_login_helper.h"
-#include "components/policy/proto/chrome_device_policy.pb.h"
+#include "chromeos/dbus/util/tpm_util.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/proto/cloud_policy.pb.h"
-#include "components/policy/proto/device_management_backend.pb.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "dbus/message.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -36,6 +34,8 @@ namespace {
 
 constexpr size_t kMaxMachineNameLength = 15;
 constexpr char kInvalidMachineNameCharacters[] = "\\/:*?\"<>|";
+constexpr char kDefaultKerberosCreds[] = "credentials";
+constexpr char kDefaultKerberosConf[] = "configuration";
 
 void OnStorePolicy(chromeos::AuthPolicyClient::RefreshPolicyCallback callback,
                    bool success) {
@@ -60,16 +60,18 @@ void RunSignalCallback(const std::string& interface_name,
 }
 
 void StoreDevicePolicy(
+    const em::ChromeDeviceSettingsProto& device_policy,
     const std::string& machine_name,
+    const std::string& dm_token,
     chromeos::AuthPolicyClient::RefreshPolicyCallback callback) {
-  em::ChromeDeviceSettingsProto policy;
   std::string payload;
-  CHECK(policy.SerializeToString(&payload));
+  CHECK(device_policy.SerializeToString(&payload));
 
   em::PolicyFetchResponse response;
   em::PolicyData policy_data;
   policy_data.set_policy_type("google/chromeos/device");
   policy_data.set_device_id(machine_name);
+  policy_data.set_request_token(dm_token);
   policy_data.set_policy_value(payload);
   policy_data.set_timestamp(base::Time::Now().ToJavaTime());
   response.set_policy_data(policy_data.SerializeAsString());
@@ -94,7 +96,7 @@ void FakeAuthPolicyClient::JoinAdDomain(
     const authpolicy::JoinDomainRequest& request,
     int password_fd,
     JoinCallback callback) {
-  DCHECK(!AuthPolicyLoginHelper::IsAdLocked());
+  DCHECK(!tpm_util::IsActiveDirectoryLocked());
   authpolicy::ErrorType error = authpolicy::ERROR_NONE;
   std::string machine_domain;
   if (!started_) {
@@ -106,6 +108,10 @@ void FakeAuthPolicyClient::JoinAdDomain(
              request.machine_name().find_first_of(
                  kInvalidMachineNameCharacters) != std::string::npos) {
     error = authpolicy::ERROR_INVALID_MACHINE_NAME;
+  } else if (request.kerberos_encryption_types() ==
+             authpolicy::KerberosEncryptionTypes::ENC_TYPES_LEGACY) {
+    // Pretend that server does not support legacy types.
+    error = authpolicy::ERROR_KDC_DOES_NOT_SUPPORT_ENCRYPTION_TYPE;
   } else {
     std::vector<std::string> parts =
         base::SplitString(request.user_principal_name(), "@",
@@ -131,7 +137,7 @@ void FakeAuthPolicyClient::AuthenticateUser(
     const authpolicy::AuthenticateUserRequest& request,
     int password_fd,
     AuthCallback callback) {
-  DCHECK(AuthPolicyLoginHelper::IsAdLocked());
+  DCHECK(tpm_util::IsActiveDirectoryLocked());
   authpolicy::ErrorType error = authpolicy::ERROR_NONE;
   authpolicy::ActiveDirectoryAccountInfo account_info;
   if (!started_) {
@@ -147,6 +153,8 @@ void FakeAuthPolicyClient::AuthenticateUser(
     }
     error = auth_error_;
   }
+  if (error == authpolicy::ERROR_NONE)
+    SetUserKerberosFiles(kDefaultKerberosCreds, kDefaultKerberosConf);
   PostDelayedClosure(base::BindOnce(std::move(callback), error, account_info),
                      dbus_operation_delay_);
 }
@@ -178,8 +186,8 @@ void FakeAuthPolicyClient::GetUserKerberosFiles(
     const std::string& object_guid,
     GetUserKerberosFilesCallback callback) {
   authpolicy::KerberosFiles files;
-  files.set_krb5cc("credentials");
-  files.set_krb5conf("configuration");
+  files.set_krb5cc(user_kerberos_creds());
+  files.set_krb5conf(user_kerberos_conf());
   PostDelayedClosure(
       base::BindOnce(std::move(callback), authpolicy::ERROR_NONE, files),
       dbus_operation_delay_);
@@ -192,7 +200,7 @@ void FakeAuthPolicyClient::RefreshDevicePolicy(RefreshPolicyCallback callback) {
     return;
   }
 
-  if (!AuthPolicyLoginHelper::IsAdLocked()) {
+  if (!tpm_util::IsActiveDirectoryLocked()) {
     // Pretend that policy was fetched and cached inside authpolicyd.
     std::move(callback).Run(
         authpolicy::ERROR_DEVICE_POLICY_CACHED_BUT_NOT_SENT);
@@ -202,21 +210,22 @@ void FakeAuthPolicyClient::RefreshDevicePolicy(RefreshPolicyCallback callback) {
   SessionManagerClient* session_manager_client =
       DBusThreadManager::Get()->GetSessionManagerClient();
 
-  if (machine_name_.empty()) {
+  if (machine_name_.empty() || dm_token_.empty()) {
     // We need to set a new timestamp below. So we fetch the policy to get the
-    // machine name. So we could set it as well.
+    // machine name and dm_token. So we could set it as well.
     session_manager_client->RetrieveDevicePolicy(
         base::BindOnce(&FakeAuthPolicyClient::OnDevicePolicyRetrieved,
                        weak_factory_.GetWeakPtr(), std::move(callback)));
     return;
   }
 
-  StoreDevicePolicy(machine_name_, std::move(callback));
+  StoreDevicePolicy(device_policy_, machine_name_, dm_token_,
+                    std::move(callback));
 }
 
 void FakeAuthPolicyClient::RefreshUserPolicy(const AccountId& account_id,
                                              RefreshPolicyCallback callback) {
-  DCHECK(AuthPolicyLoginHelper::IsAdLocked());
+  DCHECK(tpm_util::IsActiveDirectoryLocked());
   if (!started_) {
     LOG(ERROR) << "authpolicyd not started";
     std::move(callback).Run(authpolicy::ERROR_DBUS_FAILURE);
@@ -247,12 +256,48 @@ void FakeAuthPolicyClient::ConnectToSignal(
     const std::string& signal_name,
     dbus::ObjectProxy::SignalCallback signal_callback,
     dbus::ObjectProxy::OnConnectedCallback on_connected_callback) {
+  DCHECK_EQ(authpolicy::kUserKerberosFilesChangedSignal, signal_name);
+  DCHECK(!user_kerberos_files_changed_callback_);
+  user_kerberos_files_changed_callback_ = signal_callback;
   std::move(on_connected_callback)
       .Run(authpolicy::kAuthPolicyInterface, signal_name, true /* success */);
-  PostDelayedClosure(
-      base::BindOnce(RunSignalCallback, authpolicy::kAuthPolicyInterface,
-                     signal_name, signal_callback),
-      dbus_operation_delay_);
+}
+
+void FakeAuthPolicyClient::WaitForServiceToBeAvailable(
+    dbus::ObjectProxy::WaitForServiceToBeAvailableCallback callback) {
+  if (started_) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), true /* service_is_available */));
+    return;
+  }
+  wait_for_service_to_be_available_callbacks_.push_back(std::move(callback));
+}
+
+void FakeAuthPolicyClient::SetUserKerberosFiles(const std::string& creds,
+                                                const std::string& conf) {
+  const bool run_signal =
+      user_kerberos_files_changed_callback_ &&
+      (creds != user_kerberos_creds_ || conf != user_kerberos_conf_);
+  user_kerberos_creds_ = creds;
+  user_kerberos_conf_ = conf;
+  if (run_signal) {
+    PostDelayedClosure(
+        base::BindOnce(RunSignalCallback, authpolicy::kAuthPolicyInterface,
+                       authpolicy::kUserKerberosFilesChangedSignal,
+                       user_kerberos_files_changed_callback_),
+        dbus_operation_delay_);
+  }
+}
+
+void FakeAuthPolicyClient::SetStarted(bool started) {
+  started_ = started;
+  if (started_) {
+    std::vector<WaitForServiceToBeAvailableCallback> callbacks;
+    callbacks.swap(wait_for_service_to_be_available_callbacks_);
+    for (size_t i = 0; i < callbacks.size(); ++i)
+      std::move(callbacks[i]).Run(true /* service_is_available*/);
+  }
 }
 
 void FakeAuthPolicyClient::OnDevicePolicyRetrieved(
@@ -270,7 +315,10 @@ void FakeAuthPolicyClient::OnDevicePolicyRetrieved(
   policy_data.ParseFromString(response.policy_data());
   if (policy_data.has_device_id())
     machine_name_ = policy_data.device_id();
-  StoreDevicePolicy(machine_name_, std::move(callback));
+  if (policy_data.has_request_token())
+    dm_token_ = policy_data.request_token();
+  StoreDevicePolicy(device_policy_, machine_name_, dm_token_,
+                    std::move(callback));
 }
 
 }  // namespace chromeos

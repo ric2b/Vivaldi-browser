@@ -4,15 +4,13 @@
 
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 
-#include "ash/shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/bind.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen_input_methods_controller.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/gfx/geometry/rect.h"
@@ -49,8 +47,7 @@ class UserAddingScreenImpl : public UserAddingScreen {
 
 void UserAddingScreenImpl::Start() {
   CHECK(!IsRunning());
-  gfx::Rect screen_bounds(chromeos::CalculateScreenBounds(gfx::Size()));
-  display_host_ = new chromeos::LoginDisplayHostWebUI(screen_bounds);
+  display_host_ = new chromeos::LoginDisplayHostWebUI();
   display_host_->StartUserAdding(base::BindOnce(
       &UserAddingScreenImpl::OnDisplayHostCompletion, base::Unretained(this)));
 
@@ -63,13 +60,11 @@ void UserAddingScreenImpl::Start() {
 void UserAddingScreenImpl::Cancel() {
   CHECK(IsRunning());
 
-  // Make sure that system tray is enabled after this flow.
-  ash::Shell::Get()->GetPrimarySystemTray()->SetEnabled(true);
   display_host_->CancelUserAdding();
 
   // Reset wallpaper if cancel adding user from multiple user sign in page.
   if (user_manager::UserManager::Get()->IsUserLoggedIn()) {
-    WallpaperManager::Get()->ShowUserWallpaper(
+    WallpaperControllerClient::Get()->ShowUserWallpaper(
         user_manager::UserManager::Get()->GetActiveUser()->GetAccountId());
   }
 }

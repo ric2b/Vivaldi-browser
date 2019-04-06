@@ -64,7 +64,7 @@ public class SiteChannelsManager {
         }
         // Channel group must be created before the channel.
         NotificationChannelGroup channelGroup =
-                ChannelDefinitions.getChannelGroup(ChannelDefinitions.CHANNEL_GROUP_ID_SITES)
+                ChannelDefinitions.getChannelGroup(ChannelDefinitions.ChannelGroupId.SITES)
                         .toNotificationChannelGroup(
                                 ContextUtils.getApplicationContext().getResources());
         mNotificationManager.createNotificationChannelGroup(channelGroup);
@@ -180,6 +180,7 @@ public class SiteChannelsManager {
     public String getChannelIdForOrigin(String origin) {
         SiteChannel channel = getSiteChannelForOrigin(origin);
         // Fall back to generic Sites channel if a channel for this origin doesn't exist.
-        return channel == null ? ChannelDefinitions.CHANNEL_ID_SITES : channel.getId();
+        // TODO(crbug.com/802380) Stop using this channel as a fallback and fully deprecate it.
+        return channel == null ? ChannelDefinitions.ChannelId.SITES : channel.getId();
     }
 }

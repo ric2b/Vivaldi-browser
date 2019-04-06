@@ -79,8 +79,8 @@ void TopSitesBackend::ResetDatabase() {
 
 void TopSitesBackend::DoEmptyRequest(const base::Closure& reply,
                                      base::CancelableTaskTracker* tracker) {
-  tracker->PostTaskAndReply(db_task_runner_.get(), FROM_HERE,
-                            base::Bind(&base::DoNothing), reply);
+  tracker->PostTaskAndReply(db_task_runner_.get(), FROM_HERE, base::DoNothing(),
+                            reply);
 }
 
 TopSitesBackend::~TopSitesBackend() {
@@ -147,14 +147,6 @@ void TopSitesBackend::ResetDatabaseOnDBThread(const base::FilePath& file_path) {
   db_.reset(new TopSitesDatabase());
   InitDBOnDBThread(db_path_);
   }
-}
-
-void TopSitesBackend::VacuumDatabase() {
-  db_->Vacuum();
-}
-
-void TopSitesBackend::RemoveThumbnailForUrl(const GURL& url) {
-  db_->RemoveThumbnailForUrl(url);
 }
 
 }  // namespace history

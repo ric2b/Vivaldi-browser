@@ -20,7 +20,6 @@ const char kElementSizeIsLogical[] = "elementSizeIsLogical";
 const char kEventResize[] = "guestViewInternal.onResize";
 
 // Parameters/properties on events.
-const char kFileSize[] = "fileSize";
 const char kCode[] = "code";
 const char kContentWindowID[] = "contentWindowId";
 const char kID[] = "id";
@@ -32,8 +31,6 @@ const char kOldHeight[] = "oldHeight";
 const char kReason[] = "reason";
 const char kUrl[] = "url";
 const char kUserGesture[] = "userGesture";
-const char kMimeType[] = "mimeType";
-const char kSuggestedFilename[] = "suggestedFilename";
 
 // Initialization parameters.
 const char kParameterApi[] = "api";

@@ -7,6 +7,7 @@ Polymer({
 
   behaviors: [
     bookmarks.StoreClient,
+    ListPropertyUpdateBehavior,
   ],
 
   properties: {
@@ -95,30 +96,14 @@ Polymer({
    * @param {Array<string>} oldValue
    */
   onDisplayedIdsChanged_: function(newValue, oldValue) {
-    if (!oldValue) {
-      this.displayedList_ = this.displayedIds_.map(function(id) {
-        return {id: id};
-      });
-    } else {
-      const splices = Polymer.ArraySplice.calculateSplices(
-          /** @type {!Array<string>} */ (newValue),
-          /** @type {!Array<string>} */ (oldValue));
-      splices.forEach((splice) => {
-        // TODO(calamity): Could use notifySplices to improve performance here.
-        const additions =
-            newValue.slice(splice.index, splice.index + splice.addedCount)
-                .map(function(id) {
-                  return {id: id};
-                });
-        this.splice.apply(this, [
-          'displayedList_', splice.index, splice.removed.length
-        ].concat(additions));
-      });
-
-      cr.sendWithPromise(
-            'getPluralString', 'listChanged', this.displayedList_.length)
-          .then((label) => this.fire('iron-announce', {text: label}));
-    }
+    const updatedList = newValue.map(id => ({id: id}));
+    this.updateList('displayedList_', item => item.id, updatedList);
+    // Trigger a layout of the iron list. Otherwise some elements may render
+    // as blank entries. See https://crbug.com/848683
+    this.$.list.fire('iron-resize');
+    cr.sendWithPromise(
+          'getPluralString', 'listChanged', this.displayedList_.length)
+        .then(label => this.fire('iron-announce', {text: label}));
   },
 
   /** @private */
@@ -142,7 +127,13 @@ Polymer({
 
   /** @private */
   emptyListMessage_: function() {
-    const emptyListMessage = this.searchTerm_ ? 'noSearchResults' : 'emptyList';
+    let emptyListMessage = 'noSearchResults';
+    if (!this.searchTerm_) {
+      emptyListMessage = bookmarks.util.canReorderChildren(
+                             this.getState(), this.getState().selectedFolder) ?
+          'emptyList' :
+          'emptyUnmodifiableList';
+    }
     return loadTimeData.getString(emptyListMessage);
   },
 

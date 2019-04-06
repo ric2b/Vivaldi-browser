@@ -16,9 +16,8 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.SysUtils;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.media.router.cast.MediaSink;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +25,7 @@ import java.util.List;
 /**
  * Sink observation tests for ChromeMediaRouter.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class ChromeMediaRouterSinkObservationTest extends ChromeMediaRouterTestBase {
     @Test
@@ -34,13 +33,16 @@ public class ChromeMediaRouterSinkObservationTest extends ChromeMediaRouterTestB
     public void testRouterOnSinksReceived() {
         mChromeMediaRouter.onSinksReceived(SOURCE_ID1, mRouteProvider, new ArrayList<MediaSink>());
 
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest().size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID1).size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID1).get(mRouteProvider).size(), 0);
-        assertEquals(mChromeMediaRouter.getSinksPerSourceForTest().size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID1).size(), 0);
+        assertEquals(1, mChromeMediaRouter.getSinksPerSourcePerProviderForTest().size());
+        assertEquals(
+                1, mChromeMediaRouter.getSinksPerSourcePerProviderForTest().get(SOURCE_ID1).size());
+        assertEquals(0,
+                mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
+                        .get(SOURCE_ID1)
+                        .get(mRouteProvider)
+                        .size());
+        assertEquals(1, mChromeMediaRouter.getSinksPerSourceForTest().size());
+        assertEquals(0, mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID1).size());
     }
 
     @Test
@@ -53,16 +55,21 @@ public class ChromeMediaRouterSinkObservationTest extends ChromeMediaRouterTestB
         sinkList.add(sink);
         mChromeMediaRouter.onSinksReceived(SOURCE_ID1, mRouteProvider, sinkList);
 
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest().size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID1).size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID1).get(mRouteProvider).size(), 1);
+        assertEquals(1, mChromeMediaRouter.getSinksPerSourcePerProviderForTest().size());
+        assertEquals(
+                1, mChromeMediaRouter.getSinksPerSourcePerProviderForTest().get(SOURCE_ID1).size());
+        assertEquals(1,
+                mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
+                        .get(SOURCE_ID1)
+                        .get(mRouteProvider)
+                        .size());
         assertTrue(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                   .get(SOURCE_ID1).get(mRouteProvider).contains(sink));
+                           .get(SOURCE_ID1)
+                           .get(mRouteProvider)
+                           .contains(sink));
 
-        assertEquals(mChromeMediaRouter.getSinksPerSourceForTest().size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID1).size(), 1);
+        assertEquals(1, mChromeMediaRouter.getSinksPerSourceForTest().size());
+        assertEquals(1, mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID1).size());
         assertTrue(mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID1).contains(sink));
     }
 
@@ -76,20 +83,26 @@ public class ChromeMediaRouterSinkObservationTest extends ChromeMediaRouterTestB
         sinkList.add(sink);
         mChromeMediaRouter.onSinksReceived(SOURCE_ID2, mRouteProvider, sinkList);
 
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest().size(), 2);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID1).size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID1).get(mRouteProvider).size(), 0);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID2).size(), 1);
-        assertEquals(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
-                .get(SOURCE_ID2).get(mRouteProvider).size(), 1);
+        assertEquals(2, mChromeMediaRouter.getSinksPerSourcePerProviderForTest().size());
+        assertEquals(
+                1, mChromeMediaRouter.getSinksPerSourcePerProviderForTest().get(SOURCE_ID1).size());
+        assertEquals(0,
+                mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
+                        .get(SOURCE_ID1)
+                        .get(mRouteProvider)
+                        .size());
+        assertEquals(
+                1, mChromeMediaRouter.getSinksPerSourcePerProviderForTest().get(SOURCE_ID2).size());
+        assertEquals(1,
+                mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
+                        .get(SOURCE_ID2)
+                        .get(mRouteProvider)
+                        .size());
         assertTrue(mChromeMediaRouter.getSinksPerSourcePerProviderForTest()
                    .get(SOURCE_ID2).get(mRouteProvider).contains(sink));
-        assertEquals(mChromeMediaRouter.getSinksPerSourceForTest().size(), 2);
-        assertEquals(mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID1).size(), 0);
-        assertEquals(mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID2).size(), 1);
+        assertEquals(2, mChromeMediaRouter.getSinksPerSourceForTest().size());
+        assertEquals(0, mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID1).size());
+        assertEquals(1, mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID2).size());
         assertTrue(mChromeMediaRouter.getSinksPerSourceForTest().get(SOURCE_ID2).contains(sink));
     }
 

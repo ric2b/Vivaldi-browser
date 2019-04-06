@@ -17,8 +17,8 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.Linker;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.content.browser.BrowserStartupController;
-import org.chromium.content.browser.ContentViewCore;
+import org.chromium.content_public.browser.BrowserStartupController;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_shell.Shell;
 import org.chromium.content_shell.ShellManager;
 import org.chromium.ui.base.ActivityWindowAndroid;
@@ -80,10 +80,13 @@ public class ChromiumLinkerTestActivity extends Activity {
         Linker linker = Linker.getInstance();
         linker.setMemoryDeviceConfigForTesting(memoryDeviceConfig);
 
+        // Setup the TestRunner class name.
+        Linker.setupForTesting("org.chromium.chromium_linker_test_apk.LinkerTests");
+
         // Load the library in the browser process, this will also run the test
         // runner in this process.
         try {
-            LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER).ensureInitialized();
+            LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
         } catch (ProcessInitException e) {
             Log.i(TAG, "Cannot load chromium_linker_test:" +  e);
         }
@@ -98,7 +101,7 @@ public class ChromiumLinkerTestActivity extends Activity {
                 (LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         View view = inflater.inflate(R.layout.test_activity, null);
         mShellManager = (ShellManager) view.findViewById(R.id.shell_container);
-        mWindowAndroid = new ActivityWindowAndroid(this);
+        mWindowAndroid = new ActivityWindowAndroid(this, false);
         mShellManager.setWindow(mWindowAndroid);
 
         mShellManager.setStartupUrl("about:blank");
@@ -106,10 +109,9 @@ public class ChromiumLinkerTestActivity extends Activity {
         try {
             BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                     .startBrowserProcessesAsync(
-                            true,
-                            new BrowserStartupController.StartupCallback() {
+                            true, false, new BrowserStartupController.StartupCallback() {
                                 @Override
-                                public void onSuccess(boolean alreadyStarted) {
+                                public void onSuccess() {
                                     finishInitialization(savedInstanceState);
                                 }
 
@@ -147,16 +149,16 @@ public class ChromiumLinkerTestActivity extends Activity {
     protected void onStop() {
         super.onStop();
 
-        ContentViewCore contentViewCore = getActiveContentViewCore();
-        if (contentViewCore != null) contentViewCore.onHide();
+        WebContents webContents = getActiveWebContents();
+        if (webContents != null) webContents.onHide();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
 
-        ContentViewCore contentViewCore = getActiveContentViewCore();
-        if (contentViewCore != null) contentViewCore.onShow();
+        WebContents webContents = getActiveWebContents();
+        if (webContents != null) webContents.onHide();
     }
 
     @Override
@@ -170,19 +172,12 @@ public class ChromiumLinkerTestActivity extends Activity {
     }
 
     /**
-     * @return The {@link ContentViewCore} owned by the currently visible {@link Shell} or null if
+     * @return The {@link WebContents} owned by the currently visible {@link Shell} or null if
      *         one is not showing.
      */
-    public ContentViewCore getActiveContentViewCore() {
-        if (mShellManager == null) {
-            return null;
-        }
-
+    public WebContents getActiveWebContents() {
+        if (mShellManager == null) return null;
         Shell shell = mShellManager.getActiveShell();
-        if (shell == null) {
-            return null;
-        }
-
-        return shell.getContentViewCore();
+        return shell != null ? shell.getWebContents() : null;
     }
 }

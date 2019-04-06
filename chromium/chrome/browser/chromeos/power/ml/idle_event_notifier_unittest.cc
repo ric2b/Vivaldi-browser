@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/clock.h"
+#include "chrome/browser/chromeos/power/ml/fake_boot_clock.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
@@ -26,11 +26,29 @@ namespace {
 
 bool operator==(const IdleEventNotifier::ActivityData& x,
                 const IdleEventNotifier::ActivityData& y) {
-  return x.last_activity_time == y.last_activity_time &&
-         x.earliest_activity_time == y.earliest_activity_time &&
-         x.last_user_activity_time == y.last_user_activity_time &&
-         x.last_mouse_time == y.last_mouse_time &&
-         x.last_key_time == y.last_key_time;
+  return x.last_activity_day == y.last_activity_day &&
+         x.last_activity_time_of_day == y.last_activity_time_of_day &&
+         x.last_user_activity_time_of_day == y.last_user_activity_time_of_day &&
+         x.recent_time_active == y.recent_time_active &&
+         x.time_since_last_key == y.time_since_last_key &&
+         x.time_since_last_mouse == y.time_since_last_mouse &&
+         x.time_since_last_touch == y.time_since_last_touch &&
+         x.video_playing_time == y.video_playing_time &&
+         x.time_since_video_ended == y.time_since_video_ended &&
+         x.key_events_in_last_hour == y.key_events_in_last_hour &&
+         x.mouse_events_in_last_hour == y.mouse_events_in_last_hour &&
+         x.touch_events_in_last_hour == y.touch_events_in_last_hour;
+}
+
+base::TimeDelta GetTimeSinceMidnight(base::Time time) {
+  return time - time.LocalMidnight();
+}
+
+UserActivityEvent_Features_DayOfWeek GetDayOfWeek(base::Time time) {
+  base::Time::Exploded exploded;
+  time.LocalExplode(&exploded);
+  return static_cast<UserActivityEvent_Features_DayOfWeek>(
+      exploded.day_of_week);
 }
 
 class TestObserver : public IdleEventNotifier::Observer {
@@ -67,7 +85,10 @@ class IdleEventNotifierTest : public testing::Test {
     viz::mojom::VideoDetectorObserverPtr observer;
     idle_event_notifier_ = std::make_unique<IdleEventNotifier>(
         &power_client_, &user_activity_detector_, mojo::MakeRequest(&observer));
-    idle_event_notifier_->SetClockForTesting(task_runner_->GetMockClock());
+    idle_event_notifier_->SetClockForTesting(
+        task_runner_, task_runner_->GetMockClock(),
+        std::make_unique<FakeBootClock>(task_runner_,
+                                        base::TimeDelta::FromSeconds(10)));
     idle_event_notifier_->AddObserver(&test_observer_);
     ac_power_.set_external_power(
         power_manager::PowerSupplyProperties_ExternalPower_AC);
@@ -80,10 +101,12 @@ class IdleEventNotifierTest : public testing::Test {
   }
 
  protected:
-  void FastForwardAndCheckResults(
+  void ReportScreenDimImminent() { power_client_.SendScreenDimImminent(); }
+
+  void ReportIdleEventAndCheckResults(
       int expected_idle_count,
       const IdleEventNotifier::ActivityData& expected_activity_data) {
-    task_runner_->FastForwardUntilNoTasksRemain();
+    ReportScreenDimImminent();
     EXPECT_EQ(expected_idle_count, test_observer_.idle_event_count());
     EXPECT_TRUE(expected_activity_data == test_observer_.activity_data());
   }
@@ -102,99 +125,127 @@ class IdleEventNotifierTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(IdleEventNotifierTest);
 };
 
-// After initialization, |idle_delay_timer_| should not be running and
-// |external_power_| is not set up.
+// After initialization, |external_power_| is not set up.
 TEST_F(IdleEventNotifierTest, CheckInitialValues) {
-  EXPECT_FALSE(idle_event_notifier_->idle_delay_timer_.IsRunning());
   EXPECT_FALSE(idle_event_notifier_->external_power_);
 }
 
-// After lid is opened, an idle event will be fired following an idle period.
+// Lid is opened, followed by an idle event.
 TEST_F(IdleEventNotifierTest, LidOpenEventReceived) {
   base::Time now = task_runner_->Now();
   idle_event_notifier_->LidEventReceived(
       chromeos::PowerManagerClient::LidState::OPEN,
       base::TimeTicks::UnixEpoch());
-  IdleEventNotifier::ActivityData data(now, now);
-  data.last_user_activity_time = now;
-  FastForwardAndCheckResults(1, data);
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = base::TimeDelta();
+  ReportIdleEventAndCheckResults(1, data);
 }
 
-// Lid-closed event will not trigger any future idle event to be generated.
-TEST_F(IdleEventNotifierTest, LidClosedEventReceived) {
-  idle_event_notifier_->LidEventReceived(
-      chromeos::PowerManagerClient::LidState::CLOSED,
-      base::TimeTicks::UnixEpoch());
-  FastForwardAndCheckResults(0, {});
-}
-
-// Initially power source is unset, hence the 1st time power change signal is
-// detected, it'll be treated as a user activity and an idle event will be fired
-// following an idle period.
-TEST_F(IdleEventNotifierTest, PowerChangedFirstSet) {
-  base::Time now = task_runner_->Now();
-  idle_event_notifier_->PowerChanged(ac_power_);
-  IdleEventNotifier::ActivityData data(now, now);
-  data.last_user_activity_time = now;
-  FastForwardAndCheckResults(1, data);
-}
-
-// PowerChanged signal is received but source isn't changed, so it won't trigger
-// a future idle event.
+// PowerChanged signal is received but source isn't changed, so it won't change
+// ActivityData that gets reported when an idle event is received.
 TEST_F(IdleEventNotifierTest, PowerSourceNotChanged) {
   base::Time now = task_runner_->Now();
   idle_event_notifier_->PowerChanged(ac_power_);
-  IdleEventNotifier::ActivityData data(now, now);
-  data.last_user_activity_time = now;
-  FastForwardAndCheckResults(1, data);
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = base::TimeDelta();
+  ReportIdleEventAndCheckResults(1, data);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
   idle_event_notifier_->PowerChanged(ac_power_);
-  FastForwardAndCheckResults(1, data);
+  ReportIdleEventAndCheckResults(2, data);
 }
 
-// PowerChanged signal is received and source is changed, so it will trigger
-// a future idle event.
+// PowerChanged signal is received and source is changed, so a different
+// ActivityData gets reported when the 2nd idle event is received.
 TEST_F(IdleEventNotifierTest, PowerSourceChanged) {
   base::Time now_1 = task_runner_->Now();
   idle_event_notifier_->PowerChanged(ac_power_);
-  IdleEventNotifier::ActivityData data_1(now_1, now_1);
-  data_1.last_user_activity_time = now_1;
-  FastForwardAndCheckResults(1, data_1);
+  IdleEventNotifier::ActivityData data_1;
+  data_1.last_activity_day = GetDayOfWeek(now_1);
+  const base::TimeDelta time_of_day_1 = GetTimeSinceMidnight(now_1);
+  data_1.last_activity_time_of_day = time_of_day_1;
+  data_1.last_user_activity_time_of_day = time_of_day_1;
+  data_1.recent_time_active = base::TimeDelta();
+  ReportIdleEventAndCheckResults(1, data_1);
+
   task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(100));
   base::Time now_2 = task_runner_->Now();
   idle_event_notifier_->PowerChanged(disconnected_power_);
-  IdleEventNotifier::ActivityData data_2(now_2, now_2);
-  data_2.last_user_activity_time = now_2;
-  FastForwardAndCheckResults(2, data_2);
+  IdleEventNotifier::ActivityData data_2;
+  data_2.last_activity_day = GetDayOfWeek(now_2);
+  const base::TimeDelta time_of_day_2 = GetTimeSinceMidnight(now_2);
+  data_2.last_activity_time_of_day = time_of_day_2;
+  data_2.last_user_activity_time_of_day = time_of_day_2;
+  data_2.recent_time_active = base::TimeDelta();
+  ReportIdleEventAndCheckResults(2, data_2);
 }
 
-// SuspendImminent will not trigger any future idle event.
-TEST_F(IdleEventNotifierTest, SuspendImminent) {
-  idle_event_notifier_->LidEventReceived(
-      chromeos::PowerManagerClient::LidState::OPEN,
-      base::TimeTicks::UnixEpoch());
-  idle_event_notifier_->SuspendImminent(
-      power_manager::SuspendImminent_Reason_LID_CLOSED);
-  FastForwardAndCheckResults(0, {});
+// Short sleep duration does not break up recent time active.
+TEST_F(IdleEventNotifierTest, ShortSuspendDone) {
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->PowerChanged(ac_power_);
+
+  task_runner_->FastForwardBy(IdleEventNotifier::kIdleDelay / 2);
+  idle_event_notifier_->SuspendDone(IdleEventNotifier::kIdleDelay / 2);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(5));
+  idle_event_notifier_->PowerChanged(disconnected_power_);
+  base::Time now_2 = task_runner_->Now();
+
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_2);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now_2);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = now_2 - now_1;
+  ReportIdleEventAndCheckResults(1, data);
 }
 
-// SuspendDone means user is back to active, hence it will trigger a future idle
-// event.
-TEST_F(IdleEventNotifierTest, SuspendDone) {
-  base::Time now = task_runner_->Now();
-  idle_event_notifier_->SuspendDone(base::TimeDelta::FromSeconds(1));
-  IdleEventNotifier::ActivityData data(now, now);
-  data.last_user_activity_time = now;
-  FastForwardAndCheckResults(1, data);
+// Long sleep duration recalc recent time active.
+TEST_F(IdleEventNotifierTest, LongSuspendDone) {
+  idle_event_notifier_->PowerChanged(ac_power_);
+
+  task_runner_->FastForwardBy(IdleEventNotifier::kIdleDelay +
+                              base::TimeDelta::FromSeconds(10));
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->SuspendDone(IdleEventNotifier::kIdleDelay +
+                                    base::TimeDelta::FromSeconds(10));
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::Time now_2 = task_runner_->Now();
+  idle_event_notifier_->PowerChanged(disconnected_power_);
+
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_2);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now_2);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = now_2 - now_1;
+  ReportIdleEventAndCheckResults(1, data);
 }
 
 TEST_F(IdleEventNotifierTest, UserActivityKey) {
   base::Time now = task_runner_->Now();
   ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
   idle_event_notifier_->OnUserActivity(&key_event);
-  IdleEventNotifier::ActivityData data(now, now);
-  data.last_user_activity_time = now;
-  data.last_key_time = now;
-  FastForwardAndCheckResults(1, data);
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = base::TimeDelta();
+  data.time_since_last_key = base::TimeDelta::FromSeconds(10);
+  data.key_events_in_last_hour = 1;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  ReportIdleEventAndCheckResults(1, data);
 }
 
 TEST_F(IdleEventNotifierTest, UserActivityMouse) {
@@ -203,10 +254,16 @@ TEST_F(IdleEventNotifierTest, UserActivityMouse) {
                              gfx::Point(0, 0), base::TimeTicks(), 0, 0);
 
   idle_event_notifier_->OnUserActivity(&mouse_event);
-  IdleEventNotifier::ActivityData data(now, now);
-  data.last_user_activity_time = now;
-  data.last_mouse_time = now;
-  FastForwardAndCheckResults(1, data);
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = base::TimeDelta();
+  data.time_since_last_mouse = base::TimeDelta::FromSeconds(10);
+  data.mouse_events_in_last_hour = 1;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  ReportIdleEventAndCheckResults(1, data);
 }
 
 TEST_F(IdleEventNotifierTest, UserActivityOther) {
@@ -215,9 +272,14 @@ TEST_F(IdleEventNotifierTest, UserActivityOther) {
                                  ui::GestureEventDetails(ui::ET_GESTURE_TAP));
 
   idle_event_notifier_->OnUserActivity(&gesture_event);
-  IdleEventNotifier::ActivityData data(now, now);
-  data.last_user_activity_time = now;
-  FastForwardAndCheckResults(1, data);
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = base::TimeDelta();
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  ReportIdleEventAndCheckResults(1, data);
 }
 
 // Two consecutive activities separated by 2sec only. Only 1 idle event with
@@ -233,36 +295,21 @@ TEST_F(IdleEventNotifierTest, TwoQuickUserActivities) {
   ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
   idle_event_notifier_->OnUserActivity(&key_event);
 
-  IdleEventNotifier::ActivityData data(now_2, now_1);
-  data.last_user_activity_time = now_2;
-  data.last_mouse_time = now_1;
-  data.last_key_time = now_2;
-  FastForwardAndCheckResults(1, data);
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_2);
+  const base::TimeDelta time_of_day = GetTimeSinceMidnight(now_2);
+  data.last_activity_time_of_day = time_of_day;
+  data.last_user_activity_time_of_day = time_of_day;
+  data.recent_time_active = now_2 - now_1;
+  data.time_since_last_key = base::TimeDelta::FromSeconds(10);
+  data.time_since_last_mouse =
+      base::TimeDelta::FromSeconds(10) + (now_2 - now_1);
+  data.key_events_in_last_hour = 1;
+  data.mouse_events_in_last_hour = 1;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  ReportIdleEventAndCheckResults(1, data);
 }
 
-TEST_F(IdleEventNotifierTest, ActivityWhileVideoPlaying) {
-  ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
-                             gfx::Point(0, 0), base::TimeTicks(), 0, 0);
-  idle_event_notifier_->OnVideoActivityStarted();
-  idle_event_notifier_->OnUserActivity(&mouse_event);
-  FastForwardAndCheckResults(0, {});
-}
-
-// Activity is observed when video isn't playing, it will start idle timer. But
-// before timer expires, video starts playing. So when timer expires, no idle
-// event will be generated.
-TEST_F(IdleEventNotifierTest, ActivityBeforeVideoStarts) {
-  ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
-                             gfx::Point(0, 0), base::TimeTicks(), 0, 0);
-  idle_event_notifier_->OnUserActivity(&mouse_event);
-  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(2));
-  idle_event_notifier_->OnVideoActivityStarted();
-  FastForwardAndCheckResults(0, {});
-}
-
-// An activity is observed when video is playing. No idle timer will be
-// triggered but last user activity time will be recorded. Video then stops
-// playing that will trigger timer to start.
 TEST_F(IdleEventNotifierTest, ActivityAfterVideoStarts) {
   ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
                              gfx::Point(0, 0), base::TimeTicks(), 0, 0);
@@ -277,10 +324,375 @@ TEST_F(IdleEventNotifierTest, ActivityAfterVideoStarts) {
   base::Time now_3 = task_runner_->Now();
   idle_event_notifier_->OnVideoActivityEnded();
 
-  IdleEventNotifier::ActivityData data(now_3, now_1);
-  data.last_user_activity_time = now_2;
-  data.last_mouse_time = now_2;
-  FastForwardAndCheckResults(1, data);
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_3);
+  data.last_activity_time_of_day = GetTimeSinceMidnight(now_3);
+  data.last_user_activity_time_of_day = GetTimeSinceMidnight(now_2);
+  data.recent_time_active = now_3 - now_1;
+  data.time_since_last_mouse = base::TimeDelta::FromSeconds(10) + now_3 - now_2;
+  data.video_playing_time = now_3 - now_1;
+  data.time_since_video_ended = base::TimeDelta::FromSeconds(10);
+  data.mouse_events_in_last_hour = 1;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  ReportIdleEventAndCheckResults(1, data);
+}
+
+TEST_F(IdleEventNotifierTest, IdleEventFieldReset) {
+  base::Time now_1 = task_runner_->Now();
+  ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  idle_event_notifier_->OnUserActivity(&key_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::Time now_2 = task_runner_->Now();
+  ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
+                             gfx::Point(0, 0), base::TimeTicks(), 0, 0);
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+
+  IdleEventNotifier::ActivityData data_1;
+  data_1.last_activity_day = GetDayOfWeek(now_2);
+  const base::TimeDelta time_of_day_2 = GetTimeSinceMidnight(now_2);
+  data_1.last_activity_time_of_day = time_of_day_2;
+  data_1.last_user_activity_time_of_day = time_of_day_2;
+  data_1.recent_time_active = now_2 - now_1;
+  data_1.time_since_last_key = base::TimeDelta::FromSeconds(10) + now_2 - now_1;
+  data_1.time_since_last_mouse = base::TimeDelta::FromSeconds(10);
+  data_1.key_events_in_last_hour = 1;
+  data_1.mouse_events_in_last_hour = 1;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  ReportIdleEventAndCheckResults(1, data_1);
+
+  idle_event_notifier_->PowerChanged(ac_power_);
+  base::Time now_3 = task_runner_->Now();
+
+  IdleEventNotifier::ActivityData data_2;
+  data_2.last_activity_day = GetDayOfWeek(now_3);
+  const base::TimeDelta time_of_day_3 = GetTimeSinceMidnight(now_3);
+  data_2.last_activity_time_of_day = time_of_day_3;
+  data_2.last_user_activity_time_of_day = time_of_day_3;
+  data_2.recent_time_active = base::TimeDelta();
+  data_2.time_since_last_key = base::TimeDelta::FromSeconds(20) + now_3 - now_1;
+  data_2.time_since_last_mouse =
+      base::TimeDelta::FromSeconds(20) + now_3 - now_2;
+  data_2.key_events_in_last_hour = 1;
+  data_2.mouse_events_in_last_hour = 1;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  ReportIdleEventAndCheckResults(2, data_2);
+}
+
+TEST_F(IdleEventNotifierTest, TwoConsecutiveVideoPlaying) {
+  // Two video playing sessions with a gap shorter than kIdleDelay. They are
+  // merged into one playing session.
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(2));
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  task_runner_->FastForwardBy(IdleEventNotifier::kIdleDelay / 2);
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  base::Time now_2 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::Time now_3 = task_runner_->Now();
+  ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
+                             gfx::Point(0, 0), base::TimeTicks(), 0, 0);
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_3);
+  data.last_activity_time_of_day = GetTimeSinceMidnight(now_3);
+  data.last_user_activity_time_of_day = GetTimeSinceMidnight(now_3);
+  data.recent_time_active = now_3 - now_1;
+  data.time_since_last_mouse = base::TimeDelta::FromSeconds(25);
+  data.mouse_events_in_last_hour = 1;
+  data.video_playing_time = now_2 - now_1;
+  data.time_since_video_ended =
+      base::TimeDelta::FromSeconds(25) + now_3 - now_2;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(25));
+  ReportIdleEventAndCheckResults(1, data);
+}
+
+TEST_F(IdleEventNotifierTest, TwoVideoPlayingFarApartOneIdleEvent) {
+  // Two video playing sessions with a gap larger than kIdleDelay.
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(2));
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
+                             gfx::Point(0, 0), base::TimeTicks(), 0, 0);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+
+  base::Time now_2 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  base::Time now_3 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_3);
+  data.last_activity_time_of_day = GetTimeSinceMidnight(now_3);
+  data.last_user_activity_time_of_day = GetTimeSinceMidnight(now_2);
+  data.recent_time_active = now_3 - now_1;
+  data.time_since_last_mouse = base::TimeDelta::FromSeconds(25) + now_3 - now_2;
+  data.mouse_events_in_last_hour = 2;
+  data.video_playing_time = now_3 - now_2;
+  data.time_since_video_ended = base::TimeDelta::FromSeconds(25);
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(25));
+  ReportIdleEventAndCheckResults(1, data);
+}
+
+TEST_F(IdleEventNotifierTest, TwoVideoPlayingFarApartTwoIdleEvents) {
+  // Two video playing sessions with a gap equal to kIdleDelay. An idle event
+  // is generated in between, both video sessions are reported.
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(2));
+  base::Time now_2 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data_1;
+  data_1.last_activity_day = GetDayOfWeek(now_2);
+  data_1.last_activity_time_of_day = GetTimeSinceMidnight(now_2);
+  data_1.recent_time_active = now_2 - now_1;
+  data_1.video_playing_time = now_2 - now_1;
+  data_1.time_since_video_ended =
+      IdleEventNotifier::kIdleDelay + base::TimeDelta::FromSeconds(10);
+  task_runner_->FastForwardBy(IdleEventNotifier::kIdleDelay +
+                              base::TimeDelta::FromSeconds(10));
+  ReportIdleEventAndCheckResults(1, data_1);
+
+  base::Time now_3 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  base::Time now_4 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data_2;
+  data_2.last_activity_day = GetDayOfWeek(now_4);
+  data_2.last_activity_time_of_day = GetTimeSinceMidnight(now_4);
+  data_2.recent_time_active = now_4 - now_3;
+  data_2.video_playing_time = now_4 - now_3;
+  data_2.time_since_video_ended = base::TimeDelta();
+  ReportIdleEventAndCheckResults(2, data_2);
+}
+
+TEST_F(IdleEventNotifierTest, TwoVideoPlayingSeparatedByAnIdleEvent) {
+  // Two video playing sessions with gap shorter than kIdleDelay but separated
+  // by an idle event. They are considered as two video sessions.
+  const base::Time kNow1 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(2));
+  const base::Time kNow2 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data_1;
+  data_1.last_activity_day = GetDayOfWeek(kNow2);
+  data_1.last_activity_time_of_day = GetTimeSinceMidnight(kNow2);
+  data_1.recent_time_active = kNow2 - kNow1;
+  data_1.video_playing_time = kNow2 - kNow1;
+  data_1.time_since_video_ended = base::TimeDelta::FromSeconds(1);
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(1));
+  ReportIdleEventAndCheckResults(1, data_1);
+
+  const base::Time kNow3 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  const base::Time kNow4 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data_2;
+  data_2.last_activity_day = GetDayOfWeek(kNow4);
+  data_2.last_activity_time_of_day = GetTimeSinceMidnight(kNow4);
+  data_2.recent_time_active = kNow4 - kNow3;
+  data_2.video_playing_time = kNow4 - kNow3;
+  data_2.time_since_video_ended = base::TimeDelta();
+  ReportIdleEventAndCheckResults(2, data_2);
+}
+
+TEST_F(IdleEventNotifierTest, VideoPlayingPausedByShortSuspend) {
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(100));
+  base::Time now_2 = task_runner_->Now();
+  idle_event_notifier_->SuspendDone(IdleEventNotifier::kIdleDelay / 2);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  base::Time now_3 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_3);
+  data.last_activity_time_of_day = GetTimeSinceMidnight(now_3);
+  data.last_user_activity_time_of_day = GetTimeSinceMidnight(now_2);
+  data.recent_time_active = now_3 - now_1;
+  data.video_playing_time = now_3 - now_1;
+  data.time_since_video_ended = base::TimeDelta();
+  ReportIdleEventAndCheckResults(1, data);
+}
+
+TEST_F(IdleEventNotifierTest, VideoPlayingPausedByLongSuspend) {
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(2 * IdleEventNotifier::kIdleDelay);
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->SuspendDone(2 * IdleEventNotifier::kIdleDelay);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(20));
+  base::Time now_2 = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(now_2);
+  data.last_activity_time_of_day = GetTimeSinceMidnight(now_2);
+  data.last_user_activity_time_of_day = GetTimeSinceMidnight(now_1);
+  data.recent_time_active = now_2 - now_1;
+  data.video_playing_time = now_2 - now_1;
+  data.time_since_video_ended = base::TimeDelta();
+  ReportIdleEventAndCheckResults(1, data);
+}
+
+TEST_F(IdleEventNotifierTest, UserInputEventsOneIdleEvent) {
+  ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
+                             gfx::Point(0, 0), base::TimeTicks(), 0, 0);
+  ui::TouchEvent touch_event(
+      ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), base::TimeTicks::UnixEpoch(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+
+  base::Time first_activity_time = task_runner_->Now();
+  // This key event will be too old to be counted.
+  idle_event_notifier_->OnUserActivity(&key_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::Time video_start_time = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  base::Time last_key_time = task_runner_->Now();
+  idle_event_notifier_->OnUserActivity(&key_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  idle_event_notifier_->OnUserActivity(&touch_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  idle_event_notifier_->OnUserActivity(&touch_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  base::Time last_touch_time = task_runner_->Now();
+  idle_event_notifier_->OnUserActivity(&touch_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  base::Time last_mouse_time = task_runner_->Now();
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::Time video_end_time = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data;
+  data.last_activity_day = GetDayOfWeek(video_end_time);
+  data.last_activity_time_of_day = GetTimeSinceMidnight(video_end_time);
+  data.last_user_activity_time_of_day = GetTimeSinceMidnight(last_mouse_time);
+  data.recent_time_active = video_end_time - first_activity_time;
+  data.video_playing_time = video_end_time - video_start_time;
+  data.time_since_video_ended = base::TimeDelta::FromSeconds(30);
+  data.time_since_last_key =
+      base::TimeDelta::FromSeconds(30) + video_end_time - last_key_time;
+  data.time_since_last_mouse =
+      base::TimeDelta::FromSeconds(30) + video_end_time - last_mouse_time;
+  data.time_since_last_touch =
+      base::TimeDelta::FromSeconds(30) + video_end_time - last_touch_time;
+
+  data.key_events_in_last_hour = 1;
+  data.mouse_events_in_last_hour = 2;
+  data.touch_events_in_last_hour = 3;
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(30));
+  ReportIdleEventAndCheckResults(1, data);
+}
+
+TEST_F(IdleEventNotifierTest, UserInputEventsTwoIdleEvents) {
+  ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  ui::MouseEvent mouse_event(ui::ET_MOUSE_EXITED, gfx::Point(0, 0),
+                             gfx::Point(0, 0), base::TimeTicks(), 0, 0);
+  ui::TouchEvent touch_event(
+      ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), base::TimeTicks::UnixEpoch(),
+      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+
+  base::Time now_1 = task_runner_->Now();
+  idle_event_notifier_->OnUserActivity(&key_event);
+
+  IdleEventNotifier::ActivityData data_1;
+  data_1.last_activity_day = GetDayOfWeek(now_1);
+  data_1.last_activity_time_of_day = GetTimeSinceMidnight(now_1);
+  data_1.last_user_activity_time_of_day = GetTimeSinceMidnight(now_1);
+  data_1.recent_time_active = base::TimeDelta();
+  data_1.time_since_last_key = base::TimeDelta::FromSeconds(30);
+  data_1.key_events_in_last_hour = 1;
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(30));
+  ReportIdleEventAndCheckResults(1, data_1);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  base::Time last_key_time = task_runner_->Now();
+  idle_event_notifier_->OnUserActivity(&key_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::Time video_start_time = task_runner_->Now();
+  // Keep playing video so we won't run into an idle event.
+  idle_event_notifier_->OnVideoActivityStarted();
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  idle_event_notifier_->OnUserActivity(&touch_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  idle_event_notifier_->OnUserActivity(&touch_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  base::Time last_touch_time = task_runner_->Now();
+  idle_event_notifier_->OnUserActivity(&touch_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(11));
+  base::Time last_mouse_time = task_runner_->Now();
+  idle_event_notifier_->OnUserActivity(&mouse_event);
+
+  task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::Time video_end_time = task_runner_->Now();
+  idle_event_notifier_->OnVideoActivityEnded();
+
+  IdleEventNotifier::ActivityData data_2;
+  data_2.last_activity_day = GetDayOfWeek(video_end_time);
+  data_2.last_activity_time_of_day = GetTimeSinceMidnight(video_end_time);
+  data_2.last_user_activity_time_of_day = GetTimeSinceMidnight(last_mouse_time);
+  data_2.recent_time_active = video_end_time - last_key_time;
+  data_2.video_playing_time = video_end_time - video_start_time;
+  data_2.time_since_video_ended = base::TimeDelta();
+  data_2.time_since_last_key = video_end_time - last_key_time;
+  data_2.time_since_last_mouse = video_end_time - last_mouse_time;
+  data_2.time_since_last_touch = video_end_time - last_touch_time;
+
+  data_2.key_events_in_last_hour = 1;
+  data_2.mouse_events_in_last_hour = 2;
+  data_2.touch_events_in_last_hour = 3;
+
+  ReportIdleEventAndCheckResults(2, data_2);
 }
 
 }  // namespace ml

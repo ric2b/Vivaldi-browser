@@ -9,8 +9,10 @@
 
 #include "base/strings/string16.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/platform_window/platform_window_delegate.h"
 
 namespace gfx {
+class Point;
 class Rect;
 }
 
@@ -44,11 +46,13 @@ class PlatformWindow {
 
   virtual void SetCapture() = 0;
   virtual void ReleaseCapture() = 0;
+  virtual bool HasCapture() const = 0;
 
   virtual void ToggleFullscreen() = 0;
   virtual void Maximize() = 0;
   virtual void Minimize() = 0;
   virtual void Restore() = 0;
+  virtual PlatformWindowState GetPlatformWindowState() const = 0;
 
   virtual void SetCursor(PlatformCursor cursor) = 0;
 

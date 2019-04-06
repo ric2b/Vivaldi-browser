@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/metrics/histogram_macros.h"
+#include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "url/origin.h"
 
 namespace content {
@@ -49,6 +50,31 @@ void ReportInternalError(const char* type,
                               INTERNAL_ERROR_MAX + 1,
                               base::HistogramBase::kUmaTargetedHistogramFlag)
       ->Add(location);
+}
+
+void ReportSchemaVersion(int version, const url::Origin& origin) {
+  UMA_HISTOGRAM_ENUMERATION("WebCore.IndexedDB.SchemaVersion", version,
+                            kLatestKnownSchemaVersion + 1);
+  const std::string suffix = OriginToCustomHistogramSuffix(origin);
+  if (!suffix.empty()) {
+    base::LinearHistogram::FactoryGet(
+        "WebCore.IndexedDB.SchemaVersion" + suffix, 0,
+        indexed_db::kLatestKnownSchemaVersion,
+        indexed_db::kLatestKnownSchemaVersion + 1,
+        base::HistogramBase::kUmaTargetedHistogramFlag)
+        ->Add(version);
+  }
+}
+
+void ReportV2Schema(bool has_broken_blobs, const url::Origin& origin) {
+  UMA_HISTOGRAM_BOOLEAN("WebCore.IndexedDB.SchemaV2HasBlobs", has_broken_blobs);
+  const std::string suffix = OriginToCustomHistogramSuffix(origin);
+  if (!suffix.empty()) {
+    base::BooleanHistogram::FactoryGet(
+        "WebCore.IndexedDB.SchemaV2HasBlobs" + suffix,
+        base::HistogramBase::kUmaTargetedHistogramFlag)
+        ->Add(has_broken_blobs);
+  }
 }
 
 }  // namespace indexed_db

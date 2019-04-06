@@ -18,11 +18,11 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -37,8 +37,6 @@
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_thread.h"
 #include "net/cert/cert_verifier.h"
-#include "net/cert/ct_known_logs.h"
-#include "net/cert/ct_log_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
@@ -53,13 +51,14 @@
 #include "net/http/http_network_layer.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/log/net_log_event_type.h"
-#include "net/proxy/proxy_config_service.h"
-#include "net/proxy/proxy_script_fetcher_impl.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/pac_file_fetcher_impl.h"
+#include "net/proxy_resolution/proxy_config_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/tcp_client_socket.h"
-#include "net/spdy/chromium/spdy_session.h"
+#include "net/spdy/spdy_session.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
+#include "net/ssl/ssl_config_service_defaults.h"
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/file_protocol_handler.h"
 #include "net/url_request/static_http_user_agent_settings.h"
@@ -242,11 +241,6 @@ IOSIOThread::IOSIOThread(PrefService* local_state,
   system_proxy_config_service_ = ProxyServiceFactory::CreateProxyConfigService(
       pref_proxy_config_tracker_.get());
 
-  ssl_config_service_manager_.reset(
-      ssl_config::SSLConfigServiceManager::CreateDefaultManager(
-          local_state,
-          web::WebThread::GetTaskRunnerForThread(web::WebThread::IO)));
-
   web::WebThread::SetDelegate(web::WebThread::IO, this);
 }
 
@@ -286,7 +280,7 @@ net::URLRequestContextGetter* IOSIOThread::system_url_request_context_getter() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   if (!system_url_request_context_getter_.get()) {
     // If we're in unit_tests, IOSIOThread may not be run.
-    if (!web::WebThread::IsMessageLoopValid(web::WebThread::IO))
+    if (!web::WebThread::IsThreadInitialized(web::WebThread::IO))
       return nullptr;
     system_url_request_context_getter_ =
         new SystemURLRequestContextGetter(this);
@@ -306,9 +300,6 @@ void IOSIOThread::Init() {
   // logging the network change before other IO thread consumers respond to it.
   network_change_observer_.reset(new LoggingNetworkChangeObserver(net_log_));
 
-  // Setup the HistogramWatcher to run on the IO thread.
-  net::NetworkChangeNotifier::InitHistogramWatcher();
-
   globals_->system_network_delegate = CreateSystemNetworkDelegate();
   globals_->host_resolver = CreateGlobalHostResolver(net_log_);
 
@@ -316,17 +307,10 @@ void IOSIOThread::Init() {
 
   globals_->transport_security_state.reset(new net::TransportSecurityState());
 
-  std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs(
-      net::ct::CreateLogVerifiersForKnownLogs());
+  globals_->cert_transparency_verifier.reset(new net::MultiLogCTVerifier());
+  globals_->ct_policy_enforcer.reset(new net::DefaultCTPolicyEnforcer());
 
-  net::MultiLogCTVerifier* ct_verifier = new net::MultiLogCTVerifier();
-  globals_->cert_transparency_verifier.reset(ct_verifier);
-  // Add built-in logs
-  ct_verifier->AddLogs(ct_logs);
-
-  globals_->ct_policy_enforcer.reset(new net::CTPolicyEnforcer());
-
-  globals_->ssl_config_service = GetSSLConfigService();
+  globals_->ssl_config_service.reset(new net::SSLConfigServiceDefaults());
 
   CreateDefaultAuthHandlerFactory();
   globals_->http_server_properties.reset(new net::HttpServerPropertiesImpl());
@@ -357,9 +341,11 @@ void IOSIOThread::Init() {
       base::CommandLine(base::CommandLine::NO_PROGRAM),
       /*is_quic_force_disabled=*/false, quic_user_agent_id, &params_);
 
-  globals_->system_proxy_service = ProxyServiceFactory::CreateProxyService(
-      net_log_, nullptr, globals_->system_network_delegate.get(),
-      std::move(system_proxy_config_service_), true /* quick_check_enabled */);
+  globals_->system_proxy_resolution_service =
+      ProxyServiceFactory::CreateProxyResolutionService(
+          net_log_, nullptr, globals_->system_network_delegate.get(),
+          std::move(system_proxy_config_service_),
+          true /* quick_check_enabled */);
 
   globals_->system_request_context.reset(
       ConstructSystemRequestContext(globals_, params_, net_log_));
@@ -371,9 +357,6 @@ void IOSIOThread::CleanUp() {
 
   // Release objects that the net::URLRequestContext could have been pointing
   // to.
-
-  // Shutdown the HistogramWatcher on the IO thread.
-  net::NetworkChangeNotifier::ShutdownHistogramWatcher();
 
   // This must be reset before the ChromeNetLog is destroyed.
   network_change_observer_.reset();
@@ -390,11 +373,12 @@ void IOSIOThread::CreateDefaultAuthHandlerFactory() {
   std::vector<std::string> supported_schemes =
       base::SplitString(kSupportedAuthSchemes, ",", base::TRIM_WHITESPACE,
                         base::SPLIT_WANT_NONEMPTY);
-  globals_->http_auth_preferences.reset(
-      new net::HttpAuthPreferences(supported_schemes, std::string()));
+  globals_->http_auth_preferences =
+      std::make_unique<net::HttpAuthPreferences>();
   globals_->http_auth_handler_factory =
       net::HttpAuthHandlerRegistryFactory::Create(
-          globals_->http_auth_preferences.get(), globals_->host_resolver.get());
+          globals_->host_resolver.get(), globals_->http_auth_preferences.get(),
+          supported_schemes);
 }
 
 void IOSIOThread::ClearHostCache() {
@@ -408,10 +392,6 @@ void IOSIOThread::ClearHostCache() {
 const net::HttpNetworkSession::Params& IOSIOThread::NetworkSessionParams()
     const {
   return params_;
-}
-
-net::SSLConfigService* IOSIOThread::GetSSLConfigService() {
-  return ssl_config_service_manager_->Get();
 }
 
 void IOSIOThread::ChangedToOnTheRecordOnIOThread() {
@@ -437,7 +417,8 @@ net::URLRequestContext* IOSIOThread::ConstructSystemRequestContext(
   context->set_ssl_config_service(globals->ssl_config_service.get());
   context->set_http_auth_handler_factory(
       globals->http_auth_handler_factory.get());
-  context->set_proxy_service(globals->system_proxy_service.get());
+  context->set_proxy_resolution_service(
+      globals->system_proxy_resolution_service.get());
   context->set_ct_policy_enforcer(globals->ct_policy_enforcer.get());
 
   net::URLRequestJobFactoryImpl* system_job_factory =

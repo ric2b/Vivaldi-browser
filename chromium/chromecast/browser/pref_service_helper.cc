@@ -13,7 +13,7 @@
 #include "build/build_config.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/base/pref_names.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service_factory.h"
@@ -36,7 +36,7 @@ void UserPrefsLoadError(PersistentPrefStore::PrefReadError* error_val,
 
 base::FilePath GetConfigPath() {
   base::FilePath config_path;
-  CHECK(PathService::Get(FILE_CAST_CONFIG, &config_path));
+  CHECK(base::PathService::Get(FILE_CAST_CONFIG, &config_path));
   return config_path;
 }
 

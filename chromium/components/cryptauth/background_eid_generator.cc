@@ -5,15 +5,16 @@
 #include "components/cryptauth/background_eid_generator.h"
 
 #include <cstring>
+#include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
 #include "components/cryptauth/raw_eid_generator.h"
 #include "components/cryptauth/raw_eid_generator_impl.h"
-#include "components/proximity_auth/logging/logging.h"
+#include "components/cryptauth/remote_device_ref.h"
 
 namespace cryptauth {
 
@@ -43,7 +44,7 @@ const BeaconSeed* GetBeaconSeedForTimestamp(
 }  // namespace
 
 BackgroundEidGenerator::BackgroundEidGenerator()
-    : BackgroundEidGenerator(base::MakeUnique<RawEidGeneratorImpl>(),
+    : BackgroundEidGenerator(std::make_unique<RawEidGeneratorImpl>(),
                              base::DefaultClock::GetInstance()) {}
 
 BackgroundEidGenerator::~BackgroundEidGenerator() {}
@@ -66,7 +67,6 @@ std::vector<DataWithTimestamp> BackgroundEidGenerator::GenerateNearestEids(
       eids.push_back(*eid);
   }
 
-  PA_LOG(INFO) << "Generated EIDs: " << DataWithTimestamp::ToDebugString(eids);
   return eids;
 }
 
@@ -76,7 +76,7 @@ std::unique_ptr<DataWithTimestamp> BackgroundEidGenerator::GenerateEid(
   const BeaconSeed* beacon_seed =
       GetBeaconSeedForTimestamp(timestamp_ms, beacon_seeds);
   if (!beacon_seed) {
-    PA_LOG(INFO) << "  " << timestamp_ms << ": outside of BeaconSeed range.";
+    PA_LOG(WARNING) << "  " << timestamp_ms << ": outside of BeaconSeed range.";
     return nullptr;
   }
 
@@ -88,8 +88,37 @@ std::unique_ptr<DataWithTimestamp> BackgroundEidGenerator::GenerateEid(
   std::string eid = raw_eid_generator_->GenerateEid(
       beacon_seed->data(), start_of_period_ms, nullptr);
 
-  return base::MakeUnique<DataWithTimestamp>(eid, start_of_period_ms,
+  return std::make_unique<DataWithTimestamp>(eid, start_of_period_ms,
                                              start_of_period_ms + kEidPeriodMs);
+}
+
+std::string BackgroundEidGenerator::IdentifyRemoteDeviceByAdvertisement(
+    const std::string& advertisement_service_data,
+    const RemoteDeviceRefList& remote_devices) const {
+  // Resize the service data to analyze only the first |kNumBytesInEidValue|
+  // bytes. If there are any bytes after those first |kNumBytesInEidValue|
+  // bytes, they are flags, so they are not needed to identify the device which
+  // sent a message.
+  std::string service_data_without_flags = advertisement_service_data;
+  service_data_without_flags.resize(RawEidGenerator::kNumBytesInEidValue);
+
+  const auto remote_device_it = std::find_if(
+      remote_devices.begin(), remote_devices.end(),
+      [this, &service_data_without_flags](const auto& remote_device) {
+        std::vector<DataWithTimestamp> eids =
+            GenerateNearestEids(remote_device.beacon_seeds());
+        const auto eid_it = std::find_if(
+            eids.begin(), eids.end(), [&service_data_without_flags](auto eid) {
+              return eid.data == service_data_without_flags;
+            });
+
+        return eid_it != eids.end();
+      });
+
+  // Return empty string if no matching device is found.
+  return remote_device_it != remote_devices.end()
+             ? remote_device_it->GetDeviceId()
+             : std::string();
 }
 
 }  // cryptauth

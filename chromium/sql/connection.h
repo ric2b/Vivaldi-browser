@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -18,9 +19,11 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequence_checker.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/time/time.h"
+#include "base/time/tick_clock.h"
 #include "sql/sql_export.h"
+#include "sql/statement_id.h"
 
 struct sqlite3;
 struct sqlite3_stmt;
@@ -30,8 +33,8 @@ class FilePath;
 class HistogramBase;
 namespace trace_event {
 class ProcessMemoryDump;
-}
-}
+}  // namespace trace_event
+}  // namespace base
 
 namespace sql {
 
@@ -45,70 +48,18 @@ class ScopedCommitHook;
 class ScopedErrorExpecter;
 class ScopedScalarFunction;
 class ScopedMockTimeSource;
-}
-
-// Uniquely identifies a statement. There are two modes of operation:
-//
-// - In the most common mode, you will use the source file and line number to
-//   identify your statement. This is a convienient way to get uniqueness for
-//   a statement that is only used in one place. Use the SQL_FROM_HERE macro
-//   to generate a StatementID.
-//
-// - In the "custom" mode you may use the statement from different places or
-//   need to manage it yourself for whatever reason. In this case, you should
-//   make up your own unique name and pass it to the StatementID. This name
-//   must be a static string, since this object only deals with pointers and
-//   assumes the underlying string doesn't change or get deleted.
-//
-// This object is copyable and assignable using the compiler-generated
-// operator= and copy constructor.
-class StatementID {
- public:
-  // Creates a uniquely named statement with the given file ane line number.
-  // Normally you will use SQL_FROM_HERE instead of calling yourself.
-  StatementID(const char* file, int line)
-      : number_(line),
-        str_(file) {
-  }
-
-  // Creates a uniquely named statement with the given user-defined name.
-  explicit StatementID(const char* unique_name)
-      : number_(-1),
-        str_(unique_name) {
-  }
-
-  // This constructor is unimplemented and will generate a linker error if
-  // called. It is intended to try to catch people dynamically generating
-  // a statement name that will be deallocated and will cause a crash later.
-  // All strings must be static and unchanging!
-  explicit StatementID(const std::string& dont_ever_do_this);
-
-  // We need this to insert into our map.
-  bool operator<(const StatementID& other) const;
-
- private:
-  int number_;
-  const char* str_;
-};
-
-#define SQL_FROM_HERE sql::StatementID(__FILE__, __LINE__)
+}  // namespace test
 
 class Connection;
 
-// Abstract the source of timing information for metrics (RecordCommitTime, etc)
-// to allow testing control.
-class SQL_EXPORT TimeSource {
- public:
-  TimeSource() {}
-  virtual ~TimeSource() {}
-
-  // Return the current time (by default base::TimeTicks::Now()).
-  virtual base::TimeTicks Now();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TimeSource);
-};
-
+// Handle to an open SQLite database.
+//
+// Instances of this class are thread-unsafe and DCHECK that they are accessed
+// on the same sequence.
+//
+// TODO(pwnall): This should be renamed to Database. Class instances are
+// typically named "db_" / "db", and the class' equivalents in other systems
+// used by Chrome are named LevelDB::DB and blink::IDBDatabase.
 class SQL_EXPORT Connection {
  private:
   class StatementRef;  // Forward declaration, see real one below.
@@ -128,12 +79,22 @@ class SQL_EXPORT Connection {
   // From sqlite.org: "The page size must be a power of two greater than or
   // equal to 512 and less than or equal to SQLITE_MAX_PAGE_SIZE. The maximum
   // value for SQLITE_MAX_PAGE_SIZE is 32768."
-  void set_page_size(int page_size) { page_size_ = page_size; }
+  void set_page_size(int page_size) {
+    DCHECK(!page_size || (page_size >= 512));
+    DCHECK(!page_size || !(page_size & (page_size - 1)))
+        << "page_size must be a power of two";
+
+    page_size_ = page_size;
+  }
 
   // Sets the number of pages that will be cached in memory by sqlite. The
   // total cache size in bytes will be page_size * cache_size. This must be
   // called before Open() to have an effect.
-  void set_cache_size(int cache_size) { cache_size_ = cache_size; }
+  void set_cache_size(int cache_size) {
+    DCHECK_GE(cache_size, 0);
+
+    cache_size_ = cache_size;
+  }
 
   // Call to put the database in exclusive locking mode. There is no "back to
   // normal" flag because of some additional requirements sqlite puts on this
@@ -149,8 +110,8 @@ class SQL_EXPORT Connection {
 
   // Call to cause Open() to restrict access permissions of the
   // database file to only the owner.
-  // TODO(shess): Currently only supported on OS_POSIX, is a noop on
-  // other platforms.
+  //
+  // This is only supported on OS_POSIX and is a noop on other platforms.
   void set_restrict_to_user() { restrict_to_user_ = true; }
 
   // Call to use alternative status-tracking for mmap.  Usually this is tracked
@@ -158,7 +119,7 @@ class SQL_EXPORT Connection {
   // TODO(shess): Maybe just have all databases use the alt option?
   void set_mmap_alt_status() { mmap_alt_status_ = true; }
 
-  // Call to opt out of memory-mapped file I/O.
+  // Opt out of memory-mapped file I/O.
   void set_mmap_disabled() { mmap_disabled_ = true; }
 
   // Set an error-handling callback.  On errors, the error number (and
@@ -166,16 +127,12 @@ class SQL_EXPORT Connection {
   //
   // If no callback is set, the default action is to crash in debug
   // mode or return failure in release mode.
-  typedef base::Callback<void(int, Statement*)> ErrorCallback;
+  using ErrorCallback = base::RepeatingCallback<void(int, Statement*)>;
   void set_error_callback(const ErrorCallback& callback) {
     error_callback_ = callback;
   }
-  bool has_error_callback() const {
-    return !error_callback_.is_null();
-  }
-  void reset_error_callback() {
-    error_callback_.Reset();
-  }
+  bool has_error_callback() const { return !error_callback_.is_null(); }
+  void reset_error_callback() { error_callback_.Reset(); }
 
   // Set this to enable additional per-connection histogramming.  Must be called
   // before Open().
@@ -235,9 +192,7 @@ class SQL_EXPORT Connection {
     EVENT_MAX_VALUE
   };
   void RecordEvent(Events event, size_t count);
-  void RecordOneEvent(Events event) {
-    RecordEvent(event, 1);
-  }
+  void RecordOneEvent(Events event) { RecordEvent(event, 1); }
 
   // Run "PRAGMA integrity_check" and post each line of
   // results into |messages|.  Returns the success of running the
@@ -276,7 +231,7 @@ class SQL_EXPORT Connection {
   bool OpenTemporary() WARN_UNUSED_RESULT;
 
   // Returns true if the database has been successfully opened.
-  bool is_open() const { return !!db_; }
+  bool is_open() const { return static_cast<bool>(db_); }
 
   // Closes the database. This is automatically performed on destruction for
   // you, but this allows you to close the database early. You must not call
@@ -396,9 +351,7 @@ class SQL_EXPORT Connection {
   //
   // On the SQLite version shipped with Chrome (3.21+, Oct 2017), databases can
   // be attached while a transaction is opened. However, these databases cannot
-  // be detached until the transaction is committed or aborted. On iOS, the
-  // built-in SQLite might not be older than 3.21. In that case, attaching a
-  // database while a transaction is open results in a error.
+  // be detached until the transaction is committed or aborted.
   bool AttachDatabase(const base::FilePath& other_db_path,
                       const char* attachment_point);
   bool DetachDatabase(const char* attachment_point);
@@ -417,12 +370,6 @@ class SQL_EXPORT Connection {
 
   // Like Execute(), but returns the error code given by SQLite.
   int ExecuteAndReturnErrorCode(const char* sql) WARN_UNUSED_RESULT;
-
-  // Returns true if we have a statement with the given identifier already
-  // cached. This is normally not necessary to call, but can be useful if the
-  // caller has to dynamically build up SQL to avoid doing so if it's already
-  // cached.
-  bool HasCachedStatement(const StatementID& id) const;
 
   // Returns a statement for the given SQL using the statement cache. It can
   // take a nontrivial amount of work to parse and compile a statement, so
@@ -447,7 +394,7 @@ class SQL_EXPORT Connection {
   //       SQL_FROM_HERE, "SELECT * FROM foo"));
   //   if (!stmt)
   //     return false;  // Error creating statement.
-  scoped_refptr<StatementRef> GetCachedStatement(const StatementID& id,
+  scoped_refptr<StatementRef> GetCachedStatement(StatementID id,
                                                  const char* sql);
 
   // Used to check a |sql| statement for syntactic validity. If the statement is
@@ -512,6 +459,16 @@ class SQL_EXPORT Connection {
   // crash server.
   void ReportDiagnosticInfo(int extended_error, Statement* stmt);
 
+  // Helper to return the current time from the time source.
+  base::TimeTicks NowTicks() const { return clock_->NowTicks(); }
+
+  // Intended for tests to inject a mock time source.
+  //
+  // Inlined to avoid generating code in the production binary.
+  inline void set_clock_for_testing(std::unique_ptr<base::TickClock> clock) {
+    clock_ = std::move(clock);
+  }
+
  private:
   // For recovery module.
   friend class Recovery;
@@ -527,6 +484,7 @@ class SQL_EXPORT Connection {
   friend class test::ScopedScalarFunction;
   friend class test::ScopedMockTimeSource;
 
+  FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, CachedStatement);
   FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, CollectDiagnosticInfo);
   FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, GetAppropriateMmapSize);
   FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, GetAppropriateMmapSizeAltStatus);
@@ -563,7 +521,7 @@ class SQL_EXPORT Connection {
 
   // Accessors for global error-expecter, for injecting behavior during tests.
   // See test/scoped_error_expecter.h.
-  typedef base::Callback<bool(int)> ErrorExpecterCallback;
+  using ErrorExpecterCallback = base::RepeatingCallback<bool(int)>;
   static ErrorExpecterCallback* current_expecter_cb_;
   static void SetErrorExpecter(ErrorExpecterCallback* expecter);
   static void ResetErrorExpecter();
@@ -581,13 +539,15 @@ class SQL_EXPORT Connection {
   // should always check validity before using.
   class SQL_EXPORT StatementRef : public base::RefCounted<StatementRef> {
    public:
+    REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
+
     // |connection| is the sql::Connection instance associated with
     // the statement, and is used for tracking outstanding statements
-    // and for error handling.  Set to NULL for invalid or untracked
-    // refs.  |stmt| is the actual statement, and should only be NULL
+    // and for error handling.  Set to nullptr for invalid or untracked
+    // refs.  |stmt| is the actual statement, and should only be null
     // to create an invalid ref.  |was_valid| indicates whether the
     // statement should be considered valid for diagnistic purposes.
-    // |was_valid| can be true for NULL |stmt| if the connection has
+    // |was_valid| can be true for a null |stmt| if the connection has
     // been forcibly closed by an error handler.
     StatementRef(Connection* connection, sqlite3_stmt* stmt, bool was_valid);
 
@@ -599,23 +559,28 @@ class SQL_EXPORT Connection {
     // for diagnostic checks.
     bool was_valid() const { return was_valid_; }
 
-    // If we've not been linked to a connection, this will be NULL.
-    // TODO(shess): connection_ can be NULL in case of GetUntrackedStatement(),
-    // which prevents Statement::OnError() from forwarding errors.
+    // If we've not been linked to a connection, this will be null.
+    //
+    // TODO(shess): connection_ can be nullptr in case of
+    // GetUntrackedStatement(), which prevents Statement::OnError() from
+    // forwarding errors.
     Connection* connection() const { return connection_; }
 
     // Returns the sqlite statement if any. If the statement is not active,
-    // this will return NULL.
+    // this will return nullptr.
     sqlite3_stmt* stmt() const { return stmt_; }
 
-    // Destroys the compiled statement and marks it NULL. The statement will
-    // no longer be active.  |forced| is used to indicate if orderly-shutdown
-    // checks should apply (see Connection::RazeAndClose()).
+    // Destroys the compiled statement and sets it to nullptr. The statement
+    // will no longer be active. |forced| is used to indicate if
+    // orderly-shutdown checks should apply (see Connection::RazeAndClose()).
     void Close(bool forced);
 
     // Check whether the current thread is allowed to make IO calls, but only
     // if database wasn't open in memory.
-    void AssertIOAllowed() { if (connection_) connection_->AssertIOAllowed(); }
+    void AssertIOAllowed() const {
+      if (connection_)
+        connection_->AssertIOAllowed();
+    }
 
    private:
     friend class base::RefCounted<StatementRef>;
@@ -641,10 +606,10 @@ class SQL_EXPORT Connection {
 
   // Called when a sqlite function returns an error, which is passed
   // as |err|.  The return value is the error code to be reflected
-  // back to client code.  |stmt| is non-NULL if the error relates to
-  // an sql::Statement instance.  |sql| is non-NULL if the error
+  // back to client code.  |stmt| is non-null if the error relates to
+  // an sql::Statement instance.  |sql| is non-nullptr if the error
   // relates to non-statement sql code (Execute, for instance).  Both
-  // can be NULL, but both should never be set.
+  // can be null, but both should never be set.
   // NOTE(shess): Originally, the return value was intended to allow
   // error handlers to transparently convert errors into success.
   // Unfortunately, transactions are not generally restartable, so
@@ -657,7 +622,7 @@ class SQL_EXPORT Connection {
 
   // Implementation helper for GetUniqueStatement() and GetUntrackedStatement().
   // |tracking_db| is the db the resulting ref should register with for
-  // outstanding statement tracking, which should be |this| to track or NULL to
+  // outstanding statement tracking, which should be |this| to track or null to
   // not track.
   scoped_refptr<StatementRef> GetStatementImpl(
       sql::Connection* tracking_db, const char* sql) const;
@@ -696,11 +661,6 @@ class SQL_EXPORT Connection {
   // time if the database is in a transaction.  Also records change count to
   // EVENT_CHANGES_AUTOCOMMIT or EVENT_CHANGES_COMMIT.
   void RecordTimeAndChanges(const base::TimeDelta& delta, bool read_only);
-
-  // Helper to return the current time from the time source.
-  base::TimeTicks Now() {
-    return clock_->Now();
-  }
 
   // Release page-cache memory if memory-mapped I/O is enabled and the database
   // was changed.  Passing true for |implicit_change_performed| allows
@@ -749,7 +709,7 @@ class SQL_EXPORT Connection {
   bool GetMmapAltStatus(int64_t* status);
   bool SetMmapAltStatus(int64_t status);
 
-  // The actual sqlite database. Will be NULL before Init has been called or if
+  // The actual sqlite database. Will be null before Init has been called or if
   // Init resulted in an error.
   sqlite3* db_;
 
@@ -760,18 +720,17 @@ class SQL_EXPORT Connection {
   bool exclusive_locking_;
   bool restrict_to_user_;
 
-  // All cached statements. Keeping a reference to these statements means that
-  // they'll remain active. Using flat_map here because number of cached
-  // statements is expected to be small, see //base/containers/README.md.
-  typedef base::flat_map<StatementID, scoped_refptr<StatementRef>>
-      CachedStatementMap;
-  CachedStatementMap statement_cache_;
+  // Holds references to all cached statements so they remain active.
+  //
+  // flat_map is appropriate here because the codebase has ~400 cached
+  // statements, and each statement is at most one insertion in the map
+  // throughout a process' lifetime.
+  base::flat_map<StatementID, scoped_refptr<StatementRef>> statement_cache_;
 
   // A list of all StatementRefs we've given out. Each ref must register with
   // us when it's created or destroyed. This allows us to potentially close
   // any open statements when we encounter an error.
-  typedef std::set<StatementRef*> StatementRefSet;
-  StatementRefSet open_statements_;
+  std::set<StatementRef*> open_statements_;
 
   // Number of currently-nested transactions.
   int transaction_nesting_;
@@ -828,7 +787,7 @@ class SQL_EXPORT Connection {
 
   // Source for timing information, provided to allow tests to inject time
   // changes.
-  std::unique_ptr<TimeSource> clock_;
+  std::unique_ptr<base::TickClock> clock_;
 
   // Stores the dump provider object when db is open.
   std::unique_ptr<ConnectionMemoryDumpProvider> memory_dump_provider_;

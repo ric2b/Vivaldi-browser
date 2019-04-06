@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
@@ -19,10 +19,13 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
+#include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_activation_throttle.h"
+#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
+#include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
+#include "third_party/blink/public/web/web_triggering_event_info.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
@@ -40,6 +43,12 @@ class SafeBrowsingTriggeredPopupBlockerTest
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
+    system_request_context_getter_ =
+        base::MakeRefCounted<net::TestURLRequestContextGetter>(
+            content::BrowserThread::GetTaskRunnerForThread(
+                content::BrowserThread::IO));
+    TestingBrowserProcess::GetGlobal()->SetSystemRequestContext(
+        system_request_context_getter_.get());
     // Set up safe browsing service with the fake database manager.
     //
     // TODO(csharrison): This is a bit ugly. See if the instructions in
@@ -72,6 +81,8 @@ class SafeBrowsingTriggeredPopupBlockerTest
     // all cleanup related to these classes actually happens.
     TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(nullptr);
     base::RunLoop().RunUntilIdle();
+    TestingBrowserProcess::GetGlobal()->SetSystemRequestContext(nullptr);
+    system_request_context_getter_ = nullptr;
 
     ChromeRenderViewHostTestHarness::TearDown();
   }
@@ -128,36 +139,74 @@ class SafeBrowsingTriggeredPopupBlockerTest
   std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
   scoped_refptr<FakeSafeBrowsingDatabaseManager> fake_safe_browsing_database_;
   std::unique_ptr<SafeBrowsingTriggeredPopupBlocker> popup_blocker_;
+  scoped_refptr<net::URLRequestContextGetter> system_request_context_getter_;
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingTriggeredPopupBlockerTest);
 };
 
-class IgnoreSublistSafeBrowsingTriggeredPopupBlockerTest
-    : public SafeBrowsingTriggeredPopupBlockerTest {
-  std::unique_ptr<base::test::ScopedFeatureList> DefaultFeatureList() override {
-    auto feature_list = std::make_unique<base::test::ScopedFeatureList>();
-    feature_list->InitAndEnableFeatureWithParameters(
-        kAbusiveExperienceEnforce, {{"ignore_sublists", "true"}});
-    return feature_list;
-  }
+struct RedirectSamplesAndResults {
+  GURL initial_url;
+  GURL redirect_url;
+  bool expect_strong_blocker;
 };
 
-TEST_F(IgnoreSublistSafeBrowsingTriggeredPopupBlockerTest,
-       MatchNoSublist_BlocksPopup) {
-  const GURL url("https://example.test/");
-  fake_safe_browsing_database()->AddBlacklistedUrl(
-      url, safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER);
-  NavigateAndCommit(url);
-  EXPECT_TRUE(popup_blocker()->ShouldApplyStrongPopupBlocker(nullptr));
+TEST_F(SafeBrowsingTriggeredPopupBlockerTest,
+       MatchOnSafeBrowsingWithRedirectDetection) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      subresource_filter::kSafeBrowsingSubresourceFilterConsiderRedirects);
+
+  GURL enforce_url("https://example.enforce");
+  GURL warning_url("https://example.warning");
+  GURL regular_url("https://example.regular");
+  MarkUrlAsAbusiveEnforce(enforce_url);
+  MarkUrlAsAbusiveWarning(warning_url);
+
+  const RedirectSamplesAndResults kTestCases[] = {
+      {enforce_url, regular_url, true},  {regular_url, enforce_url, true},
+      {warning_url, enforce_url, true},  {enforce_url, warning_url, true},
+      {regular_url, warning_url, false}, {warning_url, regular_url, false}};
+
+  for (const auto& test_case : kTestCases) {
+    std::unique_ptr<content::NavigationSimulator> simulator =
+        content::NavigationSimulator::CreateRendererInitiated(
+            test_case.initial_url, web_contents()->GetMainFrame());
+    simulator->Start();
+    simulator->Redirect(test_case.redirect_url);
+    simulator->Commit();
+    EXPECT_EQ(test_case.expect_strong_blocker,
+              popup_blocker()->ShouldApplyStrongPopupBlocker(nullptr));
+  }
 }
 
-// ignore_sublists should still block on URLs matching a sublist.
-TEST_F(IgnoreSublistSafeBrowsingTriggeredPopupBlockerTest,
-       MatchSublist_BlocksPopup) {
-  const GURL url("https://example.test/");
-  MarkUrlAsAbusiveEnforce(url);
-  NavigateAndCommit(url);
-  EXPECT_TRUE(popup_blocker()->ShouldApplyStrongPopupBlocker(nullptr));
+TEST_F(SafeBrowsingTriggeredPopupBlockerTest,
+       MatchOnSafeBrowsingWithoutRedirectDetection) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      subresource_filter::kSafeBrowsingSubresourceFilterConsiderRedirects);
+
+  GURL enforce_url("https://example.enforce");
+  GURL warning_url("https://example.warning");
+  GURL regular_url("https://example.regular");
+  MarkUrlAsAbusiveEnforce(enforce_url);
+  MarkUrlAsAbusiveWarning(warning_url);
+
+  const RedirectSamplesAndResults kTestCases[] = {
+      {enforce_url, regular_url, false},
+      {regular_url, enforce_url, true},
+      {warning_url, enforce_url, true},
+      {enforce_url, warning_url, false}};
+
+  for (const auto& test_case : kTestCases) {
+    std::unique_ptr<content::NavigationSimulator> simulator =
+        content::NavigationSimulator::CreateRendererInitiated(
+            test_case.initial_url, web_contents()->GetMainFrame());
+    simulator->Start();
+    simulator->Redirect(test_case.redirect_url);
+    simulator->Commit();
+    EXPECT_EQ(test_case.expect_strong_blocker,
+              popup_blocker()->ShouldApplyStrongPopupBlocker(nullptr));
+  }
 }
 
 TEST_F(SafeBrowsingTriggeredPopupBlockerTest, MatchingURL_BlocksPopupAndLogs) {
@@ -198,10 +247,11 @@ TEST_F(SafeBrowsingTriggeredPopupBlockerTest, NoMatch_NoBlocking) {
   EXPECT_TRUE(GetMainFrameConsoleMessages().empty());
 }
 
-TEST_F(SafeBrowsingTriggeredPopupBlockerTest, NoFeature_NoCreating) {
+TEST_F(SafeBrowsingTriggeredPopupBlockerTest, FeatureEnabledByDefault) {
+  ResetFeatureAndGet();
   EXPECT_NE(nullptr,
             SafeBrowsingTriggeredPopupBlocker::MaybeCreate(web_contents()));
-  ResetFeatureAndGet();
+  ResetFeatureAndGet()->InitAndDisableFeature(kAbusiveExperienceEnforce);
   EXPECT_EQ(nullptr,
             SafeBrowsingTriggeredPopupBlocker::MaybeCreate(web_contents()));
 }
@@ -351,4 +401,62 @@ TEST_F(SafeBrowsingTriggeredPopupBlockerTest, WarningMatch_OnlyLogs) {
   EXPECT_EQ(GetMainFrameConsoleMessages().front(), kAbusiveWarnMessage);
 
   EXPECT_FALSE(popup_blocker()->ShouldApplyStrongPopupBlocker(nullptr));
+}
+
+TEST_F(SafeBrowsingTriggeredPopupBlockerTest, ActivationPosition) {
+  // Turn on the feature to perform safebrowsing on redirects.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      subresource_filter::kSafeBrowsingSubresourceFilterConsiderRedirects);
+
+  const GURL enforce_url("https://enforce.test/");
+  const GURL warn_url("https://warn.test/");
+  MarkUrlAsAbusiveEnforce(enforce_url);
+  MarkUrlAsAbusiveWarning(warn_url);
+
+  using subresource_filter::ActivationPosition;
+  struct {
+    std::vector<const char*> urls;
+    base::Optional<ActivationPosition> expected_position;
+  } kTestCases[] = {
+      {{"https://normal.test/"}, base::nullopt},
+      {{"https://enforce.test/"}, ActivationPosition::kOnly},
+      {{"https://warn.test/"}, ActivationPosition::kOnly},
+
+      {{"https://normal.test/", "https://warn.test/"},
+       ActivationPosition::kLast},
+      {{"https://normal.test/", "https://normal.test/",
+        "https://enforce.test/"},
+       ActivationPosition::kLast},
+
+      {{"https://enforce.test", "https://normal.test/", "https://warn.test/"},
+       ActivationPosition::kFirst},
+      {{"https://warn.test/", "https://normal.test/"},
+       ActivationPosition::kFirst},
+
+      {{"https://normal.test/", "https://enforce.test/",
+        "https://normal.test/"},
+       base::nullopt},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    base::HistogramTester histograms;
+    const GURL& first_url = GURL(test_case.urls.front());
+    auto navigation_simulator =
+        content::NavigationSimulator::CreateRendererInitiated(first_url,
+                                                              main_rfh());
+    for (size_t i = 1; i < test_case.urls.size(); ++i) {
+      navigation_simulator->Redirect(GURL(test_case.urls[i]));
+    }
+    navigation_simulator->Commit();
+
+    histograms.ExpectTotalCount(
+        "ContentSettings.Popups.StrongBlockerActivationPosition",
+        test_case.expected_position.has_value() ? 1 : 0);
+    if (test_case.expected_position.has_value()) {
+      histograms.ExpectUniqueSample(
+          "ContentSettings.Popups.StrongBlockerActivationPosition",
+          static_cast<int>(test_case.expected_position.value()), 1);
+    }
+  }
 }

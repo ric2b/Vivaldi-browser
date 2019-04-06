@@ -15,10 +15,10 @@
 #include "base/i18n/rtl.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,7 +26,6 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_scheduler.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -43,14 +42,12 @@
 #include "chrome/service/cloud_print/cloud_print_proxy.h"
 #include "chrome/service/net/service_url_request_context_getter.h"
 #include "chrome/service/service_process_prefs.h"
+#include "components/language/core/browser/pref_names.h"
+#include "components/language/core/common/locale_util.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/prefs/json_pref_store.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/named_platform_handle.h"
-#include "mojo/edk/embedder/named_platform_handle_utils.h"
-#include "mojo/edk/embedder/peer_connection.h"
-#include "mojo/edk/embedder/platform_handle_utils.h"
-#include "mojo/edk/embedder/scoped_ipc_support.h"
+#include "mojo/core/embedder/embedder.h"
+#include "mojo/core/embedder/scoped_ipc_support.h"
 #include "net/base/network_change_notifier.h"
 #include "net/url_request/url_fetcher.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -135,16 +132,15 @@ void PrepareRestartOnCrashEnviroment(
 ServiceProcess::ServiceProcess()
     : shutdown_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                       base::WaitableEvent::InitialState::NOT_SIGNALED),
-      main_message_loop_(NULL),
       enabled_services_(0),
       update_available_(false) {
   DCHECK(!g_service_process);
   g_service_process = this;
 }
 
-bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
+bool ServiceProcess::Initialize(base::OnceClosure quit_closure,
                                 const base::CommandLine& command_line,
-                                ServiceProcessState* state) {
+                                std::unique_ptr<ServiceProcessState> state) {
 #if defined(USE_GLIB)
   // g_type_init has been deprecated since version 2.35.
 #if !GLIB_CHECK_VERSION(2, 35, 0)
@@ -152,10 +148,10 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
   g_type_init();
 #endif
 #endif  // defined(USE_GLIB)
-  main_message_loop_ = message_loop;
-  service_process_state_.reset(state);
+  quit_closure_ = std::move(quit_closure);
+  service_process_state_ = std::move(state);
 
-  // Initialize TaskScheduler and redirect SequencedWorkerPool tasks to it.
+  // Initialize TaskScheduler.
   constexpr int kMaxBackgroundThreads = 1;
   constexpr int kMaxBackgroundBlockingThreads = 1;
   constexpr int kMaxForegroundThreads = 3;
@@ -170,8 +166,6 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
        {kMaxForegroundThreads, kSuggestedReclaimTime},
        {kMaxForegroundBlockingThreads, kSuggestedReclaimTime,
         base::SchedulerBackwardCompatibility::INIT_COM_STA}});
-
-  base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
 
   // The NetworkChangeNotifier must be created after TaskScheduler because it
   // posts tasks to it.
@@ -188,15 +182,15 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
   }
 
   // Initialize Mojo early so things can use it.
-  mojo::edk::Init();
-  mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
+  mojo::core::Init();
+  mojo_ipc_support_.reset(new mojo::core::ScopedIPCSupport(
       io_thread_->task_runner(),
-      mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
+      mojo::core::ScopedIPCSupport::ShutdownPolicy::FAST));
 
   request_context_getter_ = new ServiceURLRequestContextGetter();
 
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   base::FilePath pref_path =
       user_data_dir.Append(chrome::kServiceStateFileName);
   service_prefs_ = std::make_unique<ServiceProcessPrefs>(
@@ -213,13 +207,14 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
   // Check if a locale override has been specified on the command-line.
   std::string locale = command_line.GetSwitchValueASCII(switches::kLang);
   if (!locale.empty()) {
-    service_prefs_->SetString(prefs::kApplicationLocale, locale);
+    service_prefs_->SetString(language::prefs::kApplicationLocale, locale);
     service_prefs_->WritePrefs();
   } else {
     // If no command-line value was specified, read the last used locale from
     // the prefs.
-    locale =
-        service_prefs_->GetString(prefs::kApplicationLocale, std::string());
+    locale = service_prefs_->GetString(language::prefs::kApplicationLocale,
+                                       std::string());
+    language::ConvertToActualUILocale(&locale);
     // If no locale was specified anywhere, use the default one.
     if (locale.empty())
       locale = kDefaultServiceProcessLocale;
@@ -305,8 +300,7 @@ void ServiceProcess::Shutdown() {
 }
 
 void ServiceProcess::Terminate() {
-  main_message_loop_->task_runner()->PostTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+  std::move(quit_closure_).Run();
 }
 
 void ServiceProcess::OnShutdown() {
@@ -329,34 +323,41 @@ bool ServiceProcess::OnIPCClientDisconnect() {
 }
 
 mojo::ScopedMessagePipeHandle ServiceProcess::CreateChannelMessagePipe() {
-  if (!server_handle_.is_valid()) {
 #if defined(OS_MACOSX)
-    mojo::edk::PlatformHandle platform_handle(
-        service_process_state_->GetServiceProcessChannel().release());
-    platform_handle.needs_connection = true;
-    server_handle_.reset(platform_handle);
-#elif defined(OS_POSIX)
-    server_handle_ = mojo::edk::CreateServerHandle(
-        service_process_state_->GetServiceProcessChannel());
-#elif defined(OS_WIN)
-    server_handle_ = service_process_state_->GetServiceProcessChannel();
-#endif
-    DCHECK(server_handle_.is_valid());
+  if (!server_endpoint_.is_valid()) {
+    server_endpoint_ =
+        service_process_state_->GetServiceProcessServerEndpoint();
+    DCHECK(server_endpoint_.is_valid());
   }
-
-  mojo::edk::ScopedPlatformHandle channel_handle;
-#if defined(OS_POSIX)
-  channel_handle = mojo::edk::DuplicatePlatformHandle(server_handle_.get());
+#elif defined(OS_POSIX)
+  if (!server_endpoint_.is_valid()) {
+    mojo::NamedPlatformChannel::Options options;
+    options.server_name = service_process_state_->GetServiceProcessServerName();
+    mojo::NamedPlatformChannel server_channel(options);
+    server_endpoint_ = server_channel.TakeServerEndpoint();
+    DCHECK(server_endpoint_.is_valid());
+  }
 #elif defined(OS_WIN)
-  mojo::edk::CreateServerHandleOptions options;
-  options.enforce_uniqueness = false;
-  channel_handle = mojo::edk::CreateServerHandle(server_handle_, options);
+  if (server_name_.empty()) {
+    server_name_ = service_process_state_->GetServiceProcessServerName();
+    DCHECK(!server_name_.empty());
+  }
 #endif
-  CHECK(channel_handle.is_valid());
 
-  peer_connection_ = base::MakeUnique<mojo::edk::PeerConnection>();
-  return peer_connection_->Connect(mojo::edk::ConnectionParams(
-      mojo::edk::TransportProtocol::kLegacy, std::move(channel_handle)));
+  mojo::PlatformChannelServerEndpoint server_endpoint;
+#if defined(OS_POSIX)
+  server_endpoint = server_endpoint_.Clone();
+#elif defined(OS_WIN)
+  mojo::NamedPlatformChannel::Options options;
+  options.server_name = server_name_;
+  options.enforce_uniqueness = false;
+  mojo::NamedPlatformChannel server_channel(options);
+  server_endpoint = server_channel.TakeServerEndpoint();
+#endif
+  CHECK(server_endpoint.is_valid());
+
+  mojo_connection_ = std::make_unique<mojo::IsolatedConnection>();
+  return mojo_connection_->Connect(std::move(server_endpoint));
 }
 
 cloud_print::CloudPrintProxy* ServiceProcess::GetCloudPrintProxy() {

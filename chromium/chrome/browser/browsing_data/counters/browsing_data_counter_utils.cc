@@ -4,20 +4,21 @@
 
 #include "chrome/browser/browsing_data/counters/browsing_data_counter_utils.h"
 
-#include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browsing_data/counters/cache_counter.h"
 #include "chrome/browser/browsing_data/counters/media_licenses_counter.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
-#include "chrome/common/chrome_switches.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
+#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
-#include "extensions/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 
@@ -26,12 +27,6 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/browsing_data/counters/hosted_apps_counter.h"
 #endif
-
-
-bool IsSiteDataCounterEnabled() {
-  // Only use the site data counter for the new CBD ui.
-  return base::FeatureList::IsEnabled(features::kTabsInCbd);
-}
 
 // A helper function to display the size of cache in units of MB or higher.
 // We need this, as 1 MB is the lowest nonzero cache size displayed by the
@@ -45,8 +40,27 @@ base::string16 FormatBytesMBOrHigher(
       bytes, ui::DataUnits::DATA_UNITS_MEBIBYTE, true);
 }
 
+bool ShouldShowCookieException(Profile* profile) {
+  if (AccountConsistencyModeManager::IsMirrorEnabledForProfile(profile)) {
+    auto* signin_manager = SigninManagerFactory::GetForProfile(profile);
+    return signin_manager->IsAuthenticated();
+  }
+  if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile)) {
+    auto* token_service =
+        ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
+    std::vector<std::string> accounts = token_service->GetAccounts();
+    bool has_valid_token = std::any_of(
+        accounts.begin(), accounts.end(), [&](std::string account_id) {
+          return !token_service->RefreshTokenHasError(account_id);
+        });
+    return has_valid_token;
+  }
+  return false;
+}
+
 base::string16 GetChromeCounterTextFromResult(
-    const browsing_data::BrowsingDataCounter::Result* result) {
+    const browsing_data::BrowsingDataCounter::Result* result,
+    Profile* profile) {
   std::string pref_name = result->source()->GetPrefName();
 
   if (!result->Finished()) {
@@ -88,13 +102,18 @@ base::string16 GetChromeCounterTextFromResult(
   }
   if (pref_name == browsing_data::prefs::kDeleteCookies) {
     // Site data counter.
-    DCHECK(IsSiteDataCounterEnabled());
     browsing_data::BrowsingDataCounter::ResultInt origins =
         static_cast<const browsing_data::BrowsingDataCounter::FinishedResult*>(
             result)
             ->Value();
-    return l10n_util::GetPluralStringFUTF16(IDS_DEL_COOKIES_COUNTER_ADVANCED,
-                                            origins);
+
+    // Determines whether or not to show the count with exception message.
+    int del_cookie_counter_msg_id =
+        ShouldShowCookieException(profile)
+            ? IDS_DEL_COOKIES_COUNTER_ADVANCED_WITH_EXCEPTION
+            : IDS_DEL_COOKIES_COUNTER_ADVANCED;
+
+    return l10n_util::GetPluralStringFUTF16(del_cookie_counter_msg_id, origins);
   }
 
   if (pref_name == browsing_data::prefs::kDeleteMediaLicenses) {

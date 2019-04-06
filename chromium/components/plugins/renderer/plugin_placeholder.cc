@@ -9,8 +9,8 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "gin/object_template_builder.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/re2/src/re2/re2.h"
 
 namespace plugins {
@@ -75,14 +75,14 @@ void PluginPlaceholderBase::HidePlugin() {
   // 4) Seems to have a good / low false negative rate at this time.
   if (element.HasAttribute("width") && element.HasAttribute("height")) {
     std::string width_str("width:[\\s]*");
-    width_str += element.GetAttribute("width").Utf8().data();
+    width_str += element.GetAttribute("width").Utf8();
     if (base::EndsWith(width_str, "px", base::CompareCase::INSENSITIVE_ASCII)) {
       width_str = width_str.substr(0, width_str.length() - 2);
     }
     base::TrimWhitespaceASCII(width_str, base::TRIM_TRAILING, &width_str);
     width_str += "[\\s]*px";
     std::string height_str("height:[\\s]*");
-    height_str += element.GetAttribute("height").Utf8().data();
+    height_str += element.GetAttribute("height").Utf8();
     if (base::EndsWith(height_str, "px",
                        base::CompareCase::INSENSITIVE_ASCII)) {
       height_str = height_str.substr(0, height_str.length() - 2);

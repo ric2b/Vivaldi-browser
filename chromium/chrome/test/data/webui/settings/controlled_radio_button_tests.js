@@ -21,21 +21,22 @@ suite('controlled radio button', function() {
   });
 
   test('disables when pref is managed', function() {
-    radioButton.set('pref.enforcement',
-                    chrome.settingsPrivate.Enforcement.ENFORCED);
+    radioButton.set(
+        'pref.enforcement', chrome.settingsPrivate.Enforcement.ENFORCED);
     Polymer.dom.flush();
-    // TODO(dbeam): rewrite this not to test private state (controlled_).
-    assertTrue(radioButton.controlled_);
+    assertTrue(radioButton.disabled);
     assertFalse(!!radioButton.$$('cr-policy-pref-indicator'));
 
     radioButton.set('name', 'true');
     Polymer.dom.flush();
     assertTrue(!!radioButton.$$('cr-policy-pref-indicator'));
 
-    radioButton.set('pref.enforcement', undefined);
+    // See https://github.com/Polymer/polymer/issues/4652#issuecomment-305471987
+    // on why |null| must be used here instead of |undefined|.
+    radioButton.set('pref.enforcement', null);
     Polymer.dom.flush();
-    assertFalse(radioButton.controlled_);
-    assertEquals('none',
-                 radioButton.$$('cr-policy-pref-indicator').style.display);
+    assertFalse(radioButton.disabled);
+    assertEquals(
+        'none', radioButton.$$('cr-policy-pref-indicator').style.display);
   });
 });

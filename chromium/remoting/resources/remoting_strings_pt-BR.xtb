@@ -3,9 +3,6 @@
 <translationbundle lang="pt-BR">
 <translation id="1002108253973310084">Foi detectada uma versão incompatível do protocolo. Certifique-se de que você tenha a versão mais recente do software instalada em ambos os computadores e tente novamente.</translation>
 <translation id="1050693411695664090">Insatisfatória</translation>
-<translation id="1059802506829356230">• Nova aparência.
-• Desempenho, capacidade de resposta e confiabilidade aprimorados.
-• Compatibilidade com reprodução de áudio em computadores Windows ou Linux.</translation>
 <translation id="1152528166145813711">Selecionar...</translation>
 <translation id="1199593201721843963">Desativar conexões remotas</translation>
 <translation id="1291443878853470558">Ative conexões remotas se quiser usar o Chromoting para acessar este computador.</translation>
@@ -143,10 +140,12 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="4145029455188493639">Conectado como <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Alguns componentes obrigatórios não foram encontrados. Certifique-se de que você esteja executando a última versão do software e tente novamente.</translation>
 <translation id="4156740505453712750">Para proteger o acesso a este computador, selecione um PIN de <ph name="BOLD_START" />pelo menos seis dígitos<ph name="BOLD_END" />. Este PIN será necessário para estabelecer conexão a partir de outro local.</translation>
+<translation id="4169432154993690151">Para escolher uma foto do perfil, permita que a Área de trabalho remota do Google Chrome acesse sua câmera</translation>
 <translation id="4176825807642096119">Código de acesso</translation>
 <translation id="4207623512727273241">Execute o instalador antes de continuar.</translation>
 <translation id="4227991223508142681">Utilitário de aprovisionamento de host</translation>
 <translation id="4240294130679914010">Desinstalador do host do Chromoting</translation>
+<translation id="4249741460382919890">Correções gerais e melhorias de estabilidade.</translation>
 <translation id="4277463233460010382">Este computador está configurado para permitir que um ou mais clientes se conectem sem ter que inserir um PIN.</translation>
 <translation id="4277736576214464567">Código de acesso inválido. Tente novamente.</translation>
 <translation id="4361728918881830843">Para ativar conexões remotas a um computador diferente, instale a Área de trabalho remota do Google Chrome no computador desejado e clique em "<ph name="BUTTON_NAME" />".</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (off-line)</translation>
 <translation id="5070121137485264635">O host remoto requer a autenticação em um website de terceiros. Para continuar, você deve conceder à Área de trabalho remota do Google Chrome acesso a permissões adicionais para acessar este endereço:</translation>
 <translation id="507204348399810022">Tem certeza que quer desativar conexões remotas para <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Falha ao se comunicar com o servidor: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Digite o mesmo PIN nas duas caixas.</translation>
 <translation id="5170982930780719864">ID de host inválido.</translation>
 <translation id="518094545883702183">Essa informação é usada apenas para diagnosticar o problema que você está relatando, está disponível apenas para as pessoas que estão investigando seu relatório e só fica retida por até 30 dias.</translation>
@@ -200,7 +200,7 @@ PC</translation>
 <translation id="5254120496627797685">Abandonar esta página encerrará sua sessão na Área de trabalho remota do Google Chrome.</translation>
 <translation id="5308380583665731573">Conectar-se</translation>
 <translation id="533625276787323658">Não há nenhum computador para conexão</translation>
-<translation id="5363265567587775042">Peça ao usuário do computador que você deseja acessar que clique em "<ph name="SHARE" />" e forneça o código de acesso para você.</translation>
+<translation id="5363265567587775042">Peça ao usuário do computador que você quer acessar que clique em "<ph name="SHARE" />" e forneça o código de acesso para você.</translation>
 <translation id="5379087427956679853">A Área de trabalho remota do Google Chrome permite que você compartilhe seu computador com segurança através da Web. Para isso, é preciso que os usuários executem simultaneamente o aplicativo da Área de trabalho remota do Google Chrome, disponível em <ph name="URL" />.</translation>
 <translation id="5397086374758643919">Desinstalador do host da Área de trabalho remota do Google Chrome</translation>
 <translation id="5419185025274123272">Não foi possível redefinir o aplicativo. Você ainda pode enviar um relatório de bug.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Outro.</translation>
 <translation id="6398765197997659313">Sair do modo tela cheia</translation>
 <translation id="6441316101718669559">A integração da área de trabalho não é compatível com esta plataforma. Você ainda pode usar o aplicativo, mas sua experiência de usuário será reduzida.</translation>
+<translation id="6502629188777329097">Acessar seu computador com segurança</translation>
 <translation id="652218476070540101">O PIN para este computador está sendo atualizado...</translation>
 <translation id="6527303717912515753">Compartilhar</translation>
 <translation id="6541219117979389420">Os registros do aplicativo podem incluir informações particulares, inclusive sua identidade (endereço de e-mail) e os nomes e as propriedades dos arquivos e das pastas no Google Drive.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">De</translation>
 <translation id="677755392401385740">Host iniciado para o usuário <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Visualizar/editar</translation>
+<translation id="6913710942997637770">Para escolher uma foto do perfil, permita que a Área de trabalho remota do Google Chrome acesse suas fotos</translation>
 <translation id="6930242544192836755">Duração</translation>
 <translation id="6939719207673461467">Mostrar/ocultar teclado</translation>
 <translation id="6944854424004126054">Restaurar janela</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">As conexões remotas deste computador foram desativadas.</translation>
 <translation id="7678209621226490279">Ancorar à esquerda</translation>
 <translation id="7693372326588366043">Atualiza a lista de hosts</translation>
+<translation id="7714222945760997814">Informar</translation>
 <translation id="7782471917492991422">Verifique as configurações de gerenciamento de energia de seu computador para garantir que ele não esteja configurado para entrar em modo de espera quando estiver inativo.</translation>
 <translation id="7810127880729796595">Mostrar estatísticas (conexão: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Alguns componentes obrigatórios não foram encontrados. Certifique-se de que você esteja executando a última versão do Google Chrome e tente novamente.</translation>

@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
+#include "base/strings/string16.h"
 #include "base/values.h"
 #import "ios/web/navigation/navigation_manager_delegate.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
@@ -23,6 +24,7 @@
 #include "ios/web/public/java_script_dialog_type.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_delegate.h"
+#import "ios/web/public/web_state/web_state_policy_decider.h"
 #include "url/gurl.h"
 
 @class CRWSessionStorage;
@@ -42,14 +44,12 @@ namespace web {
 class BrowserState;
 struct ContextMenuParams;
 struct FaviconURL;
-struct FormActivityParams;
 struct LoadCommittedDetails;
 class NavigationContext;
 class NavigationManager;
 class SessionCertificatePolicyCacheImpl;
 class WebInterstitialImpl;
 class WebStateInterfaceProvider;
-class WebStatePolicyDecider;
 class WebUIIOS;
 
 // Implementation of WebState.
@@ -84,6 +84,9 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // candidates received in OnFaviconUrlUpdated.
   void OnNavigationFinished(web::NavigationContext* context);
 
+  // Called when current window's canGoBack / canGoForward state was changed.
+  void OnBackForwardStateChanged();
+
   // Called when page title was changed.
   void OnTitleChanged();
 
@@ -98,20 +101,13 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   bool OnScriptCommandReceived(const std::string& command,
                                const base::DictionaryValue& value,
                                const GURL& url,
-                               bool user_is_interacting);
+                               bool user_is_interacting,
+                               bool is_main_frame);
 
   void SetIsLoading(bool is_loading);
 
   // Called when a page is loaded. Must be called only once per page.
   void OnPageLoaded(const GURL& url, bool load_success);
-
-  // Called on form submission.
-  void OnDocumentSubmitted(const std::string& form_name,
-                           bool user_initiated,
-                           bool is_main_frame);
-
-  // Called when form activity is registered.
-  void OnFormActivityRegistered(const FormActivityParams& params);
 
   // Called when new FaviconURL candidates are received.
   void OnFaviconUrlUpdated(const std::vector<FaviconURL>& candidates);
@@ -161,7 +157,9 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Returns whether the navigation corresponding to |request| should be allowed
   // to continue by asking its policy deciders. Defaults to true.
-  bool ShouldAllowRequest(NSURLRequest* request, ui::PageTransition transition);
+  bool ShouldAllowRequest(
+      NSURLRequest* request,
+      const WebStatePolicyDecider::RequestInfo& request_info);
   // Returns whether the navigation corresponding to |response| should be
   // allowed to continue by asking its policy deciders. Defaults to true.
   bool ShouldAllowResponse(NSURLResponse* response, bool for_main_frame);
@@ -201,7 +199,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
   void ExecuteJavaScript(const base::string16& javascript) override;
   void ExecuteJavaScript(const base::string16& javascript,
-                         const JavaScriptResultCallback& callback) override;
+                         JavaScriptResultCallback callback) override;
   void ExecuteUserJavaScript(NSString* javaScript) override;
   const std::string& GetContentsMimeType() const override;
   bool ContentIsHTML() const override;
@@ -229,7 +227,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
       mojo::ScopedMessagePipeHandle interface_pipe) override;
   bool HasOpener() const override;
   void SetHasOpener(bool has_opener) override;
-  void TakeSnapshot(const SnapshotCallback& callback,
+  void TakeSnapshot(SnapshotCallback callback,
                     CGSize target_size) const override;
   void AddObserver(WebStateObserver* observer) override;
   void RemoveObserver(WebStateObserver* observer) override;
@@ -243,14 +241,14 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void HandleContextMenu(const ContextMenuParams& params);
 
   // Notifies the delegate that a Form Repost dialog needs to be presented.
-  void ShowRepostFormWarningDialog(const base::Callback<void(bool)>& callback);
+  void ShowRepostFormWarningDialog(base::OnceCallback<void(bool)> callback);
 
   // Notifies the delegate that a JavaScript dialog needs to be presented.
   void RunJavaScriptDialog(const GURL& origin_url,
                            JavaScriptDialogType java_script_dialog_type,
                            NSString* message_text,
                            NSString* default_prompt_text,
-                           const DialogClosedCallback& callback);
+                           DialogClosedCallback callback);
 
   // Instructs the delegate to create a new web state. Called when this WebState
   // wants to open a new window. |url| is the URL of the new window;
@@ -270,14 +268,17 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
                       NSURLCredential* proposed_credential,
                       const WebStateDelegate::AuthCallback& callback);
 
+  // Asks the delegate if Application launching is allowed.
+  bool ShouldAllowAppLaunching();
+
   // Cancels all dialogs associated with this web_state.
   void CancelDialogs();
 
   // NavigationManagerDelegate:
   void ClearTransientContent() override;
   void RecordPageStateInNavigationItem() override;
-  void OnGoToIndexSameDocumentNavigation(
-      NavigationInitiationType type) override;
+  void OnGoToIndexSameDocumentNavigation(NavigationInitiationType type,
+                                         bool has_user_gesture) override;
   void WillChangeUserAgentType() override;
   void LoadCurrentItem() override;
   void LoadIfNecessary() override;
@@ -375,6 +376,13 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // Cached session history when web usage is disabled. It is used to restore
   // history into WKWebView when web usage is re-enabled.
   CRWSessionStorage* cached_session_storage_;
+
+  // The most recently restored session history that has not yet committed in
+  // the WKWebView. This is reset in OnNavigationItemCommitted().
+  CRWSessionStorage* restored_session_storage_;
+  // The title of the active navigation entry in |restored_session_storage_|.
+  // It is only valid when |restore_session_storage_| is not nil.
+  base::string16 restored_title_;
 
   // Favicons URLs received in OnFaviconUrlUpdated.
   // WebStateObserver:FaviconUrlUpdated must be called for same-document

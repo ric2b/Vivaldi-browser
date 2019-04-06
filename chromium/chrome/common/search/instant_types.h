@@ -44,6 +44,7 @@ enum ThemeBackgroundImageTiling {
 // The RGBA color components for the text and links of the theme.
 struct RGBAColor {
   RGBAColor();
+  RGBAColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
   ~RGBAColor();
 
   bool operator==(const RGBAColor& rhs) const;
@@ -65,6 +66,18 @@ struct ThemeBackgroundInfo {
 
   // True if the default theme is selected.
   bool using_default_theme;
+
+  // Url of the custom background selected by the user.
+  GURL custom_background_url;
+
+  // First attribution string for custom background.
+  std::string custom_background_attribution_line_1;
+
+  // Second attribution string for custom background.
+  std::string custom_background_attribution_line_2;
+
+  // Url to learn more info about the custom background.
+  GURL custom_background_attribution_action_url;
 
   // The theme background color in RGBA format always valid.
   RGBAColor background_color;
@@ -98,10 +111,6 @@ struct ThemeBackgroundInfo {
 
   // The theme background image tiling is only valid if |theme_id| is valid.
   ThemeBackgroundImageTiling image_tiling;
-
-  // The theme background image height.
-  // Value is only valid if |theme_id| is valid.
-  uint16_t image_height;
 
   // True if theme has attribution logo.
   // Value is only valid if |theme_id| is valid.

@@ -10,6 +10,7 @@
 #include "components/cryptauth/cryptauth_enrollment_utils.h"
 #include "components/cryptauth/fake_secure_message_delegate.h"
 #include "components/cryptauth/mock_cryptauth_client.h"
+#include "components/cryptauth/network_request_error.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::_;
@@ -103,10 +104,10 @@ class CryptAuthEnrollerTest
       public MockCryptAuthClientFactory::Observer {
  public:
   CryptAuthEnrollerTest()
-      : client_factory_(new MockCryptAuthClientFactory(
+      : client_factory_(std::make_unique<MockCryptAuthClientFactory>(
             MockCryptAuthClientFactory::MockType::MAKE_NICE_MOCKS)),
         secure_message_delegate_(new FakeSecureMessageDelegate()),
-        enroller_(base::WrapUnique(client_factory_),
+        enroller_(client_factory_.get(),
                   base::WrapUnique(secure_message_delegate_)) {
     client_factory_->AddObserver(this);
 
@@ -243,7 +244,7 @@ class CryptAuthEnrollerTest
   std::string user_private_key_;
 
   // Owned by |enroller_|.
-  MockCryptAuthClientFactory* client_factory_;
+  std::unique_ptr<MockCryptAuthClientFactory> client_factory_;
   // Owned by |enroller_|.
   FakeSecureMessageDelegate* secure_message_delegate_;
   // The CryptAuthEnroller under test.
@@ -292,7 +293,7 @@ TEST_F(CryptAuthEnrollerTest, SetupEnrollmentApiCallError) {
 
   EXPECT_TRUE(setup_request_.get());
   ASSERT_FALSE(error_callback_.is_null());
-  error_callback_.Run("Setup enrollment failed network");
+  error_callback_.Run(NetworkRequestError::kBadRequest);
 
   EXPECT_TRUE(finish_callback_.is_null());
   ASSERT_TRUE(enroller_result_.get());
@@ -326,7 +327,7 @@ TEST_F(CryptAuthEnrollerTest, FinishEnrollmentApiCallError) {
   StartEnroller(GetDeviceInfo());
   setup_callback_.Run(GetSetupEnrollmentResponse(true));
   ASSERT_FALSE(error_callback_.is_null());
-  error_callback_.Run("finish enrollment oauth error");
+  error_callback_.Run(NetworkRequestError::kAuthenticationError);
   ASSERT_TRUE(enroller_result_.get());
   EXPECT_FALSE(*enroller_result_);
 }

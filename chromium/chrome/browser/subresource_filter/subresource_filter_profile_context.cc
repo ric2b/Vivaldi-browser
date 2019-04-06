@@ -4,13 +4,12 @@
 
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
 
 SubresourceFilterProfileContext::SubresourceFilterProfileContext(
     Profile* profile)
     : settings_manager_(
-          base::MakeUnique<SubresourceFilterContentSettingsManager>(profile)) {}
+          std::make_unique<SubresourceFilterContentSettingsManager>(profile)) {}
 
 SubresourceFilterProfileContext::~SubresourceFilterProfileContext() {}
 

@@ -12,15 +12,18 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
+#include "chrome/browser/ui/tabs/tab_change_type.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/favicon/core/favicon_driver_observer.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_event_histogram_value.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 
 typedef std::unordered_map<base::string16, base::string16> TabDragDataCollection;
 typedef base::Callback<void(base::SharedMemoryHandle handle,
@@ -28,10 +31,6 @@ typedef base::Callback<void(base::SharedMemoryHandle handle,
                             int callback_id,
                             bool success)>
     CaptureTabDoneCallback;
-
-namespace favicon {
-class FaviconDriver;
-}
 
 namespace extensions {
 
@@ -94,13 +93,14 @@ class TabsPrivateEventRouter : public TabDragDelegate {
 };
 
 class TabsPrivateAPI : public BrowserContextKeyedAPI,
+                       public TabStripModelObserver,
                        public EventRouter::Observer {
  public:
   explicit TabsPrivateAPI(content::BrowserContext* context);
   ~TabsPrivateAPI() override;
 
   void SendKeyboardShortcutEvent(
-    const content::NativeWebKeyboardEvent& event);
+    const content::NativeWebKeyboardEvent& event, bool is_auto_repeat);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -111,11 +111,17 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI,
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
 
+  // TabStripModelObserver implementation
+  void TabChangedAt(content::WebContents* contents,
+                    int index,
+                    TabChangeType change_type) override;
+
   TabDragDelegate* tab_drag_delegate() { return event_router_.get(); }
 
  private:
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
 
+  base::string16 KeyCodeToName(ui::KeyboardCode key_code) const;
   std::string ShortcutText(const content::NativeWebKeyboardEvent& event);
 
   content::BrowserContext* browser_context_;
@@ -134,10 +140,10 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI,
 class VivaldiPrivateTabObserver
     : public content::WebContentsObserver,
       public zoom::ZoomObserver,
-      public content::WebContentsUserData<VivaldiPrivateTabObserver>,
-      public favicon::FaviconDriverObserver {
+      public content::WebContentsUserData<VivaldiPrivateTabObserver> {
  public:
-  ~VivaldiPrivateTabObserver() override;
+   explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
+   ~VivaldiPrivateTabObserver() override;
 
   void BroadcastTabInfo();
 
@@ -156,6 +162,7 @@ class VivaldiPrivateTabObserver
   void SetContentsMimeType(std::string mimetype) {
     contents_mime_type_ = mimetype;
   }
+  void UpdateAllowTabCycleIntoUI();
 
   bool show_images() { return show_images_; }
   bool load_from_cache_only() { return load_from_cache_only_; }
@@ -171,13 +178,6 @@ class VivaldiPrivateTabObserver
 
   void SetZoomLevelForTab(double level);
 
-  // favicon::FaviconDriverObserver:
-  void OnFaviconUpdated(favicon::FaviconDriver* favicon_driver,
-                        NotificationIconType notification_icon_type,
-                        const GURL& icon_url,
-                        bool icon_url_changed,
-                        const gfx::Image& image) override;
-
   void CaptureTab(gfx::Size size,
                   bool full_page,
                   const CaptureTabDoneCallback& callback);
@@ -191,24 +191,21 @@ class VivaldiPrivateTabObserver
   // Returns true if a capture is already underway for this WebContents.
   bool IsCapturing();
 
-  // This will fire an event for site permission-changes, telling the user that
-  // the page might be acting differently the next time it's loaded.
-  void OnSitePermissionChanged(ContentSettingsType type, ContentSetting value);
-
   // If a page is accessing a resource controlled by a permission this will
   // fire.
   void OnPermissionAccessed(ContentSettingsType type, std::string origin,
                             ContentSetting content_setting);
 
- private:
-  explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
+  static void BroadcastEvent(const std::string& eventname,
+    std::unique_ptr<base::ListValue> args,
+    content::BrowserContext* context);
+
+private:
   friend class content::WebContentsUserData<VivaldiPrivateTabObserver>;
 
-  static void BroadcastEvent(const std::string& eventname,
-                             std::unique_ptr<base::ListValue> args,
-                             content::BrowserContext* context);
-
   void SaveZoomLevelToExtData(double zoom_level);
+
+  void OnPrefsChanged(const std::string& path);
 
   // Show images for all pages loaded in this tab. Default is true.
   bool show_images_ = true;
@@ -228,8 +225,10 @@ class VivaldiPrivateTabObserver
   // Callback to call when we get an capture response message from the renderer.
   CaptureTabDoneCallback capture_callback_;
 
-  ScopedObserver<favicon::FaviconDriver, VivaldiPrivateTabObserver>
-      favicon_scoped_observer_;
+  // We want to communicate changes in some prefs to the renderer right away.
+  PrefChangeRegistrar prefs_registrar_;
+
+  base::WeakPtrFactory<VivaldiPrivateTabObserver> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiPrivateTabObserver);
 };

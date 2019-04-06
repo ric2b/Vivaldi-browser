@@ -30,7 +30,6 @@ import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.media.MediaSwitches;
-import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.concurrent.TimeoutException;
 
@@ -52,7 +51,7 @@ public class VideoFullscreenOrientationLockChromeTest {
     private static final String VIDEO_ID = "video";
 
     private WebContents getWebContents() {
-        return mActivityTestRule.getActivity().getCurrentContentViewCore().getWebContents();
+        return mActivityTestRule.getActivity().getCurrentWebContents();
     }
 
     private void waitForContentsFullscreenState(boolean fullscreenValue)
@@ -110,7 +109,7 @@ public class VideoFullscreenOrientationLockChromeTest {
     @Feature({"VideoFullscreenOrientationLock"})
     @RetryOnFailure // The final waitForContentsFullscreenState(false) is flaky - crbug.com/711005.
     public void testUnlockWithDownloadViewerActivity() throws Exception {
-        if (DeviceFormFactor.isTablet()) {
+        if (mActivityTestRule.getActivity().isTablet()) {
             return;
         }
 
@@ -120,8 +119,7 @@ public class VideoFullscreenOrientationLockChromeTest {
         DOMUtils.waitForMediaPlay(getWebContents(), VIDEO_ID);
 
         // Trigger requestFullscreen() via a click on a button.
-        Assert.assertTrue(DOMUtils.clickNode(
-                mActivityTestRule.getActivity().getCurrentContentViewCore(), "fullscreen"));
+        Assert.assertTrue(DOMUtils.clickNode(getWebContents(), "fullscreen"));
         waitForContentsFullscreenState(true);
 
         // Should be locked to landscape now, `waitUntilLockedToLandscape` will throw otherwise.

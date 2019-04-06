@@ -48,40 +48,40 @@ TEST(ParsedCookieTest, TestQuoted) {
   // handle differently.  I've tested Internet Explorer 6, Opera 9.6,
   // Firefox 3, and Safari Windows 3.2.1.  We originally tried to match
   // Firefox closely, however we now match Internet Explorer and Safari.
-  const char* const values[] = {
+  const struct {
+    const char* input;
+    const char* expected;
+  } kTests[] = {
       // Trailing whitespace after a quoted value.  The whitespace after
       // the quote is stripped in all browsers.
-      "\"zzz \"  ",
-      "\"zzz \"",
+      {"\"zzz \"  ", "\"zzz \""},
       // Handling a quoted value with a ';', like FOO="zz;pp"  ;
       // IE and Safari: "zz;
       // Firefox and Opera: "zz;pp"
-      "\"zz;pp\" ;",
-      "\"zz",
+      {"\"zz;pp\" ;", "\"zz"},
       // Handling a value with multiple quoted parts, like FOO="zzz "   "ppp" ;
       // IE and Safari: "zzz "   "ppp";
       // Firefox: "zzz ";
       // Opera: <rejects cookie>
-      "\"zzz \"   \"ppp\" ",
-      "\"zzz \"   \"ppp\"",
+      {
+          "\"zzz \"   \"ppp\" ", "\"zzz \"   \"ppp\"",
+      },
       // A quote in a value that didn't start quoted.  like FOO=A"B ;
       // IE, Safari, and Firefox: A"B;
       // Opera: <rejects cookie>
-      "A\"B",
-      "A\"B",
-  };
+      {
+          "A\"B", "A\"B",
+      }};
 
-  for (size_t i = 0; i < arraysize(values); i += 2) {
-    std::string input(values[i]);
-    std::string expected(values[i + 1]);
-
-    ParsedCookie pc("aBc=" + input + " ; path=\"/\"  ; httponly ");
+  for (const auto& test : kTests) {
+    ParsedCookie pc(std::string("aBc=") + test.input +
+                    " ; path=\"/\"  ; httponly ");
     EXPECT_TRUE(pc.IsValid());
     EXPECT_FALSE(pc.IsSecure());
     EXPECT_TRUE(pc.IsHttpOnly());
     EXPECT_TRUE(pc.HasPath());
     EXPECT_EQ("aBc", pc.Name());
-    EXPECT_EQ(expected, pc.Value());
+    EXPECT_EQ(test.expected, pc.Value());
 
     // If a path was quoted, the path attribute keeps the quotes.  This will
     // make the cookie effectively useless, but path parameters aren't supposed
@@ -467,7 +467,7 @@ TEST(ParsedCookieTest, SetSameSite) {
   EXPECT_EQ("name=value", pc.ToCookieLine());
   EXPECT_EQ(CookieSameSite::DEFAULT_MODE, pc.SameSite());
 
-  // Test each priority, expect case-insensitive compare.
+  // Test each samesite directive, expect case-insensitive compare.
   EXPECT_TRUE(pc.SetSameSite("strict"));
   EXPECT_EQ("name=value; samesite=strict", pc.ToCookieLine());
   EXPECT_EQ(CookieSameSite::STRICT_MODE, pc.SameSite());
@@ -483,24 +483,28 @@ TEST(ParsedCookieTest, SetSameSite) {
   EXPECT_EQ(CookieSameSite::LAX_MODE, pc.SameSite());
   EXPECT_TRUE(pc.IsValid());
 
+  // Remove the SameSite attribute.
   EXPECT_TRUE(pc.SetSameSite(""));
   EXPECT_EQ("name=value", pc.ToCookieLine());
   EXPECT_EQ(CookieSameSite::DEFAULT_MODE, pc.SameSite());
   EXPECT_TRUE(pc.IsValid());
 
   EXPECT_TRUE(pc.SetSameSite("Blah"));
-  EXPECT_FALSE(pc.IsValid());
+  EXPECT_EQ("name=value; samesite=Blah", pc.ToCookieLine());
+  EXPECT_EQ(CookieSameSite::NO_RESTRICTION, pc.SameSite());
+  EXPECT_TRUE(pc.IsValid());
 }
 
-TEST(ParsedCookieTest, InvalidSameSiteValue) {
+TEST(ParsedCookieTest, SameSiteValues) {
   struct TestCase {
     const char* cookie;
     bool valid;
     CookieSameSite mode;
   } cases[]{{"n=v; samesite=strict", true, CookieSameSite::STRICT_MODE},
             {"n=v; samesite=lax", true, CookieSameSite::LAX_MODE},
-            {"n=v; samesite=boo", false, CookieSameSite::DEFAULT_MODE},
-            {"n=v; samesite", false, CookieSameSite::DEFAULT_MODE}};
+            {"n=v; samesite=boo", true, CookieSameSite::NO_RESTRICTION},
+            {"n=v; samesite", true, CookieSameSite::NO_RESTRICTION},
+            {"n=v", true, CookieSameSite::DEFAULT_MODE}};
 
   for (const auto& test : cases) {
     SCOPED_TRACE(test.cookie);

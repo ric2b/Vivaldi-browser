@@ -30,10 +30,11 @@ class ShellSpeechRecognitionManagerDelegate
   void OnRecognitionEnd(int session_id) override;
   void OnRecognitionResults(
       int session_id,
-      const content::SpeechRecognitionResults& result) override;
+      const std::vector<blink::mojom::SpeechRecognitionResultPtr>& result)
+      override;
   void OnRecognitionError(
       int session_id,
-      const content::SpeechRecognitionError& error) override;
+      const blink::mojom::SpeechRecognitionError& error) override;
   void OnAudioLevelsChange(int session_id,
                            float volume,
                            float noise_volume) override;
@@ -46,10 +47,10 @@ class ShellSpeechRecognitionManagerDelegate
   content::SpeechRecognitionEventListener* GetEventListener() override;
   bool FilterProfanities(int render_process_id) override;
 
-  static void CheckRenderViewType(
+  static void CheckRenderFrameType(
       base::OnceCallback<void(bool ask_user, bool is_allowed)> callback,
       int render_process_id,
-      int render_view_id);
+      int render_frame_id);
 
   DISALLOW_COPY_AND_ASSIGN(ShellSpeechRecognitionManagerDelegate);
 };

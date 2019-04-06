@@ -15,6 +15,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/favicon/core/favicon_server_fetcher_params.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon_base/favicon_types.h"
@@ -151,6 +152,7 @@ jlong PartnerBookmarksReader::AddPartnerBookmark(
     const JavaParamRef<jbyteArray>& favicon,
     const JavaParamRef<jbyteArray>& touchicon,
     jboolean fetch_uncached_favicons_from_server,
+    jint desired_favicon_size_px,
     const JavaParamRef<jobject>& j_callback) {
   base::string16 url;
   base::string16 title;
@@ -185,6 +187,7 @@ jlong PartnerBookmarksReader::AddPartnerBookmark(
         Java_FetchFaviconCallback_onFaviconFetch(env, j_callback);
         GetFavicon(
             GURL(url), profile_, fetch_uncached_favicons_from_server,
+            desired_favicon_size_px,
             base::BindOnce(&PartnerBookmarksReader::OnFaviconFetched,
                            base::Unretained(this),
                            ScopedJavaGlobalRef<jobject>(env, j_callback)));
@@ -214,17 +217,20 @@ jlong PartnerBookmarksReader::AddPartnerBookmark(
 void PartnerBookmarksReader::GetFavicon(const GURL& page_url,
                                         Profile* profile,
                                         bool fallback_to_server,
+                                        int desired_favicon_size_px,
                                         FaviconFetchedCallback callback) {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(&PartnerBookmarksReader::GetFaviconImpl,
                      base::Unretained(this), page_url, profile,
-                     fallback_to_server, std::move(callback)));
+                     fallback_to_server, desired_favicon_size_px,
+                     std::move(callback)));
 }
 
 void PartnerBookmarksReader::GetFaviconImpl(const GURL& page_url,
                                             Profile* profile,
                                             bool fallback_to_server,
+                                            int desired_favicon_size_px,
                                             FaviconFetchedCallback callback) {
   if (!GetLargeIconService()) {
     std::move(callback).Run(
@@ -233,7 +239,8 @@ void PartnerBookmarksReader::GetFaviconImpl(const GURL& page_url,
   }
 
   GetFaviconFromCacheOrServer(page_url, fallback_to_server,
-                              false /* from_server */, std::move(callback));
+                              false /* from_server */, desired_favicon_size_px,
+                              std::move(callback));
 }
 
 favicon::LargeIconService* PartnerBookmarksReader::GetLargeIconService() {
@@ -248,13 +255,14 @@ void PartnerBookmarksReader::GetFaviconFromCacheOrServer(
     const GURL& page_url,
     bool fallback_to_server,
     bool from_server,
+    int desired_favicon_size_px,
     FaviconFetchedCallback callback) {
   GetLargeIconService()->GetLargeIconOrFallbackStyle(
-      page_url, kPartnerBookmarksMinimumFaviconSizePx, 0,
+      page_url, kPartnerBookmarksMinimumFaviconSizePx, desired_favicon_size_px,
       base::Bind(&PartnerBookmarksReader::OnGetFaviconFromCacheFinished,
                  base::Unretained(this), page_url,
                  base::Passed(std::move(callback)), fallback_to_server,
-                 from_server),
+                 from_server, desired_favicon_size_px),
       &favicon_task_tracker_);
 }
 
@@ -263,6 +271,7 @@ void PartnerBookmarksReader::OnGetFaviconFromCacheFinished(
     FaviconFetchedCallback callback,
     bool fallback_to_server,
     bool from_server,
+    int desired_favicon_size_px,
     const favicon_base::LargeIconResult& result) {
   // |from_server| tells us if we fetched the image from the cache after we went
   // to server for it, so this successful cache retrieval should actually return
@@ -305,15 +314,18 @@ void PartnerBookmarksReader::OnGetFaviconFromCacheFinished(
         })");
   GetLargeIconService()
       ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
-          page_url, kPartnerBookmarksMinimumFaviconSizePx, 0,
+          favicon::FaviconServerFetcherParams::CreateForMobile(
+              page_url, kPartnerBookmarksMinimumFaviconSizePx,
+              desired_favicon_size_px),
           false /* may_page_url_be_private */, traffic_annotation,
           base::Bind(&PartnerBookmarksReader::OnGetFaviconFromServerFinished,
-                     base::Unretained(this), page_url,
+                     base::Unretained(this), page_url, desired_favicon_size_px,
                      base::Passed(std::move(callback))));
 }
 
 void PartnerBookmarksReader::OnGetFaviconFromServerFinished(
     const GURL& page_url,
+    int desired_favicon_size_px,
     FaviconFetchedCallback callback,
     favicon_base::GoogleFaviconServerRequestStatus status) {
   if (status != favicon_base::GoogleFaviconServerRequestStatus::SUCCESS) {
@@ -334,7 +346,8 @@ void PartnerBookmarksReader::OnGetFaviconFromServerFinished(
   // The icon was successfully retrieved from the server, now we just have to
   // retrieve it from the cache where it was stored.
   GetFaviconFromCacheOrServer(page_url, false /* fallback_to_server */,
-                              true /* from_server */, std::move(callback));
+                              true /* from_server */, desired_favicon_size_px,
+                              std::move(callback));
 }
 
 void PartnerBookmarksReader::OnFaviconFetched(

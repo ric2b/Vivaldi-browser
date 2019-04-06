@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "components/gcm_driver/crypto/proto/gcm_encryption_data.pb.h"
 #include "components/gcm_driver/gcm_delayed_task_controller.h"
+#include "crypto/ec_private_key.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -39,8 +40,9 @@ namespace gcm {
 // rather than returning the result. Do not rely on the timing of the callbacks.
 class GCMKeyStore {
  public:
-  using KeysCallback = base::Callback<void(const KeyPair& pair,
-                                           const std::string& auth_secret)>;
+  using KeysCallback =
+      base::OnceCallback<void(std::unique_ptr<crypto::ECPrivateKey> key,
+                              const std::string& auth_secret)>;
 
   GCMKeyStore(
       const base::FilePath& key_store_path,
@@ -57,7 +59,7 @@ class GCMKeyStore {
   void GetKeys(const std::string& app_id,
                const std::string& authorized_entity,
                bool fallback_to_empty_authorized_entity,
-               const KeysCallback& callback);
+               KeysCallback callback);
 
   // Creates a new public/private key-pair for the |app_id| +
   // |authorized_entity| pair, and invokes |callback| when they are available,
@@ -67,7 +69,7 @@ class GCMKeyStore {
   // registration and one or more InstanceID tokens is not supported.
   void CreateKeys(const std::string& app_id,
                   const std::string& authorized_entity,
-                  const KeysCallback& callback);
+                  KeysCallback callback);
 
   // Removes the keys associated with the |app_id| + |authorized_entity| pair,
   // and invokes |callback| when the operation has finished. |authorized_entity|
@@ -75,22 +77,27 @@ class GCMKeyStore {
   // all InstanceID tokens, or "" for non-InstanceID GCM registrations.
   void RemoveKeys(const std::string& app_id,
                   const std::string& authorized_entity,
-                  const base::Closure& callback);
+                  base::OnceClosure callback);
 
  private:
+  friend class GCMKeyStoreTest;
   // Initializes the database if necessary, and runs |done_closure| when done.
-  void LazyInitialize(const base::Closure& done_closure);
+  void LazyInitialize(base::OnceClosure done_closure);
+
+  // Upgrades the stored encryption keys from pairs including deprecated PKCS #8
+  // EncryptedPrivateKeyInfo blocks, to storing a single PrivateKeyInfo block.
+  void UpgradeDatabase(std::unique_ptr<std::vector<EncryptionData>> entries);
 
   void DidInitialize(bool success);
   void DidLoadKeys(bool success,
                    std::unique_ptr<std::vector<EncryptionData>> entries);
-
-  void DidStoreKeys(const KeyPair& pair,
+  void DidStoreKeys(std::unique_ptr<crypto::ECPrivateKey> key,
                     const std::string& auth_secret,
-                    const KeysCallback& callback,
+                    KeysCallback callback,
                     bool success);
+  void DidUpgradeDatabase(bool success);
 
-  void DidRemoveKeys(const base::Closure& callback, bool success);
+  void DidRemoveKeys(base::OnceClosure callback, bool success);
 
   // Private implementations of the API that will be executed when the database
   // has either been successfully loaded, or failed to load.
@@ -98,13 +105,17 @@ class GCMKeyStore {
   void GetKeysAfterInitialize(const std::string& app_id,
                               const std::string& authorized_entity,
                               bool fallback_to_empty_authorized_entity,
-                              const KeysCallback& callback);
+                              KeysCallback callback);
   void CreateKeysAfterInitialize(const std::string& app_id,
                                  const std::string& authorized_entity,
-                                 const KeysCallback& callback);
+                                 KeysCallback callback);
   void RemoveKeysAfterInitialize(const std::string& app_id,
                                  const std::string& authorized_entity,
-                                 const base::Closure& callback);
+                                 base::OnceClosure callback);
+
+  // Converts private key from old deprecated format (where it is encrypted with
+  // and empty string) to the new format, where it's unencrypted.
+  bool DecryptPrivateKey(const std::string& to_decrypt, std::string* decrypted);
 
   // Path in which the key store database will be saved.
   base::FilePath key_store_path_;
@@ -126,7 +137,8 @@ class GCMKeyStore {
 
   // Nested map from app_id to a map from authorized_entity to the loaded key
   // pair and authentication secrets.
-  using KeyPairAndAuthSecret = std::pair<KeyPair, std::string>;
+  using KeyPairAndAuthSecret =
+      std::pair<std::unique_ptr<crypto::ECPrivateKey>, std::string>;
   std::unordered_map<std::string,
                      std::unordered_map<std::string, KeyPairAndAuthSecret>>
       key_data_;

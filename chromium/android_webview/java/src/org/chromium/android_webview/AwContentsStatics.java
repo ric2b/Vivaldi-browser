@@ -4,7 +4,6 @@
 
 package org.chromium.android_webview;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.net.Uri;
 
@@ -85,15 +84,6 @@ public class AwContentsStatics {
         nativeSetServiceWorkerIoThreadClient(ioThreadClient, browserContext);
     }
 
-    // Can be called from any thread.
-    public static boolean getSafeBrowsingEnabledByManifest() {
-        return nativeGetSafeBrowsingEnabledByManifest();
-    }
-
-    public static void setSafeBrowsingEnabledByManifest(boolean enable) {
-        nativeSetSafeBrowsingEnabledByManifest(enable);
-    }
-
     @CalledByNative
     private static void safeBrowsingWhitelistAssigned(Callback<Boolean> callback, boolean success) {
         if (callback == null) return;
@@ -109,8 +99,6 @@ public class AwContentsStatics {
         nativeSetSafeBrowsingWhitelist(urlArray, callback);
     }
 
-    @SuppressWarnings("unchecked")
-    @TargetApi(19)
     public static void initSafeBrowsing(Context context, final Callback<Boolean> callback) {
         // Wrap the callback to make sure we always invoke it on the UI thread, as guaranteed by the
         // API.
@@ -155,8 +143,6 @@ public class AwContentsStatics {
     private static native String nativeGetProductVersion();
     private static native void nativeSetServiceWorkerIoThreadClient(
             AwContentsIoThreadClient ioThreadClient, AwBrowserContext browserContext);
-    private static native boolean nativeGetSafeBrowsingEnabledByManifest();
-    private static native void nativeSetSafeBrowsingEnabledByManifest(boolean enable);
     private static native void nativeSetSafeBrowsingWhitelist(
             String[] urls, Callback<Boolean> callback);
     private static native void nativeSetCheckClearTextPermitted(boolean permitted);

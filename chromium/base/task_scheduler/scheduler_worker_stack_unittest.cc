@@ -25,7 +25,10 @@ class MockSchedulerWorkerDelegate : public SchedulerWorker::Delegate {
   void OnCanScheduleSequence(scoped_refptr<Sequence> sequence) override {
     ADD_FAILURE() << "Unexpected call to OnCanScheduleSequence().";
   }
-  void OnMainEntry(SchedulerWorker* worker) override {}
+  SchedulerWorker::ThreadLabel GetThreadLabel() const override {
+    return SchedulerWorker::ThreadLabel::DEDICATED;
+  }
+  void OnMainEntry(const SchedulerWorker* worker) override {}
   scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) override {
     return nullptr;
   }
@@ -45,24 +48,25 @@ class TaskSchedulerWorkerStackTest : public testing::Test {
   void SetUp() override {
     worker_a_ = MakeRefCounted<SchedulerWorker>(
         ThreadPriority::NORMAL, WrapUnique(new MockSchedulerWorkerDelegate),
-        &task_tracker_);
+        task_tracker_.GetTrackedRef());
     ASSERT_TRUE(worker_a_);
     worker_b_ = MakeRefCounted<SchedulerWorker>(
         ThreadPriority::NORMAL, WrapUnique(new MockSchedulerWorkerDelegate),
-        &task_tracker_);
+        task_tracker_.GetTrackedRef());
     ASSERT_TRUE(worker_b_);
     worker_c_ = MakeRefCounted<SchedulerWorker>(
         ThreadPriority::NORMAL, WrapUnique(new MockSchedulerWorkerDelegate),
-        &task_tracker_);
+        task_tracker_.GetTrackedRef());
     ASSERT_TRUE(worker_c_);
   }
 
+ private:
+  TaskTracker task_tracker_ = {"Test"};
+
+ protected:
   scoped_refptr<SchedulerWorker> worker_a_;
   scoped_refptr<SchedulerWorker> worker_b_;
   scoped_refptr<SchedulerWorker> worker_c_;
-
- private:
-  TaskTracker task_tracker_ = {"Test"};
 };
 
 }  // namespace
@@ -223,19 +227,20 @@ TEST_F(TaskSchedulerWorkerStackTest, Remove) {
 TEST_F(TaskSchedulerWorkerStackTest, PushAfterRemove) {
   SchedulerWorkerStack stack;
   EXPECT_EQ(0U, stack.Size());
-  EXPECT_TRUE(stack.IsEmpty());
 
   stack.Push(worker_a_.get());
   EXPECT_EQ(1U, stack.Size());
-  EXPECT_FALSE(stack.IsEmpty());
+
+  // Need to also push worker B for this test as it's illegal to Remove() the
+  // top of the stack.
+  stack.Push(worker_b_.get());
+  EXPECT_EQ(2U, stack.Size());
 
   stack.Remove(worker_a_.get());
-  EXPECT_EQ(0U, stack.Size());
-  EXPECT_TRUE(stack.IsEmpty());
+  EXPECT_EQ(1U, stack.Size());
 
   stack.Push(worker_a_.get());
-  EXPECT_EQ(1U, stack.Size());
-  EXPECT_FALSE(stack.IsEmpty());
+  EXPECT_EQ(2U, stack.Size());
 }
 
 // Verify that Push() DCHECKs when a value is inserted twice.

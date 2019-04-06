@@ -13,13 +13,12 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/callback_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/safe_browsing/db/database_manager.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/blacklist_state.h"
 
 namespace content {
@@ -33,7 +32,6 @@ class ExtensionPrefs;
 
 // The blacklist of extensions backed by safe browsing.
 class Blacklist : public KeyedService,
-                  public content::NotificationObserver,
                   public base::SupportsWeakPtr<Blacklist> {
  public:
   class Observer {
@@ -64,15 +62,15 @@ class Blacklist : public KeyedService,
     DISALLOW_COPY_AND_ASSIGN(ScopedDatabaseManagerForTest);
   };
 
-  typedef std::map<std::string, BlacklistState> BlacklistStateMap;
+  using BlacklistStateMap = std::map<std::string, BlacklistState>;
 
-  typedef base::Callback<void(const BlacklistStateMap&)>
-      GetBlacklistedIDsCallback;
+  using GetBlacklistedIDsCallback =
+      base::Callback<void(const BlacklistStateMap&)>;
 
-  typedef base::Callback<void(const std::set<std::string>&)>
-      GetMalwareIDsCallback;
+  using GetMalwareIDsCallback =
+      base::Callback<void(const std::set<std::string>&)>;
 
-  typedef base::Callback<void(BlacklistState)> IsBlacklistedCallback;
+  using IsBlacklistedCallback = base::Callback<void(BlacklistState)>;
 
   explicit Blacklist(ExtensionPrefs* prefs);
 
@@ -110,6 +108,9 @@ class Blacklist : public KeyedService,
   // BlacklistStateFetcher.
   BlacklistStateFetcher* ResetBlacklistStateFetcherForTest();
 
+  // Reset the listening for an updated database.
+  void ResetDatabaseUpdatedListenerForTest();
+
   // Adds/removes an observer to the blacklist.
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -122,16 +123,15 @@ class Blacklist : public KeyedService,
   static scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
       GetDatabaseManager();
 
-  // content::NotificationObserver
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  void ObserveNewDatabase();
+
+  void NotifyObservers();
 
   void GetBlacklistStateForIDs(const GetBlacklistedIDsCallback& callback,
                                const std::set<std::string>& blacklisted_ids);
 
   void RequestExtensionsBlacklistState(const std::set<std::string>& ids,
-                                       const base::Callback<void()>& callback);
+                                       base::OnceClosure callback);
 
   void OnBlacklistStateReceived(const std::string& id, BlacklistState state);
 
@@ -140,22 +140,25 @@ class Blacklist : public KeyedService,
 
   base::ObserverList<Observer> observers_;
 
-  content::NotificationRegistrar registrar_;
+  std::unique_ptr<base::CallbackList<void()>::Subscription>
+      database_updated_subscription_;
+  std::unique_ptr<base::CallbackList<void()>::Subscription>
+      database_changed_subscription_;
 
   // The cached BlacklistState's, received from BlacklistStateFetcher.
   BlacklistStateMap blacklist_state_cache_;
 
   std::unique_ptr<BlacklistStateFetcher> state_fetcher_;
 
-  typedef std::list<std::pair<std::vector<std::string>,
-                              base::Callback<void()> > >
-      StateRequestsList;
-
   // The list of ongoing requests for blacklist states that couldn't be
   // served directly from the cache. A new request is created in
   // GetBlacklistedIDs and deleted when the callback is called from
   // OnBlacklistStateReceived.
-  StateRequestsList state_requests_;
+  //
+  // This is a list of requests. Each item in the list is a request. A request
+  // is a pair of [vector of string ids to check, response closure].
+  std::list<std::pair<std::vector<std::string>, base::OnceClosure>>
+      state_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(Blacklist);
 };

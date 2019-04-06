@@ -13,6 +13,7 @@
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
+@protocol OmniboxFocuser;
 @class Tab;
 @class TabModel;
 @protocol TabSwitcher;
@@ -24,18 +25,15 @@
 // is a good example of the implementation of this delegate.
 @protocol TabSwitcherDelegate<NSObject>
 
-// Informs the delegate the stack controller is starting to be dismissed with
-// the given model active.
+// Informs the delegate the stack controller should be dismissed with the given
+// active model.
 - (void)tabSwitcher:(id<TabSwitcher>)tabSwitcher
-    dismissTransitionWillStartWithActiveModel:(TabModel*)tabModel;
+    shouldFinishWithActiveModel:(TabModel*)tabModel
+                   focusOmnibox:(BOOL)focusOmnibox;
 
 // Informs the delegate that the stack controller is done and should be
 // dismissed.
 - (void)tabSwitcherDismissTransitionDidEnd:(id<TabSwitcher>)tabSwitcher;
-
-// Informs the delegate that the stack controller has finished its
-// presentation transition animation.
-- (void)tabSwitcherPresentationTransitionDidEnd:(id<TabSwitcher>)tabSwitcher;
 
 // Returns a reference to the owner of the toolbar that should be used in the
 // transition animations.
@@ -58,16 +56,16 @@
 // This protocol describes the common interface between the two implementations
 // of the tab switcher. StackViewController for iPhone and TabSwitcherController
 // for iPad are examples of implementers of this protocol.
-@protocol TabSwitcher
+@protocol TabSwitcher<NSObject>
 
 // This delegate must be set on the tab switcher in order to drive the tab
 // switcher.
-@property(nonatomic, assign) id<TabSwitcherDelegate> delegate;
-@property(nonatomic, assign) id<TabSwitcherAnimationDelegate> animationDelegate;
+@property(nonatomic, weak) id<TabSwitcherDelegate> delegate;
+@property(nonatomic, weak) id<TabSwitcherAnimationDelegate> animationDelegate;
 
 // Dispatcher for anything that acts in a "browser" role.
 @property(nonatomic, readonly)
-    id<ApplicationCommands, BrowserCommands, ToolbarCommands>
+    id<ApplicationCommands, BrowserCommands, OmniboxFocuser, ToolbarCommands>
         dispatcher;
 
 // Restores the internal state of the tab switcher with the given tab models,
@@ -78,8 +76,8 @@
                                  otrTabModel:(TabModel*)otrModel
                               activeTabModel:(TabModel*)activeModel;
 
-// Returns the root view of the tab switcher.
-- (UIView*)view;
+// Returns the view controller that displays the tab switcher.
+- (UIViewController*)viewController;
 
 // Tells the tab switcher to prepare to be displayed at |size|.
 - (void)prepareForDisplayAtSize:(CGSize)size;
@@ -89,11 +87,14 @@
 // been presented.
 - (void)showWithSelectedTabAnimation;
 
-// Performs an animation from the selected tab in the tab switcher to the
-// presented tab in the content area. When the animation completes, calls the
-// delegate methods:
-// |-tabSwitcher:dismissTransitionWillStartWithActiveModel:| and
-// |-tabSwitcherDismissTransitionDidEnd:|
+// Create a new tab in |targetModel| with the url |url| at |position|, using
+// page transition |transition|. Implementors are expected to also
+// perform an animation from the selected tab in the tab switcher to the
+// newly created tab in the content area. Objects adopting this protocol should
+// call the following delegate methods:
+//   |-tabSwitcher:shouldFinishWithActiveModel:|
+//   |-tabSwitcherDismissTransitionDidEnd:|
+// to inform the delegate when this animation begins and ends.
 - (Tab*)dismissWithNewTabAnimationToModel:(TabModel*)targetModel
                                   withURL:(const GURL&)url
                                   atIndex:(NSUInteger)position

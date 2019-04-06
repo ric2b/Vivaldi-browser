@@ -88,7 +88,6 @@ GeolocationPermissionContextAndroid::GeolocationPermissionContextAndroid(
     Profile* profile)
     : GeolocationPermissionContext(profile),
       location_settings_(new LocationSettingsImpl()),
-      permission_update_infobar_(nullptr),
       location_settings_dialog_request_id_(0, 0, 0),
       weak_factory_(this) {}
 
@@ -129,38 +128,21 @@ void GeolocationPermissionContextAndroid::RequestPermission(
   std::vector<ContentSettingsType> content_settings_types;
   content_settings_types.push_back(CONTENT_SETTINGS_TYPE_GEOLOCATION);
   if (content_setting == CONTENT_SETTING_ALLOW &&
-      PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfobar(
-          web_contents, content_settings_types)) {
-    permission_update_infobar_ = PermissionUpdateInfoBarDelegate::Create(
+      PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfoBar(
+          web_contents, content_settings_types) ==
+          ShowPermissionInfoBarState::SHOW_PERMISSION_INFOBAR) {
+    PermissionUpdateInfoBarDelegate::Create(
         web_contents, content_settings_types,
-        base::Bind(
-            &GeolocationPermissionContextAndroid
-                ::HandleUpdateAndroidPermissions,
-            weak_factory_.GetWeakPtr(), id, requesting_frame_origin,
-            embedding_origin, callback));
+        base::BindOnce(&GeolocationPermissionContextAndroid ::
+                           HandleUpdateAndroidPermissions,
+                       weak_factory_.GetWeakPtr(), id, requesting_frame_origin,
+                       embedding_origin, callback));
 
     return;
   }
 
   GeolocationPermissionContext::RequestPermission(
       web_contents, id, requesting_frame_origin, user_gesture, callback);
-}
-
-void GeolocationPermissionContextAndroid::CancelPermissionRequest(
-    content::WebContents* web_contents,
-    const PermissionRequestID& id) {
-  // TODO(timloh): This could cancel a infobar from an unrelated request.
-  if (permission_update_infobar_) {
-    permission_update_infobar_->RemoveSelf();
-    permission_update_infobar_ = nullptr;
-  }
-
-  if (id == location_settings_dialog_request_id_) {
-    location_settings_dialog_request_id_ = PermissionRequestID(0, 0, 0);
-    location_settings_dialog_callback_.Reset();
-  }
-
-  GeolocationPermissionContext::CancelPermissionRequest(web_contents, id);
 }
 
 void GeolocationPermissionContextAndroid::UserMadePermissionDecision(
@@ -207,6 +189,8 @@ void GeolocationPermissionContextAndroid::NotifyPermissionSet(
         content::WebContents::FromRenderFrameHost(
             content::RenderFrameHost::FromID(id.render_process_id(),
                                              id.render_frame_id()));
+    if (!web_contents)
+      return;
 
     // Only show the location settings dialog if the tab for |web_contents| is
     // user-interactable (i.e. is the current tab, and Chrome is active and not
@@ -329,7 +313,7 @@ void GeolocationPermissionContextAndroid::UpdateLocationSettingsBackOff(
       break;
     case LocationSettingsDialogBackOff::kOneMonth:
       backoff_level = LocationSettingsDialogBackOff::kThreeMonths;
-    // fall through
+      FALLTHROUGH;
     case LocationSettingsDialogBackOff::kThreeMonths:
       next_show += base::TimeDelta::FromDays(90);
       break;
@@ -393,8 +377,6 @@ void GeolocationPermissionContextAndroid::HandleUpdateAndroidPermissions(
     const GURL& embedding_origin,
     const BrowserPermissionCallback& callback,
     bool permissions_updated) {
-  permission_update_infobar_ = nullptr;
-
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   ContentSetting new_setting = permissions_updated
       ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;

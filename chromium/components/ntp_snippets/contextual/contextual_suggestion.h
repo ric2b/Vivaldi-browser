@@ -5,77 +5,67 @@
 #ifndef COMPONENTS_NTP_SNIPPETS_CONTEXTUAL_CONTEXTUAL_SUGGESTION_H_
 #define COMPONENTS_NTP_SNIPPETS_CONTEXTUAL_CONTEXTUAL_SUGGESTION_H_
 
-#include <cstdint>
-#include <memory>
 #include <string>
-#include <vector>
 
-#include "base/macros.h"
-#include "base/optional.h"
-#include "base/time/time.h"
-#include "components/ntp_snippets/content_suggestion.h"
 #include "url/gurl.h"
 
-namespace base {
-class DictionaryValue;
-}  // namespace base
+namespace contextual_suggestions {
 
-namespace ntp_snippets {
-
-class ContextualSuggestion {
- public:
-  using PtrVector = std::vector<std::unique_ptr<ContextualSuggestion>>;
-
+// Struct containing the data for a single contextual content suggestion.
+struct ContextualSuggestion {
+  ContextualSuggestion();
+  ContextualSuggestion(const ContextualSuggestion&);
+  ContextualSuggestion(ContextualSuggestion&&) noexcept;
   ~ContextualSuggestion();
 
-  // Creates a ContextualSuggestion from a dictionary. Returns a null pointer if
-  // the dictionary doesn't correspond to a valid suggestion.
-  static std::unique_ptr<ContextualSuggestion> CreateFromDictionary(
-      const base::DictionaryValue& dict);
+  ContextualSuggestion& operator=(const ContextualSuggestion&);
 
-  // Converts to general content suggestion form.
-  ContentSuggestion ToContentSuggestion() const;
-
-  // The ID for identifying the suggestion.
-  const std::string& id() const { return id_; }
+  // The ID identifying the suggestion.
+  std::string id;
 
   // Title of the suggestion.
-  const std::string& title() const { return title_; }
+  std::string title;
 
-  // The main URL pointing to the content web page.
-  const GURL& url() const { return url_; }
+  // The URL of the suggested page.
+  GURL url;
 
   // The name of the content's publisher.
-  const std::string& publisher_name() const { return publisher_name_; }
+  std::string publisher_name;
 
   // Summary or relevant extract from the content.
-  const std::string& snippet() const { return snippet_; }
+  std::string snippet;
 
-  // Link to an image representative of the content. Do not fetch directly,
-  // but through the service, which uses caching, to avoid multiple
-  // network requests.
-  const GURL& salient_image_url() const { return salient_image_url_; }
+  // Identifier of the image to display alongside the suggestion. This id can
+  // be used to construct a URL to the image.
+  std::string image_id;
 
-  static std::unique_ptr<ContextualSuggestion> CreateForTesting(
-      const std::string& to_url,
-      const std::string& image_url);
+  // As above, but for identifying the favicon for the site the suggestion
+  // resides on.
+  std::string favicon_image_id;
 
- private:
-  ContextualSuggestion(const std::string& id);
-
-  // std::make_unique doesn't work if the ctor is private.
-  static std::unique_ptr<ContextualSuggestion> MakeUnique(
-      const std::string& id);
-
-  std::string id_;
-  std::string title_;
-  GURL url_;
-  std::string publisher_name_;
-  GURL salient_image_url_;
-  std::string snippet_;
-  base::Time publish_date_;
+  // The favicon URL for the suggestion.
+  std::string favicon_image_url;
 };
 
-}  // namespace ntp_snippets
+// Allows compact, precise construction of a ContextualSuggestion. Its main
+// purpose is to avoid using a confusing 6 param helper whose argument
+// order has to be guessed at.
+class SuggestionBuilder {
+ public:
+  explicit SuggestionBuilder(const GURL& url);
+
+  SuggestionBuilder& Title(const std::string& title);
+  SuggestionBuilder& PublisherName(const std::string& publisher_name);
+  SuggestionBuilder& Snippet(const std::string& snippet);
+  SuggestionBuilder& ImageId(const std::string& image_id);
+  SuggestionBuilder& FaviconImageId(const std::string& favicon_image_id);
+  SuggestionBuilder& FaviconImageUrl(const std::string& favicon_image_url);
+  ContextualSuggestion Build();
+
+ private:
+  ContextualSuggestion suggestion_;
+};
+
+}  // namespace contextual_suggestions
 
 #endif  // COMPONENTS_NTP_SNIPPETS_CONTEXTUAL_CONTEXTUAL_SUGGESTION_H_

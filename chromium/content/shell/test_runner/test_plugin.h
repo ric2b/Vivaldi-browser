@@ -11,24 +11,23 @@
 #include "base/macros.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/layers/texture_layer_client.h"
+#include "cc/resources/shared_bitmap_id_registrar.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "third_party/WebKit/public/platform/WebLayer.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPlugin.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/khronos/GLES2/gl2.h"
 
 namespace blink {
 class WebGraphicsContext3DProvider;
-class WebLayer;
 struct WebPluginParams;
 }
 
 namespace cc {
-class SharedBitmap;
+class CrossThreadSharedBitmap;
 }
 
 namespace gpu {
@@ -76,7 +75,7 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   bool CanProcessDrag() const override;
   bool SupportsKeyboardFocus() const override;
   void UpdateAllLifecyclePhases() override {}
-  void Paint(blink::WebCanvas* canvas, const blink::WebRect& rect) override {}
+  void Paint(cc::PaintCanvas* canvas, const blink::WebRect& rect) override {}
   void UpdateGeometry(const blink::WebRect& window_rect,
                       const blink::WebRect& clip_rect,
                       const blink::WebRect& unobscured_rect,
@@ -100,6 +99,7 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
 
   // cc::TextureLayerClient methods:
   bool PrepareTransferableResource(
+      cc::SharedBitmapIdRegistrar* bitmap_registrar,
       viz::TransferableResource* resource,
       std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override;
 
@@ -153,6 +153,11 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
 
   // Functions for drawing scene in Software.
   void DrawSceneSoftware(void* memory);
+  static void ReleaseSharedMemory(
+      scoped_refptr<cc::CrossThreadSharedBitmap> shared_bitmap,
+      cc::SharedBitmapIdRegistration registration,
+      const gpu::SyncToken& sync_token,
+      bool lost);
 
   WebTestDelegate* delegate_;
   blink::WebPluginContainer* container_;
@@ -164,12 +169,11 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   GLuint color_texture_;
   gpu::Mailbox mailbox_;
   gpu::SyncToken sync_token_;
-  std::unique_ptr<viz::SharedBitmap> shared_bitmap_;
+  scoped_refptr<cc::CrossThreadSharedBitmap> shared_bitmap_;
   bool content_changed_;
   GLuint framebuffer_;
   Scene scene_;
   scoped_refptr<cc::TextureLayer> layer_;
-  std::unique_ptr<blink::WebLayer> web_layer_;
 
   blink::WebPluginContainer::TouchEventRequestType touch_event_request_;
   // Requests touch events from the WebPluginContainerImpl multiple times to

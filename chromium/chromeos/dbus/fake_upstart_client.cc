@@ -20,7 +20,7 @@ void FakeUpstartClient::Init(dbus::Bus* bus) {}
 void FakeUpstartClient::StartAuthPolicyService() {
   static_cast<FakeAuthPolicyClient*>(
       DBusThreadManager::Get()->GetAuthPolicyClient())
-      ->set_started(true);
+      ->SetStarted(true);
 }
 
 void FakeUpstartClient::RestartAuthPolicyService() {
@@ -28,12 +28,12 @@ void FakeUpstartClient::RestartAuthPolicyService() {
       DBusThreadManager::Get()->GetAuthPolicyClient());
   DLOG_IF(WARNING, !authpolicy_client->started())
       << "Trying to restart authpolicyd which is not started";
-  authpolicy_client->set_started(true);
+  authpolicy_client->SetStarted(true);
 }
 
 void FakeUpstartClient::StartMediaAnalytics(
     const std::vector<std::string>& /* upstart_env */,
-    const UpstartCallback& callback) {
+    VoidDBusMethodCallback callback) {
   FakeMediaAnalyticsClient* media_analytics_client =
       static_cast<FakeMediaAnalyticsClient*>(
           DBusThreadManager::Get()->GetMediaAnalyticsClient());
@@ -44,7 +44,7 @@ void FakeUpstartClient::StartMediaAnalytics(
       FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
-void FakeUpstartClient::RestartMediaAnalytics(const UpstartCallback& callback) {
+void FakeUpstartClient::RestartMediaAnalytics(VoidDBusMethodCallback callback) {
   FakeMediaAnalyticsClient* media_analytics_client =
       static_cast<FakeMediaAnalyticsClient*>(
           DBusThreadManager::Get()->GetMediaAnalyticsClient());
@@ -64,13 +64,17 @@ void FakeUpstartClient::StopMediaAnalytics() {
   media_analytics_client->set_process_running(false);
 }
 
-void FakeUpstartClient::StopMediaAnalytics(const UpstartCallback& callback) {
+void FakeUpstartClient::StopMediaAnalytics(VoidDBusMethodCallback callback) {
   FakeMediaAnalyticsClient* media_analytics_client =
       static_cast<FakeMediaAnalyticsClient*>(
           DBusThreadManager::Get()->GetMediaAnalyticsClient());
   media_analytics_client->set_process_running(false);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));
+}
+
+void FakeUpstartClient::StartBluetoothLogging() {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace chromeos

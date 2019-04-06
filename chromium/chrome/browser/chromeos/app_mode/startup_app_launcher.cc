@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/app_mode/startup_app_launcher.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -12,7 +13,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_diagnosis_runner.h"
 #include "chrome/browser/chromeos/app_mode/startup_app_launcher_update_checker.h"
@@ -27,7 +27,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/crx_file/id_util.h"
 #include "components/session_manager/core/session_manager.h"
-#include "content/public/browser/notification_service.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -144,6 +144,42 @@ void StartupAppLauncher::MaybeInitializeNetwork() {
     BeginInstall();
 }
 
+void StartupAppLauncher::SetSecondaryAppsEnabledState(
+    const extensions::Extension* primary_app) {
+  extensions::KioskModeInfo* info = extensions::KioskModeInfo::Get(primary_app);
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(profile_)->extension_service();
+  extensions::ExtensionPrefs* prefs = extensions::ExtensionPrefs::Get(profile_);
+  for (const auto& app_info : info->secondary_apps) {
+    // If the enabled on launch is not specified in the manifest, the apps
+    // enabled state should be kept as is.
+    if (!app_info.enabled_on_launch.has_value())
+      continue;
+
+    // If the app is already enabled, and should not be disabled, there is
+    // nothing to do for the app.
+    if (app_info.enabled_on_launch.value() &&
+        service->IsExtensionEnabled(app_info.id)) {
+      continue;
+    }
+
+    if (!app_info.enabled_on_launch.value()) {
+      service->DisableExtension(
+          app_info.id, extensions::disable_reason::DISABLE_USER_ACTION);
+    } else {
+      // Remove USER_ACTION disable reason - if the app was disabled only due to
+      // user action, enable it.
+      if (prefs->GetDisableReasons(app_info.id) ==
+          extensions::disable_reason::DISABLE_USER_ACTION) {
+        service->EnableExtension(app_info.id);
+      } else {
+        prefs->RemoveDisableReason(
+            app_info.id, extensions::disable_reason::DISABLE_USER_ACTION);
+      }
+    }
+  }
+}
+
 void StartupAppLauncher::MaybeLaunchApp() {
   DCHECK(!ready_to_launch_);
 
@@ -167,6 +203,8 @@ void StartupAppLauncher::MaybeLaunchApp() {
     // Updates to cached primary app crx will be ignored after this point, so
     // there is no need to observe the kiosk app manager any longer.
     kiosk_app_manager_observer_.RemoveAll();
+
+    SetSecondaryAppsEnabledState(extension);
 
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(&StartupAppLauncher::OnReadyToLaunch,
@@ -297,11 +335,11 @@ bool StartupAppLauncher::IsAnySecondaryAppPending() const {
   const extensions::Extension* extension = GetPrimaryAppExtension();
   DCHECK(extension);
   extensions::KioskModeInfo* info = extensions::KioskModeInfo::Get(extension);
-  for (const auto& id : info->secondary_app_ids) {
+  for (const auto& app : info->secondary_apps) {
     if (extensions::ExtensionSystem::Get(profile_)
             ->extension_service()
             ->pending_extension_manager()
-            ->IsIdPending(id)) {
+            ->IsIdPending(app.id)) {
       return true;
     }
   }
@@ -312,10 +350,10 @@ bool StartupAppLauncher::AreSecondaryAppsInstalled() const {
   const extensions::Extension* extension = GetPrimaryAppExtension();
   DCHECK(extension);
   extensions::KioskModeInfo* info = extensions::KioskModeInfo::Get(extension);
-  for (const auto& id : info->secondary_app_ids) {
+  for (const auto& app : info->secondary_apps) {
     if (!extensions::ExtensionSystem::Get(profile_)
              ->extension_service()
-             ->GetInstalledExtension(id)) {
+             ->GetInstalledExtension(app.id)) {
       return false;
     }
   }
@@ -350,8 +388,8 @@ bool StartupAppLauncher::DidPrimaryOrSecondaryAppFailedToInstall(
     return false;
 
   extensions::KioskModeInfo* info = extensions::KioskModeInfo::Get(extension);
-  for (const auto& app_id : info->secondary_app_ids) {
-    if (app_id == id) {
+  for (const auto& app : info->secondary_apps) {
+    if (app.id == id) {
       SYSLOG(ERROR) << "Failed to install a secondary app id=" << id;
       return true;
     }
@@ -391,11 +429,6 @@ void StartupAppLauncher::LaunchApp() {
 
   KioskAppManager::Get()->InitSession(profile_, app_id_);
   session_manager::SessionManager::Get()->SessionStarted();
-
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_KIOSK_APP_LAUNCHED,
-      content::NotificationService::AllSources(),
-      content::NotificationService::NoDetails());
 
   if (diagnostic_mode_)
     KioskDiagnosisRunner::Run(profile_, app_id_);
@@ -463,8 +496,12 @@ void StartupAppLauncher::MaybeInstallSecondaryApps() {
   secondary_apps_installed_ = true;
   extensions::KioskModeInfo* info =
       extensions::KioskModeInfo::Get(GetPrimaryAppExtension());
-  KioskAppManager::Get()->UpdateSecondaryAppsLoaderPrefs(
-      info->secondary_app_ids);
+
+  std::vector<std::string> secondary_app_ids;
+  for (const auto& app : info->secondary_apps)
+    secondary_app_ids.push_back(app.id);
+
+  KioskAppManager::Get()->UpdateSecondaryAppsLoaderPrefs(secondary_app_ids);
   if (IsAnySecondaryAppPending()) {
     delegate_->OnInstallingApp();
     // Observe the crx installation events.

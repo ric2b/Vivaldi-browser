@@ -44,6 +44,10 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
  public:
   static AwMetricsServiceClient* GetInstance();
 
+  // If the client ID was pre-loaded on the Java side, store it in "client_id"
+  // and return true; otherwise, return false.
+  static bool GetPreloadedClientId(std::string* client_id);
+
   // Retrieve the client ID or generate one if none exists.
   static void LoadOrCreateClientId();
 
@@ -90,7 +94,6 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   std::unique_ptr<metrics::MetricsService> metrics_service_;
   PrefService* pref_service_;
   net::URLRequestContextGetter* request_context_;
-  version_info::Channel channel_;
   bool consent_;    // = (user has consented) && !(app has opted out)
   bool in_sample_;  // Is this client enabled by sampling?
 

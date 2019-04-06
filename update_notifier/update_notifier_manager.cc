@@ -23,8 +23,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
-#include "base/run_loop.h"
-#include "base/strings/string16.h"
 #include "base/values.h"
 #include "base/vivaldi_switches.h"
 #include "base/win/message_window.h"
@@ -32,7 +30,7 @@
 #include "base/win/win_util.h"
 #include "browser/init_sparkle.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/pref_names.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
 #include "third_party/_winsparkle_lib/include/winsparkle.h"
@@ -42,9 +40,7 @@
 #include "update_notifier/update_notifier_switches.h"
 #include "update_notifier/update_notifier_window.h"
 
-namespace ui {
-enum ScaleFactor;
-}
+using base::PathService;
 
 namespace vivaldi_update_notifier {
 
@@ -390,8 +386,7 @@ void UpdateNotifierManager::OnShutdownRequested() {
 void UpdateNotifierManager::OnEventTriggered(
     base::WaitableEvent* waitable_event) {
   if (waitable_event == global_restart_event_.get()) {
-    PostQuitMessage(0);
-
+    run_loop_.Quit();
     // restart only if the update notifier is enabled
     if (IsNotifierEnabled()) {
       base::FilePath exe_path =
@@ -404,7 +399,7 @@ void UpdateNotifierManager::OnEventTriggered(
     }
   } else if (waitable_event == quit_event_.get() ||
              waitable_event == global_quit_event_.get()) {
-    PostQuitMessage(0);
+    run_loop_.Quit();
   } else if (waitable_event == check_for_updates_event_.get()) {
     check_for_updates_event_->Reset();
     check_for_updates_event_watch_.StartWatching(
@@ -502,7 +497,6 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   instance_ = instance;
 
   ui_thread_loop_ = base::MessageLoop::current();
-  base::RunLoop run_loop;
 
   std::unique_ptr<FileVersionInfo> file_version_info(
       FileVersionInfo::CreateFileVersionInfoForModule(instance_));
@@ -522,7 +516,7 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
 
   const base::Value* locale_value = nullptr;
   std::string locale;
-  if (local_state->GetValue(prefs::kApplicationLocale, &locale_value))
+  if (local_state->GetValue(language::prefs::kApplicationLocale, &locale_value))
     locale_value->GetAsString(&locale);
 
   ResourceBundleDelegate resource_bundle_delegate;
@@ -551,7 +545,7 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   if (check_for_updates)
     TriggerUpdate(true);
 
-  run_loop.Run();
+  run_loop_.Run();
 
   update_notifier_window_.reset();
 
@@ -578,6 +572,7 @@ void UpdateNotifierManager::Disable() {
                                         vivaldi::kUpdateNotifierAutorunName);
   }
 
-  PostQuitMessage(0);
+  run_loop_.Quit();
 }
+
 }  // namespace vivaldi_update_notifier

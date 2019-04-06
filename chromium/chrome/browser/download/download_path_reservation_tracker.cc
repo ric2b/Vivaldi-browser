@@ -26,24 +26,21 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/third_party/icu/icu_utf.h"
 #include "build/build_config.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/features.h"
+#include "components/download/public/common/download_item.h"
+#include "components/filename_generation/filename_generation.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/download_item.h"
 #include "net/base/filename_util.h"
 #include "url/gurl.h"
 
 using content::BrowserThread;
-using content::DownloadItem;
+using download::DownloadItem;
 
 namespace {
 
 typedef DownloadItem* ReservationKey;
 typedef std::map<ReservationKey, base::FilePath> ReservationMap;
-
-// The lower bound for file name truncation. If the truncation results in a name
-// shorter than this limit, we give up automatic truncation and prompt the user.
-const size_t kTruncatedNameLengthLowerbound = 5;
 
 // The length of the suffix string we append for an intermediate file name.
 // In the file name truncation, we keep the margin to append the suffix.
@@ -125,46 +122,6 @@ bool IsPathInUse(const base::FilePath& path) {
   return false;
 }
 
-// Truncates path->BaseName() to make path->BaseName().value().size() <= limit.
-// - It keeps the extension as is. Only truncates the body part.
-// - It secures the base filename length to be more than or equals to
-//   kTruncatedNameLengthLowerbound.
-// If it was unable to shorten the name, returns false.
-bool TruncateFileName(base::FilePath* path, size_t limit) {
-  base::FilePath basename(path->BaseName());
-  // It is already short enough.
-  if (basename.value().size() <= limit)
-    return true;
-
-  base::FilePath dir(path->DirName());
-  base::FilePath::StringType ext(basename.Extension());
-  base::FilePath::StringType name(basename.RemoveExtension().value());
-
-  // Impossible to satisfy the limit.
-  if (limit < kTruncatedNameLengthLowerbound + ext.size())
-    return false;
-  limit -= ext.size();
-
-  // Encoding specific truncation logic.
-  base::FilePath::StringType truncated;
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX)
-  // UTF-8.
-  base::TruncateUTF8ToByteSize(name, limit, &truncated);
-#elif defined(OS_WIN)
-  // UTF-16.
-  DCHECK(name.size() > limit);
-  truncated = name.substr(0, CBU16_IS_TRAIL(name[limit]) ? limit - 1 : limit);
-#else
-  // We cannot generally assume that the file name encoding is in UTF-8 (see
-  // the comment for FilePath::AsUTF8Unsafe), hence no safe way to truncate.
-#endif
-
-  if (truncated.size() < kTruncatedNameLengthLowerbound)
-    return false;
-  *path = dir.Append(truncated + ext);
-  return true;
-}
-
 // Create a unique filename by appending a uniquifier. Modifies |path| in place
 // if successful and returns true. Otherwise |path| is left unmodified and
 // returns false.
@@ -188,7 +145,8 @@ bool CreateUniqueFilename(int max_path_component_length, base::FilePath* path) {
                   suffix.size();
 #endif  // defined(OS_WIN)
       // If truncation failed, give up uniquification.
-      if (limit <= 0 || !TruncateFileName(&path_to_check, limit))
+      if (limit <= 0 ||
+          !filename_generation::TruncateFilename(&path_to_check, limit))
         break;
     }
     path_to_check = path_to_check.InsertBeforeExtensionASCII(suffix);
@@ -223,7 +181,7 @@ PathValidationResult ValidatePathAndResolveConflicts(
   if (!base::PathIsWritable(target_path->DirName())) {
     DVLOG(1) << "Unable to write to path \"" << target_path->value() << "\"";
     base::FilePath target_dir;
-    PathService::Get(chrome::DIR_USER_DOCUMENTS, &target_dir);
+    base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &target_dir);
     *target_path = target_dir.Append(target_path->BaseName());
     return PathValidationResult::PATH_NOT_WRITABLE;
   }
@@ -239,7 +197,8 @@ PathValidationResult ValidatePathAndResolveConflicts(
 #else
     int limit = max_path_component_length - kIntermediateNameSuffixLength;
 #endif  // defined(OS_WIN)
-    if (limit <= 0 || !TruncateFileName(target_path, limit))
+    if (limit <= 0 ||
+        !filename_generation::TruncateFilename(target_path, limit))
       return PathValidationResult::NAME_TOO_LONG;
   }
 

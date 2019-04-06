@@ -58,7 +58,8 @@ cr.define('cr.ui', function() {
       this.addEventListener('dblclick', this.handleDblClick);
       this.addEventListener('keydown', this.handleKeyDown);
 
-      this.setAttribute('role', 'group');
+      if (!this.hasAttribute('role'))
+        this.setAttribute('role', 'group');
     },
 
     /**
@@ -465,7 +466,7 @@ cr.define('cr.ui', function() {
       return getComputedStyle(this.labelElement).backgroundImage.slice(4, -1);
     },
     set icon(icon) {
-      return this.labelElement.style.backgroundImage = url(icon);
+      return this.labelElement.style.backgroundImage = getUrlForCss(icon);
     },
 
     /**

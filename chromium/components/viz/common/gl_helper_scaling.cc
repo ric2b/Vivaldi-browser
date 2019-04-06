@@ -16,7 +16,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -653,6 +652,7 @@ void GLHelperScaling::ConvertScalerOpsToScalerStages(
           switch (x_ops->size()) {
             case 0:
               NOTREACHED();
+              break;
             case 1:
               if (x_ops->front().scale_factor == 3) {
                 current_shader = SHADER_BILINEAR3;
@@ -861,7 +861,7 @@ scoped_refptr<ShaderProgram> GLHelperScaling::GetShaderProgram(ShaderType type,
                                                                bool swizzle) {
   ShaderProgramKeyType key(type, swizzle);
   scoped_refptr<ShaderProgram>& cache_entry(shader_programs_[key]);
-  if (!cache_entry.get()) {
+  if (!cache_entry) {
     cache_entry = new ShaderProgram(gl_, helper_, type);
     std::basic_string<GLchar> vertex_program;
     std::basic_string<GLchar> fragment_program;

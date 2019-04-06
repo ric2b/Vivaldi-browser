@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/events/blink/web_input_event_builders_win.h"
 #include "base/command_line.h"
+#include "base/time/time.h"
 #include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/display/display.h"
 #include "ui/display/display_switches.h"
-#include "ui/events/blink/web_input_event_builders_win.h"
 #include "ui/events/event_constants.h"
 
 using blink::WebMouseEvent;
@@ -27,7 +28,8 @@ TEST(WebInputEventBuilderTest, TestMouseEventScale) {
 
   // Synthesize a mouse move with x = 300 and y = 200.
   WebMouseEvent mouse_move = ui::WebMouseEventBuilder::Build(
-      ::GetDesktopWindow(), WM_MOUSEMOVE, 0, MAKELPARAM(300, 200), 100,
+      ::GetDesktopWindow(), WM_MOUSEMOVE, 0, MAKELPARAM(300, 200),
+      base::TimeTicks() + base::TimeDelta::FromSeconds(100),
       blink::WebPointerProperties::PointerType::kMouse);
 
   // The WebMouseEvent.position field should be in pixels on return and hence

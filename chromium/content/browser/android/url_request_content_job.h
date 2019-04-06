@@ -43,7 +43,9 @@ class CONTENT_EXPORT URLRequestContentJob : public net::URLRequestJob {
   void Start() override;
   void Kill() override;
   int ReadRawData(net::IOBuffer* buf, int buf_size) override;
-  bool IsRedirectResponse(GURL* location, int* http_status_code) override;
+  bool IsRedirectResponse(GURL* location,
+                          int* http_status_code,
+                          bool* insecure_scheme_was_upgraded) override;
   bool GetMimeType(std::string* mime_type) const override;
   void SetExtraRequestHeaders(const net::HttpRequestHeaders& headers) override;
 
@@ -86,6 +88,7 @@ class CONTENT_EXPORT URLRequestContentJob : public net::URLRequestJob {
 
   std::unique_ptr<net::FileStream> stream_;
   ContentMetaInfo meta_info_;
+  std::string mime_type_from_intent_;
   const scoped_refptr<base::TaskRunner> content_task_runner_;
 
   net::HttpByteRange byte_range_;

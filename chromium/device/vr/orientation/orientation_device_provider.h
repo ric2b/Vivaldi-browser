@@ -12,8 +12,8 @@
 #include "device/vr/orientation/orientation_device.h"
 #include "device/vr/vr_device_provider.h"
 #include "device/vr/vr_export.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/sensor_provider.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/sensor_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace device {
@@ -24,8 +24,10 @@ class DEVICE_VR_EXPORT VROrientationDeviceProvider : public VRDeviceProvider {
   ~VROrientationDeviceProvider() override;
 
   void Initialize(
-      base::RepeatingCallback<void(VRDevice*)> add_device_callback,
-      base::RepeatingCallback<void(VRDevice*)> remove_device_callback,
+      base::RepeatingCallback<void(unsigned int,
+                                   mojom::VRDisplayInfoPtr,
+                                   mojom::XRRuntimePtr)> add_device_callback,
+      base::RepeatingCallback<void(unsigned int)> remove_device_callback,
       base::OnceClosure initialization_complete) override;
 
   bool Initialized() override;
@@ -39,7 +41,9 @@ class DEVICE_VR_EXPORT VROrientationDeviceProvider : public VRDeviceProvider {
 
   std::unique_ptr<VROrientationDevice> device_;
 
-  base::RepeatingCallback<void(VRDevice*)> add_device_callback_;
+  base::RepeatingCallback<
+      void(unsigned int, mojom::VRDisplayInfoPtr, mojom::XRRuntimePtr)>
+      add_device_callback_;
   base::OnceClosure initialized_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(VROrientationDeviceProvider);

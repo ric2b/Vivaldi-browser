@@ -19,11 +19,23 @@ namespace content {
 class WebContents;
 }
 
+// The states that indicate if a permission infobar should/could be shown or
+// not.
+enum class ShowPermissionInfoBarState {
+  // No need to show the infobar as the permissions have been already granted.
+  NO_NEED_TO_SHOW_PERMISSION_INFOBAR = 0,
+  // Show the the permission infobar.
+  SHOW_PERMISSION_INFOBAR,
+  // Can't show the permission infobar due to an internal state issue like
+  // the WebContents or the AndroidWindow are not available.
+  CANNOT_SHOW_PERMISSION_INFOBAR
+};
+
 // An infobar delegate to be used for requesting missing Android runtime
 // permissions for previously allowed ContentSettingsTypes.
 class PermissionUpdateInfoBarDelegate : public ConfirmInfoBarDelegate {
  public:
-  using PermissionUpdatedCallback = base::Callback<void(bool)>;
+  using PermissionUpdatedCallback = base::OnceCallback<void(bool)>;
 
   // Creates an infobar to resolve conflicts in Android runtime permissions.
   // The necessary runtime permissions are generated based on the list of
@@ -41,7 +53,7 @@ class PermissionUpdateInfoBarDelegate : public ConfirmInfoBarDelegate {
   static infobars::InfoBar* Create(
       content::WebContents* web_contents,
       const std::vector<ContentSettingsType>& content_settings_types,
-      const PermissionUpdatedCallback& callback);
+      PermissionUpdatedCallback callback);
 
   // Creates an infobar to resolve conflicts in Android runtime permissions.
   // Returns the infobar if it was successfully added.
@@ -51,12 +63,11 @@ class PermissionUpdateInfoBarDelegate : public ConfirmInfoBarDelegate {
       content::WebContents* web_contents,
       const std::vector<std::string>& android_permissions,
       int permission_msg_id,
-      const PermissionUpdatedCallback& callback);
+      PermissionUpdatedCallback callback);
 
-  // Return whether the runtime permissions currently granted to Chrome by
-  // Android are compatible with ContentSettingTypes previously granted to a
-  // site by the user.
-  static bool ShouldShowPermissionInfobar(
+  // Returns an indicator of whether a permission infobar should be shown or
+  // not or cannot be shown.
+  static ShowPermissionInfoBarState ShouldShowPermissionInfoBar(
       content::WebContents* web_contents,
       const std::vector<ContentSettingsType>& content_settings_types);
 
@@ -69,7 +80,7 @@ class PermissionUpdateInfoBarDelegate : public ConfirmInfoBarDelegate {
       content::WebContents* web_contents,
       const std::vector<std::string>& android_permissions,
       int permission_msg_id,
-      const PermissionUpdatedCallback& callback);
+      PermissionUpdatedCallback callback);
   ~PermissionUpdateInfoBarDelegate() override;
 
   // InfoBarDelegate:

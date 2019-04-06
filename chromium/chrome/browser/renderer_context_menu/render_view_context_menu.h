@@ -20,9 +20,9 @@
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "content/public/common/context_menu_params.h"
-#include "extensions/features/features.h"
-#include "ppapi/features/features.h"
-#include "printing/features/features.h"
+#include "extensions/buildflags/buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -38,7 +38,6 @@ class PrintPreviewContextMenuObserver;
 class Profile;
 class SpellingMenuObserver;
 class SpellingOptionsSubMenuObserver;
-class NotesSubMenuObserver;
 
 namespace content {
 class RenderFrameHost;
@@ -77,8 +76,13 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void ExecuteCommand(int command_id, int event_flags) override;
   void AddSpellCheckServiceItem(bool is_checked) override;
 
+  // Registers a one-time callback that will be called the next time a context
+  // menu is shown.
+  static void RegisterMenuShownCallbackForTesting(
+      base::OnceCallback<void(RenderViewContextMenu*)> cb);
+
  protected:
-  Profile* GetProfile();
+  Profile* GetProfile() const;
   Browser* GetBrowser() const;
 
   // Returns a (possibly truncated) version of the current selection text
@@ -96,6 +100,10 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   // Returns true if the browser is in HTML fullscreen mode, initiated by the
   // page (as opposed to the user). Used to determine which shortcut to display.
   bool IsHTML5Fullscreen() const;
+
+  // Returns true if keyboard lock is active and requires the user to press and
+  // hold escape to exit exclusive access mode.
+  bool IsPressAndHoldEscRequiredToExitFullscreen() const;
 
  private:
   friend class RenderViewContextMenuTest;
@@ -131,6 +139,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendDevtoolsForUnpackedExtensions();
   void AppendLinkItems();
   void AppendOpenWithLinkItems();
+  void AppendSmartSelectionActionItems();
   void AppendOpenInBookmarkAppLinkItems();
   void AppendImageItems();
   void AppendAudioItems();
@@ -241,6 +250,9 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
 #if defined(OS_CHROMEOS)
   // An observer that handles "Open with <app>" items.
   std::unique_ptr<RenderViewContextMenuObserver> open_with_menu_observer_;
+  // An observer that handles smart text selection action items.
+  std::unique_ptr<RenderViewContextMenuObserver>
+      start_smart_selection_action_menu_observer_;
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -252,8 +264,6 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   // embeds the MimeHandlerViewGuest. Otherwise this will be the same as
   // |source_web_contents_|.
   content::WebContents* const embedder_web_contents_;
-
-  std::unique_ptr<RenderViewContextMenuObserver> vivaldi_menu_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenu);
 };

@@ -80,10 +80,12 @@ void CardboardGamepadDataFetcher::GetGamepadData(bool devices_changed_hint) {
   CardboardGamepadData provided_data = gamepad_data_;
 
   Gamepad& pad = state->data;
-  if (state->active_state == GAMEPAD_NEWLY_ACTIVE) {
+  if (!state->is_initialized) {
+    state->is_initialized = true;
     // This is the first time we've seen this device, so do some one-time
     // initialization
     pad.connected = true;
+    pad.is_xr = true;
     CopyToUString(pad.id, Gamepad::kIdLengthCap,
                   base::UTF8ToUTF16("Cardboard Button"));
     CopyToUString(pad.mapping, Gamepad::kMappingLengthCap,
@@ -96,7 +98,7 @@ void CardboardGamepadDataFetcher::GetGamepadData(bool devices_changed_hint) {
     pad.hand = GamepadHand::kNone;
   }
 
-  pad.timestamp = provided_data.timestamp;
+  pad.timestamp = CurrentTimeInMicroseconds();
 
   bool pressed = provided_data.is_screen_touching;
   pad.buttons[0].touched = pressed;

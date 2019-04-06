@@ -32,39 +32,46 @@ CSPContext::~CSPContext() {}
 bool CSPContext::IsAllowedByCsp(CSPDirective::Name directive_name,
                                 const GURL& url,
                                 bool is_redirect,
+                                bool is_response_check,
                                 const SourceLocation& source_location,
-                                CheckCSPDisposition check_csp_disposition) {
+                                CheckCSPDisposition check_csp_disposition,
+                                bool is_form_submission) {
   if (SchemeShouldBypassCSP(url.scheme_piece()))
     return true;
 
   bool allow = true;
   for (const auto& policy : policies_) {
     if (ShouldCheckPolicy(policy, check_csp_disposition)) {
-      allow &= ContentSecurityPolicy::Allow(policy, directive_name, url,
-                                            is_redirect, this, source_location);
+      allow &= ContentSecurityPolicy::Allow(
+          policy, directive_name, url, is_redirect, is_response_check, this,
+          source_location, is_form_submission);
     }
   }
+
+  DCHECK(allow || check_csp_disposition != CSPContext::CHECK_REPORT_ONLY_CSP);
+
   return allow;
 }
 
 bool CSPContext::ShouldModifyRequestUrlForCsp(
-    const GURL& url,
-    bool is_subresource_or_form_submission,
-    GURL* new_url) {
+    bool is_subresource_or_form_submission) {
   for (const auto& policy : policies_) {
-    if (url.scheme() == "http" &&
-        ContentSecurityPolicy::ShouldUpgradeInsecureRequest(policy) &&
+    if (ContentSecurityPolicy::ShouldUpgradeInsecureRequest(policy) &&
         is_subresource_or_form_submission) {
-      *new_url = url;
-      GURL::Replacements replacements;
-      replacements.SetSchemeStr("https");
-      if (url.port() == "80")
-        replacements.SetPortStr("443");
-      *new_url = new_url->ReplaceComponents(replacements);
       return true;
     }
   }
   return false;
+}
+
+void CSPContext::ModifyRequestUrlForCsp(GURL* url) {
+  if (url->SchemeIs(url::kHttpScheme)) {
+    // Updating the URL's scheme also implicitly updates the URL's port from 80
+    // to 443 if needed.
+    GURL::Replacements replacements;
+    replacements.SetSchemeStr(url::kHttpsScheme);
+    *url = url->ReplaceComponents(replacements);
+  }
 }
 
 void CSPContext::SetSelf(const url::Origin origin) {
@@ -86,6 +93,10 @@ void CSPContext::SetSelf(const url::Origin origin) {
       origin.port() == 0 ? url::PORT_UNSPECIFIED : origin.port(), false, "");
 
   DCHECK_NE("", self_source_->scheme);
+}
+
+void CSPContext::SetSelf(const CSPSource& self_source) {
+  self_source_ = self_source;
 }
 
 bool CSPContext::SchemeShouldBypassCSP(const base::StringPiece& scheme) {
@@ -113,6 +124,7 @@ CSPViolationParams::CSPViolationParams(
     const std::string& console_message,
     const GURL& blocked_url,
     const std::vector<std::string>& report_endpoints,
+    bool use_reporting_api,
     const std::string& header,
     const blink::WebContentSecurityPolicyType& disposition,
     bool after_redirect,
@@ -122,6 +134,7 @@ CSPViolationParams::CSPViolationParams(
       console_message(console_message),
       blocked_url(blocked_url),
       report_endpoints(report_endpoints),
+      use_reporting_api(use_reporting_api),
       header(header),
       disposition(disposition),
       after_redirect(after_redirect),
@@ -129,7 +142,6 @@ CSPViolationParams::CSPViolationParams(
 
 CSPViolationParams::CSPViolationParams(const CSPViolationParams& other) =
     default;
-
 CSPViolationParams::~CSPViolationParams() {}
 
 }  // namespace content

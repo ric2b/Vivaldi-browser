@@ -4,13 +4,18 @@
 
 #include "chrome/test/views/chrome_views_test_base.h"
 
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/test/views/chrome_test_views_delegate.h"
 
 ChromeViewsTestBase::ChromeViewsTestBase() {}
 
 ChromeViewsTestBase::~ChromeViewsTestBase() {}
 
 void ChromeViewsTestBase::SetUp() {
+  set_views_delegate(CreateTestViewsDelegate());
   views::ViewsTestBase::SetUp();
-  provider_ = base::MakeUnique<ChromeLayoutProvider>();
+}
+
+std::unique_ptr<views::TestViewsDelegate>
+ChromeViewsTestBase::CreateTestViewsDelegate() {
+  return std::make_unique<ChromeTestViewsDelegate>();
 }

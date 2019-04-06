@@ -10,6 +10,7 @@
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_request_headers.h"
+#include "net/socket/socket_tag.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -25,8 +26,15 @@ struct NET_EXPORT BidirectionalStreamRequestInfo {
   // The method to use (GET, POST, etc.).
   std::string method;
 
+  // Whether to allow early data to be used with this request, overriding the
+  // early data based on the |method| semantics.
+  bool allow_early_data_override;
+
   // Request priority.
   RequestPriority priority;
+
+  // Socket tag to apply to sockets used to process this request.
+  SocketTag socket_tag;
 
   // Any extra request headers (including User-Agent).
   HttpRequestHeaders extra_headers;

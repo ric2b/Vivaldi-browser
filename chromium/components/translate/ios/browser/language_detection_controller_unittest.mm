@@ -4,9 +4,9 @@
 
 #import "components/translate/ios/browser/language_detection_controller.h"
 
+#include <memory>
+
 #include "base/callback.h"
-#include "base/mac/bind_objc_block.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -51,7 +51,7 @@ class LanguageDetectionControllerTest : public PlatformTest {
 
     MockJsLanguageDetectionManager* js_manager =
         [[MockJsLanguageDetectionManager alloc] init];
-    controller_ = base::MakeUnique<LanguageDetectionController>(
+    controller_ = std::make_unique<LanguageDetectionController>(
         &web_state_, js_manager, &prefs_);
   }
 
@@ -66,7 +66,7 @@ class LanguageDetectionControllerTest : public PlatformTest {
   std::unique_ptr<LanguageDetectionDetails> details_;
 
   void OnLanguageDetermined(const LanguageDetectionDetails& details) {
-    details_ = base::MakeUnique<LanguageDetectionDetails>(details);
+    details_ = std::make_unique<LanguageDetectionDetails>(details);
   }
 };
 
@@ -85,7 +85,8 @@ TEST_F(LanguageDetectionControllerTest, OnTextCaptured) {
   command.SetInteger("captureTextTime", 10);
   command.SetString("htmlLang", kRootLanguage);
   command.SetString("httpContentLanguage", kContentLanguage);
-  controller()->OnTextCaptured(command, GURL("http://google.com"), false);
+  controller()->OnTextCaptured(command, GURL("http://google.com"),
+                               /*interacting=*/false, /*is_main_frame=*/true);
 
   const LanguageDetectionDetails* const details = this->details();
   EXPECT_NE(nullptr, details);
@@ -112,7 +113,8 @@ TEST_F(LanguageDetectionControllerTest, MissingHttpContentLanguage) {
   command.SetInteger("captureTextTime", 10);
   command.SetString("htmlLang", "");
   command.SetString("httpContentLanguage", "");
-  controller()->OnTextCaptured(command, GURL("http://google.com"), false);
+  controller()->OnTextCaptured(command, GURL("http://google.com"),
+                               /*interacting=*/false, /*is_main_frame=*/true);
 
   const LanguageDetectionDetails* const details = this->details();
   EXPECT_NE(nullptr, details);

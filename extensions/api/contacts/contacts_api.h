@@ -168,6 +168,27 @@ class ContactsCreateFunction : public ContactAsyncFunction {
   DISALLOW_COPY_AND_ASSIGN(ContactsCreateFunction);
 };
 
+class ContactsCreateManyFunction : public ContactAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contacts.createMany", CONTACTS_CREATE_MANY)
+  ContactsCreateManyFunction() = default;
+
+ protected:
+  ~ContactsCreateManyFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback to provide results.
+  void CreateManyComplete(
+      std::shared_ptr<contact::CreateContactsResult> result);
+
+ private:
+  // The task tracker for the ContactService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(ContactsCreateManyFunction);
+};
+
 class ContactsUpdateFunction : public ContactAsyncFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("contacts.update", CONTACTS_UPDATE)

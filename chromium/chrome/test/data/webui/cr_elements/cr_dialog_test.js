@@ -11,14 +11,60 @@ suite('cr-dialog', function() {
     PolymerTest.clearBody();
   });
 
+  test('cr-dialog-open event fires when opened', function() {
+    document.body.innerHTML = `
+      <cr-dialog>
+        <div slot="title">title</div>
+        <div slot="body">body</div>
+      </cr-dialog>`;
+
+    const dialog = document.body.querySelector('cr-dialog');
+    const whenFired = test_util.eventToPromise('cr-dialog-open', dialog);
+    dialog.showModal();
+    return whenFired;
+  });
+
+  test('close event bubbles', function() {
+    document.body.innerHTML = `
+      <cr-dialog>
+        <div slot="title">title</div>
+        <div slot="body">body</div>
+      </cr-dialog>`;
+
+    const dialog = document.body.querySelector('cr-dialog');
+    dialog.showModal();
+    const whenFired = test_util.eventToPromise('close', dialog);
+    dialog.close();
+    return whenFired.then(() => {
+      assertEquals('success', dialog.getNative().returnValue);
+    });
+  });
+
+  test('cancel and close events bubbles when cancelled', function() {
+    document.body.innerHTML = `
+      <cr-dialog>
+        <div slot="title">title</div>
+        <div slot="body">body</div>
+      </cr-dialog>`;
+
+    const dialog = document.body.querySelector('cr-dialog');
+    dialog.showModal();
+    const whenCancelFired = test_util.eventToPromise('cancel', dialog);
+    const whenCloseFired = test_util.eventToPromise('close', dialog);
+    dialog.cancel();
+    return Promise.all([whenCancelFired, whenCloseFired]).then(() => {
+      assertEquals('', dialog.getNative().returnValue);
+    });
+  });
+
   test('focuses title on show', function() {
     document.body.innerHTML = `
-      <dialog is="cr-dialog">
+      <cr-dialog>
         <div slot="title">title</div>
         <div slot="body"><button>button</button></div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
     const button = document.body.querySelector('button');
 
     assertNotEquals(dialog, document.activeElement);
@@ -32,15 +78,15 @@ suite('cr-dialog', function() {
 
   test('enter keys should trigger action buttons once', function() {
     document.body.innerHTML = `
-      <dialog is="cr-dialog">
+      <cr-dialog>
         <div slot="title">title</div>
         <div slot="body">
           <button class="action-button">button</button>
           <button id="other-button">other button</button>
         </div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
     const actionButton = document.body.querySelector('.action-button');
 
     dialog.showModal();
@@ -69,7 +115,7 @@ suite('cr-dialog', function() {
 
   test('enter keys find the first non-hidden non-disabled button', function() {
     document.body.innerHTML = `
-      <dialog is="cr-dialog">
+      <cr-dialog>
         <div slot="title">title</div>
         <div slot="body">
           <button id="hidden" class="action-button" hidden>hidden</button>
@@ -77,9 +123,9 @@ suite('cr-dialog', function() {
           <button class="action-button" disabled hidden>disabled hidden</button>
           <button id="active" class="action-button">active</button>
         </div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
     const hiddenButton = document.body.querySelector('#hidden');
     const actionButton = document.body.querySelector('#active');
     dialog.showModal();
@@ -97,20 +143,20 @@ suite('cr-dialog', function() {
     assertTrue(clicked);
   });
 
-  test('enter keys from paper-inputs (only) are processed', function() {
+  test('enter keys from cr-inputs (only) are processed', function() {
     document.body.innerHTML = `
-      <dialog is="cr-dialog">
+      <cr-dialog>
         <div slot="title">title</div>
         <div slot="body">
-          <paper-input></paper-input>
+          <cr-input></cr-input>
           <foobar></foobar>
           <button class="action-button">active</button>
         </div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
 
-    const inputElement = document.body.querySelector('paper-input');
+    const inputElement = document.body.querySelector('cr-input');
     const otherElement = document.body.querySelector('foobar');
     const actionButton = document.body.querySelector('.action-button');
     assertTrue(!!inputElement);
@@ -132,12 +178,12 @@ suite('cr-dialog', function() {
 
   test('focuses [autofocus] instead of title when present', function() {
     document.body.innerHTML = `
-      <dialog is="cr-dialog">
+      <cr-dialog>
         <div slot="title">title</div>
         <div slot="body"><button autofocus>button</button></div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
     const button = document.body.querySelector('button');
 
     assertNotEquals(dialog, document.activeElement);
@@ -153,12 +199,12 @@ suite('cr-dialog', function() {
   // dialog has been opened.
   test('body scrollable border not added before modal shown', function(done) {
     document.body.innerHTML = `
-      <dialog is="cr-dialog">
+      <cr-dialog>
         <div slot="title">title</div>
         <div slot="body">body</div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
     assertFalse(dialog.open);
     const bodyContainer = dialog.$$('.body-container');
     assertTrue(!!bodyContainer);
@@ -174,14 +220,14 @@ suite('cr-dialog', function() {
 
   test('dialog body scrollable border when appropriate', function(done) {
     document.body.innerHTML = `
-      <dialog is="cr-dialog">
+      <cr-dialog>
         <div slot="title">title</div>
         <div slot="body">
           <div style="height: 100px">tall content</div>
         </div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
     const bodyContainer = dialog.$$('.body-container');
     assertTrue(!!bodyContainer);
 
@@ -225,25 +271,64 @@ suite('cr-dialog', function() {
 
   test('dialog cannot be cancelled when `no-cancel` is set', function() {
     document.body.innerHTML = `
-      <dialog is="cr-dialog" no-cancel>
+      <cr-dialog no-cancel>
         <div slot="title">title</div>
-      </dialog>`;
+      </cr-dialog>`;
 
-    const dialog = document.body.querySelector('dialog');
+    const dialog = document.body.querySelector('cr-dialog');
     dialog.showModal();
 
-    assertTrue(dialog.getCloseButton().hidden);
+    // The paper-icon-button-light is the hidden element which is the
+    // parentElement of the button.
+    assertTrue(dialog.getCloseButton().parentElement.hidden);
 
     // Hitting escape fires a 'cancel' event. Cancelling that event prevents the
     // dialog from closing.
-    let e = new Event('cancel', {cancelable: true});
-    dialog.dispatchEvent(e);
+    let e = new CustomEvent('cancel', {cancelable: true});
+    dialog.getNative().dispatchEvent(e);
     assertTrue(e.defaultPrevented);
 
     dialog.noCancel = false;
 
-    e = new Event('cancel', {cancelable: true});
-    dialog.dispatchEvent(e);
+    e = new CustomEvent('cancel', {cancelable: true});
+    dialog.getNative().dispatchEvent(e);
     assertFalse(e.defaultPrevented);
+  });
+
+  test('dialog close button shown when showCloseButton is true', function() {
+    document.body.innerHTML = `
+      <cr-dialog show-close-button>
+        <div slot="title">title</div>
+      </cr-dialog>`;
+
+    const dialog = document.body.querySelector('cr-dialog');
+    dialog.showModal();
+    assertTrue(dialog.open);
+
+    // The paper-icon-button-light is the hidden element which is the
+    // parentElement of the button.
+    assertFalse(dialog.getCloseButton().parentElement.hidden);
+    assertEquals(
+        'block',
+        window.getComputedStyle(dialog.getCloseButton().parentElement).display);
+    dialog.getCloseButton().click();
+    assertFalse(dialog.open);
+  });
+
+  test('dialog close button hidden when showCloseButton is false', function() {
+    document.body.innerHTML = `
+      <cr-dialog>
+        <div slot="title">title</div>
+      </cr-dialog>`;
+
+    const dialog = document.body.querySelector('cr-dialog');
+    dialog.showModal();
+
+    // The paper-icon-button-light is the hidden element which is the
+    // parentElement of the button.
+    assertTrue(dialog.getCloseButton().parentElement.hidden);
+    assertEquals(
+        'none',
+        window.getComputedStyle(dialog.getCloseButton().parentElement).display);
   });
 });

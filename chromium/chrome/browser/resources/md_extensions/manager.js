@@ -38,19 +38,11 @@ cr.define('extensions', function() {
         value: false,
       },
 
-      // This is not typed because it implements multiple interfaces, and is
-      // passed to different elements as different types.
+      /** @type {!extensions.Service} */
       delegate: {
         type: Object,
         value: function() {
           return extensions.Service.getInstance();
-        },
-      },
-
-      isGuest_: {
-        type: Boolean,
-        value: function() {
-          return loadTimeData.getBoolean('isGuest');
         },
       },
 
@@ -127,9 +119,6 @@ cr.define('extensions', function() {
       /** @private */
       showOptionsDialog_: Boolean,
 
-      /** @private */
-      showPackDialog_: Boolean,
-
       // <if expr="chromeos">
       /** @private */
       kioskEnabled_: {
@@ -166,11 +155,6 @@ cr.define('extensions', function() {
 
     /** @override */
     ready: function() {
-      if (loadTimeData.getBoolean('isGuest')) {
-        this.initPage_();
-        return;
-      }
-
       let service = extensions.Service.getInstance();
 
       let onProfileStateChanged = profileInfo => {
@@ -243,11 +227,18 @@ cr.define('extensions', function() {
         case EventType.ERRORS_REMOVED:
         case EventType.PREFS_CHANGED:
         case EventType.WARNINGS_CHANGED:
+        case EventType.COMMAND_ADDED:
+        case EventType.COMMAND_REMOVED:
           // |extensionInfo| can be undefined in the case of an extension
           // being unloaded right before uninstallation. There's nothing to do
           // here.
           if (!eventData.extensionInfo)
             break;
+
+          if (this.delegate.shouldIgnoreUpdate(
+                  eventData.extensionInfo.id, eventData.event_type)) {
+            break;
+          }
 
           const listId = this.getListId_(eventData.extensionInfo);
           const currentIndex = this[listId].findIndex(
@@ -507,19 +498,6 @@ cr.define('extensions', function() {
     /** @private */
     onOptionsDialogClose_: function() {
       this.showOptionsDialog_ = false;
-    },
-
-    /** @private */
-    onPackTap_: function() {
-      this.showPackDialog_ = true;
-      this.async(() => {
-        this.$$('#pack-dialog').show();
-      });
-    },
-
-    /** @private */
-    onPackDialogClose_: function() {
-      this.showPackDialog_ = false;
     },
 
     /** @private */

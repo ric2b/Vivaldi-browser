@@ -474,12 +474,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
 
     chromeos::LoginDisplayHost* host =
         chromeos::LoginDisplayHost::default_host();
-    ASSERT_TRUE(host);
-    chromeos::WebUILoginView* web_ui_login_view = host->GetWebUILoginView();
-    ASSERT_TRUE(web_ui_login_view);
-    content::WebUI* web_ui = web_ui_login_view->GetWebUI();
-    ASSERT_TRUE(web_ui);
-    contents_ = web_ui->GetWebContents();
+    contents_ = host->GetOobeWebContents();
     ASSERT_TRUE(contents_);
 
     // Wait for the login UI to be ready.
@@ -489,26 +484,6 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
     const bool oobe_ui_ready = oobe_ui->IsJSReady(run_loop.QuitClosure());
     if (!oobe_ui_ready)
       run_loop.Run();
-
-    // The network selection screen changes the application locale on load and
-    // once again on blur. Wait for the screen to load and blur it so that any
-    // locale changes caused by this screen happen now and do not affect any
-    // subsequent parts of the test.
-    bool done = false;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        contents_,
-        "var languageSelect = document.getElementById('language-select');"
-        "var blurAndReportSuccess = function() {"
-        "  languageSelect.blur();"
-        "  domAutomationController.send(true);"
-        "};"
-        "var screenLoading = document.getElementById('outer-container')"
-        "    .classList.contains('down');"
-        "if (document.activeElement == languageSelect || !screenLoading)"
-        "  blurAndReportSuccess();"
-        "else"
-        "  languageSelect.addEventListener('focus', blurAndReportSuccess);",
-        &done));
 
     // Skip to the login screen.
     chromeos::WizardController* wizard_controller =
@@ -632,8 +607,8 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
   base::FilePath GetExtensionCacheDirectoryForAccountID(
       const std::string& account_id) {
     base::FilePath extension_cache_root_dir;
-    if (!PathService::Get(chromeos::DIR_DEVICE_LOCAL_ACCOUNT_EXTENSIONS,
-                          &extension_cache_root_dir)) {
+    if (!base::PathService::Get(chromeos::DIR_DEVICE_LOCAL_ACCOUNT_EXTENSIONS,
+                                &extension_cache_root_dir)) {
       ADD_FAILURE();
     }
     return extension_cache_root_dir.Append(
@@ -1118,7 +1093,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
   // Verify that the hosted app was installed.
   Profile* profile = GetProfileForTest();
   ASSERT_TRUE(profile);
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
   EXPECT_TRUE(extension_service->GetExtensionById(kHostedAppID, true));
 
@@ -1127,7 +1102,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
 
   // Verify that the app was downloaded to the account's extension cache.
   base::FilePath test_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
   EXPECT_TRUE(ContentsEqual(
           GetCacheCRXFile(kAccountId1, kHostedAppID, kHostedAppVersion),
           test_dir.Append(kHostedAppCRXPath)));
@@ -1154,7 +1129,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsCached) {
   EXPECT_TRUE(base::CreateDirectory(
       GetExtensionCacheDirectoryForAccountID(kAccountId1)));
   base::FilePath test_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
   const base::FilePath cached_hosted_app =
       GetCacheCRXFile(kAccountId1, kHostedAppID, kHostedAppVersion);
   EXPECT_TRUE(CopyFile(test_dir.Append(kHostedAppCRXPath),
@@ -1196,7 +1171,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsCached) {
   // Verify that the hosted app was installed.
   Profile* profile = GetProfileForTest();
   ASSERT_TRUE(profile);
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
   EXPECT_TRUE(extension_service->GetExtensionById(kHostedAppID, true));
 
@@ -1279,7 +1254,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionCacheImplTest) {
       GetCacheCRXFilePath(kGoodExtensionID, kGoodExtensionVersion, temp_path);
   base::FilePath test_dir;
   std::string hash;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
   EXPECT_TRUE(CopyFile(test_dir.Append(kGoodExtensionCRXPath), temp_file));
   cache_impl.AllowCaching(kGoodExtensionID);
   run_loop.reset(new base::RunLoop);
@@ -1437,7 +1412,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, UserAvatarImage) {
   WaitForPolicy();
 
   base::FilePath test_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
   std::string image_data;
   ASSERT_TRUE(base::ReadFileToString(
       test_dir.Append(chromeos::test::kUserAvatarImage1RelativePath),
@@ -1479,7 +1454,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, UserAvatarImage) {
   ASSERT_TRUE(user);
 
   base::FilePath user_data_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   const base::FilePath saved_image_path =
       user_data_dir.Append(account_id_1_.GetUserEmail()).AddExtension("jpg");
 
@@ -1547,7 +1522,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, LastWindowClosedLogoutReminder) {
       extensions::NOTIFICATION_CRX_INSTALLER_DONE,
       content::NotificationService::AllSources());
   base::FilePath test_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
   installer->InstallCrx(test_dir.Append(kPackagedAppCRXPath));
   app_install_observer.Wait();
   const extensions::Extension* app =
@@ -2085,7 +2060,10 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest,
   VerifyKeyboardLayoutMatchesLocale();
 }
 
-IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
+// https://crbug.com/865702: Flaky (crashes intermittently) on
+// linux-chromeos-rel builder.
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest,
+                       DISABLED_TermsOfServiceWithLocaleSwitch) {
   // Specify Terms of Service URL.
   ASSERT_TRUE(embedded_test_server()->Start());
   device_local_account_policy_.payload().mutable_termsofserviceurl()->set_value(
@@ -2115,7 +2093,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
   // Set up an observer that will quit the message loop when login has succeeded
   // and the first wizard screen, if any, is being shown.
   base::RunLoop login_wait_run_loop;
-  chromeos::MockAuthStatusConsumer login_status_consumer;
+  chromeos::MockAuthStatusConsumer login_status_consumer(
+      login_wait_run_loop.QuitClosure());
   EXPECT_CALL(login_status_consumer, OnAuthSuccess(_)).Times(1).WillOnce(
       InvokeWithoutArgs(&login_wait_run_loop, &base::RunLoop::Quit));
   chromeos::ExistingUserController* controller =
@@ -2262,7 +2241,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PolicyForExtensions) {
   // Verify that the app was installed.
   Profile* profile = GetProfileForTest();
   ASSERT_TRUE(profile);
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
   EXPECT_TRUE(extension_service->GetExtensionById(kShowManagedStorageID, true));
 
@@ -2333,7 +2312,8 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
   // Set up an observer that will quit the message loop when login has succeeded
   // and the first wizard screen, if any, is being shown.
   base::RunLoop login_wait_run_loop;
-  chromeos::MockAuthStatusConsumer login_status_consumer;
+  chromeos::MockAuthStatusConsumer login_status_consumer(
+      login_wait_run_loop.QuitClosure());
   EXPECT_CALL(login_status_consumer, OnAuthSuccess(_)).Times(1).WillOnce(
       InvokeWithoutArgs(&login_wait_run_loop, &base::RunLoop::Quit));
 
@@ -2439,7 +2419,7 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
   // The Terms of Service URL was valid. Verify that the screen is showing the
   // downloaded Terms of Service and the accept button is enabled.
   base::FilePath test_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
   std::string terms_of_service;
   ASSERT_TRUE(base::ReadFileToString(
       test_dir.Append(kExistentTermsOfServicePath), &terms_of_service));

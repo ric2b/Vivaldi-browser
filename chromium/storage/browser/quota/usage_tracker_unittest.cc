@@ -67,48 +67,45 @@ class MockQuotaClient : public QuotaClient {
 
   void OnQuotaManagerDestroyed() override {}
 
-  void GetOriginUsage(const GURL& origin,
+  void GetOriginUsage(const url::Origin& origin,
                       StorageType type,
-                      const GetUsageCallback& callback) override {
+                      GetUsageCallback callback) override {
     EXPECT_EQ(StorageType::kTemporary, type);
-    int64_t usage = GetUsage(origin);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  base::Bind(callback, usage));
+    int64_t usage = GetUsage(origin.GetURL());
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), usage));
   }
 
   void GetOriginsForType(StorageType type,
-                         const GetOriginsCallback& callback) override {
+                         GetOriginsCallback callback) override {
     EXPECT_EQ(StorageType::kTemporary, type);
-    std::set<GURL> origins;
-    for (UsageMap::const_iterator itr = usage_map_.begin();
-         itr != usage_map_.end(); ++itr) {
-      origins.insert(itr->first);
-    }
+    std::set<url::Origin> origins;
+    for (const auto& origin_usage_pair : origin_usage_map_)
+      origins.insert(url::Origin::Create(origin_usage_pair.first));
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, origins));
+        FROM_HERE, base::BindOnce(std::move(callback), origins));
   }
 
   void GetOriginsForHost(StorageType type,
                          const std::string& host,
-                         const GetOriginsCallback& callback) override {
+                         GetOriginsCallback callback) override {
     EXPECT_EQ(StorageType::kTemporary, type);
-    std::set<GURL> origins;
-    for (UsageMap::const_iterator itr = usage_map_.begin();
-         itr != usage_map_.end(); ++itr) {
-      if (net::GetHostOrSpecFromURL(itr->first) == host)
-        origins.insert(itr->first);
+    std::set<url::Origin> origins;
+    for (const auto& origin_usage_pair : origin_usage_map_) {
+      if (net::GetHostOrSpecFromURL(origin_usage_pair.first) == host)
+        origins.insert(url::Origin::Create(origin_usage_pair.first));
     }
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, origins));
+        FROM_HERE, base::BindOnce(std::move(callback), origins));
   }
 
-  void DeleteOriginData(const GURL& origin,
+  void DeleteOriginData(const url::Origin& origin,
                         StorageType type,
-                        const DeletionCallback& callback) override {
+                        DeletionCallback callback) override {
     EXPECT_EQ(StorageType::kTemporary, type);
-    usage_map_.erase(origin);
+    origin_usage_map_.erase(origin.GetURL());
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, QuotaStatusCode::kOk));
+        FROM_HERE, base::BindOnce(std::move(callback), QuotaStatusCode::kOk));
   }
 
   bool DoesSupport(StorageType type) const override {
@@ -116,24 +113,22 @@ class MockQuotaClient : public QuotaClient {
   }
 
   int64_t GetUsage(const GURL& origin) {
-    UsageMap::const_iterator found = usage_map_.find(origin);
-    if (found == usage_map_.end())
+    auto found = origin_usage_map_.find(origin);
+    if (found == origin_usage_map_.end())
       return 0;
     return found->second;
   }
 
   void SetUsage(const GURL& origin, int64_t usage) {
-    usage_map_[origin] = usage;
+    origin_usage_map_[origin] = usage;
   }
 
   int64_t UpdateUsage(const GURL& origin, int64_t delta) {
-    return usage_map_[origin] += delta;
+    return origin_usage_map_[origin] += delta;
   }
 
  private:
-  typedef std::map<GURL, int64_t> UsageMap;
-
-  UsageMap usage_map_;
+  std::map<GURL, int64_t> origin_usage_map_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuotaClient);
 };
@@ -165,8 +160,8 @@ class UsageTrackerTest : public testing::Test {
 
   void GetGlobalLimitedUsage(int64_t* limited_usage) {
     bool done = false;
-    usage_tracker_.GetGlobalLimitedUsage(base::Bind(
-        &DidGetUsage, &done, limited_usage));
+    usage_tracker_.GetGlobalLimitedUsage(
+        base::BindOnce(&DidGetUsage, &done, limited_usage));
     base::RunLoop().RunUntilIdle();
 
     EXPECT_TRUE(done);
@@ -174,9 +169,8 @@ class UsageTrackerTest : public testing::Test {
 
   void GetGlobalUsage(int64_t* usage, int64_t* unlimited_usage) {
     bool done = false;
-    usage_tracker_.GetGlobalUsage(base::Bind(
-        &DidGetGlobalUsage,
-        &done, usage, unlimited_usage));
+    usage_tracker_.GetGlobalUsage(
+        base::BindOnce(&DidGetGlobalUsage, &done, usage, unlimited_usage));
     base::RunLoop().RunUntilIdle();
 
     EXPECT_TRUE(done);
@@ -184,7 +178,8 @@ class UsageTrackerTest : public testing::Test {
 
   void GetHostUsage(const std::string& host, int64_t* usage) {
     bool done = false;
-    usage_tracker_.GetHostUsage(host, base::Bind(&DidGetUsage, &done, usage));
+    usage_tracker_.GetHostUsage(host,
+                                base::BindOnce(&DidGetUsage, &done, usage));
     base::RunLoop().RunUntilIdle();
 
     EXPECT_TRUE(done);
@@ -196,7 +191,8 @@ class UsageTrackerTest : public testing::Test {
       base::flat_map<QuotaClient::ID, int64_t>* usage_breakdown) {
     bool done = false;
     usage_tracker_.GetHostUsageWithBreakdown(
-        host, base::Bind(&DidGetUsageBreakdown, &done, usage, usage_breakdown));
+        host,
+        base::BindOnce(&DidGetUsageBreakdown, &done, usage, usage_breakdown));
     base::RunLoop().RunUntilIdle();
 
     EXPECT_TRUE(done);

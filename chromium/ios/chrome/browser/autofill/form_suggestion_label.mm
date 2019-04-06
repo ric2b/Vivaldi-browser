@@ -18,6 +18,7 @@
 #import "ios/chrome/browser/autofill/form_suggestion_view_client.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -65,7 +66,6 @@ UILabel* TextLabel(NSString* text, CGFloat alpha, BOOL bold) {
   [label setFont:font];
   [label setTextColor:[UIColor colorWithWhite:0.0f alpha:alpha]];
   [label setBackgroundColor:[UIColor clearColor]];
-  [label sizeToFit];
   return label;
 }
 
@@ -75,22 +75,30 @@ UILabel* TextLabel(NSString* text, CGFloat alpha, BOOL bold) {
   // Client of this view.
   __weak id<FormSuggestionViewClient> client_;
   FormSuggestion* suggestion_;
+  BOOL userInteractionEnabled_;
 }
 
 - (id)initWithSuggestion:(FormSuggestion*)suggestion
-           proposedFrame:(CGRect)proposedFrame
-                   index:(NSUInteger)index
-          numSuggestions:(NSUInteger)numSuggestions
-                  client:(id<FormSuggestionViewClient>)client {
-  // TODO(jimblackler): implement sizeThatFits: and layoutSubviews, and perform
-  // layout in those methods instead of in the designated initializer.
+                     index:(NSUInteger)index
+    userInteractionEnabled:(BOOL)userInteractionEnabled
+            numSuggestions:(NSUInteger)numSuggestions
+                    client:(id<FormSuggestionViewClient>)client {
   self = [super initWithFrame:CGRectZero];
   if (self) {
     suggestion_ = suggestion;
     client_ = client;
+    userInteractionEnabled_ = userInteractionEnabled;
 
-    const CGFloat frameHeight = CGRectGetHeight(proposedFrame);
-    CGFloat currentX = kBorderWidth;
+    UIStackView* stackView = [[UIStackView alloc] initWithArrangedSubviews:@[]];
+    stackView.axis = UILayoutConstraintAxisHorizontal;
+    stackView.alignment = UIStackViewAlignmentCenter;
+    stackView.layoutMarginsRelativeArrangement = YES;
+    stackView.layoutMargins =
+        UIEdgeInsetsMake(0, kBorderWidth, 0, kBorderWidth);
+    stackView.spacing = kSpacing;
+    stackView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addSubview:stackView];
+    AddSameConstraints(stackView, self);
 
     if (suggestion.icon.length > 0) {
       const int iconImageID = autofill::data_util::GetPaymentRequestData(
@@ -98,40 +106,21 @@ UILabel* TextLabel(NSString* text, CGFloat alpha, BOOL bold) {
                                   .icon_resource_id;
       UIImage* iconImage = NativeImage(iconImageID);
       UIImageView* iconView = [[UIImageView alloc] initWithImage:iconImage];
-      const CGFloat iconY =
-          std::floor((frameHeight - iconImage.size.height) / 2.0f);
-      iconView.frame = CGRectMake(currentX, iconY, iconImage.size.width,
-                                  iconImage.size.height);
-      [self addSubview:iconView];
-      currentX += CGRectGetWidth(iconView.frame) + kSpacing;
+      [stackView addArrangedSubview:iconView];
     }
 
     UILabel* label = TextLabel(suggestion.value, kMainLabelAlpha, YES);
-    const CGFloat labelY =
-        std::floor(frameHeight / 2.0f - CGRectGetMidY(label.frame));
-    label.frame = CGRectMake(currentX, labelY, CGRectGetWidth(label.frame),
-                             CGRectGetHeight(label.frame));
-    [self addSubview:label];
-    currentX += CGRectGetWidth(label.frame);
+    [stackView addArrangedSubview:label];
 
     if ([suggestion.displayDescription length] > 0) {
-      currentX += kSpacing;
       UILabel* description =
           TextLabel(suggestion.displayDescription, kDescriptionLabelAlpha, NO);
-      const CGFloat descriptionY =
-          std::floor(frameHeight / 2.0f - CGRectGetMidY(description.frame));
-      description.frame =
-          CGRectMake(currentX, descriptionY, CGRectGetWidth(description.frame),
-                     CGRectGetHeight(description.frame));
-      [self addSubview:description];
-      currentX += CGRectGetWidth(description.frame);
+      [stackView addArrangedSubview:description];
     }
 
-    currentX += kBorderWidth;
-
-    self.frame = CGRectMake(proposedFrame.origin.x, proposedFrame.origin.y,
-                            currentX, proposedFrame.size.height);
-    [self setBackgroundColor:UIColorFromRGB(kBackgroundNormalColor)];
+    if (userInteractionEnabled_) {
+      [self setBackgroundColor:UIColorFromRGB(kBackgroundNormalColor)];
+    }
     [[self layer] setCornerRadius:kCornerRadius];
 
     [self setClipsToBounds:YES];
@@ -149,25 +138,26 @@ UILabel* TextLabel(NSString* text, CGFloat alpha, BOOL bold) {
   return self;
 }
 
-- (id)initWithFrame:(CGRect)frame {
-  NOTREACHED();
-  return nil;
-}
-
 #pragma mark -
 #pragma mark UIResponder
 
 - (void)touchesBegan:(NSSet*)touches withEvent:(UIEvent*)event {
-  [self setBackgroundColor:UIColorFromRGB(kBackgroundPressedColor)];
+  if (userInteractionEnabled_) {
+    [self setBackgroundColor:UIColorFromRGB(kBackgroundPressedColor)];
+  }
 }
 
 - (void)touchesCancelled:(NSSet*)touches withEvent:(UIEvent*)event {
-  [self setBackgroundColor:UIColorFromRGB(kBackgroundNormalColor)];
+  if (userInteractionEnabled_) {
+    [self setBackgroundColor:UIColorFromRGB(kBackgroundNormalColor)];
+  }
 }
 
 - (void)touchesEnded:(NSSet*)touches withEvent:(UIEvent*)event {
-  [self setBackgroundColor:UIColorFromRGB(kBackgroundNormalColor)];
-  [client_ didSelectSuggestion:suggestion_];
+  if (userInteractionEnabled_) {
+    [self setBackgroundColor:UIColorFromRGB(kBackgroundNormalColor)];
+    [client_ didSelectSuggestion:suggestion_];
+  }
 }
 
 @end

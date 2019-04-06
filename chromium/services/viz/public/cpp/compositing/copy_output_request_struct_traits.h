@@ -6,7 +6,8 @@
 #define SERVICES_VIZ_PUBLIC_CPP_COMPOSITING_COPY_OUTPUT_REQUEST_STRUCT_TRAITS_H_
 
 #include "components/viz/common/frame_sinks/copy_output_request.h"
-#include "mojo/common/common_custom_types_struct_traits.h"
+#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
+#include "services/viz/public/cpp/compositing/copy_output_result_struct_traits.h"
 #include "services/viz/public/interfaces/compositing/copy_output_request.mojom.h"
 #include "ui/gfx/geometry/mojo/geometry_struct_traits.h"
 
@@ -40,14 +41,9 @@ struct StructTraits<viz::mojom::CopyOutputRequestDataView,
     return request->area_;
   }
 
-  static const base::Optional<gpu::Mailbox>& mailbox(
+  static const base::Optional<gfx::Rect>& result_selection(
       const std::unique_ptr<viz::CopyOutputRequest>& request) {
-    return request->mailbox_;
-  }
-
-  static const base::Optional<gpu::SyncToken>& sync_token(
-      const std::unique_ptr<viz::CopyOutputRequest>& request) {
-    return request->sync_token_;
+    return request->result_selection_;
   }
 
   static viz::mojom::CopyOutputResultSenderPtr result_sender(

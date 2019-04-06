@@ -42,8 +42,7 @@ NotesModelFactory* NotesModelFactory::GetInstance() {
 KeyedService* NotesModelFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Notes_Model* notes_model = new Notes_Model(context);
-  notes_model->Load(content::BrowserThread::GetTaskRunnerForThread(
-    content::BrowserThread::FILE));
+  notes_model->Load(Profile::FromBrowserContext(context)->GetIOTaskRunner());
   return notes_model;
 }
 

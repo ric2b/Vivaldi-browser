@@ -6,12 +6,14 @@
 #define CONTENT_PUBLIC_BROWSER_RESOURCE_REQUEST_INFO_H_
 
 #include "base/callback_forward.h"
+#include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/resource_type.h"
-#include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
+#include "third_party/blink/public/platform/resource_request_blocked_reason.h"
+#include "third_party/blink/public/platform/web_referrer_policy.h"
 #include "ui/base/page_transition_types.h"
 
 namespace net {
@@ -27,6 +29,8 @@ class WebContents;
 class ResourceRequestInfo {
  public:
   // Returns the ResourceRequestInfo associated with the given URLRequest.
+  CONTENT_EXPORT static ResourceRequestInfo* ForRequest(
+      net::URLRequest* request);
   CONTENT_EXPORT static const ResourceRequestInfo* ForRequest(
       const net::URLRequest* request);
 
@@ -174,8 +178,32 @@ class ResourceRequestInfo {
   // UI thread at the beginning of navigation.
   virtual NavigationUIData* GetNavigationUIData() const = 0;
 
-  // Whether this request was canceled by DevTools.
-  virtual bool CanceledByDevTools() const = 0;
+  enum class DevToolsStatus {
+    kCanceled,
+    // DevTools can internally handle a redirect, so the url request may
+    // appear never done. Mark these cases.
+    kCanceledAsRedirect,
+    kNotCanceled,
+  };
+
+  // If and why this request was canceled by DevTools. TODO(johannes): Remove.
+  virtual DevToolsStatus GetDevToolsStatus() const = 0;
+
+  // Used to annotate requests blocked using net::ERR_BLOCKED_BY_CLIENT and
+  // net::ERR_BLOCKED_BY_RESPONSE errors, with a ResourceRequestBlockedReason.
+  virtual void SetResourceRequestBlockedReason(
+      blink::ResourceRequestBlockedReason) = 0;
+
+  // Returns the ResourceRequestBlockedReason for this request, else
+  // base::nullopt.
+  virtual base::Optional<blink::ResourceRequestBlockedReason>
+  GetResourceRequestBlockedReason() const = 0;
+
+  // When the client of a request decides to cancel it, it may optionally
+  // provide an application-defined description of the canncellation reason.
+  // This method returns the custom reason. If no such reason has been provided,
+  // it returns an empty string.
+  virtual base::StringPiece GetCustomCancelReason() const = 0;
 
  protected:
   virtual ~ResourceRequestInfo() {}

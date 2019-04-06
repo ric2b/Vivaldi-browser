@@ -18,7 +18,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
+#include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/media_galleries/media_galleries_api.h"
 #include "chrome/browser/media_galleries/media_file_system_registry.h"
@@ -27,7 +27,7 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_paths.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "components/storage_monitor/storage_info.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "content/public/browser/web_contents.h"
@@ -38,7 +38,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/test/result_catcher.h"
 #include "media/base/test_data_util.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/foundation_util.h"
@@ -254,7 +254,7 @@ class MediaGalleriesPlatformAppPpapiTest
   void SetUpOnMainThread() override {
     MediaGalleriesPlatformAppBrowserTest::SetUpOnMainThread();
 
-    ASSERT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &app_dir_));
+    ASSERT_TRUE(base::PathService::Get(chrome::DIR_GEN_TEST_DATA, &app_dir_));
     app_dir_ = app_dir_.AppendASCII("ppapi")
                        .AppendASCII("tests")
                        .AppendASCII("extensions")

@@ -59,7 +59,7 @@ public class SyncNotificationController implements ProfileSyncService.SyncStateC
         ThreadUtils.assertOnUiThread();
 
         // Auth errors take precedence over passphrase errors.
-        if (!AndroidSyncSettings.isSyncEnabled(mApplicationContext)) {
+        if (!AndroidSyncSettings.isSyncEnabled()) {
             mNotificationManager.cancel(NotificationConstants.NOTIFICATION_ID_SYNC);
             return;
         }
@@ -106,7 +106,7 @@ public class SyncNotificationController implements ProfileSyncService.SyncStateC
         ChromeNotificationBuilder builder =
                 NotificationBuilderFactory
                         .createChromeNotificationBuilder(
-                                true /* preferCompat */, ChannelDefinitions.CHANNEL_ID_BROWSER)
+                                true /* preferCompat */, ChannelDefinitions.ChannelId.BROWSER)
                         .setAutoCancel(true)
                         .setContentIntent(contentIntent)
                         .setContentTitle(title)
@@ -120,7 +120,8 @@ public class SyncNotificationController implements ProfileSyncService.SyncStateC
 
         mNotificationManager.notify(NotificationConstants.NOTIFICATION_ID_SYNC, notification);
         NotificationUmaTracker.getInstance().onNotificationShown(
-                NotificationUmaTracker.SYNC, ChannelDefinitions.CHANNEL_ID_BROWSER);
+                NotificationUmaTracker.SystemNotificationType.SYNC,
+                ChannelDefinitions.ChannelId.BROWSER);
     }
 
     private boolean shouldSyncAuthErrorBeShown() {

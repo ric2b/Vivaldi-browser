@@ -20,7 +20,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/autofill/dialog_event_waiter.h"
 #include "chrome/browser/ui/views/payments/editor_view_controller.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/validating_combobox.h"
@@ -34,6 +33,8 @@
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/payments/content/payment_request.h"
 #include "components/payments/content/payment_request_web_contents_manager.h"
+#include "components/payments/core/payment_prefs.h"
+#include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -106,6 +107,12 @@ void PaymentRequestBrowserTestBase::SetUpOnMainThread() {
   registry_.AddInterface<payments::mojom::PaymentRequest>(
       base::Bind(&PaymentRequestBrowserTestBase::CreatePaymentRequestForTest,
                  base::Unretained(this)));
+
+  // Set a test sync service so that all types of cards work.
+  GetDataManager()->SetSyncServiceForTest(&sync_service_);
+
+  // Register all prefs with our pref testing service.
+  payments::RegisterProfilePrefs(prefs_.registry());
 }
 
 void PaymentRequestBrowserTestBase::NavigateTo(const std::string& file_path) {
@@ -477,8 +484,8 @@ void PaymentRequestBrowserTestBase::CreatePaymentRequestForTest(
   DCHECK(web_contents);
   std::unique_ptr<TestChromePaymentRequestDelegate> delegate =
       std::make_unique<TestChromePaymentRequestDelegate>(
-          web_contents, this /* observer */, is_incognito_, is_valid_ssl_,
-          is_browser_window_active_);
+          web_contents, this /* observer */, &prefs_, is_incognito_,
+          is_valid_ssl_, is_browser_window_active_);
   delegate_ = delegate.get();
   PaymentRequestWebContentsManager::GetOrCreateForWebContents(web_contents)
       ->CreatePaymentRequest(web_contents->GetMainFrame(), web_contents,
@@ -744,14 +751,19 @@ const base::string16& PaymentRequestBrowserTestBase::GetErrorLabelForType(
   return static_cast<views::Label*>(view)->text();
 }
 
+void PaymentRequestBrowserTestBase::SetCanMakePaymentEnabledPref(
+    bool can_make_payment_enabled) {
+  prefs_.SetBoolean(kCanMakePaymentEnabled, can_make_payment_enabled);
+}
+
 void PaymentRequestBrowserTestBase::ResetEventWaiter(DialogEvent event) {
-  event_waiter_ = std::make_unique<DialogEventWaiter<DialogEvent>>(
+  event_waiter_ = std::make_unique<autofill::EventWaiter<DialogEvent>>(
       std::list<DialogEvent>{event});
 }
 
 void PaymentRequestBrowserTestBase::ResetEventWaiterForSequence(
     std::list<DialogEvent> event_sequence) {
-  event_waiter_ = std::make_unique<DialogEventWaiter<DialogEvent>>(
+  event_waiter_ = std::make_unique<autofill::EventWaiter<DialogEvent>>(
       std::move(event_sequence));
 }
 

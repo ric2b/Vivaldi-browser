@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/utility/payment_manifest_parser.h"
@@ -40,10 +41,10 @@ void EnableMethodManifestUrlForSupportedApps(
     for (auto& app : *apps) {
       if (app_origin.IsSameOriginWith(
               url::Origin::Create(app.second->scope.GetOrigin()))) {
+        app.second->has_explicitly_verified_methods = base::ContainsValue(
+            supported_origin_strings, app_origin.Serialize());
         if (all_origins_supported ||
-            std::find(supported_origin_strings.begin(),
-                      supported_origin_strings.end(), app_origin.Serialize()) !=
-                supported_origin_strings.end()) {
+            app.second->has_explicitly_verified_methods) {
           app.second->enabled_methods.emplace_back(method_manifest_url.spec());
           prohibited_payment_methods->at(app.second->scope)
               .erase(method_manifest_url);
@@ -55,14 +56,13 @@ void EnableMethodManifestUrlForSupportedApps(
 
 }  // namespace
 
-ManifestVerifier::ManifestVerifier(
-    content::WebContents* web_contents,
-    std::unique_ptr<PaymentMethodManifestDownloaderInterface> downloader,
-    std::unique_ptr<PaymentManifestParser> parser,
-    scoped_refptr<PaymentManifestWebDataService> cache)
+ManifestVerifier::ManifestVerifier(content::WebContents* web_contents,
+                                   PaymentManifestDownloader* downloader,
+                                   PaymentManifestParser* parser,
+                                   PaymentManifestWebDataService* cache)
     : dev_tools_(web_contents),
-      downloader_(std::move(downloader)),
-      parser_(std::move(parser)),
+      downloader_(downloader),
+      parser_(parser),
       cache_(cache),
       number_of_manifests_to_verify_(0),
       number_of_manifests_to_download_(0),
@@ -123,6 +123,7 @@ void ManifestVerifier::Verify(content::PaymentAppProvider::PaymentApps apps,
       if (url::Origin::Create(method_manifest_url.GetOrigin())
               .IsSameOriginWith(app_origin)) {
         verified_method_names.emplace_back(method);
+        app.second->has_explicitly_verified_methods = true;
         continue;
       }
 
@@ -178,13 +179,29 @@ void ManifestVerifier::OnWebDataServiceRequestDone(
   GURL method_manifest_url = it->second;
   cache_request_handles_.erase(it);
 
-  const std::vector<std::string>& supported_origin_strings =
+  const std::vector<std::string>& cached_strings =
       (static_cast<const WDResult<std::vector<std::string>>*>(result.get()))
           ->GetValue();
-  bool all_origins_supported = std::find(supported_origin_strings.begin(),
-                                         supported_origin_strings.end(),
-                                         kAllOriginsSupportedIndicator) !=
-                               supported_origin_strings.end();
+
+  bool all_origins_supported = false;
+  std::vector<std::string> native_app_ids;
+  std::vector<std::string> supported_origin_strings;
+  for (const auto& origin_or_id : cached_strings) {
+    // The string could be "*", origin or native payment app package Id on
+    // Android.
+    if (origin_or_id == kAllOriginsSupportedIndicator) {
+      all_origins_supported = true;
+      continue;
+    }
+
+    if (base::IsStringUTF8(origin_or_id) && GURL(origin_or_id).is_valid()) {
+      supported_origin_strings.emplace_back(origin_or_id);
+    } else {
+      native_app_ids.emplace_back(origin_or_id);
+    }
+  }
+  cached_supported_native_app_ids_[method_manifest_url] = native_app_ids;
+
   EnableMethodManifestUrlForSupportedApps(
       method_manifest_url, supported_origin_strings, all_origins_supported,
       manifest_url_to_app_origins_map_[method_manifest_url], &apps_,
@@ -256,6 +273,15 @@ void ManifestVerifier::OnPaymentMethodManifestParsed(
 
   if (all_origins_supported)
     supported_origin_strings.emplace_back(kAllOriginsSupportedIndicator);
+
+  // Keep Android native payment app Ids in cache.
+  std::map<GURL, std::vector<std::string>>::const_iterator it =
+      cached_supported_native_app_ids_.find(method_manifest_url);
+  if (it != cached_supported_native_app_ids_.end()) {
+    supported_origin_strings.insert(supported_origin_strings.end(),
+                                    it->second.begin(), it->second.end());
+  }
+
   cache_->AddPaymentMethodManifest(method_manifest_url.spec(),
                                    supported_origin_strings);
 

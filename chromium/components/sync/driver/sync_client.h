@@ -13,7 +13,7 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/engine/model_safe_worker.h"
-#include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/model/model_type_controller_delegate.h"
 
 class BookmarkUndoService;
 class PrefService;
@@ -49,6 +49,8 @@ class Notes_Model;
 
 namespace syncer {
 
+class LocalDeviceInfoProvider;
+class ModelTypeStoreService;
 class SyncService;
 class SyncableService;
 
@@ -75,6 +77,8 @@ class SyncClient {
   // Returns the current profile's preference service.
   virtual PrefService* GetPrefService() = 0;
 
+  virtual ModelTypeStoreService* GetModelTypeStoreService() = 0;
+
   // Returns the path to the folder used for storing the local sync database.
   // It is only used when sync is running against a local backend.
   virtual base::FilePath GetLocalSyncBackendFolder() = 0;
@@ -85,10 +89,11 @@ class SyncClient {
   virtual history::HistoryService* GetHistoryService() = 0;
   virtual bool HasPasswordStore() = 0;
 
-  // Returns a callback that will register the types specific to the current
-  // platform.
-  virtual SyncApiComponentFactory::RegisterDataTypesMethod
-  GetRegisterPlatformTypesCallback() = 0;
+  // Returns a vector with all supported datatypes and their controllers.
+  // TODO(crbug.com/681921): Remove |local_device_info_provider| once the
+  // migration to USS is completed.
+  virtual DataTypeController::TypeVector CreateDataTypeControllers(
+      LocalDeviceInfoProvider* local_device_info_provider) = 0;
 
   // Returns a callback that will be invoked when password sync state has
   // potentially been changed.
@@ -106,11 +111,11 @@ class SyncClient {
   virtual base::WeakPtr<SyncableService> GetSyncableServiceForType(
       ModelType type) = 0;
 
-  // Returns a weak pointer to the ModelTypeSyncBridge specified by |type|. Weak
-  // pointer may be unset if service is already destroyed.
-  // Note: Should only be dereferenced from the model type thread.
-  virtual base::WeakPtr<ModelTypeSyncBridge> GetSyncBridgeForModelType(
-      ModelType type) = 0;
+  // Returns a weak pointer to the ModelTypeControllerDelegate specified by
+  // |type|. Weak pointer may be unset if service is already destroyed. Note:
+  // Should only be dereferenced from the model type thread.
+  virtual base::WeakPtr<ModelTypeControllerDelegate>
+  GetControllerDelegateForModelType(ModelType type) = 0;
 
   // Creates and returns a new ModelSafeWorker for the group, or null if one
   // cannot be created.

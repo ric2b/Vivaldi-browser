@@ -63,13 +63,10 @@ class MockBackgroundFetchDelegate : public BackgroundFetchDelegate {
   ~MockBackgroundFetchDelegate() override;
 
   // BackgroundFetchDelegate implementation:
+  void GetIconDisplaySize(
+      BackgroundFetchDelegate::GetIconDisplaySizeCallback callback) override;
   void CreateDownloadJob(
-      const std::string& job_unique_id,
-      const std::string& title,
-      const url::Origin& origin,
-      int completed_parts,
-      int total_parts,
-      const std::vector<std::string>& current_guids) override;
+      std::unique_ptr<BackgroundFetchDescription> fetch_description) override;
   void DownloadUrl(const std::string& job_unique_id,
                    const std::string& guid,
                    const std::string& method,
@@ -77,6 +74,8 @@ class MockBackgroundFetchDelegate : public BackgroundFetchDelegate {
                    const net::NetworkTrafficAnnotationTag& traffic_annotation,
                    const net::HttpRequestHeaders& headers) override;
   void Abort(const std::string& job_unique_id) override;
+  void UpdateUI(const std::string& job_unique_id,
+                const std::string& title) override;
 
   void RegisterResponse(const GURL& url,
                         std::unique_ptr<TestResponse> response);

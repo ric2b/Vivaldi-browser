@@ -5,19 +5,13 @@
 #include "components/sync/driver/fake_sync_client.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/fake_sync_service.h"
+#include "components/sync/model/model_type_sync_bridge.h"
 
 namespace syncer {
-
-namespace {
-
-void DummyRegisterPlatformTypesCallback(SyncService* sync_service,
-                                        ModelTypeSet,
-                                        ModelTypeSet) {}
-
-}  // namespace
 
 FakeSyncClient::FakeSyncClient()
     : bridge_(nullptr),
@@ -51,6 +45,10 @@ base::FilePath FakeSyncClient::GetLocalSyncBackendFolder() {
   return base::FilePath();
 }
 
+ModelTypeStoreService* FakeSyncClient::GetModelTypeStoreService() {
+  return nullptr;
+}
+
 bookmarks::BookmarkModel* FakeSyncClient::GetBookmarkModel() {
   return nullptr;
 }
@@ -68,12 +66,14 @@ bool FakeSyncClient::HasPasswordStore() {
 }
 
 base::Closure FakeSyncClient::GetPasswordStateChangedCallback() {
-  return base::Bind(&base::DoNothing);
+  return base::DoNothing();
 }
 
-SyncApiComponentFactory::RegisterDataTypesMethod
-FakeSyncClient::GetRegisterPlatformTypesCallback() {
-  return base::Bind(&DummyRegisterPlatformTypesCallback);
+DataTypeController::TypeVector FakeSyncClient::CreateDataTypeControllers(
+    LocalDeviceInfoProvider* local_device_info_provider) {
+  DCHECK(factory_);
+  return factory_->CreateCommonDataTypeControllers(
+      /*disabled_types=*/ModelTypeSet(), local_device_info_provider);
 }
 
 autofill::PersonalDataManager* FakeSyncClient::GetPersonalDataManager() {
@@ -101,9 +101,9 @@ base::WeakPtr<SyncableService> FakeSyncClient::GetSyncableServiceForType(
   return base::WeakPtr<SyncableService>();
 }
 
-base::WeakPtr<ModelTypeSyncBridge> FakeSyncClient::GetSyncBridgeForModelType(
-    ModelType type) {
-  return bridge_->AsWeakPtr();
+base::WeakPtr<ModelTypeControllerDelegate>
+FakeSyncClient::GetControllerDelegateForModelType(ModelType type) {
+  return bridge_->change_processor()->GetControllerDelegateOnUIThread();
 }
 
 scoped_refptr<ModelSafeWorker> FakeSyncClient::CreateModelWorkerForGroup(

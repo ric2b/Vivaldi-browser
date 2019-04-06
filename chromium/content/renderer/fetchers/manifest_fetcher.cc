@@ -7,10 +7,10 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "content/public/renderer/associated_resource_fetcher.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebAssociatedURLLoaderOptions.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_associated_url_loader_options.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace content {
 
@@ -54,7 +54,7 @@ void ManifestFetcher::OnLoadComplete(const blink::WebURLResponse& response,
   completed_ = true;
 
   Callback callback = callback_;
-  callback.Run(response, data);
+  std::move(callback).Run(response, data);
 }
 
 }  // namespace content

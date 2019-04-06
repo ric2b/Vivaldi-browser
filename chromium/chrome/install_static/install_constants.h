@@ -97,6 +97,9 @@ struct InstallConstants {
   // Center.
   CLSID toast_activator_clsid;
 
+  // The CLSID of the COM server that provides silent elevation functionality.
+  CLSID elevator_clsid;
+
   // The default name for this mode's update channel.
   const wchar_t* default_channel_name;
 
@@ -124,6 +127,9 @@ struct InstallConstants {
 
   // The resource id of this mode's main application icon.
   int16_t app_icon_resource_id;
+
+  // The app container sid prefix for sandbox.
+  const wchar_t* sandbox_sid_prefix;
 };
 
 }  // namespace install_static

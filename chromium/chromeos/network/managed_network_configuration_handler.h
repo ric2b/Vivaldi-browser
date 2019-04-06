@@ -83,8 +83,7 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandler {
   // |service_path|. A network can be initially configured by calling
   // CreateConfiguration or if it is managed by a policy. The given properties
   // will be merged with the existing settings, and it won't clear any existing
-  // properties. This method is expected to be called by a user initiated
-  // action (see NetworkConfigurationObserver::Source).
+  // properties.
   virtual void SetProperties(
       const std::string& service_path,
       const base::DictionaryValue& user_settings,
@@ -95,9 +94,7 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandler {
   // and returns the new identifier to |callback| if successful. Fails if the
   // network was already configured by a call to this function or because of a
   // policy. The new configuration will be owned by user |userhash|. If
-  // |userhash| is empty, the new configuration will be shared. This method is
-  // expected to be called by a user initiated action (see
-  // NetworkConfigurationObserver::Source).
+  // |userhash| is empty, the new configuration will be shared.
   virtual void CreateConfiguration(
       const std::string& userhash,
       const base::DictionaryValue& properties,
@@ -107,8 +104,6 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandler {
   // Removes the user's configuration from the network with |service_path|. The
   // network may still show up in the visible networks after this, but no user
   // configuration will remain. If it was managed, it will still be configured.
-  // This method is expected to be called by a user initiated action (see
-  // NetworkConfigurationObserver::Source).
   virtual void RemoveConfiguration(
       const std::string& service_path,
       const base::Closure& callback,
@@ -162,6 +157,16 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandler {
       const std::string& guid,
       const std::string& profile_path,
       ::onc::ONCSource* onc_source) const = 0;
+
+  // Returns true if the provided network is blocked by policy. This can occur,
+  // by either 'BlacklistedHexSSIDs' or 'AllowOnlyPolicyNetworksToConnect',
+  // which are both specified in ONC's global configuration. Both policies only
+  // apply to WiFi networks and can be bypassed by providing a network
+  // configuration with an ONC policy.
+  virtual bool IsNetworkBlockedByPolicy(const std::string& type,
+                                        const std::string& guid,
+                                        const std::string& profile_path,
+                                        const std::string& hex_ssid) const = 0;
 
  private:
   DISALLOW_ASSIGN(ManagedNetworkConfigurationHandler);

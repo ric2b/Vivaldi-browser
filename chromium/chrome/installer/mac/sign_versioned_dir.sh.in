@@ -91,7 +91,6 @@ crashpad_handler="${framework}/Helpers/crashpad_handler"
 helper_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper.app"
 app_mode_loader_app="${framework}/Resources/app_mode_loader.app"
 app_mode_loader="${app_mode_loader_app}/Contents/MacOS/app_mode_loader"
-widevine_plugin="${framework}/Libraries/WidevineCdm/_platform_specific/mac_x64/widevinecdmadapter.plugin"
 sparkle_framework="${app_path}/Contents/Frameworks/Sparkle.framework"
 
 codesign_with_options "${crashpad_handler}" \
@@ -117,22 +116,12 @@ codesign_with_options "${notification_service}" \
                       "${enforcement_flags_helpers}" \
                       "com.vivaldi.Vivaldi.framework.AlertNotificationService"
 
-# Only sign widevine plugin if it is present in the bundle.
-# ${enforcement_flags*} are meaningless for dynamic libraries.
-if [[ -f "${widevine_plugin}" ]]; then
-  codesign_with_options "${widevine_plugin}" "" "widevinecdmadapter"
-fi
-
 # The framework is a dylib, so ${enforcement_flags_helpers} are meaningless.
 codesign_with_options "${framework}" "" "com.vivaldi.Vivaldi.framework"
 
 codesign_with_options "${helper_app}" \
                       "${enforcement_flags_app}" \
                       "com.vivaldi.Vivaldi.helper"
-
-if [[ -f "${widevine_plugin}" ]]; then
-  codesign_display_and_verify "${widevine_plugin}"
-fi
 
 codesign_with_options "${sparkle_framework}" \
                       "" \

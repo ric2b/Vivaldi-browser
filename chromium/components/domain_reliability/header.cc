@@ -6,7 +6,9 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
+
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
@@ -169,7 +171,7 @@ bool ParseReportUri(const std::vector<base::StringPiece> in,
     GURL url(unquoted);
     if (!url.is_valid() || !content::IsOriginSecure(url))
       return false;
-    out->push_back(base::MakeUnique<GURL>(url));
+    out->push_back(std::make_unique<GURL>(url));
   }
 
   return true;
@@ -276,7 +278,7 @@ DomainReliabilityHeader::ReleaseConfig() {
 }
 
 std::string DomainReliabilityHeader::ToString() const {
-  std::string string = "";
+  std::string string;
   int64_t max_age_s = max_age_.InSeconds();
 
   if (config_->collectors.empty()) {
@@ -312,7 +314,7 @@ DomainReliabilityHeader::DomainReliabilityHeader(
     base::TimeDelta max_age)
     : status_(status), config_(std::move(config)), max_age_(max_age) {
   DCHECK_EQ(PARSE_SET_CONFIG, status_);
-  DCHECK(config_.get());
+  DCHECK(config_);
   DCHECK_NE(0, max_age_.InMicroseconds());
 }
 

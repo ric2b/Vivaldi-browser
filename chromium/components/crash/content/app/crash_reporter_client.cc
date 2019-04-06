@@ -93,6 +93,10 @@ void CrashReporterClient::GetProductNameAndVersion(const char** product_name,
                                                    const char** version) {
 }
 
+void CrashReporterClient::GetProductNameAndVersion(std::string* product_name,
+                                                   std::string* version,
+                                                   std::string* channel) {}
+
 base::FilePath CrashReporterClient::GetReporterLogFilename() {
   return base::FilePath();
 }
@@ -139,11 +143,9 @@ bool CrashReporterClient::GetCollectStatsInSample() {
   return true;
 }
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
 bool CrashReporterClient::ReportingIsEnforcedByPolicy(bool* breakpad_enabled) {
   return false;
 }
-#endif
 
 #if defined(OS_ANDROID)
 int CrashReporterClient::GetAndroidMinidumpDescriptor() {
@@ -169,11 +171,20 @@ bool CrashReporterClient::ShouldEnableBreakpadMicrodumps() {
 }
 #endif
 
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_ANDROID) || defined(OS_LINUX)
+void CrashReporterClient::GetSanitizationInformation(
+    const char* const** annotations_whitelist,
+    void** target_module,
+    bool* sanitize_stacks) {
+  *annotations_whitelist = nullptr;
+  *target_module = nullptr;
+  *sanitize_stacks = false;
+}
+#endif
+
 bool CrashReporterClient::ShouldMonitorCrashHandlerExpensively() {
   return false;
 }
-#endif
 
 bool CrashReporterClient::EnableBreakpadForProcess(
     const std::string& process_type) {

@@ -10,14 +10,12 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_size.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRect.h"
 
-using blink::WebCanvas;
-using blink::WebColor;
 using blink::WebRect;
 using blink::WebThemeEngine;
 
@@ -303,7 +301,7 @@ void markState(cc::PaintCanvas* canvas,
   }
 }
 
-void MockWebThemeEngine::Paint(blink::WebCanvas* canvas,
+void MockWebThemeEngine::Paint(cc::PaintCanvas* canvas,
                                WebThemeEngine::Part part,
                                WebThemeEngine::State state,
                                const blink::WebRect& rect,

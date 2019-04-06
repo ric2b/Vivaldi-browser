@@ -2,12 +2,20 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/ios/rules.gni")
 import("//build/config/mac/base_rules.gni")
 import("//build/mac/tweak_info_plist.gni")
 import("//ios/build/chrome_build.gni")
+import("//ios/build/config.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
+import("//ios/third_party/firebase/firebase.gni")
 import("//services/service_manager/public/service_manifest.gni")
+
+buildflag_header("firebase_buildflags") {
+  header = "firebase_buildflags.h"
+  flags = [ "FIREBASE_ENABLED=$ios_enable_firebase_sdk" ]
+}
 
 service_manifest("chrome_browser_manifest_overlay") {
   source = "//ios/chrome/browser/chrome_browser_manifest_overlay.json"
@@ -35,7 +43,7 @@ source_set("unit_tests") {
     "chrome_overlay_window_testing.h",
     "deferred_initialization_runner_unittest.mm",
     "main_application_delegate_unittest.mm",
-    "main_controller_unittest.mm",
+    "tab_opener_unittest.mm",
   ]
   deps = [
     ":app",
@@ -120,6 +128,7 @@ source_set("app_internal") {
 
   deps = [
     ":app",
+    ":firebase_buildflags",
     ":tests_hook",
     "//base",
     "//components/bookmarks/browser",
@@ -139,8 +148,10 @@ source_set("app_internal") {
     "//components/keyed_service/ios",
     "//components/metrics",
     "//components/ntp_snippets",
+    "//components/password_manager/core/common",
     "//components/payments/core",
     "//components/prefs",
+    "//components/prefs/ios",
     "//components/proxy_config",
     "//components/signin/core/browser",
     "//components/suggestions",
@@ -158,7 +169,6 @@ source_set("app_internal") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:browser_state_impl",
     "//ios/chrome/browser/browsing_data",
-    "//ios/chrome/browser/browsing_data:browsing_data_internal",
     "//ios/chrome/browser/content_settings",
     "//ios/chrome/browser/crash_report",
     "//ios/chrome/browser/crash_report:crash_report_internal",
@@ -169,15 +179,16 @@ source_set("app_internal") {
     "//ios/chrome/browser/geolocation",
     "//ios/chrome/browser/geolocation:geolocation_internal",
     "//ios/chrome/browser/history",
+    "//ios/chrome/browser/mailto:feature_flags",
     "//ios/chrome/browser/memory",
     "//ios/chrome/browser/metrics",
     "//ios/chrome/browser/metrics:metrics_internal",
     "//ios/chrome/browser/net",
     "//ios/chrome/browser/ntp_snippets",
     "//ios/chrome/browser/omaha",
+    "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/payments",
     "//ios/chrome/browser/payments:constants",
-    "//ios/chrome/browser/prefs",
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/share_extension",
@@ -192,8 +203,6 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/download",
     "//ios/chrome/browser/ui/first_run",
-    "//ios/chrome/browser/ui/fullscreen",
-    "//ios/chrome/browser/ui/fullscreen:legacy_fullscreen",
     "//ios/chrome/browser/ui/history",
     "//ios/chrome/browser/ui/main",
     "//ios/chrome/browser/ui/main:feature_flags",
@@ -201,7 +210,10 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/settings",
     "//ios/chrome/browser/ui/signin_interaction",
     "//ios/chrome/browser/ui/stack_view",
+    "//ios/chrome/browser/ui/tab_grid",
+    "//ios/chrome/browser/ui/tab_grid:tab_grid_ui",
     "//ios/chrome/browser/ui/tab_switcher",
+    "//ios/chrome/browser/ui/tab_switcher:modes",
     "//ios/chrome/browser/ui/tabs",
     "//ios/chrome/browser/ui/toolbar/clean:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/public",
@@ -219,13 +231,14 @@ source_set("app_internal") {
     "//ios/net",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/distribution",
+    "//ios/public/provider/chrome/browser/mailto",
     "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/user_feedback",
     "//ios/testing/perf:startup",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
     "//ios/web/public/app",
-    "//mojo/edk/system",
+    "//mojo/core/embedder",
     "//net",
     "//skia",
     "//ui/base",
@@ -278,6 +291,9 @@ ios_app_bundle("chrome") {
     ":main",
     ":tests_fake_hook",
   ]
+  if (ios_enable_firebase_sdk) {
+    deps += [ "//ios/third_party/firebase" ]
+  }
 
   if (current_toolchain == default_toolchain) {
     if (ios_enable_search_widget_extension) {
@@ -307,6 +323,8 @@ ios_app_bundle("chrome") {
     extra_substitutions += [ "ENCRYPTION_EXPORT_COMPLIANCE_CODE=" +
                              ios_encryption_export_compliance_code ]
   }
+
+  assert_no_deps = ios_assert_no_deps + ios_chrome_extra_assert_no_deps
 }
 
 if (current_toolchain == default_toolchain) {

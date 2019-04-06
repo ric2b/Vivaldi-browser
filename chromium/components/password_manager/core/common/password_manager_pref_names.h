@@ -48,9 +48,6 @@ extern const char kKeychainMigrationStatus[];
 // prompt was shown or not.
 extern const char kWasAutoSignInFirstRunExperienceShown[];
 
-// Boolean that indicated if obsolete HTTP data has been cleaned in the past.
-extern const char kWasObsoleteHttpDataCleaned[];
-
 // Boolean that indicated if user interacted with the Chrome Sign in promo.
 extern const char kWasSignInPasswordPromoClicked[];
 
@@ -64,6 +61,12 @@ extern const char kSyncPasswordHash[];
 // encrypted and converted to base64 string "<password length, as ascii
 // int>.<16 char salt>".
 extern const char kSyncPasswordLengthAndHashSalt[];
+
+// Whether Chrome cleaned up username/password in the blacklisted credentials.
+extern const char kBlacklistedCredentialsStripped[];
+
+// List that contains captured password hashes.
+extern const char kPasswordHashDataList[];
 
 }  // namespace prefs
 }  // namespace password_manager

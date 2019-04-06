@@ -37,7 +37,6 @@ function EntryListWatcher(list) {
 /**
  * Obtains entry from ArrayDataModel's item.
  * @param {*} item Item in ArrayDataModel.
- * @protected
  * @return {!FileEntry}
  */
 EntryListWatcher.prototype.getEntry = function(item) {
@@ -103,7 +102,7 @@ EntryListWatcher.prototype.onSplice_ = function(event) {
 };
 
 /**
- * @param {!FileWatchEvent} event
+ * @param {!chrome.fileManagerPrivate.FileWatchEvent} event
  * @private
  */
 EntryListWatcher.prototype.onDirectoryChanged_ = function(event) {

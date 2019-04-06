@@ -11,14 +11,12 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/infobars/mock_infobar_service.h"
 #include "chrome/browser/ui/page_info/page_info_ui.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
@@ -29,7 +27,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/infobars/core/infobar.h"
-#include "components/subresource_filter/core/browser/subresource_filter_features.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/content_switches.h"
@@ -42,9 +40,10 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_certificate_data.h"
 #include "net/test/test_data_directory.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/android_theme_resources.h"
@@ -79,7 +78,7 @@ int SetSSLCipherSuite(int connection_status, int cipher_suite) {
 
 class MockPageInfoUI : public PageInfoUI {
  public:
-  virtual ~MockPageInfoUI() {}
+  ~MockPageInfoUI() override {}
   MOCK_METHOD1(SetCookieInfo, void(const CookieInfoList& cookie_info_list));
   MOCK_METHOD0(SetPermissionInfoStub, void());
   MOCK_METHOD1(SetIdentityInfo, void(const IdentityInfo& identity_info));
@@ -93,6 +92,21 @@ class MockPageInfoUI : public PageInfoUI {
                                         std::move(chosen_object_info_list));
     }
   }
+
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  std::unique_ptr<PageInfoUI::SecurityDescription>
+  CreateSecurityDescriptionForPasswordReuse(
+      bool unused_is_enterprise_password) const override {
+    std::unique_ptr<PageInfoUI::SecurityDescription> security_description(
+        new PageInfoUI::SecurityDescription());
+    security_description->summary_style = SecuritySummaryColor::RED;
+    security_description->summary =
+        l10n_util::GetStringUTF16(IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY);
+    security_description->details =
+        l10n_util::GetStringUTF16(IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS);
+    return security_description;
+  }
+#endif
 
   base::Callback<void(const PermissionInfoList& permission_info_list,
                       ChosenObjectInfoList chosen_object_info_list)>
@@ -117,7 +131,7 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     ASSERT_TRUE(cert_);
 
     TabSpecificContentSettings::CreateForWebContents(web_contents());
-    InfoBarService::CreateForWebContents(web_contents());
+    MockInfoBarService::CreateForWebContents(web_contents());
 
     // Setup mock ui.
     ResetMockUI();
@@ -221,18 +235,9 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // check for DSE settings (so expect 1 item), but isn't actually shown later
   // on because this test isn't testing with a default search engine origin.
   expected_visible_permissions.insert(CONTENT_SETTINGS_TYPE_GEOLOCATION);
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
-  EXPECT_EQ(CONTENT_SETTINGS_TYPE_GEOLOCATION,
-            last_permission_info_list().back().type);
-#else
-  expected_visible_permissions.insert(CONTENT_SETTINGS_TYPE_PLUGINS);
-  // Flash is always visible on desktop - see https://crbug.com/791142.
-  EXPECT_EQ(expected_visible_permissions.size(),
-            last_permission_info_list().size());
-  EXPECT_EQ(CONTENT_SETTINGS_TYPE_PLUGINS,
-            last_permission_info_list().back().type);
 #endif
+  EXPECT_EQ(expected_visible_permissions.size(),
+            last_permission_info_list().size());
 
   // Change some default-ask settings away from the default.
   page_info()->OnSitePermissionChanged(CONTENT_SETTINGS_TYPE_GEOLOCATION,
@@ -441,15 +446,27 @@ TEST_F(PageInfoTest, UnwantedSoftware) {
 }
 
 #if defined(SAFE_BROWSING_DB_LOCAL)
-TEST_F(PageInfoTest, PasswordReuse) {
+TEST_F(PageInfoTest, SignInPasswordReuse) {
   security_info_.security_level = security_state::DANGEROUS;
   security_info_.malicious_content_status =
-      security_state::MALICIOUS_CONTENT_STATUS_PASSWORD_REUSE;
+      security_state::MALICIOUS_CONTENT_STATUS_SIGN_IN_PASSWORD_REUSE;
   SetDefaultUIExpectations(mock_ui());
 
   EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_UNENCRYPTED,
             page_info()->site_connection_status());
-  EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_PASSWORD_REUSE,
+  EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_SIGN_IN_PASSWORD_REUSE,
+            page_info()->site_identity_status());
+}
+
+TEST_F(PageInfoTest, EnterprisePasswordReuse) {
+  security_info_.security_level = security_state::DANGEROUS;
+  security_info_.malicious_content_status =
+      security_state::MALICIOUS_CONTENT_STATUS_ENTERPRISE_PASSWORD_REUSE;
+  SetDefaultUIExpectations(mock_ui());
+
+  EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_UNENCRYPTED,
+            page_info()->site_connection_status());
+  EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_ENTERPRISE_PASSWORD_REUSE,
             page_info()->site_identity_status());
 }
 #endif
@@ -924,9 +941,9 @@ TEST_F(PageInfoTest, SecurityLevelMetrics) {
 
   const TestCase kTestCases[] = {
       {"https://example.test", security_state::SECURE,
-       "Security.PageInfo.Action.HttpsUrl.Valid"},
+       "Security.PageInfo.Action.HttpsUrl.ValidNonEV"},
       {"https://example.test", security_state::EV_SECURE,
-       "Security.PageInfo.Action.HttpsUrl.Valid"},
+       "Security.PageInfo.Action.HttpsUrl.ValidEV"},
       {"https://example2.test", security_state::NONE,
        "Security.PageInfo.Action.HttpsUrl.Downgraded"},
       {"https://example.test", security_state::DANGEROUS,
@@ -966,11 +983,73 @@ TEST_F(PageInfoTest, SecurityLevelMetrics) {
   }
 }
 
+// Tests that the duration of time the PageInfo is open is recorded for pages
+// with various security levels.
+TEST_F(PageInfoTest, TimeOpenMetrics) {
+  struct TestCase {
+    const std::string url;
+    const security_state::SecurityLevel security_level;
+    const std::string security_level_name;
+    const PageInfo::PageInfoAction action;
+  };
+
+  const std::string kHistogramPrefix("Security.PageInfo.TimeOpen.");
+
+  const TestCase kTestCases[] = {
+      // PAGE_INFO_COUNT used as shorthand for "take no action".
+      {"https://example.test", security_state::SECURE, "SECURE",
+       PageInfo::PAGE_INFO_COUNT},
+      {"https://example.test", security_state::EV_SECURE, "EV_SECURE",
+       PageInfo::PAGE_INFO_COUNT},
+      {"http://example.test", security_state::NONE, "NONE",
+       PageInfo::PAGE_INFO_COUNT},
+      {"https://example.test", security_state::SECURE, "SECURE",
+       PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED},
+      {"https://example.test", security_state::EV_SECURE, "EV_SECURE",
+       PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED},
+      {"http://example.test", security_state::NONE, "NONE",
+       PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED},
+  };
+
+  for (const auto& test : kTestCases) {
+    base::HistogramTester histograms;
+    SetURL(test.url);
+    security_info_.security_level = test.security_level;
+    ResetMockUI();
+    ClearPageInfo();
+    SetDefaultUIExpectations(mock_ui());
+
+    histograms.ExpectTotalCount(kHistogramPrefix + test.security_level_name, 0);
+    histograms.ExpectTotalCount(
+        kHistogramPrefix + "Action." + test.security_level_name, 0);
+    histograms.ExpectTotalCount(
+        kHistogramPrefix + "NoAction." + test.security_level_name, 0);
+
+    PageInfo* test_page_info = page_info();
+    if (test.action != PageInfo::PAGE_INFO_COUNT) {
+      test_page_info->RecordPageInfoAction(test.action);
+    }
+    ClearPageInfo();
+
+    histograms.ExpectTotalCount(kHistogramPrefix + test.security_level_name, 1);
+
+    if (test.action != PageInfo::PAGE_INFO_COUNT) {
+      histograms.ExpectTotalCount(
+          kHistogramPrefix + "Action." + test.security_level_name, 1);
+    } else {
+      histograms.ExpectTotalCount(
+          kHistogramPrefix + "NoAction." + test.security_level_name, 1);
+    }
+  }
+
+  // PageInfoTest expects a valid PageInfo instance to exist at end of test.
+  ResetMockUI();
+  SetDefaultUIExpectations(mock_ui());
+  page_info();
+}
+
 // Tests that the SubresourceFilter setting is omitted correctly.
 TEST_F(PageInfoTest, SubresourceFilterSetting_MatchesActivation) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI);
   auto showing_setting = [](const PermissionInfoList& permissions) {
     return PermissionInfoListContainsPermission(permissions,
                                                 CONTENT_SETTINGS_TYPE_ADS);

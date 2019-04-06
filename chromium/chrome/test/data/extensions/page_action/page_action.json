@@ -1,9 +1,9 @@
 {
    "name": "PageAction Test",
    "version": "1.0",
+   "manifest_version": 2,
    "page_action": {
-      "icons": [ "image1.png", "image2.png" ],
-      "id": "MyExtensionActionId",
-      "name": "MyExtensionActionName"
+      "default_icon": "image1.png",
+      "default_title": "MyExtensionActionTitle"
    }
 }

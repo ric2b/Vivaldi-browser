@@ -11,10 +11,10 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/process/process_handle.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_variant.h"
@@ -49,14 +49,14 @@ namespace content {
 
 namespace {
 
-
-const char INPUT_CONTENTS[] = "Moz/5.0 (ST 6.x; WWW33) "
+constexpr char kInputContents[] =
+    "Moz/5.0 (ST 6.x; WWW33) "
     "WebKit  \"KHTML, like\".";
-const char TEXTAREA_CONTENTS[] = "Moz/5.0 (ST 6.x; WWW33)\n"
+constexpr char kTextareaContents[] =
+    "Moz/5.0 (ST 6.x; WWW33)\n"
     "WebKit \n\"KHTML, like\".";
-const LONG CONTENTS_LENGTH = static_cast<LONG>(
-    (sizeof(INPUT_CONTENTS) - 1) / sizeof(char));
-
+constexpr LONG kContentsLength =
+    static_cast<LONG>((sizeof(kInputContents) - 1) / sizeof(char));
 
 // AccessibilityWinBrowserTest ------------------------------------------------
 
@@ -71,18 +71,22 @@ class AccessibilityWinBrowserTest : public ContentBrowserTest {
       const std::string& html,
       ui::AXMode accessibility_mode = ui::kAXModeComplete);
   IAccessible* GetRendererAccessible();
+  base::string16 PrintAXTree() const;
   void ExecuteScript(const std::wstring& script);
   void SetUpInputField(Microsoft::WRL::ComPtr<IAccessibleText>* input_text);
+  void SetUpScrollableInputField(
+      Microsoft::WRL::ComPtr<IAccessibleText>* input_text);
   void SetUpTextareaField(
       Microsoft::WRL::ComPtr<IAccessibleText>* textarea_text);
   void SetUpSampleParagraph(
       Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text,
       ui::AXMode accessibility_mode = ui::kAXModeComplete);
-  void SetUpSampleParagraphWithScroll(
+  void SetUpSampleParagraphInScrollableDocument(
       Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text,
       ui::AXMode accessibility_mode = ui::kAXModeComplete);
-  void SetUpSampleParagraphHelper(
-      Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text);
+  void SetUpSampleParagraphInScrollableEditable(
+      Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text,
+      ui::AXMode accessibility_mode = ui::kAXModeComplete);
 
   static Microsoft::WRL::ComPtr<IAccessible> GetAccessibleFromVariant(
       IAccessible* parent,
@@ -104,6 +108,11 @@ class AccessibilityWinBrowserTest : public ContentBrowserTest {
       IAccessible* element);
 
  private:
+  void SetUpInputFieldHelper(
+      Microsoft::WRL::ComPtr<IAccessibleText>* input_text);
+  void SetUpSampleParagraphHelper(
+      Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text);
+
   DISALLOW_COPY_AND_ASSIGN(AccessibilityWinBrowserTest);
 };
 
@@ -116,11 +125,30 @@ AccessibilityWinBrowserTest::~AccessibilityWinBrowserTest() {
 void AccessibilityWinBrowserTest::LoadInitialAccessibilityTreeFromHtml(
     const std::string& html,
     ui::AXMode accessibility_mode) {
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), accessibility_mode, ui::AX_EVENT_LOAD_COMPLETE);
-  GURL html_data_url("data:text/html," + html);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         accessibility_mode,
+                                         ax::mojom::Event::kLoadComplete);
+  GURL html_data_url("data:text/html," +
+                     net::EscapeQueryParamValue(html, false));
   NavigateToURL(shell(), html_data_url);
   waiter.WaitForNotification();
+}
+
+base::string16 AccessibilityWinBrowserTest::PrintAXTree() const {
+  std::unique_ptr<AccessibilityTreeFormatter> formatter(
+      AccessibilityTreeFormatter::Create());
+  DCHECK(formatter);
+  formatter->set_show_ids(true);
+  formatter->SetFilters({AccessibilityTreeFormatter::Filter(
+      L"*", AccessibilityTreeFormatter::Filter::ALLOW)});
+
+  base::string16 str;
+  formatter->FormatAccessibilityTree(
+      static_cast<WebContentsImpl*>(shell()->web_contents())
+          ->GetRootBrowserAccessibilityManager()
+          ->GetRoot(),
+      &str);
+  return str;
 }
 
 // Retrieve the MSAA client accessibility object for the Render Widget Host View
@@ -135,35 +163,66 @@ void AccessibilityWinBrowserTest::ExecuteScript(const std::wstring& script) {
 }
 
 // Loads a page with  an input text field and places sample text in it. Also,
-// places the caret on the last character.
+// places the caret before the last character.
 void AccessibilityWinBrowserTest::SetUpInputField(
     Microsoft::WRL::ComPtr<IAccessibleText>* input_text) {
   ASSERT_NE(nullptr, input_text);
-  LoadInitialAccessibilityTreeFromHtml(std::string("<!DOCTYPE html><html><body>"
-      "<form><label for='textField'>Browser name:</label>"
-      "<input type='text' id='textField' name='name' value='") +
-      net::EscapeQueryParamValue(INPUT_CONTENTS, false) + std::string(
-      "'></form></body></html>"));
+  LoadInitialAccessibilityTreeFromHtml(std::string(
+                                           R"HTML(<!DOCTYPE html>
+          <html>
+          <body>
+            <form>
+              <label for="textField">Browser name:</label>
+              <input type="text" id="textField" name="name" value=")HTML") +
+                                       net::EscapeForHTML(kInputContents) +
+                                       std::string(R"HTML(">
+            </form>
+          </body>
+          </html>)HTML"));
 
-  // Retrieve the IAccessible interface for the web page.
+  SetUpInputFieldHelper(input_text);
+}
+
+// Loads a page with  an input text field and places sample text in it that
+// overflows its width. Also, places the caret before the last character.
+void AccessibilityWinBrowserTest::SetUpScrollableInputField(
+    Microsoft::WRL::ComPtr<IAccessibleText>* input_text) {
+  ASSERT_NE(nullptr, input_text);
+  LoadInitialAccessibilityTreeFromHtml(std::string(
+                                           R"HTML(<!DOCTYPE html>
+          <html>
+          <body>
+            <input type="text" style="width: 150px;" value=")HTML") +
+                                       net::EscapeForHTML(kInputContents) +
+                                       std::string(R"HTML(">
+          </body>
+          </html>)HTML"));
+
+  SetUpInputFieldHelper(input_text);
+}
+
+void AccessibilityWinBrowserTest::SetUpInputFieldHelper(
+    Microsoft::WRL::ComPtr<IAccessibleText>* input_text) {
   Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
   std::vector<base::win::ScopedVariant> document_children =
       GetAllAccessibleChildren(document.Get());
   ASSERT_EQ(1u, document_children.size());
 
-  Microsoft::WRL::ComPtr<IAccessible2> form;
+  Microsoft::WRL::ComPtr<IAccessible2> div;
   ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
       GetAccessibleFromVariant(document.Get(), document_children[0].AsInput())
           .Get(),
-      form.GetAddressOf()));
-  std::vector<base::win::ScopedVariant> form_children =
-      GetAllAccessibleChildren(form.Get());
-  ASSERT_EQ(2u, form_children.size());
+      div.GetAddressOf()));
+  std::vector<base::win::ScopedVariant> div_children =
+      GetAllAccessibleChildren(div.Get());
+  ASSERT_LT(0u, div_children.size());
 
-  // Find the input text field.
+  // The input field is always the last child.
   Microsoft::WRL::ComPtr<IAccessible2> input;
   ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
-      GetAccessibleFromVariant(form.Get(), form_children[1].AsInput()).Get(),
+      GetAccessibleFromVariant(div.Get(),
+                               div_children[div_children.size() - 1].AsInput())
+          .Get(),
       input.GetAddressOf()));
   LONG input_role = 0;
   ASSERT_HRESULT_SUCCEEDED(input->role(&input_role));
@@ -172,29 +231,34 @@ void AccessibilityWinBrowserTest::SetUpInputField(
   // Retrieve the IAccessibleText interface for the field.
   ASSERT_HRESULT_SUCCEEDED(input.CopyTo(input_text->GetAddressOf()));
 
-  // Set the caret on the last character.
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
-  std::wstring caret_offset = base::UTF16ToWide(base::IntToString16(
-      static_cast<int>(CONTENTS_LENGTH - 1)));
-  ExecuteScript(std::wstring(
-      L"var textField = document.getElementById('textField');"
-      L"textField.focus();"
-      L"textField.setSelectionRange(") +
-      caret_offset + L"," + caret_offset + L");");
+  // Set the caret before the last character.
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
+  std::wstring caret_offset = base::UTF16ToWide(
+      base::IntToString16(static_cast<int>(kContentsLength - 1)));
+  ExecuteScript(std::wstring(L"let textField = document.querySelector('input');"
+                             L"textField.focus();"
+                             L"textField.setSelectionRange(") +
+                caret_offset + L"," + caret_offset +
+                L");"
+                L"textField.scrollLeft = 1000;");
   waiter.WaitForNotification();
 }
 
 // Loads a page with  a textarea text field and places sample text in it. Also,
-// places the caret on the last character.
+// places the caret before the last character.
 void AccessibilityWinBrowserTest::SetUpTextareaField(
     Microsoft::WRL::ComPtr<IAccessibleText>* textarea_text) {
   ASSERT_NE(nullptr, textarea_text);
-  LoadInitialAccessibilityTreeFromHtml(std::string("<!DOCTYPE html><html><body>"
-      "<textarea id='textField' rows='3' cols='60'>") +
-      net::EscapeQueryParamValue(TEXTAREA_CONTENTS, false) + std::string(
-      "</textarea></body></html>"));
+  LoadInitialAccessibilityTreeFromHtml(std::string(R"HTML(<!DOCTYPE html>
+      <html>
+      <body>
+                    <textarea rows="3" cols="60">)HTML") +
+                                       net::EscapeForHTML(kTextareaContents) +
+                                       std::string(R"HTML(</textarea>
+          </body>
+          </html>)HTML"));
 
   // Retrieve the IAccessible interface for the web page.
   Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
@@ -224,16 +288,16 @@ void AccessibilityWinBrowserTest::SetUpTextareaField(
   // Retrieve the IAccessibleText interface for the field.
   ASSERT_HRESULT_SUCCEEDED(textarea.CopyTo(textarea_text->GetAddressOf()));
 
-  // Set the caret on the last character.
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
-  std::wstring caret_offset = base::UTF16ToWide(base::IntToString16(
-      static_cast<int>(CONTENTS_LENGTH - 1)));
-  ExecuteScript(std::wstring(
-      L"var textField = document.getElementById('textField');"
-      L"textField.focus();"
-      L"textField.setSelectionRange(") +
+  // Set the caret before the last character.
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
+  std::wstring caret_offset = base::UTF16ToWide(
+      base::IntToString16(static_cast<int>(kContentsLength - 1)));
+  ExecuteScript(
+      std::wstring(L"var textField = document.querySelector('textarea');"
+                   L"textField.focus();"
+                   L"textField.setSelectionRange(") +
       caret_offset + L"," + caret_offset + L");");
   waiter.WaitForNotification();
 }
@@ -243,12 +307,16 @@ void AccessibilityWinBrowserTest::SetUpSampleParagraph(
     Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text,
     ui::AXMode accessibility_mode) {
   LoadInitialAccessibilityTreeFromHtml(
-      "<!DOCTYPE html><html>"
-      "<body>"
-      "<p><b>Game theory</b> is \"the study of "
-      "<a href=\"#\" title=\"Mathematical model\">mathematical models</a> "
-      "of conflict and<br>cooperation between intelligent rational "
-      "decision-makers.\"</p></body></html>",
+      R"HTML(<!DOCTYPE html>
+      <html>
+      <body>
+        <p><b>Game theory</b> is "the study of
+            <a href="" title="Mathematical model">mathematical models</a>
+            of conflict and<br>cooperation between intelligent rational
+            decision-makers."
+        </p>
+      </body>
+      </html>)HTML",
       accessibility_mode);
 
   SetUpSampleParagraphHelper(accessible_text);
@@ -256,17 +324,51 @@ void AccessibilityWinBrowserTest::SetUpSampleParagraph(
 
 // Loads a page with a paragraph of sample text which is below the
 // bottom of the screen.
-void AccessibilityWinBrowserTest::SetUpSampleParagraphWithScroll(
+void AccessibilityWinBrowserTest::SetUpSampleParagraphInScrollableDocument(
     Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text,
     ui::AXMode accessibility_mode) {
   LoadInitialAccessibilityTreeFromHtml(
-      "<!DOCTYPE html><html>"
-      "<body style=\"overflow: scroll; margin-top: 100vh\">"
-      "<p><b>Game theory</b> is \"the study of "
-      "<a href=\"#\" title=\"Mathematical model\">mathematical models</a> "
-      "of conflict and<br>cooperation between intelligent rational "
-      "decision-makers.\"</p></body></html>",
+      R"HTML(<!DOCTYPE html>
+      <html>
+      <body style="overflow: scroll; margin-top: 100vh">
+        <p><b>Game theory</b> is "the study of
+            <a href="" title="Mathematical model">mathematical models</a>
+            of conflict and<br>cooperation between intelligent rational
+            decision-makers."
+        </p>
+      </body>
+      </html>)HTML",
       accessibility_mode);
+
+  SetUpSampleParagraphHelper(accessible_text);
+}
+
+// Loads a page with a content editable whose text overflows its height.
+// Places the caret at the beginning of the editable's last line but doesn't
+// scroll the editable.
+void AccessibilityWinBrowserTest::SetUpSampleParagraphInScrollableEditable(
+    Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text,
+    ui::AXMode accessibility_mode) {
+  LoadInitialAccessibilityTreeFromHtml(
+      R"HTML(<p contenteditable="true"
+          style="height: 30px; overflow: scroll;">
+          hello<br><br><br>hello
+      </p>)HTML",
+      accessibility_mode);
+
+  AccessibilityNotificationWaiter selection_waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
+  ExecuteScript(
+      L"let selection=document.getSelection();"
+      L"let range=document.createRange();"
+      L"let editable=document.querySelector('p[contenteditable=\"true\"]');"
+      L"editable.focus();"
+      L"range.setStart(editable.lastChild, 0);"
+      L"range.setEnd(editable.lastChild, 0);"
+      L"selection.removeAllRanges();"
+      L"selection.addRange(range);");
+  selection_waiter.WaitForNotification();
 
   SetUpSampleParagraphHelper(accessible_text);
 }
@@ -286,9 +388,11 @@ void AccessibilityWinBrowserTest::SetUpSampleParagraphHelper(
       GetAccessibleFromVariant(document.Get(), document_children[0].AsInput())
           .Get(),
       paragraph.GetAddressOf()));
+
   LONG paragraph_role = 0;
   ASSERT_HRESULT_SUCCEEDED(paragraph->role(&paragraph_role));
   ASSERT_EQ(IA2_ROLE_PARAGRAPH, paragraph_role);
+
   ASSERT_HRESULT_SUCCEEDED(paragraph.CopyTo(accessible_text->GetAddressOf()));
 }
 
@@ -417,9 +521,9 @@ AccessibilityWinBrowserTest::GetAllAccessibleChildren(
 
   std::vector<base::win::ScopedVariant> children(
       static_cast<size_t>(child_count));
-  for (size_t i = 0; i < children.size(); i++) {
+  for (size_t i = 0; i < children.size(); i++)
     children[i].Reset(children_array[i]);
-  }
+
   return children;
 }
 
@@ -735,8 +839,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   // Set focus to the radio group.
   std::unique_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_FOCUS));
+      new AccessibilityNotificationWaiter(shell()->web_contents(),
+                                          ui::kAXModeComplete,
+                                          ax::mojom::Event::kFocus));
   ExecuteScript(L"document.body.children[0].focus()");
   waiter->WaitForNotification();
 
@@ -747,7 +852,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   // Set the active descendant of the radio group
   waiter.reset(new AccessibilityNotificationWaiter(
-      shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_FOCUS));
+      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus));
   ExecuteScript(
       L"document.body.children[0].setAttribute('aria-activedescendant', 'li')");
   waiter->WaitForNotification();
@@ -778,9 +883,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   // Check the checkbox.
   std::unique_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(shell()->web_contents(),
-                                          ui::kAXModeComplete,
-                                          ui::AX_EVENT_CHECKED_STATE_CHANGED));
+      new AccessibilityNotificationWaiter(
+          shell()->web_contents(), ui::kAXModeComplete,
+          ax::mojom::Event::kCheckedStateChanged));
   ExecuteScript(L"document.body.children[0].checked=true");
   waiter->WaitForNotification();
 
@@ -807,7 +912,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   std::unique_ptr<AccessibilityNotificationWaiter> waiter(
       new AccessibilityNotificationWaiter(shell()->web_contents(),
                                           ui::kAXModeComplete,
-                                          ui::AX_EVENT_CHILDREN_CHANGED));
+                                          ax::mojom::Event::kChildrenChanged));
   ExecuteScript(L"document.body.innerHTML='<b>new text</b>'");
   waiter->WaitForNotification();
 
@@ -833,7 +938,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   std::unique_ptr<AccessibilityNotificationWaiter> waiter(
       new AccessibilityNotificationWaiter(shell()->web_contents(),
                                           ui::kAXModeComplete,
-                                          ui::AX_EVENT_CHILDREN_CHANGED));
+                                          ax::mojom::Event::kChildrenChanged));
   ExecuteScript(L"document.body.children[0].style.visibility='visible'");
   waiter->WaitForNotification();
 
@@ -864,8 +969,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   // Focus the div in the document
   std::unique_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_FOCUS));
+      new AccessibilityNotificationWaiter(shell()->web_contents(),
+                                          ui::kAXModeComplete,
+                                          ax::mojom::Event::kFocus));
   ExecuteScript(L"document.body.children[0].focus()");
   waiter->WaitForNotification();
 
@@ -877,7 +983,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   // Focus the document accessible. This will un-focus the current node.
   waiter.reset(new AccessibilityNotificationWaiter(
-      shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_BLUR));
+      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kBlur));
   Microsoft::WRL::ComPtr<IAccessible> document_accessible(
       GetRendererAccessible());
   ASSERT_NE(document_accessible.Get(), reinterpret_cast<IAccessible*>(NULL));
@@ -913,7 +1019,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   std::unique_ptr<AccessibilityNotificationWaiter> waiter(
       new AccessibilityNotificationWaiter(shell()->web_contents(),
                                           ui::kAXModeComplete,
-                                          ui::AX_EVENT_VALUE_CHANGED));
+                                          ax::mojom::Event::kValueChanged));
   ExecuteScript(L"document.body.children[0].value='new value'");
   waiter->WaitForNotification();
 
@@ -1083,17 +1189,18 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   EXPECT_EQ(-1, height);
 }
 
-IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestCharacterExtents) {
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
+                       TestCharacterExtentsInEditable) {
   Microsoft::WRL::ComPtr<IAccessibleText> paragraph_text;
   SetUpSampleParagraph(&paragraph_text);
 
-  const LONG newline_offset = 46;
+  constexpr LONG newline_offset = 46;
   LONG n_characters;
   ASSERT_HRESULT_SUCCEEDED(paragraph_text->get_nCharacters(&n_characters));
-  ASSERT_LT(0, n_characters);
+  ASSERT_EQ(105, n_characters);
 
   LONG x, y, width, height;
-  LONG previous_x, previous_y;
+  LONG previous_x, previous_y, previous_height;
   for (int coordinate = IA2_COORDTYPE_SCREEN_RELATIVE;
        coordinate <= IA2_COORDTYPE_PARENT_RELATIVE; ++coordinate) {
     auto coordinate_type = static_cast<IA2CoordinateType>(coordinate);
@@ -1101,19 +1208,20 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestCharacterExtents) {
         0, coordinate_type, &x, &y, &width, &height));
     EXPECT_LT(0, x) << "at offset 0";
     EXPECT_LT(0, y) << "at offset 0";
-    EXPECT_LT(0, width) << "at offset 0";
-    EXPECT_LT(0, height) << "at offset 0";
+    EXPECT_LT(1, width) << "at offset 0";
+    EXPECT_LT(1, height) << "at offset 0";
 
     for (LONG offset = 1; offset < newline_offset; ++offset) {
       previous_x = x;
       previous_y = y;
+      previous_height = height;
 
       EXPECT_HRESULT_SUCCEEDED(paragraph_text->get_characterExtents(
           offset, coordinate_type, &x, &y, &width, &height));
       EXPECT_LT(previous_x, x) << "at offset " << offset;
       EXPECT_EQ(previous_y, y) << "at offset " << offset;
-      EXPECT_LT(0, width) << "at offset " << offset;
-      EXPECT_LT(0, height) << "at offset " << offset;
+      EXPECT_LT(1, width) << "at offset " << offset;
+      EXPECT_EQ(previous_height, height) << "at offset " << offset;
     }
 
     EXPECT_HRESULT_SUCCEEDED(paragraph_text->get_characterExtents(
@@ -1121,19 +1229,163 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestCharacterExtents) {
     EXPECT_LE(0, x) << "at offset " << newline_offset + 1;
     EXPECT_GT(previous_x, x) << "at offset " << newline_offset + 1;
     EXPECT_LT(previous_y, y) << "at offset " << newline_offset + 1;
-    EXPECT_LT(0, width) << "at offset " << newline_offset + 1;
-    EXPECT_LT(0, height) << "at offset " << newline_offset + 1;
+    EXPECT_LT(1, width) << "at offset " << newline_offset + 1;
+    EXPECT_EQ(previous_height, height) << "at offset " << newline_offset + 1;
 
     for (LONG offset = newline_offset + 2; offset < n_characters; ++offset) {
       previous_x = x;
       previous_y = y;
+      previous_height = height;
 
       EXPECT_HRESULT_SUCCEEDED(paragraph_text->get_characterExtents(
           offset, coordinate_type, &x, &y, &width, &height));
       EXPECT_LT(previous_x, x) << "at offset " << offset;
       EXPECT_EQ(previous_y, y) << "at offset " << offset;
-      EXPECT_LT(0, width) << "at offset " << offset;
-      EXPECT_LT(0, height) << "at offset " << offset;
+      EXPECT_LT(1, width) << "at offset " << offset;
+      EXPECT_EQ(previous_height, height) << "at offset " << offset;
+    }
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
+                       TestCharacterExtentsInScrollableEditable) {
+  Microsoft::WRL::ComPtr<IAccessibleText> editable_container;
+  // By construction, only the first line of the content editable is visible.
+  SetUpSampleParagraphInScrollableEditable(&editable_container);
+
+  constexpr LONG first_line_end = 5;
+  constexpr LONG last_line_start = 8;
+  LONG n_characters;
+  ASSERT_HRESULT_SUCCEEDED(editable_container->get_nCharacters(&n_characters));
+  ASSERT_EQ(13, n_characters);
+  LONG caret_offset;
+  ASSERT_HRESULT_SUCCEEDED(editable_container->get_caretOffset(&caret_offset));
+  ASSERT_EQ(last_line_start, caret_offset);
+
+  LONG x, y, width, height;
+  LONG previous_x, previous_y, previous_height;
+  for (int coordinate = IA2_COORDTYPE_SCREEN_RELATIVE;
+       coordinate <= IA2_COORDTYPE_PARENT_RELATIVE; ++coordinate) {
+    auto coordinate_type = static_cast<IA2CoordinateType>(coordinate);
+
+    // Test that non offscreen characters have increasing x coordinates and a
+    // height that is greater than 1px.
+    EXPECT_HRESULT_SUCCEEDED(editable_container->get_characterExtents(
+        0, coordinate_type, &x, &y, &width, &height));
+    EXPECT_LT(0, x) << "at offset 0";
+    EXPECT_LT(0, y) << "at offset 0";
+    EXPECT_LT(1, width) << "at offset 0";
+    EXPECT_LT(1, height) << "at offset 0";
+
+    for (LONG offset = 1; offset < first_line_end; ++offset) {
+      previous_x = x;
+      previous_y = y;
+      previous_height = height;
+
+      EXPECT_HRESULT_SUCCEEDED(editable_container->get_characterExtents(
+          offset, coordinate_type, &x, &y, &width, &height));
+      EXPECT_LT(previous_x, x) << "at offset " << offset;
+      EXPECT_EQ(previous_y, y) << "at offset " << offset;
+      EXPECT_LT(1, width) << "at offset " << offset;
+      EXPECT_EQ(previous_height, height) << "at offset " << offset;
+    }
+
+    // Vertically offscreen objects should have a height of 1px so that if an
+    // assistive aid ignores the offscreen state, they will still be too small
+    // to be visible and thus not appear outside the window. Note that a height
+    // of 0 is not used because it signifies an invalid size.
+    EXPECT_HRESULT_SUCCEEDED(editable_container->get_characterExtents(
+        last_line_start, coordinate_type, &x, &y, &width, &height));
+    EXPECT_LT(0, x) << "at offset " << last_line_start;
+    EXPECT_LT(previous_y, y) << "at offset " << last_line_start;
+    EXPECT_LT(1, width) << "at offset " << last_line_start;
+    EXPECT_EQ(1, height) << "at offset " << last_line_start;
+
+    for (LONG offset = last_line_start + 1; offset < n_characters; ++offset) {
+      previous_x = x;
+      previous_y = y;
+
+      EXPECT_HRESULT_SUCCEEDED(editable_container->get_characterExtents(
+          offset, coordinate_type, &x, &y, &width, &height));
+      EXPECT_LT(previous_x, x) << "at offset " << offset;
+      EXPECT_EQ(previous_y, y) << "at offset " << offset;
+      EXPECT_LT(1, width) << "at offset " << offset;
+      EXPECT_EQ(1, height) << "at offset " << offset;
+    }
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
+                       TestCharacterExtentsInScrollableInputField) {
+  Microsoft::WRL::ComPtr<IAccessibleText> input_text;
+  SetUpScrollableInputField(&input_text);
+
+  constexpr LONG visible_characters_start = 21;
+  LONG n_characters;
+  ASSERT_HRESULT_SUCCEEDED(input_text->get_nCharacters(&n_characters));
+  ASSERT_EQ(kContentsLength, n_characters);
+  LONG caret_offset;
+  ASSERT_HRESULT_SUCCEEDED(input_text->get_caretOffset(&caret_offset));
+  ASSERT_EQ(kContentsLength - 1, caret_offset);
+
+  LONG x, y, width, height;
+  LONG previous_x, previous_y, previous_height;
+  for (int coordinate = IA2_COORDTYPE_SCREEN_RELATIVE;
+       coordinate <= IA2_COORDTYPE_PARENT_RELATIVE; ++coordinate) {
+    auto coordinate_type = static_cast<IA2CoordinateType>(coordinate);
+
+    // Horizontally offscreen objects should have a width of 1px so that if an
+    // assistive aid ignores the offscreen state, they will still be too small
+    // to be visible and thus not appear outside the window. Note that a width
+    // of 0 is not used because it signifies an invalid size.
+    EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
+        0, coordinate_type, &x, &y, &width, &height));
+    EXPECT_LT(0, x + width) << "at offset 0";
+    EXPECT_LT(0, y) << "at offset 0";
+    EXPECT_EQ(1, width) << "at offset 0";
+    EXPECT_LT(1, height) << "at offset 0";
+
+    // Test that characters at the start of the input field are offscreen by
+    // checking that their x coordinate is at the start of the field and their
+    // width is 1.
+    // Exclude the character that is partly visible.
+    for (LONG offset = 1; offset < (visible_characters_start - 1); ++offset) {
+      previous_x = x;
+      previous_y = y;
+      previous_height = height;
+
+      EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
+          offset, coordinate_type, &x, &y, &width, &height));
+      EXPECT_EQ(previous_x, x) << "at offset " << offset;
+      EXPECT_EQ(previous_y, y) << "at offset " << offset;
+      EXPECT_EQ(1, width) << "at offset " << offset;
+      EXPECT_EQ(previous_height, height) << "at offset " << offset;
+    }
+
+    // Test that non offscreen characters have increasing x coordinates and a
+    // width that is greater than 1px.
+    EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
+        visible_characters_start, coordinate_type, &x, &y, &width, &height));
+    EXPECT_EQ(previous_x, x) << "at offset " << visible_characters_start;
+    EXPECT_EQ(previous_y, y) << "at offset " << visible_characters_start;
+    EXPECT_LT(1, width) << "at offset " << visible_characters_start;
+    EXPECT_EQ(previous_height, height)
+        << "at offset " << visible_characters_start;
+
+    // Exclude the dot at the end of the text field, because it has a width of
+    // one anyway.
+    for (LONG offset = visible_characters_start + 1;
+         offset < (n_characters - 1); ++offset) {
+      previous_x = x;
+      previous_y = y;
+      previous_height = height;
+
+      EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
+          offset, coordinate_type, &x, &y, &width, &height));
+      EXPECT_LT(previous_x, x) << "at offset " << offset;
+      EXPECT_EQ(previous_y, y) << "at offset " << offset;
+      EXPECT_LT(1, width) << "at offset " << offset;
+      EXPECT_EQ(previous_height, height) << "at offset " << offset;
     }
   }
 }
@@ -1146,11 +1398,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
                                             ui::AXMode::kScreenReader);
 
   LONG x, y, width, height;
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::AXMode::kNativeAPIs |
-                                             ui::AXMode::kWebContents |
-                                             ui::AXMode::kScreenReader,
-                                         ui::AX_EVENT_LOAD_COMPLETE);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(),
+      ui::AXMode::kNativeAPIs | ui::AXMode::kWebContents |
+          ui::AXMode::kScreenReader | ui::AXMode::kInlineTextBoxes,
+      ax::mojom::Event::kLoadComplete);
   EXPECT_HRESULT_SUCCEEDED(paragraph_text->get_characterExtents(
       0, IA2_COORDTYPE_SCREEN_RELATIVE, &x, &y, &width, &height));
   // X and y coordinates should be available without
@@ -1166,13 +1418,13 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       0, IA2_COORDTYPE_SCREEN_RELATIVE, &x, &y, &width, &height));
   EXPECT_LT(0, x);
   EXPECT_LT(0, y);
-  EXPECT_LT(0, width);
-  EXPECT_LT(0, height);
+  EXPECT_LT(1, width);
+  EXPECT_LT(1, height);
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollToPoint) {
   Microsoft::WRL::ComPtr<IAccessibleText> accessible_text;
-  SetUpSampleParagraphWithScroll(&accessible_text);
+  SetUpSampleParagraphInScrollableDocument(&accessible_text);
   Microsoft::WRL::ComPtr<IAccessible2> paragraph;
   ASSERT_HRESULT_SUCCEEDED(
       accessible_text.CopyTo(IID_PPV_ARGS(&paragraph)));
@@ -1183,7 +1435,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollToPoint) {
       paragraph->accLocation(&prev_x, &prev_y, &width, &height, childid_self));
   AccessibilityNotificationWaiter location_changed_waiter(
       shell()->web_contents(), ui::kAXModeComplete,
-      ui::AX_EVENT_LOCATION_CHANGED);
+      ax::mojom::Event::kLocationChanged);
   EXPECT_HRESULT_SUCCEEDED(
       paragraph->scrollToPoint(IA2_COORDTYPE_PARENT_RELATIVE, 0, 0));
   location_changed_waiter.WaitForNotification();
@@ -1211,11 +1463,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestSetCaretOffset) {
   LONG caret_offset = 0;
   HRESULT hr = input_text->get_caretOffset(&caret_offset);
   EXPECT_EQ(S_OK, hr);
-  EXPECT_EQ(CONTENTS_LENGTH - 1, caret_offset);
+  EXPECT_EQ(kContentsLength - 1, caret_offset);
 
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
   caret_offset = 0;
   hr = input_text->setCaretOffset(caret_offset);
   EXPECT_EQ(S_OK, hr);
@@ -1234,11 +1486,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
     LONG caret_offset = 0;
   HRESULT hr = textarea_text->get_caretOffset(&caret_offset);
   EXPECT_EQ(S_OK, hr);
-  EXPECT_EQ(CONTENTS_LENGTH - 1, caret_offset);
+  EXPECT_EQ(kContentsLength - 1, caret_offset);
 
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
   caret_offset = 0;
   hr = textarea_text->setCaretOffset(caret_offset);
   EXPECT_EQ(S_OK, hr);
@@ -1260,11 +1512,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestSetSelection) {
   // There is no selection, just a caret.
   EXPECT_EQ(E_INVALIDARG, hr);
 
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
   start_offset = 0;
-  end_offset = CONTENTS_LENGTH;
+  end_offset = kContentsLength;
   EXPECT_HRESULT_FAILED(input_text->setSelection(1, start_offset, end_offset));
   EXPECT_HRESULT_SUCCEEDED(
       input_text->setSelection(0, start_offset, end_offset));
@@ -1273,9 +1525,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestSetSelection) {
   hr = input_text->get_selection(0, &start_offset, &end_offset);
   EXPECT_EQ(S_OK, hr);
   EXPECT_EQ(0, start_offset);
-  EXPECT_EQ(CONTENTS_LENGTH, end_offset);
+  EXPECT_EQ(kContentsLength, end_offset);
 
-  start_offset = CONTENTS_LENGTH;
+  start_offset = kContentsLength;
   end_offset = 1;
   EXPECT_HRESULT_SUCCEEDED(
       input_text->setSelection(0, start_offset, end_offset));
@@ -1285,7 +1537,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestSetSelection) {
   EXPECT_EQ(S_OK, hr);
   // Start and end offsets are always swapped to be in ascending order.
   EXPECT_EQ(1, start_offset);
-  EXPECT_EQ(CONTENTS_LENGTH, end_offset);
+  EXPECT_EQ(kContentsLength, end_offset);
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestMultiLineSetSelection) {
@@ -1299,11 +1551,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestMultiLineSetSelection) {
   // There is no selection, just a caret.
   EXPECT_EQ(E_INVALIDARG, hr);
 
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ui::AX_EVENT_TEXT_SELECTION_CHANGED);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
   start_offset = 0;
-  end_offset = CONTENTS_LENGTH;
+  end_offset = kContentsLength;
   EXPECT_HRESULT_FAILED(
       textarea_text->setSelection(1, start_offset, end_offset));
   EXPECT_HRESULT_SUCCEEDED(
@@ -1313,9 +1565,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestMultiLineSetSelection) {
   hr = textarea_text->get_selection(0, &start_offset, &end_offset);
   EXPECT_EQ(S_OK, hr);
   EXPECT_EQ(0, start_offset);
-  EXPECT_EQ(CONTENTS_LENGTH, end_offset);
+  EXPECT_EQ(kContentsLength, end_offset);
 
-  start_offset = CONTENTS_LENGTH - 1;
+  start_offset = kContentsLength - 1;
   end_offset = 0;
   EXPECT_HRESULT_SUCCEEDED(
       textarea_text->setSelection(0, start_offset, end_offset));
@@ -1325,7 +1577,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestMultiLineSetSelection) {
   EXPECT_EQ(S_OK, hr);
   // Start and end offsets are always swapped to be in ascending order.
   EXPECT_EQ(0, start_offset);
-  EXPECT_EQ(CONTENTS_LENGTH - 1, end_offset);
+  EXPECT_EQ(kContentsLength - 1, end_offset);
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
@@ -1339,7 +1591,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   AccessibilityNotificationWaiter waiter(
       shell()->web_contents(), ui::kAXModeComplete,
-      ui::AX_EVENT_DOCUMENT_SELECTION_CHANGED);
+      ax::mojom::Event::kDocumentSelectionChanged);
   LONG start_offset = 0;
   LONG end_offset = n_characters;
   EXPECT_HRESULT_FAILED(
@@ -1386,7 +1638,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   EXPECT_EQ(0, start_offset);
   EXPECT_EQ(0, end_offset);
   EXPECT_EQ(nullptr, static_cast<BSTR>(text));
-  invalid_offset = CONTENTS_LENGTH + 1;
+  invalid_offset = kContentsLength + 1;
   hr = input_text->get_textAtOffset(
       invalid_offset, IA2_TEXT_BOUNDARY_WORD,
       &start_offset, &end_offset, text.Receive());
@@ -1397,7 +1649,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   // According to the IA2 Spec, only line boundaries should succeed when
   // the offset is one past the end of the text.
-  invalid_offset = CONTENTS_LENGTH;
+  invalid_offset = kContentsLength;
   hr = input_text->get_textAtOffset(
       invalid_offset, IA2_TEXT_BOUNDARY_CHAR,
       &start_offset, &end_offset, text.Receive());
@@ -1479,7 +1731,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   EXPECT_EQ(0, start_offset);
   EXPECT_EQ(0, end_offset);
   EXPECT_EQ(nullptr, static_cast<BSTR>(text));
-  invalid_offset = CONTENTS_LENGTH + 1;
+  invalid_offset = kContentsLength + 1;
   hr = textarea_text->get_textAtOffset(
       invalid_offset, IA2_TEXT_BOUNDARY_WORD,
       &start_offset, &end_offset, text.Receive());
@@ -1490,7 +1742,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   // According to the IA2 Spec, only line boundaries should succeed when
   // the offset is one past the end of the text.
-  invalid_offset = CONTENTS_LENGTH;
+  invalid_offset = kContentsLength;
   hr = textarea_text->get_textAtOffset(
       invalid_offset, IA2_TEXT_BOUNDARY_CHAR,
       &start_offset, &end_offset, text.Receive());
@@ -1556,40 +1808,40 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
                        TestTextAtOffsetWithBoundaryCharacter) {
   Microsoft::WRL::ComPtr<IAccessibleText> input_text;
   SetUpInputField(&input_text);
-  for (LONG offset = 0; offset < CONTENTS_LENGTH; ++offset) {
-    std::wstring expected_text(1, INPUT_CONTENTS[offset]);
+  for (LONG offset = 0; offset < kContentsLength; ++offset) {
+    std::wstring expected_text(1, kInputContents[offset]);
     LONG expected_start_offset = offset;
     LONG expected_end_offset = offset + 1;
     CheckTextAtOffset(input_text, offset, IA2_TEXT_BOUNDARY_CHAR,
         expected_start_offset, expected_end_offset, expected_text);
   }
 
-  for (LONG offset = CONTENTS_LENGTH - 1; offset >= 0; --offset) {
-    std::wstring expected_text(1, INPUT_CONTENTS[offset]);
+  for (LONG offset = kContentsLength - 1; offset >= 0; --offset) {
+    std::wstring expected_text(1, kInputContents[offset]);
     LONG expected_start_offset = offset;
     LONG expected_end_offset = offset + 1;
     CheckTextAtOffset(input_text, offset, IA2_TEXT_BOUNDARY_CHAR,
         expected_start_offset, expected_end_offset, expected_text);
   }
 
-  CheckTextAtOffset(input_text, IA2_TEXT_OFFSET_CARET,
-      IA2_TEXT_BOUNDARY_CHAR, CONTENTS_LENGTH - 1, CONTENTS_LENGTH, L".");
+  CheckTextAtOffset(input_text, IA2_TEXT_OFFSET_CARET, IA2_TEXT_BOUNDARY_CHAR,
+                    kContentsLength - 1, kContentsLength, L".");
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
     TestMultiLineTextAtOffsetWithBoundaryCharacter) {
   Microsoft::WRL::ComPtr<IAccessibleText> textarea_text;
   SetUpTextareaField(&textarea_text);
-  for (LONG offset = 0; offset < CONTENTS_LENGTH; ++offset) {
-    std::wstring expected_text(1, TEXTAREA_CONTENTS[offset]);
+  for (LONG offset = 0; offset < kContentsLength; ++offset) {
+    std::wstring expected_text(1, kTextareaContents[offset]);
     LONG expected_start_offset = offset;
     LONG expected_end_offset = offset + 1;
     CheckTextAtOffset(textarea_text, offset, IA2_TEXT_BOUNDARY_CHAR,
         expected_start_offset, expected_end_offset, expected_text);
   }
 
-  for (LONG offset = CONTENTS_LENGTH - 1; offset >= 0; --offset) {
-    std::wstring expected_text(1, TEXTAREA_CONTENTS[offset]);
+  for (LONG offset = kContentsLength - 1; offset >= 0; --offset) {
+    std::wstring expected_text(1, kTextareaContents[offset]);
     LONG expected_start_offset = offset;
     LONG expected_end_offset = offset + 1;
     CheckTextAtOffset(textarea_text, offset, IA2_TEXT_BOUNDARY_CHAR,
@@ -1597,7 +1849,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   }
 
   CheckTextAtOffset(textarea_text, IA2_TEXT_OFFSET_CARET,
-      IA2_TEXT_BOUNDARY_CHAR, CONTENTS_LENGTH - 1, CONTENTS_LENGTH, L".");
+                    IA2_TEXT_BOUNDARY_CHAR, kContentsLength - 1,
+                    kContentsLength, L".");
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
@@ -1662,14 +1915,14 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       33, 40, L"KHTML, ");
 
   // Trailing final punctuation should be part of the last word.
-  CheckTextAtOffset(input_text, 41, IA2_TEXT_BOUNDARY_WORD,
-      40, CONTENTS_LENGTH, L"like\".");
-  CheckTextAtOffset(input_text, 45, IA2_TEXT_BOUNDARY_WORD,
-      40, CONTENTS_LENGTH, L"like\".");
+  CheckTextAtOffset(input_text, 41, IA2_TEXT_BOUNDARY_WORD, 40, kContentsLength,
+                    L"like\".");
+  CheckTextAtOffset(input_text, 45, IA2_TEXT_BOUNDARY_WORD, 40, kContentsLength,
+                    L"like\".");
 
   // Test special offsets.
-  CheckTextAtOffset(input_text, IA2_TEXT_OFFSET_CARET,
-      IA2_TEXT_BOUNDARY_WORD, 40, CONTENTS_LENGTH, L"like\".");
+  CheckTextAtOffset(input_text, IA2_TEXT_OFFSET_CARET, IA2_TEXT_BOUNDARY_WORD,
+                    40, kContentsLength, L"like\".");
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
@@ -1734,14 +1987,14 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       33, 40, L"KHTML, ");
 
   // Trailing final punctuation should be part of the last word.
-  CheckTextAtOffset(textarea_text, 41, IA2_TEXT_BOUNDARY_WORD,
-      40, CONTENTS_LENGTH, L"like\".");
-  CheckTextAtOffset(textarea_text, 45, IA2_TEXT_BOUNDARY_WORD,
-      40, CONTENTS_LENGTH, L"like\".");
+  CheckTextAtOffset(textarea_text, 41, IA2_TEXT_BOUNDARY_WORD, 40,
+                    kContentsLength, L"like\".");
+  CheckTextAtOffset(textarea_text, 45, IA2_TEXT_BOUNDARY_WORD, 40,
+                    kContentsLength, L"like\".");
 
   // Test special offsets.
   CheckTextAtOffset(textarea_text, IA2_TEXT_OFFSET_CARET,
-      IA2_TEXT_BOUNDARY_WORD, 40, CONTENTS_LENGTH, L"like\".");
+                    IA2_TEXT_BOUNDARY_WORD, 40, kContentsLength, L"like\".");
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
@@ -1820,14 +2073,14 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   SetUpInputField(&input_text);
 
   // Single line text fields should return the whole text.
-  CheckTextAtOffset(input_text, 0, IA2_TEXT_BOUNDARY_LINE,
-      0, CONTENTS_LENGTH, base::SysUTF8ToWide(INPUT_CONTENTS));
+  CheckTextAtOffset(input_text, 0, IA2_TEXT_BOUNDARY_LINE, 0, kContentsLength,
+                    base::SysUTF8ToWide(kInputContents));
 
   // Test special offsets.
   CheckTextAtOffset(input_text, IA2_TEXT_OFFSET_LENGTH, IA2_TEXT_BOUNDARY_LINE,
-      0, CONTENTS_LENGTH, base::SysUTF8ToWide(INPUT_CONTENTS));
+                    0, kContentsLength, base::SysUTF8ToWide(kInputContents));
   CheckTextAtOffset(input_text, IA2_TEXT_OFFSET_CARET, IA2_TEXT_BOUNDARY_LINE,
-      0, CONTENTS_LENGTH, base::SysUTF8ToWide(INPUT_CONTENTS));
+                    0, kContentsLength, base::SysUTF8ToWide(kInputContents));
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
@@ -1843,18 +2096,20 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       24, 32, L"WebKit \n");
 
   // Last line does not have a trailing newline.
-  CheckTextAtOffset(textarea_text, 32, IA2_TEXT_BOUNDARY_LINE,
-      32, CONTENTS_LENGTH, L"\"KHTML, like\".");
+  CheckTextAtOffset(textarea_text, 32, IA2_TEXT_BOUNDARY_LINE, 32,
+                    kContentsLength, L"\"KHTML, like\".");
 
   // An offset one past the last character should return the last line.
-  CheckTextAtOffset(textarea_text, CONTENTS_LENGTH, IA2_TEXT_BOUNDARY_LINE,
-      32, CONTENTS_LENGTH, L"\"KHTML, like\".");
+  CheckTextAtOffset(textarea_text, kContentsLength, IA2_TEXT_BOUNDARY_LINE, 32,
+                    kContentsLength, L"\"KHTML, like\".");
 
   // Test special offsets.
   CheckTextAtOffset(textarea_text, IA2_TEXT_OFFSET_LENGTH,
-      IA2_TEXT_BOUNDARY_LINE, 32, CONTENTS_LENGTH, L"\"KHTML, like\".");
+                    IA2_TEXT_BOUNDARY_LINE, 32, kContentsLength,
+                    L"\"KHTML, like\".");
   CheckTextAtOffset(textarea_text, IA2_TEXT_OFFSET_CARET,
-      IA2_TEXT_BOUNDARY_LINE, 32, CONTENTS_LENGTH, L"\"KHTML, like\".");
+                    IA2_TEXT_BOUNDARY_LINE, 32, kContentsLength,
+                    L"\"KHTML, like\".");
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
@@ -1890,8 +2145,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   Microsoft::WRL::ComPtr<IAccessibleText> input_text;
   SetUpInputField(&input_text);
 
-  CheckTextAtOffset(input_text, 0, IA2_TEXT_BOUNDARY_ALL,
-      0, CONTENTS_LENGTH, base::SysUTF8ToWide(INPUT_CONTENTS));
+  CheckTextAtOffset(input_text, 0, IA2_TEXT_BOUNDARY_ALL, 0, kContentsLength,
+                    base::SysUTF8ToWide(kInputContents));
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
@@ -1899,16 +2154,19 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   Microsoft::WRL::ComPtr<IAccessibleText> textarea_text;
   SetUpTextareaField(&textarea_text);
 
-  CheckTextAtOffset(textarea_text, CONTENTS_LENGTH - 1, IA2_TEXT_BOUNDARY_ALL,
-      0, CONTENTS_LENGTH, base::SysUTF8ToWide(TEXTAREA_CONTENTS));
+  CheckTextAtOffset(textarea_text, kContentsLength - 1, IA2_TEXT_BOUNDARY_ALL,
+                    0, kContentsLength, base::SysUTF8ToWide(kTextareaContents));
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIAccessibleAction) {
   LoadInitialAccessibilityTreeFromHtml(
-      "<!DOCTYPE html><html><body>"
-      "<img src=\"\" alt=\"image\" "
-      "onclick=\"document.querySelector('img').alt = 'image2';\">"
-      "</body></html>");
+      R"HTML(<!DOCTYPE html>
+      <html>
+      <body>
+        <img src="" alt="image"
+            onclick="document.querySelector('img').alt = 'image2';">
+      </body>
+      </html>)HTML");
 
   // Retrieve the IAccessible interface for the web page.
   Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
@@ -1955,8 +2213,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIAccessibleAction) {
   image_name.Release();
   // Cllicking the image will change its name.
   EXPECT_HRESULT_SUCCEEDED(image_action->doAction(0));
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_TEXT_CHANGED);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kTextChanged);
   waiter.WaitForNotification();
   EXPECT_HRESULT_SUCCEEDED(
       image->get_accName(childid_self, image_name.Receive()));
@@ -1981,8 +2240,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, HasHWNDAfterNavigation) {
   web_contents_view_aura->set_init_rwhv_with_null_parent_for_testing(true);
 
   // Navigate to a new page and wait for the accessibility tree to load.
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_LOAD_COMPLETE);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
   NavigateToURL(shell(), embedded_test_server()->GetURL(
       "/accessibility/html/article.html"));
   waiter.WaitForNotification();
@@ -2003,8 +2263,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, HasHWNDAfterNavigation) {
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestAccNavigateInTables) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_LOAD_COMPLETE);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
   NavigateToURL(shell(), embedded_test_server()->GetURL(
                              "/accessibility/html/table-spans.html"));
   waiter.WaitForNotification();
@@ -2099,13 +2360,16 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestAccNavigateInTables) {
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollTo) {
   LoadInitialAccessibilityTreeFromHtml(
-      "<!DOCTYPE html><html><body>"
-      "<div style='height: 5000px;'></div>"
-      "<img src='#' alt='Target1'>"
-      "<div style='height: 5000px;'></div>"
-      "<img src='#' alt='Target2'>"
-      "<div style='height: 5000px;'></div>"
-      "</body></html>");
+      R"HTML(<!DOCTYPE html>
+      <html>
+      <body>
+        <div style="height: 5000px;"></div>
+        <img src="" alt="Target1">
+        <div style="height: 5000px;"></div>
+        <img src="" alt="Target2">
+        <div style="height: 5000px;"></div>
+      </body>
+      </html>)HTML");
 
   // Retrieve the IAccessible interface for the document node.
   Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
@@ -2139,9 +2403,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollTo) {
 
   // Call scrollTo on the first target. Ensure it ends up very near the
   // center of the window.
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ui::AX_EVENT_SCROLL_POSITION_CHANGED);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kScrollPositionChanged);
   ASSERT_HRESULT_SUCCEEDED(target->scrollTo(IA2_SCROLL_TYPE_ANYWHERE));
   waiter.WaitForNotification();
 
@@ -2157,9 +2421,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollTo) {
 
   // Now call scrollTo on the second target. Ensure it ends up very near the
   // center of the window.
-  AccessibilityNotificationWaiter waiter2(shell()->web_contents(),
-                                          ui::kAXModeComplete,
-                                          ui::AX_EVENT_SCROLL_POSITION_CHANGED);
+  AccessibilityNotificationWaiter waiter2(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kScrollPositionChanged);
   ASSERT_HRESULT_SUCCEEDED(target2->scrollTo(IA2_SCROLL_TYPE_ANYWHERE));
   waiter2.WaitForNotification();
 
@@ -2205,7 +2469,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   BrowserAccessibilityManager* manager =
       web_contents->GetRootBrowserAccessibilityManager();
   NativeWinEventWaiter win_event_waiter(
-      manager, "EVENT_OBJECT_FOCUS on role=ROLE_SYSTEM_TEXT*");
+      manager, "EVENT_OBJECT_FOCUS on <input> role=ROLE_SYSTEM_TEXT*");
 
   // Get the root accessible element and its children.
   Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());

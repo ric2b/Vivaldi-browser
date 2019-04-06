@@ -4,6 +4,7 @@
 
 import("//media/media_options.gni")
 import("//testing/test.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 
 component("blink") {
   output_name = "media_blink"
@@ -31,6 +32,8 @@ component("blink") {
     "multibuffer_reader.h",
     "new_session_cdm_result_promise.cc",
     "new_session_cdm_result_promise.h",
+    "remote_playback_client_wrapper_impl.cc",
+    "remote_playback_client_wrapper_impl.h",
     "resource_fetch_context.h",
     "resource_multibuffer_data_provider.cc",
     "resource_multibuffer_data_provider.h",
@@ -42,6 +45,8 @@ component("blink") {
     "video_decode_stats_reporter.h",
     "video_frame_compositor.cc",
     "video_frame_compositor.h",
+    "watch_time_component.cc",
+    "watch_time_component.h",
     "watch_time_reporter.cc",
     "watch_time_reporter.h",
     "webaudiosourceprovider_impl.cc",
@@ -74,7 +79,6 @@ component("blink") {
   deps = [
     "//base",
     "//cc",
-    "//cc/blink",
     "//gpu",
     "//media",
     "//media:shared_memory_support",
@@ -82,7 +86,7 @@ component("blink") {
     "//net",
     "//services/service_manager/public/cpp:cpp",
     "//skia",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//url",
@@ -109,21 +113,24 @@ test("media_blink_unittests") {
     "//base",
     "//base/test:test_support",
     "//cc",
-    "//cc/blink",
     "//gin",
     "//media:test_support",
     "//media/mojo/interfaces",
     "//media/mojo/services",
-    "//mojo/edk/system",
+    "//mojo/core/embedder",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/WebKit/public:blink",
-    "//third_party/WebKit/public:test_support",
+    "//third_party/blink/public:blink",
+    "//third_party/blink/public:test_support",
     "//tools/v8_context_snapshot",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//url",
+  ]
+
+  data = [
+    "//media/test/data/",
   ]
 
   configs += [
@@ -151,15 +158,19 @@ test("media_blink_unittests") {
     "url_index_unittest.cc",
     "video_decode_stats_reporter_unittest.cc",
     "video_frame_compositor_unittest.cc",
+    "watch_time_component_unittest.cc",
     "watch_time_reporter_unittest.cc",
     "webaudiosourceprovider_impl_unittest.cc",
+    "webmediacapabilitiesclient_impl_unittest.cc",
     "webmediaplayer_impl_unittest.cc",
   ]
 
   if (is_android) {
-    deps += [
-      "//media/base/android:media_java",
-      "//v8:v8_external_startup_data_assets",
-    ]
+    deps += [ "//media/base/android:media_java" ]
+    if (use_v8_context_snapshot) {
+      deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+    } else {
+      deps += [ "//v8:v8_external_startup_data_assets" ]
+    }
   }
 }

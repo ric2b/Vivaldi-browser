@@ -5,6 +5,8 @@
 #ifndef PPAPI_PROXY_PPP_PDF_PROXY_H_
 #define PPAPI_PROXY_PPP_PDF_PROXY_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "ppapi/c/private/ppp_pdf.h"
 #include "ppapi/proxy/interface_proxy.h"
@@ -38,8 +40,17 @@ class PPP_Pdf_Proxy : public InterfaceProxy {
                                      const PP_FloatPoint& base,
                                      const PP_FloatPoint& extent);
   void OnPluginMsgCanEditText(PP_Instance instance, PP_Bool* result);
+  void OnPluginMsgHasEditableText(PP_Instance instance, PP_Bool* result);
+  void OnPluginMsgCanUndo(PP_Instance instance, PP_Bool* result);
+  void OnPluginMsgCanRedo(PP_Instance instance, PP_Bool* result);
+  void OnPluginMsgUndo(PP_Instance instance);
+  void OnPluginMsgRedo(PP_Instance instance);
   void OnPluginMsgReplaceSelection(PP_Instance instance,
                                    const std::string& text);
+  void OnPluginMsgPrintBegin(PP_Instance instance,
+                             const PP_PrintSettings_Dev& print_settings,
+                             const PP_PdfPrintSettings_Dev& pdf_print_settings,
+                             int32_t* result);
 
   // When this proxy is in the plugin side, this value caches the interface
   // pointer so we don't have to retrieve it from the dispatcher each time.

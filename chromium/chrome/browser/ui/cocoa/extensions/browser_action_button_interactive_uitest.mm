@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/test/base/interactive_test_utils.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "extensions/common/extension_builder.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/events/test/cocoa_test_event_utils.h"
@@ -233,13 +234,13 @@ void ClickOnOverflowedAction(
 
 @end
 
-class BrowserActionButtonUiTest : public ExtensionBrowserTest {
+class BrowserActionButtonUiTest : public extensions::ExtensionBrowserTest {
  protected:
   BrowserActionButtonUiTest() {}
   ~BrowserActionButtonUiTest() override {}
 
   void SetUpOnMainThread() override {
-    ExtensionBrowserTest::SetUpOnMainThread();
+    extensions::ExtensionBrowserTest::SetUpOnMainThread();
     toolbarController_ =
         [[BrowserWindowController
             browserWindowControllerForWindow:browser()->
@@ -251,13 +252,13 @@ class BrowserActionButtonUiTest : public ExtensionBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionBrowserTest::SetUpCommandLine(command_line);
+    extensions::ExtensionBrowserTest::SetUpCommandLine(command_line);
     ToolbarActionsBar::disable_animations_for_testing_ = true;
   }
 
   void TearDownOnMainThread() override {
     ToolbarActionsBar::disable_animations_for_testing_ = false;
-    ExtensionBrowserTest::TearDownOnMainThread();
+    extensions::ExtensionBrowserTest::TearDownOnMainThread();
   }
 
   // Opens the app menu and the context menu of the overflowed action, and
@@ -300,6 +301,8 @@ class BrowserActionButtonUiTest : public ExtensionBrowserTest {
   ToolbarController* toolbarController_ = nil;
   AppMenuController* appMenuController_ = nil;
   ToolbarActionsModel* model_ = nullptr;
+
+  test::ScopedMacViewsBrowserMode cocoa_browser_mode_{false};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserActionButtonUiTest);
 };
@@ -530,7 +533,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
 }
 
 void AddExtensionWithMenuOpen(ToolbarController* toolbarController,
-                              ExtensionService* extensionService,
+                              extensions::ExtensionService* extensionService,
                               const base::Closure& closure) {
   AppMenuController* appMenuController =
       [toolbarController appMenuController];

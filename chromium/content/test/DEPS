@@ -1,28 +1,29 @@
 include_rules = [
   # Allow inclusion of specific components that we depend on.
   # See comment in content/DEPS for which components are allowed.
-  "+components/leveldb",
+  "+components/services/leveldb",
   "+components/network_session_configurator/common",
   "+components/scheduler/renderer",
   "+components/scheduler/test",
   "+components/viz/common",
   "+components/viz/host",
   "+components/viz/service",
+  "+components/viz/test",
   "+services/viz/public/interfaces",
 
-  "+cc/blink",
   "+chromeos/audio", # For WebRTC tests.
   # Testing utilities can access anything in content/
   "+content",
   "+device/bluetooth", # For WebBluetooth tests
   "+device/gamepad/public/cpp",
-  "+device/sensors/public/cpp",
   # For loading V8's initial snapshot from external files.
   "+gin/v8_initializer.h",
   "+services/catalog",
   "+services/device/public/cpp/generic_sensor",
   "+services/network/public/cpp",
-  "+services/network/public/interfaces",
+  "+services/network/public/mojom",
+  "+services/network/test",
+  "+services/network/url_request_context_builder_mojo.h",
   "+services/proxy_resolver",
   "+services/service_manager/public",
   "+ui/base/resource/data_pack.h",
@@ -34,13 +35,19 @@ include_rules = [
   # For TestMojoProxyResolverFactory. Remove once it moves to the network
   # service.
   "+services/service_manager/public/cpp/service_context_ref.h",
+
+  # For ProxyServiceMojoTest. Remove once it moves to the network service.
+  "+services/network/proxy_service_mojo.h",
 ]
 
 specific_include_rules = {
   "layouttest_support.cc": [
-    "+components/viz/test",
     "+content/shell/test_runner",
     "+content/shell/common/shell_switches.h",
     "+services/ui/public/cpp/gpu",
+  ],
+  "gpu_browsertest_helpers.cc": [
+    "+services/ui/public/cpp/gpu/command_buffer_metrics.h",
+    "+services/ui/public/cpp/gpu/context_provider_command_buffer.h",
   ],
 }

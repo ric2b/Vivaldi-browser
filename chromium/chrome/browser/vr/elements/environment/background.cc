@@ -4,7 +4,6 @@
 
 #include "chrome/browser/vr/elements/environment/background.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/skia_surface_provider.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
@@ -141,7 +140,6 @@ float RemapLatitude(float t) {
 }  // namespace
 
 Background::Background() {
-  set_hit_testable(false);
   SetTransitionedProperties(
       {NORMAL_COLOR_FACTOR, INCOGNITO_COLOR_FACTOR, FULLSCREEN_COLOR_FACTOR});
   SetTransitionDuration(base::TimeDelta::FromMilliseconds(2500));
@@ -189,18 +187,18 @@ void Background::SetGradientImages(
 }
 
 void Background::SetNormalFactor(float factor) {
-  animation_player().TransitionFloatTo(last_frame_time(), NORMAL_COLOR_FACTOR,
-                                       normal_factor_, factor);
+  animation().TransitionFloatTo(last_frame_time(), NORMAL_COLOR_FACTOR,
+                                normal_factor_, factor);
 }
 
 void Background::SetIncognitoFactor(float factor) {
-  animation_player().TransitionFloatTo(
-      last_frame_time(), INCOGNITO_COLOR_FACTOR, incognito_factor_, factor);
+  animation().TransitionFloatTo(last_frame_time(), INCOGNITO_COLOR_FACTOR,
+                                incognito_factor_, factor);
 }
 
 void Background::SetFullscreenFactor(float factor) {
-  animation_player().TransitionFloatTo(
-      last_frame_time(), FULLSCREEN_COLOR_FACTOR, fullscreen_factor_, factor);
+  animation().TransitionFloatTo(last_frame_time(), FULLSCREEN_COLOR_FACTOR,
+                                fullscreen_factor_, factor);
 }
 
 void Background::CreateBackgroundTexture() {
@@ -225,7 +223,7 @@ void Background::CreateGradientTextures() {
 
 void Background::NotifyClientFloatAnimated(float value,
                                            int target_property_id,
-                                           cc::Animation* animation) {
+                                           cc::KeyframeModel* keyframe_model) {
   switch (target_property_id) {
     case NORMAL_COLOR_FACTOR:
       normal_factor_ = value;
@@ -238,7 +236,7 @@ void Background::NotifyClientFloatAnimated(float value,
       break;
     default:
       UiElement::NotifyClientFloatAnimated(value, target_property_id,
-                                           animation);
+                                           keyframe_model);
   }
 }
 
@@ -311,6 +309,7 @@ void Background::Renderer::Draw(const gfx::Transform& view_proj_matrix,
                                 float normal_factor,
                                 float incognito_factor,
                                 float fullscreen_factor) {
+  glDisable(GL_BLEND);
   glUseProgram(program_handle_);
 
   // Pass in model view project matrix.

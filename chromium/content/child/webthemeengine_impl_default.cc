@@ -6,13 +6,11 @@
 
 #include "build/build_config.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_size.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/native_theme/overlay_scrollbar_constants_aura.h"
 
-using blink::WebCanvas;
-using blink::WebColor;
 using blink::WebRect;
 using blink::WebThemeEngine;
 using blink::WebScrollbarOverlayColorTheme;
@@ -231,7 +229,7 @@ blink::WebSize WebThemeEngineImpl::GetSize(WebThemeEngine::Part part) {
 }
 
 void WebThemeEngineImpl::Paint(
-    blink::WebCanvas* canvas,
+    cc::PaintCanvas* canvas,
     WebThemeEngine::Part part,
     WebThemeEngine::State state,
     const blink::WebRect& rect,
@@ -245,9 +243,8 @@ void WebThemeEngineImpl::Paint(
 }
 
 void WebThemeEngineImpl::GetOverlayScrollbarStyle(ScrollbarStyle* style) {
-  style->fade_out_delay_seconds = ui::kOverlayScrollbarFadeDelay.InSecondsF();
-  style->fade_out_duration_seconds =
-      ui::kOverlayScrollbarFadeDuration.InSecondsF();
+  style->fade_out_delay = ui::kOverlayScrollbarFadeDelay;
+  style->fade_out_duration = ui::kOverlayScrollbarFadeDuration;
   // The other fields in this struct are used only on Android to draw solid
   // color scrollbars. On other platforms the scrollbars are painted in
   // NativeTheme so these fields are unused.

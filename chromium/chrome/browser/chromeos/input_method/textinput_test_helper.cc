@@ -4,12 +4,12 @@
 
 #include "chrome/browser/chromeos/input_method/textinput_test_helper.h"
 #include "ash/shell.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/platform_thread.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "content/public/browser/render_view_host.h"
@@ -74,8 +74,7 @@ ui::TextInputClient* TextInputTestHelper::GetTextInputClient() const {
   return GetInputMethod()->GetTextInputClient();
 }
 
-void TextInputTestHelper::OnShowImeIfNeeded() {
-}
+void TextInputTestHelper::OnShowVirtualKeyboardIfEnabled() {}
 
 void TextInputTestHelper::OnInputMethodDestroyed(
     const ui::InputMethod* input_method) {
@@ -160,6 +159,13 @@ void TextInputTestHelper::WaitForSurroundingTextChanged(
   waiting_type_ = NO_WAIT;
 }
 
+void TextInputTestHelper::WaitForPassageOfTimeMillis(const int milliseconds) {
+  CHECK_EQ(NO_WAIT, waiting_type_);
+  waiting_type_ = WAIT_ON_PASSAGE_OF_TIME;
+  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(milliseconds));
+  waiting_type_ = NO_WAIT;
+}
+
 // static
 bool TextInputTestHelper::ConvertRectFromString(const std::string& str,
                                                 gfx::Rect* rect) {
@@ -194,9 +200,9 @@ bool TextInputTestHelper::ClickElement(const std::string& id,
   if (!ConvertRectFromString(coordinate, &rect))
     return false;
 
-  blink::WebMouseEvent mouse_event(blink::WebInputEvent::kMouseDown,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(rect.CenterPoint().x(),
                                   rect.CenterPoint().y());

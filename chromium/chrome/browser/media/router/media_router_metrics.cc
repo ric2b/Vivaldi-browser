@@ -4,6 +4,8 @@
 
 #include "chrome/browser/media/router/media_router_metrics.h"
 
+#include <algorithm>
+
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -43,6 +45,8 @@ MediaRouterMetrics::MediaRouterMetrics() {}
 MediaRouterMetrics::~MediaRouterMetrics() = default;
 
 // static
+const char MediaRouterMetrics::kHistogramCloseLatency[] =
+    "MediaRouter.Ui.Action.CloseLatency";
 const char MediaRouterMetrics::kHistogramDialParsingError[] =
     "MediaRouter.Dial.ParsingError";
 const char MediaRouterMetrics::kHistogramIconClickLocation[] =
@@ -54,11 +58,21 @@ const char MediaRouterMetrics::kHistogramMediaRouterFileFormat[] =
 const char MediaRouterMetrics::kHistogramMediaRouterFileSize[] =
     "MediaRouter.Source.LocalFileSize";
 const char MediaRouterMetrics::kHistogramMediaSinkType[] =
-    "MediaRouter.MediaSink.SelectedType";
+    "MediaRouter.Sink.SelectedType";
 const char MediaRouterMetrics::kHistogramPresentationUrlType[] =
     "MediaRouter.PresentationRequest.AvailabilityUrlType";
+const char MediaRouterMetrics::kHistogramRecordSearchSinkOutcome[] =
+    "MediaRouter.Sink.SearchOutcome";
 const char MediaRouterMetrics::kHistogramRouteCreationOutcome[] =
     "MediaRouter.Route.CreationOutcome";
+const char MediaRouterMetrics::kHistogramStartLocalLatency[] =
+    "MediaRouter.Ui.Action.StartLocal.Latency";
+const char MediaRouterMetrics::kHistogramStartLocalPosition[] =
+    "MediaRouter.Ui.Action.StartLocalPosition";
+const char MediaRouterMetrics::kHistogramStartLocalSessionSuccessful[] =
+    "MediaRouter.Ui.Action.StartLocalSessionSuccessful";
+const char MediaRouterMetrics::kHistogramUiDeviceCount[] =
+    "MediaRouter.Ui.Device.Count";
 const char MediaRouterMetrics::kHistogramUiDialogPaint[] =
     "MediaRouter.Ui.Dialog.Paint";
 const char MediaRouterMetrics::kHistogramUiDialogLoadedWithData[] =
@@ -78,14 +92,20 @@ void MediaRouterMetrics::RecordMediaRouterDialogOrigin(
 
 // static
 void MediaRouterMetrics::RecordMediaRouterDialogPaint(
-    const base::TimeDelta delta) {
+    const base::TimeDelta& delta) {
   UMA_HISTOGRAM_TIMES(kHistogramUiDialogPaint, delta);
 }
 
 // static
 void MediaRouterMetrics::RecordMediaRouterDialogLoaded(
-    const base::TimeDelta delta) {
+    const base::TimeDelta& delta) {
   UMA_HISTOGRAM_TIMES(kHistogramUiDialogLoadedWithData, delta);
+}
+
+// static
+void MediaRouterMetrics::RecordCloseDialogLatency(
+    const base::TimeDelta& delta) {
+  UMA_HISTOGRAM_TIMES(kHistogramCloseLatency, delta);
 }
 
 // static
@@ -146,6 +166,32 @@ void MediaRouterMetrics::RecordPresentationUrlType(const GURL& url) {
 void MediaRouterMetrics::RecordMediaSinkType(SinkIconType sink_icon_type) {
   UMA_HISTOGRAM_ENUMERATION(kHistogramMediaSinkType, sink_icon_type,
                             SinkIconType::TOTAL_COUNT);
+}
+
+// static
+void MediaRouterMetrics::RecordDeviceCount(int device_count) {
+  UMA_HISTOGRAM_COUNTS_100(kHistogramUiDeviceCount, device_count);
+}
+
+// static
+void MediaRouterMetrics::RecordStartRouteDeviceIndex(int index) {
+  base::UmaHistogramSparse(kHistogramStartLocalPosition, std::min(index, 100));
+}
+
+// static
+void MediaRouterMetrics::RecordStartLocalSessionLatency(
+    const base::TimeDelta& delta) {
+  UMA_HISTOGRAM_TIMES(kHistogramStartLocalLatency, delta);
+}
+
+// static
+void MediaRouterMetrics::RecordStartLocalSessionSuccessful(bool success) {
+  UMA_HISTOGRAM_BOOLEAN(kHistogramStartLocalSessionSuccessful, success);
+}
+
+// static
+void MediaRouterMetrics::RecordSearchSinkOutcome(bool success) {
+  UMA_HISTOGRAM_BOOLEAN(kHistogramRecordSearchSinkOutcome, success);
 }
 
 }  // namespace media_router

@@ -67,7 +67,6 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
   ~BookmarkBubbleView() override;
 
   // LocationBarBubbleDelegateView:
-  int GetDialogButtons() const override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   View* GetInitiallyFocusedView() override;
   base::string16 GetWindowTitle() const override;
@@ -83,7 +82,6 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
   bool Close() override;
   void UpdateButton(views::LabelButton* button, ui::DialogButton type) override;
   const char* GetClassName() const override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;

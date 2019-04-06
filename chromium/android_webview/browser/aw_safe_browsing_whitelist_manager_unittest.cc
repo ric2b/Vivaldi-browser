@@ -40,8 +40,8 @@ void VerifyWhitelistCallback(bool expected, bool success) {
 void AwSafeBrowsingWhitelistManagerTest::SetWhitelist(
     std::vector<std::string>&& whitelist,
     bool expected) {
-  wm_->SetWhitelistOnUIThread(std::move(whitelist),
-                              base::Bind(&VerifyWhitelistCallback, expected));
+  wm_->SetWhitelistOnUIThread(
+      std::move(whitelist), base::BindOnce(&VerifyWhitelistCallback, expected));
 }
 
 TEST_F(AwSafeBrowsingWhitelistManagerTest, WsSchemeCanBeWhitelisted) {
@@ -475,13 +475,28 @@ TEST_F(AwSafeBrowsingWhitelistManagerTest,
   EXPECT_FALSE(wm_->IsURLWhitelisted(GURL("http://com/")));
 }
 
-TEST_F(AwSafeBrowsingWhitelistManagerTest,
-       VerifyNonWsNonHttpSchemeInUrlsAreNotWhitelisted) {
+TEST_F(AwSafeBrowsingWhitelistManagerTest, VerifyInvalidUrlsAreNotWhitelisted) {
   std::vector<std::string> whitelist;
   whitelist.push_back("google.com");
   SetWhitelist(std::move(whitelist), true);
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(wm_->IsURLWhitelisted(GURL("file://a/b/test")));
+
+  GURL url = GURL("");
+  EXPECT_FALSE(url.is_valid());
+  EXPECT_FALSE(wm_->IsURLWhitelisted(url));
+
+  url = GURL("http;??www.google.com");
+  EXPECT_FALSE(url.is_valid());
+  EXPECT_FALSE(wm_->IsURLWhitelisted(url));
+}
+
+TEST_F(AwSafeBrowsingWhitelistManagerTest,
+       VerifyUrlsWithoutHostAreNotWhitelisted) {
+  std::vector<std::string> whitelist;
+  whitelist.push_back("google.com");
+  SetWhitelist(std::move(whitelist), true);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(wm_->IsURLWhitelisted(GURL("file:///google.com/test")));
   EXPECT_FALSE(wm_->IsURLWhitelisted(GURL("mailto:google.com/")));
   EXPECT_FALSE(wm_->IsURLWhitelisted(GURL("data:google.com/")));
 

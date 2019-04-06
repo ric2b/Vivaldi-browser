@@ -12,14 +12,14 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/service_manager_connection.h"
-#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "url/origin.h"
 
 GeolocationPermissionContext::GeolocationPermissionContext(Profile* profile)
     : PermissionContextBase(profile,
                             CONTENT_SETTINGS_TYPE_GEOLOCATION,
-                            blink::FeaturePolicyFeature::kGeolocation),
+                            blink::mojom::FeaturePolicyFeature::kGeolocation),
       extensions_context_(profile) {}
 
 GeolocationPermissionContext::~GeolocationPermissionContext() {
@@ -58,16 +58,6 @@ void GeolocationPermissionContext::DecidePermission(
                                           embedding_origin,
                                           user_gesture,
                                           callback);
-}
-
-void GeolocationPermissionContext::CancelPermissionRequest(
-    content::WebContents* web_contents,
-    const PermissionRequestID& id) {
-
-    if (extensions_context_.CancelPermissionRequest(
-        web_contents, id.request_id()))
-      return;
-    PermissionContextBase::CancelPermissionRequest(web_contents, id);
 }
 
 void GeolocationPermissionContext::UpdateTabContext(

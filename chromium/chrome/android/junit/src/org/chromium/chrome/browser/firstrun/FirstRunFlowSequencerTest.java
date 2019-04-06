@@ -22,17 +22,16 @@ import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.multidex.ShadowMultiDex;
 
-import org.chromium.base.BaseChromiumApplication;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.components.signin.ChildAccountStatus;
 
 /**
  * Tests FirstRunFlowSequencer which contains the core logic of what should be shown during the
  * first run.
  */
-@RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
-        shadows = {ShadowMultiDex.class})
+@RunWith(BaseRobolectricTestRunner.class)
+@Config(manifest = Config.NONE, shadows = {ShadowMultiDex.class})
 public class FirstRunFlowSequencerTest {
     /** Information for Google OS account */
     private static final String GOOGLE_ACCOUNT_TYPE = "com.google";
@@ -150,7 +149,8 @@ public class FirstRunFlowSequencerTest {
         mSequencer.hasAnyUserSeenToS = true;
         mSequencer.shouldSkipFirstUseHints = false;
         mSequencer.isFirstRunEulaAccepted = true;
-        mSequencer.initializeSharedState(false /* androidEduDevice */, false /* hasChildAccount */);
+        mSequencer.initializeSharedState(
+                false /* androidEduDevice */, ChildAccountStatus.NOT_CHILD);
 
         mSequencer.processFreEnvironmentPreNative();
         assertTrue(mSequencer.calledOnFlowIsKnown);
@@ -168,7 +168,8 @@ public class FirstRunFlowSequencerTest {
         mSequencer.hasAnyUserSeenToS = false;
         mSequencer.shouldSkipFirstUseHints = false;
         mSequencer.shouldShowDataReductionPage = false;
-        mSequencer.initializeSharedState(false /* androidEduDevice */, false /* hasChildAccount */);
+        mSequencer.initializeSharedState(
+                false /* androidEduDevice */, ChildAccountStatus.NOT_CHILD);
 
         mSequencer.processFreEnvironmentPreNative();
         assertTrue(mSequencer.calledOnFlowIsKnown);
@@ -180,39 +181,9 @@ public class FirstRunFlowSequencerTest {
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SIGNIN_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_DATA_REDUCTION_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
-        assertFalse(bundle.getBoolean(AccountFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(ChildAccountStatus.NOT_CHILD,
+                bundle.getInt(AccountFirstRunFragment.CHILD_ACCOUNT_STATUS));
         assertEquals(5, bundle.size());
-    }
-
-    @Test
-    @Feature({"FirstRun"})
-    public void testStandardFlowTosSeenOneAccount() {
-        Account[] accounts = new Account[1];
-        accounts[0] = new Account(DEFAULT_ACCOUNT, GOOGLE_ACCOUNT_TYPE);
-        mSequencer.isFirstRunFlowComplete = false;
-        mSequencer.isSignedIn = false;
-        mSequencer.isSyncAllowed = true;
-        mSequencer.googleAccounts = accounts;
-        mSequencer.hasAnyUserSeenToS = true;
-        mSequencer.shouldSkipFirstUseHints = false;
-        mSequencer.shouldShowDataReductionPage = false;
-        mSequencer.initializeSharedState(false /* androidEduDevice */, false /* hasChildAccount */);
-
-        mSequencer.processFreEnvironmentPreNative();
-        assertTrue(mSequencer.calledOnFlowIsKnown);
-        assertTrue(mSequencer.calledSetDefaultMetricsAndCrashReporting);
-        assertFalse(mSequencer.calledSetFirstRunFlowSignInComplete);
-
-        Bundle bundle = mSequencer.returnedBundle;
-        assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_WELCOME_PAGE));
-        assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SIGNIN_PAGE));
-        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_DATA_REDUCTION_PAGE));
-        assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
-        assertFalse(bundle.getBoolean(AccountFirstRunFragment.IS_CHILD_ACCOUNT));
-        assertTrue(bundle.getBoolean(AccountFirstRunFragment.PRESELECT_BUT_ALLOW_TO_CHANGE));
-        assertEquals(
-                DEFAULT_ACCOUNT, bundle.getString(AccountFirstRunFragment.FORCE_SIGNIN_ACCOUNT_TO));
-        assertEquals(7, bundle.size());
     }
 
     @Test
@@ -227,7 +198,8 @@ public class FirstRunFlowSequencerTest {
         mSequencer.hasAnyUserSeenToS = false;
         mSequencer.shouldSkipFirstUseHints = false;
         mSequencer.shouldShowDataReductionPage = false;
-        mSequencer.initializeSharedState(false /* androidEduDevice */, true /* hasChildAccount */);
+        mSequencer.initializeSharedState(
+                false /* androidEduDevice */, ChildAccountStatus.REGULAR_CHILD);
 
         mSequencer.processFreEnvironmentPreNative();
         assertTrue(mSequencer.calledOnFlowIsKnown);
@@ -239,11 +211,11 @@ public class FirstRunFlowSequencerTest {
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SIGNIN_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_DATA_REDUCTION_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
-        assertTrue(bundle.getBoolean(AccountFirstRunFragment.IS_CHILD_ACCOUNT));
-        assertFalse(bundle.getBoolean(AccountFirstRunFragment.PRESELECT_BUT_ALLOW_TO_CHANGE));
+        assertEquals(ChildAccountStatus.REGULAR_CHILD,
+                bundle.getInt(AccountFirstRunFragment.CHILD_ACCOUNT_STATUS));
         assertEquals(
                 DEFAULT_ACCOUNT, bundle.getString(AccountFirstRunFragment.FORCE_SIGNIN_ACCOUNT_TO));
-        assertEquals(7, bundle.size());
+        assertEquals(6, bundle.size());
     }
 
     @Test
@@ -257,7 +229,8 @@ public class FirstRunFlowSequencerTest {
         mSequencer.shouldSkipFirstUseHints = false;
         mSequencer.shouldShowDataReductionPage = true;
         mSequencer.shouldShowSearchEnginePage = false;
-        mSequencer.initializeSharedState(false /* androidEduDevice */, false /* hasChildAccount */);
+        mSequencer.initializeSharedState(
+                false /* androidEduDevice */, ChildAccountStatus.NOT_CHILD);
 
         mSequencer.processFreEnvironmentPreNative();
         assertTrue(mSequencer.calledOnFlowIsKnown);
@@ -269,7 +242,8 @@ public class FirstRunFlowSequencerTest {
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SIGNIN_PAGE));
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_DATA_REDUCTION_PAGE));
         assertFalse(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
-        assertFalse(bundle.getBoolean(AccountFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(ChildAccountStatus.NOT_CHILD,
+                bundle.getInt(AccountFirstRunFragment.CHILD_ACCOUNT_STATUS));
         assertEquals(5, bundle.size());
     }
 
@@ -284,7 +258,8 @@ public class FirstRunFlowSequencerTest {
         mSequencer.shouldSkipFirstUseHints = false;
         mSequencer.shouldShowDataReductionPage = true;
         mSequencer.shouldShowSearchEnginePage = true;
-        mSequencer.initializeSharedState(false /* androidEduDevice */, false /* hasChildAccount */);
+        mSequencer.initializeSharedState(
+                false /* androidEduDevice */, ChildAccountStatus.NOT_CHILD);
 
         mSequencer.processFreEnvironmentPreNative();
         assertTrue(mSequencer.calledOnFlowIsKnown);
@@ -296,7 +271,8 @@ public class FirstRunFlowSequencerTest {
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SIGNIN_PAGE));
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_DATA_REDUCTION_PAGE));
         assertTrue(bundle.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
-        assertFalse(bundle.getBoolean(AccountFirstRunFragment.IS_CHILD_ACCOUNT));
+        assertEquals(ChildAccountStatus.NOT_CHILD,
+                bundle.getInt(AccountFirstRunFragment.CHILD_ACCOUNT_STATUS));
         assertEquals(5, bundle.size());
     }
 }

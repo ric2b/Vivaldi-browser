@@ -4,11 +4,38 @@
 
 #include "ash/content/screen_orientation_delegate_chromeos.h"
 
-#include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/shell.h"
 #include "content/public/browser/web_contents.h"
 
 namespace ash {
+namespace {
+
+OrientationLockType ToAshOrientationLockType(
+    blink::WebScreenOrientationLockType blink_orientation_lock) {
+  switch (blink_orientation_lock) {
+    case blink::kWebScreenOrientationLockDefault:
+    case blink::kWebScreenOrientationLockAny:
+      return OrientationLockType::kAny;
+    case blink::kWebScreenOrientationLockPortrait:
+      return OrientationLockType::kPortrait;
+    case blink::kWebScreenOrientationLockPortraitPrimary:
+      return OrientationLockType::kPortraitPrimary;
+    case blink::kWebScreenOrientationLockPortraitSecondary:
+      return OrientationLockType::kPortraitSecondary;
+    case blink::kWebScreenOrientationLockLandscape:
+      return OrientationLockType::kLandscape;
+    case blink::kWebScreenOrientationLockLandscapePrimary:
+      return OrientationLockType::kLandscapePrimary;
+    case blink::kWebScreenOrientationLockLandscapeSecondary:
+      return OrientationLockType::kLandscapeSecondary;
+    case blink::kWebScreenOrientationLockNatural:
+      return OrientationLockType::kNatural;
+  }
+  return OrientationLockType::kAny;
+}
+
+}  // namespace
 
 ScreenOrientationDelegateChromeos::ScreenOrientationDelegateChromeos() {
   content::WebContents::SetScreenOrientationDelegate(this);
@@ -25,10 +52,10 @@ bool ScreenOrientationDelegateChromeos::FullScreenRequired(
 
 void ScreenOrientationDelegateChromeos::Lock(
     content::WebContents* web_contents,
-    blink::WebScreenOrientationLockType lock_orientation) {
+    blink::WebScreenOrientationLockType orientation_lock) {
   Shell::Get()->screen_orientation_controller()->LockOrientationForWindow(
-      web_contents->GetNativeView(), lock_orientation,
-      ScreenOrientationController::LockCompletionBehavior::None);
+      web_contents->GetNativeView(),
+      ToAshOrientationLockType(orientation_lock));
 }
 
 bool ScreenOrientationDelegateChromeos::ScreenOrientationProviderSupported() {

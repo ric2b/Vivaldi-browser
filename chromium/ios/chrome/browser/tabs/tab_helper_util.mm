@@ -8,13 +8,13 @@
 #error "This file requires ARC support."
 #endif
 
+#include "base/feature_list.h"
 #import "components/favicon/ios/web_favicon_driver.h"
 #include "components/history/core/browser/top_sites.h"
 #import "components/history/ios/browser/web_state_top_sites_observer.h"
 #include "components/keyed_service/core/service_access_type.h"
 #import "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
-#import "ios/chrome/browser/autofill/form_input_accessory_view_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
@@ -23,11 +23,15 @@
 #include "ios/chrome/browser/history/history_tab_helper.h"
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
+#include "ios/chrome/browser/itunes_urls/itunes_urls_flag.h"
+#import "ios/chrome/browser/itunes_urls/itunes_urls_handler_tab_helper.h"
+#import "ios/chrome/browser/metrics/ukm_url_recorder.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_web_state_observer.h"
 #import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
+#include "ios/chrome/browser/ssl/captive_portal_features.h"
 #import "ios/chrome/browser/ssl/captive_portal_metrics_tab_helper.h"
 #import "ios/chrome/browser/ssl/insecure_input_tab_helper.h"
 #import "ios/chrome/browser/ssl/ios_security_state_tab_helper.h"
@@ -38,7 +42,8 @@
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/voice/voice_search_navigations_tab_helper.h"
 #import "ios/chrome/browser/web/blocked_popup_tab_helper.h"
-#import "ios/chrome/browser/web/external_app_launcher_tab_helper.h"
+#import "ios/chrome/browser/web/features.h"
+#import "ios/chrome/browser/web/font_size_tab_helper.h"
 #import "ios/chrome/browser/web/load_timing_tab_helper.h"
 #import "ios/chrome/browser/web/network_activity_indicator_tab_helper.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
@@ -74,11 +79,21 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   InfoBarManagerImpl::CreateForWebState(web_state);
   IOSSecurityStateTabHelper::CreateForWebState(web_state);
   BlockedPopupTabHelper::CreateForWebState(web_state);
-  FindTabHelper::CreateForWebState(web_state, tab.findInPageControllerDelegate);
+  FindTabHelper::CreateForWebState(web_state);
   StoreKitTabHelper::CreateForWebState(web_state);
+  if (base::FeatureList::IsEnabled(kITunesUrlsStoreKitHandling)) {
+    ITunesUrlsHandlerTabHelper::CreateForWebState(web_state);
+  }
   HistoryTabHelper::CreateForWebState(web_state);
   LoadTimingTabHelper::CreateForWebState(web_state);
-  CaptivePortalMetricsTabHelper::CreateForWebState(web_state);
+
+  if (base::FeatureList::IsEnabled(kCaptivePortalMetrics)) {
+    CaptivePortalMetricsTabHelper::CreateForWebState(web_state);
+  }
+
+  if (base::FeatureList::IsEnabled(web::kWebPageTextAccessibility)) {
+    FontSizeTabHelper::CreateForWebState(web_state);
+  }
 
   ReadingListModel* model =
       ReadingListModelFactory::GetForBrowserState(browser_state);
@@ -105,13 +120,9 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     AutofillTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
   ]);
 
-  FormInputAccessoryViewTabHelper::CreateForWebState(web_state, @[
-    FormSuggestionTabHelper::FromWebState(web_state)
-        ->GetAccessoryViewProvider(),
-  ]);
-
   InsecureInputTabHelper::CreateForWebState(web_state);
-  ExternalAppLauncherTabHelper::CreateForWebState(web_state);
+
+  ukm::InitializeSourceUrlRecorderForWebState(web_state);
 
   // TODO(crbug.com/794115): pre-rendered WebState have lots of unnecessary
   // tab helpers for historical reasons. For the moment, AttachTabHelpers

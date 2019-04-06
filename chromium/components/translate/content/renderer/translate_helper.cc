@@ -26,10 +26,10 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLanguageDetectionDetails.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_language_detection_details.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_source.h"
 #include "url/gurl.h"
 #include "v8/include/v8.h"
 
@@ -132,7 +132,7 @@ void TranslateHelper::PageCaptured(const base::string16& contents) {
   ResetPage();
   mojom::PagePtr page;
   binding_.Bind(mojo::MakeRequest(&page));
-  GetTranslateDriver()->RegisterPage(
+  GetTranslateHandler()->RegisterPage(
       std::move(page), details, !details.has_notranslate && !language.empty());
 }
 
@@ -195,7 +195,7 @@ void TranslateHelper::ExecuteScript(const std::string& script) {
     return;
 
   WebScriptSource source = WebScriptSource(WebString::FromASCII(script));
-  main_frame->ExecuteScriptInIsolatedWorld(world_id_, &source, 1);
+  main_frame->ExecuteScriptInIsolatedWorld(world_id_, source);
 }
 
 bool TranslateHelper::ExecuteScriptAndGetBoolResult(const std::string& script,
@@ -205,15 +205,15 @@ bool TranslateHelper::ExecuteScriptAndGetBoolResult(const std::string& script,
     return fallback;
 
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebVector<v8::Local<v8::Value> > results;
   WebScriptSource source = WebScriptSource(WebString::FromASCII(script));
-  main_frame->ExecuteScriptInIsolatedWorld(world_id_, &source, 1, &results);
-  if (results.size() != 1 || results[0].IsEmpty() || !results[0]->IsBoolean()) {
+  v8::Local<v8::Value> result =
+      main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(world_id_, source);
+  if (result.IsEmpty() || !result->IsBoolean()) {
     NOTREACHED();
     return fallback;
   }
 
-  return results[0]->BooleanValue();
+  return result->BooleanValue();
 }
 
 std::string TranslateHelper::ExecuteScriptAndGetStringResult(
@@ -223,15 +223,15 @@ std::string TranslateHelper::ExecuteScriptAndGetStringResult(
     return std::string();
 
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebVector<v8::Local<v8::Value> > results;
   WebScriptSource source = WebScriptSource(WebString::FromASCII(script));
-  main_frame->ExecuteScriptInIsolatedWorld(world_id_, &source, 1, &results);
-  if (results.size() != 1 || results[0].IsEmpty() || !results[0]->IsString()) {
+  v8::Local<v8::Value> result =
+      main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(world_id_, source);
+  if (result.IsEmpty() || !result->IsString()) {
     NOTREACHED();
     return std::string();
   }
 
-  v8::Local<v8::String> v8_str = results[0].As<v8::String>();
+  v8::Local<v8::String> v8_str = result.As<v8::String>();
   int length = v8_str->Utf8Length() + 1;
   std::unique_ptr<char[]> str(new char[length]);
   v8_str->WriteUtf8(str.get(), length);
@@ -245,15 +245,15 @@ double TranslateHelper::ExecuteScriptAndGetDoubleResult(
     return 0.0;
 
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebVector<v8::Local<v8::Value> > results;
   WebScriptSource source = WebScriptSource(WebString::FromASCII(script));
-  main_frame->ExecuteScriptInIsolatedWorld(world_id_, &source, 1, &results);
-  if (results.size() != 1 || results[0].IsEmpty() || !results[0]->IsNumber()) {
+  v8::Local<v8::Value> result =
+      main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(world_id_, source);
+  if (result.IsEmpty() || !result->IsNumber()) {
     NOTREACHED();
     return 0.0;
   }
 
-  return results[0]->NumberValue();
+  return result->NumberValue();
 }
 
 int64_t TranslateHelper::ExecuteScriptAndGetIntegerResult(
@@ -263,15 +263,15 @@ int64_t TranslateHelper::ExecuteScriptAndGetIntegerResult(
     return 0;
 
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebVector<v8::Local<v8::Value>> results;
   WebScriptSource source = WebScriptSource(WebString::FromASCII(script));
-  main_frame->ExecuteScriptInIsolatedWorld(world_id_, &source, 1, &results);
-  if (results.size() != 1 || results[0].IsEmpty() || !results[0]->IsNumber()) {
+  v8::Local<v8::Value> result =
+      main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(world_id_, source);
+  if (result.IsEmpty() || !result->IsNumber()) {
     NOTREACHED();
     return 0;
   }
 
-  return results[0]->IntegerValue();
+  return result->IntegerValue();
 }
 
 // mojom::Page implementations.
@@ -441,13 +441,13 @@ void TranslateHelper::NotifyBrowserTranslationFailed(
       .Run(false, source_lang_, target_lang_, error);
 }
 
-const mojom::ContentTranslateDriverPtr& TranslateHelper::GetTranslateDriver() {
-  if (!translate_driver_) {
+const mojom::ContentTranslateDriverPtr& TranslateHelper::GetTranslateHandler() {
+  if (!translate_handler_) {
     render_frame()->GetRemoteInterfaces()->GetInterface(
-        mojo::MakeRequest(&translate_driver_));
+        mojo::MakeRequest(&translate_handler_));
   }
 
-  return translate_driver_;
+  return translate_handler_;
 }
 
 void TranslateHelper::ResetPage() {

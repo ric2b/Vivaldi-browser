@@ -7,12 +7,16 @@
 #include <memory>
 #include <vector>
 
-#include "base/test/histogram_tester.h"
+#include "base/memory/ptr_util.h"
+#include "base/optional.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
 #include "chromeos/components/tether/proto_test_util.h"
+#include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
+#include "chromeos/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -33,7 +37,7 @@ class TestObserver final : public KeepAliveOperation::Observer {
 
   bool has_run_callback() { return has_run_callback_; }
 
-  cryptauth::RemoteDevice last_remote_device_received() {
+  base::Optional<cryptauth::RemoteDeviceRef> last_remote_device_received() {
     return last_remote_device_received_;
   }
 
@@ -42,7 +46,7 @@ class TestObserver final : public KeepAliveOperation::Observer {
   }
 
   void OnOperationFinished(
-      const cryptauth::RemoteDevice& remote_device,
+      cryptauth::RemoteDeviceRef remote_device,
       std::unique_ptr<DeviceStatus> device_status) override {
     has_run_callback_ = true;
     last_remote_device_received_ = remote_device;
@@ -51,7 +55,7 @@ class TestObserver final : public KeepAliveOperation::Observer {
 
  private:
   bool has_run_callback_;
-  cryptauth::RemoteDevice last_remote_device_received_;
+  base::Optional<cryptauth::RemoteDeviceRef> last_remote_device_received_;
   std::unique_ptr<DeviceStatus> last_device_status_received_;
 };
 
@@ -73,20 +77,24 @@ class KeepAliveOperationTest : public testing::Test {
  protected:
   KeepAliveOperationTest()
       : keep_alive_tickle_string_(CreateKeepAliveTickleString()),
-        test_device_(cryptauth::GenerateTestRemoteDevices(1)[0]) {}
+        test_device_(cryptauth::CreateRemoteDeviceRefListForTest(1)[0]) {}
 
   void SetUp() override {
+    fake_device_sync_client_ =
+        std::make_unique<device_sync::FakeDeviceSyncClient>();
+    fake_secure_channel_client_ =
+        std::make_unique<secure_channel::FakeSecureChannelClient>();
     fake_ble_connection_manager_ = std::make_unique<FakeBleConnectionManager>();
 
     operation_ = base::WrapUnique(new KeepAliveOperation(
-        test_device_, fake_ble_connection_manager_.get()));
+        test_device_, fake_device_sync_client_.get(),
+        fake_secure_channel_client_.get(), fake_ble_connection_manager_.get()));
 
     test_observer_ = base::WrapUnique(new TestObserver());
     operation_->AddObserver(test_observer_.get());
 
-    test_clock_ = new base::SimpleTestClock();
-    test_clock_->SetNow(base::Time::UnixEpoch());
-    operation_->SetClockForTest(base::WrapUnique(test_clock_));
+    test_clock_.SetNow(base::Time::UnixEpoch());
+    operation_->SetClockForTest(&test_clock_);
 
     operation_->Initialize();
   }
@@ -103,10 +111,13 @@ class KeepAliveOperationTest : public testing::Test {
   }
 
   const std::string keep_alive_tickle_string_;
-  const cryptauth::RemoteDevice test_device_;
+  const cryptauth::RemoteDeviceRef test_device_;
 
+  std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
+  std::unique_ptr<secure_channel::SecureChannelClient>
+      fake_secure_channel_client_;
   std::unique_ptr<FakeBleConnectionManager> fake_ble_connection_manager_;
-  base::SimpleTestClock* test_clock_;
+  base::SimpleTestClock test_clock_;
   std::unique_ptr<TestObserver> test_observer_;
 
   std::unique_ptr<KeepAliveOperation> operation_;
@@ -123,7 +134,7 @@ TEST_F(KeepAliveOperationTest, TestSendsKeepAliveTickleAndReceivesResponse) {
   SimulateDeviceAuthenticationAndVerifyMessageSent();
   EXPECT_FALSE(test_observer_->has_run_callback());
 
-  test_clock_->Advance(kKeepAliveTickleResponseTime);
+  test_clock_.Advance(kKeepAliveTickleResponseTime);
 
   fake_ble_connection_manager_->ReceiveMessage(
       test_device_.GetDeviceId(), CreateKeepAliveTickleResponseString());
@@ -146,6 +157,7 @@ TEST_F(KeepAliveOperationTest, TestCannotConnect) {
 
   // The maximum number of connection failures has occurred.
   EXPECT_TRUE(test_observer_->has_run_callback());
+  ASSERT_TRUE(test_observer_->last_remote_device_received());
   EXPECT_EQ(test_device_, test_observer_->last_remote_device_received());
   EXPECT_FALSE(test_observer_->last_device_status_received());
 
@@ -155,4 +167,4 @@ TEST_F(KeepAliveOperationTest, TestCannotConnect) {
 
 }  // namespace tether
 
-}  // namespace cryptauth
+}  // namespace chromeos

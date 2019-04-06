@@ -4,6 +4,7 @@
 
 #include "content/browser/service_worker/service_worker_context_request_handler.h"
 
+#include "base/command_line.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
@@ -11,6 +12,8 @@
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/service_worker/service_worker_write_to_cache_job.h"
+#include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/common/content_switches.h"
 #include "net/base/load_flags.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
@@ -31,7 +34,8 @@ ServiceWorkerContextRequestHandler::ServiceWorkerContextRequestHandler(
                                   blob_storage_context,
                                   resource_type),
       version_(provider_host_->running_hosted_version()) {
-  DCHECK(provider_host_->IsHostToRunningServiceWorker());
+  DCHECK(provider_host_->IsProviderForServiceWorker());
+  DCHECK(version_);
 }
 
 ServiceWorkerContextRequestHandler::~ServiceWorkerContextRequestHandler() {
@@ -154,8 +158,6 @@ net::URLRequestJob* ServiceWorkerContextRequestHandler::MaybeCreateJobImpl(
   if (resource_id != kInvalidServiceWorkerResourceId) {
     if (ServiceWorkerVersion::IsInstalled(version_->status())) {
       // An installed worker is loading a stored script.
-      if (is_main_script)
-        version_->embedded_worker()->OnURLJobCreatedForMainScript();
       *out_status = CreateJobStatus::READ_JOB;
     } else {
       // A new worker is loading a stored script. The script was already
@@ -191,7 +193,10 @@ net::URLRequestJob* ServiceWorkerContextRequestHandler::MaybeCreateJobImpl(
   int extra_load_flags = 0;
   base::TimeDelta time_since_last_check =
       base::Time::Now() - registration->last_update_check();
-  if (time_since_last_check > kServiceWorkerScriptMaxCacheAge ||
+
+  if (ServiceWorkerUtils::ShouldBypassCacheDueToUpdateViaCache(
+          is_main_script, registration->update_via_cache()) ||
+      time_since_last_check > kServiceWorkerScriptMaxCacheAge ||
       version_->force_bypass_cache_for_scripts()) {
     extra_load_flags = net::LOAD_BYPASS_CACHE;
   }
@@ -205,7 +210,6 @@ net::URLRequestJob* ServiceWorkerContextRequestHandler::MaybeCreateJobImpl(
       incumbent_resource_id =
           stored_version->script_cache_map()->LookupResourceId(request->url());
     }
-    version_->embedded_worker()->OnURLJobCreatedForMainScript();
   }
   *out_status = incumbent_resource_id == kInvalidServiceWorkerResourceId
                     ? CreateJobStatus::WRITE_JOB

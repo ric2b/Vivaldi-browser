@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_views.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "ui/views/controls/message_box_view.h"
@@ -104,8 +103,7 @@ JavaScriptDialogViews::JavaScriptDialogViews(
     const base::string16& message_text,
     const base::string16& default_prompt_text,
     content::JavaScriptDialogManager::DialogClosedCallback dialog_callback)
-    : JavaScriptDialog(parent_web_contents),
-      title_(title),
+    : title_(title),
       dialog_type_(dialog_type),
       message_text_(message_text),
       default_prompt_text_(default_prompt_text),

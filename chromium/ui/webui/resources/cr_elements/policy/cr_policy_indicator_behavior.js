@@ -13,6 +13,7 @@
  * Chrome OS only strings may be undefined.
  * @type {{
  *   controlledSettingExtension: string,
+ *   controlledSettingExtensionWithoutName: string,
  *   controlledSettingPolicy: string,
  *   controlledSettingRecommendedMatches: string,
  *   controlledSettingRecommendedDiffers: string,
@@ -67,11 +68,6 @@ var CrPolicyIndicatorBehavior = {
       type: String,
       computed: 'getIndicatorIcon_(indicatorType)',
     },
-
-    indicatorTooltip: {
-      type: String,
-      computed: 'getIndicatorTooltip(indicatorType, indicatorSourceName)',
-    },
   },
 
   /**
@@ -120,7 +116,9 @@ var CrPolicyIndicatorBehavior = {
       return '';  // Tooltips may not be defined, e.g. in OOBE.
     switch (type) {
       case CrPolicyIndicatorType.EXTENSION:
-        return CrPolicyStrings.controlledSettingExtension;
+        return name.length > 0 ?
+            CrPolicyStrings.controlledSettingExtension.replace('$1', name) :
+            CrPolicyStrings.controlledSettingExtensionWithoutName;
       case CrPolicyIndicatorType.PRIMARY_USER:
         return CrPolicyStrings.controlledSettingShared.replace('$1', name);
       case CrPolicyIndicatorType.OWNER:

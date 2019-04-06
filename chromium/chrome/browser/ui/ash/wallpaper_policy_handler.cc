@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ui/ash/wallpaper_policy_handler.h"
 
-#include "ash/wallpaper/wallpaper_controller.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task_scheduler/post_task.h"
@@ -14,6 +14,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/customization/customization_wallpaper_downloader.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/common/chrome_paths.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "crypto/sha2.h"
 #include "url/gurl.h"
@@ -21,6 +22,10 @@
 using chromeos::CrosSettings;
 
 namespace {
+
+// The directory and file name to save the downloaded device policy wallpaper.
+constexpr char kDeviceWallpaperDir[] = "device_wallpaper";
+constexpr char kDeviceWallpaperFile[] = "device_wallpaper_image.jpg";
 
 // A helper function to check the existing/downloaded device wallpaper file's
 // hash value matches with the hash value provided in the policy settings.
@@ -48,10 +53,26 @@ WallpaperPolicyHandler::WallpaperPolicyHandler(Delegate* delegate)
           base::BindRepeating(
               &WallpaperPolicyHandler::DeviceWallpaperPolicyChanged,
               weak_factory_.GetWeakPtr()));
+  show_user_names_on_signin_subscription_ =
+      chromeos::CrosSettings::Get()->AddSettingsObserver(
+          chromeos::kAccountsPrefShowUserNamesOnSignIn,
+          base::Bind(
+              &WallpaperPolicyHandler::ShowUserNamesOnSignInPolicyChanged,
+              weak_factory_.GetWeakPtr()));
+
+  // Initialize the desired file path for device policy wallpaper. The path will
+  // be used by WallpaperController to access the wallpaper file.
+  base::FilePath chromeos_wallpapers_path;
+  CHECK(base::PathService::Get(chrome::DIR_CHROMEOS_WALLPAPERS,
+                               &chromeos_wallpapers_path));
+  device_wallpaper_file_path_ =
+      chromeos_wallpapers_path.Append(kDeviceWallpaperDir)
+          .Append(kDeviceWallpaperFile);
 }
 
 WallpaperPolicyHandler::~WallpaperPolicyHandler() {
   device_wallpaper_image_subscription_.reset();
+  show_user_names_on_signin_subscription_.reset();
 }
 
 bool WallpaperPolicyHandler::IsDeviceWallpaperPolicyEnforced() {
@@ -63,6 +84,13 @@ bool WallpaperPolicyHandler::IsDeviceWallpaperPolicyEnforced() {
 
   std::string url, hash;
   return GetDeviceWallpaperPolicyStrings(&url, &hash);
+}
+
+bool WallpaperPolicyHandler::ShouldShowUserNamesOnLogin() {
+  bool show_user_names;
+  chromeos::CrosSettings::Get()->GetBoolean(
+      chromeos::kAccountsPrefShowUserNamesOnSignIn, &show_user_names);
+  return show_user_names;
 }
 
 bool WallpaperPolicyHandler::GetDeviceWallpaperPolicyStrings(
@@ -79,12 +107,6 @@ bool WallpaperPolicyHandler::GetDeviceWallpaperPolicyStrings(
 }
 
 void WallpaperPolicyHandler::DeviceWallpaperPolicyChanged() {
-  // Get the desired file path for device policy wallpaper first.
-  if (device_wallpaper_file_path_.empty()) {
-    device_wallpaper_file_path_ =
-        ash::WallpaperController::GetDevicePolicyWallpaperFilePath();
-  }
-
   // First check if the device policy was cleared.
   const base::DictionaryValue* dict = nullptr;
   if (!CrosSettings::Get()->GetDictionary(chromeos::kDeviceWallpaperImage,
@@ -110,6 +132,10 @@ void WallpaperPolicyHandler::DeviceWallpaperPolicyChanged() {
                      weak_factory_.GetWeakPtr()));
 }
 
+void WallpaperPolicyHandler::ShowUserNamesOnSignInPolicyChanged() {
+  delegate_->OnShowUserNamesOnLoginPolicyChanged();
+}
+
 void WallpaperPolicyHandler::OnDeviceWallpaperFileExists(bool exists) {
   std::string url, hash;
   if (!GetDeviceWallpaperPolicyStrings(&url, &hash)) {
@@ -129,8 +155,8 @@ void WallpaperPolicyHandler::OnDeviceWallpaperFileExists(bool exists) {
     GURL wallpaper_url(url);
     device_wallpaper_downloader_.reset(
         new chromeos::CustomizationWallpaperDownloader(
-            g_browser_process->system_request_context(), wallpaper_url,
-            device_wallpaper_file_path_.DirName(), device_wallpaper_file_path_,
+            wallpaper_url, device_wallpaper_file_path_.DirName(),
+            device_wallpaper_file_path_,
             base::BindRepeating(
                 &WallpaperPolicyHandler::OnDeviceWallpaperDownloaded,
                 weak_factory_.GetWeakPtr(), hash)));
@@ -151,8 +177,8 @@ void WallpaperPolicyHandler::OnCheckExistingDeviceWallpaperMatchHash(
   GURL wallpaper_url(url);
   device_wallpaper_downloader_.reset(
       new chromeos::CustomizationWallpaperDownloader(
-          g_browser_process->system_request_context(), wallpaper_url,
-          device_wallpaper_file_path_.DirName(), device_wallpaper_file_path_,
+          wallpaper_url, device_wallpaper_file_path_.DirName(),
+          device_wallpaper_file_path_,
           base::BindRepeating(
               &WallpaperPolicyHandler::OnDeviceWallpaperDownloaded,
               weak_factory_.GetWeakPtr(), hash)));

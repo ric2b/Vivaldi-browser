@@ -80,6 +80,7 @@
 //
 // <include src="../../common/js/async_util.js">
 // <include src="../../common/js/file_type.js">
+// <include src="../../common/js/files_app_entry_types.js">
 // <include src="../../common/js/volume_manager_common.js">
 // <include src="../../common/js/util.js">
 // <include src="../../common/js/progress_center_common.js">
@@ -174,6 +175,7 @@
 // <include src="ui/files_confirm_dialog.js">
 // <include src="ui/files_menu.js">
 // <include src="ui/gear_menu.js">
+// <include src="ui/install_linux_package_dialog.js">
 // <include src="ui/list_container.js">
 // <include src="ui/location_line.js">
 // <include src="ui/multi_profile_share_dialog.js">

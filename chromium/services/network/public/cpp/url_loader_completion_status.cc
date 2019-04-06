@@ -26,13 +26,14 @@ URLLoaderCompletionStatus::~URLLoaderCompletionStatus() = default;
 bool URLLoaderCompletionStatus::operator==(
     const URLLoaderCompletionStatus& rhs) const {
   return error_code == rhs.error_code &&
+         extended_error_code == rhs.extended_error_code &&
          exists_in_cache == rhs.exists_in_cache &&
          completion_time == rhs.completion_time &&
          encoded_data_length == rhs.encoded_data_length &&
          encoded_body_length == rhs.encoded_body_length &&
          decoded_body_length == rhs.decoded_body_length &&
          cors_error_status == rhs.cors_error_status &&
-         blocked_cross_site_document == rhs.blocked_cross_site_document;
+         should_report_corb_blocking == rhs.should_report_corb_blocking;
 }
 
 }  // namespace network

@@ -6,6 +6,7 @@
 #define ASH_APP_LIST_MODEL_SEARCH_SEARCH_MODEL_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "ash/app_list/model/app_list_model_export.h"
@@ -28,13 +29,13 @@ class APP_LIST_MODEL_EXPORT SearchModel {
   ~SearchModel();
 
   // Whether tablet mode is active. Controlled by AppListView.
-  void SetTabletMode(bool started);
-  bool tablet_mode() const { return is_tablet_mode_; }
+  void SetTabletMode(bool is_tablet_mode);
+  bool tablet_mode() const { return search_box_->is_tablet_mode(); }
 
-  void SetSearchEngineIsGoogle(bool is_google) {
-    search_engine_is_google_ = is_google;
+  void SetSearchEngineIsGoogle(bool is_google);
+  bool search_engine_is_google() const {
+    return search_box_->search_engine_is_google();
   }
-  bool search_engine_is_google() const { return search_engine_is_google_; }
 
   // Filters the given |results| by |display_type|. The returned list is
   // truncated to |max_results|.
@@ -48,12 +49,14 @@ class APP_LIST_MODEL_EXPORT SearchModel {
 
   void PublishResults(std::vector<std::unique_ptr<SearchResult>> new_results);
 
+  SearchResult* FindSearchResult(const std::string& id);
+
+  // Deletes all search results. This is used in profile switches.
+  void DeleteAllResults();
+
  private:
   std::unique_ptr<SearchBoxModel> search_box_;
   std::unique_ptr<SearchResults> results_;
-  bool search_engine_is_google_ = false;
-  // Whether tablet mode is active. Controlled by the AppListView.
-  bool is_tablet_mode_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SearchModel);
 };

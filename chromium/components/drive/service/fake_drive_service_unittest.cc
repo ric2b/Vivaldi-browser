@@ -16,8 +16,10 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/drive/file_system_core_util.h"
 #include "components/drive/service/test_util.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "google_apis/drive/test_util.h"
@@ -41,6 +43,7 @@ using google_apis::HTTP_PRECONDITION;
 using google_apis::HTTP_RESUME_INCOMPLETE;
 using google_apis::HTTP_SUCCESS;
 using google_apis::ProgressCallback;
+using google_apis::StartPageToken;
 using google_apis::TeamDriveList;
 using google_apis::UploadRangeResponse;
 
@@ -64,6 +67,112 @@ constexpr char TEAM_DRIVE_ID_2[] = "the2ndTeamDriveId";
 constexpr char TEAM_DRIVE_NAME_2[] = "The Seconcd Team Drive";
 constexpr char TEAM_DRIVE_ID_3[] = "the3rdTeamDriveId";
 constexpr char TEAM_DRIVE_NAME_3[] = "The Third Team Drive";
+
+// Creates a new FileResourceCapabilities object with mixed (true/false)
+// capability settings.
+google_apis::FileResourceCapabilities CreateMixedFileCapabilities() {
+  google_apis::FileResourceCapabilities capabilities;
+  capabilities.set_can_add_children(true);
+  capabilities.set_can_change_restricted_download(false);
+  capabilities.set_can_comment(true);
+  capabilities.set_can_copy(false);
+  capabilities.set_can_delete(true);
+  capabilities.set_can_download(false);
+  capabilities.set_can_edit(true);
+  capabilities.set_can_list_children(false);
+  capabilities.set_can_move_item_into_team_drive(true);
+  capabilities.set_can_move_team_drive_item(false);
+  capabilities.set_can_read_revisions(true);
+  capabilities.set_can_read_team_drive(false);
+  capabilities.set_can_remove_children(true);
+  capabilities.set_can_rename(false);
+  capabilities.set_can_share(true);
+  capabilities.set_can_trash(false);
+  capabilities.set_can_untrash(true);
+  return capabilities;
+}
+
+// Creates a new TeamDriveCapabilities object with mixed (true/false)
+// capability settings.
+google_apis::TeamDriveCapabilities CreateMixedTeamDriveCapabilities() {
+  google_apis::TeamDriveCapabilities capabilities;
+  capabilities.set_can_add_children(true);
+  capabilities.set_can_comment(false);
+  capabilities.set_can_copy(true);
+  capabilities.set_can_delete_team_drive(false);
+  capabilities.set_can_download(true);
+  capabilities.set_can_edit(false);
+  capabilities.set_can_list_children(true);
+  capabilities.set_can_manage_members(false);
+  capabilities.set_can_read_revisions(true);
+  capabilities.set_can_remove_children(false);
+  capabilities.set_can_rename(true);
+  capabilities.set_can_rename_team_drive(false);
+  capabilities.set_can_share(true);
+  return capabilities;
+}
+
+// Compares two FileResourceCapabilities objects with EXPECT_EQ.
+void ExpectFileCapabilitiesEqual(
+    const google_apis::FileResourceCapabilities& expectedCapabilities,
+    const google_apis::FileResourceCapabilities& actualCapabilities) {
+  EXPECT_EQ(expectedCapabilities.can_add_children(),
+            actualCapabilities.can_add_children());
+  EXPECT_EQ(expectedCapabilities.can_change_restricted_download(),
+            actualCapabilities.can_change_restricted_download());
+  EXPECT_EQ(expectedCapabilities.can_comment(),
+            actualCapabilities.can_comment());
+  EXPECT_EQ(expectedCapabilities.can_copy(), actualCapabilities.can_copy());
+  EXPECT_EQ(expectedCapabilities.can_delete(), actualCapabilities.can_delete());
+  EXPECT_EQ(expectedCapabilities.can_download(),
+            actualCapabilities.can_download());
+  EXPECT_EQ(expectedCapabilities.can_edit(), actualCapabilities.can_edit());
+  EXPECT_EQ(expectedCapabilities.can_list_children(),
+            actualCapabilities.can_list_children());
+  EXPECT_EQ(expectedCapabilities.can_move_item_into_team_drive(),
+            actualCapabilities.can_move_item_into_team_drive());
+  EXPECT_EQ(expectedCapabilities.can_move_team_drive_item(),
+            actualCapabilities.can_move_team_drive_item());
+  EXPECT_EQ(expectedCapabilities.can_read_revisions(),
+            actualCapabilities.can_read_revisions());
+  EXPECT_EQ(expectedCapabilities.can_read_team_drive(),
+            actualCapabilities.can_read_team_drive());
+  EXPECT_EQ(expectedCapabilities.can_remove_children(),
+            actualCapabilities.can_remove_children());
+  EXPECT_EQ(expectedCapabilities.can_rename(), actualCapabilities.can_rename());
+  EXPECT_EQ(expectedCapabilities.can_share(), actualCapabilities.can_share());
+  EXPECT_EQ(expectedCapabilities.can_trash(), actualCapabilities.can_trash());
+  EXPECT_EQ(expectedCapabilities.can_untrash(),
+            actualCapabilities.can_untrash());
+}
+
+// Compares two FileResourceCapabilities objects with EXPECT_EQ.
+void ExpectTeamDriveCapabilitiesEqual(
+    const google_apis::TeamDriveCapabilities& expectedCapabilities,
+    const google_apis::TeamDriveCapabilities& actualCapabilities) {
+  EXPECT_EQ(expectedCapabilities.can_add_children(),
+            actualCapabilities.can_add_children());
+  EXPECT_EQ(expectedCapabilities.can_comment(),
+            actualCapabilities.can_comment());
+  EXPECT_EQ(expectedCapabilities.can_copy(), actualCapabilities.can_copy());
+  EXPECT_EQ(expectedCapabilities.can_delete_team_drive(),
+            actualCapabilities.can_delete_team_drive());
+  EXPECT_EQ(expectedCapabilities.can_download(),
+            actualCapabilities.can_download());
+  EXPECT_EQ(expectedCapabilities.can_edit(), actualCapabilities.can_edit());
+  EXPECT_EQ(expectedCapabilities.can_list_children(),
+            actualCapabilities.can_list_children());
+  EXPECT_EQ(expectedCapabilities.can_manage_members(),
+            actualCapabilities.can_manage_members());
+  EXPECT_EQ(expectedCapabilities.can_read_revisions(),
+            actualCapabilities.can_read_revisions());
+  EXPECT_EQ(expectedCapabilities.can_remove_children(),
+            actualCapabilities.can_remove_children());
+  EXPECT_EQ(expectedCapabilities.can_rename(), actualCapabilities.can_rename());
+  EXPECT_EQ(expectedCapabilities.can_rename_team_drive(),
+            actualCapabilities.can_rename_team_drive());
+  EXPECT_EQ(expectedCapabilities.can_share(), actualCapabilities.can_share());
+}
 
 class FakeDriveServiceTest : public testing::Test {
  protected:
@@ -128,6 +237,7 @@ TEST_F(FakeDriveServiceTest, GetAllFileList) {
   DriveApiErrorCode error = DRIVE_OTHER_ERROR;
   std::unique_ptr<FileList> file_list;
   fake_service_.GetAllFileList(
+      util::kTeamDriveIdDefaultCorpus,
       test_util::CreateCopyResultCallback(&error, &file_list));
   base::RunLoop().RunUntilIdle();
 
@@ -138,6 +248,23 @@ TEST_F(FakeDriveServiceTest, GetAllFileList) {
   EXPECT_EQ(1, fake_service_.file_list_load_count());
 }
 
+TEST_F(FakeDriveServiceTest, GetAllFileList_TeamDrives) {
+  ASSERT_TRUE(test_util::SetUpTeamDriveTestEntries(
+      &fake_service_, TEAM_DRIVE_ID_1, TEAM_DRIVE_NAME_1));
+
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<FileList> file_list;
+  fake_service_.GetAllFileList(
+      TEAM_DRIVE_ID_1, test_util::CreateCopyResultCallback(&error, &file_list));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(HTTP_SUCCESS, error);
+  ASSERT_TRUE(file_list);
+  // Do some sanity check.
+  EXPECT_EQ(13U, file_list->items().size());
+  EXPECT_EQ(1, fake_service_.file_list_load_count());
+}
+
 TEST_F(FakeDriveServiceTest, GetAllFileList_Offline) {
   ASSERT_TRUE(test_util::SetUpTestEntries(&fake_service_));
   fake_service_.set_offline(true);
@@ -145,6 +272,7 @@ TEST_F(FakeDriveServiceTest, GetAllFileList_Offline) {
   DriveApiErrorCode error = DRIVE_OTHER_ERROR;
   std::unique_ptr<FileList> file_list;
   fake_service_.GetAllFileList(
+      util::kTeamDriveIdDefaultCorpus,
       test_util::CreateCopyResultCallback(&error, &file_list));
   base::RunLoop().RunUntilIdle();
 
@@ -425,6 +553,34 @@ TEST_F(FakeDriveServiceTest, GetChangeList_WithNewEntry) {
   EXPECT_EQ(1, fake_service_.change_list_load_count());
 }
 
+TEST_F(FakeDriveServiceTest, GetChangeList_WithNewTeamDrive) {
+  ASSERT_TRUE(test_util::SetUpTestEntries(&fake_service_));
+  const int64_t old_largest_change_id =
+      fake_service_.about_resource().largest_change_id();
+
+  // Add a new team drive.
+  fake_service_.AddTeamDrive(TEAM_DRIVE_ID_1, TEAM_DRIVE_NAME_1, "");
+
+  // Get the resource list newer than old_largest_change_id.
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<ChangeList> change_list;
+  fake_service_.GetChangeList(
+      old_largest_change_id + 1,
+      test_util::CreateCopyResultCallback(&error, &change_list));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(HTTP_SUCCESS, error);
+  ASSERT_TRUE(change_list);
+  EXPECT_EQ(fake_service_.about_resource().largest_change_id(),
+            change_list->largest_change_id());
+  // The result should only contain the newly created tam drive.
+  ASSERT_EQ(1U, change_list->items().size());
+  ASSERT_TRUE(change_list->items()[0]->team_drive());
+  EXPECT_EQ(TEAM_DRIVE_ID_1, change_list->items()[0]->team_drive()->id());
+  EXPECT_EQ(TEAM_DRIVE_NAME_1, change_list->items()[0]->team_drive()->name());
+  EXPECT_EQ(1, fake_service_.change_list_load_count());
+}
+
 TEST_F(FakeDriveServiceTest, GetChangeList_Offline) {
   ASSERT_TRUE(test_util::SetUpTestEntries(&fake_service_));
   fake_service_.set_offline(true);
@@ -554,6 +710,7 @@ TEST_F(FakeDriveServiceTest, GetRemainingFileList_GetAllFileList) {
   DriveApiErrorCode error = DRIVE_OTHER_ERROR;
   std::unique_ptr<FileList> file_list;
   fake_service_.GetAllFileList(
+      util::kTeamDriveIdDefaultCorpus,
       test_util::CreateCopyResultCallback(&error, &file_list));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(HTTP_SUCCESS, error);
@@ -763,6 +920,43 @@ TEST_F(FakeDriveServiceTest, GetAboutResource) {
   EXPECT_EQ(fake_service_.GetRootResourceId(),
             about_resource->root_folder_id());
   EXPECT_EQ(1, fake_service_.about_resource_load_count());
+}
+
+TEST_F(FakeDriveServiceTest, GetStartPageToken) {
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<StartPageToken> start_page_token;
+  fake_service_.GetStartPageToken(
+      util::kTeamDriveIdDefaultCorpus,
+      test_util::CreateCopyResultCallback(&error, &start_page_token));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(HTTP_SUCCESS, error);
+
+  ASSERT_TRUE(start_page_token);
+  // Do some sanity check.
+  EXPECT_EQ(drive::util::ConvertChangestampToStartPageToken(
+                GetLargestChangeByAboutResource()),
+            start_page_token->start_page_token());
+  EXPECT_EQ(1, fake_service_.start_page_token_load_count());
+}
+
+TEST_F(FakeDriveServiceTest, GetStartPageToken_TeamDrive) {
+  ASSERT_TRUE(test_util::SetUpTeamDriveTestEntries(
+      &fake_service_, TEAM_DRIVE_ID_1, TEAM_DRIVE_NAME_1));
+
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<StartPageToken> start_page_token;
+  fake_service_.GetStartPageToken(
+      TEAM_DRIVE_ID_1,
+      test_util::CreateCopyResultCallback(&error, &start_page_token));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(HTTP_SUCCESS, error);
+
+  ASSERT_TRUE(start_page_token);
+  // Do some sanity check.
+  EXPECT_NE("", start_page_token->start_page_token());
+  EXPECT_EQ(1, fake_service_.start_page_token_load_count());
 }
 
 TEST_F(FakeDriveServiceTest, GetAboutResource_Offline) {
@@ -1817,7 +2011,7 @@ TEST_F(FakeDriveServiceTest, ResumeUpload_Offline) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(DRIVE_NO_CONNECTION, response.code);
-  EXPECT_FALSE(entry.get());
+  EXPECT_FALSE(entry);
 }
 
 TEST_F(FakeDriveServiceTest, ResumeUpload_NotFound) {
@@ -1844,7 +2038,7 @@ TEST_F(FakeDriveServiceTest, ResumeUpload_NotFound) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(HTTP_NOT_FOUND, response.code);
-  EXPECT_FALSE(entry.get());
+  EXPECT_FALSE(entry);
 }
 
 TEST_F(FakeDriveServiceTest, ResumeUpload_ExistingFile) {
@@ -1888,7 +2082,7 @@ TEST_F(FakeDriveServiceTest, ResumeUpload_ExistingFile) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(HTTP_RESUME_INCOMPLETE, response.code);
-  EXPECT_FALSE(entry.get());
+  EXPECT_FALSE(entry);
   ASSERT_TRUE(!upload_progress_values.empty());
   EXPECT_TRUE(base::STLIsSorted(upload_progress_values));
   EXPECT_LE(0, upload_progress_values.front().first);
@@ -1953,7 +2147,7 @@ TEST_F(FakeDriveServiceTest, ResumeUpload_NewFile) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(HTTP_RESUME_INCOMPLETE, response.code);
-  EXPECT_FALSE(entry.get());
+  EXPECT_FALSE(entry);
   ASSERT_TRUE(!upload_progress_values.empty());
   EXPECT_TRUE(base::STLIsSorted(upload_progress_values));
   EXPECT_LE(0, upload_progress_values.front().first);
@@ -2222,6 +2416,89 @@ TEST_F(FakeDriveServiceTest, SetLastModifiedTime_Offline) {
 
   EXPECT_EQ(DRIVE_NO_CONNECTION, error);
   EXPECT_FALSE(entry);
+}
+
+TEST_F(FakeDriveServiceTest, SetFileCapabilities_ExistingFile) {
+  ASSERT_TRUE(test_util::SetUpTestEntries(&fake_service_));
+
+  const std::string kResourceId = "2_file_resource_id";
+  const google_apis::FileResourceCapabilities& kCapabilities =
+      CreateMixedFileCapabilities();
+
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<FileResource> entry;
+  fake_service_.SetFileCapabilities(
+      kResourceId, kCapabilities,
+      test_util::CreateCopyResultCallback(&error, &entry));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(HTTP_SUCCESS, error);
+  ASSERT_TRUE(entry);
+  ExpectFileCapabilitiesEqual(kCapabilities, entry->capabilities());
+}
+
+TEST_F(FakeDriveServiceTest, SetFileCapabilities_NonexistingFile) {
+  ASSERT_TRUE(test_util::SetUpTestEntries(&fake_service_));
+
+  const std::string kResourceId = "nonexisting_resource_id";
+  const google_apis::FileResourceCapabilities& kCapabilities =
+      CreateMixedFileCapabilities();
+
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<FileResource> entry;
+  fake_service_.SetFileCapabilities(
+      kResourceId, kCapabilities,
+      test_util::CreateCopyResultCallback(&error, &entry));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(HTTP_NOT_FOUND, error);
+  EXPECT_FALSE(entry);
+}
+
+TEST_F(FakeDriveServiceTest, SetFileCapabilities_Offline) {
+  ASSERT_TRUE(test_util::SetUpTestEntries(&fake_service_));
+  fake_service_.set_offline(true);
+
+  const std::string kResourceId = "2_file_resource_id";
+  const google_apis::FileResourceCapabilities& kCapabilities =
+      CreateMixedFileCapabilities();
+
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<FileResource> entry;
+  fake_service_.SetFileCapabilities(
+      kResourceId, kCapabilities,
+      test_util::CreateCopyResultCallback(&error, &entry));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(DRIVE_NO_CONNECTION, error);
+  EXPECT_FALSE(entry);
+}
+
+TEST_F(FakeDriveServiceTest, SetTeamDriveCapabilities_ExistingTeamDrive) {
+  ASSERT_TRUE(test_util::SetUpTestEntries(&fake_service_));
+
+  // Add a new team drive.
+  fake_service_.AddTeamDrive(TEAM_DRIVE_ID_1, TEAM_DRIVE_NAME_1, "");
+
+  const google_apis::TeamDriveCapabilities& kCapabilities =
+      CreateMixedTeamDriveCapabilities();
+  bool result =
+      fake_service_.SetTeamDriveCapabilities(TEAM_DRIVE_ID_1, kCapabilities);
+  EXPECT_TRUE(result);
+  base::RunLoop().RunUntilIdle();
+
+  DriveApiErrorCode error = DRIVE_OTHER_ERROR;
+  std::unique_ptr<TeamDriveList> team_drive_list;
+  fake_service_.GetAllTeamDriveList(
+      test_util::CreateCopyResultCallback(&error, &team_drive_list));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(HTTP_SUCCESS, error);
+  ASSERT_TRUE(team_drive_list);
+
+  EXPECT_EQ(1U, team_drive_list->items().size());
+  ExpectTeamDriveCapabilitiesEqual(kCapabilities,
+                                   team_drive_list->items()[0]->capabilities());
 }
 
 }  // namespace

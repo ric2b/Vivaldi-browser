@@ -12,6 +12,7 @@
 
 #include "base/containers/mru_cache.h"
 #include "base/memory/memory_coordinator_client.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_math.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -52,7 +53,7 @@ class CC_EXPORT SoftwareImageDecodeCache
       bool aggressively_free_resources) override {}
   void ClearCache() override;
   size_t GetMaximumMemoryLimitBytes() const override;
-  void NotifyImageUnused(const PaintImage::FrameKey& frame_key) override;
+  bool UseCacheForDrawImage(const DrawImage& image) const override;
 
   // Decode the given image and store it in the cache. This is only called by an
   // image decode task from a worker thread.
@@ -116,6 +117,11 @@ class CC_EXPORT SoftwareImageDecodeCache
   void OnMemoryStateChange(base::MemoryState state) override;
   void OnPurgeMemory() override;
 
+  // TODO(gyuyoung): OnMemoryPressure is deprecated. So this should be removed
+  // when the memory coordinator is enabled by default.
+  void OnMemoryPressure(
+      base::MemoryPressureListener::MemoryPressureLevel level);
+
   // Helper method to get the different tasks. Note that this should be used as
   // if it was public (ie, all of the locks need to be properly acquired).
   TaskResult GetTaskForImageAndRefInternal(const DrawImage& image,
@@ -129,6 +135,7 @@ class CC_EXPORT SoftwareImageDecodeCache
                               CacheEntry* cache_entry);
   void AddBudgetForImage(const CacheKey& key, CacheEntry* entry);
   void RemoveBudgetForImage(const CacheKey& key, CacheEntry* entry);
+  base::Optional<CacheKey> FindCachedCandidate(const CacheKey& key);
 
   void UnrefImage(const CacheKey& key);
 
@@ -140,6 +147,8 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   // Decoded images and ref counts (predecode path).
   ImageMRUCache decoded_images_;
+
+  std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
   // A map of PaintImage::FrameKey to the ImageKeys for cached decodes of this
   // PaintImage.

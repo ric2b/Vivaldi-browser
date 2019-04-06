@@ -35,7 +35,7 @@ void ForwardJobFinished(
     ExternalPolicyDataFetcher::Result result,
     std::unique_ptr<std::string> data) {
   task_runner->PostTask(FROM_HERE,
-                        base::Bind(callback, job, result, base::Passed(&data)));
+                        base::BindOnce(callback, job, result, std::move(data)));
 }
 
 // Helper that forwards a job cancelation confirmation from the thread that the
@@ -45,14 +45,6 @@ void ForwardJobCanceled(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     const base::Closure& callback) {
   task_runner->PostTask(FROM_HERE, callback);
-}
-
-// Helper invoked when a job cancelation confirmation has been forwarded to the
-// thread which canceled the job. The helper itself does nothing. It exists so
-// that the |job| can be passed as base::Owned(), allowing it to be deleted on
-// the correct thread and after any pending callbacks for the |job| have been
-// processed.
-void DoNothing(ExternalPolicyDataFetcher::Job* job) {
 }
 
 }  // namespace
@@ -123,12 +115,10 @@ void ExternalPolicyDataFetcher::CancelJob(Job* job) {
   // still be pending for the canceled |job|.
   io_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&ExternalPolicyDataFetcherBackend::CancelJob,
-                 backend_,
-                 job,
-                 base::Bind(&ForwardJobCanceled,
-                            task_runner_,
-                            base::Bind(&DoNothing, base::Owned(job)))));
+      base::Bind(&ExternalPolicyDataFetcherBackend::CancelJob, backend_, job,
+                 base::Bind(&ForwardJobCanceled, task_runner_,
+                            base::Bind(base::DoNothing::Repeatedly<Job*>(),
+                                       base::Owned(job)))));
 }
 
 void ExternalPolicyDataFetcher::OnJobFinished(

@@ -30,6 +30,7 @@
  *   networkListItemConnecting: string,
  *   networkListItemConnectingTo: string,
  *   networkListItemInitializing: string,
+ *   networkListItemScanning: string,
  *   networkListItemNotConnected: string,
  *   networkListItemNoNetwork: string,
  *   vpnNameTemplate: string,
@@ -45,7 +46,7 @@ CrOnc.NetworkStateProperties;
 /** @typedef {chrome.networkingPrivate.ManagedProperties} */
 CrOnc.NetworkProperties;
 
-/** @typedef {string|number|boolean|Object|Array<Object>} */
+/** @typedef {string|number|boolean|Array<string>|Object|Array<Object>} */
 CrOnc.NetworkPropertyType;
 
 /**
@@ -226,7 +227,7 @@ CrOnc.getActiveValue = function(property) {
   if (property == undefined)
     return undefined;
 
-  if (typeof property != 'object') {
+  if (typeof property != 'object' || Array.isArray(property)) {
     console.error(
         'getActiveValue called on non object: ' + JSON.stringify(property));
     return undefined;
@@ -498,7 +499,8 @@ CrOnc.setValidStaticIPConfig = function(config, properties) {
  * @param {!chrome.networkingPrivate.NetworkConfigProperties} properties
  *     The ONC property dictionary to modify.
  * @param {string} key The property key which may be nested, e.g. 'Foo.Bar'.
- * @param {!CrOnc.NetworkPropertyType} value The property value to set.
+ * @param {!CrOnc.NetworkPropertyType|undefined} value The property value to
+ *     set. If undefined the property will be removed.
  */
 CrOnc.setProperty = function(properties, key, value) {
   while (true) {
@@ -511,7 +513,10 @@ CrOnc.setProperty = function(properties, key, value) {
     properties = properties[keyComponent];
     key = key.substr(index + 1);
   }
-  properties[key] = value;
+  if (value === undefined)
+    delete properties[key];
+  else
+    properties[key] = value;
 };
 
 /**
@@ -519,7 +524,8 @@ CrOnc.setProperty = function(properties, key, value) {
  * @param {!chrome.networkingPrivate.NetworkConfigProperties} properties The
  *     ONC properties to set. properties.Type must be set already.
  * @param {string} key The type property key, e.g. 'AutoConnect'.
- * @param {!CrOnc.NetworkPropertyType} value The property value to set.
+ * @param {!CrOnc.NetworkPropertyType|undefined} value The property value to
+ *     set. If undefined the property will be removed.
  */
 CrOnc.setTypeProperty = function(properties, key, value) {
   if (properties.Type == undefined) {

@@ -5,8 +5,8 @@
 'use strict';
 
 /**
- * Tests if the files initially added by the C++ side are displayed, and
- * that a subsequently added file shows up.
+ * Checks if the files initially added by the C++ side are displayed, and
+ * that files subsequently added are also displayed.
  *
  * @param {string} path Directory path to be tested.
  */
@@ -21,68 +21,81 @@ function fileDisplay(path) {
       expectedFilesBefore.concat([ENTRIES.newlyAdded.getExpectedRow()]).sort();
 
   StepsRunner.run([
+    // Open Files app on local downloads.
     function() {
       setupAndWaitUntilReady(null, path, this.next);
     },
-    // Notify that the list has been verified and a new file can be added
-    // in file_manager_browsertest.cc.
-    function(results) {
-      appId = results.windowId;
-      var actualFilesBefore = results.fileList;
-      chrome.test.assertEq(expectedFilesBefore, actualFilesBefore);
+    // Verify the file list.
+    function(result) {
+      appId = result.windowId;
+      var filesBefore = result.fileList;
+      chrome.test.assertEq(expectedFilesBefore, filesBefore);
+      this.next();
+    },
+    // Add new file entries.
+    function() {
       addEntries(['local', 'drive'], [ENTRIES.newlyAdded], this.next);
     },
-    function(result) {
-      chrome.test.assertTrue(result);
+    // Wait for the new file entries.
+    function() {
       remoteCall.waitForFileListChange(appId, expectedFilesBefore.length).
           then(this.next);
     },
-    // Confirm the file list.
-    function(actualFilesAfter) {
-      chrome.test.assertEq(expectedFilesAfter, actualFilesAfter);
+    // Verify the new file list.
+    function(filesAfter) {
+      chrome.test.assertEq(expectedFilesAfter, filesAfter);
       checkIfNoErrorsOccured(this.next);
     },
   ]);
 }
 
+/**
+ * Tests files display in Downloads.
+ */
 testcase.fileDisplayDownloads = function() {
   fileDisplay(RootPath.DOWNLOADS);
 };
 
+/**
+ * Tests files display in Google Drive.
+ */
 testcase.fileDisplayDrive = function() {
   fileDisplay(RootPath.DRIVE);
 };
 
+/**
+ * Tests files display in an MTP volume.
+ */
 testcase.fileDisplayMtp = function() {
   var appId;
-  var MTP_VOLUME_QUERY = '#directory-tree > .tree-item > .tree-row > ' +
-    '.item-icon[volume-type-icon="mtp"]';
+
+  const MTP_VOLUME_QUERY = '#directory-tree [volume-type-icon="mtp"]';
 
   StepsRunner.run([
+    // Open Files app on local downloads.
     function() {
       setupAndWaitUntilReady(null, RootPath.DOWNLOADS, this.next);
     },
-    // Mount a fake MTP volume.
+    // Mount MTP volume in the Downloads window.
     function(results) {
       appId = results.windowId;
       chrome.test.sendMessage(JSON.stringify({name: 'mountFakeMtp'}),
                               this.next);
     },
-    // Wait for the mount.
-    function(result) {
+    // Wait for the MTP mount.
+    function() {
       remoteCall.waitForElement(appId, MTP_VOLUME_QUERY).then(this.next);
     },
-    // Click the MTP volume.
+    // Click to open the MTP volume.
     function() {
       remoteCall.callRemoteTestUtil(
           'fakeMouseClick', appId, [MTP_VOLUME_QUERY], this.next);
     },
-    // Wait for the file list to change.
-    function(appIds) {
-      remoteCall.waitForFiles(
-          appId,
-          TestEntryInfo.getExpectedRows(BASIC_FAKE_ENTRY_SET),
-          {ignoreLastModifiedTime: true}).then(this.next);
+    // Verify the MTP file list.
+    function() {
+      const files = TestEntryInfo.getExpectedRows(BASIC_FAKE_ENTRY_SET);
+      remoteCall.waitForFiles(appId, files, {ignoreLastModifiedTime: true})
+          .then(this.next);
     },
     function() {
       checkIfNoErrorsOccured(this.next);
@@ -91,8 +104,48 @@ testcase.fileDisplayMtp = function() {
 };
 
 /**
- * Searches for a string in Downloads and checks the correct results are
- * being displayed.
+ * Tests files display in a removable USB volume.
+ */
+testcase.fileDisplayUsb = function() {
+  var appId;
+
+  const USB_VOLUME_QUERY = '#directory-tree [volume-type-icon="removable"]';
+
+  StepsRunner.run([
+    // Open Files app on local downloads.
+    function() {
+      setupAndWaitUntilReady(null, RootPath.DOWNLOADS, this.next);
+    },
+    // Mount USB volume in the Downloads window.
+    function(results) {
+      appId = results.windowId;
+      chrome.test.sendMessage(
+          JSON.stringify({name: 'mountFakeUsb'}), this.next);
+    },
+    // Wait for the USB mount.
+    function() {
+      remoteCall.waitForElement(appId, USB_VOLUME_QUERY).then(this.next);
+    },
+    // Click to open the USB volume.
+    function() {
+      remoteCall.callRemoteTestUtil(
+          'fakeMouseClick', appId, [USB_VOLUME_QUERY], this.next);
+    },
+    // Verify the USB file list.
+    function() {
+      const files = TestEntryInfo.getExpectedRows(BASIC_FAKE_ENTRY_SET);
+      remoteCall.waitForFiles(appId, files, {ignoreLastModifiedTime: true})
+          .then(this.next);
+    },
+    function() {
+      checkIfNoErrorsOccured(this.next);
+    }
+  ]);
+};
+
+/**
+ * Searches for a string in Downloads and checks that the correct results
+ * are displayed.
  *
  * @param {string} searchTerm The string to search for.
  * @param {Array<Object>} expectedResults The results set.
@@ -102,31 +155,26 @@ function searchDownloads(searchTerm, expectedResults) {
   var appId;
 
   StepsRunner.run([
+    // Open Files app on local downloads.
     function() {
       setupAndWaitUntilReady(null, RootPath.DOWNLOADS, this.next);
     },
     // Focus the search box.
     function(results) {
       appId = results.windowId;
-      remoteCall.callRemoteTestUtil('fakeEvent',
-                                    appId,
-                                    ['#search-box input', 'focus'],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'fakeEvent', appId, ['#search-box cr-input', 'focus'], this.next);
     },
     // Input a text.
     function(result) {
       chrome.test.assertTrue(result);
-      remoteCall.callRemoteTestUtil('inputText',
-                                    appId,
-                                    ['#search-box input', searchTerm],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'inputText', appId, ['#search-box cr-input', searchTerm], this.next);
     },
     // Notify the element of the input.
     function() {
-      remoteCall.callRemoteTestUtil('fakeEvent',
-                                    appId,
-                                    ['#search-box input', 'input'],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'fakeEvent', appId, ['#search-box cr-input', 'input'], this.next);
     },
     function(result) {
       remoteCall.waitForFileListChange(appId, BASIC_LOCAL_ENTRY_SET.length).
@@ -142,20 +190,25 @@ function searchDownloads(searchTerm, expectedResults) {
   ]);
 }
 
-testcase.searchNormal = function() {
+/**
+ * Tests case-senstive search for an entry in Downloads.
+ */
+testcase.fileSearch = function() {
   searchDownloads('hello', [ENTRIES.hello]);
 };
 
-testcase.searchCaseInsensitive = function() {
+/**
+ * Tests case-insenstive search for an entry in Downloads.
+ */
+testcase.fileSearchCaseInsensitive = function() {
   searchDownloads('HELLO', [ENTRIES.hello]);
 };
 
 /**
- * Searches for a string that doesn't match anything in Downloads
- * and checks that the no items match string is displayed.
- *
+ * Tests searching for a string doesn't match anything in Downloads and that
+ * there are no displayed items that match the search string.
  */
-testcase.searchNotFound = function() {
+testcase.fileSearchNotFound = function() {
   var appId;
   var searchTerm = 'blahblah';
 
@@ -166,25 +219,19 @@ testcase.searchNotFound = function() {
     // Focus the search box.
     function(results) {
       appId = results.windowId;
-      remoteCall.callRemoteTestUtil('fakeEvent',
-                                    appId,
-                                    ['#search-box input', 'focus'],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'fakeEvent', appId, ['#search-box cr-input', 'focus'], this.next);
     },
     // Input a text.
     function(result) {
       chrome.test.assertTrue(result);
-      remoteCall.callRemoteTestUtil('inputText',
-                                    appId,
-                                    ['#search-box input', searchTerm],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'inputText', appId, ['#search-box cr-input', searchTerm], this.next);
     },
     // Notify the element of the input.
     function() {
-      remoteCall.callRemoteTestUtil('fakeEvent',
-                                    appId,
-                                    ['#search-box input', 'input'],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'fakeEvent', appId, ['#search-box cr-input', 'input'], this.next);
     },
     function(result) {
       remoteCall.waitForElement(appId, ['#empty-folder-label b']).

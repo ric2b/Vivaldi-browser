@@ -51,18 +51,49 @@ base::Optional<storage::QuotaSettings> CalculateNominalDynamicSettings(
     return settings;
   }
 
-  // The fraction of the device's storage the browser is willing to
-  // use for temporary storage, this is applied after adjusting the
-  // total to take os_accomodation into account.
+// The fraction of the device's storage the browser is willing to
+// use for temporary storage.
+#if defined(OS_CHROMEOS)
+  // Chrome OS is given a larger fraction, as web content is the considered
+  // the primary use of the platform. Chrome OS itself maintains free space by
+  // starting to evict data (old profiles) when less than 1GB remains,
+  // stopping eviction once 2GB is free.
+  // Prior to M66 this was 1/3, same as other platforms.
+  const double kTemporaryPoolSizeRatio = 2.0 / 3.0;  // 66%
+#else
   const double kTemporaryPoolSizeRatio = 1.0 / 3.0;  // 33%
+#endif
 
-  // The fraction of the device's storage the browser attempts to
-  // keep free.
-  const double kShouldRemainAvailableRatio = 0.1;  // 10%
+  // The amount of the device's storage the browser attempts to
+  // keep free. If there is less than this amount of storage free
+  // on the device, Chrome will grant 0 quota to origins.
+  //
+  // Prior to M66, this was 10% of total storage instead of a fixed value on
+  // all devices. Now the minimum of a fixed value (2GB) and 10% is used to
+  // limit the reserve on devices with plenty of storage, but scale down for
+  // devices with extremely limited storage.
+  // *   1TB storage -- min(100GB,2GB) = 2GB
+  // * 500GB storage -- min(50GB,2GB) = 2GB
+  // *  64GB storage -- min(6GB,2GB) = 2GB
+  // *  16GB storage -- min(1.6GB,2GB) = 1.6GB
+  // *   8GB storage -- min(800MB,2GB) = 800MB
+  const int64_t kShouldRemainAvailableFixed = 2048 * kMBytes;  // 2GB
+  const double kShouldRemainAvailableRatio = 0.1;              // 10%
 
-  // The fraction of the device's storage the browser attempts to
-  // keep free at all costs.
-  const double kMustRemainAvailableRatio = 0.01;  // 1%
+  // The amount of the device's storage the browser attempts to
+  // keep free at all costs. Data will be aggressively evicted.
+  //
+  // Prior to M66, this was 1% of total storage instead of a fixed value on
+  // all devices. Now the minimum of a fixed value (1GB) and 1% is used to
+  // limit the reserve on devices with plenty of storage, but scale down for
+  // devices with extremely limited storage.
+  // *   1TB storage -- min(10GB,1GB) = 1GB
+  // * 500GB storage -- min(5GB,1GB) = 1GB
+  // *  64GB storage -- min(640MB,1GB) = 640MB
+  // *  16GB storage -- min(160MB,1GB) = 160MB
+  // *   8GB storage -- min(80MB,1GB) = 80MB
+  const int64_t kMustRemainAvailableFixed = 1024 * kMBytes;  // 1GB
+  const double kMustRemainAvailableRatio = 0.01;             // 1%
 
   // Determines the portion of the temp pool that can be
   // utilized by a single host (ie. 5 for 20%).
@@ -73,21 +104,6 @@ base::Optional<storage::QuotaSettings> CalculateNominalDynamicSettings(
   const double kSessionOnlyHostQuotaRatio = 0.1;  // 10%
   const int64_t kMaxSessionOnlyHostQuota = 300 * kMBytes;
 
-  // os_accomodation is an estimate of how much storage is needed for
-  // the os and essential application code outside of the browser.
-  const int64_t kDefaultOSAccomodation =
-#if defined(OS_ANDROID)
-      1000 * kMBytes;
-#elif defined(OS_CHROMEOS)
-      1000 * kMBytes;
-#elif defined(OS_FUCHSIA)
-      1000 * kMBytes;
-#elif defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
-      10000 * kMBytes;
-#else
-#error "Port: Need to define an OS accomodation value for unknown OS."
-#endif
-
   storage::QuotaSettings settings;
 
   int64_t total = base::SysInfo::AmountOfTotalDiskSpace(partition_path);
@@ -96,19 +112,15 @@ base::Optional<storage::QuotaSettings> CalculateNominalDynamicSettings(
     return base::nullopt;
   }
 
-  // If our hardcoded OS accomodation is too large for the volume size, define
-  // the value as a fraction of the total volume size instead.
-  int64_t os_accomodation =
-      std::min(kDefaultOSAccomodation, static_cast<int64_t>(total * 0.8));
-  UMA_HISTOGRAM_MBYTES("Quota.OSAccomodationDelta",
-                       kDefaultOSAccomodation - os_accomodation);
-
-  int64_t adjusted_total = total - os_accomodation;
-  int64_t pool_size = adjusted_total * kTemporaryPoolSizeRatio;
+  int64_t pool_size = total * kTemporaryPoolSizeRatio;
 
   settings.pool_size = pool_size;
-  settings.should_remain_available = total * kShouldRemainAvailableRatio;
-  settings.must_remain_available = total * kMustRemainAvailableRatio;
+  settings.should_remain_available =
+      std::min(kShouldRemainAvailableFixed,
+               static_cast<int64_t>(total * kShouldRemainAvailableRatio));
+  settings.must_remain_available =
+      std::min(kMustRemainAvailableFixed,
+               static_cast<int64_t>(total * kMustRemainAvailableRatio));
   settings.per_host_quota = pool_size / kPerHostTemporaryPortion;
   settings.session_only_per_host_quota = std::min(
       RandomizeByPercent(kMaxSessionOnlyHostQuota, kRandomizedPercentage),

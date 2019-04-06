@@ -18,10 +18,12 @@
 @protocol ContentSuggestionsCollectionSynchronizing;
 @protocol ContentSuggestionsCommands;
 @protocol ContentSuggestionsHeaderViewControllerDelegate;
-@protocol OmniboxFocuser;
 @protocol FakeboxFocuser;
-@protocol UrlLoader;
+@protocol NewTabPageControllerDelegate;
+@protocol OmniboxFocuser;
+@class PrimaryToolbarViewController;
 class ReadingListModel;
+@protocol UrlLoader;
 
 // Controller for the header containing the logo and the fake omnibox, handling
 // the interactions between the header and the collection, and the rest of the
@@ -52,6 +54,7 @@ class ReadingListModel;
     delegate;
 @property(nonatomic, weak) id<ContentSuggestionsCommands> commandHandler;
 @property(nonatomic, assign) ReadingListModel* readingListModel;
+@property(nonatomic, weak) id<NewTabPageControllerDelegate> toolbarDelegate;
 
 // Whether the Google logo or doodle is being shown.
 @property(nonatomic, assign) BOOL logoIsShowing;

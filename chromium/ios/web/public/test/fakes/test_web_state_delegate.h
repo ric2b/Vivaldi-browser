@@ -40,10 +40,9 @@ struct TestOpenURLRequest {
 // Encapsulates parameters passed to ShowRepostFormWarningDialog.
 struct TestRepostFormRequest {
   TestRepostFormRequest();
-  TestRepostFormRequest(const TestRepostFormRequest&);
   ~TestRepostFormRequest();
   WebState* web_state = nullptr;
-  base::Callback<void(bool)> callback;
+  base::OnceCallback<void(bool)> callback;
 };
 
 // Encapsulates parameters passed to OnAuthRequired.
@@ -84,7 +83,7 @@ class TestWebStateDelegate : public WebStateDelegate {
                          const ContextMenuParams& params) override;
   void ShowRepostFormWarningDialog(
       WebState* source,
-      const base::Callback<void(bool)>& callback) override;
+      base::OnceCallback<void(bool)> callback) override;
   TestJavaScriptDialogPresenter* GetTestJavaScriptDialogPresenter();
   void OnAuthRequired(WebState* source,
                       NSURLProtectionSpace* protection_space,
@@ -96,6 +95,7 @@ class TestWebStateDelegate : public WebStateDelegate {
   void CommitPreviewingViewController(
       WebState* source,
       UIViewController* previewing_view_controller) override;
+  bool ShouldAllowAppLaunching(WebState* source) override;
 
   // Allows popups requested by a page with |opener_url|.
   void allow_popups(const GURL& opener_url) {
@@ -183,6 +183,11 @@ class TestWebStateDelegate : public WebStateDelegate {
     last_previewing_view_controller_ = nil;
   }
 
+  // Sets the return value of |ShouldAllowAppLaunching|.
+  void SetShouldAllowAppLaunching(bool should_allow_apps) {
+    should_allow_app_launching_ = should_allow_apps;
+  }
+
  private:
   std::vector<std::unique_ptr<WebState>> child_windows_;
   // WebStates that were closed via |CloseWebState| callback.
@@ -201,6 +206,7 @@ class TestWebStateDelegate : public WebStateDelegate {
   std::unique_ptr<TestAuthenticationRequest> last_authentication_request_;
   GURL last_link_url_;
   bool should_preview_link_ = false;
+  bool should_allow_app_launching_ = false;
   UIViewController* previewing_view_controller_ = nil;
   UIViewController* last_previewing_view_controller_ = nil;
 };

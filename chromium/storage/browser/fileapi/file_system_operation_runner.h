@@ -15,6 +15,7 @@
 #include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/fileapi/file_system_operation.h"
 #include "storage/browser/fileapi/file_system_url.h"
@@ -39,20 +40,20 @@ class FileSystemContext;
 class STORAGE_EXPORT FileSystemOperationRunner
     : public base::SupportsWeakPtr<FileSystemOperationRunner> {
  public:
-  typedef FileSystemOperation::GetMetadataCallback GetMetadataCallback;
-  typedef FileSystemOperation::ReadDirectoryCallback ReadDirectoryCallback;
-  typedef FileSystemOperation::SnapshotFileCallback SnapshotFileCallback;
-  typedef FileSystemOperation::StatusCallback StatusCallback;
-  typedef FileSystemOperation::WriteCallback WriteCallback;
-  typedef FileSystemOperation::OpenFileCallback OpenFileCallback;
-  typedef FileSystemOperation::ErrorBehavior ErrorBehavior;
-  typedef FileSystemOperation::CopyProgressCallback CopyProgressCallback;
-  typedef FileSystemOperation::CopyFileProgressCallback
-      CopyFileProgressCallback;
-  typedef FileSystemOperation::CopyOrMoveOption CopyOrMoveOption;
-  typedef FileSystemOperation::GetMetadataField GetMetadataField;
+  using GetMetadataCallback = FileSystemOperation::GetMetadataCallback;
+  using ReadDirectoryCallback = FileSystemOperation::ReadDirectoryCallback;
+  using SnapshotFileCallback = FileSystemOperation::SnapshotFileCallback;
+  using StatusCallback = FileSystemOperation::StatusCallback;
+  using WriteCallback = FileSystemOperation::WriteCallback;
+  using OpenFileCallback = FileSystemOperation::OpenFileCallback;
+  using ErrorBehavior = FileSystemOperation::ErrorBehavior;
+  using CopyProgressCallback = FileSystemOperation::CopyProgressCallback;
+  using CopyFileProgressCallback =
+      FileSystemOperation::CopyFileProgressCallback;
+  using CopyOrMoveOption = FileSystemOperation::CopyOrMoveOption;
+  using GetMetadataField = FileSystemOperation::GetMetadataField;
 
-  typedef int OperationID;
+  using OperationID = int;
 
   virtual ~FileSystemOperationRunner();
 
@@ -269,18 +270,17 @@ class STORAGE_EXPORT FileSystemOperationRunner
   void DidReadDirectory(const OperationHandle& handle,
                         const ReadDirectoryCallback& callback,
                         base::File::Error rv,
-                        std::vector<DirectoryEntry> entries,
+                        std::vector<filesystem::mojom::DirectoryEntry> entries,
                         bool has_more);
   void DidWrite(const OperationHandle& handle,
                 const WriteCallback& callback,
                 base::File::Error rv,
                 int64_t bytes,
                 bool complete);
-  void DidOpenFile(
-      const OperationHandle& handle,
-      const OpenFileCallback& callback,
-      base::File file,
-      const base::Closure& on_close_callback);
+  void DidOpenFile(const OperationHandle& handle,
+                   const OpenFileCallback& callback,
+                   base::File file,
+                   base::OnceClosure on_close_callback);
   void DidCreateSnapshot(
       const OperationHandle& handle,
       const SnapshotFileCallback& callback,
@@ -302,17 +302,21 @@ class STORAGE_EXPORT FileSystemOperationRunner
   // These must be called at the beginning and end of any async operations.
   OperationHandle BeginOperation(std::unique_ptr<FileSystemOperation> operation,
                                  base::WeakPtr<BeginOperationScoper> scope);
+  // Cleans up the FileSystemOperation for |id|, which may result in the
+  // FileSystemContext, and |this| being deleted, by the time the call returns.
   void FinishOperation(OperationID id);
 
   // Not owned; file_system_context owns this.
   FileSystemContext* file_system_context_;
 
-  // IDMap<std::unique_ptr<FileSystemOperation>> operations_;
-  base::IDMap<std::unique_ptr<FileSystemOperation>> operations_;
+  using Operations =
+      std::map<OperationID, std::unique_ptr<FileSystemOperation>>;
+  OperationID next_operation_id_ = 1;
+  Operations operations_;
 
   // We keep track of the file to be modified by each operation so that
   // we can notify observers when we're done.
-  typedef std::map<OperationID, FileSystemURLSet> OperationToURLSet;
+  using OperationToURLSet = std::map<OperationID, FileSystemURLSet>;
   OperationToURLSet write_target_urls_;
 
   // Operations that are finished but not yet fire their callbacks.

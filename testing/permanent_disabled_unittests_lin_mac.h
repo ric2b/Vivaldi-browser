@@ -6,3 +6,10 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
+// Does not work for vivaldi
+DISABLE(StartupBrowserCreatorFirstRunTest, FirstRunTabsWithRestoreSession)
+DISABLE(StartupBrowserCreatorFirstRunTest, RestoreOnStartupURLsPolicySpecified)
+DISABLE(ProfileSigninConfirmationHelperBrowserTest, HasNotBeenShutdown)
+
+// Disabled in Google Chrome official builds
+DISABLE(FirstRunMasterPrefsImportNothing, ImportNothingAndShowNewTabPage)

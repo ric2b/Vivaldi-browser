@@ -29,7 +29,8 @@ class InterstitialAccessibilityBrowserTest : public InProcessBrowserTest {
   std::string GetNameOfFocusedNode(content::WebContents* web_contents) {
     ui::AXNodeData focused_node_data =
         content::GetFocusedAccessibilityNodeInfo(web_contents);
-    return focused_node_data.GetStringAttribute(ui::AX_ATTR_NAME);
+    return focused_node_data.GetStringAttribute(
+        ax::mojom::StringAttribute::kName);
   }
 
  protected:
@@ -64,11 +65,7 @@ IN_PROC_BROWSER_TEST_F(InterstitialAccessibilityBrowserTest,
 
   // Ensure that we got an interstitial page.
   ASSERT_FALSE(web_contents->IsCrashed());
-  content::NavigationEntry* entry =
-      web_contents->GetController().GetActiveEntry();
-  ASSERT_TRUE(entry);
-  EXPECT_TRUE(entry->GetPageType() == content::PAGE_TYPE_ERROR ||
-              entry->GetPageType() == content::PAGE_TYPE_INTERSTITIAL);
+  EXPECT_TRUE(web_contents->ShowingInterstitialPage());
 
   // Now check from the perspective of accessibility - we should be focused
   // on a page with title "Privacy error". Keep waiting on accessibility

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../../../../ui/login/bubble.css">
   <link rel="stylesheet" href="../../../../ui/login/oobe.css">
   <link rel="stylesheet" href="../../../../ui/login/screen_container.css">
+  <link rel="stylesheet" href="chrome://resources/css/md_colors.css">
   <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
 
   <link rel="import" href="chrome://resources/html/polymer.html">
@@ -32,10 +33,6 @@
   <!-- Make sure paper-button is imported to use in user_pod_template.html -->
   <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
   <style is="custom-style" include="shared-styles">
-    body {
-      background-color: var(--paper-grey-100);
-    }
-
     user-manager-pages,
     #login-header-bar {
       bottom: 0;
@@ -84,9 +81,9 @@
     }
 
     .pod {
-      box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .24),
-                  0 0 2px 0 rgba(0, 0, 0, .12);
-      color: var(--primary-text-color);
+      @apply --cr-card-elevation;
+      border-radius: var(--cr-card-border-radius);
+      color: var(--cr-primary-text-color);
       cursor: default;
       height: auto;
       transform: none;
@@ -132,7 +129,6 @@
 
     .pod .main-pane .name-container .name,
     .reauth-hint-container .reauth-name-hint {
-      color: inherit;
       font-size: inherit;
       margin: 0;
       padding: 0;
@@ -260,6 +256,7 @@
 
     .action-box-area.active ~ .action-box-menu {
       border: none;
+      border-radius: var(--cr-card-border-radius);
       box-shadow: 0 10px 20px 0 rgba(0, 0, 0, .19);
       right: 8px;
       width: 224px;
@@ -280,11 +277,16 @@
       height: auto;
     }
 
+    .action-box-menu-title-name {
+      color: var(--cr-primary-text-color);
+    }
+
     .action-box-menu-title-email {
-      color: var(--paper-grey-600);
+      color: var(--cr-secondary-text-color);
     }
 
     .action-box-menu-remove {
+      border-radius: var(--cr-card-border-radius);
       border-top: var(--user-manager-separator-line);
       line-height: 32px;
       padding: 8px 12px;
@@ -311,18 +313,6 @@
     .total-count,
     .pod:not(.synced) .action-box-remove-user-warning-text {
       font-weight: 500;
-    }
-
-    .action-box-remove-user-warning .remove-warning-button {
-      --paper-button: {
-        background: var(--google-red-700);
-        color: white;
-        font-weight: 500;
-      };
-      --paper-button-flat-keyboard-focus: {
-        background: rgb(173, 50, 36);
-      };
-      @apply(--action-button);
     }
 
     #user-manager-prompt-message {

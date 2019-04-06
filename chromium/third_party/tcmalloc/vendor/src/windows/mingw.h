@@ -1,3 +1,4 @@
+/* -*- Mode: C; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 /* Copyright (c) 2007, Google Inc.
  * All rights reserved.
  * 
@@ -58,7 +59,13 @@
 // Some mingw distributions have a pthreads wrapper, but it doesn't
 // work as well as native windows spinlocks (at least for us).  So
 // pretend the pthreads wrapper doesn't exist, even when it does.
+#ifndef HAVE_PTHREAD_DESPITE_ASKING_FOR
 #undef HAVE_PTHREAD
+#endif
+
+#undef HAVE_FORK
+
+#define HAVE_PID_T
 
 #include "windows/port.h"
 

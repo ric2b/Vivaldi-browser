@@ -19,12 +19,12 @@
 #include "base/time/time.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_export.h"
-#include "net/quic/core/quic_bandwidth.h"
-#include "net/quic/core/quic_server_id.h"
-#include "net/quic/core/quic_versions.h"
 #include "net/socket/next_proto.h"
-#include "net/spdy/core/spdy_framer.h"  // TODO(willchan): Reconsider this.
-#include "net/spdy/core/spdy_protocol.h"
+#include "net/third_party/quic/core/quic_bandwidth.h"
+#include "net/third_party/quic/core/quic_server_id.h"
+#include "net/third_party/quic/core/quic_versions.h"
+#include "net/third_party/spdy/core/spdy_framer.h"  // TODO(willchan): Reconsider this.
+#include "net/third_party/spdy/core/spdy_protocol.h"
 #include "url/scheme_host_port.h"
 
 namespace base {
@@ -58,10 +58,10 @@ NET_EXPORT void HistogramAlternateProtocolUsage(AlternateProtocolUsage usage,
                                                 bool proxy_server_used);
 
 enum BrokenAlternateProtocolLocation {
-  BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_IMPL_JOB = 0,
+  BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_JOB = 0,
   BROKEN_ALTERNATE_PROTOCOL_LOCATION_QUIC_STREAM_FACTORY = 1,
-  BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_IMPL_JOB_ALT = 2,
-  BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_IMPL_JOB_MAIN = 3,
+  BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_JOB_ALT = 2,
+  BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_JOB_MAIN = 3,
   BROKEN_ALTERNATE_PROTOCOL_LOCATION_QUIC_HTTP_STREAM = 4,
   BROKEN_ALTERNATE_PROTOCOL_LOCATION_MAX,
 };
@@ -132,7 +132,7 @@ class NET_EXPORT_PRIVATE AlternativeServiceInfo {
   static AlternativeServiceInfo CreateQuicAlternativeServiceInfo(
       const AlternativeService& alternative_service,
       base::Time expiration,
-      const QuicTransportVersionVector& advertised_versions);
+      const quic::QuicTransportVersionVector& advertised_versions);
 
   AlternativeServiceInfo();
   ~AlternativeServiceInfo();
@@ -172,7 +172,7 @@ class NET_EXPORT_PRIVATE AlternativeServiceInfo {
   }
 
   void set_advertised_versions(
-      const QuicTransportVersionVector& advertised_versions) {
+      const quic::QuicTransportVersionVector& advertised_versions) {
     if (alternative_service_.protocol != kProtoQUIC)
       return;
 
@@ -192,14 +192,15 @@ class NET_EXPORT_PRIVATE AlternativeServiceInfo {
 
   base::Time expiration() const { return expiration_; }
 
-  const QuicTransportVersionVector& advertised_versions() const {
+  const quic::QuicTransportVersionVector& advertised_versions() const {
     return advertised_versions_;
   }
 
  private:
-  AlternativeServiceInfo(const AlternativeService& alternative_service,
-                         base::Time expiration,
-                         const QuicTransportVersionVector& advertised_versions);
+  AlternativeServiceInfo(
+      const AlternativeService& alternative_service,
+      base::Time expiration,
+      const quic::QuicTransportVersionVector& advertised_versions);
 
   AlternativeService alternative_service_;
   base::Time expiration_;
@@ -208,7 +209,7 @@ class NET_EXPORT_PRIVATE AlternativeServiceInfo {
   // by Chrome. If empty, defaults to versions used by the current instance of
   // the netstack.
   // This list MUST be sorted in ascending order.
-  QuicTransportVersionVector advertised_versions_;
+  quic::QuicTransportVersionVector advertised_versions_;
 };
 
 struct NET_EXPORT SupportsQuic {
@@ -226,7 +227,7 @@ struct NET_EXPORT SupportsQuic {
 };
 
 struct NET_EXPORT ServerNetworkStats {
-  ServerNetworkStats() : bandwidth_estimate(QuicBandwidth::Zero()) {}
+  ServerNetworkStats() : bandwidth_estimate(quic::QuicBandwidth::Zero()) {}
 
   bool operator==(const ServerNetworkStats& other) const {
     return srtt == other.srtt && bandwidth_estimate == other.bandwidth_estimate;
@@ -237,7 +238,7 @@ struct NET_EXPORT ServerNetworkStats {
   }
 
   base::TimeDelta srtt;
-  QuicBandwidth bandwidth_estimate;
+  quic::QuicBandwidth bandwidth_estimate;
 };
 
 typedef std::vector<AlternativeService> AlternativeServiceVector;
@@ -297,7 +298,7 @@ class RecentlyBrokenAlternativeServices
 
 // Max number of quic servers to store is not hardcoded and can be set.
 // Because of this, QuicServerInfoMap will not be a subclass of MRUCache.
-typedef base::MRUCache<QuicServerId, std::string> QuicServerInfoMap;
+typedef base::MRUCache<quic::QuicServerId, std::string> QuicServerInfoMap;
 
 extern const char kAlternativeServiceHeader[];
 
@@ -371,7 +372,7 @@ class NET_EXPORT HttpServerProperties {
       const url::SchemeHostPort& origin,
       const AlternativeService& alternative_service,
       base::Time expiration,
-      const QuicTransportVersionVector& advertised_versions) = 0;
+      const quic::QuicTransportVersionVector& advertised_versions) = 0;
 
   // Set alternative services for |origin|.  Previous alternative services for
   // |origin| are discarded.
@@ -437,12 +438,12 @@ class NET_EXPORT HttpServerProperties {
 
   // Save QuicServerInfo (in std::string form) for the given |server_id|.
   // Returns true if the value has changed otherwise it returns false.
-  virtual bool SetQuicServerInfo(const QuicServerId& server_id,
+  virtual bool SetQuicServerInfo(const quic::QuicServerId& server_id,
                                  const std::string& server_info) = 0;
 
   // Get QuicServerInfo (in std::string form) for the given |server_id|.
   virtual const std::string* GetQuicServerInfo(
-      const QuicServerId& server_id) = 0;
+      const quic::QuicServerId& server_id) = 0;
 
   // Returns all persistent QuicServerInfo objects.
   virtual const QuicServerInfoMap& quic_server_info_map() const = 0;

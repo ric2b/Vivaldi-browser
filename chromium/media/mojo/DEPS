@@ -1,13 +1,11 @@
 include_rules = [
   "+components/ukm/test_ukm_recorder.h",
-
-  "+mojo/common",
   "+mojo/converters",
   "+mojo/logging",
   "+mojo/public",
 
   # For changing the bad message handler for tests.
-  "+mojo/edk/embedder/embedder.h",
+  "+mojo/core/embedder/embedder.h",
 
   # TODO(xhwang): Ideally media should not worry about sandbox. Find a way to
   # remove this dependency.

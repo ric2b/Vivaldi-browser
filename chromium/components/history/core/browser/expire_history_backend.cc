@@ -13,13 +13,13 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/containers/flat_set.h"
-#include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "components/history/core/browser/history_backend_client.h"
 #include "components/history/core/browser/history_backend_notifier.h"
 #include "components/history/core/browser/history_database.h"
@@ -117,6 +117,11 @@ const int kExpirationDelaySec = 30;
 // iteration, so we want to wait longer before checking to avoid wasting CPU.
 const int kExpirationEmptyDelayMin = 5;
 
+// If the expiration timer is delayed by over an hour, then assume that the
+// machine went to sleep.
+constexpr base::TimeDelta kExpirationSleepWakeupThreshold =
+    base::TimeDelta::FromHours(1);
+
 // The minimum number of hours between checking for old on-demand favicons that
 // should be cleared.
 const int kClearOnDemandFaviconsIntervalHours = 24;
@@ -134,8 +139,12 @@ bool IsAnyURLBookmarked(HistoryBackendClient* backend_client,
 
 namespace internal {
 
-const base::Feature kClearOldOnDemandFavicons{
-    "ClearOldOnDemandFavicons", base::FEATURE_DISABLED_BY_DEFAULT};
+// Clearing old on-demand favicons is only enabled on mobile.
+#if defined(OS_ANDROID) || defined(OS_IOS)
+constexpr bool kClearOldOnDemandFaviconsEnabled = true;
+#else
+constexpr bool kClearOldOnDemandFaviconsEnabled = false;
+#endif
 
 const int kOnDemandFaviconIsOldAfterDays = 30;
 
@@ -212,7 +221,8 @@ void ExpireHistoryBackend::DeleteURLs(const std::vector<GURL>& urls) {
 
   DeleteFaviconsIfPossible(&effects);
 
-  BroadcastNotifications(&effects, DELETION_USER_INITIATED);
+  BroadcastNotifications(&effects, DELETION_USER_INITIATED,
+                         DeletionTimeRange::Invalid(), base::nullopt);
 }
 
 void ExpireHistoryBackend::ExpireHistoryBetween(
@@ -228,7 +238,7 @@ void ExpireHistoryBackend::ExpireHistoryBetween(
   if (!restrict_urls.empty()) {
     std::set<URLID> url_ids;
     for (std::set<GURL>::const_iterator url = restrict_urls.begin();
-        url != restrict_urls.end(); ++url)
+         url != restrict_urls.end(); ++url)
       url_ids.insert(main_db_->GetRowForURL(*url, nullptr));
     VisitVector all_visits;
     all_visits.swap(visits);
@@ -238,7 +248,8 @@ void ExpireHistoryBackend::ExpireHistoryBetween(
         visits.push_back(*visit);
     }
   }
-  ExpireVisits(visits);
+  DeletionTimeRange time_range(begin_time, end_time);
+  ExpireVisitsInternal(visits, time_range, restrict_urls);
 }
 
 void ExpireHistoryBackend::ExpireHistoryForTimes(
@@ -261,6 +272,13 @@ void ExpireHistoryBackend::ExpireHistoryForTimes(
 }
 
 void ExpireHistoryBackend::ExpireVisits(const VisitVector& visits) {
+  ExpireVisitsInternal(visits, DeletionTimeRange::Invalid(), {});
+}
+
+void ExpireHistoryBackend::ExpireVisitsInternal(
+    const VisitVector& visits,
+    const DeletionTimeRange& time_range,
+    const std::set<GURL>& restrict_urls) {
   if (visits.empty())
     return;
 
@@ -277,7 +295,9 @@ void ExpireHistoryBackend::ExpireVisits(const VisitVector& visits) {
   // and we don't want to leave any evidence.
   ExpireURLsForVisits(visits_and_redirects, &effects);
   DeleteFaviconsIfPossible(&effects);
-  BroadcastNotifications(&effects, DELETION_USER_INITIATED);
+  BroadcastNotifications(
+      &effects, DELETION_USER_INITIATED, time_range,
+      restrict_urls.empty() ? base::Optional<std::set<GURL>>() : restrict_urls);
 
   // Pick up any bits possibly left over.
   ParanoidExpireHistory();
@@ -291,7 +311,7 @@ void ExpireHistoryBackend::ExpireVisits(const VisitVector& visits) {
   }
 }
 
-void ExpireHistoryBackend::ExpireHistoryBefore(base::Time end_time) {
+void ExpireHistoryBackend::ExpireHistoryBeforeForTesting(base::Time end_time) {
   if (!main_db_)
     return;
 
@@ -359,16 +379,18 @@ void ExpireHistoryBackend::DeleteFaviconsIfPossible(DeleteEffects* effects) {
   }
 }
 
-void ExpireHistoryBackend::BroadcastNotifications(DeleteEffects* effects,
-                                                  DeletionType type) {
+void ExpireHistoryBackend::BroadcastNotifications(
+    DeleteEffects* effects,
+    DeletionType type,
+    const DeletionTimeRange& time_range,
+    base::Optional<std::set<GURL>> restrict_urls) {
   if (!effects->modified_urls.empty()) {
     notifier_->NotifyURLsModified(effects->modified_urls);
   }
-  if (!effects->deleted_urls.empty()) {
-    notifier_->NotifyURLsDeleted(false,
-                                 type == DELETION_EXPIRED,
-                                 effects->deleted_urls,
-                                 effects->deleted_favicons);
+  if (!effects->deleted_urls.empty() || time_range.IsValid()) {
+    notifier_->NotifyURLsDeleted(DeletionInfo(
+        time_range, type == DELETION_EXPIRED, std::move(effects->deleted_urls),
+        std::move(effects->deleted_favicons), std::move(restrict_urls)));
   }
 }
 
@@ -454,12 +476,7 @@ void ExpireHistoryBackend::ExpireURLsForVisits(const VisitVector& visits,
                                       ui::PAGE_TRANSITION_RELOAD)) {
       cur.visit_count++;
     }
-    if (ui::PageTransitionIsNewNavigation(visits[i].transition) &&
-        ((ui::PageTransitionCoreTypeIs(visits[i].transition,
-                                       ui::PAGE_TRANSITION_TYPED) &&
-          !ui::PageTransitionIsRedirect(visits[i].transition)) ||
-         ui::PageTransitionCoreTypeIs(visits[i].transition,
-                                      ui::PAGE_TRANSITION_KEYWORD_GENERATED)))
+    if (visits[i].incremented_omnibox_typed_score)
       cur.typed_count++;
   }
 
@@ -513,6 +530,7 @@ void ExpireHistoryBackend::ScheduleExpire() {
     delay = base::TimeDelta::FromSeconds(kExpirationDelaySec);
   }
 
+  expected_expiration_time_ = base::Time::Now() + delay;
   task_runner_->PostDelayedTask(
       FROM_HERE,
       base::Bind(&ExpireHistoryBackend::DoExpireIteration,
@@ -523,6 +541,21 @@ void ExpireHistoryBackend::ScheduleExpire() {
 void ExpireHistoryBackend::DoExpireIteration() {
   DCHECK(!work_queue_.empty()) << "queue has to be non-empty";
 
+  // If the timer is firing more than an hour later than expected, than the
+  // machine likely just woke from sleep/hibernation. There is potentially a lot
+  // of expiring that needs to happen. Wait for 5 minutes before starting to do
+  // any expiry, to avoid conflicting with other work that happens on waking
+  // from sleep.
+  if (base::Time::Now() - expected_expiration_time_ >
+      kExpirationSleepWakeupThreshold) {
+    task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&ExpireHistoryBackend::ScheduleExpire,
+                   weak_factory_.GetWeakPtr()),
+        base::TimeDelta::FromMinutes(kExpirationEmptyDelayMin));
+    return;
+  }
+
   const ExpiringVisitsReader* reader = work_queue_.front();
   bool more_to_expire = ExpireSomeOldHistory(
       GetCurrentExpirationTime(), reader, kNumExpirePerIteration);
@@ -532,7 +565,7 @@ void ExpireHistoryBackend::DoExpireIteration() {
     // If there are more items to expire, add the reader back to the queue, thus
     // creating a new task for future iterations.
     work_queue_.push(reader);
-  } else {
+  } else if (internal::kClearOldOnDemandFaviconsEnabled) {
     // Otherwise do a final clean-up - remove old favicons not bound to visits.
     ClearOldOnDemandFaviconsIfPossible(
         base::Time::Now() -
@@ -545,9 +578,6 @@ void ExpireHistoryBackend::DoExpireIteration() {
 void ExpireHistoryBackend::ClearOldOnDemandFaviconsIfPossible(
     base::Time expiration_threshold) {
   if (!thumb_db_)
-    return;
-
-  if (!base::FeatureList::IsEnabled(internal::kClearOldOnDemandFavicons))
     return;
 
   // Extra precaution to avoid repeated calls to GetOldOnDemandFavicons() close
@@ -578,7 +608,8 @@ void ExpireHistoryBackend::ClearOldOnDemandFaviconsIfPossible(
     effects.deleted_favicons.insert(mappings.icon_url);
   }
 
-  BroadcastNotifications(&effects, DELETION_EXPIRED);
+  BroadcastNotifications(&effects, DELETION_EXPIRED,
+                         DeletionTimeRange::Invalid(), base::nullopt);
 }
 
 bool ExpireHistoryBackend::ExpireSomeOldHistory(
@@ -602,7 +633,8 @@ bool ExpireHistoryBackend::ExpireSomeOldHistory(
   ExpireURLsForVisits(deleted_visits, &deleted_effects);
   DeleteFaviconsIfPossible(&deleted_effects);
 
-  BroadcastNotifications(&deleted_effects, DELETION_EXPIRED);
+  BroadcastNotifications(&deleted_effects, DELETION_EXPIRED,
+                         DeletionTimeRange::Invalid(), base::nullopt);
 
   return more_to_expire;
 }

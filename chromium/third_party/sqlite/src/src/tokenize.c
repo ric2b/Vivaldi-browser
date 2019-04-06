@@ -496,9 +496,9 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
   /* sqlite3ParserTrace(stdout, "parser: "); */
 #ifdef sqlite3Parser_ENGINEALWAYSONSTACK
   pEngine = &sEngine;
-  sqlite3ParserInit(pEngine);
+  sqlite3ParserInit(pEngine, pParse);
 #else
-  pEngine = sqlite3ParserAlloc(sqlite3Malloc);
+  pEngine = sqlite3ParserAlloc(sqlite3Malloc, pParse);
   if( pEngine==0 ){
     sqlite3OomFault(db);
     return SQLITE_NOMEM_BKPT;
@@ -526,7 +526,7 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
       }else{
         tokenType = TK_SEMI;
       }
-      zSql -= n;
+      n = 0;
     }
     if( tokenType>=TK_SPACE ){
       assert( tokenType==TK_SPACE || tokenType==TK_ILLEGAL );
@@ -542,7 +542,7 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
     }else{
       pParse->sLastToken.z = zSql;
       pParse->sLastToken.n = n;
-      sqlite3Parser(pEngine, tokenType, pParse->sLastToken, pParse);
+      sqlite3Parser(pEngine, tokenType, pParse->sLastToken);
       lastTokenParsed = tokenType;
       zSql += n;
       if( pParse->rc!=SQLITE_OK || db->mallocFailed ) break;

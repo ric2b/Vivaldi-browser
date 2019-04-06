@@ -5,6 +5,7 @@
 #include "base/optional.h"
 #include "extensions/common/features/complex_feature.h"
 #include "extensions/common/features/feature.h"
+#include "extensions/common/features/feature_provider.h"
 #include "extensions/common/features/simple_feature.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/json_schema_compiler/test/features_compiler_test.h"
@@ -36,8 +37,8 @@ struct FeatureComparator {
   void CompareFeature(const SimpleFeature* feature);
 
   std::string name;
-  std::vector<std::string> blacklist;
-  std::vector<std::string> whitelist;
+  std::vector<std::string> blocklist;
+  std::vector<std::string> allowlist;
   std::vector<std::string> dependencies;
   std::vector<Manifest::Type> extension_types;
   std::vector<Feature::Context> contexts;
@@ -68,8 +69,8 @@ FeatureComparator::~FeatureComparator() = default;
 void FeatureComparator::CompareFeature(const SimpleFeature* feature) {
   ASSERT_TRUE(feature);
   EXPECT_EQ(name, feature->name());
-  ExpectVectorsEqual(blacklist, feature->blacklist(), name);
-  ExpectVectorsEqual(whitelist, feature->whitelist(), name);
+  ExpectVectorsEqual(blocklist, feature->blocklist(), name);
+  ExpectVectorsEqual(allowlist, feature->allowlist(), name);
   ExpectVectorsEqual(dependencies, feature->dependencies(), name);
   ExpectVectorsEqual(extension_types, feature->extension_types(), name);
   ExpectVectorsEqual(contexts, feature->contexts(), name);
@@ -89,7 +90,8 @@ void FeatureComparator::CompareFeature(const SimpleFeature* feature) {
 }
 
 TEST(FeaturesGenerationTest, FeaturesTest) {
-  CompilerTestFeatureProvider provider;
+  FeatureProvider provider;
+  CompilerTestAddFeaturesMethod(&provider);
 
   auto GetAsSimpleFeature = [&provider](const std::string& name) {
     const Feature* feature = provider.GetFeature(name);
@@ -123,8 +125,8 @@ TEST(FeaturesGenerationTest, FeaturesTest) {
     comparator.extension_types = {Manifest::TYPE_EXTENSION,
                                   Manifest::TYPE_PLATFORM_APP};
     comparator.location = SimpleFeature::COMPONENT_LOCATION;
-    comparator.whitelist = {"aaa", "bbb"};
-    comparator.blacklist = {"zzz", "yyy"};
+    comparator.allowlist = {"aaa", "bbb"};
+    comparator.blocklist = {"zzz", "yyy"};
     comparator.component_extensions_auto_granted = false;
     comparator.CompareFeature(feature);
   }
@@ -143,7 +145,7 @@ TEST(FeaturesGenerationTest, FeaturesTest) {
     // case that it specifies its own value. Thus, we reuse |comparator|.
     feature = GetAsSimpleFeature("gamma.child");
     comparator.name = "gamma.child";
-    comparator.whitelist = {"ccc"};
+    comparator.allowlist = {"ccc"};
     comparator.platforms = {Feature::LINUX_PLATFORM};
     comparator.dependencies.clear();
     comparator.CompareFeature(feature);
@@ -153,7 +155,7 @@ TEST(FeaturesGenerationTest, FeaturesTest) {
     // other feature.
     const SimpleFeature* feature = GetAsSimpleFeature("gamma.unparented");
     FeatureComparator comparator("gamma.unparented");
-    comparator.blacklist = {"ddd"};
+    comparator.blocklist = {"ddd"};
     comparator.contexts = {Feature::UNBLESSED_EXTENSION_CONTEXT};
     comparator.channel = version_info::Channel::DEV;
     comparator.CompareFeature(feature);
@@ -257,7 +259,7 @@ TEST(FeaturesGenerationTest, FeaturesTest) {
       comparator.channel = version_info::Channel::BETA;
       comparator.contexts = {Feature::BLESSED_EXTENSION_CONTEXT};
       comparator.extension_types = {Manifest::TYPE_EXTENSION};
-      comparator.whitelist = {"aaa"};
+      comparator.allowlist = {"aaa"};
       comparator.CompareFeature(other_parent);
     }
   }

@@ -8,6 +8,7 @@ lastchange.py -- Chromium revision fetching utility.
 """
 
 import re
+import logging
 import optparse
 import os
 import subprocess
@@ -42,11 +43,12 @@ def RunGitCommand(directory, command):
                             cwd=directory,
                             shell=(sys.platform=='win32'))
     return proc
-  except OSError:
+  except OSError as e:
+    logging.error('Command %r failed: %s' % (' '.join(command), e))
     return None
 
 
-def FetchGitRevision(directory):
+def FetchGitRevision(directory, filter):
   """
   Fetch the Git hash (and Cr-Commit-Position if any) for a given directory.
 
@@ -57,11 +59,16 @@ def FetchGitRevision(directory):
   """
   hsh = ''
   git_args = ['log', '-1', '--format=%H']
+  if filter is not None:
+    git_args.append('--grep=' + filter)
   proc = RunGitCommand(directory, git_args)
   if proc:
     output = proc.communicate()[0].strip()
     if proc.returncode == 0 and output:
       hsh = output
+    else:
+      logging.error('Git error: rc=%d, output=%r' %
+                    (proc.returncode, output))
   if not hsh:
     return None
   pos = ''
@@ -76,12 +83,12 @@ def FetchGitRevision(directory):
   return VersionInfo(hsh, '%s-%s' % (hsh, pos))
 
 
-def FetchVersionInfo(directory=None):
+def FetchVersionInfo(directory=None, filter=None):
   """
   Returns the last change (as a VersionInfo object)
   from some appropriate revision control system.
   """
-  version_info = FetchGitRevision(directory)
+  version_info = FetchGitRevision(directory, filter)
   if not version_info:
     version_info = VersionInfo('0', '0')
   return version_info
@@ -165,12 +172,20 @@ def main(argv=None):
                     "file-output-related options.")
   parser.add_option("-s", "--source-dir", metavar="DIR",
                     help="Use repository in the given directory.")
+  parser.add_option("", "--filter", metavar="REGEX",
+                    help="Only use log entries where the commit message " +
+                    "matches the supplied filter regex. Defaults to " +
+                    "'^Change-Id:' to suppress local commits.",
+                    default='^Change-Id:')
   parser.add_option("--name-suffix", default=None,
                     help="Suffix for LASTCHANGE name in file.")
   opts, args = parser.parse_args(argv[1:])
 
+  logging.basicConfig(level=logging.WARNING)
+
   out_file = opts.output
   header = opts.header
+  filter=opts.filter
 
   while len(args) and out_file is None:
     if out_file is None:
@@ -185,7 +200,7 @@ def main(argv=None):
   else:
     src_dir = os.path.dirname(os.path.abspath(__file__))
 
-  version_info = FetchVersionInfo(directory=src_dir)
+  version_info = FetchVersionInfo(directory=src_dir, filter=filter)
   revision_string = version_info.revision
   if opts.revision_id_only:
     revision_string = version_info.revision_id

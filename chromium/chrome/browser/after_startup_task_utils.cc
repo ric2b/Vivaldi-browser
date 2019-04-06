@@ -25,7 +25,11 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include "ui/views/linux_ui/linux_ui.h"
+#endif
 
 using content::BrowserThread;
 using content::WebContents;
@@ -73,7 +77,7 @@ void ScheduleTask(std::unique_ptr<AfterStartupTask> queued_task) {
   scoped_refptr<base::TaskRunner> target_runner = queued_task->task_runner;
   base::Location from_here = queued_task->from_here;
   target_runner->PostDelayedTask(
-      from_here, base::BindOnce(&RunTask, base::Passed(std::move(queued_task))),
+      from_here, base::BindOnce(&RunTask, std::move(queued_task)),
       base::TimeDelta::FromSeconds(base::RandInt(kMinDelaySec, kMaxDelaySec)));
 }
 
@@ -85,9 +89,8 @@ void QueueTask(std::unique_ptr<AfterStartupTask> queued_task) {
   CHECK(queued_task->task);
 
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::BindOnce(QueueTask, base::Passed(std::move(queued_task))));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(QueueTask, std::move(queued_task)));
     return;
   }
 
@@ -121,6 +124,14 @@ void SetBrowserStartupIsComplete() {
   // The shrink_to_fit() method is not available for all of our build targets.
   base::circular_deque<AfterStartupTask*>(g_after_startup_tasks.Get())
       .swap(g_after_startup_tasks.Get());
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  // Make sure we complete the startup notification sequence, or launchers will
+  // get confused by not receiving the expected message from the main process.
+  views::LinuxUI* linux_ui = views::LinuxUI::instance();
+  if (linux_ui)
+    linux_ui->NotifyWindowManagerStartupComplete();
+#endif
 }
 
 // Observes the first visible page load and sets the startup complete

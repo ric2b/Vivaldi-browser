@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/memory/aligned_memory.h"
+#include "media/base/audio_sample_types.h"
 #include "media/base/media_shmem_export.h"
 
 namespace media {
@@ -55,6 +56,9 @@ class MEDIA_SHMEM_EXPORT AudioBus {
                                               void* data);
   static std::unique_ptr<AudioBus> WrapMemory(const AudioParameters& params,
                                               void* data);
+  static std::unique_ptr<const AudioBus> WrapReadOnlyMemory(int channels,
+                                                            int frames,
+                                                            const void* data);
   static std::unique_ptr<const AudioBus> WrapReadOnlyMemory(
       const AudioParameters& params,
       const void* data);

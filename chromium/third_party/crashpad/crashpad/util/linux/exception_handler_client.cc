@@ -92,7 +92,7 @@ int ExceptionHandlerClient::SendCrashDumpRequest(
   cmsg->cmsg_len = CMSG_LEN(sizeof(creds));
   *reinterpret_cast<ucred*>(CMSG_DATA(cmsg)) = creds;
 
-  if (sendmsg(server_sock_, &msg, MSG_NOSIGNAL) < 0) {
+  if (HANDLE_EINTR(sendmsg(server_sock_, &msg, MSG_NOSIGNAL)) < 0) {
     PLOG(ERROR) << "sendmsg";
     return errno;
   }
@@ -112,11 +112,14 @@ int ExceptionHandlerClient::WaitForCrashDumpComplete() {
         Signals::InstallDefaultHandler(SIGCHLD);
 
         pid_t pid = fork();
-        if (pid < 0) {
-          Errno error = errno;
+        if (pid <= 0) {
+          Errno error = pid < 0 ? errno : 0;
           if (!WriteFile(server_sock_, &error, sizeof(error))) {
             return errno;
           }
+        }
+
+        if (pid < 0) {
           continue;
         }
 
@@ -127,7 +130,7 @@ int ExceptionHandlerClient::WaitForCrashDumpComplete() {
           constexpr bool am_64_bit = false;
 #endif  // ARCH_CPU_64_BITS
 
-          PtraceBroker broker(server_sock_, am_64_bit);
+          PtraceBroker broker(server_sock_, getppid(), am_64_bit);
           _exit(broker.Run());
         }
 

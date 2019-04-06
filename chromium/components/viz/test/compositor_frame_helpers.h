@@ -9,6 +9,7 @@
 
 #include "base/optional.h"
 #include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/frame_deadline.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/common/surfaces/surface_id.h"
@@ -53,16 +54,18 @@ class CompositorFrameBuilder {
   CompositorFrameBuilder& AddLatencyInfos(
       std::vector<ui::LatencyInfo> latency_info);
   CompositorFrameBuilder& SetReferencedSurfaces(
-      std::vector<SurfaceId> referenced_surfaces);
+      std::vector<SurfaceRange> referenced_surfaces);
   CompositorFrameBuilder& SetActivationDependencies(
       std::vector<SurfaceId> activation_dependencies);
-  CompositorFrameBuilder& SetDeadlineInFrames(
-      base::Optional<uint32_t> deadline_in_frames);
+  CompositorFrameBuilder& SetDeadline(const FrameDeadline& deadline);
   CompositorFrameBuilder& SetFrameToken(uint32_t frame_token);
   CompositorFrameBuilder& SetContentSourceId(uint32_t content_source_id);
-  CompositorFrameBuilder& SetPresentationToken(uint32_t presentation_token);
+  CompositorFrameBuilder& SetSendFrameTokenToEmbedder(bool send);
+  CompositorFrameBuilder& SetRequestPresentationFeedback(bool request);
 
  private:
+  CompositorFrame MakeInitCompositorFrame() const;
+
   base::Optional<CompositorFrame> frame_;
   uint64_t next_render_pass_id_ = 1;
 

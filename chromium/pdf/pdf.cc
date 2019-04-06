@@ -10,81 +10,51 @@
 #include <windows.h>
 #endif
 
-#include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "pdf/out_of_process_instance.h"
-#include "ppapi/c/ppp.h"
-#include "ppapi/cpp/private/internal_module.h"
-#include "ppapi/cpp/private/pdf.h"
-#include "v8/include/v8.h"
+#include "pdf/pdf_ppapi.h"
 
 namespace chrome_pdf {
 
 namespace {
 
-bool g_sdk_initialized_via_pepper = false;
+class ScopedSdkInitializer {
+ public:
+  ScopedSdkInitializer() {}
+  ~ScopedSdkInitializer() {
+#if DCHECK_IS_ON()
+    DCHECK(initialized_);
+#endif
+    if (!IsSDKInitializedViaPepper())
+      ShutdownSDK();
+  }
+
+  // Must be called.
+  bool Init() {
+#if DCHECK_IS_ON()
+    initialized_ = true;
+#endif
+    return IsSDKInitializedViaPepper() || InitializeSDK();
+  }
+
+ private:
+#if DCHECK_IS_ON()
+  bool initialized_ = false;
+#endif
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedSdkInitializer);
+};
 
 }  // namespace
-
-PDFModule::PDFModule() = default;
-
-PDFModule::~PDFModule() {
-  if (g_sdk_initialized_via_pepper) {
-    ShutdownSDK();
-    g_sdk_initialized_via_pepper = false;
-  }
-}
-
-bool PDFModule::Init() {
-  return true;
-}
-
-pp::Instance* PDFModule::CreateInstance(PP_Instance instance) {
-  if (!g_sdk_initialized_via_pepper) {
-    v8::StartupData natives;
-    v8::StartupData snapshot;
-    pp::PDF::GetV8ExternalSnapshotData(pp::InstanceHandle(instance),
-                                       &natives.data, &natives.raw_size,
-                                       &snapshot.data, &snapshot.raw_size);
-    if (natives.data) {
-      v8::V8::SetNativesDataBlob(&natives);
-      v8::V8::SetSnapshotDataBlob(&snapshot);
-    }
-    if (!InitializeSDK())
-      return nullptr;
-    g_sdk_initialized_via_pepper = true;
-  }
-
-  return new OutOfProcessInstance(instance);
-}
-
-// Implementation of Global PPP functions ---------------------------------
-int32_t PPP_InitializeModule(PP_Module module_id,
-                             PPB_GetInterface get_browser_interface) {
-  std::unique_ptr<PDFModule> module(new PDFModule);
-  if (!module->InternalInit(module_id, get_browser_interface))
-    return PP_ERROR_FAILED;
-
-  pp::InternalSetModuleSingleton(module.release());
-  return PP_OK;
-}
-
-void PPP_ShutdownModule() {
-  delete pp::Module::Get();
-  pp::InternalSetModuleSingleton(nullptr);
-}
-
-const void* PPP_GetInterface(const char* interface_name) {
-  auto* module = pp::Module::Get();
-  return module ? module->GetPluginInterface(interface_name) : nullptr;
-}
 
 #if defined(OS_WIN)
 bool RenderPDFPageToDC(const void* pdf_buffer,
                        int buffer_size,
                        int page_number,
                        HDC dc,
-                       int dpi,
+                       int dpi_x,
+                       int dpi_y,
                        int bounds_origin_x,
                        int bounds_origin_y,
                        int bounds_width,
@@ -93,24 +63,20 @@ bool RenderPDFPageToDC(const void* pdf_buffer,
                        bool stretch_to_bounds,
                        bool keep_aspect_ratio,
                        bool center_in_bounds,
-                       bool autorotate) {
-  if (!g_sdk_initialized_via_pepper) {
-    if (!InitializeSDK()) {
-      return false;
-    }
-  }
+                       bool autorotate,
+                       bool use_color) {
+  ScopedSdkInitializer scoped_sdk_initializer;
+  if (!scoped_sdk_initializer.Init())
+    return false;
+
   PDFEngineExports* engine_exports = PDFEngineExports::Get();
   PDFEngineExports::RenderingSettings settings(
-      dpi, dpi,
+      dpi_x, dpi_y,
       pp::Rect(bounds_origin_x, bounds_origin_y, bounds_width, bounds_height),
       fit_to_bounds, stretch_to_bounds, keep_aspect_ratio, center_in_bounds,
-      autorotate);
-  bool ret = engine_exports->RenderPDFPageToDC(pdf_buffer, buffer_size,
-                                               page_number, settings, dc);
-  if (!g_sdk_initialized_via_pepper)
-    ShutdownSDK();
-
-  return ret;
+      autorotate, use_color);
+  return engine_exports->RenderPDFPageToDC(pdf_buffer, buffer_size, page_number,
+                                           settings, dc);
 }
 
 void SetPDFEnsureTypefaceCharactersAccessible(
@@ -131,17 +97,13 @@ bool GetPDFDocInfo(const void* pdf_buffer,
                    int buffer_size,
                    int* page_count,
                    double* max_page_width) {
-  if (!g_sdk_initialized_via_pepper) {
-    if (!InitializeSDK())
-      return false;
-  }
-  PDFEngineExports* engine_exports = PDFEngineExports::Get();
-  bool ret = engine_exports->GetPDFDocInfo(pdf_buffer, buffer_size, page_count,
-                                           max_page_width);
-  if (!g_sdk_initialized_via_pepper)
-    ShutdownSDK();
+  ScopedSdkInitializer scoped_sdk_initializer;
+  if (!scoped_sdk_initializer.Init())
+    return false;
 
-  return ret;
+  PDFEngineExports* engine_exports = PDFEngineExports::Get();
+  return engine_exports->GetPDFDocInfo(pdf_buffer, buffer_size, page_count,
+                                       max_page_width);
 }
 
 bool GetPDFPageSizeByIndex(const void* pdf_buffer,
@@ -149,17 +111,14 @@ bool GetPDFPageSizeByIndex(const void* pdf_buffer,
                            int page_number,
                            double* width,
                            double* height) {
-  if (!g_sdk_initialized_via_pepper) {
-    if (!chrome_pdf::InitializeSDK())
-      return false;
-  }
+  ScopedSdkInitializer scoped_sdk_initializer;
+  if (!scoped_sdk_initializer.Init())
+    return false;
+
   chrome_pdf::PDFEngineExports* engine_exports =
       chrome_pdf::PDFEngineExports::Get();
-  bool ret = engine_exports->GetPDFPageSizeByIndex(pdf_buffer, pdf_buffer_size,
-                                                   page_number, width, height);
-  if (!g_sdk_initialized_via_pepper)
-    chrome_pdf::ShutdownSDK();
-  return ret;
+  return engine_exports->GetPDFPageSizeByIndex(pdf_buffer, pdf_buffer_size,
+                                               page_number, width, height);
 }
 
 bool RenderPDFPageToBitmap(const void* pdf_buffer,
@@ -168,22 +127,20 @@ bool RenderPDFPageToBitmap(const void* pdf_buffer,
                            void* bitmap_buffer,
                            int bitmap_width,
                            int bitmap_height,
-                           int dpi,
-                           bool autorotate) {
-  if (!g_sdk_initialized_via_pepper) {
-    if (!InitializeSDK())
-      return false;
-  }
+                           int dpi_x,
+                           int dpi_y,
+                           bool autorotate,
+                           bool use_color) {
+  ScopedSdkInitializer scoped_sdk_initializer;
+  if (!scoped_sdk_initializer.Init())
+    return false;
+
   PDFEngineExports* engine_exports = PDFEngineExports::Get();
   PDFEngineExports::RenderingSettings settings(
-      dpi, dpi, pp::Rect(bitmap_width, bitmap_height), true, false, true, true,
-      autorotate);
-  bool ret = engine_exports->RenderPDFPageToBitmap(
+      dpi_x, dpi_y, pp::Rect(bitmap_width, bitmap_height), true, false, true,
+      true, autorotate, use_color);
+  return engine_exports->RenderPDFPageToBitmap(
       pdf_buffer, pdf_buffer_size, page_number, settings, bitmap_buffer);
-  if (!g_sdk_initialized_via_pepper)
-    ShutdownSDK();
-
-  return ret;
 }
 
 }  // namespace chrome_pdf

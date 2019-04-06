@@ -121,9 +121,9 @@ void ShortcutsBackend::RemoveObserver(ShortcutsBackendObserver* obs) {
 
 void ShortcutsBackend::AddOrUpdateShortcut(const base::string16& text,
                                            const AutocompleteMatch& match) {
-  // TODO(crbug.com/46623): Let's think twice about saving these.
-  if (match.type == AutocompleteMatchType::TAB_SEARCH)
-    return;
+#if DCHECK_IS_ON()
+  match.Validate();
+#endif  // DCHECK_IS_ON()
   const base::string16 text_lowercase(base::i18n::ToLower(text));
   const base::Time now(base::Time::Now());
   for (ShortcutMap::const_iterator it(
@@ -162,37 +162,40 @@ ShortcutsDatabase::Shortcut::MatchCore ShortcutsBackend::MatchToMatchCore(
     TemplateURLService* template_url_service,
     SearchTermsData* search_terms_data) {
   const AutocompleteMatch::Type match_type = GetTypeForShortcut(match.type);
-  const AutocompleteMatch& normalized_match =
-      AutocompleteMatch::IsSpecializedSearchType(match.type)
-          ? BaseSearchProvider::CreateSearchSuggestion(
-                match.search_terms_args->search_terms, match_type,
-                ui::PageTransitionCoreTypeIs(match.transition,
-                                             ui::PAGE_TRANSITION_KEYWORD),
-                match.GetTemplateURL(template_url_service, false),
-                *search_terms_data)
-          : match;
+
+  const AutocompleteMatch* normalized_match = &match;
+  AutocompleteMatch temp;
+
+  if (AutocompleteMatch::IsSpecializedSearchType(match.type)) {
+    DCHECK(match.search_terms_args);
+    temp = BaseSearchProvider::CreateSearchSuggestion(
+        match.search_terms_args->search_terms, match_type,
+        ui::PageTransitionCoreTypeIs(match.transition,
+                                     ui::PAGE_TRANSITION_KEYWORD),
+        match.GetTemplateURL(template_url_service, false), *search_terms_data);
+    normalized_match = &temp;
+  }
+
   return ShortcutsDatabase::Shortcut::MatchCore(
-      normalized_match.fill_into_edit, normalized_match.destination_url,
-      normalized_match.contents,
-      StripMatchMarkers(normalized_match.contents_class),
-      normalized_match.description,
-      StripMatchMarkers(normalized_match.description_class),
-      normalized_match.transition, match_type, normalized_match.keyword);
+      normalized_match->fill_into_edit, normalized_match->destination_url,
+      normalized_match->contents,
+      StripMatchMarkers(normalized_match->contents_class),
+      normalized_match->description,
+      StripMatchMarkers(normalized_match->description_class),
+      normalized_match->transition, match_type, normalized_match->keyword);
 }
 
 void ShortcutsBackend::ShutdownOnUIThread() {
   history_service_observer_.RemoveAll();
 }
 
-void ShortcutsBackend::OnURLsDeleted(history::HistoryService* history_service,
-                                     bool all_history,
-                                     bool expired,
-                                     const history::URLRows& deleted_rows,
-                                     const std::set<GURL>& favicon_urls) {
+void ShortcutsBackend::OnURLsDeleted(
+    history::HistoryService* history_service,
+    const history::DeletionInfo& deletion_info) {
   if (!initialized())
     return;
 
-  if (all_history) {
+  if (deletion_info.IsAllHistory()) {
     DeleteAllShortcuts();
     return;
   }
@@ -200,10 +203,11 @@ void ShortcutsBackend::OnURLsDeleted(history::HistoryService* history_service,
   ShortcutsDatabase::ShortcutIDs shortcut_ids;
   for (const auto& guid_pair : guid_map_) {
     if (std::find_if(
-            deleted_rows.begin(), deleted_rows.end(),
+            deletion_info.deleted_rows().begin(),
+            deletion_info.deleted_rows().end(),
             history::URLRow::URLRowHasURL(
                 guid_pair.second->second.match_core.destination_url)) !=
-        deleted_rows.end()) {
+        deletion_info.deleted_rows().end()) {
       shortcut_ids.push_back(guid_pair.first);
     }
   }

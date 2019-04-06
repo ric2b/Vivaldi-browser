@@ -30,17 +30,49 @@ class SyncedWindowDelegate;
 
 class Profile;
 class TabAndroid;
+class TabModelObserver;
 
 // Abstract representation of a Tab Model for Android.  Since Android does
 // not use Browser/BrowserList, this is required to allow Chrome to interact
 // with Android's Tabs and Tab Model.
 class TabModel : public content::NotificationObserver {
  public:
+  // TODO(chrisha): Clean up these enums so that the Java ones are generated
+  // from them.
+  // https://chromium.googlesource.com/chromium/src/+/lkcr/docs/android_accessing_cpp_enums_in_java.md
+
+  // Various ways tabs can be launched. See TabModel.java.
+  enum class TabLaunchType {
+    FROM_LINK,
+    FROM_EXTERNAL_APP,
+    FROM_CHROME_UI,
+    FROM_RESTORE,
+    FROM_LONGPRESS_FOREGROUND,
+    FROM_LONGPRESS_BACKGROUND,
+    FROM_REPARENTING,
+    FROM_LAUNCHER_SHORTCUT,
+    FROM_SPECULATIVE_BACKGROUND_CREATION,
+    FROM_BROWSER_ACTIONS,
+
+    // Must be last.
+    SIZE
+  };
+
+  // Various ways tabs can be selected. See TabModel.java.
+  enum class TabSelectionType {
+    FROM_CLOSE,
+    FROM_EXIT,
+    FROM_NEW,
+    FROM_USER,
+
+    // Must be last.
+    SIZE
+  };
+
   virtual Profile* GetProfile() const;
   virtual bool IsOffTheRecord() const;
   virtual sync_sessions::SyncedWindowDelegate* GetSyncedWindowDelegate() const;
-  virtual SessionID::id_type GetSessionId() const;
-  virtual const SessionID& SessionId() const;
+  virtual SessionID GetSessionId() const;
   virtual sessions::LiveTabContext* GetLiveTabContext() const;
 
   virtual int GetTabCount() const = 0;
@@ -64,6 +96,16 @@ class TabModel : public content::NotificationObserver {
 
   // Return true if we are currently restoring sessions asynchronously.
   virtual bool IsSessionRestoreInProgress() const = 0;
+
+  // Return true if this class is the currently selected in the correspond
+  // tab model selector.
+  virtual bool IsCurrentModel() const = 0;
+
+  // Adds an observer to this TabModel.
+  virtual void AddObserver(TabModelObserver* observer) = 0;
+
+  // Removes an observer from this TabModel.
+  virtual void RemoveObserver(TabModelObserver* observer) = 0;
 
  protected:
   explicit TabModel(Profile* profile, bool is_tabbed_activity);

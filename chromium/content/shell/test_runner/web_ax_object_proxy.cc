@@ -9,12 +9,12 @@
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "gin/handle.h"
-#include "third_party/WebKit/public/platform/WebFloatRect.h"
-#include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_float_rect.h"
+#include "third_party/blink/public/platform/web_point.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/transform.h"
@@ -70,6 +70,10 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("ComboBoxMenuButton");
     case blink::kWebAXRoleComplementary:
       return result.append("Complementary");
+    case blink::kWebAXRoleContentDeletion:
+      return result.append("ContentDeletion");
+    case blink::kWebAXRoleContentInsertion:
+      return result.append("ContentInsertion");
     case blink::kWebAXRoleContentInfo:
       return result.append("ContentInfo");
     case blink::kWebAXRoleDate:
@@ -92,6 +96,84 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("Directory");
     case blink::kWebAXRoleDisclosureTriangle:
       return result.append("DisclosureTriangle");
+    case blink::kWebAXRoleDocAbstract:
+      return result.append("DocAbstract");
+    case blink::kWebAXRoleDocAcknowledgments:
+      return result.append("DocAcknowledgments");
+    case blink::kWebAXRoleDocAfterword:
+      return result.append("DocAfterword");
+    case blink::kWebAXRoleDocAppendix:
+      return result.append("DocAppendix");
+    case blink::kWebAXRoleDocBackLink:
+      return result.append("DocBackLink");
+    case blink::kWebAXRoleDocBiblioEntry:
+      return result.append("DocBiblioEntry");
+    case blink::kWebAXRoleDocBibliography:
+      return result.append("DocBibliography");
+    case blink::kWebAXRoleDocBiblioRef:
+      return result.append("DocBiblioRef");
+    case blink::kWebAXRoleDocChapter:
+      return result.append("DocChapter");
+    case blink::kWebAXRoleDocColophon:
+      return result.append("DocColophon");
+    case blink::kWebAXRoleDocConclusion:
+      return result.append("DocConclusion");
+    case blink::kWebAXRoleDocCover:
+      return result.append("DocCover");
+    case blink::kWebAXRoleDocCredit:
+      return result.append("DocCredit");
+    case blink::kWebAXRoleDocCredits:
+      return result.append("DocCredits");
+    case blink::kWebAXRoleDocDedication:
+      return result.append("DocDedication");
+    case blink::kWebAXRoleDocEndnote:
+      return result.append("DocEndnote");
+    case blink::kWebAXRoleDocEndnotes:
+      return result.append("DocEndnotes");
+    case blink::kWebAXRoleDocEpigraph:
+      return result.append("DocEpigraph");
+    case blink::kWebAXRoleDocEpilogue:
+      return result.append("DocEpilogue");
+    case blink::kWebAXRoleDocErrata:
+      return result.append("DocErrata");
+    case blink::kWebAXRoleDocExample:
+      return result.append("DocExample");
+    case blink::kWebAXRoleDocFootnote:
+      return result.append("DocFootnote");
+    case blink::kWebAXRoleDocForeword:
+      return result.append("DocForeword");
+    case blink::kWebAXRoleDocGlossary:
+      return result.append("DocGlossary");
+    case blink::kWebAXRoleDocGlossRef:
+      return result.append("DocGlossRef");
+    case blink::kWebAXRoleDocIndex:
+      return result.append("DocIndex");
+    case blink::kWebAXRoleDocIntroduction:
+      return result.append("DocIntroduction");
+    case blink::kWebAXRoleDocNoteRef:
+      return result.append("DocNoteRef");
+    case blink::kWebAXRoleDocNotice:
+      return result.append("DocNotice");
+    case blink::kWebAXRoleDocPageBreak:
+      return result.append("DocPageBreak");
+    case blink::kWebAXRoleDocPageList:
+      return result.append("DocPageList");
+    case blink::kWebAXRoleDocPart:
+      return result.append("DocPart");
+    case blink::kWebAXRoleDocPreface:
+      return result.append("DocPreface");
+    case blink::kWebAXRoleDocPrologue:
+      return result.append("DocPrologue");
+    case blink::kWebAXRoleDocPullquote:
+      return result.append("DocPullquote");
+    case blink::kWebAXRoleDocQna:
+      return result.append("DocQna");
+    case blink::kWebAXRoleDocSubtitle:
+      return result.append("DocSubtitle");
+    case blink::kWebAXRoleDocTip:
+      return result.append("DocTip");
+    case blink::kWebAXRoleDocToc:
+      return result.append("DocToc");
     case blink::kWebAXRoleDocument:
       return result.append("Document");
     case blink::kWebAXRoleEmbeddedObject:
@@ -106,6 +188,12 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("Form");
     case blink::kWebAXRoleGenericContainer:
       return result.append("GenericContainer");
+    case blink::kWebAXRoleGraphicsDocument:
+      return result.append("GraphicsDocument");
+    case blink::kWebAXRoleGraphicsObject:
+      return result.append("GraphicsObject");
+    case blink::kWebAXRoleGraphicsSymbol:
+      return result.append("GraphicsSymbol");
     case blink::kWebAXRoleGrid:
       return result.append("Grid");
     case blink::kWebAXRoleGroup:
@@ -124,6 +212,14 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("InputTime");
     case blink::kWebAXRoleLabel:
       return result.append("Label");
+    case blink::kWebAXRoleLayoutTable:
+      return result.append("LayoutTable");
+    case blink::kWebAXRoleLayoutTableCell:
+      return result.append("LayoutTableCell");
+    case blink::kWebAXRoleLayoutTableColumn:
+      return result.append("LayoutTableColumn");
+    case blink::kWebAXRoleLayoutTableRow:
+      return result.append("LayoutTableRow");
     case blink::kWebAXRoleLegend:
       return result.append("Legend");
     case blink::kWebAXRoleLink:
@@ -208,8 +304,6 @@ std::string RoleToString(blink::WebAXRole role) {
       return result.append("Slider");
     case blink::kWebAXRoleSliderThumb:
       return result.append("SliderThumb");
-    case blink::kWebAXRoleSpinButtonPart:
-      return result.append("SpinButtonPart");
     case blink::kWebAXRoleSpinButton:
       return result.append("SpinButton");
     case blink::kWebAXRoleSplitter:
@@ -600,6 +694,7 @@ gin::ObjectTemplateBuilder WebAXObjectProxy::GetObjectTemplateBuilder(
       .SetProperty("isValid", &WebAXObjectProxy::IsValid)
       .SetProperty("isReadOnly", &WebAXObjectProxy::IsReadOnly)
       .SetProperty("restriction", &WebAXObjectProxy::Restriction)
+      .SetProperty("activeDescendant", &WebAXObjectProxy::ActiveDescendant)
       .SetProperty("backgroundColor", &WebAXObjectProxy::BackgroundColor)
       .SetProperty("color", &WebAXObjectProxy::Color)
       .SetProperty("colorValue", &WebAXObjectProxy::ColorValue)
@@ -649,7 +744,6 @@ gin::ObjectTemplateBuilder WebAXObjectProxy::GetObjectTemplateBuilder(
       .SetMethod("boundsForRange", &WebAXObjectProxy::BoundsForRange)
       .SetMethod("childAtIndex", &WebAXObjectProxy::ChildAtIndex)
       .SetMethod("elementAtPoint", &WebAXObjectProxy::ElementAtPoint)
-      .SetMethod("tableHeader", &WebAXObjectProxy::TableHeader)
       .SetMethod("rowHeaderAtIndex", &WebAXObjectProxy::RowHeaderAtIndex)
       .SetMethod("columnHeaderAtIndex", &WebAXObjectProxy::ColumnHeaderAtIndex)
       .SetMethod("rowIndexRange", &WebAXObjectProxy::RowIndexRange)
@@ -1028,12 +1122,13 @@ bool WebAXObjectProxy::IsModal() {
 
 bool WebAXObjectProxy::IsSelected() {
   accessibility_object_.UpdateLayoutAndCheckValidity();
-  return accessibility_object_.IsSelected();
+  return accessibility_object_.IsSelected() == blink::kWebAXSelectedStateTrue;
 }
 
 bool WebAXObjectProxy::IsSelectable() {
   accessibility_object_.UpdateLayoutAndCheckValidity();
-  return accessibility_object_.CanSetSelectedAttribute();
+  return accessibility_object_.IsSelected() !=
+         blink::kWebAXSelectedStateUndefined;
 }
 
 bool WebAXObjectProxy::IsMultiLine() {
@@ -1085,11 +1180,6 @@ bool WebAXObjectProxy::IsOffScreen() {
   return accessibility_object_.IsOffScreen();
 }
 
-bool WebAXObjectProxy::HasPopup() {
-  accessibility_object_.UpdateLayoutAndCheckValidity();
-  return accessibility_object_.AriaHasPopup();
-}
-
 bool WebAXObjectProxy::IsValid() {
   accessibility_object_.UpdateLayoutAndCheckValidity();
   return !accessibility_object_.IsDetached();
@@ -1099,6 +1189,12 @@ bool WebAXObjectProxy::IsReadOnly() {
   accessibility_object_.UpdateLayoutAndCheckValidity();
   return accessibility_object_.Restriction() ==
          blink::kWebAXRestrictionReadOnly;
+}
+
+v8::Local<v8::Object> WebAXObjectProxy::ActiveDescendant() {
+  accessibility_object_.UpdateLayoutAndCheckValidity();
+  blink::WebAXObject element = accessibility_object_.AriaActiveDescendant();
+  return factory_->GetOrCreate(element);
 }
 
 unsigned int WebAXObjectProxy::BackgroundColor() {
@@ -1152,6 +1248,26 @@ std::string WebAXObjectProxy::Current() {
       return "date";
     case blink::kWebAXAriaCurrentStateTime:
       return "time";
+    default:
+      return std::string();
+  }
+}
+
+std::string WebAXObjectProxy::HasPopup() {
+  accessibility_object_.UpdateLayoutAndCheckValidity();
+  switch (accessibility_object_.HasPopup()) {
+    case blink::kWebAXHasPopupTrue:
+      return "true";
+    case blink::kWebAXHasPopupMenu:
+      return "menu";
+    case blink::kWebAXHasPopupListbox:
+      return "listbox";
+    case blink::kWebAXHasPopupTree:
+      return "tree";
+    case blink::kWebAXHasPopupGrid:
+      return "grid";
+    case blink::kWebAXHasPopupDialog:
+      return "dialog";
     default:
       return std::string();
   }
@@ -1416,15 +1532,6 @@ v8::Local<v8::Object> WebAXObjectProxy::ElementAtPoint(int x, int y) {
   accessibility_object_.UpdateLayoutAndCheckValidity();
   blink::WebPoint point(x, y);
   blink::WebAXObject obj = accessibility_object_.HitTest(point);
-  if (obj.IsNull())
-    return v8::Local<v8::Object>();
-
-  return factory_->GetOrCreate(obj);
-}
-
-v8::Local<v8::Object> WebAXObjectProxy::TableHeader() {
-  accessibility_object_.UpdateLayoutAndCheckValidity();
-  blink::WebAXObject obj = accessibility_object_.HeaderContainerObject();
   if (obj.IsNull())
     return v8::Local<v8::Object>();
 

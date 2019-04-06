@@ -1,5 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/cr/ui/splitter.html">
 <link rel="import" href="chrome://bookmarks/api_listener.html">
 <link rel="import" href="chrome://bookmarks/command_manager.html">
@@ -19,7 +20,7 @@
   <template>
     <style>
       :host {
-        color: var(--primary-text-color);
+        color: var(--cr-primary-text-color);
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -30,6 +31,7 @@
         display: flex;
         flex-direction: row;
         flex-grow: 1;
+        overflow: hidden;
       }
 
       #splitter {
@@ -51,12 +53,11 @@
       }
 
       #sidebar {
-        -webkit-padding-start: 3px;
         display: block;
         max-width: 40%;
         min-width: var(--min-sidebar-width);
         overflow-y: auto;
-        padding-top: 8px;
+        padding: 8px 3px 0 3px;
         user-select: none;
         width: var(--min-sidebar-width);
       }

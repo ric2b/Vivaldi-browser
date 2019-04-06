@@ -12,6 +12,7 @@ class GURL;
 class HostContentSettingsMap;
 
 namespace content {
+class ResourceContext;
 struct WebPluginInfo;
 }
 
@@ -41,11 +42,23 @@ class PluginUtils {
       const GURL& plugin_url,
       bool* is_managed);
 
+  // Remember that the user has changed the Flash permission for
+  // |top_level_url|.
+  static void RememberFlashChangedForSite(
+      HostContentSettingsMap* host_content_settings_map,
+      const GURL& top_level_url);
+
   // Returns true if HTML content should be prefered, by hiding Flash from the
   // plugin list. Use this instead of
   // base::FeatureList::IsEnabled(features::kPreferHtmlOverPlugins).
   static bool ShouldPreferHtmlOverPlugins(
       const HostContentSettingsMap* host_content_settings_map);
+
+  // If there's an extension that is allowed to handle |mime_type|, returns its
+  // ID. Otherwise returns an empty string.
+  static std::string GetExtensionIdForMimeType(
+      content::ResourceContext* resource_context,
+      const std::string& mime_type);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(PluginUtils);

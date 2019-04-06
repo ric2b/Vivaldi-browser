@@ -9,7 +9,7 @@
 #include "base/threading/thread_checker.h"
 #include "services/resource_coordinator/public/cpp/frame_resource_coordinator.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_interface.h"
-#include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
+#include "services/resource_coordinator/public/mojom/coordination_unit.mojom.h"
 
 namespace resource_coordinator {
 
@@ -20,11 +20,13 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT PageResourceCoordinator
   PageResourceCoordinator(service_manager::Connector* connector);
   ~PageResourceCoordinator() override;
 
+  void SetIsLoading(bool is_loading);
   void SetVisibility(bool visible);
   void SetUKMSourceId(int64_t ukm_source_id);
   void OnFaviconUpdated();
   void OnTitleUpdated();
-  void OnMainFrameNavigationCommitted();
+  void OnMainFrameNavigationCommitted(uint64_t navigation_id,
+                                      const std::string& url);
 
   void AddFrame(const FrameResourceCoordinator& frame);
   void RemoveFrame(const FrameResourceCoordinator& frame);

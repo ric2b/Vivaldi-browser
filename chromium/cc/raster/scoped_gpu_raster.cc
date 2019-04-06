@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 #include "cc/raster/scoped_gpu_raster.h"
+
+#include "build/build_config.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
@@ -30,8 +33,11 @@ void ScopedGpuRaster::BeginGpuRaster() {
   // arguments even when tracing is disabled.
   gl->TraceBeginCHROMIUM("ScopedGpuRaster", "GpuRasterization");
 
-  class GrContext* gr_context = context_provider_->GrContext();
+#if defined(OS_ANDROID)
+  // TODO(crbug.com/832810): The following reset should not be necessary.
+  GrContext* gr_context = context_provider_->GrContext();
   gr_context->resetContext();
+#endif
 }
 
 void ScopedGpuRaster::EndGpuRaster() {

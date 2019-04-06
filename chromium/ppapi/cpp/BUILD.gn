@@ -42,6 +42,7 @@ target(cpp_target_type, "cpp") {
       # This library is distributed as a part of the SDK and as such has to
       # be a static library rather than a source set.
       complete_static_lib = true
+      configs -= [ "//build/config/compiler:thin_archive" ]
     }
   }
 }
@@ -205,8 +206,6 @@ source_set("objects") {
     "private/camera_capabilities_private.h",
     "private/camera_device_private.cc",
     "private/camera_device_private.h",
-    "private/content_decryptor_private.cc",
-    "private/content_decryptor_private.h",
     "private/ext_crx_file_system_private.cc",
     "private/ext_crx_file_system_private.h",
     "private/file_io_private.cc",
@@ -239,14 +238,10 @@ source_set("objects") {
     "private/isolated_file_system_private.h",
     "private/net_address_private.cc",
     "private/net_address_private.h",
-    "private/output_protection_private.cc",
-    "private/output_protection_private.h",
     "private/pass_file_handle.cc",
     "private/pass_file_handle.h",
     "private/pdf.cc",
     "private/pdf.h",
-    "private/platform_verification.cc",
-    "private/platform_verification.h",
     "private/tcp_server_socket_private.cc",
     "private/tcp_server_socket_private.h",
     "private/tcp_socket_private.cc",

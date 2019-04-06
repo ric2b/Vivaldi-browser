@@ -7,12 +7,14 @@
 #include <vector>
 
 #import "base/mac/foundation_util.h"
+#include "base/mac/mac_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 
 #define EXPECT_EQ_BOOL(a, b) \
   EXPECT_EQ(static_cast<bool>(a), static_cast<bool>(b))
@@ -305,9 +307,12 @@ TEST_F(SelectFileDialogMacTest, EmptyDescription) {
       GetExtensionDescriptionList(popup);
   EXPECT_EQ(3lu, extension_descriptions.size());
   // Verify that the correct system description is produced for known file types
-  // like pdf if no extension description is provided by the client.
-  EXPECT_EQ(base::ASCIIToUTF16("Portable Document Format (PDF)"),
-            extension_descriptions[0]);
+  // like pdf if no extension description is provided by the client. Search the
+  // string for "PDF" as the system may display:
+  // - Portable Document Format (PDF)
+  // - PDF document
+  EXPECT_NE(base::string16::npos,
+            extension_descriptions[0].find(base::ASCIIToUTF16("PDF")));
   EXPECT_EQ(base::ASCIIToUTF16("Image"), extension_descriptions[1]);
   // Verify the description for unknown file types if no extension description
   // is provided by the client.
@@ -366,8 +371,8 @@ TEST_F(SelectFileDialogMacTest, SelectionType) {
     std::string prompt;
   } test_cases[] = {
       {SelectFileDialog::SELECT_FOLDER, PICK_DIRS | CREATE_DIRS, "Select"},
-      {SelectFileDialog::SELECT_UPLOAD_FOLDER, PICK_DIRS | CREATE_DIRS,
-       "Upload"},
+      {SelectFileDialog::SELECT_UPLOAD_FOLDER, PICK_DIRS, "Upload"},
+      {SelectFileDialog::SELECT_EXISTING_FOLDER, PICK_DIRS, "Select"},
       {SelectFileDialog::SELECT_SAVEAS_FILE, HAS_ACCESSORY_VIEW | CREATE_DIRS,
        "Save"},
       {SelectFileDialog::SELECT_OPEN_FILE, HAS_ACCESSORY_VIEW | PICK_FILES,
@@ -416,6 +421,10 @@ TEST_F(SelectFileDialogMacTest, DialogMessage) {
 
 // Verify that multiple file dialogs are corrected handled.
 TEST_F(SelectFileDialogMacTest, MultipleDialogs) {
+  // TODO(https://crbug.com/852536): Test fails on 10.10.
+  if (base::mac::IsOS10_10())
+    return;
+
   FileDialogArguments args(GetDefaultArguments());
   SelectFileWithParams(args);
   SelectFileWithParams(args);
@@ -439,6 +448,8 @@ TEST_F(SelectFileDialogMacTest, DefaultPath) {
 
   SelectFileWithParams(args);
   NSSavePanel* panel = GetPanel();
+
+  [panel setExtensionHidden:NO];
 
   EXPECT_EQ(args.default_path.DirName(),
             base::mac::NSStringToFilePath([[panel directoryURL] path]));
@@ -464,6 +475,35 @@ TEST_F(SelectFileDialogMacTest, MultipleExtension) {
   panel = GetPanel();
   EXPECT_FALSE([panel canSelectHiddenExtension]);
   EXPECT_FALSE([panel isExtensionHidden]);
+}
+
+// Test to ensure lifetime is sound if a reference to the panel outlives the
+// delegate.
+TEST_F(SelectFileDialogMacTest, Lifetime) {
+  base::scoped_nsobject<NSSavePanel> panel;
+  @autoreleasepool {
+    auto args = GetDefaultArguments();
+    // Set a type (Save dialogs do not have a delegate).
+    args.type = SelectFileDialog::SELECT_OPEN_MULTI_FILE;
+    SelectFileWithParams(args);
+    panel.reset([GetPanel() retain]);
+
+    EXPECT_TRUE([panel isVisible]);
+    EXPECT_NE(nil, [panel delegate]);
+
+    // Newer versions of AppKit may clear out weak delegate pointers when
+    // dealloc is called on the delegate. Put a ref into the autorelease pool to
+    // simulate what happens on older versions.
+    [[[panel delegate] retain] autorelease];
+
+    ResetDialog();
+
+    // The SelectFileDialogImpl destructor invokes [panel cancel]. That should
+    // close the panel, and run the completion handler.
+    EXPECT_EQ(nil, [panel delegate]);
+    EXPECT_FALSE([panel isVisible]);
+  }
+  EXPECT_EQ(nil, [panel delegate]);
 }
 
 }  // namespace test

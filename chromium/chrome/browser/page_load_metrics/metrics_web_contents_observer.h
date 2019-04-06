@@ -22,7 +22,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/resource_type.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace content {
 class NavigationHandle;
@@ -69,6 +69,12 @@ class MetricsWebContentsObserver
     DISALLOW_COPY_AND_ASSIGN(TestingObserver);
   };
 
+  // Record a set of PageLoadFeatures directly from the browser process. This
+  // should only be used for features that were detected browser-side; features
+  // sources from the renderer should go via MetricsRenderFrameObserver.
+  static void RecordFeatureUsage(content::RenderFrameHost* render_frame_host,
+                                 const mojom::PageLoadFeatures& new_features);
+
   // Note that the returned metrics is owned by the web contents.
   static MetricsWebContentsObserver* CreateForWebContents(
       content::WebContents* web_contents,
@@ -78,6 +84,10 @@ class MetricsWebContentsObserver
       std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
   ~MetricsWebContentsObserver() override;
 
+  // Any visibility changes that occur after this method should be ignored since
+  // they are just clean up prior to destroying the WebContents instance.
+  void WebContentsWillSoonBeDestroyed();
+
   // content::WebContentsObserver implementation:
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
@@ -85,8 +95,7 @@ class MetricsWebContentsObserver
       content::NavigationHandle* navigation_handle) override;
   void NavigationStopped() override;
   void OnInputEvent(const blink::WebInputEvent& event) override;
-  void WasShown() override;
-  void WasHidden() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
   void RenderProcessGone(base::TerminationStatus status) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
@@ -119,13 +128,6 @@ class MetricsWebContentsObserver
       int net_error,
       std::unique_ptr<net::LoadTimingInfo> load_timing_info);
 
-  // Invoked on navigations where a navigation delay was added by the
-  // DelayNavigationThrottle. This is a temporary method that will be removed
-  // once the experiment is complete.
-  void OnNavigationDelayComplete(content::NavigationHandle* navigation_handle,
-                                 base::TimeDelta scheduled_delay,
-                                 base::TimeDelta actual_delay);
-
   // Flush any buffered metrics, as part of the metrics subsystem persisting
   // metrics as the application goes into the background. The application may be
   // killed at any time after this method is invoked without further
@@ -143,7 +145,8 @@ class MetricsWebContentsObserver
   void OnTimingUpdated(content::RenderFrameHost* render_frame_host,
                        const mojom::PageLoadTiming& timing,
                        const mojom::PageLoadMetadata& metadata,
-                       const mojom::PageLoadFeatures& new_features);
+                       const mojom::PageLoadFeatures& new_features,
+                       const mojom::PageLoadDataUse& new_data_use);
 
   // Informs the observers of the currently committed load that the event
   // corresponding to |event_key| has occurred. This should not be called within
@@ -155,9 +158,10 @@ class MetricsWebContentsObserver
   friend class content::WebContentsUserData<MetricsWebContentsObserver>;
 
   // page_load_metrics::mojom::PageLoadMetrics implementation.
-  void UpdateTiming(mojom::PageLoadTimingPtr timing,
-                    mojom::PageLoadMetadataPtr metadata,
-                    mojom::PageLoadFeaturesPtr new_features) override;
+  void UpdateTiming(const mojom::PageLoadTimingPtr timing,
+                    const mojom::PageLoadMetadataPtr metadata,
+                    const mojom::PageLoadFeaturesPtr new_features,
+                    const mojom::PageLoadDataUsePtr new_data_use) override;
 
   void HandleFailedNavigationForTrackedLoad(
       content::NavigationHandle* navigation_handle,
@@ -200,6 +204,9 @@ class MetricsWebContentsObserver
   bool ShouldTrackNavigation(
       content::NavigationHandle* navigation_handle) const;
 
+  void OnBrowserFeatureUsage(content::RenderFrameHost* render_frame_host,
+                             const mojom::PageLoadFeatures& new_features);
+
   // True if the web contents is currently in the foreground.
   bool in_foreground_;
 
@@ -229,6 +236,8 @@ class MetricsWebContentsObserver
   base::ObserverList<TestingObserver> testing_observers_;
   content::WebContentsFrameBindingSet<mojom::PageLoadMetrics>
       page_load_metrics_binding_;
+
+  bool web_contents_will_soon_be_destroyed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsWebContentsObserver);
 };

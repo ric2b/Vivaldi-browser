@@ -24,6 +24,14 @@ class ExtensionNavigationUIData {
   ExtensionNavigationUIData(content::NavigationHandle* navigation_handle,
                             int tab_id,
                             int window_id);
+  ExtensionNavigationUIData(content::RenderFrameHost* frame_host,
+                            int tab_id,
+                            int window_id);
+
+  static std::unique_ptr<ExtensionNavigationUIData>
+  CreateForMainFrameNavigation(content::WebContents* web_contents,
+                               int tab_id,
+                               int window_id);
 
   std::unique_ptr<ExtensionNavigationUIData> DeepCopy() const;
 
@@ -36,6 +44,12 @@ class ExtensionNavigationUIData {
   int web_view_rules_registry_id() const { return web_view_rules_registry_id_; }
 
  private:
+  ExtensionNavigationUIData(content::WebContents* web_contents,
+                            int tab_id,
+                            int window_id,
+                            int frame_id,
+                            int parent_frame_id);
+
   ExtensionApiFrameIdMap::FrameData frame_data_;
   bool is_web_view_;
   // These are only valid iff is_web_view_.

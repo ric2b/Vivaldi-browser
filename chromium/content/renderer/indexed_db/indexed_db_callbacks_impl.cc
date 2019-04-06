@@ -10,11 +10,11 @@
 #include "content/renderer/indexed_db/indexed_db_key_builders.h"
 #include "content/renderer/indexed_db/webidbcursor_impl.h"
 #include "content/renderer/indexed_db/webidbdatabase_impl.h"
-#include "third_party/WebKit/public/platform/FilePathConversion.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBCallbacks.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseError.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBMetadata.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBValue.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_callbacks.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_error.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_metadata.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_value.h"
 
 using blink::WebBlobInfo;
 using blink::WebData;
@@ -154,7 +154,7 @@ void IndexedDBCallbacksImpl::UpgradeNeeded(
   callback_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&InternalState::UpgradeNeeded,
-                     base::Unretained(internal_state_), base::Passed(&database),
+                     base::Unretained(internal_state_), std::move(database),
                      old_version, data_loss, data_loss_message, metadata));
 }
 
@@ -164,7 +164,7 @@ void IndexedDBCallbacksImpl::SuccessDatabase(
   callback_runner_->PostTask(FROM_HERE,
                              base::BindOnce(&InternalState::SuccessDatabase,
                                             base::Unretained(internal_state_),
-                                            base::Passed(&database), metadata));
+                                            std::move(database), metadata));
 }
 
 void IndexedDBCallbacksImpl::SuccessCursor(
@@ -175,8 +175,8 @@ void IndexedDBCallbacksImpl::SuccessCursor(
   callback_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&InternalState::SuccessCursor,
-                     base::Unretained(internal_state_), base::Passed(&cursor),
-                     key, primary_key, base::Passed(&value)));
+                     base::Unretained(internal_state_), std::move(cursor), key,
+                     primary_key, std::move(value)));
 }
 
 void IndexedDBCallbacksImpl::SuccessValue(
@@ -184,7 +184,7 @@ void IndexedDBCallbacksImpl::SuccessValue(
   callback_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&InternalState::SuccessValue,
-                     base::Unretained(internal_state_), base::Passed(&value)));
+                     base::Unretained(internal_state_), std::move(value)));
 }
 
 void IndexedDBCallbacksImpl::SuccessCursorContinue(
@@ -194,7 +194,7 @@ void IndexedDBCallbacksImpl::SuccessCursorContinue(
   callback_runner_->PostTask(
       FROM_HERE, base::BindOnce(&InternalState::SuccessCursorContinue,
                                 base::Unretained(internal_state_), key,
-                                primary_key, base::Passed(&value)));
+                                primary_key, std::move(value)));
 }
 
 void IndexedDBCallbacksImpl::SuccessCursorPrefetch(
@@ -204,7 +204,7 @@ void IndexedDBCallbacksImpl::SuccessCursorPrefetch(
   callback_runner_->PostTask(
       FROM_HERE, base::BindOnce(&InternalState::SuccessCursorPrefetch,
                                 base::Unretained(internal_state_), keys,
-                                primary_keys, base::Passed(&values)));
+                                primary_keys, std::move(values)));
 }
 
 void IndexedDBCallbacksImpl::SuccessArray(
@@ -212,7 +212,7 @@ void IndexedDBCallbacksImpl::SuccessArray(
   callback_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&InternalState::SuccessArray,
-                     base::Unretained(internal_state_), base::Passed(&values)));
+                     base::Unretained(internal_state_), std::move(values)));
 }
 
 void IndexedDBCallbacksImpl::SuccessKey(const IndexedDBKey& key) {

@@ -5,7 +5,6 @@
 #include "ash/display/display_configuration_controller.h"
 
 #include "ash/display/display_animator.h"
-#include "ash/display/display_animator_chromeos.h"
 #include "ash/display/display_util.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/rotator/screen_rotation_animator.h"
@@ -68,7 +67,7 @@ DisplayConfigurationController::DisplayConfigurationController(
   window_tree_host_manager_->AddObserver(this);
   if (chromeos::IsRunningAsSystemCompositor())
     limiter_.reset(new DisplayChangeLimiter);
-  display_animator_.reset(new DisplayAnimatorChromeOS());
+  display_animator_.reset(new DisplayAnimator());
 }
 
 DisplayConfigurationController::~DisplayConfigurationController() {
@@ -99,7 +98,7 @@ void DisplayConfigurationController::SetUnifiedDesktopLayoutMatrix(
   }
 }
 
-void DisplayConfigurationController::SetMirrorMode(bool mirror) {
+void DisplayConfigurationController::SetMirrorMode(bool mirror, bool throttle) {
   if (!display_manager_->is_multi_mirroring_enabled() &&
       display_manager_->num_connected_displays() > 2) {
     ShowDisplayErrorNotification(
@@ -108,7 +107,8 @@ void DisplayConfigurationController::SetMirrorMode(bool mirror) {
     return;
   }
   if (display_manager_->num_connected_displays() <= 1 ||
-      display_manager_->IsInMirrorMode() == mirror || IsLimited()) {
+      display_manager_->IsInMirrorMode() == mirror ||
+      (throttle && IsLimited())) {
     return;
   }
   SetThrottleTimeout(kCycleDisplayThrottleTimeoutMs);
@@ -150,8 +150,9 @@ display::Display::Rotation DisplayConfigurationController::GetTargetRotation(
   return display_manager_->GetDisplayInfo(display_id).GetActiveRotation();
 }
 
-void DisplayConfigurationController::SetPrimaryDisplayId(int64_t display_id) {
-  if (display_manager_->GetNumDisplays() <= 1 || IsLimited())
+void DisplayConfigurationController::SetPrimaryDisplayId(int64_t display_id,
+                                                         bool throttle) {
+  if (display_manager_->GetNumDisplays() <= 1 || (IsLimited() && throttle))
     return;
 
   SetThrottleTimeout(kSetPrimaryDisplayThrottleTimeoutMs);

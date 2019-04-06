@@ -33,9 +33,9 @@ void TabNodePool::AddTabNode(int tab_node_id) {
   free_nodes_pool_.insert(tab_node_id);
 }
 
-void TabNodePool::AssociateTabNode(int tab_node_id, SessionID::id_type tab_id) {
+void TabNodePool::AssociateTabNode(int tab_node_id, SessionID tab_id) {
   DCHECK_GT(tab_node_id, kInvalidTabNodeID);
-  DCHECK_GT(tab_id, kInvalidTabID);
+  DCHECK(tab_id.is_valid());
 
   // This is a new node association, the sync node should be free.
   // Remove node from free node pool and then associate it with the tab.
@@ -44,51 +44,54 @@ void TabNodePool::AssociateTabNode(int tab_node_id, SessionID::id_type tab_id) {
   free_nodes_pool_.erase(it);
 
   DCHECK(nodeid_tabid_map_.find(tab_node_id) == nodeid_tabid_map_.end());
-  DVLOG(1) << "Associating tab node " << tab_node_id << " with tab " << tab_id;
-  nodeid_tabid_map_[tab_node_id] = tab_id;
+  DVLOG(1) << "Associating tab node " << tab_node_id << " with tab "
+           << tab_id.id();
+  nodeid_tabid_map_.emplace(tab_node_id, tab_id);
   tabid_nodeid_map_[tab_id] = tab_node_id;
 }
 
-bool TabNodePool::GetTabNodeForTab(SessionID::id_type tab_id,
-                                   int* tab_node_id) {
-  if (tabid_nodeid_map_.find(tab_id) != tabid_nodeid_map_.end()) {
-    *tab_node_id = tabid_nodeid_map_[tab_id];
-    return true;
+int TabNodePool::GetTabNodeIdFromTabId(SessionID tab_id) const {
+  TabIDToTabNodeIDMap::const_iterator it = tabid_nodeid_map_.find(tab_id);
+  if (it != tabid_nodeid_map_.end()) {
+    return it->second;
   }
-
-  if (free_nodes_pool_.empty()) {
-    // Tab pool has no free nodes, allocate new one.
-    *tab_node_id = ++max_used_tab_node_id_;
-    AddTabNode(*tab_node_id);
-
-    AssociateTabNode(*tab_node_id, tab_id);
-    return false;
-  } else {
-    // Return the next free node.
-    *tab_node_id = *free_nodes_pool_.begin();
-    AssociateTabNode(*tab_node_id, tab_id);
-    return true;
-  }
+  return kInvalidTabNodeID;
 }
 
-void TabNodePool::FreeTab(int tab_id) {
-  DCHECK_GT(tab_id, kInvalidTabID);
+void TabNodePool::FreeTab(SessionID tab_id) {
+  DCHECK(tab_id.is_valid());
   TabIDToTabNodeIDMap::iterator it = tabid_nodeid_map_.find(tab_id);
   if (it == tabid_nodeid_map_.end()) {
     return;  // Already freed.
   }
 
   int tab_node_id = it->second;
-  DVLOG(1) << "Freeing tab " << tab_id << " at node " << tab_node_id;
+  DVLOG(1) << "Freeing tab " << tab_id.id() << " at node " << tab_node_id;
   nodeid_tabid_map_.erase(nodeid_tabid_map_.find(tab_node_id));
   tabid_nodeid_map_.erase(it);
   free_nodes_pool_.insert(tab_node_id);
 }
 
-void TabNodePool::ReassociateTabNode(int tab_node_id,
-                                     SessionID::id_type tab_id) {
+int TabNodePool::AssociateWithFreeTabNode(SessionID tab_id) {
+  DCHECK_EQ(0U, tabid_nodeid_map_.count(tab_id));
+
+  int tab_node_id;
+  if (free_nodes_pool_.empty()) {
+    // Tab pool has no free nodes, allocate new one.
+    tab_node_id = ++max_used_tab_node_id_;
+    AddTabNode(tab_node_id);
+  } else {
+    // Return the next free node.
+    tab_node_id = *free_nodes_pool_.begin();
+  }
+
+  AssociateTabNode(tab_node_id, tab_id);
+  return tab_node_id;
+}
+
+void TabNodePool::ReassociateTabNode(int tab_node_id, SessionID tab_id) {
   DCHECK_GT(tab_node_id, kInvalidTabNodeID);
-  DCHECK_GT(tab_id, kInvalidTabID);
+  DCHECK(tab_id.is_valid());
 
   auto tabid_it = tabid_nodeid_map_.find(tab_id);
   if (tabid_it != tabid_nodeid_map_.end()) {
@@ -112,12 +115,12 @@ void TabNodePool::ReassociateTabNode(int tab_node_id,
   AssociateTabNode(tab_node_id, tab_id);
 }
 
-SessionID::id_type TabNodePool::GetTabIdFromTabNodeId(int tab_node_id) const {
+SessionID TabNodePool::GetTabIdFromTabNodeId(int tab_node_id) const {
   TabNodeIDToTabIDMap::const_iterator it = nodeid_tabid_map_.find(tab_node_id);
   if (it != nodeid_tabid_map_.end()) {
     return it->second;
   }
-  return kInvalidTabID;
+  return SessionID::InvalidValue();
 }
 
 void TabNodePool::CleanupTabNodes(std::set<int>* deleted_node_ids) {
@@ -135,6 +138,21 @@ void TabNodePool::CleanupTabNodes(std::set<int>* deleted_node_ids) {
       }
     }
   }
+}
+
+void TabNodePool::DeleteTabNode(int tab_node_id) {
+  TabNodeIDToTabIDMap::iterator it = nodeid_tabid_map_.find(tab_node_id);
+  if (it == nodeid_tabid_map_.end()) {
+    free_nodes_pool_.erase(tab_node_id);
+    return;
+  }
+
+  DCHECK_EQ(0U, free_nodes_pool_.count(tab_node_id));
+
+  SessionID tab_id = it->second;
+  DVLOG(1) << "Deleting node " << tab_node_id << " with tab ID " << tab_id;
+  tabid_nodeid_map_.erase(tab_id);
+  nodeid_tabid_map_.erase(it);
 }
 
 // Clear tab pool.
@@ -155,6 +173,14 @@ bool TabNodePool::Empty() const {
 
 bool TabNodePool::Full() {
   return nodeid_tabid_map_.empty();
+}
+
+std::set<int> TabNodePool::GetAllTabNodeIds() const {
+  std::set<int> tab_node_ids = free_nodes_pool_;
+  for (const auto& entry : nodeid_tabid_map_) {
+    tab_node_ids.insert(entry.first);
+  }
+  return tab_node_ids;
 }
 
 }  // namespace sync_sessions

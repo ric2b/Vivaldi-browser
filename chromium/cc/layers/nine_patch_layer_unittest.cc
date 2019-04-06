@@ -5,11 +5,9 @@
 #include "cc/layers/nine_patch_layer.h"
 
 #include "cc/animation/animation_host.h"
-#include "cc/resources/resource_provider.h"
 #include "cc/resources/scoped_ui_resource.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_layer_tree_host_client.h"
-#include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -53,7 +51,7 @@ TEST_F(NinePatchLayerTest, SetLayerProperties) {
 
   layer_tree_host_->SetRootLayer(test_layer);
   Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-  EXPECT_EQ(test_layer->GetLayerTreeHostForTesting(), layer_tree_host_.get());
+  EXPECT_EQ(test_layer->layer_tree_host(), layer_tree_host_.get());
 
   test_layer->Update();
 

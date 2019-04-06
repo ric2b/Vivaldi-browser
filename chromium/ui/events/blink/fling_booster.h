@@ -5,10 +5,11 @@
 #ifndef UI_EVENTS_BLINK_FLING_BOOSTER_H_
 #define UI_EVENTS_BLINK_FLING_BOOSTER_H_
 
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
 
 namespace ui {
 
+// TODO(dcheng): This class should probably be using base::TimeTicks internally.
 class FlingBooster {
  public:
   FlingBooster(const gfx::Vector2dF& fling_velocity,

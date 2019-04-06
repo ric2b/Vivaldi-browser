@@ -15,8 +15,6 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
@@ -89,8 +87,9 @@ static scoped_refptr<Extension> CreateExtension(
     bool background_permission) {
   base::DictionaryValue manifest;
   manifest.SetString(extensions::manifest_keys::kVersion, "1.0.0.0");
+  manifest.SetInteger(extensions::manifest_keys::kManifestVersion, 2);
   manifest.SetString(extensions::manifest_keys::kName, name);
-  auto permissions = base::MakeUnique<base::ListValue>();
+  auto permissions = std::make_unique<base::ListValue>();
   if (background_permission) {
     permissions->AppendString("background");
   }
@@ -118,7 +117,7 @@ std::string GenerateUniqueExtensionName() {
   return output.str();
 }
 
-void AddBackgroundPermission(ExtensionService* service,
+void AddBackgroundPermission(extensions::ExtensionService* service,
                              Extension* extension) {
   if (BackgroundApplicationListModel::IsBackgroundApp(*extension,
                                                       service->profile())) {
@@ -128,11 +127,11 @@ void AddBackgroundPermission(ExtensionService* service,
   scoped_refptr<Extension> temporary =
       CreateExtension(GenerateUniqueExtensionName(), true);
   extensions::PermissionsUpdater(service->profile())
-      .AddPermissions(extension,
-                      temporary->permissions_data()->active_permissions());
+      .AddPermissionsForTesting(
+          *extension, temporary->permissions_data()->active_permissions());
 }
 
-void RemoveBackgroundPermission(ExtensionService* service,
+void RemoveBackgroundPermission(extensions::ExtensionService* service,
                                 Extension* extension) {
   if (!BackgroundApplicationListModel::IsBackgroundApp(*extension,
                                                        service->profile())) {
@@ -328,7 +327,7 @@ TEST_F(BackgroundApplicationListModelTest, LateExtensionSystemReady) {
 typedef std::set<scoped_refptr<Extension> > ExtensionCollection;
 
 namespace {
-void AddExtension(ExtensionService* service,
+void AddExtension(extensions::ExtensionService* service,
                   ExtensionCollection* extensions,
                   BackgroundApplicationListModel* model,
                   size_t* expected,
@@ -352,7 +351,7 @@ void AddExtension(ExtensionService* service,
   ASSERT_EQ(*expected, model->size());
 }
 
-void RemoveExtension(ExtensionService* service,
+void RemoveExtension(extensions::ExtensionService* service,
                      ExtensionCollection* extensions,
                      BackgroundApplicationListModel* model,
                      size_t* expected,
@@ -388,7 +387,7 @@ void RemoveExtension(ExtensionService* service,
   }
 }
 
-void TogglePermission(ExtensionService* service,
+void TogglePermission(extensions::ExtensionService* service,
                       ExtensionCollection* extensions,
                       BackgroundApplicationListModel* model,
                       size_t* expected,

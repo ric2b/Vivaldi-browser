@@ -55,6 +55,25 @@ class SearchIPCRouter : public content::WebContentsObserver,
     // Called when the EmbeddedSearch wants to undo all Most Visited deletions.
     virtual void OnUndoAllMostVisitedDeletions() = 0;
 
+    // Called when the EmbeddedSearch wants to add a custom link.
+    virtual bool OnAddCustomLink(const GURL& url, const std::string& title) = 0;
+
+    // Called when the EmbeddedSearch wants to update a custom link.
+    virtual bool OnUpdateCustomLink(const GURL& url,
+                                    const GURL& new_url,
+                                    const std::string& new_title) = 0;
+
+    // Called when the EmbeddedSearch wants to delete a custom link.
+    virtual bool OnDeleteCustomLink(const GURL& url) = 0;
+
+    // Called when the EmbeddedSearch wants to undo the previous custom link
+    // action.
+    virtual void OnUndoCustomLinkAction() = 0;
+
+    // Called when the EmbeddedSearch wants to delete all custom links and
+    // use Most Visited sites instead.
+    virtual void OnResetCustomLinks() = 0;
+
     // Called to signal that an event has occurred on the New Tab Page at a
     // particular time since navigation start.
     virtual void OnLogEvent(NTPLoggingEventType event,
@@ -79,6 +98,24 @@ class SearchIPCRouter : public content::WebContentsObserver,
     // Called when the EmbeddedSearch wants to verify that history sync is
     // enabled.
     virtual bool HistorySyncCheck() = 0;
+
+    // Called when a custom background is selected on the NTP.
+    virtual void OnSetCustomBackgroundURL(const GURL& url) = 0;
+
+    // Called when a custom background with attributions is selected on the NTP.
+    // background_url: Url of the background image.
+    // attribution_line_1: First attribution line for the image.
+    // attribution_line_2: Second attribution line for the image.
+    // action_url: Url to learn more about the backgrounds image.
+    virtual void OnSetCustomBackgroundURLWithAttributions(
+        const GURL& background_url,
+        const std::string& attribution_line_1,
+        const std::string& attribution_line_2,
+        const GURL& action_url) = 0;
+
+    // Called to open the file select dialog for selecting a
+    // NTP background image.
+    virtual void OnSelectLocalBackgroundImage() = 0;
   };
 
   // An interface to be implemented by consumers of SearchIPCRouter objects to
@@ -94,6 +131,11 @@ class SearchIPCRouter : public content::WebContentsObserver,
     virtual bool ShouldProcessDeleteMostVisitedItem() = 0;
     virtual bool ShouldProcessUndoMostVisitedDeletion() = 0;
     virtual bool ShouldProcessUndoAllMostVisitedDeletions() = 0;
+    virtual bool ShouldProcessAddCustomLink() = 0;
+    virtual bool ShouldProcessUpdateCustomLink() = 0;
+    virtual bool ShouldProcessDeleteCustomLink() = 0;
+    virtual bool ShouldProcessUndoCustomLinkAction() = 0;
+    virtual bool ShouldProcessResetCustomLinks() = 0;
     virtual bool ShouldProcessLogEvent() = 0;
     virtual bool ShouldProcessPasteIntoOmnibox(bool is_active_tab) = 0;
     virtual bool ShouldProcessChromeIdentityCheck() = 0;
@@ -102,6 +144,9 @@ class SearchIPCRouter : public content::WebContentsObserver,
     virtual bool ShouldSendOmniboxFocusChanged() = 0;
     virtual bool ShouldSendMostVisitedItems() = 0;
     virtual bool ShouldSendThemeBackgroundInfo() = 0;
+    virtual bool ShouldProcessSetCustomBackgroundURL() = 0;
+    virtual bool ShouldProcessSetCustomBackgroundURLWithAttributions() = 0;
+    virtual bool ShouldProcessSelectLocalBackgroundImage() = 0;
   };
 
   // Creates chrome::mojom::EmbeddedSearchClient connections on request.
@@ -149,6 +194,20 @@ class SearchIPCRouter : public content::WebContentsObserver,
   void DeleteMostVisitedItem(int page_seq_no, const GURL& url) override;
   void UndoMostVisitedDeletion(int page_seq_no, const GURL& url) override;
   void UndoAllMostVisitedDeletions(int page_seq_no) override;
+  void AddCustomLink(int page_seq_no,
+                     const GURL& url,
+                     const std::string& title,
+                     AddCustomLinkCallback callback) override;
+  void UpdateCustomLink(int page_seq_no,
+                        const GURL& url,
+                        const GURL& new_url,
+                        const std::string& new_title,
+                        UpdateCustomLinkCallback callback) override;
+  void DeleteCustomLink(int page_seq_no,
+                        const GURL& url,
+                        DeleteCustomLinkCallback callback) override;
+  void UndoCustomLinkAction(int page_seq_no) override;
+  void ResetCustomLinks(int page_seq_no) override;
   void LogEvent(int page_seq_no,
                 NTPLoggingEventType event,
                 base::TimeDelta time) override;
@@ -165,7 +224,13 @@ class SearchIPCRouter : public content::WebContentsObserver,
                            ChromeIdentityCheckCallback callback) override;
   void HistorySyncCheck(int page_seq_no,
                         HistorySyncCheckCallback callback) override;
-
+  void SetCustomBackgroundURL(const GURL& url) override;
+  void SetCustomBackgroundURLWithAttributions(
+      const GURL& background_url,
+      const std::string& attribution_line_1,
+      const std::string& attribution_line_2,
+      const GURL& action_url) override;
+  void SelectLocalBackgroundImage() override;
   void set_embedded_search_client_factory_for_testing(
       std::unique_ptr<EmbeddedSearchClientFactory> factory) {
     embedded_search_client_factory_ = std::move(factory);

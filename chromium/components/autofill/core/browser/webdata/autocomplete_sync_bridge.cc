@@ -20,12 +20,14 @@
 #include "components/sync/model/entity_data.h"
 #include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
+#include "components/sync/model_impl/client_tag_based_model_type_processor.h"
 #include "components/sync/model_impl/sync_metadata_store_change_list.h"
 #include "net/base/escape.h"
 
 using base::Optional;
 using base::Time;
 using sync_pb::AutofillSpecifics;
+using syncer::ClientTagBasedModelTypeProcessor;
 using syncer::EntityChange;
 using syncer::EntityChangeList;
 using syncer::EntityData;
@@ -281,24 +283,24 @@ void AutocompleteSyncBridge::CreateForWebDataServiceAndBackend(
     AutofillWebDataService* web_data_service,
     AutofillWebDataBackend* web_data_backend) {
   web_data_service->GetDBUserData()->SetUserData(
-      UserDataKey(), std::make_unique<AutocompleteSyncBridge>(
-                         web_data_backend,
-                         base::BindRepeating(&ModelTypeChangeProcessor::Create,
-                                             base::RepeatingClosure())));
+      UserDataKey(),
+      std::make_unique<AutocompleteSyncBridge>(
+          web_data_backend,
+          std::make_unique<ClientTagBasedModelTypeProcessor>(
+              syncer::AUTOFILL, /*dump_stack=*/base::RepeatingClosure())));
 }
 
 // static
-base::WeakPtr<ModelTypeSyncBridge> AutocompleteSyncBridge::FromWebDataService(
+ModelTypeSyncBridge* AutocompleteSyncBridge::FromWebDataService(
     AutofillWebDataService* web_data_service) {
   return static_cast<AutocompleteSyncBridge*>(
-             web_data_service->GetDBUserData()->GetUserData(UserDataKey()))
-      ->AsWeakPtr();
+      web_data_service->GetDBUserData()->GetUserData(UserDataKey()));
 }
 
 AutocompleteSyncBridge::AutocompleteSyncBridge(
     AutofillWebDataBackend* backend,
-    const ChangeProcessorFactory& change_processor_factory)
-    : ModelTypeSyncBridge(change_processor_factory, syncer::AUTOFILL),
+    std::unique_ptr<ModelTypeChangeProcessor> change_processor)
+    : ModelTypeSyncBridge(std::move(change_processor)),
       web_data_backend_(backend),
       scoped_observer_(this) {
   DCHECK(web_data_backend_);
@@ -368,8 +370,8 @@ void AutocompleteSyncBridge::AutocompleteSyncBridge::GetData(
   DCHECK(thread_checker_.CalledOnValidThread());
   std::vector<AutofillEntry> entries;
   if (!GetAutofillTable()->GetAllAutofillEntries(&entries)) {
-    change_processor()->ReportError(FROM_HERE,
-                                    "Failed to load entries from table.");
+    change_processor()->ReportError(
+        {FROM_HERE, "Failed to load entries from table."});
     return;
   }
 
@@ -382,16 +384,16 @@ void AutocompleteSyncBridge::AutocompleteSyncBridge::GetData(
       batch->Put(key, CreateEntityData(entry));
     }
   }
-  callback.Run(std::move(batch));
+  std::move(callback).Run(std::move(batch));
 }
 
-void AutocompleteSyncBridge::GetAllData(DataCallback callback) {
+void AutocompleteSyncBridge::GetAllDataForDebugging(DataCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   std::vector<AutofillEntry> entries;
   if (!GetAutofillTable()->GetAllAutofillEntries(&entries)) {
-    change_processor()->ReportError(FROM_HERE,
-                                    "Failed to load entries from table.");
+    change_processor()->ReportError(
+        {FROM_HERE, "Failed to load entries from table."});
     return;
   }
 
@@ -399,7 +401,7 @@ void AutocompleteSyncBridge::GetAllData(DataCallback callback) {
   for (const AutofillEntry& entry : entries) {
     batch->Put(GetStorageKeyFromModel(entry.key()), CreateEntityData(entry));
   }
-  callback.Run(std::move(batch));
+  std::move(callback).Run(std::move(batch));
 }
 
 void AutocompleteSyncBridge::ActOnLocalChanges(
@@ -422,7 +424,7 @@ void AutocompleteSyncBridge::ActOnLocalChanges(
             &date_last_used);
         if (!success) {
           change_processor()->ReportError(
-              FROM_HERE, "Failed reading autofill entry from WebDatabase.");
+              {FROM_HERE, "Failed reading autofill entry from WebDatabase."});
           return;
         }
 
@@ -439,21 +441,21 @@ void AutocompleteSyncBridge::ActOnLocalChanges(
   }
 
   if (Optional<ModelError> error = metadata_change_list->TakeError())
-    change_processor()->ReportError(error.value());
+    change_processor()->ReportError(*error);
 }
 
 void AutocompleteSyncBridge::LoadMetadata() {
   if (!web_data_backend_ || !web_data_backend_->GetDatabase() ||
       !GetAutofillTable()) {
-    change_processor()->ReportError(FROM_HERE,
-                                    "Failed to load AutofillWebDatabase.");
+    change_processor()->ReportError(
+        {FROM_HERE, "Failed to load AutofillWebDatabase."});
     return;
   }
 
   auto batch = std::make_unique<syncer::MetadataBatch>();
   if (!GetAutofillTable()->GetAllSyncMetadata(syncer::AUTOFILL, batch.get())) {
     change_processor()->ReportError(
-        FROM_HERE, "Failed reading autofill metadata from WebDatabase.");
+        {FROM_HERE, "Failed reading autofill metadata from WebDatabase."});
     return;
   }
   change_processor()->ModelReadyToSync(std::move(batch));

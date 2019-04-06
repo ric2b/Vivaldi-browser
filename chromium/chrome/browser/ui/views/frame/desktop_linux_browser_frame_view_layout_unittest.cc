@@ -7,11 +7,11 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/nav_button_provider.h"
-#include "chrome/browser/ui/views/tabs/tab.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/test/views_test_base.h"
 
 namespace {
 
@@ -58,14 +58,18 @@ class TestLayoutDelegate : public OpaqueBrowserFrameViewLayoutDelegate {
   bool IsFullscreen() const override { return false; }
   bool IsTabStripVisible() const override { return true; }
   int GetTabStripHeight() const override {
-    return Tab::GetMinimumInactiveSize().height();
+    return GetLayoutConstant(TAB_HEIGHT);
   }
   bool IsToolbarVisible() const override { return true; }
   gfx::Size GetTabstripPreferredSize() const override {
     return gfx::Size(78, 29);
   }
+  gfx::Size GetNewTabButtonPreferredSize() const override {
+    return gfx::Size(28, 28);
+  }
   int GetTopAreaHeight() const override { return 0; }
   bool UseCustomFrame() const override { return true; }
+  bool EverHasVisibleBackgroundTabShapes() const override { return false; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestLayoutDelegate);
@@ -131,13 +135,13 @@ class TestNavButtonProvider : public views::NavButtonProvider {
 
 }  // namespace
 
-class DesktopLinuxBrowserFrameViewLayoutTest : public views::ViewsTestBase {
+class DesktopLinuxBrowserFrameViewLayoutTest : public ChromeViewsTestBase {
  public:
   DesktopLinuxBrowserFrameViewLayoutTest() {}
   ~DesktopLinuxBrowserFrameViewLayoutTest() override {}
 
   void SetUp() override {
-    views::ViewsTestBase::SetUp();
+    ChromeViewsTestBase::SetUp();
 
     delegate_.reset(new TestLayoutDelegate);
     nav_button_provider_ = std::make_unique<::TestNavButtonProvider>();
@@ -161,7 +165,7 @@ class DesktopLinuxBrowserFrameViewLayoutTest : public views::ViewsTestBase {
   void TearDown() override {
     widget_->CloseNow();
 
-    views::ViewsTestBase::TearDown();
+    ChromeViewsTestBase::TearDown();
   }
 
  protected:

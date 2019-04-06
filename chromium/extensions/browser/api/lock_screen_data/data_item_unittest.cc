@@ -12,8 +12,8 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/values.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/test/test_browser_context.h"
@@ -150,7 +150,7 @@ class DataItemTest : public testing::Test {
 
   void DrainTaskRunner() {
     base::RunLoop run_loop;
-    task_runner()->PostTaskAndReply(FROM_HERE, base::Bind(&base::DoNothing),
+    task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
                                     run_loop.QuitClosure());
     run_loop.Run();
   }
@@ -171,7 +171,7 @@ class DataItemTest : public testing::Test {
     ListBuilder app_handlers_builder;
     app_handlers_builder.Append(DictionaryBuilder()
                                     .Set("action", "new_note")
-                                    .SetBoolean("enabled_on_lock_screen", true)
+                                    .Set("enabled_on_lock_screen", true)
                                     .Build());
     scoped_refptr<const Extension> extension =
         ExtensionBuilder()
@@ -555,9 +555,8 @@ TEST_F(DataItemTest, RepeatedWrite) {
   std::vector<char> first_write = {'f', 'i', 'l', 'e', '_', '1'};
   std::vector<char> second_write = {'f', 'i', 'l', 'e', '_', '2'};
 
-  writer->Write(
-      first_write,
-      base::Bind(&WriteCallback, base::Bind(&base::DoNothing), &write_result));
+  writer->Write(first_write,
+                base::Bind(&WriteCallback, base::DoNothing(), &write_result));
   EXPECT_EQ(OperationResult::kSuccess,
             WriteItemAndWaitForResult(writer.get(), second_write));
 

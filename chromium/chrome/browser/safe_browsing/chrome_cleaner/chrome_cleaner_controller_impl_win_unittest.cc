@@ -15,6 +15,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/test/multiprocess_test.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -47,7 +48,7 @@ using ::testing::Values;
 using ::testing::_;
 using CrashPoint = MockChromeCleanerProcess::CrashPoint;
 using IdleReason = ChromeCleanerController::IdleReason;
-using RegistryKeysReporting = MockChromeCleanerProcess::RegistryKeysReporting;
+using ItemsReporting = MockChromeCleanerProcess::ItemsReporting;
 using State = ChromeCleanerController::State;
 using UserResponse = ChromeCleanerController::UserResponse;
 
@@ -226,7 +227,8 @@ enum class UwsFoundStatus {
 typedef std::tuple<CleanerProcessStatus,
                    CrashPoint,
                    UwsFoundStatus,
-                   RegistryKeysReporting,
+                   ItemsReporting,
+                   ItemsReporting,
                    UserResponse>
     ChromeCleanerControllerTestParams;
 
@@ -242,11 +244,12 @@ class ChromeCleanerControllerTest
 
   void SetUp() override {
     std::tie(process_status_, crash_point_, uws_found_status_,
-             registry_keys_reporting_, user_response_) = GetParam();
+             registry_keys_reporting_, extensions_reporting_, user_response_) =
+        GetParam();
 
     cleaner_process_options_.SetReportedResults(
         uws_found_status_ != UwsFoundStatus::kNoUwsFound,
-        registry_keys_reporting_);
+        registry_keys_reporting_, extensions_reporting_);
     cleaner_process_options_.set_reboot_required(
         uws_found_status_ == UwsFoundStatus::kUwsFoundRebootRequired);
     cleaner_process_options_.set_crash_point(crash_point_);
@@ -366,7 +369,12 @@ class ChromeCleanerControllerTest
 
   bool ExpectedRegistryKeysReported() {
     return ExpectedOnInfectedCalled() &&
-           registry_keys_reporting_ == RegistryKeysReporting::kReported;
+           registry_keys_reporting_ == ItemsReporting::kReported;
+  }
+
+  bool ExpectedExtensionsReported() {
+    return ExpectedOnInfectedCalled() &&
+           extensions_reporting_ == ItemsReporting::kReported;
   }
 
   bool ExpectedPromptAccepted() {
@@ -436,7 +444,8 @@ class ChromeCleanerControllerTest
   CleanerProcessStatus process_status_;
   MockChromeCleanerProcess::CrashPoint crash_point_;
   UwsFoundStatus uws_found_status_;
-  RegistryKeysReporting registry_keys_reporting_;
+  ItemsReporting registry_keys_reporting_;
+  ItemsReporting extensions_reporting_;
   ChromeCleanerController::UserResponse user_response_;
 
   MockChromeCleanerProcess::Options cleaner_process_options_;
@@ -483,6 +492,8 @@ TEST_P(ChromeCleanerControllerTest, WithMockCleanerProcess) {
   ASSERT_TRUE(profile1);
   Profile* profile2 = profile_manager.CreateTestingProfile(kTestProfileName2);
   ASSERT_TRUE(profile2);
+
+  MockChromeCleanerProcess::AddMockExtensionsToProfile(profile1);
 
   const int num_profiles =
       profile_manager.profile_manager()->GetNumberOfProfiles();
@@ -572,6 +583,26 @@ TEST_P(ChromeCleanerControllerTest, WithMockCleanerProcess) {
         UnorderedElementsAreArray(scanner_results_on_infected.registry_keys()));
   }
 
+  std::set<base::string16> extension_names_infected;
+  scanner_results_on_infected.FetchExtensionNames(profile1,
+                                                  &extension_names_infected);
+  std::set<base::string16> extension_names_cleaning;
+  scanner_results_on_cleaning.FetchExtensionNames(profile1,
+                                                  &extension_names_cleaning);
+// Extension names only reported on Windows Chrome build.
+#if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
+  EXPECT_EQ(!extension_names_infected.empty(), ExpectedExtensionsReported());
+  EXPECT_EQ(!extension_names_cleaning.empty(),
+            ExpectedExtensionsReported() && ExpectedOnCleaningCalled());
+  if (!extension_names_cleaning.empty()) {
+    EXPECT_THAT(extension_names_cleaning,
+                UnorderedElementsAreArray(extension_names_infected));
+  }
+#else
+  EXPECT_TRUE(extension_names_infected.empty());
+  EXPECT_TRUE(extension_names_cleaning.empty());
+#endif
+
   EXPECT_EQ(ExpectedRebootFlowStarted(), reboot_flow_started_);
 
   std::vector<Profile*> expected_tagged;
@@ -638,18 +669,17 @@ std::ostream& operator<<(std::ostream& out, UwsFoundStatus status) {
   }
 }
 
-std::ostream& operator<<(std::ostream& out,
-                         RegistryKeysReporting registry_keys_reporting) {
-  switch (registry_keys_reporting) {
-    case RegistryKeysReporting::kUnsupported:
+std::ostream& operator<<(std::ostream& out, ItemsReporting items_reporting) {
+  switch (items_reporting) {
+    case ItemsReporting::kUnsupported:
       return out << "kUnsupported";
-    case RegistryKeysReporting::kNotReported:
+    case ItemsReporting::kNotReported:
       return out << "kNotReported";
-    case RegistryKeysReporting::kReported:
+    case ItemsReporting::kReported:
       return out << "kReported";
     default:
       NOTREACHED();
-      return out << "UnknownRegistryKeysReporting";
+      return out << "UnknownItemsReporting";
   }
 }
 
@@ -681,7 +711,8 @@ struct ChromeCleanerControllerTestParamsToString {
     param_name << std::get<1>(info.param) << "_";
     param_name << std::get<2>(info.param) << "_";
     param_name << std::get<3>(info.param) << "_";
-    param_name << std::get<4>(info.param);
+    param_name << std::get<4>(info.param) << "_";
+    param_name << std::get<5>(info.param);
     return param_name.str();
   }
 };
@@ -702,9 +733,12 @@ INSTANTIATE_TEST_CASE_P(
             Values(UwsFoundStatus::kNoUwsFound,
                    UwsFoundStatus::kUwsFoundRebootRequired,
                    UwsFoundStatus::kUwsFoundNoRebootRequired),
-            Values(RegistryKeysReporting::kUnsupported,
-                   RegistryKeysReporting::kNotReported,
-                   RegistryKeysReporting::kReported),
+            Values(ItemsReporting::kUnsupported,
+                   ItemsReporting::kNotReported,
+                   ItemsReporting::kReported),
+            Values(ItemsReporting::kUnsupported,
+                   ItemsReporting::kNotReported,
+                   ItemsReporting::kReported),
             Values(UserResponse::kAcceptedWithLogs,
                    UserResponse::kAcceptedWithoutLogs,
                    UserResponse::kDenied,
@@ -716,12 +750,10 @@ INSTANTIATE_TEST_CASE_P(
 // is no cleaner activity, so it's enough to check the state after a signal.
 //
 // Parameters:
-//  - user_initiated_cleanups_enabled_: if the UserInitiatedCleanups feature
-//        is enabled.
 //  - initial_state_: the state of the controller before receiving a signal from
 //        the reporter.
 using ChromeCleanerControllerReporterInteractionTestParams =
-    std::tuple<bool, ChromeCleanerController::State>;
+    ChromeCleanerController::State;
 
 class ChromeCleanerControllerReporterInteractionTest
     : public testing::TestWithParam<
@@ -729,7 +761,7 @@ class ChromeCleanerControllerReporterInteractionTest
       public ChromeCleanerControllerDelegate {
  public:
   void SetUp() override {
-    std::tie(user_initiated_cleanups_enabled_, initial_state_) = GetParam();
+    initial_state_ = GetParam();
 
     ChromeCleanerControllerImpl::ResetInstanceForTesting();
     controller_ = ChromeCleanerControllerImpl::GetInstance();
@@ -746,10 +778,6 @@ class ChromeCleanerControllerReporterInteractionTest
     ChromeCleanerControllerImpl::ResetInstanceForTesting();
   }
 
-  bool UserInitiatedCleanupsFeatureEnabled() override {
-    return user_initiated_cleanups_enabled_;
-  }
-
   void ExpectNoStateChangeOnReporterSequenceDone(
       SwReporterInvocationResult reporter_result) {
     controller_->OnReporterSequenceDone(reporter_result);
@@ -760,8 +788,7 @@ class ChromeCleanerControllerReporterInteractionTest
       SwReporterInvocationResult reporter_result,
       ChromeCleanerController::IdleReason idle_reason) {
     controller_->OnReporterSequenceDone(reporter_result);
-    if (user_initiated_cleanups_enabled_ &&
-        initial_state_ == ChromeCleanerController::State::kReporterRunning) {
+    if (initial_state_ == ChromeCleanerController::State::kReporterRunning) {
       EXPECT_EQ(ChromeCleanerController::State::kIdle, controller_->state());
       EXPECT_EQ(idle_reason, controller_->idle_reason());
     } else {
@@ -774,7 +801,6 @@ class ChromeCleanerControllerReporterInteractionTest
   // last.
   content::TestBrowserThreadBundle thread_bundle_;
 
-  bool user_initiated_cleanups_enabled_;
   ChromeCleanerController::State initial_state_;
 
   ChromeCleanerControllerImpl* controller_ = nullptr;
@@ -784,8 +810,7 @@ class ChromeCleanerControllerReporterInteractionTest
 TEST_P(ChromeCleanerControllerReporterInteractionTest,
        OnReporterSequenceStarted) {
   controller_->OnReporterSequenceStarted();
-  EXPECT_EQ(user_initiated_cleanups_enabled_ &&
-                    (initial_state_ == ChromeCleanerController::State::kIdle)
+  EXPECT_EQ(initial_state_ == ChromeCleanerController::State::kIdle
                 ? ChromeCleanerController::State::kReporterRunning
                 : initial_state_,
             controller_->state());
@@ -859,31 +884,15 @@ std::ostream& operator<<(std::ostream& out,
   }
 }
 
-// ::testing::PrintToStringParamName does not format tuples as a valid test
-// name, so this functor can be used to get each element in the tuple
-// explicitly and format them using the above operator<< overrides.
-struct ChromeCleanerControllerReporterInteractionTestParamsToString {
-  std::string operator()(
-      const ::testing::TestParamInfo<
-          ChromeCleanerControllerReporterInteractionTestParams>& info) const {
-    std::ostringstream param_name;
-    param_name << std::get<0>(info.param) << "_";
-    param_name << std::get<1>(info.param);
-    return param_name.str();
-  }
-};
-
 INSTANTIATE_TEST_CASE_P(
     All,
     ChromeCleanerControllerReporterInteractionTest,
-    Combine(Bool(),
-            Values(ChromeCleanerController::State::kIdle,
-                   ChromeCleanerController::State::kReporterRunning,
-                   ChromeCleanerController::State::kScanning,
-                   ChromeCleanerController::State::kInfected,
-                   ChromeCleanerController::State::kCleaning,
-                   ChromeCleanerController::State::kRebootRequired)),
-    ChromeCleanerControllerReporterInteractionTestParamsToString());
+    Values(ChromeCleanerController::State::kIdle,
+           ChromeCleanerController::State::kReporterRunning,
+           ChromeCleanerController::State::kScanning,
+           ChromeCleanerController::State::kInfected,
+           ChromeCleanerController::State::kCleaning,
+           ChromeCleanerController::State::kRebootRequired));
 
 }  // namespace
 }  // namespace safe_browsing

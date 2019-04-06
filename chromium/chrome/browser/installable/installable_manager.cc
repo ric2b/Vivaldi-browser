@@ -14,12 +14,12 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/manifest_icon_downloader.h"
-#include "content/public/browser/manifest_icon_selector.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/url_util.h"
-#include "third_party/WebKit/public/platform/WebDisplayMode.h"
+#include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
+#include "third_party/blink/public/common/manifest/web_display_mode.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/shortcut_helper.h"
@@ -81,7 +81,7 @@ bool IsContentSecure(content::WebContents* web_contents) {
 
 // Returns true if |manifest| specifies a PNG icon with IconPurpose::ANY and of
 // height and width >= kMinimumPrimaryIconSizeInPx (or size "any").
-bool DoesManifestContainRequiredIcon(const content::Manifest& manifest) {
+bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest) {
   for (const auto& icon : manifest.icons) {
     // The type field is optional. If it isn't present, fall back on checking
     // the src extension, and allow the icon if the extension ends with png.
@@ -92,7 +92,7 @@ bool DoesManifestContainRequiredIcon(const content::Manifest& manifest) {
       continue;
 
     if (!base::ContainsValue(icon.purpose,
-                             content::Manifest::Icon::IconPurpose::ANY)) {
+                             blink::Manifest::ImageResource::Purpose::ANY)) {
       continue;
     }
 
@@ -115,9 +115,6 @@ bool IsParamsForPwaCheck(const InstallableParams& params) {
          params.valid_primary_icon;
 }
 
-// Used for a no-op call to GetData.
-void DoNothingCallback(const InstallableData& data) {}
-
 }  // namespace
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(InstallableManager);
@@ -134,11 +131,11 @@ InstallableManager::IconProperty& InstallableManager::IconProperty::operator=(
 
 InstallableManager::InstallableManager(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
-      metrics_(base::MakeUnique<InstallableMetrics>()),
-      eligibility_(base::MakeUnique<EligiblityProperty>()),
-      manifest_(base::MakeUnique<ManifestProperty>()),
-      valid_manifest_(base::MakeUnique<ValidManifestProperty>()),
-      worker_(base::MakeUnique<ServiceWorkerProperty>()),
+      metrics_(std::make_unique<InstallableMetrics>()),
+      eligibility_(std::make_unique<EligiblityProperty>()),
+      manifest_(std::make_unique<ManifestProperty>()),
+      valid_manifest_(std::make_unique<ValidManifestProperty>()),
+      worker_(std::make_unique<ServiceWorkerProperty>()),
       service_worker_context_(nullptr),
       has_pwa_check_(false),
       weak_factory_(this) {
@@ -208,7 +205,7 @@ void InstallableManager::RecordAddToHomescreenManifestAndIconTimeout() {
     params.has_worker = true;
     params.valid_primary_icon = true;
     params.wait_for_worker = true;
-    GetData(params, base::Bind(&DoNothingCallback));
+    GetData(params, base::DoNothing());
   }
 }
 
@@ -333,11 +330,11 @@ void InstallableManager::Reset() {
   task_queue_.Reset();
   has_pwa_check_ = false;
 
-  metrics_ = base::MakeUnique<InstallableMetrics>();
-  eligibility_ = base::MakeUnique<EligiblityProperty>();
-  manifest_ = base::MakeUnique<ManifestProperty>();
-  valid_manifest_ = base::MakeUnique<ValidManifestProperty>();
-  worker_ = base::MakeUnique<ServiceWorkerProperty>();
+  metrics_ = std::make_unique<InstallableMetrics>();
+  eligibility_ = std::make_unique<EligiblityProperty>();
+  manifest_ = std::make_unique<ManifestProperty>();
+  valid_manifest_ = std::make_unique<ValidManifestProperty>();
+  worker_ = std::make_unique<ServiceWorkerProperty>();
 
   OnResetData();
 }
@@ -390,7 +387,7 @@ void InstallableManager::WorkOnTask() {
     // don't cache a missing service worker error to ensure we always check
     // again.
     if (worker_error() == NO_MATCHING_SERVICE_WORKER)
-      worker_ = base::MakeUnique<ServiceWorkerProperty>();
+      worker_ = std::make_unique<ServiceWorkerProperty>();
 
     task_queue_.Next();
 
@@ -446,7 +443,7 @@ void InstallableManager::FetchManifest() {
 }
 
 void InstallableManager::OnDidGetManifest(const GURL& manifest_url,
-                                          const content::Manifest& manifest) {
+                                          const blink::Manifest& manifest) {
   if (!GetWebContents())
     return;
 
@@ -474,7 +471,7 @@ void InstallableManager::CheckManifestValid() {
 }
 
 bool InstallableManager::IsManifestValidForWebApp(
-    const content::Manifest& manifest) {
+    const blink::Manifest& manifest) {
   if (manifest.IsEmpty()) {
     valid_manifest_->error = MANIFEST_EMPTY;
     return false;
@@ -535,8 +532,8 @@ void InstallableManager::OnDidCheckHasServiceWorker(
     case content::ServiceWorkerCapability::NO_SERVICE_WORKER:
       InstallableTask& task = task_queue_.Current();
       if (task.params.wait_for_worker) {
-        // Wait for ServiceWorkerContextObserver::OnRegistrationStored. Set the
-        // param |wait_for_worker| to false so we only wait once per task.
+        // Wait for ServiceWorkerContextObserver::OnRegistrationCompleted. Set
+        // the param |wait_for_worker| to false so we only wait once per task.
         task.params.wait_for_worker = false;
         OnWaitingForServiceWorker();
         task_queue_.PauseCurrent();
@@ -562,7 +559,7 @@ void InstallableManager::CheckAndFetchBestIcon(int ideal_icon_size_in_px,
   IconProperty& icon = icons_[purpose];
   icon.fetched = true;
 
-  GURL icon_url = content::ManifestIconSelector::FindBestMatchingIcon(
+  GURL icon_url = blink::ManifestIconSelector::FindBestMatchingIcon(
       manifest().icons, ideal_icon_size_in_px, minimum_icon_size_in_px,
       purpose);
 
@@ -600,7 +597,7 @@ void InstallableManager::OnIconFetched(const GURL icon_url,
   WorkOnTask();
 }
 
-void InstallableManager::OnRegistrationStored(const GURL& pattern) {
+void InstallableManager::OnRegistrationCompleted(const GURL& pattern) {
   // If the scope doesn't match we keep waiting.
   if (!content::ServiceWorkerContext::ScopeMatches(pattern,
                                                    manifest().start_url)) {
@@ -647,7 +644,7 @@ const GURL& InstallableManager::manifest_url() const {
   return manifest_->url;
 }
 
-const content::Manifest& InstallableManager::manifest() const {
+const blink::Manifest& InstallableManager::manifest() const {
   return manifest_->manifest;
 }
 

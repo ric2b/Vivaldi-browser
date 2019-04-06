@@ -8,7 +8,10 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/mojo/accelerated_widget_struct_traits.h"
 #include "ui/gfx/mojo/buffer_types_struct_traits.h"
+#include "ui/gfx/mojo/presentation_feedback.mojom.h"
+#include "ui/gfx/mojo/presentation_feedback_struct_traits.h"
 #include "ui/gfx/mojo/traits_test_service.mojom.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/selection_bound.h"
@@ -18,12 +21,21 @@ namespace gfx {
 
 namespace {
 
-gfx::AcceleratedWidget castToAcceleratedWidget(int i) {
+gfx::AcceleratedWidget CastToAcceleratedWidget(int i) {
 #if defined(USE_OZONE) || defined(USE_X11) || defined(OS_MACOSX)
   return static_cast<gfx::AcceleratedWidget>(i);
 #else
   return reinterpret_cast<gfx::AcceleratedWidget>(i);
 #endif
+}
+
+// Test StructTrait serialization and deserialization for copyable type. |input|
+// will be serialized and then deserialized into |output|.
+template <class MojomType, class Type>
+void SerializeAndDeserialize(const Type& input, Type* output) {
+  MojomType::DeserializeFromMessage(
+      mojo::Message(MojomType::SerializeAsMessage(&input).TakeMojoMessage()),
+      output);
 }
 
 class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
@@ -49,15 +61,10 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
     std::move(callback).Run(t);
   }
 
-  void EchoAcceleratedWidget(const AcceleratedWidget& t,
-                             EchoAcceleratedWidgetCallback callback) override {
-    std::move(callback).Run(t);
-  }
-
   void EchoGpuMemoryBufferHandle(
-      const GpuMemoryBufferHandle& handle,
+      GpuMemoryBufferHandle handle,
       EchoGpuMemoryBufferHandleCallback callback) override {
-    std::move(callback).Run(handle);
+    std::move(callback).Run(std::move(handle));
   }
 
   base::MessageLoop loop_;
@@ -130,18 +137,18 @@ TEST_F(StructTraitsTest, Transform) {
   EXPECT_EQ(col4row4, output.matrix().get(3, 3));
 }
 
-// AcceleratedWidgets can only be sent between processes on X11, Ozone, Win
-#if defined(OS_WIN) || defined(USE_OZONE) || defined(USE_X11)
+// AcceleratedWidgets can only be sent between processes on some platforms.
+#if defined(OS_WIN) || defined(USE_OZONE) || defined(USE_X11) || \
+    defined(OS_MACOSX)
 #define MAYBE_AcceleratedWidget AcceleratedWidget
 #else
 #define MAYBE_AcceleratedWidget DISABLED_AcceleratedWidget
 #endif
 
 TEST_F(StructTraitsTest, MAYBE_AcceleratedWidget) {
-  gfx::AcceleratedWidget input(castToAcceleratedWidget(1001));
-  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  gfx::AcceleratedWidget input(CastToAcceleratedWidget(1001));
   gfx::AcceleratedWidget output;
-  proxy->EchoAcceleratedWidget(input, &output);
+  SerializeAndDeserialize<gfx::mojom::AcceleratedWidget>(input, &output);
   EXPECT_EQ(input, output);
 }
 
@@ -162,7 +169,7 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   gfx::GpuMemoryBufferHandle output;
-  proxy->EchoGpuMemoryBufferHandle(handle, &output);
+  proxy->EchoGpuMemoryBufferHandle(std::move(handle), &output);
   EXPECT_EQ(gfx::SHARED_MEMORY_BUFFER, output.type);
   EXPECT_EQ(kId, output.id);
   EXPECT_EQ(kOffset, output.offset);
@@ -172,13 +179,16 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
   EXPECT_TRUE(output_memory.Map(1024));
 
 #if defined(OS_LINUX)
+  gfx::GpuMemoryBufferHandle handle2;
   const uint64_t kSize = kOffset + kStride;
   const uint64_t kModifier = 2;
-  handle.type = gfx::NATIVE_PIXMAP;
-  handle.id = kId;
-  handle.native_pixmap_handle.planes.emplace_back(kOffset, kStride, kSize,
-                                                  kModifier);
-  proxy->EchoGpuMemoryBufferHandle(handle, &output);
+  handle2.type = gfx::NATIVE_PIXMAP;
+  handle2.id = kId;
+  handle2.offset = kOffset;
+  handle2.stride = kStride;
+  handle2.native_pixmap_handle.planes.emplace_back(kOffset, kStride, kSize,
+                                                   kModifier);
+  proxy->EchoGpuMemoryBufferHandle(std::move(handle2), &output);
   EXPECT_EQ(gfx::NATIVE_PIXMAP, output.type);
   EXPECT_EQ(kId, output.id);
   ASSERT_EQ(1u, output.native_pixmap_handle.planes.size());
@@ -216,6 +226,20 @@ TEST_F(StructTraitsTest, BufferUsage) {
     BufferUsageTraits::FromMojom(BufferUsageTraits::ToMojom(input), &output);
     EXPECT_EQ(output, input);
   }
+}
+
+TEST_F(StructTraitsTest, PresentationFeedback) {
+  base::TimeTicks timestamp =
+      base::TimeTicks() + base::TimeDelta::FromSeconds(12);
+  base::TimeDelta interval = base::TimeDelta::FromMilliseconds(23);
+  uint32_t flags =
+      PresentationFeedback::kVSync | PresentationFeedback::kZeroCopy;
+  PresentationFeedback input{timestamp, interval, flags};
+  PresentationFeedback output;
+  SerializeAndDeserialize<gfx::mojom::PresentationFeedback>(input, &output);
+  EXPECT_EQ(timestamp, output.timestamp);
+  EXPECT_EQ(interval, output.interval);
+  EXPECT_EQ(flags, output.flags);
 }
 
 }  // namespace gfx

@@ -3,11 +3,12 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//extensions/features/features.gni")
+import("//build/config/jumbo.gni")
+import("//extensions/buildflags/buildflags.gni")
 
 assert(enable_extensions)
 
-source_set("renderer") {
+jumbo_source_set("renderer") {
   sources = [
     "activity_log_converter_strategy.cc",
     "activity_log_converter_strategy.h",
@@ -51,6 +52,8 @@ source_set("renderer") {
     "bindings/api_last_error.h",
     "bindings/api_request_handler.cc",
     "bindings/api_request_handler.h",
+    "bindings/api_response_validator.cc",
+    "bindings/api_response_validator.h",
     "bindings/api_signature.cc",
     "bindings/api_signature.h",
     "bindings/api_type_reference_map.cc",
@@ -67,6 +70,8 @@ source_set("renderer") {
     "bindings/exception_handler.h",
     "bindings/js_runner.cc",
     "bindings/js_runner.h",
+    "bindings/listener_tracker.cc",
+    "bindings/listener_tracker.h",
     "blob_native_handler.cc",
     "blob_native_handler.h",
     "chrome_setting.cc",
@@ -132,6 +137,10 @@ source_set("renderer") {
     "guest_view/mime_handler_view/mime_handler_view_container.h",
     "i18n_custom_bindings.cc",
     "i18n_custom_bindings.h",
+    "i18n_hooks_delegate.cc",
+    "i18n_hooks_delegate.h",
+    "i18n_hooks_util.cc",
+    "i18n_hooks_util.h",
     "id_generator_custom_bindings.cc",
     "id_generator_custom_bindings.h",
     "injection_host.cc",
@@ -188,6 +197,7 @@ source_set("renderer") {
     "resources/extension.css",
     "resources/extension_custom_bindings.js",
     "resources/extension_fonts.css",
+    "resources/feedback_private_custom_bindings.js",
     "resources/file_entry_binding_util.js",
     "resources/file_system_custom_bindings.js",
     "resources/greasemonkey_api.js",
@@ -307,7 +317,7 @@ source_set("renderer") {
     "//extensions/common/api",
     "//gin",
     "//skia",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//third_party/cld_3/src/src:cld_3",
   ]
 
@@ -348,7 +358,7 @@ source_set("renderer") {
   }
 }
 
-static_library("unit_test_support") {
+jumbo_static_library("unit_test_support") {
   # Sources that are shared between chrome-based renderer unit tests and
   # top-level extensions renderer unit tests.
   testonly = true
@@ -389,6 +399,7 @@ source_set("unit_tests") {
   sources = [
     "activity_log_converter_strategy_unittest.cc",
     "api_activity_logger_unittest.cc",
+    "bindings/api_binding_bridge_unittest.cc",
     "bindings/api_binding_hooks_test_delegate.cc",
     "bindings/api_binding_hooks_test_delegate.h",
     "bindings/api_binding_js_util_unittest.cc",
@@ -400,6 +411,7 @@ source_set("unit_tests") {
     "bindings/api_invocation_errors_unittest.cc",
     "bindings/api_last_error_unittest.cc",
     "bindings/api_request_handler_unittest.cc",
+    "bindings/api_response_validator_unittest.cc",
     "bindings/api_signature_unittest.cc",
     "bindings/argument_spec_builder.cc",
     "bindings/argument_spec_builder.h",
@@ -408,6 +420,7 @@ source_set("unit_tests") {
     "bindings/declarative_event_unittest.cc",
     "bindings/event_emitter_unittest.cc",
     "bindings/exception_handler_unittest.cc",
+    "bindings/listener_tracker_unittest.cc",
     "event_unittest.cc",
     "feature_cache_unittest.cc",
     "gc_callback_unittest.cc",
@@ -446,7 +459,7 @@ source_set("unit_tests") {
     "//ipc:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//ui/base",
   ]
 

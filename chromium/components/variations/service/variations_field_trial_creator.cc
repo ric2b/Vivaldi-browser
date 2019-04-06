@@ -6,8 +6,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -16,6 +19,7 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
@@ -33,6 +37,7 @@
 #include "ui/base/device_form_factor.h"
 
 namespace variations {
+namespace {
 
 // Maximum age permitted for a variations seed, in days.
 const int kMaxVariationsSeedAgeDays = 30;
@@ -76,15 +81,6 @@ Study::FormFactor GetCurrentFormFactor() {
   return Study::DESKTOP;
 }
 
-// Gets the hardware class and returns it as a string. This returns an empty
-// string if the client is not ChromeOS.
-std::string GetHardwareClass() {
-#if defined(OS_CHROMEOS)
-  return base::SysInfo::GetLsbReleaseBoard();
-#endif  // OS_CHROMEOS
-  return std::string();
-}
-
 // Returns the date that should be used by the VariationsSeedProcessor to do
 // expiry and start date checks.
 base::Time GetReferenceDateForExpiryChecks(PrefService* local_state) {
@@ -99,11 +95,25 @@ base::Time GetReferenceDateForExpiryChecks(PrefService* local_state) {
 }
 
 // Wrapper around channel checking, used to enable channel mocking for
-// testing. If the current browser channel is not UNKNOWN, this will return
-// that channel value. Otherwise, if the fake channel flag is provided, this
-// will return the fake channel. Failing that, this will return the UNKNOWN
-// channel.
+// testing. If a fake channel flag is provided, it will take precedence.
+// Otherwise, this will return the current browser channel (which could be
+// UNKNOWN).
 Study::Channel GetChannelForVariations(version_info::Channel product_channel) {
+  const std::string forced_channel =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kFakeVariationsChannel);
+  if (!forced_channel.empty()) {
+    if (forced_channel == "stable")
+      return Study::STABLE;
+    if (forced_channel == "beta")
+      return Study::BETA;
+    if (forced_channel == "dev")
+      return Study::DEV;
+    if (forced_channel == "canary")
+      return Study::CANARY;
+    DVLOG(1) << "Invalid channel provided: " << forced_channel;
+  }
+
   switch (product_channel) {
     case version_info::Channel::CANARY:
       return Study::CANARY;
@@ -114,20 +124,9 @@ Study::Channel GetChannelForVariations(version_info::Channel product_channel) {
     case version_info::Channel::STABLE:
       return Study::STABLE;
     case version_info::Channel::UNKNOWN:
-      break;
+      return Study::UNKNOWN;
   }
-  const std::string forced_channel =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kFakeVariationsChannel);
-  if (forced_channel == "stable")
-    return Study::STABLE;
-  if (forced_channel == "beta")
-    return Study::BETA;
-  if (forced_channel == "dev")
-    return Study::DEV;
-  if (forced_channel == "canary")
-    return Study::CANARY;
-  DVLOG(1) << "Invalid channel provided: " << forced_channel;
+  NOTREACHED();
   return Study::UNKNOWN;
 }
 
@@ -138,13 +137,39 @@ void RecordCreateTrialsSeedExpiry(VariationsSeedExpiry expiry_check_result) {
                             VARIATIONS_SEED_EXPIRY_ENUM_SIZE);
 }
 
+// Records the loaded seed's age to an UMA histogram.
+void RecordSeedFreshness(base::TimeDelta seed_age) {
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Variations.SeedFreshness", seed_age.InMinutes(),
+                              1, base::TimeDelta::FromDays(30).InMinutes(), 50);
+}
+
+// If an invalid command-line to force field trials was specified, exit the
+// browser with a helpful error message, so that the user can correct their
+// mistake.
+void ExitWithMessage(const std::string& message) {
+  puts(message.c_str());
+  exit(1);
+}
+
+}  // namespace
+
 VariationsFieldTrialCreator::VariationsFieldTrialCreator(
     PrefService* local_state,
     VariationsServiceClient* client,
     const UIStringOverrider& ui_string_overrider)
+    : VariationsFieldTrialCreator(local_state,
+                                  client,
+                                  ui_string_overrider,
+                                  nullptr) {}
+
+VariationsFieldTrialCreator::VariationsFieldTrialCreator(
+    PrefService* local_state,
+    VariationsServiceClient* client,
+    const UIStringOverrider& ui_string_overrider,
+    std::unique_ptr<SeedResponse> initial_seed)
     : client_(client),
       ui_string_overrider_(ui_string_overrider),
-      seed_store_(local_state),
+      seed_store_(local_state, std::move(initial_seed)),
       create_trials_from_seed_called_(false),
       has_platform_override_(false),
       platform_override_(Study::PLATFORM_WINDOWS) {}
@@ -172,17 +197,23 @@ bool VariationsFieldTrialCreator::CreateTrialsFromSeed(
 
   base::TimeTicks start_time = base::TimeTicks::Now();
 
-  const base::Version current_version(version_info::GetVersionNumber());
+  const base::Version& current_version = version_info::GetVersion();
   if (!current_version.IsValid())
     return false;
+
   std::unique_ptr<ClientFilterableState> client_filterable_state =
       GetClientFilterableStateForVersion(current_version);
-
   VariationsSeed seed;
+  bool run_in_safe_mode = safe_seed_manager->ShouldRunInSafeMode() &&
+                          LoadSafeSeed(&seed, client_filterable_state.get());
+
   std::string seed_data;
   std::string base64_seed_signature;
-  if (!LoadSeed(&seed, &seed_data, &base64_seed_signature))
+  if (!run_in_safe_mode && !LoadSeed(&seed, &seed_data, &base64_seed_signature))
     return false;
+
+  UMA_HISTOGRAM_BOOLEAN("Variations.SafeMode.FellBackToSafeMode2",
+                        run_in_safe_mode);
 
   // Note that passing |&ui_string_overrider_| via base::Unretained below is
   // safe because the callback is executed synchronously. It is not possible to
@@ -195,9 +226,14 @@ bool VariationsFieldTrialCreator::CreateTrialsFromSeed(
       low_entropy_provider.get(), feature_list);
 
   // Store into the |safe_seed_manager| the combined server and client data used
-  // to create the field trials.
-  safe_seed_manager->SetActiveSeedState(seed_data, base64_seed_signature,
-                                        std::move(client_filterable_state));
+  // to create the field trials. But, as an optimization, skip this step when
+  // running in safe mode – once running in safe mode, there can never be a need
+  // to save the active state to the safe seed prefs.
+  if (!run_in_safe_mode) {
+    safe_seed_manager->SetActiveSeedState(seed_data, base64_seed_signature,
+                                          std::move(client_filterable_state),
+                                          seed_store_.GetLastFetchTime());
+  }
 
   UMA_HISTOGRAM_TIMES("Variations.SeedProcessingTime",
                       base::TimeTicks::Now() - start_time);
@@ -214,10 +250,8 @@ VariationsFieldTrialCreator::GetClientFilterableStateForVersion(
   state->version = version;
   state->channel = GetChannelForVariations(client_->GetChannel());
   state->form_factor = GetCurrentFormFactor();
-  state->platform = (has_platform_override_)
-                        ? platform_override_
-                        : ClientFilterableState::GetCurrentPlatform();
-  state->hardware_class = GetHardwareClass();
+  state->platform = GetPlatform();
+  state->hardware_class = GetShortHardwareClass();
 #if defined(OS_ANDROID)
   // This is set on Android only currently, because the IsLowEndDevice() API
   // on other platforms has no intrinsic meaning outside of a field trial that
@@ -316,30 +350,39 @@ void VariationsFieldTrialCreator::StorePermanentCountry(
                      new_list_value);
 }
 
-void VariationsFieldTrialCreator::RecordLastFetchTime() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  local_state()->SetTime(prefs::kVariationsLastFetchTime, base::Time::Now());
-}
-
 void VariationsFieldTrialCreator::OverrideVariationsPlatform(
     Study::Platform platform_override) {
   has_platform_override_ = true;
   platform_override_ = platform_override;
 }
 
+// static
+std::string VariationsFieldTrialCreator::GetShortHardwareClass() {
+#if defined(OS_CHROMEOS)
+  std::string board = base::SysInfo::GetLsbReleaseBoard();
+  // GetLsbReleaseBoard() may be suffixed with a "-signed-" and other extra
+  // info. Strip it.
+  const size_t index = board.find("-signed-");
+  if (index != std::string::npos)
+    board.resize(index);
+
+  return base::ToUpperASCII(board);
+#else
+  return std::string();
+#endif  // OS_CHROMEOS
+}
+
 bool VariationsFieldTrialCreator::LoadSeed(VariationsSeed* seed,
                                            std::string* seed_data,
                                            std::string* base64_signature) {
-  if (!LoadSeedFromStore(seed, seed_data, base64_signature))
+  if (!GetSeedStore()->LoadSeed(seed, seed_data, base64_signature))
     return false;
 
-  const base::Time last_fetch_time =
-      local_state()->GetTime(prefs::kVariationsLastFetchTime);
+  const base::Time last_fetch_time = seed_store_.GetLastFetchTime();
   if (last_fetch_time.is_null()) {
     // If the last fetch time is missing and we have a seed, then this must be
     // the first run of Chrome. Store the current time as the last fetch time.
-    RecordLastFetchTime();
+    seed_store_.RecordLastFetchTime();
     RecordCreateTrialsSeedExpiry(VARIATIONS_SEED_EXPIRY_FETCH_TIME_MISSING);
     return true;
   }
@@ -353,16 +396,25 @@ bool VariationsFieldTrialCreator::LoadSeed(VariationsSeed* seed,
 
   // Record that a suitably fresh seed was loaded.
   RecordCreateTrialsSeedExpiry(VARIATIONS_SEED_EXPIRY_NOT_EXPIRED);
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Variations.SeedFreshness", seed_age.InMinutes(),
-                              1, base::TimeDelta::FromDays(30).InMinutes(), 50);
+  RecordSeedFreshness(seed_age);
   return true;
 }
 
-bool VariationsFieldTrialCreator::LoadSeedFromStore(
+bool VariationsFieldTrialCreator::LoadSafeSeed(
     VariationsSeed* seed,
-    std::string* seed_data,
-    std::string* base64_signature) {
-  return seed_store_.LoadSeed(seed, seed_data, base64_signature);
+    ClientFilterableState* client_state) {
+  base::Time safe_seed_fetch_time;
+  if (!GetSeedStore()->LoadSafeSeed(seed, client_state, &safe_seed_fetch_time))
+    return false;
+
+  // Record the safe seed's age. Note, however, that the safe seed fetch time
+  // pref was added about a milestone later than most of the other safe seed
+  // prefs, so it might be absent. If it's absent, don't attempt to guess what
+  // value to record; just skip recording the metric.
+  if (!safe_seed_fetch_time.is_null())
+    RecordSeedFreshness(base::Time::Now() - safe_seed_fetch_time);
+
+  return true;
 }
 
 bool VariationsFieldTrialCreator::SetupFieldTrials(
@@ -370,10 +422,10 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
     const char* kEnableFeatures,
     const char* kDisableFeatures,
     const std::set<std::string>& unforceable_field_trials,
+    const std::vector<std::string>& variation_ids,
     std::unique_ptr<const base::FieldTrial::EntropyProvider>
         low_entropy_provider,
     std::unique_ptr<base::FeatureList> feature_list,
-    std::vector<std::string>* variation_ids,
     PlatformFieldTrials* platform_field_trials,
     SafeSeedManager* safe_seed_manager) {
   const base::CommandLine* command_line =
@@ -386,8 +438,15 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
   if (command_line->HasSwitch(switches::kForceFieldTrialParams)) {
     bool result = AssociateParamsFromString(
         command_line->GetSwitchValueASCII(switches::kForceFieldTrialParams));
-    CHECK(result) << "Invalid --" << switches::kForceFieldTrialParams
-                  << " list specified.";
+    if (!result) {
+      // Some field trial params implement things like csv or json with a
+      // particular param. If some control characters are not %-encoded, it can
+      // lead to confusing error messages, so add a hint here.
+      ExitWithMessage(base::StringPrintf(
+          "Invalid --%s list specified. Make sure you %%-"
+          "encode the following characters in param values: %%:/.,",
+          switches::kForceFieldTrialParams));
+    }
   }
 
   // Ensure any field trials specified on the command line are initialized.
@@ -397,19 +456,32 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
     bool result = base::FieldTrialList::CreateTrialsFromString(
         command_line->GetSwitchValueASCII(::switches::kForceFieldTrials),
         unforceable_field_trials);
-    CHECK(result) << "Invalid --" << ::switches::kForceFieldTrials
-                  << " list specified.";
+    if (!result) {
+      ExitWithMessage(base::StringPrintf("Invalid --%s list specified.",
+                                         ::switches::kForceFieldTrials));
+    }
   }
 
   VariationsHttpHeaderProvider* http_header_provider =
       VariationsHttpHeaderProvider::GetInstance();
   // Force the variation ids selected in chrome://flags and/or specified using
   // the command-line flag.
-  bool result = http_header_provider->ForceVariationIds(
-      command_line->GetSwitchValueASCII(switches::kForceVariationIds),
-      variation_ids);
-  CHECK(result) << "Invalid list of variation ids specified (either in --"
-                << switches::kForceVariationIds << " or in chrome://flags)";
+  auto result = http_header_provider->ForceVariationIds(
+      variation_ids,
+      command_line->GetSwitchValueASCII(switches::kForceVariationIds));
+  switch (result) {
+    case VariationsHttpHeaderProvider::ForceIdsResult::INVALID_SWITCH_ENTRY:
+      ExitWithMessage(base::StringPrintf("Invalid --%s list specified.",
+                                         switches::kForceVariationIds));
+      break;
+    case VariationsHttpHeaderProvider::ForceIdsResult::INVALID_VECTOR_ENTRY:
+      // It should not be possible to have invalid variation ids from the
+      // vector param (which corresponds to chrome://flags).
+      NOTREACHED();
+      break;
+    case VariationsHttpHeaderProvider::ForceIdsResult::SUCCESS:
+      break;
+  }
 
   feature_list->InitializeFromCommandLine(
       command_line->GetSwitchValueASCII(kEnableFeatures),
@@ -419,7 +491,7 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
   if (!command_line->HasSwitch(switches::kDisableFieldTrialTestingConfig) &&
       !command_line->HasSwitch(::switches::kForceFieldTrials) &&
       !command_line->HasSwitch(switches::kVariationsServerURL)) {
-    AssociateDefaultFieldTrialConfig(feature_list.get());
+    AssociateDefaultFieldTrialConfig(feature_list.get(), GetPlatform());
   }
 #endif  // defined(FIELDTRIAL_TESTING_ENABLED)
 
@@ -435,6 +507,16 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
   platform_field_trials->SetupFieldTrials();
 
   return has_seed;
+}
+
+VariationsSeedStore* VariationsFieldTrialCreator::GetSeedStore() {
+  return &seed_store_;
+}
+
+Study::Platform VariationsFieldTrialCreator::GetPlatform() {
+  if (has_platform_override_)
+    return platform_override_;
+  return ClientFilterableState::GetCurrentPlatform();
 }
 
 }  // namespace variations

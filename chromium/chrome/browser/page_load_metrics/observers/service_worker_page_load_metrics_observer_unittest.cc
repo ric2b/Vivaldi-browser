@@ -10,6 +10,7 @@
 #include "chrome/browser/page_load_metrics/page_load_tracker.h"
 #include "chrome/common/page_load_metrics/test/page_load_metrics_test_util.h"
 #include "content/public/browser/web_contents.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 
 namespace {
 
@@ -35,6 +36,10 @@ class ServiceWorkerPageLoadMetricsObserverTest
   }
 
   void AssertNoServiceWorkerHistogramsLogged() {
+    histogram_tester().ExpectTotalCount(
+        internal::kHistogramServiceWorkerFirstInputDelay, 0);
+    histogram_tester().ExpectTotalCount(
+        internal::kHistogramServiceWorkerFirstPaint, 0);
     histogram_tester().ExpectTotalCount(
         internal::kHistogramServiceWorkerFirstContentfulPaint, 0);
     histogram_tester().ExpectTotalCount(
@@ -121,7 +126,12 @@ class ServiceWorkerPageLoadMetricsObserverTest
       page_load_metrics::mojom::PageLoadTiming* timing) {
     page_load_metrics::InitPageLoadTimingForTest(timing);
     timing->navigation_start = base::Time::FromDoubleT(1);
+    timing->interactive_timing->first_input_delay =
+        base::TimeDelta::FromMilliseconds(50);
+    timing->interactive_timing->first_input_timestamp =
+        base::TimeDelta::FromMilliseconds(712);
     timing->parse_timing->parse_start = base::TimeDelta::FromMilliseconds(100);
+    timing->paint_timing->first_paint = base::TimeDelta::FromMilliseconds(200);
     timing->paint_timing->first_contentful_paint =
         base::TimeDelta::FromMilliseconds(300);
     timing->paint_timing->first_meaningful_paint =
@@ -167,6 +177,18 @@ TEST_F(ServiceWorkerPageLoadMetricsObserverTest, WithServiceWorker) {
   SimulateTimingAndMetadataUpdate(timing, metadata);
 
   histogram_tester().ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstInputDelay, 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramServiceWorkerFirstInputDelay,
+      timing.interactive_timing->first_input_delay.value().InMilliseconds(), 1);
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstPaint, 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramServiceWorkerFirstPaint,
+      timing.paint_timing->first_paint.value().InMilliseconds(), 1);
+
+  histogram_tester().ExpectTotalCount(
       internal::kHistogramServiceWorkerFirstContentfulPaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramServiceWorkerFirstContentfulPaint,
@@ -207,8 +229,8 @@ TEST_F(ServiceWorkerPageLoadMetricsObserverTest, WithServiceWorker) {
   histogram_tester().ExpectTotalCount(
       internal::kHistogramServiceWorkerParseStartForwardBackNoStore, 0);
 
-  const auto& entries =
-      test_ukm_recorder().GetEntriesByName(internal::kUkmServiceWorkerName);
+  const auto& entries = test_ukm_recorder().GetEntriesByName(
+      ukm::builders::PageLoad_ServiceWorkerControlled::kEntryName);
   EXPECT_EQ(1u, entries.size());
   for (const auto* entry : entries) {
     test_ukm_recorder().ExpectEntrySourceHasUrl(entry, GURL(kDefaultTestUrl));
@@ -239,6 +261,8 @@ TEST_F(ServiceWorkerPageLoadMetricsObserverTest, WithServiceWorkerBackground) {
   SimulateTimingAndMetadataUpdate(timing, metadata);
 
   histogram_tester().ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstPaint, 0);
+  histogram_tester().ExpectTotalCount(
       internal::kHistogramServiceWorkerFirstContentfulPaint, 0);
   histogram_tester().ExpectTotalCount(
       internal::kBackgroundHistogramServiceWorkerFirstContentfulPaint, 1);
@@ -259,8 +283,8 @@ TEST_F(ServiceWorkerPageLoadMetricsObserverTest, WithServiceWorkerBackground) {
   // histogram_tester().ExpectTotalCount(
   //     internal::kBackgroundHistogramServiceWorkerParseStart, 1);
 
-  const auto& entries =
-      test_ukm_recorder().GetEntriesByName(internal::kUkmServiceWorkerName);
+  const auto& entries = test_ukm_recorder().GetEntriesByName(
+      ukm::builders::PageLoad_ServiceWorkerControlled::kEntryName);
   EXPECT_EQ(1u, entries.size());
   for (const auto* entry : entries) {
     test_ukm_recorder().ExpectEntrySourceHasUrl(entry, GURL(kDefaultTestUrl));
@@ -291,6 +315,12 @@ TEST_F(ServiceWorkerPageLoadMetricsObserverTest, InboxSite) {
   histogram_tester().ExpectBucketCount(
       internal::kHistogramServiceWorkerParseStartInbox,
       timing.parse_timing->parse_start.value().InMilliseconds(), 1);
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstPaint, 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramServiceWorkerFirstPaint,
+      timing.paint_timing->first_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramServiceWorkerFirstContentfulPaint, 1);
@@ -407,6 +437,12 @@ TEST_F(ServiceWorkerPageLoadMetricsObserverTest, SearchSite) {
   histogram_tester().ExpectBucketCount(
       internal::kHistogramServiceWorkerParseStartSearch,
       timing.parse_timing->parse_start.value().InMilliseconds(), 1);
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstPaint, 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramServiceWorkerFirstPaint,
+      timing.paint_timing->first_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramServiceWorkerFirstContentfulPaint, 1);
@@ -579,6 +615,12 @@ TEST_F(ServiceWorkerPageLoadMetricsObserverTest,
   metadata.behavior_flags |=
       blink::WebLoadingBehaviorFlag::kWebLoadingBehaviorServiceWorkerControlled;
   SimulateTimingAndMetadataUpdate(timing, metadata);
+
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstPaint, 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramServiceWorkerFirstPaint,
+      timing.paint_timing->first_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramServiceWorkerFirstContentfulPaint, 1);

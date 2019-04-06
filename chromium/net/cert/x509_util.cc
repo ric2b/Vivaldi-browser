@@ -5,6 +5,7 @@
 #include "net/cert/x509_util.h"
 
 #include <string.h>
+#include <map>
 #include <memory>
 
 #include "base/lazy_instance.h"
@@ -13,7 +14,9 @@
 #include "build/build_config.h"
 #include "crypto/openssl_util.h"
 #include "crypto/rsa_private_key.h"
+#include "crypto/sha2.h"
 #include "net/base/hash_value.h"
+#include "net/cert/asn1_util.h"
 #include "net/cert/internal/cert_errors.h"
 #include "net/cert/internal/name_constraints.h"
 #include "net/cert/internal/parse_certificate.h"
@@ -202,23 +205,19 @@ bool CreateKeyAndSelfSignedCert(const std::string& subject,
                                 std::string* der_cert) {
   std::unique_ptr<crypto::RSAPrivateKey> new_key(
       crypto::RSAPrivateKey::Create(kRSAKeyLength));
-  if (!new_key.get())
+  if (!new_key)
     return false;
 
-  bool success = CreateSelfSignedCert(new_key.get(),
-                                      kSignatureDigestAlgorithm,
-                                      subject,
-                                      serial_number,
-                                      not_valid_before,
-                                      not_valid_after,
-                                      der_cert);
+  bool success = CreateSelfSignedCert(new_key->key(), kSignatureDigestAlgorithm,
+                                      subject, serial_number, not_valid_before,
+                                      not_valid_after, der_cert);
   if (success)
     *key = std::move(new_key);
 
   return success;
 }
 
-bool CreateSelfSignedCert(crypto::RSAPrivateKey* key,
+bool CreateSelfSignedCert(EVP_PKEY* key,
                           DigestAlgorithm alg,
                           const std::string& subject,
                           uint32_t serial_number,
@@ -256,7 +255,7 @@ bool CreateSelfSignedCert(crypto::RSAPrivateKey* key,
       !AddTime(&validity, not_valid_before) ||
       !AddTime(&validity, not_valid_after) ||
       !AddNameWithCommonName(&tbs_cert, common_name) ||  // subject
-      !EVP_marshal_public_key(&tbs_cert, key->key()) ||  // subjectPublicKeyInfo
+      !EVP_marshal_public_key(&tbs_cert, key) ||         // subjectPublicKeyInfo
       !CBB_finish(cbb.get(), &tbs_cert_bytes, &tbs_cert_len)) {
     return false;
   }
@@ -275,8 +274,7 @@ bool CreateSelfSignedCert(crypto::RSAPrivateKey* key,
       !AddRSASignatureAlgorithm(&cert, alg) ||
       !CBB_add_asn1(&cert, &signature, CBS_ASN1_BITSTRING) ||
       !CBB_add_u8(&signature, 0 /* no unused bits */) ||
-      !EVP_DigestSignInit(ctx.get(), nullptr, ToEVP(alg), nullptr,
-                          key->key()) ||
+      !EVP_DigestSignInit(ctx.get(), nullptr, ToEVP(alg), nullptr, key) ||
       // Compute the maximum signature length.
       !EVP_DigestSign(ctx.get(), nullptr, &sig_len, tbs_cert_bytes,
                       tbs_cert_len) ||
@@ -310,11 +308,6 @@ bssl::UniquePtr<CRYPTO_BUFFER> CreateCryptoBuffer(
                         data.size(), GetBufferPool()));
 }
 
-bssl::UniquePtr<CRYPTO_BUFFER> DupCryptoBuffer(CRYPTO_BUFFER* buffer) {
-  CRYPTO_BUFFER_up_ref(buffer);
-  return bssl::UniquePtr<CRYPTO_BUFFER>(buffer);
-}
-
 bool CryptoBufferEqual(const CRYPTO_BUFFER* a, const CRYPTO_BUFFER* b) {
   DCHECK(a && b);
   if (a == b)
@@ -331,7 +324,7 @@ base::StringPiece CryptoBufferAsStringPiece(const CRYPTO_BUFFER* buffer) {
 }
 
 scoped_refptr<X509Certificate> CreateX509CertificateFromBuffers(
-    STACK_OF(CRYPTO_BUFFER) * buffers) {
+    const STACK_OF(CRYPTO_BUFFER) * buffers) {
   if (sk_CRYPTO_BUFFER_num(buffers) == 0) {
     NOTREACHED();
     return nullptr;
@@ -340,10 +333,10 @@ scoped_refptr<X509Certificate> CreateX509CertificateFromBuffers(
   std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> intermediate_chain;
   for (size_t i = 1; i < sk_CRYPTO_BUFFER_num(buffers); ++i) {
     intermediate_chain.push_back(
-        DupCryptoBuffer(sk_CRYPTO_BUFFER_value(buffers, i)));
+        bssl::UpRef(sk_CRYPTO_BUFFER_value(buffers, i)));
   }
   return X509Certificate::CreateFromBuffer(
-      DupCryptoBuffer(sk_CRYPTO_BUFFER_value(buffers, 0)),
+      bssl::UpRef(sk_CRYPTO_BUFFER_value(buffers, 0)),
       std::move(intermediate_chain));
 }
 
@@ -351,6 +344,56 @@ ParseCertificateOptions DefaultParseCertificateOptions() {
   ParseCertificateOptions options;
   options.allow_invalid_serial_numbers = true;
   return options;
+}
+
+bool CalculateSha256SpkiHash(const CRYPTO_BUFFER* buffer, HashValue* hash) {
+  base::StringPiece spki;
+  if (!asn1::ExtractSPKIFromDERCert(CryptoBufferAsStringPiece(buffer), &spki)) {
+    return false;
+  }
+  *hash = HashValue(HASH_VALUE_SHA256);
+  crypto::SHA256HashString(spki, hash->data(), hash->size());
+  return true;
+}
+
+bool SignatureVerifierInitWithCertificate(
+    crypto::SignatureVerifier* verifier,
+    crypto::SignatureVerifier::SignatureAlgorithm signature_algorithm,
+    base::span<const uint8_t> signature,
+    const CRYPTO_BUFFER* certificate) {
+  base::StringPiece cert_der =
+      x509_util::CryptoBufferAsStringPiece(certificate);
+
+  der::Input tbs_certificate_tlv;
+  der::Input signature_algorithm_tlv;
+  der::BitString signature_value;
+  ParsedTbsCertificate tbs;
+  if (!ParseCertificate(der::Input(cert_der), &tbs_certificate_tlv,
+                        &signature_algorithm_tlv, &signature_value, nullptr) ||
+      !ParseTbsCertificate(tbs_certificate_tlv,
+                           DefaultParseCertificateOptions(), &tbs, nullptr)) {
+    return false;
+  }
+
+  // The key usage extension, if present, must assert the digitalSignature bit.
+  if (tbs.has_extensions) {
+    std::map<der::Input, ParsedExtension> extensions;
+    if (!ParseExtensions(tbs.extensions_tlv, &extensions)) {
+      return false;
+    }
+    ParsedExtension key_usage_ext;
+    if (ConsumeExtension(KeyUsageOid(), &extensions, &key_usage_ext)) {
+      der::BitString key_usage;
+      if (!ParseKeyUsage(key_usage_ext.value, &key_usage) ||
+          !key_usage.AssertsBit(KEY_USAGE_BIT_DIGITAL_SIGNATURE)) {
+        return false;
+      }
+    }
+  }
+
+  return verifier->VerifyInit(
+      signature_algorithm, signature,
+      base::make_span(tbs.spki_tlv.UnsafeData(), tbs.spki_tlv.Length()));
 }
 
 }  // namespace x509_util

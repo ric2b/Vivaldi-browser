@@ -22,6 +22,11 @@ class FirstRunTest : public testing::Test {
   FirstRunTest() : user_data_dir_override_(chrome::DIR_USER_DATA) {}
   ~FirstRunTest() override {}
 
+  void TearDown() override {
+    first_run::ResetCachedSentinelDataForTesting();
+    Test::TearDown();
+  }
+
  private:
   base::ScopedPathOverride user_data_dir_override_;
 
@@ -134,7 +139,7 @@ TEST_F(FirstRunTest, GetFirstRunSentinelCreationTime_Created) {
   first_run::CreateSentinelIfNeeded();
   // Gets the creation time of the first run sentinel.
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   base::File::Info info;
   ASSERT_TRUE(base::GetFileInfo(user_data_dir.Append(chrome::kFirstRunSentinel),
                                 &info));
@@ -144,7 +149,7 @@ TEST_F(FirstRunTest, GetFirstRunSentinelCreationTime_Created) {
 
 TEST_F(FirstRunTest, GetFirstRunSentinelCreationTime_NotCreated) {
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   base::File::Info info;
   ASSERT_FALSE(base::GetFileInfo(
       user_data_dir.Append(chrome::kFirstRunSentinel), &info));

@@ -36,15 +36,15 @@ class KEYBOARD_EXPORT NotificationManager {
   // - visual bounds change
   // - occluded bounds change
   // - layout displacement bounds change
-  // - general availability change
+  // - general visibility change
   void SendNotifications(
-      bool bounds_obscure_usable_region,
       bool bounds_affect_layout,
       bool is_locked,
-      const gfx::Rect& bounds,
+      const gfx::Rect& visual_bounds,
+      const gfx::Rect& occluded_bounds,
       const base::ObserverList<KeyboardControllerObserver>& observers);
 
-  bool ShouldSendAvailabilityNotification(bool current_availability);
+  bool ShouldSendVisibilityNotification(bool current_visibility);
 
   bool ShouldSendVisualBoundsNotification(const gfx::Rect& new_bounds);
 
@@ -58,9 +58,9 @@ class KEYBOARD_EXPORT NotificationManager {
   // ought to be considered equal regardless of location or non-zero dimensions.
   // This method will return a default empty (0,0,0,0) rectangle for any 0-area
   // rectangle, otherwise it returns the original rectangle, unmodified.
-  const gfx::Rect CanonicalizeEmptyRectangles(const gfx::Rect rect) const;
+  gfx::Rect CanonicalizeEmptyRectangles(const gfx::Rect& rect) const;
 
-  ValueNotificationConsolidator<bool> availability_;
+  ValueNotificationConsolidator<bool> visibility_;
   ValueNotificationConsolidator<gfx::Rect> visual_bounds_;
   ValueNotificationConsolidator<gfx::Rect> occluded_bounds_;
   ValueNotificationConsolidator<gfx::Rect> workspace_displaced_bounds_;

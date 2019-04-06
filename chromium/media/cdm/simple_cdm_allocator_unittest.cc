@@ -22,14 +22,14 @@ class TestCdmBuffer : public cdm::Buffer {
   }
 
   // cdm::Buffer implementation.
-  void Destroy() {
+  void Destroy() override {
     DestroyCalled();
     delete this;
   }
-  uint32_t Capacity() const { return buffer_.size(); }
-  uint8_t* Data() { return buffer_.data(); }
-  void SetSize(uint32_t size) { size_ = size > Capacity() ? 0 : size; }
-  uint32_t Size() const { return size_; }
+  uint32_t Capacity() const override { return buffer_.size(); }
+  uint8_t* Data() override { return buffer_.data(); }
+  void SetSize(uint32_t size) override { size_ = size > Capacity() ? 0 : size; }
+  uint32_t Size() const override { return size_; }
 
  private:
   TestCdmBuffer(uint32_t capacity) : buffer_(capacity), size_(0) {
@@ -89,7 +89,7 @@ TEST_F(SimpleCdmAllocatorTest, TransformToVideoFrame) {
 
   // Fill VideoFrameImpl as if it was a small video frame.
   video_frame->SetFormat(cdm::kI420);
-  video_frame->SetSize(cdm::Size(size.width(), size.height()));
+  video_frame->SetSize({size.width(), size.height()});
   video_frame->SetFrameBuffer(TestCdmBuffer::Create(memory_needed));
   video_frame->FrameBuffer()->SetSize(memory_needed);
 

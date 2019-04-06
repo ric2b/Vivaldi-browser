@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/stl_util.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
@@ -123,7 +123,8 @@ class SessionRestorePageLoadMetricsObserverTest
     std::unique_ptr<content::NavigationEntry> entry(
         content::NavigationController::CreateNavigationEntry(
             GetTestURL(), content::Referrer(), ui::PAGE_TRANSITION_RELOAD,
-            false, std::string(), browser_context()));
+            false, std::string(), browser_context(),
+            nullptr /* blob_url_loader_factory */));
     entries.emplace_back(std::move(entry));
 
     content::NavigationController& controller = contents->GetController();

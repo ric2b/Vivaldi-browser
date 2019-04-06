@@ -118,12 +118,18 @@ class MockClient : public VideoCaptureDevice::Client {
                               int frame_feedback_id) override {
     frame_cb_.Run(format);
   }
+  void OnIncomingCapturedGfxBuffer(gfx::GpuMemoryBuffer* buffer,
+                                   const VideoCaptureFormat& frame_format,
+                                   int clockwise_rotation,
+                                   base::TimeTicks reference_time,
+                                   base::TimeDelta timestamp,
+                                   int frame_feedback_id = 0) override {
+    frame_cb_.Run(frame_format);
+  }
   // Virtual methods for capturing using Client's Buffers.
   Buffer ReserveOutputBuffer(const gfx::Size& dimensions,
                              VideoPixelFormat format,
-                             VideoPixelStorage storage,
                              int frame_feedback_id) override {
-    EXPECT_EQ(VideoPixelStorage::CPU, storage);
     EXPECT_GT(dimensions.GetArea(), 0);
     const VideoCaptureFormat frame_format(dimensions, 0.0, format);
     return CreateStubBuffer(0, frame_format.ImageAllocationSize());
@@ -145,7 +151,6 @@ class MockClient : public VideoCaptureDevice::Client {
   }
   Buffer ResurrectLastOutputBuffer(const gfx::Size& dimensions,
                                    VideoPixelFormat format,
-                                   VideoPixelStorage storage,
                                    int frame_feedback_id) override {
     return Buffer();
   }

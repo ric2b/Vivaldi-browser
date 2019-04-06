@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.payments;
 
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_BILLING_ADDRESS;
 
-import android.content.DialogInterface;
 import android.support.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -22,6 +21,7 @@ import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
@@ -71,10 +71,11 @@ public class PaymentRequestExpiredLocalCardTest implements MainActivityStartCall
         mRule.setTextInExpiredCardUnmaskDialogAndWait(
                 new int[] {R.id.expiration_month, R.id.expiration_year, R.id.card_unmask_input},
                 new String[] {"11", "26", "123"}, mRule.getReadyToUnmask());
-        mRule.clickCardUnmaskButtonAndWait(DialogInterface.BUTTON_POSITIVE, mRule.getDismissed());
+        mRule.clickCardUnmaskButtonAndWait(
+                ModalDialogView.ButtonType.POSITIVE, mRule.getDismissed());
         mRule.expectResultContains(new String[] {"Jon Doe", "4111111111111111", "11", "2026",
-                "visa", "123", "Google", "340 Main St", "CA", "Los Angeles", "90291", "US", "en",
-                "freeShippingOption"});
+                "basic-card", "123", "Google", "340 Main St", "CA", "Los Angeles", "90291", "US",
+                "en", "freeShippingOption"});
     }
 
     /**
@@ -91,7 +92,8 @@ public class PaymentRequestExpiredLocalCardTest implements MainActivityStartCall
         mRule.setTextInExpiredCardUnmaskDialogAndWait(
                 new int[] {R.id.expiration_month, R.id.expiration_year, R.id.card_unmask_input},
                 new String[] {"11", "26", "123"}, mRule.getReadyToUnmask());
-        mRule.clickCardUnmaskButtonAndWait(DialogInterface.BUTTON_POSITIVE, mRule.getDismissed());
+        mRule.clickCardUnmaskButtonAndWait(
+                ModalDialogView.ButtonType.POSITIVE, mRule.getDismissed());
 
         // Make sure the new expiration date was saved.
         CreditCard storedCard = mHelper.getCreditCard(mCreditCardId);
@@ -124,22 +126,22 @@ public class PaymentRequestExpiredLocalCardTest implements MainActivityStartCall
         mRule.setTextInCardEditorAndWait(
                 new String[] {"4111111111111111", "Jon Doe"}, mRule.getEditorTextUpdate());
         mRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mRule.getEditorValidationError());
+                R.id.editor_dialog_done_button, mRule.getEditorValidationError());
 
         // Set the expiration date to the current month of the current year.
         mRule.setSpinnerSelectionsInCardEditorAndWait(
                 new int[] {now.get(Calendar.MONTH), 0, FIRST_BILLING_ADDRESS},
                 mRule.getExpirationMonthChange());
 
-        mRule.clickInCardEditorAndWait(R.id.payments_edit_done_button, mRule.getReadyToPay());
+        mRule.clickInCardEditorAndWait(R.id.editor_dialog_done_button, mRule.getReadyToPay());
     }
 
     /**
      * Tests the different card unmask error messages for an expired card.
      */
+    @Test
     @MediumTest
     @Feature({"Payments"})
-    @Test
     public void testPromptErrorMessages()
             throws InterruptedException, ExecutionException, TimeoutException {
         // Click pay to get to the card unmask prompt.
@@ -172,11 +174,14 @@ public class PaymentRequestExpiredLocalCardTest implements MainActivityStartCall
         if (now.get(Calendar.MONTH) != 0) {
             String twoDigitsYear = Integer.toString(now.get(Calendar.YEAR)).substring(2);
 
-            // Set an invalid expiration year.
+            // Set an invalid expiration date. The year is current, but the month is previous.
+            // now.get(Calendar.MONTH) returns 0-indexed values (January is 0), but the unmask
+            // dialog expects 1-indexed values (January is 1). Therefore, using
+            // now.get(Calendar.MONTH) directly will result in using the previous month and no
+            // subtraction is needed here.
             mRule.setTextInExpiredCardUnmaskDialogAndWait(
                     new int[] {R.id.expiration_month, R.id.expiration_year, R.id.card_unmask_input},
-                    new String[] {
-                            Integer.toString(now.get(Calendar.MONTH) - 1), twoDigitsYear, "123"},
+                    new String[] {Integer.toString(now.get(Calendar.MONTH)), twoDigitsYear, "123"},
                     mRule.getUnmaskValidationDone());
             Assert.assertTrue(mRule.getUnmaskPromptErrorMessage().equals(
                     "Check your expiration date and try again"));

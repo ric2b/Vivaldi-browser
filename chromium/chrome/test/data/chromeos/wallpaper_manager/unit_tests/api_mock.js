@@ -5,11 +5,13 @@
 
 var TestConstants = {
   isPowerwashed: 0,
-  wallpaperURL: 'https://test.com/test.jpg',
+  isUsingNewWallpaperPicker: false,
+  wallpaperUrl: 'https://test.com/test.jpg',
+  highResolutionSuffix: 'suffix',
   // A dummy string which is used to mock an image.
   IMAGE: '*#*@#&',
   // A dummy array which is used to mock the file content.
-  FILESTRING: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+  FILESTRING: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 };
 
 // mock FileReader object in HTML5 File System
@@ -210,7 +212,7 @@ var chrome = {
               items[Constants.AccessLocalWallpaperInfoKey] = null;
             } else {
               items[Constants.AccessLocalWallpaperInfoKey] = {
-                'url': 'dummy',
+                'url': TestConstants.wallpaperUrl,
                 'layout': 'dummy',
                 'source': Constants.WallpaperSourceEnum.Custom
               };
@@ -218,20 +220,17 @@ var chrome = {
             break;
           case Constants.AccessLocalManifestKey:
             items[Constants.AccessLocalManifestKey] = {
-              'wallpaper_list': [
-                {
-                  'available_for_surprise_me': true,
-                  'base_url': 'dummy',
-                  'default_layout': 'dummy'
-                }
-              ]
+              'wallpaper_list': [{
+                'available_for_surprise_me': true,
+                'base_url': TestConstants.wallpaperUrl,
+                'default_layout': 'dummy'
+              }]
             };
             break;
         }
         callback(items);
       },
-      set: function(items, callback) {
-      }
+      set: function(items, callback) {}
     },
     sync: {
       get: function(key, callback) {
@@ -247,8 +246,7 @@ var chrome = {
         }
         callback(items);
       },
-      set: function(items, callback) {
-      }
+      set: function(items, callback) {}
     },
     onChanged: {
       addListener: function(listener) {
@@ -266,39 +264,39 @@ var chrome = {
       }
     }
   },
-  app: {
-    runtime: {
-      onLaunched: {
-        addListener: function(listener) {
-        }
-      }
-    }
-  },
-  alarms: {
-    onAlarm: {
-      addListener: function(listener) {
-      }
-    }
-  },
+  app: {runtime: {onLaunched: {addListener: function(listener) {}}}},
+  alarms: {onAlarm: {addListener: function(listener) {}}},
   wallpaperPrivate: {
     getStrings: function(callback) {
-      callback({isExperimental: false});
+      callback({
+        useNewWallpaperPicker: TestConstants.isUsingNewWallpaperPicker,
+        highResolutionSuffix: TestConstants.highResolutionSuffix
+      });
     },
-    setCustomWallpaper: function(data, layout, isGenerateThumbnail, fileName,
-                                 callback) {
-    },
+    setCustomWallpaper: function(
+        data, layout, generateThumbnail, fileName, previewMode, callback) {},
     getSyncSetting: function(callback) {
       var setting = {};
       setting.syncThemes = true;
       callback(setting);
     },
-    onWallpaperChangedBy3rdParty: {
-      addListener: function(listener) {
-      }
+    onWallpaperChangedBy3rdParty: {addListener: function(listener) {}},
+    getCollectionsInfo: function(callback) {
+      callback([{collectionId: 'dummyId'}]);
+    },
+    getImagesInfo: function(collectionId, callback) {
+      callback([{imageUrl: TestConstants.wallpaperUrl}]);
+    },
+    getSurpriseMeImage: function(collectionId, resumeToken, callback) {
+      callback(
+          {imageUrl: TestConstants.wallpaperUrl}, null /*nextResumeToken=*/);
     }
   },
-  runtime: {
-    lastError: null
+  runtime: {lastError: null},
+  commandLinePrivate: {
+    hasSwitch: function(arg, callback) {
+      callback(TestConstants.isUsingNewWallpaperPicker);
+    }
   }
 };
 

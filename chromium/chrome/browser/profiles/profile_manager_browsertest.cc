@@ -5,14 +5,14 @@
 #include <stddef.h>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -97,7 +97,7 @@ class MultipleProfileDeletionObserver
   }
 
   void Wait() {
-    keep_alive_ = base::MakeUnique<ScopedKeepAlive>(
+    keep_alive_ = std::make_unique<ScopedKeepAlive>(
         KeepAliveOrigin::PROFILE_HELPER, KeepAliveRestartOption::DISABLED);
     loop_.Run();
   }
@@ -257,8 +257,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteSingletonProfile) {
       storage.GetAllProfilesAttributes().front()->GetPath();
   EXPECT_FALSE(singleton_profile_path.empty());
   MultipleProfileDeletionObserver profile_deletion_observer(1u);
-  profile_manager->ScheduleProfileForDeletion(
-      singleton_profile_path, ProfileManager::CreateCallback());
+  profile_manager->ScheduleProfileForDeletion(singleton_profile_path,
+                                              base::DoNothing());
 
   // Run the message loop until the profile is actually deleted (as indicated
   // by the callback above being called).
@@ -301,8 +301,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteInactiveProfile) {
 
   // Delete inactive profile.
   MultipleProfileDeletionObserver profile_deletion_observer(1u);
-  profile_manager->ScheduleProfileForDeletion(
-      new_path, ProfileManager::CreateCallback());
+  profile_manager->ScheduleProfileForDeletion(new_path, base::DoNothing());
   profile_deletion_observer.Wait();
 
   // Make sure there only preexisted profile left.
@@ -334,8 +333,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteCurrentProfile) {
 
   // Delete current profile.
   MultipleProfileDeletionObserver profile_deletion_observer(1u);
-  profile_manager->ScheduleProfileForDeletion(
-      browser()->profile()->GetPath(), ProfileManager::CreateCallback());
+  profile_manager->ScheduleProfileForDeletion(browser()->profile()->GetPath(),
+                                              base::DoNothing());
   profile_deletion_observer.Wait();
 
   // Make sure a profile created earlier become the only profile.
@@ -375,8 +374,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteAllProfiles) {
   for (ProfileAttributesEntry* entry : entries) {
     base::FilePath profile_path = entry->GetPath();
     EXPECT_FALSE(profile_path.empty());
-    profile_manager->ScheduleProfileForDeletion(
-        profile_path, ProfileManager::CreateCallback());
+    profile_manager->ScheduleProfileForDeletion(profile_path,
+                                                base::DoNothing());
     old_profile_paths.push_back(profile_path);
   }
   profile_deletion_observer.Wait();
@@ -412,7 +411,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerCrOSBrowserTest, GetLastUsedProfile) {
   EXPECT_TRUE(last_used_profile != NULL);
 
   base::FilePath profile_path;
-  PathService::Get(chrome::DIR_USER_DATA, &profile_path);
+  base::PathService::Get(chrome::DIR_USER_DATA, &profile_path);
 
   profile_path = profile_path.AppendASCII(
       std::string(chrome::kProfileDirPrefix) + "test-user-hash");
@@ -605,7 +604,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeletePasswords) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   base::RunLoop run_loop;
   profile_manager->ScheduleProfileForDeletion(
-      profile->GetPath(), base::Bind(&OnUnblockOnProfileCreation, &run_loop));
+      profile->GetPath(),
+      base::BindLambdaForTesting([&run_loop](Profile*) { run_loop.Quit(); }));
   run_loop.Run();
 
   PasswordStoreConsumerVerifier verify_delete;

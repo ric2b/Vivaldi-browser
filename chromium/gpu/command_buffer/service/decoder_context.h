@@ -15,8 +15,10 @@
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/context_result.h"
+#include "gpu/command_buffer/service/abstract_texture.h"
 #include "gpu/command_buffer/service/async_api_interface.h"
 #include "gpu/gpu_gles2_export.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace gl {
 class GLContext;
@@ -25,14 +27,17 @@ class GLSurface;
 }  // namespace gl
 
 namespace gpu {
+class QueryManager;
 class TextureBase;
 struct ContextCreationAttribs;
 
 namespace gles2 {
 class ContextGroup;
 class ErrorState;
+class FeatureInfo;
 class GpuFenceManager;
-class QueryManager;
+class Outputter;
+class Texture;
 struct ContextState;
 struct DisallowedFeatures;
 }  // namespace gles2
@@ -72,8 +77,13 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
 
   virtual Capabilities GetCapabilities() = 0;
 
+  virtual const gles2::FeatureInfo* GetFeatureInfo() const = 0;
+
   // Gets the associated GLContext.
   virtual gl::GLContext* GetGLContext() = 0;
+
+  // Gets the associated GLSurface.
+  virtual gl::GLSurface* GetGLSurface() = 0;
 
   // Make this decoder's GL context current.
   virtual bool MakeCurrent() = 0;
@@ -96,7 +106,12 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
   virtual bool CheckResetStatus() = 0;
 
   // Gets the QueryManager for this context.
-  virtual gles2::QueryManager* GetQueryManager() = 0;
+  virtual QueryManager* GetQueryManager() = 0;
+
+  // Set a callback to be called when a query is complete.  If the query is
+  // invalid, the callback must be called immediately.
+  virtual void SetQueryCallback(unsigned int query_client_id,
+                                base::OnceClosure callback) = 0;
 
   // Gets the GpuFenceManager for this context.
   virtual gles2::GpuFenceManager* GetGpuFenceManager() = 0;
@@ -129,6 +144,9 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
   virtual void RestoreState(const gles2::ContextState* prev_state) = 0;
 
   // Restore States.
+  virtual void RestoreGlobalState() const = 0;
+  virtual void ClearAllAttributes() const = 0;
+  virtual void RestoreAllAttributes() const = 0;
   virtual void RestoreActiveTexture() const = 0;
   virtual void RestoreAllTextureUnitAndSamplerBindings(
       const gles2::ContextState* prev_state) const = 0;
@@ -149,6 +167,15 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
   // Gets the texture object associated with the client ID.  null is returned on
   // failure or if the texture has not been bound yet.
   virtual TextureBase* GetTextureBase(uint32_t client_id) = 0;
+  virtual void SetLevelInfo(uint32_t client_id,
+                            int level,
+                            unsigned internal_format,
+                            unsigned width,
+                            unsigned height,
+                            unsigned depth,
+                            unsigned format,
+                            unsigned type,
+                            const gfx::Rect& cleared_rect) = 0;
   virtual void BindImage(uint32_t client_texture_id,
                          uint32_t texture_target,
                          gl::GLImage* image,
@@ -160,6 +187,61 @@ class GPU_GLES2_EXPORT DecoderContext : public AsyncAPIInterface {
   //
   virtual gles2::ContextGroup* GetContextGroup() = 0;
   virtual gles2::ErrorState* GetErrorState() = 0;
+  virtual std::unique_ptr<gpu::gles2::AbstractTexture> CreateAbstractTexture(
+      unsigned /* GLenum */ target,
+      unsigned /* GLenum */ internal_format,
+      int /* GLsizei */ width,
+      int /* GLsizei */ height,
+      int /* GLsizei */ depth,
+      int /* GLint */ border,
+      unsigned /* GLenum */ format,
+      unsigned /* GLenum */ type) = 0;
+
+  //
+  // Methods required by Texture.
+  //
+  // Indicates whether a given internal format is one for a compressed
+  // texture.
+  virtual bool IsCompressedTextureFormat(unsigned format) = 0;
+  // Clears a level sub area of a 2D texture.
+  // Returns false if a GL error should be generated.
+  virtual bool ClearLevel(gles2::Texture* texture,
+                          unsigned target,
+                          int level,
+                          unsigned format,
+                          unsigned type,
+                          int xoffset,
+                          int yoffset,
+                          int width,
+                          int height) = 0;
+  // Clears a level sub area of a compressed 2D texture.
+  // Returns false if a GL error should be generated.
+  virtual bool ClearCompressedTextureLevel(gles2::Texture* texture,
+                                           unsigned target,
+                                           int level,
+                                           unsigned format,
+                                           int width,
+                                           int height) = 0;
+  // Clears a level of a 3D texture.
+  // Returns false if a GL error should be generated.
+  virtual bool ClearLevel3D(gles2::Texture* texture,
+                            unsigned target,
+                            int level,
+                            unsigned format,
+                            unsigned type,
+                            int width,
+                            int height,
+                            int depth) = 0;
+  //
+  // Methods required by InProcessCommandBuffer
+  //
+  // Set to true to LOG every command.
+  virtual void SetLogCommands(bool log_commands) = 0;
+
+  //
+  // Methods required by GpuTracer
+  //
+  virtual gles2::Outputter* outputter() const = 0;
 };
 
 }  // namespace gpu

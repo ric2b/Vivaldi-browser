@@ -34,13 +34,11 @@ class MEDIA_MOJO_EXPORT WatchTimeRecorder : public mojom::WatchTimeRecorder {
   void FinalizeWatchTime(
       const std::vector<WatchTimeKey>& watch_time_keys) override;
   void OnError(PipelineStatus status) override;
-  void SetAudioDecoderName(const std::string& name) override;
-  void SetVideoDecoderName(const std::string& name) override;
-
+  void UpdateSecondaryProperties(
+      mojom::SecondaryPlaybackPropertiesPtr secondary_properties) override;
+  void SetAutoplayInitiated(bool value) override;
+  void OnDurationChanged(base::TimeDelta duration) override;
   void UpdateUnderflowCount(int32_t count) override;
-
-  // Test helper method for determining if keys are not reported to UMA.
-  static bool ShouldReportUmaForTesting(WatchTimeKey key);
 
  private:
   // Records a UKM event based on |aggregate_watch_time_info_|; only recorded
@@ -79,17 +77,32 @@ class MEDIA_MOJO_EXPORT WatchTimeRecorder : public mojom::WatchTimeRecorder {
   using WatchTimeInfo = base::flat_map<WatchTimeKey, base::TimeDelta>;
   WatchTimeInfo watch_time_info_;
 
-  // Sum of all watch time data since the last complete finalize.
-  WatchTimeInfo aggregate_watch_time_info_;
+  // Aggregate record of all watch time for a given set of secondary properties.
+  struct WatchTimeUkmRecord {
+    explicit WatchTimeUkmRecord(
+        mojom::SecondaryPlaybackPropertiesPtr properties);
+    WatchTimeUkmRecord(WatchTimeUkmRecord&& record);
+    ~WatchTimeUkmRecord();
+
+    // Properties for this segment of UKM watch time.
+    mojom::SecondaryPlaybackPropertiesPtr secondary_properties;
+
+    // Sum of all watch time data since the last complete finalize.
+    WatchTimeInfo aggregate_watch_time_info;
+
+    // Total underflow count for this segment of UKM watch time.
+    int total_underflow_count = 0;
+  };
+
+  // List of all watch time segments. A new entry is added for every secondary
+  // property update.
+  std::vector<WatchTimeUkmRecord> ukm_records_;
 
   int underflow_count_ = 0;
-  int total_underflow_count_ = 0;
   PipelineStatus pipeline_status_ = PIPELINE_OK;
+  base::TimeDelta duration_ = kNoTimestamp;
 
-  // Decoder name associated with this recorder. Reported to UKM as a
-  // base::PersistentHash().
-  std::string audio_decoder_name_;
-  std::string video_decoder_name_;
+  base::Optional<bool> autoplay_initiated_;
 
   DISALLOW_COPY_AND_ASSIGN(WatchTimeRecorder);
 };

@@ -7,7 +7,6 @@ import("//remoting/build/config/remoting_build.gni")
 source_set("security_key") {
   sources = [
     "security_key_auth_handler.h",
-    "security_key_auth_handler_posix.cc",
     "security_key_auth_handler_win.cc",
     "security_key_extension.cc",
     "security_key_extension.h",
@@ -37,10 +36,15 @@ source_set("security_key") {
 
   deps = [
     "//ipc",
-    "//mojo/edk/system",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
     "//remoting/proto",
     "//third_party/webrtc/modules/desktop_capture",
   ]
+
+  if (is_posix) {
+    sources += [ "security_key_auth_handler_posix.cc" ]
+  }
 }
 
 source_set("main") {
@@ -53,6 +57,10 @@ source_set("main") {
   sources = [
     "remote_security_key_main.cc",
     "remote_security_key_main.h",
+  ]
+  deps = [
+    "//base:debugging_buildflags",
+    "//mojo/core/embedder",
   ]
 }
 
@@ -80,7 +88,6 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "security_key_auth_handler_posix_unittest.cc",
     "security_key_auth_handler_win_unittest.cc",
     "security_key_extension_session_unittest.cc",
     "security_key_ipc_client_unittest.cc",
@@ -94,8 +101,12 @@ source_set("unit_tests") {
     ":test_support",
   ]
   deps = [
-    "//mojo/edk/test:test_support",
+    "//mojo/core/test:test_support",
   ]
+
+  if (is_posix) {
+    sources += [ "security_key_auth_handler_posix_unittest.cc" ]
+  }
 }
 
 static_library("test_support") {

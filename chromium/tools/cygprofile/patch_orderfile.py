@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env vpython
 # Copyright 2013 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -367,8 +367,8 @@ def GeneratePatchedOrderfile(unpatched_orderfile, native_lib_filename,
   (offset_to_symbol_infos, name_to_symbol_infos) = _GroupSymbolInfosFromBinary(
       native_lib_filename)
   obj_dir = cygprofile_utils.GetObjDir(native_lib_filename)
-  raw_symbol_map = cyglog_to_orderfile.GetSymbolToSectionsMapFromObjectFiles(
-      obj_dir)
+  raw_symbol_map = cyglog_to_orderfile.ObjectFileProcessor(
+      obj_dir).GetSymbolToSectionsMap()
   suffixed = _SectionsWithSuffixes(raw_symbol_map)
   symbol_to_sections_map = _CombineSectionListsByPrimaryName(raw_symbol_map)
   section_to_symbols_map = cygprofile_utils.InvertMapping(
@@ -383,11 +383,20 @@ def GeneratePatchedOrderfile(unpatched_orderfile, native_lib_filename,
     # Make sure the anchor functions are located in the right place, here and
     # after everything else.
     # See the comment in //base/android/library_loader/anchor_functions.cc.
-    for prefix in _PREFIXES:
-      f.write(prefix + 'dummy_function_to_anchor_text\n')
+    #
+    # __cxx_global_var_init is one of the largest symbols (~38kB as of May
+    # 2018), called extremely early, and not instrumented.
+    first_sections = ('dummy_function_start_of_ordered_text',
+                      '__cxx_global_var_init')
+    for section in first_sections:
+      for prefix in _PREFIXES:
+        f.write(prefix + section + '\n')
 
     for section in expanded_sections:
       f.write(section + '\n')
+
+    for prefix in _PREFIXES:
+      f.write(prefix + 'dummy_function_end_of_ordered_text\n')
 
     # The following is needed otherwise Gold only applies a partial sort.
     f.write('.text\n')  # gets methods not in a section, such as assembly

@@ -11,7 +11,8 @@
 #include "base/hash.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -51,7 +52,8 @@ class WatchTimeRecorderTest : public testing::Test {
                        kDiscardedWatchTimeAudioVideoMse,
                        kDiscardedWatchTimeAudioVideoEme}) {
     ResetMetricRecorders();
-    MediaMetricsProvider::Create(nullptr, mojo::MakeRequest(&provider_));
+    MediaMetricsProvider::Create(VideoDecodePerfHistory::SaveCallback(),
+                                 mojo::MakeRequest(&provider_));
   }
 
   ~WatchTimeRecorderTest() override { base::RunLoop().RunUntilIdle(); }
@@ -68,8 +70,7 @@ class WatchTimeRecorderTest : public testing::Test {
                   bool is_mse,
                   bool is_encrypted) {
     Initialize(mojom::PlaybackProperties::New(
-        kUnknownAudioCodec, kUnknownVideoCodec, has_audio, has_video, false,
-        is_mse, is_encrypted, false, gfx::Size(800, 600)));
+        has_audio, has_video, false, false, is_mse, is_encrypted, false));
   }
 
   void ExpectWatchTime(const std::vector<base::StringPiece>& keys,
@@ -77,7 +78,9 @@ class WatchTimeRecorderTest : public testing::Test {
     for (int i = 0; i <= static_cast<int>(WatchTimeKey::kWatchTimeKeyMax);
          ++i) {
       const base::StringPiece test_key =
-          WatchTimeKeyToString(static_cast<WatchTimeKey>(i));
+          ConvertWatchTimeKeyToStringForUma(static_cast<WatchTimeKey>(i));
+      if (test_key.empty())
+        continue;
       auto it = std::find(keys.begin(), keys.end(), test_key);
       if (it == keys.end()) {
         histogram_tester_->ExpectTotalCount(test_key.as_string(), 0);
@@ -161,9 +164,17 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
 
   for (int i = 0; i <= static_cast<int>(WatchTimeKey::kWatchTimeKeyMax); ++i) {
     const WatchTimeKey key = static_cast<WatchTimeKey>(i);
-    SCOPED_TRACE(WatchTimeKeyToString(key));
 
+    auto key_str = ConvertWatchTimeKeyToStringForUma(key);
+    SCOPED_TRACE(key_str.empty() ? base::NumberToString(i)
+                                 : key_str.as_string());
+
+    // Values for |is_background| and |is_muted| don't matter in this test since
+    // they don't prevent the muted or background keys from being recorded.
     Initialize(true, false, true, true);
+    wtr_->UpdateSecondaryProperties(mojom::SecondaryPlaybackProperties::New(
+        kCodecAAC, kCodecH264, "", "", gfx::Size(800, 600)));
+
     wtr_->RecordWatchTime(WatchTimeKey::kWatchTimeKeyMax, kWatchTime1);
     wtr_->RecordWatchTime(key, kWatchTime1);
     wtr_->RecordWatchTime(key, kWatchTime2);
@@ -176,10 +187,8 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
     wtr_->FinalizeWatchTime({key});
     base::RunLoop().RunUntilIdle();
 
-    if (WatchTimeRecorder::ShouldReportUmaForTesting(key)) {
-      const base::StringPiece key_str = WatchTimeKeyToString(key);
+    if (!key_str.empty())
       ExpectWatchTime({key_str}, kWatchTime2);
-    }
 
     // These keys are only reported for a full finalize.
     ExpectMtbrTime({}, base::TimeDelta());
@@ -199,6 +208,7 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
       case WatchTimeKey::kAudioBackgroundAll:
       case WatchTimeKey::kAudioVideoAll:
       case WatchTimeKey::kAudioVideoBackgroundAll:
+      case WatchTimeKey::kAudioVideoMutedAll:
       case WatchTimeKey::kVideoAll:
       case WatchTimeKey::kVideoBackgroundAll:
         ExpectUkmWatchTime({UkmEntry::kWatchTimeName}, kWatchTime2);
@@ -217,6 +227,10 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
       case WatchTimeKey::kAudioVideoEme:
       case WatchTimeKey::kAudioVideoSrc:
       case WatchTimeKey::kAudioVideoEmbeddedExperience:
+      case WatchTimeKey::kAudioVideoMutedMse:
+      case WatchTimeKey::kAudioVideoMutedEme:
+      case WatchTimeKey::kAudioVideoMutedSrc:
+      case WatchTimeKey::kAudioVideoMutedEmbeddedExperience:
       case WatchTimeKey::kAudioVideoBackgroundMse:
       case WatchTimeKey::kAudioVideoBackgroundEme:
       case WatchTimeKey::kAudioVideoBackgroundSrc:
@@ -236,6 +250,7 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
       case WatchTimeKey::kAudioBattery:
       case WatchTimeKey::kAudioBackgroundBattery:
       case WatchTimeKey::kAudioVideoBattery:
+      case WatchTimeKey::kAudioVideoMutedBattery:
       case WatchTimeKey::kAudioVideoBackgroundBattery:
       case WatchTimeKey::kVideoBattery:
       case WatchTimeKey::kVideoBackgroundBattery:
@@ -247,24 +262,28 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
       case WatchTimeKey::kAudioBackgroundAc:
       case WatchTimeKey::kAudioVideoAc:
       case WatchTimeKey::kAudioVideoBackgroundAc:
+      case WatchTimeKey::kAudioVideoMutedAc:
       case WatchTimeKey::kVideoAc:
       case WatchTimeKey::kVideoBackgroundAc:
         ExpectUkmWatchTime({UkmEntry::kWatchTime_ACName}, kWatchTime2);
         break;
 
       case WatchTimeKey::kAudioVideoDisplayFullscreen:
+      case WatchTimeKey::kAudioVideoMutedDisplayFullscreen:
       case WatchTimeKey::kVideoDisplayFullscreen:
         ExpectUkmWatchTime({UkmEntry::kWatchTime_DisplayFullscreenName},
                            kWatchTime2);
         break;
 
       case WatchTimeKey::kAudioVideoDisplayInline:
+      case WatchTimeKey::kAudioVideoMutedDisplayInline:
       case WatchTimeKey::kVideoDisplayInline:
         ExpectUkmWatchTime({UkmEntry::kWatchTime_DisplayInlineName},
                            kWatchTime2);
         break;
 
       case WatchTimeKey::kAudioVideoDisplayPictureInPicture:
+      case WatchTimeKey::kAudioVideoMutedDisplayPictureInPicture:
       case WatchTimeKey::kVideoDisplayPictureInPicture:
         ExpectUkmWatchTime({UkmEntry::kWatchTime_DisplayPictureInPictureName},
                            kWatchTime2);
@@ -272,6 +291,7 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
 
       case WatchTimeKey::kAudioNativeControlsOn:
       case WatchTimeKey::kAudioVideoNativeControlsOn:
+      case WatchTimeKey::kAudioVideoMutedNativeControlsOn:
       case WatchTimeKey::kVideoNativeControlsOn:
         ExpectUkmWatchTime({UkmEntry::kWatchTime_NativeControlsOnName},
                            kWatchTime2);
@@ -279,6 +299,7 @@ TEST_F(WatchTimeRecorderTest, TestBasicReporting) {
 
       case WatchTimeKey::kAudioNativeControlsOff:
       case WatchTimeKey::kAudioVideoNativeControlsOff:
+      case WatchTimeKey::kAudioVideoMutedNativeControlsOff:
       case WatchTimeKey::kVideoNativeControlsOff:
         ExpectUkmWatchTime({UkmEntry::kWatchTime_NativeControlsOffName},
                            kWatchTime2);
@@ -334,6 +355,8 @@ TEST_F(WatchTimeRecorderTest, TestRebufferingMetrics) {
 
 TEST_F(WatchTimeRecorderTest, TestDiscardMetrics) {
   Initialize(true, false, true, true);
+  wtr_->UpdateSecondaryProperties(mojom::SecondaryPlaybackProperties::New(
+      kCodecAAC, kCodecH264, "", "", gfx::Size(800, 600)));
 
   constexpr base::TimeDelta kWatchTime = base::TimeDelta::FromSeconds(5);
   for (auto key : computation_keys_)
@@ -365,10 +388,13 @@ TEST_F(WatchTimeRecorderTest, TestDiscardMetrics) {
   EXPECT_TRUE(test_recorder_->EntryHasMetric(entry, name));
 
 TEST_F(WatchTimeRecorderTest, TestFinalizeNoDuplication) {
-  mojom::PlaybackPropertiesPtr properties =
-      mojom::PlaybackProperties::New(kCodecAAC, kCodecH264, true, true, false,
-                                     false, false, false, gfx::Size(800, 600));
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, false, false, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties =
+      mojom::SecondaryPlaybackProperties::New(kCodecAAC, kCodecH264, "", "",
+                                              gfx::Size(800, 600));
   Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
 
   // Verify that UKM is reported along with the watch time.
   constexpr base::TimeDelta kWatchTime = base::TimeDelta::FromSeconds(4);
@@ -400,8 +426,9 @@ TEST_F(WatchTimeRecorderTest, TestFinalizeNoDuplication) {
     test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
 
     EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
-    EXPECT_UKM(UkmEntry::kAudioCodecName, properties->audio_codec);
-    EXPECT_UKM(UkmEntry::kVideoCodecName, properties->video_codec);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties->video_codec);
     EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
     EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
     EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
@@ -409,12 +436,13 @@ TEST_F(WatchTimeRecorderTest, TestFinalizeNoDuplication) {
     EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
     EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
     EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
-               properties->natural_size.width());
+               secondary_properties->natural_size.width());
     EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
-               properties->natural_size.height());
+               secondary_properties->natural_size.height());
     EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime.InMilliseconds());
     EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 0);
     EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
     EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
 
     EXPECT_NO_UKM(UkmEntry::kMeanTimeBetweenRebuffersName);
@@ -429,10 +457,13 @@ TEST_F(WatchTimeRecorderTest, TestFinalizeNoDuplication) {
 }
 
 TEST_F(WatchTimeRecorderTest, FinalizeWithoutWatchTime) {
-  mojom::PlaybackPropertiesPtr properties =
-      mojom::PlaybackProperties::New(kCodecAAC, kCodecH264, true, true, false,
-                                     false, false, false, gfx::Size(800, 600));
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, false, false, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties =
+      mojom::SecondaryPlaybackProperties::New(kCodecAAC, kCodecH264, "", "",
+                                              gfx::Size(800, 600));
   Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
 
   // Finalize everything. UKM is only recorded at destruction, so this should do
   // nothing.
@@ -461,8 +492,9 @@ TEST_F(WatchTimeRecorderTest, FinalizeWithoutWatchTime) {
     test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
 
     EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
-    EXPECT_UKM(UkmEntry::kAudioCodecName, properties->audio_codec);
-    EXPECT_UKM(UkmEntry::kVideoCodecName, properties->video_codec);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties->video_codec);
     EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
     EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
     EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
@@ -470,11 +502,12 @@ TEST_F(WatchTimeRecorderTest, FinalizeWithoutWatchTime) {
     EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
     EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
     EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
-               properties->natural_size.width());
+               secondary_properties->natural_size.width());
     EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
-               properties->natural_size.height());
+               secondary_properties->natural_size.height());
     EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 0);
     EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
     EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
 
     EXPECT_NO_UKM(UkmEntry::kMeanTimeBetweenRebuffersName);
@@ -490,10 +523,13 @@ TEST_F(WatchTimeRecorderTest, FinalizeWithoutWatchTime) {
 }
 
 TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideo) {
-  mojom::PlaybackPropertiesPtr properties =
-      mojom::PlaybackProperties::New(kCodecAAC, kCodecH264, true, true, false,
-                                     false, false, false, gfx::Size(800, 600));
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, false, false, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties =
+      mojom::SecondaryPlaybackProperties::New(kCodecAAC, kCodecH264, "", "",
+                                              gfx::Size(800, 600));
   Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
 
   constexpr base::TimeDelta kWatchTime = base::TimeDelta::FromSeconds(4);
   wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll, kWatchTime);
@@ -507,8 +543,9 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideo) {
 
     EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime.InMilliseconds());
     EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
-    EXPECT_UKM(UkmEntry::kAudioCodecName, properties->audio_codec);
-    EXPECT_UKM(UkmEntry::kVideoCodecName, properties->video_codec);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties->video_codec);
     EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
     EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
     EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
@@ -516,12 +553,13 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideo) {
     EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
     EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
     EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
-               properties->natural_size.width());
+               secondary_properties->natural_size.width());
     EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
-               properties->natural_size.height());
+               secondary_properties->natural_size.height());
     EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
     EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 0);
     EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
 
     EXPECT_NO_UKM(UkmEntry::kMeanTimeBetweenRebuffersName);
     EXPECT_NO_UKM(UkmEntry::kWatchTime_ACName);
@@ -535,10 +573,13 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideo) {
 }
 
 TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoWithExtras) {
-  mojom::PlaybackPropertiesPtr properties =
-      mojom::PlaybackProperties::New(kCodecOpus, kCodecVP9, true, true, false,
-                                     true, true, false, gfx::Size(800, 600));
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, true, true, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties =
+      mojom::SecondaryPlaybackProperties::New(kCodecOpus, kCodecVP9, "", "",
+                                              gfx::Size(800, 600));
   Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
 
   constexpr base::TimeDelta kWatchTime = base::TimeDelta::FromSeconds(54);
   const base::TimeDelta kWatchTime2 = kWatchTime * 2;
@@ -562,10 +603,13 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoWithExtras) {
   wtr_->UpdateUnderflowCount(3);
   wtr_->OnError(PIPELINE_ERROR_DECODE);
 
-  const std::string kAudioDecoderName = "MojoAudioDecoder";
-  const std::string kVideoDecoderName = "MojoVideoDecoder";
-  wtr_->SetAudioDecoderName(kAudioDecoderName);
-  wtr_->SetVideoDecoderName(kVideoDecoderName);
+  secondary_properties->audio_decoder_name = "MojoAudioDecoder";
+  secondary_properties->video_decoder_name = "MojoVideoDecoder";
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
+
+  wtr_->SetAutoplayInitiated(true);
+
+  wtr_->OnDurationChanged(base::TimeDelta::FromSeconds(9500));
 
   wtr_.reset();
   base::RunLoop().RunUntilIdle();
@@ -595,9 +639,13 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoWithExtras) {
     EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 2);
     EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 5);
 
+    // Duration should be rounded up.
+    EXPECT_UKM(UkmEntry::kDurationName, 10000000);
+
     EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
-    EXPECT_UKM(UkmEntry::kAudioCodecName, properties->audio_codec);
-    EXPECT_UKM(UkmEntry::kVideoCodecName, properties->video_codec);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties->video_codec);
     EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
     EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
     EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
@@ -605,17 +653,21 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoWithExtras) {
     EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_ERROR_DECODE);
     EXPECT_UKM(UkmEntry::kRebuffersCountName, 3);
     EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
-               properties->natural_size.width());
+               secondary_properties->natural_size.width());
     EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
-               properties->natural_size.height());
+               secondary_properties->natural_size.height());
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, true);
   }
 }
 
-TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoBackground) {
-  mojom::PlaybackPropertiesPtr properties =
-      mojom::PlaybackProperties::New(kCodecAAC, kCodecH264, true, true, true,
-                                     false, false, false, gfx::Size(800, 600));
+TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoBackgroundMuted) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, true, true, false, false, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties =
+      mojom::SecondaryPlaybackProperties::New(kCodecAAC, kCodecH264, "", "",
+                                              gfx::Size(800, 600));
   Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
 
   constexpr base::TimeDelta kWatchTime = base::TimeDelta::FromSeconds(54);
   wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoBackgroundAll, kWatchTime);
@@ -629,8 +681,9 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoBackground) {
 
     EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime.InMilliseconds());
     EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
-    EXPECT_UKM(UkmEntry::kAudioCodecName, properties->audio_codec);
-    EXPECT_UKM(UkmEntry::kVideoCodecName, properties->video_codec);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties->video_codec);
     EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
     EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
     EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
@@ -638,12 +691,65 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoBackground) {
     EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
     EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
     EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
-               properties->natural_size.width());
+               secondary_properties->natural_size.width());
     EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
-               properties->natural_size.height());
+               secondary_properties->natural_size.height());
     EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
     EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 0);
     EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
+
+    EXPECT_NO_UKM(UkmEntry::kDurationName);
+    EXPECT_NO_UKM(UkmEntry::kMeanTimeBetweenRebuffersName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_ACName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_BatteryName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_NativeControlsOnName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_NativeControlsOffName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayFullscreenName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayInlineName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayPictureInPictureName);
+  }
+}
+
+TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoDuration) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, false, false, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties =
+      mojom::SecondaryPlaybackProperties::New(kCodecAAC, kCodecH264, "", "",
+                                              gfx::Size(800, 600));
+  Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
+
+  wtr_->OnDurationChanged(base::TimeDelta::FromSeconds(12345));
+  wtr_.reset();
+  base::RunLoop().RunUntilIdle();
+
+  const auto& entries = test_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* entry : entries) {
+    test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
+
+    EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties->video_codec);
+    EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
+    EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
+    EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
+    EXPECT_UKM(UkmEntry::kIsMSEName, properties->is_mse);
+    EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
+    EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
+    EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+               secondary_properties->natural_size.width());
+    EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+               secondary_properties->natural_size.height());
+    EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
+    EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
+
+    // Duration should be rounded to the most significant digit.
+    EXPECT_UKM(UkmEntry::kDurationName, 10000000);
 
     EXPECT_NO_UKM(UkmEntry::kMeanTimeBetweenRebuffersName);
     EXPECT_NO_UKM(UkmEntry::kWatchTime_ACName);
@@ -654,6 +760,364 @@ TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoBackground) {
     EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayInlineName);
     EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayPictureInPictureName);
   }
+}
+
+TEST_F(WatchTimeRecorderTest, BasicUkmAudioVideoDurationInfinite) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, false, false, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties =
+      mojom::SecondaryPlaybackProperties::New(kCodecAAC, kCodecH264, "", "",
+                                              gfx::Size(800, 600));
+  Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties.Clone());
+
+  wtr_->OnDurationChanged(kInfiniteDuration);
+  wtr_.reset();
+  base::RunLoop().RunUntilIdle();
+
+  const auto& entries = test_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* entry : entries) {
+    test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
+
+    EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties->video_codec);
+    EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
+    EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
+    EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
+    EXPECT_UKM(UkmEntry::kIsMSEName, properties->is_mse);
+    EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
+    EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
+    EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+               secondary_properties->natural_size.width());
+    EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+               secondary_properties->natural_size.height());
+    EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
+    EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 0);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
+
+    // Duration should be unrecorded when infinite.
+    EXPECT_NO_UKM(UkmEntry::kDurationName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTimeName);
+    EXPECT_NO_UKM(UkmEntry::kMeanTimeBetweenRebuffersName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_ACName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_BatteryName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_NativeControlsOnName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_NativeControlsOffName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayFullscreenName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayInlineName);
+    EXPECT_NO_UKM(UkmEntry::kWatchTime_DisplayPictureInPictureName);
+  }
+}
+
+// Might happen due to timing issues, so ensure no crashes.
+TEST_F(WatchTimeRecorderTest, NoSecondaryProperties) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, true, true, false);
+  Initialize(properties.Clone());
+
+  constexpr base::TimeDelta kWatchTime = base::TimeDelta::FromSeconds(54);
+  wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll, kWatchTime);
+  wtr_.reset();
+  base::RunLoop().RunUntilIdle();
+  const auto& entries = test_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(0u, entries.size());
+}
+
+TEST_F(WatchTimeRecorderTest, SingleSecondaryPropertiesUnknownToKnown) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, true, true, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties1 =
+      mojom::SecondaryPlaybackProperties::New(
+          kUnknownAudioCodec, kUnknownVideoCodec, "", "", gfx::Size(800, 600));
+  Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties1.Clone());
+
+  constexpr base::TimeDelta kWatchTime = base::TimeDelta::FromSeconds(54);
+  wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll, kWatchTime);
+
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties2 =
+      mojom::SecondaryPlaybackProperties::New(
+          kCodecAAC, kCodecH264, "FFmpegAudioDecoder", "FFmpegVideoDecoder",
+          gfx::Size(800, 600));
+  wtr_->UpdateSecondaryProperties(secondary_properties2.Clone());
+
+  wtr_.reset();
+  base::RunLoop().RunUntilIdle();
+
+  // Since we only transitioned unknown values to known values, there should be
+  // only a single UKM entry.
+  const auto& entries = test_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* entry : entries) {
+    test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
+    EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
+    EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
+    EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
+    EXPECT_UKM(UkmEntry::kIsMSEName, properties->is_mse);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
+    EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
+    EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
+    EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime.InMilliseconds());
+    EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 1);
+    EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 2);
+    EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
+    EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties2->audio_codec);
+    EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties2->video_codec);
+    EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+               secondary_properties2->natural_size.width());
+    EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+               secondary_properties2->natural_size.height());
+    EXPECT_NO_UKM(UkmEntry::kDurationName);
+  }
+}
+
+TEST_F(WatchTimeRecorderTest, MultipleSecondaryPropertiesNoFinalize) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, true, true, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties1 =
+      mojom::SecondaryPlaybackProperties::New(
+          kCodecOpus, kCodecVP9, "MojoAudioDecoder", "MojoVideoDecoder",
+          gfx::Size(400, 300));
+  Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties1.Clone());
+
+  constexpr base::TimeDelta kWatchTime1 = base::TimeDelta::FromSeconds(54);
+  const int kUnderflowCount1 = 2;
+  wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll, kWatchTime1);
+  wtr_->UpdateUnderflowCount(kUnderflowCount1);
+
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties2 =
+      mojom::SecondaryPlaybackProperties::New(
+          kCodecAAC, kCodecH264, "FFmpegAudioDecoder", "FFmpegVideoDecoder",
+          gfx::Size(800, 600));
+  wtr_->UpdateSecondaryProperties(secondary_properties2.Clone());
+
+  constexpr base::TimeDelta kWatchTime2 = base::TimeDelta::FromSeconds(25);
+  const int kUnderflowCount2 = 3;
+
+  // Watch time and underflow counts continue to accumulate during property
+  // changes, so we report the sum here instead of just kWatchTime2.
+  wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll,
+                        kWatchTime1 + kWatchTime2);
+  wtr_->UpdateUnderflowCount(kUnderflowCount1 + kUnderflowCount2);
+  wtr_->OnError(PIPELINE_ERROR_DECODE);
+  wtr_->OnDurationChanged(base::TimeDelta::FromSeconds(5125));
+
+  wtr_.reset();
+  base::RunLoop().RunUntilIdle();
+
+  // All records should have the following:
+  const auto& entries = test_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(2u, entries.size());
+  for (const auto* entry : entries) {
+    test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
+    EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
+    EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
+    EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
+    EXPECT_UKM(UkmEntry::kIsMSEName, properties->is_mse);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
+    EXPECT_UKM(UkmEntry::kDurationName, 5000000);
+    EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
+
+    // All records inherit the final pipeline status code.
+    EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_ERROR_DECODE);
+  }
+
+  // The first record should have...
+  auto* entry = entries[0];
+  EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime1.InMilliseconds());
+  EXPECT_UKM(UkmEntry::kMeanTimeBetweenRebuffersName,
+             kWatchTime1.InMilliseconds() / kUnderflowCount1);
+  EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 2);
+  EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 5);
+  EXPECT_UKM(UkmEntry::kRebuffersCountName, kUnderflowCount1);
+  EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties1->audio_codec);
+  EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties1->video_codec);
+  EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+             secondary_properties1->natural_size.width());
+  EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+             secondary_properties1->natural_size.height());
+
+  // The second record should have...
+  entry = entries[1];
+  EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime2.InMilliseconds());
+  EXPECT_UKM(UkmEntry::kMeanTimeBetweenRebuffersName,
+             kWatchTime2.InMilliseconds() / kUnderflowCount2);
+  EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 1);
+  EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 2);
+  EXPECT_UKM(UkmEntry::kRebuffersCountName, kUnderflowCount2);
+  EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties2->audio_codec);
+  EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties2->video_codec);
+  EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+             secondary_properties2->natural_size.width());
+  EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+             secondary_properties2->natural_size.height());
+}
+
+TEST_F(WatchTimeRecorderTest, MultipleSecondaryPropertiesNoFinalizeNo2ndWT) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, true, true, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties1 =
+      mojom::SecondaryPlaybackProperties::New(
+          kCodecOpus, kCodecVP9, "MojoAudioDecoder", "MojoVideoDecoder",
+          gfx::Size(400, 300));
+  Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties1.Clone());
+
+  constexpr base::TimeDelta kWatchTime1 = base::TimeDelta::FromSeconds(54);
+  const int kUnderflowCount1 = 2;
+  wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll, kWatchTime1);
+  wtr_->UpdateUnderflowCount(kUnderflowCount1);
+
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties2 =
+      mojom::SecondaryPlaybackProperties::New(
+          kCodecAAC, kCodecH264, "FFmpegAudioDecoder", "FFmpegVideoDecoder",
+          gfx::Size(800, 600));
+  wtr_->UpdateSecondaryProperties(secondary_properties2.Clone());
+
+  // Don't record any watch time to the new record, it should report zero watch
+  // time upon destruction. This ensures there's always a Finalize to prevent
+  // UKM was receiving negative values from the previous unfinalized record.
+  wtr_.reset();
+  base::RunLoop().RunUntilIdle();
+
+  // All records should have the following:
+  const auto& entries = test_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(2u, entries.size());
+  for (const auto* entry : entries) {
+    test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
+    EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
+    EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
+    EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
+    EXPECT_UKM(UkmEntry::kIsMSEName, properties->is_mse);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
+    EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_OK);
+    EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
+    EXPECT_NO_UKM(UkmEntry::kDurationName);
+  }
+
+  // The first record should have...
+  auto* entry = entries[0];
+  EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime1.InMilliseconds());
+  EXPECT_UKM(UkmEntry::kMeanTimeBetweenRebuffersName,
+             kWatchTime1.InMilliseconds() / kUnderflowCount1);
+  EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 2);
+  EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 5);
+  EXPECT_UKM(UkmEntry::kRebuffersCountName, kUnderflowCount1);
+  EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties1->audio_codec);
+  EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties1->video_codec);
+  EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+             secondary_properties1->natural_size.width());
+  EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+             secondary_properties1->natural_size.height());
+
+  // The second record should have...
+  entry = entries[1];
+  EXPECT_UKM(UkmEntry::kWatchTimeName, 0);
+  EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 1);
+  EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 2);
+  EXPECT_UKM(UkmEntry::kRebuffersCountName, 0);
+  EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties2->audio_codec);
+  EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties2->video_codec);
+  EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+             secondary_properties2->natural_size.width());
+  EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+             secondary_properties2->natural_size.height());
+}
+
+TEST_F(WatchTimeRecorderTest, MultipleSecondaryPropertiesWithFinalize) {
+  mojom::PlaybackPropertiesPtr properties = mojom::PlaybackProperties::New(
+      true, true, false, false, true, true, false);
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties1 =
+      mojom::SecondaryPlaybackProperties::New(
+          kCodecOpus, kCodecVP9, "MojoAudioDecoder", "MojoVideoDecoder",
+          gfx::Size(400, 300));
+  Initialize(properties.Clone());
+  wtr_->UpdateSecondaryProperties(secondary_properties1.Clone());
+
+  constexpr base::TimeDelta kWatchTime1 = base::TimeDelta::FromSeconds(54);
+  const int kUnderflowCount1 = 2;
+  wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll, kWatchTime1);
+  wtr_->UpdateUnderflowCount(kUnderflowCount1);
+
+  // Force a finalize here so that the there is no unfinalized watch time at the
+  // time of the secondary property update.
+  wtr_->FinalizeWatchTime({});
+
+  mojom::SecondaryPlaybackPropertiesPtr secondary_properties2 =
+      mojom::SecondaryPlaybackProperties::New(
+          kCodecAAC, kCodecH264, "FFmpegAudioDecoder", "FFmpegVideoDecoder",
+          gfx::Size(800, 600));
+  wtr_->UpdateSecondaryProperties(secondary_properties2.Clone());
+
+  constexpr base::TimeDelta kWatchTime2 = base::TimeDelta::FromSeconds(25);
+  const int kUnderflowCount2 = 3;
+
+  wtr_->RecordWatchTime(WatchTimeKey::kAudioVideoAll, kWatchTime2);
+  wtr_->UpdateUnderflowCount(kUnderflowCount2);
+  wtr_->OnError(PIPELINE_ERROR_DECODE);
+
+  wtr_.reset();
+  base::RunLoop().RunUntilIdle();
+
+  // All records should have the following:
+  const auto& entries = test_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+  EXPECT_EQ(2u, entries.size());
+  for (const auto* entry : entries) {
+    test_recorder_->ExpectEntrySourceHasUrl(entry, GURL(kTestOrigin));
+    EXPECT_UKM(UkmEntry::kIsBackgroundName, properties->is_background);
+    EXPECT_UKM(UkmEntry::kIsMutedName, properties->is_muted);
+    EXPECT_UKM(UkmEntry::kHasAudioName, properties->has_audio);
+    EXPECT_UKM(UkmEntry::kHasVideoName, properties->has_video);
+    EXPECT_UKM(UkmEntry::kIsEMEName, properties->is_eme);
+    EXPECT_UKM(UkmEntry::kIsMSEName, properties->is_mse);
+    EXPECT_UKM(UkmEntry::kAutoplayInitiatedName, false);
+    EXPECT_HAS_UKM(UkmEntry::kPlayerIDName);
+    EXPECT_NO_UKM(UkmEntry::kDurationName);
+
+    // All records inherit the final pipeline status code.
+    EXPECT_UKM(UkmEntry::kLastPipelineStatusName, PIPELINE_ERROR_DECODE);
+  }
+
+  // The first record should have...
+  auto* entry = entries[0];
+  EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime1.InMilliseconds());
+  EXPECT_UKM(UkmEntry::kMeanTimeBetweenRebuffersName,
+             kWatchTime1.InMilliseconds() / kUnderflowCount1);
+  EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 2);
+  EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 5);
+  EXPECT_UKM(UkmEntry::kRebuffersCountName, kUnderflowCount1);
+  EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties1->audio_codec);
+  EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties1->video_codec);
+  EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+             secondary_properties1->natural_size.width());
+  EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+             secondary_properties1->natural_size.height());
+
+  // The second record should have...
+  entry = entries[1];
+  EXPECT_UKM(UkmEntry::kWatchTimeName, kWatchTime2.InMilliseconds());
+  EXPECT_UKM(UkmEntry::kMeanTimeBetweenRebuffersName,
+             kWatchTime2.InMilliseconds() / kUnderflowCount2);
+  EXPECT_UKM(UkmEntry::kAudioDecoderNameName, 1);
+  EXPECT_UKM(UkmEntry::kVideoDecoderNameName, 2);
+  EXPECT_UKM(UkmEntry::kRebuffersCountName, kUnderflowCount2);
+  EXPECT_UKM(UkmEntry::kAudioCodecName, secondary_properties2->audio_codec);
+  EXPECT_UKM(UkmEntry::kVideoCodecName, secondary_properties2->video_codec);
+  EXPECT_UKM(UkmEntry::kVideoNaturalWidthName,
+             secondary_properties2->natural_size.width());
+  EXPECT_UKM(UkmEntry::kVideoNaturalHeightName,
+             secondary_properties2->natural_size.height());
 }
 
 #undef EXPECT_UKM

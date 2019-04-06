@@ -68,7 +68,8 @@ void PDFResource::SearchString(const unsigned short* input_string,
   UStringSearch* searcher = usearch_open(term, -1, string, -1, locale_.c_str(),
                                          0, &status);
   DCHECK(status == U_ZERO_ERROR || status == U_USING_FALLBACK_WARNING ||
-         status == U_USING_DEFAULT_WARNING);
+         status == U_USING_DEFAULT_WARNING)
+      << status;
   UCollationStrength strength = case_sensitive ? UCOL_TERTIARY : UCOL_PRIMARY;
 
   UCollator* collator = usearch_getCollator(searcher);
@@ -79,7 +80,7 @@ void PDFResource::SearchString(const unsigned short* input_string,
 
   status = U_ZERO_ERROR;
   int match_start = usearch_first(searcher, &status);
-  DCHECK(status == U_ZERO_ERROR);
+  DCHECK_EQ(U_ZERO_ERROR, status);
 
   std::vector<PP_PrivateFindResult> pp_results;
   while (match_start != USEARCH_DONE) {
@@ -89,7 +90,7 @@ void PDFResource::SearchString(const unsigned short* input_string,
     result.length = matched_length;
     pp_results.push_back(result);
     match_start = usearch_next(searcher, &status);
-    DCHECK(status == U_ZERO_ERROR);
+    DCHECK_EQ(U_ZERO_ERROR, status);
   }
 
   if (pp_results.empty() ||
@@ -134,6 +135,32 @@ void PDFResource::HasUnsupportedFeature() {
 
 void PDFResource::Print() {
   Post(RENDERER, PpapiHostMsg_PDF_Print());
+}
+
+void PDFResource::ShowAlertDialog(const char* message) {
+  SyncCall<PpapiPluginMsg_PDF_ShowAlertDialogReply>(
+      RENDERER, PpapiHostMsg_PDF_ShowAlertDialog(message));
+}
+
+bool PDFResource::ShowConfirmDialog(const char* message) {
+  bool bool_result = false;
+  if (SyncCall<PpapiPluginMsg_PDF_ShowConfirmDialogReply>(
+          RENDERER, PpapiHostMsg_PDF_ShowConfirmDialog(message),
+          &bool_result) != PP_OK) {
+    return false;
+  }
+  return bool_result;
+}
+
+PP_Var PDFResource::ShowPromptDialog(const char* message,
+                                     const char* default_answer) {
+  std::string str_result;
+  if (SyncCall<PpapiPluginMsg_PDF_ShowPromptDialogReply>(
+          RENDERER, PpapiHostMsg_PDF_ShowPromptDialog(message, default_answer),
+          &str_result) != PP_OK) {
+    return PP_MakeUndefined();
+  }
+  return StringVar::StringToPPVar(str_result);
 }
 
 void PDFResource::SaveAs() {
@@ -210,10 +237,6 @@ void PDFResource::SelectionChanged(const PP_FloatPoint& left,
                                    int32_t right_height) {
   Post(RENDERER, PpapiHostMsg_PDF_SelectionChanged(left, left_height, right,
                                                    right_height));
-}
-
-void PDFResource::DidScroll() {
-  Post(RENDERER, PpapiHostMsg_PDF_DidScroll());
 }
 
 }  // namespace proxy

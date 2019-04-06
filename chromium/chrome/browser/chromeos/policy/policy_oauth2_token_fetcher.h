@@ -10,10 +10,11 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 
-namespace net {
-class URLRequestContextGetter;
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace policy {
@@ -40,17 +41,17 @@ class PolicyOAuth2TokenFetcher {
 
   // Fetches the device management service's oauth2 token. This may be fetched
   // via signin context, auth code, or oauth2 refresh token.
-  virtual void StartWithSigninContext(
-      net::URLRequestContextGetter* auth_context_getter,
-      net::URLRequestContextGetter* system_context_getter,
+  virtual void StartWithSigninURLLoaderFactory(
+      scoped_refptr<network::SharedURLLoaderFactory> auth_url_loader_factory,
+      scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory,
       const TokenCallback& callback) = 0;
   virtual void StartWithAuthCode(
       const std::string& auth_code,
-      net::URLRequestContextGetter* system_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory,
       const TokenCallback& callback) = 0;
   virtual void StartWithRefreshToken(
       const std::string& oauth2_refresh_token,
-      net::URLRequestContextGetter* system_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory,
       const TokenCallback& callback) = 0;
 
   // Returns true if we have previously attempted to fetch tokens with this

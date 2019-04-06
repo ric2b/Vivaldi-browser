@@ -11,6 +11,12 @@ namespace content {
 // the expected pixel results on retina capable displays.
 void EnsureCorrectResolutionSettings();
 
+// Sets up base::mac::BaseBundleID.
+void OverrideBundleID();
+
+// Initializes NSApplication.
+void RegisterShellCrApp();
+
 }  // namespace content
 
 #endif  // CONTENT_SHELL_APP_SHELL_MAIN_DELEGATE_MAC_H_

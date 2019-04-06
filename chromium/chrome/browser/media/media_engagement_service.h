@@ -75,10 +75,7 @@ class MediaEngagementService : public KeyedService,
 
   // Overridden from history::HistoryServiceObserver:
   void OnURLsDeleted(history::HistoryService* history_service,
-                     bool all_history,
-                     bool expired,
-                     const history::URLRows& deleted_rows,
-                     const std::set<GURL>& favicon_urls) override;
+                     const history::DeletionInfo& deletion_info) override;
 
   // KeyedService support:
   void Shutdown() override;
@@ -101,6 +98,10 @@ class MediaEngagementService : public KeyedService,
   // The name of the histogram that records the reduction in score when history
   // is cleared.
   static const char kHistogramURLsDeletedScoreReductionName[];
+
+  // The name of the histogram that records the reason why the engagement was
+  // cleared, either partially or fully.
+  static const char kHistogramClearName[];
 
  private:
   friend class MediaEngagementBrowserTest;
@@ -133,6 +134,13 @@ class MediaEngagementService : public KeyedService,
 
   int GetSchemaVersion() const;
   void SetSchemaVersion(int);
+
+  // Remove origins from `deleted_origins` that have no more visits in the
+  // history service, represented as `origin_data`. This is meant to be used
+  // when the service receives a notification of history expiration.
+  void RemoveOriginsWithNoVisits(
+      const std::set<GURL>& deleted_origins,
+      const history::OriginCountAndLastVisitMap& origin_data);
 
   // Allows us to cancel the RecordScoresToHistogram task if we are destroyed.
   base::CancelableTaskTracker task_tracker_;

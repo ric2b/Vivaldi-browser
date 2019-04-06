@@ -12,14 +12,15 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "chromeos/attestation/attestation_constants.h"
 #include "chromeos/chromeos_export.h"
+#include "chromeos/dbus/attestation_constants.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace cryptohome {
 
+class AccountIdentifier;
 class AddKeyRequest;
 class AuthorizationRequest;
 class BaseReply;
@@ -27,7 +28,10 @@ class CheckKeyRequest;
 class FlushAndSignBootAttributesRequest;
 class GetBootAttributeRequest;
 class GetKeyDataRequest;
+class GetSupportedKeyPoliciesRequest;
+class MigrateKeyRequest;
 class MigrateToDircryptoRequest;
+class MountGuestRequest;
 class MountRequest;
 class RemoveFirmwareManagementParametersRequest;
 class RemoveKeyRequest;
@@ -146,18 +150,13 @@ class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
   // Calls Unmount method and returns true when the call succeeds.
   virtual void Unmount(DBusMethodCallback<bool> callback) = 0;
 
-  // Calls AsyncCheckKey method.  |callback| is called after the method call
+  // Calls MigrateKeyEx method. |callback| is called after the method call
   // succeeds.
-  virtual void AsyncCheckKey(const cryptohome::Identification& cryptohome_id,
-                             const std::string& key,
-                             AsyncMethodCallback callback) = 0;
-
-  // Calls AsyncMigrateKey method.  |callback| is called after the method call
-  // succeeds.
-  virtual void AsyncMigrateKey(const cryptohome::Identification& cryptohome_id,
-                               const std::string& from_key,
-                               const std::string& to_key,
-                               AsyncMethodCallback callback) = 0;
+  virtual void MigrateKeyEx(
+      const cryptohome::AccountIdentifier& account,
+      const cryptohome::AuthorizationRequest& auth_request,
+      const cryptohome::MigrateKeyRequest& migrate_request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
   // Calls AsyncRemove method.  |callback| is called after the method call
   // succeeds.
@@ -197,26 +196,11 @@ class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
   virtual std::string BlockingGetSanitizedUsername(
       const cryptohome::Identification& cryptohome_id) = 0;
 
-  // Calls the AsyncMount method to asynchronously mount the cryptohome for
-  // |username|, using |key| to unlock it. For supported |flags|, see the
-  // documentation of AsyncMethodCaller::AsyncMount().
-  // |callback| is called after the method call succeeds.
-  virtual void AsyncMount(const cryptohome::Identification& cryptohome_id,
-                          const std::string& key,
-                          int flags,
-                          AsyncMethodCallback callback) = 0;
-
-  // Calls the AsyncAddKey method to asynchronously add another |new_key| for
-  // |username|, using |key| to unlock it first.
-  // |callback| is called after the method call succeeds.
-  virtual void AsyncAddKey(const cryptohome::Identification& cryptohome_id,
-                           const std::string& key,
-                           const std::string& new_key,
-                           AsyncMethodCallback callback) = 0;
-
-  // Calls AsyncMountGuest method.  |callback| is called after the method call
+  // Calls MountGuestEx method. |callback| is called after the method call
   // succeeds.
-  virtual void AsyncMountGuest(AsyncMethodCallback callback) = 0;
+  virtual void MountGuestEx(
+      const cryptohome::MountGuestRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
   // Calls TpmIsReady method.
   virtual void TpmIsReady(DBusMethodCallback<bool> callback) = 0;
@@ -308,6 +292,13 @@ class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
   // Calls the TpmAttestationIsPrepared dbus method.  The callback is called
   // when the operation completes.
   virtual void TpmAttestationIsPrepared(DBusMethodCallback<bool> callback) = 0;
+
+  // Requests the device's enrollment identifier (EID). The |callback| will be
+  // called with the EID. If |ignore_cache| is true, the EID is calculated
+  // even if the attestation database already contains a cached version.
+  virtual void TpmAttestationGetEnrollmentId(
+      bool ignore_cache,
+      DBusMethodCallback<TpmAttestationDataResult> callback) = 0;
 
   // Calls the TpmAttestationIsEnrolled dbus method.  The callback is called
   // when the operation completes.
@@ -601,6 +592,25 @@ class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
   virtual void NeedsDircryptoMigration(
       const cryptohome::Identification& cryptohome_id,
       DBusMethodCallback<bool> callback) = 0;
+
+  // Calls GetSupportedKeyPolicies to determine which type of keys can be added.
+  virtual void GetSupportedKeyPolicies(
+      const cryptohome::GetSupportedKeyPoliciesRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
+
+  // Calls IsQuotaSupported to know whether quota is supported by cryptohome.
+  virtual void IsQuotaSupported(
+      DBusMethodCallback<bool> callback) = 0;
+
+  // Calls GetCurrentSpaceForUid to get the current disk space for an android
+  // uid (a shifted uid).
+  virtual void GetCurrentSpaceForUid(const uid_t android_uid,
+                                     DBusMethodCallback<int64_t> callback) = 0;
+
+  // Calls GetCurrentSpaceForGid to get the current disk space for an android
+  // gid (a shifted gid).
+  virtual void GetCurrentSpaceForGid(const gid_t android_gid,
+                                     DBusMethodCallback<int64_t> callback) = 0;
 
  protected:
   // Create() should be used instead.

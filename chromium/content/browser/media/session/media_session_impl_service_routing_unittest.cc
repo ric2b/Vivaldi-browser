@@ -7,7 +7,6 @@
 #include <map>
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/media/session/media_session_player_observer.h"
@@ -16,7 +15,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "media/base/media_content_type.h"
-#include "third_party/WebKit/public/platform/modules/mediasession/media_session.mojom.h"
+#include "third_party/blink/public/platform/modules/mediasession/media_session.mojom.h"
 
 using ::testing::_;
 using ::testing::AnyNumber;

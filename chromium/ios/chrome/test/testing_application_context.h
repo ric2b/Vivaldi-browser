@@ -12,6 +12,11 @@
 #include "base/threading/thread_checker.h"
 #include "ios/chrome/browser/application_context.h"
 
+namespace network {
+class TestURLLoaderFactory;
+class WeakWrapperSharedURLLoaderFactory;
+}  // namespace network
+
 class TestingApplicationContext : public ApplicationContext {
  public:
   TestingApplicationContext();
@@ -37,6 +42,9 @@ class TestingApplicationContext : public ApplicationContext {
 
   PrefService* GetLocalState() override;
   net::URLRequestContextGetter* GetSystemURLRequestContext() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetSharedURLLoaderFactory()
+      override;
+  network::mojom::NetworkContext* GetSystemNetworkContext() override;
   const std::string& GetApplicationLocale() override;
   ios::ChromeBrowserStateManager* GetChromeBrowserStateManager() override;
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
@@ -59,6 +67,9 @@ class TestingApplicationContext : public ApplicationContext {
   ios::ChromeBrowserStateManager* chrome_browser_state_manager_;
   std::unique_ptr<network_time::NetworkTimeTracker> network_time_tracker_;
   bool was_last_shutdown_clean_;
+  std::unique_ptr<network::TestURLLoaderFactory> test_url_loader_factory_;
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+      system_shared_url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TestingApplicationContext);
 };

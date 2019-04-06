@@ -31,12 +31,14 @@ ViewsTestSuite::~ViewsTestSuite() {}
 
 int ViewsTestSuite::RunTests() {
   return base::LaunchUnitTests(
-      argc_, argv_, base::Bind(&ViewsTestSuite::Run, base::Unretained(this)));
+      argc_, argv_,
+      base::BindOnce(&ViewsTestSuite::Run, base::Unretained(this)));
 }
 
 int ViewsTestSuite::RunTestsSerially() {
   return base::LaunchUnitTestsSerially(
-      argc_, argv_, base::Bind(&ViewsTestSuite::Run, base::Unretained(this)));
+      argc_, argv_,
+      base::BindOnce(&ViewsTestSuite::Run, base::Unretained(this)));
 }
 
 void ViewsTestSuite::Initialize() {
@@ -50,7 +52,7 @@ void ViewsTestSuite::Initialize() {
   ui::RegisterPathProvider();
 
   base::FilePath ui_test_pak_path;
-  ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+  ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 #if defined(USE_AURA)
   InitializeEnv();

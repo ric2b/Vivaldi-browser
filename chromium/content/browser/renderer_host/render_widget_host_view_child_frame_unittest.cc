@@ -9,15 +9,14 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
-#include "components/viz/common/surfaces/surface_sequence.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
@@ -29,16 +28,18 @@
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/common/frame_visual_properties.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/fake_renderer_compositor_frame_sink.h"
 #include "content/test/mock_render_widget_host_delegate.h"
 #include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/compositor.h"
 
 namespace content {
@@ -56,13 +57,14 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
       : FrameConnectorDelegate(use_zoom_for_device_scale_factor) {}
   ~MockFrameConnectorDelegate() override {}
 
-  void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
-                            const viz::SurfaceSequence& sequence) override {
+  void FirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override {
     last_surface_info_ = surface_info;
   }
 
-  void SetViewportIntersection(const gfx::Rect& intersection) {
+  void SetViewportIntersection(const gfx::Rect& intersection,
+                               const gfx::Rect& compositor_visible_rect) {
     viewport_intersection_rect_ = intersection;
+    compositor_visible_rect_ = compositor_visible_rect;
   }
 
   RenderWidgetHostViewBase* GetParentRenderWidgetHostView() override {
@@ -80,9 +82,7 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
 
 class RenderWidgetHostViewChildFrameTest : public testing::Test {
  public:
-  RenderWidgetHostViewChildFrameTest()
-      : scoped_task_environment_(
-            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
+  RenderWidgetHostViewChildFrameTest() {}
 
   void SetUp() override {
     SetUpEnvironment(false /* use_zoom_for_device_scale_factor */);
@@ -140,20 +140,15 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
   }
 
   viz::SurfaceId GetSurfaceId() const {
-    return viz::SurfaceId(view_->frame_sink_id_,
-                          view_->last_received_local_surface_id_);
+    return view_->last_activated_surface_info_.id();
   }
 
   viz::LocalSurfaceId GetLocalSurfaceId() const {
-    return view_->last_received_local_surface_id_;
-  }
-
-  void ClearCompositorSurfaceIfNecessary() {
-    view_->ClearCompositorSurfaceIfNecessary();
+    return GetSurfaceId().local_surface_id();
   }
 
  protected:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  TestBrowserThreadBundle thread_bundle_;
 
   std::unique_ptr<BrowserContext> browser_context_;
   MockRenderWidgetHostDelegate delegate_;
@@ -200,41 +195,9 @@ TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
   ASSERT_FALSE(view_->IsShowing());
 }
 
-// Verify that SubmitCompositorFrame behavior is correct when a delegated
-// frame is received from a renderer process.
-TEST_F(RenderWidgetHostViewChildFrameTest, SwapCompositorFrame) {
-  gfx::Size view_size(100, 100);
-  gfx::Rect view_rect(view_size);
-  float scale_factor = 1.f;
-  viz::LocalSurfaceId local_surface_id(1, base::UnguessableToken::Create());
-
-  view_->SetSize(view_size);
-  view_->Show();
-
-  view_->SubmitCompositorFrame(
-      local_surface_id,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
-
-  viz::SurfaceId id = GetSurfaceId();
-  if (id.is_valid()) {
-#if !defined(OS_ANDROID)
-    ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-    viz::SurfaceManager* manager = factory->GetContextFactoryPrivate()
-                                       ->GetFrameSinkManager()
-                                       ->surface_manager();
-    viz::Surface* surface = manager->GetSurfaceForId(id);
-    EXPECT_TRUE(surface);
-#endif
-
-    // Surface ID should have been passed to FrameConnectorDelegate to
-    // be sent to the embedding renderer.
-    EXPECT_EQ(viz::SurfaceInfo(id, scale_factor, view_size),
-              test_frame_connector_->last_surface_info_);
-  }
-}
-
-// Check that the same local surface id can be used after frame eviction.
-TEST_F(RenderWidgetHostViewChildFrameTest, FrameEviction) {
+// Verify that RenderWidgetHostViewChildFrame passes the child's SurfaceId to
+// FrameConnectorDelegate to be sent to the embedding renderer.
+TEST_F(RenderWidgetHostViewChildFrameTest, PassesSurfaceId) {
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
   float scale_factor = 1.f;
@@ -242,33 +205,20 @@ TEST_F(RenderWidgetHostViewChildFrameTest, FrameEviction) {
   view_->SetSize(view_size);
   view_->Show();
 
-  // Submit a frame.
-  view_->SubmitCompositorFrame(
-      kArbitraryLocalSurfaceId,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
+  viz::SurfaceId surface_id(view_->GetFrameSinkId(),
+                            view_->GetLocalSurfaceId());
+  viz::SurfaceInfo surface_info(surface_id, scale_factor, view_size);
+  view_->OnFirstSurfaceActivation(surface_info);
 
-  EXPECT_EQ(kArbitraryLocalSurfaceId, GetLocalSurfaceId());
-  EXPECT_TRUE(view_->has_frame());
-
-  // Evict the frame. has_frame() should return false.
-  ClearCompositorSurfaceIfNecessary();
-  EXPECT_EQ(kArbitraryLocalSurfaceId, GetLocalSurfaceId());
-  EXPECT_FALSE(view_->has_frame());
-
-  // Submit another frame with the same local surface id. The same id should be
-  // usable.
-  view_->SubmitCompositorFrame(
-      kArbitraryLocalSurfaceId,
-      CreateDelegatedFrame(scale_factor, view_size, view_rect), nullptr);
-  EXPECT_EQ(kArbitraryLocalSurfaceId, GetLocalSurfaceId());
-  EXPECT_TRUE(view_->has_frame());
+  EXPECT_EQ(surface_info, test_frame_connector_->last_surface_info_);
 }
 
 // Tests that the viewport intersection rect is dispatched to the RenderWidget
 // whenever screen rects are updated.
 TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
   gfx::Rect intersection_rect(5, 5, 100, 80);
-  test_frame_connector_->SetViewportIntersection(intersection_rect);
+  test_frame_connector_->SetViewportIntersection(intersection_rect,
+                                                 intersection_rect);
 
   MockRenderProcessHost* process =
       static_cast<MockRenderProcessHost*>(widget_host_->GetProcess());
@@ -280,33 +230,12 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
       process->sink().GetUniqueMessageMatching(
           ViewMsg_SetViewportIntersection::ID);
   ASSERT_TRUE(intersection_update);
-  std::tuple<gfx::Rect> sent_rect;
-  ViewMsg_SetViewportIntersection::Read(intersection_update, &sent_rect);
-  EXPECT_EQ(intersection_rect, std::get<0>(sent_rect));
+  std::tuple<gfx::Rect, gfx::Rect> sent_rects;
+
+  ViewMsg_SetViewportIntersection::Read(intersection_update, &sent_rects);
+  EXPECT_EQ(intersection_rect, std::get<0>(sent_rects));
+  EXPECT_EQ(intersection_rect, std::get<1>(sent_rects));
 }
-
-// Tests specific to non-scroll-latching behaviour.
-// TODO(mcnee): Remove once scroll-latching lands. crbug.com/526463
-class RenderWidgetHostViewChildFrameScrollLatchingDisabledTest
-    : public RenderWidgetHostViewChildFrameTest {
- public:
-  RenderWidgetHostViewChildFrameScrollLatchingDisabledTest() {}
-
-  void SetUp() override {
-    feature_list_.InitWithFeatures({},
-                                   {features::kTouchpadAndWheelScrollLatching,
-                                    features::kAsyncWheelEvents});
-
-    RenderWidgetHostViewChildFrameTest::SetUp();
-    DCHECK(!view_->wheel_scroll_latching_enabled());
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(
-      RenderWidgetHostViewChildFrameScrollLatchingDisabledTest);
-};
 
 class RenderWidgetHostViewChildFrameZoomForDSFTest
     : public RenderWidgetHostViewChildFrameTest {
@@ -321,40 +250,21 @@ class RenderWidgetHostViewChildFrameZoomForDSFTest
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrameZoomForDSFTest);
 };
 
-// Test that when a child scrolls and then stops consuming once it hits the
-// extent, we don't bubble the subsequent unconsumed GestureScrollUpdates
-// in the same gesture.
-TEST_F(RenderWidgetHostViewChildFrameScrollLatchingDisabledTest,
-       DoNotBubbleIfChildHasAlreadyScrolled) {
-  blink::WebGestureEvent gesture_scroll(
-      blink::WebGestureEvent::kGestureScrollBegin,
-      blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
-  view_->GestureEventAck(gesture_scroll, INPUT_EVENT_ACK_STATE_IGNORED);
-
-  gesture_scroll.SetType(blink::WebGestureEvent::kGestureScrollUpdate);
-  view_->GestureEventAck(gesture_scroll, INPUT_EVENT_ACK_STATE_CONSUMED);
-  ASSERT_FALSE(test_frame_connector_->seen_bubbled_gsu_);
-
-  view_->GestureEventAck(gesture_scroll,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_FALSE(test_frame_connector_->seen_bubbled_gsu_);
-}
-
 // Tests that moving the child around does not affect the physical backing size.
-TEST_F(RenderWidgetHostViewChildFrameZoomForDSFTest, PhysicalBackingSize) {
+TEST_F(RenderWidgetHostViewChildFrameZoomForDSFTest,
+       CompositorViewportPixelSize) {
   ScreenInfo screen_info;
   screen_info.device_scale_factor = 2.0f;
   test_frame_connector_->SetScreenInfoForTesting(screen_info);
 
   gfx::Size local_frame_size(1276, 410);
   test_frame_connector_->SetLocalFrameSize(local_frame_size);
-  EXPECT_EQ(local_frame_size, view_->GetPhysicalBackingSize());
+  EXPECT_EQ(local_frame_size, view_->GetCompositorViewportPixelSize());
 
   gfx::Rect screen_space_rect(local_frame_size);
   screen_space_rect.set_origin(gfx::Point(230, 263));
   test_frame_connector_->SetScreenSpaceRect(screen_space_rect);
-  EXPECT_EQ(local_frame_size, view_->GetPhysicalBackingSize());
+  EXPECT_EQ(local_frame_size, view_->GetCompositorViewportPixelSize());
   EXPECT_EQ(gfx::Point(115, 131), view_->GetViewBounds().origin());
   EXPECT_EQ(gfx::Point(230, 263),
             test_frame_connector_->screen_space_rect_in_pixels().origin());
@@ -369,8 +279,8 @@ TEST_F(RenderWidgetHostViewChildFrameTest, WasResizedOncePerChange) {
 
   widget_host_->Init();
 
-  constexpr gfx::Size physical_backing_size(100, 100);
-  constexpr gfx::Rect screen_space_rect(physical_backing_size);
+  constexpr gfx::Size compositor_viewport_pixel_size(100, 100);
+  constexpr gfx::Rect screen_space_rect(compositor_viewport_pixel_size);
   viz::ParentLocalSurfaceIdAllocator allocator;
   viz::LocalSurfaceId local_surface_id = allocator.GenerateId();
   constexpr viz::FrameSinkId frame_sink_id(1, 1);
@@ -378,19 +288,25 @@ TEST_F(RenderWidgetHostViewChildFrameTest, WasResizedOncePerChange) {
 
   process->sink().ClearMessages();
 
-  test_frame_connector_->UpdateResizeParams(
-      screen_space_rect, physical_backing_size, ScreenInfo(), 1u, surface_id);
+  FrameVisualProperties visual_properties;
+  visual_properties.screen_space_rect = screen_space_rect;
+  visual_properties.local_frame_size = compositor_viewport_pixel_size;
+  visual_properties.capture_sequence_number = 123u;
+  test_frame_connector_->SynchronizeVisualProperties(surface_id,
+                                                     visual_properties);
 
   ASSERT_EQ(1u, process->sink().message_count());
 
-  const IPC::Message* resize_msg =
-      process->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID);
+  const IPC::Message* resize_msg = process->sink().GetUniqueMessageMatching(
+      ViewMsg_SynchronizeVisualProperties::ID);
   ASSERT_NE(nullptr, resize_msg);
-  ViewMsg_Resize::Param params;
-  ViewMsg_Resize::Read(resize_msg, &params);
-  EXPECT_EQ(physical_backing_size, std::get<0>(params).physical_backing_size);
+  ViewMsg_SynchronizeVisualProperties::Param params;
+  ViewMsg_SynchronizeVisualProperties::Read(resize_msg, &params);
+  EXPECT_EQ(compositor_viewport_pixel_size,
+            std::get<0>(params).compositor_viewport_pixel_size);
   EXPECT_EQ(screen_space_rect.size(), std::get<0>(params).new_size);
   EXPECT_EQ(local_surface_id, std::get<0>(params).local_surface_id);
+  EXPECT_EQ(123u, std::get<0>(params).capture_sequence_number);
 }
 
 }  // namespace content

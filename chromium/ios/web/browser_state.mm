@@ -6,19 +6,27 @@
 
 #include <memory>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process_handle.h"
 #include "ios/web/public/certificate_policy_cache.h"
+#include "ios/web/public/network_context_owner.h"
 #include "ios/web/public/service_manager_connection.h"
 #include "ios/web/public/service_names.mojom.h"
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/webui/url_data_manager_ios_backend.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "net/url_request/url_request_context_getter.h"
+#include "net/url_request/url_request_context_getter_observer.h"
+#include "services/network/network_context.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -124,12 +132,24 @@ BrowserState::BrowserState() : url_data_manager_ios_backend_(nullptr) {
   // an empty object to this via a private key.
   SetUserData(kBrowserStateIdentifierKey,
               std::make_unique<SupportsUserData::Data>());
+
+  // Set up shared_url_loader_factory_ for lazy creation.
+  shared_url_loader_factory_ =
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          base::BindOnce(&BrowserState::GetURLLoaderFactory,
+                         base::Unretained(this) /* safe due to Detach call */));
 }
 
 BrowserState::~BrowserState() {
   CHECK(GetUserData(kMojoWasInitialized))
       << "Attempting to destroy a BrowserState that never called "
       << "Initialize()";
+  shared_url_loader_factory_->Detach();
+
+  if (network_context_) {
+    web::WebThread::DeleteSoon(web::WebThread::IO, FROM_HERE,
+                               network_context_owner_.release());
+  }
 
   RemoveBrowserStateFromUserIdMap(this);
 
@@ -144,6 +164,32 @@ BrowserState::~BrowserState() {
     if (!posted)
       delete url_data_manager_ios_backend_;
   }
+}
+
+network::mojom::URLLoaderFactory* BrowserState::GetURLLoaderFactory() {
+  if (!url_loader_factory_) {
+    DCHECK(!network_context_);
+    DCHECK(!network_context_owner_);
+
+    net::URLRequestContextGetter* request_context = GetRequestContext();
+    DCHECK(request_context);
+    network_context_owner_ = std::make_unique<NetworkContextOwner>(
+        request_context, &network_context_);
+    auto url_loader_factory_params =
+        network::mojom::URLLoaderFactoryParams::New();
+    url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
+    url_loader_factory_params->is_corb_enabled = false;
+    network_context_->CreateURLLoaderFactory(
+        mojo::MakeRequest(&url_loader_factory_),
+        std::move(url_loader_factory_params));
+  }
+
+  return url_loader_factory_.get();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+BrowserState::GetSharedURLLoaderFactory() {
+  return shared_url_loader_factory_;
 }
 
 URLDataManagerIOSBackend*

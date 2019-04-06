@@ -8,11 +8,10 @@
 #include <stdint.h>
 
 #include "ash/ash_export.h"
+#include "ash/session/session_observer.h"
 #include "ash/system/tray/tray_image_item.h"
 #include "base/macros.h"
 #include "chromeos/audio/cras_audio_handler.h"
-#include "chromeos/dbus/power_manager_client.h"
-#include "ui/display/display_observer.h"
 
 namespace ash {
 
@@ -21,29 +20,24 @@ class AudioDetailedView;
 class VolumeView;
 }
 
+class DetailedViewDelegate;
+
 // The system tray item for audio input and output.
 class ASH_EXPORT TrayAudio : public TrayImageItem,
                              public chromeos::CrasAudioHandler::AudioObserver,
-                             public display::DisplayObserver,
-                             public chromeos::PowerManagerClient::Observer {
+                             public SessionObserver {
  public:
   explicit TrayAudio(SystemTray* system_tray);
   ~TrayAudio() override;
 
-  // Temporarily shows the pop-up volume slider on all displays. Used by ARC
-  // when an Android app changes the system volume.
-  static void ShowPopUpVolumeView();
+  // Shows the pop-up volume slider on all displays. Used by ARC when an Android
+  // app changes the system volume.
+  void ShowPopUpVolumeView();
 
   tray::VolumeView* volume_view_for_testing() { return volume_view_; }
   bool pop_up_volume_view_for_testing() { return pop_up_volume_view_; }
 
  private:
-  // Overridden from display::DisplayObserver.
-  void OnDisplayAdded(const display::Display& new_display) override;
-  void OnDisplayRemoved(const display::Display& old_display) override;
-  void OnDisplayMetricsChanged(const display::Display& display,
-                               uint32_t changed_metrics) override;
-
   // Overridden from TrayImageItem.
   bool GetInitialVisibility() override;
 
@@ -53,6 +47,7 @@ class ASH_EXPORT TrayAudio : public TrayImageItem,
   void OnDefaultViewDestroyed() override;
   void OnDetailedViewDestroyed() override;
   bool ShouldShowShelf() const override;
+  views::View* GetItemToRestoreFocusTo() override;
 
   // Overridden from CrasAudioHandler::AudioObserver.
   void OnOutputNodeVolumeChanged(uint64_t node_id, int volume) override;
@@ -61,11 +56,8 @@ class ASH_EXPORT TrayAudio : public TrayImageItem,
   void OnActiveOutputNodeChanged() override;
   void OnActiveInputNodeChanged() override;
 
-  // Overridden from chromeos::PowerManagerClient::Observer.
-  void SuspendDone(const base::TimeDelta& sleep_duration) override;
-
-  // Swaps the left and right channels on yoga devices based on orientation.
-  void ChangeInternalSpeakerChannelMode();
+  // Overridden from SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // Updates the UI views.
   void Update();
@@ -77,6 +69,10 @@ class ASH_EXPORT TrayAudio : public TrayImageItem,
   bool pop_up_volume_view_;
 
   tray::AudioDetailedView* audio_detail_view_;
+
+  ScopedSessionObserver session_observer_{this};
+
+  const std::unique_ptr<DetailedViewDelegate> detailed_view_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayAudio);
 };

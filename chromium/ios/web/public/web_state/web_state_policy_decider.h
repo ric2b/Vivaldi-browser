@@ -9,25 +9,49 @@
 
 #include "base/macros.h"
 #include "ui/base/page_transition_types.h"
+#include "url/gurl.h"
 
 namespace web {
 
 class WebState;
+class TestWebState;
 
 // Decides the navigation policy for a web state.
 class WebStatePolicyDecider {
  public:
+  // Data Transfer Object for the additional information about navigation
+  // request passed to WebStatePolicyDecider::ShouldAllowRequest().
+  struct RequestInfo {
+    RequestInfo(ui::PageTransition transition_type,
+                const GURL& source_url,
+                bool target_frame_is_main,
+                bool has_user_gesture)
+        : transition_type(transition_type),
+          source_url(source_url),
+          target_frame_is_main(target_frame_is_main),
+          has_user_gesture(has_user_gesture) {}
+    // The navigation page transition type.
+    ui::PageTransition transition_type =
+        ui::PageTransition::PAGE_TRANSITION_FIRST;
+    // The source URL that the request was initiated from.
+    GURL source_url;
+    // Indicates whether the navigation target frame is the main frame.
+    bool target_frame_is_main = false;
+    // Indicates if there was a recent user interaction with the request frame.
+    bool has_user_gesture = false;
+  };
+
   // Removes self as a policy decider of |web_state_|.
   virtual ~WebStatePolicyDecider();
 
   // Asks the decider whether the navigation corresponding to |request| should
-  // be allowed to continue. Defaults to true if not overriden. Called before
-  // WebStateObserver::DidStartNavigation.
+  // be allowed to continue. Defaults to true if not overriden.
+  // Called before WebStateObserver::DidStartNavigation.
   // Never called in the following cases:
   //  - same-document back-forward and state change navigations
   //  - CRWNativeContent navigations
   virtual bool ShouldAllowRequest(NSURLRequest* request,
-                                  ui::PageTransition transition);
+                                  const RequestInfo& request_info);
 
   // Asks the decider whether the navigation corresponding to |response| should
   // be allowed to continue. Defaults to true if not overriden.
@@ -55,6 +79,7 @@ class WebStatePolicyDecider {
 
  private:
   friend class WebStateImpl;
+  friend class TestWebState;
 
   // Resets the current web state.
   void ResetWebState();

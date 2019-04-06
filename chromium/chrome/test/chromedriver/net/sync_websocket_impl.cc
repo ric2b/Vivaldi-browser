@@ -55,10 +55,30 @@ bool SyncWebSocketImpl::Core::Connect(const GURL& url) {
   bool success = false;
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
-  context_getter_->GetNetworkTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&SyncWebSocketImpl::Core::ConnectOnIO, this,
-                                url, &success, &event));
-  event.Wait();
+  // Connect with retries. The retry timeout starts at 2 seconds, with
+  // exponential backoff, up to 16 seconds. The maximum total wait time is
+  // about 30 seconds. (Normally, a successful connection takes only a few
+  // milliseconds on Linux and Mac, but around a second on Windows.)
+  const int kMaxTimeout = 16;
+  for (int timeout = 2; timeout <= kMaxTimeout; timeout *= 2) {
+    context_getter_->GetNetworkTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(&SyncWebSocketImpl::Core::ConnectOnIO, this,
+                                  url, &success, &event));
+    if (event.TimedWait(base::TimeDelta::FromSeconds(timeout)))
+      break;
+    LOG(WARNING) << "Timed out connecting to Chrome, "
+                 << (timeout < kMaxTimeout ? "retrying..." : "giving up.");
+  }
+  if (!success) {
+    // Make sure the underlying connection is closed before we return, otherwise
+    // it might try to set event or success flag after they have already gone
+    // out of scope.
+    context_getter_->GetNetworkTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&SyncWebSocketImpl::Core::CloseOnIO, this, &event));
+    event.Wait();
+    return false;
+  }
   return success;
 }
 
@@ -117,6 +137,14 @@ void SyncWebSocketImpl::Core::ConnectOnIO(
     base::AutoLock lock(lock_);
     received_queue_.clear();
   }
+  // If this is a retry to connect, there is a chance that the original attempt
+  // to connect has succeeded after the retry was initiated, so double check if
+  // we are already connected. The is_connected_ flag is only set on the I/O
+  // thread, so no additional synchronization is needed to check it here.
+  // Note: If is_connected_ is true, both |success| and |event| may point to
+  // stale memory, so don't use either parameters before returning.
+  if (socket_ && is_connected_)
+    return;
   socket_.reset(new WebSocket(url, this));
   socket_->Connect(base::Bind(
       &SyncWebSocketImpl::Core::OnConnectCompletedOnIO,
@@ -150,4 +178,9 @@ void SyncWebSocketImpl::Core::OnDestruct() const {
     delete this;
   else
     network_task_runner->DeleteSoon(FROM_HERE, this);
+}
+
+void SyncWebSocketImpl::Core::CloseOnIO(base::WaitableEvent* event) {
+  socket_.reset();
+  event->Signal();
 }

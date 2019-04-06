@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "ui/aura/aura_export.h"
 #include "ui/base/class_property.h"
@@ -85,24 +86,30 @@ class AURA_EXPORT WindowPort {
   virtual std::unique_ptr<cc::LayerTreeFrameSink>
   CreateLayerTreeFrameSink() = 0;
 
-  // Get the current viz::SurfaceId.
-  virtual viz::SurfaceId GetSurfaceId() const = 0;
-
   // Forces the window to allocate a new viz::LocalSurfaceId for the next
   // CompositorFrame submission in anticipation of a synchronization operation
   // that does not involve a resize or a device scale factor change.
   virtual void AllocateLocalSurfaceId() = 0;
 
+  // When a child-allocated viz::LocalSurfaceId is being processed, this returns
+  // true.
+  virtual bool IsLocalSurfaceIdAllocationSuppressed() const = 0;
+
+  // When a ScopedSurfaceIdAllocator is alive, it prevents the
+  // allocator from actually allocating. Instead, it triggers its
+  // |allocation_task| upon destruction. This allows us to issue only one
+  // allocation during the lifetime. This is used to continue routing and
+  // processing when a child allocates its own LocalSurfaceId.
+  virtual viz::ScopedSurfaceIdAllocator GetSurfaceIdAllocator(
+      base::OnceCallback<void()> allocation_task) = 0;
+
+  virtual void UpdateLocalSurfaceIdFromEmbeddedClient(
+      const viz::LocalSurfaceId& embedded_client_local_surface_id) = 0;
+
   // Gets the current viz::LocalSurfaceId. The viz::LocalSurfaceId is allocated
   // lazily on call, and will be updated on changes to size or device scale
   // factor.
   virtual const viz::LocalSurfaceId& GetLocalSurfaceId() = 0;
-
-  // This can return invalid FrameSinkId.
-  virtual viz::FrameSinkId GetFrameSinkId() const = 0;
-
-  virtual void OnWindowAddedToRootWindow() = 0;
-  virtual void OnWillRemoveWindowFromRootWindow() = 0;
 
   virtual void OnEventTargetingPolicyChanged() = 0;
 

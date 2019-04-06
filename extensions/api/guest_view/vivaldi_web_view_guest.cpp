@@ -44,6 +44,7 @@
 #include "extensions/helper/vivaldi_init_helpers.h"
 #include "net/cert/x509_certificate.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -68,13 +69,11 @@
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "content/public/browser/render_frame_host.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-// Vivaldi addition: only define mouse gesture for OSX & linux
-// because context menu is shown on mouse down for those systems
-#define MOUSE_GESTURES
-#endif
+// Vivaldi constants
+#include "extensions/api/guest_view/vivaldi_web_view_constants.h"
+
+bool extensions::WebViewGuest::gesture_recording_;
 
 using content::WebContents;
 using guest_view::GuestViewEvent;
@@ -83,23 +82,6 @@ using vivaldi::IsVivaldiApp;
 using vivaldi::IsVivaldiRunning;
 
 namespace extensions {
-
-ExtensionHostForWebContents::ExtensionHostForWebContents(
-    const Extension* extension,
-    content::SiteInstance* site_instance,
-    const GURL& url,
-    ViewType host_type,
-    content::WebContents* contents)
-    : ExtensionHost(extension, site_instance, url, host_type) {
-  SetHostContentsAndRenderView(contents);
-  content::WebContentsObserver::Observe(host_contents());
-  SetViewType(host_contents(), host_type);
-}
-
-ExtensionHostForWebContents::~ExtensionHostForWebContents() {
-  // We must release host_contents here since it is not owned by us.
-  ExtensionHost::ReleaseHostContents();
-}
 
 namespace {
 
@@ -135,27 +117,6 @@ static std::string SSLStateToString(security_state::SecurityLevel status) {
       break;
   }
   NOTREACHED() << "Unknown SecurityLevel";
-  return "unknown";
-}
-
-static std::string TabAlertStateToString(TabAlertState status) {
-  switch (status) {
-    case TabAlertState::NONE:
-      return "none";
-    case TabAlertState::MEDIA_RECORDING:
-      return "recording";
-    case TabAlertState::TAB_CAPTURING:
-      return "capturing";
-    case TabAlertState::AUDIO_PLAYING:
-      return "playing";
-    case TabAlertState::AUDIO_MUTING:
-      return "muting";
-    case TabAlertState::BLUETOOTH_CONNECTED:
-      return "bluetooth";
-    case TabAlertState::USB_CONNECTED:
-      return "usb";
-  }
-  NOTREACHED() << "Unknown TabAlertState Status.";
   return "unknown";
 }
 
@@ -261,11 +222,26 @@ void WebViewGuest::InitListeners() {
   content::RenderViewHost* render_view_host =
       web_contents()->GetRenderViewHost();
 
+  // If any inner web contents are in place we must be in a PDF
+  // or similar and the inner contents must get the mouse events.
+  std::vector<content::WebContentsImpl*> inner_contents =
+      static_cast<content::WebContentsImpl*>(web_contents())
+        ->GetInnerWebContents();
+  if (inner_contents.size() > 0) {
+    render_view_host = inner_contents[0]->GetRenderViewHost();
+  }
+
   if (render_view_host && current_host_ != render_view_host) {
     // Add mouse event listener, only one for every new render_view_host
     mouseevent_callback_ =
         base::Bind(&WebViewGuest::OnMouseEvent, base::Unretained(this));
     render_view_host->GetWidget()->AddMouseEventCallback(mouseevent_callback_);
+
+#if defined(OS_MACOSX) || defined(OS_LINUX)
+    content::WebPreferences prefs = render_view_host->GetWebkitPreferences();
+    prefs.context_menu_on_mouse_up = true;
+    render_view_host->UpdateWebkitPreferences(prefs);
+#endif
     current_host_ = render_view_host;
   }
 }
@@ -404,26 +380,11 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   }
 }
 
-void WebViewGuest::UpdateMediaState(TabAlertState state) {
-  if (state != media_state_) {
-    std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-
-    args->SetString("activeMediaType", TabAlertStateToString(state));
-
-    DispatchEventToView(base::WrapUnique(
-        new GuestViewEvent(webview::kEventMediaStateChanged, std::move(args))));
-  }
-  media_state_ = state;
-}
-
 void WebViewGuest::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
-  UpdateMediaState(chrome::GetTabAlertStateForContents(web_contents()));
-
-  // TODO(gisli):  This would normally be done in the browser, but until we get
-  // Vivaldi browser object we do it here (as we did remove the webcontents
-  // listener for the current browser).
+  // This class is the WebContentsDelegate, so forward this event
+  // to the normal delegate here.
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
   if (browser) {
     static_cast<content::WebContentsDelegate*>(browser)->NavigationStateChanged(
@@ -473,18 +434,23 @@ void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
 }
 
 bool WebViewGuest::IsMouseGesturesEnabled() const {
-  PrefService* pref_service =
+  if (web_contents()) {
+    PrefService* pref_service =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext())
-          ->GetPrefs();
-  return pref_service->GetBoolean(vivaldiprefs::kMouseGesturesEnabled);
+        ->GetPrefs();
+    return pref_service->GetBoolean(vivaldiprefs::kMouseGesturesEnabled);
+  }
+  return true;
 }
 
 bool WebViewGuest::IsRockerGesturesEnabled() const {
-  PrefService* pref_service =
+  if (web_contents()) {
+    PrefService* pref_service =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext())
-          ->GetPrefs();
-  return pref_service->GetBoolean(
-      vivaldiprefs::kMouseGesturesRockerGesturesEnabled);
+        ->GetPrefs();
+    return pref_service->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled);
+  }
+  return false;
 }
 
 bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
@@ -533,91 +499,42 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
         mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
         mouse_event.button == blink::WebMouseEvent::Button::kRight) {
       eat_next_right_mouseup_ = false;
-#ifdef MOUSE_GESTURES
-      // Allows the sequence LMB-DOWN - RMB-DOWN - RMB-UP - LMB-UP (single
-      // back nav) to be repeatable without a menu popping up breaking it
-      // when LMB-DOWN is activated to start another sequence.
-      gesture_recording_ = false;
-#endif
       return true;
     }
   }
 
-#ifdef MOUSE_GESTURES
-  // Both mouse gestures and rocker gestures need a delayed menu (on mouse up)
-  // to work propely.
-  if (!IsMouseGesturesEnabled() && !IsRockerGesturesEnabled()) {
-    return false;
-  }
-
-  // Record the gesture
-  if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
+  if (!gesture_recording_ &&
+      (mouse_event.GetType() == blink::WebInputEvent::kMouseDown ||
+       mouse_event.GetType() == blink::WebInputEvent::kMouseMove) &&
       mouse_event.button == blink::WebMouseEvent::Button::kRight &&
       !(mouse_event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown) &&
-      !gesture_recording_) {
+      IsMouseGesturesEnabled()) {
     gesture_recording_ = true;
-    down_position_in_widget_ = move_position_in_widget_ =
-      mouse_event.PositionInWidget();
-    down_position_in_screen_ = move_position_in_screen_ =
-      mouse_event.PositionInScreen();
-    fire_context_menu_ = true;
-    return true;
+    mousedown_x_ = mouse_event.PositionInWidget().x;
+    mousedown_y_ = mouse_event.PositionInWidget().y;
+    ::vivaldi::SetBlockNextContextMenu(false);
   } else if (gesture_recording_ &&
-             (mouse_event.GetType() == blink::WebInputEvent::kMouseMove ||
-              mouse_event.GetType() == blink::WebInputEvent::kMouseUp)) {
-    if (mouse_event.GetType() == blink::WebInputEvent::kMouseMove) {
-      move_position_in_widget_ = mouse_event.PositionInWidget();
-      move_position_in_screen_ = mouse_event.PositionInScreen();
-    }
+             mouse_event.GetType() == blink::WebInputEvent::kMouseMove) {
+    if (mouse_event.GetModifiers() & blink::WebInputEvent::kRightButtonDown) {
+      if (!::vivaldi::GetBlockNextContextMenu()) {
+        int dx = mouse_event.PositionInWidget().x - mousedown_x_;
+        int dy = mouse_event.PositionInWidget().y - mousedown_y_;
 
-    // If we went over the 5px threshold to cancel the context menu,
-    // the flag is set. It persists if we go under the threshold by
-    // moving you mouse into the original coords, which is expected.
-    int dx = move_position_in_widget_.x - down_position_in_widget_.x;
-    int dy = move_position_in_widget_.y - down_position_in_widget_.y;
-    if (abs(dx) >= 5 || abs(dy) >= 5) {
-      fire_context_menu_ = false;
-    }
-
-    // Copy event and fire
-    if (mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::kRight) {
-      blink::WebMouseEvent event_copy(mouse_event);
-      content::RenderViewHost* render_view_host =
-          web_contents()->GetRenderViewHost();
-
-      if (fire_context_menu_) {
-        // Send the originally-culled right mouse down at original coords
-        event_copy.SetType(blink::WebInputEvent::kMouseDown);
-        event_copy.SetPositionInScreen(down_position_in_screen_.x,
-            down_position_in_screen_.y);
-        // Note: Have to use up position for widget location for correct
-        // behavior on hidpi systems.
-        event_copy.SetPositionInWidget(mouse_event.PositionInWidget().x,
-            mouse_event.PositionInWidget().y);
-        render_view_host->GetWidget()->ForwardMouseEvent(event_copy);
-
-        // Mac will not reset rocker gestures when a context menu closes
-        // (like what happens on lin and win that receive a mouse event with
-        // blink::WebMouseEvent::Button::kNoButton set). So, reset flags here.
-        has_right_mousebutton_down_ = false;
-        has_left_mousebutton_down_ = false;
+        // If we went over the 5px threshold to cancel the context menu,
+        // the flag is set. It persists if we go under the threshold by
+        // moving the mouse into the original coords, which is expected.
+        if (abs(dx) >= 5 || abs(dy) >= 5) {
+          ::vivaldi::SetBlockNextContextMenu(true);
+        }
       }
-
-      gesture_recording_ = false;
-      return fire_context_menu_;
-    } else if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
-               mouse_event.button == blink::WebMouseEvent::Button::kLeft) {
-      fire_context_menu_ = true;
+    } else {
+      // Happens when right mouse button is released outside of webview.
       gesture_recording_ = false;
     }
-
-    if ((mouse_event.GetModifiers() & blink::WebInputEvent::kRightButtonDown) ==
-        0) {
-      gesture_recording_ = false;
-    }
+  } else if (gesture_recording_ &&
+             mouse_event.GetType() == blink::WebInputEvent::kMouseUp) {
+    gesture_recording_ = false;
   }
-#endif  // MOUSE_GESTURES
   return false;
 }
 
@@ -737,11 +654,22 @@ void WebViewGuest::ParseNewWindowUserInput(const std::string& user_input,
 void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
                                            int windowId,
                                            bool activePage) {
-  Browser* browser = chrome::FindBrowserWithID(windowId);
+  Browser* browser =
+      chrome::FindBrowserWithID(SessionID::FromSerializedValue(windowId));
 
   if (!browser || !browser->window()) {
-    NOTREACHED();
-    return;
+    if (windowId) {
+      NOTREACHED();
+      return;
+    }
+    // Find a suitable window.
+    browser = chrome::FindTabbedBrowser(
+        Profile::FromBrowserContext(guest->web_contents()->GetBrowserContext()),
+        true);
+    if (!browser || !browser->window()) {
+      NOTREACHED();
+      return;
+    }
   }
 
   TabStripModel* tab_strip = browser->tab_strip_model();
@@ -762,7 +690,9 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
       TabStripModel::ADD_FORCE_INDEX | TabStripModel::ADD_INHERIT_OPENER;
   if (pinned)
     add_types |= TabStripModel::ADD_PINNED;
-  NavigateParams navigate_params(browser, guest->web_contents());
+
+  NavigateParams navigate_params(browser,
+      std::unique_ptr<WebContents>(guest->web_contents()));
   navigate_params.disposition = active
                                     ? WindowOpenDisposition::NEW_FOREGROUND_TAB
                                     : WindowOpenDisposition::NEW_BACKGROUND_TAB;
@@ -771,53 +701,19 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   navigate_params.source_contents = web_contents();
   Navigate(&navigate_params);
 
-  if (!browser->is_vivaldi()){
-  if (active)
-    navigate_params.target_contents->SetInitialFocus();
+  if (!browser->is_vivaldi()) {
+    if (active)
+      navigate_params.navigated_or_inserted_contents->SetInitialFocus();
   }
-  if (navigate_params.target_contents) {
+  if (navigate_params.navigated_or_inserted_contents) {
     content::RenderFrameHost* host =
-        navigate_params.target_contents->GetMainFrame();
+        navigate_params.navigated_or_inserted_contents->GetMainFrame();
     DCHECK(host);
     chrome::mojom::ChromeRenderFrameAssociatedPtr client;
     host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
     client->SetWindowFeatures(blink::mojom::WindowFeatures().Clone());
   }
 }
-
-void WebViewGuest::CreateExtensionHost(const std::string& extension_id) {
-  if (!IsVivaldiApp(owner_host())) {
-    // Only allow creation of ExtensionHost if the hosting app is Vivaldi.
-    return;
-  }
-
-  if (extension_id.empty()) {
-    extension_host_.reset(nullptr);
-  } else {
-    if (extension_host_.get()) {
-      // Do not create a new one if there is one. Use CreateExtensionHost("") to
-      // change ExtensionHost
-      return;
-    }
-
-    Profile* profile = Profile::FromBrowserContext(browser_context());
-
-    const Extension* extension =
-        extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
-            extension_id, extensions::ExtensionRegistry::ENABLED);
-    if (extension) {
-      content::SiteInstance* site_instance = web_contents()->GetSiteInstance();
-      const GURL& url = web_contents()->GetURL();
-
-      ViewType host_type = VIEW_TYPE_EXTENSION_POPUP;
-
-      extension_host_.reset(new ExtensionHostForWebContents(
-          extension, site_instance, url, host_type, web_contents()));
-    }
-  }
-}
-
-void WebViewGuest::SetExtensionHost(const std::string& extensionhost) {}
 
 blink::WebSecurityStyle WebViewGuest::GetSecurityStyle(
     WebContents* contents,
@@ -890,43 +786,33 @@ void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
                                 source);
 }
 
+bool WebViewGuest::HasOwnerShipOfContents() {
+  if (web_contents_is_owned_by_this_ == false) {
+    return false;
+  }
+  return !chrome::FindBrowserWithWebContents(web_contents());
+}
+
 void WebViewGuest::LoadTabContentsIfNecessary() {
-  // NOTE(andre@vivaldi.com) : This logic was moved here as we now never starts
-  // loading contents in the session restore code. This is to ensure that the
-  // webcontents is a guest before starting loading.
-  Profile* current_profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  PrefService* prefs = current_profile->GetPrefs();
-  bool lazy_load =
-      prefs->GetBoolean(vivaldiprefs::kTabsDeferLoadingAfterRestore);
-  bool always_load_pinned =
-      prefs->GetBoolean(vivaldiprefs::kTabsAlwaysLoadPinnedAfterRestore);
+  web_contents()->GetController().LoadIfNecessary();
+
   TabStripModel* tab_strip;
   int tab_index;
   ::vivaldi::VivaldiStartupTabUserData* viv_startup_data =
-      static_cast<::vivaldi::VivaldiStartupTabUserData *>(
+      static_cast<::vivaldi::VivaldiStartupTabUserData*>(
           web_contents()->GetUserData(
               ::vivaldi::kVivaldiStartupTabUserDataKey));
 
-  if (ExtensionTabUtil::GetTabStripModel(web_contents(), &tab_strip,
-                                         &tab_index)) {
-    if (!lazy_load ||
-        (always_load_pinned && tab_strip->IsTabPinned(tab_index))) {
-      web_contents()->GetController().LoadIfNecessary();
-    }
-
-    if (viv_startup_data) {
-      // Since we start off as discarded we need to reload the page.
-      web_contents()->GetController().Reload(content::ReloadType::NORMAL,
-                                             false);
-      // Then check if we need to make a tab active, this must be done when
-      // starting with tabs through the commandline or through start with pages.
-      if (viv_startup_data->start_as_active()) {
-        tab_strip->ActivateTabAt(tab_index, false);
-      }
+  if (viv_startup_data && ExtensionTabUtil::GetTabStripModel(
+                              web_contents(), &tab_strip, &tab_index)) {
+    // Check if we need to make a tab active, this must be done when
+    // starting with tabs through the commandline or through start with pages.
+    if (viv_startup_data && viv_startup_data->start_as_active()) {
+      tab_strip->ActivateTabAt(tab_index, false);
     }
   }
-  web_contents()->SetUserData("VivaldiStartupTab", nullptr);
+  web_contents()->SetUserData(::vivaldi::kVivaldiStartupTabUserDataKey,
+                              nullptr);
 }
 
 }  // namespace extensions

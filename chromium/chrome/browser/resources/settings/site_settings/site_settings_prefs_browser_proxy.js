@@ -19,6 +19,16 @@ const ContentSettingProvider = {
 };
 
 /**
+ * Represents a list of sites, grouped under the same eTLD+1. For example, an
+ * origin "https://www.example.com" would be grouped together with
+ * "https://login.example.com" and "http://example.com" under a common eTLD+1 of
+ * "example.com".
+ * @typedef {{etldPlus1: string,
+ *            origins: Array<string>}}
+ */
+let SiteGroup;
+
+/**
  * The site exception information passed from the C++ handler.
  * See also: SiteException.
  * @typedef {{embeddingOrigin: string,
@@ -106,6 +116,15 @@ cr.define('settings', function() {
     getDefaultValueForContentType(contentType) {}
 
     /**
+     * Gets a list of sites, grouped by eTLD+1, affected by any of the content
+     * settings specified by |contentTypes|.
+     * @param {string} contentTypes A list of the content types to retrieve
+     *     sites for.
+     * @return {!Promise<!Array<!SiteGroup>>}
+     */
+    getAllSites(contentTypes) {}
+
+    /**
      * Gets the exceptions (site list) for a particular category.
      * @param {string} contentType The name of the category to query.
      * @return {!Promise<!Array<!RawSiteException>>}
@@ -135,6 +154,13 @@ cr.define('settings', function() {
      *     permissions listed in |contentTypes| to.
      */
     setOriginPermissions(origin, contentTypes, blanketSetting) {}
+
+    /**
+     * Clears the flag that's set when the user has changed the Flash permission
+     * for this particular origin.
+     * @param {string} origin The origin to clear the Flash preference for.
+     */
+    clearFlashPref(origin) {}
 
     /**
      * Resets the category permission for a given origin (expressed as primary
@@ -291,6 +317,11 @@ cr.define('settings', function() {
     }
 
     /** @override */
+    getAllSites(contentTypes) {
+      return cr.sendWithPromise('getAllSites', contentTypes);
+    }
+
+    /** @override */
     getExceptionList(contentType) {
       return cr.sendWithPromise('getExceptionList', contentType);
     }
@@ -304,6 +335,11 @@ cr.define('settings', function() {
     setOriginPermissions(origin, contentTypes, blanketSetting) {
       chrome.send(
           'setOriginPermissions', [origin, contentTypes, blanketSetting]);
+    }
+
+    /** @override */
+    clearFlashPref(origin) {
+      chrome.send('clearFlashPref', [origin]);
     }
 
     /** @override */
@@ -362,12 +398,12 @@ cr.define('settings', function() {
 
     /** @override */
     setProtocolDefault(protocol, url) {
-      chrome.send('setDefault', [[protocol, url]]);
+      chrome.send('setDefault', [protocol, url]);
     }
 
     /** @override */
     removeProtocolHandler(protocol, url) {
-      chrome.send('removeHandler', [[protocol, url]]);
+      chrome.send('removeHandler', [protocol, url]);
     }
 
     /** @override */

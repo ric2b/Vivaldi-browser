@@ -41,6 +41,10 @@ class DrmGpuPlatformSupportHost : public GpuPlatformSupportHost,
       scoped_refptr<base::SingleThreadTaskRunner> send_runner,
       const base::Callback<void(IPC::Message*)>& send_callback) override;
   void OnChannelDestroyed(int host_id) override;
+  void OnGpuServiceLaunched(
+      scoped_refptr<base::SingleThreadTaskRunner> ui_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> io_runner,
+      GpuHostBindInterfaceCallback binder) override;
 
   void OnMessageReceived(const IPC::Message& message) override;
 
@@ -82,11 +86,12 @@ class DrmGpuPlatformSupportHost : public GpuPlatformSupportHost,
   bool GpuDisableNativeDisplay(int64_t display_id) override;
   bool GpuGetHDCPState(int64_t display_id) override;
   bool GpuSetHDCPState(int64_t display_id, display::HDCPState state) override;
-  bool GpuSetColorCorrection(
+  bool GpuSetColorMatrix(int64_t display_id,
+                         const std::vector<float>& color_matrix) override;
+  bool GpuSetGammaCorrection(
       int64_t display_id,
       const std::vector<display::GammaRampRGBEntry>& degamma_lut,
-      const std::vector<display::GammaRampRGBEntry>& gamma_lut,
-      const std::vector<float>& correction_matrix) override;
+      const std::vector<display::GammaRampRGBEntry>& gamma_lut) override;
 
   // Services needed by DrmWindowHost
   bool GpuDestroyWindow(gfx::AcceleratedWidget widget) override;

@@ -37,6 +37,7 @@ print_preview_new.Setting;
  *   vendorItems: !print_preview_new.Setting,
  *   otherOptions: !print_preview_new.Setting,
  *   ranges: !print_preview_new.Setting,
+ *   pagesPerSheet: !print_preview_new.Setting,
  * }}
  */
 print_preview_new.Settings;
@@ -91,6 +92,9 @@ const SettingsBehavior = {
     // is no way for the user to change the value in this case.
     if (!valid)
       assert(setting.available, 'Setting is not available: ' + settingName);
+    const shouldFireEvent = valid != setting.valid;
     this.set(`settings.${settingName}.valid`, valid);
+    if (shouldFireEvent)
+      this.fire('setting-valid-changed', valid);
   }
 };

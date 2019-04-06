@@ -8,35 +8,8 @@
 <dom-module id="cr-shared-style">
   <template>
     <style include="cr-hidden-style cr-icons">
-      .action-button {
-        background: var(--google-blue-500);
-        color: white;
-        --paper-button-flat-keyboard-focus: {
-          background: rgb(58, 117, 215);  /* 88% of --google-blue-500 */
-        };
-      }
-
-      .action-button[disabled] {
-        opacity: .2;
-      }
-
-      .cancel-button {
-        --paper-button-flat-keyboard-focus: {
-          background: rgba(0, 0, 0, .12);
-        };
-        -webkit-margin-end: 8px;
-        color: var(--paper-grey-600);
-      }
-
-      .action-button,
-      .cancel-button {
-        font-weight: 500;
-        line-height: 154%;
-        padding: 8px 16px;
-      }
-
       [actionable] {
-        @apply(--cr-actionable);
+        @apply --cr-actionable;
       }
 
       .subpage-arrow,
@@ -71,8 +44,8 @@
         border-bottom-color: var(--google-grey-300);
       }
       [scrollable] iron-list > :not(.no-outline):focus {
-        @apply(--cr-list-item-focus);
-        @apply(--cr-selectable-focus);
+        @apply --cr-list-item-focus;
+        @apply --cr-selectable-focus;
       }
 
       .scroll-container {
@@ -81,17 +54,17 @@
         min-height: 1px;
       }
 
-      [selectable]:focus,
-      [selectable] > :focus {
-        @apply(--cr-selectable-focus);
+      [selectable]:not(paper-radio-group):focus,
+      [selectable]:not(paper-radio-group) > :focus {
+        @apply --cr-selectable-focus;
       }
-      [selectable] > * {
-        @apply(--cr-actionable);
+      [selectable]:not(paper-radio-group) > * {
+        @apply --cr-actionable;
       }
 
       /** Styles for elements that implement the CrContainerShadowBehavior */
       #cr-container-shadow {
-        @apply(--cr-container-shadow);
+        @apply --cr-container-shadow;
       }
 
       #cr-container-shadow.has-shadow {

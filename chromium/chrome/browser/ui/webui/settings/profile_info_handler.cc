@@ -9,7 +9,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
-#include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -17,7 +17,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/webui/chromeos/user_image_source.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
 #else
@@ -32,9 +32,6 @@ namespace settings {
 // static
 const char ProfileInfoHandler::kProfileInfoChangedEventName[] =
     "profile-info-changed";
-const char
-    ProfileInfoHandler::kProfileManagesSupervisedUsersChangedEventName[] =
-        "profile-manages-supervised-users-changed";
 const char ProfileInfoHandler::kProfileStatsCountReadyEventName[] =
     "profile-stats-count-ready";
 
@@ -55,30 +52,20 @@ ProfileInfoHandler::~ProfileInfoHandler() {}
 
 void ProfileInfoHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "getProfileInfo", base::Bind(&ProfileInfoHandler::HandleGetProfileInfo,
-                                   base::Unretained(this)));
+      "getProfileInfo",
+      base::BindRepeating(&ProfileInfoHandler::HandleGetProfileInfo,
+                          base::Unretained(this)));
 #if !defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "getProfileStatsCount",
-      base::Bind(&ProfileInfoHandler::HandleGetProfileStats,
-                 base::Unretained(this)));
+      base::BindRepeating(&ProfileInfoHandler::HandleGetProfileStats,
+                          base::Unretained(this)));
 #endif
-  web_ui()->RegisterMessageCallback(
-      "getProfileManagesSupervisedUsers",
-      base::Bind(&ProfileInfoHandler::HandleGetProfileManagesSupervisedUsers,
-                 base::Unretained(this)));
 }
 
 void ProfileInfoHandler::OnJavascriptAllowed() {
   profile_observer_.Add(
       &g_browser_process->profile_manager()->GetProfileAttributesStorage());
-
-  PrefService* prefs = profile_->GetPrefs();
-  profile_pref_registrar_.Init(prefs);
-  profile_pref_registrar_.Add(
-      prefs::kSupervisedUsers,
-      base::Bind(&ProfileInfoHandler::PushProfileManagesSupervisedUsersStatus,
-                 base::Unretained(this)));
 
 #if defined(OS_CHROMEOS)
   user_manager_observer_.Add(user_manager::UserManager::Get());
@@ -90,8 +77,6 @@ void ProfileInfoHandler::OnJavascriptDisallowed() {
 
   profile_observer_.Remove(
       &g_browser_process->profile_manager()->GetProfileAttributesStorage());
-
-  profile_pref_registrar_.RemoveAll();
 
 #if defined(OS_CHROMEOS)
   user_manager_observer_.Remove(user_manager::UserManager::Get());
@@ -147,27 +132,8 @@ void ProfileInfoHandler::PushProfileStatsCount(
 }
 #endif
 
-void ProfileInfoHandler::HandleGetProfileManagesSupervisedUsers(
-    const base::ListValue* args) {
-  AllowJavascript();
-
-  CHECK_EQ(1U, args->GetSize());
-  const base::Value* callback_id;
-  CHECK(args->Get(0, &callback_id));
-
-  ResolveJavascriptCallback(*callback_id,
-                            base::Value(IsProfileManagingSupervisedUsers()));
-}
-
 void ProfileInfoHandler::PushProfileInfo() {
   FireWebUIListener(kProfileInfoChangedEventName, *GetAccountNameAndIcon());
-}
-
-void ProfileInfoHandler::PushProfileManagesSupervisedUsersStatus() {
-  CallJavascriptFunction(
-      "cr.webUIListenerCallback",
-      base::Value(kProfileManagesSupervisedUsersChangedEventName),
-      base::Value(IsProfileManagingSupervisedUsers()));
 }
 
 std::unique_ptr<base::DictionaryValue>
@@ -206,10 +172,6 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
   response->SetString("name", name);
   response->SetString("iconUrl", icon_url);
   return response;
-}
-
-bool ProfileInfoHandler::IsProfileManagingSupervisedUsers() const {
-  return !profile_->GetPrefs()->GetDictionary(prefs::kSupervisedUsers)->empty();
 }
 
 }  // namespace settings

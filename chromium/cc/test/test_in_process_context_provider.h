@@ -21,6 +21,7 @@ class GrContext;
 
 namespace gpu {
 class GLInProcessContext;
+class RasterInProcessContext;
 }
 
 namespace skia_bindings {
@@ -30,19 +31,14 @@ class GrContextForGLES2Interface;
 namespace cc {
 
 std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext();
-std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
-    viz::TestGpuMemoryBufferManager* gpu_memory_buffer_manager,
-    TestImageFactory* image_factory,
-    gpu::GLInProcessContext* shared_context,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
 class TestInProcessContextProvider
     : public base::RefCountedThreadSafe<TestInProcessContextProvider>,
       public viz::ContextProvider,
       public viz::RasterContextProvider {
  public:
-  explicit TestInProcessContextProvider(
-      TestInProcessContextProvider* shared_context);
+  explicit TestInProcessContextProvider(bool enable_oop_rasterization,
+                                        bool support_locking);
 
   // viz::ContextProvider / viz::RasterContextProvider implementation.
   void AddRef() const override;
@@ -53,15 +49,13 @@ class TestInProcessContextProvider
   gpu::ContextSupport* ContextSupport() override;
   class GrContext* GrContext() override;
   viz::ContextCacheController* CacheController() override;
-  void InvalidateGrContext(uint32_t state) override;
   base::Lock* GetLock() override;
   const gpu::Capabilities& ContextCapabilities() const override;
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
   void AddObserver(viz::ContextLostObserver* obs) override {}
   void RemoveObserver(viz::ContextLostObserver* obs) override {}
-  void SetSupportTextureNorm16(bool support) {
-    capabilities_texture_norm16_ = support;
-  }
+
+  void ExecuteOnGpuThread(base::OnceClosure task);
 
  protected:
   friend class base::RefCountedThreadSafe<TestInProcessContextProvider>;
@@ -70,13 +64,17 @@ class TestInProcessContextProvider
  private:
   viz::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   TestImageFactory image_factory_;
-  std::unique_ptr<gpu::GLInProcessContext> context_;
-  std::unique_ptr<gpu::raster::RasterInterface> raster_context_;
+
+  // Used if support_gles2_interface.
+  std::unique_ptr<gpu::GLInProcessContext> gles2_context_;
+  std::unique_ptr<gpu::raster::RasterInterface> raster_implementation_gles2_;
   std::unique_ptr<skia_bindings::GrContextForGLES2Interface> gr_context_;
+
+  // Used if !support_gles2_interface.
+  std::unique_ptr<gpu::RasterInProcessContext> raster_context_;
+
   std::unique_ptr<viz::ContextCacheController> cache_controller_;
-  base::Lock context_lock_;
-  bool capabilities_texture_norm16_ = false;
-  gpu::Capabilities capabilities_;
+  base::Optional<base::Lock> context_lock_;
   gpu::GpuFeatureInfo gpu_feature_info_;
 };
 

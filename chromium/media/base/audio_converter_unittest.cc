@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <tuple>
 
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -22,7 +23,6 @@ static const int kConvertInputs = 8;
 static const int kConvertCycles = 3;
 
 // Parameters used for testing.
-static const int kBitsPerChannel = 32;
 static const ChannelLayout kChannelLayout = CHANNEL_LAYOUT_STEREO;
 static const int kHighLatencyBufferSize = 2048;
 static const int kLowLatencyBufferSize = 256;
@@ -32,19 +32,18 @@ static const int kSampleRate = 48000;
 static const int kSineCycles = 4;
 
 // Tuple of <input rate, output rate, output channel layout, epsilon>.
-typedef std::tr1::tuple<int, int, ChannelLayout, double> AudioConverterTestData;
+typedef std::tuple<int, int, ChannelLayout, double> AudioConverterTestData;
 class AudioConverterTest
     : public testing::TestWithParam<AudioConverterTestData> {
  public:
-  AudioConverterTest()
-      : epsilon_(std::tr1::get<3>(GetParam())) {
+  AudioConverterTest() : epsilon_(std::get<3>(GetParam())) {
     // Create input and output parameters based on test parameters.
-    input_parameters_ = AudioParameters(
-        AudioParameters::AUDIO_PCM_LINEAR, kChannelLayout,
-        std::tr1::get<0>(GetParam()), kBitsPerChannel, kHighLatencyBufferSize);
+    input_parameters_ =
+        AudioParameters(AudioParameters::AUDIO_PCM_LINEAR, kChannelLayout,
+                        std::get<0>(GetParam()), kHighLatencyBufferSize);
     output_parameters_ = AudioParameters(
-        AudioParameters::AUDIO_PCM_LOW_LATENCY, std::tr1::get<2>(GetParam()),
-        std::tr1::get<1>(GetParam()), 16, kLowLatencyBufferSize);
+        AudioParameters::AUDIO_PCM_LOW_LATENCY, std::get<2>(GetParam()),
+        std::get<1>(GetParam()), kLowLatencyBufferSize);
 
     converter_.reset(new AudioConverter(
         input_parameters_, output_parameters_, false));
@@ -201,11 +200,11 @@ TEST(AudioConverterTest, AudioDelayAndDiscreteChannelCount) {
   // multiple calls to fill the buffer.
   AudioParameters input_parameters(AudioParameters::AUDIO_PCM_LINEAR,
                                    CHANNEL_LAYOUT_DISCRETE, kSampleRate,
-                                   kBitsPerChannel, kLowLatencyBufferSize);
+                                   kLowLatencyBufferSize);
   input_parameters.set_channels_for_discrete(10);
   AudioParameters output_parameters(AudioParameters::AUDIO_PCM_LINEAR,
                                     CHANNEL_LAYOUT_DISCRETE, kSampleRate * 2,
-                                    kBitsPerChannel, kHighLatencyBufferSize);
+                                    kHighLatencyBufferSize);
   output_parameters.set_channels_for_discrete(5);
 
   AudioConverter converter(input_parameters, output_parameters, false);
@@ -253,14 +252,16 @@ TEST_P(AudioConverterTest, ManyInputs) {
 }
 
 INSTANTIATE_TEST_CASE_P(
-    AudioConverterTest, AudioConverterTest, testing::Values(
+    AudioConverterTest,
+    AudioConverterTest,
+    testing::Values(
         // No resampling. No channel mixing.
-        std::tr1::make_tuple(44100, 44100, CHANNEL_LAYOUT_STEREO, 0.00000048),
+        std::make_tuple(44100, 44100, CHANNEL_LAYOUT_STEREO, 0.00000048),
 
         // Upsampling. Channel upmixing.
-        std::tr1::make_tuple(44100, 48000, CHANNEL_LAYOUT_QUAD, 0.033),
+        std::make_tuple(44100, 48000, CHANNEL_LAYOUT_QUAD, 0.033),
 
         // Downsampling. Channel downmixing.
-        std::tr1::make_tuple(48000, 41000, CHANNEL_LAYOUT_MONO, 0.042)));
+        std::make_tuple(48000, 41000, CHANNEL_LAYOUT_MONO, 0.042)));
 
 }  // namespace media

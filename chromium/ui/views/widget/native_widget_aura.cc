@@ -6,13 +6,11 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -48,16 +46,18 @@
 #include "ui/views/widget/widget_aura_utils.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/window_reorderer.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/transient_window_manager.h"
 #include "ui/wm/core/window_animations.h"
+#include "ui/wm/core/window_properties.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
 #include "ui/wm/public/window_move_client.h"
 
 #if defined(OS_WIN)
 #include "base/win/scoped_gdi_object.h"
-#include "base/win/win_util.h"
+#include "base/win/win_client_metrics.h"
 #include "ui/base/l10n/l10n_util_win.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #endif
@@ -136,10 +136,10 @@ void NativeWidgetAura::SetShadowElevationFromInitParams(
     aura::Window* window,
     const Widget::InitParams& params) {
   if (params.shadow_type == Widget::InitParams::SHADOW_TYPE_NONE) {
-    SetShadowElevation(window, wm::ShadowElevation::NONE);
+    wm::SetShadowElevation(window, wm::kShadowElevationNone);
   } else if (params.shadow_type == Widget::InitParams::SHADOW_TYPE_DROP &&
              params.shadow_elevation) {
-    SetShadowElevation(window, *params.shadow_elevation);
+    wm::SetShadowElevation(window, *params.shadow_elevation);
   }
 }
 
@@ -147,7 +147,6 @@ void NativeWidgetAura::SetShadowElevationFromInitParams(
 // NativeWidgetAura, internal::NativeWidgetPrivate implementation:
 
 void NativeWidgetAura::InitNativeWidget(const Widget::InitParams& params) {
-  // Aura needs to know which desktop (Ash or regular) will manage this widget.
   // See Widget::InitParams::context for details.
   DCHECK(params.parent || params.context);
 
@@ -157,15 +156,23 @@ void NativeWidgetAura::InitNativeWidget(const Widget::InitParams& params) {
   // MusClient has assertions that ui::mojom::WindowType matches
   // views::Widget::InitParams::Type.
   aura::SetWindowType(window_, static_cast<ui::mojom::WindowType>(params.type));
+  if (params.corner_radius) {
+    window_->SetProperty(aura::client::kWindowCornerRadiusKey,
+                         *params.corner_radius);
+  }
   window_->SetProperty(aura::client::kShowStateKey, params.show_state);
   if (params.type == Widget::InitParams::TYPE_BUBBLE)
     wm::SetHideOnDeactivate(window_, true);
   window_->SetTransparent(
       params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW);
+
+  // Check for SHADOW_TYPE_NONE before aura::Window::Init() to ensure observers
+  // do not add useless shadow layers by deriving one from the window type.
+  SetShadowElevationFromInitParams(window_, params);
+
   window_->Init(params.layer_type);
   // Set name after layer init so it propagates to layer.
   window_->SetName(params.name);
-  SetShadowElevationFromInitParams(window_, params);
   if (params.type == Widget::InitParams::TYPE_CONTROL)
     window_->Show();
 
@@ -181,7 +188,7 @@ void NativeWidgetAura::InitNativeWidget(const Widget::InitParams& params) {
       wm::AddTransientChild(parent, window_);
       if (!context)
         context = parent;
-      parent = NULL;
+      parent = nullptr;
 
       // Generally transient bubbles are showing state associated to the parent
       // window. Make sure the transient bubble is only visible if the parent is
@@ -193,13 +200,15 @@ void NativeWidgetAura::InitNativeWidget(const Widget::InitParams& params) {
     }
     // SetAlwaysOnTop before SetParent so that always-on-top container is used.
     SetAlwaysOnTop(params.keep_on_top);
+
     // Make sure we have a real |window_bounds|.
-    if (parent && window_bounds == gfx::Rect()) {
-      // If a parent is specified but no bounds are given,
-      // use the origin of the parent's display so that the widget
-      // will be added to the same display as the parent.
+    aura::Window* parent_or_context = parent ? parent : context;
+    if (parent_or_context && window_bounds == gfx::Rect()) {
+      // If a parent or context is specified but no bounds are given, use the
+      // origin of the display so that the widget will be added to the same
+      // display as the parent or context.
       gfx::Rect bounds = display::Screen::GetScreen()
-                             ->GetDisplayNearestWindow(parent)
+                             ->GetDisplayNearestWindow(parent_or_context)
                              .bounds();
       window_bounds.set_origin(bounds.origin());
     }
@@ -477,6 +486,22 @@ void NativeWidgetAura::SetBounds(const gfx::Rect& bounds) {
   window_->SetBounds(bounds);
 }
 
+void NativeWidgetAura::SetBoundsConstrained(const gfx::Rect& bounds) {
+  if (!window_)
+    return;
+
+  gfx::Rect new_bounds(bounds);
+  if (window_->parent()) {
+    if (window_->parent()->GetProperty(wm::kUsesScreenCoordinatesKey)) {
+      new_bounds =
+          NativeWidgetPrivate::ConstrainBoundsToDisplayWorkArea(new_bounds);
+    } else {
+      new_bounds.AdjustToFit(gfx::Rect(window_->parent()->bounds().size()));
+    }
+  }
+  SetBounds(new_bounds);
+}
+
 void NativeWidgetAura::SetSize(const gfx::Size& size) {
   if (window_)
     window_->SetBounds(gfx::Rect(window_->bounds().origin(), size));
@@ -512,8 +537,8 @@ void NativeWidgetAura::Close() {
 
   if (!close_widget_factory_.HasWeakPtrs()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&NativeWidgetAura::CloseNow,
-                              close_widget_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&NativeWidgetAura::CloseNow,
+                                  close_widget_factory_.GetWeakPtr()));
   }
 }
 
@@ -645,6 +670,16 @@ bool NativeWidgetAura::IsFullscreen() const {
 void NativeWidgetAura::SetOpacity(float opacity) {
   if (window_)
     window_->layer()->SetOpacity(opacity);
+}
+
+void NativeWidgetAura::SetAspectRatio(const gfx::SizeF& aspect_ratio) {
+  DCHECK(!aspect_ratio.IsEmpty());
+  if (window_) {
+    // aura::client::kAspectRatio is owned, which allows for passing in this
+    // raw pointer.
+    window_->SetProperty(aura::client::kAspectRatio,
+                         new gfx::SizeF(aspect_ratio));
+  }
 }
 
 void NativeWidgetAura::FlashFrame(bool flash) {
@@ -1041,12 +1076,6 @@ void Widget::CloseAllSecondaryWidgets() {
 #endif
 }
 
-bool Widget::ConvertRect(const Widget* source,
-                         const Widget* target,
-                         gfx::Rect* rect) {
-  return false;
-}
-
 const ui::NativeTheme* Widget::GetNativeTheme() const {
 #if defined(USE_X11)
   const LinuxUI* linux_ui = LinuxUI::instance();
@@ -1167,8 +1196,6 @@ void NativeWidgetPrivate::ReparentNativeView(gfx::NativeView native_view,
     // matches our previous behaviour; the global stacking client would almost
     // always reattach the window to the same RootWindow.
     aura::Window* root_window = native_view->GetRootWindow();
-    if (!root_window)
-      return;
     aura::client::ParentWindowWithContext(
         native_view, root_window, root_window->GetBoundsInScreen());
   }

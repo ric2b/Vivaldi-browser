@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "components/payments/core/payment_currency_amount.h"
 #include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_details_modifier.h"
@@ -98,7 +97,7 @@ std::string GetBasicCardNetworkName(const mojom::BasicCardNetwork& network) {
 PaymentMethodData ConvertPaymentMethodData(
     const mojom::PaymentMethodDataPtr& method_data_entry) {
   PaymentMethodData method_data;
-  method_data.supported_methods = method_data_entry->supported_methods;
+  method_data.supported_method = method_data_entry->supported_method;
 
   // Transfer the supported basic card networks (visa, amex) and types
   // (credit, debit).

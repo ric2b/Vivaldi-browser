@@ -4,10 +4,11 @@
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
-        "media:media": [ "media::mojom::MediaService" ]
+        "media:media": [ "media.mojom.MediaService" ]
       },
       "requires": {
-        "*": [ "app" ]
+        "*": [ "app" ],
+        "chromecast": [ "multizone" ]
       }
     }
   }

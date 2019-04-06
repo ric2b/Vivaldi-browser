@@ -2,8 +2,8 @@
 
 #include "browser/vivaldi_clipboard_utils.h"
 
-#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
+#include "third_party/blink/public/platform/web_keyboard_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 namespace vivaldi {

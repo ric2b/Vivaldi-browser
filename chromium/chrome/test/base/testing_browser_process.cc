@@ -17,24 +17,22 @@
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/features.h"
 #include "chrome/test/base/testing_browser_process_platform_part.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/optimization_guide/optimization_guide_service.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/prefs/pref_service.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service.h"
+#include "content/public/browser/network_connection_tracker.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/common/network_connection_tracker.h"
-#include "extensions/features/features.h"
-#include "media/media_features.h"
+#include "extensions/buildflags/buildflags.h"
+#include "media/media_buildflags.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/message_center/message_center.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 #include "chrome/browser/background/background_mode_manager.h"
@@ -54,6 +52,8 @@
 #endif
 
 #if !defined(OS_ANDROID)
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
 #endif
 
@@ -124,6 +124,13 @@ TestingBrowserProcess::~TestingBrowserProcess() {
   extensions::AppWindowClient::Set(nullptr);
 #endif
 
+#if !defined(OS_ANDROID)
+  // TabLifecycleUnitSource must be deleted before TabManager because it has a
+  // raw pointer to a UsageClock owned by TabManager.
+  tab_lifecycle_unit_source_.reset();
+  tab_manager_.reset();
+#endif
+
   // Destructors for some objects owned by TestingBrowserProcess will use
   // g_browser_process if it is not null, so it must be null before proceeding.
   DCHECK_EQ(static_cast<BrowserProcess*>(nullptr), g_browser_process);
@@ -164,6 +171,11 @@ TestingBrowserProcess::system_network_context_manager() {
   return nullptr;
 }
 
+scoped_refptr<network::SharedURLLoaderFactory>
+TestingBrowserProcess::shared_url_loader_factory() {
+  return shared_url_loader_factory_;
+}
+
 content::NetworkConnectionTracker*
 TestingBrowserProcess::network_connection_tracker() {
   if (!network_connection_tracker_) {
@@ -171,6 +183,11 @@ TestingBrowserProcess::network_connection_tracker() {
         std::make_unique<MockNetworkConnectionTracker>();
   }
   return network_connection_tracker_.get();
+}
+
+network::NetworkQualityTracker*
+TestingBrowserProcess::network_quality_tracker() {
+  return nullptr;
 }
 
 WatchDogThread* TestingBrowserProcess::watchdog_thread() {
@@ -214,7 +231,7 @@ TestingBrowserProcess::browser_policy_connector() {
     // If a test needs to place a file in this directory in the future, we could
     // create a temporary directory and make its path available to tests.
     base::FilePath local_policy_path("/tmp/non/existing/directory");
-    EXPECT_TRUE(PathService::OverrideAndCreateIfNeeded(
+    EXPECT_TRUE(base::PathService::OverrideAndCreateIfNeeded(
         chrome::DIR_POLICY_FILES, local_policy_path, true, false));
 #endif
 
@@ -237,12 +254,6 @@ policy::PolicyService* TestingBrowserProcess::policy_service() {
 IconManager* TestingBrowserProcess::icon_manager() {
   return nullptr;
 }
-
-#if defined(OS_ANDROID)
-GpuDriverInfoManager* TestingBrowserProcess::gpu_driver_info_manager() {
-  return nullptr;
-}
-#endif
 
 GpuModeManager* TestingBrowserProcess::gpu_mode_manager() {
   return nullptr;
@@ -295,7 +306,7 @@ TestingBrowserProcess::extension_event_router_forwarder() {
 }
 
 NotificationUIManager* TestingBrowserProcess::notification_ui_manager() {
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   if (!notification_ui_manager_.get())
     notification_ui_manager_.reset(NotificationUIManager::Create());
   return notification_ui_manager_.get();
@@ -310,18 +321,11 @@ TestingBrowserProcess::notification_platform_bridge() {
   return notification_platform_bridge_.get();
 }
 
-message_center::MessageCenter* TestingBrowserProcess::message_center() {
-  return message_center::MessageCenter::Get();
-}
-
 IntranetRedirectDetector* TestingBrowserProcess::intranet_redirect_detector() {
   return nullptr;
 }
 
-void TestingBrowserProcess::CreateDevToolsHttpProtocolHandler(
-    const std::string& ip,
-    uint16_t port) {
-}
+void TestingBrowserProcess::CreateDevToolsProtocolHandler() {}
 
 void TestingBrowserProcess::CreateDevToolsAutoOpener() {
 }
@@ -410,11 +414,9 @@ MediaFileSystemRegistry* TestingBrowserProcess::media_file_system_registry() {
 #endif
 }
 
-#if BUILDFLAG(ENABLE_WEBRTC)
 WebRtcLogUploader* TestingBrowserProcess::webrtc_log_uploader() {
   return nullptr;
 }
-#endif
 
 network_time::NetworkTimeTracker*
 TestingBrowserProcess::network_time_tracker() {
@@ -423,7 +425,7 @@ TestingBrowserProcess::network_time_tracker() {
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
         std::unique_ptr<base::Clock>(new base::DefaultClock()),
         std::unique_ptr<base::TickClock>(new base::DefaultTickClock()),
-        local_state_, system_request_context()));
+        local_state_, nullptr));
   }
   return network_time_tracker_.get();
 }
@@ -433,23 +435,24 @@ gcm::GCMDriver* TestingBrowserProcess::gcm_driver() {
 }
 
 resource_coordinator::TabManager* TestingBrowserProcess::GetTabManager() {
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-  if (!tab_manager_.get())
-    tab_manager_.reset(new resource_coordinator::TabManager());
-  return tab_manager_.get();
-#else
+#if defined(OS_ANDROID)
   return nullptr;
+#else
+  if (!tab_manager_) {
+    tab_manager_ = std::make_unique<resource_coordinator::TabManager>();
+    tab_lifecycle_unit_source_ =
+        std::make_unique<resource_coordinator::TabLifecycleUnitSource>(
+            tab_manager_->intervention_policy_database(),
+            tab_manager_->usage_clock());
+    tab_lifecycle_unit_source_->AddObserver(tab_manager_.get());
+  }
+  return tab_manager_.get();
 #endif
 }
 
 shell_integration::DefaultWebClientState
 TestingBrowserProcess::CachedDefaultWebClientState() {
   return shell_integration::UNKNOWN_DEFAULT;
-}
-
-physical_web::PhysicalWebDataSource*
-TestingBrowserProcess::GetPhysicalWebDataSource() {
-  return nullptr;
 }
 
 prefs::InProcessPrefServiceFactory*
@@ -460,6 +463,11 @@ TestingBrowserProcess::pref_service_factory() const {
 void TestingBrowserProcess::SetSystemRequestContext(
     net::URLRequestContextGetter* context_getter) {
   system_request_context_ = context_getter;
+}
+
+void TestingBrowserProcess::SetSharedURLLoaderFactory(
+    scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory) {
+  shared_url_loader_factory_ = shared_url_loader_factory;
 }
 
 void TestingBrowserProcess::SetNetworkConnectionTracker(

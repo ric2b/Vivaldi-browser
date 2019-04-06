@@ -64,6 +64,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
         @Override
         public void onDisconnected(CameraDevice cameraDevice) {
+            Log.e(TAG, "cameraDevice was closed unexpectedly");
             cameraDevice.close();
             mCameraDevice = null;
             changeCameraStateAndNotify(CameraState.STOPPED);
@@ -71,6 +72,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
         @Override
         public void onError(CameraDevice cameraDevice, int error) {
+            Log.e(TAG, "cameraDevice encountered an error");
             cameraDevice.close();
             mCameraDevice = null;
             changeCameraStateAndNotify(CameraState.STOPPED);
@@ -166,9 +168,12 @@ public class VideoCaptureCamera2 extends VideoCapture {
     // Inner class to extend a Photo Session state change listener.
     // Error paths must signal notifyTakePhotoError().
     private class CrPhotoSessionListener extends CameraCaptureSession.StateCallback {
+        private final ImageReader mImageReader;
         private final CaptureRequest mPhotoRequest;
         private final long mCallbackId;
-        CrPhotoSessionListener(CaptureRequest photoRequest, long callbackId) {
+        CrPhotoSessionListener(
+                ImageReader imageReader, CaptureRequest photoRequest, long callbackId) {
+            mImageReader = imageReader;
             mPhotoRequest = photoRequest;
             mCallbackId = callbackId;
         }
@@ -181,8 +186,12 @@ public class VideoCaptureCamera2 extends VideoCapture {
                 // will get notified via a CrPhotoSessionListener. Since |handler| is null, we'll
                 // work on the current Thread Looper.
                 session.capture(mPhotoRequest, null, null);
-            } catch (CameraAccessException e) {
-                Log.e(TAG, "capture() error");
+            } catch (CameraAccessException ex) {
+                Log.e(TAG, "capture() CameraAccessException", ex);
+                notifyTakePhotoError(mCallbackId);
+                return;
+            } catch (IllegalStateException ex) {
+                Log.e(TAG, "capture() IllegalStateException", ex);
                 notifyTakePhotoError(mCallbackId);
                 return;
             }
@@ -193,6 +202,11 @@ public class VideoCaptureCamera2 extends VideoCapture {
             Log.e(TAG, "failed configuring capture session");
             notifyTakePhotoError(mCallbackId);
             return;
+        }
+
+        @Override
+        public void onClosed(CameraCaptureSession session) {
+            mImageReader.close();
         }
     };
 
@@ -612,6 +626,23 @@ public class VideoCaptureCamera2 extends VideoCapture {
                 return VideoCaptureApi.ANDROID_API2_LIMITED;
             default:
                 return VideoCaptureApi.ANDROID_API2_LEGACY;
+        }
+    }
+
+    static int getFacingMode(int id) {
+        final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(id);
+        if (cameraCharacteristics == null) {
+            return VideoFacingMode.MEDIA_VIDEO_FACING_NONE;
+        }
+
+        final int facing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING);
+        switch (facing) {
+            case CameraCharacteristics.LENS_FACING_FRONT:
+                return VideoFacingMode.MEDIA_VIDEO_FACING_USER;
+            case CameraCharacteristics.LENS_FACING_BACK:
+                return VideoFacingMode.MEDIA_VIDEO_FACING_ENVIRONMENT;
+            default:
+                return VideoFacingMode.MEDIA_VIDEO_FACING_NONE;
         }
     }
 
@@ -1124,7 +1155,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
         final CaptureRequest photoRequest = photoRequestBuilder.build();
         final CrPhotoSessionListener sessionListener =
-                new CrPhotoSessionListener(photoRequest, callbackId);
+                new CrPhotoSessionListener(imageReader, photoRequest, callbackId);
         try {
             mCameraDevice.createCaptureSession(surfaceList, sessionListener, backgroundHandler);
         } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {

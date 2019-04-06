@@ -69,12 +69,14 @@ static_library("core") {
     "//net",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/cpp:ukm_builders",
+    "//services/network/public/cpp",
     "//third_party/re2",
     "//ui/base",
     "//url",
   ]
 
   public_deps = [
+    "//services/network/public/cpp",
     "//third_party/icu",
     "//third_party/libaddressinput",
   ]
@@ -99,6 +101,8 @@ static_library("test_support") {
     "//components/pref_registry",
     "//components/prefs",
     "//net:test_support",
+    "//services/network:test_support",
+    "//services/network/public/cpp",
   ]
 }
 
@@ -140,6 +144,8 @@ source_set("unit_tests") {
     "//components/ukm:test_support",
     "//net:test_support",
     "//services/metrics/public/cpp:ukm_builders",
+    "//services/network:test_support",
+    "//services/network/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/libaddressinput:test_support",
@@ -226,10 +232,12 @@ if (is_ios) {
       "//components/test/data/payments/payment_request_phone_and_free_shipping_test.html",
       "//components/test/data/payments/payment_request_phone_test.html",
       "//components/test/data/payments/payment_request_shipping_address_change_test.html",
+      "//components/test/data/payments/payment_request_show_promise.html",
       "//components/test/data/payments/payment_request_show_twice_test.html",
       "//components/test/data/payments/phone.js",
       "//components/test/data/payments/phone_and_free_shipping.js",
       "//components/test/data/payments/shipping_address_change.js",
+      "//components/test/data/payments/show_promise.js",
       "//components/test/data/payments/show_twice.js",
       "//components/test/data/payments/style.css",
       "//components/test/data/payments/util.js",

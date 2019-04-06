@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/shell.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/camera_detector.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
@@ -25,10 +24,6 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service_factory.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/grit/generated_resources.h"
@@ -48,19 +43,6 @@ namespace chromeos {
 
 namespace {
 
-// Key for (boolean) value that indicates that user already exists on device.
-const char kUserExists[] = "exists";
-// Key for  value that indicates why user can not be imported.
-const char kUserConflict[] = "conflict";
-// User is already imported.
-const char kUserConflictImported[] = "imported";
-// There is another supervised user with same name.
-const char kUserConflictName[] = "name";
-
-const char kUserNeedPassword[] = "needPassword";
-
-const char kAvatarURLKey[] = "avatarurl";
-const char kRandomAvatarKey[] = "randomAvatar";
 const char kNameOfIntroScreen[] = "intro";
 const char kNameOfNewUserParametersScreen[] = "username";
 
@@ -108,7 +90,6 @@ SupervisedUserCreationScreen::SupervisedUserCreationScreen(
       on_error_screen_(false),
       manager_signin_in_progress_(false),
       last_page_(kNameOfIntroScreen),
-      sync_service_(NULL),
       apply_photo_after_decoding_(false),
       selected_image_(0),
       histogram_helper_(new ErrorScreensHistogramHelper("Supervised")),
@@ -120,8 +101,6 @@ SupervisedUserCreationScreen::SupervisedUserCreationScreen(
 
 SupervisedUserCreationScreen::~SupervisedUserCreationScreen() {
   CameraPresenceNotifier::GetInstance()->RemoveObserver(this);
-  if (sync_service_)
-    sync_service_->RemoveObserver(this);
   if (view_)
     view_->SetDelegate(NULL);
   network_portal_detector::GetInstance()->RemoveObserver(this);
@@ -225,7 +204,14 @@ void SupervisedUserCreationScreen::AuthenticateManager(
 
   controller_.reset(new SupervisedUserCreationControllerNew(this, manager_id));
 
-  UserContext user_context(manager_id);
+  const user_manager::User* const manager =
+      user_manager::UserManager::Get()->FindUser(manager_id);
+  // Tests depend on the ability to create users on-demand, so we cannot
+  // require manager to exist here.
+  UserContext user_context =
+      manager
+          ? UserContext(*manager)
+          : UserContext(user_manager::UserType::USER_TYPE_REGULAR, manager_id);
   user_context.SetKey(Key(manager_password));
   ExistingUserController::current_controller()->Login(user_context,
                                                       SigninSpecifics());
@@ -234,71 +220,12 @@ void SupervisedUserCreationScreen::AuthenticateManager(
 void SupervisedUserCreationScreen::CreateSupervisedUser(
     const base::string16& display_name,
     const std::string& supervised_user_password) {
-  DCHECK(controller_.get());
-  int image;
-  if (selected_image_ == user_manager::User::USER_IMAGE_EXTERNAL)
-    // TODO(dzhioev): crbug/249660
-    image = SupervisedUserCreationController::kDummyAvatarIndex;
-  else
-    image = selected_image_;
-  controller_->StartCreation(display_name, supervised_user_password, image);
+  NOTREACHED();
 }
 
 void SupervisedUserCreationScreen::ImportSupervisedUser(
     const std::string& user_id) {
-  DCHECK(controller_.get());
-  DCHECK(existing_users_.get());
-  VLOG(1) << "Importing user " << user_id;
-  base::DictionaryValue* user_info;
-  if (!existing_users_->GetDictionary(user_id, &user_info)) {
-    LOG(ERROR) << "Can not import non-existing user " << user_id;
-    return;
-  }
-  base::string16 display_name;
-  std::string master_key;
-  std::string signature_key;
-  std::string encryption_key;
-  std::string avatar;
-  bool exists;
-  int avatar_index = SupervisedUserCreationController::kDummyAvatarIndex;
-  user_info->GetString(SupervisedUserSyncService::kName, &display_name);
-  user_info->GetString(SupervisedUserSyncService::kMasterKey, &master_key);
-  user_info->GetString(SupervisedUserSyncService::kPasswordSignatureKey,
-                       &signature_key);
-  user_info->GetString(SupervisedUserSyncService::kPasswordEncryptionKey,
-                       &encryption_key);
-  user_info->GetString(SupervisedUserSyncService::kChromeOsAvatar, &avatar);
-  user_info->GetBoolean(kUserExists, &exists);
-
-  // We should not get here with existing user selected, so just display error.
-  if (exists) {
-    view_->ShowErrorPage(
-        l10n_util::GetStringUTF16(
-            IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_TITLE),
-        l10n_util::GetStringUTF16(IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR),
-        l10n_util::GetStringUTF16(
-            IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_BUTTON));
-    return;
-  }
-
-  SupervisedUserSyncService::GetAvatarIndex(avatar, &avatar_index);
-
-  const base::DictionaryValue* password_data = NULL;
-  SupervisedUserSharedSettingsService* shared_settings_service =
-      SupervisedUserSharedSettingsServiceFactory::GetForBrowserContext(
-          controller_->GetManagerProfile());
-  const base::Value* value = shared_settings_service->GetValue(
-      user_id, supervised_users::kChromeOSPasswordData);
-
-  bool password_right_here = value && value->GetAsDictionary(&password_data) &&
-                             !password_data->empty();
-
-  if (password_right_here) {
-    controller_->StartImport(display_name, avatar_index, user_id, master_key,
-                             password_data, encryption_key, signature_key);
-  } else {
-    NOTREACHED() << " Oops, no password";
-  }
+  NOTREACHED();
 }
 
 // TODO(antrim): Code duplication with previous method will be removed once
@@ -306,39 +233,7 @@ void SupervisedUserCreationScreen::ImportSupervisedUser(
 void SupervisedUserCreationScreen::ImportSupervisedUserWithPassword(
     const std::string& user_id,
     const std::string& password) {
-  DCHECK(controller_.get());
-  DCHECK(existing_users_.get());
-  VLOG(1) << "Importing user " << user_id;
-  base::DictionaryValue* user_info;
-  if (!existing_users_->GetDictionary(user_id, &user_info)) {
-    LOG(ERROR) << "Can not import non-existing user " << user_id;
-    return;
-  }
-  base::string16 display_name;
-  std::string master_key;
-  std::string avatar;
-  bool exists;
-  int avatar_index = SupervisedUserCreationController::kDummyAvatarIndex;
-  user_info->GetString(SupervisedUserSyncService::kName, &display_name);
-  user_info->GetString(SupervisedUserSyncService::kMasterKey, &master_key);
-  user_info->GetString(SupervisedUserSyncService::kChromeOsAvatar, &avatar);
-  user_info->GetBoolean(kUserExists, &exists);
-
-  // We should not get here with existing user selected, so just display error.
-  if (exists) {
-    view_->ShowErrorPage(
-        l10n_util::GetStringUTF16(
-            IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_TITLE),
-        l10n_util::GetStringUTF16(IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR),
-        l10n_util::GetStringUTF16(
-            IDS_CREATE_SUPERVISED_USER_GENERIC_ERROR_BUTTON));
-    return;
-  }
-
-  SupervisedUserSyncService::GetAvatarIndex(avatar, &avatar_index);
-
-  controller_->StartImport(display_name, password, avatar_index, user_id,
-                           master_key);
+  NOTREACHED();
 }
 
 void SupervisedUserCreationScreen::OnManagerLoginFailure() {
@@ -360,18 +255,6 @@ void SupervisedUserCreationScreen::OnManagerFullyAuthenticated(
     view_->ShowUsernamePage();
 
   last_page_ = kNameOfNewUserParametersScreen;
-  CHECK(!sync_service_);
-  sync_service_ =
-      SupervisedUserSyncServiceFactory::GetForProfile(manager_profile);
-  sync_service_->AddObserver(this);
-  OnSupervisedUsersChanged();
-}
-
-void SupervisedUserCreationScreen::OnSupervisedUsersChanged() {
-  CHECK(sync_service_);
-  sync_service_->GetSupervisedUsersAsync(
-      base::Bind(&SupervisedUserCreationScreen::OnGetSupervisedUsers,
-                 weak_factory_.GetWeakPtr()));
 }
 
 void SupervisedUserCreationScreen::OnManagerCryptohomeAuthenticated() {
@@ -443,22 +326,6 @@ void SupervisedUserCreationScreen::OnLongCreationWarning() {
 bool SupervisedUserCreationScreen::FindUserByDisplayName(
     const base::string16& display_name,
     std::string* out_id) const {
-  if (!existing_users_.get())
-    return false;
-  for (base::DictionaryValue::Iterator it(*existing_users_.get());
-       !it.IsAtEnd(); it.Advance()) {
-    const base::DictionaryValue* user_info =
-        static_cast<const base::DictionaryValue*>(&it.value());
-    base::string16 user_display_name;
-    if (user_info->GetString(SupervisedUserSyncService::kName,
-                             &user_display_name)) {
-      if (display_name == user_display_name) {
-        if (out_id)
-          *out_id = it.key();
-        return true;
-      }
-    }
-  }
   return false;
 }
 
@@ -500,77 +367,6 @@ void SupervisedUserCreationScreen::OnCameraPresenceCheckDone(
     bool is_camera_present) {
   if (view_)
     view_->SetCameraPresent(is_camera_present);
-}
-
-void SupervisedUserCreationScreen::OnGetSupervisedUsers(
-    const base::DictionaryValue* users) {
-  // Copy for passing to WebUI, contains only id, name and avatar URL.
-  std::unique_ptr<base::ListValue> ui_users(new base::ListValue());
-  SupervisedUserManager* supervised_user_manager =
-      ChromeUserManager::Get()->GetSupervisedUserManager();
-
-  // Stored copy, contains all necessary information.
-  existing_users_.reset(new base::DictionaryValue());
-  for (base::DictionaryValue::Iterator it(*users); !it.IsAtEnd();
-       it.Advance()) {
-    const base::DictionaryValue* value = nullptr;
-    it.value().GetAsDictionary(&value);
-    // Copy that would be stored in this class.
-    std::unique_ptr<base::DictionaryValue> local_copy = value->CreateDeepCopy();
-    // Copy that would be passed to WebUI. It has some extra values for
-    // displaying, but does not contain sensitive data, such as master password.
-    auto ui_copy = std::make_unique<base::DictionaryValue>();
-
-    int avatar_index = SupervisedUserCreationController::kDummyAvatarIndex;
-    std::string chromeos_avatar;
-    if (local_copy->GetString(SupervisedUserSyncService::kChromeOsAvatar,
-                              &chromeos_avatar) &&
-        !chromeos_avatar.empty() &&
-        SupervisedUserSyncService::GetAvatarIndex(chromeos_avatar,
-                                                  &avatar_index)) {
-      ui_copy->SetString(kAvatarURLKey,
-                         default_user_image::GetDefaultImageUrl(avatar_index));
-    } else {
-      int i = default_user_image::GetRandomDefaultImageIndex();
-      local_copy->SetString(SupervisedUserSyncService::kChromeOsAvatar,
-                            SupervisedUserSyncService::BuildAvatarString(i));
-      local_copy->SetBoolean(kRandomAvatarKey, true);
-      ui_copy->SetString(kAvatarURLKey,
-                         default_user_image::GetDefaultImageUrl(i));
-    }
-
-    local_copy->SetBoolean(kUserExists, false);
-    ui_copy->SetBoolean(kUserExists, false);
-
-    base::string16 display_name;
-    local_copy->GetString(SupervisedUserSyncService::kName, &display_name);
-
-    if (supervised_user_manager->FindBySyncId(it.key())) {
-      local_copy->SetBoolean(kUserExists, true);
-      ui_copy->SetBoolean(kUserExists, true);
-      local_copy->SetString(kUserConflict, kUserConflictImported);
-      ui_copy->SetString(kUserConflict, kUserConflictImported);
-    } else if (supervised_user_manager->FindByDisplayName(display_name)) {
-      local_copy->SetBoolean(kUserExists, true);
-      ui_copy->SetBoolean(kUserExists, true);
-      local_copy->SetString(kUserConflict, kUserConflictName);
-      ui_copy->SetString(kUserConflict, kUserConflictName);
-    }
-    ui_copy->SetString(SupervisedUserSyncService::kName, display_name);
-
-    std::string signature_key;
-    bool has_password =
-        local_copy->GetString(SupervisedUserSyncService::kPasswordSignatureKey,
-                              &signature_key) &&
-        !signature_key.empty();
-
-    ui_copy->SetBoolean(kUserNeedPassword, !has_password);
-    ui_copy->SetString("id", it.key());
-
-    existing_users_->Set(it.key(), std::move(local_copy));
-    ui_users->Append(std::move(ui_copy));
-  }
-  view_->ShowExistingSupervisedUsers(ui_users.get());
 }
 
 void SupervisedUserCreationScreen::UpdateSecureModuleMessages(

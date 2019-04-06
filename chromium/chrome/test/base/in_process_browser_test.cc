@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
+#include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -40,11 +42,11 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "chrome/common/logging_chrome.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
@@ -60,10 +62,12 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/display/display_switches.h"
 
 #if defined(OS_MACOSX)
+#include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "chrome/test/base/scoped_bundle_swizzler_mac.h"
 #endif
@@ -91,6 +95,14 @@
 #include "ui/views/test/test_desktop_screen_x11.h"
 #endif
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/extension_api_frame_id_map.h"
+#endif
+
+#if defined(TOOLKIT_VIEWS)
+#include "chrome/test/views/accessibility_checker.h"
+#endif
+
 #include "app/vivaldi_version_constants.h"
 
 namespace {
@@ -104,75 +116,39 @@ const char kBrowserTestType[] = "browser";
 InProcessBrowserTest::SetUpBrowserFunction*
     InProcessBrowserTest::global_browser_set_up_function_ = nullptr;
 
-// Library used for testing accessibility.
-const base::FilePath::CharType kAXSTesting[] =
-    FILE_PATH_LITERAL("third_party/accessibility-audit/axs_testing.js");
-// JavaScript snippet to configure and run the accessibility audit.
-const char kAccessibilityTestString[] =
-    "var config = new axs.AuditConfiguration();"
-    "/* Disable warning about rules that cannot be checked. */"
-    "config.showUnsupportedRulesWarning = false;"
-    "config.auditRulesToIgnore = ["
-    "  /*"
-    "   * The 'elements with meaningful background image' accessibility"
-    "   * audit (AX_IMAGE_01) does not apply, since Chrome doesn't"
-    "   * disable background images in high-contrast mode like some"
-    "   * browsers do."
-    "   */"
-    "  'elementsWithMeaningfulBackgroundImage',"
-    "  /*"
-    "   * Most WebUI pages are inside an IFrame, so the 'web page should"
-    "   * have a title that describes topic or purpose' test (AX_TITLE_01)"
-    "   * generally does not apply."
-    "   */"
-    "  'pageWithoutTitle',"
-    "  /*"
-    "   * Enable when crbug.com/267035 is fixed."
-    "   * Until then it's just noise."
-    "   */"
-    "  'lowContrastElements'"
-    "];"
-    "var result = axs.Audit.run(config);"
-    "var error = '';"
-    "for (var i = 0; i < result.length; ++i) {"
-    "  if (result[i].result == axs.constants.AuditResult.FAIL) {"
-    "    error = axs.Audit.createReport(result);"
-    "    break;"
-    "  }"
-    "}"
-    "domAutomationController.send(error);";
-
 InProcessBrowserTest::InProcessBrowserTest()
     : browser_(NULL),
       exit_when_last_browser_closes_(true),
-      open_about_blank_on_browser_launch_(true),
-      run_accessibility_checks_for_test_case_(false)
+      open_about_blank_on_browser_launch_(true)
 #if defined(OS_MACOSX)
-      , autorelease_pool_(NULL)
+      ,
+      autorelease_pool_(NULL)
 #endif  // OS_MACOSX
-    {
+{
 #if defined(OS_MACOSX)
+  base::mac::SetOverrideAmIBundled(true);
+
   // TODO(phajdan.jr): Make browser_tests self-contained on Mac, remove this.
   // Before we run the browser, we have to hack the path to the exe to match
   // what it would be if Chrome was running, because it is used to fork renderer
   // processes, on Linux at least (failure to do so will cause a browser_test to
   // be run instead of a renderer).
   base::FilePath chrome_path;
-  CHECK(PathService::Get(base::FILE_EXE, &chrome_path));
+  CHECK(base::PathService::Get(base::FILE_EXE, &chrome_path));
   chrome_path = chrome_path.DirName();
   chrome_path = chrome_path.Append(chrome::kBrowserProcessExecutablePath);
-  CHECK(PathService::Override(base::FILE_EXE, chrome_path));
+  CHECK(base::PathService::Override(base::FILE_EXE, chrome_path));
 #endif  // defined(OS_MACOSX)
 
   CreateTestServer(base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
   base::FilePath src_dir;
-  CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &src_dir));
+  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir));
 
   // chrome::DIR_TEST_DATA isn't going to be setup until after we call
   // ContentMain. However that is after tests' constructors or SetUp methods,
   // which sometimes need it. So just override it.
-  CHECK(PathService::Override(chrome::DIR_TEST_DATA,
-                              src_dir.AppendASCII("chrome/test/data")));
+  CHECK(base::PathService::Override(chrome::DIR_TEST_DATA,
+                                    src_dir.AppendASCII("chrome/test/data")));
 
 #if defined(OS_MACOSX)
   bundle_swizzler_.reset(new ScopedBundleSwizzlerMac);
@@ -180,6 +156,10 @@ InProcessBrowserTest::InProcessBrowserTest()
 
 #if defined(OS_CHROMEOS)
   DefaultAshEventGeneratorDelegate::GetInstance();
+#endif
+
+#if defined(TOOLKIT_VIEWS)
+  accessibility_checker_ = std::make_unique<AccessibilityChecker>();
 #endif
 }
 
@@ -198,9 +178,12 @@ void InProcessBrowserTest::SetUp() {
   // here.
   command_line->AppendSwitch(switches::kDisableOfflineAutoReload);
 
-  // Turn off preconnects because they break the brittle python webserver;
-  // see http://crbug.com/60035.
-  scoped_feature_list_.InitAndDisableFeature(features::kNetworkPrediction);
+  // Turn off preconnects because it breaks some browser tests, see
+  // http://crbug.com/60035.
+  std::vector<base::Feature> enabled_features = {};
+  std::vector<base::Feature> disabled_features = {
+      features::kNetworkPrediction, predictors::kSpeculativePreconnectFeature};
+  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
 
   // Allow subclasses to change the command line before running any tests.
   SetUpCommandLine(command_line);
@@ -262,6 +245,11 @@ void InProcessBrowserTest::SetUp() {
   ChromeContentBrowserClient::SetDefaultQuotaSettingsForTesting(
       &quota_settings_);
 
+  // Redirect the default download directory to a temporary directory.
+  ASSERT_TRUE(default_download_dir_.CreateUniqueTempDir());
+  CHECK(base::PathService::Override(chrome::DIR_DEFAULT_DOWNLOADS,
+                                    default_download_dir_.GetPath()));
+
   BrowserTestBase::SetUp();
 }
 
@@ -281,7 +269,7 @@ void InProcessBrowserTest::SetUpDefaultCommandLine(
   // Explicitly set the path of the binary used for child processes, otherwise
   // they'll try to use browser_tests which doesn't contain ChromeMain.
   base::FilePath subprocess_path;
-  PathService::Get(base::FILE_EXE, &subprocess_path);
+  base::PathService::Get(base::FILE_EXE, &subprocess_path);
   // Recreate the real environment, run the helper within the app bundle.
   subprocess_path = subprocess_path.DirName().DirName();
   DCHECK_EQ(subprocess_path.BaseName().value(), "Contents");
@@ -303,57 +291,6 @@ void InProcessBrowserTest::SetUpDefaultCommandLine(
 
   if (open_about_blank_on_browser_launch_ && command_line->GetArgs().empty())
     command_line->AppendArg(url::kAboutBlankURL);
-}
-
-bool InProcessBrowserTest::RunAccessibilityChecks(std::string* error_message) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  if (!browser()) {
-    *error_message = "browser is NULL";
-    return false;
-  }
-  auto* tab_strip = browser()->tab_strip_model();
-  if (!tab_strip) {
-    *error_message = "tab_strip is NULL";
-    return false;
-  }
-  auto* web_contents = tab_strip->GetActiveWebContents();
-  if (!web_contents) {
-    *error_message = "web_contents is NULL";
-    return false;
-  }
-  auto* focused_frame = web_contents->GetFocusedFrame();
-  if (!focused_frame) {
-    *error_message = "focused_frame is NULL";
-    return false;
-  }
-
-  // Load accessibility library.
-  base::FilePath src_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &src_dir)) {
-    *error_message = "PathService::Get failed";
-    return false;
-  }
-  base::FilePath script_path = src_dir.Append(kAXSTesting);
-  std::string script;
-  if (!base::ReadFileToString(script_path, &script)) {
-    *error_message = "Could not read accessibility library";
-    return false;
-  }
-  if (!content::ExecuteScript(web_contents, script)) {
-    *error_message = "Failed to load accessibility library";
-    return false;
-  }
-
-  // Run accessibility audit.
-  if (!content::ExecuteScriptAndExtractString(focused_frame,
-                                              kAccessibilityTestString,
-                                              error_message)) {
-    *error_message = "Failed to run accessibility audit";
-    return false;
-  }
-
-  // Test result should be empty if there are no errors.
-  return error_message->empty();
 }
 
 bool InProcessBrowserTest::CreateUserDataDirectory() {
@@ -381,6 +318,14 @@ void InProcessBrowserTest::TearDown() {
   BrowserTestBase::TearDown();
   OSCryptMocker::TearDown();
   ChromeContentBrowserClient::SetDefaultQuotaSettingsForTesting(nullptr);
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // By now, all the WebContents should be destroyed, Ensure that we are not
+  // leaking memory in ExtensionAPIFrameIdMap. crbug.com/817205.
+  EXPECT_EQ(
+      0u,
+      extensions::ExtensionApiFrameIdMap::Get()->GetFrameDataCountForTesting());
+#endif
 }
 
 void InProcessBrowserTest::CloseBrowserSynchronously(Browser* browser) {
@@ -409,6 +354,10 @@ void InProcessBrowserTest::CloseAllBrowsers() {
 #endif
 }
 
+void InProcessBrowserTest::RunUntilBrowserProcessQuits() {
+  std::move(run_loop_)->Run();
+}
+
 // TODO(alexmos): This function should expose success of the underlying
 // navigation to tests, which should make sure navigations succeed when
 // appropriate. See https://crbug.com/425335
@@ -423,10 +372,12 @@ void InProcessBrowserTest::AddTabAtIndexToBrowser(
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);
 
-  if (check_navigation_success)
-    content::WaitForLoadStop(params.target_contents);
-  else
-    content::WaitForLoadStopWithoutSuccessCheck(params.target_contents);
+  if (check_navigation_success) {
+    content::WaitForLoadStop(params.navigated_or_inserted_contents);
+  } else {
+    content::WaitForLoadStopWithoutSuccessCheck(
+        params.navigated_or_inserted_contents);
+  }
 }
 
 void InProcessBrowserTest::AddTabAtIndex(
@@ -467,10 +418,13 @@ Browser* InProcessBrowserTest::CreateBrowser(Profile* profile) {
   return browser;
 }
 
-Browser* InProcessBrowserTest::CreateIncognitoBrowser() {
+Browser* InProcessBrowserTest::CreateIncognitoBrowser(Profile* profile) {
+  // Use active profile if default nullptr was passed.
+  if (!profile)
+    profile = browser()->profile();
   // Create a new browser with using the incognito profile.
-  Browser* incognito = new Browser(Browser::CreateParams(
-      browser()->profile()->GetOffTheRecordProfile(), true));
+  Browser* incognito = new Browser(
+      Browser::CreateParams(profile->GetOffTheRecordProfile(), true));
   AddBlankTabAndShow(incognito);
   return incognito;
 }
@@ -516,7 +470,7 @@ base::CommandLine InProcessBrowserTest::GetCommandLineForRelaunch() {
   new_command_line.AppendSwitch(content::kLaunchAsBrowser);
 
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   new_command_line.AppendSwitchPath(switches::kUserDataDir, user_data_dir);
 
   for (base::CommandLine::SwitchMap::const_iterator iter = switches.begin();
@@ -530,6 +484,10 @@ base::CommandLine InProcessBrowserTest::GetCommandLineForRelaunch() {
 void InProcessBrowserTest::PreRunTestOnMainThread() {
   AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
 
+  // Take the ChromeBrowserMainParts' RunLoop to run ourself, when we
+  // want to wait for the browser to exit.
+  run_loop_ = ChromeBrowserMainParts::TakeRunLoopForTest();
+
   // Pump startup related events.
   content::RunAllPendingInMessageLoop();
 
@@ -541,8 +499,9 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
     if (browser_->window()->IsMaximized())
       browser_->window()->Restore();
 #endif
-    content::WaitForLoadStop(
-        browser_->tab_strip_model()->GetActiveWebContents());
+    auto* tab = browser_->tab_strip_model()->GetActiveWebContents();
+    content::WaitForLoadStop(tab);
+    SetInitialWebContents(tab);
   }
 
 #if !defined(OS_ANDROID)
@@ -566,11 +525,6 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
   // browser.
   content::RunAllPendingInMessageLoop();
 
-  // run_accessibility_checks_for_test_case_ must be set before calling
-  // SetUpOnMainThread or RunTestOnMainThread so that one or all tests can
-  // enable/disable the accessibility audit.
-  run_accessibility_checks_for_test_case_ = false;
-
   if (browser_ && global_browser_set_up_function_)
     ASSERT_TRUE(global_browser_set_up_function_(browser_));
 
@@ -588,16 +542,6 @@ void InProcessBrowserTest::PostRunTestOnMainThread() {
   autorelease_pool_->Recycle();
 #endif
 
-  if (run_accessibility_checks_for_test_case_) {
-    std::string error_message;
-    EXPECT_TRUE(RunAccessibilityChecks(&error_message));
-    EXPECT_EQ("", error_message);
-  }
-
-#if defined(OS_MACOSX)
-  autorelease_pool_->Recycle();
-#endif
-
   // Sometimes tests leave Quit tasks in the MessageLoop (for shame), so let's
   // run all pending messages here to avoid preempting the QuitBrowsers tasks.
   // TODO(jbates) Once crbug.com/134753 is fixed, this can be removed because it
@@ -605,6 +549,7 @@ void InProcessBrowserTest::PostRunTestOnMainThread() {
   content::RunAllPendingInMessageLoop();
 
   QuitBrowsers();
+
   // BrowserList should be empty at this point.
   CHECK(BrowserList::GetInstance()->empty());
 }
@@ -628,7 +573,7 @@ void InProcessBrowserTest::QuitBrowsers() {
   // shut down properly.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&chrome::AttemptExit));
-  content::RunMessageLoop();
+  RunUntilBrowserProcessQuits();
 
 #if defined(OS_MACOSX)
   // chrome::AttemptExit() will attempt to close all browsers by deleting

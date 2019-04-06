@@ -18,6 +18,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/values.h"
 #include "cc/base/unique_notifier.h"
+#include "cc/paint/color_space_transfer_cache_entry.h"
 #include "cc/raster/raster_buffer_provider.h"
 #include "cc/raster/raster_source.h"
 #include "cc/resources/memory_history.h"
@@ -80,7 +81,7 @@ class CC_EXPORT TileManagerClient {
   virtual void SetIsLikelyToRequireADraw(bool is_likely_to_require_a_draw) = 0;
 
   // Requests the color space into which tiles should be rasterized.
-  virtual gfx::ColorSpace GetRasterColorSpace() const = 0;
+  virtual RasterColorSpace GetRasterColorSpace() const = 0;
 
   // Requests that a pending tree be scheduled to invalidate content on the
   // pending on active tree. This is currently used when tiles that are
@@ -155,7 +156,6 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
                     ImageDecodeCache* image_decode_cache,
                     TaskGraphRunner* task_graph_runner,
                     RasterBufferProvider* raster_buffer_provider,
-                    size_t scheduled_raster_task_limit,
                     bool use_gpu_rasterization);
 
   // This causes any completed raster work to finalize, so that tiles get up to
@@ -191,12 +191,20 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   void InitializeTilesWithResourcesForTesting(const std::vector<Tile*>& tiles) {
     for (size_t i = 0; i < tiles.size(); ++i) {
       TileDrawInfo& draw_info = tiles[i]->draw_info();
-      draw_info.SetResource(
+      ResourcePool::InUsePoolResource resource =
           resource_pool_->AcquireResource(
               tiles[i]->desired_texture_size(),
-              raster_buffer_provider_->GetResourceFormat(false),
-              client_->GetRasterColorSpace()),
-          false, false);
+              raster_buffer_provider_->GetResourceFormat(),
+              client_->GetRasterColorSpace().color_space);
+      raster_buffer_provider_->AcquireBufferForRaster(resource, 0, 0);
+      // The raster here never really happened, cuz tests. So just add an
+      // arbitrary sync token.
+      if (resource.gpu_backing()) {
+        resource.gpu_backing()->mailbox_sync_token.Set(
+            gpu::GPU_IO, gpu::CommandBufferId::FromUnsafeValue(1), 1);
+      }
+      resource_pool_->PrepareForExport(resource);
+      draw_info.SetResource(std::move(resource), false, false, false);
       draw_info.set_resource_ready_for_draw();
     }
   }
@@ -252,8 +260,6 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
                              ResourcePool::InUsePoolResource resource,
                              bool was_canceled);
 
-  void SetDecodedImageTracker(DecodedImageTracker* decoded_image_tracker);
-
   // CheckerImageTrackerClient implementation.
   void NeedsInvalidationForCheckerImagedTiles() override;
 
@@ -269,6 +275,9 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
 
   CheckerImageTracker& checker_image_tracker() {
     return checker_image_tracker_;
+  }
+  DecodedImageTracker& decoded_image_tracker() {
+    return decoded_image_tracker_;
   }
 
   const std::vector<DrawImage>& decode_tasks_for_testing(Tile::Id id) {
@@ -304,16 +313,16 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   };
 
   struct Signals {
-    Signals();
+    bool activate_tile_tasks_completed = false;
+    bool draw_tile_tasks_completed = false;
+    bool all_tile_tasks_completed = false;
 
-    void reset();
+    bool activate_gpu_work_completed = false;
+    bool draw_gpu_work_completed = false;
 
-    bool ready_to_activate;
-    bool did_notify_ready_to_activate;
-    bool ready_to_draw;
-    bool did_notify_ready_to_draw;
-    bool all_tile_tasks_completed;
-    bool did_notify_all_tile_tasks_completed;
+    bool did_notify_ready_to_activate = false;
+    bool did_notify_ready_to_draw = false;
+    bool did_notify_all_tile_tasks_completed = false;
   };
 
   struct PrioritizedWorkToSchedule {
@@ -333,7 +342,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   void FreeResourcesForTileAndNotifyClientIfTileWasReadyToDraw(Tile* tile);
   scoped_refptr<TileTask> CreateRasterTask(
       const PrioritizedTile& prioritized_tile,
-      const gfx::ColorSpace& color_space,
+      const RasterColorSpace& raster_color_space,
       PrioritizedWorkToSchedule* work_to_schedule);
 
   std::unique_ptr<EvictionTilePriorityQueue>
@@ -350,7 +359,6 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   bool TilePriorityViolatesMemoryPolicy(const TilePriority& priority);
   bool AreRequiredTilesReadyToDraw(RasterTilePriorityQueue::Type type) const;
   void CheckIfMoreTilesNeedToBePrepared();
-  void CheckAndIssueSignals();
   void MarkTilesOutOfMemory(
       std::unique_ptr<RasterTilePriorityQueue> queue) const;
 
@@ -383,7 +391,9 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
 
   bool UsePartialRaster() const;
 
-  void CheckPendingGpuWorkTiles(bool issue_signals, bool flush);
+  void FlushAndIssueSignals();
+  void CheckPendingGpuWorkAndIssueSignals();
+  void IssueSignals();
 
   TileManagerClient* client_;
   base::SequencedTaskRunner* task_runner_;
@@ -405,6 +415,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   bool did_oom_on_last_assign_;
 
   ImageController image_controller_;
+  DecodedImageTracker decoded_image_tracker_;
   CheckerImageTracker checker_image_tracker_;
 
   RasterTaskCompletionStats raster_task_completion_stats_;
@@ -426,7 +437,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   uint64_t pending_required_for_activation_callback_id_ = 0;
   uint64_t pending_required_for_draw_callback_id_ = 0;
   // If true, we should re-compute tile requirements in
-  // CheckPendingGpuWorkTiles.
+  // CheckPendingGpuWorkAndIssueSignals.
   bool pending_tile_requirements_dirty_ = false;
 
   std::unordered_map<Tile::Id, std::vector<DrawImage>> scheduled_draw_images_;

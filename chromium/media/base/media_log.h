@@ -23,11 +23,27 @@
 
 namespace media {
 
+// Interface for media components to log to chrome://media-internals log.
+//
+// Implementations only need to implement AddEvent(), which must be thread-safe.
+// AddEvent() is expected to be called from multiple threads.
 class MEDIA_EXPORT MediaLog {
  public:
   enum MediaLogLevel {
+    // Fatal error, e.g. cause of playback failure. Since this is also used to
+    // form MediaError.message, do NOT use this for non-fatal errors to avoid
+    // contaminating MediaError.message.
     MEDIALOG_ERROR,
+
+    // Warning about non-fatal issues, e.g. quality of playback issues such as
+    // audio/video out of sync.
+    MEDIALOG_WARNING,
+
+    // General info useful for Chromium and/or web developers, testers and even
+    // users, e.g. audio/video codecs used in a playback instance.
     MEDIALOG_INFO,
+
+    // Misc debug info for Chromium developers.
     MEDIALOG_DEBUG,
   };
 
@@ -107,6 +123,18 @@ class MEDIA_EXPORT MediaLog {
   int32_t id() const { return id_; }
 
  private:
+  friend class MediaLogTest;
+
+  enum : size_t {
+    // Max length of URLs in Created/Load events. Exceeding triggers truncation.
+    kMaxUrlLength = 1000,
+  };
+
+  // URLs (for Created and Load events) may be of arbitrary length from the
+  // untrusted renderer. This method truncates to |kMaxUrlLength| before storing
+  // the event, and sets the last 3 characters to an ellipsis.
+  static std::string TruncateUrlString(std::string log_string);
+
   // A unique (to this process) id for this MediaLog.
   int32_t id_;
 

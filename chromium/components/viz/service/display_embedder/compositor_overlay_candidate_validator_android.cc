@@ -20,11 +20,19 @@ CompositorOverlayCandidateValidatorAndroid::
 
 void CompositorOverlayCandidateValidatorAndroid::GetStrategies(
     OverlayProcessor::StrategyList* strategies) {
-  strategies->push_back(std::make_unique<OverlayStrategyUnderlay>(this));
+  // For Android, we do not have the ability to skip an overlay, since the
+  // texture is already in a SurfaceView.  Ideally, we would honor a 'force
+  // overlay' flag that FromDrawQuad would also check.
+  // For now, though, just skip the opacity check.  We really have no idea if
+  // the underlying overlay is opaque anyway; the candidate is referring to
+  // a dummy resource that has no relation to what the overlay contains.
+  // https://crbug.com/842931 .
+  strategies->push_back(std::make_unique<OverlayStrategyUnderlay>(
+      this, OverlayStrategyUnderlay::OpaqueMode::AllowTransparentCandidates));
 }
 
 void CompositorOverlayCandidateValidatorAndroid::CheckOverlaySupport(
-    cc::OverlayCandidateList* candidates) {
+    OverlayCandidateList* candidates) {
   // There should only be at most a single overlay candidate: the video quad.
   // There's no check that the presented candidate is really a video frame for
   // a fullscreen video. Instead it's assumed that if a quad is marked as
@@ -32,7 +40,7 @@ void CompositorOverlayCandidateValidatorAndroid::CheckOverlaySupport(
   DCHECK_LE(candidates->size(), 1u);
 
   if (!candidates->empty()) {
-    cc::OverlayCandidate& candidate = candidates->front();
+    OverlayCandidate& candidate = candidates->front();
 
     // This quad either will be promoted, or would be if it were backed by a
     // SurfaceView.  Record that it should get a promotion hint.

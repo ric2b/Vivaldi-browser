@@ -6,18 +6,21 @@
 
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/v8_helpers.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebSelector.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_selector.h"
 
 namespace extensions {
 
 using blink::WebString;
 
 CssNativeHandler::CssNativeHandler(ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction("CanonicalizeCompoundSelector", "declarativeContent",
-                base::Bind(&CssNativeHandler::CanonicalizeCompoundSelector,
-                           base::Unretained(this)));
+    : ObjectBackedNativeHandler(context) {}
+
+void CssNativeHandler::AddRoutes() {
+  RouteHandlerFunction(
+      "CanonicalizeCompoundSelector", "declarativeContent",
+      base::Bind(&CssNativeHandler::CanonicalizeCompoundSelector,
+                 base::Unretained(this)));
 }
 
 void CssNativeHandler::CanonicalizeCompoundSelector(

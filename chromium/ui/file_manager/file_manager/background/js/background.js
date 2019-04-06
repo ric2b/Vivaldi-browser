@@ -90,7 +90,7 @@ function FileBrowserBackgroundImpl() {
 
   /**
    * Provides drive search to app launcher.
-   * @private {LauncherSearch}
+   * @private {!LauncherSearch}
    */
   this.launcherSearch_ = new LauncherSearch();
 
@@ -302,7 +302,7 @@ FileBrowserBackgroundImpl.prototype.navigateToVolumeInFocusedWindow_ = function(
 
 /**
  * Prefix for the dialog ID.
- * @type {string}
+ * @type {!string}
  * @const
  */
 var DIALOG_ID_PREFIX = 'dialog#';
@@ -378,7 +378,7 @@ FileBrowserBackgroundImpl.prototype.onLaunched_ = function() {
   });
 };
 
-/** @const {string} */
+/** @const {!string} */
 var GPLUS_PHOTOS_APP_ID = 'efjnaogkjbogokcnohkmnjdojkikgobo';
 
 /**
@@ -453,6 +453,7 @@ FileBrowserBackgroundImpl.prototype.onContextMenuClicked_ = function(info) {
  *
  * @return {!Promise<?string>} Promise fulfilled with a key of the focused
  *     window, or null if not found.
+ * @private
  */
 FileBrowserBackgroundImpl.prototype.findFocusedWindow_ = function() {
   return new Promise(function(fulfill, reject) {
@@ -490,21 +491,22 @@ FileBrowserBackgroundImpl.prototype.onMountCompleted_ = function(event) {
 FileBrowserBackgroundImpl.prototype.onMountCompletedInternal_ = function(
     event) {
   // If there is no focused window, then create a new one opened on the
-  // mounted FSP volume.
-  this.findFocusedWindow_().then(function(key) {
-    if (key === null &&
-        event.eventType === 'mount' &&
-        (event.status === 'success' ||
-         event.status === 'error_path_already_mounted') &&
-        event.volumeMetadata.mountContext === 'user' &&
-        event.volumeMetadata.volumeType ===
-            VolumeManagerCommon.VolumeType.PROVIDED &&
-        event.volumeMetadata.source === VolumeManagerCommon.Source.FILE) {
-      this.navigateToVolumeWhenReady_(event.volumeMetadata.volumeId);
-    }
-  }.bind(this)).catch(function(error) {
-    console.error(error.stack || error);
-  });
+  // mounted volume.
+  this.findFocusedWindow_()
+      .then(function(key) {
+        let statusOK = event.status === 'success' ||
+            event.status === 'error_path_already_mounted';
+        let volumeTypeOK = event.volumeMetadata.volumeType ===
+                VolumeManagerCommon.VolumeType.PROVIDED &&
+            event.volumeMetadata.source === VolumeManagerCommon.Source.FILE;
+        if (key === null && event.eventType === 'mount' && statusOK &&
+            event.volumeMetadata.mountContext === 'user' && volumeTypeOK) {
+          this.navigateToVolumeWhenReady_(event.volumeMetadata.volumeId);
+        }
+      }.bind(this))
+      .catch(function(error) {
+        console.error(error.stack || error);
+      });
 };
 
 /**
@@ -534,9 +536,13 @@ FileBrowserBackgroundImpl.prototype.initContextMenu_ = function() {
 };
 
 /**
- * Singleton instance of Background.
- * NOTE: This must come after the call to metrics.clearUserId.
- * @type {FileBrowserBackgroundImpl}
+ * Singleton instance of Background object.
+ * @type {!FileBrowserBackgroundImpl}
  */
 window.background = new FileBrowserBackgroundImpl();
+
+/**
+ * Lastly, end recording of the background page Load.BackgroundScript metric.
+ * NOTE: This call must come after the call to metrics.clearUserId.
+ */
 metrics.recordInterval('Load.BackgroundScript');

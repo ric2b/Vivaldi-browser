@@ -8,16 +8,17 @@
 #include <limits>
 #include <utility>
 
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_canvas.h"
 #include "content/shell/test_runner/layout_and_paint_async_then.h"
 #include "content/shell/test_runner/layout_dump.h"
 #include "content/shell/test_runner/mock_content_settings_client.h"
 #include "content/shell/test_runner/mock_screen_orientation_client.h"
-#include "content/shell/test_runner/mock_web_speech_recognizer.h"
 #include "content/shell/test_runner/pixel_dump.h"
 #include "content/shell/test_runner/spell_check_client.h"
 #include "content/shell/test_runner/test_common.h"
@@ -26,34 +27,32 @@
 #include "content/shell/test_runner/test_runner.h"
 #include "content/shell/test_runner/web_test_delegate.h"
 #include "content/shell/test_runner/web_view_test_proxy.h"
-#include "device/sensors/public/cpp/motion_data.h"
-#include "device/sensors/public/cpp/orientation_data.h"
 #include "gin/arguments.h"
 #include "gin/array_buffer.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
-#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
-#include "third_party/WebKit/public/platform/WebCanvas.h"
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
-#include "third_party/WebKit/public/web/WebArrayBuffer.h"
-#include "third_party/WebKit/public/web/WebArrayBufferConverter.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFindOptions.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
-#include "third_party/WebKit/public/web/WebSerializedScriptValue.h"
-#include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/WebKit/public/web/WebSurroundingText.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/modules/service_worker/web_service_worker_registration.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_point.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_array_buffer.h"
+#include "third_party/blink/public/web/web_array_buffer_converter.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_find_options.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_source.h"
+#include "third_party/blink/public/web/web_security_policy.h"
+#include "third_party/blink/public/web/web_serialized_script_value.h"
+#include "third_party/blink/public/web/web_settings.h"
+#include "third_party/blink/public/web/web_surrounding_text.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/rect.h"
@@ -61,10 +60,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/switches.h"
-
-#if defined(__linux__) || defined(ANDROID)
-#include "third_party/WebKit/public/web/linux/WebFontRendering.h"
-#endif
 
 using namespace blink;
 
@@ -110,10 +105,9 @@ void TestRunnerForSpecificView::Reset() {
 bool TestRunnerForSpecificView::RequestPointerLock() {
   switch (pointer_lock_planned_result_) {
     case PointerLockWillSucceed:
-      PostDelayedTask(
-          0,
-          base::Bind(&TestRunnerForSpecificView::DidAcquirePointerLockInternal,
-                     weak_factory_.GetWeakPtr()));
+      PostTask(base::BindOnce(
+          &TestRunnerForSpecificView::DidAcquirePointerLockInternal,
+          weak_factory_.GetWeakPtr()));
       return true;
     case PointerLockWillRespondAsync:
       DCHECK(!pointer_locked_);
@@ -128,30 +122,25 @@ bool TestRunnerForSpecificView::RequestPointerLock() {
 }
 
 void TestRunnerForSpecificView::RequestPointerUnlock() {
-  PostDelayedTask(
-      0, base::Bind(&TestRunnerForSpecificView::DidLosePointerLockInternal,
-                    weak_factory_.GetWeakPtr()));
+  PostTask(
+      base::BindOnce(&TestRunnerForSpecificView::DidLosePointerLockInternal,
+                     weak_factory_.GetWeakPtr()));
 }
 
 bool TestRunnerForSpecificView::isPointerLocked() {
   return pointer_locked_;
 }
 
-void TestRunnerForSpecificView::PostTask(const base::Closure& callback) {
-  delegate()->PostTask(callback);
-}
-
-void TestRunnerForSpecificView::PostDelayedTask(long long delay,
-                                                const base::Closure& callback) {
-  delegate()->PostDelayedTask(callback, delay);
+void TestRunnerForSpecificView::PostTask(base::OnceClosure callback) {
+  delegate()->PostTask(std::move(callback));
 }
 
 void TestRunnerForSpecificView::PostV8Callback(
     const v8::Local<v8::Function>& callback) {
-  PostTask(base::Bind(&TestRunnerForSpecificView::InvokeV8Callback,
-                      weak_factory_.GetWeakPtr(),
-                      v8::UniquePersistent<v8::Function>(
-                          blink::MainThreadIsolate(), callback)));
+  PostTask(base::BindOnce(&TestRunnerForSpecificView::InvokeV8Callback,
+                          weak_factory_.GetWeakPtr(),
+                          v8::UniquePersistent<v8::Function>(
+                              blink::MainThreadIsolate(), callback)));
 }
 
 void TestRunnerForSpecificView::PostV8CallbackWithArgs(
@@ -164,9 +153,9 @@ void TestRunnerForSpecificView::PostV8CallbackWithArgs(
         v8::UniquePersistent<v8::Value>(blink::MainThreadIsolate(), argv[i]));
   }
 
-  PostTask(base::Bind(&TestRunnerForSpecificView::InvokeV8CallbackWithArgs,
-                      weak_factory_.GetWeakPtr(), std::move(callback),
-                      std::move(args)));
+  PostTask(base::BindOnce(&TestRunnerForSpecificView::InvokeV8CallbackWithArgs,
+                          weak_factory_.GetWeakPtr(), std::move(callback),
+                          std::move(args)));
 }
 
 void TestRunnerForSpecificView::InvokeV8Callback(
@@ -197,14 +186,14 @@ void TestRunnerForSpecificView::InvokeV8CallbackWithArgs(
       local_args.size(), local_args.data());
 }
 
-base::Closure TestRunnerForSpecificView::CreateClosureThatPostsV8Callback(
+base::OnceClosure TestRunnerForSpecificView::CreateClosureThatPostsV8Callback(
     const v8::Local<v8::Function>& callback) {
-  return base::Bind(&TestRunnerForSpecificView::PostTask,
-                    weak_factory_.GetWeakPtr(),
-                    base::Bind(&TestRunnerForSpecificView::InvokeV8Callback,
-                               weak_factory_.GetWeakPtr(),
-                               v8::UniquePersistent<v8::Function>(
-                                   blink::MainThreadIsolate(), callback)));
+  return base::BindOnce(
+      &TestRunnerForSpecificView::PostTask, weak_factory_.GetWeakPtr(),
+      base::BindOnce(&TestRunnerForSpecificView::InvokeV8Callback,
+                     weak_factory_.GetWeakPtr(),
+                     v8::UniquePersistent<v8::Function>(
+                         blink::MainThreadIsolate(), callback)));
 }
 
 void TestRunnerForSpecificView::LayoutAndPaintAsync() {
@@ -214,7 +203,7 @@ void TestRunnerForSpecificView::LayoutAndPaintAsync() {
   // this structure more generic.
   test_runner::LayoutAndPaintAsyncThen(
       web_view()->MainFrame()->ToWebLocalFrame()->FrameWidget(),
-      base::Closure());
+      base::DoNothing());
 }
 
 void TestRunnerForSpecificView::LayoutAndPaintAsyncThen(
@@ -239,7 +228,7 @@ void TestRunnerForSpecificView::CapturePixelsAsyncThen(
           web_view()->MainFrame()->ToWebLocalFrame(),
           base::BindOnce(&TestRunnerForSpecificView::CapturePixelsCallback,
                          weak_factory_.GetWeakPtr(),
-                         base::Passed(std::move(persistent_callback))));
+                         std::move(persistent_callback)));
 }
 
 void TestRunnerForSpecificView::CapturePixelsCallback(
@@ -288,18 +277,11 @@ void TestRunnerForSpecificView::CopyImageAtAndCapturePixelsAsyncThen(
     v8::Local<v8::Function> callback) {
   v8::UniquePersistent<v8::Function> persistent_callback(
       blink::MainThreadIsolate(), callback);
-
-  // TODO(lukasza): Support image capture in OOPIFs for
-  // https://crbug.com/477150.
-  CHECK(web_view()->MainFrame()->IsWebLocalFrame())
-      << "Layout tests harness doesn't support calling "
-      << "testRunner.copyImageAtAndCapturePixelsAsyncThen from an OOPIF.";
-
   CopyImageAtAndCapturePixels(
       web_view()->MainFrame()->ToWebLocalFrame(), x, y,
       base::BindOnce(&TestRunnerForSpecificView::CapturePixelsCallback,
                      weak_factory_.GetWeakPtr(),
-                     base::Passed(std::move(persistent_callback))));
+                     std::move(persistent_callback)));
 }
 
 void TestRunnerForSpecificView::GetManifestThen(
@@ -322,13 +304,13 @@ void TestRunnerForSpecificView::GetManifestThen(
 void TestRunnerForSpecificView::GetManifestCallback(
     v8::UniquePersistent<v8::Function> callback,
     const GURL& manifest_url,
-    const content::Manifest& manifest) {
+    const blink::Manifest& manifest) {
   PostV8CallbackWithArgs(std::move(callback), 0, nullptr);
 }
 
 void TestRunnerForSpecificView::GetBluetoothManualChooserEvents(
     v8::Local<v8::Function> callback) {
-  return delegate()->GetBluetoothManualChooserEvents(base::Bind(
+  return delegate()->GetBluetoothManualChooserEvents(base::BindOnce(
       &TestRunnerForSpecificView::GetBluetoothManualChooserEventsCallback,
       weak_factory_.GetWeakPtr(),
       base::Passed(v8::UniquePersistent<v8::Function>(
@@ -405,7 +387,7 @@ void TestRunnerForSpecificView::DispatchBeforeInstallPromptEvent(
     v8::Local<v8::Function> callback) {
   delegate()->DispatchBeforeInstallPromptEvent(
       event_platforms,
-      base::Bind(
+      base::BindOnce(
           &TestRunnerForSpecificView::DispatchBeforeInstallPromptCallback,
           weak_factory_.GetWeakPtr(),
           base::Passed(v8::UniquePersistent<v8::Function>(
@@ -584,15 +566,14 @@ v8::Local<v8::Value>
 TestRunnerForSpecificView::EvaluateScriptInIsolatedWorldAndReturnValue(
     int world_id,
     const std::string& script) {
-  WebVector<v8::Local<v8::Value>> values;
   WebScriptSource source(WebString::FromUTF8(script));
   // This relies on the iframe focusing itself when it loads. This is a bit
   // sketchy, but it seems to be what other tests do.
-  web_view()->FocusedFrame()->ExecuteScriptInIsolatedWorld(world_id, &source, 1,
-                                                           &values);
-  // Since only one script was added, only one result is expected
-  if (values.size() == 1 && !values[0].IsEmpty())
-    return values[0];
+  v8::Local<v8::Value> value =
+      web_view()->FocusedFrame()->ExecuteScriptInIsolatedWorldAndReturnValue(
+          world_id, source);
+  if (!value.IsEmpty())
+    return value;
   return v8::Local<v8::Value>();
 }
 
@@ -600,8 +581,7 @@ void TestRunnerForSpecificView::EvaluateScriptInIsolatedWorld(
     int world_id,
     const std::string& script) {
   WebScriptSource source(WebString::FromUTF8(script));
-  web_view()->FocusedFrame()->ExecuteScriptInIsolatedWorld(world_id, &source,
-                                                           1);
+  web_view()->FocusedFrame()->ExecuteScriptInIsolatedWorld(world_id, source);
 }
 
 void TestRunnerForSpecificView::SetIsolatedWorldSecurityOrigin(
@@ -657,7 +637,8 @@ bool TestRunnerForSpecificView::FindString(
   WebLocalFrame* frame = GetLocalMainFrame();
   const bool find_result = frame->Find(0, WebString::FromUTF8(search_text),
                                        find_options, wrap_around, nullptr);
-  frame->StopFinding(WebLocalFrame::kStopFindActionKeepSelection);
+  frame->StopFindingForTesting(
+      blink::mojom::StopFindAction::kStopFindActionKeepSelection);
   return find_result;
 }
 

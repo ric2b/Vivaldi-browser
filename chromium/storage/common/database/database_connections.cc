@@ -4,14 +4,7 @@
 
 #include "storage/common/database/database_connections.h"
 
-#include <stdint.h>
-
-#include "base/auto_reset.h"
-#include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
-#include "base/synchronization/waitable_event.h"
-#include "base/threading/thread_task_runner_handle.h"
 
 namespace storage {
 
@@ -58,28 +51,32 @@ void DatabaseConnections::RemoveAllConnections() {
   connections_.clear();
 }
 
-void DatabaseConnections::RemoveConnections(
-    const DatabaseConnections& connections,
-    std::vector<std::pair<std::string, base::string16> >* closed_dbs) {
-  for (OriginConnections::const_iterator origin_it =
-           connections.connections_.begin();
-       origin_it != connections.connections_.end();
-       origin_it++) {
-    const DBConnections& db_connections = origin_it->second;
-    for (DBConnections::const_iterator db_it = db_connections.begin();
-         db_it != db_connections.end(); db_it++) {
-      if (RemoveConnectionsHelper(origin_it->first, db_it->first,
-                                  db_it->second.first))
-        closed_dbs->push_back(std::make_pair(origin_it->first, db_it->first));
+std::vector<std::pair<std::string, base::string16>>
+DatabaseConnections::RemoveConnections(const DatabaseConnections& connections) {
+  std::vector<std::pair<std::string, base::string16>> closed_dbs;
+  for (const auto& origin_connections_pair : connections.connections_) {
+    const DBConnections& db_connections = origin_connections_pair.second;
+    for (const auto& count_size_pair : db_connections) {
+      if (RemoveConnectionsHelper(origin_connections_pair.first,
+                                  count_size_pair.first,
+                                  count_size_pair.second.first)) {
+        closed_dbs.emplace_back(origin_connections_pair.first,
+                                count_size_pair.first);
+      }
     }
   }
+  return closed_dbs;
 }
 
 int64_t DatabaseConnections::GetOpenDatabaseSize(
     const std::string& origin_identifier,
     const base::string16& database_name) const {
-  DCHECK(IsDatabaseOpened(origin_identifier, database_name));
-  return connections_[origin_identifier][database_name].second;
+  OriginConnections::const_iterator origin_it =
+      connections_.find(origin_identifier);
+  DCHECK(origin_it != connections_.end()) << "Database not opened";
+  DBConnections::const_iterator it = origin_it->second.find(database_name);
+  DCHECK(it != origin_it->second.end()) << "Database not opened";
+  return it->second.second;
 }
 
 void DatabaseConnections::SetOpenDatabaseSize(
@@ -90,18 +87,15 @@ void DatabaseConnections::SetOpenDatabaseSize(
   connections_[origin_identifier][database_name].second = size;
 }
 
-void DatabaseConnections::ListConnections(
-    std::vector<std::pair<std::string, base::string16> > *list) const {
-  for (OriginConnections::const_iterator origin_it =
-           connections_.begin();
-       origin_it != connections_.end();
-       origin_it++) {
-    const DBConnections& db_connections = origin_it->second;
-    for (DBConnections::const_iterator db_it = db_connections.begin();
-         db_it != db_connections.end(); db_it++) {
-      list->push_back(std::make_pair(origin_it->first, db_it->first));
-    }
+std::vector<std::pair<std::string, base::string16>>
+DatabaseConnections::ListConnections() const {
+  std::vector<std::pair<std::string, base::string16>> list;
+  for (const auto& origin_connections_pair : connections_) {
+    const DBConnections& db_connections = origin_connections_pair.second;
+    for (const auto& count_size_pair : db_connections)
+      list.emplace_back(origin_connections_pair.first, count_size_pair.first);
   }
+  return list;
 }
 
 bool DatabaseConnections::RemoveConnectionsHelper(
@@ -121,50 +115,6 @@ bool DatabaseConnections::RemoveConnectionsHelper(
   if (db_connections.empty())
     connections_.erase(origin_iterator);
   return true;
-}
-
-DatabaseConnectionsWrapper::DatabaseConnectionsWrapper() = default;
-
-DatabaseConnectionsWrapper::~DatabaseConnectionsWrapper() = default;
-
-bool DatabaseConnectionsWrapper::HasOpenConnections() {
-  base::AutoLock auto_lock(open_connections_lock_);
-  return !open_connections_.IsEmpty();
-}
-
-void DatabaseConnectionsWrapper::AddOpenConnection(
-    const std::string& origin_identifier,
-    const base::string16& database_name) {
-  base::AutoLock auto_lock(open_connections_lock_);
-  open_connections_.AddConnection(origin_identifier, database_name);
-}
-
-void DatabaseConnectionsWrapper::RemoveOpenConnection(
-    const std::string& origin_identifier,
-    const base::string16& database_name) {
-  base::AutoLock auto_lock(open_connections_lock_);
-  open_connections_.RemoveConnection(origin_identifier, database_name);
-  if (waiting_to_close_event_ && open_connections_.IsEmpty())
-    waiting_to_close_event_->Signal();
-}
-
-bool DatabaseConnectionsWrapper::WaitForAllDatabasesToClose(
-    base::TimeDelta timeout) {
-  base::WaitableEvent waitable_event(
-      base::WaitableEvent::ResetPolicy::MANUAL,
-      base::WaitableEvent::InitialState::NOT_SIGNALED);
-  {
-    base::AutoLock auto_lock(open_connections_lock_);
-    if (open_connections_.IsEmpty())
-      return true;
-    waiting_to_close_event_ = &waitable_event;
-  }
-  waitable_event.TimedWait(timeout);
-  {
-    base::AutoLock auto_lock(open_connections_lock_);
-    waiting_to_close_event_ = nullptr;
-    return open_connections_.IsEmpty();
-  }
 }
 
 }  // namespace storage

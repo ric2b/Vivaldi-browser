@@ -15,9 +15,11 @@ FakeMessageCenter::~FakeMessageCenter() {
 }
 
 void FakeMessageCenter::AddObserver(MessageCenterObserver* observer) {
+  observer_list_.AddObserver(observer);
 }
 
 void FakeMessageCenter::RemoveObserver(MessageCenterObserver* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 void FakeMessageCenter::AddNotificationBlocker(NotificationBlocker* blocker) {
@@ -39,13 +41,18 @@ bool FakeMessageCenter::IsQuietMode() const {
   return false;
 }
 
-message_center::Notification* FakeMessageCenter::FindVisibleNotificationById(
+Notification* FakeMessageCenter::FindVisibleNotificationById(
     const std::string& id) {
   for (auto* notification : GetVisibleNotifications()) {
     if (id == notification->id())
       return notification;
   }
   return nullptr;
+}
+
+NotificationList::Notifications FakeMessageCenter::FindNotificationsByAppId(
+    const std::string& app_id) {
+  return NotificationList::Notifications();
 }
 
 const NotificationList::Notifications&
@@ -122,6 +129,14 @@ void FakeMessageCenter::SetVisibility(Visibility visible) {
 
 bool FakeMessageCenter::IsMessageCenterVisible() const {
   return false;
+}
+
+void FakeMessageCenter::SetHasMessageCenterView(bool has_message_center_view) {
+  has_message_center_view_ = has_message_center_view;
+}
+
+bool FakeMessageCenter::HasMessageCenterView() const {
+  return has_message_center_view_;
 }
 
 void FakeMessageCenter::RestartPopupTimers() {}

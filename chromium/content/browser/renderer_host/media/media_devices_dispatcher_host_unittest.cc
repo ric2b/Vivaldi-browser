@@ -13,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -32,11 +31,12 @@
 #include "media/base/media_switches.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
 #include "media/capture/video/video_capture_system_impl.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
 
+using blink::mojom::MediaDeviceType;
 using testing::_;
 using testing::SaveArg;
 using testing::InvokeWithoutArgs;
@@ -60,24 +60,24 @@ void PhysicalDevicesEnumerated(base::Closure quit_closure,
                                MediaDeviceEnumeration* out,
                                const MediaDeviceEnumeration& enumeration) {
   *out = enumeration;
-  quit_closure.Run();
+  std::move(quit_closure).Run();
 }
 
 class MockMediaDevicesListener : public blink::mojom::MediaDevicesListener {
  public:
-  MockMediaDevicesListener() : binding_(this) {}
+  MockMediaDevicesListener() {}
 
-  MOCK_METHOD3(OnDevicesChanged,
-               void(MediaDeviceType, uint32_t, const MediaDeviceInfoArray&));
+  MOCK_METHOD2(OnDevicesChanged,
+               void(MediaDeviceType, const MediaDeviceInfoArray&));
 
   blink::mojom::MediaDevicesListenerPtr CreateInterfacePtrAndBind() {
     blink::mojom::MediaDevicesListenerPtr listener;
-    binding_.Bind(mojo::MakeRequest(&listener));
+    bindings_.AddBinding(this, mojo::MakeRequest(&listener));
     return listener;
   }
 
  private:
-  mojo::Binding<blink::mojom::MediaDevicesListener> binding_;
+  mojo::BindingSet<blink::mojom::MediaDevicesListener> bindings_;
 };
 
 }  // namespace
@@ -114,9 +114,10 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
         std::move(video_capture_provider));
     host_ = std::make_unique<MediaDevicesDispatcherHost>(
         kProcessId, kRenderId, media_stream_manager_.get());
-    host_->set_salt_and_origin_callback_for_testing(
-        base::Bind(&MediaDevicesDispatcherHostTest::GetSaltAndOrigin,
-                   base::Unretained(this)));
+    media_stream_manager_->media_devices_manager()
+        ->set_salt_and_origin_callback_for_testing(base::BindRepeating(
+            &MediaDevicesDispatcherHostTest::GetSaltAndOrigin,
+            base::Unretained(this)));
   }
   ~MediaDevicesDispatcherHostTest() override { audio_manager_->Shutdown(); }
 
@@ -232,7 +233,9 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
  protected:
   void DevicesEnumerated(
       const base::Closure& closure,
-      const std::vector<std::vector<MediaDeviceInfo>>& devices) {
+      const std::vector<std::vector<MediaDeviceInfo>>& devices,
+      std::vector<blink::mojom::VideoInputDeviceCapabilitiesPtr>
+          video_input_capabilities) {
     enumerated_devices_ = devices;
     closure.Run();
   }
@@ -247,6 +250,7 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
     base::RunLoop run_loop;
     host_->EnumerateDevices(
         enumerate_audio_input, enumerate_video_input, enumerate_audio_output,
+        false,
         base::BindOnce(&MediaDevicesDispatcherHostTest::DevicesEnumerated,
                        base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
@@ -345,24 +349,24 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
   void SubscribeAndWaitForResult(bool has_permission) {
     media_stream_manager_->media_devices_manager()->SetPermissionChecker(
         std::make_unique<MediaDevicesPermissionChecker>(has_permission));
-    uint32_t subscription_id = 0u;
+    MockMediaDevicesListener device_change_listener;
     for (size_t i = 0; i < NUM_MEDIA_DEVICE_TYPES; ++i) {
       MediaDeviceType type = static_cast<MediaDeviceType>(i);
-      host_->SubscribeDeviceChangeNotifications(type, subscription_id);
-      MockMediaDevicesListener device_change_listener;
-      host_->SetDeviceChangeListenerForTesting(
+      host_->AddMediaDevicesListener(
+          type == MEDIA_DEVICE_TYPE_AUDIO_INPUT,
+          type == MEDIA_DEVICE_TYPE_VIDEO_INPUT,
+          type == MEDIA_DEVICE_TYPE_AUDIO_OUTPUT,
           device_change_listener.CreateInterfacePtrAndBind());
       MediaDeviceInfoArray changed_devices;
-      EXPECT_CALL(device_change_listener,
-                  OnDevicesChanged(type, subscription_id, testing::_))
-          .WillRepeatedly(SaveArg<2>(&changed_devices));
+      EXPECT_CALL(device_change_listener, OnDevicesChanged(type, _))
+          .WillRepeatedly(SaveArg<1>(&changed_devices));
 
       // Simulate device-change notification
-      MediaDeviceInfoArray updated_devices = {
-          {"fake_device_id", "fake_label", "fake_group"}};
-      host_->OnDevicesChanged(type, updated_devices);
+      media_stream_manager_->media_devices_manager()->OnDevicesChanged(
+          base::SystemMonitor::DEVTYPE_AUDIO);
+      media_stream_manager_->media_devices_manager()->OnDevicesChanged(
+          base::SystemMonitor::DEVTYPE_VIDEO_CAPTURE);
       base::RunLoop().RunUntilIdle();
-      host_->UnsubscribeDeviceChangeNotifications(type, subscription_id);
 
       if (has_permission)
         EXPECT_TRUE(DoesContainLabels(changed_devices));
@@ -371,9 +375,10 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
     }
   }
 
-  std::pair<std::string, url::Origin> GetSaltAndOrigin(int /* process_id */,
-                                                       int /* frame_id */) {
-    return std::make_pair(browser_context_->GetMediaDeviceIDSalt(), origin_);
+  MediaDeviceSaltAndOrigin GetSaltAndOrigin(int /* process_id */,
+                                            int /* frame_id */) {
+    return MediaDeviceSaltAndOrigin(browser_context_->GetMediaDeviceIDSalt(),
+                                    "fake_group_id_salt", origin_);
   }
 
   // The order of these members is important on teardown:

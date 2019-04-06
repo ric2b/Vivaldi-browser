@@ -12,12 +12,13 @@
 #include "chrome/browser/ui/aura/accessibility/ax_tree_source_aura.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_action_data.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_serializable_tree.h"
 #include "ui/accessibility/ax_tree_serializer.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/aura/window.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -56,7 +57,6 @@ class AXTreeSourceAuraTest : public ash::AshTestBase {
 
     widget_ = new Widget();
     Widget::InitParams init_params(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-    init_params.context = CurrentContext();
     widget_->Init(init_params);
 
     content_ = new View();
@@ -101,7 +101,10 @@ TEST_F(AXTreeSourceAuraTest, Accessors) {
   ASSERT_EQ(cached_textfield, textfield);
   std::vector<AXAuraObjWrapper*> textfield_children;
   ax_tree.GetChildren(textfield, &textfield_children);
-  ASSERT_EQ(1U, textfield_children.size());
+  // The textfield has an extra child in Harmony, the focus ring.
+  const size_t expected_children =
+      ui::MaterialDesignController::IsSecondaryUiMaterial() ? 2 : 1;
+  ASSERT_EQ(expected_children, textfield_children.size());
 
   ASSERT_EQ(content, textfield->GetParent());
 
@@ -125,7 +128,7 @@ TEST_F(AXTreeSourceAuraTest, DoDefault) {
   // Click and verify focus.
   ASSERT_FALSE(textfield_->HasFocus());
   ui::AXActionData action_data;
-  action_data.action = ui::AX_ACTION_DO_DEFAULT;
+  action_data.action = ax::mojom::Action::kDoDefault;
   action_data.target_node_id = textfield_wrapper->GetUniqueId().Get();
   textfield_wrapper->HandleAccessibleAction(action_data);
   ASSERT_TRUE(textfield_->HasFocus());
@@ -141,7 +144,7 @@ TEST_F(AXTreeSourceAuraTest, Focus) {
   // Focus and verify.
   ASSERT_FALSE(textfield_->HasFocus());
   ui::AXActionData action_data;
-  action_data.action = ui::AX_ACTION_FOCUS;
+  action_data.action = ax::mojom::Action::kFocus;
   action_data.target_node_id = textfield_wrapper->GetUniqueId().Get();
   textfield_wrapper->HandleAccessibleAction(action_data);
   ASSERT_TRUE(textfield_->HasFocus());
@@ -184,6 +187,20 @@ TEST_F(AXTreeSourceAuraTest, Serialize) {
   }
 
   ASSERT_NE(-1, text_field_update_index);
-  ASSERT_EQ(ui::AX_ROLE_TEXT_FIELD,
+  ASSERT_EQ(ax::mojom::Role::kTextField,
             out_update2.nodes[text_field_update_index].role);
+}
+
+TEST_F(AXTreeSourceAuraTest, SerializeWindowSetsClipsChildren) {
+  AXTreeSourceAura ax_tree;
+  AuraAXTreeSerializer ax_serializer(&ax_tree);
+  AXAuraObjWrapper* widget_wrapper =
+      AXAuraObjCache::GetInstance()->GetOrCreate(widget_);
+  ui::AXNodeData node_data;
+  ax_tree.SerializeNode(widget_wrapper, &node_data);
+  EXPECT_EQ(ax::mojom::Role::kWindow, node_data.role);
+  bool clips_children = false;
+  EXPECT_TRUE(node_data.GetBoolAttribute(
+      ax::mojom::BoolAttribute::kClipsChildren, &clips_children));
+  EXPECT_TRUE(clips_children);
 }

@@ -42,15 +42,7 @@
 
   bool IsVisible();
 
-  void UpdateMediaState(TabAlertState state);
-
   void SetIsFullscreen(bool is_fullscreen, bool skip_window_state);
-
-  // Sets the extension id used when creating the |ExtensionHost|
-  void SetExtensionHost(const std::string& name);
-
-  // Creates the |ExtensionHost|
-  void CreateExtensionHost(const std::string& extension_id);
 
   // contentblocking handling
   void OnContentBlocked(ContentSettingsType settings_type,
@@ -75,10 +67,9 @@
 
   // WebContentsDelegate
   void ShowRepostFormWarningDialog(content::WebContents* source) override;
+  bool HasOwnerShipOfContents() override;
 
-  void ResetGestureState() {
-    gesture_recording_ = false;
-  }
+  const std::string& sourceSpec() { return src_.spec(); }
 
  private:
   void VisibleSecurityStateChanged(content::WebContents* source) override;
@@ -115,30 +106,13 @@
   // per RenderViewHost
   content::RenderViewHost* current_host_;
 
-  enum GestureState {
-    GestureStateNone,
-    GestureStateRecording,
-    GestureStateBlocked
-  };
+  int mousedown_x_;
+  int mousedown_y_;
+  static bool gesture_recording_;
 
-  // For delayed context menu on Mac and Linux. Allows rocker and mouse
-  // gestures.
-  blink::WebFloatPoint down_position_in_widget_;
-  blink::WebFloatPoint down_position_in_screen_;
-  blink::WebFloatPoint move_position_in_widget_;
-  blink::WebFloatPoint move_position_in_screen_;
-  bool fire_context_menu_;
-
-  bool gesture_recording_;
-
-#ifdef VIVALDI_BUILD
-  TabAlertState media_state_;
-#endif  // VIVALDI_BUILD
   bool is_visible_;
   bool is_fullscreen_;
   ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;
-
-  std::unique_ptr<ExtensionHostForWebContents> extension_host_;
 
 #if defined(USE_AURA)
 

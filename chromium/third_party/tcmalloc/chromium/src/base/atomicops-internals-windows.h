@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2006, Google Inc.
  * All rights reserved.
  * 
@@ -40,7 +41,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "base/abort.h"
 #include "base/basictypes.h"  // For COMPILE_ASSERT
 
 typedef int32 Atomic32;
@@ -86,29 +86,21 @@ inline LONG FastInterlockedExchangeAdd(volatile LONG* ptr, LONG increment) {
 // have conflicting declarations of some intrinsics, breaking
 // compilation.  So we declare the intrinsics we need ourselves.  See
 //   http://connect.microsoft.com/VisualStudio/feedback/details/262047
-
-// Don't declare the intrinsics if using Clang. Clang provides inline
-// definitions in its Intrin.h.
-#ifndef __clang__
 LONG _InterlockedCompareExchange(volatile LONG* ptr, LONG newval, LONG oldval);
 #pragma intrinsic(_InterlockedCompareExchange)
-
-LONG _InterlockedExchange(volatile LONG* ptr, LONG newval);
-#pragma intrinsic(_InterlockedExchange)
-
-LONG _InterlockedExchangeAdd(volatile LONG* ptr, LONG increment);
-#pragma intrinsic(_InterlockedExchangeAdd)
-#endif
-
 inline LONG FastInterlockedCompareExchange(volatile LONG* ptr,
                                            LONG newval, LONG oldval) {
   return _InterlockedCompareExchange(ptr, newval, oldval);
 }
 
+LONG _InterlockedExchange(volatile LONG* ptr, LONG newval);
+#pragma intrinsic(_InterlockedExchange)
 inline LONG FastInterlockedExchange(volatile LONG* ptr, LONG newval) {
   return _InterlockedExchange(ptr, newval);
 }
 
+LONG _InterlockedExchangeAdd(volatile LONG* ptr, LONG increment);
+#pragma intrinsic(_InterlockedExchangeAdd)
 inline LONG FastInterlockedExchangeAdd(volatile LONG* ptr, LONG increment) {
   return _InterlockedExchangeAdd(ptr, increment);
 }
@@ -146,16 +138,16 @@ inline Atomic32 NoBarrier_AtomicExchange(volatile Atomic32* ptr,
   return static_cast<Atomic32>(result);
 }
 
-inline Atomic32 Barrier_AtomicIncrement(volatile Atomic32* ptr,
-                                        Atomic32 increment) {
-  return FastInterlockedExchangeAdd(
-      reinterpret_cast<volatile LONG*>(ptr),
-      static_cast<LONG>(increment)) + increment;
+inline Atomic32 Acquire_AtomicExchange(volatile Atomic32* ptr,
+                                       Atomic32 new_value) {
+  // FastInterlockedExchange has both acquire and release memory barriers.
+  return NoBarrier_AtomicExchange(ptr, new_value);
 }
 
-inline Atomic32 NoBarrier_AtomicIncrement(volatile Atomic32* ptr,
-                                          Atomic32 increment) {
-  return Barrier_AtomicIncrement(ptr, increment);
+inline Atomic32 Release_AtomicExchange(volatile Atomic32* ptr,
+                                       Atomic32 new_value) {
+  // FastInterlockedExchange has both acquire and release memory barriers.
+  return NoBarrier_AtomicExchange(ptr, new_value);
 }
 
 }  // namespace base::subtle
@@ -197,8 +189,7 @@ inline void NoBarrier_Store(volatile Atomic32* ptr, Atomic32 value) {
 }
 
 inline void Acquire_Store(volatile Atomic32* ptr, Atomic32 value) {
-  NoBarrier_AtomicExchange(ptr, value);
-              // acts as a barrier in this implementation
+  Acquire_AtomicExchange(ptr, value);
 }
 
 inline void Release_Store(volatile Atomic32* ptr, Atomic32 value) {
@@ -303,18 +294,6 @@ inline Atomic64 NoBarrier_AtomicExchange(volatile Atomic64* ptr,
   return reinterpret_cast<Atomic64>(result);
 }
 
-inline Atomic64 Barrier_AtomicIncrement(volatile Atomic64* ptr,
-                                        Atomic64 increment) {
-  return FastInterlockedExchangeAdd64(
-      reinterpret_cast<volatile LONGLONG*>(ptr),
-      static_cast<LONGLONG>(increment)) + increment;
-}
-
-inline Atomic64 NoBarrier_AtomicIncrement(volatile Atomic64* ptr,
-                                          Atomic64 increment) {
-  return Barrier_AtomicIncrement(ptr, increment);
-}
-
 inline void NoBarrier_Store(volatile Atomic64* ptr, Atomic64 value) {
   *ptr = value;
 }
@@ -359,7 +338,7 @@ inline Atomic64 Release_Load(volatile const Atomic64* ptr) {
 inline void NotImplementedFatalError(const char *function_name) {
   fprintf(stderr, "64-bit %s() not implemented on this platform\n",
           function_name);
-  tcmalloc::Abort();
+  abort();
 }
 
 inline Atomic64 NoBarrier_CompareAndSwap(volatile Atomic64* ptr,
@@ -404,55 +383,14 @@ inline Atomic64 NoBarrier_AtomicExchange(volatile Atomic64* ptr,
 #endif
 }
 
-inline Atomic64 NoBarrier_AtomicIncrement(volatile Atomic64* ptr,
-                                          Atomic64 increment) {
-#if 0 // Not implemented
-  Atomic64 temp = increment;
-  __asm__ __volatile__(
-                       "0:\n\t"
-                       "movl (%3), %%ebx\n\t"    // Move 64-bit increment into
-                       "movl 4(%3), %%ecx\n\t"   // ecx:ebx
-                       "movl (%2), %%eax\n\t"    // Read contents of ptr into
-                       "movl 4(%2), %%edx\n\t"   // edx:eax
-                       "add %%eax, %%ebx\n\t"    // sum => ecx:ebx
-                       "adc %%edx, %%ecx\n\t"    // edx:eax still has old *ptr
-                       "lock; cmpxchg8b (%2)\n\t"// Attempt cmpxchg; if *ptr
-                       "jnz 0b\n\t"              // is no longer edx:eax, loop
-                       : "=A"(temp), "+m"(*ptr)
-                       : "D" (ptr), "S" (&increment)
-                       : "memory", "%ebx", "%ecx");
-  // temp now contains the previous value of *ptr
-  return temp + increment;
-#else
-  NotImplementedFatalError("NoBarrier_AtomicIncrement");
-  return 0;
-#endif
-}
-
-inline Atomic64 Barrier_AtomicIncrement(volatile Atomic64* ptr,
-                                        Atomic64 increment) {
-#if 0 // Not implemented
-  Atomic64 new_val = NoBarrier_AtomicIncrement(ptr, increment);
-  if (AtomicOps_Internalx86CPUFeatures.has_amd_lock_mb_bug) {
-    __asm__ __volatile__("lfence" : : : "memory");
-  }
-  return new_val;
-#else
-  NotImplementedFatalError("Barrier_AtomicIncrement");
-  return 0;
-#endif
-}
-
-inline void NoBarrier_Store(volatile Atomic64* ptr, Atomic64 value) {
-#if 0 // Not implemented
-  __asm {
-    mov mm0, value;  // Use mmx reg for 64-bit atomic moves
-    mov ptr, mm0;
-    emms;            // Empty mmx state to enable FP registers
-  }
-#else
-  NotImplementedFatalError("NoBarrier_Store");
-#endif
+inline void NoBarrier_Store(volatile Atomic64* ptrValue, Atomic64 value)
+{
+ 	__asm {
+    	movq mm0, value;  // Use mmx reg for 64-bit atomic moves
+    	mov eax, ptrValue;
+    	movq [eax], mm0;
+    	emms;            // Empty mmx state to enable FP registers
+  	}
 }
 
 inline void Acquire_Store(volatile Atomic64* ptr, Atomic64 value) {
@@ -464,19 +402,16 @@ inline void Release_Store(volatile Atomic64* ptr, Atomic64 value) {
   NoBarrier_Store(ptr, value);
 }
 
-inline Atomic64 NoBarrier_Load(volatile const Atomic64* ptr) {
-#if 0 // Not implemented
-  Atomic64 value;
-  __asm {
-    mov mm0, ptr;    // Use mmx reg for 64-bit atomic moves
-    mov value, mm0;
-    emms;            // Empty mmx state to enable FP registers
+inline Atomic64 NoBarrier_Load(volatile const Atomic64* ptrValue)
+{
+  	Atomic64 value;
+  	__asm {
+    	mov eax, ptrValue;
+    	movq mm0, [eax]; // Use mmx reg for 64-bit atomic moves
+    	movq value, mm0;
+    	emms; // Empty mmx state to enable FP registers
   }
   return value;
-#else
-  NotImplementedFatalError("NoBarrier_Store");
-  return 0;
-#endif
 }
 
 inline Atomic64 Acquire_Load(volatile const Atomic64* ptr) {
@@ -491,6 +426,18 @@ inline Atomic64 Release_Load(volatile const Atomic64* ptr) {
 
 #endif  // defined(_WIN64) || defined(__MINGW64__)
 
+
+inline Atomic64 Acquire_AtomicExchange(volatile Atomic64* ptr,
+                                       Atomic64 new_value) {
+  // FastInterlockedExchange has both acquire and release memory barriers.
+  return NoBarrier_AtomicExchange(ptr, new_value);
+}
+
+inline Atomic64 Release_AtomicExchange(volatile Atomic64* ptr,
+                                       Atomic64 new_value) {
+  // FastInterlockedExchange has both acquire and release memory barriers.
+  return NoBarrier_AtomicExchange(ptr, new_value);
+}
 
 inline Atomic64 Acquire_CompareAndSwap(volatile Atomic64* ptr,
                                        Atomic64 old_value,

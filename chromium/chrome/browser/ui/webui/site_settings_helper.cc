@@ -14,6 +14,7 @@
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -32,11 +33,6 @@ constexpr char kAppName[] = "appName";
 constexpr char kAppId[] = "appId";
 constexpr char kObject[] = "object";
 constexpr char kObjectName[] = "objectName";
-
-ChooserContextBase* GetUsbChooserContext(Profile* profile) {
-  return reinterpret_cast<ChooserContextBase*>(
-      UsbChooserContextFactory::GetForProfile(profile));
-}
 
 namespace {
 
@@ -69,11 +65,14 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {CONTENT_SETTINGS_TYPE_PPAPI_BROKER, "ppapi-broker"},
     {CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS, "multiple-automatic-downloads"},
     {CONTENT_SETTINGS_TYPE_MIDI_SYSEX, "midi-sysex"},
-    {CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER, "protectedContent"},
+    {CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER, "protected-content"},
     {CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC, "background-sync"},
     {CONTENT_SETTINGS_TYPE_ADS, "ads"},
     {CONTENT_SETTINGS_TYPE_SOUND, "sound"},
     {CONTENT_SETTINGS_TYPE_CLIPBOARD_READ, "clipboard"},
+    {CONTENT_SETTINGS_TYPE_SENSORS, "sensors"},
+    {CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER, "payment-handler"},
+    {CONTENT_SETTINGS_TYPE_USB_GUARD, "usb-devices"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required. Note some exceptions, such as
@@ -96,9 +95,9 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, nullptr},
     {CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT, nullptr},
     {CONTENT_SETTINGS_TYPE_CLIENT_HINTS, nullptr},
-    {CONTENT_SETTINGS_TYPE_SENSORS, nullptr},
     {CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS, nullptr},
     {CONTENT_SETTINGS_TYPE_CLIPBOARD_WRITE, nullptr},
+    {CONTENT_SETTINGS_TYPE_PLUGINS_DATA, nullptr},
 };
 static_assert(arraysize(kContentSettingsTypeGroupNames) ==
                   // ContentSettingsType starts at -1, so add 1 here.
@@ -162,7 +161,7 @@ SiteSettingSource CalculateSiteSettingSource(
 
   if (content_type == CONTENT_SETTINGS_TYPE_ADS &&
       base::FeatureList::IsEnabled(
-          subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI)) {
+          subresource_filter::kSafeBrowsingSubresourceFilter)) {
     HostContentSettingsMap* map =
         HostContentSettingsMapFactory::GetForProfile(profile);
     if (map->GetWebsiteSetting(origin, GURL(), CONTENT_SETTINGS_TYPE_ADS_DATA,
@@ -180,8 +179,7 @@ SiteSettingSource CalculateSiteSettingSource(
 
   DCHECK_NE(content_settings::SETTING_SOURCE_NONE, info.source);
   if (info.source == content_settings::SETTING_SOURCE_USER) {
-    if (result.source == PermissionStatusSource::SAFE_BROWSING_BLACKLIST ||
-        result.source == PermissionStatusSource::MULTIPLE_DISMISSALS ||
+    if (result.source == PermissionStatusSource::MULTIPLE_DISMISSALS ||
         result.source == PermissionStatusSource::MULTIPLE_IGNORES) {
       return SiteSettingSource::kEmbargo;  // Source #8.
     }
@@ -201,6 +199,14 @@ SiteSettingSource CalculateSiteSettingSource(
   NOTREACHED();
   return SiteSettingSource::kPreference;
 }
+
+ChooserContextBase* GetUsbChooserContext(Profile* profile) {
+  return UsbChooserContextFactory::GetForProfile(profile);
+}
+
+const ChooserTypeNameEntry kChooserTypeGroupNames[] = {
+    {&GetUsbChooserContext, kGroupTypeUsb},
+};
 
 }  // namespace
 
@@ -586,9 +592,7 @@ void GetChooserExceptionsFromProfile(Profile* profile,
       chooser_context->GetAllGrantedObjects();
   AllOriginObjects all_origin_objects;
   for (const auto& object : objects) {
-    std::string name;
-    bool found = object->object.GetString(chooser_type.ui_name_key, &name);
-    DCHECK(found);
+    std::string name = chooser_context->GetObjectName(object->object);
     // It is safe for this structure to hold references into |objects| because
     // they are both destroyed at the end of this function.
     all_origin_objects[make_pair(object->requesting_origin, object->source)]

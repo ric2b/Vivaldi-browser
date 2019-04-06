@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/test_suite.h"
@@ -18,7 +17,7 @@
 
 #if defined(USE_OZONE)
 #include "base/command_line.h"
-#include "mojo/edk/embedder/embedder.h"                   // nogncheck
+#include "mojo/core/embedder/embedder.h"                  // nogncheck
 #include "services/service_manager/public/cpp/service.h"  // nogncheck
 #include "services/service_manager/public/cpp/test/test_connector_factory.h"  // nogncheck
 #include "ui/ozone/public/ozone_platform.h"
@@ -31,24 +30,16 @@ class OzoneDrmTestService : public service_manager::Service {
   OzoneDrmTestService() = default;
   ~OzoneDrmTestService() override = default;
 
-  service_manager::BinderRegistryWithArgs<
-      const service_manager::BindSourceInfo&>*
-  registry() {
-    return &registry_;
-  }
+  service_manager::BinderRegistry* registry() { return &registry_; }
 
   void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(interface_name, std::move(interface_pipe),
-                            source_info);
+    registry_.BindInterface(interface_name, std::move(interface_pipe));
   }
 
  private:
-  service_manager::BinderRegistryWithArgs<
-      const service_manager::BindSourceInfo&>
-      registry_;
-
+  service_manager::BinderRegistry registry_;
   std::unique_ptr<service_manager::Connector> connector_;
 
   DISALLOW_COPY_AND_ASSIGN(OzoneDrmTestService);
@@ -118,13 +109,12 @@ class GlTestSuite : public base::TestSuite {
 
 int main(int argc, char** argv) {
 #if defined(USE_OZONE)
-  mojo::edk::Init();
+  mojo::core::Init();
 #endif
 
   GlTestSuite test_suite(argc, argv);
 
   return base::LaunchUnitTests(
-      argc,
-      argv,
-      base::Bind(&GlTestSuite::Run, base::Unretained(&test_suite)));
+      argc, argv,
+      base::BindOnce(&GlTestSuite::Run, base::Unretained(&test_suite)));
 }

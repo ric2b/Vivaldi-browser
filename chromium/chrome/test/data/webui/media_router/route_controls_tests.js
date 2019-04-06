@@ -44,8 +44,7 @@ cr.define('route_controls', function() {
       // parameter is not set, it defaults to an empty string, zero, or false.
       var createRouteStatus = function(params = {}) {
         return new media_router.RouteStatus(
-            params.title ? params.title : '',
-            params.status ? params.status : '', !!params.canPlayPause,
+            params.title ? params.title : '', !!params.canPlayPause,
             !!params.canMute, !!params.canSetVolume, !!params.canSeek,
             params.playState ? params.playState :
                                media_router.PlayState.PLAYING,
@@ -89,16 +88,19 @@ cr.define('route_controls', function() {
         assertElementText(fakeRouteTwo.description, 'route-description');
       });
 
-      // Tests that the route title and status are shown when RouteStatus is
+      // Tests that the route status title is shown when RouteStatus is
       // updated.
       test('update route text', function() {
-        var title = 'test title';
-        var status = 'test status';
-        controls.routeStatus =
-            createRouteStatus({title: title, status: status});
+        // Set |route|.
+        controls.onRouteUpdated_(fakeRouteOne);
+        assertElementText(fakeRouteOne.description, 'route-description');
 
+        // Set the route status title.
+        var title = 'test title';
+        controls.routeStatus = createRouteStatus({title: title});
+
+        assertElementText(fakeRouteOne.description, 'route-description');
         assertElementText(title, 'route-title');
-        assertElementText(status, 'route-description');
       });
 
       // Tests that media controls are shown and hidden when RouteStatus is
@@ -282,11 +284,12 @@ cr.define('route_controls', function() {
         routeStatus.mirroringExtraData = {mediaRemotingEnabled: true};
         controls.routeStatus = routeStatus;
         assertElementShown('mirroring-fullscreen-video-controls');
-        assertEquals(controls.FullscreenVideoOption_.REMOTE_SCREEN,
+        assertEquals(
+            controls.FullscreenVideoOption_.REMOTE_SCREEN,
             controls.$$('#mirroring-fullscreen-video-dropdown').value);
 
-        document.addEventListener('mock-set-media-remoting-enabled',
-            function(e) {
+        document.addEventListener(
+            'mock-set-media-remoting-enabled', function(e) {
               assertFalse(e.detail.enabled);
               done();
             });
@@ -294,8 +297,8 @@ cr.define('route_controls', function() {
         // Simulate changing the dropdown menu value.
         controls.$$('#mirroring-fullscreen-video-dropdown').value =
             controls.FullscreenVideoOption_.BOTH_SCREENS;
-        controls.$$('#mirroring-fullscreen-video-dropdown').dispatchEvent(
-            new Event('change'));
+        controls.$$('#mirroring-fullscreen-video-dropdown')
+            .dispatchEvent(new Event('change'));
       });
 
       test('hangouts local present mode', function(done) {
@@ -315,15 +318,15 @@ cr.define('route_controls', function() {
         assertElementShown('hangouts-local-present-controls');
         assertTrue(controls.$$('#hangouts-local-present-checkbox').checked);
 
-        document.addEventListener('mock-set-hangouts-local-present',
-            function(e) {
+        document.addEventListener(
+            'mock-set-hangouts-local-present', function(e) {
               done();
             });
         MockInteractions.tap(controls.$$('#hangouts-local-present-checkbox'));
         assertFalse(controls.$$('#hangouts-local-present-checkbox').checked);
-    });
+      });
 
-    test('ignore external updates right after using sliders', function(done) {
+      test('ignore external updates right after using sliders', function(done) {
         var currentTime = 500;
         var externalCurrentTime = 800;
         var volume = 0.45;

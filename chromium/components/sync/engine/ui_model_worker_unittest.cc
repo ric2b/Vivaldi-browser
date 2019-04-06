@@ -50,9 +50,9 @@ class SyncUIModelWorkerTest : public testing::Test {
 
   void PostWorkToSyncThread(base::Closure work) {
     sync_thread_.task_runner()->PostTask(
-        FROM_HERE,
-        base::Bind(base::IgnoreResult(&UIModelWorker::DoWorkAndWaitUntilDone),
-                   worker_, base::Passed(ClosureToWorkCallback(work))));
+        FROM_HERE, base::BindOnce(base::IgnoreResult(
+                                      &UIModelWorker::DoWorkAndWaitUntilDone),
+                                  worker_, ClosureToWorkCallback(work)));
   }
 
  protected:
@@ -87,7 +87,7 @@ TEST_F(SyncUIModelWorkerTest, MultipleDoWork) {
 }
 
 TEST_F(SyncUIModelWorkerTest, JoinSyncThreadAfterUIMessageLoopDestruction) {
-  PostWorkToSyncThread(base::Bind(&base::DoNothing));
+  PostWorkToSyncThread(base::DoNothing());
 
   // Wait to allow the sync thread to post the WorkCallback to the UI
   // MessageLoop. This is racy. If the WorkCallback isn't posted fast enough,
@@ -102,7 +102,7 @@ TEST_F(SyncUIModelWorkerTest, JoinSyncThreadAfterUIMessageLoopDestruction) {
 }
 
 TEST_F(SyncUIModelWorkerTest, JoinSyncThreadAfterRequestStop) {
-  PostWorkToSyncThread(base::Bind(&base::DoNothing));
+  PostWorkToSyncThread(base::DoNothing());
 
   // Wait to allow the sync thread to post the WorkCallback to the UI
   // MessageLoop. This is racy. If the WorkCallback isn't posted fast enough,

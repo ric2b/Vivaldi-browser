@@ -70,7 +70,7 @@ VolumeManagerImpl.prototype.__proto__ = cr.EventTarget.prototype;
 /**
  * Adds new volume info from the given volumeMetadata. If the corresponding
  * volume info has already been added, the volumeMetadata is ignored.
- * @param {!VolumeMetadata} volumeMetadata
+ * @param {!chrome.fileManagerPrivate.VolumeMetadata} volumeMetadata
  * @return {!Promise<!VolumeInfo>}
  * @private
  */
@@ -103,7 +103,7 @@ VolumeManagerImpl.prototype.addVolumeMetadata_ = function(volumeMetadata) {
           // Update the network connection status, because until the drive is
           // initialized, the status is set to not ready.
           // TODO(mtomasz): The connection status should be migrated into
-          // VolumeMetadata.
+          // chrome.fileManagerPrivate.VolumeMetadata.
           if (volumeMetadata.volumeType ===
               VolumeManagerCommon.VolumeType.DRIVE) {
             this.onDriveConnectionStatusChanged_();
@@ -160,7 +160,7 @@ VolumeManagerImpl.prototype.initialize_ = function(callback) {
 
 /**
  * Event handler called when some volume was mounted or unmounted.
- * @param {MountCompletedEvent} event Received event.
+ * @param {chrome.fileManagerPrivate.MountCompletedEvent} event Received event.
  * @private
  */
 VolumeManagerImpl.prototype.onMountCompleted_ = function(event) {
@@ -183,10 +183,10 @@ VolumeManagerImpl.prototype.onMountCompleted_ = function(event) {
               }.bind(this));
         } else if (event.status ===
             VolumeManagerCommon.VolumeError.ALREADY_MOUNTED) {
-          var navigation_event =
+          var navigationEvent =
               new Event(VolumeManagerCommon.VOLUME_ALREADY_MOUNTED);
-          navigation_event.volumeId = event.volumeMetadata.volumeId;
-          this.dispatchEvent(navigation_event);
+          navigationEvent.volumeId = event.volumeMetadata.volumeId;
+          this.dispatchEvent(navigationEvent);
           this.finishRequest_(requestKey, event.status, volumeInfo);
           callback();
         } else {
@@ -361,12 +361,27 @@ VolumeManagerImpl.prototype.getLocationInfo = function(entry) {
       case VolumeManagerCommon.VolumeType.MEDIA_VIEW:
         rootType = VolumeManagerCommon.RootType.MEDIA_VIEW;
         break;
+      case VolumeManagerCommon.VolumeType.CROSTINI:
+        rootType = VolumeManagerCommon.RootType.CROSTINI;
+        break;
+      case VolumeManagerCommon.VolumeType.ANDROID_FILES:
+        rootType = VolumeManagerCommon.RootType.ANDROID_FILES;
+        break;
       default:
         // Programming error, throw an exception.
         throw new Error('Invalid volume type: ' + volumeInfo.volumeType);
     }
-    isReadOnly = volumeInfo.isReadOnly;
     isRootEntry = util.isSameEntry(entry, volumeInfo.fileSystem.root);
+    // Although "Play files" root directory is writable in file system level,
+    // we prohibit write operations on it in the UI level to avoid confusion.
+    // Users can still have write access in sub directories like
+    // /Play files/Pictures, /Play files/DCIM, etc...
+    if (volumeInfo.volumeType == VolumeManagerCommon.VolumeType.ANDROID_FILES &&
+        isRootEntry) {
+      isReadOnly = true;
+    } else {
+      isReadOnly = volumeInfo.isReadOnly;
+    }
   }
 
   return new EntryLocationImpl(volumeInfo, rootType, isRootEntry, isReadOnly);

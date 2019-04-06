@@ -10,16 +10,20 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.net.Uri;
+import android.os.Environment;
 import android.os.StrictMode;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
+import android.support.v7.content.res.AppCompatResources;
 import android.text.TextUtils;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.Log;
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
@@ -27,13 +31,13 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.FileProviderHelper;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.download.DownloadUpdate.PendingState;
-import org.chromium.chrome.browser.download.ui.BackendProvider;
-import org.chromium.chrome.browser.download.ui.BackendProvider.DownloadDelegate;
+import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.download.ui.DownloadFilter;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper;
+import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper.OfflineItemWrapper;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.offlinepages.DownloadUiActionFlags;
@@ -46,16 +50,20 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.ConversionUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.components.download.DownloadState;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.offline_items_collection.ContentId;
+import org.chromium.components.offline_items_collection.FailState;
+import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
 import org.chromium.components.offline_items_collection.OfflineItemProgressUnit;
 import org.chromium.components.offline_items_collection.OfflineItemState;
-import org.chromium.content.browser.BrowserStartupController;
-import org.chromium.content_public.browser.DownloadState;
+import org.chromium.components.offline_items_collection.PendingState;
+import org.chromium.components.offlinepages.SavePageResult;
+import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
@@ -63,13 +71,14 @@ import org.chromium.ui.widget.Toast;
 import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.ref.WeakReference;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -85,14 +94,23 @@ public class DownloadUtils {
         R.string.file_size_downloaded_gb
     };
 
+    private static final int[] BYTES_AVAILABLE_STRINGS = {
+            R.string.download_manager_ui_space_free_kb, R.string.download_manager_ui_space_free_mb,
+            R.string.download_manager_ui_space_free_gb};
+
+    private static final int[] BYTES_STRINGS = {
+            R.string.download_ui_kb, R.string.download_ui_mb, R.string.download_ui_gb};
+
     private static final String TAG = "download";
 
     private static final String DEFAULT_MIME_TYPE = "*/*";
     private static final String MIME_TYPE_DELIMITER = "/";
-    private static final String MIME_TYPE_VIDEO = "video";
+    private static final String MIME_TYPE_SHARING_URL = "text/plain";
 
     private static final String EXTRA_IS_OFF_THE_RECORD =
             "org.chromium.chrome.browser.download.IS_OFF_THE_RECORD";
+    public static final String EXTRA_SHOW_PREFETCHED_CONTENT =
+            "org.chromium.chrome.browser.download.SHOW_PREFETCHED_CONTENT";
 
     @VisibleForTesting
     static final long SECONDS_PER_MINUTE = TimeUnit.MINUTES.toSeconds(1);
@@ -128,23 +146,27 @@ public class DownloadUtils {
      * Displays the download manager UI. Note the UI is different on tablets and on phones.
      * @param activity The current activity is available.
      * @param tab The current tab if it exists.
-     * @param fromMenu Whether the manager was triggered from the overflow menu.
+     * @param showPrefetchedContent Whether the manager should start with prefetched content section
+     * expanded.
      * @return Whether the UI was shown.
      */
     public static boolean showDownloadManager(
-            @Nullable Activity activity, @Nullable Tab tab, boolean fromMenu) {
+            @Nullable Activity activity, @Nullable Tab tab, boolean showPrefetchedContent) {
         // Figure out what tab was last being viewed by the user.
         if (activity == null) activity = ApplicationStatus.getLastTrackedFocusedActivity();
-
-        if (openDownloadsManagerInBottomSheet(activity, fromMenu)) return true;
+        Context appContext = ContextUtils.getApplicationContext();
+        boolean isTablet;
 
         if (tab == null && activity instanceof ChromeTabbedActivity) {
-            tab = ((ChromeTabbedActivity) activity).getActivityTab();
+            ChromeTabbedActivity chromeActivity = ((ChromeTabbedActivity) activity);
+            tab = chromeActivity.getActivityTab();
+            isTablet = chromeActivity.isTablet();
+        } else {
+            Context displayContext = activity != null ? activity : appContext;
+            isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(displayContext);
         }
 
-        Context appContext = ContextUtils.getApplicationContext();
-
-        if (DeviceFormFactor.isTablet()) {
+        if (isTablet) {
             // Download Home shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.DOWNLOADS_URL);
             if (tab == null || !tab.isInitialized()) {
@@ -167,6 +189,7 @@ public class DownloadUtils {
             // Download Home shows up as a new Activity on phones.
             Intent intent = new Intent();
             intent.setClass(appContext, DownloadActivity.class);
+            intent.putExtra(EXTRA_SHOW_PREFETCHED_CONTENT, showPrefetchedContent);
             if (tab != null) intent.putExtra(EXTRA_IS_OFF_THE_RECORD, tab.isIncognito());
             if (activity == null) {
                 // Stands alone in its own task.
@@ -192,54 +215,19 @@ public class DownloadUtils {
     }
 
     /**
-     * @param activity The activity the download manager should be displayed in if applicable or
-     *                 the last tracked focused activity.
-     * @param fromMenu Whether downloads was triggered from the overflow menu.
-     * @return Whether the downloads manager was opened in the Chrome Home bottom sheet.
-     */
-    private static boolean openDownloadsManagerInBottomSheet(Activity activity, boolean fromMenu) {
-        if (!FeatureUtilities.isChromeHomeEnabled()) return false;
-
-        Context appContext = ContextUtils.getApplicationContext();
-
-        ChromeTabbedActivity tabbedActivity = null;
-        if (activity instanceof ChromeTabbedActivity) {
-            tabbedActivity = (ChromeTabbedActivity) activity;
-        } else {
-            // Iterate through all activities looking for an instance of ChromeTabbedActivity.
-            List<WeakReference<Activity>> list = ApplicationStatus.getRunningActivities();
-            for (WeakReference<Activity> ref : list) {
-                Activity currentActivity = ref.get();
-                if (currentActivity instanceof ChromeTabbedActivity) {
-                    tabbedActivity = (ChromeTabbedActivity) currentActivity;
-                }
-            }
-        }
-
-        if (tabbedActivity == null) return false;
-
-        if (fromMenu) {
-            tabbedActivity.getBottomSheetContentController().openBottomSheetForMenuItem(
-                    R.id.action_downloads);
-        } else {
-            tabbedActivity.getBottomSheetContentController().showContentAndOpenSheet(
-                    R.id.action_downloads);
-
-            // Bring the ChromeTabbedActivity to the front.
-            Intent intent = new Intent(appContext, tabbedActivity.getClass());
-            intent.addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            appContext.startActivity(intent);
-        }
-        return true;
-    }
-
-    /**
      * @return Whether or not the Intent corresponds to a DownloadActivity that should show off the
      *         record downloads.
      */
     public static boolean shouldShowOffTheRecordDownloads(Intent intent) {
         return IntentUtils.safeGetBooleanExtra(intent, EXTRA_IS_OFF_THE_RECORD, false);
+    }
+
+    /**
+     * @return Whether or not the prefetched content section should be expanded on launch of the
+     * DownloadActivity.
+     */
+    public static boolean shouldShowPrefetchContent(Intent intent) {
+        return IntentUtils.safeGetBooleanExtra(intent, EXTRA_SHOW_PREFETCHED_CONTENT, false);
     }
 
     /**
@@ -261,20 +249,18 @@ public class DownloadUtils {
     }
 
     /**
-     * Issues a request to the {@link DownloadDelegate} associated with backendProvider to check
-     * for externally removed downloads.
+     * Issues a request to the {@link DownloadManagerService} associated to check for externally
+     * removed downloads.
      * See {@link DownloadManagerService#checkForExternallyRemovedDownloads}.
-     *
-     * @param backendProvider The {@link BackendProvider} associated with the DownloadDelegate used
-     *                        to check for externally removed downloads.
      * @param isOffTheRecord  Whether to check downloads for the off the record profile.
      */
-    public static void checkForExternallyRemovedDownloads(BackendProvider backendProvider,
-            boolean isOffTheRecord) {
+    public static void checkForExternallyRemovedDownloads(boolean isOffTheRecord) {
         if (isOffTheRecord) {
-            backendProvider.getDownloadDelegate().checkForExternallyRemovedDownloads(true);
+            DownloadManagerService.getDownloadManagerService().checkForExternallyRemovedDownloads(
+                    true);
         }
-        backendProvider.getDownloadDelegate().checkForExternallyRemovedDownloads(false);
+        DownloadManagerService.getDownloadManagerService().checkForExternallyRemovedDownloads(
+                false);
         RecordUserAction.record(
                 "Android.DownloadManager.CheckForExternallyRemovedItems");
     }
@@ -335,17 +321,21 @@ public class DownloadUtils {
     /**
      * Creates an Intent to share {@code items} with another app by firing an Intent to Android.
      *
-     * Sharing a DownloadItem shares the file itself, while sharing an OfflinePageItem shares the
-     * URL.
+     * Sharing a DownloadItem shares the file itself. Sharing an OfflinePageItem shares the archive
+     * file if the sharing is enabled. Otherwise, the URL is shared.
      *
      * @param items Items to share.
+     * @param newOfflineFilePathMap Map of id to new file path for those offline pages that are
+     *        published before sharing.
      * @return      Intent that can be used to share the items.
      */
-    public static Intent createShareIntent(List<DownloadHistoryItemWrapper> items) {
+    public static Intent createShareIntent(
+            List<DownloadHistoryItemWrapper> items, Map<String, String> newOfflineFilePathMap) {
         Intent shareIntent = new Intent();
         String intentAction;
         ArrayList<Uri> itemUris = new ArrayList<Uri>();
         StringBuilder offlinePagesString = new StringBuilder();
+        @DownloadFilter.Type
         int selectedItemsFilterType = items.get(0).getFilterType();
 
         String intentMimeType = "";
@@ -353,27 +343,39 @@ public class DownloadUtils {
 
         for (int i = 0; i < items.size(); i++) {
             DownloadHistoryItemWrapper wrappedItem  = items.get(i);
+            String mimeType = Intent.normalizeMimeType(wrappedItem.getMimeType());
 
             if (wrappedItem.isOfflinePage()) {
-                if (offlinePagesString.length() != 0) {
-                    offlinePagesString.append("\n");
+                // Attempt to share the mhtml file.  If that fails, share by URL.
+                OfflineItemWrapper wrappedOfflineItem = (OfflineItemWrapper) wrappedItem;
+                Uri uriToShare =
+                        getUriToShareOfflinePage(wrappedOfflineItem, newOfflineFilePathMap);
+
+                if (uriToShare == null) {
+                    // Share the URL, instead of the file, if publishing the file failed.
+                    if (offlinePagesString.length() != 0) {
+                        offlinePagesString.append("\n");
+                    }
+                    offlinePagesString.append(wrappedItem.getUrl());
+                    mimeType = MIME_TYPE_SHARING_URL;
+                } else {
+                    itemUris.add(uriToShare);
+                    RecordUserAction.record("OfflinePages.Sharing.SharePageFromDownloadHome");
                 }
-                offlinePagesString.append(wrappedItem.getUrl());
             } else {
+                // If not sharing an offline page, generate the URI for the file being shared.
                 itemUris.add(getUriForItem(wrappedItem.getFile()));
             }
 
             if (selectedItemsFilterType != wrappedItem.getFilterType()) {
-                selectedItemsFilterType = DownloadFilter.FILTER_ALL;
+                selectedItemsFilterType = DownloadFilter.Type.ALL;
             }
-            if (wrappedItem.getFilterType() == DownloadFilter.FILTER_OTHER) {
+            if (wrappedItem.getFilterType() == DownloadFilter.Type.OTHER) {
                 RecordHistogram.recordEnumeratedHistogram(
                         "Android.DownloadManager.OtherExtensions.Share",
                         wrappedItem.getFileExtensionType(),
-                        DownloadHistoryItemWrapper.FILE_EXTENSION_BOUNDARY);
+                        DownloadHistoryItemWrapper.FileExtension.NUM_ENTRIES);
             }
-
-            String mimeType = Intent.normalizeMimeType(wrappedItem.getMimeType());
 
             // If a mime type was not retrieved from the backend or could not be normalized,
             // set the mime type to the default.
@@ -417,15 +419,20 @@ public class DownloadUtils {
             intentAction = Intent.ACTION_SEND_MULTIPLE;
         }
 
-        if (itemUris.size() == 1 && offlinePagesString.length() == 0) {
-            // Sharing a DownloadItem.
-            shareIntent.putExtra(Intent.EXTRA_STREAM, getUriForItem(items.get(0).getFile()));
-        } else {
+        if (itemUris.size() == 1) {
+            // Sharing a downloaded item or an offline page.
+            shareIntent.putExtra(Intent.EXTRA_STREAM, itemUris.get(0));
+        } else if (itemUris.size() > 1) {
             shareIntent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, itemUris);
         }
 
         if (offlinePagesString.length() != 0) {
             shareIntent.putExtra(Intent.EXTRA_TEXT, offlinePagesString.toString());
+        }
+
+        // If there is exactly one item shared, set the mail title.
+        if (items.size() == 1) {
+            shareIntent.putExtra(Intent.EXTRA_SUBJECT, items.get(0).getDisplayFileName());
         }
 
         shareIntent.setAction(intentAction);
@@ -435,6 +442,119 @@ public class DownloadUtils {
         recordShareHistograms(items.size(), selectedItemsFilterType);
 
         return shareIntent;
+    }
+
+    /**
+     * Compute the URI to use for sharing this page.
+     * @param wrappedOfflineItem OfflineItem to be shared.
+     * @param newOfflineFilePathMap map of offline id to the file path now that publishing is done.
+     * @return Uri to use for sharing this offline page, or null if we cannot build one.
+     */
+    private static Uri getUriToShareOfflinePage(
+            OfflineItemWrapper wrappedOfflineItem, Map<String, String> newOfflineFilePathMap) {
+        if (!OfflinePageBridge.isPageSharingEnabled()) {
+            return null;
+        }
+        String newFilePath = wrappedOfflineItem.getFilePath();
+
+        if (wrappedOfflineItem.isSuggested()) {
+            // If we have a temporary page, share it by content URI.  Today this only
+            // supports suggested pages, since they are the only type of temporary pages
+            // shown in DownloadsHome.  If we support other types of pages someday,
+            // we'll need to add support for them here too.
+            try {
+                return (new FileProviderHelper()).getContentUriFromFile(new File(newFilePath));
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        if (newOfflineFilePathMap == null) {
+            // If the file was already in the public directory, use the existing file path.
+            return getUriForItem(wrappedOfflineItem.getFile());
+        }
+
+        String publishedFilePath = newOfflineFilePathMap.get(wrappedOfflineItem.getId());
+        if (!TextUtils.isEmpty(publishedFilePath)) {
+            // If we moved the file to publish it, use the new path.
+            return getUriForItem(new File(publishedFilePath));
+        }
+
+        // If publishing failed, return null, and we will share by original URL.
+        return null;
+    }
+
+    /**
+     * Performs all the necessary work needed to share download items. For offline pages, we may
+     * need to publish the internal archive file to public location first.
+     *
+     * @param items Items to share.
+     * @return True if the work is done or not needed and the sharing can start immediately.
+     *         False if the asynchronous work is in progress. After it is done, |callback| will be
+     *         invoked to inform the result.
+     */
+    public static boolean prepareForSharing(
+            List<DownloadHistoryItemWrapper> items, Callback<Map<String, String>> callback) {
+        if (!OfflinePageBridge.isPageSharingEnabled()) return true;
+
+        OfflinePageBridge offlinePageBridge =
+                OfflinePageBridge.getForProfile(Profile.getLastUsedProfile().getOriginalProfile());
+
+        // If the sharing of offline pages is enabled, we need to publish the archive files if they
+        // are still located in the internal directory, and not temporary pages.
+        List<OfflineItemWrapper> offlinePagesToPublish = new ArrayList<OfflineItemWrapper>();
+        for (int i = 0; i < items.size(); i++) {
+            DownloadHistoryItemWrapper wrappedItem = items.get(i);
+            if (wrappedItem.isOfflinePage()) {
+                OfflineItemWrapper wrappedOfflineItem = (OfflineItemWrapper) wrappedItem;
+                if (!wrappedOfflineItem.isSuggested()
+                        && offlinePageBridge.isInPrivateDirectory(
+                                   wrappedOfflineItem.getFilePath())) {
+                    offlinePagesToPublish.add(wrappedOfflineItem);
+                }
+            }
+        }
+
+        if (offlinePagesToPublish.isEmpty()) return true;
+
+        publishOfflinePagesForSharing(offlinePageBridge, offlinePagesToPublish, callback);
+        return false;
+    }
+
+    static void publishOfflinePagesForSharing(OfflinePageBridge offlinePageBridge,
+            List<OfflineItemWrapper> offlinePages, Callback<Map<String, String>> callback) {
+        DownloadController.requestFileAccessPermission(granted -> {
+            if (!granted) {
+                OfflinePageUtils.recordPublishPageResult(SavePageResult.PERMISSION_DENIED);
+                return;
+            }
+            publishOfflinePageForSharing(
+                    offlinePageBridge, offlinePages, 0, new HashMap<String, String>(), callback);
+        });
+    }
+
+    static void publishOfflinePageForSharing(OfflinePageBridge offlinePageBridge,
+            final List<OfflineItemWrapper> offlinePages, final int index,
+            final Map<String, String> newFilePathMap, Callback<Map<String, String>> callback) {
+        assert index < offlinePages.size();
+
+        final OfflineItemWrapper wrappedItem = offlinePages.get(index);
+        assert wrappedItem.isOfflinePage();
+
+        offlinePageBridge.publishInternalPageByGuid(wrappedItem.getId(), (newFilePath) -> {
+            if (!newFilePath.isEmpty()) {
+                newFilePathMap.put(wrappedItem.getId(), newFilePath);
+            }
+
+            int nextIndex = index + 1;
+            if (nextIndex >= offlinePages.size()) {
+                callback.onResult(newFilePathMap);
+                return;
+            }
+
+            publishOfflinePageForSharing(
+                    offlinePageBridge, offlinePages, nextIndex, newFilePathMap, callback);
+        });
     }
 
     /**
@@ -458,6 +578,22 @@ public class DownloadUtils {
     }
 
     /**
+     * Utility method to open an {@link OfflineItem}, which can be a chrome download, offline page.
+     * Falls back to open download home.
+     * @param contentId The {@link ContentId} of the associated offline item.
+     */
+    public static void openItem(ContentId contentId, boolean isOffTheRecord,
+            @DownloadMetrics.DownloadOpenSource int source) {
+        if (LegacyHelpers.isLegacyOfflinePage(contentId)) {
+            OfflineContentAggregatorFactory.forProfile(Profile.getLastUsedProfile())
+                    .openItem(contentId);
+        } else {
+            DownloadManagerService.getDownloadManagerService().openDownload(
+                    contentId, isOffTheRecord, source);
+        }
+    }
+
+    /**
      * Opens a file in Chrome or in another app if appropriate.
      * @param file path to the file to open.
      * @param mimeType mime type of the file.
@@ -465,11 +601,13 @@ public class DownloadUtils {
      * @param isOffTheRecord whether we are in an off the record context.
      * @param originalUrl The original url of the downloaded file.
      * @param referrer Referrer of the downloaded file.
+     * @param source The source that tries to open the download file.
      * @return whether the file could successfully be opened.
      */
-    public static boolean openFile(
-            File file, String mimeType, String downloadGuid, boolean isOffTheRecord,
-            String originalUrl, String referrer) {
+    public static boolean openFile(File file, String mimeType, String downloadGuid,
+            boolean isOffTheRecord, String originalUrl, String referrer,
+            @DownloadMetrics.DownloadOpenSource int source) {
+        DownloadMetrics.recordDownloadOpen(source, mimeType);
         Context context = ContextUtils.getApplicationContext();
         DownloadManagerService service = DownloadManagerService.getDownloadManagerService();
 
@@ -501,16 +639,18 @@ public class DownloadUtils {
             return true;
         } catch (ActivityNotFoundException e) {
             // Can't launch the Intent.
-            Toast.makeText(context, context.getString(R.string.download_cant_open_file),
-                         Toast.LENGTH_SHORT)
-                    .show();
+            if (source != DownloadMetrics.DownloadOpenSource.DOWNLOAD_PROGRESS_INFO_BAR) {
+                Toast.makeText(context, context.getString(R.string.download_cant_open_file),
+                             Toast.LENGTH_SHORT)
+                        .show();
+            }
             return false;
         }
     }
 
     private static void recordShareHistograms(int count, int filterType) {
         RecordHistogram.recordEnumeratedHistogram("Android.DownloadManager.Share.FileTypes",
-                filterType, DownloadFilter.FILTER_BOUNDARY);
+                filterType, DownloadFilter.Type.NUM_ENTRIES);
 
         RecordHistogram.recordLinearCountHistogram("Android.DownloadManager.Share.Count",
                 count, 1, 20, 20);
@@ -541,6 +681,49 @@ public class DownloadUtils {
     }
 
     /**
+     * Helper method to determine the progress text to use for an in progress download notification.
+     * @param progress The {@link Progress} struct that represents the current state of an in
+     *                 progress download.
+     * @return         The {@link String} that represents the progress.
+     */
+    public static String getProgressTextForNotification(Progress progress) {
+        Context context = ContextUtils.getApplicationContext();
+
+        if (progress.isIndeterminate() && progress.value == 0) {
+            return context.getResources().getString(R.string.download_started);
+        }
+
+        switch (progress.unit) {
+            case OfflineItemProgressUnit.PERCENTAGE:
+                return progress.isIndeterminate()
+                        ? context.getResources().getString(R.string.download_started)
+                        : getPercentageString(progress.getPercentage());
+            case OfflineItemProgressUnit.BYTES:
+                String bytes = getStringForBytes(context, progress.value);
+                if (progress.isIndeterminate()) {
+                    return context.getResources().getString(
+                            R.string.download_ui_indeterminate_bytes, bytes);
+                } else {
+                    String total = getStringForBytes(context, progress.max);
+                    return context.getResources().getString(
+                            R.string.download_ui_determinate_bytes, bytes, total);
+                }
+            case OfflineItemProgressUnit.FILES:
+                if (progress.isIndeterminate()) {
+                    int fileCount = (int) Math.min(Integer.MAX_VALUE, progress.value);
+                    return context.getResources().getQuantityString(
+                            R.plurals.download_ui_files_downloaded, fileCount, fileCount);
+                } else {
+                    return formatRemainingFiles(context, progress);
+                }
+            default:
+                assert false;
+        }
+
+        return "";
+    }
+
+    /**
      * Create a string that represents the percentage of the file that has downloaded.
      * @param percentage Current percentage of the file.
      * @return String representing the percentage of the file that has been downloaded.
@@ -559,11 +742,9 @@ public class DownloadUtils {
      */
     public static String getTimeOrFilesLeftString(
             Context context, Progress progress, long timeRemainingInMillis) {
-        if (progress.unit == OfflineItemProgressUnit.FILES) {
-            return formatRemainingFiles(context, progress);
-        } else {
-            return formatRemainingTime(context, timeRemainingInMillis);
-        }
+        return progress.unit == OfflineItemProgressUnit.FILES
+                ? formatRemainingFiles(context, progress)
+                : formatRemainingTime(context, timeRemainingInMillis);
     }
 
     /**
@@ -573,11 +754,8 @@ public class DownloadUtils {
      */
     public static String formatRemainingFiles(Context context, Progress progress) {
         int filesLeft = (int) (progress.max - progress.value);
-        if (filesLeft == 1) {
-            return context.getResources().getString(R.string.one_file_left);
-        } else {
-            return context.getResources().getString(R.string.files_left, filesLeft);
-        }
+        return filesLeft == 1 ? context.getResources().getString(R.string.one_file_left)
+                              : context.getResources().getString(R.string.files_left, filesLeft);
     }
 
     /**
@@ -590,7 +768,6 @@ public class DownloadUtils {
      * @param millis the remaining time in milli seconds.
      * @return the formatted remaining time.
      */
-    @VisibleForTesting
     public static String formatRemainingTime(Context context, long millis) {
         long secondsLong = millis / 1000;
 
@@ -644,7 +821,7 @@ public class DownloadUtils {
             case OfflineItemState.COMPLETE:
                 return context.getString(R.string.download_notification_completed);
             case OfflineItemState.PENDING:
-                return context.getString(R.string.download_notification_pending);
+                return getPendingStatusString(item.pendingState);
             case OfflineItemState.PAUSED:
                 return context.getString(R.string.download_notification_paused);
             case OfflineItemState.IN_PROGRESS: // intentional fall through
@@ -652,7 +829,7 @@ public class DownloadUtils {
             case OfflineItemState.INTERRUPTED: // intentional fall through
             case OfflineItemState.FAILED:
                 break;
-            case OfflineItemState.MAX_DOWNLOAD_STATE:
+            // case OfflineItemState.MAX_DOWNLOAD_STATE:
             default:
                 assert false : "Unexpected OfflineItemState: " + item.state;
         }
@@ -680,13 +857,7 @@ public class DownloadUtils {
             return context.getString(R.string.download_notification_completed);
         }
 
-        DownloadSharedPreferenceHelper helper = DownloadSharedPreferenceHelper.getInstance();
-        DownloadSharedPreferenceEntry entry =
-                helper.getDownloadSharedPreferenceEntry(item.getContentId());
-        boolean isDownloadPending =
-                entry != null && state == DownloadState.INTERRUPTED && entry.isAutoResumable;
-
-        if (isDownloadPending) {
+        if (isDownloadPending(item)) {
             // All pending, non-offline page downloads are by default waiting for network.
             // The other pending reason (i.e. waiting for another download to complete) applies
             // only to offline page requests because offline pages download one at a time.
@@ -710,12 +881,37 @@ public class DownloadUtils {
     }
 
     /**
+     * Determine the status string for a failed download.
+     *
+     * @param failState Reason download failed.
+     * @return String representing the current download status.
+     */
+    public static String getFailStatusString(@FailState int failState) {
+        Context context = ContextUtils.getApplicationContext();
+
+        // TODO(cmsy): Return correct status for failure reasons once strings are finalized.
+        // if (BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+        //                .isStartupSuccessfullyCompleted()
+        //        && ChromeFeatureList.isEnabled(
+        //                   ChromeFeatureList.OFFLINE_PAGES_DESCRIPTIVE_FAIL_STATUS)) {
+        //    switch (failState) {
+        //        case FailState.CANNOT_DOWNLOAD:
+        //        case FailState.NETWORK_INSTABILITY:
+        //        default:
+        //          return context.getString(R.string.download_notification_failed);
+        //    }
+        // }
+
+        return context.getString(R.string.download_notification_failed);
+    }
+
+    /**
      * Determine the status string for a pending download.
      *
      * @param pendingState Reason download is pending.
      * @return String representing the current download status.
      */
-    public static String getPendingStatusString(PendingState pendingState) {
+    public static String getPendingStatusString(@PendingState int pendingState) {
         Context context = ContextUtils.getApplicationContext();
         // When foreground service restarts and there is no connection to native, use the default
         // pending status. The status will be replaced when connected to native.
@@ -724,12 +920,11 @@ public class DownloadUtils {
                 && ChromeFeatureList.isEnabled(
                            ChromeFeatureList.OFFLINE_PAGES_DESCRIPTIVE_PENDING_STATUS)) {
             switch (pendingState) {
-                case PENDING_NETWORK:
+                case PendingState.PENDING_NETWORK:
                     return context.getString(R.string.download_notification_pending_network);
-                case PENDING_ANOTHER_DOWNLOAD:
+                case PendingState.PENDING_ANOTHER_DOWNLOAD:
                     return context.getString(
                             R.string.download_notification_pending_another_download);
-                case PENDING_REASON_UNKNOWN: // Intentional fallthrough.
                 default:
                     return context.getString(R.string.download_notification_pending);
             }
@@ -766,6 +961,19 @@ public class DownloadUtils {
     }
 
     /**
+     * Return whether a download is pending.
+     * @param item Download to check the status of.
+     * @return Whether the download is pending or not.
+     */
+    public static boolean isDownloadPending(DownloadItem item) {
+        DownloadSharedPreferenceHelper helper = DownloadSharedPreferenceHelper.getInstance();
+        DownloadSharedPreferenceEntry entry =
+                helper.getDownloadSharedPreferenceEntry(item.getContentId());
+        return entry != null && item.getDownloadInfo().state() == DownloadState.INTERRUPTED
+                && entry.isAutoResumable;
+    }
+
+    /**
      * Format the number of bytes into KB, or MB, or GB and return the corresponding string
      * resource. Uses default download-related set of strings.
      * @param context Context to use.
@@ -774,6 +982,28 @@ public class DownloadUtils {
      */
     public static String getStringForDownloadedBytes(Context context, long bytes) {
         return getStringForBytes(context, BYTES_DOWNLOADED_STRINGS, bytes);
+    }
+
+    /**
+     * Format the number of available bytes into KB, MB, or GB and return the corresponding string
+     * resource. Uses default format "20 KB available."
+     *
+     * @param context   Context to use.
+     * @param bytes     Number of bytes needed to display.
+     * @return          The formatted string to be displayed.
+     */
+    public static String getStringForAvailableBytes(Context context, long bytes) {
+        return getStringForBytes(context, BYTES_AVAILABLE_STRINGS, bytes);
+    }
+
+    /**
+     * Format the number of bytes into KB, MB, or GB and return the corresponding generated string.
+     * @param context Context to use.
+     * @param bytes   Number of bytes needed to display.
+     * @return        The formatted string to be displayed.
+     */
+    public static String getStringForBytes(Context context, long bytes) {
+        return getStringForBytes(context, BYTES_STRINGS, bytes);
     }
 
     /**
@@ -812,9 +1042,7 @@ public class DownloadUtils {
     public static String getAbbreviatedFileName(String fileName, int limit) {
         assert limit >= 1;  // Abbreviated file name should at least be 1 characters (a...)
 
-        if (TextUtils.isEmpty(fileName)) return fileName;
-
-        if (fileName.length() <= limit) return fileName;
+        if (TextUtils.isEmpty(fileName) || fileName.length() <= limit) return fileName;
 
         // Find the file name extension
         int index = fileName.lastIndexOf(".");
@@ -837,19 +1065,19 @@ public class DownloadUtils {
     public static int getIconResId(int fileType, @IconSize int iconSize) {
         // TODO(huayinz): Make image view size same as icon size so that 36dp icons can be removed.
         switch (fileType) {
-            case DownloadFilter.FILTER_PAGE:
+            case DownloadFilter.Type.PAGE:
                 return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_globe_24dp
                                                    : R.drawable.ic_globe_36dp;
-            case DownloadFilter.FILTER_VIDEO:
+            case DownloadFilter.Type.VIDEO:
                 return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_videocam_24dp
                                                    : R.drawable.ic_videocam_36dp;
-            case DownloadFilter.FILTER_AUDIO:
+            case DownloadFilter.Type.AUDIO:
                 return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_music_note_24dp
                                                    : R.drawable.ic_music_note_36dp;
-            case DownloadFilter.FILTER_IMAGE:
+            case DownloadFilter.Type.IMAGE:
                 return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_image_24dp
                                                    : R.drawable.ic_drive_image_36dp;
-            case DownloadFilter.FILTER_DOCUMENT:
+            case DownloadFilter.Type.DOCUMENT:
                 return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_document_24dp
                                                    : R.drawable.ic_drive_document_36dp;
             default:
@@ -873,17 +1101,18 @@ public class DownloadUtils {
      * @return a foreground color list.
      */
     public static ColorStateList getIconForegroundColorList(Context context) {
-        return ApiCompatibilityUtils.getColorStateList(
-                context.getResources(), R.color.white_mode_tint);
+        return AppCompatResources.getColorStateList(context, R.color.white_mode_tint);
     }
 
-    private static boolean isMimeTypeVideo(String mimeType) {
-        if (TextUtils.isEmpty(mimeType)) return false;
-
-        String[] pieces = mimeType.split(MIME_TYPE_DELIMITER);
-        if (pieces.length != 2) return false;
-
-        return MIME_TYPE_VIDEO.equals(pieces[0]);
+    /**
+     * Return if a download item is already viewed by the user. Will return false if the last
+     * access time is not available.
+     * @param item The download item.
+     * @return true if the item is viewed by the user.
+     */
+    public static boolean isDownloadViewed(DownloadItem item) {
+        if (item == null || item.getDownloadInfo() == null) return false;
+        return item.getDownloadInfo().getLastAccessTime() != 0;
     }
 
     /**
@@ -905,5 +1134,20 @@ public class DownloadUtils {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
         return cal.getTime();
+    }
+
+    /**
+     * Returns if the path is in the download directory on primary storage.
+     * @param path The directory to check.
+     * @return If the path is in the download directory on primary storage.
+     */
+    public static boolean isInPrimaryStorageDownloadDirectory(String path) {
+        File primaryDir = null;
+        try (StrictModeContext unused = StrictModeContext.allowDiskReads()) {
+            primaryDir = Environment.getExternalStorageDirectory();
+        }
+        if (primaryDir == null || path == null) return false;
+        String primaryPath = primaryDir.getAbsolutePath();
+        return primaryPath == null ? false : path.contains(primaryPath);
     }
 }

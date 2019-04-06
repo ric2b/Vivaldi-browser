@@ -36,9 +36,8 @@ enum TokenBindingParam {
 };
 
 enum TLS13Variant {
-  kTLS13VariantExperiment2,
-  kTLS13VariantDraft22,
   kTLS13VariantDraft23,
+  kTLS13VariantDraft28,
 };
 
 // Default minimum protocol version.
@@ -87,12 +86,6 @@ struct NET_EXPORT SSLConfig {
   // local (non-public) trust anchor should be allowed.
   bool sha1_local_anchors_enabled;
 
-  // common_name_fallback_local_anchors_enabled is true if certificates which
-  // only have a commonName in the Subject (i.e. lacking a subjectAltName)
-  // should be checked if the name matches. Only those issued by a local
-  // (non-public) trust anchor will be allowed to match.
-  bool common_name_fallback_local_anchors_enabled;
-
   // symantec_enforcement_disabled is true if the policies outlined in
   // https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html
   // should not be enforced.
@@ -108,6 +101,20 @@ struct NET_EXPORT SSLConfig {
   // The TLS 1.3 variant that is enabled. This only takes affect if TLS 1.3 is
   // also enabled via version_min and version_max.
   TLS13Variant tls13_variant;
+
+  // Whether early data is enabled on this connection. Note that early data has
+  // weaker security properties than normal data and changes the
+  // SSLClientSocket's behavior. The caller must only send replayable data prior
+  // to handshake confirmation. See StreamSocket::ConfirmHandshake for details.
+  //
+  // Additionally, early data may be rejected by the server, resulting in some
+  // socket operation failing with ERR_EARLY_DATA_REJECTED or
+  // ERR_WRONG_VERSION_ON_EARLY_DATA before any data is returned from the
+  // server. The caller must handle these cases, typically by retrying the
+  // high-level operation.
+  //
+  // If unsure, do not enable this option.
+  bool early_data_enabled;
 
   // Presorted list of cipher suites which should be explicitly prevented from
   // being used in addition to those disabled by the net built-in policy.
@@ -132,9 +139,6 @@ struct NET_EXPORT SSLConfig {
   std::vector<TokenBindingParam> token_binding_params;
 
   bool false_start_enabled;  // True if we'll use TLS False Start.
-  // True if the Certificate Transparency signed_certificate_timestamp
-  // TLS extension is enabled.
-  bool signed_cert_timestamps_enabled;
 
   // If true, causes only ECDHE cipher suites to be enabled.
   bool require_ecdhe;
@@ -160,15 +164,6 @@ struct NET_EXPORT SSLConfig {
 
   // True if we should send client_cert to the server.
   bool send_client_cert;
-
-  bool verify_ev_cert;  // True if we should verify the certificate for EV.
-
-  // If cert_io_enabled is false, then certificate verification will not
-  // result in additional HTTP requests. (For example: to fetch missing
-  // intermediates or to perform OCSP/CRL fetches.) It also implies that online
-  // revocation checking is disabled.
-  // NOTE: Only used by NSS.
-  bool cert_io_enabled;
 
   // The list of application level protocols supported with ALPN (Application
   // Layer Protocol Negotation), in decreasing order of preference.  Protocols

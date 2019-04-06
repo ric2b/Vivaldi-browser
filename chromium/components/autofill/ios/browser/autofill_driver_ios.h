@@ -38,6 +38,7 @@ class AutofillDriverIOS : public AutofillDriver,
   // AutofillDriver:
   bool IsIncognito() const override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool RendererIsAvailable() override;
   void SendFormDataToRenderer(int query_id,
                               RendererFormDataAction action,
@@ -46,7 +47,7 @@ class AutofillDriverIOS : public AutofillDriver,
       const std::vector<autofill::FormStructure*>& forms) override;
   void SendAutofillTypePredictionsToRenderer(
       const std::vector<FormStructure*>& forms) override;
-  void RendererShouldClearFilledForm() override;
+  void RendererShouldClearFilledSection() override;
   void RendererShouldClearPreviewedForm() override;
   void RendererShouldAcceptDataListSuggestion(
       const base::string16& value) override;

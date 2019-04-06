@@ -293,6 +293,8 @@ class V4Store {
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestChecksumErrorOnStartup);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest, WriteToDiskFails);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest, FullUpdateFailsChecksumSynchronously);
+  FRIEND_TEST_ALL_PREFIXES(V4StorePerftest, StressTest);
+
   friend class V4StoreTest;
 
   // If |prefix_size| is within expected range, and |raw_hashes_length| is a
@@ -319,10 +321,11 @@ class V4Store {
       const IteratorMap& iterator_map,
       HashPrefix* smallest_hash_prefix);
 
-  // Returns true if |hash_prefix| exists between |begin| and |end| iterators.
-  static bool HashPrefixMatches(const HashPrefix& hash_prefix,
-                                const HashPrefixes::const_iterator& begin,
-                                const HashPrefixes::const_iterator& end);
+  // Returns true if |hash_prefix| with PrefixSize |size| exists in |prefixes|.
+  // This small method is exposed in the header so it can be tested separately.
+  static bool HashPrefixMatches(base::StringPiece prefix,
+                                const HashPrefixes& prefixes,
+                                const PrefixSize& size);
 
   // For each key in |hash_prefix_map|, sets the iterator at that key
   // |iterator_map| to hash_prefix_map[key].begin().
@@ -336,6 +339,10 @@ class V4Store {
   // be small and infrequent.
   static void ReserveSpaceInPrefixMap(const HashPrefixMap& other_prefixes_map,
                                       HashPrefixMap* prefix_map_to_update);
+
+  // Same as the public GetMatchingHashPrefix method, but takes a StringPiece,
+  // for performance reasons.
+  HashPrefix GetMatchingHashPrefix(base::StringPiece full_hash);
 
   // Merges the prefix map from the old store (|old_hash_prefix_map|) and the
   // update (additions_map) to populate the prefix map for the current store.

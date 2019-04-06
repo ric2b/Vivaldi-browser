@@ -7,7 +7,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "storage/browser/quota/quota_callbacks.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace storage {
 class QuotaManager;
@@ -40,7 +40,7 @@ class StorageInfoFetcher :
   friend class base::RefCountedThreadSafe<StorageInfoFetcher>;
 
   // Fetches the usage information.
-  void GetUsageInfo(const storage::GetUsageInfoCallback& callback);
+  void GetUsageInfo(storage::GetUsageInfoCallback callback);
 
   // Called when usage information is available.
   void OnGetUsageInfoInternal(const storage::UsageInfoEntries& entries);

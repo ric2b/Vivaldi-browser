@@ -15,7 +15,6 @@
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/browser/browser_thread_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
 #include "content/browser/renderer_host/media/mock_video_capture_provider.h"
@@ -23,6 +22,7 @@
 #include "content/public/browser/media_observer.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_service_manager_context.h"
 #include "media/audio/audio_device_description.h"
 #include "media/audio/audio_system_impl.h"
 #include "media/audio/fake_audio_log_factory.h"
@@ -109,13 +109,13 @@ class MockAudioManager : public AudioManagerPlatform {
 
   media::AudioParameters GetDefaultOutputStreamParameters() override {
     return media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                  media::CHANNEL_LAYOUT_STEREO, 48000, 16, 128);
+                                  media::CHANNEL_LAYOUT_STEREO, 48000, 128);
   }
 
   media::AudioParameters GetOutputStreamParameters(
       const std::string& device_id) override {
     return media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                  media::CHANNEL_LAYOUT_STEREO, 48000, 16, 128);
+                                  media::CHANNEL_LAYOUT_STEREO, 48000, 128);
   }
 
   void SetNumAudioOutputDevices(size_t num_devices) {
@@ -167,6 +167,7 @@ class MediaStreamManagerTest : public ::testing::Test {
         std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
     auto video_capture_provider = std::make_unique<MockVideoCaptureProvider>();
     video_capture_provider_ = video_capture_provider.get();
+    service_manager_context_ = std::make_unique<TestServiceManagerContext>();
     media_stream_manager_ = std::make_unique<MediaStreamManager>(
         audio_system_.get(), audio_manager_->GetTaskRunner(),
         std::move(video_capture_provider));
@@ -184,7 +185,10 @@ class MediaStreamManagerTest : public ::testing::Test {
             }));
   }
 
-  ~MediaStreamManagerTest() override { audio_manager_->Shutdown(); }
+  ~MediaStreamManagerTest() override {
+    audio_manager_->Shutdown();
+    service_manager_context_.reset();
+  }
 
   MOCK_METHOD1(Response, void(int index));
   void ResponseCallback(int index,
@@ -211,7 +215,7 @@ class MediaStreamManagerTest : public ::testing::Test {
   }
 
   // media_stream_manager_ needs to outlive thread_bundle_ because it is a
-  // MessageLoop::DestructionObserver. audio_manager_ needs to outlive
+  // MessageLoopCurrent::DestructionObserver. audio_manager_ needs to outlive
   // thread_bundle_ because it uses the underlying message loop.
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   std::unique_ptr<MockMediaObserver> media_observer_;
@@ -223,6 +227,8 @@ class MediaStreamManagerTest : public ::testing::Test {
   base::RunLoop run_loop_;
 
  private:
+  std::unique_ptr<TestServiceManagerContext> service_manager_context_;
+
   DISALLOW_COPY_AND_ASSIGN(MediaStreamManagerTest);
 };
 

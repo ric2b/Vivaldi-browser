@@ -12,6 +12,7 @@
 
 namespace content {
 class JavaScriptDialogManager;
+class RenderFrameHost;
 class WebContents;
 }
 
@@ -44,7 +45,7 @@ class ExtensionHostDelegate {
 
   // Creates a new tab or popup window with |web_contents|. The embedder may
   // choose to do nothing if tabs and popups are not supported.
-  virtual void CreateTab(content::WebContents* web_contents,
+  virtual void CreateTab(std::unique_ptr<content::WebContents> web_contents,
                          const std::string& extension_id,
                          WindowOpenDisposition disposition,
                          const gfx::Rect& initial_rect,
@@ -55,16 +56,17 @@ class ExtensionHostDelegate {
   virtual void ProcessMediaAccessRequest(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback,
+      content::MediaResponseCallback callback,
       const Extension* extension) = 0;
 
   // Checks if we have permission to access the microphone or camera. Note that
   // this does not query the user. |type| must be MEDIA_DEVICE_AUDIO_CAPTURE
   // or MEDIA_DEVICE_VIDEO_CAPTURE.
-  virtual bool CheckMediaAccessPermission(content::WebContents* web_contents,
-                                          const GURL& security_origin,
-                                          content::MediaStreamType type,
-                                          const Extension* extension) = 0;
+  virtual bool CheckMediaAccessPermission(
+      content::RenderFrameHost* render_frame_host,
+      const GURL& security_origin,
+      content::MediaStreamType type,
+      const Extension* extension) = 0;
 
   // Returns the ExtensionHostQueue implementation to use for creating
   // ExtensionHost renderers.

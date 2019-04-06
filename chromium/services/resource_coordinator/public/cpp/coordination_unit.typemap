@@ -2,17 +2,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-mojom =
-    "//services/resource_coordinator/public/interfaces/coordination_unit.mojom"
+mojom = "//services/resource_coordinator/public/mojom/coordination_unit.mojom"
 
 public_headers = [
   "//services/resource_coordinator/public/cpp/coordination_unit_id.h",
   "//services/resource_coordinator/public/cpp/coordination_unit_types.h",
+  "//services/resource_coordinator/public/cpp/page_navigation_identity.h",
 ]
-traits_headers = [ "//services/resource_coordinator/public/cpp/coordination_unit_struct_traits.h" ]
+traits_headers = [
+  "//services/resource_coordinator/public/cpp/coordination_unit_mojom_traits.h",
+]
 sources = [
-  "//services/resource_coordinator/public/cpp/coordination_unit_struct_traits.cc",
-  "//services/resource_coordinator/public/cpp/coordination_unit_struct_traits.h",
+  "//services/resource_coordinator/public/cpp/coordination_unit_mojom_traits.cc",
+  "//services/resource_coordinator/public/cpp/coordination_unit_mojom_traits.h",
 ]
 public_deps = [
   "//services/resource_coordinator/public/cpp:resource_coordinator_cpp_base",
@@ -21,4 +23,5 @@ public_deps = [
 type_mappings = [
   "resource_coordinator.mojom.CoordinationUnitType=::resource_coordinator::CoordinationUnitType",
   "resource_coordinator.mojom.CoordinationUnitID=::resource_coordinator::CoordinationUnitID",
+  "resource_coordinator.mojom.PageNavigationIdentity=::resource_coordinator::PageNavigationIdentity",
 ]

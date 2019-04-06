@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,9 +27,6 @@
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_source.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -104,6 +100,7 @@ bool IsDownloadAllowedBySafeBrowsing(
     // failed safe browsing ping.
     case Result::UNKNOWN:
     case Result::SAFE:
+    case Result::WHITELISTED_BY_POLICY:
       return true;
 
     case Result::DANGEROUS:
@@ -143,7 +140,8 @@ FileSelectHelper::FileSelectHelper(Profile* profile)
       select_file_dialog_(),
       select_file_types_(),
       dialog_type_(ui::SelectFileDialog::SELECT_OPEN_FILE),
-      dialog_mode_(FileChooserParams::Open) {}
+      dialog_mode_(FileChooserParams::Open),
+      observer_(this) {}
 
 FileSelectHelper::~FileSelectHelper() {
   // There may be pending file dialogs, we need to tell them that we've gone
@@ -453,7 +451,7 @@ void FileSelectHelper::RunFileChooser(
   scoped_refptr<FileSelectHelper> file_select_helper(
       new FileSelectHelper(profile));
   file_select_helper->RunFileChooser(
-      render_frame_host, base::MakeUnique<content::FileChooserParams>(params));
+      render_frame_host, std::make_unique<content::FileChooserParams>(params));
 }
 
 // static
@@ -482,17 +480,14 @@ void FileSelectHelper::RunFileChooser(
 
   render_frame_host_ = render_frame_host;
   web_contents_ = WebContents::FromRenderFrameHost(render_frame_host);
-  notification_registrar_.RemoveAll();
+  observer_.RemoveAll();
   content::WebContentsObserver::Observe(web_contents_);
-  notification_registrar_.Add(
-      this, content::NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
-      content::Source<RenderWidgetHost>(
-          render_frame_host_->GetRenderViewHost()->GetWidget()));
+  observer_.Add(render_frame_host_->GetRenderViewHost()->GetWidget());
 
   base::PostTaskWithTraits(
       FROM_HERE, {base::MayBlock()},
       base::BindOnce(&FileSelectHelper::GetFileTypesInThreadPool, this,
-                     base::Passed(&params)));
+                     std::move(params)));
 
   // Because this class returns notifications to the RenderViewHost, it is
   // difficult for callers to know how long to keep a reference to this
@@ -512,7 +507,7 @@ void FileSelectHelper::GetFileTypesInThreadPool(
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(&FileSelectHelper::GetSanitizedFilenameOnUIThread, this,
-                     base::Passed(&params)));
+                     std::move(params)));
 }
 
 void FileSelectHelper::GetSanitizedFilenameOnUIThread(
@@ -670,11 +665,10 @@ void FileSelectHelper::EnumerateDirectoryEnd() {
   Release();
 }
 
-void FileSelectHelper::Observe(int type,
-                               const content::NotificationSource& source,
-                               const content::NotificationDetails& details) {
-  DCHECK_EQ(content::NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED, type);
+void FileSelectHelper::RenderWidgetHostDestroyed(
+    content::RenderWidgetHost* widget_host) {
   render_frame_host_ = nullptr;
+  observer_.Remove(widget_host);
 }
 
 void FileSelectHelper::RenderFrameHostChanged(

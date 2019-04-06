@@ -37,16 +37,17 @@ struct UrlHandlers : public Extension::ManifestData {
   static const std::vector<UrlHandlerInfo>* GetUrlHandlers(
       const Extension* extension);
 
-  // Determines whether |extension| has at least one URL handler that matches
+  // Determines whether |app| has at least one URL handler that matches
   // |url|.
-  static bool CanExtensionHandleUrl(
-      const Extension* extension,
-      const GURL& url);
+  static bool CanPlatformAppHandleUrl(const Extension* app, const GURL& url);
 
-  // Finds a matching URL handler for |extension|, if any. Returns NULL in none
+  // Determines whether |app| has at least one URL handler that matches |url|.
+  static bool CanBookmarkAppHandleUrl(const Extension* app, const GURL& url);
+
+  // Finds a matching URL handler for |app|, if any. Returns nullptr if none
   // are found.
-  static const UrlHandlerInfo* FindMatchingUrlHandler(
-      const Extension* extension,
+  static const UrlHandlerInfo* GetMatchingPlatformAppUrlHandler(
+      const Extension* app,
       const GURL& url);
 
   std::vector<UrlHandlerInfo> handlers;
@@ -62,7 +63,7 @@ class UrlHandlersParser : public ManifestHandler {
   bool Parse(Extension* extension, base::string16* error) override;
 
  private:
-  const std::vector<std::string> Keys() const override;
+  base::span<const char* const> Keys() const override;
 
   DISALLOW_COPY_AND_ASSIGN(UrlHandlersParser);
 };

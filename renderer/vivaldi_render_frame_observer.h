@@ -11,6 +11,9 @@ class VivaldiRenderFrameObserver
   explicit VivaldiRenderFrameObserver(content::RenderFrame* render_frame);
   ~VivaldiRenderFrameObserver() override;
 
+  // content::RenderFrameObserver
+  bool OnMessageReceived(const IPC::Message& message) override;
+
   void GetFocusedElementInfo(std::string* tagname,
                              std::string* type,
                              bool* editable,
@@ -18,6 +21,7 @@ class VivaldiRenderFrameObserver
 
   private:
    void FocusedNodeChanged(const blink::WebNode& node) override;
+   void OnResumeParser();
    void OnDestruct() override;
 };
 

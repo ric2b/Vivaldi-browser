@@ -1,2 +1,10 @@
 group("vivaldi_app") {
+  public_deps = [
+    ":bundle",
+  ]
+}
+
+copy("bundle") {
+  sources = [ "module_list" ]
+  outputs =  [ "$target_gen_dir/module_list" ]
 }

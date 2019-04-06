@@ -6,12 +6,17 @@ package org.chromium.chrome.browser.ntp.cards;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -33,31 +38,31 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.DisableHistogramsRule;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsEventReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.test.support.DisableHistogramsRule;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.CategoryInfoBuilder;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.net.NetworkChangeNotifier;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.HashMap;
 import java.util.List;
@@ -65,9 +70,9 @@ import java.util.List;
 /**
  * Unit tests for {@link SuggestionsSection}.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-@EnableFeatures(ChromeFeatureList.CHROME_HOME)
+@DisableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
 public class SectionListTest {
     @Rule
     public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
@@ -79,19 +84,23 @@ public class SectionListTest {
     @CategoryInt
     private static final int CATEGORY2 = CATEGORY1 + 1;
 
+    private static final int ARTICLES_SECTION_ENABLED_PREF = Pref.NTP_ARTICLES_SECTION_ENABLED;
+
+    private static final int EXPANDABLE_HEADER_PREF = Pref.NTP_ARTICLES_LIST_VISIBLE;
+
     @Mock
     private SuggestionsUiDelegate mUiDelegate;
     @Mock
     private OfflinePageBridge mOfflinePageBridge;
     @Mock
     private SuggestionsEventReporter mEventReporter;
+    @Mock
+    private PrefServiceBridge mPrefServiceBridge;
+
     private FakeSuggestionsSource mSuggestionSource;
 
     @Before
     public void setUp() {
-        ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
-        FeatureUtilities.resetChromeHomeEnabledForTests();
-
         // Ensure that NetworkChangeNotifier is initialized.
         if (!NetworkChangeNotifier.isInitialized()) {
             NetworkChangeNotifier.init();
@@ -105,11 +114,15 @@ public class SectionListTest {
         when(mUiDelegate.getSuggestionsSource()).thenReturn(mSuggestionSource);
         when(mUiDelegate.getEventReporter()).thenReturn(mEventReporter);
         when(mUiDelegate.getSuggestionsRanker()).thenReturn(new SuggestionsRanker());
+
+        doNothing().when(mPrefServiceBridge).setBoolean(anyInt(), anyBoolean());
+        PrefServiceBridge.setInstanceForTesting(mPrefServiceBridge);
     }
 
     @After
     public void tearDown() {
         CardsVariationParameters.setTestVariationParams(null);
+        PrefServiceBridge.setInstanceForTesting(null);
     }
 
     @Test
@@ -309,7 +322,7 @@ public class SectionListTest {
         assertTrue(sectionList.isEmpty());
         // Verify that the section has been detached by notifying its parent about changes. If not
         // detached, it should crash.
-        section.notifyItemRangeChanged(0, 1);
+        section.notifyItemRangeChanged(0, 1, null);
     }
 
     @Test
@@ -344,6 +357,92 @@ public class SectionListTest {
         sectionList.refreshSuggestions();
         SuggestionsSection articles = sectionList.getSection(KnownCategories.ARTICLES);
         assertTrue(articles.getHeaderItemForTesting().isVisible());
+    }
+
+    @Test
+    @Feature({"Ntp"})
+    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
+    public void testArticlesHeaderShownWhenExplicitlyDisabled() {
+        when(mPrefServiceBridge.getBoolean(ARTICLES_SECTION_ENABLED_PREF)).thenReturn(true);
+        registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 0);
+        mSuggestionSource.setStatusForCategory(
+                KnownCategories.ARTICLES, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+
+        SectionList sectionList = new SectionList(mUiDelegate, mOfflinePageBridge);
+        sectionList.refreshSuggestions();
+        SuggestionsSection section = sectionList.getSection(KnownCategories.ARTICLES);
+        assertEquals(1, section.getItemCount());
+        assertEquals(ItemViewType.HEADER, section.getItemViewType(0));
+        assertTrue(section.getHeaderItemForTesting().isVisible());
+    }
+
+    @Test
+    @Feature({"Ntp"})
+    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
+    public void testArticlesHeaderHiddenWhenDisabledByPolicy() {
+        when(mPrefServiceBridge.getBoolean(ARTICLES_SECTION_ENABLED_PREF)).thenReturn(false);
+        registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 0);
+        mSuggestionSource.setStatusForCategory(
+                KnownCategories.ARTICLES, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+
+        SectionList sectionList = new SectionList(mUiDelegate, mOfflinePageBridge);
+        sectionList.refreshSuggestions();
+        SuggestionsSection section = sectionList.getSection(KnownCategories.ARTICLES);
+        assertNull(section);
+    }
+
+    @Test
+    @Feature({"Ntp"})
+    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
+    public void testArticlesHeaderExpandableWithOtherSections() {
+        registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 1);
+        registerCategory(mSuggestionSource, CATEGORY1, 1);
+
+        SectionList sectionList = new SectionList(mUiDelegate, mOfflinePageBridge);
+        sectionList.refreshSuggestions();
+
+        // Check article header is expandable.
+        SuggestionsSection articles = sectionList.getSection(KnownCategories.ARTICLES);
+        assertTrue(articles.getHeaderItemForTesting().isVisible());
+        assertTrue(articles.getHeaderItemForTesting().isExpandable());
+
+        // Check header of other section is not expandable.
+        SuggestionsSection otherSection = sectionList.getSection(CATEGORY1);
+        assertTrue(otherSection.getHeaderItemForTesting().isVisible());
+        assertFalse(otherSection.getHeaderItemForTesting().isExpandable());
+    }
+
+    @Test
+    @Feature({"Ntp"})
+    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
+    public void testSuggestionsVisibilityOnPreferenceChanged() {
+        when(mPrefServiceBridge.getBoolean(ARTICLES_SECTION_ENABLED_PREF)).thenReturn(true);
+        when(mPrefServiceBridge.getBoolean(EXPANDABLE_HEADER_PREF)).thenReturn(true);
+        registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 3);
+
+        SectionList sectionList = new SectionList(mUiDelegate, mOfflinePageBridge);
+        sectionList.refreshSuggestions();
+
+        // The suggestions should be visible initially.
+        SuggestionsSection section = sectionList.getSection(KnownCategories.ARTICLES);
+        assertEquals(5, section.getItemCount());
+        assertEquals(ItemViewType.SNIPPET, section.getItemViewType(1));
+        assertEquals(ItemViewType.SNIPPET, section.getItemViewType(2));
+        assertEquals(ItemViewType.SNIPPET, section.getItemViewType(3));
+
+        // Simulate visibility changed on article header collapsed.
+        when(mPrefServiceBridge.getBoolean(EXPANDABLE_HEADER_PREF)).thenReturn(false);
+        mSuggestionSource.fireOnSuggestionsVisibilityChanged(KnownCategories.ARTICLES);
+        assertEquals(1, section.getItemCount());
+        assertEquals(ItemViewType.HEADER, section.getItemViewType(0));
+
+        // Simulate visibility changed on article header expanded.
+        when(mPrefServiceBridge.getBoolean(EXPANDABLE_HEADER_PREF)).thenReturn(true);
+        mSuggestionSource.fireOnSuggestionsVisibilityChanged(KnownCategories.ARTICLES);
+        assertEquals(5, section.getItemCount());
+        assertEquals(ItemViewType.SNIPPET, section.getItemViewType(1));
+        assertEquals(ItemViewType.SNIPPET, section.getItemViewType(2));
+        assertEquals(ItemViewType.SNIPPET, section.getItemViewType(3));
     }
 
     @Test

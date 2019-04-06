@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "content/browser/background_fetch/storage/database_task.h"
-#include "content/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 
 namespace content {
 
@@ -20,7 +20,7 @@ namespace background_fetch {
 // TODO(crbug.com/780025): Log failed deletions to UMA.
 class CleanupTask : public background_fetch::DatabaseTask {
  public:
-  explicit CleanupTask(BackgroundFetchDataManager* data_manager);
+  explicit CleanupTask(DatabaseTaskHost* host);
 
   ~CleanupTask() override;
 
@@ -29,13 +29,14 @@ class CleanupTask : public background_fetch::DatabaseTask {
  private:
   void DidGetRegistrations(
       const std::vector<std::pair<int64_t, std::string>>& registration_data,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
 
- private:
   void DidGetActiveUniqueIds(
       const std::vector<std::pair<int64_t, std::string>>& registration_data,
       const std::vector<std::pair<int64_t, std::string>>& active_unique_id_data,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
+
+  void FinishWithError(blink::mojom::BackgroundFetchError error) override;
 
   base::WeakPtrFactory<CleanupTask> weak_factory_;  // Keep as last.
 

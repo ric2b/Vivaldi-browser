@@ -9,61 +9,58 @@
 #include "ash/app_list/model/search/search_result_observer.h"
 #include "ash/public/cpp/app_list/tokenized_string.h"
 #include "ash/public/cpp/app_list/tokenized_string_match.h"
+#include "ui/base/models/menu_model.h"
 
 namespace app_list {
 
-SearchResult::Action::Action(const gfx::ImageSkia& base_image,
-                             const gfx::ImageSkia& hover_image,
-                             const gfx::ImageSkia& pressed_image,
-                             const base::string16& tooltip_text)
-    : base_image(base_image),
-      hover_image(hover_image),
-      pressed_image(pressed_image),
-      tooltip_text(tooltip_text) {}
-
-SearchResult::Action::Action(const base::string16& label_text,
-                             const base::string16& tooltip_text)
-    : tooltip_text(tooltip_text), label_text(label_text) {}
-
-SearchResult::Action::Action(const Action& other) = default;
-
-SearchResult::Action::~Action() = default;
-
-SearchResult::SearchResult() = default;
+SearchResult::SearchResult()
+    : metadata_(ash::mojom::SearchResultMetadata::New()) {}
 
 SearchResult::~SearchResult() {
   for (auto& observer : observers_)
     observer.OnResultDestroying();
 }
 
-void SearchResult::SetIcon(const gfx::ImageSkia& icon) {
-  icon_ = icon;
+void SearchResult::SetMetadata(ash::mojom::SearchResultMetadataPtr metadata) {
+  metadata_ = std::move(metadata);
   for (auto& observer : observers_)
-    observer.OnIconChanged();
+    observer.OnMetadataChanged();
+}
+
+void SearchResult::SetIcon(const gfx::ImageSkia& icon) {
+  metadata_->icon = icon;
+  for (auto& observer : observers_)
+    observer.OnMetadataChanged();
+}
+
+void SearchResult::set_title(const base::string16& title) {
+  metadata_->title = title;
+  for (auto& observer : observers_)
+    observer.OnMetadataChanged();
 }
 
 void SearchResult::SetBadgeIcon(const gfx::ImageSkia& badge_icon) {
-  badge_icon_ = badge_icon;
+  metadata_->badge_icon = badge_icon;
   for (auto& observer : observers_)
-    observer.OnBadgeIconChanged();
+    observer.OnMetadataChanged();
 }
 
 void SearchResult::SetRating(float rating) {
-  rating_ = rating;
+  metadata_->rating = rating;
   for (auto& observer : observers_)
-    observer.OnRatingChanged();
+    observer.OnMetadataChanged();
 }
 
 void SearchResult::SetFormattedPrice(const base::string16& formatted_price) {
-  formatted_price_ = formatted_price;
+  metadata_->formatted_price = formatted_price;
   for (auto& observer : observers_)
-    observer.OnFormattedPriceChanged();
+    observer.OnMetadataChanged();
 }
 
 void SearchResult::SetActions(const Actions& sets) {
-  actions_ = sets;
+  metadata_->actions = sets;
   for (auto& observer : observers_)
-    observer.OnActionsChanged();
+    observer.OnMetadataChanged();
 }
 
 void SearchResult::SetIsInstalling(bool is_installing) {
@@ -97,55 +94,8 @@ void SearchResult::RemoveObserver(SearchResultObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void SearchResult::UpdateFromMatch(const TokenizedString& title,
-                                   const TokenizedStringMatch& match) {
-  const TokenizedStringMatch::Hits& hits = match.hits();
-
-  Tags tags;
-  tags.reserve(hits.size());
-  for (size_t i = 0; i < hits.size(); ++i)
-    tags.push_back(Tag(Tag::MATCH, hits[i].start(), hits[i].end()));
-
-  set_title(title.text());
-  set_title_tags(tags);
-  set_relevance(match.relevance());
-}
-
 void SearchResult::Open(int event_flags) {}
 
 void SearchResult::InvokeAction(int action_index, int event_flags) {}
-
-ui::MenuModel* SearchResult::GetContextMenuModel() {
-  return NULL;
-}
-
-// static
-std::string SearchResult::TagsDebugString(const std::string& text,
-                                          const Tags& tags) {
-  std::string result = text;
-
-  // Build a table of delimiters to insert.
-  std::map<size_t, std::string> inserts;
-  for (const auto& tag : tags) {
-    if (tag.styles & Tag::URL)
-      inserts[tag.range.start()].push_back('{');
-    if (tag.styles & Tag::MATCH)
-      inserts[tag.range.start()].push_back('[');
-    if (tag.styles & Tag::DIM) {
-      inserts[tag.range.start()].push_back('<');
-      inserts[tag.range.end()].push_back('>');
-    }
-    if (tag.styles & Tag::MATCH)
-      inserts[tag.range.end()].push_back(']');
-    if (tag.styles & Tag::URL)
-      inserts[tag.range.end()].push_back('}');
-  }
-
-  // Insert the delimiters (in reverse order, to preserve indices).
-  for (auto it = inserts.rbegin(); it != inserts.rend(); ++it)
-    result.insert(it->first, it->second);
-
-  return result;
-}
 
 }  // namespace app_list

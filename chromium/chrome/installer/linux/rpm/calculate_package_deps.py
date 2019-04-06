@@ -40,6 +40,8 @@ if exit_code != 0:
   sys.exit(1)
 
 requires = set([] if stdout == '' else stdout.rstrip('\n').split('\n'))
+requires = set(i for i in requires
+                 if not i.startswith('libffmpeg.so'))
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 provides_file = open(os.path.join(script_dir, 'dist_package_provides.json'))
@@ -50,7 +52,7 @@ ret_code = 0
 if distro_check:
   for distro in distro_package_provides:
     for requirement in requires:
-      if any([requirement.startswith(shlib) for shlib in bundled_shlibs + ['libffmpeg.so', 'rtld']]):
+      if any([requirement.startswith(shlib) for shlib in bundled_shlibs]):
         remove_requires.add(requirement)
         continue
       if requirement not in distro_package_provides[distro]:

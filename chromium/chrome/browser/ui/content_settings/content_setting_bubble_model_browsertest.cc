@@ -7,13 +7,14 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_content_setting_bubble_model_delegate.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
+#include "chrome/browser/ui/content_settings/fake_owner.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -234,6 +235,8 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMediaStreamTest,
 
 class ContentSettingBubbleModelPopupTest : public InProcessBrowserTest {
  protected:
+  static constexpr int kDisallowButtonIndex = 1;
+
   void SetUpInProcessBrowserTestFixture() override {
     https_server_.reset(
         new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
@@ -262,6 +265,8 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelPopupTest,
           browser()->content_setting_bubble_model_delegate(),
           browser()->tab_strip_model()->GetActiveWebContents(),
           browser()->profile(), CONTENT_SETTINGS_TYPE_POPUPS));
+  std::unique_ptr<FakeOwner> owner =
+      FakeOwner::Create(*model, kDisallowButtonIndex);
 
   histograms.ExpectBucketCount(
         "ContentSettings.Popups",
@@ -277,8 +282,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelPopupTest,
         "ContentSettings.Popups",
         content_settings::POPUPS_ACTION_CLICKED_MANAGE_POPUPS_BLOCKING, 1);
 
-  model->OnRadioClicked(model->kAllowButtonIndex);
-  delete model.release();
+  owner->SetSelectedRadioOptionAndCommit(model->kAllowButtonIndex);
   histograms.ExpectBucketCount(
         "ContentSettings.Popups",
         content_settings::POPUPS_ACTION_SELECTED_ALWAYS_ALLOW_POPUPS_FROM, 1);
@@ -301,12 +305,11 @@ class ContentSettingBubbleModelMixedScriptOopifTest
   }
 };
 
-// TODO: Flaking test crbug.com/802281
 // Tests that a MIXEDSCRIPT type ContentSettingBubbleModel sends appropriate
 // IPCs to allow the renderer to load unsafe scripts inside out-of-processs
 // iframes.
 IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMixedScriptOopifTest,
-                       DISABLED_MixedContentInCrossSiteIframe) {
+                       MixedContentInCrossSiteIframe) {
   // Create a URL for the mixed content document and append it as a query
   // string to the main URL. This approach is taken because the test servers
   // run on random ports each time and it is not possible to use a static

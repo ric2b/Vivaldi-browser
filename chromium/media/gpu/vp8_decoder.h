@@ -15,6 +15,7 @@
 #include "media/filters/vp8_parser.h"
 #include "media/gpu/accelerated_video_decoder.h"
 #include "media/gpu/vp8_picture.h"
+#include "media/gpu/vp8_reference_frame_vector.h"
 
 namespace media {
 
@@ -40,16 +41,11 @@ class MEDIA_GPU_EXPORT VP8Decoder : public AcceleratedVideoDecoder {
     // this situation as normal and return from Decode() with kRanOutOfSurfaces.
     virtual scoped_refptr<VP8Picture> CreateVP8Picture() = 0;
 
-    // Submit decode for |pic|, taking as arguments |frame_hdr| with parsed
-    // VP8 frame header information for current frame, and using |last_frame|,
-    // |golden_frame| and |alt_frame| as references, as per VP8 specification.
-    // Note that this runs the decode in hardware.
-    // Return true if successful.
-    virtual bool SubmitDecode(const scoped_refptr<VP8Picture>& pic,
-                              const Vp8FrameHeader* frame_hdr,
-                              const scoped_refptr<VP8Picture>& last_frame,
-                              const scoped_refptr<VP8Picture>& golden_frame,
-                              const scoped_refptr<VP8Picture>& alt_frame) = 0;
+    // Submits decode for |pic|, using |reference_frames| as references, as per
+    // VP8 specification. Returns true if successful.
+    virtual bool SubmitDecode(
+        scoped_refptr<VP8Picture> pic,
+        const Vp8ReferenceFrameVector& reference_frames) = 0;
 
     // Schedule output (display) of |pic|. Note that returning from this
     // method does not mean that |pic| has already been outputted (displayed),
@@ -63,20 +59,22 @@ class MEDIA_GPU_EXPORT VP8Decoder : public AcceleratedVideoDecoder {
     DISALLOW_COPY_AND_ASSIGN(VP8Accelerator);
   };
 
-  VP8Decoder(VP8Accelerator* accelerator);
+  explicit VP8Decoder(std::unique_ptr<VP8Accelerator> accelerator);
   ~VP8Decoder() override;
 
   // AcceleratedVideoDecoder implementation.
+  void SetStream(int32_t id,
+                 const uint8_t* ptr,
+                 size_t size,
+                 const DecryptConfig* decrypt_config = nullptr) override;
   bool Flush() override WARN_UNUSED_RESULT;
   void Reset() override;
-  void SetStream(const uint8_t* ptr, size_t size) override;
   DecodeResult Decode() override WARN_UNUSED_RESULT;
   gfx::Size GetPicSize() const override;
   size_t GetRequiredNumOfPictures() const override;
 
  private:
-  bool DecodeAndOutputCurrentFrame();
-  void RefreshReferenceFrames();
+  bool DecodeAndOutputCurrentFrame(scoped_refptr<VP8Picture> pic);
 
   enum State {
     kNeedStreamMetadata,  // After initialization, need a keyframe.
@@ -90,10 +88,13 @@ class MEDIA_GPU_EXPORT VP8Decoder : public AcceleratedVideoDecoder {
   Vp8Parser parser_;
 
   std::unique_ptr<Vp8FrameHeader> curr_frame_hdr_;
-  scoped_refptr<VP8Picture> curr_pic_;
-  scoped_refptr<VP8Picture> last_frame_;
-  scoped_refptr<VP8Picture> golden_frame_;
-  scoped_refptr<VP8Picture> alt_frame_;
+  Vp8ReferenceFrameVector ref_frames_;
+
+  // Current stream buffer id; to be assigned to pictures decoded from it.
+  static constexpr int32_t kInvalidId = -1;
+  int32_t stream_id_ = kInvalidId;
+  int32_t last_decoded_stream_id_ = kInvalidId;
+  size_t size_change_failure_counter_ = 0;
 
   const uint8_t* curr_frame_start_;
   size_t frame_size_;
@@ -102,7 +103,7 @@ class MEDIA_GPU_EXPORT VP8Decoder : public AcceleratedVideoDecoder {
   int horizontal_scale_;
   int vertical_scale_;
 
-  VP8Accelerator* accelerator_;
+  const std::unique_ptr<VP8Accelerator> accelerator_;
 
   DISALLOW_COPY_AND_ASSIGN(VP8Decoder);
 };

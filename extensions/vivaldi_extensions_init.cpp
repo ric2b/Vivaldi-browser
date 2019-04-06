@@ -14,7 +14,7 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiExtensionInit>>::
 
 VivaldiExtensionInit::VivaldiExtensionInit(content::BrowserContext* context) {
   ExtensionFunctionRegistry* registry =
-      ExtensionFunctionRegistry::GetInstance();
+      &ExtensionFunctionRegistry::GetInstance();
 
   // Generated APIs from Vivaldi.
   extensions::vivaldi::VivaldiGeneratedFunctionRegistry::RegisterAll(registry);

@@ -22,6 +22,7 @@
 #include "content/common/content_export.h"
 #include "content/public/common/resource_type.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace net {
 class URLRequest;
@@ -56,9 +57,9 @@ namespace appcache_update_job_unittest {
 class AppCacheUpdateJobTest;
 }
 
-typedef base::OnceCallback<void(AppCacheStatus)> GetStatusCallback;
-typedef base::OnceCallback<void(bool)> StartUpdateCallback;
-typedef base::OnceCallback<void(bool)> SwapCacheCallback;
+using GetStatusCallback = base::OnceCallback<void(AppCacheStatus)>;
+using StartUpdateCallback = base::OnceCallback<void(bool)>;
+using SwapCacheCallback = base::OnceCallback<void(bool)>;
 
 // Server-side representation of an application cache host.
 class CONTENT_EXPORT AppCacheHost
@@ -189,10 +190,6 @@ class CONTENT_EXPORT AppCacheHost
   }
 
   const GURL& first_party_url() const { return first_party_url_; }
-
-  // Methods to support cross site navigations.
-  void PrepareForTransfer();
-  void CompleteTransfer(int host_id, AppCacheFrontend* frontend);
 
   // Returns a weak pointer reference to the host.
   base::WeakPtr<AppCacheHost> GetWeakPtr();
@@ -346,7 +343,7 @@ class CONTENT_EXPORT AppCacheHost
   base::ObserverList<Observer> observers_;
 
   // Used to inform the QuotaManager of what origins are currently in use.
-  GURL origin_in_use_;
+  url::Origin origin_in_use_;
 
   // First party url to be used in policy checks.
   GURL first_party_url_;

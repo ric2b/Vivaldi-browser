@@ -52,6 +52,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/test/test_utils.h"
+#include "dbus/object_path.h"
 #include "extensions/browser/api/networking_private/networking_private_chromeos.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate_factory.h"
 #include "extensions/browser/notification_types.h"
@@ -186,7 +187,7 @@ class TestListener : public content::NotificationObserver {
   DISALLOW_COPY_AND_ASSIGN(TestListener);
 };
 
-class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
+class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
  public:
   NetworkingPrivateChromeOSApiTest()
       : detector_(nullptr),
@@ -207,11 +208,11 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
         .WillRepeatedly(Return(true));
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
 
-    ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+    extensions::ExtensionApiTest::SetUpInProcessBrowserTestFixture();
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
+    extensions::ExtensionApiTest::SetUpCommandLine(command_line);
     // Whitelist the extension ID of the test extension.
     command_line->AppendSwitchASCII(
         extensions::switches::kWhitelistedExtensionID,
@@ -252,33 +253,30 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     // Add a Cellular GSM Device.
     device_test_->AddDevice(kCellularDevicePath, shill::kTypeCellular,
                             "stub_cellular_device1");
-    device_test_->SetDeviceProperty(kCellularDevicePath,
-                                    shill::kCarrierProperty,
-                                    base::Value("Cellular1_Carrier"));
+    SetDeviceProperty(kCellularDevicePath, shill::kCarrierProperty,
+                      base::Value("Cellular1_Carrier"));
     base::DictionaryValue home_provider;
     home_provider.SetString("name", "Cellular1_Provider");
     home_provider.SetString("code", "000000");
     home_provider.SetString("country", "us");
-    device_test_->SetDeviceProperty(
-        kCellularDevicePath, shill::kHomeProviderProperty, home_provider);
-    device_test_->SetDeviceProperty(kCellularDevicePath,
-                                    shill::kTechnologyFamilyProperty,
-                                    base::Value(shill::kNetworkTechnologyGsm));
-    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kMeidProperty,
-                                    base::Value("test_meid"));
-    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kImeiProperty,
-                                    base::Value("test_imei"));
-    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kIccidProperty,
-                                    base::Value("test_iccid"));
-    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kEsnProperty,
-                                    base::Value("test_esn"));
-    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kMdnProperty,
-                                    base::Value("test_mdn"));
-    device_test_->SetDeviceProperty(kCellularDevicePath, shill::kMinProperty,
-                                    base::Value("test_min"));
-    device_test_->SetDeviceProperty(kCellularDevicePath,
-                                    shill::kModelIdProperty,
-                                    base::Value("test_model_id"));
+    SetDeviceProperty(kCellularDevicePath, shill::kHomeProviderProperty,
+                      home_provider);
+    SetDeviceProperty(kCellularDevicePath, shill::kTechnologyFamilyProperty,
+                      base::Value(shill::kNetworkTechnologyGsm));
+    SetDeviceProperty(kCellularDevicePath, shill::kMeidProperty,
+                      base::Value("test_meid"));
+    SetDeviceProperty(kCellularDevicePath, shill::kImeiProperty,
+                      base::Value("test_imei"));
+    SetDeviceProperty(kCellularDevicePath, shill::kIccidProperty,
+                      base::Value("test_iccid"));
+    SetDeviceProperty(kCellularDevicePath, shill::kEsnProperty,
+                      base::Value("test_esn"));
+    SetDeviceProperty(kCellularDevicePath, shill::kMdnProperty,
+                      base::Value("test_mdn"));
+    SetDeviceProperty(kCellularDevicePath, shill::kMinProperty,
+                      base::Value("test_min"));
+    SetDeviceProperty(kCellularDevicePath, shill::kModelIdProperty,
+                      base::Value("test_model_id"));
     device_test_->SetSimLocked(kCellularDevicePath, false);
 
     // Add the Cellular Service.
@@ -323,6 +321,13 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
                               state, true /* add_to_visible */);
   }
 
+  void SetDeviceProperty(const std::string& device_path,
+                         const std::string& name,
+                         const base::Value& value) {
+    device_test_->SetDeviceProperty(device_path, name, value,
+                                    /*notify_changed=*/true);
+  }
+
   static std::unique_ptr<KeyedService> CreateNetworkingPrivateDelegate(
       content::BrowserContext* context) {
     std::unique_ptr<NetworkingPrivateDelegate> result(
@@ -340,14 +345,14 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     ChromeNetworkingCastPrivateDelegate::SetFactoryCallbackForTest(
         &networking_cast_delegate_factory_);
 
-    ExtensionApiTest::SetUp();
+    extensions::ExtensionApiTest::SetUp();
   }
 
   void SetUpOnMainThread() override {
     detector_ = new NetworkPortalDetectorTestImpl();
     chromeos::network_portal_detector::InitializeForTesting(detector_);
 
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
     content::RunAllPendingInMessageLoop();
 
     NetworkingPrivateDelegateFactory::GetInstance()->SetTestingFactory(
@@ -389,10 +394,10 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
                             "stub_wifi_device1");
     base::ListValue wifi_ip_configs;
     wifi_ip_configs.AppendString(kIPConfigPath);
-    device_test_->SetDeviceProperty(kWifiDevicePath, shill::kIPConfigsProperty,
-                                    wifi_ip_configs);
-    device_test_->SetDeviceProperty(kWifiDevicePath, shill::kAddressProperty,
-                                    base::Value("001122aabbcc"));
+    SetDeviceProperty(kWifiDevicePath, shill::kIPConfigsProperty,
+                      wifi_ip_configs);
+    SetDeviceProperty(kWifiDevicePath, shill::kAddressProperty,
+                      base::Value("001122aabbcc"));
 
     // Add Services
     AddService("stub_ethernet", "eth0", shill::kTypeEthernet,
@@ -480,7 +485,7 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
   }
 
   void TearDown() override {
-    ExtensionApiTest::TearDown();
+    extensions::ExtensionApiTest::TearDown();
     ChromeNetworkingCastPrivateDelegate::SetFactoryCallbackForTest(nullptr);
   }
 
@@ -543,8 +548,10 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, StartActivate) {
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, StartActivateSprint) {
   SetupCellular();
   // Set the carrier to Sprint.
-  device_test_->SetDeviceProperty(kCellularDevicePath, shill::kCarrierProperty,
-                                  base::Value(shill::kCarrierSprint));
+  DBusThreadManager::Get()->GetShillDeviceClient()->SetCarrier(
+      dbus::ObjectPath(kCellularDevicePath), shill::kCarrierSprint,
+      base::DoNothing(),
+      base::BindRepeating([](const std::string&, const std::string&) {}));
   EXPECT_TRUE(RunNetworkingSubtest("startActivateSprint")) << message_;
   EXPECT_EQ(0, UIDelegateStub::s_show_account_details_called_);
 }
@@ -908,8 +915,8 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
                       .Set(shill::kStatusProperty, "available")
                       .Build())
           .Build();
-  device_test_->SetDeviceProperty(
-      kCellularDevicePath, shill::kFoundNetworksProperty, *found_networks);
+  SetDeviceProperty(kCellularDevicePath, shill::kFoundNetworksProperty,
+                    *found_networks);
   EXPECT_TRUE(RunNetworkingSubtest("selectCellularMobileNetwork")) << message_;
 }
 

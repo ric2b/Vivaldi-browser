@@ -8,11 +8,10 @@
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
-#include "chrome/browser/vr/test/fake_ui_element_renderer.h"
 #include "chrome/browser/vr/ui.h"
+#include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_creator.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 
 namespace vr {
@@ -61,6 +60,13 @@ bool WillElementBeVisible(const UiElement* element) {
   return WillElementFaceCamera(element);
 }
 
+int NumVisibleInTreeRecursive(const UiElement* element) {
+  int visible = WillElementBeVisible(element) ? 1 : 0;
+  for (auto& child : element->children())
+    visible += NumVisibleInTreeRecursive(child.get());
+  return visible;
+}
+
 }  // namespace
 
 UiTest::UiTest() {}
@@ -70,31 +76,30 @@ void UiTest::SetUp() {
   browser_ = std::make_unique<testing::NiceMock<MockUiBrowserInterface>>();
 }
 
-void UiTest::CreateScene(const UiInitialState& state) {
-  auto content_input_delegate =
-      std::make_unique<testing::NiceMock<MockContentInputDelegate>>();
+void UiTest::CreateSceneInternal(
+    const UiInitialState& state,
+    std::unique_ptr<MockContentInputDelegate> content_input_delegate) {
   content_input_delegate_ = content_input_delegate.get();
-
-  ui_ = std::make_unique<Ui>(std::move(browser_.get()),
-                             std::move(content_input_delegate), nullptr,
-                             nullptr, state);
-  scene_ = ui_->scene();
-  model_ = ui_->model_for_test();
+  ui_instance_ = std::make_unique<Ui>(std::move(browser_.get()),
+                                      std::move(content_input_delegate),
+                                      nullptr, nullptr, nullptr, state);
+  ui_ = ui_instance_.get();
+  scene_ = ui_instance_->scene();
+  model_ = ui_instance_->model_for_test();
+  model_->controller.transform.Translate3d(kStartControllerPosition);
 
   OnBeginFrame();
 }
 
-void UiTest::CreateScene(InCct in_cct, InWebVr in_web_vr) {
-  UiInitialState state;
-  state.in_cct = in_cct;
-  state.in_web_vr = in_web_vr;
-  CreateScene(state);
+void UiTest::CreateScene(const UiInitialState& state) {
+  auto content_input_delegate =
+      std::make_unique<testing::NiceMock<MockContentInputDelegate>>();
+  CreateSceneInternal(state, std::move(content_input_delegate));
 }
 
-void UiTest::CreateSceneForAutoPresentation() {
+void UiTest::CreateScene(InWebVr in_web_vr) {
   UiInitialState state;
-  state.in_web_vr = true;
-  state.web_vr_autopresentation_expected = true;
+  state.in_web_vr = in_web_vr;
   CreateScene(state);
 }
 
@@ -127,18 +132,18 @@ void UiTest::VerifyOnlyElementsVisible(
     const std::set<UiElementName>& names) const {
   OnBeginFrame();
   SCOPED_TRACE(trace_context);
-  for (const auto& element : scene_->root_element()) {
-    SCOPED_TRACE(element.DebugName());
-    UiElementName name = element.name();
-    UiElementName owner_name = element.owner_name_for_test();
-    if (element.draw_phase() == kPhaseNone && owner_name == kNone) {
+  for (auto* element : scene_->GetAllElements()) {
+    SCOPED_TRACE(element->DebugName());
+    UiElementName name = element->name();
+    UiElementName owner_name = element->owner_name_for_test();
+    if (element->draw_phase() == kPhaseNone && owner_name == kNone) {
       EXPECT_TRUE(names.find(name) == names.end());
       continue;
     }
     if (name == kNone)
       name = owner_name;
     bool should_be_visible = (names.find(name) != names.end());
-    EXPECT_EQ(WillElementBeVisible(&element), should_be_visible);
+    EXPECT_EQ(WillElementBeVisible(element), should_be_visible);
   }
 }
 
@@ -149,12 +154,7 @@ int UiTest::NumVisibleInTree(UiElementName name) const {
   if (!root) {
     return 0;
   }
-  int visible = 0;
-  for (const auto& element : *root) {
-    if (WillElementBeVisible(&element))
-      visible++;
-  }
-  return visible;
+  return NumVisibleInTreeRecursive(root);
 }
 
 bool UiTest::VerifyIsAnimating(const std::set<UiElementName>& names,
@@ -186,76 +186,82 @@ bool UiTest::VerifyRequiresLayout(const std::set<UiElementName>& names,
   return true;
 }
 
-void UiTest::CheckRendererOpacityRecursive(UiElement* element) {
-  // Disable all opacity animation for testing.
-  element->SetTransitionedProperties({});
-  // Set element's opacity to a value smaller than 1. This could make sure it's
-  // children's opacity is not the same as computed_opacity. Otherwise, our test
-  // might be confused which opacity is used by renderer.
-  element->SetOpacity(0.9f);
-
-  OnBeginFrame();
-
-  FakeUiElementRenderer renderer;
-  if (element->draw_phase() != kPhaseNone) {
-    CameraModel model;
-    model.view_proj_matrix = kPixelDaydreamProjMatrix;
-    element->Render(&renderer, model);
-  }
-
-  // It is expected that some elements doesn't render anything (such as root
-  // elements). So skipping verify these elements should be fine.
-  if (renderer.called()) {
-    EXPECT_FLOAT_EQ(renderer.opacity(), element->computed_opacity())
-        << "element name: " << element->name();
-  }
-
-  for (auto& child : element->children()) {
-    CheckRendererOpacityRecursive(child.get());
-  }
-}
-
 bool UiTest::RunFor(base::TimeDelta delta) {
   base::TimeTicks target_time = current_time_ + delta;
   base::TimeDelta frame_time = base::TimeDelta::FromSecondsD(1.0 / 60.0);
   bool changed = false;
-  for (; current_time_ < target_time; current_time_ += frame_time) {
-    if (scene_->OnBeginFrame(current_time_, kStartHeadPose))
-      changed = true;
+
+  // Run a frame in the near future to trigger new state changes.
+  current_time_ += frame_time;
+  changed |= OnBeginFrame();
+
+  // If needed, skip ahead and run another frame at the target time.
+  if (current_time_ < target_time) {
+    current_time_ = target_time;
+    changed |= OnBeginFrame();
   }
-  current_time_ = target_time;
-  if (scene_->OnBeginFrame(current_time_, kStartHeadPose))
-    changed = true;
+
   return changed;
 }
 
-bool UiTest::OnBeginFrame() const {
-  return scene_->OnBeginFrame(current_time_, kStartHeadPose);
+bool UiTest::RunForMs(float milliseconds) {
+  return RunFor(base::TimeDelta::FromMilliseconds(milliseconds));
 }
 
-bool UiTest::OnBeginFrame(base::TimeDelta delta) {
+bool UiTest::RunForSeconds(float seconds) {
+  return RunFor(base::TimeDelta::FromSecondsD(seconds));
+}
+
+bool UiTest::OnBeginFrame() const {
+  bool changed = false;
+  changed |= scene_->OnBeginFrame(current_time_, kStartHeadPose);
+  if (scene_->HasDirtyTextures()) {
+    scene_->UpdateTextures();
+    changed = true;
+  }
+  return changed;
+}
+
+bool UiTest::OnDelayedFrame(base::TimeDelta delta) {
   current_time_ += delta;
   return OnBeginFrame();
 }
 
 void UiTest::GetBackgroundColor(SkColor* background_color) const {
   OnBeginFrame();
-  Rect* front =
-      static_cast<Rect*>(scene_->GetUiElementByName(kBackgroundFront));
-  ASSERT_NE(nullptr, front);
-  SkColor color = front->edge_color();
+  Rect* background =
+      static_cast<Rect*>(scene_->GetUiElementByName(kSolidBackground));
+  ASSERT_NE(nullptr, background);
+  EXPECT_EQ(background->center_color(), background->edge_color());
+  *background_color = background->edge_color();
+}
 
-  // While returning background color, ensure that all background panel elements
-  // share the same color.
-  for (auto name : {kBackgroundFront, kBackgroundLeft, kBackgroundBack,
-                    kBackgroundRight, kBackgroundTop, kBackgroundBottom}) {
-    const Rect* panel = static_cast<Rect*>(scene_->GetUiElementByName(name));
-    ASSERT_NE(nullptr, panel);
-    EXPECT_EQ(panel->center_color(), color);
-    EXPECT_EQ(panel->edge_color(), color);
-  }
+void UiTest::ClickElement(UiElement* element) {
+  // Synthesize a controller vector targeting the element.
+  gfx::Point3F target;
+  element->ComputeTargetWorldSpaceTransform().TransformPoint(&target);
+  gfx::Point3F origin;
+  gfx::Vector3dF direction(target - origin);
+  direction.GetNormalized(&direction);
 
-  *background_color = color;
+  RenderInfo render_info;
+  ReticleModel reticle_model;
+  InputEventList input_event_list;
+  ControllerModel controller_model;
+  controller_model.laser_direction = direction;
+  controller_model.laser_origin = origin;
+
+  controller_model.touchpad_button_state = UiInputManager::ButtonState::DOWN;
+  ui_instance_->input_manager()->HandleInput(current_time_, render_info,
+                                             controller_model, &reticle_model,
+                                             &input_event_list);
+  OnBeginFrame();
+
+  controller_model.touchpad_button_state = UiInputManager::ButtonState::UP;
+  ui_instance_->input_manager()->HandleInput(current_time_, render_info,
+                                             controller_model, &reticle_model,
+                                             &input_event_list);
+  OnBeginFrame();
 }
 
 }  // namespace vr

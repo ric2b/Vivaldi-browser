@@ -15,12 +15,13 @@ SimpleURLLoaderTestHelper::SimpleURLLoaderTestHelper()
 
 SimpleURLLoaderTestHelper::~SimpleURLLoaderTestHelper() {}
 
-SimpleURLLoader::BodyAsStringCallback SimpleURLLoaderTestHelper::GetCallback() {
+network::SimpleURLLoader::BodyAsStringCallback
+SimpleURLLoaderTestHelper::GetCallback() {
   DCHECK(!callback_created_);
   callback_created_ = true;
 
-  return base::Bind(&SimpleURLLoaderTestHelper::OnCompleteCallback,
-                    weak_ptr_factory_.GetWeakPtr());
+  return base::BindOnce(&SimpleURLLoaderTestHelper::OnCompleteCallback,
+                        weak_ptr_factory_.GetWeakPtr());
 }
 
 void SimpleURLLoaderTestHelper::WaitForCallback() {
@@ -29,23 +30,11 @@ void SimpleURLLoaderTestHelper::WaitForCallback() {
   run_loop_.Run();
 }
 
-void SimpleURLLoaderTestHelper::SetRunLoopQuitThread(
-    BrowserThread::ID thread_id) {
-  run_loop_quit_thread_ = thread_id;
-}
-
 void SimpleURLLoaderTestHelper::OnCompleteCallback(
     std::unique_ptr<std::string> response_body) {
   DCHECK(!response_body_);
 
   response_body_ = std::move(response_body);
-
-  if (run_loop_quit_thread_ &&
-      !BrowserThread::CurrentlyOn(*run_loop_quit_thread_)) {
-    BrowserThread::PostTask(*run_loop_quit_thread_, FROM_HERE,
-                            run_loop_.QuitClosure());
-    return;
-  }
 
   run_loop_.Quit();
 }

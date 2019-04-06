@@ -28,25 +28,37 @@ SimpleThread::~SimpleThread() {
 }
 
 void SimpleThread::Start() {
-  DCHECK(!HasBeenStarted()) << "Tried to Start a thread multiple times.";
-  bool success =
-      options_.joinable
-          ? PlatformThread::CreateWithPriority(options_.stack_size, this,
-                                               &thread_, options_.priority)
-          : PlatformThread::CreateNonJoinableWithPriority(
-                options_.stack_size, this, options_.priority);
-  DCHECK(success);
+  StartAsync();
   ThreadRestrictions::ScopedAllowWait allow_wait;
   event_.Wait();  // Wait for the thread to complete initialization.
 }
 
 void SimpleThread::Join() {
   DCHECK(options_.joinable) << "A non-joinable thread can't be joined.";
-  DCHECK(HasBeenStarted()) << "Tried to Join a never-started thread.";
+  DCHECK(HasStartBeenAttempted()) << "Tried to Join a never-started thread.";
   DCHECK(!HasBeenJoined()) << "Tried to Join a thread multiple times.";
+  BeforeJoin();
   PlatformThread::Join(thread_);
   thread_ = PlatformThreadHandle();
   joined_ = true;
+}
+
+void SimpleThread::StartAsync() {
+  DCHECK(!HasStartBeenAttempted()) << "Tried to Start a thread multiple times.";
+  start_called_ = true;
+  BeforeStart();
+  bool success =
+      options_.joinable
+          ? PlatformThread::CreateWithPriority(options_.stack_size, this,
+                                               &thread_, options_.priority)
+          : PlatformThread::CreateNonJoinableWithPriority(
+                options_.stack_size, this, options_.priority);
+  CHECK(success);
+}
+
+PlatformThreadId SimpleThread::tid() {
+  DCHECK(HasBeenStarted());
+  return tid_;
 }
 
 bool SimpleThread::HasBeenStarted() {
@@ -65,6 +77,7 @@ void SimpleThread::ThreadMain() {
   // We've initialized our new thread, signal that we're done to Start().
   event_.Signal();
 
+  BeforeRun();
   Run();
 }
 

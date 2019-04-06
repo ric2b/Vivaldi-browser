@@ -14,9 +14,11 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/managed_memory_policy.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
@@ -48,9 +50,11 @@ class SynchronousCompositorRegistry;
 class SynchronousLayerTreeFrameSinkClient {
  public:
   virtual void DidActivatePendingTree() = 0;
-  virtual void Invalidate() = 0;
+  virtual void Invalidate(bool needs_draw) = 0;
   virtual void SubmitCompositorFrame(uint32_t layer_tree_frame_sink_id,
                                      viz::CompositorFrame frame) = 0;
+  virtual void SetNeedsBeginFrames(bool needs_begin_frames) = 0;
+  virtual void SinkDestroyed() = 0;
 
  protected:
   virtual ~SynchronousLayerTreeFrameSinkClient() {}
@@ -66,13 +70,15 @@ class SynchronousLayerTreeFrameSinkClient {
 // to a fixed thread when BindToClient is called.
 class SynchronousLayerTreeFrameSink
     : public cc::LayerTreeFrameSink,
-      public viz::mojom::CompositorFrameSinkClient {
+      public viz::mojom::CompositorFrameSinkClient,
+      public viz::ExternalBeginFrameSourceClient {
  public:
   SynchronousLayerTreeFrameSink(
       scoped_refptr<viz::ContextProvider> context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      IPC::Sender* sender,
       int routing_id,
       uint32_t layer_tree_frame_sink_id,
       std::unique_ptr<viz::BeginFrameSource> begin_frame_source,
@@ -81,33 +87,43 @@ class SynchronousLayerTreeFrameSink
   ~SynchronousLayerTreeFrameSink() override;
 
   void SetSyncClient(SynchronousLayerTreeFrameSinkClient* compositor);
-  bool OnMessageReceived(const IPC::Message& message);
 
   // cc::LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* sink_client) override;
   void DetachFromClient() override;
   void SubmitCompositorFrame(viz::CompositorFrame frame) override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
-  void Invalidate() override;
+  void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
+                               const viz::SharedBitmapId& id) override;
+  void DidDeleteSharedBitmap(const viz::SharedBitmapId& id) override;
+  void Invalidate(bool needs_draw) override;
 
   // Partial SynchronousCompositor API implementation.
   void DemandDrawHw(const gfx::Size& viewport_size,
                     const gfx::Rect& viewport_rect_for_tile_priority,
                     const gfx::Transform& transform_for_tile_priority);
   void DemandDrawSw(SkCanvas* canvas);
+  void WillSkipDraw();
 
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
-  void DidPresentCompositorFrame(uint32_t presentation_token,
-                                 base::TimeTicks time,
-                                 base::TimeDelta refresh,
-                                 uint32_t flags) override;
-  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
+  void DidPresentCompositorFrame(
+      uint32_t presentation_token,
+      const gfx::PresentationFeedback& feedback) override;
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
   void OnBeginFramePausedChanged(bool paused) override;
+
+  // viz::ExternalBeginFrameSourceClient overrides.
+  void OnNeedsBeginFrames(bool needs_begin_frames) override;
+
+  void BeginFrame(const viz::BeginFrameArgs& args);
+  void SetBeginFrameSourcePaused(bool paused);
+  void SetMemoryPolicy(size_t bytes_limit);
+  void ReclaimResources(uint32_t layer_tree_frame_sink_id,
+                        const std::vector<viz::ReturnedResource>& resources);
 
  private:
   class SoftwareOutputSurface;
@@ -121,11 +137,6 @@ class SynchronousLayerTreeFrameSink
 
   void CancelFallbackTick();
   void FallbackTickFired();
-
-  // IPC handlers.
-  void SetMemoryPolicy(size_t bytes_limit);
-  void OnReclaimResources(uint32_t layer_tree_frame_sink_id,
-                          const std::vector<viz::ReturnedResource>& resources);
 
   const int routing_id_;
   const uint32_t layer_tree_frame_sink_id_;
@@ -160,6 +171,9 @@ class SynchronousLayerTreeFrameSink
     void DisplayDidDrawAndSwap() override {}
     void DisplayDidReceiveCALayerParams(
         const gfx::CALayerParams& ca_layer_params) override {}
+    void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {}
+    void DidSwapAfterSnapshotRequestReceived(
+        const std::vector<ui::LatencyInfo>& latency_info) override {}
   };
 
   // TODO(danakj): These don't to be stored in unique_ptrs when OutputSurface
@@ -181,7 +195,8 @@ class SynchronousLayerTreeFrameSink
   std::unique_ptr<viz::Display> display_;
   // Owned by |display_|.
   SoftwareOutputSurface* software_output_surface_ = nullptr;
-  std::unique_ptr<viz::BeginFrameSource> begin_frame_source_;
+  std::unique_ptr<viz::BeginFrameSource> synthetic_begin_frame_source_;
+  std::unique_ptr<viz::ExternalBeginFrameSource> external_begin_frame_source_;
 
   gfx::Rect sw_viewport_for_current_draw_;
 

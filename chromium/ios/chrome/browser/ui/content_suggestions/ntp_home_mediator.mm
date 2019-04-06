@@ -15,11 +15,13 @@
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_alert_factory.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
@@ -28,7 +30,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_consumer.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_metrics.h"
-#import "ios/chrome/browser/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/browser/ui/location_bar_notification_names.h"
 #include "ios/chrome/browser/ui/ntp/metrics.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
@@ -37,6 +38,7 @@
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
+#import "ios/chrome/common/favicon/favicon_attributes.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #import "ios/web/public/navigation_item.h"
@@ -199,7 +201,8 @@ const char kRateThisAppCommand[] = "ratethisapp";
     // offset, taking into account the size of the toolbar.
     offset = MAX(0, MIN(offset, collection.contentSize.height -
                                     collection.bounds.size.height -
-                                    ntp_header::kToolbarHeight));
+                                    ntp_header::ToolbarHeight() +
+                                    collection.contentInset.bottom));
     collection.contentOffset = CGPointMake(0, offset);
     // Update the constraints in case the omnibox needs to be moved.
     [self.suggestionsViewController updateConstraints];
@@ -234,29 +237,51 @@ const char kRateThisAppCommand[] = "ratethisapp";
   self.suggestionsService->user_classifier()->OnEvent(
       ntp_snippets::UserClassifier::Metric::SUGGESTIONS_USED);
 
+  web::NavigationManager::WebLoadParams params(suggestionItem.URL);
   // Use a referrer with a specific URL to mark this entry as coming from
   // ContentSuggestions.
-  const web::Referrer referrer(GURL(kNewTabPageReferrerURL),
-                               web::ReferrerPolicyDefault);
-
-  [self.dispatcher loadURL:suggestionItem.URL
-                  referrer:referrer
-                transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
-         rendererInitiated:NO];
+  params.referrer =
+      web::Referrer(GURL(kNewTabPageReferrerURL), web::ReferrerPolicyDefault);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  [self.dispatcher loadURLWithParams:params];
   [self.NTPMetrics recordAction:new_tab_page_uma::ACTION_OPENED_SUGGESTION];
 }
 
 - (void)openMostVisitedItem:(CollectionViewItem*)item
                     atIndex:(NSInteger)mostVisitedIndex {
+  if ([item isKindOfClass:[ContentSuggestionsMostVisitedActionItem class]]) {
+    ContentSuggestionsMostVisitedActionItem* mostVisitedItem =
+        base::mac::ObjCCastStrict<ContentSuggestionsMostVisitedActionItem>(
+            item);
+    switch (mostVisitedItem.action) {
+      case ContentSuggestionsMostVisitedActionBookmark:
+        [self.dispatcher showBookmarksManager];
+        base::RecordAction(base::UserMetricsAction("MobileNTPShowBookmarks"));
+        break;
+      case ContentSuggestionsMostVisitedActionReadingList:
+        [self.dispatcher showReadingList];
+        base::RecordAction(base::UserMetricsAction("MobileNTPShowReadingList"));
+        break;
+      case ContentSuggestionsMostVisitedActionRecentTabs:
+        [self.dispatcher showRecentTabs];
+        base::RecordAction(base::UserMetricsAction("MobileNTPShowRecentTabs"));
+        break;
+      case ContentSuggestionsMostVisitedActionHistory:
+        [self.dispatcher showHistory];
+        base::RecordAction(base::UserMetricsAction("MobileNTPShowHistory"));
+        break;
+    }
+    return;
+  }
+
   ContentSuggestionsMostVisitedItem* mostVisitedItem =
       base::mac::ObjCCastStrict<ContentSuggestionsMostVisitedItem>(item);
 
   [self logMostVisitedOpening:mostVisitedItem atIndex:mostVisitedIndex];
 
-  [self.dispatcher loadURL:mostVisitedItem.URL
-                  referrer:web::Referrer()
-                transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
-         rendererInitiated:NO];
+  web::NavigationManager::WebLoadParams params(mostVisitedItem.URL);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  [self.dispatcher loadURLWithParams:params];
 }
 
 - (void)displayContextMenuForSuggestion:(CollectionViewItem*)item
@@ -287,6 +312,10 @@ const char kRateThisAppCommand[] = "ratethisapp";
 - (void)displayContextMenuForMostVisitedItem:(CollectionViewItem*)item
                                      atPoint:(CGPoint)touchLocation
                                  atIndexPath:(NSIndexPath*)indexPath {
+  // No context menu for action buttons.
+  if ([item isKindOfClass:[ContentSuggestionsMostVisitedActionItem class]]) {
+    return;
+  }
   ContentSuggestionsMostVisitedItem* mostVisitedItem =
       base::mac::ObjCCastStrict<ContentSuggestionsMostVisitedItem>(item);
   self.alertCoordinator = [ContentSuggestionsAlertFactory
@@ -316,6 +345,7 @@ const char kRateThisAppCommand[] = "ratethisapp";
     [self.dispatcher webPageOrderedOpen:notificationPromo->url()
                                referrer:web::Referrer()
                            inBackground:NO
+                            originPoint:CGPointZero
                                appendTo:kCurrentTab];
     return;
   }
@@ -335,10 +365,9 @@ const char kRateThisAppCommand[] = "ratethisapp";
 }
 
 - (void)handleLearnMoreTapped {
-  [self.dispatcher loadURL:GURL(kNTPHelpURL)
-                  referrer:web::Referrer()
-                transition:ui::PAGE_TRANSITION_LINK
-         rendererInitiated:NO];
+  GURL URL(kNTPHelpURL);
+  web::NavigationManager::WebLoadParams params(URL);
+  [self.dispatcher loadURLWithParams:params];
   [self.NTPMetrics recordAction:new_tab_page_uma::ACTION_OPENED_LEARN_MORE];
 }
 
@@ -366,7 +395,8 @@ const char kRateThisAppCommand[] = "ratethisapp";
                    withAction:disposition];
   }
 
-  [self openNewTabWithURL:item.URL incognito:incognito];
+  CGPoint cellCenter = [self cellCenterForItem:item];
+  [self openNewTabWithURL:item.URL incognito:incognito originPoint:cellCenter];
 }
 
 - (void)addItemToReadingList:(ContentSuggestionsItem*)item {
@@ -406,7 +436,8 @@ const char kRateThisAppCommand[] = "ratethisapp";
                             incognito:(BOOL)incognito
                               atIndex:(NSInteger)index {
   [self logMostVisitedOpening:item atIndex:index];
-  [self openNewTabWithURL:item.URL incognito:incognito];
+  CGPoint cellCenter = [self cellCenterForItem:item];
+  [self openNewTabWithURL:item.URL incognito:incognito originPoint:cellCenter];
 }
 
 - (void)openNewTabWithMostVisitedItem:(ContentSuggestionsMostVisitedItem*)item
@@ -482,13 +513,31 @@ const char kRateThisAppCommand[] = "ratethisapp";
 
 #pragma mark - Private
 
-// Opens the |URL| in a new tab |incognito| or not.
-- (void)openNewTabWithURL:(const GURL&)URL incognito:(BOOL)incognito {
+// Returns the center of the cell associated with |item| in the window
+// coordinates. Returns CGPointZero is the cell isn't visible.
+- (CGPoint)cellCenterForItem:(CollectionViewItem<SuggestedContent>*)item {
+  NSIndexPath* indexPath = [self.suggestionsViewController.collectionViewModel
+      indexPathForItem:item];
+  if (!indexPath)
+    return CGPointZero;
+
+  UIView* cell = [self.suggestionsViewController.collectionView
+      cellForItemAtIndexPath:indexPath];
+  return [cell.superview convertPoint:cell.center toView:nil];
+}
+
+// Opens the |URL| in a new tab |incognito| or not. |originPoint| is the origin
+// of the new tab animation if the tab is opened in background, in window
+// coordinates.
+- (void)openNewTabWithURL:(const GURL&)URL
+                incognito:(BOOL)incognito
+              originPoint:(CGPoint)originPoint {
   // Open the tab in background if it is non-incognito only.
   [self.dispatcher webPageOrderedOpen:URL
                              referrer:web::Referrer()
                           inIncognito:incognito
                          inBackground:!incognito
+                          originPoint:originPoint
                              appendTo:kCurrentTab];
 }
 

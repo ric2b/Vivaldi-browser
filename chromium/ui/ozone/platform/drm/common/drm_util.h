@@ -21,6 +21,7 @@ typedef struct _drmModeModeInfo drmModeModeInfo;
 
 namespace display {
 class DisplayMode;
+class EdidParser;
 }  // namespace display
 
 namespace gfx {
@@ -28,6 +29,18 @@ class Point;
 }
 
 namespace ui {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class EdidColorSpaceChecksOutcome {
+  kSuccess = 0,
+  kErrorBadCoordinates = 1,
+  kErrorPrimariesAreaTooSmall = 2,
+  kErrorBluePrimaryIsBroken = 3,
+  kErrorCannotExtractToXYZD50 = 4,
+  kErrorBadGamma = 5,
+  kMaxValue = kErrorBadGamma
+};
 
 // Representation of the information required to initialize and configure a
 // native display. |index| is the position of the connection and will be
@@ -86,12 +99,15 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
 std::vector<DisplaySnapshot_Params> CreateDisplaySnapshotParams(
     const MovableDisplaySnapshots& displays);
 
-int GetFourCCFormatFromBufferFormat(gfx::BufferFormat format);
-gfx::BufferFormat GetBufferFormatFromFourCCFormat(int format);
-
 int GetFourCCFormatForOpaqueFramebuffer(gfx::BufferFormat format);
 
 gfx::Size GetMaximumCursorSize(int fd);
+
+ScopedDrmPropertyPtr FindDrmProperty(int fd,
+                                     drmModeObjectProperties* properties,
+                                     const char* name);
+
+bool HasColorCorrectionMatrix(int fd, drmModeCrtc* crtc);
 
 DisplayMode_Params GetDisplayModeParams(const display::DisplayMode& mode);
 
@@ -119,9 +135,9 @@ OverlayStatusList CreateOverlayStatusListFrom(
 std::vector<OverlayCheckReturn_Params> CreateParamsFromOverlayStatusList(
     const OverlayStatusList& returns);
 
-// Parses |edid| to extract a gfx::ColorSpace which will be IsValid() if both
-// gamma and the color primaries were correctly found.
-gfx::ColorSpace GetColorSpaceFromEdid(const std::vector<uint8_t>& edid);
+// Uses |edid_parser| to extract a gfx::ColorSpace which will be IsValid() if
+// both gamma and the color primaries were correctly found.
+gfx::ColorSpace GetColorSpaceFromEdid(const display::EdidParser& edid_parser);
 
 }  // namespace ui
 

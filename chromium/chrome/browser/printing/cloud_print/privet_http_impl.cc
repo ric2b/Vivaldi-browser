@@ -14,6 +14,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -24,7 +25,7 @@
 #include "chrome/common/cloud_print/cloud_print_constants.h"
 #include "net/base/url_util.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -480,16 +481,10 @@ void PrivetLocalPrintOperationImpl::DoSubmitdoc() {
   url_fetcher_ =
       privet_client_->CreateURLFetcher(url, net::URLFetcher::POST, this);
 
-  if (use_pdf_) {
-    // TODO(noamsml): Move to file-based upload data?
-    std::string data_str(reinterpret_cast<const char*>(data_->front()),
-                         data_->size());
-    url_fetcher_->SetUploadData(kPrivetContentTypePDF, data_str);
-  } else {
-    url_fetcher_->SetUploadFilePath(kPrivetContentTypePWGRaster,
-                                    pwg_file_path_);
-  }
-
+  std::string data_str(reinterpret_cast<const char*>(data_->front()),
+                       data_->size());
+  url_fetcher_->SetUploadData(
+      use_pdf_ ? kPrivetContentTypePDF : kPrivetContentTypePWGRaster, data_str);
   url_fetcher_->Start();
 }
 
@@ -506,12 +501,15 @@ void PrivetLocalPrintOperationImpl::StartConvertToPWG() {
   if (!pwg_raster_converter_)
     pwg_raster_converter_ = PwgRasterConverter::CreateDefault();
 
+  printing::PwgRasterSettings bitmap_settings =
+      PwgRasterConverter::GetBitmapSettings(capabilities_, ticket_);
   pwg_raster_converter_->Start(
       data_.get(),
-      PwgRasterConverter::GetConversionSettings(capabilities_, page_size_),
-      PwgRasterConverter::GetBitmapSettings(capabilities_, ticket_),
-      base::Bind(&PrivetLocalPrintOperationImpl::OnPWGRasterConverted,
-                 weak_factory_.GetWeakPtr()));
+      PwgRasterConverter::GetConversionSettings(capabilities_, page_size_,
+                                                bitmap_settings.use_color),
+      bitmap_settings,
+      base::BindOnce(&PrivetLocalPrintOperationImpl::OnPWGRasterConverted,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void PrivetLocalPrintOperationImpl::OnSubmitdocResponse(
@@ -570,15 +568,15 @@ void PrivetLocalPrintOperationImpl::OnCreatejobResponse(
 }
 
 void PrivetLocalPrintOperationImpl::OnPWGRasterConverted(
-    bool success,
-    const base::FilePath& pwg_file_path) {
-  if (!success) {
+    base::ReadOnlySharedMemoryRegion pwg_region) {
+  auto data =
+      base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(pwg_region);
+  if (!data) {
     delegate_->OnPrivetPrintingError(this, -1);
     return;
   }
 
-  DCHECK(!pwg_file_path.empty());
-  pwg_file_path_ = pwg_file_path;
+  data_ = data;
   StartPrinting();
 }
 
@@ -605,7 +603,7 @@ void PrivetLocalPrintOperationImpl::OnNeedPrivetToken(
 }
 
 void PrivetLocalPrintOperationImpl::SetData(
-    const scoped_refptr<base::RefCountedBytes>& data) {
+    const scoped_refptr<base::RefCountedMemory>& data) {
   DCHECK(!started_);
   data_ = data;
 }

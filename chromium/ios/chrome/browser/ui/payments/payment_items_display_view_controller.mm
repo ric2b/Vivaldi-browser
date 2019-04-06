@@ -7,11 +7,11 @@
 #include "base/mac/foundation_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_item+collection_view_controller.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
+#import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/ui/payments/cells/price_item.h"
 #import "ios/chrome/browser/ui/payments/payment_items_display_view_controller_actions.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
@@ -129,7 +129,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)setDataSource:
     (id<PaymentItemsDisplayViewControllerDataSource>)dataSource {
   _dataSource = dataSource;
-  [_payButton setEnabled:[_dataSource canPay]];
 }
 
 #pragma mark - CollectionViewController methods
@@ -137,6 +136,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)loadModel {
   [super loadModel];
   CollectionViewModel* model = self.collectionViewModel;
+
+  [_payButton setEnabled:[_dataSource canPay]];
 
   // Add the total entry.
   [model addSectionWithIdentifier:SectionIdentifierPayment];

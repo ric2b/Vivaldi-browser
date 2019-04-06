@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/views/close_bubble_on_tab_activation_helper.h"
+#include "chrome/browser/ui/views/profiles/dice_accounts_menu.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -34,6 +35,8 @@ class LabelButton;
 }
 
 class Browser;
+class DiceSigninButtonView;
+class HoverButton;
 
 // This bubble view is displayed when the user clicks on the avatar button.
 // It displays a list of profiles and allows users to switch between profiles.
@@ -50,14 +53,14 @@ class ProfileChooserView : public content::WebContentsDelegate,
   // call this function when the button is clicked and if the bubble isn't
   // showing it will appear while if it is showing, nothing will happen here and
   // the existing bubble will auto-close due to focus loss.
-  // There are 2 ways to position the Bubble, if |anchor_view| is set, then
+  // There are 2 ways to position the Bubble, if |anchor_button| is set, then
   // |parent_window| and |anchor_rect| are ignored. Otherwise, |parent_window|
   // and |anchor_rect| have to be set.
   static void ShowBubble(
       profiles::BubbleViewMode view_mode,
       const signin::ManageAccountsParams& manage_accounts_params,
       signin_metrics::AccessPoint access_point,
-      views::View* anchor_view,
+      views::Button* anchor_button,
       gfx::NativeView parent_window,
       const gfx::Rect& anchor_rect,
       Browser* browser,
@@ -75,7 +78,7 @@ class ProfileChooserView : public content::WebContentsDelegate,
   typedef std::map<views::Button*, int> ButtonIndexes;
   typedef std::map<views::Button*, std::string> AccountButtonIndexes;
 
-  ProfileChooserView(views::View* anchor_view,
+  ProfileChooserView(views::Button* anchor_button,
                      Browser* browser,
                      profiles::BubbleViewMode view_mode,
                      signin::GAIAServiceType service_type,
@@ -140,6 +143,7 @@ class ProfileChooserView : public content::WebContentsDelegate,
   views::View* CreateGuestProfileView();
   views::View* CreateOptionsView(bool display_lock, AvatarMenu* avatar_menu);
   views::View* CreateSupervisedUserDisclaimerView();
+  views::View* CreateAutofillHomeView();
 
   // Account Management view for the profile |avatar_item|.
   views::View* CreateCurrentProfileAccountsView(
@@ -163,21 +167,33 @@ class ProfileChooserView : public content::WebContentsDelegate,
   // Creates a header for signin and sync error surfacing for the user menu.
   views::View* CreateSyncErrorViewIfNeeded(const AvatarMenu::Item& avatar_item);
 
-  // Creates a view with a red HoverButton, which displays the profile icon
-  // associated with |avatar_item| and the strings associated with
-  // |title_string_id| and |subtitle_string_id|.
+  // Creates a view showing the profile associated with |avatar_item| and an
+  // error button below.
   views::View* CreateDiceSyncErrorView(const AvatarMenu::Item& avatar_item,
                                        sync_ui_util::AvatarSyncErrorType error,
-                                       int title_string_id,
-                                       int subtitle_string_id);
+                                       int button_string_id);
 
   bool ShouldShowGoIncognito() const;
+
+  // Return maximal height for the view after which it becomes scrollable.
+  // TODO(crbug.com/870303): remove when a general solution is available.
+  int GetMaxHeight() const;
 
   // Clean-up done after an action was performed in the ProfileChooser.
   void PostActionPerformed(ProfileMetrics::ProfileDesktopMenu action_performed);
 
+  // Callbacks for DiceAccountsMenu.
+  void EnableSync(const base::Optional<AccountInfo>& account);
+  void SignOutAllWebAccounts();
+
+  // Methods to keep track of the number of times the Dice sign-in promo has
+  // been shown.
+  int GetDiceSigninPromoShowCount() const;
+  void IncrementDiceSigninPromoShowCount();
+
   std::unique_ptr<AvatarMenu> avatar_menu_;
   Browser* const browser_;
+  views::Button* const anchor_button_;
 
   // Other profiles used in the "fast profile switcher" view.
   ButtonIndexes open_other_profile_indexes_map_;
@@ -193,6 +209,7 @@ class ProfileChooserView : public content::WebContentsDelegate,
   views::Link* manage_accounts_link_;
   views::LabelButton* manage_accounts_button_;
   views::LabelButton* signin_current_profile_button_;
+  HoverButton* sync_to_another_account_button_;
   views::LabelButton* signin_with_gaia_account_button_;
 
   // For material design user menu, the active profile card owns the profile
@@ -207,6 +224,9 @@ class ProfileChooserView : public content::WebContentsDelegate,
   views::LabelButton* lock_button_;
   views::LabelButton* close_all_windows_button_;
   views::Link* add_account_link_;
+  views::LabelButton* passwords_button_;
+  views::LabelButton* credit_cards_button_;
+  views::LabelButton* addresses_button_;
 
   // Buttons displayed in the gaia signin view.
   views::ImageButton* gaia_signin_cancel_button_;
@@ -214,6 +234,9 @@ class ProfileChooserView : public content::WebContentsDelegate,
   // Links and buttons displayed in the account removal view.
   views::LabelButton* remove_account_button_;
   views::ImageButton* account_removal_cancel_button_;
+
+  // View for the signin/turn-on-sync button in the dice promo.
+  DiceSigninButtonView* dice_signin_button_view_;
 
   // Records the account id to remove.
   std::string account_id_to_remove_;
@@ -229,9 +252,12 @@ class ProfileChooserView : public content::WebContentsDelegate,
 
   CloseBubbleOnTabActivationHelper close_bubble_helper_;
 
-  // ID of the GAIA account that should be signed in when
-  // |signin_with_gaia_account_button_| is pressed.
-  std::string signin_with_gaia_account_id_;
+  // Accounts that are presented in the enable sync promo.
+  std::vector<AccountInfo> dice_sync_promo_accounts_;
+
+  // Accounts submenu that is shown when |sync_to_another_account_button_| is
+  // pressed.
+  std::unique_ptr<DiceAccountsMenu> dice_accounts_menu_;
 
   const bool dice_enabled_;
 

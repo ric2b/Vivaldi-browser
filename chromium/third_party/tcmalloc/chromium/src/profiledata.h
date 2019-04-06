@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2007, Google Inc.
 // All rights reserved.
 //
@@ -34,7 +35,7 @@
 // Collect profiling data.
 //
 // The profile data file format is documented in
-// doc/cpuprofile-fileformat.html
+// docs/cpuprofile-fileformat.html
 
 
 #ifndef BASE_PROFILEDATA_H_

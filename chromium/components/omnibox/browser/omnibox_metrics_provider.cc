@@ -56,7 +56,7 @@ OmniboxEventProto::Suggestion::ResultType AsOmniboxEventResultType(
       return OmniboxEventProto::Suggestion::CALCULATOR;
     case AutocompleteMatchType::SEARCH_OTHER_ENGINE:
       return OmniboxEventProto::Suggestion::SEARCH_OTHER_ENGINE;
-    case AutocompleteMatchType::EXTENSION_APP:
+    case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:
       return OmniboxEventProto::Suggestion::EXTENSION_APP;
     case AutocompleteMatchType::BOOKMARK_TITLE:
       return OmniboxEventProto::Suggestion::BOOKMARK_TITLE;
@@ -64,18 +64,15 @@ OmniboxEventProto::Suggestion::ResultType AsOmniboxEventResultType(
       return OmniboxEventProto::Suggestion::NAVSUGGEST_PERSONALIZED;
     case AutocompleteMatchType::CLIPBOARD:
       return OmniboxEventProto::Suggestion::CLIPBOARD;
-    case AutocompleteMatchType::PHYSICAL_WEB:
-      return OmniboxEventProto::Suggestion::PHYSICAL_WEB;
-    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW:
-      return OmniboxEventProto::Suggestion::PHYSICAL_WEB_OVERFLOW;
-    case AutocompleteMatchType::TAB_SEARCH:
-      // TODO(crbug.com/46672): Create a specific type and move this result
-      // under it.
-      return OmniboxEventProto::Suggestion::UNKNOWN_RESULT_TYPE;
+    case AutocompleteMatchType::DOCUMENT_SUGGESTION:
+      return OmniboxEventProto::Suggestion::DOCUMENT;
     case AutocompleteMatchType::VOICE_SUGGEST:
       // VOICE_SUGGEST matches are only used in Java and are not logged,
       // so we should never reach this case.
     case AutocompleteMatchType::CONTACT_DEPRECATED:
+    case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
+    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
+    case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
     case AutocompleteMatchType::NUM_TYPES:
       break;
   }
@@ -122,14 +119,16 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
 
   OmniboxEventProto* omnibox_event = omnibox_events_cache.add_omnibox_event();
   omnibox_event->set_time_sec(metrics::MetricsLog::GetCurrentTime());
-  if (log.tab_id != -1) {
+  if (log.tab_id.is_valid()) {
     // If we know what tab the autocomplete URL was opened in, log it.
-    omnibox_event->set_tab_id(log.tab_id);
+    omnibox_event->set_tab_id(log.tab_id.id());
   }
   omnibox_event->set_typed_length(log.text.length());
   omnibox_event->set_just_deleted_text(log.just_deleted_text);
   omnibox_event->set_num_typed_terms(static_cast<int>(terms.size()));
   omnibox_event->set_selected_index(log.selected_index);
+  omnibox_event->set_selected_tab_match(log.disposition ==
+                                        WindowOpenDisposition::SWITCH_TO_TAB);
   if (log.completed_length != base::string16::npos)
     omnibox_event->set_completed_length(log.completed_length);
   const base::TimeDelta default_time_delta =
@@ -166,6 +165,7 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
       suggestion->set_typed_count(i->typed_count);
     if (i->subtype_identifier > 0)
       suggestion->set_result_subtype_identifier(i->subtype_identifier);
+    suggestion->set_has_tab_match(i->has_tab_match);
   }
   for (ProvidersInfo::const_iterator i(log.providers_info.begin());
        i != log.providers_info.end(); ++i) {

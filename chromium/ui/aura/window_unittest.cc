@@ -32,6 +32,7 @@
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
+#include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/class_property.h"
 #include "ui/base/hit_test.h"
@@ -113,6 +114,7 @@ DEFINE_UI_CLASS_PROPERTY_TYPE(DeletionTestProperty*);
 
 namespace aura {
 namespace test {
+namespace {
 
 class WindowTest : public AuraTestBaseWithType {
  public:
@@ -139,8 +141,6 @@ class WindowTest : public AuraTestBaseWithType {
 
   DISALLOW_COPY_AND_ASSIGN(WindowTest);
 };
-
-namespace {
 
 // Used for verifying destruction methods are invoked.
 class DestroyTrackingDelegateImpl : public TestWindowDelegate {
@@ -316,8 +316,6 @@ void OffsetBounds(Window* window, int horizontal, int vertical) {
   window->SetBounds(bounds);
 }
 
-}  // namespace
-
 TEST_P(WindowTest, GetChildById) {
   std::unique_ptr<Window> w1(CreateTestWindowWithId(1, root_window()));
   std::unique_ptr<Window> w11(CreateTestWindowWithId(11, w1.get()));
@@ -424,18 +422,19 @@ TEST_P(WindowTest, ContainsMouse) {
 // Tests that the root window gets a valid LocalSurfaceId.
 TEST_P(WindowTest, RootWindowHasValidLocalSurfaceId) {
   // When mus is hosting viz, the LocalSurfaceId is sent from mus.
-  if (GetParam() == BackendType::MUS_HOSTING_VIZ)
+  if (GetParam() != BackendType::CLASSIC)
     return;
   EXPECT_TRUE(root_window()->GetLocalSurfaceId().is_valid());
 }
 
 TEST_P(WindowTest, WindowEmbeddingClientHasValidLocalSurfaceId) {
   // When mus is hosting viz, the LocalSurfaceId is sent from mus.
-  if (GetParam() == BackendType::MUS_HOSTING_VIZ)
+  if (GetParam() != BackendType::CLASSIC)
     return;
   std::unique_ptr<Window> window(CreateTestWindow(
       SK_ColorWHITE, 1, gfx::Rect(10, 10, 300, 200), root_window()));
-  window->set_embed_frame_sink_id(viz::FrameSinkId(0, 1));
+  test::WindowTestApi(window.get()).DisableFrameSinkRegistration();
+  window->SetEmbedFrameSinkId(viz::FrameSinkId(0, 1));
   EXPECT_TRUE(window->GetLocalSurfaceId().is_valid());
 }
 
@@ -1673,8 +1672,6 @@ TEST_P(WindowTest, Property) {
   EXPECT_EQ(nullptr, w->GetNativeWindowProperty(native_prop_key));
 }
 
-namespace {
-
 class DeletionTestLayoutManager : public LayoutManager {
  public:
   explicit DeletionTestLayoutManager(DeletionTracker* tracker)
@@ -1695,8 +1692,6 @@ class DeletionTestLayoutManager : public LayoutManager {
 
   DISALLOW_COPY_AND_ASSIGN(DeletionTestLayoutManager);
 };
-
-}  // namespace
 
 TEST_P(WindowTest, DeleteLayoutManagerBeforeOwnedProps) {
   DeletionTracker tracker;
@@ -2696,8 +2691,6 @@ TEST_P(WindowTest, OwnedByParentFalse) {
   EXPECT_EQ(NULL, w2->parent());
 }
 
-namespace {
-
 // Used By DeleteWindowFromOnWindowDestroyed. Destroys a Window from
 // OnWindowDestroyed().
 class OwningWindowDelegate : public TestWindowDelegate {
@@ -2715,8 +2708,6 @@ class OwningWindowDelegate : public TestWindowDelegate {
 
   DISALLOW_COPY_AND_ASSIGN(OwningWindowDelegate);
 };
-
-}  // namespace
 
 // Creates a window with two child windows. When the first child window is
 // destroyed (WindowDelegate::OnWindowDestroyed) it deletes the second child.
@@ -2737,7 +2728,52 @@ TEST_P(WindowTest, DeleteWindowFromOnWindowDestroyed) {
   parent.reset();
 }
 
-namespace {
+// WindowObserver implementation that deletes a window in
+// OnWindowVisibilityChanged().
+class DeleteOnVisibilityChangedObserver : public WindowObserver {
+ public:
+  // |to_observe| is the Window this is added as an observer to. When
+  // OnWindowVisibilityChanged() is called |to_delete| is deleted.
+  explicit DeleteOnVisibilityChangedObserver(Window* to_observe,
+                                             Window* to_delete)
+      : to_observe_(to_observe), to_delete_(to_delete) {
+    to_observe_->AddObserver(this);
+  }
+  ~DeleteOnVisibilityChangedObserver() override {
+    // OnWindowVisibilityChanged() should have been called.
+    DCHECK(!to_delete_);
+  }
+
+  // WindowObserver:
+  void OnWindowVisibilityChanged(Window* window, bool visible) override {
+    to_observe_->RemoveObserver(this);
+    delete to_delete_;
+    to_delete_ = nullptr;
+  }
+
+ private:
+  Window* to_observe_;
+  Window* to_delete_;
+
+  DISALLOW_COPY_AND_ASSIGN(DeleteOnVisibilityChangedObserver);
+};
+
+TEST_P(WindowTest, DeleteParentWindowFromOnWindowVisibiltyChanged) {
+  WindowTracker tracker;
+  Window* root = CreateTestWindowWithId(0, nullptr);
+  tracker.Add(root);
+  Window* child1 = CreateTestWindowWithId(0, root);
+  tracker.Add(child1);
+  tracker.Add(CreateTestWindowWithId(0, root));
+
+  // This deletes |root| (the parent) when OnWindowVisibilityChanged() is
+  // received by |child1|.
+  DeleteOnVisibilityChangedObserver deletion_observer(child1, root);
+  // The Hide() calls trigger deleting |root|, which should delete the whole
+  // tree.
+  root->Hide();
+  EXPECT_TRUE(tracker.windows().empty());
+}
 
 // Used by DelegateNotifiedAsBoundsChange to verify OnBoundsChanged() is
 // invoked.
@@ -2762,8 +2798,6 @@ class BoundsChangeDelegate : public TestWindowDelegate {
 
   DISALLOW_COPY_AND_ASSIGN(BoundsChangeDelegate);
 };
-
-}  // namespace
 
 // Verifies the delegate is notified when the actual bounds of the layer
 // change.
@@ -2843,8 +2877,6 @@ TEST_P(WindowTest, DelegateNotifiedAsBoundsChangeInHiddenLayer) {
   EXPECT_NE("0,0 100x100", window->layer()->bounds().ToString());
 }
 
-namespace {
-
 // Used by AddChildNotifications to track notification counts.
 class AddChildNotificationsObserver : public WindowObserver {
  public:
@@ -2870,8 +2902,6 @@ class AddChildNotificationsObserver : public WindowObserver {
 
   DISALLOW_COPY_AND_ASSIGN(AddChildNotificationsObserver);
 };
-
-}  // namespace
 
 // Assertions around when root window notifications are sent.
 TEST_P(WindowTest, AddChildNotifications) {
@@ -3094,8 +3124,6 @@ TEST_P(WindowTest, OnWindowHierarchyChange) {
   }
 }
 
-namespace {
-
 class TestLayerAnimationObserver : public ui::LayerAnimationObserver {
  public:
   TestLayerAnimationObserver()
@@ -3129,8 +3157,6 @@ class TestLayerAnimationObserver : public ui::LayerAnimationObserver {
 
   DISALLOW_COPY_AND_ASSIGN(TestLayerAnimationObserver);
 };
-
-}  // namespace
 
 TEST_P(WindowTest, WindowDestroyCompletesAnimations) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
@@ -3182,6 +3208,12 @@ TEST_P(WindowTest, WindowDestroyCompletesAnimations) {
 }
 
 TEST_P(WindowTest, RootWindowUsesCompositorFrameSinkId) {
+  // MUS2 doesn't create context_factory_private, which results in this test
+  // failing.
+  // TODO(sky): figure out the right thing here.
+  if (GetParam() == BackendType::MUS2)
+    return;
+
   EXPECT_EQ(host()->compositor()->frame_sink_id(),
             root_window()->GetFrameSinkId());
   EXPECT_TRUE(root_window()->GetFrameSinkId().is_valid());
@@ -3240,13 +3272,14 @@ INSTANTIATE_TEST_CASE_P(/* no prefix */,
                         WindowTest,
                         ::testing::Values(BackendType::CLASSIC,
                                           BackendType::MUS,
-                                          BackendType::MUS_HOSTING_VIZ));
+                                          BackendType::MUS2));
 
 INSTANTIATE_TEST_CASE_P(/* no prefix */,
                         WindowObserverTest,
                         ::testing::Values(BackendType::CLASSIC,
                                           BackendType::MUS,
-                                          BackendType::MUS_HOSTING_VIZ));
+                                          BackendType::MUS2));
 
+}  // namespace
 }  // namespace test
 }  // namespace aura

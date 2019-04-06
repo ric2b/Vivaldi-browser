@@ -135,12 +135,14 @@ void AppCacheServiceImpl::DeleteHelper::OnGroupMadeObsolete(
 
 class AppCacheServiceImpl::DeleteOriginHelper : public AsyncHelper {
  public:
-  DeleteOriginHelper(
-      AppCacheServiceImpl* service, const GURL& origin,
-      const net::CompletionCallback& callback)
-      : AsyncHelper(service, callback), origin_(origin),
-        num_caches_to_delete_(0), successes_(0), failures_(0) {
-  }
+  DeleteOriginHelper(AppCacheServiceImpl* service,
+                     const url::Origin& origin,
+                     const net::CompletionCallback& callback)
+      : AsyncHelper(service, callback),
+        origin_(origin),
+        num_caches_to_delete_(0),
+        successes_(0),
+        failures_(0) {}
 
   void Start() override {
     // We start by listing all caches, continues in OnAllInfo().
@@ -157,7 +159,7 @@ class AppCacheServiceImpl::DeleteOriginHelper : public AsyncHelper {
 
   void CacheCompleted(bool success);
 
-  GURL origin_;
+  url::Origin origin_;
   int num_caches_to_delete_;
   int successes_;
   int failures_;
@@ -174,8 +176,7 @@ void AppCacheServiceImpl::DeleteOriginHelper::OnAllInfo(
     return;
   }
 
-  std::map<GURL, AppCacheInfoVector>::iterator found =
-      collection->infos_by_origin.find(origin_);
+  auto found = collection->infos_by_origin.find(origin_);
   if (found == collection->infos_by_origin.end() || found->second.empty()) {
     // No caches for this origin.
     CallCallback(net::OK);
@@ -188,9 +189,8 @@ void AppCacheServiceImpl::DeleteOriginHelper::OnAllInfo(
   successes_ = 0;
   failures_ = 0;
   num_caches_to_delete_ = static_cast<int>(caches_to_delete.size());
-  for (AppCacheInfoVector::const_iterator iter = caches_to_delete.begin();
-       iter != caches_to_delete.end(); ++iter) {
-    service_->storage()->LoadOrCreateGroup(iter->manifest_url, this);
+  for (const auto& cache : caches_to_delete) {
+    service_->storage()->LoadOrCreateGroup(cache.manifest_url, this);
   }
 }
 
@@ -336,8 +336,8 @@ void AppCacheServiceImpl::CheckResponseHelper::OnGroupLoaded(
   info_buffer_ = new HttpResponseInfoIOBuffer();
   response_reader_->ReadInfo(
       info_buffer_.get(),
-      base::Bind(&CheckResponseHelper::OnReadInfoComplete,
-                 base::Unretained(this)));
+      base::BindOnce(&CheckResponseHelper::OnReadInfoComplete,
+                     base::Unretained(this)));
 }
 
 void AppCacheServiceImpl::CheckResponseHelper::OnReadInfoComplete(int result) {
@@ -353,10 +353,9 @@ void AppCacheServiceImpl::CheckResponseHelper::OnReadInfoComplete(int result) {
   // Start reading the data.
   data_buffer_ = new net::IOBuffer(kIOBufferSize);
   response_reader_->ReadData(
-      data_buffer_.get(),
-      kIOBufferSize,
-      base::Bind(&CheckResponseHelper::OnReadDataComplete,
-                 base::Unretained(this)));
+      data_buffer_.get(), kIOBufferSize,
+      base::BindOnce(&CheckResponseHelper::OnReadDataComplete,
+                     base::Unretained(this)));
 }
 
 void AppCacheServiceImpl::CheckResponseHelper::OnReadDataComplete(int result) {
@@ -364,10 +363,9 @@ void AppCacheServiceImpl::CheckResponseHelper::OnReadDataComplete(int result) {
     // Keep reading until we've read thru everything or failed to read.
     amount_data_read_ += result;
     response_reader_->ReadData(
-        data_buffer_.get(),
-        kIOBufferSize,
-        base::Bind(&CheckResponseHelper::OnReadDataComplete,
-                   base::Unretained(this)));
+        data_buffer_.get(), kIOBufferSize,
+        base::BindOnce(&CheckResponseHelper::OnReadDataComplete,
+                       base::Unretained(this)));
     return;
   }
 
@@ -492,7 +490,8 @@ void AppCacheServiceImpl::DeleteAppCacheGroup(
 }
 
 void AppCacheServiceImpl::DeleteAppCachesForOrigin(
-    const GURL& origin,  const net::CompletionCallback& callback) {
+    const url::Origin& origin,
+    const net::CompletionCallback& callback) {
   DeleteOriginHelper* helper = new DeleteOriginHelper(this, origin, callback);
   helper->Start();
 }

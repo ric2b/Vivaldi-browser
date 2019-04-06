@@ -5,6 +5,7 @@
 """Holds the constants for pretty printing histograms.xml."""
 
 import os
+import re
 import sys
 
 # Import the metrics/common module for pretty print xml.
@@ -19,7 +20,7 @@ ATTRIBUTE_ORDER = {
     'details': [],
     'enum': ['name'],
     'enums': [],
-    'histogram': ['base', 'name', 'enum', 'units', 'expiry_date'],
+    'histogram': ['base', 'name', 'enum', 'units', 'expires_after'],
     'histogram-configuration': ['logsource'],
     'histogram_suffixes': ['name', 'separator', 'ordering'],
     'histogram_suffixes_list': [],
@@ -66,15 +67,28 @@ TAGS_THAT_ALLOW_SINGLE_LINE = ['summary', 'int', 'owner']
 
 LOWERCASE_NAME_FN = lambda n: n.attributes['name'].value.lower()
 
+
+def _NaturalSortByName(node):
+  """Sort by name, ordering numbers in the way humans expect."""
+  # See: https://blog.codinghorror.com/sorting-for-humans-natural-sort-order/
+  name = node.attributes['name'].value.lower()
+  convert = lambda text: int(text) if text.isdigit() else text
+  return [convert(c) for c in re.split('([0-9]+)', name)]
+
+
 # Tags whose children we want to alphabetize. The key is the parent tag name,
-# and the value is a pair of the tag name of the children we want to sort,
-# and a key function that maps each child node to the desired sort key.
+# and the value is a list of pairs of tag name and key functions that maps each
+# child node to the desired sort key.
 TAGS_ALPHABETIZATION_RULES = {
-    'histograms': ('histogram', LOWERCASE_NAME_FN),
-    'enums': ('enum', LOWERCASE_NAME_FN),
-    'enum': ('int', lambda n: int(n.attributes['value'].value)),
-    'histogram_suffixes_list': ('histogram_suffixes', LOWERCASE_NAME_FN),
-    'histogram_suffixes': ('affected-histogram', LOWERCASE_NAME_FN),
+    'histograms': [('histogram', LOWERCASE_NAME_FN)],
+    'enums': [('enum', LOWERCASE_NAME_FN)],
+    'enum': [('int', lambda n: int(n.attributes['value'].value))],
+    'histogram_suffixes_list': [('histogram_suffixes', LOWERCASE_NAME_FN)],
+    'histogram_suffixes': [
+        ('obsolete', lambda n: None),
+        ('suffix', _NaturalSortByName),
+        ('affected-histogram', LOWERCASE_NAME_FN),
+    ],
 }
 
 

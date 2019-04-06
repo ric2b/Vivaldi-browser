@@ -48,7 +48,8 @@ class OAuth2TokenServiceDelegateAndroid : public OAuth2TokenServiceDelegate {
 
   // OAuth2TokenServiceDelegate overrides:
   bool RefreshTokenIsAvailable(const std::string& account_id) const override;
-  bool RefreshTokenHasError(const std::string& account_id) const override;
+  GoogleServiceAuthError GetAuthError(
+      const std::string& account_id) const override;
   void UpdateAuthError(const std::string& account_id,
                        const GoogleServiceAuthError& error) override;
   std::vector<std::string> GetAccounts() override;
@@ -97,7 +98,7 @@ class OAuth2TokenServiceDelegateAndroid : public OAuth2TokenServiceDelegate {
  protected:
   OAuth2AccessTokenFetcher* CreateAccessTokenFetcher(
       const std::string& account_id,
-      net::URLRequestContextGetter* getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_factory,
       OAuth2AccessTokenConsumer* consumer) override;
 
   // Overridden from OAuth2TokenService to intercept token fetch requests and
@@ -117,12 +118,6 @@ class OAuth2TokenServiceDelegateAndroid : public OAuth2TokenServiceDelegate {
  private:
   std::string MapAccountIdToAccountName(const std::string& account_id) const;
   std::string MapAccountNameToAccountId(const std::string& account_name) const;
-
-  struct ErrorInfo {
-    ErrorInfo();
-    explicit ErrorInfo(const GoogleServiceAuthError& error);
-    GoogleServiceAuthError error;
-  };
 
   enum RefreshTokenLoadStatus {
     RT_LOAD_NOT_START,
@@ -145,7 +140,7 @@ class OAuth2TokenServiceDelegateAndroid : public OAuth2TokenServiceDelegate {
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;
 
   // Maps account_id to the last error for that account.
-  std::map<std::string, ErrorInfo> errors_;
+  std::map<std::string, GoogleServiceAuthError> errors_;
 
   AccountTrackerService* account_tracker_service_;
   RefreshTokenLoadStatus fire_refresh_token_loaded_;

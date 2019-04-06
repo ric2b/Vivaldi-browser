@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/toolbar/toolbar_model.h"
+#include "components/url_formatter/url_formatter.h"
 #include "url/gurl.h"
 
 class ToolbarModelDelegate;
@@ -26,17 +27,24 @@ class ToolbarModelImpl : public ToolbarModel {
                    size_t max_url_display_chars);
   ~ToolbarModelImpl() override;
 
- private:
   // ToolbarModel:
-  base::string16 GetFormattedURL(size_t* prefix_end) const override;
+  base::string16 GetFormattedFullURL() const override;
+  base::string16 GetURLForDisplay() const override;
   GURL GetURL() const override;
   security_state::SecurityLevel GetSecurityLevel(
       bool ignore_editing) const override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetSecureVerboseText() const override;
+  base::string16 GetSecureAccessibilityText() const override;
   base::string16 GetEVCertName() const override;
   bool ShouldDisplayURL() const override;
   bool IsOfflinePage() const override;
+
+ private:
+  // Get the security text describing the current security state.
+  base::string16 GetSecureText() const;
+  base::string16 GetFormattedURL(
+      url_formatter::FormatUrlTypes format_types) const;
 
   ToolbarModelDelegate* delegate_;
   const size_t max_url_display_chars_;

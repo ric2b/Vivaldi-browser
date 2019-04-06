@@ -9,7 +9,9 @@
 #include <set>
 
 #include "base/macros.h"
+#include "base/unguessable_token.h"
 #include "chromeos/components/tether/ble_connection_manager.h"
+#include "chromeos/services/secure_channel/public/cpp/shared/connection_priority.h"
 
 namespace chromeos {
 
@@ -54,29 +56,34 @@ class FakeBleConnectionManager : public BleConnectionManager {
   bool IsRegistered(const std::string& device_id);
 
   // BleConnectionManager:
-  void RegisterRemoteDevice(const std::string& device_id,
-                            const MessageType& connection_reason) override;
-  void UnregisterRemoteDevice(const std::string& device_id,
-                              const MessageType& connection_reason) override;
+  void RegisterRemoteDevice(
+      const std::string& device_id,
+      const base::UnguessableToken& request_id,
+      secure_channel::ConnectionPriority connection_priority) override;
+  void UnregisterRemoteDevice(
+      const std::string& device_id,
+      const base::UnguessableToken& request_id) override;
   int SendMessage(const std::string& device_id,
                   const std::string& message) override;
   bool GetStatusForDevice(
       const std::string& device_id,
       cryptauth::SecureChannel::Status* status) const override;
 
+  using BleConnectionManager::NotifyAdvertisementReceived;
+
  private:
-  struct StatusAndRegisteredMessageTypes {
-    StatusAndRegisteredMessageTypes();
-    StatusAndRegisteredMessageTypes(
-        const StatusAndRegisteredMessageTypes& other);
-    ~StatusAndRegisteredMessageTypes();
+  struct StatusAndRegisteredConnectionRequestIds {
+    StatusAndRegisteredConnectionRequestIds();
+    StatusAndRegisteredConnectionRequestIds(
+        const StatusAndRegisteredConnectionRequestIds& other);
+    ~StatusAndRegisteredConnectionRequestIds();
 
     cryptauth::SecureChannel::Status status;
-    std::set<MessageType> registered_message_types;
+    std::set<base::UnguessableToken> registered_request_ids;
   };
 
   int next_sequence_number_ = 0;
-  std::map<std::string, StatusAndRegisteredMessageTypes> device_id_map_;
+  std::map<std::string, StatusAndRegisteredConnectionRequestIds> device_id_map_;
   std::vector<SentMessage> sent_messages_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeBleConnectionManager);

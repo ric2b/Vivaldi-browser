@@ -5,12 +5,12 @@
 #include "components/omnibox/browser/history_match.h"
 
 #include "base/logging.h"
+#include "base/trace_event/memory_usage_estimator.h"
 
 namespace history {
 
 HistoryMatch::HistoryMatch()
-    : url_info(),
-      input_location(base::string16::npos),
+    : input_location(base::string16::npos),
       match_in_scheme(false),
       match_in_subdomain(false),
       match_after_host(false),
@@ -18,6 +18,10 @@ HistoryMatch::HistoryMatch()
 
 bool HistoryMatch::EqualsGURL(const HistoryMatch& h, const GURL& url) {
   return h.url_info.url() == url;
+}
+
+size_t HistoryMatch::EstimateMemoryUsage() const {
+  return base::trace_event::EstimateMemoryUsage(url_info);
 }
 
 bool HistoryMatch::IsHostOnly() const {

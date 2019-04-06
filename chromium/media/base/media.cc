@@ -4,13 +4,13 @@
 
 #include "media/base/media.h"
 
-#include "base/allocator/features.h"
+#include "base/allocator/buildflags.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "third_party/libyuv/include/libyuv.h"
 
 #if defined(OS_ANDROID)
@@ -35,11 +35,12 @@ class MediaInitializer {
     TRACE_EVENT_WARMUP_CATEGORY("audio");
     TRACE_EVENT_WARMUP_CATEGORY("media");
 
+    // Initializing the CPU flags may query /proc for details on the current CPU
+    // for NEON, VFP, etc optimizations. If in a sandboxed process, they should
+    // have been forced (see InitializeMediaLibraryInSandbox).
     libyuv::InitCpuFlags();
 
 #if BUILDFLAG(ENABLE_FFMPEG)
-    // Initialize CPU flags outside of the sandbox as this may query /proc for
-    // details on the current CPU for NEON, VFP, etc optimizations.
     av_get_cpu_flags();
 
     // Disable logging as it interferes with layout tests.
@@ -82,6 +83,17 @@ void InitializeMediaLibrary() {
   GetMediaInstance();
 }
 
+void InitializeMediaLibraryInSandbox(int64_t libyuv_cpu_flags,
+                                     int64_t libavutil_cpu_flags) {
+  // Force the CPU flags so when they don't require disk access when queried
+  // from MediaInitializer().
+  libyuv::SetCpuFlags(libyuv_cpu_flags);
+#if BUILDFLAG(ENABLE_FFMPEG)
+  av_force_cpu_flags(libavutil_cpu_flags);
+#endif
+  GetMediaInstance();
+}
+
 #if defined(OS_ANDROID)
 void EnablePlatformDecoderSupport() {
   GetMediaInstance()->enable_platform_decoder_support();
@@ -92,7 +104,8 @@ bool HasPlatformDecoderSupport() {
 }
 
 bool PlatformHasOpusSupport() {
-  return base::android::BuildInfo::GetInstance()->sdk_int() >= 21;
+  return base::android::BuildInfo::GetInstance()->sdk_int() >=
+         base::android::SDK_VERSION_LOLLIPOP;
 }
 #endif  // defined(OS_ANDROID)
 

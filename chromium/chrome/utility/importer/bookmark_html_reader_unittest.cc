@@ -39,26 +39,23 @@ TEST(BookmarkHTMLReaderTest, ParseTests) {
   // Escaped characters in name.
   base::string16 folder_name;
   bool is_toolbar_folder;
-  bool is_speeddial_folder;
   base::Time folder_add_date;
   result = internal::ParseFolderNameFromLine(
       "<DT><H3 ADD_DATE=\"1207558707\" >&lt; &gt;"
       " &amp; &quot; &#39; \\ /</H3>",
-      charset, &folder_name, &is_toolbar_folder, &is_speeddial_folder, &folder_add_date);
+      charset, &folder_name, &is_toolbar_folder, &folder_add_date);
   EXPECT_TRUE(result);
   EXPECT_EQ(ASCIIToUTF16("< > & \" ' \\ /"), folder_name);
   EXPECT_FALSE(is_toolbar_folder);
-  EXPECT_FALSE(is_speeddial_folder);
   EXPECT_TRUE(base::Time::FromTimeT(1207558707) == folder_add_date);
 
   // Empty name and toolbar folder attribute.
   result = internal::ParseFolderNameFromLine(
       "<DT><H3 PERSONAL_TOOLBAR_FOLDER=\"true\"></H3>",
-      charset, &folder_name, &is_toolbar_folder, &is_speeddial_folder, &folder_add_date);
+      charset, &folder_name, &is_toolbar_folder, &folder_add_date);
   EXPECT_TRUE(result);
   EXPECT_EQ(base::string16(), folder_name);
   EXPECT_TRUE(is_toolbar_folder);
-  EXPECT_FALSE(is_speeddial_folder);
 
   // Unicode characters in title and shortcut.
   base::string16 title;
@@ -198,7 +195,7 @@ class BookmarkHTMLReaderTestWithData : public testing::Test {
 };
 
 void BookmarkHTMLReaderTestWithData::SetUp() {
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_path_));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_path_));
   test_data_path_ = test_data_path_.AppendASCII("bookmark_html_reader");
 }
 

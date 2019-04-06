@@ -4,10 +4,10 @@
 
 #include "components/security_state/content/content_utils.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,7 +25,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
-#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
+#include "third_party/blink/public/platform/web_mixed_content_context_type.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -394,7 +394,7 @@ void ExplainContentSecurity(
 
 std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
     content::WebContents* web_contents) {
-  auto state = base::MakeUnique<security_state::VisibleSecurityState>();
+  auto state = std::make_unique<security_state::VisibleSecurityState>();
 
   content::NavigationEntry* entry =
       web_contents->GetController().GetVisibleEntry();

@@ -35,6 +35,7 @@
 #include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
+#include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gles2_command_buffer_stub.h"
@@ -252,21 +253,31 @@ bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
     std::vector<FlushParams> flush_list = std::get<0>(std::move(params));
 
     for (auto& flush_info : flush_list) {
-      GpuCommandBufferMsg_AsyncFlush flush_message(
-          flush_info.route_id, flush_info.put_offset, flush_info.flush_id,
-          flush_info.snapshot_requested);
-
       auto it = route_sequences_.find(flush_info.route_id);
       if (it == route_sequences_.end()) {
         DLOG(ERROR) << "Invalid route id in flush list";
         continue;
       }
 
-      tasks.emplace_back(
-          it->second /* sequence_id */,
-          base::BindOnce(&GpuChannel::HandleMessage, gpu_channel_->AsWeakPtr(),
-                         flush_message),
-          std::move(flush_info.sync_token_fences));
+      if (flush_info.transfer_buffer_id_to_destroy) {
+        tasks.emplace_back(
+            it->second /* sequence_id */,
+            base::BindOnce(&GpuChannel::HandleMessage,
+                           gpu_channel_->AsWeakPtr(),
+                           GpuCommandBufferMsg_DestroyTransferBuffer(
+                               flush_info.route_id,
+                               flush_info.transfer_buffer_id_to_destroy)),
+            std::move(flush_info.sync_token_fences));
+      } else {
+        GpuCommandBufferMsg_AsyncFlush flush_message(
+            flush_info.route_id, flush_info.put_offset, flush_info.flush_id);
+
+        tasks.emplace_back(
+            it->second /* sequence_id */,
+            base::BindOnce(&GpuChannel::HandleMessage,
+                           gpu_channel_->AsWeakPtr(), flush_message),
+            std::move(flush_info.sync_token_fences));
+      }
     }
 
     scheduler_->ScheduleTasks(std::move(tasks));
@@ -396,8 +407,12 @@ base::WeakPtr<GpuChannel> GpuChannel::AsWeakPtr() {
 }
 
 base::ProcessId GpuChannel::GetClientPID() const {
-  DCHECK_NE(peer_pid_, base::kNullProcessId);
+  DCHECK(IsConnected());
   return peer_pid_;
+}
+
+bool GpuChannel::IsConnected() const {
+  return peer_pid_ != base::kNullProcessId;
 }
 
 bool GpuChannel::OnMessageReceived(const IPC::Message& msg) {
@@ -563,14 +578,11 @@ const CommandBufferStub* GpuChannel::GetOneStub() const {
 void GpuChannel::OnCreateCommandBuffer(
     const GPUCreateCommandBufferConfig& init_params,
     int32_t route_id,
-    base::SharedMemoryHandle shared_state_handle,
+    base::UnsafeSharedMemoryRegion shared_state_shm,
     ContextResult* result,
     gpu::Capabilities* capabilities) {
   TRACE_EVENT2("gpu", "GpuChannel::OnCreateCommandBuffer", "route_id", route_id,
                "offscreen", (init_params.surface_handle == kNullSurfaceHandle));
-  std::unique_ptr<base::SharedMemory> shared_state_shm(
-      new base::SharedMemory(shared_state_handle, false));
-
   // Default result on failure. Override with a more accurate failure if needed,
   // or with success.
   *result = ContextResult::kFatalFailure;
@@ -624,7 +636,12 @@ void GpuChannel::OnCreateCommandBuffer(
   }
 
   std::unique_ptr<CommandBufferStub> stub;
-  if (gpu_channel_manager_->gpu_preferences().enable_raster_decoder &&
+
+  bool supports_oop_rasterization =
+      gpu_channel_manager_->gpu_feature_info()
+          .status_values[GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
+      kGpuFeatureStatusEnabled;
+  if (supports_oop_rasterization &&
       init_params.attribs.enable_oop_rasterization &&
       init_params.attribs.enable_raster_interface &&
       !init_params.attribs.enable_gles2_interface) {
@@ -691,17 +708,18 @@ void GpuChannel::RemoveFilter(IPC::MessageFilter* filter) {
                             filter_, base::RetainedRef(filter)));
 }
 
-uint64_t GpuChannel::GetMemoryUsage() {
+uint64_t GpuChannel::GetMemoryUsage() const {
   // Collect the unique memory trackers in use by the |stubs_|.
-  std::set<gles2::MemoryTracker*> unique_memory_trackers;
-  for (auto& kv : stubs_)
-    unique_memory_trackers.insert(kv.second->GetMemoryTracker());
-
-  // Sum the memory usage for all unique memory trackers.
+  base::flat_set<gles2::MemoryTracker*> unique_memory_trackers;
+  unique_memory_trackers.reserve(stubs_.size());
   uint64_t size = 0;
-  for (auto* tracker : unique_memory_trackers) {
-    size += gpu_channel_manager()->gpu_memory_manager()->GetTrackerMemoryUsage(
-        tracker);
+  for (const auto& kv : stubs_) {
+    gles2::MemoryTracker* tracker = kv.second->GetMemoryTracker();
+    if (!unique_memory_trackers.insert(tracker).second) {
+      // We already counted that tracker.
+      continue;
+    }
+    size += tracker->GetSize();
   }
 
   return size;

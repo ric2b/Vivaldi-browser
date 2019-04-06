@@ -11,7 +11,6 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
@@ -22,7 +21,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -359,8 +358,8 @@ class PrivetHTTPTest : public TestWithParam<const char*> {
     return SuccessfulResponseToURL(url, response);
   }
 
-  bool SuccessfulResponseToURLAndFilePath(const GURL& url,
-                                          const base::FilePath& file_path,
+  bool SuccessfulResponseToURLAndFileData(const GURL& url,
+                                          const std::string& file_data,
                                           const std::string& response) {
     net::TestURLFetcher* fetcher = fetcher_factory_.GetFetcherByID(0);
     if (!fetcher) {
@@ -370,8 +369,8 @@ class PrivetHTTPTest : public TestWithParam<const char*> {
 
     EXPECT_EQ(url, fetcher->GetOriginalURL());
 
-    EXPECT_EQ(file_path, fetcher->upload_file_path());
-    if (file_path != fetcher->upload_file_path())
+    EXPECT_EQ(file_data, fetcher->upload_data());
+    if (file_data != fetcher->upload_data())
       return false;
 
     return SuccessfulResponseToURL(url, response);
@@ -456,15 +455,15 @@ class MockRegisterDelegate : public PrivetRegisterOperation::Delegate {
 
 class MockLocalPrintDelegate : public PrivetLocalPrintOperation::Delegate {
  public:
-  virtual void OnPrivetPrintingDone(
-      const PrivetLocalPrintOperation* print_operation) {
+  void OnPrivetPrintingDone(
+      const PrivetLocalPrintOperation* print_operation) override {
     OnPrivetPrintingDoneInternal();
   }
 
   MOCK_METHOD0(OnPrivetPrintingDoneInternal, void());
 
-  virtual void OnPrivetPrintingError(
-      const PrivetLocalPrintOperation* print_operation, int http_code) {
+  void OnPrivetPrintingError(const PrivetLocalPrintOperation* print_operation,
+                             int http_code) override {
     OnPrivetPrintingErrorInternal(http_code);
   }
 
@@ -550,6 +549,8 @@ class PrivetRegisterTest : public PrivetHTTPTest {
   std::unique_ptr<PrivetRegisterOperation> register_operation_;
   StrictMock<MockRegisterDelegate> register_delegate_;
 };
+
+INSTANTIATE_TEST_CASE_P(PrivetTests, PrivetRegisterTest, ValuesIn(kTestParams));
 
 TEST_P(PrivetRegisterTest, RegisterSuccessSimple) {
   register_operation_->Start();
@@ -768,20 +769,28 @@ TEST_P(PrivetCapabilitiesTest, BadToken) {
 }
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-// A note on PWG raster conversion: The PWG raster converter used simply
+// A note on PWG raster conversion: The fake PWG raster converter simply returns
+// the input as the converted data. The output isn't checked anyway.
 // converts strings to file paths based on them by appending "test.pdf", since
 // it's easier to test that way. Instead of using a mock, we simply check if the
 // request is uploading a file that is based on this pattern.
 class FakePwgRasterConverter : public printing::PwgRasterConverter {
  public:
-  void Start(base::RefCountedMemory* data,
+  void Start(const base::RefCountedMemory* data,
              const printing::PdfRenderSettings& conversion_settings,
              const printing::PwgRasterSettings& bitmap_settings,
              ResultCallback callback) override {
+    base::MappedReadOnlyRegion memory =
+        base::ReadOnlySharedMemoryRegion::Create(data->size());
+    if (!memory.IsValid()) {
+      ADD_FAILURE() << "Failed to create pwg raster shared memory.";
+      std::move(callback).Run(base::ReadOnlySharedMemoryRegion());
+      return;
+    }
+
+    memcpy(memory.mapping.memory(), data->front(), data->size());
     bitmap_settings_ = bitmap_settings;
-    std::string data_str(data->front_as<char>(), data->size());
-    std::move(callback).Run(
-        true, base::FilePath().AppendASCII(data_str + "test.pdf"));
+    std::move(callback).Run(std::move(memory.region));
   }
 
   const printing::PwgRasterSettings& bitmap_settings() {
@@ -873,8 +882,7 @@ TEST_P(PrivetLocalPrintTest, SuccessfulLocalPrintWithAnyMimetype) {
 TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrint) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
-  local_print_operation_->SetData(
-      RefCountedBytesFromString("path/to/"));
+  local_print_operation_->SetData(RefCountedBytesFromString("foobar"));
   local_print_operation_->SetCapabilities(kSampleCapabilitiesResponsePWGOnly);
   local_print_operation_->Start();
 
@@ -886,12 +894,11 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrint) {
 
   EXPECT_CALL(local_print_delegate_, OnPrivetPrintingDoneInternal());
 
-  EXPECT_TRUE(SuccessfulResponseToURLAndFilePath(
+  EXPECT_TRUE(SuccessfulResponseToURLAndFileData(
       GetUrl("/privet/printer/submitdoc?"
              "client_name=Chrome&user_name=sample%40gmail.com"
              "&job_name=Sample+job+name"),
-      base::FilePath(FILE_PATH_LITERAL("path/to/test.pdf")),
-      kSampleLocalPrintResponse));
+      "foobar", kSampleLocalPrintResponse));
 
   EXPECT_EQ(printing::TRANSFORM_NORMAL,
             pwg_converter_->bitmap_settings().odd_page_transform);
@@ -905,7 +912,7 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrint) {
 TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintDuplex) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
-  local_print_operation_->SetData(RefCountedBytesFromString("path/to/"));
+  local_print_operation_->SetData(RefCountedBytesFromString("foobar"));
   local_print_operation_->SetTicket(kSampleCJTDuplex);
   local_print_operation_->SetCapabilities(
       kSampleCapabilitiesResponsePWGSettings);
@@ -923,12 +930,11 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintDuplex) {
 
   EXPECT_CALL(local_print_delegate_, OnPrivetPrintingDoneInternal());
 
-  EXPECT_TRUE(SuccessfulResponseToURLAndFilePath(
+  EXPECT_TRUE(SuccessfulResponseToURLAndFileData(
       GetUrl("/privet/printer/submitdoc?"
              "client_name=Chrome&user_name=sample%40gmail.com"
              "&job_name=Sample+job+name&job_id=1234"),
-      base::FilePath(FILE_PATH_LITERAL("path/to/test.pdf")),
-      kSampleLocalPrintResponse));
+      "foobar", kSampleLocalPrintResponse));
 
   EXPECT_EQ(printing::TRANSFORM_ROTATE_180,
             pwg_converter_->bitmap_settings().odd_page_transform);
@@ -942,7 +948,7 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintDuplex) {
 TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMono) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
-  local_print_operation_->SetData(RefCountedBytesFromString("path/to/"));
+  local_print_operation_->SetData(RefCountedBytesFromString("foobar"));
   local_print_operation_->SetTicket(kSampleCJTMono);
   local_print_operation_->SetCapabilities(
       kSampleCapabilitiesResponsePWGSettings);
@@ -960,12 +966,11 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMono) {
 
   EXPECT_CALL(local_print_delegate_, OnPrivetPrintingDoneInternal());
 
-  EXPECT_TRUE(SuccessfulResponseToURLAndFilePath(
+  EXPECT_TRUE(SuccessfulResponseToURLAndFileData(
       GetUrl("/privet/printer/submitdoc?"
              "client_name=Chrome&user_name=sample%40gmail.com"
              "&job_name=Sample+job+name&job_id=1234"),
-      base::FilePath(FILE_PATH_LITERAL("path/to/test.pdf")),
-      kSampleLocalPrintResponse));
+      "foobar", kSampleLocalPrintResponse));
 
   EXPECT_EQ(printing::TRANSFORM_NORMAL,
             pwg_converter_->bitmap_settings().odd_page_transform);
@@ -979,7 +984,7 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMono) {
 TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMonoToGRAY8Printer) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
-  local_print_operation_->SetData(RefCountedBytesFromString("path/to/"));
+  local_print_operation_->SetData(RefCountedBytesFromString("foobar"));
   local_print_operation_->SetTicket(kSampleCJTMono);
   local_print_operation_->SetCapabilities(
       kSampleCapabilitiesResponsePWGSettingsMono);
@@ -997,12 +1002,11 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMonoToGRAY8Printer) {
 
   EXPECT_CALL(local_print_delegate_, OnPrivetPrintingDoneInternal());
 
-  EXPECT_TRUE(SuccessfulResponseToURLAndFilePath(
+  EXPECT_TRUE(SuccessfulResponseToURLAndFileData(
       GetUrl("/privet/printer/submitdoc?"
              "client_name=Chrome&user_name=sample%40gmail.com"
              "&job_name=Sample+job+name&job_id=1234"),
-      base::FilePath(FILE_PATH_LITERAL("path/to/test.pdf")),
-      kSampleLocalPrintResponse));
+      "foobar", kSampleLocalPrintResponse));
 
   EXPECT_EQ(printing::TRANSFORM_NORMAL,
             pwg_converter_->bitmap_settings().odd_page_transform);
@@ -1076,8 +1080,7 @@ TEST_P(PrivetLocalPrintTest, PDFPrintInvalidDocumentTypeRetry) {
   local_print_operation_->SetJobname("Sample job name");
   local_print_operation_->SetTicket(kSampleCJT);
   local_print_operation_->SetCapabilities(kSampleCapabilitiesResponse);
-  local_print_operation_->SetData(
-      RefCountedBytesFromString("sample/path/"));
+  local_print_operation_->SetData(RefCountedBytesFromString("sample_data"));
   local_print_operation_->Start();
 
   EXPECT_TRUE(SuccessfulResponseToURL(GetUrl("/privet/info"),
@@ -1094,16 +1097,15 @@ TEST_P(PrivetLocalPrintTest, PDFPrintInvalidDocumentTypeRetry) {
       GetUrl("/privet/printer/submitdoc?"
              "client_name=Chrome&user_name=sample%40gmail.com&"
              "job_name=Sample+job+name&job_id=1234"),
-      "sample/path/", kSampleInvalidDocumentTypeResponse));
+      "sample_data", kSampleInvalidDocumentTypeResponse));
 
   EXPECT_CALL(local_print_delegate_, OnPrivetPrintingDoneInternal());
 
-  EXPECT_TRUE(SuccessfulResponseToURLAndFilePath(
+  EXPECT_TRUE(SuccessfulResponseToURLAndFileData(
       GetUrl("/privet/printer/submitdoc?"
              "client_name=Chrome&user_name=sample%40gmail.com&"
              "job_name=Sample+job+name&job_id=1234"),
-      base::FilePath(FILE_PATH_LITERAL("sample/path/test.pdf")),
-      kSampleLocalPrintResponse));
+      "sample_data", kSampleLocalPrintResponse));
 }
 
 TEST_P(PrivetLocalPrintTest, LocalPrintRetryOnInvalidJobID) {
@@ -1152,7 +1154,7 @@ class PrivetHttpWithServerTest : public ::testing::Test,
         std::make_unique<EmbeddedTestServer>(EmbeddedTestServer::TYPE_HTTP);
 
     base::FilePath test_data_dir;
-    ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
+    ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
     server_->ServeFilesFromDirectory(
         test_data_dir.Append(FILE_PATH_LITERAL("chrome/test/data")));
     ASSERT_TRUE(server_->Start());

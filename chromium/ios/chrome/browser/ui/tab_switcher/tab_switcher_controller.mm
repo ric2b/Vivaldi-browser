@@ -22,7 +22,7 @@
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios.h"
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
@@ -311,6 +311,12 @@ enum class SnapshotViewOption {
   [self.view addSubview:_tabSwitcherView];
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+  [super viewWillAppear:animated];
+  [self.dispatcher
+      setIncognitoContentVisible:([[_tabSwitcherModel otrTabModel] count] > 0)];
+}
+
 #pragma mark - UIResponder
 
 - (NSArray*)keyCommands {
@@ -386,6 +392,10 @@ enum class SnapshotViewOption {
   [self selectPanelForTabModel:activeModel];
 }
 
+- (UIViewController*)viewController {
+  return self;
+}
+
 - (void)setOtrTabModel:(TabModel*)otrModel {
   [_cache setMainTabModel:[_cache mainTabModel] otrTabModel:otrModel];
   [_tabSwitcherModel setMainTabModel:[_tabSwitcherModel mainTabModel]
@@ -400,8 +410,6 @@ enum class SnapshotViewOption {
                       withCompletion:^{
                         [self.animationDelegate
                             tabSwitcherPresentationAnimationDidEnd:self];
-                        [self.delegate
-                            tabSwitcherPresentationTransitionDidEnd:self];
                         [_tabSwitcherView wasShown];
                       }];
 }
@@ -442,13 +450,13 @@ enum class SnapshotViewOption {
 
 - (void)openNewTab:(OpenNewTabCommand*)command {
   // Ensure that the right mode is showing.
-  NSInteger panelIndex = command.incognito ? kLocalTabsOffTheRecordPanelIndex
-                                           : kLocalTabsOnTheRecordPanelIndex;
+  NSInteger panelIndex = command.inIncognito ? kLocalTabsOffTheRecordPanelIndex
+                                             : kLocalTabsOnTheRecordPanelIndex;
   [_tabSwitcherView selectPanelAtIndex:panelIndex];
 
   const TabSwitcherSessionType panelSessionType =
-      (command.incognito) ? TabSwitcherSessionType::OFF_THE_RECORD_SESSION
-                          : TabSwitcherSessionType::REGULAR_SESSION;
+      (command.inIncognito) ? TabSwitcherSessionType::OFF_THE_RECORD_SESSION
+                            : TabSwitcherSessionType::REGULAR_SESSION;
 
   TabModel* model = [self tabModelForSessionType:panelSessionType];
 
@@ -865,7 +873,8 @@ enum class SnapshotViewOption {
   [[self presentedViewController] dismissViewControllerAnimated:NO
                                                      completion:nil];
   [self.delegate tabSwitcher:self
-      dismissTransitionWillStartWithActiveModel:model];
+      shouldFinishWithActiveModel:model
+                     focusOmnibox:NO];
   [self performTabSwitcherTransition:TransitionType::TRANSITION_DISMISS
                            withModel:model
                             animated:animated
@@ -913,7 +922,7 @@ enum class SnapshotViewOption {
 - (void)openTabWithContentOfDistantTab:
     (synced_sessions::DistantTab const*)distantTab {
   sync_sessions::OpenTabsUIDelegate* openTabs =
-      IOSChromeProfileSyncServiceFactory::GetForBrowserState(_browserState)
+      ProfileSyncServiceFactory::GetForBrowserState(_browserState)
           ->GetOpenTabsUIDelegate();
   const sessions::SessionTab* toLoad = nullptr;
   if (openTabs->GetForeignTab(distantTab->session_tag, distantTab->tab_id,
@@ -1141,8 +1150,8 @@ enum class SnapshotViewOption {
     } else {
       index -= kHeaderDistantSessionIndexOffset;
 
-      sync_sessions::SyncedSession::DeviceType deviceType =
-          sync_sessions::SyncedSession::TYPE_UNSET;
+      sync_pb::SyncEnums::DeviceType deviceType =
+          sync_pb::SyncEnums::TYPE_UNSET;
       NSString* cellTitle = nil;
 
       if (index < _controllersOfDistantSessions.count) {
@@ -1155,10 +1164,10 @@ enum class SnapshotViewOption {
       }
       TabSwitcherSessionCellType cellType;
       switch (deviceType) {
-        case sync_sessions::SyncedSession::TYPE_PHONE:
+        case sync_pb::SyncEnums::TYPE_PHONE:
           cellType = kPhoneRemoteSessionCell;
           break;
-        case sync_sessions::SyncedSession::TYPE_TABLET:
+        case sync_pb::SyncEnums::TYPE_TABLET:
           cellType = kTabletRemoteSessionCell;
           break;
         default:
@@ -1272,6 +1281,8 @@ enum class SnapshotViewOption {
           : [_tabSwitcherModel mainTabModel];
   DCHECK_NE(NSNotFound, static_cast<NSInteger>([tabModel indexOfTab:tab]));
   [tabModel closeTab:tab];
+  [self.dispatcher
+      setIncognitoContentVisible:([[_tabSwitcherModel otrTabModel] count] > 0)];
 
   if (panelSessionType == TabSwitcherSessionType::OFF_THE_RECORD_SESSION) {
     base::RecordAction(

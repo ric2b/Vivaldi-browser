@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "content/public/browser/web_contents.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
 
 using content::BrowserContext;
 using content::OpenURLParams;
@@ -41,19 +41,16 @@ WebContents* WebDialogWebContentsDelegate::OpenURLFromTab(
 }
 
 void WebDialogWebContentsDelegate::AddNewContents(
-    WebContents* source, WebContents* new_contents,
-    WindowOpenDisposition disposition, const gfx::Rect& initial_rect,
+    WebContents* source,
+    std::unique_ptr<WebContents> new_contents,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
     bool user_gesture,
     bool* was_blocked) {
-  handler_->AddNewContents(browser_context_, source, new_contents, disposition,
-                           initial_rect, user_gesture);
-}
-
-bool WebDialogWebContentsDelegate::IsPopupOrPanel(
-    const WebContents* source) const {
-  // This needs to return true so that we are allowed to be resized by our
-  // contents.
-  return true;
+  // TODO(erikchen): Refactor AddNewContents to take strong ownership semantics.
+  // https://crbug.com/832879.
+  handler_->AddNewContents(browser_context_, source, std::move(new_contents),
+                           disposition, initial_rect, user_gesture);
 }
 
 bool WebDialogWebContentsDelegate::PreHandleGestureEvent(

@@ -11,15 +11,15 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "content/public/common/manifest.h"
+#include "third_party/blink/public/common/manifest/manifest.h"
 
-class ExtensionService;
 class FaviconDownloader;
 struct InstallableData;
 class InstallableManager;
@@ -34,10 +34,17 @@ class WebContents;
 namespace extensions {
 class CrxInstaller;
 class Extension;
+class ExtensionService;
 
 // A helper class for creating bookmark apps from a WebContents.
 class BookmarkAppHelper : public content::NotificationObserver {
  public:
+  enum class ForInstallableSite {
+    kYes,
+    kNo,
+    kUnknown,
+  };
+
   struct BitmapAndSource {
     BitmapAndSource();
     BitmapAndSource(const GURL& source_url_p, const SkBitmap& bitmap_p);
@@ -64,8 +71,9 @@ class BookmarkAppHelper : public content::NotificationObserver {
   ~BookmarkAppHelper() override;
 
   // Update the given WebApplicationInfo with information from the manifest.
-  static void UpdateWebAppInfoFromManifest(const content::Manifest& manifest,
-                                           WebApplicationInfo* web_app_info);
+  static void UpdateWebAppInfoFromManifest(const blink::Manifest& manifest,
+                                           WebApplicationInfo* web_app_info,
+                                           ForInstallableSite installable_site);
 
   // This finds the closest not-smaller bitmap in |bitmaps| for each size in
   // |sizes| and resizes it to that size. This returns a map of sizes to bitmaps
@@ -127,11 +135,8 @@ class BookmarkAppHelper : public content::NotificationObserver {
   std::unique_ptr<FaviconDownloader> favicon_downloader_;
 
  private:
-  enum Installable {
-    INSTALLABLE_YES,
-    INSTALLABLE_NO,
-    INSTALLABLE_UNKNOWN,
-  };
+  FRIEND_TEST_ALL_PREFIXES(BookmarkAppHelperTest,
+                           CreateWindowedPWAIntoAppWindow);
 
   // Called after the bubble has been shown, and the user has either accepted or
   // the dialog was dismissed.
@@ -166,7 +171,7 @@ class BookmarkAppHelper : public content::NotificationObserver {
 
   InstallableManager* installable_manager_;
 
-  Installable installable_ = INSTALLABLE_UNKNOWN;
+  ForInstallableSite for_installable_site_ = ForInstallableSite::kUnknown;
 
   // The mechanism via which the app creation was triggered.
   WebappInstallSource install_source_;

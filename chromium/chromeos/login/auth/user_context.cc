@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "chromeos/login/auth/user_context.h"
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
 
 namespace chromeos {
@@ -11,10 +13,12 @@ UserContext::UserContext() : account_id_(EmptyAccountId()) {}
 
 UserContext::UserContext(const UserContext& other) = default;
 
-UserContext::UserContext(const AccountId& account_id)
-    : account_id_(account_id) {
-  account_id_.SetUserEmail(
-      user_manager::CanonicalizeUserID(account_id.GetUserEmail()));
+UserContext::UserContext(const user_manager::User& user)
+    : account_id_(user.GetAccountId()), user_type_(user.GetType()) {
+  if (user_type_ == user_manager::USER_TYPE_REGULAR) {
+    account_id_.SetUserEmail(
+        user_manager::CanonicalizeUserID(account_id_.GetUserEmail()));
+  }
 }
 
 UserContext::UserContext(user_manager::UserType user_type,
@@ -57,6 +61,24 @@ const Key* UserContext::GetKey() const {
 
 Key* UserContext::GetKey() {
   return &key_;
+}
+
+const Key* UserContext::GetPasswordKey() const {
+  return &password_key_;
+}
+
+Key* UserContext::GetMutablePasswordKey() {
+  return &password_key_;
+}
+
+const std::vector<ChallengeResponseKey>& UserContext::GetChallengeResponseKeys()
+    const {
+  return challenge_response_keys_;
+}
+
+std::vector<ChallengeResponseKey>*
+UserContext::GetMutableChallengeResponseKeys() {
+  return &challenge_response_keys_;
 }
 
 const std::string& UserContext::GetAuthCode() const {
@@ -111,7 +133,7 @@ const std::string& UserContext::GetGAPSCookie() const {
   return gaps_cookie_;
 }
 
-const base::Optional<password_manager::SyncPasswordData>&
+const base::Optional<password_manager::PasswordHashData>&
 UserContext::GetSyncPasswordData() const {
   return sync_password_data_;
 }
@@ -127,6 +149,10 @@ void UserContext::SetAccountId(const AccountId& account_id) {
 
 void UserContext::SetKey(const Key& key) {
   key_ = key;
+}
+
+void UserContext::SetPasswordKey(const Key& key) {
+  password_key_ = key;
 }
 
 void UserContext::SetAuthCode(const std::string& auth_code) {
@@ -161,10 +187,6 @@ void UserContext::SetAuthFlow(AuthFlow auth_flow) {
   auth_flow_ = auth_flow;
 }
 
-void UserContext::SetUserType(user_manager::UserType user_type) {
-  user_type_ = user_type;
-}
-
 void UserContext::SetPublicSessionLocale(const std::string& locale) {
   public_session_locale_ = locale;
 }
@@ -182,12 +204,13 @@ void UserContext::SetGAPSCookie(const std::string& gaps_cookie) {
 }
 
 void UserContext::SetSyncPasswordData(
-    const password_manager::SyncPasswordData& sync_password_data) {
+    const password_manager::PasswordHashData& sync_password_data) {
   sync_password_data_ = {sync_password_data};
 }
 
 void UserContext::ClearSecrets() {
   key_.ClearSecret();
+  password_key_.ClearSecret();
   auth_code_.clear();
   refresh_token_.clear();
 }

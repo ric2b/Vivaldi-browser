@@ -12,6 +12,7 @@ import android.graphics.drawable.Drawable;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.rule.UiThreadTestRule;
+import android.support.v7.content.res.AppCompatResources;
 import android.view.LayoutInflater;
 import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
@@ -67,10 +68,9 @@ public class ImageViewTinterTest {
     @SmallTest
     public void testTintedImageButton_attributeParsingExplicitTint() throws Exception {
         // The tint was explicitly set to a color.
-        int color = ApiCompatibilityUtils.getColor(
-                mContext.getResources(), R.color.app_menu_button_tint);
+        int color = ApiCompatibilityUtils.getColor(mContext.getResources(), R.color.dark_mode_tint);
         TintedImageButton colorTint =
-                createImageView(R.layout.icon_row_menu_footer, R.id.forward_menu_id);
+                createImageView(R.layout.search_toolbar, R.id.clear_text_button);
         Assert.assertNotNull(colorTint.getColorFilter());
         Assert.assertTrue(checkIfTintWasApplied(colorTint, color));
     }
@@ -90,8 +90,8 @@ public class ImageViewTinterTest {
     public void testTintedImageButton_attributeParsingNullTint() throws Exception {
         // The tint is explicitly set to null in the XML.  An image resource needs to be set here
         // because the layout doesn't define one by default.
-        int color = ApiCompatibilityUtils.getColor(
-                mContext.getResources(), R.color.app_menu_button_tint);
+        int color =
+                ApiCompatibilityUtils.getColor(mContext.getResources(), R.color.blue_when_enabled);
         TintedImageButton nullTint = createImageView(R.layout.title_button_menu_item, R.id.button);
         Assert.assertNull(nullTint.getColorFilter());
         nullTint.setImageResource(R.drawable.plus);
@@ -116,8 +116,8 @@ public class ImageViewTinterTest {
 
     private void checkSetTintWorksCorrectly(ImageViewTinterOwner view) {
         ImageView imageView = (ImageView) view;
-        int color =
-                ApiCompatibilityUtils.getColor(mContext.getResources(), R.color.light_active_color);
+        int color = ApiCompatibilityUtils.getColor(
+                mContext.getResources(), R.color.default_icon_color_blue);
 
         Assert.assertNull(imageView.getColorFilter());
         if (imageView.getDrawable() == null) {
@@ -127,8 +127,8 @@ public class ImageViewTinterTest {
         Assert.assertFalse(checkIfTintWasApplied(view, color));
 
         // Set the tint to one color.
-        ColorStateList colorList = ApiCompatibilityUtils.getColorStateList(
-                mContext.getResources(), R.color.light_active_color);
+        ColorStateList colorList =
+                AppCompatResources.getColorStateList(mContext, R.color.light_active_color);
         view.setTint(colorList);
         Assert.assertNotNull(imageView.getColorFilter());
         Assert.assertTrue(checkIfTintWasApplied(view, color));
@@ -141,8 +141,8 @@ public class ImageViewTinterTest {
         // Set it to another color.
         int otherColor =
                 ApiCompatibilityUtils.getColor(mContext.getResources(), R.color.google_red_700);
-        ColorStateList otherColorList = ApiCompatibilityUtils.getColorStateList(
-                mContext.getResources(), R.color.google_red_700);
+        ColorStateList otherColorList =
+                AppCompatResources.getColorStateList(mContext, R.color.google_red_700);
         view.setTint(otherColorList);
         Assert.assertNotNull(imageView.getColorFilter());
         Assert.assertTrue(checkIfTintWasApplied(view, otherColor));

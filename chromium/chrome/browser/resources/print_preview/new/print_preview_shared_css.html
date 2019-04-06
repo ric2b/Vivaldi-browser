@@ -12,26 +12,32 @@
       /* Default state ********************************************************/
 
       button,
-      input[type='button'],
       select,
       input[type='checkbox'],
       input[type='radio'] {
         -webkit-appearance: none;
-        background-image: linear-gradient(#ededed, #ededed 38%, #dedede);
+        -webkit-margin-end: 1px;
+        -webkit-margin-start: 0;
         border: 1px solid rgba(0, 0, 0, 0.25);
         border-radius: 2px;
         box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08),
             inset 0 1px 2px rgba(255, 255, 255, 0.75);
         color: #444;
         font: inherit;
-        margin: 0 1px 0 0;
+        margin-bottom: 0;
+        margin-top: 0;
         outline: none;
         text-shadow: 0 1px 0 rgb(240, 240, 240);
         user-select: none;
       }
 
       button,
-      input[type='button'],
+      input[type='checkbox'],
+      input[type='radio'] {
+        background-image: linear-gradient(#ededed, #ededed 38%, #dedede);
+      }
+
+      button,
       select {
         min-height: 2em;
         min-width: 4em;
@@ -61,14 +67,13 @@
         min-height: 2em;
         outline: none;
         padding: 3px;
-      <if expr="is_win or is_macosx or is_ios">
+      <if expr="is_win or is_macosx">
         /* For better alignment between adjacent buttons and inputs. */
         padding-bottom: 4px;
       </if>
       }
 
-      :root {
-      <if expr="not is_ios">
+      :host {
         /* Hover **************************************************************/
         --print-preview-hover: {
           border-color: rgba(0, 0, 0, 0.3);
@@ -76,7 +81,6 @@
               inset 0 1px 2px rgba(255, 255, 255, 0.95);
           color: black;
         };
-      </if>
 
         /* Active *************************************************************/
         --print-preview-active: {
@@ -89,7 +93,6 @@
 
       :disabled:-webkit-any(
           button,
-          input[type='button'],
           select) {
         background-image: linear-gradient(#f1f1f1, #f1f1f1 38%, #e6e6e6);
         border-color: rgba(80, 80, 80, 0.2);
@@ -114,8 +117,7 @@
           input[type='search'],
           input[type='text'],
           input:not([type]),
-          button,
-          input[type='button']) {
+            button) {
         /* We use border color because it follows the border radius (unlike
          * outline). This is particularly noticeable on mac. */
         border-color: rgb(77, 144, 254);

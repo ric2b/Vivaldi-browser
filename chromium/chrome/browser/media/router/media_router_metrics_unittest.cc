@@ -3,13 +3,16 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/media/router/media_router_metrics.h"
+
+#include <string>
+
+#include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
-#include "chrome/browser/ui/webui/media_router/media_cast_mode.h"
+#include "chrome/browser/ui/media_router/media_cast_mode.h"
 #include "chrome/common/media_router/media_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -19,6 +22,39 @@ using base::Bucket;
 using testing::ElementsAre;
 
 namespace media_router {
+
+namespace {
+
+// Tests that calling |recording_cb| with a TimeDelta records it in
+// |histogram_name|.
+void TestRecordTimeDeltaMetric(
+    base::RepeatingCallback<void(const base::TimeDelta&)> recording_cb,
+    const std::string& histogram_name) {
+  base::HistogramTester tester;
+  const base::TimeDelta delta = base::TimeDelta::FromMilliseconds(10);
+
+  tester.ExpectTotalCount(histogram_name, 0);
+  recording_cb.Run(delta);
+  tester.ExpectUniqueSample(histogram_name, delta.InMilliseconds(), 1);
+}
+
+// Tests that calling |recording_cb| with boolean values records them in
+// |histogram_name|.
+void TestRecordBooleanMetric(base::RepeatingCallback<void(bool)> recording_cb,
+                             const std::string& histogram_name) {
+  base::HistogramTester tester;
+  tester.ExpectTotalCount(histogram_name, 0);
+
+  recording_cb.Run(true);
+  recording_cb.Run(false);
+  recording_cb.Run(true);
+
+  tester.ExpectTotalCount(histogram_name, 3);
+  EXPECT_THAT(tester.GetAllSamples(histogram_name),
+              ElementsAre(Bucket(false, 1), Bucket(true, 2)));
+}
+
+}  // namespace
 
 using DialParsingError = SafeDialDeviceDescriptionParser::ParsingError;
 
@@ -41,25 +77,21 @@ TEST(MediaRouterMetricsTest, RecordMediaRouterDialogOrigin) {
 }
 
 TEST(MediaRouterMetricsTest, RecordMediaRouterDialogPaint) {
-  base::HistogramTester tester;
-  const base::TimeDelta delta = base::TimeDelta::FromMilliseconds(10);
-
-  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramUiDialogPaint, 0);
-  MediaRouterMetrics::RecordMediaRouterDialogPaint(delta);
-  tester.ExpectUniqueSample(MediaRouterMetrics::kHistogramUiDialogPaint,
-                            delta.InMilliseconds(), 1);
+  TestRecordTimeDeltaMetric(
+      base::BindRepeating(&MediaRouterMetrics::RecordMediaRouterDialogPaint),
+      MediaRouterMetrics::kHistogramUiDialogPaint);
 }
 
 TEST(MediaRouterMetricsTest, RecordMediaRouterDialogLoaded) {
-  base::HistogramTester tester;
-  const base::TimeDelta delta = base::TimeDelta::FromMilliseconds(10);
+  TestRecordTimeDeltaMetric(
+      base::BindRepeating(&MediaRouterMetrics::RecordMediaRouterDialogLoaded),
+      MediaRouterMetrics::kHistogramUiDialogLoadedWithData);
+}
 
-  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramUiDialogLoadedWithData,
-                          0);
-  MediaRouterMetrics::RecordMediaRouterDialogLoaded(delta);
-  tester.ExpectUniqueSample(
-      MediaRouterMetrics::kHistogramUiDialogLoadedWithData,
-      delta.InMilliseconds(), 1);
+TEST(MediaRouterMetricsTest, RecordCloseDialogLatency) {
+  TestRecordTimeDeltaMetric(
+      base::BindRepeating(&MediaRouterMetrics::RecordCloseDialogLatency),
+      MediaRouterMetrics::kHistogramCloseLatency);
 }
 
 TEST(MediaRouterMetricsTest, RecordMediaRouterInitialUserAction) {
@@ -187,6 +219,50 @@ TEST(MediaRouterMetricsTest, RecordMediaSinkType) {
                   Bucket(static_cast<int>(SinkIconType::HANGOUT), 1),
                   Bucket(static_cast<int>(SinkIconType::WIRED_DISPLAY), 1),
                   Bucket(static_cast<int>(SinkIconType::GENERIC), 1)));
+}
+
+TEST(MediaRouterMetricsTest, RecordDeviceCount) {
+  base::HistogramTester tester;
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramUiDeviceCount, 0);
+
+  MediaRouterMetrics::RecordDeviceCount(30);
+  MediaRouterMetrics::RecordDeviceCount(0);
+
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramUiDeviceCount, 2);
+  EXPECT_THAT(tester.GetAllSamples(MediaRouterMetrics::kHistogramUiDeviceCount),
+              ElementsAre(Bucket(0, 1), Bucket(30, 1)));
+}
+
+TEST(MediaRouterMetricsTest, RecordStartRouteDeviceIndex) {
+  base::HistogramTester tester;
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramStartLocalPosition, 0);
+
+  MediaRouterMetrics::RecordStartRouteDeviceIndex(30);
+  MediaRouterMetrics::RecordStartRouteDeviceIndex(0);
+
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramStartLocalPosition, 2);
+  EXPECT_THAT(
+      tester.GetAllSamples(MediaRouterMetrics::kHistogramStartLocalPosition),
+      ElementsAre(Bucket(0, 1), Bucket(30, 1)));
+}
+
+TEST(MediaRouterMetricsTest, RecordStartLocalSessionLatency) {
+  TestRecordTimeDeltaMetric(
+      base::BindRepeating(&MediaRouterMetrics::RecordStartLocalSessionLatency),
+      MediaRouterMetrics::kHistogramStartLocalLatency);
+}
+
+TEST(MediaRouterMetricsTest, RecordStartLocalSessionSuccessful) {
+  TestRecordBooleanMetric(
+      base::BindRepeating(
+          &MediaRouterMetrics::RecordStartLocalSessionSuccessful),
+      MediaRouterMetrics::kHistogramStartLocalSessionSuccessful);
+}
+
+TEST(MediaRouterMetricsTest, RecordSearchSinkOutcome) {
+  TestRecordBooleanMetric(
+      base::BindRepeating(&MediaRouterMetrics::RecordSearchSinkOutcome),
+      MediaRouterMetrics::kHistogramRecordSearchSinkOutcome);
 }
 
 }  // namespace media_router

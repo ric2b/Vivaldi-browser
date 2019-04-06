@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -23,13 +22,22 @@
 #include "build/build_config.h"
 #include "components/rlz/rlz_tracker_delegate.h"
 
+#if defined(OS_CHROMEOS)
+#include "base/syslog_logging.h"
+#endif
+
 namespace rlz {
 namespace {
 
 // Maximum and minimum delay for financial ping we would allow to be set through
 // master preferences. Somewhat arbitrary, may need to be adjusted in future.
-const base::TimeDelta kMaxInitDelay = base::TimeDelta::FromSeconds(200);
+#if defined(OS_CHROMEOS)
+const base::TimeDelta kMinInitDelay = base::TimeDelta::FromSeconds(60);
+const base::TimeDelta kMaxInitDelay = base::TimeDelta::FromHours(24);
+#else
 const base::TimeDelta kMinInitDelay = base::TimeDelta::FromSeconds(20);
+const base::TimeDelta kMaxInitDelay = base::TimeDelta::FromSeconds(200);
+#endif
 
 void RecordProductEvents(bool first_run,
                          bool is_google_default_search,
@@ -242,6 +250,15 @@ bool RLZTracker::Init(bool first_run,
 #endif
   }
   delegate_->GetReactivationBrand(&reactivation_brand_);
+
+#if defined(OS_CHROMEOS)
+  // If the brand is organic, RLZ is essentially disabled.  Write a log to the
+  // console for administrators and QA.
+  if (delegate_->IsBrandOrganic(brand_) &&
+      delegate_->IsBrandOrganic(reactivation_brand_)) {
+    SYSLOG(INFO) << "RLZ is disabled";
+  }
+#endif
 
   // Could be null; don't run if so.  RLZ will try again next restart.
   net::URLRequestContextGetter* context_getter = delegate_->GetRequestContext();

@@ -67,11 +67,22 @@ const char kBlockedExtensionPrefix[] = "[BLOCKED]";
 // List of policies that are considered only if the user is part of a AD domain.
 // Please document any new additions in policy_templates.json!
 const char* kInsecurePolicies[] = {
-    key::kMetricsReportingEnabled, key::kDefaultSearchProviderEnabled,
-    key::kHomepageIsNewTabPage,    key::kHomepageLocation,
-    key::kNewTabPageLocation,      key::kRestoreOnStartup,
-    key::kRestoreOnStartupURLs,    key::kSafeBrowsingForTrustedSourcesEnabled,
-    key::kCloudPolicyOverridesMachinePolicy};
+    key::kChromeCleanupEnabled,
+    key::kChromeCleanupReportingEnabled,
+    key::kCloudPolicyOverridesMachinePolicy,
+    key::kDefaultSearchProviderEnabled,
+    key::kHomepageIsNewTabPage,
+    key::kHomepageLocation,
+    key::kMetricsReportingEnabled,
+    key::kNewTabPageLocation,
+    key::kPasswordProtectionChangePasswordURL,
+    key::kPasswordProtectionLoginURLs,
+    key::kRestoreOnStartup,
+    key::kRestoreOnStartupURLs,
+    key::kSafeBrowsingForTrustedSourcesEnabled,
+    key::kSafeBrowsingEnabled,
+    key::kSafeBrowsingWhitelistDomains,
+};
 
 // The list of possible errors that can occur while collecting information about
 // the current enterprise environment.
@@ -89,7 +100,11 @@ enum DomainCheckErrors {
 // Encapculates logic to determine if enterprise policies should be honored.
 // This is used in various places below.
 bool ShouldHonorPolicies() {
-  return base::win::IsEnterpriseManaged();
+  bool is_enterprise_version =
+      base::win::OSInfo::GetInstance()->version_type() != base::win::SUITE_HOME;
+  return base::win::IsEnrolledToDomain() ||
+         (base::win::IsDeviceRegisteredWithManagement() &&
+          is_enterprise_version);
 }
 
 // Verifies that untrusted policies contain only safe values. Modifies the
@@ -204,7 +219,7 @@ bool IsDomainJoined() {
   bool got_function_addresses = false;
   // Use an absolute path to load the DLL to avoid DLL preloading attacks.
   base::FilePath path;
-  if (PathService::Get(base::DIR_SYSTEM, &path)) {
+  if (base::PathService::Get(base::DIR_SYSTEM, &path)) {
     HINSTANCE net_api_library = ::LoadLibraryEx(
         path.Append(FILE_PATH_LITERAL("netapi32.dll")).value().c_str(), nullptr,
         LOAD_WITH_ALTERED_SEARCH_PATH);

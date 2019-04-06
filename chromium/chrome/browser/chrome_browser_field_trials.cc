@@ -17,6 +17,7 @@
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -27,7 +28,9 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/persistent_system_profile.h"
+#include "components/ukm/ukm_recorder_impl.h"
 #include "components/variations/variations_associated_data.h"
+#include "components/version_info/version_info.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/chrome_browser_field_trials_mobile.h"
@@ -89,7 +92,7 @@ void InstantiatePersistentHistograms() {
       {base::MayBlock(), base::TaskPriority::BACKGROUND,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                     base::Passed(&active_file), /*recursive=*/false));
+                     std::move(active_file), /*recursive=*/false));
 
   // This is used to report results to an UMA histogram.
   enum InitResult {
@@ -113,7 +116,22 @@ void InstantiatePersistentHistograms() {
   std::string storage = variations::GetVariationParamValueByFeature(
       base::kPersistentHistogramsFeature, "storage");
 
-  if (storage.empty() || storage == "MappedFile") {
+  static const char kMappedFile[] = "MappedFile";
+  static const char kLocalMemory[] = "LocalMemory";
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  // Linux kernel 4.4.0.* shows a huge number of SIGBUS crashes with persistent
+  // histograms enabled using a mapped file.  Change this to use local memory.
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=753741
+  if (storage.empty() || storage == kMappedFile) {
+    int major, minor, bugfix;
+    base::SysInfo::OperatingSystemVersionNumbers(&major, &minor, &bugfix);
+    if (major == 4 && minor == 4 && bugfix == 0)
+      storage = kLocalMemory;
+  }
+#endif
+
+  if (storage.empty() || storage == kMappedFile) {
     if (!base::PathExists(upload_dir)) {
       // Handle failure to create the directory.
       result = NO_UPLOAD_DIR;
@@ -141,9 +159,9 @@ void InstantiatePersistentHistograms() {
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
         base::BindOnce(base::IgnoreResult(
                            &base::GlobalHistogramAllocator::CreateSpareFile),
-                       base::Passed(&spare_file), kAllocSize),
+                       std::move(spare_file), kAllocSize),
         base::TimeDelta::FromSeconds(kSpareFileCreateDelaySeconds));
-  } else if (storage == "LocalMemory") {
+  } else if (storage == kLocalMemory) {
     // Use local memory for storage even though it will not persist across
     // an unclean shutdown. This sets the result but the actual creation is
     // done below.
@@ -182,20 +200,18 @@ void InstantiatePersistentHistograms() {
 
 // Create a field trial to control metrics/crash sampling for Stable on
 // Windows/Android if no variations seed was applied.
-void CreateFallbackSamplingTrialIfNeeded(bool has_seed,
-                                         base::FeatureList* feature_list) {
+void CreateFallbackSamplingTrialIfNeeded(base::FeatureList* feature_list) {
 #if defined(OS_WIN) || defined(OS_ANDROID)
-  // Only create the fallback trial if there isn't already a variations seed
-  // being applied. This should occur during first run when first-run variations
-  // isn't supported. It's assumed that, if there is a seed, then it either
-  // contains the relavent study, or is intentionally omitted, so no fallback is
-  // needed.
-  if (has_seed)
-    return;
-
   ChromeMetricsServicesManagerClient::CreateFallbackSamplingTrial(
       chrome::GetChannel(), feature_list);
 #endif  // defined(OS_WIN) || defined(OS_ANDROID)
+}
+
+// Create a field trial to control UKM sampling for Stable if no variations
+// seed was applied.
+void CreateFallbackUkmSamplingTrialIfNeeded(base::FeatureList* feature_list) {
+  ukm::UkmRecorderImpl::CreateFallbackSamplingTrial(
+      chrome::GetChannel() == version_info::Channel::STABLE, feature_list);
 }
 
 }  // namespace
@@ -219,7 +235,15 @@ void ChromeBrowserFieldTrials::SetupFieldTrials() {
 void ChromeBrowserFieldTrials::SetupFeatureControllingFieldTrials(
     bool has_seed,
     base::FeatureList* feature_list) {
-  CreateFallbackSamplingTrialIfNeeded(has_seed, feature_list);
+  // Only create the fallback trials if there isn't already a variations seed
+  // being applied. This should occur during first run when first-run variations
+  // isn't supported. It's assumed that, if there is a seed, then it either
+  // contains the relavent studies, or is intentionally omitted, so no fallback
+  // is needed.
+  if (!has_seed) {
+    CreateFallbackSamplingTrialIfNeeded(feature_list);
+    CreateFallbackUkmSamplingTrialIfNeeded(feature_list);
+  }
 }
 
 void ChromeBrowserFieldTrials::InstantiateDynamicTrials() {

@@ -28,16 +28,16 @@ void AndroidAppsHandler::RegisterMessages() {
   // Note: requestAndroidAppsInfo must be called before observers will be added.
   web_ui()->RegisterMessageCallback(
       "requestAndroidAppsInfo",
-      base::Bind(&AndroidAppsHandler::HandleRequestAndroidAppsInfo,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&AndroidAppsHandler::HandleRequestAndroidAppsInfo,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "showAndroidAppsSettings",
-      base::Bind(&AndroidAppsHandler::ShowAndroidAppsSettings,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&AndroidAppsHandler::ShowAndroidAppsSettings,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "showAndroidManageAppLinks",
-      base::Bind(&AndroidAppsHandler::ShowAndroidManageAppLinks,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&AndroidAppsHandler::ShowAndroidManageAppLinks,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void AndroidAppsHandler::OnJavascriptAllowed() {
@@ -57,14 +57,20 @@ void AndroidAppsHandler::OnJavascriptDisallowed() {
 void AndroidAppsHandler::OnAppRegistered(
     const std::string& app_id,
     const ArcAppListPrefs::AppInfo& app_info) {
-  OnAppChanged(app_id);
+  HandleAppChanged(app_id);
+}
+
+void AndroidAppsHandler::OnAppStatesChanged(
+    const std::string& app_id,
+    const ArcAppListPrefs::AppInfo& app_info) {
+  HandleAppChanged(app_id);
 }
 
 void AndroidAppsHandler::OnAppRemoved(const std::string& app_id) {
-  OnAppChanged(app_id);
+  HandleAppChanged(app_id);
 }
 
-void AndroidAppsHandler::OnAppChanged(const std::string& app_id) {
+void AndroidAppsHandler::HandleAppChanged(const std::string& app_id) {
   if (app_id != arc::kSettingsAppId)
     return;
   SendAndroidAppsInfo();

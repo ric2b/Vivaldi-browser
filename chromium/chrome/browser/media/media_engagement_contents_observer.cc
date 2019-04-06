@@ -8,16 +8,18 @@
 
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/sequenced_task_runner.h"
 #include "chrome/browser/media/media_engagement_preloaded_list.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/media/media_engagement_session.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/recently_audible_helper.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/platform/media_engagement.mojom.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/autoplay.mojom.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/browser.h"
@@ -29,9 +31,10 @@ namespace {
 
 void SendEngagementLevelToFrame(const url::Origin& origin,
                                 content::RenderFrameHost* render_frame_host) {
-  blink::mojom::MediaEngagementClientAssociatedPtr client;
+  blink::mojom::AutoplayConfigurationClientAssociatedPtr client;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
-  client->SetHasHighMediaEngagement(origin);
+  client->AddAutoplayFlags(origin,
+                           blink::mojom::kAutoplayFlagHighMediaEngagement);
 }
 
 }  // namespace.
@@ -73,7 +76,6 @@ MediaEngagementContentsObserver::MediaEngagementContentsObserver(
     MediaEngagementService* service)
     : WebContentsObserver(web_contents),
       service_(service),
-      playback_timer_(new base::Timer(true, false)),
       task_runner_(nullptr) {}
 
 MediaEngagementContentsObserver::~MediaEngagementContentsObserver() = default;
@@ -117,7 +119,7 @@ void MediaEngagementContentsObserver::WebContentsDestroyed() {
 }
 
 void MediaEngagementContentsObserver::ClearPlayerStates() {
-  playback_timer_->Stop();
+  playback_timer_.Stop();
   player_states_.clear();
   significant_players_.clear();
 }
@@ -161,9 +163,18 @@ void MediaEngagementContentsObserver::DidFinishNavigation(
   if (session_ && session_->IsSameOriginWith(new_origin))
     return;
 
+  // Only get the opener if the navigation originated from a link.
+  content::WebContents* opener = nullptr;
+  if (ui::PageTransitionCoreTypeIs(navigation_handle->GetPageTransition(),
+                                   ui::PAGE_TRANSITION_LINK) ||
+      ui::PageTransitionCoreTypeIs(navigation_handle->GetPageTransition(),
+                                   ui::PAGE_TRANSITION_RELOAD)) {
+    opener = GetOpener();
+  }
+
   bool was_restored =
       navigation_handle->GetRestoreType() != content::RestoreType::NONE;
-  session_ = GetOrCreateSession(new_origin, GetOpener(), was_restored);
+  session_ = GetOrCreateSession(new_origin, opener, was_restored);
 }
 
 MediaEngagementContentsObserver::PlayerState::PlayerState(base::Clock* clock)
@@ -308,7 +319,8 @@ void MediaEngagementContentsObserver::OnSignificantMediaPlaybackTimeForPlayer(
   audible_row->second.second = nullptr;
 
   // Check that the tab is not muted.
-  if (web_contents()->IsAudioMuted() || !web_contents()->WasRecentlyAudible())
+  auto* audible_helper = RecentlyAudibleHelper::FromWebContents(web_contents());
+  if (web_contents()->IsAudioMuted() || !audible_helper->WasRecentlyAudible())
     return;
 
   // Record significant audible playback.
@@ -322,8 +334,9 @@ void MediaEngagementContentsObserver::OnSignificantMediaPlaybackTimeForPage() {
     return;
 
   // Do not record significant playback if the tab did not make
-  // a sound in the last two seconds.
-  if (!web_contents()->WasRecentlyAudible())
+  // a sound recently.
+  auto* audible_helper = RecentlyAudibleHelper::FromWebContents(web_contents());
+  if (!audible_helper->WasRecentlyAudible())
     return;
 
   session_->RecordSignificantPlayback();
@@ -384,8 +397,7 @@ void MediaEngagementContentsObserver::MaybeInsertRemoveSignificantPlayer(
   if (state.muted == false && state.playing == true &&
       state.has_audio == true &&
       audible_players_.find(id) == audible_players_.end()) {
-    audible_players_[id] =
-        std::make_pair(false, base::WrapUnique<base::Timer>(nullptr));
+    audible_players_[id] = std::make_pair(false, nullptr);
   }
 
   bool is_currently_significant =
@@ -436,8 +448,7 @@ void MediaEngagementContentsObserver::UpdatePlayerTimer(
     if (audible_row->second.second)
       return;
 
-    std::unique_ptr<base::Timer> new_timer =
-        std::make_unique<base::Timer>(true, false);
+    auto new_timer = std::make_unique<base::OneShotTimer>();
     if (task_runner_)
       new_timer->SetTaskRunner(task_runner_);
 
@@ -467,22 +478,22 @@ void MediaEngagementContentsObserver::UpdatePageTimer() {
     return;
 
   if (AreConditionsMet()) {
-    if (playback_timer_->IsRunning())
+    if (playback_timer_.IsRunning())
       return;
 
     if (task_runner_)
-      playback_timer_->SetTaskRunner(task_runner_);
+      playback_timer_.SetTaskRunner(task_runner_);
 
-    playback_timer_->Start(
+    playback_timer_.Start(
         FROM_HERE,
         MediaEngagementContentsObserver::kSignificantMediaPlaybackTime,
         base::Bind(&MediaEngagementContentsObserver::
                        OnSignificantMediaPlaybackTimeForPage,
                    base::Unretained(this)));
   } else {
-    if (!playback_timer_->IsRunning())
+    if (!playback_timer_.IsRunning())
       return;
-    playback_timer_->Stop();
+    playback_timer_.Stop();
   }
 }
 
@@ -494,7 +505,12 @@ void MediaEngagementContentsObserver::SetTaskRunnerForTest(
 void MediaEngagementContentsObserver::ReadyToCommitNavigation(
     content::NavigationHandle* handle) {
   // TODO(beccahughes): Convert MEI API to using origin.
-  GURL url = handle->GetWebContents()->GetURL();
+  // If the navigation is occuring in the main frame we should use the URL
+  // provided by |handle| as the navigation has not committed yet. If the
+  // navigation is in a sub frame then use the URL from the main frame.
+  GURL url = handle->IsInMainFrame()
+                 ? handle->GetURL()
+                 : handle->GetWebContents()->GetLastCommittedURL();
   MediaEngagementScore score = service_->CreateEngagementScore(url);
   bool has_high_engagement = score.high_score();
 
@@ -529,6 +545,7 @@ content::WebContents* MediaEngagementContentsObserver::GetOpener() const {
         browser->tab_strip_model()->GetIndexOfWebContents(web_contents());
     if (index == TabStripModel::kNoTab)
       continue;
+
     // Whether or not the |opener| is null, this is the right tab strip.
     return browser->tab_strip_model()->GetOpenerOfWebContentsAt(index);
   }

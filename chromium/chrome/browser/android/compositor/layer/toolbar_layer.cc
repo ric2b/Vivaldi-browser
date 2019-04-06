@@ -37,7 +37,7 @@ void ToolbarLayer::PushResource(
     float y_offset,
     bool show_debug,
     bool clip_shadow,
-    bool browser_controls_at_bottom) {
+    bool modern_design_enabled) {
   ToolbarResource* resource =
       ToolbarResource::From(resource_manager_->GetResource(
           ui::ANDROID_RESOURCE_TYPE_DYNAMIC, toolbar_resource_id));
@@ -55,17 +55,6 @@ void ToolbarLayer::PushResource(
                 resource->size().height() - resource->shadow_height());
   layer_->SetBounds(toolbar_bounds);
 
-  // The toolbar_root_ contains all of the layers that make up the toolbar. The
-  // toolbar_root_ is moved around inside of layer_ to allow appropriate
-  // clipping of the shadow.
-  toolbar_root_->SetBounds(toolbar_bounds);
-  if (browser_controls_at_bottom) {
-    // If the browser controld are at bottom, this means that the shadow is at
-    // top of the container, i.e., at the top of the resource bitmap, move the
-    // toolbar up by the amount of the shadow to allow clipping if necessary.
-    toolbar_root_->SetPosition(gfx::PointF(0, -resource->shadow_height()));
-  }
-
   toolbar_background_layer_->SetBounds(resource->toolbar_rect().size());
   toolbar_background_layer_->SetPosition(
       gfx::PointF(resource->toolbar_rect().origin()));
@@ -75,9 +64,17 @@ void ToolbarLayer::PushResource(
       (resource->location_bar_content_rect().width() != 0) && url_bar_alpha > 0;
   url_bar_background_layer_->SetHideLayerAndSubtree(!url_bar_visible);
   if (url_bar_visible) {
-    ui::NinePatchResource* url_bar_background_resource =
-        ui::NinePatchResource::From(resource_manager_->GetResource(
-            ui::ANDROID_RESOURCE_TYPE_STATIC, url_bar_background_resource_id));
+    ui::NinePatchResource* url_bar_background_resource;
+    if (!modern_design_enabled) {
+      url_bar_background_resource = ui::NinePatchResource::From(
+          resource_manager_->GetResource(ui::ANDROID_RESOURCE_TYPE_STATIC,
+                                         url_bar_background_resource_id));
+    } else {
+      url_bar_background_resource = ui::NinePatchResource::From(
+          resource_manager_->GetStaticResourceWithTint(
+              url_bar_background_resource_id,
+              toolbar_textbox_background_color));
+    }
 
     gfx::Size draw_size(url_bar_background_resource->DrawSize(
         resource->location_bar_content_rect().size()));
@@ -100,12 +97,34 @@ void ToolbarLayer::PushResource(
 
   layer_->SetMasksToBounds(clip_shadow);
 
-  anonymize_layer_->SetHideLayerAndSubtree(!anonymize);
-  if (anonymize) {
+  // TODO(mdjones): Remove the anonymize layer once modern launches.
+  anonymize_layer_->SetHideLayerAndSubtree(!anonymize || modern_design_enabled);
+  if (!modern_design_enabled && anonymize) {
     anonymize_layer_->SetPosition(
         gfx::PointF(resource->location_bar_content_rect().origin()));
     anonymize_layer_->SetBounds(resource->location_bar_content_rect().size());
     anonymize_layer_->SetBackgroundColor(toolbar_textbox_background_color);
+  }
+
+  // If modern is enabled, the location bar background doubles as the
+  // anonymize layer -- it just needs to be drawn on top of the toolbar
+  // bitmap.
+  if (modern_design_enabled) {
+    int background_layer_index = GetIndexOfLayer(toolbar_background_layer_);
+
+    bool needs_move_to_front =
+        anonymize && layer_->children().back() != url_bar_background_layer_;
+    bool needs_move_to_back =
+        !anonymize &&
+        layer_->children()[background_layer_index] != url_bar_background_layer_;
+
+    // If the layer needs to move, remove and re-add it.
+    if (needs_move_to_front) {
+      layer_->AddChild(url_bar_background_layer_);
+    } else if (needs_move_to_back) {
+      layer_->InsertChild(url_bar_background_layer_,
+                          background_layer_index + 1);
+    }
   }
 
   debug_layer_->SetBounds(resource->size());
@@ -114,13 +133,15 @@ void ToolbarLayer::PushResource(
   else if (!show_debug && debug_layer_->parent())
     debug_layer_->RemoveFromParent();
 
-  gfx::PointF root_layer_position(0, y_offset);
-  if (browser_controls_at_bottom) {
-    // The toolbar's position as if it were completely shown.
-    float base_toolbar_y = window_height - toolbar_bounds.height();
-    root_layer_position.set_y(base_toolbar_y + y_offset);
+  layer_->SetPosition(gfx::PointF(0, y_offset));
+}
+
+int ToolbarLayer::GetIndexOfLayer(scoped_refptr<cc::Layer> layer) {
+  for (unsigned int i = 0; i < layer_->children().size(); ++i) {
+    if (layer_->children()[i] == layer)
+      return i;
   }
-  layer_->SetPosition(root_layer_position);
+  return -1;
 }
 
 void ToolbarLayer::UpdateProgressBar(int progress_bar_x,
@@ -161,7 +182,6 @@ void ToolbarLayer::UpdateProgressBar(int progress_bar_x,
 ToolbarLayer::ToolbarLayer(ui::ResourceManager* resource_manager)
     : resource_manager_(resource_manager),
       layer_(cc::Layer::Create()),
-      toolbar_root_(cc::Layer::Create()),
       toolbar_background_layer_(cc::SolidColorLayer::Create()),
       url_bar_background_layer_(cc::NinePatchLayer::Create()),
       bitmap_layer_(cc::UIResourceLayer::Create()),
@@ -169,29 +189,27 @@ ToolbarLayer::ToolbarLayer(ui::ResourceManager* resource_manager)
       progress_bar_background_layer_(cc::SolidColorLayer::Create()),
       anonymize_layer_(cc::SolidColorLayer::Create()),
       debug_layer_(cc::SolidColorLayer::Create()) {
-  layer_->AddChild(toolbar_root_);
-
   toolbar_background_layer_->SetIsDrawable(true);
-  toolbar_root_->AddChild(toolbar_background_layer_);
+  layer_->AddChild(toolbar_background_layer_);
 
   url_bar_background_layer_->SetIsDrawable(true);
   url_bar_background_layer_->SetFillCenter(true);
-  toolbar_root_->AddChild(url_bar_background_layer_);
+  layer_->AddChild(url_bar_background_layer_);
 
   bitmap_layer_->SetIsDrawable(true);
-  toolbar_root_->AddChild(bitmap_layer_);
+  layer_->AddChild(bitmap_layer_);
 
   progress_bar_background_layer_->SetIsDrawable(true);
   progress_bar_background_layer_->SetHideLayerAndSubtree(true);
-  toolbar_root_->AddChild(progress_bar_background_layer_);
+  layer_->AddChild(progress_bar_background_layer_);
 
   progress_bar_layer_->SetIsDrawable(true);
   progress_bar_layer_->SetHideLayerAndSubtree(true);
-  toolbar_root_->AddChild(progress_bar_layer_);
+  layer_->AddChild(progress_bar_layer_);
 
   anonymize_layer_->SetIsDrawable(true);
   anonymize_layer_->SetBackgroundColor(SK_ColorWHITE);
-  toolbar_root_->AddChild(anonymize_layer_);
+  layer_->AddChild(anonymize_layer_);
 
   debug_layer_->SetIsDrawable(true);
   debug_layer_->SetBackgroundColor(SK_ColorGREEN);

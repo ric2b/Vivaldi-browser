@@ -9,6 +9,8 @@
 goog.provide('BackgroundKeyboardHandler');
 
 goog.require('ChromeVoxState');
+goog.require('EventSourceState');
+goog.require('MathHandler');
 goog.require('Output');
 goog.require('cvox.ChromeVoxKbHandler');
 goog.require('cvox.ChromeVoxPrefs');
@@ -36,16 +38,21 @@ BackgroundKeyboardHandler.prototype = {
    * @return {boolean} True if the default action should be performed.
    */
   onKeyDown: function(evt) {
+    EventSourceState.set(EventSourceType.STANDARD_KEYBOARD);
     evt.stickyMode = cvox.ChromeVox.isStickyModeOn() && cvox.ChromeVox.isActive;
     if (cvox.ChromeVox.passThroughMode)
       return false;
 
-    if (!cvox.ChromeVoxKbHandler.basicKeyDownActionsListener(evt)) {
+    Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
+
+    // Defer first to the math handler, if it exists, then ordinary keyboard
+    // commands.
+    if (!MathHandler.onKeyDown(evt) ||
+        !cvox.ChromeVoxKbHandler.basicKeyDownActionsListener(evt)) {
       evt.preventDefault();
       evt.stopPropagation();
       this.eatenKeyDowns_.add(evt.keyCode);
     }
-    Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
     return false;
   },
 

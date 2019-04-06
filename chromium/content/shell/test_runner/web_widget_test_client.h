@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "third_party/WebKit/public/web/WebWidgetClient.h"
+#include "third_party/blink/public/web/web_widget_client.h"
 
 namespace test_runner {
 
@@ -40,8 +40,8 @@ class WebWidgetTestClient : public blink::WebWidgetClient {
   void StartDragging(blink::WebReferrerPolicy policy,
                      const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
-                     const blink::WebImage& image,
-                     const blink::WebPoint& point) override;
+                     const SkBitmap& drag_image,
+                     const blink::WebPoint& image_offset) override;
 
  private:
   void AnimateNow();

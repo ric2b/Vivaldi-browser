@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/base64url.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -20,8 +20,10 @@
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "net/url_request/test_url_fetcher_factory.h"
+#include "content/public/test/url_loader_interceptor.h"
+#include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/third_party/mozilla/url_parse.h"
 
 namespace autofill {
 namespace {
@@ -51,40 +53,69 @@ class WindowedPersonalDataManagerObserver : public PersonalDataManagerObserver {
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 };
 
-class WindowedNetworkObserver : public net::TestURLFetcher::DelegateForTests {
+class WindowedNetworkObserver {
  public:
   explicit WindowedNetworkObserver(const std::string& expected_upload_data)
-      : factory_(new net::TestURLFetcherFactory),
-        expected_upload_data_(expected_upload_data),
+      : expected_upload_data_(expected_upload_data),
         message_loop_runner_(new content::MessageLoopRunner) {
-    factory_->SetDelegateForTests(this);
+    interceptor_ =
+        std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
+            &WindowedNetworkObserver::OnIntercept, base::Unretained(this)));
   }
   ~WindowedNetworkObserver() {}
 
   // Waits for a network request with the |expected_upload_data_|.
   void Wait() {
     message_loop_runner_->Run();
-    factory_.reset();
+    interceptor_.reset();
   }
-
-  // net::TestURLFetcher::DelegateForTests:
-  void OnRequestStart(int fetcher_id) override {
-    net::TestURLFetcher* fetcher = factory_->GetFetcherByID(fetcher_id);
-    if (fetcher->upload_data() == expected_upload_data_)
-      message_loop_runner_->Quit();
-
-    // Not interested in any further status updates from this fetcher.
-    fetcher->SetDelegateForTests(nullptr);
-  }
-  void OnChunkUpload(int fetcher_id) override {}
-  void OnRequestEnd(int fetcher_id) override {}
 
  private:
-  // Mocks out network requests.
-  std::unique_ptr<net::TestURLFetcherFactory> factory_;
+  // Helper to extract the value of a query param. Returns "*** not found ***"
+  // if the requested query param is not in the query string.
+  std::string GetQueryParam(const std::string& query_str,
+                            const std::string& param_name) {
+    url::Component query(0, query_str.length());
+    url::Component key, value;
+    while (url::ExtractQueryKeyValue(query_str.c_str(), &query, &key, &value)) {
+      std::string key_string(query_str.substr(key.begin, key.len));
+      std::string param_text(query_str.substr(value.begin, value.len));
+      std::string param_value;
+      if (key_string == param_name &&
+          base::Base64UrlDecode(param_text,
+                                base::Base64UrlDecodePolicy::REQUIRE_PADDING,
+                                &param_value)) {
+        return param_value;
+      }
+    }
+    return "*** not found ***";
+  }
 
+  bool OnIntercept(content::URLLoaderInterceptor::RequestParams* params) {
+    // NOTE: This constant matches the one defined in
+    // components/autofill/core/browser/autofill_download_manager.cc
+    static const char kDefaultAutofillServerURL[] =
+        "https://clients1.google.com/tbproxy/af/";
+    DCHECK(params);
+    network::ResourceRequest resource_request = params->url_request;
+    if (resource_request.url.spec().find(kDefaultAutofillServerURL) ==
+        std::string::npos) {
+      return false;
+    }
+
+    if (network::GetUploadData(resource_request) == expected_upload_data_ ||
+        GetQueryParam(resource_request.url.query(), "q") ==
+            expected_upload_data_) {
+      message_loop_runner_->Quit();
+    }
+    return false;
+  }
+
+ private:
   const std::string expected_upload_data_;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+
+  std::unique_ptr<content::URLLoaderInterceptor> interceptor_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowedNetworkObserver);
 };
@@ -157,6 +188,7 @@ IN_PROC_BROWSER_TEST_F(AutofillServerTest,
   upload.set_data_present("1f7e0003780000080004");
   upload.set_action_signature(15724779818122431245U);
   upload.set_form_name("test_form");
+  upload.set_passwords_revealed(false);
 
   test::FillUploadField(upload.add_field(), 2594484045U, "one", "text", nullptr,
                         2U);

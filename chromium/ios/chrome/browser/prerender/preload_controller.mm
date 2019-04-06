@@ -11,6 +11,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_service.h"
 #import "components/signin/ios/browser/account_consistency_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -26,8 +27,11 @@
 #include "ios/chrome/browser/ui/prerender_final_status.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
+#import "ios/web/public/web_state/navigation_context.h"
 #import "ios/web/public/web_state/ui/crw_native_content.h"
+#include "ios/web/public/web_state/ui/crw_web_delegate.h"
 #import "ios/web/public/web_state/web_state.h"
+#include "ios/web/public/web_state/web_state_observer_bridge.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "net/base/mac/url_conversions.h"
@@ -61,7 +65,7 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
 }  // namespace
 
-@interface PreloadController (PrivateMethods)<ManageAccountsDelegate>
+@interface PreloadController (PrivateMethods)
 
 // Returns YES if prerendering is enabled.
 - (BOOL)isPrerenderingEnabled;
@@ -85,6 +89,12 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
 @end
 
+@interface PreloadController ()<CRWWebDelegate,
+                                CRWWebStateObserver,
+                                ManageAccountsDelegate,
+                                PrefObserverDelegate>
+@end
+
 @implementation PreloadController {
   ios::ChromeBrowserState* browserState_;  // Weak.
 
@@ -94,6 +104,10 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   // The WebStateDelegateBridge used to register self as a CRWWebStateDelegate
   // with the pre-rendered WebState.
   std::unique_ptr<web::WebStateDelegateBridge> webStateDelegate_;
+
+  // The WebStateObserverBridge used to register self as a WebStateObserver
+  // with the pre-rendered WebState.
+  std::unique_ptr<web::WebStateObserverBridge> webStateObserver_;
 
   // The URL that is prerendered in |webState_|.  This can be different from
   // the value returned by WebState last committed navigation item, for example
@@ -147,16 +161,17 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
         prefs::kNetworkPredictionWifiOnly);
     usingWWAN_ = net::NetworkChangeNotifier::IsConnectionCellular(
         net::NetworkChangeNotifier::GetConnectionType());
-    webStateDelegate_.reset(new web::WebStateDelegateBridge(self));
-    observerBridge_.reset(new PrefObserverBridge(self));
+    webStateDelegate_ = std::make_unique<web::WebStateDelegateBridge>(self);
+    webStateObserver_ = std::make_unique<web::WebStateObserverBridge>(self);
+    observerBridge_ = std::make_unique<PrefObserverBridge>(self);
     prefChangeRegistrar_.Init(browserState_->GetPrefs());
     observerBridge_->ObserveChangesForPreference(
         prefs::kNetworkPredictionEnabled, &prefChangeRegistrar_);
     observerBridge_->ObserveChangesForPreference(
         prefs::kNetworkPredictionWifiOnly, &prefChangeRegistrar_);
     if (enabled_ && wifiOnly_) {
-      connectionTypeObserverBridge_.reset(
-          new ConnectionTypeObserverBridge(self));
+      connectionTypeObserverBridge_ =
+          std::make_unique<ConnectionTypeObserverBridge>(self);
     }
 
     [[NSNotificationCenter defaultCenter]
@@ -239,7 +254,10 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
   Tab* tab = LegacyTabHelper::GetTabForWebState(webState.get());
   [[tab webController] setNativeProvider:nil];
+  [[tab webController] setDelegate:tab];
+
   webState->SetShouldSuppressDialogs(false);
+  webState->RemoveObserver(webStateObserver_.get());
   webState->SetDelegate(nullptr);
 
   HistoryTabHelper::FromWebState(webState.get())
@@ -255,8 +273,6 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
     [[OmniboxGeolocationController sharedInstance] finishPageLoadForTab:tab
                                                             loadSuccess:YES];
   }
-
-  [tab setDelegate:nil];
 
   return webState;
 }
@@ -337,6 +353,11 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   return nil;
 }
 
+- (CGFloat)nativeContentHeaderHeightForWebState:(web::WebState*)webState {
+  return [delegate_ nativeContentHeaderHeightForPreloadController:self
+                                                         webState:webState];
+}
+
 #pragma mark -
 #pragma mark Private Methods
 
@@ -371,10 +392,13 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   DCHECK(tab);
 
   [[tab webController] setNativeProvider:self];
+  [[tab webController] setDelegate:self];
+
   webState_->SetDelegate(webStateDelegate_.get());
+  webState_->AddObserver(webStateObserver_.get());
   webState_->SetShouldSuppressDialogs(true);
   webState_->SetWebUsageEnabled(true);
-  [tab setDelegate:self];
+
   if (AccountConsistencyService* accountConsistencyService =
           ios::AccountConsistencyServiceFactory::GetForBrowserState(
               browserState_)) {
@@ -393,9 +417,9 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   }
   webState_->GetNavigationManager()->LoadURLWithParams(loadParams);
 
-  // Trigger the page to start loading.
-  // TODO(crbug.com/705819): Remove this call.
-  [tab view];
+  // LoadIfNecessary is needed because the view is not created (but needed) when
+  // loading the page. TODO(crbug.com/705819): Remove this call.
+  webState_->GetNavigationManager()->LoadIfNecessary();
 }
 
 - (void)destroyPreviewContents {
@@ -411,6 +435,8 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
   Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
   [[tab webController] setNativeProvider:nil];
+  [[tab webController] setDelegate:tab];
+  webState_->RemoveObserver(webStateObserver_.get());
   webState_->SetDelegate(nullptr);
   webState_.reset();
 
@@ -444,24 +470,58 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   }
 }
 
-#pragma mark - TabDelegate
-
-- (void)discardPrerender {
+- (BOOL)isAppLaunchingAllowedForWebState:(web::WebState*)webState {
+  DCHECK([self isWebStatePrerendered:webState]);
   [self schedulePrerenderCancel];
+  return NO;
+}
+
+#pragma mark - CRWWebStateObserver
+
+- (void)webState:(web::WebState*)webState
+    didStartNavigation:(web::NavigationContext*)navigation {
+  Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
+  [tab notifyTabOfUrlMayStartLoading:navigation->GetUrl()];
+}
+
+- (void)webState:(web::WebState*)webState
+    didLoadPageWithSuccess:(BOOL)loadSuccess {
+  DCHECK_EQ(webState, webState_.get());
+  // Cancel prerendering if response is "application/octet-stream". It can be a
+  // video file which should not be played from preload tab. See issue at
+  // http://crbug.com/436813 for more details.
+  const std::string& mimeType = webState->GetContentsMimeType();
+  if (mimeType == "application/octet-stream")
+    [self schedulePrerenderCancel];
+}
+
+- (void)webStateDidSuppressDialog:(web::WebState*)webState {
+  DCHECK_EQ(webState, webState_.get());
+  [self schedulePrerenderCancel];
+}
+
+#pragma mark - CRWWebDelegate protocol
+
+- (BOOL)openExternalURL:(const GURL&)URL
+              sourceURL:(const GURL&)sourceURL
+            linkClicked:(BOOL)linkClicked {
+  DCHECK(webState_);
+  Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
+  return [tab openExternalURL:URL sourceURL:sourceURL linkClicked:linkClicked];
 }
 
 #pragma mark - ManageAccountsDelegate
 
 - (void)onManageAccounts {
-  [self discardPrerender];
+  [self schedulePrerenderCancel];
 }
 
 - (void)onAddAccount {
-  [self discardPrerender];
+  [self schedulePrerenderCancel];
 }
 
 - (void)onGoIncognito:(const GURL&)url {
-  [self discardPrerender];
+  [self schedulePrerenderCancel];
 }
 
 @end

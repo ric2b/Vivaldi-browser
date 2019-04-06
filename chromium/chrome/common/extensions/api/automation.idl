@@ -22,8 +22,10 @@
     childrenChanged,
     clicked,
     documentSelectionChanged,
+    documentTitleChanged,
     expandedChanged,
     focus,
+    focusContext,
     imageFrameUpdated,
     hide,
     hitTestResult,
@@ -57,6 +59,7 @@
     selectionAdd,
     selectionRemove,
     show,
+    stateChanged,
     textChanged,
     textSelectionChanged,
     treeChanged,
@@ -66,8 +69,8 @@
   // Describes the purpose of an $(ref:automation.AutomationNode).
   enum RoleType {
     abbr,
-    alertDialog,
     alert,
+    alertDialog,
     anchor,
     annotation,
     application,
@@ -76,7 +79,6 @@
     banner,
     blockquote,
     button,
-    buttonDropDown,
     canvas,
     caption,
     caret,
@@ -84,23 +86,69 @@
     checkBox,
     client,
     colorWell,
-    columnHeader,
     column,
+    columnHeader,
     comboBoxGrouping,
     comboBoxMenuButton,
     complementary,
+    contentDeletion,
+    contentInsertion,
     contentInfo,
     date,
     dateTime,
     definition,
-    descriptionListDetail,
     descriptionList,
+    descriptionListDetail,
     descriptionListTerm,
     desktop,
     details,
     dialog,
     directory,
     disclosureTriangle,
+    // --------------------------------------------------------------
+    // DPub Roles:
+    // https://www.w3.org/TR/dpub-aam-1.0/#mapping_role_table
+    docAbstract,
+    docAcknowledgments,
+    docAfterword,
+    docAppendix,
+    docBackLink,
+    docBiblioEntry,
+    docBibliography,
+    docBiblioRef,
+    docChapter,
+    docColophon,
+    docConclusion,
+    docCover,
+    docCredit,
+    docCredits,
+    docDedication,
+    docEndnote,
+    docEndnotes,
+    docEpigraph,
+    docEpilogue,
+    docErrata,
+    docExample,
+    docFootnote,
+    docForeword,
+    docGlossary,
+    docGlossRef,
+    docIndex,
+    docIntroduction,
+    docNoteRef,
+    docNotice,
+    docPageBreak,
+    docPageList,
+    docPart,
+    docPreface,
+    docPrologue,
+    docPullquote,
+    docQna,
+    docSubtitle,
+    docTip,
+    docToc,
+    // End DPub roles.
+    // --------------------------------------------------------------
     document,
     embeddedObject,
     feed,
@@ -109,31 +157,43 @@
     footer,
     form,
     genericContainer,
+    // --------------------------------------------------------------
+    // ARIA Graphics module roles:
+    // https://rawgit.com/w3c/graphics-aam/master/#mapping_role_table
+    graphicsDocument,
+    graphicsObject,
+    graphicsSymbol,
+    // End ARIA Graphics module roles.
+    // --------------------------------------------------------------
     grid,
     group,
     heading,
     iframe,
     iframePresentational,
     ignored,
-    imageMap,
     image,
+    imageMap,
     inlineTextBox,
     inputTime,
     labelText,
+    layoutTable,
+    layoutTableCell,
+    layoutTableColumn,
+    layoutTableRow,
     legend,
     lineBreak,
     link,
-    listBoxOption,
+    list,
     listBox,
+    listBoxOption,
     listItem,
     listMarker,
-    list,
-    locationBar,
     log,
     main,
     mark,
     marquee,
     math,
+    menu,
     menuBar,
     menuButton,
     menuItem,
@@ -141,7 +201,6 @@
     menuItemRadio,
     menuListOption,
     menuListPopup,
-    menu,
     meter,
     navigation,
     note,
@@ -155,26 +214,26 @@
     radioGroup,
     region,
     rootWebArea,
-    rowHeader,
     row,
+    rowHeader,
     ruby,
-    svgRoot,
     scrollBar,
+    scrollView,
     search,
     searchBox,
     slider,
     sliderThumb,
-    spinButtonPart,
     spinButton,
     splitter,
     staticText,
     status,
+    svgRoot,
     switch,
+    tab,
     tabList,
     tabPanel,
-    tab,
-    tableHeaderContainer,
     table,
+    tableHeaderContainer,
     term,
     textField,
     textFieldWithComboBox,
@@ -183,11 +242,11 @@
     titleBar,
     toggleButton,
     toolbar,
+    tooltip,
+    tree,
     treeGrid,
     treeItem,
-    tree,
     unknown,
-    tooltip,
     video,
     webArea,
     webView,
@@ -202,9 +261,9 @@
     expanded,
     focusable,
     focused,
-    haspopup,
     horizontal,
     hovered,
+    ignored,
     invisible,
     linked,
     multiline,
@@ -213,10 +272,37 @@
     protected,
     required,
     richlyEditable,
-    selectable,
-    selected,
     vertical,
     visited
+  };
+
+  // All possible actions that can be performed on automation nodes.
+  enum ActionType {
+    blur,
+    clearAccessibilityFocus,
+    customAction,
+    decrement,
+    doDefault,
+    focus,
+    getImageData,
+    hitTest,
+    increment,
+    loadInlineTextBoxes,
+    replaceSelectedText,
+    scrollBackward,
+    scrollDown,
+    scrollForward,
+    scrollLeft,
+    scrollRight,
+    scrollToMakeVisible,
+    scrollToPoint,
+    scrollUp,
+    setAccessibilityFocus,
+    setScrollOffset,
+    setSelection,
+    setSequentialFocusNavigationStartingPoint,
+    setValue,
+    showContextMenu
   };
 
   // Possible changes to the automation tree. For any given atomic change
@@ -253,7 +339,11 @@
     /**
      * This node was removed.
      */
-    nodeRemoved
+    nodeRemoved,
+    /**
+     * This subtree has finished an update.
+     */
+    subtreeUpdateEnd
   };
 
   // Where the node's name is from.
@@ -272,6 +362,29 @@
     disabled,
     readOnly
   };
+
+  // Indicates the availability and type of interactive popup element
+  enum HasPopup {
+    true,
+    menu,
+    listbox,
+    tree,
+    grid,
+    dialog
+  };
+
+  // Describes possible actions when performing a do default action.
+  enum DefaultActionVerb {
+    activate,
+    check,
+    click,
+    clickAncestor,
+    jump,
+    open,
+    press,
+    select,
+    uncheck
+};
 
   dictionary Rect {
     long left;
@@ -458,11 +571,50 @@
     // applicable
     AutomationNode? activeDescendant;
 
+    // Reverse relationship for active descendant.
+    AutomationNode[]? activeDescendantFor;
+
     // The target of an in-page link.
     AutomationNode? inPageLinkTarget;
 
+    // A node that provides more details about the current node.
+    AutomationNode? details;
+
+    // A node that provides an error message for a current node.
+    AutomationNode? errorMessage;
+
+    // Reverse relationship for details.
+    AutomationNode[]? detailsFor;
+
+    // Reverse relationship for errorMessage.
+    AutomationNode[]? errorMessageFor;
+
+    // Reverse relationship for controls.
+    AutomationNode[]? controlledBy;
+
+    // Reverse relationship for describedBy.
+    AutomationNode[]? descriptionFor;
+
+    // Reverse relationship for flowTo.
+    AutomationNode[]? flowFrom;
+
+    // Reverse relationship for labelledBy.
+    AutomationNode[]? labelFor;
+
+    // The column header nodes for a table cell.
+    AutomationNode[]? tableCellColumnHeaders;
+
+    // The row header nodes for a table cell.
+    AutomationNode[]? tableCellRowHeaders;
+
+    // An array of standard actions available on this node.
+    ActionType[]? standardActions;
+
     // An array of custom actions.
     CustomAction[]? customActions;
+
+    // The action taken by calling <code>doDefault</code>.
+    DefaultActionVerb? defaultActionVerb;
 
     //
     // Link attributes.
@@ -612,6 +764,12 @@
     // The corresponding row header for this cell.
     AutomationNode? tableRowHeader;
 
+    // The column index of this column node.
+    long? tableColumnIndex;
+
+    // The row index of this row node.
+    long? tableRowIndex;
+
     //
     // Live region attributes.
     //
@@ -651,6 +809,9 @@
     // The name of the programmatic backing object.
     DOMString? className;
 
+    // Marks this subtree as modal.
+    boolean? modal;
+
     // A map containing all HTML attributes and their values
     // <jsexterns>@type {Object<string>}</jsexterns>
     object? htmlAttributes;
@@ -673,8 +834,17 @@
     // The language code for this subtree.
     DOMString? language;
 
+    // Indicates the availability and type of interactive popup element
+    // true - the popup is a menu
+    // menu - the popup is a menu
+    // listbox - the popup is a listbox
+    // tree - the popup is a tree
+    // grid - the popup is a grid
+    // dialog - the popup is a dialog
+    DOMString? hasPopup;
+
     // Input restriction, if any, such as readonly or disabled:
-    // undefined - enabled control or other object that is not disabled 
+    // undefined - enabled control or other object that is not disabled
     // Restriction.DISABLED - disallows input in itself + any descendants
     // Restriction.READONLY - allow focus/selection but not input
     DOMString? restriction;
@@ -692,6 +862,12 @@
     // The RGBA color of an input element whose value is a color.
     long? colorValue;
 
+    // Indicates node text is subscript.
+    boolean subscript;
+
+    // Indicates node text is superscript.
+    boolean superscript;
+
     // Indicates node text is bold.
     boolean bold;
 
@@ -703,6 +879,9 @@
 
     // Indicates node text is line through.
     boolean lineThrough;
+
+    // Indicates whether this node is selected, unselected, or neither.
+    boolean? selected;
 
     //
     // Walking the tree.
@@ -761,12 +940,23 @@
     // Performs custom action.
     static void performCustomAction(long customActionId);
 
+    // Convenience method to perform a standard action supported by this node.
+    // For actions requiring additional arguments, call the specific binding
+    // e.g. <code>setSelection</code>.
+    static void performStandardAction(ActionType actionType);
+
+    // Replaces the selected text within a text field.
+    static void replaceSelectedText(DOMString value);
+
     // Sets selection within a text field.
     static void setSelection(long startIndex, long endIndex);
 
     // Clears focus and sets this node as the starting point for the next
     // time the user presses Tab or Shift+Tab.
     static void setSequentialFocusNavigationStartingPoint();
+
+    // Sets the value of a text field.
+    static void setValue(DOMString value);
 
     // Show the context menu for this element, as if the user right-clicked.
     static void showContextMenu();
@@ -835,6 +1025,9 @@
 
     // Returns whether this node matches the given $(ref:automation.FindParams).
     static boolean matches(FindParams params);
+
+    static AutomationNode getNextTextMatch(
+        DOMString searchStr, boolean backward);
   };
 
   // Called when the <code>AutomationNode</code> for the page is available.

@@ -5,9 +5,7 @@
 #include "chrome/browser/vr/speech_recognizer.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -19,11 +17,13 @@
 #include "content/public/browser/speech_recognition_manager.h"
 #include "content/public/browser/speech_recognition_session_config.h"
 #include "content/public/browser/speech_recognition_session_context.h"
-#include "content/public/common/speech_recognition_error.h"
-#include "content/public/common/speech_recognition_result.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/speech/speech_recognition_error.mojom.h"
+#include "third_party/blink/public/mojom/speech/speech_recognition_result.mojom.h"
 
 namespace vr {
 
@@ -43,6 +43,65 @@ enum FakeRecognitionEvent {
   INTERIM_RESULT,
   FINAL_RESULT,
   MULTIPLE_FINAL_RESULT,
+};
+
+// A SharedURLLoaderFactory that hangs.
+class FakeSharedURLLoaderFactory : public network::SharedURLLoaderFactory {
+ public:
+  FakeSharedURLLoaderFactory() {}
+
+  // network::mojom::URLLoaderFactory:
+
+  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+    test_url_loader_factory_.Clone(std::move(request));
+  }
+
+  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const network::ResourceRequest& request,
+                            network::mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
+    test_url_loader_factory_.CreateLoaderAndStart(
+        std::move(loader), routing_id, request_id, options, request,
+        std::move(client), traffic_annotation);
+  }
+
+  // network::SharedURLLoaderFactory:
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override {
+    NOTREACHED();
+    return nullptr;
+  }
+
+ private:
+  friend class base::RefCounted<FakeSharedURLLoaderFactory>;
+
+  ~FakeSharedURLLoaderFactory() override {}
+
+  network::TestURLLoaderFactory test_url_loader_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeSharedURLLoaderFactory);
+};
+
+// Returns a SharedURLLoaderFactory that hangs.
+class FakeSharedURLLoaderFactoryInfo
+    : public network::SharedURLLoaderFactoryInfo {
+ public:
+  FakeSharedURLLoaderFactoryInfo() {}
+  ~FakeSharedURLLoaderFactoryInfo() override {}
+
+ protected:
+  friend class network::SharedURLLoaderFactory;
+
+  // network::SharedURLLoaderFactoryInfo:
+  scoped_refptr<network::SharedURLLoaderFactory> CreateFactory() override {
+    return base::MakeRefCounted<FakeSharedURLLoaderFactory>();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(FakeSharedURLLoaderFactoryInfo);
 };
 
 class FakeSpeechRecognitionManager : public content::SpeechRecognitionManager {
@@ -66,9 +125,8 @@ class FakeSpeechRecognitionManager : public content::SpeechRecognitionManager {
     session_id_ = 0;
   }
 
-  void AbortAllSessionsForRenderProcess(int render_process_id) override {}
-  void AbortAllSessionsForRenderView(int render_process_id,
-                                     int render_view_id) override {}
+  void AbortAllSessionsForRenderFrame(int render_process_id,
+                                      int render_frame_id) override {}
   void StopAudioCaptureForSession(int session_id) override {}
 
   const content::SpeechRecognitionSessionConfig& GetSessionConfig(
@@ -83,12 +141,6 @@ class FakeSpeechRecognitionManager : public content::SpeechRecognitionManager {
     return session_ctx_;
   }
 
-  int GetSession(int render_process_id,
-                 int render_view_id,
-                 int request_id) const override {
-    return session_id_;
-  }
-
   void FakeSpeechRecognitionEvent(FakeRecognitionEvent event) {
     if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
       content::BrowserThread::PostTask(
@@ -99,8 +151,9 @@ class FakeSpeechRecognitionManager : public content::SpeechRecognitionManager {
       return;
     }
     DCHECK(GetActiveListener());
-    content::SpeechRecognitionError error(
-        content::SPEECH_RECOGNITION_ERROR_NETWORK);
+    blink::mojom::SpeechRecognitionError error(
+        blink::mojom::SpeechRecognitionErrorCode::kNetwork,
+        blink::mojom::SpeechAudioErrorDetails::kNone);
     switch (event) {
       case RECOGNITION_START:
         GetActiveListener()->OnRecognitionStart(kTestSessionId);
@@ -162,12 +215,13 @@ class FakeSpeechRecognitionManager : public content::SpeechRecognitionManager {
     listener->OnAudioStart(session_id_);
     listener->OnAudioEnd(session_id_);
 
-    content::SpeechRecognitionResult result;
-    result.hypotheses.push_back(
-        content::SpeechRecognitionHypothesis(base::ASCIIToUTF16(string), 1.0));
-    result.is_provisional = is_provisional;
-    content::SpeechRecognitionResults results;
-    results.push_back(result);
+    blink::mojom::SpeechRecognitionResultPtr result =
+        blink::mojom::SpeechRecognitionResult::New();
+    result->hypotheses.push_back(blink::mojom::SpeechRecognitionHypothesis::New(
+        base::ASCIIToUTF16(string), 1.0));
+    result->is_provisional = is_provisional;
+    std::vector<blink::mojom::SpeechRecognitionResultPtr> results;
+    results.push_back(std::move(result));
 
     listener->OnRecognitionResults(session_id_, results);
   }
@@ -201,8 +255,12 @@ class SpeechRecognizerTest : public testing::Test {
       : fake_speech_recognition_manager_(new FakeSpeechRecognitionManager()),
         ui_(new MockBrowserUiInterface),
         delegate_(new MockVoiceSearchDelegate),
-        speech_recognizer_(
-            new SpeechRecognizer(delegate_.get(), ui_.get(), nullptr, "en")) {
+        speech_recognizer_(new SpeechRecognizer(
+            delegate_.get(),
+            ui_.get(),
+            std::make_unique<FakeSharedURLLoaderFactoryInfo>(),
+            nullptr,
+            "en")) {
     SpeechRecognizer::SetManagerForTest(fake_speech_recognition_manager_.get());
   }
 
@@ -306,8 +364,8 @@ TEST_F(SpeechRecognizerTest, NoSoundTimeout) {
   speech_recognizer_->Start();
   base::RunLoop().RunUntilIdle();
 
-  auto mock_timer = std::make_unique<base::MockTimer>(false, false);
-  base::MockTimer* timer_ptr = mock_timer.get();
+  auto mock_timer = std::make_unique<base::MockOneShotTimer>();
+  base::MockOneShotTimer* timer_ptr = mock_timer.get();
   speech_recognizer_->SetSpeechTimerForTest(std::move(mock_timer));
 
   fake_speech_recognition_manager_->FakeSpeechRecognitionEvent(SOUND_START);

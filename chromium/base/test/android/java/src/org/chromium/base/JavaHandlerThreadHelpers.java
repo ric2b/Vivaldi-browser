@@ -5,39 +5,42 @@
 package org.chromium.base;
 
 import android.os.Handler;
+import android.os.Process;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.CalledByNativeUnchecked;
 import org.chromium.base.annotations.JNINamespace;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 @JNINamespace("base::android")
 class JavaHandlerThreadHelpers {
     private static class TestException extends Exception {}
 
-    private static boolean sTaskExecuted;
     // This is executed as part of base_unittests. This tests that JavaHandlerThread can be used
     // by itself without attaching to its native peer.
     @CalledByNative
     private static JavaHandlerThread testAndGetJavaHandlerThread() {
-        sTaskExecuted = false;
+        final AtomicBoolean taskExecuted = new AtomicBoolean();
         final Object lock = new Object();
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
                 synchronized (lock) {
-                    sTaskExecuted = true;
+                    taskExecuted.set(true);
                     lock.notifyAll();
                 }
             }
         };
 
-        JavaHandlerThread thread = new JavaHandlerThread("base_unittests_java");
+        JavaHandlerThread thread =
+                new JavaHandlerThread("base_unittests_java", Process.THREAD_PRIORITY_DEFAULT);
         thread.maybeStart();
 
         Handler handler = new Handler(thread.getLooper());
         handler.post(runnable);
         synchronized (lock) {
-            while (!sTaskExecuted) {
+            while (!taskExecuted.get()) {
                 try {
                     lock.wait();
                 } catch (InterruptedException e) {

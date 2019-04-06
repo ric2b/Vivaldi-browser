@@ -61,13 +61,14 @@ void AutocompleteHistoryManager::OnGetAutocompleteSuggestions(
 
   query_id_ = query_id;
   if (!autofill_client_->IsAutocompleteEnabled() ||
+      !autofill_client_->IsAutofillSupported() ||
       form_control_type == "textarea" ||
       IsInAutofillSuggestionsDisabledExperiment()) {
     SendSuggestions(nullptr);
     return;
   }
 
-  if (database_.get()) {
+  if (database_) {
     pending_query_handle_ = database_->GetFormValuesForElementName(
         name, prefix, kMaxAutocompleteMenuItems, this);
   }
@@ -89,14 +90,14 @@ void AutocompleteHistoryManager::OnWillSubmitForm(const FormData& form) {
   //  - value is not a SSN
   //  - field was not identified as a CVC field (this is handled in
   //    AutofillManager)
+  //  - field is focusable
+  //  - not a presentation field
   std::vector<FormFieldData> values;
   for (const FormFieldData& field : form.fields) {
-    if (!field.value.empty() &&
-        !field.name.empty() &&
-        IsTextField(field) &&
-        field.should_autocomplete &&
-        !IsValidCreditCardNumber(field.value) &&
-        !IsSSN(field.value)) {
+    if (!field.value.empty() && !field.name.empty() && IsTextField(field) &&
+        field.should_autocomplete && !IsValidCreditCardNumber(field.value) &&
+        !IsSSN(field.value) && field.is_focusable &&
+        field.role != FormFieldData::ROLE_ATTRIBUTE_PRESENTATION) {
       values.push_back(field);
     }
   }
@@ -107,7 +108,7 @@ void AutocompleteHistoryManager::OnWillSubmitForm(const FormData& form) {
 
 void AutocompleteHistoryManager::OnRemoveAutocompleteEntry(
     const base::string16& name, const base::string16& value) {
-  if (database_.get())
+  if (database_)
     database_->RemoveFormValueForElementName(name, value);
 }
 
@@ -118,7 +119,7 @@ void AutocompleteHistoryManager::SetExternalDelegate(
 
 void AutocompleteHistoryManager::CancelPendingQuery() {
   if (pending_query_handle_) {
-    if (database_.get())
+    if (database_)
       database_->CancelRequest(pending_query_handle_);
     pending_query_handle_ = 0;
   }
@@ -133,7 +134,7 @@ void AutocompleteHistoryManager::SendSuggestions(
     }
   }
 
-  external_delegate_->OnSuggestionsReturned(query_id_, suggestions);
+  external_delegate_->OnSuggestionsReturned(query_id_, suggestions, false);
   query_id_ = 0;
 }
 

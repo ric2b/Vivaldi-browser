@@ -32,10 +32,11 @@ source_set("favicon") {
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/history",
+    "//ios/chrome/browser/ui:ui_util",
+    "//ios/chrome/common/favicon",
     "//ios/web",
     "//skia",
     "//ui/base",
-    "//ui/gfx",
     "//url",
   ]
 }

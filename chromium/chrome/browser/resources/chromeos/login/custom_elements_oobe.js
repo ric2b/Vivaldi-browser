@@ -9,6 +9,7 @@
 // <{controller,host}-paring-screen> depend of it.
 // <include src="oobe-screen.js">
 
+// <include src="oobe_dialog_host_behavior.js">
 // <include src="controller-pairing-screen.js">
 // <include src="gaia_buttons.js">
 // <include src="gaia_card.js">
@@ -19,6 +20,7 @@
 // <include src="hd-iron-icon.js">
 // <include src="host-pairing-screen.js">
 // <include src="html-echo.js">
+// <include src="network_select_login.js">
 // <include src="notification_card.js">
 // <include src="offline_gaia.js">
 // <include src="saml_confirm_password.js">
@@ -37,10 +39,18 @@
 // <include src="oobe_i18n_dropdown.js">
 // <include src="oobe_welcome_dialog.js">
 // <include src="oobe_welcome.js">
+// <include src="oobe_network_dialog.js">
 // <include src="offline_ad_login.js">
 // <include src="active_directory_password_change.js">
 // <include src="arc_terms_of_service.js">
 // <include src="oobe_voice_interaction_value_prop.js">
 // <include src="oobe_wait_for_container_ready.js">
+// <include src="enterprise_card.js">
+// <include src="enterprise_header.js">
 // <include src="enrollment_license_card.js">
 // <include src="sync_consent.js">
+// <include src="demo_setup.js">
+// <include src="demo_preferences.js">
+// <include src="recommend_apps.js">
+// <include src="app_downloading.js">
+// <include src="discover/discover_components.js">

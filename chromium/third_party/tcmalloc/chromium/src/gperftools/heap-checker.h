@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -33,7 +34,7 @@
 //
 // Module for detecing heap (memory) leaks.
 //
-// For full(er) information, see doc/heap_checker.html
+// For full(er) information, see docs/heap_checker.html
 //
 // This module can be linked into programs with
 // no slowdown caused by this unless you activate the leak-checker:
@@ -239,9 +240,6 @@ class PERFTOOLS_DLL_DECL HeapLeakChecker {
   friend void NamedTwoDisabledLeaks();
   friend void* RunNamedDisabledLeaks(void*);
   friend void TestHeapLeakCheckerNamedDisabling();
-  // TODO(csilvers): remove this one, at least
-  friend int main(int, char**);
-
 
   // Actually implements IgnoreObject().
   static void DoIgnoreObject(const void* ptr);
@@ -256,15 +254,15 @@ class PERFTOOLS_DLL_DECL HeapLeakChecker {
   // Helper for DoNoLeaks to ignore all objects reachable from all live data
   static void IgnoreAllLiveObjectsLocked(const void* self_stack_top);
 
-  // Callback we pass to ListAllProcessThreads (see thread_lister.h)
+  // Callback we pass to TCMalloc_ListAllProcessThreads (see thread_lister.h)
   // that is invoked when all threads of our process are found and stopped.
   // The call back does the things needed to ignore live data reachable from
   // thread stacks and registers for all our threads
   // as well as do other global-live-data ignoring
   // (via IgnoreNonThreadLiveObjectsLocked)
   // during the quiet state of all threads being stopped.
-  // For the argument meaning see the comment by ListAllProcessThreads.
-  // Here we only use num_threads and thread_pids, that ListAllProcessThreads
+  // For the argument meaning see the comment by TCMalloc_ListAllProcessThreads.
+  // Here we only use num_threads and thread_pids, that TCMalloc_ListAllProcessThreads
   // fills for us with the number and pids of all the threads of our process
   // it found and attached to.
   static int IgnoreLiveThreadsLocked(void* parameter,

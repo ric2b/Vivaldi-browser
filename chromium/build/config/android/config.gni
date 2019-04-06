@@ -4,9 +4,29 @@
 
 # This file contains common system config stuff for the Android build.
 
-if (is_android) {
+# NOTE: Because Chrome OS builds may depend on targets built with the Android
+# toolchain, this GNI file may be read and processed from within Chrome OS
+# toolchains. Checking |is_android| here would therefore be too restrictive.
+if (is_android || is_chromeos) {
   import("//build_overrides/build.gni")
   import("abi.gni")
+
+  if (build_with_chromium) {
+    # Some non-chromium projects (e.g. WebRTC) use our build configs
+    # heavily but don't write gclient args files.
+
+    import("//build/config/gclient_args.gni")
+    if (defined(checkout_android_native_support)) {
+      n = "$0x0A"  # Newline
+      assert(checkout_android_native_support,
+             "Missing native Android toolchain support. |target_os| in your " +
+                 ".gclient configuration file (in the parent directory of " +
+                 "src) must include \"android\" and/or \"chromeos\". For " +
+                 "example:${n}${n}solutions = [${n}...${n}]${n}" +
+                 "target_os=[\"chromeos\"]${n}${n}" +
+                 "After adding |target_os| please re-run \"gclient sync\".${n}")
+    }
+  }
 
   has_chrome_android_internal =
       exec_script("//build/dir_exists.py",
@@ -39,16 +59,6 @@ if (is_android) {
       # Android SDK release. Currently, only "o_mr1" is publicly supported.
       android_sdk_release = default_android_sdk_release
     }
-
-    # This is the result of profiling Chromium. Blindly applying it to arbitrary
-    # downstream projects and hoping it'll grant a speedup seems fragile. (Not
-    # to mention that it resides in a Chromium-specific directory.)
-    if (build_with_chromium) {
-      # The default AFDO profile used by public builds. Value may differ in
-      # internal builds.
-      clang_default_afdo_profile =
-          rebase_path("//chrome/android/profiles/chrome-profile-3309-text.prof")
-    }
   }
 
   if (!defined(extra_chrome_shared_library_configs)) {
@@ -69,8 +79,16 @@ if (is_android) {
 
   if (android_sdk_release == "o_mr1") {
     default_android_sdk_root = "//third_party/android_tools/sdk"
-    default_android_sdk_version = "27"
-    default_android_sdk_build_tools_version = "27.0.1"
+    default_android_sdk_version = 27
+    default_android_sdk_build_tools_version = "27.0.3"
+    default_android_sdk_tools_version_suffix = "-26.0.0-dev"
+    public_android_sdk = true
+  }
+
+  if (android_sdk_release == "p") {
+    default_android_sdk_root = "//third_party/android_tools/sdk"
+    default_android_sdk_version = 28
+    default_android_sdk_build_tools_version = "27.0.3"
     default_android_sdk_tools_version_suffix = "-26.0.0-dev"
     public_android_sdk = true
   }
@@ -79,7 +97,7 @@ if (is_android) {
     # Purposefully repeated so that downstream can change
     # default_android_sdk_root without changing lint version.
     default_lint_android_sdk_root = "//third_party/android_tools/sdk"
-    default_lint_android_sdk_version = "26"
+    default_lint_android_sdk_version = 26
   }
 
   if (!defined(default_extras_android_sdk_root)) {
@@ -109,10 +127,10 @@ if (is_android) {
     system_webview_apk_target = "//android_webview:system_webview_apk"
   }
 
-  webview_public_framework_jar =
-      "//third_party/android_system_sdk/android_system.jar"
-  if (!defined(webview_framework_jar)) {
-    webview_framework_jar = webview_public_framework_jar
+  webview_public_framework_dep =
+      "//third_party/android_system_sdk:public_framework_system_java"
+  if (!defined(webview_framework_dep)) {
+    webview_framework_dep = webview_public_framework_dep
   }
 
   assert(defined(default_android_sdk_root),
@@ -190,6 +208,14 @@ if (is_android) {
     # When true, updates all android_aar_prebuilt() .info files during gn gen.
     # Refer to android_aar_prebuilt() for more details.
     update_android_aar_prebuilts = false
+
+    # When true, uses the third party libraries from //third_party/android_deps
+    # over the ones in other places. (instead of the support library from
+    # android_tools for example)
+    enable_android_deps_repository = true
+
+    # Turns off android lint. Useful for prototyping or for faster local builds.
+    disable_android_lint = false
   }
 
   # We need a second declare_args block to make sure we are using the overridden
@@ -244,18 +270,12 @@ if (is_android) {
 
   android_sdk =
       "${android_sdk_root}/platforms/android-${android_sdk_platform_version}"
-
-  # Path to the Android NDK and SDK.
-  android_ndk_include_dir = "$android_ndk_root/usr/include"
-
   android_sdk_tools = "${android_sdk_root}/tools"
   android_sdk_build_tools =
       "${android_sdk_root}/build-tools/$android_sdk_build_tools_version"
 
   # Path to the SDK's android.jar
   android_sdk_jar = "$android_sdk/android.jar"
-
-  zipalign_path = "$android_sdk_build_tools/zipalign"
 
   # Subdirectories inside android_ndk_root that contain the sysroot for the
   # associated platform.
@@ -332,6 +352,13 @@ if (is_android) {
 
   if (android_libcpp_lib_dir == "") {
     android_libcpp_lib_dir = "${android_libcpp_root}/libs/${android_app_abi}"
+  }
+
+  declare_args() {
+    # Location of aapt2 binary used for app bundles. For now, a more recent version
+    # than the one distributed with the Android SDK is required.
+    android_sdk_tools_bundle_aapt2 =
+        "//third_party/android_build_tools/aapt2/aapt2"
   }
 }
 

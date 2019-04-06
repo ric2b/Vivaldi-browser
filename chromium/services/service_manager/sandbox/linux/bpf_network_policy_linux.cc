@@ -10,7 +10,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
 #include "sandbox/linux/seccomp-bpf-helpers/syscall_parameters_restrictions.h"
@@ -73,6 +72,12 @@ ResultExpr NetworkProcessPolicy::EvaluateSyscall(int sysno) const {
 #endif
 #if defined(__NR_stat64)
     case __NR_stat64:
+#endif
+#if defined(__NR_lstat)
+    case __NR_lstat:
+#endif
+#if defined(__NR_lstat64)
+    case __NR_lstat64:
 #endif
 #if defined(__NR_fstatat)
     case __NR_fstatat:

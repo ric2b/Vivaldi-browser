@@ -77,6 +77,7 @@ class DebuggerSendCommandFunction : public DebuggerFunction {
 
   DebuggerSendCommandFunction();
   void SendResponseBody(base::DictionaryValue* result);
+  void SendDetachedError();
 
  protected:
   ~DebuggerSendCommandFunction() override;
@@ -88,7 +89,7 @@ class DebuggerSendCommandFunction : public DebuggerFunction {
 // Implements the debugger.getTargets() extension function.
 class DebuggerGetTargetsFunction : public DebuggerFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("debugger.getTargets", DEBUGGER_ATTACH)
+  DECLARE_EXTENSION_FUNCTION("debugger.getTargets", DEBUGGER_GETTARGETS)
 
   DebuggerGetTargetsFunction();
 

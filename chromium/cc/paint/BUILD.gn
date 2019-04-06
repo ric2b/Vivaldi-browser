@@ -8,6 +8,8 @@ import("//testing/libfuzzer/fuzzer_test.gni")
 cc_component("paint") {
   output_name = "cc_paint"
   sources = [
+    "color_space_transfer_cache_entry.cc",
+    "color_space_transfer_cache_entry.h",
     "decode_stashing_image_provider.cc",
     "decode_stashing_image_provider.h",
     "decoded_draw_image.cc",
@@ -22,6 +24,7 @@ cc_component("paint") {
     "filter_operation.h",
     "filter_operations.cc",
     "filter_operations.h",
+    "image_analysis_state.h",
     "image_animation_count.h",
     "image_id.h",
     "image_provider.cc",
@@ -64,6 +67,8 @@ cc_component("paint") {
     "paint_typeface.h",
     "paint_typeface_transfer_cache_entry.cc",
     "paint_typeface_transfer_cache_entry.h",
+    "path_transfer_cache_entry.cc",
+    "path_transfer_cache_entry.h",
     "raw_memory_transfer_cache_entry.cc",
     "raw_memory_transfer_cache_entry.h",
     "record_paint_canvas.cc",
@@ -72,6 +77,8 @@ cc_component("paint") {
     "render_surface_filters.h",
     "scoped_raster_flags.cc",
     "scoped_raster_flags.h",
+    "shader_transfer_cache_entry.cc",
+    "shader_transfer_cache_entry.h",
     "skia_paint_canvas.cc",
     "skia_paint_canvas.h",
     "skia_paint_image_generator.cc",
@@ -102,6 +109,7 @@ cc_component("paint") {
   deps = [
     "//base",
     "//ui/gfx/animation",
+    "//ui/gfx/ipc/color",
   ]
 }
 
@@ -115,6 +123,8 @@ fuzzer_test("paint_op_buffer_fuzzer") {
   deps = [
     "//cc:test_support",
     "//cc/paint",
+    "//components/viz/test:test_support",
+    "//gpu/command_buffer/service:gles2",
   ]
 }
 
@@ -128,5 +138,19 @@ fuzzer_test("paint_op_buffer_eq_fuzzer") {
   deps = [
     "//cc:test_support",
     "//cc/paint",
+  ]
+}
+
+fuzzer_test("transfer_cache_fuzzer") {
+  sources = [
+    "transfer_cache_fuzzer.cc",
+  ]
+
+  libfuzzer_options = [ "max_len=4096" ]
+
+  deps = [
+    "//cc:test_support",
+    "//cc/paint",
+    "//components/viz/test:test_support",
   ]
 }

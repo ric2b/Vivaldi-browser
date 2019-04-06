@@ -49,7 +49,7 @@ void TestWindowManagerDelegate::OnWmClientJankinessChanged(
 
 void TestWindowManagerDelegate::OnWmBuildDragImage(
     const gfx::Point& screen_location,
-    const SkBitmap& drag_image,
+    const gfx::ImageSkia& drag_image,
     const gfx::Vector2d& drag_image_offset,
     ui::mojom::PointerKind source) {}
 
@@ -78,7 +78,7 @@ void TestWindowManagerDelegate::OnWmDisplayModified(
 ui::mojom::EventResult TestWindowManagerDelegate::OnAccelerator(
     uint32_t accelerator_id,
     const ui::Event& event,
-    std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
+    base::flat_map<std::string, std::vector<uint8_t>>* properties) {
   return ui::mojom::EventResult::UNHANDLED;
 }
 

@@ -13,27 +13,28 @@ if (is_chromeos) {
     sources = [
       "accessibility_helper.mojom",
       "app.mojom",
+      "appfuse.mojom",
       "arc_bridge.mojom",
       "audio.mojom",
       "auth.mojom",
       "backup_settings.mojom",
-      "bitmap.mojom",
       "bluetooth.mojom",
       "boot_phase_monitor.mojom",
       "cast_receiver.mojom",
       "cert_store.mojom",
       "clipboard.mojom",
       "crash_collector.mojom",
+      "disk_quota.mojom",
       "enterprise_reporting.mojom",
       "file_system.mojom",
       "ime.mojom",
+      "input_method_manager.mojom",
       "intent_helper.mojom",
       "kiosk.mojom",
       "lock_screen.mojom",
       "metrics.mojom",
       "midis.mojom",
       "net.mojom",
-      "notifications.mojom",
       "obb_mounter.mojom",
       "oemcrypto.mojom",
       "oemcrypto_daemon.mojom",
@@ -43,20 +44,36 @@ if (is_chromeos) {
       "process.mojom",
       "rotation_lock.mojom",
       "scale_factor.mojom",
+      "screen_capture.mojom",
       "storage_manager.mojom",
+      "timer.mojom",
       "tracing.mojom",
       "tts.mojom",
       "usb_host.mojom",
       "voice_interaction_arc_home.mojom",
       "voice_interaction_framework.mojom",
       "volume_mounter.mojom",
+      "wake_lock.mojom",
       "wallpaper.mojom",
     ]
 
     public_deps = [
       ":media",
-      "//mojo/common:common_custom_types",
+      ":notifications",
+      "//device/usb/public/mojom",
+      "//mojo/public/mojom/base",
       "//ui/gfx/geometry/mojo",
+    ]
+  }
+
+  mojom("notifications") {
+    sources = [
+      "bitmap.mojom",
+      "notifications.mojom",
+    ]
+
+    deps = [
+      ":media",  # for gfx.mojom
     ]
   }
 }
@@ -72,10 +89,10 @@ mojom("media") {
     "video_common.mojom",
     "video_decode_accelerator.mojom",
     "video_encode_accelerator.mojom",
+    "video_protected_buffer_allocator.mojom",
   ]
 
   public_deps = [
-    "//mojo/common:common_custom_types",
     "//ui/gfx/geometry/mojo",
   ]
 }

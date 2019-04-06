@@ -63,6 +63,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 using content::BrowserThread;
 
@@ -104,8 +105,8 @@ BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
       install_attributes_ = std::make_unique<chromeos::InstallAttributes>(
           chromeos::DBusThreadManager::Get()->GetCryptohomeClient());
       base::FilePath install_attrs_file;
-      CHECK(PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES,
-                             &install_attrs_file));
+      CHECK(base::PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES,
+                                   &install_attrs_file));
       install_attributes_->Init(install_attrs_file);
     }
 
@@ -120,9 +121,8 @@ BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
           ->StartAuthPolicyService();
 
       device_active_directory_policy_manager_ =
-          ActiveDirectoryPolicyManager::CreateForDevicePolicy(
-              std::move(device_cloud_policy_store))
-              .release();
+          new DeviceActiveDirectoryPolicyManager(
+              std::move(device_cloud_policy_store));
       providers_for_init_.push_back(
           base::WrapUnique<ConfigurationPolicyProvider>(
               device_active_directory_policy_manager_));
@@ -148,9 +148,11 @@ BrowserPolicyConnectorChromeOS::~BrowserPolicyConnectorChromeOS() {}
 
 void BrowserPolicyConnectorChromeOS::Init(
     PrefService* local_state,
-    scoped_refptr<net::URLRequestContextGetter> request_context) {
+    scoped_refptr<net::URLRequestContextGetter> request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   local_state_ = local_state;
-  ChromeBrowserPolicyConnector::Init(local_state, request_context);
+  ChromeBrowserPolicyConnector::Init(local_state, request_context,
+                                     url_loader_factory);
 
   affiliated_invalidation_service_provider_ =
       std::make_unique<AffiliatedInvalidationServiceProviderImpl>();
@@ -178,7 +180,7 @@ void BrowserPolicyConnectorChromeOS::Init(
             GetBackgroundTaskRunner(),
             content::BrowserThread::GetTaskRunnerForThread(
                 content::BrowserThread::IO),
-            request_context);
+            request_context, url_loader_factory);
     device_local_account_policy_service_->Connect(device_management_service());
   }
 
@@ -202,7 +204,8 @@ void BrowserPolicyConnectorChromeOS::Init(
           chromeos::NetworkHandler::Get()
               ->managed_network_configuration_handler(),
           chromeos::NetworkHandler::Get()->network_device_handler(),
-          chromeos::CrosSettings::Get());
+          chromeos::CrosSettings::Get(),
+          DeviceNetworkConfigurationUpdater::DeviceAssetIDFetcher());
 
   bluetooth_policy_handler_ =
       std::make_unique<BluetoothPolicyHandler>(chromeos::CrosSettings::Get());
@@ -283,6 +286,16 @@ std::string BrowserPolicyConnectorChromeOS::GetDeviceAssetID() const {
   return std::string();
 }
 
+std::string BrowserPolicyConnectorChromeOS::GetDeviceAnnotatedLocation() const {
+  if (device_cloud_policy_manager_) {
+    const enterprise_management::PolicyData* policy =
+        device_cloud_policy_manager_->device_store()->policy();
+    if (policy && policy->has_annotated_location())
+      return policy->annotated_location();
+  }
+  return std::string();
+}
+
 std::string BrowserPolicyConnectorChromeOS::GetDirectoryApiID() const {
   if (device_cloud_policy_manager_) {
     const enterprise_management::PolicyData* policy =
@@ -355,11 +368,13 @@ void BrowserPolicyConnectorChromeOS::OnDeviceCloudPolicyManagerDisconnected() {
   RestartDeviceCloudPolicyInitializer();
 }
 
-void BrowserPolicyConnectorChromeOS::BuildPolicyProviders(
-    std::vector<std::unique_ptr<ConfigurationPolicyProvider>>* providers) {
+std::vector<std::unique_ptr<policy::ConfigurationPolicyProvider>>
+BrowserPolicyConnectorChromeOS::CreatePolicyProviders() {
+  auto providers = ChromeBrowserPolicyConnector::CreatePolicyProviders();
   for (auto& provider_ptr : providers_for_init_)
-    providers->push_back(std::move(provider_ptr));
+    providers.push_back(std::move(provider_ptr));
   providers_for_init_.clear();
+  return providers;
 }
 
 void BrowserPolicyConnectorChromeOS::SetTimezoneIfPolicyAvailable() {

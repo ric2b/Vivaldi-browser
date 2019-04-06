@@ -11,6 +11,10 @@
 // know anything about the actual tab implementation or model, as that is fairly
 // application-specific. It only provides an API to be overridden by subclasses
 // to fill in the details.
+// Note that under the hood the TabWindowController is neither an
+// NSWindowController nor its window's delegate, though it receives all
+// NSWindowDelegate methods as if it were. It also resides in the responder
+// chain.
 
 #import <Cocoa/Cocoa.h>
 
@@ -21,9 +25,9 @@
 @class FocusTracker;
 @class NSVisualEffectView;
 @class TabStripView;
-@class TabView;
+@class TabViewCocoa;
 
-@interface TabWindowController : NSWindowController<NSWindowDelegate> {
+@interface TabWindowController : NSResponder<NSWindowDelegate> {
  @private
   // Wrapper view around web content, and the developer tools view.
   base::scoped_nsobject<FastResizeView> tabContentArea_;
@@ -54,12 +58,25 @@
   BOOL closeDeferred_;  // If YES, call performClose: in removeOverlay:.
 }
 
+// Returns the NSWindowController that manages the TabWindowController's
+// NSWindow. In the past the TabWindowController was also the window's
+// NSWindowController but they are now separate objects. Use
+// +tabWindowControllerForWindow: to retrieve a TabWindowController from a
+// given NSWindow.
+@property(readonly, nonatomic)
+    NSWindowController<NSWindowDelegate>* nsWindowController;
+@property(retain, nonatomic) NSWindow* window;
 @property(readonly, nonatomic) API_AVAILABLE(macos(10.10))
     NSVisualEffectView* visualEffectView;
 @property(readonly, nonatomic) NSView* tabStripBackgroundView;
 @property(readonly, nonatomic) TabStripView* tabStripView;
 @property(readonly, nonatomic) FastResizeView* tabContentArea;
 @property(readonly, nonatomic) NSView* chromeContentView;
+
+// A convenience class method which returns the |TabWindowController| for
+// |window|, or nil if neither |window| nor its parent or any other ancestor
+// has one.
++ (TabWindowController*)tabWindowControllerForWindow:(NSWindow*)window;
 
 // This is the designated initializer for this class.
 - (id)initTabWindowControllerWithTabStrip:(BOOL)hasTabStrip
@@ -91,7 +108,7 @@
 // Make room in the tab strip for |tab| at the given x coordinate. Will hide the
 // new tab button while there's a placeholder. Subclasses need to call the
 // superclass implementation.
-- (void)insertPlaceholderForTab:(TabView*)tab frame:(NSRect)frame;
+- (void)insertPlaceholderForTab:(TabViewCocoa*)tab frame:(NSRect)frame;
 
 // Removes the placeholder installed by |-insertPlaceholderForTab:atLocation:|
 // and restores the new tab button. Subclasses need to call the superclass
@@ -117,7 +134,7 @@
 // its current position would cause it be obscured by things such as the edge
 // of the window or the window decorations. Returns YES only if the entire tab
 // is visible. The default implementation always returns YES.
-- (BOOL)isTabFullyVisible:(TabView*)tab;
+- (BOOL)isTabFullyVisible:(TabViewCocoa*)tab;
 
 // Called to check if the receiver can receive dragged tabs from
 // source.  Return YES if so.  The default implementation returns NO.

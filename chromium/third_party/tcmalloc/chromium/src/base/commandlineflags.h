@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -54,18 +55,14 @@
 #include <stdlib.h>               // for getenv
 #include "base/basictypes.h"
 
-#if defined(__ANDROID__) || defined(ANDROID)
-#include <sys/system_properties.h>
-#endif
-
 #define DECLARE_VARIABLE(type, name)                                          \
-  namespace FLAG__namespace_do_not_use_directly_use_DECLARE_##type##_instead {\
+  namespace FLAG__namespace_do_not_use_directly_use_DECLARE_##type##_instead {  \
   extern PERFTOOLS_DLL_DECL type FLAGS_##name;                                \
   }                                                                           \
   using FLAG__namespace_do_not_use_directly_use_DECLARE_##type##_instead::FLAGS_##name
 
 #define DEFINE_VARIABLE(type, name, value, meaning) \
-  namespace FLAG__namespace_do_not_use_directly_use_DECLARE_##type##_instead {\
+  namespace FLAG__namespace_do_not_use_directly_use_DECLARE_##type##_instead {  \
   PERFTOOLS_DLL_DECL type FLAGS_##name(value);                                \
   char FLAGS_no##name;                                                        \
   }                                                                           \
@@ -100,93 +97,79 @@
 #define DEFINE_double(name, value, meaning) \
   DEFINE_VARIABLE(double, name, value, meaning)
 
-// Special case for string, because of the pointer type.
+// Special case for string, because we have to specify the namespace
+// std::string, which doesn't play nicely with our FLAG__namespace hackery.
 #define DECLARE_string(name)                                          \
   namespace FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead {  \
-  extern const char* FLAGS_##name;                                            \
+  extern std::string FLAGS_##name;                                                   \
   }                                                                           \
   using FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead::FLAGS_##name
 #define DEFINE_string(name, value, meaning) \
   namespace FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead {  \
-  const char* FLAGS_##name = value;                                           \
+  std::string FLAGS_##name(value);                                                   \
   char FLAGS_no##name;                                                        \
   }                                                                           \
   using FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead::FLAGS_##name
 
+// implemented in sysinfo.cc
+namespace tcmalloc {
+  namespace commandlineflags {
+
+    inline bool StringToBool(const char *value, bool def) {
+      if (!value) {
+        return def;
+      }
+      switch (value[0]) {
+      case 't':
+      case 'T':
+      case 'y':
+      case 'Y':
+      case '1':
+      case '\0':
+        return true;
+      }
+      return false;
+    }
+
+    inline int StringToInt(const char *value, int def) {
+      if (!value) {
+        return def;
+      }
+      return strtol(value, NULL, 10);
+    }
+
+    inline long long StringToLongLong(const char *value, long long def) {
+      if (!value) {
+        return def;
+      }
+      return strtoll(value, NULL, 10);
+    }
+
+    inline double StringToDouble(const char *value, double def) {
+      if (!value) {
+        return def;
+      }
+      return strtod(value, NULL);
+    }
+  }
+}
+
 // These macros (could be functions, but I don't want to bother with a .cc
 // file), make it easier to initialize flags from the environment.
-// They are functions in Android because __system_property_get() doesn't
-// return a string.
-
-#if defined(ENABLE_PROFILING)
-
-#if defined(__ANDROID__) || defined(ANDROID)
-
-// Returns a pointer to a static variable.  The string pointed by the returned
-// pointer must not be modified.
-inline const char* const EnvToString(const char* envname, const char* dflt) {
-  static char system_property_value[PROP_VALUE_MAX];
-  if (__system_property_get(envname, system_property_value) > 0)
-    return system_property_value;
-  return dflt;
-}
-
-inline bool EnvToBool(const char* envname, bool dflt) {
-  static const char kTrueValues[] = "tTyY1";
-  char system_property_value[PROP_VALUE_MAX];
-  if (__system_property_get(envname, system_property_value) > 0)
-    return memchr(kTrueValues, system_property_value[0], sizeof(kTrueValues));
-  return dflt;
-}
-
-inline int EnvToInt(const char* envname, int dflt) {
-  char system_property_value[PROP_VALUE_MAX];
-  if (__system_property_get(envname, system_property_value) > 0)
-    return strtol(system_property_value, NULL, 10);
-  return dflt;
-}
-
-inline int64 EnvToInt64(const char* envname, int64 dflt) {
-  char system_property_value[PROP_VALUE_MAX];
-  if (__system_property_get(envname, system_property_value) > 0)
-    return strtoll(system_property_value, NULL, 10);
-  return dflt;
-}
-
-inline double EnvToDouble(const char* envname, double dflt) {
-  char system_property_value[PROP_VALUE_MAX];
-  if (__system_property_get(envname, system_property_value) > 0)
-    return strtod(system_property_value, NULL);
-  return dflt;
-}
-
-#else  // defined(__ANDROID__) || defined(ANDROID)
 
 #define EnvToString(envname, dflt)   \
   (!getenv(envname) ? (dflt) : getenv(envname))
 
 #define EnvToBool(envname, dflt)   \
-  (!getenv(envname) ? (dflt) : memchr("tTyY1\0", getenv(envname)[0], 6) != NULL)
+  tcmalloc::commandlineflags::StringToBool(getenv(envname), dflt)
 
 #define EnvToInt(envname, dflt)  \
-  (!getenv(envname) ? (dflt) : strtol(getenv(envname), NULL, 10))
+  tcmalloc::commandlineflags::StringToInt(getenv(envname), dflt)
 
 #define EnvToInt64(envname, dflt)  \
-  (!getenv(envname) ? (dflt) : strtoll(getenv(envname), NULL, 10))
+  tcmalloc::commandlineflags::StringToLongLong(getenv(envname), dflt)
 
 #define EnvToDouble(envname, dflt)  \
-  (!getenv(envname) ? (dflt) : strtod(getenv(envname), NULL))
-
-#endif  // defined(__ANDROID__) || defined(ANDROID)
-
-#else  // defined(ENABLE_PROFILING)
-
-#define EnvToString(envname, dflt) (dflt)
-#define EnvToBool(envname, dflt) (dflt)
-#define EnvToInt(envname, dflt) (dflt)
-#define EnvToInt64(envname, dflt) (dflt)
-#define EnvToDouble(envname, dflt) (dflt)
-
-#endif  // defined(ENABLE_PROFILING)
+  tcmalloc::commandlineflags::StringToDouble(getenv(envname), dflt)
 
 #endif  // BASE_COMMANDLINEFLAGS_H_

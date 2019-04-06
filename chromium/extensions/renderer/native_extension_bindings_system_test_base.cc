@@ -77,7 +77,7 @@ ScriptContext* NativeExtensionBindingsSystemUnittest::CreateScriptContext(
     Feature::Context context_type) {
   auto script_context = std::make_unique<ScriptContext>(
       v8_context, nullptr, extension, context_type, extension, context_type);
-  script_context->set_module_system(
+  script_context->SetModuleSystem(
       std::make_unique<ModuleSystem>(script_context.get(), source_map()));
   ScriptContext* raw_script_context = script_context.get();
   raw_script_contexts_.push_back(raw_script_context);
@@ -93,7 +93,10 @@ void NativeExtensionBindingsSystemUnittest::OnWillDisposeContext(
                    [context](ScriptContext* script_context) {
                      return script_context->v8_context() == context;
                    });
-  ASSERT_TRUE(iter != raw_script_contexts_.end());
+  if (iter == raw_script_contexts_.end()) {
+    ASSERT_TRUE(allow_unregistered_contexts_);
+    return;
+  }
   bindings_system_->WillReleaseScriptContext(*iter);
   script_context_set_->Remove(*iter);
   raw_script_contexts_.erase(iter);

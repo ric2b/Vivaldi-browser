@@ -140,6 +140,7 @@ const FieldTranslationEntry wifi_fields[] = {
     // { ::onc::wifi::kEAP, shill::kEap*},
     {::onc::wifi::kFrequency, shill::kWifiFrequency},
     {::onc::wifi::kFrequencyList, shill::kWifiFrequencyListProperty},
+    {::onc::wifi::kFTEnabled, shill::kWifiFTEnabled},
     {::onc::wifi::kHexSSID, shill::kWifiHexSsid},
     {::onc::wifi::kHiddenSSID, shill::kWifiHiddenSsid},
     {::onc::wifi::kPassphrase, shill::kPassphraseProperty},
@@ -161,6 +162,7 @@ const FieldTranslationEntry cellular_apn_fields[] = {
     {::onc::cellular_apn::kName, shill::kApnNameProperty},
     {::onc::cellular_apn::kUsername, shill::kApnUsernameProperty},
     {::onc::cellular_apn::kPassword, shill::kApnPasswordProperty},
+    {::onc::cellular_apn::kAuthentication, shill::kApnAuthenticationProperty},
     {::onc::cellular_apn::kLocalizedName, shill::kApnLocalizedNameProperty},
     {::onc::cellular_apn::kLanguage, shill::kApnLanguageProperty},
     {NULL}};

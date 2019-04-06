@@ -32,7 +32,6 @@
 #include "cc/test/skia_common.h"
 #include "cc/test/test_layer_tree_host_base.h"
 #include "cc/test/test_task_graph_runner.h"
-#include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/tiles/tiling_set_raster_queue_all.h"
 #include "cc/tiles/tiling_set_raster_queue_required.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -83,7 +82,6 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
     settings.commit_to_active_tree = false;
     settings.layer_transforms_should_scale_layer_contents = true;
     settings.create_low_res_tiling = true;
-    settings.enable_image_animations = true;
     return settings;
   }
 
@@ -809,7 +807,7 @@ TEST_F(PictureLayerImplTest, PinchGestureTilings) {
   EXPECT_NE(LOW_RESOLUTION, low_res_tiling->resolution());
 
   // Stop a pinch gesture.
-  host_impl()->PinchGestureEnd(gfx::Point(), true);
+  host_impl()->PinchGestureEnd(gfx::Point(), false);
 
   // Ensure UpdateTiles won't remove any tilings.
   active_layer()->MarkAllTilingsUsed();
@@ -939,7 +937,7 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
       1.f * low_res_factor,
       active_layer()->tilings()->tiling_at(1)->contents_scale_key());
 
-  host_impl()->PinchGestureEnd(gfx::Point(), true);
+  host_impl()->PinchGestureEnd(gfx::Point(), false);
 
   // Create a 1.2 scale tiling. Now we have 1.0 and 1.2 tilings. Ideal = 1.2.
   scale = 1.2f;
@@ -1259,7 +1257,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
 
   // Resize larger than the max texture size.
-  int max_texture_size = host_impl()->resource_provider()->max_texture_size();
+  int max_texture_size = host_impl()->max_texture_size();
   gfx::Size huge_bounds(max_texture_size + 1, 10);
   scoped_refptr<FakeRasterSource> huge_raster_source =
       FakeRasterSource::CreateFilled(huge_bounds);
@@ -1452,10 +1450,10 @@ TEST_F(PictureLayerImplTest, ClampTilesToMaxTileSize) {
   ResetTilingsAndRasterScales();
 
   // Change the max texture size on the output surface context.
-  std::unique_ptr<TestWebGraphicsContext3D> context =
-      TestWebGraphicsContext3D::Create();
-  context->set_max_texture_size(140);
-  ResetLayerTreeFrameSink(FakeLayerTreeFrameSink::Create3d(std::move(context)));
+  auto gl_owned = std::make_unique<viz::TestGLES2Interface>();
+  gl_owned->set_max_texture_size(140);
+  ResetLayerTreeFrameSink(
+      FakeLayerTreeFrameSink::Create3d(std::move(gl_owned)));
 
   SetupDrawPropertiesAndUpdateTiles(pending_layer(), 1.f, 1.f, 1.f, 1.f, 0.f,
                                     false);
@@ -1487,10 +1485,10 @@ TEST_F(PictureLayerImplTest, ClampSingleTileToToMaxTileSize) {
   ResetTilingsAndRasterScales();
 
   // Change the max texture size on the output surface context.
-  std::unique_ptr<TestWebGraphicsContext3D> context =
-      TestWebGraphicsContext3D::Create();
-  context->set_max_texture_size(140);
-  ResetLayerTreeFrameSink(FakeLayerTreeFrameSink::Create3d(std::move(context)));
+  auto gl_owned = std::make_unique<viz::TestGLES2Interface>();
+  gl_owned->set_max_texture_size(140);
+  ResetLayerTreeFrameSink(
+      FakeLayerTreeFrameSink::Create3d(std::move(gl_owned)));
 
   SetupDrawPropertiesAndUpdateTiles(active_layer(), 1.f, 1.f, 1.f, 1.f, 0.f,
                                     false);
@@ -3770,7 +3768,7 @@ TEST_F(NoLowResPictureLayerImplTest, CleanUpTilings) {
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(1u, active_layer()->tilings()->num_tilings());
 
-  host_impl()->PinchGestureEnd(gfx::Point(), true);
+  host_impl()->PinchGestureEnd(gfx::Point(), false);
 
   // Create a 1.2 scale tiling. Now we have 1.0 and 1.2 tilings. Ideal = 1.2.
   scale /= 4.f;

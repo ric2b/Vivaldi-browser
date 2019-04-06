@@ -16,7 +16,7 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/payments/core/currency_formatter.h"
 #include "components/payments/core/payment_options_provider.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
 #include "url/gurl.h"
 
 namespace payments {
@@ -151,10 +151,6 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
     return method_data_;
   }
 
-  // Returns whether any of the payment method names are "basic-card" or one of
-  // the networks ("visa", "amex", "mastercard", etc).
-  bool HasBasicCardMethodName() const;
-
  private:
   // Returns the first applicable modifier in the Payment Request for the
   // |selected_instrument|.
@@ -178,7 +174,6 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
   // the CurrencyFormatter is cached here.
   CurrencyFormatter* GetOrCreateCurrencyFormatter(
       const std::string& currency_code,
-      const std::string& currency_system,
       const std::string& locale_name);
 
   mojom::PaymentOptionsPtr options_;

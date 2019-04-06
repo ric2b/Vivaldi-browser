@@ -11,13 +11,20 @@
 #include "base/metrics/sparse_histogram.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_data.h"
+#include "content/public/browser/child_process_termination_info.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
-#include "extensions/features/features.h"
-#include "ppapi/features/features.h"
+#include "content/public/common/process_type.h"
+#include "extensions/buildflags/buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
+
+#if defined(OS_ANDROID)
+#include "components/crash/content/browser/crash_metrics_reporter_android.h"
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/process_map.h"
@@ -36,34 +43,31 @@ ChromeStabilityMetricsProvider::ChromeStabilityMetricsProvider(
       helper_(local_state) {
   BrowserChildProcessObserver::Add(this);
 
+  registrar_.Add(this, content::NOTIFICATION_LOAD_START,
+                 content::NotificationService::AllSources());
+  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                 content::NotificationService::AllSources());
+  registrar_.Add(this, content::NOTIFICATION_RENDER_WIDGET_HOST_HANG,
+                 content::NotificationService::AllSources());
+  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CREATED,
+                 content::NotificationService::AllSources());
+
 #if defined(OS_ANDROID)
-  auto* crash_manager = breakpad::CrashDumpManager::GetInstance();
+  auto* crash_manager = crash_reporter::CrashMetricsReporter::GetInstance();
   DCHECK(crash_manager);
   scoped_observer_.Add(crash_manager);
 #endif  // defined(OS_ANDROID)
 }
 
 ChromeStabilityMetricsProvider::~ChromeStabilityMetricsProvider() {
+  registrar_.RemoveAll();
   BrowserChildProcessObserver::Remove(this);
 }
 
 void ChromeStabilityMetricsProvider::OnRecordingEnabled() {
-  registrar_.Add(this,
-                 content::NOTIFICATION_LOAD_START,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this,
-                 content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this,
-                 content::NOTIFICATION_RENDER_WIDGET_HOST_HANG,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this,
-                 content::NOTIFICATION_RENDERER_PROCESS_CREATED,
-                 content::NotificationService::AllSources());
 }
 
 void ChromeStabilityMetricsProvider::OnRecordingDisabled() {
-  registrar_.RemoveAll();
 }
 
 void ChromeStabilityMetricsProvider::ProvideStabilityMetrics(
@@ -88,9 +92,8 @@ void ChromeStabilityMetricsProvider::Observe(
     }
 
     case content::NOTIFICATION_RENDERER_PROCESS_CLOSED: {
-      content::RenderProcessHost::RendererClosedDetails* process_details =
-          content::Details<content::RenderProcessHost::RendererClosedDetails>(
-              details).ptr();
+      content::ChildProcessTerminationInfo* process_info =
+          content::Details<content::ChildProcessTerminationInfo>(details).ptr();
       bool was_extension_process = false;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
       content::RenderProcessHost* host =
@@ -100,8 +103,8 @@ void ChromeStabilityMetricsProvider::Observe(
         was_extension_process = true;
       }
 #endif
-      helper_.LogRendererCrash(was_extension_process, process_details->status,
-                               process_details->exit_code);
+      helper_.LogRendererCrash(was_extension_process, process_info->status,
+                               process_info->exit_code, process_info->uptime);
       break;
     }
 
@@ -131,7 +134,8 @@ void ChromeStabilityMetricsProvider::Observe(
 
 void ChromeStabilityMetricsProvider::BrowserChildProcessCrashed(
     const content::ChildProcessData& data,
-    int exit_code) {
+    const content::ChildProcessTerminationInfo& info) {
+  DCHECK(!data.metrics_name.empty());
 #if BUILDFLAG(ENABLE_PLUGINS)
   // Exclude plugin crashes from the count below because we report them via
   // a separate UMA metric.
@@ -139,23 +143,31 @@ void ChromeStabilityMetricsProvider::BrowserChildProcessCrashed(
     return;
 #endif
 
+  if (data.process_type == content::PROCESS_TYPE_UTILITY)
+    helper_.BrowserUtilityProcessCrashed(data.metrics_name, info.exit_code);
   helper_.BrowserChildProcessCrashed();
+}
+
+void ChromeStabilityMetricsProvider::BrowserChildProcessLaunchedAndConnected(
+    const content::ChildProcessData& data) {
+  DCHECK(!data.metrics_name.empty());
+  if (data.process_type == content::PROCESS_TYPE_UTILITY)
+    helper_.BrowserUtilityProcessLaunched(data.metrics_name);
 }
 
 #if defined(OS_ANDROID)
 void ChromeStabilityMetricsProvider::OnCrashDumpProcessed(
-    const breakpad::CrashDumpManager::CrashDumpDetails& details) {
-  // There is a delay for OOM flag to be removed when app goes to background, so
-  // we can't just check for OOM_PROTECTED flag.
-  if (details.status ==
-          breakpad::CrashDumpManager::CrashDumpStatus::kValidDump &&
-      details.process_type == content::PROCESS_TYPE_RENDERER &&
-      details.termination_status == base::TERMINATION_STATUS_OOM_PROTECTED &&
-      (details.app_state ==
-           base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES ||
-       details.app_state ==
-           base::android::APPLICATION_STATE_HAS_PAUSED_ACTIVITIES)) {
+    int rph_id,
+    const crash_reporter::CrashMetricsReporter::ReportedCrashTypeSet&
+        reported_counts) {
+  if (reported_counts.count(
+          crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
+              kRendererForegroundVisibleCrash) ||
+      reported_counts.count(
+          crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
+              kRendererForegroundVisibleSubframeCrash)) {
     helper_.IncreaseRendererCrashCount();
   }
 }
+
 #endif  // defined(OS_ANDROID)

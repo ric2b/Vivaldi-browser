@@ -10,22 +10,36 @@
 #include "ash/ash_export.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/host/transformer_helper.h"
+#include "ui/aura/mus/input_method_mus_delegate.h"
 #include "ui/aura/window_tree_host_platform.h"
+
+namespace aura {
+class InputMethodMus;
+}
+
+namespace ui {
+struct PlatformWindowInitProperties;
+}
 
 namespace ash {
 
 class ASH_EXPORT AshWindowTreeHostPlatform
     : public AshWindowTreeHost,
-      public aura::WindowTreeHostPlatform {
+      public aura::WindowTreeHostPlatform,
+      public aura::InputMethodMusDelegate {
  public:
-  explicit AshWindowTreeHostPlatform(const gfx::Rect& initial_bounds);
+  explicit AshWindowTreeHostPlatform(
+      ui::PlatformWindowInitProperties properties);
+
   ~AshWindowTreeHostPlatform() override;
 
  protected:
   AshWindowTreeHostPlatform();
 
   // AshWindowTreeHost:
-  bool ConfineCursorToRootWindow() override;
+  void ConfineCursorToRootWindow() override;
+  void ConfineCursorToBoundsInRoot(const gfx::Rect& bounds_in_root) override;
+  gfx::Rect GetLastCursorConfineBoundsInPixels() const override;
   void SetRootWindowTransformer(
       std::unique_ptr<RootWindowTransformer> transformer) override;
   gfx::Insets GetHostInsets() const override;
@@ -34,22 +48,42 @@ class ASH_EXPORT AshWindowTreeHostPlatform
   void SetCursorConfig(const display::Display& display,
                        display::Display::Rotation rotation) override;
   void ClearCursorConfig() override;
+  void UpdateTextInputState(ui::mojom::TextInputStatePtr state) override;
+  void UpdateImeVisibility(bool visible,
+                           ui::mojom::TextInputStatePtr state) override;
 
   // aura::WindowTreeHostPlatform:
   void SetRootTransform(const gfx::Transform& transform) override;
   gfx::Transform GetRootTransform() const override;
   gfx::Transform GetInverseRootTransform() const override;
-  void UpdateRootWindowSizeInPixels(
-      const gfx::Size& host_size_in_pixels) override;
+  gfx::Rect GetTransformedRootWindowBoundsInPixels(
+      const gfx::Size& host_size_in_pixels) const override;
   void OnCursorVisibilityChangedNative(bool show) override;
-  void SetBoundsInPixels(const gfx::Rect& bounds) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds,
+                         const viz::LocalSurfaceId& local_surface_id) override;
   void DispatchEvent(ui::Event* event) override;
 
+  // aura::InputMethodMusDelegate:
+  void SetTextInputState(ui::mojom::TextInputStatePtr state) override;
+  void SetImeVisibility(bool visible,
+                        ui::mojom::TextInputStatePtr state) override;
+
  private:
+  void InitInputMethodIfNecessary();
+
   // Temporarily disable the tap-to-click feature. Used on CrOS.
   void SetTapToClickPaused(bool state);
 
   TransformerHelper transformer_helper_;
+
+  gfx::Rect last_cursor_confine_bounds_in_pixels_;
+
+  // Use InputMethodMus as the InputMethod implementation. InputMethodMus ends
+  // up connection to the UI Service over mojo, which is in process, but
+  // simplifies things. In particular, even though the WindowService is in
+  // process, parts of ime live in it's own process, so by using InputMethodMus
+  // those connections are correctly established.
+  std::unique_ptr<aura::InputMethodMus> input_method_;
 
   DISALLOW_COPY_AND_ASSIGN(AshWindowTreeHostPlatform);
 };

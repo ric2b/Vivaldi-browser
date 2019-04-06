@@ -22,12 +22,14 @@ class MirrorAccountReconcilorDelegate : public AccountReconcilorDelegate,
   // AccountReconcilorDelegate:
   bool IsReconcileEnabled() const override;
   bool IsAccountConsistencyEnforced() const override;
+  std::string GetGaiaApiSource() const override;
   bool ShouldAbortReconcileIfPrimaryHasError() const override;
   std::string GetFirstGaiaAccountForReconcile(
       const std::vector<std::string>& chrome_accounts,
       const std::vector<gaia::ListedAccount>& gaia_accounts,
       const std::string& primary_account,
-      bool first_execution) const override;
+      bool first_execution,
+      bool will_logout) const override;
 
   // SigninManagerBase::Observer:
   void GoogleSigninSucceeded(const std::string& account_id,

@@ -29,8 +29,6 @@
 
 namespace device {
 
-typedef libusb_device* PlatformUsbDevice;
-
 void HandleTransferCompletion(PlatformUsbTransferHandle transfer);
 
 namespace {
@@ -496,7 +494,7 @@ void UsbDeviceHandleImpl::Transfer::ProcessCompletion() {
           buffer_ = resized_buffer;
         }
       }
-    // Fall through!
+      FALLTHROUGH;
 
     case UsbTransferType::BULK:
     case UsbTransferType::INTERRUPT:

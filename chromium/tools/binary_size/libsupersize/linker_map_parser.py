@@ -284,12 +284,15 @@ class MapFileParserLld(object):
   # TODO(huangs): Add LTO support.
   # Map file writer for LLD linker (for ELF):
   # https://github.com/llvm-mirror/lld/blob/HEAD/ELF/MapFile.cpp
-  _MAIN_RE = re.compile(r'([0-9a-f]+)\s+([0-9a-f]+)\s+(\d+) ( *)(.*)')
+  _LINE_RE_V0 = re.compile(r'([0-9a-f]+)\s+([0-9a-f]+)\s+(\d+) ( *)(.*)')
+  _LINE_RE_V1 = re.compile(
+      r'\s*[0-9a-f]+\s+([0-9a-f]+)\s+([0-9a-f]+)\s+(\d+) ( *)(.*)')
+  _LINE_RE = [_LINE_RE_V0, _LINE_RE_V1]
 
-  def __init__(self):
+  def __init__(self, linker_name):
+    self._linker_name = linker_name
     self._common_symbols = []
     self._section_sizes = {}
-    self._lines = None
 
   def Parse(self, lines):
     """Parses a linker map file.
@@ -301,6 +304,13 @@ class MapFileParserLld(object):
     Returns:
       A tuple of (section_sizes, symbols).
     """
+# Newest format:
+#     VMA      LMA     Size Align Out     In      Symbol
+#     194      194       13     1 .interp
+#     194      194       13     1         <internal>:(.interp)
+#     1a8      1a8     22d8     4 .ARM.exidx
+#     1b0      1b0        8     4         obj/sandbox/syscall.o:(.ARM.exidx)
+# Older format:
 # Address          Size             Align Out     In      Symbol
 # 00000000002002a8 000000000000001c     1 .interp
 # 00000000002002a8 000000000000001c     1         <internal>:(.interp)
@@ -316,12 +326,16 @@ class MapFileParserLld(object):
 # 00000000002010c0 0000000000000000     0                 frame_dummy
 # 00000000002010ed 0000000000000071     1         a.o:(.text)
 # 00000000002010ed 0000000000000071     0                 main
+    # Extract e.g., 'lld_v0' -> 0, or 'lld-lto_v1' -> 1.
+    map_file_version = int(self._linker_name.split('_v')[1])
+    pattern = MapFileParserLld._LINE_RE[map_file_version]
+
     sym_maker = _SymbolMaker()
     cur_section = None
     cur_section_is_useful = None
 
     for line in lines:
-      m = MapFileParserLld._MAIN_RE.match(line)
+      m = pattern.match(line)
       if m is None:
         continue
       address = int(m.group(1), 16)
@@ -333,25 +347,35 @@ class MapFileParserLld(object):
         sym_maker.Flush()
         self._section_sizes[tok] = size
         cur_section = tok
+        # E.g., Want to convert "(.text._name)" -> "_name" later.
+        mangled_start_idx = len(cur_section) + 2
         cur_section_is_useful = (
             cur_section in (models.SECTION_BSS,
                             models.SECTION_RODATA,
                             models.SECTION_TEXT) or
             cur_section.startswith(models.SECTION_DATA))
-        cur_obj = None
-
       elif cur_section_is_useful:
         if indent_size == 8:
           sym_maker.Flush()
-          cur_obj = tok.split(':')[0]
+          # e.g. path.o:(.text._name)
+          cur_obj, paren_value = tok.split(':')
+          # "(.text._name)" -> "_name".
+          mangled_name = paren_value[mangled_start_idx:-1]
           sym_maker.Create(cur_section, size, address=address)
           # As of 2017/11 LLD does not distinguish merged strings from other
           # merged data. Feature request is filed under:
           # https://bugs.llvm.org/show_bug.cgi?id=35248
           if cur_obj == '<internal>':
-            # Treat all literals as stirng literals.
-            # FIXME(huangs): Refine this. Checking align == 1 is insufficient.
-            sym_maker.cur_sym.full_name = '** lld merge strings'
+            if cur_section == '.rodata' and mangled_name == '':
+              # Treat all <internal> sections within .rodata as as string
+              # literals. Some may hold numeric constants or other data, but
+              # there is currently no way to distinguish them.
+              sym_maker.cur_sym.full_name = '** lld merge strings'
+            else:
+              # e.g. <internal>:(.text.thunk)
+              sym_maker.cur_sym.full_name = '** ' + mangled_name
+          elif cur_obj == 'lto.tmp' or cur_obj.startswith('thinlto-cache'):
+            pass
           else:
             sym_maker.cur_sym.object_path = cur_obj
 
@@ -368,17 +392,58 @@ class MapFileParserLld(object):
     return self._section_sizes, sym_maker.syms
 
 
-def DetectLinkerNameFromMapFileHeader(first_line):
+def _DetectLto(lines):
+  """Scans LLD linker map file and returns whether LTO was used."""
+  # It's assumed that the first line in |lines| was consumed to determine that
+  # LLD was used. Seek 'thinlto-cache' prefix within an "indicator section" as
+  # indicator for LTO.
+  found_indicator_section = False
+  # Potential names of "main section". Only one gets used.
+  indicator_section_set = set(['.rodata', '.ARM.exidx'])
+  start_pos = -1
+  for line in lines:
+    # Shortcut to avoid regex: The first line seen (second line in file) should
+    # start a section, and start with '.', e.g.:
+    #     194      194       13     1 .interp
+    # Assign |start_pos| as position of '.', and trim everything before!
+    if start_pos < 0:
+      start_pos = line.index('.')
+    if len(line) < start_pos:
+      continue
+    line = line[start_pos:]
+    tok = line.lstrip()  # Allow whitespace at right.
+    indent_size = len(line) - len(tok)
+    if indent_size == 0:  # Section change.
+      if found_indicator_section:  # Exit if just visited "main section".
+        break
+      if tok.strip() in indicator_section_set:
+        found_indicator_section = True
+    elif indent_size == 8:
+      if found_indicator_section:
+        if tok.startswith('thinlto-cache'):
+          return True
+  return False
+
+
+def DetectLinkerNameFromMapFile(lines):
+  """Scans linker map file, and returns a coded linker name."""
+  first_line = next(lines)
+
   if first_line.startswith('Address'):
-    return 'lld'
+    return 'lld-lto_v0' if _DetectLto(lines) else 'lld_v0'
+
+  if first_line.lstrip().startswith('VMA'):
+    return 'lld-lto_v1' if _DetectLto(lines) else 'lld_v1'
+
   if first_line.startswith('Archive member'):
     return 'gold'
-  raise Exception('Invalid map file.')
+
+  raise Exception('Invalid map file: ' + first_line)
 
 
 class MapFileParser(object):
   """Parses a linker map file, with heuristic linker detection."""
-  def Parse(self, lines):
+  def Parse(self, linker_name, lines):
     """Parses a linker map file.
 
     Args:
@@ -387,15 +452,18 @@ class MapFileParser(object):
     Returns:
       A tuple of (section_sizes, symbols).
     """
-    linker_name = DetectLinkerNameFromMapFileHeader(next(lines))
-    if linker_name == 'lld':
-      inner_parser = MapFileParserLld()
+    next(lines)  # Consume the first line of headers.
+    if linker_name.startswith('lld'):
+      inner_parser = MapFileParserLld(linker_name)
     elif linker_name == 'gold':
       inner_parser = MapFileParserGold()
     else:
       raise Exception('.map file is from a unsupported linker.')
+
     section_sizes, syms = inner_parser.Parse(lines)
     for sym in syms:
-      if sym.object_path:  # Don't want '' to become '.'.
+      if sym.object_path and not sym.object_path.endswith(')'):
+        # Don't want '' to become '.'.
+        # Thin archives' paths will get fixed in |ar.CreateThinObjectPath|.
         sym.object_path = os.path.normpath(sym.object_path)
     return (section_sizes, syms)

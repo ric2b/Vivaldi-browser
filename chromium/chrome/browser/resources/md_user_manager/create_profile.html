@@ -1,11 +1,12 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
-<link rel="import" href="/import_supervised_user.html">
 <link rel="import" href="/profile_browser_proxy.html">
 <link rel="import" href="/shared_styles.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_checkbox/cr_checkbox.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_input/cr_input.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/cr_elements/paper_checkbox_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
@@ -14,20 +15,18 @@
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner-lite.html">
 
 <dom-module id="create-profile">
   <template>
     <style
-        include="shared-styles iron-positioning md-select paper-checkbox-style">
+        include="shared-styles iron-positioning md-select">
       :host {
         align-self: center;
       }
 
       .container {
-        color: var(--primary-text-color);
+        color: var(--cr-primary-text-color);
         width: var(--page-width);
       }
 
@@ -76,52 +75,16 @@
       }
 
       #nameInput {
-        --paper-input-container-focus-color: var(--google-blue-500);
-        --paper-input-container-input: {
-          font-size: inherit;
-        };
-        --paper-input-container-label: {
-          font-size: inherit;
-        };
-      }
-
-      #nameInput {
+        --cr-input-input: {
+          border-bottom: 1px solid var(--paper-grey-800);
+        }
         margin-bottom: 24px;
         margin-top: 32px;
         width: 300px;
       }
 
-      paper-checkbox {
-        --paper-checkbox-checked-color: var(--google-blue-500);
-        --paper-checkbox-label-spacing: 16px;
-        --paper-checkbox-size: 16px;
-        --paper-checkbox-unchecked-color: var(--paper-grey-600);
+      cr-checkbox {
         margin-top: 24px;
-      }
-
-      paper-checkbox + paper-checkbox {
-        margin-top: 16px;
-      }
-
-      #supervised-user-container {
-        -webkit-padding-start: 32px;
-      }
-
-      #supervised-user-container #learn-more {
-        line-height: 20px;
-      }
-
-      #supervised-user-container .md-select-wrapper {
-        -webkit-margin-start: calc(-1 * var(--md-select-side-padding));
-        margin-top: 4px;
-      }
-
-      #supervised-user-container #import-user {
-        -webkit-margin-start: 16px;
-      }
-
-      #supervised-user-container #sign-in-howto-message {
-        margin-top: 12px;
       }
 
       #actions {
@@ -149,67 +112,28 @@
     </div>
     <div class="container">
       <div id="title-bar">$i18n{createProfileTitle}</div>
-      <paper-input id="nameInput" value="{{profileName_}}" pattern=".*\S.*"
-          no-label-float auto-validate>
-      </paper-input>
+      <cr-input id="nameInput" value="{{profileName_}}" pattern=".*\S.*"
+          auto-validate>
+      </cr-input>
       <cr-profile-avatar-selector avatars="[[availableIcons_]]"
           selected-avatar="{{selectedAvatar_}}">
       </cr-profile-avatar-selector>
-      <paper-checkbox id="createShortcutCheckbox" checked="{{createShortcut_}}"
+      <cr-checkbox id="createShortcutCheckbox" checked="{{createShortcut_}}"
           hidden="[[!isProfileShortcutsEnabled_]]">
         $i18n{createDesktopShortcutLabel}
-      </paper-checkbox>
-      <template is="dom-if" if="[[isSupervisedUserCreationEnabled_]]">
-        <paper-checkbox id="makeSupervisedCheckbox" checked="{{isSupervised_}}">
-          $i18n{manageProfilesSupervisedSignedInLabel}
-        </paper-checkbox>
-        <div id="supervised-user-container">
-          <div id="learn-more" >
-            <a is="action-link" on-tap="onLearnMoreTap_">$i18n{learnMore}</a>
-          </div>
-          <template is="dom-if" if="[[isSupervised_]]">
-            <template is="dom-if" if="[[isSignedIn_(signedInUsers_)]]">
-              <div class="md-select-wrapper">
-                <select class="md-select" on-change="onAccountChanged_">
-                  <option disabled selected>$i18n{selectAnAccount}</option>
-                  <template is="dom-repeat" items="[[signedInUsers_]]">
-                    <option value="[[index]]">
-                      [[item.username]]
-                    </option>
-                  </template>
-                </select>
-                <span class="md-select-underline"></span>
-              </div>
-              <a id="import-user" is="action-link" on-tap="onImportUserTap_"
-                  hidden="[[isImportUserLinkHidden_(createInProgress_,
-                                                    loadingSupervisedUsers_,
-                                                    signedInUserIndex_)]]">
-                $i18n{importExistingSupervisedUserLink}
-              </a>
-            </template>
-            <div id="sign-in-howto-message"
-                hidden="[[isSignedIn_(signedInUsers_)]]"
-                inner-h-t-m-l="[[i18nAllowIDAttr_('noSignedInUserMessage')]]">
-            </div>
-          </template>
-        </div>
-      </template>
+      </cr-checkbox>
       <div id="actions">
-        <paper-spinner-lite active="[[isSpinnerActive_(
-            createInProgress_, loadingSupervisedUsers_)]]">
+        <paper-spinner-lite active="[[isSpinnerActive_(createInProgress_)]]">
         </paper-spinner-lite>
-        <paper-button id="cancel" class="action secondary"
+        <paper-button id="cancel" class="cancel-button"
             on-tap="onCancelTap_">
           $i18n{cancel}
         </paper-button>
-        <paper-button id="save" class="action primary" on-tap="onSaveTap_"
-            disabled="[[isSaveDisabled_(createInProgress_,
-                                        loadingSupervisedUsers_,
-                                        profileName_)]]">
+        <paper-button id="save" class="action-button" on-tap="onSaveTap_"
+            disabled="[[isSaveDisabled_(createInProgress_, profileName_)]]">
           $i18n{createProfileConfirm}
         </paper-button>
       </div>
-      <import-supervised-user id="importUserPopup"></import-supervised-user>
     </div>
   </template>
   <script src="create_profile.js"></script>

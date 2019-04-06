@@ -13,6 +13,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/values.h"
 #include "content/browser/webui/url_data_manager.h"
@@ -30,15 +31,15 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
                                            public WebUIDataSource {
  public:
   // WebUIDataSource implementation:
-  void AddString(const std::string& name, const base::string16& value) override;
-  void AddString(const std::string& name, const std::string& value) override;
-  void AddLocalizedString(const std::string& name, int ids) override;
+  void AddString(base::StringPiece name, const base::string16& value) override;
+  void AddString(base::StringPiece name, const std::string& value) override;
+  void AddLocalizedString(base::StringPiece name, int ids) override;
   void AddLocalizedStrings(
       const base::DictionaryValue& localized_strings) override;
-  void AddBoolean(const std::string& name, bool value) override;
-  void AddInteger(const std::string& name, int32_t value) override;
-  void SetJsonPath(const std::string& path) override;
-  void AddResourcePath(const std::string& path, int resource_id) override;
+  void AddBoolean(base::StringPiece name, bool value) override;
+  void AddInteger(base::StringPiece name, int32_t value) override;
+  void SetJsonPath(base::StringPiece path) override;
+  void AddResourcePath(base::StringPiece path, int resource_id) override;
   void SetDefaultResource(int resource_id) override;
   void SetRequestFilter(
       const WebUIDataSource::HandleRequestCallback& callback) override;
@@ -69,6 +70,8 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
   friend class WebUIDataSource;
   friend class WebUIDataSourceTest;
 
+  FRIEND_TEST_ALL_PREFIXES(WebUIDataSourceTest, IsGzipped);
+
   explicit WebUIDataSourceImpl(const std::string& source_name);
 
   // Methods that match URLDataSource which are called by
@@ -84,6 +87,8 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
   void disable_load_time_data_defaults_for_testing() {
     add_load_time_data_defaults_ = false;
   }
+
+  bool IsGzipped(const std::string& path) const;
 
   // The name of this source.
   // E.g., for favicons, this could be "favicon", which results in paths for

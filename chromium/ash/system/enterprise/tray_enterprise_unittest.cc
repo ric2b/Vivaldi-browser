@@ -4,10 +4,11 @@
 
 #include "ash/system/enterprise/tray_enterprise.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/label_tray_view.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_test_api.h"
 #include "ash/test/ash_test_base.h"
 
@@ -16,6 +17,11 @@ namespace ash {
 using TrayEnterpriseTest = AshTestBase;
 
 TEST_F(TrayEnterpriseTest, ItemVisible) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   SystemTray* system_tray = GetPrimarySystemTray();
   TrayEnterprise* tray_enterprise =
       SystemTrayTestApi(system_tray).tray_enterprise();
@@ -27,7 +33,7 @@ TEST_F(TrayEnterpriseTest, ItemVisible) {
 
   // Simulate enterprise information becoming available.
   const bool active_directory = false;
-  Shell::Get()->system_tray_controller()->SetEnterpriseDisplayDomain(
+  Shell::Get()->system_tray_model()->SetEnterpriseDisplayDomain(
       "example.com", active_directory);
 
   // Enterprise managed devices show an item.
@@ -37,6 +43,11 @@ TEST_F(TrayEnterpriseTest, ItemVisible) {
 }
 
 TEST_F(TrayEnterpriseTest, ItemVisibleForActiveDirectory) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   SystemTray* system_tray = GetPrimarySystemTray();
   TrayEnterprise* tray_enterprise =
       SystemTrayTestApi(system_tray).tray_enterprise();
@@ -45,7 +56,7 @@ TEST_F(TrayEnterpriseTest, ItemVisibleForActiveDirectory) {
   // devices do not have a domain.
   const std::string empty_domain;
   const bool active_directory = true;
-  Shell::Get()->system_tray_controller()->SetEnterpriseDisplayDomain(
+  Shell::Get()->system_tray_model()->SetEnterpriseDisplayDomain(
       empty_domain, active_directory);
 
   // Active Directory managed devices show an item.

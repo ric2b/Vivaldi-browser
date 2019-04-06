@@ -18,7 +18,6 @@
 #include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_number_conversions.h"
@@ -29,6 +28,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/media_galleries/chromeos/mtp_device_task_helper_map_service.h"
 #include "chrome/browser/media_galleries/chromeos/snapshot_file_details.h"
+#include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "net/base/io_buffer.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -79,8 +79,7 @@ MTPDeviceTaskHelper* GetDeviceTaskHelperForStorage(
 
 // Opens the storage device for communication.
 //
-// Called on the UI thread to dispatch the request to the
-// MediaTransferProtocolManager.
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
 //
 // |storage_name| specifies the name of the storage device.
 // |read_only| specifies the mode of the storage device.
@@ -126,15 +125,13 @@ void CreateDirectoryOnUIThread(
                                error_callback);
 }
 
-// Enumerates the |dir_id| directory file entries.
+// Enumerates the |directory_id| directory file entries.
 //
-// Called on the UI thread to dispatch the request to the
-// MediaTransferProtocolManager.
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
 //
 // |storage_name| specifies the name of the storage device.
 // |read_only| specifies the mode of the storage device.
 // |directory_id| is an id of a directory to read.
-// |max_size| is a maximum size to read. Set 0 not to specify the maximum size.
 // |success_callback| is called when the ReadDirectory request succeeds.
 // |error_callback| is called when the ReadDirectory request fails.
 // |success_callback| and |error_callback| runs on the IO thread.
@@ -142,7 +139,6 @@ void ReadDirectoryOnUIThread(
     const std::string& storage_name,
     const bool read_only,
     const uint32_t directory_id,
-    const size_t max_size,
     const MTPDeviceTaskHelper::ReadDirectorySuccessCallback& success_callback,
     const MTPDeviceTaskHelper::ErrorCallback& error_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -150,14 +146,37 @@ void ReadDirectoryOnUIThread(
       GetDeviceTaskHelperForStorage(storage_name, read_only);
   if (!task_helper)
     return;
-  task_helper->ReadDirectory(directory_id, max_size, success_callback,
-                             error_callback);
+  task_helper->ReadDirectory(directory_id, success_callback, error_callback);
+}
+
+// Checks if the |directory_id| directory is empty.
+//
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
+//
+// |storage_name| specifies the name of the storage device.
+// |read_only| specifies the mode of the storage device.
+// |directory_id| is an id of a directory to check.
+// |success_callback| is called when the CheckDirectoryEmpty request succeeds.
+// |error_callback| is called when the CheckDirectoryEmpty request fails.
+// |success_callback| and |error_callback| runs on the IO thread.
+void CheckDirectoryEmptyOnUIThread(
+    const std::string& storage_name,
+    bool read_only,
+    uint32_t directory_id,
+    MTPDeviceTaskHelper::CheckDirectoryEmptySuccessCallback success_callback,
+    const MTPDeviceTaskHelper::ErrorCallback& error_callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  MTPDeviceTaskHelper* task_helper =
+      GetDeviceTaskHelperForStorage(storage_name, read_only);
+  if (!task_helper)
+    return;
+  task_helper->CheckDirectoryEmpty(directory_id, std::move(success_callback),
+                                   error_callback);
 }
 
 // Gets the |file_path| details.
 //
-// Called on the UI thread to dispatch the request to the
-// MediaTransferProtocolManager.
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
 //
 // |storage_name| specifies the name of the storage device.
 // |read_only| specifies the mode of the storage device.
@@ -180,8 +199,7 @@ void GetFileInfoOnUIThread(
 
 // Copies the contents of |device_file_path| to |snapshot_file_path|.
 //
-// Called on the UI thread to dispatch the request to the
-// MediaTransferProtocolManager.
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
 //
 // |storage_name| specifies the name of the storage device.
 // |read_only| specifies the mode of the storage device.
@@ -207,8 +225,7 @@ void WriteDataIntoSnapshotFileOnUIThread(
 
 // Copies the contents of |device_file_path| to |snapshot_file_path|.
 //
-// Called on the UI thread to dispatch the request to the
-// MediaTransferProtocolManager.
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
 //
 // |storage_name| specifies the name of the storage device.
 // |read_only| specifies the mode of the storage device.
@@ -282,8 +299,7 @@ void CopyFileFromLocalOnUIThread(
 
 // Deletes |object_id|.
 //
-// Called on the UI thread to dispatch the request to the
-// MediaTransferProtocolManager.
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
 //
 // |storage_name| specifies the name of the storage device.
 // |read_only| specifies the mode of the storage device.
@@ -308,8 +324,7 @@ void DeleteObjectOnUIThread(
 // Closes the device storage specified by the |storage_name| and destroys the
 // MTPDeviceTaskHelper object associated with the device storage.
 //
-// Called on the UI thread to dispatch the request to the
-// MediaTransferProtocolManager.
+// Called on the UI thread to dispatch the request to the MTPDeviceTaskHelper.
 void CloseStorageAndDestroyTaskHelperOnUIThread(
     const std::string& storage_name,
     const bool read_only) {
@@ -330,13 +345,14 @@ void CloseStorageAndDestroyTaskHelperOnUIThread(
 // - When |file_path| is a directory, base::File::FILE_ERROR_NOT_A_FILE is set.
 // - When |file_path| does not exist, base::File::FILE_ERROR_NOT_FOUND is set.
 // - For other error cases, base::File::FILE_ERROR_FAILED is set.
-std::pair<int, base::File::Error> OpenFileDescriptor(const char* file_path,
-                                                     const int flags) {
+std::pair<int, base::File::Error> OpenFileDescriptor(
+    const base::FilePath& file_path,
+    const int flags) {
   base::AssertBlockingAllowed();
 
-  if (base::DirectoryExists(base::FilePath(file_path)))
+  if (base::DirectoryExists(file_path))
     return std::make_pair(-1, base::File::FILE_ERROR_NOT_A_FILE);
-  int file_descriptor = open(file_path, flags);
+  int file_descriptor = open(file_path.value().c_str(), flags);
   if (file_descriptor >= 0)
     return std::make_pair(file_descriptor, base::File::FILE_OK);
   if (errno == ENOENT)
@@ -458,7 +474,7 @@ void MTPDeviceDelegateImplLinux::MTPFileNode::EnsureChildExists(
     return;
 
   children_[name] =
-      base::MakeUnique<MTPFileNode>(id, name, this, file_id_to_node_map_);
+      std::make_unique<MTPFileNode>(id, name, this, file_id_to_node_map_);
 }
 
 void MTPDeviceDelegateImplLinux::MTPFileNode::ClearNonexistentChildren(
@@ -1177,18 +1193,19 @@ void MTPDeviceDelegateImplLinux::DeleteDirectoryInternal(
   }
 
   // Since the directory can contain a file even if the cache returns it as
-  // empty, read the directory and confirm the directory is actually empty.
-  const MTPDeviceTaskHelper::ReadDirectorySuccessCallback
-      success_callback_wrapper = base::Bind(
-          &MTPDeviceDelegateImplLinux::OnDidReadDirectoryToDeleteDirectory,
-          weak_ptr_factory_.GetWeakPtr(), file_path, directory_id,
-          success_callback, error_callback);
+  // empty, explicitly check the directory and confirm it is actually empty.
+  MTPDeviceTaskHelper::CheckDirectoryEmptySuccessCallback
+      success_callback_wrapper =
+          base::BindOnce(&MTPDeviceDelegateImplLinux::
+                             OnDidCheckDirectoryEmptyToDeleteDirectory,
+                         weak_ptr_factory_.GetWeakPtr(), file_path,
+                         directory_id, success_callback, error_callback);
   const MTPDeviceTaskHelper::ErrorCallback error_callback_wrapper =
       base::Bind(&MTPDeviceDelegateImplLinux::HandleDeviceFileError,
                  weak_ptr_factory_.GetWeakPtr(), error_callback, directory_id);
   const base::Closure closure = base::Bind(
-      &ReadDirectoryOnUIThread, storage_name_, read_only_, directory_id,
-      1 /* max_size */, success_callback_wrapper, error_callback_wrapper);
+      &CheckDirectoryEmptyOnUIThread, storage_name_, read_only_, directory_id,
+      base::Passed(&success_callback_wrapper), error_callback_wrapper);
   EnsureInitAndRunTask(PendingTaskInfo(
       base::FilePath(), content::BrowserThread::UI, FROM_HERE, closure));
 }
@@ -1237,21 +1254,19 @@ void MTPDeviceDelegateImplLinux::OnDidReadDirectoryToCreateDirectory(
       base::FilePath(), content::BrowserThread::IO, FROM_HERE, closure));
 }
 
-void MTPDeviceDelegateImplLinux::OnDidReadDirectoryToDeleteDirectory(
+void MTPDeviceDelegateImplLinux::OnDidCheckDirectoryEmptyToDeleteDirectory(
     const base::FilePath& directory_path,
-    const uint32_t directory_id,
+    uint32_t directory_id,
     const DeleteDirectorySuccessCallback& success_callback,
     const ErrorCallback& error_callback,
-    const MTPDeviceTaskHelper::MTPEntries& entries,
-    const bool has_more) {
+    bool is_empty) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  DCHECK(!has_more);
 
-  if (entries.size() > 0) {
-    error_callback.Run(base::File::FILE_ERROR_NOT_EMPTY);
-  } else {
+  if (is_empty) {
     RunDeleteObjectOnUIThread(directory_path, directory_id, success_callback,
                               error_callback);
+  } else {
+    error_callback.Run(base::File::FILE_ERROR_NOT_EMPTY);
   }
 
   PendingRequestDone();
@@ -1447,7 +1462,6 @@ void MTPDeviceDelegateImplLinux::OnDidGetFileInfoToReadDirectory(
 
   base::Closure task_closure = base::Bind(
       &ReadDirectoryOnUIThread, storage_name_, read_only_, dir_id,
-      0 /* max_size */,
       base::Bind(&MTPDeviceDelegateImplLinux::OnDidReadDirectory,
                  weak_ptr_factory_.GetWeakPtr(), dir_id, success_callback),
       base::Bind(&MTPDeviceDelegateImplLinux::HandleDeviceFileError,
@@ -1516,8 +1530,7 @@ void MTPDeviceDelegateImplLinux::OnGetDestFileInfoErrorToCopyFileFromLocal(
 
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::Bind(&OpenFileDescriptor, source_file_path.value().c_str(),
-                 O_RDONLY),
+      base::Bind(&OpenFileDescriptor, source_file_path, O_RDONLY),
       base::Bind(&MTPDeviceDelegateImplLinux::OnDidOpenFDToCopyFileFromLocal,
                  weak_ptr_factory_.GetWeakPtr(), device_file_path,
                  success_callback, error_callback));
@@ -1589,14 +1602,16 @@ void MTPDeviceDelegateImplLinux::OnDidReadDirectory(
 
   storage::AsyncFileUtil::EntryList file_list;
   for (const auto& mtp_entry : mtp_entries) {
-    storage::DirectoryEntry entry;
-    entry.name = mtp_entry.name;
-    entry.is_directory = mtp_entry.file_info.is_directory;
+    filesystem::mojom::DirectoryEntry entry;
+    entry.name = base::FilePath(mtp_entry.name);
+    entry.type = mtp_entry.file_info.is_directory
+                     ? filesystem::mojom::FsFileType::DIRECTORY
+                     : filesystem::mojom::FsFileType::REGULAR_FILE;
     file_list.push_back(entry);
 
     // Refresh the in memory tree.
-    dir_node->EnsureChildExists(entry.name, mtp_entry.file_id);
-    child_nodes_seen_.insert(entry.name);
+    dir_node->EnsureChildExists(entry.name.value(), mtp_entry.file_id);
+    child_nodes_seen_.insert(entry.name.value());
 
     // Add to |file_info_cache_|.
     file_info_cache_[dir_path.Append(entry.name)] = mtp_entry;

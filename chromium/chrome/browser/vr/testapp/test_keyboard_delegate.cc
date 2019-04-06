@@ -56,42 +56,63 @@ void TestKeyboardDelegate::Draw(const CameraModel& model) {
   renderer_->Draw(model, world_space_transform);
 }
 
+bool TestKeyboardDelegate::SupportsSelection() {
+  return true;
+}
+
 void TestKeyboardDelegate::Initialize(vr::SkiaSurfaceProvider* provider,
                                       UiElementRenderer* renderer) {
   renderer_->Initialize(provider, renderer);
 }
 
+void TestKeyboardDelegate::UpdateInput(const vr::TextInputInfo& info) {
+  input_info_ = info;
+}
+
 bool TestKeyboardDelegate::HandleInput(ui::Event* e) {
-  DCHECK(keyboard_interface_);
+  DCHECK(ui_interface_);
   DCHECK(e->IsKeyEvent());
   if (!editing_)
     return false;
 
+  TextInputInfo info(input_info_);
+
   auto* event = e->AsKeyEvent();
   switch (event->key_code()) {
     case ui::VKEY_RETURN:
-      input_info_.text.clear();
-      input_info_.selection_start = input_info_.selection_end = 0;
-      keyboard_interface_->OnInputCommitted(input_info_);
+      info.text.clear();
+      info.selection_start = info.selection_end = 0;
+      ui_interface_->OnInputCommitted(EditedText(info, input_info_));
       break;
     case ui::VKEY_BACK:
-      input_info_.text.pop_back();
-      input_info_.selection_start--;
-      input_info_.selection_end--;
-      keyboard_interface_->OnInputEdited(input_info_);
+      if (info.selection_start != info.selection_end) {
+        info.text.erase(info.selection_start,
+                        info.selection_end - info.selection_start);
+        info.selection_end = info.selection_start;
+      } else if (!info.text.empty() && info.selection_start > 0) {
+        info.text.erase(info.selection_start - 1, 1);
+        info.selection_start--;
+        info.selection_end--;
+      }
+      ui_interface_->OnInputEdited(EditedText(info, input_info_));
       break;
     default:
+      if (info.selection_start != info.selection_end) {
+        info.text.erase(info.selection_start,
+                        info.selection_end - info.selection_start);
+        info.selection_end = info.selection_start;
+      }
+
       std::string character;
       base::WriteUnicodeCharacter(event->GetText(), &character);
-      input_info_.text = input_info_.text.append(base::UTF8ToUTF16(character));
-      input_info_.selection_start++;
-      input_info_.selection_end++;
-      keyboard_interface_->OnInputEdited(input_info_);
+      info.text =
+          info.text.insert(info.selection_start, base::UTF8ToUTF16(character));
+      info.selection_start++;
+      info.selection_end++;
+      ui_interface_->OnInputEdited(EditedText(info, input_info_));
       break;
   }
-  // We want to continue handling this keypress if the Ctrl key is down so
-  // that we can do things like duming the tree in editing mode.
-  return !event->IsControlDown();
+  return true;
 }
 
 }  // namespace vr

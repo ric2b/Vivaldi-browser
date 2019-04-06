@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "content/public/browser/browser_thread.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log_source.h"
 #include "net/socket/udp_socket.h"
@@ -466,8 +467,7 @@ CheckSourceMessageContent(std::string pattern,
 void MockDisplaySourceConnectionDelegate::BindToUdpSocket() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  socket_.reset(new net::UDPSocket(net::DatagramSocket::DEFAULT_BIND,
-                                   net::RandIntCallback(), nullptr,
+  socket_.reset(new net::UDPSocket(net::DatagramSocket::DEFAULT_BIND, nullptr,
                                    net::NetLogSource()));
 
   net::IPAddress address;

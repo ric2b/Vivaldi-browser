@@ -42,12 +42,12 @@ def GetExperimentArgs():
   elif platform.system().lower() == 'linux':
     my_platform = 'linux'
   elif platform.system().lower() == 'windows':
-    my_platform = 'win'
+    my_platform = 'windows'
   elif platform.system().lower() == 'darwin':
     my_platform = 'mac'
   else:
     raise Exception('unknown platform!')
-  return fieldtrial_util.GenerateArgs(config_path, my_platform)
+  return fieldtrial_util.GenerateArgs(config_path, [my_platform])
 
 def GenerateTestSuites():
   """A generator function that yields non-blacklisted tests to run.

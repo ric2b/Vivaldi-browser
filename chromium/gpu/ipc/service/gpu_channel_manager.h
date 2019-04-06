@@ -16,25 +16,23 @@
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/constants.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/gr_cache_controller.h"
+#include "gpu/command_buffer/service/raster_decoder_context_state.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/shader_translator_cache.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_feature_info.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
-#include "gpu/ipc/service/gpu_memory_manager.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_surface.h"
 #include "url/gurl.h"
-
-#if defined(OS_ANDROID)
-#include "base/android/application_status_listener.h"
-#endif
 
 namespace gl {
 class GLShareGroup;
@@ -51,6 +49,7 @@ class GpuWatchdogThread;
 class MailboxManager;
 class Scheduler;
 class SyncPointManager;
+struct VideoMemoryUsageStats;
 
 namespace gles2 {
 class Outputter;
@@ -113,8 +112,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
     return &framebuffer_completeness_cache_;
   }
 
-  GpuMemoryManager* gpu_memory_manager() { return &gpu_memory_manager_; }
-
   GpuChannel* LookupChannel(int32_t client_id) const;
 
   gl::GLSurface* GetDefaultOffscreenSurface();
@@ -125,15 +122,10 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
 
 #if defined(OS_ANDROID)
   void DidAccessGpu();
-
-  void OnApplicationStateChange(base::android::ApplicationState state);
-
-  void set_low_end_mode_for_testing(bool mode) {
-    is_running_on_low_end_mode_ = mode;
-  }
-
-  void OnApplicationBackgroundedForTesting();
+  void OnBackgroundCleanup();
 #endif
+
+  void OnApplicationBackgrounded();
 
   bool is_exiting_for_lost_context() { return exiting_for_lost_context_; }
 
@@ -143,6 +135,14 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
 
   SyncPointManager* sync_point_manager() const { return sync_point_manager_; }
 
+  // Retrieve GPU Resource consumption statistics for the task manager
+  void GetVideoMemoryUsageStats(
+      VideoMemoryUsageStats* video_memory_usage_stats) const;
+
+  scoped_refptr<raster::RasterDecoderContextState> GetRasterDecoderContextState(
+      ContextResult* result);
+  void ScheduleGrContextCleanup();
+
  private:
   void InternalDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id, int client_id);
   void InternalDestroyGpuMemoryBufferOnIO(gfx::GpuMemoryBufferId id,
@@ -150,8 +150,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
 #if defined(OS_ANDROID)
   void ScheduleWakeUpGpu();
   void DoWakeUpGpu();
-
-  void OnApplicationBackgrounded();
 #endif
 
   void HandleMemoryPressure(
@@ -176,7 +174,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
 
   std::unique_ptr<MailboxManager> mailbox_manager_;
   std::unique_ptr<gles2::Outputter> outputter_;
-  GpuMemoryManager gpu_memory_manager_;
   Scheduler* scheduler_;
   // SyncPointManager guaranteed to outlive running MessageLoop.
   SyncPointManager* sync_point_manager_;
@@ -192,10 +189,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
   // transport surfaces.
   base::TimeTicks last_gpu_access_time_;
   base::TimeTicks begin_wake_up_time_;
-
-  base::android::ApplicationStatusListener application_status_listener_;
-  bool is_running_on_low_end_mode_;
-  bool is_backgrounded_for_testing_;
 #endif
 
   // Set during intentional GPU process shutdown.
@@ -206,6 +199,20 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
   GpuProcessActivityFlags activity_flags_;
 
   base::MemoryPressureListener memory_pressure_listener_;
+
+  // The RasterDecoderContextState is shared across all RasterDecoders. Note
+  // that this class needs to be ref-counted to conveniently manage the lifetime
+  // of the shared context in the case of a context loss. While the
+  // GpuChannelManager strictly outlives the RasterDecoders, in the event of a
+  // context loss the clients need to re-create the GpuChannel and command
+  // buffers once notified. In this interim state we can have multiple instances
+  // of the RasterDecoderContextState, for the lost and recovered clients. In
+  // order to avoid having the GpuChannelManager keep the lost context state
+  // alive until all clients have recovered, we use a ref-counted object and
+  // allow the decoders to manage its lifetime.
+  base::Optional<raster::GrCacheController> gr_cache_controller_;
+  scoped_refptr<raster::RasterDecoderContextState>
+      raster_decoder_context_state_;
 
   // Member variables should appear before the WeakPtrFactory, to ensure
   // that any WeakPtrs to Controller are invalidated before its members

@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/fake_audio_render_callback.h"
@@ -15,7 +14,7 @@
 #include "media/blink/webaudiosourceprovider_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebAudioSourceProviderClient.h"
+#include "third_party/blink/public/platform/web_audio_source_provider_client.h"
 
 using ::testing::_;
 
@@ -67,7 +66,6 @@ class WebAudioSourceProviderImplTest
       : params_(AudioParameters::AUDIO_PCM_LINEAR,
                 CHANNEL_LAYOUT_STEREO,
                 kSampleRate,
-                16,
                 64),
         fake_callback_(0.1, kSampleRate),
         mock_sink_(CreateWaspMockSink(GetParam())),
@@ -153,7 +151,6 @@ class WebAudioSourceProviderImplTest
   scoped_refptr<MockAudioRendererSink> mock_sink_;
   scoped_refptr<WebAudioSourceProviderImplUnderTest> wasp_impl_;
   MockAudioRendererSink* expected_sink_;
-  base::MessageLoop message_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WebAudioSourceProviderImplTest);
 };

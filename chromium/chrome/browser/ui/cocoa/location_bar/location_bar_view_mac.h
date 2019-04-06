@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
+#include "chrome/browser/ui/page_action/page_action_icon_container.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/prefs/pref_member.h"
 #include "components/security_state/core/security_state.h"
@@ -57,6 +58,7 @@ enum class PageInfoVerboseType {
 class LocationBarViewMac : public LocationBar,
                            public LocationBarTesting,
                            public ChromeOmniboxEditController,
+                           public PageActionIconContainer,
                            public zoom::ZoomEventManagerObserver {
  public:
   LocationBarViewMac(AutocompleteTextField* field,
@@ -75,9 +77,8 @@ class LocationBarViewMac : public LocationBar,
   void UpdateContentSettingsIcons() override;
   void UpdateManagePasswordsIconAndBubble() override;
   void UpdateSaveCreditCardIcon() override;
-  void UpdateFindBarIconVisibility() override;
+  void UpdateLocalCardMigrationIcon() override;
   void UpdateBookmarkStarVisibility() override;
-  void UpdateZoomViewVisibility() override;
   void UpdateLocationBarVisibility(bool visible, bool animate) override;
   void SaveStateToContents(content::WebContents* contents) override;
   void Revert() override;
@@ -88,6 +89,7 @@ class LocationBarViewMac : public LocationBar,
   // Overridden from LocationBarTesting:
   bool GetBookmarkStarVisibility() override;
   bool TestContentSettingImagePressed(size_t index) override;
+  bool IsContentSettingBubbleShowing(size_t index) override;
 
   // Set/Get the editable state of the field.
   void SetEditable(bool editable);
@@ -119,10 +121,6 @@ class LocationBarViewMac : public LocationBar,
 
   // Get the point in window coordinates for the page info bubble anchor.
   NSPoint GetPageInfoBubblePoint() const;
-
-  // Get the point in window coordinates in the page info icon at which infobar
-  // arrows should point.
-  NSPoint GetInfoBarAnchorPoint() const;
 
   // When any image decorations change, call this to ensure everything is
   // redrawn and laid out if necessary.
@@ -163,6 +161,9 @@ class LocationBarViewMac : public LocationBar,
   ToolbarModel* GetToolbarModel() override;
   const ToolbarModel* GetToolbarModel() const override;
   content::WebContents* GetWebContents() override;
+
+  // PageActionIconContainer:
+  void UpdatePageActionIcon(PageActionIconType) override;
 
   PageInfoVerboseType GetPageInfoVerboseType() const;
 

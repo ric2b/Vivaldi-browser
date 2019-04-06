@@ -1,28 +1,31 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_input/cr_input.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
-<link rel="import" href="../settings_vars_css.html">
 <link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../settings_vars_css.html">
 
 <dom-module id="settings-credit-card-edit-dialog">
   <template>
     <style include="settings-shared md-select">
-      paper-input {
-        width: var(--paper-input-max-width);
+      cr-input {
+        --cr-input-error-display: none;
+        margin-bottom: var(--cr-form-field-bottom-spacing);
+        width: var(--settings-input-max-width);
       }
 
-      .md-select-wrapper {
-        /* Mitigate for md-select's start padding, to make it look aligned with
-         * other elements on the page. */
-        -webkit-margin-start: calc(-1 * var(--md-select-side-padding));
-      }
-
-      .md-select-wrapper + .md-select-wrapper {
+      .md-select + .md-select {
         -webkit-margin-start: 8px;
+      }
+
+      /* Prevent focus-outline from being chopped by the bottom of dialog body.
+         TODO(scottchen): find a more general way to solve this. */
+      .md-select {
+        margin-bottom: 2px;
       }
 
       #expired {
@@ -44,43 +47,35 @@
       }
 
       label {
-        color: var(--light-theme-secondary-color);
-        display: block;
-        padding-top: 8px;
+        @apply --cr-form-field-label;
       }
     </style>
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}">
+    <cr-dialog id="dialog" close-text="$i18n{close}">
       <div slot="title">[[title_]]</div>
       <div slot="body">
-        <paper-input id="nameInput" label="$i18n{creditCardName}"
-            value="{{creditCard.name}}" always-float-label autofocus
+        <cr-input id="nameInput" label="$i18n{creditCardName}"
+            value="{{creditCard.name}}" autofocus
             on-input="onCreditCardNameOrNumberChanged_">
-        </paper-input>
-        <paper-input id="numberInput" label="$i18n{creditCardNumber}"
-            value="{{creditCard.cardNumber}}" always-float-label
+        </cr-input>
+        <cr-input id="numberInput" label="$i18n{creditCardNumber}"
+            value="{{creditCard.cardNumber}}"
             on-input="onCreditCardNameOrNumberChanged_">
-        </paper-input>
+        </cr-input>
         <label>$i18n{creditCardExpiration}</label>
-        <span class="md-select-wrapper">
-          <select class="md-select" id="month" value="[[expirationMonth_]]"
-              on-change="onMonthChange_"
-              aria-label="$i18n{creditCardExpirationMonth}">
-            <template is="dom-repeat" items="[[monthList_]]">
-              <option>[[item]]</option>
-            </template>
-          </select>
-          <span class="md-select-underline"></span>
-        </span>
-        <span class="md-select-wrapper">
-          <select class="md-select" id="year" value="[[expirationYear_]]"
-              on-change="onYearChange_"
-              aria-label="$i18n{creditCardExpirationYear}">
-            <template is="dom-repeat" items="[[yearList_]]">
-              <option>[[item]]</option>
-            </template>
-          </select>
-          <span class="md-select-underline"></span>
-        </span>
+        <select class="md-select" id="month" value="[[expirationMonth_]]"
+            on-change="onMonthChange_"
+            aria-label="$i18n{creditCardExpirationMonth}">
+          <template is="dom-repeat" items="[[monthList_]]">
+            <option>[[item]]</option>
+          </template>
+        </select>
+        <select class="md-select" id="year" value="[[expirationYear_]]"
+            on-change="onYearChange_"
+            aria-label="$i18n{creditCardExpirationYear}">
+          <template is="dom-repeat" items="[[yearList_]]">
+            <option>[[item]]</option>
+          </template>
+        </select>
         <span id="expired"
             hidden="[[!checkIfCardExpired_(expirationMonth_, expirationYear_)]]"
             >
@@ -89,11 +84,11 @@
       </div>
       <div slot="button-container">
         <paper-button id="cancelButton" class="cancel-button"
-            on-tap="onCancelButtonTap_">$i18n{cancel}</paper-button>
+            on-click="onCancelButtonTap_">$i18n{cancel}</paper-button>
         <paper-button id="saveButton" class="action-button"
-            on-tap="onSaveButtonTap_" disabled>$i18n{save}</paper-button>
+            on-click="onSaveButtonTap_" disabled>$i18n{save}</paper-button>
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
   <script src="credit_card_edit_dialog.js"></script>
 </dom-module>

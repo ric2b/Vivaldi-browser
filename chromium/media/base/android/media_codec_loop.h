@@ -173,8 +173,9 @@ class MEDIA_EXPORT MediaCodecLoop {
     // call back won't happen.
     virtual void OnInputDataQueued(bool success) = 0;
 
-    // Called when an EOS buffer is dequeued from the output.
-    virtual void OnDecodedEos(const OutputBuffer& out) = 0;
+    // Called when an EOS buffer is dequeued from the output.  If this returns
+    // false, then we transition to STATE_ERROR.
+    virtual bool OnDecodedEos(const OutputBuffer& out) = 0;
 
     // Processes the output buffer after it comes from MediaCodec.  The client
     // has the responsibility to release the codec buffer, though it doesn't
@@ -208,14 +209,13 @@ class MEDIA_EXPORT MediaCodecLoop {
   // Optionally set the tick clock used for testing.  It is our caller's
   // responsibility to maintain ownership of this, since
   // FakeSingleThreadTaskRunner maintains a raw ptr to it also.
-  void SetTestTickClock(base::TickClock* test_tick_clock);
+  void SetTestTickClock(const base::TickClock* test_tick_clock);
 
-  // Does the MediaCodec processing cycle: enqueues an input buffer, then
-  // dequeues output buffers.  This should be called by the client when more
-  // work becomes available, such as when new input data arrives.  If codec
-  // output buffers are freed after OnDecodedFrame returns, then this should
-  // also be called.
-  void DoPendingWork();
+  // Notify us that work can be done immediately, or in the near future.  This
+  // should be called by the client when more work becomes available, such as
+  // when new input data arrives.  If codec output buffers are freed after
+  // OnDecodedFrame returns, then this should also be called.
+  void ExpectWork();
 
   // Try to flush this media codec.  Returns true on success, false on failure.
   // Failures can result in a state change to the Error state.  If this returns
@@ -252,6 +252,11 @@ class MEDIA_EXPORT MediaCodecLoop {
     // True if we tried to enqueue this buffer before.
     bool is_pending = false;
   };
+
+  // Does the MediaCodec processing cycle: enqueues an input buffer, then
+  // dequeues output buffers.  Will restart / reset the timer if any progress is
+  // made on this call.
+  void DoPendingWork();
 
   // Enqueues one pending input buffer into MediaCodec if MediaCodec has room,
   // and if the client has any input to give us.
@@ -312,9 +317,11 @@ class MEDIA_EXPORT MediaCodecLoop {
 
   // Optional clock for use during testing.  It may be null.  We do not maintain
   // ownership of it.
-  base::TickClock* test_tick_clock_ = nullptr;
+  const base::TickClock* test_tick_clock_ = nullptr;
 
-  // BuildInfo::sdk_int(), eventually.
+  // Has the value of BuildInfo::sdk_int(), except in tests where it
+  // might be set to other values. Will not be needed when there is a
+  // mockable BuildInfo.
   const int sdk_int_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.

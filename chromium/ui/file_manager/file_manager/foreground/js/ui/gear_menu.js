@@ -62,8 +62,16 @@ function GearMenu(element) {
       HTMLElement);
 
   /**
+   * @type {!HTMLElement}
+   * @const
+   * @private
+   */
+  this.newServiceMenuItem_ =
+      queryRequiredElement('#gear-menu-newservice', element);
+
+  /**
    * Volume space info.
-   * @type {Promise<MountPointSizeStats>}
+   * @type {Promise<chrome.fileManagerPrivate.MountPointSizeStats>}
    * @private
    */
   this.spaceInfoPromise_ = null;
@@ -74,8 +82,22 @@ function GearMenu(element) {
 }
 
 /**
- * @param {Promise<MountPointSizeStats>} spaceInfoPromise Promise to be
- *     fulfilled with space info.
+ * @param {!string} commandId Element id of the command that new service menu
+ *     should trigger.
+ * @param {!string} label Text that should be displayed to user in the menu.
+ */
+GearMenu.prototype.setNewServiceCommand = function(commandId, label) {
+  this.newServiceMenuItem_.textContent = label;
+  // Only change command if needed because it does some parsing when setting.
+  if ('#' + this.newServiceMenuItem_.command.id === commandId) {
+    return;
+  }
+  this.newServiceMenuItem_.command = commandId;
+};
+
+/**
+ * @param {Promise<chrome.fileManagerPrivate.MountPointSizeStats>}
+ * spaceInfoPromise Promise to be fulfilled with space info.
  * @param {boolean} showLoadingCaption Whether show loading caption or not.
  */
 GearMenu.prototype.setSpaceInfo = function(

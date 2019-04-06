@@ -10,8 +10,8 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_private_base_feature.h"
+#import "ios/chrome/browser/ui/toolbar/public/features.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ui/base/device_form_factor.h"
 #include "ui/gfx/ios/uikit_util.h"
@@ -53,20 +53,29 @@ CGFloat CurrentScreenWidth() {
 
 bool IsIPhoneX() {
   UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
+  CGFloat height = CGRectGetHeight([[UIScreen mainScreen] nativeBounds]);
   return (idiom == UIUserInterfaceIdiomPhone &&
-          CGRectGetHeight([[UIScreen mainScreen] nativeBounds]) == 2436);
+          (height == 2436 || height == 2688 || height == 1792));
 }
 
-bool IsAdaptiveToolbarEnabled() {
-  if (tests_hook::ForceAdaptiveToolbar())
+bool IsRefreshInfobarEnabled() {
+  return base::FeatureList::IsEnabled(kInfobarsUIReboot);
+}
+
+bool IsRefreshLocationBarEnabled() {
+  // Refresh location bar requires UIRefreshPhase1 as well.
+  return base::FeatureList::IsEnabled(kUIRefreshLocationBar) &&
+         IsUIRefreshPhase1Enabled();
+}
+
+bool IsRefreshPopupPresentationEnabled() {
+  return base::FeatureList::IsEnabled(kRefreshPopupPresentation);
+}
+
+bool IsUIRefreshPhase1Enabled() {
+  if (tests_hook::ForceUIRefreshPhase1())
     return true;
-  return base::FeatureList::IsEnabled(kAdaptiveToolbar);
-}
-
-bool IsSafeAreaCompatibleToolbarEnabled() {
-  return (IsIPhoneX() &&
-          base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) ||
-         base::FeatureList::IsEnabled(kCleanToolbar);
+  return base::FeatureList::IsEnabled(kUIRefreshPhase1);
 }
 
 CGFloat StatusBarHeight() {
@@ -74,20 +83,21 @@ CGFloat StatusBarHeight() {
   // replaced with topLayoutGuide.
 
   if (IsIPhoneX()) {
-    if (IsSafeAreaCompatibleToolbarEnabled()) {
-      return IsPortrait() ? 44 : 0;
-    } else {
-      // Return the height of the portrait status bar even in landscape because
-      // the Toolbar does not properly layout itself if the status bar height
-      // changes.
-      return 44;
-    }
+    return IsPortrait() ? 44 : 0;
   }
 
   // Checking [UIApplication sharedApplication].statusBarFrame will return the
   // wrong offset when the application is started while in a phone call, so
   // simply return 20 here.
-  return 20;
+  if (!IsUIRefreshPhase1Enabled()) {
+    return 20;
+  }
+
+  // With the UI refresh, the location bar is hidden on landscape.
+  BOOL isCompactHeight = [UIApplication sharedApplication]
+                             .keyWindow.traitCollection.verticalSizeClass ==
+                         UIUserInterfaceSizeClassCompact;
+  return isCompactHeight ? 0 : 20;
 }
 
 CGFloat AlignValueToPixel(CGFloat value) {

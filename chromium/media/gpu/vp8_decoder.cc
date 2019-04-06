@@ -11,15 +11,15 @@ VP8Decoder::VP8Accelerator::VP8Accelerator() {}
 
 VP8Decoder::VP8Accelerator::~VP8Accelerator() {}
 
-VP8Decoder::VP8Decoder(VP8Accelerator* accelerator)
+VP8Decoder::VP8Decoder(std::unique_ptr<VP8Accelerator> accelerator)
     : state_(kNeedStreamMetadata),
       curr_frame_start_(nullptr),
       frame_size_(0),
-      accelerator_(accelerator) {
+      accelerator_(std::move(accelerator)) {
   DCHECK(accelerator_);
 }
 
-VP8Decoder::~VP8Decoder() {}
+VP8Decoder::~VP8Decoder() = default;
 
 bool VP8Decoder::Flush() {
   DVLOG(2) << "Decoder flush";
@@ -27,24 +27,31 @@ bool VP8Decoder::Flush() {
   return true;
 }
 
-void VP8Decoder::SetStream(const uint8_t* ptr, size_t size) {
+void VP8Decoder::SetStream(int32_t id,
+                           const uint8_t* ptr,
+                           size_t size,
+                           const DecryptConfig* decrypt_config) {
   DCHECK(ptr);
   DCHECK(size);
+  if (decrypt_config) {
+    NOTIMPLEMENTED();
+    state_ = kError;
+    return;
+  }
 
+  DVLOG(4) << "New input stream id: " << id << " at: " << (void*)ptr
+           << " size: " << size;
+  stream_id_ = id;
   curr_frame_start_ = ptr;
   frame_size_ = size;
-  DVLOG(4) << "New input stream at: " << (void*)ptr << " size: " << size;
 }
 
 void VP8Decoder::Reset() {
-  curr_pic_ = nullptr;
   curr_frame_hdr_ = nullptr;
   curr_frame_start_ = nullptr;
   frame_size_ = 0;
 
-  last_frame_ = nullptr;
-  golden_frame_ = nullptr;
-  alt_frame_ = nullptr;
+  ref_frames_.Clear();
 
   if (state_ == kDecoding)
     state_ = kAfterReset;
@@ -64,95 +71,67 @@ VP8Decoder::DecodeResult VP8Decoder::Decode() {
     }
   }
 
+  // The |stream_id_|s are expected to be monotonically increasing, and we've
+  // lost (at least) a frame if this condition doesn't uphold.
+  const bool have_skipped_frame = last_decoded_stream_id_ + 1 != stream_id_ &&
+                                  last_decoded_stream_id_ != kInvalidId;
   if (curr_frame_hdr_->IsKeyframe()) {
-    gfx::Size new_pic_size(curr_frame_hdr_->width, curr_frame_hdr_->height);
-    if (new_pic_size.IsEmpty())
+    const gfx::Size new_picture_size(curr_frame_hdr_->width,
+                                     curr_frame_hdr_->height);
+    if (new_picture_size.IsEmpty())
       return kDecodeError;
 
-    if (new_pic_size != pic_size_) {
-      DVLOG(2) << "New resolution: " << new_pic_size.ToString();
-      pic_size_ = new_pic_size;
+    if (new_picture_size != pic_size_) {
+      DVLOG(2) << "New resolution: " << new_picture_size.ToString();
+      pic_size_ = new_picture_size;
 
-      DCHECK(!curr_pic_);
-      last_frame_ = nullptr;
-      golden_frame_ = nullptr;
-      alt_frame_ = nullptr;
+      ref_frames_.Clear();
+      last_decoded_stream_id_ = stream_id_;
+      size_change_failure_counter_ = 0;
 
       return kAllocateNewSurfaces;
     }
 
     state_ = kDecoding;
-  } else {
-    if (state_ != kDecoding) {
-      // Need a resume point.
-      curr_frame_hdr_.reset();
-      return kRanOutOfStreamData;
+  } else if (state_ != kDecoding || have_skipped_frame) {
+    // Only trust the next frame. Otherwise, new keyframe might be missed, so
+    // |pic_size_| might be stale.
+    // TODO(dshwang): if rtc decoder can know the size of inter frame, change
+    // this condition to check if new keyframe is missed.
+    // https://crbug.com/832545
+    DVLOG(4) << "Drop the frame because the size maybe stale.";
+    if (have_skipped_frame &&
+        ++size_change_failure_counter_ > kVPxMaxNumOfSizeChangeFailures) {
+      state_ = kError;
+      return kDecodeError;
     }
+
+    // Need a resume point.
+    curr_frame_hdr_ = nullptr;
+    return kRanOutOfStreamData;
   }
 
-  curr_pic_ = accelerator_->CreateVP8Picture();
-  if (!curr_pic_)
+  scoped_refptr<VP8Picture> pic = accelerator_->CreateVP8Picture();
+  if (!pic)
     return kRanOutOfSurfaces;
 
-  curr_pic_->visible_rect = gfx::Rect(pic_size_);
-  if (!DecodeAndOutputCurrentFrame())
+  if (!DecodeAndOutputCurrentFrame(std::move(pic))) {
+    state_ = kError;
     return kDecodeError;
+  }
 
+  last_decoded_stream_id_ = stream_id_;
+  size_change_failure_counter_ = 0;
   return kRanOutOfStreamData;
 }
 
-void VP8Decoder::RefreshReferenceFrames() {
-  if (curr_frame_hdr_->IsKeyframe()) {
-    last_frame_ = curr_pic_;
-    golden_frame_ = curr_pic_;
-    alt_frame_ = curr_pic_;
-    return;
-  }
-
-  // Save current golden since we overwrite it here,
-  // but may have to use it to update alt below.
-  scoped_refptr<VP8Picture> curr_golden = golden_frame_;
-
-  if (curr_frame_hdr_->refresh_golden_frame) {
-    golden_frame_ = curr_pic_;
-  } else {
-    switch (curr_frame_hdr_->copy_buffer_to_golden) {
-      case Vp8FrameHeader::COPY_LAST_TO_GOLDEN:
-        DCHECK(last_frame_);
-        golden_frame_ = last_frame_;
-        break;
-
-      case Vp8FrameHeader::COPY_ALT_TO_GOLDEN:
-        DCHECK(alt_frame_);
-        golden_frame_ = alt_frame_;
-        break;
-    }
-  }
-
-  if (curr_frame_hdr_->refresh_alternate_frame) {
-    alt_frame_ = curr_pic_;
-  } else {
-    switch (curr_frame_hdr_->copy_buffer_to_alternate) {
-      case Vp8FrameHeader::COPY_LAST_TO_ALT:
-        DCHECK(last_frame_);
-        alt_frame_ = last_frame_;
-        break;
-
-      case Vp8FrameHeader::COPY_GOLDEN_TO_ALT:
-        DCHECK(curr_golden);
-        alt_frame_ = curr_golden;
-        break;
-    }
-  }
-
-  if (curr_frame_hdr_->refresh_last)
-    last_frame_ = curr_pic_;
-}
-
-bool VP8Decoder::DecodeAndOutputCurrentFrame() {
+bool VP8Decoder::DecodeAndOutputCurrentFrame(scoped_refptr<VP8Picture> pic) {
+  DCHECK(pic);
   DCHECK(!pic_size_.IsEmpty());
-  DCHECK(curr_pic_);
   DCHECK(curr_frame_hdr_);
+
+  pic->set_visible_rect(gfx::Rect(pic_size_));
+  pic->set_bitstream_id(stream_id_);
 
   if (curr_frame_hdr_->IsKeyframe()) {
     horizontal_scale_ = curr_frame_hdr_->horizontal_scale;
@@ -165,18 +144,17 @@ bool VP8Decoder::DecodeAndOutputCurrentFrame() {
     curr_frame_hdr_->vertical_scale = vertical_scale_;
   }
 
-  if (!accelerator_->SubmitDecode(curr_pic_, curr_frame_hdr_.get(), last_frame_,
-                                  golden_frame_, alt_frame_))
+  const bool show_frame = curr_frame_hdr_->show_frame;
+  pic->frame_hdr = std::move(curr_frame_hdr_);
+
+  if (!accelerator_->SubmitDecode(pic, ref_frames_))
     return false;
 
-  if (curr_frame_hdr_->show_frame)
-    if (!accelerator_->OutputPicture(curr_pic_))
-      return false;
+  if (show_frame && !accelerator_->OutputPicture(pic))
+    return false;
 
-  RefreshReferenceFrames();
+  ref_frames_.Refresh(pic);
 
-  curr_pic_ = nullptr;
-  curr_frame_hdr_ = nullptr;
   curr_frame_start_ = nullptr;
   frame_size_ = 0;
   return true;

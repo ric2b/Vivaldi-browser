@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "google_apis/gcm/engine/gcm_request_test_base.h"
+
 #include <cmath>
 
-#include "google_apis/gcm/engine/gcm_request_test_base.h"
-#include "net/url_request/url_fetcher_delegate.h"
+#include "base/strings/string_tokenizer.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
+#include "services/network/test/test_utils.h"
 
 namespace {
 
@@ -36,17 +40,30 @@ const net::BackoffEntry::Policy kDefaultBackoffPolicy = {
   false,
 };
 
+const network::TestURLLoaderFactory::PendingRequest* PendingForURL(
+    network::TestURLLoaderFactory* factory,
+    const std::string& url) {
+  GURL gurl(url);
+  std::vector<network::TestURLLoaderFactory::PendingRequest>* pending =
+      factory->pending_requests();
+  for (const auto& pending_request : *pending) {
+    if (pending_request.request.url == gurl)
+      return &pending_request;
+  }
+  return nullptr;
+}
+
 }  // namespace
 
 namespace gcm {
 
 GCMRequestTestBase::GCMRequestTestBase()
-    : task_runner_(new base::TestMockTimeTaskRunner),
-      task_runner_handle_(task_runner_),
-      url_request_context_getter_(new net::TestURLRequestContextGetter(
-          task_runner_)),
-      retry_count_(0) {
-}
+    : task_runner_(new base::TestMockTimeTaskRunner(
+          base::TestMockTimeTaskRunner::Type::kBoundToThread)),
+      shared_factory_(
+          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+              &test_url_loader_factory_)),
+      retry_count_(0) {}
 
 GCMRequestTestBase::~GCMRequestTestBase() {
 }
@@ -55,34 +72,46 @@ const net::BackoffEntry::Policy& GCMRequestTestBase::GetBackoffPolicy() const {
   return kDefaultBackoffPolicy;
 }
 
-net::TestURLFetcher* GCMRequestTestBase::GetFetcher() const {
-  return url_fetcher_factory_.GetFetcherByID(0);
-}
+void GCMRequestTestBase::OnAboutToCompleteFetch() {}
 
-void GCMRequestTestBase::SetResponse(net::HttpStatusCode status_code,
-                                     const std::string& response_body) {
+void GCMRequestTestBase::SetResponseForURLAndComplete(
+    const std::string& url,
+    net::HttpStatusCode status_code,
+    const std::string& response_body,
+    int net_error_code) {
   if (retry_count_++)
     FastForwardToTriggerNextRetry();
 
-  net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-  ASSERT_TRUE(fetcher);
-  fetcher->set_response_code(status_code);
-  fetcher->SetResponseString(response_body);
+  OnAboutToCompleteFetch();
+  EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+      GURL(url), network::URLLoaderCompletionStatus(net_error_code),
+      network::CreateResourceResponseHead(status_code), response_body));
 }
 
-void GCMRequestTestBase::CompleteFetch() {
-  net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-  ASSERT_TRUE(fetcher);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+const net::HttpRequestHeaders* GCMRequestTestBase::GetExtraHeadersForURL(
+    const std::string& url) {
+  const network::TestURLLoaderFactory::PendingRequest* pending_request =
+      PendingForURL(&test_url_loader_factory_, url);
+  return pending_request ? &pending_request->request.headers : nullptr;
 }
 
-void GCMRequestTestBase::VerifyFetcherUploadData(
+bool GCMRequestTestBase::GetUploadDataForURL(const std::string& url,
+                                             std::string* data_out) {
+  const network::TestURLLoaderFactory::PendingRequest* pending_request =
+      PendingForURL(&test_url_loader_factory_, url);
+  if (!pending_request)
+    return false;
+  *data_out = network::GetUploadData(pending_request->request);
+  return true;
+}
+
+void GCMRequestTestBase::VerifyFetcherUploadDataForURL(
+    const std::string& url,
     std::map<std::string, std::string>* expected_pairs) {
-  net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-  ASSERT_TRUE(fetcher);
+  std::string upload_data;
+  ASSERT_TRUE(GetUploadDataForURL(url, &upload_data));
 
   // Verify data was formatted properly.
-  std::string upload_data = fetcher->upload_data();
   base::StringTokenizer data_tokenizer(upload_data, "&=");
   while (data_tokenizer.GetNext()) {
     auto iter = expected_pairs->find(data_tokenizer.token());

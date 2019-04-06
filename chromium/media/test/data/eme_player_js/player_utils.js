@@ -64,46 +64,70 @@ PlayerUtils.registerEMEEventListeners = function(player) {
       });
     }
 
-    function getStatusForHdcpPolicy(mediaKeys, hdcpVersion, expectedResult) {
-      return mediaKeys.getStatusForPolicy({minHdcpVersion: hdcpVersion})
-          .then(
-              keyStatus => {
-                if (keyStatus == expectedResult) {
-                  return Promise.resolve();
-                } else {
-                  return Promise.reject(
-                      'keyStatus ' + keyStatus + ' does not match ' +
-                      expectedResult);
-                }
-              },
-              error => {
-                if (expectedResult == 'rejected') {
-                  return Promise.resolve();
-                } else {
-                  return Promise.reject("Promise rejected unexpectedly.");
-                }
-              });
+    // Calls getStatusForPolicy() and returns a resolved promise if the result
+    // matches the |expectedResult|, whose value can be:
+    // - a valid key status, e.g. "usable", in which case getStatusForPolicy()
+    //   must be resolved with |expectedResult|.
+    // - "rejected", in which case getStatusForPolicy() must be rejected.
+    // - "resolved", in which case getStatusForPolicy() can be resolved by any
+    //   value.
+    async function getStatusForHdcpPolicy(
+        mediaKeys, hdcpVersion, expectedResult) {
+      try {
+        var keyStatus =
+            await mediaKeys.getStatusForPolicy({minHdcpVersion: hdcpVersion});
+        if (expectedResult == 'resolved' ||
+            (expectedResult != 'rejected' && keyStatus == expectedResult)) {
+          return true;
+        }
+
+        return Promise.reject(
+            'For HDCP version "' + hdcpVersion + '", keyStatus "' + keyStatus +
+            '" does not match "' + expectedResult + '"');
+      } catch (e) {
+        if (expectedResult == 'rejected') {
+          return true;
+        }
+
+        return Promise.reject('Promise rejected unexpectedly: ' + e);
+      }
     }
 
+    // Tests HDCP policy check. Returns a resolved promise if all tests pass.
     function testGetStatusForHdcpPolicy(mediaKeys) {
       const keySystem = this.testConfig.keySystem;
       Utils.timeLog('Key system: ' + keySystem);
+
       if (keySystem == EXTERNAL_CLEARKEY) {
-        return Promise.resolve().then(function() {
-          return getStatusForHdcpPolicy(mediaKeys, "", "usable");
-        }).then(function() {
-          return getStatusForHdcpPolicy(mediaKeys, "hdcp-1.0", "usable");
-        }).then(function() {
-          return getStatusForHdcpPolicy(
-              mediaKeys, "hdcp-2.2", "output-restricted");
-        });
-      } else {
-        return Promise.resolve().then(function() {
-          return getStatusForHdcpPolicy(mediaKeys, "", "rejected");
-        }).then(function() {
-          return getStatusForHdcpPolicy(mediaKeys, "hdcp-1.0", "rejected");
-        });
+        // ClearKeyCdm pretends the device is HDCP 2.0 compliant. See
+        // ClearKeyCdm::GetStatusForPolicy() for details.
+        return Promise.all([
+          getStatusForHdcpPolicy(mediaKeys, '', 'usable'),
+          getStatusForHdcpPolicy(mediaKeys, 'hdcp-1.0', 'usable'),
+          getStatusForHdcpPolicy(mediaKeys, 'hdcp-2.2', 'output-restricted'),
+        ]);
       }
+
+      if (keySystem == CLEARKEY) {
+        // AesDecryptor does not support getStatusForPolicy() so the promise
+        // is always rejected.
+        return Promise.all([
+          getStatusForHdcpPolicy(mediaKeys, '', 'rejected'),
+          getStatusForHdcpPolicy(mediaKeys, 'hdcp-1.0', 'rejected'),
+        ]);
+      }
+
+      if (keySystem == WIDEVINE_KEYSYSTEM) {
+        // Widevine CDM supports getStatusForPolicy() so the promise is always
+        // resolved. However the key status depends on the device's HDCP level
+        // so we cannot enforce it.
+        return Promise.all([
+          getStatusForHdcpPolicy(mediaKeys, '', 'usable'),
+          getStatusForHdcpPolicy(mediaKeys, 'hdcp-1.0', 'resolved'),
+        ]);
+      }
+
+      return Promise.reject('Unsupported key system');
     }
 
     try {
@@ -146,13 +170,13 @@ PlayerUtils.registerEMEEventListeners = function(player) {
         // new test js file once we figure out an easy way to separate the
         // requrestMediaKeySystemAccess() logic from the rest of this file.
         Utils.timeLog('Policy check test.');
-        player.access.createMediaKeys().then(function(mediaKeys) {
+        player.access.createMediaKeys().then(function (mediaKeys) {
           // Call getStatusForPolicy() before creating any MediaKeySessions.
           return testGetStatusForHdcpPolicy(mediaKeys);
-        }).then(function(result) {
+        }).then(function (result) {
           Utils.timeLog('Policy check test passed.');
           Utils.setResultInTitle(UNIT_TEST_SUCCESS);
-        }).catch(function(error) {
+        }).catch(function (error) {
           Utils.timeLog('Policy check test failed.');
           Utils.failTest(error, UNIT_TEST_FAILURE);
         });
@@ -210,23 +234,11 @@ PlayerUtils.registerEMEEventListeners = function(player) {
   } else {
     // Some tests (e.g. mse_different_containers.html) specify audio and
     // video codecs seperately.
-    if (player.testConfig.videoFormat == 'ENCRYPTED_MP4' ||
-        player.testConfig.videoFormat == 'CLEAR_MP4') {
-      config.videoCapabilities =
-          [{contentType: 'video/mp4; codecs="avc1.4D000C"'}];
-    } else if (
-        player.testConfig.videoFormat == 'ENCRYPTED_WEBM' ||
-        player.testConfig.videoFormat == 'CLEAR_WEBM') {
-      config.videoCapabilities = [{contentType: 'video/webm; codecs="vp8"'}];
+    if (player.testConfig.videoFormat) {
+      config.videoCapabilities = [{contentType: player.testConfig.videoFormat}];
     }
-    if (player.testConfig.audioFormat == 'ENCRYPTED_MP4' ||
-        player.testConfig.audioFormat == 'CLEAR_MP4') {
-      config.audioCapabilities =
-          [{contentType: 'audio/mp4; codecs="mp4a.40.2"'}];
-    } else if (
-        player.testConfig.audioFormat == 'ENCRYPTED_WEBM' ||
-        player.testConfig.audioFormat == 'CLEAR_WEBM') {
-      config.audioCapabilities = [{contentType: 'audio/webm; codecs="vorbis"'}];
+    if (player.testConfig.audioFormat) {
+      config.audioCapabilities = [{contentType: player.testConfig.audioFormat}];
     }
   }
 
@@ -288,6 +300,7 @@ PlayerUtils.createPlayer = function(video, testConfig) {
         return WidevinePlayer;
       case CLEARKEY:
       case EXTERNAL_CLEARKEY:
+      case EXTERNAL_CLEARKEY_CDM_PROXY:
       case MESSAGE_TYPE_TEST_KEYSYSTEM:
       case CRASH_TEST_KEYSYSTEM:
         return ClearKeyPlayer;
@@ -296,7 +309,6 @@ PlayerUtils.createPlayer = function(video, testConfig) {
       case PLATFORM_VERIFICATION_TEST_KEYSYSTEM:
       case VERIFY_HOST_FILES_TEST_KEYSYSTEM:
       case STORAGE_ID_TEST_KEYSYSTEM:
-      case CDM_PROXY_TEST_KEYSYSTEM:
         return UnitTestPlayer;
       default:
         Utils.timeLog(keySystem + ' is not a known key system');

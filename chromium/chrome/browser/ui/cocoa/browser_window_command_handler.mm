@@ -14,10 +14,12 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
-#import "chrome/browser/ui/cocoa/browser_window_controller_private.h"
+#import "chrome/browser/ui/cocoa/browser_window_controller.h"
+#import "chrome/browser/ui/cocoa/browser_window_views_mac.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -26,20 +28,26 @@
 namespace {
 
 void SetToggleState(bool toggled, id item) {
-  DCHECK([item respondsToSelector:@selector(state)] &&
-         [item respondsToSelector:@selector(setState:)]);
-
-  NSInteger old_state = [item state];
-  NSInteger new_state = toggled ? NSOnState : NSOffState;
-  if (old_state != new_state)
-    [item setState:new_state];
+  NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item);
+  NSButton* buttonItem = base::mac::ObjCCast<NSButton>(item);
+  if (menuItem) {
+    NSInteger old_state = [menuItem state];
+    NSInteger new_state = toggled ? NSOnState : NSOffState;
+    if (old_state != new_state)
+      [menuItem setState:new_state];
+  } else if (buttonItem) {
+    NSInteger old_state = [buttonItem state];
+    NSInteger new_state = toggled ? NSOnState : NSOffState;
+    if (old_state != new_state)
+      [buttonItem setState:new_state];
+  }
 }
 
 // Update a toggle state for an item if modified. The item may be an NSMenuItem
 // or NSButton. Called by -validateUserInterfaceItem:.
 void UpdateToggleStateWithTag(NSInteger tag, id item, NSWindow* window) {
-  if (![item respondsToSelector:@selector(state)] ||
-      ![item respondsToSelector:@selector(setState:)])
+  if (!base::mac::ObjCCast<NSMenuItem>(item) &&
+      !base::mac::ObjCCast<NSButton>(item))
     return;
 
   Browser* browser = chrome::FindBrowserWithWindow(window);
@@ -48,7 +56,8 @@ void UpdateToggleStateWithTag(NSInteger tag, id item, NSWindow* window) {
   // On Windows this logic happens in bookmark_bar_view.cc. This simply updates
   // the menu item; it does not display the bookmark bar itself.
   if (tag == IDC_SHOW_BOOKMARK_BAR) {
-    SetToggleState(browser->window()->IsBookmarkBarVisible(), item);
+    PrefService* prefs = browser->profile()->GetPrefs();
+    SetToggleState(prefs->GetBoolean(bookmarks::prefs::kShowBookmarkBar), item);
     return;
   }
 
@@ -95,7 +104,9 @@ NSString* GetTitleForViewsFullscreenMenuItem(Browser* browser) {
 // TODO(jackhou): Remove the dependency on BrowserWindowController(Private).
 NSString* GetTitleForFullscreenMenuItem(Browser* browser) {
   NSWindow* ns_window = browser->window()->GetNativeWindow();
-  if (BrowserWindowController* controller = [ns_window windowController]) {
+  BrowserWindowController* controller =
+      BrowserWindowControllerForWindow(ns_window);
+  if (controller) {
     return l10n_util::GetNSString([controller isInAppKitFullscreen]
                                       ? IDS_EXIT_FULLSCREEN_MAC
                                       : IDS_ENTER_FULLSCREEN_MAC);

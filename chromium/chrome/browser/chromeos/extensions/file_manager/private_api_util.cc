@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
 
 #include <stddef.h>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -127,8 +128,7 @@ void GetSelectedFileInfoInternal(
       switch (params->local_path_option) {
         case NO_LOCAL_PATH_RESOLUTION:
           // Pass empty local path.
-          params->selected_files.push_back(
-              ui::SelectedFileInfo(file_path, base::FilePath()));
+          params->selected_files.emplace_back(file_path, base::FilePath());
           break;
         case NEED_LOCAL_PATH_FOR_OPENING:
           GetFileNativeLocalPathForOpening(
@@ -148,8 +148,7 @@ void GetSelectedFileInfoInternal(
           return;  // Remaining work is done in ContinueGetSelectedFileInfo.
       }
     } else {
-      params->selected_files.push_back(
-          ui::SelectedFileInfo(file_path, file_path));
+      params->selected_files.emplace_back(file_path, file_path);
     }
   }
   params->callback.Run(params->selected_files);
@@ -166,7 +165,7 @@ void ContinueGetSelectedFileInfo(
   }
   const int index = params->selected_files.size();
   const base::FilePath& file_path = params->file_paths[index];
-  params->selected_files.push_back(ui::SelectedFileInfo(file_path, local_path));
+  params->selected_files.emplace_back(file_path, local_path);
   GetSelectedFileInfoInternal(profile, std::move(params));
 }
 
@@ -177,12 +176,12 @@ void FillIconSet(file_manager_private::IconSet* output,
   DCHECK(output);
   using chromeos::file_system_provider::IconSet;
   if (input.HasIcon(IconSet::IconSize::SIZE_16x16)) {
-    output->icon16x16_url.reset(
-        new std::string(input.GetIcon(IconSet::IconSize::SIZE_16x16).spec()));
+    output->icon16x16_url = std::make_unique<std::string>(
+        input.GetIcon(IconSet::IconSize::SIZE_16x16).spec());
   }
   if (input.HasIcon(IconSet::IconSize::SIZE_32x32)) {
-    output->icon32x32_url.reset(
-        new std::string(input.GetIcon(IconSet::IconSize::SIZE_32x32).spec()));
+    output->icon32x32_url = std::make_unique<std::string>(
+        input.GetIcon(IconSet::IconSize::SIZE_32x32).spec());
   }
 }
 
@@ -200,8 +199,8 @@ void VolumeToVolumeMetadata(
   volume_metadata->profile.is_current_profile = true;
 
   if (!volume.source_path().empty()) {
-    volume_metadata->source_path.reset(
-        new std::string(volume.source_path().AsUTF8Unsafe()));
+    volume_metadata->source_path =
+        std::make_unique<std::string>(volume.source_path().AsUTF8Unsafe());
   }
 
   switch (volume.source()) {
@@ -227,17 +226,18 @@ void VolumeToVolumeMetadata(
   volume_metadata->watchable = volume.watchable();
 
   if (volume.type() == VOLUME_TYPE_PROVIDED) {
-    volume_metadata->provider_id.reset(
-        new std::string(volume.provider_id().ToString()));
-    volume_metadata->file_system_id.reset(
-        new std::string(volume.file_system_id()));
+    volume_metadata->provider_id =
+        std::make_unique<std::string>(volume.provider_id().ToString());
+    volume_metadata->file_system_id =
+        std::make_unique<std::string>(volume.file_system_id());
   }
 
   FillIconSet(&volume_metadata->icon_set, volume.icon_set());
 
-  volume_metadata->volume_label.reset(new std::string(volume.volume_label()));
-  volume_metadata->disk_file_system_type.reset(
-      new std::string(volume.file_system_type()));
+  volume_metadata->volume_label =
+      std::make_unique<std::string>(volume.volume_label());
+  volume_metadata->disk_file_system_type =
+      std::make_unique<std::string>(volume.file_system_type());
 
   switch (volume.type()) {
     case VOLUME_TYPE_GOOGLE_DRIVE:
@@ -264,6 +264,13 @@ void VolumeToVolumeMetadata(
     case VOLUME_TYPE_MEDIA_VIEW:
       volume_metadata->volume_type =
           file_manager_private::VOLUME_TYPE_MEDIA_VIEW;
+      break;
+    case VOLUME_TYPE_CROSTINI:
+      volume_metadata->volume_type = file_manager_private::VOLUME_TYPE_CROSTINI;
+      break;
+    case VOLUME_TYPE_ANDROID_FILES:
+      volume_metadata->volume_type =
+          file_manager_private::VOLUME_TYPE_ANDROID_FILES;
       break;
     case VOLUME_TYPE_TESTING:
       volume_metadata->volume_type =
@@ -296,9 +303,10 @@ void VolumeToVolumeMetadata(
         volume_metadata->device_type = file_manager_private::DEVICE_TYPE_MOBILE;
         break;
     }
-    volume_metadata->device_path.reset(
-        new std::string(volume.system_path_prefix().AsUTF8Unsafe()));
-    volume_metadata->is_parent_device.reset(new bool(volume.is_parent()));
+    volume_metadata->device_path = std::make_unique<std::string>(
+        volume.system_path_prefix().AsUTF8Unsafe());
+    volume_metadata->is_parent_device =
+        std::make_unique<bool>(volume.is_parent());
   } else {
     volume_metadata->device_type =
         file_manager_private::DEVICE_TYPE_NONE;
@@ -395,7 +403,7 @@ void SetupProfileFileAccessPermissions(int render_view_process_id,
 drive::EventLogger* GetLogger(Profile* profile) {
   drive::DriveIntegrationService* service =
       drive::DriveIntegrationServiceFactory::FindForProfile(profile);
-  return service ? service->event_logger() : NULL;
+  return service ? service->event_logger() : nullptr;
 }
 
 }  // namespace util

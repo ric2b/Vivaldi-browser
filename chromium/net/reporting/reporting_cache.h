@@ -35,6 +35,22 @@ class ReportingContext;
 // "doomed", which will cause it to be deallocated once it is no longer pending.
 class NET_EXPORT ReportingCache {
  public:
+  // Information about the number of deliveries that we've attempted for each
+  // origin and endpoint.
+  struct ClientStatistics {
+    // The number of attempts uploads that we've made for this client.
+    int attempted_uploads = 0;
+    // The number of uploads that have succeeded for this client.
+    int successful_uploads = 0;
+    // The number of individual reports that we've attempted to upload for this
+    // client.  (Failed uploads will cause a report to be counted multiple
+    // times, once for each attempt.)
+    int attempted_reports = 0;
+    // The number of individual reports that we've successfully uploaded for
+    // this client.
+    int successful_reports = 0;
+  };
+
   static std::unique_ptr<ReportingCache> Create(ReportingContext* context);
 
   virtual ~ReportingCache();
@@ -44,9 +60,11 @@ class NET_EXPORT ReportingCache {
   // All parameters correspond to the desired values for the relevant fields in
   // ReportingReport.
   virtual void AddReport(const GURL& url,
+                         const std::string& user_agent,
                          const std::string& group,
                          const std::string& type,
                          std::unique_ptr<const base::Value> body,
+                         int depth,
                          base::TimeTicks queued,
                          int attempts) = 0;
 
@@ -57,6 +75,18 @@ class NET_EXPORT ReportingCache {
   //
   // (Clears any existing data in |*reports_out|.)
   virtual void GetReports(
+      std::vector<const ReportingReport*>* reports_out) const = 0;
+
+  // Gets all reports in the cache, including pending and doomed reports, as a
+  // base::Value.
+  virtual base::Value GetReportsAsValue() const = 0;
+
+  // Gets all reports in the cache that aren't pending. The returned pointers
+  // are valid as long as either no calls to |RemoveReports| have happened or
+  // the reports' |pending| flag has been set to true using |SetReportsPending|.
+  //
+  // (Clears any existing data in |*reports_out|.)
+  virtual void GetNonpendingReports(
       std::vector<const ReportingReport*>* reports_out) const = 0;
 
   // Marks a set of reports as pending. |reports| must not already be marked as
@@ -72,6 +102,13 @@ class NET_EXPORT ReportingCache {
   // Increments |attempts| on a set of reports.
   virtual void IncrementReportsAttempts(
       const std::vector<const ReportingReport*>& reports) = 0;
+
+  // Records that we attempted (and possibly succeeded at) delivering |reports|
+  // to |endpoint|.
+  virtual void IncrementEndpointDeliveries(const url::Origin& origin,
+                                           const GURL& endpoint,
+                                           int reports_delivered,
+                                           bool successful) = 0;
 
   // Removes a set of reports. Any reports that are pending will not be removed
   // immediately, but rather marked doomed and removed once they are no longer
@@ -98,8 +135,7 @@ class NET_EXPORT ReportingCache {
                          int priority,
                          int client) = 0;
 
-  virtual void MarkClientUsed(const url::Origin& origin,
-                              const GURL& endpoint) = 0;
+  virtual void MarkClientUsed(const ReportingClient* client) = 0;
 
   // Gets all of the clients in the cache, regardless of origin or group.
   //
@@ -107,14 +143,19 @@ class NET_EXPORT ReportingCache {
   virtual void GetClients(
       std::vector<const ReportingClient*>* clients_out) const = 0;
 
+  // Gets information about all of the clients in the cache, encoded as a
+  // base::Value.
+  virtual base::Value GetClientsAsValue() const = 0;
+
   // Gets all of the clients configured for a particular origin in a particular
   // group. The returned pointers are only guaranteed to be valid if no calls
   // have been made to |SetClient| or |RemoveEndpoint| in between.
   //
   // If no origin match is found, the cache will return clients from the most
-  // specific superdomain which contains any clients with includeSubdomains set.
-  // For example, given the origin https://foo.bar.baz.com/, the cache would
-  // prioritize returning each potential match below over the ones below it:
+  // specific superdomain which contains any clients with include_subdomains
+  // set.  For example, given the origin https://foo.bar.baz.com/, the cache
+  // would prioritize returning each potential match below over the ones below
+  // it:
   //
   // 1. https://foo.bar.baz.com/ (exact origin match)
   // 2. https://foo.bar.baz.com:444/ (technically, a superdomain)
@@ -154,6 +195,12 @@ class NET_EXPORT ReportingCache {
 
   // Removes all clients.
   virtual void RemoveAllClients() = 0;
+
+  // Returns information about the number of attempted and successful uploads
+  // for a particular origin and endpoint.
+  virtual ClientStatistics GetStatisticsForOriginAndEndpoint(
+      const url::Origin& origin,
+      const GURL& endpoint) const = 0;
 
   // Gets the count of reports in the cache, *including* doomed reports.
   //

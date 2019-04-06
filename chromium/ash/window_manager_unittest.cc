@@ -21,8 +21,8 @@
 #include "components/session_manager/session_manager_types.h"
 #include "services/service_manager/public/cpp/service_test.h"
 #include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/window_tree_client.h"
@@ -59,6 +59,7 @@ class WindowTreeClientDelegate : public aura::WindowTreeClientDelegate {
       aura::WindowTreeHostMus* window_tree_host) override {}
   void OnLostConnection(aura::WindowTreeClient* client) override {}
   void OnPointerEventObserved(const ui::PointerEvent& event,
+                              int64_t display_id,
                               aura::Window* target) override {}
   aura::PropertyConverter* GetPropertyConverter() override {
     return &property_converter_;
@@ -92,7 +93,14 @@ void OnEmbed(bool success) {
   ASSERT_TRUE(success);
 }
 
-TEST_F(WindowManagerServiceTest, OpenWindow) {
+#if defined(ADDRESS_SANITIZER)
+// See https://crbug.com/838520.
+#define MAYBE_OpenWindow DISABLED_OpenWindow
+#else
+// See https://crbug.com/865316.
+#define MAYBE_OpenWindow DISABLED_OpenWindow
+#endif
+TEST_F(WindowManagerServiceTest, MAYBE_OpenWindow) {
   display::ScreenBase screen;
   screen.display_list().AddDisplay(
       display::Display(1, gfx::Rect(0, 0, 200, 200)),
@@ -105,16 +113,17 @@ TEST_F(WindowManagerServiceTest, OpenWindow) {
 
   // Connect to mus and create a new top level window. The request goes to
   // |ash|, but is async.
-  aura::WindowTreeClient client(connector(), &window_tree_delegate, nullptr,
-                                nullptr, nullptr, false);
-  client.ConnectViaWindowTreeFactory();
-  aura::test::EnvWindowTreeClientSetter env_window_tree_client_setter(&client);
+  std::unique_ptr<aura::WindowTreeClient> client =
+      aura::WindowTreeClient::CreateForWindowTreeFactory(
+          connector(), &window_tree_delegate, false);
+  aura::test::EnvWindowTreeClientSetter env_window_tree_client_setter(
+      client.get());
   std::map<std::string, std::vector<uint8_t>> properties;
   properties[ui::mojom::WindowManager::kWindowType_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(ui::mojom::WindowType::WINDOW));
   aura::WindowTreeHostMus window_tree_host_mus(
-      aura::CreateInitParamsForTopLevel(&client, std::move(properties)));
+      aura::CreateInitParamsForTopLevel(client.get(), std::move(properties)));
   window_tree_host_mus.InitHost();
   aura::Window* child_window = new aura::Window(nullptr);
   child_window->Init(ui::LAYER_NOT_DRAWN);
@@ -124,12 +133,13 @@ TEST_F(WindowManagerServiceTest, OpenWindow) {
   // |child_window|. This blocks until it succeeds.
   ui::mojom::WindowTreeClientPtr tree_client;
   auto tree_client_request = MakeRequest(&tree_client);
-  client.Embed(child_window, std::move(tree_client), 0u, base::Bind(&OnEmbed));
-  aura::WindowTreeClient child_client(connector(), &window_tree_delegate,
-                                      nullptr, std::move(tree_client_request),
-                                      nullptr, false);
+  client->Embed(child_window, std::move(tree_client), 0u, base::Bind(&OnEmbed));
+  std::unique_ptr<aura::WindowTreeClient> child_client =
+      aura::WindowTreeClient::CreateForEmbedding(
+          connector(), &window_tree_delegate, std::move(tree_client_request),
+          false);
   window_tree_delegate.WaitForEmbed();
-  ASSERT_TRUE(!child_client.GetRoots().empty());
+  ASSERT_TRUE(!child_client->GetRoots().empty());
   window_tree_delegate.DestroyWindowTreeHost();
 }
 

@@ -8,6 +8,8 @@
 #ifndef PLATFORM_MEDIA_GPU_PIPELINE_WIN_WMF_MEDIA_PIPELINE_H_
 #define PLATFORM_MEDIA_GPU_PIPELINE_WIN_WMF_MEDIA_PIPELINE_H_
 
+#include "platform_media/common/feature_toggles.h"
+
 #include <mfidl.h>
 // Work around bug in this header by disabling the relevant warning for it.
 // https://connect.microsoft.com/VisualStudio/feedback/details/911260/dxva2api-h-in-win8-sdk-triggers-c4201-with-w4
@@ -38,16 +40,13 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
   WMFMediaPipeline(
       DataSource* data_source,
       const AudioConfigChangedCB& audio_config_changed_cb,
-      const VideoConfigChangedCB& video_config_changed_cb,
-      PlatformMediaDecodingMode preferred_video_decoding_mode,
-      const MakeGLContextCurrentCB& make_gl_context_current_cb);
+      const VideoConfigChangedCB& video_config_changed_cb);
   ~WMFMediaPipeline() override;
 
   void Initialize(const std::string& mime_type,
                   const InitializeCB& initialize_cb) override;
   void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;
-  void ReadVideoData(const ReadDataCB& read_video_data_cb,
-                     uint32_t texture_id) override;
+  void ReadVideoData(const ReadDataCB& read_video_data_cb) override;
   void WillSeek() override {}
   void Seek(base::TimeDelta time, const SeekCB& seek_cb) override;
 

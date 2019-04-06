@@ -18,8 +18,11 @@ class TrustedSourcesManager;
 
 namespace content {
 class BrowserContext;
-class DownloadItem;
 class DownloadManager;
+}
+
+namespace download {
+class DownloadItem;
 }
 
 namespace user_prefs {
@@ -54,7 +57,7 @@ class DownloadPrefs {
       content::BrowserContext* browser_context);
 
   // Identify whether the downloaded item was downloaded from a trusted source.
-  bool IsFromTrustedSource(const content::DownloadItem& item);
+  bool IsFromTrustedSource(const download::DownloadItem& item);
 
   base::FilePath DownloadPath() const;
   void SetDownloadPath(const base::FilePath& path);
@@ -111,9 +114,17 @@ class DownloadPrefs {
  private:
   void SaveAutoOpenState();
 
+  // Checks whether |path| is a valid download target path. If it is, returns
+  // it as is. If it isn't returns the default download directory.
+  base::FilePath SanitizeDownloadTargetPath(const base::FilePath& path) const;
+
   Profile* profile_;
 
   BooleanPrefMember prompt_for_download_;
+#if defined(OS_ANDROID)
+  IntegerPrefMember prompt_for_download_android_;
+#endif
+
   FilePathPrefMember download_path_;
   FilePathPrefMember save_file_path_;
   IntegerPrefMember save_file_type_;

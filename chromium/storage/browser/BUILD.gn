@@ -6,6 +6,8 @@ import("//testing/test.gni")
 component("browser") {
   output_name = "storage_browser"
   sources = [
+    "blob/blob_builder_from_stream.cc",
+    "blob/blob_builder_from_stream.h",
     "blob/blob_data_builder.cc",
     "blob/blob_data_builder.h",
     "blob/blob_data_handle.cc",
@@ -30,12 +32,18 @@ component("browser") {
     "blob/blob_storage_registry.h",
     "blob/blob_transport_strategy.cc",
     "blob/blob_transport_strategy.h",
+    "blob/blob_url_loader.cc",
+    "blob/blob_url_loader.h",
+    "blob/blob_url_loader_factory.cc",
+    "blob/blob_url_loader_factory.h",
     "blob/blob_url_request_job.cc",
     "blob/blob_url_request_job.h",
     "blob/blob_url_request_job_factory.cc",
     "blob/blob_url_request_job_factory.h",
     "blob/blob_url_store_impl.cc",
     "blob/blob_url_store_impl.h",
+    "blob/blob_url_utils.cc",
+    "blob/blob_url_utils.h",
     "blob/mojo_blob_reader.cc",
     "blob/mojo_blob_reader.h",
     "blob/scoped_file.cc",
@@ -158,8 +166,6 @@ component("browser") {
     "fileapi/sandbox_quota_observer.cc",
     "fileapi/sandbox_quota_observer.h",
     "fileapi/task_runner_bound_observer_list.h",
-    "fileapi/timed_task_helper.cc",
-    "fileapi/timed_task_helper.h",
     "fileapi/transient_file_util.cc",
     "fileapi/transient_file_util.h",
     "fileapi/watcher_manager.h",
@@ -200,6 +206,7 @@ component("browser") {
   ]
 
   public_deps = [
+    "//components/services/filesystem/public/interfaces",
     "//storage/common",
   ]
   deps = [
@@ -208,7 +215,9 @@ component("browser") {
     "//base/third_party/dynamic_annotations",
     "//mojo/public/cpp/bindings",
     "//net",
+    "//services/network:network_service",
     "//services/network/public/cpp",
+    "//services/network/public/mojom",
     "//sql",
     "//third_party/leveldatabase",
     "//third_party/sqlite",
@@ -224,7 +233,6 @@ executable("dump_file_system") {
   deps = [
     ":browser",
     "//base",
-    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
     "//storage/common",
   ]
@@ -236,6 +244,7 @@ source_set("unittests") {
   sources = [
     # This target is in the process of being populated. See
     # http://crbug.com/653751
+    "blob/blob_builder_from_stream_unittest.cc",
     "blob/blob_data_builder_unittest.cc",
     "blob/blob_flattener_unittest.cc",
     "blob/blob_impl_unittest.cc",
@@ -281,7 +290,6 @@ source_set("unittests") {
     "fileapi/sandbox_isolated_origin_database_unittest.cc",
     "fileapi/sandbox_origin_database_unittest.cc",
     "fileapi/sandbox_prioritized_origin_database_unittest.cc",
-    "fileapi/timed_task_helper_unittest.cc",
     "fileapi/transient_file_util_unittest.cc",
     "quota/quota_database_unittest.cc",
     "quota/quota_manager_unittest.cc",
@@ -295,10 +303,11 @@ source_set("unittests") {
     ":browser",
     ":test_support",
     "//base/test:test_support",
-    "//mojo/common",
-    "//mojo/edk/system",
+    "//components/services/filesystem/public/interfaces",
+    "//mojo/core/embedder",
     "//net:test_support",
     "//services/network/public/cpp",
+    "//services/network/public/mojom",
     "//sql:test_support",
     "//testing/gtest",
     "//third_party/leveldatabase",
@@ -311,6 +320,10 @@ static_library("test_support") {
   sources = [
     "test/async_file_test_helper.cc",
     "test/async_file_test_helper.h",
+    "test/fake_blob.cc",
+    "test/fake_blob.h",
+    "test/fake_progress_client.cc",
+    "test/fake_progress_client.h",
     "test/fileapi_test_file_set.cc",
     "test/fileapi_test_file_set.h",
     "test/mock_blob_registry_delegate.cc",
@@ -346,8 +359,8 @@ static_library("test_support") {
   deps = [
     ":browser",
     "//base/test:test_support",
-    "//mojo/common",
     "//net:test_support",
+    "//services/network:network_service",
     "//testing/gtest",
     "//third_party/leveldatabase",
   ]

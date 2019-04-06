@@ -156,7 +156,8 @@ void GLContextCGL::Destroy() {
       SetCurrentGL(GetCurrentGL());
     }
 
-    ScopedCGLSetCurrentContext(static_cast<CGLContextObj>(context_));
+    ScopedCGLSetCurrentContext scoped_set_current(
+        static_cast<CGLContextObj>(context_));
     yuv_to_rgb_converters_.clear();
 
     // Rebind the current context's API if needed.
@@ -228,9 +229,16 @@ YUVToRGBConverter* GLContextCGL::GetYUVToRGBConverter(
   std::unique_ptr<YUVToRGBConverter>& yuv_to_rgb_converter =
       yuv_to_rgb_converters_[color_space];
   if (!yuv_to_rgb_converter)
-    yuv_to_rgb_converter.reset(
-        new YUVToRGBConverter(*GetVersionInfo(), color_space));
+    yuv_to_rgb_converter =
+        std::make_unique<YUVToRGBConverter>(*GetVersionInfo(), color_space);
   return yuv_to_rgb_converter.get();
+}
+
+void GLContextCGL::FlushForDriverCrashWorkaround() {
+  TRACE_EVENT0("gpu", "GLContextCGL::FlushForDriverCrashWorkaround");
+  if (!context_ || CGLGetCurrentContext() != context_)
+    return;
+  glFlush();
 }
 
 bool GLContextCGL::MakeCurrent(GLSurface* surface) {
@@ -308,14 +316,9 @@ void* GLContextCGL::GetHandle() {
   return context_;
 }
 
-void GLContextCGL::OnSetSwapInterval(int interval) {
-  DCHECK(IsCurrent(nullptr));
-}
-
 void GLContextCGL::SetSafeToForceGpuSwitch() {
   safe_to_force_gpu_switch_ = true;
 }
-
 
 GLContextCGL::~GLContextCGL() {
   Destroy();

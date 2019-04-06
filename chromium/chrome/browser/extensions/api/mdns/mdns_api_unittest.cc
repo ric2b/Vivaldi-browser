@@ -98,9 +98,9 @@ class MockEventRouter : public EventRouter {
   explicit MockEventRouter(content::BrowserContext* browser_context,
                            ExtensionPrefs* extension_prefs)
       : EventRouter(browser_context, extension_prefs) {}
-  virtual ~MockEventRouter() {}
+  ~MockEventRouter() override {}
 
-  virtual void BroadcastEvent(std::unique_ptr<Event> event) {
+  void BroadcastEvent(std::unique_ptr<Event> event) override {
     BroadcastEventPtr(event.get());
   }
   MOCK_METHOD1(BroadcastEventPtr, void(Event* event));
@@ -220,6 +220,7 @@ class MDnsAPITest : public extensions::ExtensionServiceTestBase {
     base::DictionaryValue manifest;
     manifest.SetString(extensions::manifest_keys::kVersion, "1.0.0.0");
     manifest.SetString(extensions::manifest_keys::kName, name);
+    manifest.SetInteger(extensions::manifest_keys::kManifestVersion, 2);
     if (is_platform_app) {
       // Setting app.background.page = "background.html" is sufficient to make
       // the extension type TYPE_PLATFORM_APP.

@@ -7,8 +7,7 @@ package org.chromium.content_shell_apk;
 import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.process_launcher.FileDescriptorInfo;
 import org.chromium.base.process_launcher.IChildProcessService;
-import org.chromium.content.browser.ChildProcessCreationParams;
-import org.chromium.content.browser.ChildProcessLauncherHelper;
+import org.chromium.content.browser.ChildProcessLauncherHelperImpl;
 import org.chromium.content.browser.LauncherThread;
 
 import java.util.concurrent.Callable;
@@ -53,24 +52,25 @@ public final class ChildProcessLauncherTestUtils {
         }
     }
 
-    public static ChildProcessLauncherHelper startForTesting(final boolean sandboxed,
+    public static ChildProcessLauncherHelperImpl startForTesting(final boolean sandboxed,
             final String[] commandLine, final FileDescriptorInfo[] filesToBeMapped,
-            final ChildProcessCreationParams params, final boolean doSetupConnection) {
-        return runOnLauncherAndGetResult(new Callable<ChildProcessLauncherHelper>() {
+            final boolean doSetupConnection) {
+        return runOnLauncherAndGetResult(new Callable<ChildProcessLauncherHelperImpl>() {
             @Override
-            public ChildProcessLauncherHelper call() {
-                return ChildProcessLauncherHelper.createAndStartForTesting(params, commandLine,
+            public ChildProcessLauncherHelperImpl call() {
+                return ChildProcessLauncherHelperImpl.createAndStartForTesting(commandLine,
                         filesToBeMapped, sandboxed, null /* binderCallback */, doSetupConnection);
             }
         });
     }
 
     public static ChildProcessConnection getConnection(
-            final ChildProcessLauncherHelper childProcessLauncher) {
+            final ChildProcessLauncherHelperImpl childProcessLauncher) {
         return runOnLauncherAndGetResult(new Callable<ChildProcessConnection>() {
             @Override
             public ChildProcessConnection call() {
-                return childProcessLauncher.getChildProcessConnection();
+                return ((ChildProcessLauncherHelperImpl) childProcessLauncher)
+                        .getChildProcessConnection();
             }
         });
     }

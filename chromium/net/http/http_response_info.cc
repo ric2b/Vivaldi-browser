@@ -104,6 +104,9 @@ enum {
   // trust anchor.
   RESPONSE_INFO_PKP_BYPASSED = 1 << 23,
 
+  // This bit is set if stale_revalidate_time is stored.
+  RESPONSE_INFO_HAS_STALENESS = 1 << 24,
+
   // TODO(darin): Add other bits to indicate alternate request methods.
   // For now, we don't support storing those.
 };
@@ -118,6 +121,7 @@ HttpResponseInfo::HttpResponseInfo()
       was_fetched_via_proxy(false),
       did_use_http_auth(false),
       unused_since_prefetch(false),
+      async_revalidation_requested(false),
       connection_info(CONNECTION_INFO_UNKNOWN) {}
 
 HttpResponseInfo::HttpResponseInfo(const HttpResponseInfo& rhs) = default;
@@ -191,6 +195,8 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
     ssl_info.connection_status = connection_status;
   }
 
+  // Signed Certificate Timestamps are no longer persisted to the cache, so
+  // ignore them when reading them out.
   if (flags & RESPONSE_INFO_HAS_SIGNED_CERTIFICATE_TIMESTAMPS) {
     int num_scts;
     if (!iter.ReadInt(&num_scts))
@@ -201,11 +207,6 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
       uint16_t status;
       if (!sct.get() || !iter.ReadUInt16(&status))
         return false;
-      if (!net::ct::IsValidSCTStatus(status))
-        return false;
-      ssl_info.signed_certificate_timestamps.push_back(
-          SignedCertificateTimestampAndStatus(
-              sct, static_cast<ct::SCTVerifyStatus>(status)));
     }
   }
 
@@ -254,6 +255,14 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
     // values must be discarded. See https://crbug.com/639421.
     if (KeyExchangeGroupIsValid(ssl_info.connection_status))
       ssl_info.key_exchange_group = key_exchange_group;
+  }
+
+  // Read staleness time.
+  if (flags & RESPONSE_INFO_HAS_STALENESS) {
+    if (!iter.ReadInt64(&time_val))
+      return false;
+    stale_revalidate_timeout =
+        base::Time() + base::TimeDelta::FromMicroseconds(time_val);
   }
 
   was_fetched_via_spdy = (flags & RESPONSE_INFO_WAS_SPDY) != 0;
@@ -305,10 +314,10 @@ void HttpResponseInfo::Persist(base::Pickle* pickle,
     flags |= RESPONSE_INFO_USE_HTTP_AUTHENTICATION;
   if (unused_since_prefetch)
     flags |= RESPONSE_INFO_UNUSED_SINCE_PREFETCH;
-  if (!ssl_info.signed_certificate_timestamps.empty())
-    flags |= RESPONSE_INFO_HAS_SIGNED_CERTIFICATE_TIMESTAMPS;
   if (ssl_info.pkp_bypassed)
     flags |= RESPONSE_INFO_PKP_BYPASSED;
+  if (!stale_revalidate_timeout.is_null())
+    flags |= RESPONSE_INFO_HAS_STALENESS;
 
   pickle->WriteInt(flags);
   pickle->WriteInt64(request_time.ToInternalValue());
@@ -335,15 +344,6 @@ void HttpResponseInfo::Persist(base::Pickle* pickle,
       pickle->WriteInt(ssl_info.security_bits);
     if (ssl_info.connection_status != 0)
       pickle->WriteInt(ssl_info.connection_status);
-    if (!ssl_info.signed_certificate_timestamps.empty()) {
-      pickle->WriteInt(ssl_info.signed_certificate_timestamps.size());
-      for (SignedCertificateTimestampAndStatusList::const_iterator it =
-           ssl_info.signed_certificate_timestamps.begin(); it !=
-           ssl_info.signed_certificate_timestamps.end(); ++it) {
-        it->sct->Persist(pickle);
-        pickle->WriteUInt16(static_cast<uint16_t>(it->status));
-      }
-    }
   }
 
   if (vary_data.is_valid())
@@ -360,6 +360,11 @@ void HttpResponseInfo::Persist(base::Pickle* pickle,
 
   if (ssl_info.is_valid() && ssl_info.key_exchange_group != 0)
     pickle->WriteInt(ssl_info.key_exchange_group);
+
+  if (flags & RESPONSE_INFO_HAS_STALENESS) {
+    pickle->WriteInt64(
+        (stale_revalidate_timeout - base::Time()).InMicroseconds());
+  }
 }
 
 bool HttpResponseInfo::DidUseQuic() const {
@@ -387,6 +392,8 @@ bool HttpResponseInfo::DidUseQuic() const {
     case CONNECTION_INFO_QUIC_41:
     case CONNECTION_INFO_QUIC_42:
     case CONNECTION_INFO_QUIC_43:
+    case CONNECTION_INFO_QUIC_44:
+    case CONNECTION_INFO_QUIC_99:
       return true;
     case NUM_OF_CONNECTION_INFOS:
       NOTREACHED();
@@ -443,6 +450,10 @@ std::string HttpResponseInfo::ConnectionInfoToString(
       return "http/2+quic/42";
     case CONNECTION_INFO_QUIC_43:
       return "http/2+quic/43";
+    case CONNECTION_INFO_QUIC_44:
+      return "http/2+quic/44";
+    case CONNECTION_INFO_QUIC_99:
+      return "http/2+quic/99";
     case CONNECTION_INFO_HTTP0_9:
       return "http/0.9";
     case CONNECTION_INFO_HTTP1_0:

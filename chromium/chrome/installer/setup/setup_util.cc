@@ -8,10 +8,9 @@
 
 #include <windows.h>
 
+#include <objbase.h>
 #include <stddef.h>
 #include <wtsapi32.h>
-
-#include <tlhelp32.h>
 
 #include <algorithm>
 #include <initializer_list>
@@ -21,8 +20,7 @@
 #include <string>
 #include <utility>
 
-#include <utility>
-
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -33,7 +31,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
@@ -57,8 +54,12 @@
 #include "chrome/installer/util/non_updating_app_registration_data.h"
 #include "chrome/installer/util/updating_app_registration_data.h"
 #include "chrome/installer/util/util_constants.h"
+#include "components/zucchini/zucchini.h"
+#include "components/zucchini/zucchini_integration.h"
 #include "courgette/courgette.h"
 #include "courgette/third_party/bsdiff/bsdiff.h"
+
+#include <utility>
 
 #include "base/strings/stringprintf.h"
 
@@ -326,6 +327,29 @@ int BsdiffPatchFiles(const base::FilePath& src,
       << "Failed to apply bsdiff patch " << patch.value()
       << " to file " << src.value() << " and generating file " << dest.value()
       << ". err=" << exit_code;
+
+  return exit_code;
+}
+
+int ZucchiniPatchFiles(const base::FilePath& src,
+                       const base::FilePath& patch,
+                       const base::FilePath& dest) {
+  VLOG(1) << "Applying Zucchini patch " << patch.value() << " to file "
+          << src.value() << " and generating file " << dest.value();
+
+  if (src.empty() || patch.empty() || dest.empty())
+    return installer::PATCH_INVALID_ARGUMENTS;
+
+  const zucchini::status::Code patch_status = zucchini::Apply(src, patch, dest);
+  const int exit_code =
+      (patch_status != zucchini::status::kStatusSuccess)
+          ? static_cast<int>(patch_status) + kZucchiniErrorOffset
+          : 0;
+
+  LOG_IF(ERROR, exit_code) << "Failed to apply Zucchini patch " << patch.value()
+                           << " to file " << src.value()
+                           << " and generating file " << dest.value()
+                           << ". err=" << exit_code;
 
   return exit_code;
 }
@@ -656,27 +680,6 @@ void DeleteRegistryKeyPartial(
   }
 }
 
-base::string16 GuidToSquid(const base::string16& guid) {
-  base::string16 squid;
-  squid.reserve(32);
-  auto input = guid.begin();
-  auto output = std::back_inserter(squid);
-
-  // Reverse-copy relevant characters, skipping separators.
-  std::reverse_copy(input + 0, input + 8, output);
-  std::reverse_copy(input + 9, input + 13, output);
-  std::reverse_copy(input + 14, input + 18, output);
-  std::reverse_copy(input + 19, input + 21, output);
-  std::reverse_copy(input + 21, input + 23, output);
-  std::reverse_copy(input + 24, input + 26, output);
-  std::reverse_copy(input + 26, input + 28, output);
-  std::reverse_copy(input + 28, input + 30, output);
-  std::reverse_copy(input + 30, input + 32, output);
-  std::reverse_copy(input + 32, input + 34, output);
-  std::reverse_copy(input + 34, input + 36, output);
-  return squid;
-}
-
 bool IsDowngradeAllowed(const MasterPreferences& prefs) {
   bool allow_downgrade = false;
   return prefs.GetBool(master_preferences::kAllowDowngrade, &allow_downgrade) &&
@@ -789,10 +792,10 @@ void DeRegisterEventLogProvider() {
 
 std::unique_ptr<AppRegistrationData> MakeBinariesRegistrationData() {
   if (install_static::kUseGoogleUpdateIntegration) {
-    return base::MakeUnique<UpdatingAppRegistrationData>(
+    return std::make_unique<UpdatingAppRegistrationData>(
         install_static::kBinariesAppGuid);
   }
-  return base::MakeUnique<NonUpdatingAppRegistrationData>(
+  return std::make_unique<NonUpdatingAppRegistrationData>(
       base::string16(L"Software\\").append(install_static::kBinariesPathName));
 }
 
@@ -865,71 +868,65 @@ bool OsSupportsDarkTextTiles() {
          windows_version >= base::win::VERSION_WIN10_RS1;
 }
 
-std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
-    const base::FilePath& path) {
-  std::vector<base::win::ScopedHandle> processes;
+base::Optional<std::string> DecodeDMTokenSwitchValue(
+    const base::string16& encoded_token) {
+  if (encoded_token.empty()) {
+    LOG(ERROR) << "Empty DMToken specified on the command line";
+    return base::nullopt;
+  }
 
-  if (path.empty())
-    return processes;
-  VLOG(1) << "GetRunningProcessesForPath: path=" << path.value();
-  PROCESSENTRY32 entry = {sizeof(PROCESSENTRY32)};
-  base::win::ScopedHandle snapshot(
-      CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
-  if (!snapshot.IsValid() || Process32First(snapshot.Get(), &entry) == FALSE)
-    return processes;
-  do {
-    if (!base::FilePath::CompareEqualIgnoreCase(
-            entry.szExeFile, path.BaseName().value()))  // vivaldi.exe
-      continue;
-    base::win::ScopedHandle process(
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
-                    entry.th32ProcessID));
-    if (!process.IsValid())
-      continue;
+  // The token passed on the command line is base64-encoded, but since this is
+  // on Windows, it is passed in as a wide string containing base64 values only.
+  std::string token;
+  if (!base::IsStringASCII(encoded_token) ||
+      !base::Base64Decode(base::UTF16ToASCII(encoded_token), &token)) {
+    LOG(ERROR) << "DMToken passed on the command line is not correctly encoded";
+    return base::nullopt;
+  }
 
-    // Check if process is dead already.
-    if (WaitForSingleObject(process.Get(), 0) == WAIT_TIMEOUT)
-      continue;
-
-    wchar_t process_image_name[MAX_PATH];
-    DWORD size = arraysize(process_image_name);
-    if (QueryFullProcessImageName(process.Get(), 0, process_image_name,
-                                  &size) == FALSE)
-      continue;
-    VLOG(1) << "GetRunningProcessesForPath: process_image_name=" << process_image_name;
-    if (!base::FilePath::CompareEqualIgnoreCase(path.value(),
-                                                process_image_name))
-      continue;
-
-    processes.push_back(std::move(process));
-  } while (Process32Next(snapshot.Get(), &entry) != FALSE);
-  VLOG(1) << "GetRunningProcessesForPath: processes.size()=" << processes.size();
-  return processes;
+  return token;
 }
 
-void KillProcesses(const std::vector<base::win::ScopedHandle>& processes) {
-  base::string16 cmd_line_string(L"taskkill.exe /F");
-  std::vector<DWORD>::iterator it;
-  for (auto& process : processes) {
-    DCHECK(process.IsValid());
-    cmd_line_string +=
-        base::StringPrintf(L" /PID %u", GetProcessId(process.Get()));
+bool StoreDMToken(const std::string& token) {
+  DCHECK(install_static::IsSystemInstall());
+
+  if (token.size() > kMaxDMTokenLength) {
+    LOG(ERROR) << "DMToken length out of bounds";
+    return false;
   }
 
-  WCHAR* cmd_line = new WCHAR[cmd_line_string.length() + 1];
-  std::copy(cmd_line_string.begin(), cmd_line_string.end(), cmd_line);
-  cmd_line[cmd_line_string.length()] = 0;
+  std::wstring path;
+  std::wstring name;
+  InstallUtil::GetMachineLevelUserCloudPolicyDMTokenRegistryPath(&path,
+                                                                 &name);
 
-  STARTUPINFO si = { sizeof(si) };
-  PROCESS_INFORMATION pi = { 0 };
-
-  if (CreateProcess(NULL, cmd_line, NULL, NULL, FALSE,
-                    CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+  base::win::RegKey key;
+  LONG result = key.Create(HKEY_LOCAL_MACHINE, path.c_str(),
+                           KEY_WRITE | KEY_WOW64_64KEY);
+  if (result != ERROR_SUCCESS) {
+    LOG(ERROR) << "Unable to create/open registry key HKLM\\" << path
+               << " for writing result=" << result;
+    return false;
   }
-  delete[] cmd_line;
+
+  result =
+      key.WriteValue(name.c_str(), token.data(),
+                     base::saturated_cast<DWORD>(token.size()), REG_BINARY);
+  if (result != ERROR_SUCCESS) {
+    LOG(ERROR) << "Unable to write specified DMToken to the registry at HKLM\\"
+               << path << "\\" << name << " result=" << result;
+    return false;
+  }
+
+  VLOG(1) << "Successfully stored specified DMToken in the registry.";
+
+  return true;
+}
+
+base::FilePath GetNotificationHelperPath(const base::FilePath& target_path,
+                                         const base::Version& version) {
+  return target_path.AppendASCII(version.GetString())
+      .Append(kNotificationHelperExe);
 }
 
 }  // namespace installer

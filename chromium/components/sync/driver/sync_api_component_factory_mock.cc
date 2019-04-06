@@ -7,67 +7,18 @@
 #include <utility>
 
 #include "components/sync/device_info/local_device_info_provider_mock.h"
-#include "components/sync/driver/model_associator.h"
-#include "components/sync/model/attachments/attachment_service.h"
-#include "components/sync/model/attachments/attachment_store.h"
-#include "components/sync/model/change_processor.h"
-
-using testing::_;
-using testing::InvokeWithoutArgs;
-using testing::Return;
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace syncer {
 
-SyncApiComponentFactoryMock::SyncApiComponentFactoryMock()
-    : local_device_(new LocalDeviceInfoProviderMock()) {}
-
-SyncApiComponentFactoryMock::SyncApiComponentFactoryMock(
-    AssociatorInterface* model_associator,
-    ChangeProcessor* change_processor)
-    : model_associator_(model_associator),
-      change_processor_(change_processor),
-      local_device_(new LocalDeviceInfoProviderMock()) {}
-
-SyncApiComponentFactoryMock::~SyncApiComponentFactoryMock() {}
-
-std::unique_ptr<AttachmentService>
-SyncApiComponentFactoryMock::CreateAttachmentService(
-    std::unique_ptr<AttachmentStoreForSync> attachment_store,
-    const UserShare& user_share,
-    const std::string& store_birthday,
-    ModelType model_type,
-    AttachmentService::Delegate* delegate) {
-  return AttachmentService::CreateForTest();
+SyncApiComponentFactoryMock::SyncApiComponentFactoryMock() {
+  // To avoid returning nulls and crashes in many tests, we default to create
+  // a mock device info provider.
+  ON_CALL(*this, CreateLocalDeviceInfoProvider())
+      .WillByDefault(testing::Invoke(
+          []() { return std::make_unique<LocalDeviceInfoProviderMock>(); }));
 }
 
-SyncApiComponentFactory::SyncComponents
-SyncApiComponentFactoryMock::CreateBookmarkSyncComponents(
-    SyncService* sync_service,
-    std::unique_ptr<DataTypeErrorHandler> error_handler) {
-  return MakeSyncComponents();
-}
-
-SyncApiComponentFactory::SyncComponents
-SyncApiComponentFactoryMock::MakeSyncComponents() {
-  return SyncApiComponentFactory::SyncComponents(model_associator_.release(),
-                                                 change_processor_.release());
-}
-
-std::unique_ptr<LocalDeviceInfoProvider>
-SyncApiComponentFactoryMock::CreateLocalDeviceInfoProvider() {
-  return std::move(local_device_);
-}
-
-void SyncApiComponentFactoryMock::SetLocalDeviceInfoProvider(
-    std::unique_ptr<LocalDeviceInfoProvider> local_device) {
-  local_device_ = std::move(local_device);
-}
-
-SyncApiComponentFactory::SyncComponents
-SyncApiComponentFactoryMock::CreateNotesSyncComponents(
-    SyncService* sync_service,
-    std::unique_ptr<DataTypeErrorHandler> error_handler) {
-  return MakeSyncComponents();
-}
+SyncApiComponentFactoryMock::~SyncApiComponentFactoryMock() = default;
 
 }  // namespace syncer

@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "build/build_config.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/gesture_detection/motion_event.h"
 
@@ -44,7 +44,8 @@ CoalesceScrollAndPinch(const blink::WebGestureEvent* second_last_event,
 
 blink::WebTouchEvent CreateWebTouchEventFromMotionEvent(
     const MotionEvent& event,
-    bool may_cause_scrolling);
+    bool may_cause_scrolling,
+    bool hovering);
 
 blink::WebGestureEvent CreateWebGestureEvent(const GestureEventDetails& details,
                                              base::TimeTicks timestamp,
@@ -85,14 +86,16 @@ void SetWebPointerPropertiesFromMotionEventData(
     float tilt_x,
     float tilt_y,
     int android_buttons_changed,
-    int tool_type);
+    MotionEvent::ToolType tool_type);
 
 int WebEventModifiersToEventFlags(int modifiers);
 
 blink::WebInputEvent::Modifiers DomCodeToWebInputEventModifiers(
     ui::DomCode code);
 
-bool IsGestureScrollOrFlingOrPinch(blink::WebInputEvent::Type);
+bool IsGestureScrollOrPinch(blink::WebInputEvent::Type);
+
+bool IsGestureScroll(blink::WebInputEvent::Type);
 
 bool IsContinuousGestureEvent(blink::WebInputEvent::Type);
 

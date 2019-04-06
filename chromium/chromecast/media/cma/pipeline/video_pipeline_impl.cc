@@ -15,6 +15,7 @@
 #include "chromecast/media/cma/base/coded_frame_provider.h"
 #include "chromecast/media/cma/base/decoder_config_adapter.h"
 #include "chromecast/media/cma/pipeline/av_pipeline_impl.h"
+#include "chromecast/media/cma/pipeline/cdm_decryptor.h"
 #include "chromecast/public/graphics_types.h"
 #include "chromecast/public/media/decoder_config.h"
 #include "media/base/video_decoder_config.h"
@@ -26,9 +27,8 @@ namespace {
 const size_t kMaxVideoFrameSize = 1024 * 1024;
 }
 
-VideoPipelineImpl::VideoPipelineImpl(
-    MediaPipelineBackend::VideoDecoder* decoder,
-    const VideoPipelineClient& client)
+VideoPipelineImpl::VideoPipelineImpl(CmaBackend::VideoDecoder* decoder,
+                                     const VideoPipelineClient& client)
     : AvPipelineImpl(decoder, client.av_pipeline_client),
       video_decoder_(decoder),
       natural_size_changed_cb_(client.natural_size_changed_cb) {
@@ -55,7 +55,7 @@ VideoPipelineImpl::~VideoPipelineImpl() {
   if (configs.empty()) {
     return ::media::PIPELINE_ERROR_INITIALIZATION_FAILED;
   }
-  DCHECK(configs.size() <= 2);
+  DCHECK_LE(configs.size(), 2U);
   DCHECK(configs[0].IsValidConfig());
   encryption_schemes_.resize(configs.size());
 
@@ -126,13 +126,17 @@ const EncryptionScheme& VideoPipelineImpl::GetEncryptionScheme(
   return encryption_schemes_[static_cast<int>(id)];
 }
 
+std::unique_ptr<StreamDecryptor> VideoPipelineImpl::CreateDecryptor() {
+  return std::make_unique<CdmDecryptor>(false /* clear_buffer_needed */);
+}
+
 void VideoPipelineImpl::UpdateStatistics() {
   if (client().statistics_cb.is_null())
     return;
 
   // TODO(mbjorge): Give Statistics a default constructor when the
   // next system update happens. b/32802298
-  MediaPipelineBackend::VideoDecoder::Statistics video_stats = {};
+  CmaBackend::VideoDecoder::Statistics video_stats = {};
   video_decoder_->GetStatistics(&video_stats);
 
   ::media::PipelineStatistics current_stats;

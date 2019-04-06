@@ -21,7 +21,7 @@ class TestPermisisonRequestOwner {
   explicit TestPermisisonRequestOwner(ContentSettingsType type) {
     bool user_gesture = true;
     auto decided = [](ContentSetting) {};
-    request_ = base::MakeUnique<PermissionRequestImpl>(
+    request_ = std::make_unique<PermissionRequestImpl>(
         GURL("https://example.com"), type, user_gesture, base::Bind(decided),
         base::Bind(&TestPermisisonRequestOwner::DeleteThis,
                    base::Unretained(this)));
@@ -57,6 +57,10 @@ void PermissionRequestManagerTestApi::AddSimpleRequest(
 
 gfx::NativeWindow PermissionRequestManagerTestApi::GetPromptWindow() {
   return manager_->view_ ? manager_->view_->GetNativeWindow() : nullptr;
+}
+
+void PermissionRequestManagerTestApi::SimulateWebContentsDestroyed() {
+  manager_->WebContentsDestroyed();
 }
 
 }  // namespace test

@@ -127,27 +127,24 @@ class DummyTCPServerSocketFactory : public content::DevToolsSocketFactory {
 }  // namespace
 
 void StartLocalDevToolsHttpHandler(HeadlessBrowser::Options* options) {
+  if (options->devtools_pipe_enabled)
+    content::DevToolsAgentHost::StartRemoteDebuggingPipeHandler();
+  if (options->devtools_endpoint.IsEmpty())
+    return;
+
   std::unique_ptr<content::DevToolsSocketFactory> socket_factory;
-  if (options->devtools_socket_fd == 0) {
-    const net::HostPortPair& endpoint = options->devtools_endpoint;
-    socket_factory.reset(new TCPEndpointServerSocketFactory(endpoint));
-  } else {
-#if defined(OS_POSIX)
-    const uint16_t socket_fd = options->devtools_socket_fd;
-    socket_factory.reset(new TCPAdoptServerSocketFactory(socket_fd));
-#else
-    LOG(ERROR) << "Can't inherit an open socket on non-Posix systems";
-    socket_factory.reset(new DummyTCPServerSocketFactory());
-#endif
-  }
+  const net::HostPortPair& endpoint = options->devtools_endpoint;
+  socket_factory.reset(new TCPEndpointServerSocketFactory(endpoint));
+
   content::DevToolsAgentHost::StartRemoteDebuggingServer(
-      std::move(socket_factory), std::string(),
+      std::move(socket_factory),
       options->user_data_dir,  // TODO(altimin): Figure a proper value for this.
       base::FilePath());
 }
 
 void StopLocalDevToolsHttpHandler() {
   content::DevToolsAgentHost::StopRemoteDebuggingServer();
+  content::DevToolsAgentHost::StopRemoteDebuggingPipeHandler();
 }
 
 }  // namespace headless

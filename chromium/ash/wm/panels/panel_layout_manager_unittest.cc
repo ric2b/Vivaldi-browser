@@ -17,7 +17,7 @@
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/system/web_notification/web_notification_tray.h"
+#include "ash/system/message_center/notification_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state.h"
@@ -26,6 +26,7 @@
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
@@ -70,13 +71,13 @@ class PanelLayoutManagerTest : public AshTestBase {
         new ShelfViewTestAPI(GetPrimaryShelf()->GetShelfViewForTesting()));
     shelf_view_test_->SetAnimationDuration(1);
 
-    WebNotificationTray::DisableAnimationsForTest(true);
+    NotificationTray::DisableAnimationsForTest(true);
   }
 
   void TearDown() override {
     AshTestBase::TearDown();
 
-    WebNotificationTray::DisableAnimationsForTest(false);  // Reenable animation
+    NotificationTray::DisableAnimationsForTest(false);  // Reenable animation
   }
 
   aura::Window* CreateNormalWindow(const gfx::Rect& bounds) {
@@ -221,9 +222,9 @@ class PanelLayoutManagerTest : public AshTestBase {
     DCHECK_GE(index, 0);
     gfx::Rect bounds = test_api.GetButton(index)->GetBoundsInScreen();
 
-    ui::test::EventGenerator& event_generator = GetEventGenerator();
-    event_generator.MoveMouseTo(bounds.CenterPoint());
-    event_generator.ClickLeftButton();
+    ui::test::EventGenerator* event_generator = GetEventGenerator();
+    event_generator->MoveMouseTo(bounds.CenterPoint());
+    event_generator->ClickLeftButton();
 
     test_api.RunMessageLoopUntilAnimationsDone();
   }
@@ -469,15 +470,11 @@ TEST_F(PanelLayoutManagerTest, MultiplePanelStackingVertical) {
   wm::ActivateWindow(w1.get());
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(WindowIsAbove(w1.get(), w2.get()));
-  // TODO(crbug.com/698887): investigate failure in Mash.
-  if (Shell::GetAshConfig() != Config::MASH)
-    EXPECT_TRUE(WindowIsAbove(w2.get(), w3.get()));
+  EXPECT_TRUE(WindowIsAbove(w2.get(), w3.get()));
 
   wm::ActivateWindow(w2.get());
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
-  // TODO(crbug.com/698887): investigate failure in Mash.
-  if (Shell::GetAshConfig() != Config::MASH)
-    EXPECT_TRUE(WindowIsAbove(w1.get(), w3.get()));
+  EXPECT_TRUE(WindowIsAbove(w1.get(), w3.get()));
   EXPECT_TRUE(WindowIsAbove(w2.get(), w3.get()));
   EXPECT_TRUE(WindowIsAbove(w2.get(), w1.get()));
 
@@ -496,10 +493,6 @@ TEST_F(PanelLayoutManagerTest, MultiplePanelCallout) {
   EXPECT_TRUE(IsPanelCalloutVisible(w1.get()));
   EXPECT_TRUE(IsPanelCalloutVisible(w2.get()));
   EXPECT_TRUE(IsPanelCalloutVisible(w3.get()));
-
-  // TODO(crbug.com/698887): investigate failure in Mash.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
 
   wm::ActivateWindow(w1.get());
   EXPECT_NO_FATAL_FAILURE(IsCalloutAboveLauncherIcon(w1.get()));
@@ -606,9 +599,7 @@ TEST_F(PanelLayoutManagerTest, FanWindows) {
   Shelf* shelf = GetPrimaryShelf();
   int icon_x1 = shelf->GetScreenBoundsOfItemIconForWindow(w1.get()).x();
   int icon_x2 = shelf->GetScreenBoundsOfItemIconForWindow(w2.get()).x();
-  // TODO(crbug.com/698887): investigate failure in Mash.
-  if (Shell::GetAshConfig() != Config::MASH)
-    EXPECT_EQ(window_x2 - window_x1, window_x3 - window_x2);
+  EXPECT_EQ(window_x2 - window_x1, window_x3 - window_x2);
   // New shelf items for panels are inserted before existing panel items.
   EXPECT_LT(window_x2, window_x1);
   EXPECT_LT(window_x3, window_x2);
@@ -823,15 +814,9 @@ TEST_F(PanelLayoutManagerTest, PanelsHideAndRestoreWithShelf) {
   aura::Window::Windows switchable_window_list =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList();
   EXPECT_EQ(3u, switchable_window_list.size());
-  EXPECT_NE(switchable_window_list.end(),
-            std::find(switchable_window_list.begin(),
-                      switchable_window_list.end(), w1.get()));
-  EXPECT_NE(switchable_window_list.end(),
-            std::find(switchable_window_list.begin(),
-                      switchable_window_list.end(), w2.get()));
-  EXPECT_NE(switchable_window_list.end(),
-            std::find(switchable_window_list.begin(),
-                      switchable_window_list.end(), w3.get()));
+  EXPECT_TRUE(base::ContainsValue(switchable_window_list, w1.get()));
+  EXPECT_TRUE(base::ContainsValue(switchable_window_list, w2.get()));
+  EXPECT_TRUE(base::ContainsValue(switchable_window_list, w3.get()));
 
   SetShelfVisibilityState(Shell::GetPrimaryRootWindow(), SHELF_VISIBLE);
   RunAllPendingInMessageLoop();

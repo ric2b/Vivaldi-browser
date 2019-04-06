@@ -16,7 +16,7 @@ namespace keyboard {
 
 // Describes the various attributes of the keyboard's appearance and usability.
 struct KeyboardStateDescriptor {
-  bool is_available;
+  bool is_visible;
   bool is_locked;
   gfx::Rect visual_bounds;
   gfx::Rect occluded_bounds;
@@ -24,43 +24,47 @@ struct KeyboardStateDescriptor {
 };
 
 // Observers to the KeyboardController are notified of significant events that
-// occur with the keyboard, such as the bounds or visiility changing.
+// occur with the keyboard, such as the bounds or visibility changing.
 class KEYBOARD_EXPORT KeyboardControllerObserver {
  public:
   virtual ~KeyboardControllerObserver() {}
 
-  // Called when the keyboard is shown or closed.
-  virtual void OnKeyboardAvailabilityChanging(const bool is_available) {}
+  // Called when the keyboard is shown or hidden (e.g. when user focuses and
+  // unfocuses on a textfield).
+  virtual void OnKeyboardVisibilityStateChanged(bool is_visible) {}
 
   // Called when the keyboard bounds are changing.
-  virtual void OnKeyboardVisibleBoundsChanging(const gfx::Rect& new_bounds) {}
+  virtual void OnKeyboardVisibleBoundsChanged(const gfx::Rect& new_bounds) {}
 
   // Called when the keyboard bounds have changed in a way that should affect
   // the usable region of the workspace.
-  virtual void OnKeyboardWorkspaceOccludedBoundsChanging(
+  virtual void OnKeyboardWorkspaceOccludedBoundsChanged(
       const gfx::Rect& new_bounds) {}
 
   // Called when the keyboard bounds have changed in a way that affects how the
   // workspace should change to not take up the screen space occupied by the
   // keyboard.
-  virtual void OnKeyboardWorkspaceDisplacingBoundsChanging(
-      const gfx::Rect& new_bounds){};
+  virtual void OnKeyboardWorkspaceDisplacingBoundsChanged(
+      const gfx::Rect& new_bounds) {}
 
   // Redundant with other various notification methods. Use this if the state of
   // multiple properties need to be conveyed simultaneously to observer
   // implementations without the need to track multiple stateful properties.
-  virtual void OnKeyboardAppearanceChanging(
-      const KeyboardStateDescriptor& state){};
+  virtual void OnKeyboardAppearanceChanged(
+      const KeyboardStateDescriptor& state) {}
 
-  // Called when the keyboard was closed.
-  virtual void OnKeyboardClosed(){};
+  // Called when the keyboard was disabled (e.g. when user switches convertible
+  // to laptop mode)
+  virtual void OnKeyboardDisabled() {}
 
   // Called when the keyboard has been hidden and the hiding animation finished
   // successfully. This is same as |state| == HIDDEN on OnStateChanged.
-  virtual void OnKeyboardHidden() {}
+  // When |is_temporary_hide| is true, this hide is immediately followed by a
+  // show (e.g. when changing to floating keyboard)
+  virtual void OnKeyboardHidden(bool is_temporary_hide) {}
 
   // Called when the state changed.
-  virtual void OnStateChanged(const KeyboardControllerState state) {}
+  virtual void OnStateChanged(KeyboardControllerState state) {}
 
   // Called when the virtual keyboard IME config changed.
   virtual void OnKeyboardConfigChanged() {}

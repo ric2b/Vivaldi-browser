@@ -4,19 +4,21 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_toggle/cr_toggle.html">
-<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_tooltip_icon.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
+<link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner-lite.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
 <link rel="import" href="item_behavior.html">
 <link rel="import" href="item_util.html">
 <link rel="import" href="navigation_helper.html">
@@ -25,9 +27,9 @@
 
 <dom-module id="extensions-detail-view">
   <template>
-    <style include="iron-flex cr-shared-style cr-icons action-link paper-button-style">
+    <style include="iron-flex cr-shared-style cr-icons action-link md-select paper-button-style">
       :host {
-        --iron-icon-fill-color: var(--paper-grey-600);
+        --iron-icon-fill-color: var(--google-grey-refresh-700);
         display: block;
         height: 100%;
       }
@@ -41,7 +43,7 @@
       }
 
       #enable-section span {
-        color: var(--paper-grey-600);
+        color: var(--cr-secondary-text-color);
         font-weight: 500;
       }
 
@@ -55,7 +57,7 @@
       }
 
       #main {
-        @apply(--shadow-elevation-2dp);
+        @apply --cr-card-elevation;
         background-color: white;
         margin: auto;
         min-height: 100%;
@@ -80,7 +82,7 @@
 
       #name {
         flex-grow: 1;
-        @apply(--cr-title-text);
+        @apply --cr-title-text;
       }
 
       #learn-more-link {
@@ -93,7 +95,7 @@
       }
 
       .section {
-        @apply(--cr-section);
+        @apply --cr-section;
       }
 
       .section.block {
@@ -110,11 +112,6 @@
         justify-content: space-between;
       }
 
-      .section.continuation.warning {
-        padding-left: 21px;
-        padding-right: 8px;
-      }
-
       .section:first-child {
         border: none;
       }
@@ -124,7 +121,12 @@
       }
 
       .section-content {
-        color: var(--paper-grey-600);
+        color: var(--cr-secondary-text-color);
+      }
+
+      .mid-section-header {
+        color: var(--cr-primary-text-color);
+        margin-top: 12px;
       }
 
       .actionable {
@@ -140,24 +142,23 @@
       .warning .action-button {
         background: white;
         color: var(--google-blue-500);
-        margin-left: 14px;
-        width: 78px;
       }
 
-      .warning div {
-        display: flex;
+      #reload-button {
+        color: var(--google-blue-500);
       }
 
       .warning span {
-        color: var(--paper-red-700);
-        width: 484px;
+        color: var(--google-red-700);
+        flex: 1;
       }
 
       .warning-icon {
-        --iron-icon-fill-color: var(--paper-red-700);
-        --iron-icon-height: 19px;
-        --iron-icon-width: 19px;
-        margin-right: 16px;
+        --iron-icon-fill-color: var(--google-red-700);
+        -webkit-margin-end: 8px;
+        flex-shrink: 0;
+        height: 18px;
+        width: 18px;
       }
 
       ul {
@@ -165,8 +166,10 @@
         margin: 0;
       }
 
-      button[is='cr-link-row'] {
-        width: 100%;
+      #runtime-host-permissions-mode {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
       }
 
       #options-section .control-line:first-child {
@@ -187,15 +190,16 @@
       }
 
       paper-spinner-lite {
-        @apply(--cr-icon-height-width);
+        @apply --cr-icon-height-width;
       }
     </style>
     <div id="container">
       <div id="main">
         <div id="top-bar">
-          <button id="close-button" is="paper-icon-button-light"
-              aria-label="$i18n{back}" class="icon-arrow-back no-overlap"
-              on-tap="onCloseButtonTap_"></button>
+          <paper-icon-button-light class="icon-arrow-back no-overlap">
+            <button id="closeButton" aria-label="$i18n{back}"
+                on-click="onCloseButtonTap_"></button>
+          </paper-icon-button-light>
           <img id="icon" src="[[data.iconUrl]]"
               alt$="[[appOrExtension(
                   data.type,
@@ -227,43 +231,50 @@
           </div>
         </div>
         <div id="warnings" hidden$="[[!hasWarnings_(data.*)]]">
+          <div id="runtime-warnings" aria-describedby="a11yAssociation"
+              hidden$="[[!data.runtimeWarnings.length]]"
+              class="section continuation warning control-line">
+            <iron-icon class="warning-icon" icon="cr:error"></iron-icon>
+            <span>
+              <template is="dom-repeat" items="[[data.runtimeWarnings]]">
+                [[item]]
+              </template>
+            </span>
+            <paper-button id="reload-button" class="action-button"
+                on-click="onReloadTap_">
+              $i18n{itemReload}
+            </paper-button>
+          </div>
           <div class="section continuation warning" id="suspicious-warning"
               hidden$="[[!data.disableReasons.suspiciousInstall]]">
-            <div>
-              <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
-              <span>
-                $i18n{itemSuspiciousInstall}
-                <a target="_blank" id="learn-more-link"
-                    href="$i18n{suspiciousInstallHelpUrl}">
-                  $i18n{learnMore}
-                </a>
-              </span>
-            </div>
+            <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
+            <span>
+              $i18n{itemSuspiciousInstall}
+              <a target="_blank" id="learn-more-link"
+                  href="$i18n{suspiciousInstallHelpUrl}">
+                $i18n{learnMore}
+              </a>
+            </span>
           </div>
-          <div class="section continuation warning" id="corrupted-warning"
+          <div class="section continuation warning control-line"
+              id="corrupted-warning"
               hidden$="[[!data.disableReasons.corruptInstall]]">
-            <div>
-              <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
-              <span>$i18n{itemCorruptInstall}</span>
-            </div>
+            <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
+            <span>$i18n{itemCorruptInstall}</span>
             <paper-button id="repair-button" class="action-button"
-                on-tap="onRepairTap_">
+                on-click="onRepairTap_">
               $i18n{itemRepair}
             </paper-button>
           </div>
           <div class="section continuation warning" id="blacklisted-warning"
               hidden$="[[!data.blacklistText]]">
-            <div>
-              <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
-              <span>[[data.blacklistText]]</span>
-            </div>
+            <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
+            <span>[[data.blacklistText]]</span>
           </div>
           <div class="section continuation warning" id="update-required-warning"
               hidden$="[[!data.disableReasons.updateRequired]]">
-            <div>
-              <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
-              <span>$i18n{updateRequiredByPolicy}</span>
-            </div>
+            <iron-icon class="warning-icon" icon="cr:warning"></iron-icon>
+            <span>$i18n{updateRequiredByPolicy}</span>
           </div>
         </div>
         <div class="section continuation block">
@@ -299,7 +310,7 @@
                 <template is="dom-repeat" items="[[data.views]]">
                   <li>
                     <a is="action-link" class="inspectable-view"
-                        on-tap="onInspectTap_">
+                        on-click="onInspectTap_">
                       [[computeInspectLabel_(item)]]
                     </a>
                   </li>
@@ -311,11 +322,13 @@
         <div class="section block">
           <div class="section-title">$i18n{itemPermissions}</div>
           <div class="section-content">
-            <span id="no-permissions" hidden="[[data.permissions.length]]">
+            <span id="no-permissions" hidden$="[[hasPermissions_(data.*)]]">
               $i18n{itemPermissionsEmpty}
             </span>
-            <ul id="permissions-list" hidden="[[!data.permissions.length]]">
-              <template is="dom-repeat" items="[[data.permissions]]">
+            <ul id="permissions-list"
+                hidden$="[[!data.permissions.simplePermissions.length]]">
+              <template is="dom-repeat"
+                  items="[[data.permissions.simplePermissions]]">
                 <li>
                   [[item.message]]
                   <ul hidden="[[!item.submessages.length]]">
@@ -326,6 +339,37 @@
                 </li>
               </template>
             </ul>
+            <template is="dom-if" if="[[showRuntimeHostPermissions_(data.*)]]">
+              <div id="runtime-host-permissions">
+                <div id="runtime-host-permissions-mode">
+                  <div class="mid-section-header">
+                    $i18n{itemHostPermissionsHeading}
+                  </div>
+                  <select id="host-access" class="md-select"
+                      value="[[data.permissions.hostAccess]]"
+                      on-change="onHostAccessChanged_">
+                    <option value$="[[HostAccess_.ON_CLICK]]">
+                      $i18n{itemHostAccessOnClick}
+                    </option>
+                    <option value$="[[HostAccess_.ON_SPECIFIC_SITES]]">
+                      $i18n{itemHostAccessOnSpecificSites}
+                    </option>
+                    <option value$="[[HostAccess_.ON_ALL_SITES]]">
+                      $i18n{itemHostAccessOnAllSites}
+                    </option>
+                  </select>
+                </div>
+                <template is="dom-if" if="[[showSpecificSites_(data.*)]]">
+                  <div class="mid-section-header">$i18n{itemAllowedHosts}</div>
+                  <ul id="runtime-hosts">
+                    <template is="dom-repeat"
+                        items="[[data.permissions.runtimeHostPermissions]]">
+                      <li>[[item]]</li>
+                    </template>
+                  </ul>
+                </template>
+              </div>
+            </template>
           </div>
         </div>
         <template is="dom-if"
@@ -362,13 +406,6 @@
                 <span>$i18n{itemAllowOnFileUrls}</span>
               </extensions-toggle-row>
             </template>
-            <template is="dom-if" if="[[data.runOnAllUrls.isEnabled]]">
-              <extensions-toggle-row id="allow-on-all-sites"
-                  checked="[[data.runOnAllUrls.isActive]]"
-                  on-change="onAllowOnAllSitesChange_">
-                <span>$i18n{itemAllowOnAllSites}</span>
-              </extensions-toggle-row>
-            </template>
             <template is="dom-if" if="[[data.errorCollection.isEnabled]]">
               <extensions-toggle-row id="collect-errors"
                 checked="[[data.errorCollection.isActive]]"
@@ -378,20 +415,20 @@
             </template>
           </div>
         </template>
-        <button class="hr" is="cr-link-row" id="extensions-options"
+        <cr-link-row class="hr" is="" id="extensions-options"
             disabled="[[!isEnabled_(data.state)]]"
             hidden="[[!shouldShowOptionsLink_(data.*)]]"
             icon-class="icon-external" label="$i18n{itemOptions}"
-            on-tap="onExtensionOptionsTap_">
-        </button>
-        <button class="hr" hidden="[[!data.manifestHomePageUrl.length]]"
-            is="cr-link-row" icon-class="icon-external" id="extensionWebsite"
-            label="$i18n{extensionWebsite}" on-tap="onExtensionWebSiteTap_">
-        </button>
-        <button class="hr" hidden="[[!data.webStoreUrl.length]]"
-            is="cr-link-row" icon-class="icon-external" id="viewInStore"
-            label="$i18n{viewInStore}" on-tap="onViewInStoreTap_">
-        </button>
+            on-click="onExtensionOptionsTap_">
+        </cr-link-row>
+        <cr-link-row class="hr" hidden="[[!data.manifestHomePageUrl.length]]"
+            icon-class="icon-external" id="extensionWebsite"
+            label="$i18n{extensionWebsite}" on-click="onExtensionWebSiteTap_">
+        </cr-link-row>
+        <cr-link-row class="hr" hidden="[[!data.webStoreUrl.length]]"
+            icon-class="icon-external" id="viewInStore"
+            label="$i18n{viewInStore}" on-click="onViewInStoreTap_">
+        </cr-link-row>
         <div class="section block">
           <div class="section-title">$i18n{itemSource}</div>
           <div id="source" class="section-content">
@@ -400,16 +437,16 @@
           <div id="load-path" class="section-content"
               hidden$="[[!data.prettifiedPath]]">
             <span>$i18n{itemExtensionPath}</span>
-            <a is="action-link" on-tap="onLoadPathTap_">
+            <a is="action-link" on-click="onLoadPathTap_">
               [[data.prettifiedPath]]
             </a>
           </div>
         </div>
-        <button class="hr" is="cr-link-row"
+        <cr-link-row class="hr"
             hidden="[[isControlled_(data.controlledInfo)]]"
             icon-class="subpage-arrow" id="remove-extension"
-            label="$i18n{itemRemoveExtension}" on-tap="onRemoveTap_">
-        </button>
+            label="$i18n{itemRemoveExtension}" on-click="onRemoveTap_">
+        </cr-link-row>
       </div>
     </div>
   </template>

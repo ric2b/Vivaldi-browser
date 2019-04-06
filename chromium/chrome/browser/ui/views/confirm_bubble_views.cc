@@ -11,15 +11,19 @@
 #include "chrome/browser/ui/confirm_bubble_model.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_features.h"
+#include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/link.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/widget/widget.h"
 
 ConfirmBubbleViews::ConfirmBubbleViews(
     std::unique_ptr<ConfirmBubbleModel> model)
-    : model_(std::move(model)), link_(NULL) {
+    : model_(std::move(model)), help_button_(nullptr) {
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::TEXT, views::TEXT));
   views::GridLayout* layout =
@@ -28,8 +32,9 @@ ConfirmBubbleViews::ConfirmBubbleViews(
   // Use a fixed maximum message width, so longer messages will wrap.
   const int kMaxMessageWidth = 400;
   views::ColumnSet* cs = layout->AddColumnSet(0);
-  cs->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0,
-                views::GridLayout::FIXED, kMaxMessageWidth, false);
+  cs->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
+                views::GridLayout::kFixedSize, views::GridLayout::FIXED,
+                kMaxMessageWidth, false);
 
   // Add the message label.
   views::Label* label = new views::Label(model_->GetMessageText());
@@ -37,13 +42,14 @@ ConfirmBubbleViews::ConfirmBubbleViews(
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetMultiLine(true);
   label->SizeToFit(kMaxMessageWidth);
-  layout->StartRow(0, 0);
+  layout->StartRow(views::GridLayout::kFixedSize, 0);
   layout->AddView(label);
 
-  // Initialize the link.
-  link_ = new views::Link(model_->GetLinkText());
-  link_->set_listener(this);
-  link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  // Initialize the help button.
+  help_button_ = CreateVectorImageButton(this);
+  help_button_->SetFocusForPlatform();
+  help_button_->SetTooltipText(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+  SetImageFromVectorIcon(help_button_, vector_icons::kHelpOutlineIcon);
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::CONFIRM_BUBBLE);
 }
@@ -77,7 +83,7 @@ bool ConfirmBubbleViews::IsDialogButtonEnabled(ui::DialogButton button) const {
 }
 
 views::View* ConfirmBubbleViews::CreateExtraView() {
-  return link_;
+  return help_button_;
 }
 
 bool ConfirmBubbleViews::Cancel() {
@@ -98,16 +104,20 @@ base::string16 ConfirmBubbleViews::GetWindowTitle() const {
   return model_->GetTitle();
 }
 
-void ConfirmBubbleViews::LinkClicked(views::Link* source, int event_flags) {
-  if (source == link_) {
-    model_->LinkClicked();
+bool ConfirmBubbleViews::ShouldShowCloseButton() const {
+  return false;
+}
+
+void ConfirmBubbleViews::ButtonPressed(views::Button* sender,
+                                       const ui::Event& event) {
+  if (sender == help_button_) {
+    model_->OpenHelpPage();
     GetWidget()->Close();
   }
 }
 
 namespace chrome {
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 void ShowConfirmBubble(gfx::NativeWindow window,
                        gfx::NativeView anchor_view,
                        const gfx::Point& origin,
@@ -116,6 +126,5 @@ void ShowConfirmBubble(gfx::NativeWindow window,
       new ConfirmBubbleViews(std::move(model)), window)
       ->Show();
 }
-#endif  // !OS_MACOSX || MAC_VIEWS_BROWSER
 
 }  // namespace chrome

@@ -11,7 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "build/buildflag.h"
 #include "net/base/net_export.h"
-#include "net/net_features.h"
+#include "net/net_buildflags.h"
 
 namespace net {
 
@@ -29,7 +29,7 @@ class HttpUserAgentSettings;
 class NetLog;
 class NetworkDelegate;
 class ProxyDelegate;
-class ProxyService;
+class ProxyResolutionService;
 class SSLConfigService;
 class TransportSecurityState;
 class URLRequestContext;
@@ -37,7 +37,7 @@ class URLRequestJobFactory;
 class URLRequestThrottlerManager;
 
 #if BUILDFLAG(ENABLE_REPORTING)
-class NetworkErrorLoggingDelegate;
+class NetworkErrorLoggingService;
 class ReportingService;
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
@@ -63,8 +63,10 @@ class NET_EXPORT URLRequestContextStorage {
       std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory);
   void set_proxy_delegate(std::unique_ptr<ProxyDelegate> proxy_delegate);
   void set_network_delegate(std::unique_ptr<NetworkDelegate> network_delegate);
-  void set_proxy_service(std::unique_ptr<ProxyService> proxy_service);
-  void set_ssl_config_service(SSLConfigService* ssl_config_service);
+  void set_proxy_resolution_service(
+      std::unique_ptr<ProxyResolutionService> proxy_resolution_service);
+  void set_ssl_config_service(
+      std::unique_ptr<SSLConfigService> ssl_config_service);
   void set_http_server_properties(
       std::unique_ptr<HttpServerProperties> http_server_properties);
   void set_cookie_store(std::unique_ptr<CookieStore> cookie_store);
@@ -88,9 +90,9 @@ class NET_EXPORT URLRequestContextStorage {
   void set_reporting_service(
       std::unique_ptr<ReportingService> reporting_service);
 
-  void set_network_error_logging_delegate(
-      std::unique_ptr<NetworkErrorLoggingDelegate>
-          network_error_logging_delegate);
+  void set_network_error_logging_service(
+      std::unique_ptr<NetworkErrorLoggingService>
+          network_error_logging_service);
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
   // Everything else can be access through the URLRequestContext, but this
@@ -112,9 +114,8 @@ class NET_EXPORT URLRequestContextStorage {
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
   std::unique_ptr<ProxyDelegate> proxy_delegate_;
   std::unique_ptr<NetworkDelegate> network_delegate_;
-  std::unique_ptr<ProxyService> proxy_service_;
-  // TODO(willchan): Remove refcounting on this member.
-  scoped_refptr<SSLConfigService> ssl_config_service_;
+  std::unique_ptr<ProxyResolutionService> proxy_resolution_service_;
+  std::unique_ptr<SSLConfigService> ssl_config_service_;
   std::unique_ptr<HttpServerProperties> http_server_properties_;
   std::unique_ptr<HttpUserAgentSettings> http_user_agent_settings_;
   std::unique_ptr<CookieStore> cookie_store_;
@@ -132,7 +133,7 @@ class NET_EXPORT URLRequestContextStorage {
 
 #if BUILDFLAG(ENABLE_REPORTING)
   std::unique_ptr<ReportingService> reporting_service_;
-  std::unique_ptr<NetworkErrorLoggingDelegate> network_error_logging_delegate_;
+  std::unique_ptr<NetworkErrorLoggingService> network_error_logging_service_;
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextStorage);

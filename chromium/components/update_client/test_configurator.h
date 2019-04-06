@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,7 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/update_client/configurator.h"
-#include "services/service_manager/public/cpp/test/test_connector_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "url/gurl.h"
 
 class PrefService;
@@ -24,9 +25,14 @@ class TestURLRequestContextGetter;
 class URLRequestContextGetter;
 }  // namespace net
 
+namespace network {
+class SharedURLLoaderFactory;
+}  // namespace network
+
 namespace service_manager {
 class Connector;
-}
+class TestConnectorFactory;
+}  // namespace service_manager
 
 namespace update_client {
 
@@ -43,7 +49,7 @@ const uint8_t jebg_hash[] = {0x94, 0x16, 0x0b, 0x6d, 0x41, 0x75, 0xe9, 0xec,
                              0x6e, 0x05, 0x6b, 0xe8, 0x73, 0x47, 0xf6, 0xc4,
                              0x11, 0x9f, 0xbc, 0xb3, 0x09, 0xb3, 0x5b, 0x40};
 // component 1 public key (base64 encoded):
-const std::string jebg_public_key =
+const char jebg_public_key[] =
     "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC68bW8i/RzSaeXOcNLuBw0SP9+1bdo5ysLqH"
     "qfLqZs6XyJWEyL0U6f1axPR6LwViku21kgdc6PI524eb8Cr+a/iXGgZ8SdvZTcfQ/g/ukwlblF"
     "mtqYfDoVpz03U8rDQ9b6DxeJBF4r48TNlFORggrAiNR26qbf1i178Au12AzWtwIDAQAB";
@@ -85,7 +91,9 @@ class TestConfigurator : public Configurator {
   std::string GetOSLongName() const override;
   std::string ExtraRequestParams() const override;
   std::string GetDownloadPreference() const override;
-  net::URLRequestContextGetter* RequestContext() const override;
+  scoped_refptr<net::URLRequestContextGetter> RequestContext() const override;
+  scoped_refptr<network::SharedURLLoaderFactory> URLLoaderFactory()
+      const override;
   std::unique_ptr<service_manager::Connector> CreateServiceManagerConnector()
       const override;
   bool EnabledDeltas() const override;
@@ -96,6 +104,7 @@ class TestConfigurator : public Configurator {
   ActivityDataService* GetActivityDataService() const override;
   bool IsPerUserInstall() const override;
   std::vector<uint8_t> GetRunActionKeyHash() const override;
+  std::string GetAppGuid() const override;
 
   void SetBrand(const std::string& brand);
   void SetOnDemandTime(int seconds);
@@ -105,6 +114,10 @@ class TestConfigurator : public Configurator {
   void SetEnabledComponentUpdates(bool enabled_component_updates);
   void SetUpdateCheckUrl(const GURL& url);
   void SetPingUrl(const GURL& url);
+  void SetAppGuid(const std::string& app_guid);
+  network::TestURLLoaderFactory* test_url_loader_factory() {
+    return &test_url_loader_factory_;
+  }
 
  private:
   friend class base::RefCountedThreadSafe<TestConfigurator>;
@@ -120,10 +133,14 @@ class TestConfigurator : public Configurator {
   bool enabled_component_updates_;
   GURL update_check_url_;
   GURL ping_url_;
+  std::string app_guid_;
 
   std::unique_ptr<service_manager::TestConnectorFactory> connector_factory_;
   std::unique_ptr<service_manager::Connector> connector_;
   scoped_refptr<net::TestURLRequestContextGetter> context_;
+
+  scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TestConfigurator);
 };

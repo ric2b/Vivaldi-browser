@@ -11,10 +11,10 @@
 
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/browser/network_properties_manager.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
-#include "net/proxy/proxy_config.h"
+#include "net/proxy_resolution/proxy_config.h"
 
 namespace data_reduction_proxy {
 
@@ -51,9 +51,9 @@ net::ProxyConfig DataReductionProxyConfigurator::CreateProxyConfig(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   net::ProxyConfig config;
-  DCHECK(!config.is_valid() && config.proxy_rules().proxies_for_http.IsEmpty());
+  DCHECK(config.proxy_rules().proxies_for_http.IsEmpty());
   config.proxy_rules().type =
-      net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME;
+      net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME;
 
   for (const auto& http_proxy : proxies_for_http) {
     // If the config is being generated for fetching the probe URL, then the
@@ -97,16 +97,11 @@ net::ProxyConfig DataReductionProxyConfigurator::CreateProxyConfig(
   }
 
   if (config.proxy_rules().proxies_for_http.IsEmpty()) {
-    // Return an invalid net config so that data reduction proxy is not used.
-    return config;
+    // Return a DIRECT net config so that data reduction proxy is not used.
+    return net::ProxyConfig::CreateDirect();
   }
 
   config.proxy_rules().bypass_rules = bypass_rules_;
-  // The ID is set to a bogus value. It cannot be left uninitialized, else the
-  // config will return invalid.
-  net::ProxyConfig::ID unused_id = 1;
-  config.set_id(unused_id);
-
   return config;
 }
 

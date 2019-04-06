@@ -66,6 +66,9 @@ class ContactService : public KeyedService {
 
   typedef base::Callback<void(std::shared_ptr<ContactResults>)> ContactCallback;
 
+  typedef base::Callback<void(std::shared_ptr<CreateContactsResult>)>
+      CreateContactsCallback;
+
   typedef base::Callback<void(std::shared_ptr<ContactQueryResults>)>
       QueryContactCallback;
 
@@ -75,6 +78,11 @@ class ContactService : public KeyedService {
   base::CancelableTaskTracker::TaskId CreateContact(
       ContactRow ev,
       const ContactCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateContacts(
+      std::vector<contact::ContactRow> contacts,
+      const CreateContactsCallback& callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId AddEmailAddress(

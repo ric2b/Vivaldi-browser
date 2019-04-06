@@ -14,8 +14,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.WebContents;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -31,14 +31,14 @@ public class WebViewWebVrTest {
 
     private TestAwContentsClient mContentsClient;
     private AwTestContainerView mTestContainerView;
-    private ContentViewCore mContentViewCore;
+    private WebContents mWebContents;
 
     @Before
     public void setUp() throws Exception {
         mContentsClient = new TestAwContentsClient();
         mTestContainerView = mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
-        mContentViewCore = mTestContainerView.getContentViewCore();
-        mActivityTestRule.enableJavaScriptOnUiThread(mTestContainerView.getAwContents());
+        mWebContents = mTestContainerView.getWebContents();
+        AwActivityTestRule.enableJavaScriptOnUiThread(mTestContainerView.getAwContents());
     }
 
     @Test
@@ -54,8 +54,7 @@ public class WebViewWebVrTest {
             String result = "false";
             try {
                 result = JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                        mContentViewCore.getWebContents(), "promiseResolved", 100,
-                        TimeUnit.MILLISECONDS);
+                        mWebContents, "promiseResolved", 100, TimeUnit.MILLISECONDS);
             } catch (InterruptedException | TimeoutException e) {
                 // Expected to happen regularly, do nothing
             }
@@ -64,10 +63,9 @@ public class WebViewWebVrTest {
 
         // Assert that the promise resolved instead of rejecting, but returned
         // 0 VRDisplays
-        Assert.assertTrue(
-                JavaScriptUtils
-                        .executeJavaScriptAndWaitForResult(mContentViewCore.getWebContents(),
-                                "numDisplays", 100, TimeUnit.MILLISECONDS)
-                        .equals("0"));
+        Assert.assertTrue(JavaScriptUtils
+                                  .executeJavaScriptAndWaitForResult(
+                                          mWebContents, "numDisplays", 100, TimeUnit.MILLISECONDS)
+                                  .equals("0"));
     }
 }

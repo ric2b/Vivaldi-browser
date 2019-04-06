@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -20,15 +20,17 @@
 #include "media/base/audio_parameters.h"
 
 namespace base {
-class FilePath;
 class SingleThreadTaskRunner;
+class UnguessableToken;
 }
 
 namespace media {
 
+class AudioDebugRecordingManager;
 class AudioInputStream;
 class AudioManager;
 class AudioOutputStream;
+class AudioSourceDiverter;
 
 // Manages all audio resources.  Provides some convenience functions that avoid
 // the need to provide iterators over the existing streams.
@@ -130,7 +132,6 @@ class MEDIA_EXPORT AudioManager {
   // Factory to create audio recording streams.
   // |channels| can be 1 or 2.
   // |sample_rate| is in hertz and can be any value supported by the platform.
-  // |bits_per_sample| can be any value supported by the platform.
   // |samples_per_packet| is in hertz as well and can be 0 to |sample_rate|,
   // with 0 suggesting that the implementation use a default value for that
   // platform.
@@ -171,20 +172,35 @@ class MEDIA_EXPORT AudioManager {
   // Create a new AudioLog object for tracking the behavior for one or more
   // instances of the given component.  See AudioLogFactory for more details.
   virtual std::unique_ptr<AudioLog> CreateAudioLog(
-      AudioLogFactory::AudioComponent component) = 0;
+      AudioLogFactory::AudioComponent component,
+      int component_id) = 0;
 
-  // Enable debug recording. InitializeDebugRecording() must be called before
-  // this function.
-  virtual void EnableDebugRecording(const base::FilePath& base_file_name) = 0;
-
-  // Disable debug recording.
-  virtual void DisableDebugRecording() = 0;
+  // Get debug recording manager. This can only be called on AudioManager's
+  // thread (GetTaskRunner()).
+  virtual AudioDebugRecordingManager* GetAudioDebugRecordingManager() = 0;
 
   // Gets the name of the audio manager (e.g., Windows, Mac, PulseAudio).
   virtual const char* GetName() = 0;
 
   // Limits the number of streams that can be created for testing purposes.
   virtual void SetMaxStreamCountForTesting(int max_input, int max_output);
+
+  // TODO(crbug/824019): The following are temporary, as a middle-ground step
+  // necessary to resolve a chicken-and-egg problem as we migrate audio
+  // mirroring into the new AudioService. Add/RemoveDiverter() allow
+  // AudioOutputController to (de)register itself as an AudioSourceDiverter,
+  // while SetDiverterCallbacks() allows the entity that is interested in such
+  // notifications to receive them.
+  using AddDiverterCallback =
+      base::RepeatingCallback<void(const base::UnguessableToken&,
+                                   media::AudioSourceDiverter*)>;
+  using RemoveDiverterCallback =
+      base::RepeatingCallback<void(media::AudioSourceDiverter*)>;
+  virtual void SetDiverterCallbacks(AddDiverterCallback add_callback,
+                                    RemoveDiverterCallback remove_callback);
+  virtual void AddDiverter(const base::UnguessableToken& group_id,
+                           media::AudioSourceDiverter* diverter);
+  virtual void RemoveDiverter(media::AudioSourceDiverter* diverter);
 
  protected:
   FRIEND_TEST_ALL_PREFIXES(AudioManagerTest, AudioDebugRecording);
@@ -194,8 +210,8 @@ class MEDIA_EXPORT AudioManager {
 
   virtual void ShutdownOnAudioThread() = 0;
 
-  // Initializes output debug recording. Can be called on any thread; will post
-  // to the audio thread if not called on it.
+  // Initializes debug recording. Can be called on any thread; will post to the
+  // audio thread if not called on it.
   virtual void InitializeDebugRecording() = 0;
 
   // Returns true if the OS reports existence of audio devices. This does not
@@ -266,6 +282,9 @@ class MEDIA_EXPORT AudioManager {
 
   std::unique_ptr<AudioThread> audio_thread_;
   bool shutdown_ = false;  // True after |this| has been shutdown.
+
+  AddDiverterCallback add_diverter_callback_;
+  RemoveDiverterCallback remove_diverter_callback_;
 
   THREAD_CHECKER(thread_checker_);
   DISALLOW_COPY_AND_ASSIGN(AudioManager);

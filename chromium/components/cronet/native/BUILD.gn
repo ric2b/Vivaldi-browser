@@ -1,28 +1,66 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 import("//components/cronet/native/include/headers.gni")
 import("//testing/test.gni")
 
-# Cronet native API implementation.
-source_set("cronet_native_impl") {
-  sources = [
-    "buffer.cc",
-    "include/cronet_c.h",
-    "runnables.cc",
-    "runnables.h",
-
-    # Generated from cronet.idl.
-    "generated/cronet.idl_c.h",
-    "generated/cronet.idl_impl_interface.cc",
-    "generated/cronet.idl_impl_interface.h",
-    "generated/cronet.idl_impl_struct.cc",
-    "generated/cronet.idl_impl_struct.h",
-  ]
-  deps = [
-    "//base",
-    "//net",
-  ]
+config("cronet_native_include_config") {
   include_dirs = [
     "//components/cronet/native/generated",
     "//components/cronet/native/include",
+  ]
+}
+
+source_set("cronet_native_headers") {
+  deps = [
+    "//base",
+  ]
+
+  configs += [ ":cronet_native_include_config" ]
+  public_configs = [ ":cronet_native_include_config" ]
+
+  public = [
+    "include/cronet_c.h",
+    "include/cronet_export.h",
+
+    # Generated from cronet.idl.
+    "generated/cronet.idl_c.h",
+    "generated/cronet.idl_impl_interface.h",
+    "generated/cronet.idl_impl_struct.h",
+  ]
+}
+
+# Cross-platform portion of Cronet native API implementation.
+source_set("cronet_native_impl") {
+  deps = [
+    ":cronet_native_headers",
+    "//base",
+    "//components/cronet:cronet_common",
+    "//components/cronet:cronet_version_header",
+    "//net",
+  ]
+
+  configs += [ ":cronet_native_include_config" ]
+  public_configs = [ ":cronet_native_include_config" ]
+  public_deps = [
+    ":cronet_native_headers",
+  ]
+
+  sources = [
+    "buffer.cc",
+    "engine.cc",
+    "engine.h",
+    "io_buffer_with_cronet_buffer.cc",
+    "io_buffer_with_cronet_buffer.h",
+    "runnables.cc",
+    "runnables.h",
+    "url_request.cc",
+    "url_request.h",
+
+    # Generated from cronet.idl.
+    "generated/cronet.idl_impl_interface.cc",
+    "generated/cronet.idl_impl_struct.cc",
   ]
 }
 
@@ -33,44 +71,18 @@ source_set("cronet_native_unittests") {
 
   deps = [
     ":cronet_native_impl",
+    "//components/cronet/native/test:cronet_native_testutil",
     "//net:test_support",
+    "//testing/gtest",
   ]
 
-  include_dirs = [
-    "//components/cronet/native/generated",
-    "//components/cronet/native/include",
-  ]
+  configs += [ ":cronet_native_include_config" ]
 
   sources = [
     "runnables_unittest.cc",
-    "test_util.cc",
-    "test_util.h",
 
     # Generated from cronet.idl.
     "generated/cronet.idl_impl_interface_unittest.cc",
     "generated/cronet.idl_impl_struct_unittest.cc",
-  ]
-}
-
-# Tests for publicly exported Cronet Native API. This target does NOT depend on
-# cronet_native_impl to prevent static linking of implementation into test app.
-source_set("cronet_native_tests") {
-  testonly = true
-
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//testing/gtest",
-  ]
-
-  include_dirs = [
-    "//components/cronet/native/generated",
-    "//components/cronet/native/include",
-  ]
-  sources = [
-    "buffer_test.cc",
-    "executors_test.cc",
-    "test_util.cc",
-    "test_util.h",
   ]
 }

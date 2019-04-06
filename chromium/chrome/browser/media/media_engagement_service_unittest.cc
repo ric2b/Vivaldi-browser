@@ -7,10 +7,11 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/media/media_engagement_score.h"
@@ -39,6 +40,9 @@ namespace {
 
 base::FilePath g_temp_history_dir;
 
+// History is automatically expired after 90 days.
+base::TimeDelta kHistoryExpirationThreshold = base::TimeDelta::FromDays(90);
+
 // Waits until a change is observed in media engagement content settings.
 class MediaEngagementChangeWaiter : public content_settings::Observer {
  public:
@@ -52,10 +56,11 @@ class MediaEngagementChangeWaiter : public content_settings::Observer {
   }
 
   // Overridden from content_settings::Observer:
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               std::string resource_identifier) override {
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsType content_type,
+      const std::string& resource_identifier) override {
     if (content_type == CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT)
       Proceed();
   }
@@ -107,18 +112,36 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
 
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     g_temp_history_dir = temp_dir_.GetPath();
-    HistoryServiceFactory::GetInstance()->SetTestingFactory(
-        profile(), &BuildTestHistoryService);
+    ConfigureHistoryService();
 
     test_clock_.SetNow(GetReferenceTime());
     service_ = base::WrapUnique(StartNewMediaEngagementService());
   }
+
+  MediaEngagementService* service() const { return service_.get(); }
 
   MediaEngagementService* StartNewMediaEngagementService() {
     MediaEngagementService* service =
         new MediaEngagementService(profile(), &test_clock_);
     base::RunLoop().RunUntilIdle();
     return service;
+  }
+
+  void ConfigureHistoryService() {
+    HistoryServiceFactory::GetInstance()->SetTestingFactory(
+        profile(), &BuildTestHistoryService);
+  }
+
+  void RestartHistoryService() {
+    history::HistoryService* history_old = HistoryServiceFactory::GetForProfile(
+        profile(), ServiceAccessType::IMPLICIT_ACCESS);
+    history_old->Shutdown();
+
+    HistoryServiceFactory::ShutdownForProfile(profile());
+    ConfigureHistoryService();
+    history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+        profile(), ServiceAccessType::IMPLICIT_ACCESS);
+    history->AddObserver(service());
   }
 
   void RecordVisitAndPlaybackAndAdvanceClock(GURL url) {
@@ -129,8 +152,8 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
 
   void TearDown() override {
     service_->Shutdown();
-    service_.reset();
     ChromeRenderViewHostTestHarness::TearDown();
+    service_.reset();
   }
 
   void AdvanceClock() {
@@ -436,7 +459,7 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     base::CancelableTaskTracker task_tracker;
     // Expire origin1, origin1a, origin2, and origin3a's most recent visit.
     history->ExpireHistoryBetween(std::set<GURL>(), yesterday, today,
-                                  base::Bind(&base::DoNothing), &task_tracker);
+                                  base::DoNothing(), &task_tracker);
     waiter.Wait();
 
     // origin1 should have a score that is not zero and is the same as the old
@@ -459,6 +482,11 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 5, 2);
     histogram_tester.ExpectBucketCount(
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 4, 1);
+
+    histogram_tester.ExpectTotalCount(
+        MediaEngagementService::kHistogramClearName, 1);
+    histogram_tester.ExpectBucketCount(
+        MediaEngagementService::kHistogramClearName, 3, 1);
   }
 
   {
@@ -473,8 +501,7 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     expire_list.push_back(args);
 
     base::CancelableTaskTracker task_tracker;
-    history->ExpireHistory(expire_list, base::Bind(&base::DoNothing),
-                           &task_tracker);
+    history->ExpireHistory(expire_list, base::DoNothing(), &task_tracker);
     waiter.Wait();
 
     // origin1's score should have changed but the rest should remain the same.
@@ -489,6 +516,11 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 1);
     histogram_tester.ExpectBucketCount(
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 5, 1);
+
+    histogram_tester.ExpectTotalCount(
+        MediaEngagementService::kHistogramClearName, 1);
+    histogram_tester.ExpectBucketCount(
+        MediaEngagementService::kHistogramClearName, 3, 1);
   }
 
   {
@@ -503,8 +535,7 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     expire_list.push_back(args);
 
     base::CancelableTaskTracker task_tracker;
-    history->ExpireHistory(expire_list, base::Bind(&base::DoNothing),
-                           &task_tracker);
+    history->ExpireHistory(expire_list, base::DoNothing(), &task_tracker);
     waiter.Wait();
 
     // origin3's score should be removed but the rest should remain the same.
@@ -521,12 +552,199 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 1);
     histogram_tester.ExpectBucketCount(
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 0, 1);
+
+    histogram_tester.ExpectTotalCount(
+        MediaEngagementService::kHistogramClearName, 1);
+    histogram_tester.ExpectBucketCount(
+        MediaEngagementService::kHistogramClearName, 3, 1);
+  }
+}
+
+TEST_F(MediaEngagementServiceTest, CleanUpDatabaseWhenHistoryIsExpired) {
+  base::HistogramTester histogram_tester;
+
+  // |origin1| will have history that is before the expiry threshold and should
+  // not be deleted. |origin2| will have history either side of the threshold
+  // and should also not be deleted. |origin3| will have history before the
+  // threshold and should be deleted.
+  GURL origin1("http://www.google.com/");
+  GURL origin2("https://drive.google.com/");
+  GURL origin3("http://deleted.com/");
+
+  // Populate test MEI data.
+  SetScores(origin1, 20, 20);
+  SetScores(origin2, 30, 30);
+  SetScores(origin3, 40, 40);
+
+  base::Time today = base::Time::Now();
+  base::Time before_threshold = today - kHistoryExpirationThreshold;
+  SetNow(today);
+
+  // Populate test history records.
+  history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+      profile(), ServiceAccessType::IMPLICIT_ACCESS);
+
+  history->AddPage(origin1, today, history::SOURCE_BROWSED);
+  history->AddPage(origin2, today, history::SOURCE_BROWSED);
+  history->AddPage(origin2, before_threshold, history::SOURCE_BROWSED);
+  history->AddPage(origin3, before_threshold, history::SOURCE_BROWSED);
+
+  // Expire history older than |threshold|.
+  MediaEngagementChangeWaiter waiter(profile());
+  RestartHistoryService();
+  waiter.Wait();
+
+  // Check the scores for the test origins.
+  ExpectScores(origin1, 1.0, 20, 20, TimeNotSet());
+  ExpectScores(origin2, 1.0, 30, 30, TimeNotSet());
+  ExpectScores(origin3, 0, 0, 0, TimeNotSet());
+
+  // Check that we recorded the expiry event to a histogram.
+  histogram_tester.ExpectTotalCount(MediaEngagementService::kHistogramClearName,
+                                    1);
+  histogram_tester.ExpectBucketCount(
+      MediaEngagementService::kHistogramClearName, 4, 1);
+}
+
+TEST_F(MediaEngagementServiceTest, CleanUpDatabaseWhenHistoryIsDeleted) {
+  GURL origin1("http://www.google.com/");
+  GURL origin1a("http://www.google.com/search?q=asdf");
+  GURL origin1b("http://www.google.com/maps/search?q=asdf");
+  GURL origin2("https://drive.google.com/");
+  GURL origin3("http://deleted.com/");
+  GURL origin3a("http://deleted.com/test");
+  GURL origin4("http://notdeleted.com");
+
+  // origin1 will have a score that is high enough to not return zero
+  // and we will ensure it has the same score. origin2 will have a score
+  // that is zero and will remain zero. origin3 will have a score
+  // and will be cleared. origin4 will have a normal score.
+  SetScores(origin1, MediaEngagementScore::GetScoreMinVisits() + 2, 14);
+  SetScores(origin2, 2, 1);
+  SetScores(origin3, 2, 1);
+  SetScores(origin4, MediaEngagementScore::GetScoreMinVisits(), 10);
+
+  base::Time today = GetReferenceTime();
+  base::Time yesterday_afternoon = GetReferenceTime() -
+                                   base::TimeDelta::FromDays(1) +
+                                   base::TimeDelta::FromHours(4);
+  base::Time yesterday_week = GetReferenceTime() - base::TimeDelta::FromDays(8);
+  SetNow(today);
+
+  history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+      profile(), ServiceAccessType::IMPLICIT_ACCESS);
+
+  history->AddPage(origin1, yesterday_afternoon, history::SOURCE_BROWSED);
+  history->AddPage(origin1a, yesterday_afternoon, history::SOURCE_BROWSED);
+  history->AddPage(origin1b, yesterday_week, history::SOURCE_BROWSED);
+  history->AddPage(origin2, yesterday_afternoon, history::SOURCE_BROWSED);
+  history->AddPage(origin3, yesterday_week, history::SOURCE_BROWSED);
+  history->AddPage(origin3a, yesterday_afternoon, history::SOURCE_BROWSED);
+
+  // Check that the scores are valid at the beginning.
+  ExpectScores(origin1, 7.0 / 11.0,
+               MediaEngagementScore::GetScoreMinVisits() + 2, 14, TimeNotSet());
+  EXPECT_EQ(14.0 / 22.0, GetActualScore(origin1));
+  ExpectScores(origin2, 0.05, 2, 1, TimeNotSet());
+  EXPECT_EQ(1 / 20.0, GetActualScore(origin2));
+  ExpectScores(origin3, 0.05, 2, 1, TimeNotSet());
+  EXPECT_EQ(1 / 20.0, GetActualScore(origin3));
+  ExpectScores(origin4, 0.5, MediaEngagementScore::GetScoreMinVisits(), 10,
+               TimeNotSet());
+  EXPECT_EQ(0.5, GetActualScore(origin4));
+
+  {
+    base::HistogramTester histogram_tester;
+
+    base::RunLoop run_loop;
+    base::CancelableTaskTracker task_tracker;
+    // Clear all history.
+    history->ExpireHistoryBetween(std::set<GURL>(), base::Time(), base::Time(),
+                                  run_loop.QuitClosure(), &task_tracker);
+    run_loop.Run();
+
+    // origin1 should have a score that is not zero and is the same as the old
+    // score (sometimes it may not match exactly due to rounding). origin2
+    // should have a score that is zero but it's visits and playbacks should
+    // have decreased. origin3 should have had a decrease in the number of
+    // visits. origin4 should have the old score.
+    ExpectScores(origin1, 0.0, 0, 0, TimeNotSet());
+    EXPECT_EQ(0, GetActualScore(origin1));
+    ExpectScores(origin2, 0.0, 0, 0, TimeNotSet());
+    EXPECT_EQ(0, GetActualScore(origin2));
+    ExpectScores(origin3, 0.0, 0, 0, TimeNotSet());
+    ExpectScores(origin4, 0.0, 0, 0, TimeNotSet());
+
+    histogram_tester.ExpectTotalCount(
+        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 0);
+
+    histogram_tester.ExpectTotalCount(
+        MediaEngagementService::kHistogramClearName, 1);
+    histogram_tester.ExpectBucketCount(
+        MediaEngagementService::kHistogramClearName, 2, 1);
+  }
+}
+
+TEST_F(MediaEngagementServiceTest, HistoryExpirationIsNoOp) {
+  GURL origin1("http://www.google.com/");
+  GURL origin1a("http://www.google.com/search?q=asdf");
+  GURL origin1b("http://www.google.com/maps/search?q=asdf");
+  GURL origin2("https://drive.google.com/");
+  GURL origin3("http://deleted.com/");
+  GURL origin3a("http://deleted.com/test");
+  GURL origin4("http://notdeleted.com");
+
+  SetScores(origin1, MediaEngagementScore::GetScoreMinVisits() + 2, 14);
+  SetScores(origin2, 2, 1);
+  SetScores(origin3, 2, 1);
+  SetScores(origin4, MediaEngagementScore::GetScoreMinVisits(), 10);
+
+  ExpectScores(origin1, 7.0 / 11.0,
+               MediaEngagementScore::GetScoreMinVisits() + 2, 14, TimeNotSet());
+  EXPECT_EQ(14.0 / 22.0, GetActualScore(origin1));
+  ExpectScores(origin2, 0.05, 2, 1, TimeNotSet());
+  EXPECT_EQ(1 / 20.0, GetActualScore(origin2));
+  ExpectScores(origin3, 0.05, 2, 1, TimeNotSet());
+  EXPECT_EQ(1 / 20.0, GetActualScore(origin3));
+  ExpectScores(origin4, 0.5, MediaEngagementScore::GetScoreMinVisits(), 10,
+               TimeNotSet());
+  EXPECT_EQ(0.5, GetActualScore(origin4));
+
+  {
+    base::HistogramTester histogram_tester;
+
+    history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+        profile(), ServiceAccessType::IMPLICIT_ACCESS);
+
+    service()->OnURLsDeleted(
+        history, history::DeletionInfo(history::DeletionTimeRange::Invalid(),
+                                       true, history::URLRows(),
+                                       std::set<GURL>(), base::nullopt));
+
+    // Same as above, nothing should have changed.
+    ExpectScores(origin1, 7.0 / 11.0,
+                 MediaEngagementScore::GetScoreMinVisits() + 2, 14,
+                 TimeNotSet());
+    EXPECT_EQ(14.0 / 22.0, GetActualScore(origin1));
+    ExpectScores(origin2, 0.05, 2, 1, TimeNotSet());
+    EXPECT_EQ(1 / 20.0, GetActualScore(origin2));
+    ExpectScores(origin3, 0.05, 2, 1, TimeNotSet());
+    EXPECT_EQ(1 / 20.0, GetActualScore(origin3));
+    ExpectScores(origin4, 0.5, MediaEngagementScore::GetScoreMinVisits(), 10,
+                 TimeNotSet());
+    EXPECT_EQ(0.5, GetActualScore(origin4));
+
+    histogram_tester.ExpectTotalCount(
+        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 0);
+    histogram_tester.ExpectTotalCount(
+        MediaEngagementService::kHistogramClearName, 0);
   }
 }
 
 TEST_F(MediaEngagementServiceTest,
        CleanupDataOnSiteDataCleanup_OutsideBoundary) {
   GURL origin("https://www.google.com");
+  base::HistogramTester histogram_tester;
 
   base::Time today = GetReferenceTime();
   SetNow(today);
@@ -537,12 +755,18 @@ TEST_F(MediaEngagementServiceTest,
   ClearDataBetweenTime(today - base::TimeDelta::FromDays(2),
                        today - base::TimeDelta::FromDays(1));
   ExpectScores(origin, 0.05, 1, 1, today);
+
+  histogram_tester.ExpectTotalCount(MediaEngagementService::kHistogramClearName,
+                                    1);
+  histogram_tester.ExpectBucketCount(
+      MediaEngagementService::kHistogramClearName, 1, 1);
 }
 
 TEST_F(MediaEngagementServiceTest,
        CleanupDataOnSiteDataCleanup_WithinBoundary) {
   GURL origin1("https://www.google.com");
   GURL origin2("https://www.google.co.uk");
+  base::HistogramTester histogram_tester;
 
   base::Time today = GetReferenceTime();
   base::Time yesterday = today - base::TimeDelta::FromDays(1);
@@ -557,10 +781,16 @@ TEST_F(MediaEngagementServiceTest,
   ClearDataBetweenTime(two_days_ago, yesterday);
   ExpectScores(origin1, 0, 0, 0, TimeNotSet());
   ExpectScores(origin2, 0, 0, 0, TimeNotSet());
+
+  histogram_tester.ExpectTotalCount(MediaEngagementService::kHistogramClearName,
+                                    1);
+  histogram_tester.ExpectBucketCount(
+      MediaEngagementService::kHistogramClearName, 1, 1);
 }
 
 TEST_F(MediaEngagementServiceTest, CleanupDataOnSiteDataCleanup_NoTimeSet) {
   GURL origin("https://www.google.com");
+  base::HistogramTester histogram_tester;
 
   base::Time today = GetReferenceTime();
 
@@ -570,6 +800,11 @@ TEST_F(MediaEngagementServiceTest, CleanupDataOnSiteDataCleanup_NoTimeSet) {
   ClearDataBetweenTime(today - base::TimeDelta::FromDays(2),
                        today - base::TimeDelta::FromDays(1));
   ExpectScores(origin, 0.0, 1, 0, TimeNotSet());
+
+  histogram_tester.ExpectTotalCount(MediaEngagementService::kHistogramClearName,
+                                    1);
+  histogram_tester.ExpectBucketCount(
+      MediaEngagementService::kHistogramClearName, 1, 1);
 }
 
 TEST_F(MediaEngagementServiceTest, LogScoresOnStartupToHistogram) {
@@ -599,6 +834,31 @@ TEST_F(MediaEngagementServiceTest, LogScoresOnStartupToHistogram) {
       MediaEngagementService::kHistogramScoreAtStartupName, 50, 1);
   histogram_tester.ExpectBucketCount(
       MediaEngagementService::kHistogramScoreAtStartupName, 83, 1);
+}
+
+TEST_F(MediaEngagementServiceTest, CleanupDataOnSiteDataCleanup_All) {
+  GURL origin1("https://www.google.com");
+  GURL origin2("https://www.google.co.uk");
+  base::HistogramTester histogram_tester;
+
+  base::Time today = GetReferenceTime();
+  base::Time yesterday = today - base::TimeDelta::FromDays(1);
+  base::Time two_days_ago = today - base::TimeDelta::FromDays(2);
+  SetNow(today);
+
+  SetScores(origin1, 1, 1);
+  SetScores(origin2, 1, 1);
+  SetLastMediaPlaybackTime(origin1, yesterday);
+  SetLastMediaPlaybackTime(origin2, two_days_ago);
+
+  ClearDataBetweenTime(base::Time(), base::Time::Max());
+  ExpectScores(origin1, 0, 0, 0, TimeNotSet());
+  ExpectScores(origin2, 0, 0, 0, TimeNotSet());
+
+  histogram_tester.ExpectTotalCount(MediaEngagementService::kHistogramClearName,
+                                    1);
+  histogram_tester.ExpectBucketCount(
+      MediaEngagementService::kHistogramClearName, 0, 1);
 }
 
 TEST_F(MediaEngagementServiceTest, HasHighEngagement) {
@@ -637,4 +897,21 @@ TEST_F(MediaEngagementServiceTest, SchemaVersion_Same) {
 
   ExpectScores(new_service.get(), url, 0.1, 1, 2, TimeNotSet());
   new_service->Shutdown();
+}
+
+class MediaEngagementServiceEnabledTest
+    : public ChromeRenderViewHostTestHarness {};
+
+TEST_F(MediaEngagementServiceEnabledTest, IsEnabled) {
+#if defined(OS_ANDROID)
+  // Make sure these flags are disabled on Android
+  EXPECT_FALSE(base::FeatureList::IsEnabled(
+      media::kMediaEngagementBypassAutoplayPolicies));
+  EXPECT_FALSE(
+      base::FeatureList::IsEnabled(media::kPreloadMediaEngagementData));
+#else
+  EXPECT_TRUE(base::FeatureList::IsEnabled(
+      media::kMediaEngagementBypassAutoplayPolicies));
+  EXPECT_TRUE(base::FeatureList::IsEnabled(media::kPreloadMediaEngagementData));
+#endif
 }

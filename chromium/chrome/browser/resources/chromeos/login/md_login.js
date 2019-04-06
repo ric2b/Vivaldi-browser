@@ -45,6 +45,8 @@ cr.define('cr.ui.Oobe', function() {
       login.TermsOfServiceScreen.register();
       login.SyncConsentScreen.register();
       login.ArcTermsOfServiceScreen.register();
+      login.RecommendAppsScreen.register();
+      login.AppDownloadingScreen.register();
       login.AppLaunchSplashScreen.register();
       login.ArcKioskSplashScreen.register();
       login.ConfirmPasswordScreen.register();
@@ -56,12 +58,20 @@ cr.define('cr.ui.Oobe', function() {
       login.VoiceInteractionValuePropScreen.register();
       login.WaitForContainerReadyScreen.register();
       login.UpdateRequiredScreen.register();
+      login.DiscoverScreen.register();
+
+      cr.ui.Bubble.decorate($('bubble-persistent'));
+      $('bubble-persistent').persistent = true;
+      $('bubble-persistent').hideOnKeyPress = false;
 
       cr.ui.Bubble.decorate($('bubble'));
       login.HeaderBar.decorate($('login-header-bar'));
       login.TopHeaderBar.decorate($('top-header-bar'));
 
       chrome.send('screenStateInitialize');
+
+      if (Oobe.getInstance().showingViewsLogin)
+        chrome.send('showAddUser');
     },
 
     // Dummy Oobe functions not present with stripped login UI.
@@ -71,7 +81,6 @@ cr.define('cr.ui.Oobe', function() {
     handleHighContrastClick: function(e) {},
     handleScreenMagnifierClick: function(e) {},
     setUsageStats: function(checked) {},
-    setOemEulaUrl: function(oemEulaUrl) {},
     setTpmPassword: function(password) {},
     refreshA11yInfo: function(data) {},
     reloadEulaContent: function(data) {},
@@ -92,6 +101,14 @@ cr.define('cr.ui.Oobe', function() {
      */
     setTabletModeState: function(isInTabletMode) {
       Oobe.getInstance().setTabletModeState_(isInTabletMode);
+    },
+
+    /**
+     * Updates OOBE configuration when it is loaded.
+     * @param {dictionary} configuration OOBE configuration.
+     */
+    updateOobeConfiguration: function(configuration) {
+      Oobe.getInstance().updateOobeConfiguration_(configuration);
     },
   };
 });

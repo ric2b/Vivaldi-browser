@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "base/bind.h"
-#include "base/command_line.h"
+#include "base/bind_helpers.h"
 #include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -31,7 +31,7 @@
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_glue.h"
 #include "media/filters/ffmpeg_video_decoder.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -50,8 +50,6 @@ class MediaTestSuite : public base::TestSuite {
 
 void MediaTestSuite::Initialize() {
   base::TestSuite::Initialize();
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitch(switches::kEnableInbandTextTracks);
   media::InitializeMediaLibrary();
 }
 
@@ -135,7 +133,8 @@ class EndToEndFrameChecker
         config, false, nullptr,
         base::Bind(&SaveDecoderInitResult, &decoder_init_result),
         base::Bind(&EndToEndFrameChecker::CompareFrameWithExpected,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        base::NullCallback());
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(decoder_init_result);
   }
@@ -190,11 +189,10 @@ void CreateFrameAndMemsetPlane(VideoFrameFactory* const video_frame_factory) {
   CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, 0);
 }
 
-void NoopFrameEncodedCallback(
-    std::unique_ptr<media::cast::SenderEncodedFrame> /*encoded_frame*/) {}
-
 class TestPowerSource : public base::PowerMonitorSource {
  public:
+  void Shutdown() override {}
+
   void GenerateSuspendEvent() {
     ProcessPowerEvent(SUSPEND_EVENT);
     base::RunLoop().RunUntilIdle();
@@ -342,7 +340,7 @@ TEST_F(H264VideoToolboxEncoderTest, CheckVideoFrameFactory) {
 TEST_F(H264VideoToolboxEncoderTest, CheckPowerMonitoring) {
   // Encode a frame, suspend, encode a frame, resume, encode a frame.
 
-  VideoEncoder::FrameEncodedCallback cb = base::Bind(&NoopFrameEncodedCallback);
+  VideoEncoder::FrameEncodedCallback cb = base::DoNothing();
   EXPECT_TRUE(encoder_->EncodeVideoFrame(frame_, clock_.NowTicks(), cb));
   power_source_->GenerateSuspendEvent();
   EXPECT_FALSE(encoder_->EncodeVideoFrame(frame_, clock_.NowTicks(), cb));
@@ -353,7 +351,7 @@ TEST_F(H264VideoToolboxEncoderTest, CheckPowerMonitoring) {
 TEST_F(H264VideoToolboxEncoderTest, CheckPowerMonitoringNoInitialFrame) {
   // Suspend, encode a frame, resume, encode a frame.
 
-  VideoEncoder::FrameEncodedCallback cb = base::Bind(&NoopFrameEncodedCallback);
+  VideoEncoder::FrameEncodedCallback cb = base::DoNothing();
   power_source_->GenerateSuspendEvent();
   EXPECT_FALSE(encoder_->EncodeVideoFrame(frame_, clock_.NowTicks(), cb));
   power_source_->GenerateResumeEvent();
@@ -361,7 +359,7 @@ TEST_F(H264VideoToolboxEncoderTest, CheckPowerMonitoringNoInitialFrame) {
 }
 
 TEST_F(H264VideoToolboxEncoderTest, CheckPowerMonitoringVideoFrameFactory) {
-  VideoEncoder::FrameEncodedCallback cb = base::Bind(&NoopFrameEncodedCallback);
+  VideoEncoder::FrameEncodedCallback cb = base::DoNothing();
   auto video_frame_factory = encoder_->CreateVideoFrameFactory();
   ASSERT_TRUE(video_frame_factory.get());
 
@@ -391,7 +389,7 @@ TEST_F(H264VideoToolboxEncoderTest, CheckPowerMonitoringVideoFrameFactory) {
 
 TEST_F(H264VideoToolboxEncoderTest,
        CheckPowerMonitoringVideoFrameFactoryNoInitialFrame) {
-  VideoEncoder::FrameEncodedCallback cb = base::Bind(&NoopFrameEncodedCallback);
+  VideoEncoder::FrameEncodedCallback cb = base::DoNothing();
   auto video_frame_factory = encoder_->CreateVideoFrameFactory();
   ASSERT_TRUE(video_frame_factory.get());
 

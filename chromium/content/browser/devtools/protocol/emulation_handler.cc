@@ -8,15 +8,17 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
+#include "content/browser/devtools/devtools_session.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/input/touch_emulator.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/url_constants.h"
-#include "device/geolocation/public/cpp/geoposition.h"
-#include "device/geolocation/public/interfaces/geoposition.mojom.h"
-#include "services/device/public/interfaces/geolocation_context.mojom.h"
+#include "net/http/http_util.h"
+#include "services/device/public/cpp/geolocation/geoposition.h"
+#include "services/device/public/mojom/geolocation_context.mojom.h"
+#include "services/device/public/mojom/geoposition.mojom.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 
 namespace content {
@@ -64,7 +66,14 @@ EmulationHandler::EmulationHandler()
 EmulationHandler::~EmulationHandler() {
 }
 
-void EmulationHandler::SetRenderer(RenderProcessHost* process_host,
+// static
+std::vector<EmulationHandler*> EmulationHandler::ForAgentHost(
+    DevToolsAgentHostImpl* host) {
+  return DevToolsSession::HandlersForAgentHost<EmulationHandler>(
+      host, Emulation::Metainfo::domainName);
+}
+
+void EmulationHandler::SetRenderer(int process_host_id,
                                    RenderFrameHostImpl* frame_host) {
   if (host_ == frame_host)
     return;
@@ -84,6 +93,7 @@ Response EmulationHandler::Disable() {
     touch_emulation_enabled_ = false;
     UpdateTouchEventEmulationState();
   }
+  user_agent_ = std::string();
   device_emulation_enabled_ = false;
   UpdateDeviceEmulationState();
   return Response::OK();
@@ -265,8 +275,12 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   device_emulation_enabled_ = true;
   device_emulation_params_ = params;
   UpdateDeviceEmulationState();
+
   // Renderer should answer after emulation params were updated, so that the
   // response is only sent to the client once updates were applied.
+  // Unless the renderer has crashed.
+  if (GetWebContents() && GetWebContents()->IsCrashed())
+    return Response::OK();
   return Response::FallThrough();
 }
 
@@ -282,6 +296,9 @@ Response EmulationHandler::ClearDeviceMetricsOverride() {
   UpdateDeviceEmulationState();
   // Renderer should answer after emulation was disabled, so that the response
   // is only sent to the client once updates were applied.
+  // Unless the renderer has crashed.
+  if (GetWebContents() && GetWebContents()->IsCrashed())
+    return Response::OK();
   return Response::FallThrough();
 }
 
@@ -295,6 +312,23 @@ Response EmulationHandler::SetVisibleSize(int width, int height) {
     return Response::Error("Can't find the associated web contents");
 
   return Response::OK();
+}
+
+Response EmulationHandler::SetUserAgentOverride(
+    const std::string& user_agent,
+    Maybe<std::string> accept_language,
+    Maybe<std::string> platform) {
+  if (!user_agent.empty() && !net::HttpUtil::IsValidHeaderValue(user_agent))
+    return Response::InvalidParams("Invalid characters found in userAgent");
+  std::string accept_lang = accept_language.fromMaybe(std::string());
+  if (!accept_lang.empty() && !net::HttpUtil::IsValidHeaderValue(accept_lang)) {
+    return Response::InvalidParams(
+        "Invalid characters found in acceptLanguage");
+  }
+
+  user_agent_ = user_agent;
+  accept_language_ = accept_lang;
+  return Response::FallThrough();
 }
 
 blink::WebDeviceEmulationParams EmulationHandler::GetDeviceEmulationParams() {
@@ -316,16 +350,26 @@ WebContentsImpl* EmulationHandler::GetWebContents() {
 }
 
 void EmulationHandler::UpdateTouchEventEmulationState() {
-  RenderWidgetHostImpl* widget_host =
-      host_ ? host_->GetRenderWidgetHost() : nullptr;
-  if (!widget_host)
+  if (!host_ || !host_->GetRenderWidgetHost())
     return;
+  if (host_->GetParent() && !host_->IsCrossProcessSubframe())
+    return;
+
+  // We only have a single TouchEmulator for all frames, so let the main frame's
+  // EmulationHandler enable/disable it.
+  if (!host_->frame_tree_node()->IsMainFrame())
+    return;
+
   if (touch_emulation_enabled_) {
-    widget_host->GetTouchEmulator()->Enable(
-        TouchEmulator::Mode::kEmulatingTouchFromMouse,
-        TouchEmulationConfigurationToType(touch_emulation_configuration_));
+    if (auto* touch_emulator =
+            host_->GetRenderWidgetHost()->GetTouchEmulator()) {
+      touch_emulator->Enable(
+          TouchEmulator::Mode::kEmulatingTouchFromMouse,
+          TouchEmulationConfigurationToType(touch_emulation_configuration_));
+    }
   } else {
-    widget_host->GetTouchEmulator()->Disable();
+    if (auto* touch_emulator = host_->GetRenderWidgetHost()->GetTouchEmulator())
+      touch_emulator->Disable();
   }
   if (GetWebContents()) {
     GetWebContents()->SetForceDisableOverscrollContent(
@@ -334,9 +378,9 @@ void EmulationHandler::UpdateTouchEventEmulationState() {
 }
 
 void EmulationHandler::UpdateDeviceEmulationState() {
-  RenderWidgetHostImpl* widget_host =
-      host_ ? host_->GetRenderWidgetHost() : nullptr;
-  if (!widget_host)
+  if (!host_ || !host_->GetRenderWidgetHost())
+    return;
+  if (host_->GetParent() && !host_->IsCrossProcessSubframe())
     return;
   // TODO(eseckler): Once we change this to mojo, we should wait for an ack to
   // these messages from the renderer. The renderer should send the ack once the
@@ -346,11 +390,22 @@ void EmulationHandler::UpdateDeviceEmulationState() {
   // ViewMsg and acknowledgment, as well as plump the acknowledgment back to the
   // EmulationHandler somehow. Mojo callbacks should make this much simpler.
   if (device_emulation_enabled_) {
-    widget_host->Send(new ViewMsg_EnableDeviceEmulation(
-        widget_host->GetRoutingID(), device_emulation_params_));
+    host_->GetRenderWidgetHost()->Send(new ViewMsg_EnableDeviceEmulation(
+        host_->GetRenderWidgetHost()->GetRoutingID(),
+        device_emulation_params_));
   } else {
-    widget_host->Send(new ViewMsg_DisableDeviceEmulation(
-        widget_host->GetRoutingID()));
+    host_->GetRenderWidgetHost()->Send(new ViewMsg_DisableDeviceEmulation(
+        host_->GetRenderWidgetHost()->GetRoutingID()));
+  }
+}
+
+void EmulationHandler::ApplyOverrides(net::HttpRequestHeaders* headers) {
+  if (!user_agent_.empty())
+    headers->SetHeader(net::HttpRequestHeaders::kUserAgent, user_agent_);
+  if (!accept_language_.empty()) {
+    headers->SetHeader(
+        net::HttpRequestHeaders::kAcceptLanguage,
+        net::HttpUtil::GenerateAcceptLanguageHeader(accept_language_));
   }
 }
 

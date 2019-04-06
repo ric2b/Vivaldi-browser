@@ -14,9 +14,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
-#include "components/gcm_driver/gcm_build_features.h"
+#include "components/gcm_driver/gcm_buildflags.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/signin/core/browser/profile_identity_provider.h"
+#include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/signin/core/browser/signin_manager.h"
 #include "components/version_info/version_info.h"
 
 class PrefService;
@@ -25,8 +26,16 @@ namespace base {
 class SequencedTaskRunner;
 }
 
+namespace identity {
+class IdentityManager;
+}
+
 namespace net {
 class URLRequestContextGetter;
+}
+
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace gcm {
@@ -46,9 +55,12 @@ class GCMProfileService : public KeyedService {
       PrefService* prefs,
       base::FilePath path,
       net::URLRequestContextGetter* request_context,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       version_info::Channel channel,
       const std::string& product_category_for_subtypes,
-      std::unique_ptr<ProfileIdentityProvider> identity_provider,
+      identity::IdentityManager* identity_manager,
+      SigninManagerBase* signin_manager,
+      ProfileOAuth2TokenService* token_service,
       std::unique_ptr<GCMClientFactory> gcm_client_factory,
       const scoped_refptr<base::SequencedTaskRunner>& ui_task_runner,
       const scoped_refptr<base::SequencedTaskRunner>& io_task_runner,
@@ -62,8 +74,8 @@ class GCMProfileService : public KeyedService {
   // KeyedService:
   void Shutdown() override;
 
-  // For testing purpose.
-  void SetDriverForTesting(GCMDriver* driver);
+  // For testing purposes.
+  void SetDriverForTesting(std::unique_ptr<GCMDriver> driver);
 
   GCMDriver* driver() const { return driver_.get(); }
 
@@ -72,10 +84,13 @@ class GCMProfileService : public KeyedService {
   GCMProfileService();
 
  private:
-  std::unique_ptr<ProfileIdentityProvider> profile_identity_provider_;
   std::unique_ptr<GCMDriver> driver_;
 
 #if !BUILDFLAG(USE_GCM_FROM_PLATFORM)
+  identity::IdentityManager* identity_manager_;
+  SigninManagerBase* signin_manager_;
+  ProfileOAuth2TokenService* token_service_;
+
   net::URLRequestContextGetter* request_context_ = nullptr;
 
   // Used for both account tracker and GCM.UserSignedIn UMA.

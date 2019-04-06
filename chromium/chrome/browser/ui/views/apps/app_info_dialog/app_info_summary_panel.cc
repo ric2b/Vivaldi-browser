@@ -240,6 +240,8 @@ void AppInfoSummaryPanel::AddLaunchOptionControl(views::View* vertical_stack) {
   launch_options_combobox_model_.reset(new LaunchOptionsComboboxModel());
   launch_options_combobox_ =
       new views::Combobox(launch_options_combobox_model_.get());
+  launch_options_combobox_->SetAccessibleName(
+      l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_LAUNCH_OPTIONS_ACCNAME));
   launch_options_combobox_->set_listener(this);
   launch_options_combobox_->SetSelectedIndex(
       launch_options_combobox_model_->GetIndexForLaunchType(GetLaunchType()));
@@ -333,7 +335,7 @@ const std::vector<GURL> AppInfoSummaryPanel::GetLicenseUrls() const {
     return std::vector<GURL>();
 
   std::vector<GURL> license_urls;
-  ExtensionService* service =
+  extensions::ExtensionService* service =
       extensions::ExtensionSystem::Get(profile_)->extension_service();
   DCHECK(service);
   const std::vector<extensions::SharedModuleInfo::ImportInfo>& imports =

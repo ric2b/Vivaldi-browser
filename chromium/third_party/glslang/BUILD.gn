@@ -20,10 +20,10 @@ config("glslang_config") {
 config("glslang_local_config") {
   if (is_clang) {
     cflags = [
-      "-Wno-tautological-constant-out-of-range-compare",
+      "-Wno-logical-op-parentheses",
       "-Wno-reorder",
       "-Wno-sign-compare",
-      "-Wno-unused-variable",
+      "-Wno-tautological-constant-out-of-range-compare",
     ]
   }
 }
@@ -35,6 +35,8 @@ static_library("OGLCompiler") {
   ]
 
   all_dependent_configs = [ ":glslang_config" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":glslang_local_config" ]
 }
 
@@ -59,15 +61,19 @@ static_library("SPIRV") {
   ]
 
   all_dependent_configs = [ ":glslang_config" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":glslang_local_config" ]
 }
 
 static_library("glslang-default-resource-limits") {
   sources = [
-    "src/StandAlone/DefaultResourceLimits.cpp",
+    "src/StandAlone/ResourceLimits.cpp",
   ]
 
   all_dependent_configs = [ ":glslang_config" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":glslang_local_config" ]
 }
 
@@ -144,6 +150,8 @@ static_library("glslang") {
   }
 
   all_dependent_configs = [ ":glslang_config" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":glslang_local_config" ]
 }
 
@@ -155,6 +163,8 @@ static_library("HLSL") {
     "src/hlsl/hlslOpMap.h",
     "src/hlsl/hlslParseHelper.cpp",
     "src/hlsl/hlslParseHelper.h",
+    "src/hlsl/hlslParseables.cpp",
+    "src/hlsl/hlslParseables.h",
     "src/hlsl/hlslScanContext.cpp",
     "src/hlsl/hlslScanContext.h",
     "src/hlsl/hlslTokenStream.cpp",
@@ -163,6 +173,8 @@ static_library("HLSL") {
   ]
 
   all_dependent_configs = [ ":glslang_config" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":glslang_local_config" ]
 }
 

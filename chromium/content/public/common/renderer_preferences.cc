@@ -16,9 +16,6 @@ RendererPreferences::RendererPreferences()
       hinting(gfx::FontRenderParams::HINTING_MEDIUM),
       use_autohinter(false),
       use_bitmaps(false),
-      should_show_images(true),
-      should_ask_plugin_content(false),
-      should_enable_plugin_content(true),
       subpixel_rendering(gfx::FontRenderParams::SUBPIXEL_RENDERING_NONE),
       use_subpixel_positioning(false),
       focus_ring_color(SkColorSetARGB(255, 229, 151, 0)),
@@ -39,8 +36,9 @@ RendererPreferences::RendererPreferences()
       webrtc_udp_max_port(0),
       tap_multiple_targets_strategy(TAP_MULTIPLE_TARGETS_STRATEGY_POPUP),
       disable_client_blocked_error_page(false),
-      plugin_fullscreen_allowed(true),
+      plugin_fullscreen_allowed(true)
 #if defined(OS_WIN)
+      ,
       caption_font_height(0),
       small_caption_font_height(0),
       menu_font_height(0),
@@ -49,10 +47,9 @@ RendererPreferences::RendererPreferences()
       vertical_scroll_bar_width_in_dips(0),
       horizontal_scroll_bar_height_in_dips(0),
       arrow_bitmap_height_vertical_scroll_bar_in_dips(0),
-      arrow_bitmap_width_horizontal_scroll_bar_in_dips(0),
+      arrow_bitmap_width_horizontal_scroll_bar_in_dips(0)
 #endif
-      default_font_size(0),
-      serve_resources_only_from_cache(false){
+{
 }
 
 RendererPreferences::RendererPreferences(const RendererPreferences& other) =

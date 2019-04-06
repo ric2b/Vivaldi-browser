@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_CONTROLLER_H_
 
 #include "base/callback_forward.h"
+#include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
@@ -15,7 +16,7 @@ class Tab;
 namespace gfx {
 class Path;
 class Point;
-class Size;
+class Rect;
 }
 namespace ui {
 class ListSelectionModel;
@@ -29,14 +30,24 @@ class View;
 // Controller for tabs.
 class TabController {
  public:
+
   virtual const ui::ListSelectionModel& GetSelectionModel() const = 0;
 
   // Returns true if multiple selection is supported.
   virtual bool SupportsMultipleSelection() = 0;
 
-  // Returns true if we should force the close buttons of the inactive tabs
-  // to be hidden.
-  virtual bool ShouldHideCloseButtonForInactiveTabs() = 0;
+  // Under Refresh, returns where the new tab button should be placed. This is
+  // needed to determine which tab separators need to be faded in/out while
+  // animating into position.
+  virtual NewTabButtonPosition GetNewTabButtonPosition() const = 0;
+
+  // Returns true if the close button for the given tab is forced to be hidden.
+  virtual bool ShouldHideCloseButtonForTab(Tab* tab) const = 0;
+
+  // Returns true if the close button on an inactive tab should be shown on
+  // mouse hover. This is predicated on ShouldHideCloseButtonForInactiveTabs()
+  // returning true.
+  virtual bool ShouldShowCloseButtonOnHover() = 0;
 
   // Returns true if ShouldPaintTab() could return a non-empty clip path.
   virtual bool MaySetClip() = 0;
@@ -64,15 +75,26 @@ class TabController {
                                      const gfx::Point& p,
                                      ui::MenuSourceType source_type) = 0;
 
-  // Returns true if |tab| is the active tab. The active tab is the one whose
+  // Returns whether |tab| is the active tab. The active tab is the one whose
   // content is shown in the browser.
   virtual bool IsActiveTab(const Tab* tab) const = 0;
 
-  // Returns true if the specified Tab is selected.
+  // Returns whether |tab| is selected.
   virtual bool IsTabSelected(const Tab* tab) const = 0;
 
-  // Returns true if the specified Tab is pinned.
+  // Returns whether |tab| is pinned.
   virtual bool IsTabPinned(const Tab* tab) const = 0;
+
+  // Returns whether |tab| is the first or last one visible.
+  virtual bool IsFirstVisibleTab(const Tab* tab) const = 0;
+  virtual bool IsLastVisibleTab(const Tab* tab) const = 0;
+
+  // Returns whether the strip is painting in single-tab mode.  This is true in
+  // a subset of the cases where ther is exactly one tab.
+  virtual bool SingleTabMode() const = 0;
+
+  // Returns true if the tab is a part of an incognito profile.
+  virtual bool IsIncognito() const = 0;
 
   // Potentially starts a drag for the specified Tab.
   virtual void MaybeStartDrag(
@@ -87,10 +109,13 @@ class TabController {
   // Ends dragging a Tab. Returns whether the tab has been destroyed.
   virtual bool EndDrag(EndDragReason reason) = 0;
 
-  // Returns the tab that contains the specified coordinates, in terms of |tab|,
-  // or NULL if there is no tab that contains the specified point.
-  virtual Tab* GetTabAt(Tab* tab,
-                        const gfx::Point& tab_in_tab_coordinates) = 0;
+  // Returns the tab that contains the specified point in tabstrip coordinates,
+  // or null if there is no tab that contains the specified point.
+  virtual Tab* GetTabAt(const gfx::Point& point) = 0;
+
+  // Returns the next tab in the model order. Returns nullptr if there
+  // isn't another tab beyond the given tab.
+  virtual const Tab* GetSubsequentTab(const Tab* tab) = 0;
 
   // Invoked when a mouse event occurs on |source|.
   virtual void OnMouseEventInTab(views::View* source,
@@ -104,25 +129,62 @@ class TabController {
   // computing |clip|.
   virtual bool ShouldPaintTab(
       const Tab* tab,
-      const base::Callback<gfx::Path(const gfx::Size&)>& border_callback,
+      const base::RepeatingCallback<gfx::Path(const gfx::Rect&)>&
+          border_callback,
       gfx::Path* clip) = 0;
+
+  // Returns the thickness of the stroke around all tabs (for pre-refresh) or
+  // the active tab (for refresh) in DIP.  Returns 0 if there is no stroke.
+  virtual int GetStrokeThickness() const = 0;
 
   // Returns true if tab loading throbbers can be painted to a composited layer.
   // This can only be done when the TabController can guarantee that nothing
   // in the same window will redraw on top of the the favicon area of any tab.
   virtual bool CanPaintThrobberToLayer() const = 0;
 
+  // Returns whether the shapes of background tabs are visible against the
+  // frame.
+  virtual bool HasVisibleBackgroundTabShapes() const = 0;
+
   // Returns COLOR_TOOLBAR_TOP_SEPARATOR[,_INACTIVE] depending on the activation
   // state of the window.
   virtual SkColor GetToolbarTopSeparatorColor() const = 0;
 
+  // Under Refresh, returns the color of the separator between the tabs.
+  virtual SkColor GetTabSeparatorColor() const = 0;
+
+  // Returns the tab background color based on both the |state| of the tab and
+  // the activation state of the window.  If |opaque| is true, the resulting
+  // color after drawing the tab background on the frame will be returned.
+  virtual SkColor GetTabBackgroundColor(TabState state, bool opaque) const = 0;
+
+  // Returns the tab foreground color of the the text based on both the |state|
+  // of the tab and the activation state of the window.
+  virtual SkColor GetTabForegroundColor(TabState state) const = 0;
+
   // Returns the resource ID for the image to use as the tab background.
   // |custom_image| is an outparam set to true if either the tab or the frame
   // background images have been customized; see implementation comments.
-  virtual int GetBackgroundResourceId(bool* custom_image) const = 0;
+  virtual int GetBackgroundResourceId(
+      bool* has_custom_image,
+      BrowserNonClientFrameView::ActiveState active_state =
+          BrowserNonClientFrameView::kUseCurrent) const = 0;
+
+  // If the given tab is animating to its target destination, this returns the
+  // target bounds. If the tab isn't moving this will return the current bounds
+  // of the given tab.
+  virtual gfx::Rect GetTabAnimationTargetBounds(const Tab* tab) = 0;
 
   // Returns the accessible tab name for this tab.
   virtual base::string16 GetAccessibleTabName(const Tab* tab) const = 0;
+
+  // Returns opacity for hover effect on a tab with |range_parameter| between
+  // 0 and 1, where 0 gives the minimum opacity suitable for wider tabs and 1
+  // gives maximum opacity suitable for narrower tabs.
+  virtual float GetHoverOpacityForTab(float range_parameter) const = 0;
+
+  // Returns opacity for use on tab hover radial highlight.
+  virtual float GetHoverOpacityForRadialHighlight() const = 0;
 
  protected:
   virtual ~TabController() {}

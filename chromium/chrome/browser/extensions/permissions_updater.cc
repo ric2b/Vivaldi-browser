@@ -93,58 +93,72 @@ void PermissionsUpdater::SetPlatformDelegate(Delegate* delegate) {
   g_delegate = delegate;
 }
 
-void PermissionsUpdater::AddPermissions(const Extension* extension,
-                                        const PermissionSet& permissions) {
-  const PermissionSet& active =
-      extension->permissions_data()->active_permissions();
-  std::unique_ptr<const PermissionSet> total =
-      PermissionSet::CreateUnion(active, permissions);
-  std::unique_ptr<const PermissionSet> added =
-      PermissionSet::CreateDifference(*total, active);
+void PermissionsUpdater::GrantOptionalPermissions(
+    const Extension& extension,
+    const PermissionSet& permissions) {
+  // TODO(devlin): Ideally, we'd have this CHECK in place, but unit tests are
+  // currently violating it.
+  // CHECK(PermissionsParser::GetOptionalPermissions(&extension).Contains(
+  //     permissions))
+  //     << "Cannot add optional permissions that are not "
+  //     << "specified in the manifest.";
 
-  std::unique_ptr<const PermissionSet> new_withheld =
-      PermissionSet::CreateDifference(
-          extension->permissions_data()->withheld_permissions(), permissions);
-  SetPermissions(extension, std::move(total), std::move(new_withheld));
-
-  // Update the granted permissions so we don't auto-disable the extension.
-  GrantActivePermissions(extension);
-
-  NotifyPermissionsUpdated(ADDED, extension, *added);
+  // Granted optional permissions are stored in both the granted permissions (so
+  // we don't later disable the extension when we check the active permissions
+  // against the granted set to determine if there's a permissions increase) and
+  // the granted runtime permissions (so they don't get withheld with runtime
+  // host permissions enabled).
+  constexpr int permissions_store_mask =
+      kGrantedPermissions | kRuntimeGrantedPermissions;
+  AddPermissionsImpl(extension, permissions, permissions_store_mask);
 }
 
-void PermissionsUpdater::RemovePermissions(const Extension* extension,
-                                           const PermissionSet& to_remove,
-                                           RemoveType remove_type) {
-  // We should only be revoking revokable permissions.
-  CHECK(GetRevokablePermissions(extension)->Contains(to_remove));
+void PermissionsUpdater::GrantRuntimePermissions(
+    const Extension& extension,
+    const PermissionSet& permissions) {
+  CHECK(extension.permissions_data()->withheld_permissions().Contains(
+      permissions))
+      << "Cannot add runtime granted permissions that were not withheld.";
 
-  const PermissionSet& active =
-      extension->permissions_data()->active_permissions();
-  std::unique_ptr<const PermissionSet> remaining =
-      PermissionSet::CreateDifference(active, to_remove);
+  // Adding runtime granted permissions does not add permissions to the
+  // granted permissions store, so that behavior taken with the runtime host
+  // permissions feature is confined to when the experiment is enabled.
+  constexpr int permissions_store_mask = kRuntimeGrantedPermissions;
+  AddPermissionsImpl(extension, permissions, permissions_store_mask);
+}
 
-  // Move any granted permissions that were in the withheld set back to the
-  // withheld set so they can be added back later.
-  // Any revoked permission that isn't from the optional permissions can only
-  // be a withheld permission.
-  std::unique_ptr<const PermissionSet> removed_withheld =
-      PermissionSet::CreateDifference(
-          to_remove, PermissionsParser::GetOptionalPermissions(extension));
-  std::unique_ptr<const PermissionSet> withheld = PermissionSet::CreateUnion(
-      *removed_withheld, extension->permissions_data()->withheld_permissions());
+void PermissionsUpdater::RevokeOptionalPermissions(
+    const Extension& extension,
+    const PermissionSet& permissions,
+    RemoveType remove_type) {
+  // TODO(devlin): Ideally, we'd have this CHECK in place, but unit tests are
+  // currently violating it.
+  // CHECK(PermissionsParser::GetOptionalPermissions(&extension).Contains(
+  //     permissions))
+  //     << "Cannot remove optional permissions that are not "
+  //     << "specified in the manifest.";
 
-  SetPermissions(extension, std::move(remaining), std::move(withheld));
+  // Revoked optional permissions are removed from granted and runtime-granted
+  // permissions only if the user, and not the extension, removed them. This
+  // allows the extension to add them again without prompting the user.
+  int permissions_store_mask = kNone;
+  if (remove_type == REMOVE_HARD)
+    permissions_store_mask = kGrantedPermissions | kRuntimeGrantedPermissions;
+  RemovePermissionsImpl(extension, permissions, permissions_store_mask);
+}
 
-  // We might not want to revoke the granted permissions because the extension,
-  // not the user, removed the permissions. This allows the extension to add
-  // them again without prompting the user.
-  if (remove_type == REMOVE_HARD) {
-    ExtensionPrefs::Get(browser_context_)
-        ->RemoveGrantedPermissions(extension->id(), to_remove);
-  }
+void PermissionsUpdater::RevokeRuntimePermissions(
+    const Extension& extension,
+    const PermissionSet& permissions) {
+  CHECK(GetRevokablePermissions(&extension)->Contains(permissions))
+      << "Cannot remove non-revokable permissions.";
 
-  NotifyPermissionsUpdated(REMOVED, extension, to_remove);
+  // Removing runtime-granted permissions does not remove permissions from
+  // the granted permissions store. This is done to ensure behavior taken with
+  // the runtime host permissions feature is confined to when the experiment is
+  // enabled.
+  constexpr int permissions_store_mask = kRuntimeGrantedPermissions;
+  RemovePermissionsImpl(extension, permissions, permissions_store_mask);
 }
 
 void PermissionsUpdater::SetPolicyHostRestrictions(
@@ -197,17 +211,25 @@ void PermissionsUpdater::RemovePermissionsUnsafe(
 
 std::unique_ptr<const PermissionSet>
 PermissionsUpdater::GetRevokablePermissions(const Extension* extension) const {
-  // The user can revoke any permissions they granted. In other words, any
-  // permissions the extension didn't start with can be revoked.
+  // Any permissions not required by the extension are revokable.
   const PermissionSet& required =
       PermissionsParser::GetRequiredPermissions(extension);
-  std::unique_ptr<const PermissionSet> granted;
-  std::unique_ptr<const PermissionSet> withheld;
-  ScriptingPermissionsModifier(browser_context_,
-                               base::WrapRefCounted(extension))
-      .WithholdPermissions(required, &granted, &withheld, true);
-  return PermissionSet::CreateDifference(
-      extension->permissions_data()->active_permissions(), *granted);
+  std::unique_ptr<const PermissionSet> revokable_permissions =
+      PermissionSet::CreateDifference(
+          extension->permissions_data()->active_permissions(), required);
+
+  // Additionally, some required permissions may be revokable if they can be
+  // withheld by the ScriptingPermissionsModifier.
+  std::unique_ptr<const PermissionSet> revokable_scripting_permissions =
+      ScriptingPermissionsModifier(browser_context_,
+                                   base::WrapRefCounted(extension))
+          .GetRevokablePermissions();
+
+  if (revokable_scripting_permissions) {
+    revokable_permissions = PermissionSet::CreateUnion(
+        *revokable_permissions, *revokable_scripting_permissions);
+  }
+  return revokable_permissions;
 }
 
 void PermissionsUpdater::GrantActivePermissions(const Extension* extension) {
@@ -221,14 +243,14 @@ void PermissionsUpdater::GrantActivePermissions(const Extension* extension) {
 void PermissionsUpdater::InitializePermissions(const Extension* extension) {
   std::unique_ptr<const PermissionSet> bounded_wrapper;
   const PermissionSet* bounded_active = nullptr;
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(browser_context_);
   // If |extension| is a transient dummy extension, we do not want to look for
   // it in preferences.
   if (init_flag_ & INIT_FLAG_TRANSIENT) {
     bounded_active = &extension->permissions_data()->active_permissions();
   } else {
     std::unique_ptr<const PermissionSet> active_permissions =
-        ExtensionPrefs::Get(browser_context_)
-            ->GetActivePermissions(extension->id());
+        prefs->GetActivePermissions(extension->id());
     bounded_wrapper =
         GetBoundedActivePermissions(extension, active_permissions.get());
     bounded_active = bounded_wrapper.get();
@@ -236,11 +258,9 @@ void PermissionsUpdater::InitializePermissions(const Extension* extension) {
 
   std::unique_ptr<const PermissionSet> granted_permissions;
   std::unique_ptr<const PermissionSet> withheld_permissions;
-  ScriptingPermissionsModifier(browser_context_,
-                               base::WrapRefCounted(extension))
-      .WithholdPermissions(*bounded_active, &granted_permissions,
-                           &withheld_permissions,
-                           (init_flag_ & INIT_FLAG_TRANSIENT) != 0);
+  ScriptingPermissionsModifier::WithholdPermissionsIfNecessary(
+      *extension, *prefs, *bounded_active, &granted_permissions,
+      &withheld_permissions);
 
   if (g_delegate)
     g_delegate->InitializePermissions(extension, &granted_permissions);
@@ -249,15 +269,21 @@ void PermissionsUpdater::InitializePermissions(const Extension* extension) {
     // Apply per-extension policy if set.
     ExtensionManagement* management =
         ExtensionManagementFactory::GetForBrowserContext(browser_context_);
-    if (!management->UsesDefaultRuntimeHostRestrictions(extension)) {
+    if (!management->UsesDefaultPolicyHostRestrictions(extension)) {
       SetPolicyHostRestrictions(extension,
-                                management->GetRuntimeBlockedHosts(extension),
-                                management->GetRuntimeAllowedHosts(extension));
+                                management->GetPolicyBlockedHosts(extension),
+                                management->GetPolicyAllowedHosts(extension));
     }
   }
 
   SetPermissions(extension, std::move(granted_permissions),
                  std::move(withheld_permissions));
+}
+
+void PermissionsUpdater::AddPermissionsForTesting(
+    const Extension& extension,
+    const PermissionSet& permissions) {
+  AddPermissionsImpl(extension, permissions, kNone);
 }
 
 void PermissionsUpdater::SetPermissions(
@@ -386,6 +412,70 @@ void PermissionsUpdater::NotifyDefaultPolicyHostRestrictionsUpdated(
       host->Send(new ExtensionMsg_UpdateDefaultPolicyHostRestrictions(params));
     }
   }
+}
+
+void PermissionsUpdater::AddPermissionsImpl(const Extension& extension,
+                                            const PermissionSet& permissions,
+                                            int permissions_store_mask) {
+  const PermissionSet& active =
+      extension.permissions_data()->active_permissions();
+  std::unique_ptr<const PermissionSet> total =
+      PermissionSet::CreateUnion(active, permissions);
+  std::unique_ptr<const PermissionSet> added =
+      PermissionSet::CreateDifference(*total, active);
+
+  std::unique_ptr<const PermissionSet> new_withheld =
+      PermissionSet::CreateDifference(
+          extension.permissions_data()->withheld_permissions(), permissions);
+  SetPermissions(&extension, std::move(total), std::move(new_withheld));
+
+  if ((permissions_store_mask & kGrantedPermissions) != 0) {
+    // TODO(devlin): Could we only grant |permissions|, rather than all those
+    // in the active permissions? In theory, all other active permissions have
+    // already been granted.
+    GrantActivePermissions(&extension);
+  }
+
+  if ((permissions_store_mask & kRuntimeGrantedPermissions) != 0) {
+    ExtensionPrefs::Get(browser_context_)
+        ->AddRuntimeGrantedPermissions(extension.id(), permissions);
+  }
+
+  NotifyPermissionsUpdated(ADDED, &extension, *added);
+}
+
+void PermissionsUpdater::RemovePermissionsImpl(const Extension& extension,
+                                               const PermissionSet& to_remove,
+                                               int permissions_store_mask) {
+  const PermissionSet& active =
+      extension.permissions_data()->active_permissions();
+  std::unique_ptr<const PermissionSet> remaining =
+      PermissionSet::CreateDifference(active, to_remove);
+
+  // Move any granted permissions that were in the withheld set back to the
+  // withheld set so they can be added back later.
+  // Any revoked permission that isn't from the optional permissions can only
+  // be a withheld permission.
+  // TODO(devlin): This won't work well when an extension specifies a permission
+  // as both optional and required.
+  std::unique_ptr<const PermissionSet> removed_withheld =
+      PermissionSet::CreateDifference(
+          to_remove, PermissionsParser::GetOptionalPermissions(&extension));
+  std::unique_ptr<const PermissionSet> withheld = PermissionSet::CreateUnion(
+      *removed_withheld, extension.permissions_data()->withheld_permissions());
+
+  SetPermissions(&extension, std::move(remaining), std::move(withheld));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(browser_context_);
+  // NOTE: Currently, this code path is only reached in unit tests. See comment
+  // above REMOVE_HARD in the header file.
+  if ((permissions_store_mask & kGrantedPermissions) != 0)
+    prefs->RemoveGrantedPermissions(extension.id(), to_remove);
+
+  if ((permissions_store_mask & kRuntimeGrantedPermissions) != 0)
+    prefs->RemoveRuntimeGrantedPermissions(extension.id(), to_remove);
+
+  NotifyPermissionsUpdated(REMOVED, &extension, to_remove);
 }
 
 }  // namespace extensions

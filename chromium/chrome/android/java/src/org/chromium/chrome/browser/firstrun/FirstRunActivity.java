@@ -5,10 +5,10 @@
 package org.chromium.chrome.browser.firstrun;
 
 import android.app.Activity;
-import android.app.Fragment;
 import android.os.Bundle;
 import android.support.annotation.CallSuper;
 import android.support.annotation.StringRes;
+import android.support.v4.app.Fragment;
 import android.text.TextUtils;
 import android.view.View;
 
@@ -18,6 +18,7 @@ import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
@@ -154,7 +155,11 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         // An optional sign-in page.
         if (mFreProperties.getBoolean(SHOW_SIGNIN_PAGE)) {
-            mPages.add(new AccountFirstRunFragment.Page());
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.UNIFIED_CONSENT)) {
+                mPages.add(SigninFirstRunFragment::new);
+            } else {
+                mPages.add(AccountFirstRunFragment::new);
+            }
             mFreProgressStates.add(FRE_PROGRESS_SIGNIN_SHOWN);
             notifyAdapter = true;
         }
@@ -189,7 +194,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     }
 
     @Override
-    public void setContentView() {
+    public void triggerLayoutInflation() {
         initializeStateFromLaunchData();
 
         setFinishOnTouchOutside(true);
@@ -222,7 +227,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
                     return;
                 }
 
-                mPagerAdapter = new FirstRunPagerAdapter(getFragmentManager(), mPages);
+                mPagerAdapter = new FirstRunPagerAdapter(getSupportFragmentManager(), mPages);
                 stopProgressionIfNotAcceptedTermsOfService();
                 mPager.setAdapter(mPagerAdapter);
 
@@ -237,6 +242,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         mFirstRunFlowSequencer.start();
 
         recordFreProgressHistogram(FRE_PROGRESS_STARTED);
+        onInitialLayoutInflationComplete();
     }
 
     @Override
@@ -252,6 +258,10 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
             }
         };
         TemplateUrlService.getInstance().runWhenLoaded(onNativeFinished);
+    }
+
+    public boolean isNativeSideIsInitializedForTest() {
+        return mNativeSideIsInitialized;
     }
 
     private void onNativeDependenciesFullyInitialized() {
@@ -391,15 +401,22 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         if (!sendPendingIntentIfNecessary(true)) {
             finish();
         } else {
-            ApplicationStatus.registerStateListenerForActivity(new ActivityStateListener() {
+            ApplicationStatus.registerStateListenerForAllActivities(new ActivityStateListener() {
                 @Override
                 public void onActivityStateChange(Activity activity, int newState) {
-                    if (newState == ActivityState.STOPPED || newState == ActivityState.DESTROYED) {
+                    boolean shouldFinish = false;
+                    if (activity == FirstRunActivity.this) {
+                        shouldFinish = (newState == ActivityState.STOPPED
+                                || newState == ActivityState.DESTROYED);
+                    } else {
+                        shouldFinish = newState == ActivityState.RESUMED;
+                    }
+                    if (shouldFinish) {
                         finish();
                         ApplicationStatus.unregisterActivityStateListener(this);
                     }
                 }
-            }, this);
+            });
         }
     }
 

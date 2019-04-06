@@ -13,7 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
 
@@ -31,7 +31,7 @@ void MeasureSizeAndTimeToLoadNativeLibrary(
     const base::FilePath& library_relative_dir,
     const base::FilePath& library_name) {
   base::FilePath output_dir;
-  ASSERT_TRUE(PathService::Get(base::DIR_MODULE, &output_dir));
+  ASSERT_TRUE(base::PathService::Get(base::DIR_MODULE, &output_dir));
   output_dir = output_dir.Append(library_relative_dir);
   base::FilePath library_path = output_dir.Append(library_name);
   ASSERT_TRUE(base::PathExists(library_path)) << library_path.value();
@@ -74,27 +74,19 @@ void MeasureSizeAndTimeToLoadCdm(const std::string& cdm_base_dir,
 }  // namespace
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+
 #if defined(WIDEVINE_CDM_AVAILABLE)
 TEST(LoadCDMPerfTest, Widevine) {
   MeasureSizeAndTimeToLoadCdm(
       kWidevineCdmBaseDirectory,
       base::GetNativeLibraryName(kWidevineCdmLibraryName));
 }
-
-TEST(LoadCDMPerfTest, WidevineAdapter) {
-  MeasureSizeAndTimeToLoadCdm(kWidevineCdmBaseDirectory,
-                              kWidevineCdmAdapterFileName);
-}
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 
 TEST(LoadCDMPerfTest, ExternalClearKey) {
   MeasureSizeAndTimeToLoadCdm(
       media::kClearKeyCdmBaseDirectory,
-      base::GetNativeLibraryName(media::kClearKeyCdmLibraryName));
+      base::GetLoadableModuleName(media::kClearKeyCdmLibraryName));
 }
 
-TEST(LoadCDMPerfTest, ExternalClearKeyAdapter) {
-  MeasureSizeAndTimeToLoadCdm(media::kClearKeyCdmBaseDirectory,
-                              media::kClearKeyCdmAdapterFileName);
-}
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)

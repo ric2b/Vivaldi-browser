@@ -7,10 +7,12 @@
 
 #include <memory>
 
-#include "ash/fast_ink/fast_ink_pointer_controller.h"
+#include "ash/ash_export.h"
+#include "ash/components/fast_ink/fast_ink_pointer_controller.h"
 #include "ash/public/interfaces/highlighter_controller.mojom.h"
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace base {
@@ -22,14 +24,47 @@ namespace ash {
 class HighlighterResultView;
 class HighlighterView;
 
+// Highlighter enabled state that is notified to observers.
+enum class HighlighterEnabledState {
+  // Highlighter is enabled by any ways.
+  kEnabled,
+  // Highlighter is disabled by user directly, for example disabling palette
+  // tool by user actions on palette menu.
+  kDisabledByUser,
+  // Highlighter is disabled on metalayer session complete.
+  kDisabledBySessionComplete,
+  // Highlighter is disabled on metalayer session abort. An abort may occur due
+  // to dismissal of Assistant UI or due to interruption by user via hotword.
+  kDisabledBySessionAbort,
+};
+
 // Controller for the highlighter functionality.
 // Enables/disables highlighter as well as receives points
 // and passes them off to be rendered.
-class ASH_EXPORT HighlighterController : public FastInkPointerController,
-                                         public mojom::HighlighterController {
+class ASH_EXPORT HighlighterController
+    : public fast_ink::FastInkPointerController,
+      public mojom::HighlighterController {
  public:
+  // Interface for classes that wish to be notified with highlighter status.
+  class Observer {
+   public:
+    // Called when highlighter enabled state changes.
+    virtual void OnHighlighterEnabledChanged(HighlighterEnabledState state) {}
+
+    // Called when highlighter selection is recognized.
+    virtual void OnHighlighterSelectionRecognized(const gfx::Rect& rect) {}
+
+   protected:
+    virtual ~Observer() = default;
+  };
+
   HighlighterController();
   ~HighlighterController() override;
+
+  HighlighterEnabledState enabled_state() { return enabled_state_; }
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   // Set the callback to exit the highlighter mode. If |require_success| is
   // true, the callback will be called only after a successful gesture
@@ -37,8 +72,12 @@ class ASH_EXPORT HighlighterController : public FastInkPointerController,
   // after the first complete gesture, regardless of the recognition result.
   void SetExitCallback(base::OnceClosure callback, bool require_success);
 
-  // FastInkPointerController:
-  void SetEnabled(bool enabled) override;
+  // Update highlighter enabled |state| and notify observers.
+  void UpdateEnabledState(HighlighterEnabledState enabled_state);
+
+  // Aborts the current metalayer session. If no metalayer session exists,
+  // calling this method is a no-op.
+  void AbortSession();
 
   void BindRequest(mojom::HighlighterControllerRequest request);
 
@@ -49,7 +88,8 @@ class ASH_EXPORT HighlighterController : public FastInkPointerController,
  private:
   friend class HighlighterControllerTestApi;
 
-  // FastInkPointerController:
+  // fast_ink::FastInkPointerController:
+  void SetEnabled(bool enabled) override;
   views::View* GetPointerView() const override;
   void CreatePointerView(base::TimeDelta presentation_delay,
                          aura::Window* root_window) override;
@@ -74,6 +114,10 @@ class ASH_EXPORT HighlighterController : public FastInkPointerController,
   void CallExitCallback();
 
   void FlushMojoForTesting();
+
+  // Caches the highlighter enabled state.
+  HighlighterEnabledState enabled_state_ =
+      HighlighterEnabledState::kDisabledByUser;
 
   // |highlighter_view_| will only hold an instance when the highlighter is
   // enabled and activated (pressed or dragged) and until the fade out
@@ -112,6 +156,8 @@ class ASH_EXPORT HighlighterController : public FastInkPointerController,
 
   // Interface to highlighter controller client (chrome).
   mojom::HighlighterControllerClientPtr client_;
+
+  base::ObserverList<Observer> observers_;
 
   base::WeakPtrFactory<HighlighterController> weak_factory_;
 

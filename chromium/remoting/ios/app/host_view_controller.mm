@@ -11,6 +11,7 @@
 #include <memory>
 
 #import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
+#import "remoting/ios/app/help_and_feedback.h"
 #import "remoting/ios/app/remoting_theme.h"
 #import "remoting/ios/app/settings/remoting_settings_view_controller.h"
 #import "remoting/ios/app/view_utils.h"
@@ -34,6 +35,8 @@ static const CGFloat kFabInset = 15.f;
 static const CGFloat kKeyboardAnimationTime = 0.3;
 static const CGFloat kMoveFABAnimationTime = 0.3;
 
+static NSString* const kFeedbackContext = @"InSessionFeedbackContext";
+
 @interface HostViewController ()<ClientKeyboardDelegate,
                                  ClientGesturesDelegate,
                                  RemotingSettingsViewControllerDelegate> {
@@ -43,7 +46,6 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
   ClientGestures* _clientGestures;
   ClientKeyboard* _clientKeyboard;
   CGSize _keyboardSize;
-  BOOL _surfaceCreated;
   HostSettings* _settings;
 
   // Used to blur the content when the app enters background.
@@ -77,7 +79,6 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
   if (self) {
     _client = client;
     _keyboardSize = CGSizeZero;
-    _surfaceCreated = NO;
     _blocksKeyboard = NO;
     _settings =
         [[RemotingPreferences instance] settingsForHost:client.hostInfo.hostId];
@@ -194,10 +195,7 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
-  if (!_surfaceCreated) {
-    [_client.displayHandler onSurfaceCreated:_hostView];
-    _surfaceCreated = YES;
-  }
+  [_client.displayHandler createRendererContext:_hostView];
 
   // |_clientKeyboard| should always be the first responder even when the soft
   // keyboard is not visible, so that input from physical keyboard can still be
@@ -269,7 +267,7 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
   [super viewDidLayoutSubviews];
 
   // Pass the actual size of the view to the renderer.
-  [_client.displayHandler onSurfaceChanged:_hostView.bounds];
+  [_client.displayHandler setSurfaceSize:_hostView.bounds];
 
   // Start the animation on the host's visible area.
   _surfaceSizeAnimationLink.paused = NO;
@@ -323,6 +321,10 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
                                                0);
 }
 
+- (void)clientKeyboardShouldSendKey:(const remoting::KeypressInfo&)key {
+  _client.keyboardInterpreter->HandleKeypressEvent(key);
+}
+
 - (void)clientKeyboardShouldDelete {
   _client.keyboardInterpreter->HandleDeleteEvent(0);
 }
@@ -368,6 +370,14 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
 
 - (void)moveFAB {
   [self setFabIsRight:!_fabIsRight shouldLayout:YES];
+}
+
+- (void)sendFeedback {
+  [_client createFeedbackDataWithCallback:^(
+               const remoting::FeedbackData& data) {
+    [HelpAndFeedback.instance presentFeedbackFlowWithContext:kFeedbackContext
+                                                feedbackData:data];
+  }];
 }
 
 #pragma mark - Private
@@ -455,6 +465,8 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
   }
 }
 
+// TODO(yuweih): This method is badly named. Should be changed to
+// "didTapShowMenu".
 - (void)didTap:(id)sender {
   // TODO(nicholss): The FAB is being used to launch an alert window with
   // more options. This is not ideal but it gets us an easy way to make a
@@ -478,13 +490,13 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
                      title:IDS_HIDE_KEYBOARD
                      style:UIAlertActionStyleDefault
           restoresKeyboard:NO
-                   handler:^() {
+                   handler:^{
                      weakClientKeyboard.showsSoftKeyboard = NO;
                    }];
   } else {
     [self addActionToAlert:alert
                      title:IDS_SHOW_KEYBOARD
-                   handler:^() {
+                   handler:^{
                      weakClientKeyboard.showsSoftKeyboard = YES;
                    }];
   }
@@ -495,7 +507,7 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
       currentInputMode == remoting::GestureInterpreter::DIRECT_INPUT_MODE
           ? IDS_SELECT_TRACKPAD_MODE
           : IDS_SELECT_TOUCH_MODE;
-  void (^switchInputModeHandler)() = ^() {
+  void (^switchInputModeHandler)() = ^{
     switch (currentInputMode) {
       case remoting::GestureInterpreter::DIRECT_INPUT_MODE:
         [self useTrackpadInputMode];
@@ -510,7 +522,7 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
                    title:switchInputModeTitle
                  handler:switchInputModeHandler];
 
-  void (^disconnectHandler)() = ^() {
+  void (^disconnectHandler)() = ^{
     [weakSelf disconnectFromHost];
     [weakSelf.navigationController popToRootViewControllerAnimated:YES];
   };
@@ -520,7 +532,7 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
         restoresKeyboard:NO
                  handler:disconnectHandler];
 
-  void (^settingsHandler)() = ^() {
+  void (^settingsHandler)() = ^{
     RemotingSettingsViewController* settingsViewController =
         [[RemotingSettingsViewController alloc] init];
     settingsViewController.delegate = weakSelf;
@@ -541,12 +553,12 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
   [self addActionToAlert:alert
                    title:(_fabIsRight) ? IDS_MOVE_FAB_LEFT_BUTTON
                                        : IDS_MOVE_FAB_RIGHT_BUTTON
-                 handler:^() {
+                 handler:^{
                    [weakSelf moveFAB];
                  }];
 
   __weak UIAlertController* weakAlert = alert;
-  void (^cancelHandler)() = ^() {
+  void (^cancelHandler)() = ^{
     [weakAlert dismissViewControllerAnimated:YES completion:nil];
   };
   [self addActionToAlert:alert
@@ -629,6 +641,8 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
     LOG(DFATAL) << "Blur view does not exist.";
     return;
   }
+  [_client.displayHandler createRendererContext:_hostView];
+  [_client setVideoChannelEnabled:YES];
   [_blurView removeFromSuperview];
   _blurView = nil;
 }
@@ -649,6 +663,8 @@ static const CGFloat kMoveFABAnimationTime = 0.3;
     [_blurView.topAnchor constraintEqualToAnchor:_hostView.topAnchor],
     [_blurView.bottomAnchor constraintEqualToAnchor:_hostView.bottomAnchor],
   ]];
+  [_client setVideoChannelEnabled:NO];
+  [_client.displayHandler destroyRendererContext];
 }
 
 @end

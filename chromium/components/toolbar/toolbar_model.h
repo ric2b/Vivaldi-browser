@@ -25,13 +25,18 @@ class ToolbarModel {
  public:
   virtual ~ToolbarModel() = default;
 
-  // Returns a formatted URL for display in the toolbar. The formatting
-  // includes:
+  // Returns the formatted full URL for the toolbar. The formatting includes:
   //   - Some characters may be unescaped.
   //   - The scheme and/or trailing slash may be dropped.
-  // If |prefix_end| is non-NULL, it is set to the length of the pre-hostname
-  // portion of the resulting URL.
-  virtual base::string16 GetFormattedURL(size_t* prefix_end) const = 0;
+  // This method specifically keeps the URL suitable for editing by not
+  // applying any elisions that change the meaning of the URL.
+  virtual base::string16 GetFormattedFullURL() const = 0;
+
+  // Returns a simplified URL for display (but not editing) on the toolbar.
+  // This formatting is generally a superset of GetFormattedFullURL, and may
+  // include some destructive elisions that change the meaning of the URL.
+  // The returned string is not suitable for editing, and is for display only.
+  virtual base::string16 GetURLForDisplay() const = 0;
 
   // Returns the URL of the current navigation entry.
   virtual GURL GetURL() const = 0;
@@ -46,11 +51,15 @@ class ToolbarModel {
   // Returns the id of the icon to show to the left of the address, based on the
   // current URL.  When search term replacement is active, this returns a search
   // icon.  This doesn't cover specialized icons while the user is editing; see
-  // OmniboxView::GetVectorIcon().
+  // OmniboxView::GetIcon().
   virtual const gfx::VectorIcon& GetVectorIcon() const = 0;
 
-  // Returns text for the omnibox secure verbose chip.
+  // Returns text for the omnibox secure verbose chip, displayed next to the
+  // security icon on certain platforms.
   virtual base::string16 GetSecureVerboseText() const = 0;
+
+  // Returns text describing the security state for accessibility.
+  virtual base::string16 GetSecureAccessibilityText() const = 0;
 
   // Returns the name of the EV cert holder.  This returns an empty string if
   // the security level is not EV_SECURE.

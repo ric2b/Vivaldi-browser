@@ -13,10 +13,9 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
@@ -25,9 +24,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
-#include "chrome/browser/gcm/fake_gcm_profile_service.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/gcm/instance_id/instance_id_profile_service.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/notification_handler.h"
@@ -39,17 +36,19 @@
 #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/gcm_driver/common/gcm_messages.h"
+#include "components/gcm_driver/fake_gcm_profile_service.h"
 #include "components/gcm_driver/gcm_client.h"
 #include "components/gcm_driver/instance_id/fake_gcm_driver_for_instance_id.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
+#include "components/gcm_driver/instance_id/instance_id_profile_service.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -64,7 +63,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/window_open_disposition.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 #include "chrome/browser/background/background_mode_manager.h"
@@ -596,6 +595,37 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
             script_result);
 }
 
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribeWithInvalidation) {
+  std::string token1, token2, token3;
+
+  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully(true /* use_key */, &token1));
+  ASSERT_FALSE(token1.empty());
+
+  // Repeated calls to |subscribe()| should yield the same token.
+  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully(true /* use_key */, &token2));
+  ASSERT_EQ(token1, token2);
+
+  PushMessagingAppIdentifier app_identifier =
+      PushMessagingAppIdentifier::FindByServiceWorker(
+          GetBrowser()->profile(), https_server()->GetURL("/").GetOrigin(),
+          0LL /* service_worker_registration_id */);
+
+  ASSERT_FALSE(app_identifier.is_null());
+  EXPECT_EQ(app_identifier.app_id(), gcm_driver_->last_gettoken_app_id());
+
+  // Delete the InstanceID. This captures two scenarios: either the database was
+  // corrupted, or the subscription was invalidated by the server.
+  ASSERT_NO_FATAL_FAILURE(
+      DeleteInstanceIDAsIfGCMStoreReset(app_identifier.app_id()));
+
+  EXPECT_EQ(app_identifier.app_id(), gcm_driver_->last_deletetoken_app_id());
+
+  // Repeated calls to |subscribe()| will now (silently) result in a new token.
+  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully(true /* use_key */, &token3));
+  ASSERT_FALSE(token3.empty());
+  EXPECT_NE(token1, token3);
+}
+
 IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribeWorker) {
   std::string script_result;
 
@@ -990,10 +1020,6 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribePersisted) {
   // Now test that the Service Worker registration IDs and push subscription IDs
   // generated above were persisted to SW storage, by checking that they are
   // unchanged despite requesting them in a different order.
-  // TODO(johnme): Ideally we would restart the browser at this point to check
-  // they were persisted to disk, but that's not currently possible since the
-  // test server uses random port numbers for each test (even PRE_Foo and Foo),
-  // so we wouldn't be able to load the test pages with the same origin.
 
   LoadTestPage("/push_messaging/subscope1/test.html");
   std::string token4;
@@ -1005,13 +1031,13 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribePersisted) {
   std::string token5;
   ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully(true /* use_key */, &token5));
   EXPECT_EQ(token2, token5);
-  EXPECT_EQ(sw1_identifier.app_id(), gcm_driver_->last_gettoken_app_id());
+  EXPECT_EQ(sw2_identifier.app_id(), gcm_driver_->last_gettoken_app_id());
 
   LoadTestPage();
   std::string token6;
   ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully(true /* use_key */, &token6));
   EXPECT_EQ(token1, token6);
-  EXPECT_EQ(sw1_identifier.app_id(), gcm_driver_->last_gettoken_app_id());
+  EXPECT_EQ(sw0_identifier.app_id(), gcm_driver_->last_gettoken_app_id());
 }
 
 IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, AppHandlerOnlyIfSubscribed) {
@@ -1617,7 +1643,13 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, PermissionStateSaysDenied) {
   EXPECT_EQ("permission status - denied", script_result);
 }
 
-IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, UnsubscribeSuccess) {
+// TODO(peter): Flaky on Win buildbots. https://crbug.com/838759
+#if defined(OS_WIN)
+#define MAYBE_UnsubscribeSuccess DISABLED_UnsubscribeSuccess
+#else
+#define MAYBE_UnsubscribeSuccess UnsubscribeSucces
+#endif
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, MAYBE_UnsubscribeSuccess) {
   std::string script_result;
 
   std::string token1;
@@ -1698,7 +1730,14 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, UnsubscribeSuccess) {
 
 // Push subscriptions used to be non-InstanceID GCM registrations. Still need
 // to be able to unsubscribe these, even though new ones are no longer created.
-IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, LegacyUnsubscribeSuccess) {
+// Flaky on some Win and Linux buildbots.  See crbug.com/835382.
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_LegacyUnsubscribeSuccess DISABLED_LegacyUnsubscribeSuccess
+#else
+#define MAYBE_LegacyUnsubscribeSuccess LegacyUnsubscribeSuccess
+#endif
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
+                       MAYBE_LegacyUnsubscribeSuccess) {
   std::string script_result;
 
   std::string subscription_id1;
@@ -1943,53 +1982,6 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
           GetBrowser()->profile(), origin,
           0LL /* service_worker_registration_id */);
   EXPECT_TRUE(app_identifier3.is_null());
-}
-
-IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, InvalidSubscribeUnsubscribes) {
-  std::string script_result;
-
-  std::string token1;
-  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully(true /* use_key */, &token1));
-
-  GURL origin = https_server()->GetURL("/").GetOrigin();
-  PushMessagingAppIdentifier app_identifier1 =
-      PushMessagingAppIdentifier::FindByServiceWorker(
-          GetBrowser()->profile(), origin,
-          0LL /* service_worker_registration_id */);
-  ASSERT_FALSE(app_identifier1.is_null());
-
-  ASSERT_NO_FATAL_FAILURE(
-      DeleteInstanceIDAsIfGCMStoreReset(app_identifier1.app_id()));
-
-  // Push messaging should not yet be aware of the InstanceID being deleted.
-  histogram_tester_.ExpectTotalCount("PushMessaging.UnregistrationReason", 0);
-  // We should still be able to look up the app id.
-  PushMessagingAppIdentifier app_identifier2 =
-      PushMessagingAppIdentifier::FindByServiceWorker(
-          GetBrowser()->profile(), origin,
-          0LL /* service_worker_registration_id */);
-  EXPECT_FALSE(app_identifier2.is_null());
-  EXPECT_EQ(app_identifier1.app_id(), app_identifier2.app_id());
-
-  // Now call PushManager.subscribe() again. It should succeed, but with a
-  // *different* token, indicating that it unsubscribed and re-subscribed.
-  std::string token2;
-  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully(true /* use_key */, &token2));
-  EXPECT_NE(token1, token2);
-
-  // This should have unsubscribed the original push subscription.
-  histogram_tester_.ExpectUniqueSample(
-      "PushMessaging.UnregistrationReason",
-      static_cast<int>(
-          content::mojom::PushUnregistrationReason::SUBSCRIBE_STORAGE_CORRUPT),
-      1);
-  // Looking up the app id should return a different id.
-  PushMessagingAppIdentifier app_identifier3 =
-      PushMessagingAppIdentifier::FindByServiceWorker(
-          GetBrowser()->profile(), origin,
-          0LL /* service_worker_registration_id */);
-  EXPECT_FALSE(app_identifier3.is_null());
-  EXPECT_NE(app_identifier2.app_id(), app_identifier3.app_id());
 }
 
 IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
@@ -2396,104 +2388,3 @@ IN_PROC_BROWSER_TEST_F(PushMessagingIncognitoBrowserTest,
   ASSERT_TRUE(RunScript("hasSubscription()", &script_result));
   ASSERT_EQ("false - not subscribed", script_result);
 }
-
-#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
-// Push background mode is disabled by default.
-IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
-                       BackgroundModeDisabledByDefault) {
-  // Initially background mode is inactive.
-  BackgroundModeManager* background_mode_manager =
-      g_browser_process->background_mode_manager();
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-
-  // Once there is a push subscription background mode is still inactive.
-  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully());
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-
-  // After dropping the last subscription it is still inactive.
-  std::string script_result;
-  base::RunLoop run_loop;
-  push_service()->SetUnsubscribeCallbackForTesting(run_loop.QuitClosure());
-  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
-  EXPECT_EQ("unsubscribe result: true", script_result);
-  // Background mode is only guaranteed to have updated once the unsubscribe
-  // callback for testing has been run (PushSubscription.unsubscribe() usually
-  // resolves before that, in order to avoid blocking on network retries etc).
-  run_loop.Run();
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-}
-
-class PushMessagingBackgroundModeEnabledBrowserTest
-    : public PushMessagingBrowserTest {
- public:
-  ~PushMessagingBackgroundModeEnabledBrowserTest() override {}
-
-  // PushMessagingBrowserTest:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kEnablePushApiBackgroundMode);
-    PushMessagingBrowserTest::SetUpCommandLine(command_line);
-  }
-};
-
-// In this test the command line enables push background mode.
-IN_PROC_BROWSER_TEST_F(PushMessagingBackgroundModeEnabledBrowserTest,
-                       BackgroundModeEnabledWithCommandLine) {
-  // Initially background mode is inactive.
-  BackgroundModeManager* background_mode_manager =
-      g_browser_process->background_mode_manager();
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-
-  // Once there is a push subscription background mode is active.
-  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully());
-  ASSERT_TRUE(background_mode_manager->IsBackgroundModeActive());
-
-  // Dropping the last subscription deactivates background mode.
-  std::string script_result;
-  base::RunLoop run_loop;
-  push_service()->SetUnsubscribeCallbackForTesting(run_loop.QuitClosure());
-  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
-  EXPECT_EQ("unsubscribe result: true", script_result);
-  // Background mode is only guaranteed to have updated once the unsubscribe
-  // callback for testing has been run (PushSubscription.unsubscribe() usually
-  // resolves before that, in order to avoid blocking on network retries etc).
-  run_loop.Run();
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-}
-
-class PushMessagingBackgroundModeDisabledBrowserTest
-    : public PushMessagingBrowserTest {
- public:
-  ~PushMessagingBackgroundModeDisabledBrowserTest() override {}
-
-  // PushMessagingBrowserTest:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kDisablePushApiBackgroundMode);
-    PushMessagingBrowserTest::SetUpCommandLine(command_line);
-  }
-};
-
-// In this test the command line disables push background mode.
-IN_PROC_BROWSER_TEST_F(PushMessagingBackgroundModeDisabledBrowserTest,
-                       BackgroundModeDisabledWithCommandLine) {
-  // Initially background mode is inactive.
-  BackgroundModeManager* background_mode_manager =
-      g_browser_process->background_mode_manager();
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-
-  // Once there is a push subscription background mode is still inactive.
-  ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully());
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-
-  // After dropping the last subscription background mode is still inactive.
-  std::string script_result;
-  base::RunLoop run_loop;
-  push_service()->SetUnsubscribeCallbackForTesting(run_loop.QuitClosure());
-  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
-  EXPECT_EQ("unsubscribe result: true", script_result);
-  // Background mode is only guaranteed to have updated once the unsubscribe
-  // callback for testing has been run (PushSubscription.unsubscribe() usually
-  // resolves before that, in order to avoid blocking on network retries etc).
-  run_loop.Run();
-  ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
-}
-#endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)

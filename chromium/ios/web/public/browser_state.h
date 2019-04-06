@@ -5,7 +5,11 @@
 #ifndef IOS_WEB_PUBLIC_BROWSER_STATE_H_
 #define IOS_WEB_PUBLIC_BROWSER_STATE_H_
 
+#include <memory>
+
 #include "base/supports_user_data.h"
+#include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/embedder/embedded_service_info.h"
 
 namespace base {
@@ -16,12 +20,21 @@ namespace net {
 class URLRequestContextGetter;
 }
 
+namespace network {
+namespace mojom {
+class URLLoaderFactory;
+}
+class SharedURLLoaderFactory;
+class WeakWrapperSharedURLLoaderFactory;
+}  // namespace network
+
 namespace service_manager {
 class Connector;
 }
 
 namespace web {
 class CertificatePolicyCache;
+class NetworkContextOwner;
 class ServiceManagerConnection;
 class URLDataManagerIOS;
 class URLDataManagerIOSBackend;
@@ -50,6 +63,12 @@ class BrowserState : public base::SupportsUserData {
   // BrowserState.
   virtual net::URLRequestContextGetter* GetRequestContext() = 0;
 
+  // Returns a URLLoaderFactory that is backed by GetRequestContext.
+  network::mojom::URLLoaderFactory* GetURLLoaderFactory();
+
+  // Like URLLoaderFactory, but wrapped inside SharedURLLoaderFactory
+  scoped_refptr<network::SharedURLLoaderFactory> GetSharedURLLoaderFactory();
+
   // Safely cast a base::SupportsUserData to a BrowserState. Returns nullptr
   // if |supports_user_data| is not a BrowserState.
   static BrowserState* FromSupportsUserData(
@@ -57,7 +76,7 @@ class BrowserState : public base::SupportsUserData {
 
   // Returns a Service User ID associated with this BrowserState. This ID is
   // not persistent across runs. See
-  // services/service_manager/public/interfaces/connector.mojom. By default,
+  // services/service_manager/public/mojom/connector.mojom. By default,
   // this user id is randomly generated when Initialize() is called.
   static const std::string& GetServiceUserIdFor(BrowserState* browser_state);
 
@@ -95,6 +114,15 @@ class BrowserState : public base::SupportsUserData {
   // thread.
   // Not intended for usage outside of //web.
   URLDataManagerIOSBackend* GetURLDataManagerIOSBackendOnIOThread();
+
+  network::mojom::URLLoaderFactoryPtr url_loader_factory_;
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+      shared_url_loader_factory_;
+  network::mojom::NetworkContextPtr network_context_;
+
+  // Owns the network::NetworkContext that backs |url_loader_factory_|. Created
+  // on the UI thread, destroyed on the IO thread.
+  std::unique_ptr<NetworkContextOwner> network_context_owner_;
 
   // The URLDataManagerIOSBackend instance associated with this BrowserState.
   // Created and destroyed on the IO thread, and should be accessed only from

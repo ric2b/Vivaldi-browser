@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "ui/display/display.h"
+#include "ui/display/display_switches.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -149,13 +150,15 @@ ManagedDisplayInfo ManagedDisplayInfo::CreateFromSpecWithID(
 #endif
   std::string main_spec = spec;
 
-  float ui_scale = 1.0f;
+  // When display zoom mode is disabled, |zoom_factor| is used to compute
+  // the ui_scale.
+  float zoom_factor = 1.0f;
   std::vector<std::string> parts = base::SplitString(
       main_spec, "@", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   if (parts.size() == 2) {
     double scale_in_double = 0;
     if (base::StringToDouble(parts[1], &scale_in_double))
-      ui_scale = scale_in_double;
+      zoom_factor = scale_in_double;
     main_spec = parts[0];
   }
 
@@ -240,8 +243,12 @@ ManagedDisplayInfo ManagedDisplayInfo::CreateFromSpecWithID(
   ManagedDisplayInfo display_info(
       id, base::StringPrintf("Display-%d", static_cast<int>(id)), has_overscan);
   display_info.set_device_scale_factor(device_scale_factor);
-  display_info.SetRotation(rotation, Display::ROTATION_SOURCE_ACTIVE);
-  display_info.set_configured_ui_scale(ui_scale);
+  display_info.SetRotation(rotation, Display::RotationSource::ACTIVE);
+  if (features::IsDisplayZoomSettingEnabled()) {
+    display_info.set_zoom_factor(zoom_factor);
+  } else {
+    display_info.set_configured_ui_scale(zoom_factor);
+  }
   display_info.SetBounds(bounds_in_native);
   display_info.SetManagedDisplayModes(display_modes);
 
@@ -260,12 +267,15 @@ ManagedDisplayInfo ManagedDisplayInfo::CreateFromSpecWithID(
 
 ManagedDisplayInfo::ManagedDisplayInfo()
     : id_(kInvalidDisplayId),
+      year_of_manufacture_(kInvalidYearOfManufacture),
       has_overscan_(false),
-      active_rotation_source_(Display::ROTATION_SOURCE_UNKNOWN),
-      touch_support_(Display::TOUCH_SUPPORT_UNKNOWN),
+      active_rotation_source_(Display::RotationSource::UNKNOWN),
+      touch_support_(Display::TouchSupport::UNKNOWN),
       device_scale_factor_(1.0f),
       device_dpi_(kDpi96),
       overscan_insets_in_dip_(0, 0, 0, 0),
+      zoom_factor_(1.f),
+      is_zoom_factor_from_ui_scale_(false),
       configured_ui_scale_(1.0f),
       native_(false),
       is_aspect_preserving_scaling_(false),
@@ -276,12 +286,15 @@ ManagedDisplayInfo::ManagedDisplayInfo(int64_t id,
                                        bool has_overscan)
     : id_(id),
       name_(name),
+      year_of_manufacture_(kInvalidYearOfManufacture),
       has_overscan_(has_overscan),
-      active_rotation_source_(Display::ROTATION_SOURCE_UNKNOWN),
-      touch_support_(Display::TOUCH_SUPPORT_UNKNOWN),
+      active_rotation_source_(Display::RotationSource::UNKNOWN),
+      touch_support_(Display::TouchSupport::UNKNOWN),
       device_scale_factor_(1.0f),
       device_dpi_(kDpi96),
       overscan_insets_in_dip_(0, 0, 0, 0),
+      zoom_factor_(1.f),
+      is_zoom_factor_from_ui_scale_(false),
       configured_ui_scale_(1.0f),
       native_(false),
       is_aspect_preserving_scaling_(false),
@@ -295,12 +308,12 @@ ManagedDisplayInfo::~ManagedDisplayInfo() {}
 void ManagedDisplayInfo::SetRotation(Display::Rotation rotation,
                                      Display::RotationSource source) {
   rotations_[source] = rotation;
-  rotations_[Display::ROTATION_SOURCE_ACTIVE] = rotation;
+  rotations_[Display::RotationSource::ACTIVE] = rotation;
   active_rotation_source_ = source;
 }
 
 Display::Rotation ManagedDisplayInfo::GetActiveRotation() const {
-  return GetRotation(Display::ROTATION_SOURCE_ACTIVE);
+  return GetRotation(Display::RotationSource::ACTIVE);
 }
 
 Display::Rotation ManagedDisplayInfo::GetRotation(
@@ -312,6 +325,9 @@ Display::Rotation ManagedDisplayInfo::GetRotation(
 
 void ManagedDisplayInfo::Copy(const ManagedDisplayInfo& native_info) {
   DCHECK(id_ == native_info.id_);
+  manufacturer_id_ = native_info.manufacturer_id_;
+  product_id_ = native_info.product_id_;
+  year_of_manufacture_ = native_info.year_of_manufacture_;
   name_ = native_info.name_;
   has_overscan_ = native_info.has_overscan_;
 
@@ -340,7 +356,9 @@ void ManagedDisplayInfo::Copy(const ManagedDisplayInfo& native_info) {
     overscan_insets_in_dip_ = native_info.overscan_insets_in_dip_;
 
   rotations_ = native_info.rotations_;
+  zoom_factor_ = native_info.zoom_factor_;
   configured_ui_scale_ = native_info.configured_ui_scale_;
+  is_zoom_factor_from_ui_scale_ = native_info.is_zoom_factor_from_ui_scale_;
 }
 
 void ManagedDisplayInfo::SetBounds(const gfx::Rect& new_bounds_in_native) {
@@ -356,14 +374,20 @@ float ManagedDisplayInfo::GetDensityRatio() const {
 }
 
 float ManagedDisplayInfo::GetEffectiveDeviceScaleFactor() const {
+  if (features::IsDisplayZoomSettingEnabled())
+    return device_scale_factor_ * zoom_factor_;
   if (Display::IsInternalDisplayId(id_) && device_scale_factor_ == 1.25f)
-    return (configured_ui_scale_ == 0.8f) ? 1.25f : 1.0f;
+    return ((configured_ui_scale_ == 0.8f) ? 1.25f : 1.0f);
   if (device_scale_factor_ == configured_ui_scale_)
-    return 1.0f;
+    return 1.f;
   return device_scale_factor_;
 }
 
 float ManagedDisplayInfo::GetEffectiveUIScale() const {
+  // When the display zoom setting is enabled, the configured UI scale should
+  // also be 1.
+  DCHECK(!features::IsDisplayZoomSettingEnabled() ||
+         configured_ui_scale_ == 1.f);
   if (Display::IsInternalDisplayId(id_) && device_scale_factor_ == 1.25f)
     return (configured_ui_scale_ == 0.8f) ? 1.0f : configured_ui_scale_;
   if (device_scale_factor_ == configured_ui_scale_)
@@ -395,7 +419,7 @@ void ManagedDisplayInfo::SetOverscanInsets(const gfx::Insets& insets_in_dip) {
 }
 
 gfx::Insets ManagedDisplayInfo::GetOverscanInsetsInPixel() const {
-  return overscan_insets_in_dip_.Scale(device_scale_factor_);
+  return overscan_insets_in_dip_.Scale(device_scale_factor_ * zoom_factor_);
 }
 
 void ManagedDisplayInfo::SetManagedDisplayModes(
@@ -418,14 +442,14 @@ std::string ManagedDisplayInfo::ToString() const {
 
   std::string result = base::StringPrintf(
       "ManagedDisplayInfo[%lld] native bounds=%s, size=%s, device-scale=%g, "
-      "overscan=%s, rotation=%d, ui-scale=%g, touchscreen=%s, ",
+      "display-zoom=%g, overscan=%s, rotation=%d, ui-scale=%g, touchscreen=%s",
       static_cast<long long int>(id_), bounds_in_native_.ToString().c_str(),
-      size_in_pixel_.ToString().c_str(), device_scale_factor_,
+      size_in_pixel_.ToString().c_str(), device_scale_factor_, zoom_factor_,
       overscan_insets_in_dip_.ToString().c_str(), rotation_degree,
       configured_ui_scale_,
-      touch_support_ == Display::TOUCH_SUPPORT_AVAILABLE
+      touch_support_ == Display::TouchSupport::AVAILABLE
           ? "yes"
-          : touch_support_ == Display::TOUCH_SUPPORT_UNAVAILABLE ? "no"
+          : touch_support_ == Display::TouchSupport::UNAVAILABLE ? "no"
                                                                  : "unknown");
 
   return result;

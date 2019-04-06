@@ -5,7 +5,6 @@
 #include "content/browser/memory/memory_coordinator_impl.h"
 
 #include "base/memory/memory_coordinator_client_registry.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -53,16 +52,6 @@ const char* MemoryConditionToString(MemoryCondition condition) {
   }
   NOTREACHED();
   return "N/A";
-}
-
-void RecordBrowserPurge(size_t before) {
-  auto metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
-  size_t after = metrics->GetWorkingSetSize();
-  int64_t bytes = static_cast<int64_t>(before) - static_cast<int64_t>(after);
-  if (bytes < 0)
-    bytes = 0;
-  UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Experimental.Browser.PurgedMemory",
-                                bytes / 1024 / 1024);
 }
 
 }  // namespace
@@ -236,24 +225,6 @@ bool MemoryCoordinatorImpl::SetChildMemoryState(int render_process_id,
   return true;
 }
 
-bool MemoryCoordinatorImpl::TryToPurgeMemoryFromBrowser() {
-  base::TimeTicks now = tick_clock_->NowTicks();
-  if (can_purge_after_ > now)
-    return false;
-
-  auto metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
-  size_t before = metrics->GetWorkingSetSize();
-  task_runner_->PostDelayedTask(FROM_HERE,
-                                base::BindOnce(&RecordBrowserPurge, before),
-                                base::TimeDelta::FromSeconds(2));
-
-  // Suppress purging in the browser process until a certain period of time is
-  // passed.
-  can_purge_after_ = now + base::TimeDelta::FromMinutes(2);
-  base::MemoryCoordinatorClientRegistry::GetInstance()->PurgeMemory();
-  return true;
-}
-
 bool MemoryCoordinatorImpl::TryToPurgeMemoryFromChild(int render_process_id) {
   auto iter = children().find(render_process_id);
   if (iter == children().end())
@@ -305,7 +276,8 @@ MemoryState MemoryCoordinatorImpl::GetStateForProcess(
 
   for (auto& iter : children()) {
     auto* render_process_host = GetRenderProcessHost(iter.first);
-    if (render_process_host && render_process_host->GetHandle() == handle)
+    if (render_process_host &&
+        render_process_host->GetProcess().Handle() == handle)
       return iter.second.memory_state;
   }
   return MemoryState::UNKNOWN;
@@ -363,7 +335,7 @@ void MemoryCoordinatorImpl::AddChildForTesting(
 }
 
 void MemoryCoordinatorImpl::SetTickClockForTesting(
-    base::TickClock* tick_clock) {
+    const base::TickClock* tick_clock) {
   tick_clock_ = tick_clock;
 }
 

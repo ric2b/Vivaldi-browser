@@ -8,7 +8,6 @@
 
 #include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
 #include "content/browser/renderer_host/pepper/pepper_socket_utils.h"
 #include "content/public/browser/browser_thread.h"
@@ -65,10 +64,14 @@ PepperNetworkMonitorHost::PepperNetworkMonitorHost(BrowserPpapiHostImpl* host,
 }
 
 PepperNetworkMonitorHost::~PepperNetworkMonitorHost() {
-  net::NetworkChangeNotifier::RemoveIPAddressObserver(this);
+  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 }
 
-void PepperNetworkMonitorHost::OnIPAddressChanged() { GetAndSendNetworkList(); }
+void PepperNetworkMonitorHost::OnNetworkChanged(
+    net::NetworkChangeNotifier::ConnectionType type) {
+  if (type == net::NetworkChangeNotifier::GetConnectionType())
+    GetAndSendNetworkList();
+}
 
 void PepperNetworkMonitorHost::OnPermissionCheckResult(
     bool can_use_network_monitor) {
@@ -78,7 +81,7 @@ void PepperNetworkMonitorHost::OnPermissionCheckResult(
     return;
   }
 
-  net::NetworkChangeNotifier::AddIPAddressObserver(this);
+  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
   GetAndSendNetworkList();
 }
 

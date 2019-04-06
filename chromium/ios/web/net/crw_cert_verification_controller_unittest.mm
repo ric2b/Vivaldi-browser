@@ -4,9 +4,7 @@
 
 #import "ios/web/net/crw_cert_verification_controller.h"
 
-#import "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
-#include "base/message_loop/message_loop.h"
 #import "base/test/ios/wait_util.h"
 #include "ios/web/public/test/web_test.h"
 #include "ios/web/public/web_thread.h"
@@ -139,12 +137,10 @@ TEST_F(CRWCertVerificationControllerTest, PolicyForInvalidTrustAcceptedByUser) {
 // Tests that allowCert:forHost:status: strips all intermediate certs.
 TEST_F(CRWCertVerificationControllerTest, AllowCertIgnoresIntermediateCerts) {
   std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> intermediates;
-  intermediates.push_back(
-      net::x509_util::DupCryptoBuffer(cert_->cert_buffer()));
+  intermediates.push_back(bssl::UpRef(cert_->cert_buffer()));
   scoped_refptr<net::X509Certificate> cert(
-      net::X509Certificate::CreateFromBuffer(
-          net::x509_util::DupCryptoBuffer(cert_->cert_buffer()),
-          std::move(intermediates)));
+      net::X509Certificate::CreateFromBuffer(bssl::UpRef(cert_->cert_buffer()),
+                                             std::move(intermediates)));
   ASSERT_TRUE(cert);
   [controller_ allowCert:cert.get()
                  forHost:kHostName

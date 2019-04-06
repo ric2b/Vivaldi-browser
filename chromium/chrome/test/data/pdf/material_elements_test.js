@@ -37,8 +37,9 @@ var tests = [
   function testPageSelectorChange() {
     var selector =
         Polymer.Base.create('viewer-page-selector', {docLength: 1234});
+    document.body.appendChild(selector);
 
-    var input = selector.$.input;
+    var input = selector.pageSelector;
     // Simulate entering text into `input` and pressing enter.
     function changeInput(newValue) {
       input.value = newValue;
@@ -64,7 +65,8 @@ var tests = [
     chrome.test.assertEq(999, navigatedPages[0]);
     chrome.test.assertEq(1233, navigatedPages[1]);
     chrome.test.assertEq(11, navigatedPages[2]);
-    chrome.test.assertEq(2, navigatedPages[3]);
+    // If the user types 3.14, the . will be ignored but 14 will be captured.
+    chrome.test.assertEq(313, navigatedPages[3]);
 
     chrome.test.succeed();
   },
@@ -75,8 +77,9 @@ var tests = [
   function testPageSelectorDocLength() {
     var selector =
         Polymer.Base.create('viewer-page-selector', {docLength: 1234});
+    document.body.appendChild(selector);
     chrome.test.assertEq('1234', selector.$.pagelength.textContent);
-    chrome.test.assertEq('4ch', selector.$.pageselector.style.width);
+    chrome.test.assertEq('4ch', selector.pageSelector.style.width);
     chrome.test.succeed();
   },
 
@@ -89,6 +92,7 @@ var tests = [
       closedIcon: 'closedIcon',
       openIcon: 'openIcon'
     });
+    document.body.appendChild(dropdown);
 
     chrome.test.assertFalse(dropdown.dropdownOpen);
     chrome.test.assertEq('closedIcon', dropdown.dropdownIcon);
@@ -127,6 +131,7 @@ var tests = [
       }],
       depth: 1
     });
+    document.body.appendChild(bookmarkContent);
 
     // Force templates to render.
     Polymer.dom.flush();
@@ -164,7 +169,8 @@ var tests = [
    * fit-to-width buttons.
    */
   function testZoomToolbarToggle() {
-    var zoomToolbar = Polymer.Base.create('viewer-zoom-toolbar', {});
+    var zoomToolbar = document.createElement('viewer-zoom-toolbar');
+    document.body.appendChild(zoomToolbar);
     var fitButton = zoomToolbar.$['fit-button'];
     var fab = fitButton.$['button'];
 
@@ -214,7 +220,8 @@ var tests = [
   },
 
   function testZoomToolbarForceFitToPage() {
-    var zoomToolbar = Polymer.Base.create('viewer-zoom-toolbar', {});
+    var zoomToolbar = document.createElement('viewer-zoom-toolbar');
+    document.body.appendChild(zoomToolbar);
     var fitButton = zoomToolbar.$['fit-button'];
     var fab = fitButton.$['button'];
 
@@ -255,7 +262,8 @@ var tests = [
   },
 
   function testZoomToolbarForceFitToWidth() {
-    var zoomToolbar = Polymer.Base.create('viewer-zoom-toolbar', {});
+    var zoomToolbar = document.createElement('viewer-zoom-toolbar');
+    document.body.appendChild(zoomToolbar);
     var fitButton = zoomToolbar.$['fit-button'];
     var fab = fitButton.$['button'];
 

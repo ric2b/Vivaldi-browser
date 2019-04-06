@@ -77,6 +77,7 @@ MdTextButton* MdTextButton::Create(ButtonListener* listener,
   MdTextButton* button = new MdTextButton(listener, button_context);
   button->SetText(text);
   button->SetFocusForPlatform();
+
   return button;
 }
 
@@ -95,6 +96,11 @@ void MdTextButton::SetBgColorOverride(const base::Optional<SkColor>& color) {
   UpdateColors();
 }
 
+void MdTextButton::set_corner_radius(float radius) {
+  corner_radius_ = radius;
+  set_ink_drop_corner_radii(corner_radius_, corner_radius_);
+}
+
 void MdTextButton::OnPaintBackground(gfx::Canvas* canvas) {
   LabelButton::OnPaintBackground(canvas);
   if (hover_animation().is_animating() || state() == STATE_HOVERED) {
@@ -102,16 +108,6 @@ void MdTextButton::OnPaintBackground(gfx::Canvas* canvas) {
     SkScalar alpha = hover_animation().CurrentValueBetween(0, kHoverAlpha);
     canvas->FillRect(GetLocalBounds(), SkColorSetA(SK_ColorBLACK, alpha));
   }
-}
-
-void MdTextButton::OnFocus() {
-  LabelButton::OnFocus();
-  FocusRing::Install(this);
-}
-
-void MdTextButton::OnBlur() {
-  LabelButton::OnBlur();
-  FocusRing::Uninstall(this);
 }
 
 void MdTextButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
@@ -159,7 +155,7 @@ std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
   return std::make_unique<InkDropHighlight>(
       gfx::RectF(GetLocalBounds()).CenterPoint(),
       base::WrapUnique(new BorderShadowLayerDelegate(
-          shadows, GetLocalBounds(), fill_color, kInkDropSmallCornerRadius)));
+          shadows, GetLocalBounds(), fill_color, corner_radius_)));
 }
 
 void MdTextButton::SetEnabledTextColors(SkColor color) {
@@ -182,12 +178,14 @@ MdTextButton::MdTextButton(ButtonListener* listener, int button_context)
       is_prominent_(false) {
   SetInkDropMode(InkDropMode::ON);
   set_has_ink_drop_action_on_click(true);
+  set_corner_radius(LayoutProvider::Get()->GetCornerRadiusMetric(EMPHASIS_LOW));
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetFocusForPlatform();
   const int minimum_width = LayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_DIALOG_BUTTON_MINIMUM_WIDTH);
   SetMinSize(gfx::Size(minimum_width, 0));
   SetFocusPainter(nullptr);
+  SetInstallFocusRingOnFocus(true);
   label()->SetAutoColorReadabilityEnabled(false);
   set_request_focus_on_press(false);
 
@@ -225,8 +223,9 @@ void MdTextButton::UpdatePadding() {
   // GetControlHeightForFont(). It can't because that only returns a correct
   // result with --secondary-ui-md, and MdTextButtons appear in top chrome
   // without that.
-  const int kBaseHeight = 28;
-  int target_height = std::max(kBaseHeight + size_delta * 2,
+  const int base_height =
+      ui::MaterialDesignController::IsNewerMaterialUi() ? 32 : 28;
+  int target_height = std::max(base_height + size_delta * 2,
                                label()->font_list().GetFontSize() * 2);
 
   int label_height = label()->GetPreferredSize().height();
@@ -330,7 +329,7 @@ void MdTextButton::UpdateColors() {
   DCHECK_EQ(SK_AlphaOPAQUE, static_cast<int>(SkColorGetA(bg_color)));
   SetBackground(
       CreateBackgroundFromPainter(Painter::CreateRoundRectWith1PxBorderPainter(
-          bg_color, stroke_color, kInkDropSmallCornerRadius)));
+          bg_color, stroke_color, corner_radius_)));
   SchedulePaint();
 }
 

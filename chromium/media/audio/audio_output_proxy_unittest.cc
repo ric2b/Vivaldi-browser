@@ -70,17 +70,17 @@ class MockAudioOutputStream : public AudioOutputStream {
             FakeAudioOutputStream::MakeFakeStream(manager, params_)) {
   }
 
-  void Start(AudioSourceCallback* callback) {
+  void Start(AudioSourceCallback* callback) override {
     start_called_ = true;
     fake_output_stream_->Start(callback);
   }
 
-  void Stop() {
+  void Stop() override {
     stop_called_ = true;
     fake_output_stream_->Stop();
   }
 
-  ~MockAudioOutputStream() = default;
+  ~MockAudioOutputStream() override = default;
 
   bool start_called() { return start_called_; }
   bool stop_called() { return stop_called_; }
@@ -171,7 +171,7 @@ class AudioOutputProxyTest : public testing::Test {
     // FakeAudioOutputStream will keep the message loop busy indefinitely; i.e.,
     // RunUntilIdle() will never terminate.
     params_ = AudioParameters(AudioParameters::AUDIO_PCM_LINEAR,
-                              CHANNEL_LAYOUT_STEREO, 8000, 16, 2048);
+                              CHANNEL_LAYOUT_STEREO, 8000, 2048);
     InitDispatcher(base::TimeDelta::FromMilliseconds(kTestCloseDelayMs));
   }
 
@@ -501,9 +501,8 @@ class AudioOutputResamplerTest : public AudioOutputProxyTest {
     // Use a low sample rate and large buffer size when testing otherwise the
     // FakeAudioOutputStream will keep the message loop busy indefinitely; i.e.,
     // RunUntilIdle() will never terminate.
-    resampler_params_ = AudioParameters(
-        AudioParameters::AUDIO_PCM_LOW_LATENCY, CHANNEL_LAYOUT_STEREO,
-        16000, 16, 1024);
+    resampler_params_ = AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                                        CHANNEL_LAYOUT_STEREO, 16000, 1024);
     resampler_ = std::make_unique<AudioOutputResampler>(
         &manager(), params_, resampler_params_, std::string(), close_delay,
         base::BindRepeating(&RegisterDebugRecording));

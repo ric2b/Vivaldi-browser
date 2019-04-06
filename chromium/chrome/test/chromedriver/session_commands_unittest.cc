@@ -11,7 +11,6 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
@@ -40,6 +39,41 @@ TEST(SessionCommandsTest, ExecuteGetTimeouts) {
   int implicit;
   ASSERT_TRUE(response->GetInteger("implicit", &implicit));
   ASSERT_EQ(implicit, 0);
+}
+
+TEST(SessionCommandsTest, ExecuteSetTimeouts) {
+  Session session("id");
+  base::DictionaryValue params;
+  std::unique_ptr<base::Value> value;
+
+  // W3C spec doesn't forbid passing in an empty object, so we should get kOk.
+  Status status = ExecuteSetTimeouts(&session, params, &value);
+  ASSERT_EQ(kOk, status.code());
+
+  params.SetInteger("pageLoad", 5000);
+  status = ExecuteSetTimeouts(&session, params, &value);
+  ASSERT_EQ(kOk, status.code());
+
+  params.SetInteger("script", 5000);
+  params.SetInteger("implicit", 5000);
+  status = ExecuteSetTimeouts(&session, params, &value);
+  ASSERT_EQ(kOk, status.code());
+
+  params.SetInteger("implicit", -5000);
+  status = ExecuteSetTimeouts(&session, params, &value);
+  ASSERT_EQ(kInvalidArgument, status.code());
+
+  params.Clear();
+  params.SetInteger("unknown", 5000);
+  status = ExecuteSetTimeouts(&session, params, &value);
+  ASSERT_EQ(kInvalidArgument, status.code());
+
+  // Old pre-W3C format.
+  params.Clear();
+  params.SetDouble("ms", 5000.0);
+  params.SetString("type", "page load");
+  status = ExecuteSetTimeouts(&session, params, &value);
+  ASSERT_EQ(kOk, status.code());
 }
 
 TEST(SessionCommandsTest, MergeCapabilities) {

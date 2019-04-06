@@ -10,7 +10,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 #include "chrome/common/page_load_metrics/page_load_metrics_util.h"
-#include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
+#include "third_party/blink/public/platform/web_loading_behavior_flag.h"
 
 // Up to 10 minutes, with 100 buckets.
 #define PAGE_LOAD_HISTOGRAM(name, sample)                           \
@@ -165,6 +165,10 @@ bool IsGoogleSearchRedirectorUrl(const GURL& url);
 // 'zzzfoo'. For QueryContainsComponent, the component should of the form
 // 'key=value'. For QueryContainsComponentPrefix, the component should be of
 // the form 'key=' (where the value is not specified).
+// Note: The heuristic used by these functions will not find a component at the
+// beginning of the query string if the component starts with a delimiter
+// character ('?' or '#'). For example, '?foo=bar' will match the query string
+// 'a=b&?foo=bar' but not the query string '?foo=bar&a=b'.
 bool QueryContainsComponent(const base::StringPiece query,
                             const base::StringPiece component);
 bool QueryContainsComponentPrefix(const base::StringPiece query,

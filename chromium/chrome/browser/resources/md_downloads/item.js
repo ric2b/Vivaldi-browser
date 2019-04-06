@@ -7,9 +7,7 @@ cr.define('downloads', function() {
     is: 'downloads-item',
 
     properties: {
-      data: {
-        type: Object,
-      },
+      data: Object,
 
       completelyOnDisk_: {
         computed: 'computeCompletelyOnDisk_(' +
@@ -47,6 +45,11 @@ cr.define('downloads', function() {
         computed: 'computeIsInProgress_(data.state)',
         type: Boolean,
         value: false,
+      },
+
+      pauseOrResumeClass_: {
+        computed: 'computePauseOrResumeClass_(isInProgress_, data.resume)',
+        type: String,
       },
 
       pauseOrResumeText_: {
@@ -195,8 +198,22 @@ cr.define('downloads', function() {
            this.data.danger_type == downloads.DangerType.POTENTIALLY_UNWANTED);
     },
 
+    /**
+     * @return {string} 'action-button' for a resume button, empty otherwise.
+     * @private
+     */
+    computePauseOrResumeClass_: function() {
+      if (this.data === undefined)
+        return '';
+
+      return !this.isInProgress_ && this.data.resume ? 'action-button' : '';
+    },
+
     /** @private */
     computePauseOrResumeText_: function() {
+      if (this.data === undefined)
+        return '';
+
       if (this.isInProgress_)
         return loadTimeData.getString('controlPause');
       if (this.data.resume)
@@ -308,7 +325,7 @@ cr.define('downloads', function() {
 
     /** @private */
     onRetryTap_: function() {
-      this.browserProxy_.download(this.data.url);
+      this.browserProxy_.retryDownload(this.data.id);
     },
 
     /** @private */

@@ -15,7 +15,6 @@ class BookmarkModel;
 namespace web {
 class WebState;
 }
-class VoiceSearchProvider;
 class WebStateList;
 
 // A mediator object that provides the relevant properties of a web state
@@ -32,9 +31,6 @@ class WebStateList;
 // The consumer for this object. This can change during the lifetime of this
 // object and may be nil.
 @property(nonatomic, strong) id<ToolbarConsumer> consumer;
-
-// The voice search provider for this mediator.
-@property(nonatomic, assign) VoiceSearchProvider* voiceSearchProvider;
 
 // Updates the consumer to conforms to |webState|.
 - (void)updateConsumerForWebState:(web::WebState*)webState;

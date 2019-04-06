@@ -11,7 +11,7 @@ namespace device {
 
 namespace {
 
-void MapperLogitechDualAction(const Gamepad& input, Gamepad* mapped) {
+void MapperLogitechDInput(const Gamepad& input, Gamepad* mapped) {
   *mapped = input;
   mapped->buttons[BUTTON_INDEX_PRIMARY] = input.buttons[1];
   mapped->buttons[BUTTON_INDEX_SECONDARY] = input.buttons[2];
@@ -19,7 +19,9 @@ void MapperLogitechDualAction(const Gamepad& input, Gamepad* mapped) {
   mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[5];
   DpadFromAxis(mapped, input.axes[9]);
 
-  mapped->buttons_length = BUTTON_INDEX_COUNT;
+  // The Logitech button (BUTTON_INDEX_META) is not accessible through the
+  // device's D-mode.
+  mapped->buttons_length = BUTTON_INDEX_COUNT - 1;
   mapped->axes_length = AXIS_INDEX_COUNT;
 }
 
@@ -139,6 +141,35 @@ void MapperADT1(const Gamepad& input, Gamepad* mapped) {
 }
 
 void MapperNvShield(const Gamepad& input, Gamepad* mapped) {
+  enum ShieldButtons {
+    SHIELD_BUTTON_CIRCLE = BUTTON_INDEX_COUNT,
+    SHIELD_BUTTON_COUNT
+  };
+  *mapped = input;
+  mapped->buttons[BUTTON_INDEX_TERTIARY] = input.buttons[3];
+  mapped->buttons[BUTTON_INDEX_QUATERNARY] = input.buttons[4];
+  mapped->buttons[BUTTON_INDEX_LEFT_SHOULDER] = input.buttons[6];
+  mapped->buttons[BUTTON_INDEX_RIGHT_SHOULDER] = input.buttons[7];
+  mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = AxisToButton(input.axes[4]);
+  mapped->buttons[BUTTON_INDEX_RIGHT_TRIGGER] = AxisToButton(input.axes[3]);
+  mapped->buttons[BUTTON_INDEX_BACK_SELECT] = input.buttons[9];
+  mapped->buttons[BUTTON_INDEX_START] = input.buttons[11];
+  mapped->buttons[BUTTON_INDEX_LEFT_THUMBSTICK] = input.buttons[13];
+  mapped->buttons[BUTTON_INDEX_RIGHT_THUMBSTICK] = input.buttons[14];
+  mapped->buttons[BUTTON_INDEX_META] = input.buttons[2];
+  mapped->buttons[SHIELD_BUTTON_CIRCLE] = input.buttons[5];
+  mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[5];
+  DpadFromAxis(mapped, input.axes[9]);
+
+  mapped->buttons_length = SHIELD_BUTTON_COUNT;
+  mapped->axes_length = AXIS_INDEX_COUNT;
+}
+
+void MapperNvShield2017(const Gamepad& input, Gamepad* mapped) {
+  enum Shield2017Buttons {
+    SHIELD2017_BUTTON_PLAYPAUSE = BUTTON_INDEX_COUNT,
+    SHIELD2017_BUTTON_COUNT
+  };
   *mapped = input;
   mapped->buttons[BUTTON_INDEX_PRIMARY] = input.buttons[0];
   mapped->buttons[BUTTON_INDEX_SECONDARY] = input.buttons[1];
@@ -148,15 +179,16 @@ void MapperNvShield(const Gamepad& input, Gamepad* mapped) {
   mapped->buttons[BUTTON_INDEX_RIGHT_SHOULDER] = input.buttons[7];
   mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = AxisToButton(input.axes[4]);
   mapped->buttons[BUTTON_INDEX_RIGHT_TRIGGER] = AxisToButton(input.axes[3]);
-  mapped->buttons[BUTTON_INDEX_BACK_SELECT] = NullButton();
-  mapped->buttons[BUTTON_INDEX_START] = input.buttons[11];
+  mapped->buttons[BUTTON_INDEX_BACK_SELECT] = input.buttons[8];
+  mapped->buttons[BUTTON_INDEX_START] = input.buttons[5];
   mapped->buttons[BUTTON_INDEX_LEFT_THUMBSTICK] = input.buttons[13];
   mapped->buttons[BUTTON_INDEX_RIGHT_THUMBSTICK] = input.buttons[14];
-  mapped->buttons[BUTTON_INDEX_META] = input.buttons[8];
+  mapped->buttons[BUTTON_INDEX_META] = input.buttons[2];
+  mapped->buttons[SHIELD2017_BUTTON_PLAYPAUSE] = input.buttons[11];
   mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[5];
   DpadFromAxis(mapped, input.axes[9]);
 
-  mapped->buttons_length = BUTTON_INDEX_COUNT;
+  mapped->buttons_length = SHIELD2017_BUTTON_COUNT;
   mapped->axes_length = AXIS_INDEX_COUNT;
 }
 
@@ -234,16 +266,19 @@ struct MappingData {
   GamepadStandardMappingFunction function;
 } AvailableMappings[] = {
     // http://www.linux-usb.org/usb.ids
-    {"0079", "0011", Mapper2Axes8Keys},          // 2Axes 8Keys Game Pad
-    {"046d", "c216", MapperLogitechDualAction},  // Logitech DualAction
-    {"054c", "05c4", MapperDualshock4},          // Playstation Dualshock 4
-    {"054c", "09cc", MapperDualshock4},          // Dualshock 4 (PS4 Slim)
-    {"054c", "0ba0", MapperDualshock4},          // Dualshock 4 USB receiver
-    {"0583", "2060", MapperIBuffalo},            // iBuffalo Classic
-    {"0955", "7210", MapperNvShield},            // Nvidia Shield gamepad
-    {"0b05", "4500", MapperADT1},                // Nexus Player Controller
-    {"1532", "0900", MapperRazerServal},         // Razer Serval Controller
-    {"18d1", "2c40", MapperADT1},                // ADT-1 Controller
+    {"0079", "0011", Mapper2Axes8Keys},      // 2Axes 8Keys Game Pad
+    {"046d", "c216", MapperLogitechDInput},  // Logitech F310, D-mode
+    {"046d", "c218", MapperLogitechDInput},  // Logitech F510, D-mode
+    {"046d", "c219", MapperLogitechDInput},  // Logitech F710, D-mode
+    {"054c", "05c4", MapperDualshock4},      // Playstation Dualshock 4
+    {"054c", "09cc", MapperDualshock4},      // Dualshock 4 (PS4 Slim)
+    {"054c", "0ba0", MapperDualshock4},      // Dualshock 4 USB receiver
+    {"0583", "2060", MapperIBuffalo},        // iBuffalo Classic
+    {"0955", "7210", MapperNvShield},        // Nvidia Shield gamepad (2015)
+    {"0955", "7214", MapperNvShield2017},    // Nvidia Shield gamepad (2017)
+    {"0b05", "4500", MapperADT1},            // Nexus Player Controller
+    {"1532", "0900", MapperRazerServal},     // Razer Serval Controller
+    {"18d1", "2c40", MapperADT1},            // ADT-1 Controller
     {"20d6", "6271", MapperMogaPro},         // Moga Pro Controller (HID mode)
     {"2378", "1008", MapperOnLiveWireless},  // OnLive Controller (Bluetooth)
     {"2378", "100a", MapperOnLiveWireless},  // OnLive Controller (Wired)
@@ -255,7 +290,8 @@ struct MappingData {
 GamepadStandardMappingFunction GetGamepadStandardMappingFunction(
     const base::StringPiece& vendor_id,
     const base::StringPiece& product_id,
-    const base::StringPiece& version_number) {
+    const base::StringPiece& version_number,
+    GamepadBusType bus_type) {
   for (size_t i = 0; i < arraysize(AvailableMappings); ++i) {
     MappingData& item = AvailableMappings[i];
     if (vendor_id == item.vendor_id && product_id == item.product_id)

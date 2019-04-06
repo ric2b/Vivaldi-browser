@@ -12,16 +12,17 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/mock_media_stream_registry.h"
+#include "content/renderer/media/stream/mock_media_stream_registry.h"
 #include "content/renderer/media_recorder/media_recorder_handler.h"
 #include "media/audio/simple_sources.h"
 #include "media/base/audio_bus.h"
 #include "media/base/video_frame.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaRecorderHandlerClient.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_media_recorder_handler_client.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_heap.h"
 
 using ::testing::_;
 using ::testing::AtLeast;
@@ -44,7 +45,6 @@ static const std::string kTestStreamUrl = "stream_url";
 static const std::string kTestVideoTrackId = "video_track_id";
 static const std::string kTestAudioTrackId = "audio_track_id";
 static const int kTestAudioChannels = 2;
-static const int kTestAudioBitsPerSample = 16;
 static const int kTestAudioSampleRate = 48000;
 static const int kTestAudioBufferDurationMs = 10;
 // Opus works with 60ms buffers, so 6 MediaStreamAudioTrack Buffers are needed
@@ -65,11 +65,12 @@ static const MediaRecorderTestParams kMediaRecorderTestParams[] = {
     {true, false, "video/webm", "vp8", true},
     {true, false, "video/webm", "vp9", true},
 #if BUILDFLAG(RTC_USE_H264)
-    {true, false, "video/webm", "h264", false},
+    {true, false, "video/x-matroska", "avc1", false},
 #endif
     {false, true, "audio/webm", "opus", true},
     {false, true, "audio/webm", "", true},  // Should default to opus.
     {false, true, "audio/webm", "pcm", true},
+    {true, true, "video/webm", "vp9,opus", true},
 };
 
 class MediaRecorderHandlerTest : public TestWithParam<MediaRecorderTestParams>,
@@ -78,7 +79,8 @@ class MediaRecorderHandlerTest : public TestWithParam<MediaRecorderTestParams>,
   MediaRecorderHandlerTest()
       : scoped_task_environment_(
             base::test::ScopedTaskEnvironment::MainThreadType::UI),
-        media_recorder_handler_(new MediaRecorderHandler()),
+        media_recorder_handler_(new MediaRecorderHandler(
+            blink::scheduler::GetSingleThreadTaskRunnerForTesting())),
         audio_source_(kTestAudioChannels,
                       440 /* freq */,
                       kTestAudioSampleRate) {
@@ -256,7 +258,7 @@ TEST_P(MediaRecorderHandlerTest, EncodeVideoFrames) {
         .Times(AtLeast(1));
     EXPECT_CALL(*this, WriteData(_, Gt(kEncodedSizeThreshold), _, _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     OnVideoFrameForTesting(video_frame);
     run_loop.Run();
@@ -273,7 +275,7 @@ TEST_P(MediaRecorderHandlerTest, EncodeVideoFrames) {
         .Times(AtLeast(1));
     EXPECT_CALL(*this, WriteData(_, Gt(kEncodedSizeThreshold), _, _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     OnVideoFrameForTesting(video_frame);
     run_loop.Run();
@@ -299,7 +301,7 @@ TEST_P(MediaRecorderHandlerTest, EncodeVideoFrames) {
           .Times(AtLeast(1));
       EXPECT_CALL(*this, WriteData(_, Gt(kEncodedSizeThreshold), _, _))
           .Times(1)
-          .WillOnce(RunClosure(quit_closure));
+          .WillOnce(RunClosure(std::move(quit_closure)));
     }
 
     OnVideoFrameForTesting(alpha_frame);
@@ -338,7 +340,7 @@ TEST_P(MediaRecorderHandlerTest, OpusEncodeAudioFrames) {
 
   media::AudioParameters params(
       media::AudioParameters::AUDIO_PCM_LINEAR, media::CHANNEL_LAYOUT_STEREO,
-      kTestAudioSampleRate, kTestAudioBitsPerSample,
+      kTestAudioSampleRate,
       kTestAudioSampleRate * kTestAudioBufferDurationMs / 1000);
   SetAudioFormatForTesting(params);
 
@@ -352,7 +354,7 @@ TEST_P(MediaRecorderHandlerTest, OpusEncodeAudioFrames) {
         .Times(AtLeast(1));
     EXPECT_CALL(*this, WriteData(_, Gt(kEncodedSizeThreshold), _, _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     for (int i = 0; i < kRatioOpusToTestAudioBuffers; ++i)
       OnAudioBusForTesting(*audio_bus1);
@@ -369,7 +371,7 @@ TEST_P(MediaRecorderHandlerTest, OpusEncodeAudioFrames) {
         .Times(AtLeast(1));
     EXPECT_CALL(*this, WriteData(_, Gt(kEncodedSizeThreshold), _, _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     for (int i = 0; i < kRatioOpusToTestAudioBuffers; ++i)
       OnAudioBusForTesting(*audio_bus2);
@@ -408,7 +410,7 @@ TEST_P(MediaRecorderHandlerTest, WebmMuxerErrorWhileEncoding) {
     EXPECT_CALL(*this, WriteData(_, _, _, _)).Times(AtLeast(1));
     EXPECT_CALL(*this, WriteData(_, Gt(kEncodedSizeThreshold), _, _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     OnVideoFrameForTesting(video_frame);
     run_loop.Run();
@@ -420,12 +422,37 @@ TEST_P(MediaRecorderHandlerTest, WebmMuxerErrorWhileEncoding) {
     base::RunLoop run_loop;
     base::Closure quit_closure = run_loop.QuitClosure();
     EXPECT_CALL(*this, WriteData(_, _, _, _)).Times(0);
-    EXPECT_CALL(*this, OnError(_)).Times(1).WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*this, OnError(_))
+        .Times(1)
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     OnVideoFrameForTesting(video_frame);
     run_loop.Run();
   }
 
+  // Expect a last call on destruction, with size 0 and |lastInSlice| true.
+  EXPECT_CALL(*this, WriteData(nullptr, 0, true, _)).Times(1);
+  media_recorder_handler_.reset();
+}
+
+// Checks the ActualMimeType() versus the expected.
+TEST_P(MediaRecorderHandlerTest, ActualMimeType) {
+  AddTracks();
+  const WebString mime_type(WebString::FromASCII(GetParam().mime_type));
+  const WebString codecs(WebString::FromASCII(GetParam().codecs));
+  EXPECT_TRUE(media_recorder_handler_->Initialize(this, registry_.test_stream(),
+                                                  mime_type, codecs, 0, 0));
+
+  std::string actual_mime_type(GetParam().mime_type);
+  actual_mime_type.append(";codecs=");
+  if (strlen(GetParam().codecs) != 0u)
+    actual_mime_type.append(GetParam().codecs);
+  else if (GetParam().has_video)
+    actual_mime_type.append("vp8");
+  else if (GetParam().has_audio)
+    actual_mime_type.append("opus");
+
+  EXPECT_EQ(media_recorder_handler_->ActualMimeType().Utf8(), actual_mime_type);
 
   // Expect a last call on destruction, with size 0 and |lastInSlice| true.
   EXPECT_CALL(*this, WriteData(nullptr, 0, true, _)).Times(1);

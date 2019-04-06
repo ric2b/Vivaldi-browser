@@ -95,10 +95,10 @@ void TestWin10MsSigned(bool expect_success,
   // Choose the appropriate DLL and make sure the sandbox allows access to it.
   base::FilePath dll_path;
   if (use_ms_signed_binary) {
-    EXPECT_TRUE(PathService::Get(base::DIR_SYSTEM, &dll_path));
+    EXPECT_TRUE(base::PathService::Get(base::DIR_SYSTEM, &dll_path));
     dll_path = dll_path.Append(L"gdi32.dll");
   } else {
-    EXPECT_TRUE(PathService::Get(base::DIR_EXE, &dll_path));
+    EXPECT_TRUE(base::PathService::Get(base::DIR_EXE, &dll_path));
     dll_path = dll_path.Append(hooking_dll::g_hook_dll_file);
   }
   EXPECT_TRUE(runner.AddFsRule(sandbox::TargetPolicy::FILES_ALLOW_READONLY,
@@ -328,6 +328,16 @@ SBOX_TESTS_COMMAND int CheckPolicy(int argc, wchar_t** argv) {
       if (!policy.PreferSystem32Images)
         return SBOX_TEST_FAILED;
 
+      break;
+    }
+    //--------------------------------------------------
+    // MITIGATION_RESTRICT_INDIRECT_BRANCH_PREDICTION
+    //--------------------------------------------------
+    case (TESTPOLICY_RESTRICTINDIRECTBRANCHPREDICTION): {
+      // TODO(pennymac): No Policy defines available yet!
+      // Can't use GetProcessMitigationPolicy() API to check if enabled at this
+      // time.  If the creation of THIS process succeeded, then the call to
+      // UpdateProcThreadAttribute() with this mitigation succeeded.
       break;
     }
     default:
@@ -595,31 +605,20 @@ TEST(ProcessMitigationsTest, CheckWin8AslrPolicySuccess) {
   base::string16 test_command = L"CheckPolicy ";
   test_command += std::to_wstring(TESTPOLICY_ASLR);
 
+//---------------------------------------------
+// Only test in release for now.
+// TODO(pennymac): overhaul ASLR, crbug/834907.
+//---------------------------------------------
+#if defined(NDEBUG)
   TestRunner runner;
   sandbox::TargetPolicy* policy = runner.GetPolicy();
 
-//---------------------------------
-// 1) Test setting pre-startup.
-//    **Can only set ASLR pre-startup in release build.
-//---------------------------------
-#if defined(NDEBUG)
   EXPECT_EQ(policy->SetProcessMitigations(
                 MITIGATION_RELOCATE_IMAGE | MITIGATION_RELOCATE_IMAGE_REQUIRED |
                 MITIGATION_BOTTOM_UP_ASLR | MITIGATION_HIGH_ENTROPY_ASLR),
             SBOX_ALL_OK);
   EXPECT_EQ(SBOX_TEST_SUCCEEDED, runner.RunTest(test_command.c_str()));
-
-//---------------------------------
-// 2) Test setting post-startup.
-//    **Bottom up and high entropy can only be set pre-startup.
-//    **Can only set ASLR post-startup in debug build.
-//---------------------------------
-#else
-  EXPECT_EQ(policy->SetDelayedProcessMitigations(
-                MITIGATION_RELOCATE_IMAGE | MITIGATION_RELOCATE_IMAGE_REQUIRED),
-            SBOX_ALL_OK);
-  EXPECT_EQ(SBOX_TEST_SUCCEEDED, runner.RunTest(test_command.c_str()));
-#endif  // !defined(NDEBUG)
+#endif  // defined(NDEBUG)
 }
 
 //------------------------------------------------------------------------------
@@ -894,6 +893,40 @@ TEST(ProcessMitigationsTest, CheckChildProcessAbnormalExit) {
   test_command += std::to_wstring(STATUS_ACCESS_VIOLATION);
 
   EXPECT_EQ(SBOX_TEST_SUCCEEDED, runner.RunTest(test_command.c_str()));
+}
+
+//------------------------------------------------------------------------------
+// Restrict indirect branch prediction
+// (MITIGATION_RESTRICT_INDIRECT_BRANCH_PREDICTION)
+// >= Win10 RS3
+//------------------------------------------------------------------------------
+
+// This test validates that setting the
+// MITIGATION_RESTRICT_INDIRECT_BRANCH_PREDICTION mitigation enables the setting
+// on a process.
+TEST(ProcessMitigationsTest,
+     CheckWin10RestrictIndirectBranchPredictionPolicySuccess) {
+  if (base::win::GetVersion() < base::win::VERSION_WIN10_RS3)
+    return;
+
+  base::string16 test_command = L"CheckPolicy ";
+  test_command += std::to_wstring(TESTPOLICY_RESTRICTINDIRECTBRANCHPREDICTION);
+
+  //---------------------------------
+  // 1) Test setting pre-startup.
+  //---------------------------------
+  TestRunner runner;
+  sandbox::TargetPolicy* policy = runner.GetPolicy();
+
+  EXPECT_EQ(policy->SetProcessMitigations(
+                MITIGATION_RESTRICT_INDIRECT_BRANCH_PREDICTION),
+            SBOX_ALL_OK);
+  EXPECT_EQ(SBOX_TEST_SUCCEEDED, runner.RunTest(test_command.c_str()));
+
+  //---------------------------------
+  // 2) Test setting post-startup.
+  //    ** Post-startup not supported.  Must be enabled on creation.
+  //---------------------------------
 }
 
 }  // namespace sandbox

@@ -12,7 +12,8 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner_util.h"
 #include "content/public/browser/browser_thread.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/public/cpp/platform/platform_handle.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 
@@ -64,9 +65,9 @@ int ArcContentFileSystemFileStreamReader::Read(
   }
   file_system_operation_runner_util::OpenFileToReadOnIOThread(
       arc_url_,
-      base::Bind(&ArcContentFileSystemFileStreamReader::OnOpenFile,
-                 weak_ptr_factory_.GetWeakPtr(), base::WrapRefCounted(buffer),
-                 buffer_length, callback));
+      base::BindOnce(&ArcContentFileSystemFileStreamReader::OnOpenFile,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::WrapRefCounted(buffer), buffer_length, callback));
   return net::ERR_IO_PENDING;
 }
 
@@ -74,8 +75,9 @@ int64_t ArcContentFileSystemFileStreamReader::GetLength(
     const net::Int64CompletionCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   file_system_operation_runner_util::GetFileSizeOnIOThread(
-      arc_url_, base::Bind(&ArcContentFileSystemFileStreamReader::OnGetFileSize,
-                           weak_ptr_factory_.GetWeakPtr(), callback));
+      arc_url_,
+      base::BindOnce(&ArcContentFileSystemFileStreamReader::OnGetFileSize,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
   return net::ERR_IO_PENDING;
 }
 
@@ -116,14 +118,14 @@ void ArcContentFileSystemFileStreamReader::OnOpenFile(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   DCHECK(!file_);
 
-  mojo::edk::ScopedPlatformHandle platform_handle;
-  if (mojo::edk::PassWrappedPlatformHandle(
-          handle.release().value(), &platform_handle) != MOJO_RESULT_OK) {
-    LOG(ERROR) << "PassWrappedPlatformHandle failed";
+  mojo::PlatformHandle platform_handle =
+      mojo::UnwrapPlatformHandle(std::move(handle));
+  if (!platform_handle.is_valid()) {
+    LOG(ERROR) << "PassWrappedInternalPlatformHandle failed";
     callback.Run(net::ERR_FAILED);
     return;
   }
-  file_.reset(new base::File(platform_handle.release().handle));
+  file_ = std::make_unique<base::File>(platform_handle.ReleaseFD());
   if (!file_->IsValid()) {
     LOG(ERROR) << "Invalid file.";
     callback.Run(net::ERR_FAILED);

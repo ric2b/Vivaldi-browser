@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "chromeos/printing/printer_configuration.h"
 
 namespace chromeos {
@@ -47,13 +48,15 @@ class CupsPrintJob {
   // Returns a unique id for the print job.
   std::string GetUniqueId() const;
 
+  // Returns weak pointer to |this| CupsPrintJob
+  base::WeakPtr<CupsPrintJob> GetWeakPtr();
+
   // Getters.
   const Printer& printer() const { return printer_; }
   int job_id() const { return job_id_; }
   const std::string& document_title() const { return document_title_; }
   int total_page_number() const { return total_page_number_; }
   int printed_page_number() const { return printed_page_number_; }
-  bool expired() const { return expired_; }
   State state() const { return state_; }
   ErrorCode error_code() const { return error_code_; }
 
@@ -61,7 +64,6 @@ class CupsPrintJob {
   void set_printed_page_number(int page_number) {
     printed_page_number_ = page_number;
   }
-  void set_expired(bool expired) { expired_ = expired; }
   void set_state(State state) { state_ = state; }
   void set_error_code(ErrorCode error_code) { error_code_ = error_code; }
 
@@ -79,11 +81,10 @@ class CupsPrintJob {
   int total_page_number_ = 0;
   int printed_page_number_ = 0;
 
-  // True if the job has expired due to timeout.
-  bool expired_ = false;
-
   State state_ = State::STATE_NONE;
   ErrorCode error_code_ = ErrorCode::NO_ERROR;
+
+  base::WeakPtrFactory<CupsPrintJob> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CupsPrintJob);
 };

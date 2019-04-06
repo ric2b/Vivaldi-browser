@@ -9,10 +9,9 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "cc/base/switches.h"
-#include "components/viz/client/client_layer_tree_frame_sink.h"
+#include "cc/mojo_embedder/async_layer_tree_frame_sink.h"
 #include "components/viz/client/hit_test_data_provider.h"
 #include "components/viz/client/local_surface_id_provider.h"
-#include "components/viz/common/surfaces/surface_sequence.h"
 #include "content/renderer/mus/renderer_window_tree_client.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
@@ -81,14 +80,15 @@ MusEmbeddedFrame::MusEmbeddedFrame(
 void MusEmbeddedFrame::CreateChildWindowAndEmbed(
     const base::UnguessableToken& token) {
   // Set a name for debugging.
-  std::unordered_map<std::string, std::vector<uint8_t>> properties;
+  base::flat_map<std::string, std::vector<uint8_t>> properties;
   properties[ui::mojom::WindowManager::kName_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(std::string("RendererFrame"));
   window_tree()->NewWindow(GetAndAdvanceNextChangeId(), window_id_, properties);
   window_tree()->AddWindow(GetAndAdvanceNextChangeId(),
                            renderer_window_tree_client_->root_window_id_,
                            window_id_);
-  window_tree()->EmbedUsingToken(window_id_, token, 0, base::Bind(&OnEmbedAck));
+  window_tree()->EmbedUsingToken(window_id_, token, 0,
+                                 base::BindOnce(&OnEmbedAck));
 }
 
 void MusEmbeddedFrame::OnTreeAvailable() {

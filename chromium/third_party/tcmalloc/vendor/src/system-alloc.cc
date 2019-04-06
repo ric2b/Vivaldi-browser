@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -61,6 +62,14 @@
 # define MAP_ANONYMOUS MAP_ANON
 #endif
 
+// Linux added support for MADV_FREE in 4.5 but we aren't ready to use it
+// yet. Among other things, using compile-time detection leads to poor
+// results when compiling on a system with MADV_FREE and running on a
+// system without it. See https://github.com/gperftools/gperftools/issues/780.
+#if defined(__linux__) && defined(MADV_FREE) && !defined(TCMALLOC_USE_MADV_FREE)
+# undef MADV_FREE
+#endif
+
 // MADV_FREE is specifically designed for use by malloc(), but only
 // FreeBSD supports it; in linux we fall back to the somewhat inferior
 // MADV_DONTNEED.
@@ -87,30 +96,17 @@ static const bool kDebugMode = true;
 using tcmalloc::kLog;
 using tcmalloc::Log;
 
-// Anonymous namespace to avoid name conflicts on "CheckAddressBits".
-namespace {
-
 // Check that no bit is set at position ADDRESS_BITS or higher.
-template <int ADDRESS_BITS> bool CheckAddressBits(uintptr_t ptr) {
-  return (ptr >> ADDRESS_BITS) == 0;
+static bool CheckAddressBits(uintptr_t ptr) {
+  bool always_ok = (kAddressBits == 8 * sizeof(void*));
+  // this is a bit insane but otherwise we get compiler warning about
+  // shifting right by word size even if this code is dead :(
+  int shift_bits = always_ok ? 0 : kAddressBits;
+  return always_ok || ((ptr >> shift_bits) == 0);
 }
-
-// Specialize for the bit width of a pointer to avoid undefined shift.
-template <> bool CheckAddressBits<8 * sizeof(void*)>(uintptr_t ptr) {
-  return true;
-}
-
-}  // Anonymous namespace to avoid name conflicts on "CheckAddressBits".
 
 COMPILE_ASSERT(kAddressBits <= 8 * sizeof(void*),
                address_bits_larger_than_pointer_size);
-
-// Structure for discovering alignment
-union MemoryAligner {
-  void*  p;
-  double d;
-  size_t s;
-} CACHELINE_ALIGNED;
 
 static SpinLock spinlock(SpinLock::LINKER_INITIALIZED);
 
@@ -120,7 +116,10 @@ static size_t pagesize = 0;
 #endif
 
 // The current system allocator
-SysAllocator* sys_alloc = NULL;
+SysAllocator* tcmalloc_sys_alloc = NULL;
+
+// Number of bytes taken from system.
+size_t TCMalloc_SystemTaken = 0;
 
 // Configuration parameters.
 DEFINE_int32(malloc_devmem_start,
@@ -137,6 +136,10 @@ DEFINE_bool(malloc_skip_sbrk,
 DEFINE_bool(malloc_skip_mmap,
             EnvToBool("TCMALLOC_SKIP_MMAP", false),
             "Whether mmap can be used to obtain memory.");
+DEFINE_bool(malloc_disable_memory_release,
+            EnvToBool("TCMALLOC_DISABLE_MEMORY_RELEASE", false),
+            "Whether MADV_FREE/MADV_DONTNEED should be used"
+            " to return unused memory to the system.");
 
 // static allocators
 class SbrkSysAllocator : public SysAllocator {
@@ -145,7 +148,10 @@ public:
   }
   void* Alloc(size_t size, size_t *actual_size, size_t alignment);
 };
-static char sbrk_space[sizeof(SbrkSysAllocator)];
+static union {
+  char buf[sizeof(SbrkSysAllocator)];
+  void *ptr;
+} sbrk_space;
 
 class MmapSysAllocator : public SysAllocator {
 public:
@@ -153,7 +159,10 @@ public:
   }
   void* Alloc(size_t size, size_t *actual_size, size_t alignment);
 };
-static char mmap_space[sizeof(MmapSysAllocator)];
+static union {
+  char buf[sizeof(MmapSysAllocator)];
+  void *ptr;
+} mmap_space;
 
 class DevMemSysAllocator : public SysAllocator {
 public:
@@ -187,15 +196,17 @@ class DefaultSysAllocator : public SysAllocator {
   SysAllocator* allocs_[kMaxAllocators];
   const char* names_[kMaxAllocators];
 };
-static char default_space[sizeof(DefaultSysAllocator)];
+static union {
+  char buf[sizeof(DefaultSysAllocator)];
+  void *ptr;
+} default_space;
 static const char sbrk_name[] = "SbrkSysAllocator";
 static const char mmap_name[] = "MmapSysAllocator";
 
 
 void* SbrkSysAllocator::Alloc(size_t size, size_t *actual_size,
                               size_t alignment) {
-#ifndef HAVE_SBRK
-  failed_ = true;
+#if !defined(HAVE_SBRK) || defined(__UCLIBC__)
   return NULL;
 #else
   // Check if we should use sbrk allocation.
@@ -267,7 +278,6 @@ void* SbrkSysAllocator::Alloc(size_t size, size_t *actual_size,
 void* MmapSysAllocator::Alloc(size_t size, size_t *actual_size,
                               size_t alignment) {
 #ifndef HAVE_MMAP
-  failed_ = true;
   return NULL;
 #else
   // Check if we should use mmap allocation.
@@ -336,7 +346,6 @@ void* MmapSysAllocator::Alloc(size_t size, size_t *actual_size,
 void* DevMemSysAllocator::Alloc(size_t size, size_t *actual_size,
                                 size_t alignment) {
 #ifndef HAVE_MMAP
-  failed_ = true;
   return NULL;
 #else
   static bool initialized = false;
@@ -442,10 +451,16 @@ void* DefaultSysAllocator::Alloc(size_t size, size_t *actual_size,
   return NULL;
 }
 
+ATTRIBUTE_WEAK ATTRIBUTE_NOINLINE
+SysAllocator *tc_get_sysalloc_override(SysAllocator *def)
+{
+  return def;
+}
+
 static bool system_alloc_inited = false;
 void InitSystemAllocators(void) {
-  MmapSysAllocator *mmap = new (mmap_space) MmapSysAllocator();
-  SbrkSysAllocator *sbrk = new (sbrk_space) SbrkSysAllocator();
+  MmapSysAllocator *mmap = new (mmap_space.buf) MmapSysAllocator();
+  SbrkSysAllocator *sbrk = new (sbrk_space.buf) SbrkSysAllocator();
 
   // In 64-bit debug mode, place the mmap allocator first since it
   // allocates pointers that do not fit in 32 bits and therefore gives
@@ -454,7 +469,7 @@ void InitSystemAllocators(void) {
   // likely to look like pointers and therefore the conservative gc in
   // the heap-checker is less likely to misinterpret a number as a
   // pointer).
-  DefaultSysAllocator *sdef = new (default_space) DefaultSysAllocator();
+  DefaultSysAllocator *sdef = new (default_space.buf) DefaultSysAllocator();
   if (kDebugMode && sizeof(void*) > 4) {
     sdef->SetChildAllocator(mmap, 0, mmap_name);
     sdef->SetChildAllocator(sbrk, 1, sbrk_name);
@@ -462,7 +477,8 @@ void InitSystemAllocators(void) {
     sdef->SetChildAllocator(sbrk, 0, sbrk_name);
     sdef->SetChildAllocator(mmap, 1, mmap_name);
   }
-  sys_alloc = sdef;
+
+  tcmalloc_sys_alloc = tc_get_sysalloc_override(sdef);
 }
 
 void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
@@ -480,26 +496,28 @@ void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
   // Enforce minimum alignment
   if (alignment < sizeof(MemoryAligner)) alignment = sizeof(MemoryAligner);
 
-  void* result = sys_alloc->Alloc(size, actual_size, alignment);
+  size_t actual_size_storage;
+  if (actual_size == NULL) {
+    actual_size = &actual_size_storage;
+  }
+
+  void* result = tcmalloc_sys_alloc->Alloc(size, actual_size, alignment);
   if (result != NULL) {
-    if (actual_size) {
-      CheckAddressBits<kAddressBits>(
-          reinterpret_cast<uintptr_t>(result) + *actual_size - 1);
-    } else {
-      CheckAddressBits<kAddressBits>(
-          reinterpret_cast<uintptr_t>(result) + size - 1);
-    }
+    CHECK_CONDITION(
+      CheckAddressBits(reinterpret_cast<uintptr_t>(result) + *actual_size - 1));
+    TCMalloc_SystemTaken += *actual_size;
   }
   return result;
 }
 
-void TCMalloc_SystemRelease(void* start, size_t length) {
+bool TCMalloc_SystemRelease(void* start, size_t length) {
 #ifdef MADV_FREE
   if (FLAGS_malloc_devmem_start) {
     // It's not safe to use MADV_FREE/MADV_DONTNEED if we've been
     // mapping /dev/mem for heap memory.
-    return;
+    return false;
   }
+  if (FLAGS_malloc_disable_memory_release) return false;
   if (pagesize == 0) pagesize = getpagesize();
   const size_t pagemask = pagesize - 1;
 
@@ -518,13 +536,20 @@ void TCMalloc_SystemRelease(void* start, size_t length) {
   ASSERT(new_end <= end);
 
   if (new_end > new_start) {
-    // Note -- ignoring most return codes, because if this fails it
-    // doesn't matter...
-    while (madvise(reinterpret_cast<char*>(new_start), new_end - new_start,
-                   MADV_FREE) == -1 &&
-           errno == EAGAIN) {
-      // NOP
-    }
+    int result;
+    do {
+      result = madvise(reinterpret_cast<char*>(new_start),
+          new_end - new_start, MADV_FREE);
+    } while (result == -1 && errno == EAGAIN);
+
+    return result != -1;
   }
 #endif
+  return false;
+}
+
+void TCMalloc_SystemCommit(void* start, size_t length) {
+  // Nothing to do here.  TCMalloc_SystemRelease does not alter pages
+  // such that they need to be re-committed before they can be used by the
+  // application.
 }

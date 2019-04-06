@@ -10,6 +10,7 @@
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "chromecast/media/cma/base/buffering_state.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -22,29 +23,16 @@ namespace {
 
 class MockBufferingControllerClient {
  public:
-  MockBufferingControllerClient();
-  ~MockBufferingControllerClient();
-
   MOCK_METHOD1(OnBufferingNotification, void(bool is_buffering));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockBufferingControllerClient);
 };
-
-MockBufferingControllerClient::MockBufferingControllerClient() {
-}
-
-MockBufferingControllerClient::~MockBufferingControllerClient() {
-}
 
 }  // namespace
 
 class BufferingControllerTest : public testing::Test {
  public:
   BufferingControllerTest();
-  ~BufferingControllerTest() override;
 
- protected:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<BufferingController> buffering_controller_;
 
   MockBufferingControllerClient client_;
@@ -57,9 +45,6 @@ class BufferingControllerTest : public testing::Test {
 
   // Buffer level above the high level.
   base::TimeDelta d3_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BufferingControllerTest);
 };
 
 BufferingControllerTest::BufferingControllerTest() {
@@ -78,9 +63,6 @@ BufferingControllerTest::BufferingControllerTest() {
       buffering_config,
       base::Bind(&MockBufferingControllerClient::OnBufferingNotification,
                  base::Unretained(&client_))));
-}
-
-BufferingControllerTest::~BufferingControllerTest() {
 }
 
 TEST_F(BufferingControllerTest, OneStream_Typical) {

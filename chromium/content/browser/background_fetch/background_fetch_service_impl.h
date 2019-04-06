@@ -12,8 +12,9 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "content/browser/background_fetch/background_fetch_context.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/platform/modules/background_fetch/background_fetch.mojom.h"
+#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -40,8 +41,12 @@ class CONTENT_EXPORT BackgroundFetchServiceImpl
              const std::string& developer_id,
              const std::vector<ServiceWorkerFetchRequest>& requests,
              const BackgroundFetchOptions& options,
+             const SkBitmap& icon,
              FetchCallback callback) override;
-  void UpdateUI(const std::string& unique_id,
+  void GetIconDisplaySize(GetIconDisplaySizeCallback callback) override;
+  void UpdateUI(int64_t service_worker_registration_id,
+                const std::string& developer_id,
+                const std::string& unique_id,
                 const std::string& title,
                 UpdateUICallback callback) override;
   void Abort(int64_t service_worker_registration_id,

@@ -4,38 +4,93 @@
 
 #include "media/base/user_input_monitor.h"
 
+#include <utility>
+
+#include "base/atomicops.h"
 #include "base/logging.h"
+#include "base/single_thread_task_runner.h"
 
 namespace media {
 
+uint32_t ReadKeyPressMonitorCount(
+    const base::ReadOnlySharedMemoryMapping& readonly_mapping) {
+  if (!readonly_mapping.IsValid())
+    return 0;
+
+  // No ordering constraints between Load/Store operations, a temporary
+  // inconsistent value is fine.
+  return base::subtle::NoBarrier_Load(
+      reinterpret_cast<const base::subtle::Atomic32*>(
+          readonly_mapping.memory()));
+}
+
+void WriteKeyPressMonitorCount(
+    const base::WritableSharedMemoryMapping& writable_mapping,
+    uint32_t count) {
+  if (!writable_mapping.IsValid())
+    return;
+
+  // No ordering constraints between Load/Store operations, a temporary
+  // inconsistent value is fine.
+  base::subtle::NoBarrier_Store(
+      reinterpret_cast<base::subtle::Atomic32*>(writable_mapping.memory()),
+      count);
+}
+
 #ifdef DISABLE_USER_INPUT_MONITOR
+// static
 std::unique_ptr<UserInputMonitor> UserInputMonitor::Create(
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
   return nullptr;
 }
 #endif  // DISABLE_USER_INPUT_MONITOR
+UserInputMonitor::UserInputMonitor() = default;
 
-UserInputMonitor::UserInputMonitor() : key_press_counter_references_(0) {}
+UserInputMonitor::~UserInputMonitor() = default;
 
-UserInputMonitor::~UserInputMonitor() {
-  DCHECK_EQ(0u, key_press_counter_references_);
+UserInputMonitorBase::UserInputMonitorBase() {
+  DETACH_FROM_SEQUENCE(owning_sequence_);
 }
 
-void UserInputMonitor::EnableKeyPressMonitoring() {
-  base::AutoLock auto_lock(lock_);
-  ++key_press_counter_references_;
-  if (key_press_counter_references_ == 1) {
+UserInputMonitorBase::~UserInputMonitorBase() {
+  DCHECK_EQ(0u, references_);
+}
+
+void UserInputMonitorBase::EnableKeyPressMonitoring() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
+  if (++references_ == 1) {
     StartKeyboardMonitoring();
     DVLOG(2) << "Started keyboard monitoring.";
   }
 }
 
-void UserInputMonitor::DisableKeyPressMonitoring() {
-  base::AutoLock auto_lock(lock_);
-  DCHECK_NE(key_press_counter_references_, 0u);
-  --key_press_counter_references_;
-  if (key_press_counter_references_ == 0) {
+base::ReadOnlySharedMemoryRegion
+UserInputMonitorBase::EnableKeyPressMonitoringWithMapping() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
+  if (++references_ == 1) {
+    base::MappedReadOnlyRegion shmem =
+        base::ReadOnlySharedMemoryRegion::Create(sizeof(uint32_t));
+    if (!shmem.IsValid()) {
+      DVLOG(2) << "Error mapping key press count shmem.";
+      return base::ReadOnlySharedMemoryRegion();
+    }
+
+    key_press_count_region_ =
+        base::ReadOnlySharedMemoryRegion(std::move(shmem.region));
+    WriteKeyPressMonitorCount(shmem.mapping, 0u);
+    StartKeyboardMonitoring(std::move(shmem.mapping));
+    DVLOG(2) << "Started keyboard monitoring.";
+  }
+
+  return key_press_count_region_.Duplicate();
+}
+
+void UserInputMonitorBase::DisableKeyPressMonitoring() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
+  DCHECK_NE(references_, 0u);
+  if (--references_ == 0) {
+    key_press_count_region_ = base::ReadOnlySharedMemoryRegion();
     StopKeyboardMonitoring();
     DVLOG(2) << "Stopped keyboard monitoring.";
   }

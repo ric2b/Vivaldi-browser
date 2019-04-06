@@ -14,7 +14,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
@@ -26,7 +25,6 @@
 #include "net/base/net_errors.h"
 #include "net/disk_cache/backend_cleanup_tracker.h"
 #include "net/disk_cache/simple/simple_entry_format.h"
-#include "net/disk_cache/simple/simple_experiment.h"
 #include "net/disk_cache/simple/simple_histogram_macros.h"
 #include "net/disk_cache/simple/simple_index_delegate.h"
 #include "net/disk_cache/simple/simple_index_file.h"
@@ -173,7 +171,7 @@ SimpleIndex::~SimpleIndex() {
   // Fail all callbacks waiting for the index to come up.
   for (CallbackList::iterator it = to_run_when_initialized_.begin(),
        end = to_run_when_initialized_.end(); it != end; ++it) {
-    it->Run(net::ERR_ABORTED);
+    std::move(*it).Run(net::ERR_ABORTED);
   }
 }
 
@@ -205,12 +203,12 @@ void SimpleIndex::SetMaxSize(uint64_t max_bytes) {
   }
 }
 
-int SimpleIndex::ExecuteWhenReady(const net::CompletionCallback& task) {
+int SimpleIndex::ExecuteWhenReady(net::CompletionOnceCallback task) {
   DCHECK(io_thread_checker_.CalledOnValidThread());
   if (initialized_)
-    io_thread_->PostTask(FROM_HERE, base::Bind(task, net::OK));
+    io_thread_->PostTask(FROM_HERE, base::BindOnce(std::move(task), net::OK));
   else
-    to_run_when_initialized_.push_back(task);
+    to_run_when_initialized_.push_back(std::move(task));
   return net::ERR_IO_PENDING;
 }
 
@@ -276,6 +274,13 @@ uint64_t SimpleIndex::GetCacheSizeBetween(base::Time initial_time,
 size_t SimpleIndex::EstimateMemoryUsage() const {
   return base::trace_event::EstimateMemoryUsage(entries_set_) +
          base::trace_event::EstimateMemoryUsage(removed_entries_);
+}
+
+void SimpleIndex::SetLastUsedTimeForTest(uint64_t entry_hash,
+                                         const base::Time last_used) {
+  EntrySet::iterator it = entries_set_.find(entry_hash);
+  DCHECK(it != entries_set_.end());
+  it->second.SetLastUsedTime(last_used);
 }
 
 void SimpleIndex::Insert(uint64_t entry_hash) {
@@ -519,7 +524,7 @@ void SimpleIndex::MergeInitializingSet(
   // Run all callbacks waiting for the index to come up.
   for (CallbackList::iterator it = to_run_when_initialized_.begin(),
        end = to_run_when_initialized_.end(); it != end; ++it) {
-    io_thread_->PostTask(FROM_HERE, base::Bind((*it), net::OK));
+    io_thread_->PostTask(FROM_HERE, base::BindOnce(std::move(*it), net::OK));
   }
   to_run_when_initialized_.clear();
 }
@@ -565,8 +570,9 @@ void SimpleIndex::WriteToDisk(IndexWriteToDiskReason reason) {
   if (cleanup_tracker_) {
     // Make anyone synchronizing with our cleanup wait for the index to be
     // written back.
-    after_write = base::Bind([](scoped_refptr<BackendCleanupTracker>) {},
-                             cleanup_tracker_);
+    after_write = base::Bind(
+        base::DoNothing::Repeatedly<scoped_refptr<BackendCleanupTracker>>(),
+        cleanup_tracker_);
   }
 
   index_file_->WriteToDisk(reason, entries_set_, cache_size_, start,

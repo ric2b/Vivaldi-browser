@@ -7,17 +7,20 @@
 
 #include <stdint.h>
 
+#include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/public/common/drop_data.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
-#include "third_party/WebKit/public/platform/WebDisplayMode.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/range/range.h"
 
 namespace blink {
 class WebMouseWheelEvent;
@@ -31,10 +34,6 @@ class Size;
 
 namespace rappor {
 class Sample;
-}
-
-namespace ukm {
-class UkmRecorder;
 }
 
 namespace content {
@@ -65,24 +64,24 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // The RenderWidgetHost got the focus.
   virtual void RenderWidgetGotFocus(RenderWidgetHostImpl* render_widget_host) {}
 
+  // If a main frame navigation is in progress, this will return the zoom level
+  // for the pending page. Otherwise, this returns the zoom level for the
+  // current page. Note that subframe navigations do not affect the zoom level,
+  // which is tracked at the level of the page.
+  virtual double GetPendingPageZoomLevel() const;
+
   // The RenderWidgetHost lost the focus.
   virtual void RenderWidgetLostFocus(
       RenderWidgetHostImpl* render_widget_host) {}
 
   // The RenderWidget was resized.
   virtual void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
+                                      const ScreenInfo& screen_info,
                                       bool width_changed) {}
 
   // The contents auto-resized and the container should match it.
   virtual void ResizeDueToAutoResize(RenderWidgetHostImpl* render_widget_host,
-                                     const gfx::Size& new_size,
-                                     uint64_t sequence_number) {}
-
-  // The screen info has changed.
-  virtual void ScreenInfoChanged() {}
-
-  // Retrieve screen information.
-  virtual void GetScreenInfo(ScreenInfo* screen_info);
+                                     const gfx::Size& new_size) {}
 
   // Callback to give the browser a chance to handle the specified keyboard
   // event before sending it to the renderer. See enum for details on return
@@ -100,12 +99,10 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // the event itself.
   virtual bool HandleWheelEvent(const blink::WebMouseWheelEvent& event);
 
-  // Notification the user has performed a direct interaction (mouse down,
-  // scroll, raw key down, gesture tap, or browser-initiated navigation) while
-  // focus was on the page. Informs the delegate that a user is interacting with
-  // a site.
-  virtual void OnUserInteraction(RenderWidgetHostImpl* render_widget_host,
-                                 const blink::WebInputEvent::Type type) {}
+  // Notification that an input event from the user was dispatched to the
+  // widget.
+  virtual void DidReceiveInputEvent(RenderWidgetHostImpl* render_widget_host,
+                                    const blink::WebInputEvent::Type type) {}
 
   // Callback to give the browser a chance to handle the specified gesture
   // event before sending it to the renderer.
@@ -131,6 +128,11 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual void Copy() = 0;
   virtual void Paste() = 0;
   virtual void SelectAll() = 0;
+  // Undo/Redo/Delete addeded by Vivaldi
+  virtual void Undo() {}
+  virtual void Redo() {}
+  virtual void Delete() {}
+
 
   // Requests the renderer to move the selection extent to a new position.
   virtual void MoveRangeSelectionExtent(const gfx::Point& extent) {}
@@ -138,6 +140,11 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Requests the renderer to select the region between two points in the
   // currently focused frame.
   virtual void SelectRange(const gfx::Point& base, const gfx::Point& extent) {}
+
+#if defined(OS_MACOSX)
+  virtual void DidChangeTextSelection(const base::string16& text,
+                                      const gfx::Range& range) {}
+#endif
 
   // Request the renderer to Move the caret to the new position.
   virtual void MoveCaret(const gfx::Point& extent) {}
@@ -162,7 +169,10 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Notification that the renderer has become unresponsive. The
   // delegate can use this notification to show a warning to the user.
-  virtual void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host) {}
+  // See also WebContentsDelegate::RendererUnresponsive.
+  virtual void RendererUnresponsive(
+      RenderWidgetHostImpl* render_widget_host,
+      base::RepeatingClosure hang_monitor_restarter) {}
 
   // Notification that a previously unresponsive renderer has become
   // responsive again. The delegate can use this notification to end the
@@ -197,6 +207,18 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Returns the widget that holds the mouse lock or nullptr if the mouse isn't
   // locked.
   virtual RenderWidgetHostImpl* GetMouseLockWidget();
+
+  // Requests to lock the keyboard. Once the request is approved or rejected,
+  // GotResponseToKeyboardLockRequest() will be called on the requesting render
+  // widget host.
+  virtual bool RequestKeyboardLock(RenderWidgetHostImpl* render_widget_host,
+                                   bool esc_key_locked);
+
+  // Cancels a previous keyboard lock request.
+  virtual void CancelKeyboardLock(RenderWidgetHostImpl* render_widget_host) {}
+
+  // Returns the widget that holds the keyboard lock or nullptr if not locked.
+  virtual RenderWidgetHostImpl* GetKeyboardLockWidget();
 
   // Called when the visibility of the RenderFrameProxyHost in outer
   // WebContents changes. This method is only called on an inner WebContents and
@@ -253,10 +275,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // if the eTLD+1 is not known for |render_widget_host|.
   virtual bool AddDomainInfoToRapporSample(rappor::Sample* sample);
 
-  // Update UkmRecorder for the given source with the URL. This is used for
-  // URL-keyed metrics to set the url for a report.
-  virtual void UpdateUrlForUkmSource(ukm::UkmRecorder* service,
-                                     ukm::SourceId ukm_source_id);
+  // Get the UKM source ID for current content. This is used for providing
+  // data about the content to the URL-keyed metrics service.
+  virtual ukm::SourceId GetUkmSourceIdForLastCommittedSource() const;
 
   // Notifies the delegate that a focused editable element has been touched
   // inside this RenderWidgetHost. If |editable| is true then the focused

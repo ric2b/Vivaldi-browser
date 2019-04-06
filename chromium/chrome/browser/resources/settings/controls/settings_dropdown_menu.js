@@ -38,6 +38,9 @@ Polymer({
      */
     menuOptions: {
       type: Array,
+      // TODO(dpapad): This seems unnecessary in Polymer 2, since any
+      // bindings/observers will execute anyway, even if this is undefined.
+      // Consider removing once migration is done.
       value: null,
     },
 
@@ -46,6 +49,13 @@ Polymer({
       type: Boolean,
       reflectToAttribute: true,
       value: false,
+    },
+
+    /** If this is a dictionary pref, this is the key for the item
+        we are interested in. */
+    prefKey: {
+      type: String,
+      value: null,
     },
 
     /**
@@ -63,7 +73,7 @@ Polymer({
   },
 
   observers: [
-    'updateSelected_(menuOptions, pref.value)',
+    'updateSelected_(menuOptions, pref.value.*, prefKey)',
   ],
 
   /**
@@ -76,10 +86,19 @@ Polymer({
     if (selected == this.notFoundValue_)
       return;
 
-    const prefValue =
-        Settings.PrefUtil.stringToPrefValue(selected, assert(this.pref));
-    if (prefValue !== undefined)
-      this.set('pref.value', prefValue);
+    if (this.prefKey) {
+      assert(this.pref);
+      this.set(`pref.value.${this.prefKey}`, selected);
+    } else {
+      const prefValue =
+          Settings.PrefUtil.stringToPrefValue(selected, assert(this.pref));
+      if (prefValue !== undefined)
+        this.set('pref.value', prefValue);
+    }
+
+    // settings-control-change only fires when the selection is changed to
+    // a valid property.
+    this.fire('settings-control-change');
   },
 
   /**
@@ -87,10 +106,15 @@ Polymer({
    * @private
    */
   updateSelected_: function() {
+    if (this.menuOptions === undefined || this.pref === undefined ||
+        this.prefKey === undefined) {
+      return;
+    }
+
     if (this.menuOptions === null || !this.menuOptions.length)
       return;
 
-    const prefValue = this.pref.value;
+    const prefValue = this.prefStringValue_();
     const option = this.menuOptions.find(function(menuItem) {
       return menuItem.value == prefValue;
     });
@@ -98,10 +122,23 @@ Polymer({
     // Wait for the dom-repeat to populate the <select> before setting
     // <select>#value so the correct option gets selected.
     this.async(() => {
-      this.$.dropdownMenu.value = option == undefined ?
-          this.notFoundValue_ :
-          Settings.PrefUtil.prefToString(assert(this.pref));
+      this.$.dropdownMenu.value =
+          option == undefined ? this.notFoundValue_ : prefValue;
     });
+  },
+
+  /**
+   * Gets the current value of the preference as a string.
+   * @return {string}
+   * @private
+   */
+  prefStringValue_: function() {
+    if (this.prefKey) {
+      // Dictionary pref, values are always strings.
+      return this.pref.value[this.prefKey];
+    } else {
+      return Settings.PrefUtil.prefToString(assert(this.pref));
+    }
   },
 
   /**
@@ -111,12 +148,15 @@ Polymer({
    * @private
    */
   showNotFoundValue_: function(menuOptions, prefValue) {
-    // Don't show "Custom" before the options load.
-    if (!menuOptions || !menuOptions.length)
+    if (menuOptions === undefined || prefValue === undefined)
       return false;
 
-    const option = menuOptions.find(function(menuItem) {
-      return menuItem.value == prefValue;
+    // Don't show "Custom" before the options load.
+    if (menuOptions === null || menuOptions.length == 0)
+      return false;
+
+    const option = menuOptions.find((menuItem) => {
+      return menuItem.value == this.prefStringValue_();
     });
     return !option;
   },

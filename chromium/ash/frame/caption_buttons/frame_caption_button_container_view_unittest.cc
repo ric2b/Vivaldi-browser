@@ -4,13 +4,14 @@
 
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 
-#include "ash/ash_layout_constants.h"
 #include "ash/frame/caption_buttons/frame_caption_button.h"
-#include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/public/cpp/ash_layout_constants.h"
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/test/test_views.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -58,7 +59,6 @@ class FrameCaptionButtonContainerViewTest : public AshTestBase {
         new TestWidgetDelegate(maximize_allowed == MAXIMIZE_ALLOWED,
                                minimize_allowed == MINIMIZE_ALLOWED);
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    params.context = CurrentContext();
     widget->Init(params);
     return widget;
   }
@@ -67,7 +67,7 @@ class FrameCaptionButtonContainerViewTest : public AshTestBase {
   // size to the buttons in |container|.
   void InitContainer(FrameCaptionButtonContainerView* container) {
     container->SetButtonSize(
-        GetAshLayoutSize(AshLayoutSize::NON_BROWSER_CAPTION_BUTTON));
+        GetAshLayoutSize(AshLayoutSize::kNonBrowserCaption));
     for (int icon = 0; icon < CAPTION_BUTTON_ICON_COUNT; ++icon) {
       container->SetButtonImage(static_cast<CaptionButtonIcon>(icon),
                                 ash::kWindowControlCloseIcon);
@@ -148,15 +148,25 @@ TEST_F(FrameCaptionButtonContainerViewTest,
        TestUpdateSizeButtonVisibilityAnimation) {
   FrameCaptionButtonContainerView container(
       CreateTestWidget(MAXIMIZE_ALLOWED, MINIMIZE_ALLOWED));
+
+  // Add an extra button to the left of the size button to verify that it is
+  // repositioned similarly to the minimize button. This simulates the PWA menu
+  // button being added to the left of the minimize button.
+  views::View* extra_button = new views::StaticSizedView(gfx::Size(32, 32));
+  container.AddChildViewAt(extra_button, 0);
+
   InitContainer(&container);
   container.Layout();
 
   FrameCaptionButtonContainerView::TestApi test(&container);
+  gfx::Rect initial_extra_button_bounds = extra_button->bounds();
   gfx::Rect initial_minimize_button_bounds = test.minimize_button()->bounds();
   gfx::Rect initial_size_button_bounds = test.size_button()->bounds();
   gfx::Rect initial_close_button_bounds = test.close_button()->bounds();
   gfx::Rect initial_container_bounds = container.bounds();
 
+  ASSERT_EQ(initial_minimize_button_bounds.x(),
+            initial_extra_button_bounds.right());
   ASSERT_EQ(initial_size_button_bounds.x(),
             initial_minimize_button_bounds.right());
   ASSERT_EQ(initial_close_button_bounds.x(),
@@ -165,7 +175,7 @@ TEST_F(FrameCaptionButtonContainerViewTest,
   // Hidden size button should result in minimize button animating to the
   // right. The size button should not be visible, but should not have moved.
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
-  container.UpdateSizeButtonVisibility();
+  container.UpdateCaptionButtonState(false /*=animate*/);
   test.EndAnimations();
   // Parent needs to layout in response to size change.
   container.Layout();
@@ -173,8 +183,10 @@ TEST_F(FrameCaptionButtonContainerViewTest,
   EXPECT_TRUE(test.minimize_button()->visible());
   EXPECT_FALSE(test.size_button()->visible());
   EXPECT_TRUE(test.close_button()->visible());
+  gfx::Rect extra_button_bounds = extra_button->bounds();
   gfx::Rect minimize_button_bounds = test.minimize_button()->bounds();
   gfx::Rect close_button_bounds = test.close_button()->bounds();
+  EXPECT_EQ(minimize_button_bounds.x(), extra_button_bounds.right());
   EXPECT_EQ(close_button_bounds.x(), minimize_button_bounds.right());
   EXPECT_EQ(initial_size_button_bounds, test.size_button()->bounds());
   EXPECT_EQ(initial_close_button_bounds.size(), close_button_bounds.size());
@@ -184,13 +196,14 @@ TEST_F(FrameCaptionButtonContainerViewTest,
   // Revealing the size button should cause the minimize button to return to its
   // original position.
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
-  container.UpdateSizeButtonVisibility();
+  container.UpdateCaptionButtonState(false /*=animate*/);
   // Calling code needs to layout in response to size change.
   container.Layout();
   test.EndAnimations();
   EXPECT_TRUE(test.minimize_button()->visible());
   EXPECT_TRUE(test.size_button()->visible());
   EXPECT_TRUE(test.close_button()->visible());
+  EXPECT_EQ(initial_extra_button_bounds, extra_button->bounds());
   EXPECT_EQ(initial_minimize_button_bounds, test.minimize_button()->bounds());
   EXPECT_EQ(initial_size_button_bounds, test.size_button()->bounds());
   EXPECT_EQ(initial_close_button_bounds, test.close_button()->bounds());

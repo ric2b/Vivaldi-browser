@@ -1,6 +1,0 @@
-include_rules = [
-    "-modules",
-    "+modules/encryptedmedia",
-    "+modules/mediacapturefromelement",
-    "+modules/mediastream",
-]

@@ -43,6 +43,10 @@ Polymer({
     },
   },
 
+  focus: function() {
+    this.$$('cr-input').focus();
+  },
+
   /**
    * Event triggered when an input value changes.
    * @private

@@ -26,10 +26,25 @@ set_path_map([
 
 # We mainly use the chromium setup, no need to duplicate the system
 import("//chromium/.gn")
-buildconfig = [
-  "//vivaldi/gn/config/BUILDCONFIG.gn",
-  "//build/config/BUILDCONFIG.gn",
-]
+buildconfig = "//vivaldi/gn/config/BUILDCONFIG.gn"
+
+# We normally build the component build
+# The autobuilders builds statically linked builds
+default_args.is_component_build = true
+
+# Static feature overrides, don't change
+# Features we either always want enable or don't want at all
+# Cannot depend on platform settings
+default_args.enable_remoting = false
+default_args.enable_media_remoting = false
+default_args.enable_nacl = false
+default_args.enable_ipc_fuzzer = false
+
+# We don't need the Chrome field trials
+default_args.fieldtrial_testing_like_official_build = true
+
+# Don't need this normally
+default_args.chrome_pgo_phase = 0
 
 # These are the targets to check headers for by default. The files in targets
 # matching these patterns (see "gn help label_pattern" for format) will have

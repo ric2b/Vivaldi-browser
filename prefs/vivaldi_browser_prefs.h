@@ -28,12 +28,14 @@ struct PrefProperties {
     std::unordered_map<int, std::string> value_to_string;
     std::unordered_map<std::string, int> string_to_value;
   };
-  PrefProperties();
-  PrefProperties(std::unordered_map<std::string, int> string_to_value,
+  explicit PrefProperties(bool local_pref);
+  PrefProperties(bool local_pref,
+                 std::unordered_map<std::string, int> string_to_value,
                  std::unordered_map<int, std::string> value_to_string);
   PrefProperties(PrefProperties&&);
   ~PrefProperties();
   std::unique_ptr<EnumProperties> enum_properties;
+  bool local_pref;
 };
 typedef std::unordered_map<std::string, PrefProperties> PrefsProperties;
 

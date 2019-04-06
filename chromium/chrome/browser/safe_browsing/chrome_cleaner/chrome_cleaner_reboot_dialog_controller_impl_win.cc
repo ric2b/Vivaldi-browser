@@ -89,14 +89,6 @@ ChromeCleanerRebootDialogControllerImpl::Create(
   return controller;
 }
 
-void ChromeCleanerRebootDialogControllerImpl::DialogShown() {
-  DCHECK(base::FeatureList::IsEnabled(kRebootPromptDialogFeature));
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // TODO(crbug.com/770749) Collect metrics on how many times this dialog is
-  //                        shown.
-}
-
 void ChromeCleanerRebootDialogControllerImpl::Accept() {
   DCHECK(base::FeatureList::IsEnabled(kRebootPromptDialogFeature));
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -179,11 +171,14 @@ void ChromeCleanerRebootDialogControllerImpl::StartRebootPromptForBrowser(
   RecordSettingsPageActiveOnRebootRequired(
       SETTINGS_PAGE_ON_REBOOT_REQUIRED_NOT_ACTIVE_TAB);
 
-  if (base::FeatureList::IsEnabled(kRebootPromptDialogFeature)) {
-    prompt_delegate_->ShowChromeCleanerRebootPrompt(browser, this);
-  } else {
+  RebootPromptType reboot_prompt_type = GetRebootPromptType();
+  UMA_HISTOGRAM_ENUMERATION("SoftwareReporter.Cleaner.RebootPromptShown",
+                            reboot_prompt_type, REBOOT_PROMPT_TYPE_MAX);
+  if (reboot_prompt_type == REBOOT_PROMPT_TYPE_OPEN_SETTINGS_PAGE) {
     prompt_delegate_->OpenSettingsPage(browser);
     OnInteractionDone();
+  } else {
+    prompt_delegate_->ShowChromeCleanerRebootPrompt(browser, this);
   }
 }
 

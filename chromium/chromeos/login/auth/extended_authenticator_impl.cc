@@ -20,7 +20,7 @@
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/login_event_recorder.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "crypto/sha2.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
@@ -80,33 +80,6 @@ void ExtendedAuthenticatorImpl::AuthenticateToCheck(
       base::Bind(&ExtendedAuthenticatorImpl::DoAuthenticateToCheck,
                  this,
                  success_callback));
-}
-
-void ExtendedAuthenticatorImpl::CreateMount(
-    const AccountId& account_id,
-    const std::vector<cryptohome::KeyDefinition>& keys,
-    const ResultCallback& success_callback) {
-  RecordStartMarker("MountEx");
-
-  cryptohome::Identification id(account_id);
-  cryptohome::MountRequest mount;
-  for (size_t i = 0; i < keys.size(); i++) {
-    cryptohome::KeyDefinitionToKey(keys[i], mount.mutable_create()->add_keys());
-  }
-  UserContext context(account_id);
-  Key key(keys.front().secret);
-  key.SetLabel(keys.front().label);
-  context.SetKey(key);
-  cryptohome::AuthorizationRequest auth;
-  cryptohome::Key* auth_key = auth.mutable_key();
-  if (!key.GetLabel().empty()) {
-    auth_key->mutable_data()->set_label(key.GetLabel());
-  }
-  auth_key->set_secret(key.GetSecret());
-  DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
-      id, auth, mount,
-      base::BindOnce(&ExtendedAuthenticatorImpl::OnMountComplete, this,
-                     "MountEx", context, success_callback));
 }
 
 void ExtendedAuthenticatorImpl::AddKey(const UserContext& context,
@@ -266,11 +239,12 @@ void ExtendedAuthenticatorImpl::OnMountComplete(
     const UserContext& user_context,
     const ResultCallback& success_callback,
     base::Optional<cryptohome::BaseReply> reply) {
-  cryptohome::MountError return_code = cryptohome::BaseReplyToMountError(reply);
+  cryptohome::MountError return_code =
+      cryptohome::MountExReplyToMountError(reply);
   RecordEndMarker(time_marker);
   if (return_code == cryptohome::MOUNT_ERROR_NONE) {
     const std::string& mount_hash =
-        cryptohome::BaseReplyToMountHash(reply.value());
+        cryptohome::MountExReplyToMountHash(reply.value());
     if (!success_callback.is_null())
       success_callback.Run(mount_hash);
     if (old_consumer_) {
@@ -280,6 +254,7 @@ void ExtendedAuthenticatorImpl::OnMountComplete(
     }
     return;
   }
+  LOG(ERROR) << "MountEx failed. Error: " << return_code;
   AuthState state = FAILED_MOUNT;
   if (return_code == cryptohome::MOUNT_ERROR_TPM_COMM_ERROR ||
       return_code == cryptohome::MOUNT_ERROR_TPM_DEFEND_LOCK ||

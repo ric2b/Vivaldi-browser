@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 
 #include <set>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
+#include "chrome/test/base/testing_profile.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/login_state.h"
 #include "components/user_manager/known_user.h"
@@ -70,11 +72,27 @@ const user_manager::User* FakeChromeUserManager::AddUser(
   return AddUserWithAffiliation(account_id, false);
 }
 
+const user_manager::User* FakeChromeUserManager::AddChildUser(
+    const AccountId& account_id) {
+  return AddUserWithAffiliationAndTypeAndProfile(
+      account_id, false, user_manager::USER_TYPE_CHILD, nullptr);
+}
+
 const user_manager::User* FakeChromeUserManager::AddUserWithAffiliation(
     const AccountId& account_id,
     bool is_affiliated) {
-  user_manager::User* user = user_manager::User::CreateRegularUser(
-      account_id, user_manager::USER_TYPE_REGULAR);
+  return AddUserWithAffiliationAndTypeAndProfile(
+      account_id, is_affiliated, user_manager::USER_TYPE_REGULAR, nullptr);
+}
+
+const user_manager::User*
+FakeChromeUserManager::AddUserWithAffiliationAndTypeAndProfile(
+    const AccountId& account_id,
+    bool is_affiliated,
+    user_manager::UserType user_type,
+    TestingProfile* profile) {
+  user_manager::User* user =
+      user_manager::User::CreateRegularUser(account_id, user_type);
   user->SetAffiliation(is_affiliated);
   user->set_username_hash(ProfileHelper::GetUserIdHashByUserIdForTesting(
       account_id.GetUserEmail()));
@@ -85,6 +103,10 @@ const user_manager::User* FakeChromeUserManager::AddUserWithAffiliation(
       user_manager::User::USER_IMAGE_PROFILE, false);
   users_.push_back(user);
   chromeos::ProfileHelper::Get()->SetProfileToUserMappingForTesting(user);
+
+  if (profile) {
+    ProfileHelper::Get()->SetUserToProfileMappingForTesting(user, profile);
+  }
   return user;
 }
 
@@ -236,7 +258,11 @@ void FakeChromeUserManager::RemoveUser(
     user_manager::RemoveUserDelegate* delegate) {}
 
 void FakeChromeUserManager::RemoveUserFromList(const AccountId& account_id) {
-  WallpaperControllerClient::Get()->RemoveUserWallpaper(account_id);
+  WallpaperControllerClient* const wallpaper_client =
+      WallpaperControllerClient::Get();
+  // |wallpaper_client| could be nullptr in tests.
+  if (wallpaper_client)
+    wallpaper_client->RemoveUserWallpaper(account_id);
   chromeos::ProfileHelper::Get()->RemoveUserFromListForTesting(account_id);
 
   const user_manager::UserList::iterator it =
@@ -363,7 +389,7 @@ base::string16 FakeChromeUserManager::GetResourceStringUTF16(
 
 void FakeChromeUserManager::ScheduleResolveLocale(
     const std::string& locale,
-    const base::Closure& on_resolved_callback,
+    base::OnceClosure on_resolved_callback,
     std::string* out_resolved_locale) const {
   NOTIMPLEMENTED();
   return;
@@ -516,6 +542,10 @@ bool FakeChromeUserManager::IsCurrentUserNonCryptohomeDataEphemeral() const {
   return false;
 }
 
+bool FakeChromeUserManager::IsCurrentUserCryptohomeDataEphemeral() const {
+  return current_user_ephemeral_;
+}
+
 bool FakeChromeUserManager::CanCurrentUserLock() const {
   return false;
 }
@@ -568,7 +598,7 @@ bool FakeChromeUserManager::IsLoggedInAsStub() const {
 
 bool FakeChromeUserManager::IsUserNonCryptohomeDataEphemeral(
     const AccountId& account_id) const {
-  return false;
+  return current_user_ephemeral_;
 }
 
 bool FakeChromeUserManager::AreSupervisedUsersAllowed() const {
@@ -684,7 +714,7 @@ void FakeChromeUserManager::OnUserRemoved(const AccountId& account_id) {
 }
 
 void FakeChromeUserManager::SetUserAffiliation(
-    const std::string& user_email,
+    const AccountId& account_id,
     const AffiliationIDSet& user_affiliation_ids) {}
 
 bool FakeChromeUserManager::ShouldReportUser(const std::string& user_id) const {

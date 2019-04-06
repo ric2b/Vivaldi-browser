@@ -22,8 +22,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.OverlayPanelEventFilter;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.test.util.TestContentViewCore;
 
 /**
  * Class responsible for testing the OverlayPanelEventFilter.
@@ -101,12 +99,35 @@ public class OverlayPanelEventFilterTest {
     }
 
     // --------------------------------------------------------------------------------------------
-    // StubbedContentViewCore
+    // MockOverlayPanel
     // --------------------------------------------------------------------------------------------
 
-    private final class StubbedContentViewCore extends TestContentViewCore {
-        public StubbedContentViewCore(Context context) {
-            super(context, "");
+    /**
+     * Mocks an OverlayPanel, so it doesn't create ContentViewCore or animations.
+     */
+    private final class MockOverlayPanel extends OverlayPanel {
+        private boolean mWasTapDetectedOnPanel = false;
+        private boolean mWasScrollDetectedOnPanel = false;
+
+        public MockOverlayPanel(Context context, OverlayPanelManager panelManager) {
+            super(context, null, panelManager);
+        }
+
+        @Override
+        public OverlayPanelContent createNewOverlayPanelContent() {
+            return new MockOverlayPanelContent();
+        }
+
+        /**
+         * Override creation and destruction of the ContentViewCore as they rely on native methods.
+         */
+        private class MockOverlayPanelContent extends OverlayPanelContent {
+            public MockOverlayPanelContent() {
+                super(null, null, null, 0);
+            }
+
+            @Override
+            public void removeLastHistoryEntry(String url, long timeInMs) {}
         }
 
         @Override
@@ -135,49 +156,9 @@ public class OverlayPanelEventFilterTest {
                 public void onLayout(boolean changed, int l, int t, int r, int b) {}
             };
         }
-    }
-
-    // --------------------------------------------------------------------------------------------
-    // MockOverlayPanel
-    // --------------------------------------------------------------------------------------------
-
-    /**
-     * Mocks an OverlayPanel, so it doesn't create ContentViewCore or animations.
-     */
-    public final class MockOverlayPanel extends OverlayPanel {
-        private boolean mWasTapDetectedOnPanel = false;
-        private boolean mWasScrollDetectedOnPanel = false;
-        private ContentViewCore mContentViewCore;
-
-        public MockOverlayPanel(Context context, OverlayPanelManager panelManager) {
-            super(context, null, panelManager);
-            mContentViewCore = new StubbedContentViewCore(context);
-        }
 
         @Override
-        public OverlayPanelContent createNewOverlayPanelContent() {
-            return new MockOverlayPanelContent();
-        }
-
-        /**
-         * Override creation and destruction of the ContentViewCore as they rely on native methods.
-         */
-        private class MockOverlayPanelContent extends OverlayPanelContent {
-            public MockOverlayPanelContent() {
-                super(null, null, null, 0);
-            }
-
-            @Override
-            public void removeLastHistoryEntry(String url, long timeInMs) {}
-        }
-
-        @Override
-        public ContentViewCore getContentViewCore() {
-            return mContentViewCore;
-        }
-
-        @Override
-        protected void resizePanelContentViewCore(float width, float height) {}
+        protected void resizePanelContentView() {}
 
         @Override
         protected void animatePanelTo(float height, long duration) {

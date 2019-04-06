@@ -17,6 +17,10 @@ Polymer({
       notify: true,
     },
 
+    // TODO(jdoerrie): https://crbug.com/854562.
+    // Remove once Autofill Home is launched.
+    autofillHomeEnabled: Boolean,
+
     /**
      * Dictionary defining page visibility.
      * @type {!GuestModePageVisibility}
@@ -25,8 +29,8 @@ Polymer({
   },
 
   listeners: {
-    'topMenu.tap': 'onLinkTap_',
-    'subMenu.tap': 'onLinkTap_',
+    'topMenu.click': 'onLinkTap_',
+    'subMenu.click': 'onLinkTap_',
   },
 
   /** @param {!settings.Route} newRoute */
@@ -52,7 +56,7 @@ Polymer({
    * @private
    */
   onLinkTap_: function(event) {
-    if (event.target.hasAttribute('href'))
+    if (event.target.matches('a:not(#extensionsLink)'))
       event.preventDefault();
   },
 
@@ -86,5 +90,11 @@ Polymer({
    * */
   arrowState_: function(opened) {
     return opened ? 'cr:arrow-drop-up' : 'cr:arrow-drop-down';
+  },
+
+  /** @private */
+  onExtensionsLinkClick_: function() {
+    chrome.metricsPrivate.recordUserAction(
+        'SettingsMenu_ExtensionsLinkClicked');
   },
 });

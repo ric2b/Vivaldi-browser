@@ -60,10 +60,10 @@ BackgroundContents::BackgroundContents(
     content::SessionStorageNamespaceMap session_storage_namespace_map;
     session_storage_namespace_map.insert(
         std::make_pair(partition_id, session_storage_namespace));
-    web_contents_.reset(WebContents::CreateWithSessionStorage(
-        create_params, session_storage_namespace_map));
+    web_contents_ = WebContents::CreateWithSessionStorage(
+        create_params, session_storage_namespace_map);
   } else {
-    web_contents_.reset(WebContents::Create(create_params));
+    web_contents_ = WebContents::Create(create_params);
   }
   extensions::SetViewType(
       web_contents_.get(), extensions::VIEW_TYPE_BACKGROUND_CONTENTS);
@@ -150,14 +150,15 @@ void BackgroundContents::DidNavigateMainFramePostCommit(WebContents* tab) {
 }
 
 // Forward requests to add a new WebContents to our delegate.
-void BackgroundContents::AddNewContents(WebContents* source,
-                                        WebContents* new_contents,
-                                        WindowOpenDisposition disposition,
-                                        const gfx::Rect& initial_rect,
-                                        bool user_gesture,
-                                        bool* was_blocked) {
-  delegate_->AddWebContents(
-      new_contents, disposition, initial_rect, user_gesture, was_blocked);
+void BackgroundContents::AddNewContents(
+    WebContents* source,
+    std::unique_ptr<WebContents> new_contents,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
+    bool user_gesture,
+    bool* was_blocked) {
+  delegate_->AddWebContents(std::move(new_contents), disposition, initial_rect,
+                            was_blocked);
 }
 
 bool BackgroundContents::IsNeverVisible(content::WebContents* web_contents) {

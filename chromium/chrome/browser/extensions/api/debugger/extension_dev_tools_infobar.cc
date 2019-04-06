@@ -26,11 +26,12 @@ class ExtensionDevToolsInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~ExtensionDevToolsInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
-  Type GetInfoBarType() const override;
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   bool ShouldExpire(const NavigationDetails& details) const override;
   void InfoBarDismissed() override;
   base::string16 GetMessageText() const override;
+  gfx::ElideBehavior GetMessageElideBehavior() const override;
+
   int GetButtons() const override;
   bool Cancel() override;
 
@@ -50,11 +51,6 @@ ExtensionDevToolsInfoBarDelegate::ExtensionDevToolsInfoBarDelegate(
 
 ExtensionDevToolsInfoBarDelegate::~ExtensionDevToolsInfoBarDelegate() {}
 
-infobars::InfoBarDelegate::Type
-ExtensionDevToolsInfoBarDelegate::GetInfoBarType() const {
-  return WARNING_TYPE;
-}
-
 infobars::InfoBarDelegate::InfoBarIdentifier
 ExtensionDevToolsInfoBarDelegate::GetIdentifier() const {
   return EXTENSION_DEV_TOOLS_INFOBAR_DELEGATE;
@@ -73,6 +69,14 @@ void ExtensionDevToolsInfoBarDelegate::InfoBarDismissed() {
 
 base::string16 ExtensionDevToolsInfoBarDelegate::GetMessageText() const {
   return l10n_util::GetStringFUTF16(IDS_DEV_TOOLS_INFOBAR_LABEL, client_name_);
+}
+
+gfx::ElideBehavior ExtensionDevToolsInfoBarDelegate::GetMessageElideBehavior()
+    const {
+  // The important part of the message text above is at the end:
+  // "... is debugging the browser". If the extension name is very long,
+  // we'd rather truncate it instead. See https://crbug.com/823194.
+  return gfx::ELIDE_HEAD;
 }
 
 int ExtensionDevToolsInfoBarDelegate::GetButtons() const {

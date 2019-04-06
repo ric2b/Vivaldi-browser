@@ -2,23 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/** @enum {number} */
+const ShortcutError = {
+  NO_ERROR: 0,
+  INCLUDE_START_MODIFIER: 1,
+  TOO_MANY_MODIFIERS: 2,
+  NEED_CHARACTER: 3,
+};
+
 cr.define('extensions', function() {
   'use strict';
-
-  /** @enum {number} */
-  const ShortcutError = {
-    NO_ERROR: 0,
-    INCLUDE_START_MODIFIER: 1,
-    TOO_MANY_MODIFIERS: 2,
-    NEED_CHARACTER: 3,
-  };
 
   // The UI to display and manage keyboard shortcuts set for extension commands.
   const ShortcutInput = Polymer({
     is: 'extensions-shortcut-input',
 
     properties: {
-      /** @type {!Object} */
+      /** @type {!extensions.KeyboardShortcutDelegate} */
       delegate: Object,
 
       item: {
@@ -57,7 +57,7 @@ cr.define('extensions', function() {
 
     /** @override */
     ready: function() {
-      const node = this.$['input'];
+      const node = this.$.input;
       node.addEventListener('mouseup', this.startCapture_.bind(this));
       node.addEventListener('blur', this.endCapture_.bind(this));
       node.addEventListener('focus', this.startCapture_.bind(this));
@@ -90,6 +90,9 @@ cr.define('extensions', function() {
      * @private
      */
     onKeyDown_: function(e) {
+      if (e.target == this.$.clear)
+        return;
+
       if (e.keyCode == extensions.Key.Escape) {
         if (!this.capturing_) {
           // If we're not currently capturing, allow escape to propagate.
@@ -117,6 +120,13 @@ cr.define('extensions', function() {
      * @private
      */
     onKeyUp_: function(e) {
+      // Ignores pressing 'Space' or 'Enter' on the clear button. In 'Enter's
+      // case, the clear button disappears before key-up, so 'Enter's key-up
+      // target becomes the input field, not the clear button, and needs to
+      // be caught explicitly.
+      if (e.target == this.$.clear || e.key == 'Enter')
+        return;
+
       if (e.keyCode == extensions.Key.Escape || e.keyCode == extensions.Key.Tab)
         return;
 
@@ -180,7 +190,7 @@ cr.define('extensions', function() {
     /** @private */
     commitPending_: function() {
       this.shortcut = this.pendingShortcut_;
-      this.delegate.updateExtensionCommand(
+      this.delegate.updateExtensionCommandKeybinding(
           this.item, this.commandName, this.shortcut);
     },
 
@@ -206,10 +216,11 @@ cr.define('extensions', function() {
 
     /** @private */
     onClearTap_: function() {
-      if (this.shortcut) {
-        this.pendingShortcut_ = '';
-        this.commitPending_();
-      }
+      assert(this.shortcut);
+
+      this.pendingShortcut_ = '';
+      this.commitPending_();
+      this.endCapture_();
     },
   });
 

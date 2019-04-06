@@ -16,9 +16,6 @@
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
-#if defined(PLATFORM_MEDIA_HWA)
-#include "gpu/ipc/service/gpu_command_buffer_stub.h"
-#endif
 #include "ipc/ipc_listener.h"
 
 #include <map>
@@ -37,9 +34,6 @@ class DataBuffer;
 
 namespace media {
 
-#if defined(PLATFORM_MEDIA_HWA)
-class GpuCommandBufferStub;
-#endif
 class IPCDataSourceImpl;
 class PlatformMediaPipeline;
 
@@ -52,9 +46,6 @@ class IPCMediaPipeline : public IPC::Listener {
  public:
   IPCMediaPipeline(IPC::Sender* channel,
                    int32_t routing_id
-#if defined(PLATFORM_MEDIA_HWA)
-                   , gpu::GpuCommandBufferStub* command_buffer
-#endif
                    );
   ~IPCMediaPipeline() override;
 
@@ -88,12 +79,7 @@ class IPCMediaPipeline : public IPC::Listener {
                                    base::SharedMemoryHandle handle);
   void DecodedDataReady(PlatformMediaDataType type,
                         const scoped_refptr<DataBuffer>& buffer);
-#if defined(PLATFORM_MEDIA_HWA)
-  void DecodedTextureReady(uint32_t client_texture_id,
-                           const scoped_refptr<DataBuffer>& buffer);
-#endif
   void DecodedDataReadyImpl(PlatformMediaDataType type,
-                            uint32_t client_texture_id,
                             const scoped_refptr<DataBuffer>& buffer);
   void OnAudioConfigChanged(const PlatformAudioConfig& audio_config);
   void OnVideoConfigChanged(const PlatformVideoConfig& video_config);
@@ -104,8 +90,7 @@ class IPCMediaPipeline : public IPC::Listener {
 
   void OnStop();
 
-  void OnReadDecodedData(PlatformMediaDataType type,
-                         uint32_t client_texture_id);
+  void OnReadDecodedData(PlatformMediaDataType type);
 
   void SendAudioData(MediaDataStatus status,
                      base::TimeDelta timestamp,
@@ -115,18 +100,6 @@ class IPCMediaPipeline : public IPC::Listener {
     DCHECK_LT(type, PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT);
     return has_media_type_[type];
   }
-
-#if defined(PLATFORM_MEDIA_HWA)
-  bool is_handling_accelerated_video_decode(
-      PlatformMediaDataType type) const {
-    return type == PlatformMediaDataType::PLATFORM_MEDIA_VIDEO &&
-           video_config_.decoding_mode ==
-               PlatformMediaDecodingMode::HARDWARE;
-  }
-
-  bool ClientToServiceTextureId(uint32_t client_texture_id,
-                                uint32_t* service_texture_id);
-#endif
 
   State state_;
 
@@ -139,13 +112,6 @@ class IPCMediaPipeline : public IPC::Listener {
   std::unique_ptr<PlatformMediaPipeline> media_pipeline_;
 
   base::ThreadChecker thread_checker_;
-
-  PlatformVideoConfig video_config_;
-#if defined(PLATFORM_MEDIA_HWA)
-  gpu::GpuCommandBufferStub* command_buffer_;
-  // Maps texture ID used in renderer process to one used in GPU process.
-  std::map<uint32_t, uint32_t> known_picture_buffers_;
-#endif
 
   // A buffer for decoded media data, shared with the render process.  Filled in
   // the GPU process, consumed in the renderer process.

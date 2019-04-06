@@ -71,22 +71,24 @@ class PrefetchStore {
   // its result back to calling thread through |result_callback|.
   // Calling |Execute| when store is NOT_INITIALIZED will cause the store
   // initialization to start.
-  // Store initialization status needs to be SUCCESS for test task to run, or
-  // FAILURE, in which case the |db| pointer passed to |run_callback| will be
-  // null and such case should be gracefully handled.
+  // Store initialization status needs to be SUCCESS for run_callback to run.
+  // If initialization fails, |result_callback| is invoked with |default_value|.
   template <typename T>
-  void Execute(RunCallback<T> run_callback, ResultCallback<T> result_callback) {
+  void Execute(RunCallback<T> run_callback,
+               ResultCallback<T> result_callback,
+               T default_value) {
     CHECK_NE(initialization_status_, InitializationStatus::INITIALIZING);
 
     if (initialization_status_ == InitializationStatus::NOT_INITIALIZED) {
       Initialize(base::BindOnce(
           &PrefetchStore::Execute<T>, weak_ptr_factory_.GetWeakPtr(),
-          std::move(run_callback), std::move(result_callback)));
+          std::move(run_callback), std::move(result_callback),
+          std::move(default_value)));
       return;
     }
 
     TRACE_EVENT_ASYNC_BEGIN1(
-        "offline_pages", "Prefetch Store: Command execution", this,
+        "offline_pages", "Prefetch Store: task execution", this,
         "is store loaded",
         initialization_status_ == InitializationStatus::SUCCESS);
     // Ensure that any scheduled close operations are canceled.
@@ -95,12 +97,18 @@ class PrefetchStore {
     sql::Connection* db =
         initialization_status_ == InitializationStatus::SUCCESS ? db_.get()
                                                                 : nullptr;
-    base::PostTaskAndReplyWithResult(
-        blocking_task_runner_.get(), FROM_HERE,
-        base::BindOnce(std::move(run_callback), db),
-        base::BindOnce(&PrefetchStore::RescheduleClosing<T>,
-                       weak_ptr_factory_.GetWeakPtr(),
-                       std::move(result_callback)));
+    if (!db) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(std::move(result_callback), std::move(default_value)));
+    } else {
+      base::PostTaskAndReplyWithResult(
+          blocking_task_runner_.get(), FROM_HERE,
+          base::BindOnce(std::move(run_callback), db),
+          base::BindOnce(&PrefetchStore::RescheduleClosing<T>,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         std::move(result_callback)));
+    }
   }
 
   // Gets the initialization status of the store.
@@ -128,10 +136,16 @@ class PrefetchStore {
         base::BindOnce(&PrefetchStore::CloseInternal,
                        closing_weak_ptr_factory_.GetWeakPtr()),
         kClosingDelay);
-    TRACE_EVENT_ASYNC_END0("offline_pages", "Prefetch Store: Command execution",
-                           this);
 
+    // Note: the time recorded for this trace step will include thread hop wait
+    // times to the background thread and back.
+    TRACE_EVENT_ASYNC_STEP_PAST0(
+        "offline_pages", "Prefetch Store: task execution", this, "Task");
     std::move(result_callback).Run(std::move(result));
+    TRACE_EVENT_ASYNC_STEP_PAST0(
+        "offline_pages", "Prefetch Store: task execution", this, "Callback");
+    TRACE_EVENT_ASYNC_END0("offline_pages", "Prefetch Store: task execution",
+                           this);
   }
 
   // Internal function initiating the closing.

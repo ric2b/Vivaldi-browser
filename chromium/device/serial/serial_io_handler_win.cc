@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/scoped_observer.h"
 #include "base/sequence_checker.h"
 #include "device/base/device_info_query_win.h"
@@ -236,12 +237,12 @@ bool SerialIoHandlerWin::PostOpen() {
   DCHECK(!read_context_);
   DCHECK(!write_context_);
 
-  base::MessageLoopForIO::current()->RegisterIOHandler(file().GetPlatformFile(),
-                                                       this);
+  base::MessageLoopCurrentForIO::Get()->RegisterIOHandler(
+      file().GetPlatformFile(), this);
 
-  comm_context_.reset(new base::MessageLoopForIO::IOContext());
-  read_context_.reset(new base::MessageLoopForIO::IOContext());
-  write_context_.reset(new base::MessageLoopForIO::IOContext());
+  comm_context_.reset(new base::MessagePumpForIO::IOContext());
+  read_context_.reset(new base::MessagePumpForIO::IOContext());
+  write_context_.reset(new base::MessagePumpForIO::IOContext());
 
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner =
       base::ThreadTaskRunnerHandle::Get();
@@ -370,7 +371,7 @@ SerialIoHandlerWin::~SerialIoHandlerWin() {
 }
 
 void SerialIoHandlerWin::OnIOCompleted(
-    base::MessageLoopForIO::IOContext* context,
+    base::MessagePumpForIO::IOContext* context,
     DWORD bytes_transferred,
     DWORD error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

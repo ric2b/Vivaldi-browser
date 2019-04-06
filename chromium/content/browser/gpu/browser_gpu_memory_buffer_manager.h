@@ -22,6 +22,10 @@
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/ipc/host/gpu_memory_buffer_support.h"
 
+namespace gpu {
+class GpuMemoryBufferSupport;
+}
+
 namespace content {
 
 class CONTENT_EXPORT BrowserGpuMemoryBufferManager
@@ -29,7 +33,7 @@ class CONTENT_EXPORT BrowserGpuMemoryBufferManager
       public base::trace_event::MemoryDumpProvider {
  public:
   using CreateCallback =
-      base::Callback<void(const gfx::GpuMemoryBufferHandle& handle)>;
+      base::OnceCallback<void(gfx::GpuMemoryBufferHandle handle)>;
   using AllocationCallback = CreateCallback;
 
   BrowserGpuMemoryBufferManager(int gpu_client_id,
@@ -51,13 +55,12 @@ class CONTENT_EXPORT BrowserGpuMemoryBufferManager
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
-  void AllocateGpuMemoryBufferForChildProcess(
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      gfx::BufferUsage usage,
-      int child_client_id,
-      const AllocationCallback& callback);
+  void AllocateGpuMemoryBufferForChildProcess(gfx::GpuMemoryBufferId id,
+                                              const gfx::Size& size,
+                                              gfx::BufferFormat format,
+                                              gfx::BufferUsage usage,
+                                              int child_client_id,
+                                              AllocationCallback callback);
   void ChildProcessDeletedGpuMemoryBuffer(
       gfx::GpuMemoryBufferId id,
       int child_client_id,
@@ -95,9 +98,8 @@ class CONTENT_EXPORT BrowserGpuMemoryBufferManager
 
   // Functions that handle synchronous buffer creation requests.
   void HandleCreateGpuMemoryBufferOnIO(CreateGpuMemoryBufferRequest* request);
-  void HandleGpuMemoryBufferCreatedOnIO(
-      CreateGpuMemoryBufferRequest* request,
-      const gfx::GpuMemoryBufferHandle& handle);
+  void HandleGpuMemoryBufferCreatedOnIO(CreateGpuMemoryBufferRequest* request,
+                                        gfx::GpuMemoryBufferHandle handle);
 
   // Functions that implement asynchronous buffer creation.
   void CreateGpuMemoryBufferOnIO(gfx::GpuMemoryBufferId id,
@@ -106,19 +108,21 @@ class CONTENT_EXPORT BrowserGpuMemoryBufferManager
                                  gfx::BufferUsage usage,
                                  gpu::SurfaceHandle surface_handle,
                                  int client_id,
-                                 const CreateCallback& callback);
+                                 CreateCallback callback);
   void GpuMemoryBufferCreatedOnIO(gfx::GpuMemoryBufferId id,
                                   gpu::SurfaceHandle surface_handle,
                                   int client_id,
                                   int gpu_host_id,
-                                  const CreateCallback& callback,
-                                  const gfx::GpuMemoryBufferHandle& handle,
+                                  CreateCallback callback,
+                                  gfx::GpuMemoryBufferHandle handle,
                                   GpuProcessHost::BufferCreationStatus status);
   void DestroyGpuMemoryBufferOnIO(gfx::GpuMemoryBufferId id,
                                   int client_id,
                                   const gpu::SyncToken& sync_token);
 
   uint64_t ClientIdToTracingProcessId(int client_id) const;
+
+  std::unique_ptr<gpu::GpuMemoryBufferSupport> gpu_memory_buffer_support_;
 
   const gpu::GpuMemoryBufferConfigurationSet native_configurations_;
   const int gpu_client_id_;

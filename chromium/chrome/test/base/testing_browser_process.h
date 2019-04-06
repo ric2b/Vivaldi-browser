@@ -20,9 +20,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "extensions/features/features.h"
-#include "media/media_features.h"
-#include "printing/features/features.h"
+#include "extensions/buildflags/buildflags.h"
+#include "media/media_buildflags.h"
+#include "printing/buildflags/buildflags.h"
 
 class BackgroundModeManager;
 class IOThread;
@@ -47,6 +47,10 @@ namespace policy {
 class PolicyService;
 }
 
+namespace resource_coordinator {
+class TabLifecycleUnitSource;
+}
+
 class TestingBrowserProcess : public BrowserProcess {
  public:
   // Initializes |g_browser_process| with a new TestingBrowserProcess.
@@ -68,7 +72,10 @@ class TestingBrowserProcess : public BrowserProcess {
   rappor::RapporServiceImpl* rappor_service() override;
   IOThread* io_thread() override;
   SystemNetworkContextManager* system_network_context_manager() override;
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory()
+      override;
   content::NetworkConnectionTracker* network_connection_tracker() override;
+  network::NetworkQualityTracker* network_quality_tracker() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
@@ -76,9 +83,6 @@ class TestingBrowserProcess : public BrowserProcess {
   policy::ChromeBrowserPolicyConnector* browser_policy_connector() override;
   policy::PolicyService* policy_service() override;
   IconManager* icon_manager() override;
-#if defined(OS_ANDROID)
-  GpuDriverInfoManager* gpu_driver_info_manager() override;
-#endif
   GpuModeManager* gpu_mode_manager() override;
   BackgroundModeManager* background_mode_manager() override;
   void set_background_mode_manager_for_test(
@@ -97,10 +101,8 @@ class TestingBrowserProcess : public BrowserProcess {
   extensions::EventRouterForwarder* extension_event_router_forwarder() override;
   NotificationUIManager* notification_ui_manager() override;
   NotificationPlatformBridge* notification_platform_bridge() override;
-  message_center::MessageCenter* message_center() override;
   IntranetRedirectDetector* intranet_redirect_detector() override;
-  void CreateDevToolsHttpProtocolHandler(const std::string& ip,
-                                         uint16_t port) override;
+  void CreateDevToolsProtocolHandler() override;
   void CreateDevToolsAutoOpener() override;
   bool IsShuttingDown() override;
   printing::PrintJobManager* print_job_manager() override;
@@ -122,9 +124,7 @@ class TestingBrowserProcess : public BrowserProcess {
   supervised_user_whitelist_installer() override;
   MediaFileSystemRegistry* media_file_system_registry() override;
 
-#if BUILDFLAG(ENABLE_WEBRTC)
   WebRtcLogUploader* webrtc_log_uploader() override;
-#endif
 
   network_time::NetworkTimeTracker* network_time_tracker() override;
 
@@ -132,7 +132,6 @@ class TestingBrowserProcess : public BrowserProcess {
   resource_coordinator::TabManager* GetTabManager() override;
   shell_integration::DefaultWebClientState CachedDefaultWebClientState()
       override;
-  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
   prefs::InProcessPrefServiceFactory* pref_service_factory() const override;
 
   // Set the local state for tests. Consumer is responsible for cleaning it up
@@ -148,6 +147,8 @@ class TestingBrowserProcess : public BrowserProcess {
       std::unique_ptr<optimization_guide::OptimizationGuideService>
           optimization_guide_service);
   void SetSystemRequestContext(net::URLRequestContextGetter* context_getter);
+  void SetSharedURLLoaderFactory(
+      scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory);
   void SetNetworkConnectionTracker(
       std::unique_ptr<content::NetworkConnectionTracker> tracker);
   void SetNotificationUIManager(
@@ -197,14 +198,17 @@ class TestingBrowserProcess : public BrowserProcess {
 
   // |tab_manager_| is null by default and will be created when
   // GetTabManager() is invoked on supported platforms.
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if !defined(OS_ANDROID)
   std::unique_ptr<resource_coordinator::TabManager> tab_manager_;
+  std::unique_ptr<resource_coordinator::TabLifecycleUnitSource>
+      tab_lifecycle_unit_source_;
 #endif
 
   // The following objects are not owned by TestingBrowserProcess:
   PrefService* local_state_;
   IOThread* io_thread_;
   net::URLRequestContextGetter* system_request_context_;
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
   rappor::RapporServiceImpl* rappor_service_;
 
   std::unique_ptr<BrowserProcessPlatformPart> platform_part_;

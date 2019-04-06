@@ -30,9 +30,9 @@ bool GetIsInMultiWindowModeValue() {
   return is_in_multi_window_mode;
 }
 
-bool GetIsChromeHomeEnabled() {
+bool GetIsChromeModernDesignEnabled() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_FeatureUtilities_isChromeHomeEnabled(env);
+  return Java_FeatureUtilities_isChromeModernDesignEnabled(env);
 }
 
 } // namespace android
@@ -53,15 +53,3 @@ static void JNI_FeatureUtilities_SetIsInMultiWindowMode(
   is_in_multi_window_mode = j_is_in_multi_window_mode;
 }
 
-static void JNI_FeatureUtilities_NotifyChromeHomeStatusChanged(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
-    jboolean j_is_chrome_home_enabled) {
-  ntp_snippets::ContentSuggestionsService* content_suggestions_service =
-      ContentSuggestionsServiceFactory::GetForProfileIfExists(
-          ProfileManager::GetLastUsedProfile());
-  if (content_suggestions_service) {
-    content_suggestions_service->OnChromeHomeStatusChanged(
-        j_is_chrome_home_enabled);
-  }
-}

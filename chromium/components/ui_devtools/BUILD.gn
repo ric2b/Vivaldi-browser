@@ -19,7 +19,7 @@ _protocol_generated = [
 
 action("protocol_compatibility") {
   visibility = [ ":*" ]  # Only targets in this file can depend on this.
-  script = "$_inspector_protocol/CheckProtocolCompatibility.py"
+  script = "$_inspector_protocol/check_protocol_compatibility.py"
   inputs = [
     "protocol.json",
   ]
@@ -57,16 +57,25 @@ inspector_protocol_generate("protocol_generated_sources") {
 component("ui_devtools") {
   sources = rebase_path(_protocol_generated, ".", target_gen_dir)
   sources += [
+    "css_agent.cc",
+    "css_agent.h",
     "devtools_base_agent.h",
     "devtools_client.cc",
     "devtools_client.h",
     "devtools_export.h",
     "devtools_server.cc",
     "devtools_server.h",
+    "dom_agent.cc",
+    "dom_agent.h",
+    "overlay_agent.cc",
+    "overlay_agent.h",
+    "root_element.cc",
+    "root_element.h",
     "string_util.cc",
     "string_util.h",
-    "switches.cc",
-    "switches.h",
+    "ui_element.cc",
+    "ui_element.h",
+    "ui_element_delegate.h",
   ]
 
   defines = [ "UI_DEVTOOLS_IMPLEMENTATION" ]
@@ -80,6 +89,11 @@ component("ui_devtools") {
     ":protocol_generated_sources",
     "//base",
     "//net",
-    "//net:http_server",
+    "//ui/gfx",
+  ]
+
+  public_deps = [
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
   ]
 }

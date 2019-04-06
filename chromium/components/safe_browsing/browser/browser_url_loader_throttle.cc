@@ -8,6 +8,7 @@
 #include "base/trace_event/trace_event.h"
 #include "components/safe_browsing/browser/safe_browsing_url_checker_impl.h"
 #include "components/safe_browsing/browser/url_checker_delegate.h"
+#include "components/safe_browsing/common/safebrowsing_constants.h"
 #include "components/safe_browsing/common/utils.h"
 #include "net/log/net_log_event_type.h"
 #include "net/url_request/redirect_info.h"
@@ -68,7 +69,8 @@ void BrowserURLLoaderThrottle::WillStartRequest(
 void BrowserURLLoaderThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
     const network::ResourceResponseHead& response_head,
-    bool* defer) {
+    bool* defer,
+    std::vector<std::string>* to_be_removed_headers) {
   if (blocked_) {
     // OnCheckUrlResult() has set |blocked_| to true and called
     // |delegate_->CancelWithError|, but this method is called before the
@@ -141,7 +143,8 @@ void BrowserURLLoaderThrottle::OnCompleteCheck(bool slow_check,
     url_checker_.reset();
     pending_checks_ = 0;
     pending_slow_checks_ = 0;
-    delegate_->CancelWithError(net::ERR_ABORTED);
+    delegate_->CancelWithError(net::ERR_ABORTED,
+                               kCustomCancelReasonForURLLoader);
   }
 }
 

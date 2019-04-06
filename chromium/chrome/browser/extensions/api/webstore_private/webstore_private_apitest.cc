@@ -7,7 +7,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -22,9 +21,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_test_util.h"
-#include "chrome/common/features.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/notification_observer.h"
@@ -123,7 +122,7 @@ class ExtensionWebstorePrivateApiTest : public ExtensionApiTest {
     // API functions.
     host_resolver()->AddRule("www.example.com", "127.0.0.1");
     ASSERT_TRUE(StartEmbeddedTestServer());
-    extensions::ExtensionInstallUI::set_disable_failure_ui_for_tests();
+    extensions::ExtensionInstallUI::set_disable_ui_for_tests();
 
     auto_confirm_install_.reset(
         new ScopedTestDialogAutoConfirm(ScopedTestDialogAutoConfirm::ACCEPT));
@@ -430,6 +429,52 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstoreGetWebGLStatusTest, Blocked) {
 
   bool webgl_allowed = false;
   RunTest(webgl_allowed);
+}
+
+class ExtensionWebstorePrivateGetReferrerChainApiTest
+    : public ExtensionWebstorePrivateApiTest {
+ public:
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("redirect1.com", "127.0.0.1");
+    host_resolver()->AddRule("redirect2.com", "127.0.0.1");
+
+    ExtensionWebstorePrivateApiTest::SetUpOnMainThread();
+  }
+
+  GURL GetTestServerURLWithReferrers(const std::string& path) {
+    // Hand craft a url that will cause the test server to issue redirects.
+    const std::vector<std::string> redirects = {"redirect1.com",
+                                                "redirect2.com"};
+    net::HostPortPair host_port = embedded_test_server()->host_port_pair();
+    std::string redirect_chain;
+    for (const auto& redirect : redirects) {
+      std::string redirect_url = base::StringPrintf(
+          "http://%s:%d/server-redirect?", redirect.c_str(), host_port.port());
+      redirect_chain += redirect_url;
+    }
+
+    return GURL(redirect_chain + GetTestServerURL(path).spec());
+  }
+};
+
+// Tests that the GetReferrerChain API returns the redirect information.
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateGetReferrerChainApiTest,
+                       GetReferrerChain) {
+  GURL page_url = GetTestServerURLWithReferrers("referrer_chain.html");
+  ASSERT_TRUE(RunPageTest(page_url.spec()));
+}
+
+// Tests that the GetReferrerChain API returns an empty string for profiles
+// opted out of SafeBrowsing.
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateGetReferrerChainApiTest,
+                       GetReferrerChainForNonSafeBrowsingUser) {
+  PrefService* pref_service = browser()->profile()->GetPrefs();
+  EXPECT_TRUE(pref_service->GetBoolean(prefs::kSafeBrowsingEnabled));
+  // Disable SafeBrowsing.
+  pref_service->SetBoolean(prefs::kSafeBrowsingEnabled, false);
+
+  GURL page_url = GetTestServerURLWithReferrers("empty_referrer_chain.html");
+  ASSERT_TRUE(RunPageTest(page_url.spec()));
 }
 
 }  // namespace extensions

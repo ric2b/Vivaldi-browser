@@ -17,12 +17,14 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #import "chrome/browser/ui/cocoa/chrome_style.h"
+#include "chrome/browser/ui/cocoa/cocoa_util.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_control_utils.h"
 #import "chrome/browser/ui/cocoa/hover_close_button.h"
 #include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
@@ -56,18 +58,6 @@ void MakeTextBold(NSTextField* textField, int offset, int length) {
   [textField setAttributedStringValue:text];
 }
 
-// Remove underlining from the specified range of characters in a text view.
-void RemoveUnderlining(NSTextView* textView, int offset, int length) {
-  // Clear the default link attributes that were set by the
-  // HyperlinkTextView, otherwise removing the underline doesn't matter.
-  [textView setLinkTextAttributes:nil];
-  NSTextStorage* text = [textView textStorage];
-  NSRange range = NSMakeRange(offset, length);
-  [text addAttribute:NSUnderlineStyleAttributeName
-               value:[NSNumber numberWithInt:NSUnderlineStyleNone]
-               range:range];
-}
-
 // Create a new NSTextView and add it to the specified parent.
 NSTextView* AddTextView(
     NSView* parent,
@@ -93,7 +83,7 @@ NSTextView* AddTextView(
   [textView addLinkRange:NSMakeRange(offset, [linkString length])
                  withURL:nil
                linkColor:linkColor];
-  RemoveUnderlining(textView, offset, link.size());
+  cocoa_util::RemoveUnderlining(textView, offset, link.size());
   [textView setDelegate:delegate];
   [parent addSubview:textView];
   return textView.autorelease();
@@ -245,8 +235,7 @@ NSTextView* AddTextView(
   // Explanation text.
   std::vector<size_t> offsets;
   const base::string16 learn_more_text =
-      l10n_util::GetStringUTF16(
-          IDS_ENTERPRISE_SIGNIN_PROFILE_LINK_LEARN_MORE);
+      l10n_util::GetStringUTF16(IDS_LEARN_MORE);
   const base::string16 explanation_text =
       l10n_util::GetStringFUTF16(
           offerProfileCreation_ ?

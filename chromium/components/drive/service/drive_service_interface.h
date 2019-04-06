@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/time/time.h"
@@ -31,7 +32,7 @@ class DriveServiceObserver {
   virtual void OnRefreshTokenInvalid() {}
 
  protected:
-  virtual ~DriveServiceObserver() {}
+  virtual ~DriveServiceObserver() = default;
 };
 
 // Optional parameters for AddNewDirectory().
@@ -110,7 +111,7 @@ struct UploadExistingFileOptions {
 // Interface where we define operations that can be sent in batch requests.
 class DriveServiceBatchOperationsInterface {
  public:
-  virtual ~DriveServiceBatchOperationsInterface() {}
+  virtual ~DriveServiceBatchOperationsInterface() = default;
 
   // Uploads a file by a single request with multipart body. It's more efficient
   // for small files than using |InitiateUploadNewFile| and |ResumeUpload|.
@@ -144,7 +145,7 @@ class DriveServiceBatchOperationsInterface {
 class BatchRequestConfiguratorInterface
     : public DriveServiceBatchOperationsInterface {
  public:
-  ~BatchRequestConfiguratorInterface() override {}
+  ~BatchRequestConfiguratorInterface() override = default;
 
   // Commits and sends the batch request.
   virtual void Commit() = 0;
@@ -157,7 +158,7 @@ class BatchRequestConfiguratorInterface
 // URLFetcher that runs on UI thread.
 class DriveServiceInterface : public DriveServiceBatchOperationsInterface {
  public:
-  ~DriveServiceInterface() override {}
+  ~DriveServiceInterface() override = default;
 
   // Common service:
 
@@ -212,8 +213,12 @@ class DriveServiceInterface : public DriveServiceBatchOperationsInterface {
   // remaining results will be included in the returned result. See also
   // GetRemainingFileList.
   //
+  // If |team_drive_id| is empty will retrieve the file list for the users
+  // default corpus, otherwise will fetch the file list for the specified
+  // team drive.
   // |callback| must not be null.
   virtual google_apis::CancelCallback GetAllFileList(
+      const std::string& team_drive_id,
       const google_apis::FileListCallback& callback) = 0;
 
   // Fetches a file list in the directory with |directory_resource_id|.
@@ -263,6 +268,20 @@ class DriveServiceInterface : public DriveServiceBatchOperationsInterface {
   // |callback| must not be null.
   virtual google_apis::CancelCallback GetChangeList(
       int64_t start_changestamp,
+      const google_apis::ChangeListCallback& callback) = 0;
+
+  // Fetches change list since |start_page_token|. |callback| will be
+  // called upon completion.
+  // If |team_drive_id| is empty, then it will retrieve the change list for
+  // the users changelog.
+  // If the list is too long, it may be paged. In such a case, a URL to fetch
+  // remaining results will be included in the returned result. See also
+  // GetRemainingChangeList.
+  //
+  // |callback| must not be null.
+  virtual google_apis::CancelCallback GetChangeListByToken(
+      const std::string& team_drive_id,
+      const std::string& start_page_token,
       const google_apis::ChangeListCallback& callback) = 0;
 
   // The result of GetChangeList() may be paged.
@@ -316,6 +335,15 @@ class DriveServiceInterface : public DriveServiceBatchOperationsInterface {
   // |callback| must not be null.
   virtual google_apis::CancelCallback GetAboutResource(
       const google_apis::AboutResourceCallback& callback) = 0;
+
+  // Gets the start page token information from the server.
+  // If |team_drive_id| is empty, then it will retrieve the start page token for
+  // the users changelog.
+  // Upon completion, invokes |callback| with results on the calling thread.
+  // |callback| must not be null.
+  virtual google_apis::CancelCallback GetStartPageToken(
+      const std::string& team_drive_id,
+      const google_apis::StartPageTokenCallback& callback) = 0;
 
   // Gets the application information from the server.
   // Upon completion, invokes |callback| with results on the calling thread.

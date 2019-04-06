@@ -12,7 +12,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -23,28 +22,30 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
-#include "chrome/browser/profiles/profile_window.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/force_signin_verifier.h"
 #include "chrome/browser/signin/local_auth.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/web_data_service_factory.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
-#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/cookie_settings_util.h"
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_cookie_changed_subscription.h"
-#include "components/signin/core/browser/signin_features.h"
+#include "components/signin/core/browser/signin_buildflags.h"
+#include "components/signin/core/browser/signin_cookie_change_subscription.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "components/signin/core/browser/signin_switches.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -63,6 +64,11 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/profiles/profile_window.h"
+#endif
+
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/user_manager.h"
 #endif
 
 ChromeSigninClient::ChromeSigninClient(
@@ -71,7 +77,6 @@ ChromeSigninClient::ChromeSigninClient(
     : OAuth2TokenService::Consumer("chrome_signin_client"),
       profile_(profile),
       signin_error_controller_(signin_error_controller),
-      account_consistency_mode_manager_(profile),
       weak_ptr_factory_(this) {
   signin_error_controller_->AddObserver(this);
 #if !defined(OS_CHROMEOS)
@@ -202,8 +207,13 @@ net::URLRequestContextGetter* ChromeSigninClient::GetURLRequestContext() {
   return profile_->GetRequestContext();
 }
 
-bool ChromeSigninClient::ShouldMergeSigninCredentialsIntoCookieJar() {
-  return !signin::IsAccountConsistencyMirrorEnabled();
+scoped_refptr<network::SharedURLLoaderFactory>
+ChromeSigninClient::GetURLLoaderFactory() {
+  if (url_loader_factory_for_testing_)
+    return url_loader_factory_for_testing_;
+
+  return content::BrowserContext::GetDefaultStoragePartition(profile_)
+      ->GetURLLoaderFactoryForBrowserProcess();
 }
 
 std::string ChromeSigninClient::GetProductVersion() {
@@ -239,17 +249,16 @@ void ChromeSigninClient::RemoveContentSettingsObserver(
       ->RemoveObserver(observer);
 }
 
-std::unique_ptr<SigninClient::CookieChangedSubscription>
-ChromeSigninClient::AddCookieChangedCallback(
+std::unique_ptr<SigninClient::CookieChangeSubscription>
+ChromeSigninClient::AddCookieChangeCallback(
     const GURL& url,
     const std::string& name,
-    const net::CookieStore::CookieChangedCallback& callback) {
+    net::CookieChangeCallback callback) {
   scoped_refptr<net::URLRequestContextGetter> context_getter =
       profile_->GetRequestContext();
   DCHECK(context_getter.get());
-  std::unique_ptr<SigninCookieChangedSubscription> subscription(
-      new SigninCookieChangedSubscription(context_getter, url, name, callback));
-  return std::move(subscription);
+  return std::make_unique<SigninCookieChangeSubscription>(
+      context_getter, url, name, std::move(callback));
 }
 
 void ChromeSigninClient::OnSignedIn(const std::string& account_id,
@@ -418,14 +427,15 @@ void ChromeSigninClient::DelayNetworkCall(const base::Closure& callback) {
 std::unique_ptr<GaiaAuthFetcher> ChromeSigninClient::CreateGaiaAuthFetcher(
     GaiaAuthConsumer* consumer,
     const std::string& source,
-    net::URLRequestContextGetter* getter) {
-  return base::MakeUnique<GaiaAuthFetcher>(consumer, source, getter);
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  return std::make_unique<GaiaAuthFetcher>(consumer, source,
+                                           url_loader_factory);
 }
 
 void ChromeSigninClient::VerifySyncToken() {
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   if (signin_util::IsForceSigninEnabled())
-    force_signin_verifier_ = base::MakeUnique<ForceSigninVerifier>(profile_);
+    force_signin_verifier_ = std::make_unique<ForceSigninVerifier>(profile_);
 #endif
 }
 
@@ -468,10 +478,16 @@ void ChromeSigninClient::AfterCredentialsCopied() {
 
 void ChromeSigninClient::SetReadyForDiceMigration(bool is_ready) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  account_consistency_mode_manager_.SetReadyForDiceMigration(is_ready);
+  AccountConsistencyModeManager::GetForProfile(profile_)
+      ->SetReadyForDiceMigration(is_ready);
 #else
   NOTREACHED();
 #endif
+}
+
+void ChromeSigninClient::SetURLLoaderFactoryForTest(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  url_loader_factory_for_testing_ = url_loader_factory;
 }
 
 void ChromeSigninClient::OnCloseBrowsersSuccess(

@@ -11,7 +11,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -187,7 +187,11 @@ TEST_F(CardUnmaskPromptControllerImplTest, LogClosedFailedToUnmaskRetriable) {
   controller_->OnVerificationResult(AutofillClient::TRY_AGAIN_FAILURE);
   base::HistogramTester histogram_tester;
 
+  EXPECT_EQ(AutofillClient::TRY_AGAIN_FAILURE,
+            controller_->GetVerificationResult());
   controller_->OnUnmaskDialogClosed();
+  // State should be cleared when the dialog is closed.
+  EXPECT_EQ(AutofillClient::NONE, controller_->GetVerificationResult());
 
   histogram_tester.ExpectBucketCount(
       "Autofill.UnmaskPrompt.Events",
@@ -202,7 +206,11 @@ TEST_F(CardUnmaskPromptControllerImplTest,
   controller_->OnVerificationResult(AutofillClient::PERMANENT_FAILURE);
   base::HistogramTester histogram_tester;
 
+  EXPECT_EQ(AutofillClient::PERMANENT_FAILURE,
+            controller_->GetVerificationResult());
   controller_->OnUnmaskDialogClosed();
+  // State should be cleared when the dialog is closed.
+  EXPECT_EQ(AutofillClient::NONE, controller_->GetVerificationResult());
 
   histogram_tester.ExpectBucketCount(
       "Autofill.UnmaskPrompt.Events",
@@ -216,7 +224,11 @@ TEST_F(CardUnmaskPromptControllerImplTest, LogUnmaskedCardFirstAttempt) {
   base::HistogramTester histogram_tester;
 
   controller_->OnVerificationResult(AutofillClient::SUCCESS);
+
+  EXPECT_EQ(AutofillClient::SUCCESS, controller_->GetVerificationResult());
   controller_->OnUnmaskDialogClosed();
+  // State should be cleared when the dialog is closed.
+  EXPECT_EQ(AutofillClient::NONE, controller_->GetVerificationResult());
 
   histogram_tester.ExpectBucketCount(
       "Autofill.UnmaskPrompt.Events",

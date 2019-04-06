@@ -21,7 +21,12 @@ class CommandLine;
 namespace service_manager {
 class BackgroundServiceManager;
 class Identity;
+class ZygoteForkDelegate;
 }  // namespace service_manager
+
+namespace ui {
+class DataPack;
+}
 
 namespace content {
 
@@ -29,7 +34,6 @@ class ContentBrowserClient;
 class ContentGpuClient;
 class ContentRendererClient;
 class ContentUtilityClient;
-class ZygoteForkDelegate;
 struct MainFunctionParams;
 
 class CONTENT_EXPORT ContentMainDelegate {
@@ -59,6 +63,10 @@ class CONTENT_EXPORT ContentMainDelegate {
   // Called right before the process exits.
   virtual void ProcessExiting(const std::string& process_type) {}
 
+  // This loads the service manifest datapack, takes its ownership and returns
+  // the pointer to it.
+  virtual ui::DataPack* LoadServiceManifestDataPack();
+
 #if defined(OS_MACOSX)
   // Returns true if the process registers with the system monitor, so that we
   // can allocate an IO port for it before the sandbox is initialized. Embedders
@@ -81,7 +89,8 @@ class CONTENT_EXPORT ContentMainDelegate {
   // specify one or more zygote delegates if it wishes by storing them in
   // |*delegates|.
   virtual void ZygoteStarting(
-      std::vector<std::unique_ptr<ZygoteForkDelegate>>* delegates);
+      std::vector<std::unique_ptr<service_manager::ZygoteForkDelegate>>*
+          delegates);
 
   // Called every time the zygote process forks.
   virtual void ZygoteForked() {}
@@ -115,6 +124,11 @@ class CONTENT_EXPORT ContentMainDelegate {
   virtual void OnServiceManagerInitialized(
       const base::Closure& quit_closure,
       service_manager::BackgroundServiceManager* service_manager);
+
+  // Allows the embedder to perform platform-specific initializatioion. For
+  // example, things that should be done immediately before the creation of the
+  // main message loop.
+  virtual void PreContentInitialization() {}
 
  protected:
   friend class ContentClientInitializer;

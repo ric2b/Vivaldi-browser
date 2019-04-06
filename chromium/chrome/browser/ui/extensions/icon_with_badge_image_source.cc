@@ -12,23 +12,21 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/extensions/extension_action.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/grit/theme_resources.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/shadow_value.h"
+#include "ui/gfx/skia_paint_util.h"
 
 namespace {
-
-const int kPadding = 2;
-const int kBadgeHeight = 11;
-const int kMaxTextWidth = 23;
-
-// The minimum width for center-aligning the badge.
-const int kCenterAlignThreshold = 20;
 
 gfx::ImageSkiaRep ScaleImageSkiaRep(const gfx::ImageSkiaRep& rep,
                                     int target_width_dp,
@@ -41,6 +39,16 @@ gfx::ImageSkiaRep ScaleImageSkiaRep(const gfx::ImageSkiaRep& rep,
       target_scale);
 }
 
+float GetBlockedActionBadgeRadius() {
+#if defined(OS_MACOSX)
+  // Cocoa. Note: this doesn't look great on Cocoa. But runtime host
+  // permissions are expected to be launched after MacViews for top-chrome.
+  if (!base::FeatureList::IsEnabled(features::kViewsBrowserWindows))
+    return 11.4f;
+#endif
+  return 12.0f;
+}
+
 }  // namespace
 
 IconWithBadgeImageSource::Badge::Badge(const std::string& text,
@@ -51,10 +59,7 @@ IconWithBadgeImageSource::Badge::Badge(const std::string& text,
 IconWithBadgeImageSource::Badge::~Badge() {}
 
 IconWithBadgeImageSource::IconWithBadgeImageSource(const gfx::Size& size)
-    : gfx::CanvasImageSource(size, false),
-      grayscale_(false),
-      paint_page_action_decoration_(false),
-      paint_blocked_actions_decoration_(false) {}
+    : gfx::CanvasImageSource(size, false) {}
 
 IconWithBadgeImageSource::~IconWithBadgeImageSource() {}
 
@@ -67,8 +72,14 @@ void IconWithBadgeImageSource::SetBadge(std::unique_ptr<Badge> badge) {
 }
 
 void IconWithBadgeImageSource::Draw(gfx::Canvas* canvas) {
+  // TODO(https://crbug.com/842856): There should be a cleaner delineation
+  // between what is drawn here and what is handled by the button itself.
+
   if (icon_.IsEmpty())
     return;
+
+  if (paint_blocked_actions_decoration_)
+    PaintBlockedActionDecoration(canvas);
 
   gfx::ImageSkia skia = icon_.AsImageSkia();
   gfx::ImageSkiaRep rep = skia.GetRepresentation(canvas->image_scale());
@@ -90,9 +101,6 @@ void IconWithBadgeImageSource::Draw(gfx::Canvas* canvas) {
 
   if (paint_page_action_decoration_)
     PaintPageActionDecoration(canvas);
-
-  if (paint_blocked_actions_decoration_)
-    PaintBlockedActionDecoration(canvas);
 }
 
 // Paints badge with specified parameters to |canvas|.
@@ -110,6 +118,7 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
           ? gfx::kGoogleBlue500
           : SkColorSetA(badge_->background_color, SK_AlphaOPAQUE);
 
+  constexpr int kBadgeHeight = 12;
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   gfx::FontList base_font = rb->GetFontList(ui::ResourceBundle::BaseFont)
                                 .DeriveWithHeightUpperBound(kBadgeHeight);
@@ -117,7 +126,7 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
 
   // See if we can squeeze a slightly larger font into the badge given the
   // actual string that is to be displayed.
-  const int kMaxIncrementAttempts = 5;
+  constexpr int kMaxIncrementAttempts = 5;
   for (size_t i = 0; i < kMaxIncrementAttempts; ++i) {
     int w = 0;
     int h = 0;
@@ -130,23 +139,32 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
     base_font = bigger_font;
   }
 
+  constexpr int kMaxTextWidth = 23;
   const int text_width =
         std::min(kMaxTextWidth, canvas->GetStringWidth(utf16_text, base_font));
   // Calculate badge size. It is clamped to a min width just because it looks
   // silly if it is too skinny.
+  constexpr int kPadding = 2;
   int badge_width = text_width + kPadding * 2;
+
+  const gfx::Rect icon_area = GetIconAreaRect();
+
   // Force the pixel width of badge to be either odd (if the icon width is odd)
   // or even otherwise. If there is a mismatch you get http://crbug.com/26400.
-  if (size().width() != 0 && (badge_width % 2 != size().width() % 2))
+  if (icon_area.width() != 0 && (badge_width % 2 != icon_area.width() % 2))
     badge_width += 1;
   badge_width = std::max(kBadgeHeight, badge_width);
 
+  // The minimum width for center-aligning the badge.
+  constexpr int kCenterAlignThreshold = 20;
   // Calculate the badge background rect. It is usually right-aligned, but it
   // can also be center-aligned if it is large.
-  gfx::Rect rect(badge_width >= kCenterAlignThreshold
-                     ? (size().width() - badge_width) / 2
-                     : size().width() - badge_width,
-                 size().height() - kBadgeHeight, badge_width, kBadgeHeight);
+  const int badge_offset_x = badge_width >= kCenterAlignThreshold
+                                 ? (icon_area.width() - badge_width) / 2
+                                 : icon_area.width() - badge_width;
+  const int badge_offset_y = icon_area.height() - kBadgeHeight;
+  gfx::Rect rect(icon_area.x() + badge_offset_x, icon_area.y() + badge_offset_y,
+                 badge_width, kBadgeHeight);
   cc::PaintFlags rect_flags;
   rect_flags.setStyle(cc::PaintFlags::kFill_Style);
   rect_flags.setAntiAlias(true);
@@ -157,10 +175,11 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
   cutout_rect.Inset(-1, -1);
   cc::PaintFlags cutout_flags = rect_flags;
   cutout_flags.setBlendMode(SkBlendMode::kClear);
-  canvas->DrawRoundRect(cutout_rect, 2, cutout_flags);
+  constexpr int kOuterCornerRadius = 3;
+  canvas->DrawRoundRect(cutout_rect, kOuterCornerRadius, cutout_flags);
 
   // Paint the backdrop.
-  canvas->DrawRoundRect(rect, 1, rect_flags);
+  canvas->DrawRoundRect(rect, kOuterCornerRadius - 1, rect_flags);
 
   // Paint the text.
   rect.Inset(std::max(kPadding, (rect.width() - text_width) / 2),
@@ -169,27 +188,60 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
 }
 
 void IconWithBadgeImageSource::PaintPageActionDecoration(gfx::Canvas* canvas) {
-  static const SkColor decoration_color = SkColorSetARGB(255, 70, 142, 226);
-
-  int major_radius = std::ceil(size().width() / 5.0);
-  int minor_radius = std::ceil(major_radius / 2.0);
-  gfx::Point center_point(major_radius + 1, size().height() - (major_radius)-1);
+  const gfx::Rect icon_area = GetIconAreaRect();
+  constexpr float kMajorRadius = 4.5;
+  constexpr float kMinorRadius = 3;
+  // This decoration is positioned at the bottom left corner of the icon area.
+  gfx::PointF center_point = gfx::PointF(icon_area.bottom_left());
+  center_point.Offset(kMajorRadius + 1, -kMajorRadius - 1);
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
   flags.setStyle(cc::PaintFlags::kFill_Style);
   flags.setColor(SK_ColorTRANSPARENT);
   flags.setBlendMode(SkBlendMode::kSrc);
-  canvas->DrawCircle(center_point, major_radius, flags);
+  canvas->DrawCircle(center_point, kMajorRadius, flags);
+  constexpr SkColor decoration_color = SkColorSetARGB(255, 70, 142, 226);
   flags.setColor(decoration_color);
-  canvas->DrawCircle(center_point, minor_radius, flags);
+  canvas->DrawCircle(center_point, kMinorRadius, flags);
 }
 
 void IconWithBadgeImageSource::PaintBlockedActionDecoration(
     gfx::Canvas* canvas) {
-  canvas->Save();
-  gfx::ImageSkia img =
-      *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          IDR_BLOCKED_EXTENSION_SCRIPT);
-  canvas->DrawImageInt(img, size().width() - img.width(), 0);
-  canvas->Restore();
+  // To match the CSS notion of blur (spread outside the bounding box) to the
+  // Skia notion of blur (spread outside and inside the bounding box), we have
+  // to double the CSS-based blur values.
+  constexpr int kBlurCorrection = 2;
+
+  constexpr int kKeyShadowOpacity = 0x4D;  // 30%
+  const gfx::ShadowValue key_shadow(
+      gfx::Vector2d(0, 1), kBlurCorrection * 2 /*blur*/,
+      SkColorSetA(gfx::kGoogleGrey800, kKeyShadowOpacity));
+
+  constexpr int kAmbientShadowOpacity = 0x26;  // 15%
+  const gfx::ShadowValue ambient_shadow(
+      gfx::Vector2d(0, 2), kBlurCorrection * 6 /*blur*/,
+      SkColorSetA(gfx::kGoogleGrey800, kAmbientShadowOpacity));
+
+  const float blocked_action_badge_radius = GetBlockedActionBadgeRadius();
+
+  // Sanity checking.
+  const gfx::Rect icon_rect = GetIconAreaRect();
+  DCHECK_LE(2 * blocked_action_badge_radius, icon_rect.width());
+  DCHECK_EQ(icon_rect.width(), icon_rect.height());
+
+  cc::PaintFlags paint_flags;
+  paint_flags.setStyle(cc::PaintFlags::kFill_Style);
+  paint_flags.setAntiAlias(true);
+  paint_flags.setColor(SK_ColorWHITE);
+  paint_flags.setLooper(
+      gfx::CreateShadowDrawLooper({key_shadow, ambient_shadow}));
+
+  canvas->DrawCircle(gfx::PointF(icon_rect.CenterPoint()),
+                     blocked_action_badge_radius, paint_flags);
+}
+
+gfx::Rect IconWithBadgeImageSource::GetIconAreaRect() const {
+  gfx::Rect icon_area(size());
+  icon_area.ClampToCenteredSize(ToolbarActionsBar::GetIconAreaSize());
+  return icon_area;
 }

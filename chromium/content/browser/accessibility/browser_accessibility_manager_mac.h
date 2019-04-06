@@ -35,13 +35,13 @@ class CONTENT_EXPORT BrowserAccessibilityManagerMac
 
   // Implementation of BrowserAccessibilityManager.
   void FireFocusEvent(BrowserAccessibility* node) override;
-  void FireBlinkEvent(ui::AXEvent event_type,
+  void FireBlinkEvent(ax::mojom::Event event_type,
                       BrowserAccessibility* node) override;
   void FireGeneratedEvent(AXEventGenerator::Event event_type,
                           BrowserAccessibility* node) override;
 
   void OnAccessibilityEvents(
-      const std::vector<AXEventNotificationDetails>& details) override;
+      const AXEventNotificationDetails& details) override;
 
   NSView* GetParentView();
 

@@ -5,7 +5,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "ui/webgui/notes_ui.h"
 #include "url/gurl.h"
 
@@ -19,14 +19,14 @@ using content::WebUIController;
 
 // A function for creating a new WebUI. The caller owns the return value, which
 // may be NULL (for example, if the URL refers to an non-existent extension).
-typedef WebUIController* (*WebUIFactoryFunction)(WebUI* web_ui,
+typedef std::unique_ptr<content::WebUIController>(*WebUIFactoryFunction)(WebUI* web_ui,
                                                  const GURL& url);
 namespace vivaldi {
 
 // Template for defining WebUIFactoryFunction.
 template <class T>
-WebUIController* NewVivaldiWebUI(WebUI* web_ui, const GURL& url) {
-  return new T(web_ui);
+std::unique_ptr<content::WebUIController> NewVivaldiWebUI(WebUI* web_ui, const GURL& url) {
+  return std::make_unique<T>(web_ui);
 }
 
 // Returns a function that can be used to create the right type of WebUI for a
@@ -89,7 +89,7 @@ bool VivaldiWebUIControllerFactory::UseWebUIBindingsForURL(
       UseWebUIForURL(browser_context, url);
 }
 
-content::WebUIController*
+std::unique_ptr<content::WebUIController>
 VivaldiWebUIControllerFactory::CreateWebUIControllerForURL(
     content::WebUI* web_ui,
     const GURL& url) const {

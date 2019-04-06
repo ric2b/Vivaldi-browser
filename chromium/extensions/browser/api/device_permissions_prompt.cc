@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/device_permissions_prompt.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -25,7 +26,7 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/device/public/cpp/hid/hid_device_filter.h"
 #include "services/device/public/cpp/hid/hid_usage_and_page.h"
-#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -42,10 +43,6 @@ using device::UsbService;
 namespace extensions {
 
 namespace {
-
-void NoopHidCallback(std::vector<device::mojom::HidDeviceInfoPtr>) {}
-
-void NoopUsbCallback(const std::vector<scoped_refptr<device::UsbDevice>>&) {}
 
 class UsbDeviceInfo : public DevicePermissionsPrompt::Prompt::DeviceInfo {
  public:
@@ -253,7 +250,7 @@ class HidDevicePermissionsPrompt : public DevicePermissionsPrompt::Prompt,
   void DeviceAdded(device::mojom::HidDeviceInfoPtr device) override {
     if (HasUnprotectedCollections(*device) &&
         (filters_.empty() || HidDeviceFilter::MatchesAny(*device, filters_))) {
-      auto device_info = base::MakeUnique<HidDeviceInfo>(std::move(device));
+      auto device_info = std::make_unique<HidDeviceInfo>(std::move(device));
 #if defined(OS_CHROMEOS)
       chromeos::PermissionBrokerClient* client =
           chromeos::DBusThreadManager::Get()->GetPermissionBrokerClient();
@@ -392,7 +389,7 @@ DevicePermissionsPrompt::CreateHidPromptForTest(const Extension* extension,
                                                 bool multiple) {
   return base::MakeRefCounted<HidDevicePermissionsPrompt>(
       extension, nullptr, multiple, std::vector<HidDeviceFilter>(),
-      base::Bind(&NoopHidCallback));
+      base::DoNothing());
 }
 
 // static
@@ -401,7 +398,7 @@ DevicePermissionsPrompt::CreateUsbPromptForTest(const Extension* extension,
                                                 bool multiple) {
   return base::MakeRefCounted<UsbDevicePermissionsPrompt>(
       extension, nullptr, multiple, std::vector<UsbDeviceFilterPtr>(),
-      base::Bind(&NoopUsbCallback));
+      base::DoNothing());
 }
 
 }  // namespace extensions

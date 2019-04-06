@@ -19,14 +19,20 @@
 #include "headless/lib/browser/headless_url_request_context_getter.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_browser_context.h"
+#include "headless/public/headless_export.h"
+
+namespace net {
+class NetLog;
+}
 
 namespace headless {
 class HeadlessBrowserImpl;
 class HeadlessResourceContext;
 class HeadlessWebContentsImpl;
 
-class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
-                                   public content::BrowserContext {
+class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+    : public HeadlessBrowserContext,
+      public content::BrowserContext {
  public:
   ~HeadlessBrowserContextImpl() override;
 
@@ -45,8 +51,6 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
       const std::string& devtools_agent_host_id) override;
   void Close() override;
   const std::string& Id() const override;
-  void AddObserver(Observer* observer) override;
-  void RemoveObserver(Observer* observer) override;
 
   void SetDevToolsFrameToken(int render_process_id,
                              int render_frame_routing_id,
@@ -68,7 +72,8 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override;
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
-  content::PermissionManager* GetPermissionManager() override;
+  content::PermissionControllerDelegate* GetPermissionControllerDelegate()
+      override;
   content::BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
   content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
@@ -107,17 +112,6 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   const base::UnguessableToken* GetDevToolsFrameTokenForFrameTreeNodeId(
       int frame_tree_node_id) const;
 
-  void SetRemoveHeaders(bool should_remove_headers);
-  bool ShouldRemoveHeaders() const;
-
-  void NotifyChildContentsCreated(HeadlessWebContentsImpl* parent,
-                                  HeadlessWebContentsImpl* child);
-
-  // This will be called on the IO thread.
-  void NotifyUrlRequestFailed(net::URLRequest* request,
-                              int net_error,
-                              bool canceled_by_devtools);
-
   void SetNetworkConditions(HeadlessNetworkConditions conditions);
   HeadlessNetworkConditions GetNetworkConditions() override;
 
@@ -135,9 +129,6 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   std::unique_ptr<HeadlessResourceContext> resource_context_;
   scoped_refptr<HeadlessURLRequestContextGetter> url_request_getter_;
   base::FilePath path_;
-  base::Lock observers_lock_;
-  base::ObserverList<Observer> observers_;
-  bool should_remove_headers_;
 
   std::unordered_map<std::string, std::unique_ptr<HeadlessWebContents>>
       web_contents_map_;
@@ -152,9 +143,9 @@ class HeadlessBrowserContextImpl : public HeadlessBrowserContext,
   base::flat_map<int, base::UnguessableToken>
       frame_tree_node_id_to_devtools_frame_token_map_;
 
-  std::unique_ptr<content::PermissionManager> permission_manager_;
-
-  std::string id_;
+  std::unique_ptr<content::PermissionControllerDelegate>
+      permission_controller_delegate_;
+  std::unique_ptr<net::NetLog> net_log_;
 
   HeadlessNetworkConditions network_conditions_;
 

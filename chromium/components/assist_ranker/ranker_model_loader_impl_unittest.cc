@@ -11,7 +11,6 @@
 #include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_scheduler/post_task.h"
@@ -21,8 +20,9 @@
 #include "components/assist_ranker/proto/ranker_model.pb.h"
 #include "components/assist_ranker/proto/translate_ranker_model.pb.h"
 #include "components/assist_ranker/ranker_model.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -77,14 +77,12 @@ class RankerModelLoaderImplTest : public ::testing::Test {
   // Sets up the task scheduling/task-runner environment for each test.
   base::test::ScopedTaskEnvironment scoped_task_environment_;
 
-  // Override the default URL fetcher to return custom responses for tests.
-  net::FakeURLFetcherFactory url_fetcher_factory_;
+  // Override the default URL loader to return custom responses for tests.
+  network::TestURLLoaderFactory test_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
 
   // Temporary directory for model files.
   base::ScopedTempDir scoped_temp_dir_;
-
-  // Used for URLFetcher.
-  scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
 
   // A queue of responses to return from Validate(). If empty, validate will
   // return 'OK'.
@@ -115,13 +113,13 @@ class RankerModelLoaderImplTest : public ::testing::Test {
   DISALLOW_COPY_AND_ASSIGN(RankerModelLoaderImplTest);
 };
 
-RankerModelLoaderImplTest::RankerModelLoaderImplTest()
-    : url_fetcher_factory_(nullptr) {}
+RankerModelLoaderImplTest::RankerModelLoaderImplTest() {
+  test_shared_loader_factory_ =
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          &test_loader_factory_);
+}
 
 void RankerModelLoaderImplTest::SetUp() {
-  request_context_getter_ =
-      new net::TestURLRequestContextGetter(base::ThreadTaskRunnerHandle::Get());
-
   ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
   const auto& temp_dir_path = scoped_temp_dir_.GetPath();
 
@@ -143,7 +141,7 @@ void RankerModelLoaderImplTest::SetUp() {
 // static
 std::unique_ptr<RankerModel> RankerModelLoaderImplTest::Clone(
     const RankerModel& model) {
-  auto copy = base::MakeUnique<RankerModel>();
+  auto copy = std::make_unique<RankerModel>();
   *copy->mutable_proto() = model.proto();
   return copy;
 }
@@ -168,12 +166,12 @@ bool RankerModelLoaderImplTest::IsEquivalent(const RankerModel& m1,
 
 bool RankerModelLoaderImplTest::DoLoaderTest(const base::FilePath& model_path,
                                              const GURL& model_url) {
-  auto loader = base::MakeUnique<RankerModelLoaderImpl>(
+  auto loader = std::make_unique<RankerModelLoaderImpl>(
       base::Bind(&RankerModelLoaderImplTest::ValidateModel,
                  base::Unretained(this)),
       base::Bind(&RankerModelLoaderImplTest::OnModelAvailable,
                  base::Unretained(this)),
-      request_context_getter_.get(), model_path, model_url,
+      test_shared_loader_factory_, model_path, model_url,
       "RankerModelLoaderImplTest");
   loader->NotifyOfRankerActivity();
   scoped_task_environment_.RunUntilIdle();
@@ -183,15 +181,13 @@ bool RankerModelLoaderImplTest::DoLoaderTest(const base::FilePath& model_path,
 
 void RankerModelLoaderImplTest::InitRemoteModels() {
   InitModel(remote_model_url_, base::Time(), base::TimeDelta(), &remote_model_);
-  url_fetcher_factory_.SetFakeResponse(
-      remote_model_url_, remote_model_.SerializeAsString(), net::HTTP_OK,
-      net::URLRequestStatus::SUCCESS);
-  url_fetcher_factory_.SetFakeResponse(invalid_model_url_, kInvalidModelData,
-                                       net::HTTP_OK,
-                                       net::URLRequestStatus::SUCCESS);
-  url_fetcher_factory_.SetFakeResponse(failed_model_url_, "",
-                                       net::HTTP_INTERNAL_SERVER_ERROR,
-                                       net::URLRequestStatus::FAILED);
+  test_loader_factory_.AddResponse(remote_model_url_.spec(),
+                                   remote_model_.SerializeAsString());
+  test_loader_factory_.AddResponse(invalid_model_url_.spec(),
+                                   kInvalidModelData);
+  test_loader_factory_.AddResponse(
+      failed_model_url_, network::ResourceResponseHead(), "",
+      network::URLLoaderCompletionStatus(net::HTTP_INTERNAL_SERVER_ERROR));
 }
 
 void RankerModelLoaderImplTest::InitLocalModels() {

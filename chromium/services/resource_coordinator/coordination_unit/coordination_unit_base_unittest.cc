@@ -8,7 +8,7 @@
 #include "services/resource_coordinator/coordination_unit/mock_coordination_unit_graphs.h"
 #include "services/resource_coordinator/coordination_unit/page_coordination_unit_impl.h"
 #include "services/resource_coordinator/coordination_unit/process_coordination_unit_impl.h"
-#include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
+#include "services/resource_coordinator/public/mojom/coordination_unit.mojom.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,7 +40,8 @@ TEST_F(CoordinationUnitBaseTest, GetSetProperty) {
 
 TEST_F(CoordinationUnitBaseTest,
        GetAssociatedCoordinationUnitsForSinglePageInSingleProcess) {
-  MockSinglePageInSingleProcessCoordinationUnitGraph cu_graph;
+  MockSinglePageInSingleProcessCoordinationUnitGraph cu_graph(
+      coordination_unit_graph());
 
   auto pages_associated_with_process =
       cu_graph.process->GetAssociatedPageCoordinationUnits();
@@ -55,7 +56,8 @@ TEST_F(CoordinationUnitBaseTest,
 
 TEST_F(CoordinationUnitBaseTest,
        GetAssociatedCoordinationUnitsForMultiplePagesInSingleProcess) {
-  MockMultiplePagesInSingleProcessCoordinationUnitGraph cu_graph;
+  MockMultiplePagesInSingleProcessCoordinationUnitGraph cu_graph(
+      coordination_unit_graph());
 
   auto pages_associated_with_process =
       cu_graph.process->GetAssociatedPageCoordinationUnits();
@@ -76,7 +78,8 @@ TEST_F(CoordinationUnitBaseTest,
 
 TEST_F(CoordinationUnitBaseTest,
        GetAssociatedCoordinationUnitsForSinglePageWithMultipleProcesses) {
-  MockSinglePageWithMultipleProcessesCoordinationUnitGraph cu_graph;
+  MockSinglePageWithMultipleProcessesCoordinationUnitGraph cu_graph(
+      coordination_unit_graph());
 
   auto pages_associated_with_process =
       cu_graph.process->GetAssociatedPageCoordinationUnits();
@@ -98,7 +101,8 @@ TEST_F(CoordinationUnitBaseTest,
 
 TEST_F(CoordinationUnitBaseTest,
        GetAssociatedCoordinationUnitsForMultiplePagesWithMultipleProcesses) {
-  MockMultiplePagesWithMultipleProcessesCoordinationUnitGraph cu_graph;
+  MockMultiplePagesWithMultipleProcessesCoordinationUnitGraph cu_graph(
+      coordination_unit_graph());
 
   auto pages_associated_with_process =
       cu_graph.process->GetAssociatedPageCoordinationUnits();

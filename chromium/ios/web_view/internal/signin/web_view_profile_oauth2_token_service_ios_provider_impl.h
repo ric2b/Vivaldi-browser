@@ -11,20 +11,16 @@
 #include "base/macros.h"
 #include "components/signin/ios/browser/profile_oauth2_token_service_ios_provider.h"
 
-class IOSWebViewSigninClient;
-
 // Implementation of ProfileOAuth2TokenServiceIOSProvider.
 class WebViewProfileOAuth2TokenServiceIOSProviderImpl
     : public ProfileOAuth2TokenServiceIOSProvider {
  public:
-  WebViewProfileOAuth2TokenServiceIOSProviderImpl(
-      IOSWebViewSigninClient* signin_client);
+  WebViewProfileOAuth2TokenServiceIOSProviderImpl();
   ~WebViewProfileOAuth2TokenServiceIOSProviderImpl() override;
 
   // ios::ProfileOAuth2TokenServiceIOSProvider
   void GetAccessToken(const std::string& gaia_id,
                       const std::string& client_id,
-                      const std::string& client_secret,
                       const std::set<std::string>& scopes,
                       const AccessTokenCallback& callback) override;
   std::vector<AccountInfo> GetAllAccounts() const override;
@@ -33,8 +29,6 @@ class WebViewProfileOAuth2TokenServiceIOSProviderImpl
       NSError* error) const override;
 
  private:
-  IOSWebViewSigninClient* signin_client_;
-
   DISALLOW_COPY_AND_ASSIGN(WebViewProfileOAuth2TokenServiceIOSProviderImpl);
 };
 

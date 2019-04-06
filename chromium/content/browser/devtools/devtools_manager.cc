@@ -5,8 +5,6 @@
 #include "content/browser/devtools/devtools_manager.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/devtools_http_handler.h"
 #include "content/browser/devtools/devtools_pipe_handler.h"
@@ -19,14 +17,13 @@ namespace content {
 // static
 void DevToolsAgentHost::StartRemoteDebuggingServer(
     std::unique_ptr<DevToolsSocketFactory> server_socket_factory,
-    const std::string& frontend_url,
     const base::FilePath& active_port_output_directory,
     const base::FilePath& debug_frontend_dir) {
   DevToolsManager* manager = DevToolsManager::GetInstance();
   if (!manager->delegate())
     return;
   manager->SetHttpHandler(std::make_unique<DevToolsHttpHandler>(
-      manager->delegate(), std::move(server_socket_factory), frontend_url,
+      manager->delegate(), std::move(server_socket_factory),
       active_port_output_directory, debug_frontend_dir));
 }
 
@@ -40,6 +37,12 @@ void DevToolsAgentHost::StartRemoteDebuggingPipeHandler() {
 void DevToolsAgentHost::StopRemoteDebuggingServer() {
   DevToolsManager* manager = DevToolsManager::GetInstance();
   manager->SetHttpHandler(nullptr);
+}
+
+// static
+void DevToolsAgentHost::StopRemoteDebuggingPipeHandler() {
+  DevToolsManager* manager = DevToolsManager::GetInstance();
+  manager->SetPipeHandler(nullptr);
 }
 
 // static

@@ -36,10 +36,6 @@ std::unique_ptr<WebMainParts> WebClient::CreateWebMainParts() {
   return nullptr;
 }
 
-std::string WebClient::GetAcceptLangs(BrowserState* state) const {
-  return std::string();
-}
-
 std::string WebClient::GetApplicationLocale() const {
   return "en-US";
 }
@@ -74,6 +70,11 @@ base::RefCountedMemory* WebClient::GetDataResourceBytes(int resource_id) const {
   return nullptr;
 }
 
+NSString* WebClient::GetDocumentStartScriptForAllFrames(
+    BrowserState* browser_state) const {
+  return @"";
+}
+
 NSString* WebClient::GetDocumentStartScriptForMainFrame(
     BrowserState* browser_state) const {
   return @"";
@@ -96,6 +97,14 @@ void WebClient::AllowCertificateError(
 
 bool WebClient::IsSlimNavigationManagerEnabled() const {
   return base::FeatureList::IsEnabled(web::features::kSlimNavigationManager);
+}
+
+void WebClient::PrepareErrorPage(NSError* error,
+                                 bool is_post,
+                                 bool is_off_the_record,
+                                 NSString** error_html) {
+  DCHECK(error);
+  *error_html = error.localizedDescription;
 }
 
 }  // namespace web

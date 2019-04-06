@@ -27,6 +27,7 @@
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"
 #include "media/filters/decoder_stream_traits.h"
+#include "platform_media/renderer/decoders/debug_buffer_logger.h"
 
 namespace media {
 
@@ -64,7 +65,7 @@ class WMFDecoderImpl {
   void Initialize(const DecoderConfig& config,
                   const InitCB& init_cb,
                   const OutputCB& output_cb);
-  void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb);
   void Reset(const base::Closure& closure);
 
@@ -126,6 +127,8 @@ class WMFDecoderImpl {
   // evr.dll still provides a stub that calls the function in mfplat.dll, so
   // this approach always works.
   decltype(MFGetStrideForBitmapInfoHeader)* get_stride_function_;
+
+  DebugBufferLogger debug_buffer_logger_;
 };
 
 }  // namespace media

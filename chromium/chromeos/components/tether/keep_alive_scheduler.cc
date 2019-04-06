@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/host_scan_cache.h"
+#include "chromeos/services/secure_channel/public/cpp/client/secure_channel_client.h"
 
 namespace chromeos {
 
@@ -16,23 +17,31 @@ namespace tether {
 const uint32_t KeepAliveScheduler::kKeepAliveIntervalMinutes = 4;
 
 KeepAliveScheduler::KeepAliveScheduler(
+    device_sync::DeviceSyncClient* device_sync_client,
+    secure_channel::SecureChannelClient* secure_channel_client,
     ActiveHost* active_host,
     BleConnectionManager* connection_manager,
     HostScanCache* host_scan_cache,
     DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map)
-    : KeepAliveScheduler(active_host,
+    : KeepAliveScheduler(device_sync_client,
+                         secure_channel_client,
+                         active_host,
                          connection_manager,
                          host_scan_cache,
                          device_id_tether_network_guid_map,
                          std::make_unique<base::RepeatingTimer>()) {}
 
 KeepAliveScheduler::KeepAliveScheduler(
+    device_sync::DeviceSyncClient* device_sync_client,
+    secure_channel::SecureChannelClient* secure_channel_client,
     ActiveHost* active_host,
     BleConnectionManager* connection_manager,
     HostScanCache* host_scan_cache,
     DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map,
-    std::unique_ptr<base::Timer> timer)
-    : active_host_(active_host),
+    std::unique_ptr<base::RepeatingTimer> timer)
+    : device_sync_client_(device_sync_client),
+      secure_channel_client_(secure_channel_client),
+      active_host_(active_host),
       connection_manager_(connection_manager),
       host_scan_cache_(host_scan_cache),
       device_id_tether_network_guid_map_(device_id_tether_network_guid_map),
@@ -52,7 +61,7 @@ void KeepAliveScheduler::OnActiveHostChanged(
     DCHECK(change_info.new_wifi_network_guid.empty());
 
     keep_alive_operation_.reset();
-    active_host_device_.reset();
+    active_host_device_ = base::nullopt;
     timer_->Stop();
     return;
   }
@@ -69,10 +78,10 @@ void KeepAliveScheduler::OnActiveHostChanged(
 }
 
 void KeepAliveScheduler::OnOperationFinished(
-    const cryptauth::RemoteDevice& remote_device,
+    cryptauth::RemoteDeviceRef remote_device,
     std::unique_ptr<DeviceStatus> device_status) {
   // Make a copy before destroying the operation below.
-  const cryptauth::RemoteDevice device_copy = remote_device;
+  const cryptauth::RemoteDeviceRef device_copy = remote_device;
 
   keep_alive_operation_->RemoveObserver(this);
   keep_alive_operation_.reset();
@@ -96,7 +105,7 @@ void KeepAliveScheduler::OnOperationFinished(
            .SetTetherNetworkGuid(
                device_id_tether_network_guid_map_
                    ->GetTetherNetworkGuidForDeviceId(device_copy.GetDeviceId()))
-           .SetDeviceName(device_copy.name)
+           .SetDeviceName(device_copy.name())
            .SetCarrier(carrier)
            .SetBatteryPercentage(battery_percentage)
            .SetSignalStrength(signal_strength)
@@ -108,7 +117,8 @@ void KeepAliveScheduler::SendKeepAliveTickle() {
   DCHECK(active_host_device_);
 
   keep_alive_operation_ = KeepAliveOperation::Factory::NewInstance(
-      *active_host_device_, connection_manager_);
+      *active_host_device_, device_sync_client_, secure_channel_client_,
+      connection_manager_);
   keep_alive_operation_->AddObserver(this);
   keep_alive_operation_->Initialize();
 }

@@ -7,17 +7,24 @@ source_set("cells") {
     "content_suggestions_gesture_commands.h",
     "content_suggestions_item.h",
     "content_suggestions_item.mm",
+    "content_suggestions_most_visited_action_item.h",
+    "content_suggestions_most_visited_action_item.mm",
     "content_suggestions_most_visited_item.h",
     "content_suggestions_most_visited_item.mm",
   ]
   deps = [
     ":cells_ui",
+    "resources:ntp_bookmarks_icon",
+    "resources:ntp_history_icon",
+    "resources:ntp_most_visited_tile",
+    "resources:ntp_readinglist_icon",
+    "resources:ntp_recent_icon",
     "//base",
     "//components/ntp_tiles",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui/collection_view",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
-    "//ios/chrome/browser/ui/favicon:favicon_ui",
+    "//ios/chrome/common/favicon",
     "//ui/base",
     "//url",
   ]
@@ -26,6 +33,8 @@ source_set("cells") {
 
 source_set("cells_ui") {
   sources = [
+    "content_suggestions_articles_header_item.h",
+    "content_suggestions_articles_header_item.mm",
     "content_suggestions_cell.h",
     "content_suggestions_cell.mm",
     "content_suggestions_footer_item.h",
@@ -34,8 +43,12 @@ source_set("cells_ui") {
     "content_suggestions_header_item.mm",
     "content_suggestions_learn_more_item.h",
     "content_suggestions_learn_more_item.mm",
+    "content_suggestions_most_visited_action_cell.h",
+    "content_suggestions_most_visited_action_cell.mm",
     "content_suggestions_most_visited_cell.h",
     "content_suggestions_most_visited_cell.mm",
+    "content_suggestions_most_visited_constants.h",
+    "content_suggestions_most_visited_constants.mm",
     "content_suggestions_text_item.h",
     "content_suggestions_text_item.mm",
     "content_suggestions_whats_new_item.h",
@@ -49,10 +62,10 @@ source_set("cells_ui") {
     "//ios/chrome/browser/ui/collection_view",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
-    "//ios/chrome/browser/ui/favicon:favicon_ui",
     "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common",
+    "//ios/chrome/common/favicon",
     "//ui/base",
   ]
   public_deps = [
@@ -78,7 +91,7 @@ source_set("unit_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view",
-    "//ios/chrome/browser/ui/favicon:favicon_ui",
+    "//ios/chrome/common/favicon",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",

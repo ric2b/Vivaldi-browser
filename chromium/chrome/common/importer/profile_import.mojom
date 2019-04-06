@@ -5,9 +5,8 @@
 module chrome.mojom;
 
 import "components/autofill/content/common/autofill_types.mojom";
-import "mojo/common/string16.mojom";
-import "mojo/common/values.mojom";
-import "url/mojo/url.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "url/mojom/url.mojom";
 
 const string kProfileImportServiceName = "profile_import";
 
@@ -36,9 +35,6 @@ struct ImporterIE7PasswordInfo;
 enum ImportItem;
 
 [Native]
-struct ImportConfig;
-
-[Native]
 struct ImportedNotesEntry;
 
 [Native]
@@ -62,7 +58,7 @@ interface ProfileImportObserver {
       int32 visit_source);
   OnHomePageImportReady(url.mojom.Url home_page);
   OnBookmarksImportStart(
-      mojo.common.mojom.String16 first_folder_name,
+      mojo_base.mojom.String16 first_folder_name,
       uint32 total_bookmarks_count);
   OnBookmarksImportGroup(array<ImportedBookmarkEntry> bookmarks_group);
   OnFaviconsImportStart(uint32 total_favicons_count);
@@ -78,7 +74,7 @@ interface ProfileImportObserver {
   // Windows only:
   OnIE7PasswordReceived(ImporterIE7PasswordInfo importer_password_info);
   OnNotesImportStart(
-      mojo.common.mojom.String16 first_folder_name,
+      mojo_base.mojom.String16 first_folder_name,
       uint32 total_notes_count);
   OnNotesImportGroup(array<ImportedNotesEntry> notes_group);
   OnSpeedDialImportStart(uint32 total_count);
@@ -91,8 +87,8 @@ interface ProfileImport {
   // to import.
   StartImport(
       SourceProfile source_profile,
-      ImportConfig items,
-      mojo.common.mojom.DictionaryValue localized_strings,
+      uint16 items,
+      map<uint32, string> localized_strings,
       ProfileImportObserver observer);
 
   // Stop the importer.

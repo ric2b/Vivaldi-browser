@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env vpython
 # Copyright 2015 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -86,8 +86,8 @@ def main():
 
   symbol_extractor.SetArchitecture(options.arch)
   obj_dir = cygprofile_utils.GetObjDir(binary_filename)
-  symbol_to_sections_map = \
-      cyglog_to_orderfile.GetSymbolToSectionsMapFromObjectFiles(obj_dir)
+  symbol_to_sections_map = cyglog_to_orderfile.ObjectFileProcessor(
+      obj_dir).GetSymbolToSectionsMap()
   section_to_symbols_map = cygprofile_utils.InvertMapping(
       symbol_to_sections_map)
   symbols = patch_orderfile.GetSymbolsFromOrderfile(orderfile_filename,

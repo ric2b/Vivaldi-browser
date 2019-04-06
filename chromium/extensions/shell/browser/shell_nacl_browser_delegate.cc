@@ -8,6 +8,7 @@
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -52,16 +53,16 @@ bool ShellNaClBrowserDelegate::DialogsAreSuppressed() {
 bool ShellNaClBrowserDelegate::GetCacheDirectory(base::FilePath* cache_dir) {
   // Just use the general cache directory, not a subdirectory like Chrome does.
 #if defined(OS_POSIX)
-  return PathService::Get(base::DIR_CACHE, cache_dir);
+  return base::PathService::Get(base::DIR_CACHE, cache_dir);
 #elif defined(OS_WIN)
   // TODO(yoz): Find an appropriate persistent directory to use here.
-  return PathService::Get(base::DIR_TEMP, cache_dir);
+  return base::PathService::Get(base::DIR_TEMP, cache_dir);
 #endif
 }
 
 bool ShellNaClBrowserDelegate::GetPluginDirectory(base::FilePath* plugin_dir) {
   // On Posix, plugins are in the module directory.
-  return PathService::Get(base::DIR_MODULE, plugin_dir);
+  return base::PathService::Get(base::DIR_MODULE, plugin_dir);
 }
 
 bool ShellNaClBrowserDelegate::GetPnaclDirectory(base::FilePath* pnacl_dir) {
@@ -113,11 +114,13 @@ bool ShellNaClBrowserDelegate::MapUrlToLocalFilePath(
     bool use_blocking_api,
     const base::FilePath& profile_directory,
     base::FilePath* file_path) {
-  scoped_refptr<InfoMap> info_map =
-      ExtensionSystem::Get(browser_context_)->info_map();
+  ExtensionSystem* extension_system = ExtensionSystem::Get(browser_context_);
+  DCHECK(extension_system);
+
   // Check that the URL is recognized by the extension system.
   const Extension* extension =
-      info_map->extensions().GetExtensionOrAppByURL(file_url);
+      extension_system->info_map()->extensions().GetExtensionOrAppByURL(
+          file_url);
   if (!extension)
     return false;
 

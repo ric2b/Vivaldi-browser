@@ -58,8 +58,6 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
       const std::string& device_id,
       const LogCallback& log_callback) override;
 
-  static snd_pcm_format_t BitsToFormat(int bits_per_sample);
-
   // Checks if |device_id| corresponds to the default device.
   // Set |is_input| to true for capture devices, false for output.
   bool IsDefault(const std::string& device_id, bool is_input);
@@ -81,6 +79,9 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
   // Get default output buffer size for this board.
   int GetDefaultOutputBufferSizePerBoard();
 
+  // Get if system AEC is supported or not for this board.
+  bool GetSystemAecSupportedPerBoard();
+
   void GetAudioDeviceNamesImpl(bool is_input, AudioDeviceNames* device_names);
 
   std::string GetHardwareDeviceFromDeviceId(
@@ -99,6 +100,8 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
                                               base::WaitableEvent* event);
   void GetDefaultOutputBufferSizeOnMainThread(int32_t* buffer_size,
                                               base::WaitableEvent* event);
+  void GetSystemAecSupportedOnMainThread(bool* system_aec_supported,
+                                         base::WaitableEvent* event);
 
   void WaitEventOrShutdown(base::WaitableEvent* event);
 

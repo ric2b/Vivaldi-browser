@@ -13,15 +13,15 @@
 #include "base/vivaldi_switches.h"
 #include "base/win/win_util.h"
 #include "chrome/installer/util/util_constants.h"
+#include "installer/util/vivaldi_install_util.h"
 #include "update_notifier/update_notifier_switches.h"
-
 
 namespace {
 
 base::FilePath GetUpdateNotifierPath() {
   base::FilePath exe_dir;
   base::PathService::Get(base::DIR_EXE, &exe_dir);
-  return exe_dir.Append(installer::kVivaldiUpdateNotifierExe);
+  return exe_dir.Append(vivaldi::constants::kVivaldiUpdateNotifierExe);
 }
 }  // Anonymous namespace
 

@@ -23,8 +23,8 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/test/spawned_test_server/remote_test_server_proxy.h"
 #include "net/test/spawned_test_server/remote_test_server_spawner_request.h"
+#include "net/test/tcp_socket_proxy.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -88,16 +88,20 @@ bool RemoteTestServer::StartInBackground() {
   // pass right server type to Python test server.
   arguments_dict.SetString("server-type", GetServerTypeString(type()));
 
-  // If the server is not on localhost and it's expected to start OCSP server
-  // then pass OCSP proxy port number, so the server can generate certificates
-  // for the OCSP server valid for the proxied port.
+  // If the server is expected to handle OCSP, it needs to know what port
+  // number to write into the AIA urls. Initialize the ocsp proxy to
+  // reserve a port, and pass it to the testserver so it can generate
+  // certificates for the OCSP server valid for the proxied port. Note that
+  // the test spawer may forward OCSP a second time, from the device to the
+  // host.
   bool ocsp_server_enabled =
       type() == TYPE_HTTPS && (ssl_options().server_certificate ==
                                    SSLOptions::CERT_AUTO_AIA_INTERMEDIATE ||
                                !ssl_options().GetOCSPArgument().empty());
-  if (config_.address() != IPAddress::IPv4Localhost() && ocsp_server_enabled) {
-    ocsp_proxy_ =
-        std::make_unique<RemoteTestServerProxy>(io_thread_.task_runner());
+  if (ocsp_server_enabled) {
+    ocsp_proxy_ = std::make_unique<TcpSocketProxy>(io_thread_.task_runner());
+    bool initialized = ocsp_proxy_->Initialize();
+    CHECK(initialized);
     arguments_dict.SetKey("ocsp-proxy-port-number",
                           base::Value(ocsp_proxy_->local_port()));
   }
@@ -135,22 +139,24 @@ bool RemoteTestServer::BlockUntilStarted() {
   // forward connections to the server.
   if (config_.address() != IPAddress::IPv4Localhost()) {
     test_server_proxy_ =
-        std::make_unique<RemoteTestServerProxy>(io_thread_.task_runner());
+        std::make_unique<TcpSocketProxy>(io_thread_.task_runner());
+    bool initialized = test_server_proxy_->Initialize();
+    CHECK(initialized);
     test_server_proxy_->Start(IPEndPoint(config_.address(), remote_port_));
-
-    if (ocsp_proxy_) {
-      const base::Value* ocsp_port_value = server_data().FindKey("ocsp_port");
-      if (ocsp_port_value && ocsp_port_value->is_int()) {
-        ocsp_proxy_->Start(
-            IPEndPoint(config_.address(), ocsp_port_value->GetInt()));
-      } else {
-        LOG(WARNING) << "testserver.py didn't return ocsp_port.";
-      }
-    }
 
     SetPort(test_server_proxy_->local_port());
   } else {
     SetPort(remote_port_);
+  }
+
+  if (ocsp_proxy_) {
+    const base::Value* ocsp_port_value = server_data().FindKey("ocsp_port");
+    if (ocsp_port_value && ocsp_port_value->is_int()) {
+      ocsp_proxy_->Start(
+          IPEndPoint(config_.address(), ocsp_port_value->GetInt()));
+    } else {
+      LOG(WARNING) << "testserver.py didn't return ocsp_port.";
+    }
   }
 
   return SetupWhenServerStarted();
@@ -184,7 +190,7 @@ bool RemoteTestServer::Stop() {
 // device.
 base::FilePath RemoteTestServer::GetDocumentRoot() const {
   base::FilePath src_dir;
-  PathService::Get(base::DIR_SOURCE_ROOT, &src_dir);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir);
   return src_dir.Append(document_root());
 }
 

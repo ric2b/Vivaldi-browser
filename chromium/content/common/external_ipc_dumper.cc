@@ -27,10 +27,11 @@ const char kSetDumpDirectoryEntryName[] = "SetDumpDirectory";
 
 namespace content {
 
+NO_SANITIZE("cfi-icall")
 IPC::ChannelProxy::OutgoingMessageFilter* LoadExternalIPCDumper(
     const base::FilePath& dump_directory) {
   base::FilePath module_path;
-  if (!PathService::Get(base::DIR_MODULE, &module_path)) {
+  if (!base::PathService::Get(base::DIR_MODULE, &module_path)) {
     LOG(ERROR) << "Unable to get message dump module directory.";
     return NULL;
   }

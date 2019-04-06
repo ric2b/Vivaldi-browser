@@ -15,12 +15,11 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/controls/table/table_view.h"
-#include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -32,15 +31,12 @@ constexpr char kTemplate[] = "share?title={title}";
 constexpr char kUrl1[] = "https://appone.com/path/bits";
 constexpr char kUrl2[] = "https://apptwo.xyz";
 
-class WebShareTargetPickerViewTest : public views::ViewsTestBase {
+class WebShareTargetPickerViewTest : public ChromeViewsTestBase {
  public:
   WebShareTargetPickerViewTest() {}
 
   void SetUp() override {
-    ViewsTestBase::SetUp();
-
-    test_views_delegate()->set_layout_provider(
-        ChromeLayoutProvider::CreateLayoutProvider());
+    ChromeViewsTestBase::SetUp();
 
     SetConstrainedWindowViewsClient(CreateChromeConstrainedWindowViewsClient());
 
@@ -61,7 +57,7 @@ class WebShareTargetPickerViewTest : public views::ViewsTestBase {
     quit_closure_ = base::Closure();
     constrained_window::SetConstrainedWindowViewsClient(nullptr);
 
-    ViewsTestBase::TearDown();
+    ChromeViewsTestBase::TearDown();
   }
 
  protected:
@@ -127,8 +123,8 @@ TEST_F(WebShareTargetPickerViewTest, EmptyListCancel) {
 // Table with 2 targets. Choose second target and share.
 TEST_F(WebShareTargetPickerViewTest, ChooseItem) {
   std::vector<WebShareTarget> targets;
-  targets.emplace_back(GURL(kUrl1), kAppName1, kTemplate);
-  targets.emplace_back(GURL(kUrl2), kAppName2, kTemplate);
+  targets.emplace_back(GURL(kUrl1), kAppName1, GURL(kTemplate));
+  targets.emplace_back(GURL(kUrl2), kAppName2, GURL(kTemplate));
 
   CreateView(std::move(targets));
   EXPECT_EQ(2, table()->RowCount());
@@ -154,13 +150,13 @@ TEST_F(WebShareTargetPickerViewTest, ChooseItem) {
 
   run_loop.Run();
 
-  EXPECT_EQ(WebShareTarget(GURL(kUrl2), kAppName2, kTemplate), *result());
+  EXPECT_EQ(WebShareTarget(GURL(kUrl2), kAppName2, GURL(kTemplate)), *result());
 }
 
 // Table with 1 target. Select using double-click.
 TEST_F(WebShareTargetPickerViewTest, ChooseItemWithDoubleClick) {
   std::vector<WebShareTarget> targets;
-  targets.emplace_back(GURL(kUrl1), kAppName1, kTemplate);
+  targets.emplace_back(GURL(kUrl1), kAppName1, GURL(kTemplate));
 
   CreateView(std::move(targets));
   EXPECT_EQ(1, table()->RowCount());
@@ -176,13 +172,13 @@ TEST_F(WebShareTargetPickerViewTest, ChooseItemWithDoubleClick) {
 
   run_loop.Run();
 
-  EXPECT_EQ(WebShareTarget(GURL(kUrl1), kAppName1, kTemplate), *result());
+  EXPECT_EQ(WebShareTarget(GURL(kUrl1), kAppName1, GURL(kTemplate)), *result());
 }
 
 // Table with 1 target. Select, share and GetText.
 TEST_F(WebShareTargetPickerViewTest, GetTextAfterAccept) {
   std::vector<WebShareTarget> targets;
-  targets.emplace_back(GURL(kUrl1), kAppName1, kTemplate);
+  targets.emplace_back(GURL(kUrl1), kAppName1, GURL(kTemplate));
 
   CreateView(std::move(targets));
   EXPECT_EQ(1, table()->RowCount());
@@ -201,5 +197,5 @@ TEST_F(WebShareTargetPickerViewTest, GetTextAfterAccept) {
   EXPECT_EQ(base::ASCIIToUTF16("App One (https://appone.com/)"),
             table()->model()->GetText(0, 0));
 
-  EXPECT_EQ(WebShareTarget(GURL(kUrl1), kAppName1, kTemplate), *result());
+  EXPECT_EQ(WebShareTarget(GURL(kUrl1), kAppName1, GURL(kTemplate)), *result());
 }

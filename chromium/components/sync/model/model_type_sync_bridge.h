@@ -10,19 +10,18 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "components/sync/engine/activation_context.h"
-#include "components/sync/model/conflict_resolution.h"
 #include "components/sync/model/entity_change.h"
-#include "components/sync/model/entity_data.h"
-#include "components/sync/model/model_error.h"
 #include "components/sync/model/model_type_change_processor.h"
 
 namespace syncer {
 
+class ConflictResolution;
 class DataBatch;
+struct DataTypeActivationRequest;
+struct EntityData;
 class MetadataChangeList;
+class ModelError;
 
 // Interface implemented by model types to receive updates from sync via a
 // ModelTypeChangeProcessor. Provides a way for sync to update the data and
@@ -32,17 +31,24 @@ class MetadataChangeList;
 // immediately begin locally tracking changes and can start syncing with the
 // server soon afterward. If an error occurs during startup, the processor's
 // ReportError() method should be called instead of ModelReadyToSync().
-class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
+class ModelTypeSyncBridge {
  public:
-  using DataCallback = base::Callback<void(std::unique_ptr<DataBatch>)>;
+  using DataCallback = base::OnceCallback<void(std::unique_ptr<DataBatch>)>;
   using StorageKeyList = std::vector<std::string>;
-  using ChangeProcessorFactory = base::RepeatingCallback<std::unique_ptr<
-      ModelTypeChangeProcessor>(ModelType type, ModelTypeSyncBridge* bridge)>;
 
-  ModelTypeSyncBridge(const ChangeProcessorFactory& change_processor_factory,
-                      ModelType type);
+  enum class StopSyncResponse {
+    kModelStillReadyToSync,
+    kModelNoLongerReadyToSync
+  };
+
+  ModelTypeSyncBridge(
+      std::unique_ptr<ModelTypeChangeProcessor> change_processor);
 
   virtual ~ModelTypeSyncBridge();
+
+  // Called by the processor as a notification that sync has been started by the
+  // ModelTypeController.
+  virtual void OnSyncStarting(const DataTypeActivationRequest& request);
 
   // Creates an object used to communicate changes in the sync metadata to the
   // model type store.
@@ -85,7 +91,8 @@ class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
   // Asynchronously retrieve all of the local sync data. |callback| should be
   // invoked if the operation is successful, otherwise the processor's
   // ReportError method should be called.
-  virtual void GetAllData(DataCallback callback) = 0;
+  // Used for getting all data in Sync Node Browser of chrome://sync-internals.
+  virtual void GetAllDataForDebugging(DataCallback callback) = 0;
 
   // Get or generate a client tag for |entity_data|. This must be the same tag
   // that was/would have been generated in the SyncableService/Directory world
@@ -126,27 +133,21 @@ class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
       const EntityData& local_data,
       const EntityData& remote_data) const;
 
-  // Called by the DataTypeController to gather additional information needed
-  // before the processor can be connected to a sync worker. Once the
-  // metadata has been loaded, the info is collected and given to |callback|.
-  void OnSyncStarting(const ModelErrorHandler& error_handler,
-                      const ModelTypeChangeProcessor::StartCallback& callback);
-
-  // Indicates that we no longer want to do any sync-related things for this
-  // data type. Severs all ties to the sync thread, deletes all local sync
-  // metadata, and then destroys the change processor.
-  virtual void DisableSync();
+  // Similar to ApplySyncChanges() but called by the processor when sync
+  // is in the process of being stopped. If |delete_metadata_change_list| is not
+  // null, it indicates that sync metadata must be deleted (i.e. the datatype
+  // was disabled), and |*delete_metadata_change_list| contains a change list to
+  // remove all metadata that the processor knows about (the bridge may decide
+  // to implement deletion by other means).
+  virtual StopSyncResponse ApplyStopSyncChanges(
+      std::unique_ptr<MetadataChangeList> delete_metadata_change_list);
 
   // Needs to be informed about any model change occurring via Delete() and
-  // Put(). The changing metadata should be stored to persistent storage before
-  // or atomically with the model changes.
-  ModelTypeChangeProcessor* change_processor() const;
+  // Put(). The changing metadata should be stored to persistent storage
+  // before or atomically with the model changes.
+  ModelTypeChangeProcessor* change_processor();
 
  private:
-  const ModelType type_;
-
-  const ChangeProcessorFactory change_processor_factory_;
-
   std::unique_ptr<ModelTypeChangeProcessor> change_processor_;
 };
 

@@ -38,7 +38,7 @@ SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {
 }
 
 Profile* SavedpasswordsGetListFunction::GetProfile() {
-  return ChromeUIThreadExtensionFunction::GetProfile();
+  return Profile::FromBrowserContext(browser_context());
 }
 
 #if !defined(OS_ANDROID)
@@ -111,7 +111,7 @@ bool SavedpasswordsRemoveFunction::RunAsync() {
 }
 
 Profile* SavedpasswordsRemoveFunction::GetProfile() {
-  return ChromeUIThreadExtensionFunction::GetProfile();
+  return Profile::FromBrowserContext(browser_context());
 }
 void SavedpasswordsRemoveFunction::ShowPassword(
     size_t index,
@@ -170,6 +170,7 @@ bool SavedpasswordsAddFunction::RunAsync() {
       base::UTF8ToUTF16(params->password_form.username);
   password_form.password_value =
       base::UTF8ToUTF16(*params->password_form.password.get());
+  password_form.date_created = base::Time::Now();
 
   password_store->AddLogin(password_form);
 

@@ -24,6 +24,7 @@
 #include "storage/browser/fileapi/file_system_usage_cache.h"
 #include "storage/common/fileapi/file_system_util.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
 
@@ -138,8 +139,8 @@ std::string GetFileLookupKey(
 //  - Directory structure is tree, i.e. connected and acyclic.
 class DatabaseCheckHelper {
  public:
-  typedef storage::SandboxDirectoryDatabase::FileId FileId;
-  typedef storage::SandboxDirectoryDatabase::FileInfo FileInfo;
+  using FileId = storage::SandboxDirectoryDatabase::FileId;
+  using FileInfo = storage::SandboxDirectoryDatabase::FileInfo;
 
   DatabaseCheckHelper(storage::SandboxDirectoryDatabase* dir_db,
                       leveldb::DB* db,
@@ -355,16 +356,14 @@ bool DatabaseCheckHelper::ScanHierarchy() {
     std::vector<FileId> children;
     if (!dir_db_->ListChildren(dir_id, &children))
       return false;
-    for (std::vector<FileId>::iterator itr = children.begin();
-         itr != children.end();
-         ++itr) {
+    for (const FileId& id : children) {
       // Any directory must not have root directory as child.
-      if (!*itr)
+      if (!id)
         return false;
 
       // Check if the child knows the parent as its parent.
       FileInfo file_info;
-      if (!dir_db_->GetFileInfo(*itr, &file_info))
+      if (!dir_db_->GetFileInfo(id, &file_info))
         return false;
       if (file_info.parent_id != dir_id)
         return false;
@@ -372,11 +371,11 @@ bool DatabaseCheckHelper::ScanHierarchy() {
       // Check if the parent knows the name of its child correctly.
       FileId file_id;
       if (!dir_db_->GetChildWithName(dir_id, file_info.name, &file_id) ||
-          file_id != *itr)
+          file_id != id)
         return false;
 
       if (file_info.is_directory())
-        directories.push(*itr);
+        directories.push(id);
       else
         ++visited_files;
       ++visited_links;
@@ -454,16 +453,11 @@ bool SandboxDirectoryDatabase::GetChildWithName(
 
 bool SandboxDirectoryDatabase::GetFileWithPath(
     const base::FilePath& path, FileId* file_id) {
-  std::vector<base::FilePath::StringType> components;
-  VirtualPath::GetComponents(path, &components);
   FileId local_id = 0;
-  std::vector<base::FilePath::StringType>::iterator iter;
-  for (iter = components.begin(); iter != components.end(); ++iter) {
-    base::FilePath::StringType name;
-    name = *iter;
-    if (name == FILE_PATH_LITERAL("/"))
+  for (const auto& path_component : VirtualPath::GetComponents(path)) {
+    if (path_component == FILE_PATH_LITERAL("/"))
       continue;
-    if (!GetChildWithName(local_id, name, &local_id))
+    if (!GetChildWithName(local_id, path_component, &local_id))
       return false;
   }
   *file_id = local_id;
@@ -764,10 +758,10 @@ bool SandboxDirectoryDatabase::Init(RecoveryOption recovery_option) {
       UMA_HISTOGRAM_ENUMERATION(kDatabaseRepairHistogramLabel,
                                 DB_REPAIR_FAILED, DB_REPAIR_MAX);
       LOG(WARNING) << "Failed to repair SandboxDirectoryDatabase.";
-      // fall through
+      FALLTHROUGH;
     case DELETE_ON_CORRUPTION:
       LOG(WARNING) << "Clearing SandboxDirectoryDatabase.";
-      if (!base::DeleteFile(filesystem_data_directory_, true))
+      if (!leveldb_chrome::DeleteDB(filesystem_data_directory_, options).ok())
         return false;
       if (!base::CreateDirectory(filesystem_data_directory_))
         return false;

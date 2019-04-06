@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 #include <string>
-#include <unordered_map>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
@@ -83,6 +83,7 @@ struct Change {
   gfx::Rect bounds2;
   viz::FrameSinkId frame_sink_id;
   base::Optional<viz::LocalSurfaceId> local_surface_id;
+  // TODO(sky): rename, this is Event::event_type.
   int32_t event_action;
   bool matches_pointer_watcher;
   std::string embed_url;
@@ -98,7 +99,7 @@ struct Change {
   float device_scale_factor;
   gfx::Transform transform;
   // Set in OnWindowInputEvent() if the event is a KeyEvent.
-  std::unordered_map<std::string, std::vector<uint8_t>> key_event_properties;
+  base::flat_map<std::string, std::vector<uint8_t>> key_event_properties;
   int64_t display_id;
   gfx::Point location1;
   gfx::PointF location2;
@@ -179,8 +180,7 @@ class TestChangeTracker {
       int64_t display_id,
       const gfx::PointF& event_location_in_screen_pixel_layout,
       bool matches_pointer_watcher);
-  void OnPointerEventObserved(const ui::Event& event,
-                              uint32_t window_id);
+  void OnPointerEventObserved(const ui::Event& event, Id window_id);
   void OnWindowSharedPropertyChanged(
       Id window_id,
       const std::string& name,

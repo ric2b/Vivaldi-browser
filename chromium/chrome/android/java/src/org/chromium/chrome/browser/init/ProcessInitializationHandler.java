@@ -8,7 +8,6 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.SystemClock;
 import android.support.annotation.WorkerThread;
@@ -20,6 +19,7 @@ import android.view.inputmethod.InputMethodSubtype;
 import com.google.ipc.invalidation.external.client.android.service.AndroidLogger;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -41,6 +41,7 @@ import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.DevToolsServer;
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
+import org.chromium.chrome.browser.contacts_picker.ContactsPickerDialog;
 import org.chromium.chrome.browser.crash.LogcatExtractionRunnable;
 import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.download.DownloadController;
@@ -51,7 +52,9 @@ import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerat
 import org.chromium.chrome.browser.invalidation.UniqueIdInvalidationClientNameGenerator;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
+import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
+import org.chromium.chrome.browser.metrics.PackageMetrics;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
@@ -59,7 +62,6 @@ import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.PhotoPickerDialog;
-import org.chromium.chrome.browser.physicalweb.PhysicalWeb;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
@@ -68,17 +70,18 @@ import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
 import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.sync.SyncController;
+import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.webapps.WebApkVersionManager;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountsChangeObserver;
-import org.chromium.content.browser.ChildProcessLauncherHelper;
-import org.chromium.content.common.ContentSwitches;
-import org.chromium.device.geolocation.LocationProviderFactory;
+import org.chromium.content_public.browser.ChildProcessLauncherHelper;
+import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.printing.PrintDocumentAdapterWrapper;
 import org.chromium.printing.PrintingControllerImpl;
+import org.chromium.ui.ContactsPickerListener;
 import org.chromium.ui.PhotoPickerListener;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.SelectFileDialog;
@@ -182,9 +185,6 @@ public class ProcessInitializationHandler {
         UniqueIdentificationGeneratorFactory.registerGenerator(SyncController.GENERATOR_ID,
                 new UuidBasedUniqueIdentificationGenerator(
                         application, SESSIONS_UUID_PREF_KEY), false);
-
-        // Indicate that we can use the GMS location provider.
-        LocationProviderFactory.useGmsCoreLocationProvider();
     }
 
     /**
@@ -221,12 +221,32 @@ public class ProcessInitializationHandler {
                         boolean allowMultiple, List<String> mimeTypes) {
                     mDialog = new PhotoPickerDialog(context, listener, allowMultiple, mimeTypes);
                     mDialog.getWindow().getAttributes().windowAnimations =
-                            R.style.PhotoPickerDialogAnimation;
+                            R.style.PickerDialogAnimation;
                     mDialog.show();
                 }
 
                 @Override
                 public void onPhotoPickerDismissed() {
+                    mDialog = null;
+                }
+            });
+        }
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.NEW_CONTACTS_PICKER)) {
+            UiUtils.setContactsPickerDelegate(new UiUtils.ContactsPickerDelegate() {
+                private ContactsPickerDialog mDialog;
+
+                @Override
+                public void showContactsPicker(Context context, ContactsPickerListener listener,
+                        boolean allowMultiple, List<String> mimeTypes) {
+                    mDialog = new ContactsPickerDialog(context, listener, allowMultiple, mimeTypes);
+                    mDialog.getWindow().getAttributes().windowAnimations =
+                            R.style.PickerDialogAnimation;
+                    mDialog.show();
+                }
+
+                @Override
+                public void onContactsPickerDismissed() {
                     mDialog = null;
                 }
             });
@@ -307,15 +327,17 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                // Start or stop Physical Web
-                PhysicalWeb.onChromeStart();
+                LocaleManager.getInstance().recordStartupMetrics();
             }
         });
 
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                LocaleManager.getInstance().recordStartupMetrics();
+                if (HomepageManager.shouldShowHomepageSetting()) {
+                    RecordHistogram.recordBooleanHistogram("Settings.ShowHomeButtonPreferenceState",
+                            HomepageManager.isHomepageEnabled());
+                }
             }
         });
 
@@ -406,6 +428,11 @@ public class ProcessInitializationHandler {
 
         deferredStartupHandler.addDeferredTask(
                 () -> { BuildHooksAndroid.maybeRecordResourceMetrics(); });
+
+        deferredStartupHandler.addDeferredTask(() -> {
+            MediaViewerUtils.updateMediaLauncherActivityEnabled(
+                    ContextUtils.getApplicationContext());
+        });
     }
 
     private void initChannelsAsync() {
@@ -463,6 +490,7 @@ public class ProcessInitializationHandler {
                     // instance is initialized.
                     WebappRegistry.warmUpSharedPrefs();
 
+                    PackageMetrics.recordPackageStats();
                     return null;
                 } finally {
                     TraceEvent.end("ChromeBrowserInitializer.onDeferredStartup.doInBackground");
@@ -680,7 +708,7 @@ public class ProcessInitializationHandler {
                 if (!cacheFile.exists()) {
                     return null;
                 }
-                long cacheFileSizeKb = cacheFile.length() / 1024;
+                long cacheFileSizeKb = ConversionUtils.bytesToKilobytes(cacheFile.length());
                 // Clamp size to [minFileSizeKb, maxFileSizeKb). This also guarantees that the
                 // int-cast below is safe.
                 if (cacheFileSizeKb < MIN_CACHE_FILE_SIZE_KB) {

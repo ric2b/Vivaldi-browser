@@ -299,11 +299,19 @@ void ShelfModel::SetShelfItemDelegate(
   }
 }
 
-ShelfItemDelegate* ShelfModel::GetShelfItemDelegate(const ShelfID& shelf_id) {
+ShelfItemDelegate* ShelfModel::GetShelfItemDelegate(
+    const ShelfID& shelf_id) const {
   auto it = id_to_item_delegate_map_.find(shelf_id);
   if (it != id_to_item_delegate_map_.end())
     return it->second.get();
   return nullptr;
+}
+
+AppWindowLauncherItemController* ShelfModel::GetAppWindowLauncherItemController(
+    const ShelfID& shelf_id) {
+  ShelfItemDelegate* item_delegate = GetShelfItemDelegate(shelf_id);
+  return item_delegate ? item_delegate->AsAppWindowLauncherItemController()
+                       : nullptr;
 }
 
 void ShelfModel::AddObserver(ShelfModelObserver* observer) {

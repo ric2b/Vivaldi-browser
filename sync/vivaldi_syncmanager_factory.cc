@@ -1,10 +1,11 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
 #include "sync/vivaldi_syncmanager_factory.h"
-#include "sync/vivaldi_syncmanager.h"
+
+#include <string>
+#include <memory>
 
 #include "base/memory/ptr_util.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -12,26 +13,24 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/sync/supervised_user_signin_manager_wrapper.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/common/channel_info.h"
-
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
-
+#include "components/signin/core/browser/signin_manager.h"
+#include "components/sync/driver/signin_manager_wrapper.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-
+#include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
-
 #include "notes/notes_factory.h"
-#include "sync/vivaldi_profile_oauth2_token_service.h"
-#include "sync/vivaldi_profile_oauth2_token_service_factory.h"
-#include "sync/vivaldi_signin_manager.h"
-#include "sync/vivaldi_signin_manager_factory.h"
 #include "sync/vivaldi_sync_client.h"
+#include "sync/vivaldi_syncmanager.h"
 
 namespace vivaldi {
 
@@ -93,7 +92,7 @@ VivaldiSyncManagerFactory::VivaldiSyncManagerFactory()
 #endif
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(PasswordStoreFactory::GetInstance());
-  DependsOn(VivaldiSigninManagerFactory::GetInstance());
+  DependsOn(SigninManagerFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
 #if !defined(OS_ANDROID)
   DependsOn(
@@ -107,15 +106,28 @@ VivaldiSyncManagerFactory::~VivaldiSyncManagerFactory() {}
 KeyedService* VivaldiSyncManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = static_cast<Profile*>(context);
-  VivaldiSigninManager* signin =
-      VivaldiSigninManagerFactory::GetForProfile(profile);
+  SigninManager* signin =
+      SigninManagerFactory::GetForProfile(profile);
 
   ProfileSyncService::InitParams init_params;
 
   init_params.signin_wrapper =
-      base::WrapUnique(new SupervisedUserSigninManagerWrapper(profile, signin));
-  init_params.oauth2_token_service =
-      VivaldiProfileOAuth2TokenServiceFactory::GetForProfile(profile);
+      std::make_unique<SigninManagerWrapper>(
+          IdentityManagerFactory::GetForProfile(profile), signin);
+  init_params.url_loader_factory =
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess();
+#if defined(OS_WIN)
+  init_params.signin_scoped_device_id_callback =
+    base::BindRepeating([]() { return std::string("local_device"); });
+#else
+  // Note: base::Unretained(signin_client) is safe because the SigninClient is
+  // guaranteed to outlive the PSS, per a DependsOn() above (and because PSS
+  // clears the callback in its Shutdown()).
+  init_params.signin_scoped_device_id_callback = base::BindRepeating(
+    &SigninClient::GetSigninScopedDeviceId,
+    base::Unretained(ChromeSigninClientFactory::GetForProfile(profile)));
+#endif
 
   init_params.start_behavior = ProfileSyncService::MANUAL_START;
 
@@ -123,7 +135,6 @@ KeyedService* VivaldiSyncManagerFactory::BuildServiceInstanceFor(
   init_params.sync_client = base::WrapUnique(sync_client);
 
   init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
-  init_params.base_directory = profile->GetPath();
   init_params.url_request_context = profile->GetRequestContext();
   init_params.debug_identifier = profile->GetDebugName();
   init_params.channel = chrome::GetChannel();

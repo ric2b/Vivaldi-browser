@@ -7,11 +7,11 @@ module media_router.mojom;
 import "chrome/common/media_router/mojo/media_controller.mojom";
 import "chrome/common/media_router/mojo/media_status.mojom";
 import "media/mojo/interfaces/mirror_service_remoting.mojom";
-import "mojo/common/time.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "net/interfaces/ip_address.mojom";
 import "net/interfaces/ip_endpoint.mojom";
-import "url/mojo/origin.mojom";
-import "url/mojo/url.mojom";
+import "url/mojom/origin.mojom";
+import "url/mojom/url.mojom";
 
 // This must stay in sync with ash.mojom.SinkIconType.
 enum SinkIconType {
@@ -92,7 +92,9 @@ enum RouteControllerType {
   kMirroring
 };
 
-// Should be kept in sync with media_route.h.
+// MediaRoute objects contain the status and metadata of a routing
+// operation.
+// This struct should be kept in sync with media_route.h.
 struct MediaRoute {
   // The ID of this media route, e.g. "r_PR1O_blkC9dsKp-tb1ti8qurOo".
   string media_route_id;
@@ -148,8 +150,13 @@ struct Issue {
   };
 
   // If set, the ID of the route to which this issue pertains.
-  // If not set (default), then this is a global issue.
-  string? route_id;
+  // If this is an empty string (default), then this is a global issue.
+  string route_id;
+
+  // The ID of the sink associated with this issue.
+  // If this is an empty string (default), then this is a global issue.
+  // TODO(https://crbug.com/554646): Associate all issues with sinks.
+  string sink_id;
 
   Severity severity;
 
@@ -197,7 +204,7 @@ struct SinkSearchCriteria {
 // - RouteRequestResult::ResultCode in route_request_result.h
 // - MediaRouteProviderResult enum in tools/metrics/histograms.xml.
 // - mr.RouteRequestResultCode in route_request_error.js
-// - RouteRequestResultCodeFromMojo in media_router_type_converters.cc
+// - media_router_struct_traits.h
 enum RouteRequestResultCode {
   UNKNOWN_ERROR,
   OK,
@@ -207,32 +214,50 @@ enum RouteRequestResultCode {
   INVALID_ORIGIN,
   INCOGNITO_MISMATCH,
   NO_SUPPORTED_PROVIDER,
-  CANCELLED
+  CANCELLED,
+  ROUTE_ALREADY_EXISTS
 // New values must be added here.
 };
 
 // Used to pass feature configuration data from the Browser to Media Route
-// Provider.
+// Provider. This object is used by the extension MRP only.
 struct MediaRouteProviderConfig {
   // If the MRP should enable DIAL discovery.
   bool enable_dial_discovery;
 
   // If the MRP should enable Cast discovery.
   bool enable_cast_discovery;
+
+  // If the MRP should enable DIAL sink query.
+  bool enable_dial_sink_query;
+
+  // If the MRP should enable Cast sink query.
+  bool enable_cast_sink_query;
+
+  // If the Views dialog is being used.
+  bool use_views_dialog;
 };
 
 // Modeled after the MediaRouter interface defined in
 // chrome/browser/media/router/media_router.h
 //
 // MediaRouteProvider is responsible for discovering MediaSinks, and managing
-// MediaRoutes associated with them. It notifies its observers (i.e.
-// MediaRouter) when there are changes related to sinks or routes.
+// MediaRoutes associated with them.
+// A MediaRouteProvider is associated with a MediaRouter. MediaRouter issues
+// commands to the MediaRouteProvider, such as observing MediaSinks or creating
+// a MediaRoute. In return, the MediaRouteProvider notifies the MediaRouter when
+// there are changes related to sinks or routes.
+// A MediaRouteProvider may live in the Media Router component extension, or
+// the browser (e.g. DIAL and Cast MediaRouteProviders will soon move to the
+// browser).
 interface MediaRouteProvider {
   // Each MediaRouteProvider is associated with a unique ID. This enum must be
   // kept in sync with MediaRouteProviderId in C++.
   enum Id {
     EXTENSION,
-    WIRED_DISPLAY
+    WIRED_DISPLAY,
+    CAST,
+    DIAL
   };
 
   // Creates a media route from |media_source| to the sink given by |sink_id|.
@@ -261,7 +286,7 @@ interface MediaRouteProvider {
               string original_presentation_id,
               url.mojom.Origin origin,
               int32 tab_id,
-              mojo.common.mojom.TimeDelta timeout,
+              mojo_base.mojom.TimeDelta timeout,
               bool incognito) =>
                   (MediaRoute? route,
                    string? error_text,
@@ -289,7 +314,7 @@ interface MediaRouteProvider {
             string presentation_id,
             url.mojom.Origin origin,
             int32 tab_id,
-            mojo.common.mojom.TimeDelta timeout,
+            mojo_base.mojom.TimeDelta timeout,
             bool incognito) =>
                 (MediaRoute? route,
                  string? error_text,
@@ -323,7 +348,7 @@ interface MediaRouteProvider {
                         string presentation_id,
                         url.mojom.Origin origin,
                         int32 tab_id,
-                        mojo.common.mojom.TimeDelta timeout,
+                        mojo_base.mojom.TimeDelta timeout,
                         bool incognito) =>
                             (MediaRoute? route,
                              string? error_text,
@@ -397,7 +422,13 @@ interface MediaRouteProvider {
   // already a firewall rule for mDNS.
   EnableMdnsDiscovery();
 
-  // Updates media sinks capable of displaying |media_source|.
+  // Requests the MediaRouteProvider to update the list of media sinks capable
+  // of displaying |media_source|. This call is made when a user gesture is
+  // detected, so MediaRouteProvider may treat this as a signal to take actions
+  // to become more responsive, e.g., initiate a one-off round of device
+  // discovery.
+  // TODO(https://crbug.com/698940): Rename this to OnUserGesture and remove the
+  // |media_source| parameter.
   UpdateMediaSinks(string media_source);
 
   // Indicates that the Media Router is interested in finding a sink that
@@ -435,7 +466,8 @@ interface MediaRouteProvider {
 };
 
 // Interface for a service which observes MediaRouteProviders for state changes
-// across media sources, sinks, and issues.
+// across media sources, sinks, and issues. The MediaRouter lives in the browser
+// process.
 interface MediaRouter {
 
   // Represents overall media sink availability states.
@@ -449,7 +481,7 @@ interface MediaRouter {
     AVAILABLE
   };
 
-  // Keep in sync with content/public/common/presentation_info.h.
+  // TODO(crbug.com/831416): Remove and use presentation.mojom type instead.
   enum PresentationConnectionState {
     CONNECTING,
     CONNECTED,
@@ -457,7 +489,7 @@ interface MediaRouter {
     TERMINATED
   };
 
-  // Keep in sync with content/public/common/presentation_info.h.
+  // TODO(crbug.com/831416): Remove and use presentation.mojom type instead.
   enum PresentationConnectionCloseReason {
     CONNECTION_ERROR,
     CLOSED,
@@ -520,4 +552,7 @@ interface MediaRouter {
   // receive the updates/messages from MediaRemoter.
   OnMediaRemoterCreated(int32 tab_id, media.mojom.MirrorServiceRemoter remoter,
       media.mojom.MirrorServiceRemotingSource& remoting_source);
+
+  // Returns current status of media sink service in JSON format.
+  GetMediaSinkServiceStatus() => (string status);
 };

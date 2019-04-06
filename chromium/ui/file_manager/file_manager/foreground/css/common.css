@@ -126,7 +126,7 @@ cr-menu.chrome-menu > [checked]::before {
   min-width: 5.14em;
   outline: none;
   overflow: hidden;
-  padding: 0.7em 0.57em;
+  padding: 0.6em 0.57em;
   position: relative;
   text-align: center;
   text-transform: uppercase;
@@ -195,12 +195,10 @@ html[dir='rtl'] .entry-name {
 /* Pop-up dialogs. */
 
 .cr-dialog-container {
-  align-items: center;
   display: flex;
   height: 100%;
-  justify-content: center;
   left: 0;
-  overflow: hidden;
+  overflow: auto;
   position: absolute;
   top: 0;
   transition: opacity 250ms linear;
@@ -218,6 +216,7 @@ html[dir='rtl'] .entry-name {
   cursor: default;
   display: flex;
   flex-direction: column;
+  margin: auto;
   padding: 12px;
   position: relative;
   width: 386px;

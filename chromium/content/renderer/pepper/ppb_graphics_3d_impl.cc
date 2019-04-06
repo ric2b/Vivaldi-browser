@@ -28,11 +28,11 @@
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ppapi/c/ppp_graphics_3d.h"
 #include "ppapi/thunk/enter.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/khronos/GLES2/gl2.h"
 
 using ppapi::thunk::EnterResourceNoLock;
@@ -68,7 +68,7 @@ PP_Resource PPB_Graphics3D_Impl::CreateRaw(
     PP_Resource share_context,
     const gpu::ContextCreationAttribs& attrib_helper,
     gpu::Capabilities* capabilities,
-    base::SharedMemoryHandle* shared_state_handle,
+    const base::UnsafeSharedMemoryRegion** shared_state_region,
     gpu::CommandBufferId* command_buffer_id) {
   PPB_Graphics3D_API* share_api = nullptr;
   if (share_context) {
@@ -80,7 +80,7 @@ PP_Resource PPB_Graphics3D_Impl::CreateRaw(
   scoped_refptr<PPB_Graphics3D_Impl> graphics_3d(
       new PPB_Graphics3D_Impl(instance));
   if (!graphics_3d->InitRaw(share_api, attrib_helper, capabilities,
-                            shared_state_handle, command_buffer_id))
+                            shared_state_region, command_buffer_id))
     return 0;
   return graphics_3d->GetReference();
 }
@@ -125,11 +125,6 @@ void PPB_Graphics3D_Impl::EnsureWorkVisible() {
 }
 
 void PPB_Graphics3D_Impl::TakeFrontBuffer() {
-  if (!taken_front_buffer_.IsZero()) {
-    DLOG(ERROR)
-        << "TakeFrontBuffer should only be called once before DoSwapBuffers";
-    return;
-  }
   taken_front_buffer_ = GenerateMailbox();
   command_buffer_->TakeFrontBuffer(taken_front_buffer_);
 }
@@ -195,7 +190,6 @@ int32_t PPB_Graphics3D_Impl::DoSwapBuffers(const gpu::SyncToken& sync_token,
         viz::TransferableResource::MakeGLOverlay(taken_front_buffer_, GL_LINEAR,
                                                  target, sync_token, size,
                                                  is_overlay_candidate);
-    taken_front_buffer_.SetZero();
     HostGlobals::Get()
         ->GetInstance(pp_instance())
         ->CommitTransferableResource(resource);
@@ -203,8 +197,8 @@ int32_t PPB_Graphics3D_Impl::DoSwapBuffers(const gpu::SyncToken& sync_token,
   } else {
     // Wait for the command to complete on the GPU to allow for throttling.
     command_buffer_->SignalSyncToken(
-        sync_token, base::Bind(&PPB_Graphics3D_Impl::OnSwapBuffers,
-                               weak_ptr_factory_.GetWeakPtr()));
+        sync_token, base::BindOnce(&PPB_Graphics3D_Impl::OnSwapBuffers,
+                                   weak_ptr_factory_.GetWeakPtr()));
   }
 
   return PP_OK_COMPLETIONPENDING;
@@ -214,7 +208,7 @@ bool PPB_Graphics3D_Impl::InitRaw(
     PPB_Graphics3D_API* share_context,
     const gpu::ContextCreationAttribs& requested_attribs,
     gpu::Capabilities* capabilities,
-    base::SharedMemoryHandle* shared_state_handle,
+    const base::UnsafeSharedMemoryRegion** shared_state_region,
     gpu::CommandBufferId* command_buffer_id) {
   PepperPluginInstanceImpl* plugin_instance =
       HostGlobals::Get()->GetInstance(pp_instance());
@@ -279,8 +273,8 @@ bool PPB_Graphics3D_Impl::InitRaw(
 
   command_buffer_->SetGpuControlClient(this);
 
-  if (shared_state_handle)
-    *shared_state_handle = command_buffer_->GetSharedStateHandle();
+  if (shared_state_region)
+    *shared_state_region = &command_buffer_->GetSharedStateRegion();
   if (capabilities)
     *capabilities = command_buffer_->GetCapabilities();
   if (command_buffer_id)
@@ -329,6 +323,9 @@ void PPB_Graphics3D_Impl::OnGpuControlLostContext() {
 void PPB_Graphics3D_Impl::OnGpuControlLostContextMaybeReentrant() {
   // No internal state to update on lost context.
 }
+
+void PPB_Graphics3D_Impl::OnGpuControlSwapBuffersCompleted(
+    const gpu::SwapBuffersCompleteParams& params) {}
 
 void PPB_Graphics3D_Impl::OnSwapBuffers() {
   if (HasPendingSwap()) {

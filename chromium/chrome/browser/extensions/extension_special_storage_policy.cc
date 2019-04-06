@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -31,7 +32,7 @@
 #include "extensions/common/manifest_handlers/content_capabilities_handler.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 using content::BrowserThread;
 using extensions::APIPermission;
@@ -112,11 +113,18 @@ bool ExtensionSpecialStoragePolicy::IsStorageSessionOnly(const GURL& origin) {
   return cookie_settings_->IsCookieSessionOnly(origin);
 }
 
-bool ExtensionSpecialStoragePolicy::IsStorageSessionOnlyOrBlocked(
-    const GURL& origin) {
+network::SessionCleanupCookieStore::DeleteCookiePredicate
+ExtensionSpecialStoragePolicy::CreateDeleteCookieOnExitPredicate() {
   if (cookie_settings_.get() == NULL)
-    return false;
-  return cookie_settings_->IsCookieSessionOnlyOrBlocked(origin);
+    return network::SessionCleanupCookieStore::DeleteCookiePredicate();
+  // Fetch the list of cookies related content_settings and bind it
+  // to CookieSettings::ShouldDeleteCookieOnExit to avoid fetching it on
+  // every call.
+  ContentSettingsForOneType entries;
+  cookie_settings_->GetCookieSettings(&entries);
+  return base::BindRepeating(
+      &content_settings::CookieSettings::ShouldDeleteCookieOnExit,
+      cookie_settings_, std::move(entries));
 }
 
 bool ExtensionSpecialStoragePolicy::HasSessionOnlyOrigins() {

@@ -48,10 +48,12 @@ void TestAutofillExternalDelegate::OnQuery(int query_id,
 void TestAutofillExternalDelegate::OnSuggestionsReturned(
     int query_id,
     const std::vector<Suggestion>& suggestions,
+    bool autoselect_first_suggestion,
     bool is_all_server_suggestions) {
   on_suggestions_returned_seen_ = true;
   query_id_ = query_id;
   suggestions_ = suggestions;
+  autoselect_first_suggestion_ = autoselect_first_suggestion;
   is_all_server_suggestions_ = is_all_server_suggestions;
 
   // If necessary, call the superclass's OnSuggestionsReturned in order to
@@ -59,6 +61,15 @@ void TestAutofillExternalDelegate::OnSuggestionsReturned(
   if (call_parent_methods_)
     AutofillExternalDelegate::OnSuggestionsReturned(query_id, suggestions,
                                                     is_all_server_suggestions);
+}
+
+bool TestAutofillExternalDelegate::HasActiveScreenReader() const {
+  return has_active_screen_reader_;
+}
+
+void TestAutofillExternalDelegate::OnAutofillAvailabilityEvent(
+    bool has_suggestions) {
+  has_suggestions_available_on_field_focus_ = has_suggestions;
 }
 
 void TestAutofillExternalDelegate::WaitForPopupHidden() {
@@ -109,12 +120,26 @@ bool TestAutofillExternalDelegate::on_suggestions_returned_seen() const {
   return on_suggestions_returned_seen_;
 }
 
+bool TestAutofillExternalDelegate::autoselect_first_suggestion() const {
+  return autoselect_first_suggestion_;
+}
+
 bool TestAutofillExternalDelegate::is_all_server_suggestions() const {
   return is_all_server_suggestions_;
 }
 
 bool TestAutofillExternalDelegate::popup_hidden() const {
   return popup_hidden_;
+}
+
+void TestAutofillExternalDelegate::set_has_active_screen_reader(
+    bool has_active_screen_reader) {
+  has_active_screen_reader_ = has_active_screen_reader;
+}
+
+bool TestAutofillExternalDelegate::has_suggestions_available_on_field_focus()
+    const {
+  return has_suggestions_available_on_field_focus_;
 }
 
 }  // namespace autofill

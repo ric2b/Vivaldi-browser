@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "chrome/browser/password_manager/password_manager_infobar_delegate_android.h"
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
-#include "components/password_manager/core/browser/password_form_manager.h"
+#include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 
 namespace content {
@@ -25,9 +25,9 @@ class WebContents;
 // or fills in a password change form.
 class UpdatePasswordInfoBarDelegate : public PasswordManagerInfoBarDelegate {
  public:
-  static void Create(
-      content::WebContents* web_contents,
-      std::unique_ptr<password_manager::PasswordFormManager> form_to_update);
+  static void Create(content::WebContents* web_contents,
+                     std::unique_ptr<password_manager::PasswordFormManagerForUI>
+                         form_to_update);
 
   ~UpdatePasswordInfoBarDelegate() override;
 
@@ -48,16 +48,19 @@ class UpdatePasswordInfoBarDelegate : public PasswordManagerInfoBarDelegate {
   // only one credential pair stored.
   base::string16 get_username_for_single_account() {
     return passwords_state_.form_manager()
-        ->pending_credentials()
+        ->GetPendingCredentials()
         .username_value;
   }
 
- private:
+ protected:
+  // Makes a ctor available in tests.
   UpdatePasswordInfoBarDelegate(
       content::WebContents* web_contents,
-      std::unique_ptr<password_manager::PasswordFormManager> form_to_update,
+      std::unique_ptr<password_manager::PasswordFormManagerForUI>
+          form_to_update,
       bool is_smartlock_branding_enabled);
 
+ private:
   // Used to track the results we get from the info bar.
   password_manager::metrics_util::UIDismissalReason infobar_response_;
 

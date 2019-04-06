@@ -12,9 +12,10 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/scoped_path_override.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -46,8 +47,10 @@
 #include "extensions/common/manifest_constants.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_status.h"
+#include "net/http/http_util.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/test/test_url_loader_factory.h"
+#include "services/network/test/test_utils.h"
 #include "url/gurl.h"
 
 #if defined(OS_WIN)
@@ -159,7 +162,7 @@ class PinnedTabsResetTest : public BrowserWithTestWindowTest,
  protected:
   void SetUp() override;
 
-  content::WebContents* CreateWebContents();
+  std::unique_ptr<content::WebContents> CreateWebContents();
 };
 
 void PinnedTabsResetTest::SetUp() {
@@ -167,7 +170,7 @@ void PinnedTabsResetTest::SetUp() {
   resetter_.reset(new ProfileResetter(profile()));
 }
 
-content::WebContents* PinnedTabsResetTest::CreateWebContents() {
+std::unique_ptr<content::WebContents> PinnedTabsResetTest::CreateWebContents() {
   return content::WebContents::Create(
       content::WebContents::CreateParams(profile()));
 }
@@ -175,46 +178,20 @@ content::WebContents* PinnedTabsResetTest::CreateWebContents() {
 
 // ConfigParserTest -----------------------------------------------------------
 
-// URLFetcher delegate that simply records the upload data.
-struct URLFetcherRequestListener : net::URLFetcherDelegate {
-  URLFetcherRequestListener();
-  ~URLFetcherRequestListener() override;
-
-  void OnURLFetchComplete(const net::URLFetcher* source) override;
-
-  std::string upload_data;
-  net::URLFetcherDelegate* real_delegate;
-};
-
-URLFetcherRequestListener::URLFetcherRequestListener()
-    : real_delegate(NULL) {
-}
-
-URLFetcherRequestListener::~URLFetcherRequestListener() {
-}
-
-void URLFetcherRequestListener::OnURLFetchComplete(
-    const net::URLFetcher* source) {
-  const net::TestURLFetcher* test_fetcher =
-      static_cast<const net::TestURLFetcher*>(source);
-  upload_data = test_fetcher->upload_data();
-  DCHECK(real_delegate);
-  real_delegate->OnURLFetchComplete(source);
-}
-
 class ConfigParserTest : public testing::Test {
  protected:
   ConfigParserTest();
-  virtual ~ConfigParserTest();
+  ~ConfigParserTest() override;
 
   std::unique_ptr<BrandcodeConfigFetcher> WaitForRequest(const GURL& url);
 
-  net::FakeURLFetcherFactory& factory() { return factory_; }
+  network::TestURLLoaderFactory& test_url_loader_factory() {
+    return test_url_loader_factory_;
+  }
 
  private:
-  std::unique_ptr<net::FakeURLFetcher> CreateFakeURLFetcher(
+  std::unique_ptr<network::SimpleURLLoader> CreateFakeURLLoader(
       const GURL& url,
-      net::URLFetcherDelegate* fetcher_delegate,
       const std::string& response_data,
       net::HttpStatusCode response_code,
       net::URLRequestStatus::Status status);
@@ -222,45 +199,31 @@ class ConfigParserTest : public testing::Test {
   MOCK_METHOD0(Callback, void(void));
 
   content::TestBrowserThreadBundle test_browser_thread_bundle_;
-  URLFetcherRequestListener request_listener_;
-  net::FakeURLFetcherFactory factory_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
 };
 
 ConfigParserTest::ConfigParserTest()
     : test_browser_thread_bundle_(
-          content::TestBrowserThreadBundle::IO_MAINLOOP),
-      factory_(NULL,
-               base::Bind(&ConfigParserTest::CreateFakeURLFetcher,
-                          base::Unretained(this))) {}
+          content::TestBrowserThreadBundle::IO_MAINLOOP) {}
 
 ConfigParserTest::~ConfigParserTest() {}
 
 std::unique_ptr<BrandcodeConfigFetcher> ConfigParserTest::WaitForRequest(
     const GURL& url) {
   EXPECT_CALL(*this, Callback());
+  std::string upload_data;
+  test_url_loader_factory_.SetInterceptor(
+      base::BindLambdaForTesting([&](const network::ResourceRequest& request) {
+        upload_data = network::GetUploadData(request);
+      }));
   std::unique_ptr<BrandcodeConfigFetcher> fetcher(new BrandcodeConfigFetcher(
+      &test_url_loader_factory_,
       base::Bind(&ConfigParserTest::Callback, base::Unretained(this)), url,
       "ABCD"));
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(fetcher->IsActive());
   // Look for the brand code in the request.
-  EXPECT_NE(std::string::npos, request_listener_.upload_data.find("ABCD"));
-  return fetcher;
-}
-
-std::unique_ptr<net::FakeURLFetcher> ConfigParserTest::CreateFakeURLFetcher(
-    const GURL& url,
-    net::URLFetcherDelegate* fetcher_delegate,
-    const std::string& response_data,
-    net::HttpStatusCode response_code,
-    net::URLRequestStatus::Status status) {
-  request_listener_.real_delegate = fetcher_delegate;
-  std::unique_ptr<net::FakeURLFetcher> fetcher(new net::FakeURLFetcher(
-      url, &request_listener_, response_data, response_code, status));
-  scoped_refptr<net::HttpResponseHeaders> download_headers =
-      new net::HttpResponseHeaders("");
-  download_headers->AddHeader("Content-Type: text/xml");
-  fetcher->set_response_headers(download_headers);
+  EXPECT_NE(std::string::npos, upload_data.find("ABCD"));
   return fetcher;
 }
 
@@ -302,12 +265,12 @@ ShortcutCommand ShortcutHandler::CreateWithArguments(
     const base::string16& args) {
   EXPECT_TRUE(shortcut_path_.empty());
   base::FilePath path_to_create;
-  EXPECT_TRUE(PathService::Get(base::DIR_USER_DESKTOP, &path_to_create));
+  EXPECT_TRUE(base::PathService::Get(base::DIR_USER_DESKTOP, &path_to_create));
   path_to_create = path_to_create.Append(name);
   EXPECT_FALSE(base::PathExists(path_to_create)) << path_to_create.value();
 
   base::FilePath path_exe;
-  EXPECT_TRUE(PathService::Get(base::FILE_EXE, &path_exe));
+  EXPECT_TRUE(base::PathService::Get(base::FILE_EXE, &path_exe));
   base::win::ShortcutProperties shortcut_properties;
   shortcut_properties.set_target(path_exe);
   shortcut_properties.set_arguments(args);
@@ -366,10 +329,11 @@ scoped_refptr<Extension> CreateExtension(const base::string16& name,
   base::DictionaryValue manifest;
   manifest.SetString(extensions::manifest_keys::kVersion, "1.0.0.0");
   manifest.SetString(extensions::manifest_keys::kName, name);
+  manifest.SetInteger(extensions::manifest_keys::kManifestVersion, 2);
   switch (type) {
     case extensions::Manifest::TYPE_THEME:
       manifest.Set(extensions::manifest_keys::kTheme,
-                   base::MakeUnique<base::DictionaryValue>());
+                   std::make_unique<base::DictionaryValue>());
       break;
     case extensions::Manifest::TYPE_HOSTED_APP:
       manifest.SetString(extensions::manifest_keys::kLaunchWebURL,
@@ -719,27 +683,31 @@ TEST_F(PinnedTabsResetTest, ResetPinnedTabs) {
   std::unique_ptr<content::WebContents> contents2(CreateWebContents());
   std::unique_ptr<content::WebContents> contents3(CreateWebContents());
   std::unique_ptr<content::WebContents> contents4(CreateWebContents());
+  content::WebContents* raw_contents1 = contents1.get();
+  content::WebContents* raw_contents2 = contents2.get();
+  content::WebContents* raw_contents3 = contents3.get();
+  content::WebContents* raw_contents4 = contents4.get();
   TabStripModel* tab_strip_model = browser()->tab_strip_model();
 
-  tab_strip_model->AppendWebContents(contents4.get(), true);
-  tab_strip_model->AppendWebContents(contents3.get(), true);
-  tab_strip_model->AppendWebContents(contents2.get(), true);
+  tab_strip_model->AppendWebContents(std::move(contents4), true);
+  tab_strip_model->AppendWebContents(std::move(contents3), true);
+  tab_strip_model->AppendWebContents(std::move(contents2), true);
   tab_strip_model->SetTabPinned(2, true);
-  tab_strip_model->AppendWebContents(contents1.get(), true);
+  tab_strip_model->AppendWebContents(std::move(contents1), true);
   tab_strip_model->SetTabPinned(3, true);
 
-  EXPECT_EQ(contents2.get(), tab_strip_model->GetWebContentsAt(0));
-  EXPECT_EQ(contents1.get(), tab_strip_model->GetWebContentsAt(1));
-  EXPECT_EQ(contents4.get(), tab_strip_model->GetWebContentsAt(2));
-  EXPECT_EQ(contents3.get(), tab_strip_model->GetWebContentsAt(3));
+  EXPECT_EQ(raw_contents2, tab_strip_model->GetWebContentsAt(0));
+  EXPECT_EQ(raw_contents1, tab_strip_model->GetWebContentsAt(1));
+  EXPECT_EQ(raw_contents4, tab_strip_model->GetWebContentsAt(2));
+  EXPECT_EQ(raw_contents3, tab_strip_model->GetWebContentsAt(3));
   EXPECT_EQ(2, tab_strip_model->IndexOfFirstNonPinnedTab());
 
   ResetAndWait(ProfileResetter::PINNED_TABS);
 
-  EXPECT_EQ(contents2.get(), tab_strip_model->GetWebContentsAt(0));
-  EXPECT_EQ(contents1.get(), tab_strip_model->GetWebContentsAt(1));
-  EXPECT_EQ(contents4.get(), tab_strip_model->GetWebContentsAt(2));
-  EXPECT_EQ(contents3.get(), tab_strip_model->GetWebContentsAt(3));
+  EXPECT_EQ(raw_contents2, tab_strip_model->GetWebContentsAt(0));
+  EXPECT_EQ(raw_contents1, tab_strip_model->GetWebContentsAt(1));
+  EXPECT_EQ(raw_contents4, tab_strip_model->GetWebContentsAt(2));
+  EXPECT_EQ(raw_contents3, tab_strip_model->GetWebContentsAt(3));
   EXPECT_EQ(0, tab_strip_model->IndexOfFirstNonPinnedTab());
 }
 
@@ -767,8 +735,9 @@ TEST_F(ProfileResetterTest, ResetFewFlags) {
 // Tries to load unavailable config file.
 TEST_F(ConfigParserTest, NoConnectivity) {
   const GURL url("http://test");
-  factory().SetFakeResponse(url, "", net::HTTP_INTERNAL_SERVER_ERROR,
-                            net::URLRequestStatus::FAILED);
+  test_url_loader_factory().AddResponse(
+      url, network::ResourceResponseHead(), "",
+      network::URLLoaderCompletionStatus(net::HTTP_INTERNAL_SERVER_ERROR));
 
   std::unique_ptr<BrandcodeConfigFetcher> fetcher = WaitForRequest(GURL(url));
   EXPECT_FALSE(fetcher->GetSettings());
@@ -782,8 +751,14 @@ TEST_F(ConfigParserTest, ParseConfig) {
   ReplaceString(&xml_config,
                 "placeholder_for_id",
                 "abbaabbaabbaabbaabbaabbaabbaabba");
-  factory().SetFakeResponse(url, xml_config, net::HTTP_OK,
-                            net::URLRequestStatus::SUCCESS);
+  network::ResourceResponseHead head;
+  std::string headers("HTTP/1.1 200 OK\nContent-type: text/xml\n\n");
+  head.headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+      net::HttpUtil::AssembleRawHeaders(headers.c_str(), headers.size()));
+  head.mime_type = "text/xml";
+  network::URLLoaderCompletionStatus status;
+  status.decoded_body_length = xml_config.size();
+  test_url_loader_factory().AddResponse(url, head, xml_config, status);
 
   std::unique_ptr<BrandcodeConfigFetcher> fetcher = WaitForRequest(GURL(url));
   std::unique_ptr<BrandcodedDefaultSettings> settings = fetcher->GetSettings();

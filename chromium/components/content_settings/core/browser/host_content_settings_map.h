@@ -18,6 +18,7 @@
 #include "base/observer_list.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_checker.h"
+#include "build/build_config.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/user_modifiable_provider.h"
@@ -58,6 +59,7 @@ class HostContentSettingsMap : public content_settings::Observer,
     SUPERVISED_PROVIDER,
     CUSTOM_EXTENSION_PROVIDER,
     NOTIFICATION_ANDROID_PROVIDER,
+    EPHEMERAL_PROVIDER,
     PREF_PROVIDER,
     DEFAULT_PROVIDER,
 
@@ -259,10 +261,11 @@ class HostContentSettingsMap : public content_settings::Observer,
 
   // If |pattern_predicate| is null, this method is equivalent to the above.
   // Otherwise, it only deletes exceptions matched by |pattern_predicate| that
-  // were modified at or after |begin_time|.
+  // were modified at or after |begin_time| and before |end_time|.
   void ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType content_type,
       base::Time begin_time,
+      base::Time end_time,
       const PatternSourcePredicate& pattern_predicate);
 
   // RefcountedKeyedService implementation.
@@ -272,7 +275,7 @@ class HostContentSettingsMap : public content_settings::Observer,
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
                                ContentSettingsType content_type,
-                               std::string resource_identifier) override;
+                               const std::string& resource_identifier) override;
 
   // Returns the ProviderType associated with the given source string.
   // TODO(estade): I regret adding this. At the moment there are no legitimate
@@ -371,6 +374,11 @@ class HostContentSettingsMap : public content_settings::Observer,
       const GURL& secondary_url,
       ContentSettingsPattern* primary_pattern,
       ContentSettingsPattern* secondary_pattern);
+
+  // Make sure existing non-default Flash settings set by the user are marked to
+  // always show the Flash setting for this site in Page Info.
+  // TODO(patricialor): Remove after m66 (migration code).
+  void InitializePluginsDataSettings();
 
 #ifndef NDEBUG
   // This starts as the thread ID of the thread that constructs this

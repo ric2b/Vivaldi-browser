@@ -71,7 +71,7 @@ class USBDeviceManagerImplTest : public testing::Test {
 class MockDeviceManagerClient : public mojom::UsbDeviceManagerClient {
  public:
   MockDeviceManagerClient() : binding_(this) {}
-  ~MockDeviceManagerClient() = default;
+  ~MockDeviceManagerClient() override = default;
 
   UsbDeviceManagerClientPtr CreateInterfacePtrAndBind() {
     UsbDeviceManagerClientPtr client;
@@ -80,12 +80,12 @@ class MockDeviceManagerClient : public mojom::UsbDeviceManagerClient {
   }
 
   MOCK_METHOD1(DoOnDeviceAdded, void(mojom::UsbDeviceInfo*));
-  void OnDeviceAdded(UsbDeviceInfoPtr device_info) {
+  void OnDeviceAdded(UsbDeviceInfoPtr device_info) override {
     DoOnDeviceAdded(device_info.get());
   }
 
   MOCK_METHOD1(DoOnDeviceRemoved, void(mojom::UsbDeviceInfo*));
-  void OnDeviceRemoved(UsbDeviceInfoPtr device_info) {
+  void OnDeviceRemoved(UsbDeviceInfoPtr device_info) override {
     DoOnDeviceRemoved(device_info.get());
   }
 
@@ -136,7 +136,7 @@ TEST_F(USBDeviceManagerImplTest, GetDevices) {
   base::RunLoop loop;
   device_manager->GetDevices(
       std::move(options),
-      base::Bind(&ExpectDevicesAndThen, guids, loop.QuitClosure()));
+      base::BindOnce(&ExpectDevicesAndThen, guids, loop.QuitClosure()));
   loop.Run();
 }
 
@@ -193,7 +193,8 @@ TEST_F(USBDeviceManagerImplTest, Client) {
     guids.insert(device0->guid());
     base::RunLoop loop;
     device_manager->GetDevices(
-        nullptr, base::Bind(&ExpectDevicesAndThen, guids, loop.QuitClosure()));
+        nullptr,
+        base::BindOnce(&ExpectDevicesAndThen, guids, loop.QuitClosure()));
     loop.Run();
   }
 

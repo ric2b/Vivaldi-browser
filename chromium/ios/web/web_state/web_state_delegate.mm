@@ -41,8 +41,8 @@ void WebStateDelegate::HandleContextMenu(WebState*, const ContextMenuParams&) {}
 
 void WebStateDelegate::ShowRepostFormWarningDialog(
     WebState*,
-    const base::Callback<void(bool)>& callback) {
-  callback.Run(true);
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(true);
 }
 
 JavaScriptDialogPresenter* WebStateDelegate::GetJavaScriptDialogPresenter(
@@ -71,6 +71,10 @@ UIViewController* WebStateDelegate::GetPreviewingViewController(
 void WebStateDelegate::CommitPreviewingViewController(
     WebState* source,
     UIViewController* previewing_view_controller) {}
+
+bool WebStateDelegate::ShouldAllowAppLaunching(WebState* source) {
+  return false;
+}
 
 void WebStateDelegate::Attach(WebState* source) {
   DCHECK(attached_states_.find(source) == attached_states_.end());

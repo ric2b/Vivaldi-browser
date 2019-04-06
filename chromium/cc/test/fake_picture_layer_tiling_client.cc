@@ -22,11 +22,12 @@ FakePictureLayerTilingClient::FakePictureLayerTilingClient()
       has_valid_tile_priorities_(true) {}
 
 FakePictureLayerTilingClient::FakePictureLayerTilingClient(
-    LayerTreeResourceProvider* resource_provider)
+    viz::ClientResourceProvider* resource_provider,
+    viz::ContextProvider* context_provider)
     : resource_pool_(
           std::make_unique<ResourcePool>(resource_provider,
+                                         context_provider,
                                          base::ThreadTaskRunnerHandle::Get(),
-                                         viz::ResourceTextureHint::kDefault,
                                          ResourcePool::kDefaultExpirationDelay,
                                          false)),
       tile_manager_(

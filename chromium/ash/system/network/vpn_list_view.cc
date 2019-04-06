@@ -11,13 +11,13 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/network/network_icon.h"
 #include "ash/system/network/network_icon_animation.h"
 #include "ash/system/network/network_icon_animation_observer.h"
 #include "ash/system/network/vpn_list.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/system_menu_button.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
@@ -27,6 +27,7 @@
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_type_pattern.h"
+#include "components/onc/onc_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia.h"
@@ -93,8 +94,7 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
     gfx::ImageSkia icon =
         gfx::CreateVectorIcon(kSystemMenuAddConnectionIcon, image_color);
     SystemMenuButton* add_vpn_button =
-        new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED, icon,
-                             icon, button_accessible_name_id);
+        new SystemMenuButton(this, icon, icon, button_accessible_name_id);
     add_vpn_button->SetInkDropColor(image_color);
     add_vpn_button->SetEnabled(true);
     tri_view->AddView(TriView::Container::END, add_vpn_button);
@@ -108,17 +108,17 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
     if (vpn_provider_.provider_type == VPNProvider::THIRD_PARTY_VPN) {
       Shell::Get()->metrics()->RecordUserMetricsAction(
           UMA_STATUS_AREA_VPN_ADD_THIRD_PARTY_CLICKED);
-      Shell::Get()->system_tray_controller()->ShowThirdPartyVpnCreate(
+      Shell::Get()->system_tray_model()->client_ptr()->ShowThirdPartyVpnCreate(
           vpn_provider_.app_id);
     } else if (vpn_provider_.provider_type == VPNProvider::ARC_VPN) {
       // TODO(lgcheng@) Add UMA status if needed.
-      Shell::Get()->system_tray_controller()->ShowArcVpnCreate(
+      Shell::Get()->system_tray_model()->client_ptr()->ShowArcVpnCreate(
           vpn_provider_.app_id);
     } else {
       Shell::Get()->metrics()->RecordUserMetricsAction(
           UMA_STATUS_AREA_VPN_ADD_BUILT_IN_CLICKED);
-      Shell::Get()->system_tray_controller()->ShowNetworkCreate(
-          shill::kTypeVPN);
+      Shell::Get()->system_tray_model()->client_ptr()->ShowNetworkCreate(
+          ::onc::network_type::kVPN);
     }
   }
 
@@ -221,8 +221,8 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
 
 }  // namespace
 
-VPNListView::VPNListView(SystemTrayItem* owner, LoginStatus login)
-    : NetworkStateListDetailedView(owner, LIST_TYPE_VPN, login) {
+VPNListView::VPNListView(DetailedViewDelegate* delegate, LoginStatus login)
+    : NetworkStateListDetailedView(delegate, LIST_TYPE_VPN, login) {
   Shell::Get()->vpn_list()->AddObserver(this);
 }
 
@@ -324,8 +324,7 @@ void VPNListView::AddProviderAndNetworks(
     const chromeos::NetworkStateHandler::NetworkStateList& networks) {
   // Add a visual separator, unless this is the topmost entry in the list.
   if (!list_empty_) {
-    scroll_content()->AddChildView(
-        TrayPopupUtils::CreateListSubHeaderSeparator());
+    scroll_content()->AddChildView(CreateListSubHeaderSeparator());
   }
   std::string vpn_name =
       vpn_provider.provider_type == VPNProvider::BUILT_IN_VPN

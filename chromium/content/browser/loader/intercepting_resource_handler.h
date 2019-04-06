@@ -44,10 +44,6 @@ class CONTENT_EXPORT InterceptingResourceHandler
   // ResourceHandler implementation:
   void OnResponseStarted(
       network::ResourceResponse* response,
-      std::unique_ptr<ResourceController> controller,
-      bool open_when_done, bool ask_for_target) override;
-  void OnResponseStarted(
-      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller) override;
   void OnWillRead(scoped_refptr<net::IOBuffer>* buf,
                   int* buf_size,

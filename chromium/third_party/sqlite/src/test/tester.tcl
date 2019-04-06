@@ -959,9 +959,80 @@ proc do_timed_execsql_test {testname sql {result {}}} {
   uplevel do_test [list $testname] [list "execsql_timed {$sql}"]\
                                    [list [list {*}$result]]
 }
-proc do_eqp_test {name sql res} {
-  uplevel do_execsql_test $name [list "EXPLAIN QUERY PLAN $sql"] [list $res]
+
+# Run an EXPLAIN QUERY PLAN $sql in database "db".  Then rewrite the output
+# as an ASCII-art graph and return a string that is that graph.
+#
+# Hexadecimal literals in the output text are converted into "xxxxxx" since those
+# literals are pointer values that might very from one run of the test to the
+# next, yet we want the output to be consistent.
+#
+proc query_plan_graph {sql} {
+  db eval "EXPLAIN QUERY PLAN $sql" {
+    set dx($id) $detail
+    lappend cx($parent) $id
+  }
+  set a "\n  QUERY PLAN\n"
+  append a [append_graph "  " dx cx 0]
+  return [regsub -all { 0x[A-F0-9]+\y} $a { xxxxxx}]
 }
+
+# Helper routine for [query_plan_graph SQL]:
+#
+# Output rows of the graph that are children of $level.
+#
+#   prefix:  Prepend to every output line
+#
+#   dxname:  Name of an array variable that stores text describe
+#            The description for $id is $dx($id)
+#
+#   cxname:  Name of an array variable holding children of item.
+#            Children of $id are $cx($id)
+#
+#   level:   Render all lines that are children of $level
+#
+proc append_graph {prefix dxname cxname level} {
+  upvar $dxname dx $cxname cx
+  set a ""
+  set x $cx($level)
+  set n [llength $x]
+  for {set i 0} {$i<$n} {incr i} {
+    set id [lindex $x $i]
+    if {$i==$n-1} {
+      set p1 "`--"
+      set p2 "   "
+    } else {
+      set p1 "|--"
+      set p2 "|  "
+    }
+    append a $prefix$p1$dx($id)\n
+    if {[info exists cx($id)]} {
+      append a [append_graph "$prefix$p2" dx cx $id]
+    }
+  }
+  return $a
+}
+
+# Do an EXPLAIN QUERY PLAN test on input $sql with expected results $res
+#
+# If $res begins with a "\s+QUERY PLAN\n" then it is assumed to be the
+# complete graph which must match the output of [query_plan_graph $sql]
+# exactly.
+#
+# If $res does not begin with "\s+QUERY PLAN\n" then take it is a string
+# that must be found somewhere in the query plan output.
+#
+proc do_eqp_test {name sql res} {
+  if {[regexp {^\s+QUERY PLAN\n} $res]} {
+    uplevel do_test $name [list [list query_plan_graph $sql]] [list $res]
+  } else {
+    if {[string index $res 0]!="/"} {
+      set res "/*$res*/"
+    }
+    uplevel do_execsql_test $name [list "EXPLAIN QUERY PLAN $sql"] [list $res]
+  }
+}
+
 
 #-------------------------------------------------------------------------
 #   Usage: do_select_tests PREFIX ?SWITCHES? TESTLIST
@@ -2271,13 +2342,17 @@ proc test_restore_config_pagecache {} {
   sqlite3 db test.db
 }
 
-proc test_find_binary {nm} {
+proc test_binary_name {nm} {
   if {$::tcl_platform(platform)=="windows"} {
     set ret "$nm.exe"
   } else {
     set ret $nm
   }
-  set ret [file normalize [file join $::cmdlinearg(TESTFIXTURE_HOME) $ret]]
+  file normalize [file join $::cmdlinearg(TESTFIXTURE_HOME) $ret]
+}
+
+proc test_find_binary {nm} {
+  set ret [test_binary_name $nm]
   if {![file executable $ret]} {
     finish_test
     return ""
@@ -2303,6 +2378,16 @@ proc test_find_sqldiff {} {
   set prog [test_find_binary sqldiff]
   if {$prog==""} { return -code return }
   return $prog
+}
+
+# Call sqlite3_expanded_sql() on all statements associated with database
+# connection $db. This sometimes finds use-after-free bugs if run with
+# valgrind or address-sanitizer.
+proc expand_all_sql {db} {
+  set stmt ""
+  while {[set stmt [sqlite3_next_stmt $db $stmt]]!=""} {
+    sqlite3_expanded_sql $stmt
+  }
 }
 
 

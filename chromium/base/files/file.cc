@@ -9,7 +9,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <errno.h>
 #endif
 
@@ -36,12 +36,14 @@ File::File(const FilePath& path, uint32_t flags)
 }
 #endif
 
-File::File(PlatformFile platform_file)
+File::File(PlatformFile platform_file) : File(platform_file, false) {}
+
+File::File(PlatformFile platform_file, bool async)
     : file_(platform_file),
       error_details_(FILE_OK),
       created_(false),
-      async_(false) {
-#if defined(OS_POSIX)
+      async_(async) {
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
   DCHECK_GE(platform_file, -1);
 #endif
 }
@@ -64,15 +66,6 @@ File::~File() {
   Close();
 }
 
-// static
-File File::CreateForAsyncHandle(PlatformFile platform_file) {
-  File file(platform_file);
-  // It would be nice if we could validate that |platform_file| was opened with
-  // FILE_FLAG_OVERLAPPED on Windows but this doesn't appear to be possible.
-  file.async_ = true;
-  return file;
-}
-
 File& File::operator=(File&& other) {
   Close();
   SetPlatformFile(other.TakePlatformFile());
@@ -88,7 +81,7 @@ void File::Initialize(const FilePath& path, uint32_t flags) {
   if (path.ReferencesParent()) {
 #if defined(OS_WIN)
     ::SetLastError(ERROR_ACCESS_DENIED);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
     errno = EACCES;
 #else
 #error Unsupported platform

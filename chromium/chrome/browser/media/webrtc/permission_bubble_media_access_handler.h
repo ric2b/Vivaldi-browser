@@ -25,13 +25,13 @@ class PermissionBubbleMediaAccessHandler
                           const content::MediaStreamType type,
                           const extensions::Extension* extension) override;
   bool CheckMediaAccessPermission(
-      content::WebContents* web_contents,
+      content::RenderFrameHost* render_frame_host,
       const GURL& security_origin,
       content::MediaStreamType type,
       const extensions::Extension* extension) override;
   void HandleRequest(content::WebContents* web_contents,
                      const content::MediaStreamRequest& request,
-                     const content::MediaResponseCallback& callback,
+                     content::MediaResponseCallback callback,
                      const extensions::Extension* extension) override;
   void UpdateMediaRequestState(int render_process_id,
                                int render_frame_id,

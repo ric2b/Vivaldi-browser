@@ -3,7 +3,7 @@
 #ifndef BROWSER_VIVALDI_CLIPBOARD_UTILS_H_
 #define BROWSER_VIVALDI_CLIPBOARD_UTILS_H_
 
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/base/clipboard/clipboard_types.h"
 
 namespace vivaldi {

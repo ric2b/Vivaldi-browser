@@ -11,8 +11,6 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -722,7 +720,7 @@ void FirefoxImporter::GetTopBookmarkFolder(sql::Connection* db,
   s.BindInt(0, folder_id);
 
   if (s.Step()) {
-    std::unique_ptr<BookmarkItem> item = base::MakeUnique<BookmarkItem>();
+    std::unique_ptr<BookmarkItem> item = std::make_unique<BookmarkItem>();
     item->parent = -1;  // The top level folder has no parent.
     item->id = folder_id;
     item->title = s.ColumnString16(0);
@@ -759,7 +757,7 @@ void FirefoxImporter::GetWholeBookmarkFolder(sql::Connection* db,
 
   BookmarkList temp_list;
   while (s.Step()) {
-    std::unique_ptr<BookmarkItem> item = base::MakeUnique<BookmarkItem>();
+    std::unique_ptr<BookmarkItem> item = std::make_unique<BookmarkItem>();
     item->parent = static_cast<int>(position);
     item->id = s.ColumnInt(0);
     item->url = GURL(s.ColumnString(1));
@@ -843,6 +841,9 @@ void FirefoxImporter::LoadFavicons(
   std::map<uint64_t, size_t> icon_cache;
 
   for (const auto& entry : bookmarks) {
+    // Reset the SQL statement at the start of the loop rather than at the end
+    // to simplify early-continue logic.
+    s.Reset(true);
     s.BindString(0, entry.url.spec());
     if (s.Step()) {
       uint64_t icon_id = s.ColumnInt64(0);
@@ -865,6 +866,5 @@ void FirefoxImporter::LoadFavicons(
       favicons->push_back(usage_data);
       icon_cache[icon_id] = favicons->size() - 1;
     }
-    s.Reset(true);
   }
 }

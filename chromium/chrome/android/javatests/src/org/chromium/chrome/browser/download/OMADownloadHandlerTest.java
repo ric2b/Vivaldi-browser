@@ -296,14 +296,13 @@ public class OMADownloadHandlerTest {
 
         DownloadManagerDelegate downloadManagerDelegate = new DownloadManagerDelegate(context);
         DownloadQueryResultVerifier verifier =
-                new DownloadQueryResultVerifier(DownloadManagerService.DOWNLOAD_STATUS_COMPLETE);
+                new DownloadQueryResultVerifier(DownloadManagerService.DownloadStatus.COMPLETE);
         downloadManagerDelegate.queryDownloadResult(downloadItem, false, verifier);
         waitForQueryCompletion(verifier);
 
         manager.remove(downloadId1);
         downloadItem.setSystemDownloadId(downloadId1);
-        verifier =
-                new DownloadQueryResultVerifier(DownloadManagerService.DOWNLOAD_STATUS_CANCELLED);
+        verifier = new DownloadQueryResultVerifier(DownloadManagerService.DownloadStatus.CANCELLED);
         downloadManagerDelegate.queryDownloadResult(downloadItem, false, verifier);
         waitForQueryCompletion(verifier);
     }
@@ -333,8 +332,8 @@ public class OMADownloadHandlerTest {
         // Write a few pending downloads into shared preferences.
         Set<String> pendingOmaDownloads = new HashSet<>();
         pendingOmaDownloads.add(String.valueOf(downloadId1) + "," + INSTALL_NOTIFY_URI);
-        DownloadManagerService.storeDownloadInfo(
-                ContextUtils.getAppSharedPreferences(), PENDING_OMA_DOWNLOADS, pendingOmaDownloads);
+        DownloadManagerService.storeDownloadInfo(ContextUtils.getAppSharedPreferences(),
+                PENDING_OMA_DOWNLOADS, pendingOmaDownloads, false /* forceCommit */);
 
         pendingOmaDownloads = DownloadManagerService.getStoredDownloadInfo(
                 ContextUtils.getAppSharedPreferences(), PENDING_OMA_DOWNLOADS);

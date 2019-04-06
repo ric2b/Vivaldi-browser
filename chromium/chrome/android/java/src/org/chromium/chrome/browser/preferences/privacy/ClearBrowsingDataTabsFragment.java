@@ -9,6 +9,7 @@ import android.app.FragmentManager;
 import android.content.Context;
 import android.os.Bundle;
 import android.support.design.widget.TabLayout;
+import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v13.app.FragmentPagerAdapter;
 import android.support.v4.text.TextUtilsCompat;
 import android.support.v4.view.ViewCompat;
@@ -36,10 +37,22 @@ import java.util.Locale;
 public class ClearBrowsingDataTabsFragment extends Fragment {
     public static final int CBD_TAB_COUNT = 2;
 
+    private ClearBrowsingDataFetcher mFetcher;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
+
+        if (savedInstanceState == null) {
+            mFetcher = new ClearBrowsingDataFetcher();
+            mFetcher.fetchImportantSites();
+            mFetcher.requestInfoAboutOtherFormsOfBrowsingHistory();
+        } else {
+            mFetcher = savedInstanceState.getParcelable(
+                    ClearBrowsingDataPreferences.CLEAR_BROWSING_DATA_FETCHER);
+        }
+
         RecordUserAction.record("ClearBrowsingData_DialogCreated");
     }
 
@@ -65,12 +78,12 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
         View view = inflater.inflate(R.layout.clear_browsing_data_tabs, container, false);
 
         // Get the ViewPager and set its PagerAdapter so that it can display items.
-        ViewPager viewPager = (ViewPager) view.findViewById(R.id.clear_browsing_data_viewpager);
+        ViewPager viewPager = view.findViewById(R.id.clear_browsing_data_viewpager);
         viewPager.setAdapter(
-                new ClearBrowsingDataPagerAdapter(getFragmentManager(), getActivity()));
+                new ClearBrowsingDataPagerAdapter(mFetcher, getFragmentManager(), getActivity()));
 
         // Give the TabLayout the ViewPager.
-        TabLayout tabLayout = (TabLayout) view.findViewById(R.id.clear_browsing_data_tabs);
+        TabLayout tabLayout = view.findViewById(R.id.clear_browsing_data_tabs);
         tabLayout.setupWithViewPager(viewPager);
         int tabIndex = adjustIndexForDirectionality(
                 PrefServiceBridge.getInstance().getLastSelectedClearBrowsingDataTab());
@@ -87,11 +100,22 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
         return view;
     }
 
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // mFetcher acts as a cache for important sites and history data. If the activity gets
+        // suspended, we can save the cached data and reuse it when we are activated again.
+        outState.putParcelable(ClearBrowsingDataPreferences.CLEAR_BROWSING_DATA_FETCHER, mFetcher);
+    }
+
     private static class ClearBrowsingDataPagerAdapter extends FragmentPagerAdapter {
+        private final ClearBrowsingDataFetcher mFetcher;
         private final Context mContext;
 
-        ClearBrowsingDataPagerAdapter(FragmentManager fm, Context context) {
+        ClearBrowsingDataPagerAdapter(
+                ClearBrowsingDataFetcher fetcher, FragmentManager fm, Context context) {
             super(fm);
+            mFetcher = fetcher;
             mContext = context;
         }
 
@@ -103,14 +127,19 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
         @Override
         public Fragment getItem(int position) {
             position = adjustIndexForDirectionality(position);
+            ClearBrowsingDataPreferences fragment;
             switch (position) {
                 case 0:
-                    return new ClearBrowsingDataPreferencesBasic();
+                    fragment = new ClearBrowsingDataPreferencesBasic();
+                    break;
                 case 1:
-                    return new ClearBrowsingDataPreferencesAdvanced();
+                    fragment = new ClearBrowsingDataPreferencesAdvanced();
+                    break;
                 default:
                     throw new RuntimeException("invalid position: " + position);
             }
+            fragment.setClearBrowsingDataFetcher(mFetcher);
+            return fragment;
         }
 
         @Override
@@ -151,7 +180,8 @@ public class ClearBrowsingDataTabsFragment extends Fragment {
         menu.clear();
         MenuItem help =
                 menu.add(Menu.NONE, R.id.menu_id_targeted_help, Menu.NONE, R.string.menu_help);
-        help.setIcon(R.drawable.ic_help_and_feedback);
+        help.setIcon(VectorDrawableCompat.create(
+                getResources(), R.drawable.ic_help_and_feedback, getActivity().getTheme()));
         help.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
     }
 

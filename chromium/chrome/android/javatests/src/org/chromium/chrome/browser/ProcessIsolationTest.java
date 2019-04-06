@@ -13,7 +13,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
@@ -47,13 +47,13 @@ public class ProcessIsolationTest {
     @DisableIf.Build(sdk_is_greater_than = 22, message = "crbug.com/517611")
     @Feature({"Browser", "Security"})
     @RetryOnFailure
-    public void testProcessIsolationForRenderers() throws InterruptedException {
+    public void testProcessIsolationForRenderers() throws InterruptedException, IOException {
         int tabsCount = mActivityTestRule.getActivity().getCurrentTabModel().getCount();
         // The ActivityManager can be used to retrieve the current processes, but the reported UID
         // in the RunningAppProcessInfo for isolated processes is the same as the parent process
         // (see b/7724486, closed as "Working as intended").
         // So we have to resort to parsing the ps output.
-        String packageName = BuildInfo.getPackageName();
+        String packageName = ContextUtils.getApplicationContext().getPackageName();
         Assert.assertFalse("Failed to retrieve package name for current version of Chrome.",
                 TextUtils.isEmpty(packageName));
 
@@ -101,8 +101,6 @@ public class ProcessIsolationTest {
                     }
                 }
             }
-        } catch (IOException ioe) {
-            Assert.fail("Failed to read ps output.");
         } finally {
             if (reader != null) {
                 try {

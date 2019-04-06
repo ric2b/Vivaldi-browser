@@ -6,10 +6,11 @@
 
 #import <UIKit/UIKit.h>
 
+#include <memory>
+
+#include "base/bind.h"
 #include "base/callback.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task_scheduler/post_task.h"
 #import "components/image_fetcher/ios/webp_decoder.h"
@@ -80,9 +81,9 @@ void IOSImageDecoderImpl::DecodeImage(const std::string& image_data,
   }
 
   base::PostTaskAndReplyWithResult(
-      task_runner_.get(), FROM_HERE, base::BindBlockArc(decodeBlock),
-      base::Bind(&IOSImageDecoderImpl::CreateUIImageAndRunCallback,
-                 weak_factory_.GetWeakPtr(), callback));
+      task_runner_.get(), FROM_HERE, base::BindOnce(decodeBlock),
+      base::BindOnce(&IOSImageDecoderImpl::CreateUIImageAndRunCallback,
+                     weak_factory_.GetWeakPtr(), callback));
 }
 
 void IOSImageDecoderImpl::CreateUIImageAndRunCallback(
@@ -103,7 +104,7 @@ void IOSImageDecoderImpl::CreateUIImageAndRunCallback(
 }
 
 std::unique_ptr<ImageDecoder> CreateIOSImageDecoder() {
-  return base::MakeUnique<IOSImageDecoderImpl>();
+  return std::make_unique<IOSImageDecoderImpl>();
 }
 
 }  // namespace image_fetcher

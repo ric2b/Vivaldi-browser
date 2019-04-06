@@ -4,7 +4,11 @@
 
 #include "chrome/browser/chromeos/first_run/first_run_controller.h"
 
-#include "ash/shell.h"
+#include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/shelf_prefs.h"
+#include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/interfaces/constants.mojom.h"
+#include "ash/public/interfaces/first_run_helper.mojom.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -16,8 +20,13 @@
 #include "chrome/browser/chromeos/first_run/steps/help_step.h"
 #include "chrome/browser/chromeos/first_run/steps/tray_step.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/common/service_manager_connection.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -32,6 +41,20 @@ void RecordCompletion(chromeos::first_run::TutorialCompletion type) {
   UMA_HISTOGRAM_ENUMERATION("CrosFirstRun.TutorialCompletion",
                             type,
                             chromeos::first_run::TUTORIAL_COMPLETION_SIZE);
+}
+
+std::unique_ptr<views::Widget> CreateFirstRunWidget() {
+  auto widget = std::make_unique<views::Widget>();
+  views::Widget::InitParams params(
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
+  params.show_state = ui::SHOW_STATE_FULLSCREEN;
+  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  ash_util::SetupWidgetInitParamsForContainer(
+      &params, ash::kShellWindowId_OverlayContainer);
+  widget->Init(params);
+  return widget;
 }
 
 }  // namespace
@@ -62,6 +85,21 @@ void FirstRunController::Stop() {
   g_first_run_controller_instance = NULL;
 }
 
+gfx::Size FirstRunController::GetOverlaySize() const {
+  return widget_->GetWindowBoundsInScreen().size();
+}
+
+ash::ShelfAlignment FirstRunController::GetShelfAlignment() const {
+  DCHECK(user_profile_);
+  return ash::GetShelfAlignmentPref(
+      user_profile_->GetPrefs(),
+      display::Screen::GetScreen()->GetPrimaryDisplay().id());
+}
+
+void FirstRunController::Cancel() {
+  OnCancelled();
+}
+
 FirstRunController* FirstRunController::GetInstanceForTest() {
   return g_first_run_controller_instance;
 }
@@ -78,15 +116,20 @@ void FirstRunController::Init() {
   user_profile_ = ProfileHelper::Get()->GetProfileByUserUnsafe(
       user_manager->GetActiveUser());
 
-  shell_helper_.reset(ash::Shell::Get()->CreateFirstRunHelper());
-  shell_helper_->AddObserver(this);
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash::mojom::kServiceName, &first_run_helper_ptr_);
+  ash::mojom::FirstRunHelperClientPtr client_ptr;
+  binding_.Bind(mojo::MakeRequest(&client_ptr));
+  first_run_helper_ptr_->Start(std::move(client_ptr));
 
+  widget_ = CreateFirstRunWidget();
   FirstRunView* view = new FirstRunView();
-  view->Init(user_profile_);
-  shell_helper_->GetOverlayWidget()->SetContentsView(view);
+  view->Init(user_profile_, this);
+  widget_->SetContentsView(view);
   actor_ = view->GetActor();
   actor_->set_delegate(this);
-  shell_helper_->GetOverlayWidget()->Show();
+  widget_->Show();
   view->RequestFocus();
   web_contents_for_tests_ = view->GetWebContents();
 
@@ -108,8 +151,9 @@ void FirstRunController::Finalize() {
   if (actor_)
     actor_->set_delegate(NULL);
   actor_ = NULL;
-  shell_helper_->RemoveObserver(this);
-  shell_helper_.reset();
+  first_run_helper_ptr_->Stop();
+  // Close the widget.
+  widget_.reset();
 }
 
 void FirstRunController::OnActorInitialized() {
@@ -160,12 +204,11 @@ void FirstRunController::OnCancelled() {
 }
 
 void FirstRunController::RegisterSteps() {
-  steps_.push_back(make_linked_ptr(
-      new first_run::AppListStep(shell_helper_.get(), actor_)));
-  steps_.push_back(make_linked_ptr(
-      new first_run::TrayStep(shell_helper_.get(), actor_)));
-  steps_.push_back(make_linked_ptr(
-      new first_run::HelpStep(shell_helper_.get(), actor_)));
+  steps_.push_back(std::make_unique<first_run::AppListStep>(this, actor_));
+  steps_.push_back(std::make_unique<first_run::TrayStep>(this, actor_));
+  // UnifiedSystemTray does not have a help button. https://crbug.com/837502
+  if (!ash::features::IsSystemTrayUnifiedEnabled())
+    steps_.push_back(std::make_unique<first_run::HelpStep>(this, actor_));
 }
 
 void FirstRunController::ShowNextStep() {

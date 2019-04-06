@@ -4,11 +4,10 @@
 
 #include "chrome/browser/chromeos/login/ui/login_web_dialog.h"
 
-#include "ash/shell.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/events/test/event_generator.h"
@@ -38,7 +37,7 @@ IN_PROC_BROWSER_TEST_F(LoginWebDialogTest, CloseDialogByAccelerator) {
   ASSERT_TRUE(window);
   views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
   views::test::WidgetClosingObserver closing_observer(widget);
-  ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
+  ui::test::EventGenerator generator(window);
   generator.PressKey(ui::VKEY_BROWSER_BACK, ui::EF_SHIFT_DOWN);
   closing_observer.Wait();
   EXPECT_TRUE(closing_observer.widget_closed());

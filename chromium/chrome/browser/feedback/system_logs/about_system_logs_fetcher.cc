@@ -4,7 +4,6 @@
 
 #include "chrome/browser/feedback/system_logs/about_system_logs_fetcher.h"
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/feedback/system_logs/log_sources/chrome_internal_log_source.h"
 #include "chrome/browser/feedback/system_logs/log_sources/memory_details_log_source.h"
@@ -25,19 +24,19 @@ SystemLogsFetcher* BuildAboutSystemLogsFetcher() {
   const bool scrub_data = false;
   SystemLogsFetcher* fetcher = new SystemLogsFetcher(scrub_data);
 
-  fetcher->AddSource(base::MakeUnique<ChromeInternalLogSource>());
-  fetcher->AddSource(base::MakeUnique<MemoryDetailsLogSource>());
+  fetcher->AddSource(std::make_unique<ChromeInternalLogSource>());
+  fetcher->AddSource(std::make_unique<MemoryDetailsLogSource>());
 
 #if defined(OS_CHROMEOS)
-  fetcher->AddSource(base::MakeUnique<CommandLineLogSource>());
-  fetcher->AddSource(base::MakeUnique<DBusLogSource>());
-  fetcher->AddSource(base::MakeUnique<DeviceEventLogSource>());
-  fetcher->AddSource(base::MakeUnique<LsbReleaseLogSource>());
-  fetcher->AddSource(base::MakeUnique<TouchLogSource>());
+  fetcher->AddSource(std::make_unique<CommandLineLogSource>());
+  fetcher->AddSource(std::make_unique<DBusLogSource>());
+  fetcher->AddSource(std::make_unique<DeviceEventLogSource>());
+  fetcher->AddSource(std::make_unique<LsbReleaseLogSource>());
+  fetcher->AddSource(std::make_unique<TouchLogSource>());
 
   // Debug Daemon data source - currently only this data source supports
   // the scrub_data parameter.
-  fetcher->AddSource(base::MakeUnique<DebugDaemonLogSource>(scrub_data));
+  fetcher->AddSource(std::make_unique<DebugDaemonLogSource>(scrub_data));
 #endif
 
   return fetcher;

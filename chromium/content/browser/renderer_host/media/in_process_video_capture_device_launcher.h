@@ -8,6 +8,7 @@
 #include "base/single_thread_task_runner.h"
 #include "content/browser/renderer_host/media/video_capture_controller.h"
 #include "content/browser/renderer_host/media/video_capture_provider.h"
+#include "content/public/browser/video_capture_device_launcher.h"
 #include "content/public/common/media_stream_request.h"
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_capture_device_client.h"
@@ -15,6 +16,8 @@
 #include "media/capture/video/video_capture_system.h"
 
 namespace content {
+
+struct DesktopMediaID;
 
 // Implementation of BuildableVideoCaptureDevice that creates capture devices
 // in the same process as it is being operated on, which must be the Browser
@@ -48,8 +51,10 @@ class InProcessVideoCaptureDeviceLauncher : public VideoCaptureDeviceLauncher {
   };
 
   std::unique_ptr<media::VideoCaptureDeviceClient> CreateDeviceClient(
+      media::VideoCaptureBufferType requested_buffer_type,
       int buffer_pool_max_buffer_count,
-      base::WeakPtr<media::VideoFrameReceiver> receiver);
+      std::unique_ptr<media::VideoFrameReceiver> receiver,
+      base::WeakPtr<media::VideoFrameReceiver> receiver_on_io_thread);
 
   void OnDeviceStarted(Callbacks* callbacks,
                        base::OnceClosure done_cb,
@@ -64,11 +69,17 @@ class InProcessVideoCaptureDeviceLauncher : public VideoCaptureDeviceLauncher {
   void DoStartTabCaptureOnDeviceThread(
       const std::string& device_id,
       const media::VideoCaptureParams& params,
-      std::unique_ptr<media::VideoCaptureDeviceClient> client,
+      std::unique_ptr<media::VideoFrameReceiver> receiver,
+      ReceiveDeviceCallback result_callback);
+
+  void DoStartAuraWindowCaptureOnDeviceThread(
+      const DesktopMediaID& device_id,
+      const media::VideoCaptureParams& params,
+      std::unique_ptr<media::VideoFrameReceiver> receiver,
       ReceiveDeviceCallback result_callback);
 
   void DoStartDesktopCaptureOnDeviceThread(
-      const std::string& device_id,
+      const DesktopMediaID& desktop_id,
       const media::VideoCaptureParams& params,
       std::unique_ptr<media::VideoCaptureDeviceClient> client,
       ReceiveDeviceCallback result_callback);

@@ -11,9 +11,9 @@
 #include "content/renderer/indexed_db/indexed_db_callbacks_impl.h"
 #include "content/renderer/indexed_db/indexed_db_dispatcher.h"
 #include "content/renderer/indexed_db/indexed_db_key_builders.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseCallbacks.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseError.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBObservation.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_callbacks.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_error.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_observation.h"
 
 using blink::WebVector;
 using blink::WebIDBDatabaseCallbacks;
@@ -49,6 +49,10 @@ void BuildObservationsAndNotify(WebIDBDatabaseCallbacks* callbacks,
         IndexedDBCallbacksImpl::ConvertValue(observation->value));
   }
 
+  WebIDBDatabaseCallbacks::ObservationIndexMap observation_index_map(
+      changes->observation_index_map.begin(),
+      changes->observation_index_map.end());
+
   std::unordered_map<int32_t, std::pair<int64_t, std::vector<int64_t>>>
       observer_transactions;
   for (const auto& transaction_pair : changes->transaction_map) {
@@ -60,8 +64,8 @@ void BuildObservationsAndNotify(WebIDBDatabaseCallbacks* callbacks,
             std::move(transaction_pair.second->scope));
   }
 
-  callbacks->OnChanges(changes->observation_index_map,
-                       std::move(web_observations), observer_transactions);
+  callbacks->OnChanges(observation_index_map, std::move(web_observations),
+                       observer_transactions);
 }
 
 }  // namespace
@@ -116,7 +120,7 @@ void IndexedDBDatabaseCallbacksImpl::Changes(
   callback_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&BuildObservationsAndNotify, base::Unretained(callbacks_),
-                     base::Passed(&changes)));
+                     std::move(changes)));
 }
 
 }  // namespace content

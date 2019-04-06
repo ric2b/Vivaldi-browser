@@ -10,11 +10,13 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
-#include "build/build_config.h"
+#include "content/browser/frame_host/render_frame_host_delegate.h"
+#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/service_manager_connection.h"
+#include "media/mojo/buildflags.h"
 #include "media/mojo/interfaces/constants.mojom.h"
 #include "media/mojo/interfaces/media_service.mojom.h"
 #include "media/mojo/services/media_interface_provider.h"
@@ -25,7 +27,7 @@
 #include "content/public/browser/provision_fetcher_impl.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #endif
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -34,6 +36,7 @@
 #include "content/browser/media/key_system_support_impl.h"
 #include "content/public/common/cdm_info.h"
 #include "media/base/key_system_names.h"
+#include "media/mojo/interfaces/cdm_service.mojom.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #if defined(OS_MACOSX)
@@ -41,11 +44,11 @@
 #endif  // defined(OS_MACOSX)
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
-#if defined(OS_MACOSX)
-#include "media/mojo/interfaces/cdm_service_mac.mojom.h"
-#else
-#include "media/mojo/interfaces/cdm_service.mojom.h"
-#endif  // defined(OS_MACOSX)
+#if defined(OS_ANDROID)
+#include "content/browser/media/android/media_player_renderer.h"
+#include "content/browser/media/flinging_renderer.h"
+#include "media/mojo/services/mojo_renderer_service.h"  // nogncheck
+#endif
 
 namespace content {
 
@@ -123,8 +126,8 @@ MediaInterfaceProxy::MediaInterfaceProxy(
 
   binding_.set_connection_error_handler(error_handler);
 
-  // |interface_factory_ptr_| and |cdm_interface_factory_map_| will be lazily
-  // connected in GetMediaInterfaceFactory() and GetCdmInterfaceFactory().
+  // |interface_factory_ptr_| and |cdm_factory_map_| will be lazily
+  // connected in GetMediaInterfaceFactory() and GetCdmFactory().
 }
 
 MediaInterfaceProxy::~MediaInterfaceProxy() {
@@ -149,28 +152,55 @@ void MediaInterfaceProxy::CreateVideoDecoder(
 }
 
 void MediaInterfaceProxy::CreateRenderer(
-    const std::string& audio_device_id,
+    media::mojom::HostedRendererType type,
+    const std::string& type_specific_id,
     media::mojom::RendererRequest request) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+#if defined(OS_ANDROID)
+  if (type == media::mojom::HostedRendererType::kMediaPlayer) {
+    CreateMediaPlayerRenderer(std::move(request));
+    return;
+  }
+
+  if (type == media::mojom::HostedRendererType::kFlinging) {
+    std::unique_ptr<FlingingRenderer> renderer =
+        FlingingRenderer::Create(render_frame_host_, type_specific_id);
+
+    media::MojoRendererService::Create(
+        nullptr, std::move(renderer),
+        media::MojoRendererService::InitiateSurfaceRequestCB(),
+        std::move(request));
+    return;
+  }
+#endif
+
   InterfaceFactory* factory = GetMediaInterfaceFactory();
   if (factory)
-    factory->CreateRenderer(audio_device_id, std::move(request));
+    factory->CreateRenderer(type, type_specific_id, std::move(request));
 }
 
 void MediaInterfaceProxy::CreateCdm(
     const std::string& key_system,
     media::mojom::ContentDecryptionModuleRequest request) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  InterfaceFactory* factory =
-#if !BUILDFLAG(ENABLE_STANDALONE_CDM_SERVICE)
-      GetMediaInterfaceFactory();
-#else
-      GetCdmInterfaceFactory(key_system);
-#endif
-
+#if !BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  auto* factory = GetMediaInterfaceFactory();
   if (factory)
     factory->CreateCdm(key_system, std::move(request));
+#else
+  auto* factory = GetCdmFactory(key_system);
+  if (factory)
+    factory->CreateCdm(key_system, std::move(request));
+#endif
+}
+
+void MediaInterfaceProxy::CreateDecryptor(
+    int cdm_id,
+    media::mojom::DecryptorRequest request) {
+  InterfaceFactory* factory = GetMediaInterfaceFactory();
+  if (factory)
+    factory->CreateDecryptor(cdm_id, std::move(request));
 }
 
 void MediaInterfaceProxy::CreateCdmProxy(
@@ -192,12 +222,12 @@ MediaInterfaceProxy::GetFrameServices(const std::string& cdm_guid,
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
   // TODO(slan): Wrap these into a RenderFrame specific ProvisionFetcher impl.
-  net::URLRequestContextGetter* context_getter =
-      BrowserContext::GetDefaultStoragePartition(
-          render_frame_host_->GetProcess()->GetBrowserContext())
-          ->GetURLRequestContext();
   provider->registry()->AddInterface(base::BindRepeating(
-      &ProvisionFetcherImpl::Create, base::RetainedRef(context_getter)));
+      &ProvisionFetcherImpl::Create,
+      base::RetainedRef(
+          BrowserContext::GetDefaultStoragePartition(
+              render_frame_host_->GetProcess()->GetBrowserContext())
+              ->GetURLLoaderFactoryForBrowserProcess())));
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   // Only provide CdmStorageImpl when we have a valid |cdm_file_system_id|,
@@ -258,9 +288,9 @@ void MediaInterfaceProxy::OnMediaServiceConnectionError() {
   interface_factory_ptr_.reset();
 }
 
-#if BUILDFLAG(ENABLE_STANDALONE_CDM_SERVICE)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
-media::mojom::InterfaceFactory* MediaInterfaceProxy::GetCdmInterfaceFactory(
+media::mojom::CdmFactory* MediaInterfaceProxy::GetCdmFactory(
     const std::string& key_system) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -268,7 +298,6 @@ media::mojom::InterfaceFactory* MediaInterfaceProxy::GetCdmInterfaceFactory(
   base::FilePath cdm_path;
   std::string cdm_file_system_id;
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   std::unique_ptr<CdmInfo> cdm_info =
       KeySystemSupportImpl::GetCdmInfoForKeySystem(key_system);
   if (!cdm_info) {
@@ -290,22 +319,21 @@ media::mojom::InterfaceFactory* MediaInterfaceProxy::GetCdmInterfaceFactory(
   cdm_guid = cdm_info->guid;
   cdm_path = cdm_info->path;
   cdm_file_system_id = cdm_info->file_system_id;
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
-  auto found = cdm_interface_factory_map_.find(cdm_guid);
-  if (found != cdm_interface_factory_map_.end())
+  auto found = cdm_factory_map_.find(cdm_guid);
+  if (found != cdm_factory_map_.end())
     return found->second.get();
 
   return ConnectToCdmService(cdm_guid, cdm_path, cdm_file_system_id);
 }
 
-media::mojom::InterfaceFactory* MediaInterfaceProxy::ConnectToCdmService(
+media::mojom::CdmFactory* MediaInterfaceProxy::ConnectToCdmService(
     const std::string& cdm_guid,
     const base::FilePath& cdm_path,
     const std::string& cdm_file_system_id) {
   DVLOG(1) << __func__ << ": cdm_guid = " << cdm_guid;
 
-  DCHECK(!cdm_interface_factory_map_.count(cdm_guid));
+  DCHECK(!cdm_factory_map_.count(cdm_guid));
   service_manager::Identity identity(media::mojom::kCdmServiceName,
                                      service_manager::mojom::kInheritUserID,
                                      cdm_guid);
@@ -317,7 +345,6 @@ media::mojom::InterfaceFactory* MediaInterfaceProxy::ConnectToCdmService(
   media::mojom::CdmServicePtr cdm_service;
   connector->BindInterface(identity, &cdm_service);
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 #if defined(OS_MACOSX)
   // LoadCdm() should always be called before CreateInterfaceFactory().
   media::mojom::SeatbeltExtensionTokenProviderPtr token_provider_ptr;
@@ -329,20 +356,17 @@ media::mojom::InterfaceFactory* MediaInterfaceProxy::ConnectToCdmService(
 #else
   cdm_service->LoadCdm(cdm_path);
 #endif  // defined(OS_MACOSX)
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
-  InterfaceFactoryPtr interface_factory_ptr;
-  cdm_service->CreateInterfaceFactory(
-      MakeRequest(&interface_factory_ptr),
-      GetFrameServices(cdm_guid, cdm_file_system_id));
-  interface_factory_ptr.set_connection_error_handler(
+  media::mojom::CdmFactoryPtr cdm_factory_ptr;
+  cdm_service->CreateCdmFactory(MakeRequest(&cdm_factory_ptr),
+                                GetFrameServices(cdm_guid, cdm_file_system_id));
+  cdm_factory_ptr.set_connection_error_handler(
       base::BindOnce(&MediaInterfaceProxy::OnCdmServiceConnectionError,
                      base::Unretained(this), cdm_guid));
 
-  InterfaceFactory* cdm_interface_factory = interface_factory_ptr.get();
-  cdm_interface_factory_map_.emplace(cdm_guid,
-                                     std::move(interface_factory_ptr));
-  return cdm_interface_factory;
+  auto* cdm_factory = cdm_factory_ptr.get();
+  cdm_factory_map_.emplace(cdm_guid, std::move(cdm_factory_ptr));
+  return cdm_factory;
 }
 
 void MediaInterfaceProxy::OnCdmServiceConnectionError(
@@ -350,12 +374,10 @@ void MediaInterfaceProxy::OnCdmServiceConnectionError(
   DVLOG(1) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  DCHECK(cdm_interface_factory_map_.count(cdm_guid));
-  cdm_interface_factory_map_.erase(cdm_guid);
+  DCHECK(cdm_factory_map_.count(cdm_guid));
+  cdm_factory_map_.erase(cdm_guid);
 }
-#endif  // BUILDFLAG(ENABLE_STANDALONE_CDM_SERVICE)
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 void MediaInterfaceProxy::CreateCdmProxyInternal(
     const std::string& cdm_guid,
     media::mojom::CdmProxyRequest request) {
@@ -367,5 +389,26 @@ void MediaInterfaceProxy::CreateCdmProxyInternal(
     factory->CreateCdmProxy(cdm_guid, std::move(request));
 }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+
+#if defined(OS_ANDROID)
+void MediaInterfaceProxy::CreateMediaPlayerRenderer(
+    media::mojom::RendererRequest request) {
+  auto renderer = std::make_unique<MediaPlayerRenderer>(
+      render_frame_host_->GetProcess()->GetID(),
+      render_frame_host_->GetRoutingID(),
+      static_cast<RenderFrameHostImpl*>(render_frame_host_)
+          ->delegate()
+          ->GetAsWebContents());
+
+  // base::Unretained is safe here because the lifetime of the MediaPlayerRender
+  // is tied to the lifetime of the MojoRendererService.
+  media::MojoRendererService::InitiateSurfaceRequestCB surface_request_cb =
+      base::BindRepeating(&MediaPlayerRenderer::InitiateScopedSurfaceRequest,
+                          base::Unretained(renderer.get()));
+
+  media::MojoRendererService::Create(nullptr, std::move(renderer),
+                                     surface_request_cb, std::move(request));
+}
+#endif  // defined(OS_ANDROID)
 
 }  // namespace content

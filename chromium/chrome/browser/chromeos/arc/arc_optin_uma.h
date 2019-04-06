@@ -18,25 +18,23 @@ class TimeDelta;
 namespace arc {
 
 // These enums are used to define the buckets for an enumerated UMA histogram
-// and need to be synced with histograms.xml
+// and need to be synced with tools/metrics/histograms/enums.xml. Note that
+// values 0, 1, 2, 3 and 4 are now deprecated.
 enum class OptInActionType : int {
-  // ARC was opted out by user.
-  OPTED_OUT = 0,
-
-  // ARC was opted in by user.
-  OPTED_IN = 1,
-
-  // ARC OptIn notification was accepted.
-  NOTIFICATION_ACCEPTED = 2,
-
-  // ARC OptIn notification was declined.
-  NOTIFICATION_DECLINED = 3,
-
-  // ARC OptIn notification was timed out.
-  NOTIFICATION_TIMED_OUT = 4,
-
   // User asked to retry OptIn.
   RETRY = 5,
+
+  // ARC was opted in by user from OOBE flow.
+  OOBE_OPTED_IN = 6,
+
+  // ARC was opted out by user from OOBE flow.
+  OOBE_OPTED_OUT = 7,
+
+  // ARC was opted in by user from session.
+  SESSION_OPTED_IN = 8,
+
+  // ARC was opted out by user from session.
+  SESSION_OPTED_OUT = 9,
 
   // The size of this enum; keep last.
   SIZE,
@@ -185,10 +183,39 @@ enum class OptInFlowResult : int {
   SIZE,
 };
 
+enum class ArcEnabledState {
+  // ARC++ is enabled for non-managed case.
+  ENABLED_NOT_MANAGED = 0,
+
+  // ARC++ is disabled for non-managed case.
+  DISABLED_NOT_MANAGED = 1,
+
+  // ARC++ is enabled for managed case when ARC++ is forced on.
+  ENABLED_MANAGED_ON = 2,
+
+  // ARC++ is disabled for managed case when ARC++ is forced on. This can happen
+  // when user declines ToS even if ARC++ is forced on.
+  DISABLED_MANAGED_ON = 3,
+
+  // ARC++ is disabled for managed case when ARC++ is forced off.
+  DISABLED_MANAGED_OFF = 4,
+
+  // ARC++ is enabled in case ARC++ is not allowed for the device. This can
+  // happen for ARC++ kiosk mode.
+  ENABLED_NOT_ALLOWED = 5,
+
+  // ARC++ is disabled and ARC++ is not allowed for the device.
+  DISABLED_NOT_ALLOWED = 6,
+
+  // The size of this enum; keep last.
+  SIZE,
+};
+
 void UpdateOptInActionUMA(OptInActionType type);
 void UpdateOptInCancelUMA(OptInCancelReason reason);
 void UpdateOptInFlowResultUMA(OptInFlowResult result);
 void UpdateEnabledStateUMA(bool enabled);
+void UpdateEnabledStateByUserTypeUMA(bool enabled, const Profile* profile);
 void UpdateProvisioningResultUMA(ProvisioningResult result,
                                  const Profile* profile);
 void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
@@ -199,6 +226,8 @@ void UpdateReauthorizationResultUMA(ProvisioningResult result,
 void UpdatePlayStoreShowTime(const base::TimeDelta& elapsed_time,
                              const Profile* profile);
 void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state);
+void UpdateSupervisionTransitionResultUMA(
+    mojom::SupervisionChangeStatus result);
 void UpdateReauthorizationSilentAuthCodeUMA(OptInSilentAuthCode state);
 void UpdateAuthTiming(const char* histogram_name, base::TimeDelta elapsed_time);
 void UpdateAuthCheckinAttempts(int32_t num_attempts);

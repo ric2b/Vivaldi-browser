@@ -16,12 +16,15 @@
 #include "base/process/process.h"
 #include "base/threading/thread_checker.h"
 #include "base/values.h"
-#include "content/browser/webrtc/webrtc_event_log_manager.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/render_process_host_observer.h"
-#include "media/media_features.h"
-#include "services/device/public/interfaces/wake_lock.mojom.h"
+#include "media/media_buildflags.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+
+namespace media {
+class AudioDebugRecordingSession;
+}
 
 namespace content {
 
@@ -35,13 +38,16 @@ class WebRTCInternalsUIObserver;
 class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
                                        public ui::SelectFileDialog::Listener {
  public:
-  // Ensures that no previous instantiation of the class was performed, then
-  // instantiates the class and returns the object. Subsequent calls to
-  // GetInstance() will return this object.
+  // * CreateSingletonInstance() ensures that no previous instantiation of the
+  //   class was performed, then instantiates the class and returns the object.
+  // * GetInstance() returns the object previously constructed using
+  //   CreateSingletonInstance(). It may return null in tests.
+  // * Creation is separated from access because WebRTCInternals may only be
+  //   created from a context that allows blocking. If GetInstance were allowed
+  //   to instantiate, as with a lazily constructed singleton, it would be
+  //   difficult to guarantee that its construction is always first attempted
+  //   from a context that allows it.
   static WebRTCInternals* CreateSingletonInstance();
-
-  // Returns the object previously constructed using CreateSingletonInstance().
-  // Can be null in tests.
   static WebRTCInternals* GetInstance();
 
   ~WebRTCInternals() override;
@@ -114,6 +120,7 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   void DisableLocalEventLogRecordings();
 
   bool IsEventLogRecordingsEnabled() const;
+  bool CanToggleEventLogRecordings() const;
 
   int num_open_connections() const { return num_open_connections_; }
 
@@ -144,8 +151,7 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
 
   // RenderProcessHostObserver implementation.
   void RenderProcessExited(RenderProcessHost* host,
-                           base::TerminationStatus status,
-                           int exit_code) override;
+                           const ChildProcessTerminationInfo& info) override;
 
   // ui::SelectFileDialog::Listener implementation.
   void FileSelected(const base::FilePath& path,
@@ -156,11 +162,9 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   // Called when a renderer exits (including crashes).
   void OnRendererExit(int render_process_id);
 
-#if BUILDFLAG(ENABLE_WEBRTC)
   // Enables diagnostic audio recordings on all render process hosts using
   // |audio_debug_recordings_file_path_|.
   void EnableAudioDebugRecordingsOnAllRenderProcessHosts();
-#endif
 
   // Updates the number of open PeerConnections. Called when a PeerConnection
   // is stopped or removed.
@@ -218,10 +222,16 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   } selection_type_;
 
   // Diagnostic audio recording state.
-  bool audio_debug_recordings_;
   base::FilePath audio_debug_recordings_file_path_;
+  std::unique_ptr<media::AudioDebugRecordingSession>
+      audio_debug_recording_session_;
 
-  // Diagnostic event log recording state.
+  // If non-empty, WebRTC (local) event logging should be enabled using this
+  // path, and may not be turned off, except by restarting the browser.
+  const base::FilePath command_line_derived_logging_path_;
+
+  // Diagnostic event log recording state. These are meaningful only when
+  // |command_line_derived_logging_path_| is empty.
   bool event_log_recordings_;
   base::FilePath event_log_recordings_file_path_;
 

@@ -5,9 +5,11 @@
 #ifndef CHROMECAST_MEDIA_AUDIO_CAST_AUDIO_MANAGER_ALSA_H_
 #define CHROMECAST_MEDIA_AUDIO_CAST_AUDIO_MANAGER_ALSA_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "chromecast/media/audio/cast_audio_manager.h"
 
 namespace media {
@@ -23,7 +25,7 @@ class CastAudioManagerAlsa : public CastAudioManager {
   CastAudioManagerAlsa(
       std::unique_ptr<::media::AudioThread> audio_thread,
       ::media::AudioLogFactory* audio_log_factory,
-      std::unique_ptr<MediaPipelineBackendFactory> backend_factory,
+      base::RepeatingCallback<CmaBackendFactory*()> backend_factory_getter,
       scoped_refptr<base::SingleThreadTaskRunner> backend_task_runner,
       bool use_mixer);
   ~CastAudioManagerAlsa() override;

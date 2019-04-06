@@ -122,7 +122,7 @@ class TestClientRunner {
       : client_thread_("Test client") {
     client_thread_.Start();
     client_thread_.task_runner()->PostTask(
-        FROM_HERE, base::BindOnce(&RunTestClient, base::Passed(&pipe)));
+        FROM_HERE, base::BindOnce(&RunTestClient, std::move(pipe)));
   }
 
   ~TestClientRunner() {
@@ -149,7 +149,7 @@ class TestClientRunner {
       proxy.channel()->Send(message.release());
     }
 
-    driver->RequestQuit(base::MessageLoop::QuitWhenIdleClosure());
+    driver->RequestQuit(base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
 
     base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).Run();
 

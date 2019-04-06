@@ -21,8 +21,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
-import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.signin.AccountTrackerService;
 import org.chromium.chrome.browser.signin.SigninHelper;
@@ -33,7 +31,6 @@ import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.AccountIdProvider;
 import org.chromium.components.sync.AndroidSyncSettings;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
@@ -41,10 +38,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
  * Test suite for Sync.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        // TODO(crbug.com/781368) remove once feature enabled.
-        "enable-features=SyncUSSTypedURL"})
-@RetryOnFailure // crbug.com/637448
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class SyncTest {
     @Rule
     public SyncTestRule mSyncTestRule = new SyncTestRule();
@@ -92,8 +86,7 @@ public class SyncTest {
                 new Criteria("Timed out checking that isSignedInOnNative() == true") {
                     @Override
                     public boolean isSatisfied() {
-                        return SigninManager.get(mSyncTestRule.getTargetContext())
-                                .isSignedInOnNative();
+                        return SigninManager.get().isSignedInOnNative();
                     }
                 },
                 SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
@@ -107,8 +100,7 @@ public class SyncTest {
                 new Criteria("Timed out checking that isSignedInOnNative() == false") {
                     @Override
                     public boolean isSatisfied() {
-                        return !SigninManager.get(mSyncTestRule.getTargetContext())
-                                        .isSignedInOnNative();
+                        return !SigninManager.get().isSignedInOnNative();
                     }
                 },
                 SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
@@ -141,8 +133,8 @@ public class SyncTest {
                 // Tell the fake content resolver that a rename had happen and copy over the sync
                 // settings. This would normally be done by the
                 // SystemSyncTestRule.getSyncContentResolver().
-                mSyncTestRule.getSyncContentResolver().renameAccounts(oldAccount, newAccount,
-                        AndroidSyncSettings.getContractAuthority(mSyncTestRule.getTargetContext()));
+                mSyncTestRule.getSyncContentResolver().renameAccounts(
+                        oldAccount, newAccount, AndroidSyncSettings.getContractAuthority());
 
                 // Inform the AccountTracker, these would normally be done by account validation
                 // or signin. We will only be calling the testing versions of it.
@@ -189,8 +181,7 @@ public class SyncTest {
     public void testStopAndStartSyncThroughAndroid() {
         Account account = mSyncTestRule.setUpTestAccountAndSignIn();
 
-        String authority =
-                AndroidSyncSettings.getContractAuthority(mSyncTestRule.getTargetContext());
+        String authority = AndroidSyncSettings.getContractAuthority();
 
         // Disabling Android sync should turn Chrome sync engine off.
         mSyncTestRule.getSyncContentResolver().setSyncAutomatically(account, authority, false);
@@ -233,9 +224,5 @@ public class SyncTest {
         mSyncTestRule.getSyncContentResolver().setMasterSyncAutomatically(false);
         mSyncTestRule.startSync();
         Assert.assertFalse(SyncTestUtil.isSyncRequested());
-    }
-
-    private static ContentViewCore getContentViewCore(ChromeActivity activity) {
-        return activity.getActivityTab().getContentViewCore();
     }
 }

@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "ui/events/events_export.h"
-#include "ui/events/platform/platform_event_types.h"
+#include "ui/events/platform_event.h"
 
 namespace ui {
 
@@ -77,6 +77,8 @@ class EVENTS_EXPORT PlatformEventSource {
   // returned value if the event-source should stop dispatching events at the
   // current message-loop iteration.
   virtual uint32_t DispatchEvent(PlatformEvent platform_event);
+
+  base::ObserverList<PlatformEventObserver>& observers() { return observers_; }
 
  private:
   friend class ScopedEventDispatcher;

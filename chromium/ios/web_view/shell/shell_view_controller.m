@@ -22,15 +22,16 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 
 @interface ShellViewController ()<CWVNavigationDelegate,
                                   CWVUIDelegate,
+                                  CWVScriptCommandHandler,
                                   UITextFieldDelegate>
 // Container for |webView|.
 @property(nonatomic, strong) UIView* containerView;
 // Text field used for navigating to URLs.
 @property(nonatomic, strong) UITextField* field;
-// Toolbar button to navigate backwards.
-@property(nonatomic, strong) UIBarButtonItem* backButton;
-// Toolbar button to navigate forwards.
-@property(nonatomic, strong) UIBarButtonItem* forwardButton;
+// Button to navigate backwards.
+@property(nonatomic, strong) UIButton* backButton;
+// Button to navigate forwards.
+@property(nonatomic, strong) UIButton* forwardButton;
 // Toolbar containing navigation buttons and |field|.
 @property(nonatomic, strong) UIToolbar* toolbar;
 // Handles the autofill of the content displayed in |webView|.
@@ -103,35 +104,46 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
   [_field setAccessibilityLabel:kWebViewShellAddressFieldAccessibilityLabel];
 
   // Set up the toolbar buttons.
-  self.backButton = [[UIBarButtonItem alloc]
-      initWithImage:[UIImage imageNamed:@"toolbar_back"]
-              style:UIBarButtonItemStylePlain
-             target:self
-             action:@selector(back)];
+  self.backButton = [[UIButton alloc] init];
+  [_backButton setImage:[UIImage imageNamed:@"toolbar_back"]
+               forState:UIControlStateNormal];
+  [_backButton addTarget:self
+                  action:@selector(back)
+        forControlEvents:UIControlEventTouchUpInside];
   [_backButton setAccessibilityLabel:kWebViewShellBackButtonAccessibilityLabel];
+  [_backButton.widthAnchor constraintEqualToConstant:44].active = YES;
 
-  self.forwardButton = [[UIBarButtonItem alloc]
-      initWithImage:[UIImage imageNamed:@"toolbar_forward"]
-              style:UIBarButtonItemStylePlain
-             target:self
-             action:@selector(forward)];
+  self.forwardButton = [[UIButton alloc] init];
+  [_forwardButton setImage:[UIImage imageNamed:@"toolbar_forward"]
+                  forState:UIControlStateNormal];
+  [_forwardButton addTarget:self
+                     action:@selector(forward)
+           forControlEvents:UIControlEventTouchUpInside];
   [_forwardButton
       setAccessibilityLabel:kWebViewShellForwardButtonAccessibilityLabel];
+  [_forwardButton.widthAnchor constraintEqualToConstant:44].active = YES;
 
-  UIBarButtonItem* stop = [[UIBarButtonItem alloc]
-      initWithImage:[UIImage imageNamed:@"toolbar_stop"]
-              style:UIBarButtonItemStylePlain
-             target:self
-             action:@selector(stopLoading)];
+  UIButton* stopButton = [[UIButton alloc] init];
+  [stopButton setImage:[UIImage imageNamed:@"toolbar_stop"]
+              forState:UIControlStateNormal];
+  [stopButton addTarget:self
+                 action:@selector(stopLoading)
+       forControlEvents:UIControlEventTouchUpInside];
+  [stopButton.widthAnchor constraintEqualToConstant:44].active = YES;
 
-  UIBarButtonItem* menu = [[UIBarButtonItem alloc]
-      initWithImage:[UIImage imageNamed:@"toolbar_more_horiz"]
-              style:UIBarButtonItemStylePlain
-             target:self
-             action:@selector(showMenu)];
+  UIButton* menuButton = [[UIButton alloc] init];
+  [menuButton setImage:[UIImage imageNamed:@"toolbar_more_horiz"]
+              forState:UIControlStateNormal];
+  [menuButton addTarget:self
+                 action:@selector(showMenu)
+       forControlEvents:UIControlEventTouchUpInside];
+  [menuButton.widthAnchor constraintEqualToConstant:44].active = YES;
 
   [_toolbar setItems:@[
-    _backButton, _forwardButton, stop, menu,
+    [[UIBarButtonItem alloc] initWithCustomView:_backButton],
+    [[UIBarButtonItem alloc] initWithCustomView:_forwardButton],
+    [[UIBarButtonItem alloc] initWithCustomView:stopButton],
+    [[UIBarButtonItem alloc] initWithCustomView:menuButton],
     [[UIBarButtonItem alloc] initWithCustomView:_field]
   ]];
 
@@ -270,18 +282,23 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
              forKeyPath:@"canGoForward"
                 options:NSKeyValueObservingOptionNew
                 context:nil];
+
+  [_webView addScriptCommandHandler:self commandPrefix:@"test"];
 }
 
 - (void)removeWebView {
   [_webView removeFromSuperview];
   [_webView removeObserver:self forKeyPath:@"canGoBack"];
   [_webView removeObserver:self forKeyPath:@"canGoForward"];
+  [_webView removeScriptCommandHandlerForCommandPrefix:@"test"];
+
   _webView = nil;
 }
 
 - (void)dealloc {
   [_webView removeObserver:self forKeyPath:@"canGoBack"];
   [_webView removeObserver:self forKeyPath:@"canGoForward"];
+  [_webView removeScriptCommandHandlerForCommandPrefix:@"test"];
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField*)field {
@@ -427,6 +444,11 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
   [self presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)webView:(CWVWebView*)webView
+    didLoadFavicons:(NSArray<CWVFavicon*>*)favIcons {
+  NSLog(@"%@", NSStringFromSelector(_cmd));
+}
+
 #pragma mark CWVNavigationDelegate methods
 
 - (BOOL)webView:(CWVWebView*)webView
@@ -485,6 +507,15 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibiltyIdentifier =
 - (void)webView:(CWVWebView*)webView
     commitPreviewingViewController:(UIViewController*)previewingViewController {
   NSLog(@"%@", NSStringFromSelector(_cmd));
+}
+
+#pragma mark CWVScriptCommandHandler
+
+- (BOOL)webView:(CWVWebView*)webView
+    handleScriptCommand:(nonnull CWVScriptCommand*)command
+          fromMainFrame:(BOOL)fromMainFrame {
+  NSLog(@"%@ command.content=%@", NSStringFromSelector(_cmd), command.content);
+  return YES;
 }
 
 @end

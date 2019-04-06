@@ -8,7 +8,6 @@
 #include <winternl.h>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/win/win_util.h"
 #include "chrome/common/chrome_constants.h"
 
@@ -134,7 +133,7 @@ const size_t SwapThrashingMonitorDelegateWin::HardFaultDeltasWindow::
     kHardFaultDeltasWindowSize = 12;
 
 SwapThrashingMonitorDelegateWin::SwapThrashingMonitorDelegateWin()
-    : hard_fault_deltas_window_(base::MakeUnique<HardFaultDeltasWindow>()) {}
+    : hard_fault_deltas_window_(std::make_unique<HardFaultDeltasWindow>()) {}
 
 SwapThrashingMonitorDelegateWin::~SwapThrashingMonitorDelegateWin() {}
 

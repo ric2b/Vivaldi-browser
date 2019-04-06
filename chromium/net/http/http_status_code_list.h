@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 // This file intentionally does not have header guards, it's included
-// inside a macro to generate enum.
-//
+// inside a macro to generate enum. The following line silences a
+// presubmit warning that would otherwise be triggered by this:
+// no-include-guard-because-multiply-included
+
 // This file contains the list of HTTP status codes. Taken from IANA HTTP Status
 // Code Registry.
 // http://www.iana.org/assignments/http-status-codes/http-status-codes.xml
@@ -57,6 +59,7 @@ HTTP_STATUS(UNSUPPORTED_MEDIA_TYPE, 415, "Unsupported Media Type")
 HTTP_STATUS(REQUESTED_RANGE_NOT_SATISFIABLE, 416,
             "Requested Range Not Satisfiable")
 HTTP_STATUS(EXPECTATION_FAILED, 417, "Expectation Failed")
+HTTP_STATUS(TOO_EARLY, 425, "Too Early")
 
 // Server error 5xx
 HTTP_STATUS(INTERNAL_SERVER_ERROR, 500, "Internal Server Error")

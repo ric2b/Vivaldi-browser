@@ -9,7 +9,7 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "components/printing/common/print_messages.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/metafile_skia_wrapper.h"
 
 #if defined(OS_ANDROID)
@@ -43,9 +43,9 @@ bool SaveToFD(const printing::Metafile& metafile,
 
 namespace printing {
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
 bool PrintRenderFrameHelper::PrintPagesNative(blink::WebLocalFrame* frame,
-                                              int page_count) {
+                                              int page_count,
+                                              bool is_pdf) {
   const PrintMsg_PrintPages_Params& params = *print_pages_params_;
   const PrintMsg_Print_Params& print_params = params.params;
 
@@ -53,12 +53,14 @@ bool PrintRenderFrameHelper::PrintPagesNative(blink::WebLocalFrame* frame,
   if (printed_pages.empty())
     return false;
 
-  PdfMetafileSkia metafile(print_params.printed_doc_type);
+  PdfMetafileSkia metafile(print_params.printed_doc_type,
+                           print_params.document_cookie);
   CHECK(metafile.Init());
 
   for (int page_number : printed_pages) {
-    PrintPageInternal(print_params, page_number, page_count, frame, &metafile,
-                      nullptr, nullptr);
+    PrintPageInternal(print_params, page_number, page_count,
+                      GetScaleFactor(print_params.scale_factor, is_pdf), frame,
+                      &metafile, nullptr, nullptr);
   }
 
   // blink::printEnd() for PDF should be called before metafile is closed.
@@ -82,17 +84,14 @@ bool PrintRenderFrameHelper::PrintPagesNative(blink::WebLocalFrame* frame,
   return true;
 #else
   PrintHostMsg_DidPrintDocument_Params page_params;
-  if (!CopyMetafileDataToReadOnlySharedMem(metafile,
-                                           &page_params.metafile_data_handle)) {
+  if (!CopyMetafileDataToReadOnlySharedMem(metafile, &page_params.content)) {
     return false;
   }
 
-  page_params.data_size = metafile.GetDataSize();
   page_params.document_cookie = print_params.document_cookie;
   Send(new PrintHostMsg_DidPrintDocument(routing_id(), page_params));
   return true;
 #endif  // defined(OS_ANDROID)
 }
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
 }  // namespace printing

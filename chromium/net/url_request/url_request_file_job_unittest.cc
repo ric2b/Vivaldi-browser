@@ -12,10 +12,10 @@
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_test_util.h"
@@ -180,7 +180,7 @@ struct Range {
 
 // A superclass for tests of the OnReadComplete / OnSeekComplete /
 // OnReadComplete functions of URLRequestFileJob.
-class URLRequestFileJobEventsTest : public testing::Test {
+class URLRequestFileJobEventsTest : public TestWithScopedTaskEnvironment {
  public:
   URLRequestFileJobEventsTest();
 
@@ -358,7 +358,7 @@ TEST_F(URLRequestFileJobEventsTest, DecodeSvgzFile) {
 
 TEST_F(URLRequestFileJobEventsTest, OpenNonExistentFile) {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   path = path.Append(
       FILE_PATH_LITERAL("net/data/url_request_unittest/non-existent.txt"));
 
@@ -376,7 +376,7 @@ TEST_F(URLRequestFileJobEventsTest, OpenNonExistentFile) {
 
 TEST_F(URLRequestFileJobEventsTest, MultiRangeRequestNotSupported) {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   path = path.Append(
       FILE_PATH_LITERAL("net/data/url_request_unittest/BullRunSpeech.txt"));
 
@@ -395,7 +395,7 @@ TEST_F(URLRequestFileJobEventsTest, MultiRangeRequestNotSupported) {
 
 TEST_F(URLRequestFileJobEventsTest, RangeExceedingFileSize) {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   path = path.Append(
       FILE_PATH_LITERAL("net/data/url_request_unittest/BullRunSpeech.txt"));
 
@@ -414,7 +414,7 @@ TEST_F(URLRequestFileJobEventsTest, RangeExceedingFileSize) {
 
 TEST_F(URLRequestFileJobEventsTest, IgnoreRangeParsingError) {
   base::FilePath path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   path = path.Append(
       FILE_PATH_LITERAL("net/data/url_request_unittest/simple.html"));
 

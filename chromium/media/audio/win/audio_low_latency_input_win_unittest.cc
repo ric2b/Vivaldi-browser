@@ -43,6 +43,8 @@ namespace media {
 
 namespace {
 
+constexpr SampleFormat kSampleFormat = kSampleFormatS16;
+
 void LogCallbackDummy(const std::string& /* message */) {}
 
 }  // namespace
@@ -101,17 +103,14 @@ class WriteToFileAudioSink : public AudioInputStream::AudioInputCallback {
   // 2 bytes per sample, 2 channels, 10ms @ 48kHz, 10 seconds <=> 1920000 bytes.
   static const size_t kMaxBufferSize = 2 * 2 * 480 * 100 * 10;
 
-  explicit WriteToFileAudioSink(const char* file_name, int bits_per_sample)
-      : bits_per_sample_(bits_per_sample),
-        buffer_(0, kMaxBufferSize),
-        bytes_to_write_(0) {
+  explicit WriteToFileAudioSink(const char* file_name)
+      : buffer_(0, kMaxBufferSize), bytes_to_write_(0) {
     base::FilePath file_path;
-    EXPECT_TRUE(PathService::Get(base::DIR_EXE, &file_path));
+    EXPECT_TRUE(base::PathService::Get(base::DIR_EXE, &file_path));
     file_path = file_path.AppendASCII(file_name);
     binary_file_ = base::OpenFile(file_path, "wb");
     DLOG_IF(ERROR, !binary_file_) << "Failed to open binary PCM data file.";
     VLOG(0) << ">> Output file: " << file_path.value() << " has been created.";
-    VLOG(0) << ">> bits_per_sample_:" << bits_per_sample_;
   }
 
   ~WriteToFileAudioSink() override {
@@ -136,11 +135,11 @@ class WriteToFileAudioSink : public AudioInputStream::AudioInputCallback {
   void OnData(const AudioBus* src,
               base::TimeTicks capture_time,
               double volume) override {
-    EXPECT_EQ(bits_per_sample_, 16);
     const int num_samples = src->frames() * src->channels();
     auto interleaved = std::make_unique<int16_t[]>(num_samples);
     const int bytes_per_sample = sizeof(interleaved[0]);
-    src->ToInterleaved(src->frames(), bytes_per_sample, interleaved.get());
+    src->ToInterleaved<SignedInt16SampleTypeTraits>(src->frames(),
+                                                    interleaved.get());
 
     // Store data data in a temporary buffer to avoid making blocking
     // fwrite() calls in the audio callback. The complete buffer will be
@@ -154,7 +153,6 @@ class WriteToFileAudioSink : public AudioInputStream::AudioInputCallback {
   void OnError() override {}
 
  private:
-  int bits_per_sample_;
   media::SeekableBuffer buffer_;
   FILE* binary_file_;
   size_t bytes_to_write_;
@@ -172,11 +170,16 @@ static bool HasCoreAudioAndInputDevices(AudioManager* audio_man) {
 // also allows the user to modify the default settings.
 class AudioInputStreamWrapper {
  public:
-  explicit AudioInputStreamWrapper(AudioManager* audio_manager)
+  explicit AudioInputStreamWrapper(AudioManager* audio_manager,
+                                   bool use_voice_processing)
       : audio_man_(audio_manager) {
     EXPECT_TRUE(SUCCEEDED(CoreAudioUtil::GetPreferredAudioParameters(
         AudioDeviceDescription::kDefaultDeviceId, false, &default_params_)));
     EXPECT_EQ(format(), AudioParameters::AUDIO_PCM_LOW_LATENCY);
+    if (use_voice_processing) {
+      default_params_.set_effects(default_params_.effects() |
+                                  AudioParameters::ECHO_CANCELLER);
+    }
     frames_per_buffer_ = default_params_.frames_per_buffer();
   }
 
@@ -203,7 +206,6 @@ class AudioInputStreamWrapper {
   int channels() const {
     return ChannelLayoutToChannelCount(default_params_.channel_layout());
   }
-  int bits_per_sample() const { return default_params_.bits_per_sample(); }
   int sample_rate() const { return default_params_.sample_rate(); }
   int frames_per_buffer() const { return frames_per_buffer_; }
 
@@ -225,8 +227,9 @@ class AudioInputStreamWrapper {
 
 // Convenience method which creates a default AudioInputStream object.
 static AudioInputStream* CreateDefaultAudioInputStream(
-    AudioManager* audio_manager) {
-  AudioInputStreamWrapper aisw(audio_manager);
+    AudioManager* audio_manager,
+    bool use_voice_processing) {
+  AudioInputStreamWrapper aisw(audio_manager, use_voice_processing);
   AudioInputStream* ais = aisw.Create();
   return ais;
 }
@@ -261,7 +264,9 @@ class ScopedAudioInputStream {
   DISALLOW_COPY_AND_ASSIGN(ScopedAudioInputStream);
 };
 
-class WinAudioInputTest : public ::testing::Test {
+// The test class. The boolean parameter specifies if voice processing should be
+// used.
+class WinAudioInputTest : public ::testing::TestWithParam<bool> {
  public:
   WinAudioInputTest() {
     audio_manager_ =
@@ -296,27 +301,27 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamHardwareSampleRate) {
 }
 
 // Test Create(), Close() calling sequence.
-TEST_F(WinAudioInputTest, WASAPIAudioInputStreamCreateAndClose) {
+TEST_P(WinAudioInputTest, WASAPIAudioInputStreamCreateAndClose) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
   ScopedAudioInputStream ais(
-      CreateDefaultAudioInputStream(audio_manager_.get()));
+      CreateDefaultAudioInputStream(audio_manager_.get(), GetParam()));
   ais.Close();
 }
 
 // Test Open(), Close() calling sequence.
-TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenAndClose) {
+TEST_P(WinAudioInputTest, WASAPIAudioInputStreamOpenAndClose) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
   ScopedAudioInputStream ais(
-      CreateDefaultAudioInputStream(audio_manager_.get()));
+      CreateDefaultAudioInputStream(audio_manager_.get(), GetParam()));
   EXPECT_TRUE(ais->Open());
   ais.Close();
 }
 
 // Test Open(), Start(), Close() calling sequence.
-TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenStartAndClose) {
+TEST_P(WinAudioInputTest, WASAPIAudioInputStreamOpenStartAndClose) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
   ScopedAudioInputStream ais(
-      CreateDefaultAudioInputStream(audio_manager_.get()));
+      CreateDefaultAudioInputStream(audio_manager_.get(), GetParam()));
   EXPECT_TRUE(ais->Open());
   MockAudioInputCallback sink;
   ais->Start(&sink);
@@ -324,10 +329,10 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenStartAndClose) {
 }
 
 // Test Open(), Start(), Stop(), Close() calling sequence.
-TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenStartStopAndClose) {
+TEST_P(WinAudioInputTest, WASAPIAudioInputStreamOpenStartStopAndClose) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
   ScopedAudioInputStream ais(
-      CreateDefaultAudioInputStream(audio_manager_.get()));
+      CreateDefaultAudioInputStream(audio_manager_.get(), GetParam()));
   EXPECT_TRUE(ais->Open());
   MockAudioInputCallback sink;
   ais->Start(&sink);
@@ -336,10 +341,10 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenStartStopAndClose) {
 }
 
 // Test some additional calling sequences.
-TEST_F(WinAudioInputTest, WASAPIAudioInputStreamMiscCallingSequences) {
+TEST_P(WinAudioInputTest, WASAPIAudioInputStreamMiscCallingSequences) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
   ScopedAudioInputStream ais(
-      CreateDefaultAudioInputStream(audio_manager_.get()));
+      CreateDefaultAudioInputStream(audio_manager_.get(), GetParam()));
 
   // Open(), Open() should fail the second time.
   EXPECT_TRUE(ais->Open());
@@ -361,7 +366,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamMiscCallingSequences) {
   ais.Close();
 }
 
-TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
+TEST_P(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
 
   int count = 0;
@@ -370,15 +375,15 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
 
   // Create default WASAPI input stream which records in stereo using
   // the shared mixing rate. The default buffer size is 10ms.
-  AudioInputStreamWrapper aisw(audio_manager_.get());
+  AudioInputStreamWrapper aisw(audio_manager_.get(), GetParam());
   ScopedAudioInputStream ais(aisw.Create());
   EXPECT_TRUE(ais->Open());
 
   MockAudioInputCallback sink;
 
   // Derive the expected size in bytes of each recorded packet.
-  uint32_t bytes_per_packet =
-      aisw.channels() * aisw.frames_per_buffer() * (aisw.bits_per_sample() / 8);
+  uint32_t bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
+                              SampleFormatToBytesPerChannel(kSampleFormat);
 
   {
     // We use 10ms packets and will run the test until ten packets are received.
@@ -405,8 +410,8 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
   count = 0;
   ais.Reset(aisw.Create(2 * frames_per_buffer_10ms));
   EXPECT_TRUE(ais->Open());
-  bytes_per_packet =
-      aisw.channels() * aisw.frames_per_buffer() * (aisw.bits_per_sample() / 8);
+  bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
+                     SampleFormatToBytesPerChannel(kSampleFormat);
 
   {
     base::RunLoop run_loop;
@@ -426,8 +431,8 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
   count = 0;
   ais.Reset(aisw.Create(frames_per_buffer_10ms / 2));
   EXPECT_TRUE(ais->Open());
-  bytes_per_packet =
-      aisw.channels() * aisw.frames_per_buffer() * (aisw.bits_per_sample() / 8);
+  bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
+                     SampleFormatToBytesPerChannel(kSampleFormat);
 
   {
     base::RunLoop run_loop;
@@ -444,7 +449,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
 }
 
 // Test that we can capture a stream in loopback.
-TEST_F(WinAudioInputTest, WASAPIAudioInputStreamLoopback) {
+TEST_P(WinAudioInputTest, WASAPIAudioInputStreamLoopback) {
   AudioDeviceInfoAccessorForTests device_info_accessor(audio_manager_.get());
   ABORT_AUDIO_TEST_IF_NOT(device_info_accessor.HasAudioOutputDevices() &&
                           CoreAudioUtil::IsSupported());
@@ -478,7 +483,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamLoopback) {
 // To include disabled tests in test execution, just invoke the test program
 // with --gtest_also_run_disabled_tests or set the GTEST_ALSO_RUN_DISABLED_TESTS
 // environment variable to a value greater than 0.
-TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamRecordToFile) {
+TEST_P(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamRecordToFile) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
 
   // Name of the output PCM file containing captured data. The output file
@@ -486,12 +491,12 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamRecordToFile) {
   // Example of full name: \src\build\Debug\out_stereo_10sec.pcm.
   const char* file_name = "out_10sec.pcm";
 
-  AudioInputStreamWrapper aisw(audio_manager_.get());
+  AudioInputStreamWrapper aisw(audio_manager_.get(), GetParam());
   ScopedAudioInputStream ais(aisw.Create());
   ASSERT_TRUE(ais->Open());
 
   VLOG(0) << ">> Sample rate: " << aisw.sample_rate() << " [Hz]";
-  WriteToFileAudioSink file_sink(file_name, aisw.bits_per_sample());
+  WriteToFileAudioSink file_sink(file_name);
   VLOG(0) << ">> Speak into the default microphone while recording.";
   ais->Start(&file_sink);
   base::PlatformThread::Sleep(TestTimeouts::action_timeout());
@@ -500,7 +505,7 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamRecordToFile) {
   ais.Close();
 }
 
-TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamResampleToFile) {
+TEST_P(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamResampleToFile) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
 
   // This is basically the same test as WASAPIAudioInputStreamRecordToFile
@@ -534,8 +539,9 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamResampleToFile) {
     // 44.1kHz.
     // Otherwise (e.g. 44.1kHz, 22.05kHz etc) we convert to 48kHz.
     const int hw_sample_rate = params.sample_rate();
-    params.Reset(params.format(), test.layout, test.rate,
-                 params.bits_per_sample(), test.frames);
+    params.Reset(params.format(), test.layout, test.rate, test.frames);
+    if (GetParam())
+      params.set_effects(params.effects() | AudioParameters::ECHO_CANCELLER);
 
     std::string file_name(base::StringPrintf(
         "resampled_10sec_%i_to_%i_%s.pcm", hw_sample_rate, params.sample_rate(),
@@ -548,7 +554,7 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamResampleToFile) {
     VLOG(0) << ">> Resampled rate will be: " << aisw.sample_rate() << " [Hz]";
     VLOG(0) << ">> New layout will be: "
             << ChannelLayoutToString(params.channel_layout());
-    WriteToFileAudioSink file_sink(file_name.c_str(), aisw.bits_per_sample());
+    WriteToFileAudioSink file_sink(file_name.c_str());
     VLOG(0) << ">> Speak into the default microphone while recording.";
     ais->Start(&file_sink);
     base::PlatformThread::Sleep(TestTimeouts::action_timeout());
@@ -558,5 +564,9 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamResampleToFile) {
     ais.Close();
   }
 }
+
+INSTANTIATE_TEST_CASE_P(/* Intentially left empty */,
+                        WinAudioInputTest,
+                        ::testing::Bool());
 
 }  // namespace media

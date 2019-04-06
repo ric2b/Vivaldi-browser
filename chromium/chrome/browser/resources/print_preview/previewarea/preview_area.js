@@ -81,7 +81,8 @@ cr.define('print_preview', function() {
     this.printTicketStore_ = printTicketStore;
 
     /**
-     * Used to contruct the preview generator.
+     * Used to construct the preview generator and to open the GCP learn more
+     * help link.
      * @type {!print_preview.NativeLayer}
      * @private
      */
@@ -149,6 +150,13 @@ cr.define('print_preview', function() {
     this.isDocumentReady_ = false;
 
     /**
+     * Whether the current destination is valid.
+     * @type {boolean}
+     * @private
+     */
+    this.isDestinationValid_ = true;
+
+    /**
      * Timeout object used to display a loading message if the preview is taking
      * a long time to generate.
      * @type {?number}
@@ -213,7 +221,8 @@ cr.define('print_preview', function() {
         'preview-area-open-system-dialog-button-throbber',
     OVERLAY: 'preview-area-overlay-layer',
     MARGIN_CONTROL: 'margin-control',
-    PREVIEW_AREA: 'preview-area-plugin-wrapper'
+    PREVIEW_AREA: 'preview-area-plugin-wrapper',
+    GCP_ERROR_LEARN_MORE_LINK: 'learn-more-link'
   };
 
   /**
@@ -321,6 +330,16 @@ cr.define('print_preview', function() {
       this.showMessage_(print_preview.PreviewAreaMessageId_.CUSTOM, message);
     },
 
+    /** @param {boolean} valid Whether the current destination is valid. */
+    setDestinationValid: function(valid) {
+      this.isDestinationValid_ = valid;
+      // If destination is valid and preview is ready, hide the error message.
+      if (valid && this.isPluginReloaded_ && this.isDocumentReady_) {
+        this.setOverlayVisible_(false);
+        this.dispatchPreviewGenerationDoneIfReady_();
+      }
+    },
+
     /** @override */
     enterDocument: function() {
       print_preview.Component.prototype.enterDocument.call(this);
@@ -328,6 +347,9 @@ cr.define('print_preview', function() {
       this.tracker.add(
           assert(this.openSystemDialogButton_), 'click',
           this.onOpenSystemDialogButtonClick_.bind(this));
+      this.tracker.add(
+          assert(this.gcpErrorLearnMoreLink_), 'click',
+          this.onGcpErrorLearnMoreClick_.bind(this));
 
       const TicketStoreEvent = print_preview.PrintTicketStore.EventType;
       [TicketStoreEvent.INITIALIZE, TicketStoreEvent.CAPABILITIES_CHANGE,
@@ -377,6 +399,7 @@ cr.define('print_preview', function() {
       print_preview.Component.prototype.exitDocument.call(this);
       this.overlayEl_ = null;
       this.openSystemDialogButton_ = null;
+      this.gcpErrorLearnMoreLink_ = null;
     },
 
     /** @override */
@@ -386,6 +409,8 @@ cr.define('print_preview', function() {
           PreviewArea.Classes_.OVERLAY)[0];
       this.openSystemDialogButton_ = this.getElement().getElementsByClassName(
           PreviewArea.Classes_.OPEN_SYSTEM_DIALOG_BUTTON)[0];
+      this.gcpErrorLearnMoreLink_ = this.getElement().getElementsByClassName(
+          PreviewArea.Classes_.GCP_ERROR_LEARN_MORE_LINK)[0];
     },
 
     /**
@@ -480,7 +505,7 @@ cr.define('print_preview', function() {
     createPlugin_: function(srcUrl) {
       assert(!this.plugin_);
       this.plugin_ = /** @type {print_preview.PDFPlugin} */ (
-          PDFCreateOutOfProcessPlugin(srcUrl));
+          PDFCreateOutOfProcessPlugin(srcUrl, 'chrome://print/pdf'));
       this.plugin_.setKeyEventCallback(this.keyEventCallback_);
 
       this.plugin_.setAttribute('class', 'preview-area-plugin');
@@ -526,11 +551,22 @@ cr.define('print_preview', function() {
     },
 
     /**
+     * Called when the learn more link for a cloud destination with an invalid
+     * certificate is clicked. Calls nativeLayer to open a new tab with the help
+     * page.
+     * @private
+     */
+    onGcpErrorLearnMoreClick_: function() {
+      this.nativeLayer_.forceOpenNewTab(
+          loadTimeData.getString('gcpCertificateErrorLearnMoreURL'));
+    },
+
+    /**
      * Called when the print ticket changes. Updates the preview.
      * @private
      */
     onTicketChange_: function() {
-      if (!this.previewGenerator_)
+      if (!this.previewGenerator_ || !this.isDestinationValid_)
         return;
       const previewRequest = this.previewGenerator_.requestPreview();
       if (previewRequest.id <= -1) {

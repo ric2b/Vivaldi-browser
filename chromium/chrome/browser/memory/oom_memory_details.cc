@@ -5,6 +5,7 @@
 #include "chrome/browser/memory/oom_memory_details.h"
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/process/process_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -14,16 +15,14 @@
 namespace memory {
 
 // static
-void OomMemoryDetails::Log(const std::string& title,
-                           const base::Closure& callback) {
+void OomMemoryDetails::Log(const std::string& title) {
   // Deletes itself upon completion.
-  OomMemoryDetails* details = new OomMemoryDetails(title, callback);
+  OomMemoryDetails* details = new OomMemoryDetails(title);
   details->StartFetch();
 }
 
-OomMemoryDetails::OomMemoryDetails(const std::string& title,
-                                   const base::Closure& callback)
-    : title_(title), callback_(callback) {
+OomMemoryDetails::OomMemoryDetails(const std::string& title)
+    : title_(title) {
   AddRef();  // Released in OnDetailsAvailable().
   start_time_ = base::TimeTicks::Now();
 }
@@ -43,10 +42,9 @@ void OomMemoryDetails::OnDetailsAvailable() {
     log_string += base::UTF16ToASCII(ui::FormatBytes(memory.gem_size));
   }
 #endif
+  UMA_HISTOGRAM_MEDIUM_TIMES("TabManager.Discarding.LogMemoryTime", delta);
   LOG(WARNING) << title_ << " (" << delta.InMilliseconds() << " ms):\n"
                << log_string;
-  if (!callback_.is_null())
-    callback_.Run();
   // Delete ourselves so we don't have to worry about OomPriorityManager
   // deleting us when we're still working.
   Release();

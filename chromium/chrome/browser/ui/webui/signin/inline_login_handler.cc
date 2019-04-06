@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/signin/inline_login_handler.h"
 
 #include <limits.h>
+#include <string>
 
 #include "base/bind.h"
 #include "base/metrics/user_metrics.h"
@@ -32,27 +33,33 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
 
+const char kSignInPromoQueryKeyShowAccountManagement[] =
+    "showAccountManagement";
+
 InlineLoginHandler::InlineLoginHandler() : weak_ptr_factory_(this) {}
 
 InlineLoginHandler::~InlineLoginHandler() {}
 
 void InlineLoginHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("initialize",
-      base::Bind(&InlineLoginHandler::HandleInitializeMessage,
-                  base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("completeLogin",
-      base::Bind(&InlineLoginHandler::HandleCompleteLoginMessage,
-                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "initialize",
+      base::BindRepeating(&InlineLoginHandler::HandleInitializeMessage,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "completeLogin",
+      base::BindRepeating(&InlineLoginHandler::HandleCompleteLoginMessage,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "switchToFullTab",
-      base::Bind(&InlineLoginHandler::HandleSwitchToFullTabMessage,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("navigationButtonClicked",
-      base::Bind(&InlineLoginHandler::HandleNavigationButtonClicked,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("dialogClose",
-      base::Bind(&InlineLoginHandler::HandleDialogClose,
-                 base::Unretained(this)));
+      base::BindRepeating(&InlineLoginHandler::HandleSwitchToFullTabMessage,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "navigationButtonClicked",
+      base::BindRepeating(&InlineLoginHandler::HandleNavigationButtonClicked,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "dialogClose", base::BindRepeating(&InlineLoginHandler::HandleDialogClose,
+                                         base::Unretained(this)));
 }
 
 void InlineLoginHandler::HandleInitializeMessage(const base::ListValue* args) {
@@ -105,8 +112,12 @@ void InlineLoginHandler::ContinueHandleInitializeMessage() {
   if (reason != signin_metrics::Reason::REASON_REAUTHENTICATION &&
       reason != signin_metrics::Reason::REASON_UNLOCK &&
       reason != signin_metrics::Reason::REASON_ADD_SECONDARY_ACCOUNT) {
-    signin_metrics::LogSigninAccessPointStarted(access_point);
-    signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
+    signin_metrics::LogSigninAccessPointStarted(
+        access_point,
+        signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
+    signin_metrics::RecordSigninUserActionForAccessPoint(
+        access_point,
+        signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
     base::RecordAction(base::UserMetricsAction("Signin_SigninPage_Loading"));
     params.SetBoolean("isLoginPrimaryAccount", true);
   }
@@ -166,7 +177,7 @@ void InlineLoginHandler::HandleSwitchToFullTabMessage(
   main_frame_url = net::AppendOrReplaceQueryParameter(
       main_frame_url, signin::kSignInPromoQueryKeyAutoClose, "1");
   main_frame_url = net::AppendOrReplaceQueryParameter(
-      main_frame_url, signin::kSignInPromoQueryKeyShowAccountManagement, "1");
+      main_frame_url, kSignInPromoQueryKeyShowAccountManagement, "1");
   main_frame_url = net::AppendOrReplaceQueryParameter(
       main_frame_url, signin::kSignInPromoQueryKeyForceKeepData, "1");
   if (base::FeatureList::IsEnabled(
@@ -199,8 +210,10 @@ void InlineLoginHandler::HandleDialogClose(const base::ListValue* args) {
   if (browser)
     browser->signin_view_controller()->CloseModalSignin();
 
+#if !defined(OS_CHROMEOS)
   // Does nothing if user manager is not showing.
   UserManagerProfileDialog::HideDialog();
+#endif  // !defined(OS_CHROMEOS)
 }
 
 void InlineLoginHandler::CloseDialogFromJavascript() {

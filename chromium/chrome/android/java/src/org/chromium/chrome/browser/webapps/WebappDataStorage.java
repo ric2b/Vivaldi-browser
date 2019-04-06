@@ -8,10 +8,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
-import android.os.AsyncTask;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
@@ -305,7 +305,7 @@ public class WebappDataStorage {
      */
     public boolean wasUsedRecently() {
         // WebappRegistry.register sets the last used time, so that counts as a 'launch'.
-        return (sClock.currentTimeMillis() - getLastUsedTime() < WEBAPP_LAST_OPEN_MAX_TIME);
+        return (sClock.currentTimeMillis() - getLastUsedTimeMs() < WEBAPP_LAST_OPEN_MAX_TIME);
     }
 
     /**
@@ -368,9 +368,9 @@ public class WebappDataStorage {
     }
 
     /**
-     * Returns the last used time of this object, or -1 if it is not stored.
+     * Returns the last used time, in milliseconds, of this object, or -1 if it is not stored.
      */
-    public long getLastUsedTime() {
+    public long getLastUsedTimeMs() {
         return mPreferences.getLong(KEY_LAST_USED, TIMESTAMP_INVALID);
     }
 
@@ -419,10 +419,10 @@ public class WebappDataStorage {
     }
 
     /**
-     * Returns the completion time of the last check for whether the WebAPK's Web Manifest was
-     * updated. This time needs to be set when the WebAPK is registered.
+     * Returns the completion time, in milliseconds, of the last check for whether the WebAPK's Web
+     * Manifest was updated. This time needs to be set when the WebAPK is registered.
      */
-    private long getLastCheckForWebManifestUpdateTime() {
+    public long getLastCheckForWebManifestUpdateTimeMs() {
         return mPreferences.getLong(KEY_LAST_CHECK_WEB_MANIFEST_UPDATE_TIME, TIMESTAMP_INVALID);
     }
 
@@ -436,10 +436,10 @@ public class WebappDataStorage {
     }
 
     /**
-     * Returns when the last WebAPK update request completed (successfully or unsuccessfully).
-     * This time needs to be set when the WebAPK is registered.
+     * Returns the time, in milliseconds, that the last WebAPK update request completed
+     * (successfully or unsuccessfully). This time needs to be set when the WebAPK is registered.
      */
-    long getLastWebApkUpdateRequestCompletionTime() {
+    long getLastWebApkUpdateRequestCompletionTimeMs() {
         return mPreferences.getLong(KEY_LAST_UPDATE_REQUEST_COMPLETE_TIME, TIMESTAMP_INVALID);
     }
 
@@ -480,7 +480,7 @@ public class WebappDataStorage {
      * been any update attempts.
      */
     boolean didPreviousUpdateSucceed() {
-        long lastUpdateCompletionTime = getLastWebApkUpdateRequestCompletionTime();
+        long lastUpdateCompletionTime = getLastWebApkUpdateRequestCompletionTimeMs();
         if (lastUpdateCompletionTime == TIMESTAMP_INVALID) {
             return true;
         }
@@ -493,7 +493,7 @@ public class WebappDataStorage {
     }
 
     /** Returns whether we should check for updates less frequently. */
-    private boolean shouldRelaxUpdates() {
+    public boolean shouldRelaxUpdates() {
         return mPreferences.getBoolean(KEY_RELAX_UPDATES, false);
     }
 
@@ -538,7 +538,7 @@ public class WebappDataStorage {
      * last {@link numMillis} milliseconds.
      */
     boolean wasCheckForUpdatesDoneInLastMs(long numMillis) {
-        return (sClock.currentTimeMillis() - getLastCheckForWebManifestUpdateTime()) < numMillis;
+        return (sClock.currentTimeMillis() - getLastCheckForWebManifestUpdateTimeMs()) < numMillis;
     }
 
     /** Returns whether we should check for update. */
@@ -546,10 +546,10 @@ public class WebappDataStorage {
         long checkUpdatesInterval =
                 shouldRelaxUpdates() ? RELAXED_UPDATE_INTERVAL : UPDATE_INTERVAL;
         long now = sClock.currentTimeMillis();
-        long sinceLastCheckDurationMs = now - getLastCheckForWebManifestUpdateTime();
+        long sinceLastCheckDurationMs = now - getLastCheckForWebManifestUpdateTimeMs();
         if (sinceLastCheckDurationMs >= checkUpdatesInterval) return true;
 
-        long sinceLastUpdateRequestDurationMs = now - getLastWebApkUpdateRequestCompletionTime();
+        long sinceLastUpdateRequestDurationMs = now - getLastWebApkUpdateRequestCompletionTimeMs();
         return sinceLastUpdateRequestDurationMs >= RETRY_UPDATE_DURATION
                 && !didPreviousUpdateSucceed();
     }

@@ -94,8 +94,8 @@ NSString* const kDoneTouchBarId = @"DONE";
 
   Browser* browser = chrome::FindBrowserWithWindow(self.parentWindow);
   if (SyncPromoUI::ShouldShowSyncPromo(browser->profile())) {
-    base::RecordAction(
-        base::UserMetricsAction("Signin_Impression_FromBookmarkBubble"));
+    signin_metrics::RecordSigninImpressionUserActionForAccessPoint(
+        signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE);
 
     syncPromoController_.reset(
         [[BubbleSyncPromoController alloc]
@@ -196,7 +196,7 @@ NSString* const kDoneTouchBarId = @"DONE";
   // dialog, the bookmark bubble's cancel: means "don't add this as a
   // bookmark", not "cancel editing".  We must take extra care to not
   // touch the bookmark in this selector.
-  bookmarkObserver_.reset(new BookmarkModelObserverForCocoa(model_, ^() {
+  bookmarkObserver_.reset(new BookmarkModelObserverForCocoa(model_, ^{
     [self dismissWithoutEditing:nil];
   }));
   bookmarkObserver_->StartObservingNode(node_);
@@ -396,8 +396,9 @@ NSString* const kDoneTouchBarId = @"DONE";
 }
 
 - (LocationBarDecoration*)decorationForBubble {
-  LocationBarViewMac* locationBar =
-      [[[self parentWindow] windowController] locationBarBridge];
+  BrowserWindowController* browserWindowController = [BrowserWindowController
+      browserWindowControllerForWindow:[self parentWindow]];
+  LocationBarViewMac* locationBar = [browserWindowController locationBarBridge];
   return locationBar ? locationBar->star_decoration() : nullptr;
 }
 

@@ -10,6 +10,10 @@
 
 namespace tests_hook {
 
+bool DisableAppGroupAccess() {
+  return true;
+}
+
 bool DisableContentSuggestions() {
   return true;
 }
@@ -34,7 +38,7 @@ bool DisableUpdateService() {
   return true;
 }
 
-bool ForceAdaptiveToolbar() {
+bool ForceUIRefreshPhase1() {
   return false;
 }
 

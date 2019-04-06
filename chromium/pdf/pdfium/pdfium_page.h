@@ -12,9 +12,11 @@
 #include "base/strings/string16.h"
 #include "pdf/pdf_engine.h"
 #include "ppapi/cpp/rect.h"
+#include "third_party/pdfium/public/cpp/fpdf_scopers.h"
 #include "third_party/pdfium/public/fpdf_doc.h"
 #include "third_party/pdfium/public/fpdf_formfill.h"
 #include "third_party/pdfium/public/fpdf_text.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace chrome_pdf {
 
@@ -24,7 +26,7 @@ class PDFiumEngine;
 class PDFiumPage {
  public:
   PDFiumPage(PDFiumEngine* engine, int i, const pp::Rect& r, bool available);
-  PDFiumPage(const PDFiumPage& that);
+  PDFiumPage(PDFiumPage&& that);
   ~PDFiumPage();
 
   // Unloads the PDFium data for this page from memory.
@@ -77,11 +79,10 @@ class PDFiumPage {
   };
 
   // Returns the (x, y) position of a destination in page coordinates.
-  base::Optional<std::pair<float, float>> GetPageXYTarget(
-      FPDF_DEST destination);
+  base::Optional<gfx::PointF> GetPageXYTarget(FPDF_DEST destination);
 
   // Transforms an (x, y) position in page coordinates to screen coordinates.
-  std::pair<float, float> TransformPageToScreenXY(std::pair<float, float> xy);
+  gfx::PointF TransformPageToScreenXY(const gfx::PointF& xy);
 
   // Given a point in the document that's in this page, returns its character
   // index if it's near a character, and also the type of text.
@@ -122,6 +123,9 @@ class PDFiumPage {
     calculated_links_ = calculated_links;
   }
 
+  FPDF_PAGE page() const { return page_.get(); }
+  FPDF_TEXTPAGE text_page() const { return text_page_.get(); }
+
  private:
   // Returns a link index if the given character index is over a link, or -1
   // otherwise.
@@ -142,10 +146,10 @@ class PDFiumPage {
   // NONSELECTABLE_AREA if detection failed.
   Area GetURITarget(FPDF_ACTION uri_action, LinkTarget* target) const;
 
-  class ScopedLoadCounter {
+  class ScopedUnloadPreventer {
    public:
-    explicit ScopedLoadCounter(PDFiumPage* page);
-    ~ScopedLoadCounter();
+    explicit ScopedUnloadPreventer(PDFiumPage* page);
+    ~ScopedUnloadPreventer();
 
    private:
     PDFiumPage* const page_;
@@ -162,15 +166,17 @@ class PDFiumPage {
   };
 
   PDFiumEngine* engine_;
-  FPDF_PAGE page_;
-  FPDF_TEXTPAGE text_page_;
+  ScopedFPDFPage page_;
+  ScopedFPDFTextPage text_page_;
   int index_;
-  int loading_count_;
+  int preventing_unload_count_ = 0;
   pp::Rect rect_;
-  bool calculated_links_;
+  bool calculated_links_ = false;
   std::vector<Link> links_;
   bool available_;
   PDFEngine::PageFeatures page_features_;
+
+  DISALLOW_COPY_AND_ASSIGN(PDFiumPage);
 };
 
 }  // namespace chrome_pdf

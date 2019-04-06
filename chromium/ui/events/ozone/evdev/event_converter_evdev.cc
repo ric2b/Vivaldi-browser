@@ -10,7 +10,7 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/devices/device_util_linux.h"
@@ -24,6 +24,7 @@ EventConverterEvdev::EventConverterEvdev(int fd,
                                          int id,
                                          InputDeviceType type,
                                          const std::string& name,
+                                         const std::string& phys,
                                          uint16_t vendor_id,
                                          uint16_t product_id)
     : fd_(fd),
@@ -31,6 +32,7 @@ EventConverterEvdev::EventConverterEvdev(int fd,
       input_device_(id,
                     type,
                     name,
+                    phys,
                     GetInputPathInSys(path),
                     vendor_id,
                     product_id),
@@ -42,7 +44,7 @@ EventConverterEvdev::~EventConverterEvdev() {
 }
 
 void EventConverterEvdev::Start() {
-  base::MessageLoopForUI::current()->WatchFileDescriptor(
+  base::MessageLoopCurrentForUI::Get()->WatchFileDescriptor(
       fd_, true, base::MessagePumpLibevent::WATCH_READ, &controller_, this);
   watching_ = true;
 }
@@ -161,7 +163,7 @@ void EventConverterEvdev::SetTouchEventLoggingEnabled(bool enabled) {
 }
 
 void EventConverterEvdev::SetPalmSuppressionCallback(
-    const base::Callback<void(bool)>& callback) {}
+    const base::RepeatingCallback<void(bool)>& callback) {}
 
 base::TimeTicks EventConverterEvdev::TimeTicksFromInputEvent(
     const input_event& event) {

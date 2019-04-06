@@ -12,6 +12,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/tools/vivaldi_tools.h"
 
 #include "contact/contact_model_observer.h"
 #include "contact/contact_service.h"
@@ -20,6 +21,8 @@
 using contact::ContactPropertyNameEnum;
 using contact::ContactService;
 using contact::ContactServiceFactory;
+using vivaldi::MilliSecondsFromTime;
+using vivaldi::GetTime;
 
 namespace extensions {
 
@@ -45,17 +48,6 @@ bool GetIdAsInt64(const std::string& id_string, int64_t* id) {
   return false;
 }
 
-double MilliSecondsFromTime(const base::Time& time) {
-  return 1000 * time.ToDoubleT();
-}
-
-base::Time GetTime(double ms_from_epoch) {
-  double seconds_from_epoch = ms_from_epoch / 1000.0;
-  return (seconds_from_epoch == 0)
-             ? base::Time::UnixEpoch()
-             : base::Time::FromDoubleT(seconds_from_epoch);
-}
-
 ContactPropertyNameEnum APIAddpropertyTypeToInternal(
     ContactPropertyName transition) {
   switch (transition) {
@@ -75,8 +67,7 @@ EmailAddress GetEmail(const contact::EmailAddressRow& row) {
   email.email_address.reset(
       new std::string(base::UTF16ToUTF8(row.email_address())));
   email.type.reset(new std::string(row.type()));
-  email.trusted.reset(new bool(row.trusted()));
-  email.is_default.reset(new bool(row.is_default()));
+  email.favorite.reset(new bool(row.favorite()));
   email.obsolete.reset(new bool(row.obsolete()));
 
   return email;
@@ -107,6 +98,7 @@ Contact GetContact(const contact::ContactRow& row) {
   contact.name.reset(new std::string(base::UTF16ToUTF8(row.name())));
   contact.birthday.reset(new double(MilliSecondsFromTime(row.birthday())));
   contact.note.reset(new std::string(base::UTF16ToUTF8(row.note())));
+  contact.trusted.reset(new bool(row.trusted()));
   contact.avatar_url.reset(
       new std::string(base::UTF16ToUTF8(row.avatar_url())));
   contact.generated_from_sent_mail = row.generated_from_sent_mail();
@@ -125,6 +117,64 @@ Contact GetContact(const contact::ContactRow& row) {
 
   return contact;
 }
+
+contact::ContactRow GetContactRow(
+    vivaldi::contacts::CreateUpdateDetails& contact) {
+  contact::ContactRow contactRow;
+
+  if (contact.name.get()) {
+    base::string16 name;
+    name = base::UTF8ToUTF16(*contact.name);
+    contactRow.set_name(name);
+  }
+
+  if (contact.birthday.get()) {
+    contactRow.set_birthday(GetTime(*contact.birthday));
+  }
+
+  if (contact.note.get()) {
+    base::string16 note;
+    note = base::UTF8ToUTF16(*contact.note);
+    contactRow.set_note(note);
+  }
+
+  if (contact.avatar_url.get()) {
+    base::string16 avatar_url;
+    avatar_url = base::UTF8ToUTF16(*contact.avatar_url);
+    contactRow.set_avatar_url(avatar_url);
+  }
+
+  if (contact.separator.get()) {
+    base::string16 avatar_url;
+    avatar_url = base::UTF8ToUTF16(*contact.avatar_url);
+    contactRow.set_avatar_url(avatar_url);
+  }
+
+  if (contact.separator.get()) {
+    contactRow.set_separator(*contact.separator);
+  }
+
+  if (contact.generated_from_sent_mail.get()) {
+    contactRow.set_generated_from_sent_mail(*contact.generated_from_sent_mail);
+  }
+
+  if (contact.trusted.get()) {
+    bool isTrusted = false;
+    isTrusted = (*contact.trusted);
+    contactRow.set_trusted(isTrusted);
+  }
+
+  return contactRow;
+}
+
+extensions::vivaldi::contacts::CreateManyContactsResults GetCreateContactsItem(
+    const contact::CreateContactsResult& res) {
+  extensions::vivaldi::contacts::CreateManyContactsResults result;
+  result.created_count.reset(new int(res.number_success));
+  result.failed_count.reset(new int(res.number_failed));
+  return result;
+}
+
 }  // namespace
 
 ContactEventRouter::ContactEventRouter(Profile* profile)
@@ -155,7 +205,7 @@ void ContactEventRouter::OnContactDeleted(ContactService* service,
   Contact deletedEvent = GetContact(row);
   std::unique_ptr<base::ListValue> args =
       OnContactRemoved::Create(deletedEvent);
-  DispatchEvent(OnContactCreated::kEventName, std::move(args));
+  DispatchEvent(OnContactRemoved::kEventName, std::move(args));
 }
 
 void ContactEventRouter::OnContactChanged(ContactService* service,
@@ -193,13 +243,12 @@ void ContactsAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<ContactsAPI>>::DestructorAtExit g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<ContactsAPI>>::
+    DestructorAtExit g_factory_contacts = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<ContactsAPI>* ContactsAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_contacts.Pointer();
 }
 
 void ContactsAPI::OnListenerAdded(const EventListenerInfo& details) {
@@ -221,6 +270,7 @@ std::unique_ptr<Contact> CreateVivaldiContact(
       new std::string(base::UTF16ToUTF8(contact_res.avatar_url())));
   contact->separator = contact_res.separator();
   contact->generated_from_sent_mail = contact_res.generated_from_sent_mail();
+  contact->trusted.reset(new bool(contact_res.trusted()));
 
   for (const contact::EmailAddressRow& visit : contact_res.emails()) {
     contact->email_addresses.push_back(GetEmail(visit));
@@ -343,6 +393,13 @@ ExtensionFunction::ResponseAction ContactsUpdateFunction::Run() {
     updated_contact.updateFields |= contact::GENERATED_FROM_SENT_MAIL;
   }
 
+  if (params->changes.trusted.get()) {
+    bool isTrusted = false;
+    isTrusted = (*params->changes.trusted);
+    updated_contact.trusted = isTrusted;
+    updated_contact.updateFields |= contact::TRUSTED;
+  }
+
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
   model->UpdateContact(
@@ -400,44 +457,7 @@ ExtensionFunction::ResponseAction ContactsCreateFunction::Run() {
       vivaldi::contacts::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  contact::ContactRow createContact;
-
-  if (params->contact.name.get()) {
-    base::string16 name;
-    name = base::UTF8ToUTF16(*params->contact.name);
-    createContact.set_name(name);
-  }
-
-  if (params->contact.birthday.get()) {
-    createContact.set_birthday(GetTime(*params->contact.birthday));
-  }
-
-  if (params->contact.note.get()) {
-    base::string16 note;
-    note = base::UTF8ToUTF16(*params->contact.note);
-    createContact.set_note(note);
-  }
-
-  if (params->contact.avatar_url.get()) {
-    base::string16 avatar_url;
-    avatar_url = base::UTF8ToUTF16(*params->contact.avatar_url);
-    createContact.set_avatar_url(avatar_url);
-  }
-
-  if (params->contact.separator.get()) {
-    base::string16 avatar_url;
-    avatar_url = base::UTF8ToUTF16(*params->contact.avatar_url);
-    createContact.set_avatar_url(avatar_url);
-  }
-
-  if (params->contact.separator.get()) {
-    createContact.set_separator(*params->contact.separator);
-  }
-
-  if (params->contact.generated_from_sent_mail.get()) {
-    createContact.set_generated_from_sent_mail(
-        *params->contact.generated_from_sent_mail);
-  }
+  contact::ContactRow createContact = GetContactRow(params->contact);
 
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
@@ -456,6 +476,43 @@ void ContactsCreateFunction::CreateComplete(
     Respond(ArgumentList(
         extensions::vivaldi::contacts::Create::Results::Create(ev)));
   }
+}
+
+ExtensionFunction::ResponseAction ContactsCreateManyFunction::Run() {
+  std::unique_ptr<vivaldi::contacts::CreateMany::Params> params(
+      vivaldi::contacts::CreateMany::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::vector<vivaldi::contacts::CreateUpdateDetails>& contacts =
+      params->contact_list;
+  size_t count = contacts.size();
+  EXTENSION_FUNCTION_VALIDATE(count > 0);
+
+  std::vector<contact::ContactRow> contact_rows;
+
+  for (size_t i = 0; i < count; ++i) {
+    vivaldi::contacts::CreateUpdateDetails& create_details = contacts[i];
+    contact::ContactRow createContact = GetContactRow(create_details);
+    contact_rows.push_back(createContact);
+  }
+
+  ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
+
+  model->CreateContacts(
+      contact_rows,
+      base::Bind(&ContactsCreateManyFunction::CreateManyComplete, this),
+      &task_tracker_);
+
+  return RespondLater();
+}
+
+void ContactsCreateManyFunction::CreateManyComplete(
+    std::shared_ptr<contact::CreateContactsResult> results) {
+  extensions::vivaldi::contacts::CreateManyContactsResults return_results =
+      GetCreateContactsItem(*results);
+  Respond(
+      ArgumentList(extensions::vivaldi::contacts::CreateMany::Results::Create(
+          return_results)));
 }
 
 ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
@@ -616,16 +673,10 @@ ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
     add_email.set_email_address(email_address);
   }
 
-  if (params->email_to_add.is_default.get()) {
-    bool defaultEmailAddress = false;
-    defaultEmailAddress = (*params->email_to_add.is_default);
-    add_email.set_is_default(defaultEmailAddress);
-  }
-
-  if (params->email_to_add.trusted.get()) {
-    bool isTrusted = false;
-    isTrusted = (*params->email_to_add.trusted);
-    add_email.set_trusted(isTrusted);
+  if (params->email_to_add.favorite.get()) {
+    bool favoriteEmailAddress = false;
+    favoriteEmailAddress = (*params->email_to_add.favorite);
+    add_email.set_favorite(favoriteEmailAddress);
   }
 
   if (params->email_to_add.obsolete.get()) {
@@ -676,20 +727,17 @@ ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
 
   updated_email.set_email_address_id(email_address_id);
 
-  base::string16 email_address;
-  email_address = base::UTF8ToUTF16(*params->email_to_update.email_address);
-  updated_email.set_email_address(email_address);
 
-  if (params->email_to_update.is_default.get()) {
-    bool defaultEmailAddress = false;
-    defaultEmailAddress = (*params->email_to_update.is_default);
-    updated_email.set_is_default(defaultEmailAddress);
+  if (params->email_to_update.email_address.get()) {
+    base::string16 email_address;
+    email_address = base::UTF8ToUTF16(*params->email_to_update.email_address);
+    updated_email.set_email_address(email_address);
   }
 
-  if (params->email_to_update.trusted.get()) {
-    bool isTrusted = false;
-    isTrusted = (*params->email_to_update.trusted);
-    updated_email.set_trusted(isTrusted);
+  if (params->email_to_update.favorite.get()) {
+    bool favoriteEmailAddress = false;
+    favoriteEmailAddress = (*params->email_to_update.favorite);
+    updated_email.set_favorite(favoriteEmailAddress);
   }
 
   if (params->email_to_update.obsolete.get()) {

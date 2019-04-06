@@ -108,6 +108,7 @@
       <structure type="chrome_scaled_image" name="IDR_EASY_UNLOCK_UNLOCKED" file="common/easy_unlock_unlocked.png" />
       <structure type="chrome_scaled_image" name="IDR_EASY_UNLOCK_UNLOCKED_HOVER" file="common/easy_unlock_unlocked_hover.png" />
       <structure type="chrome_scaled_image" name="IDR_EASY_UNLOCK_UNLOCKED_PRESSED" file="common/easy_unlock_unlocked_pressed.png" />
+      <structure type="chrome_scaled_image" name="IDR_EMOJI_FAVICON" file="common/emoji_menu_item.png" />
       <structure type="chrome_scaled_image" name="IDR_FOLDER_CLOSED" file="common/folder_closed.png" />
       <structure type="chrome_scaled_image" name="IDR_FOLDER_CLOSED_RTL" file="common/folder_closed_rtl.png" />
       <if expr="is_macosx">
@@ -118,7 +119,7 @@
         <structure type="chrome_scaled_image" name="IDR_MENU_HIERARCHY_ARROW" file="mac/menu_hierarchy_arrow.png" />
       </if>
       <structure type="chrome_scaled_image" name="IDR_MENU_DROPARROW" file="cros/menu_droparrow.png" />
-      <if expr="toolkit_views or is_macosx or is_ios">
+      <if expr="toolkit_views or is_ios">
         <if expr="is_win">
           <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_CLOSE" file="win/notification_close.png"/>
           <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_CLOSE_HOVER" file="win/notification_close_hover.png"/>

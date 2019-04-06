@@ -14,7 +14,7 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gfx/vsync_provider.h"
-#include "ui/ozone/platform/drm/gpu/overlay_plane.h"
+#include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
 #include "ui/ozone/platform/drm/gpu/page_flip_request.h"
 #include "ui/ozone/public/swap_completion_callback.h"
 
@@ -85,13 +85,14 @@ class DrmWindow {
   // Move the HW cursor to the specified location.
   void MoveCursor(const gfx::Point& location);
 
-  bool SchedulePageFlip(const std::vector<OverlayPlane>& planes,
-                        SwapCompletionOnceCallback callback);
+  void SchedulePageFlip(std::vector<DrmOverlayPlane> planes,
+                        SwapCompletionOnceCallback submission_callback,
+                        PresentationOnceCallback presentation_callback);
   std::vector<OverlayCheckReturn_Params> TestPageFlip(
       const std::vector<OverlayCheck_Params>& overlay_params);
 
   // Returns the last buffer associated with this window.
-  const OverlayPlane* GetLastModesetBuffer();
+  const DrmOverlayPlane* GetLastModesetBuffer();
 
   void GetVSyncParameters(
       const gfx::VSyncProvider::UpdateVSyncCallback& callback) const;
@@ -130,7 +131,7 @@ class DrmWindow {
   int cursor_frame_ = 0;
   int cursor_frame_delay_ms_ = 0;
 
-  OverlayPlaneList last_submitted_planes_;
+  DrmOverlayPlaneList last_submitted_planes_;
 
   bool force_buffer_reallocation_ = false;
 

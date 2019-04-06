@@ -12,11 +12,12 @@
 #include "base/strings/string_split.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -77,9 +78,8 @@ void GotUsageAndQuotaDataCallback(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::BindOnce(ReportUsageAndQuotaDataOnUIThread,
-                     base::Passed(std::move(callback)), code, usage, quota,
-                     std::move(usage_breakdown)));
+      base::BindOnce(ReportUsageAndQuotaDataOnUIThread, std::move(callback),
+                     code, usage, quota, std::move(usage_breakdown)));
 }
 
 void GetUsageAndQuotaOnIOThread(
@@ -89,8 +89,7 @@ void GetUsageAndQuotaOnIOThread(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   manager->GetUsageAndQuotaWithBreakdown(
       url, blink::mojom::StorageType::kTemporary,
-      base::Bind(&GotUsageAndQuotaDataCallback,
-                 base::Passed(std::move(callback))));
+      base::BindOnce(&GotUsageAndQuotaDataCallback, std::move(callback)));
 }
 }  // namespace
 
@@ -239,7 +238,7 @@ class StorageHandler::IndexedDBObserver : IndexedDBContextImpl::Observer {
 
 StorageHandler::StorageHandler()
     : DevToolsDomainHandler(Storage::Metainfo::domainName),
-      process_(nullptr),
+      storage_partition_(nullptr),
       weak_ptr_factory_(this) {}
 
 StorageHandler::~StorageHandler() {
@@ -252,9 +251,10 @@ void StorageHandler::Wire(UberDispatcher* dispatcher) {
   Storage::Dispatcher::wire(dispatcher, this);
 }
 
-void StorageHandler::SetRenderer(RenderProcessHost* process_host,
+void StorageHandler::SetRenderer(int process_host_id,
                                  RenderFrameHostImpl* frame_host) {
-  process_ = process_host;
+  RenderProcessHost* process = RenderProcessHost::FromID(process_host_id);
+  storage_partition_ = process ? process->GetStoragePartition() : nullptr;
 }
 
 Response StorageHandler::Disable() {
@@ -276,10 +276,9 @@ void StorageHandler::ClearDataForOrigin(
     const std::string& origin,
     const std::string& storage_types,
     std::unique_ptr<ClearDataForOriginCallback> callback) {
-  if (!process_)
+  if (!storage_partition_)
     return callback->sendFailure(Response::InternalError());
 
-  StoragePartition* partition = process_->GetStoragePartition();
   std::vector<std::string> types = base::SplitString(
       storage_types, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   std::unordered_set<std::string> set(types.begin(), types.end());
@@ -310,18 +309,18 @@ void StorageHandler::ClearDataForOrigin(
         Response::InvalidParams("No valid storage type specified"));
   }
 
-  partition->ClearData(remove_mask,
-                       StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
-                       GURL(origin), StoragePartition::OriginMatcherFunction(),
-                       base::Time(), base::Time::Max(),
-                       base::BindOnce(&ClearDataForOriginCallback::sendSuccess,
-                                      std::move(callback)));
+  storage_partition_->ClearData(
+      remove_mask, StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
+      GURL(origin), StoragePartition::OriginMatcherFunction(), base::Time(),
+      base::Time::Max(),
+      base::BindOnce(&ClearDataForOriginCallback::sendSuccess,
+                     std::move(callback)));
 }
 
 void StorageHandler::GetUsageAndQuota(
     const String& origin,
     std::unique_ptr<GetUsageAndQuotaCallback> callback) {
-  if (!process_)
+  if (!storage_partition_)
     return callback->sendFailure(Response::InternalError());
 
   GURL origin_url(origin);
@@ -330,16 +329,15 @@ void StorageHandler::GetUsageAndQuota(
         Response::Error(origin + " is not a valid URL"));
   }
 
-  storage::QuotaManager* manager =
-      process_->GetStoragePartition()->GetQuotaManager();
+  storage::QuotaManager* manager = storage_partition_->GetQuotaManager();
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&GetUsageAndQuotaOnIOThread, base::RetainedRef(manager),
-                     origin_url, base::Passed(std::move(callback))));
+                     origin_url, std::move(callback)));
 }
 
 Response StorageHandler::TrackCacheStorageForOrigin(const std::string& origin) {
-  if (!process_)
+  if (!storage_partition_)
     return Response::InternalError();
 
   GURL origin_url(origin);
@@ -356,7 +354,7 @@ Response StorageHandler::TrackCacheStorageForOrigin(const std::string& origin) {
 
 Response StorageHandler::UntrackCacheStorageForOrigin(
     const std::string& origin) {
-  if (!process_)
+  if (!storage_partition_)
     return Response::InternalError();
 
   GURL origin_url(origin);
@@ -372,7 +370,7 @@ Response StorageHandler::UntrackCacheStorageForOrigin(
 }
 
 Response StorageHandler::TrackIndexedDBForOrigin(const std::string& origin) {
-  if (!process_)
+  if (!storage_partition_)
     return Response::InternalError();
 
   GURL origin_url(origin);
@@ -387,7 +385,7 @@ Response StorageHandler::TrackIndexedDBForOrigin(const std::string& origin) {
 }
 
 Response StorageHandler::UntrackIndexedDBForOrigin(const std::string& origin) {
-  if (!process_)
+  if (!storage_partition_)
     return Response::InternalError();
 
   GURL origin_url(origin);
@@ -408,7 +406,7 @@ StorageHandler::GetCacheStorageObserver() {
     cache_storage_observer_ = std::make_unique<CacheStorageObserver>(
         weak_ptr_factory_.GetWeakPtr(),
         static_cast<CacheStorageContextImpl*>(
-            process_->GetStoragePartition()->GetCacheStorageContext()));
+            storage_partition_->GetCacheStorageContext()));
   }
   return cache_storage_observer_.get();
 }
@@ -419,7 +417,7 @@ StorageHandler::IndexedDBObserver* StorageHandler::GetIndexedDBObserver() {
     indexed_db_observer_ = std::make_unique<IndexedDBObserver>(
         weak_ptr_factory_.GetWeakPtr(),
         static_cast<IndexedDBContextImpl*>(
-            process_->GetStoragePartition()->GetIndexedDBContext()));
+            storage_partition_->GetIndexedDBContext()));
   }
   return indexed_db_observer_.get();
 }

@@ -30,35 +30,39 @@ WebRTCInternalsMessageHandler::~WebRTCInternalsMessageHandler() {
 }
 
 void WebRTCInternalsMessageHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("getAllStats",
-      base::Bind(&WebRTCInternalsMessageHandler::OnGetAllStats,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getAllStats",
+      base::BindRepeating(&WebRTCInternalsMessageHandler::OnGetAllStats,
+                          base::Unretained(this)));
 
-  web_ui()->RegisterMessageCallback("enableAudioDebugRecordings",
-      base::Bind(
+  web_ui()->RegisterMessageCallback(
+      "enableAudioDebugRecordings",
+      base::BindRepeating(
           &WebRTCInternalsMessageHandler::OnSetAudioDebugRecordingsEnabled,
-          base::Unretained(this),
-          true));
+          base::Unretained(this), true));
 
-  web_ui()->RegisterMessageCallback("disableAudioDebugRecordings",
-      base::Bind(
+  web_ui()->RegisterMessageCallback(
+      "disableAudioDebugRecordings",
+      base::BindRepeating(
           &WebRTCInternalsMessageHandler::OnSetAudioDebugRecordingsEnabled,
-          base::Unretained(this),
-          false));
+          base::Unretained(this), false));
 
   web_ui()->RegisterMessageCallback(
       "enableEventLogRecordings",
-      base::Bind(&WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled,
-                 base::Unretained(this), true));
+      base::BindRepeating(
+          &WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled,
+          base::Unretained(this), true));
 
   web_ui()->RegisterMessageCallback(
       "disableEventLogRecordings",
-      base::Bind(&WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled,
-                 base::Unretained(this), false));
+      base::BindRepeating(
+          &WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled,
+          base::Unretained(this), false));
 
-  web_ui()->RegisterMessageCallback("finishedDOMLoad",
-      base::Bind(&WebRTCInternalsMessageHandler::OnDOMLoadDone,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "finishedDOMLoad",
+      base::BindRepeating(&WebRTCInternalsMessageHandler::OnDOMLoadDone,
+                          base::Unretained(this)));
 }
 
 RenderFrameHost* WebRTCInternalsMessageHandler::GetWebRTCInternalsHost() const {
@@ -99,6 +103,11 @@ void WebRTCInternalsMessageHandler::OnSetAudioDebugRecordingsEnabled(
 void WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled(
     bool enable,
     const base::ListValue* /* unused_list */) {
+  if (!webrtc_internals_->CanToggleEventLogRecordings()) {
+    LOG(WARNING) << "Cannot toggle WebRTC event logging.";
+    return;
+  }
+
   if (enable) {
     webrtc_internals_->EnableLocalEventLogRecordings(
         web_ui()->GetWebContents());
@@ -116,6 +125,10 @@ void WebRTCInternalsMessageHandler::OnDOMLoadDone(
 
   if (webrtc_internals_->IsEventLogRecordingsEnabled())
     ExecuteJavascriptCommand("setEventLogRecordingsEnabled", nullptr);
+
+  const base::Value can_toggle(
+      webrtc_internals_->CanToggleEventLogRecordings());
+  ExecuteJavascriptCommand("setEventLogRecordingsToggleability", &can_toggle);
 }
 
 void WebRTCInternalsMessageHandler::OnUpdate(const char* command,
@@ -123,6 +136,8 @@ void WebRTCInternalsMessageHandler::OnUpdate(const char* command,
   ExecuteJavascriptCommand(command, args);
 }
 
+// TODO(eladalon): Make this function accept a vector of base::Values.
+// https://crbug.com/817384
 void WebRTCInternalsMessageHandler::ExecuteJavascriptCommand(
     const char* command,
     const base::Value* args) {

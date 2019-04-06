@@ -8,11 +8,11 @@ import android.accounts.Account;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.v4.util.ObjectsCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
@@ -78,7 +78,7 @@ public class DelayedInvalidationsController {
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... unused) {
-                String contractAuthority = AndroidSyncSettings.getContractAuthority(context);
+                String contractAuthority = AndroidSyncSettings.getContractAuthority();
                 for (Bundle bundle : bundles) {
                     ContentResolver.requestSync(account, contractAuthority, bundle);
                 }
@@ -134,8 +134,7 @@ public class DelayedInvalidationsController {
             PendingInvalidation invalidation =
                     PendingInvalidation.decodeToPendingInvalidation(encodedInvalidation);
             if (invalidation == null) return false;
-            if (ApiCompatibilityUtils.objectEquals(
-                        invalidation.mObjectId, newInvalidation.mObjectId)
+            if (ObjectsCompat.equals(invalidation.mObjectId, newInvalidation.mObjectId)
                     && invalidation.mObjectSource == newInvalidation.mObjectSource) {
                 if (invalidation.mVersion >= newInvalidation.mVersion) return true;
                 iter.remove();

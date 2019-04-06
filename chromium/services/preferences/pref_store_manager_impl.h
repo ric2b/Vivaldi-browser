@@ -7,16 +7,16 @@
 
 #include <memory>
 #include <set>
-#include <unordered_map>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/prefs/pref_value_store.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
-#include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service.h"
 
@@ -46,7 +46,7 @@ class PrefStoreManagerImpl : public service_manager::Service {
                        PersistentPrefStore* incognito_user_prefs_underlay,
                        PrefStore* recommended_prefs,
                        PrefRegistry* pref_registry,
-                       std::vector<const char*> overlay_pref_names);
+                       std::vector<const char*> persistent_perf_names);
   ~PrefStoreManagerImpl() override;
 
   base::OnceClosure ShutDownClosure();
@@ -72,15 +72,14 @@ class PrefStoreManagerImpl : public service_manager::Service {
 
   void ShutDown();
 
-  std::unordered_map<PrefValueStore::PrefStoreType,
-                     std::unique_ptr<PrefStoreImpl>>
+  base::flat_map<PrefValueStore::PrefStoreType, std::unique_ptr<PrefStoreImpl>>
       read_only_pref_stores_;
 
   mojo::StrongBindingSet<mojom::PrefStoreConnector> connector_bindings_;
   std::unique_ptr<PersistentPrefStoreImpl> persistent_pref_store_;
   std::unique_ptr<PersistentPrefStoreImpl>
       incognito_persistent_pref_store_underlay_;
-  std::vector<const char*> overlay_pref_names_;
+  std::vector<const char*> persistent_perf_names_;
 
   const std::unique_ptr<SharedPrefRegistry> shared_pref_registry_;
 

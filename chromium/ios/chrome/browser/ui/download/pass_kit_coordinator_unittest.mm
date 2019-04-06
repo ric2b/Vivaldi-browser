@@ -6,7 +6,8 @@
 
 #import <PassKit/PassKit.h>
 
-#include "base/test/histogram_tester.h"
+#import "base/test/ios/wait_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #import "ios/chrome/browser/download/pass_kit_tab_helper.h"
@@ -16,7 +17,6 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/fakes/fake_pass_kit_tab_helper_delegate.h"
 #import "ios/chrome/test/scoped_key_window.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/test/fakes/test_navigation_manager.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -27,8 +27,8 @@
 #error "This file requires ARC support."
 #endif
 
-using testing::WaitUntilConditionOrTimeout;
-using testing::kWaitForUIElementTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForUIElementTimeout;
 
 // Test fixture for PassKitCoordinator class.
 class PassKitCoordinatorTest : public PlatformTest {
@@ -63,6 +63,7 @@ class PassKitCoordinatorTest : public PlatformTest {
 
 // Tests that PassKitCoordinator presents PKAddPassesViewController for the
 // valid PKPass object.
+// TODO(crbug.com/804250): this test is flaky.
 TEST_F(PassKitCoordinatorTest, ValidPassKitObject) {
   std::string data = testing::GetTestPass();
   NSData* nsdata = [NSData dataWithBytes:data.c_str() length:data.size()];
@@ -99,6 +100,7 @@ TEST_F(PassKitCoordinatorTest, ValidPassKitObject) {
 }
 
 // Tests presenting multiple valid PKPass objects.
+// TODO(crbug.com/804250): this test is flaky.
 TEST_F(PassKitCoordinatorTest, MultiplePassKitObjects) {
   if (IsIPadIdiom()) {
     // Wallet app is not supported on iPads.
@@ -114,10 +116,11 @@ TEST_F(PassKitCoordinatorTest, MultiplePassKitObjects) {
             presentDialogForPass:pass
                         webState:web_state_.get()];
 
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
-    return [base_view_controller_.presentedViewController class] ==
-           [PKAddPassesViewController class];
-  }));
+  EXPECT_TRUE(
+      WaitUntilConditionOrTimeout(base::test::ios::kWaitForUIElementTimeout, ^{
+        return [base_view_controller_.presentedViewController class] ==
+               [PKAddPassesViewController class];
+      }));
 
   histogram_tester_.ExpectUniqueSample(
       kUmaPresentAddPassesDialogResult,
@@ -163,10 +166,11 @@ TEST_F(PassKitCoordinatorTest, AnotherViewControllerIsPresented) {
   [base_view_controller_ presentViewController:presented_controller
                                       animated:YES
                                     completion:nil];
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
-    return presented_controller ==
-           base_view_controller_.presentedViewController;
-  }));
+  EXPECT_TRUE(
+      WaitUntilConditionOrTimeout(base::test::ios::kWaitForUIElementTimeout, ^{
+        return presented_controller ==
+               base_view_controller_.presentedViewController;
+      }));
 
   // Attempt to present "Add pkpass UI".
   std::string data = testing::GetTestPass();

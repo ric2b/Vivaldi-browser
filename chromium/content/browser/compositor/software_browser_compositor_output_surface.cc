@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -23,11 +22,9 @@ namespace content {
 
 SoftwareBrowserCompositorOutputSurface::SoftwareBrowserCompositorOutputSurface(
     std::unique_ptr<viz::SoftwareOutputDevice> software_device,
-    const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    const UpdateVSyncParametersCallback& update_vsync_parameters_callback)
     : BrowserCompositorOutputSurface(std::move(software_device),
                                      update_vsync_parameters_callback),
-      task_runner_(std::move(task_runner)),
       weak_factory_(this) {}
 
 SoftwareBrowserCompositorOutputSurface::
@@ -74,15 +71,10 @@ void SoftwareBrowserCompositorOutputSurface::SwapBuffers(
   base::TimeTicks swap_time = base::TimeTicks::Now();
   for (auto& latency : frame.latency_info) {
     latency.AddLatencyNumberWithTimestamp(
-        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, 0, 0, swap_time, 1);
+        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, swap_time, 1);
     latency.AddLatencyNumberWithTimestamp(
-        ui::INPUT_EVENT_LATENCY_TERMINATED_FRAME_SWAP_COMPONENT, 0, 0,
-        swap_time, 1);
+        ui::INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT, swap_time, 1);
   }
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RenderWidgetHostImpl::OnGpuSwapBuffersCompleted,
-                     frame.latency_info));
 
   gfx::VSyncProvider* vsync_provider = software_device()->GetVSyncProvider();
   if (vsync_provider) {
@@ -91,20 +83,21 @@ void SoftwareBrowserCompositorOutputSurface::SwapBuffers(
                    weak_factory_.GetWeakPtr()));
   }
 
-  ++swap_id_;
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &SoftwareBrowserCompositorOutputSurface::SwapBuffersCallback,
-          weak_factory_.GetWeakPtr(), swap_id_));
+  software_device()->OnSwapBuffers(base::BindOnce(
+      &SoftwareBrowserCompositorOutputSurface::SwapBuffersCallback,
+      weak_factory_.GetWeakPtr(), frame.latency_info,
+      frame.need_presentation_feedback));
 }
 
 void SoftwareBrowserCompositorOutputSurface::SwapBuffersCallback(
-    uint64_t swap_id) {
-  client_->DidReceiveSwapBuffersAck(swap_id);
-  client_->DidReceivePresentationFeedback(
-      swap_id,
-      gfx::PresentationFeedback(base::TimeTicks::Now(), refresh_interval_, 0u));
+    const std::vector<ui::LatencyInfo>& latency_info,
+    bool need_presentation_feedback) {
+  latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
+  client_->DidReceiveSwapBuffersAck();
+  if (need_presentation_feedback) {
+    client_->DidReceivePresentationFeedback(gfx::PresentationFeedback(
+        base::TimeTicks::Now(), refresh_interval_, 0u));
+  }
 }
 
 void SoftwareBrowserCompositorOutputSurface::UpdateVSyncCallback(
@@ -127,11 +120,6 @@ SoftwareBrowserCompositorOutputSurface::GetOverlayBufferFormat() const {
   return gfx::BufferFormat::RGBX_8888;
 }
 
-bool SoftwareBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle()
-    const {
-  return false;
-}
-
 uint32_t
 SoftwareBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
   // Not used for software surfaces.
@@ -139,17 +127,15 @@ SoftwareBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
   return 0;
 }
 
-#if defined(OS_MACOSX)
-void SoftwareBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
-    bool suspended) {
-}
-#endif
-
 #if BUILDFLAG(ENABLE_VULKAN)
 gpu::VulkanSurface* SoftwareBrowserCompositorOutputSurface::GetVulkanSurface() {
   NOTIMPLEMENTED();
   return nullptr;
 }
 #endif
+
+unsigned SoftwareBrowserCompositorOutputSurface::UpdateGpuFence() {
+  return 0;
+}
 
 }  // namespace content

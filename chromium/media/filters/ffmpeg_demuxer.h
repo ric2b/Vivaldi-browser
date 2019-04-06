@@ -44,7 +44,7 @@
 #include "media/base/video_decoder_config.h"
 #include "media/ffmpeg/ffmpeg_deleters.h"
 #include "media/filters/blocking_url_protocol.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 // FFmpeg forward declarations.
 struct AVFormatContext;
@@ -119,8 +119,6 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   bool IsEnabled() const;
   void SetEnabled(bool enabled, base::TimeDelta timestamp);
 
-  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb);
-
   void SetLiveness(Liveness liveness);
 
   // Returns the range of buffered data in this stream.
@@ -190,7 +188,6 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
 
   DecoderBufferQueue buffer_queue_;
   ReadCB read_cb_;
-  StreamStatusChangeCB stream_status_change_cb_;
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
   std::unique_ptr<FFmpegBitstreamConverter> bitstream_converter_;
@@ -199,6 +196,8 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   std::string encryption_key_id_;
   bool fixup_negative_timestamps_;
   bool fixup_chained_ogg_;
+
+  int num_discarded_packet_warnings_;
 
   DISALLOW_COPY_AND_ASSIGN(FFmpegDemuxerStream);
 };
@@ -215,8 +214,7 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   // Demuxer implementation.
   std::string GetDisplayName() const override;
   void Initialize(DemuxerHost* host,
-                  const PipelineStatusCB& status_cb,
-                  bool enable_text_tracks) override;
+                  const PipelineStatusCB& status_cb) override;
   void AbortPendingReads() override;
   void Stop() override;
   void StartWaitingForSeek(base::TimeDelta seek_time) override;
@@ -224,7 +222,6 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   void Seek(base::TimeDelta time, const PipelineStatusCB& cb) override;
   base::Time GetTimelineOffset() const override;
   std::vector<DemuxerStream*> GetAllStreams() override;
-  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) override;
   base::TimeDelta GetStartTime() const override;
   int64_t GetMemoryUsage() const override;
 
@@ -242,11 +239,12 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   void NotifyDemuxerError(PipelineStatus error);
 
   void OnEnabledAudioTracksChanged(const std::vector<MediaTrack::Id>& track_ids,
-                                   base::TimeDelta curr_time) override;
-  // |track_id| either contains the selected video track id or is null,
-  // indicating that all video tracks are deselected/disabled.
-  void OnSelectedVideoTrackChanged(base::Optional<MediaTrack::Id> track_id,
-                                   base::TimeDelta curr_time) override;
+                                   base::TimeDelta curr_time,
+                                   TrackChangeCB change_completed_cb) override;
+
+  void OnSelectedVideoTrackChanged(const std::vector<MediaTrack::Id>& track_ids,
+                                   base::TimeDelta curr_time,
+                                   TrackChangeCB change_completed_cb) override;
 
   // The lowest demuxed timestamp.  If negative, DemuxerStreams must use this to
   // adjust packet timestamps such that external clients see a zero-based
@@ -258,9 +256,19 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
     return blocking_task_runner_;
   }
 
+  container_names::MediaContainerName container() const {
+    return glue_->container();
+  }
+
  private:
   // To allow tests access to privates.
   friend class FFmpegDemuxerTest;
+
+  // Helper for vide and audio track changing.
+  void FindAndEnableProperTracks(const std::vector<MediaTrack::Id>& track_ids,
+                                 base::TimeDelta curr_time,
+                                 DemuxerStream::Type track_type,
+                                 TrackChangeCB change_completed_cb);
 
   // FFmpeg callbacks during initialization.
   void OnOpenContextDone(const PipelineStatusCB& status_cb, bool result);
@@ -360,9 +368,6 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   // The Time associated with timestamp 0. Set to a null
   // time if the file doesn't have an association to Time.
   base::Time timeline_offset_;
-
-  // Whether text streams have been enabled for this demuxer.
-  bool text_enabled_;
 
   // Set if we know duration of the audio stream. Used when processing end of
   // stream -- at this moment we definitely know duration.

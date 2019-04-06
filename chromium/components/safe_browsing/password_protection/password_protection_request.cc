@@ -13,12 +13,14 @@
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/safe_browsing/db/whitelist_checker_client.h"
 #include "components/safe_browsing/password_protection/password_protection_navigation_throttle.h"
+#include "components/safe_browsing/web_ui/safe_browsing_ui.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/base/url_util.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "url/origin.h"
 
 using content::BrowserThread;
@@ -42,13 +44,23 @@ const char kSyncPasswordEntryVerdictHistogram[] =
     "PasswordProtection.Verdict.SyncPasswordEntry";
 const char kProtectedPasswordEntryVerdictHistogram[] =
     "PasswordProtection.Verdict.ProtectedPasswordEntry";
+const char kEnterprisePasswordEntryVerdictHistogram[] =
+    "PasswordProtection.Verdict.NonGaiaEnterprisePasswordEntry";
+const char kGSuiteSyncPasswordEntryVerdictHistogram[] =
+    "PasswordProtection.Verdict.GSuiteSyncPasswordEntry";
+const char kReferrerChainSizeOfSafeVerdictHistogram[] =
+    "PasswordProtection.ReferrerChainSize.Safe";
+const char kReferrerChainSizeOfPhishingVerdictHistogram[] =
+    "PasswordProtection.ReferrerChainSize.Phishing";
+const char kReferrerChainSizeOfLowRepVerdictHistogram[] =
+    "PasswordProtection.ReferrerChainSize.LowReputation";
 
 PasswordProtectionRequest::PasswordProtectionRequest(
     WebContents* web_contents,
     const GURL& main_frame_url,
     const GURL& password_form_action,
     const GURL& password_form_frame_url,
-    bool matches_sync_password,
+    ReusedPasswordType reused_password_type,
     const std::vector<std::string>& matching_domains,
     LoginReputationClientRequest::TriggerType type,
     bool password_field_exists,
@@ -58,7 +70,7 @@ PasswordProtectionRequest::PasswordProtectionRequest(
       main_frame_url_(main_frame_url),
       password_form_action_(password_form_action),
       password_form_frame_url_(password_form_frame_url),
-      matches_sync_password_(matches_sync_password),
+      reused_password_type_(reused_password_type),
       matching_domains_(matching_domains),
       trigger_type_(type),
       password_field_exists_(password_field_exists),
@@ -72,7 +84,9 @@ PasswordProtectionRequest::PasswordProtectionRequest(
   DCHECK(trigger_type_ == LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE ||
          trigger_type_ == LoginReputationClientRequest::PASSWORD_REUSE_EVENT);
   DCHECK(trigger_type_ != LoginReputationClientRequest::PASSWORD_REUSE_EVENT ||
-         matches_sync_password_ || matching_domains_.size() > 0);
+         reused_password_type_ !=
+             LoginReputationClientRequest::PasswordReuseEvent::SAVED_PASSWORD ||
+         matching_domains_.size() > 0);
 
   request_proto_->set_trigger_type(trigger_type_);
 }
@@ -129,7 +143,8 @@ void PasswordProtectionRequest::CheckCachedVerdicts() {
   std::unique_ptr<LoginReputationClientResponse> cached_response =
       std::make_unique<LoginReputationClientResponse>();
   auto verdict = password_protection_service_->GetCachedVerdict(
-      main_frame_url_, trigger_type_, cached_response.get());
+      main_frame_url_, trigger_type_, reused_password_type_,
+      cached_response.get());
   if (verdict != LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED)
     Finish(PasswordProtectionService::RESPONSE_ALREADY_CACHED,
            std::move(cached_response));
@@ -148,12 +163,14 @@ void PasswordProtectionRequest::FillRequestProto() {
   main_frame->set_url(main_frame_url_.spec());
   main_frame->set_frame_index(0 /* main frame */);
   password_protection_service_->FillReferrerChain(
-      main_frame_url_, -1 /* tab id not available */, main_frame);
+      main_frame_url_, SessionID::InvalidValue(), main_frame);
   bool clicked_through_interstitial =
       password_protection_service_->UserClickedThroughSBInterstitial(
           web_contents_);
   request_proto_->set_clicked_through_interstitial(
       clicked_through_interstitial);
+
+  request_proto_->set_content_type(web_contents_->GetContentsMimeType());
 
   switch (trigger_type_) {
     case LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE: {
@@ -186,14 +203,18 @@ void PasswordProtectionRequest::FillRequestProto() {
       main_frame->set_has_password_field(password_field_exists_);
       LoginReputationClientRequest::PasswordReuseEvent* reuse_event =
           request_proto_->mutable_password_reuse_event();
-      reuse_event->set_is_chrome_signin_password(matches_sync_password_);
-      if (matches_sync_password_) {
+      bool matches_sync_password =
+          reused_password_type_ ==
+          LoginReputationClientRequest::PasswordReuseEvent::SIGN_IN_PASSWORD;
+      reuse_event->set_is_chrome_signin_password(matches_sync_password);
+      if (matches_sync_password) {
         UMA_HISTOGRAM_BOOLEAN(
             "PasswordProtection.UserClickedThroughSBInterstitial."
             "SyncPasswordEntry",
             clicked_through_interstitial);
         reuse_event->set_sync_account_type(
             password_protection_service_->GetSyncAccountType());
+        reuse_event->set_reused_password_type(reused_password_type_);
         UMA_HISTOGRAM_ENUMERATION(
             "PasswordProtection.PasswordReuseSyncAccountType",
             reuse_event->sync_account_type(),
@@ -226,6 +247,9 @@ void PasswordProtectionRequest::SendRequest() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   FillRequestProto();
 
+  web_ui_token_ =
+      WebUIInfoSingleton::GetInstance()->AddToPGPings(*request_proto_);
+
   std::string serialized_request;
   if (!request_proto_->SerializeToString(&serialized_request)) {
     Finish(PasswordProtectionService::REQUEST_MALFORMED, nullptr);
@@ -256,28 +280,30 @@ void PasswordProtectionRequest::SendRequest() {
           cookies_store: "Safe Browsing Cookie Store"
           setting:
             "Users can control this feature via 'Protect you and your device "
-            "from dangerous sites' or 'Automatically report details of "
-            "possible security incidents to Google' setting under 'Privacy'. "
-            "By default, the first setting is enabled and the second is not."
+            "from dangerous sites'. By default, this setting is enabled."
+            "Alternatively, you can turn it off via "
+            "'PasswordProtectionWarningTrigger' enterprise policy setting."
           chrome_policy {
-            SafeBrowsingExtendedReportingOptInAllowed {
+            PasswordProtectionWarningTrigger {
               policy_options {mode: MANDATORY}
-              SafeBrowsingExtendedReportingOptInAllowed: false
+              PasswordProtectionWarningTrigger: 2
             }
           }
         })");
-  fetcher_ = net::URLFetcher::Create(
-      0, PasswordProtectionService::GetPasswordProtectionRequestUrl(),
-      net::URLFetcher::POST, this, traffic_annotation);
-  data_use_measurement::DataUseUserData::AttachToFetcher(
-      fetcher_.get(), data_use_measurement::DataUseUserData::SAFE_BROWSING);
-  fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE);
-  fetcher_->SetAutomaticallyRetryOn5xx(false);
-  fetcher_->SetRequestContext(
-      password_protection_service_->request_context_getter().get());
-  fetcher_->SetUploadData("application/octet-stream", serialized_request);
+  auto resource_request = std::make_unique<network::ResourceRequest>();
+  resource_request->url =
+      PasswordProtectionService::GetPasswordProtectionRequestUrl();
+  resource_request->method = "POST";
+  resource_request->load_flags = net::LOAD_DISABLE_CACHE;
+  url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
+                                                 traffic_annotation);
+  url_loader_->AttachStringForUpload(serialized_request,
+                                     "application/octet-stream");
   request_start_time_ = base::TimeTicks::Now();
-  fetcher_->Start();
+  url_loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      password_protection_service_->url_loader_factory().get(),
+      base::BindOnce(&PasswordProtectionRequest::OnURLLoaderComplete,
+                     base::Unretained(this)));
 }
 
 void PasswordProtectionRequest::StartTimeout() {
@@ -293,16 +319,18 @@ void PasswordProtectionRequest::StartTimeout() {
       base::TimeDelta::FromMilliseconds(request_timeout_in_ms_));
 }
 
-void PasswordProtectionRequest::OnURLFetchComplete(
-    const net::URLFetcher* source) {
+void PasswordProtectionRequest::OnURLLoaderComplete(
+    std::unique_ptr<std::string> response_body) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  net::URLRequestStatus status = source->GetStatus();
-  const bool is_success = status.is_success();
-  const int response_code = source->GetResponseCode();
+  int response_code = 0;
+  if (url_loader_->ResponseInfo() && url_loader_->ResponseInfo()->headers)
+    response_code = url_loader_->ResponseInfo()->headers->response_code();
+
+  const bool is_success = url_loader_->NetError() == net::OK;
 
   base::UmaHistogramSparse(
       "PasswordProtection.PasswordProtectionResponseOrErrorCode",
-      is_success ? response_code : status.error());
+      is_success ? response_code : url_loader_->NetError());
 
   if (!is_success || net::HTTP_OK != response_code) {
     Finish(PasswordProtectionService::FETCH_FAILED, nullptr);
@@ -311,16 +339,17 @@ void PasswordProtectionRequest::OnURLFetchComplete(
 
   std::unique_ptr<LoginReputationClientResponse> response =
       std::make_unique<LoginReputationClientResponse>();
-  std::string response_body;
-  bool received_data = source->GetResponseAsString(&response_body);
-  DCHECK(received_data);
-  fetcher_.reset();  // We don't need it anymore.
+  DCHECK(response_body);
+  url_loader_.reset();  // We don't need it anymore.
   UMA_HISTOGRAM_TIMES("PasswordProtection.RequestNetworkDuration",
                       base::TimeTicks::Now() - request_start_time_);
-  if (response->ParseFromString(response_body))
+  if (response_body && response->ParseFromString(*response_body)) {
+    WebUIInfoSingleton::GetInstance()->AddToPGResponses(web_ui_token_,
+                                                        *response);
     Finish(PasswordProtectionService::SUCCEEDED, std::move(response));
-  else
+  } else {
     Finish(PasswordProtectionService::RESPONSE_MALFORMED, nullptr);
+  }
 }
 
 void PasswordProtectionRequest::Finish(
@@ -332,9 +361,10 @@ void PasswordProtectionRequest::Finish(
     UMA_HISTOGRAM_ENUMERATION(kPasswordOnFocusRequestOutcomeHistogram, outcome,
                               PasswordProtectionService::MAX_OUTCOME);
   } else {
-    PasswordProtectionService::LogPasswordEntryRequestOutcome(
-        outcome, matches_sync_password_);
-    if (matches_sync_password_) {
+    password_protection_service_->LogPasswordEntryRequestOutcome(
+        outcome, reused_password_type_);
+    if (reused_password_type_ ==
+        LoginReputationClientRequest::PasswordReuseEvent::SIGN_IN_PASSWORD) {
       password_protection_service_->MaybeLogPasswordReuseLookupEvent(
           web_contents_, outcome, response.get());
     }
@@ -351,9 +381,24 @@ void PasswordProtectionRequest::Finish(
         UMA_HISTOGRAM_ENUMERATION(
             kAnyPasswordEntryVerdictHistogram, response->verdict_type(),
             LoginReputationClientResponse_VerdictType_VerdictType_MAX + 1);
-        if (matches_sync_password_) {
+        if (reused_password_type_ == LoginReputationClientRequest::
+                                         PasswordReuseEvent::SIGN_IN_PASSWORD) {
+          if (password_protection_service_->GetSyncAccountType() ==
+              LoginReputationClientRequest::PasswordReuseEvent::GSUITE) {
+            UMA_HISTOGRAM_ENUMERATION(
+                kGSuiteSyncPasswordEntryVerdictHistogram,
+                response->verdict_type(),
+                LoginReputationClientResponse_VerdictType_VerdictType_MAX + 1);
+          }
           UMA_HISTOGRAM_ENUMERATION(
               kSyncPasswordEntryVerdictHistogram, response->verdict_type(),
+              LoginReputationClientResponse_VerdictType_VerdictType_MAX + 1);
+        } else if (reused_password_type_ ==
+                   LoginReputationClientRequest::PasswordReuseEvent::
+                       ENTERPRISE_PASSWORD) {
+          UMA_HISTOGRAM_ENUMERATION(
+              kEnterprisePasswordEntryVerdictHistogram,
+              response->verdict_type(),
               LoginReputationClientResponse_VerdictType_VerdictType_MAX + 1);
         } else {
           UMA_HISTOGRAM_ENUMERATION(
@@ -364,6 +409,11 @@ void PasswordProtectionRequest::Finish(
       default:
         NOTREACHED();
     }
+    int referrer_chain_size =
+        request_proto_->frames_size() > 0
+            ? request_proto_->frames(0).referrer_chain_size()
+            : 0;
+    LogReferrerChainSize(response->verdict_type(), referrer_chain_size);
   }
 
   password_protection_service_->RequestFinished(
@@ -373,7 +423,7 @@ void PasswordProtectionRequest::Finish(
 
 void PasswordProtectionRequest::Cancel(bool timed_out) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  fetcher_.reset();
+  url_loader_.reset();
   // If request is canceled because |password_protection_service_| is shutting
   // down, ignore all these deferred navigations.
   if (!timed_out)
@@ -392,6 +442,28 @@ void PasswordProtectionRequest::HandleDeferredNavigations() {
       throttle->ResumeNavigation();
   }
   throttles_.clear();
+}
+
+void PasswordProtectionRequest::LogReferrerChainSize(
+    LoginReputationClientResponse::VerdictType verdict_type,
+    int referrer_chain_size) {
+  switch (verdict_type) {
+    case LoginReputationClientResponse::SAFE:
+      UMA_HISTOGRAM_COUNTS_100(kReferrerChainSizeOfSafeVerdictHistogram,
+                               referrer_chain_size);
+      return;
+    case LoginReputationClientResponse::LOW_REPUTATION:
+      UMA_HISTOGRAM_COUNTS_100(kReferrerChainSizeOfLowRepVerdictHistogram,
+                               referrer_chain_size);
+      return;
+    case LoginReputationClientResponse::PHISHING:
+      UMA_HISTOGRAM_COUNTS_100(kReferrerChainSizeOfPhishingVerdictHistogram,
+                               referrer_chain_size);
+      return;
+    case LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED:
+      break;
+  }
+  NOTREACHED();
 }
 
 }  // namespace safe_browsing

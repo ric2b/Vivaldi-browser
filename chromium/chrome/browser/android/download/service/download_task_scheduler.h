@@ -6,11 +6,12 @@
 #define CHROME_BROWSER_ANDROID_DOWNLOAD_SERVICE_DOWNLOAD_TASK_SCHEDULER_H_
 
 #include <jni.h>
+#include <stdint.h>
 #include <memory>
 
 #include "base/macros.h"
-#include "components/download/public/download_task_types.h"
-#include "components/download/public/task_scheduler.h"
+#include "components/download/public/background_service/download_task_types.h"
+#include "components/download/public/background_service/task_scheduler.h"
 
 namespace download {
 namespace android {
@@ -27,8 +28,8 @@ class DownloadTaskScheduler : public TaskScheduler {
                     bool require_unmetered_network,
                     bool require_charging,
                     int optimal_battery_percentage,
-                    long window_start_time_seconds,
-                    long window_end_time_seconds) override;
+                    int64_t window_start_time_seconds,
+                    int64_t window_end_time_seconds) override;
   void CancelTask(DownloadTaskType task_type) override;
 
  private:

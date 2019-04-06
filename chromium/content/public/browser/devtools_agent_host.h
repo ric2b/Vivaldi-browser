@@ -31,6 +31,7 @@ namespace content {
 class BrowserContext;
 class DevToolsExternalAgentProxyDelegate;
 class DevToolsSocketFactory;
+class RenderFrameHost;
 class WebContents;
 
 // Describes interface for managing devtools agents from browser process.
@@ -92,23 +93,20 @@ class CONTENT_EXPORT DevToolsAgentHost
 
   // Starts remote debugging.
   // Takes ownership over |socket_factory|.
-  // If |frontend_url| is empty, assumes it's bundled.
   // If |active_port_output_directory| is non-empty, it is assumed the
   // socket_factory was initialized with an ephemeral port (0). The
   // port selected by the OS will be written to a well-known file in
   // the output directory.
   static void StartRemoteDebuggingServer(
       std::unique_ptr<DevToolsSocketFactory> server_socket_factory,
-      const std::string& frontend_url,
       const base::FilePath& active_port_output_directory,
       const base::FilePath& debug_frontend_dir);
-
-  // Stops remote debugging.
   static void StopRemoteDebuggingServer();
 
   // Starts remote debugging for browser target for the given fd=3
   // for reading and fd=4 for writing remote debugging messages.
   static void StartRemoteDebuggingPipeHandler();
+  static void StopRemoteDebuggingPipeHandler();
 
   // Observer is notified about changes in DevToolsAgentHosts.
   static void AddObserver(DevToolsAgentHostObserver*);
@@ -117,9 +115,11 @@ class CONTENT_EXPORT DevToolsAgentHost
   // Attaches |client| to this agent host to start debugging.
   virtual void AttachClient(DevToolsAgentHostClient* client) = 0;
 
-  // Attaches |client| to this agent host to start debugging. Disconnects
-  // any existing clients.
-  virtual void ForceAttachClient(DevToolsAgentHostClient* client) = 0;
+  // Attaches |client| to this agent host to start debugging.
+  // This client will be restricted in certain ways. For example,
+  // it will be detached when attempting to debug WebUI pages.
+  // Returns |true| on success.
+  virtual bool AttachRestrictedClient(DevToolsAgentHostClient* client) = 0;
 
   // Already attached client detaches from this agent host to stop debugging it.
   // Returns true iff detach succeeded.
@@ -133,10 +133,9 @@ class CONTENT_EXPORT DevToolsAgentHost
   virtual bool DispatchProtocolMessage(DevToolsAgentHostClient* client,
                                        const std::string& message) = 0;
 
-  // Starts inspecting element at position (|x|, |y|).
-  virtual void InspectElement(DevToolsAgentHostClient* client,
-                              int x,
-                              int y) = 0;
+  // Starts inspecting element at position (|x|, |y|) in the frame
+  // represented by |frame_host|.
+  virtual void InspectElement(RenderFrameHost* frame_host, int x, int y) = 0;
 
   // Returns the unique id of the agent.
   virtual std::string GetId() = 0;

@@ -13,11 +13,13 @@
 #include "base/cpu.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_flattener.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/histogram_snapshot_manager.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -148,7 +150,7 @@ void MetricsLog::RecordCoreSystemProfile(MetricsServiceClient* client,
   system_profile->set_channel(client->GetChannel());
   system_profile->set_application_locale(client->GetApplicationLocale());
 
-#if defined(SYZYASAN)
+#if defined(ADDRESS_SANITIZER)
   system_profile->set_is_asan_build(true);
 #endif
 
@@ -169,9 +171,14 @@ void MetricsLog::RecordCoreSystemProfile(MetricsServiceClient* client,
   metrics::SystemProfileProto::OS* os = system_profile->mutable_os();
   os->set_name(base::SysInfo::OperatingSystemName());
   os->set_version(base::SysInfo::OperatingSystemVersion());
-#if defined(OS_ANDROID)
+#if defined(OS_CHROMEOS)
+  os->set_kernel_version(base::SysInfo::KernelVersion());
+#elif defined(OS_ANDROID)
   os->set_build_fingerprint(
       base::android::BuildInfo::GetInstance()->android_build_fp());
+  std::string package_name = client->GetAppPackageName();
+  if (!package_name.empty() && package_name != "com.android.chrome")
+    system_profile->set_app_package_name(package_name);
 #endif
 }
 
@@ -303,6 +310,18 @@ void MetricsLog::TruncateEvents() {
   if (uma_proto_.user_action_event_size() > internal::kUserActionEventLimit) {
     UMA_HISTOGRAM_COUNTS_100000("UMA.TruncatedEvents.UserAction",
                                 uma_proto_.user_action_event_size());
+    for (int i = internal::kUserActionEventLimit;
+         i < uma_proto_.user_action_event_size(); ++i) {
+      // No histograms.xml entry is added for this histogram because it uses an
+      // enum that is generated from actions.xml in our processing pipelines.
+      // Instead, a histogram description will also be produced in our
+      // pipelines.
+      base::UmaHistogramSparse(
+          "UMA.TruncatedEvents.UserAction.Type",
+          // Truncate the unsigned 64-bit hash to 31 bits, to make it a suitable
+          // histogram sample.
+          uma_proto_.user_action_event(i).name_hash() & 0x7fffffff);
+    }
     uma_proto_.mutable_user_action_event()->DeleteSubrange(
         internal::kUserActionEventLimit,
         uma_proto_.user_action_event_size() - internal::kUserActionEventLimit);

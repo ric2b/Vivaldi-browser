@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 
 assert(enable_extensions,
        "Cannot depend on extensions because enable_extensions=false.")
@@ -26,6 +26,10 @@ source_set("web_request") {
     "web_request_info.h",
     "web_request_permissions.cc",
     "web_request_permissions.h",
+    "web_request_proxying_url_loader_factory.cc",
+    "web_request_proxying_url_loader_factory.h",
+    "web_request_proxying_websocket.cc",
+    "web_request_proxying_websocket.h",
     "web_request_resource_type.cc",
     "web_request_resource_type.h",
     "web_request_time_tracker.cc",

@@ -18,6 +18,7 @@
 #include "base/mac/scoped_typeref.h"
 #include "media/base/audio_decoder.h"
 #include "platform_media/renderer/decoders/mac/at_codec_helper.h"
+#include "platform_media/renderer/decoders/debug_buffer_logger.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -44,8 +45,9 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
   void Initialize(const AudioDecoderConfig& config,
                   CdmContext* cdm_context,
                   const InitCB& init_cb,
-                  const OutputCB& output_cb) override;
-  void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+                  const OutputCB& output_cb,
+                  const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) override;
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
 
@@ -87,6 +89,7 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
   const bool needs_eos_workaround_;
   OutputCB output_cb_;
 
+  DebugBufferLogger debug_buffer_logger_;
   DISALLOW_COPY_AND_ASSIGN(ATAudioDecoder);
 };
 

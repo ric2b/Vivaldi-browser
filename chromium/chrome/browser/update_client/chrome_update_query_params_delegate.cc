@@ -13,7 +13,7 @@
 namespace {
 
 base::LazyInstance<ChromeUpdateQueryParamsDelegate>::DestructorAtExit
-    g_delegate = LAZY_INSTANCE_INITIALIZER;
+    g_chrome_update_query_params_delegate = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -26,12 +26,12 @@ ChromeUpdateQueryParamsDelegate::~ChromeUpdateQueryParamsDelegate() {
 // static
 ChromeUpdateQueryParamsDelegate*
 ChromeUpdateQueryParamsDelegate::GetInstance() {
-  return g_delegate.Pointer();
+  return g_chrome_update_query_params_delegate.Pointer();
 }
 
 std::string ChromeUpdateQueryParamsDelegate::GetExtraParams() {
   return base::StringPrintf("&prodchannel=%s&prodversion=%s&lang=%s",
-                            chrome::GetChannelString().c_str(),
+                            chrome::GetChannelName().c_str(),
                             version_info::GetVersionNumber().c_str(),
                             GetLang());
 }

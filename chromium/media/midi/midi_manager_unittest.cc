@@ -52,7 +52,7 @@ class FakeMidiManager : public MidiManager {
   void DispatchSendMidiData(MidiManagerClient* client,
                             uint32_t port_index,
                             const std::vector<uint8_t>& data,
-                            double timestamp) override {}
+                            base::TimeTicks timestamp) override {}
 
   // Utility functions for testing.
   void CallCompleteInitialization(Result result) {
@@ -131,7 +131,7 @@ class FakeMidiManagerClient : public MidiManagerClient {
   void ReceiveMidiData(uint32_t port_index,
                        const uint8_t* data,
                        size_t size,
-                       double timestamp) override {}
+                       base::TimeTicks timestamp) override {}
   void AccumulateMidiBytesSent(size_t size) override {}
   void Detach() override {}
 
@@ -325,7 +325,13 @@ TEST_F(MidiManagerTest, AbortSession) {
   run_loop.RunUntilIdle();
 }
 
-TEST_F(MidiManagerTest, CreatePlatformMidiManager) {
+#if defined(OS_ANDROID)
+// The test sometimes fails on Android. https://crbug.com/844027
+#define MAYBE_CreatePlatformMidiManager DISABLED_CreatePlatformMidiManager
+#else
+#define MAYBE_CreatePlatformMidiManager CreatePlatformMidiManager
+#endif
+TEST_F(MidiManagerTest, MAYBE_CreatePlatformMidiManager) {
   // SystemMonitor is needed on Windows.
   base::SystemMonitor system_monitor;
 

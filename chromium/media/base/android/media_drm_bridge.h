@@ -19,10 +19,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "media/base/android/android_util.h"
-#include "media/base/android/media_drm_bridge_cdm_context.h"
-#include "media/base/android/media_drm_bridge_cdm_context_impl.h"
+#include "media/base/android/media_crypto_context.h"
+#include "media/base/android/media_crypto_context_impl.h"
 #include "media/base/android/media_drm_storage.h"
 #include "media/base/android/media_drm_storage_bridge.h"
+#include "media/base/cdm_context.h"
 #include "media/base/cdm_promise.h"
 #include "media/base/cdm_promise_adapter.h"
 #include "media/base/content_decryption_module.h"
@@ -47,6 +48,7 @@ namespace media {
 // SetMediaCryptoReadyCB(), which can be called on any thread.
 
 class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
+                                    public CdmContext,
                                     public PlayerTracker {
  public:
   // TODO(ddorwin): These are specific to Widevine. http://crbug.com/459400
@@ -57,8 +59,7 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   };
 
   using ResetCredentialsCB = base::Callback<void(bool)>;
-  using MediaCryptoReadyCB = MediaDrmBridgeCdmContext::MediaCryptoReadyCB;
-  using CreatedCB = base::OnceCallback<void(scoped_refptr<MediaDrmBridge>)>;
+  using MediaCryptoReadyCB = MediaCryptoContext::MediaCryptoReadyCB;
 
   // Checks whether MediaDRM is available and usable, including for decoding.
   // All other static methods check IsAvailable() or equivalent internally.
@@ -80,20 +81,8 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // are not handled by Chrome explicitly.
   static std::vector<std::string> GetPlatformKeySystemNames();
 
-  // Returns a MediaDrmBridge instance if |key_system| and |security_level| are
-  // supported, and nullptr otherwise. The default security level will be used
-  // if |security_level| is SECURITY_LEVEL_DEFAULT.
-  static void Create(
-      const std::string& key_system,
-      const url::Origin& security_origin,
-      SecurityLevel security_level,
-      const CreateFetcherCB& create_fetcher_cb,
-      const CreateStorageCB& create_storage_cb,
-      const SessionMessageCB& session_message_cb,
-      const SessionClosedCB& session_closed_cb,
-      const SessionKeysChangeCB& session_keys_change_cb,
-      const SessionExpirationUpdateCB& session_expiration_update_cb,
-      CreatedCB created_cb);
+  // Returns the scheme UUID for |key_system|.
+  static std::vector<uint8_t> GetUUID(const std::string& key_system);
 
   // Same as Create() except that no session callbacks are provided. This is
   // used when we need to use MediaDrmBridge without creating any sessions.
@@ -129,12 +118,15 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   CdmContext* GetCdmContext() override;
   void DeleteOnCorrectThread() const override;
 
+  // CdmContext implementation.
+  MediaCryptoContext* GetMediaCryptoContext() override;
+
   // Unprovision the origin bound with |this|. This will remove the cert for
   // current origin and leave the offline licenses in invalid state (offline
   // licenses can't be used anymore).
   //
-  // MediaDrmBridge must be created with a valid origin ID. This function won't
-  // touch persistent storage.
+  // MediaDrmBridge must be created with a valid origin ID without session
+  // support. This function won't touch persistent storage.
   void Unprovision();
 
   // PlayerTracker implementation. Can be called on any thread.
@@ -151,7 +143,9 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // video playback.
   bool IsSecureCodecRequired();
 
-  // Reset the device credentials.
+  // Reset the device credentials. MediaDrmBridge must be created without
+  // session support.
+  // TODO(xhwang): Unify Unprovision() and ResetDeviceCredentials().
   void ResetDeviceCredentials(const ResetCredentialsCB& callback);
 
   // Helper functions to resolve promises.
@@ -244,30 +238,44 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
       bool success);
 
  private:
+  friend class MediaDrmBridgeFactory;
   // For DeleteSoon() in DeleteOnCorrectThread().
   friend class base::DeleteHelper<MediaDrmBridge>;
 
   static scoped_refptr<MediaDrmBridge> CreateInternal(
       const std::vector<uint8_t>& scheme_uuid,
+      const std::string& origin_id,
       SecurityLevel security_level,
+      bool requires_media_crypto,
       std::unique_ptr<MediaDrmStorageBridge> storage,
       const CreateFetcherCB& create_fetcher_cb,
       const SessionMessageCB& session_message_cb,
       const SessionClosedCB& session_closed_cb,
       const SessionKeysChangeCB& session_keys_change_cb,
-      const SessionExpirationUpdateCB& session_expiration_update_cb,
-      const std::string& origin_id);
+      const SessionExpirationUpdateCB& session_expiration_update_cb);
 
   // Constructs a MediaDrmBridge for |scheme_uuid| and |security_level|. The
   // default security level will be used if |security_level| is
-  // SECURITY_LEVEL_DEFAULT. Sessions should not be created if session callbacks
-  // are null.
+  // SECURITY_LEVEL_DEFAULT.
   //
   // |origin_id| is a random string that can identify an origin. It may be empty
   // when reseting device credential.
+  //
+  // If |requires_media_crypto| is true, MediaCrypto is expected to be created
+  // and notified via MediaCryptoReadyCB set in SetMediaCryptoReadyCB(). This
+  // may trigger the provisioning process. Before MediaCrypto is notified, no
+  // other methods should be called.
+  // TODO(xhwang): It's odd to rely on MediaCryptoReadyCB. Maybe we should add a
+  // dedicated Initialize() method.
+  //
+  // If |requires_media_crypto| is false, MediaCrypto will not be created. This
+  // object cannot be used for playback, but can be used to unprovision the
+  // device/origin via Unprovision() and ResetDeviceCredentials(). Sessions
+  // should not be created in this mode.
   MediaDrmBridge(const std::vector<uint8_t>& scheme_uuid,
                  const std::string& origin_id,
                  SecurityLevel security_level,
+                 bool requires_media_crypto,
                  std::unique_ptr<MediaDrmStorageBridge> storage,
                  const CreateFetcherCB& create_fetcher_cb,
                  const SessionMessageCB& session_message_cb,
@@ -335,7 +343,7 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // Default task runner.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
-  MediaDrmBridgeCdmContextImpl media_drm_bridge_cdm_context_;
+  MediaCryptoContextImpl media_crypto_context_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<MediaDrmBridge> weak_factory_;

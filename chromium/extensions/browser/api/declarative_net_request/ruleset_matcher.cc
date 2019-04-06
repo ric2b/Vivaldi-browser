@@ -10,7 +10,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/elapsed_timer.h"
 #include "extensions/browser/api/declarative_net_request/flat/extension_ruleset_generated.h"
@@ -23,9 +22,6 @@ namespace declarative_net_request {
 namespace flat_rule = url_pattern_index::flat;
 
 namespace {
-void DeleteRulesetHelper(std::unique_ptr<base::MemoryMappedFile> ruleset) {
-  base::AssertBlockingAllowed();
-}
 
 using FindRuleStrategy =
     url_pattern_index::UrlPatternIndexMatcher::FindRuleStrategy;
@@ -46,16 +42,13 @@ RulesetMatcher::LoadRulesetResult RulesetMatcher::CreateVerifiedMatcher(
   if (!base::PathExists(indexed_ruleset_path))
     return kLoadErrorInvalidPath;
 
-  // TODO(crbug.com/774271): Revisit mmap-ing the file.
-  auto ruleset = std::make_unique<base::MemoryMappedFile>();
-  if (!ruleset->Initialize(indexed_ruleset_path,
-                           base::MemoryMappedFile::READ_ONLY)) {
-    return kLoadErrorMemoryMap;
-  }
+  std::string ruleset_data;
+  if (!base::ReadFileToString(indexed_ruleset_path, &ruleset_data))
+    return kLoadErrorFileRead;
 
   // This guarantees that no memory access will end up outside the buffer.
-  if (!IsValidRulesetData(ruleset->data(), ruleset->length(),
-                          expected_ruleset_checksum)) {
+  if (!IsValidRulesetData(reinterpret_cast<const uint8_t*>(ruleset_data.data()),
+                          ruleset_data.size(), expected_ruleset_checksum)) {
     return kLoadErrorRulesetVerification;
   }
 
@@ -65,18 +58,11 @@ RulesetMatcher::LoadRulesetResult RulesetMatcher::CreateVerifiedMatcher(
 
   // Using WrapUnique instead of make_unique since this class has a private
   // constructor.
-  *matcher = base::WrapUnique(new RulesetMatcher(std::move(ruleset)));
+  *matcher = base::WrapUnique(new RulesetMatcher(std::move(ruleset_data)));
   return kLoadSuccess;
 }
 
-RulesetMatcher::~RulesetMatcher() {
-  // |ruleset_| must be destroyed on a sequence which supports file IO.
-  // TODO(crbug.com/696822): Revisit this to ensure that this is safe and causes
-  // no resource leak even if this task fails.
-  base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::BindOnce(&DeleteRulesetHelper, std::move(ruleset_)));
-}
+RulesetMatcher::~RulesetMatcher() = default;
 
 bool RulesetMatcher::ShouldBlockRequest(const GURL& url,
                                         const url::Origin& first_party_origin,
@@ -91,10 +77,10 @@ bool RulesetMatcher::ShouldBlockRequest(const GURL& url,
   const bool disable_generic_rules = false;
 
   bool success =
-      !!blacklist_matcher_.FindMatch(
+      !!blocking_matcher_.FindMatch(
           url, first_party_origin, element_type, flat_rule::ActivationType_NONE,
           is_third_party, disable_generic_rules, FindRuleStrategy::kAny) &&
-      !whitelist_matcher_.FindMatch(
+      !allowing_matcher_.FindMatch(
           url, first_party_origin, element_type, flat_rule::ActivationType_NONE,
           is_third_party, disable_generic_rules, FindRuleStrategy::kAny);
   return success;
@@ -141,11 +127,11 @@ bool RulesetMatcher::ShouldRedirectRequest(
   return true;
 }
 
-RulesetMatcher::RulesetMatcher(std::unique_ptr<base::MemoryMappedFile> ruleset)
-    : ruleset_(std::move(ruleset)),
-      root_(flat::GetExtensionIndexedRuleset(ruleset_->data())),
-      blacklist_matcher_(root_->blacklist_index()),
-      whitelist_matcher_(root_->whitelist_index()),
+RulesetMatcher::RulesetMatcher(std::string ruleset_data)
+    : ruleset_data_(std::move(ruleset_data)),
+      root_(flat::GetExtensionIndexedRuleset(ruleset_data_.data())),
+      blocking_matcher_(root_->blocking_index()),
+      allowing_matcher_(root_->allowing_index()),
       redirect_matcher_(root_->redirect_index()),
       metadata_list_(root_->extension_metadata()) {}
 

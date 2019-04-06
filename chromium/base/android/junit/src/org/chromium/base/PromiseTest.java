@@ -7,6 +7,7 @@ package org.chromium.base;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -14,10 +15,10 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.Promise.UnhandledRejectionException;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 
 /** Unit tests for {@link Promise}. */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class PromiseTest {
     // We need a simple mutable reference type for testing.
@@ -198,6 +199,7 @@ public class PromiseTest {
         try {
             promise.reject(new NegativeArraySizeException(message));
             ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+            fail();
         } catch (UnhandledRejectionException e) {
             assertTrue(e.getCause() instanceof NegativeArraySizeException);
             assertEquals(e.getCause().getMessage(), message);

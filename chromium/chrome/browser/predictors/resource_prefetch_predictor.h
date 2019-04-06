@@ -23,7 +23,6 @@
 #include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
-#include "chrome/browser/predictors/resource_prefetcher.h"
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/history/core/browser/history_types.h"
@@ -37,7 +36,6 @@ class Profile;
 namespace predictors {
 
 struct OriginRequestSummary;
-struct URLRequestSummary;
 struct PageRequestSummary;
 
 namespace internal {
@@ -102,19 +100,6 @@ struct PreconnectPrediction {
 //   by profile.
 class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
  public:
-  // Stores a result of prediction. Essentially, |subresource_urls| is main
-  // result and other fields are used for diagnosis and histograms reporting.
-  struct Prediction {
-    Prediction();
-    Prediction(const Prediction& other);
-    ~Prediction();
-
-    bool is_host;
-    bool is_redirected;
-    std::string main_frame_key;
-    std::vector<GURL> subresource_urls;
-  };
-
   // Used for reporting redirect prediction success/failure in histograms.
   // NOTE: This enumeration is used in histograms, so please do not add entries
   // in the middle.
@@ -127,8 +112,6 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
     MAX
   };
 
-  using PrefetchDataMap =
-      GlowplugKeyValueData<PrefetchData, internal::LastVisitTimeCompare>;
   using RedirectDataMap =
       GlowplugKeyValueData<RedirectData, internal::LastVisitTimeCompare>;
   using OriginDataMap =
@@ -146,25 +129,13 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
   virtual void StartInitialization();
   virtual void Shutdown();
 
-  // Returns true if prefetching data exists for the |main_frame_url|.
-  virtual bool IsUrlPrefetchable(const GURL& main_frame_url) const;
   // Returns true if preconnect data exists for the |main_frame_url|.
   virtual bool IsUrlPreconnectable(const GURL& main_frame_url) const;
-
-  // Returns true iff |resource| has sufficient confidence level and required
-  // number of hits.
-  bool IsResourcePrefetchable(const ResourceData& resource) const;
 
   // Sets the |observer| to be notified when the resource prefetch predictor
   // data changes. Previously registered observer will be discarded. Call
   // this with nullptr parameter to de-register observer.
   void SetObserverForTesting(TestObserver* observer);
-
-  // Returns true iff there is PrefetchData that can be used for a
-  // |main_frame_url| and fills |prediction| with resources that need to be
-  // prefetched. |prediction| pointer may be nullptr to get return value only.
-  virtual bool GetPrefetchData(const GURL& main_frame_url,
-                               Prediction* prediction) const;
 
   // Returns true iff there is OriginData that can be used for a |url| and fills
   // |prediction| with origins and hosts that need to be preconnected and
@@ -178,6 +149,9 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
   virtual void RecordPageRequestSummary(
       std::unique_ptr<PageRequestSummary> summary);
 
+  // Deletes all URLs from the predictor database and caches.
+  void DeleteAllUrls();
+
  private:
   friend class LoadingPredictor;
   friend class ::PredictorsHandler;
@@ -186,6 +160,8 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
   friend class ResourcePrefetchPredictorBrowserTest;
 
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, DeleteUrls);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
+                           DeleteAllUrlsUninitialized);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
                            LazilyInitializeEmpty);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
@@ -234,41 +210,18 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
                            const RedirectDataMap& redirect_data,
                            std::string* redirect_endpoint) const;
 
-  // Returns true iff the |resource_data| contains PrefetchData that can be used
-  // for a |main_frame_key| and fills |urls| with resources that need to be
-  // prefetched. |urls| may be nullptr to get the return value only.
-  bool PopulatePrefetcherRequest(const std::string& main_frame_key,
-                                 const PrefetchDataMap& resource_data,
-                                 std::vector<GURL>* urls) const;
-
   // Callback for the task to read the predictor database. Takes ownership of
   // all arguments.
-  void CreateCaches(std::unique_ptr<PrefetchDataMap> url_resource_data,
-                    std::unique_ptr<PrefetchDataMap> host_resource_data,
-                    std::unique_ptr<RedirectDataMap> url_redirect_data,
-                    std::unique_ptr<RedirectDataMap> host_redirect_data,
+  void CreateCaches(std::unique_ptr<RedirectDataMap> host_redirect_data,
                     std::unique_ptr<OriginDataMap> origin_data);
 
   // Called during initialization when history is read and the predictor
   // database has been read.
   void OnHistoryAndCacheLoaded();
 
-  // Deletes all URLs from the predictor database and caches.
-  void DeleteAllUrls();
-
   // Deletes data for the input |urls| and their corresponding hosts from the
   // predictor database and caches.
   void DeleteUrls(const history::URLRows& urls);
-
-  // Callback for GetUrlVisitCountTask.
-  void OnVisitCountLookup(size_t url_visit_count,
-                          const PageRequestSummary& summary);
-
-  // Merges resources in |new_resources| into the |resource_data| and
-  // correspondingly updates the predictor database.
-  void LearnNavigation(const std::string& key,
-                       const std::vector<URLRequestSummary>& new_resources,
-                       PrefetchDataMap* resource_data);
 
   // Updates information about final redirect destination for the |key| in
   // |redirect_data| and correspondingly updates the predictor database.
@@ -286,10 +239,7 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
 
   // history::HistoryServiceObserver:
   void OnURLsDeleted(history::HistoryService* history_service,
-                     bool all_history,
-                     bool expired,
-                     const history::URLRows& deleted_rows,
-                     const std::set<GURL>& favicon_urls) override;
+                     const history::DeletionInfo& deletion_info) override;
   void OnHistoryServiceLoaded(
       history::HistoryService* history_service) override;
 
@@ -309,14 +259,15 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
   scoped_refptr<ResourcePrefetchPredictorTables> tables_;
   base::CancelableTaskTracker history_lookup_consumer_;
 
-  std::unique_ptr<PrefetchDataMap> url_resource_data_;
-  std::unique_ptr<PrefetchDataMap> host_resource_data_;
-  std::unique_ptr<RedirectDataMap> url_redirect_data_;
   std::unique_ptr<RedirectDataMap> host_redirect_data_;
   std::unique_ptr<OriginDataMap> origin_data_;
 
   ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
       history_service_observer_;
+
+  // Indicates if all predictors data should be deleted after the
+  // initialization is completed.
+  bool delete_all_data_requested_ = false;
 
   base::WeakPtrFactory<ResourcePrefetchPredictor> weak_factory_;
 
@@ -332,8 +283,7 @@ class TestObserver {
 
   virtual void OnPredictorInitialized() {}
 
-  virtual void OnNavigationLearned(size_t url_visit_count,
-                                   const PageRequestSummary& summary) {}
+  virtual void OnNavigationLearned(const PageRequestSummary& summary) {}
 
  protected:
   // |predictor| must be non-NULL and has to outlive the TestObserver.

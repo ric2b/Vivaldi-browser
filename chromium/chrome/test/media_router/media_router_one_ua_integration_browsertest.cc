@@ -29,7 +29,7 @@ class MediaRouterIntegrationOneUABrowserTest
     // Set up embedded test server to serve offscreen presentation with relative
     // URL "presentation_receiver.html".
     base::FilePath base_dir;
-    CHECK(PathService::Get(base::DIR_MODULE, &base_dir));
+    CHECK(base::PathService::Get(base::DIR_MODULE, &base_dir));
     base::FilePath resource_dir = base_dir.Append(
         FILE_PATH_LITERAL("media_router/browser_test_resources/"));
     embedded_test_server()->ServeFilesFromDirectory(resource_dir);
@@ -37,20 +37,22 @@ class MediaRouterIntegrationOneUABrowserTest
   }
 
   GURL GetTestPageUrl(const base::FilePath& full_path) override {
-    GURL url = embedded_test_server()->GetURL("/basic_test.html");
-    return GURL(url.spec() + "?__oneUA__=true");
+    return embedded_test_server()->GetURL("/basic_test.html?__oneUA__=true");
   }
 };
 
+// TODO(crbug.com/822231): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest, MANUAL_Basic) {
   RunBasicTest();
 }
 
+// TODO(crbug.com/822216): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
                        MANUAL_SendAndOnMessage) {
   RunSendMessageTest("foo");
 }
 
+// TODO(crbug.com/821717): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
                        MANUAL_ReceiverCloseConnection) {
   WebContents* web_contents = StartSessionWithTestPageAndChooseSink();
@@ -58,45 +60,53 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
   ExecuteJavaScriptAPI(web_contents, kInitiateCloseFromReceiverPageScript);
 }
 
+// TODO(crbug.com/824889): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
                        MANUAL_Fail_SendMessage) {
   RunFailToSendMessageTest();
 }
 
+// TODO(crbug.com/821717): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
                        MANUAL_ReconnectSession) {
   RunReconnectSessionTest();
 }
 
+// TODO(crbug.com/821717): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
                        MANUAL_ReconnectSessionSameTab) {
   RunReconnectSessionSameTabTest();
 }
 
 class MediaRouterIntegrationOneUANoReceiverBrowserTest
-    : public MediaRouterIntegrationBrowserTest {
+    : public MediaRouterIntegrationOneUABrowserTest {
  public:
   GURL GetTestPageUrl(const base::FilePath& full_path) override {
-    GURL url = MediaRouterIntegrationBrowserTest::GetTestPageUrl(full_path);
-    return GURL(url.spec() + "?__oneUANoReceiver__=true");
+    return embedded_test_server()->GetURL(
+        "/basic_test.html?__oneUANoReceiver__=true");
   }
 };
 
+// TODO(crbug.com/822179,822337): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUANoReceiverBrowserTest,
                        MANUAL_Basic) {
   RunBasicTest();
 }
 
+// TODO(crbug.com/821717): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUANoReceiverBrowserTest,
                        MANUAL_Fail_SendMessage) {
   RunFailToSendMessageTest();
 }
 
+// TODO(crbug.com/822231): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUANoReceiverBrowserTest,
                        MANUAL_ReconnectSession) {
   RunReconnectSessionTest();
 }
 
+// TODO(crbug.com/826016): Crashes on ASAN.
+// TODO(crbug.com/834681): Crashes elsewhere too, flakily.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUANoReceiverBrowserTest,
                        MANUAL_ReconnectSessionSameTab) {
   RunReconnectSessionSameTabTest();

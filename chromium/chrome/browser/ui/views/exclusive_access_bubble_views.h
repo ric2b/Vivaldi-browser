@@ -13,7 +13,6 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_hide_callback.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "ui/views/controls/link_listener.h"
 #include "ui/views/widget/widget_observer.h"
 
 class ExclusiveAccessBubbleViewsContext;
@@ -34,8 +33,7 @@ class SubtleNotificationView;
 // the screen top.
 class ExclusiveAccessBubbleViews : public ExclusiveAccessBubble,
                                    public content::NotificationObserver,
-                                   public views::WidgetObserver,
-                                   public views::LinkListener {
+                                   public views::WidgetObserver {
  public:
   ExclusiveAccessBubbleViews(
       ExclusiveAccessBubbleViewsContext* context,
@@ -44,10 +42,13 @@ class ExclusiveAccessBubbleViews : public ExclusiveAccessBubble,
       ExclusiveAccessBubbleHideCallback bubble_first_hide_callback);
   ~ExclusiveAccessBubbleViews() override;
 
+  // |force_update| indicates the caller wishes to show the bubble contents
+  // regardless of whether the contents have changed.
   void UpdateContent(
       const GURL& url,
       ExclusiveAccessBubbleType bubble_type,
-      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback);
+      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
+      bool force_update);
 
   // Repositions |popup_| if it is visible.
   void RepositionIfVisible();
@@ -91,9 +92,6 @@ class ExclusiveAccessBubbleViews : public ExclusiveAccessBubble,
   // views::WidgetObserver:
   void OnWidgetDestroyed(views::Widget* widget) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
-
-  // views::LinkListener override:
-  void LinkClicked(views::Link* source, int event_flags) override;
 
   void RunHideCallbackIfNeeded(ExclusiveAccessBubbleHideReason reason);
 

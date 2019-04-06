@@ -7,8 +7,8 @@
 #import <Foundation/Foundation.h>
 
 #import "base/mac/foundation_util.h"
+#import "base/test/ios/wait_util.h"
 #import "ios/chrome/app/main_controller_private.h"
-#import "ios/chrome/browser/autofill/form_input_accessory_view_controller.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/metrics/tab_usage_recorder.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -19,13 +19,12 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
-#import "ios/testing/wait_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-using testing::WaitUntilConditionOrTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
 
 namespace chrome_test_util {
 
@@ -166,12 +165,13 @@ BOOL CloseAllIncognitoTabs() {
   TabModel* tabModel = [[main_controller browserViewInformation] otrTabModel];
   DCHECK(tabModel);
   [tabModel closeAllTabs];
-  if (!IsIPadIdiom()) {
+  if (!IsIPadIdiom() && !IsUIRefreshPhase1Enabled()) {
     // If the OTR BVC is active, wait until it isn't (since all of the
     // tabs are now closed)
-    return WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
-      return !IsIncognitoMode();
-    });
+    return WaitUntilConditionOrTimeout(
+        base::test::ios::kWaitForUIElementTimeout, ^{
+          return !IsIncognitoMode();
+        });
   }
   return YES;
 }

@@ -9,7 +9,6 @@
 
 #include "base/callback_forward.h"
 #include "base/run_loop.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/app_data_migrator.h"
 #include "chrome/browser/extensions/extension_special_storage_policy.h"
@@ -133,11 +132,11 @@ void OpenFileSystems(storage::FileSystemContext* fs_context,
                      GURL extension_url) {
   fs_context->OpenFileSystem(extension_url, storage::kFileSystemTypeTemporary,
                              storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-                             base::Bind(&DidOpenFileSystem));
+                             base::BindOnce(&DidOpenFileSystem));
 
   fs_context->OpenFileSystem(extension_url, storage::kFileSystemTypePersistent,
                              storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-                             base::Bind(&DidOpenFileSystem));
+                             base::BindOnce(&DidOpenFileSystem));
   content::RunAllTasksUntilIdle();
 }
 
@@ -181,8 +180,7 @@ void GenerateTestFiles(content::MockBlobURLRequestContext* url_request_context,
   content::RunAllTasksUntilIdle();
 }
 
-void VerifyFileContents(base::File file,
-                        const base::Closure& on_close_callback) {
+void VerifyFileContents(base::File file, base::OnceClosure on_close_callback) {
   ASSERT_EQ(14, file.GetLength());
   std::unique_ptr<char[]> buffer(new char[15]);
 
@@ -195,7 +193,7 @@ void VerifyFileContents(base::File file,
 
   file.Close();
   if (!on_close_callback.is_null())
-    on_close_callback.Run();
+    std::move(on_close_callback).Run();
   base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 

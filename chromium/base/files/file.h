@@ -18,14 +18,14 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <sys/stat.h>
 #endif
 
 namespace base {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_ANDROID) && __ANDROID_API__ < 21
+  defined(OS_FUCHSIA) || (defined(OS_ANDROID) && __ANDROID_API__ < 21)
 typedef struct stat stat_wrapper_t;
 #elif defined(OS_POSIX)
 typedef struct stat64 stat_wrapper_t;
@@ -78,9 +78,9 @@ class BASE_EXPORT File {
                                          // See DeleteOnClose() for details.
   };
 
-  // This enum has been recorded in multiple histograms. If the order of the
-  // fields needs to change, please ensure that those histograms are obsolete or
-  // have been moved to a different enum.
+  // This enum has been recorded in multiple histograms using PlatformFileError
+  // enum. If the order of the fields needs to change, please ensure that those
+  // histograms are obsolete or have been moved to a different enum.
   //
   // FILE_ERROR_ACCESS_DENIED is returned when a call fails because of a
   // filesystem restriction. FILE_ERROR_SECURITY is returned when a browser
@@ -122,7 +122,7 @@ class BASE_EXPORT File {
   struct BASE_EXPORT Info {
     Info();
     ~Info();
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
     // Fills this struct with values from |stat_info|.
     void FromStat(const stat_wrapper_t& stat_info);
 #endif
@@ -153,8 +153,13 @@ class BASE_EXPORT File {
   // |path| contains path traversal ('..') components.
   File(const FilePath& path, uint32_t flags);
 
-  // Takes ownership of |platform_file|.
+  // Takes ownership of |platform_file| and sets async to false.
   explicit File(PlatformFile platform_file);
+
+  // Takes ownership of |platform_file| and sets async to the given value.
+  // This constructor exists because on Windows you can't check if platform_file
+  // is async or not.
+  File(PlatformFile platform_file, bool async);
 
   // Creates an object with a specific error_details code.
   explicit File(Error error_details);
@@ -162,9 +167,6 @@ class BASE_EXPORT File {
   File(File&& other);
 
   ~File();
-
-  // Takes ownership of |platform_file|.
-  static File CreateForAsyncHandle(PlatformFile platform_file);
 
   File& operator=(File&& other);
 
@@ -300,19 +302,21 @@ class BASE_EXPORT File {
   bool async() const { return async_; }
 
 #if defined(OS_WIN)
-  // Sets or clears the DeleteFile disposition on the handle. Returns true if
+  // Sets or clears the DeleteFile disposition on the file. Returns true if
   // the disposition was set or cleared, as indicated by |delete_on_close|.
   //
-  // Microsoft Windows deletes a file only when the last handle to the
-  // underlying kernel object is closed when the DeleteFile disposition has been
-  // set by any handle holder. This disposition is be set by:
+  // Microsoft Windows deletes a file only when the DeleteFile disposition is
+  // set on a file when the last handle to the last underlying kernel File
+  // object is closed. This disposition is be set by:
   // - Calling the Win32 DeleteFile function with the path to a file.
-  // - Opening/creating a file with FLAG_DELETE_ON_CLOSE.
+  // - Opening/creating a file with FLAG_DELETE_ON_CLOSE and then closing all
+  //   handles to that File object.
   // - Opening/creating a file with FLAG_CAN_DELETE_ON_CLOSE and subsequently
   //   calling DeleteOnClose(true).
   //
   // In all cases, all pre-existing handles to the file must have been opened
-  // with FLAG_SHARE_DELETE.
+  // with FLAG_SHARE_DELETE. Once the disposition has been set by any of the
+  // above means, no new File objects can be created for the file.
   //
   // So:
   // - Use FLAG_SHARE_DELETE when creating/opening a file to allow another
@@ -321,6 +325,9 @@ class BASE_EXPORT File {
   //   using this permission doesn't provide any protections.)
   // - Use FLAG_DELETE_ON_CLOSE for any file that is to be deleted after use.
   //   The OS will ensure it is deleted even in the face of process termination.
+  //   Note that it's possible for deletion to be cancelled via another File
+  //   object referencing the same file using DeleteOnClose(false) to clear the
+  //   DeleteFile disposition after the original File is closed.
   // - Use FLAG_CAN_DELETE_ON_CLOSE in conjunction with DeleteOnClose() to alter
   //   the DeleteFile disposition on an open handle. This fine-grained control
   //   allows for marking a file for deletion during processing so that it is
@@ -331,7 +338,7 @@ class BASE_EXPORT File {
 
 #if defined(OS_WIN)
   static Error OSErrorToFileError(DWORD last_error);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   static Error OSErrorToFileError(int saved_errno);
 #endif
 
@@ -372,4 +379,3 @@ class BASE_EXPORT File {
 }  // namespace base
 
 #endif  // BASE_FILES_FILE_H_
-

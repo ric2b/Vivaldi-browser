@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/profiles/profile.h"
 
 namespace safe_browsing {
 
@@ -18,22 +19,32 @@ class ChromeCleanerScannerResults {
  public:
   using FileCollection = std::set<base::FilePath>;
   using RegistryKeyCollection = std::set<base::string16>;
+  using ExtensionCollection = std::set<base::string16>;
 
   ChromeCleanerScannerResults();
   ChromeCleanerScannerResults(const FileCollection& files_to_delete,
-                              const RegistryKeyCollection& registry_keys);
+                              const RegistryKeyCollection& registry_keys,
+                              const ExtensionCollection& extension_ids);
   ChromeCleanerScannerResults(const ChromeCleanerScannerResults& other);
   ~ChromeCleanerScannerResults();
 
   ChromeCleanerScannerResults& operator=(
       const ChromeCleanerScannerResults& other);
 
+  // Retrieves the extension names of |extension_ids_| using the extension
+  // registry from |profile|. If a name cannot be found for an extension ID, a
+  // translated string is added stating that it is an unknown ID.
+  void FetchExtensionNames(Profile* profile,
+                           ExtensionCollection* extension_names) const;
+
   const FileCollection& files_to_delete() const { return files_to_delete_; }
   const RegistryKeyCollection& registry_keys() const { return registry_keys_; }
+  const ExtensionCollection& extension_ids() const { return extension_ids_; }
 
  private:
   FileCollection files_to_delete_;
   RegistryKeyCollection registry_keys_;
+  ExtensionCollection extension_ids_;
 };
 
 }  // namespace safe_browsing

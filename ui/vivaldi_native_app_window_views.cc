@@ -9,7 +9,6 @@
 #include "ui/vivaldi_native_app_window_views.h"
 
 #include "base/command_line.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -50,7 +49,7 @@
 
 #if defined(OS_WIN)
 #include "browser/win/vivaldi_utils.h"
-#include "chrome/browser/browser_shutdown.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #endif  // defined(OS_WIN)
 
 using extensions::AppWindow;
@@ -423,6 +422,10 @@ void VivaldiNativeAppWindowViews::Hide() {
   widget_->Hide();
 }
 
+bool VivaldiNativeAppWindowViews::IsVisible() const {
+  return widget_->IsVisible();
+}
+
 void VivaldiNativeAppWindowViews::Close() {
   // NOTE(pettern): This will abort the currently open thumbnail
   // generating windows, but if this is not the last window,
@@ -765,10 +768,9 @@ void VivaldiNativeAppWindowViews::OnWidgetVisibilityChanged(
 void VivaldiNativeAppWindowViews::OnWidgetActivationChanged(
     views::Widget* widget, bool active) {
   window_->OnNativeWindowChanged();
+  window_->OnNativeWindowActivationChanged(active);
   Browser* browser = window_->browser();
-  if (active) {
-    window_->OnNativeWindowActivated();
-  } else {
+  if (!active) {
     BrowserList::NotifyBrowserNoLongerActive(browser);
   }
 }
@@ -877,11 +879,11 @@ void VivaldiNativeAppWindowViews::UpdateShape(
   // Build a region from the list of rects when it is supplied.
   std::unique_ptr<SkRegion> region;
   if (shape_rects_) {
-    region = base::MakeUnique<SkRegion>();
+    region = std::make_unique<SkRegion>();
     for (const gfx::Rect& input_rect : *shape_rects_.get())
       region->op(gfx::RectToSkIRect(input_rect), SkRegion::kUnion_Op);
   }
-  widget()->SetShape(shape() ? base::MakeUnique<ShapeRects>(*shape_rects_)
+  widget()->SetShape(shape() ? std::make_unique<ShapeRects>(*shape_rects_)
                              : nullptr);
   widget()->OnSizeConstraintsChanged();
 }

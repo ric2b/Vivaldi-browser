@@ -14,6 +14,10 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/installer/util/util_constants.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
+using base::PathService;
+
 namespace vivaldi {
 
 bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
@@ -28,7 +32,7 @@ bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
   // Check if we are launched with the --vivaldi-standalone switch.
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   bool is_standalone =
-      command_line.HasSwitch(installer::switches::kVivaldiStandalone);
+      command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
 
   // Check if the magic file exists. If so we are standalone.
   base::FilePath exe_file_path;
@@ -45,7 +49,7 @@ bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
   // installer depends on it, i.e. prog-id suffix generation.
   if (is_standalone)
     vivaldi::CommandLineAppendSwitchNoDup(
-        command_line, installer::switches::kVivaldiStandalone);
+        command_line,vivaldi::constants::kVivaldiStandalone);
 
   return is_standalone;
 }

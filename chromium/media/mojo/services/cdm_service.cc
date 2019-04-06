@@ -5,37 +5,179 @@
 #include "media/mojo/services/cdm_service.h"
 
 #include "base/logging.h"
-#include "media/media_features.h"
-#include "media/mojo/services/interface_factory_impl.h"
-#include "media/mojo/services/mojo_media_client.h"
-#include "services/service_manager/public/cpp/connector.h"
-
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#include "media/base/cdm_factory.h"
 #include "media/cdm/cdm_module.h"
+#include "media/media_buildflags.h"
+#include "media/mojo/services/mojo_cdm_service.h"
+#include "media/mojo/services/mojo_cdm_service_context.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service_context.h"
+
 #if defined(OS_MACOSX)
 #include <vector>
 #include "sandbox/mac/seatbelt_extension.h"
 #endif  // defined(OS_MACOSX)
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 namespace media {
 
-CdmService::CdmService(std::unique_ptr<MojoMediaClient> mojo_media_client)
-    : mojo_media_client_(std::move(mojo_media_client)) {
-  DCHECK(mojo_media_client_);
+namespace {
+
+using service_manager::ServiceContextRef;
+
+constexpr base::TimeDelta kServiceContextRefReleaseDelay =
+    base::TimeDelta::FromSeconds(5);
+
+void DeleteServiceContextRef(ServiceContextRef* ref) {
+  delete ref;
+}
+
+// Starting a new process and loading the library CDM could be expensive. This
+// class helps delay the release of ServiceContextRef by
+// |kServiceContextRefReleaseDelay|, which will ultimately delay CdmService
+// destruction by the same delay as well. This helps reduce the chance of
+// destroying the CdmService and immediately creates it (in another process) in
+// cases like navigation, which could cause long service connection delays.
+class DelayedReleaseServiceContextRef : public ServiceContextRef {
+ public:
+  DelayedReleaseServiceContextRef(std::unique_ptr<ServiceContextRef> ref,
+                                  base::TimeDelta delay)
+      : ref_(std::move(ref)),
+        delay_(delay),
+        task_runner_(base::ThreadTaskRunnerHandle::Get()) {
+    DCHECK_GT(delay_, base::TimeDelta());
+  }
+
+  ~DelayedReleaseServiceContextRef() override {
+    service_manager::ServiceContextRef* ref_ptr = ref_.release();
+    if (!task_runner_->PostNonNestableDelayedTask(
+            FROM_HERE, base::BindOnce(&DeleteServiceContextRef, ref_ptr),
+            delay_)) {
+      DeleteServiceContextRef(ref_ptr);
+    }
+  }
+
+  // ServiceContextRef implementation.
+  std::unique_ptr<ServiceContextRef> Clone() override {
+    NOTIMPLEMENTED();
+    return nullptr;
+  }
+
+ private:
+  std::unique_ptr<ServiceContextRef> ref_;
+  base::TimeDelta delay_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(DelayedReleaseServiceContextRef);
+};
+
+// Implementation of mojom::CdmFactory that creates and hosts MojoCdmServices
+// which then host CDMs created by the media::CdmFactory provided by the
+// CdmService::Client.
+//
+// Lifetime Note:
+// 1. CdmFactoryImpl instances are owned by a DeferredDestroyStrongBindingSet
+//    directly, which is owned by CdmService.
+// 2. Note that CdmFactoryImpl also holds a ServiceContextRef to the CdmService.
+// 3. CdmFactoryImpl is destroyed in any of the following two cases:
+//   - CdmService is destroyed. Because of (2) this should not happen except for
+//     during browser shutdown, when the ServiceContext could be destroyed
+//     directly which will then destroy CdmService, ignoring any outstanding
+//     ServiceContextRefs.
+//   - mojo::CdmFactory connection error happens, AND CdmFactoryImpl doesn't own
+//     any CDMs (|cdm_bindings_| is empty). This is to prevent destroying the
+//     CDMs too early (e.g. during page navigation) which could cause errors
+//     (session closed) on the client side. See https://crbug.com/821171 for
+//     details.
+class CdmFactoryImpl : public DeferredDestroy<mojom::CdmFactory> {
+ public:
+  CdmFactoryImpl(CdmService::Client* client,
+                 service_manager::mojom::InterfaceProviderPtr interfaces,
+                 std::unique_ptr<ServiceContextRef> service_context_ref)
+      : client_(client),
+        interfaces_(std::move(interfaces)),
+        service_context_ref_(std::move(service_context_ref)) {
+    DVLOG(1) << __func__;
+
+    // base::Unretained is safe because |cdm_bindings_| is owned by |this|. If
+    // |this| is destructed, |cdm_bindings_| will be destructed as well and the
+    // error handler should never be called.
+    cdm_bindings_.set_connection_error_handler(base::BindRepeating(
+        &CdmFactoryImpl::OnBindingConnectionError, base::Unretained(this)));
+  }
+
+  ~CdmFactoryImpl() final { DVLOG(1) << __func__; }
+
+  // mojom::CdmFactory implementation.
+  void CreateCdm(const std::string& key_system,
+                 mojom::ContentDecryptionModuleRequest request) final {
+    DVLOG(2) << __func__;
+
+    auto* cdm_factory = GetCdmFactory();
+    if (!cdm_factory)
+      return;
+
+    cdm_bindings_.AddBinding(
+        std::make_unique<MojoCdmService>(cdm_factory, &cdm_service_context_),
+        std::move(request));
+  }
+
+  // DeferredDestroy<mojom::CdmFactory> implemenation.
+  void OnDestroyPending(base::OnceClosure destroy_cb) final {
+    destroy_cb_ = std::move(destroy_cb);
+    if (cdm_bindings_.empty())
+      std::move(destroy_cb_).Run();
+    // else the callback will be called when |cdm_bindings_| become empty.
+  }
+
+ private:
+  media::CdmFactory* GetCdmFactory() {
+    if (!cdm_factory_) {
+      cdm_factory_ = client_->CreateCdmFactory(interfaces_.get());
+      DLOG_IF(ERROR, !cdm_factory_) << "CdmFactory not available.";
+    }
+    return cdm_factory_.get();
+  }
+
+  void OnBindingConnectionError() {
+    if (destroy_cb_ && cdm_bindings_.empty())
+      std::move(destroy_cb_).Run();
+  }
+
+  // Must be declared before the bindings below because the bound objects might
+  // take a raw pointer of |cdm_service_context_| and assume it's always
+  // available.
+  MojoCdmServiceContext cdm_service_context_;
+
+  CdmService::Client* client_;
+  service_manager::mojom::InterfaceProviderPtr interfaces_;
+  mojo::StrongBindingSet<mojom::ContentDecryptionModule> cdm_bindings_;
+  std::unique_ptr<ServiceContextRef> service_context_ref_;
+  std::unique_ptr<media::CdmFactory> cdm_factory_;
+  base::OnceClosure destroy_cb_;
+
+  DISALLOW_COPY_AND_ASSIGN(CdmFactoryImpl);
+};
+
+}  // namespace
+
+CdmService::CdmService(std::unique_ptr<Client> client)
+    : client_(std::move(client)),
+      service_release_delay_(kServiceContextRefReleaseDelay) {
+  DVLOG(1) << __func__;
+  DCHECK(client_);
   registry_.AddInterface<mojom::CdmService>(
       base::BindRepeating(&CdmService::Create, base::Unretained(this)));
 }
 
-CdmService::~CdmService() = default;
+CdmService::~CdmService() {
+  DVLOG(1) << __func__;
+}
 
 void CdmService::OnStart() {
   DVLOG(1) << __func__;
 
   ref_factory_.reset(new service_manager::ServiceContextRefFactory(
-      base::BindRepeating(&service_manager::ServiceContext::RequestQuit,
-                          base::Unretained(context()))));
-  mojo_media_client_->Initialize(context()->connector());
+      context()->CreateQuitClosure()));
 }
 
 void CdmService::OnBindInterface(
@@ -48,8 +190,8 @@ void CdmService::OnBindInterface(
 }
 
 bool CdmService::OnServiceManagerConnectionLost() {
-  interface_factory_bindings_.CloseAllBindings();
-  mojo_media_client_.reset();
+  cdm_factory_bindings_.CloseAllBindings();
+  client_.reset();
   return true;
 }
 
@@ -67,10 +209,9 @@ void CdmService::LoadCdm(const base::FilePath& cdm_path) {
   DVLOG(1) << __func__ << ": cdm_path = " << cdm_path.value();
 
   // Ignore request if service has already stopped.
-  if (!mojo_media_client_)
+  if (!client_)
     return;
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   CdmModule* instance = CdmModule::GetInstance();
   if (instance->was_initialize_called()) {
     DCHECK_EQ(cdm_path, instance->GetCdmPath());
@@ -78,34 +219,34 @@ void CdmService::LoadCdm(const base::FilePath& cdm_path) {
   }
 
 #if defined(OS_MACOSX)
-  std::vector<sandbox::SeatbeltExtensionToken> tokens;
-  CHECK(token_provider->GetTokens(&tokens));
-
   std::vector<std::unique_ptr<sandbox::SeatbeltExtension>> extensions;
 
-  for (auto&& token : tokens) {
-    DVLOG(3) << "token: " << token.token();
-    auto extension = sandbox::SeatbeltExtension::FromToken(std::move(token));
-    if (!extension->Consume()) {
-      DVLOG(1) << "Failed to comsume sandbox seatbelt extension. This could "
-                  "happen if --no-sandbox is specified.";
+  if (token_provider) {
+    std::vector<sandbox::SeatbeltExtensionToken> tokens;
+    CHECK(token_provider->GetTokens(&tokens));
+
+    for (auto&& token : tokens) {
+      DVLOG(3) << "token: " << token.token();
+      auto extension = sandbox::SeatbeltExtension::FromToken(std::move(token));
+      if (!extension->Consume()) {
+        DVLOG(1) << "Failed to consume sandbox seatbelt extension. This could "
+                    "happen if --no-sandbox is specified.";
+      }
+      extensions.push_back(std::move(extension));
     }
-    extensions.push_back(std::move(extension));
   }
 #endif  // defined(OS_MACOSX)
 
 #if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
   std::vector<CdmHostFilePath> cdm_host_file_paths;
-  mojo_media_client_->AddCdmHostFilePaths(&cdm_host_file_paths);
-  if (!instance->Initialize(cdm_path, cdm_host_file_paths))
-    return;
+  client_->AddCdmHostFilePaths(&cdm_host_file_paths);
+  bool success = instance->Initialize(cdm_path, cdm_host_file_paths);
 #else
-  if (!instance->Initialize(cdm_path))
-    return;
+  bool success = instance->Initialize(cdm_path);
 #endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 
   // This may trigger the sandbox to be sealed.
-  mojo_media_client_->EnsureSandboxed();
+  client_->EnsureSandboxed();
 
 #if defined(OS_MACOSX)
   for (auto&& extension : extensions)
@@ -113,21 +254,27 @@ void CdmService::LoadCdm(const base::FilePath& cdm_path) {
 #endif  // defined(OS_MACOSX)
 
   // Always called within the sandbox.
-  instance->InitializeCdmModule();
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  if (success)
+    instance->InitializeCdmModule();
 }
 
-void CdmService::CreateInterfaceFactory(
-    mojom::InterfaceFactoryRequest request,
+void CdmService::CreateCdmFactory(
+    mojom::CdmFactoryRequest request,
     service_manager::mojom::InterfaceProviderPtr host_interfaces) {
   // Ignore request if service has already stopped.
-  if (!mojo_media_client_)
+  if (!client_)
     return;
 
-  interface_factory_bindings_.AddBinding(
-      std::make_unique<InterfaceFactoryImpl>(
-          std::move(host_interfaces), &media_log_, ref_factory_->CreateRef(),
-          mojo_media_client_.get()),
+  std::unique_ptr<ServiceContextRef> service_context_ref =
+      service_release_delay_ > base::TimeDelta()
+          ? std::make_unique<DelayedReleaseServiceContextRef>(
+                ref_factory_->CreateRef(), service_release_delay_)
+          : ref_factory_->CreateRef();
+
+  cdm_factory_bindings_.AddBinding(
+      std::make_unique<CdmFactoryImpl>(client_.get(),
+                                       std::move(host_interfaces),
+                                       std::move(service_context_ref)),
       std::move(request));
 }
 

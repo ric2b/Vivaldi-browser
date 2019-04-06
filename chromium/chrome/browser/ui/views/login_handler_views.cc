@@ -16,7 +16,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
-#include "net/url_request/url_request.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -30,10 +29,15 @@
 // have been called.
 class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
  public:
-  LoginHandlerViews(net::AuthChallengeInfo* auth_info, net::URLRequest* request)
-      : LoginHandler(auth_info, request),
-        login_view_(NULL),
-        dialog_(NULL) {
+  LoginHandlerViews(
+      net::AuthChallengeInfo* auth_info,
+      content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      LoginAuthRequiredCallback auth_required_callback)
+      : LoginHandler(auth_info,
+                     web_contents_getter,
+                     std::move(auth_required_callback)),
+        login_view_(nullptr),
+        dialog_(nullptr) {
     chrome::RecordDialogCreation(chrome::DialogIdentifier::LOGIN_HANDLER);
   }
 
@@ -77,6 +81,9 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
     dialog_ = NULL;
     ResetModel();
 
+    // This Release is the counter-point to the AddRef() in BuildViewImpl().
+    Release();
+
     ReleaseSoon();
   }
 
@@ -117,6 +124,11 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
     // accordingly.
     login_view_ = new LoginView(authority, explanation, login_model_data);
 
+    // Views requires the WidgetDelegate [this instance] live longer than the
+    // Widget. To enforce this, we AddRef() here and Release() in
+    // DeleteDelegate().
+    AddRef();
+
     // Scary thread safety note: This can potentially be called *after* SetAuth
     // or CancelAuth (say, if the request was cancelled before the UI thread got
     // control).  However, that's OK since any UI interaction in those functions
@@ -149,9 +161,12 @@ class LoginHandlerViews : public LoginHandler, public views::DialogDelegate {
 
 namespace chrome {
 
-LoginHandler* CreateLoginHandlerViews(net::AuthChallengeInfo* auth_info,
-                                      net::URLRequest* request) {
-  return new LoginHandlerViews(auth_info, request);
+scoped_refptr<LoginHandler> CreateLoginHandlerViews(
+    net::AuthChallengeInfo* auth_info,
+    content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+    LoginAuthRequiredCallback auth_required_callback) {
+  return base::MakeRefCounted<LoginHandlerViews>(
+      auth_info, web_contents_getter, std::move(auth_required_callback));
 }
 
 }  // namespace chrome

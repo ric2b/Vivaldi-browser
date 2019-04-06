@@ -124,7 +124,7 @@
   [_appState
       applicationDidEnterBackground:application
                        memoryHelper:_memoryHelper
-                tabSwitcherIsActive:[_mainController isTabSwitcherActive]];
+            incognitoContentVisible:_mainController.incognitoContentVisible];
 }
 
 // Called when returning to the foreground.
@@ -156,25 +156,6 @@
 #pragma mark Downloading Data in the Background
 
 - (void)application:(UIApplication*)application
-    performFetchWithCompletionHandler:
-        (void (^)(UIBackgroundFetchResult))completionHandler {
-  if ([_appState isInSafeMode])
-    return;
-
-  if ([application applicationState] != UIApplicationStateBackground) {
-    // If this handler is called in foreground, it means it has to be activated.
-    // Returning |UIBackgroundFetchResultNewData| means that the handler will be
-    // called again in case of a crash.
-    completionHandler(UIBackgroundFetchResultNewData);
-    return;
-  }
-  // This initialization to BACKGROUND stage may not be necessary, but is
-  // preserved in case somewhere there is a dependency on this.
-  [_browserLauncher startUpBrowserToStage:INITIALIZATION_STAGE_BACKGROUND];
-  completionHandler(UIBackgroundFetchResultFailed);
-}
-
-- (void)application:(UIApplication*)application
     handleEventsForBackgroundURLSession:(NSString*)identifier
                       completionHandler:(void (^)(void))completionHandler {
   if ([_appState isInSafeMode])
@@ -198,7 +179,12 @@
 
 - (BOOL)application:(UIApplication*)application
     continueUserActivity:(NSUserActivity*)userActivity
+#if defined(__IPHONE_12_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_12_0)
+      restorationHandler:
+          (void (^)(NSArray<id<UIUserActivityRestoring>>*))restorationHandler {
+#else
       restorationHandler:(void (^)(NSArray*))restorationHandler {
+#endif
   if ([_appState isInSafeMode])
     return NO;
 
@@ -251,12 +237,6 @@
                     options:options
                   tabOpener:_tabOpener
          startupInformation:_startupInformation];
-}
-
-#pragma mark - chromeExecuteCommand
-
-- (void)chromeExecuteCommand:(id)sender {
-  [_mainController chromeExecuteCommand:sender];
 }
 
 #pragma mark - Testing methods

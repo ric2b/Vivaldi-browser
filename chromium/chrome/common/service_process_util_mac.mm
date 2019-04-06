@@ -4,6 +4,7 @@
 
 #import <Foundation/Foundation.h>
 #include <launch.h>
+#include <sys/un.h>
 
 #include <memory>
 #include <vector>
@@ -27,7 +28,6 @@
 #include "chrome/common/mac/launchd.h"
 #include "chrome/common/service_process_util_posix.h"
 #include "components/version_info/version_info.h"
-#include "mojo/edk/embedder/named_platform_handle_utils.h"
 
 using ::base::FilePathWatcher;
 
@@ -47,7 +47,7 @@ NSString* GetServiceProcessLaunchDLabel() {
       base::mac::CFToNSCast(CopyServiceProcessLaunchDName()));
   NSString* label = [name stringByAppendingString:@".service_process"];
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   std::string user_data_dir_path = user_data_dir.value();
   NSString* ns_path = base::SysUTF8ToNSString(user_data_dir_path);
   ns_path = [ns_path stringByReplacingOccurrencesOfString:@" "
@@ -83,19 +83,23 @@ class ExecFilePathWatcherCallback {
 
 base::FilePath GetServiceProcessSocketName() {
   base::FilePath socket_name;
-  PathService::Get(base::DIR_TEMP, &socket_name);
+  base::PathService::Get(base::DIR_TEMP, &socket_name);
   std::string pipe_name = GetServiceProcessScopedName("srv");
   socket_name = socket_name.Append(pipe_name);
-  CHECK_LT(socket_name.value().size(), mojo::edk::kMaxSocketNameLength);
+
+  // Max allowed on Mac.
+  constexpr size_t kMaxSocketNameLength = sizeof(sockaddr_un().sun_path);
+  CHECK_LT(socket_name.value().size(), kMaxSocketNameLength);
+
   return socket_name;
 }
 
 }  // namespace
 
-mojo::edk::NamedPlatformHandle GetServiceProcessChannel() {
+mojo::NamedPlatformChannel::ServerName GetServiceProcessServerName() {
   base::FilePath socket_name = GetServiceProcessSocketName();
   VLOG(1) << "ServiceProcessChannel: " << socket_name.value();
-  return mojo::edk::NamedPlatformHandle(socket_name.value());
+  return socket_name.value();
 }
 
 bool ForceServiceProcessShutdown(const std::string& /* version */,
@@ -124,7 +128,7 @@ bool GetServiceProcessData(std::string* version, base::ProcessId* pid) {
   // to be a service process of some sort registered with launchd.
   if (version) {
     *version = "0";
-    NSString* exe_path = [launchd_conf objectForKey:@ LAUNCH_JOBKEY_PROGRAM];
+    NSString* exe_path = launchd_conf.get()[@LAUNCH_JOBKEY_PROGRAM];
     if (exe_path) {
       NSString* bundle_path = [[[exe_path stringByDeletingLastPathComponent]
                                 stringByDeletingLastPathComponent]
@@ -151,7 +155,7 @@ bool GetServiceProcessData(std::string* version, base::ProcessId* pid) {
   }
   if (pid) {
     *pid = -1;
-    NSNumber* ns_pid = [launchd_conf objectForKey:@ LAUNCH_JOBKEY_PID];
+    NSNumber* ns_pid = launchd_conf.get()[@LAUNCH_JOBKEY_PID];
     if (ns_pid) {
      *pid = [ns_pid intValue];
     }
@@ -173,8 +177,8 @@ bool ServiceProcessState::Initialize() {
   return true;
 }
 
-mojo::edk::ScopedPlatformHandle
-ServiceProcessState::GetServiceProcessChannel() {
+mojo::PlatformChannelServerEndpoint
+ServiceProcessState::GetServiceProcessServerEndpoint() {
   DCHECK(state_);
   NSDictionary* ns_launchd_conf = base::mac::CFToNSCast(state_->launchd_conf);
   NSDictionary* socket_dict =
@@ -183,7 +187,8 @@ ServiceProcessState::GetServiceProcessChannel() {
       [socket_dict objectForKey:GetServiceProcessLaunchDSocketKey()];
   DCHECK_EQ([sockets count], 1U);
   int socket = [[sockets objectAtIndex:0] intValue];
-  return mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(socket));
+  return mojo::PlatformChannelServerEndpoint(
+      mojo::PlatformHandle(base::ScopedFD(socket)));
 }
 
 bool CheckServiceProcessReady() {
@@ -197,16 +202,14 @@ bool CheckServiceProcessReady() {
   if (!service_version.IsValid()) {
     ready = false;
   } else {
-    base::Version running_version(version_info::GetVersionNumber());
+    const base::Version& running_version = version_info::GetVersion();
     if (!running_version.IsValid()) {
       // Our own version is invalid. This is an error case. Pretend that we
       // are out of date.
       NOTREACHED();
       ready = true;
-    } else if (running_version.CompareTo(service_version) > 0) {
-      ready = false;
     } else {
-      ready = true;
+      ready = running_version.CompareTo(service_version) <= 0;
     }
   }
   if (!ready) {
@@ -242,13 +245,12 @@ CFDictionaryRef CreateServiceProcessLaunchdPlist(base::CommandLine* cmd_line,
                                   forKey:GetServiceProcessLaunchDSocketKey()];
 
   // See the man page for launchd.plist.
-  NSMutableDictionary* launchd_plist =
-      [[NSMutableDictionary alloc] initWithObjectsAndKeys:
-        GetServiceProcessLaunchDLabel(), @LAUNCH_JOBKEY_LABEL,
-        program, @LAUNCH_JOBKEY_PROGRAM,
-        ns_args, @LAUNCH_JOBKEY_PROGRAMARGUMENTS,
-        sockets, @LAUNCH_JOBKEY_SOCKETS,
-        nil];
+  NSMutableDictionary* launchd_plist = [@{
+    @LAUNCH_JOBKEY_LABEL : GetServiceProcessLaunchDLabel(),
+    @LAUNCH_JOBKEY_PROGRAM : program,
+    @LAUNCH_JOBKEY_PROGRAMARGUMENTS : ns_args,
+    @LAUNCH_JOBKEY_SOCKETS : sockets,
+  } mutableCopy];
 
   if (for_auto_launch) {
     // We want the service process to be able to exit if there are no services
@@ -256,15 +258,12 @@ CFDictionaryRef CreateServiceProcessLaunchdPlist(base::CommandLine* cmd_line,
     // relaunch the service automatically in any other case than exiting
     // cleanly with a 0 return code.
     NSDictionary* keep_alive =
-        [NSDictionary
-           dictionaryWithObject:[NSNumber numberWithBool:NO]
-                         forKey:@LAUNCH_JOBKEY_KEEPALIVE_SUCCESSFULEXIT];
-    NSDictionary* auto_launchd_plist =
-        [[NSDictionary alloc] initWithObjectsAndKeys:
-          [NSNumber numberWithBool:YES], @LAUNCH_JOBKEY_RUNATLOAD,
-          keep_alive, @LAUNCH_JOBKEY_KEEPALIVE,
-          @kServiceProcessSessionType, @LAUNCH_JOBKEY_LIMITLOADTOSESSIONTYPE,
-          nil];
+        @{ @LAUNCH_JOBKEY_KEEPALIVE_SUCCESSFULEXIT : @NO };
+    NSDictionary* auto_launchd_plist = @{
+      @LAUNCH_JOBKEY_RUNATLOAD : @YES,
+      @LAUNCH_JOBKEY_KEEPALIVE : keep_alive,
+      @LAUNCH_JOBKEY_LIMITLOADTOSESSIONTYPE : @kServiceProcessSessionType
+    };
     [launchd_plist addEntriesFromDictionary:auto_launchd_plist];
   }
   return reinterpret_cast<CFDictionaryRef>(launchd_plist);
@@ -293,7 +292,7 @@ bool ServiceProcessState::RemoveFromAutoRun() {
 bool ServiceProcessState::StateData::WatchExecutable() {
   base::mac::ScopedNSAutoreleasePool pool;
   NSDictionary* ns_launchd_conf = base::mac::CFToNSCast(launchd_conf);
-  NSString* exe_path = [ns_launchd_conf objectForKey:@ LAUNCH_JOBKEY_PROGRAM];
+  NSString* exe_path = ns_launchd_conf[@LAUNCH_JOBKEY_PROGRAM];
   if (!exe_path) {
     DLOG(ERROR) << "No " LAUNCH_JOBKEY_PROGRAM;
     return false;
@@ -409,11 +408,11 @@ void ExecFilePathWatcherCallback::NotifyPathChanged(const base::FilePath& path,
         NSURL* new_path = [executable_fsref_ filePathURL];
         DCHECK([new_path isFileURL]);
         NSString* ns_new_path = [new_path path];
-        [ns_plist setObject:ns_new_path forKey:@ LAUNCH_JOBKEY_PROGRAM];
-        base::scoped_nsobject<NSMutableArray> args([[ns_plist
-            objectForKey:@LAUNCH_JOBKEY_PROGRAMARGUMENTS] mutableCopy]);
-        [args replaceObjectAtIndex:0 withObject:ns_new_path];
-        [ns_plist setObject:args forKey:@ LAUNCH_JOBKEY_PROGRAMARGUMENTS];
+        ns_plist[@LAUNCH_JOBKEY_PROGRAM] = ns_new_path;
+        base::scoped_nsobject<NSMutableArray> args(
+            [ns_plist[@LAUNCH_JOBKEY_PROGRAMARGUMENTS] mutableCopy]);
+        args[0] = ns_new_path;
+        ns_plist[@LAUNCH_JOBKEY_PROGRAMARGUMENTS] = args;
         if (!Launchd::GetInstance()->WritePlistToFile(Launchd::User,
                                                       Launchd::Agent,
                                                       name,

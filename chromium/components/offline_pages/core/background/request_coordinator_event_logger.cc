@@ -45,6 +45,14 @@ static std::string OfflinerRequestStatusToString(
       return "SAVED_ON_LAST_RETRY";
     case Offliner::BROWSER_KILLED:
       return "BROWSER_KILLED";
+    case Offliner::LOADING_FAILED_DOWNLOAD:
+      return "LOADING_FAILED_DOWNLOAD";
+    case Offliner::DOWNLOAD_THROTTLED:
+      return "DOWNLOAD_THROTTLED";
+    case Offliner::LOADING_FAILED_NET_ERROR:
+      return "LOADING_FAILED_NET_ERROR";
+    case Offliner::LOADING_FAILED_HTTP_ERROR:
+      return "LOADING_FAILED_HTTP_ERROR";
     default:
       NOTREACHED();
       return std::to_string(static_cast<int>(request_status));
@@ -72,6 +80,8 @@ static std::string BackgroundSavePageResultToString(
       return "START_COUNT_EXCEEDED";
     case RequestNotifier::BackgroundSavePageResult::USER_CANCELED:
       return "REMOVED";
+    case RequestNotifier::BackgroundSavePageResult::DOWNLOAD_THROTTLED:
+      return "DOWNLOAD_THROTTLED";
     default:
       NOTREACHED();
       return std::to_string(static_cast<int>(result));

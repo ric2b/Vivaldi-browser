@@ -4,7 +4,6 @@
 
 #include "chrome/test/base/test_browser_window.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
@@ -17,7 +16,7 @@ std::unique_ptr<Browser> CreateBrowserWithTestWindowForParams(
   TestBrowserWindow* window = new TestBrowserWindow;
   new TestBrowserWindowOwner(window);
   params->window = window;
-  return base::MakeUnique<Browser>(*params);
+  return std::make_unique<Browser>(*params);
 }
 
 // TestBrowserWindow::TestLocationBar -----------------------------------------
@@ -108,8 +107,16 @@ bool TestBrowserWindow::IsFullscreenBubbleVisible() const {
   return false;
 }
 
+bool TestBrowserWindow::IsVisible() const {
+  return true;
+}
+
 LocationBar* TestBrowserWindow::GetLocationBar() const {
   return const_cast<TestLocationBar*>(&location_bar_);
+}
+
+PageActionIconContainer* TestBrowserWindow::GetPageActionIconContainer() {
+  return nullptr;
 }
 
 ToolbarActionsBar* TestBrowserWindow::GetToolbarActionsBar() {
@@ -157,17 +164,20 @@ autofill::SaveCardBubbleView* TestBrowserWindow::ShowSaveCreditCardBubble(
   return nullptr;
 }
 
+autofill::LocalCardMigrationBubble*
+TestBrowserWindow::ShowLocalCardMigrationBubble(
+    content::WebContents* contents,
+    autofill::LocalCardMigrationBubbleController* controller,
+    bool user_gesture) {
+  return nullptr;
+}
+
 bool TestBrowserWindow::IsDownloadShelfVisible() const {
   return false;
 }
 
 DownloadShelf* TestBrowserWindow::GetDownloadShelf() {
   return &download_shelf_;
-}
-
-WindowOpenDisposition TestBrowserWindow::GetDispositionForPopupBounds(
-    const gfx::Rect& bounds) {
-  return WindowOpenDisposition::NEW_POPUP;
 }
 
 FindBar* TestBrowserWindow::CreateFindBar() {

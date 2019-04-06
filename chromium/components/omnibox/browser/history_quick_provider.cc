@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_database.h"
@@ -63,6 +64,14 @@ void HistoryQuickProvider::Start(const AutocompleteInput& input,
   }
 }
 
+size_t HistoryQuickProvider::EstimateMemoryUsage() const {
+  size_t res = HistoryProvider::EstimateMemoryUsage();
+
+  res += base::trace_event::EstimateMemoryUsage(autocomplete_input_);
+
+  return res;
+}
+
 HistoryQuickProvider::~HistoryQuickProvider() {
 }
 
@@ -88,8 +97,6 @@ void HistoryQuickProvider::DoAutocomplete() {
     // Mark this max_match_score as being used.
     max_match_score--;
   }
-  if (base::FeatureList::IsEnabled(omnibox::kOmniboxTabSwitchSuggestions))
-    ConvertOpenTabMatches();
 }
 
 int HistoryQuickProvider::FindMaxMatchScore(
@@ -220,18 +227,12 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
           url_formatter::FormatUrl(info.url(), fill_into_edit_format_types,
                                    net::UnescapeRule::SPACES, nullptr, nullptr,
                                    &inline_autocomplete_offset),
-          client()->GetSchemeClassifier());
+          client()->GetSchemeClassifier(), &inline_autocomplete_offset);
 
   // Set |inline_autocompletion| and |allowed_to_be_default_match| if possible.
   if (inline_autocomplete_offset != base::string16::npos) {
-    // |inline_autocomplete_offset| may be beyond the end of the
-    // |match.fill_into_edit| if the user has typed an URL with a scheme and the
-    // last character typed is a slash.  That slash is removed by the
-    // FormatUrlWithOffsets call above.
-    if (inline_autocomplete_offset < match.fill_into_edit.length()) {
-      match.inline_autocompletion =
-          match.fill_into_edit.substr(inline_autocomplete_offset);
-    }
+    match.inline_autocompletion =
+        match.fill_into_edit.substr(inline_autocomplete_offset);
     match.allowed_to_be_default_match = match.inline_autocompletion.empty() ||
         !PreventInlineAutocomplete(autocomplete_input_);
   }

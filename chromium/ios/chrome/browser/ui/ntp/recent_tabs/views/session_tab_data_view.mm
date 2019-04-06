@@ -13,7 +13,9 @@
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/views_utils.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_utils.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/favicon/favicon_attributes.h"
+#import "ios/chrome/common/favicon/favicon_view.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -29,7 +31,7 @@ const CGFloat kDesiredHeight = 48;
 }  // namespace
 
 @interface SessionTabDataView () {
-  UIImageView* _favicon;
+  FaviconViewNew* _favicon;
   UILabel* _label;
 }
 @end
@@ -39,7 +41,7 @@ const CGFloat kDesiredHeight = 48;
 - (instancetype)initWithFrame:(CGRect)aRect {
   self = [super initWithFrame:aRect];
   if (self) {
-    _favicon = [[UIImageView alloc] initWithImage:nil];
+    _favicon = [[FaviconViewNew alloc] init];
     [_favicon setTranslatesAutoresizingMaskIntoConstraints:NO];
 
     _label = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -66,8 +68,7 @@ const CGFloat kDesiredHeight = 48;
       @"H:|-56-[favicon(==16)]-16-[label]-16-|",
       @"V:|-(>=0)-[favicon(==16)]-(>=0)-|"
     ];
-    ApplyVisualConstraintsWithOptions(constraints, viewsDictionary,
-                                      LayoutOptionForRTLSupport(), self);
+    ApplyVisualConstraints(constraints, viewsDictionary);
 
     [self addConstraint:[NSLayoutConstraint
                             constraintWithItem:_favicon
@@ -105,8 +106,8 @@ const CGFloat kDesiredHeight = 48;
   DCHECK(browserState);
   [_label setText:text];
   self.accessibilityLabel = [_label accessibilityLabel];
-  TabSwitcherGetFavicon(url, browserState, ^(UIImage* newIcon) {
-    [_favicon setImage:newIcon];
+  TabSwitcherGetFavicon(url, browserState, ^(FaviconAttributes* attributes) {
+    [_favicon configureWithAttributes:attributes];
   });
 }
 
@@ -133,8 +134,7 @@ const CGFloat kDesiredHeight = 48;
     }
     case sessions::TabRestoreService::WINDOW: {
       // We only handle the TAB type.
-      [_label setText:@"Window type - NOTIMPLEMENTED"];
-      [_favicon setImage:[UIImage imageNamed:@"tools_bookmark"]];
+      NOTREACHED() << "TabRestoreService WINDOW session type is invalid.";
       break;
     }
   }

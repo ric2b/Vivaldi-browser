@@ -6,16 +6,14 @@
 
 namespace device {
 
-MockVRDisplayImpl::MockVRDisplayImpl(device::VRDevice* device,
-                                     mojom::VRServiceClient* service_client,
-                                     mojom::VRDisplayInfoPtr display_info,
-                                     mojom::VRDisplayHostPtr display_host,
-                                     bool in_frame_focused)
-    : VRDisplayImpl(device,
-                    std::move(service_client),
-                    std::move(display_info),
-                    std::move(display_host),
-                    in_frame_focused) {}
+MockVRDisplayImpl::MockVRDisplayImpl(
+    device::VRDeviceBase* device,
+    mojom::VRMagicWindowProviderRequest session,
+    mojom::XRSessionControllerRequest controller,
+    bool is_frame_focused)
+    : VRDisplayImpl(device, std::move(session), std::move(controller)) {
+  SetFrameDataRestricted(!is_frame_focused);
+}
 
 MockVRDisplayImpl::~MockVRDisplayImpl() = default;
 

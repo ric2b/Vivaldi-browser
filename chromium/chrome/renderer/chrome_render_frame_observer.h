@@ -47,6 +47,7 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
   bool OnMessageReceived(const IPC::Message& message) override;
   void DidStartProvisionalLoad(blink::WebDocumentLoader* loader) override;
   void DidFinishLoad() override;
+  void DidCreateNewDocument() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_document_navigation) override;
   void DidClearWindowObject() override;
@@ -76,9 +77,11 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
   void SetClientSidePhishingDetection(bool enable_phishing_detection) override;
   void GetWebApplicationInfo(
       const GetWebApplicationInfoCallback& callback) override;
+#if defined(OS_ANDROID)
   void UpdateBrowserControlsState(content::BrowserControlsState constraints,
                                   content::BrowserControlsState current,
                                   bool animate) override;
+#endif
 
   void OnRenderFrameObserverRequest(
       chrome::mojom::ChromeRenderFrameAssociatedRequest request);

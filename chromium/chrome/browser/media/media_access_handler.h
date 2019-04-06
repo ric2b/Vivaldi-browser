@@ -10,6 +10,7 @@
 #include "content/public/common/media_stream_request.h"
 
 namespace content {
+class RenderFrameHost;
 class WebContents;
 }
 
@@ -31,7 +32,7 @@ class MediaAccessHandler {
   // Check media access permission. |extension| is set to NULL if request was
   // made from a drive-by page.
   virtual bool CheckMediaAccessPermission(
-      content::WebContents* web_contents,
+      content::RenderFrameHost* render_frame_host,
       const GURL& security_origin,
       content::MediaStreamType type,
       const extensions::Extension* extension) = 0;
@@ -39,7 +40,7 @@ class MediaAccessHandler {
   // made from a drive-by page.
   virtual void HandleRequest(content::WebContents* web_contents,
                              const content::MediaStreamRequest& request,
-                             const content::MediaResponseCallback& callback,
+                             content::MediaResponseCallback callback,
                              const extensions::Extension* extension) = 0;
   // Update media request state. Called on UI thread.
   virtual void UpdateMediaRequestState(int render_process_id,
@@ -55,7 +56,7 @@ class MediaAccessHandler {
   static void CheckDevicesAndRunCallback(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback,
+      content::MediaResponseCallback callback,
       bool audio_allowed,
       bool video_allowed);
 };

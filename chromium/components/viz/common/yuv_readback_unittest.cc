@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <tuple>
+
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/run_loop.h"
@@ -41,13 +43,12 @@ class YUVReadbackTest : public testing::Test {
     attributes.sample_buffers = 1;
     attributes.bind_generates_resource = false;
 
-    context_ = gpu::GLInProcessContext::CreateWithoutInit();
+    context_ = std::make_unique<gpu::GLInProcessContext>();
     auto result =
         context_->Initialize(nullptr,                 /* service */
                              nullptr,                 /* surface */
                              true,                    /* offscreen */
                              gpu::kNullSurfaceHandle, /* window */
-                             nullptr,                 /* share_context */
                              attributes, gpu::SharedMemoryLimits(),
                              nullptr, /* gpu_memory_buffer_manager */
                              nullptr, /* image_factory */
@@ -355,9 +356,8 @@ class YUVReadbackTest : public testing::Test {
                     GL_UNSIGNED_BYTE, input_pixels.getPixels());
 
     gpu::Mailbox mailbox;
-    gl_->GenMailboxCHROMIUM(mailbox.name);
-    EXPECT_FALSE(mailbox.IsZero());
     gl_->ProduceTextureDirectCHROMIUM(src_texture, mailbox.name);
+    EXPECT_FALSE(mailbox.IsZero());
 
     gpu::SyncToken sync_token;
     gl_->GenSyncTokenCHROMIUM(sync_token.GetData());
@@ -404,7 +404,7 @@ class YUVReadbackTest : public testing::Test {
 
     const gfx::Rect paste_rect(gfx::Point(xmargin, ymargin),
                                gfx::Size(xsize, ysize));
-    media::LetterboxYUV(output_frame.get(), paste_rect);
+    media::LetterboxVideoFrame(output_frame.get(), paste_rect);
     run_loop.Run();
 
     if (flip) {
@@ -516,13 +516,13 @@ TEST_F(YUVReadbackTest, YUVReadbackOptTest) {
 class YUVReadbackPixelTest
     : public YUVReadbackTest,
       public ::testing::WithParamInterface<
-          std::tr1::tuple<bool, bool, unsigned int, unsigned int>> {};
+          std::tuple<bool, bool, unsigned int, unsigned int>> {};
 
 TEST_P(YUVReadbackPixelTest, Test) {
-  bool flip = std::tr1::get<0>(GetParam());
-  bool use_mrt = std::tr1::get<1>(GetParam());
-  unsigned int x = std::tr1::get<2>(GetParam());
-  unsigned int y = std::tr1::get<3>(GetParam());
+  bool flip = std::get<0>(GetParam());
+  bool use_mrt = std::get<1>(GetParam());
+  unsigned int x = std::get<2>(GetParam());
+  unsigned int y = std::get<3>(GetParam());
 
   for (unsigned int ox = x; ox < arraysize(kYUVReadbackSizes); ox++) {
     for (unsigned int oy = y; oy < arraysize(kYUVReadbackSizes); oy++) {

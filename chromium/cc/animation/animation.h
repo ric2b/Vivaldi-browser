@@ -1,241 +1,173 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CC_ANIMATION_ANIMATION_H_
 #define CC_ANIMATION_ANIMATION_H_
 
-#include <memory>
+#include <vector>
 
+#include <memory>
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/time/time.h"
+#include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_export.h"
+#include "cc/animation/element_animations.h"
+#include "cc/animation/keyframe_model.h"
+#include "cc/trees/element_id.h"
 
 namespace cc {
 
-class AnimationCurve;
+class AnimationDelegate;
+class AnimationEvents;
+class AnimationHost;
+class AnimationTimeline;
+class KeyframeEffect;
+struct AnimationEvent;
 
-// An Animation contains all the state required to play an AnimationCurve.
-// Specifically, the affected property, the run state (paused, finished, etc.),
-// loop count, last pause time, and the total time spent paused.
-class CC_ANIMATION_EXPORT Animation {
+// An Animation is responsible for managing animating properties for a set of
+// targets. Each target is represented by a KeyframeEffect and can be animating
+// multiple properties on that target; see the KeyframeEffect class.
+//
+// A particular Animation may not own all the KeyframeEffects for a given
+// target. Animation is only a grouping mechanism for related effects, and the
+// grouping relationship is defined by the client. It is also the client's
+// responsibility to deal with any conflicts that arise from animating the same
+// property of the same target across multiple Animations.
+//
+// Each Animation has a copy on the impl thread, and will take care of
+// synchronizing to/from the impl thread when requested.
+class CC_ANIMATION_EXPORT Animation : public base::RefCounted<Animation> {
  public:
-  // Animations begin in the 'WAITING_FOR_TARGET_AVAILABILITY' state. An
-  // Animation waiting for target availibility will run as soon as its target
-  // property is free (and all the animations animating with it are also able to
-  // run). When this time arrives, the controller will move the animation into
-  // the STARTING state, and then into the RUNNING state. RUNNING animations may
-  // toggle between RUNNING and PAUSED, and may be stopped by moving into either
-  // the ABORTED or FINISHED states. A FINISHED animation was allowed to run to
-  // completion, but an ABORTED animation was not. An animation in the state
-  // ABORTED_BUT_NEEDS_COMPLETION is an animation that was aborted for
-  // some reason, but needs to be finished. Currently this is for impl-only
-  // scroll offset animations that need to be completed on the main thread.
-  enum RunState {
-    WAITING_FOR_TARGET_AVAILABILITY = 0,
-    WAITING_FOR_DELETION,
-    STARTING,
-    RUNNING,
-    PAUSED,
-    FINISHED,
-    ABORTED,
-    ABORTED_BUT_NEEDS_COMPLETION,
-    // This sentinel must be last.
-    LAST_RUN_STATE = ABORTED_BUT_NEEDS_COMPLETION
-  };
-  static std::string ToString(RunState);
-
-  enum class Direction { NORMAL, REVERSE, ALTERNATE_NORMAL, ALTERNATE_REVERSE };
-
-  enum class FillMode { NONE, FORWARDS, BACKWARDS, BOTH, AUTO };
-
-  static std::unique_ptr<Animation> Create(
-      std::unique_ptr<AnimationCurve> curve,
-      int animation_id,
-      int group_id,
-      int target_property_id);
-
-  virtual ~Animation();
+  static scoped_refptr<Animation> Create(int id);
+  virtual scoped_refptr<Animation> CreateImplInstance() const;
 
   int id() const { return id_; }
-  int group() const { return group_; }
-  int target_property_id() const { return target_property_id_; }
+  typedef size_t KeyframeEffectId;
+  ElementId element_id_of_keyframe_effect(
+      KeyframeEffectId keyframe_effect_id) const;
+  bool IsElementAttached(ElementId id) const;
 
-  RunState run_state() const { return run_state_; }
-  void SetRunState(RunState run_state, base::TimeTicks monotonic_time);
+  // Parent AnimationHost. Animation can be detached from AnimationTimeline.
+  AnimationHost* animation_host() { return animation_host_; }
+  const AnimationHost* animation_host() const { return animation_host_; }
+  void SetAnimationHost(AnimationHost* animation_host);
+  bool has_animation_host() const { return !!animation_host_; }
 
-  // This is the number of times that the animation will play. If this
-  // value is zero the animation will not play. If it is negative, then
-  // the animation will loop indefinitely.
-  double iterations() const { return iterations_; }
-  void set_iterations(double n) { iterations_ = n; }
+  // Parent AnimationTimeline.
+  AnimationTimeline* animation_timeline() { return animation_timeline_; }
+  const AnimationTimeline* animation_timeline() const {
+    return animation_timeline_;
+  }
+  virtual void SetAnimationTimeline(AnimationTimeline* timeline);
 
-  double iteration_start() const { return iteration_start_; }
-  void set_iteration_start(double iteration_start) {
-    iteration_start_ = iteration_start;
+  // TODO(smcgruer): If/once ScrollTimeline is supported on normal Animations,
+  // we will need to move the promotion logic from WorkletAnimation to here.
+  virtual void PromoteScrollTimelinePendingToActive() {}
+
+  bool has_element_animations() const;
+  scoped_refptr<ElementAnimations> element_animations(
+      KeyframeEffectId keyframe_effect_id) const;
+
+  void set_animation_delegate(AnimationDelegate* delegate) {
+    animation_delegate_ = delegate;
   }
 
-  base::TimeTicks start_time() const { return start_time_; }
+  void AttachElementForKeyframeEffect(ElementId element_id,
+                                      KeyframeEffectId keyframe_effect_id);
+  void DetachElementForKeyframeEffect(ElementId element_id,
+                                      KeyframeEffectId keyframe_effect_id);
+  virtual void DetachElement();
 
-  void set_start_time(base::TimeTicks monotonic_time) {
-    start_time_ = monotonic_time;
-  }
-  bool has_set_start_time() const { return !start_time_.is_null(); }
+  void AddKeyframeModelForKeyframeEffect(
+      std::unique_ptr<KeyframeModel> keyframe_model,
+      KeyframeEffectId keyframe_effect_id);
+  void PauseKeyframeModelForKeyframeEffect(int keyframe_model_id,
+                                           double time_offset,
+                                           KeyframeEffectId keyframe_effect_id);
+  void RemoveKeyframeModelForKeyframeEffect(
+      int keyframe_model_id,
+      KeyframeEffectId keyframe_effect_id);
+  void AbortKeyframeModelForKeyframeEffect(int keyframe_model_id,
+                                           KeyframeEffectId keyframe_effect_id);
+  void AbortKeyframeModelsWithProperty(TargetProperty::Type target_property,
+                                       bool needs_completion);
 
-  base::TimeDelta time_offset() const { return time_offset_; }
-  void set_time_offset(base::TimeDelta monotonic_time) {
-    time_offset_ = monotonic_time;
-  }
+  virtual void PushPropertiesTo(Animation* animation_impl);
 
-  void Suspend(base::TimeTicks monotonic_time);
-  void Resume(base::TimeTicks monotonic_time);
+  void UpdateState(bool start_ready_keyframe_models, AnimationEvents* events);
+  virtual void Tick(base::TimeTicks monotonic_time);
 
-  Direction direction() { return direction_; }
-  void set_direction(Direction direction) { direction_ = direction; }
+  void AddToTicking();
+  void KeyframeModelRemovedFromTicking();
 
-  FillMode fill_mode() { return fill_mode_; }
-  void set_fill_mode(FillMode fill_mode) { fill_mode_ = fill_mode; }
+  // AnimationDelegate routing.
+  void NotifyKeyframeModelStarted(const AnimationEvent& event);
+  void NotifyKeyframeModelFinished(const AnimationEvent& event);
+  void NotifyKeyframeModelAborted(const AnimationEvent& event);
+  void NotifyKeyframeModelTakeover(const AnimationEvent& event);
+  size_t TickingKeyframeModelsCount() const;
 
-  double playback_rate() { return playback_rate_; }
-  void set_playback_rate(double playback_rate) {
-    playback_rate_ = playback_rate;
-  }
+  void SetNeedsPushProperties();
 
-  bool IsFinishedAt(base::TimeTicks monotonic_time) const;
-  bool is_finished() const {
-    return run_state_ == FINISHED || run_state_ == ABORTED ||
-           run_state_ == WAITING_FOR_DELETION;
-  }
+  // Make KeyframeModels affect active elements if and only if they affect
+  // pending elements. Any KeyframeModels that no longer affect any elements
+  // are deleted.
+  void ActivateKeyframeEffects();
 
-  bool InEffect(base::TimeTicks monotonic_time) const;
-
-  AnimationCurve* curve() { return curve_.get(); }
-  const AnimationCurve* curve() const { return curve_.get(); }
-
-  // If this is true, even if the animation is running, it will not be tickable
-  // until it is given a start time. This is true for animations running on the
-  // main thread.
-  bool needs_synchronized_start_time() const {
-    return needs_synchronized_start_time_;
-  }
-  void set_needs_synchronized_start_time(bool needs_synchronized_start_time) {
-    needs_synchronized_start_time_ = needs_synchronized_start_time;
-  }
-
-  // This is true for animations running on the main thread when the FINISHED
-  // event sent by the corresponding impl animation has been received.
-  bool received_finished_event() const {
-    return received_finished_event_;
-  }
-  void set_received_finished_event(bool received_finished_event) {
-    received_finished_event_ = received_finished_event;
-  }
-
-  // Takes the given absolute time, and using the start time and the number
-  // of iterations, returns the relative time in the current iteration.
-  base::TimeDelta TrimTimeToCurrentIteration(
-      base::TimeTicks monotonic_time) const;
-
-  base::TimeTicks ConvertFromActiveTime(base::TimeDelta active_time) const;
-
-  std::unique_ptr<Animation> CloneAndInitialize(
-      RunState initial_run_state) const;
-
-  void set_is_controlling_instance_for_test(bool is_controlling_instance) {
-    is_controlling_instance_ = is_controlling_instance;
-  }
-  bool is_controlling_instance() const { return is_controlling_instance_; }
-
-  void PushPropertiesTo(Animation* other) const;
+  // Returns the keyframe model animating the given property that is either
+  // running, or is next to run, if such a keyframe model exists.
+  KeyframeModel* GetKeyframeModelForKeyframeEffect(
+      TargetProperty::Type target_property,
+      KeyframeEffectId keyframe_effect_id) const;
 
   std::string ToString() const;
 
-  void set_is_impl_only(bool is_impl_only) { is_impl_only_ = is_impl_only; }
-  bool is_impl_only() const { return is_impl_only_; }
+  void SetNeedsCommit();
 
-  void set_affects_active_elements(bool affects_active_elements) {
-    affects_active_elements_ = affects_active_elements;
-  }
-  bool affects_active_elements() const { return affects_active_elements_; }
+  virtual bool IsWorkletAnimation() const;
+  void AddKeyframeEffect(std::unique_ptr<KeyframeEffect>);
 
-  void set_affects_pending_elements(bool affects_pending_elements) {
-    affects_pending_elements_ = affects_pending_elements;
-  }
-  bool affects_pending_elements() const { return affects_pending_elements_; }
+  KeyframeEffect* GetKeyframeEffectById(
+      KeyframeEffectId keyframe_effect_id) const;
+  KeyframeEffectId NextKeyframeEffectId() { return keyframe_effects_.size(); }
 
  private:
-  Animation(std::unique_ptr<AnimationCurve> curve,
-            int animation_id,
-            int group_id,
-            int target_property_id);
+  friend class base::RefCounted<Animation>;
 
-  base::TimeDelta ConvertToActiveTime(base::TimeTicks monotonic_time) const;
+  void RegisterKeyframeEffect(ElementId element_id,
+                              KeyframeEffectId keyframe_effect_id);
+  void UnregisterKeyframeEffect(ElementId element_id,
+                                KeyframeEffectId keyframe_effect_id);
+  void RegisterKeyframeEffects();
+  void UnregisterKeyframeEffects();
 
-  std::unique_ptr<AnimationCurve> curve_;
+  void PushAttachedKeyframeEffectsToImplThread(Animation* animation_impl) const;
+  void PushPropertiesToImplThread(Animation* animation_impl);
 
-  // IDs must be unique.
+ protected:
+  explicit Animation(int id);
+  virtual ~Animation();
+
+  AnimationHost* animation_host_;
+  AnimationTimeline* animation_timeline_;
+  AnimationDelegate* animation_delegate_;
+
   int id_;
 
-  // Animations that must be run together are called 'grouped' and have the same
-  // group id. Grouped animations are guaranteed to start at the same time and
-  // no other animations may animate any of the group's target properties until
-  // all animations in the group have finished animating.
-  int group_;
+  using ElementToKeyframeEffectIdMap =
+      std::unordered_map<ElementId,
+                         std::unordered_set<KeyframeEffectId>,
+                         ElementIdHash>;
+  using KeyframeEffects = std::vector<std::unique_ptr<KeyframeEffect>>;
 
-  int target_property_id_;
-  RunState run_state_;
-  double iterations_;
-  double iteration_start_;
-  base::TimeTicks start_time_;
-  Direction direction_;
-  double playback_rate_;
-  FillMode fill_mode_;
+  // It is possible for a keyframe_effect to be in keyframe_effects_ but not in
+  // element_to_keyframe_effect_id_map_ but the reverse is not possible.
+  ElementToKeyframeEffectIdMap element_to_keyframe_effect_id_map_;
+  KeyframeEffects keyframe_effects_;
 
-  // The time offset effectively pushes the start of the animation back in time.
-  // This is used for resuming paused animations -- an animation is added with a
-  // non-zero time offset, causing the animation to skip ahead to the desired
-  // point in time.
-  base::TimeDelta time_offset_;
-
-  bool needs_synchronized_start_time_;
-  bool received_finished_event_;
-
-  // When an animation is suspended, it behaves as if it is paused and it also
-  // ignores all run state changes until it is resumed. This is used for testing
-  // purposes.
-  bool suspended_;
-
-  // These are used in TrimTimeToCurrentIteration to account for time
-  // spent while paused. This is not included in AnimationState since it
-  // there is absolutely no need for clients of this controller to know
-  // about these values.
-  base::TimeTicks pause_time_;
-  base::TimeDelta total_paused_time_;
-
-  // Animations lead dual lives. An active animation will be conceptually owned
-  // by two controllers, one on the impl thread and one on the main. In reality,
-  // there will be two separate Animation instances for the same animation. They
-  // will have the same group id and the same target property (these two values
-  // uniquely identify an animation). The instance on the impl thread is the
-  // instance that ultimately controls the values of the animating layer and so
-  // we will refer to it as the 'controlling instance'.
-  bool is_controlling_instance_;
-
-  bool is_impl_only_;
-
-  // When pushed from a main-thread controller to a compositor-thread
-  // controller, an animation will initially only affect pending elements
-  // (corresponding to layers in the pending tree). Animations that only
-  // affect pending elements are able to reach the STARTING state and tick
-  // pending elements, but cannot proceed any further and do not tick active
-  // elements. After activation, such animations affect both kinds of elements
-  // and are able to proceed past the STARTING state. When the removal of
-  // an animation is pushed from a main-thread controller to a
-  // compositor-thread controller, this initially only makes the animation
-  // stop affecting pending elements. After activation, such animations no
-  // longer affect any elements, and are deleted.
-  bool affects_active_elements_;
-  bool affects_pending_elements_;
+  int ticking_keyframe_effects_count;
 
   DISALLOW_COPY_AND_ASSIGN(Animation);
 };

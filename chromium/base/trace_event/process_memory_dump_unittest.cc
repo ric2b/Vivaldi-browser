@@ -20,7 +20,7 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #include "winbase.h"
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <sys/mman.h>
 #endif
 
@@ -38,27 +38,20 @@ const char* const kTestDumpNameWhitelist[] = {
     "Whitelisted/TestName", "Whitelisted/TestName_0x?",
     "Whitelisted/0x?/TestName", "Whitelisted/0x?", nullptr};
 
-TracedValue* GetHeapDump(const ProcessMemoryDump& pmd, const char* name) {
-  auto it = pmd.heap_dumps().find(name);
-  return it == pmd.heap_dumps().end() ? nullptr : it->second.get();
-}
-
 void* Map(size_t size) {
 #if defined(OS_WIN)
   return ::VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT,
                         PAGE_READWRITE);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON,
                 0, 0);
-#else
-#error This architecture is not (yet) supported.
 #endif
 }
 
 void Unmap(void* addr, size_t size) {
 #if defined(OS_WIN)
   ::VirtualFree(addr, 0, MEM_DECOMMIT);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   ::munmap(addr, size);
 #else
 #error This architecture is not (yet) supported.
@@ -68,11 +61,7 @@ void Unmap(void* addr, size_t size) {
 }  // namespace
 
 TEST(ProcessMemoryDumpTest, MoveConstructor) {
-  auto heap_state = MakeRefCounted<HeapProfilerSerializationState>();
-  heap_state->SetStackFrameDeduplicator(MakeUnique<StackFrameDeduplicator>());
-  heap_state->SetTypeNameDeduplicator(MakeUnique<TypeNameDeduplicator>());
-
-  ProcessMemoryDump pmd1 = ProcessMemoryDump(heap_state, kDetailedDumpArgs);
+  ProcessMemoryDump pmd1 = ProcessMemoryDump(kDetailedDumpArgs);
   pmd1.CreateAllocatorDump("mad1");
   pmd1.CreateAllocatorDump("mad2");
   pmd1.AddOwnershipEdge(MemoryAllocatorDumpGuid(42),
@@ -85,26 +74,20 @@ TEST(ProcessMemoryDumpTest, MoveConstructor) {
   EXPECT_EQ(MemoryDumpLevelOfDetail::DETAILED,
             pmd2.dump_args().level_of_detail);
   EXPECT_EQ(1u, pmd2.allocator_dumps_edges().size());
-  EXPECT_EQ(heap_state.get(), pmd2.heap_profiler_serialization_state().get());
 
   // Check that calling serialization routines doesn't cause a crash.
-  auto traced_value = MakeUnique<TracedValue>();
+  auto traced_value = std::make_unique<TracedValue>();
   pmd2.SerializeAllocatorDumpsInto(traced_value.get());
-  pmd2.SerializeHeapProfilerDumpsInto(traced_value.get());
 }
 
 TEST(ProcessMemoryDumpTest, MoveAssignment) {
-  auto heap_state = MakeRefCounted<HeapProfilerSerializationState>();
-  heap_state->SetStackFrameDeduplicator(MakeUnique<StackFrameDeduplicator>());
-  heap_state->SetTypeNameDeduplicator(MakeUnique<TypeNameDeduplicator>());
-
-  ProcessMemoryDump pmd1 = ProcessMemoryDump(heap_state, kDetailedDumpArgs);
+  ProcessMemoryDump pmd1 = ProcessMemoryDump(kDetailedDumpArgs);
   pmd1.CreateAllocatorDump("mad1");
   pmd1.CreateAllocatorDump("mad2");
   pmd1.AddOwnershipEdge(MemoryAllocatorDumpGuid(42),
                         MemoryAllocatorDumpGuid(4242));
 
-  ProcessMemoryDump pmd2(nullptr, {MemoryDumpLevelOfDetail::BACKGROUND});
+  ProcessMemoryDump pmd2({MemoryDumpLevelOfDetail::BACKGROUND});
   pmd2.CreateAllocatorDump("malloc");
 
   pmd2 = std::move(pmd1);
@@ -114,17 +97,15 @@ TEST(ProcessMemoryDumpTest, MoveAssignment) {
   EXPECT_EQ(MemoryDumpLevelOfDetail::DETAILED,
             pmd2.dump_args().level_of_detail);
   EXPECT_EQ(1u, pmd2.allocator_dumps_edges().size());
-  EXPECT_EQ(heap_state.get(), pmd2.heap_profiler_serialization_state().get());
 
   // Check that calling serialization routines doesn't cause a crash.
-  auto traced_value = MakeUnique<TracedValue>();
+  auto traced_value = std::make_unique<TracedValue>();
   pmd2.SerializeAllocatorDumpsInto(traced_value.get());
-  pmd2.SerializeHeapProfilerDumpsInto(traced_value.get());
 }
 
 TEST(ProcessMemoryDumpTest, Clear) {
   std::unique_ptr<ProcessMemoryDump> pmd1(
-      new ProcessMemoryDump(nullptr, kDetailedDumpArgs));
+      new ProcessMemoryDump(kDetailedDumpArgs));
   pmd1->CreateAllocatorDump("mad1");
   pmd1->CreateAllocatorDump("mad2");
   ASSERT_FALSE(pmd1->allocator_dumps().empty());
@@ -146,9 +127,8 @@ TEST(ProcessMemoryDumpTest, Clear) {
   ASSERT_EQ(nullptr, pmd1->GetSharedGlobalAllocatorDump(shared_mad_guid2));
 
   // Check that calling serialization routines doesn't cause a crash.
-  auto traced_value = MakeUnique<TracedValue>();
+  auto traced_value = std::make_unique<TracedValue>();
   pmd1->SerializeAllocatorDumpsInto(traced_value.get());
-  pmd1->SerializeHeapProfilerDumpsInto(traced_value.get());
 
   // Check that the pmd can be reused and behaves as expected.
   auto* mad1 = pmd1->CreateAllocatorDump("mad1");
@@ -167,7 +147,6 @@ TEST(ProcessMemoryDumpTest, Clear) {
 
   traced_value.reset(new TracedValue);
   pmd1->SerializeAllocatorDumpsInto(traced_value.get());
-  pmd1->SerializeHeapProfilerDumpsInto(traced_value.get());
 
   pmd1.reset();
 }
@@ -178,22 +157,16 @@ TEST(ProcessMemoryDumpTest, TakeAllDumpsFrom) {
   metrics_by_context[AllocationContext()] = {1, 1};
   TraceEventMemoryOverhead overhead;
 
-  scoped_refptr<HeapProfilerSerializationState>
-      heap_profiler_serialization_state = new HeapProfilerSerializationState;
-  heap_profiler_serialization_state->SetStackFrameDeduplicator(
-      WrapUnique(new StackFrameDeduplicator));
-  heap_profiler_serialization_state->SetTypeNameDeduplicator(
-      WrapUnique(new TypeNameDeduplicator));
-  std::unique_ptr<ProcessMemoryDump> pmd1(new ProcessMemoryDump(
-      heap_profiler_serialization_state.get(), kDetailedDumpArgs));
+  std::unique_ptr<ProcessMemoryDump> pmd1(
+      new ProcessMemoryDump(kDetailedDumpArgs));
   auto* mad1_1 = pmd1->CreateAllocatorDump("pmd1/mad1");
   auto* mad1_2 = pmd1->CreateAllocatorDump("pmd1/mad2");
   pmd1->AddOwnershipEdge(mad1_1->guid(), mad1_2->guid());
   pmd1->DumpHeapUsage(metrics_by_context, overhead, "pmd1/heap_dump1");
   pmd1->DumpHeapUsage(metrics_by_context, overhead, "pmd1/heap_dump2");
 
-  std::unique_ptr<ProcessMemoryDump> pmd2(new ProcessMemoryDump(
-      heap_profiler_serialization_state.get(), kDetailedDumpArgs));
+  std::unique_ptr<ProcessMemoryDump> pmd2(
+      new ProcessMemoryDump(kDetailedDumpArgs));
   auto* mad2_1 = pmd2->CreateAllocatorDump("pmd2/mad1");
   auto* mad2_2 = pmd2->CreateAllocatorDump("pmd2/mad2");
   pmd2->AddOwnershipEdge(mad2_1->guid(), mad2_2->guid());
@@ -211,7 +184,6 @@ TEST(ProcessMemoryDumpTest, TakeAllDumpsFrom) {
   // Make sure that pmd2 is empty but still usable after it has been emptied.
   ASSERT_TRUE(pmd2->allocator_dumps().empty());
   ASSERT_TRUE(pmd2->allocator_dumps_edges().empty());
-  ASSERT_TRUE(pmd2->heap_dumps().empty());
   pmd2->CreateAllocatorDump("pmd2/this_mad_stays_with_pmd2");
   ASSERT_EQ(1u, pmd2->allocator_dumps().size());
   ASSERT_EQ(1u, pmd2->allocator_dumps().count("pmd2/this_mad_stays_with_pmd2"));
@@ -220,7 +192,6 @@ TEST(ProcessMemoryDumpTest, TakeAllDumpsFrom) {
 
   // Check that calling serialization routines doesn't cause a crash.
   pmd2->SerializeAllocatorDumpsInto(traced_value.get());
-  pmd2->SerializeHeapProfilerDumpsInto(traced_value.get());
 
   // Free the |pmd2| to check that the memory ownership of the two MAD(s)
   // has been transferred to |pmd1|.
@@ -236,23 +207,17 @@ TEST(ProcessMemoryDumpTest, TakeAllDumpsFrom) {
   ASSERT_EQ(shared_mad1, pmd1->GetSharedGlobalAllocatorDump(shared_mad_guid1));
   ASSERT_EQ(shared_mad2, pmd1->GetSharedGlobalAllocatorDump(shared_mad_guid2));
   ASSERT_TRUE(MemoryAllocatorDump::Flags::WEAK & shared_mad2->flags());
-  ASSERT_EQ(4u, pmd1->heap_dumps().size());
-  ASSERT_TRUE(GetHeapDump(*pmd1, "pmd1/heap_dump1") != nullptr);
-  ASSERT_TRUE(GetHeapDump(*pmd1, "pmd1/heap_dump2") != nullptr);
-  ASSERT_TRUE(GetHeapDump(*pmd1, "pmd2/heap_dump1") != nullptr);
-  ASSERT_TRUE(GetHeapDump(*pmd1, "pmd2/heap_dump2") != nullptr);
 
   // Check that calling serialization routines doesn't cause a crash.
   traced_value.reset(new TracedValue);
   pmd1->SerializeAllocatorDumpsInto(traced_value.get());
-  pmd1->SerializeHeapProfilerDumpsInto(traced_value.get());
 
   pmd1.reset();
 }
 
 TEST(ProcessMemoryDumpTest, OverrideOwnershipEdge) {
   std::unique_ptr<ProcessMemoryDump> pmd(
-      new ProcessMemoryDump(nullptr, kDetailedDumpArgs));
+      new ProcessMemoryDump(kDetailedDumpArgs));
 
   auto* shm_dump1 = pmd->CreateAllocatorDump("shared_mem/seg1");
   auto* shm_dump2 = pmd->CreateAllocatorDump("shared_mem/seg2");
@@ -318,7 +283,7 @@ TEST(ProcessMemoryDumpTest, OverrideOwnershipEdge) {
 
 TEST(ProcessMemoryDumpTest, Suballocations) {
   std::unique_ptr<ProcessMemoryDump> pmd(
-      new ProcessMemoryDump(nullptr, kDetailedDumpArgs));
+      new ProcessMemoryDump(kDetailedDumpArgs));
   const std::string allocator_dump_name = "fakealloc/allocated_objects";
   pmd->CreateAllocatorDump(allocator_dump_name);
 
@@ -357,14 +322,13 @@ TEST(ProcessMemoryDumpTest, Suballocations) {
   // Check that calling serialization routines doesn't cause a crash.
   std::unique_ptr<TracedValue> traced_value(new TracedValue);
   pmd->SerializeAllocatorDumpsInto(traced_value.get());
-  pmd->SerializeHeapProfilerDumpsInto(traced_value.get());
 
   pmd.reset();
 }
 
 TEST(ProcessMemoryDumpTest, GlobalAllocatorDumpTest) {
   std::unique_ptr<ProcessMemoryDump> pmd(
-      new ProcessMemoryDump(nullptr, kDetailedDumpArgs));
+      new ProcessMemoryDump(kDetailedDumpArgs));
   MemoryAllocatorDumpGuid shared_mad_guid(1);
   auto* shared_mad1 = pmd->CreateWeakSharedGlobalAllocatorDump(shared_mad_guid);
   ASSERT_EQ(shared_mad_guid, shared_mad1->guid());
@@ -389,7 +353,7 @@ TEST(ProcessMemoryDumpTest, GlobalAllocatorDumpTest) {
 
 TEST(ProcessMemoryDumpTest, SharedMemoryOwnershipTest) {
   std::unique_ptr<ProcessMemoryDump> pmd(
-      new ProcessMemoryDump(nullptr, kDetailedDumpArgs));
+      new ProcessMemoryDump(kDetailedDumpArgs));
   const ProcessMemoryDump::AllocatorDumpEdgesMap& edges =
       pmd->allocator_dumps_edges();
 
@@ -417,10 +381,14 @@ TEST(ProcessMemoryDumpTest, SharedMemoryOwnershipTest) {
 TEST(ProcessMemoryDumpTest, BackgroundModeTest) {
   MemoryDumpArgs background_args = {MemoryDumpLevelOfDetail::BACKGROUND};
   std::unique_ptr<ProcessMemoryDump> pmd(
-      new ProcessMemoryDump(nullptr, background_args));
+      new ProcessMemoryDump(background_args));
   ProcessMemoryDump::is_black_hole_non_fatal_for_testing_ = true;
   SetAllocatorDumpNameWhitelistForTesting(kTestDumpNameWhitelist);
   MemoryAllocatorDump* black_hole_mad = pmd->GetBlackHoleMad();
+
+  // GetAllocatorDump works for uncreated dumps.
+  EXPECT_EQ(nullptr, pmd->GetAllocatorDump("NotWhitelisted/TestName"));
+  EXPECT_EQ(nullptr, pmd->GetAllocatorDump("Whitelisted/TestName"));
 
   // Invalid dump names.
   EXPECT_EQ(black_hole_mad,
@@ -455,7 +423,7 @@ TEST(ProcessMemoryDumpTest, BackgroundModeTest) {
             pmd->CreateAllocatorDump("Whitelisted/0xaB/TestName"));
 
   // GetAllocatorDump is consistent.
-  EXPECT_EQ(black_hole_mad, pmd->GetAllocatorDump("NotWhitelisted/TestName"));
+  EXPECT_EQ(nullptr, pmd->GetAllocatorDump("NotWhitelisted/TestName"));
   EXPECT_NE(black_hole_mad, pmd->GetAllocatorDump("Whitelisted/TestName"));
 
   // Test whitelisted entries.
@@ -480,21 +448,21 @@ TEST(ProcessMemoryDumpTest, GuidsTest) {
   const auto process_token_one = UnguessableToken::Create();
   const auto process_token_two = UnguessableToken::Create();
 
-  ProcessMemoryDump pmd1(nullptr, dump_args);
+  ProcessMemoryDump pmd1(dump_args);
   pmd1.set_process_token_for_testing(process_token_one);
   MemoryAllocatorDump* mad1 = pmd1.CreateAllocatorDump("foo");
 
-  ProcessMemoryDump pmd2(nullptr, dump_args);
+  ProcessMemoryDump pmd2(dump_args);
   pmd2.set_process_token_for_testing(process_token_one);
   MemoryAllocatorDump* mad2 = pmd2.CreateAllocatorDump("foo");
 
   // If we don't pass the argument we get a random PMD:
-  ProcessMemoryDump pmd3(nullptr, dump_args);
+  ProcessMemoryDump pmd3(dump_args);
   MemoryAllocatorDump* mad3 = pmd3.CreateAllocatorDump("foo");
 
   // PMD's for different processes produce different GUIDs even for the same
   // names:
-  ProcessMemoryDump pmd4(nullptr, dump_args);
+  ProcessMemoryDump pmd4(dump_args);
   pmd4.set_process_token_for_testing(process_token_two);
   MemoryAllocatorDump* mad4 = pmd4.CreateAllocatorDump("foo");
 
@@ -508,7 +476,13 @@ TEST(ProcessMemoryDumpTest, GuidsTest) {
 }
 
 #if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
-TEST(ProcessMemoryDumpTest, CountResidentBytes) {
+#if defined(OS_FUCHSIA)
+// TODO(crbug.com/851760): Counting resident bytes is not supported on Fuchsia.
+#define MAYBE_CountResidentBytes DISABLED_CountResidentBytes
+#else
+#define MAYBE_CountResidentBytes CountResidentBytes
+#endif
+TEST(ProcessMemoryDumpTest, MAYBE_CountResidentBytes) {
   const size_t page_size = ProcessMemoryDump::GetSystemPageSize();
 
   // Allocate few page of dirty memory and check if it is resident.
@@ -529,7 +503,14 @@ TEST(ProcessMemoryDumpTest, CountResidentBytes) {
   Unmap(memory2, kVeryLargeMemorySize);
 }
 
-TEST(ProcessMemoryDumpTest, CountResidentBytesInSharedMemory) {
+#if defined(OS_FUCHSIA)
+// TODO(crbug.com/851760): Counting resident bytes is not supported on Fuchsia.
+#define MAYBE_CountResidentBytesInSharedMemory \
+  DISABLED_CountResidentBytesInSharedMemory
+#else
+#define MAYBE_CountResidentBytesInSharedMemory CountResidentBytesInSharedMemory
+#endif
+TEST(ProcessMemoryDumpTest, MAYBE_CountResidentBytesInSharedMemory) {
 #if defined(OS_IOS)
   // TODO(crbug.com/748410): Reenable this test.
   if (!base::ios::IsRunningOnIOS10OrLater()) {
@@ -545,7 +526,8 @@ TEST(ProcessMemoryDumpTest, CountResidentBytesInSharedMemory) {
   shared_memory1.CreateAndMapAnonymous(size1);
   memset(shared_memory1.memory(), 0, size1);
   base::Optional<size_t> res1 =
-      ProcessMemoryDump::CountResidentBytesInSharedMemory(shared_memory1);
+      ProcessMemoryDump::CountResidentBytesInSharedMemory(
+          shared_memory1.memory(), shared_memory1.mapped_size());
   ASSERT_TRUE(res1.has_value());
   ASSERT_EQ(res1.value(), size1);
   shared_memory1.Unmap();
@@ -557,7 +539,8 @@ TEST(ProcessMemoryDumpTest, CountResidentBytesInSharedMemory) {
   shared_memory2.CreateAndMapAnonymous(kVeryLargeMemorySize);
   memset(shared_memory2.memory(), 0, kVeryLargeMemorySize);
   base::Optional<size_t> res2 =
-      ProcessMemoryDump::CountResidentBytesInSharedMemory(shared_memory2);
+      ProcessMemoryDump::CountResidentBytesInSharedMemory(
+          shared_memory2.memory(), shared_memory2.mapped_size());
   ASSERT_TRUE(res2.has_value());
   ASSERT_EQ(res2.value(), kVeryLargeMemorySize);
   shared_memory2.Unmap();
@@ -569,7 +552,8 @@ TEST(ProcessMemoryDumpTest, CountResidentBytesInSharedMemory) {
   shared_memory3.CreateAndMapAnonymous(kVeryLargeMemorySize);
   memset(shared_memory3.memory(), 0, kTouchedMemorySize);
   base::Optional<size_t> res3 =
-      ProcessMemoryDump::CountResidentBytesInSharedMemory(shared_memory3);
+      ProcessMemoryDump::CountResidentBytesInSharedMemory(
+          shared_memory3.memory(), shared_memory3.mapped_size());
   ASSERT_TRUE(res3.has_value());
   ASSERT_EQ(res3.value(), kTouchedMemorySize);
   shared_memory3.Unmap();

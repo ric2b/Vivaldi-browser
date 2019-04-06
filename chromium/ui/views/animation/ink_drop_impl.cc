@@ -5,12 +5,12 @@
 #include "ui/views/animation/ink_drop_impl.h"
 
 #include "base/auto_reset.h"
-#include "base/memory/ptr_util.h"
 #include "base/timer/timer.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
+#include "ui/views/style/platform_style.h"
 
 namespace views {
 
@@ -170,11 +170,15 @@ void InkDropImpl::NoAutoHighlightHiddenState::Enter() {
 }
 
 void InkDropImpl::NoAutoHighlightHiddenState::ShowOnHoverChanged() {
-  HandleHoverAndFocusChangeChanges(kHighlightFadeInOnHoverChangeDurationMs);
+  HandleHoverAndFocusChangeChanges(
+      GetInkDrop()->hover_highlight_fade_duration_ms().value_or(
+          kHighlightFadeInOnHoverChangeDurationMs));
 }
 
 void InkDropImpl::NoAutoHighlightHiddenState::OnHoverChanged() {
-  HandleHoverAndFocusChangeChanges(kHighlightFadeInOnHoverChangeDurationMs);
+  HandleHoverAndFocusChangeChanges(
+      GetInkDrop()->hover_highlight_fade_duration_ms().value_or(
+          kHighlightFadeInOnHoverChangeDurationMs));
 }
 
 void InkDropImpl::NoAutoHighlightHiddenState::ShowOnFocusChanged() {
@@ -215,11 +219,15 @@ void InkDropImpl::NoAutoHighlightVisibleState::Enter() {
 }
 
 void InkDropImpl::NoAutoHighlightVisibleState::ShowOnHoverChanged() {
-  HandleHoverAndFocusChangeChanges(kHighlightFadeOutOnHoverChangeDurationMs);
+  HandleHoverAndFocusChangeChanges(
+      GetInkDrop()->hover_highlight_fade_duration_ms().value_or(
+          kHighlightFadeOutOnHoverChangeDurationMs));
 }
 
 void InkDropImpl::NoAutoHighlightVisibleState::OnHoverChanged() {
-  HandleHoverAndFocusChangeChanges(kHighlightFadeOutOnHoverChangeDurationMs);
+  HandleHoverAndFocusChangeChanges(
+      GetInkDrop()->hover_highlight_fade_duration_ms().value_or(
+          kHighlightFadeOutOnHoverChangeDurationMs));
 }
 
 void InkDropImpl::NoAutoHighlightVisibleState::ShowOnFocusChanged() {
@@ -278,7 +286,7 @@ class InkDropImpl::HideHighlightOnRippleHiddenState
 
   // The timer used to delay the highlight fade in after an ink drop ripple
   // animation.
-  std::unique_ptr<base::Timer> highlight_after_ripple_timer_;
+  std::unique_ptr<base::OneShotTimer> highlight_after_ripple_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(HideHighlightOnRippleHiddenState);
 };
@@ -343,7 +351,7 @@ void InkDropImpl::HideHighlightOnRippleHiddenState::AnimationStarted(
     // TODO(bruthig): Investigate if the animation framework can address this
     // issue instead. See https://crbug.com/663335.
     if (GetInkDrop()->ink_drop_ripple_)
-      GetInkDrop()->ink_drop_ripple_->HideImmediately();
+      GetInkDrop()->ink_drop_ripple_->SnapToHidden();
     GetInkDrop()->SetHighlightState(
         state_factory()->CreateVisibleState(base::TimeDelta(), false));
   }
@@ -612,6 +620,10 @@ void InkDropImpl::SetAutoHighlightMode(AutoHighlightMode auto_highlight_mode) {
   SetHighlightState(highlight_state_factory_->CreateStartState());
 }
 
+void InkDropImpl::SetAutoHighlightModeForPlatform() {
+  SetAutoHighlightMode(AutoHighlightMode::HIDE_ON_RIPPLE);
+}
+
 void InkDropImpl::HostSizeChanged(const gfx::Size& new_size) {
   // |root_layer_| should fill the entire host because it affects the clipping
   // when a mask layer is applied to it. This will not affect clipping if no
@@ -640,11 +652,26 @@ void InkDropImpl::AnimateToState(InkDropState ink_drop_state) {
   ink_drop_ripple_->AnimateToState(ink_drop_state);
 }
 
+void InkDropImpl::SetHoverHighlightFadeDurationMs(int duration_ms) {
+  hover_highlight_fade_duration_ms_ = duration_ms;
+}
+
+void InkDropImpl::UseDefaultHoverHighlightFadeDuration() {
+  hover_highlight_fade_duration_ms_.reset();
+}
+
 void InkDropImpl::SnapToActivated() {
   DestroyHiddenTargetedAnimations();
   if (!ink_drop_ripple_)
     CreateInkDropRipple();
   ink_drop_ripple_->SnapToActivated();
+}
+
+void InkDropImpl::SnapToHidden() {
+  DestroyHiddenTargetedAnimations();
+  if (!ink_drop_ripple_)
+    return;
+  ink_drop_ripple_->SnapToHidden();
 }
 
 void InkDropImpl::SetHovered(bool is_hovered) {

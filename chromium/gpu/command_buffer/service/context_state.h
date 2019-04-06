@@ -203,6 +203,8 @@ struct GPU_GLES2_EXPORT ContextState {
 
   void Initialize();
 
+  void MarkContextLost() { context_lost_ = true; }
+
   void SetLineWidthBounds(GLfloat min, GLfloat max);
 
   void SetIgnoreCachedStateForTest(bool ignore) {
@@ -220,7 +222,7 @@ struct GPU_GLES2_EXPORT ContextState {
   void RestoreVertexAttribValues() const;
   void RestoreVertexAttribArrays(
       const scoped_refptr<VertexAttribManager> attrib_manager) const;
-  void RestoreVertexAttribs() const;
+  void RestoreVertexAttribs(const ContextState* prev_state) const;
   void RestoreBufferBindings() const;
   void RestoreGlobalState(const ContextState* prev_state) const;
   void RestoreProgramSettings(const ContextState* prev_state,
@@ -391,6 +393,7 @@ struct GPU_GLES2_EXPORT ContextState {
   bool ignore_cached_state;
 
   mutable bool fbo_binding_for_scissor_workaround_dirty;
+  mutable bool stencil_state_changed_since_validation = true;
 
   GLuint current_draw_framebuffer_client_id = 0;
 
@@ -420,6 +423,8 @@ struct GPU_GLES2_EXPORT ContextState {
   gl::GLApi* api_ = nullptr;
   FeatureInfo* feature_info_;
   std::unique_ptr<ErrorState> error_state_;
+
+  bool context_lost_ = false;
 };
 
 }  // namespace gles2

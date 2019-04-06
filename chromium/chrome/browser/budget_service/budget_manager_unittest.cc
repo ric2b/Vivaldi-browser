@@ -5,9 +5,8 @@
 #include <stdint.h>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/budget_service/budget_manager.h"
 #include "chrome/browser/budget_service/budget_manager_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
@@ -17,7 +16,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h"
+#include "third_party/blink/public/platform/modules/budget_service/budget_service.mojom.h"
 #include "url/origin.h"
 
 namespace {

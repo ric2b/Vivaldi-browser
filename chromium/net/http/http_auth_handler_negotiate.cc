@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -41,13 +42,7 @@ std::unique_ptr<base::Value> NetLogParameterChannelBindings(
 
 }  // namespace
 
-HttpAuthHandlerNegotiate::Factory::Factory()
-    : resolver_(nullptr),
-#if defined(OS_WIN)
-      max_token_length_(0),
-#endif
-      is_unsupported_(false) {
-}
+HttpAuthHandlerNegotiate::Factory::Factory() {}
 
 HttpAuthHandlerNegotiate::Factory::~Factory() = default;
 
@@ -55,6 +50,13 @@ void HttpAuthHandlerNegotiate::Factory::set_host_resolver(
     HostResolver* resolver) {
   resolver_ = resolver;
 }
+
+#if !defined(OS_ANDROID) && defined(OS_POSIX)
+const std::string& HttpAuthHandlerNegotiate::Factory::GetLibraryNameForTesting()
+    const {
+  return auth_library_->GetLibraryNameForTesting();
+}
+#endif  // !defined(OS_ANDROID) && defined(OS_POSIX)
 
 int HttpAuthHandlerNegotiate::Factory::CreateAuthHandler(
     HttpAuthChallengeTokenizer* challenge,
@@ -91,12 +93,7 @@ int HttpAuthHandlerNegotiate::Factory::CreateAuthHandler(
   std::unique_ptr<HttpAuthHandler> tmp_handler(
       new HttpAuthHandlerNegotiate(http_auth_preferences(), resolver_));
 #elif defined(OS_POSIX)
-  bool allow_gssapi_library_load = true;
-#if defined(OS_CHROMEOS)
-  allow_gssapi_library_load = http_auth_preferences() &&
-                              http_auth_preferences()->AllowGssapiLibraryLoad();
-#endif
-  if (is_unsupported_ || !allow_gssapi_library_load)
+  if (is_unsupported_ || !allow_gssapi_library_load_)
     return ERR_UNSUPPORTED_AUTH_SCHEME;
   if (!auth_library_->Init()) {
     is_unsupported_ = true;
@@ -283,9 +280,7 @@ void HttpAuthHandlerNegotiate::OnIOComplete(int result) {
 void HttpAuthHandlerNegotiate::DoCallback(int rv) {
   DCHECK(rv != ERR_IO_PENDING);
   DCHECK(!callback_.is_null());
-  CompletionCallback callback = callback_;
-  callback_.Reset();
-  callback.Run(rv);
+  base::ResetAndReturn(&callback_).Run(rv);
 }
 
 int HttpAuthHandlerNegotiate::DoLoop(int result) {

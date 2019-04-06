@@ -5,18 +5,19 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_APP_LIST_MODEL_UPDATER_H_
 #define CHROME_BROWSER_UI_APP_LIST_APP_LIST_MODEL_UPDATER_H_
 
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "ash/app_list/model/app_list_folder_item.h"
-#include "ash/app_list/model/app_list_model.h"
-#include "ash/app_list/model/search/search_result.h"
-#include "ash/app_list/model/speech/speech_ui_model.h"
+#include "ash/public/interfaces/app_list.mojom.h"
+#include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/ui/app_list/app_list_model_updater_delegate.h"
+#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 
 class ChromeAppListItem;
+class ChromeSearchResult;
 
 // An interface to wrap AppListModel access in browser.
 class AppListModelUpdater {
@@ -36,6 +37,13 @@ class AppListModelUpdater {
     AppListModelUpdater* const model_updater_;
   };
 
+  virtual ~AppListModelUpdater() {}
+
+  // Set whether this model updater is active.
+  // When we have multiple user profiles, only the active one has access to the
+  // model. All others profile can only cache model changes in Chrome.
+  virtual void SetActive(bool active) {}
+
   // For AppListModel:
   virtual void AddItem(std::unique_ptr<ChromeAppListItem> item) {}
   virtual void AddItemToFolder(std::unique_ptr<ChromeAppListItem> item,
@@ -44,8 +52,8 @@ class AppListModelUpdater {
   virtual void RemoveUninstalledItem(const std::string& id) {}
   virtual void MoveItemToFolder(const std::string& id,
                                 const std::string& folder_id) {}
-  virtual void SetStatus(app_list::AppListModel::Status status) {}
-  virtual void SetState(app_list::AppListModel::State state) {}
+  virtual void SetStatus(ash::AppListModelStatus status) {}
+  virtual void SetState(ash::AppListState state) {}
   virtual void HighlightItemInstalledFromUI(const std::string& id) {}
   // For SearchModel:
   virtual void SetSearchEngineIsGoogle(bool is_google) {}
@@ -53,12 +61,10 @@ class AppListModelUpdater {
       const base::string16& tablet_accessible_name,
       const base::string16& clamshell_accessible_name) {}
   virtual void SetSearchHintText(const base::string16& hint_text) {}
-  virtual void SetSearchSpeechRecognitionButton(
-      app_list::SpeechRecognitionState state) {}
   virtual void UpdateSearchBox(const base::string16& text,
                                bool initiated_by_user) {}
   virtual void PublishSearchResults(
-      std::vector<std::unique_ptr<app_list::SearchResult>> results) {}
+      const std::vector<ChromeSearchResult*>& results) {}
 
   // Item field setters only used by ChromeAppListItem and its derived classes.
   virtual void SetItemIcon(const std::string& id, const gfx::ImageSkia& icon) {}
@@ -74,22 +80,66 @@ class AppListModelUpdater {
   virtual void SetItemPercentDownloaded(const std::string& id,
                                         int32_t percent_downloaded) {}
 
+  virtual void SetSearchResultMetadata(
+      const std::string& id,
+      ash::mojom::SearchResultMetadataPtr metadata) {}
+  virtual void SetSearchResultIsInstalling(const std::string& id,
+                                           bool is_installing) {}
+  virtual void SetSearchResultPercentDownloaded(const std::string& id,
+                                                int percent_downloaded) {}
+  virtual void SetSearchResultIcon(const std::string& id,
+                                   const gfx::ImageSkia& icon) {}
+  virtual void SetSearchResultBadgeIcon(const std::string& id,
+                                        const gfx::ImageSkia& badge_icon) {}
+  virtual void NotifySearchResultItemInstalled(const std::string& id) {}
+  virtual void ActivateChromeItem(const std::string& id, int event_flags) {}
+
   // For AppListModel:
   virtual ChromeAppListItem* FindItem(const std::string& id) = 0;
   virtual size_t ItemCount() = 0;
   virtual ChromeAppListItem* ItemAtForTest(size_t index) = 0;
-  // TODO(hejq): |FindFolderItem| will return |ChromeAppListItem|.
-  virtual app_list::AppListFolderItem* FindFolderItem(
-      const std::string& folder_id) = 0;
+  virtual ChromeAppListItem* FindFolderItem(const std::string& folder_id) = 0;
   virtual bool FindItemIndexForTest(const std::string& id, size_t* index) = 0;
-  virtual app_list::AppListViewState StateFullscreen() = 0;
-  virtual std::map<std::string, size_t> GetIdToAppListIndexMap() = 0;
+  using GetIdToAppListIndexMapCallback =
+      base::OnceCallback<void(const base::flat_map<std::string, uint16_t>&)>;
+  virtual void GetIdToAppListIndexMap(GetIdToAppListIndexMapCallback callback) {
+  }
+  virtual void ContextMenuItemSelected(const std::string& id,
+                                       int command_id,
+                                       int event_flags) {}
+
+  // Methods for AppListSyncableService:
+  virtual void AddItemToOemFolder(
+      std::unique_ptr<ChromeAppListItem> item,
+      app_list::AppListSyncableService::SyncItem* oem_sync_item,
+      const std::string& oem_folder_name,
+      const syncer::StringOrdinal& preferred_oem_position) {}
+  using ResolveOemFolderPositionCallback =
+      base::OnceCallback<void(ChromeAppListItem*)>;
+  virtual void ResolveOemFolderPosition(
+      const syncer::StringOrdinal& preferred_oem_position,
+      ResolveOemFolderPositionCallback callback) {}
+  virtual void UpdateAppItemFromSyncItem(
+      app_list::AppListSyncableService::SyncItem* sync_item,
+      bool update_name,
+      bool update_folder) {}
+
+  using GetMenuModelCallback =
+      base::OnceCallback<void(std::unique_ptr<ui::MenuModel>)>;
+  virtual void GetContextMenuModel(const std::string& id,
+                                   GetMenuModelCallback callback) = 0;
+  virtual size_t BadgedItemCount() = 0;
   // For SearchModel:
-  virtual bool TabletMode() = 0;
   virtual bool SearchEngineIsGoogle() = 0;
 
- protected:
-  virtual ~AppListModelUpdater() {}
+  // Methods for handle model updates in ash:
+  virtual void OnFolderCreated(ash::mojom::AppListItemMetadataPtr item) = 0;
+  virtual void OnFolderDeleted(ash::mojom::AppListItemMetadataPtr item) = 0;
+  virtual void OnItemUpdated(ash::mojom::AppListItemMetadataPtr item) = 0;
+  virtual void OnPageBreakItemAdded(const std::string& id,
+                                    const syncer::StringOrdinal& position) = 0;
+
+  virtual void SetDelegate(AppListModelUpdaterDelegate* delegate) = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_APP_LIST_APP_LIST_MODEL_UPDATER_H_

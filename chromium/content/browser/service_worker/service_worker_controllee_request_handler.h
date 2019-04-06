@@ -12,16 +12,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "content/browser/service_worker/service_worker_navigation_loader.h"
 #include "content/browser/service_worker/service_worker_request_handler.h"
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
-#include "content/browser/service_worker/service_worker_url_loader_job.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/common/service_worker_modes.h"
-#include "services/network/public/interfaces/fetch_api.mojom.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -41,7 +40,7 @@ class ServiceWorkerVersion;
 // A request handler derivative used to handle requests from
 // controlled documents.
 // Note that in IsServicificationEnabled cases this is used only for
-// main resource fetch during navigation.
+// main resource fetch during navigation or shared worker creation.
 class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
     : public ServiceWorkerRequestHandler,
       public ServiceWorkerURLJobWrapper::Delegate {
@@ -77,7 +76,7 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   // This could get called multiple times during the lifetime in redirect
   // cases. (In fallback-to-network cases we basically forward the request
   // to the request to the next request handler)
-  // URLLoaderRequestHandler overrides:
+  // NavigationLoaderInterceptor overrides:
   void MaybeCreateLoader(const network::ResourceRequest& request,
                          ResourceContext* resource_context,
                          LoaderCallback callback) override;
@@ -95,15 +94,15 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   // For main resource case.
   void PrepareForMainResource(const GURL& url, const GURL& site_for_cookies);
   void DidLookupRegistrationForMainResource(
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void OnVersionStatusChanged(
-      ServiceWorkerRegistration* registration,
-      ServiceWorkerVersion* version);
+      scoped_refptr<ServiceWorkerRegistration> registration,
+      scoped_refptr<ServiceWorkerVersion> version);
 
   void DidUpdateRegistration(
       const scoped_refptr<ServiceWorkerRegistration>& original_registration,
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       const std::string& status_message,
       int64_t registration_id);
   void OnUpdatedVersionStatusChanged(
@@ -131,6 +130,11 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
 
   bool JobWasCanceled() const;
 
+  // Schedules a service worker update to occur shortly after the page and its
+  // initial subresources load, if this handler was for a navigation.
+  void MaybeScheduleUpdate();
+
+  const ResourceType resource_type_;
   const bool is_main_resource_load_;
   const bool is_main_frame_load_;
   std::unique_ptr<ServiceWorkerURLJobWrapper> url_job_;

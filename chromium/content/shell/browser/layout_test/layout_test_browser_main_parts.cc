@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -26,7 +25,7 @@
 #include "net/base/filename_util.h"
 #include "net/base/net_module.h"
 #include "net/grit/net_resources.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
@@ -36,7 +35,6 @@
 #endif
 
 #if defined(OS_ANDROID)
-#include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/network_change_notifier.h"
 #endif

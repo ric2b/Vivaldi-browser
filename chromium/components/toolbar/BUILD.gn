@@ -4,11 +4,11 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/ui.gni")
-import("//device/vr/features/features.gni")
+import("//device/vr/buildflags/buildflags.gni")
 import("//components/vector_icons/vector_icons.gni")
 
-buildflag_header("build_features") {
-  header = "features.h"
+buildflag_header("buildflags") {
+  header = "buildflags.h"
   flags = [ "ENABLE_VR=$enable_vr" ]
 }
 
@@ -17,17 +17,12 @@ aggregate_vector_icons("toolbar_vector_icons") {
 
   icons = [
     "find_in_page.icon",
-    "http.1x.icon",
     "http.icon",
-    "https_invalid.1x.icon",
     "https_invalid.icon",
-    "https_valid.1x.icon",
     "https_valid.icon",
-    "https_valid_in_chip.1x.icon",
     "https_valid_in_chip.icon",
     "offline_pin.icon",
     "open_in_new.icon",
-    "product.1x.icon",
     "product.icon",
     "star_active.icon",
     "star.icon",
@@ -46,8 +41,10 @@ static_library("vector_icons") {
 
 static_library("toolbar") {
   sources = [
-    "features.h",
+    "toolbar_field_trial.cc",
+    "toolbar_field_trial.h",
     "toolbar_model.h",
+    "toolbar_model_delegate.cc",
     "toolbar_model_delegate.h",
     "toolbar_model_impl.cc",
     "toolbar_model_impl.h",
@@ -60,7 +57,7 @@ static_library("toolbar") {
   ]
 
   deps = [
-    ":build_features",
+    ":buildflags",
     "//components/google/core/browser",
     "//components/prefs",
     "//components/resources",
@@ -98,4 +95,18 @@ static_library("test_support") {
     # Needed to get the TOOLKIT_VIEWS define.
     deps += [ "//ui/views" ]
   }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "toolbar_model_impl_unittest.cc",
+  ]
+
+  deps = [
+    ":toolbar",
+    "//base",
+    "//testing/gtest",
+    "//url",
+  ]
 }

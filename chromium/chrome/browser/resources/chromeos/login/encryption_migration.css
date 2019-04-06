@@ -22,7 +22,7 @@ paper-progress {
   width: 100%;
 }
 
-.bottom-buttons {
+[slot='bottom-buttons'] {
   -webkit-padding-end: 16px;
 }
 
@@ -39,20 +39,24 @@ oobe-dialog > iron-icon.warning {
   --iron-icon-fill-color: rgb(219, 68, 55);
 }
 
-.chrome-logo {
-  background: url(chrome://oobe/product-logo.png) center/100% no-repeat;
+.warning-icon {
+  -webkit-mask-image: url(../../../../../ui/webui/resources/images/warning.svg);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100%;
+  background-color: var(--google-red-500);
 }
 
-.footer {
+[slot='footer'] {
   overflow: hidden;
 }
 
-.footer div {
+[slot='footer'] div {
   color: rgb(51, 51, 51);
   font-size: 13px;
 }
 
-.footer div.warning {
+[slot='footer'] div.warning {
   color: rgb(197, 57, 41);
   font-weight: 500;
 }

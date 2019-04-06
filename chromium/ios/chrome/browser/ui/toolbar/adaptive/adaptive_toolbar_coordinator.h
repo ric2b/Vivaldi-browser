@@ -7,19 +7,21 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/commands/toolbar_commands.h"
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_coordinating.h"
+#import "ios/chrome/browser/ui/toolbar/adaptive/toolbar_coordinatee.h"
+#import "ios/chrome/browser/ui/toolbar/public/side_swipe_toolbar_snapshot_providing.h"
 
 @class AdaptiveToolbarViewController;
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
+@protocol OmniboxFocuser;
+@protocol PopupMenuLongPressDelegate;
 class WebStateList;
 
 // Coordinator for the adaptive toolbar. This Coordinator is the super class of
 // the specific coordinator (primary or secondary).
 @interface AdaptiveToolbarCoordinator
-    : ChromeCoordinator<ToolbarCommands, ToolbarCoordinating>
+    : ChromeCoordinator<SideSwipeToolbarSnapshotProviding, ToolbarCoordinatee>
 
 // Initializes this Coordinator with its |browserState|.
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
@@ -36,10 +38,12 @@ class WebStateList;
 
 // Dispatcher.
 @property(nonatomic, weak)
-    id<ApplicationCommands, BrowserCommands, ToolbarCommands>
+    id<ApplicationCommands, BrowserCommands, OmniboxFocuser>
         dispatcher;
 // The web state list this ToolbarCoordinator is handling.
 @property(nonatomic, assign) WebStateList* webStateList;
+// Delegate for the long press gesture recognizer triggering popup menu.
+@property(nonatomic, weak) id<PopupMenuLongPressDelegate> longPressDelegate;
 
 @end
 

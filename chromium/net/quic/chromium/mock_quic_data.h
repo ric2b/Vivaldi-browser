@@ -5,8 +5,8 @@
 #ifndef NET_QUIC_CHROMIUM_MOCK_QUIC_DATA_H_
 #define NET_QUIC_CHROMIUM_MOCK_QUIC_DATA_H_
 
-#include "net/quic/core/quic_packets.h"
 #include "net/socket/socket_test_util.h"
+#include "net/third_party/quic/core/quic_packets.h"
 
 namespace net {
 namespace test {
@@ -22,25 +22,17 @@ class MockQuicData {
   // synchronusly or asynchronously based on |mode|.
   void AddConnect(IoMode mode, int rv);
 
-  // Adds a synchronous read at the next sequence number which will read
-  // |packet|.
-  void AddSynchronousRead(std::unique_ptr<QuicEncryptedPacket> packet);
-
-  // Adds an asynchronous read at the next sequence number which will read
-  // |packet|.
-  void AddRead(std::unique_ptr<QuicEncryptedPacket> packet);
+  // Adds a read at the next sequence number which will read |packet|
+  // synchronously or asynchronously based on |mode|.
+  void AddRead(IoMode mode, std::unique_ptr<quic::QuicEncryptedPacket> packet);
 
   // Adds a read at the next sequence number which will return |rv| either
   // synchronously or asynchronously based on |mode|.
   void AddRead(IoMode mode, int rv);
 
-  // Adds a synchronous write at the next sequence number which will write
-  // |packet|.
-  void AddWrite(std::unique_ptr<QuicEncryptedPacket> packet);
-
-  // Adds an asynchronous write at the next sequence number which will write
-  // |packet|.
-  void AddAsyncWrite(std::unique_ptr<QuicEncryptedPacket> packet);
+  // Adds a write at the next sequence number which will write |packet|
+  // synchronously or asynchronously based on |mode|.
+  void AddWrite(IoMode mode, std::unique_ptr<quic::QuicEncryptedPacket> packet);
 
   // Adds a write at the next sequence number which will return |rv| either
   // synchronously or asynchronously based on |mode|.
@@ -65,7 +57,7 @@ class MockQuicData {
   SequencedSocketData* GetSequencedSocketData();
 
  private:
-  std::vector<std::unique_ptr<QuicEncryptedPacket>> packets_;
+  std::vector<std::unique_ptr<quic::QuicEncryptedPacket>> packets_;
   std::unique_ptr<MockConnect> connect_;
   std::vector<MockWrite> writes_;
   std::vector<MockRead> reads_;

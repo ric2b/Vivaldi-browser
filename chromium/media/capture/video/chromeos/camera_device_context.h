@@ -14,6 +14,9 @@
 namespace media {
 
 // A class storing the context of a running CameraDeviceDelegate.
+//
+// The class is also used to forward/translate events and method calls to a
+// given VideoCaptureDevice::Client.
 class CAPTURE_EXPORT CameraDeviceContext {
  public:
   // The internal state of the running CameraDeviceDelegate.  The state
@@ -53,7 +56,7 @@ class CAPTURE_EXPORT CameraDeviceContext {
     //
     //   ConstructDefaultRequestSettings() ->
     //   OnConstructedDefaultRequestSettings() ->
-    //   |stream_buffer_manager_|->StartCapture()
+    //   |stream_buffer_manager_|->StartPreview()
     //
     // In the kCapturing state the |stream_buffer_manager_| runs the capture
     // loop to send capture requests and process capture results.
@@ -106,8 +109,7 @@ class CAPTURE_EXPORT CameraDeviceContext {
   void LogToClient(std::string message);
 
   // Submits the capture data to |client_->OnIncomingCapturedData|.
-  void SubmitCapturedData(const uint8_t* data,
-                          int length,
+  void SubmitCapturedData(gfx::GpuMemoryBuffer* buffer,
                           const VideoCaptureFormat& frame_format,
                           base::TimeTicks reference_time,
                           base::TimeDelta timestamp);
@@ -115,6 +117,8 @@ class CAPTURE_EXPORT CameraDeviceContext {
   void SetSensorOrientation(int sensor_orientation);
 
   void SetScreenRotation(int screen_rotation);
+
+  int GetCameraFrameOrientation();
 
  private:
   friend class StreamBufferManagerTest;

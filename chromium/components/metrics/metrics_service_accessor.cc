@@ -9,23 +9,34 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/variations/metrics_util.h"
+#include "components/variations/hashing.h"
 
 namespace metrics {
+namespace {
 
-// static
-bool MetricsServiceAccessor::IsMetricsReportingEnabled(
-    PrefService* pref_service) {
-#if defined(GOOGLE_CHROME_BUILD)
+bool g_force_official_enabled_test = false;
+
+bool IsMetricsReportingEnabledForOfficialBuild(PrefService* pref_service) {
   // In official builds, disable metrics when reporting field trials are
   // forced; otherwise, use the value of the user's preference to determine
   // whether to enable metrics reporting.
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
              switches::kForceFieldTrials) &&
          pref_service->GetBoolean(prefs::kMetricsReportingEnabled);
+}
+
+}  // namespace
+
+// static
+bool MetricsServiceAccessor::IsMetricsReportingEnabled(
+    PrefService* pref_service) {
+#if defined(GOOGLE_CHROME_BUILD)
+  return IsMetricsReportingEnabledForOfficialBuild(pref_service);
 #else
   // In non-official builds, disable metrics reporting completely.
-  return false;
+  return g_force_official_enabled_test
+             ? IsMetricsReportingEnabledForOfficialBuild(pref_service)
+             : false;
 #endif  // defined(GOOGLE_CHROME_BUILD)
 }
 
@@ -35,7 +46,8 @@ bool MetricsServiceAccessor::RegisterSyntheticFieldTrial(
     base::StringPiece trial_name,
     base::StringPiece group_name) {
   return RegisterSyntheticFieldTrialWithNameAndGroupHash(
-      metrics_service, HashName(trial_name), HashName(group_name));
+      metrics_service, variations::HashName(trial_name),
+      variations::HashName(group_name));
 }
 
 // static
@@ -47,7 +59,7 @@ bool MetricsServiceAccessor::RegisterSyntheticMultiGroupFieldTrial(
     return false;
 
   metrics_service->synthetic_trial_registry()
-      ->RegisterSyntheticMultiGroupFieldTrial(HashName(trial_name),
+      ->RegisterSyntheticMultiGroupFieldTrial(variations::HashName(trial_name),
                                               group_name_hashes);
   return true;
 }
@@ -58,7 +70,7 @@ bool MetricsServiceAccessor::RegisterSyntheticFieldTrialWithNameHash(
     uint32_t trial_name_hash,
     base::StringPiece group_name) {
   return RegisterSyntheticFieldTrialWithNameAndGroupHash(
-      metrics_service, trial_name_hash, HashName(group_name));
+      metrics_service, trial_name_hash, variations::HashName(group_name));
 }
 
 // static
@@ -73,6 +85,12 @@ bool MetricsServiceAccessor::RegisterSyntheticFieldTrialWithNameAndGroupHash(
   metrics_service->synthetic_trial_registry()->RegisterSyntheticFieldTrial(
       trial_group);
   return true;
+}
+
+// static
+void MetricsServiceAccessor::SetForceIsMetricsReportingEnabledPrefLookup(
+    bool value) {
+  g_force_official_enabled_test = value;
 }
 
 }  // namespace metrics

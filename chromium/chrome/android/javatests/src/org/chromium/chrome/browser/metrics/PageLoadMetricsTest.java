@@ -100,6 +100,8 @@ public class PageLoadMetricsTest {
             if (loadEventStartMs > 0) mLoadEventStartLatch.countDown();
         }
 
+        // Wait methods below assume that the navigation either has already started or it will never
+        // start.
         public boolean waitForFirstContentfulPaintEvent() throws InterruptedException {
             // The event will not occur if there is no navigation to observe, so we can exit
             // earlier.
@@ -120,15 +122,6 @@ public class PageLoadMetricsTest {
         public long getNavigationId() {
             return mNavigationId;
         }
-
-        @Override
-        public void onLoadedMainResource(WebContents webContents, long navigationId,
-                long dnsStartMs, long dnsEndMs, long connectStartMs, long connectEndMs,
-                long requestStartMs, long sendStartMs, long sendEndMs) {}
-
-        @Override
-        public void onNetworkQualityEstimate(WebContents webContents, long navigationId,
-                int effectiveConnectionType, long httpRttMs, long transportRttMs) {}
     }
 
     @Test

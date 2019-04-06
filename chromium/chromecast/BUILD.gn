@@ -18,6 +18,10 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+declare_args() {
+  cast_test_extra_flags = ""
+}
+
 config("playready_config") {
   if (use_playready) {
     defines = [ "PLAYREADY_CDM_AVAILABLE" ]
@@ -62,6 +66,7 @@ cast_test_group("cast_tests") {
     "//chromecast/base:cast_base_unittests",
     "//chromecast/base/component:cast_component_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
+    "//chromecast/device/bluetooth:cast_bluetooth_unittests",
     "//chromecast/media:cast_media_unittests",
     "//chromecast/net:cast_net_unittests",
     "//chromecast/system/reboot:cast_reboot_unittests",
@@ -92,7 +97,10 @@ cast_test_group("cast_tests") {
   }
 
   if (is_linux || is_fuchsia) {
-    tests += [ "//chromecast/media/cma/backend:cast_audio_backend_unittests" ]
+    tests += [
+      "//chromecast/media/cma/backend:cast_audio_backend_unittests",
+      "//chromecast/media/cma/backend:cast_av_sync_backend_unittests",
+    ]
   }
 
   if (!is_android) {
@@ -125,11 +133,6 @@ cast_test_group("cast_tests") {
         "--enable-local-file-accesses",
         "--test-launcher-jobs=1",
       ]
-      if (is_cast_audio_only) {
-        args += [ "--ozone-platform=headless" ]
-      } else {
-        args += [ "--ozone-platform=cast" ]
-      }
       if (!is_cast_desktop_build) {
         args += [ "--use-gpu-in-tests" ]
 
@@ -197,8 +200,11 @@ cast_test_group("cast_tests") {
     gtest_excludes = []
     if (target_os == "linux") {
       if (is_cast_desktop_build) {
-        # Disable PartitionAllocTest.RepeatedReturnNullDirect (b/67975693)
-        gtest_excludes += [ "PartitionAllocTest.RepeatedReturnNullDirect" ]
+        # Disable PartitionAllocDeathTest.Repeated*ReturnNullDirect (b/67975693)
+        gtest_excludes += [
+          "PartitionAllocDeathTest.RepeatedAllocReturnNullDirect",
+          "PartitionAllocDeathTest.RepeatedReallocReturnNullDirect",
+        ]
       } else {
         # Disable ProcessMetricsTest.GetNumberOfThreads (b/15610509)
         # Disable ProcessUtilTest.* (need to define OS_ANDROID)
@@ -250,13 +256,12 @@ cast_test_group("cast_tests") {
     if (target_os == "linux" && !is_cast_desktop_build) {
       # DesktopCaptureDeviceTest.*: No capture device on Eureka
       # Disable PepperGamepadHostTest.WaitForReply (pepper not supported on Eureka)
-      # Disable GpuDataManagerImplPrivateTest.SetGLStrings and
-      # RenderWidgetHostTest.Background because we disable the blacklist to enable WebGL (b/16142554)
+      # Disable RenderWidgetHostTest.Background because we disable the
+      # blacklist to enable WebGL (b/16142554)
       gtest_excludes += [
         "DOMStorageDatabaseTest.TestCanOpenAndReadWebCoreDatabase",
         "DesktopCaptureDeviceTest.Capture",
         "GamepadProviderTest.PollingAccess",
-        "GpuDataManagerImplPrivateTest.SetGLStrings",
         "PepperGamepadHostTest.WaitForReply",
         "RenderWidgetHostTest.Background",
       ]
@@ -330,9 +335,9 @@ cast_test_group("cast_tests") {
       # Run net_unittests first to avoid random failures due to slow python startup
       # URLRequestTestHTTP.GetTest_ManyCookies takes roughly 55s to run. Increase
       # timeout to 90s from 45s to allow it to pass (b/19821476)
-      # ProxyScriptFetcherImplTest.HttpMimeType is flaking (b/19848784)
+      # PacFileFetcherImplTest.HttpMimeType is flaking (b/19848784)
       # Running a batch of net_unittests has high overhead. Run tests in batches of 50 to reduce number of batches (b/23156294).
-      gtest_excludes = [ "ProxyScriptFetcherImplTest.HttpMimeType" ]
+      gtest_excludes = [ "PacFileFetcherImplTest.HttpMimeType" ]
       args = [
         "--test-launcher-timeout=90000",
         "--test-launcher-batch-limit=50",
@@ -361,7 +366,9 @@ cast_test_group_list("cast_test_lists") {
   runtime_deps_path = "$root_out_dir/tests/runtime_deps.json"
   run_list_path = "$root_out_dir/tests/run_test_list.txt"
 
-  additional_options = [ "--ozone-platform=headless --test-launcher-bot-mode" ]
+  additional_options = [
+    "--ozone-platform=headless --test-launcher-bot-mode $cast_test_extra_flags",
+  ]
 
   test_groups = [ ":cast_tests" ]
 
@@ -443,28 +450,31 @@ cast_executable("cast_shell") {
   deps = [
     ":cast_shell_lib",
     ":chromecast_locales_pak",
-    "//build/config:exe_and_shlib_deps",
     "//chromecast/app",
     "//content/public/app:both",
   ]
 }
 
 if (is_fuchsia) {
-  fuchsia_executable_runner("cast_shell_fuchsia") {
-    exe_target = ":cast_shell"
+  fuchsia_package("cast_shell_pkg") {
+    binary = ":cast_shell"
+    package_name_override = "cast_shell"
 
     if (chromecast_branding != "public") {
-      data_deps = [
+      deps = [
         "//chromecast/internal:fuchsia_internal_data_deps",
       ]
     }
+  }
+
+  fuchsia_package_runner("cast_shell_fuchsia") {
+    package = ":cast_shell_pkg"
+    package_name_override = "cast_shell"
   }
 }
 
 repack("cast_shell_pak") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_resources.pak",
-    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/chromecast/app/shell_resources.pak",
     "$root_gen_dir/chromecast/browser/cast_browser_resources.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
@@ -472,6 +482,8 @@ repack("cast_shell_pak") {
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
     "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
@@ -488,19 +500,21 @@ repack("cast_shell_pak") {
     "//content/app/strings",
     "//mojo/public/js:resources",
     "//net:net_resources",
-    "//third_party/WebKit/public:resources",
-    "//third_party/WebKit/public:scaled_resources_100_percent",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
     "//ui/resources",
     "//ui/strings",
   ]
 
   if (enable_chromecast_extensions) {
     sources += [
+      "$root_gen_dir/chromecast/renderer/extensions_renderer_resources.pak",
       "$root_gen_dir/extensions/extensions_renderer_resources.pak",
       "$root_gen_dir/extensions/extensions_resources.pak",
       "$root_gen_dir/extensions/shell/app_shell_resources.pak",
     ]
     deps += [
+      "//chromecast/renderer:extensions_resources",
       "//extensions:extensions_resources",
       "//extensions/shell:resources",
     ]
@@ -551,8 +565,8 @@ group("chromecast_locales_pak") {
   }
 }
 
-buildflag_header("chromecast_features") {
-  header = "chromecast_features.h"
+buildflag_header("chromecast_buildflags") {
+  header = "chromecast_buildflags.h"
   flags = [
     "ENABLE_ASSISTANT=$enable_assistant",
     "ENABLE_VOLUME_TABLES_ACCESS=$enable_volume_tables_access",
@@ -563,6 +577,8 @@ buildflag_header("chromecast_features") {
     "SUPPORTS_MULTIZONE=$supports_multizone",
     "ENABLE_HEADLESS_MUSIC_MODE=$enable_headless_music_mode",
     "ENABLE_CHROMECAST_EXTENSIONS=$enable_chromecast_extensions",
+    "ENABLE_CAST_FRAGMENT=$enable_cast_fragment",
+    "IS_ANDROID_THINGS_NON_PUBLIC=$is_android_things_non_public",
   ]
 }
 

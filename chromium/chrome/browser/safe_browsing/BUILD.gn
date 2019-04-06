@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 proto_library("chunk_proto") {
@@ -16,6 +16,7 @@ static_library("safe_browsing") {
     "chrome_cleaner/chrome_cleaner_controller_impl_win.cc",
     "chrome_cleaner/chrome_cleaner_controller_impl_win.h",
     "chrome_cleaner/chrome_cleaner_controller_win.h",
+    "chrome_cleaner/chrome_cleaner_extensions_util_win.h",
     "chrome_cleaner/chrome_cleaner_fetcher_win.cc",
     "chrome_cleaner/chrome_cleaner_fetcher_win.h",
     "chrome_cleaner/chrome_cleaner_navigation_util_win.cc",
@@ -27,8 +28,6 @@ static_library("safe_browsing") {
     "chrome_cleaner/chrome_cleaner_runner_win.h",
     "chrome_cleaner/chrome_cleaner_scanner_results.cc",
     "chrome_cleaner/chrome_cleaner_scanner_results.h",
-    "chrome_cleaner/chrome_cleaner_state_change_observer_win.cc",
-    "chrome_cleaner/chrome_cleaner_state_change_observer_win.h",
     "chrome_cleaner/reporter_runner_win.cc",
     "chrome_cleaner/reporter_runner_win.h",
     "chrome_cleaner/settings_resetter_win.cc",
@@ -51,6 +50,8 @@ static_library("safe_browsing") {
     "//chrome/app:generated_resources",
     "//components/chrome_cleaner/public/interfaces",
     "//components/safe_browsing/common:interfaces",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
   ]
 
   if (enable_extensions) {
@@ -74,6 +75,12 @@ static_library("safe_browsing") {
     deps += [ "//components/keep_alive_registry" ]
   }
 
+  if (is_chrome_branded && is_win) {
+    sources += [ "chrome_cleaner/chrome_cleaner_extension_util_win.cc" ]
+  } else {
+    sources += [ "chrome_cleaner/chrome_cleaner_extension_util_win_noop.cc" ]
+  }
+
   if (safe_browsing_mode != 0) {
     # "Safe Browsing Basic" files used for safe browsing in full mode
     # (safe_browsing=1) and mobile (=2)
@@ -86,12 +93,6 @@ static_library("safe_browsing") {
       "certificate_reporting_service.h",
       "certificate_reporting_service_factory.cc",
       "certificate_reporting_service_factory.h",
-      "notification_image_reporter.cc",
-      "notification_image_reporter.h",
-      "permission_reporter.cc",
-      "permission_reporter.h",
-      "ping_manager.cc",
-      "ping_manager.h",
       "safe_browsing_blocking_page.cc",
       "safe_browsing_blocking_page.h",
       "safe_browsing_navigation_observer.cc",
@@ -105,6 +106,8 @@ static_library("safe_browsing") {
       "test_safe_browsing_blocking_page_quiet.h",
       "test_safe_browsing_service.cc",
       "test_safe_browsing_service.h",
+      "trigger_creator.cc",
+      "trigger_creator.h",
       "ui_manager.cc",
       "ui_manager.h",
     ]
@@ -115,9 +118,13 @@ static_library("safe_browsing") {
       "//components/safe_browsing:safe_browsing",
       "//components/safe_browsing/browser:browser",
       "//components/safe_browsing/common:common",
+      "//components/safe_browsing/common:safe_browsing_prefs",
       "//components/safe_browsing/db:metadata_proto",
       "//components/safe_browsing/db:whitelist_checker_client",
       "//components/safe_browsing/password_protection",
+      "//components/safe_browsing/triggers:ad_sampler_trigger",
+      "//components/safe_browsing/triggers:suspicious_site_trigger",
+      "//components/safe_browsing/triggers:trigger_throttler",
       "//components/safe_browsing/triggers:triggers",
     ]
     if (safe_browsing_mode == 1) {
@@ -227,18 +234,13 @@ static_library("safe_browsing") {
         "services_delegate_impl.h",
         "signature_evaluator_mac.h",
         "signature_evaluator_mac.mm",
-        "trigger_creator.cc",
-        "trigger_creator.h",
       ]
       deps += [
         "//chrome/services/file_util/public/cpp",
         "//components/content_settings/core/browser:browser",
+        "//components/language/core/common:common",
         "//components/prefs:prefs",
-        "//components/safe_browsing/common:safe_browsing_prefs",
         "//components/safe_browsing/db:db",
-        "//components/safe_browsing/triggers:ad_sampler_trigger",
-        "//components/safe_browsing/triggers:trigger_throttler",
-        "//components/safe_browsing/triggers:triggers",
         "//components/security_interstitials/content:security_interstitial_page",
         "//content/public/browser:browser",
         "//net:net",

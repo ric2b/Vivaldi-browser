@@ -8,11 +8,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator_delegate.h"
 #include "content/common/content_export.h"
 #include "content/common/navigation_params.mojom.h"
 #include "content/public/browser/navigation_controller.h"
-#include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
+#include "third_party/blink/public/web/web_triggering_event_info.h"
 #include "ui/base/window_open_disposition.h"
 
 class GURL;
@@ -31,7 +32,6 @@ namespace content {
 
 class FrameNavigationEntry;
 class FrameTreeNode;
-class NavigationRequest;
 class RenderFrameHostImpl;
 struct CommonNavigationParams;
 
@@ -81,35 +81,28 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   virtual void DidNavigate(
       RenderFrameHostImpl* render_frame_host,
       const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
-      std::unique_ptr<NavigationHandleImpl> navigation_handle) {}
-
-  // Called by the NavigationController to cause the Navigator to navigate
-  // to the current pending entry. The NavigationController should be called
-  // back with RendererDidNavigate on success or DiscardPendingEntry on failure.
-  // The callbacks can be inside of this function, or at some future time.
-  //
-  // If this method returns false, then the navigation is discarded (equivalent
-  // to calling DiscardPendingEntry on the NavigationController).
-  //
-  // TODO(nasko): Remove this method from the interface, since Navigator and
-  // NavigationController know about each other. This will be possible once
-  // initialization of Navigator and NavigationController is properly done.
-  virtual bool NavigateToPendingEntry(FrameTreeNode* frame_tree_node,
-                                      const FrameNavigationEntry& frame_entry,
-                                      ReloadType reload_type,
-                                      bool is_same_document_history_load);
+      std::unique_ptr<NavigationHandleImpl> navigation_handle,
+      bool was_within_same_document) {}
 
   // Called on a newly created subframe during a history navigation. The browser
   // process looks up the corresponding FrameNavigationEntry for the new frame
   // navigates it in the correct process. Returns false if the
-  // FrameNavigationEntry can't be found or the navigation fails. This is only
-  // used in OOPIF-enabled modes.
+  // FrameNavigationEntry can't be found or the navigation fails.
   // TODO(creis): Remove |default_url| once we have collected UMA stats on the
   // cases that we use a different URL from history than the frame's src.
-  virtual bool NavigateNewChildFrame(RenderFrameHostImpl* render_frame_host,
-                                     const GURL& default_url);
+  virtual bool StartHistoryNavigationInNewSubframe(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& default_url);
 
   // Navigation requests -------------------------------------------------------
+
+  // Called by the NavigationController to cause the Navigator to navigate to
+  // |navigation_request|. The NavigationController should be called back with
+  // RendererDidNavigate on success or DiscardPendingEntry on failure. The
+  // callbacks should be called in a future iteration of the message loop.
+  virtual void Navigate(std::unique_ptr<NavigationRequest> request,
+                        ReloadType reload_type,
+                        RestoreType restore_type) {}
 
   virtual base::TimeTicks GetCurrentLoadStart();
 
@@ -126,25 +119,22 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       bool should_replace_current_entry,
       bool user_gesture,
       blink::WebTriggeringEventInfo triggering_event_info,
-      const base::Optional<std::string>& suggested_filename) {}
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory) {}
 
-  // The RenderFrameHostImpl wants to transfer the request to a new renderer.
-  // |redirect_chain| contains any redirect URLs (excluding |url|) that happened
-  // before the transfer.  If |method| is "POST", then |post_body| needs to
-  // specify the request body, otherwise |post_body| should be null.
-  virtual void RequestTransferURL(
+  // Called when a document requests a navigation in another document through a
+  // RenderFrameProxy. If |method| is "POST", then |post_body| needs to specify
+  // the request body, otherwise |post_body| should be null.
+  virtual void NavigateFromFrameProxy(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
       SiteInstance* source_site_instance,
-      const std::vector<GURL>& redirect_chain,
       const Referrer& referrer,
       ui::PageTransition page_transition,
-      const GlobalRequestID& transferred_global_request_id,
       bool should_replace_current_entry,
       const std::string& method,
       scoped_refptr<network::ResourceRequestBody> post_body,
       const std::string& extra_headers,
-      const base::Optional<std::string>& suggested_filename) {}
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory) {}
 
   // Called after receiving a BeforeUnloadACK IPC from the renderer. If
   // |frame_tree_node| has a NavigationRequest waiting for the renderer
@@ -156,11 +146,20 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
 
   // Used to start a new renderer-initiated navigation, following a
   // BeginNavigation IPC from the renderer.
-  virtual void OnBeginNavigation(FrameTreeNode* frame_tree_node,
-                                 const CommonNavigationParams& common_params,
-                                 mojom::BeginNavigationParamsPtr begin_params);
+  virtual void OnBeginNavigation(
+      FrameTreeNode* frame_tree_node,
+      const CommonNavigationParams& common_params,
+      mojom::BeginNavigationParamsPtr begin_params,
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
+      mojom::NavigationClientAssociatedPtrInfo navigation_client);
+
+  // Used to restart a navigation that was thought to be same-document in
+  // cross-document mode.
+  virtual void RestartNavigationAsCrossDocument(
+      std::unique_ptr<NavigationRequest> navigation_request) {}
 
   // Used to abort an ongoing renderer-initiated navigation.
+  // Only used with PerNavigationMojoInterface disabled.
   virtual void OnAbortNavigation(FrameTreeNode* frame_tree_node) {}
 
   // Cancel a NavigationRequest for |frame_tree_node|. If the request is

@@ -50,8 +50,8 @@ const char* DefaultMessageForStatusCode(StatusCode code) {
       return "invalid cookie domain";
     case kUnexpectedAlertOpen:
       return "unexpected alert open";
-    case kNoAlertOpen:
-      return "no alert open";
+    case kNoSuchAlert:
+      return "no such alert";
     case kScriptTimeout:
       return "asynchronous script timeout";
     case kInvalidSelector:
@@ -72,6 +72,8 @@ const char* DefaultMessageForStatusCode(StatusCode code) {
       return "no such cookie";
     case kUnableToSetCookie:
       return "unable to set cookie";
+    case kTargetDetached:
+      return "target frame detached";
     default:
       return "<unknown>";
   }

@@ -8,20 +8,22 @@
 #include <utility>
 
 #include "base/base_switches.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/pattern.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/login_delegate.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
+#include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
@@ -32,18 +34,18 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_browser_main_parts.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
+#include "content/shell/browser/shell_login_dialog.h"
 #include "content/shell/browser/shell_net_log.h"
 #include "content/shell/browser/shell_quota_permission_context.h"
-#include "content/shell/browser/shell_resource_dispatcher_host_delegate.h"
 #include "content/shell/browser/shell_web_contents_view_delegate_creator.h"
 #include "content/shell/common/shell_messages.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/grit/shell_resources.h"
-#include "media/mojo/features.h"
+#include "media/mojo/buildflags.h"
 #include "net/ssl/client_cert_identity.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/test/echo/public/interfaces/echo.mojom.h"
+#include "services/test/echo/public/mojom/echo.mojom.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
@@ -52,7 +54,7 @@
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
 #include "base/android/path_utils.h"
-#include "components/crash/content/browser/crash_dump_observer_android.h"
+#include "components/crash/content/browser/child_exit_observer_android.h"
 #include "content/shell/android/shell_descriptors.h"
 #endif
 
@@ -208,7 +210,8 @@ void ShellContentBrowserClient::BindInterfaceRequestFromFrame(
 }
 
 void ShellContentBrowserClient::RegisterInProcessServices(
-    StaticServiceMap* services) {
+    StaticServiceMap* services,
+    content::ServiceManagerConnection* connection) {
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   {
     service_manager::EmbeddedServiceInfo info;
@@ -220,8 +223,10 @@ void ShellContentBrowserClient::RegisterInProcessServices(
 
 void ShellContentBrowserClient::RegisterOutOfProcessServices(
     OutOfProcessServiceMap* services) {
-  (*services)[kTestServiceUrl] = base::UTF8ToUTF16("Test Service");
-  (*services)[echo::mojom::kServiceName] = base::UTF8ToUTF16("Echo Service");
+  (*services)[kTestServiceUrl] =
+      base::BindRepeating(&base::ASCIIToUTF16, "Test Service");
+  (*services)[echo::mojom::kServiceName] =
+      base::BindRepeating(&base::ASCIIToUTF16, "Echo Service");
 }
 
 bool ShellContentBrowserClient::ShouldTerminateOnServiceQuit(
@@ -289,7 +294,7 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
 
 void ShellContentBrowserClient::ResourceDispatcherHostCreated() {
   resource_dispatcher_host_delegate_.reset(
-      new ShellResourceDispatcherHostDelegate);
+      new ResourceDispatcherHostDelegate());
   ResourceDispatcherHost::Get()->SetDelegate(
       resource_dispatcher_host_delegate_.get());
 }
@@ -348,6 +353,29 @@ void ShellContentBrowserClient::OpenURL(
                                       gfx::Size())->web_contents());
 }
 
+scoped_refptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
+    net::AuthChallengeInfo* auth_info,
+    content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+    const content::GlobalRequestID& request_id,
+    bool is_main_frame,
+    const GURL& url,
+    scoped_refptr<net::HttpResponseHeaders> response_headers,
+    bool first_auth_attempt,
+    LoginAuthRequiredCallback auth_required_callback) {
+  if (!login_request_callback_.is_null()) {
+    std::move(login_request_callback_).Run();
+    return nullptr;
+  }
+
+#if !defined(OS_MACOSX)
+  // TODO: implement ShellLoginDialog for other platforms, drop this #if
+  return nullptr;
+#else
+  return base::MakeRefCounted<ShellLoginDialog>(
+      auth_info, std::move(auth_required_callback));
+#endif
+}
+
 #if defined(OS_LINUX) || defined(OS_ANDROID)
 void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
     const base::CommandLine& command_line,
@@ -359,12 +387,12 @@ void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
       base::GlobalDescriptors::GetInstance()->Get(kShellPakDescriptor),
       base::GlobalDescriptors::GetInstance()->GetRegion(kShellPakDescriptor));
 
-  breakpad::CrashDumpObserver::GetInstance()->BrowserChildProcessStarted(
+  crash_reporter::ChildExitObserver::GetInstance()->BrowserChildProcessStarted(
       child_process_id, mappings);
 #else
   int crash_signal_fd = GetCrashSignalFD(command_line);
   if (crash_signal_fd >= 0) {
-    mappings->Share(kCrashDumpSignal, crash_signal_fd);
+    mappings->Share(service_manager::kCrashDumpSignal, crash_signal_fd);
   }
 #endif  // !defined(OS_ANDROID)
 }

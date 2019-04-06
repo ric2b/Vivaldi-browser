@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
+<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved.</translation>
+<translation id="3850557856045828465">Warning: Vivaldi cannot prevent extensions from recording your browsing history. To disable this extension in incognito mode, unselect this option.</translation>
+<translation id="5743878272102782872">Task Manager - Vivaldi</translation>
 </translationbundle>

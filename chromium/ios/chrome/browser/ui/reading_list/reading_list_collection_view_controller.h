@@ -7,72 +7,26 @@
 
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
 
-#import "ios/chrome/browser/ui/reading_list/reading_list_toolbar.h"
+#import "ios/chrome/browser/ui/reading_list/legacy_reading_list_toolbar.h"
+#import "ios/chrome/browser/ui/reading_list/reading_list_list_item_accessibility_delegate.h"
 
-@class ReadingListCollectionViewController;
 @protocol ReadingListDataSource;
-
-// Audience for the ReadingListCollectionViewController
-@protocol ReadingListCollectionViewControllerAudience
-
-// Whether the collection has items.
-- (void)readingListHasItems:(BOOL)hasItems;
-
-@end
-
-// Delegate for the ReadingListCollectionViewController, managing the visibility
-// of the toolbar, dismissing the Reading List View and opening elements.
-@protocol ReadingListCollectionViewControllerDelegate<NSObject>
-
-// Dismisses the Reading List View.
-- (void)dismissReadingListCollectionViewController:
-    (ReadingListCollectionViewController*)readingListCollectionViewController;
-
-// Displays the context menu for the |readingListItem|. The |menuLocation| is
-// the anchor of the context menu in the
-// readingListCollectionViewController.collectionView coordinates.
-- (void)readingListCollectionViewController:
-            (ReadingListCollectionViewController*)
-                readingListCollectionViewController
-                  displayContextMenuForItem:(CollectionViewItem*)readingListItem
-                                    atPoint:(CGPoint)menuLocation;
-
-// Opens the entry corresponding to the |readingListItem|.
-- (void)
-readingListCollectionViewController:
-    (ReadingListCollectionViewController*)readingListCollectionViewController
-                           openItem:(CollectionViewItem*)readingListItem;
-
-// Opens the entry corresponding to the |item| in a new tab, |incognito| or not.
-- (void)readingListCollectionViewController:
-            (ReadingListCollectionViewController*)
-                readingListCollectionViewController
-                           openItemInNewTab:(CollectionViewItem*)item
-                                  incognito:(BOOL)incognito;
-
-// Opens the offline version of the entry corresponding to the |item| in a new
-// tab, if available.
-- (void)readingListCollectionViewController:
-            (ReadingListCollectionViewController*)
-                readingListCollectionViewController
-                    openItemOfflineInNewTab:(CollectionViewItem*)item;
-
-@end
+@protocol ReadingListListViewControllerAudience;
+@protocol ReadingListListViewControllerDelegate;
 
 @interface ReadingListCollectionViewController
-    : CollectionViewController<ReadingListToolbarActions>
+    : CollectionViewController<ReadingListListItemAccessibilityDelegate,
+                               LegacyReadingListToolbarActions>
 
 - (instancetype)initWithDataSource:(id<ReadingListDataSource>)dataSource
-                           toolbar:(ReadingListToolbar*)toolbar
+                           toolbar:(LegacyReadingListToolbar*)toolbar
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithLayout:(UICollectionViewLayout*)layout
                          style:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;
 
-@property(nonatomic, weak) id<ReadingListCollectionViewControllerDelegate>
-    delegate;
-@property(nonatomic, weak) id<ReadingListCollectionViewControllerAudience>
-    audience;
+@property(nonatomic, weak) id<ReadingListListViewControllerDelegate> delegate;
+@property(nonatomic, weak) id<ReadingListListViewControllerAudience> audience;
 @property(nonatomic, weak) id<ReadingListDataSource> dataSource;
 
 // Prepares this view controller to be dismissed.

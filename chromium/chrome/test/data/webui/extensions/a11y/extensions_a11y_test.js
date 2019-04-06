@@ -12,22 +12,16 @@ GEN_INCLUDE([
 ]);
 GEN('#include "chrome/browser/ui/webui/extensions/' +
     'extension_settings_browsertest.h"');
-GEN('#include "chrome/common/chrome_features.h"');
 
 /**
  * Test fixture for Accessibility of Chrome Extensions.
  * @constructor
  * @extends {PolymerTest}
  */
-var CrExtensionsA11yTest = class extends PolymerTest {
+CrExtensionsA11yTest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
     return 'chrome://extensions/';
-  }
-
-  /** @override */
-  get featureList() {
-    return ['features::kMaterialDesignExtensions', ''];
   }
 
   // Include files that define the mocha tests.
@@ -60,7 +54,15 @@ var CrExtensionsA11yTest = class extends PolymerTest {
                 node.element, 'iron-iconset-svg');
           });
         });
-      }
+      },
+      'button-name': function(nodeResult) {
+        const parentNode = nodeResult.element.parentNode;
+
+        // Ignore the <button> residing within cr-toggle, which has tabindex -1
+        // anyway.
+        return parentNode && parentNode.host &&
+            parentNode.host.tagName == 'CR-TOGGLE';
+      },
     };
   }
 
@@ -97,16 +99,14 @@ AccessibilityTest.define('CrExtensionsA11yTest', {
   /** @override */
   tests: {
     'Accessible with No Extensions': function() {
-      let list =
-          document.querySelector('* /deep/ #items-list');
+      let list = document.querySelector('* /deep/ #items-list');
       assertEquals(list.extensions.length, 0);
       assertEquals(list.apps.length, 0);
     }
   },
 });
 
-var CrExtensionsA11yTestWithMultipleExensions =
-    class extends CrExtensionsA11yTest {
+CrExtensionsA11yTestWithMultipleExensions = class extends CrExtensionsA11yTest {
   /** @override */
   testGenPreamble() {
     GEN('  InstallGoodExtension();');
@@ -129,15 +129,14 @@ AccessibilityTest.define('CrExtensionsA11yTestWithMultipleExensions', {
   /** @override */
   tests: {
     'Accessible with Extensions and Apps': function() {
-      let list =
-          document.querySelector('* /deep/ #items-list');
+      let list = document.querySelector('* /deep/ #items-list');
       assertEquals(list.extensions.length, 1);
       assertEquals(list.apps.length, 3);
     },
   },
 });
 
-var CrExtensionsShortcutA11yTestWithNoExtensions =
+CrExtensionsShortcutA11yTestWithNoExtensions =
     class extends CrExtensionsA11yTest {
   /** @override */
   get browsePreload() {
@@ -158,14 +157,14 @@ AccessibilityTest.define('CrExtensionsShortcutA11yTestWithNoExtensions', {
   /** @override */
   tests: {
     'Accessible with No Extensions or Apps': function() {
-      let list = document.querySelector(
-          '* /deep/ extensions-keyboard-shortcuts');
+      let list =
+          document.querySelector('* /deep/ extensions-keyboard-shortcuts');
       assertEquals(list.items.length, 0);
     },
   },
 });
 
-var CrExtensionsShortcutA11yTestWithExtensions =
+CrExtensionsShortcutA11yTestWithExtensions =
     class extends CrExtensionsShortcutA11yTestWithNoExtensions {
   /** @override */
   testGenPreamble() {
@@ -186,14 +185,14 @@ AccessibilityTest.define('CrExtensionsShortcutA11yTestWithExtensions', {
   /** @override */
   tests: {
     'Accessible with Extensions': function() {
-      let list = document.querySelector(
-          '* /deep/ extensions-keyboard-shortcuts');
+      let list =
+          document.querySelector('* /deep/ extensions-keyboard-shortcuts');
       assertEquals(list.items.length, 1);
     },
   },
 });
 
-var CrExtensionsErrorConsoleA11yTest =
+CrExtensionsErrorConsoleA11yTest =
     class extends CrExtensionsShortcutA11yTestWithNoExtensions {
   /** @override */
   get browsePreload() {

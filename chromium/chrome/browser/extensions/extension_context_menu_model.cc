@@ -29,6 +29,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
+#include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/context_menu_params.h"
@@ -209,7 +210,7 @@ bool ExtensionContextMenuModel::IsCommandIdEnabled(int command_id) const {
       content::WebContents* web_contents = GetActiveWebContents();
       return web_contents && extension_action_ &&
              extension_action_->HasPopup(
-                 SessionTabHelper::IdForTab(web_contents));
+                 SessionTabHelper::IdForTab(web_contents).id());
     }
     case UNINSTALL:
       return !IsExtensionRequiredByPolicy(extension, profile_);
@@ -372,8 +373,8 @@ ExtensionContextMenuModel::GetCurrentPageAccess(
     const Extension* extension,
     content::WebContents* web_contents) const {
   ScriptingPermissionsModifier modifier(profile_, extension);
-  DCHECK(modifier.HasAffectedExtension());
-  if (modifier.IsAllowedOnAllUrls())
+  DCHECK(modifier.CanAffectExtension());
+  if (!modifier.HasWithheldHostPermissions())
     return PAGE_ACCESS_RUN_ON_ALL_SITES;
   if (modifier.HasGrantedHostPermission(
           GetActiveWebContents()->GetLastCommittedURL()))
@@ -385,8 +386,7 @@ void ExtensionContextMenuModel::CreatePageAccessSubmenu(
     const Extension* extension) {
   content::WebContents* web_contents = GetActiveWebContents();
   if (!web_contents ||
-      !ScriptingPermissionsModifier(profile_, extension)
-           .HasAffectedExtension()) {
+      !ScriptingPermissionsModifier(profile_, extension).CanAffectExtension()) {
     return;
   }
   page_access_submenu_.reset(new ui::SimpleMenuModel(this));
@@ -394,16 +394,19 @@ void ExtensionContextMenuModel::CreatePageAccessSubmenu(
   page_access_submenu_->AddRadioItemWithStringId(
       PAGE_ACCESS_RUN_ON_CLICK,
       IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_CLICK, kRadioGroup);
+  // TODO(https://crbug.com/857235): We should update these options based on
+  // the withheld permissions for the extension.
+  page_access_submenu_->AddRadioItemWithStringId(
+      PAGE_ACCESS_RUN_ON_ALL_SITES,
+      IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_ALL_SITES, kRadioGroup);
   page_access_submenu_->AddRadioItem(
       PAGE_ACCESS_RUN_ON_SITE,
       l10n_util::GetStringFUTF16(
           IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE,
-          base::UTF8ToUTF16(
-              web_contents->GetLastCommittedURL().GetOrigin().spec())),
+          url_formatter::StripWWW(base::UTF8ToUTF16(
+              url::Origin::Create(web_contents->GetLastCommittedURL())
+                  .host()))),
       kRadioGroup);
-  page_access_submenu_->AddRadioItemWithStringId(
-      PAGE_ACCESS_RUN_ON_ALL_SITES,
-      IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_ALL_SITES, kRadioGroup);
 
   AddSubMenuWithStringId(PAGE_ACCESS_SUBMENU,
                          IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS,
@@ -423,22 +426,22 @@ void ExtensionContextMenuModel::HandlePageAccessCommand(
 
   const GURL& url = web_contents->GetLastCommittedURL();
   ScriptingPermissionsModifier modifier(profile_, extension);
-  DCHECK(modifier.HasAffectedExtension());
+  DCHECK(modifier.CanAffectExtension());
   switch (command_id) {
     case PAGE_ACCESS_RUN_ON_CLICK:
       if (current_access == PAGE_ACCESS_RUN_ON_ALL_SITES)
-        modifier.SetAllowedOnAllUrls(false);
+        modifier.SetWithholdHostPermissions(true);
       if (modifier.HasGrantedHostPermission(url))
         modifier.RemoveGrantedHostPermission(url);
       break;
     case PAGE_ACCESS_RUN_ON_SITE:
       if (current_access == PAGE_ACCESS_RUN_ON_ALL_SITES)
-        modifier.SetAllowedOnAllUrls(false);
+        modifier.SetWithholdHostPermissions(true);
       if (!modifier.HasGrantedHostPermission(url))
         modifier.GrantHostPermission(url);
       break;
     case PAGE_ACCESS_RUN_ON_ALL_SITES:
-      modifier.SetAllowedOnAllUrls(true);
+      modifier.SetWithholdHostPermissions(false);
       break;
     default:
       NOTREACHED();

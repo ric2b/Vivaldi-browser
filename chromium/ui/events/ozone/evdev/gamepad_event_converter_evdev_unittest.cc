@@ -18,7 +18,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
@@ -72,8 +71,9 @@ class GamepadEventConverterEvdevTest : public testing::Test {
     event_factory_ = ui::CreateEventFactoryEvdevForTest(
         nullptr, device_manager_.get(),
         ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine(),
-        base::Bind(&GamepadEventConverterEvdevTest::DispatchEventForTest,
-                   base::Unretained(this)));
+        base::BindRepeating(
+            &GamepadEventConverterEvdevTest::DispatchEventForTest,
+            base::Unretained(this)));
     dispatcher_ =
         ui::CreateDeviceEventDispatcherEvdevForTest(event_factory_.get());
   }

@@ -25,7 +25,6 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/dbus/cryptohome_client.h"
-#include "chromeos/system/version_loader.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_member.h"
 #include "ui/base/idle/idle.h"
@@ -41,6 +40,7 @@ namespace user_manager {
 class User;
 }
 
+class PrefChangeRegistrar;
 class PrefRegistrySimple;
 class PrefService;
 class Profile;
@@ -91,14 +91,19 @@ class DeviceStatusCollector {
   // Constructor. Callers can inject their own *Fetcher callbacks, e.g. for unit
   // testing. A null callback can be passed for any *Fetcher parameter, to use
   // the default implementation. These callbacks are always executed on Blocking
-  // Pool.
-  DeviceStatusCollector(
-      PrefService* local_state,
-      chromeos::system::StatisticsProvider* provider,
-      const VolumeInfoFetcher& volume_info_fetcher,
-      const CPUStatisticsFetcher& cpu_statistics_fetcher,
-      const CPUTempFetcher& cpu_temp_fetcher,
-      const AndroidStatusFetcher& android_status_fetcher);
+  // Pool. Caller is responsible for passing already initialized |pref_service|.
+  // |activity_day_start| indicates what time does the new day start for
+  // activity reporting daily data aggregation. It is represented by the
+  // distance from midnight. If |is_enterprise_device| additional enterprise
+  // relevant status data will be reported.
+  DeviceStatusCollector(PrefService* pref_service,
+                        chromeos::system::StatisticsProvider* provider,
+                        const VolumeInfoFetcher& volume_info_fetcher,
+                        const CPUStatisticsFetcher& cpu_statistics_fetcher,
+                        const CPUTempFetcher& cpu_temp_fetcher,
+                        const AndroidStatusFetcher& android_status_fetcher,
+                        base::TimeDelta activity_day_start,
+                        bool is_enterprise_reporting);
   virtual ~DeviceStatusCollector();
 
   // Gathers device and session status information and calls the passed response
@@ -146,28 +151,17 @@ class DeviceStatusCollector {
   // next device status update.
   void SampleResourceUsage();
 
-  // The number of days in the past to store device activity.
+  // The timeout in the past to store device activity.
   // This is kept in case device status uploads fail for a number of days.
-  unsigned int max_stored_past_activity_days_;
+  base::TimeDelta max_stored_past_activity_interval_;
 
-  // The number of days in the future to store device activity.
+  // The timeout in the future to store device activity.
   // When changing the system time and/or timezones, it's possible to record
   // activity time that is slightly in the future.
-  unsigned int max_stored_future_activity_days_;
+  base::TimeDelta max_stored_future_activity_interval_;
 
  private:
-  // Prevents the local store of activity periods from growing too large by
-  // removing entries that are outside the reporting window.
-  void PruneStoredActivityPeriods(base::Time base_time);
-
-  // Trims the store activity periods to only retain data within the
-  // [|min_day_key|, |max_day_key|). The record for |min_day_key| will be
-  // adjusted by subtracting |min_day_trim_duration|.
-  void TrimStoredActivityPeriods(int64_t min_day_key,
-                                 int min_day_trim_duration,
-                                 int64_t max_day_key);
-
-  void AddActivePeriod(base::Time start, base::Time end);
+  class ActivityStorage;
 
   // Clears the cached hardware resource usage.
   void ClearCachedResourceUsage();
@@ -218,7 +212,20 @@ class DeviceStatusCollector {
   // Callback invoked to update our cpu usage information.
   void ReceiveCPUStatistics(const std::string& statistics);
 
-  PrefService* const local_state_;
+  // Callback invoked when reporting users pref is changed.
+  void ReportingUsersChanged();
+
+  // Returns user's email if it should be included in the activity reports or
+  // empty string otherwise. Primary user is used as unique identifier of a
+  // single session, even for multi-user sessions.
+  std::string GetUserForActivityReporting() const;
+
+  // Returns whether users' email addresses should be included in activity
+  // reports.
+  bool IncludeEmailsInActivityReports() const;
+
+  // Pref service that is mainly used to store activity periods for reporting.
+  PrefService* const pref_service_;
 
   // The last time an idle state check was performed.
   base::Time last_idle_check_;
@@ -265,6 +272,9 @@ class DeviceStatusCollector {
 
   chromeos::CrosSettings* const cros_settings_;
 
+  // Stores and filters activity periods used for reporting.
+  std::unique_ptr<ActivityStorage> activity_storage_;
+
   // The most recent CPU readings.
   uint64_t last_cpu_active_ = 0;
   uint64_t last_cpu_idle_ = 0;
@@ -279,6 +289,9 @@ class DeviceStatusCollector {
   bool report_kiosk_session_status_ = false;
   bool report_os_update_status_ = false;
   bool report_running_kiosk_app_ = false;
+
+  // Whether reporting is for enterprise or consumer.
+  bool is_enterprise_reporting_ = false;
 
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       version_info_subscription_;
@@ -298,6 +311,8 @@ class DeviceStatusCollector {
       os_update_status_subscription_;
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       running_kiosk_app_subscription_;
+
+  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 
   // Task runner in the creation thread where responses are sent to.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;

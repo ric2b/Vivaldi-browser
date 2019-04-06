@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ios/web/navigation/wk_navigation_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -52,13 +53,17 @@ TEST_F(NavigationItemTest, Dummy) {
 // Tests that the debug description is as expected.
 TEST_F(NavigationItemTest, Description) {
   item_->SetTitle(base::UTF8ToUTF16("Title"));
-  EXPECT_NSEQ(@"url:http://init.test/ originalurl:http://init.test/ referrer:  "
-              @"title:Title transition:2 displayState:{ scrollOffset:(nan, "
-              @"nan), zoomScaleRange:(nan, nan), zoomScale:nan } "
-              @"userAgentType:MOBILE is_create_from_push_state: false "
-              @"has_state_been_replaced: false is_created_from_hash_change: "
-              @"false navigation_initiation_type: 0",
-              item_->GetDescription());
+  NSString* description = item_->GetDescription();
+  EXPECT_TRUE([description containsString:@"url:http://init.test/"]);
+  EXPECT_TRUE([description containsString:@"originalurl:http://init.test/"]);
+  EXPECT_TRUE([description containsString:@"title:Title"]);
+  EXPECT_TRUE([description containsString:@"transition:2"]);
+  EXPECT_TRUE([description containsString:@"userAgentType:MOBILE"]);
+  EXPECT_TRUE([description containsString:@"is_create_from_push_state: false"]);
+  EXPECT_TRUE([description containsString:@"has_state_been_replaced: false"]);
+  EXPECT_TRUE(
+      [description containsString:@"is_created_from_hash_change: false"]);
+  EXPECT_TRUE([description containsString:@"navigation_initiation_type: 0"]);
 }
 #endif
 

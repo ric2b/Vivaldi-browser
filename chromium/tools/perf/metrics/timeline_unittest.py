@@ -15,81 +15,6 @@ def _GetInteractionRecord(start, end):
   return tir_module.TimelineInteractionRecord('test-record', start, end)
 
 
-class LoadTimesTimelineMetric(unittest.TestCase):
-
-  def GetResults(self, metric, model, renderer_thread, interaction_records):
-    results = test_page_test_results.TestPageTestResults(self)
-    metric.AddResults(model, renderer_thread, interaction_records, results)
-    return results
-
-  def testSanitizing(self):
-    model = model_module.TimelineModel()
-    renderer_main = model.GetOrCreateProcess(1).GetOrCreateThread(2)
-    renderer_main.name = 'CrRendererMain'
-
-    # [      X       ]
-    #      [  Y  ]
-    renderer_main.BeginSlice('cat1', 'x.y', 10, 0)
-    renderer_main.EndSlice(20, 20)
-    model.FinalizeImport()
-
-    metric = timeline.LoadTimesTimelineMetric()
-    results = self.GetResults(
-        metric, model=model, renderer_thread=renderer_main,
-        interaction_records=[_GetInteractionRecord(0, float('inf'))])
-    results.AssertHasPageSpecificScalarValue(
-        'CrRendererMain|x_y', 'ms', 10)
-    results.AssertHasPageSpecificScalarValue(
-        'CrRendererMain|x_y_max', 'ms', 10)
-    results.AssertHasPageSpecificScalarValue(
-        'CrRendererMain|x_y_avg', 'ms', 10)
-
-  def testTimelineBetweenRange(self):
-    model = model_module.TimelineModel()
-    renderer_main = model.GetOrCreateProcess(1).GetOrCreateThread(2)
-    renderer_main.name = 'CrRendererMain'
-
-    #   [          X         ]    [       Z      ]
-    #           [  Y  ]               [   T    ]
-    #   [ interaction record ]
-    renderer_main.BeginSlice('cat1', 'x.y', 10, 0)
-    renderer_main.EndSlice(20, 20)
-    renderer_main.BeginSlice('cat1', 'z.t', 30, 0)
-    renderer_main.EndSlice(35, 35)
-    model.FinalizeImport()
-
-    metric = timeline.LoadTimesTimelineMetric()
-    results = self.GetResults(
-        metric, model=model, renderer_thread=renderer_main,
-        interaction_records=[_GetInteractionRecord(10, 20)])
-    results.AssertHasPageSpecificScalarValue(
-        'CrRendererMain|x_y', 'ms', 10)
-    results.AssertHasPageSpecificScalarValue(
-        'CrRendererMain|x_y_max', 'ms', 10)
-    results.AssertHasPageSpecificScalarValue(
-        'CrRendererMain|x_y_avg', 'ms', 10)
-
-  def testCounterSanitizing(self):
-    model = model_module.TimelineModel()
-    renderer_main = model.GetOrCreateProcess(1).GetOrCreateThread(2)
-    renderer_main.name = 'CrRendererMain'
-
-    x_counter = renderer_main.parent.GetOrCreateCounter('cat', 'x.y')
-    x_counter.samples += [1, 2]
-    x_counter.series_names += ['a']
-    x_counter.timestamps += [0, 1]
-    model.FinalizeImport()
-
-    metric = timeline.LoadTimesTimelineMetric()
-    results = self.GetResults(
-        metric, model=model, renderer_thread=renderer_main,
-        interaction_records=[_GetInteractionRecord(0, float('inf'))])
-    results.AssertHasPageSpecificScalarValue(
-        'cat_x_y', 'count', 3)
-    results.AssertHasPageSpecificScalarValue(
-        'cat_x_y_avg', 'count', 1.5)
-
-
 class ThreadTimesTimelineMetricUnittest(unittest.TestCase):
 
   def GetResults(self, metric, model, renderer_thread, interaction_record):
@@ -122,9 +47,11 @@ class ThreadTimesTimelineMetricUnittest(unittest.TestCase):
     # an interaction that lasts 20 milliseconds.
     cc_main = model.GetOrCreateProcess(1).GetOrCreateThread(3)
     cc_main.name = 'Compositor'
-    cc_main.BeginSlice('cc_cat', timeline.FrameTraceName, 10, 10)
+    cc_main.BeginSlice('cc_cat', timeline.FrameTraceName, 10, 10,
+        args={'step': 'GenerateCompositorFrame'})
     cc_main.EndSlice(11, 11)
-    cc_main.BeginSlice('cc_cat', timeline.FrameTraceName, 12, 12)
+    cc_main.BeginSlice('cc_cat', timeline.FrameTraceName, 12, 12,
+        args={'step': 'GenerateCompositorFrame'})
     cc_main.EndSlice(13, 13)
 
     # [      X       ]   [ Z ]
@@ -180,7 +107,8 @@ class ThreadTimesTimelineMetricUnittest(unittest.TestCase):
     # Create one frame swap.
     cc_main = model.GetOrCreateProcess(1).GetOrCreateThread(3)
     cc_main.name = 'Compositor'
-    cc_main.BeginSlice('cc_cat', timeline.FrameTraceName, 10, 10)
+    cc_main.BeginSlice('cc_cat', timeline.FrameTraceName, 10, 10,
+        args={'step': 'GenerateCompositorFrame'})
     cc_main.EndSlice(11, 11)
 
     # [      X       ]

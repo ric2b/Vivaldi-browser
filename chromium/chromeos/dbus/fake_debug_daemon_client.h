@@ -36,8 +36,8 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
   std::string GetTracingAgentName() override;
   std::string GetTraceEventLabel() override;
   void StartAgentTracing(const base::trace_event::TraceConfig& trace_config,
-                         const StartAgentTracingCallback& callback) override;
-  void StopAgentTracing(const StopAgentTracingCallback& callback) override;
+                         StartAgentTracingCallback callback) override;
+  void StopAgentTracing(StopAgentTracingCallback callback) override;
   void SetStopAgentTracingTaskRunner(
       scoped_refptr<base::TaskRunner> task_runner) override;
   void GetRoutes(
@@ -86,6 +86,9 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
   void CupsRemovePrinter(const std::string& name,
                          const CupsRemovePrinterCallback& callback,
                          const base::Closure& error_callback) override;
+  void StartConcierge(ConciergeCallback callback) override;
+  void StopConcierge(ConciergeCallback callback) override;
+  void SetRlzPingSent(SetRlzPingSentCallback callback) override;
 
   // Sets debugging features mask for testing.
   virtual void SetDebuggingFeaturesStatus(int featues_mask);

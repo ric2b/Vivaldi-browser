@@ -7,21 +7,28 @@
  * cr-lazy-render is a simple variant of dom-if designed for lazy rendering
  * of elements that are accessed imperatively.
  * Usage:
- *   <template is="cr-lazy-render" id="menu">
- *     <heavy-menu></heavy-menu>
- *   </template>
+ *   <cr-lazy-render id="menu">
+ *     <template>
+ *       <heavy-menu></heavy-menu>
+ *     </template>
+ *   </cr-lazy-render>
  *
  *   this.$.menu.get().show();
+ *
+ * TODO(calamity): Use Polymer.Templatize instead of inheriting the
+ * Polymer.Templatizer behavior once Polymer 2.0 is available.
  */
 
 Polymer({
   is: 'cr-lazy-render',
-  extends: 'template',
 
   behaviors: [Polymer.Templatizer],
 
-  /** @private {TemplatizerNode} */
+  /** @private {?Element} */
   child_: null,
+
+  /** @private {?Element} */
+  instance_: null,
 
   /**
    * Stamp the template into the DOM tree synchronously
@@ -43,17 +50,19 @@ Polymer({
 
   /** @private */
   render_: function() {
+    var template = this.getContentChildren()[0];
     if (!this.ctor)
-      this.templatize(this);
+      this.templatize(template);
     var parentNode = this.parentNode;
     if (parentNode && !this.child_) {
-      var instance = this.stamp({});
-      this.child_ = instance.root.firstElementChild;
-      parentNode.insertBefore(instance.root, this);
+      this.instance_ = this.stamp({});
+      this.child_ = this.instance_.root.firstElementChild;
+      parentNode.insertBefore(this.instance_.root, this);
     }
   },
 
   /**
+   * TODO(dpapad): Delete this method once migration to Polymer 2 has finished.
    * @param {string} prop
    * @param {Object} value
    */
@@ -63,11 +72,21 @@ Polymer({
   },
 
   /**
+   * TODO(dpapad): Delete this method once migration to Polymer 2 has finished.
    * @param {string} path
    * @param {Object} value
    */
   _forwardParentPath: function(path, value) {
     if (this.child_)
       this.child_._templateInstance.notifyPath(path, value, true);
-  }
+  },
+
+  /**
+   * @param {string} prop
+   * @param {Object} value
+   */
+  _forwardHostPropV2: function(prop, value) {
+    if (this.instance_)
+      this.instance_.forwardHostProp(prop, value);
+  },
 });

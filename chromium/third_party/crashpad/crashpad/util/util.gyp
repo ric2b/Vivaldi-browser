@@ -60,6 +60,7 @@
         'linux/direct_ptrace_connection.h',
         'linux/exception_handler_client.cc',
         'linux/exception_handler_client.h',
+        'linux/exception_handler_protocol.cc',
         'linux/exception_handler_protocol.h',
         'linux/exception_information.h',
         'linux/memory_map.cc',
@@ -73,6 +74,8 @@
         'linux/ptrace_connection.h',
         'linux/ptracer.cc',
         'linux/ptracer.h',
+        'linux/scoped_pr_set_ptracer.cc',
+        'linux/scoped_pr_set_ptracer.h',
         'linux/scoped_ptrace_attach.cc',
         'linux/scoped_ptrace_attach.h',
         'linux/thread_info.cc',
@@ -125,10 +128,15 @@
         'misc/address_types.h',
         'misc/arraysize_unsafe.h',
         'misc/as_underlying_type.h',
+        'misc/capture_context.h',
+        'misc/capture_context_linux.S',
+        'misc/capture_context_mac.S',
+        'misc/capture_context_win.asm',
         'misc/clock.h',
         'misc/clock_mac.cc',
         'misc/clock_posix.cc',
         'misc/clock_win.cc',
+        'misc/elf_note_types.h',
         'misc/from_pointer_cast.h',
         'misc/implicit_cast.h',
         'misc/initialization_state.h',
@@ -146,6 +154,8 @@
         'misc/pdb_structures.h',
         'misc/random_string.cc',
         'misc/random_string.h',
+        'misc/range_set.cc',
+        'misc/range_set.h',
         'misc/reinterpret_bytes.cc',
         'misc/reinterpret_bytes.h',
         'misc/scoped_forbid_return.cc',
@@ -168,8 +178,8 @@
         'net/http_multipart_builder.h',
         'net/http_transport.cc',
         'net/http_transport.h',
-        'net/http_transport_libcurl.cc',
         'net/http_transport_mac.mm',
+        'net/http_transport_none.cc',
         'net/http_transport_win.cc',
         'net/url.cc',
         'net/url.h',
@@ -199,9 +209,11 @@
         'posix/signals.h',
         'posix/symbolic_constants_posix.cc',
         'posix/symbolic_constants_posix.h',
+        'process/process_memory.cc',
         'process/process_memory.h',
         'process/process_memory_linux.cc',
         'process/process_memory_linux.h',
+        'process/process_memory_native.h',
         'process/process_memory_range.cc',
         'process/process_memory_range.h',
         'stdlib/aligned_allocator.cc',
@@ -221,6 +233,7 @@
         'synchronization/semaphore_posix.cc',
         'synchronization/semaphore_win.cc',
         'synchronization/semaphore.h',
+        'thread/stoppable.h',
         'thread/thread.cc',
         'thread/thread.h',
         'thread/thread_log_messages.cc',
@@ -230,8 +243,6 @@
         'thread/worker_thread.cc',
         'thread/worker_thread.h',
         'win/address_types.h',
-        'win/capture_context.asm',
-        'win/capture_context.h',
         'win/checked_win_address_range.h',
         'win/command_line.cc',
         'win/command_line.h',
@@ -338,6 +349,8 @@
               '$(SDKROOT)/usr/lib/libbsm.dylib',
             ],
           },
+        }, { # else: OS!=mac
+          'sources!': [ 'misc/capture_context_mac.S' ],
         }],
         ['OS=="win"', {
           'link_settings': {
@@ -367,19 +380,22 @@
           ],
         }, {  # else: OS!="win"
           'sources!': [
-            'win/capture_context.asm',
+            'misc/capture_context_win.asm',
             'win/safe_terminate_process.asm',
           ],
         }],
         ['OS=="linux"', {
-          'link_settings': {
-            'libraries': [
-              '-lcurl',
-            ],
-          },
+          'sources': [
+            'net/http_transport_socket.cc',
+          ],
         }, {  # else: OS!="linux"
           'sources!': [
-            'net/http_transport_libcurl.cc',
+            'misc/capture_context_linux.S',
+          ],
+        }],
+        ['OS!="android"', {
+          'sources!': [
+            'net/http_transport_none.cc',
           ],
         }],
         ['OS!="linux" and OS!="android"', {
@@ -392,6 +408,7 @@
         ['OS=="android"', {
           'sources/': [
             ['include', '^linux/'],
+            ['include', '^misc/capture_context_linux\\.S$'],
             ['include', '^misc/paths_linux\\.cc$'],
             ['include', '^posix/process_info_linux\\.cc$'],
             ['include', '^process/process_memory_linux\\.cc$'],

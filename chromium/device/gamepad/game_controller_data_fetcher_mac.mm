@@ -9,7 +9,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
 #include "device/gamepad/gamepad_standard_mappings.h"
 
 #import <GameController/GameController.h>
@@ -85,7 +84,8 @@ void GameControllerDataFetcherMac::GetGamepadData(bool) {
     // This first time we encounter a gamepad, set its name, mapping, and
     // axes/button counts. This information is static, so it only needs to be
     // done once.
-    if (state->active_state == GAMEPAD_NEWLY_ACTIVE) {
+    if (!state->is_initialized) {
+      state->is_initialized = true;
       NSString* vendorName = [controller vendorName];
       NSString* ident =
           [NSString stringWithFormat:@"%@ (STANDARD GAMEPAD)",
@@ -112,7 +112,7 @@ void GameControllerDataFetcherMac::GetGamepadData(bool) {
 #endif
     }
 
-    pad.timestamp = base::TimeTicks::Now().ToInternalValue();
+    pad.timestamp = CurrentTimeInMicroseconds();
 
     pad.axes[AXIS_INDEX_LEFT_STICK_X] =
         [[[extended_gamepad leftThumbstick] xAxis] value];

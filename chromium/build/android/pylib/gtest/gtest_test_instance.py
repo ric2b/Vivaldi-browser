@@ -31,9 +31,8 @@ RUN_IN_SUB_THREAD_TEST_SUITES = [
   'base_unittests',  # file_locking_unittest.cc uses a child process.
   'ipc_perftests',
   'ipc_tests',
-  'mojo_message_pipe_perftests',
-  'mojo_public_bindings_perftests',
-  'mojo_system_unittests',
+  'mojo_perftests',
+  'mojo_unittests',
   'net_unittests'
 ]
 
@@ -285,7 +284,8 @@ class GtestTestInstance(test_instance.TestInstance):
     # TODO(jbudorick): Support multiple test suites.
     if len(args.suite_name) > 1:
       raise ValueError('Platform mode currently supports only 1 gtest suite')
-    self._chartjson_result_file = args.chartjson_result_file
+    self._isolated_script_test_perf_output = (
+        args.isolated_script_test_perf_output)
     self._exe_dist_dir = None
     self._external_shard_index = args.test_launcher_shard_index
     self._extract_test_list_from_filter = args.extract_test_list_from_filter
@@ -294,7 +294,7 @@ class GtestTestInstance(test_instance.TestInstance):
     self._shard_timeout = args.shard_timeout
     self._store_tombstones = args.store_tombstones
     self._suite = args.suite_name[0]
-    self._symbolizer = stack_symbolizer.Symbolizer(None, False)
+    self._symbolizer = stack_symbolizer.Symbolizer(None)
     self._total_external_shards = args.test_launcher_total_shards
     self._wait_for_java_debugger = args.wait_for_java_debugger
 
@@ -434,8 +434,8 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._gtest_filter
 
   @property
-  def chartjson_result_file(self):
-    return self._chartjson_result_file
+  def isolated_script_test_perf_output(self):
+    return self._isolated_script_test_perf_output
 
   @property
   def package(self):

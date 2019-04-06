@@ -22,8 +22,7 @@ std::string ComputeMethodForRedirect(const std::string& method,
   // the httpbis draft say to prompt the user to confirm the generation of new
   // requests, other than GET and HEAD requests, but IE omits these prompts and
   // so shall we.
-  // See:
-  // https://tools.ietf.org/html/draft-ietf-httpbis-p2-semantics-17#section-7.3
+  // See: https://tools.ietf.org/html/rfc7231#section-6.4
   if ((http_status_code == 303 && method != "HEAD") ||
       ((http_status_code == 301 || http_status_code == 302) &&
        method == "POST")) {
@@ -106,6 +105,7 @@ URLRequest::ReferrerPolicy ProcessReferrerPolicyHeaderOnRedirect(
 
 RedirectInfo::RedirectInfo()
     : status_code(-1),
+      insecure_scheme_was_upgraded(false),
       new_referrer_policy(
           URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE) {}
 
@@ -123,6 +123,7 @@ RedirectInfo RedirectInfo::ComputeRedirectInfo(
     const HttpResponseHeaders* response_headers,
     int http_status_code,
     const GURL& new_location,
+    bool insecure_scheme_was_upgraded,
     bool token_binding_negotiated,
     bool copy_fragment) {
   DCHECK(!response_headers ||
@@ -149,6 +150,8 @@ RedirectInfo RedirectInfo::ComputeRedirectInfo(
   } else {
     redirect_info.new_url = new_location;
   }
+
+  redirect_info.insecure_scheme_was_upgraded = insecure_scheme_was_upgraded;
 
   // Update the first-party URL if appropriate.
   if (original_first_party_url_policy ==

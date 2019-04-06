@@ -4,6 +4,7 @@
 
 #include "components/cryptauth/device_to_device_authenticator.h"
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -15,9 +16,9 @@
 #include "base/timer/mock_timer.h"
 #include "components/cryptauth/authenticator.h"
 #include "components/cryptauth/connection.h"
-#include "components/cryptauth/cryptauth_test_util.h"
 #include "components/cryptauth/device_to_device_responder_operations.h"
 #include "components/cryptauth/fake_secure_message_delegate.h"
+#include "components/cryptauth/remote_device_test_util.h"
 #include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/session_keys.h"
 #include "components/cryptauth/wire_message.h"
@@ -65,7 +66,7 @@ void SaveValidateHelloMessageResult(bool* validated_out,
 // Connection implementation for testing.
 class FakeConnection : public Connection {
  public:
-  FakeConnection(const RemoteDevice& remote_device)
+  FakeConnection(RemoteDeviceRef remote_device)
       : Connection(remote_device), connection_blocked_(false) {}
   ~FakeConnection() override {}
 
@@ -76,6 +77,7 @@ class FakeConnection : public Connection {
   void Disconnect() override {
     SetStatus(Connection::Status::DISCONNECTED);
   }
+  std::string GetDeviceAddress() override { return std::string(); }
 
   using Connection::OnBytesReceived;
 
@@ -120,23 +122,18 @@ class DeviceToDeviceAuthenticatorForTest : public DeviceToDeviceAuthenticator {
         timer_(nullptr) {}
   ~DeviceToDeviceAuthenticatorForTest() override {}
 
-  base::MockTimer* timer() { return timer_; }
+  base::MockOneShotTimer* timer() { return timer_; }
 
  private:
   // DeviceToDeviceAuthenticator:
-  std::unique_ptr<base::Timer> CreateTimer() override {
-    bool retain_user_task = false;
-    bool is_repeating = false;
-
-    std::unique_ptr<base::MockTimer> timer(
-        new base::MockTimer(retain_user_task, is_repeating));
-
+  std::unique_ptr<base::OneShotTimer> CreateTimer() override {
+    auto timer = std::make_unique<base::MockOneShotTimer>();
     timer_ = timer.get();
     return std::move(timer);
   }
 
   // This instance is owned by the super class.
-  base::MockTimer* timer_;
+  base::MockOneShotTimer* timer_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceToDeviceAuthenticatorForTest);
 };
@@ -146,7 +143,7 @@ class DeviceToDeviceAuthenticatorForTest : public DeviceToDeviceAuthenticator {
 class CryptAuthDeviceToDeviceAuthenticatorTest : public testing::Test {
  public:
   CryptAuthDeviceToDeviceAuthenticatorTest()
-      : remote_device_(CreateClassicRemoteDeviceForTest()),
+      : remote_device_(CreateRemoteDeviceRefForTest()),
         connection_(remote_device_),
         secure_message_delegate_(new FakeSecureMessageDelegate),
         authenticator_(&connection_,
@@ -189,7 +186,7 @@ class CryptAuthDeviceToDeviceAuthenticatorTest : public testing::Test {
     bool validated = false;
     std::string local_session_public_key;
     DeviceToDeviceResponderOperations::ValidateHelloMessage(
-        hello_message, remote_device_.persistent_symmetric_key,
+        hello_message, remote_device_.persistent_symmetric_key(),
         secure_message_delegate_,
         base::Bind(&SaveValidateHelloMessageResult, &validated,
                    &local_session_public_key));
@@ -209,7 +206,7 @@ class CryptAuthDeviceToDeviceAuthenticatorTest : public testing::Test {
     std::string responder_auth_message;
     DeviceToDeviceResponderOperations::CreateResponderAuthMessage(
         hello_message, remote_session_public_key_, remote_session_private_key_,
-        remote_device_private_key, remote_device_.persistent_symmetric_key,
+        remote_device_private_key, remote_device_.persistent_symmetric_key(),
         secure_message_delegate_,
         base::Bind(&SaveStringResult, &responder_auth_message));
     EXPECT_FALSE(responder_auth_message.empty());
@@ -230,7 +227,7 @@ class CryptAuthDeviceToDeviceAuthenticatorTest : public testing::Test {
   MOCK_METHOD1(OnAuthenticationResultProxy, void(Authenticator::Result result));
 
   // Contains information about the remote device.
-  const RemoteDevice remote_device_;
+  const RemoteDeviceRef remote_device_;
 
   // Simulates the connection to the remote device.
   FakeConnection connection_;
@@ -271,7 +268,7 @@ TEST_F(CryptAuthDeviceToDeviceAuthenticatorTest, AuthenticateSucceeds) {
   bool initiator_auth_validated = false;
   DeviceToDeviceResponderOperations::ValidateInitiatorAuthMessage(
       initiator_auth, SessionKeys(session_symmetric_key_),
-      remote_device_.persistent_symmetric_key, responder_auth_message,
+      remote_device_.persistent_symmetric_key(), responder_auth_message,
       secure_message_delegate_,
       base::Bind(&SaveBooleanResult, &initiator_auth_validated));
   ASSERT_TRUE(initiator_auth_validated);
@@ -350,10 +347,10 @@ TEST_F(CryptAuthDeviceToDeviceAuthenticatorTest,
   // completes.
   WireMessage wire_message(base::RandBytesAsString(300u),
                            Authenticator::kAuthenticationFeature);
-  connection_.SendMessage(base::MakeUnique<WireMessage>(
+  connection_.SendMessage(std::make_unique<WireMessage>(
       base::RandBytesAsString(300u), Authenticator::kAuthenticationFeature));
   connection_.OnBytesReceived(wire_message.Serialize());
-  connection_.SendMessage(base::MakeUnique<WireMessage>(
+  connection_.SendMessage(std::make_unique<WireMessage>(
       base::RandBytesAsString(300u), Authenticator::kAuthenticationFeature));
   connection_.OnBytesReceived(wire_message.Serialize());
 }

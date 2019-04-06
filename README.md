@@ -26,3 +26,50 @@ The file `README` has the original readme from the developpers.
 >    vivaldi-source\third_party\_winsparkle_lib
 >
 >And lastly the 'Release' folder will be about 30GB once built. Not all of the files/folders in it are needed to run the browser. So [here's](https://gist.github.com/Sporif/89e9584ef2370079756700e7f2aecf4e) a Powershell script I made that copies only the stuff you need.
+
+# Note for the maintainer - Update the repository
+
+```
+# ssh $USER@$FAST_MACHINE
+# wget Miniconda.sh
+# bash Miniconda.sh -b -p /var/tmp/...
+# source /var/tmp/.../bin/activate
+# conda install git
+# git config --global user.name  "..."
+# git config --global user.email "..."
+git clone --depth=1 https://github.com/ric2b/Vivaldi-browser w
+
+wget https://vivaldi.com/source/vivaldi-source-2.0...tar.xz
+tar --xz -xf v0
+mv vivaldi-source v0
+ls v0/.git/*/*/*
+rm -rf v0/.git
+
+cp w/.git README.MD v0
+cd v0
+git status
+git add .
+git status
+git commit -m 'Added version 2.0...'
+git status
+cd ..
+
+wget https://vivaldi.com/source/vivaldi-source-2.1...tar.xz
+tar --xz -xf v1
+mv vivaldi-source v1
+ls v0/.git/*/*/*
+rm -rf v1/.git
+
+cp w/.git README.MD v1
+...
+
+git status
+git push
+cd ..
+
+cd ..
+
+ls -l
+
+rm -rf
+```

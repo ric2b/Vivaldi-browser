@@ -208,12 +208,13 @@ class InstallerState {
   bool verbose_logging_;
   bool is_migrating_to_single_;
 
-  bool is_vivaldi_;
-  bool is_vivaldi_update_;
-  bool is_standalone_;
-  bool register_standalone_;
-  bool is_uninstall_;
-  bool install_dir_supplied_;
+  // Vivaldi specific.
+  bool is_vivaldi_ = false;
+  bool is_vivaldi_update_ = false;
+  bool is_standalone_ = false;
+  bool register_standalone_ = false;
+  bool is_uninstall_ = false;
+  bool install_dir_supplied_ = false;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InstallerState);

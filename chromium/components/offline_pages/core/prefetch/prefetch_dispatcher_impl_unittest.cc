@@ -4,17 +4,22 @@
 
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher_impl.h"
 
+#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/offline_event_logger.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/prefetch/generate_page_bundle_request.h"
 #include "components/offline_pages/core/prefetch/get_operation_request.h"
+#include "components/offline_pages/core/prefetch/mock_thumbnail_fetcher.h"
 #include "components/offline_pages/core/prefetch/prefetch_background_task.h"
 #include "components/offline_pages/core/prefetch/prefetch_configuration.h"
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher_impl.h"
+#include "components/offline_pages/core/prefetch/prefetch_importer_impl.h"
+#include "components/offline_pages/core/prefetch/prefetch_item.h"
 #include "components/offline_pages/core/prefetch/prefetch_network_request_factory.h"
 #include "components/offline_pages/core/prefetch/prefetch_request_test_base.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
@@ -22,24 +27,61 @@
 #include "components/offline_pages/core/prefetch/store/prefetch_store.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store_test_util.h"
 #include "components/offline_pages/core/prefetch/suggested_articles_observer.h"
+#include "components/offline_pages/core/prefetch/test_download_service.h"
 #include "components/offline_pages/core/prefetch/test_prefetch_network_request_factory.h"
+#include "components/offline_pages/core/stub_offline_page_model.h"
 #include "components/version_info/channel.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 using testing::Contains;
+using ::testing::InSequence;
 
 namespace offline_pages {
 
 namespace {
+using testing::_;
 
-const std::string kTestNamespace = "TestPrefetchClientNamespace";
-const std::string kTestID = "id";
+const char kTestID[] = "id";
 const GURL kTestURL("https://www.chromium.org");
 const GURL kTestURL2("https://www.chromium.org/2");
+const int64_t kTestOfflineID = 1111;
+const char kClientID[] = "client-id-1";
+const char kOperationName[] = "operation-1";
+const char kBodyName[] = "body-1";
+const int64_t kBodyLength = 10;
+const char kBodyContent[] = "abcde12345";
+const base::Time kRenderTime = base::Time::Now();
+
+RenderPageInfo RenderInfo(const std::string& url) {
+  RenderPageInfo info;
+  info.url = url;
+  info.redirect_url = "";
+  info.status = RenderStatus::RENDERED;
+  info.body_name = kBodyName;
+  info.body_length = kBodyLength;
+  info.render_time = kRenderTime;
+  return info;
+}
+
+class MockOfflinePageModel : public StubOfflinePageModel {
+ public:
+  MockOfflinePageModel(const base::FilePath& archive_directory) {
+    SetArchiveDirectory(archive_directory);
+  }
+  ~MockOfflinePageModel() override = default;
+  MOCK_METHOD1(StoreThumbnail, void(const OfflinePageThumbnail& thumb));
+  MOCK_METHOD2(HasThumbnailForOfflineId,
+               void(int64_t offline_id,
+                    base::OnceCallback<void(bool)> callback));
+  MOCK_METHOD2(AddPage,
+               void(const OfflinePageItem& page, AddPageCallback callback));
+};
 
 class TestPrefetchBackgroundTask : public PrefetchBackgroundTask {
  public:
@@ -70,6 +112,41 @@ class TestPrefetchConfiguration : public PrefetchConfiguration {
   bool enabled_ = true;
 };
 
+class FakePrefetchNetworkRequestFactory
+    : public TestPrefetchNetworkRequestFactory {
+ public:
+  void MakeGeneratePageBundleRequest(
+      const std::vector<std::string>& prefetch_urls,
+      const std::string& gcm_registration_id,
+      PrefetchRequestFinishedCallback callback) override {
+    // TODO(https://crbug.com/850648): Explicitly passing in a base::DoNothing()
+    // callback when |respond_to_generate_page_bundle_| is set to true, to avoid
+    // the |callback| being called for more than once.
+    if (!respond_to_generate_page_bundle_) {
+      TestPrefetchNetworkRequestFactory::MakeGeneratePageBundleRequest(
+          prefetch_urls, gcm_registration_id, std::move(callback));
+      return;
+    } else {
+      TestPrefetchNetworkRequestFactory::MakeGeneratePageBundleRequest(
+          prefetch_urls, gcm_registration_id, base::DoNothing());
+    }
+    std::vector<RenderPageInfo> pages;
+    for (const std::string& url : prefetch_urls) {
+      pages.push_back(RenderInfo(url));
+    }
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), PrefetchRequestStatus::SUCCESS,
+                       kOperationName, pages));
+  }
+
+  void set_respond_to_generate_page_bundle(bool value) {
+    respond_to_generate_page_bundle_ = value;
+  }
+
+ private:
+  bool respond_to_generate_page_bundle_ = false;
+};
 }  // namespace
 
 class PrefetchDispatcherTest : public PrefetchRequestTestBase {
@@ -104,7 +181,7 @@ class PrefetchDispatcherTest : public PrefetchRequestTestBase {
   bool dispatcher_suspended() const { return dispatcher_->suspended_; }
   TaskQueue* dispatcher_task_queue() { return &dispatcher_->task_queue_; }
   PrefetchDispatcher* prefetch_dispatcher() { return dispatcher_; }
-  TestPrefetchNetworkRequestFactory* network_request_factory() {
+  FakePrefetchNetworkRequestFactory* network_request_factory() {
     return network_request_factory_;
   }
 
@@ -113,8 +190,46 @@ class PrefetchDispatcherTest : public PrefetchRequestTestBase {
     return reschedule_type_;
   }
 
+  void ExpectFetchThumbnail(const std::string& thumbnail_data,
+                            const bool first_attempt,
+                            const char* client_id) {
+    EXPECT_CALL(
+        *thumbnail_fetcher_,
+        FetchSuggestionImageData(
+            ClientId(kSuggestedArticlesNamespace, client_id), first_attempt, _))
+        .WillOnce([&, thumbnail_data](
+                      const ClientId& client_id, bool first_attempt,
+                      ThumbnailFetcher::ImageDataFetchedCallback callback) {
+          task_runner()->PostTask(
+              FROM_HERE, base::BindOnce(std::move(callback), thumbnail_data));
+        });
+  }
+
+  void ExpectHasThumbnailForOfflineId(int64_t offline_id, bool to_return) {
+    EXPECT_CALL(*offline_model_, HasThumbnailForOfflineId(offline_id, _))
+        .WillOnce(
+            [&, offline_id, to_return](
+                int64_t offline_id, base::OnceCallback<void(bool)> callback) {
+              task_runner()->PostTask(
+                  FROM_HERE, base::BindOnce(std::move(callback), to_return));
+            });
+  }
+
+  PrefetchDispatcherImpl* dispatcher() { return dispatcher_; }
+  PrefetchService* prefetch_service() { return taco_->prefetch_service(); }
+  TestDownloadService* download_service() { return taco_->download_service(); }
+
  protected:
+  // Owned by |taco_|.
+  MockOfflinePageModel* offline_model_;
+
   std::vector<PrefetchURL> test_urls_;
+
+  // Owned by |taco_|.
+  MockThumbnailFetcher* thumbnail_fetcher_;
+
+  PrefetchStoreTestUtil store_util_{task_runner()};
+  base::ScopedTempDir archive_directory_;
 
  private:
   std::unique_ptr<PrefetchServiceTestTaco> taco_;
@@ -124,7 +239,7 @@ class PrefetchDispatcherTest : public PrefetchRequestTestBase {
   // Owned by |taco_|.
   PrefetchDispatcherImpl* dispatcher_;
   // Owned by |taco_|.
-  TestPrefetchNetworkRequestFactory* network_request_factory_;
+  FakePrefetchNetworkRequestFactory* network_request_factory_;
 
   bool reschedule_called_ = false;
   PrefetchBackgroundTaskRescheduleType reschedule_type_ =
@@ -136,14 +251,29 @@ PrefetchDispatcherTest::PrefetchDispatcherTest() {
 }
 
 void PrefetchDispatcherTest::SetUp() {
+  ASSERT_TRUE(archive_directory_.CreateUniqueTempDir());
+
   dispatcher_ = new PrefetchDispatcherImpl();
-  network_request_factory_ = new TestPrefetchNetworkRequestFactory();
+  network_request_factory_ = new FakePrefetchNetworkRequestFactory();
   taco_.reset(new PrefetchServiceTestTaco);
+  store_util_.BuildStore();
+  taco_->SetPrefetchStore(store_util_.ReleaseStore());
   taco_->SetPrefetchDispatcher(base::WrapUnique(dispatcher_));
   taco_->SetPrefetchNetworkRequestFactory(
       base::WrapUnique(network_request_factory_));
   taco_->SetPrefetchConfiguration(
       std::make_unique<TestPrefetchConfiguration>());
+  auto thumbnail_fetcher = std::make_unique<MockThumbnailFetcher>();
+  thumbnail_fetcher_ = thumbnail_fetcher.get();
+  taco_->SetThumbnailFetcher(std::move(thumbnail_fetcher));
+  auto model =
+      std::make_unique<MockOfflinePageModel>(archive_directory_.GetPath());
+
+  offline_model_ = model.get();
+  taco_->SetOfflinePageModel(std::move(model));
+  taco_->SetPrefetchImporter(std::make_unique<PrefetchImporterImpl>(
+      dispatcher_, offline_model_, task_runner()));
+
   taco_->CreatePrefetchService();
 
   ASSERT_TRUE(test_urls_.empty());
@@ -169,12 +299,17 @@ void PrefetchDispatcherTest::BeginBackgroundTask() {
                           base::Unretained(this))));
 }
 
+MATCHER(ValidThumbnail, "") {
+  return arg.offline_id == kTestOfflineID && !arg.thumbnail.empty();
+};
+
 TEST_F(PrefetchDispatcherTest, DispatcherDoesNotCrash) {
   // TODO(https://crbug.com/735254): Ensure that Dispatcher unit test keep up
   // with the state of adding tasks, and that the end state is we have tests
   // that verify the proper tasks were added in the proper order at each wakeup
   // signal of the dispatcher.
-  prefetch_dispatcher()->AddCandidatePrefetchURLs(kTestNamespace, test_urls_);
+  prefetch_dispatcher()->AddCandidatePrefetchURLs(kSuggestedArticlesNamespace,
+                                                  test_urls_);
   prefetch_dispatcher()->RemoveAllUnprocessedPrefetchURLs(
       kSuggestedArticlesNamespace);
   prefetch_dispatcher()->RemovePrefetchURLsByClientId(
@@ -182,7 +317,20 @@ TEST_F(PrefetchDispatcherTest, DispatcherDoesNotCrash) {
 }
 
 TEST_F(PrefetchDispatcherTest, AddCandidatePrefetchURLsTask) {
-  prefetch_dispatcher()->AddCandidatePrefetchURLs(kTestNamespace, test_urls_);
+  prefetch_dispatcher()->AddCandidatePrefetchURLs(kSuggestedArticlesNamespace,
+                                                  test_urls_);
+  EXPECT_TRUE(dispatcher_task_queue()->HasPendingTasks());
+  RunUntilIdle();
+  EXPECT_FALSE(dispatcher_task_queue()->HasPendingTasks());
+  EXPECT_FALSE(dispatcher_task_queue()->HasRunningTask());
+}
+
+TEST_F(PrefetchDispatcherTest, RemovePrefetchURLsByClientId) {
+  prefetch_dispatcher()->AddCandidatePrefetchURLs(kSuggestedArticlesNamespace,
+                                                  test_urls_);
+  RunUntilIdle();
+  prefetch_dispatcher()->RemovePrefetchURLsByClientId(
+      ClientId(kSuggestedArticlesNamespace, test_urls_.front().id));
   EXPECT_TRUE(dispatcher_task_queue()->HasPendingTasks());
   RunUntilIdle();
   EXPECT_FALSE(dispatcher_task_queue()->HasPendingTasks());
@@ -194,7 +342,8 @@ TEST_F(PrefetchDispatcherTest, DispatcherDoesNothingIfFeatureNotEnabled) {
   disabled_feature_list.InitAndDisableFeature(kPrefetchingOfflinePagesFeature);
 
   // Don't add a task for new prefetch URLs.
-  prefetch_dispatcher()->AddCandidatePrefetchURLs(kTestNamespace, test_urls_);
+  prefetch_dispatcher()->AddCandidatePrefetchURLs(kSuggestedArticlesNamespace,
+                                                  test_urls_);
   EXPECT_FALSE(dispatcher_task_queue()->HasRunningTask());
 
   // Do nothing with a new background task.
@@ -208,7 +357,8 @@ TEST_F(PrefetchDispatcherTest, DispatcherDoesNothingIfSettingsDoNotAllowIt) {
   DisablePrefetchingInSettings();
 
   // Don't add a task for new prefetch URLs.
-  prefetch_dispatcher()->AddCandidatePrefetchURLs(kTestNamespace, test_urls_);
+  prefetch_dispatcher()->AddCandidatePrefetchURLs(kSuggestedArticlesNamespace,
+                                                  test_urls_);
   EXPECT_FALSE(dispatcher_task_queue()->HasRunningTask());
 
   // Do nothing with a new background task.
@@ -221,7 +371,7 @@ TEST_F(PrefetchDispatcherTest, DispatcherDoesNothingIfSettingsDoNotAllowIt) {
 TEST_F(PrefetchDispatcherTest, DispatcherReleasesBackgroundTask) {
   PrefetchURL prefetch_url(kTestID, kTestURL, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url));
   RunUntilIdle();
 
   // We start the background task, causing reconcilers and action tasks to be
@@ -252,7 +402,7 @@ TEST_F(PrefetchDispatcherTest, DispatcherReleasesBackgroundTask) {
 TEST_F(PrefetchDispatcherTest, RetryWithBackoffAfterFailedNetworkRequest) {
   PrefetchURL prefetch_url(kTestID, kTestURL, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url));
   RunUntilIdle();
 
   BeginBackgroundTask();
@@ -261,7 +411,7 @@ TEST_F(PrefetchDispatcherTest, RetryWithBackoffAfterFailedNetworkRequest) {
   // Trigger another request to make sure we have more work to do.
   PrefetchURL prefetch_url2(kTestID, kTestURL2, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
   RunUntilIdle();
 
   // This should trigger retry with backoff.
@@ -284,7 +434,7 @@ TEST_F(PrefetchDispatcherTest, RetryWithBackoffAfterFailedNetworkRequest) {
 TEST_F(PrefetchDispatcherTest, RetryWithoutBackoffAfterFailedNetworkRequest) {
   PrefetchURL prefetch_url(kTestID, kTestURL, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url));
   RunUntilIdle();
 
   BeginBackgroundTask();
@@ -293,7 +443,7 @@ TEST_F(PrefetchDispatcherTest, RetryWithoutBackoffAfterFailedNetworkRequest) {
   // Trigger another request to make sure we have more work to do.
   PrefetchURL prefetch_url2(kTestID, kTestURL2, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
 
   // This should trigger retry without backoff.
   RespondWithNetError(net::ERR_CONNECTION_CLOSED);
@@ -315,7 +465,7 @@ TEST_F(PrefetchDispatcherTest, RetryWithoutBackoffAfterFailedNetworkRequest) {
 TEST_F(PrefetchDispatcherTest, SuspendAfterFailedNetworkRequest) {
   PrefetchURL prefetch_url(kTestID, kTestURL, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url));
   RunUntilIdle();
 
   BeginBackgroundTask();
@@ -324,7 +474,7 @@ TEST_F(PrefetchDispatcherTest, SuspendAfterFailedNetworkRequest) {
   // Trigger another request to make sure we have more work to do.
   PrefetchURL prefetch_url2(kTestID, kTestURL2, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
 
   EXPECT_FALSE(dispatcher_suspended());
 
@@ -350,7 +500,7 @@ TEST_F(PrefetchDispatcherTest, SuspendAfterFailedNetworkRequest) {
 TEST_F(PrefetchDispatcherTest, SuspendRemovedAfterNewBackgroundTask) {
   PrefetchURL prefetch_url(kTestID, kTestURL, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url));
   RunUntilIdle();
 
   BeginBackgroundTask();
@@ -376,7 +526,7 @@ TEST_F(PrefetchDispatcherTest, SuspendRemovedAfterNewBackgroundTask) {
   // Trigger another request to make sure we have more work to do.
   PrefetchURL prefetch_url2(kTestID, kTestURL2, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url2));
 
   BeginBackgroundTask();
 
@@ -390,11 +540,132 @@ TEST_F(PrefetchDispatcherTest, SuspendRemovedAfterNewBackgroundTask) {
 TEST_F(PrefetchDispatcherTest, NoNetworkRequestsAfterNewURLs) {
   PrefetchURL prefetch_url(kTestID, kTestURL, base::string16());
   prefetch_dispatcher()->AddCandidatePrefetchURLs(
-      kTestNamespace, std::vector<PrefetchURL>(1, prefetch_url));
+      kSuggestedArticlesNamespace, std::vector<PrefetchURL>(1, prefetch_url));
   RunUntilIdle();
 
   // We should not have started GPB
   EXPECT_EQ(nullptr, GetRunningFetcher());
+}
+
+TEST_F(PrefetchDispatcherTest, ThumbnailFetchFailure_ItemDownloaded) {
+  ExpectFetchThumbnail("", false, kClientID);
+  ExpectHasThumbnailForOfflineId(kTestOfflineID, false);
+  EXPECT_CALL(*offline_model_, StoreThumbnail(_)).Times(0);
+  prefetch_dispatcher()->ItemDownloaded(
+      kTestOfflineID, ClientId(kSuggestedArticlesNamespace, kClientID));
+}
+
+TEST_F(PrefetchDispatcherTest, ThumbnailFetchSuccess_ItemDownloaded) {
+  std::string kThumbnailData = "abc";
+  ExpectHasThumbnailForOfflineId(kTestOfflineID, false);
+  EXPECT_CALL(*offline_model_, StoreThumbnail(ValidThumbnail()));
+  ExpectFetchThumbnail(kThumbnailData, false, kClientID);
+  prefetch_dispatcher()->ItemDownloaded(
+      kTestOfflineID, ClientId(kSuggestedArticlesNamespace, kClientID));
+}
+
+TEST_F(PrefetchDispatcherTest, ThumbnailAlreadyExists_ItemDownloaded) {
+  ExpectHasThumbnailForOfflineId(kTestOfflineID, true);
+  EXPECT_CALL(*thumbnail_fetcher_, FetchSuggestionImageData(_, _, _)).Times(0);
+  EXPECT_CALL(*offline_model_, StoreThumbnail(_)).Times(0);
+  prefetch_dispatcher()->ItemDownloaded(
+      kTestOfflineID, ClientId(kSuggestedArticlesNamespace, kClientID));
+}
+
+TEST_F(PrefetchDispatcherTest,
+       ThumbnailVariousCases_GeneratePageBundleRequested) {
+  // Covers all possible thumbnail cases with a single
+  // GeneratePageBundleRequested call: fetch succeeds (#1), fetch fails (#2),
+  // item already exists (#3).
+  const int64_t kTestOfflineID1 = 100;
+  const int64_t kTestOfflineID2 = 101;
+  const int64_t kTestOfflineID3 = 102;
+  const char kClientID1[] = "a";
+  const char kClientID2[] = "b";
+  const char kClientID3[] = "c";
+
+  InSequence in_sequence;
+  // Case #1.
+  ExpectHasThumbnailForOfflineId(kTestOfflineID1, false);
+  ExpectFetchThumbnail("abc", true, kClientID1);
+  EXPECT_CALL(*offline_model_, StoreThumbnail(_)).Times(1);
+  // Case #2.
+  ExpectHasThumbnailForOfflineId(kTestOfflineID2, false);
+  ExpectFetchThumbnail("", true, kClientID2);
+  // Case #3.
+  ExpectHasThumbnailForOfflineId(kTestOfflineID3, true);
+
+  auto prefetch_item_ids = std::make_unique<PrefetchDispatcher::IdsVector>();
+  prefetch_item_ids->emplace_back(
+      kTestOfflineID1, ClientId(kSuggestedArticlesNamespace, kClientID1));
+  prefetch_item_ids->emplace_back(
+      kTestOfflineID2, ClientId(kSuggestedArticlesNamespace, kClientID2));
+  prefetch_item_ids->emplace_back(
+      kTestOfflineID3, ClientId(kSuggestedArticlesNamespace, kClientID3));
+  prefetch_dispatcher()->GeneratePageBundleRequested(
+      std::move(prefetch_item_ids));
+}
+
+// Runs through the entire lifecycle of a successful prefetch item,
+// from GeneratePageBundle, GetOperation, download, import, and completion.
+TEST_F(PrefetchDispatcherTest, PrefetchItemFlow) {
+  auto get_item = [&]() {
+    std::set<PrefetchItem> items;
+    EXPECT_EQ(1ul, store_util_.GetAllItems(&items));
+    return *items.begin();
+  };
+  // The page should be added to the offline model. Return success through the
+  // callback, and store the page to added_page.
+  OfflinePageItem added_page;
+  EXPECT_CALL(*offline_model_, AddPage(_, _))
+      .WillOnce([&](const OfflinePageItem& page, AddPageCallback callback) {
+        added_page = page;
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::BindOnce(std::move(callback),
+                                      AddPageResult::SUCCESS, page.offline_id));
+      });
+
+  network_request_factory()->set_respond_to_generate_page_bundle(true);
+  download_service()->SetTestFileData(kBodyContent);
+  std::vector<PrefetchURL> prefetch_urls;
+  prefetch_urls.push_back(PrefetchURL("url-1", GURL("http://www.url1.com"),
+                                      base::ASCIIToUTF16("URL 1")));
+
+  // Kick off the request.
+  dispatcher()->AddCandidatePrefetchURLs(kSuggestedArticlesNamespace,
+                                         prefetch_urls);
+
+  // Run the pipeline to completion.
+  RunUntilIdle();
+  PrefetchItem state1 = get_item();
+  BeginBackgroundTask();
+  RunUntilIdle();
+  PrefetchItem state2 = get_item();
+  BeginBackgroundTask();
+  RunUntilIdle();
+  PrefetchItem state3 = get_item();
+
+  // Check progression of item state. Log the states to help explain any failed
+  // expectations.
+  SCOPED_TRACE(testing::Message() << "\nstate1: " << state1 << "\nstate2: "
+                                  << state2 << "\nstate3: " << state3);
+
+  // State 1.
+  EXPECT_EQ(PrefetchItemState::NEW_REQUEST, state1.state);
+
+  // State 2.
+  EXPECT_EQ(PrefetchItemState::FINISHED, state2.state);
+  EXPECT_FALSE(state2.file_path.empty());
+  EXPECT_FALSE(added_page.file_path.empty());
+  std::string imported_file_contents;
+  EXPECT_TRUE(
+      base::ReadFileToString(added_page.file_path, &imported_file_contents));
+  EXPECT_EQ(kBodyContent, imported_file_contents);
+  EXPECT_EQ(kBodyLength, state2.file_size);
+
+  // State 3.
+  EXPECT_EQ(PrefetchItemState::ZOMBIE, state3.state);
+  EXPECT_EQ(PrefetchItemErrorCode::SUCCESS, state3.error_code);
 }
 
 }  // namespace offline_pages

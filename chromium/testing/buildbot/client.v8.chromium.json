@@ -18,10 +18,9 @@
       },
       {
         "args": [
-          "--site-per-process",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/site-per-process.browser_tests.filter"
+          "--disable-site-isolation-trials"
         ],
-        "name": "site_per_process_browser_tests",
+        "name": "not_site_per_process_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 10
@@ -213,9 +212,9 @@
       },
       {
         "args": [
-          "--site-per-process"
+          "--disable-site-isolation-trials"
         ],
-        "name": "site_per_process_unit_tests",
+        "name": "not_site_per_process_unit_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -293,10 +292,9 @@
       },
       {
         "args": [
-          "--site-per-process",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/site-per-process.browser_tests.filter"
+          "--disable-site-isolation-trials"
         ],
-        "name": "site_per_process_browser_tests",
+        "name": "not_site_per_process_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 10
@@ -394,6 +392,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gin_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "google_apis_unittests"
       },
       {
@@ -401,6 +405,18 @@
           "can_use_on_swarming_builders": true
         },
         "test": "gpu_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "headless_browsertests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "headless_unittests"
       },
       {
         "swarming": {
@@ -471,9 +487,9 @@
       },
       {
         "args": [
-          "--site_per_process"
+          "--disable-site-isolation-trials"
         ],
-        "name": "site_per_process_unit_tests",
+        "name": "not_site_per_process_unit_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -481,6 +497,27 @@
       }
     ],
     "isolated_scripts": [
+      {
+        "isolate_name": "content_shell_crash_test",
+        "name": "content_shell_crash_test",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
+        "isolate_name": "devtools_closure_compile",
+        "name": "devtools_closure_compile",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
+        "isolate_name": "devtools_eslint",
+        "name": "devtools_eslint",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
       {
         "isolate_name": "telemetry_gpu_unittests",
         "name": "telemetry_gpu_unittests",

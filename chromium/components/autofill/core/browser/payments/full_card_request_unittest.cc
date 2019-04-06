@@ -22,6 +22,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -68,15 +71,18 @@ class FullCardRequestTest : public testing::Test,
  public:
   FullCardRequestTest()
       : request_context_(new net::TestURLRequestContextGetter(
-            base::ThreadTaskRunnerHandle::Get())) {
+            base::ThreadTaskRunnerHandle::Get())),
+        test_shared_loader_factory_(
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_)) {
     std::unique_ptr<TestingPrefServiceSimple> pref_service(
         new TestingPrefServiceSimple());
     pref_service->registry()->RegisterDoublePref(
         prefs::kAutofillBillingCustomerNumber, 0.0);
     autofill_client_.SetPrefs(std::move(pref_service));
     payments_client_ = std::make_unique<PaymentsClient>(
-        request_context_.get(), autofill_client_.GetPrefs(),
-        autofill_client_.GetIdentityProvider(), this, nullptr);
+        test_shared_loader_factory_, autofill_client_.GetPrefs(),
+        autofill_client_.GetIdentityManager(), this, nullptr);
     request_ = std::make_unique<FullCardRequest>(
         &autofill_client_, payments_client_.get(), &personal_data_);
     // Silence the warning from PaymentsClient about matching sync and Payments
@@ -112,6 +118,8 @@ class FullCardRequestTest : public testing::Test,
   MockUIDelegate ui_delegate_;
   TestAutofillClient autofill_client_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
   std::unique_ptr<PaymentsClient> payments_client_;
   std::unique_ptr<FullCardRequest> request_;
 

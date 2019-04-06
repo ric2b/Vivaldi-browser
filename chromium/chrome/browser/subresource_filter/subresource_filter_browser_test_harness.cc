@@ -15,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
@@ -25,7 +26,8 @@
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/db/v4_test_util.h"
 #include "components/safe_browsing/features.h"
-#include "components/subresource_filter/core/browser/subresource_filter_features.h"
+#include "components/subresource_filter/content/browser/content_ruleset_service.h"
+#include "components/subresource_filter/core/common/common_features.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/test/browser_test_utils.h"
@@ -37,10 +39,7 @@
 namespace subresource_filter {
 
 SubresourceFilterBrowserTest::SubresourceFilterBrowserTest() {
-  scoped_feature_list_.InitWithFeatures(
-      {kSafeBrowsingSubresourceFilter,
-       kSafeBrowsingSubresourceFilterExperimentalUI, kAbusiveExperienceEnforce},
-      {});
+  scoped_feature_list_.InitAndEnableFeature(kAdTagging);
 }
 
 SubresourceFilterBrowserTest::~SubresourceFilterBrowserTest() {}
@@ -58,8 +57,15 @@ void SubresourceFilterBrowserTest::TearDown() {
 }
 
 void SubresourceFilterBrowserTest::SetUpOnMainThread() {
+  // Note: even after startup, tasks posted to be run after startup are
+  // artificially delayed up to 10s. To avoid that delay in tests, just fake
+  // being after startup internally so there is no delay when writing and
+  // publishing rulesets.
+  g_browser_process->subresource_filter_ruleset_service()
+      ->SetIsAfterStartupForTesting();
+
   base::FilePath test_data_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
   host_resolver()->AddSimulatedFailure("host-with-dns-lookup-failure");
 
@@ -67,11 +73,10 @@ void SubresourceFilterBrowserTest::SetUpOnMainThread() {
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   // Add content/test/data for cross_site_iframe_factory.html
-  ASSERT_TRUE(PathService::Get(content::DIR_TEST_DATA, &test_data_dir));
+  ASSERT_TRUE(base::PathService::Get(content::DIR_TEST_DATA, &test_data_dir));
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
 
   ASSERT_TRUE(embedded_test_server()->Start());
-  ResetConfigurationToEnableOnPhishingSites();
 
   auto* factory = SubresourceFilterProfileContextFactory::GetForProfile(
       browser()->profile());
@@ -224,13 +229,10 @@ void SubresourceFilterBrowserTest::ResetConfiguration(Configuration config) {
 }
 
 void SubresourceFilterBrowserTest::ResetConfigurationToEnableOnPhishingSites(
-    bool measure_performance,
-    bool whitelist_site_on_reload) {
+    bool measure_performance) {
   Configuration config = Configuration::MakePresetForLiveRunOnPhishingSites();
   config.activation_options.performance_measurement_rate =
       measure_performance ? 1.0 : 0.0;
-  config.activation_options.should_whitelist_site_on_reload =
-      whitelist_site_on_reload;
   ResetConfiguration(std::move(config));
 }
 

@@ -32,7 +32,8 @@ TEST(ContainerFloatingBehaviorTest, AdjustSetBoundsRequest) {
                                  keyboard_height);
 
   // Save an arbitrary position so that default location will not be used.
-  floating_behavior.SavePosition(gfx::Point(0, 0));
+  floating_behavior.SavePosition(
+      gfx::Rect(0, 0, keyboard_width, keyboard_height), workspace.size());
 
   gfx::Rect result =
       floating_behavior.AdjustSetBoundsRequest(workspace, center);
@@ -47,6 +48,76 @@ TEST(ContainerFloatingBehaviorTest, AdjustSetBoundsRequest) {
                       workspace.height() - keyboard_height, keyboard_width,
                       keyboard_height),
             result);
+
+  // Try to move the keyboard to the center of the primary display while it's
+  // in a secondary display.
+  gfx::Rect secondary_display(1000, -200, 1200, 800);
+  result = floating_behavior.AdjustSetBoundsRequest(secondary_display, center);
+  // It gets clipped to the far left of this display
+  ASSERT_EQ(gfx::Rect(1000, 100, keyboard_width, keyboard_height), result);
+}
+
+TEST(ContainerFloatingBehaviorTest, AdjustSetBoundsRequestVariousSides) {
+  ContainerFloatingBehavior floating_behavior(nullptr);
+
+  const int keyboard_width = 100;
+  const int keyboard_height = 100;
+  gfx::Size keyboard_size = gfx::Size(keyboard_width, keyboard_height);
+  gfx::Rect workspace_wide(0, 0, 1000, 500);
+  gfx::Rect workspace_tall(0, 0, 500, 1000);
+  gfx::Rect top_left(0, 0, keyboard_width, keyboard_height);
+  gfx::Rect top_right(900, 0, keyboard_width, keyboard_height);
+  gfx::Rect bottom_left(0, 400, keyboard_width, keyboard_height);
+  gfx::Rect bottom_right(900, 400, keyboard_width, keyboard_height);
+  gfx::Rect bottomish_center(450, 390, keyboard_width, keyboard_height);
+
+  // Save an arbitrary position so that default location will not be used.
+  floating_behavior.SavePosition(
+      gfx::Rect(0, 0, keyboard_width, keyboard_height), workspace_wide.size());
+
+  floating_behavior.AdjustSetBoundsRequest(workspace_wide, top_left);
+  gfx::Point result = floating_behavior.GetPositionForShowingKeyboard(
+      keyboard_size, workspace_wide);
+  ASSERT_EQ(gfx::Point(0, 0), result);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_tall);
+  ASSERT_EQ(gfx::Point(0, 0), result);
+
+  floating_behavior.AdjustSetBoundsRequest(workspace_wide, top_right);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_wide);
+  ASSERT_EQ(gfx::Point(900, 0), result);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_tall);
+  ASSERT_EQ(gfx::Point(400, 0), result);
+
+  floating_behavior.AdjustSetBoundsRequest(workspace_wide, bottom_left);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_wide);
+  ASSERT_EQ(gfx::Point(0, 400), result);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_tall);
+  ASSERT_EQ(gfx::Point(0, 900), result);
+
+  floating_behavior.AdjustSetBoundsRequest(workspace_wide, bottom_right);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_wide);
+  ASSERT_EQ(gfx::Point(900, 400), result);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_tall);
+  ASSERT_EQ(gfx::Point(400, 900), result);
+
+  floating_behavior.AdjustSetBoundsRequest(workspace_wide, bottomish_center);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_wide);
+  ASSERT_EQ(gfx::Point(450, 390), result);
+  result = floating_behavior.GetPositionForShowingKeyboard(keyboard_size,
+                                                           workspace_tall);
+
+  // rather than 400:0 for the vertical padding, use 390:10
+  // with 900 pixels available this ratio results in 877.5, which is truncated.
+  // 390 / 400 * 900 = 877.5
+  ASSERT_EQ(gfx::Point(200, 877), result);
 }
 
 TEST(ContainerFloatingBehaviorTest, DontSaveCoordinatesUntilKeyboardMoved) {
@@ -77,7 +148,8 @@ TEST(ContainerFloatingBehaviorTest, DontSaveCoordinatesUntilKeyboardMoved) {
   // Simulate the user clicking and moving the keyboard to some arbitrary
   // location (it doesn't matter where). Now that the coordinate is known to be
   // user-determined.
-  floating_behavior.SavePosition(gfx::Point(10, 10));
+  floating_behavior.SavePosition(
+      gfx::Rect(10, 10, keyboard_width, keyboard_height), workspace.size());
 
   // Move the keyboard somewhere else. The coordinates should be taken as-is
   // without being adjusted.

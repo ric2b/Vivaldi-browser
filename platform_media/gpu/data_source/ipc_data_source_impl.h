@@ -14,6 +14,10 @@
 #include "base/synchronization/lock.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 
+#ifndef NDEBUG
+#include "base/files/memory_mapped_file.h"
+#endif //NDEBUG
+
 namespace IPC {
 class Sender;
 }
@@ -72,6 +76,12 @@ class IPCDataSourceImpl : public IPCDataSource {
   // A buffer for raw media data, shared with the render process.  Filled in the
   // render process, consumed in the GPU process.
   std::unique_ptr<base::SharedMemory> shared_data_;
+
+#ifndef NDEBUG
+  int64_t content_log_size_;
+  base::FilePath content_log_path_;
+  std::unique_ptr<base::MemoryMappedFile> content_log_;
+#endif //NDEBUG
 
   DISALLOW_COPY_AND_ASSIGN(IPCDataSourceImpl);
 };

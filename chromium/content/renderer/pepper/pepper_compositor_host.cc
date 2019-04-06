@@ -10,12 +10,10 @@
 
 #include "base/logging.h"
 #include "base/memory/shared_memory.h"
-#include "cc/blink/web_layer_impl.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/trees/layer_tree_host.h"
-#include "components/viz/client/client_shared_bitmap_manager.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/gfx_conversion.h"
 #include "content/renderer/pepper/host_globals.h"
@@ -191,12 +189,10 @@ void PepperCompositorHost::ViewInitiatedPaint() {
 
 void PepperCompositorHost::ImageReleased(
     int32_t id,
-    std::unique_ptr<base::SharedMemory> shared_memory,
-    std::unique_ptr<viz::SharedBitmap> bitmap,
+    scoped_refptr<cc::CrossThreadSharedBitmap> shared_bitmap,
+    cc::SharedBitmapIdRegistration registration,
     const gpu::SyncToken& sync_token,
     bool is_lost) {
-  bitmap.reset();
-  shared_memory.reset();
   ResourceReleased(id, sync_token, is_lost);
 }
 
@@ -268,11 +264,9 @@ void PepperCompositorHost::UpdateLayer(
   }
 
   if (new_layer->color) {
-    layer->SetBackgroundColor(SkColorSetARGBMacro(
-        new_layer->color->alpha * 255,
-        new_layer->color->red * 255,
-        new_layer->color->green * 255,
-        new_layer->color->blue * 255));
+    layer->SetBackgroundColor(SkColorSetARGB(
+        new_layer->color->alpha * 255, new_layer->color->red * 255,
+        new_layer->color->green * 255, new_layer->color->blue * 255));
     return;
   }
 
@@ -286,7 +280,7 @@ void PepperCompositorHost::UpdateLayer(
           new_layer->texture->sync_token);
       texture_layer->SetTransferableResource(
           resource,
-          viz::SingleReleaseCallback::Create(base::Bind(
+          viz::SingleReleaseCallback::Create(base::BindOnce(
               &PepperCompositorHost::ResourceReleased,
               weak_factory_.GetWeakPtr(), new_layer->common.resource_id)));
       // TODO(penghuang): get a damage region from the application and
@@ -314,19 +308,25 @@ void PepperCompositorHost::UpdateLayer(
       DCHECK_EQ(rv, PP_TRUE);
       DCHECK_EQ(desc.stride, desc.size.width * 4);
       DCHECK_EQ(desc.format, PP_IMAGEDATAFORMAT_RGBA_PREMUL);
-      std::unique_ptr<viz::SharedBitmap> bitmap =
-          RenderThreadImpl::current()
-              ->shared_bitmap_manager()
-              ->GetBitmapForSharedMemory(image_shm.get());
+
+      viz::SharedBitmapId shared_bitmap_id = viz::SharedBitmap::GenerateId();
+      // TODO(danakj): These bitmaps could be reused for future frames instead
+      // of malloc/free for each frame.
+      auto shared_bitmap = base::MakeRefCounted<cc::CrossThreadSharedBitmap>(
+          shared_bitmap_id, std::move(image_shm), PP_ToGfxSize(desc.size),
+          viz::RGBA_8888);
+
+      cc::SharedBitmapIdRegistration registration =
+          image_layer->RegisterSharedBitmapId(shared_bitmap_id, shared_bitmap);
 
       auto resource = viz::TransferableResource::MakeSoftware(
-          bitmap->id(), bitmap->sequence_number(), PP_ToGfxSize(desc.size));
+          shared_bitmap_id, PP_ToGfxSize(desc.size), viz::RGBA_8888);
       image_layer->SetTransferableResource(
           resource,
-          viz::SingleReleaseCallback::Create(base::Bind(
+          viz::SingleReleaseCallback::Create(base::BindOnce(
               &PepperCompositorHost::ImageReleased, weak_factory_.GetWeakPtr(),
-              new_layer->common.resource_id, base::Passed(&image_shm),
-              base::Passed(&bitmap))));
+              new_layer->common.resource_id, std::move(shared_bitmap),
+              std::move(registration))));
       // TODO(penghuang): get a damage region from the application and
       // pass it to SetNeedsDisplayRect().
       image_layer->SetNeedsDisplay();

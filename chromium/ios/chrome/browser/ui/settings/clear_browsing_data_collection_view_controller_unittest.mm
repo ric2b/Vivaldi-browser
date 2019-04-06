@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -25,12 +24,12 @@
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/signin/fake_oauth2_token_service_builder.h"
 #include "ios/chrome/browser/signin/fake_signin_manager_builder.h"
-#include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
+#include "ios/chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_test_util.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller_test.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_text_item.h"
 #import "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
@@ -45,7 +44,7 @@
 using testing::Return;
 
 @interface ClearBrowsingDataCollectionViewController (ExposedForTesting)
-- (NSString*)getCounterTextFromResult:
+- (NSString*)counterTextFromResult:
     (const browsing_data::BrowsingDataCounter::Result&)result;
 @end
 
@@ -68,19 +67,18 @@ class ClearBrowsingDataCollectionViewControllerTest
     // Setup identity services.
     TestChromeBrowserState::Builder builder;
     builder.SetPrefService(CreatePrefService());
-    builder.AddTestingFactory(OAuth2TokenServiceFactory::GetInstance(),
+    builder.AddTestingFactory(ProfileOAuth2TokenServiceFactory::GetInstance(),
                               &BuildFakeOAuth2TokenService);
     builder.AddTestingFactory(ios::SigninManagerFactory::GetInstance(),
                               &ios::BuildFakeSigninManager);
-    builder.AddTestingFactory(IOSChromeProfileSyncServiceFactory::GetInstance(),
+    builder.AddTestingFactory(ProfileSyncServiceFactory::GetInstance(),
                               &BuildMockProfileSyncService);
     browser_state_ = builder.Build();
 
     signin_manager_ =
         ios::SigninManagerFactory::GetForBrowserState(browser_state_.get());
     mock_sync_service_ = static_cast<browser_sync::ProfileSyncServiceMock*>(
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-            browser_state_.get()));
+        ProfileSyncServiceFactory::GetForBrowserState(browser_state_.get()));
   }
 
   std::unique_ptr<sync_preferences::PrefServiceSyncable> CreatePrefService() {
@@ -114,47 +112,42 @@ class ClearBrowsingDataCollectionViewControllerTest
 // Tests ClearBrowsingDataCollectionViewControllerTest is set up with all
 // appropriate items and sections.
 TEST_F(ClearBrowsingDataCollectionViewControllerTest, TestModel) {
-  EXPECT_CALL(*mock_sync_service_, IsSyncActive())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
+      .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_USER_CHOICE));
   CreateController();
   CheckController();
 
   int section_offset = 0;
   if (experimental_flags::IsNewClearBrowsingDataUIEnabled()) {
-    EXPECT_EQ(4, NumberOfSections());
-    EXPECT_EQ(1, NumberOfItemsInSection(0));
     section_offset = 1;
-  } else {
-    EXPECT_EQ(3, NumberOfSections());
   }
 
-  EXPECT_EQ(5, NumberOfItemsInSection(section_offset));
-  CheckTextCellTitleWithId(IDS_IOS_CLEAR_BROWSING_HISTORY, section_offset, 0);
-  CheckAccessoryType(MDCCollectionViewCellAccessoryCheckmark, section_offset,
-                     0);
-  CheckTextCellTitleWithId(IDS_IOS_CLEAR_COOKIES, section_offset, 1);
-  CheckAccessoryType(MDCCollectionViewCellAccessoryCheckmark, section_offset,
-                     1);
-  CheckTextCellTitleWithId(IDS_IOS_CLEAR_CACHE, section_offset, 2);
-  CheckAccessoryType(MDCCollectionViewCellAccessoryCheckmark, section_offset,
-                     2);
-  CheckTextCellTitleWithId(IDS_IOS_CLEAR_SAVED_PASSWORDS, section_offset, 3);
-  CheckAccessoryType(MDCCollectionViewCellAccessoryNone, section_offset, 3);
-  CheckTextCellTitleWithId(IDS_IOS_CLEAR_AUTOFILL, section_offset, 4);
-  CheckAccessoryType(MDCCollectionViewCellAccessoryNone, section_offset, 4);
+  CheckTextCellTitleWithId(IDS_IOS_CLEAR_BROWSING_HISTORY, 0 + section_offset,
+                           0);
+  CheckAccessoryType(MDCCollectionViewCellAccessoryCheckmark,
+                     0 + section_offset, 0);
+  CheckTextCellTitleWithId(IDS_IOS_CLEAR_COOKIES, 0 + section_offset, 1);
+  CheckAccessoryType(MDCCollectionViewCellAccessoryCheckmark,
+                     0 + section_offset, 1);
+  CheckTextCellTitleWithId(IDS_IOS_CLEAR_CACHE, 0 + section_offset, 2);
+  CheckAccessoryType(MDCCollectionViewCellAccessoryCheckmark,
+                     0 + section_offset, 2);
+  CheckTextCellTitleWithId(IDS_IOS_CLEAR_SAVED_PASSWORDS, 0 + section_offset,
+                           3);
+  CheckAccessoryType(MDCCollectionViewCellAccessoryNone, 0 + section_offset, 3);
+  CheckTextCellTitleWithId(IDS_IOS_CLEAR_AUTOFILL, 0 + section_offset, 4);
+  CheckAccessoryType(MDCCollectionViewCellAccessoryNone, 0 + section_offset, 4);
 
-  EXPECT_EQ(1, NumberOfItemsInSection(1 + section_offset));
   CheckTextCellTitleWithId(IDS_IOS_CLEAR_BUTTON, 1 + section_offset, 0);
 
-  EXPECT_EQ(1, NumberOfItemsInSection(2 + section_offset));
   CheckSectionFooterWithId(IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_SAVED_SITE_DATA,
                            2 + section_offset);
 }
 
 TEST_F(ClearBrowsingDataCollectionViewControllerTest,
-       TestModelSignedInSyncOff) {
-  EXPECT_CALL(*mock_sync_service_, IsSyncActive())
-      .WillRepeatedly(Return(false));
+       TestItemsSignedInSyncOff) {
+  EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
+      .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_USER_CHOICE));
   signin_manager_->SetAuthenticatedAccountInfo("12345", "syncuser@example.com");
   CreateController();
   CheckController();
@@ -168,12 +161,11 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest,
     EXPECT_EQ(4, NumberOfSections());
   }
 
-  EXPECT_EQ(5, NumberOfItemsInSection(section_offset));
+  EXPECT_EQ(5, NumberOfItemsInSection(0 + section_offset));
   EXPECT_EQ(1, NumberOfItemsInSection(1 + section_offset));
 
   EXPECT_EQ(1, NumberOfItemsInSection(2 + section_offset));
-  CheckSectionFooterWithId(IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_ACCOUNT,
-                           2 + section_offset);
+  CheckSectionFooterWithId(IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_ACCOUNT, 2);
 
   EXPECT_EQ(1, NumberOfItemsInSection(3 + section_offset));
   CheckSectionFooterWithId(IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_SAVED_SITE_DATA,
@@ -181,8 +173,11 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest,
 }
 
 TEST_F(ClearBrowsingDataCollectionViewControllerTest,
-       TestModelSignedInSyncActiveHistoryOff) {
-  EXPECT_CALL(*mock_sync_service_, IsSyncActive()).WillRepeatedly(Return(true));
+       TestItemsSignedInSyncActiveHistoryOff) {
+  EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
+      .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_NONE));
+  EXPECT_CALL(*mock_sync_service_, GetState())
+      .WillRepeatedly(Return(syncer::SyncService::State::ACTIVE));
   EXPECT_CALL(*mock_sync_service_, GetActiveDataTypes())
       .WillRepeatedly(Return(syncer::ModelTypeSet()));
   EXPECT_CALL(*mock_sync_service_, IsUsingSecondaryPassphrase())
@@ -194,21 +189,12 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest,
 
   int section_offset = 0;
   if (experimental_flags::IsNewClearBrowsingDataUIEnabled()) {
-    EXPECT_EQ(5, NumberOfSections());
-    EXPECT_EQ(1, NumberOfItemsInSection(0));
     section_offset = 1;
-  } else {
-    EXPECT_EQ(4, NumberOfSections());
   }
 
-  EXPECT_EQ(5, NumberOfItemsInSection(section_offset));
-  EXPECT_EQ(1, NumberOfItemsInSection(1 + section_offset));
-
-  EXPECT_EQ(1, NumberOfItemsInSection(2 + section_offset));
   CheckSectionFooterWithId(IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_ACCOUNT,
                            2 + section_offset);
 
-  EXPECT_EQ(1, NumberOfItemsInSection(3 + section_offset));
   CheckSectionFooterWithId(
       IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_CLEAR_SYNC_AND_SAVED_SITE_DATA,
       3 + section_offset);
@@ -219,92 +205,19 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest, TestUpdatePrefWithValue) {
   CheckController();
   PrefService* prefs = browser_state_->GetPrefs();
 
-  int section = experimental_flags::IsNewClearBrowsingDataUIEnabled() ? 1 : 0;
+  const int section_offset =
+      experimental_flags::IsNewClearBrowsingDataUIEnabled() ? 1 : 0;
 
-  SelectItem(kDeleteBrowsingHistoryItem, section);
+  SelectItem(kDeleteBrowsingHistoryItem, 0 + section_offset);
   EXPECT_FALSE(prefs->GetBoolean(browsing_data::prefs::kDeleteBrowsingHistory));
-  SelectItem(kDeleteCookiesItem, section);
+  SelectItem(kDeleteCookiesItem, 0 + section_offset);
   EXPECT_FALSE(prefs->GetBoolean(browsing_data::prefs::kDeleteCookies));
-  SelectItem(kDeleteCacheItem, section);
+  SelectItem(kDeleteCacheItem, 0 + section_offset);
   EXPECT_FALSE(prefs->GetBoolean(browsing_data::prefs::kDeleteCache));
-  SelectItem(kDeletePasswordsItem, section);
+  SelectItem(kDeletePasswordsItem, 0 + section_offset);
   EXPECT_TRUE(prefs->GetBoolean(browsing_data::prefs::kDeletePasswords));
-  SelectItem(kDeleteFormDataItem, section);
+  SelectItem(kDeleteFormDataItem, 0 + section_offset);
   EXPECT_TRUE(prefs->GetBoolean(browsing_data::prefs::kDeleteFormData));
-}
-
-TEST_F(ClearBrowsingDataCollectionViewControllerTest,
-       TestCacheCounterFormattingForAllTime) {
-  ASSERT_EQ("en", GetApplicationContext()->GetApplicationLocale());
-  PrefService* prefs = browser_state_->GetPrefs();
-  prefs->SetInteger(browsing_data::prefs::kDeleteTimePeriod,
-                    static_cast<int>(browsing_data::TimePeriod::ALL_TIME));
-  CacheCounter counter(browser_state_.get());
-
-  // Test multiple possible types of formatting.
-  // clang-format off
-  const struct TestCase {
-    int cache_size;
-    NSString* expected_output;
-  } kTestCases[] = {
-      {0, @"Less than 1 MB"},
-      {(1 << 20) - 1, @"Less than 1 MB"},
-      {(1 << 20), @"1 MB"},
-      {(1 << 20) + (1 << 19), @"1.5 MB"},
-      {(1 << 21), @"2 MB"},
-      {(1 << 30), @"1 GB"}
-  };
-  // clang-format on
-
-  ClearBrowsingDataCollectionViewController* viewController =
-      base::mac::ObjCCastStrict<ClearBrowsingDataCollectionViewController>(
-          controller());
-  for (const TestCase& test_case : kTestCases) {
-    browsing_data::BrowsingDataCounter::FinishedResult result(
-        &counter, test_case.cache_size);
-    NSString* output = [viewController getCounterTextFromResult:result];
-    EXPECT_NSEQ(test_case.expected_output, output);
-  }
-}
-
-TEST_F(ClearBrowsingDataCollectionViewControllerTest,
-       TestCacheCounterFormattingForLessThanAllTime) {
-  ASSERT_EQ("en", GetApplicationContext()->GetApplicationLocale());
-
-  // If the new UI is not enabled then the pref value for the time period
-  // is ignored and the time period defaults to ALL_TIME.
-  if (!experimental_flags::IsNewClearBrowsingDataUIEnabled()) {
-    return;
-  }
-  PrefService* prefs = browser_state_->GetPrefs();
-  prefs->SetInteger(browsing_data::prefs::kDeleteTimePeriod,
-                    static_cast<int>(browsing_data::TimePeriod::LAST_HOUR));
-  CacheCounter counter(browser_state_.get());
-
-  // Test multiple possible types of formatting.
-  // clang-format off
-  const struct TestCase {
-    int cache_size;
-    NSString* expected_output;
-  } kTestCases[] = {
-      {0, @"Less than 1 MB"},
-      {(1 << 20) - 1, @"Less than 1 MB"},
-      {(1 << 20), @"Less than 1 MB"},
-      {(1 << 20) + (1 << 19), @"Less than 1.5 MB"},
-      {(1 << 21), @"Less than 2 MB"},
-      {(1 << 30), @"Less than 1 GB"}
-  };
-  // clang-format on
-
-  ClearBrowsingDataCollectionViewController* viewController =
-      base::mac::ObjCCastStrict<ClearBrowsingDataCollectionViewController>(
-          controller());
-  for (const TestCase& test_case : kTestCases) {
-    browsing_data::BrowsingDataCounter::FinishedResult result(
-        &counter, test_case.cache_size);
-    NSString* output = [viewController getCounterTextFromResult:result];
-    EXPECT_NSEQ(test_case.expected_output, output);
-  }
 }
 
 }  // namespace

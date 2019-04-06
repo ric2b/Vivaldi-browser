@@ -22,8 +22,7 @@
 #include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
 
 namespace {
-const CGFloat kAnimationDuration = 0.2;
-
+const CGFloat kResizeAnimationDuration = 0.2;
 }
 
 @implementation AutocompleteTextField
@@ -45,7 +44,7 @@ const CGFloat kAnimationDuration = 0.2;
   [[self cell] setLineBreakMode:NSLineBreakByTruncatingTail];
   currentToolTips_.reset([[NSMutableArray alloc] init]);
   resizeAnimation_.reset([[NSViewAnimation alloc] init]);
-  [resizeAnimation_ setDuration:kAnimationDuration];
+  [resizeAnimation_ setDuration:kResizeAnimationDuration];
   [resizeAnimation_ setAnimationBlockingMode:NSAnimationNonblocking];
   [self setAlignment:cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
                          ? NSRightTextAlignment
@@ -296,8 +295,12 @@ const CGFloat kAnimationDuration = 0.2;
   // Use MD-style anchoring, even if only pilot dialogs are enabled. MD dialogs
   // have no arrow and align corners. Cocoa dialogs will always have an arrow.
   // This causes the arrows on Cocoa dialogs to align to the omnibox corner.
-  if (!chrome::ShowPilotDialogsWithViewsToolkit())
-    return [self arrowAnchorPointForDecoration:decoration];
+  if (!chrome::ShowPilotDialogsWithViewsToolkit()) {
+    const NSRect frame =
+        [[self cell] frameForDecoration:decoration inFrame:[self bounds]];
+    NSPoint point = decoration->GetBubblePointInFrame(frame);
+    return [self convertPoint:point toView:nil];
+  }
 
   // Under MD, dialogs have no arrow and anchor to corner of the location bar
   // frame, not a specific point within it. See http://crbug.com/566115.
@@ -319,13 +322,6 @@ const CGFloat kAnimationDuration = 0.2;
   BOOL isLeftDecoration = [[self cell] isLeftDecoration:decoration];
   NSPoint point = NSMakePoint(isLeftDecoration ? NSMinX(frame) : NSMaxX(frame),
                               NSMaxY(frame));
-  return [self convertPoint:point toView:nil];
-}
-
-- (NSPoint)arrowAnchorPointForDecoration:(LocationBarDecoration*)decoration {
-  const NSRect frame =
-      [[self cell] frameForDecoration:decoration inFrame:[self bounds]];
-  NSPoint point = decoration->GetBubblePointInFrame(frame);
   return [self convertPoint:point toView:nil];
 }
 

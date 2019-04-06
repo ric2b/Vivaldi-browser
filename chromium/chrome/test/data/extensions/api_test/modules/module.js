@@ -3,5 +3,5 @@
 // found in the LICENSE file.
 
 export function pass() {
-  chrome.test.notifyPass();
+  chrome.test.succeed();
 }

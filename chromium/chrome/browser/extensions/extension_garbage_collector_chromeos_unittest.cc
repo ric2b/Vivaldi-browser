@@ -22,9 +22,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
@@ -32,8 +32,10 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/install_flag.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest_constants.h"
-#include "ppapi/features/features.h"
+#include "extensions/common/value_builder.h"
+#include "ppapi/buildflags/buildflags.h"
 
 namespace {
 const char kExtensionId1[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -48,6 +50,8 @@ class ExtensionGarbageCollectorChromeOSUnitTest
   const base::FilePath& cache_dir() { return cache_dir_.GetPath(); }
 
   void SetUp() override {
+    ExtensionServiceTestBase::SetUp();
+
 #if BUILDFLAG(ENABLE_PLUGINS)
     content::PluginService::GetInstance()->Init();
 #endif
@@ -116,17 +120,12 @@ class ExtensionGarbageCollectorChromeOSUnitTest
   scoped_refptr<Extension> CreateExtension(const std::string& id,
                                            const std::string& version,
                                            const base::FilePath& path) {
-    base::DictionaryValue manifest;
-    manifest.SetString(manifest_keys::kName, "test");
-    manifest.SetString(manifest_keys::kVersion, version);
-
-    std::string error;
-    scoped_refptr<Extension> extension = Extension::Create(
-        path, Manifest::INTERNAL, manifest, Extension::NO_FLAGS, id, &error);
-    CHECK(extension.get()) << error;
-    CHECK_EQ(id, extension->id());
-
-    return extension;
+    return ExtensionBuilder("test")
+        .SetManifestKey(manifest_keys::kVersion, version)
+        .SetID(id)
+        .SetPath(path)
+        .SetLocation(Manifest::INTERNAL)
+        .Build();
   }
 
   ExtensionPrefs* GetExtensionPrefs() {

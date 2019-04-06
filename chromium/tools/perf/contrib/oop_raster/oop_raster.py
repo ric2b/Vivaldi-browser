@@ -13,7 +13,7 @@ def CustomizeBrowserOptionsForOopRasterization(options):
   options.AppendExtraBrowserArgs('--enable-oop-rasterization')
 
 
-@benchmark.Owner(emails=['enne@chromium.org'])
+@benchmark.Info(emails=['enne@chromium.org'])
 class SmoothnessOopRasterizationTop25(smoothness._Smoothness):
   """Measures rendering statistics for the top 25 with oop rasterization.
   """
@@ -28,12 +28,13 @@ class SmoothnessOopRasterizationTop25(smoothness._Smoothness):
     return 'smoothness.oop_rasterization.top_25_smooth'
 
 
-@benchmark.Owner(emails=['enne@chromium.org'])
+@benchmark.Info(emails=['enne@chromium.org'])
 class ThreadTimesOopRasterKeyMobile(thread_times._ThreadTimes):
   """Measure timeline metrics for key mobile pages while using out of process
   raster."""
   tag = 'oop_rasterization'
   page_set = page_sets.KeyMobileSitesSmoothPageSet
+  options = {'story_tag_filter': 'fastpath'}
 
   def SetExtraBrowserOptions(self, options):
     super(ThreadTimesOopRasterKeyMobile, self).SetExtraBrowserOptions(options)

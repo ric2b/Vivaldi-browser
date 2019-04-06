@@ -21,6 +21,7 @@
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/vivaldi_browser_window.h"
+#include "ui/vivaldi_native_app_window.h"
 
 @class VivaldiAppNSWindow;
 class ExtensionKeybindingRegistryCocoa;
@@ -51,8 +52,7 @@ class SkRegion;
 @end
 
 // Cocoa bridge to AppWindow.
-class VivaldiNativeAppWindowCocoa : public extensions::NativeAppWindow,
-                                    public content::WebContentsObserver {
+class VivaldiNativeAppWindowCocoa : public VivaldiNativeAppWindow {
  public:
   VivaldiNativeAppWindowCocoa(
         VivaldiBrowserWindow* app_window,
@@ -70,6 +70,7 @@ class VivaldiNativeAppWindowCocoa : public extensions::NativeAppWindow,
   void Show() override;
   void ShowInactive() override;
   void Hide() override;
+  bool IsVisible() const override;
   void Close() override;
   void Activate() override;
   void Deactivate() override;

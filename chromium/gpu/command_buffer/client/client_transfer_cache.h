@@ -7,16 +7,14 @@
 
 #include <map>
 
+#include "base/optional.h"
 #include "base/synchronization/lock.h"
-#include "cc/paint/transfer_cache_entry.h"
 #include "gpu/command_buffer/client/client_discardable_manager.h"
 #include "gpu/command_buffer/client/gles2_impl_export.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/mapped_memory.h"
 
 namespace gpu {
-namespace gles2 {
-class GLES2CmdHelper;
-}
 class MappedMemoryManager;
 
 // ClientTransferCache allows for ClientTransferCacheEntries to be inserted
@@ -41,34 +39,46 @@ class MappedMemoryManager;
 // the context lock be held.
 class GLES2_IMPL_EXPORT ClientTransferCache {
  public:
-  ClientTransferCache();
+  class Client {
+   public:
+    virtual void IssueCreateTransferCacheEntry(GLuint entry_type,
+                                               GLuint entry_id,
+                                               GLuint handle_shm_id,
+                                               GLuint handle_shm_offset,
+                                               GLuint data_shm_id,
+                                               GLuint data_shm_offset,
+                                               GLuint data_size) = 0;
+    virtual void IssueDeleteTransferCacheEntry(GLuint entry_type,
+                                               GLuint entry_id) = 0;
+    virtual void IssueUnlockTransferCacheEntry(GLuint entry_type,
+                                               GLuint entry_id) = 0;
+    virtual CommandBufferHelper* cmd_buffer_helper() = 0;
+    virtual CommandBuffer* command_buffer() const = 0;
+  };
+
+  explicit ClientTransferCache(Client* client);
   ~ClientTransferCache();
 
-  void CreateCacheEntry(gles2::GLES2CmdHelper* helper,
-                        MappedMemoryManager* mapped_memory,
-                        const cc::ClientTransferCacheEntry& entry);
-  bool LockTransferCacheEntry(cc::TransferCacheEntryType type, uint32_t id);
-  void UnlockTransferCacheEntries(
-      gles2::GLES2CmdHelper* helper,
-      const std::vector<std::pair<cc::TransferCacheEntryType, uint32_t>>&
-          entries);
-  void DeleteTransferCacheEntry(gles2::GLES2CmdHelper* helper,
-                                cc::TransferCacheEntryType type,
-                                uint32_t id);
+  void* MapEntry(MappedMemoryManager* mapped_memory, size_t size);
+  void UnmapAndCreateEntry(uint32_t type, uint32_t id);
+  bool LockEntry(uint32_t type, uint32_t id);
+  void UnlockEntries(const std::vector<std::pair<uint32_t, uint32_t>>& entries);
+  void DeleteEntry(uint32_t type, uint32_t id);
 
  private:
-  ClientDiscardableHandle::Id FindDiscardableHandleId(
-      cc::TransferCacheEntryType type,
-      uint32_t id);
+  using EntryKey = std::pair<uint32_t, uint32_t>;
+  ClientDiscardableHandle::Id FindDiscardableHandleId(const EntryKey& key);
 
-  std::map<uint32_t, ClientDiscardableHandle::Id>& DiscardableHandleIdMap(
-      cc::TransferCacheEntryType entry_type);
+  Client* const client_;  // not owned --- client_ outlives this
+
+  base::Optional<ScopedMappedMemoryPtr> mapped_ptr_;
 
   // Access to other members must always be done with |lock_| held.
   base::Lock lock_;
   ClientDiscardableManager discardable_manager_;
-  std::map<uint32_t, ClientDiscardableHandle::Id> discardable_handle_id_map_
-      [static_cast<uint32_t>(cc::TransferCacheEntryType::kLast) + 1];
+  std::map<EntryKey, ClientDiscardableHandle::Id> discardable_handle_id_map_;
+
+  DISALLOW_COPY_AND_ASSIGN(ClientTransferCache);
 };
 
 }  // namespace gpu

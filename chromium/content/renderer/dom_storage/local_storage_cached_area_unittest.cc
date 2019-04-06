@@ -10,12 +10,11 @@
 
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/common/leveldb_wrapper.mojom.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/renderer/dom_storage/local_storage_cached_areas.h"
 #include "content/renderer/dom_storage/mock_leveldb_wrapper.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/test/fake_renderer_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/test/fake_renderer_scheduler.h"
 
 namespace content {
 
@@ -64,18 +63,20 @@ class LocalStorageCachedAreaTest : public testing::Test {
 
   static std::vector<uint8_t> String16ToUint8Vector(
       const base::string16& input) {
-    return LocalStorageCachedArea::String16ToUint8Vector(input);
+    return LocalStorageCachedArea::String16ToUint8Vector(
+        input, LocalStorageCachedArea::FormatOption::kLocalStorageDetectFormat);
   }
 
   static base::string16 Uint8VectorToString16(
       const std::vector<uint8_t>& input) {
-    return LocalStorageCachedArea::Uint8VectorToString16(input);
+    return LocalStorageCachedArea::Uint8VectorToString16(
+        input, LocalStorageCachedArea::FormatOption::kLocalStorageDetectFormat);
   }
 
  protected:
   TestBrowserThreadBundle test_browser_thread_bundle_;
   MockLevelDBWrapper mock_leveldb_wrapper_;
-  std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler_;
+  std::unique_ptr<blink::scheduler::WebThreadScheduler> renderer_scheduler_;
   LocalStorageCachedAreas cached_areas_;
 };
 
@@ -188,7 +189,7 @@ TEST_F(LocalStorageCachedAreaTest, Setters) {
 TEST_F(LocalStorageCachedAreaTest, MutationsAreIgnoredUntilLoadCompletion) {
   scoped_refptr<LocalStorageCachedArea> cached_area =
       cached_areas_.GetCachedArea(kOrigin);
-  mojom::LevelDBObserver* observer = cached_area.get();
+  blink::mojom::StorageAreaObserver* observer = cached_area.get();
 
   EXPECT_TRUE(cached_area->GetItem(kKey).is_null());
   EXPECT_TRUE(IsCacheLoaded(cached_area.get()));
@@ -241,7 +242,7 @@ TEST_F(LocalStorageCachedAreaTest, MutationsAreIgnoredUntilClearCompletion) {
 TEST_F(LocalStorageCachedAreaTest, KeyMutationsAreIgnoredUntilCompletion) {
   scoped_refptr<LocalStorageCachedArea> cached_area =
       cached_areas_.GetCachedArea(kOrigin);
-  mojom::LevelDBObserver* observer = cached_area.get();
+  blink::mojom::StorageAreaObserver* observer = cached_area.get();
 
   // SetItem
   EXPECT_TRUE(cached_area->SetItem(kKey, kValue, kPageUrl, kStorageAreaId));

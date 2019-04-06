@@ -16,7 +16,9 @@
 // broadcaster.
 @property(nonatomic, strong) ChromeBroadcaster* broadcaster;
 // The broadcasted UI state observed by this object.
-@property(nonatomic, readonly) CGFloat toolbarHeight;
+@property(nonatomic, readonly) CGFloat collapsedHeight;
+@property(nonatomic, readonly) CGFloat expandedHeight;
+@property(nonatomic, readonly) CGFloat bottomToolbarHeight;
 
 @end
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_TEST_TEST_TOOLBAR_UI_OBSERVER_H_

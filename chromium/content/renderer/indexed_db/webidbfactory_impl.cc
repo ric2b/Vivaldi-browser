@@ -10,8 +10,8 @@
 #include "content/renderer/storage_util.h"
 #include "ipc/ipc_sync_channel.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_string.h"
 
 using blink::WebIDBCallbacks;
 using blink::WebIDBDatabase;
@@ -75,8 +75,8 @@ void WebIDBFactoryImpl::GetDatabaseNames(
   io_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&IOThreadHelper::GetDatabaseNames,
-                     base::Unretained(io_helper_),
-                     base::Passed(&callbacks_impl), url::Origin(origin)));
+                     base::Unretained(io_helper_), std::move(callbacks_impl),
+                     url::Origin(origin)));
 }
 
 void WebIDBFactoryImpl::Open(
@@ -95,10 +95,10 @@ void WebIDBFactoryImpl::Open(
           base::WrapUnique(database_callbacks), std::move(task_runner));
   io_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          &IOThreadHelper::Open, base::Unretained(io_helper_), name.Utf16(),
-          version, transaction_id, base::Passed(&callbacks_impl),
-          base::Passed(&database_callbacks_impl), url::Origin(origin)));
+      base::BindOnce(&IOThreadHelper::Open, base::Unretained(io_helper_),
+                     name.Utf16(), version, transaction_id,
+                     std::move(callbacks_impl),
+                     std::move(database_callbacks_impl), url::Origin(origin)));
 }
 
 void WebIDBFactoryImpl::DeleteDatabase(
@@ -113,8 +113,8 @@ void WebIDBFactoryImpl::DeleteDatabase(
   io_runner_->PostTask(
       FROM_HERE, base::BindOnce(&IOThreadHelper::DeleteDatabase,
                                 base::Unretained(io_helper_), name.Utf16(),
-                                base::Passed(&callbacks_impl),
-                                url::Origin(origin), force_close));
+                                std::move(callbacks_impl), url::Origin(origin),
+                                force_close));
 }
 
 WebIDBFactoryImpl::IOThreadHelper::IOThreadHelper(

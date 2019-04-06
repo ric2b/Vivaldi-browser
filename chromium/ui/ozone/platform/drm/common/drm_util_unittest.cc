@@ -9,8 +9,12 @@
 
 #include <map>
 
+#include "base/test/metrics/histogram_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkMatrix44.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/display/util/edid_parser.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
 
@@ -93,6 +97,17 @@ const unsigned char kSST210Corrected[] =
     "\x30\x31\x20\x54\x69\x44\x69\x67\x61\x74\x0a\x6c\x00\x00\xff\x00"
     "\x48\x00\x4b\x34\x41\x54\x30\x30\x32\x38\x0a\x38\x20\x20\xf8\x00";
 
+// This EDID produces blue primary coordinates too far off the expected point,
+// which would paint blue colors as purple. See https://crbug.com/809909.
+const unsigned char kBrokenBluePrimaries[] =
+    "\x00\xff\xff\xff\xff\xff\xff\x00\x4c\x83\x4d\x83\x00\x00\x00\x00"
+    "\x00\x19\x01\x04\x95\x1d\x10\x78\x0a\xee\x25\xa3\x54\x4c\x99\x29"
+    "\x26\x50\x54\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01"
+    "\x01\x01\x01\x01\x01\x01\xd2\x37\x80\xa2\x70\x38\x40\x40\x30\x20"
+    "\x25\x00\x25\xa5\x10\x00\x00\x1a\xa6\x2c\x80\xa2\x70\x38\x40\x40"
+    "\x30\x20\x25\x00\x25\xa5\x10\x00\x00\x1a\x00\x00\x00\xfe\x00\x56"
+    "\x59\x54\x39\x36\x80\x31\x33\x33\x48\x4c\x0a\x20\x00\x00\x00\x00";
+
 }  // anonymous namespace
 
 bool operator==(const ui::DisplayMode_Params& a,
@@ -114,7 +129,8 @@ bool operator==(const ui::DisplaySnapshot_Params& a,
          a.has_current_mode == b.has_current_mode &&
          a.current_mode == b.current_mode &&
          a.has_native_mode == b.has_native_mode &&
-         a.native_mode == b.native_mode && a.product_id == b.product_id &&
+         a.native_mode == b.native_mode && a.product_code == b.product_code &&
+         a.year_of_manufacture == b.year_of_manufacture &&
          a.maximum_cursor_size == b.maximum_cursor_size;
 }
 
@@ -146,7 +162,8 @@ void DetailedCompare(const ui::DisplaySnapshot_Params& a,
   EXPECT_EQ(a.current_mode, b.current_mode);
   EXPECT_EQ(a.has_native_mode, b.has_native_mode);
   EXPECT_EQ(a.native_mode, b.native_mode);
-  EXPECT_EQ(a.product_id, b.product_id);
+  EXPECT_EQ(a.product_code, b.product_code);
+  EXPECT_EQ(a.year_of_manufacture, b.year_of_manufacture);
   EXPECT_EQ(a.maximum_cursor_size, b.maximum_cursor_size);
 }
 
@@ -187,7 +204,8 @@ TEST_F(DrmUtilTest, RoundTripDisplaySnapshot) {
   fp.current_mode = MakeDisplay(1.2);
   fp.has_native_mode = true;
   fp.native_mode = MakeDisplay(1.1);
-  fp.product_id = 7;
+  fp.product_code = 7;
+  fp.year_of_manufacture = 1776;
   fp.maximum_cursor_size = gfx::Size(103, 44);
 
   sp.display_id = 1002;
@@ -206,7 +224,8 @@ TEST_F(DrmUtilTest, RoundTripDisplaySnapshot) {
   sp.has_current_mode = false;
   sp.has_native_mode = true;
   sp.native_mode = MakeDisplay(500.2);
-  sp.product_id = 8;
+  sp.product_code = 8;
+  sp.year_of_manufacture = 2018;
   sp.maximum_cursor_size = gfx::Size(500, 44);
 
   ep.display_id = 2002;
@@ -225,7 +244,8 @@ TEST_F(DrmUtilTest, RoundTripDisplaySnapshot) {
   ep.has_current_mode = true;
   ep.current_mode = MakeDisplay(1000.2);
   ep.has_native_mode = false;
-  ep.product_id = 9;
+  ep.product_code = 9;
+  ep.year_of_manufacture = 2000;
   ep.maximum_cursor_size = gfx::Size(1000, 44);
 
   orig_params.push_back(fp);
@@ -289,68 +309,156 @@ TEST_F(DrmUtilTest, OverlaySurfaceCandidate) {
 }
 
 TEST_F(DrmUtilTest, GetColorSpaceFromEdid) {
+  base::HistogramTester histogram_tester;
+
+  // Test with HP z32x monitor.
+  constexpr SkColorSpacePrimaries expected_hpz32x_primaries = {
+      .fRX = 0.673828f,
+      .fRY = 0.316406f,
+      .fGX = 0.198242f,
+      .fGY = 0.719727f,
+      .fBX = 0.148438f,
+      .fBY = 0.043945f,
+      .fWX = 0.313477f,
+      .fWY = 0.329102f};
+  SkMatrix44 expected_hpz32x_toXYZ50_matrix;
+  expected_hpz32x_primaries.toXYZD50(&expected_hpz32x_toXYZ50_matrix);
   const std::vector<uint8_t> hpz32x_edid(kHPz32x,
                                          kHPz32x + arraysize(kHPz32x) - 1);
-  const double hpz32x_toXYZ50_coeffs[] = {0.620465,   0.200003,  0.143752,  0.,
-                                          0.290159,   0.667573,  0.0422682, 0.,
-                                          0.00523514, 0.0673996, 0.752575,  0.};
-  SkMatrix44 hpz32x_toXYZ50_matrix;
-  hpz32x_toXYZ50_matrix.setRowMajord(hpz32x_toXYZ50_coeffs);
-  const gfx::ColorSpace hpz32x_color_space = gfx::ColorSpace::CreateCustom(
-      hpz32x_toXYZ50_matrix, SkColorSpaceTransferFn({2.2, 1, 0, 0, 0, 0, 0}));
-  EXPECT_STREQ(hpz32x_color_space.ToString().c_str(),
-               GetColorSpaceFromEdid(hpz32x_edid).ToString().c_str());
+  const gfx::ColorSpace expected_hpz32x_color_space =
+      gfx::ColorSpace::CreateCustom(
+          expected_hpz32x_toXYZ50_matrix,
+          SkColorSpaceTransferFn({2.2, 1, 0, 0, 0, 0, 0}));
+  EXPECT_EQ(expected_hpz32x_color_space.ToString(),
+            GetColorSpaceFromEdid(display::EdidParser(hpz32x_edid)).ToString());
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kSuccess),
+      1);
 
+  // Test with Chromebook Samus internal display.
+  constexpr SkColorSpacePrimaries expected_samus_primaries = {.fRX = 0.633789f,
+                                                              .fRY = 0.347656f,
+                                                              .fGX = 0.323242f,
+                                                              .fGY = 0.577148f,
+                                                              .fBX = 0.151367f,
+                                                              .fBY = 0.090820f,
+                                                              .fWX = 0.313477f,
+                                                              .fWY = 0.329102f};
+  SkMatrix44 expected_samus_toXYZ50_matrix;
+  expected_samus_primaries.toXYZD50(&expected_samus_toXYZ50_matrix);
   const std::vector<uint8_t> samus_edid(kSamus, kSamus + arraysize(kSamus) - 1);
-  const double samus_toXYZ50_coeffs[] = {0.41211,    0.39743,  0.15468,  0.,
-                                         0.22317,    0.674029, 0.102801, 0.,
-                                         0.00831561, 0.095953, 0.720941, 0.};
-  SkMatrix44 samus_toXYZ50_matrix;
-  samus_toXYZ50_matrix.setRowMajord(samus_toXYZ50_coeffs);
-  const gfx::ColorSpace samus_color_space = gfx::ColorSpace::CreateCustom(
-      samus_toXYZ50_matrix, SkColorSpaceTransferFn({2.5, 1, 0, 0, 0, 0, 0}));
-  EXPECT_STREQ(samus_color_space.ToString().c_str(),
-               GetColorSpaceFromEdid(samus_edid).ToString().c_str());
+  const gfx::ColorSpace expected_samus_color_space =
+      gfx::ColorSpace::CreateCustom(
+          expected_samus_toXYZ50_matrix,
+          SkColorSpaceTransferFn({2.5, 1, 0, 0, 0, 0, 0}));
+  EXPECT_EQ(expected_samus_color_space.ToString(),
+            GetColorSpaceFromEdid(display::EdidParser(samus_edid)).ToString());
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kSuccess),
+      2);
 
+  // Test with Chromebook Eve internal display.
+  constexpr SkColorSpacePrimaries expected_eve_primaries = {.fRX = 0.639648f,
+                                                            .fRY = 0.329102f,
+                                                            .fGX = 0.299805f,
+                                                            .fGY = 0.599609f,
+                                                            .fBX = 0.149414f,
+                                                            .fBY = 0.059570f,
+                                                            .fWX = 0.312500f,
+                                                            .fWY = 0.328125f};
+  SkMatrix44 expected_eve_toXYZ50_matrix;
+  expected_eve_primaries.toXYZD50(&expected_eve_toXYZ50_matrix);
   const std::vector<uint8_t> eve_edid(kEve, kEve + arraysize(kEve) - 1);
-  const double eve_toXYZ50_coeffs[] = {0.444601,  0.377972,  0.141646,  0.,
-                                       0.226825,  0.713295,  0.0598808, 0.,
-                                       0.0149676, 0.0972496, 0.712993,  0.};
-  SkMatrix44 eve_toXYZ50_matrix;
-  eve_toXYZ50_matrix.setRowMajord(eve_toXYZ50_coeffs);
-  const gfx::ColorSpace eve_color_space = gfx::ColorSpace::CreateCustom(
-      eve_toXYZ50_matrix, SkColorSpaceTransferFn({2.2, 1, 0, 0, 0, 0, 0}));
-  EXPECT_STREQ(eve_color_space.ToString().c_str(),
-               GetColorSpaceFromEdid(eve_edid).ToString().c_str());
+  const gfx::ColorSpace expected_eve_color_space =
+      gfx::ColorSpace::CreateCustom(
+          expected_eve_toXYZ50_matrix,
+          SkColorSpaceTransferFn({2.2, 1, 0, 0, 0, 0, 0}));
+  EXPECT_EQ(expected_eve_color_space.ToString(),
+            GetColorSpaceFromEdid(display::EdidParser(eve_edid)).ToString());
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kSuccess),
+      3);
 
+  // Test with gamma marked as non-existent.
   const std::vector<uint8_t> no_gamma_edid(
       kEdidWithNoGamma, kEdidWithNoGamma + arraysize(kEdidWithNoGamma) - 1);
   const gfx::ColorSpace no_gamma_color_space =
-      GetColorSpaceFromEdid(no_gamma_edid);
+      GetColorSpaceFromEdid(display::EdidParser(no_gamma_edid));
   EXPECT_FALSE(no_gamma_color_space.IsValid());
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kErrorBadGamma),
+      1);
+  histogram_tester.ExpectTotalCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome", 4);
 }
 
 TEST_F(DrmUtilTest, GetInvalidColorSpaceFromEdid) {
+  base::HistogramTester histogram_tester;
   const std::vector<uint8_t> empty_edid;
-  EXPECT_EQ(gfx::ColorSpace(), GetColorSpaceFromEdid(empty_edid));
+  EXPECT_EQ(gfx::ColorSpace(),
+            GetColorSpaceFromEdid(display::EdidParser(empty_edid)));
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kErrorPrimariesAreaTooSmall),
+      1);
 
   const std::vector<uint8_t> invalid_edid(
       kInvalidEdid, kInvalidEdid + arraysize(kInvalidEdid) - 1);
   const gfx::ColorSpace invalid_color_space =
-      GetColorSpaceFromEdid(invalid_edid);
+      GetColorSpaceFromEdid(display::EdidParser(invalid_edid));
   EXPECT_FALSE(invalid_color_space.IsValid());
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kErrorPrimariesAreaTooSmall),
+      2);
 
   const std::vector<uint8_t> sst210_edid(kSST210,
                                          kSST210 + arraysize(kSST210) - 1);
-  const gfx::ColorSpace sst210_color_space = GetColorSpaceFromEdid(sst210_edid);
+  const gfx::ColorSpace sst210_color_space =
+      GetColorSpaceFromEdid(display::EdidParser(sst210_edid));
   EXPECT_FALSE(sst210_color_space.IsValid()) << sst210_color_space.ToString();
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kErrorBadCoordinates),
+      1);
 
   const std::vector<uint8_t> sst210_edid_2(
       kSST210Corrected, kSST210Corrected + arraysize(kSST210Corrected) - 1);
   const gfx::ColorSpace sst210_color_space_2 =
-      GetColorSpaceFromEdid(sst210_edid_2);
+      GetColorSpaceFromEdid(display::EdidParser(sst210_edid_2));
   EXPECT_FALSE(sst210_color_space_2.IsValid())
       << sst210_color_space_2.ToString();
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kErrorPrimariesAreaTooSmall),
+      3);
+
+  const std::vector<uint8_t> broken_blue_edid(
+      kBrokenBluePrimaries,
+      kBrokenBluePrimaries + arraysize(kBrokenBluePrimaries) - 1);
+  const gfx::ColorSpace broken_blue_color_space =
+      GetColorSpaceFromEdid(display::EdidParser(broken_blue_edid));
+  EXPECT_FALSE(broken_blue_color_space.IsValid())
+      << broken_blue_color_space.ToString();
+  histogram_tester.ExpectBucketCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome",
+      static_cast<base::HistogramBase::Sample>(
+          EdidColorSpaceChecksOutcome::kErrorBluePrimaryIsBroken),
+      1);
+  histogram_tester.ExpectTotalCount(
+      "DrmUtil.GetColorSpaceFromEdid.ChecksOutcome", 5);
 }
 
 TEST_F(DrmUtilTest, TestDisplayModesExtraction) {

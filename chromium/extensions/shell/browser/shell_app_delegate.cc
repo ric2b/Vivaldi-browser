@@ -5,8 +5,8 @@
 #include "extensions/shell/browser/shell_app_delegate.h"
 
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/media_capture_util.h"
 #include "extensions/common/constants.h"
-#include "extensions/shell/browser/media_capture_util.h"
 #include "extensions/shell/browser/shell_extension_web_contents_observer.h"
 
 namespace extensions {
@@ -41,11 +41,12 @@ content::WebContents* ShellAppDelegate::OpenURLFromTab(
   return NULL;
 }
 
-void ShellAppDelegate::AddNewContents(content::BrowserContext* context,
-                                      content::WebContents* new_contents,
-                                      WindowOpenDisposition disposition,
-                                      const gfx::Rect& initial_rect,
-                                      bool user_gesture) {
+void ShellAppDelegate::AddNewContents(
+    content::BrowserContext* context,
+    std::unique_ptr<content::WebContents> new_contents,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
+    bool user_gesture) {
   NOTIMPLEMENTED();
 }
 
@@ -65,14 +66,14 @@ void ShellAppDelegate::RunFileChooser(
 void ShellAppDelegate::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback,
+    content::MediaResponseCallback callback,
     const extensions::Extension* extension) {
-  media_capture_util::GrantMediaStreamRequest(
-      web_contents, request, callback, extension);
+  media_capture_util::GrantMediaStreamRequest(web_contents, request,
+                                              std::move(callback), extension);
 }
 
 bool ShellAppDelegate::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type,
     const Extension* extension) {

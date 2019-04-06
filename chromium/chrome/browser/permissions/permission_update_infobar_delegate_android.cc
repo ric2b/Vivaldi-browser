@@ -5,6 +5,7 @@
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/android/jni_array.h"
 #include "base/callback_helpers.h"
@@ -25,8 +26,9 @@ using base::android::JavaParamRef;
 infobars::InfoBar* PermissionUpdateInfoBarDelegate::Create(
     content::WebContents* web_contents,
     const std::vector<ContentSettingsType>& content_settings_types,
-    const PermissionUpdatedCallback& callback) {
-  DCHECK(ShouldShowPermissionInfobar(web_contents, content_settings_types))
+    PermissionUpdatedCallback callback) {
+  DCHECK(ShouldShowPermissionInfoBar(web_contents, content_settings_types) ==
+         ShowPermissionInfoBarState::SHOW_PERMISSION_INFOBAR)
       << "Caller should check ShouldShowPermissionInfobar before creating the "
       << "infobar.";
 
@@ -73,7 +75,7 @@ infobars::InfoBar* PermissionUpdateInfoBarDelegate::Create(
   }
 
   return PermissionUpdateInfoBarDelegate::Create(
-      web_contents, permissions, message_id, callback);
+      web_contents, permissions, message_id, std::move(callback));
 }
 
 // static
@@ -81,30 +83,32 @@ infobars::InfoBar* PermissionUpdateInfoBarDelegate::Create(
     content::WebContents* web_contents,
     const std::vector<std::string>& android_permissions,
     int permission_msg_id,
-    const PermissionUpdatedCallback& callback) {
+    PermissionUpdatedCallback callback) {
   InfoBarService* infobar_service =
       InfoBarService::FromWebContents(web_contents);
   if (!infobar_service) {
-    callback.Run(false);
+    std::move(callback).Run(false);
     return nullptr;
   }
 
   return infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
       std::unique_ptr<ConfirmInfoBarDelegate>(
           new PermissionUpdateInfoBarDelegate(web_contents, android_permissions,
-                                              permission_msg_id, callback))));
+                                              permission_msg_id,
+                                              std::move(callback)))));
 }
 
 // static
-bool PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfobar(
+ShowPermissionInfoBarState
+PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfoBar(
     content::WebContents* web_contents,
     const std::vector<ContentSettingsType>& content_settings_types) {
   if (!web_contents)
-    return false;
+    return ShowPermissionInfoBarState::CANNOT_SHOW_PERMISSION_INFOBAR;
 
   auto* window_android = web_contents->GetNativeView()->GetWindowAndroid();
   if (!window_android)
-    return false;
+    return ShowPermissionInfoBarState::CANNOT_SHOW_PERMISSION_INFOBAR;
 
   for (ContentSettingsType content_settings_type : content_settings_types) {
     std::vector<std::string> android_permissions;
@@ -113,18 +117,18 @@ bool PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfobar(
 
     for (const auto& android_permission : android_permissions) {
       if (!window_android->HasPermission(android_permission))
-        return true;
+        return ShowPermissionInfoBarState::SHOW_PERMISSION_INFOBAR;
     }
   }
 
-  return false;
+  return ShowPermissionInfoBarState::NO_NEED_TO_SHOW_PERMISSION_INFOBAR;
 }
 
 void PermissionUpdateInfoBarDelegate::OnPermissionResult(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jboolean all_permissions_granted) {
-  base::ResetAndReturn(&callback_).Run(all_permissions_granted);
+  std::move(callback_).Run(all_permissions_granted);
   infobar()->RemoveSelf();
 }
 
@@ -132,11 +136,11 @@ PermissionUpdateInfoBarDelegate::PermissionUpdateInfoBarDelegate(
     content::WebContents* web_contents,
     const std::vector<std::string>& android_permissions,
     int permission_msg_id,
-    const PermissionUpdatedCallback& callback)
+    PermissionUpdatedCallback callback)
     : ConfirmInfoBarDelegate(),
       android_permissions_(android_permissions),
       permission_msg_id_(permission_msg_id),
-      callback_(callback) {
+      callback_(std::move(callback)) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_delegate_.Reset(Java_PermissionUpdateInfoBarDelegate_create(
       env, reinterpret_cast<intptr_t>(this), web_contents->GetJavaWebContents(),

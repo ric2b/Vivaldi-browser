@@ -25,6 +25,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace debug {
@@ -50,21 +51,6 @@ const char kProcessPhaseDataKey[] = "process-phase";
 // An atomically incrementing number, used to check for recreations of objects
 // in the same memory space.
 AtomicSequenceNumber g_next_id;
-
-union ThreadRef {
-  int64_t as_id;
-#if defined(OS_WIN)
-  // On Windows, the handle itself is often a pseudo-handle with a common
-  // value meaning "this thread" and so the thread-id is used. The former
-  // can be converted to a thread-id with a system call.
-  PlatformThreadId as_tid;
-#elif defined(OS_POSIX)
-  // On Posix, the handle is always a unique identifier so no conversion
-  // needs to be done. However, it's value is officially opaque so there
-  // is no one correct way to convert it to a numerical identifier.
-  PlatformThreadHandle::Handle as_handle;
-#endif
-};
 
 // Gets the next non-zero identifier. It is only unique within a process.
 uint32_t GetNextDataId() {
@@ -119,6 +105,21 @@ Time WallTimeFromTickTime(int64_t ticks_start, int64_t ticks, Time time_start) {
 }
 
 }  // namespace
+
+union ThreadRef {
+  int64_t as_id;
+#if defined(OS_WIN)
+  // On Windows, the handle itself is often a pseudo-handle with a common
+  // value meaning "this thread" and so the thread-id is used. The former
+  // can be converted to a thread-id with a system call.
+  PlatformThreadId as_tid;
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
+  // On Posix and Fuchsia, the handle is always a unique identifier so no
+  // conversion needs to be done. However, its value is officially opaque so
+  // there is no one correct way to convert it to a numerical identifier.
+  PlatformThreadHandle::Handle as_handle;
+#endif
+};
 
 OwningProcess::OwningProcess() = default;
 OwningProcess::~OwningProcess() = default;
@@ -260,8 +261,9 @@ void Activity::FillFrom(Activity* activity,
   activity->activity_type = type;
   activity->data = data;
 
-#if defined(SYZYASAN)
-  // Create a stacktrace from the current location and get the addresses.
+#if (!defined(OS_NACL) && DCHECK_IS_ON()) || defined(ADDRESS_SANITIZER)
+  // Create a stacktrace from the current location and get the addresses for
+  // improved debuggability.
   StackTrace stack_trace;
   size_t stack_depth;
   const void* const* stack_addrs = stack_trace.Addresses(&stack_depth);
@@ -734,7 +736,7 @@ ThreadActivityTracker::ThreadActivityTracker(void* base, size_t size)
 
 #if defined(OS_WIN)
     header_->thread_ref.as_tid = PlatformThread::CurrentId();
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
     header_->thread_ref.as_handle =
         PlatformThread::CurrentHandle().platform_handle();
 #endif
@@ -1457,12 +1459,12 @@ void GlobalActivityTracker::RecordProcessLaunch(
     ProcessId process_id,
     const FilePath::StringType& exe,
     const FilePath::StringType& args) {
-  const int64_t pid = process_id;
   if (exe.find(FILE_PATH_LITERAL(" "))) {
-    RecordProcessLaunch(pid, FilePath::StringType(FILE_PATH_LITERAL("\"")) +
-                                 exe + FILE_PATH_LITERAL("\" ") + args);
+    RecordProcessLaunch(process_id,
+                        FilePath::StringType(FILE_PATH_LITERAL("\"")) + exe +
+                            FILE_PATH_LITERAL("\" ") + args);
   } else {
-    RecordProcessLaunch(pid, exe + FILE_PATH_LITERAL(' ') + args);
+    RecordProcessLaunch(process_id, exe + FILE_PATH_LITERAL(' ') + args);
   }
 }
 
@@ -1496,7 +1498,7 @@ void GlobalActivityTracker::RecordProcessExit(ProcessId process_id,
     task_runner->PostTask(
         FROM_HERE,
         BindOnce(&GlobalActivityTracker::CleanupAfterProcess, Unretained(this),
-                 pid, now_stamp, exit_code, Passed(&command_line)));
+                 pid, now_stamp, exit_code, std::move(command_line)));
     return;
   }
 

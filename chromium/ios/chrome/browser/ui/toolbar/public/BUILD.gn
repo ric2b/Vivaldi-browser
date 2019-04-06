@@ -5,29 +5,20 @@
 source_set("public") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "abstract_toolbar.h",
-    "abstract_web_toolbar.h",
     "fakebox_focuser.h",
-    "legacy_toolbar_coordinator.h",
     "omnibox_focuser.h",
     "primary_toolbar_coordinator.h",
     "side_swipe_toolbar_interacting.h",
-    "toolbar.h",
-    "toolbar_controller_constants.h",
-    "toolbar_controller_constants.mm",
+    "side_swipe_toolbar_snapshot_providing.h",
     "toolbar_coordinating.h",
-    "toolbar_utils.h",
-    "toolbar_utils.mm",
-    "web_toolbar_controller_constants.h",
-    "web_toolbar_controller_constants.mm",
   ]
   deps = [
-    ":toolbar_base_feature",
+    ":feature_flags",
     "//base",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/activity_services/requirements",
     "//ios/chrome/browser/ui/bubble",
-    "//ios/chrome/browser/ui/fullscreen:new_fullscreen_ui",
+    "//ios/chrome/browser/ui/fullscreen:ui",
     "//ios/chrome/browser/ui/ntp",
     "//ios/chrome/browser/ui/qr_scanner/requirements",
     "//ios/chrome/browser/ui/tools_menu/public",
@@ -35,10 +26,10 @@ source_set("public") {
   ]
 }
 
-source_set("toolbar_base_feature") {
+source_set("feature_flags") {
   sources = [
-    "toolbar_controller_base_feature.h",
-    "toolbar_controller_base_feature.mm",
+    "features.cc",
+    "features.h",
   ]
   deps = [
     "//base",

@@ -97,7 +97,7 @@ class TLSSocket : public ResumableTCPSocket {
   // depend on the newer one.
   static void UpgradeSocketToTLS(
       Socket* socket,
-      scoped_refptr<net::SSLConfigService> config_service,
+      net::SSLConfigService* config_service,
       net::CertVerifier* cert_verifier,
       net::TransportSecurityState* transport_security_state,
       net::CTVerifier* ct_verifier,

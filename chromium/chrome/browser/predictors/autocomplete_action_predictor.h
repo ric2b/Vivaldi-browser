@@ -127,6 +127,7 @@ class AutocompleteActionPredictor
 
   struct TransitionalMatch {
     TransitionalMatch();
+    explicit TransitionalMatch(const base::string16 in_user_text);
     TransitionalMatch(const TransitionalMatch& other);
     ~TransitionalMatch();
 
@@ -161,6 +162,8 @@ class AutocompleteActionPredictor
       DBIdCacheMap;
 
   static const int kMaximumDaysToKeepEntry;
+  static const size_t kMinimumUserTextLength;
+  static const size_t kMaximumStringLength;
 
   // NotificationObserver
   void Observe(int type,
@@ -175,8 +178,12 @@ class AutocompleteActionPredictor
   // Removes all rows from the database and caches.
   void DeleteAllRows();
 
-  // Removes rows from the database and caches that contain a URL in |rows|.
-  void DeleteRowsWithURLs(const history::URLRows& rows);
+  // Removes rows that contain a URL in |rows| from the local caches.
+  // |id_list| must not be nullptr. Every row id deleted will be added to
+  // |id_list|.
+  void DeleteRowsFromCaches(
+      const history::URLRows& rows,
+      std::vector<AutocompleteActionPredictorTable::Row::Id>* id_list);
 
   // Adds and updates rows in the database and caches.
   void AddAndUpdateRows(
@@ -198,7 +205,8 @@ class AutocompleteActionPredictor
   void DeleteOldEntries(history::URLDatabase* url_db);
 
   // Deletes any old or invalid entries from the local caches. |url_db| and
-  // |id_list| must not be NULL. Every row id deleted will be added to id_list.
+  // |id_list| must not be nullptr. Every row id deleted will be added to
+  // |id_list|.
   void DeleteOldIdsFromCaches(
       history::URLDatabase* url_db,
       std::vector<AutocompleteActionPredictorTable::Row::Id>* id_list);
@@ -226,10 +234,7 @@ class AutocompleteActionPredictor
 
   // history::HistoryServiceObserver:
   void OnURLsDeleted(history::HistoryService* history_service,
-                     bool all_history,
-                     bool expired,
-                     const history::URLRows& deleted_rows,
-                     const std::set<GURL>& favicon_urls) override;
+                     const history::DeletionInfo& deletion_info) override;
   void OnHistoryServiceLoaded(
       history::HistoryService* history_service) override;
 
@@ -250,6 +255,10 @@ class AutocompleteActionPredictor
 
   // This is cleared after every Omnibox navigation.
   std::vector<TransitionalMatch> transitional_matches_;
+
+  // The aggregated size of all user text and GURLs in |transitional_matches_|.
+  // This is used to limit the maximum size of |transitional_matches_|.
+  size_t transitional_matches_size_ = 0;
 
   std::unique_ptr<prerender::PrerenderHandle> prerender_handle_;
 

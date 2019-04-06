@@ -5,10 +5,13 @@
 #ifndef CONTENT_PUBLIC_BROWSER_WEB_UI_H_
 #define CONTENT_PUBLIC_BROWSER_WEB_UI_H_
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
 #include "ui/base/page_transition_types.h"
 
@@ -48,7 +51,7 @@ class CONTENT_EXPORT WebUI {
   virtual WebContents* GetWebContents() const = 0;
 
   virtual WebUIController* GetController() const = 0;
-  virtual void SetController(WebUIController* controller) = 0;
+  virtual void SetController(std::unique_ptr<WebUIController> controller) = 0;
 
   // Returns the device scale factor of the monitor that the renderer is on.
   // Whenever possible, WebUI should push resources with this scale factor to
@@ -71,8 +74,8 @@ class CONTENT_EXPORT WebUI {
 
   // Used by WebUIMessageHandlers. If the given message is already registered,
   // the call has no effect.
-  typedef base::Callback<void(const base::ListValue*)> MessageCallback;
-  virtual void RegisterMessageCallback(const std::string& message,
+  using MessageCallback = base::RepeatingCallback<void(const base::ListValue*)>;
+  virtual void RegisterMessageCallback(base::StringPiece message,
                                        const MessageCallback& callback) = 0;
 
   // This is only needed if an embedder overrides handling of a WebUIMessage and

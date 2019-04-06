@@ -37,7 +37,6 @@ REQUIRED_ATTRIBUTES = [
 # Tag names for top-level nodes whose children we don't want to indent.
 TAGS_THAT_DONT_INDENT = [
     'actions',
-    'actions-suffixes',
 ]
 
 # Extra vertical spacing rules for special tag names.
@@ -45,7 +44,6 @@ TAGS_THAT_DONT_INDENT = [
 TAGS_THAT_HAVE_EXTRA_NEWLINE = {
     'actions': (2, 1, 1),
     'action': (1, 1, 1),
-    'actions-suffixes': (2, 1, 1),
     'action-suffix': (1, 1, 1),
 }
 
@@ -55,11 +53,17 @@ TAGS_THAT_ALLOW_SINGLE_LINE = ['obsolete', 'owner', 'description']
 LOWERCASE_NAME_FN = lambda n: n.attributes['name'].value.lower()
 
 # Tags whose children we want to alphabetize. The key is the parent tag name,
-# and the value is a pair of the tag name of the children we want to sort,
-# and a key function that maps each child node to the desired sort key.
+# and the value is a list of pairs of tag name and key functions that maps each
+# child node to the desired sort key.
 TAGS_ALPHABETIZATION_RULES = {
-    'actions': ('action', LOWERCASE_NAME_FN),
-    'action-suffix': ('affected-action', LOWERCASE_NAME_FN),
+    'actions': [
+        ('action', LOWERCASE_NAME_FN),
+        ('action-suffix', lambda n: None),
+    ],
+    'action-suffix': [
+        ('suffix', LOWERCASE_NAME_FN),
+        ('affected-action', LOWERCASE_NAME_FN),
+    ],
 }
 
 

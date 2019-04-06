@@ -12,7 +12,6 @@ import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.IMMEDI
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NEXT_YEAR;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NO_INSTRUMENTS;
 
-import android.content.DialogInterface;
 import android.support.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -30,6 +29,7 @@ import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
@@ -86,7 +86,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the right number of suggestions were logged.
         Assert.assertEquals(1,
@@ -162,13 +162,13 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
                 new String[] {"In Complete", "Google", "344 Main St", "CA", "Los Angeles"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the edit was logged.
         Assert.assertEquals(1,
@@ -211,7 +211,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
                         "Alice", "Supreme Court", "Airport Road", "Kabul", "1043", "020-253-0000"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
 
         // Complete the transaction.
         mPaymentRequestTestRule.clickAndWait(
@@ -219,7 +219,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the add was logged.
         Assert.assertEquals(1,
@@ -367,7 +367,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
                 new String[] {"4111111111111111", "Jon Doe"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
 
         // Complete the transaction.
         mPaymentRequestTestRule.clickAndWait(
@@ -375,7 +375,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the add was logged.
         Assert.assertEquals(1,
@@ -409,7 +409,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the right number of suggestions were logged.
         Assert.assertEquals(1,
@@ -487,13 +487,13 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
                 new String[] {"In Complete", "514-123-1234", "test@email.com"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the edit was logged.
         Assert.assertEquals(1,
@@ -534,7 +534,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
                 new String[] {"Alice", "020-253-0000", "test@email.com"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
 
         // Complete the transaction.
         mPaymentRequestTestRule.clickAndWait(
@@ -542,7 +542,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the add was logged.
         Assert.assertEquals(1,
@@ -963,7 +963,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure nothing was logged for contact info.
         Assert.assertEquals(0,
@@ -997,7 +997,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the right number of suggestions were logged.
         Assert.assertEquals(1,
@@ -1023,7 +1023,7 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the right number of suggestions were logged.
         Assert.assertEquals(2,

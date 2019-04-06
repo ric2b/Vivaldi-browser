@@ -44,14 +44,6 @@ cr.define('device_page_tests', function() {
       cr.webUIListenerCallback('has-stylus-changed', true);
     },
 
-    /** @override */
-    handleLinkEvent: function(e) {
-      settings.DevicePageBrowserProxyImpl.prototype.handleLinkEvent.call(
-          this, e);
-      // Prevent opening the link, which can block the test.
-      e.preventDefault();
-    },
-
     /** override */
     initializeKeyboard: function() {},
 
@@ -116,20 +108,22 @@ cr.define('device_page_tests', function() {
       this.noteTakingApps_.forEach(function(app) {
         if (enabled) {
           if (app.preferred) {
-            assertEquals(settings.NoteAppLockScreenSupport.SUPPORTED,
-                         app.lockScreenSupport);
+            assertEquals(
+                settings.NoteAppLockScreenSupport.SUPPORTED,
+                app.lockScreenSupport);
           }
           if (app.lockScreenSupport ==
-                  settings.NoteAppLockScreenSupport.SUPPORTED) {
+              settings.NoteAppLockScreenSupport.SUPPORTED) {
             app.lockScreenSupport = settings.NoteAppLockScreenSupport.ENABLED;
           }
         } else {
           if (app.preferred) {
-            assertEquals(settings.NoteAppLockScreenSupport.ENABLED,
-                         app.lockScreenSupport);
+            assertEquals(
+                settings.NoteAppLockScreenSupport.ENABLED,
+                app.lockScreenSupport);
           }
           if (app.lockScreenSupport ==
-                  settings.NoteAppLockScreenSupport.ENABLED) {
+              settings.NoteAppLockScreenSupport.ENABLED) {
             app.lockScreenSupport = settings.NoteAppLockScreenSupport.SUPPORTED;
           }
         }
@@ -200,9 +194,11 @@ cr.define('device_page_tests', function() {
      * @private
      */
     scheduleLockScreenAppsUpdated_: function() {
-      this.onNoteTakingAppsUpdated_(this.noteTakingApps_.map(function(app) {
-        return Object.assign({}, app);
-      }), !this.androidAppsReceived_);
+      this.onNoteTakingAppsUpdated_(
+          this.noteTakingApps_.map(function(app) {
+            return Object.assign({}, app);
+          }),
+          !this.androidAppsReceived_);
     }
   };
 
@@ -399,15 +395,16 @@ cr.define('device_page_tests', function() {
     /** @return {!Promise<!HTMLElement>} */
     function showAndGetDeviceSubpage(subpage, expectedRoute) {
       return new Promise(function(resolve, reject) {
-        const row = assert(devicePage.$$('#main #' + subpage + 'Row'));
-        devicePage.$$('#pages').addEventListener(
-            'neon-animation-finish', resolve);
-        MockInteractions.tap(row);
-      }).then(function() {
-        assertEquals(expectedRoute, settings.getCurrentRoute());
-        const page = devicePage.$$('settings-' + subpage);
-        return assert(page);
-      });
+               const row = assert(devicePage.$$('#main #' + subpage + 'Row'));
+               devicePage.$$('#pages').addEventListener(
+                   'neon-animation-finish', resolve);
+               row.click();
+             })
+          .then(function() {
+            assertEquals(expectedRoute, settings.getCurrentRoute());
+            const page = devicePage.$$('settings-' + subpage);
+            return assert(page);
+          });
     }
 
     /**
@@ -417,18 +414,16 @@ cr.define('device_page_tests', function() {
      * @param {boolean} lidClosedControlled
      * @param {boolean} hasLid
      */
-    function sendPowerManagementSettings(idleBehavior, idleControlled,
-                                         lidClosedBehavior, lidClosedControlled,
-                                         hasLid) {
-      cr.webUIListenerCallback(
-          'power-management-settings-changed',
-          {
-            idleBehavior: idleBehavior,
-            idleControlled: idleControlled,
-            lidClosedBehavior: lidClosedBehavior,
-            lidClosedControlled: lidClosedControlled,
-            hasLid: hasLid,
-          });
+    function sendPowerManagementSettings(
+        idleBehavior, idleControlled, lidClosedBehavior, lidClosedControlled,
+        hasLid) {
+      cr.webUIListenerCallback('power-management-settings-changed', {
+        idleBehavior: idleBehavior,
+        idleControlled: idleControlled,
+        lidClosedBehavior: lidClosedBehavior,
+        lidClosedControlled: lidClosedControlled,
+        hasLid: hasLid,
+      });
       Polymer.dom.flush();
     }
 
@@ -447,17 +442,15 @@ cr.define('device_page_tests', function() {
      * @param {boolean} expected
      */
     function expectNaturalScrollValue(pointersPage, expected) {
-      const naturalScrollOff =
-          pointersPage.$$('paper-radio-button[name="false"]');
-      const naturalScrollOn =
-          pointersPage.$$('paper-radio-button[name="true"]');
+      const naturalScrollOff = pointersPage.$$('cr-radio-button[name="false"]');
+      const naturalScrollOn = pointersPage.$$('cr-radio-button[name="true"]');
       assertTrue(!!naturalScrollOff);
       assertTrue(!!naturalScrollOn);
 
       expectEquals(!expected, naturalScrollOff.checked);
       expectEquals(expected, naturalScrollOn.checked);
-      expectEquals(expected,
-                   devicePage.prefs.settings.touchpad.natural_scroll.value);
+      expectEquals(
+          expected, devicePage.prefs.settings.touchpad.natural_scroll.value);
     }
 
     test(assert(TestNames.DevicePage), function() {
@@ -537,7 +530,7 @@ cr.define('device_page_tests', function() {
         const slider = assert(pointersPage.$$('#mouse settings-slider'));
         expectEquals(4, slider.pref.value);
         MockInteractions.pressAndReleaseKeyOn(
-            slider.$$('#slider'), 37 /* left */);
+            slider.$$('cr-slider').$$('#slider'), 37 /* left */);
         expectEquals(3, devicePage.prefs.settings.mouse.sensitivity2.value);
 
         pointersPage.set('prefs.settings.mouse.sensitivity2.value', 5);
@@ -553,44 +546,59 @@ cr.define('device_page_tests', function() {
         const slider = assert(pointersPage.$$('#touchpad settings-slider'));
         expectEquals(3, slider.pref.value);
         MockInteractions.pressAndReleaseKeyOn(
-            slider.$$('#slider'), 39 /* right */);
+            slider.$$('cr-slider').$$('#slider'), 39 /* right */);
         expectEquals(4, devicePage.prefs.settings.touchpad.sensitivity2.value);
 
         pointersPage.set('prefs.settings.touchpad.sensitivity2.value', 2);
         expectEquals(2, slider.pref.value);
       });
 
-      test('link doesn\'t activate control', function(done) {
+      test('link doesn\'t activate control', function() {
         expectNaturalScrollValue(pointersPage, false);
 
         // Tapping the link shouldn't enable the radio button.
-        const naturalScrollOn =
-            pointersPage.$$('paper-radio-button[name="true"]');
+        const naturalScrollOff =
+            pointersPage.$$('cr-radio-button[name="false"]');
+        const naturalScrollOn = pointersPage.$$('cr-radio-button[name="true"]');
         const a = naturalScrollOn.querySelector('a');
 
-        MockInteractions.tap(a);
+        // Prevent actually opening a link, which would block test.
+        a.removeAttribute('href');
+
+        a.click();
         expectNaturalScrollValue(pointersPage, false);
 
-        MockInteractions.tap(naturalScrollOn);
+        naturalScrollOn.click();
         expectNaturalScrollValue(pointersPage, true);
         devicePage.set('prefs.settings.touchpad.natural_scroll.value', false);
         expectNaturalScrollValue(pointersPage, false);
 
+        /**
+         * MockInteraction's pressEnter does not sufficiently set all key-event
+         * properties.
+         * @param {!HTMLElement} element
+         * @param {string} keyCode
+         * @param {string} keyName
+         */
+        function triggerKeyEvents(element, keyCode, keyName) {
+          ['keydown', 'keypress', 'keyup'].forEach(event => {
+            MockInteractions.keyEventOn(
+                element, event, keyCode, undefined, keyName);
+          });
+        }
+
         // Enter on the link shouldn't enable the radio button either.
-        MockInteractions.pressEnter(a);
+        triggerKeyEvents(a, 'Enter', 'Enter');
+        PolymerTest.flushTasks();
+        expectNaturalScrollValue(pointersPage, false);
 
-        // Annoyingly, we have to schedule an async event with a timeout
-        // greater than or equal to the timeout used by IronButtonState (1).
-        // https://github.com/PolymerElements/iron-behaviors/issues/54
-        Polymer.Base.async(function() {
-          expectNaturalScrollValue(pointersPage, false);
+        triggerKeyEvents(naturalScrollOn, 'Enter', 'Enter');
+        PolymerTest.flushTasks();
+        expectNaturalScrollValue(pointersPage, true);
 
-          MockInteractions.pressEnter(naturalScrollOn);
-          Polymer.Base.async(function() {
-            expectNaturalScrollValue(pointersPage, true);
-            done();
-          }, 1);
-        }, 1);
+        triggerKeyEvents(naturalScrollOff, 'Space', ' ');
+        PolymerTest.flushTasks();
+        expectNaturalScrollValue(pointersPage, false);
       });
     });
 
@@ -629,9 +637,12 @@ cr.define('device_page_tests', function() {
             // Test interaction with the settings-slider's underlying
             // paper-slider.
             MockInteractions.pressAndReleaseKeyOn(
-                keyboardPage.$$('#delaySlider').$$('#slider'), 37 /* left */);
+                keyboardPage.$$('#delaySlider').$$('cr-slider').$$('#slider'),
+                37 /* left */);
             MockInteractions.pressAndReleaseKeyOn(
-                keyboardPage.$$('#repeatRateSlider').$$('#slider'),
+                keyboardPage.$$('#repeatRateSlider')
+                    .$$('cr-slider')
+                    .$$('#slider'),
                 39 /* right */);
             const language = devicePage.prefs.settings.language;
             expectEquals(1000, language.xkb_auto_repeat_delay_r2.value);
@@ -661,7 +672,7 @@ cr.define('device_page_tests', function() {
             expectFalse(collapse.opened);
 
             // Test keyboard shortcut overlay button.
-            MockInteractions.tap(keyboardPage.$$('#keyboardOverlay'));
+            keyboardPage.$$('#keyboardOverlay').click();
             expectEquals(
                 1,
                 settings.DevicePageBrowserProxyImpl.getInstance()
@@ -684,6 +695,7 @@ cr.define('device_page_tests', function() {
             width: 1920,
             height: 1080,
           },
+          availableDisplayZoomFactors: [1],
         };
         fakeSystemDisplay.addDisplayForTest(display);
       };
@@ -749,7 +761,7 @@ cr.define('device_page_tests', function() {
             assertTrue(!!displayLayout);
             const displayDiv = displayLayout.$$('#_fakeDisplayId2');
             assertTrue(!!displayDiv);
-            MockInteractions.tap(displayDiv);
+            displayDiv.click();
             expectEquals(
                 displayPage.displays[1].id, displayPage.selectedDisplay.id);
 
@@ -777,7 +789,7 @@ cr.define('device_page_tests', function() {
             expectEquals(90, displayPage.displays[1].rotation);
 
             // Mirror the displays.
-            displayPage.onMirroredTap_({target: {blur: function(){}}});
+            displayPage.onMirroredTap_({target: {blur: function() {}}});
             fakeSystemDisplay.onDisplayChanged.callListeners();
 
             return Promise.all([
@@ -811,8 +823,9 @@ cr.define('device_page_tests', function() {
         const sourcesCopy = sources.map(function(source) {
           return Object.assign({}, source);
         });
-        cr.webUIListenerCallback('power-sources-changed',
-            sourcesCopy, powerSourceId, isLowPowerCharger);
+        cr.webUIListenerCallback(
+            'power-sources-changed', sourcesCopy, powerSourceId,
+            isLowPowerCharger);
       }
 
       suite('no power settings', function() {
@@ -825,16 +838,16 @@ cr.define('device_page_tests', function() {
 
         test('power row hidden', function() {
           assertEquals(null, devicePage.$$('#powerRow'));
-          assertEquals(0,
+          assertEquals(
+              0,
               settings.DevicePageBrowserProxyImpl.getInstance()
-              .updatePowerStatusCalled_);
+                  .updatePowerStatusCalled_);
         });
       });
 
       suite('power settings', function() {
         let powerPage;
         let powerSourceRow;
-        let powerSourceWrapper;
         let powerSourceSelect;
         let idleSelect;
         let lidClosedToggle;
@@ -851,8 +864,6 @@ cr.define('device_page_tests', function() {
               .then(function(page) {
                 powerPage = page;
                 powerSourceRow = assert(powerPage.$$('#powerSourceRow'));
-                powerSourceWrapper =
-                    assert(powerSourceRow.querySelector('.md-select-wrapper'));
                 powerSourceSelect = assert(powerPage.$$('#powerSource'));
                 assertEquals(
                     1,
@@ -865,7 +876,7 @@ cr.define('device_page_tests', function() {
                 assertEquals(
                     1,
                     settings.DevicePageBrowserProxyImpl.getInstance()
-                    .requestPowerManagementSettingsCalled_);
+                        .requestPowerManagementSettingsCalled_);
                 sendPowerManagementSettings(
                     settings.IdleBehavior.DISPLAY_OFF_SLEEP,
                     false /* idleControlled */,
@@ -905,25 +916,25 @@ cr.define('device_page_tests', function() {
 
           // Power sources row is visible but dropdown is hidden.
           assertFalse(powerSourceRow.hidden);
-          assertTrue(powerSourceWrapper.hidden);
+          assertTrue(powerSourceSelect.hidden);
 
           // Attach a dual-role USB device.
           const powerSource = {
             id: '2',
-            type: settings.PowerDeviceType.DUAL_ROLE_USB,
+            is_dedicated_charger: false,
             description: 'USB-C device',
           };
           setPowerSources([powerSource], '', false);
           Polymer.dom.flush();
 
           // "Battery" should be selected.
-          assertFalse(powerSourceWrapper.hidden);
+          assertFalse(powerSourceSelect.hidden);
           assertEquals('', powerSourceSelect.value);
 
           // Select the power source.
           setPowerSources([powerSource], powerSource.id, true);
           Polymer.dom.flush();
-          assertFalse(powerSourceWrapper.hidden);
+          assertFalse(powerSourceSelect.hidden);
           assertEquals(powerSource.id, powerSourceSelect.value);
 
           // Send another power source; the first should still be selected.
@@ -932,7 +943,7 @@ cr.define('device_page_tests', function() {
           setPowerSources(
               [otherPowerSource, powerSource], powerSource.id, true);
           Polymer.dom.flush();
-          assertFalse(powerSourceWrapper.hidden);
+          assertFalse(powerSourceSelect.hidden);
           assertEquals(powerSource.id, powerSourceSelect.value);
         });
 
@@ -950,7 +961,7 @@ cr.define('device_page_tests', function() {
           // Attach a dual-role USB device.
           const powerSource = {
             id: '3',
-            type: settings.PowerDeviceType.DUAL_ROLE_USB,
+            is_dedicated_charger: false,
             description: 'USB-C device',
           };
           setPowerSources([powerSource], '', false);
@@ -978,15 +989,15 @@ cr.define('device_page_tests', function() {
         test('set lid behavior', function() {
           const sendLid = function(lidBehavior) {
             sendPowerManagementSettings(
-                settings.IdleBehavior.DISPLAY_OFF,
-                false /* idleControlled */, lidBehavior,
-                false /* lidClosedControlled */, true /* hasLid */);
+                settings.IdleBehavior.DISPLAY_OFF, false /* idleControlled */,
+                lidBehavior, false /* lidClosedControlled */,
+                true /* hasLid */);
           };
 
           sendLid(settings.LidClosedBehavior.SUSPEND);
           assertTrue(lidClosedToggle.checked);
 
-          MockInteractions.tap(lidClosedToggle.$$('#control'));
+          lidClosedToggle.$$('#control').click();
           expectEquals(
               settings.LidClosedBehavior.DO_NOTHING,
               settings.DevicePageBrowserProxyImpl.getInstance()
@@ -994,7 +1005,7 @@ cr.define('device_page_tests', function() {
           sendLid(settings.LidClosedBehavior.DO_NOTHING);
           expectFalse(lidClosedToggle.checked);
 
-          MockInteractions.tap(lidClosedToggle.$$('#control'));
+          lidClosedToggle.$$('#control').click();
           expectEquals(
               settings.LidClosedBehavior.SUSPEND,
               settings.DevicePageBrowserProxyImpl.getInstance()
@@ -1005,74 +1016,92 @@ cr.define('device_page_tests', function() {
 
         test('display idle and lid behavior', function() {
           return new Promise(function(resolve) {
-            sendPowerManagementSettings(
-                settings.IdleBehavior.DISPLAY_ON, false /* idleControlled */,
-                settings.LidClosedBehavior.DO_NOTHING,
-                false /* lidClosedControlled */, true /* hasLid */);
-            powerPage.async(resolve);
-          }).then(function() {
-            expectEquals(
-                settings.IdleBehavior.DISPLAY_ON.toString(), idleSelect.value);
-            expectFalse(idleSelect.disabled);
-            expectEquals(null, powerPage.$$('#idleControlledIndicator'));
-            expectEquals(loadTimeData.getString('powerLidSleepLabel'),
-                         lidClosedToggle.label);
-            expectFalse(lidClosedToggle.checked);
-            expectFalse(lidClosedToggle.isPrefEnforced());
-          }).then(function() {
-            sendPowerManagementSettings(
-                settings.IdleBehavior.DISPLAY_OFF,
-                false /* idleControlled */, settings.LidClosedBehavior.SUSPEND,
-                false /* lidClosedControlled */, true /* hasLid */);
-            return new Promise(function(resolve) { powerPage.async(resolve); });
-          }).then(function() {
-            expectEquals(settings.IdleBehavior.DISPLAY_OFF.toString(),
-                         idleSelect.value);
-            expectFalse(idleSelect.disabled);
-            expectEquals(null, powerPage.$$('#idleControlledIndicator'));
-            expectEquals(loadTimeData.getString('powerLidSleepLabel'),
-                         lidClosedToggle.label);
-            expectTrue(lidClosedToggle.checked);
-            expectFalse(lidClosedToggle.isPrefEnforced());
-          });
+                   sendPowerManagementSettings(
+                       settings.IdleBehavior.DISPLAY_ON,
+                       false /* idleControlled */,
+                       settings.LidClosedBehavior.DO_NOTHING,
+                       false /* lidClosedControlled */, true /* hasLid */);
+                   powerPage.async(resolve);
+                 })
+              .then(function() {
+                expectEquals(
+                    settings.IdleBehavior.DISPLAY_ON.toString(),
+                    idleSelect.value);
+                expectFalse(idleSelect.disabled);
+                expectEquals(null, powerPage.$$('#idleControlledIndicator'));
+                expectEquals(
+                    loadTimeData.getString('powerLidSleepLabel'),
+                    lidClosedToggle.label);
+                expectFalse(lidClosedToggle.checked);
+                expectFalse(lidClosedToggle.isPrefEnforced());
+              })
+              .then(function() {
+                sendPowerManagementSettings(
+                    settings.IdleBehavior.DISPLAY_OFF,
+                    false /* idleControlled */,
+                    settings.LidClosedBehavior.SUSPEND,
+                    false /* lidClosedControlled */, true /* hasLid */);
+                return new Promise(function(resolve) {
+                  powerPage.async(resolve);
+                });
+              })
+              .then(function() {
+                expectEquals(
+                    settings.IdleBehavior.DISPLAY_OFF.toString(),
+                    idleSelect.value);
+                expectFalse(idleSelect.disabled);
+                expectEquals(null, powerPage.$$('#idleControlledIndicator'));
+                expectEquals(
+                    loadTimeData.getString('powerLidSleepLabel'),
+                    lidClosedToggle.label);
+                expectTrue(lidClosedToggle.checked);
+                expectFalse(lidClosedToggle.isPrefEnforced());
+              });
         });
 
         test('display controlled idle and lid behavior', function() {
           // When settings are controlled, the controls should be disabled and
           // the indicators should be shown.
           return new Promise(function(resolve) {
-            sendPowerManagementSettings(
-                settings.IdleBehavior.OTHER, true /* idleControlled */,
-                settings.LidClosedBehavior.SHUT_DOWN,
-                true /* lidClosedControlled */, true /* hasLid */);
-            powerPage.async(resolve);
-          }).then(function() {
-            expectEquals(
-                settings.IdleBehavior.OTHER.toString(), idleSelect.value);
-            expectTrue(idleSelect.disabled);
-            expectNotEquals(null, powerPage.$$('#idleControlledIndicator'));
-            expectEquals(loadTimeData.getString('powerLidShutDownLabel'),
-                         lidClosedToggle.label);
-            expectTrue(lidClosedToggle.checked);
-            expectTrue(lidClosedToggle.isPrefEnforced());
-          }).then(function() {
-            sendPowerManagementSettings(
-                settings.IdleBehavior.DISPLAY_OFF,
-                true /* idleControlled */,
-                settings.LidClosedBehavior.STOP_SESSION,
-                true /* lidClosedControlled */, true /* hasLid */);
-            return new Promise(function(resolve) { powerPage.async(resolve); });
-          }).then(function() {
-            expectEquals(
-                settings.IdleBehavior.DISPLAY_OFF.toString(),
-                idleSelect.value);
-            expectTrue(idleSelect.disabled);
-            expectNotEquals(null, powerPage.$$('#idleControlledIndicator'));
-            expectEquals(loadTimeData.getString('powerLidSignOutLabel'),
-                         lidClosedToggle.label);
-            expectTrue(lidClosedToggle.checked);
-            expectTrue(lidClosedToggle.isPrefEnforced());
-          });
+                   sendPowerManagementSettings(
+                       settings.IdleBehavior.OTHER, true /* idleControlled */,
+                       settings.LidClosedBehavior.SHUT_DOWN,
+                       true /* lidClosedControlled */, true /* hasLid */);
+                   powerPage.async(resolve);
+                 })
+              .then(function() {
+                expectEquals(
+                    settings.IdleBehavior.OTHER.toString(), idleSelect.value);
+                expectTrue(idleSelect.disabled);
+                expectNotEquals(null, powerPage.$$('#idleControlledIndicator'));
+                expectEquals(
+                    loadTimeData.getString('powerLidShutDownLabel'),
+                    lidClosedToggle.label);
+                expectTrue(lidClosedToggle.checked);
+                expectTrue(lidClosedToggle.isPrefEnforced());
+              })
+              .then(function() {
+                sendPowerManagementSettings(
+                    settings.IdleBehavior.DISPLAY_OFF,
+                    true /* idleControlled */,
+                    settings.LidClosedBehavior.STOP_SESSION,
+                    true /* lidClosedControlled */, true /* hasLid */);
+                return new Promise(function(resolve) {
+                  powerPage.async(resolve);
+                });
+              })
+              .then(function() {
+                expectEquals(
+                    settings.IdleBehavior.DISPLAY_OFF.toString(),
+                    idleSelect.value);
+                expectTrue(idleSelect.disabled);
+                expectNotEquals(null, powerPage.$$('#idleControlledIndicator'));
+                expectEquals(
+                    loadTimeData.getString('powerLidSignOutLabel'),
+                    lidClosedToggle.label);
+                expectTrue(lidClosedToggle.checked);
+                expectTrue(lidClosedToggle.isPrefEnforced());
+              });
         });
 
         test('hide lid behavior when lid not present', function() {
@@ -1098,7 +1127,6 @@ cr.define('device_page_tests', function() {
       let browserProxy;
       let noAppsDiv;
       let waitingDiv;
-      let selectAppDiv;
 
       // Shorthand for settings.NoteAppLockScreenSupport.
       let LockScreenSupport;
@@ -1115,10 +1143,9 @@ cr.define('device_page_tests', function() {
             .then(function(page) {
               stylusPage = page;
               browserProxy = settings.DevicePageBrowserProxyImpl.getInstance();
-              appSelector = assert(page.$$('#menu'));
+              appSelector = assert(page.$$('#selectApp'));
               noAppsDiv = assert(page.$$('#no-apps'));
               waitingDiv = assert(page.$$('#waiting'));
-              selectAppDiv = assert(page.$$('#select-app'));
               LockScreenSupport = settings.NoteAppLockScreenSupport;
 
               assertEquals(1, browserProxy.requestNoteTakingApps_);
@@ -1148,7 +1175,7 @@ cr.define('device_page_tests', function() {
 
       /** @return {?Element} */
       function enableAppOnLockScreenPolicyIndicator() {
-        return stylusPage.$$("#enable-app-on-lock-screen-policy-indicator");
+        return stylusPage.$$('#enable-app-on-lock-screen-policy-indicator');
       }
 
       /** @return {?Element} */
@@ -1180,20 +1207,17 @@ cr.define('device_page_tests', function() {
         expectTrue(isVisible(stylusPage.$$('#enableStylusToolsToggle')));
         expectTrue(
             isVisible(stylusPage.$$('#launchPaletteOnEjectEventToggle')));
-        expectTrue(
-            stylusPage.$$('#launchPaletteOnEjectEventToggle').disabled);
+        expectTrue(stylusPage.$$('#launchPaletteOnEjectEventToggle').disabled);
         expectFalse(devicePage.prefs.settings.enable_stylus_tools.value);
         expectFalse(
             devicePage.prefs.settings.launch_palette_on_eject_event.value);
 
         // Tapping the enable stylus tools pref causes the launch palette on
         // eject pref toggle to not be disabled anymore.
-        MockInteractions.tap(stylusPage.$$('#enableStylusToolsToggle'));
+        stylusPage.$$('#enableStylusToolsToggle').click();
         expectTrue(devicePage.prefs.settings.enable_stylus_tools.value);
-        expectFalse(
-            stylusPage.$$('#launchPaletteOnEjectEventToggle').disabled);
-        MockInteractions.tap(
-            stylusPage.$$('#launchPaletteOnEjectEventToggle'));
+        expectFalse(stylusPage.$$('#launchPaletteOnEjectEventToggle').disabled);
+        stylusPage.$$('#launchPaletteOnEjectEventToggle').click();
         expectTrue(
             devicePage.prefs.settings.launch_palette_on_eject_event.value);
       });
@@ -1207,9 +1231,9 @@ cr.define('device_page_tests', function() {
         ]);
         Polymer.dom.flush();
         assertEquals('v1', appSelector.value);
-       });
+      });
 
-       test('choose prefered app if exists', function() {
+      test('choose prefered app if exists', function() {
         // Selector chooses the preferred value if set.
         browserProxy.setNoteTakingApps([
           entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
@@ -1266,31 +1290,31 @@ cr.define('device_page_tests', function() {
         browserProxy.setNoteTakingApps([]);
         assert(noAppsDiv.hidden);
         assert(!waitingDiv.hidden);
-        assert(selectAppDiv.hidden);
+        assert(appSelector.hidden);
 
         // Waiting for apps to finish loading.
         browserProxy.setAndroidAppsReceived(true);
         assert(!noAppsDiv.hidden);
         assert(waitingDiv.hidden);
-        assert(selectAppDiv.hidden);
+        assert(appSelector.hidden);
 
         // Apps loaded, show selector.
         browserProxy.addNoteTakingApp(
             entry('n', 'v', false, LockScreenSupport.NOT_SUPPORTED));
         assert(noAppsDiv.hidden);
         assert(waitingDiv.hidden);
-        assert(!selectAppDiv.hidden);
+        assert(!appSelector.hidden);
 
         // Waiting for Android apps again.
         browserProxy.setAndroidAppsReceived(false);
         assert(noAppsDiv.hidden);
         assert(!waitingDiv.hidden);
-        assert(selectAppDiv.hidden);
+        assert(appSelector.hidden);
 
         browserProxy.setAndroidAppsReceived(true);
         assert(noAppsDiv.hidden);
         assert(waitingDiv.hidden);
-        assert(!selectAppDiv.hidden);
+        assert(!appSelector.hidden);
       });
 
       test('enabled-on-lock-screen', function() {
@@ -1299,195 +1323,234 @@ cr.define('device_page_tests', function() {
         expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
         return new Promise(function(resolve) {
-          // No apps available.
-          browserProxy.setNoteTakingApps([]);
-          stylusPage.async(resolve);
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+                 // No apps available.
+                 browserProxy.setNoteTakingApps([]);
+                 stylusPage.async(resolve);
+               })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          // Single app which does not support lock screen note taking.
-          browserProxy.addNoteTakingApp(
-              entry('n1', 'v1', true, LockScreenSupport.NOT_SUPPORTED));
-          return new Promise(function(resolve) {stylusPage.async(resolve);});
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              // Single app which does not support lock screen note taking.
+              browserProxy.addNoteTakingApp(
+                  entry('n1', 'v1', true, LockScreenSupport.NOT_SUPPORTED));
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          // Add an app with lock screen support, but do not select it yet.
-          browserProxy.addNoteTakingApp(
-              entry('n2', 'v2', false, LockScreenSupport.SUPPORTED));
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              // Add an app with lock screen support, but do not select it yet.
+              browserProxy.addNoteTakingApp(
+                  entry('n2', 'v2', false, LockScreenSupport.SUPPORTED));
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          // Select the app with lock screen app support.
-          appSelector.value = 'v2';
-          stylusPage.onSelectedAppChanged_();
-          assertEquals(1, browserProxy.setPreferredAppCount_);
-          assertEquals('v2', browserProxy.getPreferredNoteTakingAppId());
+              // Select the app with lock screen app support.
+              appSelector.value = 'v2';
+              stylusPage.onSelectedAppChanged_();
+              assertEquals(1, browserProxy.setPreferredAppCount_);
+              assertEquals('v2', browserProxy.getPreferredNoteTakingAppId());
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
 
-          // Preferred app updated to be enabled on lock screen.
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-            entry('n2', 'v2', true, LockScreenSupport.ENABLED)
-          ]);
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectTrue(enableAppOnLockScreenToggle().checked);
+              // Preferred app updated to be enabled on lock screen.
+              browserProxy.setNoteTakingApps([
+                entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
+                entry('n2', 'v2', true, LockScreenSupport.ENABLED)
+              ]);
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectTrue(enableAppOnLockScreenToggle().checked);
 
-          // Select the app that does not support lock screen again.
-          appSelector.value = 'v1';
-          stylusPage.onSelectedAppChanged_();
-          assertEquals(2, browserProxy.setPreferredAppCount_);
-          assertEquals('v1', browserProxy.getPreferredNoteTakingAppId());
+              // Select the app that does not support lock screen again.
+              appSelector.value = 'v1';
+              stylusPage.onSelectedAppChanged_();
+              assertEquals(2, browserProxy.setPreferredAppCount_);
+              assertEquals('v1', browserProxy.getPreferredNoteTakingAppId());
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
-        });
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+            });
       });
 
       test('initial-app-lock-screen-enabled', function() {
         return new Promise(function(resolve) {
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)
-          ]);
-          stylusPage.async(resolve);
-        }).then(function() {
-          Polymer.dom.flush();
+                 browserProxy.setNoteTakingApps(
+                     [entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)]);
+                 stylusPage.async(resolve);
+               })
+            .then(function() {
+              Polymer.dom.flush();
 
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', true, LockScreenSupport.ENABLED)
-          ]);
+              browserProxy.setNoteTakingApps(
+                  [entry('n1', 'v1', true, LockScreenSupport.ENABLED)]);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectTrue(enableAppOnLockScreenToggle().checked);
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectTrue(enableAppOnLockScreenToggle().checked);
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)
-          ]);
+              browserProxy.setNoteTakingApps(
+                  [entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)]);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          browserProxy.setNoteTakingApps([]);
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(isVisible(enableAppOnLockScreenToggle()));
-        });
+              browserProxy.setNoteTakingApps([]);
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(isVisible(enableAppOnLockScreenToggle()));
+            });
       });
 
       test('tap-on-enable-note-taking-on-lock-screen', function() {
         return new Promise(function(resolve) {
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)
-          ]);
-          stylusPage.async(resolve);
-        }).then(function() {
-          Polymer.dom.flush();
+                 browserProxy.setNoteTakingApps(
+                     [entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)]);
+                 stylusPage.async(resolve);
+               })
+            .then(function() {
+              Polymer.dom.flush();
 
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          MockInteractions.tap(enableAppOnLockScreenToggle());
-          assertEquals(1, browserProxy.setAppOnLockScreenCount_);
+              enableAppOnLockScreenToggle().click();
+              assertEquals(1, browserProxy.setAppOnLockScreenCount_);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(enableAppOnLockScreenToggle().checked);
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(enableAppOnLockScreenToggle().checked);
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          expectEquals(LockScreenSupport.ENABLED,
-                       browserProxy.getPreferredAppLockScreenState());
+              expectEquals(
+                  LockScreenSupport.ENABLED,
+                  browserProxy.getPreferredAppLockScreenState());
 
-          MockInteractions.tap(enableAppOnLockScreenToggle());
-          assertEquals(2, browserProxy.setAppOnLockScreenCount_);
+              enableAppOnLockScreenToggle().click();
+              assertEquals(2, browserProxy.setAppOnLockScreenCount_);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
-          expectEquals(LockScreenSupport.SUPPORTED,
-                       browserProxy.getPreferredAppLockScreenState());
-        });
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
+              expectEquals(
+                  LockScreenSupport.SUPPORTED,
+                  browserProxy.getPreferredAppLockScreenState());
+            });
       });
 
       test('tap-on-enable-note-taking-on-lock-screen-label', function() {
         return new Promise(function(resolve) {
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)
-          ]);
-          stylusPage.async(resolve);
-        }).then(function() {
-          Polymer.dom.flush();
+                 browserProxy.setNoteTakingApps(
+                     [entry('n1', 'v1', true, LockScreenSupport.SUPPORTED)]);
+                 stylusPage.async(resolve);
+               })
+            .then(function() {
+              Polymer.dom.flush();
 
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
 
-          MockInteractions.tap(enableAppOnLockScreenToggleLabel());
-          assertEquals(1, browserProxy.setAppOnLockScreenCount_);
+              enableAppOnLockScreenToggleLabel().click();
+              assertEquals(1, browserProxy.setAppOnLockScreenCount_);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(enableAppOnLockScreenToggle().checked);
-          expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(enableAppOnLockScreenToggle().checked);
+              expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          expectEquals(LockScreenSupport.ENABLED,
-                       browserProxy.getPreferredAppLockScreenState());
+              expectEquals(
+                  LockScreenSupport.ENABLED,
+                  browserProxy.getPreferredAppLockScreenState());
 
-          MockInteractions.tap(enableAppOnLockScreenToggleLabel());
-          assertEquals(2, browserProxy.setAppOnLockScreenCount_);
+              enableAppOnLockScreenToggleLabel().click();
+              assertEquals(2, browserProxy.setAppOnLockScreenCount_);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(enableAppOnLockScreenToggle().checked);
-          expectEquals(LockScreenSupport.SUPPORTED,
-                       browserProxy.getPreferredAppLockScreenState());
-        });
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(enableAppOnLockScreenToggle().checked);
+              expectEquals(
+                  LockScreenSupport.SUPPORTED,
+                  browserProxy.getPreferredAppLockScreenState());
+            });
       });
 
       test('lock-screen-apps-disabled-by-policy', function() {
@@ -1495,92 +1558,106 @@ cr.define('device_page_tests', function() {
         expectFalse(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
         return new Promise(function(resolve) {
-          // Add an app with lock screen support.
-          browserProxy.addNoteTakingApp(
-              entry('n2', 'v2', true, LockScreenSupport.NOT_ALLOWED_BY_POLICY));
-          stylusPage.async(resolve);
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
-          expectTrue(isVisible(enableAppOnLockScreenPolicyIndicator()));
+                 // Add an app with lock screen support.
+                 browserProxy.addNoteTakingApp(entry(
+                     'n2', 'v2', true,
+                     LockScreenSupport.NOT_ALLOWED_BY_POLICY));
+                 stylusPage.async(resolve);
+               })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
+              expectTrue(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          // The toggle should be disabled, so enabling app on lock screen
-          // should not be attempted.
-          MockInteractions.tap(enableAppOnLockScreenToggle());
-          assertEquals(0, browserProxy.setAppOnLockScreenCount_);
+              // The toggle should be disabled, so enabling app on lock screen
+              // should not be attempted.
+              enableAppOnLockScreenToggle().click();
+              assertEquals(0, browserProxy.setAppOnLockScreenCount_);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
 
-          // Tap on label should not work either.
-          MockInteractions.tap(enableAppOnLockScreenToggleLabel());
-          assertEquals(0, browserProxy.setAppOnLockScreenCount_);
+              // Tap on label should not work either.
+              enableAppOnLockScreenToggleLabel().click();
+              assertEquals(0, browserProxy.setAppOnLockScreenCount_);
 
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          assert(isVisible(enableAppOnLockScreenToggle()));
-          expectFalse(enableAppOnLockScreenToggle().checked);
-          expectTrue(isVisible(enableAppOnLockScreenPolicyIndicator()));
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              assert(isVisible(enableAppOnLockScreenToggle()));
+              expectFalse(enableAppOnLockScreenToggle().checked);
+              expectTrue(isVisible(enableAppOnLockScreenPolicyIndicator()));
 
-          expectEquals(LockScreenSupport.NOT_ALLOWED_BY_POLICY,
-                       browserProxy.getPreferredAppLockScreenState());
-        });
+              expectEquals(
+                  LockScreenSupport.NOT_ALLOWED_BY_POLICY,
+                  browserProxy.getPreferredAppLockScreenState());
+            });
       });
 
       test('keep-last-note-on-lock-screen', function() {
         return new Promise(function(resolve) {
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', true, LockScreenSupport.NOT_SUPPORTED),
-            entry('n2', 'v2', false, LockScreenSupport.SUPPORTED)
-          ]);
-          stylusPage.async(resolve);
-        }).then(function() {
-          Polymer.dom.flush();
-          expectFalse(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(keepLastNoteOnLockScreenToggle()));
+                 browserProxy.setNoteTakingApps([
+                   entry('n1', 'v1', true, LockScreenSupport.NOT_SUPPORTED),
+                   entry('n2', 'v2', false, LockScreenSupport.SUPPORTED)
+                 ]);
+                 stylusPage.async(resolve);
+               })
+            .then(function() {
+              Polymer.dom.flush();
+              expectFalse(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(keepLastNoteOnLockScreenToggle()));
 
-          browserProxy.setNoteTakingApps([
-            entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-            entry('n2', 'v2', true, LockScreenSupport.SUPPORTED)
-          ]);
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          expectFalse(isVisible(keepLastNoteOnLockScreenToggle()));
+              browserProxy.setNoteTakingApps([
+                entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
+                entry('n2', 'v2', true, LockScreenSupport.SUPPORTED)
+              ]);
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              expectFalse(isVisible(keepLastNoteOnLockScreenToggle()));
 
-          browserProxy.setNoteTakingApps([
-            entry('n2', 'v2', true, LockScreenSupport.ENABLED),
-          ]);
-          return new Promise(function(resolve) { stylusPage.async(resolve); });
-        }).then(function() {
-          Polymer.dom.flush();
-          expectTrue(isVisible(noteTakingAppLockScreenSettings()));
-          assert(isVisible(keepLastNoteOnLockScreenToggle()));
-          expectTrue(keepLastNoteOnLockScreenToggle().checked);
+              browserProxy.setNoteTakingApps([
+                entry('n2', 'v2', true, LockScreenSupport.ENABLED),
+              ]);
+              return new Promise(function(resolve) {
+                stylusPage.async(resolve);
+              });
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              expectTrue(isVisible(noteTakingAppLockScreenSettings()));
+              assert(isVisible(keepLastNoteOnLockScreenToggle()));
+              expectTrue(keepLastNoteOnLockScreenToggle().checked);
 
-          // Clicking the toggle updates the pref value.
-          MockInteractions.tap(keepLastNoteOnLockScreenToggle().$$('#control'));
-          expectFalse(keepLastNoteOnLockScreenToggle().checked);
+              // Clicking the toggle updates the pref value.
+              keepLastNoteOnLockScreenToggle().$$('#control').click();
+              expectFalse(keepLastNoteOnLockScreenToggle().checked);
 
-          expectFalse(
-              devicePage.prefs.settings.restore_last_lock_screen_note.value);
+              expectFalse(devicePage.prefs.settings
+                              .restore_last_lock_screen_note.value);
 
-          // Changing the pref value updates the toggle.
-          devicePage.set(
-              'prefs.settings.restore_last_lock_screen_note.value', true);
-          expectTrue(keepLastNoteOnLockScreenToggle().checked);
-        });
+              // Changing the pref value updates the toggle.
+              devicePage.set(
+                  'prefs.settings.restore_last_lock_screen_note.value', true);
+              expectTrue(keepLastNoteOnLockScreenToggle().checked);
+            });
       });
     });
   });
 
-  return {
-    TestNames: TestNames
-  };
+  return {TestNames: TestNames};
 });

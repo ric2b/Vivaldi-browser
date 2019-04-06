@@ -19,6 +19,7 @@ class TimeDelta;
 class Value;
 }
 
+class FrameTracker;
 struct Geoposition;
 class JavaScriptDialogManager;
 struct KeyEvent;
@@ -52,6 +53,12 @@ class WebView {
 
   // Reload the current page.
   virtual Status Reload(const Timeout* timeout) = 0;
+
+  // Freeze the current page.
+  virtual Status Freeze(const Timeout* timeout) = 0;
+
+  // Resume the current page.
+  virtual Status Resume(const Timeout* timeout) = 0;
 
   // Send a command to the DevTools debugger
   virtual Status SendCommand(const std::string& cmd,
@@ -217,6 +224,10 @@ class WebView {
   virtual Status SetScreenOrientation(std::string orientation) = 0;
 
   virtual Status DeleteScreenOrientation() = 0;
+
+  virtual bool IsOOPIF(const std::string& frame_id) = 0;
+
+  virtual FrameTracker* GetFrameTracker() const = 0;
 };
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CHROME_WEB_VIEW_H_

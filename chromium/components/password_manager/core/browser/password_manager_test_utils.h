@@ -6,15 +6,12 @@
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_TEST_UTILS_H_
 
 #include <iosfwd>
-#include <string>
 #include <vector>
 
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_store.h"
-#include "net/http/transport_security_state.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace password_manager {
@@ -60,11 +57,6 @@ std::unique_ptr<autofill::PasswordForm> FillPasswordFormWithData(
     const PasswordFormData& form_data,
     bool use_federated_login = false);
 
-// Convenience method that wraps the passed in forms in unique ptrs and returns
-// the result.
-std::vector<std::unique_ptr<autofill::PasswordForm>> WrapForms(
-    std::vector<autofill::PasswordForm> forms);
-
 // Checks whether the PasswordForms pointed to in |actual_values| are in some
 // permutation pairwise equal to those in |expectations|. Returns true in case
 // of a perfect match; otherwise returns false and writes details of mismatches
@@ -97,26 +89,34 @@ class MockPasswordReuseDetectorConsumer : public PasswordReuseDetectorConsumer {
   ~MockPasswordReuseDetectorConsumer() override;
 
   MOCK_METHOD4(OnReuseFound,
-               void(size_t, bool, const std::vector<std::string>&, int));
+               void(size_t,
+                    base::Optional<PasswordHashData>,
+                    const std::vector<std::string>&,
+                    int));
 };
-#endif
 
-// Auxiliary class to automatically set and reset the HSTS state for a given
-// host.
-class HSTSStateManager {
+// Matcher class used to compare PasswordHashData in tests.
+class PasswordHashDataMatcher
+    : public ::testing::MatcherInterface<base::Optional<PasswordHashData>> {
  public:
-  HSTSStateManager(net::TransportSecurityState* state,
-                   bool is_hsts,
-                   const std::string& host);
-  ~HSTSStateManager();
+  explicit PasswordHashDataMatcher(base::Optional<PasswordHashData> expected);
+  virtual ~PasswordHashDataMatcher() {}
+
+  // ::testing::MatcherInterface overrides
+  virtual bool MatchAndExplain(base::Optional<PasswordHashData> hash_data,
+                               ::testing::MatchResultListener* listener) const;
+  virtual void DescribeTo(::std::ostream* os) const;
+  virtual void DescribeNegationTo(::std::ostream* os) const;
 
  private:
-  net::TransportSecurityState* state_;
-  const bool is_hsts_;
-  const std::string host_;
+  const base::Optional<PasswordHashData> expected_;
 
-  DISALLOW_COPY_AND_ASSIGN(HSTSStateManager);
+  DISALLOW_COPY_AND_ASSIGN(PasswordHashDataMatcher);
 };
+
+::testing::Matcher<base::Optional<PasswordHashData>> Matches(
+    base::Optional<PasswordHashData> expected);
+#endif
 
 }  // namespace password_manager
 

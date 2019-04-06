@@ -71,10 +71,40 @@ print_preview.DestinationCertificateStatus = {
 };
 
 /**
+ * @typedef {{
+ *   display_name: (string),
+ *   type: (string | undefined),
+ *   value: (number | string | boolean),
+ *   is_default: (boolean | undefined),
+ * }}
+ */
+print_preview.VendorCapabilitySelectOption;
+
+/**
+ * Specifies a custom vendor capability.
+ * @typedef {{
+ *   id: (string),
+ *   display_name: (string),
+ *   localized_display_name: (string | undefined),
+ *   type: (string),
+ *   select_cap: ({
+ *     option: (Array<!print_preview.VendorCapabilitySelectOption>|undefined),
+ *   }|undefined),
+ *   typed_value_cap: ({
+ *     default: (number | string | boolean | undefined),
+ *   }|undefined),
+ *   range_cap: ({
+ *     default: (number),
+ *   }),
+ * }}
+ */
+print_preview.VendorCapability;
+
+/**
  * Capabilities of a print destination represented in a CDD.
  *
  * @typedef {{
- *   vendor_capability: !Array<{Object}>,
+ *   vendor_capability: !Array<!print_preview.VendorCapability>,
  *   collate: ({default: (boolean|undefined)}|undefined),
  *   color: ({
  *     option: !Array<{
@@ -537,10 +567,26 @@ cr.define('print_preview', function() {
     }
 
     /**
+     * @return {boolean} Whether the destination is offline or has an invalid
+     *     certificate.
+     */
+    get isOfflineOrInvalid() {
+      return this.isOffline || this.shouldShowInvalidCertificateError;
+    }
+
+    /** @return {boolean} Whether the destination is ready to be selected. */
+    get readyForSelection() {
+      return (!cr.isChromeOS ||
+              this.origin_ != print_preview.DestinationOrigin.CROS ||
+              this.capabilities_ != null) &&
+          !this.isProvisional;
+    }
+
+    /**
      * @return {string} Human readable status for a destination that is offline
      *     or has a bad certificate. */
     get connectionStatusText() {
-      if (!this.isOffline && !this.shouldShowInvalidCertificateError)
+      if (!this.isOfflineOrInvalid)
         return '';
       const offlineDurationMs = Date.now() - this.lastAccessTime_;
       let statusMessageId;
@@ -781,7 +827,6 @@ cr.define('print_preview', function() {
     LOCAL_2X: 'images/2x/printer.png',
     MOBILE: 'images/mobile.png',
     MOBILE_SHARED: 'images/mobile_shared.png',
-    THIRD_PARTY: 'images/third_party.png',
     PDF: 'images/pdf.png',
     DOCS: 'images/google_doc.png',
     ENTERPRISE: 'images/business.svg'

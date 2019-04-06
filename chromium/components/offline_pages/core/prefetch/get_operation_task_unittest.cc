@@ -38,10 +38,8 @@ TEST_F(GetOperationTaskTest, StoreFailure) {
   store_util()->SimulateInitializationError();
   base::MockCallback<PrefetchRequestFinishedCallback> callback;
 
-  GetOperationTask task(store(), prefetch_request_factory(), callback.Get());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(std::make_unique<GetOperationTask>(
+      store(), prefetch_request_factory(), callback.Get()));
 }
 
 TEST_F(GetOperationTaskTest, NormalOperationTask) {
@@ -50,10 +48,8 @@ TEST_F(GetOperationTaskTest, NormalOperationTask) {
       kOperationName, PrefetchItemState::RECEIVED_GCM);
   ASSERT_NE(nullptr, store_util()->GetPrefetchItem(id));
 
-  GetOperationTask task(store(), prefetch_request_factory(), callback.Get());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(std::make_unique<GetOperationTask>(
+      store(), prefetch_request_factory(), callback.Get()));
 
   EXPECT_NE(nullptr, prefetch_request_factory()->FindGetOperationRequestByName(
                          kOperationName));
@@ -67,24 +63,17 @@ TEST_F(GetOperationTaskTest, NormalOperationTask) {
 
 TEST_F(GetOperationTaskTest, NotMatchingEntries) {
   base::MockCallback<PrefetchRequestFinishedCallback> callback;
-  std::vector<PrefetchItemState> states = {
-      PrefetchItemState::NEW_REQUEST,
-      PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE,
-      PrefetchItemState::AWAITING_GCM,
-      PrefetchItemState::RECEIVED_BUNDLE,
-      PrefetchItemState::DOWNLOADING,
-      PrefetchItemState::FINISHED,
-      PrefetchItemState::ZOMBIE};
+  // List all states that are not affected by the GetOperationTask.
+  std::vector<PrefetchItemState> states = GetAllStatesExcept(
+      {PrefetchItemState::SENT_GET_OPERATION, PrefetchItemState::RECEIVED_GCM});
   std::vector<int64_t> entries;
   for (auto& state : states) {
     entries.push_back(
         InsertPrefetchItemInStateWithOperation(kOperationName, state));
   }
 
-  GetOperationTask task(store(), prefetch_request_factory(), callback.Get());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(std::make_unique<GetOperationTask>(
+      store(), prefetch_request_factory(), callback.Get()));
 
   EXPECT_EQ(nullptr, prefetch_request_factory()->FindGetOperationRequestByName(
                          kOperationName));
@@ -108,10 +97,8 @@ TEST_F(GetOperationTaskTest, TwoOperations) {
   int64_t unused_item = InsertPrefetchItemInStateWithOperation(
       kOperationShouldNotBeRequested, PrefetchItemState::SENT_GET_OPERATION);
 
-  GetOperationTask task(store(), prefetch_request_factory(), callback.Get());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(std::make_unique<GetOperationTask>(
+      store(), prefetch_request_factory(), callback.Get()));
 
   EXPECT_NE(nullptr, prefetch_request_factory()->FindGetOperationRequestByName(
                          kOperationName));

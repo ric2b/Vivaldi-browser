@@ -8,7 +8,6 @@
 
 #include "components/grit/components_resources.h"
 #include "components/keyed_service/core/service_access_type.h"
-#include "components/ntp_tiles/field_trial.h"
 #include "components/ntp_tiles/most_visited_sites.h"
 #include "components/ntp_tiles/webui/ntp_tiles_internals_message_handler.h"
 #include "components/ntp_tiles/webui/ntp_tiles_internals_message_handler_client.h"
@@ -45,7 +44,8 @@ class IOSNTPTilesInternalsMessageHandlerBridge
   PrefService* GetPrefs() override;
   void RegisterMessageCallback(
       const std::string& message,
-      const base::Callback<void(const base::ListValue*)>& callback) override;
+      const base::RepeatingCallback<void(const base::ListValue*)>& callback)
+      override;
   void CallJavascriptFunctionVector(
       const std::string& name,
       const std::vector<const base::Value*>& values) override;
@@ -72,6 +72,7 @@ bool IOSNTPTilesInternalsMessageHandlerBridge::DoesSourceExist(
     case ntp_tiles::TileSource::POPULAR_BAKED_IN:
     case ntp_tiles::TileSource::HOMEPAGE:
       return true;
+    case ntp_tiles::TileSource::CUSTOM_LINKS:
     case ntp_tiles::TileSource::WHITELIST:
       return false;
   }
@@ -91,7 +92,7 @@ PrefService* IOSNTPTilesInternalsMessageHandlerBridge::GetPrefs() {
 
 void IOSNTPTilesInternalsMessageHandlerBridge::RegisterMessageCallback(
     const std::string& message,
-    const base::Callback<void(const base::ListValue*)>& callback) {
+    const base::RepeatingCallback<void(const base::ListValue*)>& callback) {
   web_ui()->RegisterMessageCallback(message, callback);
 }
 

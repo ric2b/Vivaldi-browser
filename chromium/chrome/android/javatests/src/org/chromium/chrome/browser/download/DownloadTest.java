@@ -175,6 +175,7 @@ public class DownloadTest implements CustomMainActivityStart {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/849876")
     @Feature({"Downloads"})
     @RetryOnFailure
     public void testDuplicateHttpPostDownload_Download() throws Exception {
@@ -436,7 +437,7 @@ public class DownloadTest implements CustomMainActivityStart {
                     + "  }"
                     + "</script>"
                     + "<body id='body' onclick='download()'></body>"));
-            DOMUtils.clickNode(mDownloadTestRule.getActivity().getCurrentContentViewCore(), "body");
+            DOMUtils.clickNode(mDownloadTestRule.getActivity().getCurrentWebContents(), "body");
             CriteriaHelper.pollUiThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {

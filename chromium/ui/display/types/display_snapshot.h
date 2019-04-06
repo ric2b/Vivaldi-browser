@@ -36,6 +36,7 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
                   bool is_aspect_preserving_scaling,
                   bool has_overscan,
                   bool has_color_correction_matrix,
+                  bool color_correction_in_linear_space,
                   const gfx::ColorSpace& color_space,
                   std::string display_name,
                   const base::FilePath& sys_path,
@@ -43,7 +44,8 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
                   const std::vector<uint8_t>& edid,
                   const DisplayMode* current_mode,
                   const DisplayMode* native_mode,
-                  int64_t product_id,
+                  int64_t product_code,
+                  int32_t year_of_manufacture,
                   const gfx::Size& maximum_cursor_size);
   virtual ~DisplaySnapshot();
 
@@ -59,7 +61,11 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
   bool has_color_correction_matrix() const {
     return has_color_correction_matrix_;
   }
+  bool color_correction_in_linear_space() const {
+    return color_correction_in_linear_space_;
+  }
   const gfx::ColorSpace& color_space() const { return color_space_; }
+  void reset_color_space() { color_space_ = gfx::ColorSpace(); }
   const std::string& display_name() const { return display_name_; }
   const base::FilePath& sys_path() const { return sys_path_; }
   const DisplayModeList& modes() const { return modes_; }
@@ -67,7 +73,8 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
   const DisplayMode* current_mode() const { return current_mode_; }
   void set_current_mode(const DisplayMode* mode) { current_mode_ = mode; }
   const DisplayMode* native_mode() const { return native_mode_; }
-  int64_t product_id() const { return product_id_; }
+  int64_t product_code() const { return product_code_; }
+  int32_t year_of_manufacture() const { return year_of_manufacture_; }
   const gfx::Size& maximum_cursor_size() const { return maximum_cursor_size_; }
 
   void add_mode(const DisplayMode* mode) { modes_.push_back(mode->Clone()); }
@@ -78,8 +85,8 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
   // Returns a textual representation of this display state.
   std::string ToString() const;
 
-  // Used when no product id known.
-  static const int64_t kInvalidProductID = -1;
+  // Used when no |product_code_| known.
+  static const int64_t kInvalidProductCode = -1;
 
   // Returns the buffer format to be used for the primary plane buffer.
   static gfx::BufferFormat PrimaryFormat();
@@ -101,8 +108,11 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
 
   // Whether this display has advanced color correction available.
   const bool has_color_correction_matrix_;
+  // Whether the color correction matrix will be applied in linear color space
+  // instead of gamma compressed one.
+  const bool color_correction_in_linear_space_;
 
-  const gfx::ColorSpace color_space_;
+  gfx::ColorSpace color_space_;
 
   const std::string display_name_;
 
@@ -120,8 +130,10 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
   // "Best" mode supported by the output.
   const DisplayMode* const native_mode_;
 
-  // Combination of manufacturer and product code.
-  const int64_t product_id_;
+  // Combination of manufacturer id and product id.
+  const int64_t product_code_;
+
+  const int32_t year_of_manufacture_;
 
   // Maximum supported cursor size on this display.
   const gfx::Size maximum_cursor_size_;

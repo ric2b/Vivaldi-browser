@@ -36,9 +36,12 @@ class CC_EXPORT LayerTreeSettings {
   bool single_thread_proxy_scheduler = true;
   bool main_frame_before_activation_enabled = false;
   bool using_synchronous_renderer_compositor = false;
+  bool enable_early_damage_check = false;
+  // When |enable_early_damage_check| is true, the early damage check is
+  // performed if one of the last |damaged_frame_limit| frames had no damage.
+  int damaged_frame_limit = 3;
   bool enable_latency_recovery = true;
   bool can_use_lcd_text = true;
-  bool use_distance_field_text = false;
   bool gpu_rasterization_forced = false;
   int gpu_rasterization_msaa_sample_count = 0;
   float gpu_rasterization_skewport_target_time_in_seconds = 0.2f;
@@ -67,6 +70,9 @@ class CC_EXPORT LayerTreeSettings {
   double background_animation_rate = 1.0;
   gfx::Size default_tile_size;
   gfx::Size max_untiled_layer_size;
+  // If set, indicates the largest tile size we will use for GPU Raster. If not
+  // set, no limit is enforced.
+  gfx::Size max_gpu_raster_tile_size;
   gfx::Size minimum_occlusion_tracking_size;
   // 3000 pixels should give sufficient area for prepainting.
   // Note this value is specified with an ideal contents scale in mind. That
@@ -84,11 +90,11 @@ class CC_EXPORT LayerTreeSettings {
   bool use_occlusion_for_tile_prioritization = false;
   bool use_layer_lists = false;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
-  ManagedMemoryPolicy gpu_memory_policy;
-  ManagedMemoryPolicy software_memory_policy;
+  ManagedMemoryPolicy memory_policy;
   size_t decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
   int max_preraster_distance_in_screen_pixels = 1000;
-  viz::ResourceFormat preferred_tile_format;
+  bool use_rgba_4444 = false;
+  bool unpremultiply_and_dither_low_bit_depth_tiles = false;
 
   bool enable_mask_tiling = true;
 
@@ -132,15 +138,28 @@ class CC_EXPORT LayerTreeSettings {
   // produces the active tree as its 'sync tree'.
   bool commit_to_active_tree = true;
 
-  // Whether to use out of process raster.  If true, whenever gpu raster
-  // would have been used, out of process gpu raster will be used instead.
-  bool enable_oop_rasterization = false;
-
-  // Whether images should be animated in the compositor.
-  bool enable_image_animations = false;
+  // Whether image animations can be reset to the beginning to avoid skipping
+  // many frames.
+  bool enable_image_animation_resync = true;
 
   // Whether to use edge anti-aliasing for all layer types that supports it.
   bool enable_edge_anti_aliasing = true;
+
+  // Whether to request presentation time regardless if existance of
+  // presentation time callbacks.
+  bool always_request_presentation_time = false;
+
+  // Whether SetViewportSizeAndScale should update the painted scale factor or
+  // the device scale factor.
+  bool use_painted_device_scale_factor = false;
+
+  // Whether a HitTestRegionList should be built from the active layer tree when
+  // submitting a CompositorFrame.
+  bool build_hit_test_data = false;
+
+  // When false, sync tokens are expected to be present, and are verified,
+  // before transfering gpu resources to the display compositor.
+  bool delegated_sync_points_required = true;
 };
 
 }  // namespace cc

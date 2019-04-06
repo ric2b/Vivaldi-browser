@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/files/file_util.h"
 #include "base/task_runner_util.h"
 #include "components/drive/chromeos/fake_free_disk_space_getter.h"
@@ -28,9 +30,9 @@ class DownloadOperationTest : public OperationTestBase {
   void SetUp() override {
     OperationTestBase::SetUp();
 
-    operation_.reset(new DownloadOperation(
+    operation_ = std::make_unique<DownloadOperation>(
         blocking_task_runner(), delegate(), scheduler(), metadata(), cache(),
-        temp_dir()));
+        temp_dir());
   }
 
   std::unique_ptr<DownloadOperation> operation_;
@@ -243,8 +245,7 @@ TEST_F(DownloadOperationTest, EnsureFileDownloadedByPath_HostedDocument) {
   EXPECT_TRUE(entry->file_specific_info().is_hosted_document());
   EXPECT_FALSE(file_path.empty());
 
-  EXPECT_EQ(GURL(entry->file_specific_info().alternate_url()),
-            util::ReadUrlFromGDocFile(file_path));
+  EXPECT_EQ(GURL(entry->alternate_url()), util::ReadUrlFromGDocFile(file_path));
   EXPECT_EQ(entry->resource_id(), util::ReadResourceIdFromGDocFile(file_path));
   EXPECT_EQ(FILE_PATH_LITERAL(".gdoc"), file_path.Extension());
 }

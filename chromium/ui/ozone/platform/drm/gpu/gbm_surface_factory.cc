@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "third_party/khronos/EGL/egl.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -22,11 +21,20 @@
 #include "ui/ozone/platform/drm/gpu/drm_thread_proxy.h"
 #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
 #include "ui/ozone/platform/drm/gpu/gbm_buffer.h"
+#include "ui/ozone/platform/drm/gpu/gbm_overlay_surface.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
+
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/vulkan/vulkan_function_pointers.h"
+#include "ui/ozone/platform/drm/gpu/vulkan_implementation_gbm.h"
+#if defined(OS_CHROMEOS)
+#include <vulkan/vulkan_intel.h>
+#endif
+#endif
 
 namespace ui {
 
@@ -115,15 +123,80 @@ GbmSurfaceFactory::GetAllowedGLImplementations() {
 }
 
 GLOzone* GbmSurfaceFactory::GetGLOzone(gl::GLImplementation implementation) {
-  DCHECK(thread_checker_.CalledOnValidThread());
   switch (implementation) {
     case gl::kGLImplementationEGLGLES2:
+    case gl::kGLImplementationSwiftShaderGL:
       return egl_implementation_.get();
     case gl::kGLImplementationOSMesaGL:
       return osmesa_implementation_.get();
     default:
       return nullptr;
   }
+}
+
+#if BUILDFLAG(ENABLE_VULKAN)
+std::unique_ptr<gpu::VulkanImplementation>
+GbmSurfaceFactory::CreateVulkanImplementation() {
+  return std::make_unique<ui::VulkanImplementationGbm>();
+}
+
+scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
+    gfx::AcceleratedWidget widget,
+    gfx::Size size,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
+    VkDevice vk_device,
+    VkDeviceMemory* vk_device_memory,
+    VkImage* vk_image) {
+#if defined(OS_CHROMEOS)
+  scoped_refptr<GbmBuffer> buffer = drm_thread_proxy_->CreateBuffer(
+      widget, size, format, usage, GbmBuffer::kFlagNoModifiers);
+  if (!buffer.get())
+    return nullptr;
+
+  PFN_vkCreateDmaBufImageINTEL create_dma_buf_image_intel =
+      reinterpret_cast<PFN_vkCreateDmaBufImageINTEL>(
+          vkGetDeviceProcAddr(vk_device, "vkCreateDmaBufImageINTEL"));
+  if (!create_dma_buf_image_intel) {
+    LOG(ERROR) << "Scanout buffers can only be imported into vulkan when "
+                  "vkCreateDmaBufImageINTEL is available.";
+    return nullptr;
+  }
+
+  DCHECK(buffer->AreFdsValid());
+  DCHECK_EQ(buffer->GetFdCount(), 1U);
+
+  base::ScopedFD vk_image_fd(dup(buffer->GetFd(0)));
+  DCHECK(vk_image_fd.is_valid());
+
+  VkDmaBufImageCreateInfo dma_buf_image_create_info = {
+      .sType = static_cast<VkStructureType>(
+          VK_STRUCTURE_TYPE_DMA_BUF_IMAGE_CREATE_INFO_INTEL),
+      .fd = vk_image_fd.release(),
+      .format = VK_FORMAT_B8G8R8A8_SRGB,
+      .extent = (VkExtent3D){size.width(), size.height(), 1},
+      .strideInBytes = buffer->GetStride(0),
+  };
+
+  VkResult result =
+      create_dma_buf_image_intel(vk_device, &dma_buf_image_create_info, nullptr,
+                                 vk_device_memory, vk_image);
+  if (result != VK_SUCCESS) {
+    LOG(ERROR) << "Failed to create a Vulkan image from a dmabuf.";
+    return nullptr;
+  }
+
+  return base::MakeRefCounted<GbmPixmap>(this, buffer);
+#else
+  return nullptr;
+#endif
+}
+#endif
+
+std::unique_ptr<OverlaySurface> GbmSurfaceFactory::CreateOverlaySurface(
+    gfx::AcceleratedWidget window) {
+  return std::make_unique<GbmOverlaySurface>(
+      drm_thread_proxy_->CreateDrmWindowProxy(window));
 }
 
 std::unique_ptr<SurfaceOzoneCanvas> GbmSurfaceFactory::CreateCanvasForWidget(
@@ -145,14 +218,8 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage) {
-#if !defined(OS_CHROMEOS)
-  // Support for memory mapping accelerated buffers requires some
-  // CrOS-specific patches (using dma-buf mmap API).
-  DCHECK(gfx::BufferUsage::SCANOUT == usage);
-#endif
-
-  scoped_refptr<GbmBuffer> buffer =
-      drm_thread_proxy_->CreateBuffer(widget, size, format, usage);
+  scoped_refptr<GbmBuffer> buffer = drm_thread_proxy_->CreateBuffer(
+      widget, size, format, usage, 0 /* flags */);
   if (!buffer.get())
     return nullptr;
 

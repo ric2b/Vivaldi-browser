@@ -6,6 +6,8 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/account_tracker_service_factory.h"
+#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -13,27 +15,29 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "services/identity/public/cpp/identity_manager.h"
 
-// Class that wraps IdentityManager in a KeyedService (as IdentityManager is a
-// client-side library intended for use by any process, it would be a layering
+// Subclass that wraps IdentityManager in a KeyedService (as IdentityManager is
+// a client-side library intended for use by any process, it would be a layering
 // violation for IdentityManager itself to have direct knowledge of
 // KeyedService).
-class IdentityManagerHolder : public KeyedService {
+// NOTE: Do not add any code here that further ties IdentityManager to Profile
+// without communicating with {blundell, sdefresne}@chromium.org.
+class IdentityManagerWrapper : public KeyedService,
+                               public identity::IdentityManager {
  public:
-  explicit IdentityManagerHolder(Profile* profile)
-      : identity_manager_(
+  explicit IdentityManagerWrapper(Profile* profile)
+      : identity::IdentityManager(
             SigninManagerFactory::GetForProfile(profile),
-            ProfileOAuth2TokenServiceFactory::GetForProfile(profile)) {}
-
-  identity::IdentityManager* identity_manager() { return &identity_manager_; }
-
- private:
-  identity::IdentityManager identity_manager_;
+            ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
+            AccountTrackerServiceFactory::GetForProfile(profile),
+            GaiaCookieManagerServiceFactory::GetForProfile(profile)) {}
 };
 
 IdentityManagerFactory::IdentityManagerFactory()
     : BrowserContextKeyedServiceFactory(
           "IdentityManager",
           BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(AccountTrackerServiceFactory::GetInstance());
+  DependsOn(GaiaCookieManagerServiceFactory::GetInstance());
   DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
   DependsOn(SigninManagerFactory::GetInstance());
 }
@@ -43,10 +47,15 @@ IdentityManagerFactory::~IdentityManagerFactory() {}
 // static
 identity::IdentityManager* IdentityManagerFactory::GetForProfile(
     Profile* profile) {
-  IdentityManagerHolder* holder = static_cast<IdentityManagerHolder*>(
+  return static_cast<IdentityManagerWrapper*>(
       GetInstance()->GetServiceForBrowserContext(profile, true));
+}
 
-  return holder->identity_manager();
+// static
+identity::IdentityManager* IdentityManagerFactory::GetForProfileIfExists(
+    Profile* profile) {
+  return static_cast<IdentityManagerWrapper*>(
+      GetInstance()->GetServiceForBrowserContext(profile, false));
 }
 
 // static
@@ -56,5 +65,5 @@ IdentityManagerFactory* IdentityManagerFactory::GetInstance() {
 
 KeyedService* IdentityManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  return new IdentityManagerHolder(Profile::FromBrowserContext(context));
+  return new IdentityManagerWrapper(Profile::FromBrowserContext(context));
 }

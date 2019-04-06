@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -19,7 +18,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 #include "base/command_line.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -165,6 +164,7 @@ WebViewPermissionHelper::WebViewPermissionHelper(WebViewGuest* web_view_guest)
     : content::WebContentsObserver(web_view_guest->web_contents()),
       next_permission_request_id_(guest_view::kInstanceIDNone),
       web_view_guest_(web_view_guest),
+      default_media_access_permission_(false),
       weak_factory_(this) {
       web_view_permission_helper_delegate_.reset(
           ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(
@@ -209,9 +209,8 @@ WebViewPermissionHelper* WebViewPermissionHelper::FromWebContents(
     return web_view_guest->web_view_permission_helper_.get();
   }
   WebViewGuest* web_view_guest = WebViewGuest::FromWebContents(web_contents);
-  if (!web_view_guest) {
-    return NULL;
-  }
+  if (!web_view_guest)
+      return NULL;
   return web_view_guest->web_view_permission_helper_.get();
 }
 
@@ -227,7 +226,7 @@ bool WebViewPermissionHelper::OnMessageReceived(
 void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::WebContents* source,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback) {
+    content::MediaResponseCallback callback) {
   // Vivaldi
   // If this is a TabCast request.
   if (request.video_type == content::MEDIA_TAB_VIDEO_CAPTURE ||
@@ -253,14 +252,13 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
         }
       }
 
-      callback.Run(devices,
+      std::move(callback).Run(devices,
                    devices.empty() ? content::MEDIA_DEVICE_INVALID_STATE
                                    : content::MEDIA_DEVICE_OK,
                    std::unique_ptr<content::MediaStreamUI>(nullptr));
       return;
     }
   }
-  // End Vivaldi
 
   extensions::VivaldiAppHelper* helper =
       extensions::VivaldiAppHelper::FromWebContents(web_view_guest()->
@@ -309,7 +307,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     // Others are "always ask".
     if (audio_setting == CONTENT_SETTING_BLOCK ||
         camera_setting == CONTENT_SETTING_BLOCK) {
-      callback.Run(content::MediaStreamDevices(),
+      std::move(callback).Run(content::MediaStreamDevices(),
                    content::MEDIA_DEVICE_PERMISSION_DENIED,
                    std::unique_ptr<content::MediaStreamUI>());
       return;
@@ -320,27 +318,24 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
           ->embedder_web_contents()
           ->GetDelegate()
           ->RequestMediaAccessPermission(
-              web_view_guest()->embedder_web_contents(), request, callback);
+              web_view_guest()->embedder_web_contents(), request,
+              std::move(callback));
       return;
     }
-
-
   } while(false);
+  // End Vivaldi
 
   base::DictionaryValue request_info;
   request_info.SetString(guest_view::kUrl, request.security_origin.spec());
   RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_MEDIA,
-      request_info,
-      base::Bind(&WebViewPermissionHelper::OnMediaPermissionResponse,
-                 weak_factory_.GetWeakPtr(),
-                 request,
-                 callback),
-      false /* allowed_by_default */);
+      WEB_VIEW_PERMISSION_TYPE_MEDIA, request_info,
+      base::BindOnce(&WebViewPermissionHelper::OnMediaPermissionResponse,
+                     weak_factory_.GetWeakPtr(), request, std::move(callback)),
+      default_media_access_permission_);
 }
 
 bool WebViewPermissionHelper::CheckMediaAccessPermission(
-    content::WebContents* source,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type) {
   if (!web_view_guest()->attached() ||
@@ -350,13 +345,12 @@ bool WebViewPermissionHelper::CheckMediaAccessPermission(
   return web_view_guest()
       ->embedder_web_contents()
       ->GetDelegate()
-      ->CheckMediaAccessPermission(
-          web_view_guest()->embedder_web_contents(), security_origin, type);
+      ->CheckMediaAccessPermission(render_frame_host, security_origin, type);
 }
 
 void WebViewPermissionHelper::OnMediaPermissionResponse(
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback,
+    content::MediaResponseCallback callback,
     bool allow,
     const std::string& user_input) {
   ContentSettingsPattern primary_pattern =
@@ -366,7 +360,7 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
       extensions::VivaldiAppHelper::FromWebContents(
           web_view_guest()->embedder_web_contents());
   if (helper) {
-    Browser* browser = vivaldi::FindBrowserWithWebContents(web_contents());
+    Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
     DCHECK(browser);
     Profile* profile = browser->profile();
 
@@ -387,35 +381,33 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
   }
 
   if (!allow) {
-    callback.Run(content::MediaStreamDevices(),
-                 content::MEDIA_DEVICE_PERMISSION_DENIED,
-                 std::unique_ptr<content::MediaStreamUI>());
+    std::move(callback).Run(content::MediaStreamDevices(),
+                            content::MEDIA_DEVICE_PERMISSION_DENIED,
+                            std::unique_ptr<content::MediaStreamUI>());
     return;
   }
   if (!web_view_guest()->attached() ||
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
-    callback.Run(content::MediaStreamDevices(),
-                 content::MEDIA_DEVICE_INVALID_STATE,
-                 std::unique_ptr<content::MediaStreamUI>());
+    std::move(callback).Run(content::MediaStreamDevices(),
+                            content::MEDIA_DEVICE_INVALID_STATE,
+                            std::unique_ptr<content::MediaStreamUI>());
     return;
   }
 
   web_view_guest()
       ->embedder_web_contents()
       ->GetDelegate()
-      ->RequestMediaAccessPermission(
-          web_view_guest()->embedder_web_contents(), request, callback);
+      ->RequestMediaAccessPermission(web_view_guest()->embedder_web_contents(),
+                                     request, std::move(callback));
 }
 
 void WebViewPermissionHelper::CanDownload(
     const GURL& url,
     const std::string& request_method,
-    const content::DownloadInformation& info,
-    const base::Callback<void(const content::DownloadItemAction&)>& callback) {
-  base::DictionaryValue request_info;
-  request_info.SetString(guest_view::kUrl, url.spec());
+    const base::Callback<void(bool)>& callback) {
+  web_view_permission_helper_delegate_->SetDownloadInformation(download_info_);
   web_view_permission_helper_delegate_->CanDownload(url, request_method,
-                                                    info, callback);
+                                                    callback);
 }
 
 void WebViewPermissionHelper::RequestPointerLockPermission(

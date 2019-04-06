@@ -71,7 +71,7 @@ class NET_EXPORT NetworkThrottleManagerImpl : public NetworkThrottleManager {
                                            RequestPriority priority,
                                            bool ignore_limits) override;
 
-  void SetTickClockForTesting(base::TickClock* tick_clock);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
   // If the |NowTicks()| value of |tick_clock_| is greater than the
   // time the outstanding_recomputation_timer_ has set to go off, Stop()
@@ -129,7 +129,7 @@ class NET_EXPORT NetworkThrottleManagerImpl : public NetworkThrottleManager {
   // throttles are outstanding.  This guarantees that the class will
   // eventually detect aging out of outstanding throttles and unblock
   // throttles blocked on those outstanding throttles.
-  std::unique_ptr<base::Timer> outstanding_recomputation_timer_;
+  std::unique_ptr<base::OneShotTimer> outstanding_recomputation_timer_;
 
   // FIFO of OUTSTANDING throttles (ordered by time of entry into the
   // OUTSTANDING state).
@@ -140,7 +140,7 @@ class NET_EXPORT NetworkThrottleManagerImpl : public NetworkThrottleManager {
   ThrottleList blocked_throttles_;
 
   // For testing.
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_;
 
   base::WeakPtrFactory<NetworkThrottleManagerImpl> weak_ptr_factory_;
 

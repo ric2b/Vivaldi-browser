@@ -103,9 +103,14 @@ void EncryptUpdate(const KeyParams& params, EntitySpecifics* specifics) {
 }
 
 void VerifyCommitCount(const DataTypeDebugInfoEmitter* emitter,
-                       int expected_count) {
-  EXPECT_EQ(expected_count, emitter->GetCommitCounters().num_commits_attempted);
-  EXPECT_EQ(expected_count, emitter->GetCommitCounters().num_commits_success);
+                       int expected_creation_count,
+                       int expected_deletion_count) {
+  EXPECT_EQ(expected_creation_count,
+            emitter->GetCommitCounters().num_creation_commits_attempted);
+  EXPECT_EQ(expected_deletion_count,
+            emitter->GetCommitCounters().num_deletion_commits_attempted);
+  EXPECT_EQ(expected_creation_count + expected_deletion_count,
+            emitter->GetCommitCounters().num_commits_success);
 }
 
 }  // namespace
@@ -320,9 +325,10 @@ class ModelTypeWorkerTest : public ::testing::Test {
 
   void TriggerTypeRootUpdateFromServer() {
     SyncEntity entity = server()->TypeRootUpdate();
-    worker()->ProcessGetUpdatesResponse(
-        server()->GetProgress(), server()->GetContext(), {&entity}, nullptr);
-    worker()->PassiveApplyUpdates(nullptr);
+    worker()->ProcessGetUpdatesResponse(server()->GetProgress(),
+                                        server()->GetContext(), {&entity},
+                                        &status_controller_);
+    worker()->PassiveApplyUpdates(&status_controller_);
   }
 
   void TriggerPartialUpdateFromServer(int64_t version_offset,
@@ -336,15 +342,16 @@ class ModelTypeWorkerTest : public ::testing::Test {
                     entity.mutable_specifics());
     }
 
-    worker()->ProcessGetUpdatesResponse(
-        server()->GetProgress(), server()->GetContext(), {&entity}, nullptr);
+    worker()->ProcessGetUpdatesResponse(server()->GetProgress(),
+                                        server()->GetContext(), {&entity},
+                                        &status_controller_);
   }
 
   void TriggerUpdateFromServer(int64_t version_offset,
                                const std::string& tag,
                                const std::string& value) {
     TriggerPartialUpdateFromServer(version_offset, tag, value);
-    worker()->ApplyUpdates(nullptr);
+    worker()->ApplyUpdates(&status_controller_);
   }
 
   void TriggerTombstoneFromServer(int64_t version_offset,
@@ -357,14 +364,15 @@ class ModelTypeWorkerTest : public ::testing::Test {
                     entity.mutable_specifics());
     }
 
-    worker()->ProcessGetUpdatesResponse(
-        server()->GetProgress(), server()->GetContext(), {&entity}, nullptr);
-    worker()->ApplyUpdates(nullptr);
+    worker()->ProcessGetUpdatesResponse(server()->GetProgress(),
+                                        server()->GetContext(), {&entity},
+                                        &status_controller_);
+    worker()->ApplyUpdates(&status_controller_);
   }
 
   // Simulates the end of a GU sync cycle and tells the worker to flush changes
   // to the processor.
-  void ApplyUpdates() { worker()->ApplyUpdates(nullptr); }
+  void ApplyUpdates() { worker()->ApplyUpdates(&status_controller_); }
 
   // Delivers specified protos as updates.
   //
@@ -373,8 +381,9 @@ class ModelTypeWorkerTest : public ::testing::Test {
   // protocol. Try to use the other, higher level methods if possible.
   void DeliverRawUpdates(const SyncEntityList& list) {
     worker()->ProcessGetUpdatesResponse(server()->GetProgress(),
-                                        server()->GetContext(), list, nullptr);
-    worker()->ApplyUpdates(nullptr);
+                                        server()->GetContext(), list,
+                                        &status_controller_);
+    worker()->ApplyUpdates(&status_controller_);
   }
 
   // By default, this harness behaves as if all tasks posted to the model
@@ -419,7 +428,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
     sync_pb::ClientToServerResponse response =
         server()->DoSuccessfulCommit(message);
 
-    contribution->ProcessCommitResponse(response, nullptr);
+    contribution->ProcessCommitResponse(response, &status_controller_);
     contribution->CleanUp();
   }
 
@@ -487,6 +496,8 @@ class ModelTypeWorkerTest : public ::testing::Test {
   base::ObserverList<TypeDebugInfoObserver> type_observers_;
 
   std::unique_ptr<NonBlockingTypeDebugInfoEmitter> emitter_;
+
+  StatusController status_controller_;
 };
 
 // Requests a commit and verifies the messages sent to the client and server as
@@ -504,7 +515,8 @@ TEST_F(ModelTypeWorkerTest, SimpleCommit) {
   EXPECT_EQ(nullptr, worker()->GetContribution(INT_MAX));
   EXPECT_EQ(0U, server()->GetNumCommitMessages());
   EXPECT_EQ(0U, processor()->GetNumCommitResponses());
-  VerifyCommitCount(emitter(), 0);
+  VerifyCommitCount(emitter(), /*expected_creation_count=*/0,
+                    /*expected_deletion_count=*/0);
 
   worker()->NudgeForCommit();
   EXPECT_EQ(1, nudge_handler()->GetNumCommitNudges());
@@ -529,7 +541,8 @@ TEST_F(ModelTypeWorkerTest, SimpleCommit) {
   EXPECT_FALSE(entity.deleted());
   EXPECT_EQ(kValue1, entity.specifics().preference().value());
 
-  VerifyCommitCount(emitter(), 1);
+  VerifyCommitCount(emitter(), /*expected_creation_count=*/1,
+                    /*expected_deletion_count=*/0);
 
   // Exhaustively verify the commit response returned to the model thread.
   ASSERT_EQ(1U, processor()->GetNumCommitResponses());
@@ -553,11 +566,13 @@ TEST_F(ModelTypeWorkerTest, SimpleDelete) {
 
   // We can't delete an entity that was never committed.
   // Step 1 is to create and commit a new entity.
-  VerifyCommitCount(emitter(), 0);
+  VerifyCommitCount(emitter(), /*expected_creation_count=*/0,
+                    /*expected_deletion_count=*/0);
   processor()->SetCommitRequest(GenerateCommitRequest(kTag1, kValue1));
   DoSuccessfulCommit();
 
-  VerifyCommitCount(emitter(), 1);
+  VerifyCommitCount(emitter(), /*expected_creation_count=*/1,
+                    /*expected_deletion_count=*/0);
 
   ASSERT_TRUE(processor()->HasCommitResponse(kHash1));
   const CommitResponseData& initial_commit_response =
@@ -568,7 +583,8 @@ TEST_F(ModelTypeWorkerTest, SimpleDelete) {
   processor()->SetCommitRequest(GenerateDeleteRequest(kTag1));
   DoSuccessfulCommit();
 
-  VerifyCommitCount(emitter(), 2);
+  VerifyCommitCount(emitter(), /*expected_creation_count=*/1,
+                    /*expected_deletion_count=*/1);
 
   // Verify the SyncEntity sent in the commit message.
   ASSERT_EQ(2U, server()->GetNumCommitMessages());
@@ -612,8 +628,8 @@ TEST_F(ModelTypeWorkerTest, SendInitialSyncDone) {
   // "initial sync done". This triggers a model thread update, too.
   EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
 
-  // The update contains no entities.
-  EXPECT_EQ(0U, processor()->GetNthUpdateResponse(0).size());
+  // The update contains one entity for the root node.
+  EXPECT_EQ(1U, processor()->GetNthUpdateResponse(0).size());
 
   const ModelTypeState& state = processor()->GetNthUpdateState(0);
   EXPECT_FALSE(state.progress_marker().token().empty());
@@ -1135,7 +1151,8 @@ TEST_F(ModelTypeWorkerTest, CommitOnly) {
   EXPECT_TRUE(entity.specifics().has_user_event());
   EXPECT_EQ(id, entity.specifics().user_event().event_time_usec());
 
-  VerifyCommitCount(emitter(), 1);
+  VerifyCommitCount(emitter(), /*expected_creation_count=*/1,
+                    /*expected_deletion_count=*/0);
 
   ASSERT_EQ(1U, processor()->GetNumCommitResponses());
   EXPECT_EQ(1U, processor()->GetNthCommitResponse(0).size());
@@ -1144,6 +1161,39 @@ TEST_F(ModelTypeWorkerTest, CommitOnly) {
       processor()->GetCommitResponse(kHash1);
   EXPECT_EQ(kHash1, commit_response.client_tag_hash);
   EXPECT_FALSE(commit_response.specifics_hash.empty());
+}
+
+TEST_F(ModelTypeWorkerTest, PopulateUpdateResponseData) {
+  InitializeCommitOnly();
+  sync_pb::SyncEntity entity;
+
+  entity.set_id_string("SomeID");
+  entity.set_parent_id_string("ParentID");
+  entity.set_folder(false);
+  entity.mutable_unique_position()->set_custom_compressed_v1("POSITION");
+  entity.set_version(1);
+  entity.set_client_defined_unique_tag("CLIENT_TAG");
+  entity.set_server_defined_unique_tag("SERVER_TAG");
+  entity.set_deleted(false);
+  entity.mutable_specifics()->CopyFrom(GenerateSpecifics(kTag1, kValue1));
+  UpdateResponseData response_data;
+
+  FakeEncryptor encryptor;
+  Cryptographer cryptographer(&encryptor);
+
+  EXPECT_EQ(ModelTypeWorker::SUCCESS,
+            ModelTypeWorker::PopulateUpdateResponseData(&cryptographer, entity,
+                                                        &response_data));
+  const EntityData& data = response_data.entity.value();
+  EXPECT_FALSE(data.id.empty());
+  EXPECT_FALSE(data.parent_id.empty());
+  EXPECT_FALSE(data.is_folder);
+  EXPECT_TRUE(data.unique_position.has_custom_compressed_v1());
+  EXPECT_EQ("CLIENT_TAG", data.client_tag_hash);
+  EXPECT_EQ("SERVER_TAG", data.server_defined_unique_tag);
+  EXPECT_FALSE(data.is_deleted());
+  EXPECT_EQ(kTag1, data.specifics.preference().name());
+  EXPECT_EQ(kValue1, data.specifics.preference().value());
 }
 
 class GetLocalChangesRequestTest : public testing::Test {

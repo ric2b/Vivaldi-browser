@@ -114,7 +114,7 @@ function pageRangeTextToPageRanges(pageRangeText, opt_totalPageCount) {
       opt_totalPageCount ? opt_totalPageCount : MAX_PAGE_NUMBER;
 
   const regex = /^\s*([0-9]*)\s*-\s*([0-9]*)\s*$/;
-  const parts = pageRangeText.split(/,/);
+  const parts = pageRangeText.split(/,|\u3001/);
 
   const pageRanges = [];
   for (let i = 0; i < parts.length; ++i) {
@@ -240,4 +240,12 @@ function getStringForCurrentLocale(localizedStrings) {
   // First try to find an exact match and then look for the language only.
   return getStringForLocale(localizedStrings, navigator.language) ||
       getStringForLocale(localizedStrings, navigator.language.split('-')[0]);
+}
+
+/**
+ * @param {!Array<*>} args The arguments for the observer.
+ * @return {boolean} Whether all arguments are defined.
+ */
+function observerDepsDefined(args) {
+  return args.every(arg => arg !== undefined);
 }

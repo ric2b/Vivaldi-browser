@@ -53,22 +53,18 @@ class EmailAddressRow {
   std::string type() const { return type_; }
   void set_type(std::string type) { type_ = type; }
 
-  bool is_default() const { return is_default_; }
-  void set_is_default(bool is_default) { is_default_ = is_default; }
+  bool favorite() const { return favorite_; }
+  void set_favorite(bool favorite) { favorite_ = favorite; }
 
   bool obsolete() const { return obsolete_; }
   void set_obsolete(bool obsolete) { obsolete_ = obsolete; }
-
-  bool trusted() const { return trusted_; }
-  void set_trusted(bool is_trusted) { trusted_ = is_trusted; }
 
   EmailAddressID email_address_id_;
   ContactID contact_id_;
   base::string16 email_address_;
   std::string type_;
-  bool is_default_;
+  bool favorite_;
   bool obsolete_;
-  bool trusted_;
 
  protected:
   void Swap(EmailAddressRow* other);

@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_OFFLINE_PAGES_PREFETCH_OFFLINE_PREFETCH_DOWNLOAD_CLIENT_H_
 
 #include "base/macros.h"
-#include "components/download/public/client.h"
+#include "components/download/public/background_service/client.h"
 
 namespace content {
 class BrowserContext;
@@ -45,6 +45,8 @@ class OfflinePrefetchDownloadClient : public download::Client {
       const download::CompletionInfo& completion_info) override;
   bool CanServiceRemoveDownloadedFile(const std::string& guid,
                                       bool force_delete) override;
+  void GetUploadData(const std::string& guid,
+                     download::GetUploadDataCallback callback) override;
 
   PrefetchDownloader* GetPrefetchDownloader() const;
 

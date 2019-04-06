@@ -10,10 +10,8 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/ios/ios_util.h"
 #include "base/location.h"
 #include "base/logging.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -28,7 +26,7 @@
 #include "ios/net/cookies/cookie_store_ios_client.h"
 #import "ios/net/cookies/ns_http_system_cookie_store.h"
 #import "ios/net/cookies/system_cookie_util.h"
-#include "ios/net/ios_net_features.h"
+#include "ios/net/ios_net_buildflags.h"
 #import "net/base/mac/url_conversions.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
@@ -40,22 +38,24 @@
 
 namespace net {
 
+using CookieDeletionInfo = CookieDeletionInfo;
+
 namespace {
 
-class CookieStoreIOSCookieChangedSubscription
-    : public CookieStore::CookieChangedSubscription {
+class CookieStoreIOSCookieChangeSubscription : public CookieChangeSubscription {
  public:
-  CookieStoreIOSCookieChangedSubscription(
-      std::unique_ptr<CookieStore::CookieChangedCallbackList::Subscription>
-          subscription)
+  using CookieChangeCallbackList =
+      base::CallbackList<void(const CanonicalCookie& cookie,
+                              CookieChangeCause cause)>;
+  CookieStoreIOSCookieChangeSubscription(
+      std::unique_ptr<CookieChangeCallbackList::Subscription> subscription)
       : subscription_(std::move(subscription)) {}
-  ~CookieStoreIOSCookieChangedSubscription() override {}
+  ~CookieStoreIOSCookieChangeSubscription() override {}
 
  private:
-  std::unique_ptr<CookieStore::CookieChangedCallbackList::Subscription>
-      subscription_;
+  std::unique_ptr<CookieChangeCallbackList::Subscription> subscription_;
 
-  DISALLOW_COPY_AND_ASSIGN(CookieStoreIOSCookieChangedSubscription);
+  DISALLOW_COPY_AND_ASSIGN(CookieStoreIOSCookieChangeSubscription);
 };
 
 #pragma mark NotificationTrampoline
@@ -150,20 +150,6 @@ NSHTTPCookie* GetNSHTTPCookieFromCookieLine(const std::string& cookie_line,
   return corrected_cookie;
 }
 
-
-// Builds a cookie line (such as "key1=value1; key2=value2") from an array of
-// cookies.
-std::string BuildCookieLineWithOptions(NSArray* cookies,
-                                       const net::CookieOptions& options) {
-  // The exclude_httponly() option would only be used by a javascript engine.
-  DCHECK(!options.exclude_httponly());
-
-  // This utility function returns all the cookies, including the httponly ones.
-  // This is fine because we don't support the exclude_httponly option.
-  NSDictionary* header = [NSHTTPCookie requestHeaderFieldsWithCookies:cookies];
-  return base::SysNSStringToUTF8([header valueForKey:@"Cookie"]);
-}
-
 // Returns an empty closure if |callback| is null callback or binds the
 // callback to |success|.
 base::OnceClosure BindSetCookiesCallback(
@@ -174,48 +160,6 @@ base::OnceClosure BindSetCookiesCallback(
     set_callback = base::BindOnce(std::move(*callback), success);
   }
   return set_callback;
-}
-
-// Runs |callback| on CookieLine generated from |options| and |cookies|.
-void RunGetCookiesCallbackOnSystemCookies(
-    const net::CookieOptions& options,
-    CookieStoreIOS::GetCookiesCallback callback,
-    NSArray<NSHTTPCookie*>* cookies) {
-  if (!callback.is_null()) {
-    std::move(callback).Run(BuildCookieLineWithOptions(cookies, options));
-  }
-}
-
-// Tests whether the |cookie| is a session cookie.
-bool IsCookieSessionCookie(NSHTTPCookie* cookie, base::Time time) {
-  return [cookie isSessionOnly];
-}
-
-// Tests whether the |creation_time| of |cookie| is in the time range defined
-// by |time_begin| and |time_end|. A null |time_end| means end-of-time.
-bool IsCookieCreatedBetween(base::Time time_begin,
-                            base::Time time_end,
-                            NSHTTPCookie* cookie,
-                            base::Time creation_time) {
-  return time_begin <= creation_time &&
-         (time_end.is_null() || creation_time <= time_end);
-}
-
-// Tests whether the |creation_time| of |cookie| is in the time range defined
-// by |time_begin| and |time_end| and the cookie host match |host|. A null
-// |time_end| means end-of-time.
-bool IsCookieCreatedBetweenWithPredicate(
-    base::Time time_begin,
-    base::Time time_end,
-    const net::CookieStore::CookiePredicate& predicate,
-    NSHTTPCookie* cookie,
-    base::Time creation_time) {
-  if (predicate.is_null())
-    return false;
-  CanonicalCookie canonical_cookie =
-      CanonicalCookieFromSystemCookie(cookie, creation_time);
-  return IsCookieCreatedBetween(time_begin, time_end, cookie, creation_time) &&
-         predicate.Run(canonical_cookie);
 }
 
 // Adds cookies in |cookies| with name |name| to |filtered|.
@@ -238,6 +182,43 @@ bool HasExplicitDomain(const std::string& cookie_line) {
 }  // namespace
 
 #pragma mark -
+
+#pragma mark CookieStoreIOS::CookieChangeDispatcherIOS
+
+CookieStoreIOS::CookieChangeDispatcherIOS::CookieChangeDispatcherIOS(
+    CookieStoreIOS* cookie_store)
+    : cookie_store_(cookie_store) {
+  DCHECK(cookie_store);
+}
+
+CookieStoreIOS::CookieChangeDispatcherIOS::~CookieChangeDispatcherIOS() =
+    default;
+
+std::unique_ptr<CookieChangeSubscription>
+CookieStoreIOS::CookieChangeDispatcherIOS::AddCallbackForCookie(
+    const GURL& gurl,
+    const std::string& name,
+    CookieChangeCallback callback) {
+  return cookie_store_->AddCallbackForCookie(gurl, name, std::move(callback));
+}
+
+std::unique_ptr<CookieChangeSubscription>
+CookieStoreIOS::CookieChangeDispatcherIOS::AddCallbackForUrl(
+    const GURL& gurl,
+    CookieChangeCallback callback) {
+  // Implement when needed by iOS consumers.
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+
+std::unique_ptr<CookieChangeSubscription>
+CookieStoreIOS::CookieChangeDispatcherIOS::AddCallbackForAllChanges(
+    CookieChangeCallback callback) {
+  // Implement when needed by iOS consumers.
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+
 #pragma mark CookieStoreIOS
 
 CookieStoreIOS::CookieStoreIOS(
@@ -274,15 +255,15 @@ void CookieStoreIOS::SetCookieWithOptionsAsync(
     const std::string& cookie_line,
     const net::CookieOptions& options,
     SetCookiesCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
 
   // The exclude_httponly() option would only be used by a javascript
   // engine.
   DCHECK(!options.exclude_httponly());
-
-  // If cookies are not allowed, they are stashed in the CookieMonster, and
-  // should be written there instead.
-  DCHECK(SystemCookiesAllowed());
 
   base::Time server_time =
       options.has_server_time() ? options.server_time() : base::Time();
@@ -325,6 +306,12 @@ void CookieStoreIOS::SetCanonicalCookieAsync(
     bool secure_source,
     bool modify_http_only,
     SetCookiesCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
+
   DCHECK(cookie->IsCanonical());
   // The exclude_httponly() option would only be used by a javascript
   // engine.
@@ -348,38 +335,15 @@ void CookieStoreIOS::SetCanonicalCookieAsync(
     std::move(callback).Run(false);
 }
 
-void CookieStoreIOS::GetCookiesWithOptionsAsync(
-    const GURL& url,
-    const net::CookieOptions& options,
-    GetCookiesCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  // If cookies are not allowed, they are stashed in the CookieMonster, and
-  // should be read from there instead.
-  DCHECK(SystemCookiesAllowed());
-  // The exclude_httponly() option would only be used by a javascript
-  // engine.
-  DCHECK(!options.exclude_httponly());
-
-  // TODO(crbug.com/459154): If/when iOS supports Same-Site cookies, we'll need
-  // to pass options in here as well.
-  system_store_->GetCookiesForURLAsync(
-      url, base::BindOnce(&RunGetCookiesCallbackOnSystemCookies, options,
-                          base::Passed(&callback)));
-}
-
 void CookieStoreIOS::GetCookieListWithOptionsAsync(
     const GURL& url,
     const net::CookieOptions& options,
     GetCookieListCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (!SystemCookiesAllowed()) {
-    // If cookies are not allowed, the cookies are stashed in the
-    // CookieMonster, so get them from there.
-    cookie_monster_->GetCookieListWithOptionsAsync(url, options,
-                                                   std::move(callback));
-    return;
-  }
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
 
   // TODO(mkwst): If/when iOS supports Same-Site cookies, we'll need to pass
   // options in here as well. https://crbug.com/459154
@@ -390,14 +354,12 @@ void CookieStoreIOS::GetCookieListWithOptionsAsync(
 }
 
 void CookieStoreIOS::GetAllCookiesAsync(GetCookieListCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (!SystemCookiesAllowed()) {
-    // If cookies are not allowed, the cookies are stashed in the
-    // CookieMonster, so get them from there.
-    cookie_monster_->GetAllCookiesAsync(std::move(callback));
-    return;
-  }
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
+
   // TODO(crbug.com/459154): If/when iOS supports Same-Site cookies, we'll need
   // to pass options in here as well.
   system_store_->GetAllCookiesAsync(
@@ -408,12 +370,17 @@ void CookieStoreIOS::GetAllCookiesAsync(GetCookieListCallback callback) {
 void CookieStoreIOS::DeleteCookieAsync(const GURL& url,
                                        const std::string& cookie_name,
                                        base::OnceClosure callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
+
   __block base::OnceClosure shared_callback = std::move(callback);
   base::WeakPtr<SystemCookieStore> weak_system_store =
       system_store_->GetWeakPtr();
   system_store_->GetCookiesForURLAsync(
-      url, base::BindBlockArc(^(NSArray<NSHTTPCookie*>* cookies) {
+      url, base::BindOnce(^(NSArray<NSHTTPCookie*>* cookies) {
         for (NSHTTPCookie* cookie in cookies) {
           if ([cookie.name
                   isEqualToString:base::SysUTF8ToNSString(cookie_name)] &&
@@ -429,55 +396,65 @@ void CookieStoreIOS::DeleteCookieAsync(const GURL& url,
 
 void CookieStoreIOS::DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
                                                 DeleteCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
 
   // This relies on the fact cookies are given unique creation dates.
-  CookieFilterFunction filter = base::Bind(
-      IsCookieCreatedBetween, cookie.CreationDate(), cookie.CreationDate());
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  CookieDeletionInfo delete_info(cookie.CreationDate(), cookie.CreationDate());
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
-void CookieStoreIOS::DeleteAllCreatedBetweenAsync(
-    const base::Time& delete_begin,
-    const base::Time& delete_end,
+void CookieStoreIOS::DeleteAllCreatedInTimeRangeAsync(
+    const CookieDeletionInfo::TimeRange& creation_range,
     DeleteCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (metrics_enabled_)
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
+
+  if (metrics_enabled())
     ResetCookieCountMetrics();
 
-  CookieFilterFunction filter = base::Bind(
-      &IsCookieCreatedBetween, delete_begin, delete_end);
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  CookieDeletionInfo delete_info(creation_range.start(), creation_range.end());
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
-void CookieStoreIOS::DeleteAllCreatedBetweenWithPredicateAsync(
-    const base::Time& delete_begin,
-    const base::Time& delete_end,
-    const CookiePredicate& predicate,
-    DeleteCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void CookieStoreIOS::DeleteAllMatchingInfoAsync(CookieDeletionInfo delete_info,
+                                                DeleteCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (metrics_enabled_)
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
+
+  if (metrics_enabled())
     ResetCookieCountMetrics();
 
-  CookieFilterFunction filter = base::Bind(
-      IsCookieCreatedBetweenWithPredicate, delete_begin, delete_end, predicate);
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
 void CookieStoreIOS::DeleteSessionCookiesAsync(DeleteCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (metrics_enabled_)
+  // If cookies are not allowed, a CookieStoreIOS subclass should be used
+  // instead.
+  DCHECK(SystemCookiesAllowed());
+
+  if (metrics_enabled())
     ResetCookieCountMetrics();
 
-  CookieFilterFunction filter = base::Bind(&IsCookieSessionCookie);
-  DeleteCookiesWithFilterAsync(std::move(filter), std::move(callback));
+  CookieDeletionInfo delete_info;
+  delete_info.session_control =
+      CookieDeletionInfo::SessionControl::SESSION_COOKIES;
+  DeleteCookiesMatchingInfoAsync(std::move(delete_info), std::move(callback));
 }
 
 void CookieStoreIOS::FlushStore(base::OnceClosure closure) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (SystemCookiesAllowed()) {
     // If cookies are disabled, the system store is empty, and the cookies are
@@ -488,13 +465,8 @@ void CookieStoreIOS::FlushStore(base::OnceClosure closure) {
     return;
   }
 
-  cookie_monster_->FlushStore(std::move(closure));
-  flush_closure_.Cancel();
-}
-
-void CookieStoreIOS::FlushStoreFromCookies(base::OnceClosure closure,
-                                           NSArray<NSHTTPCookie*>* cookies) {
-  WriteToCookieMonster(cookies);
+  // This code path is used by a CookieStoreIOS subclass, which shares this
+  // implementation.
   cookie_monster_->FlushStore(std::move(closure));
   flush_closure_.Cancel();
 }
@@ -509,6 +481,7 @@ CookieStoreIOS::CookieStoreIOS(
       system_store_(std::move(system_store)),
       metrics_enabled_(false),
       cookie_cache_(new CookieCache()),
+      change_dispatcher_(this),
       weak_factory_(this) {
   DCHECK(system_store_);
 
@@ -518,22 +491,29 @@ CookieStoreIOS::CookieStoreIOS(
   cookie_monster_->SetForceKeepSessionState();
 }
 
+void CookieStoreIOS::FlushStoreFromCookies(base::OnceClosure closure,
+                                           NSArray<NSHTTPCookie*>* cookies) {
+  WriteToCookieMonster(cookies);
+  cookie_monster_->FlushStore(std::move(closure));
+  flush_closure_.Cancel();
+}
+
 CookieStoreIOS::SetCookiesCallback CookieStoreIOS::WrapSetCallback(
     SetCookiesCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return base::BindOnce(&CookieStoreIOS::UpdateCachesAfterSet,
                         weak_factory_.GetWeakPtr(), std::move(callback));
 }
 
 CookieStoreIOS::DeleteCallback CookieStoreIOS::WrapDeleteCallback(
     DeleteCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return base::BindOnce(&CookieStoreIOS::UpdateCachesAfterDelete,
                         weak_factory_.GetWeakPtr(), std::move(callback));
 }
 
 base::OnceClosure CookieStoreIOS::WrapClosure(base::OnceClosure callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return base::BindOnce(&CookieStoreIOS::UpdateCachesAfterClosure,
                         weak_factory_.GetWeakPtr(), std::move(callback));
 }
@@ -542,13 +522,13 @@ base::OnceClosure CookieStoreIOS::WrapClosure(base::OnceClosure callback) {
 #pragma mark Private methods
 
 bool CookieStoreIOS::SystemCookiesAllowed() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return system_store_->GetCookieAcceptPolicy() !=
          NSHTTPCookieAcceptPolicyNever;
 }
 
 void CookieStoreIOS::WriteToCookieMonster(NSArray* system_cookies) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // Copy the cookies from the global cookie store to |cookie_monster_|.
   // Unlike the system store, CookieMonster requires unique creation times.
   net::CookieList cookie_list;
@@ -565,21 +545,28 @@ void CookieStoreIOS::WriteToCookieMonster(NSArray* system_cookies) {
     UMA_HISTOGRAM_COUNTS_10000("CookieIOS.CookieWrittenCount", cookie_count);
 }
 
-void CookieStoreIOS::DeleteCookiesWithFilterAsync(CookieFilterFunction filter,
-                                                  DeleteCallback callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!filter.is_null());
+void CookieStoreIOS::DeleteCookiesMatchingInfoAsync(
+    CookieDeletionInfo delete_info,
+    DeleteCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   __block DeleteCallback shared_callback = std::move(callback);
-  __block CookieFilterFunction shared_filter = std::move(filter);
+  __block CookieDeletionInfo shared_delete_info = std::move(delete_info);
   base::WeakPtr<SystemCookieStore> weak_system_store =
       system_store_->GetWeakPtr();
   system_store_->GetAllCookiesAsync(
-      base::BindBlockArc(^(NSArray<NSHTTPCookie*>* cookies) {
+      base::BindOnce(^(NSArray<NSHTTPCookie*>* cookies) {
+        if (!weak_system_store) {
+          if (!shared_callback.is_null())
+            std::move(shared_callback).Run(0);
+          return;
+        }
         int to_delete_count = 0;
         for (NSHTTPCookie* cookie in cookies) {
-          if (weak_system_store &&
-              shared_filter.Run(
-                  cookie, weak_system_store->GetCookieCreationTime(cookie))) {
+          base::Time creation_time =
+              weak_system_store->GetCookieCreationTime(cookie);
+          CanonicalCookie cc =
+              CanonicalCookieFromSystemCookie(cookie, creation_time);
+          if (shared_delete_info.Matches(cc)) {
             weak_system_store->DeleteCookieAsync(
                 cookie, SystemCookieStore::SystemCookieCallback());
             to_delete_count++;
@@ -592,7 +579,7 @@ void CookieStoreIOS::DeleteCookiesWithFilterAsync(CookieFilterFunction filter,
 }
 
 void CookieStoreIOS::OnSystemCookiesChanged() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   for (const auto& hook_map_entry : hook_map_) {
     std::pair<GURL, std::string> key = hook_map_entry.first;
@@ -610,41 +597,37 @@ void CookieStoreIOS::OnSystemCookiesChanged() {
       FROM_HERE, flush_closure_.callback(), base::TimeDelta::FromSeconds(10));
 }
 
-std::unique_ptr<net::CookieStore::CookieChangedSubscription>
-CookieStoreIOS::AddCallbackForCookie(const GURL& gurl,
-                                     const std::string& name,
-                                     const CookieChangedCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  // Prefill cookie cache with all pertinent cookies for |url| if needed.
-  std::pair<GURL, std::string> key(gurl, name);
-  if (hook_map_.count(key) == 0) {
-    UpdateCacheForCookieFromSystem(gurl, name, /*run_callbacks=*/false);
-    hook_map_[key] = std::make_unique<CookieChangedCallbackList>();
-  }
-
-  DCHECK(hook_map_.find(key) != hook_map_.end());
-  return std::make_unique<CookieStoreIOSCookieChangedSubscription>(
-      hook_map_[key]->Add(callback));
-}
-
-std::unique_ptr<net::CookieStore::CookieChangedSubscription>
-CookieStoreIOS::AddCallbackForAllChanges(
-    const CookieChangedCallback& callback) {
-  // Implement when needed by iOS consumers.
-  NOTIMPLEMENTED();
-  return nullptr;
+CookieChangeDispatcher& CookieStoreIOS::GetChangeDispatcher() {
+  return change_dispatcher_;
 }
 
 bool CookieStoreIOS::IsEphemeral() {
   return cookie_monster_->IsEphemeral();
 }
 
+std::unique_ptr<CookieChangeSubscription> CookieStoreIOS::AddCallbackForCookie(
+    const GURL& gurl,
+    const std::string& name,
+    CookieChangeCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // Prefill cookie cache with all pertinent cookies for |url| if needed.
+  std::pair<GURL, std::string> key(gurl, name);
+  if (hook_map_.count(key) == 0) {
+    UpdateCacheForCookieFromSystem(gurl, name, /*run_callbacks=*/false);
+    hook_map_[key] = std::make_unique<CookieChangeCallbackList>();
+  }
+
+  DCHECK(hook_map_.find(key) != hook_map_.end());
+  return std::make_unique<CookieStoreIOSCookieChangeSubscription>(
+      hook_map_[key]->Add(std::move(callback)));
+}
+
 void CookieStoreIOS::UpdateCacheForCookieFromSystem(
     const GURL& gurl,
     const std::string& cookie_name,
     bool run_callbacks) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   system_store_->GetCookiesForURLAsync(
       gurl, base::BindOnce(&CookieStoreIOS::UpdateCacheForCookies,
                            weak_factory_.GetWeakPtr(), gurl, cookie_name,
@@ -670,9 +653,9 @@ void CookieStoreIOS::UpdateCacheForCookies(const GURL& gurl,
       gurl, cookie_name, cookies, &out_removed_cookies, &out_added_cookies);
   if (run_callbacks && changes) {
     RunCallbacksForCookies(gurl, cookie_name, out_removed_cookies,
-                           net::CookieStore::ChangeCause::UNKNOWN_DELETION);
+                           net::CookieChangeCause::UNKNOWN_DELETION);
     RunCallbacksForCookies(gurl, cookie_name, out_added_cookies,
-                           net::CookieStore::ChangeCause::INSERTED);
+                           net::CookieChangeCause::INSERTED);
   }
 }
 
@@ -680,13 +663,13 @@ void CookieStoreIOS::RunCallbacksForCookies(
     const GURL& url,
     const std::string& name,
     const std::vector<net::CanonicalCookie>& cookies,
-    net::CookieStore::ChangeCause cause) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+    net::CookieChangeCause cause) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (cookies.empty())
     return;
 
   std::pair<GURL, std::string> key(url, name);
-  CookieChangedCallbackList* callbacks = hook_map_[key].get();
+  CookieChangeCallbackList* callbacks = hook_map_[key].get();
   for (const auto& cookie : cookies) {
     DCHECK_EQ(name, cookie.Name());
     callbacks->Notify(cookie, cause);
@@ -695,7 +678,7 @@ void CookieStoreIOS::RunCallbacksForCookies(
 
 void CookieStoreIOS::GotCookieListFor(const std::pair<GURL, std::string> key,
                                       const net::CookieList& cookies) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   net::CookieList filtered;
   OnlyCookiesWithName(cookies, key.second, &filtered);
@@ -704,14 +687,14 @@ void CookieStoreIOS::GotCookieListFor(const std::pair<GURL, std::string> key,
   if (cookie_cache_->Update(key.first, key.second, filtered, &removed_cookies,
                             &added_cookies)) {
     RunCallbacksForCookies(key.first, key.second, removed_cookies,
-                           net::CookieStore::ChangeCause::UNKNOWN_DELETION);
+                           net::CookieChangeCause::UNKNOWN_DELETION);
     RunCallbacksForCookies(key.first, key.second, added_cookies,
-                           net::CookieStore::ChangeCause::INSERTED);
+                           net::CookieChangeCause::INSERTED);
   }
 }
 
 void CookieStoreIOS::UpdateCachesFromCookieMonster() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   for (const auto& hook_map_entry : hook_map_) {
     std::pair<GURL, std::string> key = hook_map_entry.first;
     GetCookieListCallback callback = base::BindOnce(
@@ -722,7 +705,7 @@ void CookieStoreIOS::UpdateCachesFromCookieMonster() {
 
 void CookieStoreIOS::UpdateCachesAfterSet(SetCookiesCallback callback,
                                           bool success) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (success)
     UpdateCachesFromCookieMonster();
   if (!callback.is_null())
@@ -731,14 +714,14 @@ void CookieStoreIOS::UpdateCachesAfterSet(SetCookiesCallback callback,
 
 void CookieStoreIOS::UpdateCachesAfterDelete(DeleteCallback callback,
                                              uint32_t num_deleted) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   UpdateCachesFromCookieMonster();
   if (!callback.is_null())
     std::move(callback).Run(num_deleted);
 }
 
 void CookieStoreIOS::UpdateCachesAfterClosure(base::OnceClosure callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   UpdateCachesFromCookieMonster();
   if (!callback.is_null())
     std::move(callback).Run();

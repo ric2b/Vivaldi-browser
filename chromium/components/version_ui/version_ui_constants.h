@@ -20,6 +20,7 @@ extern const char kRequestVersionInfo[];
 extern const char kReturnFilePaths[];
 extern const char kReturnFlashVersion[];
 extern const char kReturnVariationInfo[];
+extern const char kReturnVariationCmd[];
 
 // Strings.
 // Must match the constants used in the resource files.
@@ -32,7 +33,6 @@ extern const char kCommandLine[];
 extern const char kCommandLineName[];
 extern const char kCompany[];
 #if defined(OS_WIN)
-extern const char kCompiler[];
 extern const char kUpdateCohortName[];
 #endif
 extern const char kCopyright[];
@@ -75,7 +75,9 @@ extern const char kRevision[];
 extern const char kTitle[];
 extern const char kUserAgent[];
 extern const char kUserAgentName[];
+extern const char kVariationsCmdName[];
 extern const char kVariationsName[];
+extern const char kVariationsShowCmdQuery[];
 extern const char kVersion[];
 extern const char kVersionBitSize[];
 extern const char kVersionModifier[];

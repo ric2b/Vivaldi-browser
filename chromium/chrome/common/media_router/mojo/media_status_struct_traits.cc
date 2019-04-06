@@ -5,7 +5,7 @@
 #include "chrome/common/media_router/mojo/media_status_struct_traits.h"
 
 #include "base/strings/string_util.h"
-#include "mojo/common/time_struct_traits.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 
 namespace mojo {
 
@@ -16,11 +16,6 @@ bool StructTraits<media_router::mojom::MediaStatusDataView,
          media_router::MediaStatus* out) {
   if (!data.ReadTitle(&out->title) || !base::IsStringUTF8(out->title))
     return false;
-
-  if (!data.ReadDescription(&out->description) ||
-      !base::IsStringUTF8(out->description)) {
-    return false;
-  }
 
   out->can_play_pause = data.can_play_pause();
   out->can_mute = data.can_mute();

@@ -16,7 +16,6 @@
 #include "ash/ash_export.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell_delegate.h"
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/display/display_controller.mojom.h"
@@ -47,34 +46,25 @@ class WMState;
 namespace ash {
 class AcceleratorHandler;
 class AshTestHelper;
-class WaylandServerController;
 
 enum class Config;
 
 // WindowManager serves as the WindowManagerDelegate and
 // WindowTreeClientDelegate for mash. WindowManager takes ownership of
-// the WindowTreeClient. This is used in not in classic, only mus and mash.
+// the WindowTreeClient. This is used in not in classic.
 class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
                                  public aura::WindowTreeClientDelegate {
  public:
   // Set |show_primary_host_on_connect| to true if the initial display should
   // be made visible.  Generally tests should use false, other places use true.
   WindowManager(service_manager::Connector* connector,
-                Config config,
                 bool show_primary_host_on_connect);
   ~WindowManager() override;
 
+  // |initial_display_prefs| contains a dictionary of initial display prefs to
+  // pass to Shell::Init for synchronous initial display configuraiton.
   void Init(std::unique_ptr<aura::WindowTreeClient> window_tree_client,
-            std::unique_ptr<ash::ShellDelegate> shell_delegate = nullptr);
-
-  // Sets the callback that is run once the connection to mus is lost. If not
-  // set shutdown occurs when the connection is lost (the Shell is deleted).
-  void SetLostConnectionCallback(base::OnceClosure closure);
-
-  // Blocks waiting for the initial set of displays.
-  bool WaitForInitialDisplays();
-
-  Config config() const { return config_; }
+            std::unique_ptr<base::Value> initial_display_prefs);
 
   aura::WindowTreeClient* window_tree_client() {
     return window_tree_client_.get();
@@ -122,6 +112,7 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
   void OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) override;
   void OnLostConnection(aura::WindowTreeClient* client) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
+                              int64_t display_id,
                               aura::Window* target) override;
   aura::PropertyConverter* GetPropertyConverter() override;
 
@@ -144,7 +135,7 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
   void OnWmClientJankinessChanged(const std::set<aura::Window*>& client_windows,
                                   bool not_responding) override;
   void OnWmBuildDragImage(const gfx::Point& screen_location,
-                          const SkBitmap& drag_image,
+                          const gfx::ImageSkia& drag_image,
                           const gfx::Vector2d& drag_image_offset,
                           ui::mojom::PointerKind source) override;
   void OnWmMoveDragImage(const gfx::Point& screen_location) override;
@@ -162,8 +153,7 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
   ui::mojom::EventResult OnAccelerator(
       uint32_t id,
       const ui::Event& event,
-      std::unordered_map<std::string, std::vector<uint8_t>>* properties)
-      override;
+      base::flat_map<std::string, std::vector<uint8_t>>* properties) override;
   void OnCursorTouchVisibleChanged(bool enabled) override;
   void OnWmSetClientArea(
       aura::Window* window,
@@ -178,11 +168,7 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
   service_manager::Connector* connector_;
   display::mojom::DisplayControllerPtr display_controller_;
 
-  const Config config_;
-
   const bool show_primary_host_on_connect_;
-
-  base::OnceClosure lost_connection_callback_;
 
   std::unique_ptr<::wm::WMState> wm_state_;
   std::unique_ptr<aura::PropertyConverter> property_converter_;
@@ -200,16 +186,17 @@ class ASH_EXPORT WindowManager : public aura::WindowManagerDelegate,
   uint16_t next_accelerator_namespace_id_ = 0u;
 
   // The ShellDelegate to install. This may be null, in which case
-  // ShellDelegateMus is used.
+  // ShellDelegateMash is used.
+  // NOTE: AshTestHelper may set |shell_delegate_| directly.
   std::unique_ptr<ShellDelegate> shell_delegate_;
+
+  std::unique_ptr<base::Value> initial_display_prefs_;
 
   // State that is only valid during a drag.
   struct DragState;
   std::unique_ptr<DragState> drag_state_;
 
   std::unique_ptr<ui::InputDeviceClient> input_device_client_;
-
-  std::unique_ptr<WaylandServerController> wayland_server_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManager);
 };

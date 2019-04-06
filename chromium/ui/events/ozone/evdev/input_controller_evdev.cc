@@ -9,7 +9,6 @@
 #include <algorithm>
 
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/ozone/evdev/input_device_factory_evdev_proxy.h"
@@ -183,8 +182,8 @@ void InputControllerEvdev::ScheduleUpdateDeviceSettings() {
   if (!input_device_factory_ || settings_update_pending_)
     return;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&InputControllerEvdev::UpdateDeviceSettings,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&InputControllerEvdev::UpdateDeviceSettings,
+                                weak_ptr_factory_.GetWeakPtr()));
   settings_update_pending_ = true;
 }
 

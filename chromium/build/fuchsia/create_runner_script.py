@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -44,40 +44,19 @@ if __name__ == '__main__':
 """
 
 
-def MakeDirectory(dir_path):
-  try:
-    os.makedirs(dir_path)
-  except OSError:
-    pass
-
-
-def WriteDepfile(depfile_path, first_gn_output, inputs=None):
-  assert depfile_path != first_gn_output
-  inputs = inputs or []
-  MakeDirectory(os.path.dirname(depfile_path))
-  # Ninja does not support multiple outputs in depfiles.
-  with open(depfile_path, 'w') as depfile:
-    depfile.write(first_gn_output.replace(' ', '\\ '))
-    depfile.write(': ')
-    depfile.write(' '.join(i.replace(' ', '\\ ') for i in inputs))
-    depfile.write('\n')
-
-
 def main(args):
   parser = argparse.ArgumentParser()
   parser.add_argument('--runner-script',
                       help='Name of the runner script to use.')
   parser.add_argument('--script-output-path',
                       help='Output path for executable script.')
-  parser.add_argument('--depfile',
-                      help='Path to the depfile. This must be specified as '
-                           'the action\'s first output.')
   parser.add_argument('--test-runner-path',
                       help='Path to test_runner.py (optional).')
   group = parser.add_argument_group('Test runner path arguments.')
   group.add_argument('--output-directory')
-  group.add_argument('--runtime-deps-path')
-  group.add_argument('--exe-name')
+  group.add_argument('--package')
+  group.add_argument('--package-dep', action='append', default=[])
+  group.add_argument('--package-manifest')
   args, runner_args = parser.parse_known_args(args)
 
   def RelativizePathToScript(path):
@@ -92,21 +71,22 @@ def main(args):
   runner_path_args.append(
       ('--output-directory', RelativizePathToScript(args.output_directory)))
   runner_path_args.append(
-      ('--runtime-deps-path', RelativizePathToScript(args.runtime_deps_path)))
+      ('--package', RelativizePathToScript(args.package)))
+  for next_package_dep in args.package_dep:
+    runner_path_args.append(
+        ('--package-dep', RelativizePathToScript(next_package_dep)))
   runner_path_args.append(
-      ('--exe-name', RelativizePathToScript(args.exe_name)))
+      ('--package-manifest', RelativizePathToScript(args.package_manifest)))
 
   with open(args.script_output_path, 'w') as script:
     script.write(SCRIPT_TEMPLATE.format(
         runner_path=str(runner_path),
-        runner_args=str(runner_args),
-        runner_path_args=str(runner_path_args)))
+        runner_args=repr(runner_args),
+        runner_path_args=repr(runner_path_args)))
 
+  # Sets the mode of the generated script so that it is executable by the
+  # current user.
   os.chmod(args.script_output_path, 0750)
-
-  if args.depfile:
-    WriteDepfile(args.depfile, args.script_output_path,
-                 [__file__])
 
 
 if __name__ == '__main__':

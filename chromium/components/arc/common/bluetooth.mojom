@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Next MinVersion: 8
+// Next MinVersion: 13
 
 module arc.mojom;
 
@@ -278,8 +278,8 @@ struct BluetoothSdpAttribute {
   // change. This field is introduced between version 7 and 8, though
   // MinVersion is not annotated because of breaking change, too.
   // See details in the bug linked below.
-  // TODO(crbug.com/767313): Use mojo/common/values.mojom, when new libmojo
-  // (440057 or later) is rolled to ARC repository.
+  // TODO(crbug.com/767313): Use mojo/public/mojom/base/values.mojom, when new
+  // libmojo (440057 or later) is rolled to ARC repository.
   string? json_value@3;
 };
 
@@ -292,7 +292,7 @@ struct BluetoothCreateSdpRecordResult {
   uint32 service_handle;
 };
 
-// Next Method ID: 43
+// Next Method ID: 45
 interface BluetoothHost {
   EnableAdapter@0() => (BluetoothAdapterState state);
   DisableAdapter@1() => (BluetoothAdapterState state);
@@ -329,7 +329,8 @@ interface BluetoothHost {
   [MinVersion=1] WriteGattCharacteristic@23(BluetoothAddress remote_addr,
                                             BluetoothGattServiceID service_id,
                                             BluetoothGattID char_id,
-                                            BluetoothGattValue value)
+                                            BluetoothGattValue value,
+                                            [MinVersion=11] bool prepare)
       => (BluetoothGattStatus status);
   [MinVersion=1] ReadGattDescriptor@24(BluetoothAddress remote_addr,
                                        BluetoothGattServiceID service_id,
@@ -341,6 +342,9 @@ interface BluetoothHost {
                                         BluetoothGattID char_id,
                                         BluetoothGattID desc_id,
                                         BluetoothGattValue value)
+      => (BluetoothGattStatus status);
+  [MinVersion=11] ExecuteWrite@44(BluetoothAddress remote_addr,
+                                  bool execute)
       => (BluetoothGattStatus status);
   [MinVersion=1] RegisterForGattNotification@26(
       BluetoothAddress remote_addr,
@@ -396,14 +400,16 @@ interface BluetoothHost {
   // Multi-advertisement functions
   [MinVersion=6] ReserveAdvertisementHandle@40()
       => (BluetoothGattStatus status, int32 adv_handle);
-  [MinVersion=6] BroadcastAdvertisement@41(int32 adv_handle,
-                                           BluetoothAdvertisement adv)
+  [MinVersion=6] EnableAdvertisement@41(int32 adv_handle,
+                                        BluetoothAdvertisement adv)
       => (BluetoothGattStatus status);
   [MinVersion=6] ReleaseAdvertisementHandle@42(int32 adv_handle)
       => (BluetoothGattStatus status);
+  [MinVersion=8] DisableAdvertisement@43(int32 adv_handle)
+      => (BluetoothGattStatus status);
 };
 
-// Next Method ID: 19
+// Next Method ID: 21
 interface BluetoothInstance {
   // DEPRECATED: Please use Init@18 instead.
   InitDeprecated@0(BluetoothHost host_ptr);
@@ -449,20 +455,30 @@ interface BluetoothInstance {
                                  array<uint8> value);
 
   // Bluetooth Gatt Server functions
-  [MinVersion=3] RequestGattRead@14(BluetoothAddress address,
-                                    int32 attribute_handle,
-                                    int32 offset,
-                                    bool is_long)
+  [MinVersion=3] RequestGattRead@14(
+      BluetoothAddress address,
+      int32 attribute_handle,
+      int32 offset,
+      bool is_long,
+      [MinVersion=9] BluetoothGattDBAttributeType attribute_type)
       => (BluetoothGattStatus status, array<uint8> value);
-  [MinVersion=3] RequestGattWrite@15(BluetoothAddress address,
-                                     int32 attribute_handle,
-                                     int32 offset,
-                                     array<uint8> value)
+  [MinVersion=3] RequestGattWrite@15(
+      BluetoothAddress address,
+      int32 attribute_handle,
+      int32 offset,
+      array<uint8> value,
+      [MinVersion=9] BluetoothGattDBAttributeType attribute_type,
+      [MinVersion=12] bool is_prepare)
       => (BluetoothGattStatus status);
+  [MinVersion=12] RequestGattExecuteWrite@20(
+      BluetoothAddress address,
+      bool execute)
+      => (BluetoothGattStatus status);
+  [MinVersion=10] OnMTUReceived@19(BluetoothAddress remote_addr, uint16 mtu);
 
   // Bluetooth SDP function
   [MinVersion=5] OnGetSdpRecords@17(BluetoothStatus status,
-                                    BluetoothAddress remove_addr,
+                                    BluetoothAddress remote_addr,
                                     BluetoothUUID target_uuid,
                                     array<BluetoothSdpRecord> records);
 };

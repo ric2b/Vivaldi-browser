@@ -72,33 +72,54 @@ TEST_F(HttpResponseInfoTest, PKPBypassPersistFalse) {
   EXPECT_FALSE(restored_response_info.ssl_info.pkp_bypassed);
 }
 
-TEST_F(HttpResponseInfoTest, FailsInitFromPickleWithInvalidSCTStatus) {
-  // A valid certificate is needed for ssl_info.is_valid() to be true
-  // so that the SCTs would be serialized.
-  response_info_.ssl_info.cert =
-      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
+TEST_F(HttpResponseInfoTest, AsyncRevalidationRequestedDefault) {
+  EXPECT_FALSE(response_info_.async_revalidation_requested);
+}
 
-  scoped_refptr<ct::SignedCertificateTimestamp> sct;
-  ct::GetX509CertSCT(&sct);
+TEST_F(HttpResponseInfoTest, AsyncRevalidationRequestedCopy) {
+  response_info_.async_revalidation_requested = true;
+  net::HttpResponseInfo response_info_clone(response_info_);
+  EXPECT_TRUE(response_info_clone.async_revalidation_requested);
+}
 
-  response_info_.ssl_info.signed_certificate_timestamps.push_back(
-      SignedCertificateTimestampAndStatus(
-          sct, ct::SCTVerifyStatus::SCT_STATUS_LOG_UNKNOWN));
+TEST_F(HttpResponseInfoTest, AsyncRevalidationRequestedAssign) {
+  response_info_.async_revalidation_requested = true;
+  net::HttpResponseInfo response_info_clone;
+  response_info_clone = response_info_;
+  EXPECT_TRUE(response_info_clone.async_revalidation_requested);
+}
 
-  base::Pickle pickle;
-  response_info_.Persist(&pickle, false, false);
-  bool truncated = false;
+TEST_F(HttpResponseInfoTest, AsyncRevalidationRequestedNotPersisted) {
+  response_info_.async_revalidation_requested = true;
   net::HttpResponseInfo restored_response_info;
-  EXPECT_TRUE(restored_response_info.InitFromPickle(pickle, &truncated));
+  PickleAndRestore(response_info_, &restored_response_info);
+  EXPECT_FALSE(restored_response_info.async_revalidation_requested);
+}
 
-  response_info_.ssl_info.signed_certificate_timestamps.push_back(
-      SignedCertificateTimestampAndStatus(sct,
-                                          static_cast<ct::SCTVerifyStatus>(2)));
-  base::Pickle pickle_invalid;
-  response_info_.Persist(&pickle_invalid, false, false);
-  net::HttpResponseInfo restored_invalid_response;
-  EXPECT_FALSE(
-      restored_invalid_response.InitFromPickle(pickle_invalid, &truncated));
+TEST_F(HttpResponseInfoTest, StaleRevalidationTimeoutDefault) {
+  EXPECT_TRUE(response_info_.stale_revalidate_timeout.is_null());
+}
+
+TEST_F(HttpResponseInfoTest, StaleRevalidationTimeoutCopy) {
+  base::Time test_time = base::Time::FromDoubleT(1000);
+  response_info_.stale_revalidate_timeout = test_time;
+  HttpResponseInfo response_info_clone(response_info_);
+  EXPECT_EQ(test_time, response_info_clone.stale_revalidate_timeout);
+}
+
+TEST_F(HttpResponseInfoTest, StaleRevalidationTimeoutRestoreValue) {
+  base::Time test_time = base::Time::FromDoubleT(1000);
+  response_info_.stale_revalidate_timeout = test_time;
+  HttpResponseInfo restored_response_info;
+  PickleAndRestore(response_info_, &restored_response_info);
+  EXPECT_EQ(test_time, restored_response_info.stale_revalidate_timeout);
+}
+
+TEST_F(HttpResponseInfoTest, StaleRevalidationTimeoutRestoreNoValue) {
+  EXPECT_TRUE(response_info_.stale_revalidate_timeout.is_null());
+  HttpResponseInfo restored_response_info;
+  PickleAndRestore(response_info_, &restored_response_info);
+  EXPECT_TRUE(restored_response_info.stale_revalidate_timeout.is_null());
 }
 
 // Test that key_exchange_group is preserved for ECDHE ciphers.

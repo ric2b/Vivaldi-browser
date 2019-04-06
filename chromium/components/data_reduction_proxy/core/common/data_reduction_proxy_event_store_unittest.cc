@@ -15,6 +15,7 @@
 #include "base/json/json_writer.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_configurator.h"
@@ -27,6 +28,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_status_code.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
@@ -34,7 +36,6 @@
 #include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
-#include "net/proxy/proxy_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace data_reduction_proxy {
@@ -225,7 +226,8 @@ TEST_F(DataReductionProxyEventStoreTest, TestFeedbackMethods) {
   base::MessageLoopForIO loop;
   TestingPrefServiceSimple test_prefs;
   test_prefs.registry()->RegisterDictionaryPref(prefs::kNetworkProperties);
-  NetworkPropertiesManager manager(&test_prefs,
+  NetworkPropertiesManager manager(base::DefaultClock::GetInstance(),
+                                   &test_prefs,
                                    base::ThreadTaskRunnerHandle::Get());
   DataReductionProxyConfigurator configurator(net_log(), event_creator());
   EXPECT_EQ(std::string(), event_store()->GetHttpProxyList());
@@ -252,7 +254,8 @@ TEST_F(DataReductionProxyEventStoreTest, TestFeedbackLastBypassEventFullURL) {
   base::MessageLoopForIO loop;
   TestingPrefServiceSimple test_prefs;
   test_prefs.registry()->RegisterDictionaryPref(prefs::kNetworkProperties);
-  NetworkPropertiesManager manager(&test_prefs,
+  NetworkPropertiesManager manager(base::DefaultClock::GetInstance(),
+                                   &test_prefs,
                                    base::ThreadTaskRunnerHandle::Get());
   DataReductionProxyConfigurator configurator(net_log(), event_creator());
   std::vector<DataReductionProxyServer> http_proxies;
@@ -281,7 +284,7 @@ TEST_F(DataReductionProxyEventStoreTest, TestFeedbackLastBypassEventFullURL) {
 
   bypass_event->Set("params", std::move(bypass_params));
   std::string sanitized_output;
-  base::JSONWriter::Write(*sanitized_event.get(), &sanitized_output);
+  base::JSONWriter::Write(*sanitized_event, &sanitized_output);
   event_store()->AddAndSetLastBypassEvent(std::move(bypass_event), 0);
   EXPECT_EQ(sanitized_output, event_store()->SanitizedLastBypassEvent());
 }
@@ -290,7 +293,8 @@ TEST_F(DataReductionProxyEventStoreTest, TestFeedbackLastBypassEventHostOnly) {
   base::MessageLoopForIO loop;
   TestingPrefServiceSimple test_prefs;
   test_prefs.registry()->RegisterDictionaryPref(prefs::kNetworkProperties);
-  NetworkPropertiesManager manager(&test_prefs,
+  NetworkPropertiesManager manager(base::DefaultClock::GetInstance(),
+                                   &test_prefs,
                                    base::ThreadTaskRunnerHandle::Get());
   DataReductionProxyConfigurator configurator(net_log(), event_creator());
   std::vector<DataReductionProxyServer> http_proxies;
@@ -319,7 +323,7 @@ TEST_F(DataReductionProxyEventStoreTest, TestFeedbackLastBypassEventHostOnly) {
 
   bypass_event->Set("params", std::move(bypass_params));
   std::string sanitized_output;
-  base::JSONWriter::Write(*sanitized_event.get(), &sanitized_output);
+  base::JSONWriter::Write(*sanitized_event, &sanitized_output);
   event_store()->AddAndSetLastBypassEvent(std::move(bypass_event), 0);
   EXPECT_EQ(sanitized_output, event_store()->SanitizedLastBypassEvent());
 }

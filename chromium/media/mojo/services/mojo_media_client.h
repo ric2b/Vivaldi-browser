@@ -12,32 +12,33 @@
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/overlay_info.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "media/mojo/interfaces/video_decoder.mojom.h"
 #include "media/mojo/services/media_mojo_export.h"
 
 namespace base {
 class SingleThreadTaskRunner;
-}
+}  // namespace base
+
+namespace gfx {
+class ColorSpace;
+}  // namespace gfx
 
 namespace service_manager {
 class Connector;
 namespace mojom {
 class InterfaceProvider;
-}
+}  // namespace mojom
 }  // namespace service_manager
 
 namespace media {
 
 class AudioDecoder;
-class AudioRendererSink;
 class CdmFactory;
 class CdmProxy;
 class MediaLog;
-class RendererFactory;
+class Renderer;
 class VideoDecoder;
-class VideoRendererSink;
-struct CdmHostFilePath;
 
 class MEDIA_MOJO_EXPORT MojoMediaClient {
  public:
@@ -50,10 +51,6 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   // |this| to connect to other services. It is guaranteed to outlive |this|.
   virtual void Initialize(service_manager::Connector* connector);
 
-  // Called by the MediaService to ensure the process is sandboxed. It could be
-  // a no-op if the process is already sandboxed.
-  virtual void EnsureSandboxed();
-
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
@@ -61,21 +58,16 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       MediaLog* media_log,
       mojom::CommandBufferIdPtr command_buffer_id,
-      RequestOverlayInfoCB request_overlay_info_cb);
+      RequestOverlayInfoCB request_overlay_info_cb,
+      const gfx::ColorSpace& target_color_space);
 
-  // Returns the output sink used for rendering audio on |audio_device_id|.
-  // May be null if the RendererFactory doesn't need an audio sink.
-  virtual scoped_refptr<AudioRendererSink> CreateAudioRendererSink(
+  // Returns the Renderer to be used by MojoRendererService.
+  // TODO(hubbe): Find out whether we should pass in |target_color_space| here.
+  virtual std::unique_ptr<Renderer> CreateRenderer(
+      service_manager::mojom::InterfaceProvider* host_interfaces,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      MediaLog* media_log,
       const std::string& audio_device_id);
-
-  // Returns the output sink used for rendering video.
-  // May be null if the RendererFactory doesn't need a video sink.
-  virtual std::unique_ptr<VideoRendererSink> CreateVideoRendererSink(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
-
-  // Returns the RendererFactory to be used by MojoRendererService.
-  virtual std::unique_ptr<RendererFactory> CreateRendererFactory(
-      MediaLog* media_log);
 
   // Returns the CdmFactory to be used by MojoCdmService. |host_interfaces| can
   // be used to request interfaces provided remotely by the host. It may be a
@@ -88,12 +80,6 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   // entity, e.g. hardware CDM modules.
   virtual std::unique_ptr<CdmProxy> CreateCdmProxy(const std::string& cdm_guid);
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
-
-#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
-  // Gets a list of CDM host file paths and put them in |cdm_host_file_paths|.
-  virtual void AddCdmHostFilePaths(
-      std::vector<CdmHostFilePath>* cdm_host_file_paths);
-#endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 
  protected:
   MojoMediaClient();

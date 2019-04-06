@@ -57,7 +57,7 @@ fun:*DatabaseContext*contextDestroyed*
 
 # FIXME: Cannot handle template function LifecycleObserver<>::setContext,
 # so exclude source file for now. 
-src:*LifecycleObserver.h*
+src:*lifecycle_observer.h*
 
 #############################################################################
 # Methods disabled due to perf considerations.
@@ -120,15 +120,12 @@ type:sandbox::BrokerServices
 type:sandbox::TargetPolicy
 type:sandbox::TargetServices
 
-# Likewise (base/win/scoped_handle.cc).
-type:*ActiveVerifier*
-
 #############################################################################
 # Disabled indirect calls
 
 [cfi-icall]
 
-######### Cross-DSO icalls using dynamically resolved symbols
+######### Cross-DSO icalls using dynamically resolved symbols crbug.com/771365
 
 # ANGLE
 src:*third_party/angle/src/libANGLE/*
@@ -144,21 +141,22 @@ src:*ppapi/*
 src:*content/renderer/pepper*
 fun:*PpapiThread*
 fun:*BrokerProcessDispatcher*
-# ppapi code uses base::Callback to call into libppappi_test.so.
-# base/bind_internal.h
+# Blacklist base::Callback due to https://crbug.com/845855
 fun:*FunctorTraits*
 
 # Calls to auto-generated stubs by generate_stubs.py
 src:*audio/pulse/pulse_stubs.cc
 
 # Calls to auto-generated stubs by generate_library_loader.py
+src:*chrome/browser/speech/tts_linux.cc
+src:*device/udev_linux/udev0_loader.cc
 src:*device/udev_linux/udev1_loader.cc
-src:*net/proxy/proxy_config_service_linux.cc
 
 # Calls to auto-generated stubs by ui/gl/generate_bindings.py
 src:*ui/gl/gl_bindings_autogen_*
 
 src:*components/os_crypt/*
+src:*chrome/browser/password_manager/native_backend_gnome_x.cc
 src:*chrome/browser/password_manager/native_backend_libsecret*
 
 src:*content/browser/accessibility/browser_accessibility_auralinux.cc
@@ -170,6 +168,10 @@ src:*third_party/webrtc/modules/desktop_capture/x11/x_server_pixel_buffer.cc
 src:*media/cdm/*
 src:*third_party/swiftshader/*
 src:*base/native_library_unittest.cc
+src:*chrome/browser/ui/libgtkui/app_indicator_icon.cc
+src:*chrome/browser/ui/libgtkui/unity_service.cc
+src:*components/cronet/native/*
+src:*third_party/breakpad/breakpad/src/client/linux/handler/exception_handler_unittest.cc
 
 # chrome/browser/ui/views/frame/global_menu_bar_x11.cc
 fun:*GlobalMenuBarX11*
@@ -177,13 +179,26 @@ fun:*GlobalMenuBarX11*
 # third_party/skia/include/gpu/gl/GrGLFunctions.h
 fun:*GrGLFunction*
 
+# Call to libcurl.so from the symupload utility
+src:*third_party/breakpad/breakpad/src/common/linux/http_upload.cc
+
+# The follow entries are speculatively disabled. They're included in the
+# chromium build and include calls to dynamically resolved symbols; however,
+# they do not trigger cfi-icall failures in unit tests or normal chrome usage.
+# They're disabled to avoid failing in uncommon code paths. Be careful removing.
+src:*net/http/http_auth_gssapi_posix.cc
+src:*third_party/breakpad/breakpad/src/common/linux/libcurl_wrapper.cc
+src:*third_party/crashpad/crashpad/snapshot/crashpad_info_client_options_test.cc
+src:*third_party/skia/src/ports/SkFontHost_FreeType.cpp
+
 ######### Function pointers cast to incorrect type signatures
 
 # libicu is currently compiled such that in libicu the 'UChar' type is a
 # defined as a char16_t internally, but for the rest of chromium it's an
 # unsigned short, causing mismatched type signatures for icalls to/from icu
+# https://crbug.com/732026
 src:*third_party/icu/source/common/*
-src:*third_party/WebKit/Source/platform/wtf/*
+src:*third_party/blink/renderer/platform/wtf/*
 # v8/src/intl.cc
 fun:*LocaleConvertCase*
 
@@ -191,13 +206,16 @@ fun:*LocaleConvertCase*
 # third_party/boringssl/src/crypto/pem/pem_lib.c
 fun:*PEM_ASN1_write*
 
-src:*third_party/sqlite/*
-
 # PropertyCallbackArguments::Call methods cast function pointers
 src:*v8/src/api-arguments-inl.h
 
 # v8 callback that casts argument template parameters
 fun:*PendingPhantomCallback*Invoke*
+
+# weak_callback_ is cast from original type.
+fun:*GlobalHandles*PostGarbageCollectionProcessing*
+
+fun:*InvokeAccessorGetterCallback*
 
 ######### Uncategorized
 

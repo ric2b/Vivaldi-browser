@@ -178,7 +178,7 @@ bool DeleteDirectiveHandler::DeleteDirectiveTask::RunOnDBThread(
 }
 
 void DeleteDirectiveHandler::DeleteDirectiveTask::DoneRunOnMainThread() {
-  if (delete_directive_handler_.get()) {
+  if (delete_directive_handler_) {
     delete_directive_handler_->FinishProcessing(post_processing_action_,
                                                 delete_directives_);
   }
@@ -302,6 +302,7 @@ void DeleteDirectiveHandler::Start(
   if (!initial_sync_data.empty()) {
     // Drop processed delete directives during startup.
     history_service->ScheduleDBTask(
+        FROM_HERE,
         std::unique_ptr<HistoryDBTask>(
             new DeleteDirectiveTask(weak_ptr_factory_.GetWeakPtr(),
                                     initial_sync_data, DROP_AFTER_PROCESSING)),
@@ -407,6 +408,7 @@ syncer::SyncError DeleteDirectiveHandler::ProcessSyncChanges(
     // redelivered delete directives to avoid processing them again and again
     // in one chrome session.
     history_service->ScheduleDBTask(
+        FROM_HERE,
         std::unique_ptr<HistoryDBTask>(
             new DeleteDirectiveTask(weak_ptr_factory_.GetWeakPtr(),
                                     delete_directives, KEEP_AFTER_PROCESSING)),

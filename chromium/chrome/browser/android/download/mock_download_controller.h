@@ -5,15 +5,20 @@
 #ifndef CHROME_BROWSER_ANDROID_DOWNLOAD_MOCK_DOWNLOAD_CONTROLLER_H_
 #define CHROME_BROWSER_ANDROID_DOWNLOAD_MOCK_DOWNLOAD_CONTROLLER_H_
 
+#include <string>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/android/download/download_controller_base.h"
 
 namespace content {
-class DownloadItem;
 class WebContents;
 }  // namespace content
+
+namespace download {
+class DownloadItem;
+}
 
 namespace chrome {
 namespace android {
@@ -25,19 +30,19 @@ class MockDownloadController : public DownloadControllerBase {
   ~MockDownloadController() override;
 
   // DownloadControllerBase implementation.
-  void OnDownloadStarted(content::DownloadItem* download_item) override;
+  void OnDownloadStarted(download::DownloadItem* download_item) override;
   void StartContextMenuDownload(
       const content::ContextMenuParams& params,
       content::WebContents* web_contents,
       bool is_link, const std::string& extra_headers) override;
   void AcquireFileAccessPermission(
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
-      const AcquireFileAccessPermissionCallback& callback) override;
+      AcquireFileAccessPermissionCallback callback) override;
   void SetApproveFileAccessRequestForTesting(bool approve) override;
   void CreateAndroidDownload(
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const DownloadInfo& info) override;
-  void AboutToResumeDownload(content::DownloadItem* download_item) override;
+  void AboutToResumeDownload(download::DownloadItem* download_item) override;
 
  private:
   bool approve_file_access_request_;

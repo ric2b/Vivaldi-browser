@@ -28,7 +28,10 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
                const gfx::RectF& bounds) override;
   void OnSuggestionsReturned(int query_id,
                              const std::vector<Suggestion>& suggestions,
+                             bool autoselect_first_suggestion,
                              bool is_all_server_suggestions) override;
+  bool HasActiveScreenReader() const override;
+  void OnAutofillAvailabilityEvent(bool has_suggestions) override;
 
   // Functions unique to TestAutofillExternalDelegate.
 
@@ -51,9 +54,15 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
 
   bool on_suggestions_returned_seen() const;
 
+  bool autoselect_first_suggestion() const;
+
   bool is_all_server_suggestions() const;
 
   bool popup_hidden() const;
+
+  void set_has_active_screen_reader(bool has_active_screen_reader);
+
+  bool has_suggestions_available_on_field_focus() const;
 
  private:
   // If true, calls AutofillExternalDelegate::OnQuery and
@@ -67,6 +76,9 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
   // call to OnQuery.
   bool on_suggestions_returned_seen_ = false;
 
+  // Records if the first suggestion should be auto-selected.
+  bool autoselect_first_suggestion_ = false;
+
   // Records whether the Autofill suggestions all come from Google Payments.
   bool is_all_server_suggestions_ = false;
 
@@ -78,6 +90,10 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
 
   // |true| if the popup is hidden, |false| if the popup is shown.
   bool popup_hidden_ = true;
+
+  bool has_active_screen_reader_ = true;
+
+  bool has_suggestions_available_on_field_focus_ = false;
 
   base::RunLoop run_loop_;
 

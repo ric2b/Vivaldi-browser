@@ -8,24 +8,28 @@
 #include <stdint.h>
 #include <string>
 
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_base.h"
-#include "services/resource_coordinator/coordination_unit/coordination_unit_manager.h"
+#include "services/resource_coordinator/coordination_unit/coordination_unit_graph.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_provider_impl.h"
+#include "services/resource_coordinator/coordination_unit/system_coordination_unit_impl.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace resource_coordinator {
 
 struct CoordinationUnitID;
+class SystemCoordinationUnitImpl;
 
 template <class CoordinationUnitClass>
 class TestCoordinationUnitWrapper {
  public:
-  static TestCoordinationUnitWrapper<CoordinationUnitClass> Create() {
-    CoordinationUnitID cu_id(CoordinationUnitClass::Type(), std::string());
+  static TestCoordinationUnitWrapper<CoordinationUnitClass> Create(
+      CoordinationUnitGraph* graph) {
+    CoordinationUnitID cu_id(CoordinationUnitClass::Type(),
+                             CoordinationUnitID::RANDOM_ID);
     return TestCoordinationUnitWrapper<CoordinationUnitClass>(
-        CoordinationUnitClass::Create(cu_id, nullptr));
+        CoordinationUnitClass::Create(cu_id, graph, nullptr));
   }
 
   TestCoordinationUnitWrapper(CoordinationUnitClass* impl) : impl_(impl) {
@@ -55,31 +59,43 @@ class CoordinationUnitTestHarness : public testing::Test {
   TestCoordinationUnitWrapper<CoordinationUnitClass> CreateCoordinationUnit(
       CoordinationUnitID cu_id) {
     return TestCoordinationUnitWrapper<CoordinationUnitClass>(
-        CoordinationUnitClass::Create(cu_id, service_ref_factory_.CreateRef()));
+        CoordinationUnitClass::Create(cu_id, coordination_unit_graph(),
+                                      service_ref_factory_.CreateRef()));
   }
 
   template <class CoordinationUnitClass>
   TestCoordinationUnitWrapper<CoordinationUnitClass> CreateCoordinationUnit() {
-    CoordinationUnitID cu_id(CoordinationUnitClass::Type(), std::string());
+    CoordinationUnitID cu_id(CoordinationUnitClass::Type(),
+                             CoordinationUnitID::RANDOM_ID);
     return CreateCoordinationUnit<CoordinationUnitClass>(cu_id);
+  }
+
+  TestCoordinationUnitWrapper<SystemCoordinationUnitImpl>
+  GetSystemCoordinationUnit() {
+    return TestCoordinationUnitWrapper<SystemCoordinationUnitImpl>(
+        coordination_unit_graph()->FindOrCreateSystemCoordinationUnit(
+            service_ref_factory_.CreateRef()));
   }
 
   // testing::Test:
   void TearDown() override;
 
  protected:
+  base::test::ScopedTaskEnvironment& task_env() {
+    return task_env_;
+  }
   service_manager::ServiceContextRefFactory* service_context_ref_factory() {
     return &service_ref_factory_;
   }
-  CoordinationUnitManager& coordination_unit_manager() {
-    return coordination_unit_manager_;
+  CoordinationUnitGraph* coordination_unit_graph() {
+    return &coordination_unit_graph_;
   }
   CoordinationUnitProviderImpl* provider() { return &provider_; }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_env_;
   service_manager::ServiceContextRefFactory service_ref_factory_;
-  CoordinationUnitManager coordination_unit_manager_;
+  CoordinationUnitGraph coordination_unit_graph_;
   CoordinationUnitProviderImpl provider_;
 };
 

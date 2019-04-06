@@ -4,6 +4,8 @@
 
 static_library("renderer") {
   sources = [
+    "ad_delay_renderer_metadata_provider.cc",
+    "ad_delay_renderer_metadata_provider.h",
     "subresource_filter_agent.cc",
     "subresource_filter_agent.h",
     "unverified_ruleset_dealer.cc",
@@ -17,7 +19,7 @@ static_library("renderer") {
     "//components/subresource_filter/core/common",
     "//content/public/common",
     "//content/public/renderer",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//url",
   ]
   public_deps = [
@@ -39,7 +41,7 @@ source_set("unit_tests") {
     "//components/subresource_filter/core/common:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//url",
   ]
 }

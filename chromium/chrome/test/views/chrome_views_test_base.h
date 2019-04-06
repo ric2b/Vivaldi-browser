@@ -10,8 +10,6 @@
 #include "base/macros.h"
 #include "ui/views/test/views_test_base.h"
 
-class ChromeLayoutProvider;
-
 // A base class for Chrome views unit tests. Changes the dependencies when they
 // need to be different than non-Chrome views.
 class ChromeViewsTestBase : public views::ViewsTestBase {
@@ -22,11 +20,10 @@ class ChromeViewsTestBase : public views::ViewsTestBase {
   // views::ViewsTestBase:
   void SetUp() override;
 
- private:
-  // Overrides the LayoutProvider created by ViewsTestBase (via
-  // TestViewsDelegate).
-  std::unique_ptr<ChromeLayoutProvider> provider_;
+  // Subclasses can override to provide their own TestViewsDelegate
+  virtual std::unique_ptr<views::TestViewsDelegate> CreateTestViewsDelegate();
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(ChromeViewsTestBase);
 };
 

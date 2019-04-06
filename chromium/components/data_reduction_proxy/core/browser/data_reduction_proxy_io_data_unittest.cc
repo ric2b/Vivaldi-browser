@@ -26,8 +26,8 @@
 #include "net/http/http_network_session.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_with_source.h"
-#include "net/proxy/proxy_info.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_info.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -46,7 +46,7 @@ class CountingNetworkDelegate : public net::NetworkDelegateImpl {
   }
 
   int OnBeforeURLRequest(net::URLRequest* request,
-                         const net::CompletionCallback& callback,
+                         net::CompletionOnceCallback callback,
                          GURL* new_url) final {
     created_requests_++;
     return net::OK;
@@ -114,7 +114,7 @@ TEST_F(DataReductionProxyIODataTest, TestConstruction) {
 
   // Check that the SimpleURLRequestContextGetter uses vanilla HTTP.
   net::URLRequestContext* request_context =
-      io_data->basic_url_request_context_getter_.get()->GetURLRequestContext();
+      io_data->basic_url_request_context_getter_->GetURLRequestContext();
   const net::HttpNetworkSession::Params* http_params =
       request_context->GetNetworkSessionParams();
   EXPECT_FALSE(http_params->enable_http2);
@@ -167,17 +167,17 @@ TEST_F(DataReductionProxyIODataTest, TestResetBadProxyListOnDisableDataSaver) {
   std::vector<net::ProxyServer> proxies;
   proxies.push_back(net::ProxyServer::FromURI("http://foo1.com",
                                               net::ProxyServer::SCHEME_HTTP));
-  net::ProxyService* proxy_service =
+  net::ProxyResolutionService* proxy_resolution_service =
       io_data->url_request_context_getter_->GetURLRequestContext()
-          ->proxy_service();
+          ->proxy_resolution_service();
   net::ProxyInfo proxy_info;
   proxy_info.UseNamedProxy("http://foo2.com");
   net::NetLogWithSource net_log_with_source;
   const net::ProxyRetryInfoMap& bad_proxy_list =
-      proxy_service->proxy_retry_info();
+      proxy_resolution_service->proxy_retry_info();
 
   // Simulate network error to add proxies to the bad proxy list.
-  proxy_service->MarkProxiesAsBadUntil(proxy_info, base::TimeDelta::FromDays(1),
+  proxy_resolution_service->MarkProxiesAsBadUntil(proxy_info, base::TimeDelta::FromDays(1),
                                        proxies, net_log_with_source);
   base::RunLoop().RunUntilIdle();
 

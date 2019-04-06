@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "components/onc/onc_constants.h"
@@ -67,7 +66,7 @@ std::unique_ptr<base::DictionaryValue> NetworkProperties::ToValue(
 }
 
 bool NetworkProperties::UpdateFromValue(const base::DictionaryValue& value) {
-  const base::DictionaryValue* wifi = NULL;
+  const base::DictionaryValue* wifi = nullptr;
   std::string network_type;
   // Get network type and make sure that it is WiFi (if specified).
   if (value.GetString(onc::network_config::kType, &network_type)) {

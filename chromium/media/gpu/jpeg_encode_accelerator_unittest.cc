@@ -22,15 +22,16 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "media/base/test_data_util.h"
 #include "media/filters/jpeg_parser.h"
-#include "media/gpu/features.h"
+#include "media/gpu/buildflags.h"
+#include "media/gpu/test/video_accelerator_unittest_helpers.h"
 #include "media/gpu/vaapi/vaapi_jpeg_encode_accelerator.h"
-#include "media/gpu/video_accelerator_unittest_helpers.h"
 #include "media/video/jpeg_encode_accelerator.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -78,6 +79,171 @@ enum class ClientState {
   ERROR,
 };
 
+class JpegEncodeAcceleratorTestEnvironment : public ::testing::Environment {
+ public:
+  JpegEncodeAcceleratorTestEnvironment(
+      const base::FilePath::CharType* yuv_filenames,
+      const base::FilePath log_path,
+      const int repeat)
+      : repeat_(repeat), log_path_(log_path) {
+    user_yuv_files_ = yuv_filenames ? yuv_filenames : kDefaultYuvFilename;
+  }
+  void SetUp() override;
+  void TearDown() override;
+
+  void LogToFile(const std::string& key, const std::string& value);
+
+  // Read image from |filename| to |image_data|.
+  void ReadTestYuvImage(base::FilePath& filename, TestImageFile* image_data);
+
+  // Returns a file path for a file in what name specified or media/test/data
+  // directory.  If the original file path is existed, returns it first.
+  base::FilePath GetOriginalOrTestDataFilePath(const std::string& name);
+
+  // Parsed data from command line.
+  std::vector<std::unique_ptr<TestImageFile>> image_data_user_;
+
+  // Parsed data of |test_1280x720_yuv_file_|.
+  std::unique_ptr<TestImageFile> image_data_1280x720_white_;
+  // Parsed data of |test_640x368_yuv_file_|.
+  std::unique_ptr<TestImageFile> image_data_640x368_black_;
+  // Parsed data of |test_640x360_yuv_file_|.
+  std::unique_ptr<TestImageFile> image_data_640x360_black_;
+
+  // Number of times SimpleEncodeTest should repeat for an image.
+  const size_t repeat_;
+
+ private:
+  // Create black or white test image with |width| and |height| size.
+  void CreateTestYuvImage(int width,
+                          int height,
+                          bool is_black,
+                          base::FilePath* filename);
+
+  const base::FilePath::CharType* user_yuv_files_;
+  const base::FilePath log_path_;
+  std::unique_ptr<base::File> log_file_;
+
+  // Programatically generated YUV files.
+  base::FilePath test_1280x720_yuv_file_;
+  base::FilePath test_640x368_yuv_file_;
+  base::FilePath test_640x360_yuv_file_;
+};
+
+void JpegEncodeAcceleratorTestEnvironment::SetUp() {
+  if (!log_path_.empty()) {
+    log_file_.reset(new base::File(
+        log_path_, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE));
+    LOG_ASSERT(log_file_->IsValid());
+  }
+
+  CreateTestYuvImage(1280, 720, false, &test_1280x720_yuv_file_);
+  CreateTestYuvImage(640, 368, true, &test_640x368_yuv_file_);
+  CreateTestYuvImage(640, 360, true, &test_640x360_yuv_file_);
+
+  image_data_1280x720_white_.reset(
+      new TestImageFile(test_1280x720_yuv_file_.value(), gfx::Size(1280, 720)));
+  ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(test_1280x720_yuv_file_,
+                                           image_data_1280x720_white_.get()));
+
+  image_data_640x368_black_.reset(
+      new TestImageFile(test_640x368_yuv_file_.value(), gfx::Size(640, 368)));
+  ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(test_640x368_yuv_file_,
+                                           image_data_640x368_black_.get()));
+
+  image_data_640x360_black_.reset(
+      new TestImageFile(test_640x360_yuv_file_.value(), gfx::Size(640, 360)));
+  ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(test_640x360_yuv_file_,
+                                           image_data_640x360_black_.get()));
+
+  // |user_yuv_files_| may include many files and use ';' as delimiter.
+  std::vector<base::FilePath::StringType> files =
+      base::SplitString(user_yuv_files_, base::FilePath::StringType(1, ';'),
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  for (const auto& file : files) {
+    std::vector<base::FilePath::StringType> filename_and_size =
+        base::SplitString(file, base::FilePath::StringType(1, ':'),
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    ASSERT_EQ(2u, filename_and_size.size());
+    base::FilePath::StringType filename(filename_and_size[0]);
+
+    std::vector<base::FilePath::StringType> image_resolution =
+        base::SplitString(filename_and_size[1],
+                          base::FilePath::StringType(1, 'x'),
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    ASSERT_EQ(2u, image_resolution.size());
+    int width = 0, height = 0;
+    ASSERT_TRUE(base::StringToInt(image_resolution[0], &width));
+    ASSERT_TRUE(base::StringToInt(image_resolution[1], &height));
+
+    gfx::Size image_size(width, height);
+    ASSERT_TRUE(!image_size.IsEmpty());
+
+    base::FilePath input_file = GetOriginalOrTestDataFilePath(filename);
+    auto image_data = std::make_unique<TestImageFile>(filename, image_size);
+    ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(input_file, image_data.get()));
+    image_data_user_.push_back(std::move(image_data));
+  }
+}
+
+void JpegEncodeAcceleratorTestEnvironment::TearDown() {
+  log_file_.reset();
+
+  base::DeleteFile(test_1280x720_yuv_file_, false);
+  base::DeleteFile(test_640x368_yuv_file_, false);
+  base::DeleteFile(test_640x360_yuv_file_, false);
+}
+
+void JpegEncodeAcceleratorTestEnvironment::LogToFile(const std::string& key,
+                                                     const std::string& value) {
+  std::string s = base::StringPrintf("%s: %s\n", key.c_str(), value.c_str());
+  LOG(INFO) << s;
+  if (log_file_) {
+    log_file_->WriteAtCurrentPos(s.data(), static_cast<int>(s.length()));
+  }
+}
+
+void JpegEncodeAcceleratorTestEnvironment::CreateTestYuvImage(
+    int width,
+    int height,
+    bool is_black,
+    base::FilePath* filename) {
+  std::vector<uint8_t> buffer(width * height * 3 / 2);
+
+  size_t size = width * height;
+  // Fill in Y values.
+  memset(buffer.data(), is_black ? 0 : 255, size);
+  // FIll in U and V values.
+  memset(buffer.data() + size, 128, size / 2);
+  LOG_ASSERT(base::CreateTemporaryFile(filename));
+  EXPECT_TRUE(base::AppendToFile(
+      *filename, reinterpret_cast<char*>(buffer.data()), buffer.size()));
+}
+
+void JpegEncodeAcceleratorTestEnvironment::ReadTestYuvImage(
+    base::FilePath& input_file,
+    TestImageFile* image_data) {
+  ASSERT_TRUE(base::ReadFileToString(input_file, &image_data->data_str));
+
+  // This is just a placeholder. We will compute the real output size when we
+  // have encoder instance.
+  image_data->output_size =
+      VideoFrame::AllocationSize(PIXEL_FORMAT_I420, image_data->visible_size);
+}
+
+base::FilePath
+JpegEncodeAcceleratorTestEnvironment::GetOriginalOrTestDataFilePath(
+    const std::string& name) {
+  base::FilePath original_file_path = base::FilePath(name);
+  base::FilePath return_file_path = GetTestDataFilePath(name);
+
+  if (PathExists(original_file_path))
+    return_file_path = original_file_path;
+
+  VLOG(3) << "Use file path " << return_file_path.value();
+  return return_file_path;
+}
+
 class JpegClient : public JpegEncodeAccelerator::Client {
  public:
   JpegClient(const std::vector<TestImageFile*>& test_image_files,
@@ -88,9 +254,8 @@ class JpegClient : public JpegEncodeAccelerator::Client {
   void StartEncode(int32_t bitstream_buffer_id);
 
   // JpegEncodeAccelerator::Client implementation.
-  void VideoFrameReady(int video_frame_id,
-                       size_t encoded_picture_size) override;
-  void NotifyError(int video_frame_id,
+  void VideoFrameReady(int32_t buffer_id, size_t encoded_picture_size) override;
+  void NotifyError(int32_t buffer_id,
                    JpegEncodeAccelerator::Status status) override;
 
  private:
@@ -117,10 +282,8 @@ class JpegClient : public JpegEncodeAccelerator::Client {
   // JpegClient doesn't own |test_image_files_|.
   const std::vector<TestImageFile*>& test_image_files_;
 
-  // A map that stores HW encoding start timestamp for each video frame id.
-  std::map<int, base::TimeTicks> video_frame_id_to_start_time_;
-
-  std::map<int, TestImageFile*> video_frame_id_to_image_;
+  // A map that stores HW encoding start timestamp for each output buffer id.
+  std::map<int, base::TimeTicks> buffer_id_to_start_time_;
 
   std::unique_ptr<JpegEncodeAccelerator> encoder_;
   ClientState state_;
@@ -145,7 +308,6 @@ class JpegClient : public JpegEncodeAccelerator::Client {
 JpegClient::JpegClient(const std::vector<TestImageFile*>& test_image_files,
                        ClientStateNotification<ClientState>* note)
     : test_image_files_(test_image_files),
-      video_frame_id_to_image_(),
       state_(ClientState::CREATED),
       note_(note) {}
 
@@ -178,20 +340,22 @@ void JpegClient::DestroyJpegEncoder() {
   encoder_.reset();
 }
 
-void JpegClient::VideoFrameReady(int video_frame_id, size_t hw_encoded_size) {
+void JpegClient::VideoFrameReady(int32_t buffer_id, size_t hw_encoded_size) {
   base::TimeTicks hw_encode_end = base::TimeTicks::Now();
   base::TimeDelta elapsed_hw =
-      hw_encode_end - video_frame_id_to_start_time_[video_frame_id];
+      hw_encode_end - buffer_id_to_start_time_[buffer_id];
 
-  TestImageFile* test_image = video_frame_id_to_image_[video_frame_id];
+  TestImageFile* test_image = test_image_files_[buffer_id];
   size_t sw_encoded_size = 0;
   base::TimeDelta elapsed_sw;
   LOG_ASSERT(GetSoftwareEncodeResult(test_image->visible_size.width(),
                                      test_image->visible_size.height(),
                                      &sw_encoded_size, &elapsed_sw));
 
-  LOG(INFO) << "HW encode elapsed time: " << elapsed_hw.InMicroseconds()
-            << " SW encode elapsed time: " << elapsed_sw.InMicroseconds();
+  g_env->LogToFile("hw_encode_time",
+                   base::Int64ToString(elapsed_hw.InMicroseconds()));
+  g_env->LogToFile("sw_encode_time",
+                   base::Int64ToString(elapsed_sw.InMicroseconds()));
 
   if (g_save_to_file) {
     SaveToFile(test_image, hw_encoded_size, sw_encoded_size);
@@ -248,7 +412,7 @@ bool JpegClient::CompareHardwareAndSoftwareResults(int width,
   int u_stride = width / 2;
   int v_stride = u_stride;
   if (libyuv::ConvertToI420(
-          static_cast<const uint8*>(hw_out_shm_->memory()), hw_encoded_size,
+          static_cast<const uint8_t*>(hw_out_shm_->memory()), hw_encoded_size,
           hw_yuv_result, y_stride, hw_yuv_result + y_stride * height, u_stride,
           hw_yuv_result + y_stride * height + u_stride * height / 2, v_stride,
           0, 0, width, height, width, height, libyuv::kRotate0,
@@ -258,7 +422,7 @@ bool JpegClient::CompareHardwareAndSoftwareResults(int width,
 
   uint8_t* sw_yuv_result = new uint8_t[yuv_size];
   if (libyuv::ConvertToI420(
-          static_cast<const uint8*>(sw_out_shm_->memory()), sw_encoded_size,
+          static_cast<const uint8_t*>(sw_out_shm_->memory()), sw_encoded_size,
           sw_yuv_result, y_stride, sw_yuv_result + y_stride * height, u_stride,
           sw_yuv_result + y_stride * height + u_stride * height / 2, v_stride,
           0, 0, width, height, width, height, libyuv::kRotate0,
@@ -289,10 +453,10 @@ double JpegClient::GetMeanAbsoluteDifference(uint8_t* hw_yuv_result,
   return total_difference / yuv_size;
 }
 
-void JpegClient::NotifyError(int video_frame_id,
+void JpegClient::NotifyError(int32_t buffer_id,
                              JpegEncodeAccelerator::Status status) {
-  LOG(ERROR) << "Notifying of error " << status << " for video frame id "
-             << video_frame_id;
+  LOG(ERROR) << "Notifying of error " << status << " for output buffer id "
+             << buffer_id;
   SetState(ClientState::ERROR);
   encoded_buffer_.reset(nullptr);
 }
@@ -369,148 +533,9 @@ void JpegClient::StartEncode(int32_t bitstream_buffer_id) {
 
   LOG_ASSERT(input_frame_.get());
 
-  video_frame_id_to_image_[input_frame_->unique_id()] = image_file;
-  video_frame_id_to_start_time_[input_frame_->unique_id()] =
-      base::TimeTicks::Now();
-  encoder_->Encode(input_frame_, kJpegDefaultQuality, *encoded_buffer_);
-}
-
-class JpegEncodeAcceleratorTestEnvironment : public ::testing::Environment {
- public:
-  JpegEncodeAcceleratorTestEnvironment(
-      const base::FilePath::CharType* yuv_filenames) {
-    user_yuv_files_ = yuv_filenames ? yuv_filenames : kDefaultYuvFilename;
-  }
-  void SetUp() override;
-  void TearDown() override;
-
-  // Read image from |filename| to |image_data|.
-  void ReadTestYuvImage(base::FilePath& filename, TestImageFile* image_data);
-
-  // Returns a file path for a file in what name specified or media/test/data
-  // directory.  If the original file path is existed, returns it first.
-  base::FilePath GetOriginalOrTestDataFilePath(const std::string& name);
-
-  // Parsed data from command line.
-  std::vector<std::unique_ptr<TestImageFile>> image_data_user_;
-
-  // Parsed data of |test_1280x720_yuv_file_|.
-  std::unique_ptr<TestImageFile> image_data_1280x720_white_;
-  // Parsed data of |test_640x368_yuv_file_|.
-  std::unique_ptr<TestImageFile> image_data_640x368_black_;
-  // Parsed data of |test_640x360_yuv_file_|.
-  std::unique_ptr<TestImageFile> image_data_640x360_black_;
-
- private:
-  // Create black or white test image with |width| and |height| size.
-  void CreateTestYuvImage(int width,
-                          int height,
-                          bool is_black,
-                          base::FilePath* filename);
-
-  const base::FilePath::CharType* user_yuv_files_;
-
-  // Programatically generated YUV files.
-  base::FilePath test_1280x720_yuv_file_;
-  base::FilePath test_640x368_yuv_file_;
-  base::FilePath test_640x360_yuv_file_;
-};
-
-void JpegEncodeAcceleratorTestEnvironment::SetUp() {
-  CreateTestYuvImage(1280, 720, false, &test_1280x720_yuv_file_);
-  CreateTestYuvImage(640, 368, true, &test_640x368_yuv_file_);
-  CreateTestYuvImage(640, 360, true, &test_640x360_yuv_file_);
-
-  image_data_1280x720_white_.reset(
-      new TestImageFile(test_1280x720_yuv_file_.value(), gfx::Size(1280, 720)));
-  ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(test_1280x720_yuv_file_,
-                                           image_data_1280x720_white_.get()));
-
-  image_data_640x368_black_.reset(
-      new TestImageFile(test_640x368_yuv_file_.value(), gfx::Size(640, 368)));
-  ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(test_640x368_yuv_file_,
-                                           image_data_640x368_black_.get()));
-
-  image_data_640x360_black_.reset(
-      new TestImageFile(test_640x360_yuv_file_.value(), gfx::Size(640, 360)));
-  ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(test_640x360_yuv_file_,
-                                           image_data_640x360_black_.get()));
-
-  // |user_yuv_files_| may include many files and use ';' as delimiter.
-  std::vector<base::FilePath::StringType> files =
-      base::SplitString(user_yuv_files_, base::FilePath::StringType(1, ';'),
-                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  for (const auto& file : files) {
-    std::vector<base::FilePath::StringType> filename_and_size =
-        base::SplitString(file, base::FilePath::StringType(1, ':'),
-                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-    ASSERT_EQ(2u, filename_and_size.size());
-    base::FilePath::StringType filename(filename_and_size[0]);
-
-    std::vector<base::FilePath::StringType> image_resolution =
-        base::SplitString(filename_and_size[1],
-                          base::FilePath::StringType(1, 'x'),
-                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-    ASSERT_EQ(2u, image_resolution.size());
-    int width = 0, height = 0;
-    ASSERT_TRUE(base::StringToInt(image_resolution[0], &width));
-    ASSERT_TRUE(base::StringToInt(image_resolution[1], &height));
-
-    gfx::Size image_size(width, height);
-    ASSERT_TRUE(!image_size.IsEmpty());
-
-    base::FilePath input_file = GetOriginalOrTestDataFilePath(filename);
-    auto image_data = std::make_unique<TestImageFile>(filename, image_size);
-    ASSERT_NO_FATAL_FAILURE(ReadTestYuvImage(input_file, image_data.get()));
-    image_data_user_.push_back(std::move(image_data));
-  }
-}
-
-void JpegEncodeAcceleratorTestEnvironment::TearDown() {
-  base::DeleteFile(test_1280x720_yuv_file_, false);
-  base::DeleteFile(test_640x368_yuv_file_, false);
-  base::DeleteFile(test_640x360_yuv_file_, false);
-}
-
-void JpegEncodeAcceleratorTestEnvironment::CreateTestYuvImage(
-    int width,
-    int height,
-    bool is_black,
-    base::FilePath* filename) {
-  std::vector<uint8_t> buffer(width * height * 3 / 2);
-
-  size_t size = width * height;
-  // Fill in Y values.
-  memset(buffer.data(), is_black ? 0 : 255, size);
-  // FIll in U and V values.
-  memset(buffer.data() + size, 128, size / 2);
-  LOG_ASSERT(base::CreateTemporaryFile(filename));
-  EXPECT_TRUE(base::AppendToFile(
-      *filename, reinterpret_cast<char*>(buffer.data()), buffer.size()));
-}
-
-void JpegEncodeAcceleratorTestEnvironment::ReadTestYuvImage(
-    base::FilePath& input_file,
-    TestImageFile* image_data) {
-  ASSERT_TRUE(base::ReadFileToString(input_file, &image_data->data_str));
-
-  // This is just a placeholder. We will compute the real output size when we
-  // have encoder instance.
-  image_data->output_size =
-      VideoFrame::AllocationSize(PIXEL_FORMAT_I420, image_data->visible_size);
-}
-
-base::FilePath
-JpegEncodeAcceleratorTestEnvironment::GetOriginalOrTestDataFilePath(
-    const std::string& name) {
-  base::FilePath original_file_path = base::FilePath(name);
-  base::FilePath return_file_path = GetTestDataFilePath(name);
-
-  if (PathExists(original_file_path))
-    return_file_path = original_file_path;
-
-  VLOG(3) << "Use file path " << return_file_path.value();
-  return return_file_path;
+  buffer_id_to_start_time_[bitstream_buffer_id] = base::TimeTicks::Now();
+  encoder_->Encode(input_frame_, kJpegDefaultQuality, nullptr,
+                   *encoded_buffer_);
 }
 
 class JpegEncodeAcceleratorTest : public ::testing::Test {
@@ -572,9 +597,11 @@ void JpegEncodeAcceleratorTest::TestEncode(size_t num_concurrent_encoders) {
 }
 
 TEST_F(JpegEncodeAcceleratorTest, SimpleEncode) {
-  for (auto& image : g_env->image_data_user_) {
-    test_image_files_.push_back(image.get());
-    expected_status_.push_back(ClientState::ENCODE_PASS);
+  for (size_t i = 0; i < g_env->repeat_; i++) {
+    for (auto& image : g_env->image_data_user_) {
+      test_image_files_.push_back(image.get());
+      expected_status_.push_back(ClientState::ENCODE_PASS);
+    }
   }
   TestEncode(1);
 }
@@ -619,6 +646,8 @@ int main(int argc, char** argv) {
   DCHECK(cmd_line);
 
   const base::FilePath::CharType* yuv_filenames = nullptr;
+  base::FilePath log_path;
+  size_t repeat = 1;
   base::CommandLine::SwitchMap switches = cmd_line->GetSwitches();
   for (base::CommandLine::SwitchMap::const_iterator it = switches.begin();
        it != switches.end(); ++it) {
@@ -627,6 +656,18 @@ int main(int argc, char** argv) {
     // For example, "lake.yuv:4160x3120".
     if (it->first == "yuv_filenames") {
       yuv_filenames = it->second.c_str();
+      continue;
+    }
+    if (it->first == "output_log") {
+      log_path = base::FilePath(
+          base::FilePath::StringType(it->second.begin(), it->second.end()));
+      continue;
+    }
+    if (it->first == "repeat") {
+      if (!base::StringToSizeT(it->second, &repeat)) {
+        LOG(INFO) << "Can't parse parameter |repeat|: " << it->second;
+        repeat = 1;
+      }
       continue;
     }
     if (it->first == "save_to_file") {
@@ -646,7 +687,8 @@ int main(int argc, char** argv) {
 
   media::g_env = reinterpret_cast<media::JpegEncodeAcceleratorTestEnvironment*>(
       testing::AddGlobalTestEnvironment(
-          new media::JpegEncodeAcceleratorTestEnvironment(yuv_filenames)));
+          new media::JpegEncodeAcceleratorTestEnvironment(yuv_filenames,
+                                                          log_path, repeat)));
 
   return RUN_ALL_TESTS();
 }

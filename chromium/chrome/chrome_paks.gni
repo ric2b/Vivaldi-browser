@@ -4,7 +4,7 @@
 
 import("//build/config/locales.gni")
 import("//chrome/common/features.gni")
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//ui/base/ui_features.gni")
 import("chrome_repack_locales.gni")
 
@@ -29,11 +29,11 @@ template("chrome_repack_percent") {
 
     # All sources should also have deps for completeness.
     sources = [
-      "$root_gen_dir/blink/public/resources/blink_scaled_resources_${percent}_percent.pak",
       "$root_gen_dir/chrome/renderer_resources_${percent}_percent.pak",
       "$root_gen_dir/chrome/theme_resources_${percent}_percent.pak",
       "$root_gen_dir/components/components_resources_${percent}_percent.pak",
       "$root_gen_dir/content/app/resources/content_resources_${percent}_percent.pak",
+      "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_${percent}_percent.pak",
       "$root_gen_dir/ui/resources/ui_resources_${percent}_percent.pak",
     ]
 
@@ -44,7 +44,7 @@ template("chrome_repack_percent") {
       "//components/strings",
       "//content/app/resources",
       "//net:net_resources",
-      "//third_party/WebKit/public:scaled_resources_${percent}_percent",
+      "//third_party/blink/public:scaled_resources_${percent}_percent",
       "//ui/resources",
     ]
 
@@ -58,11 +58,11 @@ template("chrome_repack_percent") {
     }
     if (is_chromeos) {
       sources += [
-        "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak",
+        "$root_gen_dir/ash/components/resources/ash_components_resources_${percent}_percent.pak",
         "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak",
       ]
       deps += [
-        "//ash/resources",
+        "//ash/components/resources",
         "//ui/chromeos/resources",
       ]
     }
@@ -71,8 +71,8 @@ template("chrome_repack_percent") {
       deps += [ "//extensions:extensions_browser_resources" ]
     }
     if (enable_app_list) {
-      sources += [ "$root_gen_dir/ui/app_list/resources/app_list_resources_${percent}_percent.pak" ]
-      deps += [ "//ui/app_list/resources" ]
+      sources += [ "$root_gen_dir/ash/app_list/resources/app_list_resources_${percent}_percent.pak" ]
+      deps += [ "//ash/app_list/resources" ]
     }
 
     output = "${invoker.output_dir}/vivaldi_${percent}_percent.pak"
@@ -89,7 +89,6 @@ template("chrome_extra_paks") {
                            ])
     output = "${invoker.output_dir}/resources.pak"
     sources = [
-      "$root_gen_dir/blink/public/resources/blink_resources.pak",
       "$root_gen_dir/chrome/browser_resources.pak",
       "$root_gen_dir/chrome/chrome_unscaled_resources.pak",
       "$root_gen_dir/chrome/common_resources.pak",
@@ -103,6 +102,7 @@ template("chrome_extra_paks") {
       "$root_gen_dir/content/content_resources.pak",
       "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
       "$root_gen_dir/net/net_resources.pak",
+      "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
       "$root_gen_dir/ui/resources/webui_resources.pak",
     ]
     deps = [
@@ -119,7 +119,7 @@ template("chrome_extra_paks") {
       "//content/browser/tracing:resources",
       "//mojo/public/js:resources",
       "//net:net_resources",
-      "//third_party/WebKit/public:resources",
+      "//third_party/blink/public:resources",
       "//ui/resources",
     ]
     if (defined(invoker.deps)) {
@@ -149,10 +149,16 @@ template("chrome_extra_paks") {
     }
     if (is_chromeos) {
       sources += [
+        "$root_gen_dir/ash/public/cpp/resources/ash_public_unscaled_resources.pak",
+        "$root_gen_dir/chrome/multidevice_setup_resources.pak",
+        "$root_gen_dir/chromeos/chromeos_resources.pak",
         "$root_gen_dir/components/chrome_apps/chrome_apps_resources.pak",
         "$root_gen_dir/ui/file_manager/file_manager_resources.pak",
       ]
       deps += [
+        "//ash/public/cpp/resources:ash_public_unscaled_resources",
+        "//chrome/browser/resources/chromeos:multidevice_setup_resources",
+        "//chromeos/resources",
         "//components/chrome_apps:resources",
         "//ui/file_manager:resources",
       ]
@@ -173,10 +179,6 @@ template("chrome_extra_paks") {
     if (enable_print_preview) {
       sources += [ "$root_gen_dir/chrome/print_preview_resources.pak" ]
       deps += [ "//chrome/browser/resources:print_preview_resources" ]
-    }
-    if (enable_gvr_services) {
-      sources += [ "$root_gen_dir/chrome/vr_shell_resources.pak" ]
-      deps += [ "//chrome/browser/resources:vr_shell_resources" ]
     }
   }
 }

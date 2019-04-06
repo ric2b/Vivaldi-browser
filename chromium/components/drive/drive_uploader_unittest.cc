@@ -10,11 +10,11 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -73,10 +73,10 @@ CancelCallback SendMultipartUploadResult(
   // MultipartUploadXXXFile is an asynchronous function, so don't callback
   // directly.
   std::unique_ptr<FileResource> entry;
-  entry.reset(new FileResource);
+  entry = std::make_unique<FileResource>();
   entry->set_md5_checksum(kTestDummyMd5);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, response_code, base::Passed(&entry)));
+      FROM_HERE, base::BindOnce(callback, response_code, std::move(entry)));
   return CancelCallback();
 }
 
@@ -219,15 +219,15 @@ class MockDriveServiceWithUploadExpectation : public DummyDriveService {
           HTTP_CREATED : HTTP_SUCCESS;
       response = UploadRangeResponse(response_code, -1, -1);
 
-      entry.reset(new FileResource);
+      entry = std::make_unique<FileResource>();
       entry->set_md5_checksum(kTestDummyMd5);
     } else {
       response = UploadRangeResponse(
           HTTP_RESUME_INCOMPLETE, 0, received_bytes_);
     }
     // ResumeUpload is an asynchronous function, so don't callback directly.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-        base::Bind(callback, response, base::Passed(&entry)));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(callback, response, std::move(entry)));
   }
 
   CancelCallback MultipartUploadNewFile(
@@ -266,9 +266,7 @@ class MockDriveServiceWithUploadExpectation : public DummyDriveService {
 
     if (!options.etag.empty() && options.etag != kTestETag) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::Bind(callback, HTTP_PRECONDITION,
-                     base::Passed(base::WrapUnique<FileResource>(nullptr))));
+          FROM_HERE, base::BindOnce(callback, HTTP_PRECONDITION, nullptr));
       return CancelCallback();
     }
 
@@ -335,9 +333,7 @@ class MockDriveServiceNoConnectionAtInitiate : public DummyDriveService {
       const google_apis::FileResourceCallback& callback,
       const google_apis::ProgressCallback& progress_callback) override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(callback, DRIVE_NO_CONNECTION,
-                   base::Passed(base::WrapUnique<FileResource>(nullptr))));
+        FROM_HERE, base::BindOnce(callback, DRIVE_NO_CONNECTION, nullptr));
     return CancelCallback();
   }
 
@@ -350,9 +346,7 @@ class MockDriveServiceNoConnectionAtInitiate : public DummyDriveService {
       const google_apis::FileResourceCallback& callback,
       const google_apis::ProgressCallback& progress_callback) override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(callback, DRIVE_NO_CONNECTION,
-                   base::Passed(base::WrapUnique<FileResource>(nullptr))));
+        FROM_HERE, base::BindOnce(callback, DRIVE_NO_CONNECTION, nullptr));
     return CancelCallback();
   }
 };
@@ -395,8 +389,9 @@ class MockDriveServiceNoConnectionAtResume : public DummyDriveService {
       const ProgressCallback& progress_callback) override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(callback, UploadRangeResponse(DRIVE_NO_CONNECTION, -1, -1),
-                   base::Passed(std::unique_ptr<FileResource>())));
+        base::BindOnce(callback,
+                       UploadRangeResponse(DRIVE_NO_CONNECTION, -1, -1),
+                       nullptr));
     return CancelCallback();
   }
 };
@@ -409,8 +404,9 @@ class MockDriveServiceNoConnectionAtGetUploadStatus : public DummyDriveService {
                                  const UploadRangeCallback& callback) override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(callback, UploadRangeResponse(DRIVE_NO_CONNECTION, -1, -1),
-                   base::Passed(std::unique_ptr<FileResource>())));
+        base::BindOnce(callback,
+                       UploadRangeResponse(DRIVE_NO_CONNECTION, -1, -1),
+                       nullptr));
     return CancelCallback();
   }
 };

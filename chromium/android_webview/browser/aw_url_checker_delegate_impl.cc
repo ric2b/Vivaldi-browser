@@ -5,6 +5,7 @@
 #include "android_webview/browser/aw_url_checker_delegate_impl.h"
 
 #include "android_webview/browser/aw_contents_client_bridge.h"
+#include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/aw_safe_browsing_ui_manager.h"
 #include "android_webview/browser/aw_safe_browsing_whitelist_manager.h"
 #include "android_webview/browser/net/aw_web_resource_request.h"
@@ -46,13 +47,39 @@ void AwUrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&AwUrlCheckerDelegateImpl::StartApplicationResponse,
-                 ui_manager_, resource, std::move(request)));
+      base::BindOnce(&AwUrlCheckerDelegateImpl::StartApplicationResponse,
+                     ui_manager_, resource, std::move(request)));
 }
 
 bool AwUrlCheckerDelegateImpl::IsUrlWhitelisted(const GURL& url) {
   return whitelist_manager_->IsURLWhitelisted(url);
 }
+
+bool AwUrlCheckerDelegateImpl::ShouldSkipRequestCheck(
+    content::ResourceContext* resource_context,
+    const GURL& original_url,
+    int frame_tree_node_id,
+    int render_process_id,
+    int render_frame_id,
+    bool originated_from_service_worker) {
+  std::unique_ptr<AwContentsIoThreadClient> client;
+
+  if (originated_from_service_worker)
+    client = AwContentsIoThreadClient::GetServiceWorkerIoThreadClient();
+  else if (render_process_id == -1 || render_frame_id == -1) {
+    client = AwContentsIoThreadClient::FromID(frame_tree_node_id);
+  } else {
+    client =
+        AwContentsIoThreadClient::FromID(render_process_id, render_frame_id);
+  }
+
+  // Consider the request as whitelisted, if SafeBrowsing is not enabled.
+  return client && !client->GetSafeBrowsingEnabled();
+}
+
+void AwUrlCheckerDelegateImpl::NotifySuspiciousSiteDetected(
+    const base::RepeatingCallback<content::WebContents*()>&
+        web_contents_getter) {}
 
 const safe_browsing::SBThreatTypeSet&
 AwUrlCheckerDelegateImpl::GetThreatTypes() {
@@ -78,10 +105,12 @@ void AwUrlCheckerDelegateImpl::StartApplicationResponse(
       AwContentsClientBridge::FromWebContents(web_contents);
 
   if (client) {
-    base::Callback<void(SafeBrowsingAction, bool)> callback = base::Bind(
-        &AwUrlCheckerDelegateImpl::DoApplicationResponse, ui_manager, resource);
+    base::OnceCallback<void(SafeBrowsingAction, bool)> callback =
+        base::BindOnce(&AwUrlCheckerDelegateImpl::DoApplicationResponse,
+                       ui_manager, resource);
 
-    client->OnSafeBrowsingHit(request, resource.threat_type, callback);
+    client->OnSafeBrowsingHit(request, resource.threat_type,
+                              std::move(callback));
   }
 }
 
@@ -100,7 +129,7 @@ void AwUrlCheckerDelegateImpl::DoApplicationResponse(
     case SafeBrowsingAction::SHOW_INTERSTITIAL:
       content::BrowserThread::PostTask(
           content::BrowserThread::UI, FROM_HERE,
-          base::Bind(
+          base::BindOnce(
               &AwUrlCheckerDelegateImpl::StartDisplayingDefaultBlockingPage,
               ui_manager, resource));
       return;
@@ -146,7 +175,7 @@ void AwUrlCheckerDelegateImpl::StartDisplayingDefaultBlockingPage(
 
   // Reporting back that it is not okay to proceed with loading the URL.
   content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
-                                   base::Bind(resource.callback, false));
+                                   base::BindOnce(resource.callback, false));
 }
 
 }  // namespace android_webview

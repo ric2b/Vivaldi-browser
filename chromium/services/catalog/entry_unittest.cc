@@ -11,7 +11,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "services/service_manager/public/cpp/interface_provider_spec.h"
-#include "services/service_manager/public/interfaces/interface_provider_spec.mojom.h"
+#include "services/service_manager/public/mojom/interface_provider_spec.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace catalog {
@@ -34,7 +34,7 @@ class EntryTest : public testing::Test {
 
   std::unique_ptr<base::Value> ReadManifest(const std::string& manifest) {
     base::FilePath manifest_path;
-    PathService::Get(base::DIR_SOURCE_ROOT, &manifest_path);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &manifest_path);
     manifest_path =
         manifest_path.AppendASCII("services/catalog/test_data/" + manifest);
 

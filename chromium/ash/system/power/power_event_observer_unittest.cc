@@ -6,9 +6,12 @@
 
 #include <memory>
 
+#include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
+#include "ash/system/power/power_event_observer_test_api.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/lock_state_controller_test_api.h"
 #include "ash/wm/test_session_state_animator.h"
@@ -19,6 +22,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/compositor.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 
 namespace ash {
 
@@ -29,6 +33,7 @@ class PowerEventObserverTest : public AshTestBase {
 
   // AshTestBase:
   void SetUp() override {
+    chromeos::DBusThreadManager::Initialize();
     AshTestBase::SetUp();
     observer_.reset(new PowerEventObserver());
   }
@@ -36,6 +41,7 @@ class PowerEventObserverTest : public AshTestBase {
   void TearDown() override {
     observer_.reset();
     AshTestBase::TearDown();
+    chromeos::DBusThreadManager::Shutdown();
   }
 
  protected:
@@ -78,23 +84,63 @@ TEST_F(PowerEventObserverTest, LockBeforeSuspend) {
   // It should run the callback when it hears that the screen is locked and the
   // lock screen animations have completed.
   BlockUserSession(BLOCKED_BY_LOCK_SCREEN);
+
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  ui::Compositor* compositor =
+      Shell::GetPrimaryRootWindow()->GetHost()->compositor();
+
+  test_api.CompositingDidCommit(compositor);
   observer_->OnLockAnimationsComplete();
+
+  // Verify that CompositingStarted and CompositingEnded observed before
+  // CompositingDidCommit are ignored.
+  test_api.CompositingStarted(compositor);
+  test_api.CompositingEnded(compositor);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  // Suspend should remain delayed after first compositing cycle ends.
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  test_api.CompositingDidCommit(compositor);
+  test_api.CompositingStarted(compositor);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  test_api.CompositingEnded(compositor);
   EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
 
   // If the system is already locked, no callback should be requested.
   observer_->SuspendDone(base::TimeDelta());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
   UnblockUserSession();
   BlockUserSession(BLOCKED_BY_LOCK_SCREEN);
+
+  // Notify that lock animation is complete.
   observer_->OnLockAnimationsComplete();
+
+  // Wait for a compositing after lock animation completes before suspending.
+  // In this case compositors should be made invisible immediately
+  test_api.CompositeFrame(compositor);
+  test_api.CompositeFrame(compositor);
+
   observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
   EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
 
   // It also shouldn't request a callback if it isn't instructed to lock the
   // screen.
   observer_->SuspendDone(base::TimeDelta());
+  UnblockUserSession();
   SetShouldLockScreenAutomatically(false);
+  EXPECT_EQ(1, GetNumVisibleCompositors());
   observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
   EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
 }
 
 TEST_F(PowerEventObserverTest, SetInvisibleBeforeSuspend) {
@@ -118,6 +164,10 @@ TEST_F(PowerEventObserverTest, SetInvisibleBeforeSuspend) {
   EXPECT_EQ(1, GetNumVisibleCompositors());
 
   observer_->OnLockAnimationsComplete();
+
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+  ASSERT_TRUE(PowerEventObserverTestApi(observer_.get())
+                  .SimulateCompositorsReadyForSuspend());
   EXPECT_EQ(0, GetNumVisibleCompositors());
 
   observer_->SuspendDone(base::TimeDelta());
@@ -146,9 +196,10 @@ TEST_F(PowerEventObserverTest, DelayResuspendForLockAnimations) {
   // - The suspend request is canceled.
   // - Another suspend request is started.
   // - The screen lock animations complete.
+  // - The screen lock UI changes get composited
   //
   // In this case, the observer should block the second suspend request until
-  // the animations have completed.
+  // the screen lock compositing is done.
   SetCanLockScreen(true);
   SetShouldLockScreenAutomatically(true);
 
@@ -168,7 +219,121 @@ TEST_F(PowerEventObserverTest, DelayResuspendForLockAnimations) {
   EXPECT_EQ(2, client->GetNumPendingSuspendReadinessCallbacks());
 
   observer_->OnLockAnimationsComplete();
+  EXPECT_EQ(2, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  ASSERT_TRUE(PowerEventObserverTestApi(observer_.get())
+                  .SimulateCompositorsReadyForSuspend());
   EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
+}
+
+// Tests that device suspend is delayed for screen lock until the screen lock
+// changes are composited for all root windows.
+TEST_F(PowerEventObserverTest, DelaySuspendForCompositing_MultiDisplay) {
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  UpdateDisplay("100x100,200x200");
+
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+
+  aura::Window::Windows windows = Shell::GetAllRootWindows();
+  ASSERT_EQ(2u, windows.size());
+
+  ui::Compositor* primary_compositor = windows[0]->GetHost()->compositor();
+  ui::Compositor* secondary_compositor = windows[1]->GetHost()->compositor();
+  ASSERT_EQ(2, GetNumVisibleCompositors());
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  // Simulate a commit before lock animations complete, and verify associated
+  // compositing ends are ignored.
+  test_api.CompositingDidCommit(secondary_compositor);
+  observer_->OnLockAnimationsComplete();
+
+  test_api.CompositingStarted(secondary_compositor);
+  test_api.CompositingEnded(secondary_compositor);
+
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(2, GetNumVisibleCompositors());
+
+  test_api.CompositeFrame(primary_compositor);
+  test_api.CompositeFrame(primary_compositor);
+
+  test_api.CompositeFrame(secondary_compositor);
+
+  // Even though compositing for one display is done, changes to compositor
+  // visibility, and suspend readines state should be delayed until compositing
+  // for the other display finishes.
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(2, GetNumVisibleCompositors());
+
+  test_api.CompositeFrame(secondary_compositor);
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
+}
+
+TEST_F(PowerEventObserverTest,
+       DelaySuspendForCompositing_PendingDisplayRemoved) {
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  UpdateDisplay("100x100,200x200");
+
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+
+  aura::Window::Windows windows = Shell::GetAllRootWindows();
+  ASSERT_EQ(2u, windows.size());
+
+  ui::Compositor* primary_compositor = windows[0]->GetHost()->compositor();
+  ASSERT_EQ(2, GetNumVisibleCompositors());
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  observer_->OnLockAnimationsComplete();
+
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  test_api.CompositeFrame(primary_compositor);
+  test_api.CompositeFrame(primary_compositor);
+
+  // Even though compositing for one display is done, changes to compositor
+  // visibility, and suspend readines state should be delayed until compositing
+  // for the other display finishes.
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(2, GetNumVisibleCompositors());
+
+  // Remove the second display, and verify the remaining compositor is hidden
+  // at this point.
+  UpdateDisplay("100x100");
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
+}
+
+TEST_F(PowerEventObserverTest, CompositorNotVisibleAtLockAnimationsComplete) {
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+
+  Shell::GetPrimaryRootWindow()->GetHost()->compositor()->SetVisible(false);
+
+  observer_->OnLockAnimationsComplete();
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
   EXPECT_EQ(0, GetNumVisibleCompositors());
 }
 
@@ -217,6 +382,225 @@ TEST_F(PowerEventObserverTest, ImmediateLockAnimations) {
       SessionStateAnimator::ANIMATION_SPEED_IMMEDIATE));
   EXPECT_EQ(0u, test_animator->GetAnimationCount());
   EXPECT_FALSE(lock_state_test_api.is_animating_lock());
+}
+
+// Tests that displays will not be considered ready to suspend until the
+// animated wallpaper change finishes (if the wallpaper is being animated to
+// another wallpaper after the screen is locked).
+TEST_F(PowerEventObserverTest,
+       DisplaysNotReadyForSuspendUntilWallpaperAnimationEnds) {
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  ASSERT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  // Set up animation state so wallpaper widget animations are not ended on
+  // their creation.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Lock screen - this is expected to start wallpaper change (e.g. to a
+  // widget with a blurred wallpaper).
+  BlockUserSession(BLOCKED_BY_LOCK_SCREEN);
+  observer_->OnLockAnimationsComplete();
+
+  WallpaperWidgetController* wallpaper_widget_controller =
+      Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
+  // Assert that the wallpaper is being animated here - otherwise the test will
+  // not work.
+  ASSERT_TRUE(wallpaper_widget_controller->IsAnimating());
+
+  ui::Compositor* compositor =
+      Shell::GetPrimaryRootWindow()->GetHost()->compositor();
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  // Simulate a single frame getting composited before the wallpaper animation
+  // is done - this frame is expected to be ignored by power event observer's
+  // compositing state observer.
+  test_api.CompositeFrame(compositor);
+
+  // Simulate wallpaper animation finishing - for the purpose of this test,
+  // before suspend begins.
+  wallpaper_widget_controller->EndPendingAnimation();
+
+  // Expect that two compositing cycles are completed before suspend continues,
+  // and displays get suspended.
+  test_api.CompositeFrame(compositor);
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
+}
+
+// Tests that animated wallpaper changes will be finished immediately when
+// suspend starts (if the screen was locked when suspend started).
+TEST_F(PowerEventObserverTest, EndWallpaperAnimationOnSuspendWhileLocked) {
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  ASSERT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  // Set up animation state so wallpaper widget animations are not ended on
+  // their creation.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Lock screen - this is expected to start wallpaper change (e.g. to a
+  // widget with a blurred wallpaper).
+  BlockUserSession(BLOCKED_BY_LOCK_SCREEN);
+  observer_->OnLockAnimationsComplete();
+
+  // Wallpaper animation should be stopped immediately on suspend.
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+
+  WallpaperWidgetController* wallpaper_widget_controller =
+      Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
+  EXPECT_FALSE(wallpaper_widget_controller->IsAnimating());
+
+  ui::Compositor* compositor =
+      Shell::GetPrimaryRootWindow()->GetHost()->compositor();
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  // Expect that two compositing cycles are completed before suspend continues,
+  // and displays get suspended.
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
+}
+
+// Tests that animated wallpaper changes will be finished immediately when
+// suspend starts (if the screen lock started before suspend).
+TEST_F(PowerEventObserverTest, EndWallpaperAnimationOnSuspendWhileLocking) {
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  ASSERT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  // Set up animation state so wallpaper widget animations are not ended on
+  // their creation.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Lock screen - this is expected to start wallpaper change (e.g. to a
+  // widget with a blurred wallpaper).
+  BlockUserSession(BLOCKED_BY_LOCK_SCREEN);
+
+  // If suspend starts, wallpaper animation should be stopped after screen lock
+  // completes.
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+  observer_->OnLockAnimationsComplete();
+
+  WallpaperWidgetController* wallpaper_widget_controller =
+      Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
+  EXPECT_FALSE(wallpaper_widget_controller->IsAnimating());
+
+  ui::Compositor* compositor =
+      Shell::GetPrimaryRootWindow()->GetHost()->compositor();
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  // Expect that two compositing cycles are completed before suspend continues,
+  // and displays get suspended.
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
+}
+
+// Tests that animated wallpaper changes will be finished immediately when
+// suspend starts and causes a screen lock.
+TEST_F(PowerEventObserverTest, EndWallpaperAnimationAfterLockDueToSuspend) {
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  ASSERT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  // Set up animation state so wallpaper widget animations are not ended on
+  // their creation.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Start suspend (which should start screen lock) - verify that wallpaper is
+  // not animating after the screen lock animations are reported as complete.
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+  observer_->OnLockAnimationsComplete();
+
+  WallpaperWidgetController* wallpaper_widget_controller =
+      Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
+  EXPECT_FALSE(wallpaper_widget_controller->IsAnimating());
+
+  ui::Compositor* compositor =
+      Shell::GetPrimaryRootWindow()->GetHost()->compositor();
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  // Expect that two compositing cycles are completed before suspend continues,
+  // and displays get suspended.
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(1, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(1, GetNumVisibleCompositors());
+
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
+}
+
+// Tests that removing a display while power event observer is waiting for the
+// wallpaper animation does not cause suspend to hang.
+TEST_F(PowerEventObserverTest, DisplayRemovedDuringWallpaperAnimation) {
+  chromeos::PowerManagerClient* client =
+      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+  ASSERT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+
+  SetCanLockScreen(true);
+  SetShouldLockScreenAutomatically(true);
+
+  UpdateDisplay("100x100,200x200");
+
+  // Set up animation state so wallpaper widget animations are not ended on
+  // their creation.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Lock screen - this is expected to start wallpaper change (e.g. to a
+  // widget with a blurred wallpaper).
+  BlockUserSession(BLOCKED_BY_LOCK_SCREEN);
+  observer_->OnLockAnimationsComplete();
+
+  // Remove a display before wallpaper animation ends.
+  UpdateDisplay("100x100");
+  base::RunLoop().RunUntilIdle();
+
+  // Start suspend and verify the suspend proceeds when the primary window's
+  // compositors go throug two compositing cycles.
+  observer_->SuspendImminent(power_manager::SuspendImminent_Reason_OTHER);
+
+  ui::Compositor* compositor =
+      Shell::GetPrimaryRootWindow()->GetHost()->compositor();
+  PowerEventObserverTestApi test_api(observer_.get());
+
+  // Expect that two compositing cycles are completed before suspend continues,
+  // and displays get suspended.
+  test_api.CompositeFrame(compositor);
+  test_api.CompositeFrame(compositor);
+  EXPECT_EQ(0, client->GetNumPendingSuspendReadinessCallbacks());
+  EXPECT_EQ(0, GetNumVisibleCompositors());
 }
 
 }  // namespace ash

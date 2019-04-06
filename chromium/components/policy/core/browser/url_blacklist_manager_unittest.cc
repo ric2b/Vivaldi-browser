@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -23,7 +22,6 @@
 #include "components/url_formatter/url_fixer.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/load_flags.h"
-#include "net/base/net_errors.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -31,15 +29,10 @@ namespace policy {
 
 namespace {
 
-bool OverrideBlacklistForURL(const GURL& url, bool* block, int* reason) {
-  return false;
-}
-
 class TestingURLBlacklistManager : public URLBlacklistManager {
  public:
   explicit TestingURLBlacklistManager(PrefService* pref_service)
-      : URLBlacklistManager(pref_service,
-                            base::Bind(OverrideBlacklistForURL)),
+      : URLBlacklistManager(pref_service),
         update_called_(0),
         set_blacklist_called_(false) {}
 
@@ -81,7 +74,7 @@ class URLBlacklistManagerTest : public testing::Test {
   }
 
   void TearDown() override {
-    if (blacklist_manager_.get())
+    if (blacklist_manager_)
       scoped_task_environment_.RunUntilIdle();
     blacklist_manager_.reset();
   }
@@ -215,8 +208,7 @@ TEST_F(URLBlacklistManagerTest, LoadBlacklistOnCreate) {
   auto list = std::make_unique<base::ListValue>();
   list->AppendString("example.com");
   pref_service_.SetManagedPref(policy_prefs::kUrlBlacklist, std::move(list));
-  auto manager = std::make_unique<URLBlacklistManager>(
-      &pref_service_, URLBlacklistManager::OverrideBlacklistCallback());
+  auto manager = std::make_unique<URLBlacklistManager>(&pref_service_);
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(URLBlacklist::URL_IN_BLACKLIST,
             manager->GetURLBlacklistState(GURL("http://example.com")));
@@ -226,8 +218,7 @@ TEST_F(URLBlacklistManagerTest, LoadWhitelistOnCreate) {
   auto list = std::make_unique<base::ListValue>();
   list->AppendString("example.com");
   pref_service_.SetManagedPref(policy_prefs::kUrlWhitelist, std::move(list));
-  auto manager = std::make_unique<URLBlacklistManager>(
-      &pref_service_, URLBlacklistManager::OverrideBlacklistCallback());
+  auto manager = std::make_unique<URLBlacklistManager>(&pref_service_);
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(URLBlacklist::URL_IN_WHITELIST,
             manager->GetURLBlacklistState(GURL("http://example.com")));
@@ -626,21 +617,6 @@ TEST_F(URLBlacklistManagerTest, BlockAllWithExceptions) {
   EXPECT_TRUE(blacklist.IsURLBlocked(GURL("https://very.safe/")));
   EXPECT_TRUE(blacklist.IsURLBlocked(GURL("http://very.safe/path")));
   EXPECT_FALSE(blacklist.IsURLBlocked(GURL("https://very.safe/path")));
-}
-
-TEST_F(URLBlacklistManagerTest, DontBlockResources) {
-  std::unique_ptr<URLBlacklist>
-  blacklist(new URLBlacklist);
-  std::unique_ptr<base::ListValue> blocked(new base::ListValue);
-  blocked->AppendString("google.com");
-  blacklist->Block(blocked.get());
-  blacklist_manager_->SetBlacklist(std::move(blacklist));
-  EXPECT_TRUE(blacklist_manager_->IsURLBlocked(GURL("http://google.com")));
-
-  int reason = net::ERR_UNEXPECTED;
-  EXPECT_TRUE(blacklist_manager_->ShouldBlockRequestForFrame(
-      GURL("http://google.com"), &reason));
-  EXPECT_EQ(net::ERR_BLOCKED_BY_ADMINISTRATOR, reason);
 }
 
 TEST_F(URLBlacklistManagerTest, DefaultBlacklistExceptions) {

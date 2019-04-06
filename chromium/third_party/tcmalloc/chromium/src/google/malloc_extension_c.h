@@ -31,4 +31,7 @@
 /* The code has moved to gperftools/.  Use that include-directory for
  * new code.
  */
+#if defined(__GNUC__) && !defined(GPERFTOOLS_SUPPRESS_LEGACY_WARNING)
+#warning "google/malloc_extension_c.h is deprecated. Use gperftools/malloc_extension_c.h instead"
+#endif
 #include <gperftools/malloc_extension_c.h>

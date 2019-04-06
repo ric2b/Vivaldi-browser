@@ -21,8 +21,14 @@ public class TabModalLifetimeHandler {
     private final TabObserver mTabObserver = new EmptyTabObserver() {
         @Override
         public void onInteractabilityChanged(boolean isInteractable) {
-            if (!isInteractable && mPresenter.getModalDialog() != null) {
-                mManager.cancelAllDialogs();
+            updateSuspensionState();
+        }
+
+        @Override
+        public void onDestroyed(Tab tab) {
+            if (mActiveTab == tab) {
+                mManager.cancelAllDialogs(ModalDialogManager.TAB_MODAL);
+                mActiveTab = null;
             }
         }
     };
@@ -47,10 +53,19 @@ public class TabModalLifetimeHandler {
         TabModelSelector tabModelSelector = activity.getTabModelSelector();
         mTabModelObserver = new TabModelSelectorTabModelObserver(tabModelSelector) {
             @Override
-            public void didSelectTab(Tab tab, TabModel.TabSelectionType type, int lastId) {
-                if (mActiveTab != null) mActiveTab.removeObserver(mTabObserver);
-                mActiveTab = tabModelSelector.getCurrentTab();
-                if (mActiveTab != null) mActiveTab.addObserver(mTabObserver);
+            public void didSelectTab(Tab tab, @TabModel.TabSelectionType int type, int lastId) {
+                // Do not use lastId here since it can be the selected tab's ID if model is switched
+                // inside tab switcher.
+                if (tab != mActiveTab) {
+                    mManager.cancelAllDialogs(ModalDialogManager.TAB_MODAL);
+                    if (mActiveTab != null) mActiveTab.removeObserver(mTabObserver);
+
+                    mActiveTab = tab;
+                    if (mActiveTab != null) {
+                        mActiveTab.addObserver(mTabObserver);
+                        updateSuspensionState();
+                    }
+                }
             }
         };
     }
@@ -80,5 +95,15 @@ public class TabModalLifetimeHandler {
      */
     public void destroy() {
         mTabModelObserver.destroy();
+    }
+
+    /** Update whether the {@link ModalDialogManager} should suspend tab modal dialogs. */
+    private void updateSuspensionState() {
+        assert mActiveTab != null;
+        if (mActiveTab.isUserInteractable()) {
+            mManager.resumeType(ModalDialogManager.TAB_MODAL);
+        } else {
+            mManager.suspendType(ModalDialogManager.TAB_MODAL);
+        }
     }
 }

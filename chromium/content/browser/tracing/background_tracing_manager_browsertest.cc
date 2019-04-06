@@ -18,6 +18,7 @@
 #include "base/trace_event/trace_event.h"
 #include "content/browser/tracing/background_tracing_manager_impl.h"
 #include "content/browser/tracing/background_tracing_rule.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -106,16 +107,13 @@ class BackgroundTracingManagerBrowserTest : public ContentBrowserTest {
 
 class BackgroundTracingManagerUploadConfigWrapper {
  public:
-  BackgroundTracingManagerUploadConfigWrapper(const base::Closure& callback)
-      : callback_(callback), receive_count_(0) {
-    receive_callback_ =
-        base::Bind(&BackgroundTracingManagerUploadConfigWrapper::Upload,
-                   base::Unretained(this));
-  }
+  BackgroundTracingManagerUploadConfigWrapper(base::OnceClosure callback)
+      : callback_(std::move(callback)), receive_count_(0) {}
 
-  void Upload(const scoped_refptr<base::RefCountedString>& file_contents,
-              std::unique_ptr<const base::DictionaryValue> metadata,
-              base::Callback<void()> done_callback) {
+  void Upload(
+      const scoped_refptr<base::RefCountedString>& file_contents,
+      std::unique_ptr<const base::DictionaryValue> metadata,
+      BackgroundTracingManager::FinishedProcessingCallback done_callback) {
     receive_count_ += 1;
     EXPECT_TRUE(file_contents);
 
@@ -140,8 +138,14 @@ class BackgroundTracingManagerUploadConfigWrapper {
     EXPECT_EQ(Z_STREAM_END, result);
 
     last_file_contents_.assign(output_str.data(), bytes_written);
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, done_callback);
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback_);
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(std::move(done_callback), true));
+    CHECK(callback_);
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, std::move(callback_));
+  }
+
+  void SetUploadCallback(base::OnceClosure callback) {
+    callback_ = std::move(callback);
   }
 
   bool TraceHasMatchingString(const char* str) {
@@ -150,14 +154,14 @@ class BackgroundTracingManagerUploadConfigWrapper {
 
   int get_receive_count() const { return receive_count_; }
 
-  const BackgroundTracingManager::ReceiveCallback& get_receive_callback()
-      const {
-    return receive_callback_;
+  BackgroundTracingManager::ReceiveCallback get_receive_callback() {
+    return base::BindRepeating(
+        &BackgroundTracingManagerUploadConfigWrapper::Upload,
+        base::Unretained(this));
   }
 
  private:
-  BackgroundTracingManager::ReceiveCallback receive_callback_;
-  base::Closure callback_;
+  base::OnceClosure callback_;
   int receive_count_;
   std::string last_file_contents_;
 };
@@ -167,7 +171,7 @@ void StartedFinalizingCallback(base::Closure callback,
                                bool value) {
   EXPECT_EQ(expected, value);
   if (!callback.is_null())
-    callback.Run();
+    std::move(callback).Run();
 }
 
 std::unique_ptr<BackgroundTracingConfig> CreatePreemptiveConfig() {
@@ -1331,6 +1335,57 @@ IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
     run_loop.Run();
 
     EXPECT_TRUE(upload_config_wrapper.get_receive_count() == 1);
+  }
+}
+
+#if defined(OS_ANDROID)
+// Flaky on android: https://crbug.com/639706
+#define MAYBE_ReactiveSecondUpload DISABLED_ReactiveSecondUpload
+#else
+#define MAYBE_ReactiveSecondUpload ReactiveSecondUpload
+#endif
+
+// This tests that reactive mode uploads on a second set of triggers.
+IN_PROC_BROWSER_TEST_F(BackgroundTracingManagerBrowserTest,
+                       MAYBE_ReactiveSecondUpload) {
+  {
+    SetupBackgroundTracingManager();
+
+    base::RunLoop run_loop;
+    BackgroundTracingManagerUploadConfigWrapper upload_config_wrapper(
+        run_loop.QuitClosure());
+
+    std::unique_ptr<BackgroundTracingConfig> config = CreateReactiveConfig();
+
+    BackgroundTracingManager::TriggerHandle handle =
+        BackgroundTracingManager::GetInstance()->RegisterTriggerType(
+            "reactive_test");
+
+    EXPECT_TRUE(BackgroundTracingManager::GetInstance()->SetActiveScenario(
+        std::move(config), upload_config_wrapper.get_receive_callback(),
+        BackgroundTracingManager::NO_DATA_FILTERING));
+
+    BackgroundTracingManager::GetInstance()->TriggerNamedEvent(
+        handle, base::Bind(&StartedFinalizingCallback, base::Closure(), true));
+    // second trigger to terminate.
+    BackgroundTracingManager::GetInstance()->TriggerNamedEvent(
+        handle, base::Bind(&StartedFinalizingCallback, base::Closure(), true));
+
+    run_loop.Run();
+
+    base::RunLoop second_upload_run_loop;
+    upload_config_wrapper.SetUploadCallback(
+        second_upload_run_loop.QuitClosure());
+
+    BackgroundTracingManager::GetInstance()->TriggerNamedEvent(
+        handle, base::Bind(&StartedFinalizingCallback, base::Closure(), true));
+    // second trigger to terminate.
+    BackgroundTracingManager::GetInstance()->TriggerNamedEvent(
+        handle, base::Bind(&StartedFinalizingCallback, base::Closure(), true));
+
+    second_upload_run_loop.Run();
+
+    EXPECT_TRUE(upload_config_wrapper.get_receive_count() == 2);
   }
 }
 

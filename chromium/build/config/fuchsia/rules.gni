@@ -1,156 +1,115 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 assert(is_fuchsia)
 
-template("generate_runner_script") {
-  # This runtime_deps file is used at runtime and thus cannot go in
-  # target_gen_dir.
-  _target_dir_name = get_label_info(invoker.exe_target, "dir")
-  _target_shortname = get_label_info(invoker.exe_target, "name")
-  _runtime_deps_file = "$root_out_dir/gen.runtime/$_target_dir_name/$_target_shortname.runtime_deps"
-  _runtime_deps_target = "${target_name}__write_deps"
-  group(_runtime_deps_target) {
-    forward_variables_from(invoker,
-                           [
-                             "data",
-                             "data_deps",
-                             "deps",
-                             "public_deps",
-                             "testonly",
-                           ])
-    write_runtime_deps = _runtime_deps_file
+import("//build/config/chromecast_build.gni")
+import("//build/config/fuchsia/config.gni")
+import("//build/config/fuchsia/package.gni")
+import("//build/config/sysroot.gni")
+
+blobstore_qcow_path = "$root_out_dir/fvm.blk.qcow2"
+
+# Generates a script which deploys and executes a package on a device.
+#
+# Parameters:
+#   package: The package() target which will be run.
+#   package_name_override: Specifies the name of the generated package, if its
+#       name is different than the |package| target name. This value must match
+#       package_name_override in the |package| target.
+#   package_deps: An array of [package, package_name_override] array pairs
+#       which specify additional dependency packages to be installed
+#       prior to execution.
+#   runner_script: The runner script implementation to use, relative to
+#       "build/fuchsia". Defaults to "exe_runner.py".
+template("fuchsia_package_runner") {
+  forward_variables_from(invoker, [ "runner_script" ])
+
+  if (defined(invoker.package_name_override)) {
+    _pkg_shortname = invoker.package_name_override
+  } else {
+    _pkg_shortname = get_label_info(invoker.package, "name")
+  }
+
+  _pkg_dir = "$root_out_dir/gen/" + get_label_info(invoker.package, "dir") +
+             "/" + _pkg_shortname
+  _manifest_path = "$_pkg_dir/${_pkg_shortname}.archive_manifest"
+  _package_path = "$_pkg_dir/${_pkg_shortname}.far"
+  _generated_script_path = "$root_build_dir/bin/run_$_pkg_shortname"
+
+  if (!defined(runner_script)) {
+    runner_script = "//build/fuchsia/exe_runner.py"
   }
 
   action(target_name) {
     forward_variables_from(invoker,
                            [
-                             "data_deps",
-                             "deps",
-                             "runner_script",
                              "target",
                              "testonly",
                            ])
-    if (!defined(deps)) {
-      deps = []
-    }
-    if (!defined(data_deps)) {
-      data_deps = []
-    }
+
+    deps = [
+      "//build/config/fuchsia:blobstore_extended_qcow2",
+      "//testing/buildbot/filters:fuchsia_filters",
+      invoker.package,
+    ]
 
     script = "//build/fuchsia/create_runner_script.py"
-    depfile = "$target_gen_dir/$target_name.d"
-
-    data = []
-    runner_args = []
 
     outputs = [
-      invoker.generated_script,
+      _generated_script_path,
     ]
-    data += [
-      invoker.generated_script,
-      "//build/fuchsia/exe_runner.py",
-      "//build/fuchsia/test_runner.py",
-      "//build/fuchsia/runner_common.py",
+
+    data = [
+      _generated_script_path,
+      _manifest_path,
+      "//build/fuchsia/",
       "//build/util/lib/",
-      "//third_party/fuchsia-sdk/",
+      "${fuchsia_sdk}/",
     ]
 
-    runner_args += [
-      "--runner-script",
-      runner_script,
-      "--output-directory",
-      rebase_path(root_build_dir, root_build_dir),
-      "--target-cpu",
-      target_cpu,
+    data_deps = [
+      invoker.package,
     ]
 
-    deps += [
-      ":$_runtime_deps_target",
-      "//testing/buildbot/filters:fuchsia_filters",
-    ]
-    data += [ _runtime_deps_file ]
-    runner_args += [
-      "--runtime-deps-path",
-      rebase_path(_runtime_deps_file, root_build_dir),
-    ]
-
-    if (defined(args)) {
-      args = []
-    }
+    # Arguments used at build time by the runner script generator.
     args = [
-      "--depfile",
-      rebase_path(depfile, root_build_dir),
       "--script-output-path",
-      rebase_path(invoker.generated_script, root_build_dir),
-      "--exe-name",
-      _target_shortname,
+      rebase_path(_generated_script_path, root_build_dir, root_out_dir),
     ]
 
     if (defined(invoker.use_test_server) && invoker.use_test_server) {
       args += [ "--enable-test-server" ]
     }
 
-    args += runner_args
-  }
-}
-
-# This template is used to generate a runner script for test binaries into the
-# build dir for Fuchsia. It's generally used from the "test" template.
-template("test_runner_script") {
-  generate_runner_script(target_name) {
-    testonly = true
-    runner_script = "test_runner.py"
-    exe_target = invoker.test_name
-    generated_script =
-        "$root_build_dir/bin/run_" + get_label_info(exe_target, "name")
-    forward_variables_from(invoker, "*")
-  }
-}
-
-# This template is used to generate a runner script for arbitrary executables
-# into the build dir for Fuchsia. The template should reference an "executable"
-# target using the "exe_target" attribute.
-#
-# Example usage:
-#
-#   executable("foo") {
-#     sources = [ "foo_main.cc" ]
-#   }
-#   fuchsia_executable_runner("foo_fuchsia") {
-#     exe_target = ":foo"
-#   }
-template("fuchsia_executable_runner") {
-  generate_runner_script(target_name) {
-    forward_variables_from(invoker,
-                           [
-                             "testonly",
-                             "exe_target",
-                             "data_deps",
-                           ])
-    runner_script = "exe_runner.py"
-    generated_script =
-        "$root_build_dir/bin/run_" + get_label_info(exe_target, "name")
-    if (!defined(data_deps)) {
-      data_deps = []
+    if (defined(invoker.package_deps)) {
+      foreach(cur_package, invoker.package_deps) {
+        deps += [ cur_package[0] ]
+        dep_package_path =
+            "$root_out_dir/gen/" + get_label_info(cur_package[0], "dir") + "/" +
+            cur_package[1] + "/" + cur_package[1] + ".far"
+        args += [
+          "--package-dep",
+          rebase_path(dep_package_path, root_out_dir, root_build_dir),
+        ]
+      }
     }
-    data_deps += [ exe_target ]
-  }
 
-  generate_runner_script(target_name + "_archive") {
-    forward_variables_from(invoker,
-                           [
-                             "testonly",
-                             "exe_target",
-                             "data_deps",
-                           ])
-    runner_script = "archive_builder.py"
-    generated_script =
-        "$root_build_dir/bin/archive_" + get_label_info(exe_target, "name")
-    if (!defined(data_deps)) {
-      data_deps = []
-    }
-    data_deps += [ exe_target ]
+    # Arguments used at runtime by the test runner.
+    args += [
+      "--runner-script",
+      rebase_path(runner_script, root_out_dir),
+      "--output-directory",
+      rebase_path(root_build_dir, root_build_dir),
+      "--target-cpu",
+      target_cpu,
+      "--package",
+      rebase_path(_package_path, root_out_dir, root_build_dir),
+      "--package-name",
+      _pkg_shortname,
+      "--package-manifest",
+      rebase_path(_manifest_path),
+    ]
   }
 }

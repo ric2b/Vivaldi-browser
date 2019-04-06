@@ -27,7 +27,8 @@ namespace {
 
 buzz::AsyncSocket* CreateSocket(
     const buzz::XmppClientSettings& xmpp_client_settings,
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter) {
+    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   bool use_fake_ssl_client_socket =
       (xmpp_client_settings.protocol() == cricket::PROTO_SSLTCP);
   // The default SSLConfig is good enough for us for now.
@@ -36,14 +37,14 @@ buzz::AsyncSocket* CreateSocket(
   // XmppSocketAdapter.
   const size_t kReadBufSize = 64U * 1024U;
   const size_t kWriteBufSize = 64U * 1024U;
-  jingle_glue::XmppClientSocketFactory* const client_socket_factory =
-      new jingle_glue::XmppClientSocketFactory(
-          net::ClientSocketFactory::GetDefaultFactory(),
-          ssl_config,
-          request_context_getter,
-          use_fake_ssl_client_socket);
-  return new jingle_glue::ChromeAsyncSocket(client_socket_factory,
-                                            kReadBufSize, kWriteBufSize);
+  auto client_socket_factory =
+      std::make_unique<jingle_glue::XmppClientSocketFactory>(
+          net::ClientSocketFactory::GetDefaultFactory(), ssl_config,
+          request_context_getter, use_fake_ssl_client_socket);
+
+  return new jingle_glue::ChromeAsyncSocket(std::move(client_socket_factory),
+                                            kReadBufSize, kWriteBufSize,
+                                            traffic_annotation);
 }
 
 }  // namespace
@@ -52,7 +53,8 @@ XmppConnection::XmppConnection(
     const buzz::XmppClientSettings& xmpp_client_settings,
     const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
     Delegate* delegate,
-    buzz::PreXmppAuth* pre_xmpp_auth)
+    buzz::PreXmppAuth* pre_xmpp_auth,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation)
     : task_pump_(new jingle_glue::TaskPump()),
       on_connect_called_(false),
       delegate_(delegate) {
@@ -67,11 +69,11 @@ XmppConnection::XmppConnection(
   weak_xmpp_client->SignalLogOutput.connect(
       this, &XmppConnection::OnOutputLog);
   const char kLanguage[] = "en";
-  buzz::XmppReturnStatus connect_status =
-      weak_xmpp_client->Connect(xmpp_client_settings, kLanguage,
-                                CreateSocket(xmpp_client_settings,
-                                             request_context_getter),
-                                pre_xmpp_auth);
+  buzz::XmppReturnStatus connect_status = weak_xmpp_client->Connect(
+      xmpp_client_settings, kLanguage,
+      CreateSocket(xmpp_client_settings, request_context_getter,
+                   traffic_annotation),
+      pre_xmpp_auth);
   // buzz::XmppClient::Connect() should never fail.
   DCHECK_EQ(connect_status, buzz::XMPP_RETURN_OK);
   weak_xmpp_client->Start();
@@ -87,7 +89,7 @@ XmppConnection::~XmppConnection() {
   // things happen when the stack pops back up to the XmppClient's
   // (which is deleted by |task_pump_|) function.
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
-                                                  task_pump_.release());
+                                                  std::move(task_pump_));
 }
 
 void XmppConnection::OnStateChange(buzz::XmppEngine::State state) {

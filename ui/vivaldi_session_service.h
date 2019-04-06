@@ -65,7 +65,7 @@ class VivaldiSessionService {
   bool FillBuffer();
   Browser* ProcessSessionWindows(
       std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
-      SessionID::id_type active_window_id,
+      const SessionID& active_window_id,
       std::vector<SessionRestoreDelegate::RestoredTab>* created_contents);
   void RestoreTabsToBrowser(
       const sessions::SessionWindow& window,

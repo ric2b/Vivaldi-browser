@@ -14,7 +14,6 @@
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller_factory.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
 #import "ios/chrome/browser/ui/history_popup/requirements/tab_history_constants.h"
 #import "ios/chrome/browser/ui/location_bar_notification_names.h"
@@ -22,10 +21,11 @@
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_view.h"
 #import "ios/chrome/browser/ui/page_info/page_info_legacy_coordinator.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
+#import "ios/chrome/browser/ui/toolbar/legacy/toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/voice/voice_search_notification_names.h"
+#include "ios/web/public/features.h"
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -82,16 +82,18 @@ typedef struct {
   CGFloat initialYInset;
   CGFloat headerInset;
   CGFloat velocityInset;
+  CGFloat initialTopMargin;
   CFAbsoluteTime time;
 } SpringInsetState;
 
 // Used to set the height of a view frame.
 // Implicit animations are disabled when setting the new frame.
-void SetViewFrameHeight(UIView* view, CGFloat height) {
+void SetViewFrameHeight(UIView* view, CGFloat height, CGFloat topMargin) {
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
   CGRect viewFrame = view.frame;
-  viewFrame.size.height = height;
+  viewFrame.size.height = height - topMargin;
+  viewFrame.origin.y = topMargin;
   view.frame = viewFrame;
   [CATransaction commit];
 }
@@ -105,6 +107,14 @@ CGFloat Clamp(CGFloat value, CGFloat min, CGFloat max) {
     return max;
   return value;
 }
+
+// Returns |scrollView|.contentInset with an updated |topInset|.
+UIEdgeInsets TopContentInset(UIScrollView* scrollView, CGFloat topInset) {
+  UIEdgeInsets insets = scrollView.contentInset;
+  insets.top = topInset;
+  return insets;
+}
+
 }  // namespace
 
 NSString* const kOverscrollActionsWillStart = @"OverscrollActionsWillStart";
@@ -204,6 +214,8 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
 @property(nonatomic, assign) CGPoint panPointScreenOrigin;
 // Pan gesture recognizer used to track horizontal touches.
 @property(nonatomic, strong) UIPanGestureRecognizer* panGestureRecognizer;
+// Whether the scroll view is dragged by the user.
+@property(nonatomic, assign) BOOL scrollViewDragged;
 
 // Registers notifications to lock the overscroll actions on certain UI states.
 - (void)registerNotifications;
@@ -255,6 +267,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
 @synthesize browserState = _browserState;
 @synthesize panPointScreenOrigin = _panPointScreenOrigin;
 @synthesize panGestureRecognizer = _panGestureRecognizer;
+@synthesize scrollViewDragged = _scrollViewDragged;
 
 - (instancetype)initWithScrollView:(UIScrollView*)scrollView
                       webViewProxy:(id<CRWWebViewProxy>)webViewProxy {
@@ -333,6 +346,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
 }
 
 - (void)clear {
+  self.scrollViewDragged = NO;
   self.overscrollState = OverscrollState::NO_PULL_STARTED;
 }
 
@@ -358,17 +372,22 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
     return;
 
   const UIEdgeInsets insets =
-      UIEdgeInsetsMake(-[self scrollView].contentOffset.y, 0, 0, 0);
+      TopContentInset(self.scrollView, -[self scrollView].contentOffset.y);
   // Start pulling (on top).
   CGFloat contentOffsetFromTheTop = [self scrollView].contentOffset.y;
-  if (![_webViewProxy shouldUseInsetForTopPadding]) {
+  if (![_webViewProxy shouldUseViewContentInset]) {
     // Content offset is shifted for WKWebView when the web view's
-    // |shouldUseInsetForTopPadding| is NO, to workaround bug with
+    // |shouldUseViewContentInset| is NO, to workaround bug with
     // UIScollView.contentInset (rdar://23584409).
-    contentOffsetFromTheTop -= [_webViewProxy topContentPadding];
+    contentOffsetFromTheTop -= _webViewProxy.contentInset.top;
   }
   CGFloat contentOffsetFromExpandedHeader =
       contentOffsetFromTheTop + self.initialHeaderInset;
+  CGFloat topMargin = 0;
+  if (!_webViewProxy && base::FeatureList::IsEnabled(
+                            web::features::kBrowserContainerFullscreen)) {
+    topMargin = StatusBarHeight();
+  }
   if (contentOffsetFromExpandedHeader >= 0) {
     // Record initial content offset and dispatch delegate on state change.
     self.overscrollState = OverscrollState::NO_PULL_STARTED;
@@ -383,11 +402,13 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
       _initialHeaderHeight = [[self delegate] overscrollHeaderHeight];
       self.overscrollState = OverscrollState::STARTED_PULLING;
     }
-    [self updateWithVerticalOffset:-contentOffsetFromExpandedHeader];
+    [self updateWithVerticalOffset:-contentOffsetFromExpandedHeader
+                         topMargin:topMargin];
   }
 }
 
 - (void)scrollViewWillBeginDragging {
+  self.scrollViewDragged = YES;
   [self stopBounce];
   _allowPullingActions = NO;
   _didTransitionToActionReady = NO;
@@ -419,6 +440,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
 
 - (void)scrollViewDidEndDraggingWillDecelerate:(BOOL)decelerate
                                  contentOffset:(CGPoint)contentOffset {
+  self.scrollViewDragged = NO;
   // Content is now hidden behind toolbar, make sure that contentInset is
   // restored to initial value.
   if (contentOffset.y >= 0 ||
@@ -626,9 +648,9 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
 }
 
 - (void)resetScrollViewTopContentInset {
-  UIEdgeInsets contentInset = self.scrollView.contentInset;
-  contentInset.top = self.initialContentInset;
-  [self setScrollViewContentInset:contentInset];
+  const UIEdgeInsets insets =
+      TopContentInset(self.scrollView, self.initialContentInset);
+  [self setScrollViewContentInset:insets];
 }
 
 - (UIView<RelaxedBoundsConstraintsHitTestSupport>*)headerView {
@@ -672,8 +694,8 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
   [[self scrollView] panGestureRecognizer].enabled = NO;
   [[self scrollView] panGestureRecognizer].enabled = YES;
 
-  [self setScrollViewContentInset:UIEdgeInsetsMake(self.initialContentInset, 0,
-                                                   0, 0)];
+  [self setScrollViewContentInset:TopContentInset(self.scrollView,
+                                                  self.initialContentInset)];
   [self clear];
 }
 
@@ -696,8 +718,9 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
       if (CACurrentMediaTime() - _lastScrollBeginTime >=
           kMinimumPullDurationToTriggerActionInSeconds) {
         _performingScrollViewIndependentAnimation = YES;
-        [self setScrollViewContentInset:UIEdgeInsetsMake(
-                                            self.initialContentInset, 0, 0, 0)];
+        [self setScrollViewContentInset:TopContentInset(
+                                            self.scrollView,
+                                            self.initialContentInset)];
         CGPoint contentOffset = [[self scrollView] contentOffset];
         contentOffset.y = -self.initialContentInset;
         [[self scrollView] setContentOffset:contentOffset animated:YES];
@@ -705,7 +728,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
         dispatch_async(dispatch_get_main_queue(), ^{
           [self recordMetricForTriggeredAction:self.overscrollActionView
                                                    .selectedAction];
-          TriggerHapticFeedbackForAction();
+          TriggerHapticFeedbackForImpact(UIImpactFeedbackStyleMedium);
           [self.delegate overscrollActionsController:self
                                     didTriggerAction:self.overscrollActionView
                                                          .selectedAction];
@@ -737,7 +760,8 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
       SetViewFrameHeight(
           self.overscrollActionView,
           self.initialContentInset +
-              [UIApplication sharedApplication].statusBarFrame.size.height);
+              [UIApplication sharedApplication].statusBarFrame.size.height,
+          0);
       self.panPointScreenOrigin = CGPointZero;
       [[NSNotificationCenter defaultCenter]
           postNotificationName:kOverscrollActionsDidEnd
@@ -749,7 +773,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
       }
     } break;
     case OverscrollState::STARTED_PULLING: {
-      if (!self.overscrollActionView.superview) {
+      if (!self.overscrollActionView.superview && self.scrollViewDragged) {
         if (previousOverscrollState == OverscrollState::NO_PULL_STARTED) {
           UIView* view = [self.delegate toolbarSnapshotView];
           [self.overscrollActionView addSnapshotView:view];
@@ -815,20 +839,21 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
   }
 }
 
-- (void)updateWithVerticalOffset:(CGFloat)verticalOffset {
+- (void)updateWithVerticalOffset:(CGFloat)verticalOffset
+                       topMargin:(CGFloat)topMargin {
   self.overscrollActionView.backgroundView.alpha =
       1.0 -
-      Clamp(verticalOffset / (kHeaderMaxExpansionThreshold / 2.0), 0.0, 1.0);
+      Clamp((verticalOffset) / (kHeaderMaxExpansionThreshold / 2.0), 0.0, 1.0);
   SetViewFrameHeight(self.overscrollActionView,
-                     self.initialHeaderHeight + verticalOffset);
+                     self.initialHeaderHeight + verticalOffset, topMargin);
   [self.overscrollActionView updateWithVerticalOffset:verticalOffset];
 }
 
 - (CGFloat)initialContentInset {
   // Content inset is not used for displaying header if the web view's
-  // |shouldUseInsetForTopPadding| is NO, instead the whole web view
-  // frame is changed.
-  if (!_scrollview && ![_webViewProxy shouldUseInsetForTopPadding])
+  // |shouldUseViewContentInset| is NO, instead the whole web view frame is
+  // changed.
+  if (!_scrollview && ![_webViewProxy shouldUseViewContentInset])
     return 0;
   return self.initialHeaderInset;
 }
@@ -855,13 +880,15 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
   _dpLink = dpLink;
   memset(&_bounceState, 0, sizeof(_bounceState));
   if (self.overscrollState == OverscrollState::ACTION_READY) {
-    const UIEdgeInsets insets = UIEdgeInsetsMake(
-        -[self scrollView].contentOffset.y + self.initialContentInset, 0, 0, 0);
+    const UIEdgeInsets insets =
+        TopContentInset(self.scrollView, -[self scrollView].contentOffset.y +
+                                             self.initialContentInset);
     [self setScrollViewContentInset:insets];
     [[self scrollView] setScrollIndicatorInsets:insets];
   }
   _bounceState.yInset = [self scrollView].contentInset.top;
   _bounceState.initialYInset = _bounceState.yInset;
+  _bounceState.initialTopMargin = self.overscrollActionView.frame.origin.y;
   _bounceState.headerInset = self.initialContentInset;
   _bounceState.time = CACurrentMediaTime();
   _bounceState.velocityInset = -velocity.y * 1000.0;
@@ -894,10 +921,12 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
   if (_bounceState.yInset - _bounceState.headerInset < 0.5)
     _bounceState.yInset = _bounceState.headerInset;
   if (_performingScrollViewIndependentAnimation) {
-    [self updateWithVerticalOffset:_bounceState.yInset -
-                                   _bounceState.headerInset];
+    [self
+        updateWithVerticalOffset:_bounceState.yInset - _bounceState.headerInset
+                       topMargin:_bounceState.initialTopMargin];
   } else {
-    const UIEdgeInsets insets = UIEdgeInsetsMake(_bounceState.yInset, 0, 0, 0);
+    const UIEdgeInsets insets =
+        TopContentInset(self.scrollView, _bounceState.yInset);
     _forceStateUpdate = YES;
     [self setScrollViewContentInset:insets];
     [self scrollView].scrollIndicatorInsets = insets;
@@ -924,7 +953,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
   [self scrollView].panGestureRecognizer.enabled = YES;
   [self startBounceWithInitialVelocity:CGPointZero];
 
-  TriggerHapticFeedbackForAction();
+  TriggerHapticFeedbackForImpact(UIImpactFeedbackStyleMedium);
   [self.delegate
       overscrollActionsController:self
                  didTriggerAction:self.overscrollActionView.selectedAction];

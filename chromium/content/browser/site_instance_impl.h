@@ -39,6 +39,12 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
       const GURL& url);
   static bool ShouldAssignSiteForURL(const GURL& url);
 
+  // Returns whether |lock_url| is at least at the granularity of a site (i.e.,
+  // a scheme plus eTLD+1, like https://google.com).  Also returns true if the
+  // lock is to a more specific origin (e.g., https://accounts.google.com), but
+  // not if the lock is empty or applies to an entire scheme (e.g., file://).
+  static bool IsOriginLockASite(const GURL& lock_url);
+
   // See SiteInstance::IsSameWebSite.
   // This version allows comparing URLs without converting them to effective
   // URLs first, which is useful for avoiding OOPIFs when otherwise same-site
@@ -165,6 +171,22 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
+  // Whether GetProcess() method (when it needs to find a new process to
+  // associate with the current SiteInstanceImpl) can return a spare process.
+  bool CanAssociateWithSpareProcess();
+
+  // Has no effect if the SiteInstanceImpl already has a |process_|.
+  // Otherwise, prevents GetProcess() from associating this SiteInstanceImpl
+  // with the spare RenderProcessHost - instead GetProcess will either need to
+  // create a new, not-yet-initialized/spawned RenderProcessHost or will need to
+  // reuse one of existing RenderProcessHosts.
+  //
+  // See also:
+  // - https://crbug.com/840409.
+  // - WebContents::CreateParams::desired_renderer_state
+  // - SiteInstanceImpl::CanAssociateWithSpareProcess().
+  void PreventAssociationWithSpareProcess();
+
   // Get the effective URL for the given actual URL.  This allows the
   // ContentBrowserClient to override the SiteInstance's site for certain URLs.
   // For example, Chrome uses this to replace hosted app URLs with extension
@@ -207,10 +229,8 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
 
   // RenderProcessHostObserver implementation.
   void RenderProcessHostDestroyed(RenderProcessHost* host) override;
-  void RenderProcessWillExit(RenderProcessHost* host) override;
   void RenderProcessExited(RenderProcessHost* host,
-                           base::TerminationStatus status,
-                           int exit_code) override;
+                           const ChildProcessTerminationInfo& info) override;
 
   // Used to restrict a process' origin access rights.
   void LockToOriginIfNeeded();
@@ -240,6 +260,12 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // will still remain the same even if the process crashes, since in that
   // scenario the RenderProcessHost remains the same.
   RenderProcessHost* process_;
+
+  // Describes the desired behavior when GetProcess() method needs to find a new
+  // process to associate with the current SiteInstanceImpl.  If |false|, then
+  // prevents the spare RenderProcessHost from being taken and stored in
+  // |process_|.
+  bool can_associate_with_spare_process_;
 
   // The web site that this SiteInstance is rendering pages for.
   GURL site_;

@@ -13,11 +13,13 @@ bool IsOpaqueUiMode(UiMode mode) {
     case kModeBrowsing:
     case kModeFullscreen:
     case kModeWebVr:
-    case kModeWebVrAutopresented:
     case kModeVoiceSearch:
     case kModeEditingOmnibox:
+    case kModeTabsView:
       return true;
     case kModeRepositionWindow:
+    case kModeModalPrompt:
+    case kModeVoiceSearchListening:
       return false;
   }
   NOTREACHED();
@@ -26,16 +28,15 @@ bool IsOpaqueUiMode(UiMode mode) {
 
 }  // namespace
 
-Model::Model() {}
-
-Model::~Model() {}
+Model::Model() = default;
+Model::~Model() = default;
 
 const ColorScheme& Model::color_scheme() const {
   ColorScheme::Mode mode = ColorScheme::kModeNormal;
-  if (fullscreen_enabled())
-    mode = ColorScheme::kModeFullscreen;
   if (incognito)
     mode = ColorScheme::kModeIncognito;
+  if (fullscreen_enabled())
+    mode = ColorScheme::kModeFullscreen;
   return ColorScheme::GetColorScheme(mode);
 }
 
@@ -63,6 +64,10 @@ void Model::toggle_mode(UiMode mode) {
     return;
   }
   push_mode(mode);
+}
+
+UiMode Model::get_mode() const {
+  return ui_modes.back();
 }
 
 UiMode Model::get_last_opaque_mode() const {
@@ -99,21 +104,26 @@ bool Model::omnibox_editing_enabled() const {
   return get_last_opaque_mode() == kModeEditingOmnibox;
 }
 
+bool Model::editing_enabled() const {
+  return editing_input || editing_web_input;
+}
+
 bool Model::fullscreen_enabled() const {
   return get_last_opaque_mode() == kModeFullscreen;
 }
 
 bool Model::web_vr_enabled() const {
-  return get_last_opaque_mode() == kModeWebVr ||
-         get_last_opaque_mode() == kModeWebVrAutopresented;
-}
-
-bool Model::web_vr_autopresentation_enabled() const {
-  return get_last_opaque_mode() == kModeWebVrAutopresented;
+  return get_last_opaque_mode() == kModeWebVr;
 }
 
 bool Model::reposition_window_enabled() const {
   return ui_modes.back() == kModeRepositionWindow;
+}
+
+bool Model::reposition_window_permitted() const {
+  return !editing_input && !editing_web_input &&
+         active_modal_prompt_type == kModalPromptTypeNone &&
+         !hosted_platform_ui.hosted_ui_enabled;
 }
 
 }  // namespace vr

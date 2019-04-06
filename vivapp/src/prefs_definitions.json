@@ -138,6 +138,13 @@
         "syncable": false
       }
     },
+    "dot_net": {
+      "username": {
+        "type": "string",
+        "default": "",
+        "syncable": false
+      }
+    },
     "homepage": {
       "type": "string",
       "default": "https://vivaldi.com",
@@ -268,7 +275,7 @@
       "window_background_image_url": {
         "type": "string",
         "syncable": false,
-        "default": "../resources/sayagata.png"
+        "default": "../resources/triangles_pattern_vivaldi.png"
       },
       "window_background_image_scaling": {
         "type": "enum",
@@ -321,6 +328,12 @@
           "syncable": true
         }
       },
+      "focus_trap": {
+        "type": "boolean",
+        "default": true,
+        "description": "true if the focus trap disabling tab cycling from web pages into the UI is enabled, otherwise false to allow it.",
+        "syncable": true
+      },
       "full_screen": {
         "hide_mouse": {
           "type": "boolean",
@@ -349,6 +362,20 @@
           "default": true,
           "syncable": true
         }
+      }
+    },
+    "welcome": {
+      "seen_pages": {
+        "type": "list",
+        "default": [],
+        "description": "Welcome pages marked as seen",
+        "syncable": false
+      },
+      "read_pages": {
+        "type": "list",
+        "default": [],
+        "description": "Welcome pages marked as consumed",
+        "syncable": false
       }
     },
     "windows": {
@@ -412,7 +439,6 @@
     "kExtensionURLOverrides": "extensions.chrome_url_overrides",
     "kPluginsAlwaysOpenPdfExternally": "plugins.always_open_pdf_externally",
     "kSafeBrowsingEnabled": "safebrowsing.enabled",
-    "kSafeBrowsingExtendedReportingEnabled": "safebrowsing.extended_reporting_enabled",
     "kURLsToRestoreOnStartup": "session.startup_urls",
     "kWebKitCursiveFontFamily": "webkit.webprefs.fonts.cursive.Zyyy",
     "kWebKitFantasyFontFamily": "webkit.webprefs.fonts.fantasy.Zyyy",
@@ -422,5 +448,9 @@
     "kWebKitSerifFontFamily": "webkit.webprefs.fonts.serif.Zyyy",
     "kWebKitStandardFontFamily": "webkit.webprefs.fonts.standard.Zyyy",
     "kWebRTCIPHandlingPolicy": "webrtc.ip_handling_policy"
+  },
+
+  "chromium_local": {
+    "kHardwareAccelerationModeEnabled": "hardware_acceleration_mode.enabled"
   }
 }

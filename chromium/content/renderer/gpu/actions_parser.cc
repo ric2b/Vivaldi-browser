@@ -5,7 +5,6 @@
 #include "content/renderer/gpu/actions_parser.h"
 
 #include "base/format_macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -47,6 +46,10 @@ SyntheticPointerActionParams::Button ToSyntheticMouseButton(
     return SyntheticPointerActionParams::Button::MIDDLE;
   if (button == "right")
     return SyntheticPointerActionParams::Button::RIGHT;
+  if (button == "back")
+    return SyntheticPointerActionParams::Button::BACK;
+  if (button == "forward")
+    return SyntheticPointerActionParams::Button::FORWARD;
   NOTREACHED() << "Unexpected button";
   return SyntheticPointerActionParams::Button();
 }
@@ -89,9 +92,9 @@ bool ActionsParser::ParsePointerActionSequence() {
   for (size_t action_index = 0; action_index < longest_action_sequence_;
        ++action_index) {
     SyntheticPointerActionListParams::ParamList param_list;
-    for (const auto pointer_list : pointer_actions_list_) {
-      if (action_index < pointer_list.size())
-        param_list.push_back(pointer_list[action_index]);
+    for (const auto pointer_action_list : pointer_actions_list_) {
+      if (action_index < pointer_action_list.size())
+        param_list.push_back(pointer_action_list[action_index]);
     }
     gesture_params_.PushPointerActionParamsList(param_list);
   }
@@ -114,14 +117,6 @@ bool ActionsParser::ParsePointerActions(const base::DictionaryValue& pointer) {
 
   if (source_type_.empty()) {
     source_type_ = source_type;
-
-#if defined(OS_MACOSX)
-    if (source_type == "touch") {
-      error_message_ =
-          base::StringPrintf("Mac OS does not support touch events");
-      return false;
-    }
-#endif  // defined(OS_MACOSX)
   }
 
   if (source_type_ != source_type) {
@@ -210,7 +205,8 @@ bool ActionsParser::ParseAction(
         "actions[%d].actions.button is not a string", action_index_);
     return false;
   } else if (button_name != "left" && button_name != "middle" &&
-             button_name != "right") {
+             button_name != "right" && button_name != "back" &&
+             button_name != "forward") {
     error_message_ = base::StringPrintf(
         "actions[%d].actions.button is an unsupported button", action_index_);
     return false;

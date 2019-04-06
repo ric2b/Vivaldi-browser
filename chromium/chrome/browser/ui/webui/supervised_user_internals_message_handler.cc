@@ -27,6 +27,7 @@
 #include "components/supervised_user_error_page/supervised_user_error_page.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_ui.h"
 
 using content::BrowserThread;
@@ -126,18 +127,22 @@ SupervisedUserInternalsMessageHandler::
 void SupervisedUserInternalsMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  web_ui()->RegisterMessageCallback("registerForEvents",
-      base::Bind(&SupervisedUserInternalsMessageHandler::
-                     HandleRegisterForEvents,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "registerForEvents",
+      base::BindRepeating(
+          &SupervisedUserInternalsMessageHandler::HandleRegisterForEvents,
+          base::Unretained(this)));
 
-  web_ui()->RegisterMessageCallback("getBasicInfo",
-      base::Bind(&SupervisedUserInternalsMessageHandler::HandleGetBasicInfo,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getBasicInfo",
+      base::BindRepeating(
+          &SupervisedUserInternalsMessageHandler::HandleGetBasicInfo,
+          base::Unretained(this)));
 
-  web_ui()->RegisterMessageCallback("tryURL",
-      base::Bind(&SupervisedUserInternalsMessageHandler::HandleTryURL,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "tryURL",
+      base::BindRepeating(&SupervisedUserInternalsMessageHandler::HandleTryURL,
+                          base::Unretained(this)));
 }
 
 void SupervisedUserInternalsMessageHandler::OnURLFilterChanged() {

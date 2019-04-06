@@ -4,13 +4,68 @@
 
 #include "extensions/browser/api/media_perception_private/conversion_utils.h"
 
-#include "base/memory/ptr_util.h"
 
 namespace extensions {
 namespace api {
 namespace media_perception_private {
 
 namespace {
+
+HotwordType HotwordTypeProtoToIdl(const mri::HotwordDetection::Type& type) {
+  switch (type) {
+    case mri::HotwordDetection::UNKNOWN_TYPE:
+      return HOTWORD_TYPE_UNKNOWN_TYPE;
+    case mri::HotwordDetection::OK_GOOGLE:
+      return HOTWORD_TYPE_OK_GOOGLE;
+  }
+  NOTREACHED() << "Unknown hotword type: " << type;
+  return HOTWORD_TYPE_UNKNOWN_TYPE;
+}
+
+Hotword HotwordProtoToIdl(const mri::HotwordDetection::Hotword& hotword) {
+  Hotword hotword_result;
+  if (hotword.has_id())
+    hotword_result.id = std::make_unique<int>(hotword.id());
+
+  if (hotword.has_type())
+    hotword_result.type = HotwordTypeProtoToIdl(hotword.type());
+
+  if (hotword.has_frame_id())
+    hotword_result.frame_id = std::make_unique<int>(hotword.frame_id());
+
+  if (hotword.has_start_timestamp_ms()) {
+    hotword_result.start_timestamp_ms =
+        std::make_unique<int>(hotword.start_timestamp_ms());
+  }
+
+  if (hotword.has_end_timestamp_ms()) {
+    hotword_result.end_timestamp_ms =
+        std::make_unique<int>(hotword.end_timestamp_ms());
+  }
+
+  if (hotword.has_confidence())
+    hotword_result.confidence = std::make_unique<double>(hotword.confidence());
+
+  if (hotword.has_id())
+    hotword_result.id = std::make_unique<int>(hotword.id());
+
+  return hotword_result;
+}
+
+std::unique_ptr<HotwordDetection> HotwordDetectionProtoToIdl(
+    const mri::HotwordDetection& detection) {
+  std::unique_ptr<HotwordDetection> detection_result =
+      std::make_unique<HotwordDetection>();
+
+  if (detection.hotwords_size() > 0) {
+    detection_result->hotwords = std::make_unique<std::vector<Hotword>>();
+    for (const auto& hotword : detection.hotwords()) {
+      detection_result->hotwords->emplace_back(HotwordProtoToIdl(hotword));
+    }
+  }
+
+  return detection_result;
+}
 
 std::unique_ptr<AudioSpectrogram> AudioSpectrogramProtoToIdl(
     const mri::AudioSpectrogram& spectrogram) {
@@ -78,6 +133,10 @@ AudioPerception AudioPerceptionProtoToIdl(
     perception_result.audio_human_presence_detection =
         AudioHumanPresenceDetectionProtoToIdl(
             perception.audio_human_presence_detection());
+  }
+  if (perception.has_hotword_detection()) {
+    perception_result.hotword_detection =
+        HotwordDetectionProtoToIdl(perception.hotword_detection());
   }
   return perception_result;
 }
@@ -171,6 +230,14 @@ std::unique_ptr<Point> PointProtoToIdl(const mri::Point& point) {
     point_result->y = std::make_unique<double>(point.y());
 
   return point_result;
+}
+
+void PointIdlToProto(const Point& point, mri::Point* point_result) {
+  if (point.x)
+    point_result->set_x(*point.x);
+
+  if (point.y)
+    point_result->set_y(*point.y);
 }
 
 std::unique_ptr<BoundingBox> BoundingBoxProtoToIdl(
@@ -442,6 +509,58 @@ void VideoStreamParamIdlToProto(mri::VideoStreamParam* param_result,
 
 }  //  namespace
 
+std::unique_ptr<Whiteboard> WhiteboardProtoToIdl(
+    const mri::Whiteboard& whiteboard) {
+  std::unique_ptr<Whiteboard> whiteboard_result =
+      std::make_unique<Whiteboard>();
+  if (whiteboard.has_top_left())
+    whiteboard_result->top_left = PointProtoToIdl(whiteboard.top_left());
+
+  if (whiteboard.has_top_right())
+    whiteboard_result->top_right = PointProtoToIdl(whiteboard.top_right());
+
+  if (whiteboard.has_bottom_left())
+    whiteboard_result->bottom_left = PointProtoToIdl(whiteboard.bottom_left());
+
+  if (whiteboard.has_bottom_right()) {
+    whiteboard_result->bottom_right =
+        PointProtoToIdl(whiteboard.bottom_right());
+  }
+
+  if (whiteboard.has_aspect_ratio()) {
+    whiteboard_result->aspect_ratio =
+        std::make_unique<double>(whiteboard.aspect_ratio());
+  }
+
+  return whiteboard_result;
+}
+
+void WhiteboardIdlToProto(const Whiteboard& whiteboard,
+                          mri::Whiteboard *whiteboard_result) {
+  if (whiteboard.top_left) {
+    PointIdlToProto(*whiteboard.top_left,
+                    whiteboard_result->mutable_top_left());
+  }
+
+  if (whiteboard.top_right) {
+    PointIdlToProto(*whiteboard.top_right,
+                    whiteboard_result->mutable_top_right());
+  }
+
+  if (whiteboard.bottom_left) {
+    PointIdlToProto(*whiteboard.bottom_left,
+                    whiteboard_result->mutable_bottom_left());
+  }
+
+  if (whiteboard.bottom_right) {
+    PointIdlToProto(*whiteboard.bottom_right,
+                    whiteboard_result->mutable_bottom_right());
+  }
+
+  if (whiteboard.aspect_ratio)
+    whiteboard_result->set_aspect_ratio(*whiteboard.aspect_ratio);
+}
+
 State StateProtoToIdl(const mri::State& state) {
   State state_result;
   if (state.has_status()) {
@@ -455,6 +574,9 @@ State StateProtoToIdl(const mri::State& state) {
     state_result.configuration =
         std::make_unique<std::string>(state.configuration());
   }
+  if (state.has_whiteboard())
+    state_result.whiteboard = WhiteboardProtoToIdl(state.whiteboard());
+
   return state_result;
 }
 
@@ -475,6 +597,9 @@ mri::State StateIdlToProto(const State& state) {
                                  state.video_stream_param.get()->at(i));
     }
   }
+
+  if (state.whiteboard)
+    WhiteboardIdlToProto(*state.whiteboard, state_result.mutable_whiteboard());
 
   return state_result;
 }

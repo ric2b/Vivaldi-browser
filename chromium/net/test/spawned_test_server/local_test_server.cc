@@ -77,7 +77,7 @@ LocalTestServer::~LocalTestServer() {
 
 bool LocalTestServer::GetTestServerPath(base::FilePath* testserver_path) const {
   base::FilePath testserver_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &testserver_dir)) {
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &testserver_dir)) {
     LOG(ERROR) << "Failed to get DIR_SOURCE_ROOT";
     return false;
   }
@@ -123,10 +123,11 @@ bool LocalTestServer::Stop() {
     return true;
 
   // First check if the process has already terminated.
-  int exit_code;
-  bool ret = process_.WaitForExitWithTimeout(base::TimeDelta(), &exit_code);
-  if (!ret)
+  bool ret = process_.WaitForExitWithTimeout(base::TimeDelta(), nullptr);
+  if (!ret) {
+    base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait_process;
     ret = process_.Terminate(1, true);
+  }
 
   if (ret)
     process_.Close();
@@ -147,7 +148,7 @@ bool LocalTestServer::Init(const base::FilePath& document_root) {
   DCHECK(!GetPort());
 
   base::FilePath src_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
     return false;
   SetResourcePath(src_dir.Append(document_root),
                   src_dir.AppendASCII("net")
@@ -161,7 +162,7 @@ bool LocalTestServer::SetPythonPath() const {
   ClearPythonPath();
 
   base::FilePath third_party_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &third_party_dir)) {
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &third_party_dir)) {
     LOG(ERROR) << "Failed to get DIR_SOURCE_ROOT";
     return false;
   }

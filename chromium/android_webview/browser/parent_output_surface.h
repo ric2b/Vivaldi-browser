@@ -29,6 +29,9 @@ class ParentOutputSurface : public viz::OutputSurface {
                bool has_alpha,
                bool use_stencil) override;
   void SwapBuffers(viz::OutputSurfaceFrame frame) override;
+#if BUILDFLAG(ENABLE_VULKAN)
+  gpu::VulkanSurface* GetVulkanSurface() override;
+#endif
   bool HasExternalStencilTest() const override;
   void ApplyExternalStencil() override;
   uint32_t GetFramebufferCopyTextureFormat() override;
@@ -36,7 +39,7 @@ class ParentOutputSurface : public viz::OutputSurface {
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
-  bool SurfaceIsSuspendForRecycle() const override;
+  unsigned UpdateGpuFence() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ParentOutputSurface);

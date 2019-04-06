@@ -23,116 +23,133 @@ namespace {
     TestSchemaValidationHelper(          \
         base::StringPrintf("%s:%i", __FILE__, __LINE__), a, b, c, d)
 
-const char kTestSchema[] =
-    "{"
-    "  \"type\": \"object\","
-    "  \"properties\": {"
-    "    \"Boolean\": { \"type\": \"boolean\" },"
-    "    \"Integer\": { \"type\": \"integer\" },"
-    "    \"Null\": { \"type\": \"null\" },"
-    "    \"Number\": { \"type\": \"number\" },"
-    "    \"String\": { \"type\": \"string\" },"
-    "    \"Array\": {"
-    "      \"type\": \"array\","
-    "      \"items\": { \"type\": \"string\" }"
-    "    },"
-    "    \"ArrayOfObjects\": {"
-    "      \"type\": \"array\","
-    "      \"items\": {"
-    "        \"type\": \"object\","
-    "        \"properties\": {"
-    "          \"one\": { \"type\": \"string\" },"
-    "          \"two\": { \"type\": \"integer\" }"
-    "        }"
-    "      }"
-    "    },"
-    "    \"ArrayOfArray\": {"
-    "      \"type\": \"array\","
-    "      \"items\": {"
-    "        \"type\": \"array\","
-    "        \"items\": { \"type\": \"string\" }"
-    "      }"
-    "    },"
-    "    \"Object\": {"
-    "      \"type\": \"object\","
-    "      \"properties\": {"
-    "        \"one\": { \"type\": \"boolean\" },"
-    "        \"two\": { \"type\": \"integer\" }"
-    "      },"
-    "      \"additionalProperties\": { \"type\": \"string\" }"
-    "    },"
-    "    \"ObjectOfObject\": {"
-    "      \"type\": \"object\","
-    "      \"properties\": {"
-    "        \"Object\": {"
-    "          \"type\": \"object\","
-    "          \"properties\": {"
-    "            \"one\": { \"type\": \"string\" },"
-    "            \"two\": { \"type\": \"integer\" }"
-    "          }"
-    "        }"
-    "      }"
-    "    },"
-    "    \"IntegerWithEnums\": {"
-    "      \"type\": \"integer\","
-    "      \"enum\": [1, 2, 3]"
-    "    },"
-    "    \"IntegerWithEnumsGaps\": {"
-    "      \"type\": \"integer\","
-    "      \"enum\": [10, 20, 30]"
-    "    },"
-    "    \"StringWithEnums\": {"
-    "      \"type\": \"string\","
-    "      \"enum\": [\"one\", \"two\", \"three\"]"
-    "    },"
-    "    \"IntegerWithRange\": {"
-    "      \"type\": \"integer\","
-    "      \"minimum\": 1,"
-    "      \"maximum\": 3"
-    "    },"
-    "    \"ObjectOfArray\": {"
-    "      \"type\": \"object\","
-    "      \"properties\": {"
-    "        \"List\": {"
-    "          \"type\": \"array\","
-    "          \"items\": { \"type\": \"integer\" }"
-    "        }"
-    "      }"
-    "    },"
-    "    \"ArrayOfObjectOfArray\": {"
-    "      \"type\": \"array\","
-    "      \"items\": {"
-    "        \"type\": \"object\","
-    "        \"properties\": {"
-    "          \"List\": {"
-    "            \"type\": \"array\","
-    "            \"items\": { \"type\": \"string\" }"
-    "          }"
-    "        }"
-    "      }"
-    "    },"
-    "    \"StringWithPattern\": {"
-    "      \"type\": \"string\","
-    "      \"pattern\": \"^foo+$\""
-    "    },"
-    "    \"ObjectWithPatternProperties\": {"
-    "      \"type\": \"object\","
-    "      \"patternProperties\": {"
-    "        \"^foo+$\": { \"type\": \"integer\" },"
-    "        \"^bar+$\": {"
-    "          \"type\": \"string\","
-    "          \"enum\": [\"one\", \"two\"]"
-    "        }"
-    "      },"
-    "      \"properties\": {"
-    "        \"bar\": {"
-    "          \"type\": \"string\","
-    "          \"enum\": [\"one\", \"three\"]"
-    "        }"
-    "      }"
-    "    }"
-    "  }"
-    "}";
+const char kTestSchema[] = R"({
+  "type": "object",
+  "properties": {
+    "Boolean": { "type": "boolean" },
+    "Integer": { "type": "integer" },
+    "Null": { "type": "null" },
+    "Number": { "type": "number" },
+    "String": { "type": "string" },
+    "Array": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "ArrayOfObjects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "one": { "type": "string" },
+          "two": { "type": "integer" }
+        }
+      }
+    },
+    "ArrayOfArray": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "Object": {
+      "type": "object",
+      "properties": {
+        "one": { "type": "boolean" },
+        "two": { "type": "integer" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "ObjectOfObject": {
+      "type": "object",
+      "properties": {
+        "Object": {
+          "type": "object",
+          "properties": {
+            "one": { "type": "string" },
+            "two": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "IntegerWithEnums": {
+      "type": "integer",
+      "enum": [1, 2, 3]
+    },
+    "IntegerWithEnumsGaps": {
+      "type": "integer",
+      "enum": [10, 20, 30]
+    },
+    "StringWithEnums": {
+      "type": "string",
+      "enum": ["one", "two", "three"]
+    },
+    "IntegerWithRange": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "ObjectOfArray": {
+      "type": "object",
+      "properties": {
+        "List": {
+          "type": "array",
+          "items": { "type": "integer" }
+        }
+      }
+    },
+    "ArrayOfObjectOfArray": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "List": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "StringWithPattern": {
+      "type": "string",
+      "pattern": "^foo+$"
+    },
+    "ObjectWithPatternProperties": {
+      "type": "object",
+      "patternProperties": {
+        "^foo+$": { "type": "integer" },
+        "^bar+$": {
+          "type": "string",
+          "enum": ["one", "two"]
+        }
+      },
+      "properties": {
+        "bar": {
+          "type": "string",
+          "enum": ["one", "three"]
+        }
+      }
+    },
+    "ObjectWithRequiredProperties": {
+      "type": "object",
+      "properties": {
+        "Integer": {
+          "type": "integer",
+          "enum": [1, 2]
+        },
+        "String": { "type": "string" },
+        "Number": { "type": "number" }
+      },
+      "patternProperties": {
+        "^Integer": {
+          "type": "integer",
+          "enum": [1, 3]
+        }
+      },
+      "required": [ "Integer", "String" ]
+    }
+  }
+})";
 
 bool ParseFails(const std::string& content) {
   std::string error;
@@ -171,8 +188,7 @@ void TestSchemaValidationHelper(const std::string& source,
   // Test that Schema::Normalize() have actually dropped invalid and unknown
   // properties.
   if (expected_return_value) {
-    EXPECT_TRUE(
-        schema.Validate(*cloned_value.get(), SCHEMA_STRICT, nullptr, &error))
+    EXPECT_TRUE(schema.Validate(*cloned_value, SCHEMA_STRICT, nullptr, &error))
         << source;
     EXPECT_TRUE(schema.Normalize(cloned_value.get(), SCHEMA_STRICT, nullptr,
                                  &error, nullptr))
@@ -203,7 +219,7 @@ std::string SchemaObjectWrapper(const std::string& subschema) {
 }  // namespace
 
 TEST(SchemaTest, MinimalSchema) {
-  EXPECT_FALSE(ParseFails("{ \"type\": \"object\" }"));
+  EXPECT_FALSE(ParseFails(R"({ "type": "object" })"));
 }
 
 TEST(SchemaTest, InvalidSchemas) {
@@ -215,63 +231,56 @@ TEST(SchemaTest, InvalidSchemas) {
   EXPECT_TRUE(ParseFails("null"));
   EXPECT_TRUE(ParseFails("{}"));
 
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-        "\"additionalProperties\": { \"type\":\"object\" }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "additionalProperties": { "type":"object" }
+  })"));
 
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"patternProperties\": { \"a+b*\": { \"type\": \"object\" } }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "patternProperties": { "a+b*": { "type": "object" } }
+  })"));
 
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": { \"Policy\": { \"type\": \"bogus\" } }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "properties": { "Policy": { "type": "bogus" } }
+  })"));
 
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": { \"Policy\": { \"type\": [\"string\", \"number\"] } }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "properties": { "Policy": { "type": ["string", "number"] } }
+  })"));
 
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": { \"Policy\": { \"type\": \"any\" } }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "properties": { "Policy": { "type": "any" } }
+  })"));
 
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": { \"Policy\": 123 }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "properties": { "Policy": 123 }
+  })"));
 
-  EXPECT_FALSE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"unknown attribute\": \"is ignored\""
-      "}"));
+  EXPECT_FALSE(ParseFails(R"({
+    "type": "object",
+    "unknown attribute": "is ignored"
+  })"));
 }
 
 TEST(SchemaTest, Ownership) {
   std::string error;
-  Schema schema = Schema::Parse(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"sub\": {"
-      "      \"type\": \"object\","
-      "      \"properties\": {"
-      "        \"subsub\": { \"type\": \"string\" }"
-      "      }"
-      "    }"
-      "  }"
-      "}", &error);
+  Schema schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "sub": {
+        "type": "object",
+        "properties": {
+          "subsub": { "type": "string" }
+        }
+      }
+    }
+  })",
+                                &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -392,28 +401,33 @@ TEST(SchemaTest, ValidSchema) {
   ASSERT_TRUE(sub.valid());
   ASSERT_EQ(base::Value::Type::DICTIONARY, sub.type());
 
+  sub = schema.GetProperty("ObjectWithRequiredProperties");
+  ASSERT_TRUE(sub.valid());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, sub.type());
+
   struct {
     const char* expected_key;
     base::Value::Type expected_type;
   } kExpectedProperties[] = {
-    { "Array",                       base::Value::Type::LIST },
-    { "ArrayOfArray",                base::Value::Type::LIST },
-    { "ArrayOfObjectOfArray",        base::Value::Type::LIST },
-    { "ArrayOfObjects",              base::Value::Type::LIST },
-    { "Boolean",                     base::Value::Type::BOOLEAN },
-    { "Integer",                     base::Value::Type::INTEGER },
-    { "IntegerWithEnums",            base::Value::Type::INTEGER },
-    { "IntegerWithEnumsGaps",        base::Value::Type::INTEGER },
-    { "IntegerWithRange",            base::Value::Type::INTEGER },
-    { "Null",                        base::Value::Type::NONE },
-    { "Number",                      base::Value::Type::DOUBLE },
-    { "Object",                      base::Value::Type::DICTIONARY },
-    { "ObjectOfArray",               base::Value::Type::DICTIONARY },
-    { "ObjectOfObject",              base::Value::Type::DICTIONARY },
-    { "ObjectWithPatternProperties", base::Value::Type::DICTIONARY },
-    { "String",                      base::Value::Type::STRING },
-    { "StringWithEnums",             base::Value::Type::STRING },
-    { "StringWithPattern",           base::Value::Type::STRING },
+    { "Array",                        base::Value::Type::LIST },
+    { "ArrayOfArray",                 base::Value::Type::LIST },
+    { "ArrayOfObjectOfArray",         base::Value::Type::LIST },
+    { "ArrayOfObjects",               base::Value::Type::LIST },
+    { "Boolean",                      base::Value::Type::BOOLEAN },
+    { "Integer",                      base::Value::Type::INTEGER },
+    { "IntegerWithEnums",             base::Value::Type::INTEGER },
+    { "IntegerWithEnumsGaps",         base::Value::Type::INTEGER },
+    { "IntegerWithRange",             base::Value::Type::INTEGER },
+    { "Null",                         base::Value::Type::NONE },
+    { "Number",                       base::Value::Type::DOUBLE },
+    { "Object",                       base::Value::Type::DICTIONARY },
+    { "ObjectOfArray",                base::Value::Type::DICTIONARY },
+    { "ObjectOfObject",               base::Value::Type::DICTIONARY },
+    { "ObjectWithPatternProperties",  base::Value::Type::DICTIONARY },
+    { "ObjectWithRequiredProperties", base::Value::Type::DICTIONARY },
+    { "String",                       base::Value::Type::STRING },
+    { "StringWithEnums",              base::Value::Type::STRING },
+    { "StringWithPattern",            base::Value::Type::STRING },
   };
   Schema::Iterator it = schema.GetPropertiesIterator();
   for (size_t i = 0; i < arraysize(kExpectedProperties); ++i) {
@@ -429,7 +443,7 @@ TEST(SchemaTest, ValidSchema) {
 TEST(SchemaTest, Lookups) {
   std::string error;
 
-  Schema schema = Schema::Parse("{ \"type\": \"object\" }", &error);
+  Schema schema = Schema::Parse(R"({ "type": "object" })", &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -438,13 +452,13 @@ TEST(SchemaTest, Lookups) {
   EXPECT_FALSE(schema.GetKnownProperty("xyz").valid());
   EXPECT_TRUE(schema.GetPropertiesIterator().IsAtEnd());
 
-  schema = Schema::Parse(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"Boolean\": { \"type\": \"boolean\" }"
-      "  }"
-      "}", &error);
+  schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "Boolean": { "type": "boolean" }
+    }
+  })",
+                         &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -452,17 +466,17 @@ TEST(SchemaTest, Lookups) {
   EXPECT_FALSE(schema.GetKnownProperty("xyz").valid());
   EXPECT_TRUE(schema.GetKnownProperty("Boolean").valid());
 
-  schema = Schema::Parse(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"bb\" : { \"type\": \"null\" },"
-      "    \"aa\" : { \"type\": \"boolean\" },"
-      "    \"abab\" : { \"type\": \"string\" },"
-      "    \"ab\" : { \"type\": \"number\" },"
-      "    \"aba\" : { \"type\": \"integer\" }"
-      "  }"
-      "}", &error);
+  schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "bb" : { "type": "null" },
+      "aa" : { "type": "boolean" },
+      "abab" : { "type": "string" },
+      "ab" : { "type": "number" },
+      "aba" : { "type": "integer" }
+    }
+  })",
+                         &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -484,6 +498,34 @@ TEST(SchemaTest, Lookups) {
     ASSERT_TRUE(sub.valid());
     EXPECT_EQ(kExpectedKeys[i].expected_type, sub.type());
   }
+
+  schema = Schema::Parse(R"(
+    {
+      "type": "object",
+      "properties": {
+        "String": { "type": "string" },
+        "Object": {
+          "type": "object",
+          "properties": {"Integer": {"type": "integer"}},
+          "required": [ "Integer" ]
+        },
+        "Number": { "type": "number" }
+      },
+      "required": [ "String", "Object"]
+    })",
+                         &error);
+  ASSERT_TRUE(schema.valid()) << error;
+  ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
+
+  EXPECT_EQ(std::vector<std::string>({"String", "Object"}),
+            schema.GetRequiredProperties());
+
+  schema = schema.GetKnownProperty("Object");
+  ASSERT_TRUE(schema.valid()) << error;
+  ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
+
+  EXPECT_EQ(std::vector<std::string>({"Integer"}),
+            schema.GetRequiredProperties());
 }
 
 TEST(SchemaTest, Wrap) {
@@ -499,25 +541,34 @@ TEST(SchemaTest, Wrap) {
     { base::Value::Type::INTEGER,      1 },    //  8: ranged integers.
     { base::Value::Type::STRING,       2 },    //  9: string enumerations.
     { base::Value::Type::STRING,       3 },    // 10: string with pattern.
+    { base::Value::Type::DICTIONARY,   1 },    // 11: dictionary with required
+                                             //     properties
   };
 
   const internal::PropertyNode kPropertyNodes[] = {
-    { "Boolean",   1 },  // 0
-    { "Integer",   2 },  // 1
-    { "Number",    3 },  // 2
-    { "String",    4 },  // 3
-    { "List",      5 },  // 4
-    { "IntEnum",   7 },  // 5
-    { "RangedInt", 8 },  // 6
-    { "StrEnum",   9 },  // 7
-    { "StrPat",   10 },  // 8
-    { "bar+$",     4 },  // 9
+    { "Boolean",       1},  //  0
+    { "DictRequired", 11},  //  1
+    { "Integer",       2},  //  2
+    { "List",          5},  //  3
+    { "Number",        3},  //  4
+    { "String",        4},  //  5
+    { "IntEnum",       7},  //  6
+    { "RangedInt",     8},  //  7
+    { "StrEnum",       9},  //  8
+    { "StrPat",       10},  //  9
+    { "bar+$",         4},  // 10
+    { "String",        4},  // 11
+    { "Number",        3},  // 12
   };
 
   const internal::PropertiesNode kProperties[] = {
-    // 0 to 9 (exclusive) are the known properties in kPropertyNodes, 9 is
+    // 0 to 10 (exclusive) are the known properties in kPropertyNodes, 9 is
     // patternProperties and 6 is the additionalProperties node.
-    { 0, 9, 10, 6 },
+    { 0, 10, 11, 0, 0, 6 },
+    // 11 to 13 (exclusive) are the known properties in kPropertyNodes. 0 to
+    // 1 (exclusive) are the required properties in kRequired. -1 indicates
+    // no additionalProperties.
+    { 11, 13, 13, 0, 1, -1 },
   };
 
   const internal::RestrictionNode kRestriction[] = {
@@ -526,6 +577,8 @@ TEST(SchemaTest, Wrap) {
     {{0, 3}},  // 2: ["one", "two", "three"]
     {{3, 3}},  // 3: pattern "foo+"
   };
+
+  const char* kRequired[] = {"String"};
 
   const int kIntEnums[] = {1, 2, 3};
 
@@ -537,27 +590,29 @@ TEST(SchemaTest, Wrap) {
   };
 
   const internal::SchemaData kData = {
-    kSchemas,
-    kPropertyNodes,
-    kProperties,
-    kRestriction,
-    kIntEnums,
-    kStringEnums,
+      kSchemas,  kPropertyNodes, kProperties,  kRestriction,
+      kRequired, kIntEnums,      kStringEnums,
+      -1,       // validation_schema_root_index
+      nullptr,  // schema_nodes_metadata
   };
 
   Schema schema = Schema::Wrap(&kData);
   ASSERT_TRUE(schema.valid());
   EXPECT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
+  // Wrapped schemas have no |SchemaNodeMetadata| elements.
+  EXPECT_FALSE(schema.IsSensitiveValue());
+
   struct {
     const char* key;
     base::Value::Type type;
   } kExpectedProperties[] = {
     { "Boolean", base::Value::Type::BOOLEAN },
+    { "DictRequired", base::Value::Type::DICTIONARY },
     { "Integer", base::Value::Type::INTEGER },
+    { "List", base::Value::Type::LIST },
     { "Number", base::Value::Type::DOUBLE },
     { "String", base::Value::Type::STRING },
-    { "List", base::Value::Type::LIST },
     { "IntEnum", base::Value::Type::INTEGER },
     { "RangedInt", base::Value::Type::INTEGER },
     { "StrEnum", base::Value::Type::STRING },
@@ -600,6 +655,12 @@ TEST(SchemaTest, Wrap) {
 
   EXPECT_TRUE(schema.GetPatternProperties("ba").empty());
   EXPECT_TRUE(schema.GetPatternProperties("bar+$").empty());
+
+  Schema dict = schema.GetKnownProperty("DictRequired");
+  ASSERT_TRUE(dict.valid());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, dict.type());
+
+  EXPECT_EQ(std::vector<std::string>({"String"}), dict.GetRequiredProperties());
 }
 
 TEST(SchemaTest, Validate) {
@@ -679,6 +740,14 @@ TEST(SchemaTest, Validate) {
     dict.SetString("additionally", "a string");
     dict.SetString("and also", "another string");
     bundle.SetKey("Object", std::move(dict));
+  }
+
+  {
+    base::DictionaryValue dict;
+    dict.SetInteger("Integer", 1);
+    dict.SetString("String", "a string");
+    dict.SetDouble("Number", 3.14);
+    bundle.SetKey("ObjectWithRequiredProperties", std::move(dict));
   }
 
   bundle.SetInteger("IntegerWithEnums", 1);
@@ -917,6 +986,52 @@ TEST(SchemaTest, Validate) {
     root.Remove("foobar", nullptr);
   }
 
+  // Tests on ObjectWithRequiredProperties
+  {
+    Schema subschema = schema.GetProperty("ObjectWithRequiredProperties");
+    ASSERT_TRUE(subschema.valid());
+    base::DictionaryValue root;
+
+    // Required property missing.
+    root.SetInteger("Integer", 1);
+    root.SetDouble("Number", 3.14);
+    TestSchemaValidation(subschema, root, SCHEMA_STRICT, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID, false);
+
+    // Invalid required property.
+    root.SetInteger("String", 123);
+    TestSchemaValidation(subschema, root, SCHEMA_STRICT, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID, false);
+    root.SetString("String", "a string");
+
+    // Invalid subschema of required property with multiple subschemas.
+    //
+    // The "Integer" property has two subschemas, one in "properties" and one
+    // in "patternProperties". The first test generates a valid schema for the
+    // first subschema and the second test generates a valid schema for the
+    // second subschema. In both cases validation should fail because one of the
+    // required properties is invalid.
+    root.SetInteger("Integer", 2);
+    TestSchemaValidation(subschema, root, SCHEMA_STRICT, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID, false);
+
+    root.SetInteger("Integer", 3);
+    TestSchemaValidation(subschema, root, SCHEMA_STRICT, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_UNKNOWN, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID_TOPLEVEL, false);
+    TestSchemaValidation(subschema, root, SCHEMA_ALLOW_INVALID, false);
+  }
+
   // Test that integer to double promotion is allowed.
   bundle.SetInteger("Number", 31415);
   TestSchemaValidation(schema, bundle, SCHEMA_STRICT, true);
@@ -924,79 +1039,74 @@ TEST(SchemaTest, Validate) {
 
 TEST(SchemaTest, InvalidReferences) {
   // References to undeclared schemas fail.
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"name\": { \"$ref\": \"undeclared\" }"
-      "  }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "properties": {
+      "name": { "$ref": "undeclared" }
+    }
+  })"));
 
   // Can't refer to self.
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"name\": {"
-      "      \"id\": \"self\","
-      "      \"$ref\": \"self\""
-      "    }"
-      "  }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "properties": {
+      "name": {
+        "id": "self",
+        "$ref": "self"
+      }
+    }
+  })"));
 
   // Duplicated IDs are invalid.
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"name\": {"
-      "      \"id\": \"x\","
-      "      \"type\": \"string\""
-      "    },"
-      "    \"another\": {"
-      "      \"id\": \"x\","
-      "      \"type\": \"string\""
-      "    }"
-      "  }"
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "properties": {
+      "name": {
+        "id": "x",
+        "type": "string"
+      },
+      "another": {
+        "id": "x",
+        "type": "string"
+      }
+    }
+  })"));
 
   // Main object can't be a reference.
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"id\": \"main\","
-      "  \"$ref\": \"main\""
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "id": "main",
+    "$ref": "main"
+  })"));
 
-  EXPECT_TRUE(ParseFails(
-      "{"
-      "  \"type\": \"object\","
-      "  \"$ref\": \"main\""
-      "}"));
+  EXPECT_TRUE(ParseFails(R"({
+    "type": "object",
+    "$ref": "main"
+  })"));
 }
 
 TEST(SchemaTest, RecursiveReferences) {
   // Verifies that references can go to a parent schema, to define a
   // recursive type.
   std::string error;
-  Schema schema = Schema::Parse(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"bookmarks\": {"
-      "      \"type\": \"array\","
-      "      \"id\": \"ListOfBookmarks\","
-      "      \"items\": {"
-      "        \"type\": \"object\","
-      "        \"properties\": {"
-      "          \"name\": { \"type\": \"string\" },"
-      "          \"url\": { \"type\": \"string\" },"
-      "          \"children\": { \"$ref\": \"ListOfBookmarks\" }"
-      "        }"
-      "      }"
-      "    }"
-      "  }"
-      "}", &error);
+  Schema schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "bookmarks": {
+        "type": "array",
+        "id": "ListOfBookmarks",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "url": { "type": "string" },
+            "children": { "$ref": "ListOfBookmarks" }
+          }
+        }
+      }
+    }
+  })",
+                                &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -1029,24 +1139,24 @@ TEST(SchemaTest, RecursiveReferences) {
 TEST(SchemaTest, UnorderedReferences) {
   // Verifies that references and IDs can come in any order.
   std::string error;
-  Schema schema = Schema::Parse(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"a\": { \"$ref\": \"shared\" },"
-      "    \"b\": { \"$ref\": \"shared\" },"
-      "    \"c\": { \"$ref\": \"shared\" },"
-      "    \"d\": { \"$ref\": \"shared\" },"
-      "    \"e\": {"
-      "      \"type\": \"boolean\","
-      "      \"id\": \"shared\""
-      "    },"
-      "    \"f\": { \"$ref\": \"shared\" },"
-      "    \"g\": { \"$ref\": \"shared\" },"
-      "    \"h\": { \"$ref\": \"shared\" },"
-      "    \"i\": { \"$ref\": \"shared\" }"
-      "  }"
-      "}", &error);
+  Schema schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "a": { "$ref": "shared" },
+      "b": { "$ref": "shared" },
+      "c": { "$ref": "shared" },
+      "d": { "$ref": "shared" },
+      "e": {
+        "type": "boolean",
+        "id": "shared"
+      },
+      "f": { "$ref": "shared" },
+      "g": { "$ref": "shared" },
+      "h": { "$ref": "shared" },
+      "i": { "$ref": "shared" }
+    }
+  })",
+                                &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -1060,22 +1170,22 @@ TEST(SchemaTest, UnorderedReferences) {
 TEST(SchemaTest, AdditionalPropertiesReference) {
   // Verifies that "additionalProperties" can be a reference.
   std::string error;
-  Schema schema = Schema::Parse(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"policy\": {"
-      "      \"type\": \"object\","
-      "      \"properties\": {"
-      "        \"foo\": {"
-      "          \"type\": \"boolean\","
-      "          \"id\": \"FooId\""
-      "        }"
-      "      },"
-      "      \"additionalProperties\": { \"$ref\": \"FooId\" }"
-      "    }"
-      "  }"
-      "}", &error);
+  Schema schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "policy": {
+        "type": "object",
+        "properties": {
+          "foo": {
+            "type": "boolean",
+            "id": "FooId"
+          }
+        },
+        "additionalProperties": { "$ref": "FooId" }
+      }
+    }
+  })",
+                                &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -1099,20 +1209,20 @@ TEST(SchemaTest, AdditionalPropertiesReference) {
 TEST(SchemaTest, ItemsReference) {
   // Verifies that "items" can be a reference.
   std::string error;
-  Schema schema = Schema::Parse(
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"foo\": {"
-      "      \"type\": \"boolean\","
-      "      \"id\": \"FooId\""
-      "    },"
-      "    \"list\": {"
-      "      \"type\": \"array\","
-      "      \"items\": { \"$ref\": \"FooId\" }"
-      "    }"
-      "  }"
-      "}", &error);
+  Schema schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "foo": {
+        "type": "boolean",
+        "id": "FooId"
+      },
+      "list": {
+        "type": "array",
+        "items": { "$ref": "FooId" }
+      }
+    }
+  })",
+                                &error);
   ASSERT_TRUE(schema.valid()) << error;
   ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
 
@@ -1129,55 +1239,122 @@ TEST(SchemaTest, ItemsReference) {
   ASSERT_EQ(base::Value::Type::BOOLEAN, items.type());
 }
 
+TEST(SchemaTest, SchemaNodeMetadataSensitiveValues) {
+  std::string error;
+  Schema schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "foo": {
+        "type": "boolean"
+      },
+      "bar": {
+        "type": "string",
+        "sensitiveValue": true
+      }
+    }
+  })",
+                                &error);
+  ASSERT_TRUE(schema.valid()) << error;
+  ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
+  EXPECT_FALSE(schema.IsSensitiveValue());
+
+  Schema foo_schema = schema.GetKnownProperty("foo");
+  ASSERT_TRUE(foo_schema.valid());
+  EXPECT_EQ(base::Value::Type::BOOLEAN, foo_schema.type());
+  EXPECT_FALSE(foo_schema.IsSensitiveValue());
+
+  Schema bar_schema = schema.GetKnownProperty("bar");
+  ASSERT_TRUE(bar_schema.valid());
+  EXPECT_EQ(base::Value::Type::STRING, bar_schema.type());
+  EXPECT_TRUE(bar_schema.IsSensitiveValue());
+
+  // Run |MaskSensitiveValues| on the top-level schema
+  base::Value value(base::Value::Type::DICTIONARY);
+  value.SetKey("foo", base::Value(true));
+  value.SetKey("bar", base::Value("testvalue"));
+  schema.MaskSensitiveValues(&value);
+
+  base::Value value_expected(base::Value::Type::DICTIONARY);
+  value_expected.SetKey("foo", base::Value(true));
+  value_expected.SetKey("bar", base::Value("********"));
+  EXPECT_EQ(value_expected, value);
+
+  // Run |MaskSensitiveValues| on a sub-schema
+  base::Value bar_value("testvalue");
+  bar_schema.MaskSensitiveValues(&bar_value);
+  EXPECT_EQ(base::Value("********"), bar_value);
+}
+
+TEST(SchemaTest, SchemaNodeNoSensitiveValues) {
+  std::string error;
+  Schema schema = Schema::Parse(R"({
+    "type": "object",
+    "properties": {
+      "foo": {
+        "type": "boolean"
+      }
+    }
+  })",
+                                &error);
+  ASSERT_TRUE(schema.valid()) << error;
+  ASSERT_EQ(base::Value::Type::DICTIONARY, schema.type());
+  EXPECT_FALSE(schema.IsSensitiveValue());
+
+  Schema foo = schema.GetKnownProperty("foo");
+  ASSERT_TRUE(foo.valid());
+  EXPECT_EQ(base::Value::Type::BOOLEAN, foo.type());
+  EXPECT_FALSE(foo.IsSensitiveValue());
+
+  base::Value value(base::Value::Type::DICTIONARY);
+  value.SetKey("foo", base::Value(true));
+
+  base::Value expected_value = value.Clone();
+  schema.MaskSensitiveValues(&value);
+  EXPECT_EQ(expected_value, value);
+}
+
 TEST(SchemaTest, EnumerationRestriction) {
   // Enum attribute is a list.
-  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(
-      "{"
-      "  \"type\": \"string\","
-      "  \"enum\": 12"
-      "}")));
+  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(R"({
+    "type": "string",
+    "enum": 12
+  })")));
 
   // Empty enum attributes is not allowed.
-  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(
-      "{"
-      "  \"type\": \"integer\","
-      "  \"enum\": []"
-      "}")));
+  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(R"({
+    "type": "integer",
+    "enum": []
+  })")));
 
   // Enum elements type should be same as stated.
-  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(
-      "{"
-      "  \"type\": \"string\","
-      "  \"enum\": [1, 2, 3]"
-      "}")));
+  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(R"({
+    "type": "string",
+    "enum": [1, 2, 3]
+  })")));
 
-  EXPECT_FALSE(ParseFails(SchemaObjectWrapper(
-      "{"
-      "  \"type\": \"integer\","
-      "  \"enum\": [1, 2, 3]"
-      "}")));
+  EXPECT_FALSE(ParseFails(SchemaObjectWrapper(R"({
+    "type": "integer",
+    "enum": [1, 2, 3]
+  })")));
 
-  EXPECT_FALSE(ParseFails(SchemaObjectWrapper(
-      "{"
-      "  \"type\": \"string\","
-      "  \"enum\": [\"1\", \"2\", \"3\"]"
-      "}")));
+  EXPECT_FALSE(ParseFails(SchemaObjectWrapper(R"({
+    "type": "string",
+    "enum": ["1", "2", "3"]
+  })")));
 }
 
 TEST(SchemaTest, RangedRestriction) {
-  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(
-      "{"
-      "  \"type\": \"integer\","
-      "  \"minimum\": 10,"
-      "  \"maximum\": 5"
-      "}")));
+  EXPECT_TRUE(ParseFails(SchemaObjectWrapper(R"({
+    "type": "integer",
+    "minimum": 10,
+    "maximum": 5
+  })")));
 
-  EXPECT_FALSE(ParseFails(SchemaObjectWrapper(
-      "{"
-      "  \"type\": \"integer\","
-      "  \"minimum\": 10,"
-      "  \"maximum\": 20"
-      "}")));
+  EXPECT_FALSE(ParseFails(SchemaObjectWrapper(R"({
+    "type": "integer",
+    "minimum": 10,
+    "maximum": 20
+  })")));
 }
 
 }  // namespace policy

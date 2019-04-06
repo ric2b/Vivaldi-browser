@@ -4,15 +4,14 @@
 
 #include "chrome/browser/ui/ash/multi_user/user_switch_animator_chromeos.h"
 
+#include "ash/app_list/app_list_controller_impl.h"
 #include "ash/shell.h"
-#include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_positioner.h"
 #include "base/macros.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
-#include "ui/app_list/presenter/app_list.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_tree_owner.h"
@@ -90,19 +89,18 @@ UserSwitchAnimatorChromeOS::UserSwitchAnimatorChromeOS(
       animation_step_(ANIMATION_STEP_HIDE_OLD_USER),
       screen_cover_(GetScreenCover(NULL)),
       windows_by_account_id_() {
-  ash::Shell::Get()->app_list()->Dismiss();
+  ash::Shell::Get()->app_list_controller()->DismissAppList();
   BuildUserToWindowsListMap();
   AdvanceUserTransitionAnimation();
 
   if (!animation_speed_ms_) {
     FinalizeAnimation();
   } else {
-    user_changed_animation_timer_.reset(new base::Timer(
+    user_changed_animation_timer_.reset(new base::RepeatingTimer());
+    user_changed_animation_timer_->Start(
         FROM_HERE, base::TimeDelta::FromMilliseconds(animation_speed_ms_),
         base::Bind(&UserSwitchAnimatorChromeOS::AdvanceUserTransitionAnimation,
-                   base::Unretained(this)),
-        true));
-    user_changed_animation_timer_->Reset();
+                   base::Unretained(this)));
   }
 }
 
@@ -163,17 +161,16 @@ void UserSwitchAnimatorChromeOS::FinalizeAnimation() {
 void UserSwitchAnimatorChromeOS::TransitionWallpaper(
     AnimationStep animation_step) {
   // Handle the wallpaper switch.
-  ash::WallpaperDelegate* wallpaper_delegate =
-      ash::Shell::Get()->wallpaper_delegate();
   if (animation_step == ANIMATION_STEP_HIDE_OLD_USER) {
     // Set the wallpaper cross dissolve animation duration to our complete
     // animation cycle for a fade in and fade out.
     int duration =
         NO_USER_COVERS_SCREEN == screen_cover_ ? (2 * animation_speed_ms_) : 0;
-    wallpaper_delegate->SetAnimationDurationOverride(
-        std::max(duration, kMinimalAnimationTimeMS));
+    WallpaperControllerClient::Get()->SetAnimationDuration(
+        base::TimeDelta::FromMilliseconds(
+            std::max(duration, kMinimalAnimationTimeMS)));
     if (screen_cover_ != NEW_USER_COVERS_SCREEN) {
-      chromeos::WallpaperManager::Get()->ShowUserWallpaper(new_account_id_);
+      WallpaperControllerClient::Get()->ShowUserWallpaper(new_account_id_);
       wallpaper_user_id_for_test_ =
           (NO_USER_COVERS_SCREEN == screen_cover_ ? "->" : "") +
           new_account_id_.Serialize();
@@ -182,12 +179,12 @@ void UserSwitchAnimatorChromeOS::TransitionWallpaper(
     // Revert the wallpaper cross dissolve animation duration back to the
     // default.
     if (screen_cover_ == NEW_USER_COVERS_SCREEN)
-      chromeos::WallpaperManager::Get()->ShowUserWallpaper(new_account_id_);
+      WallpaperControllerClient::Get()->ShowUserWallpaper(new_account_id_);
 
     // Coming here the wallpaper user id is the final result. No matter how we
     // got here.
     wallpaper_user_id_for_test_ = new_account_id_.Serialize();
-    wallpaper_delegate->SetAnimationDurationOverride(0);
+    WallpaperControllerClient::Get()->SetAnimationDuration(base::TimeDelta());
   }
 }
 

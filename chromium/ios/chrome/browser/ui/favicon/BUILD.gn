@@ -10,27 +10,17 @@ source_set("favicon") {
     "favicon_attributes_with_payload.mm",
   ]
   deps = [
-    ":favicon_ui",
+    "resources:default_favicon",
+    "resources:default_world_favicon",
+    "resources:default_world_favicon_incognito",
+    "resources:default_world_favicon_regular",
     "//base",
     "//components/favicon/core",
     "//components/favicon_base",
     "//ios/chrome/browser/favicon",
+    "//ios/chrome/browser/ui:ui_util",
+    "//ios/chrome/common/favicon",
     "//url",
-  ]
-  configs += [ "//build/config/compiler:enable_arc" ]
-}
-
-source_set("favicon_ui") {
-  sources = [
-    "favicon_attributes+private.h",
-    "favicon_attributes.h",
-    "favicon_attributes.mm",
-    "favicon_view.h",
-    "favicon_view.mm",
-  ]
-  deps = [
-    "//base",
-    "//ios/chrome/browser/ui/util:constraints_ui",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }

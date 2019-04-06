@@ -53,7 +53,7 @@ class CRYPTO_EXPORT AutoSECMODListReadLock {
 // loaded and |callback| is non-null, the |callback| will be run once the slot
 // is loaded.
 CRYPTO_EXPORT ScopedPK11Slot GetSystemNSSKeySlot(
-    const base::Callback<void(ScopedPK11Slot)>& callback) WARN_UNUSED_RESULT;
+    base::OnceCallback<void(ScopedPK11Slot)> callback) WARN_UNUSED_RESULT;
 
 // Sets the test system slot to |slot|, which means that |slot| will be exposed
 // through |GetSystemNSSKeySlot| and |IsTPMTokenReady| will return true.
@@ -102,12 +102,23 @@ CRYPTO_EXPORT ScopedPK11Slot GetPublicSlotForChromeOSUser(
 // is loaded.
 CRYPTO_EXPORT ScopedPK11Slot GetPrivateSlotForChromeOSUser(
     const std::string& username_hash,
-    const base::Callback<void(ScopedPK11Slot)>& callback) WARN_UNUSED_RESULT;
+    base::OnceCallback<void(ScopedPK11Slot)> callback) WARN_UNUSED_RESULT;
 
 // Closes the NSS DB for |username_hash| that was previously opened by the
 // *Initialize*ForChromeOSUser functions.
 CRYPTO_EXPORT void CloseChromeOSUserForTesting(
     const std::string& username_hash);
+
+// Sets the slot which should be used as private slot for the next
+// |InitializePrivateSoftwareSlotForChromeOSUser| called. This is intended for
+// simulating a separate private slot in Chrome OS browser tests.
+// As a sanity check, it is recommended to check that the private slot of the
+// profile's certificate database is set to |slot| when the profile is
+// available, because |slot| will be used as private slot for whichever profile
+// is initialized next.
+CRYPTO_EXPORT void SetPrivateSoftwareSlotForChromeOSUserForTesting(
+    ScopedPK11Slot slot);
+
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace crypto

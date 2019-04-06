@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "chromecast/public/media/media_pipeline_backend.h"
+#include "chromecast/media/cma/backend/cma_backend.h"
 #include "chromecast/public/media/media_pipeline_device_params.h"
 
 namespace chromecast {
@@ -20,9 +20,11 @@ namespace media {
 
 enum class AudioContentType;
 class AudioDecoderWrapper;
+class VideoDecoderWrapper;
+class MediaPipelineBackend;
 class MediaPipelineBackendManager;
 
-class MediaPipelineBackendWrapper : public MediaPipelineBackend {
+class MediaPipelineBackendWrapper : public CmaBackend {
  public:
   MediaPipelineBackendWrapper(const media::MediaPipelineDeviceParams& params,
                               MediaPipelineBackendManager* backend_manager);
@@ -31,7 +33,7 @@ class MediaPipelineBackendWrapper : public MediaPipelineBackend {
   void LogicalPause();
   void LogicalResume();
 
-  // MediaPipelineBackend implementation:
+  // CmaBackend implementation:
   AudioDecoder* CreateAudioDecoder() override;
   VideoDecoder* CreateVideoDecoder() override;
   bool Initialize() override;
@@ -56,8 +58,8 @@ class MediaPipelineBackendWrapper : public MediaPipelineBackend {
   const AudioContentType content_type_;
 
   std::unique_ptr<AudioDecoderWrapper> audio_decoder_;
+  std::unique_ptr<VideoDecoderWrapper> video_decoder_;
 
-  bool have_video_decoder_;
   bool playing_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaPipelineBackendWrapper);

@@ -5,7 +5,6 @@
 #include "chrome/browser/importer/external_process_importer_host.h"
 
 #include "base/bind.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/importer/external_process_importer_client.h"
@@ -20,6 +19,7 @@
 #include "content/public/browser/browser_thread.h"
 
 #include "app/vivaldi_resources.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/common/importer/importer_type.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -36,6 +36,7 @@ ExternalProcessImporterHost::ExternalProcessImporterHost()
       installed_bookmark_observer_(false),
       is_source_readable_(true),
       client_(NULL),
+      items_(0),
       cancelled_(false),
       weak_ptr_factory_(this) {
 }
@@ -49,27 +50,9 @@ void ExternalProcessImporterHost::Cancel() {
 }
 
 void ExternalProcessImporterHost::StartImportSettings(
-      const importer::SourceProfile& source_profile,
-      Profile* target_profile,
-      uint16_t imported_items,
-      ProfileWriter* writer)
-{
-  importer::ImportConfig import_config;
-
-  import_config.imported_items = imported_items;
-  if (!source_profile.master_password.empty()) {
-    import_config.arguments.resize(1);
-    import_config.arguments[0] =
-        base::UTF8ToUTF16(source_profile.master_password);
-  }
-
-  StartImportSettings(source_profile, target_profile, import_config, writer);
-}
-
-void ExternalProcessImporterHost::StartImportSettings(
     const importer::SourceProfile& source_profile,
     Profile* target_profile,
-    const importer::ImportConfig &import_config,
+    uint16_t items,
     ProfileWriter* writer) {
   // We really only support importing from one host at a time.
   DCHECK(!profile_);
@@ -78,7 +61,7 @@ void ExternalProcessImporterHost::StartImportSettings(
   profile_ = target_profile;
   writer_ = writer;
   source_profile_ = source_profile;
-  import_config_ = import_config;
+  items_ = items;
 
   if (!CheckForFirefoxLock(source_profile)) {
     Cancel();
@@ -90,7 +73,7 @@ void ExternalProcessImporterHost::StartImportSettings(
     return;
   }
 
-  CheckForLoadedModels(import_config_.imported_items);
+  CheckForLoadedModels(items);
 
   LaunchImportIfReady();
 }
@@ -150,7 +133,7 @@ void ExternalProcessImporterHost::LaunchImportIfReady() {
       new InProcessImporterBridge(writer_.get(),
                                   weak_ptr_factory_.GetWeakPtr());
   client_ = new ExternalProcessImporterClient(
-      weak_ptr_factory_.GetWeakPtr(), source_profile_, import_config_, bridge);
+      weak_ptr_factory_.GetWeakPtr(), source_profile_, items_, bridge);
   client_->Start();
 }
 

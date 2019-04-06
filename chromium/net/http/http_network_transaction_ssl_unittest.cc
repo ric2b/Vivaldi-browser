@@ -23,10 +23,12 @@
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log_with_source.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/socket_test_util.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -42,30 +44,30 @@ class TokenBindingSSLConfigService : public SSLConfigService {
   TokenBindingSSLConfigService() {
     ssl_config_.token_binding_params.push_back(TB_PARAM_ECDSAP256);
   }
+  ~TokenBindingSSLConfigService() override = default;
 
   void GetSSLConfig(SSLConfig* config) override { *config = ssl_config_; }
 
  private:
-  ~TokenBindingSSLConfigService() override = default;
-
   SSLConfig ssl_config_;
 };
 
 }  // namespace
 
-class HttpNetworkTransactionSSLTest : public testing::Test {
+class HttpNetworkTransactionSSLTest : public TestWithScopedTaskEnvironment {
  protected:
   HttpNetworkTransactionSSLTest() = default;
 
   void SetUp() override {
-    ssl_config_service_ = new TokenBindingSSLConfigService;
+    ssl_config_service_.reset(new TokenBindingSSLConfigService);
     session_context_.ssl_config_service = ssl_config_service_.get();
 
     auth_handler_factory_.reset(new HttpAuthHandlerMock::Factory());
     session_context_.http_auth_handler_factory = auth_handler_factory_.get();
 
-    proxy_service_ = ProxyService::CreateDirect();
-    session_context_.proxy_service = proxy_service_.get();
+    proxy_resolution_service_ = ProxyResolutionService::CreateDirect();
+    session_context_.proxy_resolution_service =
+        proxy_resolution_service_.get();
 
     session_context_.client_socket_factory = &mock_socket_factory_;
     session_context_.host_resolver = &mock_resolver_;
@@ -80,13 +82,15 @@ class HttpNetworkTransactionSSLTest : public testing::Test {
     HttpRequestInfo* request_info = new HttpRequestInfo;
     request_info->url = GURL(url);
     request_info->method = "GET";
+    request_info->traffic_annotation =
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
     request_info_vector_.push_back(base::WrapUnique(request_info));
     return request_info;
   }
 
-  scoped_refptr<SSLConfigService> ssl_config_service_;
+  std::unique_ptr<SSLConfigService> ssl_config_service_;
   std::unique_ptr<HttpAuthHandlerMock::Factory> auth_handler_factory_;
-  std::unique_ptr<ProxyService> proxy_service_;
+  std::unique_ptr<ProxyResolutionService> proxy_resolution_service_;
 
   MockClientSocketFactory mock_socket_factory_;
   MockHostResolver mock_resolver_;
@@ -94,10 +98,27 @@ class HttpNetworkTransactionSSLTest : public testing::Test {
   MockCertVerifier cert_verifier_;
   TransportSecurityState transport_security_state_;
   MultiLogCTVerifier ct_verifier_;
-  CTPolicyEnforcer ct_policy_enforcer_;
+  DefaultCTPolicyEnforcer ct_policy_enforcer_;
   HttpNetworkSession::Context session_context_;
   std::vector<std::unique_ptr<HttpRequestInfo>> request_info_vector_;
 };
+
+TEST_F(HttpNetworkTransactionSSLTest, ChannelID) {
+  ChannelIDService channel_id_service(new DefaultChannelIDStore(NULL));
+  session_context_.channel_id_service = &channel_id_service;
+
+  HttpNetworkSession::Params params;
+  params.enable_channel_id = true;
+  HttpNetworkSession session(params, session_context_);
+
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, &session);
+  TestCompletionCallback callback;
+  EXPECT_EQ(ERR_IO_PENDING,
+            trans.Start(GetRequestInfo("https://example.com"),
+                        callback.callback(), NetLogWithSource()));
+
+  EXPECT_TRUE(trans.server_ssl_config_.channel_id_enabled);
+}
 
 #if !defined(OS_IOS)
 TEST_F(HttpNetworkTransactionSSLTest, TokenBinding) {
@@ -110,7 +131,7 @@ TEST_F(HttpNetworkTransactionSSLTest, TokenBinding) {
   mock_socket_factory_.AddSSLSocketDataProvider(&ssl_data);
   MockRead mock_reads[] = {MockRead("HTTP/1.1 200 OK\r\n\r\n"),
                            MockRead(SYNCHRONOUS, OK)};
-  StaticSocketDataProvider data(mock_reads, arraysize(mock_reads), NULL, 0);
+  StaticSocketDataProvider data(mock_reads, base::span<MockWrite>());
   mock_socket_factory_.AddSocketDataProvider(&data);
 
   HttpNetworkSession session(HttpNetworkSession::Params(), session_context_);
@@ -131,7 +152,7 @@ TEST_F(HttpNetworkTransactionSSLTest, TokenBinding) {
   // Send a second request and verify that the token binding header is the same
   // as in the first request.
   mock_socket_factory_.AddSSLSocketDataProvider(&ssl_data);
-  StaticSocketDataProvider data2(mock_reads, arraysize(mock_reads), NULL, 0);
+  StaticSocketDataProvider data2(mock_reads, base::span<MockWrite>());
   mock_socket_factory_.AddSocketDataProvider(&data2);
   HttpNetworkTransaction trans2(DEFAULT_PRIORITY, &session);
 
@@ -159,7 +180,7 @@ TEST_F(HttpNetworkTransactionSSLTest, NoTokenBindingOverHttp) {
   mock_socket_factory_.AddSSLSocketDataProvider(&ssl_data);
   MockRead mock_reads[] = {MockRead("HTTP/1.1 200 OK\r\n\r\n"),
                            MockRead(SYNCHRONOUS, OK)};
-  StaticSocketDataProvider data(mock_reads, arraysize(mock_reads), NULL, 0);
+  StaticSocketDataProvider data(mock_reads, base::span<MockWrite>());
   mock_socket_factory_.AddSocketDataProvider(&data);
 
   HttpNetworkSession session(HttpNetworkSession::Params(), session_context_);
@@ -197,13 +218,15 @@ TEST_F(HttpNetworkTransactionSSLTest, TokenBindingAsync) {
   mock_socket_factory_.AddSSLSocketDataProvider(&ssl_data);
 
   MockRead reads[] = {MockRead(ASYNC, OK, 0)};
-  StaticSocketDataProvider data(reads, arraysize(reads), nullptr, 0);
+  StaticSocketDataProvider data(reads, base::span<MockWrite>());
   mock_socket_factory_.AddSocketDataProvider(&data);
 
   HttpRequestInfo request_info;
   request_info.url = GURL("https://www.example.com/");
   request_info.method = "GET";
   request_info.token_binding_referrer = "encrypted.example.com";
+  request_info.traffic_annotation =
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
 
   HttpNetworkSession session(HttpNetworkSession::Params(), session_context_);
   HttpNetworkTransaction trans(DEFAULT_PRIORITY, &session);

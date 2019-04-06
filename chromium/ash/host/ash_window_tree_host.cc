@@ -10,16 +10,31 @@
 #include "ash/host/ash_window_tree_host_mirroring_unified.h"
 #include "ash/host/ash_window_tree_host_platform.h"
 #include "ash/host/ash_window_tree_host_unified.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell_port.h"
+#include "base/command_line.h"
+#include "base/sys_info.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 namespace ash {
+namespace {
 
-AshWindowTreeHost::AshWindowTreeHost() = default;
+bool GetAllowConfineCursor() {
+  return base::SysInfo::IsRunningOnChromeOS() ||
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kAshConstrainPointerToRoot);
+}
+
+}  // namespace
+
+AshWindowTreeHost::AshWindowTreeHost()
+    : allow_confine_cursor_(GetAllowConfineCursor()) {}
 
 AshWindowTreeHost::~AshWindowTreeHost() = default;
 
@@ -72,7 +87,7 @@ std::unique_ptr<AshWindowTreeHost> AshWindowTreeHost::Create(
         init_params.initial_bounds, init_params.mirroring_delegate);
   }
   return std::make_unique<AshWindowTreeHostPlatform>(
-      init_params.initial_bounds);
+      ui::PlatformWindowInitProperties{init_params.initial_bounds});
 }
 
 }  // namespace ash

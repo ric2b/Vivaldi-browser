@@ -14,7 +14,7 @@ package metrics;
 import "omnibox_input_type.proto";
 
 // Stores information about an omnibox interaction.
-// Next tag: 17
+// Next tag: 18
 message OmniboxEventProto {
   // The timestamp for the event, in seconds.
   // This value comes from Chromium's TimeTicks::Now(), which is an abstract
@@ -44,6 +44,11 @@ message OmniboxEventProto {
   // The index of the item that the user selected in the omnibox popup list.
   // This corresponds the index of the |suggestion| below.
   optional int32 selected_index = 5;
+
+  // Whether the user selected the option to switch tabs (or ignored it
+  // and navigated). If true, one or more |Suggestions| will have
+  // |has_tab_match| set as well, which must include the |selected_index|.
+  optional bool selected_tab_match = 17;
 
   // DEPRECATED. Whether or not the top match was hidden in the omnibox
   // suggestions dropdown.
@@ -142,6 +147,9 @@ message OmniboxEventProto {
     // The user is in the maps app.
     APP_MAPS = 12;
 
+    // This omnibox interaction started with the user tapping the search button.
+    SEARCH_BUTTON_AS_STARTING_FOCUS = 13;
+
     // When adding new classifications, please consider adding them in
     // chromium's chrome/browser/resources/omnibox/omnibox.html
     // so that these new options are displayed on about:omnibox.
@@ -174,10 +182,11 @@ message OmniboxEventProto {
     CLIPBOARD_URL = 14;  // Suggestion coming from clipboard (iOS only).
     PHYSICAL_WEB = 15;   // Suggestions triggered by URLs broadcast by nearby
                          // devices (iOS and Android).
+    DOCUMENT = 16;       // Suggestions for documents in a cloud corpus.
   }
 
   // The result set displayed on the completion popup
-  // Next tag: 8
+  // Next tag: 9
   message Suggestion {
     // Where does this result come from?
     optional ProviderType provider = 1;
@@ -244,6 +253,8 @@ message OmniboxEventProto {
       PHYSICAL_WEB = 25;             // A Physical Web nearby URL.
       PHYSICAL_WEB_OVERFLOW = 26;    // An item representing multiple Physical
                                      // Web nearby URLs.
+      DOCUMENT = 27;                 // An item representing a cloud document
+                                     // suggestion.
     }
     optional ResultType result_type = 2;
 
@@ -267,6 +278,10 @@ message OmniboxEventProto {
     // provider of each suggestion type and is different for every suggestion
     // type. See enum ResultType above for more details.
     optional int32 result_subtype_identifier = 7;
+
+    // Whether the suggestion presented in the match, regardless of type,
+    // matched an open tab.
+    optional bool has_tab_match = 8;
   }
   repeated Suggestion suggestion = 9;
 

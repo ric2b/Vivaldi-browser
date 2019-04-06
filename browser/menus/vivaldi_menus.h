@@ -18,6 +18,8 @@ typedef base::Callback<void(const GURL&,
                             ui::PageTransition transition)>
     OpenURLCall;
 bool IsVivaldiCommandId(int id);
+void VivaldiInitMenu(WebContents* web_contents,
+                     const ContextMenuParams& params);
 void VivaldiAddLinkItems(SimpleMenuModel* menu,
                          WebContents* web_contents,
                          const ContextMenuParams& params);

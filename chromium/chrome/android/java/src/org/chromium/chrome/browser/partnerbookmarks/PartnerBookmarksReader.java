@@ -5,14 +5,13 @@
 package org.chromium.chrome.browser.partnerbookmarks;
 
 import android.content.Context;
-import android.content.SharedPreferences;
-import android.os.AsyncTask;
 
-import org.chromium.base.ContextUtils;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.AppHooks;
+import org.chromium.chrome.browser.util.ViewUtils;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -26,8 +25,7 @@ import javax.annotation.concurrent.GuardedBy;
 public class PartnerBookmarksReader {
     private static final String TAG = "PartnerBMReader";
     private static Set<FaviconUpdateObserver> sFaviconUpdateObservers = new HashSet<>();
-
-    static final String LAST_EMPTY_READ_PREFS_NAME = "PartnerBookmarksReader.last_empty_read";
+    private static final float DESIRED_FAVICON_SIZE_DP = 16.0f;
 
     private static boolean sInitialized;
     private static boolean sForceDisableEditing;
@@ -173,7 +171,8 @@ public class PartnerBookmarksReader {
         };
         return nativeAddPartnerBookmark(mNativePartnerBookmarksReader, url, title, isFolder,
                 parentId, favicon, touchicon,
-                mFaviconThrottle.shouldFetchFromServerIfNecessary(url), callback);
+                mFaviconThrottle.shouldFetchFromServerIfNecessary(url),
+                ViewUtils.dpToPx(mContext, DESIRED_FAVICON_SIZE_DP), callback);
     }
 
     /**
@@ -222,17 +221,6 @@ public class PartnerBookmarksReader {
     private class ReadBookmarksTask extends AsyncTask<Void, Void, Void> {
         private final Object mRootSync = new Object();
 
-        private void handleZeroBookmark() {
-            SharedPreferences.Editor editor = ContextUtils.getAppSharedPreferences().edit();
-            editor.putLong(LAST_EMPTY_READ_PREFS_NAME, System.currentTimeMillis());
-            editor.apply();
-            recordPartnerBookmarkCount(0);
-
-            Log.w(TAG,
-                    "Obtained zero partner bookmarks. "
-                            + "Will skip reading partner bookmarks for a while.");
-        }
-
         @Override
         protected Void doInBackground(Void... params) {
             if (mFaviconThrottle == null) {
@@ -242,12 +230,7 @@ public class PartnerBookmarksReader {
             }
             PartnerBookmark.BookmarkIterator bookmarkIterator =
                     AppHooks.get().getPartnerBookmarkIterator();
-            RecordHistogram.recordBooleanHistogram(
-                    "PartnerBookmark.Null", bookmarkIterator == null);
-            if (bookmarkIterator == null) {
-                handleZeroBookmark();
-                return null;
-            }
+            if (bookmarkIterator == null) return null;
 
             // Get a snapshot of the bookmarks.
             LinkedHashMap<Long, PartnerBookmark> idMap = new LinkedHashMap<Long, PartnerBookmark>();
@@ -281,15 +264,6 @@ public class PartnerBookmarksReader {
             bookmarkIterator.close();
             int count = urlSet.size();
             recordPartnerBookmarkCount(count);
-
-            if (count == 0) {
-                handleZeroBookmark();
-            } else {
-                SharedPreferences pref = ContextUtils.getAppSharedPreferences();
-                if (pref.contains(LAST_EMPTY_READ_PREFS_NAME)) {
-                    pref.edit().remove(LAST_EMPTY_READ_PREFS_NAME).apply();
-                }
-            }
 
             // Recreate the folder hierarchy and read it.
             recreateFolderHierarchy(idMap);
@@ -397,7 +371,8 @@ public class PartnerBookmarksReader {
     private native void nativeDestroy(long nativePartnerBookmarksReader);
     private native long nativeAddPartnerBookmark(long nativePartnerBookmarksReader, String url,
             String title, boolean isFolder, long parentId, byte[] favicon, byte[] touchicon,
-            boolean fetchUncachedFaviconsFromServer, FetchFaviconCallback callback);
+            boolean fetchUncachedFaviconsFromServer, int desiredFaviconSizePx,
+            FetchFaviconCallback callback);
     private native void nativePartnerBookmarksCreationComplete(long nativePartnerBookmarksReader);
     private static native String nativeGetNativeUrlString(String url);
     private static native void nativeDisablePartnerBookmarksEditing();

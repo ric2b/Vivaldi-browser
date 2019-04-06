@@ -30,6 +30,7 @@ cr.define('login', function() {
   var SCROLL_MASK_HEIGHT = 112;
   var CROS_POD_HEIGHT_WITH_PIN = 618;
   var PUBLIC_SESSION_ICON_WIDTH = 12;
+  var CROS_POD_WARNING_BANNER_OFFSET_Y = 270;
 
   /**
    * The maximum number of users that each pod placement method can handle.
@@ -776,6 +777,15 @@ cr.define('login', function() {
      * also being displayed.
      */
     pinEnabled: false,
+
+    /**
+     * If set, a function which hides a persistent detachable base warning
+     * bubble. This will be set if a detachable base warning bubble is shown for
+     * this pod.
+     * @type {?function()}
+     * @private
+     */
+    detachableBaseWarningBubbleHider_: null,
 
     /** @override */
     decorate: function() {
@@ -1573,7 +1583,7 @@ cr.define('login', function() {
       // global focus change event. Sometimes focus requests are ignored while
       // loading the page. See crbug.com/725622.
       if (opt_ensureFocus) {
-        var INTERVAL_REPEAT_MS = 10
+        var INTERVAL_REPEAT_MS = 10;
         var input = this.mainInput;
         var intervalId = setInterval(function() {
           input.focus();
@@ -1674,29 +1684,63 @@ cr.define('login', function() {
     },
 
     /**
+     * Returns the element that should be used as the anchor for error bubbles
+     * associated with the pod.
+     *
+     * @return {HTMLElement} The anchor for error bubbles.
+     * @private
+     */
+    getBubbleAnchor_: function() {
+      var bubbleAnchor = this.getElementsByClassName('auth-container')[0];
+      if (!bubbleAnchor) {
+        console.error('auth-container not found!');
+        bubbleAnchor = this.mainInput;
+      }
+      return bubbleAnchor;
+    },
+
+    /**
      * Shows a bubble under the auth-container of the user pod.
      * @param {HTMLElement} content Content to show in bubble.
+     * @param {!{bubble: (HTMLElement|undefined),
+     *           anchor: (HTMLElement|undefined),
+     *           timeout: (number|undefined)}|undefined} opt_options The custom
+     *     options describing how the bubble should be shown:
+     *     <ul>
+     *       <li>bubble: The element that hosts the bubble content.</li>
+     *       <li>
+     *           anchor: The element to which the bubble should be anchored.
+     *       </li>
+     *       <li>
+     *           timeout: Amount of time in ms after which the bubble
+     *           should be hidden. Note: this should only be used for
+     *           {@code $('bubble')} bubble element. The timeout will get
+     *           cleared if the bubble is shown again.
+     *       </li>
+     *     </ul>
+     * @return {function()} Function that, when called, hides the shown bubble.
      */
-    showBubble: function(content) {
+    showBubble: function(content, opt_options) {
       /** @const */ var BUBBLE_OFFSET = 25;
       // -8 = 4(BUBBLE_POD_OFFSET) - 2(bubble margin)
       //      - 10(internal bubble adjustment)
       var bubblePositioningPadding = -8;
 
-      var bubbleAnchor;
-      var attachment;
-      // Anchor the bubble to the input field.
-      bubbleAnchor = this.getElementsByClassName('auth-container')[0];
-      if (!bubbleAnchor) {
-        console.error('auth-container not found!');
-        bubbleAnchor = this.mainInput;
+      var options = opt_options || {};
+      var bubble = options.bubble || $('bubble');
+
+      // Make sure bubble timeout is changed only for $('bubble') element.
+      if (options.timeout && bubble != $('bubble')) {
+        console.error('Timeout can be set only when showing #bubble element.');
+        return;
       }
+
+      var bubbleAnchor = options.anchor || this.getBubbleAnchor_();
+      var attachment;
       if (this.pinContainer && this.pinContainer.style.visibility == 'visible')
         attachment = cr.ui.Bubble.Attachment.RIGHT;
       else
         attachment = cr.ui.Bubble.Attachment.BOTTOM;
-
-      var bubble = $('bubble');
 
       // Cannot use cr.ui.LoginUITools.get* on bubble until it is attached to
       // the element. getMaxHeight/Width rely on the correct up/left element
@@ -1734,14 +1778,89 @@ cr.define('login', function() {
           attachment = cr.ui.Bubble.Attachment.LEFT;
         }
       }
+
+      if (bubble == $('bubble'))
+        this.clearBubbleHideTimeout_();
+
+      var state = {shown: false, hidden: false};
+
       var showBubbleCallback = function() {
         this.removeEventListener('transitionend', showBubbleCallback);
-        $('bubble').showContentForElement(
+        // If the bubble was requested to be hidden while the transition was in
+        // progress, do not show the bubble.
+        if (state.hidden)
+          return;
+
+        state.shown = true;
+
+        bubble.showContentForElement(
             bubbleAnchor, attachment, content, BUBBLE_OFFSET,
             bubblePositioningPadding, true);
-      };
+
+        if (options.timeout != undefined) {
+          this.hideBubbleTimeout_ = setTimeout(() => {
+            this.hideBubbleTimeout_ = undefined;
+            bubble.hideForElement(bubbleAnchor);
+          }, options.timeout);
+        }
+      }.bind(this);
       this.addEventListener('transitionend', showBubbleCallback);
       ensureTransitionEndEvent(this);
+
+      return function() {
+        if (state.hidden)
+          return;
+
+        state.hidden = true;
+        if (state.shown)
+          bubble.hideForElement(bubbleAnchor);
+      };
+    },
+
+    /**
+     * Clears the timeout to hide a bubble, if a bubble timeout was set.
+     * @private
+     */
+    clearBubbleHideTimeout_: function() {
+      if (this.hideBubbleTimeout_) {
+        clearTimeout(this.hideBubbleTimeout_);
+        this.hideBubbleTimeout_ = null;
+      }
+    },
+
+    /**
+     * Shows persistent bubble for detachable base change warning.
+     * @param {HTMLElement} content The bubble contens.
+     */
+    showDetachableBaseWarningBubble: function(content) {
+      var anchor = this.getBubbleAnchor_();
+      if (!anchor)
+        return;
+      this.clearBubbleHideTimeout_();
+      $('bubble').hideForElement(anchor);
+      this.detachableBaseWarningBubbleHider_ = this.showBubble(
+          content, {bubble: $('bubble-persistent'), anchor: anchor});
+    },
+
+    /**
+     * If a peristent bubble for detachable base change warning is shown (and
+     * anchored at this pod), hides the bubble.
+     */
+    hideDetachableBaseWarningBubble: function() {
+      if (this.detachableBaseWarningBubbleHider_) {
+        this.detachableBaseWarningBubbleHider_();
+        this.detachableBaseWarningBubbleHider_ = null;
+      }
+    },
+
+    /**
+     * Whether a detachable base warning bubble is being shown for this pod.
+     * @return {boolean}
+     */
+    showingDetachableBaseWarningBubble: function() {
+      return this.detachableBaseWarningBubbleHider_ &&
+          !$('bubble-persistent').hidden &&
+          $('bubble-persistent').anchor == this.getBubbleAnchor_();
     },
 
     /**
@@ -1756,8 +1875,8 @@ cr.define('login', function() {
       this.classList.toggle('signing-in', false);
       if (takeFocus) {
         if (!this.multiProfilesPolicyApplied) {
-          // This will set a custom tab order.
-          this.focusInput(true /*opt_ensureFocus*/);
+          this.focusInput(
+              this.mainInput.tagName == 'INPUT' /*opt_ensureFocus*/);
         }
       }
       else
@@ -4067,7 +4186,12 @@ cr.define('login', function() {
       var bannerContainer = $('signin-banner-container1');
       if (bannerContainer.hidden)
         return;
-      bannerContainer.style.top = cr.ui.toCssPx(this.mainPod_.top / 2);
+      if ($('signin-banner').classList.contains('warning')) {
+        bannerContainer.style.top =
+            cr.ui.toCssPx(this.mainPod_.top + CROS_POD_WARNING_BANNER_OFFSET_Y);
+      } else {
+        bannerContainer.style.top = cr.ui.toCssPx(this.mainPod_.top / 2);
+      }
       if (this.pods.length <= POD_ROW_LIMIT) {
         bannerContainer.style.left = cr.ui.toCssPx(
             (this.screenSize.width - bannerContainer.offsetWidth) / 2);
@@ -4211,11 +4335,13 @@ cr.define('login', function() {
      * Displays a banner containing |message|. If the banner is already present
      * this function updates the message in the banner.
      * @param {string} message Text to be displayed or empty to hide the banner.
+     * @param {boolean} isWarning True if the given message is a warning.
      */
-    showBannerMessage: function(message) {
+    showBannerMessage: function(message, isWarning) {
       var banner = $('signin-banner');
       banner.textContent = message;
       banner.classList.toggle('message-set', !!message);
+      banner.classList.toggle('warning', isWarning);
       $('signin-banner-container1').hidden = banner.textContent.length == 0;
       this.updateSigninBannerPosition_();
     },
@@ -4791,6 +4917,9 @@ cr.define('login', function() {
       }
 
       this.handleAfterPodPlacement_();
+      // This is a hack for https://crbug.com/875128.
+      if (Oobe.getInstance().displayType == DISPLAY_TYPE.OOBE)
+        document.documentElement.removeAttribute('full-screen-dialog');
     },
 
     /**

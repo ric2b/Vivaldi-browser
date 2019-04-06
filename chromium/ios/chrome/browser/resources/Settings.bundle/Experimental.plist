@@ -118,16 +118,6 @@
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Enable New FeedbackKit</string>
-			<key>Key</key>
-			<string>NewFeedbackKitEnabled</string>
-			<key>DefaultValue</key>
-			<false/>
-		</dict>
-		<dict>
-			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
 			<string>Application Group</string>
@@ -191,34 +181,6 @@
 			<string></string>
 			<key>AutocorrectionType</key>
 			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>Title</key>
-			<string>Web Page Replay Settings</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Enable Web Page Replay</string>
-			<key>Key</key>
-			<string>WebPageReplayEnabled</string>
-			<key>DefaultValue</key>
-			<false/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Proxy Server</string>
-			<key>Key</key>
-			<string>WebPageReplayProxyAddress</string>
-			<key>DefaultValue</key>
-			<string></string>
-			<key>KeyboardType</key>
-			<string>URL</string>
 		</dict>
 		<dict>
 			<key>Type</key>

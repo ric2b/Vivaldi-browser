@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace safe_browsing {
 
@@ -20,10 +20,6 @@ void TestSafeBrowsingDatabaseManager::CancelCheck(Client* client) {
 bool TestSafeBrowsingDatabaseManager::CanCheckResourceType(
     content::ResourceType resource_type) const {
   NOTIMPLEMENTED();
-  return false;
-}
-
-bool TestSafeBrowsingDatabaseManager::CanCheckSubresourceFilter() const {
   return false;
 }
 
@@ -114,9 +110,9 @@ bool TestSafeBrowsingDatabaseManager::IsSupported() const {
 }
 
 void TestSafeBrowsingDatabaseManager::StartOnIOThread(
-    net::URLRequestContextGetter* request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const V4ProtocolConfig& config) {
-  SafeBrowsingDatabaseManager::StartOnIOThread(request_context_getter, config);
+  SafeBrowsingDatabaseManager::StartOnIOThread(url_loader_factory, config);
   enabled_ = true;
 }
 

@@ -18,8 +18,9 @@ var WebViewAttributesPrivate = require('webViewAttributesPrivate');
 
 // Attribute that specifies whether scaling is allowed in the webview.
 function AllowScalingAttribute(view) {
-  GuestViewAttributes.BooleanAttribute.call(
-      this, WebViewConstants.ATTRIBUTE_ALLOWSCALING, view);
+  $Function.call(
+      GuestViewAttributes.BooleanAttribute, this,
+      WebViewConstants.ATTRIBUTE_ALLOWSCALING, view);
 }
 
 AllowScalingAttribute.prototype.__proto__ =
@@ -37,8 +38,9 @@ AllowScalingAttribute.prototype.handleMutation = function(oldValue, newValue) {
 
 // Attribute that specifies whether transparency is allowed in the webview.
 function AllowTransparencyAttribute(view) {
-  GuestViewAttributes.BooleanAttribute.call(
-      this, WebViewConstants.ATTRIBUTE_ALLOWTRANSPARENCY, view);
+  $Function.call(
+      GuestViewAttributes.BooleanAttribute, this,
+      WebViewConstants.ATTRIBUTE_ALLOWTRANSPARENCY, view);
 }
 
 AllowTransparencyAttribute.prototype.__proto__ =
@@ -58,7 +60,7 @@ AllowTransparencyAttribute.prototype.handleMutation = function(oldValue,
 
 // Attribute used to define the demension limits of autosizing.
 function AutosizeDimensionAttribute(name, view) {
-  GuestViewAttributes.IntegerAttribute.call(this, name, view);
+  $Function.call(GuestViewAttributes.IntegerAttribute, this, name, view);
 }
 
 AutosizeDimensionAttribute.prototype.__proto__ =
@@ -93,8 +95,9 @@ AutosizeDimensionAttribute.prototype.handleMutation = function(
 
 // Attribute that specifies whether the webview should be autosized.
 function AutosizeAttribute(view) {
-  GuestViewAttributes.BooleanAttribute.call(
-      this, WebViewConstants.ATTRIBUTE_AUTOSIZE, view);
+  $Function.call(
+      GuestViewAttributes.BooleanAttribute, this,
+      WebViewConstants.ATTRIBUTE_AUTOSIZE, view);
 }
 
 AutosizeAttribute.prototype.__proto__ =
@@ -108,8 +111,9 @@ AutosizeAttribute.prototype.handleMutation =
 
 // Attribute that sets the guest content's window.name object.
 function NameAttribute(view) {
-  GuestViewAttributes.Attribute.call(
-      this, WebViewConstants.ATTRIBUTE_NAME, view);
+  $Function.call(
+      GuestViewAttributes.Attribute, this, WebViewConstants.ATTRIBUTE_NAME,
+      view);
 }
 
 NameAttribute.prototype.__proto__ = GuestViewAttributes.Attribute.prototype
@@ -136,8 +140,9 @@ NameAttribute.prototype.setValue = function(value) {
 
 // Attribute representing the state of the storage partition.
 function PartitionAttribute(view) {
-  GuestViewAttributes.Attribute.call(
-      this, WebViewConstants.ATTRIBUTE_PARTITION, view);
+  $Function.call(
+      GuestViewAttributes.Attribute, this, WebViewConstants.ATTRIBUTE_PARTITION,
+      view);
   this.validPartitionId = true;
 }
 
@@ -170,8 +175,9 @@ PartitionAttribute.prototype.detach = function() {
 
 // Attribute that handles the location and navigation of the webview.
 function SrcAttribute(view) {
-  GuestViewAttributes.Attribute.call(
-      this, WebViewConstants.ATTRIBUTE_SRC, view);
+  $Function.call(
+      GuestViewAttributes.Attribute, this, WebViewConstants.ATTRIBUTE_SRC,
+      view);
   this.setupMutationObserver();
   this.beforeFirstNavigation = true;
 }
@@ -179,14 +185,15 @@ function SrcAttribute(view) {
 SrcAttribute.prototype.__proto__ = GuestViewAttributes.Attribute.prototype;
 
 SrcAttribute.prototype.setValueIgnoreMutation = function(value) {
-  GuestViewAttributes.Attribute.prototype.setValueIgnoreMutation.call(
-      this, value);
+  $Function.call(
+      GuestViewAttributes.Attribute.prototype.setValueIgnoreMutation, this,
+      value);
   // takeRecords() is needed to clear queued up src mutations. Without it, it is
   // possible for this change to get picked up asyncronously by src's mutation
   // observer |observer|, and then get handled even though we do not want to
   // handle this mutation.
   this.observer.takeRecords();
-}
+};
 
 SrcAttribute.prototype.handleMutation = function(oldValue, newValue) {
   // Once we have navigated, we don't allow clearing the src attribute.

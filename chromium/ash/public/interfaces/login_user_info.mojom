@@ -5,8 +5,9 @@
 module ash.mojom;
 
 import "ash/public/interfaces/user_info.mojom";
-import "components/proximity_auth/public/interfaces/auth_type.mojom";
-import "mojo/common/string16.mojom";
+import "chromeos/components/proximity_auth/public/interfaces/auth_type.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/values.mojom";
 
 // Supported multi-profile user behavior values.
 // Keep in sync with the enum in md_user_pod_row.js and user_pod_row.js
@@ -37,6 +38,18 @@ enum EasyUnlockIconId {
   SPINNER,
 };
 
+// Fingerprint unlock state in the views lock screen.
+enum FingerprintUnlockState {
+  // Fingerprint unlock is not available.
+  UNAVAILABLE,
+  // Fingerprint unlock is available.
+  AVAILABLE,
+  // The unlock attempt is successful, the fingerprint is matched.
+  AUTH_SUCCESS,
+  // The unlock attempt is unsuccessful, the fingerprint is not recognized.
+  AUTH_FAILED,
+};
+
 // Information about the custom icon in the user pod.
 struct EasyUnlockIconOptions {
   // Icon that should be displayed.
@@ -45,7 +58,7 @@ struct EasyUnlockIconOptions {
   // |autoshow_tooltip| is true. The user can always see the tooltip if they
   // hover over the icon. The tooltip should be used for the accessibility label
   // if it is present.
-  mojo.common.mojom.String16 tooltip;
+  mojo_base.mojom.String16 tooltip;
   // If true, the tooltip should be displayed (even if the user is not currently
   // hovering over the icon, ie, this makes |tooltip| act like a little like a
   // notification).
@@ -53,7 +66,7 @@ struct EasyUnlockIconOptions {
   // Accessibility label. Only used if |tooltip| is empty.
   // TODO(jdufault): Always populate and use |aria_label|, even if |tooltip| is
   // non-empty.
-  mojo.common.mojom.String16 aria_label;
+  mojo_base.mojom.String16 aria_label;
   // If true, clicking the easy unlock icon should fire a hardlock event which
   // will disable easy unlock. The hardlock event will request a new icon
   // display via a separate EasyUnlockIconsOption update. See
@@ -64,6 +77,53 @@ struct EasyUnlockIconOptions {
   // scenario.
   // TODO(jdufault): This should be removed, as it does not change UI.
   bool is_trial_run;
+};
+
+// Infomation of each input method. This is used to populate keyboard layouts
+// for public account user.
+struct InputMethodItem {
+  // An id that identifies an input method engine (e.g., "t:latn-post",
+  // "pinyin", "hangul").
+  string ime_id;
+
+  // Title of the imput method.
+  string title;
+
+  // Whether this input method is been selected.
+  bool selected;
+};
+
+// Information of each available locale. This is used to populate language
+// locales for public account user.
+struct LocaleItem {
+  // Language code of the locale.
+  string language_code;
+
+  // Title of the locale.
+  string title;
+
+  // Optional, group name of the locale.
+  string? group_name;
+};
+
+// Infomation about a public account user.
+struct PublicAccountInfo {
+  // Optional, the domain name displayed in the login screen UI.
+  string? enterprise_domain;
+
+  // A list of available user locales.
+  array<LocaleItem> available_locales;
+
+  // Default locale for this user.
+  string default_locale;
+
+  // Show the advanced expanded user view if there are at least two recommended
+  // locales. This will be the case in multilingual environments where users
+  // are likely to want to choose among locales.
+  bool show_advanced_view;
+
+  // A list of available keyboard layouts.
+  array<InputMethodItem> keyboard_layouts;
 };
 
 // Info about a user in login/lock screen.
@@ -91,4 +151,8 @@ struct LoginUserInfo {
 
   // True if this user can be removed.
   bool can_remove;
+
+  // Optional, contains the public account information if user type is
+  // PUBLIC_ACCOUNT.
+  PublicAccountInfo? public_account_info;
 };

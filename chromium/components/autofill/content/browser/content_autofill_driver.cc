@@ -27,9 +27,6 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/gfx/geometry/size_f.h"
 
-#include "app/vivaldi_apptools.h"
-#include "content/public/browser/guest_mode.h"
-
 namespace autofill {
 
 ContentAutofillDriver::ContentAutofillDriver(
@@ -45,11 +42,7 @@ ContentAutofillDriver::ContentAutofillDriver(
   // AutofillManager isn't used if provider is valid, Autofill provider is
   // currently used by Android WebView only.
   if (provider) {
-    autofill_handler_ = std::make_unique<AutofillHandlerProxy>(this, provider);
-    GetAutofillAgent()->SetUserGestureRequired(false);
-    GetAutofillAgent()->SetSecureContextRequired(true);
-    GetAutofillAgent()->SetFocusRequiresScroll(false);
-    GetAutofillAgent()->SetQueryPasswordSuggestion(true);
+    SetAutofillProvider(provider);
   } else {
     autofill_handler_ = std::make_unique<AutofillManager>(
         this, client, app_locale, enable_download_manager);
@@ -85,6 +78,13 @@ net::URLRequestContextGetter* ContentAutofillDriver::GetURLRequestContext() {
   return content::BrowserContext::GetDefaultStoragePartition(
       render_frame_host_->GetSiteInstance()->GetBrowserContext())->
           GetURLRequestContext();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+ContentAutofillDriver::GetURLLoaderFactory() {
+  return content::BrowserContext::GetDefaultStoragePartition(
+             render_frame_host_->GetSiteInstance()->GetBrowserContext())
+      ->GetURLLoaderFactoryForBrowserProcess();
 }
 
 bool ContentAutofillDriver::RendererIsAvailable() {
@@ -131,10 +131,10 @@ void ContentAutofillDriver::RendererShouldAcceptDataListSuggestion(
   GetAutofillAgent()->AcceptDataListSuggestion(value);
 }
 
-void ContentAutofillDriver::RendererShouldClearFilledForm() {
+void ContentAutofillDriver::RendererShouldClearFilledSection() {
   if (!RendererIsAvailable())
     return;
-  GetAutofillAgent()->ClearForm();
+  GetAutofillAgent()->ClearSection();
 }
 
 void ContentAutofillDriver::RendererShouldClearPreviewedForm() {
@@ -166,21 +166,13 @@ void ContentAutofillDriver::PopupHidden() {
 
 gfx::RectF ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates(
     const gfx::RectF& bounding_box) {
-  if (vivaldi::IsVivaldiRunning()) {
-    // Same code in ContentPasswordManagerDriver::TransformToRootCoordinates
-    // Both should be in sync.
-    if (!content::GuestMode::IsCrossProcessFrameGuest(
-        content::WebContents::FromRenderFrameHost(render_frame_host_))) {
-      return bounding_box;
-    }
-  }
   content::RenderWidgetHostView* view = render_frame_host_->GetView();
   if (!view)
     return bounding_box;
 
-  gfx::Point orig_point(bounding_box.x(), bounding_box.y());
-  gfx::Point transformed_point =
-      view->TransformPointToRootCoordSpace(orig_point);
+  gfx::PointF orig_point(bounding_box.x(), bounding_box.y());
+  gfx::PointF transformed_point =
+      view->TransformPointToRootCoordSpaceF(orig_point);
   return gfx::RectF(transformed_point.x(), transformed_point.y(),
                     bounding_box.width(), bounding_box.height());
 }
@@ -223,12 +215,21 @@ void ContentAutofillDriver::TextFieldDidScroll(const FormData& form,
   autofill_handler_->OnTextFieldDidScroll(form, field, bounding_box);
 }
 
+void ContentAutofillDriver::SelectControlDidChange(
+    const FormData& form,
+    const FormFieldData& field,
+    const gfx::RectF& bounding_box) {
+  autofill_handler_->OnSelectControlDidChange(form, field, bounding_box);
+}
+
 void ContentAutofillDriver::QueryFormFieldAutofill(
     int32_t id,
     const FormData& form,
     const FormFieldData& field,
-    const gfx::RectF& bounding_box) {
-  autofill_handler_->OnQueryFormFieldAutofill(id, form, field, bounding_box);
+    const gfx::RectF& bounding_box,
+    bool autoselect_first_suggestion) {
+  autofill_handler_->OnQueryFormFieldAutofill(id, form, field, bounding_box,
+                                              autoselect_first_suggestion);
 }
 
 void ContentAutofillDriver::HidePopup() {
@@ -262,6 +263,10 @@ void ContentAutofillDriver::SetDataList(
     const std::vector<base::string16>& values,
     const std::vector<base::string16>& labels) {
   autofill_handler_->OnSetDataList(values, labels);
+}
+
+void ContentAutofillDriver::SelectFieldOptionsDidChange(const FormData& form) {
+  autofill_handler_->SelectFieldOptionsDidChange(form);
 }
 
 void ContentAutofillDriver::DidNavigateMainFrame(
@@ -313,6 +318,19 @@ void ContentAutofillDriver::RemoveHandler(
   if (!view)
     return;
   view->GetRenderWidgetHost()->RemoveKeyPressEventCallback(handler);
+}
+
+void ContentAutofillDriver::SetAutofillProvider(AutofillProvider* provider) {
+  autofill_handler_ = std::make_unique<AutofillHandlerProxy>(this, provider);
+  GetAutofillAgent()->SetUserGestureRequired(false);
+  GetAutofillAgent()->SetSecureContextRequired(true);
+  GetAutofillAgent()->SetFocusRequiresScroll(false);
+  GetAutofillAgent()->SetQueryPasswordSuggestion(true);
+}
+
+void ContentAutofillDriver::SetAutofillProviderForTesting(
+    AutofillProvider* provider) {
+  SetAutofillProvider(provider);
 }
 
 }  // namespace autofill

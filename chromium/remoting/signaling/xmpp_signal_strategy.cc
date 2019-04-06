@@ -33,7 +33,8 @@
 #include "remoting/signaling/signaling_address.h"
 #include "remoting/signaling/xmpp_login_handler.h"
 #include "remoting/signaling/xmpp_stream_parser.h"
-#include "services/network/public/cpp/proxy_resolving_client_socket.h"
+#include "services/network/proxy_resolving_client_socket.h"
+#include "services/network/proxy_resolving_client_socket_factory.h"
 #include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 
 // Use 50 seconds keep-alive interval, in case routers terminate
@@ -122,6 +123,8 @@ class XmppSignalStrategy::Core : public XmppLoginHandler::Delegate {
   XmppServerConfig xmpp_server_config_;
 
   // Used by the |socket_|.
+  std::unique_ptr<network::ProxyResolvingClientSocketFactory>
+      proxy_resolving_socket_factory_;
   std::unique_ptr<net::CertVerifier> cert_verifier_;
   std::unique_ptr<net::TransportSecurityState> transport_security_state_;
   std::unique_ptr<net::CTVerifier> cert_transparency_verifier_;
@@ -178,11 +181,16 @@ void XmppSignalStrategy::Core::Connect() {
   for (auto& observer : listeners_)
     observer.OnSignalStrategyStateChange(CONNECTING);
 
-  socket_ = std::make_unique<network::ProxyResolvingClientSocket>(
-      socket_factory_, request_context_getter_, net::SSLConfig(),
+  if (!proxy_resolving_socket_factory_) {
+    proxy_resolving_socket_factory_ =
+        std::make_unique<network::ProxyResolvingClientSocketFactory>(
+            request_context_getter_->GetURLRequestContext());
+  }
+  socket_ = proxy_resolving_socket_factory_->CreateSocket(
       GURL("https://" +
            net::HostPortPair(xmpp_server_config_.host, xmpp_server_config_.port)
-               .ToString()));
+               .ToString()),
+      false /*use_tls*/);
 
   int result = socket_->Connect(base::Bind(
       &Core::OnSocketConnected, base::Unretained(this)));
@@ -253,9 +261,9 @@ bool XmppSignalStrategy::Core::SendStanza(
     return false;
   }
 
-  HOST_DLOG << "Sending outgoing stanza:\n"
-            << stanza->Str()
-            << "\n=========================================================";
+  HOST_LOG << "Sending outgoing stanza:\n"
+           << stanza->Str()
+           << "\n=========================================================";
   SendMessage(stanza->Str());
 
   // Return false if the SendMessage() call above resulted in the SignalStrategy
@@ -279,10 +287,35 @@ void XmppSignalStrategy::Core::SendMessage(const std::string& message) {
       new net::IOBufferWithSize(message.size());
   memcpy(buffer->data(), message.data(), message.size());
 
-  // TODO(crbug.com/656607): Add proper annotation.
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("xmpp_signal_strategy", R"(
+        semantics {
+          sender: "Xmpp Signal Strategy"
+           description:
+            "This request is used for setting up the ICE connection between "
+            "the client and the host for Chrome Remote Desktop."
+          trigger:
+            "Initiating a Chrome Remote Desktop connection."
+          data: "No user data."
+          destination: OTHER
+          destination_other:
+            "The Chrome Remote Desktop client/host that user is connecting to."
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "This request cannot be stopped in settings, but will not be sent "
+            "if user does not use Chrome Remote Desktop."
+          policy_exception_justification:
+            "Not implemented. 'RemoteAccessHostClientDomainList' and "
+            "'RemoteAccessHostDomainList' policies can limit the domains to "
+            "which a connection can be made, but they cannot be used to block "
+            "the request to all domains. Please refer to help desk for other "
+            "approaches to manage this feature."
+        })");
   writer_->Write(buffer,
                  base::Bind(&Core::OnMessageSent, base::Unretained(this)),
-                 NO_TRAFFIC_ANNOTATION_BUG_656607);
+                 traffic_annotation);
 }
 
 void XmppSignalStrategy::Core::StartTls() {
@@ -310,7 +343,7 @@ void XmppSignalStrategy::Core::StartTls() {
   cert_verifier_ = net::CertVerifier::CreateDefault();
   transport_security_state_.reset(new net::TransportSecurityState());
   cert_transparency_verifier_.reset(new net::MultiLogCTVerifier());
-  ct_policy_enforcer_.reset(new net::CTPolicyEnforcer());
+  ct_policy_enforcer_.reset(new net::DefaultCTPolicyEnforcer());
   net::SSLClientSocketContext context;
   context.cert_verifier = cert_verifier_.get();
   context.transport_security_state = transport_security_state_.get();
@@ -367,10 +400,9 @@ void XmppSignalStrategy::Core::OnStanza(
     const std::unique_ptr<buzz::XmlElement> stanza) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-
-  HOST_DLOG << "Received incoming stanza:\n"
-            << stanza->Str()
-            << "\n=========================================================";
+  HOST_LOG << "Received incoming stanza:\n"
+           << stanza->Str()
+           << "\n=========================================================";
 
   for (auto& listener : listeners_) {
     if (listener.OnSignalStrategyIncomingStanza(stanza.get()))

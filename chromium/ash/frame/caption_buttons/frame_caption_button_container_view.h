@@ -8,6 +8,8 @@
 #include <map>
 
 #include "ash/ash_export.h"
+#include "ash/frame/caption_buttons/caption_button_model.h"
+#include "ash/frame/caption_buttons/frame_caption_button.h"
 #include "ash/frame/caption_buttons/frame_size_button_delegate.h"
 #include "base/macros.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -36,7 +38,9 @@ class ASH_EXPORT FrameCaptionButtonContainerView
   static const char kViewClassName[];
 
   // |frame| is the views::Widget that the caption buttons act on.
-  explicit FrameCaptionButtonContainerView(views::Widget* frame);
+  FrameCaptionButtonContainerView(
+      views::Widget* frame,
+      std::unique_ptr<CaptionButtonModel> model = nullptr);
   ~FrameCaptionButtonContainerView() override;
 
   // For testing.
@@ -59,6 +63,10 @@ class ASH_EXPORT FrameCaptionButtonContainerView
       return container_view_->close_button_;
     }
 
+    FrameCaptionButton* menu_button() const {
+      return container_view_->menu_button_;
+    }
+
    private:
     FrameCaptionButtonContainerView* container_view_;
 
@@ -75,9 +83,12 @@ class ASH_EXPORT FrameCaptionButtonContainerView
   // a repaint.
   void SetPaintAsActive(bool paint_as_active);
 
-  // Sets whether the buttons should be painted in a lighter color (for use on
-  // dark backgrounds).
-  void SetUseLightImages(bool light);
+  // Sets whether the buttons should use themed foreground color computation.
+  void SetColorMode(FrameCaptionButton::ColorMode color_mode);
+
+  // Sets the background frame color that buttons should compute their color
+  // respective to.
+  void SetBackgroundColor(SkColor background_color);
 
   // Tell the window controls to reset themselves to the normal state.
   void ResetWindowControls();
@@ -87,17 +98,23 @@ class ASH_EXPORT FrameCaptionButtonContainerView
   // be in the coordinates of the FrameCaptionButtonContainerView.
   int NonClientHitTest(const gfx::Point& point) const;
 
-  // Updates the size button's visibility based on whether |frame_| can be
-  // maximized and if tablet mode is enabled. A parent view should relayout
-  // to reflect the change in visibility.
-  void UpdateSizeButtonVisibility();
+  // Updates the caption buttons' state based on the caption button model's
+  // state. A parent view should relayout to reflect the change in states.
+  void UpdateCaptionButtonState(bool animate);
 
   // Sets the size of the buttons in this container.
   void SetButtonSize(const gfx::Size& size);
 
+  // Sets the CaptionButtonModel. Caller is responsible for updating
+  // the state by calling UpdateCaptionButtonState.
+  void SetModel(std::unique_ptr<CaptionButtonModel> model);
+  const CaptionButtonModel* model() const { return model_.get(); }
+
   // views::View:
   void Layout() override;
   const char* GetClassName() const override;
+  void ChildPreferredSizeChanged(View* child) override;
+  void ChildVisibilityChanged(View* child) override;
 
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;
@@ -113,10 +130,6 @@ class ASH_EXPORT FrameCaptionButtonContainerView
   void SetButtonIcon(FrameCaptionButton* button,
                      CaptionButtonIcon icon,
                      Animate animate);
-
-  // Returns true if tablet mode is not enabled, and |frame_| widget delegate
-  // can be maximized.
-  bool ShouldSizeButtonBeVisible() const;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -137,17 +150,21 @@ class ASH_EXPORT FrameCaptionButtonContainerView
 
   // The buttons. In the normal button style, at most one of |minimize_button_|
   // and |size_button_| is visible.
-  FrameCaptionButton* minimize_button_;
-  FrameCaptionButton* size_button_;
-  FrameCaptionButton* close_button_;
+  FrameCaptionButton* menu_button_ = nullptr;
+  FrameCaptionButton* minimize_button_ = nullptr;
+  FrameCaptionButton* size_button_ = nullptr;
+  FrameCaptionButton* close_button_ = nullptr;
 
   // Mapping of the image needed to paint a button for each of the values of
   // CaptionButtonIcon.
   std::map<CaptionButtonIcon, const gfx::VectorIcon*> button_icon_map_;
 
-  // Animation that affects the position of |minimize_button_| and the
-  // visibility of |size_button_|.
+  // Animation that affects the visibility of |size_button_| and the position of
+  // buttons to the left of it. Usually this is just the minimize button but it
+  // can also include a PWA menu button.
   std::unique_ptr<gfx::SlideAnimation> tablet_mode_animation_;
+
+  std::unique_ptr<CaptionButtonModel> model_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameCaptionButtonContainerView);
 };

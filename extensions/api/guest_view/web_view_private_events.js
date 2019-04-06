@@ -10,10 +10,6 @@ var EVENTS_PRIVATE = {
     evt: CreateEvent('webViewPrivate.onFullscreen'),
     fields: ['enterFullscreen']
   },
-  'mediastatechanged': {
-    evt: CreateEvent('webViewPrivate.onMediaStateChanged'),
-    fields: ['activeMediaType']
-  },
   'sslstatechanged': {
     evt: CreateEvent('webViewPrivate.onSSLStateChanged'),
     fields: ['SSLState', 'issuerstring']
@@ -34,12 +30,12 @@ var EVENTS_PRIVATE = {
     evt: CreateEvent('webViewPrivate.onSimpleAction'),
     fields: ['command', 'text', 'url', 'modifiers']
   },
-  'contentsdiscarded': {
-    evt: CreateEvent('webViewPrivate.onWebcontentsDiscarded')
-  },
   'contentblocked': {
     evt: CreateEvent('webViewPrivate.onContentBlocked'),
     fields: ['blockedType']
+  },
+  'contentscreated': {
+    evt: CreateEvent('webViewPrivate.onWebcontentsCreated')
   },
 };
 

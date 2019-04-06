@@ -7,7 +7,7 @@
 #import "base/mac/scoped_nsobject.h"
 #import "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -61,7 +61,7 @@ class ShareMenuControllerTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     base::FilePath test_data_dir;
-    PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+    base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
     embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
     ASSERT_TRUE(embedded_test_server()->Start());
 

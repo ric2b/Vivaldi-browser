@@ -10,10 +10,10 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/common/pref_names.h"
-#include "components/proximity_auth/switches.h"
+#include "chromeos/components/proximity_auth/switches.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 
@@ -50,24 +50,25 @@ EasyUnlockSettingsHandler* EasyUnlockSettingsHandler::Create(
 void EasyUnlockSettingsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "easyUnlockGetEnabledStatus",
-      base::Bind(&EasyUnlockSettingsHandler::HandleGetEnabledStatus,
-                 base::Unretained(this)));
+      base::BindRepeating(&EasyUnlockSettingsHandler::HandleGetEnabledStatus,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "easyUnlockStartTurnOnFlow",
-      base::Bind(&EasyUnlockSettingsHandler::HandleStartTurnOnFlow,
-                 base::Unretained(this)));
+      base::BindRepeating(&EasyUnlockSettingsHandler::HandleStartTurnOnFlow,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "easyUnlockGetTurnOffFlowStatus",
-      base::Bind(&EasyUnlockSettingsHandler::HandleGetTurnOffFlowStatus,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &EasyUnlockSettingsHandler::HandleGetTurnOffFlowStatus,
+          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "easyUnlockStartTurnOffFlow",
-      base::Bind(&EasyUnlockSettingsHandler::HandleStartTurnOffFlow,
-                 base::Unretained(this)));
+      base::BindRepeating(&EasyUnlockSettingsHandler::HandleStartTurnOffFlow,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "easyUnlockCancelTurnOffFlow",
-      base::Bind(&EasyUnlockSettingsHandler::HandleCancelTurnOffFlow,
-                 base::Unretained(this)));
+      base::BindRepeating(&EasyUnlockSettingsHandler::HandleCancelTurnOffFlow,
+                          base::Unretained(this)));
 }
 
 void EasyUnlockSettingsHandler::OnJavascriptAllowed() {

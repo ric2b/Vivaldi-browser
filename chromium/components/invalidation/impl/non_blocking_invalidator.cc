@@ -20,6 +20,7 @@
 #include "components/invalidation/public/invalidation_handler.h"
 #include "components/invalidation/public/object_id_invalidation_map.h"
 #include "jingle/notifier/listener/push_client.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace syncer {
 
@@ -93,7 +94,7 @@ void CallbackProxy::Run(const base::DictionaryValue& value) {
   std::unique_ptr<base::DictionaryValue> copied(value.DeepCopy());
   running_thread_->PostTask(
       FROM_HERE,
-      base::Bind(&CallbackProxy::DoRun, callback_, base::Passed(&copied)));
+      base::BindOnce(&CallbackProxy::DoRun, callback_, std::move(copied)));
 }
 }
 
@@ -145,7 +146,7 @@ NonBlockingInvalidator::Core::Core(
     : delegate_observer_(delegate_observer),
       delegate_observer_task_runner_(delegate_observer_task_runner) {
   DCHECK(delegate_observer_);
-  DCHECK(delegate_observer_task_runner_.get());
+  DCHECK(delegate_observer_task_runner_);
 }
 
 NonBlockingInvalidator::Core::~Core() {
@@ -153,7 +154,7 @@ NonBlockingInvalidator::Core::~Core() {
 
 void NonBlockingInvalidator::Core::Initialize(
     const NonBlockingInvalidator::InitializeOptions& initialize_options) {
-  DCHECK(initialize_options.request_context_getter.get());
+  DCHECK(initialize_options.request_context_getter);
   network_task_runner_ =
       initialize_options.request_context_getter->GetNetworkTaskRunner();
   DCHECK(network_task_runner_->BelongsToCurrentThread());
@@ -324,10 +325,11 @@ NetworkChannelCreator
 }
 
 NetworkChannelCreator NonBlockingInvalidator::MakeGCMNetworkChannelCreator(
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+        url_loader_factory_info,
     std::unique_ptr<GCMNetworkChannelDelegate> delegate) {
   return base::Bind(&SyncNetworkChannel::CreateGCMNetworkChannel,
-                    request_context_getter,
+                    base::Passed(&url_loader_factory_info),
                     base::Passed(&delegate));
 }
 

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/compiler/compiler.gni")
 import("//build/config/nacl/config.gni")
 import("//components/nacl/features.gni")
 import("//services/service_manager/public/service_manifest.gni")
@@ -35,13 +36,17 @@ source_set("minimal") {
     "//components/nacl/common:mojo_bindings",
     "//crypto",
     "//ipc",
-    "//mojo/edk/system",
+    "//mojo/core/embedder",
     "//native_client/src/trusted/service_runtime:sel_main_chrome",
     "//ppapi/c",
     "//ppapi/proxy:ipc",
     "//sandbox",
     "//services/service_manager/public/cpp",
   ]
+
+  if (is_linux) {
+    deps += [ "//services/service_manager/zygote" ]
+  }
 }
 
 # This exists just to make 'gn check' happy with :minimal and
@@ -58,7 +63,7 @@ source_set("minimal_content_dummy") {
 
   # Deps required by the above headers.
   deps = [
-    "//media:media_features",
+    "//media:media_buildflags",
   ]
 }
 
@@ -119,15 +124,15 @@ if (is_linux) {
     deps = [
       ":loader",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//components/nacl/common:switches",
       "//components/nacl/loader/sandbox_linux",
       "//content/public/common",
       "//crypto",
       "//ipc",
-      "//mojo/edk/system",
+      "//mojo/core/embedder",
       "//sandbox/linux:sandbox_services",
       "//services/service_manager/sandbox",
+      "//services/service_manager/zygote",
       "//url/ipc:url_ipc",
     ]
 
@@ -139,6 +144,25 @@ if (is_linux) {
       # NaCl is not working with compiler-rt in ChromeOS.
       # Force libgcc as a workaround. See https://crbug.com/761103
       ldflags += [ "-rtlib=libgcc" ]
+
+      # Nacl crashes when enabling ThinLTO. See https://crbug.com/799642
+      # We haven't triaged down to the root cause yet. For now, disabling
+      # dead function removal from LTO optimization is a workaround, so that
+      # we can enable ThinLTO and CFI.
+      if (use_thin_lto) {
+        if (use_lld) {
+          ldflags += [ "-Wl,-mllvm,-compute-dead=false" ]
+        } else {
+          ldflags += [ "-Wl,-plugin-opt,-compute-dead=false" ]
+        }
+      }
+    }
+
+    # The only symbols that nacl_helper needs to export are those specified by
+    # its direct dependencies, so -rdynamic would only serve to unnecessarily
+    # increase the binary size.
+    if (is_desktop_linux) {
+      configs -= [ "//build/config/linux:export_dynamic" ]
     }
 
     data_deps = [
@@ -192,7 +216,7 @@ if (is_win && target_cpu == "x86" && current_cpu == "x64") {
       "//components/nacl/broker",
       "//components/nacl/common:switches",
       "//content/public/common:static_switches",
-      "//mojo/edk/system",
+      "//mojo/core/embedder",
       "//sandbox",
       "//services/service_manager/sandbox:sandbox",
     ]
@@ -222,7 +246,7 @@ if (is_nacl_nonsfi) {
       "//components/tracing",
       "//content",
       "//ipc",
-      "//mojo/edk/system",
+      "//mojo/core/embedder",
       "//native_client/src/nonsfi/irt:nacl_sys_private",
       "//native_client/src/nonsfi/loader:elf_loader",
 
@@ -236,6 +260,7 @@ if (is_nacl_nonsfi) {
       "//sandbox/linux:sandbox",
       "//services/service_manager/public/cpp",
       "//services/service_manager/sandbox",
+      "//services/service_manager/zygote:zygote_util",
     ]
   }
 

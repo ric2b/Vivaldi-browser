@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//third_party/jinja2/jinja2.gni")
 
 action("precompile_templates") {
   sources = mojom_generator_sources
@@ -17,6 +18,7 @@ action("precompile_templates") {
     "$mojom_generator_root/generators/cpp_templates/interface_response_validator_declaration.tmpl",
     "$mojom_generator_root/generators/cpp_templates/interface_stub_declaration.tmpl",
     "$mojom_generator_root/generators/cpp_templates/module-shared-internal.h.tmpl",
+    "$mojom_generator_root/generators/cpp_templates/module-shared-message-ids.h.tmpl",
     "$mojom_generator_root/generators/cpp_templates/module-shared.cc.tmpl",
     "$mojom_generator_root/generators/cpp_templates/module-shared.h.tmpl",
     "$mojom_generator_root/generators/cpp_templates/module.cc.tmpl",
@@ -56,6 +58,10 @@ action("precompile_templates") {
     "$mojom_generator_root/generators/java_templates/struct.java.tmpl",
     "$mojom_generator_root/generators/java_templates/union.java.tmpl",
     "$mojom_generator_root/generators/js_templates/enum_definition.tmpl",
+    "$mojom_generator_root/generators/js_templates/externs/interface_definition.tmpl",
+    "$mojom_generator_root/generators/js_templates/externs/module.externs.tmpl",
+    "$mojom_generator_root/generators/js_templates/externs/struct_definition.tmpl",
+    "$mojom_generator_root/generators/js_templates/fuzzing.tmpl",
     "$mojom_generator_root/generators/js_templates/interface_definition.tmpl",
     "$mojom_generator_root/generators/js_templates/module.amd.tmpl",
     "$mojom_generator_root/generators/js_templates/module_definition.tmpl",
@@ -64,6 +70,8 @@ action("precompile_templates") {
     "$mojom_generator_root/generators/js_templates/validation_macros.tmpl",
   ]
   script = mojom_generator_script
+
+  inputs = jinja2_sources
   outputs = [
     "$target_gen_dir/cpp_templates.zip",
     "$target_gen_dir/java_templates.zip",

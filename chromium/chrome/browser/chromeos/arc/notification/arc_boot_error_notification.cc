@@ -7,10 +7,10 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/notifications/notification_display_service.h"
@@ -24,9 +24,9 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 namespace arc {
 
@@ -49,8 +49,6 @@ void ShowLowDiskSpaceErrorNotification(content::BrowserContext* context) {
   }
   message_center::ButtonInfo storage_settings(
       l10n_util::GetStringUTF16(IDS_LOW_DISK_NOTIFICATION_BUTTON));
-  storage_settings.icon = ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-      IDR_STORAGE_MANAGER_BUTTON);
   message_center::RichNotificationData optional_fields;
   optional_fields.buttons.push_back(storage_settings);
 
@@ -68,8 +66,7 @@ void ShowLowDiskSpaceErrorNotification(content::BrowserContext* context) {
               IDS_ARC_CRITICALLY_LOW_DISK_NOTIFICATION_TITLE),
           l10n_util::GetStringUTF16(
               IDS_ARC_CRITICALLY_LOW_DISK_NOTIFICATION_MESSAGE),
-          gfx::Image(ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-              IDR_DISK_SPACE_NOTIFICATION_CRITICAL)),
+          gfx::Image(),
           l10n_util::GetStringUTF16(IDS_ARC_NOTIFICATION_DISPLAY_SOURCE),
           GURL(), notifier_id, optional_fields,
           base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
@@ -82,7 +79,7 @@ void ShowLowDiskSpaceErrorNotification(content::BrowserContext* context) {
                     }
                   },
                   profile)),
-          kNotificationStorageFullIcon,
+          ash::kNotificationStorageFullIcon,
           message_center::SystemNotificationWarningLevel::CRITICAL_WARNING);
   NotificationDisplayService::GetForProfile(profile)->Display(
       NotificationHandler::Type::TRANSIENT, *notification);

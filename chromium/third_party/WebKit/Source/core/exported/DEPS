@@ -1,6 +1,0 @@
-include_rules = [
-  # Files in exported are allowed to take dependencies on other files in
-  # exported.
-  "+core/exported",
-  "+public/web",
-]

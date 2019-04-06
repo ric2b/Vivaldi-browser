@@ -27,6 +27,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -44,8 +45,23 @@ class ByteCodeProcessor {
     private static final String TEMPORARY_FILE_SUFFIX = ".temp";
     private static final int BUFFER_SIZE = 16384;
 
+    private static void writeZipEntry(ZipOutputStream zipStream, String zipPath, byte[] data)
+            throws IOException {
+        ZipEntry entry = new ZipEntry(zipPath);
+        entry.setMethod(ZipEntry.STORED);
+        entry.setTime(0);
+        entry.setSize(data.length);
+        CRC32 crc = new CRC32();
+        crc.update(data);
+        entry.setCrc(crc.getValue());
+        zipStream.putNextEntry(entry);
+        zipStream.write(data);
+        zipStream.closeEntry();
+    }
+
     private static void process(String inputJarPath, String outputJarPath, boolean shouldAssert,
-            boolean shouldUseCustomResources, ClassLoader classPathJarsClassLoader) {
+            boolean shouldUseCustomResources, boolean shouldUseThreadAnnotations,
+            ClassLoader classPathJarsClassLoader) {
         String tempJarPath = outputJarPath + TEMPORARY_FILE_SUFFIX;
         try (ZipInputStream inputStream = new ZipInputStream(
                      new BufferedInputStream(new FileInputStream(inputJarPath)));
@@ -85,6 +101,9 @@ class ByteCodeProcessor {
                        "asm-util-5.0.1.jar:out/Debug/lib.java/jar_containing_yourclass.jar" \
                        org.objectweb.asm.util.ASMifier org.package.YourClassName
                 */
+                if (shouldUseThreadAnnotations) {
+                    chain = new ThreadAssertionClassAdapter(chain);
+                }
                 if (shouldAssert) {
                     chain = new AssertionEnablerClassAdapter(chain);
                 }
@@ -94,9 +113,7 @@ class ByteCodeProcessor {
                 }
                 reader.accept(chain, 0);
                 byte[] patchedByteCode = writer.toByteArray();
-                tempStream.putNextEntry(new ZipEntry(entry.getName()));
-                tempStream.write(patchedByteCode);
-                tempStream.closeEntry();
+                writeZipEntry(tempStream, entry.getName(), patchedByteCode);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -142,6 +159,7 @@ class ByteCodeProcessor {
         String outputJarPath = args[1];
         boolean shouldAssert = args[2].equals("--enable-assert");
         boolean shouldUseCustomResources = args[3].equals("--enable-custom-resources");
+        boolean shouldUseThreadAnnotations = args[4].equals("--enable-thread-annotations");
 
         // Load all jars that are on the classpath for the input jar for analyzing class hierarchy.
         ClassLoader classPathJarsClassLoader = null;
@@ -152,6 +170,6 @@ class ByteCodeProcessor {
             classPathJarsClassLoader = loadJars(classPathJarsPaths);
         }
         process(inputJarPath, outputJarPath, shouldAssert, shouldUseCustomResources,
-                classPathJarsClassLoader);
+                shouldUseThreadAnnotations, classPathJarsClassLoader);
     }
 }

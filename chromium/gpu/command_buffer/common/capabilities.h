@@ -25,7 +25,7 @@
 namespace gpu {
 
 // NOTE: When adding members to this struct, also add corresponding
-// entries in gpu/ipc/gpu_command_buffer_traits_multi.h.
+// entries in gpu/ipc/common/gpu_command_buffer_traits_multi.h.
 
 struct GPU_EXPORT Capabilities {
   struct ShaderPrecision {
@@ -120,6 +120,9 @@ struct GPU_EXPORT Capabilities {
   int num_extensions = 0;
   int num_program_binary_formats = 0;
   int uniform_buffer_offset_alignment = 1;
+  // Describes how many buffers a surface uses in the swap chain. Default to 2
+  // since double buffering is the default in most cases.
+  int num_surface_buffers = 2;
 
   bool post_sub_buffer = false;
   bool swap_buffers_with_bounds = false;
@@ -147,6 +150,8 @@ struct GPU_EXPORT Capabilities {
   bool image_ycbcr_422 = false;
   bool image_ycbcr_420v = false;
   bool image_ycbcr_420v_disabled_for_video_frames = false;
+  bool image_xr30 = false;
+  bool image_xb30 = false;
   bool render_buffer_format_bgra8888 = false;
   bool occlusion_query = false;
   bool occlusion_query_boolean = false;
@@ -161,6 +166,7 @@ struct GPU_EXPORT Capabilities {
   // True if DirectComposition layers are enabled.
   bool dc_layers = false;
   bool use_dc_overlays_for_video = false;
+  bool protected_video_swap_chain = false;
 
   // When this parameter is true, a CHROMIUM image created with RGB format will
   // actually have RGBA format. The client is responsible for handling most of
@@ -182,8 +188,20 @@ struct GPU_EXPORT Capabilities {
 
   bool chromium_gpu_fence = false;
 
+  bool unpremultiply_and_dither_copy = false;
+
+  bool separate_stencil_ref_mask_writemask = false;
+
+  bool use_gpu_fences_for_overlay_planes = false;
+
+  bool chromium_nonblocking_readback = false;
+
   int major_version = 2;
   int minor_version = 0;
+
+  // Used by OOP raster.
+  bool context_supports_distance_field_text = true;
+  uint64_t glyph_cache_max_texture_bytes = 0.f;
 
   std::vector<gfx::BufferUsageAndFormat> texture_target_exception_list;
 };

@@ -6,7 +6,7 @@
 
 #include "base/auto_reset.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "printing/backend/win_helper.h"
 #include "printing/print_settings_initializer_win.h"
 #include "skia/ext/skia_utils_win.h"
@@ -23,7 +23,7 @@ void PrintingContextSystemDialogWin::AskUserForSettings(
     int max_pages,
     bool has_selection,
     bool is_scripted,
-    const PrintSettingsCallback& callback) {
+    PrintSettingsCallback callback) {
   DCHECK(!in_print_job_);
 
   HWND window = GetRootWindow(delegate_->GetParentView());
@@ -66,12 +66,12 @@ void PrintingContextSystemDialogWin::AskUserForSettings(
 
   if (ShowPrintDialog(&dialog_options) != S_OK) {
     ResetSettings();
-    callback.Run(FAILED);
+    std::move(callback).Run(FAILED);
     return;
   }
 
   // TODO(maruel):  Support PD_PRINTTOFILE.
-  callback.Run(ParseDialogResultEx(dialog_options));
+  std::move(callback).Run(ParseDialogResultEx(dialog_options));
 }
 
 HRESULT PrintingContextSystemDialogWin::ShowPrintDialog(PRINTDLGEX* options) {
@@ -88,8 +88,7 @@ HRESULT PrintingContextSystemDialogWin::ShowPrintDialog(PRINTDLGEX* options) {
   // browser frame (but still being modal) so neither the browser frame nor
   // the print dialog will get any input. See http://crbug.com/342697
   // http://crbug.com/180997 for details.
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
+  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
 
   return PrintDlgEx(options);
 }

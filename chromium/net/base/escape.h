@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <set>
 #include <string>
 
 #include "base/strings/string16.h"
@@ -48,14 +49,14 @@ NET_EXPORT std::string EscapeNonASCII(base::StringPiece input);
 // Escapes characters in text suitable for use as an external protocol handler
 // command.
 // We %XX everything except alphanumerics and -_.!~*'() and the restricted
-// chracters (;/?:@&=+$,#[]) and a valid percent escape sequence (%XX).
+// characters (;/?:@&=+$,#[]) and a valid percent escape sequence (%XX).
 NET_EXPORT std::string EscapeExternalHandlerValue(base::StringPiece text);
 
 // Appends the given character to the output string, escaping the character if
-// the character would be interpretted as an HTML delimiter.
+// the character would be interpreted as an HTML delimiter.
 NET_EXPORT void AppendEscapedCharForHTML(char c, std::string* output);
 
-// Escapes chars that might cause this text to be interpretted as HTML tags.
+// Escapes chars that might cause this text to be interpreted as HTML tags.
 NET_EXPORT std::string EscapeForHTML(base::StringPiece text);
 NET_EXPORT base::string16 EscapeForHTML(base::StringPiece16 text);
 
@@ -81,7 +82,7 @@ class UnescapeRule {
     // Convert %20 to spaces. In some places where we're showing URLs, we may
     // want this. In places where the URL may be copied and pasted out, then
     // you wouldn't want this since it might not be interpreted in one piece
-    // by other applications.
+    // by other applications.  Other UTF-8 spaces will not be unescaped.
     SPACES = 1 << 1,
 
     // Unescapes '/' and '\\'. If these characters were unescaped, the resulting
@@ -99,37 +100,28 @@ class UnescapeRule {
     // as much unescaping as possible.
     URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS = 1 << 3,
 
-    // Unescapes characters that can be used in spoofing attempts (such as LOCK)
-    // and control characters (such as BiDi control characters and %01).  This
-    // INCLUDES NULLs.  This is used for rare cases such as data: URL decoding
-    // where the result is binary data.
-    //
-    // DO NOT use SPOOFING_AND_CONTROL_CHARS if the URL is going to be displayed
-    // in the UI for security reasons.
-    SPOOFING_AND_CONTROL_CHARS = 1 << 4,
-
     // URL queries use "+" for space. This flag controls that replacement.
-    REPLACE_PLUS_WITH_SPACE = 1 << 5,
+    REPLACE_PLUS_WITH_SPACE = 1 << 4,
   };
 };
 
 // Unescapes |escaped_text| and returns the result.
 // Unescaping consists of looking for the exact pattern "%XX", where each X is
 // a hex digit, and converting to the character with the numerical value of
-// those digits. Thus "i%20=%203%3b" unescapes to "i = 3;".
+// those digits. Thus "i%20=%203%3b" unescapes to "i = 3;", if the
+// "UnescapeRule::SPACES" used.
 //
-// Watch out: this doesn't necessarily result in the correct final result,
-// because the encoding may be unknown. For example, the input might be ASCII,
-// which, after unescaping, is supposed to be interpreted as UTF-8, and then
-// converted into full UTF-16 chars. This function won't tell you if any
-// conversions need to take place, it only unescapes.
+// This method does not ensure that the output is a valid string using any
+// character encoding. However, it does leave escaped certain byte sequences
+// that would be dangerous to display to the user, because if interpreted as
+// UTF-8, they could be used to mislead the user. Callers that want to
+// unconditionally unescape everything for uses other than displaying data to
+// the user should use UnescapeBinaryURLComponent().
 NET_EXPORT std::string UnescapeURLComponent(base::StringPiece escaped_text,
                                             UnescapeRule::Type rules);
-NET_EXPORT base::string16 UnescapeURLComponent(base::StringPiece16 escaped_text,
-                                               UnescapeRule::Type rules);
 
 // Unescapes the given substring as a URL, and then tries to interpret the
-// result as being encoded as UTF-8. If the result is convertable into UTF-8, it
+// result as being encoded as UTF-8. If the result is convertible into UTF-8, it
 // will be returned as converted. If it is not, the original escaped string will
 // be converted into a base::string16 and returned.  |adjustments| provides
 // information on how the original string was adjusted to get the string
@@ -142,9 +134,28 @@ NET_EXPORT base::string16 UnescapeAndDecodeUTF8URLComponentWithAdjustments(
     UnescapeRule::Type rules,
     base::OffsetAdjuster::Adjustments* adjustments);
 
+// Unescapes a component of a URL for use as binary data. Unlike
+// UnescapeURLComponent, leaves nothing unescaped, including nulls, invalid
+// characters, characters that are unsafe to display, etc. This should *not*
+// be used when displaying the decoded data to the user.
+//
+// Only the NORMAL and REPLACE_PLUS_WITH_SPACE rules are allowed.
+NET_EXPORT std::string UnescapeBinaryURLComponent(
+    base::StringPiece escaped_text,
+    UnescapeRule::Type rules = UnescapeRule::NORMAL);
+
 // Unescapes the following ampersand character codes from |text|:
 // &lt; &gt; &amp; &quot; &#39;
 NET_EXPORT base::string16 UnescapeForHTML(base::StringPiece16 text);
+
+// Returns true if |escaped_text| contains any element of |bytes| in
+// percent-encoded form.
+//
+// For example, if |bytes| is {'%', '/'}, returns true if |escaped_text|
+// contains "%25" or "%2F", but not if it just contains bare '%' or '/'
+// characters.
+NET_EXPORT bool ContainsEncodedBytes(base::StringPiece escaped_text,
+                                     const std::set<unsigned char>& bytes);
 
 }  // namespace net
 

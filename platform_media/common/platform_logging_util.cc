@@ -69,7 +69,6 @@ std::string Loggable(const AudioDecoderConfig & config) {
     << "\n bytes_per_channel : " << config.bytes_per_channel()
     << "\n bytes_per_frame : " << config.bytes_per_frame()
     << "\n samples_per_second : " << config.samples_per_second()
-    << "\n input_samples_per_second : " << config.input_samples_per_second()
     << "\n seek_preroll : " << config.seek_preroll().InMilliseconds() << "ms"
     << "\n codec_delay : " << config.codec_delay()
     << "\n encrypted : " << (config.is_encrypted() ? "true" : "false")

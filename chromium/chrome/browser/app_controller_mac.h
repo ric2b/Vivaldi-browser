@@ -169,6 +169,13 @@ class ScopedKeepAlive;
 // the original profile and never incognito.
 - (void)windowChangedToProfile:(Profile*)profile;
 
+// Certain NSMenuItems [Close Tab and Close Window] have different
+// keyEquivalents depending on context. This must be invoked in two locations:
+//   * In menuNeedsUpdate:, which is called prior to showing the NSMenu.
+//   * In CommandDispatcher, which independently searches for a matching
+//     keyEquivalent.
+- (void)updateMenuItemKeyEquivalents;
+
 - (void)setVivaldiMenuItemAction:(NSMenuItem*)item;
 - (void)setVivaldiScrollType:(int)val;
 - (void)swipeWithEvent:(NSEvent*)event;
@@ -186,6 +193,14 @@ namespace app_controller_mac {
 // SessionService::Observe() to get around windows/linux and mac having
 // different models of application lifetime.
 bool IsOpeningNewWindow();
+
+// Create a guest profile if one is needed. Afterwards, even if the profile
+// already existed, notify the AppController of the profile in use.
+void CreateGuestProfileIfNeeded();
+
+// Called when Enterprise startup dialog is close and repost
+// applicationDidFinished notification.
+void EnterpriseStartupDialogClosed();
 
 }  // namespace app_controller_mac
 

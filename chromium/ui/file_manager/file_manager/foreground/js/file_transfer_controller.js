@@ -153,19 +153,21 @@ function FileTransferController(
   this.sourceNotFoundErrorCount_ = 0;
 
   /**
-   * @private {!Element}
+   * @private {!cr.ui.Command}
    * @const
    */
-  this.copyCommand_ = queryRequiredElement('command#copy', this.document_);
+  this.copyCommand_ = /** @type {!cr.ui.Command} */ (
+      queryRequiredElement('command#copy', this.document_));
 
   /**
-   * @private {!Element}
+   * @private {!cr.ui.Command}
    * @const
    */
-  this.cutCommand_ = queryRequiredElement('command#cut', this.document_);
+  this.cutCommand_ = /** @type {!cr.ui.Command} */ (
+      queryRequiredElement('command#cut', this.document_));
 
   /**
-   * @private {DirectoryEntry}
+   * @private {DirectoryEntry|FakeEntry}
    */
   this.destinationEntry_ = null;
 
@@ -701,7 +703,34 @@ FileTransferController.prototype.paste = function(
       this.preparePaste(clipboardData, opt_destinationEntry, opt_effect);
 
   return util.URLsToEntries(pastePlan.sourceURLs).then(function(entriesResult) {
-    var sourceEntries = entriesResult.entries;
+    const sourceEntries = entriesResult.entries;
+    const destinationEntry = pastePlan.destinationEntry;
+    const destinationLocationInfo =
+        this.volumeManager_.getLocationInfo(destinationEntry);
+
+    const destinationIsOutsideOfDrive =
+        VolumeManagerCommon.getVolumeTypeFromRootType(
+            destinationLocationInfo.rootType) !==
+        VolumeManagerCommon.VolumeType.DRIVE;
+
+    // Disallow transferring hosted files from Team Drives to outside of Drive.
+    // This is because hosted files aren't 'real' files, so it doesn't make
+    // sense to allow a 'local' copy (e.g. in Downloads, or on a USB), where the
+    // file can't be accessed offline (or necessarily accessed at all) by the
+    // person who tries to open it.
+    // In future, block this for all hosted files, regardless of their source.
+    // For now, to maintain backwards-compatibility, just block this for hosted
+    // files stored in a Team Drive.
+    if (sourceEntries.some(
+            entry =>
+                util.isTeamDriveEntry(entry) && FileType.isHosted(entry)) &&
+        destinationIsOutsideOfDrive) {
+      // For now, just don't execute the paste.
+      // TODO(sashab): Display a warning message, and disallow drag-drop
+      // operations.
+      return null;
+    }
+
     if (sourceEntries.length == 0) {
       // This can happen when copied files were deleted before pasting them.
       // We execute the plan as-is, so as to share the post-copy logic.
@@ -994,12 +1023,19 @@ FileTransferController.prototype.onDragStart_ = function(list, event) {
     return;
   }
 
-  // Check if a drag selection should be initiated or not.
-  if (list.shouldStartDragSelection(event)) {
+  // If this drag operation is initiated by mouse, check if we should start
+  // selecting area.
+  if (!this.touching_ && list.shouldStartDragSelection(event)) {
     event.preventDefault();
-    // If this drag operation is initiated by mouse, start selecting area.
-    if (!this.touching_)
-      this.dragSelector_.startDragSelection(list, event);
+    this.dragSelector_.startDragSelection(list, event);
+    return;
+  }
+
+  // If the drag starts outside the files list on a touch device, cancel the
+  // drag.
+  if (this.touching_ && !list.hasDragHitElement(event)) {
+    event.preventDefault();
+    list.selectionModel_.unselectAll();
     return;
   }
 
@@ -1173,11 +1209,22 @@ FileTransferController.prototype.onDrop_ =
 };
 
 /**
+ * Change to the drop target directory.
+ * @private
+ */
+FileTransferController.prototype.changeToDropTargetDirectory_ = function() {
+  // Do custom action.
+  if (this.dropTarget_ instanceof DirectoryItem)
+    /** @type {DirectoryItem} */ (this.dropTarget_).doDropTargetAction();
+  this.directoryModel_.changeDirectoryEntry(assert(this.destinationEntry_));
+};
+
+/**
  * Sets the drop target.
  *
  * @param {Element} domElement Target of the drop.
  * @param {!ClipboardData} clipboardData Data transfer object.
- * @param {!DirectoryEntry} destinationEntry Destination entry.
+ * @param {!DirectoryEntry|!FakeEntry} destinationEntry Destination entry.
  * @private
  */
 FileTransferController.prototype.setDropTarget_ =
@@ -1199,14 +1246,13 @@ FileTransferController.prototype.setDropTarget_ =
   domElement.classList.add('accepts');
   this.destinationEntry_ = destinationEntry;
 
-  // Start timer changing the directory.
-  this.navigateTimer_ = setTimeout(function() {
-    if (domElement instanceof DirectoryItem) {
-      // Do custom action.
-      /** @type {DirectoryItem} */ (domElement).doDropTargetAction();
-    }
-    this.directoryModel_.changeDirectoryEntry(destinationEntry);
-  }.bind(this), 2000);
+  // Change directory immediately for crostini, otherwise start timer.
+  if (destinationEntry.rootType === VolumeManagerCommon.RootType.CROSTINI) {
+    this.changeToDropTargetDirectory_();
+  } else {
+    this.navigateTimer_ =
+        setTimeout(this.changeToDropTargetDirectory_.bind(this), 2000);
+  }
 };
 
 /**
@@ -1345,12 +1391,23 @@ FileTransferController.prototype.canCutOrCopy_ = function(isMove) {
       return false;
     }
 
-    if (!isMove)
-      return true;
+    // Cut is unavailable on Team Drive roots.
+    if (util.isTeamDriveRoot(selectedItem.entry)) {
+      return false;
+    }
+
+    var metadata = this.metadataModel_.getCache(
+        [selectedItem.entry], ['canCopy', 'canDelete']);
+    assert(metadata.length === 1);
+
+    if (!isMove) {
+      return metadata[0].canCopy !== false;
+    }
 
     // We need to check source volume is writable for move operation.
     var volumeInfo = this.volumeManager_.getVolumeInfo(selectedItem.entry);
-    return !volumeInfo.isReadOnly;
+    return !volumeInfo.isReadOnly && metadata[0].canCopy !== false &&
+        metadata[0].canDelete !== false;
   }
 
   return isMove ? this.canCutOrDrag_() : this.canCopyOrDrag_() ;
@@ -1375,7 +1432,10 @@ FileTransferController.prototype.canCopyOrDrag_ = function() {
     if (i > 0 && !util.isSiblingEntry(entries[0], entries[i]))
       return false;
   }
-  return true;
+  // Check if canCopy is true or undefined, but not false (see
+  // https://crbug.com/849999).
+  return this.metadataModel_.getCache(entries, ['canCopy'])
+      .every(item => item.canCopy !== false);
 };
 
 /**
@@ -1383,8 +1443,18 @@ FileTransferController.prototype.canCopyOrDrag_ = function() {
  * @private
  */
 FileTransferController.prototype.canCutOrDrag_ = function() {
-  return !this.directoryModel_.isReadOnly() &&
-      this.selectionHandler_.selection.entries.length > 0;
+  if (this.directoryModel_.isReadOnly() ||
+      !this.selectionHandler_.isAvailable() ||
+      this.selectionHandler_.selection.entries.length <= 0) {
+    return false;
+  }
+  var entries = this.selectionHandler_.selection.entries;
+  // All entries need the 'canDelete' permission.
+  var metadata = this.metadataModel_.getCache(entries, ['canDelete']);
+  if (metadata.some(item => item.canDelete === false)) {
+    return false;
+  }
+  return true;
 };
 
 /**
@@ -1403,7 +1473,7 @@ FileTransferController.prototype.onPaste_ = function(event) {
     return;
   }
   event.preventDefault();
-  this.paste(assert(event.clipboardData), destination).then(function(effect) {
+  this.paste(assert(event.clipboardData), destination).then(effect => {
     // On cut, we clear the clipboard after the file is pasted/moved so we don't
     // try to move/delete the original file again.
     if (effect === 'move') {
@@ -1412,7 +1482,7 @@ FileTransferController.prototype.onPaste_ = function(event) {
         event.clipboardData.setData('fs/clear', '');
       });
     }
-  }.bind(this));
+  });
 };
 
 /**
@@ -1431,7 +1501,8 @@ FileTransferController.prototype.onBeforePaste_ = function(event) {
 
 /**
  * @param {!ClipboardData} clipboardData Clipboard data object.
- * @param {DirectoryEntry|FakeEntry} destinationEntry Destination entry.
+ * @param {DirectoryEntry|FakeEntry|FilesAppEntry} destinationEntry Destination
+ *    entry.
  * @return {boolean} Returns true if items stored in {@code clipboardData} can
  *     be pasted to {@code destinationEntry}. Otherwise, returns false.
  * @private
@@ -1457,13 +1528,20 @@ FileTransferController.prototype.canPasteOrDrop_ =
       this.isMissingFileContents_(clipboardData))
     return false;
 
+  // Destination entry needs the 'canAddChildren' permission.
+  var metadata =
+      this.metadataModel_.getCache([destinationEntry], ['canAddChildren']);
+  if (metadata[0].canAddChildren === false) {
+    return false;
+  }
+
   return true;
 };
 
 /**
  * Execute paste command.
  *
- * @param {DirectoryEntry|FakeEntry} destinationEntry
+ * @param {DirectoryEntry|FakeEntry|FilesAppEntry} destinationEntry
  * @return {boolean}  Returns true, the paste is success. Otherwise, returns
  *     false.
  */
@@ -1571,7 +1649,8 @@ FileTransferController.prototype.onFileSelectionChangedThrottled_ = function() {
  * @param {!Event} event Drag event.
  * @param {Object<string>} dragAndDropData drag & drop data from
  *     getDragAndDropGlobalData_().
- * @param {DirectoryEntry|FakeEntry} destinationEntry Destination entry.
+ * @param {DirectoryEntry|FakeEntry|FilesAppEntry} destinationEntry Destination
+ *     entry.
  * @return {DropEffectAndLabel} Returns the appropriate drop query type
  *     ('none', 'move' or copy') to the current modifiers status and the
  *     destination, as well as label message to describe why the operation is
@@ -1594,6 +1673,12 @@ FileTransferController.prototype.selectDropEffect_ = function(
       // The location is a fake entry that corresponds to special search.
       return new DropEffectAndLabel(DropEffectType.NONE, null);
     }
+    if (destinationLocationInfo.rootType ==
+        VolumeManagerCommon.RootType.CROSTINI) {
+      // The location is a the fake entry for crostini.  Start container.
+      return new DropEffectAndLabel(
+          DropEffectType.NONE, strf('OPENING_LINUX_FILES'));
+    }
     if (destinationLocationInfo.volumeInfo.isReadOnlyRemovableDevice) {
       return new DropEffectAndLabel(DropEffectType.NONE,
                                     strf('DEVICE_WRITE_PROTECTED'));
@@ -1603,6 +1688,16 @@ FileTransferController.prototype.selectDropEffect_ = function(
     // removable drives is restricted by device policy.
     return new DropEffectAndLabel(DropEffectType.NONE,
                                   strf('DEVICE_ACCESS_RESTRICTED'));
+  }
+  var destinationMetadata =
+      this.metadataModel_.getCache([destinationEntry], ['canAddChildren']);
+  if (destinationMetadata.length === 1 &&
+      destinationMetadata[0].canAddChildren === false) {
+    // TODO(sashab): Distinguish between copy/move operations and display
+    // corresponding warning text here.
+    return new DropEffectAndLabel(
+        DropEffectType.NONE,
+        strf('DROP_TARGET_FOLDER_NO_MOVE_PERMISSION', destinationEntry.name));
   }
   if (util.isDropEffectAllowed(event.dataTransfer.effectAllowed, 'move')) {
     if (!util.isDropEffectAllowed(event.dataTransfer.effectAllowed, 'copy'))

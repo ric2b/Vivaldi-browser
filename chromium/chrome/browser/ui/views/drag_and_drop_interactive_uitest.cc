@@ -17,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -27,6 +28,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "net/base/escape.h"
@@ -699,8 +701,8 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
     frame = GetFrameByName(frame_name);
     DCHECK(frame);
 
-    // Wait until frame contents have painted and are ready for hit testing.
-    WaitForChildFrameSurfaceReady(frame);
+    // Wait until hit testing data is ready.
+    WaitForHitTestDataOrChildSurfaceReady(frame);
 
     return true;
   }
@@ -719,9 +721,15 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
   DISALLOW_COPY_AND_ASSIGN(DragAndDropBrowserTest);
 };
 
+#if defined(OS_CHROMEOS)
+// Flaky: https://crbug.com/835774
+#define MAYBE_DropTextFromOutside DISABLED_DropTextFromOutside
+#else
+#define MAYBE_DropTextFromOutside DropTextFromOutside
+#endif
 // Scenario: drag text from outside the browser and drop to the right frame.
 // Test coverage: dragover, drop DOM events.
-IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DropTextFromOutside) {
+IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, MAYBE_DropTextFromOutside) {
   std::string frame_site = use_cross_site_subframe() ? "b.com" : "a.com";
   ASSERT_TRUE(NavigateToTestPage("a.com"));
   ASSERT_TRUE(NavigateRightFrame(frame_site, "drop_target.html"));
@@ -755,9 +763,15 @@ IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DropTextFromOutside) {
   }
 }
 
+#if defined(OS_CHROMEOS) || !defined(NDEBUG)
+// Flaky: https://crbug.com/835774
+#define MAYBE_DragStartInFrame DISABLED_DragStartInFrame
+#else
+#define MAYBE_DragStartInFrame DragStartInFrame
+#endif
 // Scenario: starting a drag in left frame
 // Test coverage: dragstart DOM event, dragstart data passed to the OS.
-IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DragStartInFrame) {
+IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, MAYBE_DragStartInFrame) {
   std::string frame_site = use_cross_site_subframe() ? "b.com" : "a.com";
   ASSERT_TRUE(NavigateToTestPage("a.com"));
   ASSERT_TRUE(NavigateLeftFrame(frame_site, "image_source.html"));
@@ -816,9 +830,12 @@ IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DragStartInFrame) {
   SimulateMouseUp();
 }
 
+#if defined(OS_WIN)
 // There is no known way to execute test-controlled tasks during
 // a drag-and-drop loop run by Windows OS.
-#if defined(OS_WIN)
+#define MAYBE_DragImageBetweenFrames DISABLED_DragImageBetweenFrames
+#elif defined(OS_CHROMEOS)
+// Flakiness on CrOS tracked by https://crbug.com/835573.
 #define MAYBE_DragImageBetweenFrames DISABLED_DragImageBetweenFrames
 #else
 #define MAYBE_DragImageBetweenFrames DragImageBetweenFrames
@@ -1031,9 +1048,13 @@ void DragAndDropBrowserTest::DragImageBetweenFrames_Step3(
                    {"dragstart", "dragleave", "dragenter", "dragend"}));
 }
 
+#if defined(OS_WIN)
 // There is no known way to execute test-controlled tasks during
 // a drag-and-drop loop run by Windows OS.
-#if defined(OS_WIN)
+#define MAYBE_DragImageFromDisappearingFrame \
+  DISABLED_DragImageFromDisappearingFrame
+#elif defined(OS_CHROMEOS)
+// Flakiness on CrOS tracked by https://crbug.com/835572.
 #define MAYBE_DragImageFromDisappearingFrame \
   DISABLED_DragImageFromDisappearingFrame
 #else
@@ -1150,6 +1171,9 @@ void DragAndDropBrowserTest::DragImageFromDisappearingFrame_Step3(
 // There is no known way to execute test-controlled tasks during
 // a drag-and-drop loop run by Windows OS.
 #if defined(OS_WIN)
+#define MAYBE_CrossSiteDrag DISABLED_CrossSiteDrag
+#elif defined(OS_CHROMEOS)
+// Flaky: https://crbug.com/835774
 #define MAYBE_CrossSiteDrag DISABLED_CrossSiteDrag
 #else
 #define MAYBE_CrossSiteDrag CrossSiteDrag

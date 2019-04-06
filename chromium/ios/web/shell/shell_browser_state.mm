@@ -6,7 +6,6 @@
 
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/threading/thread_restrictions.h"
 #include "ios/web/public/web_thread.h"
@@ -20,7 +19,7 @@
 namespace web {
 
 ShellBrowserState::ShellBrowserState() : BrowserState() {
-  CHECK(PathService::Get(base::DIR_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_APP_DATA, &path_));
 
   request_context_getter_ = new ShellURLRequestContextGetter(
       GetStatePath(),

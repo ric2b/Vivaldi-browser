@@ -12,22 +12,24 @@
 
 class AccountId;
 
+namespace chromeos {
+
 // Handler for login flow initiazted by Easy Signin login attempt.
 // The only difference to the default login flow is hanlding of the auth
 // failure.
-class EasyUnlockUserLoginFlow : public chromeos::ExtendedUserFlow {
+class EasyUnlockUserLoginFlow : public ExtendedUserFlow {
  public:
   explicit EasyUnlockUserLoginFlow(const AccountId& account_id);
   ~EasyUnlockUserLoginFlow() override;
 
  private:
-  // chromeos::ExtendedUserFlow implementation.
+  // ExtendedUserFlow implementation.
   bool CanLockScreen() override;
   bool CanStartArc() override;
   bool ShouldLaunchBrowser() override;
   bool ShouldSkipPostLoginScreens() override;
-  bool HandleLoginFailure(const chromeos::AuthFailure& failure) override;
-  void HandleLoginSuccess(const chromeos::UserContext& context) override;
+  bool HandleLoginFailure(const AuthFailure& failure) override;
+  void HandleLoginSuccess(const UserContext& context) override;
   bool HandlePasswordChangeDetected() override;
   void HandleOAuthTokenStatusChange(
       user_manager::User::OAuthTokenStatus status) override;
@@ -36,5 +38,7 @@ class EasyUnlockUserLoginFlow : public chromeos::ExtendedUserFlow {
 
   DISALLOW_COPY_AND_ASSIGN(EasyUnlockUserLoginFlow);
 };
+
+}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_CHROMEOS_LOGIN_EASY_UNLOCK_EASY_UNLOCK_USER_LOGIN_FLOW_H_

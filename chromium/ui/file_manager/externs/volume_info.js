@@ -81,7 +81,7 @@ VolumeInfo.prototype.providerId;
 
 /**
  * Set of icons for this volume.
- * @type {!IconSet}
+ * @type {!chrome.fileManagerPrivate.IconSet}
  */
 VolumeInfo.prototype.iconSet;
 
@@ -109,6 +109,13 @@ VolumeInfo.prototype.source;
 
 /**  @type {VolumeManagerCommon.FileSystemType} */
 VolumeInfo.prototype.diskFileSystemType;
+
+/**
+ * @type {FilesAppEntry} an entry to be used as prefix of this volume on
+ *     breadcrumbs, e.g. "My Files > Downloads", "My Files" is a prefixEntry on
+ *     "Downloads" VolumeInfo.
+ */
+VolumeInfo.prototype.prefixEntry;
 
 /**
  * Starts resolving the display root and obtains it.  It may take long time for

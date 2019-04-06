@@ -4,9 +4,9 @@
 
 #include "components/guest_view/browser/test_guest_view_manager.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 
@@ -112,10 +112,10 @@ void TestGuestViewManager::AddGuest(int guest_instance_id,
   GuestViewManager::AddGuest(guest_instance_id, guest_web_contents);
 
   guest_web_contents_watchers_.push_back(
-      base::MakeUnique<content::WebContentsDestroyedWatcher>(
+      std::make_unique<content::WebContentsDestroyedWatcher>(
           guest_web_contents));
 
-  if (created_message_loop_runner_.get())
+  if (created_message_loop_runner_)
     created_message_loop_runner_->Quit();
 
   ++num_guests_created_;
@@ -124,7 +124,7 @@ void TestGuestViewManager::AddGuest(int guest_instance_id,
     return;
   }
 
-  if (num_created_message_loop_runner_.get())
+  if (num_created_message_loop_runner_)
     num_created_message_loop_runner_->Quit();
 }
 
@@ -163,7 +163,7 @@ void TestGuestViewManager::ViewGarbageCollected(int embedder_process_id,
                                                 int view_instance_id) {
   GuestViewManager::ViewGarbageCollected(embedder_process_id, view_instance_id);
   ++num_views_garbage_collected_;
-  if (gc_message_loop_runner_.get())
+  if (gc_message_loop_runner_)
     gc_message_loop_runner_->Quit();
 }
 

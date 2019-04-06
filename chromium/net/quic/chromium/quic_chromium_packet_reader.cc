@@ -9,16 +9,16 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
-#include "net/quic/platform/api/quic_clock.h"
+#include "net/third_party/quic/platform/api/quic_clock.h"
 
 namespace net {
 
 QuicChromiumPacketReader::QuicChromiumPacketReader(
     DatagramClientSocket* socket,
-    QuicClock* clock,
+    quic::QuicClock* clock,
     Visitor* visitor,
     int yield_after_packets,
-    QuicTime::Delta yield_after_duration,
+    quic::QuicTime::Delta yield_after_duration,
     const NetLogWithSource& net_log)
     : socket_(socket),
       visitor_(visitor),
@@ -27,8 +27,9 @@ QuicChromiumPacketReader::QuicChromiumPacketReader(
       clock_(clock),
       yield_after_packets_(yield_after_packets),
       yield_after_duration_(yield_after_duration),
-      yield_after_(QuicTime::Infinite()),
-      read_buffer_(new IOBufferWithSize(static_cast<size_t>(kMaxPacketSize))),
+      yield_after_(quic::QuicTime::Infinite()),
+      read_buffer_(
+          new IOBufferWithSize(static_cast<size_t>(quic::kMaxPacketSize))),
       net_log_(net_log),
       weak_factory_(this) {}
 
@@ -44,9 +45,10 @@ void QuicChromiumPacketReader::StartReading() {
 
     DCHECK(socket_);
     read_pending_ = true;
-    int rv = socket_->Read(read_buffer_.get(), read_buffer_->size(),
-                           base::Bind(&QuicChromiumPacketReader::OnReadComplete,
-                                      weak_factory_.GetWeakPtr()));
+    int rv =
+        socket_->Read(read_buffer_.get(), read_buffer_->size(),
+                      base::BindOnce(&QuicChromiumPacketReader::OnReadComplete,
+                                     weak_factory_.GetWeakPtr()));
     UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.AsyncRead", rv == ERR_IO_PENDING);
     if (rv == ERR_IO_PENDING) {
       num_packets_read_ = 0;
@@ -72,7 +74,7 @@ void QuicChromiumPacketReader::StartReading() {
 
 size_t QuicChromiumPacketReader::EstimateMemoryUsage() const {
   // Return the size of |read_buffer_|.
-  return kMaxPacketSize;
+  return quic::kMaxPacketSize;
 }
 
 bool QuicChromiumPacketReader::ProcessReadResult(int result) {
@@ -85,14 +87,15 @@ bool QuicChromiumPacketReader::ProcessReadResult(int result) {
     return false;
   }
 
-  QuicReceivedPacket packet(read_buffer_->data(), result, clock_->Now());
+  quic::QuicReceivedPacket packet(read_buffer_->data(), result, clock_->Now());
   IPEndPoint local_address;
   IPEndPoint peer_address;
   socket_->GetLocalAddress(&local_address);
   socket_->GetPeerAddress(&peer_address);
   return visitor_->OnPacket(
-      packet, QuicSocketAddress(QuicSocketAddressImpl(local_address)),
-      QuicSocketAddress(QuicSocketAddressImpl(peer_address)));
+      packet,
+      quic::QuicSocketAddress(quic::QuicSocketAddressImpl(local_address)),
+      quic::QuicSocketAddress(quic::QuicSocketAddressImpl(peer_address)));
 }
 
 void QuicChromiumPacketReader::OnReadComplete(int result) {

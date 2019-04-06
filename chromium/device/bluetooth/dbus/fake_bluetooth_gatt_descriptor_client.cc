@@ -64,7 +64,9 @@ FakeBluetoothGattDescriptorClient::~FakeBluetoothGattDescriptorClient() {
     delete iter->second;
 }
 
-void FakeBluetoothGattDescriptorClient::Init(dbus::Bus* bus) {}
+void FakeBluetoothGattDescriptorClient::Init(
+    dbus::Bus* bus,
+    const std::string& bluetooth_service_name) {}
 
 void FakeBluetoothGattDescriptorClient::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
@@ -136,7 +138,7 @@ void FakeBluetoothGattDescriptorClient::WriteValue(
 
   // Since the only fake descriptor is "Client Characteristic Configuration"
   // and BlueZ doesn't allow writing to it, return failure.
-  error_callback.Run(bluetooth_gatt_service::kErrorWriteNotPermitted,
+  error_callback.Run(bluetooth_gatt_service::kErrorNotPermitted,
                      "Writing to the Client Characteristic Configuration "
                      "descriptor not allowed");
 }

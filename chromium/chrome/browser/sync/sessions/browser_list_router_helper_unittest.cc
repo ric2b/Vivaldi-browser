@@ -23,6 +23,8 @@ namespace sync_sessions {
 
 class MockLocalSessionEventHandler : public LocalSessionEventHandler {
  public:
+  void OnSessionRestoreComplete() override {}
+
   void OnLocalTabModified(SyncedTabDelegate* modified_tab) override {
     seen_urls_.push_back(modified_tab->GetVirtualURLAtIndex(
         modified_tab->GetCurrentEntryIndex()));
@@ -33,11 +35,11 @@ class MockLocalSessionEventHandler : public LocalSessionEventHandler {
                          const GURL& icon_url) override {}
 
   std::vector<GURL>* seen_urls() { return &seen_urls_; }
-  std::vector<SessionID::id_type>* seen_ids() { return &seen_ids_; }
+  std::vector<SessionID>* seen_ids() { return &seen_ids_; }
 
  private:
   std::vector<GURL> seen_urls_;
-  std::vector<SessionID::id_type> seen_ids_;
+  std::vector<SessionID> seen_ids_;
 };
 
 class BrowserListRouterHelperTest : public BrowserWithTestWindowTest {
@@ -130,7 +132,7 @@ TEST_F(BrowserListRouterHelperTest, NotifyOnDiscardTab) {
   BrowserList::GetInstance()->SetLastActive(browser());
 
   EXPECT_EQ(gurl_1, *handler_1.seen_urls()->rbegin());
-  SessionID::id_type old_id = *handler_1.seen_ids()->rbegin();
+  SessionID old_id = *handler_1.seen_ids()->rbegin();
 
   // Remove previous any observations from setup to make checking expectations
   // easier below.

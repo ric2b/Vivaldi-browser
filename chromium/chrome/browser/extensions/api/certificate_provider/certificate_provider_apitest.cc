@@ -42,6 +42,7 @@
 #include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/boringssl/src/include/openssl/mem.h"
 #include "third_party/boringssl/src/include/openssl/rsa.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/widget/widget.h"
@@ -140,10 +141,11 @@ void EnterWrongPin(chromeos::CertificateProviderService* service) {
   // Check that we have an error message displayed.
   chromeos::RequestPinView* view =
       service->pin_dialog_manager()->active_view_for_testing();
-  EXPECT_EQ(SK_ColorRED, view->error_label_for_testing()->enabled_color());
+  EXPECT_EQ(gfx::kGoogleRed600,
+            view->error_label_for_testing()->enabled_color());
 }
 
-class CertificateProviderApiTest : public ExtensionApiTest {
+class CertificateProviderApiTest : public extensions::ExtensionApiTest {
  public:
   CertificateProviderApiTest() {}
 
@@ -152,11 +154,11 @@ class CertificateProviderApiTest : public ExtensionApiTest {
         .WillRepeatedly(Return(true));
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
 
-    ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+    extensions::ExtensionApiTest::SetUpInProcessBrowserTestFixture();
   }
 
   void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
     // Set up the AutoSelectCertificateForUrls policy to avoid the client
     // certificate selection dialog.
     const std::string autoselect_pattern =

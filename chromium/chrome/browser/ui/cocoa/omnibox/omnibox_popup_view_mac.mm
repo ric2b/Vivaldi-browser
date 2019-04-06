@@ -6,7 +6,6 @@
 
 #include <cmath>
 
-#include "base/feature_list.h"
 #include "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/stl_util.h"
@@ -19,7 +18,6 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/toolbar/vector_icons.h"
 #include "skia/ext/skia_utils_mac.h"
@@ -55,8 +53,7 @@ OmniboxPopupViewMac::OmniboxPopupViewMac(OmniboxView* omnibox_view,
     : omnibox_view_(omnibox_view),
       model_(new OmniboxPopupModel(this, edit_model)),
       field_(field),
-      popup_(nil),
-      target_popup_frame_(NSZeroRect) {
+      popup_(nil) {
   DCHECK(omnibox_view);
   DCHECK(edit_model);
 }
@@ -74,9 +71,9 @@ OmniboxPopupViewMac::~OmniboxPopupViewMac() {
 // Background colors for different states of the popup elements.
 // static
 NSColor* OmniboxPopupViewMac::BackgroundColor(bool is_dark_theme) {
-  const CGFloat kMDDarkControlBackround = 40 / 255.;
+  const CGFloat kMDDarkControlBackground = 40 / 255.;
   return is_dark_theme
-             ? [NSColor colorWithGenericGamma22White:kMDDarkControlBackround
+             ? [NSColor colorWithGenericGamma22White:kMDDarkControlBackground
                                                alpha:1]
              : [NSColor controlBackgroundColor];
 }
@@ -100,18 +97,19 @@ void OmniboxPopupViewMac::UpdatePopupAppearance() {
     matrix_.reset();
 
     popup_.reset(nil);
-
-    target_popup_frame_ = NSZeroRect;
-
     return;
   }
 
   CreatePopupIfNeeded();
 
   NSImage* answerImage = nil;
-  if (!model_->answer_bitmap().isNull()) {
-    answerImage =
-        gfx::Image::CreateFrom1xBitmap(model_->answer_bitmap()).CopyNSImage();
+  const size_t result_size = model_->result().size();
+  for (size_t i = 0; i < result_size; ++i) {
+    const SkBitmap* bitmap = model_->RichSuggestionBitmapAt(i);
+    if (result.match_at(i).answer && bitmap != nullptr) {
+      answerImage = gfx::Image::CreateFrom1xBitmap(*bitmap).CopyNSImage();
+      break;
+    }
   }
   [matrix_ setController:[[[OmniboxPopupTableController alloc]
                              initWithMatchResults:result
@@ -135,15 +133,6 @@ void OmniboxPopupViewMac::UpdatePopupAppearance() {
 void OmniboxPopupViewMac::OnMatchIconUpdated(size_t match_index) {
   [matrix_ setMatchIcon:ImageForMatch(GetResult().match_at(match_index))
                  forRow:match_index];
-}
-
-gfx::Rect OmniboxPopupViewMac::GetTargetBounds() {
-  // Flip the coordinate system before returning.
-  NSScreen* screen = [[NSScreen screens] firstObject];
-  NSRect monitor_frame = [screen frame];
-  gfx::Rect bounds(NSRectToCGRect(target_popup_frame_));
-  bounds.set_y(monitor_frame.size.height - bounds.y() - bounds.height());
-  return bounds;
 }
 
 // This is only called by model in SetSelectedLine() after updating
@@ -181,10 +170,6 @@ void OmniboxPopupViewMac::CreatePopupIfNeeded() {
                                         defer:NO]);
     [popup_ setBackgroundColor:[NSColor clearColor]];
     [popup_ setOpaque:NO];
-    bool narrow_popup =
-        base::FeatureList::IsEnabled(omnibox::kUIExperimentNarrowDropdown);
-    if (narrow_popup)
-      [popup_ setHasShadow:YES];
 
     // Use a flipped view to pin the matrix top the top left. This is needed
     // for animated resize.
@@ -206,16 +191,14 @@ void OmniboxPopupViewMac::CreatePopupIfNeeded() {
                                                   forDarkTheme:is_dark_theme]);
     [background_view_ addSubview:matrix_];
 
-    if (!narrow_popup) {
-      top_separator_view_.reset(
-          [[OmniboxPopupTopSeparatorView alloc] initWithFrame:NSZeroRect]);
-      [contentView addSubview:top_separator_view_];
+    top_separator_view_.reset(
+        [[OmniboxPopupTopSeparatorView alloc] initWithFrame:NSZeroRect]);
+    [contentView addSubview:top_separator_view_];
 
-      bottom_separator_view_.reset([[OmniboxPopupBottomSeparatorView alloc]
-          initWithFrame:NSZeroRect
-           forDarkTheme:is_dark_theme]);
-      [contentView addSubview:bottom_separator_view_];
-    }
+    bottom_separator_view_.reset([[OmniboxPopupBottomSeparatorView alloc]
+        initWithFrame:NSZeroRect
+         forDarkTheme:is_dark_theme]);
+    [contentView addSubview:bottom_separator_view_];
 
     // TODO(dtseng): Ignore until we provide NSAccessibility support.
     [popup_ accessibilitySetOverrideValue:NSAccessibilityUnknownRole
@@ -231,12 +214,7 @@ void OmniboxPopupViewMac::PositionPopup(const CGFloat matrixHeight) {
   // Calculate the popup's position on the screen.
   NSRect popup_frame = anchor_rect_base;
 
-  bool match_omnibox_width =
-      base::FeatureList::IsEnabled(omnibox::kUIExperimentNarrowDropdown);
-
-  CGFloat table_width = match_omnibox_width
-                            ? NSWidth([field_ bounds])
-                            : NSWidth([[[field_ window] contentView] bounds]);
+  CGFloat table_width = NSWidth([[[field_ window] contentView] bounds]);
   DCHECK_GT(table_width, 0.0);
 
   NSPoint field_origin_base =
@@ -246,11 +224,8 @@ void OmniboxPopupViewMac::PositionPopup(const CGFloat matrixHeight) {
   popup_frame.size.height = matrixHeight + PopupPaddingVertical() * 2.0;
   popup_frame.size.height += [OmniboxPopupTopSeparatorView preferredHeight];
   popup_frame.size.height += [OmniboxPopupBottomSeparatorView preferredHeight];
-  popup_frame.origin.x = match_omnibox_width ? field_origin_base.x : 0;
+  popup_frame.origin.x = 0;
   popup_frame.origin.y -= NSHeight(popup_frame);
-
-  if (match_omnibox_width)
-    popup_frame.size.width = table_width;
 
   // Shift to screen coordinates.
   if ([controller window]) {
@@ -284,7 +259,7 @@ void OmniboxPopupViewMac::PositionPopup(const CGFloat matrixHeight) {
   // Matrix.
   NSRect matrix_frame = NSZeroRect;
   matrix_frame.origin.x = 0;
-  [matrix_ setContentLeftPadding:match_omnibox_width ? 0 : field_origin_base.x];
+  [matrix_ setContentLeftPadding:field_origin_base.x];
   [matrix_ setContentMaxWidth:NSWidth([field_ bounds])];
   matrix_frame.origin.y = PopupPaddingVertical();
   matrix_frame.size.width = table_width;
@@ -293,7 +268,6 @@ void OmniboxPopupViewMac::PositionPopup(const CGFloat matrixHeight) {
   [[[matrix_ tableColumns] objectAtIndex:0] setWidth:table_width];
 
   // Don't play animation games on first display.
-  target_popup_frame_ = popup_frame;
   if (![popup_ parentWindow]) {
     DCHECK(![popup_ isVisible]);
     [popup_ setFrame:popup_frame display:NO];

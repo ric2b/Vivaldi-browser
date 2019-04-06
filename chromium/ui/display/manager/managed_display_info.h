@@ -84,7 +84,7 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   // The format is
   //
   // [origin-]widthxheight[*device_scale_factor][#resolutions list]
-  //     [/<properties>][@ui-scale]
+  //     [/<properties>][@zoom-factor]
   //
   // where [] are optional:
   // - |origin| is given in x+y- format.
@@ -93,24 +93,24 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   //   (5%), and one rotation property where 'r' is 90 degree clock-wise
   //   (to the 'r'ight) 'u' is 180 degrees ('u'pside-down) and 'l' is
   //   270 degrees (to the 'l'eft).
-  // - ui-scale is floating value, e.g. @1.5 or @1.25.
+  // - zoom-factor is floating value, e.g. @1.5 or @1.25.
   // - |resolution list| is the list of size that is given in
   //   |width x height [% refresh_rate]| separated by '|'.
   //
   // A couple of examples:
   // "100x100"
   //      100x100 window at 0,0 origin. 1x device scale factor. no overscan.
-  //      no rotation. 1.0 ui scale.
+  //      no rotation. 1.0 zoom factor.
   // "5+5-300x200*2"
   //      300x200 window at 5,5 origin. 2x device scale factor.
-  //      no overscan, no rotation. 1.0 ui scale.
+  //      no overscan, no rotation. 1.0 zoom factor.
   // "300x200/ol"
   //      300x200 window at 0,0 origin. 1x device scale factor.
   //      with 5% overscan. rotated to left (90 degree counter clockwise).
-  //      1.0 ui scale.
+  //      1.0 zoom factor.
   // "10+20-300x200/u@1.5"
   //      300x200 window at 10,20 origin. 1x device scale factor.
-  //      no overscan. flipped upside-down (180 degree) and 1.5 ui scale.
+  //      no overscan. flipped upside-down (180 degree) and 1.5 zoom factor.
   // "200x100#300x200|200x100%59.0|100x100%60"
   //      200x100 window at 0,0 origin, with 3 possible resolutions,
   //      300x200, 200x100 at 59 Hz, and 100x100 at 60 Hz.
@@ -146,6 +146,16 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   // Gets/Sets the device scale factor of the display.
   float device_scale_factor() const { return device_scale_factor_; }
   void set_device_scale_factor(float scale) { device_scale_factor_ = scale; }
+
+  float zoom_factor() const { return zoom_factor_; }
+  void set_zoom_factor(float zoom_factor) { zoom_factor_ = zoom_factor; }
+
+  void set_is_zoom_factor_from_ui_scale(bool is_zoom_factor_from_ui_scale) {
+    is_zoom_factor_from_ui_scale_ = is_zoom_factor_from_ui_scale;
+  }
+  bool is_zoom_factor_from_ui_scale() const {
+    return is_zoom_factor_from_ui_scale_;
+  }
 
   // Gets/Sets the device DPI of the display.
   float device_dpi() const { return device_dpi_; }
@@ -253,6 +263,15 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
     maximum_cursor_size_ = size;
   }
 
+  const std::string& manufacturer_id() const { return manufacturer_id_; }
+  void set_manufacturer_id(const std::string& id) { manufacturer_id_ = id; }
+
+  const std::string& product_id() const { return product_id_; }
+  void set_product_id(const std::string& id) { product_id_ = id; }
+
+  int32_t year_of_manufacture() const { return year_of_manufacture_; }
+  void set_year_of_manufacture(int32_t year) { year_of_manufacture_ = year; }
+
   // Returns a string representation of the ManagedDisplayInfo, excluding
   // display modes.
   std::string ToString() const;
@@ -264,6 +283,9 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
  private:
   int64_t id_;
   std::string name_;
+  std::string manufacturer_id_;
+  std::string product_id_;
+  int32_t year_of_manufacture_;
   base::FilePath sys_path_;
   bool has_overscan_;
   std::map<Display::RotationSource, Display::Rotation> rotations_;
@@ -284,6 +306,16 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   // of |bounds_in_native_| if the display has overscan insets and/or rotation.
   gfx::Size size_in_pixel_;
   gfx::Insets overscan_insets_in_dip_;
+
+  // The zoom level currently applied to the display. This value is appended
+  // multiplicatively to the device scale factor to get the effecting scaling
+  // for a display.
+  float zoom_factor_;
+
+  // True if the |zoom_factor_| currently set is a port of the ui-scale. This is
+  // needed to correctly compute zoom values and effective device scale factor
+  // for FHD devices with 1.25 device scale factor.
+  bool is_zoom_factor_from_ui_scale_;
 
   // The pixel scale of the display. This is used to simply expand (or shrink)
   // the desktop over the native display resolution (useful in HighDPI display).

@@ -39,6 +39,11 @@ class URLFetcherResponseWriter;
 class URLRequestContextGetter;
 class URLRequestStatus;
 
+// NOTE:  This class should not be used by content embedders, as it requires an
+// in-process network stack. Content embedders should use
+// network::SimpleURLLoader instead, which works with both in-process and
+// out-of-process network stacks.
+//
 // To use this class, create an instance with the desired URL and a pointer to
 // the object to be notified when the URL has been loaded:
 //   std::unique_ptr<URLFetcher> fetcher =
@@ -214,6 +219,10 @@ class NET_EXPORT URLFetcher {
   // Set one or more load flags as defined in net/base/load_flags.h.  Must be
   // called before the request is started.
   virtual void SetLoadFlags(int load_flags) = 0;
+
+  // Set whether credentials should be included on the request. Must be called
+  // before the request is started.
+  virtual void SetAllowCredentials(bool allow_credentials) = 0;
 
   // Returns the current load flags.
   virtual int GetLoadFlags() const = 0;

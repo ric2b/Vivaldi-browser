@@ -129,8 +129,9 @@ void GetRendererContentSettingRules(const HostContentSettingsMap* map,
   // all origins.
   rules->image_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      ContentSettingToValue(CONTENT_SETTING_ALLOW), std::string(),
-      map->is_incognito()));
+      base::Value::FromUniquePtrValue(
+          ContentSettingToValue(CONTENT_SETTING_ALLOW)),
+      std::string(), map->is_incognito()));
 #endif
   map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_JAVASCRIPT,
@@ -143,6 +144,8 @@ void GetRendererContentSettingRules(const HostContentSettingsMap* map,
   map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_CLIENT_HINTS,
                              ResourceIdentifier(),
                              &(rules->client_hints_rules));
+  map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS, ResourceIdentifier(),
+                             &(rules->popup_redirect_rules));
 }
 
 bool IsMorePermissive(ContentSetting a, ContentSetting b) {

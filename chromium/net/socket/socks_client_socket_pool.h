@@ -135,14 +135,13 @@ class NET_EXPORT_PRIVATE SOCKSClientSocketPool
                     const SocketTag& socket_tag,
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
-                    const CompletionCallback& callback,
+                    CompletionOnceCallback callback,
                     const NetLogWithSource& net_log) override;
 
   void RequestSockets(const std::string& group_name,
                       const void* params,
                       int num_sockets,
-                      const NetLogWithSource& net_log,
-                      HttpRequestInfo::RequestMotivation motivation) override;
+                      const NetLogWithSource& net_log) override;
 
   void SetPriority(const std::string& group_name,
                    ClientSocketHandle* handle,

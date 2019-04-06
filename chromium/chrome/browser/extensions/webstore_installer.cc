@@ -42,11 +42,10 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/crx_file/id_util.h"
+#include "components/download/public/common/download_url_parameters.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
-#include "content/public/browser/download_save_info.h"
-#include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_details.h"
@@ -76,10 +75,10 @@
 
 using content::BrowserContext;
 using content::BrowserThread;
-using content::DownloadItem;
 using content::DownloadManager;
 using content::NavigationController;
-using content::DownloadUrlParameters;
+using download::DownloadItem;
+using download::DownloadUrlParameters;
 
 namespace {
 
@@ -174,10 +173,10 @@ void MaybeAppendAuthUserParameter(const std::string& authuser, GURL* url) {
 }
 
 std::string GetErrorMessageForDownloadInterrupt(
-    content::DownloadInterruptReason reason) {
+    download::DownloadInterruptReason reason) {
   switch (reason) {
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
       return l10n_util::GetStringUTF8(IDS_WEBSTORE_DOWNLOAD_ACCESS_DENIED);
     default:
       break;
@@ -206,9 +205,9 @@ GURL WebstoreInstaller::GetWebstoreInstallURL(
   }
 
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  if (cmd_line->HasSwitch(switches::kAppsGalleryDownloadURL)) {
+  if (cmd_line->HasSwitch(::switches::kAppsGalleryDownloadURL)) {
     std::string download_url =
-        cmd_line->GetSwitchValueASCII(switches::kAppsGalleryDownloadURL);
+        cmd_line->GetSwitchValueASCII(::switches::kAppsGalleryDownloadURL);
     return GURL(base::StringPrintf(download_url.c_str(),
                                    extension_id.c_str()));
   }
@@ -233,13 +232,11 @@ GURL WebstoreInstaller::GetWebstoreInstallURL(
 
 void WebstoreInstaller::Delegate::OnExtensionDownloadStarted(
     const std::string& id,
-    content::DownloadItem* item) {
-}
+    download::DownloadItem* item) {}
 
 void WebstoreInstaller::Delegate::OnExtensionDownloadProgress(
     const std::string& id,
-    content::DownloadItem* item) {
-}
+    download::DownloadItem* item) {}
 
 WebstoreInstaller::Approval::Approval()
     : profile(NULL),
@@ -452,11 +449,11 @@ WebstoreInstaller::~WebstoreInstaller() {
 void WebstoreInstaller::OnDownloadStarted(
     const std::string& extension_id,
     DownloadItem* item,
-    content::DownloadInterruptReason interrupt_reason) {
-  if (!item || interrupt_reason != content::DOWNLOAD_INTERRUPT_REASON_NONE) {
+    download::DownloadInterruptReason interrupt_reason) {
+  if (!item || interrupt_reason != download::DOWNLOAD_INTERRUPT_REASON_NONE) {
     if (item)
       item->Remove();
-    ReportFailure(content::DownloadInterruptReasonToString(interrupt_reason),
+    ReportFailure(download::DownloadInterruptReasonToString(interrupt_reason),
                   FAILURE_REASON_OTHER);
     return;
   }
@@ -479,7 +476,7 @@ void WebstoreInstaller::OnDownloadStarted(
     return;
   }
 
-  DCHECK_EQ(content::DOWNLOAD_INTERRUPT_REASON_NONE, interrupt_reason);
+  DCHECK_EQ(download::DOWNLOAD_INTERRUPT_REASON_NONE, interrupt_reason);
   DCHECK(!pending_modules_.empty());
   download_item_ = item;
   download_item_->AddObserver(this);
@@ -584,7 +581,7 @@ void WebstoreInstaller::DownloadCrx(
   MaybeAppendAuthUserParameter(approval_->authuser, &download_url_);
 
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   base::FilePath download_path = user_data_dir.Append(kWebstoreDownloadFolder);
 
   base::FilePath download_directory(g_download_directory_for_tests ?
@@ -699,14 +696,18 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
       render_frame_host->GetRoutingID(),
       storage_partition->GetURLRequestContext(), traffic_annotation));
   params->set_file_path(file);
-  if (controller.GetVisibleEntry())
-    params->set_referrer(content::Referrer::SanitizeForRequest(
+  if (controller.GetVisibleEntry()) {
+    content::Referrer referrer = content::Referrer::SanitizeForRequest(
         download_url_, content::Referrer(controller.GetVisibleEntry()->GetURL(),
-                                         blink::kWebReferrerPolicyDefault)));
+                                         blink::kWebReferrerPolicyDefault));
+    params->set_referrer(referrer.url);
+    params->set_referrer_policy(
+        content::Referrer::ReferrerPolicyForUrlRequest(referrer.policy));
+  }
   params->set_callback(base::Bind(&WebstoreInstaller::OnDownloadStarted,
                                   this,
                                   extension_id));
-  params->set_download_source(content::DownloadSource::EXTENSION_INSTALLER);
+  params->set_download_source(download::DownloadSource::EXTENSION_INSTALLER);
   download_manager->DownloadUrl(std::move(params));
 }
 

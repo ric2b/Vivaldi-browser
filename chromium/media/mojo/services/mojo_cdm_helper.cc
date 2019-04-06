@@ -5,6 +5,7 @@
 #include "media/mojo/services/mojo_cdm_helper.h"
 
 #include "base/stl_util.h"
+#include "media/base/cdm_context.h"
 #include "media/cdm/cdm_helpers.h"
 #include "media/mojo/services/mojo_cdm_allocator.h"
 #include "media/mojo/services/mojo_cdm_file_io.h"
@@ -48,9 +49,12 @@ cdm::CdmProxy* MojoCdmHelper::CreateCdmProxy(cdm::CdmProxyClient* client) {
   mojom::CdmProxyPtr cdm_proxy_ptr;
   service_manager::GetInterface<mojom::CdmProxy>(interface_provider_,
                                                  &cdm_proxy_ptr);
-  cdm_proxy_ =
-      std::make_unique<MojoCdmProxy>(this, std::move(cdm_proxy_ptr), client);
+  cdm_proxy_ = std::make_unique<MojoCdmProxy>(std::move(cdm_proxy_ptr), client);
   return cdm_proxy_.get();
+}
+
+int MojoCdmHelper::GetCdmProxyCdmId() {
+  return cdm_proxy_ ? cdm_proxy_->GetCdmId() : CdmContext::kInvalidCdmId;
 }
 
 cdm::Buffer* MojoCdmHelper::CreateCdmBuffer(size_t capacity) {
@@ -101,17 +105,6 @@ void MojoCdmHelper::CloseCdmFileIO(MojoCdmFileIO* cdm_file_io) {
                 [cdm_file_io](const std::unique_ptr<MojoCdmFileIO>& ptr) {
                   return ptr.get() == cdm_file_io;
                 });
-}
-
-void MojoCdmHelper::DestroyCdmProxy(MojoCdmProxy* cdm_proxy) {
-  DVLOG(3) << __func__ << ": cdm_proxy = " << cdm_proxy;
-
-  if (cdm_proxy != cdm_proxy_.get()) {
-    DVLOG(3) << __func__ << ": Invalid CdmProxy to destroy.";
-    return;
-  }
-
-  cdm_proxy_.reset();
 }
 
 void MojoCdmHelper::ReportFileReadSize(int file_size_bytes) {

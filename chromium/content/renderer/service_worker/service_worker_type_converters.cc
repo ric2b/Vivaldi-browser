@@ -14,8 +14,7 @@ TypeConverter<blink::WebCanMakePaymentEventData,
     Convert(const payments::mojom::CanMakePaymentEventDataPtr& input) {
   blink::WebCanMakePaymentEventData output;
 
-  output.top_level_origin =
-      blink::WebString::FromUTF8(input->top_level_origin.spec());
+  output.top_origin = blink::WebString::FromUTF8(input->top_origin.spec());
   output.payment_request_origin =
       blink::WebString::FromUTF8(input->payment_request_origin.spec());
 
@@ -42,8 +41,7 @@ TypeConverter<blink::WebPaymentRequestEventData,
     Convert(const payments::mojom::PaymentRequestEventDataPtr& input) {
   blink::WebPaymentRequestEventData output;
 
-  output.top_level_origin =
-      blink::WebString::FromUTF8(input->top_level_origin.spec());
+  output.top_origin = blink::WebString::FromUTF8(input->top_origin.spec());
   output.payment_request_origin =
       blink::WebString::FromUTF8(input->payment_request_origin.spec());
   output.payment_request_id =
@@ -74,15 +72,9 @@ blink::WebPaymentMethodData
 TypeConverter<blink::WebPaymentMethodData,
               payments::mojom::PaymentMethodDataPtr>::
     Convert(const payments::mojom::PaymentMethodDataPtr& input) {
+  DCHECK(!input->supported_method.empty());
   blink::WebPaymentMethodData output;
-
-  output.supported_methods =
-      blink::WebVector<blink::WebString>(input->supported_methods.size());
-  for (size_t i = 0; i < input->supported_methods.size(); i++) {
-    output.supported_methods[i] =
-        blink::WebString::FromUTF8(input->supported_methods[i]);
-  }
-
+  output.supported_method = blink::WebString::FromUTF8(input->supported_method);
   output.stringified_data = blink::WebString::FromUTF8(input->stringified_data);
 
   return output;
@@ -106,7 +98,6 @@ TypeConverter<blink::WebPaymentCurrencyAmount,
   blink::WebPaymentCurrencyAmount output;
   output.currency = blink::WebString::FromUTF8(input->currency);
   output.value = blink::WebString::FromUTF8(input->value);
-  output.currency_system = blink::WebString::FromUTF8(input->currency_system);
   return output;
 }
 
@@ -114,14 +105,11 @@ blink::WebPaymentDetailsModifier
 TypeConverter<blink::WebPaymentDetailsModifier,
               payments::mojom::PaymentDetailsModifierPtr>::
     Convert(const payments::mojom::PaymentDetailsModifierPtr& input) {
+  DCHECK(!input->method_data->supported_method.empty());
   blink::WebPaymentDetailsModifier output;
 
-  output.supported_methods = blink::WebVector<blink::WebString>(
-      input->method_data->supported_methods.size());
-  for (size_t i = 0; i < input->method_data->supported_methods.size(); i++) {
-    output.supported_methods[i] =
-        blink::WebString::FromUTF8(input->method_data->supported_methods[i]);
-  }
+  output.supported_method =
+      blink::WebString::FromUTF8(input->method_data->supported_method);
 
   output.total = mojo::ConvertTo<blink::WebPaymentItem>(input->total);
 

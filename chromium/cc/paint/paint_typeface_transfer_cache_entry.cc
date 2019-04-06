@@ -118,7 +118,7 @@ size_t ServicePaintTypefaceTransferCacheEntry::CachedSize() const {
 
 bool ServicePaintTypefaceTransferCacheEntry::Deserialize(
     GrContext* context,
-    base::span<uint8_t> data) {
+    base::span<const uint8_t> data) {
   data_ = data;
   size_t initial_size = data_.size();
 
@@ -198,7 +198,7 @@ bool ServicePaintTypefaceTransferCacheEntry::Deserialize(
 
   // Set the size to however much data we read.
   size_ = initial_size - data_.size();
-  data_ = base::span<uint8_t>(nullptr);
+  data_ = base::span<uint8_t>();
   return valid_;
 }
 
@@ -208,7 +208,7 @@ void ServicePaintTypefaceTransferCacheEntry::ReadSimple(T* val) {
     valid_ = false;
   if (!valid_)
     return;
-  *val = *reinterpret_cast<T*>(data_.data());
+  *val = *reinterpret_cast<const T*>(data_.data());
   data_ = data_.subspan(sizeof(T));
 }
 

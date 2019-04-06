@@ -4,15 +4,25 @@
 
 #include "content/browser/web_contents/web_contents_view_aura.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/test/scoped_command_line.h"
+#include "base/test/scoped_feature_list.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
 #include "ui/display/display_switches.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace content {
+
+namespace {
+constexpr gfx::Rect kBounds = gfx::Rect(0, 0, 20, 20);
+}  // namespace
 
 class WebContentsViewAuraTest : public RenderViewHostTestHarness {
  public:
@@ -21,6 +31,8 @@ class WebContentsViewAuraTest : public RenderViewHostTestHarness {
 
   void SetUp() override {
     RenderViewHostTestHarness::SetUp();
+    root_window()->SetBounds(kBounds);
+    web_contents()->GetNativeView()->SetBounds(kBounds);
     web_contents()->GetNativeView()->Show();
     root_window()->AddChild(web_contents()->GetNativeView());
   }
@@ -39,21 +51,29 @@ TEST_F(WebContentsViewAuraTest, EnableDisableOverscroll) {
   EXPECT_TRUE(wcva->navigation_overlay_);
 }
 
-TEST_F(WebContentsViewAuraTest, ScreenInfoColorDepth) {
-  WebContentsView* web_contents_view = view();
-
-  ScreenInfo screen_info;
-  web_contents_view->GetScreenInfo(&screen_info);
-  EXPECT_EQ(24u, screen_info.depth);
-  EXPECT_EQ(8u, screen_info.depth_per_component);
+TEST_F(WebContentsViewAuraTest, ShowHideParent) {
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  root_window()->Hide();
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  root_window()->Show();
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
 }
 
-TEST_F(WebContentsViewAuraTest, ShowHideParent) {
-  EXPECT_TRUE(web_contents()->IsVisible());
-  root_window()->Hide();
-  EXPECT_FALSE(web_contents()->IsVisible());
-  root_window()->Show();
-  EXPECT_TRUE(web_contents()->IsVisible());
+TEST_F(WebContentsViewAuraTest, OccludeView) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kWebContentsOcclusion);
+
+  // |other_window| occludes |web_contents()| when it's shown.
+  std::unique_ptr<aura::Window> other_window(
+      aura::test::CreateTestWindowWithDelegateAndType(
+          nullptr, aura::client::WINDOW_TYPE_NORMAL, 0, kBounds, root_window(),
+          false));
+
+  EXPECT_EQ(web_contents()->GetVisibility(), Visibility::VISIBLE);
+  other_window->Show();
+  EXPECT_EQ(web_contents()->GetVisibility(), Visibility::OCCLUDED);
+  other_window->Hide();
+  EXPECT_EQ(web_contents()->GetVisibility(), Visibility::VISIBLE);
 }
 
 }  // namespace content

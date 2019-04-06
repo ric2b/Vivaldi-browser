@@ -49,17 +49,21 @@ class CONTENT_EXPORT CSPContext {
   bool IsAllowedByCsp(CSPDirective::Name directive_name,
                       const GURL& url,
                       bool is_redirect,
+                      bool is_response_check,
                       const SourceLocation& source_location,
-                      CheckCSPDisposition check_csp_disposition);
+                      CheckCSPDisposition check_csp_disposition,
+                      bool is_form_submission);
 
   // Returns true if the request URL needs to be modified (e.g. upgraded to
-  // HTTPS) according to the CSP. If true, |new_url| will contain the new URL
-  // that should be used instead of |url|.
-  bool ShouldModifyRequestUrlForCsp(const GURL& url,
-                                    bool is_suresource_or_form_submssion,
-                                    GURL* new_url);
+  // HTTPS) according to the CSP.
+  bool ShouldModifyRequestUrlForCsp(bool is_suresource_or_form_submssion);
+
+  // If the scheme of |url| is HTTP, this upgrades it to HTTPS, otherwise it
+  // doesn't modify it.
+  void ModifyRequestUrlForCsp(GURL* url);
 
   void SetSelf(const url::Origin origin);
+  void SetSelf(const CSPSource& self_source);
 
   // When a CSPSourceList contains 'self', the url is allowed when it match the
   // CSPSource returned by this function.
@@ -108,6 +112,7 @@ struct CONTENT_EXPORT CSPViolationParams {
                      const std::string& console_message,
                      const GURL& blocked_url,
                      const std::vector<std::string>& report_endpoints,
+                     bool use_reporting_api,
                      const std::string& header,
                      const blink::WebContentSecurityPolicyType& disposition,
                      bool after_redirect,
@@ -128,9 +133,14 @@ struct CONTENT_EXPORT CSPViolationParams {
   // The URL that was blocked by the policy.
   GURL blocked_url;
 
-  // The set of URI where a JSON-formatted report of the violation should be
-  // sent.
+  // The set of endpoints where a report of the violation should be sent.
+  // Based on 'use_reporting_api' it can be either a set of group_names (when
+  // 'use_reporting_api' = true) or a set of URLs. This means that it's not
+  // possible to use both methods of reporting. This is by design.
   std::vector<std::string> report_endpoints;
+
+  // Whether to use the reporting api or not.
+  bool use_reporting_api;
 
   // The raw content security policy header that was violated.
   std::string header;

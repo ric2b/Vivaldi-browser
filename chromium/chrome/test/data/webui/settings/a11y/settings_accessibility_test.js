@@ -26,7 +26,7 @@ SettingsAccessibilityTest.axeOptions = {
     // Disable 'skip-link' check since there are few tab stops before the main
     // content.
     'skip-link': {enabled: false},
-  // TODO(crbug.com/761461): enable after addressing flaky tests.
+    // TODO(crbug.com/761461): enable after addressing flaky tests.
     'color-contrast': {enabled: false},
   }
 };
@@ -36,6 +36,16 @@ SettingsAccessibilityTest.violationFilter = {
   // Polymer components use aria-active-attribute.
   'aria-valid-attr': function(nodeResult) {
     return nodeResult.element.hasAttribute('aria-active-attribute');
+  },
+  'button-name': function(nodeResult) {
+    if (nodeResult.element.classList.contains('icon-expand-more'))
+      return true;
+
+    // Ignore the <button> residing within cr-toggle, which has tabindex -1
+    // anyway.
+    const parentNode = nodeResult.element.parentNode;
+    return parentNode && parentNode.host &&
+        parentNode.host.tagName == 'CR-TOGGLE';
   },
 };
 

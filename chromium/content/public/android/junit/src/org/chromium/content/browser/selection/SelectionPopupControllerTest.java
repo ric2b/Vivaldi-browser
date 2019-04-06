@@ -9,7 +9,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -23,8 +22,9 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.provider.Settings;
 import android.view.ActionMode;
-import android.view.View;
+import android.view.ViewGroup;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,33 +35,39 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLog;
 
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content.browser.RenderCoordinates;
+import org.chromium.content.browser.ContentClassFactory;
+import org.chromium.content.browser.PopupController;
+import org.chromium.content.browser.RenderCoordinatesImpl;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionMetricsLogger;
 import org.chromium.content_public.browser.SelectionPopupController;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.chromium.ui.base.MenuSourceType;
+import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.touch_selection.SelectionEventType;
 
 /**
  * Unit tests for {@link SelectionPopupController}.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class SelectionPopupControllerTest {
     private SelectionPopupControllerImpl mController;
     private Context mContext;
     private WindowAndroid mWindowAndroid;
     private WebContentsImpl mWebContents;
-    private View mView;
+    private ViewGroup mView;
+    private ViewAndroidDelegate mViewAndroidDelegate;
     private ActionMode mActionMode;
     private PackageManager mPackageManager;
     private SmartSelectionMetricsLogger mLogger;
-    private RenderCoordinates mRenderCoordinates;
+    private RenderCoordinatesImpl mRenderCoordinates;
     private ContentResolver mContentResolver;
+    private PopupController mPopupController;
+    private ContentClassFactory mOriginalContentClassFactory;
 
     private static final String MOUNTAIN_FULL = "585 Franklin Street, Mountain View, CA 94041";
     private static final String MOUNTAIN = "Mountain";
@@ -78,9 +84,6 @@ public class SelectionPopupControllerTest {
 
         @Override
         public void onSelectionEvent(int eventType, float posXPix, float poxYPix) {}
-
-        @Override
-        public void showUnhandledTapUIIfNeeded(int x, int y) {}
 
         @Override
         public void selectWordAroundCaretAck(boolean didSelect, int startAdjust, int endAdjust) {}
@@ -127,11 +130,20 @@ public class SelectionPopupControllerTest {
         mContext = Mockito.mock(Context.class);
         mWindowAndroid = Mockito.mock(WindowAndroid.class);
         mWebContents = Mockito.mock(WebContentsImpl.class);
-        mView = Mockito.mock(View.class);
+        mView = Mockito.mock(ViewGroup.class);
+        mViewAndroidDelegate = ViewAndroidDelegate.createBasicDelegate(mView);
         mActionMode = Mockito.mock(ActionMode.class);
         mPackageManager = Mockito.mock(PackageManager.class);
-        mRenderCoordinates = Mockito.mock(RenderCoordinates.class);
+        mRenderCoordinates = Mockito.mock(RenderCoordinatesImpl.class);
         mLogger = Mockito.mock(SmartSelectionMetricsLogger.class);
+        mPopupController = Mockito.mock(PopupController.class);
+
+        mOriginalContentClassFactory = ContentClassFactory.get();
+        ContentClassFactory mockContentClassFactory = Mockito.mock(ContentClassFactory.class);
+        when(mockContentClassFactory.createHandleObserver(
+                     Mockito.any(SelectionPopupControllerImpl.ReadbackViewCallback.class)))
+                .thenReturn(null);
+        ContentClassFactory.set(mockContentClassFactory);
 
         mContentResolver = RuntimeEnvironment.application.getContentResolver();
         // To let isDeviceProvisioned() call in showSelectionMenu() return true.
@@ -141,9 +153,14 @@ public class SelectionPopupControllerTest {
         when(mContext.getContentResolver()).thenReturn(mContentResolver);
         when(mWebContents.getRenderCoordinates()).thenReturn(mRenderCoordinates);
         when(mRenderCoordinates.getDeviceScaleFactor()).thenReturn(1.f);
-
+        when(mWebContents.getViewAndroidDelegate()).thenReturn(mViewAndroidDelegate);
         mController = SelectionPopupControllerImpl.createForTesting(
-                mContext, mWindowAndroid, mWebContents, mView);
+                mContext, mWindowAndroid, mWebContents, mPopupController);
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        ContentClassFactory.set(mOriginalContentClassFactory);
     }
 
     @Test
@@ -466,26 +483,18 @@ public class SelectionPopupControllerTest {
         mController.setSelectionInsertionHandleObserver(handleObserver);
 
         // Selection handles shown.
-        mController.onSelectionEvent(
-                SelectionEventType.SELECTION_HANDLES_SHOWN, 0, 0, 0, 0, 0.f, 0.f);
-        // Selection handles moved, but drag wasn't triggered, so no handleDragStartedOrMoved call.
-        mController.onSelectionEvent(
-                SelectionEventType.SELECTION_HANDLES_MOVED, 0, 0, 0, 0, 0.f, 0.f);
-        order.verify(handleObserver, never()).handleDragStartedOrMoved(anyFloat(), anyFloat());
+        mController.onSelectionEvent(SelectionEventType.SELECTION_HANDLES_SHOWN, 0, 0, 0, 0);
 
-        // Selection handle drag started.
-        mController.onSelectionEvent(
-                SelectionEventType.SELECTION_HANDLE_DRAG_STARTED, 0, 0, 0, 0, 0.f, 0.f);
+        // Selection handles drag started.
+        mController.onDragUpdate(0.f, 0.f);
         order.verify(handleObserver).handleDragStartedOrMoved(0.f, 0.f);
 
         // Moving.
-        mController.onSelectionEvent(
-                SelectionEventType.SELECTION_HANDLES_MOVED, 0, 0, 0, 0, 5.f, 5.f);
+        mController.onDragUpdate(5.f, 5.f);
         order.verify(handleObserver).handleDragStartedOrMoved(5.f, 5.f);
 
         // Selection handle drag stopped.
-        mController.onSelectionEvent(
-                SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED, 0, 0, 0, 0, 0.f, 0.f);
+        mController.onSelectionEvent(SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED, 0, 0, 0, 0);
         order.verify(handleObserver).handleDragStopped();
     }
 
@@ -498,26 +507,18 @@ public class SelectionPopupControllerTest {
         mController.setSelectionInsertionHandleObserver(handleObserver);
 
         // Insertion handle shown.
-        mController.onSelectionEvent(
-                SelectionEventType.INSERTION_HANDLE_SHOWN, 0, 0, 0, 0, 0.f, 0.f);
-        // Insertion handle moved, but drag wasn't triggered, so no handleDragStartedOrMoved call.
-        mController.onSelectionEvent(
-                SelectionEventType.INSERTION_HANDLE_MOVED, 0, 0, 0, 0, 0.f, 0.f);
-        order.verify(handleObserver, never()).handleDragStartedOrMoved(anyFloat(), anyFloat());
+        mController.onSelectionEvent(SelectionEventType.INSERTION_HANDLE_SHOWN, 0, 0, 0, 0);
 
         // Insertion handle drag started.
-        mController.onSelectionEvent(
-                SelectionEventType.INSERTION_HANDLE_DRAG_STARTED, 0, 0, 0, 0, 0.f, 0.f);
+        mController.onDragUpdate(0.f, 0.f);
         order.verify(handleObserver).handleDragStartedOrMoved(0.f, 0.f);
 
         // Moving.
-        mController.onSelectionEvent(
-                SelectionEventType.INSERTION_HANDLE_MOVED, 0, 0, 0, 0, 5.f, 5.f);
+        mController.onDragUpdate(5.f, 5.f);
         order.verify(handleObserver).handleDragStartedOrMoved(5.f, 5.f);
 
         // Insertion handle drag stopped.
-        mController.onSelectionEvent(
-                SelectionEventType.INSERTION_HANDLE_DRAG_STOPPED, 0, 0, 0, 0, 0.f, 0.f);
+        mController.onSelectionEvent(SelectionEventType.INSERTION_HANDLE_DRAG_STOPPED, 0, 0, 0, 0);
         order.verify(handleObserver).handleDragStopped();
     }
 

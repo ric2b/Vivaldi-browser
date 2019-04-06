@@ -13,10 +13,10 @@
 #include "content/shell/test_runner/mock_grammar_check.h"
 #include "content/shell/test_runner/test_runner.h"
 #include "content/shell/test_runner/web_test_delegate.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebTextCheckingCompletion.h"
-#include "third_party/WebKit/public/web/WebTextCheckingResult.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_text_checking_completion.h"
+#include "third_party/blink/public/web/web_text_checking_result.h"
 
 namespace test_runner {
 
@@ -82,13 +82,12 @@ void SpellCheckClient::RequestCheckingOfText(
 
   last_requested_text_checking_completion_ = completion;
   last_requested_text_check_string_ = text;
-  if (spell_check_.HasInCache(text))
+  if (spell_check_.HasInCache(text)) {
     FinishLastTextCheck();
-  else
-    delegate_->PostDelayedTask(
-        base::Bind(&SpellCheckClient::FinishLastTextCheck,
-                   weak_factory_.GetWeakPtr()),
-        0);
+  } else {
+    delegate_->PostTask(base::BindOnce(&SpellCheckClient::FinishLastTextCheck,
+                                       weak_factory_.GetWeakPtr()));
+  }
 }
 
 void SpellCheckClient::CancelAllPendingRequests() {

@@ -10,9 +10,10 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/content_settings_mock_observer.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/chrome_switches.h"
@@ -25,6 +26,7 @@
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/default_pref_store.h"
@@ -37,7 +39,7 @@
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -153,7 +155,7 @@ TEST_F(PrefProviderTest, DiscardObsoleteFullscreenAndMouselockPreferences) {
   // Set some pref data. Each content setting type has the following value:
   // {"[*.]example.com": {"setting": 1}}
   base::DictionaryValue pref_data;
-  auto data_for_pattern = base::MakeUnique<base::DictionaryValue>();
+  auto data_for_pattern = std::make_unique<base::DictionaryValue>();
   data_for_pattern->SetInteger("setting", CONTENT_SETTING_ALLOW);
   pref_data.SetWithoutPathExpansion(kPattern, std::move(data_for_pattern));
   prefs->Set(kFullscreenPrefPath, pref_data);
@@ -362,13 +364,22 @@ TEST_F(PrefProviderTest, ResourceIdentifier) {
             TestUtils::GetContentSetting(&pref_content_settings_provider, host,
                                          host, CONTENT_SETTINGS_TYPE_PLUGINS,
                                          resource1, false));
-  pref_content_settings_provider.SetWebsiteSetting(
-      pattern, pattern, CONTENT_SETTINGS_TYPE_PLUGINS, resource1,
-      new base::Value(CONTENT_SETTING_BLOCK));
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            TestUtils::GetContentSetting(&pref_content_settings_provider, host,
-                                         host, CONTENT_SETTINGS_TYPE_PLUGINS,
-                                         resource1, false));
+  std::unique_ptr<base::Value> value(new base::Value(CONTENT_SETTING_BLOCK));
+  if (pref_content_settings_provider.SetWebsiteSetting(
+          pattern, pattern, CONTENT_SETTINGS_TYPE_PLUGINS, resource1,
+          value.get())) {
+    value.release();
+  }
+
+  bool flash_is_ephemeral =
+      ContentSettingsRegistry::GetInstance()
+          ->Get(CONTENT_SETTINGS_TYPE_PLUGINS)
+          ->storage_behavior() == ContentSettingsInfo::EPHEMERAL;
+  ContentSetting expectation =
+      flash_is_ephemeral ? CONTENT_SETTING_DEFAULT : CONTENT_SETTING_BLOCK;
+  EXPECT_EQ(expectation, TestUtils::GetContentSetting(
+                             &pref_content_settings_provider, host, host,
+                             CONTENT_SETTINGS_TYPE_PLUGINS, resource1, false));
   EXPECT_EQ(CONTENT_SETTING_DEFAULT,
             TestUtils::GetContentSetting(&pref_content_settings_provider, host,
                                          host, CONTENT_SETTINGS_TYPE_PLUGINS,
@@ -397,7 +408,7 @@ TEST_F(PrefProviderTest, Deadlock) {
     DictionaryPrefUpdate update(&prefs, info->pref_name());
     base::DictionaryValue* mutable_settings = update.Get();
     mutable_settings->SetWithoutPathExpansion(
-        "www.example.com,*", base::MakeUnique<base::DictionaryValue>());
+        "www.example.com,*", std::make_unique<base::DictionaryValue>());
   }
   EXPECT_TRUE(observer.notification_received());
 
@@ -493,12 +504,20 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
                              ResourceIdentifier(), value->DeepCopy());
 #if BUILDFLAG(ENABLE_PLUGINS)
   // Non-empty pattern, plugins, non-empty resource identifier.
-  provider.SetWebsiteSetting(pattern, wildcard, CONTENT_SETTINGS_TYPE_PLUGINS,
-                             res_id, value->DeepCopy());
+  std::unique_ptr<base::Value> value_copy(value->DeepCopy());
+  if (provider.SetWebsiteSetting(pattern, wildcard,
+                                 CONTENT_SETTINGS_TYPE_PLUGINS, res_id,
+                                 value_copy.get())) {
+    value_copy.release();
+  }
 
   // Empty pattern, plugins, non-empty resource identifier.
-  provider.SetWebsiteSetting(wildcard, wildcard, CONTENT_SETTINGS_TYPE_PLUGINS,
-                             res_id, value->DeepCopy());
+  value_copy.reset(value->DeepCopy());
+  if (provider.SetWebsiteSetting(wildcard, wildcard,
+                                 CONTENT_SETTINGS_TYPE_PLUGINS, res_id,
+                                 value_copy.get())) {
+    value_copy.release();
+  }
 #endif
   // Non-empty pattern, syncable, empty resource identifier.
   provider.SetWebsiteSetting(pattern, wildcard, CONTENT_SETTINGS_TYPE_COOKIES,
@@ -554,7 +573,7 @@ TEST_F(PrefProviderTest, LastModified) {
       ContentSettingsPattern::FromString("google.com");
   ContentSettingsPattern pattern_2 =
       ContentSettingsPattern::FromString("www.google.com");
-  auto value = base::MakeUnique<base::Value>(CONTENT_SETTING_ALLOW);
+  auto value = std::make_unique<base::Value>(CONTENT_SETTING_ALLOW);
 
   // Create a  provider and set a few settings.
   PrefProvider provider(&prefs, false /* incognito */,
@@ -585,7 +604,7 @@ TEST_F(PrefProviderTest, LastModified) {
   EXPECT_EQ(last_modified, t1);
 
   // A change for pattern_1, which will update the last_modified timestamp.
-  auto value2 = base::MakeUnique<base::Value>(CONTENT_SETTING_BLOCK);
+  auto value2 = std::make_unique<base::Value>(CONTENT_SETTING_BLOCK);
   provider.SetWebsiteSetting(pattern_1, ContentSettingsPattern::Wildcard(),
                              CONTENT_SETTINGS_TYPE_COOKIES, std::string(),
                              value2->DeepCopy());
@@ -603,5 +622,119 @@ TEST_F(PrefProviderTest, LastModified) {
 
   provider.ShutdownOnUIThread();
 }
+
+// Tests if PrefProvider rejects storing ephemeral types.
+TEST_F(PrefProviderTest, RejectEphemeralStorage) {
+  // Find an ephemeral type.
+  ContentSettingsType ephemeral_type = CONTENT_SETTINGS_NUM_TYPES;
+  ContentSettingsRegistry* registry = ContentSettingsRegistry::GetInstance();
+  for (const content_settings::ContentSettingsInfo* item : *registry) {
+    if (item->storage_behavior() == ContentSettingsInfo::EPHEMERAL) {
+      ephemeral_type = item->website_settings_info()->type();
+      break;
+    }
+  }
+  if (ephemeral_type == CONTENT_SETTINGS_NUM_TYPES)
+    return;
+
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  PrefProvider::RegisterProfilePrefs(prefs.registry());
+  PrefProvider provider(&prefs, false /* regular */,
+                        true /* store_last_modified */);
+  ContentSettingsPattern site_pattern =
+      ContentSettingsPattern::FromString("https://example.com");
+
+  std::unique_ptr<base::Value> value(new base::Value(CONTENT_SETTING_ALLOW));
+  EXPECT_FALSE(provider.SetWebsiteSetting(
+      site_pattern, site_pattern, ephemeral_type, std::string(), value.get()));
+  std::unique_ptr<RuleIterator> rule_iterator =
+      provider.GetRuleIterator(ephemeral_type, std::string(), false);
+  EXPECT_EQ(nullptr, rule_iterator);
+
+  provider.ShutdownOnUIThread();
+}
+
+// Tests if PrefProvider clears unsupported (ephemeral) types if they are
+// stored.
+// kEnableEphemeralFlashPermission is not available on Android.
+#if BUILDFLAG(ENABLE_PLUGINS)
+#if !defined(OS_ANDROID)
+TEST_F(PrefProviderTest, ClearingUnsupportedTypes) {
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  PrefProvider::RegisterProfilePrefs(prefs.registry());
+
+  const ContentSettingsPattern site_pattern =
+      ContentSettingsPattern::FromString("https://example.com");
+
+  enum steps {
+    SET_PERMISSION,
+    CHECK_EXISTENCE,
+    CLEAR_PERMISSION,
+    CHECK_DELETION,
+  };
+
+  for (int step = SET_PERMISSION; step <= CHECK_DELETION; step++) {
+    bool ephemeral_flash_permission = (step == CLEAR_PERMISSION);
+
+    // Boilerplate code to set the switch and restart PrefProvider.
+    base::test::ScopedFeatureList feature_list;
+    if (ephemeral_flash_permission) {
+      feature_list.InitAndEnableFeature(
+          features::kEnableEphemeralFlashPermission);
+    } else {
+      feature_list.InitAndDisableFeature(
+          features::kEnableEphemeralFlashPermission);
+    }
+    ContentSettingsRegistry::GetInstance()->ResetForTest();
+    PrefProvider provider(&prefs, false, true);
+
+    switch (step) {
+      case SET_PERMISSION: {
+        // Disable Ephemeral Flash permissions and set permission.
+        ASSERT_FALSE(ephemeral_flash_permission);
+        EXPECT_TRUE(provider.SetWebsiteSetting(
+            site_pattern, site_pattern, CONTENT_SETTINGS_TYPE_PLUGINS,
+            std::string(), new base::Value(CONTENT_SETTING_ALLOW)));
+        EXPECT_NE(nullptr,
+                  provider.GetRuleIterator(CONTENT_SETTINGS_TYPE_PLUGINS,
+                                           std::string(), false));
+        break;
+      }
+      case CHECK_EXISTENCE: {
+        // Reload PrefProvider with persistent Flash permission and ensure the
+        // permission still exists.
+        ASSERT_FALSE(ephemeral_flash_permission);
+        EXPECT_NE(nullptr,
+                  provider.GetRuleIterator(CONTENT_SETTINGS_TYPE_PLUGINS,
+                                           std::string(), false));
+        break;
+      }
+      case CLEAR_PERMISSION: {
+        // Enable Ephemeral Flash permissions and clear permission.
+        ASSERT_TRUE(ephemeral_flash_permission);
+        EXPECT_EQ(nullptr,
+                  provider.GetRuleIterator(CONTENT_SETTINGS_TYPE_PLUGINS,
+                                           std::string(), false));
+
+        provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_PLUGINS);
+        break;
+      }
+      case CHECK_DELETION: {
+        // Reload PrefProvider with persistent Flash permission and check if the
+        // permission is gone.
+        ASSERT_FALSE(ephemeral_flash_permission);
+        EXPECT_EQ(nullptr,
+                  provider.GetRuleIterator(CONTENT_SETTINGS_TYPE_PLUGINS,
+                                           std::string(), false));
+        break;
+      }
+    }
+
+    provider.ShutdownOnUIThread();
+  }
+}
+#endif  // !defined(OS_ANDROID)
+
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 }  // namespace content_settings

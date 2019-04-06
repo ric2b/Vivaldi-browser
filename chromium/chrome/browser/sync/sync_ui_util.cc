@@ -40,7 +40,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #else
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -55,12 +55,6 @@ namespace sync_ui_util {
 
 namespace {
 
-bool IsChromeDashboardEnabled() {
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("ChromeDashboard");
-  return group_name == "Enabled";
-}
-
 // Returns the message that should be displayed when the user is authenticated
 // and can connect to the sync server. If the user hasn't yet authenticated, an
 // empty string is returned.
@@ -68,13 +62,17 @@ base::string16 GetSyncedStateStatusLabel(ProfileSyncService* service,
                                          const SigninManagerBase& signin,
                                          StatusLabelStyle style,
                                          bool sync_everything) {
-  if (!service || service->IsManaged()) {
+  if (!service || service->HasDisableReason(
+                      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY)) {
     // User is signed in, but sync is disabled.
     return l10n_util::GetStringUTF16(IDS_SIGNED_IN_WITH_SYNC_DISABLED);
-  } else if (!service->IsSyncRequested()) {
+  }
+  if (service->HasDisableReason(
+          syncer::SyncService::DISABLE_REASON_USER_CHOICE)) {
     // User is signed in, but sync has been stopped.
     return l10n_util::GetStringUTF16(IDS_SIGNED_IN_WITH_SYNC_SUPPRESSED);
-  } else if (!service->IsSyncActive()) {
+  }
+  if (!service->IsSyncActive()) {
     // User is not signed in, or sync is still initializing.
     return base::string16();
   }
@@ -86,11 +84,6 @@ base::string16 GetSyncedStateStatusLabel(ProfileSyncService* service,
           sync_everything ? IDS_SYNC_ACCOUNT_SYNCING
                           : IDS_SYNC_ACCOUNT_SYNCING_CUSTOM_DATA_TYPES);
     case WITH_HTML:
-      if (IsChromeDashboardEnabled()) {
-        return l10n_util::GetStringFUTF16(
-            IDS_SYNC_ACCOUNT_SYNCING_WITH_MANAGE_LINK_NEW,
-            base::ASCIIToUTF16(chrome::kSyncGoogleDashboardURL));
-      }
       return l10n_util::GetStringFUTF16(
           IDS_SYNC_ACCOUNT_SYNCING_WITH_MANAGE_LINK,
           base::ASCIIToUTF16(chrome::kSyncGoogleDashboardURL));
@@ -131,7 +124,7 @@ void GetStatusForUnrecoverableError(Profile* profile,
   // Unrecoverable error is sometimes accompanied by actionable error.
   // If status message is set display that message, otherwise show generic
   // unrecoverable error message.
-  ProfileSyncService::Status status;
+  syncer::SyncStatus status;
   service->QueryDetailedSyncStatus(&status);
   GetStatusForActionableError(status.sync_protocol_error, status_label,
                               link_label, action_type);
@@ -209,8 +202,11 @@ MessageType GetStatusInfo(Profile* profile,
   if (!signin.IsAuthenticated())
     return PRE_SYNCED;
 
-  if (!service || service->IsManaged() || service->IsFirstSetupComplete() ||
-      !service->IsSyncRequested()) {
+  if (!service || service->IsFirstSetupComplete() ||
+      service->HasDisableReason(
+          syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY) ||
+      service->HasDisableReason(
+          syncer::SyncService::DISABLE_REASON_USER_CHOICE)) {
     // The order or priority is going to be: 1. Unrecoverable errors.
     // 2. Auth errors. 3. Protocol errors. 4. Passphrase errors.
 
@@ -249,7 +245,7 @@ MessageType GetStatusInfo(Profile* profile,
       }
 
       // We don't have an auth error. Check for an actionable error.
-      ProfileSyncService::Status status;
+      syncer::SyncStatus status;
       service->QueryDetailedSyncStatus(&status);
       if (status_label && link_label) {
         GetStatusForActionableError(status.sync_protocol_error, status_label,
@@ -274,7 +270,8 @@ MessageType GetStatusInfo(Profile* profile,
 
       // Check to see if sync has been disabled via the dasboard and needs to be
       // set up once again.
-      if (!service->IsSyncRequested() &&
+      if (service->HasDisableReason(
+              syncer::SyncService::DISABLE_REASON_USER_CHOICE) &&
           status.sync_protocol_error.error_type == syncer::NOT_MY_BIRTHDAY) {
         if (status_label) {
           status_label->assign(GetSyncedStateStatusLabel(service, signin, style,
@@ -295,7 +292,7 @@ MessageType GetStatusInfo(Profile* profile,
     // or provide a link to continue with setup.
     if (service->IsFirstSetupInProgress()) {
       result_type = PRE_SYNCED;
-      ProfileSyncService::Status status;
+      syncer::SyncStatus status;
       service->QueryDetailedSyncStatus(&status);
       AuthError auth_error =
           SigninErrorControllerFactory::GetForProfile(profile)->auth_error();
@@ -345,46 +342,6 @@ MessageType GetStatusInfo(Profile* profile,
   return result_type;
 }
 
-// Returns the status info for use on the new tab page, where we want slightly
-// different information than in the settings panel.
-MessageType GetStatusInfoForNewTabPage(Profile* profile,
-                                       ProfileSyncService* service,
-                                       const SigninManagerBase& signin,
-                                       base::string16* status_label,
-                                       base::string16* link_label) {
-  DCHECK(status_label);
-  DCHECK(link_label);
-
-  if (service->IsFirstSetupComplete() && service->IsPassphraseRequired()) {
-    if (service->passphrase_required_reason() == syncer::REASON_ENCRYPTION) {
-      // First machine migrating to passwords.  Show as a promotion.
-      if (status_label && link_label) {
-        status_label->assign(
-            l10n_util::GetStringFUTF16(
-                IDS_SYNC_NTP_PASSWORD_PROMO,
-                l10n_util::GetStringUTF16(IDS_PRODUCT_NAME)));
-        link_label->assign(
-            l10n_util::GetStringUTF16(IDS_SYNC_NTP_PASSWORD_ENABLE));
-      }
-      return SYNC_PROMO;
-    } else {
-      // NOT first machine.
-      // Show a link and present as an error ("needs attention").
-      if (status_label && link_label) {
-        status_label->assign(base::string16());
-        link_label->assign(
-            l10n_util::GetStringUTF16(IDS_SYNC_CONFIGURE_ENCRYPTION));
-      }
-      return SYNC_ERROR;
-    }
-  }
-
-  // Fallback to default.
-  ActionType action_type = NO_ACTION;
-  return GetStatusInfo(profile, service, signin, WITH_HTML, status_label,
-                       link_label, &action_type);
-}
-
 }  // namespace
 
 MessageType GetStatusLabels(Profile* profile,
@@ -398,17 +355,6 @@ MessageType GetStatusLabels(Profile* profile,
   DCHECK(link_label);
   return sync_ui_util::GetStatusInfo(profile, service, signin, style,
                                      status_label, link_label, action_type);
-}
-
-MessageType GetStatusLabelsForNewTabPage(Profile* profile,
-                                         ProfileSyncService* service,
-                                         const SigninManagerBase& signin,
-                                         base::string16* status_label,
-                                         base::string16* link_label) {
-  DCHECK(status_label);
-  DCHECK(link_label);
-  return sync_ui_util::GetStatusInfoForNewTabPage(profile, service, signin,
-                                                  status_label, link_label);
 }
 
 #if !defined(OS_CHROMEOS)
@@ -426,7 +372,7 @@ AvatarSyncErrorType GetMessagesForAvatarSyncError(
     // An unrecoverable error is sometimes accompanied by an actionable error.
     // If an actionable error is not set to be UPGRADE_CLIENT, then show a
     // generic unrecoverable error message.
-    ProfileSyncService::Status status;
+    syncer::SyncStatus status;
     service->QueryDetailedSyncStatus(&status);
     if (status.sync_protocol_error.action != syncer::UPGRADE_CLIENT) {
       // Display different messages and buttons for managed accounts.
@@ -466,7 +412,7 @@ AvatarSyncErrorType GetMessagesForAvatarSyncError(
   // Check for sync errors if the sync service is enabled.
   if (service) {
     // Check for an actionable UPGRADE_CLIENT error.
-    ProfileSyncService::Status status;
+    syncer::SyncStatus status;
     service->QueryDetailedSyncStatus(&status);
     if (status.sync_protocol_error.action == syncer::UPGRADE_CLIENT) {
       *content_string_id = IDS_SYNC_ERROR_USER_MENU_UPGRADE_MESSAGE;

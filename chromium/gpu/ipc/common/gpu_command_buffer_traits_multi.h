@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// no-include-guard-because-multiply-included
 // Multiply-included message file, hence no include guard here.
 
 #include "gpu/command_buffer/common/capabilities.h"
@@ -93,6 +94,7 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities)
   IPC_STRUCT_TRAITS_MEMBER(num_extensions)
   IPC_STRUCT_TRAITS_MEMBER(num_program_binary_formats)
   IPC_STRUCT_TRAITS_MEMBER(uniform_buffer_offset_alignment)
+  IPC_STRUCT_TRAITS_MEMBER(num_surface_buffers)
 
   IPC_STRUCT_TRAITS_MEMBER(post_sub_buffer)
   IPC_STRUCT_TRAITS_MEMBER(swap_buffers_with_bounds)
@@ -119,6 +121,8 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities)
   IPC_STRUCT_TRAITS_MEMBER(image_ycbcr_422)
   IPC_STRUCT_TRAITS_MEMBER(image_ycbcr_420v)
   IPC_STRUCT_TRAITS_MEMBER(image_ycbcr_420v_disabled_for_video_frames)
+  IPC_STRUCT_TRAITS_MEMBER(image_xr30)
+  IPC_STRUCT_TRAITS_MEMBER(image_xb30)
   IPC_STRUCT_TRAITS_MEMBER(render_buffer_format_bgra8888)
   IPC_STRUCT_TRAITS_MEMBER(occlusion_query)
   IPC_STRUCT_TRAITS_MEMBER(occlusion_query_boolean)
@@ -131,6 +135,7 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities)
   IPC_STRUCT_TRAITS_MEMBER(chromium_image_rgb_emulation)
   IPC_STRUCT_TRAITS_MEMBER(dc_layers)
   IPC_STRUCT_TRAITS_MEMBER(use_dc_overlays_for_video)
+  IPC_STRUCT_TRAITS_MEMBER(protected_video_swap_chain)
   IPC_STRUCT_TRAITS_MEMBER(disable_non_empty_post_sub_buffers)
   IPC_STRUCT_TRAITS_MEMBER(avoid_stencil_buffers)
   IPC_STRUCT_TRAITS_MEMBER(disable_2d_canvas_copy_on_write)
@@ -138,6 +143,12 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities)
   IPC_STRUCT_TRAITS_MEMBER(texture_storage_image)
   IPC_STRUCT_TRAITS_MEMBER(supports_oop_raster)
   IPC_STRUCT_TRAITS_MEMBER(chromium_gpu_fence)
+  IPC_STRUCT_TRAITS_MEMBER(unpremultiply_and_dither_copy)
+  IPC_STRUCT_TRAITS_MEMBER(separate_stencil_ref_mask_writemask)
+  IPC_STRUCT_TRAITS_MEMBER(use_gpu_fences_for_overlay_planes)
+  IPC_STRUCT_TRAITS_MEMBER(context_supports_distance_field_text)
+  IPC_STRUCT_TRAITS_MEMBER(glyph_cache_max_texture_bytes)
+  IPC_STRUCT_TRAITS_MEMBER(chromium_nonblocking_readback)
 
   IPC_STRUCT_TRAITS_MEMBER(major_version)
   IPC_STRUCT_TRAITS_MEMBER(minor_version)

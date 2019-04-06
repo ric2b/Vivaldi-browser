@@ -19,14 +19,14 @@
 #include "net/base/load_flags.h"
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
+#include "net/base/proxy_server.h"
 #include "net/base/request_priority.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
-#include "net/proxy/proxy_server.h"
-#include "net/quic/core/quic_packets.h"
 #include "net/ssl/ssl_info.h"
+#include "net/third_party/quic/core/quic_packets.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request_context.h"
 
@@ -64,7 +64,11 @@ static jlong JNI_CronetUrlRequest_CreateRequestAdapter(
     jint jpriority,
     jboolean jdisable_cache,
     jboolean jdisable_connection_migration,
-    jboolean jenable_metrics) {
+    jboolean jenable_metrics,
+    jboolean jtraffic_stats_tag_set,
+    jint jtraffic_stats_tag,
+    jboolean jtraffic_stats_uid_set,
+    jint jtraffic_stats_uid) {
   CronetURLRequestContextAdapter* context_adapter =
       reinterpret_cast<CronetURLRequestContextAdapter*>(
           jurl_request_context_adapter);
@@ -78,7 +82,8 @@ static jlong JNI_CronetUrlRequest_CreateRequestAdapter(
   CronetURLRequestAdapter* adapter = new CronetURLRequestAdapter(
       context_adapter, env, jurl_request, url,
       static_cast<net::RequestPriority>(jpriority), jdisable_cache,
-      jdisable_connection_migration, jenable_metrics);
+      jdisable_connection_migration, jenable_metrics, jtraffic_stats_tag_set,
+      jtraffic_stats_tag, jtraffic_stats_uid_set, jtraffic_stats_uid);
 
   return reinterpret_cast<jlong>(adapter);
 }
@@ -91,7 +96,11 @@ CronetURLRequestAdapter::CronetURLRequestAdapter(
     net::RequestPriority priority,
     jboolean jdisable_cache,
     jboolean jdisable_connection_migration,
-    jboolean jenable_metrics)
+    jboolean jenable_metrics,
+    jboolean jtraffic_stats_tag_set,
+    jint jtraffic_stats_tag,
+    jboolean jtraffic_stats_uid_set,
+    jint jtraffic_stats_uid)
     : request_(
           new CronetURLRequest(context->cronet_url_request_context(),
                                std::unique_ptr<CronetURLRequestAdapter>(this),
@@ -99,7 +108,11 @@ CronetURLRequestAdapter::CronetURLRequestAdapter(
                                priority,
                                jdisable_cache == JNI_TRUE,
                                jdisable_connection_migration == JNI_TRUE,
-                               jenable_metrics == JNI_TRUE)) {
+                               jenable_metrics == JNI_TRUE,
+                               jtraffic_stats_tag_set == JNI_TRUE,
+                               jtraffic_stats_tag,
+                               jtraffic_stats_uid_set == JNI_TRUE,
+                               jtraffic_stats_uid)) {
   owner_.Reset(env, jurl_request);
 }
 
@@ -207,7 +220,8 @@ void CronetURLRequestAdapter::OnResponseStarted(
     const net::HttpResponseHeaders* headers,
     bool was_cached,
     const std::string& negotiated_protocol,
-    const std::string& proxy_server) {
+    const std::string& proxy_server,
+    int64_t received_byte_count) {
   JNIEnv* env = base::android::AttachCurrentThread();
   cronet::Java_CronetUrlRequest_onResponseStarted(
       env, owner_, http_status_code,
@@ -215,7 +229,7 @@ void CronetURLRequestAdapter::OnResponseStarted(
       ConvertResponseHeadersToJava(env, headers),
       was_cached ? JNI_TRUE : JNI_FALSE,
       ConvertUTF8ToJavaString(env, negotiated_protocol),
-      ConvertUTF8ToJavaString(env, proxy_server));
+      ConvertUTF8ToJavaString(env, proxy_server), received_byte_count);
 }
 
 void CronetURLRequestAdapter::OnReadCompleted(

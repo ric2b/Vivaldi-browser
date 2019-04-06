@@ -1,0 +1,164 @@
+{
+    "0": {
+        "benchmarks": {
+            "system_health.common_mobile": {
+                "end": 16
+            }
+        }
+    },
+    "1": {
+        "benchmarks": {
+            "system_health.common_mobile": {
+                "begin": 16,
+                "end": 29
+            }
+        }
+    },
+    "2": {
+        "benchmarks": {
+            "system_health.common_mobile": {
+                "begin": 29,
+                "end": 53
+            }
+        }
+    },
+    "3": {
+        "benchmarks": {
+            "system_health.common_mobile": {
+                "begin": 53
+            }
+        }
+    },
+    "4": {
+        "benchmarks": {
+            "start_with_url.warm.startup_pages": {},
+            "start_with_url.cold.startup_pages": {
+                "end": 1
+            }
+        }
+    },
+    "5": {
+        "benchmarks": {
+            "start_with_url.cold.startup_pages": {
+                "begin": 1
+            },
+            "system_health.memory_mobile": {
+                "end": 7
+            }
+        }
+    },
+    "6": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 7,
+                "end": 14
+            }
+        }
+    },
+    "7": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 14,
+                "end": 17
+            }
+        }
+    },
+    "8": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 17,
+                "end": 22
+            }
+        }
+    },
+    "9": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 22,
+                "end": 30
+            }
+        }
+    },
+    "10": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 30,
+                "end": 41
+            }
+        }
+    },
+    "11": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 41,
+                "end": 50
+            }
+        }
+    },
+    "12": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 50,
+                "end": 53
+            }
+        }
+    },
+    "13": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 53,
+                "end": 56
+            }
+        }
+    },
+    "14": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 56,
+                "end": 61
+            }
+        }
+    },
+    "15": {
+        "benchmarks": {
+            "system_health.memory_mobile": {
+                "begin": 61
+            },
+            "power.typical_10_mobile": {
+                "end": 8
+            }
+        }
+    },
+    "16": {
+        "benchmarks": {
+            "power.typical_10_mobile": {
+                "begin": 8
+            },
+            "memory.top_10_mobile": {
+                "end": 6
+            }
+        }
+    },
+    "17": {
+        "benchmarks": {
+            "memory.top_10_mobile": {
+                "begin": 6,
+                "end": 13
+            }
+        }
+    },
+    "18": {
+        "benchmarks": {
+            "memory.top_10_mobile": {
+                "begin": 13
+            }
+        }
+    },
+    "extra_infos": {
+        "num_stories": 159,
+        "predicted_min_shard_time": 1566.0,
+        "predicted_min_shard_index": 7,
+        "predicted_max_shard_time": 2400.0,
+        "predicted_max_shard_index": 6
+    }
+}

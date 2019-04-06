@@ -13,6 +13,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
+#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_client_info_win.h"
@@ -21,11 +22,8 @@
 #include "components/chrome_cleaner/public/constants/constants.h"
 #include "components/chrome_cleaner/public/interfaces/chrome_prompt.mojom.h"
 #include "components/version_info/version_info.h"
-#include "mojo/edk/embedder/connection_params.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
-#include "mojo/edk/embedder/transport_protocol.h"
+#include "mojo/public/cpp/platform/platform_channel.h"
+#include "mojo/public/cpp/system/invitation.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 using chrome_cleaner::mojom::ChromePrompt;
@@ -100,7 +98,7 @@ ChromeCleanerRunner::ChromeCleanerRunner(
   cleaner_command_line_.AppendSwitchASCII(chrome_cleaner::kChromeChannelSwitch,
                                           base::IntToString(ChannelAsInt()));
   base::FilePath chrome_exe_path;
-  PathService::Get(base::FILE_EXE, &chrome_exe_path);
+  base::PathService::Get(base::FILE_EXE, &chrome_exe_path);
   cleaner_command_line_.AppendSwitchPath(chrome_cleaner::kChromeExePathSwitch,
                                          chrome_exe_path);
   if (!InstallUtil::IsPerUserInstall())
@@ -144,28 +142,32 @@ ChromeCleanerRunner::ChromeCleanerRunner(
     cleaner_command_line_.AppendSwitchASCII(
         chrome_cleaner::kSRTPromptFieldTrialGroupNameSwitch, group_name);
   }
+
+  std::string reboot_prompt_type = base::IntToString(GetRebootPromptType());
+  cleaner_command_line_.AppendSwitchASCII(
+      chrome_cleaner::kRebootPromptMethodSwitch, reboot_prompt_type);
 }
 
 ChromeCleanerRunner::ProcessStatus
 ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
-  mojo::edk::OutgoingBrokerClientInvitation invitation;
-  std::string mojo_pipe_token = mojo::edk::GenerateRandomToken();
-  mojo::ScopedMessagePipeHandle mojo_pipe =
-      invitation.AttachMessagePipe(mojo_pipe_token);
+  mojo::OutgoingInvitation invitation;
+  std::string pipe_name = base::NumberToString(base::RandUint64());
+  mojo::ScopedMessagePipeHandle request_pipe =
+      invitation.AttachMessagePipe(pipe_name);
   cleaner_command_line_.AppendSwitchASCII(
-      chrome_cleaner::kChromeMojoPipeTokenSwitch, mojo_pipe_token);
+      chrome_cleaner::kChromeMojoPipeTokenSwitch, pipe_name);
 
-  mojo::edk::PlatformChannelPair channel;
+  mojo::PlatformChannel channel;
   base::LaunchOptions launch_options;
-  channel.PrepareToPassClientHandleToChildProcess(
-      &cleaner_command_line_, &launch_options.handles_to_inherit);
+  channel.PrepareToPassRemoteEndpoint(&launch_options.handles_to_inherit,
+                                      &cleaner_command_line_);
 
   base::Process cleaner_process =
       g_test_delegate
           ? g_test_delegate->LaunchTestProcess(cleaner_command_line_,
                                                launch_options)
           : base::LaunchProcess(cleaner_command_line_, launch_options);
-
+  channel.RemoteProcessLaunchAttempted();
   if (!cleaner_process.IsValid())
     return ProcessStatus(LaunchStatus::kLaunchFailed);
 
@@ -177,12 +179,10 @@ ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
                  base::BindOnce(&ChromeCleanerRunner::CreateChromePromptImpl,
                                 base::RetainedRef(this),
                                 chrome_cleaner::mojom::ChromePromptRequest(
-                                    std::move(mojo_pipe))));
-
-  invitation.Send(
-      cleaner_process.Handle(),
-      mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
-                                  channel.PassServerHandle()));
+                                    std::move(request_pipe))));
+  mojo::OutgoingInvitation::Send(std::move(invitation),
+                                 cleaner_process.Handle(),
+                                 channel.TakeLocalEndpoint());
 
   int exit_code = -1;
   if (!cleaner_process.WaitForExit(&exit_code)) {

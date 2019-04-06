@@ -16,8 +16,6 @@
 #include "chrome/common/extensions/manifest_handlers/app_icon_color_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
-#include "chrome/common/extensions/manifest_handlers/automation.h"
-#include "chrome/common/extensions/manifest_handlers/content_scripts_handler.h"
 #include "chrome/common/extensions/manifest_handlers/extension_action_handler.h"
 #include "chrome/common/extensions/manifest_handlers/linked_app_icons.h"
 #include "chrome/common/extensions/manifest_handlers/minimum_chrome_version_checker.h"
@@ -25,6 +23,8 @@
 #include "chrome/common/extensions/manifest_handlers/theme_handler.h"
 #include "chrome/common/extensions/manifest_handlers/ui_overrides_handler.h"
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
+#include "extensions/common/manifest_handlers/automation.h"
+#include "extensions/common/manifest_handlers/content_scripts_handler.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 
@@ -60,7 +60,6 @@ void RegisterChromeManifestHandlers() {
   (new ThemeHandler)->Register();
   (new TtsEngineManifestHandler)->Register();
   (new UIOverridesHandler)->Register();
-  (new UpdateURLHandler)->Register();
   (new UrlHandlersParser)->Register();
   (new URLOverridesHandler)->Register();
 #if defined(OS_CHROMEOS)

@@ -52,9 +52,9 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
                                    base::string16* body) override;
   bool RemoveSuggestion(const base::string16& value, int identifier) override;
   void ClearPreviewedForm() override;
-  // Returns false for all popups prior to |onQuery|, true for credit card
-  // popups after call to |onQuery|.
-  bool IsCreditCardPopup() override;
+  // Returns PopupType::kUnspecified for all popups prior to |onQuery|, or the
+  // popup type after call to |onQuery|.
+  PopupType GetPopupType() const override;
   AutofillDriver* GetAutofillDriver() override;
   void RegisterDeletionCallback(base::OnceClosure deletion_callback) override;
 
@@ -72,7 +72,15 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
   // to be displayed.  Called when an Autofill query result is available.
   virtual void OnSuggestionsReturned(int query_id,
                                      const std::vector<Suggestion>& suggestions,
+                                     bool autoselect_first_suggestion,
                                      bool is_all_server_suggestions = false);
+
+  // Returns true if there is a screen reader installed on the machine.
+  virtual bool HasActiveScreenReader() const;
+
+  // Indicates on focus changed if autofill is available or unavailable, so
+  // state can be announced by screen readers.
+  virtual void OnAutofillAvailabilityEvent(bool has_suggestions);
 
   // Set the data list value associated with the current field.
   void SetCurrentDataListValues(
@@ -147,12 +155,8 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
   // Does the popup include any Autofill profile or credit card suggestions?
   bool has_autofill_suggestions_;
 
-  // Have we already shown Autofill suggestions for the field the user is
-  // currently editing?  Used to keep track of state for metrics logging.
-  bool has_shown_popup_for_current_edit_;
-
   bool should_show_scan_credit_card_;
-  bool is_credit_card_popup_;
+  PopupType popup_type_;
 
   // Whether the credit card signin promo should be shown to the user.
   bool should_show_cc_signin_promo_;

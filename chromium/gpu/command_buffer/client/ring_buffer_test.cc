@@ -12,7 +12,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "gpu/command_buffer/client/cmd_buffer_helper.h"
@@ -134,6 +133,20 @@ TEST_F(RingBufferTest, TestBasic) {
   EXPECT_EQ(kBufferSize - kSize, allocator_->GetLargestFreeSizeNoWaiting());
   int32_t token = helper_->InsertToken();
   allocator_->FreePendingToken(pointer, token);
+}
+
+// Checks that the value returned by GetLargestFreeOrPendingSize can actually be
+// allocated. This is a regression test for https://crbug.com/834444, where an
+// unaligned buffer could cause an alloc using the value returned by
+// GetLargestFreeOrPendingSize to try to allocate more memory than was allowed.
+TEST_F(RingBufferTest, TestCanAllocGetLargestFreeOrPendingSize) {
+  // Make sure we aren't actually aligned
+  buffer_.reset(new int8_t[kBufferSize + 2 + kBaseOffset]);
+  buffer_start_ = buffer_.get() + kBaseOffset;
+  allocator_.reset(new RingBuffer(kAlignment, kBaseOffset, kBufferSize + 2,
+                                  helper_.get(), buffer_start_));
+  void* pointer = allocator_->Alloc(allocator_->GetLargestFreeOrPendingSize());
+  allocator_->FreePendingToken(pointer, helper_->InsertToken());
 }
 
 // Checks the free-pending-token mechanism.
@@ -417,6 +430,15 @@ TEST_F(RingBufferTest, DiscardAllPaddingFromBeginningTest) {
   // Discarding the first allocation should discard the middle padding as well.
   allocator_->DiscardBlock(ptr1);
   EXPECT_EQ(kAlloc1 + kAlloc2, allocator_->GetLargestFreeSizeNoWaiting());
+}
+
+TEST_F(RingBufferTest, LargestFreeSizeNoWaiting) {
+  // GetLargestFreeSizeNoWaiting should return the largest free aligned size.
+  void* ptr = allocator_->Alloc(kBufferSize);
+  EXPECT_EQ(0u, allocator_->GetLargestFreeSizeNoWaiting());
+  allocator_->ShrinkLastBlock(kBufferSize - 2 * kAlignment - 1);
+  EXPECT_EQ(2 * kAlignment, allocator_->GetLargestFreeSizeNoWaiting());
+  allocator_->FreePendingToken(ptr, helper_.get()->InsertToken());
 }
 
 }  // namespace gpu

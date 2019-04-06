@@ -5,25 +5,30 @@
 #ifndef CONTENT_RENDERER_DOM_STORAGE_LOCAL_STORAGE_CACHED_AREAS_H_
 #define CONTENT_RENDERER_DOM_STORAGE_LOCAL_STORAGE_CACHED_AREAS_H_
 
+#include <array>
 #include <map>
+#include <string>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequence_checker.h"
 #include "content/common/content_export.h"
+#include "third_party/blink/public/mojom/dom_storage/session_storage_namespace.mojom.h"
 #include "url/origin.h"
 
 namespace blink {
+namespace mojom {
+class StoragePartitionService;
+}
+
 namespace scheduler {
-class RendererScheduler;
+class WebThreadScheduler;
 }
 }  // namespace blink
 
 namespace content {
 class LocalStorageCachedArea;
-
-namespace mojom {
-class StoragePartitionService;
-}
 
 // Keeps a map of all the LocalStorageCachedArea objects in a renderer. This is
 // needed because we can have n LocalStorageArea objects for the same origin but
@@ -33,8 +38,8 @@ class StoragePartitionService;
 class CONTENT_EXPORT LocalStorageCachedAreas {
  public:
   LocalStorageCachedAreas(
-      mojom::StoragePartitionService* storage_partition_service,
-      blink::scheduler::RendererScheduler* renderer_schedule);
+      blink::mojom::StoragePartitionService* storage_partition_service,
+      blink::scheduler::WebThreadScheduler* main_thread_scheduler);
   ~LocalStorageCachedAreas();
 
   // Returns, creating if necessary, a cached storage area for the given origin.
@@ -42,31 +47,62 @@ class CONTENT_EXPORT LocalStorageCachedAreas {
       GetCachedArea(const url::Origin& origin);
 
   scoped_refptr<LocalStorageCachedArea> GetSessionStorageArea(
-      int64_t namespace_id,
+      const std::string& namespace_id,
       const url::Origin& origin);
+
+  void CloneNamespace(const std::string& source_namespace,
+                      const std::string& destination_namespace);
 
   size_t TotalCacheSize() const;
 
-  void set_cache_limit_for_testing(size_t limit) { total_cache_limit_ = limit; }
+  void set_cache_limit_for_testing(size_t limit) {
+    CHECK(sequence_checker_.CalledOnValidSequence());
+    total_cache_limit_ = limit;
+  }
 
  private:
   void ClearAreasIfNeeded();
 
   scoped_refptr<LocalStorageCachedArea> GetCachedArea(
-      int64_t namespace_id,
+      const std::string& namespace_id,
       const url::Origin& origin,
-      blink::scheduler::RendererScheduler* scheduler);
+      blink::scheduler::WebThreadScheduler* scheduler);
 
-  mojom::StoragePartitionService* const storage_partition_service_;
+  // TODO(dmurph): Remove release check when crashing has stopped.
+  // http://crbug.com/857464
+  base::SequenceCheckerImpl sequence_checker_;
 
-  // Maps from a namespace + origin to its LocalStorageCachedArea object. When
-  // this map is the only reference to the object, it can be deleted by the
-  // cache.
-  using AreaKey = std::pair<int64_t, url::Origin>;
-  std::map<AreaKey, scoped_refptr<LocalStorageCachedArea>> cached_areas_;
+  blink::mojom::StoragePartitionService* const storage_partition_service_;
+
+  struct DOMStorageNamespace {
+   public:
+    DOMStorageNamespace();
+    ~DOMStorageNamespace();
+    DOMStorageNamespace(DOMStorageNamespace&& other);
+    DOMStorageNamespace& operator=(DOMStorageNamespace&&) = default;
+
+    void CheckPrefixes() const;
+
+    size_t TotalCacheSize() const;
+    // Returns true if this namespace is totally unused and can be deleted.
+    bool CleanUpUnusedAreas();
+
+    // TODO(dmurph): Remove the prefix & postfix after memory corruption is
+    // solved.
+    int64_t prefix;
+    blink::mojom::SessionStorageNamespacePtr session_storage_namespace;
+    base::flat_map<url::Origin, scoped_refptr<LocalStorageCachedArea>>
+        cached_areas;
+    int64_t postfix;
+
+    DISALLOW_COPY_AND_ASSIGN(DOMStorageNamespace);
+  };
+
+  base::flat_map<std::string, DOMStorageNamespace> cached_namespaces_;
   size_t total_cache_limit_;
 
-  blink::scheduler::RendererScheduler* renderer_scheduler_;  // NOT OWNED
+  // Not owned.
+  blink::scheduler::WebThreadScheduler* main_thread_scheduler_;
 
   DISALLOW_COPY_AND_ASSIGN(LocalStorageCachedAreas);
 };

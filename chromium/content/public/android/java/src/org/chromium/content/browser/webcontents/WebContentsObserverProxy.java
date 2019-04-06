@@ -188,6 +188,14 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
+    public void navigationEntriesDeleted() {
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().navigationEntriesDeleted();
+        }
+    }
+
+    @Override
+    @CalledByNative
     public void didAttachInterstitialPage() {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().didAttachInterstitialPage();
@@ -215,6 +223,14 @@ class WebContentsObserverProxy extends WebContentsObserver {
     public void hasEffectivelyFullscreenVideoChange(boolean isFullscreen) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().hasEffectivelyFullscreenVideoChange(isFullscreen);
+        }
+    }
+
+    @Override
+    @CalledByNative
+    public void viewportFitChanged(@WebContentsObserver.ViewportFitType int value) {
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().viewportFitChanged(value);
         }
     }
 

@@ -92,6 +92,9 @@ class ContactBackend
 
   // Creates a Contact
   void CreateContact(ContactRow row, std::shared_ptr<ContactResults> result);
+  // Creates multiple contacts
+  void CreateContacts(std::vector<ContactRow> contacts,
+                      std::shared_ptr<CreateContactsResult> result);
   void GetAllContacts(std::shared_ptr<ContactQueryResults> results);
   void GetAllEmailAddresses(std::shared_ptr<EmailAddressRows> results);
   void UpdateContact(ContactID contact_id,

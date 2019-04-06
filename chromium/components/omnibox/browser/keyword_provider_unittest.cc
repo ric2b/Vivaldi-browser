@@ -12,7 +12,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
@@ -25,6 +24,7 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
+#include "net/url_request/url_request.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
@@ -66,7 +66,7 @@ class KeywordProviderTest : public testing::Test {
     // a DCHECK.
     field_trial_list_.reset();
     field_trial_list_.reset(new base::FieldTrialList(
-        std::make_unique<metrics::SHA1EntropyProvider>("foo")));
+        std::make_unique<variations::SHA1EntropyProvider>("foo")));
     variations::testing::ClearAllVariationParams();
   }
   ~KeywordProviderTest() override {}
@@ -131,10 +131,9 @@ const TemplateURLService::Initializer KeywordProviderTest::kTestData[] = {
 };
 
 void KeywordProviderTest::SetUpClientAndKeywordProvider() {
-  std::unique_ptr<TemplateURLService> template_url_service(
-      new TemplateURLService(kTestData, arraysize(kTestData)));
   client_.reset(new MockAutocompleteProviderClient());
-  client_->set_template_url_service(std::move(template_url_service));
+  client_->set_template_url_service(
+      std::make_unique<TemplateURLService>(kTestData, arraysize(kTestData)));
   kw_provider_ = new KeywordProvider(client_.get(), nullptr);
 }
 

@@ -1,5 +1,8 @@
 include_rules = [
   "+base",
   "+net",
-  "+third_party/WebKit/Source/platform/inspector_protocol",
+  "+services/network/public/cpp",
+  "+services/network/public/mojom",
+  "+third_party/blink/renderer/platform/inspector_protocol",
+  "+ui/gfx",
 ]

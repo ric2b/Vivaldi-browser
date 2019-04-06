@@ -28,6 +28,11 @@
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkScalar.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
+#include "ui/gfx/color_space.h"
+
+class SkColorSpace;
+class SkStrikeClient;
+class SkStrikeServer;
 
 // PaintOpBuffer is a reimplementation of SkLiteDL.
 // See: third_party/skia/src/core/SkLiteDL.h.
@@ -90,21 +95,28 @@ enum class PaintOpType : uint8_t {
 };
 
 CC_PAINT_EXPORT std::string PaintOpTypeToString(PaintOpType type);
+CC_PAINT_EXPORT std::ostream& operator<<(std::ostream&, PaintOpType);
 
 struct CC_PAINT_EXPORT PlaybackParams {
   using CustomDataRasterCallback =
       base::RepeatingCallback<void(SkCanvas* canvas, uint32_t id)>;
+  using DidDrawOpCallback = base::RepeatingCallback<void()>;
 
   explicit PlaybackParams(ImageProvider* image_provider);
   PlaybackParams(
       ImageProvider* image_provider,
       const SkMatrix& original_ctm,
-      CustomDataRasterCallback custom_callback = CustomDataRasterCallback());
+      CustomDataRasterCallback custom_callback = CustomDataRasterCallback(),
+      DidDrawOpCallback did_draw_op_callback = DidDrawOpCallback());
   ~PlaybackParams();
 
+  PlaybackParams(const PlaybackParams& other);
+  PlaybackParams& operator=(const PlaybackParams& other);
+
   ImageProvider* image_provider;
-  const SkMatrix original_ctm;
+  SkMatrix original_ctm;
   CustomDataRasterCallback custom_callback;
+  DidDrawOpCallback did_draw_op_callback;
 };
 
 class CC_PAINT_EXPORT PaintOp {
@@ -128,26 +140,43 @@ class CC_PAINT_EXPORT PaintOp {
   bool operator!=(const PaintOp& other) const { return !(*this == other); }
 
   struct CC_PAINT_EXPORT SerializeOptions {
-    SerializeOptions();
     SerializeOptions(ImageProvider* image_provider,
                      TransferCacheSerializeHelper* transfer_cache,
                      SkCanvas* canvas,
+                     SkStrikeServer* strike_server,
+                     SkColorSpace* color_space,
+                     bool can_use_lcd_text,
+                     bool context_supports_distance_field_text,
+                     int max_texture_size,
+                     size_t max_texture_bytes,
                      const SkMatrix& original_ctm);
+    SerializeOptions(const SerializeOptions&);
+    SerializeOptions& operator=(const SerializeOptions&);
 
     // Required.
+    ImageProvider* image_provider = nullptr;
     TransferCacheSerializeHelper* transfer_cache = nullptr;
     SkCanvas* canvas = nullptr;
+    SkStrikeServer* strike_server = nullptr;
+    SkColorSpace* color_space = nullptr;
+    bool can_use_lcd_text = false;
+    bool context_supports_distance_field_text = true;
+    int max_texture_size = 0;
+    size_t max_texture_bytes = 0.f;
+    SkMatrix original_ctm = SkMatrix::I();
 
     // Optional.
-    ImageProvider* image_provider = nullptr;
-    SkMatrix original_ctm = SkMatrix::I();
     // The flags to use when serializing this op. This can be used to override
     // the flags serialized with the op. Valid only for PaintOpWithFlags.
     const PaintFlags* flags_to_serialize = nullptr;
   };
 
-  struct DeserializeOptions {
+  struct CC_PAINT_EXPORT DeserializeOptions {
+    DeserializeOptions(TransferCacheDeserializeHelper* transfer_cache,
+                       SkStrikeClient* strike_client);
     TransferCacheDeserializeHelper* transfer_cache = nullptr;
+    uint32_t raster_color_space_id = gfx::ColorSpace::kInvalidId;
+    SkStrikeClient* strike_client = nullptr;
   };
 
   // Indicates how PaintImages are serialized.
@@ -205,6 +234,9 @@ class CC_PAINT_EXPORT PaintOp {
   // Returns the number of bytes used by this op in referenced sub records
   // and display lists.  This doesn't count other objects like paths or blobs.
   size_t AdditionalBytesUsed() const { return 0; }
+
+  // Returns the number of ops in referenced sub records and display lists.
+  size_t AdditionalOpCount() const { return 0; }
 
   // Run the destructor for the derived op type.  Ops are usually contained in
   // memory buffers and so don't have their destructors run automatically.
@@ -450,7 +482,10 @@ class CC_PAINT_EXPORT DrawImageOp final : public PaintOpWithFlags {
                               const PaintFlags* flags,
                               SkCanvas* canvas,
                               const PlaybackParams& params);
-  bool IsValid() const { return flags.IsValid(); }
+  bool IsValid() const {
+    return flags.IsValid() && SkScalarIsFinite(scale_adjustment.width()) &&
+           SkScalarIsFinite(scale_adjustment.height());
+  }
   static bool AreEqual(const PaintOp* left, const PaintOp* right);
   bool HasDiscardableImages() const;
   bool HasNonAAPaint() const { return false; }
@@ -462,6 +497,10 @@ class CC_PAINT_EXPORT DrawImageOp final : public PaintOpWithFlags {
 
  private:
   DrawImageOp();
+
+  // Scale that has already been applied to the decoded image during
+  // serialization. Used with OOP raster.
+  SkSize scale_adjustment = SkSize::Make(1.f, 1.f);
 };
 
 class CC_PAINT_EXPORT DrawImageRectOp final : public PaintOpWithFlags {
@@ -479,7 +518,9 @@ class CC_PAINT_EXPORT DrawImageRectOp final : public PaintOpWithFlags {
                               SkCanvas* canvas,
                               const PlaybackParams& params);
   bool IsValid() const {
-    return flags.IsValid() && src.isFinite() && dst.isFinite();
+    return flags.IsValid() && src.isFinite() && dst.isFinite() &&
+           SkScalarIsFinite(scale_adjustment.width()) &&
+           SkScalarIsFinite(scale_adjustment.height());
   }
   static bool AreEqual(const PaintOp* left, const PaintOp* right);
   bool HasDiscardableImages() const;
@@ -492,6 +533,10 @@ class CC_PAINT_EXPORT DrawImageRectOp final : public PaintOpWithFlags {
 
  private:
   DrawImageRectOp();
+
+  // Scale that has already been applied to the decoded image during
+  // serialization. Used with OOP raster.
+  SkSize scale_adjustment = SkSize::Make(1.f, 1.f);
 };
 
 class CC_PAINT_EXPORT DrawIRectOp final : public PaintOpWithFlags {
@@ -554,7 +599,10 @@ class CC_PAINT_EXPORT DrawOvalOp final : public PaintOpWithFlags {
                               const PaintFlags* flags,
                               SkCanvas* canvas,
                               const PlaybackParams& params);
-  bool IsValid() const { return flags.IsValid() && oval.isFinite(); }
+  bool IsValid() const {
+    // Reproduce SkRRect::isValid without converting.
+    return flags.IsValid() && oval.isFinite() && oval.isSorted();
+  }
   static bool AreEqual(const PaintOp* left, const PaintOp* right);
   HAS_SERIALIZATION_FUNCTIONS();
 
@@ -597,6 +645,7 @@ class CC_PAINT_EXPORT DrawRecordOp final : public PaintOp {
   bool IsValid() const { return true; }
   static bool AreEqual(const PaintOp* left, const PaintOp* right);
   size_t AdditionalBytesUsed() const;
+  size_t AdditionalOpCount() const;
   bool HasDiscardableImages() const;
   int CountSlowPaths() const;
   bool HasNonAAPaint() const;
@@ -859,6 +908,9 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   size_t bytes_used() const {
     return sizeof(*this) + reserved_ + subrecord_bytes_used_;
   }
+  // Returns the total number of ops including sub-records.
+  size_t total_op_count() const { return op_count_ + subrecord_op_count_; }
+
   size_t next_op_offset() const { return used_; }
   int numSlowPaths() const { return num_slow_paths_; }
   bool HasNonAAPaint() const { return has_non_aa_paint_; }
@@ -890,6 +942,25 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
     AnalyzeAddedOp(op);
   }
 
+  void UpdateSaveLayerBounds(size_t offset, const SkRect& bounds) {
+    CHECK_LT(offset, used_);
+    CHECK_LE(offset + sizeof(PaintOp), used_);
+
+    auto* op = reinterpret_cast<PaintOp*>(data_.get() + offset);
+    switch (op->GetType()) {
+      case SaveLayerOp::kType:
+        CHECK_LE(offset + sizeof(SaveLayerOp), used_);
+        static_cast<SaveLayerOp*>(op)->bounds = bounds;
+        break;
+      case SaveLayerAlphaOp::kType:
+        CHECK_LE(offset + sizeof(SaveLayerAlphaOp), used_);
+        static_cast<SaveLayerAlphaOp*>(op)->bounds = bounds;
+        break;
+      default:
+        NOTREACHED();
+    }
+  }
+
   template <typename T>
   void AnalyzeAddedOp(const T* op) {
     static_assert(!std::is_same<T, PaintOp>::value,
@@ -904,6 +975,17 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
     has_discardable_images_ |= op->HasDiscardableImagesFromFlags();
 
     subrecord_bytes_used_ += op->AdditionalBytesUsed();
+    subrecord_op_count_ += op->AdditionalOpCount();
+  }
+
+  template <typename T>
+  const T* GetOpAtForTesting(size_t index) const {
+    size_t i = 0;
+    for (PaintOpBuffer::Iterator it(this); it && i <= index; ++it, ++i) {
+      if (i == index && (*it)->GetType() == T::kType)
+        return static_cast<const T*>(*it);
+    }
+    return nullptr;
   }
 
   class CC_PAINT_EXPORT Iterator {
@@ -1107,6 +1189,8 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   int num_slow_paths_ = 0;
   // Record additional bytes used by referenced sub-records and display lists.
   size_t subrecord_bytes_used_ = 0;
+  // Record total op count of referenced sub-record and display lists.
+  size_t subrecord_op_count_ = 0;
 
   bool has_non_aa_paint_ : 1;
   bool has_discardable_images_ : 1;

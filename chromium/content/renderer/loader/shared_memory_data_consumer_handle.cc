@@ -11,7 +11,6 @@
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -455,7 +454,9 @@ SharedMemoryDataConsumerHandle::~SharedMemoryDataConsumerHandle() {
 }
 
 std::unique_ptr<blink::WebDataConsumerHandle::Reader>
-SharedMemoryDataConsumerHandle::ObtainReader(Client* client) {
+SharedMemoryDataConsumerHandle::ObtainReader(
+    Client* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   return base::WrapUnique(new ReaderImpl(context_, client));
 }
 

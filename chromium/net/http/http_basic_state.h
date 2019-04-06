@@ -13,9 +13,9 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "net/base/completion_callback.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -34,11 +34,10 @@ class NET_EXPORT_PRIVATE HttpBasicState {
   ~HttpBasicState();
 
   // Initialize() must be called before using any of the other methods.
-  int Initialize(const HttpRequestInfo* request_info,
-                 bool can_send_early,
-                 RequestPriority priority,
-                 const NetLogWithSource& net_log,
-                 const CompletionCallback& callback);
+  void Initialize(const HttpRequestInfo* request_info,
+                  bool can_send_early,
+                  RequestPriority priority,
+                  const NetLogWithSource& net_log);
 
   HttpStreamParser* parser() const { return parser_.get(); }
 
@@ -62,6 +61,10 @@ class NET_EXPORT_PRIVATE HttpBasicState {
   // values of request_info_ and using_proxy_.
   std::string GenerateRequestLine() const;
 
+  MutableNetworkTrafficAnnotationTag traffic_annotation() {
+    return traffic_annotation_;
+  }
+
  private:
   scoped_refptr<GrowableIOBuffer> read_buf_;
 
@@ -77,6 +80,8 @@ class NET_EXPORT_PRIVATE HttpBasicState {
 
   GURL url_;
   std::string request_method_;
+
+  MutableNetworkTrafficAnnotationTag traffic_annotation_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpBasicState);
 };

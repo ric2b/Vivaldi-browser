@@ -24,18 +24,19 @@
 #include "chrome/common/safe_browsing/download_file_types.pb.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "content/public/browser/download_danger_type.h"
-#include "content/public/browser/download_interrupt_reasons.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_danger_type.h"
+#include "components/download/public/common/download_interrupt_reasons.h"
+#include "components/download/public/common/download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "net/base/mime_util.h"
-#include "third_party/WebKit/common/mime_util/mime_util.h"
+#include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "ui/gfx/text_elider.h"
 
 using base::TimeDelta;
-using content::DownloadItem;
+using download::DownloadItem;
 using safe_browsing::DownloadFileType;
 
 namespace {
@@ -109,180 +110,184 @@ DownloadItemModelData::DownloadItemModelData()
       is_being_revived_(false) {}
 
 base::string16 InterruptReasonStatusMessage(
-    content::DownloadInterruptReason reason) {
+    download::DownloadInterruptReason reason) {
   int string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
 
   switch (reason) {
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_ACCESS_DENIED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_DISK_FULL;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_NAME_TOO_LONG:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_NAME_TOO_LONG:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_PATH_TOO_LONG;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_LARGE:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_LARGE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_FILE_TOO_LARGE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_VIRUS_INFECTED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_VIRUS_INFECTED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_VIRUS;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_TEMPORARY_PROBLEM;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_BLOCKED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_SECURITY_CHECK_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_SECURITY_CHECK_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_SECURITY_CHECK_FAILED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_FILE_TOO_SHORT;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_FILE_SAME_AS_SOURCE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST:
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_NETWORK_ERROR;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_NETWORK_TIMEOUT;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_NETWORK_DISCONNECTED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_SERVER_DOWN:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_SERVER_DOWN:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_SERVER_DOWN;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_SERVER_PROBLEM;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_NO_FILE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED:
+    case download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED:
       string_id = IDS_DOWNLOAD_STATUS_CANCELLED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN:
+    case download::DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_SHUTDOWN;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_CRASH:
+    case download::DOWNLOAD_INTERRUPT_REASON_CRASH:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_CRASH;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_UNAUTHORIZED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_SERVER_CERT_PROBLEM;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_FORBIDDEN;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_UNREACHABLE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS_CONTENT_LENGTH_MISMATCH;
       break;
 
-    case content::DOWNLOAD_INTERRUPT_REASON_NONE:
+    case download::DOWNLOAD_INTERRUPT_REASON_NONE:
       NOTREACHED();
-      // fallthrough
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_FAILED:
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_HASH_MISMATCH:
+      FALLTHROUGH;
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_CROSS_ORIGIN_REDIRECT:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_HASH_MISMATCH:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
   }
 
   return l10n_util::GetStringUTF16(string_id);
 }
 
-base::string16 InterruptReasonMessage(content::DownloadInterruptReason reason) {
+base::string16 InterruptReasonMessage(
+    download::DownloadInterruptReason reason) {
   int string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
   base::string16 status_text;
 
   switch (reason) {
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_ACCESS_DENIED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_DISK_FULL;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_NAME_TOO_LONG:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_NAME_TOO_LONG:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_PATH_TOO_LONG;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_LARGE:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_LARGE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_FILE_TOO_LARGE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_VIRUS_INFECTED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_VIRUS_INFECTED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_VIRUS;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_TEMPORARY_PROBLEM;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_BLOCKED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_SECURITY_CHECK_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_SECURITY_CHECK_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_SECURITY_CHECK_FAILED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_FILE_TOO_SHORT;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_SAME_AS_SOURCE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_FILE_SAME_AS_SOURCE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST:
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_NETWORK_ERROR;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_NETWORK_TIMEOUT;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_NETWORK_DISCONNECTED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NETWORK_SERVER_DOWN:
+    case download::DOWNLOAD_INTERRUPT_REASON_NETWORK_SERVER_DOWN:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_SERVER_DOWN;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_SERVER_PROBLEM;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_NO_FILE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED:
+    case download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED:
       string_id = IDS_DOWNLOAD_STATUS_CANCELLED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN:
+    case download::DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_SHUTDOWN;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_CRASH:
+    case download::DOWNLOAD_INTERRUPT_REASON_CRASH:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_CRASH;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_UNAUTHORIZED;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_SERVER_CERT_PROBLEM;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_FORBIDDEN;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_UNREACHABLE;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_CONTENT_LENGTH_MISMATCH:
       string_id = IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_CONTENT_LENGTH_MISMATCH;
       break;
-    case content::DOWNLOAD_INTERRUPT_REASON_NONE:
+    case download::DOWNLOAD_INTERRUPT_REASON_NONE:
       NOTREACHED();
-      // fallthrough
-    case content::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_FAILED:
-    case content::DOWNLOAD_INTERRUPT_REASON_FILE_HASH_MISMATCH:
+      FALLTHROUGH;
+    // fallthrough
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_NO_RANGE:
+    case download::DOWNLOAD_INTERRUPT_REASON_SERVER_CROSS_ORIGIN_REDIRECT:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_FAILED:
+    case download::DOWNLOAD_INTERRUPT_REASON_FILE_HASH_MISMATCH:
       string_id = IDS_DOWNLOAD_INTERRUPTED_STATUS;
   }
 
@@ -304,7 +309,7 @@ DownloadItemModel::~DownloadItemModel() {}
 base::string16 DownloadItemModel::GetInterruptReasonText() const {
   if (download_->GetState() != DownloadItem::INTERRUPTED ||
       download_->GetLastReason() ==
-      content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED) {
+          download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED) {
     return base::string16();
   }
   return InterruptReasonMessage(download_->GetLastReason());
@@ -327,8 +332,8 @@ base::string16 DownloadItemModel::GetStatusText() const {
       status_text = l10n_util::GetStringUTF16(IDS_DOWNLOAD_STATUS_CANCELLED);
       break;
     case DownloadItem::INTERRUPTED: {
-      content::DownloadInterruptReason reason = download_->GetLastReason();
-      if (reason != content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED) {
+      download::DownloadInterruptReason reason = download_->GetLastReason();
+      if (reason != download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED) {
         base::string16 interrupt_reason = InterruptReasonStatusMessage(reason);
         status_text = l10n_util::GetStringFUTF16(
             IDS_DOWNLOAD_STATUS_INTERRUPTED, interrupt_reason);
@@ -393,9 +398,9 @@ base::string16 DownloadItemModel::GetTooltipText(const gfx::FontList& font_list,
   base::string16 tooltip =
       gfx::ElideFilename(download_->GetFileNameToReportUser(), font_list,
                          max_width, gfx::Typesetter::NATIVE);
-  content::DownloadInterruptReason reason = download_->GetLastReason();
+  download::DownloadInterruptReason reason = download_->GetLastReason();
   if (download_->GetState() == DownloadItem::INTERRUPTED &&
-      reason != content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED) {
+      reason != download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED) {
     tooltip += base::ASCIIToUTF16("\n");
     tooltip +=
         gfx::ElideText(InterruptReasonStatusMessage(reason), font_list,
@@ -412,10 +417,10 @@ base::string16 DownloadItemModel::GetWarningText(const gfx::FontList& font_list,
       gfx::ElideFilename(download_->GetFileNameToReportUser(), font_list,
                          base_width, gfx::Typesetter::BROWSER);
   switch (download_->GetDangerType()) {
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL: {
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL: {
       return l10n_util::GetStringUTF16(IDS_PROMPT_MALICIOUS_DOWNLOAD_URL);
     }
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE: {
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE: {
       if (download_crx_util::IsExtensionDownload(*download_)) {
         return l10n_util::GetStringUTF16(
             IDS_PROMPT_DANGEROUS_DOWNLOAD_EXTENSION);
@@ -424,23 +429,24 @@ base::string16 DownloadItemModel::GetWarningText(const gfx::FontList& font_list,
                                           elided_filename);
       }
     }
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST: {
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST: {
       return l10n_util::GetStringFUTF16(IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT,
                                         elided_filename);
     }
-    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
       return l10n_util::GetStringFUTF16(IDS_PROMPT_UNCOMMON_DOWNLOAD_CONTENT,
                                         elided_filename);
     }
-    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED: {
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED: {
       return l10n_util::GetStringFUTF16(
           IDS_PROMPT_DOWNLOAD_CHANGES_SETTINGS, elided_filename);
     }
-    case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
-    case content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-    case content::DOWNLOAD_DANGER_TYPE_MAX: {
+    case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+    case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+    case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
+    case download::DOWNLOAD_DANGER_TYPE_MAX: {
       break;
     }
   }
@@ -452,7 +458,7 @@ base::string16 DownloadItemModel::GetWarningConfirmButtonText() const {
   // Should only be called if IsDangerous()
   DCHECK(IsDangerous());
   if (download_->GetDangerType() ==
-          content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE &&
+          download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE &&
       download_crx_util::IsExtensionDownload(*download_)) {
     return l10n_util::GetStringUTF16(IDS_CONTINUE_EXTENSION_DOWNLOAD);
   } else {
@@ -484,21 +490,22 @@ bool DownloadItemModel::MightBeMalicious() const {
   if (!IsDangerous())
     return false;
   switch (download_->GetDangerType()) {
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
-    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
       return true;
 
-    case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
-    case content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-    case content::DOWNLOAD_DANGER_TYPE_MAX:
+    case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+    case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+    case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
+    case download::DOWNLOAD_DANGER_TYPE_MAX:
       // We shouldn't get any of these due to the IsDangerous() test above.
       NOTREACHED();
-      // Fallthrough.
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+      FALLTHROUGH;
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
       return false;
   }
   NOTREACHED();
@@ -511,21 +518,22 @@ bool DownloadItemModel::IsMalicious() const {
   if (!MightBeMalicious())
     return false;
   switch (download_->GetDangerType()) {
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
-    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
       return true;
 
-    case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
-    case content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-    case content::DOWNLOAD_DANGER_TYPE_MAX:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+    case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+    case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+    case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
+    case download::DOWNLOAD_DANGER_TYPE_MAX:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
       // We shouldn't get any of these due to the MightBeMalicious() test above.
       NOTREACHED();
-      // Fallthrough.
-    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+      FALLTHROUGH;
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
       return false;
   }
   NOTREACHED();
@@ -619,8 +627,8 @@ bool DownloadItemModel::ShouldNotifyUI() const {
   if (download_->IsTransient())
     return false;
 
-  Profile* profile =
-      Profile::FromBrowserContext(download_->GetBrowserContext());
+  Profile* profile = Profile::FromBrowserContext(
+      content::DownloadItemUtils::GetBrowserContext(download_));
   DownloadCoreService* download_core_service =
       DownloadCoreServiceFactory::GetForBrowserContext(profile);
   DownloadHistory* download_history =
@@ -763,7 +771,7 @@ base::string16 DownloadItemModel::GetInProgressStatusString() const {
 void DownloadItemModel::OpenUsingPlatformHandler() {
   DownloadCoreService* download_core_service =
       DownloadCoreServiceFactory::GetForBrowserContext(
-          download_->GetBrowserContext());
+          content::DownloadItemUtils::GetBrowserContext(download_));
   if (!download_core_service)
     return;
 

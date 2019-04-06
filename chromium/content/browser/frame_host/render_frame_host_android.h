@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
-#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
+#include "services/service_manager/public/mojom/interface_provider.mojom.h"
 
 namespace content {
 
@@ -48,6 +48,9 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
   base::android::ScopedJavaLocalRef<jobject> GetAndroidOverlayRoutingToken(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&) const;
+
+  void NotifyUserActivation(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>&);
 
  private:
   RenderFrameHostImpl* const render_frame_host_;

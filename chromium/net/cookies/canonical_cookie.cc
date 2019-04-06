@@ -63,8 +63,6 @@ namespace net {
 
 namespace {
 
-const int kVlogSetCookies = 7;
-
 // Determine the cookie domain to use for setting the specified cookie.
 bool GetCookieDomain(const GURL& url,
                      const ParsedCookie& pc,
@@ -195,18 +193,20 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   ParsedCookie parsed_cookie(cookie_line);
 
   if (!parsed_cookie.IsValid()) {
-    VLOG(kVlogSetCookies) << "WARNING: Couldn't parse cookie";
+    VLOG(net::cookie_util::kVlogSetCookies) << "WARNING: Couldn't parse cookie";
     return nullptr;
   }
 
   if (options.exclude_httponly() && parsed_cookie.IsHttpOnly()) {
-    VLOG(kVlogSetCookies) << "Create() is not creating a httponly cookie";
+    VLOG(net::cookie_util::kVlogSetCookies)
+        << "Create() is not creating a httponly cookie";
     return nullptr;
   }
 
   std::string cookie_domain;
   if (!GetCookieDomain(url, parsed_cookie, &cookie_domain)) {
-    VLOG(kVlogSetCookies) << "Create() failed to get a cookie domain";
+    VLOG(net::cookie_util::kVlogSetCookies)
+        << "Create() failed to get a cookie domain";
     return nullptr;
   }
 
@@ -215,7 +215,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   // URL does not have a secure scheme, the cookie should be thrown away.
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-alone
   if (parsed_cookie.IsSecure() && !url.SchemeIsCryptographic()) {
-    VLOG(kVlogSetCookies)
+    VLOG(net::cookie_util::kVlogSetCookies)
         << "Create() is trying to create a secure cookie from an insecure URL";
     return nullptr;
   }
@@ -236,7 +236,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   bool is_cookie_valid = IsCookiePrefixValid(prefix, url, parsed_cookie);
   RecordCookiePrefixMetrics(prefix, is_cookie_valid);
   if (!is_cookie_valid) {
-    VLOG(kVlogSetCookies)
+    VLOG(net::cookie_util::kVlogSetCookies)
         << "Create() failed because the cookie violated prefix rules.";
     return nullptr;
   }
@@ -346,36 +346,7 @@ bool CanonicalCookie::IsOnPath(const std::string& url_path) const {
 }
 
 bool CanonicalCookie::IsDomainMatch(const std::string& host) const {
-  // Can domain match in two ways; as a domain cookie (where the cookie
-  // domain begins with ".") or as a host cookie (where it doesn't).
-
-  // Some consumers of the CookieMonster expect to set cookies on
-  // URLs like http://.strange.url.  To retrieve cookies in this instance,
-  // we allow matching as a host cookie even when the domain_ starts with
-  // a period.
-  if (host == domain_)
-    return true;
-
-  // Domain cookie must have an initial ".".  To match, it must be
-  // equal to url's host with initial period removed, or a suffix of
-  // it.
-
-  // Arguably this should only apply to "http" or "https" cookies, but
-  // extension cookie tests currently use the funtionality, and if we
-  // ever decide to implement that it should be done by preventing
-  // such cookies from being set.
-  if (domain_.empty() || domain_[0] != '.')
-    return false;
-
-  // The host with a "." prefixed.
-  if (domain_.compare(1, std::string::npos, host) == 0)
-    return true;
-
-  // A pure suffix of the host (ok since we know the domain already
-  // starts with a ".")
-  return (host.length() > domain_.length() &&
-          host.compare(host.length() - domain_.length(),
-                       domain_.length(), domain_) == 0);
+  return cookie_util::IsDomainMatch(domain_, host);
 }
 
 bool CanonicalCookie::IncludeForRequestURL(const GURL& url,

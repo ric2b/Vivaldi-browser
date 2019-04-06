@@ -1,6 +1,8 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-static_library("notes") {
+import("//build/config/jumbo.gni")
+
+jumbo_static_library("notes") {
   sources = [
     "note_attachment.cpp",
     "note_attachment.h",
@@ -40,7 +42,7 @@ static_library("notes") {
   ]
 }
 
-static_library("browser") {
+jumbo_static_library("browser") {
   sources = [
     "notes_factory.cpp",
     "notes_factory.h",
@@ -72,6 +74,7 @@ source_set("unit_tests") {
     "notes_codec_unittest.cpp"
   ]
   deps = [
+    "//skia",
     "//testing/gtest",
     "//third_party/boringssl",
   ]

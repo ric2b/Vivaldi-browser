@@ -189,34 +189,25 @@ def main():
     return code
   else:
     versions = {'HEAD': archive.GetLatestRevision()}
-    if util.IsLinux() and not util.Is64Bit():
-      # Linux32 builds need to be special-cased, because 1) they are keyed by
-      # git hash rather than commit position, and 2) come from a different
-      # download site (so we can't just convert the commit position to a hash).
-      versions['63'] = 'adb61db19020ed8ecee5e91b1a0ea4c924ae2988'
-      versions['62'] = '17030e3a08cfbb6e591991f7dbf0eb703454b365'
-      versions['61'] = '77132a2bc78e8dc9ce411e8166bfd009f6476f6f'
-
-      # TODO(samuong): speculative fix for crbug.com/611886
-      os.environ['CHROME_DEVEL_SANDBOX'] = '/opt/chromium/chrome_sandbox'
-
     # Linux64 build numbers
-    elif util.IsLinux():
-          versions['64'] = '520842'
-          versions['63'] = '508578'
-          versions['62'] = '499100'
+    if util.IsLinux():
+      versions['68'] = '561732'
+      versions['67'] = '550422'
+      versions['66'] = '540276'
+
 
     # Mac build numbers
     elif util.IsMac():
-          versions['64'] = '520840'
-          versions['63'] = '508578'
-          versions['62'] = '499098'
+      versions['68'] = '561733'
+      versions['67'] = '550418'
+      versions['66'] = '540271'
+
 
     # Windows build numbers
     elif util.IsWindows():
-          versions['64'] = '520840'
-          versions['63'] = '508578'
-          versions['62'] = '499101'
+      versions['68'] = '561732'
+      versions['67'] = '550416'
+      versions['66'] = '540272'
 
     code = 0
     for version, revision in versions.iteritems():
@@ -238,7 +229,8 @@ def main():
                              chrome_version_name='v%s' % version_name)
       code2 = RunJavaTests(chromedriver, chrome=chrome_path,
                            chrome_version=version,
-                           chrome_version_name='v%s' % version_name)
+                           chrome_version_name='v%s' % version_name,
+                           verbose=True)
       code = code or code1 or code2
       _KillChromes()
       shutil.rmtree(temp_dir)

@@ -38,7 +38,6 @@ class GLNonOwnedContext : public GLContextReal {
   void ReleaseCurrent(GLSurface* surface) override {}
   bool IsCurrent(GLSurface* surface) override { return true; }
   void* GetHandle() override { return nullptr; }
-  void OnSetSwapInterval(int interval) override {}
 
  protected:
   ~GLNonOwnedContext() override {}
@@ -99,6 +98,9 @@ scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
     case kGLImplementationOSMesaGL:
       return InitializeGLContext(new GLContextOSMesa(share_group),
                                  compatible_surface, attribs);
+    case kGLImplementationDisabled:
+      NOTREACHED();
+      return nullptr;
     default:
       if (compatible_surface->GetHandle() ||
           compatible_surface->IsSurfaceless()) {

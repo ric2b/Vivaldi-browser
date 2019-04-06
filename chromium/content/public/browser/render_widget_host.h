@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <vector>
+
 #include "base/callback.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -15,10 +18,10 @@
 #include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_sender.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebTextDirection.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/web/web_text_direction.h"
 #include "ui/surface/transport_dib.h"
 
 namespace blink {
@@ -39,6 +42,7 @@ namespace content {
 struct CursorInfo;
 class RenderProcessHost;
 class RenderWidgetHostIterator;
+class RenderWidgetHostObserver;
 class RenderWidgetHostView;
 struct ScreenInfo;
 
@@ -76,8 +80,8 @@ struct ScreenInfo;
 // the render process dies, the RenderWidgetHostView goes away and all
 // references to it must become nullptr.
 //
-// RenderViewHost (a RenderWidgetHost subclass) is the conduit used to
-// communicate with the RenderView and is owned by the WebContents. If the
+// RenderViewHost (an owner delegate for RenderWidgetHost) is the conduit used
+// to communicate with the RenderView and is owned by the WebContents. If the
 // render process crashes, the RenderViewHost remains and restarts the render
 // process if needed to continue navigation.
 //
@@ -92,9 +96,9 @@ struct ScreenInfo;
 // For select popups, the situation is a little different. The RenderWidgetHost
 // associated with the select popup owns the view and itself (is responsible
 // for destroying itself when the view is closed). The WebContents's only
-// responsibility is to select popups is to create them when it is told to. When
-// the View is destroyed via an IPC message (for when WebCore destroys the
-// popup, e.g. if the user selects one of the options), or because
+// responsibility with select popups is to create them when it is told to. When
+// the View is destroyed via an IPC message (triggered when WebCore destroys
+// the popup, e.g. if the user selects one of the options), or because
 // WM_CANCELMODE is received by the view, the View schedules the destruction of
 // the render process. However in this case since there's no WebContents
 // container, when the render process is destroyed, the RenderWidgetHost just
@@ -194,21 +198,14 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // Returns true if the renderer is loading, false if not.
   virtual bool IsLoading() const = 0;
 
-  // Restart the active hang monitor timeout if the renderer is actively
-  // waiting on a response. Clears all existing timeouts and starts with
-  // a new one.  This can be because the renderer has become
-  // active, the tab is being hidden, or the user has chosen to wait some more
-  // to give the tab a chance to become active and we don't want to display a
-  // warning too soon.
-  virtual void RestartHangMonitorTimeoutIfNecessary() = 0;
-
   // Returns true if the renderer is considered unresponsive.
   virtual bool IsCurrentlyUnresponsive() const = 0;
 
   virtual void SetIgnoreInputEvents(bool ignore_input_events) = 0;
 
-  // Called to notify the RenderWidget that it has been resized.
-  virtual void WasResized() = 0;
+  // Called to propagate updated visual properties to the renderer. Returns
+  // whether the renderer has been informed of updated properties.
+  virtual bool SynchronizeVisualProperties() = 0;
 
   // Access to the implementation's IPC::Listener::OnMessageReceived. Intended
   // only for test code.
@@ -241,6 +238,12 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   virtual void AddInputEventObserver(InputEventObserver* observer) = 0;
   virtual void RemoveInputEventObserver(InputEventObserver* observer) = 0;
 
+  // Add and remove observers for widget host events. The order in which
+  // notifications are sent to observers is undefined. Observers must be sure to
+  // remove the observer before they go away.
+  virtual void AddObserver(RenderWidgetHostObserver* observer) = 0;
+  virtual void RemoveObserver(RenderWidgetHostObserver* observer) = 0;
+
   // Get the screen info corresponding to this render widget.
   virtual void GetScreenInfo(ScreenInfo* result) = 0;
 
@@ -256,7 +259,7 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
       const gfx::PointF& client_pt,
       const gfx::PointF& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers){};
+      int key_modifiers) {}
   virtual void DragTargetDragOver(
       const gfx::PointF& client_pt,
       const gfx::PointF& screen_pt,
@@ -273,11 +276,11 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // either in a drop or by being cancelled.
   virtual void DragSourceEndedAt(const gfx::PointF& client_pt,
                                  const gfx::PointF& screen_pt,
-                                 blink::WebDragOperation operation){};
+                                 blink::WebDragOperation operation) {}
 
   // Notifies the renderer that we're done with the drag and drop operation.
   // This allows the renderer to reset some state.
-  virtual void DragSourceSystemDragEnded() {};
+  virtual void DragSourceSystemDragEnded() {}
 
   // Filters drop data before it is passed to RenderWidgetHost.
   virtual void FilterDropData(DropData* drop_data) {}

@@ -21,8 +21,8 @@ class ServicesDelegateStub : public ServicesDelegate {
   const scoped_refptr<SafeBrowsingDatabaseManager>& v4_local_database_manager()
       const override;
   void Initialize(bool v4_enabled = false) override;
-  void InitializeCsdService(
-      net::URLRequestContextGetter* context_getter) override;
+  void InitializeCsdService(scoped_refptr<network::SharedURLLoaderFactory>
+                                url_loader_factory) override;
   void ShutdownServices() override;
   void RefreshState(bool enable) override;
   void ProcessResourceRequest(const ResourceRequestInfo* request) override;
@@ -35,8 +35,8 @@ class ServicesDelegateStub : public ServicesDelegate {
   DownloadProtectionService* GetDownloadService() override;
 
   void StartOnIOThread(
-    net::URLRequestContextGetter* url_request_context_getter,
-    const V4ProtocolConfig& v4_config) override;
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      const V4ProtocolConfig& v4_config) override;
   void StopOnIOThread(bool shutdown) override;
   void CreatePasswordProtectionService(Profile* profile) override;
   void RemovePasswordProtectionService(Profile* profile) override;

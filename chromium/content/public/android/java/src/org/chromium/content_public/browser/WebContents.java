@@ -4,14 +4,17 @@
 
 package org.chromium.content_public.browser;
 
+import android.content.Context;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Parcelable;
 import android.support.annotation.Nullable;
 
+import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.ui.OverscrollRefreshHandler;
 import org.chromium.ui.base.EventForwarder;
+import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -57,6 +60,30 @@ public interface WebContents extends Parcelable {
     }
 
     /**
+     * Factory interface passed to {@link #setUserData()} for instantiation of
+     * class as user data.
+     *
+     * Constructor method reference comes handy for class Foo to provide the factory.
+     * Use lazy initialization to avoid having to generate too many anonymous reference.
+     *
+     * <code>
+     * public class Foo {
+     *     static final class FoofactoryLazyHolder {
+     *         private static final UserDataFactory<Foo> INSTANCE = Foo::new;
+     *     }
+     *     ....
+     *
+     *     webContents.setUserData(Foo.class, FooFactoryLazyHolder.INSTANCE);
+     *
+     *     ....
+     * }
+     * </code>
+     *
+     * @param <T> Class to instantiate.
+     */
+    public interface UserDataFactory<T> { T create(WebContents webContents); }
+
+    /**
      * Sets holder of the objects used internally by WebContents for various features.
      * This transfers the ownership of the objects to the caller since they will have the same
      * lifecycle as that of the caller. The caller doesn't have to care about the objects inside
@@ -68,9 +95,34 @@ public interface WebContents extends Parcelable {
     void setInternalsHolder(InternalsHolder holder);
 
     /**
+     * Initialize various content objects of {@link WebContents} lifetime.
+     * @param context The context used to create this object.
+     * @param productVersion Product version for accessibility.
+     * @param viewDelegate Delegate to add/remove anchor views.
+     * @param accessDelegate Handles dispatching all hidden or super methods to the containerView.
+     * @param windowAndroid An instance of the WindowAndroid.
+     */
+    void initialize(Context context, String productVersion, ViewAndroidDelegate viewDelegate,
+            ViewEventSink.InternalAccessDelegate accessDelegate, WindowAndroid windowAndroid);
+
+    /**
      * @return The top level WindowAndroid associated with this WebContents.  This can be null.
      */
     WindowAndroid getTopLevelNativeWindow();
+
+    /*
+     * Updates the native {@link WebContents} with a new window. This moves the NativeView and
+     * attached it to the new NativeWindow linked with the given {@link WindowAndroid}.
+     * TODO(jinsukkim): This should happen through view android tree instead.
+     * @param windowAndroid The new {@link WindowAndroid} for this {@link WebContents}.
+     */
+    void setTopLevelNativeWindow(WindowAndroid windowAndroid);
+
+    /**
+     * @return The {@link ViewAndroidDelegate} from which to get the container view.
+     *         This can be null.
+     */
+    ViewAndroidDelegate getViewAndroidDelegate();
 
     /**
      * Deletes the Web Contents object.
@@ -81,6 +133,17 @@ public interface WebContents extends Parcelable {
      * @return Whether or not the native object associated with this WebContent is destroyed.
      */
     boolean isDestroyed();
+
+    /**
+     * Retrieves or stores a user data object for this WebContents.
+     * @param key Class instance of the object used as the key.
+     * @param userDataFactory Factory that creates an object of the generic class. A new object
+     *        is created if it hasn't been created and non-null factory is given.
+     * @return The created or retrieved user data object. Can be null if the object was
+     *         not created yet, or {@code userDataFactory} is null, or the internal data
+     *         storage is already garbage-collected.
+     */
+    public <T> T getOrSetUserData(Class<T> key, UserDataFactory<T> userDataFactory);
 
     /**
      * @return The navigation controller associated with this WebContents.
@@ -123,48 +186,6 @@ public interface WebContents extends Parcelable {
      */
     void stop();
 
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Cut the selected content.
-     */
-    void cut();
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Copy the selected content.
-     */
-    void copy();
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Paste content from the clipboard.
-     */
-    void paste();
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Paste content from the clipboard without format.
-     */
-    void pasteAsPlainText();
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Replace the selected text with the {@code word}.
-     */
-    void replace(String word);
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Select all content.
-     */
-    void selectAll();
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Collapse the selection to the end of selection range.
-     */
-    void collapseSelection();
-
     /**
      * To be called when the ContentView is hidden.
      */
@@ -177,21 +198,10 @@ public interface WebContents extends Parcelable {
 
     /**
      * ChildProcessImportance on Android allows controls of the renderer process bindings
-     * independent of visibility.
+     * independent of visibility. Note this does not affect importance of subframe processes.
+     * @param mainFrameImportance importance of the main frame process.
      */
-    void setImportance(@ChildProcessImportance int importance);
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Removes handles used in text selection.
-     */
-    void dismissTextHandles();
-
-    // TODO (amaralp): Only used in content. Should be moved out of public interface.
-    /**
-     * Shows paste popup menu at the touch handle at specified location.
-     */
-    void showContextMenuAtTouchHandle(int x, int y);
+    void setImportance(@ChildProcessImportance int mainFrameImportance);
 
     /**
      * Suspends all media players for this WebContents.  Note: There may still
@@ -211,16 +221,6 @@ public interface WebContents extends Parcelable {
      * Get the Background color from underlying RenderWidgetHost for this WebContent.
      */
     int getBackgroundColor();
-
-    /**
-     * Shows an interstitial page driven by the passed in delegate.
-     *
-     * @param url The URL being blocked by the interstitial.
-     * @param interstitialPageDelegateAndroid The delegate handling the interstitial.
-     */
-    @VisibleForTesting
-    void showInterstitialPage(
-            String url, long interstitialPageDelegateAndroid);
 
     /**
      * @return Whether the page is currently showing an interstitial, such as a bad HTTPS page.
@@ -244,15 +244,6 @@ public interface WebContents extends Parcelable {
      * Inform WebKit that Fullscreen mode has been exited by the user.
      */
     void exitFullscreen();
-
-    /**
-     * Changes whether hiding the browser controls is enabled.
-     *
-     * @param enableHiding Whether hiding the browser controls should be enabled or not.
-     * @param enableShowing Whether showing the browser controls should be enabled or not.
-     * @param animate Whether the transition should be animated or not.
-     */
-    void updateBrowserControlsState(boolean enableHiding, boolean enableShowing, boolean animate);
 
     /**
      * Brings the Editable to the visible area while IME is up to make easier for inputing text.
@@ -417,14 +408,16 @@ public interface WebContents extends Parcelable {
     void setOverscrollRefreshHandler(OverscrollRefreshHandler handler);
 
     /**
-     * Requests an image snapshot of the content.
+     * Requests an image snapshot of the content and stores it in the specified folder.
      *
      * @param width The width of the resulting bitmap, or 0 for "auto."
      * @param height The height of the resulting bitmap, or 0 for "auto."
+     * @param path The folder in which to store the screenshot.
      * @param callback May be called synchronously, or at a later point, to deliver the bitmap
      *                 result (or a failure code).
      */
-    void getContentBitmapAsync(int width, int height, ContentBitmapCallback callback);
+    void writeContentBitmapToDiskAsync(
+            int width, int height, String path, Callback<String> callback);
 
     /**
      * Reloads all the Lo-Fi images in this WebContents.
@@ -454,16 +447,20 @@ public interface WebContents extends Parcelable {
     /**
      * Whether the WebContents has an active fullscreen video with native or custom controls.
      * The WebContents must be fullscreen when this method is called. Fullscreen videos may take a
-     * moment to register. This should only be called if AppHooks.shouldDetectVideoFullscreen()
-     * returns true.
+     * moment to register.
      */
     boolean hasActiveEffectivelyFullscreenVideo();
 
     /**
+     * Whether the WebContents is allowed to enter Picture-in-Picture when it has an active
+     * fullscreen video with native or custom controls.
+     */
+    boolean isPictureInPictureAllowedForFullscreenVideo();
+
+    /**
      * Gets a Rect containing the size of the currently playing fullscreen video. The position of
      * the rectangle is meaningless. Will return null if there is no such video. Fullscreen videos
-     * may take a moment to register. This should only be called if
-     * AppHooks.shouldDetectVideoFullscreen() returns true.
+     * may take a moment to register.
      */
     @Nullable
     Rect getFullscreenVideoSize();
@@ -477,6 +474,12 @@ public interface WebContents extends Parcelable {
     void simulateRendererKilledForTesting(boolean wasOomProtected);
 
     /**
+     * @return {@code true} if select popup is being shown.
+     */
+    @VisibleForTesting
+    boolean isSelectPopupVisibleForTesting();
+
+    /**
      * Notifies the WebContents about the new persistent video status. It should be called whenever
      * the value changes.
      *
@@ -485,10 +488,32 @@ public interface WebContents extends Parcelable {
     void setHasPersistentVideo(boolean value);
 
     /**
-     * Set the view size of WebContents. The size is in physical pixel.
+     * Set the view size of the WebContents. The size is in physical pixels.
      *
      * @param width The width of the view.
      * @param height The height of the view.
      */
     void setSize(int width, int height);
+
+    /**
+     * Gets the view size width of the WebContents. The size is in physical pixels.
+     *
+     * @return The width of the view.
+     */
+    int getWidth();
+
+    /**
+     * Gets the view size width of the WebContents. The size is in physical pixels.
+     *
+     * @return The width of the view.
+     */
+    int getHeight();
+
+    /**
+     * Sets the Display Cutout safe area of the WebContents. These are insets from each edge
+     * in physical pixels
+     *
+     * @param insets The insets stored in a Rect.
+     */
+    void setDisplayCutoutSafeArea(Rect insets);
 }

@@ -4,21 +4,20 @@
 
 #include "base/time/default_tick_clock.h"
 
-#include "base/lazy_instance.h"
+#include "base/no_destructor.h"
 
 namespace base {
 
 DefaultTickClock::~DefaultTickClock() = default;
 
-TimeTicks DefaultTickClock::NowTicks() {
+TimeTicks DefaultTickClock::NowTicks() const {
   return TimeTicks::Now();
 }
 
 // static
-DefaultTickClock* DefaultTickClock::GetInstance() {
-  static LazyInstance<DefaultTickClock>::Leaky instance =
-      LAZY_INSTANCE_INITIALIZER;
-  return instance.Pointer();
+const DefaultTickClock* DefaultTickClock::GetInstance() {
+  static const base::NoDestructor<DefaultTickClock> default_tick_clock;
+  return default_tick_clock.get();
 }
 
 }  // namespace base

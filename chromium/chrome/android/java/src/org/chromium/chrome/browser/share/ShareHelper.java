@@ -24,7 +24,6 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AlertDialog;
@@ -38,6 +37,7 @@ import android.widget.AdapterView.OnItemClickListener;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -45,6 +45,7 @@ import org.chromium.base.StreamUtil;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.CachedMetrics;
 import org.chromium.chrome.R;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.UiUtils;
 
 import java.io.File;
@@ -107,8 +108,7 @@ public class ShareHelper {
 
     private static void fireIntent(Activity activity, Intent intent) {
         if (sFakeIntentReceiverForTesting != null) {
-            Context context = activity.getApplicationContext();
-            sFakeIntentReceiverForTesting.fireIntent(context, intent);
+            sFakeIntentReceiverForTesting.fireIntent(ContextUtils.getApplicationContext(), intent);
         } else {
             activity.startActivity(intent);
         }
@@ -199,7 +199,7 @@ public class ShareHelper {
                     sTargetChosenReceiveAction = activity.getPackageName() + "/"
                             + TargetChosenReceiver.class.getName() + "_ACTION";
                 }
-                Context context = activity.getApplicationContext();
+                Context context = ContextUtils.getApplicationContext();
                 if (sLastRegisteredReceiver != null) {
                     context.unregisterReceiver(sLastRegisteredReceiver);
                     // Must cancel the callback (to satisfy guarantee that exactly one method of
@@ -232,7 +232,7 @@ public class ShareHelper {
         public void onReceive(Context context, Intent intent) {
             synchronized (LOCK) {
                 if (sLastRegisteredReceiver != this) return;
-                context.getApplicationContext().unregisterReceiver(sLastRegisteredReceiver);
+                ContextUtils.getApplicationContext().unregisterReceiver(sLastRegisteredReceiver);
                 sLastRegisteredReceiver = null;
             }
             if (!intent.hasExtra(EXTRA_RECEIVER_TOKEN)
@@ -366,54 +366,60 @@ public class ShareHelper {
         }.execute();
     }
 
-    /**
-     * Persists the screenshot file and notifies the file provider that the file is ready to be
-     * accessed by the client.
-     *
-     * The bitmap is compressed to JPEG before being written to the file.
-     *
-     * @param screenshot  The screenshot bitmap to be written to file.
-     * @param callback    The callback that will be called once the bitmap is saved.
-     */
-    public static void saveScreenshotToDisk(final Bitmap screenshot, final Context context,
-            final Callback<Uri> callback) {
-        if (screenshot == null) {
-            callback.onResult(null);
-            return;
+    private static class ExternallyVisibleUriCallback implements Callback<String> {
+        private Callback<Uri> mComposedCallback;
+        ExternallyVisibleUriCallback(Callback<Uri> cb) {
+            mComposedCallback = cb;
         }
 
-        new AsyncTask<Void, Void, Uri>() {
-            @Override
-            protected Uri doInBackground(Void... params) {
-                FileOutputStream fOut = null;
-                try {
-                    File path = new File(UiUtils.getDirectoryForImageCapture(context) + "/"
-                            + SHARE_IMAGES_DIRECTORY_NAME);
-                    if (path.exists() || path.mkdir()) {
-                        String fileName = String.valueOf(System.currentTimeMillis());
-                        File saveFile = File.createTempFile(fileName, JPEG_EXTENSION, path);
-                        fOut = new FileOutputStream(saveFile);
-                        screenshot.compress(Bitmap.CompressFormat.JPEG, 85, fOut);
-                        return ApiCompatibilityUtils.getUriForImageCaptureFile(saveFile);
-                    }
-                } catch (IOException ie) {
-                    Log.w(TAG, "Ignoring IOException when saving screenshot.", ie);
-                } finally {
-                    StreamUtil.closeQuietly(fOut);
+        @Override
+        public void onResult(final String path) {
+            if (TextUtils.isEmpty(path)) {
+                mComposedCallback.onResult(null);
+                return;
+            }
+
+            new AsyncTask<Void, Void, Uri>() {
+                @Override
+                protected Uri doInBackground(Void... v) {
+                    return ApiCompatibilityUtils.getUriForImageCaptureFile(new File(path));
                 }
 
-                return null;
+                @Override
+                protected void onPostExecute(Uri uri) {
+                    mComposedCallback.onResult(uri);
+                }
             }
+                    .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        }
+    }
 
-            @Override
-            protected void onPostExecute(Uri fileUri) {
-                fileUri = ApplicationStatus.getStateForApplication()
-                                != ApplicationState.HAS_DESTROYED_ACTIVITIES
-                        ? fileUri
-                        : null;
-                callback.onResult(fileUri);
-            }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    // TODO(yfriedman): Remove after internal tree is updated.
+    public static void saveScreenshotToDisk(
+            Bitmap screenshot, Context context, Callback<Uri> callback) {}
+
+    /**
+     * Captures a screenshot for the provided web contents, persists it and notifies the file
+     * provider that the file is ready to be accessed by the client.
+     *
+     * The screenshot is compressed to JPEG before being written to the file.
+     *
+     * @param contents The WebContents instance for which to capture a screenshot.
+     * @param width    The desired width of the resulting screenshot, or 0 for "auto."
+     * @param height   The desired height of the resulting screenshot, or 0 for "auto."
+     * @param callback The callback that will be called once the screenshot is saved.
+     */
+    public static void captureScreenshotForContents(
+            WebContents contents, int width, int height, Callback<Uri> callback) {
+        try {
+            String path = UiUtils.getDirectoryForImageCapture(ContextUtils.getApplicationContext())
+                    + File.separator + SHARE_IMAGES_DIRECTORY_NAME;
+            contents.writeContentBitmapToDiskAsync(
+                    width, height, path, new ExternallyVisibleUriCallback(callback));
+        } catch (IOException e) {
+            Log.e(TAG, "Error getting content bitmap: ", e);
+            callback.onResult(null);
+        }
     }
 
     /**
@@ -462,17 +468,18 @@ public class ShareHelper {
             }
         });
 
-        if (callback != null) {
-            dialog.setOnDismissListener(new OnDismissListener() {
-                @Override
-                public void onDismiss(DialogInterface dialog) {
-                    if (!callbackCalled[0]) {
-                        callback.onCancel();
-                        callbackCalled[0] = true;
-                    }
+        dialog.setOnDismissListener(new OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                if (callback != null && !callbackCalled[0]) {
+                    callback.onCancel();
+                    callbackCalled[0] = true;
                 }
-            });
-        }
+                if (params.getOnDialogDismissed() != null) {
+                    params.getOnDialogDismissed().run();
+                }
+            }
+        });
 
         if (sFakeIntentReceiverForTesting != null) {
             sFakeIntentReceiverForTesting.onCustomChooserShown(dialog);
@@ -604,7 +611,6 @@ public class ShareHelper {
     public static Intent getShareLinkIntent(ShareParams params) {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.addFlags(ApiCompatibilityUtils.getActivityNewDocumentFlag());
-        intent.putExtra(Intent.EXTRA_SUBJECT, params.getTitle());
         intent.putExtra(EXTRA_TASK_ID, params.getActivity().getTaskId());
 
         Uri screenshotUri = params.getScreenshotUri();
@@ -618,12 +624,16 @@ public class ShareHelper {
         }
 
         if (params.getOfflineUri() != null) {
+            intent.putExtra(Intent.EXTRA_SUBJECT, params.getTitle());
             intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.putExtra(Intent.EXTRA_STREAM, params.getOfflineUri());
             intent.addCategory(Intent.CATEGORY_DEFAULT);
             intent.setType("multipart/related");
         } else {
+            if (!TextUtils.equals(params.getText(), params.getTitle())) {
+                intent.putExtra(Intent.EXTRA_SUBJECT, params.getTitle());
+            }
             intent.putExtra(Intent.EXTRA_TEXT, params.getText());
             intent.setType("text/plain");
         }

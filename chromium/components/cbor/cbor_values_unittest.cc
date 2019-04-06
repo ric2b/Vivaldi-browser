@@ -69,6 +69,14 @@ TEST(CBORValuesTest, ConstructBytestring) {
             value.GetBytestring());
 }
 
+TEST(CBORValuesTest, ConstructBytestringFromString) {
+  CBORValue value(CBORValue("hello", CBORValue::Type::BYTE_STRING));
+  ASSERT_EQ(CBORValue::Type::BYTE_STRING, value.type());
+  EXPECT_EQ(CBORValue::BinaryValue({'h', 'e', 'l', 'l', 'o'}),
+            value.GetBytestring());
+  EXPECT_EQ("hello", value.GetBytestringAsString());
+}
+
 TEST(CBORValuesTest, ConstructArray) {
   CBORValue::ArrayValue array;
   array.emplace_back(CBORValue("foo"));
@@ -131,6 +139,16 @@ TEST(CBORValuesTest, ConstructSimpleValue) {
   ASSERT_EQ(CBORValue::Type::SIMPLE_VALUE, undefined_value.type());
   EXPECT_EQ(CBORValue::SimpleValue::UNDEFINED,
             undefined_value.GetSimpleValue());
+}
+
+TEST(CBORValuesTest, ConstructSimpleBooleanValue) {
+  CBORValue true_value(true);
+  ASSERT_EQ(CBORValue::Type::SIMPLE_VALUE, true_value.type());
+  EXPECT_TRUE(true_value.GetBool());
+
+  CBORValue false_value(false);
+  ASSERT_EQ(CBORValue::Type::SIMPLE_VALUE, false_value.type());
+  EXPECT_FALSE(false_value.GetBool());
 }
 
 // Test copy constructors

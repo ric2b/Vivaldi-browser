@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_UPGRADE_DETECTOR_IMPL_H_
 #define CHROME_BROWSER_UPGRADE_DETECTOR_IMPL_H_
 
+#include <utility>
+#include <vector>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -17,10 +20,14 @@
 #include "components/variations/service/variations_service.h"
 
 namespace base {
+template <typename T>
+class NoDestructor;
 class SequencedTaskRunner;
 class TaskRunner;
+class TickClock;
 }
 
+// This class contains the non-CrOS desktop implementation of the detector.
 class UpgradeDetectorImpl : public UpgradeDetector,
                             public variations::VariationsService::Observer {
  public:
@@ -34,8 +41,16 @@ class UpgradeDetectorImpl : public UpgradeDetector,
   // Returns the global instance.
   static UpgradeDetectorImpl* GetInstance();
 
+  // UpgradeDetector:
+  base::TimeDelta GetHighAnnoyanceLevelDelta() override;
+  base::TimeTicks GetHighAnnoyanceDeadline() override;
+
  protected:
-  UpgradeDetectorImpl();
+  explicit UpgradeDetectorImpl(const base::TickClock* tick_clock);
+
+  // Sends out a notification and starts a one shot timer to wait until
+  // notifying the user.
+  void UpgradeDetected(UpgradeAvailable upgrade_available);
 
   // variations::VariationsService::Observer:
   void OnExperimentChangesDetected(Severity severity) override;
@@ -44,9 +59,20 @@ class UpgradeDetectorImpl : public UpgradeDetector,
   // interval. Exposed as protected for testing.
   void NotifyOnUpgradeWithTimePassed(base::TimeDelta time_passed);
 
+  base::TimeDelta GetThresholdForLevel(UpgradeNotificationAnnoyanceLevel level);
+
  private:
+  friend class base::NoDestructor<UpgradeDetectorImpl>;
+
   // A callback that receives the results of |DetectUpgradeTask|.
   using UpgradeDetectedCallback = base::OnceCallback<void(UpgradeAvailable)>;
+
+  using DeltaAndStage =
+      std::pair<base::TimeDelta, UpgradeNotificationAnnoyanceLevel>;
+  using Stages = std::vector<DeltaAndStage>;
+
+  // UpgradeDetector:
+  void OnRelaunchNotificationPeriodPrefChanged() override;
 
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
   // Receives the results of AreAutoupdatesEnabled and starts the upgrade check
@@ -65,9 +91,9 @@ class UpgradeDetectorImpl : public UpgradeDetector,
   // badging) of the notification.
   void StartUpgradeNotificationTimer();
 
-  // Sends out a notification and starts a one shot timer to wait until
-  // notifying the user.
-  void UpgradeDetected(UpgradeAvailable upgrade_available);
+  // Lazy-initialization for the various threshold deltas (idempotent).
+  void InitializeThresholds();
+  void DoInitializeThresholds();
 
   // Returns true after calling UpgradeDetected if current install is outdated.
   bool DetectOutdatedInstall();
@@ -91,19 +117,25 @@ class UpgradeDetectorImpl : public UpgradeDetector,
   // We periodically check to see if Chrome has been upgraded.
   base::RepeatingTimer detect_upgrade_timer_;
 
-  // After we detect an upgrade we start a recurring timer to see if enough time
-  // has passed and we should start notifying the user.
-  base::RepeatingTimer upgrade_notification_timer_;
-
-  // True if this build is a dev or canary channel build.
-  bool is_unstable_channel_;
+  // A timer used to move through the various upgrade notification stages and
+  // schedule calls to NotifyUpgrade.
+  base::OneShotTimer upgrade_notification_timer_;
 
   // True if auto update is turned on.
   bool is_auto_update_enabled_;
 
-  // When the upgrade was detected - either a software update or a variations
-  // update, whichever happened first.
-  base::TimeTicks upgrade_detected_time_;
+  // True if test switches that simulate an outdated install are present on the
+  // command line.
+  const bool simulating_outdated_;
+
+  // True if test switches are present on the command line.
+  const bool is_testing_;
+
+  // The various deltas from detection time to the different annoyance levels;
+  // lazy-initialized by InitializeThresholds.
+  base::TimeDelta high_threshold_;
+  base::TimeDelta elevated_threshold_;
+  Stages stages_;
 
   // The date the binaries were built.
   base::Time build_date_;

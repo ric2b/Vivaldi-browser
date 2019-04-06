@@ -11,9 +11,8 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
+import android.support.annotation.ColorRes;
 import android.support.annotation.IntDef;
 import android.support.v4.view.ViewCompat;
 import android.support.v7.app.AlertDialog;
@@ -36,7 +35,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.omnibox.OmniboxResultsAdapter.OmniboxResultItem;
 import org.chromium.chrome.browser.omnibox.OmniboxResultsAdapter.OmniboxSuggestionDelegate;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestion.MatchClassification;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -51,23 +49,17 @@ import java.util.List;
  * any unnecessary measures and layouts.
  */
 class SuggestionView extends ViewGroup {
+    @IntDef({SuggestionIcon.UNDEFINED, SuggestionIcon.BOOKMARK, SuggestionIcon.HISTORY,
+            SuggestionIcon.GLOBE, SuggestionIcon.MAGNIFIER, SuggestionIcon.VOICE})
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
-            SUGGESTION_ICON_UNDEFINED,
-            SUGGESTION_ICON_BOOKMARK,
-            SUGGESTION_ICON_HISTORY,
-            SUGGESTION_ICON_GLOBE,
-            SUGGESTION_ICON_MAGNIFIER,
-            SUGGESTION_ICON_VOICE
-    })
-    private @interface SuggestionIcon {}
-
-    private static final int SUGGESTION_ICON_UNDEFINED = -1;
-    private static final int SUGGESTION_ICON_BOOKMARK = 0;
-    private static final int SUGGESTION_ICON_HISTORY = 1;
-    private static final int SUGGESTION_ICON_GLOBE = 2;
-    private static final int SUGGESTION_ICON_MAGNIFIER = 3;
-    private static final int SUGGESTION_ICON_VOICE = 4;
+    private @interface SuggestionIcon {
+        int UNDEFINED = -1;
+        int BOOKMARK = 0;
+        int HISTORY = 1;
+        int GLOBE = 2;
+        int MAGNIFIER = 3;
+        int VOICE = 4;
+    }
 
     private static final long RELAYOUT_DELAY_MS = 20;
 
@@ -83,7 +75,8 @@ class SuggestionView extends ViewGroup {
 
     private final int mDarkTitleColorStandardFont;
     private final int mLightTitleColorStandardFont;
-    private final int mDarkUrlStandardColor;
+    private final int mDarkUrlStandardModernColor;
+    private final int mLightUrlStandardModernColor;
     private final int mLightUrlStandardColor;
 
     private OmniboxResultItem mSuggestionItem;
@@ -91,8 +84,8 @@ class SuggestionView extends ViewGroup {
     private OmniboxSuggestionDelegate mSuggestionDelegate;
     private Boolean mUseDarkColors;
     private int mPosition;
-    private int mRightOffsetPx;
-    private int mSuggestionViewOffset;
+    private int mRefineViewOffsetPx;
+    private int mSuggestionViewStartOffset;
 
     private final SuggestionContentsContainer mContentsView;
 
@@ -129,8 +122,10 @@ class SuggestionView extends ViewGroup {
                 ApiCompatibilityUtils.getColor(resources, R.color.url_emphasis_default_text);
         mLightTitleColorStandardFont =
                 ApiCompatibilityUtils.getColor(resources, R.color.url_emphasis_light_default_text);
-        mDarkUrlStandardColor =
-                ApiCompatibilityUtils.getColor(resources, R.color.suggestion_url_dark);
+        mDarkUrlStandardModernColor =
+                ApiCompatibilityUtils.getColor(resources, R.color.suggestion_url_dark_modern);
+        mLightUrlStandardModernColor =
+                ApiCompatibilityUtils.getColor(resources, R.color.suggestion_url_light_modern);
         mLightUrlStandardColor =
                 ApiCompatibilityUtils.getColor(resources, R.color.suggestion_url_light);
 
@@ -223,7 +218,8 @@ class SuggestionView extends ViewGroup {
                 contentsViewOffsetX + mContentsView.getMeasuredWidth(),
                 mContentsView.getMeasuredHeight());
 
-        int refineViewOffsetX = isRtl ? 0 : getMeasuredWidth() - mRefineWidth - mRightOffsetPx;
+        int refineViewOffsetX = isRtl ? mRefineViewOffsetPx
+                                      : (getMeasuredWidth() - mRefineWidth) - mRefineViewOffsetPx;
         mRefineView.layout(
                 refineViewOffsetX,
                 0,
@@ -287,10 +283,10 @@ class SuggestionView extends ViewGroup {
      * @param suggestionDelegate The suggestion delegate.
      * @param position Position of the suggestion in the dropdown list.
      * @param useDarkColors Whether dark colors should be used for fonts and icons.
-     * @param mUseModernDesign Whether modern design padding should be used.
+     * @param useModernDesign Whether modern design should be used.
      */
     public void init(OmniboxResultItem suggestionItem, OmniboxSuggestionDelegate suggestionDelegate,
-            int position, boolean useDarkColors, boolean mUseModernDesign) {
+            int position, boolean useDarkColors, boolean useModernDesign) {
         ViewCompat.setLayoutDirection(this, ViewCompat.getLayoutDirection(mUrlBar));
 
         // Update the position unconditionally.
@@ -319,14 +315,14 @@ class SuggestionView extends ViewGroup {
         mContentsView.mTextLine2.setTextSize(TypedValue.COMPLEX_UNIT_PX, getResources()
                 .getDimension(R.dimen.omnibox_suggestion_second_line_text_size));
 
-        mRightOffsetPx = mUseModernDesign ? mRefineViewModernEndPadding : 0;
-        mSuggestionViewOffset = mUseModernDesign ? mSuggestionListModernOffset : 0;
+        mRefineViewOffsetPx = useModernDesign ? mRefineViewModernEndPadding : 0;
+        mSuggestionViewStartOffset = useModernDesign ? mSuggestionListModernOffset : 0;
 
         // Suggestions with attached answers are rendered with rich results regardless of which
         // suggestion type they are.
         if (mSuggestion.hasAnswer()) {
             setAnswer(mSuggestion.getAnswer());
-            mContentsView.setSuggestionIcon(SUGGESTION_ICON_MAGNIFIER, colorsChanged);
+            mContentsView.setSuggestionIcon(SuggestionIcon.MAGNIFIER, colorsChanged);
             mContentsView.mTextLine2.setVisibility(VISIBLE);
             setRefinable(true);
             return;
@@ -341,37 +337,38 @@ class SuggestionView extends ViewGroup {
         int suggestionType = mSuggestion.getType();
         if (mSuggestion.isUrlSuggestion()) {
             if (mSuggestion.isStarred()) {
-                mContentsView.setSuggestionIcon(SUGGESTION_ICON_BOOKMARK, colorsChanged);
+                mContentsView.setSuggestionIcon(SuggestionIcon.BOOKMARK, colorsChanged);
             } else if (suggestionType == OmniboxSuggestionType.HISTORY_URL) {
-                mContentsView.setSuggestionIcon(SUGGESTION_ICON_HISTORY, colorsChanged);
+                mContentsView.setSuggestionIcon(SuggestionIcon.HISTORY, colorsChanged);
             } else {
-                mContentsView.setSuggestionIcon(SUGGESTION_ICON_GLOBE, colorsChanged);
+                mContentsView.setSuggestionIcon(SuggestionIcon.GLOBE, colorsChanged);
             }
             boolean urlShown = !TextUtils.isEmpty(mSuggestion.getUrl());
             boolean urlHighlighted = false;
             if (urlShown) {
-                urlHighlighted = setUrlText(suggestionItem);
+                urlHighlighted = setUrlText(suggestionItem, useModernDesign);
             } else {
                 mContentsView.mTextLine2.setVisibility(INVISIBLE);
             }
             setSuggestedQuery(suggestionItem, true, urlShown, urlHighlighted);
-            setRefinable(!sameAsTyped
-                    && suggestionType != OmniboxSuggestionType.PHYSICAL_WEB_OVERFLOW);
+            setRefinable(!sameAsTyped);
         } else {
-            @SuggestionIcon int suggestionIcon = SUGGESTION_ICON_MAGNIFIER;
+            @SuggestionIcon
+            int suggestionIcon = SuggestionIcon.MAGNIFIER;
             if (suggestionType == OmniboxSuggestionType.VOICE_SUGGEST) {
-                suggestionIcon = SUGGESTION_ICON_VOICE;
+                suggestionIcon = SuggestionIcon.VOICE;
             } else if ((suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_PERSONALIZED)
                     || (suggestionType == OmniboxSuggestionType.SEARCH_HISTORY)) {
                 // Show history icon for suggestions based on user queries.
-                suggestionIcon = SUGGESTION_ICON_HISTORY;
+                suggestionIcon = SuggestionIcon.HISTORY;
             }
             mContentsView.setSuggestionIcon(suggestionIcon, colorsChanged);
             setRefinable(!sameAsTyped);
             setSuggestedQuery(suggestionItem, false, false, false);
             if ((suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_ENTITY)
                     || (suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_PROFILE)) {
-                showDescriptionLine(SpannableString.valueOf(mSuggestion.getDescription()), false);
+                showDescriptionLine(SpannableString.valueOf(mSuggestion.getDescription()), false,
+                        useModernDesign);
             } else {
                 mContentsView.mTextLine2.setVisibility(INVISIBLE);
             }
@@ -401,10 +398,10 @@ class SuggestionView extends ViewGroup {
                                                           : mLightTitleColorStandardFont;
     }
 
-    private int getStandardUrlColor() {
-        if (!FeatureUtilities.isChromeHomeEnabled()) return mLightUrlStandardColor;
-        return (mUseDarkColors == null || mUseDarkColors) ? mDarkUrlStandardColor
-                                                          : mLightUrlStandardColor;
+    private int getStandardUrlColor(boolean useModernDesign) {
+        if (!useModernDesign) return mLightUrlStandardColor;
+        return (mUseDarkColors == null || mUseDarkColors) ? mDarkUrlStandardModernColor
+                                                          : mLightUrlStandardModernColor;
     }
 
     @Override
@@ -418,10 +415,10 @@ class SuggestionView extends ViewGroup {
     private void setRefineIcon(boolean invalidateIcon) {
         if (!invalidateIcon && mRefineIcon != null) return;
 
+        @ColorRes
+        int tintId = mUseDarkColors ? R.color.dark_mode_tint : R.color.light_mode_tint;
         mRefineIcon = TintedDrawable.constructTintedDrawable(
-                getResources(), R.drawable.btn_suggestion_refine);
-        mRefineIcon.setTint(ApiCompatibilityUtils.getColorStateList(getResources(),
-                mUseDarkColors ? R.color.dark_mode_tint : R.color.light_mode_tint));
+                getContext(), R.drawable.btn_suggestion_refine, tintId);
         mRefineIcon.setBounds(
                 0, 0,
                 mRefineIcon.getIntrinsicWidth(),
@@ -434,14 +431,15 @@ class SuggestionView extends ViewGroup {
      * Sets (and highlights) the URL text of the second line of the omnibox suggestion.
      *
      * @param result The suggestion containing the URL.
+     * @param useModernDesign Whether modern design should be used.
      * @return Whether the URL was highlighted based on the user query.
      */
-    private boolean setUrlText(OmniboxResultItem result) {
+    private boolean setUrlText(OmniboxResultItem result, boolean useModernDesign) {
         OmniboxSuggestion suggestion = result.getSuggestion();
         Spannable str = SpannableString.valueOf(suggestion.getDisplayText());
         boolean hasMatch = applyHighlightToMatchRegions(
                 str, suggestion.getDisplayTextClassifications());
-        showDescriptionLine(str, true);
+        showDescriptionLine(str, true, useModernDesign);
         return hasMatch;
     }
 
@@ -476,8 +474,9 @@ class SuggestionView extends ViewGroup {
      *
      * @param str The description text.
      * @param isUrl Whether this text is a URL (as opposed to a normal string).
+     * @param useModernDesign Whether modern design should be used.
      */
-    private void showDescriptionLine(Spannable str, boolean isUrl) {
+    private void showDescriptionLine(Spannable str, boolean isUrl, boolean useModernDesign) {
         TextView textLine = mContentsView.mTextLine2;
         if (textLine.getVisibility() != VISIBLE) {
             textLine.setVisibility(VISIBLE);
@@ -486,7 +485,7 @@ class SuggestionView extends ViewGroup {
 
         // Force left-to-right rendering for URLs. See UrlBar constructor for details.
         if (isUrl) {
-            textLine.setTextColor(getStandardUrlColor());
+            textLine.setTextColor(getStandardUrlColor(useModernDesign));
             ApiCompatibilityUtils.setTextDirection(textLine, TEXT_DIRECTION_LTR);
         } else {
             textLine.setTextColor(getStandardFontColor());
@@ -543,7 +542,7 @@ class SuggestionView extends ViewGroup {
                 }
                 classifications.add(0, new MatchClassification(0, MatchClassificationStyle.NONE));
 
-                if (DeviceFormFactor.isTablet()) {
+                if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                     TextPaint tp = mContentsView.mTextLine1.getPaint();
                     mContentsView.mRequiredWidth =
                             tp.measureText(fillIntoEdit, 0, fillIntoEdit.length());
@@ -652,7 +651,7 @@ class SuggestionView extends ViewGroup {
         private int mTextRight = Integer.MIN_VALUE;
         private Drawable mSuggestionIcon;
         @SuggestionIcon
-        private int mSuggestionIconType = SUGGESTION_ICON_UNDEFINED;
+        private int mSuggestionIconType = SuggestionIcon.UNDEFINED;
 
         private final TextView mTextLine1;
         private final TextView mTextLine2;
@@ -705,7 +704,7 @@ class SuggestionView extends ViewGroup {
                                 @Override
                                 public void onClick(DialogInterface dialog, int which) {
                                     RecordUserAction.record("MobileOmniboxDeleteRequested");
-                                    mSuggestionDelegate.onDeleteSuggestion(mPosition);
+                                    mSuggestionDelegate.onDeleteSuggestion(mSuggestion, mPosition);
                                 }
                             };
                     b.setPositiveButton(android.R.string.ok, okListener);
@@ -765,7 +764,7 @@ class SuggestionView extends ViewGroup {
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
 
-            if (DeviceFormFactor.isTablet()) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 // Use the same image transform matrix as the navigation icon to ensure the same
                 // scaling, which requires centering vertically based on the height of the
                 // navigation icon view and not the image itself.
@@ -851,17 +850,16 @@ class SuggestionView extends ViewGroup {
 
             // Align the text to be pixel perfectly aligned with the text in the url bar.
             boolean isRTL = ApiCompatibilityUtils.isLayoutRtl(this);
-            if (DeviceFormFactor.isTablet()) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 int textWidth = isRTL ? mTextRight : (r - l - mTextLeft);
                 final float maxRequiredWidth = mSuggestionDelegate.getMaxRequiredWidth();
                 final float maxMatchContentsWidth = mSuggestionDelegate.getMaxMatchContentsWidth();
                 float paddingStart = (textWidth > maxRequiredWidth)
                         ? (mRequiredWidth - mMatchContentsWidth)
                         : Math.max(textWidth - maxMatchContentsWidth, 0);
-                ApiCompatibilityUtils.setPaddingRelative(
-                        mTextLine1, (int) paddingStart, mTextLine1.getPaddingTop(),
-                        0, // TODO(skanuj) : Change to ApiCompatibilityUtils.getPaddingEnd(...).
-                        mTextLine1.getPaddingBottom());
+                // TODO(skanuj) : Change to ViewCompat.getPaddingEnd(...).
+                ViewCompat.setPaddingRelative(mTextLine1, (int) paddingStart,
+                        mTextLine1.getPaddingTop(), 0, mTextLine1.getPaddingBottom());
             }
 
             int imageWidth = mAnswerImageMaxSize;
@@ -870,18 +868,18 @@ class SuggestionView extends ViewGroup {
                 imageSpacing = getResources().getDimensionPixelOffset(
                         R.dimen.omnibox_suggestion_answer_image_horizontal_spacing);
             }
+
             if (isRTL) {
-                mTextLine1.layout(0, t, mTextRight - mSuggestionViewOffset, b);
-                mAnswerImage.layout(
-                        mTextRight - imageWidth, t, mTextRight - mSuggestionViewOffset, b);
-                mTextLine2.layout(
-                        0, t, mTextRight - (imageWidth + imageSpacing) - mSuggestionViewOffset, b);
+                mTextLine1.layout(0, t, mTextRight, b);
+                mAnswerImage.layout(mTextRight - imageWidth, t, mTextRight, b);
+                mTextLine2.layout(0, t, mTextRight - (imageWidth + imageSpacing), b);
             } else {
-                mTextLine1.layout(mTextLeft + mSuggestionViewOffset, t, r - l, b);
+                mTextLine1.layout(mTextLeft + mSuggestionViewStartOffset, t, r - l, b);
                 mAnswerImage.layout(
-                        mTextLeft + mSuggestionViewOffset, t, mTextLeft + imageWidth, b);
+                        mTextLeft + mSuggestionViewStartOffset, t, mTextLeft + imageWidth, b);
                 mTextLine2.layout(
-                        mTextLeft + imageWidth + imageSpacing + mSuggestionViewOffset, t, r - l, b);
+                        mTextLeft + imageWidth + imageSpacing + mSuggestionViewStartOffset, t,
+                        r - l, b);
             }
 
             int suggestionIconPosition = getSuggestionIconLeftPosition();
@@ -924,7 +922,15 @@ class SuggestionView extends ViewGroup {
             int leftOffset = getUrlBarLeftOffset();
             View contentView = getRootView().findViewById(android.R.id.content);
             ViewUtils.getRelativeLayoutPosition(contentView, this, mViewPositionHolder);
-            return leftOffset + mUrlBar.getWidth() - mUrlBar.getPaddingRight()
+
+            // When a user types into the omnibox, buttons on the url action container e.g. delete
+            // become visible, shrinking the url bar's width. Add the url action container's width
+            // to the url bar for consistency.
+            int buttonWidth = 0;
+            if (mLocationBar instanceof LocationBarPhone) {
+                buttonWidth = mLocationBar.getUrlContainerMarginEnd();
+            }
+            return leftOffset + mUrlBar.getWidth() + buttonWidth - mUrlBar.getPaddingRight()
                     - mViewPositionHolder[0];
         }
 
@@ -1020,29 +1026,27 @@ class SuggestionView extends ViewGroup {
         @SuppressLint("SwitchIntDef")
         private void setSuggestionIcon(@SuggestionIcon int type, boolean invalidateCurrentIcon) {
             if (mSuggestionIconType == type && !invalidateCurrentIcon) return;
-            assert type != SUGGESTION_ICON_UNDEFINED;
+            assert type != SuggestionIcon.UNDEFINED;
 
             int drawableId = R.drawable.ic_omnibox_page;
             switch (type) {
-                case SUGGESTION_ICON_BOOKMARK:
+                case SuggestionIcon.BOOKMARK:
                     drawableId = R.drawable.btn_star;
                     break;
-                case SUGGESTION_ICON_MAGNIFIER:
+                case SuggestionIcon.MAGNIFIER:
                     drawableId = R.drawable.ic_suggestion_magnifier;
                     break;
-                case SUGGESTION_ICON_HISTORY:
+                case SuggestionIcon.HISTORY:
                     drawableId = R.drawable.ic_suggestion_history;
                     break;
-                case SUGGESTION_ICON_VOICE:
+                case SuggestionIcon.VOICE:
                     drawableId = R.drawable.btn_mic;
                     break;
                 default:
                     break;
             }
-            mSuggestionIcon = ApiCompatibilityUtils.getDrawable(getResources(), drawableId);
-            mSuggestionIcon.setColorFilter(mUseDarkColors
-                    ? ApiCompatibilityUtils.getColor(getResources(), R.color.light_normal_color)
-                    : Color.WHITE, PorterDuff.Mode.SRC_IN);
+            mSuggestionIcon = TintedDrawable.constructTintedDrawable(getContext(), drawableId,
+                    mUseDarkColors ? R.color.dark_mode_tint : R.color.white_mode_tint);
             mSuggestionIcon.setBounds(
                     0, 0,
                     mSuggestionIcon.getIntrinsicWidth(),
@@ -1090,6 +1094,7 @@ class SuggestionView extends ViewGroup {
 
         @Override
         protected void onDetachedFromWindow() {
+            removeCallbacks(mRelayoutRunnable);
             if (mNavigationButton != null) mNavigationButton.removeOnLayoutChangeListener(this);
             if (mUrlBar != null) mUrlBar.removeOnLayoutChangeListener(this);
             if (mLocationBar != null) {

@@ -43,9 +43,6 @@ class WebContentsView {
   // The following static method is implemented by each platform.
   static void GetDefaultScreenInfo(ScreenInfo* results);
 
-  // Gets screen information for the window associated with this view.
-  virtual void GetScreenInfo(ScreenInfo* screen_info) const = 0;
-
   // Computes the rectangle for the native widget that contains the contents of
   // the tab in the screen coordinate system.
   virtual void GetContainerBounds(gfx::Rect* out) const = 0;
@@ -88,6 +85,8 @@ class WebContentsView {
   virtual void CreateView(
       const gfx::Size& initial_size, gfx::NativeView context) = 0;
 
+  virtual bool IsWebContentsViewChildFrame() const;
+
   // Sets up the View that holds the rendered web page, receives messages for
   // it and contains page plugins. The host view should be sized to the current
   // size of the WebContents.
@@ -113,9 +112,13 @@ class WebContentsView {
   // fully created.
   virtual void RenderViewCreated(RenderViewHost* host) = 0;
 
-  // Invoked when the WebContents is notified that the RenderView has been
-  // swapped in.
-  virtual void RenderViewSwappedIn(RenderViewHost* host) = 0;
+  // Invoked when the WebContents is notified that the RenderView is ready.
+  virtual void RenderViewReady() = 0;
+
+  // Invoked when the WebContents is notified that the RenderViewHost has been
+  // changed.
+  virtual void RenderViewHostChanged(RenderViewHost* old_host,
+                                     RenderViewHost* new_host) = 0;
 
   // Invoked to enable/disable overscroll gesture navigation.
   virtual void SetOverscrollControllerEnabled(bool enabled) = 0;

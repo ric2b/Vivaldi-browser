@@ -95,6 +95,16 @@
             "type": "string",
             "optional": true,
             "description": "Address of extension options page."
+          },
+          "optionsInNewTab": {
+            "type": "boolean",
+            "optional": true,
+            "description": "false if the options page should be opened embedded, true if it opens in a new tab."
+          },
+          "keyboardShortcut": {
+            "type": "string",
+            "optional": true,
+            "description": "Keyboard shortcut to toggle this extension."
           }
         }
       }
@@ -163,6 +173,24 @@
         "name": "removeExtension",
         "type": "function",
         "description": "Removes a specified extension.",
+        "parameters": [
+          {
+            "name": "extensionId",
+            "type": "string",
+            "description": "The id for the extension we want to remove."
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Window.id of the application window. Used to find the Browser object.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "name": "showExtensionOptions",
+        "type": "function",
+        "description": "Shows options for the given extension",
         "parameters": [
           {
             "name": "extensionId",

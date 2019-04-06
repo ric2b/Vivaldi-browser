@@ -28,7 +28,7 @@ scoped_refptr<CyclicFrameGenerator> CyclicFrameGenerator::Create() {
 CyclicFrameGenerator::CyclicFrameGenerator(
     std::vector<std::unique_ptr<webrtc::DesktopFrame>> reference_frames)
     : reference_frames_(std::move(reference_frames)),
-      clock_(&default_tick_clock_),
+      clock_(base::DefaultTickClock::GetInstance()),
       started_time_(clock_->NowTicks()) {
   CHECK(!reference_frames_.empty());
   screen_size_ = reference_frames_[0]->size();
@@ -40,7 +40,7 @@ CyclicFrameGenerator::CyclicFrameGenerator(
 
 CyclicFrameGenerator::~CyclicFrameGenerator() = default;
 
-void CyclicFrameGenerator::SetTickClock(base::TickClock* tick_clock) {
+void CyclicFrameGenerator::SetTickClock(const base::TickClock* tick_clock) {
   clock_ = tick_clock;
   started_time_ = clock_->NowTicks();
 }

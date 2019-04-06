@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
-#include "content/renderer/media/media_stream_audio_track.h"
+#include "content/renderer/media/stream/media_stream_audio_track.h"
 #include "content/renderer/media_recorder/audio_track_opus_encoder.h"
 #include "content/renderer/media_recorder/audio_track_pcm_encoder.h"
 #include "media/base/audio_bus.h"
@@ -93,7 +93,7 @@ void AudioTrackRecorder::OnData(const media::AudioBus& audio_bus,
 
   encoder_thread_.task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&AudioTrackEncoder::EncodeAudio, encoder_,
-                                base::Passed(&audio_data), capture_time));
+                                std::move(audio_data), capture_time));
 }
 
 void AudioTrackRecorder::Pause() {

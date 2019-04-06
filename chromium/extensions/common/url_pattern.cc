@@ -17,6 +17,7 @@
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/base/url_util.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
 
@@ -26,14 +27,14 @@ const char URLPattern::kAllUrlsPattern[] = "<all_urls>";
 
 namespace {
 
-// TODO(aa): What about more obscure schemes like data: and javascript: ?
+// TODO(aa): What about more obscure schemes like javascript: ?
 // Note: keep this array in sync with kValidSchemeMasks.
 const char* const kValidSchemes[] = {
     url::kHttpScheme,         url::kHttpsScheme,
     url::kFileScheme,         url::kFtpScheme,
     content::kChromeUIScheme, extensions::kExtensionScheme,
     url::kFileSystemScheme,   url::kWsScheme,
-    url::kWssScheme,
+    url::kWssScheme,          url::kDataScheme,
     vivaldi::kVivaldiUIScheme,
 };
 
@@ -42,7 +43,7 @@ const int kValidSchemeMasks[] = {
     URLPattern::SCHEME_FILE,       URLPattern::SCHEME_FTP,
     URLPattern::SCHEME_CHROMEUI,   URLPattern::SCHEME_EXTENSION,
     URLPattern::SCHEME_FILESYSTEM, URLPattern::SCHEME_WS,
-    URLPattern::SCHEME_WSS,
+    URLPattern::SCHEME_WSS,        URLPattern::SCHEME_DATA,
     URLPattern::SCHEME_VIVALDIUI,
 };
 
@@ -164,8 +165,13 @@ URLPattern::URLPattern(int valid_schemes, base::StringPiece pattern)
       match_effective_tld_(true),
       port_("*") {
   ParseResult result = Parse(pattern);
-  if (PARSE_SUCCESS != result)
+  if (PARSE_SUCCESS != result) {
+    // Temporarily add more logging to investigate why this code path is
+    // reached. For http://crbug.com/856948
+    LOG(ERROR) << "Invalid pattern was given " << pattern << " result "
+               << result;
     NOTREACHED() << "URLPattern invalid: " << pattern << " result " << result;
+  }
 }
 
 URLPattern::URLPattern(const URLPattern& other) = default;
@@ -261,14 +267,42 @@ URLPattern::ParseResult URLPattern::Parse(base::StringPiece pattern,
     if (host_end_pos == base::StringPiece::npos)
       return PARSE_ERROR_EMPTY_PATH;
 
-    // TODO(devlin): This whole series is expensive. Luckily we don't do it
-    // *too* often, but it could be optimized.
-    pattern.substr(host_start_pos, host_end_pos - host_start_pos)
-        .CopyToString(&host_);
+    base::StringPiece host_and_port =
+        pattern.substr(host_start_pos, host_end_pos - host_start_pos);
+
+    size_t port_separator_pos = base::StringPiece::npos;
+    if (host_and_port[0] != '[') {
+      // Not IPv6 (either IPv4 or just a normal address).
+      port_separator_pos = host_and_port.find(':');
+    } else {  // IPv6.
+      size_t host_end_pos = host_and_port.find(']');
+      if (host_end_pos == base::StringPiece::npos)
+        return PARSE_ERROR_INVALID_HOST;
+      if (host_end_pos == 1)
+        return PARSE_ERROR_EMPTY_HOST;
+
+      if (host_end_pos < host_and_port.length() - 1) {
+        // The host isn't the only component. Check for a port. This would
+        // require a ':' to follow the closing ']' from the host.
+        if (host_and_port[host_end_pos + 1] != ':')
+          return PARSE_ERROR_INVALID_HOST;
+
+        port_separator_pos = host_end_pos + 1;
+      }
+    }
+
+    if (port_separator_pos != base::StringPiece::npos &&
+        !SetPort(host_and_port.substr(port_separator_pos + 1))) {
+      return PARSE_ERROR_INVALID_PORT;
+    }
+
+    // Note: this substr() will be the entire string if the port position
+    // wasn't found.
+    base::StringPiece host_piece = host_and_port.substr(0, port_separator_pos);
 
     // The first component can optionally be '*' to match all subdomains.
     std::vector<base::StringPiece> host_components = base::SplitStringPiece(
-        host_, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+        host_piece, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
     // Could be empty if the host only consists of whitespace characters.
     if (host_components.empty() ||
@@ -277,8 +311,7 @@ URLPattern::ParseResult URLPattern::Parse(base::StringPiece pattern,
 
     if (host_components[0] == "*") {
       match_subdomains_ = true;
-      host_components.erase(host_components.begin(),
-                            host_components.begin() + 1);
+      host_components.erase(host_components.begin());
     }
 
     // If explicitly allowed, the last component can optionally be '*' to
@@ -295,18 +328,21 @@ URLPattern::ParseResult URLPattern::Parse(base::StringPiece pattern,
 
   SetPath(pattern.substr(path_start_pos));
 
-  size_t port_pos = host_.find(':');
-  if (port_pos != std::string::npos) {
-    if (!SetPort(host_.substr(port_pos + 1)))
-      return PARSE_ERROR_INVALID_PORT;
-    host_ = host_.substr(0, port_pos);
-  }
-
   // No other '*' can occur in the host, though. This isn't necessary, but is
   // done as a convenience to developers who might otherwise be confused and
   // think '*' works as a glob in the host.
   if (host_.find('*') != std::string::npos)
     return PARSE_ERROR_INVALID_HOST_WILDCARD;
+
+  if (!host_.empty()) {
+    // If |host_| is present (i.e., isn't a wildcard), we need to canonicalize
+    // it.
+    url::CanonHostInfo host_info;
+    host_ = net::CanonicalizeHost(host_, &host_info);
+    // net::CanonicalizeHost() returns an empty string on failure.
+    if (host_.empty())
+      return PARSE_ERROR_INVALID_HOST;
+  }
 
   // Null characters are not allowed in hosts.
   if (host_.find('\0') != std::string::npos)
@@ -440,7 +476,10 @@ bool URLPattern::MatchesScheme(base::StringPiece test) const {
 }
 
 bool URLPattern::MatchesHost(base::StringPiece host) const {
-  // TODO(devlin): This is a bit sad. Parsing urls is expensive.
+  // TODO(devlin): This is a bit sad. Parsing urls is expensive. However, it's
+  // important that we do this conversion to a GURL in order to canonicalize the
+  // host (the pattern's host_ already is canonicalized from Parse()). We can't
+  // just do string comparison.
   return MatchesHost(
       GURL(base::StringPrintf("%s%s%s/", url::kHttpScheme,
                               url::kStandardSchemeSeparator, host.data())));
@@ -489,41 +528,39 @@ bool URLPattern::MatchesHost(const GURL& test) const {
   return test_host[test_host.length() - pattern_host.length() - 1] == '.';
 }
 
-bool URLPattern::ImpliesAllHosts() const {
+bool URLPattern::MatchesEffectiveTld(
+    net::registry_controlled_domains::PrivateRegistryFilter private_filter,
+    net::registry_controlled_domains::UnknownRegistryFilter unknown_filter)
+    const {
   // Check if it matches all urls or is a pattern like http://*/*.
-  if (match_all_urls_ ||
-      (match_subdomains_ && host_.empty() && port_ == "*" && path_ == "/*")) {
+  if (match_all_urls_ || (match_subdomains_ && host_.empty()))
     return true;
-  }
 
-  // If this doesn't even match subdomains, it can't possibly imply all hosts.
+  // If this doesn't even match subdomains, it can't possibly be a TLD wildcard.
   if (!match_subdomains_)
     return false;
 
   // If there was more than just a TLD in the host (e.g., *.foobar.com), it
-  // doesn't imply all hosts. We don't include private TLDs, so that, e.g.,
-  // *.appspot.com does not imply all hosts.
+  // doesn't match all hosts in an effective TLD.
   if (net::registry_controlled_domains::HostHasRegistryControlledDomain(
-          host_, net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-          net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES))
+          host_, unknown_filter, private_filter)) {
     return false;
+  }
 
   // At this point the host could either be just a TLD ("com") or some unknown
   // TLD-like string ("notatld"). To disambiguate between them construct a
   // fake URL, and check the registry.
   //
   // If we recognized this TLD, then this is a pattern like *.com, and it
-  // should imply all hosts.
+  // matches an effective TLD.
   return net::registry_controlled_domains::HostHasRegistryControlledDomain(
-      "notatld." + host_,
-      net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-      net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
+      "notatld." + host_, unknown_filter, private_filter);
 }
 
 bool URLPattern::MatchesSingleOrigin() const {
   // Strictly speaking, the port is part of the origin, but in URLPattern it
   // defaults to *. It's not very interesting anyway, so leave it out.
-  return !ImpliesAllHosts() && scheme_ != "*" && !match_subdomains_;
+  return !MatchesEffectiveTld() && scheme_ != "*" && !match_subdomains_;
 }
 
 bool URLPattern::MatchesPath(base::StringPiece test) const {

@@ -19,19 +19,21 @@
 
 #if defined(OS_POSIX)
 #include <sys/mman.h>
+#if !defined(OS_FUCHSIA)
 #include <sys/resource.h>
+#endif
 #include <sys/time.h>
-
 #endif  // defined(OS_POSIX)
 
 #if !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
 
-namespace {
+// Because there is so much deep inspection of the internal objects,
+// explicitly annotating the namespaces for commonly expected objects makes the
+// code unreadable. Prefer using directives instead.
+using base::internal::PartitionBucket;
+using base::internal::PartitionPage;
 
-template <typename T>
-std::unique_ptr<T[]> WrapArrayUnique(T* ptr) {
-  return std::unique_ptr<T[]>(ptr);
-}
+namespace {
 
 constexpr size_t kTestMaxAllocation = base::kSystemPageSize;
 
@@ -69,7 +71,7 @@ bool SetAddressSpaceLimit() {
 }
 
 bool ClearAddressSpaceLimit() {
-#if !defined(ARCH_CPU_64_BITS) || !defined(OS_POSIX)
+#if !defined(ARCH_CPU_64_BITS) || !defined(OS_POSIX) || defined(OS_FUCHSIA)
   return true;
 #elif defined(OS_POSIX)
   struct rlimit limit;
@@ -87,6 +89,14 @@ bool ClearAddressSpaceLimit() {
 }  // namespace
 
 namespace base {
+
+// NOTE: Though this test actually excercises interfaces inside the ::base
+// namespace, the unittest is inside the ::base::internal spaces because a
+// portion of the test expectations require inspecting objects and behavior
+// in the ::base::internal namespace. An alternate formulation would be to
+// explicitly add using statements for each inspected type but this felt more
+// readable.
+namespace internal {
 
 const size_t kTestAllocSize = 16;
 #if !DCHECK_IS_ON()
@@ -172,14 +182,14 @@ class PartitionAllocTest : public testing::Test {
     }
   }
 
-  void DoReturnNullTest(size_t allocSize) {
+  void DoReturnNullTest(size_t allocSize, bool use_realloc) {
     // TODO(crbug.com/678782): Where necessary and possible, disable the
     // platform's OOM-killing behavior. OOM-killing makes this test flaky on
     // low-memory devices.
     if (!IsLargeMemoryDevice()) {
       LOG(WARNING)
           << "Skipping test on this device because of crbug.com/678782";
-      return;
+      LOG(FATAL) << "DoReturnNullTest";
     }
 
     ASSERT_TRUE(SetAddressSpaceLimit());
@@ -192,9 +202,17 @@ class PartitionAllocTest : public testing::Test {
     int i;
 
     for (i = 0; i < numAllocations; ++i) {
-      ptrs[i] = PartitionAllocGenericFlags(generic_allocator.root(),
-                                           PartitionAllocReturnNull, allocSize,
-                                           type_name);
+      if (use_realloc) {
+        ptrs[i] = PartitionAllocGenericFlags(
+            generic_allocator.root(), PartitionAllocReturnNull, 1, type_name);
+        ptrs[i] = PartitionReallocGenericFlags(generic_allocator.root(),
+                                               PartitionAllocReturnNull,
+                                               ptrs[i], allocSize, type_name);
+      } else {
+        ptrs[i] = PartitionAllocGenericFlags(generic_allocator.root(),
+                                             PartitionAllocReturnNull,
+                                             allocSize, type_name);
+      }
       if (!i)
         EXPECT_TRUE(ptrs[0]);
       if (!ptrs[i]) {
@@ -224,6 +242,7 @@ class PartitionAllocTest : public testing::Test {
     generic_allocator.root()->Free(ptrs);
 
     EXPECT_TRUE(ClearAddressSpaceLimit());
+    LOG(FATAL) << "DoReturnNullTest";
   }
 
   SizeSpecificPartitionAllocator<kTestMaxAllocation> allocator;
@@ -248,13 +267,14 @@ void FreeFullPage(PartitionPage* page) {
 }
 
 #if defined(OS_LINUX)
-bool IsPageInCore(void* ptr) {
+bool CheckPageInCore(void* ptr, bool in_core) {
   unsigned char ret = 0;
   EXPECT_EQ(0, mincore(ptr, kSystemPageSize, &ret));
-  return (ret & 1) != 0;
+  return in_core == (ret & 1);
 }
 
-#define CHECK_PAGE_IN_CORE(ptr, in_core) EXPECT_EQ(IsPageInCore(ptr), in_core);
+#define CHECK_PAGE_IN_CORE(ptr, in_core) \
+  EXPECT_TRUE(CheckPageInCore(ptr, in_core))
 #else
 #define CHECK_PAGE_IN_CORE(ptr, in_core) (void)(0)
 #endif  // defined(OS_LINUX)
@@ -310,73 +330,7 @@ class MockPartitionStatsDumper : public PartitionStatsDumper {
   std::vector<PartitionBucketMemoryStats> bucket_stats;
 };
 
-// Any number of bytes that can be allocated with no trouble.
-constexpr size_t kEasyAllocSize =
-    (1024 * 1024) & ~(kPageAllocationGranularity - 1);
-
-// A huge amount of memory, greater than or equal to the ASLR space.
-constexpr size_t kHugeMemoryAmount =
-    std::max(base::internal::kASLRMask,
-             std::size_t{2} * base::internal::kASLRMask);
-
-}  // anonymous namespace
-
-// Test that failed page allocations invoke base::ReleaseReservation().
-// We detect this by making a reservation and ensuring that after failure, we
-// can make a new reservation.
-TEST(PageAllocatorTest, AllocFailure) {
-  // Release any reservation made by another test.
-  base::ReleaseReservation();
-
-  // We can make a reservation.
-  EXPECT_TRUE(base::ReserveAddressSpace(kEasyAllocSize));
-
-  // We can't make another reservation until we trigger an allocation failure.
-  EXPECT_FALSE(base::ReserveAddressSpace(kEasyAllocSize));
-
-  size_t size = kHugeMemoryAmount;
-  // Skip the test for sanitizers and platforms with ASLR turned off.
-  if (size == 0)
-    return;
-
-  void* result = base::AllocPages(nullptr, size, kPageAllocationGranularity,
-                                  PageInaccessible);
-  if (result == nullptr) {
-    // We triggered allocation failure. Our reservation should have been
-    // released, and we should be able to make a new reservation.
-    EXPECT_TRUE(base::ReserveAddressSpace(kEasyAllocSize));
-    base::ReleaseReservation();
-    return;
-  }
-  // We couldn't fail. Make sure reservation is still there.
-  EXPECT_FALSE(base::ReserveAddressSpace(kEasyAllocSize));
-}
-
-// TODO(crbug.com/765801): Test failed on chromium.win/Win10 Tests x64.
-#if defined(OS_WIN) && defined(ARCH_CPU_64_BITS)
-#define MAYBE_ReserveAddressSpace DISABLED_ReserveAddressSpace
-#else
-#define MAYBE_ReserveAddressSpace ReserveAddressSpace
-#endif  // defined(OS_WIN) && defined(ARCH_CPU_64_BITS)
-
-// Test that reserving address space can fail.
-TEST(PageAllocatorTest, MAYBE_ReserveAddressSpace) {
-  // Release any reservation made by another test.
-  base::ReleaseReservation();
-
-  size_t size = kHugeMemoryAmount;
-  // Skip the test for sanitizers and platforms with ASLR turned off.
-  if (size == 0)
-    return;
-
-  bool success = base::ReserveAddressSpace(size);
-  if (!success) {
-    EXPECT_TRUE(base::ReserveAddressSpace(kEasyAllocSize));
-    return;
-  }
-  // We couldn't fail. Make sure reservation is still there.
-  EXPECT_FALSE(base::ReserveAddressSpace(kEasyAllocSize));
-}
+}  // namespace
 
 // Check that the most basic of allocate / free pairs work.
 TEST_F(PartitionAllocTest, Basic) {
@@ -551,8 +505,7 @@ TEST_F(PartitionAllocTest, FreePageListPageTransitions) {
   // The +1 is because we need to account for the fact that the current page
   // never gets thrown on the freelist.
   ++numToFillFreeListPage;
-  std::unique_ptr<PartitionPage* []> pages =
-      WrapArrayUnique(new PartitionPage*[numToFillFreeListPage]);
+  auto pages = std::make_unique<PartitionPage* []>(numToFillFreeListPage);
 
   size_t i;
   for (i = 0; i < numToFillFreeListPage; ++i) {
@@ -594,8 +547,7 @@ TEST_F(PartitionAllocTest, MultiPageAllocs) {
   --numPagesNeeded;
 
   EXPECT_GT(numPagesNeeded, 1u);
-  std::unique_ptr<PartitionPage* []> pages;
-  pages = WrapArrayUnique(new PartitionPage*[numPagesNeeded]);
+  auto pages = std::make_unique<PartitionPage* []>(numPagesNeeded);
   uintptr_t firstSuperPageBase = 0;
   size_t i;
   for (i = 0; i < numPagesNeeded; ++i) {
@@ -1141,10 +1093,10 @@ TEST_F(PartitionAllocTest, MappingCollision) {
   // The -2 is because the first and last partition pages in a super page are
   // guard pages.
   size_t numPartitionPagesNeeded = kNumPartitionPagesPerSuperPage - 2;
-  std::unique_ptr<PartitionPage* []> firstSuperPagePages =
-      WrapArrayUnique(new PartitionPage*[numPartitionPagesNeeded]);
-  std::unique_ptr<PartitionPage* []> secondSuperPagePages =
-      WrapArrayUnique(new PartitionPage*[numPartitionPagesNeeded]);
+  auto firstSuperPagePages =
+      std::make_unique<PartitionPage* []>(numPartitionPagesNeeded);
+  auto secondSuperPagePages =
+      std::make_unique<PartitionPage* []>(numPartitionPagesNeeded);
 
   size_t i;
   for (i = 0; i < numPartitionPagesNeeded; ++i)
@@ -1331,51 +1283,59 @@ TEST_F(PartitionAllocTest, LostFreePagesBug) {
   EXPECT_TRUE(bucket->decommitted_pages_head);
 }
 
-#if !defined(ARCH_CPU_64_BITS) || defined(OS_POSIX)
+// Death tests misbehave on Android, http://crbug.com/643760.
+#if defined(GTEST_HAS_DEATH_TEST) && !defined(OS_ANDROID)
 
 // Unit tests that check if an allocation fails in "return null" mode,
 // repeating it doesn't crash, and still returns null. The tests need to
 // stress memory subsystem limits to do so, hence they try to allocate
 // 6 GB of memory, each with a different per-allocation block sizes.
 //
-// On 64-bit POSIX systems, the address space is limited to 6 GB using
-// setrlimit() first.
+// On 64-bit systems we need to restrict the address space to force allocation
+// failure, so these tests run only on POSIX systems that provide setrlimit(),
+// and use it to limit address space to 6GB.
+//
+// Disable these tests on Android because, due to the allocation-heavy behavior,
+// they tend to get OOM-killed rather than pass.
+// TODO(https://crbug.com/779645): Fuchsia currently sets OS_POSIX, but does
+// not provide a working setrlimit().
+//
+// Disable these test on Windows, since they run slower, so tend to timout and
+// cause flake.
+#if !defined(OS_WIN) &&            \
+    (!defined(ARCH_CPU_64_BITS) || \
+     (defined(OS_POSIX) &&         \
+      !(defined(OS_FUCHSIA) || defined(OS_MACOSX) || defined(OS_ANDROID))))
 
-// Test "return null" for larger, direct-mapped allocations first. As a
-// direct-mapped allocation's pages are unmapped and freed on release, this
-// test is performd first for these "return null" tests in order to leave
-// sufficient unreserved virtual memory around for the later one(s).
-
-// Disable this test on Android because, due to its allocation-heavy behavior,
-// it tends to get OOM-killed rather than pass.
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
-#define MAYBE_RepeatedReturnNullDirect DISABLED_RepeatedReturnNullDirect
-#else
-#define MAYBE_RepeatedReturnNullDirect RepeatedReturnNullDirect
-#endif
-TEST_F(PartitionAllocTest, MAYBE_RepeatedReturnNullDirect) {
+// The following four tests wrap a called function in an expect death statement
+// to perform their test, because they are non-hermetic. Specifically they are
+// going to attempt to exhaust the allocatable memory, which leaves the
+// allocator in a bad global state.
+// Performing them as death tests causes them to be forked into their own
+// process, so they won't pollute other tests.
+TEST_F(PartitionAllocDeathTest, RepeatedAllocReturnNullDirect) {
   // A direct-mapped allocation size.
-  DoReturnNullTest(32 * 1024 * 1024);
+  EXPECT_DEATH(DoReturnNullTest(32 * 1024 * 1024, false), "DoReturnNullTest");
+}
+
+// Repeating above test with Realloc
+TEST_F(PartitionAllocDeathTest, RepeatedReallocReturnNullDirect) {
+  EXPECT_DEATH(DoReturnNullTest(32 * 1024 * 1024, true), "DoReturnNullTest");
 }
 
 // Test "return null" with a 512 kB block size.
-
-// Disable this test on Android because, due to its allocation-heavy behavior,
-// it tends to get OOM-killed rather than pass.
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
-#define MAYBE_RepeatedReturnNull DISABLED_RepeatedReturnNull
-#else
-#define MAYBE_RepeatedReturnNull RepeatedReturnNull
-#endif
-TEST_F(PartitionAllocTest, MAYBE_RepeatedReturnNull) {
+TEST_F(PartitionAllocDeathTest, RepeatedAllocReturnNull) {
   // A single-slot but non-direct-mapped allocation size.
-  DoReturnNullTest(512 * 1024);
+  EXPECT_DEATH(DoReturnNullTest(512 * 1024, false), "DoReturnNullTest");
 }
 
-#endif  // !defined(ARCH_CPU_64_BITS) || defined(OS_POSIX)
+// Repeating above test with Realloc.
+TEST_F(PartitionAllocDeathTest, RepeatedReallocReturnNull) {
+  EXPECT_DEATH(DoReturnNullTest(512 * 1024, true), "DoReturnNullTest");
+}
 
-// Death tests misbehave on Android, http://crbug.com/643760.
-#if defined(GTEST_HAS_DEATH_TEST) && !defined(OS_ANDROID)
+#endif  // !defined(ARCH_CPU_64_BITS) || (defined(OS_POSIX) &&
+        // !(defined(OS_FUCHSIA) || defined(OS_MACOSX) || defined(OS_ANDROID)))
 
 // Make sure that malloc(-1) dies.
 // In the past, we had an integer overflow that would alias malloc(-1) to
@@ -1942,19 +1902,16 @@ TEST_F(PartitionAllocTest, PurgeDiscardable) {
 // for clarity of purpose and for applicability to more architectures.
 #if defined(_MIPS_ARCH_LOONGSON)
   {
-    char* ptr1 = reinterpret_cast<char*>(PartitionAllocGeneric(
-        generic_allocator.root(), (32 * kSystemPageSize) - kExtraAllocSize,
-        type_name));
+    char* ptr1 = reinterpret_cast<char*>(generic_allocator.root()->Alloc(
+        (32 * kSystemPageSize) - kExtraAllocSize, type_name));
     memset(ptr1, 'A', (32 * kSystemPageSize) - kExtraAllocSize);
-    PartitionFreeGeneric(generic_allocator.root(), ptr1);
-    ptr1 = reinterpret_cast<char*>(PartitionAllocGeneric(
-        generic_allocator.root(), (31 * kSystemPageSize) - kExtraAllocSize,
-        type_name));
+    generic_allocator.root()->Free(ptr1);
+    ptr1 = reinterpret_cast<char*>(generic_allocator.root()->Alloc(
+        (31 * kSystemPageSize) - kExtraAllocSize, type_name));
     {
       MockPartitionStatsDumper dumper;
-      PartitionDumpStatsGeneric(generic_allocator.root(),
-                                "mock_generic_allocator",
-                                false /* detailed dump */, &dumper);
+      generic_allocator.root()->DumpStats("mock_generic_allocator",
+                                          false /* detailed dump */, &dumper);
       EXPECT_TRUE(dumper.IsMemoryAllocationRecorded());
 
       const PartitionBucketMemoryStats* stats =
@@ -1968,12 +1925,12 @@ TEST_F(PartitionAllocTest, PurgeDiscardable) {
     }
     CheckPageInCore(ptr1 - kPointerOffset + (kSystemPageSize * 30), true);
     CheckPageInCore(ptr1 - kPointerOffset + (kSystemPageSize * 31), true);
-    PartitionPurgeMemoryGeneric(generic_allocator.root(),
-                                PartitionPurgeDiscardUnusedSystemPages);
+    generic_allocator.root()->PurgeMemory(
+        PartitionPurgeDiscardUnusedSystemPages);
     CheckPageInCore(ptr1 - kPointerOffset + (kSystemPageSize * 30), true);
     CheckPageInCore(ptr1 - kPointerOffset + (kSystemPageSize * 31), false);
 
-    PartitionFreeGeneric(generic_allocator.root(), ptr1);
+    generic_allocator.root()->Free(ptr1);
   }
 #else
   {
@@ -2164,6 +2121,7 @@ TEST_F(PartitionAllocTest, SmallReallocDoesNotMoveTrailingCookie) {
   generic_allocator.root()->Free(ptr);
 }
 
+}  // namespace internal
 }  // namespace base
 
 #endif  // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)

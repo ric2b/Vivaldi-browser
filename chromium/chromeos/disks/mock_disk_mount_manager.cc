@@ -9,7 +9,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 
 using testing::_;
@@ -145,6 +144,13 @@ void MockDiskMountManager::NotifyDeviceRemoveEvents() {
   NotifyDiskChanged(DISK_REMOVED, disk);
 }
 
+void MockDiskMountManager::NotifyMountEvent(MountEvent event,
+                                            MountError error_code,
+                                            const MountPointInfo& mount_info) {
+  for (auto& observer : observers_)
+    observer.OnMountEvent(event, error_code, mount_info);
+}
+
 void MockDiskMountManager::SetupDefaultReplies() {
   EXPECT_CALL(*this, AddObserver(_))
       .Times(AnyNumber());
@@ -157,7 +163,7 @@ void MockDiskMountManager::SetupDefaultReplies() {
   EXPECT_CALL(*this, FindDiskBySourcePath(_))
       .Times(AnyNumber());
   EXPECT_CALL(*this, EnsureMountInfoRefreshed(_, _)).Times(AnyNumber());
-  EXPECT_CALL(*this, MountPath(_, _, _, _, _)).Times(AnyNumber());
+  EXPECT_CALL(*this, MountPath(_, _, _, _, _, _)).Times(AnyNumber());
   EXPECT_CALL(*this, UnmountPath(_, _, _))
       .Times(AnyNumber());
   EXPECT_CALL(*this, RemountAllRemovableDrives(_)).Times(AnyNumber());

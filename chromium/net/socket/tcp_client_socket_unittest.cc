@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -40,6 +41,9 @@ namespace {
 // Try binding a socket to loopback interface and verify that we can
 // still connect to a server on the same interface.
 TEST(TCPClientSocketTest, BindLoopbackToLoopback) {
+  base::test::ScopedTaskEnvironment scoped_task_environment(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
   IPAddress lo_address = IPAddress::IPv4Localhost();
 
   TCPServerSocket server(nullptr, NetLogSource());
@@ -77,6 +81,9 @@ TEST(TCPClientSocketTest, BindLoopbackToLoopback) {
 // Try to bind socket to the loopback interface and connect to an
 // external address, verify that connection fails.
 TEST(TCPClientSocketTest, BindLoopbackToExternal) {
+  base::test::ScopedTaskEnvironment scoped_task_environment(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
   IPAddress external_ip(72, 14, 213, 105);
   TCPClientSocket socket(AddressList::CreateFromIPAddress(external_ip, 80),
                          NULL, NULL, NetLogSource());
@@ -114,6 +121,56 @@ TEST(TCPClientSocketTest, BindLoopbackToIPv6) {
   int result = socket.Connect(connect_callback.callback());
 
   EXPECT_THAT(connect_callback.GetResult(result), Not(IsOk()));
+}
+
+TEST(TCPClientSocketTest, WasEverUsed) {
+  base::test::ScopedTaskEnvironment scoped_task_environment(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
+  IPAddress lo_address = IPAddress::IPv4Localhost();
+  TCPServerSocket server(nullptr, NetLogSource());
+  ASSERT_THAT(server.Listen(IPEndPoint(lo_address, 0), 1), IsOk());
+  IPEndPoint server_address;
+  ASSERT_THAT(server.GetLocalAddress(&server_address), IsOk());
+
+  TCPClientSocket socket(AddressList(server_address), nullptr, nullptr,
+                         NetLogSource());
+
+  EXPECT_FALSE(socket.WasEverUsed());
+
+  EXPECT_THAT(socket.Bind(IPEndPoint(lo_address, 0)), IsOk());
+
+  // Just connecting the socket should not set WasEverUsed.
+  TestCompletionCallback connect_callback;
+  int connect_result = socket.Connect(connect_callback.callback());
+  EXPECT_FALSE(socket.WasEverUsed());
+
+  TestCompletionCallback accept_callback;
+  std::unique_ptr<StreamSocket> accepted_socket;
+  int result = server.Accept(&accepted_socket, accept_callback.callback());
+  ASSERT_THAT(accept_callback.GetResult(result), IsOk());
+  EXPECT_THAT(connect_callback.GetResult(connect_result), IsOk());
+
+  EXPECT_FALSE(socket.WasEverUsed());
+  EXPECT_TRUE(socket.IsConnected());
+
+  // Writing some data to the socket _should_ set WasEverUsed.
+  const char kRequest[] = "GET / HTTP/1.0";
+  auto write_buffer = base::MakeRefCounted<StringIOBuffer>(kRequest);
+  TestCompletionCallback write_callback;
+  socket.Write(write_buffer.get(), write_buffer->size(),
+               write_callback.callback(), TRAFFIC_ANNOTATION_FOR_TESTS);
+  EXPECT_TRUE(socket.WasEverUsed());
+  socket.Disconnect();
+  EXPECT_FALSE(socket.IsConnected());
+
+  EXPECT_TRUE(socket.WasEverUsed());
+
+  // Re-use the socket, which should set WasEverUsed to false.
+  EXPECT_THAT(socket.Bind(IPEndPoint(lo_address, 0)), IsOk());
+  TestCompletionCallback connect_callback2;
+  connect_result = socket.Connect(connect_callback2.callback());
+  EXPECT_FALSE(socket.WasEverUsed());
 }
 
 class TestSocketPerformanceWatcher : public SocketPerformanceWatcher {
@@ -172,6 +229,9 @@ TEST(TCPClientSocketTest, MAYBE_TestSocketPerformanceWatcher) {
 // TCPClientSocket::Tag works as expected.
 #if defined(OS_ANDROID)
 TEST(TCPClientSocketTest, Tag) {
+  base::test::ScopedTaskEnvironment scoped_task_environment(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
   // Start test server.
   EmbeddedTestServer test_server;
   test_server.AddDefaultHandlers(base::FilePath());
@@ -223,6 +283,9 @@ TEST(TCPClientSocketTest, Tag) {
 }
 
 TEST(TCPClientSocketTest, TagAfterConnect) {
+  base::test::ScopedTaskEnvironment scoped_task_environment(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
   // Start test server.
   EmbeddedTestServer test_server;
   test_server.AddDefaultHandlers(base::FilePath());

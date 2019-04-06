@@ -14,18 +14,18 @@
 #include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
-#include "content/public/browser/download_danger_type.h"
+#include "components/download/public/common/download_danger_type.h"
 
 namespace base {
 class TaskRunner;
 }
 
-namespace content {
+namespace download {
 class DownloadItem;
 }
 
-namespace net {
-class URLRequestContextGetter;
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace safe_browsing {
@@ -37,8 +37,9 @@ class DownloadFeedback;
 // Lives on the UI thread.
 class DownloadFeedbackService {
  public:
-  DownloadFeedbackService(net::URLRequestContextGetter* request_context_getter,
-                          base::TaskRunner* file_task_runner);
+  DownloadFeedbackService(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      base::TaskRunner* file_task_runner);
   ~DownloadFeedbackService();
 
   // Stores the request and response ping data from the download check, if the
@@ -49,28 +50,28 @@ class DownloadFeedbackService {
   // classification.
   static void MaybeStorePingsForDownload(DownloadCheckResult result,
                                          bool upload_requested,
-                                         content::DownloadItem* download,
+                                         download::DownloadItem* download,
                                          const std::string& ping,
                                          const std::string& response);
 
   // Test if pings have been stored for |download|.
-  static bool IsEnabledForDownload(const content::DownloadItem& download);
+  static bool IsEnabledForDownload(const download::DownloadItem& download);
 
   // Get the ping values stored in |download|. Returns false if no ping values
   // are present.
   static bool GetPingsForDownloadForTesting(
-      const content::DownloadItem& download,
+      const download::DownloadItem& download,
       std::string* ping,
       std::string* response);
 
   // Records histogram for download feedback option shown to user.
   static void RecordEligibleDownloadShown(
-      content::DownloadDangerType danger_type);
+      download::DownloadDangerType danger_type);
 
   // Begin download feedback for |download|. Then delete download file if
   // |download_command| is DISCARD, or run the KEEP command otherwise.This must
   // only be called if IsEnabledForDownload is true for |download|.
-  void BeginFeedbackForDownload(content::DownloadItem* download,
+  void BeginFeedbackForDownload(download::DownloadItem* download,
                                 DownloadCommands::Command download_command);
 
  private:
@@ -86,7 +87,7 @@ class DownloadFeedbackService {
                      const base::FilePath& path);
   void FeedbackComplete();
 
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   scoped_refptr<base::TaskRunner> file_task_runner_;
 
   // Currently active & pending uploads. The first item is active, remaining

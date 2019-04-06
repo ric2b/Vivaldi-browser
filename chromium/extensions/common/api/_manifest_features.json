@@ -56,12 +56,10 @@
     ],
     "min_manifest_version": 2
   },
-  "background_page": {
-    "channel": "stable",
-    "extension_types": [
-      "extension", "legacy_packaged_app", "hosted_app"
-    ],
-    "max_manifest_version": 1
+  "background.service_worker_script": {
+    "channel": "trunk",
+    "extension_types": ["extension"],
+    "min_manifest_version": 2
   },
   "bluetooth": [{
     // Note: The "bluetooth" manifest permission is used by the
@@ -83,7 +81,8 @@
       "4F25792AF1AA7483936DE29C07806F203C7170A0",  // http://crbug.com/407693
       "BD8781D757D830FC2E85470A1B6E8A718B7EE0D9",  // http://crbug.com/407693
       "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/407693
-      "81986D4F846CEDDDB962643FA501D1780DD441BB"   // http://crbug.com/407693
+      "81986D4F846CEDDDB962643FA501D1780DD441BB",  // http://crbug.com/407693
+      "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7"   // http://crbug.com/839189
     ]
   }],
   "content_capabilities": [{
@@ -92,26 +91,10 @@
     "whitelist": [
       "950D13BB9B4794F4CA2A68D3597E5DFAA47C88AE",  // Drive
       "0EEB39B7A9A52CAAE6A072F83320435749B184A4",  // http://crbug.com/481210
-      "D4AF239830E1E038C9B60DA365B1EC9CB3BC5658",  // http://crbug.com/481210
+      "99717FF3BE1AFB5B343CDD024E53873C1783521B",  // http://crbug.com/838690
       "4895B1DBB92D52488F8D9FFDF9CC7B95C7258C9A",  // http://crbug.com/505532
       "A3880AA78DB0004DE841CC980959D8443F3A8E40",  // http://crbug.com/521615
       "C8B53B3C2CC39CB504B19D990165684FF0CE880C"   // http://crbug.com/521615
-    ]
-  }, {
-    "channel": "beta",
-    "extension_types": ["extension"],
-    "whitelist": [
-      "4895B1DBB92D52488F8D9FFDF9CC7B95C7258C9A",  // https://crbug.com/570337
-      "A3880AA78DB0004DE841CC980959D8443F3A8E40",  // https://crbug.com/570337
-      "C8B53B3C2CC39CB504B19D990165684FF0CE880C"   // https://crbug.com/570337
-    ]
-  }, {
-    "channel": "dev",
-    "extension_types": ["extension"],
-    "whitelist": [
-      "4895B1DBB92D52488F8D9FFDF9CC7B95C7258C9A",  // https://crbug.com/570337
-      "A3880AA78DB0004DE841CC980959D8443F3A8E40",  // https://crbug.com/570337
-      "C8B53B3C2CC39CB504B19D990165684FF0CE880C"   // https://crbug.com/570337
     ]
   }, {
     "channel": "canary",
@@ -232,6 +215,9 @@
     "extension_types": [ "extension", "legacy_packaged_app", "platform_app" ],
     "whitelist": [
       "787000072C6FBB934AF5A42275CDE73FC977D995",  // browser_tests
+      "2FC374607C2DF285634B67C64A2E356C607091C3",  // QuickOffice
+      "12E618C3C6E97495AAECF2AC12DEB082353241C6",  // QuickOffice component extension
+      "3727DD3E564B6055387425027AD74C58784ACC15",  // QuickOffice Editor
       "CBCC42ABED43A4B58FE3810E62AFFA010EB0349F"   // PDF
     ]
   },

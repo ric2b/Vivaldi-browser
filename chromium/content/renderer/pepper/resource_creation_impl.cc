@@ -128,7 +128,7 @@ PP_Resource ResourceCreationImpl::CreateGraphics3DRaw(
     PP_Resource share_context,
     const gpu::ContextCreationAttribs& attrib_helper,
     gpu::Capabilities* capabilities,
-    base::SharedMemoryHandle* shared_state,
+    const base::UnsafeSharedMemoryRegion** shared_state,
     gpu::CommandBufferId* command_buffer_id) {
   return PPB_Graphics3D_Impl::CreateRaw(instance, share_context, attrib_helper,
                                         capabilities, shared_state,
@@ -280,16 +280,6 @@ PP_Resource ResourceCreationImpl::CreateNetAddressFromNetAddressPrivate(
 }
 
 PP_Resource ResourceCreationImpl::CreateNetworkMonitor(PP_Instance instance) {
-  return 0;  // Not supported in-process.
-}
-
-PP_Resource ResourceCreationImpl::CreateOutputProtectionPrivate(
-    PP_Instance instance) {
-  return 0;  // Not supported in-process.
-}
-
-PP_Resource ResourceCreationImpl::CreatePlatformVerificationPrivate(
-    PP_Instance instance) {
   return 0;  // Not supported in-process.
 }
 

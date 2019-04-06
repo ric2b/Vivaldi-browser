@@ -19,7 +19,6 @@
 #include "base/time/time.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display_observer.h"
-#include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/wm/public/activation_change_observer.h"
 
@@ -31,17 +30,18 @@ class Rect;
 namespace views {
 class Textfield;
 class Widget;
-}
+}  // namespace views
 
 namespace ash {
+
 class OverviewWindowDragController;
-class SplitViewOverviewOverlay;
+class SplitViewDragIndicators;
 class WindowGrid;
 class WindowSelectorDelegate;
 class WindowSelectorItem;
 class WindowSelectorTest;
 
-enum class IndicatorType;
+enum class IndicatorState;
 
 // The WindowSelector shows a grid of all of your windows, allowing to select
 // one by clicking or tapping on it.
@@ -52,9 +52,14 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
                                   public SplitViewController::Observer {
  public:
   // Returns true if the window can be selected in overview mode.
-  static bool IsSelectable(aura::Window* window);
+  static bool IsSelectable(const aura::Window* window);
 
   enum Direction { LEFT, UP, RIGHT, DOWN };
+
+  enum class OverviewTransition {
+    kEnter,  // In the entering process of overview.
+    kExit    // In the exiting process of overview.
+  };
 
   using WindowList = std::vector<aura::Window*>;
 
@@ -88,38 +93,76 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   void WindowClosing(WindowSelectorItem* window);
 
   // Called to set bounds for window grids. Used for split view.
-  void SetBoundsForWindowGridsInScreen(const gfx::Rect& bounds);
   void SetBoundsForWindowGridsInScreenIgnoringWindow(
       const gfx::Rect& bounds,
       WindowSelectorItem* ignored_item);
 
-  // Called to show or hide the split view overview overlay. This will do
+  // Called to show or hide the split view drag indicators. This will do
   // nothing if split view is not enabled. |event_location| is used to reparent
-  // |split_view_overview_overlays_|'s widget, if necessary.
-  void SetSplitViewOverviewOverlayIndicatorType(
-      IndicatorType indicator_type,
+  // |split_view_drag_indicators_|'s widget, if necessary.
+  void SetSplitViewDragIndicatorsIndicatorState(
+      IndicatorState indicator_state,
       const gfx::Point& event_location);
   // Retrieves the window grid whose root window matches |root_window|. Returns
   // nullptr if the window grid is not found.
   WindowGrid* GetGridWithRootWindow(aura::Window* root_window);
 
   // Add |window| to the grid in |grid_list_| with the same root window. Does
-  // nothing if the grid already contains |window|.
-  void AddItem(aura::Window* window);
+  // nothing if the grid already contains |window|. And if |reposition| is true,
+  // re-position all windows in the target window grid. This may be called in
+  // two scenarioes: 1) when a item in split view mode was previously snapped
+  // but should now be returned to the window grid (e.g. split view divider
+  // dragged to either edge, or a window is snapped to a postion that already
+  // has a snapped window); 2) when a window (not from overview) is dragged
+  // while overview is open and the window is dropped on the new selector item,
+  // the dragged window is then added to the overview.
+  void AddItem(aura::Window* window, bool reposition);
 
-  // Removes the window selector item from the overview window grid.
-  void RemoveWindowSelectorItem(WindowSelectorItem* item);
+  // Removes the window selector item from the overview window grid. And if
+  // |reposition| is true, re-position all windows in the target window grid.
+  // This may be called in two scenarioes: 1) when a user drags an overview item
+  // to snap to one side of the screen, the item should be removed from the
+  // overview grid; 2) when a window (not from overview) ends its dragging while
+  // overview is open, the new selector item should be removed. Note in both
+  // cases, the windows in the window grid do not need to be repositioned.
+  void RemoveWindowSelectorItem(WindowSelectorItem* item, bool reposition);
 
   void InitiateDrag(WindowSelectorItem* item,
                     const gfx::Point& location_in_screen);
   void Drag(WindowSelectorItem* item, const gfx::Point& location_in_screen);
   void CompleteDrag(WindowSelectorItem* item,
                     const gfx::Point& location_in_screen);
+  void StartSplitViewDragMode(const gfx::Point& location_in_screen);
+  void Fling(WindowSelectorItem* item,
+             const gfx::Point& location_in_screen,
+             float velocity_x,
+             float velocity_y);
   void ActivateDraggedWindow();
   void ResetDraggedWindowGesture();
 
-  // Positions all of the windows in the overview.
-  void PositionWindows(bool animate);
+  // Called when a window's tab(s) start/continue/end being dragged around if
+  // overview mode is active.
+  // TODO(xdai): Currently it doesn't work for multi-display scenario.
+  void OnWindowDragStarted(aura::Window* dragged_window);
+  void OnWindowDragContinued(aura::Window* dragged_window,
+                             const gfx::Point& location_in_screen,
+                             IndicatorState indicator_state);
+  void OnWindowDragEnded(aura::Window* dragged_window,
+                         const gfx::Point& location_in_screen);
+
+  // Positions all of the windows in the overview, except |ignored_item|.
+  void PositionWindows(bool animate,
+                       WindowSelectorItem* ignored_item = nullptr);
+
+  // If we are in middle of ending overview mode.
+  bool IsShuttingDown() const;
+
+  // Checks if the grid associated with a given |root_window| needs to have the
+  // wallpaper animated. Returns false if one of the grids windows covers the
+  // the entire workspace, true otherwise.
+  bool ShouldAnimateWallpaper(aura::Window* root_window);
+
+  bool IsWindowInOverview(const aura::Window* window);
 
   WindowSelectorDelegate* delegate() { return delegate_; }
 
@@ -129,15 +172,13 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
 
   int text_filter_bottom() const { return text_filter_bottom_; }
 
-  bool is_shut_down() const { return is_shut_down_; }
-
   const std::vector<std::unique_ptr<WindowGrid>>& grid_list_for_testing()
       const {
     return grid_list_;
   }
 
-  SplitViewOverviewOverlay* split_view_overview_overlay() {
-    return split_view_overview_overlay_.get();
+  SplitViewDragIndicators* split_view_drag_indicators() {
+    return split_view_drag_indicators_.get();
   }
 
   OverviewWindowDragController* window_drag_controller() {
@@ -196,6 +237,9 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   // Called when the display area for the overview window grids changed.
   void OnDisplayBoundsChanged();
 
+  // Returns true if all its window grids don't have any window item.
+  bool IsEmpty();
+
   // Tracks observed windows.
   std::set<aura::Window*> observed_windows_;
 
@@ -210,17 +254,17 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
 
   // True when performing operations that may cause window activations. This is
   // used to prevent handling the resulting expected activation.
-  bool ignore_activations_;
+  bool ignore_activations_ = false;
 
   // List of all the window overview grids, one for each root window.
   std::vector<std::unique_ptr<WindowGrid>> grid_list_;
 
   // The owner of the widget which displays splitview related information in
   // overview mode. This will be nullptr if split view is not enabled.
-  std::unique_ptr<SplitViewOverviewOverlay> split_view_overview_overlay_;
+  std::unique_ptr<SplitViewDragIndicators> split_view_drag_indicators_;
 
   // Tracks the index of the root window the selection widget is in.
-  size_t selected_grid_index_;
+  size_t selected_grid_index_ = 0;
 
   // The following variables are used for metric collection purposes. All of
   // them refer to this particular overview session and are not cumulative:
@@ -228,38 +272,37 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   base::Time overview_start_time_;
 
   // The number of arrow key presses.
-  size_t num_key_presses_;
+  size_t num_key_presses_ = 0;
 
   // The number of items in the overview.
-  size_t num_items_;
+  size_t num_items_ = 0;
 
   // Indicates if the text filter is shown on screen (rather than above it).
-  bool showing_text_filter_;
+  bool showing_text_filter_ = false;
 
   // Window text filter widget. As the user writes on it, we filter the items
   // in the overview. It is also responsible for handling overview key events,
   // such as enter key to select.
   std::unique_ptr<views::Widget> text_filter_widget_;
 
-  // Image used for text filter textfield.
-  gfx::ImageSkia search_image_;
-
   // The current length of the string entered into the text filtering textfield.
-  size_t text_filter_string_length_;
+  size_t text_filter_string_length_ = 0;
 
   // The number of times the text filtering textfield has been cleared of text
   // during this overview mode session.
-  size_t num_times_textfield_cleared_;
+  size_t num_times_textfield_cleared_ = 0;
 
   // Tracks whether minimized windows are currently being restored for overview
   // mode.
-  bool restoring_minimized_windows_;
+  bool restoring_minimized_windows_ = false;
 
   // The distance between the top edge of the screen and the bottom edge of
   // the text filtering textfield.
-  int text_filter_bottom_;
+  int text_filter_bottom_ = 0;
 
-  bool is_shut_down_ = false;
+  // The selected item when exiting overview mode. nullptr if no window
+  // selected.
+  WindowSelectorItem* selected_item_ = nullptr;
 
   // The drag controller for a window in the overview mode.
   std::unique_ptr<OverviewWindowDragController> window_drag_controller_;

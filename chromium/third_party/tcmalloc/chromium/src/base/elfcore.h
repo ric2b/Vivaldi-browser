@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2005-2008, Google Inc.
  * All rights reserved.
  *
@@ -37,11 +38,11 @@
 extern "C" {
 #endif
 
-/* We currently only support x86-32, x86-64, ARM, and MIPS on Linux.
+/* We currently only support x86-32, x86-64, ARM, MIPS, PPC on Linux.
  * Porting to other related platforms should not be difficult.
  */
-#if (defined(__i386__) || defined(__x86_64__) || defined(__ARM_ARCH_3__) || \
-     defined(__mips__)) && defined(__linux)
+#if (defined(__i386__) || defined(__x86_64__) || defined(__arm__) || \
+     defined(__mips__) || defined(__PPC__)) && defined(__linux)
 
 #include <stdarg.h>
 #include <stdint.h>
@@ -88,7 +89,7 @@ extern "C" {
     uint16_t  ss, __ss;
   #endif
   } i386_regs;
-#elif defined(__ARM_ARCH_3__)
+#elif defined(__arm__)
   typedef struct arm_regs {     /* General purpose registers                 */
     #define BP uregs[11]        /* Frame pointer                             */
     #define SP uregs[13]        /* Stack pointer                             */
@@ -108,6 +109,21 @@ extern "C" {
     unsigned long cp0_cause;
     unsigned long unused;
   } mips_regs;
+#elif defined (__PPC__)
+  typedef struct ppc_regs {
+    #define SP uregs[1]         /* Stack pointer                             */
+    #define IP rip              /* Program counter                           */
+    #define LR lr               /* Link register                             */
+    unsigned long uregs[32];	/* General Purpose Registers - r0-r31.       */
+    double        fpr[32];	/* Floating-Point Registers - f0-f31.        */
+    unsigned long rip;		/* Program counter.                          */
+    unsigned long msr;
+    unsigned long ccr;
+    unsigned long lr;
+    unsigned long ctr;
+    unsigned long xeq;
+    unsigned long mq;
+  } ppc_regs;
 #endif
 
 #if defined(__i386__) && defined(__GNUC__)
@@ -229,7 +245,7 @@ extern "C" {
                        (f).uregs.gs_base = (r).gs_base;               \
                        (r)   = (f).uregs;                             \
                      } while (0)
-#elif defined(__ARM_ARCH_3__) && defined(__GNUC__)
+#elif defined(__arm__) && defined(__GNUC__)
   /* ARM calling conventions are a little more tricky. A little assembly
    * helps in obtaining an accurate snapshot of all registers.
    */

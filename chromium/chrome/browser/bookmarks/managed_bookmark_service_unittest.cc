@@ -8,12 +8,13 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -69,7 +70,7 @@ class ManagedBookmarkServiceTest : public testing::Test {
       const std::string& title,
       const std::string& url) {
     EXPECT_TRUE(GURL(url).is_valid());
-    auto dict = base::MakeUnique<base::DictionaryValue>();
+    auto dict = std::make_unique<base::DictionaryValue>();
     dict->SetString("name", title);
     dict->SetString("url", GURL(url).spec());
     return dict;
@@ -78,18 +79,18 @@ class ManagedBookmarkServiceTest : public testing::Test {
   static std::unique_ptr<base::DictionaryValue> CreateFolder(
       const std::string& title,
       std::unique_ptr<base::ListValue> children) {
-    auto dict = base::MakeUnique<base::DictionaryValue>();
+    auto dict = std::make_unique<base::DictionaryValue>();
     dict->SetString("name", title);
     dict->Set("children", std::move(children));
     return dict;
   }
 
   static std::unique_ptr<base::ListValue> CreateTestTree() {
-    auto folder = base::MakeUnique<base::ListValue>();
-    folder->Append(CreateFolder("Empty", base::MakeUnique<base::ListValue>()));
+    auto folder = std::make_unique<base::ListValue>();
+    folder->Append(CreateFolder("Empty", std::make_unique<base::ListValue>()));
     folder->Append(CreateBookmark("Youtube", "http://youtube.com/"));
 
-    auto list = base::MakeUnique<base::ListValue>();
+    auto list = std::make_unique<base::ListValue>();
     list->Append(CreateBookmark("Google", "http://google.com/"));
     list->Append(CreateFolder("Folder", std::move(folder)));
 
@@ -296,4 +297,19 @@ TEST_F(ManagedBookmarkServiceTest, HasDescendantsOfManagedNode) {
   EXPECT_FALSE(bookmarks::HasDescendantsOf(nodes, managed_->managed_node()));
   nodes.push_back(managed_node);
   EXPECT_TRUE(bookmarks::HasDescendantsOf(nodes, managed_->managed_node()));
+}
+
+TEST_F(ManagedBookmarkServiceTest, GetManagedBookmarksDomain) {
+  // Not managed profile
+  profile_.set_profile_name("user@google.com");
+  EXPECT_TRUE(
+      ManagedBookmarkServiceFactory::GetManagedBookmarksDomain(&profile_)
+          .empty());
+
+  // Managed profile
+  policy::ProfilePolicyConnectorFactory::GetForBrowserContext(&profile_)
+      ->OverrideIsManagedForTesting(true);
+  EXPECT_EQ(
+      "google.com",
+      ManagedBookmarkServiceFactory::GetManagedBookmarksDomain(&profile_));
 }

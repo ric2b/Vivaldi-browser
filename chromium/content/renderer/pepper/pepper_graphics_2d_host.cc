@@ -17,9 +17,11 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
-#include "components/viz/client/client_shared_bitmap_manager.h"
+#include "cc/resources/cross_thread_shared_bitmap.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/quads/shared_bitmap.h"
+#include "components/viz/common/resources/bitmap_allocation.h"
+#include "components/viz/common/resources/resource_sizes.h"
+#include "components/viz/common/resources/shared_bitmap.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/gfx_conversion.h"
@@ -325,7 +327,8 @@ bool PepperGraphics2DHost::BindToInstance(
     new_instance->InvalidateRect(gfx::Rect());
   }
 
-  cached_bitmap_.reset();
+  cached_bitmap_ = nullptr;
+  cached_bitmap_registration_ = cc::SharedBitmapIdRegistration();
   composited_output_modified_ = true;
 
   bound_instance_ = new_instance;
@@ -335,7 +338,7 @@ bool PepperGraphics2DHost::BindToInstance(
 // The |backing_bitmap| must be clipped to the |plugin_rect| to avoid painting
 // outside the plugin area. This can happen if the plugin has been resized since
 // PaintImageData verified the image is within the plugin size.
-void PepperGraphics2DHost::Paint(blink::WebCanvas* canvas,
+void PepperGraphics2DHost::Paint(cc::PaintCanvas* canvas,
                                  const gfx::Rect& plugin_rect,
                                  const gfx::Rect& paint_rect) {
   TRACE_EVENT0("pepper", "PepperGraphics2DHost::Paint");
@@ -361,7 +364,7 @@ void PepperGraphics2DHost::Paint(blink::WebCanvas* canvas,
     // show white (typically less jarring) rather than black or uninitialized.
     // We don't do this for non-full-frame plugins since we specifically want
     // the page background to show through.
-    cc::PaintCanvasAutoRestore auto_restore(canvas, true);
+    cc::PaintCanvasAutoRestore full_page_auto_restore(canvas, true);
     SkRect image_data_rect =
         gfx::RectToSkRect(gfx::Rect(plugin_rect.origin(), image_size));
     canvas->clipRect(image_data_rect, SkClipOp::kDifference);
@@ -384,8 +387,10 @@ void PepperGraphics2DHost::Paint(blink::WebCanvas* canvas,
     canvas->scale(scale_, scale_);
     pixel_origin.scale(1.0f / scale_);
   }
-  canvas->drawBitmap(backing_bitmap, pixel_origin.x(), pixel_origin.y(),
-                     &flags);
+  // TODO(khushalsagar): Can this be cached on image_data_, and invalidated when
+  // the bitmap changes?
+  canvas->drawImage(cc::PaintImage::CreateFromBitmap(std::move(backing_bitmap)),
+                    pixel_origin.x(), pixel_origin.y(), &flags);
 }
 
 void PepperGraphics2DHost::ViewInitiatedPaint() {
@@ -407,7 +412,8 @@ gfx::Size PepperGraphics2DHost::Size() const {
 }
 
 void PepperGraphics2DHost::ClearCache() {
-  cached_bitmap_.reset();
+  cached_bitmap_ = nullptr;
+  cached_bitmap_registration_ = cc::SharedBitmapIdRegistration();
 }
 
 int32_t PepperGraphics2DHost::OnHostMsgPaintImageData(
@@ -559,16 +565,18 @@ int32_t PepperGraphics2DHost::OnHostMsgReadImageData(
 }
 
 void PepperGraphics2DHost::ReleaseSoftwareCallback(
-    std::unique_ptr<viz::SharedBitmap> bitmap,
-    const gfx::Size& bitmap_size,
+    scoped_refptr<cc::CrossThreadSharedBitmap> bitmap,
+    cc::SharedBitmapIdRegistration registration,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
-  cached_bitmap_.reset();
+  cached_bitmap_ = nullptr;
+  cached_bitmap_registration_ = cc::SharedBitmapIdRegistration();
   // Only keep around a cached bitmap if the plugin is currently drawing (has
   // need_flush_ack_ set).
-  if (need_flush_ack_ && bound_instance_)
+  if (need_flush_ack_ && bound_instance_) {
     cached_bitmap_ = std::move(bitmap);
-  cached_bitmap_size_ = bitmap_size;
+    cached_bitmap_registration_ = std::move(registration);
+  }
 }
 
 // static
@@ -604,6 +612,7 @@ void PepperGraphics2DHost::ReleaseTextureCallback(
 }
 
 bool PepperGraphics2DHost::PrepareTransferableResource(
+    cc::SharedBitmapIdRegistrar* bitmap_registrar,
     viz::TransferableResource* transferable_resource,
     std::unique_ptr<viz::SingleReleaseCallback>* release_callback) {
   // Reuse the |main_thread_context_| if it is not lost. If it is lost, we
@@ -706,7 +715,6 @@ bool PepperGraphics2DHost::PrepareTransferableResource(
                        0, format, GL_UNSIGNED_BYTE, nullptr);
       }
 
-      gl->GenMailboxCHROMIUM(gpu_mailbox.name);
       gl->ProduceTextureDirectCHROMIUM(texture_id, gpu_mailbox.name);
     }
 
@@ -743,37 +751,44 @@ bool PepperGraphics2DHost::PrepareTransferableResource(
         std::move(gpu_mailbox), GL_LINEAR, texture_target,
         std::move(sync_token), size, overlay_candidate);
     *release_callback = viz::SingleReleaseCallback::Create(
-        base::Bind(&ReleaseTextureCallback, this->AsWeakPtr(),
-                   main_thread_context_, texture_id));
+        base::BindOnce(&ReleaseTextureCallback, this->AsWeakPtr(),
+                       main_thread_context_, texture_id));
     composited_output_modified_ = false;
     return true;
   }
 
   gfx::Size pixel_image_size(image_data_->width(), image_data_->height());
-  std::unique_ptr<viz::SharedBitmap> shared_bitmap;
+  scoped_refptr<cc::CrossThreadSharedBitmap> shared_bitmap;
+  cc::SharedBitmapIdRegistration registration;
   if (cached_bitmap_) {
-    if (cached_bitmap_size_ == pixel_image_size)
+    if (cached_bitmap_->size() == pixel_image_size) {
       shared_bitmap = std::move(cached_bitmap_);
-    else
-      cached_bitmap_.reset();
+      registration = std::move(cached_bitmap_registration_);
+    } else {
+      cached_bitmap_ = nullptr;
+      cached_bitmap_registration_ = cc::SharedBitmapIdRegistration();
+    }
   }
   if (!shared_bitmap) {
-    shared_bitmap = RenderThreadImpl::current()
-                        ->shared_bitmap_manager()
-                        ->AllocateSharedBitmap(pixel_image_size);
+    viz::SharedBitmapId id = viz::SharedBitmap::GenerateId();
+    std::unique_ptr<base::SharedMemory> shm =
+        viz::bitmap_allocation::AllocateMappedBitmap(pixel_image_size,
+                                                     viz::RGBA_8888);
+    shared_bitmap = base::MakeRefCounted<cc::CrossThreadSharedBitmap>(
+        id, std::move(shm), pixel_image_size, viz::RGBA_8888);
+    registration = bitmap_registrar->RegisterSharedBitmapId(id, shared_bitmap);
   }
-  if (!shared_bitmap)
-    return false;
   void* src = image_data_->Map();
-  memcpy(shared_bitmap->pixels(), src,
-         viz::SharedBitmap::CheckedSizeInBytes(pixel_image_size));
+  memcpy(shared_bitmap->shared_memory()->memory(), src,
+         viz::ResourceSizes::CheckedSizeInBytes<size_t>(pixel_image_size,
+                                                        viz::RGBA_8888));
   image_data_->Unmap();
 
   *transferable_resource = viz::TransferableResource::MakeSoftware(
-      shared_bitmap->id(), shared_bitmap->sequence_number(), pixel_image_size);
-  *release_callback = viz::SingleReleaseCallback::Create(base::Bind(
+      shared_bitmap->id(), pixel_image_size, viz::RGBA_8888);
+  *release_callback = viz::SingleReleaseCallback::Create(base::BindOnce(
       &PepperGraphics2DHost::ReleaseSoftwareCallback, this->AsWeakPtr(),
-      base::Passed(&shared_bitmap), pixel_image_size));
+      std::move(shared_bitmap), std::move(registration)));
   composited_output_modified_ = false;
   return true;
 }
@@ -886,9 +901,11 @@ int32_t PepperGraphics2DHost::Flush(PP_Resource* old_image_data) {
 void PepperGraphics2DHost::ExecuteTransform(const float& scale,
                                             const gfx::PointF& translate,
                                             gfx::Rect* invalidated_rect) {
-  bound_instance_->SetGraphics2DTransform(scale, translate);
-  *invalidated_rect =
-      gfx::Rect(0, 0, image_data_->width(), image_data_->height());
+  if (bound_instance_) {
+    bound_instance_->SetGraphics2DTransform(scale, translate);
+    *invalidated_rect =
+        gfx::Rect(0, 0, image_data_->width(), image_data_->height());
+  }
 }
 
 void PepperGraphics2DHost::ExecutePaintImageData(PPB_ImageData_Impl* image,

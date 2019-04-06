@@ -4,7 +4,7 @@
 
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
 
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "chrome/browser/resource_coordinator/time.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -19,6 +19,13 @@ using content::WebContentsTester;
 
 namespace resource_coordinator {
 namespace {
+
+constexpr TabLoadTracker::LoadingState UNLOADED =
+    TabLoadTracker::LoadingState::UNLOADED;
+constexpr TabLoadTracker::LoadingState LOADING =
+    TabLoadTracker::LoadingState::LOADING;
+constexpr TabLoadTracker::LoadingState LOADED =
+    TabLoadTracker::LoadingState::LOADED;
 
 class TabManagerWebContentsDataTest : public ChromeRenderViewHostTestHarness {
  public:
@@ -45,8 +52,8 @@ class TabManagerWebContentsDataTest : public ChromeRenderViewHostTestHarness {
 
   TabManager::WebContentsData* CreateWebContentsAndTabData(
       std::unique_ptr<WebContents>* web_contents) {
-    web_contents->reset(
-        WebContentsTester::CreateTestWebContents(browser_context(), nullptr));
+    *web_contents =
+        WebContentsTester::CreateTestWebContents(browser_context(), nullptr);
     TabManager::WebContentsData::CreateForWebContents(web_contents->get());
     return TabManager::WebContentsData::FromWebContents(web_contents->get());
   }
@@ -62,37 +69,6 @@ const char kDefaultUrl[] = "https://www.google.com";
 
 }  // namespace
 
-TEST_F(TabManagerWebContentsDataTest, DiscardState) {
-  EXPECT_FALSE(tab_data()->IsDiscarded());
-  tab_data()->SetDiscardState(true);
-  EXPECT_TRUE(tab_data()->IsDiscarded());
-  tab_data()->SetDiscardState(false);
-  EXPECT_FALSE(tab_data()->IsDiscarded());
-}
-
-TEST_F(TabManagerWebContentsDataTest, DiscardCount) {
-  EXPECT_EQ(0, tab_data()->DiscardCount());
-  tab_data()->IncrementDiscardCount();
-  EXPECT_EQ(1, tab_data()->DiscardCount());
-  tab_data()->IncrementDiscardCount();
-  EXPECT_EQ(2, tab_data()->DiscardCount());
-}
-
-TEST_F(TabManagerWebContentsDataTest, RecentlyAudible) {
-  EXPECT_FALSE(tab_data()->IsRecentlyAudible());
-  tab_data()->SetRecentlyAudible(true);
-  EXPECT_TRUE(tab_data()->IsRecentlyAudible());
-  tab_data()->SetRecentlyAudible(false);
-  EXPECT_FALSE(tab_data()->IsRecentlyAudible());
-}
-
-TEST_F(TabManagerWebContentsDataTest, LastAudioChangeTime) {
-  EXPECT_TRUE(tab_data()->LastAudioChangeTime().is_null());
-  auto now = NowTicks();
-  tab_data()->SetLastAudioChangeTime(now);
-  EXPECT_EQ(now, tab_data()->LastAudioChangeTime());
-}
-
 TEST_F(TabManagerWebContentsDataTest, LastInactiveTime) {
   EXPECT_TRUE(tab_data()->LastInactiveTime().is_null());
   auto now = NowTicks();
@@ -101,122 +77,27 @@ TEST_F(TabManagerWebContentsDataTest, LastInactiveTime) {
 }
 
 TEST_F(TabManagerWebContentsDataTest, TabLoadingState) {
-  EXPECT_EQ(TAB_IS_NOT_LOADING, tab_data()->tab_loading_state());
-  tab_data()->SetTabLoadingState(TAB_IS_LOADING);
-  EXPECT_EQ(TAB_IS_LOADING, tab_data()->tab_loading_state());
-  tab_data()->SetTabLoadingState(TAB_IS_LOADED);
-  EXPECT_EQ(TAB_IS_LOADED, tab_data()->tab_loading_state());
+  EXPECT_EQ(UNLOADED, tab_data()->tab_loading_state());
+  tab_data()->SetTabLoadingState(LOADING);
+  EXPECT_EQ(LOADING, tab_data()->tab_loading_state());
+  tab_data()->SetTabLoadingState(LOADED);
+  EXPECT_EQ(LOADED, tab_data()->tab_loading_state());
 }
 
 TEST_F(TabManagerWebContentsDataTest, CopyState) {
+  tab_data()->SetLastInactiveTime(base::TimeTicks() +
+                                  base::TimeDelta::FromSeconds(42));
+  tab_data()->SetTabLoadingState(LOADED);
+  tab_data()->SetIsInSessionRestore(true);
+  tab_data()->SetIsRestoredInForeground(true);
+
   std::unique_ptr<WebContents> web_contents2;
   auto* tab_data2 = CreateWebContentsAndTabData(&web_contents2);
-  // TabManagerWebContentsData are initially distinct as they each have unique
-  // IDs assigned to them at construction time.
-  EXPECT_NE(tab_data()->tab_data_, tab_data2->tab_data_);
 
-  // Copying the state should bring the ID along with it, so they should have
-  // identical content afterwards.
+  EXPECT_NE(tab_data()->tab_data_, tab_data2->tab_data_);
   TabManager::WebContentsData::CopyState(tab_data()->web_contents(),
                                          tab_data2->web_contents());
   EXPECT_EQ(tab_data()->tab_data_, tab_data2->tab_data_);
-}
-
-TEST_F(TabManagerWebContentsDataTest, HistogramDiscardCount) {
-  const char kHistogramName[] = "TabManager.Discarding.DiscardCount";
-
-  base::HistogramTester histograms;
-
-  EXPECT_TRUE(histograms.GetTotalCountsForPrefix(kHistogramName).empty());
-  tab_data()->SetDiscardState(true);
-  EXPECT_EQ(1,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-  tab_data()->SetDiscardState(false);
-  EXPECT_EQ(1,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-  tab_data()->SetDiscardState(true);
-  EXPECT_EQ(2,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-  tab_data()->SetDiscardState(false);
-  EXPECT_EQ(2,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-}
-
-TEST_F(TabManagerWebContentsDataTest, HistogramReloadCount) {
-  const char kHistogramName[] = "TabManager.Discarding.ReloadCount";
-
-  base::HistogramTester histograms;
-
-  EXPECT_TRUE(histograms.GetTotalCountsForPrefix(kHistogramName).empty());
-  tab_data()->SetDiscardState(true);
-  EXPECT_TRUE(histograms.GetTotalCountsForPrefix(kHistogramName).empty());
-  tab_data()->SetDiscardState(false);
-  EXPECT_EQ(1,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-  tab_data()->SetDiscardState(true);
-  EXPECT_EQ(1,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-  tab_data()->SetDiscardState(false);
-  EXPECT_EQ(2,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-}
-
-TEST_F(TabManagerWebContentsDataTest, HistogramsDiscardToReloadTime) {
-  const char kHistogramName[] = "TabManager.Discarding.DiscardToReloadTime";
-
-  base::HistogramTester histograms;
-
-  EXPECT_TRUE(histograms.GetTotalCountsForPrefix(kHistogramName).empty());
-
-  tab_data()->SetDiscardState(true);
-  test_clock().Advance(base::TimeDelta::FromSeconds(24));
-  tab_data()->SetDiscardState(false);
-
-  EXPECT_EQ(1,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-
-  histograms.ExpectBucketCount(kHistogramName, 24000, 1);
-}
-
-TEST_F(TabManagerWebContentsDataTest, HistogramsReloadToCloseTime) {
-  const char kHistogramName[] = "TabManager.Discarding.ReloadToCloseTime";
-
-  base::HistogramTester histograms;
-
-  EXPECT_TRUE(histograms.GetTotalCountsForPrefix(kHistogramName).empty());
-
-  tab_data()->SetDiscardState(true);
-  tab_data()->IncrementDiscardCount();
-  test_clock().Advance(base::TimeDelta::FromSeconds(5));
-  tab_data()->SetDiscardState(false);
-  test_clock().Advance(base::TimeDelta::FromSeconds(13));
-
-  tab_data()->WebContentsDestroyed();
-
-  EXPECT_EQ(1,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-
-  histograms.ExpectBucketCount(kHistogramName, 13000, 1);
-}
-
-TEST_F(TabManagerWebContentsDataTest, HistogramsInactiveToReloadTime) {
-  const char kHistogramName[] = "TabManager.Discarding.InactiveToReloadTime";
-
-  base::HistogramTester histograms;
-
-  EXPECT_TRUE(histograms.GetTotalCountsForPrefix(kHistogramName).empty());
-
-  tab_data()->SetLastInactiveTime(NowTicks());
-  test_clock().Advance(base::TimeDelta::FromSeconds(5));
-  tab_data()->SetDiscardState(true);
-  tab_data()->IncrementDiscardCount();
-  test_clock().Advance(base::TimeDelta::FromSeconds(7));
-  tab_data()->SetDiscardState(false);
-
-  EXPECT_EQ(1,
-            histograms.GetTotalCountsForPrefix(kHistogramName).begin()->second);
-
-  histograms.ExpectBucketCount(kHistogramName, 12000, 1);
 }
 
 TEST_F(TabManagerWebContentsDataTest, IsInSessionRestoreWithTabLoading) {

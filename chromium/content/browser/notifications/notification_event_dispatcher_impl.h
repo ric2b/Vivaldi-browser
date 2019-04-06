@@ -7,14 +7,18 @@
 
 #include <map>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/notification_database_data.h"
 #include "content/public/browser/notification_event_dispatcher.h"
+#include "third_party/blink/public/platform/modules/notifications/notification_service.mojom.h"
 
 namespace content {
 
-class NotificationEventDispatcherImpl : public NotificationEventDispatcher {
+class CONTENT_EXPORT NotificationEventDispatcherImpl
+    : public NotificationEventDispatcher {
  public:
   // Returns the instance of the NotificationEventDispatcherImpl. Must be called
   // on the UI thread.
@@ -37,30 +41,41 @@ class NotificationEventDispatcherImpl : public NotificationEventDispatcher {
   void DispatchNonPersistentShowEvent(
       const std::string& notification_id) override;
   void DispatchNonPersistentClickEvent(
-      const std::string& notification_id) override;
+      const std::string& notification_id,
+      NotificationClickEventCallback callback) override;
   void DispatchNonPersistentCloseEvent(
-      const std::string& notification_id) override;
+      const std::string& notification_id,
+      base::OnceClosure completed_closure) override;
 
-  // Called when a renderer that had shown a non persistent notification
-  // dissappears.
-  void RendererGone(int renderer_id);
-
-  // Register the fact that a non persistent notification has been displayed.
-  void RegisterNonPersistentNotification(const std::string& notification_id,
-                                         int renderer_id,
-                                         int request_id);
+  // Registers |listener| to receive the show, click and close events of the
+  // non-persistent notification identified by |notification_id|.
+  void RegisterNonPersistentNotificationListener(
+      const std::string& notification_id,
+      blink::mojom::NonPersistentNotificationListenerPtr event_listener_ptr);
 
  private:
+  friend class NotificationEventDispatcherImplTest;
+  friend struct base::DefaultSingletonTraits<NotificationEventDispatcherImpl>;
+
   NotificationEventDispatcherImpl();
   ~NotificationEventDispatcherImpl() override;
 
-  // Notification Id -> renderer Id.
-  std::map<std::string, int> renderer_ids_;
+  // Removes all references to the listener registered to receive events
+  // from the non-persistent notification identified by |notification_id|,
+  // and executes |completed_closure|. This method is called after OnClose has
+  // been dispatched to the non-persistent notification listener.
+  void OnNonPersistentCloseComplete(const std::string& notification_id,
+                                    base::OnceClosure completed_closure);
 
-  // Notification Id -> request Id.
-  std::map<std::string, int> request_ids_;
+  // Removes all references to the listener registered to receive events
+  // from the non-persistent notification identified by |notification_id|.
+  // Should be called when the connection to this listener goes away.
+  void HandleConnectionErrorForNonPersistentNotificationListener(
+      const std::string& notification_id);
 
-  friend struct base::DefaultSingletonTraits<NotificationEventDispatcherImpl>;
+  // Notification Id -> listener.
+  std::map<std::string, blink::mojom::NonPersistentNotificationListenerPtr>
+      non_persistent_notification_listeners_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationEventDispatcherImpl);
 };

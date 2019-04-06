@@ -14,7 +14,6 @@
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/sync/browser/password_sync_util.h"
-#include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
 
@@ -65,7 +64,7 @@ std::vector<std::unique_ptr<PasswordForm>> SyncCredentialsFilter::FilterResults(
   auto begin_of_removed =
       std::partition(results.begin(), results.end(),
                      [this](const std::unique_ptr<PasswordForm>& form) {
-                       return ShouldSave(*form, form->origin);
+                       return ShouldSave(*form);
                      });
 
   UMA_HISTOGRAM_BOOLEAN("PasswordManager.SyncCredentialFiltered",
@@ -76,19 +75,40 @@ std::vector<std::unique_ptr<PasswordForm>> SyncCredentialsFilter::FilterResults(
   return results;
 }
 
-bool SyncCredentialsFilter::ShouldSave(const autofill::PasswordForm& form,
-                                       const GURL& main_frame_url) const {
-  return !gaia::ShouldSkipSavePasswordForGaiaURL(main_frame_url) &&
+bool SyncCredentialsFilter::ShouldSave(
+    const autofill::PasswordForm& form) const {
+  return !form.is_gaia_with_skip_save_password_form &&
          !sync_util::IsSyncAccountCredential(
              form, sync_service_factory_function_.Run(),
              signin_manager_factory_function_.Run());
+}
+
+bool SyncCredentialsFilter::ShouldSaveGaiaPasswordHash(
+    const autofill::PasswordForm& form) const {
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  return sync_util::IsGaiaCredentialPage(form.signon_realm);
+#else
+  return false;
+#endif  // SYNC_PASSWORD_REUSE_DETECTION_ENABLED
+}
+
+bool SyncCredentialsFilter::ShouldSaveEnterprisePasswordHash(
+    const autofill::PasswordForm& form) const {
+  return sync_util::ShouldSaveEnterprisePasswordHash(form,
+                                                     *client_->GetPrefs());
+}
+
+bool SyncCredentialsFilter::IsSyncAccountEmail(
+    const std::string& username) const {
+  return sync_util::IsSyncAccountEmail(username,
+                                       signin_manager_factory_function_.Run());
 }
 
 void SyncCredentialsFilter::ReportFormLoginSuccess(
     const PasswordFormManager& form_manager) const {
   if (!form_manager.IsNewLogin() &&
       sync_util::IsSyncAccountCredential(
-          form_manager.pending_credentials(),
+          form_manager.GetPendingCredentials(),
           sync_service_factory_function_.Run(),
           signin_manager_factory_function_.Run())) {
     base::RecordAction(base::UserMetricsAction(

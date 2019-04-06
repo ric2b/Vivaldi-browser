@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ui/base/ime/mock_input_method.h"
+#include "build/build_config.h"
 
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/events/event.h"
@@ -55,12 +56,14 @@ void MockInputMethod::OnBlur() {
     observer.OnBlur();
 }
 
-bool MockInputMethod::OnUntranslatedIMEMessage(const base::NativeEvent& event,
+#if defined(OS_WIN)
+bool MockInputMethod::OnUntranslatedIMEMessage(const MSG event,
                                                NativeEventResult* result) {
   if (result)
     *result = NativeEventResult();
   return false;
 }
+#endif
 
 void MockInputMethod::OnTextInputTypeChanged(const TextInputClient* client) {
   for (InputMethodObserver& observer : observer_list_)
@@ -102,9 +105,13 @@ bool MockInputMethod::IsCandidatePopupOpen() const {
   return false;
 }
 
-void MockInputMethod::ShowImeIfNeeded() {
+bool MockInputMethod::GetClientShouldDoLearning() {
+  return false;
+}
+
+void MockInputMethod::ShowVirtualKeyboardIfEnabled() {
   for (InputMethodObserver& observer : observer_list_)
-    observer.OnShowImeIfNeeded();
+    observer.OnShowVirtualKeyboardIfEnabled();
 }
 
 void MockInputMethod::AddObserver(InputMethodObserver* observer) {
@@ -113,6 +120,11 @@ void MockInputMethod::AddObserver(InputMethodObserver* observer) {
 
 void MockInputMethod::RemoveObserver(InputMethodObserver* observer) {
   observer_list_.RemoveObserver(observer);
+}
+
+InputMethodKeyboardController*
+MockInputMethod::GetInputMethodKeyboardController() {
+  return &keyboard_controller_;
 }
 
 const std::vector<std::unique_ptr<ui::KeyEvent>>&

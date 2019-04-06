@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
+#include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/simple_enclosed_region.h"
@@ -23,7 +23,8 @@ scoped_refptr<TextureLayer> TextureLayer::CreateForMailbox(
   return scoped_refptr<TextureLayer>(new TextureLayer(client));
 }
 
-TextureLayer::TextureLayer(TextureLayerClient* client) : client_(client) {}
+TextureLayer::TextureLayer(TextureLayerClient* client)
+    : client_(client), weak_ptr_factory_(this) {}
 
 TextureLayer::~TextureLayer() = default;
 
@@ -154,6 +155,15 @@ void TextureLayer::SetLayerTreeHost(LayerTreeHost* host) {
     // commit is called complete.
     SetNextCommitWaitsForActivation();
   }
+  if (host) {
+    // When attached to a new LayerTreHost, all previously registered
+    // SharedBitmapIds will need to be re-sent to the new TextureLayerImpl
+    // representing this layer on the compositor thread.
+    to_register_bitmaps_.insert(
+        std::make_move_iterator(registered_bitmaps_.begin()),
+        std::make_move_iterator(registered_bitmaps_.end()));
+    registered_bitmaps_.clear();
+  }
   Layer::SetLayerTreeHost(host);
 }
 
@@ -166,7 +176,8 @@ bool TextureLayer::Update() {
   if (client_) {
     viz::TransferableResource resource;
     std::unique_ptr<viz::SingleReleaseCallback> release_callback;
-    if (client_->PrepareTransferableResource(&resource, &release_callback)) {
+    if (client_->PrepareTransferableResource(this, &resource,
+                                             &release_callback)) {
       // Already within a commit, no need to do another one immediately.
       bool requires_commit = false;
       SetTransferableResourceInternal(resource, std::move(release_callback),
@@ -181,7 +192,12 @@ bool TextureLayer::Update() {
   return updated || !update_rect().IsEmpty();
 }
 
-bool TextureLayer::IsSnapped() {
+bool TextureLayer::IsSnappedToPixelGridInTarget() {
+  // Often layers are positioned with CSS to "50%", which can often leave them
+  // with a fractional (N + 0.5) pixel position. This would leave them looking
+  // fuzzy, so we request that TextureLayers are snapped to the pixel grid,
+  // since their content is generated externally and we can not adjust for it
+  // inside the content (unlike for PictureLayers).
   return true;
 }
 
@@ -210,6 +226,49 @@ void TextureLayer::PushPropertiesTo(LayerImpl* layer) {
                                            std::move(release_callback));
     needs_set_resource_ = false;
   }
+  for (auto& pair : to_register_bitmaps_)
+    texture_layer->RegisterSharedBitmapId(pair.first, pair.second);
+  // Store the registered SharedBitmapIds in case we get a new TextureLayerImpl,
+  // in a new tree, to re-send them to.
+  registered_bitmaps_.insert(
+      std::make_move_iterator(to_register_bitmaps_.begin()),
+      std::make_move_iterator(to_register_bitmaps_.end()));
+  to_register_bitmaps_.clear();
+  for (const auto& id : to_unregister_bitmap_ids_)
+    texture_layer->UnregisterSharedBitmapId(id);
+  to_unregister_bitmap_ids_.clear();
+}
+
+SharedBitmapIdRegistration TextureLayer::RegisterSharedBitmapId(
+    const viz::SharedBitmapId& id,
+    scoped_refptr<CrossThreadSharedBitmap> bitmap) {
+  DCHECK(to_register_bitmaps_.find(id) == to_register_bitmaps_.end());
+  DCHECK(registered_bitmaps_.find(id) == registered_bitmaps_.end());
+  to_register_bitmaps_[id] = std::move(bitmap);
+  base::Erase(to_unregister_bitmap_ids_, id);
+  // This does not SetNeedsCommit() to be as lazy as possible. Notifying a
+  // SharedBitmapId is not needed until it is used, and using it will require
+  // a commit, so we can wait for that commit before forwarding the
+  // notification instead of forcing it to happen as a side effect of this
+  // method.
+  SetNeedsPushProperties();
+  return SharedBitmapIdRegistration(weak_ptr_factory_.GetWeakPtr(), id);
+}
+
+void TextureLayer::UnregisterSharedBitmapId(viz::SharedBitmapId id) {
+  // If we didn't get to sending the registration to the compositor thread yet,
+  // just remove it.
+  to_register_bitmaps_.erase(id);
+  // Since we also track all previously sent registrations, we must remove that
+  // to in order to prevent re-registering on another LayerTreeHost.
+  registered_bitmaps_.erase(id);
+
+  to_unregister_bitmap_ids_.push_back(id);
+  // Unregistering a SharedBitmapId needs to happen eventually to prevent
+  // leaking the SharedMemory in the display compositor. But this attempts to be
+  // lazy and not force a commit prematurely, so just requests a
+  // PushPropertiesTo() without requesting a commit.
+  SetNeedsPushProperties();
 }
 
 TextureLayer::TransferableResourceHolder::MainThreadReference::
@@ -220,20 +279,40 @@ TextureLayer::TransferableResourceHolder::MainThreadReference::
 
 TextureLayer::TransferableResourceHolder::MainThreadReference::
     ~MainThreadReference() {
+#if DCHECK_IS_ON()
+  {
+    base::AutoLock hold(holder_->posted_internal_derefs_lock_);
+    ++holder_->posted_internal_derefs_;
+  }
+#endif
   holder_->InternalRelease();
 }
 
 TextureLayer::TransferableResourceHolder::TransferableResourceHolder(
     const viz::TransferableResource& resource,
     std::unique_ptr<viz::SingleReleaseCallback> release_callback)
-    : internal_references_(0),
-      resource_(resource),
+    : resource_(resource),
       release_callback_(std::move(release_callback)),
-      sync_token_(resource.mailbox_holder.sync_token),
-      is_lost_(false) {}
+      sync_token_(resource.mailbox_holder.sync_token) {}
 
 TextureLayer::TransferableResourceHolder::~TransferableResourceHolder() {
-  DCHECK_EQ(0u, internal_references_);
+#if DCHECK_IS_ON()
+  {
+    // If the MessageLoop is destroyed while a posted deref is waiting to run,
+    // this object will be destroyed with an internal_references_ still present.
+    // So we must also include the outstanding posted derefences.
+    base::AutoLock hold(posted_internal_derefs_lock_);
+    DCHECK_EQ(internal_references_, posted_internal_derefs_);
+  }
+#endif
+  if (release_callback_) {
+    // We land here if the dereferences are posted but not run and the
+    // MessageLoop is destroyed, destroying those tasks and this object with it.
+    // We run the ReleaseCallback in that case assuming the MessageLoop is being
+    // destroyed on the main thread.
+    DCHECK(main_thread_checker_.CalledOnValidThread());
+    release_callback_->Run(sync_token_, is_lost_);
+  }
 }
 
 std::unique_ptr<TextureLayer::TransferableResourceHolder::MainThreadReference>
@@ -257,7 +336,7 @@ TextureLayer::TransferableResourceHolder::GetCallbackForImplThread(
     scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner) {
   // We can't call GetCallbackForImplThread if we released the main thread
   // reference.
-  DCHECK_GT(internal_references_, 0u);
+  DCHECK_GT(internal_references_, 0);
   InternalAddRef();
   return viz::SingleReleaseCallback::Create(
       base::Bind(&TransferableResourceHolder::ReturnAndReleaseOnImplThread,
@@ -270,6 +349,12 @@ void TextureLayer::TransferableResourceHolder::InternalAddRef() {
 
 void TextureLayer::TransferableResourceHolder::InternalRelease() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
+#if DCHECK_IS_ON()
+  {
+    base::AutoLock hold(posted_internal_derefs_lock_);
+    --posted_internal_derefs_;
+  }
+#endif
   if (!--internal_references_) {
     release_callback_->Run(sync_token_, is_lost_);
     resource_ = viz::TransferableResource();
@@ -282,6 +367,12 @@ void TextureLayer::TransferableResourceHolder::ReturnAndReleaseOnImplThread(
     const gpu::SyncToken& sync_token,
     bool is_lost) {
   Return(sync_token, is_lost);
+#if DCHECK_IS_ON()
+  {
+    base::AutoLock hold(posted_internal_derefs_lock_);
+    ++posted_internal_derefs_;
+  }
+#endif
   main_thread_task_runner->PostTask(
       FROM_HERE,
       base::Bind(&TransferableResourceHolder::InternalRelease, this));

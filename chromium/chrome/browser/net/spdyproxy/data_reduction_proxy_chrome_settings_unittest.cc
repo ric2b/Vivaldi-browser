@@ -7,9 +7,8 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
@@ -25,7 +24,7 @@ using testing::Return;
 class DataReductionProxyChromeSettingsTest : public testing::Test {
  public:
   void SetUp() override {
-    drp_chrome_settings_ = base::MakeUnique<DataReductionProxyChromeSettings>();
+    drp_chrome_settings_ = std::make_unique<DataReductionProxyChromeSettings>();
     test_context_ =
         data_reduction_proxy::DataReductionProxyTestContext::Builder()
             .WithMockConfig()
@@ -33,7 +32,7 @@ class DataReductionProxyChromeSettingsTest : public testing::Test {
             .Build();
     config_ = test_context_->mock_config();
     drp_chrome_settings_->ResetConfigForTest(config_);
-    dict_ = base::MakeUnique<base::DictionaryValue>();
+    dict_ = std::make_unique<base::DictionaryValue>();
 
     PrefRegistrySimple* registry = test_context_->pref_service()->registry();
     registry->RegisterDictionaryPref(proxy_config::prefs::kProxy);

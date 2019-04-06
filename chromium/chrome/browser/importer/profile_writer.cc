@@ -10,7 +10,6 @@
 #include <set>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -49,10 +48,12 @@
 #include "notes/notes_model.h"
 #include "ui/base/l10n/l10n_util.h"
 
-using namespace vivaldi;
-
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
+
+using vivaldi::Notes_Model;
+using vivaldi::NotesModelFactory;
+using vivaldi::Notes_Node;
 
 namespace {
 

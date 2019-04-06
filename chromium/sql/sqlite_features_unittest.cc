@@ -19,10 +19,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/sqlite/sqlite3.h"
 
-#if defined(OS_IOS)
-#include "base/ios/ios_util.h"
-#endif
-
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreServices/CoreServices.h>
@@ -42,7 +38,7 @@ using sql::test::ExecuteWithResults;
 void CaptureErrorCallback(int* error_pointer, std::string* sql_text,
                           int error, sql::Statement* stmt) {
   *error_pointer = error;
-  const char* text = stmt ? stmt->GetSQLStatement() : NULL;
+  const char* text = stmt ? stmt->GetSQLStatement() : nullptr;
   *sql_text = text ? text : "no statement available";
 }
 
@@ -58,7 +54,7 @@ class SQLiteFeaturesTest : public sql::SQLTestBase {
     // The error delegate will set |error_| and |sql_text_| when any sqlite
     // statement operation returns an error code.
     db().set_error_callback(
-        base::Bind(&CaptureErrorCallback, &error_, &sql_text_));
+        base::BindRepeating(&CaptureErrorCallback, &error_, &sql_text_));
   }
 
   void TearDown() override {
@@ -98,12 +94,11 @@ TEST_F(SQLiteFeaturesTest, FTS3) {
   ASSERT_TRUE(db().Execute("CREATE VIRTUAL TABLE foo USING fts3(x)"));
 }
 
-#if !defined(USE_SYSTEM_SQLITE)
 // Originally history used fts2, which Chromium patched to treat "foo*" as a
 // prefix search, though the icu tokenizer would return it as two tokens {"foo",
 // "*"}.  Test that fts3 works correctly.
 TEST_F(SQLiteFeaturesTest, FTS3_Prefix) {
-  const char kCreateSql[] =
+  static const char kCreateSql[] =
       "CREATE VIRTUAL TABLE foo USING fts3(x, tokenize icu)";
   ASSERT_TRUE(db().Execute(kCreateSql));
 
@@ -112,9 +107,7 @@ TEST_F(SQLiteFeaturesTest, FTS3_Prefix) {
   EXPECT_EQ("test",
             ExecuteWithResult(&db(), "SELECT x FROM foo WHERE x MATCH 'te*'"));
 }
-#endif
 
-#if !defined(USE_SYSTEM_SQLITE)
 // Verify that Chromium's SQLite is compiled with HAVE_USLEEP defined.  With
 // HAVE_USLEEP, SQLite uses usleep() with millisecond granularity.  Otherwise it
 // uses sleep() with second granularity.
@@ -128,7 +121,6 @@ TEST_F(SQLiteFeaturesTest, UsesUsleep) {
   // 1ms, with the rest at 2ms, and the worst observed cases was ASAN at 7ms.
   EXPECT_LT(delta.InMilliseconds(), 1000);
 }
-#endif
 
 // Ensure that our SQLite version has working foreign key support with cascade
 // delete support.
@@ -139,49 +131,62 @@ TEST_F(SQLiteFeaturesTest, ForeignKeySupport) {
       "CREATE TABLE children ("
       "    id INTEGER PRIMARY KEY,"
       "    pid INTEGER NOT NULL REFERENCES parents(id) ON DELETE CASCADE)"));
-  const char kSelectParents[] = "SELECT * FROM parents ORDER BY id";
-  const char kSelectChildren[] = "SELECT * FROM children ORDER BY id";
+  static const char kSelectParentsSql[] = "SELECT * FROM parents ORDER BY id";
+  static const char kSelectChildrenSql[] = "SELECT * FROM children ORDER BY id";
 
   // Inserting without a matching parent should fail with constraint violation.
-  // Mask off any extended error codes for USE_SYSTEM_SQLITE.
-  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectParents));
+  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectParentsSql));
   const int insert_error =
       db().ExecuteAndReturnErrorCode("INSERT INTO children VALUES (10, 1)");
-  EXPECT_EQ(SQLITE_CONSTRAINT, (insert_error & 0xff));
-  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectChildren));
+  EXPECT_EQ(SQLITE_CONSTRAINT | SQLITE_CONSTRAINT_FOREIGNKEY, insert_error);
+  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectChildrenSql));
 
   // Inserting with a matching parent should work.
   ASSERT_TRUE(db().Execute("INSERT INTO parents VALUES (1)"));
-  EXPECT_EQ("1", ExecuteWithResults(&db(), kSelectParents, "|", "\n"));
+  EXPECT_EQ("1", ExecuteWithResults(&db(), kSelectParentsSql, "|", "\n"));
   EXPECT_TRUE(db().Execute("INSERT INTO children VALUES (11, 1)"));
   EXPECT_TRUE(db().Execute("INSERT INTO children VALUES (12, 1)"));
   EXPECT_EQ("11|1\n12|1",
-            ExecuteWithResults(&db(), kSelectChildren, "|", "\n"));
+            ExecuteWithResults(&db(), kSelectChildrenSql, "|", "\n"));
 
   // Deleting the parent should cascade, deleting the children as well.
   ASSERT_TRUE(db().Execute("DELETE FROM parents"));
-  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectParents));
-  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectChildren));
+  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectParentsSql));
+  EXPECT_EQ("", ExecuteWithResult(&db(), kSelectChildrenSql));
 }
 
-#if defined(OS_IOS) || defined(OS_FUCHSIA)
+// Ensure that our SQLite version supports booleans.
+TEST_F(SQLiteFeaturesTest, BooleanSupport) {
+  ASSERT_TRUE(
+      db().Execute("CREATE TABLE flags ("
+                   "    id INTEGER PRIMARY KEY,"
+                   "    true_flag BOOL NOT NULL DEFAULT TRUE,"
+                   "    false_flag BOOL NOT NULL DEFAULT FALSE)"));
+  ASSERT_TRUE(db().Execute(
+      "ALTER TABLE flags ADD COLUMN true_flag2 BOOL NOT NULL DEFAULT TRUE"));
+  ASSERT_TRUE(db().Execute(
+      "ALTER TABLE flags ADD COLUMN false_flag2 BOOL NOT NULL DEFAULT FALSE"));
+  ASSERT_TRUE(db().Execute("INSERT INTO flags (id) VALUES (1)"));
+
+  sql::Statement s(db().GetUniqueStatement(
+      "SELECT true_flag, false_flag, true_flag2, false_flag2"
+      "    FROM flags WHERE id=1;"));
+  ASSERT_TRUE(s.Step());
+
+  EXPECT_TRUE(s.ColumnBool(0)) << " default TRUE at table creation time";
+  EXPECT_TRUE(!s.ColumnBool(1)) << " default FALSE at table creation time";
+
+  EXPECT_TRUE(s.ColumnBool(2)) << " default TRUE added by altering the table";
+  EXPECT_TRUE(!s.ColumnBool(3)) << " default FALSE added by altering the table";
+}
+
+#if defined(OS_FUCHSIA)
 // If the platform cannot support SQLite mmap'ed I/O, make sure SQLite isn't
 // offering to support it.
 TEST_F(SQLiteFeaturesTest, NoMmap) {
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  if (base::ios::IsRunningOnIOS10OrLater()) {
-    // iOS 10 added mmap support for sqlite.
-    return;
-  }
-#endif
-
   // For recent versions of SQLite, SQLITE_MAX_MMAP_SIZE=0 can be used to
   // disable mmap support.  Alternately, sqlite3_config() could be used.  In
   // that case, the pragma will run successfully, but the size will always be 0.
-  //
-  // The SQLite embedded in older iOS releases predates the addition of mmap
-  // support.  In that case the pragma will run without error, but no results
-  // are returned when querying the value.
   //
   // MojoVFS implements a no-op for xFileControl().  PRAGMA mmap_size is
   // implemented in terms of SQLITE_FCNTL_MMAP_SIZE.  In that case, the pragma
@@ -190,7 +195,7 @@ TEST_F(SQLiteFeaturesTest, NoMmap) {
   sql::Statement s(db().GetUniqueStatement("PRAGMA mmap_size"));
   ASSERT_TRUE(!s.Step() || !s.ColumnInt64(0));
 }
-#endif  // defined(OS_IOS) || defined(OS_FUCHSIA)
+#endif  // defined(OS_FUCHSIA)
 
 #if !defined(OS_FUCHSIA)
 // Verify that OS file writes are reflected in the memory mapping of a
@@ -200,30 +205,13 @@ TEST_F(SQLiteFeaturesTest, NoMmap) {
 // version doesn't reflect the OS file writes, SQLite's memory-mapped I/O should
 // be disabled on this platform using SQLITE_MAX_MMAP_SIZE=0.
 TEST_F(SQLiteFeaturesTest, Mmap) {
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // iOS9's sqlite does not support mmap, so this test must be skipped.
-    return;
-  }
-#endif
-
   // Try to turn on mmap'ed I/O.
   ignore_result(db().Execute("PRAGMA mmap_size = 1048576"));
   {
     sql::Statement s(db().GetUniqueStatement("PRAGMA mmap_size"));
 
-#if !defined(USE_SYSTEM_SQLITE)
-    // With Chromium's version of SQLite, the setting should always be non-zero.
     ASSERT_TRUE(s.Step());
     ASSERT_GT(s.ColumnInt64(0), 0);
-#else
-    // With the system SQLite, don't verify underlying mmap functionality if the
-    // SQLite is too old to support mmap, or if mmap is disabled (see NoMmap
-    // test).  USE_SYSTEM_SQLITE is not bundled into the NoMmap case because
-    // whether mmap is enabled or not is outside of Chromium's control.
-    if (!s.Step() || !s.ColumnInt64(0))
-      return;
-#endif
   }
   db().Close();
 
@@ -293,7 +281,7 @@ TEST_F(SQLiteFeaturesTest, CachedRegexp) {
   ASSERT_TRUE(db().Execute("INSERT INTO r VALUES (3, 'this is a stickup')"));
   ASSERT_TRUE(db().Execute("INSERT INTO r VALUES (4, 'that sucks')"));
 
-  const char* kSimpleSql = "SELECT SUM(id) FROM r WHERE x REGEXP ?";
+  static const char kSimpleSql[] = "SELECT SUM(id) FROM r WHERE x REGEXP ?";
   sql::Statement s(db().GetCachedStatement(SQL_FROM_HERE, kSimpleSql));
 
   s.BindString(0, "this.*");
@@ -343,8 +331,8 @@ TEST_F(SQLiteFeaturesTest, DISABLED_TimeMachine) {
   base::ScopedCFTypeRef<CFURLRef> journalURL(CFURLRefForPath(journal));
 
   // Not excluded to start.
-  EXPECT_FALSE(CSBackupIsItemExcluded(dbURL, NULL));
-  EXPECT_FALSE(CSBackupIsItemExcluded(journalURL, NULL));
+  EXPECT_FALSE(CSBackupIsItemExcluded(dbURL, nullptr));
+  EXPECT_FALSE(CSBackupIsItemExcluded(journalURL, nullptr));
 
   // Exclude the main database file.
   EXPECT_TRUE(base::mac::SetFileBackupExclusion(db_path()));
@@ -352,7 +340,7 @@ TEST_F(SQLiteFeaturesTest, DISABLED_TimeMachine) {
   Boolean excluded_by_path = FALSE;
   EXPECT_TRUE(CSBackupIsItemExcluded(dbURL, &excluded_by_path));
   EXPECT_FALSE(excluded_by_path);
-  EXPECT_FALSE(CSBackupIsItemExcluded(journalURL, NULL));
+  EXPECT_FALSE(CSBackupIsItemExcluded(journalURL, nullptr));
 
   EXPECT_TRUE(db().Open(db_path()));
   ASSERT_TRUE(db().Execute("INSERT INTO t VALUES (1)"));
@@ -366,7 +354,6 @@ TEST_F(SQLiteFeaturesTest, DISABLED_TimeMachine) {
 }
 #endif
 
-#if !defined(USE_SYSTEM_SQLITE)
 // Test that Chromium's patch to make auto_vacuum integrate with
 // SQLITE_FCNTL_CHUNK_SIZE is working.
 TEST_F(SQLiteFeaturesTest, SmartAutoVacuum) {
@@ -377,7 +364,7 @@ TEST_F(SQLiteFeaturesTest, SmartAutoVacuum) {
   ASSERT_TRUE(db().Execute("VACUUM"));
 
   // Code-coverage of the PRAGMA set/get implementation.
-  const char kPragmaSql[] = "PRAGMA auto_vacuum_slack_pages";
+  static const char kPragmaSql[] = "PRAGMA auto_vacuum_slack_pages";
   ASSERT_EQ("0", sql::test::ExecuteWithResult(&db(), kPragmaSql));
   ASSERT_TRUE(db().Execute("PRAGMA auto_vacuum_slack_pages = 4"));
   ASSERT_EQ("4", sql::test::ExecuteWithResult(&db(), kPragmaSql));
@@ -390,10 +377,13 @@ TEST_F(SQLiteFeaturesTest, SmartAutoVacuum) {
   // overflow page, plus a small header in a b-tree node.  An empty table takes
   // a single page, so for small row counts each insert will add one page, and
   // each delete will remove one page.
-  const char kCreateSql[] = "CREATE TABLE t (id INTEGER PRIMARY KEY, value)";
-  const char kInsertSql[] = "INSERT INTO t (value) VALUES (randomblob(980))";
+  static const char kCreateSql[] =
+      "CREATE TABLE t (id INTEGER PRIMARY KEY, value)";
+  static const char kInsertSql[] =
+      "INSERT INTO t (value) VALUES (randomblob(980))";
 #if !defined(OS_WIN)
-  const char kDeleteSql[] = "DELETE FROM t WHERE id = (SELECT MIN(id) FROM t)";
+  static const char kDeleteSql[] =
+      "DELETE FROM t WHERE id = (SELECT MIN(id) FROM t)";
 #endif
 
   // This database will be 34 overflow pages plus the table's root page plus the
@@ -456,9 +446,8 @@ TEST_F(SQLiteFeaturesTest, SmartAutoVacuum) {
   }
 #endif
 }
-#endif  // !defined(USE_SYSTEM_SQLITE)
 
-#if !defined(USE_SYSTEM_SQLITE) && !defined(OS_FUCHSIA)
+#if !defined(OS_FUCHSIA)
 // SQLite WAL mode defaults to checkpointing the WAL on close.  This would push
 // additional work into Chromium shutdown.  Verify that SQLite supports a config
 // option to not checkpoint on close.
@@ -481,9 +470,9 @@ TEST_F(SQLiteFeaturesTest, WALNoClose) {
   ASSERT_TRUE(Reopen());
   ASSERT_TRUE(db().Execute("PRAGMA journal_mode = WAL"));
   ASSERT_TRUE(db().Execute("ALTER TABLE foo ADD COLUMN c"));
-  ASSERT_EQ(
-      SQLITE_OK,
-      sqlite3_db_config(db().db_, SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, 1, NULL));
+  ASSERT_EQ(SQLITE_OK,
+            sqlite3_db_config(db().db_, SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, 1,
+                              nullptr));
   ASSERT_TRUE(GetPathExists(wal_path));
   db().Close();
   ASSERT_TRUE(GetPathExists(wal_path));

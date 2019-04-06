@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 
 namespace media {
 
@@ -46,7 +46,7 @@ AliveChecker::AliveChecker(
     PowerObserverHelperFactoryCallback power_observer_helper_factory_callback)
     : check_interval_(check_interval),
       timeout_(timeout),
-      task_runner_(base::MessageLoop::current()->task_runner()),
+      task_runner_(base::MessageLoopCurrent::Get()->task_runner()),
       dead_callback_(std::move(dead_callback)),
       stop_at_first_alive_notification_(stop_at_first_alive_notification),
       weak_factory_(this) {
@@ -62,14 +62,14 @@ AliveChecker::AliveChecker(
     // PowerObserverHelper) is destroyed on.
     if (power_observer_helper_factory_callback.is_null()) {
       power_observer_ = std::make_unique<PowerObserverHelper>(
-          task_runner_, base::Bind(&base::DoNothing),
+          task_runner_, base::DoNothing(),
           base::Bind(
               &AliveChecker::SetLastAliveNotificationTimeToNowOnTaskRunner,
               base::Unretained(this)));
     } else {
       power_observer_ =
           std::move(power_observer_helper_factory_callback)
-              .Run(task_runner_, base::Bind(&base::DoNothing),
+              .Run(task_runner_, base::DoNothing(),
                    base::Bind(&AliveChecker::
                                   SetLastAliveNotificationTimeToNowOnTaskRunner,
                               base::Unretained(this)));

@@ -10,10 +10,12 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -31,12 +33,12 @@ LanguagesHandler::~LanguagesHandler() {
 void LanguagesHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "getProspectiveUILanguage",
-      base::Bind(&LanguagesHandler::HandleGetProspectiveUILanguage,
-                 base::Unretained(this)));
+      base::BindRepeating(&LanguagesHandler::HandleGetProspectiveUILanguage,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "setProspectiveUILanguage",
-      base::Bind(&LanguagesHandler::HandleSetProspectiveUILanguage,
-                 base::Unretained(this)));
+      base::BindRepeating(&LanguagesHandler::HandleSetProspectiveUILanguage,
+                          base::Unretained(this)));
 }
 
 void LanguagesHandler::HandleGetProspectiveUILanguage(
@@ -49,12 +51,12 @@ void LanguagesHandler::HandleGetProspectiveUILanguage(
   std::string locale;
 #if defined(OS_CHROMEOS)
   // On Chrome OS, an individual profile may have a preferred locale.
-  locale = profile_->GetPrefs()->GetString(prefs::kApplicationLocale);
+  locale = profile_->GetPrefs()->GetString(language::prefs::kApplicationLocale);
 #endif  // defined(OS_CHROMEOS)
 
   if (locale.empty()) {
-    locale =
-        g_browser_process->local_state()->GetString(prefs::kApplicationLocale);
+    locale = g_browser_process->local_state()->GetString(
+        language::prefs::kApplicationLocale);
   }
 
   ResolveJavascriptCallback(*callback_id, base::Value(locale));
@@ -68,9 +70,17 @@ void LanguagesHandler::HandleSetProspectiveUILanguage(
   std::string language_code;
   CHECK(args->GetString(0, &language_code));
 
+#if defined(OS_CHROMEOS)
+  // check if prospectiveUILanguage is allowed by policy (AllowedUILocales)
+  if (!chromeos::locale_util::IsAllowedUILocale(language_code,
+                                                profile_->GetPrefs())) {
+    return;
+  }
+#endif
+
 #if defined(OS_WIN)
   PrefService* prefs = g_browser_process->local_state();
-  prefs->SetString(prefs::kApplicationLocale, language_code);
+  prefs->SetString(language::prefs::kApplicationLocale, language_code);
 #elif defined(OS_CHROMEOS)
   // Secondary users and public session users cannot change the locale.
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();

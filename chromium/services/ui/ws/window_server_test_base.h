@@ -9,6 +9,7 @@
 #include <set>
 
 #include "base/macros.h"
+#include "base/test/scoped_feature_list.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/window_server_service_test_base.h"
@@ -82,6 +83,7 @@ class WindowServerTestBase : public WindowServerServiceTestBase,
   void OnLostConnection(aura::WindowTreeClient* client) override;
   void OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
+                              int64_t display_id,
                               aura::Window* target) override;
   aura::PropertyConverter* GetPropertyConverter() override;
 
@@ -104,7 +106,7 @@ class WindowServerTestBase : public WindowServerServiceTestBase,
   void OnWmClientJankinessChanged(const std::set<aura::Window*>& client_windows,
                                   bool not_responding) override;
   void OnWmBuildDragImage(const gfx::Point& screen_location,
-                          const SkBitmap& drag_image,
+                          const gfx::ImageSkia& drag_image,
                           const gfx::Vector2d& drag_image_offset,
                           ui::mojom::PointerKind source) override {}
   void OnWmMoveDragImage(const gfx::Point& screen_location) override {}
@@ -117,8 +119,7 @@ class WindowServerTestBase : public WindowServerServiceTestBase,
   mojom::EventResult OnAccelerator(
       uint32_t accelerator_id,
       const ui::Event& event,
-      std::unordered_map<std::string, std::vector<uint8_t>>* properties)
-      override;
+      base::flat_map<std::string, std::vector<uint8_t>>* properties) override;
   void OnCursorTouchVisibleChanged(bool enabled) override;
   void OnWmPerformMoveLoop(aura::Window* window,
                            mojom::MoveLoopSource source,
@@ -140,6 +141,8 @@ class WindowServerTestBase : public WindowServerServiceTestBase,
   // Returns true on success, and false if not found, in which case
   // |window_tree_host| is not deleted.
   bool DeleteWindowTreeHost(aura::WindowTreeHostMus* window_tree_host);
+
+  base::test::ScopedFeatureList feature_list_;
 
   std::unique_ptr<aura::Env> env_;
   ::wm::WMState wm_state_;

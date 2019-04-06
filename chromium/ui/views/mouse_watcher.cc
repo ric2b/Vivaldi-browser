@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
-#include "base/event_types.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -16,6 +15,7 @@
 #include "ui/events/event_constants.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/event_utils.h"
+#include "ui/events/platform_event.h"
 #include "ui/views/event_monitor.h"
 
 namespace views {
@@ -64,8 +64,9 @@ class MouseWatcher::Observer : public ui::EventHandler {
         // Mouse moved outside the host's zone, start a timer to notify the
         // listener.
         base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-            FROM_HERE, base::Bind(&Observer::NotifyListener,
-                                  notify_listener_factory_.GetWeakPtr()),
+            FROM_HERE,
+            base::BindOnce(&Observer::NotifyListener,
+                           notify_listener_factory_.GetWeakPtr()),
             event_type == MouseWatcherHost::MOUSE_MOVE
                 ? base::TimeDelta::FromMilliseconds(kNotifyListenerTimeMs)
                 : mouse_watcher_->notify_on_exit_time_);

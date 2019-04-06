@@ -9,27 +9,24 @@
 namespace autofill {
 
 Suggestion::Suggestion()
-    : frontend_id(0),
-      match(PREFIX_MATCH),
-      is_value_bold(false) {
-}
+    : frontend_id(0), match(PREFIX_MATCH), is_value_secondary(false) {}
 
 Suggestion::Suggestion(const Suggestion& other)
     : backend_id(other.backend_id),
       frontend_id(other.frontend_id),
       value(other.value),
       label(other.label),
+      additional_label(other.additional_label),
+      custom_icon(other.custom_icon),
       icon(other.icon),
       match(other.match),
-      is_value_bold(other.is_value_bold) {
-}
+      is_value_secondary(other.is_value_secondary) {}
 
 Suggestion::Suggestion(const base::string16& v)
     : frontend_id(0),
       value(v),
       match(PREFIX_MATCH),
-      is_value_bold(false) {
-}
+      is_value_secondary(false) {}
 
 Suggestion::Suggestion(const std::string& v,
                        const std::string& l,
@@ -40,10 +37,8 @@ Suggestion::Suggestion(const std::string& v,
       label(base::UTF8ToUTF16(l)),
       icon(base::UTF8ToUTF16(i)),
       match(PREFIX_MATCH),
-      is_value_bold(false) {
-}
+      is_value_secondary(false) {}
 
-Suggestion::~Suggestion() {
-}
+Suggestion::~Suggestion() = default;
 
 }  // namespace autofill

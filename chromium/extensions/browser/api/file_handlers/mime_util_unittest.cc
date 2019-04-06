@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/extensions_test.h"
@@ -51,8 +50,7 @@ storage::FileSystemURL CreateNativeLocalFileSystemURL(
 
 class FileHandlersMimeUtilTest : public ExtensionsTest {
  protected:
-  FileHandlersMimeUtilTest()
-      : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {}
+  FileHandlersMimeUtilTest() {}
   ~FileHandlersMimeUtilTest() override {}
 
   void SetUp() override {
@@ -60,11 +58,17 @@ class FileHandlersMimeUtilTest : public ExtensionsTest {
     file_system_context_ = content::CreateFileSystemContextForTesting(
         NULL, browser_context()->GetPath());
 
-    EXPECT_TRUE(base::CreateTemporaryFile(&html_mime_file_path_));
+    base::FilePath temp_filename;
+    EXPECT_TRUE(base::CreateTemporaryFile(&temp_filename));
     const std::string kSampleContent = "<html><body></body></html>";
     EXPECT_EQ(static_cast<int>(kSampleContent.size()),
-              base::WriteFile(html_mime_file_path_, kSampleContent.c_str(),
+              base::WriteFile(temp_filename, kSampleContent.c_str(),
                               kSampleContent.size()));
+    // File path must end in .html to avoid relying upon MIME-sniffing, which
+    // is disabled for HTML files delivered from file:// URIs.
+    html_mime_file_path_ =
+        temp_filename.AddExtension(FILE_PATH_LITERAL(".html"));
+    EXPECT_TRUE(base::Move(temp_filename, html_mime_file_path_));
   }
 
   ExtensionsAPIClient extensions_api_client_;

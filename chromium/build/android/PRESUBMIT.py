@@ -35,7 +35,8 @@ def CommonChecks(input_api, output_api):
           J('..', '..', 'third_party', 'catapult', 'common', 'py_trace_event'),
           J('..', '..', 'third_party', 'catapult', 'common', 'py_utils'),
           J('..', '..', 'third_party', 'catapult', 'devil'),
-          J('..', '..', 'third_party', 'catapult', 'tracing')
+          J('..', '..', 'third_party', 'catapult', 'tracing'),
+          J('..', '..', 'third_party', 'depot_tools'),
       ]))
   output.extend(input_api.canned_checks.RunPylint(
       input_api,
@@ -57,8 +58,10 @@ def CommonChecks(input_api, output_api):
       output_api,
       unit_tests=[
           J('.', 'emma_coverage_stats_test.py'),
+          J('gyp', 'util', 'build_utils_test.py'),
           J('gyp', 'util', 'md5_check_test.py'),
           J('play_services', 'update_test.py'),
+          J('pylib', 'constants', 'host_paths_unittest.py'),
           J('pylib', 'gtest', 'gtest_test_instance_test.py'),
           J('pylib', 'instrumentation',
             'instrumentation_test_instance_test.py'),
@@ -69,6 +72,7 @@ def CommonChecks(input_api, output_api):
           J('pylib', 'output', 'noop_output_manager_test.py'),
           J('pylib', 'output', 'remote_output_manager_test.py'),
           J('pylib', 'results', 'json_results_test.py'),
+          J('pylib', 'symbols', 'apk_native_libs_unittest.py'),
           J('pylib', 'symbols', 'elf_symbolizer_unittest.py'),
           J('pylib', 'utils', 'decorators_test.py'),
           J('pylib', 'utils', 'device_dependencies_test.py'),

@@ -9,10 +9,13 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/strings/sys_string_conversions.h"
 #include "content/public/common/content_switches.h"
 #include "content/shell/app/paths_mac.h"
+#include "content/shell/browser/shell_application_mac.h"
 #include "content/shell/common/shell_switches.h"
 
 namespace content {
@@ -28,15 +31,15 @@ void EnsureCorrectResolutionSettings() {
       [[NSMutableDictionary alloc]
           initWithContentsOfFile:base::mac::FilePathToNSString(info_plist)]);
 
-  bool running_layout_tests = switches::IsRunLayoutTestSwitchPresent();
+  bool running_web_tests = switches::IsRunWebTestsSwitchPresent();
   bool not_high_resolution_capable =
       [info_dict objectForKey:kHighResolutionCapable] &&
       [[info_dict objectForKey:kHighResolutionCapable] isEqualToNumber:@(NO)];
-  if (running_layout_tests == not_high_resolution_capable)
+  if (running_web_tests == not_high_resolution_capable)
     return;
 
   // We need to update our Info.plist before we can continue.
-  [info_dict setObject:@(!running_layout_tests) forKey:kHighResolutionCapable];
+  [info_dict setObject:@(!running_web_tests) forKey:kHighResolutionCapable];
   CHECK([info_dict writeToFile:base::mac::FilePathToNSString(info_plist)
                     atomically:YES]);
 
@@ -48,6 +51,17 @@ void EnsureCorrectResolutionSettings() {
   argv[original_argv.size()] = NULL;
 
   CHECK(execvp(argv[0], argv));
+}
+
+void OverrideBundleID() {
+  NSBundle* bundle = base::mac::OuterBundle();
+  base::mac::SetBaseBundleID(
+      base::SysNSStringToUTF8([bundle bundleIdentifier]).c_str());
+}
+
+void RegisterShellCrApp() {
+  // Force the NSApplication subclass to be used.
+  [ShellCrApplication sharedApplication];
 }
 
 }  // namespace content

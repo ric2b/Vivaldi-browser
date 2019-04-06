@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/autofill/core/browser/autofill_country.h"
@@ -120,13 +121,13 @@ base::string16 AutofillPaymentInstrument::GetSublabel() const {
 }
 
 bool AutofillPaymentInstrument::IsValidForModifier(
-    const std::vector<std::string>& methods,
+    const std::string& method,
     bool supported_networks_specified,
     const std::set<std::string>& supported_networks,
     bool supported_types_specified,
     const std::set<autofill::CreditCard::CardType>& supported_types) const {
   // This instrument only matches basic-card.
-  if (std::find(methods.begin(), methods.end(), "basic-card") == methods.end())
+  if (method != "basic-card")
     return false;
 
   // If supported_types is not specified and this instrument matches the method,

@@ -5,7 +5,8 @@
 #include "ash/system/bluetooth/tray_bluetooth_helper.h"
 
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_controller.h"
+#include "ash/system/bluetooth/bluetooth_power_controller.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -14,6 +15,7 @@
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
+#include "device/bluetooth/chromeos/bluetooth_utils.h"
 
 namespace ash {
 namespace {
@@ -75,22 +77,12 @@ void TrayBluetoothHelper::InitializeOnAdapterReady(
 
 BluetoothDeviceList TrayBluetoothHelper::GetAvailableBluetoothDevices() const {
   BluetoothDeviceList device_list;
-  device::BluetoothAdapter::DeviceList devices = adapter_->GetDevices();
-  for (device::BluetoothDevice* device : devices) {
-    if (device_list.size() == kMaximumDevicesShown)
-      break;
-
-    if (device->IsPaired() || device->IsConnecting())
-      device_list.push_back(GetBluetoothDeviceInfo(device));
-  }
-
-  for (device::BluetoothDevice* device : devices) {
-    if (device_list.size() == kMaximumDevicesShown)
-      break;
-
-    if (!device->IsPaired() && !device->IsConnecting())
-      device_list.push_back(GetBluetoothDeviceInfo(device));
-  }
+  device::BluetoothAdapter::DeviceList devices =
+      device::FilterBluetoothDeviceList(adapter_->GetDevices(),
+                                        device::BluetoothFilterType::KNOWN,
+                                        kMaximumDevicesShown);
+  for (device::BluetoothDevice* device : devices)
+    device_list.push_back(GetBluetoothDeviceInfo(device));
 
   return device_list;
 }
@@ -115,7 +107,7 @@ void TrayBluetoothHelper::StopBluetoothDiscovering() {
     return;
   }
   VLOG(1) << "Stopping Bluetooth device discovery session.";
-  discovery_session_->Stop(base::Bind(&base::DoNothing),
+  discovery_session_->Stop(base::DoNothing(),
                            base::Bind(&BluetoothSetDiscoveringError));
 }
 
@@ -130,12 +122,12 @@ void TrayBluetoothHelper::ConnectToBluetoothDevice(const std::string& address) {
   if (device->IsPaired() || !device->IsPairable()) {
     base::RecordAction(
         base::UserMetricsAction("StatusArea_Bluetooth_Connect_Known"));
-    device->Connect(NULL, base::Bind(&base::DoNothing),
+    device->Connect(NULL, base::DoNothing(),
                     base::Bind(&BluetoothDeviceConnectError));
     return;
   }
   // Show pairing dialog for the unpaired device.
-  Shell::Get()->system_tray_controller()->ShowBluetoothPairingDialog(
+  Shell::Get()->system_tray_model()->client_ptr()->ShowBluetoothPairingDialog(
       device->GetAddress(), device->GetNameForDisplay(), device->IsPaired(),
       device->IsConnected());
 }
@@ -146,6 +138,15 @@ bool TrayBluetoothHelper::GetBluetoothAvailable() {
 
 bool TrayBluetoothHelper::GetBluetoothEnabled() {
   return adapter_ && adapter_->IsPowered();
+}
+
+void TrayBluetoothHelper::SetBluetoothEnabled(bool enabled) {
+  if (GetBluetoothEnabled() != enabled) {
+    Shell::Get()->metrics()->RecordUserMetricsAction(
+        enabled ? UMA_STATUS_AREA_BLUETOOTH_ENABLED
+                : UMA_STATUS_AREA_BLUETOOTH_DISABLED);
+  }
+  Shell::Get()->bluetooth_power_controller()->SetBluetoothEnabled(enabled);
 }
 
 bool TrayBluetoothHelper::HasBluetoothDiscoverySession() {

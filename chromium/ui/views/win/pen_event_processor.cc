@@ -4,7 +4,6 @@
 
 #include "pen_event_processor.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "ui/events/event_utils.h"
 
@@ -19,12 +18,6 @@ int GetFlagsFromPointerMessage(UINT message, const POINTER_INFO& pointer_info) {
   if (pointer_info.pointerFlags & POINTER_FLAG_SECONDBUTTON)
     flags |= ui::EF_RIGHT_MOUSE_BUTTON;
 
-  if (message == WM_POINTERUP) {
-    if (pointer_info.ButtonChangeType == POINTER_CHANGE_SECONDBUTTON_UP)
-      flags |= ui::EF_RIGHT_MOUSE_BUTTON;
-    else
-      flags |= ui::EF_LEFT_MOUSE_BUTTON;
-  }
   return flags;
 }
 
@@ -48,11 +41,17 @@ std::unique_ptr<ui::Event> PenEventProcessor::GenerateEvent(
   // the WM_POINTER message and then setting up an associated pointer
   // details in the MouseEvent which contains the pen's information.
   ui::EventPointerType input_type = ui::EventPointerType::POINTER_TYPE_PEN;
-  // TODO(lanwei): penFlags of PEN_FLAG_INVERTED may also indicate we are using
-  // an eraser, but it is under debate. Please see
-  // https://github.com/w3c/pointerevents/issues/134/.
-  if (pointer_pen_info.penFlags & PEN_FLAG_ERASER)
+  // For the pointerup event, the penFlags is not set to PEN_FLAG_ERASER, so we
+  // have to check if previously the pointer type is an eraser.
+  if (pointer_pen_info.penFlags & PEN_FLAG_ERASER) {
     input_type = ui::EventPointerType::POINTER_TYPE_ERASER;
+    DCHECK(eraser_pointer_id_ == -1 || eraser_pointer_id_ == mapped_pointer_id);
+    eraser_pointer_id_ = mapped_pointer_id;
+  } else if (eraser_pointer_id_ == mapped_pointer_id &&
+             message == WM_POINTERUP) {
+    input_type = ui::EventPointerType::POINTER_TYPE_ERASER;
+    eraser_pointer_id_ = -1;
+  }
 
   // convert pressure into a float [0, 1]. The range of the pressure is
   // [0, 1024] as specified on MSDN.
@@ -122,10 +121,13 @@ std::unique_ptr<ui::Event> PenEventProcessor::GenerateMouseEvent(
       break;
     case WM_POINTERUP:
       event_type = ui::ET_MOUSE_RELEASED;
-      if (pointer_info.ButtonChangeType == POINTER_CHANGE_FIRSTBUTTON_UP)
+      if (pointer_info.ButtonChangeType == POINTER_CHANGE_FIRSTBUTTON_UP) {
+        flag |= ui::EF_LEFT_MOUSE_BUTTON;
         changed_flag = ui::EF_LEFT_MOUSE_BUTTON;
-      else
+      } else {
+        flag |= ui::EF_RIGHT_MOUSE_BUTTON;
         changed_flag = ui::EF_RIGHT_MOUSE_BUTTON;
+      }
       id_generator_->ReleaseNumber(pointer_id);
       click_count = 1;
       if (!sent_mouse_down_)
@@ -187,11 +189,12 @@ std::unique_ptr<ui::Event> PenEventProcessor::GenerateTouchEvent(
   int rotation_angle = static_cast<int>(pointer_details.twist) % 180;
   if (rotation_angle < 0)
     rotation_angle += 180;
-  std::unique_ptr<ui::Event> event = std::make_unique<ui::TouchEvent>(
+  std::unique_ptr<ui::TouchEvent> event = std::make_unique<ui::TouchEvent>(
       event_type, point, event_time, pointer_details,
       flags | ui::GetModifiersFromKeyState(), rotation_angle);
+  event->set_hovering(event_type == ui::ET_TOUCH_RELEASED);
   event->latency()->AddLatencyNumberWithTimestamp(
-      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0, event_time, 1);
+      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, event_time, 1);
   return event;
 }
 

@@ -9,8 +9,11 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
 
 namespace resource_coordinator {
+
+using ::mojom::LifecycleUnitState;
 
 // Observes a LifecycleUnit to record metrics.
 class DiscardMetricsLifecycleUnitObserver : public LifecycleUnitObserver {
@@ -19,12 +22,16 @@ class DiscardMetricsLifecycleUnitObserver : public LifecycleUnitObserver {
   ~DiscardMetricsLifecycleUnitObserver() override;
 
   // LifecycleUnitObserver:
-  void OnLifecycleUnitStateChanged(LifecycleUnit* lifecycle_unit) override;
+  void OnLifecycleUnitStateChanged(
+      LifecycleUnit* lifecycle_unit,
+      LifecycleUnitState last_state,
+      LifecycleUnitStateChangeReason reason) override;
   void OnLifecycleUnitDestroyed(LifecycleUnit* lifecycle_unit) override;
 
  private:
   // Invoked when the LifecycleUnit is discarded.
-  void OnDiscard(LifecycleUnit* lifecycle_unit);
+  void OnDiscard(LifecycleUnit* lifecycle_unit,
+                 LifecycleUnitStateChangeReason reason);
 
   // Invoked when the LifecycleUnit is reloaded.
   void OnReload();
@@ -35,6 +42,10 @@ class DiscardMetricsLifecycleUnitObserver : public LifecycleUnitObserver {
 
   // The last time at which the LifecycleUnit was discarded.
   base::TimeTicks discard_time_;
+
+  // The last discard reason.
+  LifecycleUnitStateChangeReason discard_reason_ =
+      LifecycleUnitStateChangeReason::BROWSER_INITIATED;
 
   // The last time at which the LifecycleUnit was reloaded after being
   // discarded.

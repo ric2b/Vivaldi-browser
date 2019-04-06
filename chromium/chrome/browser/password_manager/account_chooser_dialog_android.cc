@@ -152,7 +152,8 @@ void AccountChooserDialogAndroid::ShowDialog() {
   network::mojom::URLLoaderFactory* loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(
           Profile::FromBrowserContext(web_contents_->GetBrowserContext()))
-          ->GetURLLoaderFactoryForBrowserProcess();
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get();
   int avatar_index = 0;
   for (const auto& form : local_credentials_forms())
     FetchAvatar(dialog_jobject_, form.get(), avatar_index++, loader_factory);
@@ -194,12 +195,15 @@ void AccountChooserDialogAndroid::WebContentsDestroyed() {
   Java_AccountChooserDialog_dismissDialog(env, dialog_jobject_);
 }
 
-void AccountChooserDialogAndroid::WasHidden() {
-  // TODO(https://crbug.com/610700): once bug is fixed, this code should be
-  // gone.
-  OnDialogCancel();
-  JNIEnv* env = AttachCurrentThread();
-  Java_AccountChooserDialog_dismissDialog(env, dialog_jobject_);
+void AccountChooserDialogAndroid::OnVisibilityChanged(
+    content::Visibility visibility) {
+  if (visibility == content::Visibility::HIDDEN) {
+    // TODO(https://crbug.com/610700): once bug is fixed, this code should be
+    // gone.
+    OnDialogCancel();
+    JNIEnv* env = AttachCurrentThread();
+    Java_AccountChooserDialog_dismissDialog(env, dialog_jobject_);
+  }
 }
 
 void AccountChooserDialogAndroid::OnDialogCancel() {

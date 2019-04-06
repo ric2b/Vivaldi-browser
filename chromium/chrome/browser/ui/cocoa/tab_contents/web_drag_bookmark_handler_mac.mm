@@ -63,11 +63,3 @@ void WebDragBookmarkHandlerMac::OnDragLeave() {
         bookmark_drag_data_);
   }
 }
-
-blink::WebDragOperationsMask WebDragBookmarkHandlerMac::OnDragEnd(
-      int screen_x,
-      int screen_y,
-      blink::WebDragOperationsMask ops,
-      bool cancelled) {
-  return ops;
-}

@@ -158,8 +158,9 @@ const char kAccessPointName[] = "AccessPointName";
 const char kName[] = "Name";
 const char kUsername[] = "Username";
 const char kPassword[] = "Password";
+const char kAuthentication[] = "Authentication";
 const char kLocalizedName[] = "LocalizedName";
-const char kLanguage[] = "LocalizedName";
+const char kLanguage[] = "Language";
 }  // namespace cellular_apn
 
 namespace cellular_found_network {
@@ -223,6 +224,7 @@ const char kBSSID[] = "BSSID";
 const char kEAP[] = "EAP";
 const char kFrequency[] = "Frequency";
 const char kFrequencyList[] = "FrequencyList";
+const char kFTEnabled[] = "FTEnabled";
 const char kHexSSID[] = "HexSSID";
 const char kHiddenSSID[] = "HiddenSSID";
 const char kPassphrase[] = "Passphrase";
@@ -439,10 +441,20 @@ const char kWPAD[] = "WPAD";
 }  // namespace proxy
 
 namespace substitutes {
-const char kLoginIDField[] = "${LOGIN_ID}";
-const char kEmailField[] = "${LOGIN_EMAIL}";
-const char kCertSANEmail[] = "${CERT_SAN_EMAIL}";
-const char kCertSANUPN[] = "${CERT_SAN_UPN}";
+const char kLoginID[] = "LOGIN_ID";
+const char kLoginEmail[] = "LOGIN_EMAIL";
+const char kCertSANEmail[] = "CERT_SAN_EMAIL";
+const char kCertSANUPN[] = "CERT_SAN_UPN";
+const char kCertSubjectCommonName[] = "CERT_SUBJECT_COMMON_NAME";
+const char kDeviceSerialNumber[] = "DEVICE_SERIAL_NUMBER";
+const char kDeviceAssetId[] = "DEVICE_ASSET_ID";
+// The password placeholder is defined as ${PASSWORD} because it's compared
+// verbatim against the policy-specified password field, and if it matches,
+// another bool (|shill::kEapUseLoginPasswordProperty|) is set, which makes
+// shill replace the whole password field.
+// The other placeholders above on the other hand are replaced using
+// VariableExpander.
+const char kPasswordPlaceholderVerbatim[] = "${PASSWORD}";
 }  // namespace substitutes
 
 namespace global_network_config {
@@ -450,6 +462,7 @@ const char kAllowOnlyPolicyNetworksToAutoconnect[] =
     "AllowOnlyPolicyNetworksToAutoconnect";
 const char kAllowOnlyPolicyNetworksToConnect[] =
     "AllowOnlyPolicyNetworksToConnect";
+const char kBlacklistedHexSSIDs[] = "BlacklistedHexSSIDs";
 const char kDisableNetworkTypes[] = "DisableNetworkTypes";
 }  // global_network_config
 

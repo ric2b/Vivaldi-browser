@@ -14,6 +14,7 @@ DecoderFactory::~DecoderFactory() = default;
 
 void DecoderFactory::CreateAudioDecoders(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    MediaLog* media_log,
     std::vector<std::unique_ptr<AudioDecoder>>* audio_decoders) {}
 
 void DecoderFactory::CreateVideoDecoders(
@@ -21,6 +22,7 @@ void DecoderFactory::CreateVideoDecoders(
     GpuVideoAcceleratorFactories* gpu_factories,
     MediaLog* media_log,
     const RequestOverlayInfoCB& request_overlay_info_cb,
+    const gfx::ColorSpace& target_color_space,
     std::vector<std::unique_ptr<VideoDecoder>>* video_decoders) {}
 
 }  // namespace media

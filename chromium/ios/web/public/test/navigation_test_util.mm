@@ -4,13 +4,16 @@
 
 #import "ios/web/public/test/navigation_test_util.h"
 
+#import "base/test/ios/wait_util.h"
 #import "ios/web/public/navigation_manager.h"
+#import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-using web::NavigationManager;
+using base::test::ios::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForPageLoadTimeout;
 
 namespace web {
 namespace test {
@@ -20,6 +23,12 @@ void LoadUrl(web::WebState* web_state, const GURL& url) {
   NavigationManager::WebLoadParams params(url);
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
   navigation_manager->LoadURLWithParams(params);
+}
+
+bool WaitForPageToFinishLoading(WebState* web_state) {
+  return WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
+    return !web_state->IsLoading();
+  });
 }
 
 }  // namespace test

@@ -7,7 +7,7 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
@@ -17,7 +17,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/test_completion_callback.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -43,7 +43,7 @@ void ReadDataPipeInternal(mojo::DataPipeConsumerHandle handle,
         BrowserThread::PostTask(
             BrowserThread::IO, FROM_HERE,
             base::BindOnce(&ReadDataPipeInternal, handle, result,
-                           base::Passed(&quit_closure)));
+                           std::move(quit_closure)));
         return;
       case MOJO_RESULT_OK:
         EXPECT_NE(nullptr, buffer);
@@ -171,8 +171,7 @@ class ServiceWorkerInstalledScriptsSenderTest : public testing::Test {
   void SetUp() override {
     helper_ = std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath());
 
-    context()->storage()->LazyInitializeForTest(
-        base::BindOnce(&base::DoNothing));
+    context()->storage()->LazyInitializeForTest(base::DoNothing());
     base::RunLoop().RunUntilIdle();
 
     pattern_ = GURL("http://www.example.com/test/");
@@ -207,8 +206,7 @@ class ServiceWorkerInstalledScriptsSenderTest : public testing::Test {
   scoped_refptr<ServiceWorkerVersion> version_;
 };
 
-using SenderFinishedReason =
-    ServiceWorkerInstalledScriptsSender::FinishedReason;
+using FinishedReason = ServiceWorkerInstalledScriptReader::FinishedReason;
 
 TEST_F(ServiceWorkerInstalledScriptsSenderTest, SendScripts) {
   const GURL kMainScriptURL = version()->script_url();
@@ -277,14 +275,13 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, SendScripts) {
   // Stream the installed scripts once.
   for (const auto& expected_script : kExpectedScriptInfoMap) {
     const ExpectedScriptInfo& info = expected_script.second;
-    EXPECT_EQ(SenderFinishedReason::kNotFinished,
-              sender->last_finished_reason());
+    EXPECT_EQ(FinishedReason::kNotFinished, sender->last_finished_reason());
     auto script_info = renderer_manager->WaitUntilTransferInstalledScript();
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
 
-  EXPECT_EQ(SenderFinishedReason::kSuccess, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 }
 
 TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendBody) {
@@ -330,7 +327,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendBody) {
   ASSERT_TRUE(renderer_manager);
 
   sender->Start();
-  EXPECT_EQ(SenderFinishedReason::kNotFinished, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kNotFinished, sender->last_finished_reason());
 
   {
     // Reset a data pipe during sending the body.
@@ -343,8 +340,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendBody) {
     base::RunLoop().RunUntilIdle();
   }
 
-  EXPECT_EQ(SenderFinishedReason::kConnectionError,
-            sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kConnectionError, sender->last_finished_reason());
 }
 
 TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendMetaData) {
@@ -390,7 +386,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendMetaData) {
   ASSERT_TRUE(renderer_manager);
 
   sender->Start();
-  EXPECT_EQ(SenderFinishedReason::kNotFinished, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kNotFinished, sender->last_finished_reason());
 
   {
     // Reset a data pipe during sending the meta data.
@@ -403,7 +399,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendMetaData) {
     base::RunLoop().RunUntilIdle();
   }
 
-  EXPECT_EQ(SenderFinishedReason::kMetaDataSenderError,
+  EXPECT_EQ(FinishedReason::kMetaDataSenderError,
             sender->last_finished_reason());
 }
 
@@ -466,14 +462,13 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, Histograms) {
   // Stream the installed scripts once.
   for (const auto& expected_script : kExpectedScriptInfoMap) {
     const ExpectedScriptInfo& info = expected_script.second;
-    EXPECT_EQ(SenderFinishedReason::kNotFinished,
-              sender->last_finished_reason());
+    EXPECT_EQ(FinishedReason::kNotFinished, sender->last_finished_reason());
     auto script_info = renderer_manager->WaitUntilTransferInstalledScript();
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
 
-  EXPECT_EQ(SenderFinishedReason::kSuccess, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 
   // The histogram should be recorded when reading the script.
   // The count should be four: reading the response body of a main script and an
@@ -552,13 +547,12 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptBeforeStreaming) {
   // Stream the installed scripts once.
   for (const auto& expected_script : kExpectedScriptInfoMap) {
     const ExpectedScriptInfo& info = expected_script.second;
-    EXPECT_EQ(SenderFinishedReason::kNotFinished,
-              sender->last_finished_reason());
+    EXPECT_EQ(FinishedReason::kNotFinished, sender->last_finished_reason());
     auto script_info = renderer_manager->WaitUntilTransferInstalledScript();
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
-  EXPECT_EQ(SenderFinishedReason::kNotFinished, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kNotFinished, sender->last_finished_reason());
 
   // Handle requested installed scripts.
   {
@@ -567,7 +561,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptBeforeStreaming) {
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
-  EXPECT_EQ(SenderFinishedReason::kSuccess, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 }
 
 TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
@@ -635,13 +629,12 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
   // Stream the installed scripts once.
   for (const auto& expected_script : kExpectedScriptInfoMap) {
     const ExpectedScriptInfo& info = expected_script.second;
-    EXPECT_EQ(SenderFinishedReason::kNotFinished,
-              sender->last_finished_reason());
+    EXPECT_EQ(FinishedReason::kNotFinished, sender->last_finished_reason());
     auto script_info = renderer_manager->WaitUntilTransferInstalledScript();
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
-  EXPECT_EQ(SenderFinishedReason::kSuccess, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 
   // Request the main script again before receiving the other scripts.
   manager_host_ptr->RequestInstalledScript(kMainScriptURL);
@@ -653,7 +646,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
-  EXPECT_EQ(SenderFinishedReason::kSuccess, sender->last_finished_reason());
+  EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 }
 
 }  // namespace content

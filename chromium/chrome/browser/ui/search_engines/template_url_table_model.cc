@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -19,8 +20,8 @@ TemplateURLTableModel::TemplateURLTableModel(
     TemplateURLService* template_url_service)
     : observer_(NULL), template_url_service_(template_url_service) {
   DCHECK(template_url_service);
-  template_url_service_->Load();
   template_url_service_->AddObserver(this);
+  template_url_service_->Load();
   Reload();
 }
 
@@ -29,12 +30,10 @@ TemplateURLTableModel::~TemplateURLTableModel() {
 }
 
 void TemplateURLTableModel::Reload() {
-  entries_.clear();
-
-  TemplateURLService::TemplateURLVector urls =
+  TemplateURL::TemplateURLVector urls =
       template_url_service_->GetTemplateURLs();
 
-  TemplateURLService::TemplateURLVector default_entries, other_entries,
+  TemplateURL::TemplateURLVector default_entries, other_entries,
       extension_entries;
   // Keywords that can be made the default first.
   for (auto* template_url : urls) {
@@ -50,6 +49,7 @@ void TemplateURLTableModel::Reload() {
   last_other_engine_index_ = last_search_engine_index_ +
       static_cast<int>(other_entries.size());
 
+  entries_.clear();
   std::move(default_entries.begin(), default_entries.end(),
             std::back_inserter(entries_));
 
@@ -91,17 +91,8 @@ void TemplateURLTableModel::SetObserver(ui::TableModelObserver* observer) {
 }
 
 void TemplateURLTableModel::Remove(int index) {
-  // Remove the observer while we modify the model, that way we don't need to
-  // worry about the model calling us back when we mutate it.
-  template_url_service_->RemoveObserver(this);
   TemplateURL* template_url = GetTemplateURL(index);
-
-  RemoveEntry(index);
-
-  // Make sure to remove from the table model first, otherwise the
-  // TemplateURL would be freed.
   template_url_service_->Remove(template_url);
-  template_url_service_->AddObserver(this);
 }
 
 void TemplateURLTableModel::Add(int index,
@@ -110,14 +101,11 @@ void TemplateURLTableModel::Add(int index,
                                 const std::string& url) {
   DCHECK(index >= 0 && index <= RowCount());
   DCHECK(!url.empty());
-  template_url_service_->RemoveObserver(this);
   TemplateURLData data;
   data.SetShortName(short_name);
   data.SetKeyword(keyword);
   data.SetURL(url);
-  AddEntry(index,
-           template_url_service_->Add(std::make_unique<TemplateURL>(data)));
-  template_url_service_->AddObserver(this);
+  template_url_service_->Add(std::make_unique<TemplateURL>(data));
 }
 
 void TemplateURLTableModel::ModifyTemplateURL(int index,
@@ -127,17 +115,23 @@ void TemplateURLTableModel::ModifyTemplateURL(int index,
   DCHECK(index >= 0 && index <= RowCount());
   DCHECK(!url.empty());
   TemplateURL* template_url = GetTemplateURL(index);
+
   // The default search provider should support replacement.
   DCHECK(template_url_service_->GetDefaultSearchProvider() != template_url ||
          template_url->SupportsReplacement(
              template_url_service_->search_terms_data()));
-  template_url_service_->RemoveObserver(this);
   template_url_service_->ResetTemplateURL(template_url, title, keyword, url);
-  template_url_service_->AddObserver(this);
-  NotifyChanged(index);
 }
 
 TemplateURL* TemplateURLTableModel::GetTemplateURL(int index) {
+  // Sanity checks for https://crbug.com/781703.
+  CHECK_GE(index, 0);
+  CHECK_LT(static_cast<size_t>(index), entries_.size());
+  CHECK(base::ContainsValue(template_url_service_->GetTemplateURLs(),
+                            entries_[index]))
+      << "TemplateURLTableModel is returning a pointer to a TemplateURL "
+         "that has already been freed by TemplateURLService.";
+
   return entries_[index];
 }
 
@@ -150,75 +144,19 @@ int TemplateURLTableModel::IndexOfTemplateURL(
   return -1;
 }
 
-int TemplateURLTableModel::MoveToMainGroup(int index) {
-  if (index < last_search_engine_index_)
-    return index;  // Already in the main group.
-
-  TemplateURL* current_entry = RemoveEntry(index);
-  const int new_index = last_search_engine_index_++;
-  AddEntry(new_index, current_entry);
-  return new_index;
-}
-
-int TemplateURLTableModel::MakeDefaultTemplateURL(int index) {
-  if (index < 0 || index >= RowCount()) {
-    NOTREACHED();
-    return -1;
-  }
+void TemplateURLTableModel::MakeDefaultTemplateURL(int index) {
+  DCHECK_GE(index, 0);
+  DCHECK_LT(index, RowCount());
 
   TemplateURL* keyword = GetTemplateURL(index);
   const TemplateURL* current_default =
       template_url_service_->GetDefaultSearchProvider();
   if (current_default == keyword)
-    return -1;
+    return;
 
-  template_url_service_->RemoveObserver(this);
   template_url_service_->SetUserSelectedDefaultSearchProvider(keyword);
-  template_url_service_->AddObserver(this);
-
-  // The formatting of the default engine is different; notify the table that
-  // both old and new entries have changed.
-  if (current_default != NULL) {
-    int old_index = IndexOfTemplateURL(current_default);
-    // current_default may not be in the list of TemplateURLs if the database is
-    // corrupt and the default TemplateURL is used from preferences
-    if (old_index >= 0)
-      NotifyChanged(old_index);
-  }
-  const int new_index = IndexOfTemplateURL(keyword);
-  NotifyChanged(new_index);
-
-  // Make sure the new default is in the main group.
-  return MoveToMainGroup(index);
-}
-
-void TemplateURLTableModel::NotifyChanged(int index) {
-  if (observer_) {
-    DCHECK_GE(index, 0);
-    observer_->OnItemsChanged(index, 1);
-  }
 }
 
 void TemplateURLTableModel::OnTemplateURLServiceChanged() {
   Reload();
-}
-
-TemplateURL* TemplateURLTableModel::RemoveEntry(int index) {
-  TemplateURL* entry = entries_[index];
-  entries_.erase(index + entries_.begin());
-  if (index < last_search_engine_index_)
-    --last_search_engine_index_;
-  if (index < last_other_engine_index_)
-    --last_other_engine_index_;
-  if (observer_)
-    observer_->OnItemsRemoved(index, 1);
-  return entry;
-}
-
-void TemplateURLTableModel::AddEntry(int index, TemplateURL* entry) {
-  entries_.insert(entries_.begin() + index, entry);
-  if (index <= last_other_engine_index_)
-    ++last_other_engine_index_;
-  if (observer_)
-    observer_->OnItemsAdded(index, 1);
 }

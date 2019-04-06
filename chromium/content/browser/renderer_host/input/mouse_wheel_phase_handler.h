@@ -7,10 +7,10 @@
 
 #include "base/timer/timer.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "content/public/common/input_event_ack_state.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 
 namespace content {
-class RenderWidgetHostImpl;
 class RenderWidgetHostViewBase;
 
 // The duration after which a synthetic wheel with zero deltas and
@@ -29,21 +29,35 @@ constexpr base::TimeDelta kMaximumTimeBetweenPhaseEndedAndMomentumPhaseBegan =
 const double kWheelLatchingSlopRegion = 10.0;
 
 // On ChromeOS wheel events don't have phase information; However, whenever the
-// user puts down or lifts their fingers a GFC or GFS is received.
-enum ScrollPhaseState {
+// user puts down their fingers on touchpad a GFC is received and at the end of
+// touchpad scrolling when the user lifts their fingers a GFS is received. This
+// enum tracks the current state of the touchpad scrolling by listening to GFC
+// and GFS events.
+enum TouchpadScrollPhaseState {
   // Scrolling with normal mouse wheels doesn't give any information about the
   // state of scrolling.
-  SCROLL_STATE_UNKNOWN = 0,
+  TOUCHPAD_SCROLL_STATE_UNKNOWN = 0,
   // Shows that the user has put their fingers down and a scroll may start.
-  SCROLL_MAY_BEGIN,
+  TOUCHPAD_SCROLL_MAY_BEGIN,
   // Scrolling has started and the user hasn't lift their fingers, yet.
-  SCROLL_IN_PROGRESS,
+  TOUCHPAD_SCROLL_IN_PROGRESS,
 };
 
+enum class FirstScrollUpdateAckState {
+  // Shows that the ACK for the first GSU event is not arrived yet.
+  kNotArrived = 0,
+  // Shows that the first GSU event is consumed.
+  kConsumed,
+  // Shows that the first GSU event is not consumed.
+  kNotConsumed,
+};
+
+// The MouseWheelPhaseHandler is responsible for adding the proper phase to
+// wheel events. Phase information is necessary for wheel scrolling since it
+// shows the start and end of a scrolling sequence.
 class MouseWheelPhaseHandler {
  public:
-  MouseWheelPhaseHandler(RenderWidgetHostImpl* const host,
-                         RenderWidgetHostViewBase* const host_view);
+  MouseWheelPhaseHandler(RenderWidgetHostViewBase* const host_view);
   ~MouseWheelPhaseHandler() {}
 
   void AddPhaseIfNeededAndScheduleEndEvent(
@@ -51,9 +65,9 @@ class MouseWheelPhaseHandler {
       bool should_route_event);
   void DispatchPendingWheelEndEvent();
   void IgnorePendingWheelEndEvent();
-  void ResetScrollSequence();
-  void SendWheelEndIfNeeded();
-  void ScrollingMayBegin();
+  void ResetTouchpadScrollSequence();
+  void SendWheelEndForTouchpadScrollingIfNeeded();
+  void TouchpadScrollingMayBegin();
 
   // Used to set the timer timeout for testing.
   void set_mouse_wheel_end_dispatch_timeout(base::TimeDelta timeout) {
@@ -63,25 +77,44 @@ class MouseWheelPhaseHandler {
   bool HasPendingWheelEndEvent() const {
     return mouse_wheel_end_dispatch_timer_.IsRunning();
   }
+  void GestureEventAck(const blink::WebGestureEvent& event,
+                       InputEventAckState ack_result);
+
+  // Used to verify the correctness of touchpad_scroll_phase_state_'s value in
+  // testing.
+  TouchpadScrollPhaseState touchpad_scroll_phase_state_for_test() const {
+    return touchpad_scroll_phase_state_;
+  }
 
  private:
   void SendSyntheticWheelEventWithPhaseEnded(
       bool should_route_event);
   void ScheduleMouseWheelEndDispatching(bool should_route_event,
                                         const base::TimeDelta timeout);
-  bool IsWithinSlopRegion(blink::WebMouseWheelEvent wheel_event) const;
+  bool IsWithinSlopRegion(const blink::WebMouseWheelEvent& wheel_event) const;
+  bool HasDifferentModifiers(
+      const blink::WebMouseWheelEvent& wheel_event) const;
+  bool ShouldBreakLatchingDueToDirectionChange(
+      const blink::WebMouseWheelEvent& wheel_event) const;
 
-  RenderWidgetHostImpl* const host_;
   RenderWidgetHostViewBase* const host_view_;
   base::OneShotTimer mouse_wheel_end_dispatch_timer_;
   base::TimeDelta mouse_wheel_end_dispatch_timeout_;
   blink::WebMouseWheelEvent last_mouse_wheel_event_;
-  ScrollPhaseState scroll_phase_state_;
+  TouchpadScrollPhaseState touchpad_scroll_phase_state_;
   // This is used to break the timer based latching when the difference between
   // the locations of the first wheel event and the current wheel event is
   // larger than some threshold. The variable value is only valid while the
   // dispatch timer is running.
   gfx::Vector2dF first_wheel_location_;
+
+  // This is used to break the timer based latching when the new wheel event has
+  // different modifiers or when it is in a different direction from the
+  // previous wheel events and the scrolling has been ignored.
+  blink::WebMouseWheelEvent initial_wheel_event_;
+
+  FirstScrollUpdateAckState first_scroll_update_ack_state_ =
+      FirstScrollUpdateAckState::kNotArrived;
 
   DISALLOW_COPY_AND_ASSIGN(MouseWheelPhaseHandler);
 };

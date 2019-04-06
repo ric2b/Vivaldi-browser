@@ -718,6 +718,25 @@ TEST(PermissionsTest, IsPrivilegeIncrease) {
   }
 }
 
+// Tests that swapping out a permission for a less powerful one is not
+// considered a privilege increase.
+// Regression test for https://crbug.com/841938.
+TEST(PermissionsTest,
+     IsNotPrivilegeIncreaseWhenSwitchingForLowerPrivilegePermission) {
+  APIPermissionSet apis1;
+  apis1.insert(APIPermission::kHistory);
+  PermissionSet permissions1(apis1, ManifestPermissionSet(), URLPatternSet(),
+                             URLPatternSet());
+
+  APIPermissionSet apis2;
+  apis2.insert(APIPermission::kTopSites);
+  PermissionSet permissions2(apis2, ManifestPermissionSet(), URLPatternSet(),
+                             URLPatternSet());
+
+  EXPECT_FALSE(PermissionMessageProvider::Get()->IsPrivilegeIncrease(
+      permissions1, permissions2, Manifest::TYPE_EXTENSION));
+}
+
 TEST(PermissionsTest, PermissionMessages) {
   // Ensure that all permissions that needs to show install UI actually have
   // strings associated with them.
@@ -759,6 +778,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kSystemDisplay);
   skip.insert(APIPermission::kSystemMemory);
   skip.insert(APIPermission::kSystemNetwork);
+  skip.insert(APIPermission::kSystemPowerSource);
   skip.insert(APIPermission::kTts);
   skip.insert(APIPermission::kUnlimitedStorage);
   skip.insert(APIPermission::kWebcamPrivate);
@@ -813,15 +833,16 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kBrailleDisplayPrivate);
   skip.insert(APIPermission::kCast);
   skip.insert(APIPermission::kCastStreaming);
+  skip.insert(APIPermission::kCecPrivate);
   skip.insert(APIPermission::kChromeosInfoPrivate);
   skip.insert(APIPermission::kCloudPrintPrivate);
   skip.insert(APIPermission::kCommandLinePrivate);
   skip.insert(APIPermission::kDeveloperPrivate);
-  skip.insert(APIPermission::kDial);
   skip.insert(APIPermission::kDownloadsInternal);
   skip.insert(APIPermission::kEasyUnlockPrivate);
   skip.insert(APIPermission::kEchoPrivate);
   skip.insert(APIPermission::kEnterprisePlatformKeysPrivate);
+  skip.insert(APIPermission::kEnterpriseReportingPrivate);
   skip.insert(APIPermission::kFeedbackPrivate);
   skip.insert(APIPermission::kFileBrowserHandlerInternal);
   skip.insert(APIPermission::kFileManagerPrivate);
@@ -839,6 +860,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kImageWriterPrivate);
   skip.insert(APIPermission::kResourcesPrivate);
   skip.insert(APIPermission::kRtcPrivate);
+  skip.insert(APIPermission::kSafeBrowsingPrivate);
   skip.insert(APIPermission::kStreamsPrivate);
   skip.insert(APIPermission::kSystemPrivate);
   skip.insert(APIPermission::kTabCaptureForTab);
@@ -860,6 +882,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kHid);
   skip.insert(APIPermission::kFileSystem);
   skip.insert(APIPermission::kFileSystemProvider);
+  skip.insert(APIPermission::kFileSystemRequestDownloads);
   skip.insert(APIPermission::kFileSystemRequestFileSystem);
   skip.insert(APIPermission::kFileSystemRetainEntries);
   skip.insert(APIPermission::kFileSystemWrite);
@@ -1076,16 +1099,21 @@ TEST(PermissionsTest, MergedFileSystemPermissionComparison) {
   EXPECT_FALSE(provider->IsPrivilegeIncrease(write_directory_permissions,
                                              directory_permissions,
                                              Manifest::TYPE_PLATFORM_APP));
-  EXPECT_TRUE(provider->IsPrivilegeIncrease(
-      write_permissions, directory_permissions, Manifest::TYPE_PLATFORM_APP));
   EXPECT_TRUE(provider->IsPrivilegeIncrease(write_permissions,
                                             write_directory_permissions,
                                             Manifest::TYPE_PLATFORM_APP));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(
-      directory_permissions, write_permissions, Manifest::TYPE_PLATFORM_APP));
   EXPECT_TRUE(provider->IsPrivilegeIncrease(directory_permissions,
                                             write_directory_permissions,
                                             Manifest::TYPE_PLATFORM_APP));
+  // Tricky case: going from kFileSystemWrite to kFileSystemDirectory (or vice
+  // versa). A warning is only shown if *both* kFileSystemWrite and
+  // kFileSystemDirectory are present. Even though kFileSystemWrite is not in
+  // the new set of permissions, it will still be a granted permission.
+  // Therefore, we should consider this a privilege increase.
+  EXPECT_TRUE(provider->IsPrivilegeIncrease(
+      write_permissions, directory_permissions, Manifest::TYPE_PLATFORM_APP));
+  EXPECT_TRUE(provider->IsPrivilegeIncrease(
+      directory_permissions, write_permissions, Manifest::TYPE_PLATFORM_APP));
 }
 
 TEST(PermissionsTest, GetWarningMessages_ManyHosts) {
@@ -1290,14 +1318,7 @@ TEST(PermissionsTest, GetWarningMessages_PlatformAppHosts) {
 
 testing::AssertionResult ShowsAllHostsWarning(const std::string& pattern) {
   scoped_refptr<Extension> extension =
-      ExtensionBuilder()
-          .SetManifest(
-              DictionaryBuilder()
-                  .Set("name", "TLDWildCardTest")
-                  .Set("version", "0.1.0")
-                  .Set("permissions", ListBuilder().Append(pattern).Build())
-                  .Build())
-          .Build();
+      ExtensionBuilder("TLDWildCardTest").AddPermission(pattern).Build();
 
   return VerifyHasPermissionMessage(
       extension->permissions_data(),
@@ -1568,87 +1589,131 @@ TEST(PermissionsTest, GetDistinctHosts_FirstInListIs4thBestRcd) {
 }
 
 TEST(PermissionsTest, IsHostPrivilegeIncrease) {
-  Manifest::Type type = Manifest::TYPE_EXTENSION;
+  const struct {
+    struct host_spec {
+      int schemes;
+      std::string pattern;
+    };
+    std::vector<host_spec> initial_hosts;
+    std::vector<host_spec> final_hosts;
+    Manifest::Type type;
+    bool is_increase;
+    bool reverse_is_increase;
+  } test_cases[] = {
+      // Order doesn't matter.
+      {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
+       {{URLPattern::SCHEME_HTTP, "http://www.google.com/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"}},
+       Manifest::TYPE_EXTENSION,
+       false,
+       false},
+      // Paths are ignored.
+      {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
+       {{URLPattern::SCHEME_HTTP, "http://www.google.com/*"}},
+       Manifest::TYPE_EXTENSION,
+       false,
+       false},
+      // RCDs are ignored.
+      {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
+       {{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/*"}},
+       Manifest::TYPE_EXTENSION,
+       false,
+       false},
+      // Subdomain wildcards are handled properly.
+      {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
+       {{URLPattern::SCHEME_HTTP, "http://*.google.com.hk/*"}},
+       Manifest::TYPE_EXTENSION,
+       true,
+       false},
+      // Different domains count as different hosts.
+      {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
+       {{URLPattern::SCHEME_HTTP, "http://www.google.com/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.example.org/path"}},
+       Manifest::TYPE_EXTENSION,
+       true,
+       false},
+      // Different subdomains count as different hosts.
+      {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
+       {{URLPattern::SCHEME_HTTP, "http://mail.google.com/*"}},
+       Manifest::TYPE_EXTENSION,
+       true,
+       true},
+      // Moving from all subdomains to the domain should not be
+      // an increase in permissions. However, moving from just
+      // the domain to all of the subdomains should be.
+      {{{URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+         "*://*.google.com/*"}},
+       {{URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+         "*://google.com/*"}},
+       Manifest::TYPE_EXTENSION,
+       false,
+       true},
+      // Platform apps should not have host permissions increases.
+      {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
+        {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
+       {{URLPattern::SCHEME_HTTP, "http://mail.google.com/*"}},
+       Manifest::TYPE_PLATFORM_APP,
+       false,
+       false},
+      // Test that subdomain wildcard matching from crbug.com://65337
+      // works.
+      {{{URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+         "*://*.google.com/"},
+        {URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+         "*://mail.google.com/"}},
+       {{URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+         "*://inbox.google.com/"}},
+       Manifest::TYPE_EXTENSION,
+       false,
+       true},
+      // Test the "all_urls" meta-pattern.
+      {{{URLPattern::SCHEME_ALL, "<all_urls>"}},
+       {{URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+         "*://inbox.google.com/"}},
+       Manifest::TYPE_EXTENSION,
+       false,
+       true},
+      // Test expanding from any .com host to any host in any TLD.
+      // TODO(crbug.com/849906): Should this really be a permissions increase?
+      {{{URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS, "*://*.com/*"}},
+       {{URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS, "*://*/*"}},
+       Manifest::TYPE_EXTENSION,
+       true,
+       false},
+  };
+  const ManifestPermissionSet empty_manifest_permissions;
+  const APIPermissionSet empty_permissions;
+  const URLPatternSet empty_scriptable_hosts;
   const PermissionMessageProvider* provider = PermissionMessageProvider::Get();
-  ManifestPermissionSet empty_manifest_permissions;
-  URLPatternSet elist1;
-  URLPatternSet elist2;
-  URLPatternSet slist1;
-  URLPatternSet slist2;
-  std::unique_ptr<const PermissionSet> set1;
-  std::unique_ptr<const PermissionSet> set2;
-  APIPermissionSet empty_perms;
-  elist1.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"));
-  elist1.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.google.com/path"));
-
-  // Test that the host order does not matter.
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.google.com/path"));
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"));
-
-  set1.reset(new PermissionSet(empty_perms, empty_manifest_permissions, elist1,
-                               slist1));
-  set2.reset(new PermissionSet(empty_perms, empty_manifest_permissions, elist2,
-                               slist2));
-
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set1, *set2, type));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set2, *set1, type));
-
-  // Test that paths are ignored.
-  elist2.ClearPatterns();
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.google.com/*"));
-  set2.reset(new PermissionSet(empty_perms, empty_manifest_permissions, elist2,
-                               slist2));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set1, *set2, type));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set2, *set1, type));
-
-  // Test that RCDs are ignored.
-  elist2.ClearPatterns();
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.google.com.hk/*"));
-  set2.reset(new PermissionSet(empty_perms, empty_manifest_permissions, elist2,
-                               slist2));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set1, *set2, type));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set2, *set1, type));
-
-  // Test that subdomain wildcards are handled properly.
-  elist2.ClearPatterns();
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://*.google.com.hk/*"));
-  set2.reset(new PermissionSet(empty_perms, empty_manifest_permissions, elist2,
-                               slist2));
-  EXPECT_TRUE(provider->IsPrivilegeIncrease(*set1, *set2, type));
-  // TODO(jstritar): Does not match subdomains properly. http://crbug.com/65337
-  // EXPECT_FALSE(provider->IsPrivilegeIncrease(set2, set1, type));
-
-  // Test that different domains count as different hosts.
-  elist2.ClearPatterns();
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.google.com/path"));
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://www.example.org/path"));
-  set2.reset(new PermissionSet(empty_perms, empty_manifest_permissions, elist2,
-                               slist2));
-  EXPECT_TRUE(provider->IsPrivilegeIncrease(*set1, *set2, type));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set2, *set1, type));
-
-  // Test that different subdomains count as different hosts.
-  elist2.ClearPatterns();
-  elist2.AddPattern(
-      URLPattern(URLPattern::SCHEME_HTTP, "http://mail.google.com/*"));
-  set2.reset(new PermissionSet(empty_perms, empty_manifest_permissions, elist2,
-                               slist2));
-  EXPECT_TRUE(provider->IsPrivilegeIncrease(*set1, *set2, type));
-  EXPECT_TRUE(provider->IsPrivilegeIncrease(*set2, *set1, type));
-
-  // Test that platform apps do not have host permissions increases.
-  type = Manifest::TYPE_PLATFORM_APP;
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set1, *set2, type));
-  EXPECT_FALSE(provider->IsPrivilegeIncrease(*set2, *set1, type));
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
+    URLPatternSet explicit_hosts1;
+    URLPatternSet explicit_hosts2;
+    const auto& test_case = test_cases[i];
+    for (const auto& initial_host : test_case.initial_hosts) {
+      explicit_hosts1.AddPattern(
+          URLPattern(initial_host.schemes, initial_host.pattern));
+    }
+    for (const auto& final_host : test_case.final_hosts) {
+      explicit_hosts2.AddPattern(
+          URLPattern(final_host.schemes, final_host.pattern));
+    }
+    const PermissionSet set1(empty_permissions, empty_manifest_permissions,
+                             explicit_hosts1, empty_scriptable_hosts);
+    const PermissionSet set2(empty_permissions, empty_manifest_permissions,
+                             explicit_hosts2, empty_scriptable_hosts);
+    EXPECT_EQ(test_case.is_increase,
+              provider->IsPrivilegeIncrease(set1, set2, test_case.type))
+        << "Failure at index " << i;
+    EXPECT_EQ(test_case.reverse_is_increase,
+              provider->IsPrivilegeIncrease(set2, set1, test_case.type))
+        << "Failure at index " << i;
+  }
 }
 
 TEST(PermissionsTest, GetAPIsAsStrings) {

@@ -26,7 +26,7 @@ class HeadlessSurfaceFactory : public SurfaceFactoryOzone {
   std::vector<gl::GLImplementation> GetAllowedGLImplementations() override;
   GLOzone* GetGLOzone(gl::GLImplementation implementation) override;
   std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(
-      gfx::AcceleratedWidget w) override;
+      gfx::AcceleratedWidget widget) override;
   scoped_refptr<gfx::NativePixmap> CreateNativePixmap(
       gfx::AcceleratedWidget widget,
       gfx::Size size,
@@ -40,6 +40,7 @@ class HeadlessSurfaceFactory : public SurfaceFactoryOzone {
   base::FilePath base_path_;
 
   std::unique_ptr<GLOzone> osmesa_implementation_;
+  std::unique_ptr<GLOzone> swiftshader_implementation_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessSurfaceFactory);
 };

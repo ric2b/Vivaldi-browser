@@ -26,6 +26,7 @@ void FillContactRow(sql::Statement& statement, ContactRow* contact) {
   base::string16 avatar_url = statement.ColumnString16(4);
   int separator = statement.ColumnInt(5);
   int generated_from_sent_mail = statement.ColumnInt(6);
+  bool trusted = statement.ColumnInt(7) == 1 ? true : false;
 
   contact->set_contact_id(id);
   contact->set_name(name);
@@ -35,6 +36,7 @@ void FillContactRow(sql::Statement& statement, ContactRow* contact) {
   contact->set_separator(separator == 1 ? true : false);
   contact->set_generated_from_sent_mail(generated_from_sent_mail == 1 ? true
                                                                       : false);
+  contact->set_trusted(trusted);
 }
 }  // namespace
 
@@ -65,9 +67,10 @@ bool ContactTable::CreateContactTable() {
       "note LONGVARCHAR,"
       "avatar_url LONGVARCHAR,"
       "separator INTEGER,"
-      "generated_from_sent_mail INTEGER,"
+      "generated_from_sent_mail INTEGER DEFAULT 0,"
       "last_used INTEGER,"  // Timestamp since epoch since you either sent or
                             // received an email for given contact
+      "trusted INTEGER DEFAULT 0,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -82,9 +85,9 @@ ContactID ContactTable::CreateContact(ContactRow row) {
       GetDB().GetCachedStatement(SQL_FROM_HERE,
                                  "INSERT INTO contacts "
                                  "(fn, birthday, note, avatar_url, separator, "
-                                 "generated_from_sent_mail, created, "
+                                 "generated_from_sent_mail, trusted, created, "
                                  "last_modified) "
-                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
 
   statement.BindString16(0, row.name());
   statement.BindInt64(1, row.birthday().ToInternalValue());
@@ -92,10 +95,11 @@ ContactID ContactTable::CreateContact(ContactRow row) {
   statement.BindString16(3, row.avatar_url());
   statement.BindInt(4, row.separator() ? 1 : 0);
   statement.BindInt(5, row.generated_from_sent_mail() ? 1 : 0);
+  statement.BindInt(6, row.trusted() ? 1 : 0);
 
   int created = base::Time().Now().ToInternalValue();
-  statement.BindInt64(6, created);
   statement.BindInt64(7, created);
+  statement.BindInt64(8, created);
 
   if (!statement.Run()) {
     return 0;
@@ -108,7 +112,7 @@ bool ContactTable::GetAllContacts(ContactRows* contacts) {
   sql::Statement s(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "SELECT id, fn, birthday, note, avatar_url, separator, "
-      "generated_from_sent_mail FROM contacts"));
+      "generated_from_sent_mail, trusted FROM contacts"));
   while (s.Step()) {
     ContactRow contact;
     FillContactRow(s, &contact);
@@ -122,7 +126,7 @@ bool ContactTable::UpdateContactRow(const ContactRow& contact) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "UPDATE contacts SET fn=?, birthday=?, "
-      "note=?, avatar_url=?, separator=?, generated_from_sent_mail=?, "
+      "note=?, avatar_url=?, separator=?, generated_from_sent_mail=?, trusted=?, "
       "last_modified=? WHERE id=?"));
   statement.BindString16(0, contact.name());
   statement.BindInt64(1, contact.birthday().ToInternalValue());
@@ -130,9 +134,9 @@ bool ContactTable::UpdateContactRow(const ContactRow& contact) {
   statement.BindString16(3, contact.avatar_url());
   statement.BindInt(4, contact.separator() == true ? 1 : 0);
   statement.BindInt(5, contact.generated_from_sent_mail() == true ? 1 : 0);
-
-  statement.BindInt64(6, base::Time().Now().ToInternalValue());
-  statement.BindInt64(7, contact.contact_id());
+  statement.BindInt(6, contact.trusted() == true ? 1 : 0);
+  statement.BindInt64(7, base::Time().Now().ToInternalValue());
+  statement.BindInt64(8, contact.contact_id());
   return statement.Run();
 }
 
@@ -149,7 +153,7 @@ bool ContactTable::GetRowForContact(ContactID contact_id,
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "SELECT id, fn, birthday, note, avatar_url, "
-      "separator, generated_from_sent_mail, created, "
+      "separator, generated_from_sent_mail, trusted, created, "
       "last_modified FROM contacts WHERE id=?"));
   statement.BindInt64(0, contact_id);
 

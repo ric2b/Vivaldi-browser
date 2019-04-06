@@ -11,7 +11,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
@@ -19,6 +18,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/feedback/system_logs/system_logs_fetcher.h"
@@ -38,20 +38,6 @@
 using extensions::api::feedback_private::SystemInformation;
 using feedback::FeedbackData;
 
-namespace {
-
-// Getting the filename of a blob prepends a "C:\fakepath" to the filename.
-// This is undesirable, strip it if it exists.
-std::string StripFakepath(const std::string& path) {
-  const char kFakePathStr[] = "C:\\fakepath\\";
-  if (base::StartsWith(path, kFakePathStr,
-                       base::CompareCase::INSENSITIVE_ASCII))
-    return path.substr(arraysize(kFakePathStr) - 1);
-  return path;
-}
-
-}  // namespace
-
 namespace extensions {
 
 namespace feedback_private = api::feedback_private;
@@ -66,6 +52,45 @@ using SystemInformationList =
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<FeedbackPrivateAPI>>::
     DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+
+namespace {
+
+constexpr base::FilePath::CharType kBluetoothLogsFilePath[] =
+    FILE_PATH_LITERAL("/var/log/bluetooth/log.gz");
+
+constexpr char kBluetoothLogsAttachmentName[] = "bluetooth_logs.gz";
+
+// Getting the filename of a blob prepends a "C:\fakepath" to the filename.
+// This is undesirable, strip it if it exists.
+std::string StripFakepath(const std::string& path) {
+  constexpr char kFakePathStr[] = "C:\\fakepath\\";
+  if (base::StartsWith(path, kFakePathStr,
+                       base::CompareCase::INSENSITIVE_ASCII))
+    return path.substr(arraysize(kFakePathStr) - 1);
+  return path;
+}
+
+// Returns the type of the landing page which is shown to the user when the
+// report is successfully sent.
+feedback_private::LandingPageType GetLandingPageType(const std::string& email) {
+#if defined(OS_CHROMEOS)
+  const std::string board =
+      base::ToLowerASCII(base::SysInfo::GetLsbReleaseBoard());
+  if (board.find("eve") == std::string::npos)
+    return feedback_private::LANDING_PAGE_TYPE_NORMAL;
+
+  if (!base::EndsWith(email, "@google.com",
+                      base::CompareCase::INSENSITIVE_ASCII)) {
+    return feedback_private::LANDING_PAGE_TYPE_NORMAL;
+  }
+
+  return feedback_private::LANDING_PAGE_TYPE_TECHSTOP;
+#else
+  return feedback_private::LANDING_PAGE_TYPE_NORMAL;
+#endif  // defined(OS_CHROMEOS)
+}
+
+}  // namespace
 
 // static
 BrowserContextKeyedAPIFactory<FeedbackPrivateAPI>*
@@ -249,11 +274,11 @@ ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
   const FeedbackInfo& feedback_info = params->feedback;
 
   // Populate feedback data.
+  FeedbackPrivateDelegate* delegate =
+      ExtensionsAPIClient::Get()->GetFeedbackPrivateDelegate();
   scoped_refptr<FeedbackData> feedback_data =
       base::MakeRefCounted<FeedbackData>(
-          ExtensionsAPIClient::Get()
-              ->GetFeedbackPrivateDelegate()
-              ->GetFeedbackUploaderForContext(browser_context()));
+          delegate->GetFeedbackUploaderForContext(browser_context()));
   feedback_data->set_context(browser_context());
   feedback_data->set_description(feedback_info.description);
 
@@ -289,6 +314,26 @@ ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
       sys_logs->emplace(info.key, info.value);
   }
 
+#if defined(OS_CHROMEOS)
+  delegate->FetchAndMergeIwlwifiDumpLogsIfPresent(
+      std::move(sys_logs), browser_context(),
+      base::Bind(&FeedbackPrivateSendFeedbackFunction::OnAllLogsFetched, this,
+                 feedback_data, feedback_info.send_histograms,
+                 feedback_info.send_bluetooth_logs &&
+                     *feedback_info.send_bluetooth_logs));
+#else
+  OnAllLogsFetched(feedback_data, feedback_info.send_histograms,
+                   false /* send_bluetooth_logs */, std::move(sys_logs));
+#endif  // defined(OS_CHROMEOS)
+
+  return RespondLater();
+}
+
+void FeedbackPrivateSendFeedbackFunction::OnAllLogsFetched(
+    scoped_refptr<FeedbackData> feedback_data,
+    bool send_histograms,
+    bool send_bluetooth_logs,
+    std::unique_ptr<system_logs::SystemLogsResponse> sys_logs) {
   feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
 
   FeedbackService* service = FeedbackPrivateAPI::GetFactoryInstance()
@@ -296,7 +341,7 @@ ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
                                  ->GetService();
   DCHECK(service);
 
-  if (feedback_info.send_histograms) {
+  if (send_histograms) {
     auto histograms = std::make_unique<std::string>();
     *histograms =
         base::StatisticsRecorder::ToJSON(base::JSON_VERBOSITY_LEVEL_FULL);
@@ -304,17 +349,30 @@ ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
       feedback_data->SetAndCompressHistograms(std::move(histograms));
   }
 
+  if (send_bluetooth_logs) {
+    std::unique_ptr<std::string> bluetooth_logs =
+        std::make_unique<std::string>();
+    if (base::ReadFileToString(base::FilePath(kBluetoothLogsFilePath),
+                               bluetooth_logs.get())) {
+      feedback_data->AddFile(kBluetoothLogsAttachmentName,
+                             std::move(bluetooth_logs));
+    }
+  }
+
   service->SendFeedback(
       feedback_data,
-      base::Bind(&FeedbackPrivateSendFeedbackFunction::OnCompleted, this));
-
-  return RespondLater();
+      base::Bind(&FeedbackPrivateSendFeedbackFunction::OnCompleted, this,
+                 GetLandingPageType(feedback_data->user_email())));
 }
 
-void FeedbackPrivateSendFeedbackFunction::OnCompleted(bool success) {
-  Respond(OneArgument(std::make_unique<base::Value>(
-      feedback_private::ToString(success ? feedback_private::STATUS_SUCCESS
-                                         : feedback_private::STATUS_DELAYED))));
+void FeedbackPrivateSendFeedbackFunction::OnCompleted(
+    api::feedback_private::LandingPageType type,
+    bool success) {
+  Respond(TwoArguments(
+      std::make_unique<base::Value>(feedback_private::ToString(
+          success ? feedback_private::STATUS_SUCCESS
+                  : feedback_private::STATUS_DELAYED)),
+      std::make_unique<base::Value>(feedback_private::ToString(type))));
   if (!success) {
     ExtensionsAPIClient::Get()
         ->GetFeedbackPrivateDelegate()
@@ -322,7 +380,7 @@ void FeedbackPrivateSendFeedbackFunction::OnCompleted(bool success) {
   }
 }
 
-AsyncExtensionFunction::ResponseAction
+ExtensionFunction::ResponseAction
 FeedbackPrivateLogSrtPromptResultFunction::Run() {
   std::unique_ptr<feedback_private::LogSrtPromptResult::Params> params(
       feedback_private::LogSrtPromptResult::Params::Create(*args_));

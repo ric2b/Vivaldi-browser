@@ -4,8 +4,10 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_cell.h"
 
-#import "ios/chrome/browser/ui/favicon/favicon_view.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_constants.h"
+#include "ios/chrome/browser/ui/ui_util.h"
+#import "ios/chrome/common/favicon/favicon_view.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -13,14 +15,10 @@
 #endif
 
 namespace {
-const CGFloat kLabelTextColor = 0.314;
-const NSInteger kLabelNumLines = 2;
-const CGFloat kFaviconSize = 48;
-const CGFloat kSpaceFaviconTitle = 10;
 
-// Size of a Most Visited cell.
-const CGSize kCellSize = {73, 100};
-}
+const CGFloat kIconSizeLegacy = 48;
+
+}  // namespace
 
 @implementation ContentSuggestionsMostVisitedCell : MDCCollectionViewCell
 
@@ -33,34 +31,67 @@ const CGSize kCellSize = {73, 100};
   self = [super initWithFrame:frame];
   if (self) {
     _titleLabel = [[UILabel alloc] init];
-    _titleLabel.textColor = [UIColor colorWithWhite:kLabelTextColor alpha:1.0];
-    _titleLabel.font = [MDCTypography captionFont];
+    if (IsUIRefreshPhase1Enabled()) {
+      _titleLabel.textColor = [UIColor colorWithWhite:0 alpha:kTitleAlpha];
+      _titleLabel.font = [UIFont systemFontOfSize:12];
+    } else {
+      _titleLabel.textColor =
+          [UIColor colorWithWhite:kLabelTextColor alpha:1.0];
+      _titleLabel.font = [MDCTypography captionFont];
+    }
     _titleLabel.textAlignment = NSTextAlignmentCenter;
     _titleLabel.preferredMaxLayoutWidth = [[self class] defaultSize].width;
     _titleLabel.numberOfLines = kLabelNumLines;
 
     _faviconView = [[FaviconViewNew alloc] init];
-    _faviconView.font = [MDCTypography headlineFont];
-
+    if (IsUIRefreshPhase1Enabled()) {
+      _faviconView.font = [UIFont systemFontOfSize:22];
+    } else {
+      _faviconView.font = [MDCTypography headlineFont];
+    }
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _faviconView.translatesAutoresizingMaskIntoConstraints = NO;
 
     [self.contentView addSubview:_titleLabel];
-    [self.contentView addSubview:_faviconView];
 
-    [NSLayoutConstraint activateConstraints:@[
-      [_faviconView.widthAnchor constraintEqualToConstant:kFaviconSize],
-      [_faviconView.heightAnchor
-          constraintEqualToAnchor:_faviconView.widthAnchor],
-      [_faviconView.centerXAnchor
-          constraintEqualToAnchor:_titleLabel.centerXAnchor],
-    ]];
+    UIView* containerView = nil;
+    if (IsUIRefreshPhase1Enabled()) {
+      UIImageView* faviconContainer =
+          [[UIImageView alloc] initWithFrame:self.bounds];
+      faviconContainer.translatesAutoresizingMaskIntoConstraints = NO;
+      faviconContainer.image = [UIImage imageNamed:@"ntp_most_visited_tile"];
+      [self.contentView addSubview:faviconContainer];
+      [faviconContainer addSubview:_faviconView];
+
+      [NSLayoutConstraint activateConstraints:@[
+        [faviconContainer.widthAnchor constraintEqualToConstant:kIconSize],
+        [faviconContainer.heightAnchor
+            constraintEqualToAnchor:faviconContainer.widthAnchor],
+        [faviconContainer.centerXAnchor
+            constraintEqualToAnchor:_titleLabel.centerXAnchor],
+        [_faviconView.heightAnchor constraintEqualToConstant:32],
+        [_faviconView.widthAnchor
+            constraintEqualToAnchor:_faviconView.heightAnchor],
+      ]];
+      AddSameCenterConstraints(_faviconView, faviconContainer);
+      containerView = faviconContainer;
+    } else {
+      [self.contentView addSubview:_faviconView];
+
+      [NSLayoutConstraint activateConstraints:@[
+        [_faviconView.widthAnchor constraintEqualToConstant:kIconSizeLegacy],
+        [_faviconView.heightAnchor
+            constraintEqualToAnchor:_faviconView.widthAnchor],
+        [_faviconView.centerXAnchor
+            constraintEqualToAnchor:_titleLabel.centerXAnchor],
+      ]];
+      containerView = _faviconView;
+    }
 
     ApplyVisualConstraintsWithMetrics(
-        @[ @"V:|[favicon]-(space)-[title]", @"H:|[title]|" ],
-        @{ @"favicon" : _faviconView,
-           @"title" : _titleLabel },
-        @{ @"space" : @(kSpaceFaviconTitle) });
+        @[ @"V:|[container]-(space)-[title]", @"H:|[title]|" ],
+        @{@"container" : containerView, @"title" : _titleLabel},
+        @{ @"space" : @(kSpaceIconTitle) });
 
     self.isAccessibilityElement = YES;
   }

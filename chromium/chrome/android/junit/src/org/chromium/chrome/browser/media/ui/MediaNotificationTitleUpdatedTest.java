@@ -20,18 +20,17 @@ import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowNotification;
 
-import org.chromium.base.BaseChromiumApplication;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.media.ui.MediaNotificationManager.ListenerService;
 import org.chromium.content_public.common.MediaMetadata;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 /**
  * Test of media notifications to see whether the text updates when the tab title changes or the
  * MediaMetadata gets updated.
  */
-@RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
+@RunWith(BaseRobolectricTestRunner.class)
+@Config(manifest = Config.NONE,
         // Remove this after updating to a version of Robolectric that supports
         // notification channel creation. crbug.com/774315
         sdk = Build.VERSION_CODES.N_MR1,

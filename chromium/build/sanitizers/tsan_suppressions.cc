@@ -55,10 +55,6 @@ char kTSanDefaultSuppressions[] =
     "race:third_party/libvpx/source/libvpx/vp8/encoder/*\n"
     "race:third_party/libvpx/source/libvpx/vp9/encoder/*\n"
 
-    // http://crbug.com/189177
-    "race:thread_manager\n"
-    "race:v8::Locker::Initialize\n"
-
     // http://crbug.com/239359
     "race:media::TestInputCallback::OnData\n"
 
@@ -78,8 +74,8 @@ char kTSanDefaultSuppressions[] =
     "race:webrtc::RTPSender::ProcessBitrate\n"
     "race:webrtc::VideoCodingModuleImpl::Decode\n"
     "race:webrtc::RTPSender::SendOutgoingData\n"
-    "race:webrtc::VP8EncoderImpl::GetEncodedPartitions\n"
-    "race:webrtc::VP8EncoderImpl::Encode\n"
+    "race:webrtc::LibvpxVp8Encoder::GetEncodedPartitions\n"
+    "race:webrtc::LibvpxVp8Encoder::Encode\n"
     "race:webrtc::ViEEncoder::DeliverFrame\n"
     "race:webrtc::vcm::VideoReceiver::Decode\n"
     "race:webrtc::VCMReceiver::FrameForDecoding\n"
@@ -236,8 +232,10 @@ char kTSanDefaultSuppressions[] =
 
     // http://crbug.com/587199
     "race:base::TimerTest_OneShotTimer_CustomTaskRunner_Test::TestBody\n"
-    "race:base::TimerSequenceTest_OneShotTimerTaskOnPoolThread_Test::TestBody\n"
-    "race:base::TimerSequenceTest_OneShotTimerUsedAndTaskedOnDifferentPools\n"
+    "race:base::TimerSequenceTest_OneShotTimerTaskOnPoolSequence_Test::"
+    "TestBody\n"
+    "race:base::TimerSequenceTest_"
+    "OneShotTimerUsedAndTaskedOnDifferentSequences\n"
 
     // http://crbug.com/v8/6065
     "race:net::(anonymous namespace)::ProxyResolverV8TracingImpl::RequestImpl"
@@ -252,6 +250,10 @@ char kTSanDefaultSuppressions[] =
     // http://crbug.com/695929
     "race:base::i18n::IsRTL\n"
     "race:base::i18n::SetICUDefaultLocale\n"
+
+    // https://crbug.com/794920
+    "race:base::debug::SetCrashKeyString\n"
+    "race:crash_reporter::internal::CrashKeyStringImpl::Set\n"
 
     // http://crbug.com/795110
     "race:third_party/fontconfig/*\n"

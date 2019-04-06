@@ -134,6 +134,7 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
         mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost);
         mManager = mManagerPhone;
+        mManager.getAnimationHandler().enableTestingMode();
         mManager.init(mTabModelSelector, null, null, container, null, null);
         initializeMotionEvent();
     }
@@ -265,7 +266,7 @@ public class LayoutManagerTest implements MockTabModelDelegate {
                 mManager.getActiveLayout() instanceof StackLayout);
 
         StackLayout layout = (StackLayout) mManager.getActiveLayout();
-        Stack stack = layout.getTabStack(false);
+        Stack stack = layout.getTabStackAtIndex(StackLayout.NORMAL_STACK_INDEX);
         StackTab[] tabs = stack.getTabs();
 
         long time = 0;
@@ -515,7 +516,8 @@ public class LayoutManagerTest implements MockTabModelDelegate {
         });
     }
 
-    private void runToolbarSideSwipeTestOnCurrentModel(ScrollDirection direction, int finalIndex) {
+    private void runToolbarSideSwipeTestOnCurrentModel(
+            @ScrollDirection int direction, int finalIndex) {
         final TabModel model = mTabModelSelector.getCurrentModel();
         final int finalId = model.getTabAt(finalIndex).getId();
 
@@ -531,14 +533,14 @@ public class LayoutManagerTest implements MockTabModelDelegate {
                 mManager.getActiveLayout() instanceof StaticLayout);
     }
 
-    private void performToolbarSideSwipe(ScrollDirection direction) {
+    private void performToolbarSideSwipe(@ScrollDirection int direction) {
         Assert.assertTrue("Unexpected direction for side swipe " + direction,
                 direction == ScrollDirection.LEFT || direction == ScrollDirection.RIGHT);
 
         final Layout layout = mManager.getActiveLayout();
-        final EdgeSwipeHandler eventHandler = mManager.getTopSwipeHandler();
+        final EdgeSwipeHandler eventHandler = mManager.getToolbarSwipeHandler();
 
-        Assert.assertNotNull("LayoutManager#getTopSwipeHandler() returned null", eventHandler);
+        Assert.assertNotNull("LayoutManager#getToolbarSwipeHandler() returned null", eventHandler);
         Assert.assertNotNull("LayoutManager#getActiveLayout() returned null", layout);
 
         final float layoutWidth = layout.getWidth();

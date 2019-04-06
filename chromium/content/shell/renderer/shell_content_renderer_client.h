@@ -11,7 +11,7 @@
 #include "base/compiler_specific.h"
 #include "build/build_config.h"
 #include "content/public/renderer/content_renderer_client.h"
-#include "media/mojo/features.h"
+#include "media/mojo/buildflags.h"
 
 namespace web_cache {
 class WebCacheImpl;
@@ -48,6 +48,13 @@ class ShellContentRendererClient : public ContentRendererClient {
 
   void DidInitializeWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context) override;
+
+  bool ShouldFork(blink::WebLocalFrame* frame,
+                  const GURL& url,
+                  const std::string& http_method,
+                  bool is_initial_navigation,
+                  bool is_server_redirect,
+                  bool* send_referrer) override;
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
   void AddSupportedKeySystems(

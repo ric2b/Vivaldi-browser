@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -18,10 +19,10 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/printing/cloud_print/privet_constants.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/ui/webui/print_preview/printer_capabilities.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/webui/print_preview/print_preview_utils.h"
 #include "chrome/common/chrome_switches.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace {
@@ -85,7 +86,7 @@ void PrivetPrinterHandler::StartPrint(
     const base::string16& job_title,
     const std::string& ticket_json,
     const gfx::Size& page_size,
-    const scoped_refptr<base::RefCountedBytes>& print_data,
+    const scoped_refptr<base::RefCountedMemory>& print_data,
     PrintCallback callback) {
   DCHECK(!print_callback_);
   print_callback_ = std::move(callback);
@@ -100,15 +101,19 @@ void PrivetPrinterHandler::LocalPrinterChanged(
     bool has_local_printing,
     const cloud_print::DeviceDescription& description) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (has_local_printing ||
-      command_line->HasSwitch(switches::kEnablePrintPreviewRegisterPromos)) {
-    auto printer_info = std::make_unique<base::DictionaryValue>();
-    FillPrinterDescription(name, description, has_local_printing,
-                           printer_info.get());
-    base::ListValue printers;
-    printers.Set(0, std::move(printer_info));
-    added_printers_callback_.Run(printers);
+  if (!added_printers_callback_ ||
+      (!has_local_printing &&
+       !command_line->HasSwitch(switches::kEnablePrintPreviewRegisterPromos))) {
+    // If Print Preview is not expecting this printer (callback reset or no
+    // registration promos and not a local printer), return early.
+    return;
   }
+  auto printer_info = std::make_unique<base::DictionaryValue>();
+  FillPrinterDescription(name, description, has_local_printing,
+                         printer_info.get());
+  base::ListValue printers;
+  printers.Set(0, std::move(printer_info));
+  added_printers_callback_.Run(printers);
 }
 
 void PrivetPrinterHandler::LocalPrinterRemoved(const std::string& name) {}
@@ -188,7 +193,7 @@ void PrivetPrinterHandler::OnGotCapabilities(
       std::make_unique<base::DictionaryValue>();
   FillPrinterDescription(name, *description, true, printer_info.get());
   base::DictionaryValue printer_info_and_caps;
-  printer_info_and_caps.SetDictionary(printing::kPrinter,
+  printer_info_and_caps.SetDictionary(cloud_print::kPrivetTypePrinter,
                                       std::move(printer_info));
   std::unique_ptr<base::DictionaryValue> capabilities_copy =
       capabilities->CreateDeepCopy();
@@ -201,7 +206,7 @@ void PrivetPrinterHandler::OnGotCapabilities(
 
 void PrivetPrinterHandler::PrintUpdateClient(
     const base::string16& job_title,
-    const scoped_refptr<base::RefCountedBytes>& print_data,
+    const scoped_refptr<base::RefCountedMemory>& print_data,
     const std::string& print_ticket,
     const std::string& capabilities,
     const gfx::Size& page_size,
@@ -233,7 +238,7 @@ bool PrivetPrinterHandler::UpdateClient(
 
 void PrivetPrinterHandler::StartPrint(
     const base::string16& job_title,
-    const scoped_refptr<base::RefCountedBytes>& print_data,
+    const scoped_refptr<base::RefCountedMemory>& print_data,
     const std::string& print_ticket,
     const std::string& capabilities,
     const gfx::Size& page_size) {
@@ -246,11 +251,11 @@ void PrivetPrinterHandler::StartPrint(
   privet_local_print_operation_->SetPageSize(page_size);
   privet_local_print_operation_->SetData(print_data);
 
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfileIfExists(profile_);
-  if (signin_manager) {
+  identity::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfileIfExists(profile_);
+  if (identity_manager) {
     privet_local_print_operation_->SetUsername(
-        signin_manager->GetAuthenticatedAccountInfo().email);
+        identity_manager->GetPrimaryAccountInfo().email);
   }
 
   privet_local_print_operation_->Start();

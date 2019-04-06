@@ -6,12 +6,11 @@
 
 #include <stdint.h>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/browsing_data/core/pref_names.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "base/memory/ref_counted.h"
@@ -91,7 +90,7 @@ void MediaLicensesCounterPlugin::Count() {
 void MediaLicensesCounterPlugin::OnContentLicensesObtained(
     const std::set<GURL>& origins) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  ReportResult(base::MakeUnique<MediaLicenseResult>(this, origins));
+  ReportResult(std::make_unique<MediaLicenseResult>(this, origins));
 }
 
 #elif defined(OS_ANDROID)
@@ -114,7 +113,7 @@ MediaLicensesCounterAndroid::MediaLicensesCounterAndroid(Profile* profile)
 MediaLicensesCounterAndroid::~MediaLicensesCounterAndroid() = default;
 
 void MediaLicensesCounterAndroid::Count() {
-  ReportResult(base::MakeUnique<MediaLicenseResult>(
+  ReportResult(std::make_unique<MediaLicenseResult>(
       this, cdm::MediaDrmStorageImpl::GetAllOrigins(profile_->GetPrefs())));
 }
 
@@ -149,9 +148,9 @@ const char* MediaLicensesCounter::GetPrefName() const {
 std::unique_ptr<MediaLicensesCounter> MediaLicensesCounter::Create(
     Profile* profile) {
 #if BUILDFLAG(ENABLE_PLUGINS)
-  return base::MakeUnique<MediaLicensesCounterPlugin>(profile);
+  return std::make_unique<MediaLicensesCounterPlugin>(profile);
 #elif defined(OS_ANDROID)
-  return base::MakeUnique<MediaLicensesCounterAndroid>(profile);
+  return std::make_unique<MediaLicensesCounterAndroid>(profile);
 #else
 #error "Unsupported configuration"
 #endif

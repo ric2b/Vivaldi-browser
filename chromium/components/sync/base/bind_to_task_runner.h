@@ -13,7 +13,7 @@
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 
 // This is a helper utility for Bind()ing callbacks to a given TaskRunner.
 // The typical use is when |a| (of class |A|) wants to hand a callback such as
@@ -21,7 +21,7 @@
 // the callback, it does so on a specific TaskRunner (for example, |a|'s current
 // MessageLoop).
 //
-// Typical usage: request to be called back on the current thread:
+// Typical usage: request to be called back on the current sequence:
 // other->StartAsyncProcessAndCallMeBack(
 //    BindToTaskRunner(my_task_runner_, base::Bind(&MyClass::MyMethod, this)));
 //
@@ -30,8 +30,9 @@
 // of its arguments, and thus can't be used with arrays. Note that the callback
 // is always posted to the target TaskRunner.
 //
-// As a convenience, you can use BindToCurrentThread() to bind to the
-// TaskRunner for the current thread (ie, base::ThreadTaskRunnerHandle::Get()).
+// As a convenience, you can use BindToCurrentSequence() to bind to the
+// TaskRunner for the current sequence (i.e.
+// base::SequencedTaskRunnerHandle::Get()).
 
 namespace syncer {
 namespace bind_helpers {
@@ -42,26 +43,41 @@ struct BindToTaskRunnerTrampoline;
 template <typename... Args>
 struct BindToTaskRunnerTrampoline<void(Args...)> {
   static void Run(const scoped_refptr<base::TaskRunner>& task_runner,
-                  const base::Callback<void(Args...)>& cb,
+                  base::OnceCallback<void(Args...)> cb,
                   Args... args) {
-    task_runner->PostTask(FROM_HERE,
-                          base::BindOnce(cb, std::forward<Args>(args)...));
+    task_runner->PostTask(
+        FROM_HERE, base::BindOnce(std::move(cb), std::forward<Args>(args)...));
   }
 };
 
 }  // namespace bind_helpers
 
 template <typename T>
-base::Callback<T> BindToTaskRunner(
+base::OnceCallback<T> BindToTaskRunner(
     const scoped_refptr<base::TaskRunner>& task_runner,
-    const base::Callback<T>& cb) {
-  return base::Bind(&bind_helpers::BindToTaskRunnerTrampoline<T>::Run,
-                    task_runner, cb);
+    base::OnceCallback<T> cb) {
+  return base::BindOnce(&bind_helpers::BindToTaskRunnerTrampoline<T>::Run,
+                        task_runner, std::move(cb));
 }
 
 template <typename T>
-base::Callback<T> BindToCurrentThread(const base::Callback<T>& cb) {
-  return BindToTaskRunner(base::ThreadTaskRunnerHandle::Get(), cb);
+base::RepeatingCallback<T> BindToTaskRunner(
+    const scoped_refptr<base::TaskRunner>& task_runner,
+    const base::RepeatingCallback<T>& cb) {
+  return base::BindRepeating(&bind_helpers::BindToTaskRunnerTrampoline<T>::Run,
+                             task_runner, cb);
+}
+
+template <typename T>
+base::OnceCallback<T> BindToCurrentSequence(base::OnceCallback<T> cb) {
+  return BindToTaskRunner(base::SequencedTaskRunnerHandle::Get(),
+                          std::move(cb));
+}
+
+template <typename T>
+base::RepeatingCallback<T> BindToCurrentSequence(
+    const base::RepeatingCallback<T>& cb) {
+  return BindToTaskRunner(base::SequencedTaskRunnerHandle::Get(), cb);
 }
 
 }  // namespace syncer

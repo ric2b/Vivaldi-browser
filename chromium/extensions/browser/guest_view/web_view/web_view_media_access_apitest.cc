@@ -27,13 +27,13 @@ class MockWebContentsDelegate : public content::WebContentsDelegate {
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) override {
+      content::MediaResponseCallback callback) override {
     requested_ = true;
     if (request_message_loop_runner_.get())
       request_message_loop_runner_->Quit();
   }
 
-  bool CheckMediaAccessPermission(content::WebContents* web_contents,
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) override {
     checked_ = true;

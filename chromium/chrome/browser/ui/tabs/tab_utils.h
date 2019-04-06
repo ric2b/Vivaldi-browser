@@ -34,6 +34,8 @@ enum class TabAlertState {
   AUDIO_MUTING,         // Tab audio is being muted.
   BLUETOOTH_CONNECTED,  // Tab is connected to a BT Device.
   USB_CONNECTED,        // Tab is connected to a USB device.
+  PIP_PLAYING,          // Tab contains a video in Picture-in-Picture mode.
+  DESKTOP_CAPTURING,    // Desktop contents being recorded, consumed by tab.
 };
 
 enum class TabMutedReason {

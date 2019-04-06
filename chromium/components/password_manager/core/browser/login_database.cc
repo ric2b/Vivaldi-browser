@@ -10,6 +10,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <set>
 #include <utility>
 
 #include "base/bind.h"
@@ -51,8 +52,8 @@ const int kCurrentVersionNumber = 19;
 // version can still read/write the current database.
 const int kCompatibleVersionNumber = 19;
 
-base::Pickle SerializePossibleUsernamePairs(
-    const autofill::PossibleUsernamesVector& vec) {
+base::Pickle SerializeValueElementPairs(
+    const autofill::ValueElementVector& vec) {
   base::Pickle p;
   for (size_t i = 0; i < vec.size(); ++i) {
     p.WriteString16(vec[i].first);
@@ -61,9 +62,9 @@ base::Pickle SerializePossibleUsernamePairs(
   return p;
 }
 
-autofill::PossibleUsernamesVector DeserializePossibleUsernamePairs(
+autofill::ValueElementVector DeserializeValueElementPairs(
     const base::Pickle& p) {
-  autofill::PossibleUsernamesVector ret;
+  autofill::ValueElementVector ret;
   base::string16 value;
   base::string16 field_name;
 
@@ -71,7 +72,7 @@ autofill::PossibleUsernamesVector DeserializePossibleUsernamePairs(
   while (iterator.ReadString16(&value)) {
     bool name_success = iterator.ReadString16(&field_name);
     DCHECK(name_success);
-    ret.push_back(autofill::PossibleUsernamePair(value, field_name));
+    ret.push_back(autofill::ValueElementPair(value, field_name));
   }
   return ret;
 }
@@ -156,7 +157,7 @@ void BindAddStatement(const PasswordForm& form,
   s->BindInt(COLUMN_SKIP_ZERO_CLICK, form.skip_zero_click);
   s->BindInt(COLUMN_GENERATION_UPLOAD_STATUS, form.generation_upload_status);
   base::Pickle usernames_pickle =
-      SerializePossibleUsernamePairs(form.other_possible_usernames);
+      SerializeValueElementPairs(form.other_possible_usernames);
   s->BindBlob(COLUMN_POSSIBLE_USERNAME_PAIRS, usernames_pickle.data(),
               usernames_pickle.size());
 }
@@ -788,25 +789,47 @@ void LoginDatabase::ReportMetrics(const std::string& sync_username,
   LogNumberOfAccountsForScheme("Https", https_logins);
   LogNumberOfAccountsForScheme("Other", other_logins);
 
-  sql::Statement form_based_passwords_statement(
-      db_.GetUniqueStatement("SELECT signon_realm, password_value FROM logins "
-                             "WHERE blacklisted_by_user = 0 AND scheme = 0"));
+  sql::Statement saved_passwords_statement(
+      db_.GetUniqueStatement("SELECT signon_realm, password_value, scheme "
+                             "FROM logins WHERE blacklisted_by_user = 0"));
 
   std::map<base::string16, std::vector<std::string>> passwords_to_realms;
-  while (form_based_passwords_statement.Step()) {
-    std::string signon_realm = form_based_passwords_statement.ColumnString(0);
+  size_t failed_encryption = 0;
+  while (saved_passwords_statement.Step()) {
     base::string16 decrypted_password;
     // Note that CryptProtectData() is non-deterministic, so passwords must be
     // decrypted before checking equality.
-    if (!IsValidAndroidFacetURI(signon_realm) &&
-        DecryptedString(form_based_passwords_statement.ColumnString(1),
+    if (DecryptedString(saved_passwords_statement.ColumnString(1),
                         &decrypted_password) == ENCRYPTION_RESULT_SUCCESS) {
-      passwords_to_realms[decrypted_password].push_back(signon_realm);
+      std::string signon_realm = saved_passwords_statement.ColumnString(0);
+      if (saved_passwords_statement.ColumnInt(2) == 0 &&
+          !decrypted_password.empty() &&
+          !IsValidAndroidFacetURI(signon_realm)) {
+        passwords_to_realms[decrypted_password].push_back(
+            std::move(signon_realm));
+      }
+    } else {
+      ++failed_encryption;
     }
   }
+  UMA_HISTOGRAM_COUNTS_100("PasswordManager.InaccessiblePasswords",
+                           failed_encryption);
 
   for (const auto& password_to_realms : passwords_to_realms)
     LogPasswordReuseMetrics(password_to_realms.second);
+
+  sql::Statement blacklist_statement(
+      db_.GetUniqueStatement("SELECT signon_realm "
+                             "FROM logins WHERE blacklisted_by_user = 1"));
+  std::set<std::string> signon_realms;
+  size_t blacklisted_items = 0;
+  while (blacklist_statement.Step()) {
+    signon_realms.insert(blacklist_statement.ColumnString(0));
+    ++blacklisted_items;
+  }
+  size_t blacklisted_duplicates = blacklisted_items - signon_realms.size();
+  UMA_HISTOGRAM_COUNTS_1000("PasswordManager.BlacklistedDuplicates",
+                            blacklisted_duplicates);
 }
 
 PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
@@ -879,7 +902,7 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
   s.BindInt(next_param++, form.skip_zero_click);
   s.BindInt(next_param++, form.generation_upload_status);
   base::Pickle username_pickle =
-      SerializePossibleUsernamePairs(form.other_possible_usernames);
+      SerializeValueElementPairs(form.other_possible_usernames);
   s.BindBlob(next_param++, username_pickle.data(), username_pickle.size());
   // NOTE: Add new fields here unless the field is a part of the unique key.
   // If so, add new field below.
@@ -978,10 +1001,9 @@ bool LoginDatabase::DisableAutoSignInForOrigin(const GURL& origin) {
   return s.Run();
 }
 
-// static
 LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
     PasswordForm* form,
-    const sql::Statement& s) {
+    const sql::Statement& s) const {
   std::string encrypted_password;
   s.ColumnBlobAsString(COLUMN_PASSWORD_VALUE, &encrypted_password);
   base::string16 decrypted_password;
@@ -1019,7 +1041,7 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
     base::Pickle pickle(
         static_cast<const char*>(s.ColumnBlob(COLUMN_POSSIBLE_USERNAME_PAIRS)),
         s.ColumnByteLength(COLUMN_POSSIBLE_USERNAME_PAIRS));
-    form->other_possible_usernames = DeserializePossibleUsernamePairs(pickle);
+    form->other_possible_usernames = DeserializeValueElementPairs(pickle);
   }
   form->times_used = s.ColumnInt(COLUMN_TIMES_USED);
   if (s.ColumnByteLength(COLUMN_FORM_DATA)) {
@@ -1259,11 +1281,10 @@ std::string LoginDatabase::GetEncryptedPassword(
   return encrypted_password;
 }
 
-// static
 bool LoginDatabase::StatementToForms(
     sql::Statement* statement,
     const PasswordStore::FormDigest* matched_form,
-    std::vector<std::unique_ptr<PasswordForm>>* forms) {
+    std::vector<std::unique_ptr<PasswordForm>>* forms) const {
   PSLDomainMatchMetric psl_domain_match_metric = PSL_DOMAIN_MATCH_NONE;
 
   forms->clear();

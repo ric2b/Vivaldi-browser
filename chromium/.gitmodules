@@ -1,6 +1,9 @@
 [submodule "buildtools"]
 	path = buildtools
 	url = ../buildtools.git
+[submodule "chrome/browser/resources/media_router/extension/src"]
+	path = chrome/browser/resources/media_router/extension/src
+	url = ../../media_router.git
 [submodule "chrome/installer/mac/third_party/xz/xz"]
 	path = chrome/installer/mac/third_party/xz/xz
 	url = ../deps/xz.git
@@ -10,9 +13,12 @@
 [submodule "chrome/test/data/perf/frame_rate/content"]
 	path = chrome/test/data/perf/frame_rate/content
 	url = ../frame_rate/content.git
-[submodule "chrome/test/data/vr/webvr_info"]
-	path = chrome/test/data/vr/webvr_info
+[submodule "chrome/test/data/xr/webvr_info"]
+	path = chrome/test/data/xr/webvr_info
 	url = ../../external/github.com/toji/webvr.info.git
+[submodule "chrome/test/data/xr/webxr_samples"]
+	path = chrome/test/data/xr/webxr_samples
+	url = ../../external/github.com/immersive-web/webxr-samples.git
 [submodule "media/cdm/api"]
 	path = media/cdm/api
 	url = ../cdm.git
@@ -25,6 +31,9 @@
 [submodule "third_party/bidichecker"]
 	path = third_party/bidichecker
 	url = ../../external/bidichecker/lib.git
+[submodule "third_party/bison"]
+	path = third_party/bison
+	url = ../deps/bison.git
 [submodule "third_party/boringssl/src"]
 	path = third_party/boringssl/src
 	url = ../../boringssl/boringssl.git
@@ -52,9 +61,6 @@
 [submodule "third_party/depot_tools"]
 	path = third_party/depot_tools
 	url = ../tools/depot_tools.git
-[submodule "third_party/deqp/src"]
-	path = third_party/deqp/src
-	url = ../../android/platform/external/deqp.git
 [submodule "third_party/dom_distiller_js/dist"]
 	path = third_party/dom_distiller_js/dist
 	url = ../dom-distiller/dist.git
@@ -76,9 +82,6 @@
 [submodule "third_party/gestures/gestures"]
 	path = third_party/gestures/gestures
 	url = ../../chromiumos/platform/gestures.git
-[submodule "third_party/glslang-angle/src"]
-	path = third_party/glslang-angle/src
-	url = ../../android/platform/external/shaderc/glslang.git
 [submodule "third_party/glslang/src"]
 	path = third_party/glslang/src
 	url = ../../external/github.com/google/glslang.git
@@ -88,6 +91,12 @@
 [submodule "third_party/googletest/src"]
 	path = third_party/googletest/src
 	url = ../../external/github.com/google/googletest.git
+[submodule "third_party/gperf"]
+	path = third_party/gperf
+	url = ../deps/gperf.git
+[submodule "third_party/harfbuzz-ng/src"]
+	path = third_party/harfbuzz-ng/src
+	url = ../../external/github.com/harfbuzz/harfbuzz.git
 [submodule "third_party/hunspell_dictionaries"]
 	path = third_party/hunspell_dictionaries
 	url = ../deps/hunspell_dictionaries.git
@@ -163,6 +172,9 @@
 [submodule "third_party/pdfium"]
 	path = third_party/pdfium
 	url = ../../pdfium/pdfium.git
+[submodule "third_party/pefile"]
+	path = third_party/pefile
+	url = ../../external/pefile.git
 [submodule "third_party/perfetto"]
 	path = third_party/perfetto
 	url = ../../android/platform/external/perfetto.git
@@ -172,6 +184,9 @@
 [submodule "third_party/pywebsocket/src"]
 	path = third_party/pywebsocket/src
 	url = ../../external/github.com/google/pywebsocket.git
+[submodule "third_party/quic_trace/src"]
+	path = third_party/quic_trace/src
+	url = ../../external/github.com/google/quic-trace.git
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
@@ -190,12 +205,6 @@
 [submodule "third_party/snappy/src"]
 	path = third_party/snappy/src
 	url = ../../external/github.com/google/snappy.git
-[submodule "third_party/spirv-headers/src"]
-	path = third_party/spirv-headers/src
-	url = ../../android/platform/external/shaderc/spirv-headers.git
-[submodule "third_party/spirv-tools-angle/src"]
-	path = third_party/spirv-tools-angle/src
-	url = ../../android/platform/external/shaderc/spirv-tools.git
 [submodule "third_party/swiftshader"]
 	path = third_party/swiftshader
 	url = ../../swiftshader/SwiftShader.git
@@ -205,9 +214,6 @@
 [submodule "third_party/visualmetrics/src"]
 	path = third_party/visualmetrics/src
 	url = ../../external/github.com/WPO-Foundation/visualmetrics.git
-[submodule "third_party/vulkan-validation-layers/src"]
-	path = third_party/vulkan-validation-layers/src
-	url = ../../android/platform/external/vulkan-validation-layers.git
 [submodule "third_party/wayland-protocols/src"]
 	path = third_party/wayland-protocols/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland-protocols.git
@@ -232,9 +238,6 @@
 [submodule "third_party/yasm/source/patched-yasm"]
 	path = third_party/yasm/source/patched-yasm
 	url = ../deps/yasm/patched-yasm.git
-[submodule "tools/gyp"]
-	path = tools/gyp
-	url = ../../external/gyp.git
 [submodule "tools/page_cycler/acid3"]
 	path = tools/page_cycler/acid3
 	url = ../deps/acid3.git
@@ -244,12 +247,3 @@
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
-[submodule "third_party/pefile"]
-	path = third_party/pefile
-	url = ../../external/pefile.git
-[submodule "third_party/bison"]
-	path = third_party/bison
-	url = ../deps/bison.git
-[submodule "third_party/gperf"]
-	path = third_party/gperf
-	url = ../deps/gperf.git

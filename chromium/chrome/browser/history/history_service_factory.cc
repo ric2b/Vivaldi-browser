@@ -4,7 +4,6 @@
 
 #include "chrome/browser/history/history_service_factory.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/chrome_history_client.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -81,16 +80,16 @@ KeyedService* HistoryServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   std::unique_ptr<history::HistoryService> history_service(
       new history::HistoryService(
-          base::MakeUnique<ChromeHistoryClient>(
+          std::make_unique<ChromeHistoryClient>(
               BookmarkModelFactory::GetForBrowserContext(context)),
-          base::MakeUnique<history::ContentVisitDelegate>(context)));
+          std::make_unique<history::ContentVisitDelegate>(context)));
 
   Profile *profile = Profile::FromBrowserContext(context);
   int number_of_days_to_keep_visits = profile->GetPrefs()->GetInteger(
       vivaldiprefs::kHistoryDaysToKeepVisits);
 
   history::HistoryDatabaseParams param =
-      history::HistoryDatabaseParamsForPath(profile->GetPath());
+      history::HistoryDatabaseParamsForPath(context->GetPath());
   param.number_of_days_to_keep_visits = number_of_days_to_keep_visits;
 
   if (!history_service->Init(param)) {

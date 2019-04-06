@@ -8,9 +8,9 @@
 #include <pthread.h>
 
 #include "crazy_linker_library_list.h"
+#include "crazy_linker_pointer_set.h"
 #include "crazy_linker_rdebug.h"
 #include "crazy_linker_search_path_list.h"
-#include "crazy_linker_util.h"
 
 // All crazy linker globals are declared in this header.
 
@@ -18,37 +18,81 @@ namespace crazy {
 
 class Globals {
  public:
-  Globals();
-  ~Globals();
-
-  void Lock() { pthread_mutex_lock(&lock_); }
-
-  void Unlock() { pthread_mutex_unlock(&lock_); }
-
+  // Get the single Globals instance for this process.
   static Globals* Get();
 
-  static LibraryList* GetLibraries() { return &Get()->libraries_; }
+  // Default constructor.
+  Globals();
 
-  static SearchPathList* GetSearchPaths() { return &Get()->search_paths_; }
+  // Destructor.
+  ~Globals();
 
-  static RDebug* GetRDebug() { return &Get()->rdebug_; }
+  // Acquire and release the mutex that protects all other non-static members.
+  // ScopedLockedGlobals is recommended, to avoid using these directly.
+  void Lock();
+  void Unlock();
 
-  static int* GetSDKBuildVersion() { return &sdk_build_version_; }
+  // The list of libraries known to the crazy linker.
+  LibraryList* libraries() { return &libraries_; }
+
+  // The RDebug instance for this process.
+  RDebug* rdebug() { return &rdebug_; }
+
+  // Set of valid handles returned by the dlopen() wrapper. This is
+  // required to deal with rare cases where the wrapper is passed
+  // a handle that was opened with the system linker by mistake.
+  PointerSet* valid_handles() { return &valid_handles_; }
+
+  // The current library search path list used by the dlopen() wrapper.
+  // Initialized from LD_LIBRARY_PATH when ::Get() creates the instance.
+  SearchPathList* search_path_list() { return &search_paths_; }
+
+  // Android API level for the current device (if known).
+  // This is static because it must be set before the first call to Get().
+  static int sdk_build_version;
+
+  // Convenience function to get the global RDebug instance.
+  static RDebug* GetRDebug() { return Get()->rdebug(); }
 
  private:
   pthread_mutex_t lock_;
   LibraryList libraries_;
   SearchPathList search_paths_;
   RDebug rdebug_;
-  static int sdk_build_version_;
+  PointerSet valid_handles_;
 };
 
-// Helper class to access the globals with scoped locking.
-class ScopedGlobalLock {
+// Convenience class to retrieve the Globals instance and lock it at the same
+// time on construction, then release it on destruction. Also dereference can
+// be used to access global methods and members.
+class ScopedLockedGlobals {
  public:
-  ScopedGlobalLock() { Globals::Get()->Lock(); }
+  // Default constructor acquires the lock on the global instance.
+  ScopedLockedGlobals() : globals_(Globals::Get()) { globals_->Lock(); }
 
-  ~ScopedGlobalLock() { Globals::Get()->Unlock(); }
+  // Destructor releases the lock.
+  ~ScopedLockedGlobals() { globals_->Unlock(); }
+
+  // Disallow copy operations.
+  ScopedLockedGlobals(const ScopedLockedGlobals&) = delete;
+  ScopedLockedGlobals& operator=(const ScopedLockedGlobals&) = delete;
+
+  // Dereference operator.
+  Globals* operator->() { return globals_; }
+
+ private:
+  Globals* globals_;
+};
+
+// Convenience class used to operate on a mutex used to synchronize access to
+// the global _r_debug link map, at least from threads using the crazy linker.
+class ScopedLinkMapLocker {
+ public:
+  ScopedLinkMapLocker() { pthread_mutex_lock(&s_lock_); }
+  ~ScopedLinkMapLocker() { pthread_mutex_unlock(&s_lock_); }
+
+ private:
+  static pthread_mutex_t s_lock_;
 };
 
 }  // namespace crazy

@@ -8,10 +8,12 @@
 
 #include <algorithm>
 
+#include "base/containers/span.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -61,15 +63,7 @@ namespace {
 const char kLeafCert[] = "Leaf";
 const char kIntermediateCert[] = "Intermediate";
 const char kRootCert[] = "Root";
-// Matches the order of X509Certificate::PublicKeyType
-const char* const kCertTypeStrings[] = {
-    "Unknown",
-    "RSA",
-    "DSA",
-    "ECDSA",
-    "DH",
-    "ECDH"
-};
+
 // Histogram buckets for RSA/DSA/DH key sizes.
 const int kRsaDsaKeySizes[] = {512, 768, 1024, 1536, 2048, 3072, 4096, 8192,
                                16384};
@@ -77,12 +71,23 @@ const int kRsaDsaKeySizes[] = {512, 768, 1024, 1536, 2048, 3072, 4096, 8192,
 // 186-4 approved curves.
 const int kEccKeySizes[] = {163, 192, 224, 233, 256, 283, 384, 409, 521, 571};
 
-const char* CertTypeToString(int cert_type) {
-  if (cert_type < 0 ||
-      static_cast<size_t>(cert_type) >= arraysize(kCertTypeStrings)) {
-    return "Unsupported";
+const char* CertTypeToString(X509Certificate::PublicKeyType cert_type) {
+  switch (cert_type) {
+    case X509Certificate::kPublicKeyTypeUnknown:
+      return "Unknown";
+    case X509Certificate::kPublicKeyTypeRSA:
+      return "RSA";
+    case X509Certificate::kPublicKeyTypeDSA:
+      return "DSA";
+    case X509Certificate::kPublicKeyTypeECDSA:
+      return "ECDSA";
+    case X509Certificate::kPublicKeyTypeDH:
+      return "DH";
+    case X509Certificate::kPublicKeyTypeECDH:
+      return "ECDH";
   }
-  return kCertTypeStrings[cert_type];
+  NOTREACHED();
+  return "Unsupported";
 }
 
 void RecordPublicKeyHistogram(const char* chain_position,
@@ -105,16 +110,14 @@ void RecordPublicKeyHistogram(const char* chain_position,
     // binary curves - which range from 163 bits to 571 bits.
     counter = base::CustomHistogram::FactoryGet(
         histogram_name,
-        base::CustomHistogram::ArrayToCustomRanges(kEccKeySizes,
-                                                   arraysize(kEccKeySizes)),
+        base::CustomHistogram::ArrayToCustomEnumRanges(kEccKeySizes),
         base::HistogramBase::kUmaTargetedHistogramFlag);
   } else {
     // Key sizes < 1024 bits should cause errors, while key sizes > 16K are not
     // uniformly supported by the underlying cryptographic libraries.
     counter = base::CustomHistogram::FactoryGet(
         histogram_name,
-        base::CustomHistogram::ArrayToCustomRanges(kRsaDsaKeySizes,
-                                                   arraysize(kRsaDsaKeySizes)),
+        base::CustomHistogram::ArrayToCustomEnumRanges(kRsaDsaKeySizes),
         base::HistogramBase::kUmaTargetedHistogramFlag);
   }
   counter->Add(size_bits);
@@ -201,11 +204,19 @@ bool IsUntrustedSymantecCert(const X509Certificate& cert) {
   const base::Time& start = cert.valid_start();
   if (start.is_max() || start.is_null())
     return true;
+
   // Certificates issued on/after 2017-12-01 00:00:00 UTC are no longer
   // trusted.
   const base::Time kSymantecDeprecationDate =
       base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(1512086400);
   if (start >= kSymantecDeprecationDate)
+    return true;
+
+  // Certificates issued prior to 2016-06-01 00:00:00 UTC are no longer
+  // trusted.
+  const base::Time kFirstAcceptedCertDate =
+      base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(1464739200);
+  if (start < kFirstAcceptedCertDate)
     return true;
 
   return false;
@@ -242,7 +253,7 @@ void BestEffortCheckOCSP(const std::string& raw_response,
 
   verify_result->revocation_status =
       CheckOCSP(raw_response, cert_der, issuer_der, base::Time::Now(),
-                &verify_result->response_status);
+                kMaxOCSPLeafUpdateAge, &verify_result->response_status);
 }
 
 // Records histograms indicating whether the certificate |cert|, which
@@ -283,7 +294,13 @@ void RecordTLSFeatureExtensionWithPrivateRoot(
 // This also accounts for situations in which a new CA is introduced, and
 // has been cross-signed by an existing CA. Assessing impact should use the
 // most-specific trust anchor, when possible.
-void RecordTrustAnchorHistogram(const HashValueVector& spki_hashes) {
+//
+// This also histograms for divergence between the root store and
+// |spki_hashes| - that is, situations in which the OS methods of detecting
+// a known root flag a certificate as known, but its hash is not known as part
+// of the built-in list.
+void RecordTrustAnchorHistogram(const HashValueVector& spki_hashes,
+                                bool is_issued_by_known_root) {
   int32_t id = 0;
   for (const auto& hash : spki_hashes) {
     id = GetNetTrustAnchorHistogramIdForSPKI(hash);
@@ -291,6 +308,14 @@ void RecordTrustAnchorHistogram(const HashValueVector& spki_hashes) {
       break;
   }
   base::UmaHistogramSparse("Net.Certificate.TrustAnchor.Verify", id);
+
+  // Record when a known trust anchor is not found within the chain, but the
+  // certificate is flagged as being from a known root (meaning a fallback to
+  // OS-based methods of determination).
+  if (id == 0) {
+    UMA_HISTOGRAM_BOOLEAN("Net.Certificate.TrustAnchor.VerifyOutOfDate",
+                          is_issued_by_known_root);
+  }
 }
 
 // Comparison functor used for binary searching whether a given HashValue,
@@ -501,13 +526,6 @@ int CertVerifyProc::Verify(X509Certificate* cert,
     return ERR_CERT_REVOKED;
   }
 
-  // We do online revocation checking for EV certificates that aren't covered
-  // by a fresh CRLSet.
-  // TODO(rsleevi): http://crbug.com/142974 - Allow preferences to fully
-  // disable revocation checking.
-  if (flags & CertVerifier::VERIFY_EV_CERT)
-    flags |= CertVerifier::VERIFY_REV_CHECKING_ENABLED_EV_ONLY;
-
   int rv = VerifyInternal(cert, hostname, ocsp_response, flags, crl_set,
                           additional_trust_anchors, verify_result);
 
@@ -519,10 +537,7 @@ int CertVerifyProc::Verify(X509Certificate* cert,
     rv = MapCertStatusToNetError(verify_result->cert_status);
   }
 
-  bool allow_common_name_fallback =
-      !verify_result->is_issued_by_known_root &&
-      (flags & CertVerifier::VERIFY_ENABLE_COMMON_NAME_FALLBACK_LOCAL_ANCHORS);
-  if (!cert->VerifyNameMatch(hostname, allow_common_name_fallback)) {
+  if (!cert->VerifyNameMatch(hostname)) {
     verify_result->cert_status |= CERT_STATUS_COMMON_NAME_INVALID;
     rv = MapCertStatusToNetError(verify_result->cert_status);
   }
@@ -604,8 +619,9 @@ int CertVerifyProc::Verify(X509Certificate* cert,
   // https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html
   if (!(flags & CertVerifier::VERIFY_DISABLE_SYMANTEC_ENFORCEMENT) &&
       IsLegacySymantecCert(verify_result->public_key_hashes)) {
-    if (IsUntrustedSymantecCert(*verify_result->verified_cert)) {
-      verify_result->cert_status |= CERT_STATUS_AUTHORITY_INVALID;
+    if (base::FeatureList::IsEnabled(kLegacySymantecPKIEnforcement) ||
+        IsUntrustedSymantecCert(*verify_result->verified_cert)) {
+      verify_result->cert_status |= CERT_STATUS_SYMANTEC_LEGACY;
       if (rv == OK || IsCertificateError(rv))
         rv = MapCertStatusToNetError(verify_result->cert_status);
     }
@@ -635,8 +651,10 @@ int CertVerifyProc::Verify(X509Certificate* cert,
     RecordTLSFeatureExtensionWithPrivateRoot(cert, verify_result->ocsp_result);
 
   // Record a histogram for per-verification usage of root certs.
-  if (rv == OK)
-    RecordTrustAnchorHistogram(verify_result->public_key_hashes);
+  if (rv == OK) {
+    RecordTrustAnchorHistogram(verify_result->public_key_hashes,
+                               verify_result->is_issued_by_known_root);
+  }
 
   return rv;
 }
@@ -649,16 +667,14 @@ bool CertVerifyProc::IsBlacklisted(X509Certificate* cert) {
   //
   // The old certs had a lifetime of five years, so this can be removed April
   // 2nd, 2019.
-  const std::string& cn = cert->subject().common_name;
-  static const char kCloudFlareCNSuffix[] = ".cloudflare.com";
-  // kCloudFlareEpoch is the base::Time internal value for midnight at the
-  // beginning of April 2nd, 2014, UTC.
-  static const int64_t kCloudFlareEpoch = INT64_C(13040870400000000);
-  if (cn.size() > arraysize(kCloudFlareCNSuffix) - 1 &&
-      cn.compare(cn.size() - (arraysize(kCloudFlareCNSuffix) - 1),
-                 arraysize(kCloudFlareCNSuffix) - 1,
-                 kCloudFlareCNSuffix) == 0 &&
-      cert->valid_start() < base::Time::FromInternalValue(kCloudFlareEpoch)) {
+  const base::StringPiece cn(cert->subject().common_name);
+  static constexpr base::StringPiece kCloudflareCNSuffix(".cloudflare.com");
+  // April 2nd, 2014 UTC, expressed as seconds since the Unix Epoch.
+  static constexpr base::TimeDelta kCloudflareEpoch =
+      base::TimeDelta::FromSeconds(1396396800);
+
+  if (cn.ends_with(kCloudflareCNSuffix) &&
+      cert->valid_start() < (base::Time::UnixEpoch() + kCloudflareEpoch)) {
     return true;
   }
 
@@ -682,39 +698,34 @@ bool CertVerifyProc::IsPublicKeyBlacklisted(
   return false;
 }
 
-static const size_t kMaxDomainLength = 18;
-
 // CheckNameConstraints verifies that every name in |dns_names| is in one of
-// the domains specified by |domains|. The |domains| array is terminated by an
-// empty string.
+// the domains specified by |domains|.
 static bool CheckNameConstraints(const std::vector<std::string>& dns_names,
-                                 const char domains[][kMaxDomainLength]) {
-  for (std::vector<std::string>::const_iterator i = dns_names.begin();
-       i != dns_names.end(); ++i) {
+                                 base::span<const base::StringPiece> domains) {
+  for (const auto& host : dns_names) {
     bool ok = false;
     url::CanonHostInfo host_info;
-    const std::string dns_name = CanonicalizeHost(*i, &host_info);
+    const std::string dns_name = CanonicalizeHost(host, &host_info);
     if (host_info.IsIPAddress())
       continue;
 
     // If the name is not in a known TLD, ignore it. This permits internal
-    // names.
+    // server names.
     if (!registry_controlled_domains::HostHasRegistryControlledDomain(
             dns_name, registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-            registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES))
+            registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
       continue;
+    }
 
-    for (size_t j = 0; domains[j][0]; ++j) {
-      const size_t domain_length = strlen(domains[j]);
-      // The DNS name must have "." + domains[j] as a suffix.
-      if (i->size() <= (1 /* period before domain */ + domain_length))
+    for (const auto& domain : domains) {
+      // The |domain| must be of ".somesuffix" form, and |dns_name| must
+      // have |domain| as a suffix.
+      DCHECK_EQ('.', domain[0]);
+      if (dns_name.size() <= domain.size())
         continue;
-
-      std::string suffix =
-          base::ToLowerASCII(&(*i)[i->size() - domain_length - 1]);
-      if (suffix[0] != '.')
-        continue;
-      if (memcmp(&suffix[1], domains[j], domain_length) != 0)
+      base::StringPiece suffix =
+          base::StringPiece(dns_name).substr(dns_name.size() - domain.size());
+      if (!base::LowerCaseEqualsASCII(suffix, domain))
         continue;
       ok = true;
       break;
@@ -727,62 +738,52 @@ static bool CheckNameConstraints(const std::vector<std::string>& dns_names,
   return true;
 }
 
-// PublicKeyDomainLimitation contains SHA-256(SPKI) and a pointer to an array of
-// fixed-length strings that contain the domains that the SPKI is allowed to
-// issue for.
-struct PublicKeyDomainLimitation {
-  uint8_t public_key[crypto::kSHA256Length];
-  const char (*domains)[kMaxDomainLength];
-};
-
 // static
 bool CertVerifyProc::HasNameConstraintsViolation(
     const HashValueVector& public_key_hashes,
     const std::string& common_name,
     const std::vector<std::string>& dns_names,
     const std::vector<std::string>& ip_addrs) {
-  static const char kDomainsANSSI[][kMaxDomainLength] = {
-    "fr",  // France
-    "gp",  // Guadeloupe
-    "gf",  // Guyane
-    "mq",  // Martinique
-    "re",  // Réunion
-    "yt",  // Mayotte
-    "pm",  // Saint-Pierre et Miquelon
-    "bl",  // Saint Barthélemy
-    "mf",  // Saint Martin
-    "wf",  // Wallis et Futuna
-    "pf",  // Polynésie française
-    "nc",  // Nouvelle Calédonie
-    "tf",  // Terres australes et antarctiques françaises
-    "",
+  static constexpr base::StringPiece kDomainsANSSI[] = {
+      ".fr",  // France
+      ".gp",  // Guadeloupe
+      ".gf",  // Guyane
+      ".mq",  // Martinique
+      ".re",  // Réunion
+      ".yt",  // Mayotte
+      ".pm",  // Saint-Pierre et Miquelon
+      ".bl",  // Saint Barthélemy
+      ".mf",  // Saint Martin
+      ".wf",  // Wallis et Futuna
+      ".pf",  // Polynésie française
+      ".nc",  // Nouvelle Calédonie
+      ".tf",  // Terres australes et antarctiques françaises
   };
 
-  static const char kDomainsIndiaCCA[][kMaxDomainLength] = {
-    "gov.in",
-    "nic.in",
-    "ac.in",
-    "rbi.org.in",
-    "bankofindia.co.in",
-    "ncode.in",
-    "tcs.co.in",
-    "",
+  static constexpr base::StringPiece kDomainsIndiaCCA[] = {
+      ".gov.in",   ".nic.in",    ".ac.in", ".rbi.org.in", ".bankofindia.co.in",
+      ".ncode.in", ".tcs.co.in",
   };
 
-  static const char kDomainsTest[][kMaxDomainLength] = {
-    "example.com",
-    "",
+  static constexpr base::StringPiece kDomainsTest[] = {
+      ".example.com",
   };
 
-  static const PublicKeyDomainLimitation kLimits[] = {
+  // PublicKeyDomainLimitation contains SHA-256(SPKI) and a pointer to an array
+  // of fixed-length strings that contain the domains that the SPKI is allowed
+  // to issue for.
+  static const struct PublicKeyDomainLimitation {
+    SHA256HashValue public_key_hash;
+    base::span<const base::StringPiece> domains;
+  } kLimits[] = {
       // C=FR, ST=France, L=Paris, O=PM/SGDN, OU=DCSSI,
       // CN=IGC/A/emailAddress=igca@sgdn.pm.gouv.fr
       //
       // net/data/ssl/blacklist/b9bea7860a962ea3611dab97ab6da3e21c1068b97d55575ed0e11279c11c8932.pem
       {
-          {0x86, 0xc1, 0x3a, 0x34, 0x08, 0xdd, 0x1a, 0xa7, 0x7e, 0xe8, 0xb6,
-           0x94, 0x7c, 0x03, 0x95, 0x87, 0x72, 0xf5, 0x31, 0x24, 0x8c, 0x16,
-           0x27, 0xbe, 0xfb, 0x2c, 0x4f, 0x4b, 0x04, 0xd0, 0x44, 0x96},
+          {{0x86, 0xc1, 0x3a, 0x34, 0x08, 0xdd, 0x1a, 0xa7, 0x7e, 0xe8, 0xb6,
+            0x94, 0x7c, 0x03, 0x95, 0x87, 0x72, 0xf5, 0x31, 0x24, 0x8c, 0x16,
+            0x27, 0xbe, 0xfb, 0x2c, 0x4f, 0x4b, 0x04, 0xd0, 0x44, 0x96}},
           kDomainsANSSI,
       },
       // C=IN, O=India PKI, CN=CCA India 2007
@@ -790,9 +791,9 @@ bool CertVerifyProc::HasNameConstraintsViolation(
       //
       // net/data/ssl/blacklist/f375e2f77a108bacc4234894a9af308edeca1acd8fbde0e7aaa9634e9daf7e1c.pem
       {
-          {0x7e, 0x6a, 0xcd, 0x85, 0x3c, 0xac, 0xc6, 0x93, 0x2e, 0x9b, 0x51,
-           0x9f, 0xda, 0xd1, 0xbe, 0xb5, 0x15, 0xed, 0x2a, 0x2d, 0x00, 0x25,
-           0xcf, 0xd3, 0x98, 0xc3, 0xac, 0x1f, 0x0d, 0xbb, 0x75, 0x4b},
+          {{0x7e, 0x6a, 0xcd, 0x85, 0x3c, 0xac, 0xc6, 0x93, 0x2e, 0x9b, 0x51,
+            0x9f, 0xda, 0xd1, 0xbe, 0xb5, 0x15, 0xed, 0x2a, 0x2d, 0x00, 0x25,
+            0xcf, 0xd3, 0x98, 0xc3, 0xac, 0x1f, 0x0d, 0xbb, 0x75, 0x4b}},
           kDomainsIndiaCCA,
       },
       // C=IN, O=India PKI, CN=CCA India 2011
@@ -800,9 +801,9 @@ bool CertVerifyProc::HasNameConstraintsViolation(
       //
       // net/data/ssl/blacklist/2d66a702ae81ba03af8cff55ab318afa919039d9f31b4d64388680f81311b65a.pem
       {
-          {0x42, 0xa7, 0x09, 0x84, 0xff, 0xd3, 0x99, 0xc4, 0xea, 0xf0, 0xe7,
-           0x02, 0xa4, 0x4b, 0xef, 0x2a, 0xd8, 0xa7, 0x9b, 0x8b, 0xf4, 0x64,
-           0x8f, 0x6b, 0xb2, 0x10, 0xe1, 0x23, 0xfd, 0x07, 0x57, 0x93},
+          {{0x42, 0xa7, 0x09, 0x84, 0xff, 0xd3, 0x99, 0xc4, 0xea, 0xf0, 0xe7,
+            0x02, 0xa4, 0x4b, 0xef, 0x2a, 0xd8, 0xa7, 0x9b, 0x8b, 0xf4, 0x64,
+            0x8f, 0x6b, 0xb2, 0x10, 0xe1, 0x23, 0xfd, 0x07, 0x57, 0x93}},
           kDomainsIndiaCCA,
       },
       // C=IN, O=India PKI, CN=CCA India 2014
@@ -810,36 +811,35 @@ bool CertVerifyProc::HasNameConstraintsViolation(
       //
       // net/data/ssl/blacklist/60109bc6c38328598a112c7a25e38b0f23e5a7511cb815fb64e0c4ff05db7df7.pem
       {
-          {0x9c, 0xf4, 0x70, 0x4f, 0x3e, 0xe5, 0xa5, 0x98, 0x94, 0xb1, 0x6b,
-           0xf0, 0x0c, 0xfe, 0x73, 0xd5, 0x88, 0xda, 0xe2, 0x69, 0xf5, 0x1d,
-           0xe6, 0x6a, 0x4b, 0xa7, 0x74, 0x46, 0xee, 0x2b, 0xd1, 0xf7},
+          {{0x9c, 0xf4, 0x70, 0x4f, 0x3e, 0xe5, 0xa5, 0x98, 0x94, 0xb1, 0x6b,
+            0xf0, 0x0c, 0xfe, 0x73, 0xd5, 0x88, 0xda, 0xe2, 0x69, 0xf5, 0x1d,
+            0xe6, 0x6a, 0x4b, 0xa7, 0x74, 0x46, 0xee, 0x2b, 0xd1, 0xf7}},
           kDomainsIndiaCCA,
       },
       // Not a real certificate - just for testing.
       // net/data/ssl/certificates/name_constraint_*.pem
       {
-          {0x8e, 0x9b, 0x14, 0x9f, 0x01, 0x45, 0x4c, 0xee, 0xde, 0xfa, 0x5e,
-           0x73, 0x40, 0x36, 0x21, 0xba, 0xd9, 0x1f, 0xee, 0xe0, 0x3e, 0x74,
-           0x25, 0x6c, 0x59, 0xf4, 0x6f, 0xbf, 0x45, 0x03, 0x5f, 0x8d},
+          {{0x8e, 0x9b, 0x14, 0x9f, 0x01, 0x45, 0x4c, 0xee, 0xde, 0xfa, 0x5e,
+            0x73, 0x40, 0x36, 0x21, 0xba, 0xd9, 0x1f, 0xee, 0xe0, 0x3e, 0x74,
+            0x25, 0x6c, 0x59, 0xf4, 0x6f, 0xbf, 0x45, 0x03, 0x5f, 0x8d}},
           kDomainsTest,
       },
   };
 
-  for (unsigned i = 0; i < arraysize(kLimits); ++i) {
-    for (HashValueVector::const_iterator j = public_key_hashes.begin();
-         j != public_key_hashes.end(); ++j) {
-      if (j->tag() == HASH_VALUE_SHA256 &&
-          memcmp(j->data(), kLimits[i].public_key, crypto::kSHA256Length) ==
-              0) {
-        if (dns_names.empty() && ip_addrs.empty()) {
-          std::vector<std::string> dns_names;
-          dns_names.push_back(common_name);
-          if (!CheckNameConstraints(dns_names, kLimits[i].domains))
-            return true;
-        } else {
-          if (!CheckNameConstraints(dns_names, kLimits[i].domains))
-            return true;
-        }
+  for (const auto& limit : kLimits) {
+    for (const auto& hash : public_key_hashes) {
+      if (hash.tag() != HASH_VALUE_SHA256)
+        continue;
+      if (memcmp(hash.data(), limit.public_key_hash.data, hash.size()) != 0)
+        continue;
+      if (dns_names.empty() && ip_addrs.empty()) {
+        std::vector<std::string> names;
+        names.push_back(common_name);
+        if (!CheckNameConstraints(names, limit.domains))
+          return true;
+      } else {
+        if (!CheckNameConstraints(dns_names, limit.domains))
+          return true;
       }
     }
   }
@@ -856,39 +856,52 @@ bool CertVerifyProc::HasTooLongValidity(const X509Certificate& cert) {
     return true;
   }
 
-  base::Time::Exploded exploded_start;
-  base::Time::Exploded exploded_expiry;
-  cert.valid_start().UTCExplode(&exploded_start);
-  cert.valid_expiry().UTCExplode(&exploded_expiry);
-
-  if (exploded_expiry.year - exploded_start.year > 10)
-    return true;
-
-  int month_diff = (exploded_expiry.year - exploded_start.year) * 12 +
-                   (exploded_expiry.month - exploded_start.month);
-
-  // Add any remainder as a full month.
-  if (exploded_expiry.day_of_month > exploded_start.day_of_month)
-    ++month_diff;
-
+  // These dates are derived from the transitions noted in Section 1.2.2
+  // (Relevant Dates) of the Baseline Requirements.
   const base::Time time_2012_07_01 =
-      base::Time::FromInternalValue(12985574400000000);
+      base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(1341100800);
   const base::Time time_2015_04_01 =
-      base::Time::FromInternalValue(13072320000000000);
+      base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(1427846400);
+  const base::Time time_2018_03_01 =
+      base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(1519862400);
   const base::Time time_2019_07_01 =
-      base::Time::FromInternalValue(13206412800000000);
+      base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(1561939200);
+
+  // Compute the maximally permissive interpretations, accounting for leap
+  // years.
+  // 10 years - two possible leap years.
+  constexpr base::TimeDelta kTenYears =
+      base::TimeDelta::FromDays((365 * 8) + (366 * 2));
+  // 5 years - two possible leap years (year 0/year 4 or year 1/year 5).
+  constexpr base::TimeDelta kSixtyMonths =
+      base::TimeDelta::FromDays((365 * 3) + (366 * 2));
+  // 39 months - one possible leap year, two at 365 days, and the longest
+  // monthly sequence of 31/31/30 days (June/July/August).
+  constexpr base::TimeDelta kThirtyNineMonths =
+      base::TimeDelta::FromDays(366 + 365 + 365 + 31 + 31 + 30);
+
+  base::TimeDelta validity_duration = cert.valid_expiry() - cert.valid_start();
 
   // For certificates issued before the BRs took effect.
-  if (start < time_2012_07_01 && (month_diff > 120 || expiry > time_2019_07_01))
+  if (start < time_2012_07_01 &&
+      (validity_duration > kTenYears || expiry > time_2019_07_01)) {
     return true;
+  }
 
-  // For certificates issued after 1 July 2012: 60 months.
-  if (start >= time_2012_07_01 && month_diff > 60)
+  // For certificates issued after the BR effective date of 1 July 2012: 60
+  // months.
+  if (start >= time_2012_07_01 && validity_duration > kSixtyMonths)
     return true;
 
   // For certificates issued after 1 April 2015: 39 months.
-  if (start >= time_2015_04_01 && month_diff > 39)
+  if (start >= time_2015_04_01 && validity_duration > kThirtyNineMonths)
     return true;
+
+  // For certificates issued after 1 March 2018: 825 days.
+  if (start >= time_2018_03_01 &&
+      validity_duration > base::TimeDelta::FromDays(825)) {
+    return true;
+  }
 
   return false;
 }
@@ -896,5 +909,9 @@ bool CertVerifyProc::HasTooLongValidity(const X509Certificate& cert) {
 // static
 const base::Feature CertVerifyProc::kSHA1LegacyMode{
     "SHA1LegacyMode", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// static
+const base::Feature CertVerifyProc::kLegacySymantecPKIEnforcement{
+    "LegacySymantecPKI", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace net

@@ -8,6 +8,7 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
+#include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -17,6 +18,8 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -41,12 +44,12 @@ void VivaldiWindowsAPI::Shutdown() {
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiWindowsAPI> >::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_factory_window = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>*
 VivaldiWindowsAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_window.Pointer();
 }
 
 void VivaldiWindowsAPI::Observe(
@@ -78,7 +81,7 @@ void VivaldiWindowsAPI::Notify(app_modal::JavaScriptAppModalDialog* dialog) {
   if (dialog->is_before_unload_dialog()) {
     // We notify the UI which tab opened a beforeunload dialog so
     // appropiate action can be taken.
-    int id = SessionTabHelper::IdForTab(dialog->web_contents());
+    int id = SessionTabHelper::IdForTab(dialog->web_contents()).id();
 
     ::vivaldi::DispatchEvent(
         Profile::FromBrowserContext(browser_context_),
@@ -89,7 +92,35 @@ void VivaldiWindowsAPI::Notify(app_modal::JavaScriptAppModalDialog* dialog) {
   }
 }
 
+void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
+  // In Vivaldi we add the ExtensionActionUtil object as an tabstripobserver for
+  // each browser. We fetch the correct browser for each update.
+  extensions::ExtensionActionUtil* utils =
+    extensions::ExtensionActionUtilFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context_));
+
+  browser->tab_strip_model()->AddObserver(utils);
+
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
+      Profile::FromBrowserContext(browser_context_));
+
+  browser->tab_strip_model()->AddObserver(api);
+}
+
 void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
+  // In Vivaldi we add the ExtensionActionUtil object as an tabstripobserver for
+  // each browser. We fetch the correct browser for each update.
+  extensions::ExtensionActionUtil* utils =
+      extensions::ExtensionActionUtilFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context_));
+
+  browser->tab_strip_model()->RemoveObserver(utils);
+
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
+    Profile::FromBrowserContext(browser_context_));
+
+  browser->tab_strip_model()->RemoveObserver(api);
+
   if (chrome::GetTotalBrowserCount() == 1) {
     BrowserList* browsers = BrowserList::GetInstance();
     for (BrowserList::const_iterator iter = browsers->begin();
@@ -266,36 +297,39 @@ bool WindowPrivateSetStateFunction::RunAsync() {
   std::unique_ptr<vivaldi::window_private::SetState::Params> params(
       vivaldi::window_private::SetState::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
-  WindowController* controller;
-  if (!windows_util::GetWindowFromWindowID(
+  Browser* browser;
+  if (!windows_util::GetBrowserFromWindowID(
           this, params->window_id, WindowController::GetAllWindowFilter(),
-          &controller, &error_)) {
+          &browser, &error_)) {
     results_ = vivaldi::window_private::SetState::Results::Create(false);
     SendResponse(false);
     return true;
   }
   ui::WindowShowState show_state = ConvertToWindowShowState(params->state);
 
-  bool was_fullscreen = controller->window()->IsFullscreen();
+  bool was_fullscreen = browser->window()->IsFullscreen();
   if (show_state != ui::SHOW_STATE_FULLSCREEN &&
       show_state != ui::SHOW_STATE_DEFAULT)
-    controller->SetFullscreenMode(false, extension()->url());
+    browser->extension_window_controller()->SetFullscreenMode(
+        false, extension()->url());
 
   switch (show_state) {
     case ui::SHOW_STATE_MINIMIZED:
-      controller->window()->Minimize();
+      browser->extension_window_controller()->window()->Minimize();
       break;
     case ui::SHOW_STATE_MAXIMIZED:
-      controller->window()->Maximize();
+      browser->extension_window_controller()->window()->Maximize();
       break;
     case ui::SHOW_STATE_FULLSCREEN:
-      controller->SetFullscreenMode(true, extension()->url());
+      browser->extension_window_controller()->SetFullscreenMode(
+          true, extension()->url());
       break;
     case ui::SHOW_STATE_NORMAL:
       if (was_fullscreen) {
-        controller->SetFullscreenMode(false, extension()->url());
+        browser->extension_window_controller()->SetFullscreenMode(
+            false, extension()->url());
       } else {
-        controller->window()->Restore();
+        browser->window()->Restore();
       }
       break;
     default:

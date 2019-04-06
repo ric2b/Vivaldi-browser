@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <set>
+#include <tuple>
 
 #include "ash/accelerators/accelerator_table.h"
 #include "base/macros.h"
@@ -15,23 +16,17 @@ namespace ash {
 
 namespace {
 
-// The number of non-Search-based accelerators as of 2017-11-30.
-constexpr int kNonSearchAcceleratorsNum = 92;
-// The hash of non-Search-based accelerators as of 2017-11-30.
-// See HashAcceleratorData().
-// TODO: adding Search-based accelerators should not update this hash
-// (crbug.com/778432).
+// The number of non-Search-based accelerators.
+constexpr int kNonSearchAcceleratorsNum = 89;
+// The hash of non-Search-based accelerators. See HashAcceleratorData().
 constexpr char kNonSearchAcceleratorsHash[] =
-    "cc7e1da44f75a8bc3a8605a06934c8a4";
+    "1da4d0dbc648ec0f008837da1066599e";
 
 struct Cmp {
   bool operator()(const AcceleratorData& lhs, const AcceleratorData& rhs) {
-    if (lhs.trigger_on_press != rhs.trigger_on_press)
-      return lhs.trigger_on_press < rhs.trigger_on_press;
-    if (lhs.keycode != rhs.keycode)
-      return lhs.keycode < rhs.keycode;
-    return lhs.modifiers < rhs.modifiers;
     // Do not check |action|.
+    return std::tie(lhs.trigger_on_press, lhs.keycode, lhs.modifiers) <
+           std::tie(rhs.trigger_on_press, rhs.keycode, rhs.modifiers);
   }
 };
 
@@ -90,6 +85,14 @@ TEST(AcceleratorTableTest, CheckDuplicatedActionsAllowedAtLoginOrLockScreen) {
   }
 }
 
+TEST(AcceleratorTableTest, CheckDuplicatedActionsAllowedAtPowerMenu) {
+  std::set<AcceleratorAction> actions;
+  for (size_t i = 0; i < kActionsAllowedAtPowerMenuLength; ++i) {
+    EXPECT_TRUE(actions.insert(kActionsAllowedAtPowerMenu[i]).second)
+        << "Duplicated action: " << kActionsAllowedAtPowerMenu[i];
+  }
+}
+
 TEST(AcceleratorTableTest, CheckDuplicatedActionsAllowedAtModalWindow) {
   std::set<AcceleratorAction> actions;
   for (size_t i = 0; i < kActionsAllowedAtModalWindowLength; ++i) {
@@ -142,7 +145,7 @@ TEST(AcceleratorTableTest, CheckSearchBasedAccelerators) {
   }
 
   const int accelerators_number = non_search_accelerators.size();
-  EXPECT_LE(accelerators_number, kNonSearchAcceleratorsNum)
+  EXPECT_EQ(accelerators_number, kNonSearchAcceleratorsNum)
       << "All new accelerators should be Search-based and approved by UX.";
 
   std::stable_sort(non_search_accelerators.begin(),

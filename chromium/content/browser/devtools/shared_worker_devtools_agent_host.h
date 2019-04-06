@@ -8,13 +8,12 @@
 #include "base/macros.h"
 #include "base/unguessable_token.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
-#include "third_party/WebKit/public/web/devtools_agent.mojom.h"
+#include "third_party/blink/public/web/devtools_agent.mojom.h"
 
 namespace content {
 
 class SharedWorkerInstance;
 class SharedWorkerHost;
-class RenderProcessHost;
 
 class SharedWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
  public:
@@ -34,10 +33,9 @@ class SharedWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   bool Close() override;
 
   // DevToolsAgentHostImpl overrides.
-  void AttachSession(DevToolsSession* session) override;
+  bool AttachSession(DevToolsSession* session,
+                     TargetRegistry* registry) override;
   void DetachSession(DevToolsSession* session) override;
-  bool DispatchProtocolMessage(DevToolsSession* session,
-                               const std::string& message) override;
 
   bool Matches(SharedWorkerHost* worker_host);
   void WorkerReadyForInspection();
@@ -50,7 +48,6 @@ class SharedWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
 
  private:
   ~SharedWorkerDevToolsAgentHost() override;
-  RenderProcessHost* GetProcess();
   const blink::mojom::DevToolsAgentAssociatedPtr& EnsureAgent();
 
   enum WorkerState {

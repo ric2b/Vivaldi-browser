@@ -14,7 +14,6 @@
 #include "base/scoped_observer.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -45,8 +44,8 @@ struct NamedThreadTraits {
                     T::kThreadId == content::BrowserThread::UI,
                 "ApiResources can only belong to the IO or UI thread.");
 
-  static bool IsMessageLoopValid() {
-    return content::BrowserThread::IsMessageLoopValid(T::kThreadId);
+  static bool IsThreadInitialized() {
+    return content::BrowserThread::IsThreadInitialized(T::kThreadId);
   }
 
   static scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner() {
@@ -110,7 +109,7 @@ class ApiResourceManager : public BrowserContextKeyedAPI,
 
   virtual ~ApiResourceManager() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    DCHECK(ThreadingTraits::IsMessageLoopValid())
+    DCHECK(ThreadingTraits::IsThreadInitialized())
         << "A unit test is using an ApiResourceManager but didn't provide "
            "the thread message loop needed for that kind of resource. "
            "Please ensure that the appropriate message loop is operational.";

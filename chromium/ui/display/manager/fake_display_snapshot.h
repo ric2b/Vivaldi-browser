@@ -58,8 +58,9 @@ class DISPLAY_MANAGER_EXPORT FakeDisplaySnapshot : public DisplaySnapshot {
     Builder& SetIsAspectPerservingScaling(bool is_aspect_preserving_scaling);
     Builder& SetHasOverscan(bool has_overscan);
     Builder& SetHasColorCorrectionMatrix(bool val);
+    Builder& SetColorCorrectionInLinearSpace(bool val);
     Builder& SetName(const std::string& name);
-    Builder& SetProductId(int64_t product_id);
+    Builder& SetProductCode(int64_t product_code);
     Builder& SetMaximumCursorSize(const gfx::Size& maximum_cursor_size);
     // Sets physical_size so that the screen has the specified DPI using the
     // native resolution.
@@ -84,8 +85,9 @@ class DISPLAY_MANAGER_EXPORT FakeDisplaySnapshot : public DisplaySnapshot {
     bool is_aspect_preserving_scaling_ = false;
     bool has_overscan_ = false;
     bool has_color_correction_matrix_ = false;
+    bool color_correction_in_linear_space_ = false;
     std::string name_;
-    int64_t product_id_ = DisplaySnapshot::kInvalidProductID;
+    int64_t product_code_ = DisplaySnapshot::kInvalidProductCode;
     gfx::Size maximum_cursor_size_ = gfx::Size(64, 64);
     DisplayModeList modes_;
     const DisplayMode* current_mode_ = nullptr;
@@ -101,11 +103,12 @@ class DISPLAY_MANAGER_EXPORT FakeDisplaySnapshot : public DisplaySnapshot {
                       bool is_aspect_preserving_scaling,
                       bool has_overscan,
                       bool has_color_correction_matrix,
+                      bool color_correction_in_linear_space,
                       std::string display_name,
                       DisplayModeList modes,
                       const DisplayMode* current_mode,
                       const DisplayMode* native_mode,
-                      int64_t product_id,
+                      int64_t product_code,
                       const gfx::Size& maximum_cursor_size);
   ~FakeDisplaySnapshot() override;
 

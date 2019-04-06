@@ -22,19 +22,11 @@ class VectorIconTexture : public UiTexture {
 
   SkColor GetColor() const { return color_; }
 
-  void SetIcon(const gfx::VectorIcon& icon) {
-    SetAndDirty(&icon_no_1x_.path, icon.path);
-  }
+  void SetIcon(const gfx::VectorIcon* icon) { SetAndDirty(&icon_, icon); }
 
  private:
-  gfx::Size GetPreferredTextureSize(int width) const override {
-    return gfx::Size(width, width);
-  }
-
-  gfx::SizeF GetDrawnSize() const override { return size_; }
-
   void Draw(SkCanvas* sk_canvas, const gfx::Size& texture_size) override {
-    if (icon_no_1x_.is_empty())
+    if (icon_ == nullptr || icon_->is_empty())
       return;
     cc::SkiaPaintCanvas paint_canvas(sk_canvas);
     gfx::Canvas gfx_canvas(&paint_canvas, 1.0f);
@@ -45,19 +37,19 @@ class VectorIconTexture : public UiTexture {
     float icon_size = size_.height();
     float icon_corner_offset = (size_.height() - icon_size) / 2;
     VectorIcon::DrawVectorIcon(
-        &gfx_canvas, icon_no_1x_, icon_size,
+        &gfx_canvas, *icon_, icon_size,
         gfx::PointF(icon_corner_offset, icon_corner_offset), color_);
   }
 
   gfx::SizeF size_;
-  gfx::VectorIcon icon_no_1x_{nullptr, nullptr};
+  const gfx::VectorIcon* icon_ = nullptr;
   SkColor color_ = SK_ColorWHITE;
   DISALLOW_COPY_AND_ASSIGN(VectorIconTexture);
 };
 
-VectorIcon::VectorIcon(int maximum_width_pixels)
-    : TexturedElement(maximum_width_pixels),
-      texture_(std::make_unique<VectorIconTexture>()) {}
+VectorIcon::VectorIcon(int texture_width)
+    : texture_(std::make_unique<VectorIconTexture>()),
+      texture_width_(texture_width) {}
 VectorIcon::~VectorIcon() {}
 
 void VectorIcon::SetColor(SkColor color) {
@@ -69,11 +61,23 @@ SkColor VectorIcon::GetColor() const {
 }
 
 void VectorIcon::SetIcon(const gfx::VectorIcon& icon) {
+  texture_->SetIcon(&icon);
+}
+
+void VectorIcon::SetIcon(const gfx::VectorIcon* icon) {
   texture_->SetIcon(icon);
 }
 
 UiTexture* VectorIcon::GetTexture() const {
   return texture_.get();
+}
+
+bool VectorIcon::TextureDependsOnMeasurement() const {
+  return false;
+}
+
+gfx::Size VectorIcon::MeasureTextureSize() {
+  return gfx::Size(texture_width_, texture_width_);
 }
 
 void VectorIcon::DrawVectorIcon(gfx::Canvas* canvas,
@@ -85,12 +89,9 @@ void VectorIcon::DrawVectorIcon(gfx::Canvas* canvas,
   canvas->Translate(
       {static_cast<int>(corner.x()), static_cast<int>(corner.y())});
 
-  // Explicitly cut out the 1x version of the icon, as PaintVectorIcon draws the
-  // 1x version if device scale factor isn't set. See crbug.com/749146. If all
-  // icons end up being drawn via VectorIcon instances, this will not be
-  // required (the 1x version is automatically elided by this class).
-  gfx::VectorIcon icon_no_1x{icon.path, nullptr};
-  PaintVectorIcon(canvas, icon_no_1x, size_px, color);
+  // Don't use CreateVectorIcon() because its icon caching is not thread safe.
+  // Instead, just redraw the VectorIcon.
+  PaintVectorIcon(canvas, icon, size_px, color);
 }
 
 }  // namespace vr

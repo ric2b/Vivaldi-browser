@@ -4,14 +4,15 @@
 
 #include "content/renderer/media/webrtc_local_audio_source_provider.h"
 
+#include <string>
+
 #include "base/logging.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/renderer/media/audio_device_factory.h"
+#include "content/renderer/media/audio/audio_device_factory.h"
 #include "media/base/audio_fifo.h"
 #include "media/base/audio_parameters.h"
-#include "third_party/WebKit/public/platform/WebAudioSourceProviderClient.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_audio_source_provider_client.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 using blink::WebVector;
 
@@ -39,12 +40,11 @@ WebRtcLocalAudioSourceProvider::WebRtcLocalAudioSourceProvider(
   RenderFrame* const render_frame = RenderFrame::FromWebFrame(web_frame);
   if (render_frame) {
     int sample_rate = AudioDeviceFactory::GetOutputDeviceInfo(
-                          render_frame->GetRoutingID(), 0, std::string(),
-                          web_frame->GetSecurityOrigin())
+                          render_frame->GetRoutingID(), 0, std::string())
                           .output_params()
                           .sample_rate();
     sink_params_.Reset(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                       media::CHANNEL_LAYOUT_STEREO, sample_rate, 16,
+                       media::CHANNEL_LAYOUT_STEREO, sample_rate,
                        kWebAudioRenderBufferSize);
   }
   // Connect the source provider to the track as a sink.

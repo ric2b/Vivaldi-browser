@@ -136,7 +136,7 @@ class LoadPolicyCallbackReceiver {
 }  // namespace
 
 TEST_F(AsyncDocumentSubresourceFilterTest, ActivationStateIsReported) {
-  dealer_handle()->SetRulesetFile(testing::TestRuleset::Open(ruleset()));
+  dealer_handle()->TryOpenAndSetRulesetFile(ruleset().path, base::DoNothing());
   auto ruleset_handle = CreateRulesetHandle();
 
   AsyncDocumentSubresourceFilter::InitializationParams params(
@@ -151,8 +151,25 @@ TEST_F(AsyncDocumentSubresourceFilterTest, ActivationStateIsReported) {
       ActivationState(ActivationLevel::ENABLED));
 }
 
+TEST_F(AsyncDocumentSubresourceFilterTest, DeleteFilter_NoActivationCallback) {
+  dealer_handle()->TryOpenAndSetRulesetFile(ruleset().path, base::DoNothing());
+  auto ruleset_handle = CreateRulesetHandle();
+
+  AsyncDocumentSubresourceFilter::InitializationParams params(
+      GURL("http://example.com"), ActivationLevel::ENABLED, false);
+
+  testing::TestActivationStateCallbackReceiver activation_state;
+  auto filter = std::make_unique<AsyncDocumentSubresourceFilter>(
+      ruleset_handle.get(), std::move(params), activation_state.GetCallback());
+
+  EXPECT_FALSE(filter->has_activation_state());
+  filter.reset();
+  RunUntilIdle();
+  EXPECT_EQ(0, activation_state.callback_count());
+}
+
 TEST_F(AsyncDocumentSubresourceFilterTest, ActivationStateIsComputedCorrectly) {
-  dealer_handle()->SetRulesetFile(testing::TestRuleset::Open(ruleset()));
+  dealer_handle()->TryOpenAndSetRulesetFile(ruleset().path, base::DoNothing());
   auto ruleset_handle = CreateRulesetHandle();
 
   AsyncDocumentSubresourceFilter::InitializationParams params(
@@ -173,7 +190,7 @@ TEST_F(AsyncDocumentSubresourceFilterTest, ActivationStateIsComputedCorrectly) {
 
 TEST_F(AsyncDocumentSubresourceFilterTest, DisabledForCorruptRuleset) {
   testing::TestRuleset::CorruptByFilling(ruleset(), 0, 100, 0xFF);
-  dealer_handle()->SetRulesetFile(testing::TestRuleset::Open(ruleset()));
+  dealer_handle()->TryOpenAndSetRulesetFile(ruleset().path, base::DoNothing());
 
   auto ruleset_handle = CreateRulesetHandle();
 
@@ -190,7 +207,7 @@ TEST_F(AsyncDocumentSubresourceFilterTest, DisabledForCorruptRuleset) {
 }
 
 TEST_F(AsyncDocumentSubresourceFilterTest, GetLoadPolicyForSubdocument) {
-  dealer_handle()->SetRulesetFile(testing::TestRuleset::Open(ruleset()));
+  dealer_handle()->TryOpenAndSetRulesetFile(ruleset().path, base::DoNothing());
   auto ruleset_handle = CreateRulesetHandle();
 
   AsyncDocumentSubresourceFilter::InitializationParams params(
@@ -213,7 +230,7 @@ TEST_F(AsyncDocumentSubresourceFilterTest, GetLoadPolicyForSubdocument) {
 }
 
 TEST_F(AsyncDocumentSubresourceFilterTest, FirstDisallowedLoadIsReported) {
-  dealer_handle()->SetRulesetFile(testing::TestRuleset::Open(ruleset()));
+  dealer_handle()->TryOpenAndSetRulesetFile(ruleset().path, base::DoNothing());
   auto ruleset_handle = CreateRulesetHandle();
 
   TestCallbackReceiver first_disallowed_load_receiver;
@@ -245,6 +262,40 @@ TEST_F(AsyncDocumentSubresourceFilterTest, FirstDisallowedLoadIsReported) {
   RunUntilIdle();
 }
 
+TEST_F(AsyncDocumentSubresourceFilterTest, UpdateActivationState) {
+  // Properly initilize the ruleset and handle to use for computations.
+  dealer_handle()->TryOpenAndSetRulesetFile(ruleset().path, base::DoNothing());
+  auto ruleset_handle = CreateRulesetHandle();
+
+  // Initialize |filter| with a starting ActivationLevel of DRYRUN. This value
+  // will be updated later on.
+  AsyncDocumentSubresourceFilter::InitializationParams params(
+      GURL("http://example.com"), ActivationLevel::DRYRUN, false);
+  testing::TestActivationStateCallbackReceiver activation_state;
+  auto filter = std::make_unique<AsyncDocumentSubresourceFilter>(
+      ruleset_handle.get(), std::move(params), activation_state.GetCallback());
+
+  // Make sure the ADSF computes its initial activation before updating it.
+  RunUntilIdle();
+  activation_state.ExpectReceivedOnce(ActivationState(ActivationLevel::DRYRUN));
+
+  // Update the ActivationState before calling GetLoadPolicyForSubdocument.
+  filter->UpdateWithMoreAccurateState(
+      ActivationState(ActivationLevel::ENABLED));
+
+  LoadPolicyCallbackReceiver load_policy_1;
+  filter->GetLoadPolicyForSubdocument(GURL("http://example.com/allowed.html"),
+                                      load_policy_1.GetCallback());
+  RunUntilIdle();
+  load_policy_1.ExpectReceivedOnce(LoadPolicy::ALLOW);
+
+  LoadPolicyCallbackReceiver load_policy_2;
+  filter->GetLoadPolicyForSubdocument(
+      GURL("http://example.com/disallowed.html"), load_policy_2.GetCallback());
+  RunUntilIdle();
+  load_policy_2.ExpectReceivedOnce(LoadPolicy::DISALLOW);
+}
+
 // Tests for ComputeActivationState:
 
 class SubresourceFilterComputeActivationStateTest : public ::testing::Test {
@@ -268,7 +319,7 @@ class SubresourceFilterComputeActivationStateTest : public ::testing::Test {
     testing::TestRulesetPair test_ruleset_pair;
     ASSERT_NO_FATAL_FAILURE(test_ruleset_creator_.CreateRulesetWithRules(
         rules, &test_ruleset_pair));
-    ruleset_ = new MemoryMappedRuleset(
+    ruleset_ = MemoryMappedRuleset::CreateAndInitialize(
         testing::TestRuleset::Open(test_ruleset_pair.indexed));
   }
 

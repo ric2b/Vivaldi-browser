@@ -21,6 +21,9 @@ Polymer({
   behaviors: [settings.RouteObserverBehavior],
 
   properties: {
+    /** Preferences state. */
+    prefs: Object,
+
     // <if expr="chromeos">
     /** @private */
     showPowerwashDialog_: Boolean,
@@ -34,10 +37,10 @@ Polymer({
 
     // <if expr="_google_chrome and is_win">
     /** @private */
-    userInitiatedCleanupsEnabled_: {
+    showIncompatibleApplications_: {
       type: Boolean,
       value: function() {
-        return loadTimeData.getBoolean('userInitiatedCleanupsEnabled');
+        return loadTimeData.getBoolean('showIncompatibleApplications');
       },
     },
     // </if>
@@ -49,11 +52,18 @@ Polymer({
    * @protected
    */
   currentRouteChanged: function(route) {
+    const lazyRender =
+        /** @type {!CrLazyRenderElement} */ (this.$.resetProfileDialog);
+
     if (route == settings.routes.TRIGGERED_RESET_DIALOG ||
         route == settings.routes.RESET_DIALOG) {
-      /** @type {!SettingsResetProfileDialogElement} */ (
-          this.$.resetProfileDialog.get())
+      /** @type {!SettingsResetProfileDialogElement} */ (lazyRender.get())
           .show();
+    } else {
+      const dialog = /** @type {?SettingsResetProfileDialogElement} */ (
+          lazyRender.getIfExists());
+      if (dialog)
+        dialog.cancel();
     }
   },
 
@@ -87,8 +97,14 @@ Polymer({
   // </if>
 
   // <if expr="_google_chrome and is_win">
+  /** @private */
   onChromeCleanupTap_: function() {
     settings.navigateTo(settings.routes.CHROME_CLEANUP);
+  },
+
+  /** @private */
+  onIncompatibleApplicationsTap_: function() {
+    settings.navigateTo(settings.routes.INCOMPATIBLE_APPLICATIONS);
   },
   // </if>
 

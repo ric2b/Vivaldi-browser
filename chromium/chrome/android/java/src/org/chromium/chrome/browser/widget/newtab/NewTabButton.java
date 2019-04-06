@@ -12,11 +12,14 @@ import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.support.graphics.drawable.VectorDrawableCompat;
+import android.support.v4.view.ViewCompat;
+import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.widget.Button;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.widget.animation.AnimatorProperties;
 
@@ -54,9 +57,8 @@ public class NewTabButton extends Button implements Drawable.Callback {
         mIncognitoDrawable.setCallback(this);
         mIsIncognito = false;
         mLightModeTint =
-                ApiCompatibilityUtils.getColorStateList(getResources(), R.color.light_mode_tint);
-        mDarkModeTint =
-                ApiCompatibilityUtils.getColorStateList(getResources(), R.color.dark_mode_tint);
+                AppCompatResources.getColorStateList(getContext(), R.color.light_mode_tint);
+        mDarkModeTint = AppCompatResources.getColorStateList(getContext(), R.color.dark_mode_tint);
     }
 
     @Override
@@ -78,7 +80,7 @@ public class NewTabButton extends Button implements Drawable.Callback {
         super.onDraw(canvas);
 
         boolean isRtl = ApiCompatibilityUtils.isLayoutRtl(this);
-        int paddingStart = ApiCompatibilityUtils.getPaddingStart(this);
+        int paddingStart = ViewCompat.getPaddingStart(this);
         int widthWithoutPadding = getWidth() - paddingStart;
 
         canvas.save();
@@ -123,9 +125,7 @@ public class NewTabButton extends Button implements Drawable.Callback {
         mModernDrawable = VectorDrawableCompat.create(
                 getContext().getResources(), R.drawable.new_tab_icon, getContext().getTheme());
         mModernDrawable.setState(getDrawableState());
-        mModernDrawable.setTintList(DeviceClassManager.enableAccessibilityLayout() && mIsIncognito
-                        ? mLightModeTint
-                        : mDarkModeTint);
+        updateDrawableTint();
         mModernDrawable.setBounds(
                 0, 0, mModernDrawable.getIntrinsicWidth(), mModernDrawable.getIntrinsicHeight());
         mModernDrawable.setCallback(this);
@@ -143,9 +143,7 @@ public class NewTabButton extends Button implements Drawable.Callback {
         mIsIncognito = incognito;
 
         if (mModernDrawable != null) {
-            mModernDrawable.setTintList(
-                    DeviceClassManager.enableAccessibilityLayout() && mIsIncognito ? mLightModeTint
-                                                                                   : mDarkModeTint);
+            updateDrawableTint();
             invalidateDrawable(mModernDrawable);
             return;
         }
@@ -181,6 +179,11 @@ public class NewTabButton extends Button implements Drawable.Callback {
         mTransitionAnimation.start();
     }
 
+    /** Called when accessibility status is changed. */
+    public void onAccessibilityStatusChanged() {
+        if (mModernDrawable != null) updateDrawableTint();
+    }
+
     @Override
     protected void drawableStateChanged() {
         super.drawableStateChanged();
@@ -191,5 +194,15 @@ public class NewTabButton extends Button implements Drawable.Callback {
             mNormalDrawable.setState(getDrawableState());
             mIncognitoDrawable.setState(getDrawableState());
         }
+    }
+
+    /** Update the tint for the icon drawable for Chrome Modern. */
+    private void updateDrawableTint() {
+        final boolean shouldUseLightMode =
+                (DeviceClassManager.enableAccessibilityLayout()
+                        || ChromeFeatureList.isEnabled(
+                                   ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID))
+                && mIsIncognito;
+        mModernDrawable.setTintList(shouldUseLightMode ? mLightModeTint : mDarkModeTint);
     }
 }

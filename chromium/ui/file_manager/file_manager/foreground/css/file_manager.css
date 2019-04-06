@@ -25,6 +25,7 @@ body[type='full-page'] [visibleif]:not([visibleif~='full-page']) {
 
 html {
   height: 100%;
+  overflow: hidden;
 }
 
 html.col-resize * {
@@ -165,7 +166,7 @@ div.splitter {
   flex: auto;
   font-weight: 500;
   margin: 0 6px;
-  overflow-x: hidden;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 
@@ -255,6 +256,12 @@ body.check-select .dialog-header {
   color: rgb(90, 90, 90);
 }
 
+/* Display a grey border during check-select mode if we're in a dialog. (This
+   can only happen in an open-multi-file dialog). */
+body[type='open-multi-file'].check-select .dialog-header {
+  border-top: 1px solid rgb(219, 219, 219);
+}
+
 .dialog-header > .spacer {
   flex: auto;
 }
@@ -294,13 +301,15 @@ body.check-select .dialog-header button paper-ripple {
   color: rgb(90, 90, 90);
 }
 
+/** Avoid highlighting if element doesn't have focus by tab (tabindex=-1)
+ *  or if focusing during mouse click event ":active" pseudo-selector. */
 .dialog-header
-    button:focus:not(.using-mouse):not([tabindex='-1']):not(:active) {
+    .menu-button:focus:not([tabindex='-1']):not(:active) {
   background-color: rgba(255, 255, 255, 0.20);
 }
 
 body.check-select .dialog-header
-    button:focus:not(.using-mouse):not([tabindex='-1']):not(:active) {
+    .menu-button:focus:not([tabindex='-1']):not(:active) {
   background-color: rgba(153, 153, 153, 0.20);
 }
 
@@ -443,12 +452,6 @@ body.check-select #gear-button {
 
 body:not(.check-select) #selection-menu-button {
   display: none;
-}
-
-.cloud-import-combo-button {
-  height: 32px;
-  margin: 8px;
-  position: relative;
 }
 
 .cloud-import-combo-button > .buttons {
@@ -652,31 +655,13 @@ body.check-select #search-box {
   display: none;
 }
 
-#search-box input {
-  display: inline-block;
-  transition: width 200ms ease;
-  width: 0;
-}
-
-#search-box input::-webkit-search-cancel-button {
-  -webkit-appearance: none;
-}
-
-#search-box paper-input-container {
-  margin-top: -4px;
-}
-
-#search-box paper-input-container input::-webkit-input-placeholder {
-  color: rgba(255, 255, 255, 0.5);
-}
-
 #search-box.has-cursor,
 #search-box.has-text {
   -webkit-margin-end: 12px;
 }
 
-#search-box.has-cursor input,
-#search-box.has-text input {
+#search-box.has-cursor cr-input,
+#search-box.has-text cr-input {
   width: 202px;
 }
 
@@ -689,9 +674,8 @@ body.check-select #search-box {
   display: none;
   height: 16px;
   margin: 0;
-  position: relative;
+  position: absolute;
   right: 0;
-  top: 2px;
   visibility: hidden;
   width: 16px;
 }
@@ -819,18 +803,8 @@ html[dir='rtl'] #search-box .clear {
   color: rgb(51, 103, 214);
 }
 
-.dialog-footer input {
-  margin: 3px 0 !important;
-}
-
 .dialog-footer select {
   min-height: 21px;
-}
-
-.dialog-footer paper-input-container {
-  color: rgb(51, 51, 51);
-  padding: 4px 0;
-  width: 100%;
 }
 
 .dialog-footer select {
@@ -1123,7 +1097,7 @@ html[dir='rtl'] .breadcrumbs .separator {
   color: rgb(79, 129, 232);
   font-size: 13px;
   font-weight: 500;
-  height: 32px;
+  height: 2.5em;
 }
 
 .banner-close {
@@ -1677,6 +1651,11 @@ body.check-select #list-container list li[selected] .detail-thumbnail
       url(../images/files/ui/2x/person_add.png) 2x);
 }
 
+#action-bar {
+  display: flex;
+  flex: none;
+}
+
 .detail-name > * {
   align-items: center;
   display: flex;
@@ -1906,6 +1885,15 @@ body[drive='error'] #unmounted-panel > .error,
 #default-task-dialog {
   min-width: 300px;
   width: auto;
+}
+
+#install-linux-package-dialog {
+  min-width: 300px;
+  width: 40%;
+}
+
+#install-linux-package-dialog .cr-dialog-text {
+  min-height: 30px;
 }
 
 .drive-welcome-wrapper {
@@ -2273,7 +2261,7 @@ files-toggle-ripple {
 }
 
 /* Preventing FOUC */
-paper-input-container:unresolved {
+cr-input:unresolved {
   display: none;
 }
 

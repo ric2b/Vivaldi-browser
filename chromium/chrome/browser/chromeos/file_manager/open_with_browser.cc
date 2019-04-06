@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/file_manager/filesystem_api_util.h"
 #include "chrome/browser/chromeos/fileapi/external_file_url_util.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
@@ -25,6 +26,7 @@
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
 #include "components/drive/drive_api_util.h"
 #include "components/drive/file_system_core_util.h"
 #include "content/public/browser/browser_thread.h"
@@ -94,7 +96,7 @@ bool IsFlashPluginEnabled(Profile* profile) {
       base::CommandLine::ForCurrentProcess()->GetSwitchValueNative(
           switches::kPpapiFlashPath));
   if (plugin_path.empty())
-    PathService::Get(chrome::FILE_PEPPER_FLASH_PLUGIN, &plugin_path);
+    base::PathService::Get(chrome::FILE_PEPPER_FLASH_PLUGIN, &plugin_path);
   return IsPepperPluginEnabled(profile, plugin_path);
 }
 
@@ -124,6 +126,32 @@ GURL ReadUrlFromGDocAsync(const base::FilePath& file_path) {
   if (url.is_empty())
     url = net::FilePathToFileURL(file_path);
   return url;
+}
+
+// Parse a local file to extract the Docs url and open this url.
+void OpenGDocUrlFromFile(const base::FilePath& file_path, Profile* profile) {
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&ReadUrlFromGDocAsync, file_path),
+      base::BindOnce(&OpenNewTab, profile));
+}
+
+// Open a hosted GDoc, from a path hosted in DriveFS.
+void OpenHostedDriveFsFile(const base::FilePath& file_path,
+                           Profile* profile,
+                           drive::FileError error,
+                           drivefs::mojom::FileMetadataPtr metadata) {
+  if (error != drive::FILE_ERROR_OK)
+    return;
+  if (metadata->type != drivefs::mojom::FileMetadata::Type::kHosted) {
+    OpenGDocUrlFromFile(file_path, profile);
+    return;
+  }
+  GURL hosted_url(metadata->alternate_url);
+  if (!hosted_url.is_valid())
+    return;
+
+  OpenNewTab(profile, hosted_url);
 }
 
 }  // namespace
@@ -159,12 +187,18 @@ bool OpenFileWithBrowser(Profile* profile,
       DCHECK(!url.is_empty());
       OpenNewTab(profile, url);
     } else {
-      // The file is local (downloaded from an attachment or otherwise copied).
-      // Parse the file to extract the Docs url and open this url.
-      base::PostTaskWithTraitsAndReplyWithResult(
-          FROM_HERE, {base::MayBlock()},
-          base::Bind(&ReadUrlFromGDocAsync, file_path),
-          base::Bind(&OpenNewTab, profile));
+      drive::DriveIntegrationService* integration_service =
+          drive::DriveIntegrationServiceFactory::FindForProfile(profile);
+      base::FilePath path;
+      if (integration_service && integration_service->IsMounted() &&
+          integration_service->GetDriveFsInterface() &&
+          integration_service->GetRelativeDrivePath(file_path, &path)) {
+        integration_service->GetDriveFsInterface()->GetMetadata(
+            path, false,
+            base::BindOnce(&OpenHostedDriveFsFile, file_path, profile));
+        return true;
+      }
+      OpenGDocUrlFromFile(file_path, profile);
     }
     return true;
   }

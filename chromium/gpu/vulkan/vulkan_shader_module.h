@@ -22,13 +22,9 @@ class VULKAN_EXPORT VulkanShaderModule {
     FRAGMENT,
   };
 
-  VulkanShaderModule(VulkanDeviceQueue* device_queue);
+  explicit VulkanShaderModule(VulkanDeviceQueue* device_queue);
   ~VulkanShaderModule();
 
-  bool InitializeGLSL(ShaderType type,
-                      std::string name,
-                      std::string entry_point,
-                      std::string source);
   bool InitializeSPIRV(ShaderType type,
                        std::string name,
                        std::string entry_point,

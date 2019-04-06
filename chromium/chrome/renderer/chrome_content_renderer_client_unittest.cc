@@ -11,19 +11,18 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/renderer/searchbox/search_bouncer.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "content/public/common/webplugininfo.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url_response.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -33,9 +32,9 @@
 #endif
 
 #if BUILDFLAG(ENABLE_NACL)
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebPluginParams.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_plugin_params.h"
 #endif
 
 #if BUILDFLAG(ENABLE_NACL)
@@ -69,25 +68,6 @@ const char kChatManifestFS[] = "filesystem:https://talkgadget.google.com/foo";
 
 const char kChatAppURL[] = "https://talkgadget.google.com/hangouts/foo";
 
-#if BUILDFLAG(ENABLE_NACL)
-bool AllowsDevInterfaces(const WebPluginParams& params) {
-  for (size_t i = 0; i < params.attribute_names.size(); ++i) {
-    if (params.attribute_names[i] == "@dev")
-      return true;
-  }
-  return false;
-}
-
-void AddFakeDevAttribute(WebPluginParams* params) {
-  WebVector<WebString> names(static_cast<size_t>(1));
-  WebVector<WebString> values(static_cast<size_t>(1));
-  names[0] = WebString::FromUTF8("@dev");
-  values[0] = WebString();
-  params->attribute_names.Swap(names);
-  params->attribute_values.Swap(values);
-}
-#endif
-
 void AddContentTypeHandler(content::WebPluginInfo* info,
                            const char* mime_type,
                            const char* manifest_url) {
@@ -116,7 +96,7 @@ scoped_refptr<const extensions::Extension> CreateTestExtension(
   manifest.SetString("version", "1");
   manifest.SetInteger("manifest_version", 2);
   if (is_hosted_app) {
-    auto url_list = base::MakeUnique<base::ListValue>();
+    auto url_list = std::make_unique<base::ListValue>();
     url_list->AppendString(app_url);
     manifest.Set(extensions::manifest_keys::kWebURLs, std::move(url_list));
     manifest.SetString(extensions::manifest_keys::kLaunchWebURL, app_url);
@@ -165,7 +145,7 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
                   "application/x-foo", info));
   }
 #if BUILDFLAG(ENABLE_NACL)
-  // --enable-nacl allows all NaCl apps, with 'dev' interfaces.
+  // --enable-nacl allows all NaCl apps.
   {
     WebPluginParams params;
     EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
@@ -174,10 +154,8 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
         kNaClUnrestricted,
         CreateExtension(kExtensionNotFromWebStore).get(),
         &params));
-    EXPECT_TRUE(AllowsDevInterfaces(params));
   }
-  // Unpacked extensions are allowed without --enable-nacl, with
-  // 'dev' interfaces.
+  // Unpacked extensions are allowed without --enable-nacl.
   {
     WebPluginParams params;
     EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
@@ -187,10 +165,8 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
         CreateExtensionWithLocation(extensions::Manifest::UNPACKED,
                                     kExtensionNotFromWebStore).get(),
         &params));
-    EXPECT_TRUE(AllowsDevInterfaces(params));
   }
-  // Component extensions are allowed without --enable-nacl, with
-  // 'dev' interfaces.
+  // Component extensions are allowed without --enable-nacl.
   {
     WebPluginParams params;
     EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
@@ -200,7 +176,6 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
         CreateExtensionWithLocation(extensions::Manifest::COMPONENT,
                                     kExtensionNotFromWebStore).get(),
         &params));
-    EXPECT_TRUE(AllowsDevInterfaces(params));
   }
   {
     WebPluginParams params;
@@ -211,10 +186,9 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
         CreateExtensionWithLocation(extensions::Manifest::EXTERNAL_COMPONENT,
                                     kExtensionNotFromWebStore).get(),
         &params));
-    EXPECT_TRUE(AllowsDevInterfaces(params));
   }
   // Extensions that are force installed by policy are allowed without
-  // --enable-nacl, without 'dev' interfaces.
+  // --enable-nacl.
   {
     WebPluginParams params;
     EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
@@ -224,7 +198,6 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
         CreateExtensionWithLocation(extensions::Manifest::EXTERNAL_POLICY,
                                     kExtensionNotFromWebStore).get(),
         &params));
-    EXPECT_FALSE(AllowsDevInterfaces(params));
     EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
         GURL(),
         GURL(kExtensionUrl),
@@ -233,10 +206,9 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
             extensions::Manifest::EXTERNAL_POLICY_DOWNLOAD,
             kExtensionNotFromWebStore).get(),
         &params));
-    EXPECT_FALSE(AllowsDevInterfaces(params));
   }
-  // CWS extensions are allowed without --enable-nacl, without 'dev'
-  // interfaces if called from an extension url.
+  // CWS extensions are allowed without --enable-nacl if called from an
+  // extension url.
   {
     WebPluginParams params;
     EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
@@ -245,35 +217,10 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
         kNaClRestricted,
         CreateExtension(kExtensionFromWebStore).get(),
         &params));
-    EXPECT_FALSE(AllowsDevInterfaces(params));
-  }
-  // CWS extensions can't get 'dev' interfaces with --enable-nacl.
-  {
-    WebPluginParams params;
-    EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
-        GURL(),
-        GURL(kExtensionUrl),
-        kNaClUnrestricted,
-        CreateExtension(kExtensionFromWebStore).get(),
-        &params));
-    EXPECT_FALSE(AllowsDevInterfaces(params));
-  }
-  // CWS extensions can't get 'dev' interfaces by injecting a fake
-  // '@dev' attribute.
-  {
-    WebPluginParams params;
-    AddFakeDevAttribute(&params);
-    EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
-        GURL(),
-        GURL(kExtensionUrl),
-        kNaClRestricted,
-        CreateExtension(kExtensionFromWebStore).get(),
-        &params));
-    EXPECT_FALSE(AllowsDevInterfaces(params));
   }
 
-  // Whitelisted URLs are allowed without --enable-nacl, without 'dev'
-  // interfaces. There is a whitelist for the app URL and the manifest URL.
+  // Whitelisted URLs are allowed without --enable-nacl. There is a whitelist
+  // for the app URL and the manifest URL.
   {
     WebPluginParams params;
     // Whitelisted Chat app is allowed.
@@ -307,24 +254,6 @@ TEST_F(ChromeContentRendererClientTest, NaClRestriction) {
     EXPECT_FALSE(ChromeContentRendererClient::IsNaClAllowed(
         GURL("https://ssl.gstatic.com/wrong/s2/oz/nacl/foo"),  // bad path
         GURL(kChatAppURL), kNaClRestricted, nullptr, &params));
-  }
-  // Whitelisted URLs can't get 'dev' interfaces with --enable-nacl.
-  {
-    WebPluginParams params;
-    EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
-        GURL(kChatManifestFS), GURL(kChatAppURL), kNaClUnrestricted, nullptr,
-        &params));
-    EXPECT_FALSE(AllowsDevInterfaces(params));
-  }
-  // Whitelisted URLs can't get 'dev' interfaces by injecting a fake
-  // '@dev' attribute.
-  {
-    WebPluginParams params;
-    AddFakeDevAttribute(&params);
-    EXPECT_TRUE(ChromeContentRendererClient::IsNaClAllowed(
-        GURL(kChatManifestFS), GURL(kChatAppURL), kNaClRestricted, nullptr,
-        &params));
-    EXPECT_FALSE(AllowsDevInterfaces(params));
   }
   // Non-whitelisted URLs are blocked without --enable-nacl.
   {

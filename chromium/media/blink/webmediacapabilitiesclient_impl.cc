@@ -14,13 +14,15 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
 #include "media/filters/stream_parser_factory.h"
+#include "media/mojo/interfaces/media_types.mojom.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/modules/media_capabilities/WebAudioConfiguration.h"
-#include "third_party/WebKit/public/platform/modules/media_capabilities/WebMediaCapabilitiesInfo.h"
-#include "third_party/WebKit/public/platform/modules/media_capabilities/WebMediaConfiguration.h"
-#include "third_party/WebKit/public/platform/modules/media_capabilities/WebVideoConfiguration.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_audio_configuration.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_media_capabilities_info.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_media_configuration.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_video_configuration.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/scoped_web_callbacks.h"
 
 namespace media {
 
@@ -139,16 +141,24 @@ WebMediaCapabilitiesClientImpl::WebMediaCapabilitiesClientImpl() = default;
 
 WebMediaCapabilitiesClientImpl::~WebMediaCapabilitiesClientImpl() = default;
 
+namespace {
 void VideoPerfInfoCallback(
-    std::unique_ptr<blink::WebMediaCapabilitiesQueryCallbacks> callbacks,
+    blink::ScopedWebCallbacks<blink::WebMediaCapabilitiesQueryCallbacks>
+        scoped_callbacks,
     std::unique_ptr<blink::WebMediaCapabilitiesInfo> info,
     bool is_smooth,
     bool is_power_efficient) {
   DCHECK(info->supported);
   info->smooth = is_smooth;
   info->power_efficient = is_power_efficient;
-  callbacks->OnSuccess(std::move(info));
+  scoped_callbacks.PassCallbacks()->OnSuccess(std::move(info));
 }
+
+void OnGetPerfInfoError(
+    std::unique_ptr<blink::WebMediaCapabilitiesQueryCallbacks> callbacks) {
+  callbacks->OnError();
+}
+}  // namespace
 
 void WebMediaCapabilitiesClientImpl::DecodingInfo(
     const blink::WebMediaConfiguration& configuration,
@@ -202,11 +212,22 @@ void WebMediaCapabilitiesClientImpl::DecodingInfo(
     BindToHistoryService(&decode_history_ptr_);
   DCHECK(decode_history_ptr_.is_bound());
 
-  decode_history_ptr_->GetPerfInfo(
+  mojom::PredictionFeaturesPtr features = mojom::PredictionFeatures::New(
       video_profile, gfx::Size(video_config.width, video_config.height),
-      video_config.framerate,
-      base::BindOnce(&VideoPerfInfoCallback, std::move(callbacks),
-                     std::move(info)));
+      video_config.framerate);
+
+  decode_history_ptr_->GetPerfInfo(
+      std::move(features),
+      base::BindOnce(
+          &VideoPerfInfoCallback,
+          blink::MakeScopedWebCallbacks(std::move(callbacks),
+                                        base::BindOnce(&OnGetPerfInfoError)),
+          std::move(info)));
+}
+
+void WebMediaCapabilitiesClientImpl::BindVideoDecodePerfHistoryForTests(
+    mojom::VideoDecodePerfHistoryPtr decode_history_ptr) {
+  decode_history_ptr_ = std::move(decode_history_ptr);
 }
 
 }  // namespace media

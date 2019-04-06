@@ -4,17 +4,19 @@
 
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_manager_test_base.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/autofill/password_generation_popup_observer.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/passwords/password_generation_popup_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/password_manager/core/browser/password_generation_manager.h"
 #include "components/password_manager/core/browser/test_password_store.h"
@@ -29,26 +31,25 @@
 
 namespace {
 
-class TestPopupObserver : public autofill::PasswordGenerationPopupObserver {
+class TestPopupObserver : public PasswordGenerationPopupObserver {
  public:
-  TestPopupObserver()
-      : popup_showing_(false),
-        password_visible_(false) {}
-  virtual ~TestPopupObserver() {}
-
-  void OnPopupShown(bool password_visible) override {
+  void OnPopupShown(
+      PasswordGenerationPopupController::GenerationState state) override {
     popup_showing_ = true;
-    password_visible_ = password_visible;
+    state_ = state;
   }
 
   void OnPopupHidden() override { popup_showing_ = false; }
 
-  bool popup_showing() { return popup_showing_; }
-  bool password_visible() { return password_visible_; }
+  bool popup_showing() const { return popup_showing_; }
+  PasswordGenerationPopupController::GenerationState state() const {
+    return state_;
+  }
 
  private:
-  bool popup_showing_;
-  bool password_visible_;
+  bool popup_showing_ = false;
+  PasswordGenerationPopupController::GenerationState state_ =
+      PasswordGenerationPopupController::kOfferGeneration;
 };
 
 }  // namespace
@@ -57,8 +58,11 @@ class PasswordGenerationInteractiveTest :
     public PasswordManagerBrowserTestBase {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    PasswordManagerBrowserTestBase::SetUpCommandLine(command_line);
+
     // Make sure the feature is enabled.
-    command_line->AppendSwitch(autofill::switches::kEnablePasswordGeneration);
+    scoped_feature_list_.InitAndEnableFeature(
+        autofill::features::kAutomaticPasswordGeneration);
 
     // Don't require ping from autofill or blacklist checking.
     command_line->AppendSwitch(
@@ -67,7 +71,6 @@ class PasswordGenerationInteractiveTest :
 
   void SetUpOnMainThread() override {
     PasswordManagerBrowserTestBase::SetUpOnMainThread();
-
     // Disable Autofill requesting access to AddressBook data. This will cause
     // the tests to hang on Mac.
     autofill::test::DisableSystemServices(browser()->profile()->GetPrefs());
@@ -94,9 +97,10 @@ class PasswordGenerationInteractiveTest :
   std::string GetFieldValue(const std::string& field_id) {
     std::string value;
     EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-        RenderViewHost(),
+        WebContents(),
         "window.domAutomationController.send("
-        "    document.getElementById('" + field_id + "').value);",
+        "    document.getElementById('" +
+            field_id + "').value);",
         &value));
     return value;
   }
@@ -104,7 +108,7 @@ class PasswordGenerationInteractiveTest :
   std::string GetFocusedElement() {
     std::string focused_element;
     EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-        RenderViewHost(),
+        WebContents(),
         "window.domAutomationController.send("
         "    document.activeElement.id)",
         &focused_element));
@@ -113,29 +117,34 @@ class PasswordGenerationInteractiveTest :
 
   void FocusPasswordField() {
     ASSERT_TRUE(content::ExecuteScript(
-        RenderViewHost(),
-        "document.getElementById('password_field').focus()"));
+        WebContents(), "document.getElementById('password_field').focus()"));
   }
 
   void SendKeyToPopup(ui::KeyboardCode key) {
     content::NativeWebKeyboardEvent event(
         blink::WebKeyboardEvent::kRawKeyDown,
         blink::WebInputEvent::kNoModifiers,
-        blink::WebInputEvent::kTimeStampForTesting);
+        blink::WebInputEvent::GetStaticTimeStampForTests());
     event.windows_key_code = key;
-    RenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
+    WebContents()->GetRenderViewHost()->GetWidget()->ForwardKeyboardEvent(
+        event);
   }
 
   bool GenerationPopupShowing() {
-    return observer_.popup_showing() && observer_.password_visible();
+    return observer_.popup_showing() &&
+           observer_.state() ==
+               PasswordGenerationPopupController::kOfferGeneration;
   }
 
   bool EditingPopupShowing() {
-    return observer_.popup_showing() && !observer_.password_visible();
+    return observer_.popup_showing() &&
+           observer_.state() ==
+               PasswordGenerationPopupController::kEditGeneratedPassword;
   }
 
  private:
   TestPopupObserver observer_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
@@ -173,8 +182,8 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
   FocusPasswordField();
   EXPECT_TRUE(GenerationPopupShowing());
 
-  ASSERT_TRUE(content::ExecuteScript(RenderViewHost(),
-                                     "window.scrollTo(100, 0);"));
+  ASSERT_TRUE(
+      content::ExecuteScript(WebContents(), "window.scrollTo(100, 0);"));
 
   EXPECT_FALSE(GenerationPopupShowing());
 }
@@ -223,7 +232,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
   NavigationObserver observer(WebContents());
   std::string submit_script =
       "document.getElementById('input_submit_button').click()";
-  ASSERT_TRUE(content::ExecuteScript(RenderViewHost(), submit_script));
+  ASSERT_TRUE(content::ExecuteScript(WebContents(), submit_script));
   observer.Wait();
 
   WaitForPasswordStore();

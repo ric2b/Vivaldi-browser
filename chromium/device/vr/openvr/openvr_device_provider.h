@@ -15,17 +15,25 @@
 namespace device {
 
 class OpenVRDevice;
+class OpenVRTestHook;
 
 class DEVICE_VR_EXPORT OpenVRDeviceProvider : public VRDeviceProvider {
  public:
   OpenVRDeviceProvider();
   ~OpenVRDeviceProvider() override;
 
-  void Initialize(base::Callback<void(VRDevice*)> add_device_callback,
-                  base::Callback<void(VRDevice*)> remove_device_callback,
-                  base::OnceClosure initialization_complete) override;
+  void Initialize(
+      base::RepeatingCallback<void(unsigned int,
+                                   mojom::VRDisplayInfoPtr,
+                                   mojom::XRRuntimePtr)> add_device_callback,
+      base::RepeatingCallback<void(unsigned int)> remove_device_callback,
+      base::OnceClosure initialization_complete) override;
 
   bool Initialized() override;
+
+  static void RecordRuntimeAvailability();
+
+  static void SetTestHook(OpenVRTestHook*);
 
  private:
   void CreateDevice();

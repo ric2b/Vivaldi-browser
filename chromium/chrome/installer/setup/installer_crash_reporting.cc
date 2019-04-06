@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -75,16 +76,16 @@ void ConfigureCrashReporting(const InstallerState& installer_state) {
     base::FilePath temp_dir;
     if (GetSystemTemp(&temp_dir)) {
       base::FilePath crash_dir = temp_dir.Append(FILE_PATH_LITERAL("Crashpad"));
-      PathService::OverrideAndCreateIfNeeded(chrome::DIR_CRASH_DUMPS, crash_dir,
-                                             true, true);
+      base::PathService::OverrideAndCreateIfNeeded(chrome::DIR_CRASH_DUMPS,
+                                                   crash_dir, true, true);
     } else {
       // Failed to get a temp dir, something's gone wrong.
       return;
     }
   }
 
-  crash_reporter::InitializeCrashpadWithEmbeddedHandler(true,
-                                                        "Chrome Installer", "");
+  crash_reporter::InitializeCrashpadWithEmbeddedHandler(
+      true, "Chrome Installer", "", base::FilePath());
 
   // Set up the metrics client id (a la child_process_logging::Init()).
   std::unique_ptr<metrics::ClientInfo> client_info =

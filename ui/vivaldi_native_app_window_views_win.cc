@@ -10,12 +10,12 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_win.h"
 #include "chrome/common/chrome_switches.h"
@@ -97,16 +97,7 @@ void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(
 
 views::NonClientFrameView*
 VivaldiNativeAppWindowViewsWin::CreateStandardDesktopAppFrame() {
-#if defined(VIVALDI_BUILD)
   return VivaldiNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
-#else
-  glass_frame_view_ = NULL;
-  if (ui::win::IsAeroGlassEnabled()) {
-    glass_frame_view_ = new GlassAppWindowFrameViewWin(widget());
-    return glass_frame_view_;
-  }
-  return VivaldiNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
-#endif
 }
 
 bool VivaldiNativeAppWindowViewsWin::CanMinimize() const {

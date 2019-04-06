@@ -14,9 +14,9 @@
 #include "base/atomicops.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/sequence_checker.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
-#include "base/threading/thread_checker.h"
 #include "components/sync/base/cancelation_observer.h"
 #include "components/sync/syncable/syncable_id.h"
 
@@ -170,7 +170,7 @@ class ServerConnectionManager {
   void RemoveListener(ServerConnectionEventListener* listener);
 
   inline HttpResponse::ServerConnectionCode server_status() const {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return server_status_;
   }
 
@@ -181,18 +181,20 @@ class ServerConnectionManager {
   virtual std::unique_ptr<Connection> MakeConnection();
 
   void set_client_id(const std::string& client_id) {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     DCHECK(client_id_.empty());
     client_id_.assign(client_id);
   }
 
-  // Sets a new auth token and time.
+  // Sets a new auth token. If |auth_token| is empty, the current token is
+  // invalidated and cleared. Returns false if the server is in authentication
+  // error state.
   bool SetAuthToken(const std::string& auth_token);
 
   bool HasInvalidAuthToken() { return auth_token_.empty(); }
 
   const std::string auth_token() const {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return auth_token_;
   }
 
@@ -246,7 +248,7 @@ class ServerConnectionManager {
 
   HttpResponse::ServerConnectionCode server_status_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   CancelationSignal* const cancelation_signal_;
 

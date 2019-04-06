@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <array>
+
 #include "base/callback.h"
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
@@ -37,10 +39,12 @@ class X11_WINDOW_EXPORT X11WindowBase : public PlatformWindow {
   void SetTitle(const base::string16& title) override;
   void SetCapture() override;
   void ReleaseCapture() override;
+  bool HasCapture() const override;
   void ToggleFullscreen() override;
   void Maximize() override;
   void Minimize() override;
   void Restore() override;
+  PlatformWindowState GetPlatformWindowState() const override;
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
   PlatformImeController* GetPlatformImeController() override;
@@ -55,6 +59,8 @@ class X11_WINDOW_EXPORT X11WindowBase : public PlatformWindow {
   XDisplay* xdisplay() { return xdisplay_; }
   XID xwindow() const { return xwindow_; }
 
+  void UnConfineCursor();
+
   // Checks if XEvent is for this XWindow.
   bool IsEventForXWindow(const XEvent& xev) const;
 
@@ -65,14 +71,13 @@ class X11_WINDOW_EXPORT X11WindowBase : public PlatformWindow {
   // Called when WM_STATE property is changed.
   void OnWMStateUpdated();
 
-  bool IsMinimized() const;
   bool IsMaximized() const;
   bool IsFullscreen() const;
 
-  PlatformWindowDelegate* delegate_;
+  PlatformWindowDelegate* const delegate_;
 
   XDisplay* xdisplay_;
-  XID xwindow_;
+  XID xwindow_ = x11::None;
   XID xroot_window_;
   std::unique_ptr<ui::XScopedEventSelector> xwindow_events_;
 
@@ -86,6 +91,10 @@ class X11_WINDOW_EXPORT X11WindowBase : public PlatformWindow {
 
   // Stores current state of this window.
   ui::PlatformWindowState state_;
+
+  // Keep track of barriers to confine cursor.
+  bool has_pointer_barriers_ = false;
+  std::array<XID, 4> pointer_barriers_;
 
   bool window_mapped_ = false;
 

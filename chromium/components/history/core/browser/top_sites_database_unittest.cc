@@ -131,10 +131,6 @@ TEST_F(TopSitesDatabaseTest, Version3) {
 // Version 1 is deprecated, the resulting schema should be current,
 // with no data.
 TEST_F(TopSitesDatabaseTest, Recovery1) {
-  // Recovery module only supports some platforms at this time.
-  if (!sql::Recovery::FullRecoverySupported())
-    return;
-
   // Create an example database.
   EXPECT_TRUE(CreateDatabaseFromSQL(file_name_, "TopSites.v1.sql"));
 
@@ -166,10 +162,6 @@ TEST_F(TopSitesDatabaseTest, Recovery1) {
 }
 
 TEST_F(TopSitesDatabaseTest, Recovery2) {
-  // Recovery module only supports some platforms at this time.
-  if (!sql::Recovery::FullRecoverySupported())
-    return;
-
   // Create an example database.
   EXPECT_TRUE(CreateDatabaseFromSQL(file_name_, "TopSites.v2.sql"));
 
@@ -201,10 +193,6 @@ TEST_F(TopSitesDatabaseTest, Recovery2) {
 }
 
 TEST_F(TopSitesDatabaseTest, Recovery3) {
-  // Recovery module only supports some platforms at this time.
-  if (!sql::Recovery::FullRecoverySupported())
-    return;
-
   // Create an example database.
   EXPECT_TRUE(CreateDatabaseFromSQL(file_name_, "TopSites.v3.sql"));
 
@@ -253,10 +241,10 @@ TEST_F(TopSitesDatabaseTest, Recovery3) {
 
   // Corrupt the thumnails.url auto-index by deleting an element from the table
   // but leaving it in the index.
-  const char kIndexName[] = "sqlite_autoindex_thumbnails_1";
+  static const char kIndexName[] = "sqlite_autoindex_thumbnails_1";
   // TODO(shess): Refactor CorruptTableOrIndex() to make parameterized
   // statements easy.
-  const char kDeleteSql[] =
+  static const char kDeleteSql[] =
       "DELETE FROM thumbnails WHERE url = "
       "'http://www.google.com/chrome/intl/en/welcome.html'";
   EXPECT_TRUE(

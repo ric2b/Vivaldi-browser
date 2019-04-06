@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
@@ -32,8 +31,6 @@ namespace extensions {
 
 namespace {
 
-const int kIgnoreRoutingId = MSG_ROUTING_NONE;
-
 // Returns the routing id to use for matching filtered events.
 // Used for routing events to the correct RenderFrame. This doesn't apply to
 // Extension Service Worker events as there is no RenderFrame to target an event
@@ -41,7 +38,7 @@ const int kIgnoreRoutingId = MSG_ROUTING_NONE;
 // essentially ignoring routing id for worker events.
 int GetRoutingIDForFilteredEvents(ScriptContext* script_context) {
   return script_context->context_type() == Feature::SERVICE_WORKER_CONTEXT
-             ? kIgnoreRoutingId
+             ? MSG_ROUTING_NONE
              : script_context->GetRenderFrame()->GetRoutingID();
 }
 
@@ -83,23 +80,6 @@ EventBindings::EventBindings(ScriptContext* context,
                              IPCMessageSender* ipc_message_sender)
     : ObjectBackedNativeHandler(context),
       ipc_message_sender_(ipc_message_sender) {
-  RouteFunction("AttachEvent", base::Bind(&EventBindings::AttachEventHandler,
-                                          base::Unretained(this)));
-  RouteFunction("DetachEvent", base::Bind(&EventBindings::DetachEventHandler,
-                                          base::Unretained(this)));
-  RouteFunction(
-      "AttachFilteredEvent",
-      base::Bind(&EventBindings::AttachFilteredEvent, base::Unretained(this)));
-  RouteFunction("DetachFilteredEvent",
-                base::Bind(&EventBindings::DetachFilteredEventHandler,
-                           base::Unretained(this)));
-  RouteFunction(
-      "AttachUnmanagedEvent",
-      base::Bind(&EventBindings::AttachUnmanagedEvent, base::Unretained(this)));
-  RouteFunction(
-      "DetachUnmanagedEvent",
-      base::Bind(&EventBindings::DetachUnmanagedEvent, base::Unretained(this)));
-
   // It's safe to use base::Unretained here because |context| will always
   // outlive us.
   context->AddInvalidationObserver(
@@ -107,6 +87,27 @@ EventBindings::EventBindings(ScriptContext* context,
 }
 
 EventBindings::~EventBindings() {}
+
+void EventBindings::AddRoutes() {
+  RouteHandlerFunction(
+      "AttachEvent",
+      base::Bind(&EventBindings::AttachEventHandler, base::Unretained(this)));
+  RouteHandlerFunction(
+      "DetachEvent",
+      base::Bind(&EventBindings::DetachEventHandler, base::Unretained(this)));
+  RouteHandlerFunction(
+      "AttachFilteredEvent",
+      base::Bind(&EventBindings::AttachFilteredEvent, base::Unretained(this)));
+  RouteHandlerFunction("DetachFilteredEvent",
+                       base::Bind(&EventBindings::DetachFilteredEventHandler,
+                                  base::Unretained(this)));
+  RouteHandlerFunction(
+      "AttachUnmanagedEvent",
+      base::Bind(&EventBindings::AttachUnmanagedEvent, base::Unretained(this)));
+  RouteHandlerFunction(
+      "DetachUnmanagedEvent",
+      base::Bind(&EventBindings::DetachUnmanagedEvent, base::Unretained(this)));
+}
 
 // static
 void EventBindings::DispatchEventInContext(

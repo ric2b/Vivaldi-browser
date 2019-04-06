@@ -7,15 +7,15 @@
 #include <memory>
 
 #include "base/memory/memory_coordinator_client_registry.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/base/container_util.h"
-#include "cc/resources/resource_util.h"
-#include "cc/resources/scoped_resource.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
+#include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/client/raster_interface.h"
+#include "third_party/khronos/GLES2/gl2.h"
+#include "third_party/khronos/GLES2/gl2ext.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
 using base::trace_event::MemoryAllocatorDump;
@@ -104,7 +104,7 @@ void StagingBuffer::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
   MemoryAllocatorDump* buffer_dump = pmd->CreateAllocatorDump(buffer_dump_name);
 
   uint64_t buffer_size_in_bytes =
-      ResourceUtil::UncheckedSizeInBytes<uint64_t>(size, format);
+      viz::ResourceSizes::UncheckedSizeInBytes<uint64_t>(size, format);
   buffer_dump->AddScalar(MemoryAllocatorDump::kNameSize,
                          MemoryAllocatorDump::kUnitsBytes,
                          buffer_size_in_bytes);
@@ -131,12 +131,10 @@ void StagingBuffer::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
 StagingBufferPool::StagingBufferPool(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     viz::RasterContextProvider* worker_context_provider,
-    LayerTreeResourceProvider* resource_provider,
     bool use_partial_raster,
     int max_staging_buffer_usage_in_bytes)
     : task_runner_(std::move(task_runner)),
       worker_context_provider_(worker_context_provider),
-      resource_provider_(resource_provider),
       use_partial_raster_(use_partial_raster),
       max_staging_buffer_usage_in_bytes_(max_staging_buffer_usage_in_bytes),
       staging_buffer_usage_in_bytes_(0),
@@ -148,7 +146,12 @@ StagingBufferPool::StagingBufferPool(
   DCHECK(worker_context_provider_);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "cc::StagingBufferPool", base::ThreadTaskRunnerHandle::Get());
+
   base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
+  memory_pressure_listener_.reset(new base::MemoryPressureListener(
+      base::BindRepeating(&StagingBufferPool::OnMemoryPressure,
+                          weak_ptr_factory_.GetWeakPtr())));
+
   reduce_memory_usage_callback_ = base::Bind(
       &StagingBufferPool::ReduceMemoryUsage, weak_ptr_factory_.GetWeakPtr());
 }
@@ -211,8 +214,8 @@ void StagingBufferPool::AddStagingBuffer(const StagingBuffer* staging_buffer,
 
   DCHECK(buffers_.find(staging_buffer) == buffers_.end());
   buffers_.insert(staging_buffer);
-  int buffer_usage_in_bytes =
-      ResourceUtil::UncheckedSizeInBytes<int>(staging_buffer->size, format);
+  int buffer_usage_in_bytes = viz::ResourceSizes::UncheckedSizeInBytes<int>(
+      staging_buffer->size, format);
   staging_buffer_usage_in_bytes_ += buffer_usage_in_bytes;
 }
 
@@ -222,7 +225,7 @@ void StagingBufferPool::RemoveStagingBuffer(
 
   DCHECK(buffers_.find(staging_buffer) != buffers_.end());
   buffers_.erase(staging_buffer);
-  int buffer_usage_in_bytes = ResourceUtil::UncheckedSizeInBytes<int>(
+  int buffer_usage_in_bytes = viz::ResourceSizes::UncheckedSizeInBytes<int>(
       staging_buffer->size, staging_buffer->format);
   DCHECK_GE(staging_buffer_usage_in_bytes_, buffer_usage_in_bytes);
   staging_buffer_usage_in_bytes_ -= buffer_usage_in_bytes;
@@ -232,7 +235,7 @@ void StagingBufferPool::MarkStagingBufferAsFree(
     const StagingBuffer* staging_buffer) {
   lock_.AssertAcquired();
 
-  int buffer_usage_in_bytes = ResourceUtil::UncheckedSizeInBytes<int>(
+  int buffer_usage_in_bytes = viz::ResourceSizes::UncheckedSizeInBytes<int>(
       staging_buffer->size, staging_buffer->format);
   free_staging_buffer_usage_in_bytes_ += buffer_usage_in_bytes;
 }
@@ -241,7 +244,7 @@ void StagingBufferPool::MarkStagingBufferAsBusy(
     const StagingBuffer* staging_buffer) {
   lock_.AssertAcquired();
 
-  int buffer_usage_in_bytes = ResourceUtil::UncheckedSizeInBytes<int>(
+  int buffer_usage_in_bytes = viz::ResourceSizes::UncheckedSizeInBytes<int>(
       staging_buffer->size, staging_buffer->format);
   DCHECK_GE(free_staging_buffer_usage_in_bytes_, buffer_usage_in_bytes);
   free_staging_buffer_usage_in_bytes_ -= buffer_usage_in_bytes;
@@ -262,7 +265,7 @@ std::unique_ptr<StagingBuffer> StagingBufferPool::AcquireStagingBuffer(
   DCHECK(ri);
 
   // Check if any busy buffers have become available.
-  if (resource_provider_->use_sync_query()) {
+  if (worker_context_provider_->ContextCapabilities().sync_query) {
     while (!busy_buffers_.empty()) {
       if (!CheckForQueryResult(ri, busy_buffers_.front()->query_id))
         break;
@@ -280,7 +283,7 @@ std::unique_ptr<StagingBuffer> StagingBufferPool::AcquireStagingBuffer(
     if (busy_buffers_.empty())
       break;
 
-    if (resource_provider_->use_sync_query()) {
+    if (worker_context_provider_->ContextCapabilities().sync_query) {
       WaitForQueryResult(ri, busy_buffers_.front()->query_id);
       MarkStagingBufferAsFree(busy_buffers_.front().get());
       free_buffers_.push_back(PopFront(&busy_buffers_));
@@ -433,6 +436,19 @@ void StagingBufferPool::OnPurgeMemory() {
   base::AutoLock lock(lock_);
   // Release all buffers, regardless of how recently they were used.
   ReleaseBuffersNotUsedSince(base::TimeTicks() + base::TimeDelta::Max());
+}
+
+void StagingBufferPool::OnMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel level) {
+  base::AutoLock lock(lock_);
+  switch (level) {
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
+      break;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
+      ReleaseBuffersNotUsedSince(base::TimeTicks() + base::TimeDelta::Max());
+      break;
+  }
 }
 
 }  // namespace cc

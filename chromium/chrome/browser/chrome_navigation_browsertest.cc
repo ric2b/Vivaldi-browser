@@ -6,6 +6,7 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
@@ -17,9 +18,6 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/url_formatter/url_formatter.h"
-#include "components/variations/active_field_trials.h"
-#include "components/variations/metrics_util.h"
-#include "components/variations/variations_switches.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
@@ -632,12 +630,7 @@ class SignInIsolationBrowserTest : public ChromeNavigationBrowserTest {
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
   ~SignInIsolationBrowserTest() override {}
 
-  virtual void InitFeatureList() {
-    feature_list_.InitAndEnableFeature(features::kSignInProcessIsolation);
-  }
-
   void SetUp() override {
-    InitFeatureList();
     https_server_.ServeFilesFromSourceDirectory("chrome/test/data");
     ASSERT_TRUE(https_server_.InitializeAndListen());
     ChromeNavigationBrowserTest::SetUp();
@@ -666,40 +659,6 @@ class SignInIsolationBrowserTest : public ChromeNavigationBrowserTest {
 
   net::EmbeddedTestServer* https_server() { return &https_server_; }
 
-  bool HasSyntheticTrial(const std::string& trial_name) {
-    std::vector<std::string> synthetic_trials;
-    variations::GetSyntheticTrialGroupIdsAsString(&synthetic_trials);
-    std::string trial_hash =
-        base::StringPrintf("%x", metrics::HashName(trial_name));
-
-    for (auto entry : synthetic_trials) {
-      if (base::StartsWith(entry, trial_hash, base::CompareCase::SENSITIVE))
-        return true;
-    }
-
-    return false;
-  }
-
-  bool IsInSyntheticTrialGroup(const std::string& trial_name,
-                               const std::string& trial_group) {
-    std::vector<std::string> synthetic_trials;
-    variations::GetSyntheticTrialGroupIdsAsString(&synthetic_trials);
-    std::string expected_entry = base::StringPrintf(
-        "%x-%x", metrics::HashName(trial_name), metrics::HashName(trial_group));
-
-    for (auto entry : synthetic_trials) {
-      if (entry == expected_entry)
-        return true;
-    }
-
-    return false;
-  }
-
-  const std::string kSyntheticTrialName = "SignInProcessIsolationActive";
-
- protected:
-  base::test::ScopedFeatureList feature_list_;
-
  private:
   net::EmbeddedTestServer https_server_;
 
@@ -707,9 +666,9 @@ class SignInIsolationBrowserTest : public ChromeNavigationBrowserTest {
 };
 
 // This test ensures that the sign-in origin requires a dedicated process.  It
-// only ensures that the corresponding base::Feature works properly;
-// IsolatedOriginTest provides the main test coverage of origins whitelisted
-// for process isolation.  See https://crbug.com/739418.
+// only ensures that the sign-in origin is added as an isolated origin at
+// chrome/ layer; IsolatedOriginTest provides the main test coverage of origins
+// whitelisted for process isolation.  See https://crbug.com/739418.
 IN_PROC_BROWSER_TEST_F(SignInIsolationBrowserTest, NavigateToSignInPage) {
   const GURL first_url =
       embedded_test_server()->GetURL("google.com", "/title1.html");
@@ -728,157 +687,6 @@ IN_PROC_BROWSER_TEST_F(SignInIsolationBrowserTest, NavigateToSignInPage) {
       ExecuteScript(web_contents, "location = '" + signin_url.spec() + "';"));
   manager.WaitForNavigationFinished();
   EXPECT_NE(web_contents->GetMainFrame()->GetSiteInstance(), first_instance);
-}
-
-// The next four tests verify that the synthetic field trial is set correctly
-// for sign-in process isolation.  The synthetic field trial should be created
-// when browsing to the sign-in URL for the first time, and it should reflect
-// whether or not the sign-in isolation base::Feature is enabled, and whether
-// or not it is force-enabled from the command line.
-IN_PROC_BROWSER_TEST_F(SignInIsolationBrowserTest, SyntheticTrial) {
-  EXPECT_FALSE(HasSyntheticTrial(kSyntheticTrialName));
-
-  ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("foo.com", "/title1.html"));
-  EXPECT_FALSE(HasSyntheticTrial(kSyntheticTrialName));
-
-  GURL signin_url(
-      https_server()->GetURL("accounts.google.com", "/title1.html"));
-
-  // This test class uses InitAndEnableFeature, which overrides the feature
-  // settings as if it came from the command line, so by default, browsing to
-  // the sign-in URL should create the synthetic trial with ForceEnabled.
-  ui_test_utils::NavigateToURL(browser(), signin_url);
-  EXPECT_TRUE(IsInSyntheticTrialGroup(kSyntheticTrialName, "ForceEnabled"));
-}
-
-// This test class is used to check the synthetic sign-in trial for the Enabled
-// group. It creates a new field trial (with 100% probability of being in the
-// group), and initializes the test class's ScopedFeatureList using it, being
-// careful to not override it using the command line (which corresponds to
-// ForceEnabled).
-class EnabledSignInIsolationBrowserTest : public SignInIsolationBrowserTest {
- public:
-  EnabledSignInIsolationBrowserTest() {}
-  ~EnabledSignInIsolationBrowserTest() override {}
-
-  void InitFeatureList() override {}
-
-  void SetUpOnMainThread() override {
-    const std::string kTrialName = "SignInProcessIsolation";
-    const std::string kGroupName = "FooGroup";  // unused
-    scoped_refptr<base::FieldTrial> trial =
-        base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName);
-
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->RegisterFieldTrialOverride(
-        features::kSignInProcessIsolation.name,
-        base::FeatureList::OverrideState::OVERRIDE_ENABLE_FEATURE, trial.get());
-
-    feature_list_.InitWithFeatureList(std::move(feature_list));
-    SignInIsolationBrowserTest::SetUpOnMainThread();
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // This test creates and tests its own field trial group, so it needs to
-    // disable the field trial testing config, which might define an
-    // incompatible trial name/group.
-    command_line->AppendSwitch(
-        variations::switches::kDisableFieldTrialTestingConfig);
-    SignInIsolationBrowserTest::SetUpCommandLine(command_line);
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(EnabledSignInIsolationBrowserTest);
-};
-
-IN_PROC_BROWSER_TEST_F(EnabledSignInIsolationBrowserTest, SyntheticTrial) {
-  EXPECT_FALSE(HasSyntheticTrial(kSyntheticTrialName));
-  EXPECT_FALSE(IsInSyntheticTrialGroup(kSyntheticTrialName, "Enabled"));
-
-  GURL signin_url =
-      https_server()->GetURL("accounts.google.com", "/title1.html");
-  ui_test_utils::NavigateToURL(browser(), signin_url);
-  EXPECT_TRUE(IsInSyntheticTrialGroup(kSyntheticTrialName, "Enabled"));
-
-  // A repeat navigation shouldn't change the synthetic trial.
-  ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("accounts.google.com", "/title2.html"));
-  EXPECT_TRUE(IsInSyntheticTrialGroup(kSyntheticTrialName, "Enabled"));
-}
-
-// This test class is similar to EnabledSignInIsolationBrowserTest, but for the
-// Disabled group of the synthetic sign-in trial.
-class DisabledSignInIsolationBrowserTest : public SignInIsolationBrowserTest {
- public:
-  DisabledSignInIsolationBrowserTest() {}
-  ~DisabledSignInIsolationBrowserTest() override {}
-
-  void InitFeatureList() override {}
-
-  void SetUpOnMainThread() override {
-    const std::string kTrialName = "SignInProcessIsolation";
-    const std::string kGroupName = "FooGroup";  // unused
-    scoped_refptr<base::FieldTrial> trial =
-        base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName);
-
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->RegisterFieldTrialOverride(
-        features::kSignInProcessIsolation.name,
-        base::FeatureList::OverrideState::OVERRIDE_DISABLE_FEATURE,
-        trial.get());
-
-    feature_list_.InitWithFeatureList(std::move(feature_list));
-    SignInIsolationBrowserTest::SetUpOnMainThread();
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // This test creates and tests its own field trial group, so it needs to
-    // disable the field trial testing config, which might define an
-    // incompatible trial name/group.
-    command_line->AppendSwitch(
-        variations::switches::kDisableFieldTrialTestingConfig);
-    SignInIsolationBrowserTest::SetUpCommandLine(command_line);
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(DisabledSignInIsolationBrowserTest);
-};
-
-IN_PROC_BROWSER_TEST_F(DisabledSignInIsolationBrowserTest, SyntheticTrial) {
-  EXPECT_FALSE(IsInSyntheticTrialGroup(kSyntheticTrialName, "Disabled"));
-  GURL signin_url =
-      https_server()->GetURL("accounts.google.com", "/title1.html");
-  ui_test_utils::NavigateToURL(browser(), signin_url);
-  EXPECT_TRUE(IsInSyntheticTrialGroup(kSyntheticTrialName, "Disabled"));
-}
-
-// This test class is similar to EnabledSignInIsolationBrowserTest, but for the
-// ForceDisabled group of the synthetic sign-in trial.
-class ForceDisabledSignInIsolationBrowserTest
-    : public SignInIsolationBrowserTest {
- public:
-  ForceDisabledSignInIsolationBrowserTest() {}
-  ~ForceDisabledSignInIsolationBrowserTest() override {}
-
-  void InitFeatureList() override {
-    feature_list_.InitAndDisableFeature(features::kSignInProcessIsolation);
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(ForceDisabledSignInIsolationBrowserTest);
-};
-
-IN_PROC_BROWSER_TEST_F(ForceDisabledSignInIsolationBrowserTest,
-                       SyntheticTrial) {
-  // Test subframe navigation in this case, since that should also trigger
-  // synthetic trial creation.
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server()->GetURL("a.com", "/iframe.html"));
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_FALSE(IsInSyntheticTrialGroup(kSyntheticTrialName, "ForceDisabled"));
-  GURL signin_url =
-      https_server()->GetURL("accounts.google.com", "/title1.html");
-  EXPECT_TRUE(NavigateIframeToURL(web_contents, "test", signin_url));
-  EXPECT_TRUE(IsInSyntheticTrialGroup(kSyntheticTrialName, "ForceDisabled"));
 }
 
 // Helper class. Track one navigation and tell whether a response from the
@@ -935,6 +743,7 @@ class WillProcessResponseObserver : public content::WebContentsObserver {
 // Note: This test couldn't be a content_browsertests, since there would be
 // not handler defined for the "ftp" protocol in
 // URLRequestJobFactoryImpl::protocol_handler_map_.
+// Flaky on Mac only.  http://crbug.com/816646
 IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, BlockLegacySubresources) {
   net::SpawnedTestServer ftp_server(
       net::SpawnedTestServer::TYPE_FTP,
@@ -1004,7 +813,7 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, ChromeSchemeNavFromSadTab) {
                                             ->GetProcess();
   content::RenderProcessHostWatcher crash_observer(
       process, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-  process->Shutdown(-1, true);
+  process->Shutdown(-1);
   crash_observer.Wait();
 
   // Attempt to navigate to a chrome://... URL.  This used to hang and never
@@ -1034,14 +843,7 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, CrossSiteRedirectionToPDF) {
 
 // TODO(csharrison): These tests should become tentative WPT, once the feature
 // is enabled by default.
-class NavigationConsumingTest : public ChromeNavigationBrowserTest {
-  void SetUpCommandLine(base::CommandLine* cmd_line) override {
-    ChromeNavigationBrowserTest::SetUpCommandLine(cmd_line);
-    scoped_feature_.InitFromCommandLine("ConsumeGestureOnNavigation",
-                                        std::string());
-  }
-  base::test::ScopedFeatureList scoped_feature_;
-};
+using NavigationConsumingTest = ChromeNavigationBrowserTest;
 
 // The fullscreen API is spec'd to require a user activation (aka user gesture),
 // so use that API to test if navigation consumes the activation.
@@ -1062,10 +864,6 @@ IN_PROC_BROWSER_TEST_F(NavigationConsumingTest,
 
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
       contents, "document.webkitExitFullscreen();", &is_fullscreen));
-  EXPECT_FALSE(is_fullscreen);
-
-  EXPECT_TRUE(content::ExecuteScriptWithoutUserGestureAndExtractBool(
-      contents, "document.body.webkitRequestFullscreen();", &is_fullscreen));
   EXPECT_FALSE(is_fullscreen);
 
   // However, starting a navigation should consume the gesture. Fullscreen
@@ -1120,4 +918,36 @@ IN_PROC_BROWSER_TEST_F(NavigationConsumingTest,
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
       contents, different_document_script, &did_open));
   EXPECT_FALSE(did_open);
+}
+
+// Regression test for https://crbug.com/856779, where a navigation to a
+// top-level, same process frame in another tab fails to focus that tab.
+IN_PROC_BROWSER_TEST_F(NavigationConsumingTest, TargetNavigationFocus) {
+  content::WebContents* opener =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/link_with_target.html"));
+
+  {
+    content::TestNavigationObserver new_tab_observer(nullptr, 1);
+    new_tab_observer.StartWatchingNewWebContents();
+    ASSERT_TRUE(ExecuteScript(
+        opener, "document.getElementsByTagName('a')[0].click();"));
+    new_tab_observer.Wait();
+  }
+
+  content::WebContents* new_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_NE(new_contents, opener);
+
+  // Re-focusing the opener and clicking again should re-focus the popup.
+  opener->GetDelegate()->ActivateContents(opener);
+  EXPECT_EQ(opener, browser()->tab_strip_model()->GetActiveWebContents());
+  {
+    content::TestNavigationObserver new_tab_observer(new_contents, 1);
+    ASSERT_TRUE(ExecuteScript(
+        opener, "document.getElementsByTagName('a')[0].click();"));
+    new_tab_observer.Wait();
+  }
+  EXPECT_EQ(new_contents, browser()->tab_strip_model()->GetActiveWebContents());
 }

@@ -327,18 +327,26 @@ L$enc_compact_done:
 .byte	0xf3,0xc3
 
 .p2align	4
-.globl	_asm_AES_encrypt
-.private_extern _asm_AES_encrypt
+.globl	_aes_nohw_encrypt
+.private_extern _aes_nohw_encrypt
 
-.private_extern	_asm_AES_encrypt
-_asm_AES_encrypt:
+.private_extern	_aes_nohw_encrypt
+_aes_nohw_encrypt:
+
 	movq	%rsp,%rax
+
 	pushq	%rbx
+
 	pushq	%rbp
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 
 
 	leaq	-63(%rdx),%rcx
@@ -351,6 +359,7 @@ _asm_AES_encrypt:
 
 	movq	%rsi,16(%rsp)
 	movq	%rax,24(%rsp)
+
 L$enc_prologue:
 
 	movq	%rdx,%r15
@@ -377,20 +386,29 @@ L$enc_prologue:
 
 	movq	16(%rsp),%r9
 	movq	24(%rsp),%rsi
+
 	movl	%eax,0(%r9)
 	movl	%ebx,4(%r9)
 	movl	%ecx,8(%r9)
 	movl	%edx,12(%r9)
 
 	movq	-48(%rsi),%r15
+
 	movq	-40(%rsi),%r14
+
 	movq	-32(%rsi),%r13
+
 	movq	-24(%rsi),%r12
+
 	movq	-16(%rsi),%rbp
+
 	movq	-8(%rsi),%rbx
+
 	leaq	(%rsi),%rsp
+
 L$enc_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 .p2align	4
@@ -773,18 +791,26 @@ L$dec_compact_done:
 .byte	0xf3,0xc3
 
 .p2align	4
-.globl	_asm_AES_decrypt
-.private_extern _asm_AES_decrypt
+.globl	_aes_nohw_decrypt
+.private_extern _aes_nohw_decrypt
 
-.private_extern	_asm_AES_decrypt
-_asm_AES_decrypt:
+.private_extern	_aes_nohw_decrypt
+_aes_nohw_decrypt:
+
 	movq	%rsp,%rax
+
 	pushq	%rbx
+
 	pushq	%rbp
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 
 
 	leaq	-63(%rdx),%rcx
@@ -797,6 +823,7 @@ _asm_AES_decrypt:
 
 	movq	%rsi,16(%rsp)
 	movq	%rax,24(%rsp)
+
 L$dec_prologue:
 
 	movq	%rdx,%r15
@@ -825,42 +852,63 @@ L$dec_prologue:
 
 	movq	16(%rsp),%r9
 	movq	24(%rsp),%rsi
+
 	movl	%eax,0(%r9)
 	movl	%ebx,4(%r9)
 	movl	%ecx,8(%r9)
 	movl	%edx,12(%r9)
 
 	movq	-48(%rsi),%r15
+
 	movq	-40(%rsi),%r14
+
 	movq	-32(%rsi),%r13
+
 	movq	-24(%rsi),%r12
+
 	movq	-16(%rsi),%rbp
+
 	movq	-8(%rsi),%rbx
+
 	leaq	(%rsi),%rsp
+
 L$dec_epilogue:
 	.byte	0xf3,0xc3
 
-.p2align	4
-.globl	_asm_AES_set_encrypt_key
-.private_extern _asm_AES_set_encrypt_key
 
-_asm_AES_set_encrypt_key:
+.p2align	4
+.globl	_aes_nohw_set_encrypt_key
+.private_extern _aes_nohw_set_encrypt_key
+
+_aes_nohw_set_encrypt_key:
+
 	pushq	%rbx
+
 	pushq	%rbp
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	subq	$8,%rsp
+
 L$enc_key_prologue:
 
 	call	_x86_64_AES_set_encrypt_key
 
 	movq	40(%rsp),%rbp
+
 	movq	48(%rsp),%rbx
+
 	addq	$56,%rsp
+
 L$enc_key_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -1103,17 +1151,25 @@ L$exit:
 .byte	0xf3,0xc3
 
 .p2align	4
-.globl	_asm_AES_set_decrypt_key
-.private_extern _asm_AES_set_decrypt_key
+.globl	_aes_nohw_set_decrypt_key
+.private_extern _aes_nohw_set_decrypt_key
 
-_asm_AES_set_decrypt_key:
+_aes_nohw_set_decrypt_key:
+
 	pushq	%rbx
+
 	pushq	%rbp
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 	pushq	%rdx
+
 L$dec_key_prologue:
 
 	call	_x86_64_AES_set_encrypt_key
@@ -1281,31 +1337,47 @@ L$permute:
 	xorq	%rax,%rax
 L$abort:
 	movq	8(%rsp),%r15
+
 	movq	16(%rsp),%r14
+
 	movq	24(%rsp),%r13
+
 	movq	32(%rsp),%r12
+
 	movq	40(%rsp),%rbp
+
 	movq	48(%rsp),%rbx
+
 	addq	$56,%rsp
+
 L$dec_key_epilogue:
 	.byte	0xf3,0xc3
 
+
 .p2align	4
-.globl	_asm_AES_cbc_encrypt
-.private_extern _asm_AES_cbc_encrypt
+.globl	_aes_nohw_cbc_encrypt
+.private_extern _aes_nohw_cbc_encrypt
 
 
-.private_extern	_asm_AES_cbc_encrypt
-_asm_AES_cbc_encrypt:
+.private_extern	_aes_nohw_cbc_encrypt
+_aes_nohw_cbc_encrypt:
+
 	cmpq	$0,%rdx
 	je	L$cbc_epilogue
 	pushfq
+
 	pushq	%rbx
+
 	pushq	%rbp
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	pushq	%r15
+
 L$cbc_prologue:
 
 	cld
@@ -1352,7 +1424,9 @@ L$cbc_te_ok:
 
 	xchgq	%rsp,%r15
 
+
 	movq	%r15,16(%rsp)
+
 L$cbc_fast_body:
 	movq	%rdi,24(%rsp)
 	movq	%rsi,32(%rsp)
@@ -1734,17 +1808,27 @@ L$cbc_slow_dec_partial:
 .p2align	4
 L$cbc_exit:
 	movq	16(%rsp),%rsi
+
 	movq	(%rsi),%r15
+
 	movq	8(%rsi),%r14
+
 	movq	16(%rsi),%r13
+
 	movq	24(%rsi),%r12
+
 	movq	32(%rsi),%rbp
+
 	movq	40(%rsi),%rbx
+
 	leaq	48(%rsi),%rsp
+
 L$cbc_popfq:
 	popfq
+
 L$cbc_epilogue:
 	.byte	0xf3,0xc3
+
 
 .p2align	6
 L$AES_Te:

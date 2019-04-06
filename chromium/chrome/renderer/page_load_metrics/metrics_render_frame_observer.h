@@ -9,11 +9,12 @@
 
 #include "base/macros.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
+#include "chrome/renderer/page_load_metrics/page_resource_data_use.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
+#include "third_party/blink/public/platform/web_loading_behavior_flag.h"
 
 namespace base {
-class Timer;
+class OneShotTimer;
 }  // namespace base
 
 namespace page_load_metrics {
@@ -36,6 +37,20 @@ class MetricsRenderFrameObserver : public content::RenderFrameObserver {
   void DidObserveLoadingBehavior(
       blink::WebLoadingBehaviorFlag behavior) override;
   void DidObserveNewFeatureUsage(blink::mojom::WebFeature feature) override;
+  void DidObserveNewCssPropertyUsage(int css_property,
+                                     bool is_animated) override;
+  void DidStartResponse(int request_id,
+                        const network::ResourceResponseHead& response_head,
+                        content::ResourceType resource_type) override;
+  void DidReceiveTransferSizeUpdate(int request_id,
+                                    int received_data_length) override;
+  void DidCompleteResponse(
+      int request_id,
+      const network::URLLoaderCompletionStatus& status) override;
+  void DidCancelResponse(int request_id) override;
+  void DidStartProvisionalLoad(
+      blink::WebDocumentLoader* document_loader) override;
+  void DidFailProvisionalLoad(const blink::WebURLError& error) override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_document_navigation) override;
   void OnDestruct() override;
@@ -47,9 +62,18 @@ class MetricsRenderFrameObserver : public content::RenderFrameObserver {
  private:
   void SendMetrics();
   virtual mojom::PageLoadTimingPtr GetTiming() const;
-  virtual std::unique_ptr<base::Timer> CreateTimer();
+  virtual std::unique_ptr<base::OneShotTimer> CreateTimer();
   virtual std::unique_ptr<PageTimingSender> CreatePageTimingSender();
   virtual bool HasNoRenderFrame() const;
+
+  // Collects the data use of the frame request for a provisional load until the
+  // load is committed. We want to collect data use for completed navigations in
+  // this class, but the various navigation callbacks do not provide enough data
+  // for us to use them for data attribution. Instead, we try to get this
+  // information from ongoing resource requests on the previous page (or right
+  // before this page loads in a new renderer).
+  std::unique_ptr<PageResourceDataUse> provisional_frame_resource_data_use_;
+  mojom::PageLoadDataUsePtr provisional_delta_data_use_;
 
   // Will be null when we're not actively sending metrics.
   std::unique_ptr<PageTimingMetricsSender> page_timing_metrics_sender_;

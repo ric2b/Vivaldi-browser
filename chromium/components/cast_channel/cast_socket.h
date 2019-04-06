@@ -33,7 +33,7 @@ class CTVerifier;
 class NetLog;
 class SSLClientSocket;
 class StreamSocket;
-class TCPClientSocket;
+class TransportClientSocket;
 class TransportSecurityState;
 class X509Certificate;
 }
@@ -272,8 +272,8 @@ class CastSocketImpl : public CastSocket {
   // READY_STATE_CLOSED.
   void CloseInternal();
 
-  // Creates an instance of TCPClientSocket.
-  virtual std::unique_ptr<net::TCPClientSocket> CreateTcpSocket();
+  // Creates an instance of TransportClientSocket.
+  virtual std::unique_ptr<net::TransportClientSocket> CreateTcpSocket();
   // Creates an instance of SSLClientSocket with the given underlying |socket|.
   virtual std::unique_ptr<net::SSLClientSocket> CreateSslSocket(
       std::unique_ptr<net::StreamSocket> socket);
@@ -328,7 +328,7 @@ class CastSocketImpl : public CastSocket {
   // Runs the external connection callback and resets it.
   void DoConnectCallback();
 
-  virtual base::Timer* GetTimer();
+  virtual base::OneShotTimer* GetTimer();
 
   void SetConnectState(ConnectionState connect_state);
   void SetReadyState(ReadyState ready_state);
@@ -356,7 +356,7 @@ class CastSocketImpl : public CastSocket {
   std::unique_ptr<net::CTPolicyEnforcer> ct_policy_enforcer_;
 
   // Owned ptr to the underlying TCP socket.
-  std::unique_ptr<net::TCPClientSocket> tcp_socket_;
+  std::unique_ptr<net::TransportClientSocket> tcp_socket_;
 
   // Owned ptr to the underlying SSL socket.
   std::unique_ptr<net::SSLClientSocket> socket_;
@@ -378,7 +378,7 @@ class CastSocketImpl : public CastSocket {
   base::CancelableClosure connect_timeout_callback_;
 
   // Timer invoked when the connection has timed out.
-  std::unique_ptr<base::Timer> connect_timeout_timer_;
+  std::unique_ptr<base::OneShotTimer> connect_timeout_timer_;
 
   // Set when a timeout is triggered and the connection process has
   // canceled.

@@ -10,13 +10,12 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/events/mojo/event.mojom.h"
@@ -203,7 +202,7 @@ class AURA_EXPORT WindowManagerDelegate {
   // Called when a Mus client has started a drag, and wants this image to be
   // the drag representation.
   virtual void OnWmBuildDragImage(const gfx::Point& screen_location,
-                                  const SkBitmap& drag_image,
+                                  const gfx::ImageSkia& drag_image,
                                   const gfx::Vector2d& drag_image_offset,
                                   ui::mojom::PointerKind source) = 0;
 
@@ -243,7 +242,7 @@ class AURA_EXPORT WindowManagerDelegate {
   virtual ui::mojom::EventResult OnAccelerator(
       uint32_t id,
       const ui::Event& event,
-      std::unordered_map<std::string, std::vector<uint8_t>>* properties);
+      base::flat_map<std::string, std::vector<uint8_t>>* properties);
 
   // Called when the mouse cursor is shown or hidden in response to a touch
   // event or window manager call.

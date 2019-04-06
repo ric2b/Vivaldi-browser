@@ -7,7 +7,8 @@
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/common/chrome_content_client.h"
 #include "content/common/media/media_player_messages_android.h"
-#include "third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
+#include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_availability.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/android/java_bitmap.h"
 
@@ -105,14 +106,14 @@ void RemoteMediaPlayerManager::FetchPosterBitmap(int player_id) {
     return;
   }
   content::WebContents::ImageDownloadCallback callback =
-      base::Bind(&RemoteMediaPlayerManager::DidDownloadPoster,
-                 weak_ptr_factory_.GetWeakPtr(), player_id);
+      base::BindOnce(&RemoteMediaPlayerManager::DidDownloadPoster,
+                     weak_ptr_factory_.GetWeakPtr(), player_id);
   web_contents()->DownloadImage(
       poster_urls_[player_id],
       false,  // is_favicon, false so that cookies will be used.
       MAX_POSTER_BITMAP_SIZE,  // max_bitmap_size, 0 means no limit.
       false,                   // normal cache policy.
-      callback);
+      std::move(callback));
 }
 
 void RemoteMediaPlayerManager::OnSetPoster(int player_id, const GURL& url) {

@@ -6,40 +6,55 @@
 
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
+#include "components/viz/common/constants.h"
 
 namespace switches {
-namespace {
-
-constexpr uint32_t kDefaultNumberOfFramesToDeadline = 4;
-
-}  // namespace
 
 // The default number of the BeginFrames to wait to activate a surface with
 // dependencies.
 const char kDeadlineToSynchronizeSurfaces[] =
     "deadline-to-synchronize-surfaces";
 
-// Disable surface lifetime management using surface references. This enables
-// adding surface sequences and disables adding temporary references. This flag
-// is only checked on Android, other platforms always have surface references
-// enabled.
-const char kDisableSurfaceReferences[] = "disable-surface-references";
-
 // Enables multi-client Surface synchronization. In practice, this indicates
 // that LayerTreeHost expects to be given a valid viz::LocalSurfaceId provided
 // by the parent compositor.
 const char kEnableSurfaceSynchronization[] = "enable-surface-synchronization";
 
-uint32_t GetDeadlineToSynchronizeSurfaces() {
-  std::string deadline_to_synchronize_surfaces_string =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kDeadlineToSynchronizeSurfaces);
-  uint32_t number_of_frames_to_activation_deadline;
-  if (!base::StringToUint(deadline_to_synchronize_surfaces_string,
-                          &number_of_frames_to_activation_deadline)) {
-    return kDefaultNumberOfFramesToDeadline;
+// Enables inspecting Viz Display Compositor objects. Default port is 9229.
+// For local inspection use chrome://inspect#other
+const char kEnableVizDevTools[] = "enable-viz-devtools";
+
+// Effectively disables pipelining of compositor frame production stages by
+// waiting for each stage to finish before completing a frame.
+const char kRunAllCompositorStagesBeforeDraw[] =
+    "run-all-compositor-stages-before-draw";
+
+// Enables the viz hit-test logic (HitTestAggregator and HitTestQuery), with
+// hit-test data coming from surface layer.
+const char kUseVizHitTestSurfaceLayer[] = "use-viz-hit-test-surface-layer";
+
+// Disables begin frame limiting in both cc scheduler and display scheduler.
+// Also implies --disable-gpu-vsync (see //ui/gl/gl_switches.h).
+const char kDisableFrameRateLimit[] = "disable-frame-rate-limit";
+
+base::Optional<uint32_t> GetDeadlineToSynchronizeSurfaces() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kRunAllCompositorStagesBeforeDraw)) {
+    // In full-pipeline mode, surface deadlines should always be unlimited.
+    return base::nullopt;
   }
-  return number_of_frames_to_activation_deadline;
+  std::string deadline_to_synchronize_surfaces_string =
+      command_line->GetSwitchValueASCII(
+          switches::kDeadlineToSynchronizeSurfaces);
+  if (deadline_to_synchronize_surfaces_string.empty())
+    return viz::kDefaultActivationDeadlineInFrames;
+
+  uint32_t activation_deadline_in_frames;
+  if (!base::StringToUint(deadline_to_synchronize_surfaces_string,
+                          &activation_deadline_in_frames)) {
+    return base::nullopt;
+  }
+  return activation_deadline_in_frames;
 }
 
 }  // namespace switches

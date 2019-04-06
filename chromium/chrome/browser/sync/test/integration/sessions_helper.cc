@@ -145,14 +145,15 @@ bool OpenTabFromSourceIndex(int index,
 }
 
 void MoveTab(int from_index, int to_index, int tab_index) {
-  content::WebContents* detached_contents =
+  std::unique_ptr<content::WebContents> detached_contents =
       test()
           ->GetBrowser(from_index)
           ->tab_strip_model()
           ->DetachWebContentsAt(tab_index);
 
   TabStripModel* target_strip = test()->GetBrowser(to_index)->tab_strip_model();
-  target_strip->InsertWebContentsAt(target_strip->count(), detached_contents,
+  target_strip->InsertWebContentsAt(target_strip->count(),
+                                    std::move(detached_contents),
                                     TabStripModel::ADD_ACTIVE);
 }
 
@@ -162,7 +163,7 @@ bool NavigateTab(int index, const GURL& url) {
   params.disposition = WindowOpenDisposition::CURRENT_TAB;
 
   ui_test_utils::NavigateToURL(&params);
-  return WaitForTabToLoad(index, url, params.target_contents);
+  return WaitForTabToLoad(index, url, params.navigated_or_inserted_contents);
 }
 
 void NavigateTabBack(int index) {
@@ -232,7 +233,8 @@ bool GetLocalWindows(int index, ScopedWindowMap* local_windows) {
     const sessions::SessionWindow& window = w->second->wrapped_window;
     std::unique_ptr<sync_sessions::SyncedSessionWindow> new_window =
         std::make_unique<sync_sessions::SyncedSessionWindow>();
-    new_window->wrapped_window.window_id.set_id(window.window_id.id());
+    new_window->wrapped_window.window_id =
+        SessionID::FromSerializedValue(window.window_id.id());
     for (size_t t = 0; t < window.tabs.size(); ++t) {
       const sessions::SessionTab& tab = *window.tabs.at(t);
       std::unique_ptr<sessions::SessionTab> new_tab =
@@ -242,7 +244,7 @@ bool GetLocalWindows(int index, ScopedWindowMap* local_windows) {
                 new_tab->navigations.begin());
       new_window->wrapped_window.tabs.push_back(std::move(new_tab));
     }
-    auto id = new_window->wrapped_window.window_id.id();
+    auto id = new_window->wrapped_window.window_id;
     (*local_windows)[id] = std::move(new_window);
   }
 
@@ -364,6 +366,9 @@ bool WindowsMatchImpl(const T1& win1, const T2& win2) {
     for (size_t t = 0; t < i->second->wrapped_window.tabs.size(); ++t) {
       client0_tab = i->second->wrapped_window.tabs[t].get();
       client1_tab = j->second->wrapped_window.tabs[t].get();
+      if (client0_tab->navigations.size() != client1_tab->navigations.size()) {
+        return false;
+      }
       for (size_t n = 0; n < client0_tab->navigations.size(); ++n) {
         if (!NavigationEquals(client0_tab->navigations[n],
                               client1_tab->navigations[n])) {

@@ -5,6 +5,7 @@
 #include "components/safe_browsing/android/remote_database_manager.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/metrics/histogram_macros.h"
@@ -16,6 +17,7 @@
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 using content::BrowserThread;
 
@@ -167,10 +169,6 @@ bool RemoteSafeBrowsingDatabaseManager::CanCheckResourceType(
   return resource_types_to_check_.count(resource_type) > 0;
 }
 
-bool RemoteSafeBrowsingDatabaseManager::CanCheckSubresourceFilter() const {
-  return true;
-}
-
 bool RemoteSafeBrowsingDatabaseManager::CanCheckUrl(const GURL& url) const {
   return url.SchemeIsHTTPOrHTTPS() || url.SchemeIs(url::kFtpScheme) ||
          url.SchemeIsWSOrWSS();
@@ -203,9 +201,11 @@ bool RemoteSafeBrowsingDatabaseManager::CheckBrowseUrl(
   // SubresourceFilterSafeBrowsingActivationThrottle check IsSupported()
   // earlier.
   DCHECK(api_handler) << "SafeBrowsingApiHandler was never constructed";
-  api_handler->StartURLCheck(
-      base::Bind(&ClientRequest::OnRequestDoneWeak, req->GetWeakPtr()), url,
-      threat_types);
+
+  auto callback =
+      std::make_unique<SafeBrowsingApiHandler::URLCheckCallbackMeta>(
+          base::BindOnce(&ClientRequest::OnRequestDoneWeak, req->GetWeakPtr()));
+  api_handler->StartURLCheck(std::move(callback), url, threat_types);
 
   current_requests_.push_back(req.release());
 
@@ -237,7 +237,6 @@ bool RemoteSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
     const GURL& url,
     Client* client) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(CanCheckSubresourceFilter());
 
   if (!enabled_ || !CanCheckUrl(url))
     return true;
@@ -250,8 +249,11 @@ bool RemoteSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
   // SubresourceFilterSafeBrowsingActivationThrottle check IsSupported()
   // earlier.
   DCHECK(api_handler) << "SafeBrowsingApiHandler was never constructed";
+  auto callback =
+      std::make_unique<SafeBrowsingApiHandler::URLCheckCallbackMeta>(
+          base::BindOnce(&ClientRequest::OnRequestDoneWeak, req->GetWeakPtr()));
   api_handler->StartURLCheck(
-      base::Bind(&ClientRequest::OnRequestDoneWeak, req->GetWeakPtr()), url,
+      std::move(callback), url,
       CreateSBThreatTypeSet(
           {SB_THREAT_TYPE_SUBRESOURCE_FILTER, SB_THREAT_TYPE_URL_PHISHING}));
 
@@ -300,10 +302,10 @@ bool RemoteSafeBrowsingDatabaseManager::IsSupported() const {
 }
 
 void RemoteSafeBrowsingDatabaseManager::StartOnIOThread(
-    net::URLRequestContextGetter* request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const V4ProtocolConfig& config) {
   VLOG(1) << "RemoteSafeBrowsingDatabaseManager starting";
-  SafeBrowsingDatabaseManager::StartOnIOThread(request_context_getter, config);
+  SafeBrowsingDatabaseManager::StartOnIOThread(url_loader_factory, config);
   enabled_ = true;
 }
 

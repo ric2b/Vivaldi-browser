@@ -5,15 +5,14 @@
 #include <stddef.h>
 
 #include <memory>
-
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/thread_test_helper.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -24,6 +23,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/test_extension_dir.h"
 
 using content::BrowserThread;
 
@@ -155,9 +155,18 @@ IN_PROC_BROWSER_TEST_F(DeclarativeApiTest, PersistRules) {
   EXPECT_EQ(kTestTitle, GetTitle());
 }
 
+// Disabled for flakiness: http://crbug.com/851854
+#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
+#define MAYBE_ExtensionLifetimeRulesHandling \
+  DISABLED_ExtensionLifetimeRulesHandling
+#else
+#define MAYBE_ExtensionLifetimeRulesHandling ExtensionLifetimeRulesHandling
+#endif
+
 // Test that the rules are correctly persisted and (de)activated during
 // changing the "installed" and "enabled" status of an extension.
-IN_PROC_BROWSER_TEST_F(DeclarativeApiTest, ExtensionLifetimeRulesHandling) {
+IN_PROC_BROWSER_TEST_F(DeclarativeApiTest,
+                       MAYBE_ExtensionLifetimeRulesHandling) {
   TestExtensionDir ext_dir;
 
   // 1. Install the extension. Rules should become active.
@@ -220,10 +229,17 @@ IN_PROC_BROWSER_TEST_F(DeclarativeApiTest, ExtensionLifetimeRulesHandling) {
   EXPECT_EQ(0u, NumberOfRegisteredRules(extension_id));
 }
 
-// When an extenion is uninstalled, the state store deletes all preferences
+// Disabled for flakiness: http://crbug.com/851854
+#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
+#define MAYBE_NoTracesAfterUninstalling DISABLED_NoTracesAfterUninstalling
+#else
+#define MAYBE_NoTracesAfterUninstalling NoTracesAfterUninstalling
+#endif
+
+// When an extension is uninstalled, the state store deletes all preferences
 // stored for that extension. We need to make sure we don't store anything after
 // that deletion occurs.
-IN_PROC_BROWSER_TEST_F(DeclarativeApiTest, NoTracesAfterUninstalling) {
+IN_PROC_BROWSER_TEST_F(DeclarativeApiTest, MAYBE_NoTracesAfterUninstalling) {
   TestExtensionDir ext_dir;
 
   // 1. Install the extension. Verify that rules become active and some prefs

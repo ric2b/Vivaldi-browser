@@ -82,15 +82,18 @@ class OutOfProcessInstance : public pp::Instance,
   void SetSelectionBounds(const pp::FloatPoint& base,
                           const pp::FloatPoint& extent);
   bool CanEditText();
+  bool HasEditableText();
   void ReplaceSelection(const std::string& text);
+  bool CanUndo();
+  bool CanRedo();
+  void Undo();
+  void Redo();
+  int32_t PdfPrintBegin(const PP_PrintSettings_Dev* print_settings,
+                        const PP_PdfPrintSettings_Dev* pdf_print_settings);
 
   void FlushCallback(int32_t result);
   void DidOpen(int32_t result);
   void DidOpenPreview(int32_t result);
-
-  // Called when the timer is fired.
-  void OnClientTimerFired(int32_t id);
-  void OnClientTouchTimerFired(int32_t id);
 
   // Called to print without re-entrancy issues.
   void OnPrint(int32_t);
@@ -98,9 +101,10 @@ class OutOfProcessInstance : public pp::Instance,
   // PDFEngine::Client implementation.
   void DocumentSizeUpdated(const pp::Size& size) override;
   void Invalidate(const pp::Rect& rect) override;
-  void Scroll(const pp::Point& point) override;
+  void DidScroll(const pp::Point& point) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
+  void ScrollBy(const pp::Point& point) override;
   void ScrollToPage(int page) override;
   void NavigateTo(const std::string& url,
                   WindowOpenDisposition disposition) override;
@@ -112,6 +116,7 @@ class OutOfProcessInstance : public pp::Instance,
       const PDFEngine::PageFeatures* page_features) override;
   void GetDocumentPassword(
       pp::CompletionCallbackWithOutput<pp::Var> callback) override;
+  void Beep() override;
   void Alert(const std::string& message) override;
   bool Confirm(const std::string& message) override;
   std::string Prompt(const std::string& question,
@@ -127,14 +132,13 @@ class OutOfProcessInstance : public pp::Instance,
                   const void* data,
                   int length) override;
   pp::URLLoader CreateURLLoader() override;
-  void ScheduleCallback(int id, base::TimeDelta delay) override;
-  void ScheduleTouchTimerCallback(int id, base::TimeDelta delay) override;
   std::vector<SearchStringResult> SearchString(const base::char16* string,
                                                const base::char16* term,
                                                bool case_sensitive) override;
   void DocumentPaintOccurred() override;
   void DocumentLoadComplete(
-      const PDFEngine::DocumentFeatures& document_features) override;
+      const PDFEngine::DocumentFeatures& document_features,
+      uint32_t file_size) override;
   void DocumentLoadFailed() override;
   void FontSubstituted() override;
   pp::Instance* GetPluginInstance() override;
@@ -147,6 +151,7 @@ class OutOfProcessInstance : public pp::Instance,
   void IsSelectingChanged(bool is_selecting) override;
   void SelectionChanged(const pp::Rect& left, const pp::Rect& right) override;
   void IsEditModeChanged(bool is_edit_mode) override;
+  float GetToolbarHeightInScreenCoords() override;
 
   // PreviewModeClient::Client implementation.
   void PreviewDocumentLoadComplete() override;
@@ -301,18 +306,22 @@ class OutOfProcessInstance : public pp::Instance,
 
   struct PrintSettings {
     PrintSettings() { Clear(); }
-    void Clear() {
-      is_printing = false;
-      print_pages_called_ = false;
-      memset(&pepper_print_settings, 0, sizeof(pepper_print_settings));
-    }
-    // This is set to true when PrintBegin is called and false when PrintEnd is
-    // called.
+
+    void Clear();
+
+    // This is set to true when PdfPrintBegin() is called and false when
+    // PrintEnd() is called.
     bool is_printing;
+
     // To know whether this was an actual print operation, so we don't double
     // count UMA logging.
-    bool print_pages_called_;
+    bool print_pages_called;
+
+    // Generic print settings.
     PP_PrintSettings_Dev pepper_print_settings;
+
+    // PDF-specific print settings.
+    PP_PdfPrintSettings_Dev pdf_print_settings;
   };
 
   PrintSettings print_settings_;

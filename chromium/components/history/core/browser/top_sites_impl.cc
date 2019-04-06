@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <utility>
 
@@ -14,7 +15,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/md5.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -42,8 +42,6 @@
 #include "ui/gfx/image/image_util.h"
 
 #include "app/vivaldi_apptools.h"
-#include "content/public/browser/browser_thread.h"
-#include "prefs/vivaldi_pref_names.h"
 
 namespace history {
 namespace {
@@ -111,9 +109,6 @@ const int kTopSitesImageQuality = 100;
 // visited thumbnails.
 const char kMostVisitedURLsBlacklist[] = "ntp.most_visited_blacklist";
 
-// Vivaldi: How many days between each vacuuming of the top sites database.
-const int kTopSitesVacuumDays = 14;
-
 // Vivaldi: We need them to be smaller as we store many more of them
 const int kVivaldiTopSitesImageQuality = 80;
 
@@ -128,8 +123,8 @@ TopSitesImpl::TopSitesImpl(PrefService* pref_service,
                            const PrepopulatedPageList& prepopulated_pages,
                            const CanAddURLToHistoryFn& can_add_url_to_history)
     : backend_(nullptr),
-      cache_(base::MakeUnique<TopSitesCache>()),
-      thread_safe_cache_(base::MakeUnique<TopSitesCache>()),
+      cache_(std::make_unique<TopSitesCache>()),
+      thread_safe_cache_(std::make_unique<TopSitesCache>()),
       prepopulated_pages_(prepopulated_pages),
       pref_service_(pref_service),
       history_service_(history_service),
@@ -147,12 +142,10 @@ void TopSitesImpl::Init(const base::FilePath& db_name) {
   // unit tests that do not need the backend can run without a problem.
   backend_ = new TopSitesBackend();
   backend_->Init(db_name);
-
   backend_->GetMostVisitedThumbnails(
       base::Bind(&TopSitesImpl::OnGotMostVisitedThumbnails,
                  base::Unretained(this)),
       &cancelable_task_tracker_);
-
 }
 
 bool TopSitesImpl::SetPageThumbnail(const GURL& url,
@@ -293,7 +286,7 @@ bool TopSitesImpl::HasBlacklistedItems() const {
 void TopSitesImpl::AddBlacklistedURL(const GURL& url) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  auto dummy = base::MakeUnique<base::Value>();
+  auto dummy = std::make_unique<base::Value>();
   {
     DictionaryPrefUpdate update(pref_service_, kMostVisitedURLsBlacklist);
     base::DictionaryValue* blacklist = update.Get();
@@ -591,16 +584,11 @@ bool TopSitesImpl::EncodeBitmap(const gfx::Image& bitmap,
   if (bitmap.IsEmpty())
     return false;
   *bytes = new base::RefCountedBytes();
-  std::vector<unsigned char> data;
-  if (vivaldi::IsVivaldiRunning()) {
-    if (!gfx::JPEG1xEncodedDataFromImage(bitmap, kVivaldiTopSitesImageQuality,
-                                         &(*bytes)->data()))
-      return false;
-  } else {
-  if (!gfx::JPEG1xEncodedDataFromImage(bitmap, kTopSitesImageQuality,
+  if (!gfx::JPEG1xEncodedDataFromImage(bitmap,
+           vivaldi::IsVivaldiRunning() ? kVivaldiTopSitesImageQuality
+                                       : kTopSitesImageQuality,
                                        &(*bytes)->data())) {
     return false;
-  }
   }
 
   // As we're going to cache this data, make sure the vector is only as big as
@@ -641,15 +629,6 @@ int TopSitesImpl::GetRedirectDistanceForURL(const MostVisitedURL& most_visited,
   }
   NOTREACHED() << "URL should always be found.";
   return 0;
-}
-
-
-bool TopSitesImpl::HasPageThumbnail(const GURL& url) {
-  scoped_refptr<base::RefCountedMemory> bytes;
-  // This could be relatively expensive, but the assumption is
-  // that the next call to fetch the thumbnail will then use
-  // the cache, making the end performance the same.
-  return GetPageThumbnail(url, true, &bytes);
 }
 
 bool TopSitesImpl::AddPrepopulatedPages(MostVisitedURLList* urls,
@@ -923,19 +902,16 @@ void TopSitesImpl::OnTopSitesAvailableFromHistory(
 }
 
 void TopSitesImpl::OnURLsDeleted(HistoryService* history_service,
-                                 bool all_history,
-                                 bool expired,
-                                 const URLRows& deleted_rows,
-                                 const std::set<GURL>& favicon_urls) {
+                                 const DeletionInfo& deletion_info) {
   if (!loaded_)
     return;
 
-  if (all_history) {
+  if (deletion_info.IsAllHistory()) {
     SetTopSites(MostVisitedURLList(), CALL_LOCATION_FROM_OTHER_PLACES);
     backend_->ResetDatabase();
   } else {
     std::set<size_t> indices_to_delete;  // Indices into top_sites_.
-    for (const auto& row : deleted_rows) {
+    for (const auto& row : deletion_info.deleted_rows()) {
       if (cache_->IsKnownURL(row.url()))
         indices_to_delete.insert(cache_->GetURLIndex(row.url()));
     }
@@ -951,42 +927,6 @@ void TopSitesImpl::OnURLsDeleted(HistoryService* history_service,
     SetTopSites(new_top_sites, CALL_LOCATION_FROM_OTHER_PLACES);
   }
   StartQueryForMostVisited();
-}
-
-
-void TopSitesImpl::Vacuum() {
-  base::Time time_now = base::Time::Now();
-  int64_t last_vacuum = pref_service_->GetInt64(
-      vivaldiprefs::kVivaldiLastTopSitesVacuumDate);
-  base::Time next_vacuum =
-      time_now + base::TimeDelta::FromDays(kTopSitesVacuumDays);
-  if (last_vacuum == 0 || last_vacuum > next_vacuum.ToInternalValue()) {
-    pref_service_->SetInt64(vivaldiprefs::kVivaldiLastTopSitesVacuumDate,
-                            time_now.ToInternalValue());
-    // DB access must happen on the DB thread.
-      content::BrowserThread::PostTask(
-          content::BrowserThread::DB, FROM_HERE,
-          base::Bind(&TopSitesImpl::VacuumOnDBThread,
-                      base::Unretained(this)));
-  }
-}
-
-void TopSitesImpl::VacuumOnDBThread() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::DB);
-  backend_->VacuumDatabase();
-}
-
-void TopSitesImpl::RemoveThumbnailForUrl(const GURL& url) {
-  // DB access must happen on the DB thread.
-  content::BrowserThread::PostTask(
-      content::BrowserThread::DB, FROM_HERE,
-      base::Bind(&TopSitesImpl::RemoveThumbnailForUrlOnDBThread,
-                 base::Unretained(this), url));
-}
-
-void TopSitesImpl::RemoveThumbnailForUrlOnDBThread(const GURL& url) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::DB);
-  backend_->RemoveThumbnailForUrl(url);
 }
 
 }  // namespace history

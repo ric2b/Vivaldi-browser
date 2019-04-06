@@ -13,12 +13,14 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PhoneNumberUtil;
-import org.chromium.chrome.browser.payments.ui.EditorFieldModel;
-import org.chromium.chrome.browser.payments.ui.EditorFieldModel.EditorFieldValidator;
-import org.chromium.chrome.browser.payments.ui.EditorModel;
+import org.chromium.chrome.browser.widget.prefeditor.EditorBase;
+import org.chromium.chrome.browser.widget.prefeditor.EditorFieldModel;
+import org.chromium.chrome.browser.widget.prefeditor.EditorFieldModel.EditorFieldValidator;
+import org.chromium.chrome.browser.widget.prefeditor.EditorModel;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 import javax.annotation.Nullable;
 
@@ -39,6 +41,7 @@ public class ContactEditor extends EditorBase<AutofillContact> {
     private final boolean mRequestPayerName;
     private final boolean mRequestPayerPhone;
     private final boolean mRequestPayerEmail;
+    private final boolean mSaveToDisk;
     private final Set<CharSequence> mPayerNames;
     private final Set<CharSequence> mPhoneNumbers;
     private final Set<CharSequence> mEmailAddresses;
@@ -48,16 +51,18 @@ public class ContactEditor extends EditorBase<AutofillContact> {
     /**
      * Builds a contact information editor.
      *
-     * @param requestPayerName Whether to request the user's name.
+     * @param requestPayerName  Whether to request the user's name.
      * @param requestPayerPhone Whether to request the user's phone number.
      * @param requestPayerEmail Whether to request the user's email address.
+     * @param saveToDisk        Whether to save changes to disk.
      */
-    public ContactEditor(boolean requestPayerName,
-            boolean requestPayerPhone, boolean requestPayerEmail) {
+    public ContactEditor(boolean requestPayerName, boolean requestPayerPhone,
+            boolean requestPayerEmail, boolean saveToDisk) {
         assert requestPayerName || requestPayerPhone || requestPayerEmail;
         mRequestPayerName = requestPayerName;
         mRequestPayerPhone = requestPayerPhone;
         mRequestPayerEmail = requestPayerEmail;
+        mSaveToDisk = saveToDisk;
         mPayerNames = new HashSet<>();
         mPhoneNumbers = new HashSet<>();
         mEmailAddresses = new HashSet<>();
@@ -155,7 +160,8 @@ public class ContactEditor extends EditorBase<AutofillContact> {
                           mContext.getString(R.string.payments_name_field_in_contact_details),
                           mPayerNames, null /* suggestions */, null /* formatter */,
                           null /* validator */,
-                          mContext.getString(R.string.payments_field_required_validation_message),
+                          mContext.getString(
+                                  R.string.pref_edit_dialog_field_required_validation_message),
                           null, contact.getPayerName())
                 : null;
 
@@ -164,7 +170,8 @@ public class ContactEditor extends EditorBase<AutofillContact> {
                           mContext.getString(R.string.autofill_profile_editor_phone_number),
                           mPhoneNumbers, new PhoneNumberUtil.CountryAwareFormatTextWatcher(),
                           getPhoneValidator(), null,
-                          mContext.getString(R.string.payments_field_required_validation_message),
+                          mContext.getString(
+                                  R.string.pref_edit_dialog_field_required_validation_message),
                           mContext.getString(R.string.payments_phone_invalid_validation_message),
                           contact.getPayerPhone())
                 : null;
@@ -173,7 +180,8 @@ public class ContactEditor extends EditorBase<AutofillContact> {
                 ? EditorFieldModel.createTextInput(EditorFieldModel.INPUT_TYPE_HINT_EMAIL,
                           mContext.getString(R.string.autofill_profile_editor_email_address),
                           mEmailAddresses, null, getEmailValidator(), null,
-                          mContext.getString(R.string.payments_field_required_validation_message),
+                          mContext.getString(
+                                  R.string.pref_edit_dialog_field_required_validation_message),
                           mContext.getString(R.string.payments_email_invalid_validation_message),
                           contact.getPayerEmail())
                 : null;
@@ -211,7 +219,17 @@ public class ContactEditor extends EditorBase<AutofillContact> {
                 profile.setEmailAddress(email);
             }
 
-            profile.setGUID(PersonalDataManager.getInstance().setProfileToLocal(profile));
+            if (mSaveToDisk) {
+                profile.setGUID(PersonalDataManager.getInstance().setProfileToLocal(profile));
+            }
+
+            if (profile.getGUID().isEmpty()) {
+                assert !mSaveToDisk;
+
+                // Set a fake guid for a new temp AutofillProfile.
+                profile.setGUID(UUID.randomUUID().toString());
+            }
+
             profile.setIsLocal(true);
             contact.completeContact(profile.getGUID(), name, phone, email);
             callback.onResult(contact);

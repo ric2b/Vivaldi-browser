@@ -18,8 +18,9 @@
 #include "components/ntp_snippets/remote/request_params.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/variations/variations_params_manager.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -65,9 +66,9 @@ class JsonRequestTest : public testing::Test {
             {ntp_snippets::kArticleSuggestionsFeature.name}),
         pref_service_(std::make_unique<TestingPrefServiceSimple>()),
         mock_task_runner_(new base::TestMockTimeTaskRunner()),
-        clock_(mock_task_runner_->GetMockClock()),
-        request_context_getter_(
-            new net::TestURLRequestContextGetter(mock_task_runner_.get())) {
+        test_shared_loader_factory_(
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_)) {
     language::UrlLanguageHistogram::RegisterProfilePrefs(
         pref_service_->registry());
   }
@@ -88,8 +89,8 @@ class JsonRequestTest : public testing::Test {
   JsonRequest::Builder CreateMinimalBuilder() {
     JsonRequest::Builder builder;
     builder.SetUrl(GURL("http://valid-url.test"))
-        .SetClock(clock_.get())
-        .SetUrlRequestContextGetter(request_context_getter_.get());
+        .SetClock(mock_task_runner_->GetMockClock())
+        .SetUrlLoaderFactory(test_shared_loader_factory_);
     return builder;
   }
 
@@ -97,9 +98,8 @@ class JsonRequestTest : public testing::Test {
   variations::testing::VariationParamsManager params_manager_;
   std::unique_ptr<TestingPrefServiceSimple> pref_service_;
   scoped_refptr<base::TestMockTimeTaskRunner> mock_task_runner_;
-  std::unique_ptr<base::Clock> clock_;
-  scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
-  net::TestURLFetcherFactory fetcher_factory_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(JsonRequestTest);
 };

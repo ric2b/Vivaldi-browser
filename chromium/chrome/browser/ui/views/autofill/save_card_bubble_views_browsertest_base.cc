@@ -8,22 +8,31 @@
 #include <memory>
 #include <string>
 
+#include "chrome/browser/signin/account_fetcher_service_factory.h"
+#include "chrome/browser/signin/account_tracker_service_factory.h"
+#include "chrome/browser/signin/fake_account_fetcher_service_builder.h"
+#include "chrome/browser/signin/fake_signin_manager_builder.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/autofill/dialog_event_waiter.h"
 #include "chrome/browser/ui/views/autofill/dialog_view_ids.h"
 #include "chrome/browser/ui/views/autofill/save_card_bubble_views.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/credit_card_save_manager.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/fake_account_fetcher_service.h"
 #include "content/public/test/browser_test_utils.h"
-#include "device/geolocation/public/cpp/scoped_geolocation_overrider.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "net/url_request/test_url_fetcher_factory.h"
+#include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/window/dialog_client_view.h"
 
 namespace autofill {
@@ -65,6 +74,17 @@ void SaveCardBubbleViewsBrowserTestBase::SetUpOnMainThread() {
   url_fetcher_factory_ = std::make_unique<net::FakeURLFetcherFactory>(
       new net::URLFetcherImplFactory());
 
+  // Set up the URL loader factory for the payments client so we can intercept
+  // those network requests too.
+  test_shared_loader_factory_ =
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          &test_url_loader_factory_);
+  ContentAutofillDriver::GetForRenderFrameHost(
+      GetActiveWebContents()->GetMainFrame())
+      ->autofill_manager()
+      ->payments_client()
+      ->set_url_loader_factory_for_testing(test_shared_loader_factory_);
+
   // Set up this class as the ObserverForTest implementation.
   CreditCardSaveManager* credit_card_save_manager =
       ContentAutofillDriver::GetForRenderFrameHost(
@@ -101,11 +121,6 @@ void SaveCardBubbleViewsBrowserTestBase::OnDecideToRequestUploadSave() {
     event_waiter_->OnEvent(DialogEvent::REQUESTED_UPLOAD_SAVE);
 }
 
-void SaveCardBubbleViewsBrowserTestBase::OnDecideToNotRequestUploadSave() {
-  if (event_waiter_)
-    event_waiter_->OnEvent(DialogEvent::DID_NOT_REQUEST_UPLOAD_SAVE);
-}
-
 void SaveCardBubbleViewsBrowserTestBase::OnReceivedGetUploadDetailsResponse() {
   if (event_waiter_)
     event_waiter_->OnEvent(DialogEvent::RECEIVED_GET_UPLOAD_DETAILS_RESPONSE);
@@ -116,16 +131,71 @@ void SaveCardBubbleViewsBrowserTestBase::OnSentUploadCardRequest() {
     event_waiter_->OnEvent(DialogEvent::SENT_UPLOAD_CARD_REQUEST);
 }
 
+void SaveCardBubbleViewsBrowserTestBase::SetUpInProcessBrowserTestFixture() {
+  will_create_browser_context_services_subscription_ =
+      BrowserContextDependencyManager::GetInstance()
+          ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+              base::BindRepeating(&SaveCardBubbleViewsBrowserTestBase::
+                                      OnWillCreateBrowserContextServices,
+                                  base::Unretained(this)));
+}
+
+void SaveCardBubbleViewsBrowserTestBase::OnWillCreateBrowserContextServices(
+    content::BrowserContext* context) {
+  // Replace the signin manager and account fetcher service with fakes.
+  SigninManagerFactory::GetInstance()->SetTestingFactory(
+      context, &BuildFakeSigninManagerBase);
+  AccountFetcherServiceFactory::GetInstance()->SetTestingFactory(
+      context, &FakeAccountFetcherServiceBuilder::BuildForTests);
+}
+
+void SaveCardBubbleViewsBrowserTestBase::SignInWithFullName(
+    const std::string& full_name) {
+  // TODO(crbug.com/859761): Can this function be used to remove the
+  // observer_for_testing_ hack in
+  // CreditCardSaveManager::IsCreditCardUploadEnabled()?
+  FakeSigninManagerForTesting* signin_manager =
+      static_cast<FakeSigninManagerForTesting*>(
+          SigninManagerFactory::GetInstance()->GetForProfile(
+              browser()->profile()));
+
+  // Note: Chrome OS tests seem to rely on these specific login values, so
+  //       changing them is probably not recommended.
+  constexpr char kTestEmail[] = "stub-user@example.com";
+  constexpr char kTestGaiaId[] = "stub-user@example.com";
+#if !defined(OS_CHROMEOS)
+  signin_manager->SignIn(kTestGaiaId, kTestEmail, "password");
+#else
+  AccountTrackerService* account_tracker_service =
+      AccountTrackerServiceFactory::GetForProfile(browser()->profile());
+  signin_manager->SignIn(account_tracker_service->PickAccountIdForAccount(
+      kTestGaiaId, kTestEmail));
+#endif
+  FakeAccountFetcherService* account_fetcher_service =
+      static_cast<FakeAccountFetcherService*>(
+          AccountFetcherServiceFactory::GetForProfile(browser()->profile()));
+  account_fetcher_service->FakeUserInfoFetchSuccess(
+      signin_manager->GetAuthenticatedAccountId(), kTestEmail, kTestGaiaId,
+      AccountTrackerService::kNoHostedDomainFound, full_name,
+      /*given_name=*/std::string(), "locale", "avatar.jpg");
+}
+
+void SaveCardBubbleViewsBrowserTestBase::SubmitForm() {
+  content::WebContents* web_contents = GetActiveWebContents();
+  const std::string click_submit_button_js =
+      "(function() { document.getElementById('submit').click(); })();";
+  content::TestNavigationObserver nav_observer(web_contents);
+  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  nav_observer.Wait();
+}
+
 // Should be called for credit_card_upload_form_address_and_cc.html.
 void SaveCardBubbleViewsBrowserTestBase::FillAndSubmitForm() {
   content::WebContents* web_contents = GetActiveWebContents();
   const std::string click_fill_button_js =
       "(function() { document.getElementById('fill_form').click(); })();";
   ASSERT_TRUE(content::ExecuteScript(web_contents, click_fill_button_js));
-
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 void SaveCardBubbleViewsBrowserTestBase::
@@ -135,9 +205,7 @@ void SaveCardBubbleViewsBrowserTestBase::
       "(function() { document.getElementById('fill_card_only').click(); })();";
   ASSERT_TRUE(content::ExecuteScript(web_contents, click_fill_card_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 // Should be called for credit_card_upload_form_address_and_cc.html.
@@ -151,9 +219,7 @@ void SaveCardBubbleViewsBrowserTestBase::FillAndSubmitFormWithoutCvc() {
       "(function() { document.getElementById('clear_cvc').click(); })();";
   ASSERT_TRUE(content::ExecuteScript(web_contents, click_clear_cvc_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 // Should be called for credit_card_upload_form_address_and_cc.html.
@@ -169,25 +235,7 @@ void SaveCardBubbleViewsBrowserTestBase::FillAndSubmitFormWithInvalidCvc() {
   ASSERT_TRUE(
       content::ExecuteScript(web_contents, click_fill_invalid_cvc_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
-}
-
-// Should be called for credit_card_upload_form_address_and_cc.html.
-void SaveCardBubbleViewsBrowserTestBase::FillAndSubmitFormWithAmexWithoutCvc() {
-  content::WebContents* web_contents = GetActiveWebContents();
-  const std::string click_fill_amex_button_js =
-      "(function() { document.getElementById('fill_form_amex').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_fill_amex_button_js));
-
-  const std::string click_clear_cvc_button_js =
-      "(function() { document.getElementById('clear_cvc').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_clear_cvc_button_js));
-
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 // Should be called for credit_card_upload_form_address_and_cc.html.
@@ -201,9 +249,7 @@ void SaveCardBubbleViewsBrowserTestBase::FillAndSubmitFormWithoutName() {
       "(function() { document.getElementById('clear_name').click(); })();";
   ASSERT_TRUE(content::ExecuteScript(web_contents, click_clear_name_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 // Should be called for credit_card_upload_form_address_and_cc.html.
@@ -217,9 +263,7 @@ void SaveCardBubbleViewsBrowserTestBase::FillAndSubmitFormWithoutAddress() {
       "(function() { document.getElementById('clear_address').click(); })();";
   ASSERT_TRUE(content::ExecuteScript(web_contents, click_clear_name_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 // Should be called for credit_card_upload_form_shipping_address.html.
@@ -236,9 +280,7 @@ void SaveCardBubbleViewsBrowserTestBase::
   ASSERT_TRUE(
       content::ExecuteScript(web_contents, click_conflicting_name_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 // Should be called for credit_card_upload_form_shipping_address.html.
@@ -255,9 +297,7 @@ void SaveCardBubbleViewsBrowserTestBase::
   ASSERT_TRUE(content::ExecuteScript(
       web_contents, click_conflicting_street_address_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 // Should be called for credit_card_upload_form_shipping_address.html.
@@ -274,27 +314,23 @@ void SaveCardBubbleViewsBrowserTestBase::
   ASSERT_TRUE(content::ExecuteScript(web_contents,
                                      click_conflicting_postal_code_button_js));
 
-  const std::string click_submit_button_js =
-      "(function() { document.getElementById('submit').click(); })();";
-  ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+  SubmitForm();
 }
 
 void SaveCardBubbleViewsBrowserTestBase::SetUploadDetailsRpcPaymentsAccepts() {
-  url_fetcher_factory_->SetFakeResponse(
-      GURL(kURLGetUploadDetailsRequest), kResponseGetUploadDetailsSuccess,
-      net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  test_url_loader_factory()->AddResponse(kURLGetUploadDetailsRequest,
+                                         kResponseGetUploadDetailsSuccess);
 }
 
 void SaveCardBubbleViewsBrowserTestBase::SetUploadDetailsRpcPaymentsDeclines() {
-  url_fetcher_factory_->SetFakeResponse(
-      GURL(kURLGetUploadDetailsRequest), kResponseGetUploadDetailsFailure,
-      net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  test_url_loader_factory()->AddResponse(kURLGetUploadDetailsRequest,
+                                         kResponseGetUploadDetailsFailure);
 }
 
 void SaveCardBubbleViewsBrowserTestBase::SetUploadDetailsRpcServerError() {
-  url_fetcher_factory_->SetFakeResponse(
-      GURL(kURLGetUploadDetailsRequest), kResponseGetUploadDetailsSuccess,
-      net::HTTP_INTERNAL_SERVER_ERROR, net::URLRequestStatus::FAILED);
+  test_url_loader_factory()->AddResponse(kURLGetUploadDetailsRequest,
+                                         kResponseGetUploadDetailsSuccess,
+                                         net::HTTP_INTERNAL_SERVER_ERROR);
 }
 
 void SaveCardBubbleViewsBrowserTestBase::ClickOnDialogView(views::View* view) {
@@ -309,10 +345,24 @@ void SaveCardBubbleViewsBrowserTestBase::ClickOnDialogView(views::View* view) {
   view->OnMouseReleased(released_event);
 }
 
-void SaveCardBubbleViewsBrowserTestBase::ClickOnDialogViewWithIdAndWait(
+void SaveCardBubbleViewsBrowserTestBase::ClickOnDialogViewAndWait(
+    views::View* view) {
+  EXPECT_TRUE(GetSaveCardBubbleViews());
+  views::test::WidgetDestroyedWaiter destroyed_waiter(
+      GetSaveCardBubbleViews()->GetWidget());
+  ClickOnDialogView(view);
+  destroyed_waiter.Wait();
+  EXPECT_FALSE(GetSaveCardBubbleViews());
+}
+
+void SaveCardBubbleViewsBrowserTestBase::ClickOnDialogViewWithId(
     DialogViewId view_id) {
   ClickOnDialogView(FindViewInBubbleById(view_id));
-  WaitForObservedEvent();
+}
+
+void SaveCardBubbleViewsBrowserTestBase::ClickOnDialogViewWithIdAndWait(
+    DialogViewId view_id) {
+  ClickOnDialogViewAndWait(FindViewInBubbleById(view_id));
 }
 
 views::View* SaveCardBubbleViewsBrowserTestBase::FindViewInBubbleById(
@@ -362,12 +412,17 @@ SaveCardBubbleViewsBrowserTestBase::GetActiveWebContents() {
 
 void SaveCardBubbleViewsBrowserTestBase::ResetEventWaiterForSequence(
     std::list<DialogEvent> event_sequence) {
-  event_waiter_ = std::make_unique<DialogEventWaiter<DialogEvent>>(
-      std::move(event_sequence));
+  event_waiter_ =
+      std::make_unique<EventWaiter<DialogEvent>>(std::move(event_sequence));
 }
 
 void SaveCardBubbleViewsBrowserTestBase::WaitForObservedEvent() {
   event_waiter_->Wait();
+}
+
+network::TestURLLoaderFactory*
+SaveCardBubbleViewsBrowserTestBase::test_url_loader_factory() {
+  return &test_url_loader_factory_;
 }
 
 }  // namespace autofill

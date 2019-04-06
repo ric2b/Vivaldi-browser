@@ -1,7 +1,8 @@
 import("//vivaldi/gn/config/version.gni")
+import("//build/config/jumbo.gni")
 import("//build/util/version.gni")
 
-static_library("browser") {
+jumbo_static_library("browser") {
   public_deps = [
     "//vivaldi/app",
     "//vivaldi/app/resources",
@@ -39,7 +40,7 @@ static_library("browser") {
     "//components/strings:components_strings",
     "//crypto:crypto",
     "//skia:skia",
-    "//third_party/WebKit/public:blink_headers",
+    "//third_party/blink/public:blink_headers",
     "//ui/events:events_base",
   ]
   if (is_win) {
@@ -85,7 +86,7 @@ static_library("clipboard") {
     "vivaldi_clipboard_utils.h",
   ]
 
-  deps= [ "//third_party/WebKit/public:blink_headers" ]
+  deps= [ "//third_party/blink/public:blink_headers" ]
 }
 
 action("vivaldi_version_info") {

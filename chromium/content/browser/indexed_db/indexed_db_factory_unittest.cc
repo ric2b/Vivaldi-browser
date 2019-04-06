@@ -10,7 +10,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -28,8 +27,8 @@
 #include "content/public/test/test_utils.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -181,6 +180,9 @@ TEST_F(IndexedDBFactoryTest, BackingStoreLazyClose) {
 }
 
 TEST_F(IndexedDBFactoryTest, BackingStoreNoSweeping) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {}, {kIDBTombstoneDeletion, kIDBTombstoneStatistics});
   context()->TaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -210,7 +212,7 @@ TEST_F(IndexedDBFactoryTest, BackingStoreNoSweeping) {
             EXPECT_FALSE(store_ptr->close_timer()->IsRunning());
             factory->TestReleaseBackingStore(store_ptr, false);
             EXPECT_TRUE(store_ptr->close_timer()->IsRunning());
-            store_ptr->close_timer()->user_task().Run();
+            store_ptr->close_timer()->FireNow();
 
             // Backing store should be totally closed.
             EXPECT_FALSE(factory->IsBackingStoreOpen(origin));
@@ -226,7 +228,7 @@ TEST_F(IndexedDBFactoryTest, BackingStoreNoSweeping) {
 
             // Sweep should NOT be occurring.
             EXPECT_TRUE(store_ptr->close_timer()->IsRunning());
-            store_ptr->close_timer()->user_task().Run();
+            store_ptr->close_timer()->FireNow();
 
             // Backing store should be totally closed.
             EXPECT_FALSE(factory->IsBackingStoreOpen(origin));
@@ -269,7 +271,7 @@ TEST_F(IndexedDBFactoryTest, BackingStoreRunPreCloseTasks) {
             EXPECT_FALSE(store_ptr->close_timer()->IsRunning());
             factory->TestReleaseBackingStore(store_ptr, false);
             EXPECT_TRUE(store_ptr->close_timer()->IsRunning());
-            store_ptr->close_timer()->user_task().Run();
+            store_ptr->close_timer()->FireNow();
 
             // Backing store should be totally closed.
             EXPECT_FALSE(factory->IsBackingStoreOpen(origin));
@@ -285,8 +287,7 @@ TEST_F(IndexedDBFactoryTest, BackingStoreRunPreCloseTasks) {
 
             // Sweep should be occuring.
             EXPECT_TRUE(store_ptr->close_timer()->IsRunning());
-            store_ptr->close_timer()->user_task().Run();
-            store_ptr->close_timer()->AbandonAndStop();
+            store_ptr->close_timer()->FireNow();
             ASSERT_NE(nullptr, store_ptr->pre_close_task_queue());
             EXPECT_TRUE(store_ptr->pre_close_task_queue()->started());
 
@@ -310,8 +311,7 @@ TEST_F(IndexedDBFactoryTest, BackingStoreRunPreCloseTasks) {
 
             // Sweep should be occuring.
             EXPECT_TRUE(store_ptr->close_timer()->IsRunning());
-            store_ptr->close_timer()->user_task().Run();
-            store_ptr->close_timer()->AbandonAndStop();
+            store_ptr->close_timer()->FireNow();
             ASSERT_NE(nullptr, store_ptr->pre_close_task_queue());
             EXPECT_TRUE(store_ptr->pre_close_task_queue()->started());
 
@@ -319,6 +319,41 @@ TEST_F(IndexedDBFactoryTest, BackingStoreRunPreCloseTasks) {
             // stops a running timer.
             store = store_ptr;
             factory->TestCloseBackingStore(store_ptr);
+          },
+          base::Unretained(context())));
+
+  RunAllTasksUntilIdle();
+}
+
+TEST_F(IndexedDBFactoryTest, BackingStoreCloseImmediatelySwitch) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({kIDBTombstoneStatistics},
+                                {kIDBTombstoneDeletion});
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      kIDBCloseImmediatelySwitch);
+
+  context()->TaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](IndexedDBContextImpl* context) {
+            base::SimpleTestClock clock;
+            clock.SetNow(base::Time::Now());
+
+            scoped_refptr<MockIDBFactory> factory =
+                base::MakeRefCounted<MockIDBFactory>(context, &clock);
+
+            const Origin origin = Origin::Create(GURL("http://localhost:81"));
+
+            scoped_refptr<IndexedDBBackingStore> store =
+                factory->TestOpenBackingStore(origin, context->data_path());
+
+            // Give up the local refptr so that the factory has the only
+            // outstanding reference.
+            IndexedDBBackingStore* store_ptr = store.get();
+            store = nullptr;
+            EXPECT_FALSE(store_ptr->close_timer()->IsRunning());
+            factory->TestReleaseBackingStore(store_ptr, false);
+            EXPECT_FALSE(factory->IsBackingStoreOpen(origin));
           },
           base::Unretained(context())));
 

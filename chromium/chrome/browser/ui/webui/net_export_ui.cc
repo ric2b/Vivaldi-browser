@@ -36,7 +36,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
@@ -137,10 +137,6 @@ class NetExportMessageHandler
   // NetLog file.
   void ShowSelectFileDialog(const base::FilePath& default_path);
 
-  // Returns a list of context getters used to retrieve ongoing events when
-  // logging starts so that net log entries can be added for those events.
-  URLRequestContextGetterList GetURLRequestContexts() const;
-
   // Cache of g_browser_process->net_log()->net_export_file_writer(). This
   // is owned by ChromeNetLog which is owned by BrowserProcessImpl.
   net_log::NetExportFileWriter* file_writer_;
@@ -154,7 +150,7 @@ class NetExportMessageHandler
   // the save dialog. Their values are only valid while the save dialog is open
   // on the desktop UI.
   net::NetLogCaptureMode capture_mode_;
-  size_t max_log_file_size_;
+  uint64_t max_log_file_size_;
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 
@@ -167,8 +163,7 @@ NetExportMessageHandler::NetExportMessageHandler()
     : file_writer_(g_browser_process->net_log()->net_export_file_writer()),
       state_observer_manager_(this),
       weak_ptr_factory_(this) {
-  file_writer_->Initialize(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+  file_writer_->Initialize();
 }
 
 NetExportMessageHandler::~NetExportMessageHandler() {
@@ -177,7 +172,7 @@ NetExportMessageHandler::~NetExportMessageHandler() {
   if (select_file_dialog_)
     select_file_dialog_->ListenerDestroyed();
 
-  file_writer_->StopNetLog(nullptr, nullptr);
+  file_writer_->StopNetLog(nullptr);
 }
 
 void NetExportMessageHandler::RegisterMessages() {
@@ -185,23 +180,24 @@ void NetExportMessageHandler::RegisterMessages() {
 
   web_ui()->RegisterMessageCallback(
       net_log::kEnableNotifyUIWithStateHandler,
-      base::Bind(&NetExportMessageHandler::OnEnableNotifyUIWithState,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnEnableNotifyUIWithState,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       net_log::kStartNetLogHandler,
-      base::Bind(&NetExportMessageHandler::OnStartNetLog,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnStartNetLog,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       net_log::kStopNetLogHandler,
-      base::Bind(&NetExportMessageHandler::OnStopNetLog,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnStopNetLog,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       net_log::kSendNetLogHandler,
-      base::Bind(&NetExportMessageHandler::OnSendNetLog,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnSendNetLog,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       net_log::kShowFile,
-      base::Bind(&NetExportMessageHandler::OnShowFile, base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnShowFile,
+                          base::Unretained(this)));
 }
 
 // The net-export UI is not notified of state changes until this function runs.
@@ -269,8 +265,7 @@ void NetExportMessageHandler::OnStopNetLog(const base::ListValue* list) {
                chrome_browser_net::GetWindowsServiceProviders());
 #endif
 
-  file_writer_->StopNetLog(std::move(ui_thread_polled_data),
-                           Profile::FromWebUI(web_ui())->GetRequestContext());
+  file_writer_->StopNetLog(std::move(ui_thread_polled_data));
 }
 
 void NetExportMessageHandler::OnSendNetLog(const base::ListValue* list) {
@@ -333,7 +328,10 @@ void NetExportMessageHandler::StartNetLog(const base::FilePath& path) {
   file_writer_->StartNetLog(
       path, capture_mode_, max_log_file_size_,
       base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
-      chrome::GetChannelString(), GetURLRequestContexts());
+      chrome::GetChannelName(),
+      content::BrowserContext::GetDefaultStoragePartition(
+          Profile::FromWebUI(web_ui()))
+          ->GetNetworkContext());
 }
 
 void NetExportMessageHandler::ShowFileInShell(const base::FilePath& path) {
@@ -381,24 +379,6 @@ void NetExportMessageHandler::ShowSelectFileDialog(
   select_file_dialog_->SelectFile(
       ui::SelectFileDialog::SELECT_SAVEAS_FILE, base::string16(), default_path,
       &file_type_info, 0, base::FilePath::StringType(), owning_window, nullptr);
-}
-
-NetExportMessageHandler::URLRequestContextGetterList
-NetExportMessageHandler::GetURLRequestContexts() const {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  URLRequestContextGetterList context_getters;
-
-  Profile* profile = Profile::FromWebUI(web_ui());
-
-  context_getters.push_back(profile->GetRequestContext());
-  context_getters.push_back(
-      content::BrowserContext::GetDefaultStoragePartition(profile)
-          ->GetMediaURLRequestContext());
-  context_getters.push_back(
-      g_browser_process->io_thread()->system_url_request_context_getter());
-
-  return context_getters;
 }
 
 }  // namespace

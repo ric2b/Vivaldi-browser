@@ -10,7 +10,6 @@
 #include "base/stl_util.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_factory.h"
-#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -55,7 +54,6 @@ MediaRouterE2EBrowserTest::~MediaRouterE2EBrowserTest() {
 
 void MediaRouterE2EBrowserTest::SetUpOnMainThread() {
   MediaRouterBaseBrowserTest::SetUpOnMainThread();
-  scoped_feature_list_.InitAndEnableFeature(kEnableCastLocalMedia);
   media_router_ =
       MediaRouterFactory::GetApiForBrowserContext(browser()->profile());
   DCHECK(media_router_);
@@ -142,10 +140,10 @@ IN_PROC_BROWSER_TEST_F(MediaRouterE2EBrowserTest, MANUAL_TabMirroring) {
       browser(), GURL("about:blank"), 1);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  int tab_id = SessionTabHelper::IdForTab(web_contents);
+  SessionID tab_id = SessionTabHelper::IdForTab(web_contents);
 
   // Wait for 30 seconds to make sure the route is stable.
-  CreateMediaRoute(MediaSourceForTab(tab_id),
+  CreateMediaRoute(MediaSourceForTab(tab_id.id()),
                    url::Origin::Create(GURL(kOrigin)), web_contents);
   Wait(base::TimeDelta::FromSeconds(30));
 

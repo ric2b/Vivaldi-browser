@@ -56,18 +56,17 @@ source_set("clients") {
   public_deps = [
     "//base",
     "//media",
-    "//media/mojo:features",
+    "//media/mojo:buildflags",
     "//media/mojo/interfaces",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
   ]
 
   deps = [
     "//media/gpu",
     "//media/mojo/common",
     "//media/mojo/common:mojo_shared_buffer_video_frame",
-    "//mojo/common",
     "//services/service_manager/public/cpp",
   ]
 
@@ -80,7 +79,10 @@ source_set("clients") {
 }
 
 source_set("jpeg_decode_accelerator") {
-  visibility = [ "//content/browser" ]
+  visibility = [
+    "//content/browser",
+    "//media/capture:capture_lib",
+  ]
 
   sources = [
     "mojo_jpeg_decode_accelerator.cc",
@@ -90,7 +92,6 @@ source_set("jpeg_decode_accelerator") {
   deps = [
     "//base",
     "//media/mojo/interfaces",
-    "//mojo/common",
   ]
 }
 

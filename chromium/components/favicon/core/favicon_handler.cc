@@ -201,7 +201,7 @@ void FaviconHandler::FetchFavicon(const GURL& page_url, bool is_same_document) {
   candidates_received_ = false;
   manifest_url_ = GURL();
   non_manifest_original_candidates_.clear();
-  candidates_.clear();
+  final_candidates_.reset();
   notification_icon_url_ = GURL();
   notification_icon_type_ = favicon_base::IconType::kInvalid;
   current_candidate_index_ = 0u;
@@ -237,8 +237,8 @@ bool FaviconHandler::UpdateFaviconCandidate(
     //   and hence get sorted last during prioritization). We stop immediately
     //   to avoid downloading them all, although we don't have the certainty
     //   that no better favicon is among them.
-    return current_candidate_index_ + 1 >= candidates_.size() ||
-           candidates_[current_candidate_index_ + 1].score <=
+    return current_candidate_index_ + 1 >= final_candidates_->size() ||
+           (*final_candidates_)[current_candidate_index_ + 1].score <=
                best_favicon_.candidate.score;
   } else {
     return best_favicon_.candidate.score == 1;
@@ -329,6 +329,7 @@ void FaviconHandler::OnUpdateCandidates(
   candidates_received_ = true;
   error_other_than_404_found_ = false;
   non_manifest_original_candidates_ = candidates;
+  final_candidates_.reset();
   cancelable_task_tracker_for_candidates_.TryCancelAll();
   manifest_download_request_.Cancel();
   image_download_request_.Cancel();
@@ -382,7 +383,7 @@ void FaviconHandler::OnFaviconDataForManifestFromFaviconService(
   }
 
   if (has_expired_or_incomplete_result) {
-    manifest_download_request_.Reset(base::Bind(
+    manifest_download_request_.Reset(base::BindOnce(
         &FaviconHandler::OnDidDownloadManifest, base::Unretained(this)));
     delegate_->DownloadManifest(manifest_url_,
                                 manifest_download_request_.callback());
@@ -413,6 +414,8 @@ void FaviconHandler::OnDidDownloadManifest(
 
 void FaviconHandler::OnGotFinalIconURLCandidates(
     const std::vector<FaviconURL>& candidates) {
+  DCHECK(!final_candidates_);
+
   const std::vector<int> desired_pixel_sizes =
       GetDesiredPixelSizes(handler_type_);
 
@@ -428,7 +431,7 @@ void FaviconHandler::OnGotFinalIconURLCandidates(
   std::stable_sort(sorted_candidates.begin(), sorted_candidates.end(),
                    &FaviconCandidate::CompareScore);
 
-  candidates_ = std::move(sorted_candidates);
+  final_candidates_ = std::move(sorted_candidates);
 
   if (got_favicon_from_history_)
     OnGotInitialHistoryDataAndIconURLCandidates();
@@ -446,10 +449,11 @@ int FaviconHandler::GetMaximalIconSize(
 }
 
 void FaviconHandler::OnGotInitialHistoryDataAndIconURLCandidates() {
-  DCHECK(candidates_received_);
+  DCHECK(final_candidates_);
   DCHECK(got_favicon_from_history_);
+  DCHECK_EQ(0U, current_candidate_index_);
 
-  if (candidates_.empty()) {
+  if (final_candidates_->empty()) {
     // The page lists no candidates that match our target |icon_types_|, so
     // check if any existing mappings should be deleted.
     MaybeDeleteFaviconMappings();
@@ -521,7 +525,8 @@ void FaviconHandler::OnDidDownloadFavicon(
     }
   }
 
-  if (request_next_icon && current_candidate_index_ + 1 < candidates_.size()) {
+  if (request_next_icon &&
+      current_candidate_index_ + 1 < final_candidates_->size()) {
     // Process the next candidate.
     ++current_candidate_index_;
     DownloadCurrentCandidateOrAskFaviconService();
@@ -541,14 +546,14 @@ void FaviconHandler::OnDidDownloadFavicon(
                      : favicon_base::IconType::kWebManifestIcon);
     }
     // Clear download related state.
-    current_candidate_index_ = candidates_.size();
+    current_candidate_index_ = final_candidates_->size();
     best_favicon_ = DownloadedFavicon();
   }
 }
 
 const std::vector<GURL> FaviconHandler::GetIconURLs() const {
   std::vector<GURL> icon_urls;
-  for (const FaviconCandidate& candidate : candidates_)
+  for (const FaviconCandidate& candidate : *final_candidates_)
     icon_urls.push_back(candidate.icon_url);
   return icon_urls;
 }
@@ -600,11 +605,15 @@ void FaviconHandler::OnFaviconDataForInitialURLFromFaviconService(
                                   image);
   }
 
-  if (candidates_received_)
+  if (final_candidates_)
     OnGotInitialHistoryDataAndIconURLCandidates();
 }
 
 void FaviconHandler::DownloadCurrentCandidateOrAskFaviconService() {
+  DCHECK(image_download_request_.IsCancelled());
+  DCHECK(manifest_download_request_.IsCancelled());
+  DCHECK(current_candidate());
+
   const GURL icon_url = current_candidate()->icon_url;
   const favicon_base::IconType icon_type = current_candidate()->icon_type;
   // If the icons listed in a manifest are being processed, skip the cache
@@ -676,8 +685,8 @@ void FaviconHandler::ScheduleImageDownload(const GURL& image_url,
     return;
   }
   image_download_request_.Reset(
-      base::Bind(&FaviconHandler::OnDidDownloadFavicon, base::Unretained(this),
-                 icon_type));
+      base::BindOnce(&FaviconHandler::OnDidDownloadFavicon,
+                     base::Unretained(this), icon_type));
   // A max bitmap size is specified to avoid receiving huge bitmaps in
   // OnDidDownloadFavicon(). See FaviconDriver::StartDownload()
   // for more details about the max bitmap size.

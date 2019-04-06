@@ -3,9 +3,6 @@
 <translationbundle lang="ko">
 <translation id="1002108253973310084">호환되지 않는 프로토콜 버전이 감지되었습니다. 양쪽 컴퓨터 모두에서 소프트웨어가 최신 버전인지 확인한 뒤 다시 시도해 주세요.</translation>
 <translation id="1050693411695664090">나쁨</translation>
-<translation id="1059802506829356230">• 새로운 디자인
-• 성능, 응답 속도 및 안정성 개선
-• Windows 또는 Linux 컴퓨터에서 오디오 재생 지원</translation>
 <translation id="1152528166145813711">선택…</translation>
 <translation id="1199593201721843963">원격 연결 사용중지</translation>
 <translation id="1291443878853470558">Chromoting을 사용하여 컴퓨터에 액세스하려면 원격 연결을 사용하도록 설정해야 합니다.</translation>
@@ -143,10 +140,12 @@
 <translation id="4145029455188493639"><ph name="EMAIL_ADDRESS" /> 계정으로 로그인했습니다.</translation>
 <translation id="4155497795971509630">일부 필수 구성요소가 누락되었습니다. 소프트웨어의 최신 버전을 설치했는지 확인한 뒤 다시 시도해주세요.</translation>
 <translation id="4156740505453712750">액세스 제한을 통해 이 컴퓨터를 보호하려면 <ph name="BOLD_START" />최소 6자리<ph name="BOLD_END" />의 PIN을 선택하세요. 이 PIN은 다른 위치에서 연결할 때 필요합니다.</translation>
+<translation id="4169432154993690151">프로필 사진을 선택하려면 Chrome 원격 데스크톱에서 카메라에 액세스하도록 허용하세요.</translation>
 <translation id="4176825807642096119">액세스 코드</translation>
 <translation id="4207623512727273241">계속하기 전에 설치 프로그램을 실행하세요.</translation>
 <translation id="4227991223508142681">호스트 프로비저닝 유틸리티</translation>
 <translation id="4240294130679914010">Chromoting 호스트 제거 프로그램</translation>
+<translation id="4249741460382919890">일반적인 수정 및 안정성 개선</translation>
 <translation id="4277463233460010382">이 컴퓨터는 한 개 이상의 클라이언트가 PIN을 입력하지 않고도 연결할 수 있도록 구성되었습니다.</translation>
 <translation id="4277736576214464567">액세스 코드가 잘못되었습니다. 다시 시도해 주세요.</translation>
 <translation id="4361728918881830843">다른 컴퓨터에 원격 연결을 사용하려면 Chrome 원격 데스크톱을 설치하고 '<ph name="BUTTON_NAME" />' 버튼을 클릭하세요.</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" />(오프라인)</translation>
 <translation id="5070121137485264635">원격 호스트는 타사 웹사이트에 대한 인증이 필요합니다. 계속하려면 이 주소에 액세스할 수 있도록 Chrome 원격 데스크톱에 추가 권한을 허용해야 합니다.</translation>
 <translation id="507204348399810022"><ph name="HOSTNAME" /> 원격 연결을 사용 중지하시겠습니까?</translation>
+<translation id="5081343395220691640">다음 서버와의 통신에 실패했습니다. <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">두 입력란에 같은 PIN을 입력하세요.</translation>
 <translation id="5170982930780719864">호스트 ID가 잘못되었습니다.</translation>
 <translation id="518094545883702183">이 정보는 보고된 문제를 진단하는 데만 사용되고 보고서 조사 담당자만 볼 수 있으며, 30일 이내에 폐기됩니다.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">기타 문제</translation>
 <translation id="6398765197997659313">전체화면 닫기</translation>
 <translation id="6441316101718669559">데스크톱 통합이 이 플랫폼에서 지원되지 않습니다. 애플리케이션을 사용할 수는 있지만, 사용자 환경이 저하될 수 있습니다.</translation>
+<translation id="6502629188777329097">컴퓨터에 안전하게 액세스하기</translation>
 <translation id="652218476070540101">컴퓨터의 PIN을 업데이트 중…</translation>
 <translation id="6527303717912515753">공유</translation>
 <translation id="6541219117979389420">애플리케이션 로그는 사용자의 ID(이메일 주소)와 Google 드라이브에 있는 파일 및 폴더의 이름과 속성 등의 비공개 정보를 포함할 수 있습니다.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">올린이</translation>
 <translation id="677755392401385740">사용자(<ph name="HOST_USERNAME" />)의 호스트가 시작되었습니다.</translation>
 <translation id="6865175692670882333">보기/수정</translation>
+<translation id="6913710942997637770">프로필 사진을 선택하려면 Chrome 원격 데스크톱에서 사진에 액세스하도록 허용하세요.</translation>
 <translation id="6930242544192836755">기간</translation>
 <translation id="6939719207673461467">키보드 표시/숨기기</translation>
 <translation id="6944854424004126054">복원 창</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">컴퓨터의 원격 연결이 사용중지되었습니다.</translation>
 <translation id="7678209621226490279">왼쪽에 고정</translation>
 <translation id="7693372326588366043">호스트 목록 새로고침</translation>
+<translation id="7714222945760997814">신고하기</translation>
 <translation id="7782471917492991422">컴퓨터의 전원 관리 설정을 확인하고 유휴 상태일 때 절전 모드로 전환되도록 설정되지 않았는지 확인하세요.</translation>
 <translation id="7810127880729796595">통계 보기(연결: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">일부 필수 구성요소가 누락되었습니다. Chrome 최신 버전을 실행하고 있는지 확인한 뒤 다시 시도해 주세요.</translation>

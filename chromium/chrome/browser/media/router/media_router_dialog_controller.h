@@ -12,10 +12,10 @@
 #include "content/public/browser/presentation_request.h"
 #include "content/public/browser/presentation_service_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
 
 namespace content {
 class WebContents;
-struct PresentationInfo;
 }  // namespace content
 
 namespace media_router {
@@ -30,7 +30,7 @@ class RouteRequestResult;
 class StartPresentationContext {
  public:
   using PresentationConnectionCallback =
-      base::OnceCallback<void(const content::PresentationInfo&,
+      base::OnceCallback<void(const blink::mojom::PresentationInfo&,
                               const MediaRoute&)>;
   using PresentationConnectionErrorCallback =
       content::PresentationConnectionErrorCallback;
@@ -54,7 +54,7 @@ class StartPresentationContext {
   void InvokeSuccessCallback(const std::string& presentation_id,
                              const GURL& presentation_url,
                              const MediaRoute& route);
-  void InvokeErrorCallback(const content::PresentationError& error);
+  void InvokeErrorCallback(const blink::mojom::PresentationError& error);
 
  private:
   content::PresentationRequest presentation_request_;

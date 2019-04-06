@@ -41,24 +41,24 @@ namespace offline_pages {
 //     // Callback is of type OfflinePageModel::SavePageCallback.
 //     model->SavePage(url, std::move(archiver), callback);
 //   }
+//
+// TODO(https://crbug.com/849424): turn this into a singleton.
 class OfflinePageMHTMLArchiver : public OfflinePageArchiver {
  public:
-
-  explicit OfflinePageMHTMLArchiver(content::WebContents* web_contents);
+  OfflinePageMHTMLArchiver();
   ~OfflinePageMHTMLArchiver() override;
 
   // OfflinePageArchiver implementation:
   void CreateArchive(const base::FilePath& archives_dir,
                      const CreateArchiveParams& create_archive_params,
-                     const CreateArchiveCallback& callback) override;
+                     content::WebContents* web_contents,
+                     CreateArchiveCallback callback) override;
 
  protected:
-  // Allows to overload the archiver for testing.
-  OfflinePageMHTMLArchiver();
-
   // Try to generate MHTML.
   // Might be overridden for testing purpose.
   virtual void GenerateMHTML(const base::FilePath& archives_dir,
+                             content::WebContents* web_contents,
                              const CreateArchiveParams& create_archive_params);
 
   // Callback for Generating MHTML.
@@ -75,10 +75,10 @@ class OfflinePageMHTMLArchiver : public OfflinePageArchiver {
   // Checks whether the page to be saved has security error when loaded over
   // HTTPS. Saving a page will fail if that is the case. HTTP connections are
   // not affected.
-  virtual bool HasConnectionSecurityError();
+  virtual bool HasConnectionSecurityError(content::WebContents* web_contents);
 
   // Returns the page type of the page being saved.
-  virtual content::PageType GetPageType();
+  virtual content::PageType GetPageType(content::WebContents* web_contents);
 
   // Reports failure to create archive a page to the client that requested it.
   void ReportFailure(ArchiverResult result);
@@ -86,9 +86,6 @@ class OfflinePageMHTMLArchiver : public OfflinePageArchiver {
  private:
   void DeleteFileAndReportFailure(const base::FilePath& file_path,
                                   ArchiverResult result);
-
-  // Contents of the web page to be serialized. Not owned.
-  content::WebContents* web_contents_;
 
   CreateArchiveCallback callback_;
 

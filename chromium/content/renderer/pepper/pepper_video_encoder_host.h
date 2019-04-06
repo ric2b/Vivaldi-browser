@@ -27,6 +27,10 @@ namespace gpu {
 class CommandBufferProxyImpl;
 }
 
+namespace media {
+struct BitstreamBufferMetadata;
+}  // namespace media
+
 namespace content {
 
 class RendererPpapiHost;
@@ -63,10 +67,9 @@ class CONTENT_EXPORT PepperVideoEncoderHost
   void RequireBitstreamBuffers(unsigned int input_count,
                                const gfx::Size& input_coded_size,
                                size_t output_buffer_size) override;
-  void BitstreamBufferReady(int32_t bitstream_buffer_id,
-                            size_t payload_size,
-                            bool key_frame,
-                            base::TimeDelta timestamp) override;
+  void BitstreamBufferReady(
+      int32_t bitstream_buffer_id,
+      const media::BitstreamBufferMetadata& metadata) override;
   void NotifyError(media::VideoEncodeAccelerator::Error error) override;
 
   // ResourceHost implementation.
@@ -78,6 +81,10 @@ class CONTENT_EXPORT PepperVideoEncoderHost
   void OnGpuControlLostContext() final;
   void OnGpuControlLostContextMaybeReentrant() final;
   void OnGpuControlErrorMessage(const char* msg, int id) final {}
+  void OnGpuControlSwapBuffersCompleted(
+      const gpu::SwapBuffersCompleteParams& params) final {}
+  void OnSwapBufferPresented(uint64_t swap_id,
+                             const gfx::PresentationFeedback& feedback) final {}
 
   int32_t OnHostMsgGetSupportedProfiles(
       ppapi::host::HostMessageContext* context);

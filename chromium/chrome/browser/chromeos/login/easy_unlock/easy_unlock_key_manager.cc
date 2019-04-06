@@ -11,31 +11,13 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_names.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager_factory.h"
-#include "components/proximity_auth/logging/logging.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "components/account_id/account_id.h"
 
 namespace chromeos {
-
-namespace {
-
-const char kKeyBluetoothAddress[] = "bluetoothAddress";
-const char kKeyBluetoothType[] = "bluetoothType";
-const char kKeyPermitRecord[] = "permitRecord";
-const char kKeyPermitId[] = "permitRecord.id";
-const char kKeyPermitPermitId[] = "permitRecord.permitId";
-const char kKeyPermitData[] = "permitRecord.data";
-const char kKeyPermitType[] = "permitRecord.type";
-const char kKeyPsk[] = "psk";
-const char kKeySerializedBeaconSeeds[] = "serializedBeaconSeeds";
-
-const char kKeyLabelPrefix[] = "easy-unlock-";
-
-const char kPermitPermitIdFormat[] = "permit://google.com/easyunlock/v1/%s";
-const char kPermitTypeLicence[] = "licence";
-
-}  // namespace
 
 EasyUnlockKeyManager::EasyUnlockKeyManager() : weak_ptr_factory_(this) {}
 
@@ -85,7 +67,7 @@ void EasyUnlockKeyManager::RefreshKeysWithTpmKeyPresent(
       tpm_key_manager->GetPublicTpmKey(user_context.GetAccountId());
 
   EasyUnlockDeviceKeyDataList devices;
-  if (!RemoteDeviceListToDeviceDataList(*remote_devices, &devices))
+  if (!RemoteDeviceRefListToDeviceDataList(*remote_devices, &devices))
     devices.clear();
 
   write_operation_queue_.push_back(
@@ -110,19 +92,22 @@ void EasyUnlockKeyManager::DeviceDataToRemoteDeviceDictionary(
     const AccountId& account_id,
     const EasyUnlockDeviceKeyData& data,
     base::DictionaryValue* dict) {
-  dict->SetString(kKeyBluetoothAddress, data.bluetooth_address);
-  dict->SetInteger(kKeyBluetoothType, static_cast<int>(data.bluetooth_type));
-  dict->SetString(kKeyPsk, data.psk);
+  dict->SetString(key_names::kKeyBluetoothAddress, data.bluetooth_address);
+  dict->SetInteger(key_names::kKeyBluetoothType,
+                   static_cast<int>(data.bluetooth_type));
+  dict->SetString(key_names::kKeyPsk, data.psk);
   std::unique_ptr<base::DictionaryValue> permit_record(
       new base::DictionaryValue);
-  dict->Set(kKeyPermitRecord, std::move(permit_record));
-  dict->SetString(kKeyPermitId, data.public_key);
-  dict->SetString(kKeyPermitData, data.public_key);
-  dict->SetString(kKeyPermitType, kPermitTypeLicence);
-  dict->SetString(kKeyPermitPermitId,
-                  base::StringPrintf(kPermitPermitIdFormat,
+  dict->Set(key_names::kKeyPermitRecord, std::move(permit_record));
+  dict->SetString(key_names::kKeyPermitId, data.public_key);
+  dict->SetString(key_names::kKeyPermitData, data.public_key);
+  dict->SetString(key_names::kKeyPermitType, key_names::kPermitTypeLicence);
+  dict->SetString(key_names::kKeyPermitPermitId,
+                  base::StringPrintf(key_names::kPermitPermitIdFormat,
                                      account_id.GetUserEmail().c_str()));
-  dict->SetString(kKeySerializedBeaconSeeds, data.serialized_beacon_seeds);
+  dict->SetString(key_names::kKeySerializedBeaconSeeds,
+                  data.serialized_beacon_seeds);
+  dict->SetBoolean(key_names::kKeyUnlockKey, data.unlock_key);
 }
 
 // static
@@ -133,16 +118,16 @@ bool EasyUnlockKeyManager::RemoteDeviceDictionaryToDeviceData(
   std::string public_key;
   std::string psk;
 
-  if (!dict.GetString(kKeyBluetoothAddress, &bluetooth_address) ||
-      !dict.GetString(kKeyPermitId, &public_key) ||
-      !dict.GetString(kKeyPsk, &psk)) {
+  if (!dict.GetString(key_names::kKeyBluetoothAddress, &bluetooth_address) ||
+      !dict.GetString(key_names::kKeyPermitId, &public_key) ||
+      !dict.GetString(key_names::kKeyPsk, &psk)) {
     return false;
   }
 
   // TODO(tengs): Move this conditional up once we can be certain that the
   // dictionary will contain the Bluetooth type key.
   int bluetooth_type_as_int;
-  if (dict.GetInteger(kKeyBluetoothType, &bluetooth_type_as_int)) {
+  if (dict.GetInteger(key_names::kKeyBluetoothType, &bluetooth_type_as_int)) {
     if (bluetooth_type_as_int >= EasyUnlockDeviceKeyData::NUM_BLUETOOTH_TYPES) {
       PA_LOG(ERROR) << "Invalid Bluetooth type: " << bluetooth_type_as_int;
     } else {
@@ -153,12 +138,24 @@ bool EasyUnlockKeyManager::RemoteDeviceDictionaryToDeviceData(
   }
 
   std::string serialized_beacon_seeds;
-  if (dict.GetString(kKeySerializedBeaconSeeds, &serialized_beacon_seeds)) {
+  if (dict.GetString(key_names::kKeySerializedBeaconSeeds,
+                     &serialized_beacon_seeds)) {
     data->serialized_beacon_seeds = serialized_beacon_seeds;
   } else {
     PA_LOG(ERROR) << "Failed to parse key data: "
                   << "expected serialized_beacon_seeds.";
   }
+
+  bool unlock_key;
+  if (!dict.GetBoolean(key_names::kKeyUnlockKey, &unlock_key)) {
+    // If GetBoolean() fails, that means we're reading a Dictionary from
+    // user prefs which did not include the bool when it was stored. That means
+    // it's an older Dictionary that didn't include this |unlock_key| field --
+    // only one device was persisted, and it was implicitly assumed to be the
+    // unlock key -- thus |unlock_key| should default to being true.
+    unlock_key = true;
+  }
+  data->unlock_key = unlock_key;
 
   data->bluetooth_address.swap(bluetooth_address);
   data->public_key.swap(public_key);
@@ -182,7 +179,7 @@ void EasyUnlockKeyManager::DeviceDataListToRemoteDeviceList(
 }
 
 // static
-bool EasyUnlockKeyManager::RemoteDeviceListToDeviceDataList(
+bool EasyUnlockKeyManager::RemoteDeviceRefListToDeviceDataList(
     const base::ListValue& device_list,
     EasyUnlockDeviceKeyDataList* data_list) {
   EasyUnlockDeviceKeyDataList parsed_devices;
@@ -205,7 +202,7 @@ bool EasyUnlockKeyManager::RemoteDeviceListToDeviceDataList(
 
 // static
 std::string EasyUnlockKeyManager::GetKeyLabel(size_t key_index) {
-  return base::StringPrintf("%s%zu", kKeyLabelPrefix, key_index);
+  return base::StringPrintf("%s%zu", key_names::kKeyLabelPrefix, key_index);
 }
 
 void EasyUnlockKeyManager::RunNextOperation() {

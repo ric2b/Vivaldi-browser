@@ -19,7 +19,7 @@
 #include "components/sync/engine/events/protocol_event.h"
 #include "components/sync/js/js_event_details.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/public/webui/web_ui_ios.h"
@@ -53,33 +53,37 @@ void SyncInternalsMessageHandler::RegisterMessages() {
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRegisterForEvents,
-      base::Bind(&SyncInternalsMessageHandler::HandleRegisterForEvents,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleRegisterForEvents,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRegisterForPerTypeCounters,
-      base::Bind(&SyncInternalsMessageHandler::HandleRegisterForPerTypeCounters,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRegisterForPerTypeCounters,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestUpdatedAboutInfo,
-      base::Bind(&SyncInternalsMessageHandler::HandleRequestUpdatedAboutInfo,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestUpdatedAboutInfo,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestListOfTypes,
-      base::Bind(&SyncInternalsMessageHandler::HandleRequestListOfTypes,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestListOfTypes,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kGetAllNodes,
-      base::Bind(&SyncInternalsMessageHandler::HandleGetAllNodes,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleGetAllNodes,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kSetIncludeSpecifics,
-      base::Bind(&SyncInternalsMessageHandler::HandleSetIncludeSpecifics,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleSetIncludeSpecifics,
+          base::Unretained(this)));
 }
 
 void SyncInternalsMessageHandler::HandleRegisterForEvents(
@@ -221,8 +225,8 @@ void SyncInternalsMessageHandler::HandleJsEvent(const std::string& name,
 void SyncInternalsMessageHandler::SendAboutInfo() {
   syncer::SyncService* sync_service = GetSyncService();
   std::unique_ptr<base::DictionaryValue> value =
-      syncer::sync_ui_util::ConstructAboutInformation_DEPRECATED(sync_service,
-                                                                 GetChannel());
+      syncer::sync_ui_util::ConstructAboutInformation(sync_service,
+                                                      GetChannel());
   web_ui()->CallJavascriptFunction(
       syncer::sync_ui_util::kDispatchEvent,
       base::Value(syncer::sync_ui_util::kOnAboutInfoUpdated), *value);
@@ -232,6 +236,6 @@ void SyncInternalsMessageHandler::SendAboutInfo() {
 syncer::SyncService* SyncInternalsMessageHandler::GetSyncService() {
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromWebUIIOS(web_ui());
-  return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+  return ProfileSyncServiceFactory::GetForBrowserState(
       browser_state->GetOriginalChromeBrowserState());
 }

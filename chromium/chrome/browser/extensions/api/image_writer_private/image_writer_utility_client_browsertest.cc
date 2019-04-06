@@ -15,7 +15,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/extensions/api/image_writer_private/operation.h"
-#include "chrome/services/removable_storage_writer/public/interfaces/removable_storage_writer.mojom.h"
+#include "chrome/services/removable_storage_writer/public/mojom/removable_storage_writer.mojom.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
@@ -44,7 +44,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     base::RunLoop run_loop;
     base::PostTaskWithTraitsAndReply(
         FROM_HERE, {base::MayBlock()},
-        base::Bind(&ImageWriterUtilityClientTest::FillFile, image_, pattern),
+        base::BindOnce(&ImageWriterUtilityClientTest::FillFile, image_,
+                       pattern),
         run_loop.QuitClosure());
 
     run_loop.Run();
@@ -56,7 +57,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     base::RunLoop run_loop;
     base::PostTaskWithTraitsAndReply(
         FROM_HERE, {base::MayBlock()},
-        base::Bind(&ImageWriterUtilityClientTest::FillFile, device_, pattern),
+        base::BindOnce(&ImageWriterUtilityClientTest::FillFile, device_,
+                       pattern),
         run_loop.QuitClosure());
 
     run_loop.Run();
@@ -72,8 +74,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     cancel_ = (option == CANCEL);
 
     CreateTaskRunner()->PostTask(
-        FROM_HERE, base::Bind(&ImageWriterUtilityClientTest::StartWriteTest,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ImageWriterUtilityClientTest::StartWriteTest,
+                                  base::Unretained(this)));
     run_loop.Run();
 
     EXPECT_TRUE(quit_called_);
@@ -148,8 +150,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     }
 
     GetTaskRunner()->PostTask(
-        FROM_HERE, base::Bind(&ImageWriterUtilityClientTest::Shutdown,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ImageWriterUtilityClientTest::Shutdown,
+                                  base::Unretained(this)));
   }
 
   void StartVerifyTest() {
@@ -179,8 +181,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     error_ = error;
 
     GetTaskRunner()->PostTask(
-        FROM_HERE, base::Bind(&ImageWriterUtilityClientTest::Shutdown,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ImageWriterUtilityClientTest::Shutdown,
+                                  base::Unretained(this)));
   }
 
   void Verified() {
@@ -191,8 +193,8 @@ class ImageWriterUtilityClientTest : public InProcessBrowserTest {
     success_ = !cancel_;
 
     GetTaskRunner()->PostTask(
-        FROM_HERE, base::Bind(&ImageWriterUtilityClientTest::Shutdown,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ImageWriterUtilityClientTest::Shutdown,
+                                  base::Unretained(this)));
   }
 
   void Cancelled() {

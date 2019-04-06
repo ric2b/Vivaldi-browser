@@ -9,7 +9,6 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/null_task_runner.h"
@@ -26,6 +25,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "storage/browser/blob/blob_data_builder.h"
+#include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,9 +37,6 @@ namespace {
 const char kTestData[] = "Hello World";
 const char kEntryKey[] = "FooEntry";
 const int kCacheEntryIndex = 1;
-
-void DoNothingCompletion(int rv) {
-}
 
 class NullURLRequestContextGetter : public net::URLRequestContextGetter {
  public:
@@ -129,11 +126,10 @@ class CacheStorageBlobToDiskCacheTest : public testing::Test {
   }
 
   void InitBlob() {
-    std::unique_ptr<storage::BlobDataBuilder> blob_data(
-        new storage::BlobDataBuilder("blob-id:myblob"));
+    auto blob_data =
+        std::make_unique<storage::BlobDataBuilder>("blob-id:myblob");
     blob_data->AppendData(data_);
-
-    blob_handle_ = blob_storage_context_->AddFinishedBlob(blob_data.get());
+    blob_handle_ = blob_storage_context_->AddFinishedBlob(std::move(blob_data));
   }
 
   void InitCache() {
@@ -141,15 +137,15 @@ class CacheStorageBlobToDiskCacheTest : public testing::Test {
         net::MEMORY_CACHE, net::CACHE_BACKEND_DEFAULT, base::FilePath(),
         (CacheStorageBlobToDiskCache::kBufferSize * 100) /* max bytes */,
         false /* force */, nullptr /* net log */, &cache_backend_,
-        base::Bind(&DoNothingCompletion));
+        base::DoNothing());
     // The memory cache runs synchronously.
     EXPECT_EQ(net::OK, rv);
     EXPECT_TRUE(cache_backend_);
 
     std::unique_ptr<disk_cache::Entry*> entry(new disk_cache::Entry*());
     disk_cache::Entry** entry_ptr = entry.get();
-    rv = cache_backend_->CreateEntry(kEntryKey, entry_ptr,
-                                     base::Bind(&DoNothingCompletion));
+    rv = cache_backend_->CreateEntry(kEntryKey, net::HIGHEST, entry_ptr,
+                                     base::DoNothing());
     EXPECT_EQ(net::OK, rv);
     disk_cache_entry_.reset(*entry);
   }
@@ -161,18 +157,19 @@ class CacheStorageBlobToDiskCacheTest : public testing::Test {
 
     int rv = disk_cache_entry_->ReadData(kCacheEntryIndex, 0 /* offset */,
                                          buffer.get(), buffer->size(),
-                                         base::Bind(&DoNothingCompletion));
+                                         base::DoNothing());
     EXPECT_EQ(bytes_to_read, rv);
     return std::string(buffer->data(), bytes_to_read);
   }
 
   bool Stream() {
-    std::unique_ptr<storage::BlobDataHandle> new_data_handle(
-        blob_storage_context_->GetBlobDataFromUUID(blob_handle_->uuid()));
+    blink::mojom::BlobPtr blob_ptr;
+    storage::BlobImpl::Create(
+        std::make_unique<storage::BlobDataHandle>(*blob_handle_),
+        MakeRequest(&blob_ptr));
 
     cache_storage_blob_to_disk_cache_->StreamBlobToCache(
-        std::move(disk_cache_entry_), kCacheEntryIndex,
-        url_request_context_getter_.get(), std::move(new_data_handle),
+        std::move(disk_cache_entry_), kCacheEntryIndex, std::move(blob_ptr),
         base::BindOnce(&CacheStorageBlobToDiskCacheTest::StreamCallback,
                        base::Unretained(this)));
 
@@ -244,29 +241,6 @@ TEST_F(CacheStorageBlobToDiskCacheTest, DeleteMidStream) {
   cache_storage_blob_to_disk_cache_.reset();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(callback_called_);
-}
-
-TEST_F(CacheStorageBlobToDiskCacheTest,
-       ShutdownGetterMidStreamDeletesURLRequest) {
-  cache_storage_blob_to_disk_cache_->set_delay_blob_reads(true);
-
-  // The operation should stall while reading from the blob.
-  EXPECT_FALSE(Stream());
-
-  // Shutting down the URLRequestContext mid-stream should result in a canceled
-  // operation.
-  cache_storage_blob_to_disk_cache_->OnContextShuttingDown();
-  url_request_context_getter_->GetURLRequestContext()->AssertNoURLRequests();
-
-  browser_context_.reset();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(callback_called_);
-  EXPECT_FALSE(callback_success_);
-}
-
-TEST_F(CacheStorageBlobToDiskCacheTest, StreamWithNullContextRequest) {
-  url_request_context_getter_ = new NullURLRequestContextGetter();
-  EXPECT_FALSE(Stream());
 }
 
 }  // namespace

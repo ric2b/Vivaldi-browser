@@ -44,6 +44,9 @@ class PrefetchService;
 //    Reconcilers during BackgroundTask processing.
 class PrefetchDispatcher {
  public:
+  // Vector of pairs of offline and client IDs.
+  using IdsVector = std::vector<std::pair<int64_t, ClientId>>;
+
   virtual ~PrefetchDispatcher() = default;
 
   // Initializes the dispatcher with its respective service instance. This must
@@ -104,9 +107,17 @@ class PrefetchDispatcher {
       const std::map<std::string, std::pair<base::FilePath, int64_t>>&
           success_downloads) = 0;
 
+  // Called when a GeneratePageBundle request has been sent.
+  virtual void GeneratePageBundleRequested(std::unique_ptr<IdsVector> ids) = 0;
+
   // Called when a download is completed successfully or fails.
   virtual void DownloadCompleted(
       const PrefetchDownloadResult& download_result) = 0;
+
+  // Called when an item's state has been set to
+  // |PrefetchItemState::DOWNLOADED|, just after a download is completed.
+  virtual void ItemDownloaded(int64_t offline_id,
+                              const ClientId& client_id) = 0;
 
   // Called when an archive is imported successfully or fails.
   virtual void ArchiveImported(int64_t offline_id, bool success) = 0;

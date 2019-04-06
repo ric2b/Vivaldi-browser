@@ -28,7 +28,7 @@ class ToolkitDelegateMac;
 class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
  public:
   ~VivaldiContextMenuMac() override;
-  VivaldiContextMenuMac(content::RenderFrameHost* render_frame_host,
+  VivaldiContextMenuMac(content::WebContents* web_contents,
                         ui::SimpleMenuModel* menu_model,
                         const content::ContextMenuParams& params);
   void Show() override;
@@ -38,7 +38,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   NSView* GetActiveNativeView();
   // The Cocoa menu controller for this menu.
   base::scoped_nsobject<MenuControllerCocoa> menu_controller_;
-  content::RenderFrameHost* render_frame_host_;
+  content::WebContents* web_contents_;
   ui::SimpleMenuModel* menu_model_;
   content::ContextMenuParams params_;
 

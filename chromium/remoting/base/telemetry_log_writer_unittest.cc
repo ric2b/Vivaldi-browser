@@ -9,12 +9,20 @@
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "net/http/http_status_code.h"
 #include "remoting/base/chromoting_event.h"
+#include "remoting/base/fake_oauth_token_getter.h"
 #include "remoting/base/url_request.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace remoting {
+
+namespace {
+
+constexpr char kFakeAccessToken[] = "access_token";
+constexpr char kAuthorizationHeaderPrefix[] = "Authorization:Bearer ";
 
 class FakeUrlRequest : public UrlRequest {
  public:
@@ -22,7 +30,14 @@ class FakeUrlRequest : public UrlRequest {
                  const UrlRequest::Result& returned_result)
       : expected_post_(expected_post), returned_result_(returned_result) {}
 
-  void Respond() { on_result_callback_.Run(returned_result_); }
+  void Respond() {
+    on_result_callback_.Run(returned_result_);
+
+    // Responding to current request will trigger sending pending events. Call
+    // RunUntilIdle() to allow the new request to be created. See LogFakeEvent()
+    // below.
+    base::RunLoop().RunUntilIdle();
+  }
 
   // UrlRequest overrides.
   void SetPostData(const std::string& content_type,
@@ -31,7 +46,12 @@ class FakeUrlRequest : public UrlRequest {
     EXPECT_EQ(post_data, expected_post_);
   }
 
-  void AddHeader(const std::string& value) override {}
+  void AddHeader(const std::string& value) override {
+    if (value.find(kAuthorizationHeaderPrefix) == 0) {
+      EXPECT_EQ(std::string(kAuthorizationHeaderPrefix) + kFakeAccessToken,
+                value);
+    }
+  }
 
   void Start(const OnResultCallback& on_result_callback) override {
     on_result_callback_ = on_result_callback;
@@ -78,11 +98,18 @@ class FakeUrlRequestFactory : public UrlRequestFactory {
   base::circular_deque<std::unique_ptr<UrlRequest>> expected_requests_;
 };
 
+}  // namespace
+
 class TelemetryLogWriterTest : public testing::Test {
  public:
   TelemetryLogWriterTest()
       : request_factory_(new FakeUrlRequestFactory()),
-        log_writer_("", base::WrapUnique(request_factory_)) {
+        log_writer_(
+            "",
+            base::WrapUnique(request_factory_),
+            std::make_unique<FakeOAuthTokenGetter>(OAuthTokenGetter::SUCCESS,
+                                                   "email",
+                                                   kFakeAccessToken)) {
     success_result_.success = true;
     success_result_.status = 200;
     success_result_.response_body = "{}";
@@ -98,11 +125,9 @@ class TelemetryLogWriterTest : public testing::Test {
     entry.SetInteger("id", id_);
     id_++;
     log_writer_.Log(entry);
-  }
 
-  void SetAuthClosure() {
-    log_writer_.SetAuthClosure(
-        base::Bind(&TelemetryLogWriterTest::SetAuth, base::Unretained(this)));
+    // It's an async process to create request to send all pending events.
+    base::RunLoop().RunUntilIdle();
   }
 
   UrlRequest::Result success_result_;
@@ -111,15 +136,9 @@ class TelemetryLogWriterTest : public testing::Test {
   FakeUrlRequestFactory* request_factory_;  // For peeking. No ownership.
   TelemetryLogWriter log_writer_;
 
-  int set_auth_count_ = 0;
-
  private:
-  void SetAuth() {
-    set_auth_count_++;
-    log_writer_.SetAuthToken("some token");
-  }
-
   int id_ = 0;
+  base::MessageLoop message_loop_;
 };
 
 // Test workflow: add request -> log event -> respond request.
@@ -204,8 +223,6 @@ TEST_F(TelemetryLogWriterTest, PostThreeLogsFailedAndResendWithOnePending) {
 }
 
 TEST_F(TelemetryLogWriterTest, PostOneUnauthorizedCallClosureAndRetry) {
-  SetAuthClosure();
-
   auto respond1 = request_factory_->AddExpectedRequest(
       "{\"event\":[{\"id\":0}]}", unauth_result_);
   LogFakeEvent();
@@ -214,21 +231,6 @@ TEST_F(TelemetryLogWriterTest, PostOneUnauthorizedCallClosureAndRetry) {
       "{\"event\":[{\"id\":0}]}", success_result_);
   respond1.Run();
   respond2.Run();
-
-  EXPECT_EQ(1, set_auth_count_);
-}
-
-TEST_F(TelemetryLogWriterTest, PostOneUnauthorizedAndJustRetry) {
-  auto respond1 = request_factory_->AddExpectedRequest(
-      "{\"event\":[{\"id\":0}]}", unauth_result_);
-  LogFakeEvent();
-
-  auto respond2 = request_factory_->AddExpectedRequest(
-      "{\"event\":[{\"id\":0}]}", success_result_);
-  respond1.Run();
-  respond2.Run();
-
-  EXPECT_EQ(0, set_auth_count_);
 }
 
 }  // namespace remoting

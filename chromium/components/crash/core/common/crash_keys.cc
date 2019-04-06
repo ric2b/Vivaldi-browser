@@ -4,10 +4,17 @@
 
 #include "components/crash/core/common/crash_keys.h"
 
+#include <deque>
+#include <vector>
+
 #include "base/command_line.h"
+#include "base/format_macros.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/crash/core/common/crash_key.h"
@@ -60,24 +67,11 @@ void ClearMetricsClientId() {
 #endif
 }
 
-using SwitchesCrashKey = crash_reporter::CrashKeyString<64>;
-static SwitchesCrashKey switches_keys[] = {
-    {"switch-1", SwitchesCrashKey::Tag::kArray},
-    {"switch-2", SwitchesCrashKey::Tag::kArray},
-    {"switch-3", SwitchesCrashKey::Tag::kArray},
-    {"switch-4", SwitchesCrashKey::Tag::kArray},
-    {"switch-5", SwitchesCrashKey::Tag::kArray},
-    {"switch-6", SwitchesCrashKey::Tag::kArray},
-    {"switch-7", SwitchesCrashKey::Tag::kArray},
-    {"switch-8", SwitchesCrashKey::Tag::kArray},
-    {"switch-9", SwitchesCrashKey::Tag::kArray},
-    {"switch-10", SwitchesCrashKey::Tag::kArray},
-    {"switch-11", SwitchesCrashKey::Tag::kArray},
-    {"switch-12", SwitchesCrashKey::Tag::kArray},
-    {"switch-13", SwitchesCrashKey::Tag::kArray},
-    {"switch-14", SwitchesCrashKey::Tag::kArray},
-    {"switch-15", SwitchesCrashKey::Tag::kArray},
-};
+using SwitchesCrashKeys = std::deque<crash_reporter::CrashKeyString<64>>;
+SwitchesCrashKeys& GetSwitchesCrashKeys() {
+  static base::NoDestructor<SwitchesCrashKeys> switches_keys;
+  return *switches_keys;
+}
 
 static crash_reporter::CrashKeyString<4> num_switches_key("num-switches");
 
@@ -85,14 +79,15 @@ void SetSwitchesFromCommandLine(const base::CommandLine& command_line,
                                 SwitchFilterFunction skip_filter) {
   const base::CommandLine::StringVector& argv = command_line.argv();
 
-  // Set the number of switches in case size > kNumSwitches.
+  // Set the number of switches in case of uninteresting switches in
+  // command_line.
   num_switches_key.Set(base::NumberToString(argv.size() - 1));
 
   size_t key_i = 0;
 
   // Go through the argv, skipping the exec path. Stop if there are too many
   // switches to hold in crash keys.
-  for (size_t i = 1; i < argv.size() && key_i < arraysize(switches_keys); ++i) {
+  for (size_t i = 1; i < argv.size(); ++i) {
 #if defined(OS_WIN)
     std::string switch_str = base::WideToUTF8(argv[i]);
 #else
@@ -103,18 +98,49 @@ void SetSwitchesFromCommandLine(const base::CommandLine& command_line,
     if (skip_filter && (*skip_filter)(switch_str))
       continue;
 
-    switches_keys[key_i++].Set(switch_str);
+    if (key_i >= GetSwitchesCrashKeys().size()) {
+      static base::NoDestructor<std::deque<std::string>> crash_keys_names;
+      crash_keys_names->emplace_back(
+          base::StringPrintf("switch-%" PRIuS, key_i + 1));
+      GetSwitchesCrashKeys().emplace_back(crash_keys_names->back().c_str());
+    }
+    GetSwitchesCrashKeys()[key_i++].Set(switch_str);
   }
 
   // Clear any remaining switches.
-  for (; key_i < arraysize(switches_keys); ++key_i)
-    switches_keys[key_i].Clear();
+  for (; key_i < GetSwitchesCrashKeys().size(); ++key_i)
+    GetSwitchesCrashKeys()[key_i].Clear();
 }
 
 void ResetCommandLineForTesting() {
   num_switches_key.Clear();
-  for (auto& key : switches_keys) {
+  for (auto& key : GetSwitchesCrashKeys()) {
     key.Clear();
+  }
+}
+
+using PrinterInfoKey = crash_reporter::CrashKeyString<64>;
+static PrinterInfoKey printer_info_keys[] = {
+    {"prn-info-1", PrinterInfoKey::Tag::kArray},
+    {"prn-info-2", PrinterInfoKey::Tag::kArray},
+    {"prn-info-3", PrinterInfoKey::Tag::kArray},
+    {"prn-info-4", PrinterInfoKey::Tag::kArray},
+};
+
+ScopedPrinterInfo::ScopedPrinterInfo(base::StringPiece data) {
+  std::vector<base::StringPiece> info = base::SplitStringPiece(
+      data, ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  for (size_t i = 0; i < arraysize(printer_info_keys); ++i) {
+    if (i < info.size())
+      printer_info_keys[i].Set(info[i]);
+    else
+      printer_info_keys[i].Clear();
+  }
+}
+
+ScopedPrinterInfo::~ScopedPrinterInfo() {
+  for (auto& crash_key : printer_info_keys) {
+    crash_key.Clear();
   }
 }
 

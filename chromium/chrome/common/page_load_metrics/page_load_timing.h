@@ -8,7 +8,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/common/page_load_metrics/page_load_metrics.mojom.h"
-#include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
+#include "third_party/blink/public/platform/web_loading_behavior_flag.h"
 
 namespace page_load_metrics {
 
@@ -18,7 +18,6 @@ mojom::PageLoadTimingPtr CreatePageLoadTiming();
 bool IsEmpty(const mojom::DocumentTiming& timing);
 bool IsEmpty(const mojom::PaintTiming& timing);
 bool IsEmpty(const mojom::ParseTiming& timing);
-bool IsEmpty(const mojom::StyleSheetTiming& timing);
 bool IsEmpty(const mojom::PageLoadTiming& timing);
 
 void InitPageLoadTimingForTest(mojom::PageLoadTiming* timing);

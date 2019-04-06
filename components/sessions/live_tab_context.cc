@@ -1,5 +1,6 @@
 // Copyright (c) 2016 Vivaldi Technologies
 
+#include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/core/live_tab_context.h"
 
 namespace sessions {
@@ -52,6 +53,10 @@ LiveTab *LiveTabContext::ReplaceRestoredTab(
   return ReplaceRestoredTab(navigations, selected_navigation, from_last_session,
                             extension_app_id, tab_platform_data,
                             user_agent_override);
+}
+
+const std::string& ContentLiveTab::GetExtData() const {
+  return web_contents()->GetExtData();
 }
 
 }  // namespace sessions

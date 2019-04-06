@@ -17,14 +17,14 @@
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/service_worker/web_service_worker_registration_impl.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/modules/manifest/manifest_manager.mojom.h"
-#include "third_party/WebKit/public/platform/modules/push_messaging/WebPushError.h"
-#include "third_party/WebKit/public/platform/modules/push_messaging/WebPushSubscription.h"
-#include "third_party/WebKit/public/platform/modules/push_messaging/WebPushSubscriptionOptions.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/mojom/manifest/manifest_manager.mojom.h"
+#include "third_party/blink/public/platform/modules/push_messaging/web_push_error.h"
+#include "third_party/blink/public/platform/modules/push_messaging/web_push_subscription.h"
+#include "third_party/blink/public/platform/modules/push_messaging/web_push_subscription_options.h"
+#include "third_party/blink/public/platform/modules/service_worker/web_service_worker_registration.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -57,10 +57,10 @@ void PushMessagingClient::Subscribe(
   if (options.application_server_key.IsEmpty()) {
     RenderFrameImpl::FromRoutingID(routing_id())
         ->GetManifestManager()
-        .RequestManifest(
-            base::BindOnce(&PushMessagingClient::DidGetManifest,
-                           base::Unretained(this), service_worker_registration,
-                           options, user_gesture, base::Passed(&callbacks)));
+        .RequestManifest(base::BindOnce(&PushMessagingClient::DidGetManifest,
+                                        base::Unretained(this),
+                                        service_worker_registration, options,
+                                        user_gesture, std::move(callbacks)));
   } else {
     PushSubscriptionOptions content_options;
     content_options.user_visible_only = options.user_visible_only;
@@ -78,7 +78,7 @@ void PushMessagingClient::DidGetManifest(
     bool user_gesture,
     std::unique_ptr<blink::WebPushSubscriptionCallbacks> callbacks,
     const GURL& manifest_url,
-    const Manifest& manifest) {
+    const blink::Manifest& manifest) {
   // Get the sender_info from the manifest since it wasn't provided by
   // the caller.
   if (manifest.IsEmpty()) {
@@ -122,7 +122,7 @@ void PushMessagingClient::DoSubscribe(
       // Safe to use base::Unretained because |push_messaging_manager_ |is
       // owned by |this|.
       base::BindOnce(&PushMessagingClient::DidSubscribe, base::Unretained(this),
-                     base::Passed(&callbacks)));
+                     std::move(callbacks)));
 }
 
 void PushMessagingClient::DidSubscribe(
@@ -135,6 +135,8 @@ void PushMessagingClient::DidSubscribe(
   DCHECK(callbacks);
 
   if (status == mojom::PushRegistrationStatus::SUCCESS_FROM_PUSH_SERVICE ||
+      status == mojom::PushRegistrationStatus::
+                    SUCCESS_NEW_SUBSCRIPTION_FROM_PUSH_SERVICE ||
       status == mojom::PushRegistrationStatus::SUCCESS_FROM_CACHE) {
     DCHECK(endpoint);
     DCHECK(options);

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/guid.h"
+#include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "content/browser/devtools/devtools_session.h"
@@ -18,6 +19,7 @@
 #include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/protocol/tethering_handler.h"
 #include "content/browser/devtools/protocol/tracing_handler.h"
+#include "content/browser/devtools/target_registry.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 
 namespace content {
@@ -31,7 +33,7 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::CreateForBrowser(
 
 scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::CreateForDiscovery() {
   CreateServerSocketCallback null_callback;
-  return new BrowserDevToolsAgentHost(nullptr, null_callback, true);
+  return new BrowserDevToolsAgentHost(nullptr, std::move(null_callback), true);
 }
 
 BrowserDevToolsAgentHost::BrowserDevToolsAgentHost(
@@ -48,26 +50,40 @@ BrowserDevToolsAgentHost::BrowserDevToolsAgentHost(
 BrowserDevToolsAgentHost::~BrowserDevToolsAgentHost() {
 }
 
-void BrowserDevToolsAgentHost::AttachSession(DevToolsSession* session) {
-  session->AddHandler(base::WrapUnique(new protocol::TargetHandler()));
-  if (only_discovery_)
-    return;
+bool BrowserDevToolsAgentHost::AttachSession(DevToolsSession* session,
+                                             TargetRegistry* parent_registry) {
+  if (session->restricted())
+    return false;
 
-  session->AddHandler(base::WrapUnique(new protocol::BrowserHandler()));
-  session->AddHandler(base::WrapUnique(new protocol::IOHandler(
-      GetIOContext())));
-  session->AddHandler(base::WrapUnique(new protocol::MemoryHandler()));
-  session->AddHandler(base::WrapUnique(new protocol::SecurityHandler()));
-  session->AddHandler(base::WrapUnique(new protocol::SystemInfoHandler()));
-  session->AddHandler(base::WrapUnique(new protocol::TetheringHandler(
-      socket_callback_, tethering_task_runner_)));
-  session->AddHandler(base::WrapUnique(new protocol::TracingHandler(
-      protocol::TracingHandler::Browser,
-      FrameTreeNode::kFrameTreeNodeInvalidId,
-      GetIOContext())));
+  TargetRegistry* registry = parent_registry;
+  if (!registry) {
+    auto new_registry = std::make_unique<TargetRegistry>(session);
+    registry = new_registry.get();
+    target_registries_[session->client()] = std::move(new_registry);
+  }
+  session->SetBrowserOnly(true);
+  session->AddHandler(std::make_unique<protocol::TargetHandler>(
+      true /* browser_only */, GetId(), registry));
+  if (only_discovery_)
+    return true;
+
+  session->AddHandler(std::make_unique<protocol::BrowserHandler>());
+  session->AddHandler(std::make_unique<protocol::IOHandler>(GetIOContext()));
+  session->AddHandler(std::make_unique<protocol::MemoryHandler>());
+  session->AddHandler(std::make_unique<protocol::SecurityHandler>());
+  session->AddHandler(std::make_unique<protocol::SystemInfoHandler>());
+  if (tethering_task_runner_) {
+    session->AddHandler(std::make_unique<protocol::TetheringHandler>(
+        socket_callback_, tethering_task_runner_));
+  }
+  session->AddHandler(
+      std::make_unique<protocol::TracingHandler>(nullptr, GetIOContext()));
+  return true;
 }
 
-void BrowserDevToolsAgentHost::DetachSession(DevToolsSession* session) {}
+void BrowserDevToolsAgentHost::DetachSession(DevToolsSession* session) {
+  target_registries_.erase(session->client());
+}
 
 std::string BrowserDevToolsAgentHost::GetType() {
   return kTypeBrowser;
@@ -93,12 +109,16 @@ void BrowserDevToolsAgentHost::Reload() {
 }
 
 bool BrowserDevToolsAgentHost::DispatchProtocolMessage(
-    DevToolsSession* session,
-    const std::string& message) {
-  int call_id;
-  std::string method;
-  session->Dispatch(message, &call_id, &method);
-  return true;
+    DevToolsAgentHostClient* client,
+    const std::string& message,
+    base::DictionaryValue* parsed_message) {
+  auto it = target_registries_.find(client);
+  if (it != target_registries_.end() &&
+      it->second->DispatchMessageOnAgentHost(message, parsed_message)) {
+    return true;
+  }
+  return DevToolsAgentHostImpl::DispatchProtocolMessage(client, message,
+                                                        parsed_message);
 }
 
 }  // content

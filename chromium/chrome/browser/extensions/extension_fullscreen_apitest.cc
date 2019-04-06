@@ -7,6 +7,9 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "ui/base/material_design/material_design_controller.h"
+
+namespace extensions {
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
                        ExtensionFullscreenAccessFail) {
@@ -27,8 +30,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_ExtensionFullscreenAccessPass) {
   ASSERT_TRUE(RunPlatformAppTest("fullscreen/has_permission")) << message_;
 }
 
+#if defined(OS_MACOSX)
+// Entering fullscreen is flaky on Mac: http://crbug.com/824517
+#define MAYBE_FocusWindowDoesNotExitFullscreen \
+    DISABLED_FocusWindowDoesNotExitFullscreen
+#else
+#define MAYBE_FocusWindowDoesNotExitFullscreen FocusWindowDoesNotExitFullscreen
+#endif
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
-                       FocusWindowDoesNotExitFullscreen) {
+                       MAYBE_FocusWindowDoesNotExitFullscreen) {
   browser()->exclusive_access_manager()->context()->EnterFullscreen(
       GURL(), EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION);
   ASSERT_TRUE(browser()->window()->IsFullscreen());
@@ -62,3 +72,5 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
                        MAYBE_DisplayModeWindowIsInFullscreen) {
   ASSERT_TRUE(RunPlatformAppTest("fullscreen/mq_display_mode")) << message_;
 }
+
+}  // namespace extensions

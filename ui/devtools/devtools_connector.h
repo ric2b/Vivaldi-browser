@@ -118,7 +118,7 @@ class DevtoolsConnectorItem
   // content::WebContentsDelegate:
   void ActivateContents(content::WebContents* contents) override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -152,6 +152,7 @@ class DevtoolsConnectorItem
                       const content::FileChooserParams& params) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
+  bool HasOwnerShipOfContents() override;
 
   // These are the original delegates Chromium would normally use
   // and we call into them to allow existing functionality to work.

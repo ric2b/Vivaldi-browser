@@ -21,6 +21,8 @@ Polymer({
       notify: true,
     },
 
+    prefs: Object,
+
     /** @type {?CupsPrinterInfo} */
     activePrinter: {
       type: Object,
@@ -36,6 +38,9 @@ Polymer({
 
     /** @private */
     showCupsEditPrinterDialog_: Boolean,
+
+    /**@private */
+    addPrinterResultText_: String,
   },
 
   listeners: {
@@ -57,6 +62,8 @@ Polymer({
   /** @override */
   attached: function() {
     this.addWebUIListener('on-add-cups-printer', this.onAddPrinter_.bind(this));
+    this.addWebUIListener(
+        'on-printers-changed', this.printersChanged_.bind(this));
     this.networksChangedListener_ = this.refreshNetworks_.bind(this);
     chrome.networkingPrivate.onNetworksChanged.addListener(
         this.networksChangedListener_);
@@ -100,53 +107,54 @@ Polymer({
    * @private
    */
   onAddPrinter_: function(result_code, printerName) {
-    let message;
     if (result_code == PrinterSetupResult.SUCCESS) {
       this.updateCupsPrintersList_();
-      message = this.$.addPrinterDoneMessage;
-      message.textContent =
+      this.addPrinterResultText_ =
           loadTimeData.getStringF('printerAddedSuccessfulMessage', printerName);
     } else {
-      message = this.$.addPrinterErrorMessage;
-      const messageText = this.$.addPrinterFailedMessage;
       switch (result_code) {
         case PrinterSetupResult.FATAL_ERROR:
-          messageText.textContent =
+          this.addPrinterResultText_ =
               loadTimeData.getString('printerAddedFatalErrorMessage');
           break;
         case PrinterSetupResult.PRINTER_UNREACHABLE:
-          messageText.textContent =
+          this.addPrinterResultText_ =
               loadTimeData.getString('printerAddedUnreachableMessage');
           break;
         case PrinterSetupResult.DBUS_ERROR:
           // Simply display a generic error message as this error should only
           // occur when a call to Dbus fails which isn't meaningful to the user.
-          messageText.textContent =
+          this.addPrinterResultText_ =
               loadTimeData.getString('printerAddedFailedmMessage');
           break;
+        case PrinterSetupResult.NATIVE_PRINTERS_NOT_ALLOWED:
+          this.addPrinterResultText_ = loadTimeData.getString(
+              'printerAddedNativePrintersNotAllowedMessage');
+          break;
+        case PrinterSetupResult.INVALID_PRINTER_UPDATE:
+          this.addPrinterResultText_ =
+              loadTimeData.getString('editPrinterInvalidPrinterUpdate');
+          break;
         case PrinterSetupResult.PPD_TOO_LARGE:
-          messageText.textContent =
+          this.addPrinterResultText_ =
               loadTimeData.getString('printerAddedPpdTooLargeMessage');
           break;
         case PrinterSetupResult.INVALID_PPD:
-          messageText.textContent =
+          this.addPrinterResultText_ =
               loadTimeData.getString('printerAddedInvalidPpdMessage');
           break;
         case PrinterSetupResult.PPD_NOT_FOUND:
-          messageText.textContent =
+          this.addPrinterResultText_ =
               loadTimeData.getString('printerAddedPpdNotFoundMessage');
           break;
         case PrinterSetupResult.PPD_UNRETRIEVABLE:
-          messageText.textContent =
+          this.addPrinterResultText_ =
               loadTimeData.getString('printerAddedPpdUnretrievableMessage');
           break;
       }
     }
 
-    message.hidden = false;
-    window.setTimeout(function() {
-      message.hidden = true;
-    }, 3000);
+    this.$.errorToast.show();
   },
 
   /** @private */
@@ -167,7 +175,6 @@ Polymer({
   /** @private */
   onAddPrinterTap_: function() {
     this.$.addPrinterDialog.open();
-    this.$.addPrinterErrorMessage.hidden = true;
   },
 
   /** @private */
@@ -178,12 +185,37 @@ Polymer({
   /** @private */
   onShowCupsEditPrinterDialog_: function() {
     this.showCupsEditPrinterDialog_ = true;
-    this.async(function() {
-      const dialog = this.$$('settings-cups-edit-printer-dialog');
-      dialog.addEventListener('close', function() {
-        this.showCupsEditPrinterDialog_ = false;
-      }.bind(this));
+  },
+
+  /** @private */
+  onEditPrinterDialogClose_: function() {
+    this.showCupsEditPrinterDialog_ = false;
+  },
+
+  /**
+   * @param {string} searchTerm
+   * @return {boolean} If the 'no-search-results-found' string should be shown.
+   * @private
+   */
+  showNoSearchResultsMessage_: function(searchTerm) {
+    if (!searchTerm || !this.printers.length)
+      return false;
+    searchTerm = searchTerm.toLowerCase();
+    return !this.printers.some(printer => {
+      return printer.printerName.toLowerCase().includes(searchTerm);
     });
   },
 
+  /**
+   * @param {boolean} connectedToNetwork Whether the device is connected to
+         a network.
+   * @param {boolean} userNativePrintersAllowed Whether users are allowed to
+         configure their own native printers.
+   * @return {boolean} Whether the 'Add Printer' button is active.
+   * @private
+   */
+  addPrinterButtonActive_: function(
+      connectedToNetwork, userNativePrintersAllowed) {
+    return connectedToNetwork && userNativePrintersAllowed;
+  }
 });

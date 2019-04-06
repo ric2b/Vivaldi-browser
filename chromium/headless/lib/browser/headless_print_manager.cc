@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/base64.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -40,7 +39,8 @@ struct HeadlessPrintManager::FrameDispatchHelper {
 };
 
 HeadlessPrintSettings::HeadlessPrintSettings()
-    : landscape(false),
+    : prefer_css_page_size(false),
+      landscape(false),
       display_header_footer(false),
       should_print_backgrounds(false),
       scale(1),
@@ -80,16 +80,6 @@ std::string HeadlessPrintManager::PrintResultToString(PrintResult result) {
       NOTREACHED();
       return "Unknown PrintResult";
   }
-}
-
-// static
-std::unique_ptr<base::DictionaryValue>
-HeadlessPrintManager::PDFContentsToDictionaryValue(const std::string& data) {
-  std::string base_64_data;
-  base::Base64Encode(data, &base_64_data);
-  auto result = std::make_unique<base::DictionaryValue>();
-  result->SetString("data", base_64_data);
-  return result;
 }
 
 // static
@@ -153,15 +143,15 @@ HeadlessPrintManager::PageRangeTextToPages(base::StringPiece page_range_text,
 
 void HeadlessPrintManager::GetPDFContents(content::RenderFrameHost* rfh,
                                           const HeadlessPrintSettings& settings,
-                                          const GetPDFCallback& callback) {
+                                          GetPDFCallback callback) {
   DCHECK(callback);
 
   if (callback_) {
-    callback.Run(SIMULTANEOUS_PRINT_ACTIVE, std::string());
+    std::move(callback).Run(SIMULTANEOUS_PRINT_ACTIVE, std::string());
     return;
   }
   printing_rfh_ = rfh;
-  callback_ = callback;
+  callback_ = std::move(callback);
   print_params_ = GetPrintParamsFromSettings(settings);
   page_ranges_text_ = settings.page_ranges;
   ignore_invalid_page_ranges_ = settings.ignore_invalid_page_ranges;
@@ -204,6 +194,7 @@ HeadlessPrintManager::GetPrintParamsFromSettings(
       base::UTF8ToUTF16(settings.header_template);
   print_params->params.footer_template =
       base::UTF8ToUTF16(settings.footer_template);
+  print_params->params.prefer_css_page_size = settings.prefer_css_page_size;
   return print_params;
 }
 
@@ -292,18 +283,19 @@ void HeadlessPrintManager::OnPrintingFailed(int cookie) {
 
 void HeadlessPrintManager::OnDidPrintDocument(
     const PrintHostMsg_DidPrintDocument_Params& params) {
-  if (!base::SharedMemory::IsHandleValid(params.metafile_data_handle)) {
+  auto& content = params.content;
+  if (!base::SharedMemory::IsHandleValid(content.metafile_data_handle)) {
     ReleaseJob(INVALID_MEMORY_HANDLE);
     return;
   }
   auto shared_buf =
-      std::make_unique<base::SharedMemory>(params.metafile_data_handle, true);
-  if (!shared_buf->Map(params.data_size)) {
+      std::make_unique<base::SharedMemory>(content.metafile_data_handle, true);
+  if (!shared_buf->Map(content.data_size)) {
     ReleaseJob(METAFILE_MAP_ERROR);
     return;
   }
   data_ = std::string(static_cast<const char*>(shared_buf->memory()),
-                      params.data_size);
+                      content.data_size);
   ReleaseJob(PRINT_SUCCESS);
 }
 
@@ -324,9 +316,9 @@ void HeadlessPrintManager::ReleaseJob(PrintResult result) {
   }
 
   if (result == PRINT_SUCCESS)
-    callback_.Run(result, std::move(data_));
+    std::move(callback_).Run(result, std::move(data_));
   else
-    callback_.Run(result, std::string());
+    std::move(callback_).Run(result, std::string());
   printing_rfh_->Send(new PrintMsg_PrintingDone(printing_rfh_->GetRoutingID(),
                                                 result == PRINT_SUCCESS));
   Reset();

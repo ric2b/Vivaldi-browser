@@ -9,32 +9,35 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "chrome/browser/android/history_report/usage_reports_buffer_backend.h"
 #include "chrome/browser/android/proto/delta_file.pb.h"
-#include "content/public/browser/browser_thread.h"
 
 
 namespace {
 
-void DoInit(history_report::UsageReportsBufferBackend* backend) {
+void UsageReportsBufferServiceDoInit(
+    history_report::UsageReportsBufferBackend* backend) {
   backend->Init();
 }
 
-void DoAddVisit(history_report::UsageReportsBufferBackend* backend,
-                const std::string id,
-                int64_t timestamp_ms,
-                bool typed_visit) {
+void UsageReportsBufferServiceDoAddVisit(
+    history_report::UsageReportsBufferBackend* backend,
+    const std::string id,
+    int64_t timestamp_ms,
+    bool typed_visit) {
   backend->AddVisit(id, timestamp_ms, typed_visit);
 }
 
-void DoRemove(history_report::UsageReportsBufferBackend* backend,
-              const std::vector<std::string>* reports,
-              base::WaitableEvent* finished) {
+void UsageReportsBufferServiceDoRemove(
+    history_report::UsageReportsBufferBackend* backend,
+    const std::vector<std::string>* reports,
+    base::WaitableEvent* finished) {
   backend->Remove(*reports);
   finished->Signal();
 }
 
-void DoGetUsageReportsBatch(
+void UsageReportsBufferServiceDoGetUsageReportsBatch(
     history_report::UsageReportsBufferBackend* backend,
     int32_t batch_size,
     base::WaitableEvent* finished,
@@ -43,14 +46,14 @@ void DoGetUsageReportsBatch(
   finished->Signal();
 }
 
-void DoClear(
+void UsageReportsBufferServiceDoClear(
     history_report::UsageReportsBufferBackend* backend,
     base::WaitableEvent* finished) {
   backend->Clear();
   finished->Signal();
 }
 
-void DoDump(
+void UsageReportsBufferServiceDoDump(
     history_report::UsageReportsBufferBackend* backend,
     base::WaitableEvent* finished,
     std::string* result) {
@@ -58,30 +61,46 @@ void DoDump(
   finished->Signal();
 }
 
+void UsageReportsBufferServiceDoUnregisterMDP(
+    std::unique_ptr<history_report::UsageReportsBufferBackend> backend) {
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      backend.get());
+}
+
 }  // namespace
 
 namespace history_report {
 
-using content::BrowserThread;
-
 UsageReportsBufferService::UsageReportsBufferService(const base::FilePath& dir)
     : task_runner_(base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
-      backend_(new UsageReportsBufferBackend(dir)) {}
+      backend_(new UsageReportsBufferBackend(dir)) {
+  base::trace_event::MemoryDumpManager::GetInstance()
+      ->RegisterDumpProviderWithSequencedTaskRunner(
+          backend_.get(), "HistoryReport", task_runner_,
+          base::trace_event::MemoryDumpProvider::Options());
+}
 
-UsageReportsBufferService::~UsageReportsBufferService() {}
+UsageReportsBufferService::~UsageReportsBufferService() {
+  // Unregister should happen on task runner.
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&UsageReportsBufferServiceDoUnregisterMDP,
+                                base::Passed(std::move(backend_))));
+}
 
 void UsageReportsBufferService::Init() {
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&DoInit, base::Unretained(backend_.get())));
+                         base::Bind(&UsageReportsBufferServiceDoInit,
+                                    base::Unretained(backend_.get())));
 }
 
 void UsageReportsBufferService::AddVisit(const std::string& id,
                                          int64_t timestamp_ms,
                                          bool typed_visit) {
   task_runner_->PostTask(
-      FROM_HERE, base::Bind(&DoAddVisit, base::Unretained(backend_.get()), id,
-                            timestamp_ms, typed_visit));
+      FROM_HERE, base::Bind(&UsageReportsBufferServiceDoAddVisit,
+                            base::Unretained(backend_.get()), id, timestamp_ms,
+                            typed_visit));
 }
 
 std::unique_ptr<std::vector<UsageReport>>
@@ -93,9 +112,9 @@ UsageReportsBufferService::GetUsageReportsBatch(int32_t batch_size) {
   // call.
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&DoGetUsageReportsBatch, base::Unretained(backend_.get()),
-                 batch_size, base::Unretained(&finished),
-                 base::Unretained(&result)));
+      base::Bind(&UsageReportsBufferServiceDoGetUsageReportsBatch,
+                 base::Unretained(backend_.get()), batch_size,
+                 base::Unretained(&finished), base::Unretained(&result)));
   finished.Wait();
   return result;
 }
@@ -108,7 +127,8 @@ void UsageReportsBufferService::Remove(
   // call.
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&DoRemove, base::Unretained(backend_.get()),
+      base::Bind(&UsageReportsBufferServiceDoRemove,
+                 base::Unretained(backend_.get()),
                  base::Unretained(&report_ids), base::Unretained(&finished)));
   finished.Wait();
 }
@@ -119,7 +139,8 @@ void UsageReportsBufferService::Clear() {
   // It's ok to pass unretained pointers here because this is a synchronous
   // call.
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&DoClear, base::Unretained(backend_.get()),
+                         base::Bind(&UsageReportsBufferServiceDoClear,
+                                    base::Unretained(backend_.get()),
                                     base::Unretained(&finished)));
   finished.Wait();
 }
@@ -130,10 +151,10 @@ std::string UsageReportsBufferService::Dump() {
                                base::WaitableEvent::InitialState::NOT_SIGNALED);
   // It's ok to pass unretained pointers here because this is a synchronous
   // call.
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&DoDump, base::Unretained(backend_.get()),
-                 base::Unretained(&finished), base::Unretained(&dump)));
+  task_runner_->PostTask(FROM_HERE, base::Bind(&UsageReportsBufferServiceDoDump,
+                                               base::Unretained(backend_.get()),
+                                               base::Unretained(&finished),
+                                               base::Unretained(&dump)));
   finished.Wait();
   return dump;
 }

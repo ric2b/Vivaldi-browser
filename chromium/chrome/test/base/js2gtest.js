@@ -55,7 +55,8 @@ var outputFile = arguments[4];
 var testType = arguments[5];
 if (testType != 'extension' &&
     testType != 'unit' &&
-    testType != 'webui') {
+    testType != 'webui' &&
+    testType != 'mojo_webui') {
   print('Invalid test type: ' + testType);
   quit(-1);
 }
@@ -82,8 +83,8 @@ var genIncludes = [];
 
 /**
  * When true, add calls to set_preload_test_(fixture|name). This is needed when
- * |testType| === 'webui' to send an injection message before the page loads,
- * but is not required or supported by any other test type.
+ * |testType| === 'webui' || 'mojo_webui' to send an injection message before
+ * the page loads, but is not required or supported by any other test type.
  * @type {boolean}
  */
 var addSetPreloadInfo;
@@ -146,8 +147,10 @@ ${argHint}
   // 'extension' - browser_tests harness, js2extension rule,
   //               ExtensionJSBrowserTest superclass.
   // 'unit' - unit_tests harness, js2unit rule, V8UnitTest superclass.
+  // 'mojo_webui' - browser_tests harness, js2webui rule, MojoWebUIBrowserTest
+  // superclass. Uses Mojo to communicate test results.
   // 'webui' - browser_tests harness, js2webui rule, WebUIBrowserTest
-  // superclass.
+  // superclass. Uses chrome.send to communicate test results.
   if (testType === 'extension') {
     output('#include "chrome/test/base/extension_js_browser_test.h"');
     testing.Test.prototype.typedefCppFixture = 'ExtensionJSBrowserTest';
@@ -158,7 +161,12 @@ ${argHint}
     testing.Test.prototype.typedefCppFixture = 'V8UnitTest';
     testF = 'TEST_F';
     addSetPreloadInfo = false;
-  } else {
+  } else if (testType === 'mojo_webui') {
+    output('#include "chrome/test/base/mojo_web_ui_browser_test.h"');
+    testing.Test.prototype.typedefCppFixture = 'MojoWebUIBrowserTest';
+    testF = 'IN_PROC_BROWSER_TEST_F';
+    addSetPreloadInfo = true;
+  } else if (testType === 'webui') {
     output('#include "chrome/test/base/web_ui_browser_test.h"');
     testing.Test.prototype.typedefCppFixture = 'WebUIBrowserTest';
     testF = 'IN_PROC_BROWSER_TEST_F';
@@ -173,7 +181,8 @@ ${argHint}
       this[testFixture].prototype.testGenCppIncludes();
     if (this[testFixture].prototype.commandLineSwitches)
       output('#include "base/command_line.h"');
-    if (this[testFixture].prototype.featureList)
+    if (this[testFixture].prototype.featureList ||
+        this[testFixture].prototype.featureWithParameters)
       output('#include "base/test/scoped_feature_list.h"');
   }
   output();
@@ -395,7 +404,10 @@ function TEST_F(testFixture, testFunction, testBody) {
     var switches = this[testFixture].prototype.commandLineSwitches;
     var hasSwitches = switches && switches.length;
     var featureList = this[testFixture].prototype.featureList;
-    if ((!hasSwitches && !featureList) || typedefCppFixture == 'V8UnitTest') {
+    var featureWithParameters =
+        this[testFixture].prototype.featureWithParameters;
+    if ((!hasSwitches && !featureList && !featureWithParameters) ||
+        typedefCppFixture == 'V8UnitTest') {
       output(`
 typedef ${typedefCppFixture} ${testFixture};
 `);
@@ -404,11 +416,30 @@ typedef ${typedefCppFixture} ${testFixture};
       output(`
 class ${testFixture} : public ${typedefCppFixture} {
  protected:`);
-      if (featureList) {
+      if (featureList || featureWithParameters) {
         output(`
-  ${testFixture}() {
+  ${testFixture}() {`);
+        if (featureList) {
+          output(`
     scoped_feature_list_.InitWithFeatures({${featureList[0]}},
-                                          {${featureList[1]}});
+                                          {${featureList[1]}});`);
+        }
+        if (featureWithParameters) {
+          var feature = featureWithParameters[0];
+          var parameters = featureWithParameters[1];
+          output(`
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        ${feature}, {`);
+          for (var parameter of parameters) {
+            var parameterName = parameter[0];
+            var parameterValue = parameter[1];
+            output(`
+            {"${parameterName}", "${parameterValue}"},`);
+          }
+          output(`
+    });`);
+        }
+        output(`
   }`);
       } else {
         output(`
@@ -430,7 +461,7 @@ class ${testFixture} : public ${typedefCppFixture} {
       output(`
   }`);
       }
-      if (featureList) {
+      if (featureList || featureWithParameters) {
         output(`
   base::test::ScopedFeatureList scoped_feature_list_;`);
       }

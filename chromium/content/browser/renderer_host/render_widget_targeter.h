@@ -12,6 +12,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "content/common/content_constants_internal.h"
+#include "content/common/content_export.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/latency/latency_info.h"
 
@@ -32,17 +33,21 @@ namespace content {
 class RenderWidgetHostViewBase;
 class OneShotTimeoutMonitor;
 
-struct RenderWidgetTargetResult {
+struct CONTENT_EXPORT RenderWidgetTargetResult {
   RenderWidgetTargetResult();
   RenderWidgetTargetResult(const RenderWidgetTargetResult&);
   RenderWidgetTargetResult(RenderWidgetHostViewBase* view,
                            bool should_query_view,
-                           base::Optional<gfx::PointF> location);
+                           base::Optional<gfx::PointF> location,
+                           bool latched_target);
   ~RenderWidgetTargetResult();
 
   RenderWidgetHostViewBase* view = nullptr;
   bool should_query_view = false;
   base::Optional<gfx::PointF> target_location = base::nullopt;
+  // When |latched_target| is false, we explicitly hit-tested events instead of
+  // using a known target.
+  bool latched_target = false;
 };
 
 class TracingUmaTracker;
@@ -72,6 +77,12 @@ class RenderWidgetTargeter {
   // The delegate must outlive this targeter.
   explicit RenderWidgetTargeter(Delegate* delegate);
   ~RenderWidgetTargeter();
+
+  void SendEventToRootView(
+      RenderWidgetHostViewBase* root_view,
+      RenderWidgetHostViewBase* target,
+      const blink::WebInputEvent& event,
+      const ui::LatencyInfo& latency);
 
   // Finds the appropriate target inside |root_view| for |event|, and dispatches
   // it through the delegate. |event| is in the coord-space of |root_view|.
@@ -120,12 +131,15 @@ class RenderWidgetTargeter {
                         const viz::FrameSinkId& frame_sink_id);
 
   // |event| is in the coordinate space of |root_view|. |target_location|, if
-  // set, is the location in |target|'s coordinate space.
+  // set, is the location in |target|'s coordinate space. If |latched_target| is
+  // false, we explicitly did hit-testing for this event, instead of using a
+  // known target.
   void FoundTarget(RenderWidgetHostViewBase* root_view,
                    RenderWidgetHostViewBase* target,
                    const blink::WebInputEvent& event,
                    const ui::LatencyInfo& latency,
-                   const base::Optional<gfx::PointF>& target_location);
+                   const base::Optional<gfx::PointF>& target_location,
+                   bool latched_target);
 
   // Callback when the hit testing timer fires, to resume event processing
   // without further waiting for a response to the last targeting request.
@@ -154,15 +168,15 @@ class RenderWidgetTargeter {
     std::unique_ptr<TracingUmaTracker> tracker;
   };
 
-  // NOTE(tomas@vivaldi.com): Hack to fix VB-38880
-  uint32_t last_client_id;
-  uint32_t last_sink_id;
-
   bool request_in_flight_ = false;
   uint32_t last_request_id_ = 0;
   std::queue<TargetingRequest> requests_;
 
   std::unordered_set<RenderWidgetHostViewBase*> unresponsive_views_;
+
+  // This value keeps track of the number of clients we have asked in order to
+  // do async hit-testing.
+  uint32_t async_depth_ = 0;
 
   // This value limits how long to wait for a response from the renderer
   // process before giving up and resuming event processing.
@@ -170,6 +184,9 @@ class RenderWidgetTargeter {
       base::TimeDelta::FromMilliseconds(kAsyncHitTestTimeoutMs);
 
   std::unique_ptr<OneShotTimeoutMonitor> async_hit_test_timeout_;
+
+  RenderWidgetHostViewBase* vivaldi_active_requested_view_ = nullptr;
+  RenderWidgetHostViewBase* vivaldi_active_down_target_ = nullptr;
 
   Delegate* const delegate_;
   base::WeakPtrFactory<RenderWidgetTargeter> weak_ptr_factory_;

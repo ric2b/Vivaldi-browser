@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/strings/string_piece.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
 class GURL;
 
@@ -19,7 +20,8 @@ class GURL;
 // <url-pattern> := <scheme>://<host><port><path> | '<all_urls>'
 // <scheme> := '*' | 'http' | 'https' | 'file' | 'ftp' | 'chrome' |
 //             'chrome-extension' | 'filesystem'
-// <host> := '*' | '*.' <anychar except '/' and '*'>+
+// <host> := '*' | <IPv4 address> | [<IPv6 address>] |
+//           '*.' <anychar except '/' and '*'>+
 // <port> := [':' ('*' | <port number between 0 and 65535>)]
 // <path> := '/' <any chars>
 //
@@ -35,6 +37,7 @@ class GURL;
 // - https://*.google.com/foo*bar
 // - file://monkey*
 // - http://127.0.0.1/*
+// - http://[2607:f8b0:4005:805::200e]/*
 //
 // Examples of invalid patterns:
 // - http://* -- path not specified
@@ -57,7 +60,8 @@ class URLPattern {
     SCHEME_FILESYSTEM = 1 << 6,
     SCHEME_WS = 1 << 7,
     SCHEME_WSS = 1 << 8,
-    SCHEME_VIVALDIUI  = 1 << 9,
+    SCHEME_DATA = 1 << 9,
+    SCHEME_VIVALDIUI  = 1 << 10,
 
     // IMPORTANT!
     // SCHEME_ALL will match every scheme, including chrome://, chrome-
@@ -181,12 +185,21 @@ class URLPattern {
   // Returns true if |test| matches our path.
   bool MatchesPath(base::StringPiece test) const;
 
-  // Returns true if the pattern is vague enough that it implies all hosts,
-  // such as *://*/*.
-  // This is an expensive method, and should be used sparingly!
+  // Returns true if the pattern matches all patterns in an (e)TLD. This
+  // includes patterns like *://*.com/*, *://*.co.uk/*, etc. A pattern that
+  // matches all domains (e.g., *://*/*) will return true.
+  // |private_filter| specifies whether private registries (like appspot.com)
+  // should be considered; if included, patterns like *://*.appspot.com/* will
+  // return true. By default, we exclude private registries (so *.appspot.com
+  // returns false).
+  // Note: This is an expensive method, and should be used sparingly!
   // You should probably use URLPatternSet::ShouldWarnAllHosts(), which is
   // cached.
-  bool ImpliesAllHosts() const;
+  bool MatchesEffectiveTld(
+      net::registry_controlled_domains::PrivateRegistryFilter private_filter =
+          net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES,
+      net::registry_controlled_domains::UnknownRegistryFilter unknown_filter =
+          net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES) const;
 
   // Returns true if the pattern only matches a single origin. The pattern may
   // include a path.

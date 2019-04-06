@@ -10,7 +10,6 @@
 #include "base/containers/stack.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
@@ -35,6 +34,7 @@
 #include "components/drive/drive_uploader.h"
 #include "components/drive/service/fake_drive_service.h"
 #include "components/drive/service/test_util.h"
+#include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -86,7 +86,7 @@ class DriveBackendSyncTest : public testing::Test,
 
   void SetUp() override {
     ASSERT_TRUE(base_dir_.CreateUniqueTempDir());
-    in_memory_env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    in_memory_env_ = leveldb_chrome::NewMemEnv("DriveBackendSyncTest");
 
     io_task_runner_ = content::BrowserThread::GetTaskRunnerForThread(
         content::BrowserThread::IO);
@@ -124,6 +124,7 @@ class DriveBackendSyncTest : public testing::Test,
         nullptr,  // signin_manager
         nullptr,  // token_service
         nullptr,  // request_context
+        nullptr,  // url_loader_factory
         nullptr,  // drive_service
         in_memory_env_.get()));
     remote_sync_service_->AddServiceObserver(this);
@@ -457,10 +458,7 @@ class DriveBackendSyncTest : public testing::Test,
     FileEntryList local_entries;
     EXPECT_EQ(base::File::FILE_OK,
               file_system->ReadDirectory(url, &local_entries));
-    for (FileEntryList::iterator itr = local_entries.begin();
-         itr != local_entries.end();
-         ++itr) {
-      const storage::DirectoryEntry& local_entry = *itr;
+    for (const auto& local_entry : local_entries) {
       storage::FileSystemURL entry_url(
           CreateURL(app_id, path.Append(local_entry.name)));
       std::string title =
@@ -470,7 +468,7 @@ class DriveBackendSyncTest : public testing::Test,
       ASSERT_TRUE(base::ContainsKey(remote_entry_by_title, title));
       const google_apis::FileResource& remote_entry =
           *remote_entry_by_title[title];
-      if (local_entry.is_directory) {
+      if (local_entry.type == filesystem::mojom::FsFileType::DIRECTORY) {
         ASSERT_TRUE(remote_entry.IsDirectory());
         VerifyConsistencyForFolder(app_id, entry_url.path(),
                                    remote_entry.file_id(),
@@ -519,11 +517,10 @@ class DriveBackendSyncTest : public testing::Test,
       FileEntryList entries;
       EXPECT_EQ(base::File::FILE_OK,
                 file_system->ReadDirectory(url, &entries));
-      for (FileEntryList::iterator itr = entries.begin();
-           itr != entries.end(); ++itr) {
+      for (const auto& entry : entries) {
         ++result;
-        if (itr->is_directory)
-          folders.push(url.path().Append(itr->name));
+        if (entry.type == filesystem::mojom::FsFileType::DIRECTORY)
+          folders.push(url.path().Append(entry.name));
       }
     }
 

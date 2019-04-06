@@ -14,8 +14,19 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
                                     bool is_starred,
                                     bool is_incognito);
 
+// Converts |type| to a resource identifier for the appropriate icon for this
+// type to show in the omnibox. Returns UI Refresh icons.
+std::string GetResourceNameForAutocompleteMatchType(
+    AutocompleteMatchType::Type type,
+    bool is_starred);
+
 // Converts |security_level| to a resource identifier for the appropriate icon
 // for this security level in the omnibox.
 int GetIconForSecurityState(security_state::SecurityLevel security_level);
+
+// Converts |security_level| to the icon name used as a resource identifier for
+// this security level in the location bar.
+base::string16 GetUIRefreshIconNameForSecurityState(
+    security_state::SecurityLevel security_level);
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_UTIL_H_

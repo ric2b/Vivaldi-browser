@@ -1,10 +1,11 @@
+// -*- Mode: C; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2003, Google Inc.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  * notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above
@@ -14,7 +15,7 @@
  *     * Neither the name of Google Inc. nor the names of its
  * contributors may be used to endorse or promote products derived from
  * this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -29,33 +30,39 @@
  *
  * ---
  * Author: Sanjay Ghemawat <opensource@google.com>
- *         .h.in file by Craig Silverstein <opensource@google.com>
+ *         .h file by Craig Silverstein <opensource@google.com>
  */
 
 #ifndef TCMALLOC_TCMALLOC_H_
 #define TCMALLOC_TCMALLOC_H_
 
-#include <stddef.h>                     // for size_t
-#ifdef HAVE_SYS_CDEFS_H
-#include <sys/cdefs.h>   // where glibc defines __THROW
+#include <stddef.h>                     /* for size_t */
+#ifdef __cplusplus
+#include <new>                          /* for std::nothrow_t, std::align_val_t */
 #endif
 
-// __THROW is defined in glibc systems.  It means, counter-intuitively,
-// "This function will never throw an exception."  It's an optional
-// optimization tool, but we may need to use it to match glibc prototypes.
-#ifndef __THROW    /* I guess we're not on a glibc system */
-# define __THROW   /* __THROW is just an optimization, so ok to make it "" */
-#endif
-
-// Define the version number so folks can check against it
+/* Define the version number so folks can check against it */
 #define TC_VERSION_MAJOR  2
-#define TC_VERSION_MINOR  0
+#define TC_VERSION_MINOR  7
 #define TC_VERSION_PATCH  ""
-#define TC_VERSION_STRING "gperftools 2.0"
+#define TC_VERSION_STRING "gperftools 2.7"
 
-#include <stdlib.h>   // for struct mallinfo, if it's defined
+#ifndef PERFTOOLS_NOTHROW
 
-// Annoying stuff for windows -- makes sure clients can import these functions
+#if __cplusplus >= 201103L
+#define PERFTOOLS_NOTHROW noexcept
+#elif defined(__cplusplus)
+#define PERFTOOLS_NOTHROW throw()
+#else
+# ifdef __GNUC__
+#  define PERFTOOLS_NOTHROW __attribute__((__nothrow__))
+# else
+#  define PERFTOOLS_NOTHROW
+# endif
+#endif
+
+#endif
+
 #ifndef PERFTOOLS_DLL_DECL
 # ifdef _WIN32
 #   define PERFTOOLS_DLL_DECL  __declspec(dllimport)
@@ -65,59 +72,84 @@
 #endif
 
 #ifdef __cplusplus
-namespace std {
-struct nothrow_t;
-}
-
 extern "C" {
 #endif
-  // Returns a human-readable version string.  If major, minor,
-  // and/or patch are not NULL, they are set to the major version,
-  // minor version, and patch-code (a string, usually "").
+  /*
+   * Returns a human-readable version string.  If major, minor,
+   * and/or patch are not NULL, they are set to the major version,
+   * minor version, and patch-code (a string, usually "").
+   */
   PERFTOOLS_DLL_DECL const char* tc_version(int* major, int* minor,
-                                            const char** patch) __THROW;
+                                            const char** patch) PERFTOOLS_NOTHROW;
 
-  PERFTOOLS_DLL_DECL void* tc_malloc(size_t size) __THROW;
-  PERFTOOLS_DLL_DECL void tc_free(void* ptr) __THROW;
-  PERFTOOLS_DLL_DECL void* tc_realloc(void* ptr, size_t size) __THROW;
-  PERFTOOLS_DLL_DECL void* tc_calloc(size_t nmemb, size_t size) __THROW;
-  PERFTOOLS_DLL_DECL void tc_cfree(void* ptr) __THROW;
+  PERFTOOLS_DLL_DECL void* tc_malloc(size_t size) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void* tc_malloc_skip_new_handler(size_t size) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_free(void* ptr) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_free_sized(void *ptr, size_t size) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void* tc_realloc(void* ptr, size_t size) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void* tc_calloc(size_t nmemb, size_t size) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_cfree(void* ptr) PERFTOOLS_NOTHROW;
 
   PERFTOOLS_DLL_DECL void* tc_memalign(size_t __alignment,
-                                       size_t __size) __THROW;
+                                       size_t __size) PERFTOOLS_NOTHROW;
   PERFTOOLS_DLL_DECL int tc_posix_memalign(void** ptr,
-                                           size_t align, size_t size) __THROW;
-  PERFTOOLS_DLL_DECL void* tc_valloc(size_t __size) __THROW;
-  PERFTOOLS_DLL_DECL void* tc_pvalloc(size_t __size) __THROW;
+                                           size_t align, size_t size) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void* tc_valloc(size_t __size) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void* tc_pvalloc(size_t __size) PERFTOOLS_NOTHROW;
 
-  PERFTOOLS_DLL_DECL void tc_malloc_stats(void) __THROW;
-  PERFTOOLS_DLL_DECL int tc_mallopt(int cmd, int value) __THROW;
-#if 0
-  PERFTOOLS_DLL_DECL struct mallinfo tc_mallinfo(void) __THROW;
-#endif
+  PERFTOOLS_DLL_DECL void tc_malloc_stats(void) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL int tc_mallopt(int cmd, int value) PERFTOOLS_NOTHROW;
 
-  // This is an alias for MallocExtension::instance()->GetAllocatedSize().
-  // It is equivalent to
-  //    OS X: malloc_size()
-  //    glibc: malloc_usable_size()
-  //    Windows: _msize()
-  PERFTOOLS_DLL_DECL size_t tc_malloc_size(void* ptr) __THROW;
+  /*
+   * This is an alias for MallocExtension::instance()->GetAllocatedSize().
+   * It is equivalent to
+   *    OS X: malloc_size()
+   *    glibc: malloc_usable_size()
+   *    Windows: _msize()
+   */
+  PERFTOOLS_DLL_DECL size_t tc_malloc_size(void* ptr) PERFTOOLS_NOTHROW;
 
 #ifdef __cplusplus
-  PERFTOOLS_DLL_DECL int tc_set_new_mode(int flag) __THROW;
+  PERFTOOLS_DLL_DECL int tc_set_new_mode(int flag) PERFTOOLS_NOTHROW;
   PERFTOOLS_DLL_DECL void* tc_new(size_t size);
   PERFTOOLS_DLL_DECL void* tc_new_nothrow(size_t size,
-                                          const std::nothrow_t&) __THROW;
-  PERFTOOLS_DLL_DECL void tc_delete(void* p) __THROW;
+                                          const std::nothrow_t&) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_delete(void* p) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_delete_sized(void* p, size_t size) PERFTOOLS_NOTHROW;
   PERFTOOLS_DLL_DECL void tc_delete_nothrow(void* p,
-                                            const std::nothrow_t&) __THROW;
+                                            const std::nothrow_t&) PERFTOOLS_NOTHROW;
   PERFTOOLS_DLL_DECL void* tc_newarray(size_t size);
   PERFTOOLS_DLL_DECL void* tc_newarray_nothrow(size_t size,
-                                               const std::nothrow_t&) __THROW;
-  PERFTOOLS_DLL_DECL void tc_deletearray(void* p) __THROW;
+                                               const std::nothrow_t&) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_deletearray(void* p) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_deletearray_sized(void* p, size_t size) PERFTOOLS_NOTHROW;
   PERFTOOLS_DLL_DECL void tc_deletearray_nothrow(void* p,
-                                                 const std::nothrow_t&) __THROW;
+                                                 const std::nothrow_t&) PERFTOOLS_NOTHROW;
+
+#if defined(__cpp_aligned_new) || (defined(_MSVC_LANG) && _MSVC_LANG > 201402L)
+  PERFTOOLS_DLL_DECL void* tc_new_aligned(size_t size, std::align_val_t al);
+  PERFTOOLS_DLL_DECL void* tc_new_aligned_nothrow(size_t size, std::align_val_t al,
+                                          const std::nothrow_t&) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_delete_aligned(void* p, std::align_val_t al) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_delete_sized_aligned(void* p, size_t size, std::align_val_t al) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_delete_aligned_nothrow(void* p, std::align_val_t al,
+                                            const std::nothrow_t&) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void* tc_newarray_aligned(size_t size, std::align_val_t al);
+  PERFTOOLS_DLL_DECL void* tc_newarray_aligned_nothrow(size_t size, std::align_val_t al,
+                                               const std::nothrow_t&) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_deletearray_aligned(void* p, std::align_val_t al) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_deletearray_sized_aligned(void* p, size_t size, std::align_val_t al) PERFTOOLS_NOTHROW;
+  PERFTOOLS_DLL_DECL void tc_deletearray_aligned_nothrow(void* p, std::align_val_t al,
+                                                 const std::nothrow_t&) PERFTOOLS_NOTHROW;
+#endif
 }
 #endif
 
-#endif  // #ifndef TCMALLOC_TCMALLOC_H_
+/* We're only un-defining for public */
+#if !defined(GPERFTOOLS_CONFIG_H_)
+
+#undef PERFTOOLS_NOTHROW
+
+#endif /* GPERFTOOLS_CONFIG_H_ */
+
+#endif  /* #ifndef TCMALLOC_TCMALLOC_H_ */

@@ -29,6 +29,7 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/signin/about_signin_internals_factory.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/local_auth.h"
@@ -138,11 +139,27 @@ void UnlockProfileAndHideLoginUI(const base::FilePath profile_path,
   UserManager::Hide();
 }
 
+// Returns true if the showAccountManagement parameter in the given url is set
+// to true.
+bool ShouldShowAccountManagement(const GURL& url, bool is_mirror_enabled) {
+  if (!is_mirror_enabled)
+    return false;
+
+  std::string value;
+  if (net::GetValueForKeyInQuery(url, kSignInPromoQueryKeyShowAccountManagement,
+                                 &value)) {
+    int enabled = 0;
+    if (base::StringToInt(value, &enabled) && enabled == 1)
+      return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 InlineSigninHelper::InlineSigninHelper(
     base::WeakPtr<InlineLoginHandlerImpl> handler,
-    net::URLRequestContextGetter* getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     Profile* profile,
     Profile::CreateStatus create_status,
     const GURL& current_url,
@@ -155,7 +172,9 @@ InlineSigninHelper::InlineSigninHelper(
     bool choose_what_to_sync,
     bool confirm_untrusted_signin,
     bool is_force_sign_in_with_usermanager)
-    : gaia_auth_fetcher_(this, GaiaConstants::kChromeSource, getter),
+    : gaia_auth_fetcher_(this,
+                         GaiaConstants::kChromeSource,
+                         url_loader_factory),
       handler_(handler),
       profile_(profile),
       create_status_(create_status),
@@ -202,10 +221,8 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
     Profile::CreateStatus status) {
   if (is_force_sign_in_with_usermanager_)
     UnlockProfileAndHideLoginUI(profile_->GetPath(), handler_.get());
-  content::WebContents* contents = NULL;
   Browser* browser = NULL;
   if (handler_) {
-    contents = handler_->web_ui()->GetWebContents();
     browser = handler_->GetDesktopBrowser();
   }
 
@@ -238,9 +255,9 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
     scoped_refptr<password_manager::PasswordStore> password_store =
         PasswordStoreFactory::GetForProfile(profile_,
                                             ServiceAccessType::EXPLICIT_ACCESS);
-    if (password_store) {
-      password_store->SaveSyncPasswordHash(base::UTF8ToUTF16(password_));
-      password_manager::metrics_util::LogSyncPasswordHashChange(
+    if (password_store && !primary_email.empty()) {
+      password_store->SaveGaiaPasswordHash(
+          primary_email, base::UTF8ToUTF16(password_),
           password_manager::metrics_util::SyncPasswordHashChange::
               SAVED_ON_CHROME_SIGNIN);
     }
@@ -256,10 +273,12 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
     if (signin::IsAutoCloseEnabledInURL(current_url_)) {
       // Close the gaia sign in tab via a task to make sure we aren't in the
       // middle of any webui handler code.
+      bool show_account_management = ShouldShowAccountManagement(
+          current_url_,
+          AccountConsistencyModeManager::IsMirrorEnabledForProfile(profile_));
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::BindOnce(&InlineLoginHandlerImpl::CloseTab, handler_,
-                         signin::ShouldShowAccountManagement(current_url_)));
+          FROM_HERE, base::BindOnce(&InlineLoginHandlerImpl::CloseTab, handler_,
+                                    show_account_management));
     }
 
     if (reason == signin_metrics::Reason::REASON_REAUTHENTICATION ||
@@ -707,8 +726,9 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
 
   // InlineSigninHelper will delete itself.
   new InlineSigninHelper(
-      handler_weak_ptr, params.partition->GetURLRequestContext(), profile,
-      status, params.url, params.email, params.gaia_id, params.password,
+      handler_weak_ptr,
+      params.partition->GetURLLoaderFactoryForBrowserProcess(), profile, status,
+      params.url, params.email, params.gaia_id, params.password,
       params.session_index, params.auth_code, signin_scoped_device_id,
       params.choose_what_to_sync, params.confirm_untrusted_signin,
       params.is_force_sign_in_with_usermanager);
@@ -763,11 +783,14 @@ void InlineLoginHandlerImpl::SyncStarterCallback(
   if (result == OneClickSigninSyncStarter::SYNC_SETUP_FAILURE) {
     RedirectToNtpOrAppsPage(contents, access_point);
   } else if (auto_close) {
+    bool show_account_management = ShouldShowAccountManagement(
+        current_url,
+        AccountConsistencyModeManager::IsMirrorEnabledForProfile(
+            Profile::FromBrowserContext(contents->GetBrowserContext())));
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::BindOnce(&InlineLoginHandlerImpl::CloseTab,
-                       weak_factory_.GetWeakPtr(),
-                       signin::ShouldShowAccountManagement(current_url)));
+                       weak_factory_.GetWeakPtr(), show_account_management));
   } else {
     RedirectToNtpOrAppsPageIfNecessary(contents, access_point);
   }

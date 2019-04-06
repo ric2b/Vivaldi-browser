@@ -10,7 +10,7 @@
 
 #include "base/files/file.h"
 #include "base/time/time.h"
-#include "chrome/services/media_gallery_util/public/interfaces/media_parser.mojom.h"
+#include "chrome/services/media_gallery_util/public/mojom/media_parser.mojom.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 
 class MediaParser : public chrome::mojom::MediaParser {
@@ -29,6 +29,7 @@ class MediaParser : public chrome::mojom::MediaParser {
   void CheckMediaFile(base::TimeDelta decode_time,
                       base::File file,
                       CheckMediaFileCallback callback) override;
+  void GetCpuInfo(GetCpuInfoCallback callback) override;
 
   const std::unique_ptr<service_manager::ServiceContextRef> service_ref_;
 

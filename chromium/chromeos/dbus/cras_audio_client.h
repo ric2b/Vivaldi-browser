@@ -52,6 +52,9 @@ class CHROMEOS_EXPORT CrasAudioClient : public DBusClient {
     // Called when hotword is triggered.
     virtual void HotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec);
 
+    // Called when the number of active output streams has changed.
+    virtual void NumberOfActiveStreamsChanged();
+
    protected:
     virtual ~Observer();
   };
@@ -70,8 +73,15 @@ class CHROMEOS_EXPORT CrasAudioClient : public DBusClient {
   // Gets the default output buffer size in frames.
   virtual void GetDefaultOutputBufferSize(DBusMethodCallback<int> callback) = 0;
 
+  // Gets if system AEC is supported.
+  virtual void GetSystemAecSupported(DBusMethodCallback<bool> callback) = 0;
+
   // Gets an array of audio input and output nodes.
   virtual void GetNodes(DBusMethodCallback<AudioNodeList> callback) = 0;
+
+  // Gets the number of active output streams.
+  virtual void GetNumberOfActiveOutputStreams(
+      DBusMethodCallback<int> callback) = 0;
 
   // Sets output volume of the given |node_id| to |volume|, in the rage of
   // [0, 100].

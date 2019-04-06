@@ -4,7 +4,6 @@
 
 #include "ui/aura/mus/window_tree_host_mus.h"
 
-#include "base/memory/ptr_util.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/input_method_mus.h"
 #include "ui/aura/mus/window_port_mus.h"
@@ -15,6 +14,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/base/class_property.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -60,22 +60,25 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
   // If window-server is hosting viz, then use the FrameSinkId from the server.
   // In other cases, let a valid FrameSinkId be selected by
   // context_factory_private().
-  CreateCompositor(switches::IsMusHostingViz() ? window_mus->GetFrameSinkId()
-                                               : viz::FrameSinkId());
-  if (!init_params.uses_real_accelerated_widget) {
-    gfx::AcceleratedWidget accelerated_widget;
+  const bool force_software_compositor = false;
+  const bool external_begin_frames_enabled = false;
+  const bool are_events_in_pixels =
+      init_params.window_tree_client->is_using_pixels();
+  CreateCompositor(window_mus->GenerateFrameSinkIdFromServerId(),
+                   force_software_compositor, external_begin_frames_enabled,
+                   are_events_in_pixels);
+  gfx::AcceleratedWidget accelerated_widget;
 // We need accelerated widget numbers to be different for each window and
 // fit in the smallest sizeof(AcceleratedWidget) uint32_t has this property.
 #if defined(OS_WIN) || defined(OS_ANDROID)
-    accelerated_widget =
-        reinterpret_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
+  accelerated_widget =
+      reinterpret_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
 #else
-    accelerated_widget =
-        static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
+  accelerated_widget =
+      static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
 #endif
-    OnAcceleratedWidgetAvailable(accelerated_widget,
-                                 GetDisplay().device_scale_factor());
-  }
+  OnAcceleratedWidgetAvailable(accelerated_widget,
+                               GetDisplay().device_scale_factor());
 
   delegate_->OnWindowTreeHostCreated(this);
 
@@ -85,7 +88,9 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
       this, use_default_accelerated_widget, bounds_in_pixels));
 
   if (!init_params.use_classic_ime) {
-    input_method_ = std::make_unique<InputMethodMus>(this, window());
+    // NOTE: This creates one InputMethodMus per display, despite the
+    // call to SetSharedInputMethod() below.
+    input_method_ = std::make_unique<InputMethodMus>(this, this);
     input_method_->Init(init_params.window_tree_client->connector());
     SetSharedInputMethod(input_method_.get());
   }
@@ -94,12 +99,6 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
 
   // Mus windows are assumed hidden.
   compositor()->SetVisible(false);
-
-  if (window_mus->window_mus_type() ==
-      WindowMusType::DISPLAY_MANUALLY_CREATED) {
-    compositor()->SetLocalSurfaceId(
-        window_mus->GetOrAllocateLocalSurfaceId(bounds_in_pixels.size()));
-  }
 }
 
 WindowTreeHostMus::~WindowTreeHostMus() {
@@ -123,9 +122,11 @@ WindowTreeHostMus* WindowTreeHostMus::ForWindow(aura::Window* window) {
   return root->GetProperty(kWindowTreeHostMusKey);
 }
 
-void WindowTreeHostMus::SetBoundsFromServer(const gfx::Rect& bounds_in_pixels) {
+void WindowTreeHostMus::SetBoundsFromServerInPixels(
+    const gfx::Rect& bounds_in_pixels,
+    const viz::LocalSurfaceId& local_surface_id) {
   base::AutoReset<bool> resetter(&in_set_bounds_from_server_, true);
-  SetBoundsInPixels(bounds_in_pixels);
+  SetBoundsInPixels(bounds_in_pixels, local_surface_id);
 }
 
 void WindowTreeHostMus::SetClientArea(
@@ -203,10 +204,12 @@ void WindowTreeHostMus::HideImpl() {
   window()->Hide();
 }
 
-void WindowTreeHostMus::SetBoundsInPixels(const gfx::Rect& bounds) {
+void WindowTreeHostMus::SetBoundsInPixels(
+    const gfx::Rect& bounds,
+    const viz::LocalSurfaceId& local_surface_id) {
   if (!in_set_bounds_from_server_)
     delegate_->OnWindowTreeHostBoundsWillChange(this, bounds);
-  WindowTreeHostPlatform::SetBoundsInPixels(bounds);
+  WindowTreeHostPlatform::SetBoundsInPixels(bounds, local_surface_id);
 }
 
 void WindowTreeHostMus::DispatchEvent(ui::Event* event) {
@@ -252,6 +255,15 @@ gfx::Transform WindowTreeHostMus::GetRootTransformForLocalEventCoordinates()
 
 int64_t WindowTreeHostMus::GetDisplayId() {
   return display_id_;
+}
+
+void WindowTreeHostMus::SetTextInputState(ui::mojom::TextInputStatePtr state) {
+  WindowPortMus::Get(window())->SetTextInputState(std::move(state));
+}
+
+void WindowTreeHostMus::SetImeVisibility(bool visible,
+                                         ui::mojom::TextInputStatePtr state) {
+  WindowPortMus::Get(window())->SetImeVisibility(visible, std::move(state));
 }
 
 }  // namespace aura

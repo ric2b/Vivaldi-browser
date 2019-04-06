@@ -10,7 +10,7 @@
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_param_traits.h"
-#include "third_party/WebKit/public/platform/WebStorageArea.h"
+#include "third_party/blink/public/platform/web_storage_area.h"
 #include "url/gurl.h"
 #include "url/ipc/url_param_traits.h"
 
@@ -42,7 +42,7 @@ IPC_STRUCT_BEGIN(DOMStorageMsg_Event_Params)
 
   // The non-zero session namespace_id associated with the event or 0 if
   // this is a local storage event.
-  IPC_STRUCT_MEMBER(int64_t, namespace_id)
+  IPC_STRUCT_MEMBER(std::string, namespace_id)
 IPC_STRUCT_END()
 
 // DOM Storage messages sent from the browser to the renderer.
@@ -63,7 +63,7 @@ IPC_MESSAGE_CONTROL1(DOMStorageMsg_AsyncOperationComplete,
 // Open the storage area for a particular origin within a namespace.
 IPC_MESSAGE_CONTROL3(DOMStorageHostMsg_OpenStorageArea,
                      int /* connection_id */,
-                     int64_t /* namespace_id */,
+                     std::string /* namespace_id */,
                      GURL /* origin */)
 
 // Close a previously opened storage area.

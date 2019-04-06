@@ -8,14 +8,12 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
 import android.app.Application.ActivityLifecycleCallbacks;
-import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.view.Window;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.MainDex;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationHandler;
@@ -32,7 +30,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * to register / unregister listeners for state changes.
  */
 @JNINamespace("base::android")
-@MainDex
 public class ApplicationStatus {
     private static final String TOOLBAR_CALLBACK_INTERNAL_WRAPPER_CLASS =
             "android.support.v7.internal.app.ToolbarActionBar$ToolbarCallbackWrapper";
@@ -70,11 +67,22 @@ public class ApplicationStatus {
         }
     }
 
-    private static final Object sCachedApplicationStateLock = new Object();
+    static {
+        // Chrome initializes this only for the main process. This assert aims to try and catch
+        // usages from GPU / renderers, while still allowing tests.
+        assert ContextUtils.isMainProcess()
+                || ContextUtils.getProcessName().contains(":test")
+            : "Cannot use ApplicationState from process: "
+                        + ContextUtils.getProcessName();
+    }
+
+    private static final Object sCurrentApplicationStateLock = new Object();
 
     @SuppressLint("SupportAnnotationUsage")
     @ApplicationState
-    private static Integer sCachedApplicationState;
+    // The getStateForApplication() historically returned ApplicationState.HAS_DESTROYED_ACTIVITIES
+    // when no activity has been observed.
+    private static Integer sCurrentApplicationState = ApplicationState.HAS_DESTROYED_ACTIVITIES;
 
     /** Last activity that was shown (or null if none or it was destroyed). */
     @SuppressLint("StaticFieldLeak")
@@ -320,31 +328,25 @@ public class ApplicationStatus {
         }
 
         int oldApplicationState = getStateForApplication();
+        ActivityInfo info;
 
-        if (newState == ActivityState.CREATED) {
-            // TODO(tedchoc): crbug/691100.  The timing of application callback lifecycles were
-            //                changed in O and the activity info may have been lazily created
-            //                on first access to avoid a crash on startup.  This should be removed
-            //                once the new lifecycle APIs are available.
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        synchronized (sCurrentApplicationStateLock) {
+            if (newState == ActivityState.CREATED) {
                 assert !sActivityInfo.containsKey(activity);
+                sActivityInfo.put(activity, new ActivityInfo());
             }
-            sActivityInfo.put(activity, new ActivityInfo());
-        }
 
-        // Invalidate the cached application state.
-        synchronized (sCachedApplicationStateLock) {
-            sCachedApplicationState = null;
-        }
+            info = sActivityInfo.get(activity);
+            info.setStatus(newState);
 
-        ActivityInfo info = sActivityInfo.get(activity);
-        info.setStatus(newState);
+            // Remove before calling listeners so that isEveryActivityDestroyed() returns false when
+            // this was the last activity.
+            if (newState == ActivityState.DESTROYED) {
+                sActivityInfo.remove(activity);
+                if (activity == sActivity) sActivity = null;
+            }
 
-        // Remove before calling listeners so that isEveryActivityDestroyed() returns false when
-        // this was the last activity.
-        if (newState == ActivityState.DESTROYED) {
-            sActivityInfo.remove(activity);
-            if (activity == sActivity) sActivity = null;
+            sCurrentApplicationState = determineApplicationState();
         }
 
         // Notify all state observers that are specifically listening to this activity.
@@ -451,11 +453,8 @@ public class ApplicationStatus {
     @ApplicationState
     @CalledByNative
     public static int getStateForApplication() {
-        synchronized (sCachedApplicationStateLock) {
-            if (sCachedApplicationState == null) {
-                sCachedApplicationState = determineApplicationState();
-            }
-            return sCachedApplicationState;
+        synchronized (sCurrentApplicationStateLock) {
+            return sCurrentApplicationState;
         }
     }
 
@@ -504,14 +503,6 @@ public class ApplicationStatus {
         ApplicationStatus.assertInitialized();
 
         ActivityInfo info = sActivityInfo.get(activity);
-        // TODO(tedchoc): crbug/691100.  The timing of application callback lifecycles were changed
-        //                in O and the activity info may need to be lazily created if the onCreate
-        //                event has not yet been received.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && info == null
-                && !activity.isDestroyed()) {
-            info = new ActivityInfo();
-            sActivityInfo.put(activity, info);
-        }
         if (info == null) {
             throw new IllegalStateException(
                     "Attempting to register listener on an untracked activity.");
@@ -560,8 +551,8 @@ public class ApplicationStatus {
         sActivityInfo.clear();
         sWindowFocusListeners.clear();
         sIsInitialized = false;
-        synchronized (sCachedApplicationStateLock) {
-            sCachedApplicationState = null;
+        synchronized (sCurrentApplicationStateLock) {
+            sCurrentApplicationState = determineApplicationState();
         }
         sActivity = null;
         sNativeApplicationStateListener = null;

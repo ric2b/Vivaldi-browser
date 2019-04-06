@@ -11,10 +11,11 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -139,7 +140,8 @@ void ImeWarningBubbleView::InitAnchorView() {
   }
   if (!reference_view || !reference_view->visible()) {
     // Anchors the bubble to the app menu.
-    reference_view = browser_view_->toolbar()->app_menu_button();
+    reference_view =
+        browser_view_->toolbar_button_provider()->GetAppMenuButton();
   }
   SetAnchorView(reference_view);
   set_arrow(views::BubbleBorder::TOP_RIGHT);
@@ -166,22 +168,23 @@ void ImeWarningBubbleView::InitLayout() {
 
   views::ColumnSet* main_cs = layout->AddColumnSet(cs_id);
   // The first row which shows the warning info.
-  main_cs->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING, 0,
-                     views::GridLayout::FIXED, kColumnWidth, 0);
+  main_cs->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
+                     views::GridLayout::kFixedSize, views::GridLayout::FIXED,
+                     kColumnWidth, 0);
 
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   const int vertical_spacing =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
-  layout->StartRow(0, cs_id);
+  layout->StartRow(views::GridLayout::kFixedSize, cs_id);
   base::string16 extension_name = base::UTF8ToUTF16(extension_->name());
   base::i18n::AdjustStringForLocaleDirection(&extension_name);
   views::Label* warning = CreateExtensionNameLabel(l10n_util::GetStringFUTF16(
       IDS_IME_API_ACTIVATED_WARNING, extension_name));
   layout->AddView(warning);
-  layout->AddPaddingRow(0, vertical_spacing);
+  layout->AddPaddingRow(views::GridLayout::kFixedSize, vertical_spacing);
 
   // The seconde row which shows the check box.
-  layout->StartRow(0, cs_id);
+  layout->StartRow(views::GridLayout::kFixedSize, cs_id);
   never_show_checkbox_ =
       new views::Checkbox(l10n_util::GetStringUTF16(IDS_IME_API_NEVER_SHOW));
   layout->AddView(never_show_checkbox_);

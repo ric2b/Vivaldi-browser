@@ -11,61 +11,32 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.BasicNativePage;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.NativePage;
+import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPageView.IncognitoNewTabPageManager;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.vr_shell.OnExitVrRequestListener;
-import org.chromium.chrome.browser.vr_shell.UiUnsupportedMode;
-import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
+import org.chromium.chrome.browser.vr.VrModuleProvider;
 
 /**
  * Provides functionality when the user interacts with the Incognito NTP.
  */
-public class IncognitoNewTabPage implements NativePage, InvalidationAwareThumbnailProvider {
-    private final Activity mActivity;
+public class IncognitoNewTabPage
+        extends BasicNativePage implements InvalidationAwareThumbnailProvider {
+    private Activity mActivity;
 
-    private final String mTitle;
-    private final int mBackgroundColor;
-    private final int mThemeColor;
-    protected final IncognitoNewTabPageView mIncognitoNewTabPageView;
+    private String mTitle;
+    protected IncognitoNewTabPageView mIncognitoNewTabPageView;
 
     private boolean mIsLoaded;
 
-    private final IncognitoNewTabPageManager mIncognitoNewTabPageManager =
-            new IncognitoNewTabPageManager() {
-        @Override
-        public void loadIncognitoLearnMore() {
-            // Incognito 'Learn More' either opens a new activity or a new non-incognito tab.
-            // Both is not supported in VR. Request to exit VR and if we succeed show the 'Learn
-            // More' page in 2D.
-            if (VrShellDelegate.isInVr()) {
-                VrShellDelegate.requestToExitVr(new OnExitVrRequestListener() {
-                    @Override
-                    public void onSucceeded() {
-                        showIncognitoLearnMore();
-                    }
-
-                    @Override
-                    public void onDenied() {}
-                }, UiUnsupportedMode.UNHANDLED_CODE_POINT);
-                return;
-            }
-
-            showIncognitoLearnMore();
-        }
-
-        @Override
-        public void onLoadingComplete() {
-            mIsLoaded = true;
-        }
-    };
+    private IncognitoNewTabPageManager mIncognitoNewTabPageManager;
 
     private void showIncognitoLearnMore() {
         HelpAndFeedback.getInstance(mActivity).show(mActivity,
@@ -77,14 +48,35 @@ public class IncognitoNewTabPage implements NativePage, InvalidationAwareThumbna
      * Constructs an Incognito NewTabPage.
      * @param activity The activity used to create the new tab page's View.
      */
-    public IncognitoNewTabPage(Activity activity) {
+    public IncognitoNewTabPage(ChromeActivity activity, NativePageHost host) {
+        super(activity, host, true);
+    }
+
+    @Override
+    protected void initialize(ChromeActivity activity, final NativePageHost host) {
         mActivity = activity;
 
+        mIncognitoNewTabPageManager = new IncognitoNewTabPageManager() {
+            @Override
+            public void loadIncognitoLearnMore() {
+                // Incognito 'Learn More' either opens a new activity or a new non-incognito tab.
+                // Both is not supported in VR. Request to exit VR and if we succeed show the 'Learn
+                // More' page in 2D.
+                if (VrModuleProvider.getDelegate().isInVr()) {
+                    VrModuleProvider.getDelegate().requestToExitVrAndRunOnSuccess(
+                            IncognitoNewTabPage.this ::showIncognitoLearnMore);
+                    return;
+                }
+                showIncognitoLearnMore();
+            }
+
+            @Override
+            public void onLoadingComplete() {
+                mIsLoaded = true;
+            }
+        };
+
         mTitle = activity.getResources().getString(R.string.button_new_tab);
-        mBackgroundColor =
-                ApiCompatibilityUtils.getColor(activity.getResources(), R.color.ntp_bg_incognito);
-        mThemeColor = ApiCompatibilityUtils.getColor(activity.getResources(),
-                R.color.incognito_primary_color);
 
         LayoutInflater inflater = LayoutInflater.from(activity);
         mIncognitoNewTabPageView =
@@ -132,16 +124,6 @@ public class IncognitoNewTabPage implements NativePage, InvalidationAwareThumbna
     @Override
     public String getTitle() {
         return mTitle;
-    }
-
-    @Override
-    public int getBackgroundColor() {
-        return mBackgroundColor;
-    }
-
-    @Override
-    public int getThemeColor() {
-        return mThemeColor;
     }
 
     @Override

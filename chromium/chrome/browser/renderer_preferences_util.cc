@@ -13,11 +13,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/webrtc_ip_handling_policy.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/public_features.h"
+#include "media/media_buildflags.h"
+#include "third_party/blink/public/public_buildflags.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
@@ -38,7 +37,6 @@
 #include "ui/views/linux_ui/linux_ui.h"
 #endif
 
-#if BUILDFLAG(ENABLE_WEBRTC)
 namespace {
 
 // Parses a string |range| with a port range in the form "<min>-<max>".
@@ -78,13 +76,11 @@ void ParsePortRange(const std::string& range,
 }
 
 }  // namespace
-#endif
 
 namespace renderer_preferences_util {
 
 void UpdateFromSystemSettings(content::RendererPreferences* prefs,
-                              Profile* profile,
-                              content::WebContents* web_contents) {
+                              Profile* profile) {
   const PrefService* pref_service = profile->GetPrefs();
   prefs->accept_languages = pref_service->GetString(prefs::kAcceptLanguages);
   prefs->enable_referrers = pref_service->GetBoolean(prefs::kEnableReferrers);
@@ -92,7 +88,6 @@ void UpdateFromSystemSettings(content::RendererPreferences* prefs,
       pref_service->GetBoolean(prefs::kEnableDoNotTrack);
   prefs->enable_encrypted_media =
       pref_service->GetBoolean(prefs::kEnableEncryptedMedia);
-#if BUILDFLAG(ENABLE_WEBRTC)
   prefs->webrtc_ip_handling_policy = std::string();
   // Handling the backward compatibility of previous boolean verions of policy
   // controls.
@@ -113,7 +108,6 @@ void UpdateFromSystemSettings(content::RendererPreferences* prefs,
       pref_service->GetString(prefs::kWebRTCUDPPortRange);
   ParsePortRange(webrtc_udp_port_range, &prefs->webrtc_udp_min_port,
                  &prefs->webrtc_udp_max_port);
-#endif
 
 #if BUILDFLAG(USE_DEFAULT_RENDER_THEME)
   prefs->focus_ring_color = SkColorSetRGB(0x4D, 0x90, 0xFE);

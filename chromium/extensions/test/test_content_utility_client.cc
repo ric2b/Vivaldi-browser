@@ -4,7 +4,6 @@
 
 #include "extensions/test/test_content_utility_client.h"
 
-#include "base/memory/ptr_util.h"
 #include "content/public/child/child_thread.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
@@ -17,10 +16,7 @@ TestContentUtilityClient::TestContentUtilityClient() = default;
 TestContentUtilityClient::~TestContentUtilityClient() = default;
 
 void TestContentUtilityClient::UtilityThreadStarted() {
-  utility_handler::UtilityThreadStarted();
-
   auto registry = std::make_unique<service_manager::BinderRegistry>();
-  utility_handler::ExposeInterfacesToBrowser(registry.get(), false);
   content::ChildThread::Get()
       ->GetServiceManagerConnection()
       ->AddConnectionFilter(std::make_unique<content::SimpleConnectionFilter>(

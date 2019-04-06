@@ -6,6 +6,7 @@
 
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/condition_variable.h"
@@ -14,8 +15,14 @@
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/task_scheduler/task_scheduler_impl.h"
 #include "base/test/test_mock_time_task_runner.h"
+#include "base/threading/sequence_local_storage_map.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+
+#if defined(OS_POSIX)
+#include "base/files/file_descriptor_watcher_posix.h"
+#endif
 
 namespace base {
 namespace test {
@@ -94,6 +101,23 @@ ScopedTaskEnvironment::ScopedTaskEnvironment(
               ? MakeRefCounted<TestMockTimeTaskRunner>(
                     TestMockTimeTaskRunner::Type::kBoundToThread)
               : nullptr),
+      slsm_for_mock_time_(
+          main_thread_type == MainThreadType::MOCK_TIME
+              ? std::make_unique<internal::SequenceLocalStorageMap>()
+              : nullptr),
+      slsm_registration_for_mock_time_(
+          main_thread_type == MainThreadType::MOCK_TIME
+              ? std::make_unique<
+                    internal::ScopedSetSequenceLocalStorageMapForCurrentThread>(
+                    slsm_for_mock_time_.get())
+              : nullptr),
+#if defined(OS_POSIX)
+      file_descriptor_watcher_(
+          main_thread_type == MainThreadType::IO
+              ? std::make_unique<FileDescriptorWatcher>(
+                    static_cast<MessageLoopForIO*>(message_loop_.get()))
+              : nullptr),
+#endif  // defined(OS_POSIX)
       task_tracker_(new TestTaskTracker()) {
   CHECK(!TaskScheduler::GetInstance());
 
@@ -131,6 +155,10 @@ ScopedTaskEnvironment::~ScopedTaskEnvironment() {
   TaskScheduler::GetInstance()->FlushForTesting();
   TaskScheduler::GetInstance()->Shutdown();
   TaskScheduler::GetInstance()->JoinForTesting();
+  // Destroying TaskScheduler state can result in waiting on worker threads.
+  // Make sure this is allowed to avoid flaking tests that have disallowed waits
+  // on their main thread.
+  ScopedAllowBaseSyncPrimitivesForTesting allow_waits_to_destroy_task_tracker;
   TaskScheduler::SetInstance(nullptr);
 }
 
@@ -140,6 +168,13 @@ ScopedTaskEnvironment::GetMainThreadTaskRunner() {
     return message_loop_->task_runner();
   DCHECK(mock_time_task_runner_);
   return mock_time_task_runner_;
+}
+
+bool ScopedTaskEnvironment::MainThreadHasPendingTask() const {
+  if (message_loop_)
+    return !message_loop_->IsIdleForTesting();
+  DCHECK(mock_time_task_runner_);
+  return mock_time_task_runner_->HasPendingTask();
 }
 
 void ScopedTaskEnvironment::RunUntilIdle() {
@@ -230,6 +265,26 @@ void ScopedTaskEnvironment::FastForwardBy(TimeDelta delta) {
 void ScopedTaskEnvironment::FastForwardUntilNoTasksRemain() {
   DCHECK(mock_time_task_runner_);
   mock_time_task_runner_->FastForwardUntilNoTasksRemain();
+}
+
+const TickClock* ScopedTaskEnvironment::GetMockTickClock() {
+  DCHECK(mock_time_task_runner_);
+  return mock_time_task_runner_->GetMockTickClock();
+}
+
+std::unique_ptr<TickClock> ScopedTaskEnvironment::DeprecatedGetMockTickClock() {
+  DCHECK(mock_time_task_runner_);
+  return mock_time_task_runner_->DeprecatedGetMockTickClock();
+}
+
+size_t ScopedTaskEnvironment::GetPendingMainThreadTaskCount() const {
+  DCHECK(mock_time_task_runner_);
+  return mock_time_task_runner_->GetPendingTaskCount();
+}
+
+TimeDelta ScopedTaskEnvironment::NextMainThreadPendingTaskDelay() const {
+  DCHECK(mock_time_task_runner_);
+  return mock_time_task_runner_->NextPendingTaskDelay();
 }
 
 ScopedTaskEnvironment::TestTaskTracker::TestTaskTracker()

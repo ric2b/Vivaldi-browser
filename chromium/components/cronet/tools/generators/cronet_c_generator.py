@@ -292,7 +292,6 @@ class Generator(generator.Generator):
 
     return {
       "all_enums": all_enums,
-      "allow_native_structs": self.allow_native_structs,
       "enums": self.module.enums,
       "export_attribute": self.export_attribute,
       "export_header": self.export_header,
@@ -545,8 +544,7 @@ class Generator(generator.Generator):
 
   def _GetCppWrapperType(self, kind, add_same_module_namespaces=False):
     def _AddOptional(type_name):
-      pattern = "WTF::Optional<%s>" if self.for_blink else "base::Optional<%s>"
-      return pattern % type_name
+      return "base::Optional<%s>" % type_name
 
     if self._IsTypemappedKind(kind):
       type_name = self._GetNativeTypeName(kind)
@@ -559,7 +557,7 @@ class Generator(generator.Generator):
       return self._GetNameForKind(
           kind, add_same_module_namespaces=add_same_module_namespaces)
     if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
-      return "std::unique_ptr<%s>" % self._GetNameForKind(
+      return "%s" % self._GetNameForKind(
           kind, add_same_module_namespaces=add_same_module_namespaces)
     if mojom.IsArrayKind(kind):
       pattern = "WTF::Vector<%s>" if self.for_blink else "std::vector<%s>"
@@ -598,7 +596,7 @@ class Generator(generator.Generator):
       return (_AddOptional(type_name) if mojom.IsNullableKind(kind)
                                       else type_name)
     if mojom.IsGenericHandleKind(kind):
-      return "RawDataPtr"
+      return "Cronet_RawDataPtr"
     if mojom.IsDataPipeConsumerKind(kind):
       return "mojo::ScopedDataPipeConsumerHandle"
     if mojom.IsDataPipeProducerKind(kind):
@@ -639,7 +637,7 @@ class Generator(generator.Generator):
 
   def _GetCWrapperType(self, kind):
     if mojom.IsStringKind(kind):
-      return "CharString"
+      return "Cronet_String"
     if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
       return "%sPtr" % self._GetNameForKind(kind)
     return self._GetCppWrapperType(kind)

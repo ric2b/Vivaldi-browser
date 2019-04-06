@@ -25,13 +25,12 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/presentation_connection_message.h"
-#include "content/public/common/presentation_info.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/script_executor.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
+#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -51,7 +50,7 @@ base::RepeatingCallback<void(const std::string&)> GetNoopTitleChangeCallback() {
 
 base::FilePath GetResourceFile(base::FilePath::StringPieceType relative_path) {
   base::FilePath base_dir;
-  if (!PathService::Get(chrome::DIR_TEST_DATA, &base_dir))
+  if (!base::PathService::Get(chrome::DIR_TEST_DATA, &base_dir))
     return base::FilePath();
   base::FilePath full_path =
       base_dir.Append(kResourcePath).Append(relative_path);
@@ -101,13 +100,14 @@ class FakeControllerConnection final
 
   // blink::mojom::PresentationConnection implementation
   void OnMessage(content::PresentationConnectionMessage message,
-                 OnMessageCallback callback) {
+                 OnMessageCallback callback) override {
     OnMessageMock(message);
     std::move(callback).Run(true);
   }
   MOCK_METHOD1(OnMessageMock,
                void(content::PresentationConnectionMessage message));
-  void DidChangeState(content::PresentationConnectionState state) override {}
+  void DidChangeState(
+      blink::mojom::PresentationConnectionState state) override {}
   void RequestClose() override {}
 
   blink::mojom::PresentationConnectionRequest MakeConnectionRequest() {
@@ -271,8 +271,9 @@ IN_PROC_BROWSER_TEST_F(PresentationReceiverWindowControllerBrowserTest,
   destroyer.AwaitTerminate(std::move(receiver_window));
 }
 
+// Flaky. See https://crbug.com/840136.
 IN_PROC_BROWSER_TEST_F(PresentationReceiverWindowControllerBrowserTest,
-                       PresentationApiCommunication) {
+                       DISABLED_PresentationApiCommunication) {
   // Start receiver window.
   auto file_path =
       GetResourceFile(FILE_PATH_LITERAL("presentation_receiver.html"));
@@ -294,7 +295,7 @@ IN_PROC_BROWSER_TEST_F(PresentationReceiverWindowControllerBrowserTest,
   media_router::LocalPresentationManagerFactory::GetOrCreateForBrowserContext(
       browser()->profile())
       ->RegisterLocalPresentationController(
-          content::PresentationInfo(presentation_url, kPresentationId),
+          blink::mojom::PresentationInfo(presentation_url, kPresentationId),
           RenderFrameHostId(0, 0), std::move(controller_ptr),
           controller_connection.MakeConnectionRequest(),
           media_router::MediaRoute("route",

@@ -11,13 +11,11 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/threading/thread_checker.h"
+#include "base/values.h"
 #include "services/data_decoder/public/cpp/safe_json_parser.h"
-#include "services/data_decoder/public/interfaces/json_parser.mojom.h"
-
-namespace base {
-class Value;
-}
+#include "services/data_decoder/public/mojom/json_parser.mojom.h"
 
 namespace service_manager {
 class Connector;
@@ -30,7 +28,8 @@ class SafeJsonParserImpl : public SafeJsonParser {
   SafeJsonParserImpl(service_manager::Connector* connector,
                      const std::string& unsafe_json,
                      const SuccessCallback& success_callback,
-                     const ErrorCallback& error_callback);
+                     const ErrorCallback& error_callback,
+                     const base::Optional<std::string>& batch_id);
 
  private:
   ~SafeJsonParserImpl() override;
@@ -42,7 +41,7 @@ class SafeJsonParserImpl : public SafeJsonParser {
   void OnConnectionError();
 
   // mojom::SafeJsonParser::Parse callback.
-  void OnParseDone(std::unique_ptr<base::Value> result,
+  void OnParseDone(base::Optional<base::Value> result,
                    const base::Optional<std::string>& error);
 
   // Reports the result on the calling task runner via the |success_callback_|

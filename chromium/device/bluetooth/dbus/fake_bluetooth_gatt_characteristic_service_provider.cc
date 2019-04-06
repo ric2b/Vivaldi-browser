@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/dbus/bluetooth_gatt_attribute_value_delegate.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "device/bluetooth/dbus/fake_bluetooth_gatt_manager_client.h"
@@ -169,6 +170,38 @@ void FakeBluetoothGattCharacteristicServiceProvider::SetValue(
   delegate_->SetValue(device_path, value, callback, error_callback);
 }
 
+void FakeBluetoothGattCharacteristicServiceProvider::PrepareSetValue(
+    const dbus::ObjectPath& device_path,
+    const std::vector<uint8_t>& value,
+    int offset,
+    bool has_subsequent_write,
+    const base::Closure& callback,
+    const device::BluetoothLocalGattService::Delegate::ErrorCallback&
+        error_callback) {
+  VLOG(1) << "GATT characteristic value Prepare Set request: "
+          << object_path_.value() << " UUID: " << uuid_;
+  // Check if this characteristic is registered.
+  FakeBluetoothGattManagerClient* fake_bluetooth_gatt_manager_client =
+      static_cast<FakeBluetoothGattManagerClient*>(
+          bluez::BluezDBusManager::Get()->GetBluetoothGattManagerClient());
+  if (!fake_bluetooth_gatt_manager_client->IsServiceRegistered(service_path_)) {
+    VLOG(1) << "GATT characteristic not registered.";
+    error_callback.Run();
+    return;
+  }
+
+  if (!CanWrite(flags_)) {
+    VLOG(1) << "GATT characteristic not writeable.";
+    error_callback.Run();
+    return;
+  }
+
+  // Pass on to the delegate.
+  DCHECK(delegate_);
+  delegate_->PrepareSetValue(device_path, value, offset, has_subsequent_write,
+                             callback, error_callback);
+}
+
 bool FakeBluetoothGattCharacteristicServiceProvider::NotificationsChange(
     bool start) {
   VLOG(1) << "GATT characteristic value notification request: "
@@ -189,7 +222,10 @@ bool FakeBluetoothGattCharacteristicServiceProvider::NotificationsChange(
 
   // Pass on to the delegate.
   DCHECK(delegate_);
-  start ? delegate_->StartNotifications() : delegate_->StopNotifications();
+  start ? delegate_->StartNotifications(object_path_,
+                                        device::BluetoothGattCharacteristic::
+                                            NotificationType::kNotification)
+        : delegate_->StopNotifications(object_path_);
 
   return true;
 }

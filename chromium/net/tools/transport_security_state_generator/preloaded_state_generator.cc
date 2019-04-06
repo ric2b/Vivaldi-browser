@@ -9,8 +9,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "net/tools/huffman_trie/huffman/huffman_builder.h"
 #include "net/tools/transport_security_state_generator/cert_util.h"
-#include "net/tools/transport_security_state_generator/huffman/huffman_builder.h"
 #include "net/tools/transport_security_state_generator/spki_hash.h"
 
 namespace net {
@@ -107,16 +107,16 @@ std::string WritePinsetList(const std::string& name,
   return output;
 }
 
-HuffmanRepresentationTable ApproximateHuffman(
+huffman_trie::HuffmanRepresentationTable ApproximateHuffman(
     const TransportSecurityStateEntries& entries) {
-  HuffmanBuilder huffman_builder;
+  huffman_trie::HuffmanBuilder huffman_builder;
   for (const auto& entry : entries) {
     for (const auto& c : entry->hostname) {
       huffman_builder.RecordUsage(c);
     }
 
-    huffman_builder.RecordUsage(TrieWriter::kTerminalValue);
-    huffman_builder.RecordUsage(TrieWriter::kEndOfTableValue);
+    huffman_builder.RecordUsage(huffman_trie::kTerminalValue);
+    huffman_builder.RecordUsage(huffman_trie::kEndOfTableValue);
   }
 
   return huffman_builder.ToTable();
@@ -139,32 +139,37 @@ std::string PreloadedStateGenerator::Generate(
   NameIDMap expect_ct_report_uri_map;
   ProcessExpectCTURIs(entries, &expect_ct_report_uri_map, &output);
 
-  NameIDMap expect_staple_report_uri_map;
-  ProcessExpectStapleURIs(entries, &expect_staple_report_uri_map, &output);
-
   NameIDMap pinsets_map;
   ProcessPinsets(pinsets, &pinsets_map, &output);
+
+  std::vector<std::unique_ptr<TransportSecurityStateTrieEntry>> trie_entries;
+  std::vector<huffman_trie::TrieEntry*> raw_trie_entries;
+  for (const auto& entry : entries) {
+    std::unique_ptr<TransportSecurityStateTrieEntry> trie_entry(
+        new TransportSecurityStateTrieEntry(expect_ct_report_uri_map,
+                                            pinsets_map, entry.get()));
+    raw_trie_entries.push_back(trie_entry.get());
+    trie_entries.push_back(std::move(trie_entry));
+  }
 
   // The trie generation process is ran twice, the first time using an
   // approximate Huffman table. During this first run, the correct character
   // frequencies are collected which are then used to calculate the most space
   // efficient Huffman table for the given inputs. This table is used for the
   // second run.
-  HuffmanRepresentationTable table = ApproximateHuffman(entries);
-  HuffmanBuilder huffman_builder;
-  TrieWriter writer(table, expect_ct_report_uri_map,
-                    expect_staple_report_uri_map, pinsets_map,
-                    &huffman_builder);
+  huffman_trie::HuffmanRepresentationTable table = ApproximateHuffman(entries);
+  huffman_trie::HuffmanBuilder huffman_builder;
+  huffman_trie::TrieWriter writer(table, &huffman_builder);
   uint32_t root_position;
-  if (!writer.WriteEntries(entries, &root_position)) {
+  if (!writer.WriteEntries(raw_trie_entries, &root_position)) {
     return std::string();
   }
 
-  HuffmanRepresentationTable optimal_table = huffman_builder.ToTable();
-  TrieWriter new_writer(optimal_table, expect_ct_report_uri_map,
-                        expect_staple_report_uri_map, pinsets_map, nullptr);
+  huffman_trie::HuffmanRepresentationTable optimal_table =
+      huffman_builder.ToTable();
+  huffman_trie::TrieWriter new_writer(optimal_table, nullptr);
 
-  if (!new_writer.WriteEntries(entries, &root_position)) {
+  if (!new_writer.WriteEntries(raw_trie_entries, &root_position)) {
     return std::string();
   }
 
@@ -246,38 +251,6 @@ void PreloadedStateGenerator::ProcessExpectCTURIs(
 
   output.append("}");
   ReplaceTag("EXPECT_CT_REPORT_URIS", output, tpl);
-}
-
-void PreloadedStateGenerator::ProcessExpectStapleURIs(
-    const TransportSecurityStateEntries& entries,
-    NameIDMap* expect_staple_report_uri_map,
-    std::string* tpl) {
-  std::string output = "{";
-  output.append(kNewLine);
-
-  for (const auto& entry : entries) {
-    const std::string& url = entry->expect_staple_report_uri;
-    if (entry->expect_staple && url.size() &&
-        expect_staple_report_uri_map->find(url) ==
-            expect_staple_report_uri_map->cend()) {
-      output.append(kIndent);
-      output.append(kIndent);
-      output.append("\"" + entry->expect_staple_report_uri + "\",");
-      output.append(kNewLine);
-
-      expect_staple_report_uri_map->insert(NameIDPair(
-          entry->expect_staple_report_uri,
-          static_cast<uint32_t>(expect_staple_report_uri_map->size())));
-    }
-  }
-
-  output.append(kIndent);
-  output.append(kIndent);
-  output.append("nullptr,");
-  output.append(kNewLine);
-
-  output.append("}");
-  ReplaceTag("EXPECT_STAPLE_REPORT_URIS", output, tpl);
 }
 
 void PreloadedStateGenerator::ProcessPinsets(const Pinsets& pinset,

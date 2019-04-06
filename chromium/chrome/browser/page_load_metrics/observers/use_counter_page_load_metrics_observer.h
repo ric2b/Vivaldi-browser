@@ -9,14 +9,15 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
-#include "third_party/WebKit/public/platform/web_feature.mojom.h"
+#include "third_party/blink/public/mojom/use_counter/css_property_id.mojom.h"
+#include "third_party/blink/public/platform/web_feature.mojom.h"
 
 namespace internal {
 
-const char kFeaturesHistogramName[] =
-    "Blink.UseCounter.Features_TestBrowserProcessLogging";
-const char kUkmUseCounterEventName[] = "Blink.UseCounter";
-const char kUkmUseCounterFeature[] = "Feature";
+const char kFeaturesHistogramName[] = "Blink.UseCounter.Features";
+const char kCssPropertiesHistogramName[] = "Blink.UseCounter.CSSProperties";
+const char kAnimatedCssPropertiesHistogramName[] =
+    "Blink.UseCounter.AnimatedCSSProperties";
 
 }  // namespace internal
 
@@ -39,6 +40,10 @@ class UseCounterPageLoadMetricsObserver
   // To keep tracks of which features have been measured.
   std::bitset<static_cast<size_t>(blink::mojom::WebFeature::kNumberOfFeatures)>
       features_recorded_;
+  std::bitset<static_cast<size_t>(blink::mojom::kMaximumCSSSampleId + 1)>
+      css_properties_recorded_;
+  std::bitset<static_cast<size_t>(blink::mojom::kMaximumCSSSampleId + 1)>
+      animated_css_properties_recorded_;
   DISALLOW_COPY_AND_ASSIGN(UseCounterPageLoadMetricsObserver);
 };
 

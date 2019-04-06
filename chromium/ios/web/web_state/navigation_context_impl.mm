@@ -15,25 +15,40 @@
 
 namespace web {
 
+namespace {
+
+// Returns a new unique ID for a NavigationContext during construction.
+// The returned ID is guaranteed to be nonzero (zero is the "no ID" indicator).
+int64_t CreateUniqueContextId() {
+  static int64_t unique_id_counter = 0;
+  return ++unique_id_counter;
+}
+
+}  // namespace
+
 // static
 std::unique_ptr<NavigationContextImpl>
 NavigationContextImpl::CreateNavigationContext(
     WebState* web_state,
     const GURL& url,
+    bool has_user_gesture,
     ui::PageTransition page_transition,
     bool is_renderer_initiated) {
-  std::unique_ptr<NavigationContextImpl> result(new NavigationContextImpl(
-      web_state, url, page_transition, is_renderer_initiated));
+  std::unique_ptr<NavigationContextImpl> result(
+      new NavigationContextImpl(web_state, url, has_user_gesture,
+                                page_transition, is_renderer_initiated));
   return result;
 }
 
 #ifndef NDEBUG
 NSString* NavigationContextImpl::GetDescription() const {
-  return [NSString stringWithFormat:
-                       @"web::WebState: %ld, url: %s, "
-                        "is_same_document: %@, error: %@",
-                       reinterpret_cast<long>(web_state_), url_.spec().c_str(),
-                       is_same_document_ ? @"true" : @"false", error_];
+  return [NSString
+      stringWithFormat:
+          @"web::WebState: %ld, url: %s, "
+           "is_same_document: %@, error: %@ is_loading_error_page: %@",
+          reinterpret_cast<long>(web_state_), url_.spec().c_str(),
+          is_same_document_ ? @"true" : @"false", error_,
+          is_loading_error_page_ ? @"true" : @"false"];
 }
 #endif  // NDEBUG
 
@@ -41,8 +56,16 @@ WebState* NavigationContextImpl::GetWebState() {
   return web_state_;
 }
 
+int64_t NavigationContextImpl::GetNavigationId() const {
+  return navigation_id_;
+}
+
 const GURL& NavigationContextImpl::GetUrl() const {
   return url_;
+}
+
+bool NavigationContextImpl::HasUserGesture() const {
+  return has_user_gesture_;
 }
 
 ui::PageTransition NavigationContextImpl::GetPageTransition() const {
@@ -51,6 +74,14 @@ ui::PageTransition NavigationContextImpl::GetPageTransition() const {
 
 bool NavigationContextImpl::IsSameDocument() const {
   return is_same_document_;
+}
+
+bool NavigationContextImpl::HasCommitted() const {
+  return has_committed_;
+}
+
+bool NavigationContextImpl::IsDownload() const {
+  return is_download_;
 }
 
 bool NavigationContextImpl::IsPost() const {
@@ -75,6 +106,14 @@ void NavigationContextImpl::SetUrl(const GURL& url) {
 
 void NavigationContextImpl::SetIsSameDocument(bool is_same_document) {
   is_same_document_ = is_same_document;
+}
+
+void NavigationContextImpl::SetHasCommitted(bool has_committed) {
+  has_committed_ = has_committed;
+}
+
+void NavigationContextImpl::SetIsDownload(bool is_download) {
+  is_download_ = is_download;
 }
 
 void NavigationContextImpl::SetIsPost(bool is_post) {
@@ -111,12 +150,32 @@ WKNavigationType NavigationContextImpl::GetWKNavigationType() const {
   return wk_navigation_type_;
 }
 
+bool NavigationContextImpl::IsLoadingErrorPage() const {
+  return is_loading_error_page_;
+}
+
+void NavigationContextImpl::SetLoadingErrorPage(bool is_loading_error_page) {
+  is_loading_error_page_ = is_loading_error_page;
+}
+
+bool NavigationContextImpl::IsNativeContentPresented() const {
+  return is_native_content_presented_;
+}
+
+void NavigationContextImpl::SetIsNativeContentPresented(
+    bool is_native_content_presented) {
+  is_native_content_presented_ = is_native_content_presented;
+}
+
 NavigationContextImpl::NavigationContextImpl(WebState* web_state,
                                              const GURL& url,
+                                             bool has_user_gesture,
                                              ui::PageTransition page_transition,
                                              bool is_renderer_initiated)
     : web_state_(web_state),
+      navigation_id_(CreateUniqueContextId()),
       url_(url),
+      has_user_gesture_(has_user_gesture),
       page_transition_(page_transition),
       is_same_document_(false),
       error_(nil),

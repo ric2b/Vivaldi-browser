@@ -46,7 +46,7 @@ FakeAppInstance::FakeAppInstance(mojom::AppHost* app_host)
 FakeAppInstance::~FakeAppInstance() {}
 
 void FakeAppInstance::InitDeprecated(mojom::AppHostPtr host_ptr) {
-  Init(std::move(host_ptr), base::BindOnce(&base::DoNothing));
+  Init(std::move(host_ptr), base::DoNothing());
 }
 
 void FakeAppInstance::Init(mojom::AppHostPtr host_ptr, InitCallback callback) {
@@ -72,6 +72,12 @@ void FakeAppInstance::LaunchApp(const std::string& package_name,
                                 const std::string& activity,
                                 int64_t display_id) {
   launch_requests_.push_back(std::make_unique<Request>(package_name, activity));
+}
+
+void FakeAppInstance::LaunchAppShortcutItem(const std::string& package_name,
+                                            const std::string& shortcut_id,
+                                            int64_t display_id) {
+  ++launch_app_shortcut_item_count_;
 }
 
 void FakeAppInstance::RequestAppIcon(const std::string& package_name,
@@ -120,10 +126,7 @@ void FakeAppInstance::SendAppAdded(const mojom::AppInfo& app) {
 void FakeAppInstance::SendTaskCreated(int32_t taskId,
                                       const mojom::AppInfo& app,
                                       const std::string& intent) {
-  app_host_->OnTaskCreated(taskId,
-                           app.package_name,
-                           app.activity,
-                           app.name,
+  app_host_->OnTaskCreated(taskId, app.package_name, app.activity, app.name,
                            intent);
 }
 
@@ -199,7 +202,7 @@ bool FakeAppInstance::GetFakeIcon(mojom::ScaleFactor scale_factor,
   }
 
   base::FilePath base_path;
-  CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &base_path));
+  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &base_path));
   base::FilePath icon_file_path = base_path.AppendASCII("components")
                                       .AppendASCII("test")
                                       .AppendASCII("data")
@@ -273,11 +276,9 @@ void FakeAppInstance::GetTaskInfo(int32_t task_id,
   std::move(callback).Run(it->second->package_name(), it->second->activity());
 }
 
-void FakeAppInstance::SetTaskActive(int32_t task_id) {
-}
+void FakeAppInstance::SetTaskActive(int32_t task_id) {}
 
-void FakeAppInstance::CloseTask(int32_t task_id) {
-}
+void FakeAppInstance::CloseTask(int32_t task_id) {}
 
 void FakeAppInstance::ShowPackageInfoDeprecated(
     const std::string& package_name,
@@ -305,6 +306,17 @@ void FakeAppInstance::GetRecentAndSuggestedAppsFromPlayStore(
     GetRecentAndSuggestedAppsFromPlayStoreCallback callback) {
   // Fake Play Store app info
   std::vector<arc::mojom::AppDiscoveryResultPtr> fake_apps;
+
+  // Check if we're fabricating failed query.
+  const std::string kFailedQueryPrefix("FailedQueryWithCode-");
+  ArcPlayStoreSearchRequestState state_code =
+      ArcPlayStoreSearchRequestState::SUCCESS;
+  if (!query.compare(0, kFailedQueryPrefix.size(), kFailedQueryPrefix)) {
+    state_code = static_cast<ArcPlayStoreSearchRequestState>(
+        stoi(query.substr(kFailedQueryPrefix.size())));
+    std::move(callback).Run(state_code, std::move(fake_apps));
+    return;
+  }
 
   // Fake icon data.
   std::string png_data_as_string;
@@ -337,12 +349,92 @@ void FakeAppInstance::GetRecentAndSuggestedAppsFromPlayStore(
         fake_icon_png_data,                             // icon_png_data
         base::StringPrintf("test.package.%d", i)));     // package_name
   }
-  std::move(callback).Run(ArcPlayStoreSearchRequestState::SUCCESS,
-                          std::move(fake_apps));
+
+  std::move(callback).Run(state_code, std::move(fake_apps));
+}
+
+void FakeAppInstance::GetIcingGlobalQueryResults(
+    const std::string& query,
+    int32_t max_results,
+    GetIcingGlobalQueryResultsCallback callback) {
+  // Fake successful app data search results.
+  std::vector<arc::mojom::AppDataResultPtr> fake_app_data_results;
+
+  // Fake icon data.
+  std::string png_data_as_string;
+  GetFakeIcon(mojom::ScaleFactor::SCALE_FACTOR_100P, &png_data_as_string);
+  std::vector<uint8_t> fake_icon_png_data(png_data_as_string.begin(),
+                                          png_data_as_string.end());
+
+  int i = 0;
+  fake_app_data_results.push_back(mojom::AppDataResult::New(
+      base::StringPrintf("LauncherIntentUri %d", i),
+      base::StringPrintf("Label %s %d", query.c_str(), i),
+      base::StringPrintf("Text %s %d", query.c_str(), i), fake_icon_png_data,
+      mojom::AppDataResultType::PERSON));
+  ++i;
+  fake_app_data_results.push_back(mojom::AppDataResult::New(
+      base::StringPrintf("LauncherIntentUri %d", i),
+      base::StringPrintf("Label %s %d", query.c_str(), i),
+      base::StringPrintf("Text %s %d", query.c_str(), i), fake_icon_png_data,
+      mojom::AppDataResultType::NOTE_DOCUMENT));
+
+  std::move(callback).Run(arc::mojom::AppDataRequestState::REQUEST_SUCCESS,
+                          std::move(fake_app_data_results));
+}
+
+void FakeAppInstance::GetAppShortcutGlobalQueryItems(
+    const std::string& query,
+    int32_t max_results,
+    GetAppShortcutGlobalQueryItemsCallback callback) {
+  // Fake app shortcut items results.
+  std::vector<mojom::AppShortcutItemPtr> fake_app_shortcut_items;
+
+  // Fake icon data.
+  std::string png_data_as_string;
+  GetFakeIcon(mojom::ScaleFactor::SCALE_FACTOR_100P, &png_data_as_string);
+  std::vector<uint8_t> fake_icon_png_data(png_data_as_string.begin(),
+                                          png_data_as_string.end());
+
+  for (int i = 0; i < max_results; ++i) {
+    fake_app_shortcut_items.emplace_back(mojom::AppShortcutItem::New(
+        base::StringPrintf("ShortcutId %d", i),
+        base::StringPrintf("ShortLabel %d", i), fake_icon_png_data,
+        "FakeAppPackageName", mojom::AppShortcutItemType::kStatic, i));
+  }
+
+  std::move(callback).Run(std::move(fake_app_shortcut_items));
+}
+
+void FakeAppInstance::GetAppShortcutItems(
+    const std::string& package_name,
+    GetAppShortcutItemsCallback callback) {
+  // Fake app shortcut items results.
+  std::vector<mojom::AppShortcutItemPtr> fake_app_shortcut_items;
+
+  // Fake icon data.
+  std::string png_data_as_string;
+  GetFakeIcon(mojom::ScaleFactor::SCALE_FACTOR_100P, &png_data_as_string);
+  std::vector<uint8_t> fake_icon_png_data(png_data_as_string.begin(),
+                                          png_data_as_string.end());
+
+  for (int i = 0; i < 3; ++i) {
+    fake_app_shortcut_items.push_back(mojom::AppShortcutItem::New(
+        base::StringPrintf("ShortcutId %d", i),
+        base::StringPrintf("ShortLabel %d", i), fake_icon_png_data,
+        package_name, mojom::AppShortcutItemType::kStatic, i));
+  }
+
+  std::move(callback).Run(std::move(fake_app_shortcut_items));
 }
 
 void FakeAppInstance::StartPaiFlow() {
   ++start_pai_request_count_;
+}
+
+void FakeAppInstance::StartFastAppReinstallFlow(
+    const std::vector<std::string>& package_names) {
+  ++start_fast_app_reinstall_request_count_;
 }
 
 void FakeAppInstance::LaunchIntentDeprecated(

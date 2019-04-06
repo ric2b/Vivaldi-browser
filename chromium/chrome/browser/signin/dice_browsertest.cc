@@ -14,25 +14,30 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
+#include "chrome/browser/signin/chrome_signin_client.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
+#include "chrome/browser/signin/mutable_profile_oauth2_token_service_delegate.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/webui/signin/login_ui_test_utils.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -41,15 +46,15 @@
 #include "components/signin/core/browser/dice_header_helper.h"
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/scoped_account_consistency.h"
+#include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/sync/user_events/user_event_service.h"
 #include "components/variations/variations_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "google_apis/gaia/gaia_switches.h"
@@ -151,11 +156,13 @@ std::unique_ptr<HttpResponse> HandleSigninURL(
 
   // Add the SIGNIN dice header.
   std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse);
-  http_response->AddCustomHeader(
-      kDiceResponseHeader,
-      base::StringPrintf(
-          "action=SIGNIN,authuser=1,id=%s,email=%s,authorization_code=%s",
-          kMainGaiaID, kMainEmail, kAuthorizationCode));
+  if (header_value != kNoDiceRequestHeader) {
+    http_response->AddCustomHeader(
+        kDiceResponseHeader,
+        base::StringPrintf(
+            "action=SIGNIN,authuser=1,id=%s,email=%s,authorization_code=%s",
+            kMainGaiaID, kMainEmail, kAuthorizationCode));
+  }
 
   // When hitting the Chrome Sync endpoint, redirect to kEnableSyncURL, which
   // adds the ENABLE_SYNC dice header.
@@ -333,9 +340,6 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
                             base::Unretained(this))));
     signin::SetDiceAccountReconcilorBlockDelayForTesting(
         kAccountReconcilorDelayMs);
-
-    scoped_site_isolation_.InitAndEnableFeature(
-        features::kSignInProcessIsolation);
   }
 
   // Navigates to the given path on the test server.
@@ -371,6 +375,11 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
                                                                kSecondaryEmail);
   }
 
+  std::string GetDeviceId() {
+    return ChromeSigninClientFactory::GetForProfile(browser()->profile())
+        ->GetSigninScopedDeviceId();
+  }
+
   // Signin with a main account and add token for a secondary account.
   void SetupSignedInAccounts() {
     // Signin main account.
@@ -379,6 +388,7 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
         "existing_refresh_token", kMainGaiaID, kMainEmail, "password",
         SigninManager::OAuthTokenFetchedCallback());
     ASSERT_TRUE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
+    ASSERT_FALSE(GetTokenService()->RefreshTokenHasError(GetMainAccountID()));
     ASSERT_EQ(GetMainAccountID(), signin_manager->GetAuthenticatedAccountId());
 
     // Add a token for a secondary account.
@@ -388,12 +398,18 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
     GetTokenService()->UpdateCredentials(secondary_account_id, "other_token");
     ASSERT_TRUE(
         GetTokenService()->RefreshTokenIsAvailable(secondary_account_id));
+    ASSERT_FALSE(GetTokenService()->RefreshTokenHasError(secondary_account_id));
   }
 
   // Navigate to a Gaia URL setting the Google-Accounts-SignOut header.
   void SignOutWithDice(SignoutType signout_type) {
     NavigateToURL(base::StringPrintf("%s?%i", kSignoutURL, signout_type));
-    if (signin::IsDicePrepareMigrationEnabled()) {
+    signin::AccountConsistencyMethod account_consistency =
+        AccountConsistencyModeManager::GetMethodForProfile(
+            browser()->profile());
+    if (signin::DiceMethodGreaterOrEqual(
+            account_consistency,
+            signin::AccountConsistencyMethod::kDicePrepareMigration)) {
       EXPECT_EQ(1, reconcilor_blocked_count_);
       WaitForReconcilorUnblockedCount(1);
     } else {
@@ -475,7 +491,8 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
 
   // FakeGaia callbacks:
   void OnSigninRequest(const std::string& dice_request_header) {
-    EXPECT_EQ(signin::IsDicePrepareMigrationEnabled(), IsReconcilorBlocked());
+    EXPECT_EQ(dice_request_header != kNoDiceRequestHeader,
+              IsReconcilorBlocked());
     dice_request_header_ = dice_request_header;
   }
 
@@ -485,7 +502,7 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
   }
 
   void OnEnableSyncRequest(base::OnceClosure unblock_response_closure) {
-    EXPECT_EQ(signin::IsDicePrepareMigrationEnabled(), IsReconcilorBlocked());
+    EXPECT_TRUE(IsReconcilorBlocked());
     enable_sync_requested_ = true;
     RunClosureIfValid(std::move(enable_sync_requested_quit_closure_));
     unblock_enable_sync_response_closure_ = std::move(unblock_response_closure);
@@ -494,7 +511,7 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
   void OnTokenExchangeRequest(base::OnceClosure unblock_response_closure) {
     // The token must be exchanged only once.
     EXPECT_FALSE(token_requested_);
-    EXPECT_EQ(signin::IsDicePrepareMigrationEnabled(), IsReconcilorBlocked());
+    EXPECT_TRUE(IsReconcilorBlocked());
     token_requested_ = true;
     RunClosureIfValid(std::move(token_requested_quit_closure_));
     unblock_token_exchange_response_closure_ =
@@ -579,8 +596,7 @@ class DiceBrowserTestBase : public InProcessBrowserTest,
     EXPECT_EQ(count, token_revoked_count_);
   }
 
-  base::test::ScopedFeatureList scoped_site_isolation_;
-  signin::ScopedAccountConsistency scoped_account_consistency_;
+  ScopedAccountConsistency scoped_account_consistency_;
   net::EmbeddedTestServer https_server_;
   bool enable_sync_requested_;
   bool token_requested_;
@@ -626,15 +642,6 @@ class DicePrepareMigrationBrowserTest : public DiceBrowserTestBase {
       : DiceBrowserTestBase(AccountConsistencyMethod::kDicePrepareMigration) {}
 };
 
-class DicePrepareMigrationChromeSynEndpointBrowserTest
-    : public DiceBrowserTestBase {
- public:
-  DicePrepareMigrationChromeSynEndpointBrowserTest()
-      : DiceBrowserTestBase(
-            AccountConsistencyMethod::kDicePrepareMigrationChromeSyncEndpoint) {
-  }
-};
-
 // Checks that signin on Gaia triggers the fetch for a refresh token.
 IN_PROC_BROWSER_TEST_F(DiceBrowserTest, Signin) {
   EXPECT_EQ(0, reconcilor_started_count_);
@@ -644,11 +651,12 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, Signin) {
 
   // Check that the Dice request header was sent.
   std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
-  EXPECT_EQ(
-      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
-                         "signout_mode=show_confirmation",
-                         signin::kDiceProtocolVersion, client_id.c_str()),
-      dice_request_header_);
+  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                               "signin_mode=all_accounts,"
+                               "signout_mode=show_confirmation",
+                               signin::kDiceProtocolVersion, client_id.c_str(),
+                               GetDeviceId().c_str()),
+            dice_request_header_);
 
   // Check that the token was requested and added to the token service.
   SendRefreshTokenResponse();
@@ -675,19 +683,20 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, Reauth) {
 
   // Check that the Dice request header was sent.
   std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
-  EXPECT_EQ(
-      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
-                         "signout_mode=show_confirmation",
-                         signin::kDiceProtocolVersion, client_id.c_str()),
-      dice_request_header_);
+  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                               "signin_mode=all_accounts,"
+                               "signout_mode=show_confirmation",
+                               signin::kDiceProtocolVersion, client_id.c_str(),
+                               GetDeviceId().c_str()),
+            dice_request_header_);
 
   // Check that the token was requested and added to the token service.
   SendRefreshTokenResponse();
   EXPECT_EQ(GetMainAccountID(),
             GetSigninManager()->GetAuthenticatedAccountId());
-  // Old token must be revoked silently.
+
+  // Old token must not be revoked (see http://crbug.com/865189).
   EXPECT_EQ(0, token_revoked_notification_count_);
-  WaitForTokenRevokedCount(1);
 
   EXPECT_EQ(1, reconcilor_blocked_count_);
   WaitForReconcilorUnblockedCount(1);
@@ -702,14 +711,25 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, SignoutMainAccount) {
   // Signout from main account.
   SignOutWithDice(kMainAccount);
 
-  // Check that the user is signed out and all tokens are deleted.
-  EXPECT_TRUE(GetSigninManager()->GetAuthenticatedAccountId().empty());
-  EXPECT_TRUE(GetSigninManager()->GetAccountIdForAuthInProgress().empty());
-  EXPECT_FALSE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
-  EXPECT_FALSE(
+  // Check that the user is in error state.
+  EXPECT_EQ(GetMainAccountID(),
+            GetSigninManager()->GetAuthenticatedAccountId());
+  MutableProfileOAuth2TokenServiceDelegate* delegate =
+      static_cast<MutableProfileOAuth2TokenServiceDelegate*>(
+          GetTokenService()->GetDelegate());
+  EXPECT_TRUE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
+  EXPECT_TRUE(GetTokenService()->RefreshTokenHasError(GetMainAccountID()));
+  EXPECT_EQ(MutableProfileOAuth2TokenServiceDelegate::kInvalidRefreshToken,
+            delegate->GetRefreshTokenForTest(GetMainAccountID()));
+  EXPECT_TRUE(
       GetTokenService()->RefreshTokenIsAvailable(GetSecondaryAccountID()));
-  EXPECT_EQ(2, token_revoked_notification_count_);
-  WaitForTokenRevokedCount(2);
+  EXPECT_EQ("other_token",
+            delegate->GetRefreshTokenForTest(GetSecondaryAccountID()));
+
+  // Token for main account is revoked on server but not notified in the client.
+  EXPECT_EQ(0, token_revoked_notification_count_);
+  WaitForTokenRevokedCount(1);
+
   EXPECT_EQ(1, reconcilor_blocked_count_);
   WaitForReconcilorUnblockedCount(1);
 }
@@ -744,14 +764,23 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, SignoutAllAccounts) {
   // Signout from all accounts.
   SignOutWithDice(kAllAccounts);
 
-  // Check that the user is signed out and all tokens are deleted.
-  EXPECT_TRUE(GetSigninManager()->GetAuthenticatedAccountId().empty());
-  EXPECT_TRUE(GetSigninManager()->GetAccountIdForAuthInProgress().empty());
-  EXPECT_FALSE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
+  // Check that the user is in error state.
+  EXPECT_EQ(GetMainAccountID(),
+            GetSigninManager()->GetAuthenticatedAccountId());
+  EXPECT_TRUE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
+  EXPECT_TRUE(GetTokenService()->RefreshTokenHasError(GetMainAccountID()));
+  MutableProfileOAuth2TokenServiceDelegate* delegate =
+      static_cast<MutableProfileOAuth2TokenServiceDelegate*>(
+          GetTokenService()->GetDelegate());
+  EXPECT_EQ(MutableProfileOAuth2TokenServiceDelegate::kInvalidRefreshToken,
+            delegate->GetRefreshTokenForTest(GetMainAccountID()));
   EXPECT_FALSE(
       GetTokenService()->RefreshTokenIsAvailable(GetSecondaryAccountID()));
-  EXPECT_EQ(2, token_revoked_notification_count_);
+
+  // Token for main account is revoked on server but not notified in the client.
+  EXPECT_EQ(1, token_revoked_notification_count_);
   WaitForTokenRevokedCount(2);
+
   EXPECT_EQ(1, reconcilor_blocked_count_);
   WaitForReconcilorUnblockedCount(1);
 }
@@ -822,10 +851,11 @@ IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, SigninAccountMismatch) {
 
   // Check that the Dice request header was sent.
   std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
-  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,sync_account_id=%s,"
-                               "signin_mode=sync_account,"
+  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                               "sync_account_id=%s,signin_mode=sync_account,"
                                "signout_mode=no_confirmation",
                                signin::kDiceProtocolVersion, client_id.c_str(),
+                               GetDeviceId().c_str(),
                                GetSecondaryAccountID().c_str()),
             dice_request_header_);
 
@@ -836,8 +866,8 @@ IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, SigninAccountMismatch) {
   EXPECT_FALSE(refresh_token_available_);
   EXPECT_EQ(GetSecondaryAccountID(),
             GetSigninManager()->GetAuthenticatedAccountId());
-  EXPECT_EQ(0, reconcilor_blocked_count_);
-  WaitForReconcilorUnblockedCount(0);
+  EXPECT_EQ(1, reconcilor_blocked_count_);
+  WaitForReconcilorUnblockedCount(1);
 }
 
 // Checks that signin on Gaia triggers the fetch for a refresh token when there
@@ -854,22 +884,24 @@ IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, ReauthFixAuthError) {
 
   // Check that the Dice request header was sent.
   std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
-  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,sync_account_id=%s,"
-                               "signin_mode=sync_account,"
-                               "signout_mode=no_confirmation",
-                               signin::kDiceProtocolVersion, client_id.c_str(),
-                               GetMainAccountID().c_str()),
-            dice_request_header_);
+  EXPECT_EQ(
+      base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                         "sync_account_id=%s,signin_mode=sync_account,"
+                         "signout_mode=no_confirmation",
+                         signin::kDiceProtocolVersion, client_id.c_str(),
+                         GetDeviceId().c_str(), GetMainAccountID().c_str()),
+      dice_request_header_);
 
   // Check that the token was requested and added to the token service.
   SendRefreshTokenResponse();
   EXPECT_EQ(GetMainAccountID(),
             GetSigninManager()->GetAuthenticatedAccountId());
-  // Old token must be revoked silently.
+
+  // Old token must not be revoked (see http://crbug.com/865189).
   EXPECT_EQ(0, token_revoked_notification_count_);
-  WaitForTokenRevokedCount(1);
-  EXPECT_EQ(0, reconcilor_blocked_count_);
-  WaitForReconcilorUnblockedCount(0);
+
+  EXPECT_EQ(1, reconcilor_blocked_count_);
+  WaitForReconcilorUnblockedCount(1);
 }
 
 // Checks that the Dice signout flow is disabled.
@@ -890,33 +922,6 @@ IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, Signout) {
   EXPECT_EQ(0, token_revoked_count_);
   EXPECT_EQ(0, reconcilor_blocked_count_);
   WaitForReconcilorUnblockedCount(0);
-}
-
-// Checks that signin on Gaia triggers the fetch for a refresh token.
-IN_PROC_BROWSER_TEST_F(DicePrepareMigrationBrowserTest, Signin) {
-  EXPECT_EQ(0, reconcilor_started_count_);
-
-  // Navigate to Gaia and sign in.
-  NavigateToURL(kSigninURL);
-
-  // Check that the Dice request header was sent, with no signout confirmation.
-  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
-  EXPECT_EQ(
-      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
-                         "signout_mode=no_confirmation",
-                         signin::kDiceProtocolVersion, client_id.c_str()),
-      dice_request_header_);
-
-  // Check that the token was requested and added to the token service.
-  SendRefreshTokenResponse();
-  EXPECT_TRUE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
-  // Sync should not be enabled.
-  EXPECT_TRUE(GetSigninManager()->GetAuthenticatedAccountId().empty());
-  EXPECT_TRUE(GetSigninManager()->GetAccountIdForAuthInProgress().empty());
-
-  EXPECT_EQ(1, reconcilor_blocked_count_);
-  WaitForReconcilorUnblockedCount(1);
-  EXPECT_EQ(1, reconcilor_started_count_);
 }
 
 IN_PROC_BROWSER_TEST_F(DicePrepareMigrationBrowserTest, Signout) {
@@ -941,8 +946,7 @@ IN_PROC_BROWSER_TEST_F(DicePrepareMigrationBrowserTest, Signout) {
 
 // Tests that Sync is enabled if the ENABLE_SYNC response is received after the
 // refresh token.
-IN_PROC_BROWSER_TEST_F(DicePrepareMigrationChromeSynEndpointBrowserTest,
-                       EnableSyncAfterToken) {
+IN_PROC_BROWSER_TEST_F(DicePrepareMigrationBrowserTest, EnableSyncAfterToken) {
   EXPECT_EQ(0, reconcilor_started_count_);
 
   // Signin using the Chrome Sync endpoint.
@@ -955,16 +959,21 @@ IN_PROC_BROWSER_TEST_F(DicePrepareMigrationChromeSynEndpointBrowserTest,
   SendRefreshTokenResponse();
   EXPECT_TRUE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
 
-  // Check that the Dice request header was sent, with no signout confirmation.
-  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
-  EXPECT_EQ(
-      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
-                         "signout_mode=no_confirmation",
-                         signin::kDiceProtocolVersion, client_id.c_str()),
-      dice_request_header_);
-
   // Receive ENABLE_SYNC.
   SendEnableSyncResponse();
+
+  // Check that the Dice request header was sent, with no signout confirmation.
+  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
+  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                               "signin_mode=all_accounts,"
+                               "signout_mode=no_confirmation",
+                               signin::kDiceProtocolVersion, client_id.c_str(),
+                               GetDeviceId().c_str()),
+            dice_request_header_);
+
+  ui_test_utils::UrlLoadObserver ntp_url_observer(
+      GURL(chrome::kChromeSearchLocalNtpUrl),
+      content::NotificationService::AllSources());
 
   WaitForSigninSucceeded();
   EXPECT_EQ(GetMainAccountID(),
@@ -975,9 +984,7 @@ IN_PROC_BROWSER_TEST_F(DicePrepareMigrationChromeSynEndpointBrowserTest,
   EXPECT_EQ(1, reconcilor_started_count_);
 
   // Check that the tab was navigated to the NTP.
-  ui_test_utils::UrlLoadObserver ntp_url_observer(
-      GURL(chrome::kChromeUINewTabURL),
-      content::NotificationService::AllSources());
+  ntp_url_observer.Wait();
 
   // Dismiss the Sync confirmation UI.
   EXPECT_TRUE(login_ui_test_utils::DismissSyncConfirmationDialog(
@@ -986,9 +993,12 @@ IN_PROC_BROWSER_TEST_F(DicePrepareMigrationChromeSynEndpointBrowserTest,
 
 // Tests that Sync is enabled if the ENABLE_SYNC response is received before the
 // refresh token.
-IN_PROC_BROWSER_TEST_F(DicePrepareMigrationChromeSynEndpointBrowserTest,
-                       EnableSyncBeforeToken) {
+IN_PROC_BROWSER_TEST_F(DicePrepareMigrationBrowserTest, EnableSyncBeforeToken) {
   EXPECT_EQ(0, reconcilor_started_count_);
+
+  ui_test_utils::UrlLoadObserver enable_sync_url_observer(
+      https_server_.GetURL(kEnableSyncURL),
+      content::NotificationService::AllSources());
 
   // Signin using the Chrome Sync endpoint.
   browser()->signin_view_controller()->ShowSignin(
@@ -998,22 +1008,25 @@ IN_PROC_BROWSER_TEST_F(DicePrepareMigrationChromeSynEndpointBrowserTest,
   // Receive ENABLE_SYNC.
   SendEnableSyncResponse();
   // Wait for the page to be fully loaded.
-  ui_test_utils::UrlLoadObserver enable_sync_url_observer(
-      https_server_.GetURL(kEnableSyncURL),
-      content::NotificationService::AllSources());
-
-  // Check that the Dice request header was sent, with no signout confirmation.
-  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
-  EXPECT_EQ(
-      base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
-                         "signout_mode=no_confirmation",
-                         signin::kDiceProtocolVersion, client_id.c_str()),
-      dice_request_header_);
+  enable_sync_url_observer.Wait();
 
   // Receive token.
   EXPECT_FALSE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
   SendRefreshTokenResponse();
   EXPECT_TRUE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
+
+  // Check that the Dice request header was sent, with no signout confirmation.
+  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
+  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                               "signin_mode=all_accounts,"
+                               "signout_mode=no_confirmation",
+                               signin::kDiceProtocolVersion, client_id.c_str(),
+                               GetDeviceId().c_str()),
+            dice_request_header_);
+
+  ui_test_utils::UrlLoadObserver ntp_url_observer(
+      GURL(chrome::kChromeSearchLocalNtpUrl),
+      content::NotificationService::AllSources());
 
   WaitForSigninSucceeded();
   EXPECT_EQ(GetMainAccountID(),
@@ -1024,9 +1037,7 @@ IN_PROC_BROWSER_TEST_F(DicePrepareMigrationChromeSynEndpointBrowserTest,
   EXPECT_EQ(1, reconcilor_started_count_);
 
   // Check that the tab was navigated to the NTP.
-  ui_test_utils::UrlLoadObserver ntp_url_observer(
-      GURL(chrome::kChromeUINewTabURL),
-      content::NotificationService::AllSources());
+  ntp_url_observer.Wait();
 
   // Dismiss the Sync confirmation UI.
   EXPECT_TRUE(login_ui_test_utils::DismissSyncConfirmationDialog(

@@ -6,7 +6,7 @@ import("//build/config/features.gni")
 import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
 import("//pdf/features.gni")
-import("//printing/features/features.gni")
+import("//printing/buildflags/buildflags.gni")
 import("//testing/test.gni")
 if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
@@ -38,6 +38,8 @@ component("printing") {
     "metafile_skia_wrapper.cc",
     "metafile_skia_wrapper.h",
     "native_drawing_context.h",
+    "nup_parameters.cc",
+    "nup_parameters.h",
     "page_number.cc",
     "page_number.h",
     "page_range.cc",
@@ -79,7 +81,7 @@ component("printing") {
   defines = [ "PRINTING_IMPLEMENTATION" ]
 
   public_deps = [
-    "//printing/features",
+    "//printing/buildflags",
   ]
   deps = [
     "//base",
@@ -110,6 +112,7 @@ component("printing") {
     }
     libs = [
       "AppKit.framework",
+      "QuartzCore.framework",
       "ApplicationServices.framework",
       "CoreFoundation.framework",
       "CoreGraphics.framework",
@@ -229,13 +232,6 @@ component("printing") {
       "printing_context_linux.h",
     ]
   }
-
-  if (!is_android) {
-    sources += [
-      "pdf_transform.cc",
-      "pdf_transform.h",
-    ]
-  }
 }
 
 static_library("test_support") {
@@ -268,6 +264,7 @@ static_library("test_support") {
 test("printing_unittests") {
   sources = [
     "emf_win_unittest.cc",
+    "nup_parameters_unittest.cc",
     "page_number_unittest.cc",
     "page_range_unittest.cc",
     "page_setup_unittest.cc",
@@ -288,10 +285,6 @@ test("printing_unittests") {
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
   ]
-
-  if (!is_android) {
-    sources += [ "pdf_transform_unittest.cc" ]
-  }
 
   if (is_win || is_mac) {
     sources += [ "printed_document_unittest.cc" ]

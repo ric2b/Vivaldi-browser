@@ -4,20 +4,36 @@
 
 module mojom;
 
+import "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom";
+
+// Identical to content::Visibility.
+enum LifecycleUnitVisibility {
+  HIDDEN = 0,
+  OCCLUDED = 1,
+  VISIBLE = 2,
+};
+
 // Discard related information about a single tab in a browser.
 struct TabDiscardsInfo {
   // The URL associated with the tab. This corresponds to GetLastCommittedURL,
   // and is also what is visible in the Omnibox for a given tab.
   string tab_url;
-  // The URL of the favicon being displayed for a tab.
-  string favicon_url;
   // The title of the tab, as displayed on the tab itself.
   string title;
-  // If the tab is currently using media functionality (casting, WebRTC, playing
-  // audio, etc) this is true.
-  bool is_media;
-  // If the tab is currently discarded, this is true.
-  bool is_discarded;
+  // The visibility of the LifecycleUnit.
+  LifecycleUnitVisibility visibility;
+  // The loading state of the LifecycleUnit.
+  LifecycleUnitLoadingState loading_state;
+  // The state of the LifecycleUnit.
+  LifecycleUnitState state;
+  // Whether the tab can be frozen.
+  bool can_freeze;
+  // List of human-readable reasons why a tab can't be frozen.
+  array<string> cannot_freeze_reasons;
+  // Whether the tab can be discarded.
+  bool can_discard;
+  // List of human-readable reasons why a tab can't be discarded.
+  array<string> cannot_discard_reasons;
   // The number of times this tab has been discarded in the current browser
   // session.
   int32 discard_count;
@@ -33,6 +49,13 @@ struct TabDiscardsInfo {
   // This can be manipulated by the chrome://discards UI, or via the discards
   // extension API.
   bool is_auto_discardable;
+  // True if a reactivation score is calculated for the tab. Reactivation score
+  // can be predicted only for background tabs.
+  bool has_reactivation_score;
+  // Tab Ranker reactivation score, if |has_reactivation_score| is true.
+  double reactivation_score;
+  // Site engagement score.
+  double site_engagement_score;
 };
 
 // Interface for providing information about discards. Lives in the browser
@@ -52,6 +75,12 @@ interface DiscardsDetailsProvider {
   // handlers will not be run, and the tab will be unloaded with prejudice.
   // Invokes a callback when the discard is complete.
   DiscardById(int32 tab_id, bool urgent) => ();
+
+  // Freezes a tab given its |tab_id|.
+  FreezeById(int32 tab_id);
+
+  // Loads a tab given its |tab_id|.
+  LoadById(int32 tab_id);
 
   // Discards the least important tab. If |urgent| is specified the unload
   // handlers will not be run, and the tab will be unloaded with prejudice.

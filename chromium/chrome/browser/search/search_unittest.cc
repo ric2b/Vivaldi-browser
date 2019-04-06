@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/search/instant_service.h"
@@ -84,7 +83,7 @@ class SearchTest : public BrowserWithTestWindowTest {
     data.alternate_urls.push_back("http://foo.com/alt#quux={searchTerms}");
 
     TemplateURL* template_url =
-        template_url_service->Add(base::MakeUnique<TemplateURL>(data));
+        template_url_service->Add(std::make_unique<TemplateURL>(data));
     template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
   }
 
@@ -292,12 +291,11 @@ TEST_F(SearchTest, InstantNTPCustomNavigationEntry) {
         browser()->tab_strip_model()->GetWebContentsAt(0);
     content::NavigationController& controller = contents->GetController();
     controller.SetTransientEntry(
-        controller.CreateNavigationEntry(GURL("chrome://blank"),
-                                         content::Referrer(),
-                                         ui::PAGE_TRANSITION_LINK,
-                                         false,
-                                         std::string(),
-                                         contents->GetBrowserContext()));
+        content::NavigationController::CreateNavigationEntry(
+            GURL("chrome://blank"), content::Referrer(),
+            ui::PAGE_TRANSITION_LINK, false, std::string(),
+            contents->GetBrowserContext(),
+            nullptr /* blob_url_loader_factory */));
     // The visible entry is now chrome://blank, but this is still an NTP.
     EXPECT_FALSE(NavEntryIsInstantNTP(contents, controller.GetVisibleEntry()));
     EXPECT_EQ(test.expected_result,
@@ -428,7 +426,7 @@ TEST_F(SearchTest, SearchProviderWithPort) {
   data.alternate_urls.push_back("https://[::1]:1993/alt#quux={searchTerms}");
 
   TemplateURL* template_url =
-      template_url_service->Add(base::MakeUnique<TemplateURL>(data));
+      template_url_service->Add(std::make_unique<TemplateURL>(data));
   template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
 
   EXPECT_TRUE(ShouldAssignURLToInstantRenderer(

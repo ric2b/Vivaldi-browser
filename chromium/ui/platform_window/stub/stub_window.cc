@@ -53,6 +53,10 @@ void StubWindow::SetCapture() {
 void StubWindow::ReleaseCapture() {
 }
 
+bool StubWindow::HasCapture() const {
+  return false;
+}
+
 void StubWindow::ToggleFullscreen() {
 }
 
@@ -63,6 +67,10 @@ void StubWindow::Minimize() {
 }
 
 void StubWindow::Restore() {
+}
+
+PlatformWindowState StubWindow::GetPlatformWindowState() const {
+  return PlatformWindowState::PLATFORM_WINDOW_STATE_UNKNOWN;
 }
 
 void StubWindow::SetCursor(PlatformCursor cursor) {

@@ -14,6 +14,7 @@
 #include "media/mojo/interfaces/video_decoder.mojom.h"
 #include "media/video/video_decode_accelerator.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "ui/gfx/color_space.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -37,17 +38,21 @@ class MojoVideoDecoder final : public VideoDecoder,
                    GpuVideoAcceleratorFactories* gpu_factories,
                    MediaLog* media_log,
                    mojom::VideoDecoderPtr remote_decoder,
-                   const RequestOverlayInfoCB& request_overlay_info_cb);
+                   const RequestOverlayInfoCB& request_overlay_info_cb,
+                   const gfx::ColorSpace& target_color_space);
   ~MojoVideoDecoder() final;
 
   // VideoDecoder implementation.
   std::string GetDisplayName() const final;
-  void Initialize(const VideoDecoderConfig& config,
-                  bool low_delay,
-                  CdmContext* cdm_context,
-                  const InitCB& init_cb,
-                  const OutputCB& output_cb) final;
-  void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+  bool IsPlatformDecoder() const final;
+  void Initialize(
+      const VideoDecoderConfig& config,
+      bool low_delay,
+      CdmContext* cdm_context,
+      const InitCB& init_cb,
+      const OutputCB& output_cb,
+      const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) final;
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb) final;
   void Reset(const base::Closure& closure) final;
   bool NeedsBitstreamConversion() const final;
@@ -110,6 +115,7 @@ class MojoVideoDecoder final : public VideoDecoder,
   mojo::AssociatedBinding<mojom::MediaLog> media_log_binding_;
   RequestOverlayInfoCB request_overlay_info_cb_;
   bool overlay_info_requested_ = false;
+  gfx::ColorSpace target_color_space_;
 
   bool initialized_ = false;
   bool needs_bitstream_conversion_ = false;

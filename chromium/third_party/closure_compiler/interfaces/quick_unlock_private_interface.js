@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,28 @@ assertNotReached('Interface file for Closure Compiler should not be executed.');
 function QuickUnlockPrivate() {}
 
 QuickUnlockPrivate.prototype = {
+  /**
+   * Returns a token that can be used for future operations and the number of
+   * seconds until the token expires.
+   * @param {string} accountPassword The account password for the logged in
+   *     user.
+   * @param {function(!chrome.quickUnlockPrivate.TokenInfo):void} onComplete
+   * @see https://developer.chrome.com/extensions/quickUnlockPrivate#method-getAuthToken
+   */
+  getAuthToken: assertNotReached,
+
+  /**
+   * Sets the lock screen enabled state. NOTE: The lock enabled state is
+   * reflected in the settings.enable_screen_lock pref, which can be read but
+   * not written using the settings_private API (which also provides policy
+   * information). This API must be used to change the pref.
+   * @param {string} token The token returned by $(ref:getAuthToken).
+   * @param {boolean} enabled
+   * @param {function():void=} onComplete
+   * @see https://developer.chrome.com/extensions/quickUnlockPrivate#method-setLockScreenEnabled
+   */
+  setLockScreenEnabled: assertNotReached,
+
   /**
    * Returns the set of quick unlock modes that are available for the user to
    * use. Some quick unlock modes may be disabled by policy.
@@ -57,16 +79,14 @@ QuickUnlockPrivate.prototype = {
 
   /**
    * Update the set of quick unlock modes that are currently active/enabled.
-   * @param {string} accountPassword The password associated with the account
-   *     (e.g. the GAIA password). This is required to change the quick unlock
-   *     credentials.
+   * @param {string} token The token returned by $(ref:getAuthToken).
    * @param {!Array<!chrome.quickUnlockPrivate.QuickUnlockMode>} modes The quick
    *     unlock modes that should be active.
    * @param {!Array<string>} credentials The associated credential for each
-   *     mode. To keep the credential the same for the associated mode, pass an
-   *     empty string.
-   * @param {function(boolean):void} onComplete Called with true if the quick
-   *     unlock state was updated, false otherwise. The update is treated as a
+   *     mode. To keep the     credential the same for the associated mode, pass
+   *     an empty string.
+   * @param {function():void} onComplete Called with true if the quick unlock
+   *     state was updated,     false otherwise. The update is treated as a
    *     single atomic operation.
    * @see https://developer.chrome.com/extensions/quickUnlockPrivate#method-setModes
    */

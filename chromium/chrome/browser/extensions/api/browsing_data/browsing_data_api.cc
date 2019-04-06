@@ -55,6 +55,10 @@ const char kServiceWorkersKey[] = "serviceWorkers";
 const char kCacheStorageKey[] = "cacheStorage";
 const char kWebSQLKey[] = "webSQL";
 
+// Vivaldi addition:
+const char kSiteUsageDataKey[] = "siteUsageData";
+
+
 // Option keys.
 const char kExtensionsKey[] = "extension";
 const char kOriginTypesKey[] = "originTypes";
@@ -108,6 +112,11 @@ int MaskForKey(const char* key) {
   if (strcmp(key, extension_browsing_data_api_constants::kWebSQLKey) == 0)
     return content::BrowsingDataRemover::DATA_TYPE_WEB_SQL;
 
+  // Vivaldi addition:
+  if (strcmp(key, extension_browsing_data_api_constants::kSiteUsageDataKey)
+      == 0)
+    return ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA;
+
   return 0;
 }
 
@@ -136,11 +145,8 @@ bool BrowsingDataSettingsFunction::isDataTypeSelected(
 ExtensionFunction::ResponseAction BrowsingDataSettingsFunction::Run() {
   prefs_ = Profile::FromBrowserContext(browser_context())->GetPrefs();
 
-  ClearBrowsingDataTab tab =
-      base::FeatureList::IsEnabled(features::kTabsInCbd)
-          ? static_cast<ClearBrowsingDataTab>(prefs_->GetInteger(
-                browsing_data::prefs::kLastClearBrowsingDataTab))
-          : ClearBrowsingDataTab::ADVANCED;
+  ClearBrowsingDataTab tab = static_cast<ClearBrowsingDataTab>(
+      prefs_->GetInteger(browsing_data::prefs::kLastClearBrowsingDataTab));
 
   // Fill origin types.
   // The "cookies" and "hosted apps" UI checkboxes both map to

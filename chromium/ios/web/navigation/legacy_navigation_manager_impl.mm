@@ -65,11 +65,9 @@ void LegacyNavigationManagerImpl::OnNavigationItemCommitted() {
   details.previous_item_index = [session_controller_ previousItemIndex];
   if (details.previous_item_index >= 0) {
     DCHECK([session_controller_ previousItem]);
-    details.previous_url = [session_controller_ previousItem]->GetURL();
     details.is_in_page = IsFragmentChangeNavigationBetweenUrls(
-        details.previous_url, details.item->GetURL());
+        [session_controller_ previousItem]->GetURL(), details.item->GetURL());
   } else {
-    details.previous_url = GURL();
     details.is_in_page = NO;
   }
 
@@ -90,8 +88,12 @@ void LegacyNavigationManagerImpl::AddTransientItem(const GURL& url) {
   NavigationItem* item = GetPendingItem();
   if (!item)
     item = GetLastCommittedNonAppSpecificItem();
-  DCHECK(item->GetUserAgentType() != UserAgentType::NONE);
-  GetTransientItem()->SetUserAgentType(item->GetUserAgentType());
+  // |item| may still be nullptr if NTP is the only entry in the session.
+  // See https://crbug.com/822908 for details.
+  if (item) {
+    DCHECK(item->GetUserAgentType() != UserAgentType::NONE);
+    GetTransientItem()->SetUserAgentType(item->GetUserAgentType());
+  }
 }
 
 void LegacyNavigationManagerImpl::AddPendingItem(
@@ -255,7 +257,10 @@ int LegacyNavigationManagerImpl::GetIndexForOffset(int offset) const {
       // even aware existed, it is necessary to pass over pages that would
       // immediately result in a redirect (the item *before* the redirected
       // page).
-      while (result > 0 && IsRedirectItemAtIndex(result)) {
+      while (result > 0) {
+        const NavigationItem* item = GetItemAtIndex(result);
+        if (!ui::PageTransitionIsRedirect(item->GetTransitionType()))
+          break;
         --result;
       }
       --result;
@@ -271,7 +276,10 @@ int LegacyNavigationManagerImpl::GetIndexForOffset(int offset) const {
       ++result;
       --offset;
       // As with going back, skip over redirects.
-      while (result + 1 < GetItemCount() && IsRedirectItemAtIndex(result + 1)) {
+      while (result + 1 < GetItemCount()) {
+        const NavigationItem* item = GetItemAtIndex(result + 1);
+        if (!ui::PageTransitionIsRedirect(item->GetTransitionType()))
+          break;
         ++result;
       }
     }
@@ -298,12 +306,12 @@ NavigationItemImpl* LegacyNavigationManagerImpl::GetTransientItemImpl() const {
   return [session_controller_ transientItem];
 }
 
-void LegacyNavigationManagerImpl::FinishGoToIndex(
-    int index,
-    NavigationInitiationType type) {
+void LegacyNavigationManagerImpl::FinishGoToIndex(int index,
+                                                  NavigationInitiationType type,
+                                                  bool has_user_gesture) {
   const ScopedNavigationItemImplList& items = [session_controller_ items];
   NavigationItem* to_item = items[index].get();
-  NavigationItem* previous_item = [session_controller_ currentItem];
+  NavigationItem* previous_item = GetLastCommittedItem();
 
   to_item->SetTransitionType(ui::PageTransitionFromInt(
       to_item->GetTransitionType() | ui::PAGE_TRANSITION_FORWARD_BACK));
@@ -313,19 +321,12 @@ void LegacyNavigationManagerImpl::FinishGoToIndex(
                                                        andItem:to_item];
   if (same_document_navigation) {
     [session_controller_ goToItemAtIndex:index discardNonCommittedItems:YES];
-    delegate_->OnGoToIndexSameDocumentNavigation(type);
+    delegate_->OnGoToIndexSameDocumentNavigation(type, has_user_gesture);
   } else {
     [session_controller_ discardNonCommittedItems];
     [session_controller_ setPendingItemIndex:index];
     delegate_->LoadCurrentItem();
   }
-}
-
-bool LegacyNavigationManagerImpl::IsRedirectItemAtIndex(int index) const {
-  DCHECK_GE(index, 0);
-  DCHECK_LT(index, GetItemCount());
-  ui::PageTransition transition = GetItemAtIndex(index)->GetTransitionType();
-  return transition & ui::PAGE_TRANSITION_IS_REDIRECT_MASK;
 }
 
 int LegacyNavigationManagerImpl::GetPreviousItemIndex() const {

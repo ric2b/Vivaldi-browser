@@ -55,6 +55,9 @@ class FakeIntentHelperInstance : public mojom::IntentHelperInstance {
     return handled_intents_;
   }
 
+  std::vector<Broadcast> GetBroadcastsForAction(
+      const std::string& action) const;
+
   // Sets a list of intent handlers to be returned in response to
   // RequestIntentHandlerList() calls with intents containing |action|.
   void SetIntentHandlers(
@@ -107,6 +110,10 @@ class FakeIntentHelperInstance : public mojom::IntentHelperInstance {
                      const std::string& package_name,
                      const std::string& cls,
                      const std::string& extras) override;
+
+  void ClassifySelection(const std::string& text,
+                         ::arc::mojom::ScaleFactor scale_factor,
+                         ClassifySelectionCallback callback) override;
 
  private:
   std::vector<Broadcast> broadcasts_;

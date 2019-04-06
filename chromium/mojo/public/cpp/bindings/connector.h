@@ -5,6 +5,7 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_CONNECTOR_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_CONNECTOR_H_
 
+#include <atomic>
 #include <memory>
 #include <utility>
 
@@ -234,7 +235,7 @@ class MOJO_CPP_BINDINGS_EXPORT Connector : public MessageReceiver {
   std::unique_ptr<SimpleWatcher> handle_watcher_;
   base::Optional<HandleSignalTracker> peer_remoteness_tracker_;
 
-  bool error_ = false;
+  std::atomic<bool> error_;
   bool drop_writes_ = false;
   bool enforce_errors_from_incoming_receiver_ = true;
 
@@ -269,6 +270,10 @@ class MOJO_CPP_BINDINGS_EXPORT Connector : public MessageReceiver {
   // |true| iff the Connector is currently dispatching a message. Used to detect
   // nested dispatch operations.
   bool is_dispatching_ = false;
+
+#if defined(ENABLE_IPC_FUZZER)
+  std::unique_ptr<MessageReceiver> message_dumper_;
+#endif
 
   // Create a single weak ptr and use it everywhere, to avoid the malloc/free
   // cost of creating a new weak ptr whenever it is needed.

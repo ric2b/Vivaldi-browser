@@ -9,7 +9,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -28,6 +27,7 @@
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/test_extension_dir.h"
 
 ExtensionMessageBubbleBrowserTest::ExtensionMessageBubbleBrowserTest() {
 }
@@ -203,7 +203,7 @@ void ExtensionMessageBubbleBrowserTest::TestUninstallDangerousExtension() {
                         .AppendASCII("proxy")
                         .AppendASCII("register"));
   // Wait for it to complete.
-  listener.WaitUntilSatisfied();
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
 
   // Create a second browser with the extension installed - the bubble will be
   // set to show.
@@ -219,7 +219,7 @@ void ExtensionMessageBubbleBrowserTest::TestUninstallDangerousExtension() {
 }
 
 void ExtensionMessageBubbleBrowserTest::PreBubbleShowsOnStartup() {
-  LoadExtension(test_data_dir_.AppendASCII("good_unpacked"));
+  LoadExtension(test_data_dir_.AppendASCII("simple_with_popup"));
 }
 
 void ExtensionMessageBubbleBrowserTest::TestBubbleShowsOnStartup() {
@@ -342,7 +342,7 @@ void ExtensionMessageBubbleBrowserTest::
 
 void ExtensionMessageBubbleBrowserTest::TestBubbleWithMultipleWindows() {
   CheckBubbleIsNotPresent(browser(), false, false);
-  LoadExtension(test_data_dir_.AppendASCII("good_unpacked"));
+  LoadExtension(test_data_dir_.AppendASCII("simple_with_popup"));
   Browser* second_browser = new Browser(Browser::CreateParams(profile(), true));
   ASSERT_TRUE(second_browser);
   second_browser->window()->Show();
@@ -364,7 +364,7 @@ void ExtensionMessageBubbleBrowserTest::TestBubbleWithMultipleWindows() {
 
 void ExtensionMessageBubbleBrowserTest::TestClickingLearnMoreButton() {
   CheckBubbleIsNotPresent(browser(), false, false);
-  LoadExtension(test_data_dir_.AppendASCII("good_unpacked"));
+  LoadExtension(test_data_dir_.AppendASCII("simple_with_popup"));
   Browser* second_browser = new Browser(Browser::CreateParams(profile(), true));
   ASSERT_TRUE(second_browser);
   second_browser->window()->Show();
@@ -385,7 +385,7 @@ void ExtensionMessageBubbleBrowserTest::TestClickingLearnMoreButton() {
 void ExtensionMessageBubbleBrowserTest::TestClickingActionButton() {
   CheckBubbleIsNotPresent(browser(), false, false);
   const extensions::Extension* extension =
-      LoadExtension(test_data_dir_.AppendASCII("good_unpacked"));
+      LoadExtension(test_data_dir_.AppendASCII("simple_with_popup"));
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile());
   std::string id = extension->id();
@@ -405,7 +405,7 @@ void ExtensionMessageBubbleBrowserTest::TestClickingActionButton() {
 void ExtensionMessageBubbleBrowserTest::TestClickingDismissButton() {
   CheckBubbleIsNotPresent(browser(), false, false);
   const extensions::Extension* extension =
-      LoadExtension(test_data_dir_.AppendASCII("good_unpacked"));
+      LoadExtension(test_data_dir_.AppendASCII("simple_with_popup"));
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile());
   std::string id = extension->id();

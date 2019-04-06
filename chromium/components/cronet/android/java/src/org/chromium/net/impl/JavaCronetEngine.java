@@ -26,8 +26,10 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
-
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 /**
  * {@link java.net.HttpURLConnection} backed CronetEngine.
  *
@@ -47,34 +49,40 @@ public final class JavaCronetEngine extends CronetEngineBase {
         final int threadPriority =
                 builder.threadPriority(THREAD_PRIORITY_BACKGROUND + THREAD_PRIORITY_MORE_FAVORABLE);
         this.mUserAgent = builder.getUserAgent();
-        this.mExecutorService = Executors.newCachedThreadPool(new ThreadFactory() {
-            @Override
-            public Thread newThread(final Runnable r) {
-                return Executors.defaultThreadFactory().newThread(new Runnable() {
+        this.mExecutorService = new ThreadPoolExecutor(10, 20, 50, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<Runnable>(), new ThreadFactory() {
                     @Override
-                    public void run() {
-                        Thread.currentThread().setName("JavaCronetEngine");
-                        android.os.Process.setThreadPriority(threadPriority);
-                        r.run();
+                    public Thread newThread(final Runnable r) {
+                        return Executors.defaultThreadFactory().newThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Thread.currentThread().setName("JavaCronetEngine");
+                                android.os.Process.setThreadPriority(threadPriority);
+                                r.run();
+                            }
+                        });
                     }
                 });
-            }
-        });
     }
 
     @Override
     public UrlRequestBase createRequest(String url, UrlRequest.Callback callback, Executor executor,
             int priority, Collection<Object> connectionAnnotations, boolean disableCache,
-            boolean disableConnectionMigration, boolean allowDirectExecutor) {
-        return new JavaUrlRequest(
-                callback, mExecutorService, executor, url, mUserAgent, allowDirectExecutor);
+            boolean disableConnectionMigration, boolean allowDirectExecutor,
+            boolean trafficStatsTagSet, int trafficStatsTag, boolean trafficStatsUidSet,
+            int trafficStatsUid, RequestFinishedInfo.Listener requestFinishedListener) {
+        return new JavaUrlRequest(callback, mExecutorService, executor, url, mUserAgent,
+                allowDirectExecutor, trafficStatsTagSet, trafficStatsTag, trafficStatsUidSet,
+                trafficStatsUid);
     }
 
     @Override
     protected ExperimentalBidirectionalStream createBidirectionalStream(String url,
             BidirectionalStream.Callback callback, Executor executor, String httpMethod,
             List<Map.Entry<String, String>> requestHeaders, @StreamPriority int priority,
-            boolean delayRequestHeadersUntilFirstFlush, Collection<Object> connectionAnnotations) {
+            boolean delayRequestHeadersUntilFirstFlush, Collection<Object> connectionAnnotations,
+            boolean trafficStatsTagSet, int trafficStatsTag, boolean trafficStatsUidSet,
+            int trafficStatsUid) {
         throw new UnsupportedOperationException(
                 "Can't create a bidi stream - httpurlconnection doesn't have those APIs");
     }
@@ -105,11 +113,6 @@ public final class JavaCronetEngine extends CronetEngineBase {
 
     @Override
     public void stopNetLog() {}
-
-    @Override
-    public String getCertVerifierData(long timeout) {
-        return "";
-    }
 
     @Override
     public byte[] getGlobalMetricsDeltas() {

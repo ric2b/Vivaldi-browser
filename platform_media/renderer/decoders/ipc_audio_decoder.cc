@@ -232,7 +232,7 @@ void IPCAudioDecoder::ReadInternal() {
 }
 
 void IPCAudioDecoder::DataReady(DemuxerStream::Status status,
-                                const scoped_refptr<DecoderBuffer>& buffer) {
+                                scoped_refptr<DecoderBuffer> buffer) {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(factory_.MediaTaskRunner()->RunsTasksInCurrentSequence());
 

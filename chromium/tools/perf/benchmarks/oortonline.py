@@ -13,7 +13,7 @@ from telemetry.timeline import chrome_trace_config
 from telemetry.web_perf import timeline_based_measurement
 
 
-@benchmark.Owner(emails=['ulan@chromium.org'])
+@benchmark.Info(emails=['ulan@chromium.org'])
 class OortOnlineTBMv2(perf_benchmark.PerfBenchmark):
   """OortOnline benchmark that measures WebGL and V8 performance.
   URL: http://oortonline.gl/#run
@@ -63,9 +63,9 @@ class OortOnlineTBMv2(perf_benchmark.PerfBenchmark):
     return 'oortonline_tbmv2'
 
   @classmethod
-  def ValueCanBeAddedPredicate(cls, value, _):
-    if 'memory:chrome' in value.name:
-      return bool(cls._V8_AND_OVERALL_MEMORY_RE.search(value.name))
-    if 'animation ' in value.name:
-      return 'throughput' in value.name or 'frameTimeDiscrepancy' in value.name
-    return 'v8' in value.name
+  def ShouldAddValue(cls, name, _):
+    if 'memory:chrome' in name:
+      return bool(cls._V8_AND_OVERALL_MEMORY_RE.search(name))
+    if 'animation ' in name:
+      return 'throughput' in name or 'frameTimeDiscrepancy' in name
+    return 'v8' in name

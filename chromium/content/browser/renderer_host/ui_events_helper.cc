@@ -6,9 +6,8 @@
 
 #include <stdint.h>
 
-#include "base/memory/ptr_util.h"
 #include "content/common/input/web_touch_event_traits.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/event.h"
@@ -65,9 +64,9 @@ bool MakeUITouchEventsFromWebTouchEvents(
   }
 
   int flags = ui::WebEventModifiersToEventFlags(touch.GetModifiers());
-  base::TimeTicks timestamp =
-      ui::EventTimeStampFromSeconds(touch.TimeStampSeconds());
-  for (unsigned i = 0; i < touch.touches_length; ++i) {
+  base::TimeTicks timestamp = touch.TimeStamp();
+  unsigned count = 0;
+  for (unsigned i = 0; i < blink::WebTouchEvent::kTouchesLengthCap; ++i) {
     const blink::WebTouchPoint& point = touch.touches[i];
     if (WebTouchPointStateToEventType(point.state) != type)
       continue;
@@ -86,6 +85,8 @@ bool MakeUITouchEventsFromWebTouchEvents(
     uievent->set_root_location_f(location);
     uievent->set_latency(touch_with_latency.latency);
     list->push_back(std::move(uievent));
+    if (++count >= touch.touches_length)
+      break;
   }
   return true;
 }

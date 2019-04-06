@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
@@ -14,7 +13,6 @@
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/offline_pages/android/background_scheduler_bridge.h"
 #include "chrome/browser/offline_pages/android/cct_request_observer.h"
-#include "chrome/browser/offline_pages/android/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/offline_pages/android/load_termination_listener_impl.h"
 #include "chrome/browser/offline_pages/background_loader_offliner.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
@@ -28,7 +26,6 @@
 #include "components/offline_pages/core/background/request_queue_store.h"
 #include "components/offline_pages/core/background/request_queue_store_sql.h"
 #include "components/offline_pages/core/background/scheduler.h"
-#include "components/offline_pages/core/downloads/download_notifying_observer.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_pages_ukm_reporter.h"
 #include "net/nqe/network_quality_estimator.h"
@@ -62,7 +59,7 @@ KeyedService* RequestCoordinatorFactory::BuildServiceInstanceFor(
       OfflinePageModelFactory::GetInstance()->GetForBrowserContext(context);
 
   std::unique_ptr<LoadTerminationListenerImpl> load_termination_listener =
-      base::MakeUnique<LoadTerminationListenerImpl>();
+      std::make_unique<LoadTerminationListenerImpl>();
   offliner.reset(new BackgroundLoaderOffliner(
       context, policy.get(), model, std::move(load_termination_listener)));
 
@@ -86,10 +83,6 @@ KeyedService* RequestCoordinatorFactory::BuildServiceInstanceFor(
   RequestCoordinator* request_coordinator = new RequestCoordinator(
       std::move(policy), std::move(offliner), std::move(queue),
       std::move(scheduler), network_quality_estimator, std::move(ukm_reporter));
-
-  DownloadNotifyingObserver::CreateAndStartObserving(
-      request_coordinator,
-      base::MakeUnique<android::OfflinePageNotificationBridge>());
 
   CCTRequestObserver::AttachToRequestCoordinator(request_coordinator);
 

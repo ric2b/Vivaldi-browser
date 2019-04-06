@@ -11,7 +11,7 @@
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "third_party/WebKit/public/platform/WebSecurityStyle.h"
+#include "third_party/blink/public/platform/web_security_style.h"
 
 namespace content {
 class NavigationHandle;
@@ -46,6 +46,7 @@ class SecurityStateTabHelper
   security_state::MaliciousContentStatus GetMaliciousContentStatus() const;
   std::unique_ptr<security_state::VisibleSecurityState>
   GetVisibleSecurityState() const;
+  std::vector<std::string> GetSecureOriginsAndPatterns() const;
 
   // True if a console message has been logged about an omnibox warning shown
   // when sensitive input fields are shown on insecure HTTP pages. This message

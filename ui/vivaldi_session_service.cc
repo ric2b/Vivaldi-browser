@@ -30,7 +30,7 @@
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 //#include "extensions/browser/extension_function_dispatcher.h"
 
 #include "components/sessions/vivaldi_session_service_commands.h"
@@ -251,7 +251,7 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
       tab->GetController().GetDefaultSessionStorageNamespace();
   ScheduleCommand(sessions::CreateSessionStorageAssociatedCommand(
       session_tab_helper->session_id(),
-      session_storage_namespace->persistent_id()));
+      session_storage_namespace->id()));
 }
 
 void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser) {
@@ -296,7 +296,7 @@ bool VivaldiSessionService::Load(const base::FilePath& path,
 
   std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
   std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
-  SessionID::id_type active_window_id = 0;
+  SessionID active_window_id = SessionID::InvalidValue();
 
   if (Read(&commands)) {
     sessions::RestoreSessionFromCommands(commands, &valid_windows,
@@ -430,7 +430,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
   content::WebContents* web_contents = chrome::AddRestoredTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
       false,  // select
-      tab.pinned, true, session_storage_namespace.get(),
+      tab.pinned, true, base::TimeTicks(), session_storage_namespace.get(),
       tab.user_agent_override, true /* from_session_restore */, tab.ext_data);
   // Regression check: check that the tab didn't start loading right away. The
   // focused tab will be loaded by Browser, and TabLoader will load the rest.
@@ -456,7 +456,7 @@ void VivaldiSessionService::NotifySessionServiceOfRestoredTabs(
 
 Browser* VivaldiSessionService::ProcessSessionWindows(
     std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
-    SessionID::id_type active_window_id,
+    const SessionID& active_window_id,
     std::vector<SessionRestoreDelegate::RestoredTab>* created_contents) {
   DVLOG(1) << "ProcessSessionWindows " << windows->size();
 
@@ -485,7 +485,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
   bool has_visible_browser = false;
   for (auto i = windows->begin(); i != windows->end(); ++i) {
     if ((*i)->show_state != ui::SHOW_STATE_MINIMIZED ||
-        (*i)->window_id.id() == active_window_id)
+        (*i)->window_id == active_window_id)
       has_visible_browser = true;
   }
 
@@ -519,7 +519,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
             ? browser->tab_strip_model()->active_index()
             : std::max(0, std::min((*i)->selected_tab_index,
                                    static_cast<int>((*i)->tabs.size()) - 1));
-    if ((*i)->window_id.id() == active_window_id) {
+    if ((*i)->window_id == active_window_id) {
       browser_to_activate = browser;
     }
     browser->set_ext_data((*i)->ext_data);
@@ -617,7 +617,7 @@ std::unique_ptr<sessions::SessionCommand> VivaldiSessionService::ReadCommand() {
   // NOTE: command_size includes the size of the id, which is not part of
   // the contents of the SessionCommand.
   std::unique_ptr<sessions::SessionCommand> command =
-      base::MakeUnique<sessions::SessionCommand>(
+      std::make_unique<sessions::SessionCommand>(
           command_id, command_size - sizeof(id_type));
   if (command_size > sizeof(id_type)) {
     memcpy(command->contents(), &(buffer_[buffer_position_ + sizeof(id_type)]),

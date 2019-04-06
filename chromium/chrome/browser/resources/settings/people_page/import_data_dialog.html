@@ -21,7 +21,7 @@
       .description {
         align-items: center;
         display: flex;
-        min-height: var(--settings-row-min-height);
+        margin-top: 16px;
       }
 
       paper-spinner-lite {
@@ -34,8 +34,15 @@
         margin: auto;
         width: 100%;
       }
+
+      /* Prevent focus-outline to be chopped by the bottom of dialog body.
+         TODO(scottchen): find a more general way to solve this. */
+      .md-select {
+        margin-top: 2px;
+      }
+
     </style>
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}"
+    <cr-dialog id="dialog" close-text="$i18n{close}"
         ignore-popstate>
       <div slot="title">$i18n{importTitle}</div>
       <div slot="body">
@@ -54,16 +61,13 @@
 
         <div hidden$="[[hasImportStatus_(
               importStatusEnum_.SUCCEEDED, importStatus_)]]">
-          <span class="md-select-wrapper">
-            <select id="browserSelect" class="md-select"
-                aria-label="$i18n{importFromLabel}"
-                on-change="onBrowserProfileSelectionChange_">
-              <template is="dom-repeat" items="[[browserProfiles_]]">
-                <option value="[[item.index]]">[[item.name]]</option>
-              </template>
-            </select>
-            <span class="md-select-underline"></span>
-          </span>
+          <select id="browserSelect" class="md-select"
+              aria-label="$i18n{importFromLabel}"
+              on-change="onBrowserProfileSelectionChange_">
+            <template is="dom-repeat" items="[[browserProfiles_]]">
+              <option value="[[item.index]]">[[item.name]]</option>
+            </template>
+          </select>
           <div class="description">$i18n{importDescription}</div>
           <settings-checkbox
               hidden="[[!selected_.history]]"
@@ -104,7 +108,7 @@
                 importStatusEnum_.SUCCEEDED, importStatus_)]]"
             disabled="[[hasImportStatus_(
                 importStatusEnum_.IN_PROGRESS, importStatus_)]]"
-            on-tap="closeDialog_">
+            on-click="closeDialog_">
           $i18n{cancel}
         </paper-button>
         <paper-button id="import" class="action-button"
@@ -112,16 +116,16 @@
                 importStatusEnum_.SUCCEEDED, importStatus_)]]"
             disabled="[[shouldDisableImport_(
                 importStatus_, noImportDataTypeSelected_)]]"
-            on-tap="onActionButtonTap_">
+            on-click="onActionButtonTap_">
           [[getActionButtonText_(selected_)]]
         </paper-button>
 
         <paper-button id="done" class="action-button"
             hidden$="[[!hasImportStatus_(
                 importStatusEnum_.SUCCEEDED, importStatus_)]]"
-            on-tap="closeDialog_">$i18n{done}</paper-button>
+            on-click="closeDialog_">$i18n{done}</paper-button>
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
   <script src="import_data_dialog.js"></script>
 :</dom-module>

@@ -6,7 +6,9 @@
 #define COMPONENTS_METRICS_STABILITY_METRICS_HELPER_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/process/kill.h"
+#include "base/time/time.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -28,6 +30,13 @@ class StabilityMetricsHelper {
   // Clears the gathered stability metrics.
   void ClearSavedStabilityMetrics();
 
+  // Records a utility process launch with name |metrics_name|.
+  void BrowserUtilityProcessLaunched(const std::string& metrics_name);
+
+  // Records a utility process crash with name |metrics_name|.
+  void BrowserUtilityProcessCrashed(const std::string& metrics_name,
+                                    int exit_code);
+
   // Records a browser child process crash.
   void BrowserChildProcessCrashed();
 
@@ -37,7 +46,8 @@ class StabilityMetricsHelper {
   // Records a renderer process crash.
   void LogRendererCrash(bool was_extension_process,
                         base::TerminationStatus status,
-                        int exit_code);
+                        int exit_code,
+                        base::Optional<base::TimeDelta> uptime);
 
   // Records that a new renderer process was successfully launched.
   void LogRendererLaunched(bool was_extension_process);

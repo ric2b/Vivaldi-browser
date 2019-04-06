@@ -50,9 +50,7 @@ class BASE_EXPORT RunLoop {
   // recursive task processing is disabled.
   //
   // In general, nestable RunLoops are to be avoided. They are dangerous and
-  // difficult to get right, so please use with extreme caution. To further
-  // protect this: kNestableTasksAllowed RunLoops are only allowed on threads
-  // where IsNestingAllowedOnCurrentThread().
+  // difficult to get right, so please use with extreme caution.
   //
   // A specific example where this makes a difference is:
   // - The thread is running a RunLoop.
@@ -145,13 +143,6 @@ class BASE_EXPORT RunLoop {
   static void AddNestingObserverOnCurrentThread(NestingObserver* observer);
   static void RemoveNestingObserverOnCurrentThread(NestingObserver* observer);
 
-  // Returns true if nesting is allowed on this thread.
-  static bool IsNestingAllowedOnCurrentThread();
-
-  // Disallow nesting. After this is called, running a nested RunLoop or calling
-  // Add/RemoveNestingObserverOnCurrentThread() on this thread will crash.
-  static void DisallowNestingOnCurrentThread();
-
   // A RunLoop::Delegate is a generic interface that allows RunLoop to be
   // separate from the underlying implementation of the message loop for this
   // thread. It holds private state used by RunLoops on its associated thread.
@@ -160,11 +151,6 @@ class BASE_EXPORT RunLoop {
   // and RunLoop static methods can be used on it.
   class BASE_EXPORT Delegate {
    public:
-    // A Callback which returns true if the Delegate should return from the
-    // topmost Run() when it becomes idle. The Delegate is responsible for
-    // probing this when it becomes idle.
-    using ShouldQuitWhenIdleCallback = RepeatingCallback<bool(void)>;
-
     Delegate();
     virtual ~Delegate();
 
@@ -207,7 +193,6 @@ class BASE_EXPORT RunLoop {
     // have more than a few entries.
     using RunLoopStack = base::stack<RunLoop*, std::vector<RunLoop*>>;
 
-    bool allow_nesting_ = true;
     RunLoopStack active_run_loops_;
     ObserverList<RunLoop::NestingObserver> nesting_observers_;
 
@@ -218,8 +203,6 @@ class BASE_EXPORT RunLoop {
     // True once this Delegate is bound to a thread via
     // RegisterDelegateForCurrentThread().
     bool bound_ = false;
-
-    ShouldQuitWhenIdleCallback should_quit_when_idle_callback_;
 
     // Thread-affine per its use of TLS.
     THREAD_CHECKER(bound_thread_checker_);
@@ -232,24 +215,15 @@ class BASE_EXPORT RunLoop {
   // on forever bound to that thread (including its destruction).
   static void RegisterDelegateForCurrentThread(Delegate* delegate);
 
-  // Akin to RegisterDelegateForCurrentThread but overrides an existing Delegate
-  // (there must be one). Returning the overridden Delegate which the caller is
-  // now in charge of driving. |override_should_quit_when_idle_callback|
-  // specifies will replace the overridden Delegate's
-  // |should_quit_when_idle_callback_|, giving full control to |delegate|.
-  static Delegate* OverrideDelegateForCurrentThreadForTesting(
-      Delegate* delegate,
-      Delegate::ShouldQuitWhenIdleCallback
-          overriding_should_quit_when_idle_callback);
-
   // Quits the active RunLoop (when idle) -- there must be one. These were
   // introduced as prefered temporary replacements to the long deprecated
-  // MessageLoop::Quit(WhenIdle) methods. Callers should properly plumb a
-  // reference to the appropriate RunLoop instance (or its QuitClosure) instead
-  // of using these in order to link Run()/Quit() to a single RunLoop instance
-  // and increase readability.
+  // MessageLoop::Quit(WhenIdle)(Closure) methods. Callers should properly plumb
+  // a reference to the appropriate RunLoop instance (or its QuitClosure)
+  // instead of using these in order to link Run()/Quit() to a single RunLoop
+  // instance and increase readability.
   static void QuitCurrentDeprecated();
   static void QuitCurrentWhenIdleDeprecated();
+  static Closure QuitCurrentWhenIdleClosureDeprecated();
 
   // Run() will DCHECK if called while there's a ScopedDisallowRunningForTesting
   // in scope on its thread. This is useful to add safety to some test
@@ -274,6 +248,8 @@ class BASE_EXPORT RunLoop {
   };
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(MessageLoopTypedTest, RunLoopQuitOrderAfter);
+
 #if defined(OS_ANDROID)
   // Android doesn't support the blocking RunLoop::Run, so it calls
   // BeforeRun and AfterRun directly.
@@ -308,6 +284,11 @@ class BASE_EXPORT RunLoop {
   // probing this state via ShouldQuitWhenIdle()). This state is stored here
   // rather than pushed to Delegate to support nested RunLoops.
   bool quit_when_idle_received_ = false;
+
+  // True if use of QuitCurrent*Deprecated() is allowed. Taking a Quit*Closure()
+  // from a RunLoop implicitly sets this to false, so QuitCurrent*Deprecated()
+  // cannot be used while that RunLoop is being Run().
+  bool allow_quit_current_deprecated_ = true;
 
   // RunLoop is not thread-safe. Its state/methods, unless marked as such, may
   // not be accessed from any other sequence than the thread it was constructed

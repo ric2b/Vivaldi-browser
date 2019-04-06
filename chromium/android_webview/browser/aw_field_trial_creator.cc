@@ -5,9 +5,15 @@
 #include "android_webview/browser/aw_field_trial_creator.h"
 
 #include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "android_webview/browser/aw_metrics_service_client.h"
+#include "android_webview/browser/aw_variations_seed_bridge.h"
 #include "base/base_switches.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
@@ -19,7 +25,9 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/pref_names.h"
+#include "components/variations/seed_response.h"
 #include "components/variations/service/safe_seed_manager.h"
+#include "components/variations/service/variations_service.h"
 
 namespace android_webview {
 namespace {
@@ -27,24 +35,24 @@ namespace {
 // TODO(kmilka): Update to work properly in environments both with and without
 // UMA enabled.
 std::unique_ptr<const base::FieldTrial::EntropyProvider>
-CreateLowEntropyProvider() {
+CreateLowEntropyProvider(const std::string& client_id) {
   return std::unique_ptr<const base::FieldTrial::EntropyProvider>(
       // Since variations are only enabled for users opted in to UMA, it is
       // acceptable to use the SHA1EntropyProvider for randomization.
-      new metrics::SHA1EntropyProvider(
-          // Synchronous read of the client id is permitted as it is fast
-          // enough to have minimal impact on startup time, and is behind the
-          // webview-enable-finch flag.
-          android_webview::AwMetricsServiceClient::GetClientId()));
+      new variations::SHA1EntropyProvider(client_id));
 }
 
-// Synchronous read of variations data is permitted as it is fast
-// enough to have minimal impact on startup time, and is behind the
-// webview-enable-finch flag.
-bool ReadVariationsSeedDataFromFile(PrefService* local_state) {
-  // TODO(kmilka): The data read is being moved to java and the data will be
-  // passed in via JNI.
-  return false;
+// This experiment is for testing and doesn't control any features. Log it so QA
+// can check whether variations is working.
+// TODO(crbug/841623): Remove this after launch.
+void LogTestExperiment() {
+  static const char* const test_name = "First-WebView-Experiment";
+  base::FieldTrial* test_trial = base::FieldTrialList::Find(test_name);
+  if (test_trial) {
+    LOG(INFO) << test_name << " found, group=" << test_trial->group_name();
+  } else {
+    LOG(INFO) << test_name << " not found";
+  }
 }
 
 }  // anonymous namespace
@@ -54,51 +62,39 @@ AwFieldTrialCreator::AwFieldTrialCreator()
 
 AwFieldTrialCreator::~AwFieldTrialCreator() {}
 
-std::unique_ptr<PrefService> AwFieldTrialCreator::CreateLocalState() {
-  scoped_refptr<PrefRegistrySimple> pref_registry =
-      base::MakeRefCounted<PrefRegistrySimple>();
+void AwFieldTrialCreator::SetUpFieldTrials() {
+  DoSetUpFieldTrials();
 
-  // Register the variations prefs with default values that must be overridden.
-  pref_registry->RegisterTimePref(variations::prefs::kVariationsSeedDate,
-                                  base::Time());
-  pref_registry->RegisterTimePref(variations::prefs::kVariationsLastFetchTime,
-                                  base::Time());
-  pref_registry->RegisterStringPref(variations::prefs::kVariationsCountry,
-                                    std::string());
-  pref_registry->RegisterStringPref(
-      variations::prefs::kVariationsCompressedSeed, std::string());
-  pref_registry->RegisterStringPref(variations::prefs::kVariationsSeedSignature,
-                                    std::string());
-  pref_registry->RegisterListPref(
-      variations::prefs::kVariationsPermanentConsistencyCountry,
-      std::make_unique<base::ListValue>());
-
-  variations::SafeSeedManager::RegisterPrefs(pref_registry.get());
-
-  pref_service_factory_.set_user_prefs(
-      base::MakeRefCounted<InMemoryPrefStore>());
-  return pref_service_factory_.Create(pref_registry.get());
+  // If DoSetUpFieldTrials failed, it might have skipped creating
+  // FeatureList. If so, create a FeatureList without field trials.
+  if (!base::FeatureList::GetInstance()) {
+    const base::CommandLine* command_line =
+        base::CommandLine::ForCurrentProcess();
+    auto feature_list = std::make_unique<base::FeatureList>();
+    feature_list->InitializeFromCommandLine(
+        command_line->GetSwitchValueASCII(switches::kEnableFeatures),
+        command_line->GetSwitchValueASCII(switches::kDisableFeatures));
+    base::FeatureList::SetInstance(std::move(feature_list));
+  }
 }
 
-void AwFieldTrialCreator::SetUpFieldTrials() {
-  AwMetricsServiceClient::LoadOrCreateClientId();
+void AwFieldTrialCreator::DoSetUpFieldTrials() {
+  // If the client ID isn't available yet, don't delay startup by creating it.
+  // Instead, variations will be disabled for this run.
+  std::string client_id;
+  if (!AwMetricsServiceClient::GetPreloadedClientId(&client_id))
+    return;
 
   DCHECK(!field_trial_list_);
-  // Set the FieldTrialList singleton.
-  field_trial_list_ =
-      std::make_unique<base::FieldTrialList>(CreateLowEntropyProvider());
-
-  std::unique_ptr<PrefService> local_state = CreateLocalState();
-
-  if (!ReadVariationsSeedDataFromFile(local_state.get()))
-    return;
+  field_trial_list_ = std::make_unique<base::FieldTrialList>(
+      CreateLowEntropyProvider(client_id));
 
   variations::UIStringOverrider ui_string_overrider;
   client_ = std::make_unique<AwVariationsServiceClient>();
   variations_field_trial_creator_ =
       std::make_unique<variations::VariationsFieldTrialCreator>(
-          local_state.get(), client_.get(), ui_string_overrider);
-
+          GetLocalState(), client_.get(), ui_string_overrider,
+          GetAndClearJavaSeed());
   variations_field_trial_creator_->OverrideVariationsPlatform(
       variations::Study::PLATFORM_ANDROID_WEBVIEW);
 
@@ -106,17 +102,30 @@ void AwFieldTrialCreator::SetUpFieldTrials() {
   // VariationsFieldTrialCreator::SetupFieldTrials().
   // TODO(isherman): We might want a more genuine SafeSeedManager:
   // https://crbug.com/801771
-  std::vector<std::string> variation_ids;
   std::set<std::string> unforceable_field_trials;
-  variations::SafeSeedManager ignored_safe_seed_manager(true,
-                                                        local_state.get());
-
+  variations::SafeSeedManager ignored_safe_seed_manager(true, GetLocalState());
   // Populates the FieldTrialList singleton via the static member functions.
   variations_field_trial_creator_->SetupFieldTrials(
       cc::switches::kEnableGpuBenchmarking, switches::kEnableFeatures,
       switches::kDisableFeatures, unforceable_field_trials,
-      CreateLowEntropyProvider(), std::make_unique<base::FeatureList>(),
-      &variation_ids, aw_field_trials_.get(), &ignored_safe_seed_manager);
+      std::vector<std::string>(), CreateLowEntropyProvider(client_id),
+      std::make_unique<base::FeatureList>(), aw_field_trials_.get(),
+      &ignored_safe_seed_manager);
+
+  LogTestExperiment();
+}
+
+PrefService* AwFieldTrialCreator::GetLocalState() {
+  if (!local_state_) {
+    scoped_refptr<PrefRegistrySimple> pref_registry =
+        base::MakeRefCounted<PrefRegistrySimple>();
+    variations::VariationsService::RegisterPrefs(pref_registry.get());
+
+    PrefServiceFactory factory;
+    factory.set_user_prefs(base::MakeRefCounted<InMemoryPrefStore>());
+    local_state_ = factory.Create(pref_registry.get());
+  }
+  return local_state_.get();
 }
 
 }  // namespace android_webview

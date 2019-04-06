@@ -12,9 +12,9 @@
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
 #include "chrome/browser/apps/app_shim/test/app_shim_host_manager_test_api_mac.h"
+#include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
@@ -30,7 +30,6 @@
 #import "testing/gtest_mac.h"
 #import "ui/base/test/nswindow_fullscreen_notification_waiter.h"
 #import "ui/base/test/scoped_fake_nswindow_focus.h"
-#import "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #import "ui/base/test/windowed_nsnotification_observer.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 
@@ -224,8 +223,6 @@ IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest,
 // Test that NativeAppWindow and AppWindow fullscreen state is updated when
 // the window is fullscreened natively.
 IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, Fullscreen) {
-  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
-
   extensions::AppWindow* app_window =
       CreateTestAppWindow("{\"alwaysOnTop\": true }");
   extensions::NativeAppWindow* window = app_window->GetBaseWindow();
@@ -455,8 +452,6 @@ IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, MinimizeMaximize) {
 
 // Test Maximize, Fullscreen, Restore combinations.
 IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, MaximizeFullscreen) {
-  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
-
   SetUpAppWithWindows(1);
   AppWindow* app_window = GetFirstAppWindow();
   extensions::NativeAppWindow* window = app_window->GetBaseWindow();
@@ -532,9 +527,8 @@ IN_PROC_BROWSER_TEST_P(NativeAppWindowCocoaBrowserTest, Frameless) {
   // Since the window has no constraints, it should have all of the following
   // style mask bits.
   NSUInteger style_mask = NSTitledWindowMask | NSClosableWindowMask |
-                          NSMiniaturizableWindowMask | NSResizableWindowMask |
-                          NSTexturedBackgroundWindowMask;
-  EXPECT_EQ(style_mask, [ns_window styleMask]);
+                          NSMiniaturizableWindowMask | NSResizableWindowMask;
+  EXPECT_EQ(style_mask, [ns_window styleMask] & style_mask);
 
   CloseAppWindow(app_window);
 }
@@ -556,15 +550,6 @@ void TestControls(AppWindow* app_window) {
   // The window can fullscreen and maximize.
   EXPECT_EQ(can_fullscreen, !!([ns_window collectionBehavior] &
                                NSWindowCollectionBehaviorFullScreenPrimary));
-
-  // In OSX 10.10+, the zoom button performs the zoom action rather than the
-  // fullscreen action. The above check that collectionBehavior does not include
-  // NSWindowCollectionBehaviorFullScreenPrimary is sufficient to determine that
-  // the window can't be fullscreened.
-  if (base::mac::IsOS10_9()) {
-    EXPECT_EQ(can_fullscreen,
-              [[ns_window standardWindowButton:NSWindowZoomButton] isEnabled]);
-  }
 
   // Set a maximum size.
   app_window->SetContentSizeConstraints(gfx::Size(), gfx::Size(200, 201));
@@ -593,7 +578,6 @@ void TestControls(AppWindow* app_window) {
 
   // If a window is made fullscreen by the API, fullscreen should be enabled so
   // the user can exit fullscreen.
-  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
   base::scoped_nsobject<NSWindowFullscreenNotificationWaiter> waiter(
       [[NSWindowFullscreenNotificationWaiter alloc] initWithWindow:ns_window]);
   app_window->SetFullscreen(AppWindow::FULLSCREEN_TYPE_WINDOW_API, true);

@@ -27,20 +27,20 @@ import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.process_launcher.ChildConnectionAllocator;
 import org.chromium.base.process_launcher.ChildProcessConnection;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.TestChildProcessConnection;
 import org.chromium.base.test.util.Feature;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 /** Unit tests for the SpareChildConnection class. */
 @Config(manifest = Config.NONE)
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 public class SpareChildConnectionTest {
     @Mock
     private ChildProcessConnection.ServiceCallback mServiceCallback;
 
     // A connection allocator not used to create connections.
     private final ChildConnectionAllocator mWrongConnectionAllocator =
-            ChildConnectionAllocator.createForTest("org.chromium.test", "TestServiceName",
+            ChildConnectionAllocator.createForTest(null, "org.chromium.test", "TestServiceName",
                     3 /* serviceCount */, false /* bindToCaller */,
                     false /* bindAsExternalService */, false /* useStrongBinding */);
 
@@ -87,7 +87,7 @@ public class SpareChildConnectionTest {
         LauncherThread.setCurrentThreadAsLauncherThread();
 
         mConnectionAllocator =
-                ChildConnectionAllocator.createForTest("org.chromium.test.spare_connection",
+                ChildConnectionAllocator.createForTest(null, "org.chromium.test.spare_connection",
                         "TestServiceName", 5 /* serviceCount */, false /* bindToCaller */,
                         false /* bindAsExternalService */, false /* useStrongBinding */);
         mConnectionAllocator.setConnectionFactoryForTesting(mTestConnectionFactory);

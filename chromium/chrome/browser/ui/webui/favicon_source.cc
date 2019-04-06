@@ -118,7 +118,12 @@ void FaviconSource::StartDataRequest(
     // hence won't be found if we include the scheme in the lookup. Set
     // |fallback_to_host|=true so the favicon database will fall back to
     // matching only the hostname to have the best chance of finding a favicon.
-    const bool fallback_to_host = true;
+    //const bool fallback_to_host = true;
+    // NOTE(espen@vivaldi.com): Original chromium code above. We need to make
+    // an exception for at least preloaded bookmark urls. Otherwise they will
+    // all be shown with the same icon.
+    const bool fallback_to_host =
+        url.spec().find("https://vivaldi.com/bk/") != 0;
     favicon_service->GetRawFaviconForPageURL(
         url, {favicon_base::IconType::kFavicon}, desired_size_in_pixel,
         fallback_to_host,

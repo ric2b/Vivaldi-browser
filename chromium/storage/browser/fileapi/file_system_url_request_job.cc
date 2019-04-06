@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util_proxy.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
@@ -73,8 +72,8 @@ FileSystemURLRequestJob::~FileSystemURLRequestJob() = default;
 
 void FileSystemURLRequestJob::Start() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&FileSystemURLRequestJob::StartAsync,
-                            weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&FileSystemURLRequestJob::StartAsync,
+                                weak_factory_.GetWeakPtr()));
 }
 
 void FileSystemURLRequestJob::Kill() {
@@ -149,11 +148,12 @@ void FileSystemURLRequestJob::StartAsync() {
   DCHECK(!reader_.get());
   url_ = file_system_context_->CrackURL(request_->url());
   if (!url_.is_valid()) {
+    const FileSystemRequestInfo& request_info = {request_->url(), request_,
+                                                 storage_domain_, 0};
     file_system_context_->AttemptAutoMountForURLRequest(
-        request_,
-        storage_domain_,
-        base::Bind(&FileSystemURLRequestJob::DidAttemptAutoMount,
-                   weak_factory_.GetWeakPtr()));
+        request_info,
+        base::BindOnce(&FileSystemURLRequestJob::DidAttemptAutoMount,
+                       weak_factory_.GetWeakPtr()));
     return;
   }
   if (!file_system_context_->CanServeURLRequest(url_)) {
@@ -233,8 +233,10 @@ void FileSystemURLRequestJob::DidRead(int result) {
   ReadRawDataComplete(result);
 }
 
-bool FileSystemURLRequestJob::IsRedirectResponse(GURL* location,
-                                                 int* http_status_code) {
+bool FileSystemURLRequestJob::IsRedirectResponse(
+    GURL* location,
+    int* http_status_code,
+    bool* insecure_scheme_was_upgraded) {
   if (is_directory_) {
     // This happens when we discovered the file is a directory, so needs a
     // slash at the end of the path.
@@ -242,6 +244,7 @@ bool FileSystemURLRequestJob::IsRedirectResponse(GURL* location,
     new_path.push_back('/');
     GURL::Replacements replacements;
     replacements.SetPathStr(new_path);
+    *insecure_scheme_was_upgraded = false;
     *location = request_->url().ReplaceComponents(replacements);
     *http_status_code = 301;  // simulate a permanent redirect
     return true;

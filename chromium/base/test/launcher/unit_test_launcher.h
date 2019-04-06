@@ -19,17 +19,15 @@
 namespace base {
 
 // Callback that runs a test suite and returns exit code.
-using RunTestSuiteCallback = Callback<int(void)>;
+using RunTestSuiteCallback = OnceCallback<int(void)>;
 
 // Launches unit tests in given test suite. Returns exit code.
-int LaunchUnitTests(int argc,
-                    char** argv,
-                    const RunTestSuiteCallback& run_test_suite);
+int LaunchUnitTests(int argc, char** argv, RunTestSuiteCallback run_test_suite);
 
 // Same as above, but always runs tests serially.
 int LaunchUnitTestsSerially(int argc,
                             char** argv,
-                            const RunTestSuiteCallback& run_test_suite);
+                            RunTestSuiteCallback run_test_suite);
 
 // Launches unit tests in given test suite. Returns exit code.
 // |parallel_jobs| is the number of parallel test jobs.
@@ -41,7 +39,7 @@ int LaunchUnitTestsWithOptions(int argc,
                                size_t parallel_jobs,
                                int default_batch_limit,
                                bool use_job_objects,
-                               const RunTestSuiteCallback& run_test_suite);
+                               RunTestSuiteCallback run_test_suite);
 
 #if defined(OS_WIN)
 // Launches unit tests in given test suite. Returns exit code.
@@ -49,7 +47,7 @@ int LaunchUnitTestsWithOptions(int argc,
 int LaunchUnitTests(int argc,
                     wchar_t** argv,
                     bool use_job_objects,
-                    const RunTestSuiteCallback& run_test_suite);
+                    RunTestSuiteCallback run_test_suite);
 #endif  // defined(OS_WIN)
 
 // Delegate to abstract away platform differences for unit tests.
@@ -59,7 +57,11 @@ class UnitTestPlatformDelegate {
   // must put the result in |output| and return true on success.
   virtual bool GetTests(std::vector<TestIdentifier>* output) = 0;
 
-  // Called to create a temporary file. The delegate must put the resulting
+  // Called to create a temporary for storing test results. The delegate
+  // must put the resulting path in |path| and return true on success.
+  virtual bool CreateResultsFile(base::FilePath* path) = 0;
+
+  // Called to create a new temporary file. The delegate must put the resulting
   // path in |path| and return true on success.
   virtual bool CreateTemporaryFile(base::FilePath* path) = 0;
 
@@ -68,7 +70,8 @@ class UnitTestPlatformDelegate {
   // (e.g. "A.B"), |output_file| is path to the GTest XML output file.
   virtual CommandLine GetCommandLineForChildGTestProcess(
       const std::vector<std::string>& test_names,
-      const base::FilePath& output_file) = 0;
+      const base::FilePath& output_file,
+      const base::FilePath& flag_file) = 0;
 
   // Returns wrapper to use for child GTest process. Empty string means
   // no wrapper.

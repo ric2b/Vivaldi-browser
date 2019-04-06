@@ -10,8 +10,18 @@
 
 namespace {
 
-TEST(AeadTest, SealOpen) {
-  crypto::Aead aead(crypto::Aead::AES_128_CTR_HMAC_SHA256);
+const crypto::Aead::AeadAlgorithm kAllAlgorithms[]{
+    crypto::Aead::AES_128_CTR_HMAC_SHA256, crypto::Aead::AES_256_GCM,
+    crypto::Aead::AES_256_GCM_SIV,
+};
+
+class AeadTest : public testing::TestWithParam<crypto::Aead::AeadAlgorithm> {};
+
+INSTANTIATE_TEST_CASE_P(, AeadTest, testing::ValuesIn(kAllAlgorithms));
+
+TEST_P(AeadTest, SealOpen) {
+  crypto::Aead::AeadAlgorithm alg = GetParam();
+  crypto::Aead aead(alg);
   std::string key(aead.KeyLength(), 0);
   aead.Init(&key);
   std::string nonce(aead.NonceLength(), 0);
@@ -27,12 +37,13 @@ TEST(AeadTest, SealOpen) {
   EXPECT_EQ(plaintext, decrypted);
 }
 
-TEST(AeadTest, SealOpenWrongKey) {
-  crypto::Aead aead(crypto::Aead::AES_128_CTR_HMAC_SHA256);
+TEST_P(AeadTest, SealOpenWrongKey) {
+  crypto::Aead::AeadAlgorithm alg = GetParam();
+  crypto::Aead aead(alg);
   std::string key(aead.KeyLength(), 0);
   std::string wrong_key(aead.KeyLength(), 1);
   aead.Init(&key);
-  crypto::Aead aead_wrong_key(crypto::Aead::AES_128_CTR_HMAC_SHA256);
+  crypto::Aead aead_wrong_key(alg);
   aead_wrong_key.Init(&wrong_key);
 
   std::string nonce(aead.NonceLength(), 0);

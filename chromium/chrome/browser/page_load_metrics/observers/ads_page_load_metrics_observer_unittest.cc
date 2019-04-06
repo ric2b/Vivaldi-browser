@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
@@ -59,6 +59,7 @@ enum class FrameType { AD = 0, NON_AD };
 const char kAdUrl[] = "https://tpc.googlesyndication.com/safeframe/1";
 const char kNonAdUrl[] = "https://foo.com/";
 const char kNonAdUrl2[] = "https://bar.com/";
+const char kNonAdUrlSameOrigin[] = "https://tpc.googlesyndication.com/nonad";
 
 const char kAdName[] = "google_ads_iframe_1";
 const char kNonAdName[] = "foo";
@@ -259,28 +260,6 @@ class AdsPageLoadMetricsObserverTest : public SubresourceFilterTestHarness {
     return navigation_simulator->GetFinalRenderFrameHost();
   }
 
-  RenderFrameHost* NavigateFrameAndTestRenavigationMetrics(
-      RenderFrameHost* frame,
-      FrameType frame_type,
-      const std::string& url) {
-    base::HistogramTester histogram_tester;
-    RenderFrameHost* out_frame = NavigateFrame(url, frame);
-
-    int bucket = url == kAdUrl ? 1 : 0;
-
-    if (frame_type == FrameType::AD) {
-      histogram_tester.ExpectUniqueSample(
-          "PageLoad.Clients.Ads.All.Navigations.AdFrameRenavigatedToAd", bucket,
-          1);
-    } else {
-      histogram_tester.ExpectUniqueSample(
-          "PageLoad.Clients.Ads.All.Navigations.NonAdFrameRenavigatedToAd",
-          bucket, 1);
-    }
-
-    return out_frame;
-  }
-
   void LoadResource(RenderFrameHost* frame,
                     ResourceCached resource_cached,
                     int resource_size_in_kb) {
@@ -418,42 +397,64 @@ TEST_F(AdsPageLoadMetricsObserverTest, AllAdTypesInPage) {
       "PageLoad.Clients.Ads.All.ResourceTypeWhenNoFrameFound", 0);
 }
 
-TEST_F(AdsPageLoadMetricsObserverTest, PageLoadSubFrameRenavigationMetrics) {
-  RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
+// Test that the cross-origin ad subframe navigation metric works as it's
+// supposed to, triggering a false addition with each ad that's in the same
+// origin as the main page, and a true when when the ad has a separate origin.
+TEST_F(AdsPageLoadMetricsObserverTest, AdsOriginStatusMetrics) {
+  const char kCrossOriginHistogramId[] =
+      "PageLoad.Clients.Ads.Google.FrameCounts.AdFrames.PerFrame.OriginStatus";
 
-  // Test behavior of an ad frame. Once a frame is considered an ad, it's
-  // always an ad.
-  RenderFrameHost* ad_sub_frame =
-      CreateAndNavigateSubFrame(kAdUrl, kNonAdName, main_frame);
+  // Test that when the main frame origin is different from a direct ad
+  // subframe it is correctly identified as cross-origin, but do not count
+  // indirect ad subframes.
+  {
+    base::HistogramTester histograms;
+    RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
+    RenderFrameHost* ad_sub_frame =
+        CreateAndNavigateSubFrame(kAdUrl, kNonAdName, main_frame);
+    LoadResource(main_frame, ResourceCached::NOT_CACHED, 10);
+    LoadResource(ad_sub_frame, ResourceCached::NOT_CACHED, 10);
+    LoadResource(CreateAndNavigateSubFrame(kAdUrl, kNonAdName, ad_sub_frame),
+                 ResourceCached::NOT_CACHED, 10);
+    // Trigger histograms by navigating away, then test them.
+    NavigateFrame(kAdUrl, main_frame);
+    histograms.ExpectUniqueSample(
+        kCrossOriginHistogramId,
+        AdsPageLoadMetricsObserver::AdOriginStatus::kCross, 1);
+  }
 
-  ad_sub_frame = NavigateFrameAndTestRenavigationMetrics(ad_sub_frame,
-                                                         FrameType::AD, kAdUrl);
-  ad_sub_frame = NavigateFrameAndTestRenavigationMetrics(
-      ad_sub_frame, FrameType::AD, kNonAdUrl);
-  ad_sub_frame = NavigateFrameAndTestRenavigationMetrics(
-      ad_sub_frame, FrameType::AD, kNonAdUrl);
+  // Add a non-ad subframe and an ad subframe and make sure the total count
+  // only adjusts by one.
+  {
+    base::HistogramTester histograms;
+    RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
+    LoadResource(main_frame, ResourceCached::NOT_CACHED, 10);
+    LoadResource(CreateAndNavigateSubFrame(kAdUrl, kNonAdName, main_frame),
+                 ResourceCached::NOT_CACHED, 10);
+    LoadResource(CreateAndNavigateSubFrame(kNonAdUrl, kNonAdName, main_frame),
+                 ResourceCached::NOT_CACHED, 10);
+    // Trigger histograms by navigating away, then test them.
+    NavigateFrame(kAdUrl, main_frame);
+    histograms.ExpectUniqueSample(
+        kCrossOriginHistogramId,
+        AdsPageLoadMetricsObserver::AdOriginStatus::kCross, 1);
+  }
 
-  // Test behavior of a non-ad frame. Again, once it becomes an ad it stays an
-  // ad.
-  RenderFrameHost* non_ad_sub_frame =
-      CreateAndNavigateSubFrame(kNonAdUrl, kNonAdName, main_frame);
-  non_ad_sub_frame = NavigateFrameAndTestRenavigationMetrics(
-      non_ad_sub_frame, FrameType::NON_AD, kNonAdUrl);
-  non_ad_sub_frame = NavigateFrameAndTestRenavigationMetrics(
-      non_ad_sub_frame, FrameType::NON_AD, kAdUrl);
-  non_ad_sub_frame = NavigateFrameAndTestRenavigationMetrics(
-      non_ad_sub_frame, FrameType::AD, kNonAdUrl);
-  non_ad_sub_frame = NavigateFrameAndTestRenavigationMetrics(
-      non_ad_sub_frame, FrameType::AD, kAdUrl);
-
-  // Verify that children of ad frames don't get counted in the renavigation
-  // metrics.
-  RenderFrameHost* ad_sub_sub_frame =
-      CreateAndNavigateSubFrame(kAdUrl, kNonAdName, ad_sub_frame);
-  base::HistogramTester tester;
-  ad_sub_sub_frame = NavigateFrame(kNonAdUrl2, ad_sub_sub_frame);
-  tester.ExpectTotalCount(
-      "PageLoad.Clients.Ads.All.Navigations.AdFrameRenavigatedToAd", 0);
+  // Add an ad subframe in the same origin as the parent frame and make sure it
+  // gets identified as non-cross-origin. Note: top-level navigations are never
+  // considered to be ads.
+  {
+    base::HistogramTester histograms;
+    RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrlSameOrigin);
+    LoadResource(main_frame, ResourceCached::NOT_CACHED, 10);
+    LoadResource(CreateAndNavigateSubFrame(kAdUrl, kNonAdName, main_frame),
+                 ResourceCached::NOT_CACHED, 10);
+    // Trigger histograms by navigating away, then test them.
+    NavigateFrame(kAdUrl, main_frame);
+    histograms.ExpectUniqueSample(
+        kCrossOriginHistogramId,
+        AdsPageLoadMetricsObserver::AdOriginStatus::kSame, 1);
+  }
 }
 
 TEST_F(AdsPageLoadMetricsObserverTest, PageWithAdFrameThatRenavigates) {

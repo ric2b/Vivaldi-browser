@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
-#include "net/proxy/proxy_config.h"
+#include "net/proxy_resolution/proxy_config.h"
 
 namespace net {
 class NetLog;
@@ -71,8 +71,8 @@ class DataReductionProxyConfigurator {
   net::ProxyBypassRules bypass_rules_;
 
   // The Data Reduction Proxy's configuration. This contains the list of
-  // acceptable data reduction proxies and bypass rules. It should be accessed
-  // only on the IO thread.
+  // acceptable data reduction proxies and bypass rules, or DIRECT if DRP is not
+  // enabled. It should be accessed only on the IO thread.
   net::ProxyConfig config_;
 
   // Used for logging of network- and Data Reduction Proxy-related events.

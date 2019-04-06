@@ -22,7 +22,6 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/arc/arc_util.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
-#include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace em = enterprise_management;
@@ -78,8 +77,8 @@ class UnaffiliatedArcAllowedTest
       user_affiliation_ids.insert(kAnotherAffiliationID);
 
     affiliation_test_helper::SetUserAffiliationIDs(
-        &user_policy, session_manager_client(),
-        affiliated_account_id_.GetUserEmail(), user_affiliation_ids);
+        &user_policy, session_manager_client(), affiliated_account_id_,
+        user_affiliation_ids);
   }
 
   void TearDownOnMainThread() override {
@@ -87,7 +86,7 @@ class UnaffiliatedArcAllowedTest
     if (chromeos::LoginDisplayHost::default_host()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&chrome::AttemptExit));
-      content::RunMessageLoop();
+      RunUntilBrowserProcessQuits();
     }
     arc::ArcSessionManager::Get()->Shutdown();
     DevicePolicyCrosBrowserTest::TearDownOnMainThread();

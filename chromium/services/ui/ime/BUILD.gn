@@ -18,7 +18,6 @@ source_set("lib") {
 
   deps = [
     "//base",
-    "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
     "//services/ui/public/interfaces",
@@ -34,9 +33,9 @@ source_set("tests") {
 
   deps = [
     "//base",
-    "//mojo/common",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
+    "//services/ui/ime/test_ime_driver/public/mojom",
     "//services/ui/public/interfaces",
   ]
 

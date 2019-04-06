@@ -17,11 +17,10 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/data_type_encryption_handler.h"
 #include "components/sync/driver/sync_service_observer.h"
-#include "components/sync/engine/connection_status.h"
-#include "google_apis/gaia/google_service_auth_error.h"
 
+struct AccountInfo;
 class GoogleServiceAuthError;
-class SigninManagerBase;
+class GURL;
 
 namespace sync_sessions {
 class OpenTabsUIDelegate;
@@ -30,13 +29,13 @@ class OpenTabsUIDelegate;
 namespace syncer {
 
 class BaseTransaction;
-class DataTypeController;
 class JsController;
 class LocalDeviceInfoProvider;
 class GlobalIdMapper;
 class ProtocolEventObserver;
 class SyncClient;
 class SyncCycleSnapshot;
+struct SyncTokenStatus;
 class TypeDebugInfoObserver;
 struct SyncStatus;
 struct UserShare;
@@ -76,6 +75,69 @@ class SyncSetupInProgressHandle {
 
 class SyncService : public DataTypeEncryptionHandler, public KeyedService {
  public:
+  // The set of reasons due to which Sync can be disabled. Meant to be used as a
+  // bitmask.
+  enum DisableReason {
+    DISABLE_REASON_NONE = 0,
+    // Sync is disabled via command-line flag or platform-level override (e.g.
+    // Android's "MasterSync" toggle).
+    DISABLE_REASON_PLATFORM_OVERRIDE = 1 << 0,
+    // Sync is disabled by enterprise policy, either browser policy (through
+    // prefs) or account policy received from the Sync server.
+    DISABLE_REASON_ENTERPRISE_POLICY = 1 << 1,
+    // Sync can't start because there is no authenticated user.
+    DISABLE_REASON_NOT_SIGNED_IN = 1 << 2,
+    // Sync is suppressed by user choice, either via platform-level toggle (e.g.
+    // Android's "ChromeSync" toggle), a “Reset Sync” operation from the
+    // dashboard on desktop/ChromeOS.
+    // NOTE: Other code paths that go through RequestStop also set this reason
+    // (e.g. disabling due to sign-out or policy), so it's only really
+    // meaningful when it's the *only* disable reason.
+    // TODO(crbug.com/839834): Only set this reason when it's meaningful.
+    DISABLE_REASON_USER_CHOICE = 1 << 3,
+    // Sync has encountered an unrecoverable error. It won't attempt to start
+    // again until either the browser is restarted, or the user fully signs out
+    // and back in again.
+    DISABLE_REASON_UNRECOVERABLE_ERROR = 1 << 4
+  };
+
+  // The overall state of the SyncService, in ascending order of "activeness".
+  enum class State {
+    // Sync is disabled, e.g. due to enterprise policy, or because the user has
+    // disabled it, or simply because there is no authenticated user. Call
+    // GetDisableReasons to figure out which of these it is.
+    DISABLED,
+    // Sync can start in principle, but nothing has prodded it to actually do it
+    // yet. Note that during subsequent browser startups, Sync starts
+    // automatically, i.e. no prod is necessary, but during the first start Sync
+    // does need a kick. This usually happens via starting (not finishing!) the
+    // initial setup, or via an explicit call to RequestStart.
+    // TODO(crbug.com/839834): Check whether this state is necessary, or if Sync
+    // can just always start up if all conditions are fulfilled (that's what
+    // happens in practice anyway).
+    WAITING_FOR_START_REQUEST,
+    // Sync's startup was deferred, so that it doesn't slow down browser
+    // startup. Once the deferral time (usually 10s) expires, or something
+    // requests immediate startup, Sync will actually start.
+    START_DEFERRED,
+    // The Sync engine is in the process of initializing.
+    INITIALIZING,
+    // The Sync engine is initialized, but the process of configuring the data
+    // types hasn't been started yet. This usually occurs if the user hasn't
+    // completed the initial Sync setup yet (i.e. IsFirstSetupComplete() is
+    // false), but it can also occur if a (non-initial) Sync setup happens to be
+    // ongoing while the Sync service is starting up.
+    PENDING_DESIRED_CONFIGURATION,
+    // The Sync engine itself is up and running, but the individual data types
+    // are being (re)configured. GetActiveDataTypes() will still be empty.
+    CONFIGURING,
+    // The Sync service is up and running. Note that this *still* doesn't
+    // necessarily mean any particular data is being uploaded, e.g. individual
+    // data types might be disabled or might have failed to start (check
+    // GetActiveDataTypes()).
+    ACTIVE
+  };
+
   // Used to specify the kind of passphrase with which sync data is encrypted.
   enum PassphraseType {
     IMPLICIT,  // The user did not provide a custom passphrase for encryption.
@@ -92,42 +154,39 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
     CLEAR_DATA,
   };
 
-  // Status of sync server connection, sync token and token request.
-  struct SyncTokenStatus {
-    SyncTokenStatus();
-
-    // Sync server connection status reported by sync engine.
-    base::Time connection_status_update_time;
-    ConnectionStatus connection_status;
-
-    // Times when OAuth2 access token is requested and received.
-    base::Time token_request_time;
-    base::Time token_receive_time;
-
-    // Error returned by OAuth2TokenService for token request and time when
-    // next request is scheduled.
-    GoogleServiceAuthError last_get_token_error;
-    base::Time next_token_request_time;
-  };
-
   ~SyncService() override {}
 
-  // Whether sync is enabled by user or not. This does not necessarily mean
+  // Returns the set of reasons that are keeping Sync disabled, as a bitmask of
+  // DisableReason enum entries.
+  virtual int GetDisableReasons() const = 0;
+  // Helper that returns whether GetDisableReasons() contains the given |reason|
+  // (possibly among others).
+  bool HasDisableReason(DisableReason reason) const {
+    return GetDisableReasons() & reason;
+  }
+
+  // Returns the overall state of the SyncService. See the enum definition for
+  // what the individual states mean.
+  // Note: If your question is "Are we actually sending this data to Google?" or
+  // "Am I allowed to send this type of data to Google?", you probably want
+  // syncer::GetUploadToGoogleState instead of this.
+  virtual State GetState() const = 0;
+
+  // Whether the user has completed the initial Sync setup. This does not mean
   // that sync is currently running (due to delayed startup, unrecoverable
-  // errors, or shutdown). See IsSyncActive below for checking whether sync
-  // is actually running.
+  // errors, or shutdown). If you want to know whether Sync is actually running,
+  // use GetState instead.
   virtual bool IsFirstSetupComplete() const = 0;
 
-  // Whether sync is allowed to start. Command line flags, platform-level
-  // overrides, and account-level overrides are examples of reasons this
-  // might be false.
-  virtual bool IsSyncAllowed() const = 0;
+  // DEPRECATED! Use GetDisableReasons/HasDisableReason instead.
+  // Equivalent to "!HasDisableReason(DISABLE_REASON_PLATFORM_OVERRIDE) &&
+  // !HasDisableReason(DISABLE_REASON_ENTERPRISE_POLICY)".
+  bool IsSyncAllowed() const;
 
-  // Returns true if sync is fully initialized and active. This implies that
-  // an initial configuration has successfully completed, although there may
-  // be datatype specific, auth, or other transient errors. To see which
-  // datetypes are actually syncing, see GetActiveTypes() below.
-  virtual bool IsSyncActive() const = 0;
+  // DEPRECATED! Use GetState instead. Equivalent to
+  // "GetState() == State::CONFIGURING || GetState() == State::ACTIVE".
+  // To see which datatypes are actually syncing, see GetActiveDataTypes().
+  bool IsSyncActive() const;
 
   // Returns true if the local sync backend server has been enabled through a
   // command line flag or policy. In this case sync is considered active but any
@@ -167,11 +226,10 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
   // told to MergeDataAndStartSyncing yet.
   virtual void OnDataTypeRequestsSyncStartup(ModelType type) = 0;
 
-  // Returns true if sync is allowed, requested, and the user is logged in.
-  // (being logged in does not mean that tokens are available - tokens may
-  // be missing because they have not loaded yet, or because they were deleted
-  // due to http://crbug.com/121755).
-  virtual bool CanSyncStart() const = 0;
+  // DEPRECATED! Use GetDisableReasons/HasDisableReason instead.
+  // Equivalent to having no disable reasons, i.e.
+  // "GetDisableReasons() == DISABLE_REASON_NONE".
+  bool CanSyncStart() const;
 
   // Stops sync at the user's request. |data_fate| controls whether the sync
   // engine should clear its data directory when it shuts down. Generally
@@ -220,14 +278,14 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
   // Used by tests.
   virtual bool IsSetupInProgress() const = 0;
 
-  // Whether the data types active for the current mode have finished
-  // configuration.
-  virtual bool ConfigurationDone() const = 0;
-
   virtual const GoogleServiceAuthError& GetAuthError() const = 0;
-  virtual bool HasUnrecoverableError() const = 0;
+
+  // DEPRECATED! Use GetDisableReasons/HasDisableReason instead.
+  // Equivalent to "HasDisableReason(DISABLE_REASON_UNRECOVERABLE_ERROR)".
+  bool HasUnrecoverableError() const;
 
   // Returns true if the SyncEngine has told us it's ready to accept changes.
+  // DEPRECATED! Use GetState instead.
   virtual bool IsEngineInitialized() const = 0;
 
   // Return the active OpenTabsUIDelegate. If open/proxy tabs is not enabled or
@@ -269,8 +327,8 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
       WARN_UNUSED_RESULT = 0;
 
   // Checks whether the Cryptographer is ready to encrypt and decrypt updates
-  // for sensitive data types. Caller must be holding a
-  // syncapi::BaseTransaction to ensure thread safety.
+  // for sensitive data types. Caller must be holding a syncer::BaseTransaction
+  // to ensure thread safety.
   virtual bool IsCryptographerReady(const BaseTransaction* trans) const = 0;
 
   // TODO(akalin): This is called mostly by ModelAssociators and
@@ -280,14 +338,7 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
   virtual UserShare* GetUserShare() const = 0;
 
   // Returns DeviceInfo provider for the local device.
-  virtual LocalDeviceInfoProvider* GetLocalDeviceInfoProvider() const = 0;
-
-  // Registers a data type controller with the sync service.  This
-  // makes the data type controller available for use, it does not
-  // enable or activate the synchronization of the data type (see
-  // ActivateDataType).  Takes ownership of the pointer.
-  virtual void RegisterDataTypeController(
-      std::unique_ptr<DataTypeController> data_type_controller) = 0;
+  virtual const LocalDeviceInfoProvider* GetLocalDeviceInfoProvider() const = 0;
 
   // Called to re-enable a type disabled by DisableDatatype(..). Note, this does
   // not change the preferred state of a datatype, and is not persisted across
@@ -297,9 +348,6 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
   // Return sync token status.
   virtual SyncTokenStatus GetSyncTokenStatus() const = 0;
 
-  // Get a description of the sync status for displaying in the user interface.
-  virtual std::string QuerySyncStatusSummaryString() = 0;
-
   // Initializes a struct of status indicators with data from the engine.
   // Returns false if the engine was not available for querying; in that case
   // the struct will be filled with default data.
@@ -307,9 +355,6 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
 
   // Returns the last synced time.
   virtual base::Time GetLastSyncedTime() const = 0;
-
-  // Returns a human readable string describing engine initialization state.
-  virtual std::string GetEngineInitializationStateString() const = 0;
 
   virtual SyncCycleSnapshot GetLastCycleSnapshot() const = 0;
 
@@ -350,9 +395,8 @@ class SyncService : public DataTypeEncryptionHandler, public KeyedService {
       const base::Callback<void(std::unique_ptr<base::ListValue>)>&
           callback) = 0;
 
-  // Non-owning pointer to sign in logic that can be used to fetch information
-  // about the currently signed in user.
-  virtual SigninManagerBase* signin() const = 0;
+  // Information about the currently signed in user.
+  virtual AccountInfo GetAuthenticatedAccountInfo() const = 0;
 
   virtual GlobalIdMapper* GetGlobalIdMapper() const = 0;
 

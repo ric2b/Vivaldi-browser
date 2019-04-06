@@ -24,12 +24,12 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/v8_helpers.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebDocumentLoader.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_document_loader.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "v8/include/v8.h"
 
 namespace extensions {
@@ -89,6 +89,7 @@ ScriptContext::ScriptContext(const v8::Local<v8::Context>& v8_context,
       safe_builtins_(this),
       isolate_(v8_context->GetIsolate()) {
   VLOG(1) << "Created context:\n" << GetDebugString();
+  v8_context_.AnnotateStrongRetainer("extensions::ScriptContext::v8_context_");
   if (web_frame_)
     url_ = GetAccessCheckedFrameURL(web_frame_);
 }
@@ -113,6 +114,12 @@ bool ScriptContext::IsSandboxedPage(const GURL& url) {
     }
   }
   return false;
+}
+
+void ScriptContext::SetModuleSystem(
+    std::unique_ptr<ModuleSystem> module_system) {
+  module_system_ = std::move(module_system);
+  module_system_->Initialize();
 }
 
 void ScriptContext::Invalidate() {

@@ -11,7 +11,7 @@
         "options": [
             {
                 "domain": "Browser",
-                "include": ["getVersion", "getHistograms", "getHistogram"]
+                "include": ["getVersion", "getHistograms", "getHistogram", "getBrowserCommandLine"]
             },
             {
                 "domain": "DOM",
@@ -20,7 +20,7 @@
             },
             {
                 "domain": "Emulation",
-                "include": ["setGeolocationOverride", "clearGeolocationOverride", "setEmitTouchEventsForMouse", "canEmulate", "setDeviceMetricsOverride", "clearDeviceMetricsOverride", "setVisibleSize"]
+                "include": ["setGeolocationOverride", "clearGeolocationOverride", "setEmitTouchEventsForMouse", "canEmulate", "setDeviceMetricsOverride", "clearDeviceMetricsOverride", "setVisibleSize", "setUserAgentOverride"]
             },
             {
                 "domain": "Input",
@@ -36,19 +36,20 @@
             },
             {
                 "domain": "Memory",
-                "include": ["setPressureNotificationsSuppressed", "simulatePressureNotification"]
+                "include": ["getBrowserSamplingProfile", "setPressureNotificationsSuppressed", "simulatePressureNotification", "prepareForLeakDetection"],
+                "async": ["prepareForLeakDetection"]
             },
             {
                 "domain": "Network",
-                "include": ["enable", "disable", "clearBrowserCache", "clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookies", "setCookie", "setCookies", "setUserAgentOverride", "setExtraHTTPHeaders", "canEmulateNetworkConditions", "emulateNetworkConditions", "setBypassServiceWorker", "setRequestInterception", "continueInterceptedRequest", "getResponseBodyForInterception", "setCacheDisabled"],
-                "include_events": ["requestWillBeSent", "responseReceived", "loadingFinished", "loadingFailed", "requestIntercepted"],
-                "async": ["clearBrowserCookies", "clearBrowserCache", "getCookies", "getAllCookies", "deleteCookies", "setCookie", "setCookies", "continueInterceptedRequest", "getResponseBodyForInterception"]
+                "include": ["enable", "disable", "clearBrowserCache", "clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookies", "setCookie", "setCookies", "setExtraHTTPHeaders", "canEmulateNetworkConditions", "emulateNetworkConditions", "setBypassServiceWorker", "setRequestInterception", "continueInterceptedRequest", "getResponseBodyForInterception", "setCacheDisabled", "takeResponseBodyForInterceptionAsStream"],
+                "include_events": ["requestWillBeSent", "responseReceived", "loadingFinished", "loadingFailed", "requestIntercepted", "signedExchangeReceived"],
+                "async": ["clearBrowserCookies", "clearBrowserCache", "getCookies", "getAllCookies", "deleteCookies", "setCookie", "setCookies", "continueInterceptedRequest", "getResponseBodyForInterception", "takeResponseBodyForInterceptionAsStream"]
             },
             {
                 "domain": "Page",
                 "include": ["enable", "disable", "reload", "navigate", "stopLoading", "getNavigationHistory", "navigateToHistoryEntry", "captureScreenshot",
                     "startScreencast", "stopScreencast", "screencastFrameAck", "handleJavaScriptDialog", "setColorPickerEnabled", "requestAppBanner",
-                    "printToPDF", "bringToFront", "setDownloadBehavior", "getAppManifest", "crash"],
+                    "printToPDF", "bringToFront", "setDownloadBehavior", "getAppManifest", "crash", "close", "setWebLifecycleState"],
                 "include_events": ["colorPicked", "interstitialShown", "interstitialHidden", "javascriptDialogOpening", "javascriptDialogClosed", "screencastVisibilityChanged", "screencastFrame"],
                 "async": ["captureScreenshot", "printToPDF", "navigate", "getAppManifest"]
             },

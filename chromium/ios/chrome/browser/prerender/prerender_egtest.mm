@@ -62,7 +62,8 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
     }
   }
 
-  chrome_test_util::ClearBrowsingHistory();
+  GREYAssertTrue(chrome_test_util::ClearBrowsingHistory(),
+                 @"Clearing Browsing History timed out");
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   // Set server up.
   self.testServer->RegisterRequestHandler(
@@ -81,6 +82,10 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(
                                    ntp_home::FakeOmniboxAccessibilityID())]
+      performAction:grey_tap()];
+  [ChromeEarlGrey
+      waitForElementWithMatcherSufficientlyVisible:chrome_test_util::Omnibox()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText([pageString stringByAppendingString:@"\n"])];
   [ChromeEarlGrey waitForPageToFinishLoading];
   [[self class] closeAllTabs];
@@ -91,6 +96,10 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(
                                    ntp_home::FakeOmniboxAccessibilityID())]
+      performAction:grey_tap()];
+  [ChromeEarlGrey
+      waitForElementWithMatcherSufficientlyVisible:chrome_test_util::Omnibox()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(
                         [pageString substringToIndex:[pageString length] - 6])];
 

@@ -16,13 +16,12 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "chrome/test/views/chrome_test_views_delegate.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/views/test/test_views_delegate.h"
 #include "ui/views/widget/widget_delegate.h"
 
 #if defined(OS_WIN)
@@ -69,7 +68,7 @@ class ViewEventTestPlatformPart;
 //   // Schedule the mouse move at a location slightly different from where
 //   // you really want to move to.
 //   ui_controls::SendMouseMoveNotifyWhenDone(loc.x + 10, loc.y,
-//       base::Bind(&YYY, this));
+//       base::BindOnce(&YYY, this));
 //   // Then use this to schedule another mouse move.
 //   ScheduleMouseMoveInBackground(loc.x, loc.y);
 
@@ -154,7 +153,7 @@ class ViewEventTestBase : public views::WidgetDelegate,
 
   std::unique_ptr<ViewEventTestPlatformPart> platform_part_;
 
-  views::TestViewsDelegate views_delegate_;
+  ChromeTestViewsDelegate views_delegate_;
 
   base::RunLoop run_loop_;
 

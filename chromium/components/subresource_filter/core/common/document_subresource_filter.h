@@ -56,8 +56,20 @@ class DocumentSubresourceFilter {
       const GURL& subresource_url,
       url_pattern_index::proto::ElementType subresource_type);
 
+  // Returns the matching rule that determines whether the request url and type
+  // should be allowed. If no rule matches, returns nullptr.
+  const url_pattern_index::flat::UrlRule* FindMatchingUrlRule(
+      const GURL& subresource_url,
+      url_pattern_index::proto::ElementType subresource_type);
+
+  // Called if the DocumentSubresourceFilter needs to change how it filters
+  // subresources.
+  void set_activation_state(const ActivationState& state) {
+    activation_state_ = state;
+  }
+
  private:
-  const ActivationState activation_state_;
+  ActivationState activation_state_;
   const scoped_refptr<const MemoryMappedRuleset> ruleset_;
   const IndexedRulesetMatcher ruleset_matcher_;
 

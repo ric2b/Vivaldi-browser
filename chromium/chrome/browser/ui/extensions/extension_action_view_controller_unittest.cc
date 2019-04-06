@@ -27,8 +27,7 @@ TEST_P(ToolbarActionsBarUnitTest, ExtensionActionWantsToRunAppearance) {
 
   AddTab(browser(), GURL("chrome://newtab"));
 
-  gfx::Size size(ToolbarActionsBar::IconWidth(false),
-                 ToolbarActionsBar::IconHeight());
+  const gfx::Size size = toolbar_actions_bar()->GetViewSize();
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ExtensionActionViewController* action =
@@ -80,10 +79,9 @@ TEST_P(ToolbarActionsBarUnitTest, ExtensionActionBlockedActions) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(web_contents);
-  const gfx::Size kSize(ToolbarActionsBar::IconWidth(false),
-                        ToolbarActionsBar::IconHeight());
+  const gfx::Size size = toolbar_actions_bar()->GetViewSize();
   std::unique_ptr<IconWithBadgeImageSource> image_source =
-      browser_action->GetIconImageSourceForTesting(web_contents, kSize);
+      browser_action->GetIconImageSourceForTesting(web_contents, size);
   EXPECT_FALSE(image_source->grayscale());
   EXPECT_FALSE(image_source->paint_page_action_decoration());
   EXPECT_FALSE(image_source->paint_blocked_actions_decoration());
@@ -93,16 +91,16 @@ TEST_P(ToolbarActionsBarUnitTest, ExtensionActionBlockedActions) {
   ASSERT_TRUE(action_runner);
   action_runner->RequestScriptInjectionForTesting(
       browser_action_ext.get(), extensions::UserScript::DOCUMENT_IDLE,
-      base::Bind(&base::DoNothing));
+      base::DoNothing());
   image_source =
-      browser_action->GetIconImageSourceForTesting(web_contents, kSize);
+      browser_action->GetIconImageSourceForTesting(web_contents, size);
   EXPECT_FALSE(image_source->grayscale());
   EXPECT_FALSE(image_source->paint_page_action_decoration());
   EXPECT_TRUE(image_source->paint_blocked_actions_decoration());
 
   action_runner->RunBlockedActions(browser_action_ext.get());
   image_source =
-      browser_action->GetIconImageSourceForTesting(web_contents, kSize);
+      browser_action->GetIconImageSourceForTesting(web_contents, size);
   EXPECT_FALSE(image_source->grayscale());
   EXPECT_FALSE(image_source->paint_page_action_decoration());
   EXPECT_FALSE(image_source->paint_blocked_actions_decoration());
@@ -116,15 +114,15 @@ TEST_P(ToolbarActionsBarUnitTest, ExtensionActionBlockedActions) {
           toolbar_actions_bar()->GetActions()[1]);
   EXPECT_EQ(browser_action_ext.get(), browser_action->extension());
 
-  image_source = page_action->GetIconImageSourceForTesting(web_contents, kSize);
+  image_source = page_action->GetIconImageSourceForTesting(web_contents, size);
   EXPECT_TRUE(image_source->grayscale());
   EXPECT_FALSE(image_source->paint_page_action_decoration());
   EXPECT_FALSE(image_source->paint_blocked_actions_decoration());
 
   action_runner->RequestScriptInjectionForTesting(
       page_action_ext.get(), extensions::UserScript::DOCUMENT_IDLE,
-      base::Bind(&base::DoNothing));
-  image_source = page_action->GetIconImageSourceForTesting(web_contents, kSize);
+      base::DoNothing());
+  image_source = page_action->GetIconImageSourceForTesting(web_contents, size);
   EXPECT_FALSE(image_source->grayscale());
   EXPECT_FALSE(image_source->paint_page_action_decoration());
   EXPECT_TRUE(image_source->paint_blocked_actions_decoration());
@@ -141,7 +139,7 @@ TEST_P(ToolbarActionsBarUnitTest, ExtensionActionBlockedActions) {
   SetActionWantsToRunOnTab(overflow_page_action->extension_action(),
                            web_contents, true);
   image_source =
-      overflow_page_action->GetIconImageSourceForTesting(web_contents, kSize);
+      overflow_page_action->GetIconImageSourceForTesting(web_contents, size);
   EXPECT_FALSE(image_source->grayscale());
   EXPECT_FALSE(image_source->paint_page_action_decoration());
   EXPECT_TRUE(image_source->paint_blocked_actions_decoration());
@@ -151,7 +149,7 @@ TEST_P(ToolbarActionsBarUnitTest, ExtensionActionBlockedActions) {
   toolbar_model()->SetVisibleIconCount(2u);
 
   action_runner->RunBlockedActions(page_action_ext.get());
-  image_source = page_action->GetIconImageSourceForTesting(web_contents, kSize);
+  image_source = page_action->GetIconImageSourceForTesting(web_contents, size);
   EXPECT_TRUE(image_source->grayscale());
   EXPECT_FALSE(image_source->paint_page_action_decoration());
   EXPECT_FALSE(image_source->paint_blocked_actions_decoration());

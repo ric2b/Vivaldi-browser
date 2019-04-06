@@ -9,7 +9,6 @@
 #include <memory>
 #include <set>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -115,7 +114,7 @@ void AssertWillHandle(
 std::unique_ptr<base::DictionaryValue> GetProtocolHandlerValue(
     const std::string& protocol,
     const std::string& url) {
-  auto value = base::MakeUnique<base::DictionaryValue>();
+  auto value = std::make_unique<base::DictionaryValue>();
   value->SetString("protocol", protocol);
   value->SetString("url", url);
   return value;
@@ -392,6 +391,82 @@ TEST_F(ProtocolHandlerRegistryTest, SaveAndLoad) {
   ASSERT_TRUE(registry()->IsIgnored(stuff_protocol_handler));
 }
 
+TEST_F(ProtocolHandlerRegistryTest, Encode) {
+  base::Time now = base::Time::Now();
+  ProtocolHandler handler("test", GURL("http://example.com"), now);
+  auto value = handler.Encode();
+  ProtocolHandler recreated =
+      ProtocolHandler::CreateProtocolHandler(value.get());
+  EXPECT_EQ("test", recreated.protocol());
+  EXPECT_EQ(GURL("http://example.com"), recreated.url());
+  EXPECT_EQ(now, recreated.last_modified());
+}
+
+TEST_F(ProtocolHandlerRegistryTest, GetHandlersBetween) {
+  base::Time now = base::Time::Now();
+  base::Time one_hour_ago = now - base::TimeDelta::FromHours(1);
+  base::Time two_hours_ago = now - base::TimeDelta::FromHours(2);
+  ProtocolHandler handler1("test1", GURL("http://example.com"), two_hours_ago);
+  ProtocolHandler handler2("test2", GURL("http://example.com"), one_hour_ago);
+  ProtocolHandler handler3("test3", GURL("http://example.com"), now);
+  registry()->OnAcceptRegisterProtocolHandler(handler1);
+  registry()->OnAcceptRegisterProtocolHandler(handler2);
+  registry()->OnAcceptRegisterProtocolHandler(handler3);
+
+  EXPECT_EQ(
+      std::vector<ProtocolHandler>({handler1, handler2, handler3}),
+      registry()->GetUserDefinedHandlers(base::Time(), base::Time::Max()));
+  EXPECT_EQ(
+      std::vector<ProtocolHandler>({handler2, handler3}),
+      registry()->GetUserDefinedHandlers(one_hour_ago, base::Time::Max()));
+  EXPECT_EQ(std::vector<ProtocolHandler>({handler1, handler2}),
+            registry()->GetUserDefinedHandlers(base::Time(), now));
+}
+
+TEST_F(ProtocolHandlerRegistryTest, ClearHandlersBetween) {
+  base::Time now = base::Time::Now();
+  base::Time one_hour_ago = now - base::TimeDelta::FromHours(1);
+  base::Time two_hours_ago = now - base::TimeDelta::FromHours(2);
+  GURL url("http://example.com");
+  ProtocolHandler handler1("test1", url, two_hours_ago);
+  ProtocolHandler handler2("test2", url, one_hour_ago);
+  ProtocolHandler handler3("test3", url, now);
+  ProtocolHandler ignored1("ignored1", url, two_hours_ago);
+  ProtocolHandler ignored2("ignored2", url, one_hour_ago);
+  ProtocolHandler ignored3("ignored3", url, now);
+  registry()->OnAcceptRegisterProtocolHandler(handler1);
+  registry()->OnAcceptRegisterProtocolHandler(handler2);
+  registry()->OnAcceptRegisterProtocolHandler(handler3);
+  registry()->OnIgnoreRegisterProtocolHandler(ignored1);
+  registry()->OnIgnoreRegisterProtocolHandler(ignored2);
+  registry()->OnIgnoreRegisterProtocolHandler(ignored3);
+
+  EXPECT_TRUE(registry()->IsHandledProtocol("test1"));
+  EXPECT_TRUE(registry()->IsHandledProtocol("test2"));
+  EXPECT_TRUE(registry()->IsHandledProtocol("test3"));
+  EXPECT_TRUE(registry()->IsIgnored(ignored1));
+  EXPECT_TRUE(registry()->IsIgnored(ignored2));
+  EXPECT_TRUE(registry()->IsIgnored(ignored3));
+
+  // Delete handler2 and ignored2.
+  registry()->ClearUserDefinedHandlers(one_hour_ago, now);
+  EXPECT_TRUE(registry()->IsHandledProtocol("test1"));
+  EXPECT_FALSE(registry()->IsHandledProtocol("test2"));
+  EXPECT_TRUE(registry()->IsHandledProtocol("test3"));
+  EXPECT_TRUE(registry()->IsIgnored(ignored1));
+  EXPECT_FALSE(registry()->IsIgnored(ignored2));
+  EXPECT_TRUE(registry()->IsIgnored(ignored3));
+
+  // Delete all.
+  registry()->ClearUserDefinedHandlers(base::Time(), base::Time::Max());
+  EXPECT_FALSE(registry()->IsHandledProtocol("test1"));
+  EXPECT_FALSE(registry()->IsHandledProtocol("test2"));
+  EXPECT_FALSE(registry()->IsHandledProtocol("test3"));
+  EXPECT_FALSE(registry()->IsIgnored(ignored1));
+  EXPECT_FALSE(registry()->IsIgnored(ignored2));
+  EXPECT_FALSE(registry()->IsIgnored(ignored3));
+}
+
 TEST_F(ProtocolHandlerRegistryTest, TestEnabledDisabled) {
   registry()->Disable();
   ASSERT_FALSE(registry()->enabled());
@@ -492,6 +567,14 @@ TEST_F(ProtocolHandlerRegistryTest, TestRemoveHandler) {
   registry()->RemoveHandler(ph1);
   ASSERT_FALSE(registry()->IsRegistered(ph1));
   ASSERT_FALSE(registry()->IsHandledProtocol("test"));
+
+  registry()->OnIgnoreRegisterProtocolHandler(ph1);
+  ASSERT_FALSE(registry()->IsRegistered(ph1));
+  ASSERT_TRUE(registry()->IsIgnored(ph1));
+
+  registry()->RemoveHandler(ph1);
+  ASSERT_FALSE(registry()->IsRegistered(ph1));
+  ASSERT_FALSE(registry()->IsIgnored(ph1));
 }
 
 TEST_F(ProtocolHandlerRegistryTest, TestIsRegistered) {
@@ -831,6 +914,12 @@ TEST_F(ProtocolHandlerRegistryTest, TestInstallDefaultHandler) {
   std::vector<std::string> protocols;
   registry()->GetRegisteredProtocols(&protocols);
   ASSERT_EQ(static_cast<size_t>(1), protocols.size());
+  EXPECT_TRUE(registry()->IsHandledProtocol("test"));
+  auto handlers =
+      registry()->GetUserDefinedHandlers(base::Time(), base::Time::Max());
+  EXPECT_TRUE(handlers.empty());
+  registry()->ClearUserDefinedHandlers(base::Time(), base::Time::Max());
+  EXPECT_TRUE(registry()->IsHandledProtocol("test"));
 }
 
 #define URL_p1u1 "http://p1u1.com/%s"
@@ -990,6 +1079,70 @@ TEST_F(ProtocolHandlerRegistryTest, TestPrefPolicyOverlapIgnore) {
   // p2u1 installed by user and policy, so it is removed from pref alone.
   ASSERT_EQ(InPrefIgnoredHandlerCount(), 1);
   ASSERT_EQ(InMemoryIgnoredHandlerCount(), 4);
+}
+
+TEST_F(ProtocolHandlerRegistryTest, TestURIPercentEncoding) {
+  ProtocolHandler ph =
+      CreateProtocolHandler("web+custom", GURL("https://test.com/url=%s"));
+  registry()->OnAcceptRegisterProtocolHandler(ph);
+
+  // Normal case.
+  GURL translated_url = ph.TranslateUrl(GURL("web+custom://custom/handler"));
+  ASSERT_EQ(translated_url,
+            GURL("https://test.com/url=web%2Bcustom%3A%2F%2Fcustom%2Fhandler"));
+
+  // Percent-encoding.
+  translated_url = ph.TranslateUrl(GURL("web+custom://custom/%20handler"));
+  ASSERT_EQ(
+      translated_url,
+      GURL("https://test.com/url=web%2Bcustom%3A%2F%2Fcustom%2F%2520handler"));
+
+  // Space character.
+  translated_url = ph.TranslateUrl(GURL("web+custom://custom handler"));
+  // TODO(mgiuca): Check whether this(' ') should be encoded as '%20'.
+  ASSERT_EQ(translated_url,
+            GURL("https://test.com/url=web%2Bcustom%3A%2F%2Fcustom+handler"));
+
+  // Query parameters.
+  translated_url = ph.TranslateUrl(GURL("web+custom://custom?foo=bar&bar=baz"));
+  ASSERT_EQ(translated_url,
+            GURL("https://test.com/"
+                 "url=web%2Bcustom%3A%2F%2Fcustom%3Ffoo%3Dbar%26bar%3Dbaz"));
+
+  // Non-ASCII characters.
+  translated_url = ph.TranslateUrl(GURL("web+custom://custom/<>`{}#?\"'😂"));
+  ASSERT_EQ(translated_url, GURL("https://test.com/"
+                                 "url=web%2Bcustom%3A%2F%2Fcustom%2F%3C%3E%60%"
+                                 "7B%7D%23%3F%22'%25F0%259F%2598%2582"));
+
+  // C0 characters. GURL constructor encodes U+001F as "%1F" first, because
+  // U+001F is an illegal char. Then the protocol handler translator encodes it
+  // to "%251F" again. That's why the expected result has double-encoded URL.
+  translated_url = ph.TranslateUrl(GURL("web+custom://custom/\x1fhandler"));
+  ASSERT_EQ(
+      translated_url,
+      GURL("https://test.com/url=web%2Bcustom%3A%2F%2Fcustom%2F%251Fhandler"));
+
+  // Control characters.
+  // TODO(crbug.com/809852): Check why non-special URLs don't encode any
+  // characters above U+001F.
+  translated_url = ph.TranslateUrl(GURL("web+custom://custom/\x7Fhandler"));
+  ASSERT_EQ(
+      translated_url,
+      GURL("https://test.com/url=web%2Bcustom%3A%2F%2Fcustom%2F%7Fhandler"));
+
+  // Path percent-encode set.
+  translated_url =
+      ph.TranslateUrl(GURL("web+custom://custom/handler=#download"));
+  ASSERT_EQ(translated_url,
+            GURL("https://test.com/"
+                 "url=web%2Bcustom%3A%2F%2Fcustom%2Fhandler%3D%23download"));
+
+  // Userinfo percent-encode set.
+  translated_url = ph.TranslateUrl(GURL("web+custom://custom/handler:@id="));
+  ASSERT_EQ(translated_url,
+            GURL("https://test.com/"
+                 "url=web%2Bcustom%3A%2F%2Fcustom%2Fhandler%3A%40id%3D"));
 }
 
 TEST_F(ProtocolHandlerRegistryTest, TestMultiplePlaceholders) {

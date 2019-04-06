@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "components/signin/core/browser/account_reconcilor_delegate.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 
 class SigninClient;
 
@@ -17,24 +18,28 @@ namespace signin {
 // AccountReconcilorDelegate specialized for Dice.
 class DiceAccountReconcilorDelegate : public AccountReconcilorDelegate {
  public:
-  DiceAccountReconcilorDelegate(SigninClient* signin_client);
+  DiceAccountReconcilorDelegate(SigninClient* signin_client,
+                                AccountConsistencyMethod account_consistency);
   ~DiceAccountReconcilorDelegate() override {}
 
   // AccountReconcilorDelegate:
   bool IsReconcileEnabled() const override;
   bool IsAccountConsistencyEnforced() const override;
+  std::string GetGaiaApiSource() const override;
   std::string GetFirstGaiaAccountForReconcile(
       const std::vector<std::string>& chrome_accounts,
       const std::vector<gaia::ListedAccount>& gaia_accounts,
       const std::string& primary_account,
-      bool first_execution) const override;
-  bool ShouldRevokeAllSecondaryTokensBeforeReconcile(
+      bool first_execution,
+      bool will_logout) const override;
+  RevokeTokenOption ShouldRevokeSecondaryTokensBeforeReconcile(
       const std::vector<gaia::ListedAccount>& gaia_accounts) override;
   void OnReconcileFinished(const std::string& first_account,
                            bool reconcile_is_noop) override;
 
  private:
   SigninClient* signin_client_;
+  AccountConsistencyMethod account_consistency_;
 
   // Last known "first account". Used when cookies are lost as a best guess.
   std::string last_known_first_account_;

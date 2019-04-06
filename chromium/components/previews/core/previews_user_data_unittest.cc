@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "net/base/request_priority.h"
 #include "net/nqe/effective_connection_type.h"
@@ -42,7 +41,7 @@ TEST_F(PreviewsUserDataTest, AddToURLRequest) {
   std::unique_ptr<net::URLRequest> fake_request(context->CreateRequest(
       GURL("http://www.google.com"), net::RequestPriority::IDLE, nullptr,
       TRAFFIC_ANNOTATION_FOR_TESTS));
-  PreviewsUserData* data = PreviewsUserData::GetData(*fake_request.get());
+  PreviewsUserData* data = PreviewsUserData::GetData(*fake_request);
   EXPECT_FALSE(data);
 
   data = PreviewsUserData::Create(fake_request.get(), 1u);
@@ -57,7 +56,20 @@ TEST_F(PreviewsUserDataTest, DeepCopy) {
   std::unique_ptr<PreviewsUserData> data(new PreviewsUserData(5u));
   EXPECT_EQ(id, data->page_id());
 
-  EXPECT_EQ(id, data->DeepCopy()->page_id());
+  EXPECT_EQ(0, data->data_savings_inflation_percent());
+  EXPECT_FALSE(data->cache_control_no_transform_directive());
+  EXPECT_EQ(previews::PreviewsType::NONE, data->committed_previews_type());
+
+  data->SetDataSavingsInflationPercent(123);
+  data->SetCacheControlNoTransformDirective();
+  data->SetCommittedPreviewsType(previews::PreviewsType::NOSCRIPT);
+
+  std::unique_ptr<PreviewsUserData> deep_copy = data->DeepCopy();
+  EXPECT_EQ(id, deep_copy->page_id());
+  EXPECT_EQ(123, deep_copy->data_savings_inflation_percent());
+  EXPECT_TRUE(deep_copy->cache_control_no_transform_directive());
+  EXPECT_EQ(previews::PreviewsType::NOSCRIPT,
+            deep_copy->committed_previews_type());
 }
 
 }  // namespace

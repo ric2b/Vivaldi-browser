@@ -20,7 +20,7 @@
 #include "media/formats/mp4/avc.h"
 #include "media/formats/mp4/box_reader.h"
 #include "media/formats/mp4/fourccs.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 namespace media {
 namespace mp4 {
@@ -155,6 +155,7 @@ struct MEDIA_EXPORT ProtectionSchemeInfo : Box {
   SchemeInfo info;
 
   bool HasSupportedScheme() const;
+  bool IsCbcsEncryptionScheme() const;
 };
 
 struct MEDIA_EXPORT MovieHeader : Box {
@@ -167,6 +168,12 @@ struct MEDIA_EXPORT MovieHeader : Box {
   uint64_t duration;
   int32_t rate;
   int16_t volume;
+  // A 3x3 matrix of [ A B C ]
+  //                 [ D E F ]
+  //                 [ U V W ]
+  // Where A-F are 16.16 fixed point decimals
+  // And U, V, W are 2.30 fixed point decimals.
+  DisplayMatrix display_matrix;
   uint32_t next_track_id;
 };
 
@@ -180,6 +187,7 @@ struct MEDIA_EXPORT TrackHeader : Box {
   int16_t layer;
   int16_t alternate_group;
   int16_t volume;
+  DisplayMatrix display_matrix;  // See MovieHeader.display_matrix
   uint32_t width;
   uint32_t height;
 };
@@ -243,6 +251,14 @@ struct MEDIA_EXPORT VPCodecConfigurationRecord : Box {
 
   VideoCodecProfile profile;
 };
+
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+struct MEDIA_EXPORT AV1CodecConfigurationRecord : Box {
+  DECLARE_BOX_METHODS(AV1CodecConfigurationRecord);
+
+  VideoCodecProfile profile;
+};
+#endif
 
 struct MEDIA_EXPORT PixelAspectRatioBox : Box {
   DECLARE_BOX_METHODS(PixelAspectRatioBox);

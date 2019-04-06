@@ -5,6 +5,7 @@
 #include "services/ui/ws/frame_generator.h"
 
 #include "base/macros.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/test/begin_frame_args_test.h"
@@ -44,16 +45,28 @@ class TestClientBinding : public viz::mojom::CompositorFrameSink,
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
-      viz::mojom::HitTestRegionListPtr hit_test_region_list,
+      base::Optional<viz::HitTestRegionList> hit_test_region_list,
       uint64_t submit_time) override {
     ++frames_submitted_;
     last_frame_ = std::move(frame);
     last_begin_frame_ack_ = last_frame_.metadata.begin_frame_ack;
   }
 
+  void SubmitCompositorFrameSync(
+      const viz::LocalSurfaceId& local_surface_id,
+      viz::CompositorFrame frame,
+      base::Optional<viz::HitTestRegionList> hit_test_region_list,
+      uint64_t submit_time,
+      SubmitCompositorFrameSyncCallback callback) override {}
+
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override {
     last_begin_frame_ack_ = ack;
   }
+
+  void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
+                               const viz::SharedBitmapId& id) override {}
+
+  void DidDeleteSharedBitmap(const viz::SharedBitmapId& id) override {}
 
   void SetNeedsBeginFrame(bool needs_begin_frame) override {
     if (needs_begin_frame == observing_begin_frames_)
@@ -62,8 +75,9 @@ class TestClientBinding : public viz::mojom::CompositorFrameSink,
     observing_begin_frames_ = needs_begin_frame;
     if (needs_begin_frame) {
       begin_frame_source_->AddObserver(this);
-    } else
+    } else {
       begin_frame_source_->RemoveObserver(this);
+    }
   }
 
   void SetWantsAnimateOnlyBeginFrames() override {}
@@ -133,14 +147,17 @@ class FrameGeneratorTest : public testing::Test {
     // FrameGenerator does not request BeginFrames right after creation.
     EXPECT_EQ(0, NumberOfFramesReceived());
     client_binding->SetBeginFrameSource(begin_frame_source_.get());
-    frame_generator_->Bind(std::move(client_binding));
+    viz::mojom::DisplayPrivateAssociatedPtr display_private;
+    mojo::MakeRequestAssociatedWithDedicatedPipe(&display_private);
+    frame_generator_->Bind(std::move(client_binding),
+                           std::move(display_private));
   };
 
   // InitWithSurfaceInfo creates a TestClientBinding and binds it to
   // |frame_generator_|. After InitWithSurfaceInfo finishes, |frame_generator_|
   // has a valid SurfaceInfo and does not request BeginFrames.
   void InitWithSurfaceInfo() {
-    frame_generator_->OnFirstSurfaceActivation(kArbitrarySurfaceInfo);
+    frame_generator_->SetEmbeddedSurface(kArbitrarySurfaceInfo);
 
     // Issue a BeginFrame so that frame_generator_ stops requesting BeginFrames
     // after submitting a CompositorFrame.
@@ -176,6 +193,7 @@ class FrameGeneratorTest : public testing::Test {
   TestClientBinding* binding() { return binding_; }
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<viz::FakeExternalBeginFrameSource> begin_frame_source_;
   std::unique_ptr<FrameGenerator> frame_generator_;
   TestClientBinding* binding_ = nullptr;
@@ -198,10 +216,11 @@ TEST_F(FrameGeneratorTest, OnFirstSurfaceActivation) {
   // Verify that the CompositorFrame refers to the window manager's surface via
   // referenced_surfaces.
   const viz::CompositorFrameMetadata& last_metadata = LastMetadata();
-  const std::vector<viz::SurfaceId>& referenced_surfaces =
+  const std::vector<viz::SurfaceRange>& referenced_surfaces =
       last_metadata.referenced_surfaces;
   EXPECT_EQ(1lu, referenced_surfaces.size());
-  EXPECT_EQ(kArbitrarySurfaceId, referenced_surfaces.front());
+  EXPECT_EQ(viz::SurfaceRange(kArbitrarySurfaceId),
+            referenced_surfaces.front());
 
   viz::BeginFrameAck expected_ack(0, 2, true);
   EXPECT_EQ(expected_ack, LastBeginFrameAck());

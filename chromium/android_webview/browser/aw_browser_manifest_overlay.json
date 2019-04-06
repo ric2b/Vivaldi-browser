@@ -4,17 +4,25 @@
     "service_manager:connector": {
       "provides": {
         "renderer": [
-          "safe_browsing::mojom::SafeBrowsing"
+          "safe_browsing.mojom.SafeBrowsing",
+          "spellcheck.mojom.SpellCheckHost"
+        ],
+        "profiling_client": [
+          "heap_profiling.mojom.ProfilingClient"
         ]
+      },
+      "requires": {
+        "content_browser": [ "profiling_client" ],
+        "heap_profiling": [ "profiling", "heap_profiler" ]
       }
     },
     "navigation:frame": {
       "provides": {
         "renderer": [
-          "autofill::mojom::AutofillDriver",
-          "autofill::mojom::PasswordManagerDriver",
-          "blink::mojom::TextSuggestionHost",
-          "web_restrictions::mojom::WebRestrictions"
+          "autofill.mojom.AutofillDriver",
+          "autofill.mojom.PasswordManagerDriver",
+          "blink.mojom.TextSuggestionHost",
+          "web_restrictions.mojom.WebRestrictions"
         ]
       }
     }

@@ -50,10 +50,9 @@ used when committed.
     Cast for Android (on a Linux host)
 *   [iOS Build Instructions](ios/build_instructions.md) - iOS target (on a MacOS
     host)
+*   [Chrome OS Build Instructions](chromeos_build_instructions.md) - Chrome OS
 *   [Linux Chromium ARM Recipes](linux_chromium_arm.md) - Recipes for building
     Chromium for ARM on Linux.
-*   [Common Build Tasks](common_build_tasks.md) - Recipes for slightly more
-    advanced build tasks
 *   [Chrome Component Build](component_build.md) - Faster builds using more
     libraries
 *   [Using the BuildRunner](using_build_runner.md) - Scripts that extract build
@@ -110,8 +109,6 @@ used when committed.
     compiler
 *   [Threading and Tasks in Chrome](threading_and_tasks.md) - How to run tasks
     and handle thread safety in Chrome.
-*   [Subtle Threading Bugs and Patterns to Avoid Them](subtle_threading_bugs.md) -
-    Threading pitfalls to avoid.
 *   [Callback<> and Bind()](callback.md) - All about Callbacks, Closures, and
     Bind().
 *   [Views Platform Styling](ui/views/platform_style.md) - How views are styled
@@ -127,7 +124,7 @@ used when committed.
 *   [base::Optional](optional.md) - How to use `base::Optional` in C++ code.
 *   [Using the Origin Trials Framework](origin_trials_integration.md) - A
     framework for conditionally enabling experimental APIs for testing.
-*   [`SharedModelTypeProcessor` in Unified Sync and Storage](sync/uss/shared_model_type_processor.md) -
+*   [`ClientTagBasedModelTypeProcessor` in Unified Sync and Storage](sync/uss/client_tag_based_model_type_processor.md) -
     Notes on the central data structure used in Chrome Sync.
 *   [Chrome Sync's Model API](sync/model_api.md) - Data models used for syncing
     information across devices using Chrome Sync.
@@ -158,7 +155,6 @@ used when committed.
     Diagnosing and fixing layout test flakiness due to ordering dependencies.
 *   [Running Layout Tests using `content_shell`](testing/layout_tests_in_content_shell.md) -
     Running layout tests by hand.
-*   [Testing Browser UI](testing/test_browser_ui.md) - Using TestBrowserUi
 *   [Web Platform Tests](testing/web_platform_tests.md) - Shared tests across
     browser vendors
 *   [Using Breakpad with `content_shell`](testing/using_breakpad_with_content_shell.md) -
@@ -166,6 +162,16 @@ used when committed.
 *   [Test Descriptions](test_descriptions.md) - Unit test targets that can be
     built, with associated desciptions.
 *   [IPC Fuzzer](ipc_fuzzer.md) - Fuzz testing of Chromium IPC interfaces.
+
+### GPU-related docs
+*   [GPU Pixel Wrangling](gpu/pixel_wrangling.md) - Instructions for GPU
+    pixel wrangling (the GPU sheriffing rotation).
+*   [Debugging GPU related code](gpu/debugging_gpu_related_code.md) - Hints for
+    debugging GPU- and graphics-related code.
+*   [GPU Testing](gpu/gpu_testing.md) - Description of Chromium's GPU testing
+    infrastructure.
+*   [GPU Bot Details](gpu/gpu_testing_bot_details.md) - In-depth description of
+    how the bots are maintained.
 
 ### Misc Linux-Specific Docs
 *   [Linux Proxy Config](linux_proxy_config.md) - Network proxy sources on Linux
@@ -194,7 +200,7 @@ used when committed.
     on crash dumping a process running in a seccomp sandbox.
 *   [Linux Password Storage](linux_password_storage.md) - Keychain integrations
     between Chromium and Linux.
-*   [Linux Sublime Development](linux_sublime_dev.md) - Using Sublime as an IDE
+*   [Linux Sublime Development](sublime_ide.md) - Using Sublime as an IDE
     for Chromium development on Linux.
 *   [Building and Debugging GTK](linux_building_debug_gtk.md) - Building
     Chromium against GTK using lower optimization levels and/or more debugging
@@ -210,8 +216,6 @@ used when committed.
 *   [Running Layout Tests on Linux](layout_tests_linux.md) - Linux-specific
     instructions for running layout tests.
 *   [Linux Sysroot Images](linux_sysroot.md) - How builds use libraries on Linux
-*   [`msttcorefonts` on Mandriva](mandriva_msttcorefonts.md) - Getting fonts
-    needed to build Chrome that are not available for Mandriva
 *   [Linux Hardware Video Decoding](linux_hw_video_decode.md) - Enabling
     hardware video decode codepaths on Linux
 
@@ -248,6 +252,12 @@ used when committed.
     `android.util.Log` on Android, and usage guidelines.
 *   [Chromoting Android Hacking](chromoting_android_hacking.md) - Viewing the
     logs and debugging the Chrome Remote Desktop Android client.
+*   [Android Java Static Analysis](../build/android/docs/lint.md) - Catching
+    Java related issues at compile time with the 'lint' tool.
+*   [Java Code Coverage](../build/android/docs/coverage.md) - Collecting code
+    coverage data with the EMMA tool.
+*   [Android BuildConfig files](../build/android/docs/build_config.md) -
+    What are .build_config files and how they are used.
 
 ### Misc iOS-Specific Docs
 *   [Continuous Build and Test Infrastructure for Chromium for iOS](ios/infra.md)
@@ -276,12 +286,19 @@ used when committed.
     feedback (ChromeVox) on Chrome OS.
 *   [ChromeVox on Desktop Linux](accessibility/chromevox_on_desktop_linux.md) -
     Enabling spoken feedback (ChromeVox) on desktop Linux.
+*   [Offscreen, Invisible and Size](accessibility/offscreen.md) - How Chrome
+    defines offscreen, invisible and size in the accessibility tree.
+*   [Text to Speech](accessibility/tts.md) - Overview of text to speech in 
+    Chrome and Chrome OS.
 *   [BRLTTY in Chrome OS](accessibility/brltty.md) - Chrome OS integration with
     BRLTTY to support refreshable braille displays
 *   [PATTS on Chrome OS](accessibility/patts.md) - Notes on the PATTS speech
     sythesis engine used on Chrome OS
 *   [VoiceOver](ios/voiceover.md) - Using Apple's VoiceOver feature with
     Chromium on iOS.
+
+### Memory
+*   [Memory Overview](memory/README.md)
 
 ### Memory Infrastructure Timeline Profiling (MemoryInfra)
 *   [Overview](memory-infra/README.md)
@@ -291,7 +308,6 @@ used when committed.
 *   [Memory Usage in CC](memory-infra/probe-cc.md)
 *   [Memory Benchmarks](memory-infra/memory_benchmarks.md)
 *   [Heap Profiling](memory-infra/heap_profiler.md)
-*   [Heap Profiling Internals](memory-infra/heap_profiler_internals.md)
 
 ### Misc
 *   [Useful URLs](useful_urls.md) - A collection of links to various tools and
@@ -302,9 +318,6 @@ used when committed.
     Chromium/IRC/Google
 *   [Documentation Best Practices](documentation_best_practices.md)
 *   [Documentation Guidelines](documentation_guidelines.md)
-*   [Shift-Based Development](shift_based_development.md) - An experiment in
-    handing off development of coordinated work between developers in different
-    time zones.
 *   [Chromium Browser vs Google Chrome](chromium_browser_vs_google_chrome.md) -
     What's the difference between _Chromium Browser_ and _Google Chrome_?
 *   [Proxy Auto Config using WPAD](proxy_auto_config.md) - How WPAD servers are
@@ -315,7 +328,6 @@ used when committed.
     directories are determined on all platforms.
 
 ### Probably Obsolete
-*   [Old Chrome OS build instructions](old_chromeos_build_instructions.md)
 *   [TPM Quick Reference](tpm_quick_ref.md) - Trusted Platform Module notes.
 *   [System Hardening Features](system_hardening_features.md) - A list of
     current and planned Chrome OS security features.

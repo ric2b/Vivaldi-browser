@@ -11,6 +11,8 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/strings/string16.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/chrome_cleaner/public/interfaces/chrome_prompt.mojom.h"
 
 namespace safe_browsing {
@@ -43,17 +45,18 @@ class MockChromeCleanerProcess {
     kNumCrashPoints,
   };
 
-  // Indicates if registry keys will be sent from the cleaner process.
-  enum class RegistryKeysReporting {
+  // Indicates if a category of items (e.g. registry keys, extensions) to be
+  // removed/changed will be sent from the cleaner process.
+  enum class ItemsReporting {
     // Simulation of an older cleaner version that doesn't support sending
-    // registry keys.
+    // the category of items.
     kUnsupported,
-    // Simulation of a cleaner version that supports sending registry keys,
-    // but no registry key to be removed/changed reported.
+    // Simulation of a cleaner version that supports sending the category of
+    // items, but for which no items were reported.
     kNotReported,
-    // The cleaner reported registry keys to be removed/changed.
+    // The cleaner reported items to be removed/changed.
     kReported,
-    kNumRegistryKeysReporting,
+    kNumItemsReporting,
   };
 
   static constexpr int kInternalTestFailureExitCode = 100001;
@@ -62,6 +65,14 @@ class MockChromeCleanerProcess {
   static constexpr int kDeclinedExitCode = 44;
   static constexpr int kRebootRequiredExitCode = 15;
   static constexpr int kRebootNotRequiredExitCode = 0;
+
+  static const base::char16 kInstalledExtensionId1[];
+  static const base::char16 kInstalledExtensionName1[];
+  static const base::char16 kInstalledExtensionId2[];
+  static const base::char16 kInstalledExtensionName2[];
+  static const base::char16 kUnknownExtensionId[];
+
+  static void AddMockExtensionsToProfile(Profile* profile);
 
   class Options {
    public:
@@ -76,13 +87,22 @@ class MockChromeCleanerProcess {
     void AddSwitchesToCommandLine(base::CommandLine* command_line) const;
 
     void SetReportedResults(bool has_files_to_remove,
-                            RegistryKeysReporting registry_keys_reporting);
+                            ItemsReporting registry_keys_reporting,
+                            ItemsReporting extensions_reporting);
 
     const std::vector<base::FilePath>& files_to_delete() const {
       return files_to_delete_;
     }
     const base::Optional<std::vector<base::string16>>& registry_keys() const {
       return registry_keys_;
+    }
+    const base::Optional<std::vector<base::string16>>& extension_ids() const {
+      return extension_ids_;
+    }
+
+    const base::Optional<std::vector<base::string16>>&
+    expected_extension_names() const {
+      return expected_extension_names_;
     }
 
     void set_reboot_required(bool reboot_required) {
@@ -102,8 +122,12 @@ class MockChromeCleanerProcess {
       return expected_user_response_;
     }
 
-    RegistryKeysReporting registry_keys_reporting() const {
+    ItemsReporting registry_keys_reporting() const {
       return registry_keys_reporting_;
+    }
+
+    ItemsReporting extensions_reporting() const {
+      return extensions_reporting_;
     }
 
     int ExpectedExitCode(chrome_cleaner::mojom::PromptAcceptance
@@ -112,10 +136,12 @@ class MockChromeCleanerProcess {
    private:
     std::vector<base::FilePath> files_to_delete_;
     base::Optional<std::vector<base::string16>> registry_keys_;
+    base::Optional<std::vector<base::string16>> extension_ids_;
+    base::Optional<std::vector<base::string16>> expected_extension_names_;
     bool reboot_required_ = false;
     CrashPoint crash_point_ = CrashPoint::kNone;
-    RegistryKeysReporting registry_keys_reporting_ =
-        RegistryKeysReporting::kUnsupported;
+    ItemsReporting registry_keys_reporting_ = ItemsReporting::kUnsupported;
+    ItemsReporting extensions_reporting_ = ItemsReporting::kUnsupported;
     chrome_cleaner::mojom::PromptAcceptance expected_user_response_ =
         chrome_cleaner::mojom::PromptAcceptance::UNSPECIFIED;
   };

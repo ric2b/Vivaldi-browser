@@ -44,7 +44,7 @@ struct InterruptReasonAssociation {
 // in order.
 const InterruptReasonAssociation current_reasons[] = {
 #define INTERRUPT_REASON(a, b) { #a, b },
-#include "content/public/browser/download_interrupt_reason_values.h"
+#include "components/download/public/common/download_interrupt_reason_values.h"
 #undef INTERRUPT_REASON
 };
 
@@ -77,6 +77,7 @@ const InterruptReasonAssociation historical_reasons[] = {
     {"SERVER_FORBIDDEN", 36},
     {"SERVER_UNREACHABLE", 37},
     {"SERVER_CONTENT_LENGTH_MISMATCH", 38},
+    {"SERVER_CROSS_ORIGIN_REDIRECT", 39},
     {"USER_CANCELED", 40},
     {"USER_SHUTDOWN", 41},
     {"CRASH", 50},

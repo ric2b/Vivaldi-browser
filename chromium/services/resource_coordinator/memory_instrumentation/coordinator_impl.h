@@ -20,7 +20,7 @@
 #include "services/resource_coordinator/memory_instrumentation/queued_request.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/coordinator.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/tracing_observer.h"
-#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
+#include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/service_manager/public/cpp/identity.h"
 
 namespace service_manager {
@@ -62,18 +62,24 @@ class CoordinatorImpl : public Coordinator,
       base::trace_event::MemoryDumpType,
       base::trace_event::MemoryDumpLevelOfDetail,
       const std::vector<std::string>& allocator_dump_names,
-      const RequestGlobalMemoryDumpCallback&) override;
+      RequestGlobalMemoryDumpCallback) override;
   void RequestGlobalMemoryDumpForPid(
       base::ProcessId,
-      const RequestGlobalMemoryDumpForPidCallback&) override;
+      const std::vector<std::string>& allocator_dump_names,
+      RequestGlobalMemoryDumpForPidCallback) override;
+  void RequestPrivateMemoryFootprint(
+      base::ProcessId,
+      RequestPrivateMemoryFootprintCallback) override;
   void RequestGlobalMemoryDumpAndAppendToTrace(
       base::trace_event::MemoryDumpType,
       base::trace_event::MemoryDumpLevelOfDetail,
-      const RequestGlobalMemoryDumpAndAppendToTraceCallback&) override;
+      RequestGlobalMemoryDumpAndAppendToTraceCallback) override;
+  void RegisterHeapProfiler(mojom::HeapProfilerPtr heap_profiler) override;
 
   // mojom::HeapProfilerHelper implementation.
   void GetVmRegionsForHeapProfiler(
-      const GetVmRegionsForHeapProfilerCallback&) override;
+      const std::vector<base::ProcessId>& pids,
+      GetVmRegionsForHeapProfilerCallback) override;
 
  protected:
   // virtual for testing.
@@ -84,10 +90,9 @@ class CoordinatorImpl : public Coordinator,
   ~CoordinatorImpl() override;
 
  private:
-  using OSMemDumpMap =
-      std::unordered_map<base::ProcessId, mojom::RawOSMemDumpPtr>;
+  using OSMemDumpMap = base::flat_map<base::ProcessId, mojom::RawOSMemDumpPtr>;
   using RequestGlobalMemoryDumpInternalCallback =
-      base::Callback<void(bool, uint64_t, mojom::GlobalMemoryDumpPtr)>;
+      base::OnceCallback<void(bool, uint64_t, mojom::GlobalMemoryDumpPtr)>;
   friend std::default_delete<CoordinatorImpl>;  // For testing
   friend class CoordinatorImplTest;             // For testing
 
@@ -105,7 +110,7 @@ class CoordinatorImpl : public Coordinator,
 
   void RequestGlobalMemoryDumpInternal(
       const QueuedRequest::Args& args,
-      const RequestGlobalMemoryDumpInternalCallback& callback);
+      RequestGlobalMemoryDumpInternalCallback callback);
 
   // Callback of RequestChromeMemoryDump.
   void OnChromeMemoryDumpResponse(
@@ -120,10 +125,24 @@ class CoordinatorImpl : public Coordinator,
                               bool success,
                               OSMemDumpMap);
 
+  // Callback of RequestOSMemoryDumpForVmRegions.
+  void OnOSMemoryDumpForVMRegions(uint64_t dump_guid,
+                                  mojom::ClientProcess* client,
+                                  bool success,
+                                  OSMemDumpMap);
+
+  void FinalizeVmRegionDumpIfAllManagersReplied(uint64_t dump_guid);
+
+  // Callback of DumpProcessesForTracing.
+  void OnDumpProcessesForTracing(
+      uint64_t dump_guid,
+      std::vector<mojom::SharedBufferWithSizePtr> buffers);
+
   void RemovePendingResponse(mojom::ClientProcess*,
                              QueuedRequest::PendingResponse::Type);
 
   void OnQueuedRequestTimedOut(uint64_t dump_guid);
+  void OnHeapDumpTimeOut(uint64_t dump_guid);
 
   void PerformNextQueuedGlobalMemoryDump();
   void FinalizeGlobalMemoryDumpIfAllManagersReplied();
@@ -139,6 +158,26 @@ class CoordinatorImpl : public Coordinator,
   // Outstanding dump requests, enqueued via RequestGlobalMemoryDump().
   std::list<QueuedRequest> queued_memory_dump_requests_;
 
+  // Outstanding vm region requests, enqueued via GetVmRegionsForHeapProfiler().
+  // This is kept in a separate list from |queued_memory_dump_requests_| for two
+  // reasons:
+  //   1) The profiling service is queried during a memory dump request, but the
+  //   profiling service in turn needs to query for vm regions. Keeping this in
+  //   the same list as |queued_memory_dump_requests_| would require this class
+  //   to support concurrent requests.
+  //
+  //   2) Vm region requests are only ever requested by the profiling service,
+  //   which uses the HeapProfilerHelper interface. Keeping the requests
+  //   separate means we can avoid littering the RequestGlobalMemoryDump
+  //   interface with flags intended for HeapProfilerHelper. This was already
+  //   technically possible before, but required some additional plumbing. Now
+  //   the separation is much cleaner.
+  //
+  // Unlike queued_memory_dump_requests_, all requests are executed in parallel.
+  // The key is a |dump_guid|.
+  std::map<uint64_t, std::unique_ptr<QueuedVmRegionRequest>>
+      in_progress_vm_region_requests_;
+
   // There may be extant callbacks in |queued_memory_dump_requests_|. The
   // bindings_ must be closed before destroying the un-run callbacks.
   mojo::BindingSet<mojom::Coordinator, service_manager::Identity> bindings_;
@@ -150,13 +189,19 @@ class CoordinatorImpl : public Coordinator,
 
   // Maintains a map of service_manager::Identity -> pid for registered clients.
   std::unique_ptr<ProcessMap> process_map_;
+
+  // Dump IDs are unique across both heap dump and memory dump requests.
   uint64_t next_dump_id_;
   std::unique_ptr<TracingObserver> tracing_observer_;
 
   // Timeout for registered client processes to respond to dump requests.
   base::TimeDelta client_process_timeout_;
 
+  // When not null, can be queried for heap dumps.
+  mojom::HeapProfilerPtr heap_profiler_;
+
   THREAD_CHECKER(thread_checker_);
+  base::WeakPtrFactory<CoordinatorImpl> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(CoordinatorImpl);
 };
 

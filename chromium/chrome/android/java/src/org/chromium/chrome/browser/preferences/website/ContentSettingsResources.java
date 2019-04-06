@@ -91,6 +91,11 @@ public class ContentSettingsResources {
         ThreadUtils.assertOnUiThread();
         if (sResourceInfo == null) {
             Map<Integer, ResourceItem> localMap = new HashMap<Integer, ResourceItem>();
+            localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_ADS,
+                    new ResourceItem(R.drawable.web_asset, R.string.ads_permission_title,
+                            R.string.ads_permission_title, ContentSetting.ALLOW,
+                            ContentSetting.BLOCK, 0,
+                            R.string.website_settings_category_ads_blocked));
             localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_AUTOPLAY,
                     new ResourceItem(R.drawable.settings_autoplay, R.string.autoplay_title,
                                  R.string.autoplay_title, ContentSetting.ALLOW,
@@ -102,6 +107,13 @@ public class ContentSettingsResources {
                                  R.string.background_sync_permission_title, ContentSetting.ALLOW,
                                  ContentSetting.BLOCK,
                                  R.string.website_settings_category_allowed_recommended, 0));
+            localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_CLIPBOARD_READ,
+                    new ResourceItem(R.drawable.ic_content_paste_grey600_24dp,
+                            R.string.clipboard_permission_title,
+                            R.string.clipboard_permission_title, ContentSetting.ASK,
+                            ContentSetting.BLOCK,
+                            R.string.website_settings_category_clipboard_ask,
+                            R.string.website_settings_category_clipboard_blocked));
             localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_COOKIES,
                     new ResourceItem(R.drawable.permission_cookie, R.string.cookies_title,
                                  R.string.cookies_title, ContentSetting.ALLOW, ContentSetting.BLOCK,
@@ -139,28 +151,34 @@ public class ContentSettingsResources {
                                  R.string.website_settings_category_notifications_ask, 0));
             localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_POPUPS,
                     new ResourceItem(R.drawable.permission_popups, R.string.popup_permission_title,
-                                 R.string.popup_permission_title, ContentSetting.ALLOW,
-                                 ContentSetting.BLOCK, 0,
-                                 R.string.website_settings_category_popups_blocked));
+                            R.string.popup_permission_title, ContentSetting.ALLOW,
+                            ContentSetting.BLOCK, 0,
+                            R.string.website_settings_category_popups_redirects_blocked));
             localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
                     new ResourceItem(R.drawable.permission_protected_media,
                                  org.chromium.chrome.R.string.protected_content,
                                  org.chromium.chrome.R.string.protected_content,
                                  ContentSetting.ASK, ContentSetting.BLOCK, 0, 0));
-            localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_ADS,
-                    new ResourceItem(R.drawable.ic_ad_24dp_grey600, R.string.ads_permission_title,
-                            R.string.ads_permission_title, ContentSetting.ALLOW,
-                            ContentSetting.BLOCK, 0,
-                            R.string.website_settings_category_ads_blocked));
-            localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_USB_CHOOSER_DATA,
-                    new ResourceItem(R.drawable.settings_usb, 0, 0, ContentSetting.ASK,
-                                 ContentSetting.BLOCK, 0, 0));
             localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_SOUND,
                     new ResourceItem(R.drawable.ic_volume_up_grey600_24dp,
                             R.string.sound_permission_title, R.string.sound_permission_title,
                             ContentSetting.ALLOW, ContentSetting.BLOCK,
                             R.string.website_settings_category_sound_allowed,
                             R.string.website_settings_category_sound_blocked));
+            localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_USB_CHOOSER_DATA,
+                    new ResourceItem(R.drawable.settings_usb, 0, 0, ContentSetting.ASK,
+                            ContentSetting.BLOCK, 0, 0));
+            localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_USB_GUARD,
+                    new ResourceItem(R.drawable.settings_usb, R.string.website_settings_usb,
+                            R.string.website_settings_usb, ContentSetting.ASK, ContentSetting.BLOCK,
+                            R.string.website_settings_category_usb_ask,
+                            R.string.website_settings_category_usb_blocked));
+            localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_SENSORS,
+                    new ResourceItem(R.drawable.settings_sensors, R.string.sensors_permission_title,
+                            R.string.sensors_permission_title, ContentSetting.ALLOW,
+                            ContentSetting.BLOCK,
+                            R.string.website_settings_category_sensors_allowed,
+                            R.string.website_settings_category_sensors_blocked));
             sResourceInfo = localMap;
         }
         return sResourceInfo;
@@ -178,16 +196,6 @@ public class ContentSettingsResources {
      */
     public static int getIcon(int contentType) {
         return getResourceItem(contentType).getIcon();
-    }
-
-    /**
-     * Creates a {@link Drawable} for the given content type with the correct tint applied.
-     */
-    public static Drawable getTintedIcon(int contentType, Resources resources) {
-        Drawable icon = ApiCompatibilityUtils.getDrawable(resources, getIcon(contentType));
-        icon.setColorFilter(ApiCompatibilityUtils.getColor(resources, R.color.black_alpha_65),
-                PorterDuff.Mode.SRC_IN);
-        return icon;
     }
 
     /**
@@ -321,6 +329,14 @@ public class ContentSettingsResources {
      */
     public static int getAdsBlockedListSummary() {
         return R.string.website_settings_category_ads_blocked_list;
+    }
+
+    /**
+     * Returns the blocked summary for the clipboard permission which should be used for display in
+     * the site settings list only.
+     */
+    public static int getClipboardBlockedListSummary() {
+        return R.string.website_settings_category_clipboard_blocked_list;
     }
 
     /**

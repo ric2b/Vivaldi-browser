@@ -129,12 +129,12 @@ SyncAPI::SyncAPI(content::BrowserContext* context) : browser_context_(context) {
 }
 
 static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<SyncAPI>>::DestructorAtExit g_factory =
+    BrowserContextKeyedAPIFactory<SyncAPI>>::DestructorAtExit g_factory_sync =
     LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<SyncAPI>* SyncAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_sync.Pointer();
 }
 
 SyncAPI::~SyncAPI() {}
@@ -160,8 +160,7 @@ bool SyncStartFunction::RunAsync() {
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
   DCHECK(sync_manager);
 
-  sync_manager->SetToken(true, params->token.account_id, params->token.token,
-                         params->token.expire);
+  sync_manager->SetToken(true, params->token.account_id, params->token.token);
 
   SendResponse(true);
   return true;
@@ -180,8 +179,7 @@ bool SyncRefreshTokenFunction::RunAsync() {
     return false;
   }
 
-  sync_manager->SetToken(false, params->token.account_id, params->token.token,
-                         params->token.expire);
+  sync_manager->SetToken(false, params->token.account_id, params->token.token);
 
   SendResponse(true);
   return true;
@@ -289,6 +287,7 @@ bool SyncGetTypesFunction::RunAsync() {
     // Skip the model types that don't make sense for us to synchronize.
     if (model_type.first == syncer::THEMES ||
         model_type.first == syncer::APPS ||
+        model_type.first == syncer::USER_EVENTS ||
         model_type.first == syncer::PROXY_TABS) {
       continue;
     }

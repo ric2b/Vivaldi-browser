@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -21,7 +22,6 @@
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 
@@ -35,20 +35,20 @@ namespace {
 const NSTimeInterval kPDMMaxDelaySeconds = 10.0;
 }
 
-@interface PaymentRequestEGTestBase ()
+@interface PaymentRequestEGTestBase () {
+  // The PersonalDataManager instance for the current browser state.
+  autofill::PersonalDataManager* _personalDataManager;
 
-// Returns the PersonalDataManager instance for the current browser state.
-- (autofill::PersonalDataManager*)personalDataManager;
+  // Profiles added to the PersonalDataManager.
+  std::vector<autofill::AutofillProfile> _profiles;
+
+  // Credit Cards added to the PersonalDataManager.
+  std::vector<autofill::CreditCard> _cards;
+}
 
 @end
 
 @implementation PaymentRequestEGTestBase
-
-// Profiles added to the PersonalDataManager.
-std::vector<autofill::AutofillProfile> _profiles;
-
-// Credit Cards added to the PersonalDataManager.
-std::vector<autofill::CreditCard> _cards;
 
 #pragma mark - XCTestCase
 
@@ -60,6 +60,20 @@ std::vector<autofill::CreditCard> _cards;
     // order to run this test.
     DCHECK(false);
   }
+}
+
+- (void)setUp {
+  [super setUp];
+  _personalDataManager =
+      autofill::PersonalDataManagerFactory::GetForBrowserState(
+          chrome_test_util::GetOriginalBrowserState());
+
+  // Before starting, clear existing profiles.
+  for (const auto* profile : _personalDataManager->GetProfiles()) {
+    [self personalDataManager]->RemoveByGUID(profile->guid());
+  }
+
+  _personalDataManager->SetSyncingForTest(true);
 }
 
 - (void)tearDown {
@@ -82,7 +96,7 @@ std::vector<autofill::CreditCard> _cards;
   _profiles.push_back(profile);
   size_t profile_count = [self personalDataManager]->GetProfiles().size();
   [self personalDataManager]->AddProfile(profile);
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
                  kPDMMaxDelaySeconds,
                  ^bool() {
                    return profile_count <
@@ -95,7 +109,7 @@ std::vector<autofill::CreditCard> _cards;
   _cards.push_back(card);
   size_t card_count = [self personalDataManager]->GetCreditCards().size();
   [self personalDataManager]->AddCreditCard(card);
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
                  kPDMMaxDelaySeconds,
                  ^bool() {
                    return card_count <
@@ -123,8 +137,7 @@ std::vector<autofill::CreditCard> _cards;
 }
 
 - (autofill::PersonalDataManager*)personalDataManager {
-  return autofill::PersonalDataManagerFactory::GetForBrowserState(
-      chrome_test_util::GetOriginalBrowserState());
+  return _personalDataManager;
 }
 
 - (void)loadTestPage:(const std::string&)page {

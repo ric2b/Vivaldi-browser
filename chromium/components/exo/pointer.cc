@@ -9,6 +9,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "components/exo/pointer_delegate.h"
 #include "components/exo/pointer_gesture_pinch_delegate.h"
+#include "components/exo/shell_surface_base.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -44,13 +45,8 @@ const float kLargeCursorScale = 2.8f;
 
 const double kLocatedEventEpsilonSquared = 1.0 / (2000.0 * 2000.0);
 
-// Synthesized events typically lack floating point precision so to avoid
-// generating mouse event jitter we consider the location of these events
-// to be the same as |location| if floored values match.
-bool SameLocation(const ui::LocatedEvent* event, const gfx::PointF& location) {
-  if (event->flags() & ui::EF_IS_SYNTHESIZED)
-    return event->location() == gfx::ToFlooredPoint(location);
-
+bool SameLocation(const gfx::PointF& location_in_target,
+                  const gfx::PointF& location) {
   // In general, it is good practice to compare floats using an epsilon.
   // In particular, the mouse location_f() could differ between the
   // MOUSE_PRESSED and MOUSE_RELEASED events. At MOUSE_RELEASED, it will have a
@@ -58,7 +54,7 @@ bool SameLocation(const ui::LocatedEvent* event, const gfx::PointF& location) {
   // calculate it passing through all the hierarchy of windows, and that could
   // generate rounding error. std::numeric_limits<float>::epsilon() is not big
   // enough to catch this rounding error.
-  gfx::Vector2dF offset = event->location_f() - location;
+  gfx::Vector2dF offset = location_in_target - location;
   return offset.LengthSquared() < (2 * kLocatedEventEpsilonSquared);
 }
 
@@ -88,21 +84,28 @@ Pointer::Pointer(PointerDelegate* delegate)
   auto* helper = WMHelper::GetInstance();
   helper->AddPreTargetHandler(this);
   helper->AddDisplayConfigurationObserver(this);
-  helper->GetCursorClient()->AddObserver(this);
+  // TODO(sky): CursorClient does not exist in mash
+  // yet. https://crbug.com/631103.
+  aura::client::CursorClient* cursor_client = helper->GetCursorClient();
+  if (cursor_client)
+    cursor_client->AddObserver(this);
 }
 
 Pointer::~Pointer() {
   delegate_->OnPointerDestroying(this);
   if (focus_surface_) {
     focus_surface_->RemoveSurfaceObserver(this);
-    focus_surface_->UnregisterCursorProvider(this);
   }
   if (pinch_delegate_)
     pinch_delegate_->OnPointerDestroying(this);
   auto* helper = WMHelper::GetInstance();
   helper->RemoveDisplayConfigurationObserver(this);
   helper->RemovePreTargetHandler(this);
-  helper->GetCursorClient()->RemoveObserver(this);
+  // TODO(sky): CursorClient does not exist in mash
+  // yet. https://crbug.com/631103.
+  aura::client::CursorClient* cursor_client = helper->GetCursorClient();
+  if (cursor_client)
+    cursor_client->RemoveObserver(this);
   if (root_surface())
     root_surface()->RemoveSurfaceObserver(this);
 }
@@ -124,9 +127,11 @@ void Pointer::SetCursor(Surface* surface, const gfx::Point& hotspot) {
     }
     UpdatePointerSurface(surface);
     cursor_changed = true;
+  } else if (!surface && cursor_ != ui::CursorType::kNone) {
+    cursor_changed = true;
   }
 
-  if (hotspot != cursor_hotspot_) {
+  if (hotspot != hotspot_) {
     hotspot_ = hotspot;
     cursor_changed = true;
   }
@@ -139,20 +144,32 @@ void Pointer::SetCursor(Surface* surface, const gfx::Point& hotspot) {
   // snapshot of cursor, otherwise cancel pending capture and immediately set
   // the cursor to "none".
   if (root_surface()) {
+    cursor_ = ui::CursorType::kCustom;
     CaptureCursor(hotspot);
   } else {
+    cursor_ = ui::CursorType::kNone;
     cursor_bitmap_.reset();
     cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
     UpdateCursor();
   }
 }
 
-void Pointer::SetGesturePinchDelegate(PointerGesturePinchDelegate* delegate) {
-  pinch_delegate_ = delegate;
+void Pointer::SetCursorType(ui::CursorType cursor_type) {
+  // Early out if the pointer doesn't have a surface in focus.
+  if (!focus_surface_)
+    return;
+
+  if (cursor_ == cursor_type)
+    return;
+  cursor_ = cursor_type;
+  cursor_bitmap_.reset();
+  UpdatePointerSurface(nullptr);
+  cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
+  UpdateCursor();
 }
 
-gfx::NativeCursor Pointer::GetCursor() {
-  return cursor_;
+void Pointer::SetGesturePinchDelegate(PointerGesturePinchDelegate* delegate) {
+  pinch_delegate_ = delegate;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -186,10 +203,16 @@ void Pointer::OnSurfaceDestroying(Surface* surface) {
 
 void Pointer::OnMouseEvent(ui::MouseEvent* event) {
   Surface* target = GetEffectiveTargetForEvent(event);
+  gfx::PointF location_in_target = event->location_f();
+  if (target) {
+    aura::Window::ConvertPointToTarget(
+        static_cast<aura::Window*>(event->target()), target->window(),
+        &location_in_target);
+  }
 
   // Update focus if target is different than the current pointer focus.
   if (target != focus_surface_)
-    SetFocus(target, event->location_f(), event->button_flags());
+    SetFocus(target, location_in_target, event->button_flags());
 
   if (!focus_surface_)
     return;
@@ -201,8 +224,15 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
     // here as mouse movement can generate both "moved" and "entered" events
     // but OnPointerMotion should only be called if location changed since
     // OnPointerEnter was called.
-    if (!SameLocation(event, location_)) {
-      location_ = event->location_f();
+    // For synthesized events, they typically lack floating point precision
+    // so to avoid generating mouse event jitter we consider the location of
+    // these events to be the same as |location| if floored values match.
+    bool same_location = !event->IsSynthesized()
+                             ? SameLocation(location_in_target, location_)
+                             : gfx::ToFlooredPoint(location_in_target) ==
+                                   gfx::ToFlooredPoint(location_);
+    if (!same_location) {
+      location_ = location_in_target;
       delegate_->OnPointerMotion(event->time_stamp(), location_);
       delegate_->OnPointerFrame();
     }
@@ -317,6 +347,9 @@ void Pointer::OnCursorSizeChanged(ui::CursorSize cursor_size) {
 
 void Pointer::OnCursorDisplayChanged(const display::Display& display) {
   auto* cursor_client = WMHelper::GetInstance()->GetCursorClient();
+  // TODO(crbug.com/631103): CursorClient does not exist in mash yet.
+  if (!cursor_client)
+    return;
   if (cursor_ == ui::CursorType::kCustom &&
       cursor_client->GetCursor() == cursor_client->GetCursor()) {
     // If the current cursor is still the one created by us,
@@ -340,9 +373,9 @@ void Pointer::OnDisplayConfigurationChanged() {
 ////////////////////////////////////////////////////////////////////////////////
 // Pointer, private:
 
-Surface* Pointer::GetEffectiveTargetForEvent(ui::Event* event) const {
-  Surface* target =
-      Surface::AsSurface(static_cast<aura::Window*>(event->target()));
+Surface* Pointer::GetEffectiveTargetForEvent(ui::LocatedEvent* event) const {
+  Surface* target = ShellSurfaceBase::GetTargetSurfaceForLocatedEvent(event);
+
   if (!target)
     return nullptr;
 
@@ -358,7 +391,6 @@ void Pointer::SetFocus(Surface* surface,
     focus_surface_->RemoveSurfaceObserver(this);
     // Require SetCursor() to be called and cursor to be re-defined in
     // response to each OnPointerEnter() call.
-    focus_surface_->UnregisterCursorProvider(this);
     focus_surface_ = nullptr;
     cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
   }
@@ -368,7 +400,6 @@ void Pointer::SetFocus(Surface* surface,
     location_ = location;
     focus_surface_ = surface;
     focus_surface_->AddSurfaceObserver(this);
-    focus_surface_->RegisterCursorProvider(this);
   }
   delegate_->OnPointerFrame();
 }
@@ -397,6 +428,10 @@ void Pointer::UpdatePointerSurface(Surface* surface) {
 void Pointer::CaptureCursor(const gfx::Point& hotspot) {
   DCHECK(root_surface());
   DCHECK(focus_surface_);
+
+  // Defer capture until surface commit.
+  if (host_window()->bounds().IsEmpty())
+    return;
 
   // Submit compositor frame to be captured.
   SubmitCompositorFrame();
@@ -440,10 +475,11 @@ void Pointer::OnCursorCaptured(const gfx::Point& hotspot,
 void Pointer::UpdateCursor() {
   auto* helper = WMHelper::GetInstance();
   aura::client::CursorClient* cursor_client = helper->GetCursorClient();
+  // TODO(crbug.com/631103): CursorClient does not exist in mash yet.
+  if (!cursor_client)
+    return;
 
-  if (cursor_bitmap_.drawsNothing()) {
-    cursor_ = ui::CursorType::kNone;
-  } else {
+  if (cursor_ == ui::CursorType::kCustom) {
     SkBitmap bitmap = cursor_bitmap_;
     gfx::Point hotspot =
         gfx::ScaleToFlooredPoint(cursor_hotspot_, capture_ratio_);
@@ -463,15 +499,17 @@ void Pointer::UpdateCursor() {
     ui::PlatformCursor platform_cursor;
 #if defined(USE_OZONE)
     // TODO(reveman): Add interface for creating cursors from GpuMemoryBuffers
-    // and use that here instead of the current bitmap API. crbug.com/686600
+    // and use that here instead of the current bitmap API.
+    // https://crbug.com/686600
     platform_cursor = ui::CursorFactoryOzone::GetInstance()->CreateImageCursor(
         bitmap, hotspot, 0);
 #elif defined(USE_X11)
     XcursorImage* image = ui::SkBitmapToXcursorImage(&bitmap, hotspot);
     platform_cursor = ui::CreateReffedCustomXCursor(image);
 #endif
-    cursor_ = ui::CursorType::kCustom;
     cursor_.SetPlatformCursor(platform_cursor);
+    cursor_.set_custom_bitmap(bitmap);
+    cursor_.set_custom_hotspot(hotspot);
 #if defined(USE_OZONE)
     ui::CursorFactoryOzone::GetInstance()->UnrefImageCursor(platform_cursor);
 #elif defined(USE_X11)

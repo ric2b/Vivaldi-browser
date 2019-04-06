@@ -64,6 +64,7 @@ function navigateToLanguageAndCountryCode(language, countryCode) {
 function processLangZoneTerms(initialLoad, language, countryCode) {
   var langSegments = language.split('-');
   if (initialLoad && navigateToLanguageAndCountryCode(language, countryCode)) {
+    document.body.hidden = false;
     return true;
   }
 
@@ -109,6 +110,14 @@ function processLangZoneTerms(initialLoad, language, countryCode) {
     document.body.hidden = false;
   }
   return true;
+}
+
+/**
+ * Returns the raw body HTML of the ToS contents.
+ * @return {string} HTML of document body.
+ */
+function getToSContent() {
+  return document.body.innerHTML;
 }
 
 /**

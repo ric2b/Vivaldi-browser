@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -24,19 +25,18 @@
 #include "components/spellcheck/common/spellcheck_switches.h"
 #include "components/spellcheck/renderer/spellcheck_language.h"
 #include "components/spellcheck/renderer/spellcheck_provider.h"
-#include "components/spellcheck/spellcheck_build_features.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_visitor.h"
 #include "content/public/renderer/render_thread.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebTextCheckingCompletion.h"
-#include "third_party/WebKit/public/web/WebTextCheckingResult.h"
-#include "third_party/WebKit/public/web/WebTextDecorationType.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_text_checking_completion.h"
+#include "third_party/blink/public/web/web_text_checking_result.h"
+#include "third_party/blink/public/web/web_text_decoration_type.h"
 
 using blink::WebVector;
 using blink::WebString;
@@ -65,29 +65,12 @@ bool UpdateSpellcheckEnabled::Visit(content::RenderFrame* render_frame) {
   return true;
 }
 
-class DocumentMarkersRemover : public content::RenderFrameVisitor {
- public:
-  explicit DocumentMarkersRemover(const std::set<std::string>& words);
-  ~DocumentMarkersRemover() override {}
-  bool Visit(content::RenderFrame* render_frame) override;
-
- private:
-  WebVector<WebString> words_;
-  DISALLOW_COPY_AND_ASSIGN(DocumentMarkersRemover);
-};
-
-DocumentMarkersRemover::DocumentMarkersRemover(
-    const std::set<std::string>& words)
-    : words_(words.size()) {
-  std::transform(words.begin(), words.end(), words_.begin(),
+WebVector<WebString> ConvertToWebStringFromUtf8(
+    const std::set<std::string>& words) {
+  WebVector<WebString> result(words.size());
+  std::transform(words.begin(), words.end(), result.begin(),
                  [](const std::string& w) { return WebString::FromUTF8(w); });
-}
-
-bool DocumentMarkersRemover::Visit(content::RenderFrame* render_frame) {
-  // TODO(xiaochengh): Both nullptr checks seem unnecessary.
-  if (render_frame && render_frame->GetWebFrame())
-    render_frame->GetWebFrame()->RemoveSpellingMarkersUnderWords(words_);
-  return true;
+  return result;
 }
 
 bool IsApostrophe(base::char16 c) {
@@ -171,22 +154,17 @@ class SpellCheck::SpellcheckRequest {
 // values.
 // TODO(groby): Simplify this.
 SpellCheck::SpellCheck(
+    service_manager::BinderRegistry* registry,
     service_manager::LocalInterfaceProvider* embedder_provider)
-    : embedder_provider_(embedder_provider), spellcheck_enabled_(true) {
-  if (!content::ChildThread::Get())
+    : embedder_provider_(embedder_provider),
+      spellcheck_enabled_(true),
+      weak_factory_(this) {
+  DCHECK(embedder_provider);
+  if (!registry)
     return;  // Can be NULL in tests.
-
-  auto* service_manager_connection =
-      content::ChildThread::Get()->GetServiceManagerConnection();
-  DCHECK(service_manager_connection);
-
-  auto registry = base::MakeUnique<service_manager::BinderRegistry>();
   registry->AddInterface(base::BindRepeating(&SpellCheck::SpellCheckerRequest,
-                                             base::Unretained(this)),
+                                             weak_factory_.GetWeakPtr()),
                          base::ThreadTaskRunnerHandle::Get());
-
-  service_manager_connection->AddConnectionFilter(
-      base::MakeUnique<content::SimpleConnectionFilter>(std::move(registry)));
 }
 
 SpellCheck::~SpellCheck() {
@@ -250,14 +228,9 @@ void SpellCheck::CustomDictionaryChanged(
     const std::vector<std::string>& words_added,
     const std::vector<std::string>& words_removed) {
   const std::set<std::string> added(words_added.begin(), words_added.end());
-
+  NotifyDictionaryObservers(ConvertToWebStringFromUtf8(added));
   custom_dictionary_.OnCustomDictionaryChanged(
       added, std::set<std::string>(words_removed.begin(), words_removed.end()));
-  if (added.empty())
-    return;
-
-  DocumentMarkersRemover markersRemover(added);
-  content::RenderFrame::ForEach(&markersRemover);
 }
 
 // TODO(groby): Make sure we always have a spelling engine, even before
@@ -265,7 +238,7 @@ void SpellCheck::CustomDictionaryChanged(
 void SpellCheck::AddSpellcheckLanguage(base::File file,
                                        const std::string& language) {
   languages_.push_back(
-      base::MakeUnique<SpellcheckLanguage>(embedder_provider_));
+      std::make_unique<SpellcheckLanguage>(embedder_provider_));
   languages_.back()->Init(std::move(file), language);
 }
 
@@ -416,7 +389,7 @@ void SpellCheck::RequestTextChecking(
     const base::string16& text,
     blink::WebTextCheckingCompletion* completion) {
   // Clean up the previous request before starting a new request.
-  if (pending_request_param_.get())
+  if (pending_request_param_)
     pending_request_param_->completion()->DidCancelCheckingText();
 
   pending_request_param_.reset(new SpellcheckRequest(
@@ -537,4 +510,21 @@ bool SpellCheck::IsSpellcheckEnabled() {
   if (!spellcheck::IsAndroidSpellCheckFeatureEnabled()) return false;
 #endif
   return spellcheck_enabled_;
+}
+
+void SpellCheck::AddDictionaryUpdateObserver(
+    DictionaryUpdateObserver* observer) {
+  return dictionary_update_observers_.AddObserver(observer);
+}
+
+void SpellCheck::RemoveDictionaryUpdateObserver(
+    DictionaryUpdateObserver* observer) {
+  return dictionary_update_observers_.RemoveObserver(observer);
+}
+
+void SpellCheck::NotifyDictionaryObservers(
+    const WebVector<WebString>& words_added) {
+  for (auto& observer : dictionary_update_observers_) {
+    observer.OnDictionaryUpdated(words_added);
+  }
 }

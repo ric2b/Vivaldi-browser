@@ -39,10 +39,12 @@ struct RequestStats {
 // An Offliner implementation that attempts client-side rendering and saving
 // of an offline page. It uses the BackgroundLoader to load the page and the
 // OfflinePageModel to save it. Only one request may be active at a time.
-class BackgroundLoaderOffliner : public Offliner,
-                                 public content::WebContentsObserver,
-                                 public SnapshotController::Client,
-                                 public ResourceLoadingObserver {
+class BackgroundLoaderOffliner
+    : public Offliner,
+      public background_loader::BackgroundLoaderContents::Delegate,
+      public content::WebContentsObserver,
+      public SnapshotController::Client,
+      public ResourceLoadingObserver {
  public:
   BackgroundLoaderOffliner(
       content::BrowserContext* browser_context,
@@ -56,11 +58,17 @@ class BackgroundLoaderOffliner : public Offliner,
 
   // Offliner implementation.
   bool LoadAndSave(const SavePageRequest& request,
-                   const CompletionCallback& completion_callback,
+                   CompletionCallback completion_callback,
                    const ProgressCallback& progress_callback) override;
-  bool Cancel(const CancelCallback& callback) override;
+  bool Cancel(CancelCallback callback) override;
   void TerminateLoadIfInProgress() override;
   bool HandleTimeout(int64_t request_id) override;
+
+  // BackgroundLoaderContents::Delegate implementation.
+  // Called when a navigation resulted in a single-file download. e.g.
+  // When user navigated to a pdf page while offline and clicks on the
+  // "Download page later" button.
+  void CanDownload(const base::Callback<void(bool)>& callback) override;
 
   // WebContentsObserver implementation.
   void DocumentAvailableInMainFrame() override;
@@ -91,7 +99,12 @@ class BackgroundLoaderOffliner : public Offliner,
   friend class BackgroundLoaderOfflinerTest;
 
   enum SaveState { NONE, SAVING, DELETE_AFTER_SAVE };
-  enum PageLoadState { SUCCESS, RETRIABLE, NONRETRIABLE };
+  enum PageLoadState {
+    SUCCESS,
+    RETRIABLE_NET_ERROR,
+    RETRIABLE_HTTP_ERROR,
+    NONRETRIABLE
+  };
 
   // Called when the page has been saved.
   void OnPageSaved(SavePageResult save_result, int64_t offline_id);

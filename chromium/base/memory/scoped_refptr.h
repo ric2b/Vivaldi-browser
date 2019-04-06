@@ -115,15 +115,15 @@ scoped_refptr<T> WrapRefCounted(T* t) {
 //   };
 //
 //   void some_function() {
-//     scoped_refptr<MyFoo> foo = new MyFoo();
+//     scoped_refptr<MyFoo> foo = MakeRefCounted<MyFoo>();
 //     foo->Method(param);
 //     // |foo| is released when this function returns
 //   }
 //
 //   void some_other_function() {
-//     scoped_refptr<MyFoo> foo = new MyFoo();
+//     scoped_refptr<MyFoo> foo = MakeRefCounted<MyFoo>();
 //     ...
-//     foo = nullptr;  // explicitly releases |foo|
+//     foo.reset();  // explicitly releases |foo|
 //     ...
 //     if (foo)
 //       foo->Method(param);
@@ -134,7 +134,7 @@ scoped_refptr<T> WrapRefCounted(T* t) {
 // references between the two objects, like so:
 //
 //   {
-//     scoped_refptr<MyFoo> a = new MyFoo();
+//     scoped_refptr<MyFoo> a = MakeRefCounted<MyFoo>();
 //     scoped_refptr<MyFoo> b;
 //
 //     b.swap(a);
@@ -145,13 +145,24 @@ scoped_refptr<T> WrapRefCounted(T* t) {
 // object, simply use the assignment operator:
 //
 //   {
-//     scoped_refptr<MyFoo> a = new MyFoo();
+//     scoped_refptr<MyFoo> a = MakeRefCounted<MyFoo>();
 //     scoped_refptr<MyFoo> b;
 //
 //     b = a;
 //     // now, |a| and |b| each own a reference to the same MyFoo object.
 //   }
 //
+// Also see Chromium's ownership and calling conventions:
+// https://chromium.googlesource.com/chromium/src/+/lkgr/styleguide/c++/c++.md#object-ownership-and-calling-conventions
+// Specifically:
+//   If the function (at least sometimes) takes a ref on a refcounted object,
+//   declare the param as scoped_refptr<T>. The caller can decide whether it
+//   wishes to transfer ownership (by calling std::move(t) when passing t) or
+//   retain its ref (by simply passing t directly).
+//   In other words, use scoped_refptr like you would a std::unique_ptr except
+//   in the odd case where it's required to hold on to a ref while handing one
+//   to another component (if a component merely needs to use t on the stack
+//   without keeping a ref: pass t as a raw T*).
 template <class T>
 class scoped_refptr {
  public:
@@ -216,6 +227,10 @@ class scoped_refptr {
     swap(r);
     return *this;
   }
+
+  // Sets managed object to null and releases reference to the previous managed
+  // object, if it existed.
+  void reset() { scoped_refptr().swap(*this); }
 
   void swap(scoped_refptr& r) noexcept { std::swap(ptr_, r.ptr_); }
 

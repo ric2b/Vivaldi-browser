@@ -6,97 +6,99 @@
 
 #import <UIKit/UIKit.h>
 
+#include "base/bind.h"
 #import "base/mac/foundation_util.h"
-#import "base/mac/scoped_block.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/favicon/core/favicon_service.h"
+#include "components/favicon/core/fallback_url_util.h"
+#include "components/favicon/core/large_icon_service.h"
+#include "components/favicon_base/fallback_icon_style.h"
 #include "components/favicon_base/favicon_callback.h"
-#include "ui/gfx/favicon_size.h"
+#include "ios/chrome/browser/experimental_flags.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/common/favicon/favicon_attributes.h"
+#include "skia/ext/skia_utils_ios.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-struct FaviconLoader::RequestData {
-  RequestData() {}
-  RequestData(NSString* key, FaviconLoader::ImageCompletionBlock block)
-      : key([key copy]), block(block) {}
-  ~RequestData() {}
+namespace {
+extern const CGFloat kFallbackIconDefaultTextColor = 0xAAAAAA;
+}  // namespace
 
-  NSString* key;
-  base::mac::ScopedBlock<FaviconLoader::ImageCompletionBlock> block;
-};
-
-FaviconLoader::FaviconLoader(favicon::FaviconService* favicon_service)
-    : favicon_service_(favicon_service),
-      favicon_cache_([NSMutableDictionary dictionaryWithCapacity:10]) {}
-
+FaviconLoader::FaviconLoader(favicon::LargeIconService* large_icon_service)
+    : large_icon_service_(large_icon_service),
+      favicon_cache_([[NSCache alloc] init]) {}
 FaviconLoader::~FaviconLoader() {}
 
 // TODO(pinkerton): How do we update the favicon if it's changed on the web?
 // We can possibly just rely on this class being purged or the app being killed
 // to reset it, but then how do we ensure the FaviconService is updated?
-UIImage* FaviconLoader::ImageForURL(const GURL& url,
-                                    const favicon_base::IconTypeSet& types,
-                                    ImageCompletionBlock block) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+FaviconAttributes* FaviconLoader::FaviconForUrl(
+    const GURL& url,
+    float size,
+    float min_size,
+    FaviconAttributesCompletionBlock block) {
   NSString* key = base::SysUTF8ToNSString(url.spec());
-  id value = [favicon_cache_ objectForKey:key];
+  FaviconAttributes* value = [favicon_cache_ objectForKey:key];
   if (value) {
-    // [NSNull null] returns a singleton, so we can use it as a sentinel value
-    // and just compare pointers to validate whether the value is the sentinel
-    // or a valid UIImage.
-    if (value == [NSNull null])
-      return [UIImage imageNamed:@"default_favicon"];
-    return base::mac::ObjCCastStrict<UIImage>(value);
+    return value;
   }
 
-  // Kick off an async request for the favicon.
-  if (favicon_service_) {
-    int size = gfx::kFaviconSize * [UIScreen mainScreen].scale;
+  GURL block_url(url);
+  auto favicon_block = ^(const favicon_base::LargeIconResult& result) {
+    // GetLargeIconOrFallbackStyle() either returns a valid favicon (which can
+    // be the default favicon) or fallback attributes.
+    if (result.bitmap.is_valid()) {
+      scoped_refptr<base::RefCountedMemory> data =
+          result.bitmap.bitmap_data.get();
+      // The favicon code assumes favicons are PNG-encoded.
+      UIImage* favicon =
+          [UIImage imageWithData:[NSData dataWithBytes:data->front()
+                                                length:data->size()]];
+      FaviconAttributes* attributes =
+          [FaviconAttributes attributesWithImage:favicon];
+      [favicon_cache_ setObject:attributes forKey:key];
+      block(attributes);
+      return;
+    }
+    DCHECK(result.fallback_icon_style);
+    UIColor* textColor =
+        skia::UIColorFromSkColor(result.fallback_icon_style->text_color);
+    UIColor* backgroundColor =
+        skia::UIColorFromSkColor(result.fallback_icon_style->background_color);
+    if (experimental_flags::IsCollectionsUIRebootEnabled()) {
+      textColor = UIColorFromRGB(kFallbackIconDefaultTextColor);
+      backgroundColor = [UIColor clearColor];
+    }
+    FaviconAttributes* attributes = [FaviconAttributes
+        attributesWithMonogram:base::SysUTF16ToNSString(
+                                   favicon::GetFallbackIconText(block_url))
+                     textColor:textColor
+               backgroundColor:backgroundColor
+        defaultBackgroundColor:result.fallback_icon_style->
+                               is_default_background_color];
 
-    std::unique_ptr<RequestData> request_data(new RequestData(key, block));
-    favicon_base::FaviconResultsCallback callback =
-        base::Bind(&FaviconLoader::OnFaviconAvailable, base::Unretained(this),
-                   base::Passed(&request_data));
-    favicon_service_->GetFaviconForPageURL(url, types, size, callback,
-                                           &cancelable_task_tracker_);
+    [favicon_cache_ setObject:attributes forKey:key];
+    block(attributes);
+  };
+
+  CGFloat favicon_size_in_pixels = [UIScreen mainScreen].scale * size;
+  CGFloat min_favicon_size = [UIScreen mainScreen].scale * min_size;
+  DCHECK(large_icon_service_);
+  large_icon_service_->GetLargeIconOrFallbackStyle(
+      url, min_favicon_size, favicon_size_in_pixels,
+      base::BindRepeating(favicon_block), &cancelable_task_tracker_);
+
+  if (experimental_flags::IsCollectionsUIRebootEnabled()) {
+    return [FaviconAttributes
+        attributesWithImage:[UIImage imageNamed:@"default_world_favicon"]];
   }
-
-  return [UIImage imageNamed:@"default_favicon"];
+  return [FaviconAttributes
+      attributesWithImage:[UIImage imageNamed:@"default_favicon"]];
 }
 
-void FaviconLoader::PurgeCache() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void FaviconLoader::CancellAllRequests() {
   cancelable_task_tracker_.TryCancelAll();
-  favicon_cache_ = [NSMutableDictionary dictionaryWithCapacity:10];
-}
-
-void FaviconLoader::OnFaviconAvailable(
-    std::unique_ptr<RequestData> request_data,
-    const std::vector<favicon_base::FaviconRawBitmapResult>&
-        favicon_bitmap_results) {
-  DCHECK(request_data);
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (favicon_bitmap_results.size() < 1 ||
-      !favicon_bitmap_results[0].is_valid()) {
-    // Return early if there were no results or if it is invalid, after adding a
-    // "no favicon" entry to the cache so that we don't keep trying to fetch a
-    // missing favicon over and over.
-    [favicon_cache_ setObject:[NSNull null] forKey:request_data->key];
-    return;
-  }
-
-  // The favicon code assumes favicons are PNG-encoded.
-  NSData* image_data =
-      [NSData dataWithBytes:favicon_bitmap_results[0].bitmap_data->front()
-                     length:favicon_bitmap_results[0].bitmap_data->size()];
-  UIImage* favicon =
-      [UIImage imageWithData:image_data scale:[[UIScreen mainScreen] scale]];
-  [favicon_cache_ setObject:favicon forKey:request_data->key];
-
-  // Call the block to tell the caller this is complete.
-  if (request_data->block)
-    (request_data->block.get())(favicon);
 }

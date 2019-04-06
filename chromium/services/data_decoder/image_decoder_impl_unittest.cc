@@ -13,8 +13,8 @@
 #include "services/data_decoder/image_decoder_impl.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/child/webthread_base.h"
-#include "third_party/WebKit/public/web/WebKit.h"
+#include "third_party/blink/public/platform/scheduler/child/webthread_base.h"
+#include "third_party/blink/public/web/blink.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 
@@ -27,6 +27,16 @@ namespace data_decoder {
 namespace {
 
 const int64_t kTestMaxImageSize = 128 * 1024;
+
+#if defined(V8_USE_EXTERNAL_STARTUP_DATA)
+#if defined(USE_V8_CONTEXT_SNAPSHOT)
+constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
+    gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
+#else
+constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
+    gin::V8Initializer::V8SnapshotFileType::kDefault;
+#endif
+#endif
 
 bool CreateJPEGImage(int width,
                      int height,
@@ -72,11 +82,8 @@ class BlinkInitializer : public blink::Platform {
       : main_thread_(
             blink::scheduler::WebThreadBase::InitializeUtilityThread()) {
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
-    gin::V8Initializer::LoadV8Snapshot();
+    gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
     gin::V8Initializer::LoadV8Natives();
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
-    gin::V8Initializer::LoadV8ContextSnapshot();
-#endif  // USE_V8_CONTEXT_SNAPSHOT
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
     service_manager::BinderRegistry empty_registry;

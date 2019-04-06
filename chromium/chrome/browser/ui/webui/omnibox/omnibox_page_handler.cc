@@ -81,6 +81,7 @@ struct TypeConverter<mojom::AutocompleteMatchPtr, AutocompleteMatch> {
     result->transition = input.transition;
     result->allowed_to_be_default_match = input.allowed_to_be_default_match;
     result->type = AutocompleteMatchType::ToString(input.type);
+    result->has_tab_match = input.has_tab_match;
     if (input.associated_keyword.get() != NULL) {
       result->associated_keyword =
           base::UTF16ToUTF8(input.associated_keyword->keyword);
@@ -129,6 +130,7 @@ void OmniboxPageHandler::OnResultChanged(bool default_match_changed) {
   const base::string16 host =
       input_.text().substr(input_.parts().host.begin, input_.parts().host.len);
   result->host = base::UTF16ToUTF8(host);
+  result->type = AutocompleteInput::TypeToString(input_.type());
   bool is_typed_host;
   if (!LookupIsTypedHost(host, &is_typed_host))
     is_typed_host = false;

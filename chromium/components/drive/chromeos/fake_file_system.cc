@@ -35,8 +35,7 @@ FakeFileSystem::FakeFileSystem(DriveServiceInterface* drive_service)
   CHECK(cache_dir_.CreateUniqueTempDir());
 }
 
-FakeFileSystem::~FakeFileSystem() {
-}
+FakeFileSystem::~FakeFileSystem() = default;
 
 void FakeFileSystem::AddObserver(FileSystemObserver* observer) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -131,6 +130,12 @@ void FakeFileSystem::GetFileForSaving(const base::FilePath& file_path,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
+void FakeFileSystem::IsCacheFileMarkedAsMounted(
+    const base::FilePath& drive_file_path,
+    const IsMountedCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+}
+
 base::Closure FakeFileSystem::GetFileContent(
     const base::FilePath& file_path,
     const GetFileContentInitializedCallback& initialized_callback,
@@ -144,7 +149,7 @@ base::Closure FakeFileSystem::GetFileContent(
                  weak_ptr_factory_.GetWeakPtr(),
                  initialized_callback, get_content_callback,
                  completion_callback));
-  return base::Bind(&base::DoNothing);
+  return base::DoNothing();
 }
 
 void FakeFileSystem::GetResourceEntry(

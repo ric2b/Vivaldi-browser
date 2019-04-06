@@ -8,10 +8,12 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "chromeos/components/drivefs/drivefs_host.h"
 #include "components/drive/drive_notification_observer.h"
 #include "components/drive/file_errors.h"
 #include "components/drive/file_system_core_util.h"
@@ -27,6 +29,14 @@ namespace base {
 class FilePath;
 class SequencedTaskRunner;
 }
+
+namespace drivefs {
+class DriveFsHost;
+
+namespace mojom {
+class DriveFs;
+}  // namespace mojom
+}  // namespace drivefs
 
 namespace drive {
 
@@ -73,6 +83,8 @@ class DriveIntegrationService : public KeyedService,
                                 public content::NotificationObserver {
  public:
   class PreferenceWatcher;
+  using DriveFsMojoConnectionDelegateFactory = base::RepeatingCallback<
+      std::unique_ptr<drivefs::DriveFsHost::MojoConnectionDelegate>()>;
 
   // test_drive_service, test_mount_point_name, test_cache_root and
   // test_file_system are used by tests to inject customized instances.
@@ -86,7 +98,9 @@ class DriveIntegrationService : public KeyedService,
       DriveServiceInterface* test_drive_service,
       const std::string& test_mount_point_name,
       const base::FilePath& test_cache_root,
-      FileSystemInterface* test_file_system);
+      FileSystemInterface* test_file_system,
+      DriveFsMojoConnectionDelegateFactory
+          test_drivefs_mojo_connection_delegate_factory = {});
   ~DriveIntegrationService() override;
 
   // KeyedService override:
@@ -96,6 +110,17 @@ class DriveIntegrationService : public KeyedService,
   bool is_enabled() const { return enabled_; }
 
   bool IsMounted() const;
+
+  // Returns the path of the mount point for drive. It is only valid to call if
+  // |IsMounted()|.
+  base::FilePath GetMountPointPath() const;
+
+  // Returns true if |local_path| resides inside |GetMountPointPath()|.
+  // In this case |drive_path| will contain 'drive' path of this file, e.g.
+  // reparented to the mount point.
+  // It is only valid to call if |IsMounted()|.
+  bool GetRelativeDrivePath(const base::FilePath& local_path,
+                            base::FilePath* drive_path) const;
 
   // Adds and removes the observer.
   void AddObserver(DriveIntegrationServiceObserver* observer);
@@ -122,6 +147,13 @@ class DriveIntegrationService : public KeyedService,
   void ClearCacheAndRemountFileSystem(
       const base::Callback<void(bool)>& callback);
 
+  // Returns the DriveFsHost if it is enabled.
+  drivefs::DriveFsHost* GetDriveFsHost() const;
+
+  // Returns the mojo interface to the DriveFs daemon if it is enabled and
+  // connected.
+  drivefs::mojom::DriveFs* GetDriveFsInterface() const;
+
  private:
   enum State {
     NOT_INITIALIZED,
@@ -129,13 +161,20 @@ class DriveIntegrationService : public KeyedService,
     INITIALIZED,
     REMOUNTING,
   };
+  class DriveFsHolder;
 
   // Returns true if Drive is enabled.
   // Must be called on UI thread.
   bool IsDriveEnabled();
 
-  // Registers remote file system for drive mount point.
+  // Registers remote file system for drive mount point. If DriveFS is enabled,
+  // but not yet mounted, this will start it mounting and wait for it to
+  // complete before adding the mount point.
   void AddDriveMountPoint();
+
+  // Registers remote file system for drive mount point.
+  void AddDriveMountPointAfterMounted();
+
   // Unregisters drive mount point from File API.
   void RemoveDriveMountPoint();
 
@@ -143,6 +182,10 @@ class DriveIntegrationService : public KeyedService,
   // Used to implement ClearCacheAndRemountFileSystem().
   void AddBackDriveMountPoint(const base::Callback<void(bool)>& callback,
                               FileError error);
+
+  // Unregisters drive mount point, and if |remount_delay| is specified
+  // then tries to add it back after that delay.
+  void MaybeRemountFileSystem(base::Optional<base::TimeDelta> remount_delay);
 
   // Initializes the object. This function should be called before any
   // other functions.
@@ -188,6 +231,8 @@ class DriveIntegrationService : public KeyedService,
   std::unique_ptr<PreferenceWatcher> preference_watcher_;
   std::unique_ptr<content::NotificationRegistrar>
       profile_notification_registrar_;
+
+  std::unique_ptr<DriveFsHolder> drivefs_holder_;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

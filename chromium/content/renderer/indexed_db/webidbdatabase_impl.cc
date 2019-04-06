@@ -17,14 +17,14 @@
 #include "content/renderer/indexed_db/indexed_db_dispatcher.h"
 #include "content/renderer/indexed_db/indexed_db_key_builders.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
-#include "third_party/WebKit/public/platform/FilePathConversion.h"
-#include "third_party/WebKit/public/platform/WebBlobInfo.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseError.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBKeyPath.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBMetadata.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_error.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_key_path.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_metadata.h"
+#include "third_party/blink/public/platform/web_blob_info.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
 
 using blink::WebBlobInfo;
 using blink::WebIDBCallbacks;
@@ -64,7 +64,8 @@ std::vector<content::IndexedDBIndexKeys> ConvertWebIndexKeys(
 
 class WebIDBDatabaseImpl::IOThreadHelper {
  public:
-  IOThreadHelper();
+  explicit IOThreadHelper(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~IOThreadHelper();
 
   void Bind(DatabaseAssociatedPtrInfo database_info);
@@ -152,13 +153,13 @@ class WebIDBDatabaseImpl::IOThreadHelper {
                    const base::string16& new_name);
   void Abort(int64_t transaction_id);
   void Commit(int64_t transaction_id);
-  void AckReceivedBlobs(const std::vector<std::string>& uuids);
 
  private:
   CallbacksAssociatedPtrInfo GetCallbacksProxy(
       std::unique_ptr<IndexedDBCallbacksImpl> callbacks);
 
   indexed_db::mojom::DatabaseAssociatedPtr database_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(IOThreadHelper);
 };
@@ -167,12 +168,12 @@ WebIDBDatabaseImpl::WebIDBDatabaseImpl(
     DatabaseAssociatedPtrInfo database_info,
     scoped_refptr<base::SingleThreadTaskRunner> io_runner,
     scoped_refptr<base::SingleThreadTaskRunner> callback_runner)
-    : helper_(new IOThreadHelper()),
+    : helper_(new IOThreadHelper(io_runner)),
       io_runner_(std::move(io_runner)),
       callback_runner_(std::move(callback_runner)) {
   io_runner_->PostTask(FROM_HERE, base::BindOnce(&IOThreadHelper::Bind,
                                                  base::Unretained(helper_),
-                                                 base::Passed(&database_info)));
+                                                 std::move(database_info)));
 }
 
 WebIDBDatabaseImpl::~WebIDBDatabaseImpl() {
@@ -276,7 +277,7 @@ void WebIDBDatabaseImpl::Get(long long transaction_id,
       FROM_HERE, base::BindOnce(&IOThreadHelper::Get, base::Unretained(helper_),
                                 transaction_id, object_store_id, index_id,
                                 IndexedDBKeyRangeBuilder::Build(key_range),
-                                key_only, base::Passed(&callbacks_impl)));
+                                key_only, std::move(callbacks_impl)));
 }
 
 void WebIDBDatabaseImpl::GetAll(long long transaction_id,
@@ -297,7 +298,7 @@ void WebIDBDatabaseImpl::GetAll(long long transaction_id,
       base::BindOnce(&IOThreadHelper::GetAll, base::Unretained(helper_),
                      transaction_id, object_store_id, index_id,
                      IndexedDBKeyRangeBuilder::Build(key_range), max_count,
-                     key_only, base::Passed(&callbacks_impl)));
+                     key_only, std::move(callbacks_impl)));
 }
 
 void WebIDBDatabaseImpl::Put(long long transaction_id,
@@ -357,8 +358,8 @@ void WebIDBDatabaseImpl::Put(long long transaction_id,
   io_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&IOThreadHelper::Put, base::Unretained(helper_),
-                     transaction_id, object_store_id, base::Passed(&mojo_value),
-                     key, put_mode, base::Passed(&callbacks_impl),
+                     transaction_id, object_store_id, std::move(mojo_value),
+                     key, put_mode, std::move(callbacks_impl),
                      ConvertWebIndexKeys(index_ids, index_keys)));
 }
 
@@ -382,10 +383,10 @@ void WebIDBDatabaseImpl::SetIndexesReady(
     const WebVector<long long>& web_index_ids) {
   std::vector<int64_t> index_ids(web_index_ids.Data(),
                                  web_index_ids.Data() + web_index_ids.size());
-  io_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&IOThreadHelper::SetIndexesReady,
-                                base::Unretained(helper_), transaction_id,
-                                object_store_id, base::Passed(&index_ids)));
+  io_runner_->PostTask(FROM_HERE,
+                       base::BindOnce(&IOThreadHelper::SetIndexesReady,
+                                      base::Unretained(helper_), transaction_id,
+                                      object_store_id, std::move(index_ids)));
 }
 
 void WebIDBDatabaseImpl::OpenCursor(long long transaction_id,
@@ -407,7 +408,7 @@ void WebIDBDatabaseImpl::OpenCursor(long long transaction_id,
       base::BindOnce(&IOThreadHelper::OpenCursor, base::Unretained(helper_),
                      transaction_id, object_store_id, index_id,
                      IndexedDBKeyRangeBuilder::Build(key_range), direction,
-                     key_only, task_type, base::Passed(&callbacks_impl)));
+                     key_only, task_type, std::move(callbacks_impl)));
 }
 
 void WebIDBDatabaseImpl::Count(long long transaction_id,
@@ -426,7 +427,7 @@ void WebIDBDatabaseImpl::Count(long long transaction_id,
       base::BindOnce(&IOThreadHelper::Count, base::Unretained(helper_),
                      transaction_id, object_store_id, index_id,
                      IndexedDBKeyRangeBuilder::Build(key_range),
-                     base::Passed(&callbacks_impl)));
+                     std::move(callbacks_impl)));
 }
 
 void WebIDBDatabaseImpl::Delete(long long transaction_id,
@@ -444,7 +445,7 @@ void WebIDBDatabaseImpl::Delete(long long transaction_id,
       base::BindOnce(&IOThreadHelper::DeleteRange, base::Unretained(helper_),
                      transaction_id, object_store_id,
                      IndexedDBKeyRangeBuilder::Build(primary_key),
-                     base::Passed(&callbacks_impl)));
+                     std::move(callbacks_impl)));
 }
 
 void WebIDBDatabaseImpl::DeleteRange(long long transaction_id,
@@ -462,7 +463,7 @@ void WebIDBDatabaseImpl::DeleteRange(long long transaction_id,
       base::BindOnce(&IOThreadHelper::DeleteRange, base::Unretained(helper_),
                      transaction_id, object_store_id,
                      IndexedDBKeyRangeBuilder::Build(key_range),
-                     base::Passed(&callbacks_impl)));
+                     std::move(callbacks_impl)));
 }
 
 void WebIDBDatabaseImpl::Clear(long long transaction_id,
@@ -475,10 +476,9 @@ void WebIDBDatabaseImpl::Clear(long long transaction_id,
       base::WrapUnique(callbacks), transaction_id, nullptr, io_runner_,
       callback_runner_);
   io_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&IOThreadHelper::Clear, base::Unretained(helper_),
-                     transaction_id, object_store_id,
-                     base::Passed(&callbacks_impl)));
+      FROM_HERE, base::BindOnce(&IOThreadHelper::Clear,
+                                base::Unretained(helper_), transaction_id,
+                                object_store_id, std::move(callbacks_impl)));
 }
 
 void WebIDBDatabaseImpl::CreateIndex(long long transaction_id,
@@ -527,23 +527,15 @@ void WebIDBDatabaseImpl::Commit(long long transaction_id) {
                                 base::Unretained(helper_), transaction_id));
 }
 
-void WebIDBDatabaseImpl::AckReceivedBlobs(const WebVector<WebString>& uuids) {
-  DCHECK(uuids.size());
-  std::vector<std::string> param(uuids.size());
-  for (size_t i = 0; i < uuids.size(); ++i)
-    param[i] = uuids[i].Latin1().data();
-  io_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&IOThreadHelper::AckReceivedBlobs,
-                                base::Unretained(helper_), std::move(param)));
-}
-
-WebIDBDatabaseImpl::IOThreadHelper::IOThreadHelper() {}
+WebIDBDatabaseImpl::IOThreadHelper::IOThreadHelper(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    : task_runner_(std::move(task_runner)) {}
 
 WebIDBDatabaseImpl::IOThreadHelper::~IOThreadHelper() {}
 
 void WebIDBDatabaseImpl::IOThreadHelper::Bind(
     DatabaseAssociatedPtrInfo database_info) {
-  database_.Bind(std::move(database_info));
+  database_.Bind(std::move(database_info), task_runner_);
 }
 
 void WebIDBDatabaseImpl::IOThreadHelper::CreateObjectStore(
@@ -724,11 +716,6 @@ void WebIDBDatabaseImpl::IOThreadHelper::Abort(int64_t transaction_id) {
 
 void WebIDBDatabaseImpl::IOThreadHelper::Commit(int64_t transaction_id) {
   database_->Commit(transaction_id);
-}
-
-void WebIDBDatabaseImpl::IOThreadHelper::AckReceivedBlobs(
-    const std::vector<std::string>& uuids) {
-  database_->AckReceivedBlobs(uuids);
 }
 
 CallbacksAssociatedPtrInfo

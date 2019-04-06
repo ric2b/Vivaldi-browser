@@ -5,7 +5,7 @@
 #include "media/mojo/services/media_service.h"
 
 #include "base/logging.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "media/mojo/services/interface_factory_impl.h"
 #include "media/mojo/services/mojo_media_client.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -25,8 +25,7 @@ void MediaService::OnStart() {
   DVLOG(1) << __func__;
 
   ref_factory_.reset(new service_manager::ServiceContextRefFactory(
-      base::Bind(&service_manager::ServiceContext::RequestQuit,
-                 base::Unretained(context()))));
+      context()->CreateQuitClosure()));
   mojo_media_client_->Initialize(context()->connector());
 }
 

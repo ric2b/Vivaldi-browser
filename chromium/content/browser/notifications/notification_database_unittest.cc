@@ -188,10 +188,6 @@ TEST_F(NotificationDatabaseTest, NotificationIdIncrements) {
   ASSERT_EQ(NotificationDatabase::STATUS_OK,
             database->Open(true /* create_if_missing */));
 
-  EXPECT_EQ(database->GetNextPersistentNotificationId(), 1);
-  EXPECT_EQ(database->GetNextPersistentNotificationId(), 2);
-  EXPECT_EQ(database->GetNextPersistentNotificationId(), 3);
-
   GURL origin("https://example.com");
 
   std::string notification_id;
@@ -202,10 +198,6 @@ TEST_F(NotificationDatabaseTest, NotificationIdIncrements) {
   database.reset(CreateDatabaseOnFileSystem(database_dir.GetPath()));
   ASSERT_EQ(NotificationDatabase::STATUS_OK,
             database->Open(false /* create_if_missing */));
-
-  // Verify that the next persistent notification id was stored in the database,
-  // and continues where we expect it to be, even after closing and opening it.
-  EXPECT_EQ(database->GetNextPersistentNotificationId(), 4);
 }
 
 TEST_F(NotificationDatabaseTest, NotificationIdIncrementsStorage) {
@@ -226,35 +218,6 @@ TEST_F(NotificationDatabaseTest, NotificationIdIncrementsStorage) {
                                            origin, &read_database_data));
 
   EXPECT_EQ(database_data.notification_id, read_database_data.notification_id);
-}
-
-TEST_F(NotificationDatabaseTest, NotificationIdCorruption) {
-  base::ScopedTempDir database_dir;
-  ASSERT_TRUE(database_dir.CreateUniqueTempDir());
-
-  std::unique_ptr<NotificationDatabase> database(
-      CreateDatabaseOnFileSystem(database_dir.GetPath()));
-
-  ASSERT_EQ(NotificationDatabase::STATUS_OK,
-            database->Open(true /* create_if_missing */));
-
-  GURL origin("https://example.com");
-
-  NotificationDatabaseData database_data;
-  database_data.notification_id = GenerateNotificationId();
-
-  ASSERT_EQ(NotificationDatabase::STATUS_OK,
-            database->WriteNotificationData(origin, database_data));
-
-  // Deliberately write an invalid value as the next notification id. When
-  // re-opening the database, the Open() method should realize that an invalid
-  // value is being read, and mark the database as corrupted.
-  ASSERT_NO_FATAL_FAILURE(
-      WriteLevelDBKeyValuePair(database.get(), "NEXT_NOTIFICATION_ID", "-42"));
-
-  database.reset(CreateDatabaseOnFileSystem(database_dir.GetPath()));
-  EXPECT_EQ(NotificationDatabase::STATUS_ERROR_CORRUPTED,
-            database->Open(false /* create_if_missing */));
 }
 
 TEST_F(NotificationDatabaseTest, ReadInvalidNotificationData) {
@@ -392,6 +355,63 @@ TEST_F(NotificationDatabaseTest, ReadWriteMultipleNotificationData) {
     EXPECT_EQ(service_worker_registration_id++,
               database_data.service_worker_registration_id);
   }
+}
+
+TEST_F(NotificationDatabaseTest, ReadNotificationUpdateInteraction) {
+  std::unique_ptr<NotificationDatabase> database(CreateDatabaseInMemory());
+  ASSERT_EQ(NotificationDatabase::STATUS_OK,
+            database->Open(true /* create_if_missing */));
+
+  GURL origin("https://example.com");
+
+  NotificationDatabaseData database_data, read_database_data;
+  database_data.notification_id = GenerateNotificationId();
+  database_data.notification_data.title = base::UTF8ToUTF16("My Notification");
+
+  ASSERT_EQ(NotificationDatabase::STATUS_OK,
+            database->WriteNotificationData(origin, database_data));
+
+  // Check that the time deltas have not yet been set.
+  EXPECT_EQ(false,
+            read_database_data.time_until_first_click_millis.has_value());
+  EXPECT_EQ(false, read_database_data.time_until_last_click_millis.has_value());
+  EXPECT_EQ(false, read_database_data.time_until_close_millis.has_value());
+
+  // Check that when a notification has an interaction, the appropriate field is
+  // updated on the read.
+  ASSERT_EQ(NotificationDatabase::STATUS_OK,
+            database->ReadNotificationDataAndRecordInteraction(
+                database_data.notification_id, origin,
+                PlatformNotificationContext::Interaction::CLICKED,
+                &read_database_data));
+  EXPECT_EQ(1, read_database_data.num_clicks);
+
+  ASSERT_EQ(NotificationDatabase::STATUS_OK,
+            database->ReadNotificationDataAndRecordInteraction(
+                database_data.notification_id, origin,
+                PlatformNotificationContext::Interaction::ACTION_BUTTON_CLICKED,
+                &read_database_data));
+  EXPECT_EQ(1, read_database_data.num_action_button_clicks);
+
+  ASSERT_EQ(NotificationDatabase::STATUS_OK,
+            database->ReadNotificationDataAndRecordInteraction(
+                database_data.notification_id, origin,
+                PlatformNotificationContext::Interaction::ACTION_BUTTON_CLICKED,
+                &read_database_data));
+  EXPECT_EQ(2, read_database_data.num_action_button_clicks);
+
+  // Check that the click timestamps are correctly updated.
+  EXPECT_EQ(true, read_database_data.time_until_first_click_millis.has_value());
+  EXPECT_EQ(true, read_database_data.time_until_last_click_millis.has_value());
+
+  // Check that when a read with a CLOSED interaction occurs, the correct
+  // field is updated.
+  ASSERT_EQ(NotificationDatabase::STATUS_OK,
+            database->ReadNotificationDataAndRecordInteraction(
+                database_data.notification_id, origin,
+                PlatformNotificationContext::Interaction::CLOSED,
+                &read_database_data));
+  EXPECT_EQ(true, read_database_data.time_until_close_millis.has_value());
 }
 
 TEST_F(NotificationDatabaseTest, DeleteInvalidNotificationData) {

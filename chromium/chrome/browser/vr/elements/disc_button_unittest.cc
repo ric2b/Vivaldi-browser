@@ -18,7 +18,8 @@
 namespace vr {
 
 TEST(DiscButton, HoverTest) {
-  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon);
+  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon,
+                    nullptr);
   button.SetSize(1.0f, 1.0f);
   button.set_hover_offset(0.5f);
 
@@ -29,7 +30,7 @@ TEST(DiscButton, HoverTest) {
   cc::TransformOperation hit_plane_op =
       button.hit_plane()->GetTargetTransform().at(UiElement::kScaleIndex);
 
-  button.OnHoverEnter(gfx::PointF(0.5f, 0.5f));
+  button.OnHoverEnter(gfx::PointF(0.5f, 0.5f), base::TimeTicks());
   cc::TransformOperation foreground_op_hover =
       button.foreground()->GetTargetTransform().at(UiElement::kTranslateIndex);
   cc::TransformOperation background_op_hover =
@@ -37,15 +38,14 @@ TEST(DiscButton, HoverTest) {
   cc::TransformOperation hit_plane_op_hover =
       button.hit_plane()->GetTargetTransform().at(UiElement::kScaleIndex);
 
-  EXPECT_TRUE(foreground_op_hover.translate.z - foreground_op.translate.z >
-              0.f);
   EXPECT_TRUE(background_op_hover.translate.z - background_op.translate.z >
               0.f);
   EXPECT_TRUE(hit_plane_op_hover.scale.x - hit_plane_op.scale.x > 0.f);
 }
 
 TEST(DiscButton, SizePropagatesToSubElements) {
-  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon);
+  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon,
+                    nullptr);
   gfx::SizeF size(1000.0f, 1000.0f);
   gfx::SizeF icon_size = size;
   icon_size.Scale(0.5f);
@@ -69,7 +69,8 @@ TEST(DiscButton, SizePropagatesToSubElements) {
 }
 
 TEST(DiscButton, DrawPhasePropagatesToSubElements) {
-  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon);
+  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon,
+                    nullptr);
   button.SetDrawPhase(kPhaseOverlayForeground);
 
   for (auto& child : button.children()) {
@@ -78,7 +79,8 @@ TEST(DiscButton, DrawPhasePropagatesToSubElements) {
 }
 
 TEST(DiscButton, NamePropagatesToSubElements) {
-  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon);
+  DiscButton button(base::RepeatingCallback<void()>(), vector_icons::kMicIcon,
+                    nullptr);
   button.SetName(kCloseButton);
 
   for (auto& child : button.children()) {

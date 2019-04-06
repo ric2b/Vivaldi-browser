@@ -20,8 +20,12 @@
         display: block;
         width: 104px;  /* Magic number from the specs. */
       }
+
+      paper-spinner-lite {
+        -webkit-margin-end: 8px;
+      }
     </style>
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}">
+    <cr-dialog id="dialog" close-text="$i18n{close}">
       <div slot="title">$i18n{loadErrorHeading}</div>
       <div slot="body">
         <div id="info">
@@ -40,15 +44,15 @@
       </div>
       <div slot="button-container">
         <paper-spinner-lite active="[[retrying_]]"></paper-spinner-lite>
-        <paper-button class="cancel-button" on-tap="close">
+        <paper-button class="cancel-button" on-click="close">
           $i18n{cancel}
         </paper-button>
         <paper-button class="action-button" disabled="[[retrying_]]"
-            on-tap="onRetryTap_">
+            on-click="onRetryTap_">
           $i18n{loadErrorRetry}
         </paper-button>
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
   <script src="load_error.js"></script>
 </dom-module>

@@ -12,10 +12,16 @@
 // chromeos::switches::kTetherStub for more details.
 class FakeTetherService : public TetherService {
  public:
-  FakeTetherService(Profile* profile,
-                    chromeos::PowerManagerClient* power_manager_client,
-                    cryptauth::CryptAuthService* cryptauth_service,
-                    chromeos::NetworkStateHandler* network_state_handler);
+  FakeTetherService(
+      Profile* profile,
+      chromeos::PowerManagerClient* power_manager_client,
+      cryptauth::CryptAuthService* cryptauth_service,
+      chromeos::device_sync::DeviceSyncClient* device_sync_client,
+      chromeos::secure_channel::SecureChannelClient* secure_channel_client,
+      chromeos::multidevice_setup::MultiDeviceSetupClient*
+          multidevice_setup_client,
+      chromeos::NetworkStateHandler* network_state_handler,
+      session_manager::SessionManager* session_manager);
 
   // TetherService:
   void StartTetherIfPossible() override;

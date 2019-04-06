@@ -14,8 +14,9 @@
 #include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 
 namespace ios {
 namespace {
@@ -24,7 +25,7 @@ namespace {
 // false otherwise.
 bool IsHistorySyncEnabled(ios::ChromeBrowserState* browser_state) {
   syncer::SyncService* sync_service =
-      IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
+      ProfileSyncServiceFactory::GetForBrowserState(browser_state);
   return sync_service && sync_service->IsSyncActive() &&
          sync_service->GetActiveDataTypes().Has(
              syncer::HISTORY_DELETE_DIRECTIVES);
@@ -53,7 +54,7 @@ WebHistoryServiceFactory::WebHistoryServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "WebHistoryService",
           BrowserStateDependencyManager::GetInstance()) {
-  DependsOn(IOSChromeProfileSyncServiceFactory::GetInstance());
+  DependsOn(ProfileSyncServiceFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
 }
 
@@ -66,7 +67,8 @@ std::unique_ptr<KeyedService> WebHistoryServiceFactory::BuildServiceInstanceFor(
       ios::ChromeBrowserState::FromBrowserState(context);
   return std::make_unique<history::WebHistoryService>(
       IdentityManagerFactory::GetForBrowserState(browser_state),
-      browser_state->GetRequestContext());
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          browser_state->GetURLLoaderFactory()));
 }
 
 }  // namespace ios

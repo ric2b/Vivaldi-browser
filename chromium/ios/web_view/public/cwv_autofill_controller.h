@@ -24,18 +24,26 @@ CWV_EXPORT
 
 - (instancetype)init NS_UNAVAILABLE;
 
-// Clears the html form element with the 'name' attribute equal to |formName|.
-// No-op if no such form is found.
+// Clears the fields that belong to the same autofill section as the field
+// identified by |fieldIdentifier| in the form named |formName|.
+// No-op if no such form can be found in the current page. If the field
+// identified by |fieldIdentifier| cannot be found the entire form gets cleared.
+// |fieldIdentifier| identifies the field that had focus. It is passed to
+// CWVAutofillControllerDelegate and forwarded to this method.
 // |completionHandler| will only be called on success.
 - (void)clearFormWithName:(NSString*)formName
+          fieldIdentifier:(NSString*)fieldIdentifier
         completionHandler:(nullable void (^)(void))completionHandler;
 
-// For the field named |fieldName| in the form named |formName|, fetches
-// suggestions that can be used to autofill.
+// For the field named |fieldName|, identified by |fieldIdentifier| in the form
+// named |formName|, fetches suggestions that can be used to autofill.
 // No-op if no such form and field can be found in the current page.
+// |fieldIdentifier| identifies the field that had focus. It is passed to
+// CWVAutofillControllerDelegate and forwarded to this method.
 // |completionHandler| will only be called on success.
 - (void)fetchSuggestionsForFormWithName:(NSString*)formName
                               fieldName:(NSString*)fieldName
+                        fieldIdentifier:(NSString*)fieldIdentifier
                       completionHandler:
                           (void (^)(NSArray<CWVAutofillSuggestion*>*))
                               completionHandler;
@@ -50,6 +58,19 @@ CWV_EXPORT
 // Deletes a suggestion from the data store. This suggestion will not be fetched
 // again.
 - (void)removeSuggestion:(CWVAutofillSuggestion*)suggestion;
+
+// Changes focus to the previous sibling of the currently focused field.
+// No-op if no field is currently focused or if previous field is not available.
+- (void)focusPreviousField;
+
+// Changes focus to the next sibling of the currently focused field.
+// No-op if no field is currently focused or if next field is not available.
+- (void)focusNextField;
+
+// Checks if there are next or previous fields for focusing.
+// |previous| and |next| indiciates if it is possible to focus.
+- (void)checkIfPreviousAndNextFieldsAreAvailableForFocusWithCompletionHandler:
+    (void (^)(BOOL previous, BOOL next))completionHandler;
 
 @end
 

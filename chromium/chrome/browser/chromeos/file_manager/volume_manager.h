@@ -27,7 +27,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/storage_monitor/removable_storage_observer.h"
-#include "device/media_transfer_protocol/public/interfaces/mtp_storage_info.mojom.h"
+#include "services/device/public/mojom/mtp_manager.mojom.h"
 
 class Profile;
 
@@ -54,6 +54,8 @@ enum VolumeType {
   VOLUME_TYPE_PROVIDED,  // File system provided by the FileSystemProvider API.
   VOLUME_TYPE_MTP,
   VOLUME_TYPE_MEDIA_VIEW,
+  VOLUME_TYPE_CROSTINI,
+  VOLUME_TYPE_ANDROID_FILES,
   // The enum values must be kept in sync with FileManagerVolumeType in
   // tools/metrics/histograms/histograms.xml. Since enums for histograms are
   // append-only (for keeping the number consistent across versions), new values
@@ -81,7 +83,8 @@ class Volume : public base::SupportsWeakPtr<Volume> {
   ~Volume();
 
   // Factory static methods for different volume types.
-  static std::unique_ptr<Volume> CreateForDrive(Profile* profile);
+  static std::unique_ptr<Volume> CreateForDrive(
+      const base::FilePath& drive_path);
   static std::unique_ptr<Volume> CreateForDownloads(
       const base::FilePath& downloads_path);
   static std::unique_ptr<Volume> CreateForRemovable(
@@ -96,6 +99,9 @@ class Volume : public base::SupportsWeakPtr<Volume> {
                                               bool read_only);
   static std::unique_ptr<Volume> CreateForMediaView(
       const std::string& root_document_id);
+  static std::unique_ptr<Volume> CreateForSshfsCrostini(
+      const base::FilePath& crostini_path);
+  static std::unique_ptr<Volume> CreateForAndroidFiles();
   static std::unique_ptr<Volume> CreateForTesting(
       const base::FilePath& path,
       VolumeType volume_type,
@@ -224,12 +230,15 @@ class Volume : public base::SupportsWeakPtr<Volume> {
   DISALLOW_COPY_AND_ASSIGN(Volume);
 };
 
-// Manages "Volume"s for file manager. Here are "Volume"s.
-// - Drive File System (not yet supported).
+// Manages Volumes for file manager. Example of Volumes:
+// - Drive File System.
 // - Downloads directory.
 // - Removable disks (volume will be created for each partition, not only one
 //   for a device).
 // - Mounted zip archives.
+// - Linux/Crostini file system.
+// - Android/Arc++ file system.
+// - File System Providers.
 class VolumeManager : public KeyedService,
                       public arc::ArcSessionManager::Observer,
                       public drive::DriveIntegrationServiceObserver,
@@ -237,11 +246,11 @@ class VolumeManager : public KeyedService,
                       public chromeos::file_system_provider::Observer,
                       public storage_monitor::RemovableStorageObserver {
  public:
-  // Returns MediaTransferProtocolManager. Used for injecting
-  // FakeMediaTransferProtocolManager for testing.
-  typedef base::Callback<const device::mojom::MtpStorageInfo*(
-      const std::string&)>
-      GetMtpStorageInfoCallback;
+  // An alternate to device::mojom::MtpManager::GetStorageInfo.
+  // Used for injecting fake MTP manager for testing in VolumeManagerTest.
+  using GetMtpStorageInfoCallback = base::RepeatingCallback<void(
+      const std::string&,
+      device::mojom::MtpManager::GetStorageInfoCallback)>;
 
   VolumeManager(
       Profile* profile,
@@ -249,7 +258,7 @@ class VolumeManager : public KeyedService,
       chromeos::PowerManagerClient* power_manager_client,
       chromeos::disks::DiskMountManager* disk_mount_manager,
       chromeos::file_system_provider::Service* file_system_provider_service,
-      GetMtpStorageInfoCallback get_mtp_storage_info_callback);
+      const GetMtpStorageInfoCallback& get_mtp_storage_info_callback);
   ~VolumeManager() override;
 
   // Returns the instance corresponding to the |context|.
@@ -276,9 +285,19 @@ class VolumeManager : public KeyedService,
   // the volume manager.
   base::WeakPtr<Volume> FindVolumeById(const std::string& volume_id);
 
+  // Add sshfs crostini volume mounted at specified path.
+  void AddSshfsCrostiniVolume(const base::FilePath& sshfs_mount_path);
+
+  // Removes specified sshfs crostini mount.
+  void RemoveSshfsCrostiniVolume(const base::FilePath& sshfs_mount_path);
+
   // For testing purpose, registers a native local file system pointing to
   // |path| with DOWNLOADS type, and adds its volume info.
   bool RegisterDownloadsDirectoryForTesting(const base::FilePath& path);
+
+  // For testing purpose, registers a native local file system pointing to
+  // |path| with CROSTINI type, and adds its volume info.
+  bool RegisterCrostiniDirectoryForTesting(const base::FilePath& path);
 
   // For testing purpose, adds a volume info pointing to |path|, with TESTING
   // type. Assumes that the mount point is already registered.
@@ -345,11 +364,16 @@ class VolumeManager : public KeyedService,
  private:
   void OnDiskMountManagerRefreshed(bool success);
   void OnStorageMonitorInitialized();
+  void DoAttachMtpStorage(const storage_monitor::StorageInfo& info,
+                          device::mojom::MtpStorageInfoPtr mtp_storage_info);
   void DoMountEvent(chromeos::MountError error_code,
                     std::unique_ptr<Volume> volume);
   void DoUnmountEvent(chromeos::MountError error_code, const Volume& volume);
   void OnExternalStorageDisabledChangedUnmountCallback(
       chromeos::MountError error_code);
+
+  // Returns the path of the mount point for drive.
+  base::FilePath GetDriveMountPointPath() const;
 
   Profile* profile_;
   drive::DriveIntegrationService* drive_integration_service_;  // Not owned.

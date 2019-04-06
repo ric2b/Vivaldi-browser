@@ -16,16 +16,15 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/thread_test_helper.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browsing_data/browsing_data_helper_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -127,8 +126,10 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataLocalStorageHelperTest, DeleteSingleFile) {
   scoped_refptr<BrowsingDataLocalStorageHelper> local_storage_helper(
       new BrowsingDataLocalStorageHelper(browser()->profile()));
   CreateLocalStorageFilesForTest();
-  local_storage_helper->DeleteOrigin(GURL(kOriginOfTestFile0));
-  content::RunAllTasksUntilIdle();
+  base::RunLoop run_loop;
+  local_storage_helper->DeleteOrigin(GURL(kOriginOfTestFile0),
+                                     run_loop.QuitClosure());
+  run_loop.Run();
 
   // Ensure the file has been deleted.
   base::ScopedAllowBlockingForTesting allow_blocking;

@@ -88,14 +88,6 @@ void IPCDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
     base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
-  if (!stream_status_change_cb_.is_null())
-    stream_status_change_cb_.Run(this, is_enabled_, timestamp);
-}
-
-void IPCDemuxerStream::SetStreamStatusChangeCB(
-    const StreamStatusChangeCB& cb) {
-  DCHECK(!cb.is_null());
-  stream_status_change_cb_ = cb;
 }
 
 AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
@@ -194,7 +186,7 @@ void IPCDemuxerStream::Stop() {
 }
 
 void IPCDemuxerStream::DataReady(Status status,
-                                 const scoped_refptr<DecoderBuffer>& buffer) {
+                                 scoped_refptr<DecoderBuffer> buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!read_cb_.is_null())

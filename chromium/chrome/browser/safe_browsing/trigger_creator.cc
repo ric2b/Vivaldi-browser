@@ -10,11 +10,13 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/triggers/ad_sampler_trigger.h"
+#include "components/safe_browsing/triggers/suspicious_site_trigger.h"
 #include "components/safe_browsing/triggers/trigger_manager.h"
 #include "components/safe_browsing/triggers/trigger_throttler.h"
 #include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "net/url_request/url_request_context_getter.h"
 
 namespace safe_browsing {
@@ -45,13 +47,26 @@ void TriggerCreator::MaybeCreateTriggersForWebContents(
   // new tabs.
   SBErrorOptions options = TriggerManager::GetSBErrorDisplayOptions(
       *profile->GetPrefs(), *web_contents);
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess();
   if (trigger_manager->CanStartDataCollection(options,
                                               TriggerType::AD_SAMPLE)) {
     safe_browsing::AdSamplerTrigger::CreateForWebContents(
-        web_contents, trigger_manager, profile->GetPrefs(),
-        profile->GetRequestContext(),
+        web_contents, trigger_manager, profile->GetPrefs(), url_loader_factory,
         HistoryServiceFactory::GetForProfile(
             profile, ServiceAccessType::EXPLICIT_ACCESS));
+  }
+  TriggerManagerReason reason;
+  if (trigger_manager->CanStartDataCollectionWithReason(
+          options, TriggerType::SUSPICIOUS_SITE, &reason) ||
+      reason == TriggerManagerReason::DAILY_QUOTA_EXCEEDED) {
+    bool monitor_mode = reason == TriggerManagerReason::DAILY_QUOTA_EXCEEDED;
+    safe_browsing::SuspiciousSiteTrigger::CreateForWebContents(
+        web_contents, trigger_manager, profile->GetPrefs(), url_loader_factory,
+        HistoryServiceFactory::GetForProfile(
+            profile, ServiceAccessType::EXPLICIT_ACCESS),
+        monitor_mode);
   }
 }
 

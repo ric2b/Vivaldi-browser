@@ -199,7 +199,7 @@ class TabCaptureRegistry::LiveRequest : public content::WebContentsObserver {
   }
 
   void GetCaptureInfo(tab_capture::CaptureInfo* info) const {
-    info->tab_id = SessionTabHelper::IdForTab(web_contents());
+    info->tab_id = SessionTabHelper::IdForTab(web_contents()).id();
     info->status = capture_state_;
     info->fullscreen = is_fullscreened_;
   }

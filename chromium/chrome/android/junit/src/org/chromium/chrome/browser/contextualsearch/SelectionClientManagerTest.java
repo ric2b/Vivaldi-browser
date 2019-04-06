@@ -11,14 +11,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content_public.browser.SelectionClient;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 /**
  * Unit tests for the {@link SelectionClientManager}.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class SelectionClientManagerTest {
     // The client for most tests.
@@ -48,9 +48,6 @@ public class SelectionClientManagerTest {
 
         @Override
         public void onSelectionEvent(int eventType, float posXPix, float posYPix) {}
-
-        @Override
-        public void showUnhandledTapUIIfNeeded(int x, int y) {}
 
         @Override
         public void selectWordAroundCaretAck(boolean didSelect, int startAdjust, int endAdjust) {}

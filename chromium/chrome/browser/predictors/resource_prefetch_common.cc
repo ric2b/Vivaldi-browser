@@ -18,66 +18,7 @@
 
 namespace predictors {
 
-const char kSpeculativeResourcePrefetchingFeatureName[] =
-    "SpeculativeResourcePrefetching";
-const char kModeParamName[] = "mode";
-const char kLearningMode[] = "learning";
-const char kExternalPrefetchingMode[] = "external-prefetching";
-const char kPrefetchingMode[] = "prefetching";
-const char kEnableUrlLearningParamName[] = "enable-url-learning";
-
-const base::Feature kSpeculativeResourcePrefetchingFeature{
-    kSpeculativeResourcePrefetchingFeatureName,
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-bool MaybeEnableResourcePrefetching(LoadingPredictorConfig* config) {
-  if (!base::FeatureList::IsEnabled(kSpeculativeResourcePrefetchingFeature))
-    return false;
-
-  if (config) {
-    std::string enable_url_learning_value =
-        base::GetFieldTrialParamValueByFeature(
-            kSpeculativeResourcePrefetchingFeature,
-            kEnableUrlLearningParamName);
-    if (enable_url_learning_value == "true")
-      config->is_url_learning_enabled = true;
-
-    // Ensure that a resource that was only seen once is never prefetched. This
-    // prevents the easy mistake of trying to prefetch an ephemeral url.
-    DCHECK_GT(config->min_resource_hits_to_trigger_prefetch, 1U);
-    if (config->min_resource_hits_to_trigger_prefetch < 2)
-      config->min_resource_hits_to_trigger_prefetch = 2;
-  }
-
-  std::string mode_value = base::GetFieldTrialParamValueByFeature(
-      kSpeculativeResourcePrefetchingFeature, kModeParamName);
-  if (mode_value == kLearningMode) {
-    if (config) {
-      config->mode |= LoadingPredictorConfig::LEARNING;
-      config->is_host_learning_enabled = true;
-    }
-    return true;
-  } else if (mode_value == kExternalPrefetchingMode) {
-    if (config) {
-      config->mode |= LoadingPredictorConfig::LEARNING |
-                      LoadingPredictorConfig::PREFETCHING_FOR_EXTERNAL;
-      config->is_host_learning_enabled = true;
-    }
-    return true;
-  } else if (mode_value == kPrefetchingMode) {
-    if (config) {
-      config->mode |= LoadingPredictorConfig::LEARNING |
-                      LoadingPredictorConfig::PREFETCHING_FOR_EXTERNAL |
-                      LoadingPredictorConfig::PREFETCHING_FOR_NAVIGATION;
-      config->is_host_learning_enabled = true;
-    }
-    return true;
-  }
-
-  return false;
-}
-
-NavigationID::NavigationID() : tab_id(-1) {}
+NavigationID::NavigationID() : tab_id(SessionID::InvalidValue()) {}
 
 NavigationID::NavigationID(const NavigationID& other)
     : tab_id(other.tab_id),
@@ -97,7 +38,7 @@ NavigationID::NavigationID(content::WebContents* web_contents,
       creation_time(creation_time) {}
 
 bool NavigationID::is_valid() const {
-  return tab_id != -1 && !main_frame_url.is_empty();
+  return tab_id.is_valid() && !main_frame_url.is_empty();
 }
 
 bool NavigationID::operator<(const NavigationID& rhs) const {

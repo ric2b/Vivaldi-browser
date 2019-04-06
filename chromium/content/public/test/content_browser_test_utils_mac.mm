@@ -9,9 +9,12 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/mac/scoped_objc_class_swizzler.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/sys_string_conversions.h"
+#import "content/browser/renderer_host/render_widget_host_view_cocoa.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
 #include "content/browser/renderer_host/text_input_client_mac.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -25,6 +28,8 @@
 // RenderWidgetHostViewCocoa methods for tests.
 @interface RenderWidgetHostViewCocoaSwizzler : NSObject
 - (void)didAddSubview:(NSView*)view;
+- (void)showDefinitionForAttributedString:(NSAttributedString*)attrString
+                                  atPoint:(NSPoint)textBaselineOrigin;
 @end
 
 namespace content {
@@ -32,7 +37,9 @@ namespace content {
 using base::mac::ScopedObjCClassSwizzler;
 
 // static
-const char* RenderWidgetHostViewCocoaObserver::kDidAddSubview = "didAddSubview";
+constexpr char RenderWidgetHostViewCocoaObserver::kDidAddSubview[];
+constexpr char
+    RenderWidgetHostViewCocoaObserver::kShowDefinitionForAttributedString[];
 
 // static
 std::map<std::string, std::unique_ptr<base::mac::ScopedObjCClassSwizzler>>
@@ -94,20 +101,25 @@ void RenderWidgetHostViewCocoaObserver::SetUpSwizzlers() {
     return;
 
   // [RenderWidgetHostViewCocoa didAddSubview:NSView*].
-  SEL selector = NSSelectorFromString([NSString
-      stringWithUTF8String:base::StringPrintf("%s:", kDidAddSubview).c_str()]);
   rwhvcocoa_swizzlers_[kDidAddSubview] =
       std::make_unique<ScopedObjCClassSwizzler>(
           GetRenderWidgetHostViewCocoaClassForTesting(),
-          [RenderWidgetHostViewCocoaSwizzler class], selector);
+          [RenderWidgetHostViewCocoaSwizzler class],
+          NSSelectorFromString(@(kDidAddSubview)));
+
+  // [RenderWidgetHostViewCocoa showDefinitionForAttributedString:atPoint].
+  rwhvcocoa_swizzlers_[kShowDefinitionForAttributedString] =
+      std::make_unique<ScopedObjCClassSwizzler>(
+          GetRenderWidgetHostViewCocoaClassForTesting(),
+          [RenderWidgetHostViewCocoaSwizzler class],
+          NSSelectorFromString(@(kShowDefinitionForAttributedString)));
 }
 
 void SetWindowBounds(gfx::NativeWindow window, const gfx::Rect& bounds) {
   NSRect new_bounds = NSRectFromCGRect(bounds.ToCGRect());
   if ([[NSScreen screens] count] > 0) {
-    new_bounds.origin.y =
-        [[[NSScreen screens] firstObject] frame].size.height -
-        new_bounds.origin.y - new_bounds.size.height;
+    new_bounds.origin.y = [[[NSScreen screens] firstObject] frame].size.height -
+                          new_bounds.origin.y - new_bounds.size.height;
   }
 
   [window setFrame:new_bounds display:NO];
@@ -119,10 +131,14 @@ void GetStringAtPointForRenderWidget(
     base::Callback<void(const std::string&, const gfx::Point&)>
         result_callback) {
   TextInputClientMac::GetInstance()->GetStringAtPoint(
-      rwh, point, ^(NSAttributedString* string, NSPoint baselinePoint) {
-        result_callback.Run([[string string] UTF8String],
-                            gfx::Point(baselinePoint.x, baselinePoint.y));
-      });
+      rwh, point,
+      base::BindOnce(base::RetainBlock(
+          ^(const mac::AttributedStringCoder::EncodedString& encoded_string,
+            gfx::Point baseline_point) {
+            std::string string = base::SysNSStringToUTF8(
+                [mac::AttributedStringCoder::Decode(&encoded_string) string]);
+            result_callback.Run(string, baseline_point);
+          })));
 }
 
 void GetStringFromRangeForRenderWidget(
@@ -131,11 +147,14 @@ void GetStringFromRangeForRenderWidget(
     base::Callback<void(const std::string&, const gfx::Point&)>
         result_callback) {
   TextInputClientMac::GetInstance()->GetStringFromRange(
-      rwh, range.ToNSRange(),
-      ^(NSAttributedString* string, NSPoint baselinePoint) {
-        result_callback.Run([[string string] UTF8String],
-                            gfx::Point(baselinePoint.x, baselinePoint.y));
-      });
+      rwh, range,
+      base::BindOnce(base::RetainBlock(
+          ^(const mac::AttributedStringCoder::EncodedString& encoded_string,
+            gfx::Point baseline_point) {
+            std::string string = base::SysNSStringToUTF8(
+                [mac::AttributedStringCoder::Decode(&encoded_string) string]);
+            result_callback.Run(string, baseline_point);
+          })));
 }
 
 }  // namespace content
@@ -180,5 +199,23 @@ void GetStringFromRangeForRenderWidget(
                        clickCount:1
                          pressure:1.0];
   [[NSApplication sharedApplication] postEvent:dismissal_event atStart:false];
+}
+
+- (void)showDefinitionForAttributedString:(NSAttributedString*)attrString
+                                  atPoint:(NSPoint)textBaselineOrigin {
+  content::RenderWidgetHostViewCocoaObserver::GetSwizzler(
+      content::RenderWidgetHostViewCocoaObserver::
+          kShowDefinitionForAttributedString)
+      ->GetOriginalImplementation()(self, _cmd, attrString, textBaselineOrigin);
+
+  auto* rwhv_mac = content::GetRenderWidgetHostViewMac(self);
+
+  auto* observer = content::RenderWidgetHostViewCocoaObserver::GetObserver(
+      rwhv_mac->GetWebContents());
+
+  if (!observer)
+    return;
+  observer->OnShowDefinitionForAttributedString(
+      base::SysNSStringToUTF8([attrString string]));
 }
 @end

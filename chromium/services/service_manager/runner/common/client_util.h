@@ -5,17 +5,15 @@
 #ifndef SERVICES_SERVICE_MANAGER_RUNNER_COMMON_CLIENT_UTIL_H_
 #define SERVICES_SERVICE_MANAGER_RUNNER_COMMON_CLIENT_UTIL_H_
 
-#include "services/service_manager/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 
 namespace base {
 class CommandLine;
 }
 
 namespace mojo {
-namespace edk {
-class IncomingBrokerClientInvitation;
-class OutgoingBrokerClientInvitation;
-}
+class IncomingInvitation;
+class OutgoingInvitation;
 }
 
 namespace service_manager {
@@ -25,14 +23,14 @@ namespace service_manager {
 // |command_line|. The launched process may extract the corresponding
 // ServiceRequest by calling GetServiceRequestFromCommandLine().
 mojom::ServicePtr PassServiceRequestOnCommandLine(
-    mojo::edk::OutgoingBrokerClientInvitation* invitation,
+    mojo::OutgoingInvitation* invitation,
     base::CommandLine* command_line);
 
 // Extracts a ServiceRequest from the command line of the current process.
 // The parent of this process should have passed a request using
 // PassServiceRequestOnCommandLine().
 mojom::ServiceRequest GetServiceRequestFromCommandLine(
-    mojo::edk::IncomingBrokerClientInvitation* invitation);
+    mojo::IncomingInvitation* invitation);
 
 // Returns true if the ServiceRequest came via the command line from a service
 // manager

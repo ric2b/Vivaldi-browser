@@ -10,12 +10,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class CWVAutofillController;
+@class CWVScriptCommand;
 @class CWVScrollView;
 @class CWVTranslationController;
 @class CWVWebViewConfiguration;
-@protocol CWVUIDelegate;
 @protocol CWVNavigationDelegate;
+@protocol CWVScriptCommandHandler;
+@protocol CWVUIDelegate;
 
 // A web view component (like WKWebView) which uses iOS Chromium's web view
 // implementation.
@@ -36,9 +37,6 @@ CWV_EXPORT
 
 // This web view's translation controller.
 @property(nonatomic, readonly) CWVTranslationController* translationController;
-
-// This web view's autofill controller.
-@property(nonatomic, readonly) CWVAutofillController* autofillController;
 
 // This web view's UI delegate
 @property(nonatomic, weak, nullable) id<CWVUIDelegate> UIDelegate;
@@ -139,6 +137,27 @@ CWV_EXPORT
 // The completion handler is invoked when script evaluation completes.
 - (void)evaluateJavaScript:(NSString*)javaScriptString
          completionHandler:(void (^)(id, NSError*))completionHandler;
+
+// Registers a handler that will be called when a command matching
+// |commandPrefix| is received.
+//
+// Web pages can send a command by executing JavaScript like this:
+//   __gCrWeb.message.invokeOnHost(
+//       {'command': 'test.command1', 'key1':'value1', 'key2': 42});
+// And receive it by:
+//   [webView addScriptCommandHandler:handler commandPrefix:@"test"];
+//
+// Make sure to call -removeScriptCommandHandlerForCommandPrefix: with the same
+// prefix before deallocating a CWVWebView instance. Otherwise it causes an
+// assertion failure.
+//
+// This provides a similar functionarity to -[WKUserContentController
+// addScriptMessageHandler:name:].
+- (void)addScriptCommandHandler:(id<CWVScriptCommandHandler>)handler
+                  commandPrefix:(NSString*)commandPrefix;
+
+// Removes the handler associated with |commandPrefix|.
+- (void)removeScriptCommandHandlerForCommandPrefix:(NSString*)commandPrefix;
 
 @end
 

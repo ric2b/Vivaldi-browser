@@ -13,6 +13,7 @@
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
+#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/win/win_util.h"
@@ -22,14 +23,13 @@
 #include "components/nacl/common/nacl_service.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/sandbox_init.h"
 #include "ipc/ipc_channel.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
+#include "mojo/public/cpp/platform/platform_channel.h"
+#include "mojo/public/cpp/system/invitation.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "sandbox/win/src/sandbox_policy.h"
+#include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/service_context.h"
 
 namespace {
@@ -105,7 +105,7 @@ void NaClBrokerListener::OnLaunchLoaderThroughBroker(
   // Create the path to the nacl broker/loader executable - it's the executable
   // this code is running in.
   base::FilePath exe_path;
-  PathService::Get(base::FILE_EXE, &exe_path);
+  base::PathService::Get(base::FILE_EXE, &exe_path);
   if (!exe_path.empty()) {
     base::CommandLine* cmd_line = new base::CommandLine(exe_path);
     nacl::CopyNaClCommandLineArguments(cmd_line);
@@ -114,20 +114,14 @@ void NaClBrokerListener::OnLaunchLoaderThroughBroker(
                                 switches::kNaClLoaderProcess);
 
     // Mojo IPC setup.
-    mojo::edk::PlatformChannelPair channel_pair;
-    mojo::edk::ScopedPlatformHandle parent_handle =
-        channel_pair.PassServerHandle();
-    mojo::edk::ScopedPlatformHandle client_handle =
-        channel_pair.PassClientHandle();
+    mojo::PlatformChannel channel;
     base::HandlesToInheritVector handles;
-    handles.push_back(client_handle.get().handle);
-    cmd_line->AppendSwitchASCII(
-        mojo::edk::PlatformChannelPair::kMojoPlatformChannelHandleSwitch,
-        base::UintToString(base::win::HandleToUint32(handles[0])));
+    channel.PrepareToPassRemoteEndpoint(&handles, cmd_line);
 
-    std::string token = mojo::edk::GenerateRandomToken();
-    cmd_line->AppendSwitchASCII(switches::kServiceRequestChannelToken, token);
-    mojo::edk::OutgoingBrokerClientInvitation invitation;
+    std::string token = base::NumberToString(base::RandUint64());
+    cmd_line->AppendSwitchASCII(
+        service_manager::switches::kServiceRequestChannelToken, token);
+    mojo::OutgoingInvitation invitation;
     MojoResult fuse_result = mojo::FuseMessagePipes(
         mojo::ScopedMessagePipeHandle(service_request_pipe),
         invitation.AttachMessagePipe(token));
@@ -138,10 +132,9 @@ void NaClBrokerListener::OnLaunchLoaderThroughBroker(
         this, cmd_line, handles, &loader_process);
 
     if (result == sandbox::SBOX_ALL_OK) {
-      invitation.Send(
-          loader_process.Handle(),
-          mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
-                                      std::move(parent_handle)));
+      mojo::OutgoingInvitation::Send(std::move(invitation),
+                                     loader_process.Handle(),
+                                     channel.TakeLocalEndpoint());
 
       // Note: PROCESS_DUP_HANDLE is necessary here, because:
       // 1) The current process is the broker, which is the loader's parent.

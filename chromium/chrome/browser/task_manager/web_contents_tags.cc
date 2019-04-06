@@ -9,8 +9,8 @@
 #include "build/build_config.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/view_type_utils.h"
-#include "extensions/features/features.h"
-#include "printing/features/features.h"
+#include "extensions/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/task_manager/providers/web_contents/background_contents_tag.h"

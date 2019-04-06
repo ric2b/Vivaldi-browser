@@ -32,7 +32,7 @@ struct DistantTab {
   // Uniquely identifies the distant session this DistantTab belongs to.
   std::string session_tag;
   // Uniquely identifies this tab in its distant session.
-  SessionID::id_type tab_id;
+  SessionID tab_id;
   // The title of the page shown in this DistantTab.
   base::string16 title;
   // The url shown in this DistantTab.
@@ -60,7 +60,7 @@ class DistantSession {
   std::string tag;
   std::string name;
   base::Time modified_time;
-  sync_sessions::SyncedSession::DeviceType device_type;
+  sync_pb::SyncEnums::DeviceType device_type;
   std::vector<std::unique_ptr<DistantTab>> tabs;
 
   DISALLOW_COPY_AND_ASSIGN(DistantSession);

@@ -7,7 +7,10 @@
 
 #include <cstdint>
 
+#include "ui/gfx/presentation_feedback.h"
+
 namespace gpu {
+struct SwapBuffersCompleteParams;
 
 class GpuControlClient {
  public:
@@ -22,6 +25,11 @@ class GpuControlClient {
   // visible immediately while unwinding the call stack.
   virtual void OnGpuControlLostContextMaybeReentrant() = 0;
   virtual void OnGpuControlErrorMessage(const char* message, int32_t id) = 0;
+  virtual void OnGpuControlSwapBuffersCompleted(
+      const SwapBuffersCompleteParams& params) = 0;
+  virtual void OnSwapBufferPresented(
+      uint64_t swap_id,
+      const gfx::PresentationFeedback& feedback) = 0;
 };
 
 }  // namespace gpu

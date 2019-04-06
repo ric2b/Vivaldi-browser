@@ -5,7 +5,7 @@
 #include "components/feature_engagement/public/event_constants.h"
 
 #include "build/build_config.h"
-#include "components/feature_engagement/features.h"
+#include "components/feature_engagement/buildflags.h"
 
 namespace feature_engagement {
 
@@ -33,6 +33,7 @@ const char kChromeOpened[] = "chrome_opened";
 const char kIncognitoTabOpened[] = "incognito_tab_opened";
 const char kClearedBrowsingData[] = "cleared_browsing_data";
 const char kViewedReadingList[] = "viewed_reading_list";
+const char kBottomToolbarOpened[] = "bottom_toolbar_opened";
 #endif  // defined(OS_IOS)
 
 }  // namespace events

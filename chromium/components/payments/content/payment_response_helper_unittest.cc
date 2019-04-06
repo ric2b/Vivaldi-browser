@@ -19,7 +19,7 @@
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/test_payment_request_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
 
 namespace payments {
 
@@ -79,7 +79,7 @@ class PaymentResponseHelperTest : public testing::Test,
   std::vector<mojom::PaymentMethodDataPtr> GetMethodDataForVisa() {
     std::vector<mojom::PaymentMethodDataPtr> method_data;
     mojom::PaymentMethodDataPtr entry = mojom::PaymentMethodData::New();
-    entry->supported_methods.push_back("visa");
+    entry->supported_method = "visa";
     method_data.push_back(std::move(entry));
     return method_data;
   }
@@ -141,7 +141,7 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_SupportedMethod) {
 TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_BasicCard) {
   // The method data supports visa through basic-card.
   mojom::PaymentMethodDataPtr entry = mojom::PaymentMethodData::New();
-  entry->supported_methods.push_back("basic-card");
+  entry->supported_method = "basic-card";
   entry->supported_networks.push_back(mojom::BasicCardNetwork::VISA);
   std::vector<mojom::PaymentMethodDataPtr> method_data;
   method_data.push_back(std::move(entry));

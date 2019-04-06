@@ -4,7 +4,6 @@
 
 #include "ui/views/bubble/tooltip_icon.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/timer/timer.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -15,8 +14,9 @@
 
 namespace views {
 
-TooltipIcon::TooltipIcon(const base::string16& tooltip)
+TooltipIcon::TooltipIcon(const base::string16& tooltip, int tooltip_icon_size)
     : tooltip_(tooltip),
+      tooltip_icon_size_(tooltip_icon_size),
       mouse_inside_(false),
       bubble_(nullptr),
       preferred_width_(0),
@@ -55,7 +55,7 @@ void TooltipIcon::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void TooltipIcon::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_TOOLTIP;
+  node_data->role = ax::mojom::Role::kTooltip;
   node_data->SetName(tooltip_);
 }
 
@@ -70,10 +70,10 @@ void TooltipIcon::MouseMovedOutOfHost() {
 }
 
 void TooltipIcon::SetDrawAsHovered(bool hovered) {
-  SetImage(gfx::CreateVectorIcon(vector_icons::kInfoOutlineIcon, 18,
-                                 hovered
-                                     ? SkColorSetARGB(0xBD, 0, 0, 0)
-                                     : SkColorSetARGB(0xBD, 0x44, 0x44, 0x44)));
+  SetImage(
+      gfx::CreateVectorIcon(vector_icons::kInfoOutlineIcon, tooltip_icon_size_,
+                            hovered ? SkColorSetARGB(0xBD, 0, 0, 0)
+                                    : SkColorSetARGB(0xBD, 0x44, 0x44, 0x44)));
 }
 
 void TooltipIcon::ShowBubble() {
@@ -84,7 +84,7 @@ void TooltipIcon::ShowBubble() {
 
   bubble_ = new InfoBubble(this, tooltip_);
   bubble_->set_preferred_width(preferred_width_);
-  bubble_->set_arrow(BubbleBorder::TOP_RIGHT);
+  bubble_->set_arrow(anchor_point_arrow_);
   // When shown due to a gesture event, close on deactivate (i.e. don't use
   // "focusless").
   bubble_->set_can_activate(!mouse_inside_);

@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -44,7 +43,6 @@
 
 using content::OpenURLParams;
 using content::Referrer;
-using extensions::ExperienceSamplingEvent;
 
 namespace {
 
@@ -65,7 +63,7 @@ class RatingsView : public views::View {
   ~RatingsView() override {}
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->role = ui::AX_ROLE_STATIC_TEXT;
+    node_data->role = ax::mojom::Role::kStaticText;
     base::string16 accessible_text;
     if (rating_count_ == 0) {
       accessible_text = l10n_util::GetStringUTF16(
@@ -95,7 +93,7 @@ class RatingStar : public views::ImageView {
 
   // views::ImageView:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->role = ui::AX_ROLE_IGNORED;
+    node_data->role = ax::mojom::Role::kIgnored;
   }
 
  private:
@@ -112,7 +110,7 @@ class RatingLabel : public views::Label {
 
   // views::Label:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->role = ui::AX_ROLE_IGNORED;
+    node_data->role = ax::mojom::Role::kIgnored;
   }
 
  private:
@@ -217,20 +215,18 @@ struct ExtensionInfoSection {
 // Adds a section to |sections| for permissions of |perm_type| if there are any.
 void AddPermissions(ExtensionInstallPrompt::Prompt* prompt,
                     std::vector<ExtensionInfoSection>& sections,
-                    int available_width,
-                    ExtensionInstallPrompt::PermissionsType perm_type) {
-  if (prompt->GetPermissionCount(perm_type) == 0)
-    return;
+                    int available_width) {
+  DCHECK_GT(prompt->GetPermissionCount(), 0u);
 
   auto permissions_view = std::make_unique<PermissionsView>(available_width);
 
-  for (size_t i = 0; i < prompt->GetPermissionCount(perm_type); ++i) {
-    permissions_view->AddItem(prompt->GetPermission(i, perm_type),
-                              prompt->GetPermissionsDetails(i, perm_type));
+  for (size_t i = 0; i < prompt->GetPermissionCount(); ++i) {
+    permissions_view->AddItem(prompt->GetPermission(i),
+                              prompt->GetPermissionsDetails(i));
   }
 
   sections.push_back(
-      {prompt->GetPermissionsHeading(perm_type), std::move(permissions_view)});
+      {prompt->GetPermissionsHeading(), std::move(permissions_view)});
 }
 
 }  // namespace
@@ -251,9 +247,6 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
 
   UMA_HISTOGRAM_ENUMERATION("Extensions.InstallPrompt.Type", prompt_->type(),
                             ExtensionInstallPrompt::NUM_PROMPT_TYPES);
-  sampling_event_ = ExperienceSamplingEvent::Create(
-      ExperienceSamplingEvent::kExtensionInstallDialog +
-      ExtensionInstallPrompt::PromptTypeToString(prompt_->type()));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::EXTENSION_INSTALL);
 }
 
@@ -281,16 +274,9 @@ void ExtensionInstallDialogView::CreateContents() {
 
   std::vector<ExtensionInfoSection> sections;
   if (prompt_->ShouldShowPermissions()) {
-    bool has_permissions =
-        prompt_->GetPermissionCount(
-            ExtensionInstallPrompt::PermissionsType::ALL_PERMISSIONS) > 0;
+    bool has_permissions = prompt_->GetPermissionCount() > 0;
     if (has_permissions) {
-      AddPermissions(
-          prompt_.get(), sections, content_width,
-          ExtensionInstallPrompt::PermissionsType::REGULAR_PERMISSIONS);
-      AddPermissions(
-          prompt_.get(), sections, content_width,
-          ExtensionInstallPrompt::PermissionsType::WITHHELD_PERMISSIONS);
+      AddPermissions(prompt_.get(), sections, content_width);
     } else {
       sections.push_back(
           {l10n_util::GetStringUTF16(IDS_EXTENSION_NO_SPECIAL_PERMISSIONS),
@@ -381,8 +367,6 @@ bool ExtensionInstallDialogView::Cancel() {
 
   handled_result_ = true;
   UpdateInstallResultHistogram(false);
-  if (sampling_event_)
-    sampling_event_->CreateUserDecisionEvent(ExperienceSamplingEvent::kDeny);
   base::ResetAndReturn(&done_callback_)
       .Run(ExtensionInstallPrompt::Result::USER_CANCELED);
   return true;
@@ -393,8 +377,6 @@ bool ExtensionInstallDialogView::Accept() {
 
   handled_result_ = true;
   UpdateInstallResultHistogram(true);
-  if (sampling_event_)
-    sampling_event_->CreateUserDecisionEvent(ExperienceSamplingEvent::kProceed);
   base::ResetAndReturn(&done_callback_)
       .Run(ExtensionInstallPrompt::Result::ACCEPTED);
   return true;
@@ -465,15 +447,17 @@ void ExtensionInstallDialogView::AddedToWidget() {
   views::ColumnSet* column_set = layout->AddColumnSet(kTitleColumnSetId);
   constexpr int icon_size = extension_misc::EXTENSION_ICON_SMALL;
   column_set->AddColumn(views::GridLayout::CENTER, views::GridLayout::LEADING,
-                        0, views::GridLayout::FIXED, icon_size, 0);
+                        views::GridLayout::kFixedSize, views::GridLayout::FIXED,
+                        icon_size, 0);
 
   // Equalize padding on the left and the right of the icon.
   column_set->AddPaddingColumn(
-      0, provider->GetInsetsMetric(views::INSETS_DIALOG).left());
+      views::GridLayout::kFixedSize,
+      provider->GetInsetsMetric(views::INSETS_DIALOG).left());
   // Set a resize weight so that the title label will be expanded to the
   // available width.
-  column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::LEADING, 1,
-                        views::GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::LEADING,
+                        1.0, views::GridLayout::USE_PREF, 0, 0);
 
   // Scale down to icon size, but allow smaller icons (don't scale up).
   const gfx::ImageSkia* image = prompt_->icon().ToImageSkia();
@@ -483,7 +467,7 @@ void ExtensionInstallDialogView::AddedToWidget() {
   icon->SetImageSize(size);
   icon->SetImage(*image);
 
-  layout->StartRow(0, kTitleColumnSetId);
+  layout->StartRow(views::GridLayout::kFixedSize, kTitleColumnSetId);
   layout->AddView(icon);
 
   std::unique_ptr<views::Label> title_label =
@@ -606,16 +590,17 @@ ExpandableContainerView::ExpandableContainerView(
   constexpr int kColumnSetId = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(kColumnSetId);
 
-  // Even though we only have one column, using a GridLayout here will properly
-  // handle a 0 height row when |details_view_| is collapsed.
+  // Even though we only have one column, using a GridLayout here will
+  // properly handle a 0 height row when |details_view_| is collapsed.
   column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
-                        0, views::GridLayout::FIXED, available_width, 0);
+                        views::GridLayout::kFixedSize, views::GridLayout::FIXED,
+                        available_width, 0);
 
-  layout->StartRow(0, kColumnSetId);
+  layout->StartRow(views::GridLayout::kFixedSize, kColumnSetId);
   details_view_ = new DetailsView(details);
   layout->AddView(details_view_);
 
-  layout->StartRow(0, kColumnSetId);
+  layout->StartRow(views::GridLayout::kFixedSize, kColumnSetId);
   details_link_ =
       new views::Link(l10n_util::GetStringUTF16(IDS_EXTENSIONS_SHOW_DETAILS));
   details_link_->set_listener(this);
@@ -644,6 +629,6 @@ void ExpandableContainerView::ToggleDetailLevel() {
 
 // static
 ExtensionInstallPrompt::ShowDialogCallback
-ExtensionInstallPrompt::GetViewsShowDialogCallback() {
+ExtensionInstallPrompt::GetDefaultShowDialogCallback() {
   return base::Bind(&ShowExtensionInstallDialogImpl);
 }

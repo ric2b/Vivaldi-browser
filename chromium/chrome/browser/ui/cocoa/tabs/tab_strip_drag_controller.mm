@@ -48,7 +48,7 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
 
 @synthesize draggedTab = draggedTab_;
 
-- (id)initWithTabStripController:(TabStripController*)controller {
+- (id)initWithTabStripController:(TabStripControllerCocoa*)controller {
   if ((self = [super init])) {
     tabStrip_ = controller;
   }
@@ -60,7 +60,7 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
   [super dealloc];
 }
 
-- (void)maybeStartDrag:(NSEvent*)theEvent forTab:(TabController*)tab {
+- (void)maybeStartDrag:(NSEvent*)theEvent forTab:(TabControllerCocoa*)tab {
   [self resetDragControllers];
 
   // Resolve overlay back to original window.
@@ -71,7 +71,8 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
 
   sourceWindowFrame_ = [sourceWindow_ frame];
   sourceTabFrame_ = [[tab view] frame];
-  sourceController_ = [sourceWindow_ windowController];
+  sourceController_ =
+      [TabWindowController tabWindowControllerForWindow:sourceWindow_];
   draggedTab_ = tab;
   tabWasDragged_ = NO;
   tearTime_ = 0.0;
@@ -91,7 +92,7 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
   // our own destruction. Keep ourselves around while spinning the loop as well
   // as the tab controller being dragged.
   base::scoped_nsobject<TabStripDragController> keepAlive([self retain]);
-  base::scoped_nsobject<TabController> keepAliveTab([tab retain]);
+  base::scoped_nsobject<TabControllerCocoa> keepAliveTab([tab retain]);
 
   // Because we move views between windows, we need to handle the event loop
   // ourselves. Ideally we should use the standard event loop.
@@ -185,7 +186,7 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
     // and call insertPlaceholderForTab:frame:.
     if (outOfTabHorizDeadZone_ || fabs(vertOffset) > kVertTearDistance) {
       tabWasDragged_ = YES;
-      TabView* tabView = [draggedTab_ tabView];
+      TabViewCocoa* tabView = [draggedTab_ tabView];
       [sourceController_
           insertPlaceholderForTab:tabView
                             frame:[tabView centerScanRect:NSOffsetRect(
@@ -473,7 +474,7 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
     // Force redraw to avoid flashes of old content before returning to event
     // loop.
     [[targetController_ window] display];
-    [targetController_ showWindow:nil];
+    [[targetController_ nsWindowController] showWindow:nil];
     [draggedController_ removeOverlay];
   } else {
     // Only move the window around on screen. Make sure it's set back to
@@ -518,17 +519,16 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
   if (![targets count] && [sourceController_ numberOfTabs] - [tabs count] == 0)
     return NO;  // I.e. ignore dragging *all* tabs in the last Browser window.
 
-  for (TabView* tabView in tabs) {
+  for (TabViewCocoa* tabView in tabs) {
     if ([tabView isClosing])
       return NO;
   }
 
-  NSWindowController* controller = [sourceWindow_ windowController];
-  if ([controller isKindOfClass:[TabWindowController class]]) {
-    TabWindowController* realController =
-        static_cast<TabWindowController*>(controller);
-    for (TabView* tabView in tabs) {
-      if (![realController isTabDraggable:tabView])
+  TabWindowController* controller =
+      [TabWindowController tabWindowControllerForWindow:sourceWindow_];
+  if (controller) {
+    for (TabViewCocoa* tabView in tabs) {
+      if (![controller isTabDraggable:tabView])
         return NO;
     }
   }
@@ -559,13 +559,15 @@ static BOOL PointIsInsideView(NSPoint screenPoint, NSView* view) {
     // Skip windows on the wrong space.
     if (![window isOnActiveSpace])
       continue;
-    NSWindowController* controller = [window windowController];
-    if ([controller isKindOfClass:[TabWindowController class]]) {
-      TabWindowController* realController =
-          static_cast<TabWindowController*>(controller);
-      if ([realController canReceiveFrom:dragController])
-        [targets addObject:controller];
-    }
+    TabWindowController* controller =
+        [TabWindowController tabWindowControllerForWindow:window];
+    // +tabWindowControllerForWindow: moves from a window to its parent
+    // looking for a TabWindowController. This means in some cases
+    // window != dragWindow but the returned controller == dragController.
+    if (dragController == controller)
+      continue;
+    if ([controller canReceiveFrom:dragController])
+      [targets addObject:controller];
   }
   return targets;
 }

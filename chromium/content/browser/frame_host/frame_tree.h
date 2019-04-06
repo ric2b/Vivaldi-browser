@@ -17,7 +17,7 @@
 #include "base/macros.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/common/content_export.h"
-#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
+#include "services/service_manager/public/mojom/interface_provider.mojom.h"
 
 namespace blink {
 struct FramePolicy;
@@ -141,7 +141,8 @@ class CONTENT_EXPORT FrameTree {
                 bool is_created_by_script,
                 const base::UnguessableToken& devtools_frame_token,
                 const blink::FramePolicy& frame_policy,
-                const FrameOwnerProperties& frame_owner_properties);
+                const FrameOwnerProperties& frame_owner_properties,
+                bool was_discarded);
 
   // Removes a frame from the frame tree. |child|, its children, and objects
   // owned by their RenderFrameHostManagers are immediately deleted. The root
@@ -182,6 +183,7 @@ class CONTENT_EXPORT FrameTree {
   RenderViewHostImpl* CreateRenderViewHost(SiteInstance* site_instance,
                                            int32_t routing_id,
                                            int32_t main_frame_routing_id,
+                                           int32_t widget_routing_id,
                                            bool swapped_out,
                                            bool hidden);
 
@@ -201,7 +203,8 @@ class CONTENT_EXPORT FrameTree {
   void FrameRemoved(FrameTreeNode* frame);
 
   // Updates the overall load progress and notifies the WebContents.
-  void UpdateLoadProgress();
+  // Set based on the main frame's progress only.
+  void UpdateLoadProgress(double progress);
 
   // Returns this FrameTree's total load progress.
   double load_progress() { return load_progress_; }

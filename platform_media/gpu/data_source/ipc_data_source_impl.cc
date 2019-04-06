@@ -13,6 +13,14 @@
 #include "platform_media/common/media_pipeline_messages.h"
 #include "ipc/ipc_sender.h"
 
+#ifndef NDEBUG
+#include "base/files/file.h"
+#include "base/files/file_util.h"
+
+// Uncomment to turn on content logging
+//#define CONTENT_LOG_FOLDER FILE_PATH_LITERAL("D:\\logs")
+#endif //NDEBUG
+
 namespace media {
 
 class IPCDataSourceImpl::ReadOperation {
@@ -56,9 +64,29 @@ IPCDataSourceImpl::IPCDataSourceImpl(IPC::Sender* channel,
       streaming_(streaming),
       stopped_(false),
       suspended_(false),
-      should_discard_next_buffer_(false) {
+      should_discard_next_buffer_(false)
+#ifndef NDEBUG
+      ,content_log_size_(0)
+#endif //NDEBUG
+      {
   DCHECK(channel_);
   VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+
+#if !defined(NDEBUG) && defined(CONTENT_LOG_FOLDER)
+  // Will fail if we are sandboxed
+  if (CreateTemporaryFileInDir(base::FilePath(CONTENT_LOG_FOLDER),
+                               &content_log_path_)) {
+    base::File content_log_file(content_log_path_, base::File::FLAG_OPEN |
+                                                       base::File::FLAG_READ |
+                                                       base::File::FLAG_WRITE);
+    if (!GetSize(&content_log_size_))
+      content_log_size_ = 1024 * 1024 * 16;
+    content_log_ = std::make_unique<base::MemoryMappedFile>();
+    content_log_->Initialize(std::move(content_log_file),
+                             {0, content_log_size_},
+                             base::MemoryMappedFile::READ_WRITE_EXTEND);
+  }
+#endif //NDEBUG
 }
 
 IPCDataSourceImpl::~IPCDataSourceImpl() = default;
@@ -202,8 +230,26 @@ void IPCDataSourceImpl::OnRawDataReady(int size) {
     if (size > 0) {
       if (shared_data_.get() != NULL &&
           base::saturated_cast<int>(shared_data_->mapped_size()) >= size) {
+        auto* shared_memory = static_cast<uint8_t*>(shared_data_->memory());
+#ifndef NDEBUG
+        if (content_log_size_ > 0) {
+          if (read_operation_->position() + read_operation_->size() >
+              content_log_size_) {
+            content_log_size_ = read_operation_->position() + read_operation_->size() + 1024 * 1024 * 16;
+            content_log_ = std::make_unique<base::MemoryMappedFile>();
+            base::File content_log_file(content_log_path_,
+                                        base::File::FLAG_OPEN |
+                                            base::File::FLAG_READ |
+                                            base::File::FLAG_WRITE);
+            content_log_->Initialize(std::move(content_log_file),
+                                     {0, content_log_size_},
+                                     base::MemoryMappedFile::READ_WRITE_EXTEND);
+          }
+          std::copy(shared_memory, shared_memory + size, content_log_->data() + read_operation_->position());
+        }
+#endif //NDEBUG
         ReadOperation::Finish(std::move(read_operation_),
-                              static_cast<uint8_t*>(shared_data_->memory()),
+                              shared_memory,
                               size);
         return;
       }

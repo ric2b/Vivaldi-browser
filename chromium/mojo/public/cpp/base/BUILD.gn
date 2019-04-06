@@ -10,10 +10,9 @@ component("base") {
   sources = [
     "big_buffer.cc",
     "big_buffer.h",
-    "mojo_base_export.h",
   ]
 
-  defines = [ "MOJO_BASE_IMPLEMENTATION" ]
+  defines = [ "IS_MOJO_BASE_IMPL" ]
 
   public_deps = [
     "//base",
@@ -29,14 +28,25 @@ component("shared_typemap_traits") {
   output_name = "mojo_base_shared_typemap_traits"
 
   sources = [
-    "big_buffer_struct_traits.cc",
-    "big_buffer_struct_traits.h",
+    "big_buffer_mojom_traits.cc",
+    "big_buffer_mojom_traits.h",
+    "file_info_mojom_traits.cc",
+    "file_info_mojom_traits.h",
+    "file_path_mojom_traits.cc",
+    "file_path_mojom_traits.h",
+    "shared_memory_mojom_traits.cc",
+    "shared_memory_mojom_traits.h",
+    "time_mojom_traits.cc",
+    "time_mojom_traits.h",
+    "values_mojom_traits.cc",
+    "values_mojom_traits.h",
   ]
 
-  defines = [ "MOJO_BASE_TRAITS_IMPLEMENTATION" ]
+  defines = [ "IS_MOJO_BASE_SHARED_TRAITS_IMPL" ]
 
   public_deps = [
     ":base",
+    "//base:i18n",
     "//mojo/public/mojom/base:base_shared",
   ]
 }
@@ -46,14 +56,30 @@ source_set("tests") {
 
   sources = [
     "big_buffer_unittest.cc",
+    "big_string_unittest.cc",
+    "file_path_unittest.cc",
+    "file_unittest.cc",
+    "memory_allocator_dump_cross_process_uid_unittest.cc",
+    "process_id_unittest.cc",
+    "read_only_buffer_unittest.cc",
+    "ref_counted_memory_unittest.cc",
+    "shared_memory_unittest.cc",
+    "string16_unittest.cc",
+    "text_direction_unittest.cc",
+    "thread_priority_unittest.cc",
+    "time_unittest.cc",
+    "unguessable_token_unittest.cc",
+    "values_unittest.cc",
   ]
 
   public_deps = [
     ":base",
     ":shared_typemap_traits",
     "//base",
+    "//base/test:test_support",
     "//mojo/public/cpp/test_support:test_utils",
     "//mojo/public/mojom/base",
+    "//mojo/public/mojom/base:read_only_buffer",
     "//testing/gtest",
   ]
 }

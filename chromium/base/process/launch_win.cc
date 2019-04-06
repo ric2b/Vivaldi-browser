@@ -20,7 +20,6 @@
 #include "base/debug/activity_tracker.h"
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/process/kill.h"
 #include "base/strings/utf_string_conversions.h"
@@ -257,8 +256,6 @@ Process LaunchProcess(const string16& cmdline,
   }
 
   if (options.job_handle) {
-    flags |= CREATE_SUSPENDED;
-
     // If this code is run under a debugger, the launched process is
     // automatically associated with a job object created by the debugger.
     // The CREATE_BREAKAWAY_FROM_JOB flag is used to prevent this on Windows
@@ -277,6 +274,10 @@ Process LaunchProcess(const string16& cmdline,
                                   : options.current_directory.value().c_str();
 
   string16 writable_cmdline(cmdline);
+  DCHECK(!(flags & CREATE_SUSPENDED))
+      << "Creating a suspended process can lead to hung processes if the "
+      << "launching process is killed before it assigns the process to the"
+      << "job. https://crbug.com/820996";
   if (options.as_user) {
     flags |= CREATE_UNICODE_ENVIRONMENT;
     void* enviroment_block = nullptr;
@@ -307,16 +308,18 @@ Process LaunchProcess(const string16& cmdline,
   }
   base::win::ScopedProcessInformation process_info(temp_process_info);
 
-  if (options.job_handle) {
-    if (0 == AssignProcessToJobObject(options.job_handle,
-                                      process_info.process_handle())) {
-      DLOG(ERROR) << "Could not AssignProcessToObject.";
-      Process scoped_process(process_info.TakeProcessHandle());
-      scoped_process.Terminate(win::kProcessKilledExitCode, true);
-      return Process();
-    }
+  if (options.job_handle &&
+      !AssignProcessToJobObject(options.job_handle,
+                                process_info.process_handle())) {
+    DPLOG(ERROR) << "Could not AssignProcessToObject";
+    Process scoped_process(process_info.TakeProcessHandle());
+    scoped_process.Terminate(win::kProcessKilledExitCode, true);
+    return Process();
+  }
 
-    ResumeThread(process_info.thread_handle());
+  if (options.grant_foreground_privilege &&
+      !AllowSetForegroundWindow(GetProcId(process_info.process_handle()))) {
+    DPLOG(ERROR) << "Failed to grant foreground privilege to launched process";
   }
 
   if (options.wait)

@@ -16,8 +16,9 @@
 #include "base/callback_forward.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util_proxy.h"
 #include "base/macros.h"
+#include "base/sequence_checker.h"
+#include "base/timer/timer.h"
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/file_system_file_util.h"
 #include "storage/browser/fileapi/file_system_url.h"
@@ -25,10 +26,6 @@
 #include "storage/browser/fileapi/sandbox_file_system_backend_delegate.h"
 #include "storage/browser/storage_browser_export.h"
 #include "storage/common/fileapi/file_system_types.h"
-
-namespace base {
-class SequencedTaskRunner;
-}
 
 namespace content {
 class ObfuscatedFileUtilTest;
@@ -45,7 +42,6 @@ namespace storage {
 
 class FileSystemOperationContext;
 class SandboxOriginDatabaseInterface;
-class TimedTaskHelper;
 
 // This file util stores directory information in LevelDB to obfuscate
 // and to neutralize virtual file paths given by arbitrary apps.
@@ -86,13 +82,12 @@ class STORAGE_EXPORT ObfuscatedFileUtil : public FileSystemFileUtil {
     virtual bool HasTypeDirectory(const std::string& type_string) const = 0;
   };
 
-  typedef base::Callback<std::string(const FileSystemURL&)>
-      GetTypeStringForURLCallback;
+  using GetTypeStringForURLCallback =
+      base::Callback<std::string(const FileSystemURL&)>;
 
   // |get_type_string_for_url| is user-defined callback that should return
   // a type string for the given FileSystemURL.  The type string is used
   // to provide per-type isolation in the sandboxed filesystem directory.
-  // Note that this method is called on file_task_runner.
   //
   // |known_type_strings| are known type string names that this file system
   // should care about.
@@ -104,7 +99,6 @@ class STORAGE_EXPORT ObfuscatedFileUtil : public FileSystemFileUtil {
   ObfuscatedFileUtil(storage::SpecialStoragePolicy* special_storage_policy,
                      const base::FilePath& file_system_directory,
                      leveldb::Env* env_override,
-                     base::SequencedTaskRunner* file_task_runner,
                      const GetTypeStringForURLCallback& get_type_string_for_url,
                      const std::set<std::string>& known_type_strings,
                      SandboxFileSystemBackendDelegate* sandbox_delegate);
@@ -219,8 +213,8 @@ class STORAGE_EXPORT ObfuscatedFileUtil : public FileSystemFileUtil {
       const std::vector<std::string>& type_strings_to_prepopulate);
 
  private:
-  typedef SandboxDirectoryDatabase::FileId FileId;
-  typedef SandboxDirectoryDatabase::FileInfo FileInfo;
+  using FileId = SandboxDirectoryDatabase::FileId;
+  using FileInfo = SandboxDirectoryDatabase::FileInfo;
 
   friend class ObfuscatedFileEnumerator;
   friend class content::ObfuscatedFileUtilTest;
@@ -232,8 +226,7 @@ class STORAGE_EXPORT ObfuscatedFileUtil : public FileSystemFileUtil {
   static ObfuscatedFileUtil* CreateForTesting(
       storage::SpecialStoragePolicy* special_storage_policy,
       const base::FilePath& file_system_directory,
-      leveldb::Env* env_override,
-      base::SequencedTaskRunner* file_task_runner);
+      leveldb::Env* env_override);
 
   base::FilePath GetDirectoryForURL(
       const FileSystemURL& url,
@@ -326,6 +319,8 @@ class STORAGE_EXPORT ObfuscatedFileUtil : public FileSystemFileUtil {
 
   bool HasIsolatedStorage(const GURL& origin);
 
+  SEQUENCE_CHECKER(sequence_checker_);
+
   std::map<std::string, std::unique_ptr<SandboxDirectoryDatabase>> directories_;
   std::unique_ptr<SandboxOriginDatabaseInterface> origin_database_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
@@ -335,8 +330,7 @@ class STORAGE_EXPORT ObfuscatedFileUtil : public FileSystemFileUtil {
   // Used to delete database after a certain period of inactivity.
   int64_t db_flush_delay_seconds_;
 
-  scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
-  std::unique_ptr<TimedTaskHelper> timer_;
+  base::OneShotTimer timer_;
 
   GetTypeStringForURLCallback get_type_string_for_url_;
   std::set<std::string> known_type_strings_;

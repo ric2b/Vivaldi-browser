@@ -15,13 +15,13 @@
 #include "base/win/windows_version.h"
 #include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_impl_win.h"
 #include "content/child/font_warmup_win.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/injection_test_win.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/render_thread_impl.h"
 #include "sandbox/win/src/sandbox.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/web/win/WebFontRendering.h"
+#include "services/service_manager/sandbox/switches.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/web/win/web_font_rendering.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #include "ui/display/win/dpi.h"
@@ -52,7 +52,8 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
 
   // Be mindful of what resources you acquire here. They can be used by
   // malicious code if the renderer gets compromised.
-  bool no_sandbox = command_line.HasSwitch(switches::kNoSandbox);
+  bool no_sandbox =
+      command_line.HasSwitch(service_manager::switches::kNoSandbox);
 
   if (!no_sandbox) {
     // ICU DateFormat class (used in base/time_format.cc) needs to get the
@@ -68,9 +69,6 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
   }
 
   InitializeDWriteFontProxy();
-
-  // TODO(robliao): This should use WebScreenInfo. See http://crbug.com/604555.
-  blink::WebFontRendering::SetDeviceScaleFactor(display::win::GetDPIScale());
 }
 
 void RendererMainPlatformDelegate::PlatformUninitialize() {

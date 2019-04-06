@@ -77,9 +77,10 @@ class CacheCounterTest : public PlatformTest {
     current_operation_ = OPERATION_ADD_ENTRY;
     next_step_ = STEP_GET_BACKEND;
 
-    web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
-                             base::Bind(&CacheCounterTest::CacheOperationStep,
-                                        base::Unretained(this), net::OK));
+    web::WebThread::PostTask(
+        web::WebThread::IO, FROM_HERE,
+        base::BindOnce(&CacheCounterTest::CacheOperationStep,
+                       base::Unretained(this), net::OK));
     WaitForIOThread();
   }
 
@@ -88,9 +89,10 @@ class CacheCounterTest : public PlatformTest {
     current_operation_ = OPERATION_CLEAR_CACHE;
     next_step_ = STEP_GET_BACKEND;
 
-    web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
-                             base::Bind(&CacheCounterTest::CacheOperationStep,
-                                        base::Unretained(this), net::OK));
+    web::WebThread::PostTask(
+        web::WebThread::IO, FROM_HERE,
+        base::BindOnce(&CacheCounterTest::CacheOperationStep,
+                       base::Unretained(this), net::OK));
     WaitForIOThread();
   }
 
@@ -160,8 +162,9 @@ class CacheCounterTest : public PlatformTest {
                                            ->GetCache();
 
           rv = http_cache->GetBackend(
-              &backend_, base::Bind(&CacheCounterTest::CacheOperationStep,
-                                    base::Unretained(this)));
+              &backend_,
+              base::BindRepeating(&CacheCounterTest::CacheOperationStep,
+                                  base::Unretained(this)));
 
           break;
         }
@@ -170,7 +173,7 @@ class CacheCounterTest : public PlatformTest {
           next_step_ = STEP_CALLBACK;
 
           DCHECK(backend_);
-          rv = backend_->DoomAllEntries(base::Bind(
+          rv = backend_->DoomAllEntries(base::BindRepeating(
               &CacheCounterTest::CacheOperationStep, base::Unretained(this)));
 
           break;
@@ -181,9 +184,9 @@ class CacheCounterTest : public PlatformTest {
 
           DCHECK(backend_);
           rv = backend_->CreateEntry(
-              "entry_key", &entry_,
-              base::Bind(&CacheCounterTest::CacheOperationStep,
-                         base::Unretained(this)));
+              "entry_key", net::HIGHEST, &entry_,
+              base::BindRepeating(&CacheCounterTest::CacheOperationStep,
+                                  base::Unretained(this)));
 
           break;
         }
@@ -197,8 +200,8 @@ class CacheCounterTest : public PlatformTest {
 
           rv = entry_->WriteData(
               0, 0, buffer.get(), data.size(),
-              base::Bind(&CacheCounterTest::CacheOperationStep,
-                         base::Unretained(this)),
+              base::BindRepeating(&CacheCounterTest::CacheOperationStep,
+                                  base::Unretained(this)),
               true);
 
           break;
@@ -210,9 +213,9 @@ class CacheCounterTest : public PlatformTest {
           if (current_operation_ == OPERATION_ADD_ENTRY)
             entry_->Close();
 
-          web::WebThread::PostTask(
-              web::WebThread::UI, FROM_HERE,
-              base::Bind(&CacheCounterTest::Callback, base::Unretained(this)));
+          web::WebThread::PostTask(web::WebThread::UI, FROM_HERE,
+                                   base::BindOnce(&CacheCounterTest::Callback,
+                                                  base::Unretained(this)));
 
           break;
         }
@@ -249,9 +252,9 @@ class CacheCounterTest : public PlatformTest {
 // Tests that for the empty cache, the result is zero.
 TEST_F(CacheCounterTest, Empty) {
   CacheCounter counter(browser_state());
-  counter.Init(
-      prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
-      base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
+  counter.Init(prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
+               base::BindRepeating(&CacheCounterTest::CountingCallback,
+                                   base::Unretained(this)));
   counter.Restart();
 
   WaitForIOThread();
@@ -265,9 +268,9 @@ TEST_F(CacheCounterTest, BeforeAndAfterClearing) {
   CreateCacheEntry();
 
   CacheCounter counter(browser_state());
-  counter.Init(
-      prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
-      base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
+  counter.Init(prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
+               base::BindRepeating(&CacheCounterTest::CountingCallback,
+                                   base::Unretained(this)));
   counter.Restart();
 
   WaitForIOThread();
@@ -286,9 +289,9 @@ TEST_F(CacheCounterTest, PrefChanged) {
   SetCacheDeletionPref(false);
 
   CacheCounter counter(browser_state());
-  counter.Init(
-      prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
-      base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
+  counter.Init(prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
+               base::BindRepeating(&CacheCounterTest::CountingCallback,
+                                   base::Unretained(this)));
   SetCacheDeletionPref(true);
 
   WaitForIOThread();
@@ -303,9 +306,9 @@ TEST_F(CacheCounterTest, PeriodChanged) {
   CreateCacheEntry();
 
   CacheCounter counter(browser_state());
-  counter.Init(
-      prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
-      base::Bind(&CacheCounterTest::CountingCallback, base::Unretained(this)));
+  counter.Init(prefs(), browsing_data::ClearBrowsingDataTab::ADVANCED,
+               base::BindRepeating(&CacheCounterTest::CountingCallback,
+                                   base::Unretained(this)));
 
   SetDeletionPeriodPref(browsing_data::TimePeriod::LAST_HOUR);
   WaitForIOThread();

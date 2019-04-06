@@ -208,8 +208,8 @@ three) but you'll still need to use `--plugin-launcher` or another approach.
 
 gdb 7 lets us use Python to write pretty-printers for Chromium types. The
 directory `tools/gdb/` contains a Python gdb scripts useful for Chromium code.
-There are similar scripts [in WebKit](http://trac.webkit.org/wiki/GDB) (in fact,
-the Chromium script relies on using it with the WebKit one).
+There is a similar script in `thrid_party/blink/tools/gdb`, which came from
+WebKit.
 
 To include these pretty-printers with your gdb, put the following into
 `~/.gdbinit`:
@@ -217,11 +217,11 @@ To include these pretty-printers with your gdb, put the following into
 ```python
 python
 import sys
-sys.path.insert(0, "<path/to/chromium/src>/third_party/WebKit/Tools/gdb/")
-import webkit
 sys.path.insert(0, "<path/to/chromium/src>/tools/gdb/")
 import gdb_chrome
 ```
+
+This will import Blink pretty-printers as well.
 
 Pretty printers for std types shouldn't be necessary in gdb 7, but they're
 provided here in case you're using an older gdb. Put the following into
@@ -272,6 +272,18 @@ for more info.
 You can improve GDB load time significantly at the cost of link time by
 splitting symbols from the object files. In GN, set `use_debug_fission=false` in
 your "gn args".
+
+### Source level debug with -fdebug-compilation-dir
+
+When you enable GN config `strip_absolute_paths_from_debug_symbols`, this is
+enabled by default for goma on Linux build, you need to add following command
+to your `~/.gdbinit` for source level debugging to load customized
+[gdbinit](../tools/gdb/gdbinit) or copy the content of the file to your
+`~/.gdbinit`.
+
+```
+source path/to/chromium/src/tools/gdb/gdbinit
+```
 
 ## Core files
 

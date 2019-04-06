@@ -13,7 +13,6 @@
 #include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
 #include "media/base/media_log.h"
-#include "platform_media/common/pipeline_stats.h"
 #include "platform_media/renderer/decoders/ipc_demuxer_stream.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 #include "platform_media/common/platform_logging_util.h"
@@ -31,21 +30,13 @@ static const char* const kIPCMediaPipelineSupportedMimeTypes[] = {
     "audio/aacp",  /* aac */
     "audio/mp4",   /* mp4 (aac) */
     "audio/x-m4a", /* mp4 (aac) */
-#if defined(PLATFORM_MEDIA_MP3)
-    "audio/mp3",   /* mp3 */
-    "audio/mpeg",  /* mp3 */
-    "audio/mpeg3", /* mp3 */
-    "audio/x-mp3", /* mp3 */
-#endif // PLATFORM_MEDIA_MP3
     "video/3gpp",  /**/
     "video/3gpp2", /**/
     "video/m4v",   /**/
     "video/mp4",   /**/
     "video/mpeg",  /**/
     "video/x-m4v", /**/
-#if defined(OS_MACOSX)
     "video/quicktime", /**/
-#endif
 #if defined(OS_WIN)
     "video/mpeg4",     /**/
 #endif
@@ -92,11 +83,6 @@ IPCDemuxer::~IPCDemuxer() {
   // We hand out weak pointers on the |task_runner_| thread.  Make sure they are
   // all invalidated by the time we are destroyed (on the render thread).
   DCHECK(!weak_ptr_factory_.HasWeakPtrs());
-
-  if (video_stream_)
-    pipeline_stats::RemoveStream(video_stream_.get());
-  if (audio_stream_)
-    pipeline_stats::RemoveStream(audio_stream_.get());
 }
 
 // static
@@ -119,8 +105,7 @@ std::string IPCDemuxer::GetDisplayName() const {
 }
 
 void IPCDemuxer::Initialize(DemuxerHost* host,
-                            const PipelineStatusCB& status_cb,
-                            bool enable_text_tracks) {
+                            const PipelineStatusCB& status_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(!stopping_);
 
@@ -138,13 +123,6 @@ void IPCDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
 }
 
 void IPCDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {
-}
-
-void IPCDemuxer::SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) {
-  if (audio_stream_)
-    audio_stream_->SetStreamStatusChangeCB(cb);
-  if (video_stream_)
-    video_stream_->SetStreamStatusChangeCB(cb);
 }
 
 void IPCDemuxer::Seek(base::TimeDelta time, const PipelineStatusCB& status_cb) {
@@ -226,34 +204,42 @@ int64_t IPCDemuxer::GetMemoryUsage() const {
 
 void IPCDemuxer::OnEnabledAudioTracksChanged(
     const std::vector<MediaTrack::Id>& track_ids,
-    base::TimeDelta currTime) {
+    base::TimeDelta currTime,
+    TrackChangeCB change_completed_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  bool enabled = false;
   IPCDemuxerStream* audio_stream = GetStream(DemuxerStream::AUDIO);
   CHECK(audio_stream);
-  if (track_ids.size() > 0) {
-    enabled = true;
-  }
+  bool enabled = !track_ids.empty();
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " : " << (enabled ? "enabling" : "disabling")
           << " audio stream";
   audio_stream->set_enabled(enabled, currTime);
+
+  std::set<IPCDemuxerStream*> enabled_streams;
+  enabled_streams.insert(audio_stream);
+  std::vector<DemuxerStream*> streams(enabled_streams.begin(),
+                                      enabled_streams.end());
+  std::move(change_completed_cb).Run(DemuxerStream::AUDIO, streams);
 }
 
 void IPCDemuxer::OnSelectedVideoTrackChanged(
-      base::Optional<MediaTrack::Id> track_id,
-      base::TimeDelta currTime) {
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta currTime,
+    TrackChangeCB change_completed_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  bool enabled = false;
   IPCDemuxerStream* video_stream = GetStream(DemuxerStream::VIDEO);
   CHECK(video_stream);
-  if (track_id) {
-    enabled = true;
-  }
+  bool enabled = !track_ids.empty();
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " : " << (enabled ? "enabling" : "disabling")
           << " video stream";
   video_stream->set_enabled(enabled, currTime);
+
+  std::set<IPCDemuxerStream*> enabled_streams;
+  enabled_streams.insert(video_stream);
+  std::vector<DemuxerStream*> streams(enabled_streams.begin(),
+                                      enabled_streams.end());
+  std::move(change_completed_cb).Run(DemuxerStream::VIDEO, streams);
 }
 
 void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
@@ -263,14 +249,6 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
                                const PlatformAudioConfig& audio_config,
                                const PlatformVideoConfig& video_config) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-
-  // Avoid counting audio-only media as HW-accelerated.  Unfortunately, we
-  // cannot reliably tell if media is audio-only when initialization wasn't
-  // successful.
-  const auto video_decoding_mode = success && !video_config.is_valid()
-                                       ? PlatformMediaDecodingMode::SOFTWARE
-                                       : video_config.decoding_mode;
-  pipeline_stats::ReportStartResult(success, video_decoding_mode);
 
   if (stopping_) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -291,8 +269,6 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
             << Loggable(audio_config);
     audio_stream_.reset(new IPCDemuxerStream(DemuxerStream::AUDIO,
                                              ipc_media_pipeline_host_.get()));
-    pipeline_stats::AddStream(audio_stream_.get(),
-                              PlatformMediaDecodingMode::SOFTWARE);
   } else {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Audio Config is not Valid ";
@@ -303,22 +279,8 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
             << Loggable(video_config);
     video_stream_.reset(new IPCDemuxerStream(DemuxerStream::VIDEO,
                                              ipc_media_pipeline_host_.get()));
-    pipeline_stats::AddStream(video_stream_.get(), video_config.decoding_mode);
-
-#if defined(PLATFORM_MEDIA_HWA)
-    // |decoding_mode| might be misleading on OS X, because the platform
-    // decoder may or may not use HW acceleration internally.
-    const char* mode =
-        video_config.decoding_mode == PlatformMediaDecodingMode::HARDWARE
-            ? "hardware"
-            : "software";
-    MEDIA_LOG(INFO, media_log_) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                                << " " << GetDisplayName() << ": using " << mode
-                                << " video decoding";
-#else
     MEDIA_LOG(INFO, media_log_) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                                 << " " << GetDisplayName();
-#endif
   } else {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Video Config is not Valid ";

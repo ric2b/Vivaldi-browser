@@ -17,7 +17,14 @@
 
 namespace extensions {
 
-using ExternalInstallErrorTest = ExtensionBrowserTest;
+class ExternalInstallErrorTest : public ExtensionBrowserTest {
+ public:
+  ExternalInstallErrorTest() = default;
+  ~ExternalInstallErrorTest() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ExternalInstallErrorTest);
+};
 
 // Test that global errors don't crash on shutdown. See crbug.com/720081.
 IN_PROC_BROWSER_TEST_F(ExternalInstallErrorTest, TestShutdown) {

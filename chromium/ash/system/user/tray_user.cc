@@ -17,7 +17,7 @@
 #include "ash/system/user/user_view.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/insets.h"
@@ -47,7 +47,8 @@ views::ImageView* CreateIcon() {
 namespace ash {
 
 TrayUser::TrayUser(SystemTray* system_tray)
-    : SystemTrayItem(system_tray, UMA_USER), scoped_session_observer_(this) {}
+    : SystemTrayItem(system_tray, SystemTrayItemUmaType::UMA_USER),
+      scoped_session_observer_(this) {}
 
 TrayUser::~TrayUser() = default;
 
@@ -227,7 +228,7 @@ void TrayUser::UpdateAvatarImage(LoginStatus status) {
 
   const mojom::UserSession* const user_session =
       session_controller->GetUserSession(0);
-  avatar_->SetImage(user_session->user_info->avatar,
+  avatar_->SetImage(user_session->user_info->avatar->image,
                     gfx::Size(kTrayItemSize, kTrayItemSize));
 
   // Unit tests might come here with no images for some users.

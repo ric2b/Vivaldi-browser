@@ -55,7 +55,7 @@ class PepperPlatformAudioInput
   void ShutDown();
 
   // media::AudioInputIPCDelegate.
-  void OnStreamCreated(base::SharedMemoryHandle handle,
+  void OnStreamCreated(base::ReadOnlySharedMemoryRegion shared_memory_region,
                        base::SyncSocket::Handle socket_handle,
                        bool initially_muted) override;
   void OnError() override;
@@ -121,6 +121,10 @@ class PepperPlatformAudioInput
   bool pending_open_device_;
   // THIS MUST ONLY BE ACCESSED ON THE MAIN THREAD.
   int pending_open_device_id_;
+
+  // Used to handle cases where (Start|Stop)CaptureOnIOThread runs before the
+  // InitializeOnIOThread. THIS MUST ONLY BE ACCESSED ON THE IO THREAD.
+  enum { kIdle, kStarted, kStopped } ipc_startup_state_;
 
   DISALLOW_COPY_AND_ASSIGN(PepperPlatformAudioInput);
 };

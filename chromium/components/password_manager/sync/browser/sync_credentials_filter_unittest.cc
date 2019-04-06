@@ -15,9 +15,9 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/user_action_tester.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/fake_form_fetcher.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
@@ -28,7 +28,10 @@
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/sync/browser/sync_username_test_base.h"
-#include "google_apis/gaia/gaia_urls.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/testing_pref_service.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -41,10 +44,24 @@ namespace {
 const char kFilledAndLoginActionName[] =
     "PasswordManager_SyncCredentialFilledAndLoginSuccessfull";
 
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+const char kEnterpriseURL[] = "https://enterprise.test/";
+#endif  // SYNC_PASSWORD_REUSE_DETECTION_ENABLED
+
 class FakePasswordManagerClient : public StubPasswordManagerClient {
  public:
   FakePasswordManagerClient()
-      : password_store_(new testing::NiceMock<MockPasswordStore>) {}
+      : password_store_(new testing::NiceMock<MockPasswordStore>) {
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+    // Initializes and configures prefs.
+    prefs_ = std::make_unique<TestingPrefServiceSimple>();
+    prefs_->registry()->RegisterStringPref(
+        prefs::kPasswordProtectionChangePasswordURL, "");
+    prefs_->registry()->RegisterListPref(prefs::kPasswordProtectionLoginURLs);
+    prefs_->SetString(prefs::kPasswordProtectionChangePasswordURL,
+                      kEnterpriseURL);
+#endif  // SYNC_PASSWORD_REUSE_DETECTION_ENABLED
+  }
 
   ~FakePasswordManagerClient() override {
     password_store_->ShutdownOnUIThread();
@@ -62,10 +79,17 @@ class FakePasswordManagerClient : public StubPasswordManagerClient {
     last_committed_entry_url_ = GURL(url_spec);
   }
 
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  PrefService* GetPrefs() const override { return prefs_.get(); }
+#endif
+
  private:
   base::MessageLoop message_loop_;  // For |password_store_|.
   GURL last_committed_entry_url_;
   scoped_refptr<testing::NiceMock<MockPasswordStore>> password_store_;
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  std::unique_ptr<TestingPrefServiceSimple> prefs_;
+#endif  // SYNC_PASSWORD_REUSE_DETECTION_ENABLED
 
   DISALLOW_COPY_AND_ASSIGN(FakePasswordManagerClient);
 };
@@ -139,8 +163,7 @@ class CredentialsFilterTest : public SyncUsernameTestBase {
     }
     fetcher_.SetNonFederated(matches, 0u);
 
-    form_manager_.ProvisionallySave(
-        pending_, PasswordFormManager::IGNORE_OTHER_POSSIBLE_USERNAMES);
+    form_manager_.ProvisionallySave(pending_);
   }
 
  protected:
@@ -340,7 +363,7 @@ TEST_F(CredentialsFilterTest, ShouldSave_NotSyncCredential) {
   ASSERT_NE("user@example.org",
             signin_manager()->GetAuthenticatedAccountInfo().email);
   SetSyncingPasswords(true);
-  EXPECT_TRUE(filter_.ShouldSave(form, GURL("https://example.org")));
+  EXPECT_TRUE(filter_.ShouldSave(form));
 }
 
 TEST_F(CredentialsFilterTest, ShouldSave_SyncCredential) {
@@ -348,7 +371,15 @@ TEST_F(CredentialsFilterTest, ShouldSave_SyncCredential) {
 
   FakeSigninAs("user@example.org");
   SetSyncingPasswords(true);
-  EXPECT_FALSE(filter_.ShouldSave(form, GURL("https://example.org")));
+  EXPECT_FALSE(filter_.ShouldSave(form));
+}
+
+TEST_F(CredentialsFilterTest, ShouldSave_SignIn_Form) {
+  PasswordForm form = SimpleGaiaForm("user@example.org");
+  form.is_gaia_with_skip_save_password_form = true;
+
+  SetSyncingPasswords(false);
+  EXPECT_FALSE(filter_.ShouldSave(form));
 }
 
 TEST_F(CredentialsFilterTest, ShouldSave_SyncCredential_NotSyncingPasswords) {
@@ -356,13 +387,7 @@ TEST_F(CredentialsFilterTest, ShouldSave_SyncCredential_NotSyncingPasswords) {
 
   FakeSigninAs("user@example.org");
   SetSyncingPasswords(false);
-  EXPECT_TRUE(filter_.ShouldSave(form, GURL("https://example.org")));
-}
-
-TEST_F(CredentialsFilterTest, ShouldSave_ChomeSigninURLForDice) {
-  PasswordForm form = SimpleGaiaForm("user@gmail.com");
-  EXPECT_FALSE(filter_.ShouldSave(
-      form, GaiaUrls::GetInstance()->signin_chrome_sync_dice()));
+  EXPECT_TRUE(filter_.ShouldSave(form));
 }
 
 TEST_F(CredentialsFilterTest, ShouldFilterOneForm) {
@@ -387,5 +412,40 @@ TEST_F(CredentialsFilterTest, ShouldFilterOneForm) {
   ASSERT_EQ(1u, results.size());
   EXPECT_EQ(SimpleGaiaForm("test2@gmail.com"), *results[0]);
 }
+
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+TEST_F(CredentialsFilterTest, ShouldSaveGaiaPasswordHash) {
+  PasswordForm gaia_form = SimpleGaiaForm("user@gmail.org");
+  EXPECT_TRUE(filter_.ShouldSaveGaiaPasswordHash(gaia_form));
+
+  PasswordForm other_form = SimpleNonGaiaForm("user@example.org");
+  EXPECT_FALSE(filter_.ShouldSaveGaiaPasswordHash(other_form));
+}
+
+TEST_F(CredentialsFilterTest, ShouldSaveEnterprisePasswordHash) {
+  PasswordForm gaia_form = SimpleGaiaForm("user@gmail.org");
+  EXPECT_FALSE(filter_.ShouldSaveEnterprisePasswordHash(gaia_form));
+
+  PasswordForm other_form = SimpleNonGaiaForm("user@example.org");
+  EXPECT_FALSE(filter_.ShouldSaveEnterprisePasswordHash(other_form));
+
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      safe_browsing::kEnterprisePasswordProtectionV1);
+  PasswordForm enterprise_form =
+      SimpleNonGaiaForm("user@enterprise.test", kEnterpriseURL);
+  EXPECT_TRUE(filter_.ShouldSaveEnterprisePasswordHash(enterprise_form));
+}
+
+TEST_F(CredentialsFilterTest, IsSyncAccountEmail) {
+  FakeSigninAs("user@gmail.com");
+  EXPECT_FALSE(filter_.IsSyncAccountEmail("user"));
+  EXPECT_FALSE(filter_.IsSyncAccountEmail("user2@gmail.com"));
+  EXPECT_FALSE(filter_.IsSyncAccountEmail("user2@example.com"));
+  EXPECT_TRUE(filter_.IsSyncAccountEmail("user@gmail.com"));
+  EXPECT_TRUE(filter_.IsSyncAccountEmail("us.er@gmail.com"));
+  EXPECT_TRUE(filter_.IsSyncAccountEmail("user@googlemail.com"));
+}
+#endif  // SYNC_PASSWORD_REUSE_DETECTION_ENABLED
 
 }  // namespace password_manager

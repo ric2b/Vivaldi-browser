@@ -10,7 +10,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/cocoa/bubble_anchor_helper.h"
-#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
+#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller_cocoa.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/permission_bubble/permission_bubble_browser_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -44,8 +44,10 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest, HasLocationBarByDefault) {
   HasVisibleLocationBarForBrowser(browser());
 }
 
+// Disabled. See https://crbug.com/845389 - this regressed somewhere between
+// r545258 and r559030 (suspect: r549698), but it may be obsolete soon.
 IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest,
-                       BrowserFullscreenHasLocationBar) {
+                       DISABLED_BrowserFullscreenHasLocationBar) {
   ui::test::ScopedFakeNSWindowFullscreen faker;
 
   ShowBubble(browser());
@@ -71,7 +73,7 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest,
   faker.FinishTransition();
   EXPECT_TRUE(access_manager->context()->IsFullscreen());
 
-  FullscreenToolbarController* toolbar_controller =
+  FullscreenToolbarControllerCocoa* toolbar_controller =
       [browser_controller fullscreenToolbarController];
   EXPECT_TRUE(toolbar_controller);
 
@@ -88,8 +90,10 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest,
   EXPECT_FALSE([browser_controller fullscreenToolbarController]);
 }
 
+// Disabled. See https://crbug.com/845389 - this regressed somewhere between
+// r545258 and r559030 (suspect: r549698), but it may be obsolete soon.
 IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest,
-                       TabFullscreenHasLocationBar) {
+                       DISABLED_TabFullscreenHasLocationBar) {
   ui::test::ScopedFakeNSWindowFullscreen faker;
 
   // TODO(tapted): This should use ShowBubble(). However, on 10.9 it triggers a

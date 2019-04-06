@@ -11,7 +11,7 @@
 #include "base/memory/singleton.h"
 #include "base/values.h"
 #include "extensions/browser/extension_function.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 
 // API function that enables or disables web content accessibility support.
 class AccessibilityPrivateSetNativeAccessibilityEnabledFunction
@@ -87,6 +87,15 @@ class AccessibilityPrivateSendSyntheticKeyEventFunction
   ResponseAction Run() override;
   DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.sendSyntheticKeyEvent",
                              ACCESSIBILITY_PRIVATE_SENDSYNTHETICKEYEVENT)
+};
+
+// API function that is called when the Select-to-Speak extension state changes.
+class AccessibilityPrivateOnSelectToSpeakStateChangedFunction
+    : public UIThreadExtensionFunction {
+  ~AccessibilityPrivateOnSelectToSpeakStateChangedFunction() override {}
+  ResponseAction Run() override;
+  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.onSelectToSpeakStateChanged",
+                             ACCESSIBILITY_PRIVATE_ONSELECTTOSPEAKSTATECHANGED)
 };
 #endif  // defined (OS_CHROMEOS)
 

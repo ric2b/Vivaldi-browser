@@ -9,7 +9,7 @@ TODO: Move away from tables.
 
 | **Distro** | **Contact** | **URL for packages** | **URL for distro-specific patches** |
 |:-----------|:------------|:---------------------|:------------------------------------|
-| Ubuntu     | Chad Miller `chad.miller@canonical.com` | https://launchpad.net/ubuntu/+source/chromium-browser | https://code.launchpad.net/ubuntu/+source/chromium-browser |
+| Ubuntu     | Olivier Tilloy `olivier.tilloy@canonical.com` | https://launchpad.net/ubuntu/+source/chromium-browser | https://code.launchpad.net/~chromium-team |
 | Debian     | [see package page](http://packages.debian.org/sid/chromium) | in standard repo     | [debian patch tracker](http://patch-tracker.debian.org/package/chromium-browser/) |
 | openSUSE   | Raymond Wooninck  `tittiatcoke@gmail.com` | http://software.opensuse.org/search?baseproject=ALL&p=1&q=chromium | ??                                  |
 | Arch       | Evangelos Foutras `evangelos@foutrelis.com` | http://www.archlinux.org/packages/extra/x86_64/chromium/ | [link](http://projects.archlinux.org/svntogit/packages.git/tree/trunk?h=packages/chromium) |
@@ -17,6 +17,10 @@ TODO: Move away from tables.
 | ALT Linux  | Andrey Cherepanov (Андрей Черепанов) `cas@altlinux.org` | http://packages.altlinux.org/en/Sisyphus/srpms/chromium | http://git.altlinux.org/gears/c/chromium.git?a=tree |
 | Mageia     | Dexter Morgan `dmorgan@mageia.org` | http://svnweb.mageia.org/packages/cauldron/chromium-browser-stable/current/SPECS/ | http://svnweb.mageia.org/packages/cauldron/chromium-browser-stable/current/SOURCES/ |
 | NixOS      | aszlig `"^[0-9]+$"@regexmail.net` | http://hydra.nixos.org/search?query=pkgs.chromium | https://github.com/NixOS/nixpkgs/tree/master/pkgs/applications/networking/browsers/chromium |
+| OpenMandriva | Bernhard Rosenkraenzer `bero@lindev.ch` | n/a | https://github.com/OpenMandrivaAssociation/chromium-browser-stable https://github.com/OpenMandrivaAssociation/chromium-browser-beta https://github.com/OpenMandrivaAssociation/chromium-browser-dev |
+| Fedora     | Tom Callaway `tcallawa@redhat.com` | https://src.fedoraproject.org/rpms/chromium/ | https://src.fedoraproject.org/rpms/chromium/tree/master |
+| Yocto      | Raphael Kubo da Costa `raphael.kubo.da.costa@intel.com` | https://github.com/OSSystems/meta-browser | https://github.com/OSSystems/meta-browser/tree/master/recipes-browser/chromium/files |
+| Exherbo    | Timo Gurr `tgurr@exherbo.org` | https://git.exherbo.org/summer/packages/net-www/chromium-stable/ | https://git.exherbo.org/desktop.git/tree/packages/net-www/chromium-stable/files |
 
 ## Unofficial packages
 
@@ -24,14 +28,13 @@ Packages in this section are not part of the distro's official repositories.
 
 | **Distro** | **Contact** | **URL for packages** | **URL for distro-specific patches** |
 |:-----------|:------------|:---------------------|:------------------------------------|
-| Fedora     | Tom Callaway `tcallawa@redhat.com` | http://repos.fedorapeople.org/repos/spot/chromium/ | ??                                  |
 | Slackware  | Eric Hameleers `alien@slackware.com` | http://www.slackware.com/~alien/slackbuilds/chromium/ | http://www.slackware.com/~alien/slackbuilds/chromium/ |
 
 ## Other Unixes
 
 | **System** | **Contact** | **URL for packages** | **URL for patches** |
 |:-----------|:------------|:---------------------|:--------------------|
-| FreeBSD    | http://lists.freebsd.org/mailman/listinfo/freebsd-chromium | http://wiki.freebsd.org/Chromium | http://trillian.chruetertee.ch/chromium |
+| FreeBSD    | http://lists.freebsd.org/mailman/listinfo/freebsd-chromium | http://wiki.freebsd.org/Chromium | https://svnweb.freebsd.org/ports/head/www/chromium/files/ |
 | OpenBSD    | Robert Nagy `robert@openbsd.org` | http://openports.se/www/chromium | http://www.openbsd.org/cgi-bin/cvsweb/ports/www/chromium/patches/ |
 
 ## Updating the list

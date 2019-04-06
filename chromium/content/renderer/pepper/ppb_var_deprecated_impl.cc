@@ -19,11 +19,11 @@
 #include "ppapi/c/dev/ppb_var_deprecated.h"
 #include "ppapi/c/ppb_var.h"
 #include "ppapi/shared_impl/ppb_var_shared.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
-#include "third_party/WebKit/public/web/WebPluginScriptForbiddenScope.h"
-#include "third_party/WebKit/public/web/WebScopedUserGesture.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
+#include "third_party/blink/public/web/web_plugin_script_forbidden_scope.h"
+#include "third_party/blink/public/web/web_scoped_user_gesture.h"
 
 using ppapi::V8ObjectVar;
 using ppapi::PpapiGlobals;
@@ -159,10 +159,10 @@ void EnumerateProperties(PP_Var var,
     return;
   ScopedPPVarArray identifier_vars(identifiers->Length());
   for (uint32_t i = 0; i < identifiers->Length(); ++i) {
-    ScopedPPVar var = try_catch.FromV8(identifiers->Get(i));
+    ScopedPPVar identifier = try_catch.FromV8(identifiers->Get(i));
     if (try_catch.HasException())
       return;
-    identifier_vars.Set(i, var);
+    identifier_vars.Set(i, identifier);
   }
 
   size_t size = identifier_vars.size();

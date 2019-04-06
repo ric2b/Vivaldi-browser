@@ -188,7 +188,7 @@ static const char * const sqlite3azCompileOpt[] = {
   "ENABLE_BATCH_ATOMIC_WRITE",
 #endif
 #if SQLITE_ENABLE_CEROD
-  "ENABLE_CEROD",
+  "ENABLE_CEROD=" CTIMEOPT_VAL(SQLITE_ENABLE_CEROD),
 #endif
 #if SQLITE_ENABLE_COLUMN_METADATA
   "ENABLE_COLUMN_METADATA",
@@ -285,6 +285,9 @@ static const char * const sqlite3azCompileOpt[] = {
 #endif
 #if SQLITE_ENABLE_SNAPSHOT
   "ENABLE_SNAPSHOT",
+#endif
+#if SQLITE_ENABLE_SORTER_REFERENCES
+  "ENABLE_SORTER_REFERENCES",
 #endif
 #if SQLITE_ENABLE_SQLLOG
   "ENABLE_SQLLOG",

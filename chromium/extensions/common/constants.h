@@ -6,6 +6,7 @@
 #define EXTENSIONS_COMMON_CONSTANTS_H_
 
 #include "base/files/file_path.h"
+#include "base/logging.h"
 #include "ui/base/layout.h"
 
 namespace extensions {
@@ -45,9 +46,6 @@ extern const char kInstallDirectoryName[];
 // The name of a temporary directory to install an extension into for
 // validation before finalizing install.
 extern const char kTempExtensionName[];
-
-// The file to write our decoded images to, relative to the extension_path.
-extern const char kDecodedImagesFilename[];
 
 // The file to write our decoded message catalogs to, relative to the
 // extension_path.
@@ -185,6 +183,10 @@ enum LaunchContainer {
   NUM_LAUNCH_CONTAINERS
 };
 
+// The origin of injected CSS.
+enum CSSOrigin { CSS_ORIGIN_AUTHOR, CSS_ORIGIN_USER };
+static const CSSOrigin CSS_ORIGIN_LAST = CSS_ORIGIN_USER;
+
 }  // namespace extensions
 
 namespace extension_misc {
@@ -208,6 +210,9 @@ enum ExtensionIcons {
   EXTENSION_ICON_BITTY = 16,
   EXTENSION_ICON_INVALID = 0,
 };
+
+// The extension id of the ChromeVox extension.
+extern const char kChromeVoxExtensionId[];
 
 // The extension id of the feedback component extension.
 extern const char kFeedbackExtensionId[];
@@ -235,6 +240,12 @@ extern const char* const kHangoutsExtensionIds[6];
 
 // Error message when enterprise policy blocks scripting of webpage.
 extern const char kPolicyBlockedScripting[];
+
+// The default block size for hashing used in content verification.
+extern const int kContentVerificationDefaultBlockSize;
+
+// The minimum severity of a log or error in order to report it to the browser.
+extern const logging::LogSeverity kMinimumSeverityToReportError;
 
 }  // namespace extension_misc
 

@@ -29,7 +29,11 @@ class DriveApiUrlGeneratorTest : public testing::Test {
                        TEAM_DRIVES_INTEGRATION_DISABLED),
         team_drives_url_generator_(GURL(kBaseUrlForTesting),
                                    GURL(kBaseThumbnailUrlForTesting),
-                                   TEAM_DRIVES_INTEGRATION_ENABLED) {}
+                                   TEAM_DRIVES_INTEGRATION_ENABLED) {
+    url::AddStandardScheme("chrome-extension", url::SCHEME_WITH_HOST);
+  }
+
+  ~DriveApiUrlGeneratorTest() override { url::Shutdown(); }
 
  protected:
   DriveApiUrlGenerator url_generator_;
@@ -75,7 +79,6 @@ TEST_F(DriveApiUrlGeneratorTest, GetFilesGetUrl) {
             url_generator_.GetFilesGetUrl("0ADK06pfg", true, GURL()).spec());
 
   // If |embed_origin| is not empty, it should be added as a query parameter.
-  url::AddStandardScheme("chrome-extension", url::SCHEME_WITHOUT_PORT);
   EXPECT_EQ(
       "https://www.example.com/drive/v2/files/0ADK06pfg"
       "?embedOrigin=chrome-extension%3A%2F%2Ftest",
@@ -543,6 +546,21 @@ TEST_F(DriveApiUrlGeneratorTest, GenerateTeamDriveListUrl) {
       "https://www.example.com/drive/v2/"
       "teamdrives?maxResults=100&pageToken=theToken",
       team_drives_url_generator_.GetTeamDriveListUrl(100, "theToken").spec());
+}
+
+TEST_F(DriveApiUrlGeneratorTest, GeneraeStartPageTokenUrl) {
+  EXPECT_EQ("https://www.example.com/drive/v2/changes/startPageToken",
+            url_generator_.GetStartPageTokenUrl("").spec());
+
+  EXPECT_EQ(
+      "https://www.example.com/drive/v2/changes/"
+      "startPageToken?supportsTeamDrives=true",
+      team_drives_url_generator_.GetStartPageTokenUrl("").spec());
+
+  EXPECT_EQ(
+      "https://www.example.com/drive/v2/changes/"
+      "startPageToken?supportsTeamDrives=true&teamDriveId=team_drive_id",
+      team_drives_url_generator_.GetStartPageTokenUrl("team_drive_id").spec());
 }
 
 }  // namespace google_apis

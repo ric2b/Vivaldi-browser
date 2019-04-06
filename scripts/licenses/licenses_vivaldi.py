@@ -6,8 +6,9 @@ import json
 import os.path
 from licenses_vivaldi_texts import onlineLicenses
 
-basepath = "../../vivapp"
-maindeps = check_output(["python", basepath+"/bin/list_jsdeps.py", basepath])
+f = open("gen/vivaldi/vivapp/module_list", 'r')
+maindeps = f.read()
+f.close()
 
 modules = {}
 
@@ -33,7 +34,7 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
   for l in ["LICENSE-MIT", "LICENSE-MIT.TXT", "LICENSE.MIT", "LICENSE.BSD",
       "LICENSE.APACHE2", "LICENSE", "LICENSE.txt", "LICENSE.md", "License",
       "license.txt", "License.md", "LICENSE.mkd", "UNLICENSE"]:
-    file_name = basepath+"/"+moduledir+"/"+l
+    file_name = moduledir+"/"+l
     if os.path.exists(file_name):
       entry["License File"] = file_name
       f = open(file_name)
@@ -42,7 +43,7 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
       break
 
   # get one word license type from package.json
-  f = open(basepath+"/"+moduledir+"/package.json")
+  f = open(moduledir+"/package.json")
   pjson = json.loads(f.read())
   f.close()
   preferred = None
@@ -117,6 +118,7 @@ ADDITIONAL_PATHS = (
     os.path.join('..', 'third_party', '_winsparkle_lib'),
     os.path.join('..', 'third_party', 'sparkle_lib'),
     os.path.join('..', 'platform_media'),
+    os.path.join('..', 'vivapp', 'src', 'browserjs'),
     os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'),
 )
 
@@ -138,6 +140,12 @@ SPECIAL_CASES = {
         "URL": "http://sparkle-project.org/",
         "License": "MIT",
         "License File": "/../third_party/sparkle_lib/LICENSE",
+    },
+    os.path.join('..', 'vivapp', 'src', 'browserjs'): {
+        "Name": "boss-select",
+        "URL": "https://github.com/grks/boss-select#readme",
+        "License": "MIT",
+        "License File": "/../vivapp/src/browserjs/boss-select-license.txt",
     },
     os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'): {
         "Name": "Exif.js",

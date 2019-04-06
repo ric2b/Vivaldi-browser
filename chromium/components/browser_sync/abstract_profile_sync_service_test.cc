@@ -11,7 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/run_loop.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/browser_sync/test_http_bridge_factory.h"
 #include "components/browser_sync/test_profile_sync_service.h"
 #include "components/sync/driver/glue/sync_backend_host_core.h"
@@ -25,6 +25,7 @@
 using syncer::SyncBackendHostImpl;
 using syncer::ModelType;
 using testing::_;
+using testing::ByMove;
 using testing::Return;
 
 namespace browser_sync {
@@ -43,7 +44,7 @@ class SyncEngineForProfileSyncTest : public SyncBackendHostImpl {
       syncer::SyncClient* sync_client,
       invalidation::InvalidationService* invalidator,
       const base::WeakPtr<syncer::SyncPrefs>& sync_prefs,
-      const base::Closure& callback);
+      base::OnceClosure callback);
   ~SyncEngineForProfileSyncTest() override;
 
   void Initialize(InitParams params) override;
@@ -54,7 +55,7 @@ class SyncEngineForProfileSyncTest : public SyncBackendHostImpl {
   // Invoked at the start of HandleSyncManagerInitializationOnFrontendLoop.
   // Allows extra initialization work to be performed before the engine comes
   // up.
-  base::Closure callback_;
+  base::OnceClosure callback_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncEngineForProfileSyncTest);
 };
@@ -64,21 +65,22 @@ SyncEngineForProfileSyncTest::SyncEngineForProfileSyncTest(
     syncer::SyncClient* sync_client,
     invalidation::InvalidationService* invalidator,
     const base::WeakPtr<syncer::SyncPrefs>& sync_prefs,
-    const base::Closure& callback)
+    base::OnceClosure callback)
     : SyncBackendHostImpl(
           "dummy_debug_name",
           sync_client,
           invalidator,
           sync_prefs,
           temp_dir.Append(base::FilePath(FILE_PATH_LITERAL("test")))),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
 SyncEngineForProfileSyncTest::~SyncEngineForProfileSyncTest() {}
 
 void SyncEngineForProfileSyncTest::Initialize(InitParams params) {
   params.http_factory_getter = base::Bind(&GetHttpPostProviderFactory);
   params.sync_manager_factory =
-      std::make_unique<syncer::SyncManagerFactoryForProfileSyncTest>(callback_);
+      std::make_unique<syncer::SyncManagerFactoryForProfileSyncTest>(
+          std::move(callback_));
   params.credentials.email = "testuser@gmail.com";
   params.credentials.sync_token = "token";
   params.credentials.scope_set.insert(GaiaConstants::kChromeSyncOAuth2Scope);
@@ -103,7 +105,7 @@ void SyncEngineForProfileSyncTest::ConfigureDataTypes(ConfigureParams params) {
   // send back the list of newly configured types instead and hope it doesn't
   // break anything.
   // Posted to avoid re-entrancy issues.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(
           &SyncEngineForProfileSyncTest::FinishConfigureDataTypesOnFrontendLoop,
@@ -160,7 +162,7 @@ bool AbstractProfileSyncServiceTest::CreateRoot(ModelType model_type) {
 
 void AbstractProfileSyncServiceTest::CreateSyncService(
     std::unique_ptr<syncer::SyncClient> sync_client,
-    const base::Closure& initialization_success_callback) {
+    base::OnceClosure initialization_success_callback) {
   ASSERT_TRUE(sync_client);
   ProfileSyncService::InitParams init_params =
       profile_sync_service_bundle_.CreateBasicInitParams(
@@ -170,12 +172,13 @@ void AbstractProfileSyncServiceTest::CreateSyncService(
 
   syncer::SyncApiComponentFactoryMock* components =
       profile_sync_service_bundle_.component_factory();
+  auto engine = std::make_unique<SyncEngineForProfileSyncTest>(
+      temp_dir_.GetPath(), sync_service_->GetSyncClient(),
+      profile_sync_service_bundle_.fake_invalidation_service(),
+      sync_service_->sync_prefs()->AsWeakPtr(),
+      std::move(initialization_success_callback));
   EXPECT_CALL(*components, CreateSyncEngine(_, _, _, _))
-      .WillOnce(Return(new SyncEngineForProfileSyncTest(
-          temp_dir_.GetPath(), sync_service_->GetSyncClient(),
-          profile_sync_service_bundle_.fake_invalidation_service(),
-          sync_service_->sync_prefs()->AsWeakPtr(),
-          initialization_success_callback)));
+      .WillOnce(Return(ByMove(std::move(engine))));
 
   sync_service_->SetFirstSetupComplete();
 }

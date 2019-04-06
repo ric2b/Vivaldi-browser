@@ -24,9 +24,10 @@ CSPSourceList BuildCSPSourceList(
     sources.push_back(BuildCSPSource(source));
   }
 
-  return CSPSourceList(source_list.allow_self,  // allow_self
-                       source_list.allow_star,  // allow_star
-                       sources);                // source_list
+  return CSPSourceList(source_list.allow_self,       // allow_self
+                       source_list.allow_star,       // allow_star
+                       source_list.allow_redirects,  // allow_redirects
+                       sources);                     // source_list
 }
 
 CSPDirective BuildCSPDirective(
@@ -49,7 +50,17 @@ ContentSecurityPolicy BuildContentSecurityPolicy(
   return ContentSecurityPolicy(
       ContentSecurityPolicyHeader(policy.header.Utf8(), policy.disposition,
                                   policy.source),
-      directives, report_endpoints);
+      directives, report_endpoints, policy.use_reporting_api);
+}
+
+std::vector<ContentSecurityPolicy> BuildContentSecurityPolicyList(
+    const blink::WebContentSecurityPolicyList& policies) {
+  std::vector<ContentSecurityPolicy> list;
+
+  for (const auto& policy : policies.policies)
+    list.push_back(BuildContentSecurityPolicy(policy));
+
+  return list;
 }
 
 blink::WebContentSecurityPolicyViolation BuildWebContentSecurityPolicyViolation(
@@ -67,6 +78,7 @@ blink::WebContentSecurityPolicyViolation BuildWebContentSecurityPolicyViolation(
     violation.report_endpoints[i] =
         blink::WebString::FromASCII(violation_params.report_endpoints[i]);
   }
+  violation.use_reporting_api = violation_params.use_reporting_api;
   violation.header = blink::WebString::FromASCII(violation_params.header);
   violation.disposition = violation_params.disposition;
   violation.after_redirect = violation_params.after_redirect;

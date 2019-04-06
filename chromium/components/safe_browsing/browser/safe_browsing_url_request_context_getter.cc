@@ -30,6 +30,7 @@ SafeBrowsingURLRequestContextGetter::SafeBrowsingURLRequestContextGetter(
       network_task_runner_(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)) {
   DCHECK(!user_data_dir.empty());
+  DCHECK(system_context_getter_);
 }
 
 net::URLRequestContext*
@@ -42,11 +43,8 @@ SafeBrowsingURLRequestContextGetter::GetURLRequestContext() {
 
   if (!safe_browsing_request_context_) {
     safe_browsing_request_context_.reset(new net::URLRequestContext());
-    // May be NULL in unit tests.
-    if (system_context_getter_) {
-      safe_browsing_request_context_->CopyFrom(
-          system_context_getter_->GetURLRequestContext());
-    }
+    safe_browsing_request_context_->CopyFrom(
+        system_context_getter_->GetURLRequestContext());
     scoped_refptr<base::SequencedTaskRunner> background_task_runner =
         base::CreateSequencedTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskPriority::BACKGROUND,
@@ -115,6 +113,15 @@ void SafeBrowsingURLRequestContextGetter::ServiceShuttingDown() {
 
 void SafeBrowsingURLRequestContextGetter::DisableQuicOnIOThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  // |http_network_session_| is only initialized once GetURLRequestContext() is
+  // (lazily) called. With most consumers shifting to use
+  // SafeBrowsingNetworkContext instead of this class directly, now on startup
+  // GetURLRequestContext() might not have been called yet. So expliclity call
+  // it to make sure http_network_session_ is initialized. Don't call it though
+  // if shutdown has already started.
+  if (!http_network_session_ && !shut_down_)
+    GetURLRequestContext();
 
   if (http_network_session_)
     http_network_session_->DisableQuic();

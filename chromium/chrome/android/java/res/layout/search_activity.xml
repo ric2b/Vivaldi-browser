@@ -3,16 +3,12 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-        android:id="@+id/control_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" >
-
-    <!-- This view is unnecessary visually, but required for the LocationBarLayout. -->
-    <org.chromium.chrome.browser.searchwidget.SearchActivityFadingBackgroundView
-            android:id="@+id/fading_focus_target"
-            android:layout_width="0dp"
-            android:layout_height="0dp" />
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/control_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
 
     <ViewStub
             android:id="@+id/omnibox_results_container_stub"
@@ -28,7 +24,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/toolbar_height_no_shadow"
             android:scaleType="fitXY"
-            android:contentDescription="@null" />
+            tools:ignore="ContentDescription" />
 
     <FrameLayout
             android:id="@+id/toolbar"

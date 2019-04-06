@@ -33,8 +33,7 @@ BindStateBase::BindStateBase(InvokeFuncStorage polymorphic_invoke,
       destructor_(destructor),
       is_cancelled_(is_cancelled) {}
 
-CallbackBase::CallbackBase(CallbackBase&& c) = default;
-CallbackBase& CallbackBase::operator=(CallbackBase&& c) = default;
+CallbackBase& CallbackBase::operator=(CallbackBase&& c) noexcept = default;
 CallbackBase::CallbackBase(const CallbackBaseCopyable& c)
     : bind_state_(c.bind_state_) {}
 
@@ -43,10 +42,10 @@ CallbackBase& CallbackBase::operator=(const CallbackBaseCopyable& c) {
   return *this;
 }
 
-CallbackBase::CallbackBase(CallbackBaseCopyable&& c)
+CallbackBase::CallbackBase(CallbackBaseCopyable&& c) noexcept
     : bind_state_(std::move(c.bind_state_)) {}
 
-CallbackBase& CallbackBase::operator=(CallbackBaseCopyable&& c) {
+CallbackBase& CallbackBase::operator=(CallbackBaseCopyable&& c) noexcept {
   bind_state_ = std::move(c.bind_state_);
   return *this;
 }
@@ -66,19 +65,11 @@ bool CallbackBase::EqualsInternal(const CallbackBase& other) const {
   return bind_state_ == other.bind_state_;
 }
 
-CallbackBase::CallbackBase(BindStateBase* bind_state)
-    : bind_state_(bind_state ? AdoptRef(bind_state) : nullptr) {
-  DCHECK(!bind_state_.get() || bind_state_->HasOneRef());
-}
-
 CallbackBase::~CallbackBase() = default;
 
-CallbackBaseCopyable::CallbackBaseCopyable(const CallbackBaseCopyable& c)
-    : CallbackBase(nullptr) {
+CallbackBaseCopyable::CallbackBaseCopyable(const CallbackBaseCopyable& c) {
   bind_state_ = c.bind_state_;
 }
-
-CallbackBaseCopyable::CallbackBaseCopyable(CallbackBaseCopyable&& c) = default;
 
 CallbackBaseCopyable& CallbackBaseCopyable::operator=(
     const CallbackBaseCopyable& c) {
@@ -87,7 +78,7 @@ CallbackBaseCopyable& CallbackBaseCopyable::operator=(
 }
 
 CallbackBaseCopyable& CallbackBaseCopyable::operator=(
-    CallbackBaseCopyable&& c) = default;
+    CallbackBaseCopyable&& c) noexcept = default;
 
 }  // namespace internal
 }  // namespace base

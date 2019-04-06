@@ -10,8 +10,7 @@
 
 #include "base/callback.h"
 #include "content/common/content_export.h"
-#include "services/network/public/interfaces/url_loader_factory.mojom.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 
 class GURL;
 
@@ -26,6 +25,10 @@ class WebURLResponse;
 
 namespace net {
 struct NetworkTrafficAnnotationTag;
+}
+
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace content {
@@ -62,7 +65,7 @@ class CONTENT_EXPORT ResourceFetcher {
   virtual void Start(
       blink::WebLocalFrame* frame,
       blink::WebURLRequest::RequestContext request_context,
-      network::mojom::URLLoaderFactory* url_loader_factory,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const net::NetworkTrafficAnnotationTag& annotation_tag,
       Callback callback,
       size_t maximum_download_size = kDefaultMaximumDownloadSize) = 0;

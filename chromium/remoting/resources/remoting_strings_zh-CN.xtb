@@ -3,9 +3,6 @@
 <translationbundle lang="zh-CN">
 <translation id="1002108253973310084">检测到不兼容的协议版本。请确保两台计算机上都已安装该软件的最新版本，然后重试。</translation>
 <translation id="1050693411695664090">较差</translation>
-<translation id="1059802506829356230">• 外观焕然一新。
-• 提高了性能、响应速度和可靠性。
-• 支持播放 Windows 或 Linux 计算机中的音频。</translation>
 <translation id="1152528166145813711">请选择…</translation>
 <translation id="1199593201721843963">停用远程连接</translation>
 <translation id="1291443878853470558">如果您想使用 Chrome 远程访问来访问此计算机，就必须启用远程连接。</translation>
@@ -143,10 +140,12 @@
 <translation id="4145029455188493639">以 <ph name="EMAIL_ADDRESS" /> 的身份登录。</translation>
 <translation id="4155497795971509630">缺少某些必需的组件。请确保您已安装该软件的最新版本，然后重试。</translation>
 <translation id="4156740505453712750">为防止他人擅自访问此计算机，请选用一个<ph name="BOLD_START" />至少 6 位数<ph name="BOLD_END" />的 PIN。当从其他位置连接时，将需要输入此 PIN。</translation>
+<translation id="4169432154993690151">要选择个人资料照片，请允许 Chrome 远程桌面访问您的相机</translation>
 <translation id="4176825807642096119">访问代码</translation>
 <translation id="4207623512727273241">请先运行该安装程序，再继续操作。</translation>
 <translation id="4227991223508142681">主机配置实用程序</translation>
 <translation id="4240294130679914010">Chrome 远程访问主机卸载程序</translation>
+<translation id="4249741460382919890">常规的问题修复，并提高了稳定性。</translation>
 <translation id="4277463233460010382">此计算机已配置为允许一个或多个客户端无需输入 PIN 即可进行连接。</translation>
 <translation id="4277736576214464567">访问代码无效，请重试。</translation>
 <translation id="4361728918881830843">要启用到另一台计算机的远程连接，请在该计算机上安装 Chrome 远程桌面并点击“<ph name="BUTTON_NAME" />”。</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" />（离线）</translation>
 <translation id="5070121137485264635">远程主机要求您对第三方网站进行身份验证。要继续操作，您必须向 Chrome 远程桌面授予访问以下地址的额外权限：</translation>
 <translation id="507204348399810022">确定要停用与“<ph name="HOSTNAME" />”的远程连接吗？</translation>
+<translation id="5081343395220691640">无法与服务器进行通信：<ph name="ERROR" /></translation>
 <translation id="5156271271724754543">请在两个框中输入相同的 PIN。</translation>
 <translation id="5170982930780719864">主机 ID 无效。</translation>
 <translation id="518094545883702183">这些信息仅用于诊断您报告的问题，并且只有负责对您报告的问题进行调查的人员才可使用。这些信息的保留时间不会超过 30 天。</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">其他。</translation>
 <translation id="6398765197997659313">退出全屏模式</translation>
 <translation id="6441316101718669559">该平台不支持桌面集成。您仍可以使用该应用，但用户体验将会受到影响。</translation>
+<translation id="6502629188777329097">安全地访问您的计算机</translation>
 <translation id="652218476070540101">正在更新此计算机的 PIN…</translation>
 <translation id="6527303717912515753">分享</translation>
 <translation id="6541219117979389420">应用日志可能包含私人信息，其中包括您的身份信息（电子邮件地址）以及 Google 云端硬盘中的文件和文件夹的名称及属性。</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">发件人</translation>
 <translation id="677755392401385740">已为用户<ph name="HOST_USERNAME" />启动主机。</translation>
 <translation id="6865175692670882333">查看/修改</translation>
+<translation id="6913710942997637770">要选择个人资料照片，请允许 Chrome 远程桌面访问您的照片</translation>
 <translation id="6930242544192836755">持续时间</translation>
 <translation id="6939719207673461467">显示/隐藏键盘。</translation>
 <translation id="6944854424004126054">恢复窗口</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">此计算机的远程连接已停用。</translation>
 <translation id="7678209621226490279">固定到左侧</translation>
 <translation id="7693372326588366043">刷新主机列表</translation>
+<translation id="7714222945760997814">报告此问题</translation>
 <translation id="7782471917492991422">请检查您的计算机电源管理设置，确保未将该设置配置为无操作时进入休眠模式。</translation>
 <translation id="7810127880729796595">显示统计信息（连接：<ph name="QUALITY" />）</translation>
 <translation id="7836926030608666805">缺少某些必需的组件。请确保您运行的是最新版本的 Chrome，然后重试。</translation>

@@ -8,7 +8,6 @@
 #include <string>
 
 #include "ash/ash_export.h"
-#include "ash/public/cpp/accessibility_types.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -17,17 +16,12 @@
 
 namespace ash {
 
-class AccessibilityObserver;
 class BluetoothObserver;
-class ClockObserver;
-class EnterpriseDomainObserver;
 class IMEObserver;
 class NetworkObserver;
-class NetworkPortalDetectorObserver;
 class ScreenCaptureObserver;
 class ScreenShareObserver;
 class SystemTrayFocusObserver;
-class TracingObserver;
 class VirtualKeyboardObserver;
 
 namespace mojom {
@@ -40,30 +34,11 @@ class ASH_EXPORT SystemTrayNotifier {
   SystemTrayNotifier();
   ~SystemTrayNotifier();
 
-  // Accessibility.
-  void AddAccessibilityObserver(AccessibilityObserver* observer);
-  void RemoveAccessibilityObserver(AccessibilityObserver* observer);
-  void NotifyAccessibilityStatusChanged(
-      AccessibilityNotificationVisibility notify);
-
   // Bluetooth.
   void AddBluetoothObserver(BluetoothObserver* observer);
   void RemoveBluetoothObserver(BluetoothObserver* observer);
   void NotifyRefreshBluetooth();
   void NotifyBluetoothDiscoveringChanged();
-
-  // Date and time.
-  void AddClockObserver(ClockObserver* observer);
-  void RemoveClockObserver(ClockObserver* observer);
-  void NotifyRefreshClock();
-  void NotifyDateFormatChanged();
-  void NotifySystemClockTimeUpdated();
-  void NotifySystemClockCanSetTimeChanged(bool can_set_time);
-
-  // Enterprise domain.
-  void AddEnterpriseDomainObserver(EnterpriseDomainObserver* observer);
-  void RemoveEnterpriseDomainObserver(EnterpriseDomainObserver* observer);
-  void NotifyEnterpriseDomainChanged();
 
   // Input methods.
   void AddIMEObserver(IMEObserver* observer);
@@ -75,13 +50,6 @@ class ASH_EXPORT SystemTrayNotifier {
   void AddNetworkObserver(NetworkObserver* observer);
   void RemoveNetworkObserver(NetworkObserver* observer);
   void NotifyRequestToggleWifi();
-
-  // Network portal detector.
-  void AddNetworkPortalDetectorObserver(
-      NetworkPortalDetectorObserver* observer);
-  void RemoveNetworkPortalDetectorObserver(
-      NetworkPortalDetectorObserver* observer);
-  void NotifyOnCaptivePortalDetected(const std::string& guid);
 
   // Screen capture.
   void AddScreenCaptureObserver(ScreenCaptureObserver* observer);
@@ -102,29 +70,18 @@ class ASH_EXPORT SystemTrayNotifier {
   void RemoveSystemTrayFocusObserver(SystemTrayFocusObserver* observer);
   void NotifyFocusOut(bool reverse);
 
-  // Tracing.
-  void AddTracingObserver(TracingObserver* observer);
-  void RemoveTracingObserver(TracingObserver* observer);
-  void NotifyTracingModeChanged(bool value);
-
   // Virtual keyboard.
   void AddVirtualKeyboardObserver(VirtualKeyboardObserver* observer);
   void RemoveVirtualKeyboardObserver(VirtualKeyboardObserver* observer);
   void NotifyVirtualKeyboardSuppressionChanged(bool suppressed);
 
  private:
-  base::ObserverList<AccessibilityObserver> accessibility_observers_;
   base::ObserverList<BluetoothObserver> bluetooth_observers_;
-  base::ObserverList<ClockObserver> clock_observers_;
-  base::ObserverList<EnterpriseDomainObserver> enterprise_domain_observers_;
   base::ObserverList<IMEObserver> ime_observers_;
   base::ObserverList<NetworkObserver> network_observers_;
-  base::ObserverList<NetworkPortalDetectorObserver>
-      network_portal_detector_observers_;
   base::ObserverList<ScreenCaptureObserver> screen_capture_observers_;
   base::ObserverList<ScreenShareObserver> screen_share_observers_;
   base::ObserverList<SystemTrayFocusObserver> system_tray_focus_observers_;
-  base::ObserverList<TracingObserver> tracing_observers_;
   base::ObserverList<VirtualKeyboardObserver> virtual_keyboard_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTrayNotifier);

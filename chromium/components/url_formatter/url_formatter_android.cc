@@ -40,13 +40,40 @@ static ScopedJavaLocalRef<jstring> JNI_UrlFormatter_FixupUrl(
              : ScopedJavaLocalRef<jstring>();
 }
 
-static ScopedJavaLocalRef<jstring> JNI_UrlFormatter_FormatUrlForDisplay(
+static ScopedJavaLocalRef<jstring>
+JNI_UrlFormatter_FormatUrlForDisplayOmitScheme(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& url) {
   return base::android::ConvertUTF16ToJavaString(
       env, url_formatter::FormatUrl(
-               JNI_UrlFormatter_ConvertJavaStringToGURL(env, url)));
+               JNI_UrlFormatter_ConvertJavaStringToGURL(env, url),
+               url_formatter::kFormatUrlOmitDefaults |
+                   url_formatter::kFormatUrlOmitHTTPS,
+               net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+}
+
+static ScopedJavaLocalRef<jstring>
+JNI_UrlFormatter_FormatUrlForDisplayOmitHTTPScheme(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& url) {
+  return base::android::ConvertUTF16ToJavaString(
+      env, url_formatter::FormatUrl(
+               JNI_UrlFormatter_ConvertJavaStringToGURL(env, url),
+               url_formatter::kFormatUrlOmitDefaults, net::UnescapeRule::SPACES,
+               nullptr, nullptr, nullptr));
+}
+
+static ScopedJavaLocalRef<jstring> JNI_UrlFormatter_FormatUrlForCopy(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& url) {
+  return base::android::ConvertUTF16ToJavaString(
+      env, url_formatter::FormatUrl(
+               JNI_UrlFormatter_ConvertJavaStringToGURL(env, url),
+               url_formatter::kFormatUrlOmitNothing, net::UnescapeRule::NORMAL,
+               nullptr, nullptr, nullptr));
 }
 
 static ScopedJavaLocalRef<jstring> JNI_UrlFormatter_FormatUrlForSecurityDisplay(

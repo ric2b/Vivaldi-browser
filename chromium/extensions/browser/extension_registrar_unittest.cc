@@ -11,7 +11,6 @@
 #include "base/optional.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_notification_tracker.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -31,6 +30,8 @@ namespace {
 
 using testing::Return;
 using testing::_;
+
+using LoadErrorBehavior = ExtensionRegistrar::LoadErrorBehavior;
 
 class TestExtensionSystem : public MockExtensionSystem {
  public:
@@ -59,11 +60,17 @@ class TestExtensionRegistrarDelegate : public ExtensionRegistrar::Delegate {
   ~TestExtensionRegistrarDelegate() override = default;
 
   // ExtensionRegistrar::Delegate:
-  MOCK_METHOD2(PostActivateExtension,
-               void(scoped_refptr<const Extension> extension,
-                    bool is_newly_added));
+  MOCK_METHOD2(PreAddExtension,
+               void(const Extension* extension,
+                    const Extension* old_extension));
+  MOCK_METHOD1(PostActivateExtension,
+               void(scoped_refptr<const Extension> extension));
   MOCK_METHOD1(PostDeactivateExtension,
                void(scoped_refptr<const Extension> extension));
+  MOCK_METHOD3(LoadExtensionForReload,
+               void(const ExtensionId& extension_id,
+                    const base::FilePath& path,
+                    LoadErrorBehavior load_error_behavior));
   MOCK_METHOD1(CanEnableExtension, bool(const Extension* extension));
   MOCK_METHOD1(CanDisableExtension, bool(const Extension* extension));
   MOCK_METHOD1(ShouldBlockExtension, bool(const Extension* extension));
@@ -76,8 +83,7 @@ class TestExtensionRegistrarDelegate : public ExtensionRegistrar::Delegate {
 
 class ExtensionRegistrarTest : public ExtensionsTest {
  public:
-  ExtensionRegistrarTest()
-      : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {}
+  ExtensionRegistrarTest() = default;
   ~ExtensionRegistrarTest() override = default;
 
   void SetUp() override {
@@ -100,7 +106,7 @@ class ExtensionRegistrarTest : public ExtensionsTest {
         .WillByDefault(Return(true));
     ON_CALL(delegate_, ShouldBlockExtension(extension_.get()))
         .WillByDefault(Return(false));
-    EXPECT_CALL(delegate_, PostActivateExtension(_, _)).Times(0);
+    EXPECT_CALL(delegate_, PostActivateExtension(_)).Times(0);
     EXPECT_CALL(delegate_, PostDeactivateExtension(_)).Times(0);
   }
 
@@ -113,7 +119,7 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     EXPECT_TRUE(testing::Mock::VerifyAndClearExpectations(&delegate_));
 
     // Re-add the expectations for functions that must not be called.
-    EXPECT_CALL(delegate_, PostActivateExtension(_, _)).Times(0);
+    EXPECT_CALL(delegate_, PostActivateExtension(_)).Times(0);
     EXPECT_CALL(delegate_, PostDeactivateExtension(_)).Times(0);
   }
 
@@ -123,13 +129,17 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     ExtensionRegistry* extension_registry =
         ExtensionRegistry::Get(browser_context());
 
-    EXPECT_CALL(delegate_, PostActivateExtension(extension_, true));
+    EXPECT_CALL(delegate_, PostActivateExtension(extension_));
     registrar_->AddExtension(extension_);
     ExpectInSet(ExtensionRegistry::ENABLED);
     EXPECT_FALSE(IsExtensionReady());
 
     TestExtensionRegistryObserver(extension_registry).WaitForExtensionReady();
     EXPECT_TRUE(IsExtensionReady());
+
+    EXPECT_EQ(disable_reason::DISABLE_NONE,
+              ExtensionPrefs::Get(browser_context())
+                  ->GetDisableReasons(extension()->id()));
 
     VerifyMock();
   }
@@ -243,7 +253,7 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     ExtensionRegistry* extension_registry =
         ExtensionRegistry::Get(browser_context());
 
-    EXPECT_CALL(delegate_, PostActivateExtension(extension_, false));
+    EXPECT_CALL(delegate_, PostActivateExtension(extension_));
     registrar_->EnableExtension(extension_->id());
     ExpectInSet(ExtensionRegistry::ENABLED);
     EXPECT_FALSE(IsExtensionReady());
@@ -290,6 +300,45 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     ExpectInSet(ExtensionRegistry::NONE);
     EXPECT_TRUE(notification_tracker_.Check1AndReset(
         extensions::NOTIFICATION_EXTENSION_REMOVED));
+  }
+
+  // Directs ExtensionRegistrar to reload the extension and verifies the
+  // delegate is invoked correctly.
+  void ReloadEnabledExtension() {
+    SCOPED_TRACE("ReloadEnabledExtension");
+    EXPECT_CALL(delegate_, PostDeactivateExtension(extension()));
+    EXPECT_CALL(delegate_,
+                LoadExtensionForReload(extension()->id(), extension()->path(),
+                                       LoadErrorBehavior::kNoisy));
+    registrar()->ReloadExtension(extension()->id(), LoadErrorBehavior::kNoisy);
+    VerifyMock();
+
+    // ExtensionRegistrar should have disabled the extension in preparation for
+    // a reload.
+    ExpectInSet(ExtensionRegistry::DISABLED);
+    EXPECT_EQ(disable_reason::DISABLE_RELOAD,
+              ExtensionPrefs::Get(browser_context())
+                  ->GetDisableReasons(extension()->id()));
+  }
+
+  // Directs ExtensionRegistrar to reload the terminated extension and verifies
+  // the delegate is invoked correctly.
+  void ReloadTerminatedExtension() {
+    SCOPED_TRACE("ReloadTerminatedExtension");
+    EXPECT_CALL(delegate_,
+                LoadExtensionForReload(extension()->id(), extension()->path(),
+                                       LoadErrorBehavior::kNoisy));
+    registrar()->ReloadExtension(extension()->id(), LoadErrorBehavior::kNoisy);
+    VerifyMock();
+
+    // The extension should remain in the terminated set until the reload
+    // completes successfully.
+    ExpectInSet(ExtensionRegistry::TERMINATED);
+    // Unlike when reloading an enabled extension, the extension hasn't been
+    // disabled and shouldn't have the DISABLE_RELOAD disable reason.
+    EXPECT_EQ(disable_reason::DISABLE_NONE,
+              ExtensionPrefs::Get(browser_context())
+                  ->GetDisableReasons(extension()->id()));
   }
 
   // Verifies that the extension is in the given set in the ExtensionRegistry
@@ -411,11 +460,13 @@ TEST_F(ExtensionRegistrarTest, AddForceDisabled) {
 TEST_F(ExtensionRegistrarTest, AddBlacklisted) {
   AddBlacklistedExtension();
 
-  // A blacklisted extension cannot be enabled/disabled.
+  // A blacklisted extension cannot be enabled/disabled/reloaded.
   registrar()->EnableExtension(extension()->id());
   ExpectInSet(ExtensionRegistry::BLACKLISTED);
   registrar()->DisableExtension(extension()->id(),
                                 disable_reason::DISABLE_USER_ACTION);
+  ExpectInSet(ExtensionRegistry::BLACKLISTED);
+  registrar()->ReloadExtension(extension()->id(), LoadErrorBehavior::kQuiet);
   ExpectInSet(ExtensionRegistry::BLACKLISTED);
 
   RemoveBlacklistedExtension();
@@ -458,7 +509,7 @@ TEST_F(ExtensionRegistrarTest, DisableTerminatedExtension) {
   RemoveDisabledExtension();
 }
 
-TEST_F(ExtensionRegistrarTest, ReloadTerminatedExtension) {
+TEST_F(ExtensionRegistrarTest, EnableTerminatedExtension) {
   AddEnabledExtension();
   TerminateExtension();
 
@@ -467,6 +518,40 @@ TEST_F(ExtensionRegistrarTest, ReloadTerminatedExtension) {
   AddEnabledExtension();
 
   RemoveEnabledExtension();
+}
+
+TEST_F(ExtensionRegistrarTest, ReloadExtension) {
+  AddEnabledExtension();
+  ReloadEnabledExtension();
+
+  // Add the now-reloaded extension back into the registrar.
+  AddEnabledExtension();
+}
+
+TEST_F(ExtensionRegistrarTest, RemoveReloadedExtension) {
+  AddEnabledExtension();
+  ReloadEnabledExtension();
+
+  // Simulate the delegate failing to load the extension and removing it
+  // instead.
+  RemoveDisabledExtension();
+
+  // Attempting to reload it silently fails.
+  registrar()->ReloadExtension(extension()->id(), LoadErrorBehavior::kQuiet);
+  ExpectInSet(ExtensionRegistry::NONE);
+}
+
+TEST_F(ExtensionRegistrarTest, ReloadTerminatedExtension) {
+  AddEnabledExtension();
+  TerminateExtension();
+
+  // Reload the terminated extension.
+  ReloadTerminatedExtension();
+
+  // Complete the reload by adding the extension. Expect the extension to be
+  // enabled once re-added to the registrar, since ExtensionPrefs shouldn't say
+  // it's disabled.
+  AddEnabledExtension();
 }
 
 }  // namespace extensions

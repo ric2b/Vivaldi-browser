@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2018 The Chromium Authors. All rights reserved.
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file.
+-->
+
+<org.chromium.chrome.browser.download.home.view.ImageListItemView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="true"
+    android:background="@color/modern_primary_color" >
+
+    <ImageView
+        android:id="@+id/thumbnail"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/download_manager_image_width"
+        android:scaleType="centerCrop"
+        android:layout_gravity="center"
+        tools:ignore="ContentDescription" />
+
+    <org.chromium.chrome.browser.widget.TintedImageView
+        android:id="@+id/selection"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_gravity="start|top"
+        android:layout_marginStart="6dp"
+        android:layout_marginTop="6dp"
+        android:visibility="gone"
+        app:chrometint="@color/dark_mode_tint"/>
+
+</org.chromium.chrome.browser.download.home.view.ImageListItemView>

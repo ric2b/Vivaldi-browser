@@ -23,8 +23,7 @@ class CompositorFrameSinkClientBinding
   CompositorFrameSinkClientBinding(
       viz::mojom::CompositorFrameSinkClient* sink_client,
       viz::mojom::CompositorFrameSinkClientRequest sink_client_request,
-      viz::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink,
-      viz::mojom::DisplayPrivateAssociatedPtr display_private);
+      viz::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink);
   ~CompositorFrameSinkClientBinding() override;
 
  private:
@@ -32,14 +31,22 @@ class CompositorFrameSinkClientBinding
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
-      viz::mojom::HitTestRegionListPtr hit_test_region_list,
+      base::Optional<viz::HitTestRegionList> hit_test_region_list,
       uint64_t submit_time) override;
+  void SubmitCompositorFrameSync(
+      const viz::LocalSurfaceId& local_surface_id,
+      viz::CompositorFrame frame,
+      base::Optional<viz::HitTestRegionList> hit_test_region_list,
+      uint64_t submit_time,
+      const SubmitCompositorFrameSyncCallback callback) override;
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
   void SetWantsAnimateOnlyBeginFrames() override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
+  void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
+                               const viz::SharedBitmapId& id) override;
+  void DidDeleteSharedBitmap(const viz::SharedBitmapId& id) override;
 
   mojo::Binding<viz::mojom::CompositorFrameSinkClient> binding_;
-  viz::mojom::DisplayPrivateAssociatedPtr display_private_;
   viz::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositorFrameSinkClientBinding);

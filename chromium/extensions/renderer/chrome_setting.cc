@@ -4,10 +4,11 @@
 
 #include "extensions/renderer/chrome_setting.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "extensions/renderer/bindings/api_binding_util.h"
 #include "extensions/renderer/bindings/api_event_handler.h"
+#include "extensions/renderer/bindings/api_invocation_errors.h"
 #include "extensions/renderer/bindings/api_request_handler.h"
 #include "extensions/renderer/bindings/api_signature.h"
 #include "extensions/renderer/bindings/api_type_reference_map.h"
@@ -75,6 +76,10 @@ gin::ObjectTemplateBuilder ChromeSetting::GetObjectTemplateBuilder(
       .SetProperty("onChange", &ChromeSetting::GetOnChangeEvent);
 }
 
+const char* ChromeSetting::GetTypeName() {
+  return "ChromeSetting";
+}
+
 void ChromeSetting::Get(gin::Arguments* arguments) {
   HandleFunction("get", arguments);
 }
@@ -83,6 +88,9 @@ void ChromeSetting::Set(gin::Arguments* arguments) {
   v8::Isolate* isolate = arguments->isolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
+
+  if (!binding::IsContextValidOrThrowError(context))
+    return;
 
   v8::Local<v8::Value> value = arguments->PeekNext();
   // The set schema included in the Schema object is generic, since it varies
@@ -107,6 +115,10 @@ v8::Local<v8::Value> ChromeSetting::GetOnChangeEvent(
   v8::Isolate* isolate = arguments->isolate();
   v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
   v8::Local<v8::Object> wrapper = GetWrapper(isolate).ToLocalChecked();
+
+  if (!binding::IsContextValidOrThrowError(context))
+    return v8::Undefined(isolate);
+
   v8::Local<v8::Private> key = v8::Private::ForApi(
       isolate, gin::StringToSymbol(isolate, "onChangeEvent"));
   v8::Local<v8::Value> event;
@@ -139,6 +151,9 @@ void ChromeSetting::HandleFunction(const std::string& method_name,
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
 
+  if (!binding::IsContextValidOrThrowError(context))
+    return;
+
   std::vector<v8::Local<v8::Value>> argument_list = arguments->GetAll();
 
   std::string full_name = "types.ChromeSetting." + method_name;
@@ -149,10 +164,12 @@ void ChromeSetting::HandleFunction(const std::string& method_name,
   std::unique_ptr<base::ListValue> converted_arguments;
   v8::Local<v8::Function> callback;
   std::string error;
-  if (!type_refs_->GetTypeMethodSignature(full_name)->ParseArgumentsToJSON(
-          context, argument_list, *type_refs_, &converted_arguments, &callback,
-          &error)) {
-    arguments->ThrowTypeError("Invalid invocation");
+  const APISignature* signature = type_refs_->GetTypeMethodSignature(full_name);
+  if (!signature->ParseArgumentsToJSON(context, argument_list, *type_refs_,
+                                       &converted_arguments, &callback,
+                                       &error)) {
+    arguments->ThrowTypeError(api_errors::InvocationError(
+        full_name, signature->GetExpectedSignature(), error));
     return;
   }
 

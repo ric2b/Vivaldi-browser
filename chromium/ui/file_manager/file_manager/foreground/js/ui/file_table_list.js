@@ -23,7 +23,7 @@ function FileTableList() {
  */
 FileTableList.decorate = function(self) {
   self.__proto__ = FileTableList.prototype;
-}
+};
 
 FileTableList.prototype.__proto__ = cr.ui.table.TableList.prototype;
 
@@ -134,11 +134,13 @@ filelist.decorateListItem = function(li, entry, metadataModel) {
   // not on an external backend, externalProps is not available.
   var externalProps = metadataModel.getCache(
       [entry], ['hosted', 'availableOffline', 'customIconUrl', 'shared'])[0];
-  filelist.updateListItemExternalProps(li, externalProps);
+  filelist.updateListItemExternalProps(
+      li, externalProps, util.isTeamDriveRoot(entry));
 
   // Overriding the default role 'list' to 'listbox' for better
   // accessibility on ChromeOS.
   li.setAttribute('role', 'option');
+  li.setAttribute('aria-describedby', 'more-actions-info');
 
   Object.defineProperty(li, 'selected', {
     /**
@@ -198,8 +200,10 @@ filelist.renderFileNameLabel = function(doc, entry) {
  * Updates grid item or table row for the externalProps.
  * @param {cr.ui.ListItem} li List item.
  * @param {Object} externalProps Metadata.
+ * @param {boolean} isTeamDriveRoot Whether the item is a team drive root entry.
  */
-filelist.updateListItemExternalProps = function(li, externalProps) {
+filelist.updateListItemExternalProps = function(
+    li, externalProps, isTeamDriveRoot) {
   if (li.classList.contains('file')) {
     if (externalProps.availableOffline)
       li.classList.remove('dim-offline');
@@ -219,8 +223,10 @@ filelist.updateListItemExternalProps = function(li, externalProps) {
   else
     iconDiv.style.backgroundImage = '';  // Back to the default image.
 
-  if (li.classList.contains('directory'))
+  if (li.classList.contains('directory')) {
     iconDiv.classList.toggle('shared', !!externalProps.shared);
+    iconDiv.classList.toggle('team-drive-root', !!isTeamDriveRoot);
+  }
 };
 
 /**
@@ -271,10 +277,12 @@ filelist.handleTap = function(e, index, eventType) {
   }
   var isTap = eventType == FileTapHandler.TapEvent.TAP ||
       eventType == FileTapHandler.TapEvent.LONG_TAP;
-  if (eventType == FileTapHandler.TapEvent.TAP &&
-      e.target.classList.contains('detail-checkmark')) {
-    // Single tap on the checkbox in the list view mode should toggle select,
-    // just like a mouse click on it.
+  // Revert to click handling for single tap on checkbox or tap during rename.
+  // Single tap on the checkbox in the list view mode should toggle select.
+  // Single tap on input for rename should focus on input.
+  var isCheckbox = e.target.classList.contains('detail-checkmark');
+  var isRename = e.target.localName == 'input';
+  if (eventType == FileTapHandler.TapEvent.TAP && (isCheckbox || isRename)) {
     return false;
   }
   if (sm.multiple && sm.getCheckSelectMode() && isTap && !e.shiftKey) {

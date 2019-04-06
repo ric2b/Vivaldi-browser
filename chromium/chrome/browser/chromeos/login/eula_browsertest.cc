@@ -95,36 +95,31 @@ class EulaTest : public OobeBaseTest {
     embedded_test_server()->RegisterRequestHandler(
         base::Bind(&EulaTest::HandleRequest, base::Unretained(this)));
   }
-  void SetUpOnMainThread() override {
-    OobeBaseTest::SetUpOnMainThread();
-    OverrideOnlineEulaUrl();
-
-    eula_contents_ = FindEulaContents();
-    ASSERT_NE(nullptr, eula_contents_);
-  }
 
   void OverrideOnlineEulaUrl() {
     // Override with the embedded test server's base url. Otherwise, the load
     // would not hit the embedded test server.
     const GURL fake_eula_url =
         embedded_test_server()->base_url().Resolve(kFakeOnlineEulaPath);
-    JS().Evaluate(base::StringPrintf(
-        "loadTimeData.overrideValues({eulaOnlineUrl: '%s'});",
-        fake_eula_url.spec().c_str()));
+    JS().Evaluate(
+        base::StringPrintf("loadTimeData.overrideValues({eulaOnlineUrl: '%s'});"
+                           "Oobe.updateLocalizedContent();",
+                           fake_eula_url.spec().c_str()));
   }
 
   void ShowEulaScreen() {
     LoginDisplayHost::default_host()->StartWizard(OobeScreen::SCREEN_OOBE_EULA);
+    OverrideOnlineEulaUrl();
     OobeScreenWaiter(OobeScreen::SCREEN_OOBE_EULA).Wait();
   }
 
   std::string GetLoadedEulaAsText() {
     // Wait the contents to load.
-    WebContentsLoadFinishedWaiter(eula_contents_).Wait();
+    WebContentsLoadFinishedWaiter(FindEulaContents()).Wait();
 
     std::string eula_text;
     EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-        eula_contents_,
+        FindEulaContents(),
         "window.domAutomationController.send(document.body.textContent);",
         &eula_text));
 
@@ -132,7 +127,30 @@ class EulaTest : public OobeBaseTest {
   }
 
   void set_allow_online_eula(bool allow) { allow_online_eula_ = allow; }
-  content::WebContents* eula_contents() { return eula_contents_; }
+
+ protected:
+  content::WebContents* FindEulaContents() {
+    // Tag the Eula webview in use with a unique name.
+    constexpr char kUniqueEulaWebviewName[] = "unique-eula-webview-name";
+    JS().Evaluate(base::StringPrintf(
+        "(function(){"
+        "  var eulaWebView = $('oobe-eula-md').$.crosEulaFrame;"
+        "  eulaWebView.name = '%s';"
+        "})();",
+        kUniqueEulaWebviewName));
+
+    // Find the WebContents tagged with the unique name.
+    std::set<content::WebContents*> frame_set;
+    auto* const owner_contents = GetLoginUI()->GetWebContents();
+    auto* const manager = guest_view::GuestViewManager::FromBrowserContext(
+        owner_contents->GetBrowserContext());
+    manager->ForEachGuest(
+        owner_contents,
+        base::BindRepeating(&AddNamedWebContentsToSet, &frame_set,
+                            kUniqueEulaWebviewName));
+    EXPECT_EQ(1u, frame_set.size());
+    return *frame_set.begin();
+  }
 
  private:
   std::unique_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
@@ -157,40 +175,16 @@ class EulaTest : public OobeBaseTest {
     return std::move(http_response);
   }
 
-  content::WebContents* FindEulaContents() {
-    // Tag the Eula webview in use with a unique name.
-    constexpr char kUniqueEulaWebviewName[] = "unique-eula-webview-name";
-    JS().Evaluate(base::StringPrintf(
-        "(function(){"
-        "  var isMd = (loadTimeData.getString('newOobeUI') == 'on');"
-        "  var eulaWebView = isMd ? $('oobe-eula-md').$.crosEulaFrame : "
-        "                           $('cros-eula-frame');"
-        "  eulaWebView.name = '%s';"
-        "})();",
-        kUniqueEulaWebviewName));
-
-    // Find the WebContents tagged with the unique name.
-    std::set<content::WebContents*> frame_set;
-    auto* const owner_contents = GetLoginUI()->GetWebContents();
-    auto* const manager = guest_view::GuestViewManager::FromBrowserContext(
-        owner_contents->GetBrowserContext());
-    manager->ForEachGuest(owner_contents,
-                          base::Bind(&AddNamedWebContentsToSet, &frame_set,
-                                     kUniqueEulaWebviewName));
-    EXPECT_EQ(1u, frame_set.size());
-    return *frame_set.begin();
-  }
-
   bool allow_online_eula_ = false;
-
-  // WebContents of the webview hosting the Eula contents.
-  content::WebContents* eula_contents_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(EulaTest);
 };
 
 // Tests that online version is shown when it is accessible.
-IN_PROC_BROWSER_TEST_F(EulaTest, LoadOnline) {
+
+// https://crbug.com/865710: Flaky (crashes intermittently) on
+// linux-chromeos-rel builder.
+IN_PROC_BROWSER_TEST_F(EulaTest, DISABLED_LoadOnline) {
   set_allow_online_eula(true);
   ShowEulaScreen();
 
@@ -203,9 +197,14 @@ IN_PROC_BROWSER_TEST_F(EulaTest, LoadOffline) {
   set_allow_online_eula(false);
   ShowEulaScreen();
 
+  content::WebContents* eula_contents = FindEulaContents();
+  ASSERT_TRUE(eula_contents);
   // Wait for the fallback offline page (loaded as data url) to be loaded.
-  while (!eula_contents()->GetLastCommittedURL().SchemeIs("data"))
-    WebContentsLoadFinishedWaiter(eula_contents()).Wait();
+  while (!eula_contents->GetLastCommittedURL().SchemeIs("data")) {
+    // Pump messages to avoid busy loop so that renderer could do some work.
+    base::RunLoop().RunUntilIdle();
+    WebContentsLoadFinishedWaiter(eula_contents).Wait();
+  }
 
   EXPECT_TRUE(GetLoadedEulaAsText().find(kOfflineEULAWarning) !=
               std::string::npos);

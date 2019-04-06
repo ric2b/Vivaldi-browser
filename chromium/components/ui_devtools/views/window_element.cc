@@ -4,8 +4,10 @@
 
 #include "components/ui_devtools/views/window_element.h"
 
-#include "components/ui_devtools/views/ui_element_delegate.h"
+#include "components/ui_devtools/Protocol.h"
+#include "components/ui_devtools/ui_element_delegate.h"
 #include "ui/aura/window.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ui_devtools {
 namespace {
@@ -65,7 +67,7 @@ void WindowElement::OnWindowBoundsChanged(aura::Window* window,
 }
 
 std::vector<std::pair<std::string, std::string>>
-WindowElement::GetCustomAttributes() const {
+WindowElement::GetCustomProperties() const {
   return {};
 }
 
@@ -88,15 +90,42 @@ void WindowElement::SetVisible(bool visible) {
     window_->Hide();
 }
 
-std::pair<aura::Window*, gfx::Rect> WindowElement::GetNodeWindowAndBounds()
+std::unique_ptr<protocol::Array<std::string>> WindowElement::GetAttributes()
     const {
-  return std::make_pair(window_, window_->GetBoundsInScreen());
+  auto attributes = protocol::Array<std::string>::create();
+  attributes->addItem("name");
+  attributes->addItem(window_->GetName());
+  attributes->addItem("active");
+  attributes->addItem(::wm::IsActiveWindow(window_) ? "true" : "false");
+  return attributes;
+}
+
+std::pair<gfx::NativeWindow, gfx::Rect> WindowElement::GetNodeWindowAndBounds()
+    const {
+  return std::make_pair(static_cast<aura::Window*>(window_),
+                        window_->GetBoundsInScreen());
 }
 
 // static
 aura::Window* WindowElement::From(const UIElement* element) {
   DCHECK_EQ(UIElementType::WINDOW, element->type());
   return static_cast<const WindowElement*>(element)->window_;
+}
+
+template <>
+int UIElement::FindUIElementIdForBackendElement<aura::Window>(
+    aura::Window* element) const {
+  if (type_ == UIElementType::WINDOW &&
+      UIElement::GetBackingElement<aura::Window, WindowElement>(this) ==
+          element) {
+    return node_id_;
+  }
+  for (auto* child : children_) {
+    int ui_element_id = child->FindUIElementIdForBackendElement(element);
+    if (ui_element_id)
+      return ui_element_id;
+  }
+  return 0;
 }
 
 }  // namespace ui_devtools

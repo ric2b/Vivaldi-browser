@@ -22,6 +22,8 @@
 // The main entrypoint into Linux toolkit specific code. GTK code should only
 // be executed behind this interface.
 
+class PrefService;
+
 namespace aura {
 class Window;
 }
@@ -101,7 +103,9 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
 
   virtual void Initialize() = 0;
   virtual bool GetTint(int id, color_utils::HSL* tint) const = 0;
-  virtual bool GetColor(int id, SkColor* color) const = 0;
+  virtual bool GetColor(int id,
+                        SkColor* color,
+                        PrefService* pref_service) const = 0;
 
   // Returns the preferences that we pass to WebKit.
   virtual SkColor GetFocusRingColor() const = 0;
@@ -165,9 +169,9 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
       NonClientWindowFrameActionSourceType source) = 0;
 
   // Notifies the window manager that start up has completed.
-  // Normally Chromium opens a new window on startup and GTK does this
-  // automatically. In case Chromium does not open a new window on startup,
-  // e.g. an existing browser window already exists, this should be called.
+  // This needs to be called explicitly both on the primary and the "remote"
+  // instances (e.g. an existing browser window already exists), since we no
+  // longer use GTK (which did this automatically) for the main windows.
   virtual void NotifyWindowManagerStartupComplete() = 0;
 
   // Updates the device scale factor so that the default font size can be
@@ -196,6 +200,9 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   // toolkit does not support drawing client-side navigation buttons.
   virtual std::unique_ptr<NavButtonProvider> CreateNavButtonProvider() = 0;
 #endif
+
+  // Returns a map of KeyboardEvent code to KeyboardEvent key values.
+  virtual base::flat_map<std::string, std::string> GetKeyboardLayoutMap() = 0;
 };
 
 }  // namespace views

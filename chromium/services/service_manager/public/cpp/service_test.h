@@ -18,7 +18,7 @@ class Thread;
 }
 
 namespace mojo {
-namespace edk {
+namespace core {
 class ScopedIPCSupport;
 }
 }
@@ -82,6 +82,10 @@ class ServiceTest : public testing::Test {
   // work.
   virtual std::unique_ptr<Service> CreateService();
 
+  // By default returns null, which means the global default is used. Override
+  // to customize.
+  virtual std::unique_ptr<base::Value> CreateCustomTestCatalog();
+
   // Call to set OnStart() metadata when GetService() is overridden.
   void OnStartCalled(Connector* connector,
                      const std::string& name,
@@ -101,7 +105,7 @@ class ServiceTest : public testing::Test {
   // See constructor.
   std::string test_name_;
   std::unique_ptr<base::Thread> ipc_thread_;
-  std::unique_ptr<mojo::edk::ScopedIPCSupport> ipc_support_;
+  std::unique_ptr<mojo::core::ScopedIPCSupport> ipc_support_;
 
   Connector* connector_ = nullptr;
   std::string initialize_name_;

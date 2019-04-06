@@ -6,6 +6,7 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_cookie_helper.h"
@@ -20,13 +21,14 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_observer.h"
@@ -35,28 +37,24 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/ppapi_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "media/cdm/cdm_paths.h"
-#include "media/media_features.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
-#endif
-
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-#include "chrome/browser/media/library_cdm_test_helper.h"
 #endif
 
 using content::BrowserThread;
@@ -77,7 +75,7 @@ class MockWebContentsLoadFailObserver : public content::WebContentsObserver {
  public:
   explicit MockWebContentsLoadFailObserver(content::WebContents* web_contents)
       : content::WebContentsObserver(web_contents) {}
-  virtual ~MockWebContentsLoadFailObserver() {}
+  ~MockWebContentsLoadFailObserver() override {}
 
   MOCK_METHOD1(DidFinishNavigation,
                void(content::NavigationHandle* navigation_handle));
@@ -101,83 +99,191 @@ class ContentSettingsTest : public InProcessBrowserTest {
         base::BindOnce(&chrome_browser_net::SetUrlRequestMocksEnabled, true));
   }
 
-  // Check the cookie for the given URL in an incognito window.
-  void CookieCheckIncognitoWindow(const GURL& url, bool cookies_enabled) {
-    ASSERT_TRUE(content::GetCookies(browser()->profile(), url).empty());
+  net::EmbeddedTestServer https_server_;
+};
+
+// Test the combination of different ways of accessing cookies.
+// Cookies can be read by JS or http request headers.
+// Cookies can be written by JS or http response headers.
+enum class CookieMode {
+  kJSReadJSWrite,
+  kJSReadHttpWrite,
+  kHttpReadJSWrite,
+  kHttpReadHttpWrite
+};
+
+class CookieSettingsTest : public ContentSettingsTest,
+                           public testing::WithParamInterface<CookieMode> {
+ public:
+  void SetUpOnMainThread() override {
+    embedded_test_server()->RegisterRequestMonitor(base::BindRepeating(
+        &CookieSettingsTest::MonitorRequest, base::Unretained(this)));
+    https_server_.RegisterRequestMonitor(base::BindRepeating(
+        &CookieSettingsTest::MonitorRequest, base::Unretained(this)));
+    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(https_server_.Start());
+  }
+
+  void set_secure_scheme() { secure_scheme_ = true; }
+
+  std::string ReadCookie(Browser* browser) {
+    if (GetParam() == CookieMode::kJSReadJSWrite ||
+        GetParam() == CookieMode::kJSReadHttpWrite) {
+      return JSReadCookie(browser);
+    }
+
+    return HttpReadCookie(browser);
+  }
+
+  void WriteCookie(Browser* browser) {
+    if (GetParam() == CookieMode::kJSReadJSWrite ||
+        GetParam() == CookieMode::kHttpReadJSWrite) {
+      return JSWriteCookie(browser);
+    }
+
+    return HttpWriteCookie(browser);
+  }
+
+  // Check the cookie in an incognito window.
+  void CookieCheckIncognitoWindow(bool cookies_enabled) {
+    ASSERT_TRUE(ReadCookie(browser()).empty());
 
     Browser* incognito = CreateIncognitoBrowser();
-    ASSERT_TRUE(content::GetCookies(incognito->profile(), url).empty());
-    ui_test_utils::NavigateToURL(incognito, url);
-    ASSERT_EQ(cookies_enabled,
-              !content::GetCookies(incognito->profile(), url).empty());
+    ui_test_utils::NavigateToURL(incognito, GetPageURL());
+    ASSERT_TRUE(ReadCookie(incognito).empty());
+    WriteCookie(incognito);
+    ASSERT_EQ(cookies_enabled, !ReadCookie(incognito).empty());
 
     // Ensure incognito cookies don't leak to regular profile.
-    ASSERT_TRUE(content::GetCookies(browser()->profile(), url).empty());
+    ASSERT_TRUE(ReadCookie(browser()).empty());
 
     // Ensure cookies get wiped after last incognito window closes.
     CloseBrowserSynchronously(incognito);
 
     incognito = CreateIncognitoBrowser();
-    ASSERT_TRUE(content::GetCookies(incognito->profile(), url).empty());
+    ui_test_utils::NavigateToURL(incognito, GetPageURL());
+    ASSERT_TRUE(ReadCookie(incognito).empty());
     CloseBrowserSynchronously(incognito);
   }
 
-  void PreBasic(const GURL& url) {
-    ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
+  void PreBasic() {
+    ui_test_utils::NavigateToURL(browser(), GetPageURL());
+    ASSERT_TRUE(ReadCookie(browser()).empty());
 
-    CookieCheckIncognitoWindow(url, true);
+    CookieCheckIncognitoWindow(true);
 
-    ui_test_utils::NavigateToURL(browser(), url);
-    ASSERT_FALSE(GetCookies(browser()->profile(), url).empty());
+    WriteCookie(browser());
+    ASSERT_FALSE(ReadCookie(browser()).empty());
   }
 
-  void Basic(const GURL& url) {
-    ASSERT_FALSE(GetCookies(browser()->profile(), url).empty());
+  void Basic() {
+    ui_test_utils::NavigateToURL(browser(), GetPageURL());
+    ASSERT_FALSE(ReadCookie(browser()).empty());
   }
 
-  net::EmbeddedTestServer https_server_;
+  GURL GetPageURL() { return GetServer()->GetURL("/simple.html"); }
+
+  GURL GetSetCookieURL() {
+    return GetServer()->GetURL("/set_cookie_header.html");
+  }
+
+ private:
+  net::EmbeddedTestServer* GetServer() {
+    return secure_scheme_ ? &https_server_ : embedded_test_server();
+  }
+
+  // Read a cookie via JavaScript.
+  std::string JSReadCookie(Browser* browser) {
+    std::string cookies;
+    bool rv = content::ExecuteScriptAndExtractString(
+        browser->tab_strip_model()->GetActiveWebContents(),
+        "window.domAutomationController.send(document.cookie)", &cookies);
+    CHECK(rv);
+    return cookies;
+  }
+
+  // Read a cookie by fetching a url on the appropriate test server and checking
+  // what Cookie header (if any) it saw.
+  std::string HttpReadCookie(Browser* browser) {
+    {
+      base::AutoLock auto_lock(cookies_seen_lock_);
+      cookies_seen_.clear();
+    }
+
+    auto* network_context =
+        content::BrowserContext::GetDefaultStoragePartition(browser->profile())
+            ->GetNetworkContext();
+    content::LoadBasicRequest(network_context, browser->tab_strip_model()
+                                                   ->GetActiveWebContents()
+                                                   ->GetLastCommittedURL());
+
+    {
+      base::AutoLock auto_lock(cookies_seen_lock_);
+      return cookies_seen_[GetPageURL()];
+    }
+  }
+
+  // Set a cookie with JavaScript.
+  void JSWriteCookie(Browser* browser) {
+    bool rv = content::ExecuteScript(
+        browser->tab_strip_model()->GetActiveWebContents(),
+        "document.cookie = 'name=Good;Max-Age=3600'");
+    CHECK(rv);
+  }
+
+  // Set a cookie by visiting a page that has a Set-Cookie header.
+  void HttpWriteCookie(Browser* browser) {
+    auto* network_context =
+        content::BrowserContext::GetDefaultStoragePartition(browser->profile())
+            ->GetNetworkContext();
+    content::LoadBasicRequest(network_context, GetSetCookieURL());
+  }
+
+  void MonitorRequest(const net::test_server::HttpRequest& request) {
+    base::AutoLock auto_lock(cookies_seen_lock_);
+    auto it = request.headers.find("Cookie");
+    if (it != request.headers.end())
+      cookies_seen_[request.GetURL()] = it->second;
+  }
+
+  bool secure_scheme_ = false;
+  base::Lock cookies_seen_lock_;
+  std::map<GURL, std::string> cookies_seen_;
 };
 
 // Sanity check on cookies before we do other tests. While these can be written
 // in content_browsertests, we want to verify Chrome's cookie storage and how it
 // handles incognito windows.
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, PRE_BasicCookies) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL http_url = embedded_test_server()->GetURL("/setcookie.html");
-  PreBasic(http_url);
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, PRE_BasicCookies) {
+  PreBasic();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BasicCookies) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL http_url = embedded_test_server()->GetURL("/setcookie.html");
-  Basic(http_url);
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, BasicCookies) {
+  Basic();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, PRE_BasicCookiesHttps) {
-  ASSERT_TRUE(https_server_.Start());
-  GURL https_url = https_server_.GetURL("/setcookie.html");
-  PreBasic(https_url);
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, PRE_BasicCookiesHttps) {
+  set_secure_scheme();
+  PreBasic();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BasicCookiesHttps) {
-  ASSERT_TRUE(https_server_.Start());
-  GURL https_url = https_server_.GetURL("/setcookie.html");
-  Basic(https_url);
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, BasicCookiesHttps) {
+  set_secure_scheme();
+  Basic();
 }
 
 // Verify that cookies are being blocked.
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, PRE_BlockCookies) {
-  ASSERT_TRUE(embedded_test_server()->Start());
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, PRE_BlockCookies) {
+  ui_test_utils::NavigateToURL(browser(), GetPageURL());
   CookieSettingsFactory::GetForProfile(browser()->profile())
       ->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
-  GURL url = embedded_test_server()->GetURL("/setcookie.html");
-  ui_test_utils::NavigateToURL(browser(), url);
-  ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
-  CookieCheckIncognitoWindow(url, false);
+  WriteCookie(browser());
+  ASSERT_TRUE(ReadCookie(browser()).empty());
+  CookieCheckIncognitoWindow(false);
 }
 
 // Ensure that the setting persists.
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BlockCookies) {
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, BlockCookies) {
   ASSERT_EQ(CONTENT_SETTING_BLOCK,
             CookieSettingsFactory::GetForProfile(browser()->profile())
                 ->GetDefaultCookieSetting(NULL));
@@ -185,39 +291,44 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BlockCookies) {
 
 // Verify that cookies can be allowed and set using exceptions for particular
 // website(s) when all others are blocked.
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, AllowCookiesUsingExceptions) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url = embedded_test_server()->GetURL("/setcookie.html");
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, AllowCookiesUsingExceptions) {
+  ui_test_utils::NavigateToURL(browser(), GetPageURL());
   content_settings::CookieSettings* settings =
       CookieSettingsFactory::GetForProfile(browser()->profile()).get();
   settings->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
 
-  ui_test_utils::NavigateToURL(browser(), url);
-  ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
+  WriteCookie(browser());
+  ASSERT_TRUE(ReadCookie(browser()).empty());
 
-  settings->SetCookieSetting(url, CONTENT_SETTING_ALLOW);
+  settings->SetCookieSetting(GetPageURL(), CONTENT_SETTING_ALLOW);
 
-  ui_test_utils::NavigateToURL(browser(), url);
-  ASSERT_FALSE(GetCookies(browser()->profile(), url).empty());
+  WriteCookie(browser());
+  ASSERT_FALSE(ReadCookie(browser()).empty());
 }
 
 // Verify that cookies can be blocked for a specific website using exceptions.
-IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BlockCookiesUsingExceptions) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url = embedded_test_server()->GetURL("/setcookie.html");
+IN_PROC_BROWSER_TEST_P(CookieSettingsTest, BlockCookiesUsingExceptions) {
+  ui_test_utils::NavigateToURL(browser(), GetPageURL());
   content_settings::CookieSettings* settings =
       CookieSettingsFactory::GetForProfile(browser()->profile()).get();
-  settings->SetCookieSetting(url, CONTENT_SETTING_BLOCK);
+  settings->SetCookieSetting(GetPageURL(), CONTENT_SETTING_BLOCK);
 
-  ui_test_utils::NavigateToURL(browser(), url);
-  ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
+  WriteCookie(browser());
+  ASSERT_TRUE(ReadCookie(browser()).empty());
 
-  ASSERT_TRUE(https_server_.Start());
   GURL unblocked_url = https_server_.GetURL("/cookie1.html");
 
   ui_test_utils::NavigateToURL(browser(), unblocked_url);
   ASSERT_FALSE(GetCookies(browser()->profile(), unblocked_url).empty());
 }
+
+INSTANTIATE_TEST_CASE_P(
+    /* no prefix */,
+    CookieSettingsTest,
+    ::testing::Values(CookieMode::kJSReadJSWrite,
+                      CookieMode::kJSReadHttpWrite,
+                      CookieMode::kHttpReadJSWrite,
+                      CookieMode::kHttpReadHttpWrite));
 
 // This fails on ChromeOS because kRestoreOnStartup is ignored and the startup
 // preference is always "continue where I left off.
@@ -227,9 +338,8 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, BlockCookiesUsingExceptions) {
 // website(s) only for a session when all others are blocked.
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest,
                        PRE_AllowCookiesForASessionUsingExceptions) {
-  // NOTE: don't use test_server here, since we need the port to be the same
-  // across the restart.
-  GURL url = URLRequestMockHTTPJob::GetMockUrl("setcookie.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("/setcookie.html");
   content_settings::CookieSettings* settings =
       CookieSettingsFactory::GetForProfile(browser()->profile()).get();
   settings->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
@@ -244,7 +354,9 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest,
 
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest,
                        AllowCookiesForASessionUsingExceptions) {
-  GURL url = URLRequestMockHTTPJob::GetMockUrl("setcookie.html");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("/setcookie.html");
+  // Cookies are shared between ports, so this will get cookies set in PRE.
   ASSERT_TRUE(GetCookies(browser()->profile(), url).empty());
 }
 
@@ -276,10 +388,14 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, RedirectLoopCookies) {
 // all and this test should be moved into ContentSettingsTest above.
 class ContentSettingsStrictSecureCookiesBrowserTest
     : public ContentSettingsTest {
- protected:
+ public:
+  ContentSettingsStrictSecureCookiesBrowserTest() = default;
+  ~ContentSettingsStrictSecureCookiesBrowserTest() override = default;
+
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch(switches::kEnableExperimentalWebPlatformFeatures);
   }
+
   void SetUpOnMainThread() override {
     ContentSettingsTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -347,6 +463,150 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsTest, RedirectCrossOrigin) {
 
   EXPECT_TRUE(TabSpecificContentSettings::FromWebContents(web_contents)->
       IsContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES));
+}
+
+class ContentSettingsWorkerModulesBrowserTest : public ContentSettingsTest {
+ public:
+  ContentSettingsWorkerModulesBrowserTest() = default;
+  ~ContentSettingsWorkerModulesBrowserTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* cmd) override {
+    // Module scripts on Dedicated Worker is still an experimental feature.
+    // TODO(crbug/680046): Remove this after shipping.
+    cmd->AppendSwitch(switches::kEnableExperimentalWebPlatformFeatures);
+  }
+
+ protected:
+  void RegisterStaticFile(const std::string& relative_url,
+                          const std::string& content,
+                          const std::string& content_type) {
+    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+        &ContentSettingsWorkerModulesBrowserTest::StaticRequestHandler,
+        base::Unretained(this), relative_url, content, content_type));
+  }
+
+ private:
+  std::unique_ptr<net::test_server::HttpResponse> StaticRequestHandler(
+      const std::string& relative_url,
+      const std::string& content,
+      const std::string& content_type,
+      const net::test_server::HttpRequest& request) const {
+    if (request.relative_url != relative_url)
+      return std::unique_ptr<net::test_server::HttpResponse>();
+    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
+        std::make_unique<net::test_server::BasicHttpResponse>());
+    http_response->set_code(net::HTTP_OK);
+    http_response->set_content(content);
+    http_response->set_content_type(content_type);
+    return std::move(http_response);
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ContentSettingsWorkerModulesBrowserTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ContentSettingsWorkerModulesBrowserTest,
+                       WorkerImportModule) {
+  // This test uses 2 servers, |https_server_| and |embedded_test_server|.
+  // These 3 files are served from them:
+  //   - "worker_import_module.html" from |embedded_test_server|.
+  //   - "worker_import_module_worker.js" from |embedded_test_server|.
+  //   - "worker_import_module_imported.js" from |https_server_|.
+  // 1. worker_import_module.html starts a dedicated worker which type is
+  //    'module' using worker_import_module_worker.js.
+  //      new Worker('worker_import_module_worker.js', { type: 'module' })
+  // 2. worker_import_module_worker.js imports worker_import_module_imported.js.
+  //    - If succeeded to import, calls postMessage() with the exported |msg|
+  //      constant value which is 'Imported'.
+  //    - If failed, calls postMessage('Failed').
+  // 3. When the page receives the message from the worker, change the title
+  //    to the message string.
+  //      worker.onmessage = (event) => { document.title = event.data; };
+  ASSERT_TRUE(https_server_.Start());
+  GURL module_url = https_server_.GetURL("/worker_import_module_imported.js");
+
+  const std::string script = base::StringPrintf(
+      "import('%s')\n"
+      "  .then(module => postMessage(module.msg), _ => postMessage('Failed'));",
+      module_url.spec().c_str());
+  RegisterStaticFile("/worker_import_module_worker.js", script,
+                     "text/javascript");
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL http_url = embedded_test_server()->GetURL("/worker_import_module.html");
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  base::string16 expected_title(base::ASCIIToUTF16("Imported"));
+  content::TitleWatcher title_watcher(web_contents, expected_title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("Failed"));
+
+  ui_test_utils::NavigateToURL(browser(), http_url);
+
+  // The import must be executed successfully.
+  EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
+}
+
+IN_PROC_BROWSER_TEST_F(ContentSettingsWorkerModulesBrowserTest,
+                       WorkerImportModuleBlocked) {
+  // This test uses 2 servers, |https_server_| and |embedded_test_server|.
+  // These 3 files are served from them:
+  //   - "worker_import_module.html" from |embedded_test_server|.
+  //   - "worker_import_module_worker.js" from |embedded_test_server|.
+  //   - "worker_import_module_imported.js" from |https_server_|.
+  // 1. worker_import_module.html starts a dedicated worker which type is
+  //    'module' using worker_import_module_worker.js.
+  //      new Worker('worker_import_module_worker.js', { type: 'module' })
+  // 2. worker_import_module_worker.js imports worker_import_module_imported.js.
+  //    - If succeeded to import, calls postMessage() with the exported |msg|
+  //      constant value which is 'Imported'.
+  //    - If failed, calls postMessage('Failed').
+  // 3. When the page receives the message from the worker, change the title
+  //    to the message string.
+  //      worker.onmessage = (event) => { document.title = event.data; };
+  ASSERT_TRUE(https_server_.Start());
+  GURL module_url = https_server_.GetURL("/worker_import_module_imported.js");
+
+  const std::string script = base::StringPrintf(
+      "import('%s')\n"
+      "  .then(module => postMessage(module.msg), _ => postMessage('Failed'));",
+      module_url.spec().c_str());
+  RegisterStaticFile("/worker_import_module_worker.js", script,
+                     "text/javascript");
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL http_url = embedded_test_server()->GetURL("/worker_import_module.html");
+
+  // Change the settings to blocks the script loading of
+  // worker_import_module_imported.js from worker_import_module.html.
+  HostContentSettingsMap* content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(browser()->profile());
+  content_settings_map->SetWebsiteSettingCustomScope(
+      ContentSettingsPattern::FromURLNoWildcard(http_url),
+      ContentSettingsPattern::FromURLNoWildcard(module_url),
+      CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string(),
+      std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  TabSpecificContentSettings* tab_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents);
+
+  content::WindowedNotificationObserver javascript_content_blocked_observer(
+      chrome::NOTIFICATION_WEB_CONTENT_SETTINGS_CHANGED,
+      base::BindRepeating(&TabSpecificContentSettings::IsContentBlocked,
+                          base::Unretained(tab_settings),
+                          CONTENT_SETTINGS_TYPE_JAVASCRIPT));
+
+  base::string16 expected_title(base::ASCIIToUTF16("Failed"));
+  content::TitleWatcher title_watcher(web_contents, expected_title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("Imported"));
+
+  ui_test_utils::NavigateToURL(browser(), http_url);
+
+  // The import must be blocked.
+  javascript_content_blocked_observer.Wait();
+  EXPECT_TRUE(tab_settings->IsContentBlocked(CONTENT_SETTINGS_TYPE_JAVASCRIPT));
+  EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
 }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -497,21 +757,6 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesTest, Flash) {
 // The following tests verify that Pepper plugins that use JavaScript settings
 // instead of Plugins settings still work when Plugins are blocked.
 
-// TODO(crbug.com/403462): Remove after pepper CDM is deprecated.
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS) && defined(WIDEVINE_CDM_AVAILABLE) && \
-    !defined(OS_CHROMEOS)
-IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
-                       WidevineCdm) {
-  // Check that Widevine CDM is available and registered.
-  base::FilePath adapter_path =
-      GetPepperCdmPath(kWidevineCdmBaseDirectory, kWidevineCdmAdapterFileName);
-  EXPECT_TRUE(base::PathExists(adapter_path)) << adapter_path.MaybeAsASCII();
-  EXPECT_TRUE(IsPepperCdmRegistered(kWidevineCdmPluginMimeType));
-  RunLoadPepperPluginTest(kWidevineCdmPluginMimeType, true);
-}
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS) && defined(WIDEVINE_CDM_AVAILABLE) &&
-        // !defined(OS_CHROMEOS)
-
 #if BUILDFLAG(ENABLE_NACL)
 IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
                        NaCl) {
@@ -527,19 +772,6 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,
                        Flash) {
   RunJavaScriptBlockedTest("/load_flash_no_js.html", false);
 }
-
-// TODO(crbug.com/403462): Remove after pepper CDM is deprecated.
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS) && defined(WIDEVINE_CDM_AVAILABLE)
-IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,
-                       WidevineCdm) {
-  // Check that Widevine CDM is available and registered.
-  base::FilePath adapter_path =
-      GetPepperCdmPath(kWidevineCdmBaseDirectory, kWidevineCdmAdapterFileName);
-  EXPECT_TRUE(base::PathExists(adapter_path)) << adapter_path.MaybeAsASCII();
-  EXPECT_TRUE(IsPepperCdmRegistered(kWidevineCdmPluginMimeType));
-  RunJavaScriptBlockedTest("/load_widevine_no_js.html", true);
-}
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS) && defined(WIDEVINE_CDM_AVAILABLE)
 
 #if BUILDFLAG(ENABLE_NACL)
 IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,

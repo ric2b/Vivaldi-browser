@@ -18,9 +18,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
+#include "media/gpu/image_processor.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/v4l2/v4l2_device.h"
-#include "media/gpu/v4l2/v4l2_image_processor.h"
 #include "media/video/video_encode_accelerator.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -36,7 +36,7 @@ namespace media {
 // device exposed by the codec hardware driver. The threading model of this
 // class is the same as in the V4L2VideoDecodeAccelerator (from which class this
 // was designed).
-// This class may try to instantiate and use a V4L2ImageProcessor for input
+// This class may try to instantiate and use a ImageProcessor for input
 // format conversion, if the input format requested via Initialize() is not
 // accepted by the hardware codec.
 class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
@@ -58,6 +58,7 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
   void RequestEncodingParametersChange(uint32_t bitrate,
                                        uint32_t framerate) override;
   void Destroy() override;
+  void Flush(FlushCallback flush_callback) override;
 
  private:
   // Auto-destroy reference for BitstreamBuffer, for tracking buffers passed to
@@ -67,6 +68,7 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
   // Record for codec input buffers.
   struct InputRecord {
     InputRecord();
+    InputRecord(const InputRecord&);
     ~InputRecord();
     bool at_device;
     scoped_refptr<VideoFrame> frame;
@@ -82,9 +84,12 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
     size_t length;
   };
 
-  struct ImageProcessorInputRecord {
-    ImageProcessorInputRecord();
-    ~ImageProcessorInputRecord();
+  // Store all the information of input frame passed to Encode().
+  struct InputFrameInfo {
+    InputFrameInfo();
+    InputFrameInfo(scoped_refptr<VideoFrame> frame, bool force_keyframe);
+    InputFrameInfo(const InputFrameInfo&);
+    ~InputFrameInfo();
     scoped_refptr<VideoFrame> frame;
     bool force_keyframe;
   };
@@ -103,6 +108,7 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
     kUninitialized,  // Initialize() not yet called.
     kInitialized,    // Initialize() returned true; ready to start encoding.
     kEncoding,       // Encoding frames.
+    kFlushing,       // Flushing frames.
     kError,          // Error in encoder state.
   };
 
@@ -110,10 +116,12 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
   // Callbacks for the image processor, if one is used.
   //
 
-  // Callback run by the image processor when a frame is ready for us to encode.
+  // Callback run by the image processor when a |frame| is ready for us to
+  // encode.
   void FrameProcessed(bool force_keyframe,
                       base::TimeDelta timestamp,
-                      int output_buffer_index);
+                      int output_buffer_index,
+                      scoped_refptr<VideoFrame> frame);
 
   // Error callback for handling image processor errors.
   void ImageProcessorError();
@@ -131,6 +139,10 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
 
   // Device destruction task.
   void DestroyTask();
+
+  // Flush all the encoded frames. After all frames is flushed successfully or
+  // any error occurs, |flush_callback| will be called to notify client.
+  void FlushTask(FlushCallback flush_callback);
 
   // Service I/O on the V4L2 devices.  This task should only be scheduled from
   // DevicePollTask().
@@ -180,7 +192,7 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
 
   // Try to set up the device to the input format we were Initialized() with,
   // or if the device doesn't support it, use one it can support, so that we
-  // can later instantiate a V4L2ImageProcessor to convert to it.
+  // can later instantiate an ImageProcessor to convert to it.
   bool NegotiateInputFormat(VideoPixelFormat input_format);
 
   // Set up the device to the output format requested in Initialize().
@@ -252,7 +264,7 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
   size_t cached_h264_header_size_ = 0;
 
   // Video frames ready to be encoded.
-  base::queue<scoped_refptr<VideoFrame>> encoder_input_queue_;
+  base::queue<InputFrameInfo> encoder_input_queue_;
 
   // Encoder device.
   scoped_refptr<V4L2Device> device_;
@@ -280,15 +292,16 @@ class MEDIA_GPU_EXPORT V4L2VideoEncodeAccelerator
   // since we don't care about ordering.
   std::vector<std::unique_ptr<BitstreamBufferRef>> encoder_output_queue_;
 
+  // The completion callback of the Flush() function.
+  FlushCallback flush_callback_;
+
   // Image processor, if one is in use.
-  std::unique_ptr<V4L2ImageProcessor> image_processor_;
+  std::unique_ptr<ImageProcessor> image_processor_;
   // Indexes of free image processor output buffers. Only accessed on child
   // thread.
   std::vector<int> free_image_processor_output_buffers_;
   // Video frames ready to be processed. Only accessed on child thread.
-  base::queue<ImageProcessorInputRecord> image_processor_input_queue_;
-  // Mapping of int index to fds of image processor output buffer.
-  std::vector<std::vector<base::ScopedFD>> image_processor_output_buffer_map_;
+  base::queue<InputFrameInfo> image_processor_input_queue_;
 
   // This thread services tasks posted from the VEA API entry points by the
   // child thread and device service callbacks posted from the device thread.

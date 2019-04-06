@@ -8,7 +8,10 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/browser_sync/sync_auth_manager.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/signin_manager.h"
+#include "components/sync/driver/signin_manager_wrapper.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "content/public/browser/browser_thread.h"
 #if !defined(OS_ANDROID)
@@ -17,8 +20,7 @@
 #include "prefs/vivaldi_gen_pref_enums.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "sync/vivaldi_invalidation_service.h"
-#include "sync/vivaldi_profile_oauth2_token_service.h"
-#include "sync/vivaldi_profile_oauth2_token_service_factory.h"
+#include "sync/vivaldi_sync_auth_manager.h"
 #include "sync/vivaldi_sync_urls.h"
 
 using syncer::JsBackend;
@@ -34,7 +36,19 @@ VivaldiSyncManager::VivaldiSyncManager(
     std::shared_ptr<VivaldiInvalidationService> invalidation_service)
     : ProfileSyncService(std::move(*init_params)),
       invalidation_service_(invalidation_service),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  auto vivaldi_sync_auth_manager = std::make_unique<VivaldiSyncAuthManager>(
+      &sync_prefs_, signin_ ? signin_->GetIdentityManager() : nullptr,
+      base::BindRepeating(&VivaldiSyncManager::AccountStateChanged,
+                          base::Unretained(this)),
+      base::BindRepeating(&VivaldiSyncManager::CredentialsChanged,
+                          base::Unretained(this)),
+      base::BindRepeating(&VivaldiSyncManager::NotifyAccessTokenRequested,
+                          base::Unretained(this)),
+      sync_client_->GetPrefService()->GetString(vivaldiprefs::kSyncUsername));
+  vivaldi_sync_auth_manager_ = vivaldi_sync_auth_manager.get();
+  auth_manager_.reset(vivaldi_sync_auth_manager.release());
+}
 
 VivaldiSyncManager::~VivaldiSyncManager() {
   for (auto& observer : vivaldi_observers_) {
@@ -53,7 +67,7 @@ void VivaldiSyncManager::RemoveVivaldiObserver(
 }
 
 void VivaldiSyncManager::ClearSyncData() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!engine_)
     return;
@@ -64,12 +78,9 @@ void VivaldiSyncManager::ClearSyncData() {
 }
 
 void VivaldiSyncManager::Logout() {
-  // If the engine wasn't running, we need to clear the local data manually.
-  if (!engine_)
-    RequestStop(CLEAR_DATA);
+  RequestStop(CLEAR_DATA);
 
-  signin()->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
-                    signin_metrics::SignoutDelete::IGNORE_METRIC);
+  vivaldi_sync_auth_manager_->ResetLoginInfo();
 }
 
 void VivaldiSyncManager::SetupComplete() {
@@ -145,32 +156,6 @@ void VivaldiSyncManager::OnConfigureDone(
   }
 }
 
-void VivaldiSyncManager::VivaldiTokenSuccess() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&VivaldiSyncManager::VivaldiDoTokenSuccess,
-                            weak_factory_.GetWeakPtr()));
-}
-
-void VivaldiSyncManager::VivaldiDoTokenSuccess() {
-  if (!vivaldi_access_token_.empty())
-    ProfileSyncService::OnGetTokenSuccess(nullptr, vivaldi_access_token_,
-                                          expiration_time_);
-  vivaldi_access_token_.clear();
-}
-
-SyncCredentials VivaldiSyncManager::GetCredentials() {
-  if (!vivaldi::ForcedVivaldiRunning())
-    access_token_ = vivaldi_access_token_;
-  return ProfileSyncService::GetCredentials();
-}
-
-void VivaldiSyncManager::RequestAccessToken() {
-  if (vivaldi::ForcedVivaldiRunning())
-    ProfileSyncService::RequestAccessToken();
-  else if (vivaldi_access_token_.empty())
-    NotifyAccessTokenRequested();
-}
-
 void VivaldiSyncManager::ShutdownImpl(syncer::ShutdownReason reason) {
   if (reason == syncer::DISABLE_SYNC) {
     sync_client_->GetPrefService()->ClearPref(
@@ -183,19 +168,17 @@ void VivaldiSyncManager::ShutdownImpl(syncer::ShutdownReason reason) {
   ProfileSyncService::ShutdownImpl(reason);
 }
 
-bool VivaldiSyncManager::DisableNotifications() const {
-  return !vivaldi::ForcedVivaldiRunning();
-}
-
 void VivaldiSyncManager::SetToken(bool start_sync,
                                   std::string account_id,
-                                  std::string token,
-                                  std::string expire) {
+                                  std::string token) {
   // This can only really happens when switching between sync servers and
   // using different accounts at the same time.
-  if (signin()->GetAuthenticatedAccountId() != account_id)
-    signin()->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
-                      signin_metrics::SignoutDelete::IGNORE_METRIC);
+  std::string current_account =
+      auth_manager_->GetAuthenticatedAccountInfo().account_id;
+  if (!current_account.empty() && current_account != account_id) {
+    Logout();
+    return;
+  }
 
   if (token.empty()
 // TODO(jarle): Remove the !Android check when we have extensions running
@@ -209,23 +192,7 @@ void VivaldiSyncManager::SetToken(bool start_sync,
     return;
   }
 
-  if (expire.empty()) {
-    expiration_time_ = base::Time::Now() + base::TimeDelta::FromHours(1);
-  } else {
-    if (!base::Time::FromUTCString(expire.c_str(), &expiration_time_))
-      expiration_time_ = base::Time::Now() + base::TimeDelta::FromHours(1);
-  }
-
-  vivaldi_access_token_ = token;
-
-  VivaldiProfileOAuth2TokenService* token_service =
-      VivaldiProfileOAuth2TokenServiceFactory::GetForProfile(
-          sync_client_->GetProfile());
-  token_service->SetConsumer(this);
-
-  if (start_sync) {
-    signin()->SetAuthenticatedAccountInfo(account_id, account_id);
-  }
+  vivaldi_sync_auth_manager_->SetLoginInfo(account_id, token);
 
   if (!IsEngineInitialized()) {
     sync_blocker_ = GetSetupInProgressHandle();
@@ -238,14 +205,6 @@ void VivaldiSyncManager::SetToken(bool start_sync,
   } else if (start_sync) {
     NotifyEngineStarted();
   }
-
-  if (start_sync) {
-    // Avoid passing an implicit password here, so that we can detect later on
-    // if the account password needs to be provided for decryption.
-    GoogleSigninSucceeded(account_id, account_id);
-  }
-
-  token_service->UpdateCredentials(account_id, token);
 }
 
 bool VivaldiSyncManager::SetEncryptionPassword(const std::string& password) {

@@ -5,7 +5,6 @@
 #include "components/encrypted_messages/message_encrypter.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_piece.h"
 #include "components/encrypted_messages/encrypted_message.pb.h"
 #include "crypto/aead.h"
@@ -26,12 +25,9 @@ bool GetHkdfSubkeySecret(size_t subkey_length,
   if (!X25519(shared_secret, private_key, public_key))
     return false;
 
-  crypto::HKDF hkdf(base::StringPiece(reinterpret_cast<char*>(shared_secret),
-                                      sizeof(shared_secret)),
-                    "" /* salt */, hkdf_label, 0 /* key bytes */,
-                    0 /* iv bytes */, subkey_length);
-
-  *secret = hkdf.subkey_secret().as_string();
+  base::StringPiece hkdf_input(reinterpret_cast<char*>(shared_secret),
+                               sizeof(shared_secret));
+  *secret = crypto::HkdfSha256(hkdf_input, "", hkdf_label, subkey_length);
   return true;
 }
 

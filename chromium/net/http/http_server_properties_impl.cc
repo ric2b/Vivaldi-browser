@@ -15,15 +15,20 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "base/values.h"
 
 namespace net {
 
-HttpServerPropertiesImpl::HttpServerPropertiesImpl(base::TickClock* clock)
-    : broken_alternative_services_(
-          this,
-          clock ? clock : base::DefaultTickClock::GetInstance()),
+HttpServerPropertiesImpl::HttpServerPropertiesImpl(
+    const base::TickClock* tick_clock,
+    base::Clock* clock)
+    : tick_clock_(tick_clock ? tick_clock
+                             : base::DefaultTickClock::GetInstance()),
+      clock_(clock ? clock : base::DefaultClock::GetInstance()),
+      broken_alternative_services_(this, tick_clock_),
       quic_server_info_map_(kDefaultMaxQuicServerEntries),
       max_server_configs_stored_in_properties_(kDefaultMaxQuicServerEntries) {
   canonical_suffixes_.push_back(".ggpht.com");
@@ -33,7 +38,7 @@ HttpServerPropertiesImpl::HttpServerPropertiesImpl(base::TickClock* clock)
 }
 
 HttpServerPropertiesImpl::HttpServerPropertiesImpl()
-    : HttpServerPropertiesImpl(nullptr) {}
+    : HttpServerPropertiesImpl(nullptr, nullptr) {}
 
 HttpServerPropertiesImpl::~HttpServerPropertiesImpl() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -285,7 +290,7 @@ HttpServerPropertiesImpl::GetAlternativeServiceInfos(
   // Copy valid alternative service infos into
   // |valid_alternative_service_infos|.
   AlternativeServiceInfoVector valid_alternative_service_infos;
-  const base::Time now = base::Time::Now();
+  const base::Time now = clock_->Now();
   AlternativeServiceMap::iterator map_it = alternative_service_map_.Get(origin);
   if (map_it != alternative_service_map_.end()) {
     HostPortPair host_port_pair(origin.host(), origin.port());
@@ -385,7 +390,7 @@ bool HttpServerPropertiesImpl::SetQuicAlternativeService(
     const url::SchemeHostPort& origin,
     const AlternativeService& alternative_service,
     base::Time expiration,
-    const QuicTransportVersionVector& advertised_versions) {
+    const quic::QuicTransportVersionVector& advertised_versions) {
   DCHECK(alternative_service.protocol == kProtoQUIC);
 
   return SetAlternativeServices(
@@ -413,7 +418,7 @@ bool HttpServerPropertiesImpl::SetAlternativeServices(
   if (it != alternative_service_map_.end()) {
     DCHECK(!it->second.empty());
     if (it->second.size() == alternative_service_info_vector.size()) {
-      const base::Time now = base::Time::Now();
+      const base::Time now = clock_->Now();
       changed = false;
       auto new_it = alternative_service_info_vector.begin();
       for (const auto& old : it->second) {
@@ -507,6 +512,8 @@ const AlternativeServiceMap& HttpServerPropertiesImpl::alternative_service_map()
 
 std::unique_ptr<base::Value>
 HttpServerPropertiesImpl::GetAlternativeServiceInfoAsValue() const {
+  const base::Time now = clock_->Now();
+  const base::TimeTicks now_ticks = tick_clock_->NowTicks();
   std::unique_ptr<base::ListValue> dict_list(new base::ListValue);
   for (const auto& alternative_service_map_item : alternative_service_map_) {
     std::unique_ptr<base::ListValue> alternative_service_list(
@@ -521,8 +528,22 @@ HttpServerPropertiesImpl::GetAlternativeServiceInfoAsValue() const {
       if (alternative_service.host.empty()) {
         alternative_service.host = server.host();
       }
-      if (IsAlternativeServiceBroken(alternative_service)) {
-        alternative_service_string.append(" (broken)");
+      base::TimeTicks brokenness_expiration_ticks;
+      if (broken_alternative_services_.IsAlternativeServiceBroken(
+              alternative_service, &brokenness_expiration_ticks)) {
+        // Convert |brokenness_expiration| from TimeTicks to Time
+        base::Time brokenness_expiration =
+            now + (brokenness_expiration_ticks - now_ticks);
+        base::Time::Exploded exploded;
+        brokenness_expiration.LocalExplode(&exploded);
+        std::string broken_info_string =
+            " (broken until " +
+            base::StringPrintf("%04d-%02d-%02d %0d:%0d:%0d", exploded.year,
+                               exploded.month, exploded.day_of_month,
+                               exploded.hour, exploded.minute,
+                               exploded.second) +
+            ")";
+        alternative_service_string.append(broken_info_string);
       }
       alternative_service_list->AppendString(alternative_service_string);
     }
@@ -583,7 +604,7 @@ HttpServerPropertiesImpl::server_network_stats_map() const {
 }
 
 bool HttpServerPropertiesImpl::SetQuicServerInfo(
-    const QuicServerId& server_id,
+    const quic::QuicServerId& server_id,
     const std::string& server_info) {
   QuicServerInfoMap::iterator it = quic_server_info_map_.Peek(server_id);
   bool changed =
@@ -594,7 +615,7 @@ bool HttpServerPropertiesImpl::SetQuicServerInfo(
 }
 
 const std::string* HttpServerPropertiesImpl::GetQuicServerInfo(
-    const QuicServerId& server_id) {
+    const quic::QuicServerId& server_id) {
   QuicServerInfoMap::iterator it = quic_server_info_map_.Get(server_id);
   if (it != quic_server_info_map_.end()) {
     // Since |canonical_server_info_map_| should always map to the most
@@ -622,7 +643,7 @@ const std::string* HttpServerPropertiesImpl::GetQuicServerInfo(
 
 HttpServerPropertiesImpl::CanonicalServerInfoMap::const_iterator
 HttpServerPropertiesImpl::GetCanonicalServerInfoHost(
-    const QuicServerId& server) const {
+    const quic::QuicServerId& server) const {
   const std::string* canonical_suffix = GetCanonicalSuffix(server.host());
   if (canonical_suffix == nullptr)
     return canonical_server_info_map_.end();
@@ -668,7 +689,7 @@ void HttpServerPropertiesImpl::SetMaxServerConfigsStoredInProperties(
 }
 
 void HttpServerPropertiesImpl::UpdateCanonicalServerInfoMap(
-    const QuicServerId& server) {
+    const quic::QuicServerId& server) {
   const std::string* suffix = GetCanonicalSuffix(server.host());
   if (suffix) {
     HostPortPair canonical_pair(*suffix, server.port());

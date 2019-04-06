@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/ash/launcher/extension_launcher_context_menu.h"
 
-#include "ash/scoped_root_window_for_new_windows.h"  // mash-ok
-#include "ash/shell.h"                               // mash-ok
+#include <utility>
+
+#include "ash/public/cpp/app_menu_constants.h"
 #include "base/bind.h"
-#include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -16,11 +16,15 @@
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
+#include "chrome/browser/ui/ash/shell_state_client.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/common/context_menu_params.h"
 #include "extensions/browser/extension_prefs.h"
+#include "ui/base/ui_base_features.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/controls/menu/menu_config.h"
 
 namespace {
 
@@ -29,99 +33,55 @@ bool MenuItemHasLauncherContext(const extensions::MenuItem* item) {
   return item->contexts().Contains(extensions::MenuItem::LAUNCHER);
 }
 
+// Temporarily sets the display for new windows. Only use this when it's
+// guaranteed messages won't be received from ash to update the display.
+// For example, it's OK to use temporarily at function scope, but don't
+// heap-allocate one and hang on to it.
+class ScopedDisplayIdForNewWindows {
+ public:
+  explicit ScopedDisplayIdForNewWindows(int64_t display_id)
+      : old_display_id_(display_id) {
+    ShellStateClient::Get()->SetDisplayIdForNewWindows(display_id);
+  }
+
+  ~ScopedDisplayIdForNewWindows() {
+    ShellStateClient::Get()->SetDisplayIdForNewWindows(old_display_id_);
+  }
+
+ private:
+  const int64_t old_display_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedDisplayIdForNewWindows);
+};
+
 }  // namespace
 
 ExtensionLauncherContextMenu::ExtensionLauncherContextMenu(
     ChromeLauncherController* controller,
     const ash::ShelfItem* item,
     int64_t display_id)
-    : LauncherContextMenu(controller, item, display_id) {
-  Init();
-}
+    : LauncherContextMenu(controller, item, display_id) {}
 
-ExtensionLauncherContextMenu::~ExtensionLauncherContextMenu() {}
+ExtensionLauncherContextMenu::~ExtensionLauncherContextMenu() = default;
 
-void ExtensionLauncherContextMenu::Init() {
-  extension_items_.reset(new extensions::ContextMenuMatcher(
-      controller()->profile(), this, this,
-      base::Bind(MenuItemHasLauncherContext)));
-  if (item().type == ash::TYPE_PINNED_APP || item().type == ash::TYPE_APP) {
-    // V1 apps can be started from the menu - but V2 apps should not.
-    if (!controller()->IsPlatformApp(item().id)) {
-      int string_id = (GetLaunchType() == extensions::LAUNCH_TYPE_PINNED ||
-                       GetLaunchType() == extensions::LAUNCH_TYPE_REGULAR)
-                          ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
-                          : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW;
-      AddItemWithStringId(MENU_OPEN_NEW, string_id);
-      AddSeparator(ui::NORMAL_SEPARATOR);
-    }
-
-    AddPinMenu();
-
-    if (controller()->IsOpen(item().id))
-      AddItemWithStringId(MENU_CLOSE, IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
-
-    if (!controller()->IsPlatformApp(item().id) &&
-        item().type == ash::TYPE_PINNED_APP) {
-      AddSeparator(ui::NORMAL_SEPARATOR);
-      if (extensions::util::IsNewBookmarkAppsEnabled()) {
-        // With bookmark apps enabled, hosted apps launch in a window by
-        // default. This menu item is re-interpreted as a single, toggle-able
-        // option to launch the hosted app as a tab.
-        AddCheckItemWithStringId(LAUNCH_TYPE_WINDOW,
-                                 IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
-      } else {
-        AddCheckItemWithStringId(LAUNCH_TYPE_REGULAR_TAB,
-                                 IDS_APP_CONTEXT_MENU_OPEN_REGULAR);
-        AddCheckItemWithStringId(LAUNCH_TYPE_PINNED_TAB,
-                                 IDS_APP_CONTEXT_MENU_OPEN_PINNED);
-        AddCheckItemWithStringId(LAUNCH_TYPE_WINDOW,
-                                 IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
-        // Even though the launch type is Full Screen it is more accurately
-        // described as Maximized in Ash.
-        AddCheckItemWithStringId(LAUNCH_TYPE_FULLSCREEN,
-                                 IDS_APP_CONTEXT_MENU_OPEN_MAXIMIZED);
-      }
-    }
-  } else if (item().type == ash::TYPE_BROWSER_SHORTCUT) {
-    AddItemWithStringId(MENU_NEW_WINDOW, IDS_APP_LIST_NEW_WINDOW);
-    if (!controller()->profile()->IsGuestSession()) {
-      AddItemWithStringId(MENU_NEW_INCOGNITO_WINDOW,
-                          IDS_APP_LIST_NEW_INCOGNITO_WINDOW);
-    }
-    if (!BrowserShortcutLauncherItemController(controller()->shelf_model())
-             .IsListOfActiveBrowserEmpty()) {
-      AddItemWithStringId(MENU_CLOSE, IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
-    }
-  } else if (item().type == ash::TYPE_DIALOG) {
-    AddItemWithStringId(MENU_CLOSE, IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
-  } else if (controller()->IsOpen(item().id)) {
-    AddItemWithStringId(MENU_CLOSE, IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
-  }
-  AddSeparator(ui::NORMAL_SEPARATOR);
-  if (item().type == ash::TYPE_PINNED_APP || item().type == ash::TYPE_APP) {
-    const extensions::MenuItem::ExtensionKey app_key(item().id.app_id);
-    if (!app_key.empty()) {
-      int index = 0;
-      extension_items_->AppendExtensionItems(app_key, base::string16(), &index,
-                                             false);  // is_action_menu
-      AddSeparator(ui::NORMAL_SEPARATOR);
-    }
-  }
+void ExtensionLauncherContextMenu::GetMenuModel(GetMenuModelCallback callback) {
+  auto menu_model = std::make_unique<ui::SimpleMenuModel>(this);
+  BuildMenu(menu_model.get());
+  std::move(callback).Run(std::move(menu_model));
 }
 
 bool ExtensionLauncherContextMenu::IsCommandIdChecked(int command_id) const {
   switch (command_id) {
-    case LAUNCH_TYPE_PINNED_TAB:
+    case ash::LAUNCH_TYPE_PINNED_TAB:
       return GetLaunchType() == extensions::LAUNCH_TYPE_PINNED;
-    case LAUNCH_TYPE_REGULAR_TAB:
+    case ash::LAUNCH_TYPE_REGULAR_TAB:
       return GetLaunchType() == extensions::LAUNCH_TYPE_REGULAR;
-    case LAUNCH_TYPE_WINDOW:
+    case ash::LAUNCH_TYPE_WINDOW:
       return GetLaunchType() == extensions::LAUNCH_TYPE_WINDOW;
-    case LAUNCH_TYPE_FULLSCREEN:
+    case ash::LAUNCH_TYPE_FULLSCREEN:
       return GetLaunchType() == extensions::LAUNCH_TYPE_FULLSCREEN;
     default:
-      if (command_id < MENU_ITEM_COUNT)
+      if (command_id < ash::COMMAND_ID_COUNT)
         return LauncherContextMenu::IsCommandIdChecked(command_id);
       return (extension_items_ &&
               extension_items_->IsCommandIdChecked(command_id));
@@ -130,18 +90,18 @@ bool ExtensionLauncherContextMenu::IsCommandIdChecked(int command_id) const {
 
 bool ExtensionLauncherContextMenu::IsCommandIdEnabled(int command_id) const {
   switch (command_id) {
-    case MENU_NEW_WINDOW:
+    case ash::MENU_NEW_WINDOW:
       // "Normal" windows are not allowed when incognito is enforced.
       return IncognitoModePrefs::GetAvailability(
                  controller()->profile()->GetPrefs()) !=
              IncognitoModePrefs::FORCED;
-    case MENU_NEW_INCOGNITO_WINDOW:
+    case ash::MENU_NEW_INCOGNITO_WINDOW:
       // Incognito windows are not allowed when incognito is disabled.
       return IncognitoModePrefs::GetAvailability(
                  controller()->profile()->GetPrefs()) !=
              IncognitoModePrefs::DISABLED;
     default:
-      if (command_id < MENU_ITEM_COUNT)
+      if (command_id < ash::COMMAND_ID_COUNT)
         return LauncherContextMenu::IsCommandIdEnabled(command_id);
       return (extension_items_ &&
               extension_items_->IsCommandIdEnabled(command_id));
@@ -154,21 +114,16 @@ void ExtensionLauncherContextMenu::ExecuteCommand(int command_id,
     return;
 
   // Place new windows on the same display as the context menu.
-  // TODO(crbug.com/768908): Fix this in mash (where Chrome can't use Shell).
-  std::unique_ptr<ash::ScopedRootWindowForNewWindows> scoped_root;
-  if (chromeos::GetAshConfig() != ash::Config::MASH) {
-    aura::Window* root = ash::Shell::GetRootWindowForDisplayId(display_id());
-    scoped_root = std::make_unique<ash::ScopedRootWindowForNewWindows>(root);
-  }
+  ScopedDisplayIdForNewWindows scoped_display(display_id());
 
-  switch (static_cast<MenuItem>(command_id)) {
-    case LAUNCH_TYPE_PINNED_TAB:
+  switch (static_cast<ash::CommandId>(command_id)) {
+    case ash::LAUNCH_TYPE_PINNED_TAB:
       SetLaunchType(extensions::LAUNCH_TYPE_PINNED);
       break;
-    case LAUNCH_TYPE_REGULAR_TAB:
+    case ash::LAUNCH_TYPE_REGULAR_TAB:
       SetLaunchType(extensions::LAUNCH_TYPE_REGULAR);
       break;
-    case LAUNCH_TYPE_WINDOW: {
+    case ash::LAUNCH_TYPE_WINDOW: {
       extensions::LaunchType launch_type = extensions::LAUNCH_TYPE_WINDOW;
       // With bookmark apps enabled, hosted apps can only toggle between
       // LAUNCH_WINDOW and LAUNCH_REGULAR.
@@ -180,13 +135,13 @@ void ExtensionLauncherContextMenu::ExecuteCommand(int command_id,
       SetLaunchType(launch_type);
       break;
     }
-    case LAUNCH_TYPE_FULLSCREEN:
+    case ash::LAUNCH_TYPE_FULLSCREEN:
       SetLaunchType(extensions::LAUNCH_TYPE_FULLSCREEN);
       break;
-    case MENU_NEW_WINDOW:
+    case ash::MENU_NEW_WINDOW:
       chrome::NewEmptyWindow(controller()->profile());
       break;
-    case MENU_NEW_INCOGNITO_WINDOW:
+    case ash::MENU_NEW_INCOGNITO_WINDOW:
       chrome::NewEmptyWindow(controller()->profile()->GetOffTheRecordProfile());
       break;
     default:
@@ -194,6 +149,106 @@ void ExtensionLauncherContextMenu::ExecuteCommand(int command_id,
         extension_items_->ExecuteCommand(command_id, nullptr, nullptr,
                                          content::ContextMenuParams());
       }
+  }
+}
+
+void ExtensionLauncherContextMenu::CreateOpenNewSubmenu(
+    ui::SimpleMenuModel* menu_model) {
+  // Touchable extension context menus use an actionable submenu for
+  // MENU_OPEN_NEW.
+  const gfx::VectorIcon& icon =
+      GetCommandIdVectorIcon(ash::MENU_OPEN_NEW, GetLaunchTypeStringId());
+  const views::MenuConfig& menu_config = views::MenuConfig::instance();
+  const int kGroupId = 1;
+  open_new_submenu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
+  open_new_submenu_model_->AddRadioItemWithStringId(
+      ash::LAUNCH_TYPE_REGULAR_TAB, IDS_APP_LIST_CONTEXT_MENU_NEW_TAB,
+      kGroupId);
+  open_new_submenu_model_->AddRadioItemWithStringId(
+      ash::LAUNCH_TYPE_WINDOW, IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW, kGroupId);
+  menu_model->AddActionableSubmenuWithStringIdAndIcon(
+      ash::MENU_OPEN_NEW, GetLaunchTypeStringId(),
+      open_new_submenu_model_.get(),
+      gfx::CreateVectorIcon(icon, menu_config.touchable_icon_size,
+                            menu_config.touchable_icon_color));
+}
+
+void ExtensionLauncherContextMenu::BuildMenu(ui::SimpleMenuModel* menu_model) {
+  extension_items_.reset(new extensions::ContextMenuMatcher(
+      controller()->profile(), this, menu_model,
+      base::Bind(MenuItemHasLauncherContext)));
+  if (item().type == ash::TYPE_PINNED_APP || item().type == ash::TYPE_APP) {
+    // V1 apps can be started from the menu - but V2 apps should not.
+    if (!controller()->IsPlatformApp(item().id)) {
+      if (features::IsTouchableAppContextMenuEnabled()) {
+        CreateOpenNewSubmenu(menu_model);
+      } else {
+        AddContextMenuOption(menu_model, ash::MENU_OPEN_NEW,
+                             GetLaunchTypeStringId());
+        menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+
+        // Touchable app context menus do not include these check items, their
+        // functionality is achieved by an actionable submenu.
+        if (item().type == ash::TYPE_PINNED_APP) {
+          if (extensions::util::IsNewBookmarkAppsEnabled()) {
+            // With bookmark apps enabled, hosted apps launch in a window by
+            // default. This menu item is re-interpreted as a single,
+            // toggle-able option to launch the hosted app as a tab.
+            AddContextMenuOption(menu_model, ash::LAUNCH_TYPE_WINDOW,
+                                 IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
+          } else {
+            AddContextMenuOption(menu_model, ash::LAUNCH_TYPE_REGULAR_TAB,
+                                 IDS_APP_CONTEXT_MENU_OPEN_REGULAR);
+            AddContextMenuOption(menu_model, ash::LAUNCH_TYPE_PINNED_TAB,
+                                 IDS_APP_CONTEXT_MENU_OPEN_PINNED);
+            AddContextMenuOption(menu_model, ash::LAUNCH_TYPE_WINDOW,
+                                 IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
+            // Even though the launch type is Full Screen it is more accurately
+            // described as Maximized in Ash.
+            AddContextMenuOption(menu_model, ash::LAUNCH_TYPE_FULLSCREEN,
+                                 IDS_APP_CONTEXT_MENU_OPEN_MAXIMIZED);
+          }
+          menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+        }
+      }
+    }
+
+    AddPinMenu(menu_model);
+
+    if (controller()->IsOpen(item().id)) {
+      AddContextMenuOption(menu_model, ash::MENU_CLOSE,
+                           IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
+    }
+  } else if (item().type == ash::TYPE_BROWSER_SHORTCUT) {
+    AddContextMenuOption(menu_model, ash::MENU_NEW_WINDOW,
+                         IDS_APP_LIST_NEW_WINDOW);
+    if (!controller()->profile()->IsGuestSession()) {
+      AddContextMenuOption(menu_model, ash::MENU_NEW_INCOGNITO_WINDOW,
+                           IDS_APP_LIST_NEW_INCOGNITO_WINDOW);
+    }
+    if (!BrowserShortcutLauncherItemController(controller()->shelf_model())
+             .IsListOfActiveBrowserEmpty()) {
+      AddContextMenuOption(menu_model, ash::MENU_CLOSE,
+                           IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
+    }
+  } else if (item().type == ash::TYPE_DIALOG) {
+    AddContextMenuOption(menu_model, ash::MENU_CLOSE,
+                         IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
+  } else if (controller()->IsOpen(item().id)) {
+    AddContextMenuOption(menu_model, ash::MENU_CLOSE,
+                         IDS_LAUNCHER_CONTEXT_MENU_CLOSE);
+  }
+  if (!features::IsTouchableAppContextMenuEnabled())
+    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+  if (item().type == ash::TYPE_PINNED_APP || item().type == ash::TYPE_APP) {
+    const extensions::MenuItem::ExtensionKey app_key(item().id.app_id);
+    if (!app_key.empty()) {
+      int index = 0;
+      extension_items_->AppendExtensionItems(app_key, base::string16(), &index,
+                                             false);  // is_action_menu
+      if (!features::IsTouchableAppContextMenuEnabled())
+        menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+    }
   }
 }
 
@@ -211,4 +266,11 @@ extensions::LaunchType ExtensionLauncherContextMenu::GetLaunchType() const {
 
 void ExtensionLauncherContextMenu::SetLaunchType(extensions::LaunchType type) {
   extensions::SetLaunchType(controller()->profile(), item().id.app_id, type);
+}
+
+int ExtensionLauncherContextMenu::GetLaunchTypeStringId() const {
+  return (GetLaunchType() == extensions::LAUNCH_TYPE_PINNED ||
+          GetLaunchType() == extensions::LAUNCH_TYPE_REGULAR)
+             ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
+             : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW;
 }

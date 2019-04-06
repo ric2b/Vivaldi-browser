@@ -7,7 +7,7 @@
 #import <Foundation/Foundation.h>
 #import <WebKit/WebKit.h>
 
-#import "base/mac/bind_objc_block.h"
+#include "base/bind.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/web/net/cookies/wk_cookie_util.h"
 #include "ios/web/public/browser_state.h"
@@ -107,7 +107,7 @@ int GetTaskPercentComplete(NSURLSessionTask* task) {
                     task:(NSURLSessionTask*)task
     didCompleteWithError:(nullable NSError*)error {
   __weak CRWURLSessionDelegate* weakSelf = self;
-  WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindBlockArc(^{
+  WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindOnce(^{
                         CRWURLSessionDelegate* strongSelf = weakSelf;
                         if (strongSelf.propertiesBlock)
                           strongSelf.propertiesBlock(task, error);
@@ -123,7 +123,7 @@ int GetTaskPercentComplete(NSURLSessionTask* task) {
   using Bytes = const void* _Nonnull;
   [data enumerateByteRangesUsingBlock:^(Bytes bytes, NSRange range, BOOL*) {
     auto buffer = GetBuffer(bytes, range.length);
-    WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindBlockArc(^{
+    WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindOnce(^{
                           CRWURLSessionDelegate* strongSelf = weakSelf;
                           if (!strongSelf.dataBlock) {
                             dispatch_semaphore_signal(semaphore);
@@ -137,7 +137,7 @@ int GetTaskPercentComplete(NSURLSessionTask* task) {
                         }));
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
   }];
-  WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindBlockArc(^{
+  WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindOnce(^{
                         CRWURLSessionDelegate* strongSelf = weakSelf;
                         if (strongSelf.propertiesBlock)
                           weakSelf.propertiesBlock(task, nil);
@@ -178,10 +178,24 @@ DownloadTaskImpl::DownloadTaskImpl(const WebState* web_state,
   DCHECK(web_state_);
   DCHECK(delegate_);
   DCHECK(session_);
+
+  observer_ = [NSNotificationCenter.defaultCenter
+      addObserverForName:UIApplicationWillResignActiveNotification
+                  object:nil
+                   queue:nil
+              usingBlock:^(NSNotification* _Nonnull) {
+                if (state_ == State::kInProgress) {
+                  has_performed_background_download_ = true;
+                }
+              }];
 }
 
 DownloadTaskImpl::~DownloadTaskImpl() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  [NSNotificationCenter.defaultCenter removeObserver:observer_];
+  for (auto& observer : observers_)
+    observer.OnDownloadDestroyed(this);
+
   if (delegate_) {
     delegate_->OnTaskDestroyed(this);
   }
@@ -205,6 +219,8 @@ void DownloadTaskImpl::Start(
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK_NE(state_, State::kInProgress);
   writer_ = std::move(writer);
+  percent_complete_ = 0;
+  received_bytes_ = 0;
   state_ = State::kInProgress;
   GetCookies(base::Bind(&DownloadTaskImpl::StartWithCookies,
                         weak_factory_.GetWeakPtr()));
@@ -287,6 +303,10 @@ base::string16 DownloadTaskImpl::GetSuggestedFilename() const {
                                    /*default_name=*/"document");
 }
 
+bool DownloadTaskImpl::HasPerformedBackgroundDownload() const {
+  return has_performed_background_download_;
+}
+
 void DownloadTaskImpl::AddObserver(DownloadTaskObserver* observer) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK(!observers_.HasObserver(observer));
@@ -342,7 +362,7 @@ NSURLSession* DownloadTaskImpl::CreateSession(NSString* identifier) {
       dataBlock:^(scoped_refptr<net::IOBufferWithSize> buffer,
                   void (^completion_handler)()) {
         if (weak_this.get()) {
-          net::CompletionCallback callback = base::BindBlockArc(^(int) {
+          net::CompletionCallback callback = base::BindRepeating(^(int) {
             completion_handler();
           });
           if (writer_->Write(buffer.get(), buffer->size(), callback) ==
@@ -361,7 +381,7 @@ void DownloadTaskImpl::GetCookies(
   if (@available(iOS 11, *)) {
     GetWKCookies(callback);
   } else {
-    WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindBlockArc(^{
+    WebThread::PostTask(WebThread::UI, FROM_HERE, base::BindOnce(^{
                           callback.Run([NSArray array]);
                         }));
   }
@@ -382,6 +402,10 @@ void DownloadTaskImpl::GetWKCookies(
 void DownloadTaskImpl::StartWithCookies(NSArray<NSHTTPCookie*>* cookies) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK(writer_);
+
+  has_performed_background_download_ =
+      UIApplication.sharedApplication.applicationState !=
+      UIApplicationStateActive;
 
   NSURL* url = net::NSURLWithGURL(GetOriginalUrl());
   session_task_ = [session_ dataTaskWithURL:url];

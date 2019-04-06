@@ -18,7 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
 
 struct BrowserPluginHostMsg_Attach_Params;
 
@@ -80,8 +80,8 @@ class CONTENT_EXPORT BrowserPluginEmbedder : public WebContentsObserver {
   BrowserPluginGuest* GetFullPageGuest();
 
   // Polls all guests for this web contents and returns true if any of them
-  // were audible recently.
-  bool WereAnyGuestsRecentlyAudible();
+  // are currently audible.
+  bool AreAnyGuestsCurrentlyAudible();
 
   // TODO(ekaramad): This is solely used for BrowserPlugin. Remove when issue
   // https://crbug.com/533069 is fixed.
@@ -103,7 +103,7 @@ class CONTENT_EXPORT BrowserPluginEmbedder : public WebContentsObserver {
   static bool UnlockMouseIfNecessaryCallback(bool* mouse_unlocked,
                                              WebContents* guest);
 
-  static bool GuestRecentlyAudibleCallback(WebContents* guest);
+  static bool GuestCurrentlyAudibleCallback(WebContents* guest);
 
   // Message handlers.
 

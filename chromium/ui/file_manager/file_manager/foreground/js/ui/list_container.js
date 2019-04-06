@@ -127,7 +127,7 @@ function ListContainer(element, table, grid) {
   util.isTouchModeEnabled().then(function(enabled) {
     if (!enabled)
       return;
-    this.disableContextMenuByLongTap_();
+    this.disableContextMenuByLongTapDuringCheckSelect_();
   }.bind(this));
 }
 
@@ -148,6 +148,25 @@ ListContainer.ListType = {
   DETAIL: 'detail',
   THUMBNAIL: 'thumb'
 };
+
+/**
+ * Keep the order of this in sync with FileManagerListType in
+ * tools/metrics/histograms/enums.xml.
+ * The array indices will be recorded in UMA as enum values. The index for each
+ * root type should never be renumbered nor reused in this array.
+ *
+ * @type {Array<ListContainer.ListType>}
+ * @const
+ */
+ListContainer.ListTypesForUMA = Object.freeze([
+  ListContainer.ListType.UNINITIALIZED,
+  ListContainer.ListType.DETAIL,
+  ListContainer.ListType.THUMBNAIL,
+]);
+console.assert(
+    Object.keys(ListContainer.ListType).length ===
+        ListContainer.ListTypesForUMA.length,
+    'Members in ListTypesForUMA do not match those in ListType.');
 
 ListContainer.prototype = /** @struct */ {
   /**
@@ -246,10 +265,12 @@ ListContainer.prototype.setCurrentListType = function(listType) {
 };
 
 /**
- * Disables context menu by long-tap but not two-finger tap.
+ * Disables context menu by long-tap when at least one file/folder is selected,
+ * while still enabling two-finger tap.
  * @private
  */
-ListContainer.prototype.disableContextMenuByLongTap_ = function() {
+ListContainer.prototype.disableContextMenuByLongTapDuringCheckSelect_ =
+    function() {
   this.element.addEventListener('touchstart', function(e) {
     if (e.touches.length > 1) {
       this.allowContextMenuByTouch_ = true;
@@ -265,9 +286,9 @@ ListContainer.prototype.disableContextMenuByLongTap_ = function() {
   }.bind(this));
   this.element.addEventListener('contextmenu', function(e) {
     // Block context menu triggered by touch event unless it is right after
-    // multi-touch.
-    if (!this.allowContextMenuByTouch_ && e.sourceCapabilities &&
-        e.sourceCapabilities.firesTouchEvents) {
+    // multi-touch, or we are currently selecting a file.
+    if (this.currentList.selectedItem && !this.allowContextMenuByTouch_ &&
+        e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) {
       e.stopPropagation();
     }
   }.bind(this), true);

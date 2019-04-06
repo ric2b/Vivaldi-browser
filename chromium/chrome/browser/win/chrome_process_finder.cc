@@ -129,7 +129,7 @@ void GetRunningVivaldiProcesses(const std::wstring& path,
 
 void AttemptToKillTheUndead() {
   base::FilePath exe_path;
-  PathService::Get(base::DIR_EXE, &exe_path);
+  base::PathService::Get(base::DIR_EXE, &exe_path);
 
   std::vector<DWORD> process_ids;
   GetRunningVivaldiProcesses(exe_path.value(), process_ids);
@@ -185,6 +185,11 @@ NotifyChromeResult AttemptToNotifyRunningChrome(HWND remote_window,
                            timeout_in_milliseconds, &result)) {
     return result ? NOTIFY_SUCCESS : NOTIFY_FAILED;
   }
+
+  // If SendMessageTimeout failed to send message consider this as
+  // NOTIFY_FAILED.
+  if (::GetLastError() != ERROR_TIMEOUT)
+    return NOTIFY_FAILED;
 
   // It is possible that the process owning this window may have died by now.
   if (!::IsWindow(remote_window)) {

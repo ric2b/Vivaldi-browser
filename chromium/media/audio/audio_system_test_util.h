@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_checker.h"
@@ -100,15 +99,15 @@ class AudioSystemTestTemplate : public T {
     T::SetUp();
     input_params_ =
         AudioParameters(AudioParameters::AUDIO_PCM_LINEAR, CHANNEL_LAYOUT_MONO,
-                        AudioParameters::kTelephoneSampleRate, 16,
+                        AudioParameters::kTelephoneSampleRate,
                         AudioParameters::kTelephoneSampleRate / 10);
     output_params_ =
         AudioParameters(AudioParameters::AUDIO_PCM_LINEAR, CHANNEL_LAYOUT_MONO,
-                        AudioParameters::kTelephoneSampleRate, 16,
+                        AudioParameters::kTelephoneSampleRate,
                         AudioParameters::kTelephoneSampleRate / 20);
     default_output_params_ =
         AudioParameters(AudioParameters::AUDIO_PCM_LINEAR, CHANNEL_LAYOUT_MONO,
-                        AudioParameters::kTelephoneSampleRate, 16,
+                        AudioParameters::kTelephoneSampleRate,
                         AudioParameters::kTelephoneSampleRate / 30);
     audio_manager()->SetInputStreamParameters(input_params_);
     audio_manager()->SetOutputStreamParameters(output_params_);

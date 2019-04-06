@@ -14,11 +14,16 @@
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/visit_database.h"
 #include "sql/connection.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
 using base::Time;
 using base::TimeDelta;
+using testing::AllOf;
+using testing::ElementsAre;
+using testing::IsEmpty;
+using testing::Property;
 
 namespace history {
 
@@ -71,19 +76,18 @@ class VisitDatabaseTest : public PlatformTest,
 
 TEST_F(VisitDatabaseTest, Add) {
   // Add one visit.
-  VisitRow visit_info1(1, Time::Now(), 0, ui::PAGE_TRANSITION_LINK, 0);
+  VisitRow visit_info1(1, Time::Now(), 0, ui::PAGE_TRANSITION_LINK, 0, false);
   EXPECT_TRUE(AddVisit(&visit_info1, SOURCE_BROWSED));
 
   // Add second visit for the same page.
   VisitRow visit_info2(visit_info1.url_id,
-      visit_info1.visit_time + TimeDelta::FromSeconds(1), 1,
-      ui::PAGE_TRANSITION_TYPED, 0);
+                       visit_info1.visit_time + TimeDelta::FromSeconds(1), 1,
+                       ui::PAGE_TRANSITION_TYPED, 0, true);
   EXPECT_TRUE(AddVisit(&visit_info2, SOURCE_BROWSED));
 
   // Add third visit for a different page.
-  VisitRow visit_info3(2,
-      visit_info1.visit_time + TimeDelta::FromSeconds(2), 0,
-      ui::PAGE_TRANSITION_LINK, 0);
+  VisitRow visit_info3(2, visit_info1.visit_time + TimeDelta::FromSeconds(2), 0,
+                       ui::PAGE_TRANSITION_LINK, 0, false);
   EXPECT_TRUE(AddVisit(&visit_info3, SOURCE_BROWSED));
 
   // Query the first two.
@@ -102,17 +106,17 @@ TEST_F(VisitDatabaseTest, Delete) {
   // should link them.
   static const int kTime1 = 1000;
   VisitRow visit_info1(1, Time::FromInternalValue(kTime1), 0,
-                       ui::PAGE_TRANSITION_LINK, 0);
+                       ui::PAGE_TRANSITION_LINK, 0, false);
   EXPECT_TRUE(AddVisit(&visit_info1, SOURCE_BROWSED));
 
   static const int kTime2 = kTime1 + 1;
-  VisitRow visit_info2(1, Time::FromInternalValue(kTime2),
-                       visit_info1.visit_id, ui::PAGE_TRANSITION_LINK, 0);
+  VisitRow visit_info2(1, Time::FromInternalValue(kTime2), visit_info1.visit_id,
+                       ui::PAGE_TRANSITION_LINK, 0, false);
   EXPECT_TRUE(AddVisit(&visit_info2, SOURCE_BROWSED));
 
   static const int kTime3 = kTime2 + 1;
-  VisitRow visit_info3(1, Time::FromInternalValue(kTime3),
-                       visit_info2.visit_id, ui::PAGE_TRANSITION_LINK, 0);
+  VisitRow visit_info3(1, Time::FromInternalValue(kTime3), visit_info2.visit_id,
+                       ui::PAGE_TRANSITION_LINK, 0, false);
   EXPECT_TRUE(AddVisit(&visit_info3, SOURCE_BROWSED));
 
   // First make sure all the visits are there.
@@ -138,7 +142,8 @@ TEST_F(VisitDatabaseTest, Delete) {
 
 TEST_F(VisitDatabaseTest, Update) {
   // Make something in the database.
-  VisitRow original(1, Time::Now(), 23, ui::PageTransitionFromInt(0), 19);
+  VisitRow original(1, Time::Now(), 23, ui::PageTransitionFromInt(0), 19,
+                    false);
   AddVisit(&original, SOURCE_BROWSED);
 
   // Mutate that row.
@@ -165,61 +170,58 @@ std::vector<VisitRow> GetTestVisitRows() {
   base::Time base_time = Time::UnixEpoch().LocalMidnight();
 
   // Add one visit.
-  VisitRow visit_info1(1, base_time + TimeDelta::FromMinutes(1), 0,
-      ui::PageTransitionFromInt(
-          ui::PAGE_TRANSITION_LINK |
-          ui::PAGE_TRANSITION_CHAIN_START |
-          ui::PAGE_TRANSITION_CHAIN_END),
-      0);
+  VisitRow visit_info1(
+      1, base_time + TimeDelta::FromMinutes(1), 0,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
+                                ui::PAGE_TRANSITION_CHAIN_START |
+                                ui::PAGE_TRANSITION_CHAIN_END),
+      0, false);
   visit_info1.visit_id = 1;
 
   // Add second visit for the same page.
-  VisitRow visit_info2(visit_info1.url_id,
-      visit_info1.visit_time + TimeDelta::FromSeconds(1), 1,
-      ui::PageTransitionFromInt(
-          ui::PAGE_TRANSITION_TYPED |
-          ui::PAGE_TRANSITION_CHAIN_START |
-          ui::PAGE_TRANSITION_CHAIN_END),
-      0);
+  VisitRow visit_info2(
+      visit_info1.url_id, visit_info1.visit_time + TimeDelta::FromSeconds(1), 1,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                ui::PAGE_TRANSITION_CHAIN_START |
+                                ui::PAGE_TRANSITION_CHAIN_END),
+      0, true);
   visit_info2.visit_id = 2;
 
   // Add third visit for a different page.
-  VisitRow visit_info3(2,
-      visit_info1.visit_time + TimeDelta::FromSeconds(2), 0,
-      ui::PageTransitionFromInt(
-          ui::PAGE_TRANSITION_LINK |
-          ui::PAGE_TRANSITION_CHAIN_START),
-      0);
+  VisitRow visit_info3(
+      2, visit_info1.visit_time + TimeDelta::FromSeconds(2), 0,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
+                                ui::PAGE_TRANSITION_CHAIN_START),
+      0, false);
   visit_info3.visit_id = 3;
 
   // Add a redirect visit from the last page.
-  VisitRow visit_info4(3,
-      visit_info1.visit_time + TimeDelta::FromSeconds(3), visit_info3.visit_id,
-      ui::PageTransitionFromInt(
-          ui::PAGE_TRANSITION_SERVER_REDIRECT |
-          ui::PAGE_TRANSITION_CHAIN_END),
-      0);
+  VisitRow visit_info4(
+      3, visit_info1.visit_time + TimeDelta::FromSeconds(3),
+      visit_info3.visit_id,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_SERVER_REDIRECT |
+                                ui::PAGE_TRANSITION_CHAIN_END),
+      0, false);
   visit_info4.visit_id = 4;
 
   // Add a subframe visit.
-  VisitRow visit_info5(4,
-      visit_info1.visit_time + TimeDelta::FromSeconds(4), visit_info4.visit_id,
-      ui::PageTransitionFromInt(
-          ui::PAGE_TRANSITION_AUTO_SUBFRAME |
-          ui::PAGE_TRANSITION_CHAIN_START |
-          ui::PAGE_TRANSITION_CHAIN_END),
-      0);
+  VisitRow visit_info5(
+      4, visit_info1.visit_time + TimeDelta::FromSeconds(4),
+      visit_info4.visit_id,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_AUTO_SUBFRAME |
+                                ui::PAGE_TRANSITION_CHAIN_START |
+                                ui::PAGE_TRANSITION_CHAIN_END),
+      0, false);
   visit_info5.visit_id = 5;
 
   // Add third visit for the same URL as visit 1 and 2, but exactly a day
   // later than visit 2.
-  VisitRow visit_info6(visit_info1.url_id,
-      visit_info2.visit_time + TimeDelta::FromDays(1), 1,
-      ui::PageTransitionFromInt(
-          ui::PAGE_TRANSITION_TYPED |
-          ui::PAGE_TRANSITION_CHAIN_START |
-          ui::PAGE_TRANSITION_CHAIN_END),
-      0);
+  VisitRow visit_info6(
+      visit_info1.url_id, visit_info2.visit_time + TimeDelta::FromDays(1), 1,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                ui::PAGE_TRANSITION_CHAIN_START |
+                                ui::PAGE_TRANSITION_CHAIN_END),
+      0, true);
   visit_info6.visit_id = 6;
 
   std::vector<VisitRow> test_visit_rows;
@@ -367,13 +369,13 @@ TEST_F(VisitDatabaseTest, GetAllURLIDsForTransition) {
 
 TEST_F(VisitDatabaseTest, VisitSource) {
   // Add visits.
-  VisitRow visit_info1(111, Time::Now(), 0, ui::PAGE_TRANSITION_LINK, 0);
+  VisitRow visit_info1(111, Time::Now(), 0, ui::PAGE_TRANSITION_LINK, 0, false);
   ASSERT_TRUE(AddVisit(&visit_info1, SOURCE_BROWSED));
 
-  VisitRow visit_info2(112, Time::Now(), 1, ui::PAGE_TRANSITION_TYPED, 0);
+  VisitRow visit_info2(112, Time::Now(), 1, ui::PAGE_TRANSITION_TYPED, 0, true);
   ASSERT_TRUE(AddVisit(&visit_info2, SOURCE_SYNCED));
 
-  VisitRow visit_info3(113, Time::Now(), 0, ui::PAGE_TRANSITION_TYPED, 0);
+  VisitRow visit_info3(113, Time::Now(), 0, ui::PAGE_TRANSITION_TYPED, 0, true);
   ASSERT_TRUE(AddVisit(&visit_info3, SOURCE_EXTENSION));
 
   // Query each visit.
@@ -447,27 +449,27 @@ TEST_F(VisitDatabaseTest, GetHistoryCount) {
 
   // Add 5 visits (3 distinct URLs) for the day before yesterday.
   // Whether the URL was browsed on this machine or synced has no effect.
-  VisitRow first_day_1(1, now, 0, standard_transition, 0);
+  VisitRow first_day_1(1, now, 0, standard_transition, 0, true);
   first_day_1.visit_id = 1;
   AddVisit(&first_day_1, SOURCE_BROWSED);
   now += TimeDelta::FromHours(1);
 
-  VisitRow first_day_2(2, now, 0, standard_transition, 0);
+  VisitRow first_day_2(2, now, 0, standard_transition, 0, true);
   first_day_2.visit_id = 2;
   AddVisit(&first_day_2, SOURCE_BROWSED);
   now += TimeDelta::FromHours(1);
 
-  VisitRow first_day_3(1, now, 0, standard_transition, 0);
+  VisitRow first_day_3(1, now, 0, standard_transition, 0, true);
   first_day_3.visit_id = 3;
   AddVisit(&first_day_3, SOURCE_SYNCED);
   now += TimeDelta::FromHours(1);
 
-  VisitRow first_day_4(3, now, 0, standard_transition, 0);
+  VisitRow first_day_4(3, now, 0, standard_transition, 0, true);
   first_day_4.visit_id = 4;
   AddVisit(&first_day_4, SOURCE_SYNCED);
   now += TimeDelta::FromHours(1);
 
-  VisitRow first_day_5(2, now, 0, standard_transition, 0);
+  VisitRow first_day_5(2, now, 0, standard_transition, 0, true);
   first_day_5.visit_id = 5;
   AddVisit(&first_day_5, SOURCE_BROWSED);
   now += TimeDelta::FromHours(1);
@@ -476,22 +478,22 @@ TEST_F(VisitDatabaseTest, GetHistoryCount) {
   // a user-visible navigation. Of the remaining 3, only 2 are unique.
   now = yesterday;
 
-  VisitRow second_day_1(1, now, 0, standard_transition, 0);
+  VisitRow second_day_1(1, now, 0, standard_transition, 0, true);
   second_day_1.visit_id = 6;
   AddVisit(&second_day_1, SOURCE_BROWSED);
   now += TimeDelta::FromHours(1);
 
-  VisitRow second_day_2(1, now, 0, standard_transition, 0);
+  VisitRow second_day_2(1, now, 0, standard_transition, 0, true);
   second_day_2.visit_id = 7;
   AddVisit(&second_day_2, SOURCE_BROWSED);
   now += TimeDelta::FromHours(1);
 
-  VisitRow second_day_3(2, now, 0, ui::PAGE_TRANSITION_AUTO_SUBFRAME, 0);
+  VisitRow second_day_3(2, now, 0, ui::PAGE_TRANSITION_AUTO_SUBFRAME, 0, false);
   second_day_3.visit_id = 8;
   AddVisit(&second_day_3, SOURCE_BROWSED);
   now += TimeDelta::FromHours(1);
 
-  VisitRow second_day_4(3, now, 0, standard_transition, 0);
+  VisitRow second_day_4(3, now, 0, standard_transition, 0, true);
   second_day_4.visit_id = 9;
   AddVisit(&second_day_4, SOURCE_BROWSED);
   now += TimeDelta::FromHours(1);
@@ -568,12 +570,12 @@ TEST_F(VisitDatabaseTest, GetHistoryCount) {
   // 24 hours later. The count should be 1, not 2, because the day is longer
   // than 24 hours, and the two visits will be regarded as duplicate.
   if (!shift_backward.is_null()) {
-    VisitRow backward_1(1, shift_backward, 0, standard_transition, 0);
+    VisitRow backward_1(1, shift_backward, 0, standard_transition, 0, true);
     backward_1.visit_id = 10;
     AddVisit(&backward_1, SOURCE_BROWSED);
 
-    VisitRow backward_2(1, shift_backward + TimeDelta::FromHours(24),
-                        0, standard_transition, 0);
+    VisitRow backward_2(1, shift_backward + TimeDelta::FromHours(24), 0,
+                        standard_transition, 0, true);
     backward_2.visit_id = 11;
     AddVisit(&backward_2, SOURCE_BROWSED);
 
@@ -588,14 +590,15 @@ TEST_F(VisitDatabaseTest, GetHistoryCount) {
   // regarded as duplicate in a normal 24 hour day, but in this case the second
   // visit is already in the next day.
   if (!shift_forward.is_null()) {
-    VisitRow forward_1(1, shift_forward, 0, standard_transition, 0);
+    VisitRow forward_1(1, shift_forward, 0, standard_transition, 0, true);
     forward_1.visit_id = 12;
     AddVisit(&forward_1, SOURCE_BROWSED);
 
     Time almost_24_hours_later = shift_forward +
                                  TimeDelta::FromHours(24) -
                                  TimeDelta::FromMicroseconds(1);
-    VisitRow forward_2(1, almost_24_hours_later, 0, standard_transition, 0);
+    VisitRow forward_2(1, almost_24_hours_later, 0, standard_transition, 0,
+                       true);
     forward_2.visit_id = 13;
     AddVisit(&forward_2, SOURCE_BROWSED);
 
@@ -604,6 +607,91 @@ TEST_F(VisitDatabaseTest, GetHistoryCount) {
                                 &result));
     EXPECT_EQ(2, result);
   }
+}
+
+TEST_F(VisitDatabaseTest, GetGoogleDomainVisitsFromSearchesInRange_NoVisits) {
+  const auto begin_time = base::Time::Now();
+  EXPECT_THAT(GetGoogleDomainVisitsFromSearchesInRange(
+                  begin_time, begin_time + base::TimeDelta::FromDays(1)),
+              IsEmpty());
+}
+
+TEST_F(VisitDatabaseTest,
+       GetGoogleDomainVisitsFromSearchesInRange_TwoVistsInRange) {
+  const auto begin_time = base::Time::Now();
+  // Out of range, one hour before begin time.
+  VisitRow row{AddURL(URLRow(GURL("https://www.google.fr/search?q=foo"))),
+               begin_time + base::TimeDelta::FromHours(-1),
+               0,
+               ui::PageTransitionFromInt(0),
+               0,
+               false};
+  AddVisit(&row, SOURCE_BROWSED);
+  // In range, exactly begin time.
+  row = {AddURL(URLRow(GURL("https://www.google.com/search?q=foo"))),
+         begin_time,
+         0,
+         ui::PageTransitionFromInt(0),
+         0,
+         false};
+  AddVisit(&row, SOURCE_BROWSED);
+  // In range, 23 hours after begin time.
+  row = {AddURL(URLRow(GURL("https://www.google.ch/search?q=foo"))),
+         begin_time + base::TimeDelta::FromHours(23),
+         0,
+         ui::PageTransitionFromInt(0),
+         0,
+         false};
+  AddVisit(&row, SOURCE_BROWSED);
+  // Out of range, exactly a day after begin time.
+  row = {AddURL(URLRow(GURL("https://www.google.de/search?q=foo"))),
+         begin_time + base::TimeDelta::FromHours(24),
+         0,
+         ui::PageTransitionFromInt(0),
+         0,
+         false};
+  AddVisit(&row, SOURCE_BROWSED);
+
+  EXPECT_THAT(
+      GetGoogleDomainVisitsFromSearchesInRange(
+          begin_time, begin_time + base::TimeDelta::FromDays(1)),
+      ElementsAre(
+          AllOf(Property(&DomainVisit::domain, "www.google.com"),
+                Property(&DomainVisit::visit_time, begin_time)),
+          AllOf(Property(&DomainVisit::domain, "www.google.ch"),
+                Property(&DomainVisit::visit_time,
+                         begin_time + base::TimeDelta::FromHours(23)))));
+}
+
+TEST_F(VisitDatabaseTest, GetGoogleDomainVisitsFromSearchesInRange_NotSearch) {
+  const auto begin_time = base::Time::Now();
+  VisitRow row{AddURL(URLRow(GURL("https://www.google.fr/searchin"))),
+               begin_time,
+               0,
+               ui::PageTransitionFromInt(0),
+               0,
+               false};
+  AddVisit(&row, SOURCE_BROWSED);
+
+  EXPECT_THAT(GetGoogleDomainVisitsFromSearchesInRange(
+                  begin_time, begin_time + base::TimeDelta::FromDays(1)),
+              IsEmpty());
+}
+
+TEST_F(VisitDatabaseTest,
+       GetGoogleDomainVisitsFromSearchesInRange_InvalidGoogleDomain) {
+  const auto begin_time = base::Time::Now();
+  VisitRow row{AddURL(URLRow(GURL("https://www.google.foo/search?q=foo"))),
+               begin_time,
+               0,
+               ui::PageTransitionFromInt(0),
+               0,
+               false};
+  AddVisit(&row, SOURCE_BROWSED);
+
+  EXPECT_THAT(GetGoogleDomainVisitsFromSearchesInRange(
+                  begin_time, begin_time + base::TimeDelta::FromDays(1)),
+              IsEmpty());
 }
 
 }  // namespace history

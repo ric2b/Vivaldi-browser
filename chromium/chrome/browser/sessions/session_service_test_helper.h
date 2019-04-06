@@ -11,11 +11,15 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "components/sessions/core/session_id.h"
 
 class SessionService;
+
+namespace base {
+class Location;
+}
 
 namespace sessions {
 class SerializedNavigationEntry;
@@ -50,7 +54,7 @@ class SessionServiceTestHelper {
   // Reads the contents of the last session.
   void ReadWindows(
       std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
-      SessionID::id_type* active_window_id);
+      SessionID* active_window_id);
 
   void AssertTabEquals(const SessionID& window_id,
                        const SessionID& tab_id,

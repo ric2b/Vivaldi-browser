@@ -37,7 +37,7 @@ GOOGLE_SERVICES_REGEX = (
   "(Payments|Cleanup|Drive|"
   "Talk|Cast|Play|Web Store|Cloud|Safe Browsing|OS|"
   "Hangouts|Copresence|Smart Lock|Translate|"
-  "Canary|App|Now)"
+  "Canary|App|Now|Pay)"
 )
 
 def REGEXPPATCH(s):
@@ -59,6 +59,7 @@ REPLACE_GOOGLE_EXCEPTIONS =[
   "IDS_CONTENT_CONTEXT_SPELLING_NO_SUGGESTIONS_FROM_GOOGLE",
   "IDS_CONTENT_CONTEXT_SPELLING_BUBBLE_TEXT",
   "IDS_ERRORPAGES_SUGGESTION_GOOGLE_SEARCH_SUMMARY",
+  "IDS_PRINT_PREVIEW_CLOUD_PRINT_PROMOTION",
 ]
 
 sequence_number = 0
@@ -350,10 +351,13 @@ class GritFile(dict):
       if name in exceptions:
         continue
       _seq, node = seq_node
+      modified_string = False
       for index, part in enumerate(node.mixed_content):
         if not isinstance(part, types.StringTypes):
           continue
+        old_string = node.mixed_content[index]
         node.mixed_content[index] = matcher.sub(replace_with, part)
+        modified_string = modified_string or node.mixed_content[index] != old_string
         #if matcher.search(part):
         #  print >>sys.stderr, "Replaced", name, "string |",\
         #         part.encode("utf8"), "| with |",\
@@ -363,7 +367,7 @@ class GritFile(dict):
           raise Exception("Child of "+name+" still had Google string")
 
       clique = node.GetCliques()
-      if not clique:
+      if not clique or not modified_string:
         continue
       clique = clique[0]
       translated = clique.AllMessagesThatMatch(re.compile(".*"))

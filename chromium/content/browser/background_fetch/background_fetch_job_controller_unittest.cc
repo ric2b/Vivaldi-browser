@@ -15,14 +15,16 @@
 #include "base/guid.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "components/download/public/common/download_item.h"
 #include "content/browser/background_fetch/background_fetch_constants.h"
+#include "content/browser/background_fetch/background_fetch_context.h"
 #include "content/browser/background_fetch/background_fetch_data_manager.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/background_fetch/background_fetch_test_base.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/background_fetch_delegate.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/download_item.h"
 #include "content/public/test/fake_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -88,6 +90,8 @@ class FakeBackgroundFetchRequestManager : public BackgroundFetchRequestManager {
   std::map<std::string, RegistrationState> registration_status_map_;
 };
 
+}  // namespace
+
 class BackgroundFetchJobControllerTest : public BackgroundFetchTestBase {
  public:
   BackgroundFetchJobControllerTest() = default;
@@ -150,25 +154,49 @@ class BackgroundFetchJobControllerTest : public BackgroundFetchTestBase {
     DCHECK(delegate_);
     delegate_proxy_ = std::make_unique<BackgroundFetchDelegateProxy>(delegate_);
 
-    BackgroundFetchRegistration registration;
-    registration.developer_id = registration_id.developer_id();
-    registration.unique_id = registration_id.unique_id();
-
     auto controller = std::make_unique<BackgroundFetchJobController>(
         delegate_proxy_.get(), registration_id, BackgroundFetchOptions(),
-        registration, &request_manager_,
+        SkBitmap(), 0 /* bytes_downloaded */, &request_manager_,
         base::BindRepeating(
             &BackgroundFetchJobControllerTest::DidUpdateProgress,
             base::Unretained(this)),
         base::BindOnce(&BackgroundFetchJobControllerTest::OnJobFinished));
 
-    controller->InitializeRequestStatus(0, total_downloads,
-                                        std::vector<std::string>());
+    controller->InitializeRequestStatus(
+        0, total_downloads, {} /* outstanding_guids */, "" /* ui_title */);
     return controller;
+  }
+
+  void AddControllerToContextMap(
+      const std::string& unique_id,
+      std::unique_ptr<BackgroundFetchJobController> controller) {
+    context_->job_controllers_[unique_id] = std::move(controller);
+  }
+
+  // BackgroundFetchTestBase overrides:
+  void SetUp() override {
+    BackgroundFetchTestBase::SetUp();
+
+    StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+        BrowserContext::GetDefaultStoragePartition(browser_context()));
+
+    context_ = new BackgroundFetchContext(
+        browser_context(),
+        base::WrapRefCounted(embedded_worker_test_helper()->context_wrapper()),
+        base::WrapRefCounted(partition->GetCacheStorageContext()));
+  }
+
+  void TearDown() override {
+    BackgroundFetchTestBase::TearDown();
+    context_ = nullptr;
+
+    // Give pending shutdown operations a chance to finish.
+    base::RunLoop().RunUntilIdle();
   }
 
  protected:
   FakeBackgroundFetchRequestManager request_manager_;
+  scoped_refptr<BackgroundFetchContext> context_;
 
   uint64_t last_downloaded_ = 0;
 
@@ -190,7 +218,7 @@ class BackgroundFetchJobControllerTest : public BackgroundFetchTestBase {
   }
 
   static void OnJobFinished(const BackgroundFetchRegistrationId&,
-                            bool aborted) {}
+                            BackgroundFetchReasonToAbort reason_to_abort) {}
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundFetchJobControllerTest);
 };
@@ -268,10 +296,7 @@ TEST_F(BackgroundFetchJobControllerTest, Abort) {
       CreateJobController(registration_id, requests.size());
 
   controller->StartRequest(requests[0]);
-  controller->AbortFromUser();
-  // Tell the delegate to abort the job as well so it doesn't send completed
-  // messages to the JobController.
-  delegate_->Abort(registration_id.unique_id());
+  controller->Abort(BackgroundFetchReasonToAbort::CANCELLED_FROM_UI);
 
   base::RunLoop().RunUntilIdle();
 
@@ -312,5 +337,50 @@ TEST_F(BackgroundFetchJobControllerTest, Progress) {
   EXPECT_EQ(last_downloaded_, strlen(kExampleResponseData));
 }
 
-}  // namespace
+TEST_F(BackgroundFetchJobControllerTest, ServiceWorkerRegistrationDeleted) {
+  BackgroundFetchRegistrationId registration_id;
+
+  auto requests = CreateRegistrationForRequests(
+      &registration_id, {{GURL("https://example.com/funny_cat.png"), "GET"}},
+      true /* auto_complete_requests */);
+
+  EXPECT_EQ(JobCompletionStatus::kRunning,
+            request_manager_.GetCompletionStatus(registration_id));
+
+  std::unique_ptr<BackgroundFetchJobController> controller =
+      CreateJobController(registration_id, requests.size());
+
+  AddControllerToContextMap(registration_id.unique_id(), std::move(controller));
+  context_->OnRegistrationDeleted(kExampleServiceWorkerRegistrationId,
+                                  GURL("https://example.com/funny_cat.png"));
+
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(JobCompletionStatus::kAborted,
+            request_manager_.GetCompletionStatus(registration_id));
+}
+
+TEST_F(BackgroundFetchJobControllerTest, ServiceWorkerDatabaseDeleted) {
+  BackgroundFetchRegistrationId registration_id;
+
+  auto requests = CreateRegistrationForRequests(
+      &registration_id, {{GURL("https://example.com/funny_cat.png"), "GET"}},
+      true /* auto_complete_requests */);
+
+  EXPECT_EQ(JobCompletionStatus::kRunning,
+            request_manager_.GetCompletionStatus(registration_id));
+
+  std::unique_ptr<BackgroundFetchJobController> controller =
+      CreateJobController(registration_id, requests.size());
+
+  AddControllerToContextMap(registration_id.unique_id(), std::move(controller));
+
+  context_->OnStorageWiped();
+
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(JobCompletionStatus::kAborted,
+            request_manager_.GetCompletionStatus(registration_id));
+}
+
 }  // namespace content

@@ -114,9 +114,6 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
                                   const base::android::JavaParamRef<jobject>&);
   void FlushDirectory(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& obj);
-  base::android::ScopedJavaLocalRef<jstring> QuerySyncStatusSummary(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
   void GetAllNodes(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,
                    const base::android::JavaParamRef<jobject>& callback);
@@ -125,6 +122,10 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
   jboolean HasUnrecoverableError(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  jboolean IsUrlKeyedDataCollectionEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jboolean personalized);
 
   // Gets SyncProtocolError.ClientAction.
   jint GetProtocolErrorClientAction(

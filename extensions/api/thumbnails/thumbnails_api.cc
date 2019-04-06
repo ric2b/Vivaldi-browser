@@ -18,6 +18,7 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -29,7 +30,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/readback_types.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -100,27 +100,10 @@ ThumbnailsIsThumbnailAvailableFunction::
     ~ThumbnailsIsThumbnailAvailableFunction() {}
 
 void ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete(
-    const SkBitmap& bitmap,
-    content::ReadbackResponse response) {
-  if (response == content::READBACK_SUCCESS) {
+    const SkBitmap& bitmap) {
+  if (!bitmap.drawsNothing()) {
     OnCaptureSuccess(bitmap);
     return;
-  }
-  // TODO(wjmaclean): Improve error reporting. Why aren't we passing more
-  // information here?
-  std::string reason;
-  switch (response) {
-    case content::READBACK_FAILED:
-      reason = "READBACK_FAILED";
-      break;
-    case content::READBACK_SURFACE_UNAVAILABLE:
-      reason = "READBACK_SURFACE_UNAVAILABLE";
-      break;
-    case content::READBACK_BITMAP_ALLOCATION_FAILURE:
-      reason = "READBACK_BITMAP_ALLOCATION_FAILURE";
-      break;
-    default:
-      reason = "<unknown>";
   }
   OnCaptureFailure(FAILURE_REASON_UNKNOWN);
 }
@@ -128,7 +111,7 @@ void ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete(
 bool ThumbnailsCaptureUIFunction::CaptureAsync(
     content::WebContents* web_contents,
     const gfx::Rect& capture_area,
-    const content::ReadbackRequestCallback callback) {
+    base::OnceCallback<void(const SkBitmap&)> callback) {
   if (!web_contents)
     return false;
 
@@ -150,8 +133,7 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
     if (scale > 1.0f)
       bitmap_size = gfx::ScaleToCeiledSize(bitmap_size, scale);
 
-    view->CopyFromSurface(capture_area, bitmap_size, callback,
-                          kN32_SkColorType);
+    view->CopyFromSurface(capture_area, bitmap_size, std::move(callback));
   }
   return true;
 }
@@ -217,7 +199,7 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     if (!bitmap.empty() && !bitmap.isNull()) {
       scw.WriteImage(bitmap);
     }
-    SetResult(base::MakeUnique<base::Value>(return_data));
+    SetResult(std::make_unique<base::Value>(return_data));
     SendResponse(true);
     return;
   }
@@ -262,7 +244,7 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     file_path_ = path;
     base::WriteFile(path, reinterpret_cast<const char*>(&data[0]), data.size());
   }
-  SetResult(base::MakeUnique<base::Value>(return_data));
+  SetResult(std::make_unique<base::Value>(return_data));
   SendResponse(true);
 
   if (show_file_in_path_) {
@@ -372,8 +354,10 @@ void ThumbnailsCaptureTabFunction::OnThumbnailsCaptureCompleted(
     DispatchError("Failed to capture tab: no data from the renderer process");
     return;
   }
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE,
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::Bind(&ThumbnailsCaptureTabFunction::ScaleAndConvertImage, this,
                  handle, size, callback_id));
 }
@@ -382,8 +366,6 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
     base::SharedMemoryHandle handle,
     const gfx::Size image_size,
     int callback_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-
   std::unique_ptr<base::SharedMemory> bitmap_buffer(
       new base::SharedMemory(handle, true));
   bool resize_needed = capture_full_page_ == false;

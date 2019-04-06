@@ -8,22 +8,35 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "components/infobars/core/confirm_infobar_delegate.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/window_open_disposition.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
+#include "ui/views/view_properties.h"
+
+#include "app/vivaldi_apptools.h"
+#include "ui/infobar_container_web_proxy.h"
 
 // InfoBarService -------------------------------------------------------------
 
 std::unique_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
     std::unique_ptr<ConfirmInfoBarDelegate> delegate) {
+  if (vivaldi::IsVivaldiRunning()) {
+    return std::make_unique<vivaldi::ConfirmInfoBarWebProxy>(
+        std::move(delegate), web_contents());
+  }
+
+#if defined(OS_MACOSX)
+  if (views_mode_controller::IsViewsBrowserCocoa())
+    return InfoBarService::CreateConfirmInfoBarCocoa(std::move(delegate));
+#endif
   return std::make_unique<ConfirmInfoBar>(std::move(delegate));
 }
 
@@ -31,14 +44,31 @@ std::unique_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
 // ConfirmInfoBar -------------------------------------------------------------
 
 ConfirmInfoBar::ConfirmInfoBar(std::unique_ptr<ConfirmInfoBarDelegate> delegate)
-    : InfoBarView(std::move(delegate)),
-      label_(nullptr),
-      ok_button_(nullptr),
-      cancel_button_(nullptr),
-      link_(nullptr) {
-  // Always use the standard theme for the platform on infobars (infobars in
-  // incognito should have the same appearance as normal infobars).
-  SetNativeTheme(ui::NativeTheme::GetInstanceForNativeUi());
+    : InfoBarView(std::move(delegate)) {
+  auto* delegate_ptr = GetDelegate();
+  label_ = CreateLabel(delegate_ptr->GetMessageText());
+  label_->SetElideBehavior(delegate_ptr->GetMessageElideBehavior());
+  AddChildView(label_);
+
+  const auto buttons = delegate_ptr->GetButtons();
+  if (buttons & ConfirmInfoBarDelegate::BUTTON_OK) {
+    ok_button_ = CreateButton(ConfirmInfoBarDelegate::BUTTON_OK);
+    ok_button_->SetProminent(true);
+    if (delegate_ptr->OKButtonTriggersUACPrompt()) {
+      elevation_icon_setter_.reset(new ElevationIconSetter(
+          ok_button_,
+          base::BindOnce(&ConfirmInfoBar::Layout, base::Unretained(this))));
+    }
+  }
+
+  if (buttons & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
+    cancel_button_ = CreateButton(ConfirmInfoBarDelegate::BUTTON_CANCEL);
+    if (buttons == ConfirmInfoBarDelegate::BUTTON_CANCEL)
+      cancel_button_->SetProminent(true);
+  }
+
+  link_ = CreateLink(delegate_ptr->GetLinkText(), this);
+  AddChildView(link_);
 }
 
 ConfirmInfoBar::~ConfirmInfoBar() {
@@ -76,48 +106,6 @@ void ConfirmInfoBar::Layout() {
   link_->SetPosition(gfx::Point(EndX() - link_->width(), OffsetY(link_)));
 }
 
-void ConfirmInfoBar::ViewHierarchyChanged(
-    const ViewHierarchyChangedDetails& details) {
-  if (details.is_add && details.child == this && (label_ == nullptr)) {
-    ConfirmInfoBarDelegate* delegate = GetDelegate();
-    label_ = CreateLabel(delegate->GetMessageText());
-    AddViewToContentArea(label_);
-
-    if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_OK) {
-      ok_button_ = views::MdTextButton::Create(
-          this, delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
-      ok_button_->SetProminent(true);
-      if (delegate->OKButtonTriggersUACPrompt()) {
-        elevation_icon_setter_.reset(new ElevationIconSetter(
-            ok_button_,
-            base::Bind(&ConfirmInfoBar::Layout, base::Unretained(this))));
-      }
-      AddViewToContentArea(ok_button_);
-      ok_button_->SizeToPreferredSize();
-    }
-
-    if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
-      cancel_button_ = views::MdTextButton::Create(
-          this,
-          delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
-      if (delegate->GetButtons() == ConfirmInfoBarDelegate::BUTTON_CANCEL) {
-        // Apply prominent styling only if the cancel button is the only button.
-        cancel_button_->SetProminent(true);
-      }
-      AddViewToContentArea(cancel_button_);
-      cancel_button_->SizeToPreferredSize();
-    }
-
-    base::string16 link_text(delegate->GetLinkText());
-    link_ = CreateLink(link_text, this);
-    AddViewToContentArea(link_);
-  }
-
-  // This must happen after adding all other children so InfoBarView can ensure
-  // the close button is the last child.
-  InfoBarView::ViewHierarchyChanged(details);
-}
-
 void ConfirmInfoBar::ButtonPressed(views::Button* sender,
                                    const ui::Event& event) {
   if (!owner())
@@ -149,6 +137,20 @@ void ConfirmInfoBar::LinkClicked(views::Link* source, int event_flags) {
 
 ConfirmInfoBarDelegate* ConfirmInfoBar::GetDelegate() {
   return delegate()->AsConfirmInfoBarDelegate();
+}
+
+views::MdTextButton* ConfirmInfoBar::CreateButton(
+    ConfirmInfoBarDelegate::InfoBarButton type) {
+  auto* button =
+      views::MdTextButton::Create(this, GetDelegate()->GetButtonLabel(type));
+  button->SetProperty(
+      views::kMarginsKey,
+      new gfx::Insets(ChromeLayoutProvider::Get()->GetDistanceMetric(
+                          DISTANCE_TOAST_CONTROL_VERTICAL),
+                      0));
+  AddChildView(button);
+  button->SizeToPreferredSize();
+  return button;
 }
 
 int ConfirmInfoBar::NonLabelWidth() const {

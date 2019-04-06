@@ -16,12 +16,12 @@
 #include "extensions/common/manifest_handlers/webview_info.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/renderer_extension_registry.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -34,12 +34,6 @@ ResourceRequestPolicy::~ResourceRequestPolicy() = default;
 
 void ResourceRequestPolicy::OnExtensionLoaded(const Extension& extension) {
   if (WebAccessibleResourcesInfo::HasWebAccessibleResources(&extension) ||
-      // Extensions below manifest version 2 had all resources accessible by
-      // default.
-      // TODO(devlin): Two things - first, we might not have any v1 extensions
-      // anymore; second, this should maybe be included in
-      // HasWebAccessibleResources().
-      extension.manifest_version() < 2 ||
       WebviewInfo::HasWebviewAccessibleResources(
           extension, dispatcher_->webview_partition_id()) ||
       // Hosted app icons are accessible.

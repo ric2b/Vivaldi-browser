@@ -39,7 +39,6 @@ class VulkanBrowserCompositorOutputSurface
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
-  bool SurfaceIsSuspendForRecycle() const override;
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
@@ -48,15 +47,15 @@ class VulkanBrowserCompositorOutputSurface
   uint32_t GetFramebufferCopyTextureFormat() override;
   void SwapBuffers(viz::OutputSurfaceFrame frame) override;
   void SetDrawRectangle(const gfx::Rect& rect) override;
+  unsigned UpdateGpuFence() override;
 
   gpu::VulkanSurface* GetVulkanSurface() override;
 
  private:
-  void SwapBuffersAck(uint64_t swap_id);
+  void SwapBuffersAck();
 
   std::unique_ptr<gpu::VulkanSurface> surface_;
   viz::OutputSurfaceClient* client_ = nullptr;
-  uint64_t swap_id_ = 0;
 
   base::WeakPtrFactory<VulkanBrowserCompositorOutputSurface> weak_ptr_factory_;
 

@@ -52,11 +52,6 @@ MemoryInstrumentation::~MemoryInstrumentation() {
 }
 
 void MemoryInstrumentation::RequestGlobalDump(
-    RequestGlobalDumpCallback callback) {
-  RequestGlobalDump({}, callback);
-}
-
-void MemoryInstrumentation::RequestGlobalDump(
     const std::vector<std::string>& allocator_dump_names,
     RequestGlobalDumpCallback callback) {
   const auto& coordinator = GetCoordinatorBindingForCurrentThread();
@@ -66,12 +61,22 @@ void MemoryInstrumentation::RequestGlobalDump(
       base::BindRepeating(&WrapGlobalMemoryDump, callback));
 }
 
-void MemoryInstrumentation::RequestGlobalDumpForPid(
+void MemoryInstrumentation::RequestPrivateMemoryFootprint(
     base::ProcessId pid,
     RequestGlobalDumpCallback callback) {
   const auto& coordinator = GetCoordinatorBindingForCurrentThread();
-  coordinator->RequestGlobalMemoryDumpForPid(
+  coordinator->RequestPrivateMemoryFootprint(
       pid, base::BindRepeating(&WrapGlobalMemoryDump, callback));
+}
+
+void MemoryInstrumentation::RequestGlobalDumpForPid(
+    base::ProcessId pid,
+    const std::vector<std::string>& allocator_dump_names,
+    RequestGlobalDumpCallback callback) {
+  const auto& coordinator = GetCoordinatorBindingForCurrentThread();
+  coordinator->RequestGlobalMemoryDumpForPid(
+      pid, allocator_dump_names,
+      base::BindRepeating(&WrapGlobalMemoryDump, callback));
 }
 
 void MemoryInstrumentation::RequestGlobalDumpAndAppendToTrace(
@@ -97,9 +102,9 @@ MemoryInstrumentation::GetCoordinatorBindingForCurrentThread() {
     // invoking methods on the |coordinator| proxy objects.
     connector_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &MemoryInstrumentation::BindCoordinatorRequestOnConnectorThread,
-            base::Unretained(this), base::Passed(std::move(coordinator_req))));
+            base::Unretained(this), std::move(coordinator_req)));
   }
   DCHECK(*coordinator);
   return *coordinator;

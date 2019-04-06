@@ -31,7 +31,7 @@ TOOLS_NAMESPACE = 'http://schemas.android.com/tools'
 
 
 @contextlib.contextmanager
-def _PatchedManifest(manifest_path):
+def _ProcessManifest(manifest_path):
   """Patches an Android manifest to always include the 'tools' namespace
   declaration, as it is not propagated by the manifest merger from the SDK.
 
@@ -41,6 +41,7 @@ def _PatchedManifest(manifest_path):
   manifests = doc.getElementsByTagName('manifest')
   assert len(manifests) == 1
   manifest = manifests[0]
+  package = manifest.getAttribute('package')
 
   manifest.setAttribute('xmlns:%s' % TOOLS_NAMESPACE_PREFIX, TOOLS_NAMESPACE)
 
@@ -48,7 +49,7 @@ def _PatchedManifest(manifest_path):
   with tempfile.NamedTemporaryFile(prefix=tmp_prefix) as patched_manifest:
     doc.writexml(patched_manifest)
     patched_manifest.flush()
-    yield patched_manifest.name
+    yield patched_manifest.name, package
 
 
 def _BuildManifestMergerClasspath(build_vars):
@@ -78,28 +79,32 @@ def main(argv):
 
   classpath = _BuildManifestMergerClasspath(
       build_utils.ReadBuildVars(args.build_vars))
-  cmd = [
-    'java',
-    '-cp',
-    classpath,
-    MANIFEST_MERGER_MAIN_CLASS,
-    '--out', args.output,
-  ]
 
-  extras = build_utils.ParseGnList(args.extras)
-  if extras:
-    cmd += ['--libs', ':'.join(extras)]
+  with build_utils.AtomicOutput(args.output) as f:
+    cmd = [
+      'java',
+      '-cp',
+      classpath,
+      MANIFEST_MERGER_MAIN_CLASS,
+      '--out', f.name,
+    ]
 
-  with _PatchedManifest(args.root_manifest) as root_manifest:
-    cmd += ['--main', root_manifest]
-    build_utils.CheckOutput(cmd,
-      # https://issuetracker.google.com/issues/63514300: The merger doesn't set
-      # a nonzero exit code for failures.
-      fail_func=lambda returncode, stderr: returncode != 0 or
-        build_utils.IsTimeStale(args.output, [root_manifest] + extras))
+    extras = build_utils.ParseGnList(args.extras)
+    if extras:
+      cmd += ['--libs', ':'.join(extras)]
+
+    with _ProcessManifest(args.root_manifest) as tup:
+      root_manifest, package = tup
+      cmd += ['--main', root_manifest, '--property', 'PACKAGE=' + package]
+      build_utils.CheckOutput(cmd,
+        # https://issuetracker.google.com/issues/63514300:
+        # The merger doesn't set a nonzero exit code for failures.
+        fail_func=lambda returncode, stderr: returncode != 0 or
+          build_utils.IsTimeStale(f.name, [root_manifest] + extras))
   if args.depfile:
     inputs = extras + classpath.split(':')
-    build_utils.WriteDepfile(args.depfile, args.output, inputs=inputs)
+    build_utils.WriteDepfile(args.depfile, args.output, inputs=inputs,
+                             add_pydeps=False)
 
 
 if __name__ == '__main__':

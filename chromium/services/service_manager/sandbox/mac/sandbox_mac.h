@@ -29,12 +29,9 @@ class SERVICE_MANAGER_SANDBOX_EXPORT SandboxMac {
   // Turns on the OS X sandbox for this process.
   // |sandbox_type| - type of Sandbox to use. See SandboxWarmup() for legal
   // values.
-  // |allowed_dir| - directory to allow access to, currently the only sandbox
-  // profile that supports this is SANDBOX_TYPE_UTILITY .
   //
   // Returns true on success, false if an error occurred enabling the sandbox.
-  static bool Enable(SandboxType sandbox_type,
-                     const base::FilePath& allowed_dir);
+  static bool Enable(SandboxType sandbox_type);
 
   // Returns true if the sandbox has been enabled for the current process.
   static bool IsCurrentlyActive();
@@ -53,11 +50,11 @@ class SERVICE_MANAGER_SANDBOX_EXPORT SandboxMac {
   static const char* kSandboxHomedirAsLiteral;
   static const char* kSandboxLoggingPathAsLiteral;
   static const char* kSandboxOSVersion;
-  static const char* kSandboxPermittedDir;
 
   // TODO(kerrnel): this is only for the legacy sandbox.
   static const char* kSandboxElCapOrLater;
   static const char* kSandboxMacOS1013;
+  static const char* kSandboxHighSierraOrLater;
 
   static const char* kSandboxBundleVersionPath;
 

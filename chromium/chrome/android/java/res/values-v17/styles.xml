@@ -21,17 +21,16 @@
     <style name="MainThemeBase" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:textColorHighlight">@color/text_highlight_color</item>
-        <item name="android:textColorLink">@color/light_active_color</item>
+        <item name="android:textColorLink">@color/default_text_color_link</item>
         <item name="colorPrimaryDark">@android:color/black</item>
-        <item name="android:colorAccent">@color/google_blue_500</item>
+        <item name="android:colorAccent" tools:targetApi="21">@color/light_active_color</item>
         <item name="android:statusBarColor" tools:targetApi="21">@android:color/black</item>
 
         <!--  Overriding AppCompat values -->
+        <!-- TODO(huayinz): Change this when the color for checkboxes are updated to modern. -->
         <item name="colorControlNormal">@color/light_normal_color</item>
         <item name="colorControlActivated">@color/light_active_color</item>
-
-        <!-- Default TintedImageButton tint -->
-        <item name="chrometint">@color/dark_mode_tint</item>
+        <item name="buttonStyle">@style/MainButtonStyle</item>
 
         <!-- Navigation Transitions, requires API level 21 -->
         <item name="android:windowAllowEnterTransitionOverlap" tools:targetApi="21">false</item>
@@ -44,34 +43,26 @@
     </style>
     <style name="MainTheme" parent="MainThemeBase" />
 
-    <style name="SearchActivityTheme" parent="MainTheme">
+    <style name="MainButtonStyle" parent="ButtonCompatBorderless">
+        <item name="android:textAppearance">@style/BlueButtonText2</item>
+    </style>
+
+    <!-- Extend MainThemeBase rather than MainTheme to avoid values-v27 navigation bar colors from
+         being applied -->
+    <style name="SearchActivityTheme" parent="MainThemeBase">
         <item name="android:windowBackground">@color/google_grey_500</item>
     </style>
 
-    <style name="TabbedModeTheme" parent="MainTheme">
+    <style name="TabbedModeThemeBase" parent="MainTheme">
         <item name="android:windowBackground">@android:color/white</item>
     </style>
+
+    <style name="TabbedModeTheme" parent="TabbedModeThemeBase" />
 
     <style name="FirstRunTheme" parent="DialogWhenLarge">
     </style>
 
     <style name="TabbedModeFirstRunTheme" parent="TabbedModeTheme">
-    </style>
-
-    <!-- The theme to use when starting Chrome in VR mode.-->
-    <style name="VrSupportTheme" parent="MainTheme">
-       <!-- Android shows a preview window to give the user immediate feedback that the
-            app launched. The default behavior with this preview window is to show system
-            UI (e.g. navigation bars), which looks jarring if the user already has their
-            headset on. We disable the preview window feature when starting Chrome in VR
-            mode.
-       -->
-      <item name="android:windowDisablePreview">true</item>
-      <item name="android:windowBackground">@android:color/black</item>
-    </style>
-    <style name="VrSupportThemeLauncher" parent="@android:style/Theme.NoDisplay">
-      <item name="android:windowDisablePreview">true</item>
-      <item name="android:windowBackground">@android:color/black</item>
     </style>
 
     <style name="FullscreenWhiteBase" parent="Theme.AppCompat.Light" >
@@ -98,7 +89,9 @@
     </style>
 
     <!-- Web app themes -->
-    <style name="WebappTheme" parent="MainTheme">
+    <!-- Extend MainThemeBase rather than MainTheme to avoid values-v27 navigation bar colors from
+         being applied -->
+    <style name="WebappTheme" parent="MainThemeBase">
         <item name="android:windowBackground">@null</item>
         <item name="android:windowDisablePreview">true</item>
     </style>
@@ -112,6 +105,7 @@
     </style>
 
     <style name="AlertDialogTheme" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/popup_bg</item>
         <item name="android:textColorHighlight">@color/text_highlight_color</item>
 
         <!--  Overriding AppCompat values -->
@@ -119,19 +113,18 @@
         <item name="colorControlActivated">@color/light_active_color</item>
         <item name="colorControlNormal">@color/light_normal_color</item>
         <item name="colorPrimary">@color/light_active_color</item>
-
-        <!-- Default TintedImageButton tint -->
-        <item name="chrometint">@color/dark_mode_tint</item>
     </style>
 
+    <!-- The dim amount should match the alpha of modal_dialog_scrim_color. -->
     <style name="ModalDialogTheme" parent="AlertDialogTheme">
         <item name="android:windowFrame">@null</item>
-        <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimAmount">0.5</item>
         <item name="android:windowMinWidthMajor">100%</item>
         <item name="android:windowMinWidthMinor">100%</item>
         <item name="buttonBarStyle">@style/ModalDialogButtonBarStyle</item>
         <item name="buttonBarButtonStyle">@style/ModalDialogButtonStyle</item>
+        <item name="android:windowSoftInputMode">adjustResize|stateHidden</item>
     </style>
 
     <style name="ModalDialogButtonBarStyle" parent="Widget.AppCompat.ButtonBar.AlertDialog">
@@ -144,7 +137,7 @@
     </style>
 
     <style name="ModalDialogButtonStyle" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
-        <item name="android:textColor">@color/light_active_color</item>
+        <item name="android:textColor">@color/blue_when_enabled</item>
     </style>
 
     <style name="SimpleDialog" parent="AlertDialogTheme">
@@ -162,6 +155,11 @@
         <item name="floatLabelPaddingLeft">@dimen/pref_autofill_field_horizontal_padding</item>
         <item name="floatLabelPaddingRight">@dimen/pref_autofill_field_horizontal_padding</item>
         <item name="floatLabelPaddingTop">@dimen/pref_autofill_field_top_margin</item>
+        <item name="actionBarStyle">@style/PreferenceActionBarModern</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+    <style name="PreferenceActionBarModern" parent="@style/Widget.AppCompat.Light.ActionBar.Solid">
+      <item name="titleTextStyle">@style/BlackHeadline1</item>
     </style>
     <style name="PreferenceTextAppearanceMedium">
         <item name="android:textSize">18sp</item>
@@ -231,14 +229,16 @@
         <item name="android:importantForAccessibility">no</item>
     </style>
 
-    <style name="ThemeWithActionBarBase" parent="Theme.AppCompat.Light.DarkActionBar">
+    <style name="ThemeWithActionBarBase" parent="Theme.AppCompat.Light">
         <item name="android:windowBackground">@drawable/action_bar_activity_bg</item>
         <!-- Action bar color -->
-        <item name="colorPrimary">@color/dark_action_bar_color</item>
+        <item name="colorPrimary">@color/modern_primary_color</item>
         <!-- Status bar color -->
-        <item name="colorPrimaryDark">#161e21</item>
+        <item name="colorPrimaryDark">@android:color/black</item>
         <!-- Color of checkboxes, switches, buttons, etc. -->
         <item name="colorAccent">@color/pref_accent_color</item>
+        <!-- Button style -->
+        <item name="buttonStyle">@style/MainButtonStyle</item>
     </style>
     <style name="ThemeWithActionBar" parent="ThemeWithActionBarBase" />
 
@@ -248,6 +248,16 @@
     </style>
 
     <!-- Manage Space Activity -->
+    <style name="ManageSpaceTheme" parent="PreferencesTheme">
+        <!-- Action bar color. This is intentionally a dark color. See crbug.com/871193. -->
+        <item name="colorPrimary">@color/dark_action_bar_color</item>
+        <!-- Status bar color -->
+        <item name="colorPrimaryDark">@color/dark_status_bar_color</item>
+        <item name="actionBarStyle">@style/ManageSpaceActionBarModern</item>
+    </style>
+    <style name="ManageSpaceActionBarModern" parent="PreferenceActionBarModern">
+        <item name="titleTextStyle">@style/WhiteHeadline1</item>
+    </style>
     <style name="ManageSpaceActivityButton">
       <item name="android:layout_width">wrap_content</item>
       <item name="android:layout_height">wrap_content</item>
@@ -274,6 +284,7 @@
     <style name="AlertDialogContent">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
+        <item name="android:textAlignment">viewStart</item>
         <item name="android:paddingStart">@dimen/dialog_padding_sides</item>
         <item name="android:paddingEnd">@dimen/dialog_padding_sides</item>
         <item name="android:paddingTop">@dimen/dialog_padding_top</item>
@@ -297,6 +308,7 @@
         <item name="android:layout_weight">1</item>
         <item name="android:background">?attr/listChoiceBackgroundIndicator</item>
         <item name="android:scaleType">center</item>
+        <item name="chrometint">@color/dark_mode_tint</item>
     </style>
     <style name="OverflowMenuAnim">
         <item name="android:windowEnterAnimation">@anim/menu_enter</item>
@@ -319,28 +331,6 @@
         <item name="android:background">
             @drawable/distilled_page_prefs_button_bg
         </item>
-    </style>
-    <style name="OverflowMenuHeaderLayout">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@color/modern_light_grey</item>
-        <item name="android:orientation">horizontal</item>
-        <item name="android:paddingStart">16dp</item>
-    </style>
-        <!-- Top and bottom padding is used to achieve layout that best matches
-         UX spec. While the text matches @style/BlankHint2, text size and color
-         are set explicitly. When shown in the overflow menu, the header
-         is inflated using the OverflowMenuTheme. The theme's textAppearance
-         will override any textAppearance set on this element. -->
-    <style name="OverflowMenuHeaderText">
-        <item name="android:layout_weight">1</item>
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_gravity">center_vertical</item>
-        <item name="android:paddingTop">9dp</item>
-        <item name="android:paddingBottom">9dp</item>
-        <item name="android:textColor">@color/black_alpha_54</item>
-        <item name="android:textSize">@dimen/text_size_medium</item>
     </style>
 
     <!-- Button bar styles -->
@@ -378,9 +368,6 @@
         <item name="android:windowEnterAnimation">@anim/textbubble_in</item>
         <item name="android:windowExitAnimation">@anim/textbubble_out</item>
     </style>
-    <style name="FullscreenNotificationBubble" parent="@android:style/Animation.Toast">
-        <item name="android:windowEnterAnimation">@anim/fullscreen_notification_in</item>
-    </style>
 
     <!-- Promo dialogs -->
     <style name="PromoDialog" >
@@ -403,21 +390,6 @@
     </style>
 
     <!-- Cast and media playback notifications -->
-    <style
-        name="MediaNotificationTitle"
-        parent="@android:style/TextAppearance.StatusBar.EventContent.Title"/>
-    <style
-        name="MediaNotificationText"
-        parent="@android:style/TextAppearance.StatusBar.EventContent"/>
-    <style
-        name="RemoteNotificationTitle"
-        parent="@android:style/TextAppearance.StatusBar.EventContent.Title"/>
-    <style
-        name="RemoteNotificationText"
-        parent="@android:style/TextAppearance.StatusBar.EventContent"/>
-    <style
-        name="RemoteNotificationProgressBar"
-        parent="@android:style/Widget.Holo.ProgressBar.Horizontal"/>
     <style name="CastMediaRouteButton" parent="@style/Widget.MediaRouter.MediaRouteButton">
         <item name="android:background">@null</item>
         <item name="android:paddingTop">0dp</item>
@@ -492,13 +464,16 @@
         <item name="android:alpha">0.6</item>
     </style>
 
-    <!-- First Run and Bookmark/recent-tabs dialogs -->
+    <!-- First Run and Bookmark/recent-tabs dialogs.
+         TODO(https://crbug.com/819142): Remove textAppearance when all TextViews have text style
+         explicitly specified. -->
     <style name="DialogWhenLargeBase" parent="Theme.AppCompat.Light.DialogWhenLarge" >
         <item name="android:windowBackground">@drawable/bg_white_dialog</item>
-        <item name="android:textColor">@color/default_text_color</item>
-        <item name="android:textColorLink">@color/light_active_color</item>
+        <item name="android:textAppearance">@style/BlackBodyDefault</item>
+        <item name="android:textColorLink">@color/default_text_color_link</item>
         <item name="colorPrimaryDark">@android:color/black</item>
         <item name="colorAccent">@color/light_active_color</item>
+        <item name="buttonStyle">@style/MainButtonStyle</item>
 
         <!-- Remove ActionBar -->
         <item name="windowNoTitle">true</item>
@@ -512,7 +487,7 @@
     </style>
 
     <style name="SigninDialogButtonStyle" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
-        <item name="android:textColor">@color/light_active_color</item>
+        <item name="android:textColor">@color/default_text_color_link</item>
     </style>
 
     <!-- Contextual Search styles -->
@@ -559,14 +534,6 @@
     </style>
 
     <!-- Payments UI -->
-    <style name="PaymentsUiSectionHeader">
-        <item name="android:textColor">@color/google_blue_700</item>
-        <item name="android:textSize">14sp</item>
-    </style>
-    <style name="PaymentsUiSectionDefaultText">
-        <item name="android:textColor">@color/default_text_color</item>
-        <item name="android:textSize">16sp</item>
-    </style>
     <style name="PaymentsUiSectionDisabledText">
         <item name="android:textColor">@color/explanation_text_color</item>
         <item name="android:textSize">16sp</item>
@@ -585,8 +552,8 @@
     <style name="PaymentsUiSectionPendingTextEndAligned" parent="PaymentsUiSectionDescriptiveTextEndAligned">
         <item name="android:textColor">@color/explanation_text_color</item>
     </style>
-    <style name="PaymentsUiSectionAddButtonLabel">
-        <item name="android:textColor">@color/light_active_color</item>
+    <style name="EditorDialogSectionAddButtonLabel">
+        <item name="android:textColor">@color/default_text_color_link</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textAllCaps">true</item>
     </style>
@@ -595,19 +562,17 @@
     <style name="LocationBarButton">
         <item name="android:background">@null</item>
     </style>
-    <style name="LocationBarButtonTablet" parent="LocationBarButton">
+    <style name="LocationBarActionButton" parent="LocationBarButton">
         <item name="android:layout_width">@dimen/location_bar_icon_width</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:scaleType">center</item>
         <item name="android:layout_gravity">end</item>
-    </style>
-    <style name="LocationBarMenuButton" parent="LocationBarButton">
-        <item name="android:layout_height">match_parent</item>
-        <item name="android:layout_width">match_parent</item>
+        <item name="chrometint">@color/dark_mode_tint</item>
     </style>
     <style name="ModernToolbar" parent="Widget.AppCompat.Toolbar">
         <item name="titleTextAppearance">@style/BlackHeadline1</item>
         <item name="windowActionBarOverlay">true</item>
+        <item name="android:background">@color/modern_primary_color</item>
     </style>
     <style name="ToolbarButton">
         <item name="android:background">?attr/selectableItemBackground</item>
@@ -617,8 +582,7 @@
     </style>
     <style name="ToolbarMenuButtonPhone" parent="ToolbarButton">
         <item name="android:layout_gravity">top</item>
-        <item name="android:layout_width">42dp</item>
-        <item name="android:paddingEnd">4dp</item>
+        <item name="android:paddingEnd">8dp</item>
         <item name="android:background">@null</item>
     </style>
     <style name="ToolbarMenuButtonTablet" parent="ToolbarButton">
@@ -641,17 +605,22 @@
         <item name="buttonColor">@color/light_active_color</item>
         <item name="buttonRaised">false</item>
     </style>
+    <!-- TODO(https://crbug.com/856244): Remove text attributes here and use textAppearance once
+         they are removed from @style/ButtonCompatBase. -->
     <style name="SigninButtonBorderlessRegular">
         <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:textColor">@color/light_active_color</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">@color/default_text_color_link</item>
         <item name="android:textSize">14sp</item>
     </style>
 
     <!-- New tab page RecyclerView overscroll color -->
     <style name="NewTabPageRecyclerView">
-        <item name="android:colorEdgeEffect">@color/google_grey_300</item>
+        <item name="android:colorEdgeEffect" tools:targetApi="21">@color/google_grey_300</item>
     </style>
 
     <!-- Modern List Item -->
@@ -677,11 +646,18 @@
         <item name="android:background">@null</item>
         <item name="android:scaleType">center</item>
     </style>
-    <style name="ListMenuStyle" parent="Widget.AppCompat.ListPopupWindow">
-        <item name="android:popupBackground">@drawable/menu_bg</item>
+    <!-- 18dp padding is added to each side to limit the image width to 20dp (56dp - 2 * 18dp). -->
+    <style name="ListItemEndIconSmall" parent="ListItemEndIcon">
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="android:scaleType">centerInside</item>
     </style>
 
     <!-- Download Home -->
+    <style name="DownloadHomeChipText">
+        <item name="android:textColor">@color/chip_text_color</item>
+        <item name="android:textSize">@dimen/text_size_medium</item>
+    </style>
     <style name="DownloadHomeStatusText">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
@@ -725,47 +701,71 @@
     <style name="DownloadIconView" parent="@style/ListItemStartIcon">
         <item name="android:background">@color/light_active_color</item>
     </style>
+    <style name="DownloadNewBadgeStyle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@color/light_active_color</item>
+        <item name="android:layout_marginStart">-8dp</item>
+        <item name="android:layout_marginTop">-2dp</item>
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingEnd">6dp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textSize">@dimen/text_size_small</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:text">@string/prefetch_badge_new</item>
+    </style>
+
+    <!-- Download Home V2 -->
+    <style name="DownloadItemText">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:singleLine">true</item>
+    </style>
 
     <!-- Data Reduction -->
-    <style name="DataReductionPrefSecondaryStyle">
-        <item name="android:textColor">?android:attr/textColorSecondary</item>
-        <item name="android:textSize">12sp</item>
-    </style>
     <style name="DataUsageBreakdownColumnLabel">
         <item name="android:layout_height">wrap_content</item>
         <item name="android:paddingBottom">10dp</item>
         <item name="android:paddingTop">10dp</item>
         <item name="android:singleLine">true</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:textAppearance">@style/RobotoMediumStyle</item>
+        <item name="android:textAppearance">@style/BlackButtonText</item>
+    </style>
+    <style name="DataUsageBreakdownSavedColumnLabel" parent="DataUsageBreakdownColumnLabel">
+        <item name="android:textAppearance">@style/BlueButtonText2</item>
     </style>
     <style name="DataUsageBreakdownColumnItem">
         <item name="android:layout_height">wrap_content</item>
         <item name="android:paddingBottom">10dp</item>
         <item name="android:paddingTop">10dp</item>
         <item name="android:singleLine">true</item>
-        <item name="android:textColor">@color/data_reduction_breakdown_text_color</item>
-        <item name="android:textSize">12sp</item>
+        <item name="android:textAppearance">@style/BlackCaption</item>
+    </style>
+    <style name="DataUsageBreakdownSavedColumnItem" parent="DataUsageBreakdownColumnItem">
+        <item name="android:textAppearance">@style/BlueLink3</item>
     </style>
 
     <!-- Incognito New Tab Page -->
     <style name="IncognitoNewTabMessage">
         <item name="android:maxWidth">660dp</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textAppearance">@style/WhiteBodyIncognito</item>
         <item name="android:lineSpacingMultiplier">1.2</item>
     </style>
-    <style name="IncognitoNewTabLearnMoreLink" parent="RobotoMediumStyle">
+    <style name="IncognitoNewTabLearnMoreLink">
         <item name="android:background">?attr/listChoiceBackgroundIndicator</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textAppearance">@style/BlueButtonText1</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:padding">16dp</item>
     </style>
 
-    <!-- Photo Picker animations -->
+    <!-- Picker Dialog animations -->
 
-    <style name="PhotoPickerDialogAnimation">
+    <style name="PickerDialogAnimation">
         <item name="android:windowEnterAnimation">@anim/design_bottom_sheet_slide_in</item>
         <item name="android:windowExitAnimation">@null</item>
     </style>
@@ -776,17 +776,20 @@
         <item name="android:background">@drawable/content_card_modern_background</item>
         <item name="android:foreground">@drawable/button_borderless_compat</item>
     </style>
-    <style name="SuggestionCardTitleModern" parent="BlackBodyDefault">
+    <style name="SuggestionCardTitleModern" parent="BlackTitle1">
         <item name="android:ellipsize">end</item>
-        <item name="leading">16sp</item>
+        <item name="leading">20sp</item>
     </style>
     <style name="SuggestionCardBodyModern" parent="BlackBody">
         <item name="android:layout_marginTop">8dp</item>
         <item name="android:ellipsize">end</item>
         <item name="leading">16sp</item>
     </style>
+    <!-- TODO(https://crbug.com/856244): Figure out why the styles in the feed library overrides
+         chrome's style and try to use BlueButtonText2 instead of text attributes here. -->
     <style name="SuggestionCardAction" parent="ButtonCompatBorderless">
-        <item name="android:textAppearance">@style/BlueButtonText2</item>
+        <item name="android:textSize">@dimen/text_size_medium</item>
+        <item name="android:textColor">@color/default_text_color_link</item>
         <item name="android:minHeight">48dp</item>
     </style>
 
@@ -800,5 +803,11 @@
     <style name="ListMenuItemStyle">
       <item name="android:paddingStart">?android:attr/listPreferredItemPaddingStart</item>
       <item name="android:paddingEnd">?android:attr/listPreferredItemPaddingEnd</item>
+    </style>
+
+    <!-- Explore sites section -->
+    <style name="ExploreSitesAction" parent="ButtonCompatBorderless">
+        <item name="android:textAppearance">@style/BlueLink2</item>
+        <item name="android:background">@drawable/explore_sites_button_background</item>
     </style>
 </resources>

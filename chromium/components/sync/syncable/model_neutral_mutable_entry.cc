@@ -336,29 +336,6 @@ void ModelNeutralMutableEntry::PutUniqueBookmarkTag(const std::string& tag) {
   MarkDirty();
 }
 
-void ModelNeutralMutableEntry::PutUniqueNotesTag(const std::string& tag) {
-  // This unique tag will eventually be used as the unique suffix when adjusting
-  // this bookmark's position.  Let's make sure it's a valid suffix.
-  if (!UniquePosition::IsValidSuffix(tag)) {
-    NOTREACHED();
-    return;
-  }
-
-  if (!kernel_->ref(UNIQUE_NOTES_TAG).empty() &&
-      tag != kernel_->ref(UNIQUE_NOTES_TAG)) {
-    // There is only one scenario where our tag is expected to change.  That
-    // scenario occurs when our current tag is a non-correct tag assigned during
-    // the UniquePosition migration.
-    std::string migration_generated_tag =
-        GenerateSyncableNotesHash(std::string(),
-                                     kernel_->ref(ID).GetServerId());
-    DCHECK_EQ(migration_generated_tag, kernel_->ref(UNIQUE_NOTES_TAG));
-  }
-
-  kernel_->put(UNIQUE_NOTES_TAG, tag);
-  kernel_->mark_dirty(&dir()->kernel()->dirty_metahandles);
-}
-
 void ModelNeutralMutableEntry::PutServerSpecifics(
     const sync_pb::EntitySpecifics& value) {
   DCHECK(kernel_);
@@ -438,25 +415,6 @@ void ModelNeutralMutableEntry::PutServerUniquePosition(
     DCHECK(value.IsValid());
     ScopedKernelLock lock(dir());
     kernel_->put(SERVER_UNIQUE_POSITION, value);
-    MarkDirty();
-  }
-}
-
-void ModelNeutralMutableEntry::PutServerAttachmentMetadata(
-    const sync_pb::AttachmentMetadata& value) {
-  DCHECK(kernel_);
-  const std::string& serialized_value = value.SerializeAsString();
-  if (serialized_value !=
-      kernel_->ref(SERVER_ATTACHMENT_METADATA).SerializeAsString()) {
-    base_write_transaction_->TrackChangesTo(kernel_);
-    // Check for potential sharing - SERVER_ATTACHMENT_METADATA is often
-    // copied from ATTACHMENT_METADATA.
-    if (serialized_value ==
-        kernel_->ref(ATTACHMENT_METADATA).SerializeAsString()) {
-      kernel_->copy(ATTACHMENT_METADATA, SERVER_ATTACHMENT_METADATA);
-    } else {
-      kernel_->put(SERVER_ATTACHMENT_METADATA, value);
-    }
     MarkDirty();
   }
 }

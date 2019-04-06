@@ -5,9 +5,9 @@
 #import "ios/web/net/crw_ssl_status_updater.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "ios/web/navigation/navigation_item_impl.h"
+#import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/navigation/navigation_manager_util.h"
-#import "ios/web/public/navigation_item.h"
-#import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
 #include "net/cert/x509_certificate.h"
@@ -27,7 +27,7 @@ using web::SecurityStyle;
 }
 
 // Unowned pointer to web::NavigationManager.
-@property(nonatomic, readonly) web::NavigationManager* navigationManager;
+@property(nonatomic, readonly) web::NavigationManagerImpl* navigationManager;
 
 // Updates |security_style| and |cert_status| for the NavigationItem with ID
 // |navigationItemID|, if URL and certificate chain still match |host| and
@@ -56,7 +56,8 @@ using web::SecurityStyle;
 #pragma mark - Public
 
 - (instancetype)initWithDataSource:(id<CRWSSLStatusUpdaterDataSource>)dataSource
-                 navigationManager:(web::NavigationManager*)navigationManager {
+                 navigationManager:
+                     (web::NavigationManagerImpl*)navigationManager {
   DCHECK(dataSource);
   DCHECK(navigationManager);
   if (self = [super init]) {
@@ -89,7 +90,7 @@ using web::SecurityStyle;
       item->GetSSL().cert_status_host = base::SysNSStringToUTF8(host);
       // Only recompute the SSLStatus information if the certificate or host has
       // since changed. Host can be changed in case of redirect.
-      if (!oldCert || !oldCert->Equals(cert.get()) ||
+      if (!oldCert || !oldCert->EqualsIncludingChain(cert.get()) ||
           oldHost != item->GetSSL().cert_status_host) {
         // Real SSL status is unknown, reset cert status and security style.
         // They will be asynchronously updated in
@@ -137,7 +138,7 @@ using web::SecurityStyle;
   std::string GURLHost = base::SysNSStringToUTF8(host);
   web::SSLStatus& SSLStatus = item->GetSSL();
   if (item->GetURL().SchemeIsCryptographic() && !!SSLStatus.certificate &&
-      SSLStatus.certificate->Equals(cert.get()) &&
+      SSLStatus.certificate->EqualsIncludingChain(cert.get()) &&
       item->GetURL().host() == GURLHost) {
     web::SSLStatus previousSSLStatus = item->GetSSL();
     SSLStatus.cert_status = certStatus;

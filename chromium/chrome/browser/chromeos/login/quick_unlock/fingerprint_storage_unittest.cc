@@ -23,13 +23,16 @@ class FingerprintStorageUnitTest : public testing::Test {
   ~FingerprintStorageUnitTest() override {}
 
   // testing::Test:
-  void SetUp() override {
-    quick_unlock::EnableForTesting(quick_unlock::PinStorageType::kPrefs);
-  }
+  void SetUp() override { quick_unlock::EnableForTesting(); }
 
   void SetRecords(int records_number) {
     profile_->GetPrefs()->SetInteger(prefs::kQuickUnlockFingerprintRecord,
                                      records_number);
+  }
+
+  void SetAuthenticationPref(bool enabled) {
+    profile_->GetPrefs()->SetBoolean(prefs::kEnableQuickUnlockFingerprint,
+                                     enabled);
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
@@ -79,8 +82,9 @@ TEST_F(FingerprintStorageUnitTest, UnlockAttemptCount) {
 }
 
 // Verifies that authentication is not available when
-// 1. No fingerprint records registered
-// 2. Too many authentication attempts
+// 1. Authentication pref is disabled.
+// 2. No fingerprint records registered.
+// 3. Too many authentication attempts.
 TEST_F(FingerprintStorageUnitTest, AuthenticationUnAvailable) {
   quick_unlock::FingerprintStorage* fingerprint_storage =
       quick_unlock::QuickUnlockFactory::GetForProfile(profile_.get())
@@ -91,6 +95,10 @@ TEST_F(FingerprintStorageUnitTest, AuthenticationUnAvailable) {
   SetRecords(1);
   EXPECT_TRUE(fingerprint_storage->HasRecord());
   EXPECT_EQ(0, fingerprint_storage->unlock_attempt_count());
+
+  // Authentication pref is disabled by default.
+  EXPECT_FALSE(test_api.IsFingerprintAuthenticationAvailable());
+  SetAuthenticationPref(true /*enabled*/);
   EXPECT_TRUE(test_api.IsFingerprintAuthenticationAvailable());
 
   // No fingerprint records registered makes fingerprint authentication

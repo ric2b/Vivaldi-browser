@@ -9,11 +9,9 @@
 #include <vector>
 
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/data_use_measurement/chrome_data_use_recorder.h"
 #include "chrome/browser/data_use_measurement/page_load_capping/chrome_page_load_capping_features.h"
-#include "chrome/browser/data_use_measurement/page_load_capping/page_load_observer.h"
 #include "components/data_use_measurement/content/content_url_request_classifier.h"
 #include "components/data_use_measurement/core/data_use_recorder.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
@@ -22,7 +20,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_request_info.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "ipc/ipc_message.h"
 #include "net/url_request/url_request.h"
 
@@ -52,12 +49,6 @@ ChromeDataUseAscriber::MainRenderFrameEntry::~MainRenderFrameEntry() {}
 
 ChromeDataUseAscriber::ChromeDataUseAscriber() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  if (base::FeatureList::IsEnabled(
-          page_load_capping::features::kDetectingHeavyPages)) {
-    page_capping_observer_ =
-        std::make_unique<page_load_capping::PageLoadObserver>();
-    AddObserver(page_capping_observer_.get());
-  }
 }
 
 ChromeDataUseAscriber::~ChromeDataUseAscriber() {
@@ -155,9 +146,6 @@ ChromeDataUseAscriber::GetOrCreateDataUseRecorderEntry(
       request, &render_process_id, &render_frame_id);
   if (has_valid_frame &&
       render_frame_id != SpecialRoutingIDs::MSG_ROUTING_NONE) {
-    DCHECK(content::IsBrowserSideNavigationEnabled() ||
-           render_process_id >= 0 || render_frame_id >= 0);
-
     // Browser tests may not set up DataUseWebContentsObservers in which case
     // this class never sees navigation and frame events so DataUseRecorders
     // will never be destroyed. To avoid this, we ignore requests whose

@@ -119,7 +119,8 @@ class IdentityInternalsTokenRevoker : public GaiaAuthConsumer {
   const std::string& extension_id() const { return extension_id_; }
 
   // GaiaAuthConsumer implementation.
-  void OnOAuth2RevokeTokenCompleted() override;
+  void OnOAuth2RevokeTokenCompleted(
+      GaiaAuthConsumer::TokenRevocationStatus status) override;
 
  private:
   // An object used to start a token revoke request.
@@ -249,12 +250,15 @@ void IdentityInternalsUIMessageHandler::GetInfoForAllTokens(
 }
 
 void IdentityInternalsUIMessageHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("identityInternalsGetTokens",
-      base::Bind(&IdentityInternalsUIMessageHandler::GetInfoForAllTokens,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("identityInternalsRevokeToken",
-      base::Bind(&IdentityInternalsUIMessageHandler::RevokeToken,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "identityInternalsGetTokens",
+      base::BindRepeating(
+          &IdentityInternalsUIMessageHandler::GetInfoForAllTokens,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "identityInternalsRevokeToken",
+      base::BindRepeating(&IdentityInternalsUIMessageHandler::RevokeToken,
+                          base::Unretained(this)));
 }
 
 void IdentityInternalsUIMessageHandler::RevokeToken(
@@ -272,8 +276,9 @@ IdentityInternalsTokenRevoker::IdentityInternalsTokenRevoker(
     const std::string& access_token,
     Profile* profile,
     IdentityInternalsUIMessageHandler* consumer)
-    : fetcher_(this, GaiaConstants::kChromeSource,
-               profile->GetRequestContext()),
+    : fetcher_(this,
+               GaiaConstants::kChromeSource,
+               profile->GetURLLoaderFactory()),
       extension_id_(extension_id),
       access_token_(access_token),
       consumer_(consumer) {
@@ -283,7 +288,8 @@ IdentityInternalsTokenRevoker::IdentityInternalsTokenRevoker(
 
 IdentityInternalsTokenRevoker::~IdentityInternalsTokenRevoker() {}
 
-void IdentityInternalsTokenRevoker::OnOAuth2RevokeTokenCompleted() {
+void IdentityInternalsTokenRevoker::OnOAuth2RevokeTokenCompleted(
+    GaiaAuthConsumer::TokenRevocationStatus status) {
   consumer_->OnTokenRevokerDone(this);
 }
 

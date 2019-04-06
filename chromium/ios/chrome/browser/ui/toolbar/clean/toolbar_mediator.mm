@@ -8,10 +8,13 @@
 #include "base/scoped_observer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
+#import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_consumer.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
+#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/web_client.h"
@@ -40,7 +43,6 @@
 
 @synthesize bookmarkModel = _bookmarkModel;
 @synthesize consumer = _consumer;
-@synthesize voiceSearchProvider = _voiceSearchProvider;
 @synthesize webState = _webState;
 @synthesize webStateList = _webStateList;
 
@@ -61,6 +63,8 @@
 
 - (void)updateConsumerForWebState:(web::WebState*)webState {
   [self updateNavigationBackAndForwardStateForWebState:webState];
+  [self updateShareMenuForWebState:webState];
+  [self updateBookmarksForWebState:webState];
 }
 
 - (void)disconnect {
@@ -119,6 +123,16 @@
   [self.consumer setLoadingProgressFraction:progress];
 }
 
+- (void)webStateDidChangeBackForwardState:(web::WebState*)webState {
+  DCHECK_EQ(_webState, webState);
+  [self updateConsumer];
+}
+
+- (void)webStateDidChangeVisibleSecurityState:(web::WebState*)webState {
+  DCHECK_EQ(_webState, webState);
+  [self updateConsumer];
+}
+
 - (void)webStateDestroyed:(web::WebState*)webState {
   DCHECK_EQ(_webState, webState);
   _webState->RemoveObserver(_webStateObserver.get());
@@ -132,14 +146,15 @@
               atIndex:(int)index
            activating:(BOOL)activating {
   DCHECK_EQ(_webStateList, webStateList);
-  [self.consumer setTabCount:_webStateList->count()];
+  [self.consumer setTabCount:_webStateList->count()
+           addedInBackground:!activating];
 }
 
 - (void)webStateList:(WebStateList*)webStateList
     didDetachWebState:(web::WebState*)webState
               atIndex:(int)index {
   DCHECK_EQ(_webStateList, webStateList);
-  [self.consumer setTabCount:_webStateList->count()];
+  [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
 }
 
 - (void)webStateList:(WebStateList*)webStateList
@@ -152,14 +167,6 @@
 }
 
 #pragma mark - Setters
-
-- (void)setVoiceSearchProvider:(VoiceSearchProvider*)voiceSearchProvider {
-  _voiceSearchProvider = voiceSearchProvider;
-  if (_voiceSearchProvider) {
-    [self.consumer
-        setVoiceSearchEnabled:_voiceSearchProvider->IsVoiceSearchEnabled()];
-  }
-}
 
 - (void)setWebState:(web::WebState*)webState {
   if (_webState) {
@@ -179,15 +186,14 @@
 
 - (void)setConsumer:(id<ToolbarConsumer>)consumer {
   _consumer = consumer;
-  if (self.voiceSearchProvider) {
-    [consumer
-        setVoiceSearchEnabled:self.voiceSearchProvider->IsVoiceSearchEnabled()];
-  }
+  [_consumer setVoiceSearchEnabled:ios::GetChromeBrowserProvider()
+                                       ->GetVoiceSearchProvider()
+                                       ->IsVoiceSearchEnabled()];
   if (self.webState) {
     [self updateConsumer];
   }
   if (self.webStateList) {
-    [self.consumer setTabCount:_webStateList->count()];
+    [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
   }
 }
 
@@ -205,7 +211,7 @@
     _webStateList->AddObserver(_webStateListObserver.get());
 
     if (self.consumer) {
-      [self.consumer setTabCount:_webStateList->count()];
+      [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
     }
   }
 }
@@ -229,9 +235,11 @@
   DCHECK(self.webState);
   DCHECK(self.consumer);
   [self updateConsumerForWebState:self.webState];
+
+  [self.consumer setIsNTP:IsVisibleUrlNewTabPage(self.webState)];
   [self.consumer setLoadingState:self.webState->IsLoading()];
-  [self updateBookmarks];
-  [self updateShareMenu];
+  [self updateBookmarksForWebState:self.webState];
+  [self updateShareMenuForWebState:self.webState];
 }
 
 // Updates the consumer with the new forward and back states.
@@ -244,17 +252,17 @@
 }
 
 // Updates the bookmark state of the consumer.
-- (void)updateBookmarks {
+- (void)updateBookmarksForWebState:(web::WebState*)webState {
   if (self.webState) {
-    GURL URL = self.webState->GetVisibleURL();
+    GURL URL = webState->GetVisibleURL();
     [self.consumer setPageBookmarked:self.bookmarkModel &&
                                      self.bookmarkModel->IsBookmarked(URL)];
   }
 }
 
-// Uodates the Share Menu button of the consumer.
-- (void)updateShareMenu {
-  const GURL& URL = self.webState->GetLastCommittedURL();
+// Updates the Share Menu button of the consumer.
+- (void)updateShareMenuForWebState:(web::WebState*)webState {
+  const GURL& URL = webState->GetLastCommittedURL();
   BOOL shareMenuEnabled =
       URL.is_valid() && !web::GetWebClient()->IsAppSpecificURL(URL);
   [self.consumer setShareMenuEnabled:shareMenuEnabled];
@@ -266,18 +274,18 @@
 // toolbar so the star highlight is kept in sync.
 - (void)bookmarkNodeChildrenChanged:
     (const bookmarks::BookmarkNode*)bookmarkNode {
-  [self updateBookmarks];
+  [self updateBookmarksForWebState:self.webState];
 }
 
 // If all bookmarks are removed, update the toolbar so the star highlight is
 // kept in sync.
 - (void)bookmarkModelRemovedAllNodes {
-  [self updateBookmarks];
+  [self updateBookmarksForWebState:self.webState];
 }
 
 // In case we are on a bookmarked page before the model is loaded.
 - (void)bookmarkModelLoaded {
-  [self updateBookmarks];
+  [self updateBookmarksForWebState:self.webState];
 }
 
 - (void)bookmarkNodeChanged:(const bookmarks::BookmarkNode*)bookmarkNode {

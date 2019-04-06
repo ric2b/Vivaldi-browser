@@ -25,13 +25,25 @@ class CredentialsFilter {
       std::vector<std::unique_ptr<autofill::PasswordForm>> results) const = 0;
 
   // Should |form| be offered to be saved?
-  virtual bool ShouldSave(const autofill::PasswordForm& form,
-                          const GURL& main_frame_url) const = 0;
+  virtual bool ShouldSave(const autofill::PasswordForm& form) const = 0;
+
+  // Returns true if the hash of the password in |form| should be saved for Gaia
+  // password reuse checking.
+  virtual bool ShouldSaveGaiaPasswordHash(
+      const autofill::PasswordForm& form) const = 0;
+
+  // Returns true if the hash of the password in |form| should be saved for
+  // enterprise password reuse checking.
+  virtual bool ShouldSaveEnterprisePasswordHash(
+      const autofill::PasswordForm& form) const = 0;
 
   // Call this if the form associated with |form_manager| was filled, and the
   // subsequent sign-in looked like a success.
   virtual void ReportFormLoginSuccess(
       const PasswordFormManager& form_manager) const {}
+
+  // If |username| matches Chrome sync account email.
+  virtual bool IsSyncAccountEmail(const std::string& username) const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CredentialsFilter);

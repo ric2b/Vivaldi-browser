@@ -36,6 +36,10 @@ Polymer({
         this.onDefaultSettingChanged_.bind(this));
   },
 
+  shouldHideCategory_: function(category) {
+    return !this.getCategoryList().includes(category);
+  },
+
   /**
    * Updates the drop-down value after |site| has changed.
    * @param {!RawSiteException} site The site to display.
@@ -101,6 +105,7 @@ Polymer({
    * @param {string} askString 'Ask' label, e.g. 'Ask (default)'.
    * @param {string} allowString 'Allow' label, e.g. 'Allow (default)'.
    * @param {string} blockString 'Block' label, e.g. 'Blocked (default)'.
+   * @return {string}
    * @private
    */
   defaultSettingString_: function(
@@ -172,6 +177,32 @@ Polymer({
   },
 
   /**
+   * Returns true if the 'allow' option should be shown.
+   * @param {!settings.ContentSettingsTypes} category The permission type.
+   * @return {boolean}
+   * @private
+   */
+  showAllowedSetting_: function(category) {
+    return category != settings.ContentSettingsTypes.USB_DEVICES;
+  },
+
+  /**
+   * Returns true if the 'ask' option should be shown.
+   * @param {!settings.ContentSettingsTypes} category The permission type.
+   * @param {!settings.ContentSetting} setting The setting of the permission.
+   * @param {!settings.SiteSettingSource} source The source of the permission.
+   * @return {boolean}
+   * @private
+   */
+  showAskSetting_: function(category, setting, source) {
+    // For chooser-based permissions 'ask' takes the place of 'allow'.
+    if (category == settings.ContentSettingsTypes.USB_DEVICES)
+      return true;
+
+    return this.isNonDefaultAsk_(setting, source);
+  },
+
+  /**
    * Returns true if the permission is set to a non-default 'ask'. Currently,
    * this only gets called when |this.site| is updated.
    * @param {!settings.ContentSetting} setting The setting of the permission.
@@ -220,6 +251,9 @@ Polymer({
       extensionAllowString, extensionBlockString, extensionAskString,
       policyAllowString, policyBlockString, policyAskString,
       drmDisabledString) {
+    if (source == undefined || category == undefined || setting == undefined)
+      return null;
+
     /** @type {Object<!settings.ContentSetting, ?string>} */
     const extensionStrings = {};
     extensionStrings[settings.ContentSetting.ALLOW] = extensionAllowString;

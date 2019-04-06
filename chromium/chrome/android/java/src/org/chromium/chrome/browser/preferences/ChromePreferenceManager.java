@@ -10,6 +10,9 @@ import android.os.StrictMode;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.crash.MinidumpUploadService.ProcessType;
 
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
@@ -17,7 +20,68 @@ import java.util.Set;
  * ChromePreferenceManager stores and retrieves various values in Android shared preferences.
  */
 public class ChromePreferenceManager {
-    private static final String TAG = "preferences";
+    // For new int values with a default of 0, just document the key and its usage, and call
+    // #readInt and #writeInt directly.
+
+    /** An all-time counter of taps that triggered the Contextual Search peeking panel. */
+    public static final String CONTEXTUAL_SEARCH_ALL_TIME_TAP_COUNT =
+            "contextual_search_all_time_tap_count";
+    /** An all-time counter of Contextual Search panel opens triggered by any gesture.*/
+    public static final String CONTEXTUAL_SEARCH_ALL_TIME_OPEN_COUNT =
+            "contextual_search_all_time_open_count";
+    /**
+     * The number of times a tap gesture caused a Contextual Search Quick Answer to be shown.
+     * Cumulative, starting at M-69.
+     */
+    public static final String CONTEXTUAL_SEARCH_ALL_TIME_TAP_QUICK_ANSWER_COUNT =
+            "contextual_search_all_time_tap_quick_answer_count";
+    /**
+     * The number of times that a tap triggered the Contextual Search panel to peek since the last
+     * time the panel was opened.  Note legacy string value without "open".
+     */
+    public static final String CONTEXTUAL_SEARCH_TAP_SINCE_OPEN_COUNT =
+            "contextual_search_tap_count";
+    /**
+     * The number of times a tap gesture caused a Contextual Search Quick Answer to be shown since
+     * the last time the panel was opened.  Note legacy string value without "open".
+     */
+    public static final String CONTEXTUAL_SEARCH_TAP_SINCE_OPEN_QUICK_ANSWER_COUNT =
+            "contextual_search_tap_quick_answer_count";
+    /**
+     * The number of times the Contextual Search panel was opened with the opt-in promo visible.
+     */
+    public static final String CONTEXTUAL_SEARCH_PROMO_OPEN_COUNT =
+            "contextual_search_promo_open_count";
+    /**
+     * The entity-data impressions count for Contextual Search, i.e. thumbnails shown in the Bar.
+     * Cumulative, starting at M-69.
+     */
+    public static final String CONTEXTUAL_SEARCH_ENTITY_IMPRESSIONS_COUNT =
+            "contextual_search_entity_impressions_count";
+    /**
+     * The entity-data opens count for Contextual Search, e.g. Panel opens following thumbnails
+     * shown in the Bar. Cumulative, starting at M-69.
+     */
+    public static final String CONTEXTUAL_SEARCH_ENTITY_OPENS_COUNT =
+            "contextual_search_entity_opens_count";
+    /**
+     * The Quick Action impressions count for Contextual Search, i.e. actions presented in the Bar.
+     * Cumulative, starting at M-69.
+     */
+    public static final String CONTEXTUAL_SEARCH_QUICK_ACTION_IMPRESSIONS_COUNT =
+            "contextual_search_quick_action_impressions_count";
+    /**
+     * The Quick Actions taken count for Contextual Search, i.e. phone numbers dialed and similar
+     * actions. Cumulative, starting at M-69.
+     */
+    public static final String CONTEXTUAL_SEARCH_QUICK_ACTIONS_TAKEN_COUNT =
+            "contextual_search_quick_actions_taken_count";
+    /**
+     * The Quick Actions ignored count, i.e. phone numbers available but not dialed.
+     * Cumulative, starting at M-69.
+     */
+    public static final String CONTEXTUAL_SEARCH_QUICK_ACTIONS_IGNORED_COUNT =
+            "contextual_search_quick_actions_ignored_count";
 
     private static final String PROMOS_SKIPPED_ON_FIRST_START = "promos_skipped_on_first_start";
     private static final String SIGNIN_PROMO_LAST_SHOWN_MAJOR_VERSION =
@@ -26,17 +90,10 @@ public class ChromePreferenceManager {
             "signin_promo_last_shown_account_names";
     private static final String ALLOW_LOW_END_DEVICE_UI = "allow_low_end_device_ui";
     private static final String PREF_WEBSITE_SETTINGS_FILTER = "website_settings_filter";
-    private static final String CARDS_IMPRESSION_AFTER_ANIMATION =
-            "cards_impression_after_animation";
-    private static final String CONTEXTUAL_SEARCH_PROMO_OPEN_COUNT =
-            "contextual_search_promo_open_count";
     private static final String CONTEXTUAL_SEARCH_TAP_TRIGGERED_PROMO_COUNT =
             "contextual_search_tap_triggered_promo_count";
-    private static final String CONTEXTUAL_SEARCH_TAP_COUNT = "contextual_search_tap_count";
     private static final String CONTEXTUAL_SEARCH_LAST_ANIMATION_TIME =
             "contextual_search_last_animation_time";
-    private static final String CONTEXTUAL_SEARCH_TAP_QUICK_ANSWER_COUNT =
-            "contextual_search_tap_quick_answer_count";
     private static final String CONTEXTUAL_SEARCH_CURRENT_WEEK_NUMBER =
             "contextual_search_current_week_number";
     private static final String CHROME_HOME_ENABLED_KEY = "chrome_home_enabled";
@@ -45,6 +102,16 @@ public class ChromePreferenceManager {
             "chrome_home_opt_out_snackbar_shown";
 
     private static final String CHROME_DEFAULT_BROWSER = "applink.chrome_default_browser";
+    private static final String CHROME_MODERN_DESIGN_ENABLED_KEY = "chrome_modern_design_enabled";
+
+    private static final String HOME_PAGE_BUTTON_FORCE_ENABLED_KEY =
+            "home_page_button_force_enabled";
+    private static final String HOMEPAGE_TILE_ENABLED_KEY = "homepage_tile_enabled";
+
+    private static final String NTP_BUTTON_ENABLED_KEY = "ntp_button_enabled";
+    private static final String NTP_BUTTON_VARIANT_KEY = "ntp_button_variant";
+
+    private static final String BOTTOM_TOOLBAR_ENABLED_KEY = "bottom_toolbar_enabled";
 
     private static final String CONTENT_SUGGESTIONS_SHOWN_KEY = "content_suggestions_shown";
 
@@ -55,7 +122,6 @@ public class ChromePreferenceManager {
             "ntp.personalized_signin_promo_dismissed";
     private static final String NTP_SIGNIN_PROMO_SUPPRESSION_PERIOD_START =
             "ntp.signin_promo_suppression_period_start";
-    private static final String NTP_ANIMATION_RUN_COUNT = "ntp_recycler_view_animation_run_count";
 
     private static final String SUCCESS_UPLOAD_SUFFIX = "_crash_success_upload";
     private static final String FAILURE_UPLOAD_SUFFIX = "_crash_failure_upload";
@@ -64,9 +130,18 @@ public class ChromePreferenceManager {
 
     public static final String CHROME_HOME_INFO_PROMO_SHOWN_KEY = "chrome_home_info_promo_shown";
 
-    private static final String CHROME_HOME_MENU_ITEM_CLICK_COUNT_KEY =
-            "chrome_home_menu_item_click_count";
     private static final String SOLE_INTEGRATION_ENABLED_KEY = "sole_integration_enabled";
+
+    private static final String COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY =
+            "command_line_on_non_rooted_enabled";
+
+    private static final String VERIFIED_DIGITAL_ASSET_LINKS =
+            "verified_digital_asset_links";
+    private static final String TRUSTED_WEB_ACTIVITY_LAST_DISCLOSURE_TIME =
+            "trusted_web_activity_last_disclosure_time:";
+
+    private static final String SHOULD_REGISTER_VR_ASSETS_COMPONENT_ON_STARTUP =
+            "should_register_vr_assets_component_on_startup";
 
     private static class LazyHolder {
         static final ChromePreferenceManager INSTANCE = new ChromePreferenceManager();
@@ -213,21 +288,6 @@ public class ChromePreferenceManager {
     }
 
     /**
-     * @return Number of times the panel was opened with the promo visible.
-     */
-    public int getContextualSearchPromoOpenCount() {
-        return mSharedPreferences.getInt(CONTEXTUAL_SEARCH_PROMO_OPEN_COUNT, 0);
-    }
-
-    /**
-     * Sets the number of times the panel was opened with the promo visible.
-     * @param count Number of times the panel was opened with a promo visible.
-     */
-    public void setContextualSearchPromoOpenCount(int count) {
-        writeInt(CONTEXTUAL_SEARCH_PROMO_OPEN_COUNT, count);
-    }
-
-    /**
      * @return The last time the search provider icon was animated on tap.
      */
     public long getContextualSearchLastAnimationTime() {
@@ -260,41 +320,6 @@ public class ChromePreferenceManager {
      */
     public void setContextualSearchTapTriggeredPromoCount(int count) {
         writeInt(CONTEXTUAL_SEARCH_TAP_TRIGGERED_PROMO_COUNT, count);
-    }
-
-    /**
-     * @return Number of tap gestures that have been received since the last time the panel was
-     *         opened.
-     */
-    public int getContextualSearchTapCount() {
-        return mSharedPreferences.getInt(CONTEXTUAL_SEARCH_TAP_COUNT, 0);
-    }
-
-    /**
-     * Sets the number of tap gestures that have been received since the last time the panel was
-     * opened.
-     * @param count Number of taps that have been received since the last time the panel was opened.
-     */
-    public void setContextualSearchTapCount(int count) {
-        writeInt(CONTEXTUAL_SEARCH_TAP_COUNT, count);
-    }
-
-    /**
-     * @return Number of Tap triggered Quick Answers (that "do answer") that have been shown since
-     *         the last time the panel was opened.
-     */
-    public int getContextualSearchTapQuickAnswerCount() {
-        return mSharedPreferences.getInt(CONTEXTUAL_SEARCH_TAP_QUICK_ANSWER_COUNT, 0);
-    }
-
-    /**
-     * Sets the number of tap triggered Quick Answers (that "do answer") that have been shown since
-     * the last time the panel was opened.
-     * @param count Number of Tap triggered Quick Answers (that "do answer") that have been shown
-     *              since the last time the panel was opened.
-     */
-    public void setContextualSearchTapQuickAnswerCount(int count) {
-        writeInt(CONTEXTUAL_SEARCH_TAP_QUICK_ANSWER_COUNT, count);
     }
 
     /**
@@ -366,24 +391,68 @@ public class ChromePreferenceManager {
         removeKey(NTP_SIGNIN_PROMO_SUPPRESSION_PERIOD_START);
     }
 
-    /** Gets the number of times the New Tab Page first card animation has been run. */
-    public int getNewTabPageFirstCardAnimationRunCount() {
-        return readInt(NTP_ANIMATION_RUN_COUNT);
+    /**
+     * Set whether or not the new tab page button is enabled.
+     * @param isEnabled If the new tab page button is enabled.
+     */
+    public void setNewTabPageButtonEnabled(boolean isEnabled) {
+        writeBoolean(NTP_BUTTON_ENABLED_KEY, isEnabled);
     }
 
-    /** Records the number of times the New Tab Page first card animation has been run. */
-    public void setNewTabPageFirstCardAnimationRunCount(int value) {
-        writeInt(NTP_ANIMATION_RUN_COUNT, value);
+    /**
+     * Set the new tab page button variant.
+     * @param variant The new tab page button variant.
+     */
+    public void setNewTabPageButtonVariant(String variant) {
+        writeString(NTP_BUTTON_VARIANT_KEY, variant);
     }
 
-    /** Returns whether the user has triggered a snippet impression after viewing the animation. */
-    public boolean getCardsImpressionAfterAnimation() {
-        return mSharedPreferences.getBoolean(CARDS_IMPRESSION_AFTER_ANIMATION, false);
+    /**
+     * Get the variant of the new tab page button.
+     * @return The stored variant of the new tab page button or the empty string if nothing is
+     *         stored.
+     */
+    public String getNewTabPageButtonVariant() {
+        return mSharedPreferences.getString(NTP_BUTTON_VARIANT_KEY, "");
     }
 
-    /** Sets whether the user has triggered a snippet impression after viewing the animation. */
-    public void setCardsImpressionAfterAnimation(boolean isScrolled) {
-        writeBoolean(CARDS_IMPRESSION_AFTER_ANIMATION, isScrolled);
+    /**
+     * Get whether or not the new tab page button is enabled.
+     * @return True if the new tab page button is enabled.
+     */
+    public boolean isNewTabPageButtonEnabled() {
+        return mSharedPreferences.getBoolean(NTP_BUTTON_ENABLED_KEY, false);
+    }
+
+    /**
+     * Set whether or not the bottom toolbar is enabled.
+     * @param isEnabled If the bottom toolbar is enabled.
+     */
+    public void setBottomToolbarEnabled(boolean isEnabled) {
+        writeBoolean(BOTTOM_TOOLBAR_ENABLED_KEY, isEnabled);
+    }
+
+    /**
+     * Get whether or not the bottom toolbar is enabled.
+     * @return True if the bottom toolbar is enabled.
+     */
+    public boolean isBottomToolbarEnabled() {
+        return mSharedPreferences.getBoolean(BOTTOM_TOOLBAR_ENABLED_KEY, false);
+    }
+
+    /**
+     * Set whether or not Chrome modern design is enabled.
+     * @param isEnabled Whether the feature is enabled.
+     */
+    public void setChromeModernDesignEnabled(boolean isEnabled) {
+        writeBoolean(CHROME_MODERN_DESIGN_ENABLED_KEY, isEnabled);
+    }
+
+    /**
+     * @return Whether Chrome modern design is enabled.
+     */
+    public boolean isChromeModernDesignEnabled() {
+        return mSharedPreferences.getBoolean(CHROME_MODERN_DESIGN_ENABLED_KEY, false);
     }
 
     /**
@@ -403,90 +472,62 @@ public class ChromePreferenceManager {
     }
 
     /**
-     * Set whether or not Chrome Home is enabled by the user.
-     * @param isEnabled If Chrome Home is enabled by the user.
+     * Set whether or not the home page button is force enabled.
+     * @param isEnabled If the home page button is force enabled.
      */
-    public void setChromeHomeUserEnabled(boolean isEnabled) {
-        writeBoolean(CHROME_HOME_USER_ENABLED_KEY, isEnabled);
+    public void setHomePageButtonForceEnabled(boolean isEnabled) {
+        writeBoolean(HOME_PAGE_BUTTON_FORCE_ENABLED_KEY, isEnabled);
     }
 
     /**
-     * Get whether or not Chrome Home is enabled by the user.
-     * @return True if Chrome Home is enabled by the user.
+     * Get whether or not the home page button is force enabled.
+     * @return True if the home page button is force enabled.
      */
-    public boolean isChromeHomeUserEnabled() {
-        return mSharedPreferences.getBoolean(CHROME_HOME_USER_ENABLED_KEY, false);
+    public boolean isHomePageButtonForceEnabled() {
+        return mSharedPreferences.getBoolean(HOME_PAGE_BUTTON_FORCE_ENABLED_KEY, false);
     }
 
     /**
-     * @return Whether or not the user has set their Chrome Home preference.
+     * Set whether or not the homepage tile will be shown.
+     * @param isEnabled If homepage tile is enabled.
      */
-    public boolean isChromeHomeUserPreferenceSet() {
-        return mSharedPreferences.contains(CHROME_HOME_USER_ENABLED_KEY);
+    public void setHomepageTileEnabled(boolean isEnabled) {
+        writeBoolean(HOMEPAGE_TILE_ENABLED_KEY, isEnabled);
     }
 
     /**
-     * Remove the Chrome Home user preference.
+     * Get whether or not the homepage tile is enabled.
+     * @return True if the homepage tile is enabled.
      */
-    public void clearChromeHomeUserPreference() {
+    public boolean isHomepageTileEnabled() {
+        return mSharedPreferences.getBoolean(HOMEPAGE_TILE_ENABLED_KEY, false);
+    }
+
+    /**
+     * Clean up unused Chrome Home preferences.
+     */
+    public void clearObsoleteChromeHomePrefs() {
         removeKey(CHROME_HOME_USER_ENABLED_KEY);
-    }
-
-    /**
-     * Set that the Chrome Home info-promo has been shown.
-     */
-    public void setChromeHomeInfoPromoShown() {
-        writeBoolean(CHROME_HOME_INFO_PROMO_SHOWN_KEY, true);
-    }
-
-    /**
-     * @return Whether the info-only version of the Chrome Home promo has been shown.
-     */
-    public boolean hasChromeHomeInfoPromoShown() {
-        return mSharedPreferences.getBoolean(CHROME_HOME_INFO_PROMO_SHOWN_KEY, false);
-    }
-
-    /**
-     * Mark that the Chrome Home opt-out snackbar has been shown.
-     */
-    public void setChromeHomeOptOutSnackbarShown() {
-        writeBoolean(CHROME_HOME_OPT_OUT_SNACKBAR_SHOWN, true);
-    }
-
-    /**
-     * @return Whether the Chrome Home opt-out snackbar has been shown.
-     */
-    public boolean getChromeHomeOptOutSnackbarShown() {
-        return mSharedPreferences.getBoolean(CHROME_HOME_OPT_OUT_SNACKBAR_SHOWN, false);
-    }
-
-    /**
-     * @return The number of times that bookmarks, history, or downloads have been triggered from
-     *         the overflow menu while Chrome Home is enabled.
-     */
-    public int getChromeHomeMenuItemClickCount() {
-        return readInt(CHROME_HOME_MENU_ITEM_CLICK_COUNT_KEY);
-    }
-
-    /**
-     * Increment the count for the number of times bookmarks, history, or downloads have been
-     * triggered from the overflow menu while Chrome Home is enabled.
-     */
-    public void incrementChromeHomeMenuItemClickCount() {
-        writeInt(CHROME_HOME_MENU_ITEM_CLICK_COUNT_KEY, getChromeHomeMenuItemClickCount() + 1);
-    }
-
-    /**
-     * Remove the count for number of times bookmarks, history, or downloads were clicked while
-     * Chrome Home is enabled.
-     */
-    public void clearChromeHomeMenuItemClickCount() {
-        mSharedPreferences.edit().remove(CHROME_HOME_MENU_ITEM_CLICK_COUNT_KEY).apply();
+        removeKey(CHROME_HOME_INFO_PROMO_SHOWN_KEY);
+        removeKey(CHROME_HOME_OPT_OUT_SNACKBAR_SHOWN);
     }
 
     /** Marks that the content suggestions surface has been shown. */
     public void setSuggestionsSurfaceShown() {
         writeBoolean(CONTENT_SUGGESTIONS_SHOWN_KEY, true);
+    }
+
+    /**
+     * Set whether or not command line on non-rooted devices is enabled.
+     * @param isEnabled If command line on non-rooted devices is enabled.
+     */
+    public void setCommandLineOnNonRootedEnabled(boolean isEnabled) {
+        writeBoolean(COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY, isEnabled);
+    }
+
+    /** Returns whether command line on non-rooted devices is enabled. */
+    public boolean getCommandLineOnNonRootedEnabled() {
+        return mSharedPreferences.getBoolean(COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY, false);
     }
 
     /** Returns whether the content suggestions surface has ever been shown. */
@@ -511,6 +552,70 @@ public class ChromePreferenceManager {
     }
 
     /**
+     * Gets a set of Strings representing digital asset links that have been verified.
+     * Set by {@link #setVerifiedDigitalAssetLinks(Set)}.
+     */
+    public Set<String> getVerifiedDigitalAssetLinks() {
+        // From the official docs, modifying the result of a SharedPreferences.getStringSet can
+        // cause bad things to happen including exceptions or ruining the data.
+        return new HashSet<>(mSharedPreferences.getStringSet(VERIFIED_DIGITAL_ASSET_LINKS,
+                Collections.emptySet()));
+    }
+
+    /**
+     * Sets a set of digital asset links (represented a strings) that have been verified.
+     * Can be retrieved by {@link #getVerifiedDigitalAssetLinks()}.
+     */
+    public void setVerifiedDigitalAssetLinks(Set<String> links) {
+        mSharedPreferences.edit().putStringSet(VERIFIED_DIGITAL_ASSET_LINKS, links).apply();
+    }
+
+    public boolean getShouldRegisterVrAssetsComponentOnStartup() {
+        return mSharedPreferences.getBoolean(SHOULD_REGISTER_VR_ASSETS_COMPONENT_ON_STARTUP, false);
+    }
+
+    public void setShouldRegisterVrAssetsComponentOnStartup(boolean shouldRegister) {
+        writeBoolean(SHOULD_REGISTER_VR_ASSETS_COMPONENT_ON_STARTUP, shouldRegister);
+    }
+
+    /**
+     * Private convenience method to create a Preferences Key to hold the last time the given
+     * package displayed a "Running in Chrome" disclosure while opening a Trusted Web Activity.
+     */
+    private static String getTrustedWebActivityDisclosureTimeKey(String packageName) {
+        return TRUSTED_WEB_ACTIVITY_LAST_DISCLOSURE_TIME + packageName;
+    }
+
+    /**
+     * Gets the last time a disclosure was shown while opening a Trusted Web Activity for the given
+     * package. Returns a Date object representing the Unix epoch if no data was found.
+     */
+    public Date getTrustedWebActivityLastDisclosureTime(String packageName) {
+        return new Date(readLong(getTrustedWebActivityDisclosureTimeKey(packageName), 0));
+    }
+
+    /**
+     * Sets the last time a disclosure was shown while opening a Trusted Web Activity for the given
+     * package.
+     */
+    public void setTrustedWebActivityLastDisclosureTime(String packageName, Date time) {
+        writeLong(getTrustedWebActivityDisclosureTimeKey(packageName), time.getTime());
+    }
+
+    /**
+     * Wipes all recordings of the last disclosure times for packages opening TWAs.
+     */
+    public void clearAllTrustedWebActivityLastDisclosureTimes() {
+        SharedPreferences.Editor ed = mSharedPreferences.edit();
+        for (String key : mSharedPreferences.getAll().keySet()) {
+            if (!key.startsWith(TRUSTED_WEB_ACTIVITY_LAST_DISCLOSURE_TIME)) continue;
+
+            ed.remove(key);
+        }
+        ed.apply();
+    }
+
+    /**
      * Writes the given int value to the named shared preference.
      * @param key The name of the preference to modify.
      * @param value The new value for the preference.
@@ -522,12 +627,24 @@ public class ChromePreferenceManager {
     }
 
     /**
-     * Reads the given int value from the named shared preference.
+     * Reads the given int value from the named shared preference, defaulting to 0 if not found.
      * @param key The name of the preference to return.
      * @return The value of the preference.
      */
     public int readInt(String key) {
         return mSharedPreferences.getInt(key, 0);
+    }
+
+    /**
+     * Increments the integer value specified by the given key.  If no initial value is present then
+     * an initial value of 0 is assumed and incremented, so a new value of 1 is set.
+     * @param key The key specifying which integer value to increment.
+     * @return The newly incremented value.
+     */
+    public int incrementInt(String key) {
+        int value = mSharedPreferences.getInt(key, 0);
+        writeInt(key, ++value);
+        return value;
     }
 
     /**
@@ -554,18 +671,6 @@ public class ChromePreferenceManager {
     }
 
     /**
-     * Writes the given String to the named shared preference.
-     *
-     * @param key The name of the preference to modify.
-     * @param value The new value for the preference.
-     */
-    private void writeString(String key, String value) {
-        SharedPreferences.Editor ed = mSharedPreferences.edit();
-        ed.putString(key, value);
-        ed.apply();
-    }
-
-    /**
      * Writes the given boolean to the named shared preference.
      *
      * @param key The name of the preference to modify.
@@ -574,6 +679,18 @@ public class ChromePreferenceManager {
     private void writeBoolean(String key, boolean value) {
         SharedPreferences.Editor ed = mSharedPreferences.edit();
         ed.putBoolean(key, value);
+        ed.apply();
+    }
+
+    /**
+     * Writes the given string to the named shared preference.
+     *
+     * @param key The name of the preference to modify.
+     * @param value The new value for the preference.
+     */
+    private void writeString(String key, String value) {
+        SharedPreferences.Editor ed = mSharedPreferences.edit();
+        ed.putString(key, value);
         ed.apply();
     }
 

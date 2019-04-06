@@ -154,6 +154,7 @@ namespace networkingPrivate {
 
   dictionary APNProperties {
     DOMString AccessPointName;
+    DOMString? Authentication;
     DOMString? Language;
     DOMString? LocalizedName;
     DOMString? Name;
@@ -163,6 +164,7 @@ namespace networkingPrivate {
 
   dictionary ManagedAPNProperties {
     ManagedDOMString AccessPointName;
+    ManagedDOMString? Authentication;
     ManagedDOMString? Language;
     ManagedDOMString? LocalizedName;
     ManagedDOMString? Name;
@@ -580,6 +582,7 @@ namespace networkingPrivate {
     ActivationStateType? ActivationState;
     DOMString? NetworkTechnology;
     DOMString? RoamingState;
+    boolean? Scanning;
     boolean? SIMPresent;
     long? SignalStrength;
   };
@@ -643,6 +646,7 @@ namespace networkingPrivate {
     EAPProperties? EAP;
     long? Frequency;
     long[]? FrequencyList;
+    boolean? FTEnabled;
     DOMString? HexSSID;
     boolean? HiddenSSID;
     DOMString? Passphrase;
@@ -659,6 +663,7 @@ namespace networkingPrivate {
     ManagedEAPProperties? EAP;
     long? Frequency;
     long[]? FrequencyList;
+    ManagedBoolean? FTEnabled;
     ManagedDOMString? HexSSID;
     ManagedBoolean? HiddenSSID;
     ManagedDOMString? Passphrase;
@@ -859,6 +864,11 @@ namespace networkingPrivate {
     // If true, only policy networks may be connected to and no new networks may
     // be added or configured. Defaults to false.
     boolean? AllowOnlyPolicyNetworksToConnect;
+
+    // List of blacklisted networks. Connections to blacklisted networks are
+    // prohibited. Networks can be whitelisted again by specifying an explicit
+    // network configuration. Defaults to an empty list.
+    DOMString[]? BlacklistedHexSSIDs;
   };
 
   dictionary Certificate {

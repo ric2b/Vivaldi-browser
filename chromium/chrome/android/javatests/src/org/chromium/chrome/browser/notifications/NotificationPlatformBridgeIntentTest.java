@@ -57,8 +57,8 @@ public class NotificationPlatformBridgeIntentTest {
     @MediumTest
     @Feature({"Browser", "Notifications"})
     public void testLaunchNotificationPreferencesForCategory() {
-        Assert.assertFalse(
-                "The native library should not be loaded yet", LibraryLoader.isInitialized());
+        Assert.assertFalse("The native library should not be loaded yet",
+                LibraryLoader.getInstance().isInitialized());
 
         final Context context = InstrumentationRegistry.getInstrumentation()
                                         .getTargetContext()
@@ -93,8 +93,8 @@ public class NotificationPlatformBridgeIntentTest {
     @MediumTest
     @Feature({"Browser", "Notifications"})
     public void testLaunchNotificationPreferencesForWebsite() {
-        Assert.assertFalse(
-                "The native library should not be loaded yet", LibraryLoader.isInitialized());
+        Assert.assertFalse("The native library should not be loaded yet",
+                LibraryLoader.getInstance().isInitialized());
 
         final Context context = InstrumentationRegistry.getInstrumentation()
                                         .getTargetContext()
@@ -135,8 +135,8 @@ public class NotificationPlatformBridgeIntentTest {
     @MediumTest
     @Feature({"Browser", "Notifications"})
     public void testLaunchProcessForNotificationActivation() throws Exception {
-        Assert.assertFalse(
-                "The native library should not be loaded yet", LibraryLoader.isInitialized());
+        Assert.assertFalse("The native library should not be loaded yet",
+                LibraryLoader.getInstance().isInitialized());
         Assert.assertNull(NotificationPlatformBridge.getInstanceForTests());
 
         Context context = InstrumentationRegistry.getInstrumentation()
@@ -150,7 +150,6 @@ public class NotificationPlatformBridgeIntentTest {
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_PROFILE_ID, "Default");
         intent.putExtra(
                 NotificationConstants.EXTRA_NOTIFICATION_INFO_ORIGIN, "https://example.com");
-        intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_TAG, "tag");
 
         PendingIntent pendingIntent = PendingIntent.getBroadcast(
                 context, 0 /* request code */, intent, PendingIntent.FLAG_UPDATE_CURRENT);
@@ -165,7 +164,8 @@ public class NotificationPlatformBridgeIntentTest {
             }
         });
 
-        Assert.assertTrue("The native library should be loaded now", LibraryLoader.isInitialized());
+        Assert.assertTrue("The native library should be loaded now",
+                LibraryLoader.getInstance().isInitialized());
         Assert.assertNotNull(NotificationPlatformBridge.getInstanceForTests());
     }
 }

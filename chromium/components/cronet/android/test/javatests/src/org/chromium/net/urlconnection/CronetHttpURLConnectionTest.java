@@ -13,6 +13,7 @@ import static org.junit.Assert.fail;
 import static org.chromium.net.CronetTestRule.getContext;
 
 import android.os.Build;
+import android.os.Process;
 import android.support.test.filters.SmallTest;
 
 import org.junit.After;
@@ -28,6 +29,8 @@ import org.chromium.net.CronetException;
 import org.chromium.net.CronetTestRule;
 import org.chromium.net.CronetTestRule.CompareDefaultWithCronet;
 import org.chromium.net.CronetTestRule.OnlyRunCronetHttpURLConnection;
+import org.chromium.net.CronetTestRule.RequiresMinApi;
+import org.chromium.net.CronetTestUtil;
 import org.chromium.net.MockUrlRequestJobFactory;
 import org.chromium.net.NativeTestServer;
 
@@ -35,6 +38,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
@@ -1347,5 +1351,118 @@ public class CronetHttpURLConnectionTest {
             headerValues.add(matcher.group(1));
         }
         return headerValues;
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Cronet"})
+    @RequiresMinApi(9) // Tagging support added in API level 9: crrev.com/c/chromium/src/+/930086
+    public void testTagging() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoMethodURL());
+
+        // Test untagged requests are given tag 0.
+        int tag = 0;
+        long priorBytes = CronetTestUtil.nativeGetTaggedBytes(tag);
+        CronetHttpURLConnection urlConnection = (CronetHttpURLConnection) url.openConnection();
+        assertEquals(200, urlConnection.getResponseCode());
+        urlConnection.disconnect();
+        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+
+        // Test explicit tagging.
+        tag = 0x12345678;
+        priorBytes = CronetTestUtil.nativeGetTaggedBytes(tag);
+        urlConnection = (CronetHttpURLConnection) url.openConnection();
+        urlConnection.setTrafficStatsTag(tag);
+        assertEquals(200, urlConnection.getResponseCode());
+        urlConnection.disconnect();
+        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+
+        // Test a different tag value.
+        tag = 0x87654321;
+        priorBytes = CronetTestUtil.nativeGetTaggedBytes(tag);
+        urlConnection = (CronetHttpURLConnection) url.openConnection();
+        urlConnection.setTrafficStatsTag(tag);
+        assertEquals(200, urlConnection.getResponseCode());
+        urlConnection.disconnect();
+        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+
+        // Test tagging with our UID.
+        // NOTE(pauljensen): Explicitly setting the UID to the current UID isn't a particularly
+        // thorough test of this API but at least provides coverage of the underlying code, and
+        // verifies that traffic is still properly attributed.
+        // The code path for UID is parallel to that for the tag, which we do have more thorough
+        // testing for.  More thorough testing of setting the UID would require running tests with
+        // a rare permission which isn't realistic for most apps.  Apps are allowed to set the UID
+        // to their own UID as per this logic in the tagging kernel module:
+        // https://android.googlesource.com/kernel/common/+/21dd5d7/net/netfilter/xt_qtaguid.c#154
+        tag = 0;
+        priorBytes = CronetTestUtil.nativeGetTaggedBytes(tag);
+        urlConnection = (CronetHttpURLConnection) url.openConnection();
+        urlConnection.setTrafficStatsUid(Process.myUid());
+        assertEquals(200, urlConnection.getResponseCode());
+        urlConnection.disconnect();
+        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testIOExceptionErrorRethrown() throws Exception {
+        // URL that should fail to connect.
+        URL url = new URL("http://localhost");
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        // This should not throw, even though internally it may encounter an exception.
+        connection.getHeaderField("blah");
+        try {
+            // This should throw an IOException.
+            connection.getResponseCode();
+            fail();
+        } catch (IOException e) {
+            // Expected
+        }
+        connection.disconnect();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunCronetHttpURLConnection // System impl flakily responds to interrupt.
+    public void testIOExceptionInterruptRethrown() throws Exception {
+        ServerSocket hangingServer = new ServerSocket(0);
+        URL url = new URL("http://localhost:" + hangingServer.getLocalPort());
+        final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        // connect() is non-blocking.
+        connection.connect();
+        FutureTask<IOException> task = new FutureTask<IOException>(new Callable<IOException>() {
+            @Override
+            public IOException call() {
+                // This should not throw, even though internally it may encounter an exception.
+                connection.getHeaderField("blah");
+                try {
+                    // This should throw an InterruptedIOException.
+                    connection.getResponseCode();
+                } catch (InterruptedIOException e) {
+                    // Expected
+                    return e;
+                } catch (IOException e) {
+                    return null;
+                }
+                return null;
+            }
+        });
+        Thread t = new Thread(task);
+        t.start();
+        Socket s = hangingServer.accept();
+        hangingServer.close();
+        Thread.sleep(100); // Give time for thread to get blocked, so interrupt is noticed.
+        // This will trigger an InterruptException in getHeaderField() and getResponseCode().
+        // getHeaderField() should not re-throw it.  getResponseCode() should re-throw it as an
+        // InterruptedIOException.
+        t.interrupt();
+        // Make sure an IOException is thrown.
+        assertNotNull(task.get());
+        s.close();
+        connection.disconnect();
     }
 }

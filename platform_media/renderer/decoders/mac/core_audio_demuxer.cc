@@ -29,11 +29,6 @@ static const char* kSupportedMimeTypes[] = {
     "audio/aac",
     "audio/aacp",
     "audio/mp4",
-#if defined(PLATFORM_MEDIA_MP3)
-    "audio/mp3",
-    "audio/mpeg",
-    "audio/mpeg3"
-#endif // PLATFORM_MEDIA_MP3
 };
 
 }  // namespace
@@ -63,8 +58,7 @@ std::string CoreAudioDemuxer::GetDisplayName() const {
 }
 
 void CoreAudioDemuxer::Initialize(DemuxerHost* host,
-                                  const PipelineStatusCB& status_cb,
-                                  bool enable_text_tracks) {
+                                  const PipelineStatusCB& status_cb) {
   host_ = host;
 
   CHECK(blocking_thread_.Start());
@@ -91,25 +85,12 @@ void CoreAudioDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp
     base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
-  if (!stream_status_change_cb_.is_null())
-    stream_status_change_cb_.Run(this, is_enabled_, timestamp);
-}
-
-void CoreAudioDemuxerStream::SetStreamStatusChangeCB(
-    const StreamStatusChangeCB& cb) {
-  DCHECK(!cb.is_null());
-  stream_status_change_cb_ = cb;
 }
 
 void CoreAudioDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
 }
 
 void CoreAudioDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {
-}
-
-void CoreAudioDemuxer::SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) {
-  if (audio_stream_)
-    audio_stream_->SetStreamStatusChangeCB(cb);
 }
 
 void CoreAudioDemuxer::Seek(base::TimeDelta time,
@@ -175,32 +156,40 @@ int64_t CoreAudioDemuxer::GetMemoryUsage() const {
 
 void CoreAudioDemuxer::OnEnabledAudioTracksChanged(
     const std::vector<MediaTrack::Id>& track_ids,
-    base::TimeDelta currTime) {
-  bool enabled = false;
+    base::TimeDelta currTime,
+    TrackChangeCB change_completed_cb) {
   CoreAudioDemuxerStream* audio_stream = GetStream(DemuxerStream::AUDIO);
   CHECK(audio_stream);
-  if (track_ids.size() > 0) {
-    enabled = true;
-  }
+  bool enabled = !track_ids.empty();
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " : " << (enabled ? "enabling" : "disabling")
           << " audio stream";
   audio_stream->set_enabled(enabled, currTime);
+
+  std::set<CoreAudioDemuxerStream*> enabled_streams;
+  enabled_streams.insert(audio_stream);
+  std::vector<DemuxerStream*> streams(enabled_streams.begin(),
+                                      enabled_streams.end());
+  std::move(change_completed_cb).Run(DemuxerStream::AUDIO, streams);
 }
 
 void CoreAudioDemuxer::OnSelectedVideoTrackChanged(
-      base::Optional<MediaTrack::Id> track_id,
-      base::TimeDelta currTime) {
-  bool enabled = false;
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta currTime,
+    TrackChangeCB change_completed_cb) {
   CoreAudioDemuxerStream* video_stream = GetStream(DemuxerStream::VIDEO);
   CHECK(video_stream);
-  if (track_id) {
-    enabled = true;
-  }
+  bool enabled = !track_ids.empty();
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " : " << (enabled ? "enabling" : "disabling")
           << " video stream";
   video_stream->set_enabled(enabled, currTime);
+
+  std::set<CoreAudioDemuxerStream*> enabled_streams;
+  enabled_streams.insert(video_stream);
+  std::vector<DemuxerStream*> streams(enabled_streams.begin(),
+                                      enabled_streams.end());
+  std::move(change_completed_cb).Run(DemuxerStream::VIDEO, streams);
 }
 
 void CoreAudioDemuxer::SetAudioDuration(int64_t duration) {

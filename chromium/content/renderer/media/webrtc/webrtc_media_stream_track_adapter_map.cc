@@ -59,6 +59,17 @@ WebRtcMediaStreamTrackAdapterMap::AdapterRef::Copy() const {
   return base::WrapUnique(new AdapterRef(map_, type_, adapter_));
 }
 
+void WebRtcMediaStreamTrackAdapterMap::AdapterRef::InitializeOnMainThread() {
+  adapter_->InitializeOnMainThread();
+  if (type_ == WebRtcMediaStreamTrackAdapterMap::AdapterRef::Type::kRemote) {
+    base::AutoLock scoped_lock(map_->lock_);
+    if (!map_->remote_track_adapters_.FindBySecondary(web_track().UniqueId())) {
+      map_->remote_track_adapters_.SetSecondaryKey(webrtc_track(),
+                                                   web_track().UniqueId());
+    }
+  }
+}
+
 WebRtcMediaStreamTrackAdapterMap::WebRtcMediaStreamTrackAdapterMap(
     PeerConnectionDependencyFactory* const factory,
     scoped_refptr<base::SingleThreadTaskRunner> main_thread)
@@ -108,9 +119,15 @@ WebRtcMediaStreamTrackAdapterMap::GetOrCreateLocalTrackAdapter(
     return base::WrapUnique(
         new AdapterRef(this, AdapterRef::Type::kLocal, *adapter_ptr));
   }
-  scoped_refptr<WebRtcMediaStreamTrackAdapter> new_adapter =
-      WebRtcMediaStreamTrackAdapter::CreateLocalTrackAdapter(
-          factory_, main_thread_, web_track);
+  scoped_refptr<WebRtcMediaStreamTrackAdapter> new_adapter;
+  {
+    // Do not hold |lock_| while creating the adapter in case that operation
+    // synchronizes with the signaling thread. If we do and the signaling thread
+    // is blocked waiting for |lock_| we end up in a deadlock.
+    base::AutoUnlock scoped_unlock(lock_);
+    new_adapter = WebRtcMediaStreamTrackAdapter::CreateLocalTrackAdapter(
+        factory_, main_thread_, web_track);
+  }
   DCHECK(new_adapter->is_initialized());
   local_track_adapters_.Insert(web_track.UniqueId(), new_adapter);
   local_track_adapters_.SetSecondaryKey(web_track.UniqueId(),
@@ -161,22 +178,28 @@ WebRtcMediaStreamTrackAdapterMap::GetOrCreateRemoteTrackAdapter(
     return base::WrapUnique(
         new AdapterRef(this, AdapterRef::Type::kRemote, *adapter_ptr));
   }
-  scoped_refptr<WebRtcMediaStreamTrackAdapter> new_adapter =
-      WebRtcMediaStreamTrackAdapter::CreateRemoteTrackAdapter(
-          factory_, main_thread_, webrtc_track);
+  scoped_refptr<WebRtcMediaStreamTrackAdapter> new_adapter;
+  {
+    // Do not hold |lock_| while creating the adapter in case that operation
+    // synchronizes with the main thread. If we do and the main thread is
+    // blocked waiting for |lock_| we end up in a deadlock.
+    base::AutoUnlock scoped_unlock(lock_);
+    new_adapter = WebRtcMediaStreamTrackAdapter::CreateRemoteTrackAdapter(
+        factory_, main_thread_, webrtc_track);
+  }
   remote_track_adapters_.Insert(webrtc_track.get(), new_adapter);
   // The new adapter is initialized in a post to the main thread. As soon as it
   // is initialized we map its |webrtc_track| to the |remote_track_adapters_|
   // entry as its secondary key. This ensures that there is at least one
   // |AdapterRef| alive until after the adapter is initialized and its secondary
   // key is set.
+  auto adapter_ref = base::WrapUnique(
+      new AdapterRef(this, AdapterRef::Type::kRemote, new_adapter));
   main_thread_->PostTask(
       FROM_HERE,
       base::BindOnce(
-          &WebRtcMediaStreamTrackAdapterMap::OnRemoteTrackAdapterInitialized,
-          this,
-          base::Passed(base::WrapUnique(
-              new AdapterRef(this, AdapterRef::Type::kRemote, new_adapter)))));
+          &WebRtcMediaStreamTrackAdapterMap::AdapterRef::InitializeOnMainThread,
+          std::move(adapter_ref)));
   return base::WrapUnique(
       new AdapterRef(this, AdapterRef::Type::kRemote, new_adapter));
 }
@@ -184,16 +207,6 @@ WebRtcMediaStreamTrackAdapterMap::GetOrCreateRemoteTrackAdapter(
 size_t WebRtcMediaStreamTrackAdapterMap::GetRemoteTrackCount() const {
   base::AutoLock scoped_lock(lock_);
   return remote_track_adapters_.PrimarySize();
-}
-
-void WebRtcMediaStreamTrackAdapterMap::OnRemoteTrackAdapterInitialized(
-    std::unique_ptr<AdapterRef> adapter_ref) {
-  DCHECK(adapter_ref->is_initialized());
-  {
-    base::AutoLock scoped_lock(lock_);
-    remote_track_adapters_.SetSecondaryKey(adapter_ref->webrtc_track(),
-                                           adapter_ref->web_track().UniqueId());
-  }
 }
 
 }  // namespace content

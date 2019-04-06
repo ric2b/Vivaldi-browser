@@ -44,7 +44,7 @@ class ToolkitDelegateViews;
 class VivaldiContextMenuViews : public vivaldi::VivaldiContextMenu {
  public:
   ~VivaldiContextMenuViews() override;
-  VivaldiContextMenuViews(content::RenderFrameHost* render_frame_host,
+  VivaldiContextMenuViews(content::WebContents* web_contents,
                           ui::SimpleMenuModel* menu_model,
                           const content::ContextMenuParams& params);
   void Show() override;
@@ -61,7 +61,7 @@ class VivaldiContextMenuViews : public vivaldi::VivaldiContextMenu {
   aura::Window* GetActiveNativeView();
   views::Widget* GetTopLevelWidget();
   std::unique_ptr<ToolkitDelegateViews> toolkit_delegate_;
-  content::RenderFrameHost* render_frame_host_;
+  content::WebContents* web_contents_;
   ui::SimpleMenuModel* menu_model_;
   content::ContextMenuParams params_;
   views::MenuItemView* menu_view_;  // owned by toolkit_delegate_

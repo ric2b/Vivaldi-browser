@@ -16,7 +16,7 @@
 #include "content/common/content_export.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "net/base/load_states.h"
-#include "third_party/WebKit/public/web/WebPopupType.h"
+#include "third_party/blink/public/web/web_popup_type.h"
 
 class GURL;
 
@@ -94,7 +94,7 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   virtual void Close(RenderViewHost* render_view_host) {}
 
   // The page is trying to move the RenderView's representation in the client.
-  virtual void RequestMove(const gfx::Rect& new_bounds) {}
+  virtual void RequestSetBounds(const gfx::Rect& new_bounds) {}
 
   // The RenderView's main frame document element is ready. This happens when
   // the document has finished parsing.
@@ -154,11 +154,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // Returns a copy of the map of all session storage namespaces related
   // to this view.
   virtual SessionStorageNamespaceMap GetSessionStorageNamespaceMap();
-
-  // Returns the zoom level for the pending navigation for the page. If there
-  // is no pending navigation, this returns the zoom level for the current
-  // page.
-  virtual double GetPendingPageZoomLevel();
 
   // Returns true if the RenderViewHost will never be visible.
   virtual bool IsNeverVisible();

@@ -41,8 +41,8 @@
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "net/proxy/proxy_config_service_android.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_config_service_android.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 
 using base::FilePath;
 using content::BrowserThread;
@@ -77,7 +77,7 @@ AwBrowserContext* g_browser_context = NULL;
 
 std::unique_ptr<net::ProxyConfigService> CreateProxyConfigService() {
   std::unique_ptr<net::ProxyConfigService> config_service =
-      net::ProxyService::CreateSystemProxyConfigService(
+      net::ProxyResolutionService::CreateSystemProxyConfigService(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 
   // TODO(csharrison) Architect the wrapper better so we don't need a cast for
@@ -134,7 +134,7 @@ AwBrowserContext* AwBrowserContext::FromWebContents(
 
 void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
   FilePath cache_path;
-  PathService::Get(base::DIR_CACHE, &cache_path);
+  base::PathService::Get(base::DIR_CACHE, &cache_path);
   cache_path =
       cache_path.Append(FILE_PATH_LITERAL("org.chromium.android_webview"));
 
@@ -168,8 +168,8 @@ void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
       new web_restrictions::WebRestrictionsClient());
   pref_change_registrar_.Add(
       prefs::kWebRestrictionsAuthority,
-      base::Bind(&AwBrowserContext::OnWebRestrictionsAuthorityChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&AwBrowserContext::OnWebRestrictionsAuthorityChanged,
+                          base::Unretained(this)));
   web_restriction_provider_->SetAuthority(
       user_pref_service_->GetString(prefs::kWebRestrictionsAuthority));
 
@@ -179,7 +179,9 @@ void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
       new safe_browsing::RemoteSafeBrowsingDatabaseManager();
   safe_browsing_trigger_manager_ =
       std::make_unique<safe_browsing::TriggerManager>(
-          safe_browsing_ui_manager_.get());
+          safe_browsing_ui_manager_.get(),
+          /*referrer_chain_provider=*/nullptr,
+          /*local_state_prefs=*/nullptr);
   safe_browsing_whitelist_manager_ = CreateSafeBrowsingWhitelistManager();
 
   content::WebUIControllerFactory::RegisterFactory(
@@ -237,7 +239,8 @@ void AwBrowserContext::InitUserPrefService() {
           browser_policy_connector_->GetPolicyService(),
           browser_policy_connector_->GetHandlerList(),
           policy::POLICY_LEVEL_MANDATORY));
-  pref_service_factory.set_read_error_callback(base::Bind(&HandleReadError));
+  pref_service_factory.set_read_error_callback(
+      base::BindRepeating(&HandleReadError));
   user_pref_service_ = pref_service_factory.Create(pref_registry);
   pref_change_registrar_.Init(user_pref_service_.get());
 
@@ -292,7 +295,8 @@ content::SSLHostStateDelegate* AwBrowserContext::GetSSLHostStateDelegate() {
   return ssl_host_state_delegate_.get();
 }
 
-content::PermissionManager* AwBrowserContext::GetPermissionManager() {
+content::PermissionControllerDelegate*
+AwBrowserContext::GetPermissionControllerDelegate() {
   if (!permission_manager_.get())
     permission_manager_.reset(new AwPermissionManager());
   return permission_manager_.get();
@@ -358,7 +362,6 @@ AwBrowserContext::GetWebRestrictionProvider() {
 }
 
 AwSafeBrowsingUIManager* AwBrowserContext::GetSafeBrowsingUIManager() const {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return safe_browsing_ui_manager_.get();
 }
 
@@ -369,7 +372,7 @@ AwBrowserContext::GetSafeBrowsingDBManager() {
     // V4ProtocolConfig is not used. Just create one with empty values..
     safe_browsing::V4ProtocolConfig config("", false, "", "");
     safe_browsing_db_manager_->StartOnIOThread(
-        url_request_context_getter_.get(), config);
+        safe_browsing_ui_manager_->GetURLLoaderFactoryOnIOThread(), config);
     safe_browsing_db_manager_started_ = true;
   }
   return safe_browsing_db_manager_.get();

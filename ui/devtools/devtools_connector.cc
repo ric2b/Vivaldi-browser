@@ -7,6 +7,7 @@
 #include "base/lazy_instance.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/common/pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
@@ -184,17 +185,17 @@ void DevtoolsConnectorItem::ActivateContents(content::WebContents* contents) {
 }
 
 void DevtoolsConnectorItem::AddNewContents(content::WebContents* source,
-                                           content::WebContents* new_contents,
+                                           std::unique_ptr<content::WebContents> new_contents,
                                            WindowOpenDisposition disposition,
                                            const gfx::Rect& initial_rect,
                                            bool user_gesture,
                                            bool* was_blocked) {
   if (devtools_delegate_) {
-    devtools_delegate_->AddNewContents(source, new_contents, disposition,
+    devtools_delegate_->AddNewContents(source, std::move(new_contents), disposition,
                                        initial_rect, user_gesture, was_blocked);
   }
   if (guest_delegate_) {
-    guest_delegate_->AddNewContents(source, new_contents, disposition,
+    guest_delegate_->AddNewContents(source, std::move(new_contents), disposition,
                                     initial_rect, user_gesture, was_blocked);
   }
 }
@@ -262,6 +263,10 @@ DevtoolsConnectorItem::PreHandleKeyboardEvent(
     handled = guest_delegate_->PreHandleKeyboardEvent(source, event);
   }
   return handled;
+}
+
+bool DevtoolsConnectorItem::HasOwnerShipOfContents() {
+  return false;
 }
 
 void DevtoolsConnectorItem::HandleKeyboardEvent(

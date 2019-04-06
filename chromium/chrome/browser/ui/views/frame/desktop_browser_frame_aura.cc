@@ -7,7 +7,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/views/frame/browser_desktop_window_tree_host.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/web_applications/web_app.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -106,9 +105,10 @@ void DesktopBrowserFrameAura::GetWindowPlacement(
     *show_state = ui::SHOW_STATE_NORMAL;
 }
 
-bool DesktopBrowserFrameAura::PreHandleKeyboardEvent(
+content::KeyboardEventProcessingResult
+DesktopBrowserFrameAura::PreHandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
-  return false;
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool DesktopBrowserFrameAura::HandleKeyboardEvent(

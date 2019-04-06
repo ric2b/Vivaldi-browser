@@ -15,24 +15,23 @@
 #include "base/guid.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/platform/platform_channel.h"
+#include "mojo/public/cpp/platform/platform_handle.h"
+#include "mojo/public/cpp/system/invitation.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
-#include "services/service_manager/public/interfaces/constants.mojom.h"
-#include "services/service_manager/public/interfaces/service_manager.mojom.h"
+#include "services/service_manager/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/mojom/service_manager.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
 #include "services/service_manager/tests/service_manager/service_manager_unittest.mojom.h"
 
@@ -244,7 +243,8 @@ class ServiceManagerTest : public test::ServiceTest,
 
   void StartTarget() {
     base::FilePath target_path;
-    CHECK(base::PathService::Get(base::DIR_EXE, &target_path));
+    CHECK(base::PathService::Get(base::DIR_ASSETS, &target_path));
+
 #if defined(OS_WIN)
     target_path = target_path.Append(
         FILE_PATH_LITERAL("service_manager_unittest_target.exe"));
@@ -263,20 +263,11 @@ class ServiceManagerTest : public test::ServiceTest,
 
     // Create the channel to be shared with the target process. Pass one end
     // on the command line.
-    mojo::edk::PlatformChannelPair platform_channel_pair;
+    mojo::PlatformChannel channel;
     base::LaunchOptions options;
-#if defined(OS_WIN)
-    platform_channel_pair.PrepareToPassClientHandleToChildProcess(
-        &child_command_line, &options.handles_to_inherit);
-#elif defined(OS_FUCHSIA)
-    platform_channel_pair.PrepareToPassClientHandleToChildProcess(
-        &child_command_line, &options.handles_to_transfer);
-#else
-    platform_channel_pair.PrepareToPassClientHandleToChildProcess(
-        &child_command_line, &options.fds_to_remap);
-#endif
+    channel.PrepareToPassRemoteEndpoint(&options, &child_command_line);
 
-    mojo::edk::OutgoingBrokerClientInvitation invitation;
+    mojo::OutgoingInvitation invitation;
     service_manager::mojom::ServicePtr client =
         service_manager::PassServiceRequestOnCommandLine(&invitation,
                                                          &child_command_line);
@@ -292,12 +283,10 @@ class ServiceManagerTest : public test::ServiceTest,
 
     target_ = base::LaunchProcess(child_command_line, options);
     DCHECK(target_.IsValid());
-    platform_channel_pair.ChildProcessLaunched();
+    channel.RemoteProcessLaunchAttempted();
     receiver->SetPID(target_.Pid());
-    invitation.Send(
-        target_.Handle(),
-        mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
-                                    platform_channel_pair.PassServerHandle()));
+    mojo::OutgoingInvitation::Send(std::move(invitation), target_.Handle(),
+                                   channel.TakeLocalEndpoint());
   }
 
   void StartEmbedderService() {
@@ -332,7 +321,7 @@ class ServiceManagerTest : public test::ServiceTest,
     connector()->StartService(identity);
     if (!expect_service_started) {
       // Wait briefly and test no new service was created.
-      base::MessageLoop::current()->task_runner()->PostDelayedTask(
+      base::MessageLoopCurrent::Get()->task_runner()->PostDelayedTask(
           FROM_HERE, loop.QuitClosure(), base::TimeDelta::FromSeconds(1));
     }
 

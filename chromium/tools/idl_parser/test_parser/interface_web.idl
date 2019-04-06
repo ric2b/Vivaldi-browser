@@ -43,6 +43,52 @@ partial interface MyIFacePartial { };
 partial interface MyIFaceInherit : Foo {};
 
 /** TREE
+ *Interface(IFaceMixin)
+ *  MIXIN: True
+ */
+interface mixin IFaceMixin {};
+
+/** ERROR Unexpected ":" after identifier "IFaceMixinInherit". */
+interface mixin IFaceMixinInherit : Foo {};
+
+/** TREE
+ *Interface(PartialIFaceMixin)
+ *  PARTIAL: True
+ *  MIXIN: True
+ */
+partial interface mixin PartialIFaceMixin {};
+
+/** TREE
+ *Interface(IFaceMixin)
+ *  MIXIN: True
+ *  Error(Unexpected keyword "static" after "{".)
+ */
+interface mixin IFaceMixin {
+  static attribute integer staticAttribute;
+};
+
+/** TREE
+ *Interface(IFaceMixin)
+ *  MIXIN: True
+ *  Const(pi)
+ *    PrimitiveType(double)
+ *    Value() = "3.14159"
+ *  Operation(foo)
+ *    Arguments()
+ *    Type()
+ *      PrimitiveType(void)
+ *  Attribute(bar)
+ *    READONLY: True
+ *    Type()
+ *      StringType(DOMString)
+ */
+interface mixin IFaceMixin {
+  const double pi = 3.14159;
+  void foo();
+  readonly attribute DOMString bar;
+};
+
+/** TREE
  *Interface(MyIFaceMissingArgument)
  *  Operation(foo)
  *    Arguments()
@@ -622,3 +668,31 @@ interface MyIFaceArgumentWithAnnotatedType2 {
  *        Error(Unexpected ,.)
  */
 [ Exposed(Window, Worker) ] interface InterfaceExposedError { };
+
+/** TREE
+ *Implements(Foo)
+ *  REFERENCE: Bar
+ */
+Foo implements Bar;
+
+/** TREE
+ *Includes(Foo)
+ *  REFERENCE: Bar
+ */
+Foo includes Bar;
+
+/** TREE
+ *Interface(IFaceWithKeyword)
+ *  Operation(includes)
+ *    Arguments()
+ *      Argument(val)
+ *        Type()
+ *          StringType(DOMString)
+ *    Type()
+ *      PrimitiveType(void)
+ */
+interface IFaceWithKeyword {
+  // '_' prefix needs to be removed in tokenization.
+  // https://heycam.github.io/webidl/#idl-names
+  void _includes(DOMString val);
+};

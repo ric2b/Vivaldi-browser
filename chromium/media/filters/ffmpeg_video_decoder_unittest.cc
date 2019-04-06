@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -29,7 +30,6 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/ffmpeg/ffmpeg_common.h"
-#include "media/filters/ffmpeg_glue.h"
 #include "media/filters/ffmpeg_video_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -63,8 +63,6 @@ class FFmpegVideoDecoderTest : public testing::Test {
       : decoder_(new FFmpegVideoDecoder(&media_log_)),
         decode_cb_(base::Bind(&FFmpegVideoDecoderTest::DecodeDone,
                               base::Unretained(this))) {
-    FFmpegGlue::InitializeFFmpeg();
-
     // Initialize various test buffers.
     frame_buffer_.reset(new uint8_t[kCodedSize.GetArea()]);
     end_of_stream_buffer_ = DecoderBuffer::CreateEOSBuffer();
@@ -72,9 +70,7 @@ class FFmpegVideoDecoderTest : public testing::Test {
     corrupt_i_frame_buffer_ = ReadTestDataFile("vp8-corrupt-I-frame");
   }
 
-  virtual ~FFmpegVideoDecoderTest() {
-    Destroy();
-  }
+  ~FFmpegVideoDecoderTest() override { Destroy(); }
 
   void Initialize() {
     InitializeWithConfig(TestVideoConfig::Normal());
@@ -82,9 +78,10 @@ class FFmpegVideoDecoderTest : public testing::Test {
 
   void InitializeWithConfigWithResult(const VideoDecoderConfig& config,
                                       bool success) {
-    decoder_->Initialize(config, false, nullptr, NewExpectedBoolCB(success),
-                         base::Bind(&FFmpegVideoDecoderTest::FrameReady,
-                                    base::Unretained(this)));
+    decoder_->Initialize(
+        config, false, nullptr, NewExpectedBoolCB(success),
+        base::Bind(&FFmpegVideoDecoderTest::FrameReady, base::Unretained(this)),
+        base::NullCallback());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -136,6 +133,7 @@ class FFmpegVideoDecoderTest : public testing::Test {
           break;
         case DecodeStatus::ABORTED:
           NOTREACHED();
+          FALLTHROUGH;
         case DecodeStatus::DECODE_ERROR:
           DCHECK(output_frames_.empty());
           return status;
@@ -148,7 +146,7 @@ class FFmpegVideoDecoderTest : public testing::Test {
   // uncompressed output to |video_frame|. This method works with single
   // and multithreaded decoders. End of stream buffers are used to trigger
   // the frame to be returned in the multithreaded decoder case.
-  DecodeStatus DecodeSingleFrame(const scoped_refptr<DecoderBuffer>& buffer) {
+  DecodeStatus DecodeSingleFrame(scoped_refptr<DecoderBuffer> buffer) {
     InputBuffers input_buffers;
     input_buffers.push_back(buffer);
     input_buffers.push_back(end_of_stream_buffer_);
@@ -186,7 +184,7 @@ class FFmpegVideoDecoderTest : public testing::Test {
               output_frames_[1]->visible_rect().size().height());
   }
 
-  DecodeStatus Decode(const scoped_refptr<DecoderBuffer>& buffer) {
+  DecodeStatus Decode(scoped_refptr<DecoderBuffer> buffer) {
     DecodeStatus status;
     EXPECT_CALL(*this, DecodeDone(_)).WillOnce(SaveArg<0>(&status));
 
@@ -260,25 +258,6 @@ TEST_F(FFmpegVideoDecoderTest, DecodeFrame_Normal) {
   // Simulate decoding a single frame.
   EXPECT_EQ(DecodeStatus::OK, DecodeSingleFrame(i_frame_buffer_));
   ASSERT_EQ(1U, output_frames_.size());
-}
-
-// Verify current behavior for 0 byte frames. FFmpegVideoDecoder simply ignores
-// the 0 byte frames.
-TEST_F(FFmpegVideoDecoderTest, DecodeFrame_0ByteFrame) {
-  Initialize();
-
-  scoped_refptr<DecoderBuffer> zero_byte_buffer = new DecoderBuffer(0);
-
-  InputBuffers input_buffers;
-  input_buffers.push_back(i_frame_buffer_);
-  input_buffers.push_back(zero_byte_buffer);
-  input_buffers.push_back(i_frame_buffer_);
-  input_buffers.push_back(end_of_stream_buffer_);
-
-  DecodeStatus status = DecodeMultipleFrames(input_buffers);
-
-  EXPECT_EQ(DecodeStatus::OK, status);
-  ASSERT_EQ(2U, output_frames_.size());
 }
 
 TEST_F(FFmpegVideoDecoderTest, DecodeFrame_DecodeError) {

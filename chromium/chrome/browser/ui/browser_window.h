@@ -18,7 +18,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
 #include "chrome/browser/ui/sync/one_click_signin_sync_starter.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/translate/core/common/translate_errors.h"
@@ -27,7 +27,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
+#include "chrome/browser/chromeos/apps/intent_helper/apps_navigation_types.h"
 #endif  // defined(OS_CHROMEOS)
 
 class Browser;
@@ -36,10 +36,13 @@ class ExclusiveAccessContext;
 class FindBar;
 class GURL;
 class LocationBar;
+class PageActionIconContainer;
 class StatusBubble;
 class ToolbarActionsBar;
 
 namespace autofill {
+class LocalCardMigrationBubbleController;
+class LocalCardMigrationBubble;
 class SaveCardBubbleController;
 class SaveCardBubbleView;
 }
@@ -56,7 +59,6 @@ class Extension;
 }
 
 namespace gfx {
-class Rect;
 class Size;
 }
 
@@ -164,6 +166,9 @@ class BrowserWindow : public ui::BaseWindow {
   // the TabStripModel has an active tab.
   virtual gfx::Size GetContentsSize() const = 0;
 
+  // Returns the container of page action icons.
+  virtual PageActionIconContainer* GetPageActionIconContainer() = 0;
+
   // Returns the location bar.
   virtual LocationBar* GetLocationBar() const = 0;
 
@@ -198,8 +203,8 @@ class BrowserWindow : public ui::BaseWindow {
   // Focuses the bookmarks toolbar (for accessibility).
   virtual void FocusBookmarksToolbar() = 0;
 
-  // Focuses an infobar, if shown (for accessibility).
-  virtual void FocusInfobars() = 0;
+  // Focuses a visible but inactive popup for accessibility.
+  virtual void FocusInactivePopupForAccessibility() = 0;
 
   // Moves keyboard focus to the next pane.
   virtual void RotatePaneFocus(bool forwards) = 0;
@@ -231,10 +236,13 @@ class BrowserWindow : public ui::BaseWindow {
 
 #if defined(OS_CHROMEOS)
   // Shows the intent picker bubble. |app_info| contains the app candidates to
-  // display and |callback| gives access so we can redirect the user (if needed)
-  // and store UMA metrics.
+  // display, |disable_stay_in_chrome| allows to disable 'Stay in Chrome' (used
+  // for non-http(s) queries), and |callback| helps to continue the flow back to
+  // either AppsNavigationThrottle or ArcExternalProtocolDialog capturing the
+  // user's decision and storing UMA metrics.
   virtual void ShowIntentPickerBubble(
-      std::vector<arc::ArcNavigationThrottle::AppInfo> app_info,
+      std::vector<chromeos::IntentPickerAppInfo> app_info,
+      bool disable_stay_in_chrome,
       IntentPickerResponse callback) = 0;
   virtual void SetIntentPickerViewVisibility(bool visible) = 0;
 #endif  // defined(OS_CHROMEOS)
@@ -247,6 +255,12 @@ class BrowserWindow : public ui::BaseWindow {
   virtual autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
+      bool is_user_gesture) = 0;
+
+  // Shows the local card migration bubble.
+  virtual autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
+      content::WebContents* contents,
+      autofill::LocalCardMigrationBubbleController* controller,
       bool is_user_gesture) = 0;
 
   // Shows the translate bubble.
@@ -321,10 +335,6 @@ class BrowserWindow : public ui::BaseWindow {
   // Clipboard commands applied to the whole browser window.
   virtual void CutCopyPaste(int command_id) = 0;
 
-  // Return the correct disposition for a popup window based on |bounds|.
-  virtual WindowOpenDisposition GetDispositionForPopupBounds(
-      const gfx::Rect& bounds) = 0;
-
   // Construct a FindBar implementation for the |browser|.
   virtual FindBar* CreateFindBar() = 0;
 
@@ -384,6 +394,13 @@ class BrowserWindow : public ui::BaseWindow {
   friend class BrowserCloseManager;
   friend class BrowserView;
   virtual void DestroyBrowser() = 0;
+
+#if defined(OS_MACOSX)
+  // Creates a Cocoa browser window, in browser builds where both Views and
+  // Cocoa browsers windows are present.
+  static BrowserWindow* CreateBrowserWindowCocoa(Browser* browser,
+                                                 bool user_gesture);
+#endif
 };
 
 #endif  // CHROME_BROWSER_UI_BROWSER_WINDOW_H_

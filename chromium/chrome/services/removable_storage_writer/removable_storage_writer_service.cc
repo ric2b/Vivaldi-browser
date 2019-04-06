@@ -9,7 +9,7 @@
 
 #include "base/bind.h"
 #include "build/build_config.h"
-#include "chrome/services/removable_storage_writer/public/interfaces/removable_storage_writer.mojom.h"
+#include "chrome/services/removable_storage_writer/public/mojom/removable_storage_writer.mojom.h"
 #include "chrome/services/removable_storage_writer/removable_storage_writer.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -37,8 +37,7 @@ RemovableStorageWriterService::CreateService() {
 
 void RemovableStorageWriterService::OnStart() {
   ref_factory_ = std::make_unique<service_manager::ServiceContextRefFactory>(
-      base::Bind(&service_manager::ServiceContext::RequestQuit,
-                 base::Unretained(context())));
+      context()->CreateQuitClosure());
   registry_.AddInterface(
       base::Bind(&OnRemovableStorageWriterGetterRequest, ref_factory_.get()));
 }

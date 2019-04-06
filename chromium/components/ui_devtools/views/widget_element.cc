@@ -4,7 +4,8 @@
 
 #include "components/ui_devtools/views/widget_element.h"
 
-#include "components/ui_devtools/views/ui_element_delegate.h"
+#include "components/ui_devtools/Protocol.h"
+#include "components/ui_devtools/ui_element_delegate.h"
 
 namespace ui_devtools {
 
@@ -36,7 +37,7 @@ void WidgetElement::OnWidgetBoundsChanged(views::Widget* widget,
 }
 
 std::vector<std::pair<std::string, std::string>>
-WidgetElement::GetCustomAttributes() const {
+WidgetElement::GetCustomProperties() const {
   return {};
 }
 
@@ -61,7 +62,17 @@ void WidgetElement::SetVisible(bool visible) {
     widget_->Hide();
 }
 
-std::pair<aura::Window*, gfx::Rect> WidgetElement::GetNodeWindowAndBounds()
+std::unique_ptr<protocol::Array<std::string>> WidgetElement::GetAttributes()
+    const {
+  auto attributes = protocol::Array<std::string>::create();
+  attributes->addItem("name");
+  attributes->addItem(widget_->GetName());
+  attributes->addItem("active");
+  attributes->addItem(widget_->IsActive() ? "true" : "false");
+  return attributes;
+}
+
+std::pair<gfx::NativeWindow, gfx::Rect> WidgetElement::GetNodeWindowAndBounds()
     const {
   return std::make_pair(widget_->GetNativeWindow(),
                         widget_->GetWindowBoundsInScreen());

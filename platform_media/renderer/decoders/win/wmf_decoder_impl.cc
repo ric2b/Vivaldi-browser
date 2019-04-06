@@ -23,7 +23,6 @@
 #include "media/base/channel_layout.h"
 #include "media/base/data_buffer.h"
 #include "media/base/decoder_buffer.h"
-#include "platform_media/common/pipeline_stats.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_mime_util.h"
 #include "media/base/win/mf_initializer.h"
@@ -38,12 +37,10 @@ void ReportInitResult(bool success);
 
 template <>
 void ReportInitResult<DemuxerStream::AUDIO>(bool success) {
-  pipeline_stats::ReportAudioDecoderInitResult(success);
 }
 
 template <>
 void ReportInitResult<DemuxerStream::VIDEO>(bool success) {
-  pipeline_stats::ReportVideoDecoderInitResult(success);
 }
 
 // This function is used as |no_longer_needed_cb| of
@@ -79,10 +76,6 @@ GUID AudioCodecToAudioSubtypeGUID(AudioCodec codec) {
   switch (codec) {
     case AudioCodec::kCodecAAC:
       return MFAudioFormat_AAC;
-#if defined(PLATFORM_MEDIA_MP3)
-    case AudioCodec::kCodecMP3:
-      return MFAudioFormat_MP3;
-#endif
     default:
       NOTREACHED();
   }
@@ -105,9 +98,9 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (!IsValidConfig(config)) {
-    LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-              << " Media Config not accepted for codec : "
-              << GetCodecName(config.codec());
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Media Config not accepted for codec : "
+            << GetCodecName(config.codec());
     init_cb.Run(false);
     return;
   } else {
@@ -122,13 +115,15 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
 
   decoder_ = CreateWMFDecoder(config_);
   if (!decoder_ || !ConfigureDecoder()) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Creating/Configuring failed for codec : "
-                 << GetCodecName(config.codec());
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Creating/Configuring failed for codec : "
+            << GetCodecName(config.codec());
     ReportInitResult<StreamType>(false);
     init_cb.Run(false);
     return;
   }
+
+  debug_buffer_logger_.Initialize(GetCodecName(config_.codec()));
 
   output_cb_ = output_cb;
   ResetTimestampState();
@@ -139,9 +134,11 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
 
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Decode(
-    const scoped_refptr<DecoderBuffer>& buffer,
+    scoped_refptr<DecoderBuffer> buffer,
     const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+
+  debug_buffer_logger_.Log(buffer);
 
   if (buffer->end_of_stream()) {
     VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -190,13 +187,16 @@ void WMFDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
 template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
-#if defined(PLATFORM_MEDIA_MP3)
-  if (config.codec() != AudioCodec::kCodecMP3 && config.codec() != AudioCodec::kCodecAAC) {
-#else
   if (config.codec() != AudioCodec::kCodecAAC) {
-#endif
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Unsupported Audio codec : " << GetCodecName(config.codec());
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Unsupported Audio codec : " << GetCodecName(config.codec());
+    return false;
+  }
+
+  if (config.is_encrypted()) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Unsupported Encrypted Audio codec : "
+            << GetCodecName(config.codec());
     return false;
   }
 
@@ -213,10 +213,9 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
 template <>
 bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     const DecoderConfig& config) {
-
   if (!IsPlatformVideoDecoderAvailable()) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Video Platform Decoder : Unavailable";
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Video Platform Decoder : Unavailable";
     return false;
   }
 
@@ -232,6 +231,13 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     LOG_IF(WARNING, !(config.profile() <= VideoCodecProfile::H264PROFILE_MAX))
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Unsupported Video profile (too high) : " << config.profile();
+  }
+
+  if (config.is_encrypted()) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Unsupported Encrypted VIDEO codec : "
+            << GetCodecName(config.codec());
+    return false;
   }
 
   return config.codec() == VideoCodec::kCodecH264 && config.profile() >= VideoCodecProfile::H264PROFILE_MIN &&
@@ -259,10 +265,6 @@ GUID WMFDecoderImpl<DemuxerStream::AUDIO>::GetMediaObjectGUID(
   switch (config.codec()) {
     case AudioCodec::kCodecAAC:
       return __uuidof(CMSAACDecMFT);
-#if defined(PLATFORM_MEDIA_MP3)
-    case AudioCodec::kCodecMP3:
-      return __uuidof(CMP3DecMediaObject);
-#endif
     default:
       NOTREACHED();
   }
@@ -369,11 +371,9 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
     return false;
   }
 
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " input_samples_per_second : " << config_.input_samples_per_second()
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " samples_per_second : " << config_.samples_per_second();
 
-  // FEATURE_INPUT_SAMPLES_PER_SECOND
   hr = media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND,
                              config_.samples_per_second());
   if (FAILED(hr)) {
@@ -408,8 +408,33 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
 
   hr = decoder_->SetInputType(0, media_type.Get(), 0);  // No flags.
   if (FAILED(hr)) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Error while setting input type.";
+    std::string error_code;
+    switch (hr) {
+      case S_OK:
+        error_code = "S_OK";
+        break;
+      case MF_E_INVALIDMEDIATYPE:
+        error_code = "MF_E_INVALIDMEDIATYPE";
+        break;
+      case MF_E_INVALIDSTREAMNUMBER:
+        error_code = "MF_E_INVALIDSTREAMNUMBER";
+        break;
+      case MF_E_INVALIDTYPE:
+        error_code = "MF_E_INVALIDTYPE";
+        break;
+      case MF_E_TRANSFORM_CANNOT_CHANGE_MEDIATYPE_WHILE_PROCESSING:
+        error_code = "MF_E_TRANSFORM_CANNOT_CHANGE_MEDIATYPE_WHILE_PROCESSING";
+        break;
+      case MF_E_TRANSFORM_TYPE_NOT_SET:
+        error_code = "MF_E_TRANSFORM_TYPE_NOT_SET";
+        break;
+      case MF_E_UNSUPPORTED_D3D_TYPE:
+        error_code = "MF_E_UNSUPPORTED_D3D_TYPE";
+        break;
+    }
+
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Error while setting input type : " << error_code;
     return false;
   }
 
@@ -515,8 +540,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
         CreateSample(CalculateOutputBufferSize(output_stream_info),
                      CalculateBufferAlignment(output_stream_info.cbAlignment));
     if (!output_sample_) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Couldn't create sample";
+      VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+              << " Couldn't create sample";
       return false;
     }
   }
@@ -591,22 +616,6 @@ template <>
 size_t WMFDecoderImpl<DemuxerStream::AUDIO>::CalculateOutputBufferSize(
     const MFT_OUTPUT_STREAM_INFO& stream_info) const {
   size_t buffer_size = stream_info.cbSize;
-
-#if defined(PLATFORM_MEDIA_MP3)
-  // Limit the buffer size for decoded MP3 audio so that |decoder_| doesn't
-  // output more than the MP3 frame size at a time.  This makes us behave more
-  // like FFmpeg and allows us to handle timestamp calculations and buffer
-  // discards using AudioDiscardHelper.
-  if (config_.codec() == AudioCodec::kCodecMP3) {
-    // http://teslabs.com/openplayer/docs/docs/specs/mp3_structure2.pdf
-    static const size_t kMaxOutputSampleCount = 1152;
-    buffer_size = std::min(
-        buffer_size, kMaxOutputSampleCount *
-                         ChannelLayoutToChannelCount(config_.channel_layout()) *
-                         output_sample_size_);
-  }
-#endif
-
   return buffer_size;
 }
 
@@ -637,8 +646,8 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessInput(
   const Microsoft::WRL::ComPtr<IMFSample> sample =
       PrepareInputSample(input.get());
   if (!sample) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Failed to create input sample.";
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Failed to create input sample.";
     return MF_E_UNEXPECTED;
   }
 
@@ -747,7 +756,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::ProcessBuffer(
   const scoped_refptr<DecoderBuffer> dequeued_input = queued_input_.front();
   queued_input_.pop_front();
 
-  return discard_helper_->ProcessBuffers(dequeued_input, output);
+  return discard_helper_->ProcessBuffers(*dequeued_input, output);
 }
 
 template <>
@@ -895,10 +904,8 @@ WMFDecoderImpl<DemuxerStream::AUDIO>::CreateOutputBufferInternal(
   // The timestamp will be calculated by |discard_helper_| later on.
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " input_samples_per_second : " << config_.input_samples_per_second()
           << " samples_per_second : " << config_.samples_per_second();
 
-  // FEATURE_INPUT_SAMPLES_PER_SECOND
   return AudioBuffer::CopyFrom(
       ConvertToSampleFormat(output_sample_size_), output_channel_layout_,
       ChannelLayoutToChannelCount(output_channel_layout_),
@@ -917,15 +924,33 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
   LONG stride = 0;
   HRESULT hr = get_stride_function_(MFVideoFormat_YV12.Data1,
                                     config_.coded_size().width(), &stride);
-  stride = ((stride + 15) & ~15);  // Stride has to be divisible by 16.
+
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Failed to obtain stride.";
     return nullptr;
   }
 
+  // Stride has to be divisible by 16.
+  LONG adjusted_stride = ((stride + 15) & ~15);
+
+  if (stride != adjusted_stride) {
+    // patricia@vivaldi.com : I don't know why we do this and it smells fishy
+      LOG(WARNING) << __FUNCTION__ << " Before Stride : " << stride;
+      stride = adjusted_stride;
+      LOG(WARNING) << __FUNCTION__ << " After Stride : " << stride;
+  }
+
   // Number of rows has to be divisible by 16.
-  LONG rows = ((config_.coded_size().height() + 15) & ~15);
+  LONG rows = config_.coded_size().height();
+  LONG adjusted_rows = ((rows + 15) & ~15);
+
+  if (rows != adjusted_rows) {
+    // patricia@vivaldi.com : I don't know why we do this and it smells fishy
+    LOG(WARNING) << __FUNCTION__ << " Before rows : " << rows;
+    rows = adjusted_rows;
+    LOG(WARNING) << __FUNCTION__ << " After rows : " << rows;
+  }
 
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapExternalYuvData(
       VideoPixelFormat::PIXEL_FORMAT_YV12, config_.coded_size(), config_.visible_rect(),
@@ -973,10 +998,8 @@ template <>
 void WMFDecoderImpl<DemuxerStream::AUDIO>::ResetTimestampState() {
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " input_samples_per_second : " << config_.input_samples_per_second()
           << " samples_per_second : " << config_.samples_per_second();
 
-  // FEATURE_INPUT_SAMPLES_PER_SECOND
   discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
                                                config_.codec_delay(), false));
   discard_helper_->Reset(config_.codec_delay());

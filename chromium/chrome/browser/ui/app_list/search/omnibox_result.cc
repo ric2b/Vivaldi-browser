@@ -6,6 +6,9 @@
 
 #include <stddef.h>
 
+#include "ash/public/cpp/app_list/app_list_config.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -16,9 +19,6 @@
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/vector_icons.h"
-#include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/vector_icons/vector_icons.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
@@ -30,35 +30,35 @@ namespace app_list {
 namespace {
 
 // #000 at 87% opacity.
-constexpr SkColor kListIconColor = SkColorSetARGBMacro(0xDE, 0x00, 0x00, 0x00);
+constexpr SkColor kListIconColor = SkColorSetARGB(0xDE, 0x00, 0x00, 0x00);
 
 int ACMatchStyleToTagStyle(int styles) {
   int tag_styles = 0;
   if (styles & ACMatchClassification::URL)
-    tag_styles |= SearchResult::Tag::URL;
+    tag_styles |= ash::SearchResultTag::URL;
   if (styles & ACMatchClassification::MATCH)
-    tag_styles |= SearchResult::Tag::MATCH;
+    tag_styles |= ash::SearchResultTag::MATCH;
   if (styles & ACMatchClassification::DIM)
-    tag_styles |= SearchResult::Tag::DIM;
+    tag_styles |= ash::SearchResultTag::DIM;
 
   return tag_styles;
 }
 
-// Translates ACMatchClassifications into SearchResult tags.
+// Translates ACMatchClassifications into ChromeSearchResult tags.
 void ACMatchClassificationsToTags(const base::string16& text,
                                   const ACMatchClassifications& text_classes,
-                                  SearchResult::Tags* tags) {
-  int tag_styles = SearchResult::Tag::NONE;
+                                  ChromeSearchResult::Tags* tags) {
+  int tag_styles = ash::SearchResultTag::NONE;
   size_t tag_start = 0;
 
   for (size_t i = 0; i < text_classes.size(); ++i) {
     const ACMatchClassification& text_class = text_classes[i];
 
     // Closes current tag.
-    if (tag_styles != SearchResult::Tag::NONE) {
+    if (tag_styles != ash::SearchResultTag::NONE) {
       tags->push_back(
-          SearchResult::Tag(tag_styles, tag_start, text_class.offset));
-      tag_styles = SearchResult::Tag::NONE;
+          ash::SearchResultTag(tag_styles, tag_start, text_class.offset));
+      tag_styles = ash::SearchResultTag::NONE;
     }
 
     if (text_class.style == ACMatchClassification::NONE)
@@ -68,8 +68,8 @@ void ACMatchClassificationsToTags(const base::string16& text,
     tag_styles = ACMatchStyleToTagStyle(text_class.style);
   }
 
-  if (tag_styles != SearchResult::Tag::NONE) {
-    tags->push_back(SearchResult::Tag(tag_styles, tag_start, text.length()));
+  if (tag_styles != ash::SearchResultTag::NONE) {
+    tags->push_back(ash::SearchResultTag(tag_styles, tag_start, text.length()));
   }
 }
 
@@ -85,9 +85,10 @@ const gfx::VectorIcon& TypeToVectorIcon(AutocompleteMatchType::Type type) {
     case AutocompleteMatchType::BOOKMARK_TITLE:
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
     case AutocompleteMatchType::CLIPBOARD:
-    case AutocompleteMatchType::PHYSICAL_WEB:
-    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW:
-    case AutocompleteMatchType::TAB_SEARCH:
+    case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
+    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
+    case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
+    case AutocompleteMatchType::DOCUMENT_SUGGESTION:
       return kIcDomainIcon;
 
     case AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED:
@@ -107,7 +108,7 @@ const gfx::VectorIcon& TypeToVectorIcon(AutocompleteMatchType::Type type) {
     case AutocompleteMatchType::CALCULATOR:
       return kIcEqualIcon;
 
-    case AutocompleteMatchType::EXTENSION_APP:
+    case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:
     case AutocompleteMatchType::NUM_TYPES:
       NOTREACHED();
       break;
@@ -133,6 +134,7 @@ OmniboxResult::OmniboxResult(Profile* profile,
   }
   set_id(match_.destination_url.spec());
   set_comparable_id(match_.stripped_destination_url.spec());
+  SetResultType(ash::SearchResultType::kOmnibox);
 
   // Derive relevance from omnibox relevance and normalize it to [0, 1].
   // The magic number 1500 is the highest score of an omnibox result.
@@ -140,22 +142,10 @@ OmniboxResult::OmniboxResult(Profile* profile,
   set_relevance(match_.relevance / 1500.0);
 
   if (AutocompleteMatch::IsSearchType(match_.type))
-    set_is_omnibox_search(true);
+    SetIsOmniboxSearch(true);
 
   UpdateIcon();
   UpdateTitleAndDetails();
-
-  // The raw "what you typed" search results should be promoted and
-  // automatically selected by voice queries. If a "history" result exactly
-  // matches what you typed, then the omnibox will not produce a "what you
-  // typed" result; therefore, we must also flag "history" results as voice
-  // results if they exactly match the query.
-  if (match_.type == AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED ||
-      (match_.type == AutocompleteMatchType::SEARCH_HISTORY &&
-       match_.search_terms_args &&
-       match_.contents == match_.search_terms_args->original_query)) {
-    set_voice_result(true);
-  }
 }
 
 OmniboxResult::~OmniboxResult() = default;
@@ -166,11 +156,6 @@ void OmniboxResult::Open(int event_flags) {
                             ui::DispositionFromEventFlags(event_flags));
 }
 
-std::unique_ptr<SearchResult> OmniboxResult::Duplicate() const {
-  return std::unique_ptr<SearchResult>(new OmniboxResult(
-      profile_, list_controller_, autocomplete_controller_, match_));
-}
-
 void OmniboxResult::UpdateIcon() {
   BookmarkModel* bookmark_model =
       BookmarkModelFactory::GetForBrowserContext(profile_);
@@ -179,7 +164,9 @@ void OmniboxResult::UpdateIcon() {
 
   const gfx::VectorIcon& icon =
       is_bookmarked ? kIcBookmarkIcon : TypeToVectorIcon(match_.type);
-  SetIcon(gfx::CreateVectorIcon(icon, kListIconSize, kListIconColor));
+  SetIcon(gfx::CreateVectorIcon(
+      icon, AppListConfig::instance().search_list_icon_dimension(),
+      kListIconColor));
 }
 
 void OmniboxResult::UpdateTitleAndDetails() {
@@ -187,29 +174,29 @@ void OmniboxResult::UpdateTitleAndDetails() {
   // the url description is presented as title, and url itself is presented as
   // details.
   const bool use_directly = !IsUrlResultWithDescription();
-  SearchResult::Tags title_tags;
+  ChromeSearchResult::Tags title_tags;
   if (use_directly) {
-    set_title(match_.contents);
+    SetTitle(match_.contents);
     ACMatchClassificationsToTags(match_.contents, match_.contents_class,
                                  &title_tags);
   } else {
-    set_title(match_.description);
+    SetTitle(match_.description);
     ACMatchClassificationsToTags(match_.description, match_.description_class,
                                  &title_tags);
   }
-  set_title_tags(title_tags);
+  SetTitleTags(title_tags);
 
-  SearchResult::Tags details_tags;
+  ChromeSearchResult::Tags details_tags;
   if (use_directly) {
-    set_details(match_.description);
+    SetDetails(match_.description);
     ACMatchClassificationsToTags(match_.description, match_.description_class,
                                  &details_tags);
   } else {
-    set_details(match_.contents);
+    SetDetails(match_.contents);
     ACMatchClassificationsToTags(match_.contents, match_.contents_class,
                                  &details_tags);
   }
-  set_details_tags(details_tags);
+  SetDetailsTags(details_tags);
 }
 
 bool OmniboxResult::IsUrlResultWithDescription() const {

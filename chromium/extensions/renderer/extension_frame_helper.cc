@@ -23,10 +23,11 @@
 #include "extensions/renderer/renderer_messaging_service.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_document_loader.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace extensions {
 
@@ -148,6 +149,9 @@ v8::Local<v8::Array> ExtensionFrameHelper::GetV8MainFrames(
     int browser_window_id,
     int tab_id,
     ViewType view_type) {
+  // WebFrame::ScriptCanAccess uses the isolate's current context. We need to
+  // make sure that the current context is the one we're expecting.
+  DCHECK(context == context->GetIsolate()->GetCurrentContext());
   std::vector<content::RenderFrame*> render_frames =
       GetExtensionFrames(extension_id, browser_window_id, tab_id, view_type);
   v8::Local<v8::Array> v8_frames = v8::Array::New(context->GetIsolate());
@@ -190,6 +194,22 @@ content::RenderFrame* ExtensionFrameHelper::GetBackgroundPageFrame(
   return nullptr;
 }
 
+v8::Local<v8::Value> ExtensionFrameHelper::GetV8BackgroundPageMainFrame(
+    v8::Isolate* isolate,
+    const std::string& extension_id) {
+  content::RenderFrame* main_frame = GetBackgroundPageFrame(extension_id);
+
+  v8::Local<v8::Value> background_page;
+  blink::WebLocalFrame* web_frame =
+      main_frame ? main_frame->GetWebFrame() : nullptr;
+  if (web_frame && blink::WebFrame::ScriptCanAccess(web_frame))
+    background_page = web_frame->MainWorldScriptContext()->Global();
+  else
+    background_page = v8::Undefined(isolate);
+
+  return background_page;
+}
+
 // static
 content::RenderFrame* ExtensionFrameHelper::FindFrame(
     content::RenderFrame* relative_to_frame,
@@ -200,17 +220,43 @@ content::RenderFrame* ExtensionFrameHelper::FindFrame(
   if (!extension)
     return nullptr;
 
-  for (const ExtensionFrameHelper* helper : g_frame_helpers.Get()) {
+  for (const ExtensionFrameHelper* target : g_frame_helpers.Get()) {
+    // Skip frames with a mismatched name.
+    if (target->render_frame()->GetWebFrame()->AssignedName().Utf8() != name)
+      continue;
+
     // Only pierce browsing instance boundaries if the target frame is from the
     // same extension (but not when another extension shares the same renderer
     // process because of reuse trigerred by process limit).
-    // TODO(lukasza): https://crbug.com/764487: Investigate if we can further
-    // restrict scenarios that allow piercing of browsing instance boundaries.
-    if (extension != GetExtensionFromFrame(helper->render_frame()))
+    if (extension != GetExtensionFromFrame(target->render_frame()))
       continue;
 
-    if (helper->render_frame()->GetWebFrame()->AssignedName().Utf8() == name)
-      return helper->render_frame();
+    // TODO(lukasza): https://crbug.com/764487: Investigate if we can further
+    // restrict scenarios that allow piercing of browsing instance boundaries.
+    // We hope that the piercing is only needed if the source or target frames
+    // are for background contents or background page.
+    ViewType target_view_type = target->view_type();
+    ViewType source_view_type =
+        ExtensionFrameHelper::Get(relative_to_frame)->view_type();
+    UMA_HISTOGRAM_ENUMERATION(
+        "Extensions.BrowsingInstanceViolation.ExtensionType",
+        extension->GetType(), Manifest::NUM_LOAD_TYPES);
+    UMA_HISTOGRAM_ENUMERATION(
+        "Extensions.BrowsingInstanceViolation.SourceExtensionViewType",
+        source_view_type, VIEW_TYPE_LAST + 1);
+    UMA_HISTOGRAM_ENUMERATION(
+        "Extensions.BrowsingInstanceViolation.TargetExtensionViewType",
+        target_view_type, VIEW_TYPE_LAST + 1);
+    bool is_background_source_or_target =
+        source_view_type == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE ||
+        source_view_type == VIEW_TYPE_BACKGROUND_CONTENTS ||
+        target_view_type == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE ||
+        target_view_type == VIEW_TYPE_BACKGROUND_CONTENTS;
+    UMA_HISTOGRAM_BOOLEAN(
+        "Extensions.BrowsingInstanceViolation.IsBackgroundSourceOrTarget",
+        is_background_source_or_target);
+
+    return target->render_frame();
   }
 
   return nullptr;
@@ -271,6 +317,19 @@ void ExtensionFrameHelper::ScheduleAtDocumentIdle(
 
 void ExtensionFrameHelper::DidStartProvisionalLoad(
     blink::WebDocumentLoader* document_loader) {
+  // New window created by chrome.app.window.create() must not start parsing the
+  // document immediately. The chrome.app.window.create() callback (if any)
+  // needs to be called prior to the new window's 'load' event. The parser will
+  // be resumed when it happens. It doesn't apply to sandboxed pages.
+  if (view_type_ == VIEW_TYPE_APP_WINDOW && render_frame()->IsMainFrame() &&
+      !has_started_first_navigation_ &&
+      GURL(document_loader->GetRequest().Url()).SchemeIs(kExtensionScheme) &&
+      !ScriptContext::IsSandboxedPage(document_loader->GetRequest().Url())) {
+    document_loader->BlockParser();
+  }
+
+  has_started_first_navigation_ = true;
+
   if (!delayed_main_world_script_initialization_)
     return;
 

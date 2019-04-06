@@ -8,23 +8,24 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <unordered_map>
 
+#include "base/containers/flat_map.h"
 #include "base/trace_event/memory_dump_request_args.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/coordinator.h"
-#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
+#include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 
 using base::trace_event::MemoryDumpLevelOfDetail;
 using base::trace_event::MemoryDumpType;
 
 namespace memory_instrumentation {
 
+using OSMemDumpMap =
+    base::flat_map<base::ProcessId,
+                   memory_instrumentation::mojom::RawOSMemDumpPtr>;
+
 // Holds data for pending requests enqueued via RequestGlobalMemoryDump().
 struct QueuedRequest {
-  using OSMemDumpMap =
-      std::unordered_map<base::ProcessId,
-                         memory_instrumentation::mojom::RawOSMemDumpPtr>;
-  using RequestGlobalMemoryDumpInternalCallback = base::Callback<
+  using RequestGlobalMemoryDumpInternalCallback = base::OnceCallback<
       void(bool, uint64_t, memory_instrumentation::mojom::GlobalMemoryDumpPtr)>;
 
   struct Args {
@@ -32,7 +33,8 @@ struct QueuedRequest {
          MemoryDumpLevelOfDetail level_of_detail,
          const std::vector<std::string>& allocator_dump_names,
          bool add_to_trace,
-         base::ProcessId pid);
+         base::ProcessId pid,
+         bool memory_footprint_only);
     Args(const Args&);
     ~Args();
 
@@ -41,6 +43,10 @@ struct QueuedRequest {
     const std::vector<std::string> allocator_dump_names;
     const bool add_to_trace;
     const base::ProcessId pid;
+
+    // If this member is |true|, then no MemoryDumpProviders are queried. The
+    // only other relevant member is |pid|.
+    const bool memory_footprint_only;
   };
 
   struct PendingResponse {
@@ -60,31 +66,24 @@ struct QueuedRequest {
     Response();
     ~Response();
 
-    base::ProcessId process_id;
-    mojom::ProcessType process_type;
+    base::ProcessId process_id = base::kNullProcessId;
+    mojom::ProcessType process_type = mojom::ProcessType::OTHER;
     std::unique_ptr<base::trace_event::ProcessMemoryDump> chrome_dump;
     OSMemDumpMap os_dumps;
   };
 
   QueuedRequest(const Args& args,
                 uint64_t dump_guid,
-                const RequestGlobalMemoryDumpInternalCallback& callback);
+                RequestGlobalMemoryDumpInternalCallback callback);
   ~QueuedRequest();
 
   base::trace_event::MemoryDumpRequestArgs GetRequestArgs();
 
-  bool wants_mmaps() const {
-    return args.level_of_detail == base::trace_event::MemoryDumpLevelOfDetail::
-                                       VM_REGIONS_ONLY_FOR_HEAP_PROFILER ||
-           args.level_of_detail ==
-               base::trace_event::MemoryDumpLevelOfDetail::DETAILED;
-  }
-
-  // We always want to return chrome dumps, with exception of the special
-  // case below for the heap profiler, which cares only about mmaps.
-  bool wants_chrome_dumps() const {
-    return args.level_of_detail != base::trace_event::MemoryDumpLevelOfDetail::
-                                       VM_REGIONS_ONLY_FOR_HEAP_PROFILER;
+  mojom::MemoryMapOption memory_map_option() const {
+    return args.level_of_detail ==
+                   base::trace_event::MemoryDumpLevelOfDetail::DETAILED
+               ? mojom::MemoryMapOption::FULL
+               : mojom::MemoryMapOption::NONE;
   }
 
   bool should_return_summaries() const {
@@ -93,20 +92,45 @@ struct QueuedRequest {
 
   const Args args;
   const uint64_t dump_guid;
-  const RequestGlobalMemoryDumpInternalCallback callback;
+  RequestGlobalMemoryDumpInternalCallback callback;
 
   // When a dump, requested via RequestGlobalMemoryDump(), is in progress this
   // set contains a |PendingResponse| for each |RequestChromeMemoryDump| and
   // |RequestOSMemoryDump| call that has not yet replied or been canceled (due
   // to the client disconnecting).
-  std::set<QueuedRequest::PendingResponse> pending_responses;
+  std::set<PendingResponse> pending_responses;
   std::map<mojom::ClientProcess*, Response> responses;
   int failed_memory_dump_count = 0;
   bool dump_in_progress = false;
 
+  // This field is set to |true| before a heap dump is requested, and set to
+  // |false| after the heap dump has been added to the trace.
+  bool heap_dump_in_progress = false;
+
   // The time we started handling the request (does not including queuing
   // time).
-  base::Time start_time;
+  base::TimeTicks start_time;
+};
+
+// Holds data for pending requests enqueued via GetVmRegionsForHeapProfiler().
+struct QueuedVmRegionRequest {
+  QueuedVmRegionRequest(
+      uint64_t dump_guid,
+      mojom::HeapProfilerHelper::GetVmRegionsForHeapProfilerCallback callback);
+  ~QueuedVmRegionRequest();
+  const uint64_t dump_guid;
+  mojom::HeapProfilerHelper::GetVmRegionsForHeapProfilerCallback callback;
+
+  struct Response {
+    Response();
+    ~Response();
+
+    base::ProcessId process_id = base::kNullProcessId;
+    OSMemDumpMap os_dumps;
+  };
+
+  std::set<mojom::ClientProcess*> pending_responses;
+  std::map<mojom::ClientProcess*, Response> responses;
 };
 
 }  // namespace memory_instrumentation

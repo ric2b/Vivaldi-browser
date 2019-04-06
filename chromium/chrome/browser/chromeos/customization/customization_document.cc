@@ -30,7 +30,6 @@
 #include "chrome/browser/chromeos/customization/customization_wallpaper_downloader.h"
 #include "chrome/browser/chromeos/customization/customization_wallpaper_util.h"
 #include "chrome/browser/chromeos/extensions/default_app_order.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/extensions/external_loader.h"
@@ -486,8 +485,8 @@ void ServicesCustomizationDocument::SetApplied(bool val) {
 // static
 base::FilePath ServicesCustomizationDocument::GetCustomizedWallpaperCacheDir() {
   base::FilePath custom_wallpaper_dir;
-  if (!PathService::Get(chrome::DIR_CHROMEOS_CUSTOM_WALLPAPERS,
-                        &custom_wallpaper_dir)) {
+  if (!base::PathService::Get(chrome::DIR_CHROMEOS_CUSTOM_WALLPAPERS,
+                              &custom_wallpaper_dir)) {
     LOG(DFATAL) << "Unable to get custom wallpaper dir.";
     return base::FilePath();
   }
@@ -808,7 +807,7 @@ void ServicesCustomizationDocument::StartOEMWallpaperDownload(
   }
 
   wallpaper_downloader_.reset(new CustomizationWallpaperDownloader(
-      g_browser_process->system_request_context(), wallpaper_url, dir, file,
+      wallpaper_url, dir, file,
       base::Bind(&ServicesCustomizationDocument::OnOEMWallpaperDownloaded,
                  weak_ptr_factory_.GetWeakPtr(),
                  base::Passed(std::move(applying)))));
@@ -932,8 +931,7 @@ void ServicesCustomizationDocument::OnOEMWallpaperDownloaded(
             << GetCustomizedWallpaperDownloadedFileName().value() << "' ('"
             << wallpaper_url.spec() << "')";
     customization_wallpaper_util::StartSettingCustomizedDefaultWallpaper(
-        wallpaper_url, GetCustomizedWallpaperDownloadedFileName(),
-        GetCustomizedWallpaperCacheDir());
+        wallpaper_url, GetCustomizedWallpaperDownloadedFileName());
   }
   wallpaper_downloader_.reset();
   applying->Finished(success);

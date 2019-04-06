@@ -4,11 +4,14 @@
 
 #include "ash/frame/caption_buttons/frame_back_button.h"
 
-#include "ash/ash_layout_constants.h"
 #include "ash/frame/caption_buttons/frame_caption_button.h"
-#include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/public/cpp/ash_layout_constants.h"
+#include "ash/public/cpp/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/events/event_sink.h"
 #include "ui/views/widget/widget.h"
 
@@ -16,8 +19,9 @@ namespace ash {
 
 FrameBackButton::FrameBackButton()
     : FrameCaptionButton(this, CAPTION_BUTTON_ICON_BACK) {
-  SetImage(CAPTION_BUTTON_ICON_BACK, ANIMATE_NO, kWindowControlBackIcon);
-  SetPreferredSize(GetAshLayoutSize(AshLayoutSize::NON_BROWSER_CAPTION_BUTTON));
+  SetPreferredSize(GetAshLayoutSize(AshLayoutSize::kNonBrowserCaption));
+  SetAccessibleName(
+      l10n_util::GetStringUTF16(IDS_ASH_WINDOW_CONTROL_ACCNAME_BACK));
 }
 
 FrameBackButton::~FrameBackButton() = default;

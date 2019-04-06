@@ -16,7 +16,6 @@
 <link rel="import" href="load_error.html">
 <link rel="import" href="navigation_helper.html">
 <link rel="import" href="options_dialog.html">
-<link rel="import" href="pack_dialog.html">
 <link rel="import" href="service.html">
 <link rel="import" href="sidebar.html">
 <link rel="import" href="toolbar.html">
@@ -31,6 +30,7 @@
   <template>
     <style include="cr-hidden-style">
       :host {
+        color: var(--cr-primary-text-color);
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -54,14 +54,13 @@
         background-color: var(--md-toolbar-color);
       }
     </style>
-    <extensions-drop-overlay></extensions-drop-overlay>
-    <extensions-toolbar is-guest="[[isGuest_]]"
-        in-dev-mode="[[inDevMode]]"
+    <extensions-drop-overlay drag-enabled="[[inDevMode]]">
+    </extensions-drop-overlay>
+    <extensions-toolbar in-dev-mode="[[inDevMode]]"
         can-load-unpacked="[[canLoadUnpacked]]"
         is-supervised="[[isSupervised_]]"
         dev-mode-controlled-by-policy="[[devModeControlledByPolicy]]"
-        on-pack-tap="onPackTap_" delegate="[[delegate]]"
-        on-cr-toolbar-menu-tap="onMenuButtonTap_"
+        delegate="[[delegate]]" on-cr-toolbar-menu-tap="onMenuButtonTap_"
         on-search-changed="onFilterChanged_"
 <if expr="chromeos">
         on-kiosk-tap="onKioskTap_"
@@ -70,49 +69,50 @@
         >
     </extensions-toolbar>
     <template is="dom-if" if="[[showDrawer_]]" restamp>
-      <dialog id="drawer" is="cr-drawer" heading="$i18n{toolbarTitle}"
+      <cr-drawer id="drawer" heading="$i18n{toolbarTitle}"
           align="$i18n{textdirection}" on-close="onDrawerClose_">
         <div class="drawer-content">
           <extensions-sidebar id="sidebar" is-supervised="[[isSupervised_]]"
               on-close-drawer="onCloseDrawer_">
           </extensions-sidebar>
         </div>
-      </dialog>
+      </cr-drawer>
     </template>
     <extensions-view-manager id="viewManager" role="main">
-      <extensions-item-list id="items-list" is-guest="[[isGuest_]]"
-          delegate="[[delegate]]" in-dev-mode="[[inDevMode]]"
-          filter="[[filter]]" hidden$="[[!didInitPage_]]" slot="view"
-          apps="[[apps_]]" extensions="[[extensions_]]"
+      <extensions-item-list id="items-list" delegate="[[delegate]]"
+          in-dev-mode="[[inDevMode]]" filter="[[filter]]"
+          hidden$="[[!didInitPage_]]" slot="view" apps="[[apps_]]"
+          extensions="[[extensions_]]"
           on-show-install-warnings="onShowInstallWarnings_">
       </extensions-item-list>
-      <template id="details-view" is="cr-lazy-render">
-        <extensions-detail-view delegate="[[delegate]]" slot="view"
-            in-dev-mode="[[inDevMode]]"
-            incognito-available="[[incognitoAvailable_]]"
-            data="[[detailViewItem_]]">
-        </extensions-detail-view>
-      </template>
-      <template id="keyboard-shortcuts" is="cr-lazy-render">
-        <extensions-keyboard-shortcuts delegate="[[delegate]]" slot="view"
-            items="[[extensions_]]">
-        </extensions-keyboard-shortcuts>
-      </template>
-      <template id="error-page" is="cr-lazy-render">
-        <extensions-error-page data="[[errorPageItem_]]" slot="view"
-            delegate="[[delegate]]" slot="view">
-        </extensions-error-page>
-      </template>
+      <cr-lazy-render id="details-view">
+        <template>
+          <extensions-detail-view delegate="[[delegate]]" slot="view"
+              in-dev-mode="[[inDevMode]]"
+              incognito-available="[[incognitoAvailable_]]"
+              data="[[detailViewItem_]]">
+          </extensions-detail-view>
+        </template>
+      </cr-lazy-render>
+      <cr-lazy-render id="keyboard-shortcuts">
+        <template>
+          <extensions-keyboard-shortcuts delegate="[[delegate]]" slot="view"
+              items="[[extensions_]]">
+          </extensions-keyboard-shortcuts>
+        </template>
+      </cr-lazy-render>
+      <cr-lazy-render id="error-page">
+        <template>
+          <extensions-error-page data="[[errorPageItem_]]" slot="view"
+              delegate="[[delegate]]" in-dev-mode="[[inDevMode]]">
+          </extensions-error-page>
+        </template>
+      </cr-lazy-render>
     </extensions-view-manager>
     <template is="dom-if" if="[[showOptionsDialog_]]" restamp>
       <extensions-options-dialog id="options-dialog"
           on-close="onOptionsDialogClose_">
       </extensions-options-dialog>
-    </template>
-    <template is="dom-if" if="[[showPackDialog_]]" restamp>
-      <extensions-pack-dialog id="pack-dialog" delegate="[[delegate]]"
-          on-close="onPackDialogClose_">
-      </extensions-pack-dialog>
     </template>
     <template is="dom-if" if="[[showLoadErrorDialog_]]" restamp>
       <extensions-load-error id="load-error" delegate="[[delegate]]"

@@ -16,7 +16,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
 #include <map>
 
@@ -55,9 +55,10 @@ using BrowserPermissionCallback = base::Callback<void(ContentSetting)>;
 
 class PermissionContextBase : public KeyedService {
  public:
-  PermissionContextBase(Profile* profile,
-                        ContentSettingsType content_settings_type,
-                        blink::FeaturePolicyFeature feature_policy_feature);
+  PermissionContextBase(
+      Profile* profile,
+      ContentSettingsType content_settings_type,
+      blink::mojom::FeaturePolicyFeature feature_policy_feature);
   ~PermissionContextBase() override;
 
   // A field trial used to enable the global permissions kill switch.
@@ -81,8 +82,6 @@ class PermissionContextBase : public KeyedService {
   // Returns whether the permission has been granted, denied etc.
   // |render_frame_host| may be nullptr if the call is coming from a context
   // other than a specific frame.
-  // TODO(meredithl): Ensure that the result accurately reflects whether the
-  // origin is blacklisted for this permission.
   PermissionResult GetPermissionStatus(
       content::RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,
@@ -99,11 +98,6 @@ class PermissionContextBase : public KeyedService {
   // Resets the permission to its default value.
   virtual void ResetPermission(const GURL& requesting_origin,
                                const GURL& embedding_origin);
-
-  // Withdraw an existing permission request, no op if the permission request
-  // was already cancelled by some other means.
-  virtual void CancelPermissionRequest(content::WebContents* web_contents,
-                                       const PermissionRequestID& id);
 
   // Whether the kill switch has been enabled for this permission.
   // public for permissions that do not use RequestPermission, like
@@ -176,17 +170,6 @@ class PermissionContextBase : public KeyedService {
   void CleanUpRequest(const PermissionRequestID& id);
   int RemoveBridgeID(int bridge_id);
 
-  // Called when the requesting origin and permission have been checked by Safe
-  // Browsing. |permission_blocked| determines whether to auto-block the
-  // permission request without prompting the user for a decision.
-  void ContinueRequestPermission(content::WebContents* web_contents,
-                                 const PermissionRequestID& id,
-                                 const GURL& requesting_origin,
-                                 const GURL& embedding_origin,
-                                 bool user_gesture,
-                                 const BrowserPermissionCallback& callback,
-                                 bool permission_blocked);
-
   // This is the callback for PermissionRequestImpl and is called once the user
   // allows/blocks/dismisses a permission prompt.
   void PermissionDecided(const PermissionRequestID& id,
@@ -205,7 +188,7 @@ class PermissionContextBase : public KeyedService {
 
   Profile* profile_;
   const ContentSettingsType content_settings_type_;
-  const blink::FeaturePolicyFeature feature_policy_feature_;
+  const blink::mojom::FeaturePolicyFeature feature_policy_feature_;
   std::unordered_map<std::string, std::unique_ptr<PermissionRequest>>
       pending_requests_;
 

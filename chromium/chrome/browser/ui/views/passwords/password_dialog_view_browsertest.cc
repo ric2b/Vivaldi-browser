@@ -5,8 +5,10 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,6 +27,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
 
@@ -133,6 +136,13 @@ class PasswordDialogViewTest : public DialogBrowserTest {
 };
 
 void PasswordDialogViewTest::SetUpOnMainThread() {
+#if defined(OS_MACOSX)
+  // On non-Mac platforms, animations are globally disabled during tests; on
+  // Mac they are generally not, but these tests are dramatically slower and
+  // flakier with animations.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableModalAnimations);
+#endif
   SetupTabWithTestController(browser());
 }
 
@@ -152,22 +162,24 @@ content::WebContents* PasswordDialogViewTest::SetupTabWithTestController(
   // Open a new tab with modified ManagePasswordsUIController.
   content::WebContents* tab =
       browser->tab_strip_model()->GetActiveWebContents();
-  content::WebContents* new_tab = content::WebContents::Create(
+  std::unique_ptr<content::WebContents> new_tab = content::WebContents::Create(
       content::WebContents::CreateParams(tab->GetBrowserContext()));
-  EXPECT_TRUE(new_tab);
+  content::WebContents* raw_new_tab = new_tab.get();
+  EXPECT_TRUE(raw_new_tab);
 
   // ManagePasswordsUIController needs ChromePasswordManagerClient for logging.
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
-      new_tab, nullptr);
-  EXPECT_TRUE(ChromePasswordManagerClient::FromWebContents(new_tab));
-  controller_ = new TestManagePasswordsUIController(new_tab);
-  browser->tab_strip_model()->AppendWebContents(new_tab, true);
+      raw_new_tab, nullptr);
+  EXPECT_TRUE(ChromePasswordManagerClient::FromWebContents(raw_new_tab));
+  controller_ = new TestManagePasswordsUIController(raw_new_tab);
+  browser->tab_strip_model()->AppendWebContents(std::move(new_tab), true);
 
   // Navigate to a Web URL.
   EXPECT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browser, GURL("http://www.google.com")));
-  EXPECT_EQ(controller_, ManagePasswordsUIController::FromWebContents(new_tab));
-  return new_tab;
+  EXPECT_EQ(controller_,
+            ManagePasswordsUIController::FromWebContents(raw_new_tab));
+  return raw_new_tab;
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
@@ -200,6 +212,7 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
   EXPECT_CALL(*this, OnChooseCredential(nullptr));
   EXPECT_CALL(*controller(), OnDialogClosed());
   dialog->GetWidget()->Close();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(controller()->current_autosignin_prompt());
 }
@@ -254,6 +267,7 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest,
   EXPECT_CALL(*this, OnChooseCredential(nullptr));
   EXPECT_CALL(*controller(), OnDialogClosed());
   dialog->GetWidget()->Close();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(controller()->current_autosignin_prompt());
 }
 
@@ -383,6 +397,7 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest, PopupAutoSigninPrompt) {
   EXPECT_TRUE(dialog->GetWidget()->client_view()->AcceleratorPressed(esc));
   EXPECT_TRUE(bubble_observer.widget_closed());
   content::RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
   testing::Mock::VerifyAndClearExpectations(controller());
   EXPECT_TRUE(
       password_bubble_experiment::ShouldShowAutoSignInPromptFirstRunExperience(

@@ -52,7 +52,7 @@ static_library("usb") {
     "//base/third_party/dynamic_annotations",
     "//components/device_event_log",
     "//device/base",
-    "//device/usb/public/interfaces",
+    "//device/usb/public/mojom",
   ]
 
   public_deps = [
@@ -81,6 +81,7 @@ static_library("usb") {
 
   if (is_win || is_mac) {
     sources += [
+      "scoped_libusb_device_ref.h",
       "usb_context.cc",
       "usb_context.h",
       "usb_device_handle_impl.cc",
@@ -188,7 +189,7 @@ fuzzer_test("usb_descriptors_fuzzer") {
   deps = [
     ":usb",
     "//device/usb/mojo",
-    "//device/usb/public/interfaces",
+    "//device/usb/public/mojom",
     "//mojo/public/cpp/bindings",
   ]
   seed_corpus = "fuzz_corpus"

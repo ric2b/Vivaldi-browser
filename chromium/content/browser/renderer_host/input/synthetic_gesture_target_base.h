@@ -17,6 +17,7 @@ namespace blink {
 class WebTouchEvent;
 class WebMouseEvent;
 class WebMouseWheelEvent;
+class WebGestureEvent;
 }
 
 namespace content {
@@ -36,6 +37,10 @@ class SyntheticGestureTargetBase : public SyntheticGestureTarget {
       const blink::WebMouseWheelEvent& web_wheel,
       const ui::LatencyInfo& latency_info);
 
+  virtual void DispatchWebGestureEventToPlatform(
+      const blink::WebGestureEvent& web_gesture,
+      const ui::LatencyInfo& latency_info);
+
   virtual void DispatchWebMouseEventToPlatform(
       const blink::WebMouseEvent& web_mouse,
       const ui::LatencyInfo& latency_info);
@@ -49,6 +54,8 @@ class SyntheticGestureTargetBase : public SyntheticGestureTarget {
   base::TimeDelta PointerAssumedStoppedTime() const override;
 
   float GetTouchSlopInDips() const override;
+
+  float GetSpanSlopInDips() const override;
 
   float GetMinScalingSpanInDips() const override;
 

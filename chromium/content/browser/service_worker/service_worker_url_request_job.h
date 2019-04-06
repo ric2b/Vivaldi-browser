@@ -23,20 +23,20 @@
 #include "content/browser/service_worker/service_worker_response_type.h"
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
 #include "content/common/content_export.h"
-#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
-#include "content/common/service_worker/service_worker_status_code.h"
+#include "content/common/service_worker/service_worker.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/common/service_worker_modes.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_byte_range.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_status.h"
-#include "services/network/public/interfaces/fetch_api.mojom.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "storage/common/blob_storage/blob_storage_constants.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -89,7 +89,6 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
       RequestContextType request_context_type,
       network::mojom::RequestContextFrameType frame_type,
       scoped_refptr<network::ResourceRequestBody> body,
-      ServiceWorkerFetchType fetch_type,
       Delegate* delegate);
 
   ~ServiceWorkerURLRequestJob() override;
@@ -168,15 +167,17 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   void MaybeStartRequest();
   void StartRequest();
 
-  // Creates ServiceWorkerFetchRequest from |request_| and |body_|.
-  std::unique_ptr<ServiceWorkerFetchRequest> CreateFetchRequest();
+  // Creates a ResourceRequest from |request_|. Does not populate the request
+  // body.
+  std::unique_ptr<network::ResourceRequest> CreateResourceRequest();
 
   // Creates BlobDataHandle of the request body from |body_|. This handle
   // |request_body_blob_data_handle_| will be deleted when
   // ServiceWorkerURLRequestJob is deleted.
   // This must not be called until all files in |body_| with unknown size have
   // their sizes populated.
-  void CreateRequestBodyBlob(std::string* blob_uuid, uint64_t* blob_size);
+  blink::mojom::BlobPtr CreateRequestBodyBlob(std::string* blob_uuid,
+                                              uint64_t* blob_size);
 
   // Returns true if this job performed a navigation that should be logged to
   // performance-related UMA. It returns false in certain cases that are not
@@ -187,7 +188,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   // For FORWARD_TO_SERVICE_WORKER case.
   void DidPrepareFetchEvent(scoped_refptr<ServiceWorkerVersion> version);
   void DidDispatchFetchEvent(
-      ServiceWorkerStatusCode status,
+      blink::ServiceWorkerStatusCode status,
       ServiceWorkerFetchDispatcher::FetchEventResult fetch_result,
       const ServiceWorkerResponse& response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
@@ -324,8 +325,6 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   // using the userdata mechanism. So we have to keep it not to free the blobs.
   scoped_refptr<network::ResourceRequestBody> body_;
   std::unique_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
-  scoped_refptr<storage::BlobHandle> request_body_blob_handle_;
-  ServiceWorkerFetchType fetch_type_;
 
   ResponseBodyType response_body_type_ = UNKNOWN;
   bool did_record_result_ = false;

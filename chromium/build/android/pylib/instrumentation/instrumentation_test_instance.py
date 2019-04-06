@@ -35,8 +35,8 @@ _COMMAND_LINE_PARAMETER = 'cmdlinearg-parameter'
 _DEFAULT_ANNOTATIONS = [
     'SmallTest', 'MediumTest', 'LargeTest', 'EnormousTest', 'IntegrationTest']
 _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS = [
-    'DisabledTest', 'FlakyTest']
-_VALID_ANNOTATIONS = set(['Manual'] + _DEFAULT_ANNOTATIONS +
+    'DisabledTest', 'FlakyTest', 'Manual']
+_VALID_ANNOTATIONS = set(_DEFAULT_ANNOTATIONS +
                          _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS)
 
 # These test methods are inherited from android.test base test class and
@@ -676,7 +676,6 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   def _initializeTestControlAttributes(self, args):
     self._screenshot_dir = args.screenshot_dir
     self._timeout_scale = args.timeout_scale or 1
-    self._ui_screenshot_dir = args.ui_screenshot_dir
     self._wait_for_java_debugger = args.wait_for_java_debugger
 
   def _initializeTestCoverageAttributes(self, args):
@@ -686,8 +685,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._enable_java_deobfuscation = args.enable_java_deobfuscation
     self._store_tombstones = args.store_tombstones
     self._symbolizer = stack_symbolizer.Symbolizer(
-        self.apk_under_test.path if self.apk_under_test else None,
-        args.non_native_packed_relocations)
+        self.apk_under_test.path if self.apk_under_test else None)
 
   def _initializeEditPrefsAttributes(self, args):
     if not hasattr(args, 'shared_prefs_file') or not args.shared_prefs_file:
@@ -807,10 +805,6 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def total_external_shards(self):
     return self._total_external_shards
-
-  @property
-  def ui_screenshot_dir(self):
-    return self._ui_screenshot_dir
 
   @property
   def wait_for_java_debugger(self):

@@ -7,9 +7,11 @@ package org.chromium.chrome.browser.crash;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningAppProcessInfo;
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.BuildConfig;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.StrictModeContext;
@@ -21,8 +23,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.UUID;
 
 /**
@@ -45,9 +45,12 @@ public class PureJavaExceptionReporter {
     public static final String PACKAGE = "package";
     public static final String MODEL = "model";
     public static final String BRAND = "brand";
+    public static final String BOARD = "board";
     public static final String EXCEPTION_INFO = "exception_info";
     public static final String PROCESS_TYPE = "ptype";
     public static final String EARLY_JAVA_EXCEPTION = "early_java_exception";
+    public static final String CUSTOM_THEMES = "custom_themes";
+    public static final String RESOURCES_VERSION = "resources_version";
 
     private static final String CRASH_DUMP_DIR = "Crash Reports";
     private static final String FILE_PREFIX = "chromium-browser-minidump-";
@@ -69,25 +72,6 @@ public class PureJavaExceptionReporter {
     public static void reportJavaException(Throwable javaException) {
         PureJavaExceptionReporter reporter = new PureJavaExceptionReporter();
         reporter.createAndUploadReport(javaException);
-    }
-
-    /**
-     * Detect if the current process is isolated.
-     *
-     * @return whether the process is isolated, or null if cannot determine.
-     */
-    public static Boolean detectIsIsolatedProcess() {
-        try {
-            Method isIsolatedMethod = android.os.Process.class.getMethod("isIsolated");
-            Object retVal = isIsolatedMethod.invoke(null);
-            if (retVal == null || !(retVal instanceof Boolean)) {
-                return null;
-            }
-            return (Boolean) retVal;
-        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException
-                | NoSuchMethodException | SecurityException e) {
-            return null;
-        }
     }
 
     @VisibleForTesting
@@ -136,22 +120,28 @@ public class PureJavaExceptionReporter {
             processName = "browser";
         }
 
-        String[] allInfo = BuildInfo.getAll();
+        BuildInfo buildInfo = BuildInfo.getInstance();
         addPairedString(PRODUCT, "Chrome_Android");
         addPairedString(PROCESS_TYPE, processName);
-        addPairedString(DEVICE, allInfo[BuildInfo.DEVICE_INDEX]);
+        addPairedString(DEVICE, Build.DEVICE);
         addPairedString(VERSION, ChromeVersionInfo.getProductVersion());
         addPairedString(CHANNEL, getChannel());
-        addPairedString(ANDROID_BUILD_ID, allInfo[BuildInfo.ANDROID_BUILD_ID_INDEX]);
-        addPairedString(MODEL, allInfo[BuildInfo.MODEL_INDEX]);
-        addPairedString(BRAND, allInfo[BuildInfo.BRAND_INDEX]);
-        addPairedString(ANDROID_BUILD_FP, allInfo[BuildInfo.ANDROID_BUILD_FP_INDEX]);
-        addPairedString(GMS_CORE_VERSION, allInfo[BuildInfo.GMS_CORE_VERSION_INDEX]);
-        addPairedString(INSTALLER_PACKAGE_NAME, allInfo[BuildInfo.INSTALLER_PACKAGE_NAME_INDEX]);
-        addPairedString(ABI_NAME, allInfo[BuildInfo.ABI_NAME_INDEX]);
-        addPairedString(PACKAGE, BuildInfo.getPackageName());
+        addPairedString(ANDROID_BUILD_ID, Build.ID);
+        addPairedString(MODEL, Build.MODEL);
+        addPairedString(BRAND, Build.BRAND);
+        addPairedString(BOARD, Build.BOARD);
+        addPairedString(ANDROID_BUILD_FP, buildInfo.androidBuildFingerprint);
+        addPairedString(GMS_CORE_VERSION, buildInfo.gmsVersionCode);
+        addPairedString(INSTALLER_PACKAGE_NAME, buildInfo.installerPackageName);
+        addPairedString(ABI_NAME, buildInfo.abiString);
         addPairedString(EXCEPTION_INFO, Log.getStackTraceString(javaException));
         addPairedString(EARLY_JAVA_EXCEPTION, "true");
+        addPairedString(PACKAGE,
+                String.format("%s v%s (%s)", BuildConfig.FIREBASE_APP_ID, buildInfo.versionCode,
+                        buildInfo.versionName));
+        addPairedString(CUSTOM_THEMES, buildInfo.customThemes);
+        addPairedString(RESOURCES_VERSION, buildInfo.resourcesVersion);
+
         addString(mBoundary);
     }
 

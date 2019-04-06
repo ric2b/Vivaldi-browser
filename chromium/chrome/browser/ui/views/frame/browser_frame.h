@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/widget/widget.h"
 
@@ -24,7 +25,6 @@ struct NativeWebKeyboardEvent;
 }
 
 namespace gfx {
-class FontList;
 class Rect;
 }
 
@@ -34,6 +34,7 @@ class MenuModel;
 }
 
 namespace views {
+class Button;
 class MenuRunner;
 class View;
 }
@@ -45,8 +46,6 @@ class BrowserFrame
  public:
   explicit BrowserFrame(BrowserView* browser_view);
   ~BrowserFrame() override;
-
-  static const gfx::FontList& GetTitleFontList();
 
   // Initialize the frame (creates the underlying native window).
   void InitBrowserFrame();
@@ -63,9 +62,7 @@ class BrowserFrame
   // the non-client view. The topmost view depends on the window type. The
   // topmost view is the tab strip for tabbed browser windows, the toolbar for
   // popups, the web contents for app windows and varies for fullscreen windows.
-  // If |restored| is true, this is calculated as if the window was restored,
-  // regardless of its current state.
-  int GetTopInset(bool restored) const;
+  int GetTopInset() const;
 
   // Returns the amount that the theme background should be inset.
   int GetThemeBackgroundXInset() const;
@@ -86,10 +83,13 @@ class BrowserFrame
   void GetWindowPlacement(gfx::Rect* bounds,
                           ui::WindowShowState* show_state) const;
 
-  // Returns true if the |event| was handled by the platform implementation
+  // Returns HANDLED if the |event| was handled by the platform implementation
   // before sending it to the renderer. E.g., it may be swallowed by a native
-  // menu bar.
-  bool PreHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event);
+  // menu bar. Returns NOT_HANDLED_IS_SHORTCUT if the event was not handled, but
+  // would be handled as a shortcut if the renderer chooses not to handle it.
+  // Otherwise returns NOT_HANDLED.
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      const content::NativeWebKeyboardEvent& event);
 
   // Returns true if the |event| was handled by the platform implementation,
   // if the renderer did not process it.
@@ -114,7 +114,7 @@ class BrowserFrame
                               const gfx::Point& p,
                               ui::MenuSourceType source_type) override;
 
-  views::View* GetNewAvatarMenuButton();
+  views::Button* GetNewAvatarMenuButton();
 
   // Returns the menu model. BrowserFrame owns the returned model.
   // Note that in multi user mode this will upon each call create a new model.

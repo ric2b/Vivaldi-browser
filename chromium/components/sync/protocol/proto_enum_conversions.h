@@ -65,11 +65,15 @@ const char* ProtoEnumToString(sync_pb::TabNavigation::BlockedState state);
 
 const char* ProtoEnumToString(sync_pb::TabNavigation::PasswordState state);
 
+const char* ProtoEnumToString(sync_pb::UserConsentSpecifics::Feature feature);
+
 const char* ProtoEnumToString(
     sync_pb::UserEventSpecifics::Translation::Interaction interaction);
 
 const char* ProtoEnumToString(
-    sync_pb::UserEventSpecifics::UserConsent::ConsentStatus status);
+    sync_pb::UserEventSpecifics::UserConsent::Feature feature);
+
+const char* ProtoEnumToString(sync_pb::UserConsentTypes::ConsentStatus status);
 
 const char* ProtoEnumToString(
     sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseDetected::
@@ -87,6 +91,9 @@ const char* ProtoEnumToString(
 const char* ProtoEnumToString(
     sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup::
         ReputationVerdict verdict);
+
+const char* ProtoEnumToString(sync_pb::UserEventSpecifics::GaiaPasswordReuse::
+                                  PasswordCaptured::EventTrigger trigger);
 
 const char* ProtoEnumToString(
     sync_pb::WalletMaskedCreditCard::WalletCardClass wallet_card_class);

@@ -4,21 +4,22 @@
 
 #include <memory>
 
-#include "media/blink/video_decode_stats_reporter.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/time.h"
 #include "media/base/media_util.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_types.h"
+#include "media/blink/video_decode_stats_reporter.h"
 #include "media/capabilities/bucket_utility.h"
 #include "media/mojo/interfaces/video_decode_stats_recorder.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "ui/gfx/geometry/rect.h"
 
 using ::testing::Invoke;
@@ -70,15 +71,27 @@ class RecordInterceptor : public mojom::VideoDecodeStatsRecorder {
   RecordInterceptor() = default;
   ~RecordInterceptor() override = default;
 
-  MOCK_METHOD3(StartNewRecord,
+  // Until move-only types work.
+  void StartNewRecord(mojom::PredictionFeaturesPtr features) override {
+    MockStartNewRecord(features->profile, features->video_size,
+                       features->frames_per_sec);
+  }
+
+  MOCK_METHOD3(MockStartNewRecord,
                void(VideoCodecProfile profile,
                     const gfx::Size& natural_size,
                     int frames_per_sec));
 
-  MOCK_METHOD3(UpdateRecord,
+  void UpdateRecord(mojom::PredictionTargetsPtr targets) override {
+    MockUpdateRecord(targets->frames_decoded, targets->frames_dropped,
+                     targets->frames_decoded_power_efficient);
+  }
+
+  MOCK_METHOD3(MockUpdateRecord,
                void(uint32_t frames_decoded,
                     uint32_t frames_dropped,
                     uint32_t frames_decoded_power_efficient));
+
   MOCK_METHOD0(FinalizeRecord, void());
 };
 
@@ -90,9 +103,10 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
 
   void SetUp() override {
     // Do this first. Lots of pieces depend on the task runner.
+    auto message_loop = base::MessageLoopCurrent::Get();
+    original_task_runner_ = message_loop.task_runner();
     task_runner_ = new base::TestMockTimeTaskRunner();
-    clock_ = task_runner_->GetMockTickClock();
-    message_loop_.SetTaskRunner(task_runner_);
+    message_loop.SetTaskRunner(task_runner_);
 
     // Make reporter with default configuration. Connects RecordInterceptor as
     // remote mojo VideoDecodeStatsRecorder.
@@ -107,12 +121,11 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
 
   void TearDown() override {
     // Break the IPC connection if reporter still around.
-    if (reporter_.get()) {
-      reporter_.reset();
-    }
+    reporter_.reset();
 
     // Run task runner to have Mojo cleanup interceptor_.
     task_runner_->RunUntilIdle();
+    base::MessageLoopCurrent::Get().SetTaskRunner(original_task_runner_);
   }
 
   PipelineStatistics MakeAdvancingDecodeStats() {
@@ -174,7 +187,8 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
         base::Bind(&VideoDecodeStatsReporterTest::GetPipelineStatsCB,
                    base::Unretained(this)),
         MakeDefaultVideoConfig(),
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting(), clock_.get());
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+        task_runner_->GetMockTickClock());
   }
 
   // Fast forward the task runner (and associated tick clock) by |milliseconds|.
@@ -256,7 +270,7 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
       // The final iteration stabilizes framerate and starts a new record.
       if (CurrentStableFpsSamples() == kRequiredStableFpsSamples - 1) {
         EXPECT_CALL(*interceptor_,
-                    StartNewRecord(profile, natural_size, frames_per_sec));
+                    MockStartNewRecord(profile, natural_size, frames_per_sec));
       }
 
       if (fps_timer_speed == FAST_STABILIZE_FPS) {
@@ -309,12 +323,12 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
     // Verify that UpdateRecord calls come at the recording interval with
     // correct values.
     EXPECT_CALL(*this, GetPipelineStatsCB());
-    EXPECT_CALL(
-        *interceptor_,
-        UpdateRecord(next_stats.video_frames_decoded - decoded_frames_offset,
-                     next_stats.video_frames_dropped - dropped_frames_offset,
-                     next_stats.video_frames_decoded_power_efficient -
-                         decoded_power_efficient_offset));
+    EXPECT_CALL(*interceptor_,
+                MockUpdateRecord(
+                    next_stats.video_frames_decoded - decoded_frames_offset,
+                    next_stats.video_frames_dropped - dropped_frames_offset,
+                    next_stats.video_frames_decoded_power_efficient -
+                        decoded_power_efficient_offset));
     FastForward(kRecordingInterval);
   }
 
@@ -332,17 +346,11 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
   // Placed as a class member to avoid static initialization costs.
   const gfx::Size kDefaultSize_;
 
-  // Put first so it will be destructed *last*. We must let users of the
-  // message loop (e.g. reporter_) destruct before destructing the loop itself.
-  base::MessageLoop message_loop_;
-
-  // Task runner that allows for manual advancing of time. Instantiated and
-  // used by message_loop_ in Setup().
+  // Task runner that allows for manual advancing of time. Instantiated during
+  // Setup(). |original_task_runner_| is a copy of the TaskRunner in place prior
+  // to the start of this test. It's restored after the test completes.
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
-
-  // TODO(tzik): Remove |clock_| after updating GetMockTickClock to own the
-  // instance.
-  std::unique_ptr<base::TickClock> clock_;
+  scoped_refptr<base::SingleThreadTaskRunner> original_task_runner_;
 
   // Points to the interceptor that acts as a VideoDecodeStatsRecorder. The
   // object is owned by VideoDecodeStatsRecorderPtr, which is itself owned by
@@ -408,7 +416,7 @@ TEST_F(VideoDecodeStatsReporterTest, RecordingStopsWhenPaused) {
   reporter_->OnPaused();
   EXPECT_FALSE(ShouldBeReporting());
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(0);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   // Advance a few recording intervals just to be sure.
   FastForward(kRecordingInterval * 3);
 
@@ -437,7 +445,7 @@ TEST_F(VideoDecodeStatsReporterTest, RecordingStopsWhenHidden) {
   reporter_->OnHidden();
   EXPECT_FALSE(ShouldBeReporting());
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(0);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   // Advance a few recording intervals just to be sure.
   FastForward(kRecordingInterval * 3);
 
@@ -446,7 +454,7 @@ TEST_F(VideoDecodeStatsReporterTest, RecordingStopsWhenHidden) {
   // called to update offsets to ignore stats while hidden.
   EXPECT_CALL(*this, GetPipelineStatsCB());
   EXPECT_CALL(*interceptor_,
-              StartNewRecord(kDefaultProfile, kDefaultSize_, kDefaultFps));
+              MockStartNewRecord(kDefaultProfile, kDefaultSize_, kDefaultFps));
   reporter_->OnShown();
 
   // Update offsets for new record and verify updates resume as time advances.
@@ -479,7 +487,7 @@ TEST_F(VideoDecodeStatsReporterTest, RecordingStopsWhenNoDecodeProgress) {
   // Verify record updates stop while decode is not progressing. Fast forward
   // through several recording intervals to be sure we never call UpdateRecord.
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(3);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval * 3);
 
   // Resume progressing decode!
@@ -512,7 +520,7 @@ TEST_F(VideoDecodeStatsReporterTest, NewRecordStartsForSizeChange) {
   // Next stats update will not cause a record update. We must first check
   // to see if the framerate changes and start a new record.
   EXPECT_CALL(*this, GetPipelineStatsCB());
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval);
 
   // A new record is started with the latest natural size as soon as the
@@ -551,7 +559,7 @@ TEST_F(VideoDecodeStatsReporterTest, NewRecordStartsForConfigChange) {
   // Next stats update will not cause a record update. We must first check
   // to see if the framerate changes and start a new record.
   EXPECT_CALL(*this, GetPipelineStatsCB());
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval);
 
   // A new record is started with the latest configuration as soon as the
@@ -590,7 +598,7 @@ TEST_F(VideoDecodeStatsReporterTest, NewRecordStartsForFpsChange) {
   // Next stats update will not cause a record update. It will instead begin
   // detection of the new framerate.
   EXPECT_CALL(*this, GetPipelineStatsCB());
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval);
 
   // A new record is started with the latest frames per second as soon as the
@@ -625,8 +633,8 @@ TEST_F(VideoDecodeStatsReporterTest, FpsStabilizationFailed) {
   EXPECT_CALL(*this, GetPipelineStatsCB());
 
   // We should not start nor update a record while failing to detect fps.
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
-  EXPECT_CALL(*interceptor_, StartNewRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockStartNewRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval);
   int num_fps_samples = 1;
 
@@ -723,7 +731,7 @@ TEST_F(VideoDecodeStatsReporterTest, FpsStabilizationFailed_TinyWindows) {
   // Verify no further stats updates are made because we've hit the maximum
   // number of tiny framerate windows.
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(0);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval);
 
   // Pausing then playing does not kickstart reporting. We assume framerate is
@@ -806,7 +814,7 @@ TEST_F(VideoDecodeStatsReporterTest, ThrottleFpsTimerIfNoDecodeProgress) {
   // calls to UpdateRecord because decode progress is still frozen. Fast forward
   // through several recording intervals to be sure nothing changes.
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(3);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval * 3);
 
   // Un-freeze decode stats!
@@ -851,7 +859,7 @@ TEST_F(VideoDecodeStatsReporterTest, ConfigChangeStillProcessedWhenHidden) {
   reporter_->OnHidden();
   EXPECT_FALSE(ShouldBeReporting());
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(0);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval * 3);
 
   // Config changes may still arrive when hidden and should not be dropped.
@@ -901,7 +909,7 @@ TEST_F(VideoDecodeStatsReporterTest, ConfigChangeStillProcessedWhenPaused) {
   reporter_->OnPaused();
   EXPECT_FALSE(ShouldBeReporting());
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(0);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval * 3);
 
   // Config changes are still possible when paused (e.g. user seeks to a new
@@ -914,7 +922,7 @@ TEST_F(VideoDecodeStatsReporterTest, ConfigChangeStillProcessedWhenPaused) {
   // Playback is still paused, so reporting should be stopped.
   EXPECT_FALSE(ShouldBeReporting());
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(0);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval * 3);
 
   // Upon playing, expect the new config to re-trigger framerate detection and
@@ -952,13 +960,13 @@ TEST_F(VideoDecodeStatsReporterTest, FpsBucketing) {
 
   // Small changes to framerate should not trigger a new record.
   pipeline_framerate_ = kDefaultFps + .5;
-  EXPECT_CALL(*interceptor_, StartNewRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockStartNewRecord(_, _, _)).Times(0);
   AdvanceTimeAndVerifyRecordUpdate(decoded_offset, dropped_offset,
                                    decoded_power_efficient_offset);
 
   // Small changes in the other direction should also not trigger a new record.
   pipeline_framerate_ = kDefaultFps - .5;
-  EXPECT_CALL(*interceptor_, StartNewRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockStartNewRecord(_, _, _)).Times(0);
   AdvanceTimeAndVerifyRecordUpdate(decoded_offset, dropped_offset,
                                    decoded_power_efficient_offset);
 
@@ -1026,7 +1034,7 @@ TEST_F(VideoDecodeStatsReporterTest, ResolutionBucketing) {
   // Using the same bucket means we expect it continues to use the same record.
   // Verify recording progresses as if size were unchanged.
   reporter_->OnNaturalSizeChanged(slightly_smaller_size);
-  EXPECT_CALL(*interceptor_, StartNewRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockStartNewRecord(_, _, _)).Times(0);
   AdvanceTimeAndVerifyRecordUpdate(decoded_offset, dropped_offset,
                                    decoded_power_efficient_offset);
 
@@ -1061,7 +1069,7 @@ TEST_F(VideoDecodeStatsReporterTest, ResolutionBucketing) {
                                    slightly_larger_size.height() + 1);
   EXPECT_EQ(larger_size_bucket, GetSizeBucket(slightly_larger_size));
   reporter_->OnNaturalSizeChanged(slightly_larger_size);
-  EXPECT_CALL(*interceptor_, StartNewRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockStartNewRecord(_, _, _)).Times(0);
   AdvanceTimeAndVerifyRecordUpdate(decoded_offset, dropped_offset,
                                    decoded_power_efficient_offset);
 
@@ -1110,7 +1118,7 @@ TEST_F(VideoDecodeStatsReporterTest, ResolutionTooSmall) {
   // tiny size is in effect.
   EXPECT_FALSE(ShouldBeReporting());
   EXPECT_CALL(*this, GetPipelineStatsCB()).Times(0);
-  EXPECT_CALL(*interceptor_, UpdateRecord(_, _, _)).Times(0);
+  EXPECT_CALL(*interceptor_, MockUpdateRecord(_, _, _)).Times(0);
   FastForward(kRecordingInterval * 3);
 
   // Change the size to something small, but reasonable.

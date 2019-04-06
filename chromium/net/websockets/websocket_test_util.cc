@@ -7,11 +7,16 @@
 #include <stddef.h>
 #include <algorithm>
 #include <utility>
-#include <vector>
 
+#include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "net/proxy/proxy_service.h"
+#include "net/http/http_network_session.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/socket_test_util.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "net/websockets/websocket_basic_handshake_stream.h"
 #include "url/origin.h"
 
 namespace net {
@@ -32,6 +37,23 @@ uint32_t LinearCongruentialGenerator::Generate() {
   uint64_t result = current_;
   current_ = (current_ * kA + kC) % kM;
   return static_cast<uint32_t>(result >> 16);
+}
+
+std::string WebSocketExtraHeadersToString(
+    const WebSocketExtraHeaders& headers) {
+  std::string answer;
+  for (const auto& header : headers) {
+    base::StrAppend(&answer, {header.first, ": ", header.second, "\r\n"});
+  }
+  return answer;
+}
+
+HttpRequestHeaders WebSocketExtraHeadersToHttpRequestHeaders(
+    const WebSocketExtraHeaders& headers) {
+  HttpRequestHeaders headers_to_return;
+  for (const auto& header : headers)
+    headers_to_return.SetHeader(header.first, header.second);
+  return headers_to_return;
 }
 
 std::string WebSocketStandardRequest(
@@ -63,11 +85,12 @@ std::string WebSocketStandardRequestWithCookies(
   headers.SetHeader("Connection", "Upgrade");
   headers.SetHeader("Pragma", "no-cache");
   headers.SetHeader("Cache-Control", "no-cache");
+  headers.AddHeadersFromString(send_additional_request_headers);
   headers.SetHeader("Upgrade", "websocket");
   headers.SetHeader("Origin", origin.Serialize());
   headers.SetHeader("Sec-WebSocket-Version", "13");
-  headers.SetHeader("User-Agent", "");
-  headers.AddHeadersFromString(send_additional_request_headers);
+  if (!headers.HasHeader("User-Agent"))
+    headers.SetHeader("User-Agent", "");
   headers.SetHeader("Accept-Encoding", "gzip, deflate");
   headers.SetHeader("Accept-Language", "en-us,fr");
   headers.AddHeadersFromString(cookies);
@@ -90,6 +113,57 @@ std::string WebSocketStandardResponse(const std::string& extra_headers) {
       extra_headers.c_str());
 }
 
+HttpRequestHeaders WebSocketCommonTestHeaders() {
+  HttpRequestHeaders request_headers;
+  request_headers.SetHeader("Host", "www.example.org");
+  request_headers.SetHeader("Connection", "Upgrade");
+  request_headers.SetHeader("Pragma", "no-cache");
+  request_headers.SetHeader("Cache-Control", "no-cache");
+  request_headers.SetHeader("Upgrade", "websocket");
+  request_headers.SetHeader("Origin", "http://origin.example.org");
+  request_headers.SetHeader("Sec-WebSocket-Version", "13");
+  request_headers.SetHeader("User-Agent", "");
+  request_headers.SetHeader("Accept-Encoding", "gzip, deflate");
+  request_headers.SetHeader("Accept-Language", "en-us,fr");
+  return request_headers;
+}
+
+spdy::SpdyHeaderBlock WebSocketHttp2Request(
+    const std::string& path,
+    const std::string& authority,
+    const std::string& origin,
+    const WebSocketExtraHeaders& extra_headers) {
+  spdy::SpdyHeaderBlock request_headers;
+  request_headers[spdy::kHttp2MethodHeader] = "CONNECT";
+  request_headers[spdy::kHttp2AuthorityHeader] = authority;
+  request_headers[spdy::kHttp2SchemeHeader] = "https";
+  request_headers[spdy::kHttp2PathHeader] = path;
+  request_headers[spdy::kHttp2ProtocolHeader] = "websocket";
+  request_headers["pragma"] = "no-cache";
+  request_headers["cache-control"] = "no-cache";
+  request_headers["origin"] = origin;
+  request_headers["sec-websocket-version"] = "13";
+  request_headers["user-agent"] = "";
+  request_headers["accept-encoding"] = "gzip, deflate";
+  request_headers["accept-language"] = "en-us,fr";
+  request_headers["sec-websocket-extensions"] =
+      "permessage-deflate; client_max_window_bits";
+  for (const auto& header : extra_headers) {
+    request_headers[base::ToLowerASCII(header.first)] = header.second;
+  }
+  return request_headers;
+}
+
+spdy::SpdyHeaderBlock WebSocketHttp2Response(
+    const WebSocketExtraHeaders& extra_headers) {
+  spdy::SpdyHeaderBlock response_headers;
+  response_headers[spdy::kHttp2StatusHeader] = "200";
+  for (const auto& header : extra_headers) {
+    response_headers[base::ToLowerASCII(header.first)] = header.second;
+  }
+  return response_headers;
+}
+
 struct WebSocketMockClientSocketFactoryMaker::Detail {
   std::string expect_written;
   std::string return_to_read;
@@ -101,8 +175,7 @@ struct WebSocketMockClientSocketFactoryMaker::Detail {
 };
 
 WebSocketMockClientSocketFactoryMaker::WebSocketMockClientSocketFactoryMaker()
-    : detail_(new Detail) {
-}
+    : detail_(std::make_unique<Detail>()) {}
 
 WebSocketMockClientSocketFactoryMaker::
     ~WebSocketMockClientSocketFactoryMaker() = default;
@@ -133,8 +206,8 @@ void WebSocketMockClientSocketFactoryMaker::SetExpectations(
                           kHttpStreamParserBufferSize),
                  sequence++));
   }
-  std::unique_ptr<SequencedSocketData> socket_data(new SequencedSocketData(
-      detail_->reads.data(), detail_->reads.size(), &detail_->write, 1));
+  auto socket_data = std::make_unique<SequencedSocketData>(
+      detail_->reads, base::make_span(&detail_->write, 1));
   socket_data->set_connect_data(MockConnect(SYNCHRONOUS, OK));
   AddRawExpectations(std::move(socket_data));
 }
@@ -154,6 +227,12 @@ void WebSocketMockClientSocketFactoryMaker::AddSSLSocketDataProvider(
 WebSocketTestURLRequestContextHost::WebSocketTestURLRequestContextHost()
     : url_request_context_(true), url_request_context_initialized_(false) {
   url_request_context_.set_client_socket_factory(maker_.factory());
+  auto params = std::make_unique<HttpNetworkSession::Params>();
+  params->enable_spdy_ping_based_connection_checking = false;
+  params->enable_quic = false;
+  params->enable_websocket_over_http2 = true;
+  params->disable_idle_sockets_close_on_memory_pressure = false;
+  url_request_context_.set_http_network_session_params(std::move(params));
 }
 
 WebSocketTestURLRequestContextHost::~WebSocketTestURLRequestContextHost() =
@@ -172,8 +251,19 @@ void WebSocketTestURLRequestContextHost::AddSSLSocketDataProvider(
 void WebSocketTestURLRequestContextHost::SetProxyConfig(
     const std::string& proxy_rules) {
   DCHECK(!url_request_context_initialized_);
-  proxy_service_ = ProxyService::CreateFixed(proxy_rules);
-  url_request_context_.set_proxy_service(proxy_service_.get());
+  proxy_resolution_service_ = ProxyResolutionService::CreateFixed(
+      proxy_rules, TRAFFIC_ANNOTATION_FOR_TESTS);
+  url_request_context_.set_proxy_resolution_service(
+      proxy_resolution_service_.get());
+}
+
+int DummyConnectDelegate::OnAuthRequired(
+    scoped_refptr<AuthChallengeInfo> auth_info,
+    scoped_refptr<HttpResponseHeaders> response_headers,
+    const HostPortPair& host_port_pair,
+    base::OnceCallback<void(const AuthCredentials*)> callback,
+    base::Optional<AuthCredentials>* credentials) {
+  return OK;
 }
 
 TestURLRequestContext*
@@ -186,5 +276,13 @@ WebSocketTestURLRequestContextHost::GetURLRequestContext() {
   }
   return &url_request_context_;
 }
+
+void TestWebSocketStreamRequestAPI::OnBasicHandshakeStreamCreated(
+    WebSocketBasicHandshakeStream* handshake_stream) {
+  handshake_stream->SetWebSocketKeyForTesting("dGhlIHNhbXBsZSBub25jZQ==");
+}
+
+void TestWebSocketStreamRequestAPI::OnHttp2HandshakeStreamCreated(
+    WebSocketHttp2HandshakeStream* handshake_stream) {}
 
 }  // namespace net

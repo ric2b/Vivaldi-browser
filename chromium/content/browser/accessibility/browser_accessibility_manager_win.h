@@ -35,6 +35,8 @@ class CONTENT_EXPORT BrowserAccessibilityManagerWin
 
   // IAccessible2UsageObserver
   void OnIAccessible2Used() override;
+  void OnScreenReaderHoneyPotQueried() override;
+  void OnAccNameCalled() override;
 
   // BrowserAccessibilityManager methods
   void UserIsReloading() override;
@@ -43,7 +45,7 @@ class CONTENT_EXPORT BrowserAccessibilityManagerWin
   gfx::Rect GetViewBounds() override;
 
   void FireFocusEvent(BrowserAccessibility* node) override;
-  void FireBlinkEvent(ui::AXEvent event_type,
+  void FireBlinkEvent(ax::mojom::Event event_type,
                       BrowserAccessibility* node) override;
   void FireGeneratedEvent(AXEventGenerator::Event event_type,
                           BrowserAccessibility* node) override;

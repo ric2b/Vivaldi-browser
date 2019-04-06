@@ -10,6 +10,7 @@
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_filter.h"
+#include "cc/paint/paint_op_buffer_serializer.h"
 
 struct SkRect;
 struct SkIRect;
@@ -18,16 +19,15 @@ class SkRRect;
 namespace cc {
 
 class DrawImage;
-class ImageProvider;
 class PaintShader;
-class TransferCacheSerializeHelper;
 
 class CC_PAINT_EXPORT PaintOpWriter {
  public:
+  // The SerializeOptions passed to the writer must set the required fields
+  // if it can be used for serializing images, paint records or text blobs.
   PaintOpWriter(void* memory,
                 size_t size,
-                TransferCacheSerializeHelper* transfer_cache,
-                ImageProvider* image_provider,
+                const PaintOp::SerializeOptions& options,
                 bool enable_security_constraints = false);
   ~PaintOpWriter();
 
@@ -39,8 +39,6 @@ class CC_PAINT_EXPORT PaintOpWriter {
 
   // Write a sequence of arbitrary bytes.
   void WriteData(size_t bytes, const void* input);
-
-  void WriteArray(size_t count, const SkPoint* input);
 
   size_t size() const { return valid_ ? size_ - remaining_bytes_ : 0u; }
 
@@ -57,9 +55,9 @@ class CC_PAINT_EXPORT PaintOpWriter {
 
   void Write(const SkPath& path);
   void Write(const PaintFlags& flags);
-  void Write(const DrawImage& image);
   void Write(const sk_sp<SkData>& data);
-  void Write(const PaintShader* shader);
+  void Write(const SkColorSpace* data);
+  void Write(const PaintShader* shader, SkFilterQuality quality);
   void Write(const PaintFilter* filter);
   void Write(const scoped_refptr<PaintTextBlob>& blob);
   void Write(SkColorType color_type);
@@ -90,13 +88,23 @@ class CC_PAINT_EXPORT PaintOpWriter {
     static_assert(sizeof(T) == 0,
                   "Attempted to call a non-existent sk_sp override.");
   }
+  template <typename T>
+  void Write(const T*) {
+    static_assert(sizeof(T) == 0,
+                  "Attempted to call a non-existent T* override.");
+  }
+
+  // Serializes the given |draw_image|.
+  // |scale_adjustment| is set to the scale applied to the serialized image.
+  // |quality| is set to the quality that should be used when rasterizing this
+  // image.
+  void Write(const DrawImage& draw_image, SkSize* scale_adjustment);
 
  private:
   template <typename T>
   void WriteSimple(const T& val);
 
   void WriteFlattenable(const SkFlattenable* val);
-  void Write(const sk_sp<SkTextBlob>& blob);
 
   // The main entry point is Write(const PaintFilter* filter) which casts the
   // filter and calls one of the following functions.
@@ -123,17 +131,25 @@ class CC_PAINT_EXPORT PaintOpWriter {
   void Write(const LightingPointPaintFilter& filter);
   void Write(const LightingSpotPaintFilter& filter);
 
-  void Write(const PaintRecord* record);
-  void Write(const PaintImage& image);
+  void Write(const PaintRecord* record,
+             const gfx::Rect& playback_rect,
+             const gfx::SizeF& post_scale,
+             const SkMatrix& post_matrix_for_analysis);
   void Write(const SkRegion& region);
+  void WriteImage(uint32_t transfer_cache_entry_id, bool needs_mips);
 
   void EnsureBytes(size_t required_bytes);
+  sk_sp<PaintShader> TransformShaderIfNecessary(
+      const PaintShader* original,
+      SkFilterQuality quality,
+      uint32_t* paint_image_transfer_cache_entry_id,
+      gfx::SizeF* paint_record_post_scale,
+      bool* paint_image_needs_mips);
 
   char* memory_ = nullptr;
   size_t size_ = 0u;
   size_t remaining_bytes_ = 0u;
-  TransferCacheSerializeHelper* transfer_cache_;
-  ImageProvider* image_provider_;
+  const PaintOp::SerializeOptions& options_;
   bool valid_ = true;
 
   // Indicates that the following security constraints must be applied during

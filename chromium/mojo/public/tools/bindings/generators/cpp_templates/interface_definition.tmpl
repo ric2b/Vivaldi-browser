@@ -31,7 +31,7 @@ std::move(p_{{param.name}})
 {%- endmacro %}
 
 {#--- Begin #}
-const char {{class_name}}::Name_[] = "{{namespace_as_string}}::{{class_name}}";
+const char {{class_name}}::Name_[] = "{{namespace}}.{{class_name}}";
 
 {#--- Constants #}
 {%-  for constant in interface.constants %}
@@ -142,6 +142,11 @@ bool {{proxy_name}}::{{method.name}}(
       "message")}}
 {%-   endif %}
 
+#if defined(ENABLE_IPC_FUZZER)
+  message.set_interface_name({{class_name}}::Name_);
+  message.set_method_name("{{method.name}}");
+#endif
+
   bool result = false;
   std::unique_ptr<mojo::MessageReceiver> responder(
       new {{class_name}}_{{method.name}}_HandleSyncResponse(
@@ -180,6 +185,11 @@ void {{proxy_name}}::{{method.name}}(
       "message")}}
 {%-   endif %}
 
+#if defined(ENABLE_IPC_FUZZER)
+  message.set_interface_name({{class_name}}::Name_);
+  message.set_method_name("{{method.name}}");
+#endif
+
 {%- if method.response_parameters != None %}
   std::unique_ptr<mojo::MessageReceiver> responder(
       new {{class_name}}_{{method.name}}_ForwardToCallback(
@@ -212,8 +222,13 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
     std::unique_ptr<{{class_name}}_{{method.name}}_ProxyToResponder> proxy(
         new {{class_name}}_{{method.name}}_ProxyToResponder(
             request_id, is_sync, std::move(responder)));
+{%- if use_once_callback %}
+    return base::BindOnce(&{{class_name}}_{{method.name}}_ProxyToResponder::Run,
+                          std::move(proxy));
+{%- else %}
     return base::Bind(&{{class_name}}_{{method.name}}_ProxyToResponder::Run,
                       base::Passed(&proxy));
+{%- endif %}
   }
 
   ~{{class_name}}_{{method.name}}_ProxyToResponder() {
@@ -324,6 +339,12 @@ void {{class_name}}_{{method.name}}_ProxyToResponder::Run(
   TRACE_EVENT1("mojom", "(Impl){{namespace_as_string}}::{{class_name}}::{{method.name}}Callback",
                "message", message.name());
 #endif
+
+#if defined(ENABLE_IPC_FUZZER)
+  message.set_interface_name({{class_name}}::Name_);
+  message.set_method_name("{{method.name}}");
+#endif
+
   message.set_request_id(request_id_);
   ignore_result(responder_->Accept(&message));
   // TODO(darin): Accept() returning false indicates a malformed message, and
@@ -500,8 +521,10 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
 {#--- Request validator definitions #}
 
 bool {{class_name}}RequestValidator::Accept(mojo::Message* message) {
-  if (mojo::internal::IsUnserializedOrControlMessage(message))
+  if (!message->is_serialized() ||
+      mojo::internal::ControlMessageHandler::IsControlMessage(message)) {
     return true;
+  }
 
   mojo::internal::ValidationContext validation_context(
     message->payload(), message->payload_num_bytes(),
@@ -544,8 +567,10 @@ bool {{class_name}}RequestValidator::Accept(mojo::Message* message) {
 {#--- Response validator definitions #}
 {% if interface|has_callbacks %}
 bool {{class_name}}ResponseValidator::Accept(mojo::Message* message) {
-  if (mojo::internal::IsUnserializedOrControlMessage(message))
+  if (!message->is_serialized() ||
+      mojo::internal::ControlMessageHandler::IsControlMessage(message)) {
     return true;
+  }
 
   mojo::internal::ValidationContext validation_context(
     message->payload(), message->payload_num_bytes(),
@@ -606,7 +631,11 @@ void {{interface.name}}AsyncWaiter::{{method.name}}(
 {%-   for param in method.parameters -%}
       std::move({{param.name}}),
 {%-   endfor %}
+{%-   if use_once_callback %}
+      base::BindOnce(
+{%-   else %}
       base::Bind(
+{%-   endif %}
           [](base::RunLoop* loop
 {%-   for param in method.response_parameters -%},
              {{param.kind|cpp_wrapper_call_type}}* out_{{param.name}}

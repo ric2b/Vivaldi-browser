@@ -22,11 +22,6 @@ class CHROMEOS_EXPORT MockHomedirMethods : public HomedirMethods {
 
   void SetUp(bool success, MountError return_code);
 
-  MOCK_METHOD4(GetKeyDataEx,
-               void(const Identification& id,
-                    const AuthorizationRequest& auth,
-                    const GetKeyDataRequest& request,
-                    const GetKeyDataCallback& callback));
   MOCK_METHOD4(CheckKeyEx,
                void(const Identification& id,
                     const AuthorizationRequest& auth,
@@ -47,13 +42,6 @@ class CHROMEOS_EXPORT MockHomedirMethods : public HomedirMethods {
                     const AuthorizationRequest& auth,
                     const UpdateKeyRequest& request,
                     const Callback& callback));
-  MOCK_METHOD3(RenameCryptohome,
-               void(const Identification& id_from,
-                    const Identification& id_to,
-                    const Callback& callback));
-  MOCK_METHOD2(GetAccountDiskUsage,
-               void(const Identification& id,
-                    const GetAccountDiskUsageCallback& callback));
 
   void set_add_key_callback(const base::Closure& callback) {
     on_add_key_called_ = callback;
@@ -61,7 +49,6 @@ class CHROMEOS_EXPORT MockHomedirMethods : public HomedirMethods {
 
  private:
   void DoCallback(const Callback& callback);
-  void DoGetDataCallback(const GetKeyDataCallback& callback);
   void DoAddKeyCallback(const Callback& callback);
 
   bool success_ = false;

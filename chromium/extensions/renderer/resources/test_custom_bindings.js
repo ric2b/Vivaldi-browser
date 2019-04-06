@@ -27,7 +27,7 @@ function setExceptionHandler(handler) {
 
 function handleException(message, error) {
   if (bindingUtil)
-    bindingUtil.handleException(message, error);
+    bindingUtil.handleException(message || 'Unknown error', error);
   else
     jsExceptionHandler.handle(message, error);
 }
@@ -178,6 +178,19 @@ binding.registerCustomHook(function(api) {
 
     if (typeof(expected) !== typeof(actual))
       return false;
+
+    if ((actual instanceof ArrayBuffer) && (expected instanceof ArrayBuffer)) {
+      if (actual.byteLength != expected.byteLength)
+        return false;
+      var actualView = new Uint8Array(actual);
+      var expectedView = new Uint8Array(expected);
+      for (var i = 0; i < actualView.length; ++i) {
+        if (actualView[i] != expectedView[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
 
     for (var p in actual) {
       if ($Object.hasOwnProperty(actual, p) &&
@@ -360,11 +373,6 @@ binding.registerCustomHook(function(api) {
   apiFunctions.setHandleRequest('runWithUserGesture', function(callback) {
     chromeTest.assertEq(typeof(callback), 'function');
     return userGestures.RunWithUserGesture(callback);
-  });
-
-  apiFunctions.setHandleRequest('runWithoutUserGesture', function(callback) {
-    chromeTest.assertEq(typeof(callback), 'function');
-    return userGestures.RunWithoutUserGesture(callback);
   });
 
   apiFunctions.setHandleRequest('setExceptionHandler', function(callback) {

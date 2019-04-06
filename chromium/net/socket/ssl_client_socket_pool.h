@@ -50,8 +50,7 @@ class NET_EXPORT_PRIVATE SSLSocketParams
                   const HostPortPair& host_and_port,
                   const SSLConfig& ssl_config,
                   PrivacyMode privacy_mode,
-                  int load_flags,
-                  bool expect_spdy);
+                  int load_flags);
 
   // Returns the type of the underlying connection.
   ConnectionType GetConnectionType() const;
@@ -72,7 +71,6 @@ class NET_EXPORT_PRIVATE SSLSocketParams
   const SSLConfig& ssl_config() const { return ssl_config_; }
   PrivacyMode privacy_mode() const { return privacy_mode_; }
   int load_flags() const { return load_flags_; }
-  bool expect_spdy() const { return expect_spdy_; }
 
  private:
   friend class base::RefCounted<SSLSocketParams>;
@@ -85,7 +83,6 @@ class NET_EXPORT_PRIVATE SSLSocketParams
   const SSLConfig ssl_config_;
   const PrivacyMode privacy_mode_;
   const int load_flags_;
-  const bool expect_spdy_;
 
   DISALLOW_COPY_AND_ASSIGN(SSLSocketParams);
 };
@@ -152,8 +149,6 @@ class SSLConnectJob : public ConnectJob {
   // Otherwise, it returns a net error code.
   int ConnectInternal() override;
 
-  void ResetStateForRetry();
-
   scoped_refptr<SSLSocketParams> params_;
   TransportClientSocketPool* const transport_pool_;
   SOCKSClientSocketPool* const socks_pool_;
@@ -174,16 +169,6 @@ class SSLConnectJob : public ConnectJob {
   // and only if the connect job is connected *directly* to the server (not
   // through an HTTPS CONNECT request or a SOCKS proxy).
   IPEndPoint server_address_;
-
-  bool version_interference_probe_;
-
-  // The error which triggered a TLS 1.3 version interference probe, or OK if
-  // none was triggered.
-  int version_interference_error_;
-
-  // Details for the error which triggered a TLS 1.3 interference probe, or
-  // kOther if not applicable.
-  SSLErrorDetails version_interference_details_;
 
   DISALLOW_COPY_AND_ASSIGN(SSLConnectJob);
 };
@@ -221,14 +206,13 @@ class NET_EXPORT_PRIVATE SSLClientSocketPool
                     const SocketTag& socket_tag,
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
-                    const CompletionCallback& callback,
+                    CompletionOnceCallback callback,
                     const NetLogWithSource& net_log) override;
 
   void RequestSockets(const std::string& group_name,
                       const void* params,
                       int num_sockets,
-                      const NetLogWithSource& net_log,
-                      HttpRequestInfo::RequestMotivation motivation) override;
+                      const NetLogWithSource& net_log) override;
 
   void SetPriority(const std::string& group_name,
                    ClientSocketHandle* handle,
@@ -321,7 +305,7 @@ class NET_EXPORT_PRIVATE SSLClientSocketPool
   SOCKSClientSocketPool* const socks_pool_;
   HttpProxyClientSocketPool* const http_proxy_pool_;
   PoolBase base_;
-  const scoped_refptr<SSLConfigService> ssl_config_service_;
+  SSLConfigService* const ssl_config_service_;
 
   DISALLOW_COPY_AND_ASSIGN(SSLClientSocketPool);
 };

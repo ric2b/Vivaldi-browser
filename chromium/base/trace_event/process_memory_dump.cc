@@ -9,12 +9,9 @@
 #include <vector>
 
 #include "base/memory/ptr_util.h"
-#include "base/memory/shared_memory.h"
 #include "base/memory/shared_memory_tracker.h"
 #include "base/process/process_metrics.h"
 #include "base/strings/stringprintf.h"
-#include "base/trace_event/heap_profiler_heap_dump_writer.h"
-#include "base/trace_event/heap_profiler_serialization_state.h"
 #include "base/trace_event/memory_infra_background_whitelist.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/unguessable_token.h"
@@ -24,7 +21,7 @@
 #include <mach/vm_page_size.h>
 #endif
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <sys/mman.h>
 #endif
 
@@ -84,7 +81,7 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
   DCHECK_EQ(0u, start_pointer % page_size);
 
   size_t offset = 0;
-  size_t total_resident_size = 0;
+  size_t total_resident_pages = 0;
   bool failure = false;
 
   // An array as large as number of pages in memory segment needs to be passed
@@ -93,12 +90,12 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
   const size_t kMaxChunkSize = 8 * 1024 * 1024;
   size_t max_vec_size =
       GetSystemPageCount(std::min(mapped_size, kMaxChunkSize), page_size);
-#if defined(OS_MACOSX)
-  std::unique_ptr<char[]> vec(new char[max_vec_size]);
-#elif defined(OS_WIN)
+#if defined(OS_WIN)
   std::unique_ptr<PSAPI_WORKING_SET_EX_INFORMATION[]> vec(
       new PSAPI_WORKING_SET_EX_INFORMATION[max_vec_size]);
-#elif defined(OS_POSIX)
+#elif defined(OS_MACOSX)
+  std::unique_ptr<char[]> vec(new char[max_vec_size]);
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   std::unique_ptr<unsigned char[]> vec(new unsigned char[max_vec_size]);
 #endif
 
@@ -107,13 +104,7 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
     const size_t chunk_size = std::min(mapped_size - offset, kMaxChunkSize);
     const size_t page_count = GetSystemPageCount(chunk_size, page_size);
     size_t resident_page_count = 0;
-#if defined(OS_MACOSX)
-    // mincore in MAC does not fail with EAGAIN.
-    failure =
-        !!mincore(reinterpret_cast<void*>(chunk_start), chunk_size, vec.get());
-    for (size_t i = 0; i < page_count; i++)
-      resident_page_count += vec[i] & MINCORE_INCORE ? 1 : 0;
-#elif defined(OS_WIN)
+#if defined(OS_WIN)
     for (size_t i = 0; i < page_count; i++) {
       vec[i].VirtualAddress =
           reinterpret_cast<void*>(chunk_start + i * page_size);
@@ -128,6 +119,12 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
     // TODO(fuchsia): Port, see https://crbug.com/706592.
     ALLOW_UNUSED_LOCAL(chunk_start);
     ALLOW_UNUSED_LOCAL(page_count);
+#elif defined(OS_MACOSX)
+    // mincore in MAC does not fail with EAGAIN.
+    failure =
+        !!mincore(reinterpret_cast<void*>(chunk_start), chunk_size, vec.get());
+    for (size_t i = 0; i < page_count; i++)
+      resident_page_count += vec[i] & MINCORE_INCORE ? 1 : 0;
 #elif defined(OS_POSIX)
     int error_counter = 0;
     int result = 0;
@@ -150,27 +147,28 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
     if (failure)
       break;
 
-    total_resident_size += resident_page_count * page_size;
+    total_resident_pages += resident_page_count * page_size;
     offset += kMaxChunkSize;
   }
 
   DCHECK(!failure);
   if (failure) {
-    total_resident_size = 0;
+    total_resident_pages = 0;
     LOG(ERROR) << "CountResidentBytes failed. The resident size is invalid";
   }
-  return total_resident_size;
+  return total_resident_pages;
 }
 
 // static
 base::Optional<size_t> ProcessMemoryDump::CountResidentBytesInSharedMemory(
-    const SharedMemory& shared_memory) {
+    void* start_address,
+    size_t mapped_size) {
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   // On macOS, use mach_vm_region instead of mincore for performance
   // (crbug.com/742042).
   mach_vm_size_t dummy_size = 0;
   mach_vm_address_t address =
-      reinterpret_cast<mach_vm_address_t>(shared_memory.memory());
+      reinterpret_cast<mach_vm_address_t>(start_address);
   vm_region_top_info_data_t info;
   MachVMRegionResult result =
       GetTopInfo(mach_task_self(), &dummy_size, &address, &info);
@@ -180,24 +178,58 @@ base::Optional<size_t> ProcessMemoryDump::CountResidentBytesInSharedMemory(
     return base::Optional<size_t>();
   }
 
-  size_t resident_size =
+  size_t resident_pages =
       info.private_pages_resident + info.shared_pages_resident;
-  return resident_size * PAGE_SIZE;
+
+  // On macOS, measurements for private memory footprint overcount by
+  // faulted pages in anonymous shared memory. To discount for this, we touch
+  // all the resident pages in anonymous shared memory here, thus making them
+  // faulted as well. This relies on two assumptions:
+  //
+  // 1) Consumers use shared memory from front to back. Thus, if there are
+  // (N) resident pages, those pages represent the first N * PAGE_SIZE bytes in
+  // the shared memory region.
+  //
+  // 2) This logic is run shortly before the logic that calculates
+  // phys_footprint, thus ensuring that the discrepancy between faulted and
+  // resident pages is minimal.
+  //
+  // The performance penalty is expected to be small.
+  //
+  // * Most of the time, we expect the pages to already be resident and faulted,
+  // thus incurring a cache penalty read hit [since we read from each resident
+  // page].
+  //
+  // * Rarely, we expect the pages to be resident but not faulted, resulting in
+  // soft faults + cache penalty.
+  //
+  // * If assumption (1) is invalid, this will potentially fault some
+  // previously non-resident pages, thus increasing memory usage, without fixing
+  // the accounting.
+  //
+  // Sanity check in case the mapped size is less than the total size of the
+  // region.
+  size_t pages_to_fault =
+      std::min(resident_pages, (mapped_size + PAGE_SIZE - 1) / PAGE_SIZE);
+
+  volatile char* base_address = static_cast<char*>(start_address);
+  for (size_t i = 0; i < pages_to_fault; ++i) {
+    // Reading from a volatile is a visible side-effect for the purposes of
+    // optimization. This guarantees that the optimizer will not kill this line.
+    base_address[i * PAGE_SIZE];
+  }
+
+  return resident_pages * PAGE_SIZE;
 #else
-  return CountResidentBytes(shared_memory.memory(),
-                            shared_memory.mapped_size());
+  return CountResidentBytes(start_address, mapped_size);
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 }
 
 #endif  // defined(COUNT_RESIDENT_BYTES_SUPPORTED)
 
 ProcessMemoryDump::ProcessMemoryDump(
-    scoped_refptr<HeapProfilerSerializationState>
-        heap_profiler_serialization_state,
     const MemoryDumpArgs& dump_args)
     : process_token_(GetTokenForCurrentProcess()),
-      heap_profiler_serialization_state_(
-          std::move(heap_profiler_serialization_state)),
       dump_args_(dump_args) {}
 
 ProcessMemoryDump::~ProcessMemoryDump() = default;
@@ -240,8 +272,6 @@ MemoryAllocatorDump* ProcessMemoryDump::GetAllocatorDump(
   auto it = allocator_dumps_.find(absolute_name);
   if (it != allocator_dumps_.end())
     return it->second.get();
-  if (black_hole_mad_)
-    return black_hole_mad_.get();
   return nullptr;
 }
 
@@ -286,15 +316,6 @@ void ProcessMemoryDump::DumpHeapUsage(
         metrics_by_context,
     base::trace_event::TraceEventMemoryOverhead& overhead,
     const char* allocator_name) {
-  // The heap profiler serialization state can be null here if heap profiler was
-  // enabled when a process dump is in progress.
-  if (heap_profiler_serialization_state() && !metrics_by_context.empty()) {
-    DCHECK_EQ(0ul, heap_dumps_.count(allocator_name));
-    std::unique_ptr<TracedValue> heap_dump = ExportHeapDump(
-        metrics_by_context, *heap_profiler_serialization_state());
-    heap_dumps_[allocator_name] = std::move(heap_dump);
-  }
-
   std::string base_name = base::StringPrintf("tracing/heap_profiler_%s",
                                              allocator_name);
   overhead.DumpInto(base_name.c_str(), this);
@@ -328,7 +349,6 @@ void ProcessMemoryDump::SetAllEdgesForSerialization(
 void ProcessMemoryDump::Clear() {
   allocator_dumps_.clear();
   allocator_dumps_edges_.clear();
-  heap_dumps_.clear();
 }
 
 void ProcessMemoryDump::TakeAllDumpsFrom(ProcessMemoryDump* other) {
@@ -342,12 +362,6 @@ void ProcessMemoryDump::TakeAllDumpsFrom(ProcessMemoryDump* other) {
   allocator_dumps_edges_.insert(other->allocator_dumps_edges_.begin(),
                                 other->allocator_dumps_edges_.end());
   other->allocator_dumps_edges_.clear();
-
-  for (auto& it : other->heap_dumps_) {
-    DCHECK_EQ(0ul, heap_dumps_.count(it.first));
-    heap_dumps_.insert(std::make_pair(it.first, std::move(it.second)));
-  }
-  other->heap_dumps_.clear();
 }
 
 void ProcessMemoryDump::SerializeAllocatorDumpsInto(TracedValue* value) const {
@@ -369,16 +383,6 @@ void ProcessMemoryDump::SerializeAllocatorDumpsInto(TracedValue* value) const {
     value->EndDictionary();
   }
   value->EndArray();
-}
-
-void ProcessMemoryDump::SerializeHeapProfilerDumpsInto(
-    TracedValue* value) const {
-  if (heap_dumps_.size() == 0)
-    return;
-  value->BeginDictionary("heaps");
-  for (const auto& name_and_dump : heap_dumps_)
-    value->SetValueWithCopiedName(name_and_dump.first, *name_and_dump.second);
-  value->EndDictionary();  // "heaps"
 }
 
 void ProcessMemoryDump::AddOwnershipEdge(const MemoryAllocatorDumpGuid& source,

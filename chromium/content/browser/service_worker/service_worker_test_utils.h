@@ -16,7 +16,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace net {
 
@@ -27,36 +27,35 @@ class HttpResponseInfo;
 namespace content {
 
 class ServiceWorkerContextCore;
-class ServiceWorkerDispatcherHost;
 class ServiceWorkerProviderHost;
-class ServiceWorkerRegistration;
 class ServiceWorkerStorage;
 class ServiceWorkerVersion;
-struct ServiceWorkerProviderHostInfo;
 
 template <typename Arg>
 void ReceiveResult(BrowserThread::ID run_quit_thread,
                    const base::Closure& quit,
-                   Arg* out, Arg actual) {
+                   base::Optional<Arg>* out,
+                   Arg actual) {
   *out = actual;
   if (!quit.is_null())
     BrowserThread::PostTask(run_quit_thread, FROM_HERE, quit);
 }
 
-template <typename Arg> base::Callback<void(Arg)>
-CreateReceiver(BrowserThread::ID run_quit_thread,
-               const base::Closure& quit, Arg* out) {
-  return base::Bind(&ReceiveResult<Arg>, run_quit_thread, quit, out);
+template <typename Arg>
+base::OnceCallback<void(Arg)> CreateReceiver(BrowserThread::ID run_quit_thread,
+                                             const base::RepeatingClosure& quit,
+                                             base::Optional<Arg>* out) {
+  return base::BindOnce(&ReceiveResult<Arg>, run_quit_thread, quit, out);
 }
 
 template <typename Arg>
-base::Callback<void(Arg)> CreateReceiverOnCurrentThread(
-    Arg* out,
+base::OnceCallback<void(Arg)> CreateReceiverOnCurrentThread(
+    base::Optional<Arg>* out,
     const base::Closure& quit = base::Closure()) {
   BrowserThread::ID id;
   bool ret = BrowserThread::GetCurrentThreadIdentifier(&id);
   DCHECK(ret);
-  return base::Bind(&ReceiveResult<Arg>, id, quit, out);
+  return CreateReceiver(id, quit, out);
 }
 
 // Container for keeping the Mojo connection to the service worker provider on
@@ -68,7 +67,7 @@ class ServiceWorkerRemoteProviderEndpoint {
       ServiceWorkerRemoteProviderEndpoint&& other);
   ~ServiceWorkerRemoteProviderEndpoint();
 
-  void BindWithProviderHostInfo(ServiceWorkerProviderHostInfo* info);
+  void BindWithProviderHostInfo(mojom::ServiceWorkerProviderHostInfoPtr* info);
   void BindWithProviderInfo(
       mojom::ServiceWorkerProviderInfoForStartWorkerPtr info);
 
@@ -87,12 +86,13 @@ class ServiceWorkerRemoteProviderEndpoint {
   // This is the other end of ServiceWorkerContainerAssociatedPtr owned by
   // content::ServiceWorkerProviderHost.
   mojom::ServiceWorkerContainerAssociatedRequest client_request_;
-  // This is to keep alive the corresponding content::ServiceWorkerRegistration.
-  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
-      registration_object_info_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerRemoteProviderEndpoint);
 };
+
+mojom::ServiceWorkerProviderHostInfoPtr CreateProviderHostInfoForWindow(
+    int provider_id,
+    int route_id);
 
 std::unique_ptr<ServiceWorkerProviderHost> CreateProviderHostForWindow(
     int process_id,
@@ -101,20 +101,12 @@ std::unique_ptr<ServiceWorkerProviderHost> CreateProviderHostForWindow(
     base::WeakPtr<ServiceWorkerContextCore> context,
     ServiceWorkerRemoteProviderEndpoint* output_endpoint);
 
-std::unique_ptr<ServiceWorkerProviderHost>
+base::WeakPtr<ServiceWorkerProviderHost>
 CreateProviderHostForServiceWorkerContext(
     int process_id,
     bool is_parent_frame_secure,
     ServiceWorkerVersion* hosted_version,
     base::WeakPtr<ServiceWorkerContextCore> context,
-    ServiceWorkerRemoteProviderEndpoint* output_endpoint);
-
-std::unique_ptr<ServiceWorkerProviderHost> CreateProviderHostWithDispatcherHost(
-    int process_id,
-    int provider_id,
-    base::WeakPtr<ServiceWorkerContextCore> context,
-    int route_id,
-    ServiceWorkerDispatcherHost* dispatcher_host,
     ServiceWorkerRemoteProviderEndpoint* output_endpoint);
 
 // Writes the script down to |storage| synchronously. This should not be used in

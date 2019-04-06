@@ -74,8 +74,10 @@ bool IsImageFormatCompatibleWithGpuMemoryBufferFormat(
       return format == BufferFormatForInternalFormat(internalformat);
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::BGRX_1010102:
       return internalformat == GL_RGB;
+    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::RGBX_1010102:
+      return internalformat == GL_RGB10_A2_EXT;
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBA_F16:
       return internalformat == GL_RGBA;
@@ -108,11 +110,14 @@ bool IsImageFromGpuMemoryBufferFormatSupported(
       return capabilities.texture_rg;
     case gfx::BufferFormat::UYVY_422:
       return capabilities.image_ycbcr_422;
+    case gfx::BufferFormat::BGRX_1010102:
+      return capabilities.image_xr30;
+    case gfx::BufferFormat::RGBX_1010102:
+      return capabilities.image_xb30;
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBA_8888:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::BGRX_1010102:
     case gfx::BufferFormat::YVU_420:
       return true;
     case gfx::BufferFormat::RGBA_F16:
@@ -146,6 +151,7 @@ bool IsImageSizeValidForGpuMemoryBufferFormat(const gfx::Size& size,
     case gfx::BufferFormat::BGRA_8888:
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::RGBX_1010102:
     case gfx::BufferFormat::RGBA_F16:
       return true;
     case gfx::BufferFormat::YVU_420:

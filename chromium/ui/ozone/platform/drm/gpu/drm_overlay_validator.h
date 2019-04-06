@@ -6,7 +6,7 @@
 #define UI_OZONE_PLATFORM_DRM_GPU_DRM_OVERLAY_VALIDATOR_H_
 
 #include "base/containers/mru_cache.h"
-#include "ui/ozone/platform/drm/gpu/overlay_plane.h"
+#include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
 
 namespace ui {
 
@@ -26,7 +26,7 @@ class DrmOverlayValidator {
   // without failing the page flip. It expects |params| to be sorted by z_order.
   std::vector<OverlayCheckReturn_Params> TestPageFlip(
       const std::vector<OverlayCheck_Params>& params,
-      const OverlayPlaneList& last_used_planes);
+      const DrmOverlayPlaneList& last_used_planes);
 
  private:
   DrmWindow* window_;  // Not owned.

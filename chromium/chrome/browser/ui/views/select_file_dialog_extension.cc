@@ -13,7 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
-#include "chrome/browser/apps/app_window_registry_util.h"
+#include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/select_file_dialog_util.h"
@@ -22,6 +22,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -38,6 +39,12 @@
 #include "ui/base/base_window.h"
 #include "ui/shell_dialogs/selected_file_info.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
+#include "chrome/browser/chromeos/login/ui/webui_login_view.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#endif
 
 using extensions::AppWindow;
 using content::BrowserThread;
@@ -93,6 +100,14 @@ scoped_refptr<SelectFileDialogExtension> PendingDialog::Find(
   return it->second;
 }
 
+#if defined(OS_CHROMEOS)
+// Return the Chrome OS WebUI login WebContents, if applicable.
+content::WebContents* GetLoginWebContents() {
+  chromeos::LoginDisplayHost* host = chromeos::LoginDisplayHost::default_host();
+  return host ? host->GetOobeWebContents() : nullptr;
+}
+#endif
+
 // Given |owner_window| finds corresponding |base_window|, it's associated
 // |web_contents| and |profile|.
 void FindRuntimeContext(gfx::NativeWindow owner_window,
@@ -118,7 +133,6 @@ void FindRuntimeContext(gfx::NativeWindow owner_window,
   }
 
   if (app_window) {
-    DCHECK(!app_window->window_type_is_panel());
     *base_window = app_window->GetBaseWindow();
     *web_contents = app_window->web_contents();
   } else {
@@ -138,7 +152,13 @@ void FindRuntimeContext(gfx::NativeWindow owner_window,
   if (chrome::IsRunningInForcedAppMode() && !(*web_contents))
     *web_contents = chromeos::LoginWebDialog::GetCurrentWebContents();
 
-  CHECK(web_contents);
+#if defined(OS_CHROMEOS)
+  // Check for a WebContents used for the Chrome OS WebUI login flow.
+  if (!*web_contents)
+    *web_contents = GetLoginWebContents();
+#endif
+
+  CHECK(*web_contents);
 }
 
 }  // namespace
@@ -220,7 +240,7 @@ void SelectFileDialogExtension::ExtensionTerminated(
   if (profile_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&ExtensionService::ReloadExtension,
+        base::Bind(&extensions::ExtensionService::ReloadExtension,
                    base::Unretained(extensions::ExtensionSystem::Get(profile_)
                                         ->extension_service()),
                    extension_id));
@@ -331,6 +351,14 @@ void SelectFileDialogExtension::SelectFileImpl(
   CHECK(web_contents);
   profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
   CHECK(profile_);
+
+#if defined(OS_CHROMEOS)
+  // Handle the case when |web_contents| is associated with Default profile.
+  if (chromeos::ProfileHelper::IsSigninProfile(profile_)) {
+    profile_ = ProfileManager::GetActiveUserProfile();
+    CHECK(profile_);
+  }
+#endif
 
   // Check if we have another dialog opened for the contents. It's unlikely, but
   // possible. In such situation, discard this request.

@@ -8,11 +8,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/login/existing_user_controller.h"
+#include "chrome/browser/chromeos/login/screens/gaia_view.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
-#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
@@ -48,15 +47,14 @@ class OobeTest : public OobeBaseTest {
     if (LoginDisplayHost::default_host()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&chrome::AttemptExit));
-      content::RunMessageLoop();
+      RunUntilBrowserProcessQuits();
     }
 
     OobeBaseTest::TearDownOnMainThread();
   }
 
-  LoginDisplayWebUI* GetLoginDisplay() {
-    return static_cast<LoginDisplayWebUI*>(
-        ExistingUserController::current_controller()->login_display());
+  LoginDisplay* GetLoginDisplay() {
+    return LoginDisplayHost::default_host()->GetLoginDisplay();
   }
 
   views::Widget* GetLoginWindowWidget() {
@@ -75,8 +73,12 @@ IN_PROC_BROWSER_TEST_F(OobeTest, NewUser) {
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
 
-  GetLoginDisplay()->ShowSigninScreenForCreds(OobeBaseTest::kFakeUserEmail,
-                                              OobeBaseTest::kFakeUserPassword);
+  LoginDisplayHost::default_host()
+      ->GetOobeUI()
+      ->GetGaiaScreenView()
+      ->ShowSigninScreenForTest(OobeBaseTest::kFakeUserEmail,
+                                OobeBaseTest::kFakeUserPassword,
+                                OobeBaseTest::kEmptyUserServices);
 
   session_start_waiter.Wait();
 }

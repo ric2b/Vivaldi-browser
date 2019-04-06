@@ -16,19 +16,19 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/no_destructor.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
 #include "chromecast/base/init_command_line_shlib.h"
 #include "chromecast/base/serializers.h"
-#include "chromecast/media/cma/backend/audio_features.h"
+#include "chromecast/media/cma/backend/audio_buildflags.h"
 #include "chromecast/media/cma/backend/cast_audio_json.h"
 #include "chromecast/media/cma/backend/post_processing_pipeline_parser.h"
 #include "chromecast/media/cma/backend/stream_mixer.h"
@@ -69,7 +69,10 @@ std::string ContentTypeToDbFSKey(AudioContentType type) {
   }
 }
 
-base::LazyInstance<VolumeMap>::Leaky g_volume_map = LAZY_INSTANCE_INITIALIZER;
+VolumeMap& GetVolumeMap() {
+  static base::NoDestructor<VolumeMap> volume_map;
+  return *volume_map;
+}
 
 class VolumeControlInternal : public SystemVolumeControl::Delegate {
  public:
@@ -79,7 +82,7 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
             base::WaitableEvent::ResetPolicy::MANUAL,
             base::WaitableEvent::InitialState::NOT_SIGNALED) {
     // Load volume map to check that the config file is correct.
-    g_volume_map.Get();
+    GetVolumeMap();
 
     stored_values_.SetDouble(kKeyMediaDbFS, kDefaultMediaDbFS);
     stored_values_.SetDouble(kKeyAlarmDbFS, kDefaultAlarmDbFS);
@@ -101,7 +104,7 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
     } else {
       // If saved_volumes does not exist, use per device default if it exists.
       auto cast_audio_config =
-          DeserializeJsonFromFile(base::FilePath(kCastAudioJsonFilePath));
+          DeserializeJsonFromFile(CastAudioJson::GetFilePath());
       const base::DictionaryValue* cast_audio_dict;
       if (cast_audio_config &&
           cast_audio_config->GetAsDictionary(&cast_audio_dict)) {
@@ -150,6 +153,11 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
   }
 
   void SetVolume(AudioContentType type, float level) {
+    if (type == AudioContentType::kOther) {
+      NOTREACHED() << "Can't set volume for content type kOther";
+      return;
+    }
+
     level = std::max(0.0f, std::min(level, 1.0f));
     thread_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&VolumeControlInternal::SetVolumeOnThread,
@@ -163,6 +171,11 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
   }
 
   void SetMuted(AudioContentType type, bool muted) {
+    if (type == AudioContentType::kOther) {
+      NOTREACHED() << "Can't set mute state for content type kOther";
+      return;
+    }
+
     thread_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&VolumeControlInternal::SetMutedOnThread,
                                   base::Unretained(this), type, muted,
@@ -170,6 +183,11 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
   }
 
   void SetOutputLimit(AudioContentType type, float limit) {
+    if (type == AudioContentType::kOther) {
+      NOTREACHED() << "Can't set output limit for content type kOther";
+      return;
+    }
+
     if (BUILDFLAG(SYSTEM_OWNS_VOLUME)) {
       return;
     }
@@ -219,12 +237,17 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
       system_volume_control_->SetMuted(false);
     }
 
+    volumes_[AudioContentType::kOther] = 1.0;
+    muted_[AudioContentType::kOther] = false;
+
     initialize_complete_event_.Signal();
   }
 
   void SetVolumeOnThread(AudioContentType type, float level, bool from_system) {
     DCHECK(thread_.task_runner()->BelongsToCurrentThread());
+    DCHECK(type != AudioContentType::kOther);
     DCHECK(!from_system || type == AudioContentType::kMedia);
+
     {
       base::AutoLock lock(volume_lock_);
       if (from_system && system_volume_control_->GetRoundtripVolume(
@@ -259,6 +282,8 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
 
   void SetMutedOnThread(AudioContentType type, bool muted, bool from_system) {
     DCHECK(thread_.task_runner()->BelongsToCurrentThread());
+    DCHECK(type != AudioContentType::kOther);
+
     {
       base::AutoLock lock(volume_lock_);
       if (muted == muted_[type]) {
@@ -317,15 +342,17 @@ class VolumeControlInternal : public SystemVolumeControl::Delegate {
   DISALLOW_COPY_AND_ASSIGN(VolumeControlInternal);
 };
 
-base::LazyInstance<VolumeControlInternal>::Leaky g_volume_control =
-    LAZY_INSTANCE_INITIALIZER;
+VolumeControlInternal& GetVolumeControl() {
+  static base::NoDestructor<VolumeControlInternal> g_volume_control;
+  return *g_volume_control;
+}
 
 }  // namespace
 
 // static
 void VolumeControl::Initialize(const std::vector<std::string>& argv) {
   chromecast::InitCommandLineShlib(argv);
-  g_volume_control.Get();
+  GetVolumeControl();
 }
 
 // static
@@ -335,52 +362,52 @@ void VolumeControl::Finalize() {
 
 // static
 void VolumeControl::AddVolumeObserver(VolumeObserver* observer) {
-  g_volume_control.Get().AddVolumeObserver(observer);
+  GetVolumeControl().AddVolumeObserver(observer);
 }
 
 // static
 void VolumeControl::RemoveVolumeObserver(VolumeObserver* observer) {
-  g_volume_control.Get().RemoveVolumeObserver(observer);
+  GetVolumeControl().RemoveVolumeObserver(observer);
 }
 
 // static
 float VolumeControl::GetVolume(AudioContentType type) {
-  return g_volume_control.Get().GetVolume(type);
+  return GetVolumeControl().GetVolume(type);
 }
 
 // static
 void VolumeControl::SetVolume(AudioContentType type, float level) {
-  g_volume_control.Get().SetVolume(type, level);
+  GetVolumeControl().SetVolume(type, level);
 }
 
 // static
 bool VolumeControl::IsMuted(AudioContentType type) {
-  return g_volume_control.Get().IsMuted(type);
+  return GetVolumeControl().IsMuted(type);
 }
 
 // static
 void VolumeControl::SetMuted(AudioContentType type, bool muted) {
-  g_volume_control.Get().SetMuted(type, muted);
+  GetVolumeControl().SetMuted(type, muted);
 }
 
 // static
 void VolumeControl::SetOutputLimit(AudioContentType type, float limit) {
-  g_volume_control.Get().SetOutputLimit(type, limit);
+  GetVolumeControl().SetOutputLimit(type, limit);
 }
 
 // static
 float VolumeControl::VolumeToDbFS(float volume) {
-  return g_volume_map.Get().VolumeToDbFS(volume);
+  return GetVolumeMap().VolumeToDbFS(volume);
 }
 
 // static
 float VolumeControl::DbFSToVolume(float db) {
-  return g_volume_map.Get().DbFSToVolume(db);
+  return GetVolumeMap().DbFSToVolume(db);
 }
 
 // static
 void VolumeControl::SetPowerSaveMode(bool power_save_on) {
-  g_volume_control.Get().SetPowerSaveMode(power_save_on);
+  GetVolumeControl().SetPowerSaveMode(power_save_on);
 }
 
 }  // namespace media

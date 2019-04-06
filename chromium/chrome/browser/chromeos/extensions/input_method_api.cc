@@ -38,6 +38,7 @@
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
+#include "ui/base/ime/ime_bridge.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_util.h"
 
@@ -59,6 +60,8 @@ namespace OnImeMenuListChanged =
     extensions::api::input_method_private::OnImeMenuListChanged;
 namespace OnImeMenuItemsChanged =
     extensions::api::input_method_private::OnImeMenuItemsChanged;
+namespace GetSurroundingText =
+    extensions::api::input_method_private::GetSurroundingText;
 
 namespace {
 
@@ -199,7 +202,7 @@ InputMethodPrivateAddWordToDictionaryFunction::Run() {
   // Invalid words:
   // - Already in the dictionary.
   // - Not a UTF8 string.
-  // - Longer than 99 bytes (MAX_CUSTOM_DICTIONARY_WORD_BYTES).
+  // - Longer than 99 bytes (kMaxCustomDictionaryWordBytes).
   // - Leading/trailing whitespace.
   // - Empty.
   return RespondNow(Error("Unable to add invalid word to dictionary."));
@@ -243,9 +246,8 @@ InputMethodPrivateShowInputViewFunction::Run() {
 #if !defined(OS_CHROMEOS)
   EXTENSION_FUNCTION_VALIDATE(false);
 #else
-  keyboard::KeyboardController* keyboard_controller =
-      keyboard::KeyboardController::GetInstance();
-  if (keyboard_controller) {
+  auto* keyboard_controller = keyboard::KeyboardController::Get();
+  if (keyboard_controller->enabled()) {
     keyboard_controller->ShowKeyboard(false);
     return RespondNow(NoArguments());
   }
@@ -256,9 +258,8 @@ InputMethodPrivateShowInputViewFunction::Run() {
   // Forcibly enables the a11y onscreen keyboard if there is on keyboard enabled
   // for now. And re-disables it after showing once.
   keyboard::SetAccessibilityKeyboardEnabled(true);
-  ash::Shell::Get()->CreateKeyboard();
-  keyboard_controller = keyboard::KeyboardController::GetInstance();
-  if (!keyboard_controller) {
+  keyboard_controller = keyboard::KeyboardController::Get();
+  if (!keyboard_controller->enabled()) {
     keyboard::SetAccessibilityKeyboardEnabled(false);
     return RespondNow(Error(kErrorFailToShowInputView));
   }
@@ -298,6 +299,50 @@ InputMethodPrivateOpenOptionsPageFunction::Run() {
 #endif
 }
 
+ExtensionFunction::ResponseAction
+InputMethodPrivateGetSurroundingTextFunction::Run() {
+#if !defined(OS_CHROMEOS)
+  EXTENSION_FUNCTION_VALIDATE(false);
+#else
+  ui::IMEInputContextHandlerInterface* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context)
+    return RespondNow(Error("No input context handler."));
+
+  std::unique_ptr<GetSurroundingText::Params> params(
+      GetSurroundingText::Params::Create(*args_));
+  if (params->before_length < 0 || params->after_length < 0)
+    return RespondNow(Error("Invalid parameters."));
+
+  uint32_t param_before_length = (uint32_t)params->before_length;
+  uint32_t param_after_length = (uint32_t)params->after_length;
+
+  auto ret = std::make_unique<base::DictionaryValue>();
+  ui::SurroundingTextInfo info = input_context->GetSurroundingTextInfo();
+  uint32_t text_before_end = info.selection_range.start();
+  uint32_t text_before_start = text_before_end > param_before_length
+                                   ? text_before_end - param_before_length
+                                   : 0;
+  uint32_t text_after_start = info.selection_range.end();
+  uint32_t text_after_end =
+      text_after_start + param_after_length < info.surrounding_text.length()
+          ? text_after_start + param_after_length
+          : info.surrounding_text.length();
+
+  ret->SetString("before",
+                 info.surrounding_text.substr(
+                     text_before_start, text_before_end - text_before_start));
+  ret->SetString("selected",
+                 info.surrounding_text.substr(
+                     text_before_end, text_after_start - text_before_end));
+  ret->SetString(
+      "after", info.surrounding_text.substr(text_after_start,
+                                            text_after_end - text_after_start));
+
+  return RespondNow(OneArgument(std::move(ret)));
+#endif
+}
+
 InputMethodAPI::InputMethodAPI(content::BrowserContext* context)
     : context_(context) {
   EventRouter::Get(context_)->RegisterObserver(this, OnChanged::kEventName);
@@ -311,19 +356,19 @@ InputMethodAPI::InputMethodAPI(content::BrowserContext* context)
       ->RegisterObserver(this, OnImeMenuListChanged::kEventName);
   EventRouter::Get(context_)
       ->RegisterObserver(this, OnImeMenuItemsChanged::kEventName);
-  ExtensionFunctionRegistry* registry =
+  ExtensionFunctionRegistry& registry =
       ExtensionFunctionRegistry::GetInstance();
-  registry->RegisterFunction<InputMethodPrivateGetInputMethodConfigFunction>();
-  registry->RegisterFunction<InputMethodPrivateGetCurrentInputMethodFunction>();
-  registry->RegisterFunction<InputMethodPrivateSetCurrentInputMethodFunction>();
-  registry->RegisterFunction<InputMethodPrivateGetInputMethodsFunction>();
+  registry.RegisterFunction<InputMethodPrivateGetInputMethodConfigFunction>();
+  registry.RegisterFunction<InputMethodPrivateGetCurrentInputMethodFunction>();
+  registry.RegisterFunction<InputMethodPrivateSetCurrentInputMethodFunction>();
+  registry.RegisterFunction<InputMethodPrivateGetInputMethodsFunction>();
   registry
-      ->RegisterFunction<InputMethodPrivateFetchAllDictionaryWordsFunction>();
-  registry->RegisterFunction<InputMethodPrivateAddWordToDictionaryFunction>();
-  registry->RegisterFunction<InputMethodPrivateGetEncryptSyncEnabledFunction>();
-  registry->RegisterFunction<
-      InputMethodPrivateNotifyImeMenuItemActivatedFunction>();
-  registry->RegisterFunction<InputMethodPrivateOpenOptionsPageFunction>();
+      .RegisterFunction<InputMethodPrivateFetchAllDictionaryWordsFunction>();
+  registry.RegisterFunction<InputMethodPrivateAddWordToDictionaryFunction>();
+  registry.RegisterFunction<InputMethodPrivateGetEncryptSyncEnabledFunction>();
+  registry
+      .RegisterFunction<InputMethodPrivateNotifyImeMenuItemActivatedFunction>();
+  registry.RegisterFunction<InputMethodPrivateOpenOptionsPageFunction>();
 }
 
 InputMethodAPI::~InputMethodAPI() {

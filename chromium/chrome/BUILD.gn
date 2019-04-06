@@ -17,29 +17,34 @@ import("//chrome/chrome_paks.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")
 import("//components/nacl/features.gni")
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//media/media_options.gni")
-import("//ppapi/features/features.gni")
-import("//third_party/WebKit/public/public_features.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//third_party/blink/public/public_features.gni")
 import("//third_party/widevine/cdm/widevine.gni")
 import("//tools/resources/generate_resource_whitelist.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+import("//ui/gl/features.gni")
 import("//v8/gni/v8.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
+} else if (is_linux) {
+  import("//build/linux/extract_symbols.gni")
 } else if (is_mac) {
   import("//build/compiled_action.gni")
+  import("//build/config/mac/base_rules.gni")
   import("//build/config/mac/rules.gni")
   import("//build/config/mac/symbols.gni")
   import("//build/mac/tweak_info_plist.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
-  import("//media/cdm/ppapi/cdm_paths.gni")
+  import("//media/cdm/library_cdm/cdm_paths.gni")
   import("//third_party/icu/config.gni")
 }
 
 
-if (is_vivaldi) {
+if (defined(is_vivaldi) && is_vivaldi) {
   import("//vivaldi/gn/config/product.gni")
   import("//vivaldi/gn/config/version.gni")
 }
@@ -155,10 +160,7 @@ if (!is_android && !is_mac) {
       sources += [ "app/chrome_exe_resource.h" ]
       defines = []
       public_deps = []
-      deps += [
-        "//build/config:exe_and_shlib_deps",
-        "//printing/features",
-      ]
+      deps += [ "//printing/buildflags" ]
 
       data += [ "$root_out_dir/resources.pak" ]
       if (is_linux || is_win) {
@@ -211,11 +213,14 @@ if (!is_android && !is_mac) {
           "//content/public/common:static_switches",
           "//crypto",
           "//sandbox",
+          "//services/service_manager/sandbox",
           "//third_party/breakpad:breakpad_handler",
           "//third_party/breakpad:breakpad_sender",
         ]
         data_deps = [
           "//chrome/app/version_assembly:version_assembly_manifest",
+          "//chrome/elevation_service",
+          "//chrome/notification_helper",
         ]
 
         if (win_console_app) {
@@ -267,7 +272,7 @@ if (!is_android && !is_mac) {
 
         public_deps = [
           ":xdg_mime",  # Needs to be public for installer to consume files.
-          "//chrome/common:features",
+          "//chrome/common:buildflags",
         ]
 
         ldflags = [ "-pie" ]
@@ -307,6 +312,14 @@ if (!is_android && !is_mac) {
         ]
       }
 
+      if (is_chromeos || is_win) {
+        data_deps += [ "//mojo/core:shared_library" ]
+      }
+
+      if (is_chromeos) {
+        data_deps += [ "//mojo/core:shared_libraries_for_arc" ]
+      }
+
       # These files are used by the installer so we need a public dep.
       public_deps += [ ":packed_resources" ]
 
@@ -317,9 +330,15 @@ if (!is_android && !is_mac) {
         deps += [ "//third_party/adobe/flash:flapper_binaries" ]
       }
 
+      # ChromeOS by design is safe to have rpath=$ORIGIN. This simplifies shared
+      # library usage.
+      if (is_chromeos && !is_component_build) {
+        configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+      }
+
       data_deps += [
         "//chrome/browser/resources/media/mei_preload:component",
-        "//third_party/widevine/cdm:widevinecdmadapter",
+        "//third_party/widevine/cdm",
       ]
 
       if (is_multi_dll_chrome) {
@@ -391,11 +410,10 @@ if (is_win) {
       ":chrome_dll_manifest",
       ":chrome_dll_version",
       "//base/trace_event/etw_manifest:chrome_events_win",
-      "//build/config:exe_and_shlib_deps",
       "//chrome/app:chrome_dll_resources",
       "//chrome/app:command_ids",
       "//chrome/app/theme:chrome_unscaled_resources",
-      "//chrome/common:features",
+      "//chrome/common:buildflags",
       "//chrome/install_static:install_static_util",
       "//chrome/install_static:secondary_module",
       "//chrome_elf",
@@ -406,7 +424,7 @@ if (is_win) {
       "//crypto",
       "//headless:headless_shell_browser_lib",
       "//net:net_resources",
-      "//ppapi/features",
+      "//ppapi/buildflags",
       "//services/service_manager/embedder",
       "//third_party/cld_3/src/src:cld_3",
       "//third_party/wtl",
@@ -448,9 +466,8 @@ if (is_win) {
       deps += [ "//content/public/app:browser" ]
       assert_no_deps = [
         # The browser DLL may not depend on blink or v8.
-        "//third_party/WebKit/public:blink",
+        "//third_party/blink/public:blink",
         "//gin",
-        "//tools/v8_context_snapshot",
         "//v8",
       ]
     } else {
@@ -460,7 +477,7 @@ if (is_win) {
       ]
     }
 
-    if (is_clang && is_official_build && !use_lld) {
+    if (is_clang && is_official_build) {
       orderfile = "build/chrome.$target_cpu.orderfile"
       rebased_orderfile = rebase_path(orderfile, root_build_dir)
       inputs = [
@@ -499,9 +516,8 @@ if (is_win) {
         ":child_dependencies",
         ":chrome_child_manifest",
         ":chrome_dll_version",
-        "//build/config:exe_and_shlib_deps",
         "//chrome/browser/policy:path_parser",
-        "//chrome/common:features",
+        "//chrome/common:buildflags",
         "//chrome/install_static:install_static_util",
         "//chrome/install_static:secondary_module",
         "//chrome_elf",
@@ -522,7 +538,7 @@ if (is_win) {
         "/DELAYLOAD:wininet.dll",
       ]
 
-      if (is_clang && is_official_build && !use_lld) {
+      if (is_clang && is_official_build) {
         orderfile = "build/chrome_child.$target_cpu.orderfile"
         rebased_orderfile = rebase_path(orderfile, root_build_dir)
         inputs = [
@@ -574,7 +590,7 @@ if (is_win) {
       deps += [ ":devtools_debug_resources" ]
     }
 
-    if ((is_chrome_branded || is_vivaldi) && is_official_build) {
+    if ((is_chrome_branded || (defined(is_vivaldi) && is_vivaldi)) && is_official_build) {
       deps += [
         ":chrome_dsym_archive",
         ":chrome_dump_syms",
@@ -608,7 +624,7 @@ if (is_win) {
       "--scm=1",
       "--bundle_id=$chrome_mac_bundle_id",
     ]
-    if (is_vivaldi) {
+    if (defined(is_vivaldi) && is_vivaldi) {
       args += [
       "--sparkle=1",
       ]
@@ -635,7 +651,6 @@ if (is_win) {
       ":chrome_app_strings_bundle_data",
       ":chrome_resources",
       ":chrome_versioned_bundle_data",
-      "//build/config:exe_and_shlib_deps",
       "//chrome/common:version_header",
     ]
 
@@ -643,13 +658,13 @@ if (is_win) {
       deps += [ ":chrome_helpers" ]
     }
 
-    # Remove the default strip configuration (which strips all symbols) so that
-    # a saves file can be specified.
     if (enable_stripping) {
-      remove_configs = [ "//build/config/mac:strip_all" ]
-
-      ldflags =
-          [ "-Wcrl,strip,-s," + rebase_path("app/app.saves", root_build_dir) ]
+      # At link time, preserve the global symbols specified in the .exports
+      # file. All other global symbols will be marked as private. The default
+      # //build/config/mac:strip_all config will then remove the remaining
+      # local and debug symbols.
+      ldflags = [ "-Wl,-exported_symbols_list," +
+                  rebase_path("app/app.exports", root_build_dir) ]
     }
   }
 
@@ -663,7 +678,7 @@ if (is_win) {
     outputs = []
 
     foreach(locale, locales) {
-      if (is_chrome_branded || is_vivaldi) {
+      if (is_chrome_branded || (defined(is_vivaldi) && is_vivaldi)) {
         _strings_file = "google_chrome_strings"
       } else {
         _strings_file = "chromium_strings"
@@ -690,7 +705,7 @@ if (is_win) {
       "-t",
       "main",
     ]
-    if (is_vivaldi) {
+    if (defined(is_vivaldi) && is_vivaldi) {
       args += [
         "-V",
         rebase_path(vivaldi_version_path, root_build_dir),
@@ -700,7 +715,7 @@ if (is_win) {
     }
     args += locales
 
-    if (is_chrome_branded || is_vivaldi) {
+    if (is_chrome_branded || (defined(is_vivaldi) && is_vivaldi)) {
       deps = [
         "//chrome/app:google_chrome_strings",
       ]
@@ -784,9 +799,7 @@ if (is_win) {
       ":verify_chrome_framework_order",
     ]
 
-    # Only official builds that include Widevine need the widevine
-    # signature file.
-    if (is_chrome_branded && enable_library_cdms) {
+    if (enable_widevine_cdm_host_verification) {
       sources += [ "$root_out_dir/Widevine Resources.bundle" ]
       public_deps += [ ":widevine_resources_bundle" ]
     }
@@ -813,6 +826,16 @@ if (is_win) {
     ]
   }
 
+  compile_entitlements("entitlements") {
+    entitlements_templates = [ "app/entitlements.plist" ]
+    output_name = "$target_gen_dir/entitlements.plist"
+    substitutions = [
+      "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
+      "CHROMIUM_TEAM_ID=$chrome_mac_team_id",
+    ]
+    visibility = [ "//chrome/installer/mac:copies" ]
+  }
+
   mac_app_bundle("chrome_helper_app") {
     output_name = chrome_helper_name
 
@@ -831,7 +854,6 @@ if (is_win) {
     defines = [ "HELPER_EXECUTABLE" ]
 
     deps = [
-      "//build/config:exe_and_shlib_deps",
       "//chrome/common:version_header",
       "//sandbox/mac:seatbelt",
     ]
@@ -840,20 +862,20 @@ if (is_win) {
 
     if (is_component_build) {
       ldflags += [
-        # The helper is in Chromium.app/Contents/Versions/X/Chromium Helper.app/Conents/MacOS/
+        # The helper is in Chromium.app/Contents/Versions/X/Chromium Helper.app/Contents/MacOS/
         # so set rpath up to the base.
         "-rpath",
         "@loader_path/../../../../../../..",
       ]
     }
 
-    # Remove the default strip configuration (which strips all symbols) so that
-    # a saves file can be specified.
     if (enable_stripping) {
-      remove_configs = [ "//build/config/mac:strip_all" ]
-
-      ldflags +=
-          [ "-Wcrl,strip,-s," + rebase_path("app/app.saves", root_build_dir) ]
+      # At link time, preserve the global symbols specified in the .exports
+      # file. All other global symbols will be marked as private. The default
+      # //build/config/mac:strip_all config will then remove the remaining
+      # local and debug symbols.
+      ldflags += [ "-Wl,-exported_symbols_list," +
+                   rebase_path("app/app.exports", root_build_dir) ]
     }
   }
 
@@ -880,7 +902,6 @@ if (is_win) {
   bundle_data("chrome_framework_resources") {
     sources = [
       "$root_out_dir/app_mode_loader.app",
-      "$root_out_dir/v8_context_snapshot.bin",
 
       # This image is used to badge the lock icon in the
       # authentication dialogs, such as those used for installation
@@ -900,7 +921,6 @@ if (is_win) {
     public_deps = [
       ":packed_resources",
       "//chrome/app_shim:app_mode_loader",
-      "//tools/v8_context_snapshot",
     ]
 
     if (is_chrome_branded) {
@@ -916,11 +936,14 @@ if (is_win) {
     }
 
     if (v8_use_external_startup_data) {
-      sources += [
-        "$root_out_dir/natives_blob.bin",
-        "$root_out_dir/snapshot_blob.bin",
-      ]
+      sources += [ "$root_out_dir/natives_blob.bin" ]
       public_deps += [ "//v8" ]
+      if (use_v8_context_snapshot) {
+        sources += [ "$root_out_dir/v8_context_snapshot.bin" ]
+        public_deps += [ "//tools/v8_context_snapshot" ]
+      } else {
+        sources += [ "$root_out_dir/snapshot_blob.bin" ]
+      }
     }
   }
 
@@ -954,7 +977,7 @@ if (is_win) {
         # Depend on :chrome_app to ensure that the bundle is produced before
         # creating or destroying the symlink.
         ":chrome_app",
-        "//third_party/WebKit/public:blink_devtools_frontend_resources",
+        "//third_party/blink/public:blink_devtools_frontend_resources",
       ]
     }
   } else {
@@ -984,57 +1007,76 @@ if (is_win) {
     }
   }
 
-  _should_bundle_widevine =
-      (is_chrome_branded || enable_widevine) && enable_library_cdms
-  if (_should_bundle_widevine) {
-    # The Widevine CDM and manifest are either the actual Widevine CDM and
-    # manifest or stubs used for testing only. The choice is made within the
-    # corresponding Widevine targets based on branding.
-    bundle_data("widevine_cdm_library_binaries") {
+  # EGL on MacOS can be used in dev builds and on bots for test
+  # related purposes, but it is not yet desired to ship these
+  # libraries with official chrome (http://crbug.com/757974).
+  bundle_egl_libraries = use_egl && !(is_chrome_branded && is_official_build)
+
+  if (bundle_egl_libraries) {
+    # Add the ANGLE .dylibs in the MODULE_DIR of Chromium.app
+    bundle_data("angle_binaries") {
       sources = [
-        "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin",
-        "$root_out_dir/libwidevinecdm.dylib",
+        "$root_out_dir/egl_intermediates/libEGL.dylib",
+        "$root_out_dir/egl_intermediates/libGLESv2.dylib",
       ]
       outputs = [
-        "{{bundle_contents_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
+        "{{bundle_contents_dir}}/Libraries/{{source_file_part}}",
       ]
       public_deps = [
-        # Need this intermediate dependency because "widevinecdm" is a
-        # shared_library if !is_chrome_branded, and then depending on
-        # "widevinecdm" directly would cause it to be linked into the Chromium
-        # Framework, which we don't want.
-        ":widevine_cdm_library_copy",
-        "//third_party/widevine/cdm:widevinecdmadapter",
+        "//ui/gl:angle_library_copy",
       ]
-
-      # Signatures are only generated for official chrome.
-      if (is_chrome_branded) {
-        sources += [
-          "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin.sig",
-          "$root_out_dir/libwidevinecdm.dylib.sig",
-        ]
-        public_deps += [ ":sign_cdm_adapter_for_widevine" ]
-      }
     }
 
-    copy("widevine_cdm_library_copy") {
+    # Add the SwiftShader .dylibs in the MODULE_DIR of Chromium.app
+    bundle_data("swiftshader_binaries") {
       sources = [
-        "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib",
+        "$root_out_dir/egl_intermediates/libswiftshader_libEGL.dylib",
+        "$root_out_dir/egl_intermediates/libswiftshader_libGLESv2.dylib",
       ]
-      if (is_chrome_branded) {
-        sources +=
-            [ "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib.sig" ]
-      }
       outputs = [
-        "$root_out_dir/{{source_file_part}}",
+        "{{bundle_contents_dir}}/Libraries/{{source_file_part}}",
       ]
-      deps = [
-        "//third_party/widevine/cdm:widevinecdm",
+      public_deps = [
+        "//ui/gl:swiftshader_library_copy",
       ]
     }
   }
 
-  if (is_chrome_branded || is_vivaldi) {
+  group("angle_library") {
+    if (bundle_egl_libraries) {
+      deps = [
+        ":angle_binaries",
+      ]
+    }
+  }
+
+  group("swiftshader_library") {
+    if (bundle_egl_libraries) {
+      deps = [
+        ":swiftshader_binaries",
+      ]
+    }
+  }
+
+  if (should_bundle_widevine_cdm) {
+    bundle_data("widevine_cdm_library_binaries") {
+      sources = [
+        "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib",
+      ]
+      if (enable_widevine_cdm_host_verification) {
+        sources +=
+            [ "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib.sig" ]
+      }
+      outputs = [
+        "{{bundle_contents_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
+      ]
+      public_deps = [
+        "//third_party/widevine/cdm",
+      ]
+    }
+  }
+
+  if (is_chrome_branded) {
     bundle_data("widevine_cdm_library_manifest") {
       sources = [
         "$root_out_dir/WidevineCdm/manifest.json",
@@ -1043,24 +1085,23 @@ if (is_win) {
         "{{bundle_contents_dir}}/Libraries/WidevineCdm/{{source_file_part}}",
       ]
       public_deps = [
-        "//third_party/widevine/cdm:widevine_cdm_manifest",
+        "//third_party/widevine/cdm",
       ]
     }
+  }
 
-    widevine_sign_file("sign_cdm_adapter_for_widevine") {
-      file = "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin"
-      flags = 0
+  group("widevine_cdm_library") {
+    if (should_bundle_widevine_cdm) {
       deps = [
-        "//third_party/widevine/cdm:widevinecdmadapter",
+        ":widevine_cdm_library_binaries",
+        ":widevine_cdm_library_manifest",
       ]
     }
+  }
 
+  if (enable_widevine_cdm_host_verification) {
     widevine_sign_file("sign_chrome_framework_for_widevine") {
-      file = "$root_out_dir/$chrome_framework_name.framework/"
-      if (defined(chrome_framework_version)) {
-        file += "Versions/$chrome_framework_version/"
-      }
-      file += "$chrome_framework_name"
+      file = "$root_out_dir/$chrome_framework_name.framework/Versions/$chrome_framework_version/$chrome_framework_name"
       flags = 1
       signature_file = "$root_out_dir/$chrome_framework_name.sig"
       deps = [
@@ -1114,25 +1155,12 @@ if (is_win) {
     }
   }
 
-  group("widevine_cdm_library") {
-    if (_should_bundle_widevine) {
-      deps = [
-        ":widevine_cdm_library_binaries",
-        ":widevine_cdm_library_manifest",
-      ]
-    }
-  }
-
   if (is_chrome_branded) {
     action("keystone_registration_framework") {
       script = "//chrome/tools/build/mac/copy_keystone_framework.py"
 
       framework_path = "//third_party/googlemac/Releases/Keystone/KeystoneRegistration.framework"
-      output_path = "$root_out_dir/$chrome_framework_name.framework/"
-      if (defined(chrome_framework_version)) {
-        output_path += "/Versions/$chrome_framework_version/"
-      }
-      output_path += "Frameworks/"
+      output_path = "$root_out_dir/$chrome_framework_name.framework/Versions/$chrome_framework_version/Frameworks/"
 
       sources = [
         framework_path,
@@ -1166,7 +1194,7 @@ if (is_win) {
       "--branding",
       chrome_product_short_name,
     ]
-    if (is_vivaldi) {
+    if (defined(is_vivaldi) && is_vivaldi) {
       args += [
         "--sparkle=1",
         "--vivaldi-build",
@@ -1207,7 +1235,7 @@ if (is_win) {
       ":browser_dependencies",
       ":child_dependencies",
       "//chrome/app:command_ids",
-      "//chrome/common:features",
+      "//chrome/common:buildflags",
       "//components/crash/content/app",
       "//components/policy:generated",
       "//content/public/app:both",
@@ -1233,24 +1261,22 @@ if (is_win) {
   mac_framework_bundle("chrome_framework") {
     output_name = chrome_framework_name
 
-    if (defined(chrome_framework_version)) {
-      framework_version = chrome_framework_version
-      framework_contents = [
-        "Helpers",
-        "Resources",
-        "XPCServices",
-      ]
+    framework_version = chrome_framework_version
+    framework_contents = [
+      "Helpers",
+      "Libraries",
+      "Resources",
+      "XPCServices",
+    ]
 
-      if (is_chrome_branded) {
-        framework_contents += [
-          "Default Apps",
-          "Frameworks",  # For KeystoneRegistration.framework.
-        ]
-      }
-      if (enable_nacl) {
-        framework_contents += [ "Internet Plug-Ins" ]
-      }
-      framework_contents += [ "Libraries" ]
+    if (is_chrome_branded) {
+      framework_contents += [
+        "Default Apps",
+        "Frameworks",  # For KeystoneRegistration.framework.
+      ]
+    }
+    if (enable_nacl) {
+      framework_contents += [ "Internet Plug-Ins" ]
     }
 
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
@@ -1266,13 +1292,14 @@ if (is_win) {
     ]
 
     deps = [
+      ":angle_library",
       ":chrome_framework_helpers",
       ":chrome_framework_plugins",
       ":chrome_framework_resources",
       ":chrome_framework_services",
       ":packed_resources",
+      ":swiftshader_library",
       ":widevine_cdm_library",
-      "//build/config:exe_and_shlib_deps",
       "//chrome/app/nibs:chrome_xibs",
       "//chrome/browser/resources/media/mei_preload:component_bundle",
     ]
@@ -1293,7 +1320,7 @@ if (is_win) {
     if (is_component_build) {
       ldflags += [
         "-rpath",
-        "@loader_path/../../../../..",
+        "@loader_path/../../../../../../..",
         "-Wl,-reexport_library,libchrome_dll.dylib",
       ]
 
@@ -1303,13 +1330,7 @@ if (is_win) {
     }
   }
 
-  _framework_binary_path = "$root_out_dir/$chrome_framework_name.framework/"
-  if (defined(chrome_framework_version)) {
-    _framework_binary_path +=
-        "Versions/$chrome_framework_version/$chrome_framework_name"
-  } else {
-    _framework_binary_path += "$chrome_framework_name"
-  }
+  _framework_binary_path = "$root_out_dir/$chrome_framework_name.framework/Versions/$chrome_framework_version/$chrome_framework_name"
   assert(_framework_binary_path != "",
          "Ignore configuration-dependent unused variable warning")
 
@@ -1445,7 +1466,7 @@ group("browser_dependencies") {
     public_deps += [ "//ppapi/host" ]
   }
 
-  if (enable_basic_printing || enable_print_preview) {
+  if (enable_basic_printing) {
     public_deps += [ "//printing" ]
     if (enable_print_preview && !is_chromeos) {
       public_deps += [ "//chrome/service" ]
@@ -1458,14 +1479,13 @@ group("browser_dependencies") {
       # is OK because all of content is linked into one library. Note that the
       # blink_headers target is OK, so we can't do a wildcard for all blink
       # targets.
-      "//third_party/WebKit/public:blink",
+      "//third_party/blink/public:blink",
     ]
 
     if (is_win) {
       assert_no_deps += [
         # V8/Gin should not be used in the browser DLL on Windows.
         "//gin",
-        "//tools/v8_context_snapshot",
         "//v8",
       ]
     }
@@ -1478,13 +1498,13 @@ group("child_dependencies") {
     "//chrome/child",
     "//chrome/common",
     "//chrome/gpu",
-    "//chrome/profiling",
     "//chrome/renderer",
     "//chrome/utility",
+    "//components/services/heap_profiling",
     "//components/sync",
     "//content/public/child",
     "//pdf",
-    "//third_party/WebKit/public:blink_devtools_frontend_resources",
+    "//third_party/blink/public:blink_devtools_frontend_resources",
   ]
 
   if (enable_nacl) {
@@ -1541,27 +1561,28 @@ if (is_win) {
 }
 
 copy("visual_elements_resources") {
-  if (is_vivaldi) {
-    sources = [
-      "//vivaldi/app/other_resources/$VIVALDI_RELEASE_KIND/win8/Logo.png",
-      "//vivaldi/app/other_resources/$VIVALDI_RELEASE_KIND/win8/SecondaryTile.png",
-      "//vivaldi/app/other_resources/$VIVALDI_RELEASE_KIND/win8/SmallLogo.png",
-      "app/visual_elements_resources/chrome.VisualElementsManifest.xml",
-    ]
-  } else {
-    sources = [
-      "app/visual_elements_resources/chrome.VisualElementsManifest.xml",
-    ]
-  }
+  sources = [
+    "//chrome/app/theme/$branding_path_component/win/tiles/Logo.png",
+    "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogo.png",
+    "app/visual_elements_resources/chrome.VisualElementsManifest.xml",
+  ]
 
   if (is_chrome_branded) {
     sources += [
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoBeta.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoBetaLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoCanary.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoCanaryLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoDev.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoDevLight.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/LogoLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoBeta.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoBetaLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoCanary.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoCanaryLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoDev.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoDevLight.png",
+      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoLight.png",
     ]
   }
 
@@ -1598,9 +1619,10 @@ group("extra_resources") {
 
   if (is_chromeos) {
     public_deps += [
+      "//chrome/browser/resources/chromeos:multidevice_setup_resources",
       "//chrome/browser/resources/chromeos/chromevox",
-      "//chrome/browser/resources/chromeos/select_to_speak",
-      "//chrome/browser/resources/chromeos/switch_access",
+      "//chrome/browser/resources/chromeos/select_to_speak:build",
+      "//chrome/browser/resources/chromeos/switch_access:build",
     ]
   }
 
@@ -1697,12 +1719,6 @@ group("strings") {
 }
 
 if (is_android) {
-  java_cpp_enum("data_use_ui_message_enum_javagen") {
-    sources = [
-      "browser/android/data_usage/data_use_tab_ui_manager_android.cc",
-    ]
-  }
-
   java_cpp_enum("content_setting_javagen") {
     sources = [
       "../components/content_settings/core/common/content_settings.h",
@@ -1735,7 +1751,7 @@ if (is_android) {
 
   java_cpp_enum("page_info_connection_type_javagen") {
     sources = [
-      "browser/ui/android/page_info/page_info_popup_android.h",
+      "browser/ui/android/page_info/page_info_controller_android.h",
     ]
   }
 
@@ -1775,6 +1791,19 @@ if (is_android) {
     ]
   }
 
+  java_cpp_enum("download_enum_javagen") {
+    sources = [
+      "browser/download/download_location_dialog_type.h",
+      "browser/download/download_prompt_status.h",
+    ]
+  }
+
+  java_cpp_enum("instant_apps_reasons_enum_javagen") {
+    sources = [
+      "browser/android/instantapps/instant_apps_settings.cc",
+    ]
+  }
+
   source_set("chrome_android_core") {
     sources = [
       "app/android/chrome_android_initializer.cc",
@@ -1787,8 +1816,6 @@ if (is_android) {
       "app/chrome_main_delegate.h",
     ]
 
-    include_dirs = [ android_ndk_include_dir ]
-
     libs = [
       "android",
       "jnigraphics",
@@ -1800,10 +1827,10 @@ if (is_android) {
       "//chrome/child",
       "//chrome/common",
       "//chrome/gpu",
-      "//chrome/profiling",
       "//chrome/renderer",
       "//chrome/utility",
       "//components/safe_browsing/android:safe_browsing_mobile",
+      "//components/services/heap_profiling",
       "//content/public/app:both",
       "//content/public/common:service_names",
       "//services/service_manager/embedder",
@@ -1813,10 +1840,14 @@ if (is_android) {
     # find the native side functions.
     if (is_android && is_component_build) {
       deps += [
+        "//components/viz/service",
         "//device/gamepad",
-        "//device/sensors",
         "//ui/events/devices",
       ]
+    }
+
+    if (enable_vr) {
+      deps += [ "//third_party/gvr-android-sdk:gvr_shim" ]
     }
   }
 }
@@ -1833,14 +1864,9 @@ if (enable_resource_whitelist_generation) {
 
 if (is_linux) {
   if (is_official_build) {
-    action("linux_symbols") {
-      script = "//build/linux/dump_app_syms.py"
+    extract_symbols("linux") {
+      binary = "$root_out_dir/vivaldi"
 
-      dump_syms_label = "//third_party/breakpad:dump_syms($host_toolchain)"
-      dump_syms_binary =
-          get_label_info(dump_syms_label, "root_out_dir") + "/" + "dump_syms"
-
-      chrome_binary = "$root_out_dir/vivaldi"
       if (current_cpu == "x86") {
         # GYP used "ia32" so keep that naming for back-compat.
         symbol_file = "$root_out_dir/chrome.breakpad.ia32"
@@ -1848,24 +1874,8 @@ if (is_linux) {
         symbol_file = "$root_out_dir/chrome.breakpad.$current_cpu"
       }
 
-      inputs = [
-        chrome_binary,
-        dump_syms_binary,
-      ]
-      outputs = [
-        symbol_file,
-      ]
-
-      args = [
-        "./" + rebase_path(dump_syms_binary, root_build_dir),
-        "0",  # strip_binary = false
-        rebase_path(chrome_binary, root_build_dir),
-        rebase_path(symbol_file, root_build_dir),
-      ]
-
       deps = [
         ":chrome",
-        dump_syms_label,
       ]
     }
   }
@@ -1877,7 +1887,7 @@ if (is_linux) {
       "//third_party/xdg-utils/scripts/xdg-mime",
       "//third_party/xdg-utils/scripts/xdg-settings",
     ]
-    if (is_vivaldi) {
+    if (defined(is_vivaldi) && is_vivaldi) {
       sources += [ "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/product_logo_48.png" ]
     }
     outputs = [

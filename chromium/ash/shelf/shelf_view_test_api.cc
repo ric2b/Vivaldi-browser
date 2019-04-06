@@ -8,8 +8,8 @@
 #include "ash/shelf/overflow_button.h"
 #include "ash/shelf/shelf_button.h"
 #include "ash/shelf/shelf_constants.h"
+#include "ash/shelf/shelf_menu_model_adapter.h"
 #include "ash/shelf/shelf_view.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -117,11 +117,17 @@ void ShelfViewTestAPI::RunMessageLoopUntilAnimationsDone() {
   shelf_view_->bounds_animator_->RemoveObserver(observer.get());
 }
 
+gfx::Rect ShelfViewTestAPI::GetMenuAnchorRect(const views::View& source,
+                                              const gfx::Point& location,
+                                              bool context_menu) const {
+  return shelf_view_->GetMenuAnchorRect(source, location, context_menu);
+}
+
 bool ShelfViewTestAPI::CloseMenu() {
-  if (!shelf_view_->launcher_menu_runner_)
+  if (!shelf_view_->IsShowingMenu())
     return false;
 
-  shelf_view_->launcher_menu_runner_->Cancel();
+  shelf_view_->shelf_menu_model_adapter_->Cancel();
   return true;
 }
 

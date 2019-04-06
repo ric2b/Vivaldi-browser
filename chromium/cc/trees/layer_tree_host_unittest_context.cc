@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer_impl.h"
@@ -23,21 +22,22 @@
 #include "cc/test/fake_painted_scrollbar_layer.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/fake_picture_layer_impl.h"
-#include "cc/test/fake_resource_provider.h"
 #include "cc/test/fake_scoped_ui_resource.h"
 #include "cc/test/fake_scrollbar.h"
 #include "cc/test/fake_video_frame_provider.h"
 #include "cc/test/layer_tree_test.h"
 #include "cc/test/render_pass_test_utils.h"
-#include "cc/test/test_context_provider.h"
-#include "cc/test/test_shared_bitmap_manager.h"
-#include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
+#include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/resources/single_release_callback.h"
+#include "components/viz/test/fake_output_surface.h"
+#include "components/viz/test/test_context_provider.h"
+#include "components/viz/test/test_gles2_interface.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
+#include "components/viz/test/test_shared_bitmap_manager.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "media/base/media.h"
@@ -57,7 +57,6 @@ class LayerTreeHostContextTest : public LayerTreeTest {
  public:
   LayerTreeHostContextTest()
       : LayerTreeTest(),
-        context3d_(nullptr),
         times_to_fail_create_(0),
         times_to_lose_during_commit_(0),
         times_to_lose_during_draw_(0),
@@ -73,15 +72,15 @@ class LayerTreeHostContextTest : public LayerTreeTest {
 
   void LoseContext() {
     // CreateDisplayLayerTreeFrameSink happens on a different thread, so lock
-    // context3d_ to make sure we don't set it to null after recreating it
+    // gl_ to make sure we don't set it to null after recreating it
     // there.
-    base::AutoLock lock(context3d_lock_);
+    base::AutoLock lock(gl_lock_);
     // For sanity-checking tests, they should only call this when the
     // context is not lost.
-    CHECK(context3d_);
-    context3d_->loseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
-                                    GL_INNOCENT_CONTEXT_RESET_ARB);
-    context3d_ = nullptr;
+    CHECK(gl_);
+    gl_->LoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
+                             GL_INNOCENT_CONTEXT_RESET_ARB);
+    gl_ = nullptr;
   }
 
   std::unique_ptr<viz::TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
@@ -90,26 +89,26 @@ class LayerTreeHostContextTest : public LayerTreeTest {
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
-    base::AutoLock lock(context3d_lock_);
+    base::AutoLock lock(gl_lock_);
 
-    std::unique_ptr<TestWebGraphicsContext3D> compositor_context3d =
-        TestWebGraphicsContext3D::Create();
+    auto gl_owned = std::make_unique<viz::TestGLES2Interface>();
     if (context_should_support_io_surface_) {
-      compositor_context3d->set_have_extension_io_surface(true);
-      compositor_context3d->set_have_extension_egl_image(true);
+      gl_owned->set_have_extension_io_surface(true);
+      gl_owned->set_have_extension_egl_image(true);
     }
-    context3d_ = compositor_context3d.get();
 
+    gl_ = gl_owned.get();
+
+    auto provider = viz::TestContextProvider::Create(std::move(gl_owned));
     if (times_to_fail_create_) {
       --times_to_fail_create_;
       ExpectCreateToFail();
-      context3d_->loseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
-                                      GL_INNOCENT_CONTEXT_RESET_ARB);
+      gl_->LoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
+                               GL_INNOCENT_CONTEXT_RESET_ARB);
     }
 
     return LayerTreeTest::CreateLayerTreeFrameSink(
-        renderer_settings, refresh_rate,
-        TestContextProvider::Create(std::move(compositor_context3d)),
+        renderer_settings, refresh_rate, std::move(provider),
         std::move(worker_context_provider));
   }
 
@@ -159,10 +158,10 @@ class LayerTreeHostContextTest : public LayerTreeTest {
   void ExpectCreateToFail() { ++times_to_expect_create_failed_; }
 
  protected:
-  // Protects use of context3d_ so LoseContext and
+  // Protects use of gl_ so LoseContext and
   // CreateDisplayLayerTreeFrameSink can both use it on different threads.
-  base::Lock context3d_lock_;
-  TestWebGraphicsContext3D* context3d_;
+  base::Lock gl_lock_;
+  viz::TestGLES2Interface* gl_ = nullptr;
 
   int times_to_fail_create_;
   int times_to_lose_during_commit_;
@@ -468,8 +467,8 @@ class MultipleCompositeDoesNotCreateLayerTreeFrameSink
   }
 
   void BeginTest() override {
-    layer_tree_host()->Composite(TicksFromMicroseconds(1));
-    layer_tree_host()->Composite(TicksFromMicroseconds(2));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1), false);
+    layer_tree_host()->Composite(TicksFromMicroseconds(2), false);
   }
 
   void DidInitializeLayerTreeFrameSink() override { EXPECT_TRUE(false); }
@@ -512,12 +511,12 @@ class FailedCreateDoesNotCreateExtraLayerTreeFrameSink
 
   void BeginTest() override {
     // First composite tries to create a surface.
-    layer_tree_host()->Composite(TicksFromMicroseconds(1));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1), false);
     EXPECT_EQ(num_requests_, 2);
     EXPECT_TRUE(has_failed_);
 
     // Second composite should not request or fail.
-    layer_tree_host()->Composite(TicksFromMicroseconds(2));
+    layer_tree_host()->Composite(TicksFromMicroseconds(2), false);
     EXPECT_EQ(num_requests_, 2);
     EndTest();
   }
@@ -565,7 +564,7 @@ class LayerTreeHostContextTestCommitAfterDelayedLayerTreeFrameSink
   }
 
   void BeginTest() override {
-    layer_tree_host()->Composite(TicksFromMicroseconds(1));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1), false);
   }
 
   void ScheduleComposite() override {
@@ -600,7 +599,7 @@ class LayerTreeHostContextTestAvoidUnnecessaryComposite
 
   void BeginTest() override {
     in_composite_ = true;
-    layer_tree_host()->Composite(TicksFromMicroseconds(1));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1), false);
     in_composite_ = false;
   }
 
@@ -882,13 +881,12 @@ class LayerTreeHostContextTestDontUseLostResources
   LayerTreeHostContextTestDontUseLostResources() : lost_context_(false) {
     context_should_support_io_surface_ = true;
 
-    child_context_provider_ = TestContextProvider::Create();
+    child_context_provider_ = viz::TestContextProvider::Create();
     auto result = child_context_provider_->BindToCurrentThread();
     CHECK_EQ(result, gpu::ContextResult::kSuccess);
-    shared_bitmap_manager_.reset(new TestSharedBitmapManager);
+    shared_bitmap_manager_ = std::make_unique<viz::TestSharedBitmapManager>();
     child_resource_provider_ =
-        FakeResourceProvider::CreateLayerTreeResourceProvider(
-            child_context_provider_.get(), shared_bitmap_manager_.get());
+        std::make_unique<viz::ClientResourceProvider>(true);
   }
 
   static void EmptyReleaseCallback(const gpu::SyncToken& sync_token,
@@ -897,8 +895,7 @@ class LayerTreeHostContextTestDontUseLostResources
   void SetupTree() override {
     gpu::gles2::GLES2Interface* gl = child_context_provider_->ContextGL();
 
-    gpu::Mailbox mailbox;
-    gl->GenMailboxCHROMIUM(mailbox.name);
+    gpu::Mailbox mailbox = gpu::Mailbox::Generate();
 
     gpu::SyncToken sync_token;
     gl->GenSyncTokenCHROMIUM(sync_token.GetData());
@@ -1009,7 +1006,7 @@ class LayerTreeHostContextTestDontUseLostResources
     if (host_impl->active_tree()->source_frame_number() == 2) {
       // Lose the context after draw on the second commit. This will cause
       // a third commit to recover.
-      context3d_->set_times_bind_texture_succeeds(0);
+      gl_->set_times_bind_texture_succeeds(0);
     }
     return draw_result;
   }
@@ -1041,9 +1038,9 @@ class LayerTreeHostContextTestDontUseLostResources
   FakeContentLayerClient client_;
   bool lost_context_;
 
-  scoped_refptr<TestContextProvider> child_context_provider_;
+  scoped_refptr<viz::TestContextProvider> child_context_provider_;
   std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager_;
-  std::unique_ptr<ResourceProvider> child_resource_provider_;
+  std::unique_ptr<viz::ClientResourceProvider> child_resource_provider_;
 
   scoped_refptr<VideoFrame> color_video_frame_;
   scoped_refptr<VideoFrame> hw_video_frame_;
@@ -1137,9 +1134,6 @@ SINGLE_AND_MULTI_THREAD_TEST_F(ScrollbarLayerLostContext);
 class UIResourceLostTest : public LayerTreeHostContextTest {
  public:
   UIResourceLostTest() : time_step_(0) {}
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->resource_settings.texture_id_allocation_chunk_size = 1;
-  }
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
   void AfterTest() override {}
 
@@ -1349,8 +1343,9 @@ class UIResourceLostBeforeCommit : public UIResourceLostTestSimple {
   UIResourceId test_id1_;
 };
 
-// http://crbug.com/803532 : Flaky on Win 7 (dbg).
-#if defined(NDEBUG) || defined(OS_WIN)
+// http://crbug.com/803532 : Flaky on Win 7 (dbg) and linux tsan
+#if (defined(NDEBUG) || !defined(OS_WIN)) && \
+    (!defined(THREAD_SANITIZER) || !defined(OS_LINUX))
 SINGLE_THREAD_TEST_F(UIResourceLostBeforeCommit);
 #endif
 MULTI_THREAD_TEST_F(UIResourceLostBeforeCommit);
@@ -1483,7 +1478,7 @@ class UIResourceLostEviction : public UIResourceLostTestSimple {
   void DidSetVisibleOnImplTree(LayerTreeHostImpl* impl, bool visible) override {
     if (!visible) {
       // All resources should have been evicted.
-      ASSERT_EQ(0u, context3d_->NumTextures());
+      ASSERT_EQ(0u, gl_->NumTextures());
       EXPECT_EQ(0u, impl->ResourceIdForUIResource(ui_resource_->id()));
       EXPECT_EQ(0u, impl->ResourceIdForUIResource(ui_resource2_->id()));
       EXPECT_EQ(0u, impl->ResourceIdForUIResource(ui_resource3_->id()));
@@ -1503,7 +1498,7 @@ class UIResourceLostEviction : public UIResourceLostTestSimple {
       case 1:
         // The first two resources should have been created on LTHI after the
         // commit.
-        ASSERT_EQ(2u, context3d_->NumTextures());
+        ASSERT_EQ(2u, gl_->NumTextures());
         EXPECT_NE(0u, impl->ResourceIdForUIResource(ui_resource_->id()));
         EXPECT_NE(0u, impl->ResourceIdForUIResource(ui_resource2_->id()));
         EXPECT_EQ(1, ui_resource_->resource_create_count);
@@ -1511,7 +1506,7 @@ class UIResourceLostEviction : public UIResourceLostTestSimple {
         EXPECT_TRUE(impl->CanDraw());
         // Evict all UI resources. This will trigger a commit.
         impl->EvictAllUIResources();
-        ASSERT_EQ(0u, context3d_->NumTextures());
+        ASSERT_EQ(0u, gl_->NumTextures());
         EXPECT_EQ(0u, impl->ResourceIdForUIResource(ui_resource_->id()));
         EXPECT_EQ(0u, impl->ResourceIdForUIResource(ui_resource2_->id()));
         EXPECT_EQ(1, ui_resource_->resource_create_count);
@@ -1520,7 +1515,7 @@ class UIResourceLostEviction : public UIResourceLostTestSimple {
         break;
       case 2:
         // The first two resources should have been recreated.
-        ASSERT_EQ(2u, context3d_->NumTextures());
+        ASSERT_EQ(2u, gl_->NumTextures());
         EXPECT_NE(0u, impl->ResourceIdForUIResource(ui_resource_->id()));
         EXPECT_EQ(2, ui_resource_->resource_create_count);
         EXPECT_EQ(1, ui_resource_->lost_resource_count);
@@ -1532,7 +1527,7 @@ class UIResourceLostEviction : public UIResourceLostTestSimple {
       case 3:
         // The first resource should have been recreated after visibility was
         // restored.
-        ASSERT_EQ(2u, context3d_->NumTextures());
+        ASSERT_EQ(2u, gl_->NumTextures());
         EXPECT_NE(0u, impl->ResourceIdForUIResource(ui_resource_->id()));
         EXPECT_EQ(3, ui_resource_->resource_create_count);
         EXPECT_EQ(2, ui_resource_->lost_resource_count);
@@ -1557,6 +1552,176 @@ class UIResourceLostEviction : public UIResourceLostTestSimple {
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(UIResourceLostEviction);
+
+class UIResourceFreedIfLostWhileExported : public LayerTreeHostContextTest {
+ protected:
+  void BeginTest() override {
+    // Make 1 UIResource, post it to the compositor thread, where it will be
+    // uploaded.
+    ui_resource_ =
+        FakeScopedUIResource::Create(layer_tree_host()->GetUIResourceManager());
+    EXPECT_NE(0, ui_resource_->id());
+    PostSetNeedsCommitToMainThread();
+  }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
+    switch (impl->active_tree()->source_frame_number()) {
+      case 0:
+        // The UIResource has been created and a gpu resource made for it.
+        EXPECT_NE(0u, impl->ResourceIdForUIResource(ui_resource_->id()));
+        EXPECT_EQ(1u, gl_->NumTextures());
+        // Lose the LayerTreeFrameSink connection. The UI resource should
+        // be replaced and the old texture should be destroyed.
+        impl->DidLoseLayerTreeFrameSink();
+        break;
+      case 1:
+        // The UIResource has been recreated, the old texture is not kept
+        // around.
+        EXPECT_NE(0u, impl->ResourceIdForUIResource(ui_resource_->id()));
+        EXPECT_EQ(1u, gl_->NumTextures());
+        MainThreadTaskRunner()->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                &UIResourceFreedIfLostWhileExported::DeleteAndEndTest,
+                base::Unretained(this)));
+    }
+  }
+
+  void DeleteAndEndTest() {
+    ui_resource_->DeleteResource();
+    EndTest();
+  }
+
+  void AfterTest() override {}
+
+  std::unique_ptr<FakeScopedUIResource> ui_resource_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(UIResourceFreedIfLostWhileExported);
+
+class TileResourceFreedIfLostWhileExported : public LayerTreeHostContextTest {
+ protected:
+  void SetupTree() override {
+    PaintFlags flags;
+    client_.set_fill_with_nonsolid_color(true);
+
+    scoped_refptr<FakePictureLayer> picture_layer =
+        FakePictureLayer::Create(&client_);
+    picture_layer->SetBounds(gfx::Size(10, 20));
+    client_.set_bounds(picture_layer->bounds());
+    layer_tree_host()->SetRootLayer(std::move(picture_layer));
+
+    LayerTreeTest::SetupTree();
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
+    switch (impl->active_tree()->source_frame_number()) {
+      case 0:
+        // The PicturLayer has a texture for a tile, that has been exported to
+        // the display compositor now.
+        EXPECT_EQ(1u, impl->resource_provider()->num_resources_for_testing());
+        EXPECT_EQ(1u, impl->resource_pool()->resource_count());
+        // Shows that the tile texture is allocated with the current context.
+        num_textures_ = gl_->NumTextures();
+        EXPECT_GT(num_textures_, 0u);
+
+        // Lose the LayerTreeFrameSink connection. The tile resource should
+        // be replaced and the old texture should be destroyed.
+        LoseContext();
+        break;
+      case 1:
+        // The tile has been recreated, the old texture is not kept around in
+        // the pool indefinitely. It can be dropped as soon as the context is
+        // known to be lost.
+        EXPECT_EQ(1u, impl->resource_provider()->num_resources_for_testing());
+        EXPECT_EQ(1u, impl->resource_pool()->resource_count());
+        // Shows that the replacement tile texture is re-allocated with the
+        // current context, not just the previous one.
+        EXPECT_EQ(num_textures_, gl_->NumTextures());
+        EndTest();
+    }
+  }
+
+  void AfterTest() override {}
+
+  FakeContentLayerClient client_;
+  size_t num_textures_ = 0;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(TileResourceFreedIfLostWhileExported);
+
+class SoftwareTileResourceFreedIfLostWhileExported : public LayerTreeTest {
+ protected:
+  std::unique_ptr<viz::TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
+      const viz::RendererSettings& renderer_settings,
+      double refresh_rate,
+      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider)
+      override {
+    // Induce software compositing in cc.
+    return LayerTreeTest::CreateLayerTreeFrameSink(
+        renderer_settings, refresh_rate, nullptr, nullptr);
+  }
+
+  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
+      scoped_refptr<viz::ContextProvider> compositor_context_provider)
+      override {
+    // Induce software compositing in the display compositor.
+    return viz::FakeOutputSurface::CreateSoftware(
+        std::make_unique<viz::SoftwareOutputDevice>());
+  }
+
+  void SetupTree() override {
+    PaintFlags flags;
+    client_.set_fill_with_nonsolid_color(true);
+
+    scoped_refptr<FakePictureLayer> picture_layer =
+        FakePictureLayer::Create(&client_);
+    picture_layer->SetBounds(gfx::Size(10, 20));
+    client_.set_bounds(picture_layer->bounds());
+    layer_tree_host()->SetRootLayer(std::move(picture_layer));
+
+    LayerTreeTest::SetupTree();
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
+    switch (impl->active_tree()->source_frame_number()) {
+      case 0: {
+        // The PicturLayer has a bitmap for a tile, that has been exported to
+        // the display compositor now.
+        EXPECT_EQ(1u, impl->resource_provider()->num_resources_for_testing());
+        EXPECT_EQ(1u, impl->resource_pool()->resource_count());
+
+        impl->DidLoseLayerTreeFrameSink();
+        break;
+      }
+      case 1: {
+        // The tile did not need to be recreated, the same bitmap/resource
+        // should be used for it.
+        EXPECT_EQ(1u, impl->resource_provider()->num_resources_for_testing());
+        EXPECT_EQ(1u, impl->resource_pool()->resource_count());
+
+        // TODO(danakj): It'd be possible to not destroy and recreate the
+        // software bitmap, however for simplicity we do the same for software
+        // and for gpu paths. If we didn't destroy it we could see the same
+        // bitmap on PictureLayerImpl's tile.
+
+        EndTest();
+      }
+    }
+  }
+
+  void AfterTest() override {}
+
+  FakeContentLayerClient client_;
+  viz::ResourceId exported_resource_id_ = 0;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(SoftwareTileResourceFreedIfLostWhileExported);
 
 class LayerTreeHostContextTestLoseAfterSendingBeginMainFrame
     : public LayerTreeHostContextTest {

@@ -35,6 +35,8 @@
 #include "components/undo/bookmark_undo_service.h"
 #include "components/undo/bookmark_undo_utils.h"
 
+#include "app/vivaldi_apptools.h"
+
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
@@ -410,7 +412,8 @@ bool BookmarkModelAssociator::SyncModelHasUserCreatedNodes(bool* has_nodes) {
   }
 
   syncer::ReadNode trash_bookmarks_node(&trans);
-  if (trash_bookmarks_node.InitByTagLookupForBookmarks(kTrashBookmarksTag) !=
+  if (vivaldi::IsVivaldiRunning() &&
+      trash_bookmarks_node.InitByTagLookupForBookmarks(kTrashBookmarksTag) !=
       syncer::BaseNode::INIT_OK) {
     return false;
   }
@@ -419,7 +422,7 @@ bool BookmarkModelAssociator::SyncModelHasUserCreatedNodes(bool* has_nodes) {
   // children.
   *has_nodes = bookmark_bar_node.HasChildren() ||
       other_bookmarks_node.HasChildren() ||
-      trash_bookmarks_node.HasChildren() ||
+      (vivaldi::IsVivaldiRunning() && trash_bookmarks_node.HasChildren()) ||
       (has_mobile_folder && mobile_bookmarks_node.HasChildren());
   return true;
 }

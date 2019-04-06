@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "media/audio/audio_device_name.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 
 namespace media {
@@ -19,6 +20,8 @@ namespace media {
 class AudioParameters;
 
 namespace pulse {
+
+enum class RequestType : int8_t { INPUT, OUTPUT };
 
 // A helper class that acquires pa_threaded_mainloop_lock() while in scope.
 class AutoPulseLock {
@@ -45,14 +48,14 @@ void DestroyPulse(pa_threaded_mainloop* mainloop, pa_context* context);
 void StreamSuccessCallback(pa_stream* s, int error, void* mainloop);
 void ContextStateCallback(pa_context* context, void* mainloop);
 
-pa_sample_format_t BitsToPASampleFormat(int bits_per_sample);
-
 pa_channel_map ChannelLayoutToPAChannelMap(ChannelLayout channel_layout);
 
 void WaitForOperationCompletion(pa_threaded_mainloop* mainloop,
                                 pa_operation* operation);
 
 base::TimeDelta GetHardwareLatency(pa_stream* stream);
+
+constexpr SampleFormat kInputSampleFormat = kSampleFormatS16;
 
 // Create a recording stream for the threaded mainloop, return true if success,
 // otherwise false. |mainloop| and |context| have to be from a valid Pulse
@@ -80,6 +83,16 @@ bool CreateOutputStream(pa_threaded_mainloop** mainloop,
                         pa_stream_request_cb_t write_callback,
                         void* user_data);
 
+// Utility functions to match up outputs and inputs.
+std::string GetBusOfInput(pa_threaded_mainloop* mainloop,
+                          pa_context* context,
+                          const std::string& name);
+std::string GetOutputCorrespondingTo(pa_threaded_mainloop* mainloop,
+                                     pa_context* context,
+                                     const std::string& bus);
+std::string GetRealDefaultDeviceId(pa_threaded_mainloop* mainloop,
+                                   pa_context* context,
+                                   RequestType type);
 }  // namespace pulse
 
 }  // namespace media

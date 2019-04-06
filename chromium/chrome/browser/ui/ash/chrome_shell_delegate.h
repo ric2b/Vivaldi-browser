@@ -11,54 +11,28 @@
 #include "ash/shell_delegate.h"
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
-
-namespace chromeos {
-class DisplayConfigurationObserver;
-class DisplayPrefs;
-}
 
 namespace keyboard {
 class KeyboardUI;
 }
 
-class ChromeShellDelegate : public ash::ShellDelegate,
-                            public content::NotificationObserver {
+class ChromeShellDelegate : public ash::ShellDelegate {
  public:
   ChromeShellDelegate();
   ~ChromeShellDelegate() override;
 
   // ash::ShellDelegate overrides;
   service_manager::Connector* GetShellConnector() const override;
-  bool IsRunningInForcedAppMode() const override;
   bool CanShowWindowForUser(aura::Window* window) const override;
-  bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
-  void PreShutdown() override;
   std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() override;
-  void OpenUrlFromArc(const GURL& url) override;
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() override;
   std::unique_ptr<ash::ScreenshotDelegate> CreateScreenshotDelegate() override;
-  std::unique_ptr<ash::WallpaperDelegate> CreateWallpaperDelegate() override;
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
   void OpenKeyboardShortcutHelpPage() const override;
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
 
-  // content::NotificationObserver override:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
  private:
-  void PlatformInit();
-
-  content::NotificationRegistrar registrar_;
-
-  std::unique_ptr<chromeos::DisplayPrefs> display_prefs_;
-  std::unique_ptr<chromeos::DisplayConfigurationObserver>
-      display_configuration_observer_;
-
   std::unique_ptr<ash::NetworkingConfigDelegate> networking_config_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeShellDelegate);

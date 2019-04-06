@@ -71,20 +71,29 @@ class LogoutConfirmationController::LastWindowClosedObserver
   // Shows the logout confirmation dialog if the last window is closing in the
   // containers we are tracking. Called before closing instead of after closed
   // because aura::WindowObserver only provides notifications to parent windows
-  // before a child is removed, not after.
-  void ShowDialogIfLastWindowClosing() {
-    size_t window_count = 0u;
+  // before a child is removed, not after. Note that removing window deep inside
+  // tracked container also causes OnWindowHierarchyChanging calls so we check
+  // here that removing window is the last window with parent of a tracked
+  // container.
+  void ShowDialogIfLastWindowClosing(const aura::Window* closing_window) {
+    // Enumerate all root windows.
     for (aura::Window* root : Shell::GetAllRootWindows()) {
-      for (int id : kLastWindowClosedContainerIds)
-        window_count += root->GetChildById(id)->children().size();
+      // For each root window enumerate tracked containers.
+      for (int id : kLastWindowClosedContainerIds) {
+        // In each container try to find child window that is not equal to
+        // |closing_window| which would indicate that we have other top-level
+        // window and logout time does not apply.
+        for (const aura::Window* window : root->GetChildById(id)->children()) {
+          if (window != closing_window)
+            return;
+        }
+      }
     }
 
-    // Prompt if the last window is closing.
-    if (window_count == 1) {
-      Shell::Get()->logout_confirmation_controller()->ConfirmLogout(
-          base::TimeTicks::Now() +
-          base::TimeDelta::FromSeconds(kLogoutConfirmationDelayInSeconds));
-    }
+    // No more windows except currently removing. Show logout time.
+    Shell::Get()->logout_confirmation_controller()->ConfirmLogout(
+        base::TimeTicks::Now() +
+        base::TimeDelta::FromSeconds(kLogoutConfirmationDelayInSeconds));
   }
 
   // ShellObserver:
@@ -96,7 +105,7 @@ class LogoutConfirmationController::LastWindowClosedObserver
   void OnWindowHierarchyChanging(const HierarchyChangeParams& params) override {
     if (!params.new_parent && params.old_parent) {
       // A window is being removed (and not moved to another container).
-      ShowDialogIfLastWindowClosing();
+      ShowDialogIfLastWindowClosing(params.target);
     }
   }
 
@@ -109,14 +118,18 @@ class LogoutConfirmationController::LastWindowClosedObserver
 };
 
 LogoutConfirmationController::LogoutConfirmationController()
-    : clock_(std::make_unique<base::DefaultTickClock>()),
-      logout_closure_(base::Bind(&SignOut)),
-      logout_timer_(false, false),
-      scoped_session_observer_(this) {}
+    : clock_(base::DefaultTickClock::GetInstance()),
+      logout_closure_(base::Bind(&SignOut)) {
+  if (Shell::HasInstance())  // Null in testing::Test.
+    Shell::Get()->session_controller()->AddObserver(this);
+}
 
 LogoutConfirmationController::~LogoutConfirmationController() {
   if (dialog_)
     dialog_->ControllerGone();
+
+  if (Shell::HasInstance())  // Null in testing::Test.
+    Shell::Get()->session_controller()->RemoveObserver(this);
 }
 
 void LogoutConfirmationController::ConfirmLogout(base::TimeTicks logout_time) {
@@ -172,8 +185,8 @@ void LogoutConfirmationController::OnDialogClosed() {
 }
 
 void LogoutConfirmationController::SetClockForTesting(
-    std::unique_ptr<base::TickClock> clock) {
-  clock_ = std::move(clock);
+    const base::TickClock* clock) {
+  clock_ = clock;
 }
 
 void LogoutConfirmationController::SetLogoutClosureForTesting(

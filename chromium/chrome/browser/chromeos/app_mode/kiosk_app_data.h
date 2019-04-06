@@ -13,7 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_data_base.h"
 #include "chrome/browser/extensions/webstore_data_fetcher_delegate.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -25,10 +25,6 @@ class WebstoreDataFetcher;
 
 namespace gfx {
 class Image;
-}
-
-namespace net {
-class URLRequestContextGetter;
 }
 
 namespace network {
@@ -101,9 +97,6 @@ class KioskAppData : public KioskAppDataBase,
   class WebstoreDataParser;
 
   void SetStatus(Status status);
-
-  // Returns URLRequestContextGetter to use for fetching web store data.
-  net::URLRequestContextGetter* GetRequestContextGetter();
 
   // Returns URLLoaderFactory to use for fetching web store data.
   network::mojom::URLLoaderFactory* GetURLLoaderFactory();

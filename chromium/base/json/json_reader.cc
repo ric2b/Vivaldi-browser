@@ -14,6 +14,10 @@
 
 namespace base {
 
+// Chosen to support 99.9% of documents found in the wild late 2016.
+// http://crbug.com/673263
+const int JSONReader::kStackMaxDepth = 200;
+
 // Values 1000 and above are used by JSONFileValueSerializer::JsonFileError.
 static_assert(JSONReader::JSON_PARSE_ERROR_COUNT < 1000,
               "JSONReader error out of bounds");
@@ -34,27 +38,19 @@ const char JSONReader::kUnsupportedEncoding[] =
     "Unsupported encoding. JSON must be UTF-8.";
 const char JSONReader::kUnquotedDictionaryKey[] =
     "Dictionary keys must be quoted.";
+const char JSONReader::kInputTooLarge[] =
+    "Input string is too large (>2GB).";
 
-JSONReader::JSONReader()
-    : JSONReader(JSON_PARSE_RFC) {
-}
-
-JSONReader::JSONReader(int options)
-    : parser_(new internal::JSONParser(options)) {
-}
+JSONReader::JSONReader(int options, int max_depth)
+    : parser_(new internal::JSONParser(options, max_depth)) {}
 
 JSONReader::~JSONReader() = default;
 
 // static
-std::unique_ptr<Value> JSONReader::Read(StringPiece json) {
-  internal::JSONParser parser(JSON_PARSE_RFC);
-  Optional<Value> root = parser.Parse(json);
-  return root ? std::make_unique<Value>(std::move(*root)) : nullptr;
-}
-
-// static
-std::unique_ptr<Value> JSONReader::Read(StringPiece json, int options) {
-  internal::JSONParser parser(options);
+std::unique_ptr<Value> JSONReader::Read(StringPiece json,
+                                        int options,
+                                        int max_depth) {
+  internal::JSONParser parser(options, max_depth);
   Optional<Value> root = parser.Parse(json);
   return root ? std::make_unique<Value>(std::move(*root)) : nullptr;
 }
@@ -105,10 +101,13 @@ std::string JSONReader::ErrorCodeToString(JsonParseError error_code) {
       return kUnsupportedEncoding;
     case JSON_UNQUOTED_DICTIONARY_KEY:
       return kUnquotedDictionaryKey;
-    default:
-      NOTREACHED();
-      return std::string();
+    case JSON_TOO_LARGE:
+      return kInputTooLarge;
+    case JSON_PARSE_ERROR_COUNT:
+      break;
   }
+  NOTREACHED();
+  return std::string();
 }
 
 std::unique_ptr<Value> JSONReader::ReadToValue(StringPiece json) {

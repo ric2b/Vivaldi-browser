@@ -8,7 +8,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -295,7 +294,7 @@ ExtensionFunction::ExtensionFunction()
       profile_id_(NULL),
       name_(""),
       has_callback_(false),
-      include_incognito_(false),
+      include_incognito_information_(false),
       user_gesture_(false),
       bad_message_(false),
       histogram_value_(extensions::functions::UNKNOWN),
@@ -573,14 +572,6 @@ void UIThreadExtensionFunction::SetRenderFrameHost(
       render_frame_host ? new RenderFrameHostTracker(this) : nullptr);
 }
 
-content::WebContents* UIThreadExtensionFunction::GetAssociatedWebContents() {
-  content::WebContents* web_contents = NULL;
-  if (dispatcher())
-    web_contents = dispatcher()->GetAssociatedWebContents();
-
-  return web_contents;
-}
-
 content::WebContents* UIThreadExtensionFunction::GetSenderWebContents() {
   return render_frame_host_ ?
       content::WebContents::FromRenderFrameHost(render_frame_host_) : nullptr;
@@ -633,58 +624,10 @@ void IOThreadExtensionFunction::Destruct() const {
   BrowserThread::DeleteOnIOThread::Destruct(this);
 }
 
-AsyncExtensionFunction::AsyncExtensionFunction() {
-}
-
-void AsyncExtensionFunction::SetError(const std::string& error) {
-  error_ = error;
-}
-
-const std::string& AsyncExtensionFunction::GetError() const {
-  return error_.empty() ? UIThreadExtensionFunction::GetError() : error_;
-}
-
-AsyncExtensionFunction::~AsyncExtensionFunction() {
-}
-
-void AsyncExtensionFunction::SetResult(std::unique_ptr<base::Value> result) {
-  results_.reset(new base::ListValue());
-  results_->Append(std::move(result));
-}
-
-void AsyncExtensionFunction::SetResultList(
-    std::unique_ptr<base::ListValue> results) {
-  results_ = std::move(results);
-}
-
 ExtensionFunction::ScopedUserGestureForTests::ScopedUserGestureForTests() {
   UserGestureForTests::GetInstance()->IncrementCount();
 }
 
 ExtensionFunction::ScopedUserGestureForTests::~ScopedUserGestureForTests() {
   UserGestureForTests::GetInstance()->DecrementCount();
-}
-
-ExtensionFunction::ResponseAction AsyncExtensionFunction::Run() {
-  if (RunAsync())
-    return RespondLater();
-  DCHECK(!results_);
-  return RespondNow(Error(error_));
-}
-
-// static
-bool AsyncExtensionFunction::ValidationFailure(
-    AsyncExtensionFunction* function) {
-  return false;
-}
-
-void AsyncExtensionFunction::SendResponse(bool success) {
-  ResponseValue response;
-  if (success) {
-    response = ArgumentList(std::move(results_));
-  } else {
-    response = results_ ? ErrorWithArguments(std::move(results_), error_)
-                        : Error(error_);
-  }
-  Respond(std::move(response));
 }

@@ -11,13 +11,16 @@
 #include "base/memory/ptr_util.h"
 #include "cc/cc_export.h"
 #include "cc/layers/layer_impl.h"
-#include "cc/resources/resource_provider.h"
 #include "cc/resources/ui_resource_client.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace base {
 class DictionaryValue;
+}
+
+namespace viz {
+class ClientResourceProvider;
 }
 
 namespace cc {
@@ -45,7 +48,7 @@ class CC_EXPORT UIResourceLayerImpl : public LayerImpl {
   void PushPropertiesTo(LayerImpl* layer) override;
 
   bool WillDraw(DrawMode draw_mode,
-                LayerTreeResourceProvider* resource_provider) override;
+                viz::ClientResourceProvider* resource_provider) override;
   void AppendQuads(viz::RenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
 

@@ -26,6 +26,7 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_util.h"
+#include "components/favicon/core/favicon_util.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
@@ -36,6 +37,7 @@
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/gurl.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -45,10 +47,14 @@ namespace password_manager {
 
 namespace {
 
+constexpr base::char16 kPasswordReplacementChar = 0x2022;
+
 // Returns |username| unless it is empty. For an empty |username| returns a
 // localised string saying this username is empty. Use this for displaying the
-// usernames to the user.
-base::string16 ReplaceEmptyUsername(const base::string16& username) {
+// usernames to the user. |replaced| is set to true iff |username| is empty.
+base::string16 ReplaceEmptyUsername(const base::string16& username,
+                                    bool* replaced) {
+  *replaced = username.empty();
   if (username.empty())
     return l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN);
   return username;
@@ -62,6 +68,9 @@ base::string16 GetHumanReadableRealm(const std::string& signon_realm) {
   if (maybe_facet_uri.IsValidAndroidFacetURI())
     return base::UTF8ToUTF16("android://" +
                              maybe_facet_uri.android_package_name() + "/");
+  GURL realm(signon_realm);
+  if (realm.is_valid())
+    return base::UTF8ToUTF16(realm.host());
   return base::UTF8ToUTF16(signon_realm);
 }
 
@@ -79,58 +88,62 @@ base::string16 GetUsernameFromSuggestion(const base::string16& suggestion) {
 void AppendSuggestionIfMatching(
     const base::string16& field_suggestion,
     const base::string16& field_contents,
+    const gfx::Image& custom_icon,
     const std::string& signon_realm,
     bool show_all,
     bool is_password_field,
+    size_t password_length,
     std::vector<autofill::Suggestion>* suggestions) {
   base::string16 lower_suggestion = base::i18n::ToLower(field_suggestion);
   base::string16 lower_contents = base::i18n::ToLower(field_contents);
-  bool prefix_matched_suggestion =
-      show_all || base::StartsWith(lower_suggestion, lower_contents,
-                                   base::CompareCase::SENSITIVE);
-  if (prefix_matched_suggestion ||
-      autofill::FieldIsSuggestionSubstringStartingOnTokenBoundary(
-          lower_suggestion, lower_contents, true)) {
-    autofill::Suggestion suggestion(ReplaceEmptyUsername(field_suggestion));
+  if (show_all || autofill::FieldIsSuggestionSubstringStartingOnTokenBoundary(
+                      lower_suggestion, lower_contents, true)) {
+    bool replaced_username;
+    autofill::Suggestion suggestion(
+        ReplaceEmptyUsername(field_suggestion, &replaced_username));
+    suggestion.is_value_secondary = replaced_username;
     suggestion.label = GetHumanReadableRealm(signon_realm);
+    suggestion.additional_label =
+        base::string16(password_length, kPasswordReplacementChar);
     suggestion.frontend_id = is_password_field
                                  ? autofill::POPUP_ITEM_ID_PASSWORD_ENTRY
                                  : autofill::POPUP_ITEM_ID_USERNAME_ENTRY;
-    suggestion.match = prefix_matched_suggestion
-                           ? autofill::Suggestion::PREFIX_MATCH
-                           : autofill::Suggestion::SUBSTRING_MATCH;
+    suggestion.match =
+        show_all || base::StartsWith(lower_suggestion, lower_contents,
+                                     base::CompareCase::SENSITIVE)
+            ? autofill::Suggestion::PREFIX_MATCH
+            : autofill::Suggestion::SUBSTRING_MATCH;
+    suggestion.custom_icon = custom_icon;
+    // The UI code will pick up an icon from the resources based on the string.
+    suggestion.icon = base::ASCIIToUTF16("globeIcon");
     suggestions->push_back(suggestion);
   }
 }
 
-// This function attempts to fill |suggestions| and |realms| form |fill_data|
-// based on |current_username|. Unless |show_all| is true, it only picks
-// suggestions where the username has |current_username| as a prefix.
+// This function attempts to fill |suggestions| from |fill_data| based on
+// |current_username| that is the current value of the field. Unless |show_all|
+// is true, it only picks suggestions allowed by
+// FieldIsSuggestionSubstringStartingOnTokenBoundary. It can pick either a
+// substring or a prefix based on the flag.
 void GetSuggestions(const autofill::PasswordFormFillData& fill_data,
                     const base::string16& current_username,
-                    std::vector<autofill::Suggestion>* suggestions,
+                    const gfx::Image& custom_icon,
                     bool show_all,
-                    bool is_password_field) {
-  AppendSuggestionIfMatching(fill_data.username_field.value, current_username,
-                             fill_data.preferred_realm, show_all,
-                             is_password_field, suggestions);
+                    bool is_password_field,
+                    std::vector<autofill::Suggestion>* suggestions) {
+  AppendSuggestionIfMatching(
+      fill_data.username_field.value, current_username, custom_icon,
+      fill_data.preferred_realm, show_all, is_password_field,
+      fill_data.password_field.value.size(), suggestions);
 
   for (const auto& login : fill_data.additional_logins) {
-    AppendSuggestionIfMatching(login.first, current_username,
+    AppendSuggestionIfMatching(login.first, current_username, custom_icon,
                                login.second.realm, show_all, is_password_field,
-                               suggestions);
-  }
-
-  for (const auto& usernames : fill_data.other_possible_usernames) {
-    for (size_t i = 0; i < usernames.second.size(); ++i) {
-      AppendSuggestionIfMatching(usernames.second[i], current_username,
-                                 usernames.first.realm, show_all,
-                                 is_password_field, suggestions);
-    }
+                               login.second.password.size(), suggestions);
   }
 
   // Prefix matches should precede other token matches.
-  if (autofill::IsFeatureSubstringMatchEnabled()) {
+  if (!show_all && autofill::IsFeatureSubstringMatchEnabled()) {
     std::sort(suggestions->begin(), suggestions->end(),
               [](const autofill::Suggestion& a, const autofill::Suggestion& b) {
                 return a.match < b.match;
@@ -147,20 +160,6 @@ bool ShouldShowManualFallbackForPreLollipop(syncer::SyncService* sync_service) {
 #else
   return true;
 #endif
-}
-
-void AddSimpleSuggestionWithSeparatorOnTop(
-    int value,
-    int frontend_id,
-    std::vector<autofill::Suggestion>* suggestions) {
-#if !defined(OS_ANDROID)
-  suggestions->push_back(autofill::Suggestion());
-  suggestions->back().frontend_id = autofill::POPUP_ITEM_ID_SEPARATOR;
-#endif
-
-  autofill::Suggestion suggestion(l10n_util::GetStringUTF8(value),
-                                  std::string(), std::string(), frontend_id);
-  suggestions->push_back(suggestion);
 }
 
 }  // namespace
@@ -222,18 +221,7 @@ void PasswordAutofillManager::OnAddPasswordFormMapping(
     return;
 
   login_to_password_info_[key] = fill_data;
-}
-
-autofill::Suggestion PasswordAutofillManager::CreateFormNotSecureWarning() {
-  autofill::Suggestion http_warning_suggestion(
-      l10n_util::GetStringUTF8(IDS_AUTOFILL_LOGIN_HTTP_WARNING_MESSAGE),
-      l10n_util::GetStringUTF8(IDS_AUTOFILL_HTTP_WARNING_LEARN_MORE),
-      "httpWarning", autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE);
-  if (!did_show_form_not_secure_warning_) {
-    did_show_form_not_secure_warning_ = true;
-    metrics_util::LogShowedFormNotSecureWarningOnCurrentNavigation();
-  }
-  return http_warning_suggestion;
+  RequestFavicon(fill_data.origin);
 }
 
 void PasswordAutofillManager::OnShowPasswordSuggestions(
@@ -250,9 +238,9 @@ void PasswordAutofillManager::OnShowPasswordSuggestions(
     NOTREACHED();
     return;
   }
-  GetSuggestions(fill_data_it->second, typed_username, &suggestions,
+  GetSuggestions(fill_data_it->second, typed_username, page_favicon_,
                  (options & autofill::SHOW_ALL) != 0,
-                 (options & autofill::IS_PASSWORD_FIELD) != 0);
+                 (options & autofill::IS_PASSWORD_FIELD) != 0, &suggestions);
 
   form_data_key_ = key;
 
@@ -261,136 +249,79 @@ void PasswordAutofillManager::OnShowPasswordSuggestions(
     return;
   }
 
-  if (options & autofill::IS_PASSWORD_FIELD) {
-    autofill::Suggestion password_field_suggestions(l10n_util::GetStringUTF16(
-        IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE));
-    password_field_suggestions.frontend_id = autofill::POPUP_ITEM_ID_TITLE;
-    suggestions.insert(suggestions.begin(), password_field_suggestions);
-  }
-
-  GURL origin = (fill_data_it->second).origin;
-  bool is_context_secure = autofill_client_->IsContextSecure() &&
-                           (!origin.is_valid() || !origin.SchemeIs("http"));
-  if (!is_context_secure && security_state::IsHttpWarningInFormEnabled()) {
-    std::string icon_str;
-
-    // Show http info icon for http sites.
-    if (origin.is_valid() && origin.SchemeIs("http")) {
-      icon_str = "httpWarning";
-    } else {
-      // Show https_invalid icon for broken https sites.
-      icon_str = "httpsInvalid";
-    }
-
-    autofill::Suggestion http_warning_suggestion(
-        l10n_util::GetStringUTF8(IDS_AUTOFILL_LOGIN_HTTP_WARNING_MESSAGE),
-        l10n_util::GetStringUTF8(IDS_AUTOFILL_HTTP_WARNING_LEARN_MORE),
-        icon_str, autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE);
-#if !defined(OS_ANDROID)
-      suggestions.insert(suggestions.begin(), autofill::Suggestion());
-      suggestions.front().frontend_id = autofill::POPUP_ITEM_ID_SEPARATOR;
-#endif
-      suggestions.insert(suggestions.begin(), http_warning_suggestion);
-
-      if (!did_show_form_not_secure_warning_) {
-        did_show_form_not_secure_warning_ = true;
-        metrics_util::LogShowedFormNotSecureWarningOnCurrentNavigation();
-      }
-  }
+  GURL origin = fill_data_it->second.origin;
 
   if (ShouldShowManualFallbackForPreLollipop(
           autofill_client_->GetSyncService())) {
-    if (base::FeatureList::IsEnabled(
-            password_manager::features::kEnableManualFallbacksFilling) &&
-        (options & autofill::IS_PASSWORD_FIELD) && password_client_ &&
+    if (password_client_ &&
         password_client_->IsFillingFallbackEnabledForCurrentPage()) {
-      AddSimpleSuggestionWithSeparatorOnTop(
-          IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK,
-          autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY, &suggestions);
+      autofill::Suggestion suggestion(
+          l10n_util::GetStringUTF8(IDS_PASSWORD_MANAGER_MANAGE_PASSWORDS),
+          std::string(), std::string(),
+          autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY);
+      suggestions.push_back(suggestion);
 
-      show_all_saved_passwords_shown_context_ =
-          metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD;
       metrics_util::LogContextOfShowAllSavedPasswordsShown(
-          show_all_saved_passwords_shown_context_);
-    }
-    if (base::FeatureList::IsEnabled(
-            password_manager::features::kEnableManualFallbacksGeneration) &&
-        password_manager_util::GetPasswordSyncState(
-            autofill_client_->GetSyncService()) == SYNCING_NORMAL_ENCRYPTION) {
-      AddSimpleSuggestionWithSeparatorOnTop(
-          IDS_AUTOFILL_GENERATE_PASSWORD_FALLBACK,
-          autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY, &suggestions);
+          metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD);
     }
   }
 
-  autofill_client_->ShowAutofillPopup(bounds,
-                                      text_direction,
-                                      suggestions,
-                                      weak_ptr_factory_.GetWeakPtr());
-}
-
-void PasswordAutofillManager::OnShowNotSecureWarning(
-    base::i18n::TextDirection text_direction,
-    const gfx::RectF& bounds) {
-  DCHECK(security_state::IsHttpWarningInFormEnabled());
-  // TODO(estark): Other code paths in this file don't do null checks before
-  // using |autofill_client_|. It seems that these other code paths somehow
-  // short-circuit before dereferencing |autofill_client_| in cases where it's
-  // null; it would be good to understand why/how and make a firm decision about
-  // whether |autofill_client_| is allowed to be null. Ideally we would be able
-  // to get rid of such cases so that we can enable Form-Not-Secure warnings
-  // here in all cases. https://crbug.com/699217
-  if (!autofill_client_)
-    return;
-
-  std::vector<autofill::Suggestion> suggestions;
-  autofill::Suggestion http_warning_suggestion = CreateFormNotSecureWarning();
-  suggestions.insert(suggestions.begin(), http_warning_suggestion);
-
   autofill_client_->ShowAutofillPopup(bounds, text_direction, suggestions,
-                                      weak_ptr_factory_.GetWeakPtr());
+                                      false, weak_ptr_factory_.GetWeakPtr());
 }
 
-void PasswordAutofillManager::OnShowManualFallbackSuggestion(
-    base::i18n::TextDirection text_direction,
-    const gfx::RectF& bounds) {
-  // https://crbug.com/699197
-  // CroS SimpleWebviewDialog used for the captive portal dialog is a special
-  // case because it doesn't instantiate many helper classes. |autofill_client_|
-  // is NULL too.
-  if (!autofill_client_ || !ShouldShowManualFallbackForPreLollipop(
-                               autofill_client_->GetSyncService()))
-    return;
-  if (!password_client_ ||
-      !password_client_->IsFillingFallbackEnabledForCurrentPage())
-    return;
+bool PasswordAutofillManager::MaybeShowPasswordSuggestions(
+    const gfx::RectF& bounds,
+    base::i18n::TextDirection text_direction) {
+  if (login_to_password_info_.empty())
+    return false;
+  OnShowPasswordSuggestions(
+      login_to_password_info_.begin()->first, text_direction, base::string16(),
+      autofill::SHOW_ALL | autofill::IS_PASSWORD_FIELD, bounds);
+  return true;
+}
+
+bool PasswordAutofillManager::MaybeShowPasswordSuggestionsWithGeneration(
+    const gfx::RectF& bounds,
+    base::i18n::TextDirection text_direction) {
+  if (login_to_password_info_.empty())
+    return false;
   std::vector<autofill::Suggestion> suggestions;
-  autofill::Suggestion all_saved_passwords(
-      l10n_util::GetStringUTF8(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK),
-      std::string(), std::string(),
-      autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY);
-  suggestions.push_back(all_saved_passwords);
+  GetSuggestions(login_to_password_info_.begin()->second, base::string16(),
+                 page_favicon_, true /* show_all */,
+                 true /* is_password_field */, &suggestions);
+  form_data_key_ = login_to_password_info_.begin()->first;
 
-  show_all_saved_passwords_shown_context_ =
-      metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK;
-  metrics_util::LogContextOfShowAllSavedPasswordsShown(
-      show_all_saved_passwords_shown_context_);
+  // Add 'Generation' option.
+  // The UI code will pick up an icon from the resources based on the string.
+  autofill::Suggestion suggestion(
+      l10n_util::GetStringUTF8(IDS_PASSWORD_MANAGER_GENERATE_PASSWORD),
+      std::string(), std::string("keyIcon"),
+      autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY);
+  suggestions.push_back(suggestion);
 
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kEnableManualFallbacksGeneration) &&
-      password_manager_util::GetPasswordSyncState(
-          autofill_client_->GetSyncService()) == SYNCING_NORMAL_ENCRYPTION) {
-    AddSimpleSuggestionWithSeparatorOnTop(
-        IDS_AUTOFILL_GENERATE_PASSWORD_FALLBACK,
-        autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY, &suggestions);
+  // Add "Manage passwords".
+  if (ShouldShowManualFallbackForPreLollipop(
+          autofill_client_->GetSyncService())) {
+    autofill::Suggestion suggestion(
+        l10n_util::GetStringUTF8(IDS_PASSWORD_MANAGER_MANAGE_PASSWORDS),
+        std::string(), std::string(),
+        autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY);
+    suggestions.push_back(suggestion);
+
+    metrics_util::LogContextOfShowAllSavedPasswordsShown(
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD);
   }
+
   autofill_client_->ShowAutofillPopup(bounds, text_direction, suggestions,
-                                      weak_ptr_factory_.GetWeakPtr());
+                                      false, weak_ptr_factory_.GetWeakPtr());
+  return true;
 }
 
 void PasswordAutofillManager::DidNavigateMainFrame() {
   login_to_password_info_.clear();
-  did_show_form_not_secure_warning_ = false;
+  favicon_tracker_.TryCancelAll();
+  page_favicon_ = gfx::Image();
 }
 
 bool PasswordAutofillManager::FillSuggestionForTest(
@@ -414,8 +345,7 @@ void PasswordAutofillManager::OnPopupHidden() {
 void PasswordAutofillManager::DidSelectSuggestion(const base::string16& value,
                                                   int identifier) {
   ClearPreviewedForm();
-  if (identifier == autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE ||
-      identifier == autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY ||
+  if (identifier == autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY ||
       identifier == autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY)
     return;
   bool success =
@@ -428,40 +358,22 @@ void PasswordAutofillManager::DidAcceptSuggestion(const base::string16& value,
                                                   int position) {
   autofill_client_->ExecuteCommand(identifier);
   if (identifier == autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY) {
-    password_manager_driver_->UserSelectedManualGenerationOption();
-  } else if (identifier !=
-                 autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE &&
-             identifier != autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY) {
-    bool success =
-        FillSuggestion(form_data_key_, GetUsernameFromSuggestion(value));
-    DCHECK(success);
-  }
-
-  if (identifier == autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY) {
-    DCHECK_NE(show_all_saved_passwords_shown_context_,
-              metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_NONE);
-
+    password_client_->GeneratePassword();
+  } else if (identifier == autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY) {
     metrics_util::LogContextOfShowAllSavedPasswordsAccepted(
-        show_all_saved_passwords_shown_context_);
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD);
 
     if (password_client_) {
       using UserAction =
           password_manager::PasswordManagerMetricsRecorder::PageLevelUserAction;
-      switch (show_all_saved_passwords_shown_context_) {
-        case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD:
-          password_client_->GetMetricsRecorder().RecordPageLevelUserAction(
-              UserAction::kShowAllPasswordsWhileSomeAreSuggested);
-          break;
-        case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK:
-          password_client_->GetMetricsRecorder().RecordPageLevelUserAction(
-              UserAction::kShowAllPasswordsWhileNoneAreSuggested);
-          break;
-        case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_CONTEXT_MENU:
-        case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_NONE:
-        case metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_COUNT:
-          NOTREACHED();
+
+      password_client_->GetMetricsRecorder().RecordPageLevelUserAction(
+          UserAction::kShowAllPasswordsWhileSomeAreSuggested);
       }
-    }
+  } else {
+    bool success =
+        FillSuggestion(form_data_key_, GetUsernameFromSuggestion(value));
+    DCHECK(success);
   }
 
   autofill_client_->HideAutofillPopup();
@@ -486,8 +398,8 @@ void PasswordAutofillManager::ClearPreviewedForm() {
   password_manager_driver_->ClearPreviewedForm();
 }
 
-bool PasswordAutofillManager::IsCreditCardPopup() {
-  return false;
+autofill::PopupType PasswordAutofillManager::GetPopupType() const {
+  return autofill::PopupType::kPasswords;
 }
 
 autofill::AutofillDriver* PasswordAutofillManager::GetAutofillDriver() {
@@ -527,19 +439,6 @@ bool PasswordAutofillManager::GetPasswordAndRealmForUsername(
     }
   }
 
-  for (autofill::PasswordFormFillData::UsernamesCollection::const_iterator
-           usernames_iter = fill_data.other_possible_usernames.begin();
-       usernames_iter != fill_data.other_possible_usernames.end();
-       ++usernames_iter) {
-    for (size_t i = 0; i < usernames_iter->second.size(); ++i) {
-      if (usernames_iter->second[i] == current_username) {
-        password_and_realm->password = usernames_iter->first.password;
-        password_and_realm->realm = usernames_iter->first.realm;
-        return true;
-      }
-    }
-  }
-
   return false;
 }
 
@@ -552,6 +451,23 @@ bool PasswordAutofillManager::FindLoginInfo(
 
   *found_password = iter->second;
   return true;
+}
+
+void PasswordAutofillManager::RequestFavicon(const GURL& url) {
+  if (!password_client_)
+    return;
+  favicon::GetFaviconImageForPageURL(
+      password_client_->GetFaviconService(), url,
+      favicon_base::IconType::kFavicon,
+      base::BindRepeating(&PasswordAutofillManager::OnFaviconReady,
+                          weak_ptr_factory_.GetWeakPtr()),
+      &favicon_tracker_);
+}
+
+void PasswordAutofillManager::OnFaviconReady(
+    const favicon_base::FaviconImageResult& result) {
+  if (!result.image.IsEmpty())
+    page_favicon_ = result.image;
 }
 
 }  //  namespace password_manager

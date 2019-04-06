@@ -334,7 +334,7 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
   }
 
   void Init() {
-    LoadErrorReporter::Init(true);
+    LoadErrorReporter::Init(false);
     // The two lines of magical incantation required to get the extension
     // service to work inside a unit test and access the extension prefs.
     static_cast<TestExtensionSystem*>(ExtensionSystem::Get(profile()))
@@ -694,6 +694,75 @@ TEST_F(ExtensionMessageBubbleTest, DevModeControllerTest) {
   EXPECT_FALSE(controller->ShouldShow());
   dev_mode_extensions = controller->GetExtensionList();
   EXPECT_EQ(0U, dev_mode_extensions.size());
+}
+
+// Test that if we show the dev mode bubble for the regular profile, we won't
+// show it for its incognito profile.
+// Regression test for crbug.com/819309.
+TEST_F(ExtensionMessageBubbleTest, ShowDevModeBubbleOncePerOriginalProfile) {
+  FeatureSwitch::ScopedOverride force_dev_mode_highlighting(
+      FeatureSwitch::force_dev_mode_highlighting(), true);
+  Init();
+
+  ASSERT_TRUE(LoadGenericExtension("1", kId1, Manifest::UNPACKED));
+
+  auto get_controller = [](Browser* browser) {
+    auto controller = std::make_unique<TestExtensionMessageBubbleController>(
+        new DevModeBubbleDelegate(browser->profile()), browser);
+    controller->SetIsActiveBubble();
+    return controller;
+  };
+
+  {
+    // Show the bubble for the regular profile, and dismiss it.
+    auto controller = get_controller(browser());
+    EXPECT_TRUE(controller->ShouldShow());
+    FakeExtensionMessageBubble bubble;
+    bubble.set_action_on_show(
+        FakeExtensionMessageBubble::BUBBLE_ACTION_CLICK_DISMISS_BUTTON);
+    bubble.set_controller(controller.get());
+    bubble.Show();
+  }
+
+  {
+    // The bubble shouldn't want to show twice for the same profile.
+    auto controller = get_controller(browser());
+    EXPECT_FALSE(controller->ShouldShow());
+  }
+
+  {
+    // Construct an off-the-record profile and browser.
+    Profile* off_the_record_profile = profile()->GetOffTheRecordProfile();
+
+    ToolbarActionsModelFactory::GetInstance()->SetTestingFactory(
+        off_the_record_profile, &BuildToolbarModel);
+
+    std::unique_ptr<BrowserWindow> off_the_record_window(CreateBrowserWindow());
+    std::unique_ptr<Browser> off_the_record_browser(
+        CreateBrowser(off_the_record_profile, Browser::TYPE_TABBED, false,
+                      off_the_record_window.get()));
+
+    // The bubble shouldn't want to show for an incognito version of the same
+    // profile.
+    auto controller = get_controller(browser());
+    EXPECT_FALSE(controller->ShouldShow());
+
+    // Now, try the inverse - show the bubble for the incognito profile, and
+    // dismiss it.
+    controller->delegate()->ClearProfileSetForTesting();
+    EXPECT_TRUE(controller->ShouldShow());
+    FakeExtensionMessageBubble bubble;
+    bubble.set_action_on_show(
+        FakeExtensionMessageBubble::BUBBLE_ACTION_CLICK_DISMISS_BUTTON);
+    bubble.set_controller(controller.get());
+    bubble.Show();
+  }
+
+  {
+    // The bubble shouldn't want to show for the regular profile.
+    auto controller = get_controller(browser());
+    EXPECT_FALSE(controller->ShouldShow());
+  }
 }
 
 // The feature this is meant to test is only implemented on Windows and Mac.
@@ -1290,12 +1359,21 @@ TEST_F(ExtensionMessageBubbleTest, TestBubbleOutlivesBrowser) {
   controller.reset();
 }
 
+// Fails on linux-chromeos-rel: crbug.com/839371
+#if defined(OS_CHROMEOS)
+#define MAYBE_TestUninstallExtensionAfterBrowserDestroyed \
+  DISABLED_TestUninstallExtensionAfterBrowserDestroyed
+#else
+#define MAYBE_TestUninstallExtensionAfterBrowserDestroyed \
+  TestUninstallExtensionAfterBrowserDestroyed
+#endif  // defined(OS_CHROMEOS)
+
 // Tests that when an extension -- associated with a bubble controller -- is
 // uninstalling after the browser is destroyed, the controller does not access
 // the associated browser object and therefore, no use-after-free occurs.
 // crbug.com/756316
 TEST_F(ExtensionMessageBubbleTest,
-       TestUninstallExtensionAfterBrowserDestroyed) {
+       MAYBE_TestUninstallExtensionAfterBrowserDestroyed) {
   FeatureSwitch::ScopedOverride force_dev_mode_highlighting(
       FeatureSwitch::force_dev_mode_highlighting(), true);
   Init();

@@ -48,7 +48,7 @@ class ChromeAppDelegate : public extensions::AppDelegate,
       content::WebContents* source,
       const content::OpenURLParams& params) override;
   void AddNewContents(content::BrowserContext* context,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture) override;
@@ -59,10 +59,10 @@ class ChromeAppDelegate : public extensions::AppDelegate,
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback,
+      content::MediaResponseCallback callback,
       const extensions::Extension* extension) override;
   bool CheckMediaAccessPermission(
-      content::WebContents* web_contents,
+      content::RenderFrameHost* render_frame_host,
       const GURL& security_origin,
       content::MediaStreamType type,
       const extensions::Extension* extension) override;

@@ -4,7 +4,9 @@
 
 #include "crazy_linker_util.h"
 
-#include <minitest/minitest.h>
+#include <gtest/gtest.h>
+
+#include <utility>
 
 namespace crazy {
 
@@ -40,10 +42,37 @@ TEST(String, CopyConstructor) {
   EXPECT_STREQ(s2.c_str(), s1.c_str());
 }
 
+TEST(String, MoveConstructor) {
+  String s1("Source");
+  String s2(std::move(s1));
+
+  EXPECT_TRUE(s1.IsEmpty());
+  EXPECT_EQ(6U, s2.size());
+  EXPECT_STREQ(s2.c_str(), "Source");
+}
+
 TEST(String, CharConstructor) {
   String s('H');
   EXPECT_EQ(1U, s.size());
   EXPECT_STREQ("H", s.c_str());
+}
+
+TEST(String, CopyAssign) {
+  String s1("Source");
+  String s2("Destination");
+
+  s1 = s2;
+  EXPECT_STREQ(s1.c_str(), s2.c_str());
+}
+
+TEST(String, MoveAssign) {
+  String s1("Source");
+  String s2("Destination");
+
+  s2 = std::move(s1);
+
+  EXPECT_TRUE(s1.IsEmpty());
+  EXPECT_STREQ("Source", s2.c_str());
 }
 
 TEST(String, AppendCString) {
@@ -109,6 +138,42 @@ TEST(Vector, PushBack2) {
   EXPECT_EQ(static_cast<size_t>(kMaxCount), v.GetCount());
 }
 
+TEST(Vector, MoveConstructor) {
+  const int kMaxCount = 500;
+  Vector<int> v1;
+  for (int n = 0; n < kMaxCount; ++n)
+    v1.PushBack(n * 100);
+
+  Vector<int> v2(std::move(v1));
+
+  EXPECT_TRUE(v1.IsEmpty());
+  EXPECT_FALSE(v2.IsEmpty());
+
+  EXPECT_EQ(static_cast<size_t>(kMaxCount), v2.GetCount());
+  for (int n = 0; n < kMaxCount; ++n) {
+    EXPECT_EQ(n * 100, v2[n]) << "Checking v[" << n << "]";
+  }
+}
+
+TEST(Vector, MoveAssign) {
+  const int kMaxCount = 500;
+  Vector<int> v1;
+  for (int n = 0; n < kMaxCount; ++n)
+    v1.PushBack(n * 100);
+
+  Vector<int> v2;
+
+  v2 = std::move(v1);
+
+  EXPECT_TRUE(v1.IsEmpty());
+  EXPECT_FALSE(v2.IsEmpty());
+
+  EXPECT_EQ(static_cast<size_t>(kMaxCount), v2.GetCount());
+  for (int n = 0; n < kMaxCount; ++n) {
+    EXPECT_EQ(n * 100, v2[n]) << "Checking v[" << n << "]";
+  }
+}
+
 TEST(Vector, At) {
   const int kMaxCount = 500;
   Vector<int> v;
@@ -116,20 +181,33 @@ TEST(Vector, At) {
     v.PushBack(n * 100);
 
   for (int n = 0; n < kMaxCount; ++n) {
-    TEST_TEXT << "Checking v[" << n << "]";
-    EXPECT_EQ(n * 100, v[n]);
+    EXPECT_EQ(n * 100, v[n]) << "Checking v[" << n << "]";
   }
 }
 
-TEST(Vector, IndexOf) {
+TEST(Vector, Find) {
   const int kMaxCount = 500;
   Vector<int> v;
   for (int n = 0; n < kMaxCount; ++n)
     v.PushBack(n * 100);
 
   for (int n = 0; n < kMaxCount; ++n) {
-    TEST_TEXT << "Checking v.IndexOf(" << n * 100 << ")";
-    EXPECT_EQ(n, v.IndexOf(n * 100));
+    SearchResult r = v.Find(n * 100);
+    EXPECT_TRUE(r.found) << "Looking for " << n * 100;
+    EXPECT_EQ(n, r.pos) << "Looking for " << n * 100;
+  }
+}
+
+TEST(Vector, ForRangeLoop) {
+  const int kMaxCount = 500;
+  Vector<int> v;
+  for (int n = 0; n < kMaxCount; ++n)
+    v.PushBack(n * 100);
+
+  int n = 0;
+  for (const int& value : v) {
+    EXPECT_EQ(n * 100, value) << "Checking v[" << n << "]";
+    n++;
   }
 }
 
@@ -145,7 +223,6 @@ TEST(Vector, InsertAt) {
 
     EXPECT_EQ(kMaxCount + 1, v.GetCount());
     for (int n = 0; n < v.GetCount(); ++n) {
-      TEST_TEXT << "Checking v[" << n << "]";
       int expected;
       if (n < k)
         expected = n * 100;
@@ -153,7 +230,7 @@ TEST(Vector, InsertAt) {
         expected = -1000;
       else
         expected = (n - 1) * 100;
-      EXPECT_EQ(expected, v[n]);
+      EXPECT_EQ(expected, v[n]) << "Checking v[" << n << "]";
     }
   }
 }
@@ -170,9 +247,8 @@ TEST(Vector, RemoveAt) {
 
     EXPECT_EQ(kMaxCount - 1, v.GetCount());
     for (int n = 0; n < kMaxCount - 1; ++n) {
-      TEST_TEXT << "Checking v[" << n << "]";
       int expected = (n < k) ? (n * 100) : ((n + 1) * 100);
-      EXPECT_EQ(expected, v[n]);
+      EXPECT_EQ(expected, v[n]) << "Checking v[" << n << "]";
     }
   }
 }
@@ -185,45 +261,12 @@ TEST(Vector, PopFirst) {
 
   for (int n = 0; n < kMaxCount; ++n) {
     int first = v.PopFirst();
-    TEST_TEXT << "Checking " << n << "-th PopFirst()";
-    EXPECT_EQ(n * 100, first);
-    EXPECT_EQ(kMaxCount - 1 - n, v.GetCount());
+    EXPECT_EQ(n * 100, first) << "Checking " << n << "-th PopFirst()";
+    EXPECT_EQ(kMaxCount - 1 - n, v.GetCount())
+        << "Checking " << n << "-th PopFirst()";
   }
   EXPECT_EQ(0u, v.GetCount());
   EXPECT_TRUE(v.IsEmpty());
-}
-
-TEST(Set, Empty) {
-  Set<int> s;
-  EXPECT_TRUE(s.IsEmpty());
-  EXPECT_EQ(0U, s.GetCount());
-}
-
-TEST(Set, OneItem) {
-  Set<int> s;
-
-  EXPECT_FALSE(s.Has(0));
-
-  EXPECT_TRUE(s.Add(0));
-  EXPECT_TRUE(s.Has(0));
-  EXPECT_FALSE(s.IsEmpty());
-  EXPECT_EQ(1U, s.GetCount());
-}
-
-TEST(Set, ThreeItems) {
-  Set<int> s;
-
-  EXPECT_TRUE(s.Add(0));
-  EXPECT_TRUE(s.Add(1));
-  EXPECT_TRUE(s.Add(2));
-
-  EXPECT_FALSE(s.Has(-1));
-  EXPECT_TRUE(s.Has(0));
-  EXPECT_TRUE(s.Has(1));
-  EXPECT_TRUE(s.Has(2));
-  EXPECT_FALSE(s.Has(3));
-
-  EXPECT_EQ(3U, s.GetCount());
 }
 
 }  // namespace crazy

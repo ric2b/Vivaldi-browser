@@ -10,24 +10,27 @@
 #include "extensions/renderer/script_context.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/fileapi/file_system_util.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebDOMFileSystem.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_dom_file_system.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "url/origin.h"
 
 namespace extensions {
 
 FileSystemNatives::FileSystemNatives(ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction(
+    : ObjectBackedNativeHandler(context) {}
+
+void FileSystemNatives::AddRoutes() {
+  RouteHandlerFunction(
       "GetFileEntry",
       base::Bind(&FileSystemNatives::GetFileEntry, base::Unretained(this)));
-  RouteFunction("GetIsolatedFileSystem",
-                base::Bind(&FileSystemNatives::GetIsolatedFileSystem,
-                           base::Unretained(this)));
-  RouteFunction("CrackIsolatedFileSystemName",
-                base::Bind(&FileSystemNatives::CrackIsolatedFileSystemName,
-                           base::Unretained(this)));
+  RouteHandlerFunction("GetIsolatedFileSystem",
+                       base::Bind(&FileSystemNatives::GetIsolatedFileSystem,
+                                  base::Unretained(this)));
+  RouteHandlerFunction(
+      "CrackIsolatedFileSystemName",
+      base::Bind(&FileSystemNatives::CrackIsolatedFileSystemName,
+                 base::Unretained(this)));
 }
 
 void FileSystemNatives::GetIsolatedFileSystem(

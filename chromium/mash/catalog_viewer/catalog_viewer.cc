@@ -14,8 +14,8 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/catalog/public/interfaces/catalog.mojom.h"
-#include "services/catalog/public/interfaces/constants.mojom.h"
+#include "services/catalog/public/mojom/catalog.mojom.h"
+#include "services/catalog/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "ui/base/models/table_model.h"
@@ -222,9 +222,11 @@ void CatalogViewer::RemoveWindow(views::Widget* window) {
 }
 
 void CatalogViewer::OnStart() {
-  aura_init_ = views::AuraInit::Create(
-      context()->connector(), context()->identity(), "views_mus_resources.pak",
-      std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+  views::AuraInit::InitParams params;
+  params.connector = context()->connector();
+  params.identity = context()->identity();
+  params.mode = views::AuraInit::Mode::AURA_MUS;
+  aura_init_ = views::AuraInit::Create(params);
   if (!aura_init_)
     context()->QuitNow();
 }

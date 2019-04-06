@@ -13,27 +13,28 @@
 #include "base/strings/string_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "content/child/child_thread_impl.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_util.h"
-#include "services/network/public/interfaces/data_pipe_getter.mojom.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/data_pipe_getter.mojom.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/common/blob/blob.mojom.h"
-#include "third_party/WebKit/common/blob/blob_registry.mojom.h"
-#include "third_party/WebKit/public/platform/FilePathConversion.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
-#include "third_party/WebKit/public/platform/WebMixedContent.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebThread.h"
-#include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
+#include "third_party/blink/public/platform/interface_provider.h"
+#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_http_body.h"
+#include "third_party/blink/public/platform/web_http_header_visitor.h"
+#include "third_party/blink/public/platform/web_mixed_content.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_thread.h"
 
 using blink::mojom::FetchCacheMode;
 using blink::WebData;
@@ -104,94 +105,6 @@ class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
 
  private:
   std::string buffer_;
-};
-
-// Vends data pipes to read a Blob. It stays alive until all Mojo connections
-// close.
-class DataPipeGetter : public network::mojom::DataPipeGetter {
- public:
-  DataPipeGetter(blink::mojom::BlobPtr blob,
-                 network::mojom::DataPipeGetterRequest request) {
-    // If a sync XHR is doing the upload, then the main thread will be blocked.
-    // So we must bind on a background thread, otherwise the methods below will
-    // never be called and the process will hang.
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-        base::CreateSingleThreadTaskRunnerWithTraits(
-            {base::TaskPriority::USER_VISIBLE,
-             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
-    task_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(&DataPipeGetter::BindInternal, base::Unretained(this),
-                       blob.PassInterface(), std::move(request)));
-  }
-  ~DataPipeGetter() override = default;
-
- private:
-  class BlobReaderClient : public blink::mojom::BlobReaderClient {
-   public:
-    explicit BlobReaderClient(ReadCallback callback)
-        : callback_(std::move(callback)) {
-      DCHECK(!callback_.is_null());
-    }
-    ~BlobReaderClient() override = default;
-
-    // blink::mojom::BlobReaderClient implementation:
-    void OnCalculatedSize(uint64_t total_size,
-                          uint64_t expected_content_size) override {
-      // Check if null since it's conceivable OnComplete() was already called
-      // with error.
-      if (!callback_.is_null())
-        std::move(callback_).Run(net::OK, total_size);
-    }
-    void OnComplete(int32_t status, uint64_t data_length) override {
-      // Check if null since OnCalculatedSize() may have already been called
-      // and an error occurred later.
-      if (!callback_.is_null() && status != net::OK) {
-        // On error, signal failure immediately. On success, OnCalculatedSize()
-        // is guaranteed to be called, and the result will be signaled from
-        // there.
-        std::move(callback_).Run(status, 0);
-      }
-    }
-
-   private:
-    ReadCallback callback_;
-
-    DISALLOW_COPY_AND_ASSIGN(BlobReaderClient);
-  };
-
-  void BindInternal(blink::mojom::BlobPtrInfo blob,
-                    network::mojom::DataPipeGetterRequest request) {
-    bindings_.set_connection_error_handler(base::BindRepeating(
-        &DataPipeGetter::OnConnectionError, base::Unretained(this)));
-    bindings_.AddBinding(this, std::move(request));
-    blob_.Bind(std::move(blob));
-  }
-
-  void OnConnectionError() {
-    if (bindings_.empty())
-      delete this;
-  }
-
-  // network::mojom::DataPipeGetter implementation:
-  void Read(mojo::ScopedDataPipeProducerHandle handle,
-            ReadCallback callback) override {
-    blink::mojom::BlobReaderClientPtr blob_reader_client_ptr;
-    mojo::MakeStrongBinding(
-        std::make_unique<BlobReaderClient>(std::move(callback)),
-        mojo::MakeRequest(&blob_reader_client_ptr));
-    blob_->ReadAll(std::move(handle), std::move(blob_reader_client_ptr));
-  }
-
-  void Clone(network::mojom::DataPipeGetterRequest request) override {
-    bindings_.AddBinding(this, std::move(request));
-  }
-
- private:
-  blink::mojom::BlobPtr blob_;
-  mojo::BindingSet<network::mojom::DataPipeGetter> bindings_;
-
-  DISALLOW_COPY_AND_ASSIGN(DataPipeGetter);
 };
 
 }  // namespace
@@ -337,12 +250,6 @@ std::string GetWebURLRequestHeadersAsString(
 int GetLoadFlagsForWebURLRequest(const WebURLRequest& request) {
   int load_flags = net::LOAD_NORMAL;
 
-  // Although EV status is irrelevant to sub-frames and sub-resources, we have
-  // to perform EV certificate verification on all resources because an HTTP
-  // keep-alive connection created to load a sub-frame or a sub-resource could
-  // be reused to load a main frame.
-  load_flags |= net::LOAD_VERIFY_EV_CERT;
-
   GURL url = request.Url();
   switch (request.GetCacheMode()) {
     case FetchCacheMode::kNoStore:
@@ -376,22 +283,34 @@ int GetLoadFlagsForWebURLRequest(const WebURLRequest& request) {
     load_flags |= net::LOAD_DO_NOT_SEND_AUTH_DATA;
   }
 
+  if (request.GetRequestContext() == WebURLRequest::kRequestContextPrefetch)
+    load_flags |= net::LOAD_PREFETCH;
+
   if (request.GetExtraData()) {
     RequestExtraData* extra_data =
         static_cast<RequestExtraData*>(request.GetExtraData());
-    if (extra_data->is_prefetch())
+    if (extra_data->is_for_no_state_prefetch())
       load_flags |= net::LOAD_PREFETCH;
   }
+  if (request.SupportsAsyncRevalidation())
+    load_flags |= net::LOAD_SUPPORT_ASYNC_REVALIDATION;
 
   return load_flags;
 }
 
 WebHTTPBody GetWebHTTPBodyForRequestBody(
     const network::ResourceRequestBody& input) {
+  return GetWebHTTPBodyForRequestBodyWithBlobPtrs(input, {});
+}
+
+WebHTTPBody GetWebHTTPBodyForRequestBodyWithBlobPtrs(
+    const network::ResourceRequestBody& input,
+    std::vector<blink::mojom::BlobPtrInfo> blob_ptrs) {
   WebHTTPBody http_body;
   http_body.Initialize();
   http_body.SetIdentifier(input.identifier());
   http_body.SetContainsPasswordData(input.contains_sensitive_info());
+  auto blob_ptr_iter = blob_ptrs.begin();
   for (auto& element : *input.elements()) {
     switch (element.type()) {
       case network::DataElement::TYPE_BYTES:
@@ -406,29 +325,47 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
             element.expected_modification_time().ToDoubleT());
         break;
       case network::DataElement::TYPE_BLOB:
-        http_body.AppendBlob(WebString::FromASCII(element.blob_uuid()));
+        if (blob_ptrs.empty()) {
+          http_body.AppendBlob(WebString::FromASCII(element.blob_uuid()));
+        } else {
+          DCHECK(blob_ptr_iter != blob_ptrs.end());
+          blink::mojom::BlobPtrInfo& blob = *blob_ptr_iter++;
+          http_body.AppendBlob(WebString::FromASCII(element.blob_uuid()),
+                               element.length(), blob.PassHandle());
+        }
         break;
       case network::DataElement::TYPE_DATA_PIPE: {
-        // Append the cloned data pipe to the |http_body|. This might not be
-        // needed for all callsites today but it respects the constness of
-        // |input|, as opposed to moving the data pipe out of |input|.
-        network::mojom::DataPipeGetterPtr cloned_data_pipe_getter;
-        const_cast<network::mojom::DataPipeGetterPtr&>(element.data_pipe())
-            ->Clone(mojo::MakeRequest(&cloned_data_pipe_getter));
         http_body.AppendDataPipe(
-            cloned_data_pipe_getter.PassInterface().PassHandle());
+            element.CloneDataPipeGetter().PassInterface().PassHandle());
         break;
       }
       case network::DataElement::TYPE_UNKNOWN:
-      case network::DataElement::TYPE_BYTES_DESCRIPTION:
-      case network::DataElement::TYPE_DISK_CACHE_ENTRY:
-      case network::DataElement::TYPE_FILE_FILESYSTEM:
       case network::DataElement::TYPE_RAW_FILE:
+      case network::DataElement::TYPE_CHUNKED_DATA_PIPE:
         NOTREACHED();
         break;
     }
   }
   return http_body;
+}
+
+std::vector<blink::mojom::BlobPtrInfo> GetBlobPtrsForRequestBody(
+    const network::ResourceRequestBody& input) {
+  std::vector<blink::mojom::BlobPtrInfo> blob_ptrs;
+  blink::mojom::BlobRegistryPtr blob_registry;
+  for (auto& element : *input.elements()) {
+    if (element.type() == network::DataElement::TYPE_BLOB) {
+      blink::mojom::BlobPtrInfo blob_ptr;
+      if (!blob_registry) {
+        blink::Platform::Current()->GetInterfaceProvider()->GetInterface(
+            mojo::MakeRequest(&blob_registry));
+      }
+      blob_registry->GetBlobFromUUID(mojo::MakeRequest(&blob_ptr),
+                                     element.blob_uuid());
+      blob_ptrs.push_back(std::move(blob_ptr));
+    }
+  }
+  return blob_ptrs;
 }
 
 scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebURLRequest(
@@ -446,28 +383,16 @@ scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebURLRequest(
   return GetRequestBodyForWebHTTPBody(request.HttpBody());
 }
 
-void GetBlobRegistry(blink::mojom::BlobRegistryRequest request) {
-  ChildThreadImpl::current()->GetConnector()->BindInterface(
-      mojom::kBrowserServiceName, std::move(request));
-}
-
 scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebHTTPBody(
     const blink::WebHTTPBody& httpBody) {
   scoped_refptr<network::ResourceRequestBody> request_body =
       new network::ResourceRequestBody();
   size_t i = 0;
   WebHTTPBody::Element element;
-  // TODO(jam): cache this somewhere so we don't request it each time?
-  blink::mojom::BlobRegistryPtr blob_registry;
   while (httpBody.ElementAt(i++, element)) {
     switch (element.type) {
       case WebHTTPBody::Element::kTypeData:
-        element.data.ForEachSegment([&request_body](const char* segment,
-                                                    size_t segment_size,
-                                                    size_t segment_offset) {
-          request_body->AppendBytes(segment, static_cast<int>(segment_size));
-          return true;
-        });
+        request_body->AppendBytes(element.data.Copy().ReleaseVector());
         break;
       case WebHTTPBody::Element::kTypeFile:
         if (element.file_length == -1) {
@@ -482,44 +407,20 @@ scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebHTTPBody(
               base::Time::FromDoubleT(element.modification_time));
         }
         break;
-      case WebHTTPBody::Element::kTypeFileSystemURL: {
-        GURL file_system_url = element.file_system_url;
-        DCHECK(file_system_url.SchemeIsFileSystem());
-        request_body->AppendFileSystemFileRange(
-            file_system_url, static_cast<uint64_t>(element.file_start),
-            static_cast<uint64_t>(element.file_length),
-            base::Time::FromDoubleT(element.modification_time));
-        break;
-      }
       case WebHTTPBody::Element::kTypeBlob: {
-        if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-          if (!blob_registry.is_bound()) {
-            if (ChildThreadImpl::current()) {
-              ChildThreadImpl::current()->GetConnector()->BindInterface(
-                  mojom::kBrowserServiceName, MakeRequest(&blob_registry));
-            } else {
-              // TODO(sammc): We should use per-frame / per-worker
-              // InterfaceProvider instead (crbug.com/734210).
-              blink::Platform::Current()
-                  ->MainThread()
-                  ->GetSingleThreadTaskRunner()
-                  ->PostTask(FROM_HERE,
-                             base::BindOnce(&GetBlobRegistry,
-                                            MakeRequest(&blob_registry)));
-            }
-          }
-          blink::mojom::BlobPtr blob_ptr;
-          blob_registry->GetBlobFromUUID(MakeRequest(&blob_ptr),
-                                         element.blob_uuid.Utf8());
+        if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+          DCHECK(element.optional_blob_handle.is_valid());
+          blink::mojom::BlobPtr blob_ptr(
+              blink::mojom::BlobPtrInfo(std::move(element.optional_blob_handle),
+                                        blink::mojom::Blob::Version_));
 
           network::mojom::DataPipeGetterPtr data_pipe_getter_ptr;
-          // Object deletes itself.
-          new DataPipeGetter(std::move(blob_ptr),
-                             MakeRequest(&data_pipe_getter_ptr));
+          blob_ptr->AsDataPipeGetter(MakeRequest(&data_pipe_getter_ptr));
 
           request_body->AppendDataPipe(std::move(data_pipe_getter_ptr));
         } else {
-          request_body->AppendBlob(element.blob_uuid.Utf8());
+          request_body->AppendBlob(element.blob_uuid.Utf8(),
+                                   element.blob_length);
         }
         break;
       }
@@ -640,16 +541,6 @@ blink::WebMixedContentContextType GetMixedContentContextTypeForWebURLRequest(
 
   return blink::WebMixedContent::ContextTypeFromRequestContext(
       request.GetRequestContext(), block_mixed_plugin_content);
-}
-
-STATIC_ASSERT_ENUM(ServiceWorkerMode::NONE,
-                   WebURLRequest::ServiceWorkerMode::kNone);
-STATIC_ASSERT_ENUM(ServiceWorkerMode::ALL,
-                   WebURLRequest::ServiceWorkerMode::kAll);
-
-ServiceWorkerMode GetServiceWorkerModeForWebURLRequest(
-    const WebURLRequest& request) {
-  return static_cast<ServiceWorkerMode>(request.GetServiceWorkerMode());
 }
 
 #undef STATIC_ASSERT_ENUM

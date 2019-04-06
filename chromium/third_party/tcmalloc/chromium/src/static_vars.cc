@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2008, Google Inc.
 // All rights reserved.
 //
@@ -30,24 +31,52 @@
 // ---
 // Author: Ken Ashcraft <opensource@google.com>
 
+#include <config.h>
 #include "static_vars.h"
 #include <stddef.h>                     // for NULL
 #include <new>                          // for operator new
+#ifdef HAVE_PTHREAD
+#include <pthread.h>                    // for pthread_atfork
+#endif
 #include "internal_logging.h"  // for CHECK_CONDITION
 #include "common.h"
 #include "sampler.h"           // for Sampler
+#include "getenv_safe.h"       // TCMallocGetenvSafe
+#include "base/googleinit.h"
+#include "maybe_threads.h"
 
 namespace tcmalloc {
 
+#if defined(HAVE_FORK) && defined(HAVE_PTHREAD)
+// These following two functions are registered via pthread_atfork to make
+// sure the central_cache locks remain in a consisten state in the forked
+// version of the thread.
+
+void CentralCacheLockAll()
+{
+  Static::pageheap_lock()->Lock();
+  for (int i = 0; i < Static::num_size_classes(); ++i)
+    Static::central_cache()[i].Lock();
+}
+
+void CentralCacheUnlockAll()
+{
+  for (int i = 0; i < Static::num_size_classes(); ++i)
+    Static::central_cache()[i].Unlock();
+  Static::pageheap_lock()->Unlock();
+}
+#endif
+
+bool Static::inited_;
 SpinLock Static::pageheap_lock_(SpinLock::LINKER_INITIALIZED);
 SizeMap Static::sizemap_;
-CentralFreeListPadded Static::central_cache_[kNumClasses];
+CentralFreeListPadded Static::central_cache_[kClassSizesMax];
 PageHeapAllocator<Span> Static::span_allocator_;
 PageHeapAllocator<StackTrace> Static::stacktrace_allocator_;
 Span Static::sampled_objects_;
 PageHeapAllocator<StackTraceTable::Bucket> Static::bucket_allocator_;
 StackTrace* Static::growth_stacks_ = NULL;
-PageHeap* Static::pageheap_ = NULL;
+Static::PageHeapStorage Static::pageheap_;
 
 void Static::InitStaticVars() {
   sizemap_.Init();
@@ -58,16 +87,60 @@ void Static::InitStaticVars() {
   bucket_allocator_.Init();
   // Do a bit of sanitizing: make sure central_cache is aligned properly
   CHECK_CONDITION((sizeof(central_cache_[0]) % 64) == 0);
-  for (int i = 0; i < kNumClasses; ++i) {
+  for (int i = 0; i < num_size_classes(); ++i) {
     central_cache_[i].Init(i);
   }
-  // It's important to have PageHeap allocated, not in static storage,
-  // so that HeapLeakChecker does not consider all the byte patterns stored
-  // in is caches as pointers that are sources of heap object liveness,
-  // which leads to it missing some memory leaks.
-  pageheap_ = new (MetaDataAlloc(sizeof(PageHeap))) PageHeap;
+
+  new (&pageheap_.memory) PageHeap;
+
+  bool aggressive_decommit =
+    tcmalloc::commandlineflags::StringToBool(
+      TCMallocGetenvSafe("TCMALLOC_AGGRESSIVE_DECOMMIT"), false);
+
+  pageheap()->SetAggressiveDecommit(aggressive_decommit);
+
+  inited_ = true;
+
   DLL_Init(&sampled_objects_);
-  Sampler::InitStatics();
+}
+
+void Static::InitLateMaybeRecursive() {
+#if defined(HAVE_FORK) && defined(HAVE_PTHREAD) \
+  && !defined(__APPLE__) && !defined(TCMALLOC_NO_ATFORK)
+  // OSX has it's own way of handling atfork in malloc (see
+  // libc_override_osx.h).
+  //
+  // For other OSes we do pthread_atfork even if standard seemingly
+  // discourages pthread_atfork, asking apps to do only
+  // async-signal-safe calls between fork and exec.
+  //
+  // We're deliberately attempting to register atfork handlers as part
+  // of malloc initialization. So very early. This ensures that our
+  // handler is called last and that means fork will try to grab
+  // tcmalloc locks last avoiding possible issues with many other
+  // locks that are held around calls to malloc. I.e. if we don't do
+  // that, fork() grabbing malloc lock before such other lock would be
+  // prone to deadlock, if some other thread holds other lock and
+  // calls malloc.
+  //
+  // We still leave some way of disabling it via
+  // -DTCMALLOC_NO_ATFORK. It looks like on glibc even with fully
+  // static binaries malloc is really initialized very early. But I
+  // can see how combination of static linking and other libc-s could
+  // be less fortunate and allow some early app constructors to run
+  // before malloc is ever called.
+
+  perftools_pthread_atfork(
+    CentralCacheLockAll,    // parent calls before fork
+    CentralCacheUnlockAll,  // parent calls after fork
+    CentralCacheUnlockAll); // child calls after fork
+#endif
+
+#ifndef NDEBUG
+  // pthread_atfork above may malloc sometimes. Lets ensure we test
+  // that malloc works from here.
+  free(malloc(1));
+#endif
 }
 
 }  // namespace tcmalloc

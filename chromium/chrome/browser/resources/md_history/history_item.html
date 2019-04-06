@@ -1,21 +1,22 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/html/cr/ui/focus_row.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
-<link rel="import" href="chrome://resources/html/icon.html">
-<link rel="import" href="chrome://resources/html/util.html">
 <link rel="import" href="chrome://history/browser_service.html">
 <link rel="import" href="chrome://history/constants.html">
 <link rel="import" href="chrome://history/searched_label.html">
 <link rel="import" href="chrome://history/shared_style.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_row.html">
+<link rel="import" href="chrome://resources/html/icon.html">
+<link rel="import" href="chrome://resources/html/util.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 
 <!-- Lazy loaded: paper-icon-button-light. -->
 
 <dom-module id="history-item">
   <template>
-    <style include="shared-style">
+    <style include="shared-style cr-icons">
       :host {
         display: block;
         outline: none;
@@ -31,7 +32,7 @@
       }
 
       :host([is-card-start][is-card-end]) #main-container {
-        border-radius: 2px;
+        border-radius: var(--cr-card-border-radius);
       }
 
       #date-accessed {
@@ -40,6 +41,11 @@
 
       :host([is-card-start]) #date-accessed {
         display: block;
+        font-size: 123%;
+        font-weight: 400;
+        letter-spacing: .25px;
+        padding-bottom: 4px;
+        padding-top: 8px;
       }
 
       #item-container {
@@ -67,50 +73,18 @@
       }
 
       #checkbox {
-        height: 40px;
-        margin: 0;
-        padding: 0;
-        width: 40px;
-      }
-
-      :host([selected]) #checkbox {
-        color: var(--interactive-color);
-      }
-
-      #checkmark {
-        border: 2px solid var(--secondary-text-color);
-        border-radius: 2px;
-        height: 12px;
         margin: 12px;
-        width: 12px;
       }
 
-      #checkmark::after {
-        border-color: inherit;
-        border-style: solid;
-        border-width: 0 2px 2px 0;
+      /* #checkbox[unresolved] styling is necessary since cr-checkbox is being
+         lazy-loaded. */
+      #checkbox[unresolved] {
+        border: 2px solid var(--cr-secondary-text-color);
+        border-radius: 2px;
         content: '';
         display: block;
-        height: 70%;
-        transform: scale(0) rotate(45deg);
-        transform-origin: 97% 86%;
-        width: 36%;
-      }
-
-      :host-context([dir='rtl']) #checkmark::after {
-        transform-origin: 50% 14%;
-      }
-
-      :host([selected]) #checkmark {
-        background: var(--interactive-color);
-        border-color: var(--interactive-color);
-      }
-
-      :host([selected]) #checkmark::after {
-        border-color: white;
-        transform: scale(1) rotate(45deg);
-        /* Only animate when showing checkmark. */
-        transition: transform 140ms ease-out;
+        height: 12px;
+        width: 12px;
       }
 
       #time-accessed {
@@ -121,11 +95,11 @@
 
       #domain {
         -webkit-margin-start: 16px;
-        color: var(--secondary-text-color);
+        color: var(--cr-secondary-text-color);
         flex-shrink: 0;
       }
 
-      #menu-button {
+      #menu-button-container {
         -webkit-margin-end: 12px;
       }
 
@@ -135,13 +109,13 @@
         width: 32px;
       }
 
-      #bookmark-star {
+      #bookmark-star-container {
         color: var(--interactive-color);
         height: 32px;
         width: 32px;
       }
 
-      #bookmark-star iron-icon {
+      #bookmark-star-container iron-icon {
         height: 16px;
         width: 16px;
       }
@@ -169,7 +143,7 @@
       }
 
       #background {
-        @apply(--shadow-elevation-2dp);
+        @apply --cr-card-elevation;
         background: #fff;
         bottom: 0;
         left: 0;
@@ -183,15 +157,15 @@
       }
 
       :host([is-card-start]) #background {
-        border-radius: 2px 2px 0 0;
+        border-radius: var(--cr-card-border-radius) var(--cr-card-border-radius) 0 0;
       }
 
       :host([is-card-end]) #background {
-        border-radius: 0 0 2px 2px;
+        border-radius: 0 0 var(--cr-card-border-radius) var(--cr-card-border-radius);
       }
 
       :host([is-card-start][is-card-end]) #background {
-        border-radius: 2px;
+        border-radius: var(--cr-card-border-radius);
       }
     </style>
 
@@ -205,13 +179,12 @@
       <div id="item-container"
           on-mousedown="onItemMousedown_"
           on-click="onItemClick_">
-        <button is="paper-icon-button-light" id="checkbox"
+        <cr-checkbox id="checkbox" checked="[[selected]]" unresolved
+            on-mousedown="onCheckboxClick_" on-keydown="onCheckboxClick_"
+            on-change="onCheckboxChange_" class="no-label"
             hidden="[[selectionNotAllowed_]]"
-            role="checkbox"
-            aria-checked$="[[getAriaChecked_(selected)]]"
-            aria-label$="[[getEntrySummary_(item)]]">
-          <div id="checkmark"></div>
-        </button>
+            disabled="[[selectionNotAllowed_]]"
+            aria-label$="[[getEntrySummary_(item)]]"></cr-checkbox>
         <span id="time-accessed">
           [[item.readableTimestamp]]
         </span>
@@ -227,19 +200,23 @@
         </div>
         <div id="star-container">
           <template is="dom-if" if="[[item.starred]]" notify-dom-change>
-            <button is="paper-icon-button-light" id="bookmark-star"
-                title="$i18n{removeBookmark}" on-click="onRemoveBookmarkTap_">
-              <iron-icon icon="cr:star"></iron-icon>
-            </button>
+            <paper-icon-button-light id="bookmark-star-container">
+              <button id="bookmark-star"
+                  title="$i18n{removeBookmark}" on-click="onRemoveBookmarkTap_">
+                <iron-icon icon="cr:star"></iron-icon>
+              </button>
+            </paper-icon-button-light>
           </template>
         </div>
-        <button is="paper-icon-button-light" id="menu-button"
-            class="more-vert-button" title="$i18n{moreActionsButton}"
-            on-click="onMenuButtonTap_">
-          <div></div>
-          <div></div>
-          <div></div>
-        </button>
+        <paper-icon-button-light id="menu-button-container"
+            class="more-vert-button">
+          <button id="menu-button"
+              title="$i18n{moreActionsButton}" on-click="onMenuButtonTap_">
+            <div></div>
+            <div></div>
+            <div></div>
+          </button>
+        </paper-icon-button-light>
       </div>
       <div id="time-gap-separator" hidden="[[!hasTimeGap]]"></div>
     </div>

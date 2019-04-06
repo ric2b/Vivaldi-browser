@@ -22,7 +22,7 @@
 #import "ios/chrome/browser/ui/autofill/cells/autofill_edit_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/open_url_command.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/settings/autofill_edit_collection_view_controller+protected.h"
 #import "ios/chrome/browser/ui/settings/cells/copied_to_chrome_item.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -93,8 +93,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (_creditCard.record_type() == autofill::CreditCard::FULL_SERVER_CARD ||
       _creditCard.record_type() == autofill::CreditCard::MASKED_SERVER_CARD) {
     GURL paymentsURL = autofill::payments::GetManageInstrumentsUrl(0);
-    OpenUrlCommand* command =
-        [[OpenUrlCommand alloc] initWithURLFromChrome:paymentsURL];
+    OpenNewTabCommand* command =
+        [OpenNewTabCommand commandWithURLFromChrome:paymentsURL];
     [self.dispatcher closeSettingsUIAndOpenURL:command];
 
     // Don't call [super editButtonPressed] because edit mode is not actually
@@ -145,6 +145,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierFields];
   AutofillEditItem* cardholderNameitem =
       [[AutofillEditItem alloc] initWithType:ItemTypeCardholderName];
+  cardholderNameitem.cellStyle = CollectionViewCellStyle::kUIKit;
   cardholderNameitem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_CARDHOLDER);
   cardholderNameitem.textFieldValue = autofill::GetCreditCardName(
@@ -157,6 +158,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // Card number (PAN).
   AutofillEditItem* cardNumberItem =
       [[AutofillEditItem alloc] initWithType:ItemTypeCardNumber];
+  cardNumberItem.cellStyle = CollectionViewCellStyle::kUIKit;
   cardNumberItem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_CARD_NUMBER);
   // Never show full card number for Wallet cards, even if copied locally.
@@ -176,6 +178,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // Expiration month.
   AutofillEditItem* expirationMonthItem =
       [[AutofillEditItem alloc] initWithType:ItemTypeExpirationMonth];
+  expirationMonthItem.cellStyle = CollectionViewCellStyle::kUIKit;
   expirationMonthItem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_EXP_MONTH);
   expirationMonthItem.textFieldValue =
@@ -189,6 +192,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // Expiration year.
   AutofillEditItem* expirationYearItem =
       [[AutofillEditItem alloc] initWithType:ItemTypeExpirationYear];
+  expirationYearItem.cellStyle = CollectionViewCellStyle::kUIKit;
   expirationYearItem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_EXP_YEAR);
   expirationYearItem.textFieldValue =

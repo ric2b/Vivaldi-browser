@@ -9,11 +9,10 @@
 
 #include "base/lazy_instance.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/common/extensions/api/input_ime.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_registry.h"
-#include "ui/keyboard/keyboard_util.h"
+#include "ui/base/ime/ime_bridge.h"
 
 namespace input_ime = extensions::api::input_ime;
 namespace KeyEventHandled = extensions::api::input_ime::KeyEventHandled;
@@ -24,8 +23,8 @@ using ui::IMEEngineHandlerInterface;
 using input_method::InputMethodEngineBase;
 
 namespace {
-const char kErrorEngineNotAvailable[] = "Engine is not available";
-const char kErrorSetKeyEventsFail[] = "Could not send key events";
+const char kInputImeApiErrorEngineNotAvailable[] = "Engine is not available";
+const char kInputImeApiErrorSetKeyEventsFail[] = "Could not send key events";
 }
 namespace ui {
 
@@ -57,7 +56,9 @@ void ImeObserver::OnFocus(
       input_ime::ParseInputContextType(ConvertInputContextType(context));
   context_value.auto_correct = ConvertInputContextAutoCorrect(context);
   context_value.auto_complete = ConvertInputContextAutoComplete(context);
+  context_value.auto_capitalize = ConvertInputContextAutoCapitalize(context);
   context_value.spell_check = ConvertInputContextSpellCheck(context);
+  context_value.should_do_learning = context.should_do_learning;
 
   std::unique_ptr<base::ListValue> args(
       input_ime::OnFocus::Create(context_value));
@@ -79,7 +80,7 @@ void ImeObserver::OnBlur(int context_id) {
 void ImeObserver::OnKeyEvent(
     const std::string& component_id,
     const InputMethodEngineBase::KeyboardEvent& event,
-    IMEEngineHandlerInterface::KeyEventDoneCallback& key_data) {
+    IMEEngineHandlerInterface::KeyEventDoneCallback key_data) {
   if (extension_id_.empty())
     return;
 
@@ -88,7 +89,7 @@ void ImeObserver::OnKeyEvent(
   if (!ShouldForwardKeyEvent()) {
     // Continue processing the key event so that the physical keyboard can
     // still work.
-    key_data.Run(false);
+    std::move(key_data).Run(false);
     return;
   }
 
@@ -96,8 +97,9 @@ void ImeObserver::OnKeyEvent(
       extensions::GetInputImeEventRouter(profile_);
   if (!event_router || !event_router->GetActiveEngine(extension_id_))
     return;
-  const std::string request_id = event_router->GetActiveEngine(extension_id_)
-                                     ->AddRequest(component_id, key_data);
+  const std::string request_id =
+      event_router->GetActiveEngine(extension_id_)
+          ->AddRequest(component_id, std::move(key_data));
 
   input_ime::KeyboardEvent key_data_value;
   key_data_value.type = input_ime::ParseKeyboardEventType(event.type);
@@ -226,20 +228,29 @@ std::string ImeObserver::ConvertInputContextType(
 
 bool ImeObserver::ConvertInputContextAutoCorrect(
     ui::IMEEngineHandlerInterface::InputContext input_context) {
-  return keyboard::GetKeyboardConfig().auto_correct &&
-         !(input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
+  return !(input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
 }
 
 bool ImeObserver::ConvertInputContextAutoComplete(
     ui::IMEEngineHandlerInterface::InputContext input_context) {
-  return keyboard::GetKeyboardConfig().auto_complete &&
-         !(input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_OFF);
+  return !(input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_OFF);
+}
+
+input_ime::AutoCapitalizeType ImeObserver::ConvertInputContextAutoCapitalize(
+    ui::IMEEngineHandlerInterface::InputContext input_context) {
+  if (input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_NONE)
+    return input_ime::AUTO_CAPITALIZE_TYPE_NONE;
+  if (input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_CHARACTERS)
+    return input_ime::AUTO_CAPITALIZE_TYPE_CHARACTERS;
+  if (input_context.flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_WORDS)
+    return input_ime::AUTO_CAPITALIZE_TYPE_WORDS;
+  // The default value is "sentences".
+  return input_ime::AUTO_CAPITALIZE_TYPE_SENTENCES;
 }
 
 bool ImeObserver::ConvertInputContextSpellCheck(
     ui::IMEEngineHandlerInterface::InputContext input_context) {
-  return keyboard::GetKeyboardConfig().spell_check &&
-         !(input_context.flags & ui::TEXT_INPUT_FLAG_SPELLCHECK_OFF);
+  return !(input_context.flags & ui::TEXT_INPUT_FLAG_SPELLCHECK_OFF);
 }
 
 }  // namespace ui
@@ -365,7 +376,7 @@ ExtensionFunction::ResponseAction InputImeSendKeyEventsFunction::Run() {
   InputMethodEngineBase* engine =
       event_router ? event_router->GetActiveEngine(extension_id()) : nullptr;
   if (!engine)
-    return RespondNow(Error(kErrorEngineNotAvailable));
+    return RespondNow(Error(kInputImeApiErrorEngineNotAvailable));
 
   std::unique_ptr<SendKeyEvents::Params> parent_params(
       SendKeyEvents::Params::Create(*args_));
@@ -386,7 +397,7 @@ ExtensionFunction::ResponseAction InputImeSendKeyEventsFunction::Run() {
     event.caps_lock = key_event.caps_lock ? *(key_event.caps_lock) : false;
   }
   if (!engine->SendKeyEvents(params.context_id, key_data_out))
-    return RespondNow(Error(kErrorSetKeyEventsFail));
+    return RespondNow(Error(kInputImeApiErrorSetKeyEventsFail));
   return RespondNow(NoArguments());
 }
 
@@ -413,6 +424,9 @@ InputImeAPI::~InputImeAPI() = default;
 void InputImeAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
   registrar_.RemoveAll();
+  if (observer_ && ui::IMEBridge::Get()) {
+    ui::IMEBridge::Get()->SetObserver(nullptr);
+  }
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<InputImeAPI>>::

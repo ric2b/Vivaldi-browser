@@ -7,8 +7,14 @@
 #include <stdlib.h>
 
 #include "base/command_line.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/native_pixmap.h"
+#include "ui/ozone/public/overlay_surface.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
+
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/vulkan/vulkan_instance.h"
+#endif
 
 namespace ui {
 
@@ -22,6 +28,31 @@ SurfaceFactoryOzone::GetAllowedGLImplementations() {
 }
 
 GLOzone* SurfaceFactoryOzone::GetGLOzone(gl::GLImplementation implementation) {
+  return nullptr;
+}
+
+#if BUILDFLAG(ENABLE_VULKAN)
+std::unique_ptr<gpu::VulkanImplementation>
+SurfaceFactoryOzone::CreateVulkanImplementation() {
+  return nullptr;
+}
+
+scoped_refptr<gfx::NativePixmap>
+SurfaceFactoryOzone::CreateNativePixmapForVulkan(
+    gfx::AcceleratedWidget widget,
+    gfx::Size size,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
+    VkDevice vk_device,
+    VkDeviceMemory* vk_device_memory,
+    VkImage* vk_image) {
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+#endif
+
+std::unique_ptr<OverlaySurface> SurfaceFactoryOzone::CreateOverlaySurface(
+    gfx::AcceleratedWidget widget) {
   return nullptr;
 }
 

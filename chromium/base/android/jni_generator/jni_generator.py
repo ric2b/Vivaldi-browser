@@ -35,11 +35,25 @@ _COMMENT_REMOVER_REGEX = re.compile(
 
 _EXTRACT_NATIVES_REGEX = re.compile(
     r'(@NativeClassQualifiedName'
-     '\(\"(?P<native_class_name>.*?)\"\)\s+)?'
-     '(@NativeCall(\(\"(?P<java_class_name>.*?)\"\))\s+)?'
-     '(?P<qualifiers>\w+\s\w+|\w+|\s+)\s*native '
-     '(?P<return_type>\S*) '
-     '(?P<name>native\w+)\((?P<params>.*?)\);')
+    r'\(\"(?P<native_class_name>.*?)\"\)\s+)?'
+    r'(@NativeCall(\(\"(?P<java_class_name>.*?)\"\))\s+)?'
+    r'(?P<qualifiers>\w+\s\w+|\w+|\s+)\s*native '
+    r'(?P<return_type>\S*) '
+    r'(?P<name>native\w+)\((?P<params>.*?)\);')
+
+_MAIN_DEX_REGEX = re.compile(
+    r'^\s*(?:@(?:\w+\.)*\w+\s+)*@MainDex\b',
+    re.MULTILINE)
+
+# Use 100 columns rather than 80 because it makes many lines more readable.
+_WRAP_LINE_LENGTH = 100
+# WrapOutput() is fairly slow. Pre-creating TextWrappers helps a bit.
+_WRAPPERS_BY_INDENT = [
+    textwrap.TextWrapper(width=_WRAP_LINE_LENGTH, expand_tabs=False,
+                         replace_whitespace=False,
+                         subsequent_indent=' ' * (indent + 4),
+                         break_long_words=False)
+    for indent in xrange(50)]  # 50 chosen experimentally.
 
 
 class ParseError(Exception):
@@ -127,12 +141,14 @@ def JavaDataTypeToC(java_type):
   java_type_map = {
       'void': 'void',
       'String': 'jstring',
+      'Class': 'jclass',
       'Throwable': 'jthrowable',
       'java/lang/String': 'jstring',
       'java/lang/Class': 'jclass',
       'java/lang/Throwable': 'jthrowable',
   }
 
+  java_type = _StripGenerics(java_type)
   if java_type in java_pod_type_map:
     return java_pod_type_map[java_type]
   elif java_type in java_type_map:
@@ -141,10 +157,6 @@ def JavaDataTypeToC(java_type):
     if java_type[:-2] in java_pod_type_map:
       return java_pod_type_map[java_type[:-2]] + 'Array'
     return 'jobjectArray'
-  elif java_type.startswith('Class'):
-    # Checking just the start of the name, rather than a direct comparison,
-    # in order to handle generics.
-    return 'jclass'
   else:
     return 'jobject'
 
@@ -227,10 +239,8 @@ def GetParamsInStub(native):
   Returns:
     A string containing the params.
   """
-  return ',\n    '.join(_GetJNIFirstParam(native, False) +
-                        [JavaDataTypeToC(param.datatype) + ' ' +
-                         param.name
-                         for param in native.params])
+  params = [JavaDataTypeToC(p.datatype) + ' ' + p.name for p in native.params]
+  return ',\n    '.join(_GetJNIFirstParam(native, False) + params)
 
 
 def _StripGenerics(value):
@@ -392,16 +402,13 @@ class JniParams(object):
                           'import %s;' %
                           (param, implicit_import))
 
-  def Signature(self, params, returns, wrap):
+  def Signature(self, params, returns):
     """Returns the JNI signature for the given datatypes."""
     items = ['(']
     items += [self.JavaToJni(param.datatype) for param in params]
     items += [')']
     items += [self.JavaToJni(returns)]
-    if wrap:
-      return '\n' + '\n'.join(['"' + item + '"' for item in items])
-    else:
-      return '"' + ''.join(items) + '"'
+    return '"{}"'.format(''.join(items))
 
   @staticmethod
   def ParseJavaPSignature(signature_line):
@@ -472,15 +479,14 @@ def ExtractNatives(contents, ptr_type):
 
 
 def IsMainDexJavaClass(contents):
-  """Returns True if the class is annotated with "@MainDex", False if not.
+  """Returns True if the class or any of its methods are annotated as @MainDex.
 
   JNI registration doesn't always need to be completed for non-browser processes
   since most Java code is only used by the browser process. Classes that are
   needed by non-browser processes must explicitly be annotated with @MainDex
   to force JNI registration.
   """
-  re_maindex = re.compile(r'@MainDex[\s\S]*class({|[\s\S]*{)')
-  return bool(re.search(re_maindex, contents))
+  return bool(_MAIN_DEX_REGEX.search(contents))
 
 
 def GetBinaryClassName(fully_qualified_class):
@@ -497,6 +503,8 @@ def GetRegistrationFunctionName(fully_qualified_class):
 def GetStaticCastForReturnType(return_type):
   type_map = { 'String' : 'jstring',
                'java/lang/String' : 'jstring',
+               'Class': 'jclass',
+               'java/lang/Class': 'jclass',
                'Throwable': 'jthrowable',
                'java/lang/Throwable': 'jthrowable',
                'boolean[]': 'jbooleanArray',
@@ -507,6 +515,7 @@ def GetStaticCastForReturnType(return_type):
                'long[]': 'jlongArray',
                'float[]': 'jfloatArray',
                'double[]': 'jdoubleArray' }
+  return_type = _StripGenerics(return_type)
   ret = type_map.get(return_type, None)
   if ret:
     return ret
@@ -599,15 +608,15 @@ RE_SCOPED_JNI_TYPES = re.compile('jobject|jclass|jstring|jthrowable|.*Array')
 
 # Regex to match a string like "@CalledByNative public void foo(int bar)".
 RE_CALLED_BY_NATIVE = re.compile(
-    '@CalledByNative(?P<Unchecked>(Unchecked)*?)(?:\("(?P<annotation>.*)"\))?'
-    '\s+(?P<prefix>('
-    '(private|protected|public|static|abstract|final|default|synchronized)'
-    '\s*)*)'
-    '(:?\s*@\w+)?'  # Ignore annotations in return types.
-    '\s*(?P<return_type>\S*?)'
-    '\s*(?P<name>\w+)'
-    '\s*\((?P<params>[^\)]*)\)')
-
+    r'@CalledByNative(?P<Unchecked>(?:Unchecked)?)(?:\("(?P<annotation>.*)"\))?'
+    r'(?:\s+@\w+(?:\(.*\))?)*'  # Ignore any other annotations.
+    r'\s+(?P<prefix>('
+    r'(private|protected|public|static|abstract|final|default|synchronized)'
+    r'\s*)*)'
+    r'(?:\s*@\w+)?'  # Ignore annotations in return types.
+    r'\s*(?P<return_type>\S*?)'
+    r'\s*(?P<name>\w+)'
+    r'\s*\((?P<params>[^\)]*)\)')
 
 # Removes empty lines that are indented (i.e. start with 2x spaces).
 def RemoveIndentedEmptyLines(string):
@@ -837,11 +846,11 @@ class HeaderFileGeneratorHelper(object):
     """Returns the ClassPath constants."""
     ret = []
     if declare_only:
-      template = Template("""\
+      template = Template("""
 extern const char kClassPath_${JAVA_CLASS}[];
 """)
     else:
-      template = Template("""\
+      template = Template("""
 JNI_REGISTRATION_EXPORT extern const char kClassPath_${JAVA_CLASS}[];
 const char kClassPath_${JAVA_CLASS}[] = \
 "${JNI_CLASS_PATH}";
@@ -879,7 +888,7 @@ JNI_REGISTRATION_EXPORT base::subtle::AtomicWord g_${JAVA_CLASS}_clazz = 0;
       }
       ret += [template.substitute(values)]
 
-    return '\n'.join(ret)
+    return ''.join(ret)
 
 
 class InlHeaderFileGenerator(object):
@@ -920,17 +929,15 @@ class InlHeaderFileGenerator(object):
 
 ${INCLUDES}
 
-// Step 1: forward declarations.
+// Step 1: Forward declarations.
 $CLASS_PATH_DEFINITIONS
 
-$OPEN_NAMESPACE
+// Step 2: Constants (optional).
 
-$CONSTANT_FIELDS
+$CONSTANT_FIELDS\
 
-// Step 2: method stubs.
+// Step 3: Method stubs.
 $METHOD_STUBS
-
-$CLOSE_NAMESPACE
 
 #endif  // ${HEADER_GUARD}
 """)
@@ -940,11 +947,20 @@ $CLOSE_NAMESPACE
         'CLASS_PATH_DEFINITIONS': self.GetClassPathDefinitionsString(),
         'CONSTANT_FIELDS': self.GetConstantFieldsString(),
         'METHOD_STUBS': self.GetMethodStubsString(),
-        'OPEN_NAMESPACE': self.GetOpenNamespaceString(),
-        'CLOSE_NAMESPACE': self.GetCloseNamespaceString(),
         'HEADER_GUARD': self.header_guard,
         'INCLUDES': self.GetIncludesString(),
     }
+    open_namespace = self.GetOpenNamespaceString()
+    if open_namespace:
+      close_namespace = self.GetCloseNamespaceString()
+      values['METHOD_STUBS'] = '\n'.join([
+            open_namespace, values['METHOD_STUBS'], close_namespace])
+
+      constant_fields = values['CONSTANT_FIELDS']
+      if constant_fields:
+        values['CONSTANT_FIELDS'] = '\n'.join([
+            open_namespace, constant_fields, close_namespace])
+
     return WrapOutput(template.substitute(values))
 
   def GetClassPathDefinitionsString(self):
@@ -958,7 +974,7 @@ $CLOSE_NAMESPACE
     ret = ['enum Java_%s_constant_fields {' % self.class_name]
     for c in self.constant_fields:
       ret += ['  %s = %s,' % (c.name, c.value)]
-    ret += ['};']
+    ret += ['};', '']
     return '\n'.join(ret)
 
   def GetMethodStubsString(self):
@@ -977,13 +993,13 @@ $CLOSE_NAMESPACE
     if not self.options.includes:
       return ''
     includes = self.options.includes.split(',')
-    return '\n'.join('#include "%s"' % x for x in includes)
+    return '\n'.join('#include "%s"' % x for x in includes) + '\n'
 
   def GetOpenNamespaceString(self):
     if self.namespace:
       all_namespaces = ['namespace %s {' % ns
                         for ns in self.namespace.split('::')]
-      return '\n'.join(all_namespaces)
+      return '\n'.join(all_namespaces) + '\n'
     return ''
 
   def GetCloseNamespaceString(self):
@@ -991,7 +1007,7 @@ $CLOSE_NAMESPACE
       all_namespaces = ['}  // namespace %s' % ns
                         for ns in self.namespace.split('::')]
       all_namespaces.reverse()
-      return '\n'.join(all_namespaces) + '\n'
+      return '\n' + '\n'.join(all_namespaces)
     return ''
 
   def GetCalledByNativeParamsInDeclaration(self, called_by_native):
@@ -1042,7 +1058,7 @@ $CLOSE_NAMESPACE
                             '>')
     profiling_entered_native = ''
     if self.options.enable_profiling:
-      profiling_entered_native = 'JNI_LINK_SAVED_FRAME_POINTER;'
+      profiling_entered_native = '  JNI_LINK_SAVED_FRAME_POINTER;\n'
     values = {
         'RETURN': return_type,
         'RETURN_DECLARATION': return_declaration,
@@ -1054,8 +1070,10 @@ $CLOSE_NAMESPACE
         'POST_CALL': post_call,
         'STUB_NAME': self.helper.GetStubName(native),
         'PROFILING_ENTERED_NATIVE': profiling_entered_native,
+        'TRACE_EVENT': '',
     }
 
+    namespace_qual = self.namespace + '::' if self.namespace else ''
     if is_method:
       optional_error_return = JavaReturnValueToC(native.return_type)
       if optional_error_return:
@@ -1065,20 +1083,32 @@ $CLOSE_NAMESPACE
           'PARAM0_NAME': native.params[0].name,
           'P0_TYPE': native.p0_type,
       })
+      if self.options.enable_tracing:
+        values['TRACE_EVENT'] = self.GetTraceEventForNameTemplate(
+            namespace_qual + '${P0_TYPE}::${NAME}', values);
       template = Template("""\
-JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
-  ${PROFILING_ENTERED_NATIVE}
+JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(
+    JNIEnv* env,
+    ${PARAMS_IN_STUB}) {
+${PROFILING_ENTERED_NATIVE}\
+${TRACE_EVENT}\
   ${P0_TYPE}* native = reinterpret_cast<${P0_TYPE}*>(${PARAM0_NAME});
   CHECK_NATIVE_PTR(env, jcaller, native, "${NAME}"${OPTIONAL_ERROR_RETURN});
   return native->${NAME}(${PARAMS_IN_CALL})${POST_CALL};
 }
 """)
     else:
-      template = Template("""
+      if self.options.enable_tracing:
+        values['TRACE_EVENT'] = self.GetTraceEventForNameTemplate(
+            namespace_qual + '${IMPL_METHOD_NAME}', values)
+      template = Template("""\
 static ${RETURN_DECLARATION} ${IMPL_METHOD_NAME}(JNIEnv* env, ${PARAMS});
 
-JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
-  ${PROFILING_ENTERED_NATIVE}
+JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(
+    JNIEnv* env,
+    ${PARAMS_IN_STUB}) {
+${PROFILING_ENTERED_NATIVE}\
+${TRACE_EVENT}\
   return ${IMPL_METHOD_NAME}(${PARAMS_IN_CALL})${POST_CALL};
 }
 """)
@@ -1142,7 +1172,18 @@ JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
         return_clause = 'return ret;'
     profiling_leaving_native = ''
     if self.options.enable_profiling:
-      profiling_leaving_native = 'JNI_SAVE_FRAME_POINTER;'
+      profiling_leaving_native = '  JNI_SAVE_FRAME_POINTER;\n'
+    jni_name = called_by_native.name
+    jni_return_type = called_by_native.return_type
+    if called_by_native.is_constructor:
+      jni_name = '<init>'
+      jni_return_type = 'void'
+    if called_by_native.signature:
+      jni_signature = called_by_native.signature
+    else:
+      jni_signature = self.jni_params.Signature(
+          called_by_native.params, jni_return_type)
+    java_name_full = java_class.replace('/', '.') + '.' + jni_name
     return {
         'JAVA_CLASS_ONLY': java_class_only,
         'JAVA_CLASS': GetBinaryClassName(java_class),
@@ -1157,12 +1198,14 @@ JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
         'ENV_CALL': called_by_native.env_call,
         'FIRST_PARAM_IN_CALL': first_param_in_call,
         'PARAMS_IN_CALL': params_in_call,
-        'METHOD_ID_VAR_NAME': called_by_native.method_id_var_name,
         'CHECK_EXCEPTION': check_exception,
-        'GET_METHOD_ID_IMPL': self.GetMethodIDImpl(called_by_native),
         'PROFILING_LEAVING_NATIVE': profiling_leaving_native,
+        'JNI_NAME': jni_name,
+        'JNI_SIGNATURE': jni_signature,
+        'METHOD_ID_VAR_NAME': called_by_native.method_id_var_name,
+        'METHOD_ID_TYPE': 'STATIC' if called_by_native.static else 'INSTANCE',
+        'JAVA_NAME_FULL': java_name_full,
     }
-
 
   def GetLazyCalledByNativeMethodStub(self, called_by_native):
     """Returns a string."""
@@ -1179,9 +1222,15 @@ static base::subtle::AtomicWord g_${JAVA_CLASS}_${METHOD_ID_VAR_NAME} = 0;
 ${FUNCTION_HEADER}
   CHECK_CLAZZ(env, ${FIRST_PARAM_IN_CALL},
       ${JAVA_CLASS}_clazz(env)${OPTIONAL_ERROR_RETURN});
-  jmethodID method_id =
-    ${GET_METHOD_ID_IMPL}
-  ${PROFILING_LEAVING_NATIVE}
+  jmethodID method_id = base::android::MethodID::LazyGet<
+      base::android::MethodID::TYPE_${METHOD_ID_TYPE}>(
+          env, ${JAVA_CLASS}_clazz(env),
+          "${JNI_NAME}",
+          ${JNI_SIGNATURE},
+          &g_${JAVA_CLASS}_${METHOD_ID_VAR_NAME});
+
+${TRACE_EVENT}\
+${PROFILING_LEAVING_NATIVE}\
   ${RETURN_DECLARATION}
      ${PRE_CALL}env->${ENV_CALL}(${FIRST_PARAM_IN_CALL},
           method_id${PARAMS_IN_CALL})${POST_CALL};
@@ -1196,58 +1245,30 @@ ${FUNCTION_HEADER}
           function_header_with_unused_template.substitute(values))
     else:
       values['FUNCTION_HEADER'] = function_header_template.substitute(values)
+    if self.options.enable_tracing:
+      values['TRACE_EVENT'] = self.GetTraceEventForNameTemplate(
+          '${JAVA_NAME_FULL}', values)
+    else:
+      values['TRACE_EVENT'] = ''
     return RemoveIndentedEmptyLines(template.substitute(values))
 
-  def GetMethodIDImpl(self, called_by_native):
-    """Returns the implementation of GetMethodID."""
-    template = Template("""\
-  base::android::MethodID::LazyGet<
-      base::android::MethodID::TYPE_${STATIC}>(
-      env, ${JAVA_CLASS}_clazz(env),
-      "${JNI_NAME}",
-      ${JNI_SIGNATURE},
-      &g_${JAVA_CLASS}_${METHOD_ID_VAR_NAME});
-""")
-    jni_name = called_by_native.name
-    jni_return_type = called_by_native.return_type
-    if called_by_native.is_constructor:
-      jni_name = '<init>'
-      jni_return_type = 'void'
-    if called_by_native.signature:
-      signature = called_by_native.signature
-    else:
-      signature = self.jni_params.Signature(called_by_native.params,
-                                            jni_return_type, True)
-    java_class = self.fully_qualified_class
-    if called_by_native.java_class_name:
-      java_class += '$' + called_by_native.java_class_name
-    values = {
-        'JAVA_CLASS': GetBinaryClassName(java_class),
-        'JNI_NAME': jni_name,
-        'METHOD_ID_VAR_NAME': called_by_native.method_id_var_name,
-        'STATIC': 'STATIC' if called_by_native.static else 'INSTANCE',
-        'JNI_SIGNATURE': signature,
-    }
-    return template.substitute(values)
+  def GetTraceEventForNameTemplate(self, name_template, values):
+    name = Template(name_template).substitute(values)
+    return '  TRACE_EVENT0("jni", "%s");' % name
 
 
 def WrapOutput(output):
   ret = []
   for line in output.splitlines():
-    # Do not wrap lines under 80 characters or preprocessor directives.
-    if len(line) < 80 or line.lstrip()[:1] == '#':
-      stripped = line.rstrip()
-      if len(ret) == 0 or len(ret[-1]) or len(stripped):
-        ret.append(stripped)
+    # Do not wrap preprocessor directives or comments.
+    if len(line) < _WRAP_LINE_LENGTH or line[0] == '#' or line.startswith('//'):
+      ret.append(line)
     else:
-      first_line_indent = ' ' * (len(line) - len(line.lstrip()))
-      subsequent_indent =  first_line_indent + ' ' * 4
-      if line.startswith('//'):
-        subsequent_indent = '//' + subsequent_indent
-      wrapper = textwrap.TextWrapper(width=80,
-                                     subsequent_indent=subsequent_indent,
-                                     break_long_words=False)
-      ret += [wrapped.rstrip() for wrapped in wrapper.wrap(line)]
+      # Assumes that the line is not already indented as a continuation line,
+      # which is not always true (oh well).
+      first_line_indent = (len(line) - len(line.lstrip()))
+      wrapper = _WRAPPERS_BY_INDENT[first_line_indent]
+      ret.extend(wrapper.wrap(line))
   ret += ['']
   return '\n'.join(ret)
 
@@ -1362,6 +1383,8 @@ See SampleForTests.java for more details.
                            help='The path to javap command.')
   option_parser.add_option('--enable_profiling', action='store_true',
                            help='Add additional profiling instrumentation.')
+  option_parser.add_option('--enable_tracing', action='store_true',
+                           help='Add TRACE_EVENTs to generated functions.')
   options, args = option_parser.parse_args(argv)
   if options.jar_file:
     input_file = ExtractJarInputFile(options.jar_file, options.input_file,

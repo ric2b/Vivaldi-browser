@@ -5,3 +5,9 @@
 // On the form
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
+
+// Require chromium strings
+DISABLE(ExtensionApiTabTest, TabsOnUpdated)
+
+// Flaky
+DISABLE(ExtensionActionRunnerBrowserTest, ActiveScriptsAreDisplayedAndDelayExecution)

@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
@@ -35,8 +34,6 @@
 #include "components/crash/content/app/breakpad_linux.h"
 #endif
 
-using views::GridLayout;
-
 namespace {
 
 void InitCrashReporterIfEnabled(bool enabled) {
@@ -59,9 +56,7 @@ void FirstRunDialog::Show(Profile* profile) {
   FirstRunDialog* dialog = new FirstRunDialog(profile);
   views::DialogDelegate::CreateDialogWidget(dialog, NULL, NULL)->Show();
 
-  base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
-  base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
-  base::RunLoop run_loop;
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
   dialog->quit_runloop_ = run_loop.QuitClosure();
   run_loop.Run();
 }
@@ -72,20 +67,22 @@ FirstRunDialog::FirstRunDialog(Profile* profile)
       report_crashes_(NULL) {
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::TEXT, views::TEXT));
-  GridLayout* layout =
+  views::GridLayout* layout =
       SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   views::ColumnSet* column_set = layout->AddColumnSet(0);
-  column_set->AddColumn(GridLayout::FILL, GridLayout::CENTER, 0,
-                        GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER,
+                        views::GridLayout::kFixedSize,
+                        views::GridLayout::USE_PREF, 0, 0);
 
-  layout->StartRow(0, 0);
+  layout->StartRow(views::GridLayout::kFixedSize, 0);
   make_default_ = new views::Checkbox(l10n_util::GetStringUTF16(
       IDS_FR_CUSTOMIZE_DEFAULT_BROWSER));
   make_default_->SetChecked(true);
   layout->AddView(make_default_);
 
-  layout->StartRowWithPadding(0, 0, 0,
+  layout->StartRowWithPadding(views::GridLayout::kFixedSize, 0,
+                              views::GridLayout::kFixedSize,
                               ChromeLayoutProvider::Get()->GetDistanceMetric(
                                   views::DISTANCE_RELATED_CONTROL_VERTICAL));
   report_crashes_ = new views::Checkbox(

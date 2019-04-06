@@ -709,6 +709,11 @@ void vpx_hadamard_16x16_neon(const int16_t* src_diff,
                              int16_t* coeff);
 #define vpx_hadamard_16x16 vpx_hadamard_16x16_neon
 
+void vpx_hadamard_32x32_c(const int16_t* src_diff,
+                          ptrdiff_t src_stride,
+                          int16_t* coeff);
+#define vpx_hadamard_32x32 vpx_hadamard_32x32_c
+
 void vpx_hadamard_8x8_c(const int16_t* src_diff,
                         ptrdiff_t src_stride,
                         int16_t* coeff);
@@ -2210,7 +2215,8 @@ void vpx_subtract_block_neon(int rows,
 #define vpx_subtract_block vpx_subtract_block_neon
 
 uint64_t vpx_sum_squares_2d_i16_c(const int16_t* src, int stride, int size);
-#define vpx_sum_squares_2d_i16 vpx_sum_squares_2d_i16_c
+uint64_t vpx_sum_squares_2d_i16_neon(const int16_t* src, int stride, int size);
+#define vpx_sum_squares_2d_i16 vpx_sum_squares_2d_i16_neon
 
 void vpx_tm_predictor_16x16_c(uint8_t* dst,
                               ptrdiff_t y_stride,

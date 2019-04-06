@@ -13,6 +13,7 @@
 #include "cc/layers/draw_properties.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/layers/picture_layer.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -490,52 +491,6 @@ static void UpdateElasticOverscrollInternal(
   property_trees->transform_tree.set_needs_update(true);
 }
 
-#if DCHECK_IS_ON()
-static void ValidatePageScaleLayer(const Layer* page_scale_layer) {
-  DCHECK_EQ(page_scale_layer->position().ToString(), gfx::PointF().ToString());
-  DCHECK_EQ(page_scale_layer->transform_origin().ToString(),
-            gfx::Point3F().ToString());
-}
-
-static void ValidatePageScaleLayer(const LayerImpl* page_scale_layer) {}
-#endif
-
-template <typename LayerType>
-static void UpdatePageScaleFactorInternal(PropertyTrees* property_trees,
-                                          const LayerType* page_scale_layer,
-                                          float page_scale_factor,
-                                          float device_scale_factor,
-                                          gfx::Transform device_transform) {
-  if (property_trees->transform_tree.page_scale_factor() == page_scale_factor)
-    return;
-
-  property_trees->transform_tree.set_page_scale_factor(page_scale_factor);
-  DCHECK(page_scale_layer);
-  DCHECK_GE(page_scale_layer->transform_tree_index(),
-            TransformTree::kRootNodeId);
-  TransformNode* node = property_trees->transform_tree.Node(
-      page_scale_layer->transform_tree_index());
-// TODO(enne): property trees can't ask the layer these things, but
-// the page scale layer should *just* be the page scale.
-#if DCHECK_IS_ON()
-  ValidatePageScaleLayer(page_scale_layer);
-#endif
-
-  if (IsRootLayer(page_scale_layer)) {
-    // When the page scale layer is also the root layer, the node should also
-    // store the combined scale factor and not just the page scale factor.
-    float post_local_scale_factor = page_scale_factor * device_scale_factor;
-    node->post_local_scale_factor = post_local_scale_factor;
-    node->post_local = device_transform;
-    node->post_local.Scale(post_local_scale_factor, post_local_scale_factor);
-  } else {
-    node->post_local_scale_factor = page_scale_factor;
-    node->update_post_local_transform(gfx::PointF(), gfx::Point3F());
-  }
-  node->needs_local_transform_update = true;
-  property_trees->transform_tree.set_needs_update(true);
-}
-
 static gfx::Rect LayerDrawableContentRect(
     const LayerImpl* layer,
     const gfx::Rect& layer_bounds_in_target_space,
@@ -608,7 +563,7 @@ static gfx::Transform ScreenSpaceTransformInternal(LayerType* layer,
                        layer->offset_to_transform_parent().y());
   gfx::Transform ssxform = tree.ToScreen(layer->transform_tree_index());
   xform.ConcatTransform(ssxform);
-  if (layer->should_flatten_transform_from_property_tree())
+  if (layer->should_flatten_screen_space_transform_from_property_tree())
     xform.FlattenTo2d();
   return xform;
 }
@@ -648,7 +603,7 @@ static void SetSurfaceDrawTransform(const PropertyTrees* property_trees,
   const EffectNode* effect_node =
       effect_tree.Node(render_surface->EffectTreeIndex());
   // The draw transform of root render surface is identity tranform.
-  if (transform_node->id == TransformTree::kRootNodeId) {
+  if (render_surface->EffectTreeIndex() == EffectTree::kContentsRootNodeId) {
     render_surface->SetDrawTransform(gfx::Transform());
     return;
   }
@@ -677,6 +632,11 @@ static gfx::Rect LayerVisibleRect(PropertyTrees* property_trees,
   bool non_root_copy_request_or_cache_render_surface =
       lower_effect_closest_ancestor > EffectTree::kContentsRootNodeId;
   gfx::Rect layer_content_rect = gfx::Rect(layer->bounds());
+  if (layer->layer_tree_impl()->IsRootLayer(layer) &&
+      !layer->layer_tree_impl()->viewport_visible_rect().IsEmpty()) {
+    layer_content_rect.Intersect(
+        layer->layer_tree_impl()->viewport_visible_rect());
+  }
   gfx::RectF accumulated_clip_in_root_space;
   if (non_root_copy_request_or_cache_render_surface) {
     bool include_expanding_clips = true;
@@ -815,7 +775,7 @@ void FindLayersThatNeedUpdates(LayerTreeHost* layer_tree_host,
 
     // Append mask layers to the update layer list. They don't have valid
     // visible rects, so need to get added after the above calculation.
-    if (Layer* mask_layer = layer->mask_layer()) {
+    if (PictureLayer* mask_layer = layer->mask_layer()) {
       // Layers with empty bounds should never be painted, including masks.
       if (!mask_layer->bounds().IsEmpty())
         update_layer_list->push_back(mask_layer);
@@ -929,7 +889,7 @@ gfx::Transform DrawTransform(const LayerImpl* layer,
   transform_tree.property_trees()->GetToTarget(
       layer->transform_tree_index(), layer->render_target_effect_tree_index(),
       &xform);
-  if (layer->should_flatten_transform_from_property_tree())
+  if (layer->should_flatten_screen_space_transform_from_property_tree())
     xform.FlattenTo2d();
   xform.Translate(layer->offset_to_transform_parent().x(),
                   layer->offset_to_transform_parent().y());
@@ -999,7 +959,7 @@ void ComputeDrawPropertiesOfVisibleLayers(const LayerImplList* layer_list,
 }
 
 void ComputeMaskDrawProperties(LayerImpl* mask_layer,
-                               const PropertyTrees* property_trees) {
+                               PropertyTrees* property_trees) {
   // Mask draw properties are used only for rastering, so most of the draw
   // properties computed for other layers are not needed.
   // Draw transform of a mask layer has to be a 2d scale.
@@ -1011,8 +971,17 @@ void ComputeMaskDrawProperties(LayerImpl* mask_layer,
   mask_layer->draw_properties().screen_space_transform =
       ScreenSpaceTransformInternal(mask_layer,
                                    property_trees->transform_tree);
+
+  ConditionalClip clip = LayerClipRect(property_trees, mask_layer);
+  // is_clipped should be set before visible rect computation as it is used
+  // there.
+  mask_layer->draw_properties().is_clipped = clip.is_clipped;
+  mask_layer->draw_properties().clip_rect =
+      gfx::ToEnclosingRect(clip.clip_rect);
+  // Calculate actual visible layer rect for mask layers, since we could have
+  // tiled mask layers and the tile manager would need this info for rastering.
   mask_layer->draw_properties().visible_layer_rect =
-      gfx::Rect(mask_layer->bounds());
+      LayerVisibleRect(property_trees, mask_layer);
   mask_layer->draw_properties().opacity = 1;
 }
 
@@ -1032,23 +1001,27 @@ void ComputeSurfaceDrawProperties(PropertyTrees* property_trees,
 }
 
 void UpdatePageScaleFactor(PropertyTrees* property_trees,
-                           const LayerImpl* page_scale_layer,
+                           TransformNode* page_scale_node,
                            float page_scale_factor,
                            float device_scale_factor,
                            const gfx::Transform device_transform) {
-  UpdatePageScaleFactorInternal(property_trees, page_scale_layer,
-                                page_scale_factor, device_scale_factor,
-                                device_transform);
-}
+  // TODO(wjmaclean): Once Issue #845097 is resolved, we can change the nullptr
+  // check below to a DCHECK.
+  if (property_trees->transform_tree.page_scale_factor() == page_scale_factor ||
+      !page_scale_node) {
+    return;
+  }
 
-void UpdatePageScaleFactor(PropertyTrees* property_trees,
-                           const Layer* page_scale_layer,
-                           float page_scale_factor,
-                           float device_scale_factor,
-                           const gfx::Transform device_transform) {
-  UpdatePageScaleFactorInternal(property_trees, page_scale_layer,
-                                page_scale_factor, device_scale_factor,
-                                device_transform);
+  property_trees->transform_tree.set_page_scale_factor(page_scale_factor);
+
+  float post_local_scale_factor = page_scale_factor * device_scale_factor;
+  page_scale_node->post_local_scale_factor = post_local_scale_factor;
+  page_scale_node->post_local = device_transform;
+  page_scale_node->post_local.Scale(post_local_scale_factor,
+                                    post_local_scale_factor);
+
+  page_scale_node->needs_local_transform_update = true;
+  property_trees->transform_tree.set_needs_update(true);
 }
 
 void UpdateElasticOverscroll(PropertyTrees* property_trees,

@@ -48,29 +48,28 @@ class DISPLAY_EXPORT Display final {
   // The display rotation can have multiple causes for change. A user can set a
   // preference. On devices with accelerometers, they can change the rotation.
   // RotationSource allows for the tracking of a Rotation per source of the
-  // change. ROTATION_SOURCE_ACTIVE is the current rotation of the display.
-  // Rotation changes not due to an accelerometer, nor the user, are to use this
-  // source directly. ROTATION_SOURCE_UNKNOWN is when no rotation source has
-  // been provided.
-  enum RotationSource {
-    ROTATION_SOURCE_ACCELEROMETER = 0,
-    ROTATION_SOURCE_ACTIVE,
-    ROTATION_SOURCE_USER,
-    ROTATION_SOURCE_UNKNOWN,
+  // change. ACTIVE is the current rotation of the display. Rotation changes not
+  // due to an accelerometer, nor the user, are to use this source directly.
+  // UNKNOWN is when no rotation source has been provided.
+  enum class RotationSource {
+    ACCELEROMETER = 0,
+    ACTIVE,
+    USER,
+    UNKNOWN,
   };
 
   // Touch support for the display.
-  enum TouchSupport {
-    TOUCH_SUPPORT_UNKNOWN,
-    TOUCH_SUPPORT_AVAILABLE,
-    TOUCH_SUPPORT_UNAVAILABLE,
+  enum class TouchSupport {
+    UNKNOWN,
+    AVAILABLE,
+    UNAVAILABLE,
   };
 
   // Accelerometer support for the display.
-  enum AccelerometerSupport {
-    ACCELEROMETER_SUPPORT_UNKNOWN,
-    ACCELEROMETER_SUPPORT_AVAILABLE,
-    ACCELEROMETER_SUPPORT_UNAVAILABLE,
+  enum class AccelerometerSupport {
+    UNKNOWN,
+    AVAILABLE,
+    UNAVAILABLE,
   };
 
   // Creates a display with kInvalidDisplayId as default.
@@ -79,6 +78,11 @@ class DISPLAY_EXPORT Display final {
   Display(int64_t id, const gfx::Rect& bounds);
   Display(const Display& other);
   ~Display();
+
+  // Returns a valid display with default parameters and ID set to
+  // |kDefaultDisplayId| which is used when there's no actual display connected
+  // to the device.
+  static Display GetDefaultDisplay();
 
   // Returns the forced device scale factor, which is given by
   // "--force-device-scale-factor".
@@ -107,6 +111,21 @@ class DISPLAY_EXPORT Display final {
 
   // Resets the cache and sets a new force device scale factor.
   static void SetForceDeviceScaleFactor(double dsf);
+
+  // Converts the given angle to its corresponding Rotation. The angle is in
+  // degrees, and the only valid values are 0, 90, 180, and 270.
+  // TODO(crbug.com/840189): we should never need to convert degrees to a
+  // Rotation if we were to Rotations internally and only converted to numeric
+  // values when required.
+  static Rotation DegreesToRotation(int degrees);
+
+  // This is the analog to DegreesToRotation and converts a Rotation to a
+  // numeric representation.
+  static int RotationToDegrees(Rotation rotation);
+
+  // Returns true if |degrees| is compatible with DegreesToRotation. I.e., that
+  // it is 0, 90, 180, or 270.
+  static bool IsValidRotation(int degrees);
 
   // Sets/Gets unique identifier associated with the display.
   // -1 means invalid display and it doesn't not exit.
@@ -143,8 +162,7 @@ class DISPLAY_EXPORT Display final {
     accelerometer_support_ = support;
   }
 
-  // Utility functions that just return the size of display and
-  // work area.
+  // Utility functions that just return the size of display and work area.
   const gfx::Size& size() const { return bounds_.size(); }
   const gfx::Size& work_area_size() const { return work_area_.size(); }
 
@@ -222,9 +240,10 @@ class DISPLAY_EXPORT Display final {
   // True if this is a monochrome display (e.g, for accessiblity). Used by media
   // query APIs.
   bool is_monochrome() const { return is_monochrome_; }
-  void set_is_monochrome(bool is_monochrome) {
-    is_monochrome_ = is_monochrome;
-  }
+  void set_is_monochrome(bool is_monochrome) { is_monochrome_ = is_monochrome; }
+
+  bool operator==(const Display& rhs) const;
+  bool operator!=(const Display& rhs) const { return !(*this == rhs); }
 
  private:
   friend struct mojo::StructTraits<mojom::DisplayDataView, Display>;
@@ -237,8 +256,8 @@ class DISPLAY_EXPORT Display final {
   gfx::Rect work_area_;
   float device_scale_factor_;
   Rotation rotation_ = ROTATE_0;
-  TouchSupport touch_support_ = TOUCH_SUPPORT_UNKNOWN;
-  AccelerometerSupport accelerometer_support_ = ACCELEROMETER_SUPPORT_UNKNOWN;
+  TouchSupport touch_support_ = TouchSupport::UNKNOWN;
+  AccelerometerSupport accelerometer_support_ = AccelerometerSupport::UNKNOWN;
   gfx::Size maximum_cursor_size_;
   // NOTE: this is not currently written to the mojom as it is not used in
   // aura.

@@ -61,14 +61,13 @@ GetFileForSavingOperation::GetFileForSavingOperation(
       cache_(cache),
       weak_ptr_factory_(this) {}
 
-GetFileForSavingOperation::~GetFileForSavingOperation() {
-}
+GetFileForSavingOperation::~GetFileForSavingOperation() = default;
 
 void GetFileForSavingOperation::GetFileForSaving(
     const base::FilePath& file_path,
     const GetFileCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   create_file_operation_->CreateFile(
       file_path,
@@ -84,8 +83,8 @@ void GetFileForSavingOperation::GetFileForSavingAfterCreate(
     const base::FilePath& file_path,
     const GetFileCallback& callback,
     FileError error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   if (error != FILE_ERROR_OK) {
     callback.Run(error, base::FilePath(), std::unique_ptr<ResourceEntry>());
@@ -107,8 +106,8 @@ void GetFileForSavingOperation::GetFileForSavingAfterDownload(
     FileError error,
     const base::FilePath& cache_path,
     std::unique_ptr<ResourceEntry> entry) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   if (error != FILE_ERROR_OK) {
     callback.Run(error, base::FilePath(), std::unique_ptr<ResourceEntry>());
@@ -120,20 +119,13 @@ void GetFileForSavingOperation::GetFileForSavingAfterDownload(
   std::unique_ptr<base::ScopedClosureRunner>* file_closer =
       new std::unique_ptr<base::ScopedClosureRunner>;
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(),
-      FROM_HERE,
-      base::Bind(&OpenCacheFileForWrite,
-                 metadata_,
-                 cache_,
-                 local_id,
-                 file_closer,
-                 entry_ptr),
-      base::Bind(&GetFileForSavingOperation::GetFileForSavingAfterOpenForWrite,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 callback,
-                 cache_path,
-                 base::Passed(&entry),
-                 base::Owned(file_closer)));
+      blocking_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&OpenCacheFileForWrite, metadata_, cache_, local_id,
+                     file_closer, entry_ptr),
+      base::BindOnce(
+          &GetFileForSavingOperation::GetFileForSavingAfterOpenForWrite,
+          weak_ptr_factory_.GetWeakPtr(), callback, cache_path,
+          std::move(entry), base::Owned(file_closer)));
 }
 
 void GetFileForSavingOperation::GetFileForSavingAfterOpenForWrite(
@@ -142,8 +134,8 @@ void GetFileForSavingOperation::GetFileForSavingAfterOpenForWrite(
     std::unique_ptr<ResourceEntry> entry,
     std::unique_ptr<base::ScopedClosureRunner>* file_closer,
     FileError error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   if (error != FILE_ERROR_OK) {
     callback.Run(error, base::FilePath(), std::unique_ptr<ResourceEntry>());
@@ -169,8 +161,8 @@ void GetFileForSavingOperation::GetFileForSavingAfterWatch(
     const base::FilePath& cache_path,
     std::unique_ptr<ResourceEntry> entry,
     bool success) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   logger_->Log(logging::LOG_INFO, "Started watching modification to %s [%s].",
                entry->local_id().c_str(),

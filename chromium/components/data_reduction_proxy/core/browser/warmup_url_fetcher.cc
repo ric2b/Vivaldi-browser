@@ -9,10 +9,10 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
@@ -171,7 +171,7 @@ void WarmupURLFetcher::OnURLFetchComplete(const net::URLFetcher* source) {
 
   if (!GetFieldTrialParamByFeatureAsBool(
           features::kDataReductionProxyRobustConnection,
-          "warmup_fetch_callback_enabled", false)) {
+          params::GetWarmupCallbackParamName(), false)) {
     CleanupAfterFetch();
     return;
   }
@@ -179,15 +179,15 @@ void WarmupURLFetcher::OnURLFetchComplete(const net::URLFetcher* source) {
   if (!source->GetStatus().is_success() &&
       source->GetStatus().error() == net::ERR_INTERNET_DISCONNECTED) {
     // Fetching failed due to Internet unavailability, and not due to some
-    // error. Set the proxy server to unknown.
-    callback_.Run(net::ProxyServer(), FetchResult::kSuccessful);
+    // error. No need to run the callback.
     CleanupAfterFetch();
     return;
   }
 
   bool success_response =
       source->GetStatus().status() == net::URLRequestStatus::SUCCESS &&
-      source->GetResponseCode() == net::HTTP_NO_CONTENT &&
+      params::IsWhitelistedHttpResponseCodeForProbes(
+          source->GetResponseCode()) &&
       source->GetResponseHeaders() &&
       HasDataReductionProxyViaHeader(*(source->GetResponseHeaders()),
                                      nullptr /* has_intermediary */);
@@ -208,19 +208,33 @@ base::TimeDelta WarmupURLFetcher::GetFetchTimeout() const {
   DCHECK_LE(0u, previous_attempt_counts_);
   DCHECK_GE(2u, previous_attempt_counts_);
 
-  // The timeout value should always be between kMinTimeout and kMaxTimeout
+  // The timeout value should always be between |min_timeout| and |max_timeout|
   // (both inclusive).
-  constexpr base::TimeDelta kMinTimeout = base::TimeDelta::FromSeconds(8);
-  constexpr base::TimeDelta kMaxTimeout = base::TimeDelta::FromSeconds(60);
+  const base::TimeDelta min_timeout =
+      base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
+          features::kDataReductionProxyRobustConnection,
+          "warmup_url_fetch_min_timeout_seconds", 10));
+  const base::TimeDelta max_timeout =
+      base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
+          features::kDataReductionProxyRobustConnection,
+          "warmup_url_fetch_max_timeout_seconds", 60));
+  DCHECK_LT(base::TimeDelta::FromSeconds(0), min_timeout);
+  DCHECK_LT(base::TimeDelta::FromSeconds(0), max_timeout);
+  DCHECK_LE(min_timeout, max_timeout);
 
   // Set the timeout based on how many times the fetching of the warmup URL
   // has been tried.
-  size_t http_rtt_multiplier = 5;
+  size_t http_rtt_multiplier = GetFieldTrialParamByFeatureAsInt(
+      features::kDataReductionProxyRobustConnection,
+      "warmup_url_fetch_init_http_rtt_multiplier", 12);
   if (previous_attempt_counts_ == 1) {
-    http_rtt_multiplier = 10;
+    http_rtt_multiplier *= 2;
   } else if (previous_attempt_counts_ == 2) {
-    http_rtt_multiplier = 20;
+    http_rtt_multiplier *= 4;
   }
+  // Sanity checks.
+  DCHECK_LT(0u, http_rtt_multiplier);
+  DCHECK_GE(1000u, http_rtt_multiplier);
 
   const net::NetworkQualityEstimator* network_quality_estimator =
       url_request_context_getter_->GetURLRequestContext()
@@ -229,14 +243,14 @@ base::TimeDelta WarmupURLFetcher::GetFetchTimeout() const {
   base::Optional<base::TimeDelta> http_rtt_estimate =
       network_quality_estimator->GetHttpRTT();
   if (!http_rtt_estimate)
-    return kMaxTimeout;
+    return max_timeout;
 
   base::TimeDelta timeout = http_rtt_multiplier * http_rtt_estimate.value();
-  if (timeout > kMaxTimeout)
-    return kMaxTimeout;
+  if (timeout > max_timeout)
+    return max_timeout;
 
-  if (timeout < kMinTimeout)
-    return kMinTimeout;
+  if (timeout < min_timeout)
+    return min_timeout;
 
   return timeout;
 }
@@ -257,7 +271,7 @@ void WarmupURLFetcher::OnFetchTimeout() {
 
   if (!GetFieldTrialParamByFeatureAsBool(
           features::kDataReductionProxyRobustConnection,
-          "warmup_fetch_callback_enabled", false)) {
+          params::GetWarmupCallbackParamName(), false)) {
     // Running the callback is not enabled.
     CleanupAfterFetch();
     return;

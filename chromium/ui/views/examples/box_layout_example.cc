@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -193,7 +192,7 @@ void ChildPanel::ContentsChanged(Textfield* sender,
 
 Textfield* ChildPanel::CreateTextfield() {
   Textfield* textfield = new Textfield();
-  textfield->set_default_width_in_chars(3);
+  textfield->SetDefaultWidthInChars(3);
   textfield->SizeToPreferredSize();
   textfield->SetText(base::ASCIIToUTF16("0"));
   textfield->set_controller(this);
@@ -242,7 +241,7 @@ Textfield* BoxLayoutExample::CreateRawTextfield(int& horizontal_pos,
                                                 bool add) {
   Textfield* text_field = new Textfield();
   text_field->SetPosition(gfx::Point(horizontal_pos, vertical_pos));
-  text_field->set_default_width_in_chars(3);
+  text_field->SetDefaultWidthInChars(3);
   text_field->SetTextInputType(ui::TEXT_INPUT_TYPE_NUMBER);
   text_field->SizeToPreferredSize();
   text_field->SetText(base::ASCIIToUTF16("0"));
@@ -332,10 +331,10 @@ void BoxLayoutExample::CreateExampleView(View* container) {
     border_insets_[i] =
         CreateRawTextfield(horizontal_pos, border_insets_[0]->y(), true);
 
-  collapse_margins_ = new Checkbox(base::ASCIIToUTF16("Collapse margins"));
+  collapse_margins_ =
+      new Checkbox(base::ASCIIToUTF16("Collapse margins"), this);
   collapse_margins_->SetPosition(gfx::Point(kPadding, vertical_pos));
   collapse_margins_->SizeToPreferredSize();
-  collapse_margins_->set_listener(this);
   control_panel_->AddChildView(collapse_margins_);
 
   UpdateLayoutManager();

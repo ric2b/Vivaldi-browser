@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -23,12 +24,10 @@
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_factory.h"
-#include "ipc/ipc_export.h"
 #include "ipc/ipc_message_pipe_reader.h"
 #include "ipc/ipc_mojo_bootstrap.h"
 #include "mojo/public/cpp/bindings/thread_safe_interface_ptr.h"
 #include "mojo/public/cpp/system/core.h"
-#include "mojo/public/interfaces/bindings/native_struct.mojom.h"
 
 namespace IPC {
 
@@ -41,9 +40,10 @@ namespace IPC {
 // TODO(morrita): Add APIs to create extra MessagePipes to let
 //                Mojo-based objects talk over this Channel.
 //
-class IPC_EXPORT ChannelMojo : public Channel,
-                               public Channel::AssociatedInterfaceSupport,
-                               public internal::MessagePipeReader::Delegate {
+class COMPONENT_EXPORT(IPC) ChannelMojo
+    : public Channel,
+      public Channel::AssociatedInterfaceSupport,
+      public internal::MessagePipeReader::Delegate {
  public:
   // Creates a ChannelMojo.
   static std::unique_ptr<ChannelMojo> Create(

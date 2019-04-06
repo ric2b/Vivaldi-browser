@@ -9,13 +9,13 @@
 
 namespace ntp_snippets {
 
+bool IsSimplifiedNtpEnabled();
+
 bool AreAssetDownloadsEnabled();
 bool AreOfflinePageDownloadsEnabled();
 bool IsDownloadsProviderEnabled();
 
 bool IsBookmarkProviderEnabled();
-
-bool IsRecentTabProviderEnabled();
 
 bool IsPhysicalWebPageProviderEnabled();
 

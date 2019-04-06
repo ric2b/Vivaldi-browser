@@ -28,6 +28,10 @@ class ASH_EXPORT ImeController : public mojom::ImeController {
    public:
     // Called when the caps lock state has changed.
     virtual void OnCapsLockChanged(bool enabled) = 0;
+
+    // Called when the keyboard layout name has changed.
+    virtual void OnKeyboardLayoutNameChanged(
+        const std::string& layout_name) = 0;
   };
 
   ImeController();
@@ -66,7 +70,11 @@ class ASH_EXPORT ImeController : public mojom::ImeController {
   void SwitchToPreviousIme();
   void SwitchImeById(const std::string& ime_id, bool show_message);
   void ActivateImeMenuItem(const std::string& key);
-  void SetCapsLockFromTray(bool caps_enabled);
+  void SetCapsLockEnabled(bool caps_enabled);
+  void OverrideKeyboardKeyset(chromeos::input_method::mojom::ImeKeyset keyset);
+  void OverrideKeyboardKeyset(
+      chromeos::input_method::mojom::ImeKeyset keyset,
+      mojom::ImeControllerClient::OverrideKeyboardKeysetCallback callback);
 
   // Returns true if the switch is allowed and the keystroke should be
   // consumed.
@@ -81,7 +89,8 @@ class ASH_EXPORT ImeController : public mojom::ImeController {
                   std::vector<mojom::ImeMenuItemPtr> menu_items) override;
   void SetImesManagedByPolicy(bool managed) override;
   void ShowImeMenuOnShelf(bool show) override;
-  void SetCapsLockState(bool caps_enabled) override;
+  void UpdateCapsLockState(bool caps_enabled) override;
+  void OnKeyboardLayoutNameChanged(const std::string& layout_name) override;
 
   void SetExtraInputOptionsEnabledState(bool is_extra_input_options_enabled,
                                         bool is_emoji_enabled,
@@ -90,6 +99,11 @@ class ASH_EXPORT ImeController : public mojom::ImeController {
 
   // Synchronously returns the cached caps lock state.
   bool IsCapsLockEnabled() const;
+
+  // Synchronously returns the cached keyboard layout name
+  const std::string& keyboard_layout_name() const {
+    return keyboard_layout_name_;
+  }
 
   void FlushMojoForTesting();
 
@@ -123,6 +137,11 @@ class ASH_EXPORT ImeController : public mojom::ImeController {
   // changes from the ImeControllerClient client (source of truth) which is in
   // another process. This is required for synchronous method calls in ash.
   bool is_caps_lock_enabled_ = false;
+
+  // A slightly delayed state value that is updated by asynchronously reported
+  // changes from the ImeControllerClient client (source of truth) which is in
+  // another process. This is required for synchronous method calls in ash.
+  std::string keyboard_layout_name_;
 
   // True if the extended inputs should be available in general (emoji,
   // handwriting, voice).

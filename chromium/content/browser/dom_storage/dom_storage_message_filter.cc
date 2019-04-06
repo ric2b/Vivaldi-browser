@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
@@ -16,6 +15,7 @@
 #include "content/browser/dom_storage/dom_storage_namespace.h"
 #include "content/browser/dom_storage/dom_storage_task_runner.h"
 #include "content/common/dom_storage/dom_storage_messages.h"
+#include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -85,11 +85,11 @@ bool DOMStorageMessageFilter::OnMessageReceived(const IPC::Message& message) {
 }
 
 void DOMStorageMessageFilter::OnOpenStorageArea(int connection_id,
-                                                int64_t namespace_id,
+                                                const std::string& namespace_id,
                                                 const GURL& origin) {
   DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::IO));
-  base::Optional<bad_message::BadMessageReason>
-      error = host_->OpenStorageArea(connection_id, namespace_id, origin);
+  base::Optional<bad_message::BadMessageReason> error = host_->OpenStorageArea(
+      connection_id, namespace_id, url::Origin::Create(origin));
   if (error)
     bad_message::ReceivedBadMessage(this, error.value());
 }
@@ -195,7 +195,7 @@ void DOMStorageMessageFilter::SendDOMStorageEvent(
   if (originated_in_process ||
       host_->HasAreaOpen(area->namespace_id(), area->origin())) {
     DOMStorageMsg_Event_Params params;
-    params.origin = area->origin();
+    params.origin = area->origin().GetURL();
     params.page_url = page_url;
     params.connection_id = connection_dispatching_message_for_;
     params.key = key;

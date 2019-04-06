@@ -28,10 +28,7 @@ namespace base {
 
 class CommandLine;
 struct LaunchOptions;
-class SequencedWorkerPoolOwner;
-class TaskRunner;
 class TestLauncher;
-class Thread;
 
 // Constants for GTest command-line flags.
 extern const char kGTestFilterFlag[];
@@ -41,6 +38,8 @@ extern const char kGTestListTestsFlag[];
 extern const char kGTestRepeatFlag[];
 extern const char kGTestRunDisabledTestsFlag[];
 extern const char kGTestOutputFlag[];
+extern const char kGTestShuffleFlag[];
+extern const char kGTestRandomSeedFlag[];
 
 // Interface for use with LaunchTests that abstracts away exact details
 // which tests and how are run.
@@ -136,7 +135,7 @@ class TestLauncher {
     base::LaunchOptions::Inherit inherit_mode =
         base::LaunchOptions::Inherit::kSpecific;
     base::HandlesToInheritVector handles_to_inherit;
-#elif defined(OS_POSIX)
+#else
     FileHandleMappingVector fds_to_remap;
 #endif
   };
@@ -188,10 +187,6 @@ class TestLauncher {
   // Called by the delay timer when no output was made for a while.
   void OnOutputTimeout();
 
-  // Returns the TaskRunner to be used to launch child test processes. This
-  // TaskRunner will have TaskShutdownBehavior::BLOCK_SHUTDOWN semantics.
-  scoped_refptr<TaskRunner> GetTaskRunner();
-
   // Make sure we don't accidentally call the wrong methods e.g. on the worker
   // pool thread.  Should be the first member so that it's destroyed last: when
   // destroying other members, especially the worker pool, we may check the code
@@ -204,7 +199,7 @@ class TestLauncher {
   int32_t total_shards_;  // Total number of outer shards, at least one.
   int32_t shard_index_;   // Index of shard the launcher is to run.
 
-  int cycles_;  // Number of remaining test itreations, or -1 for infinite.
+  int cycles_;  // Number of remaining test iterations, or -1 for infinite.
 
   // Test filters (empty means no filter).
   bool has_at_least_one_positive_filter_;
@@ -246,6 +241,10 @@ class TestLauncher {
   // Result to be returned from Run.
   bool run_result_;
 
+  // Support for test shuffling, just like gtest does.
+  bool shuffle_;
+  uint32_t shuffle_seed_;
+
   TestResultsTracker results_tracker_;
 
   // Watchdog timer to make sure we do not go without output for too long.
@@ -253,11 +252,6 @@ class TestLauncher {
 
   // Number of jobs to run in parallel.
   size_t parallel_jobs_;
-
-  // Worker pool used to launch processes in parallel (|worker_thread_| is used
-  // instead if |parallel_jobs == 1|).
-  std::unique_ptr<SequencedWorkerPoolOwner> worker_pool_owner_;
-  std::unique_ptr<Thread> worker_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(TestLauncher);
 };

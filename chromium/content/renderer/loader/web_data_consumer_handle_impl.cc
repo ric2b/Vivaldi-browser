@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "mojo/public/c/system/types.h"
 
 namespace content {
@@ -36,9 +37,12 @@ class WebDataConsumerHandleImpl::Context
 
 WebDataConsumerHandleImpl::ReaderImpl::ReaderImpl(
     scoped_refptr<Context> context,
-    Client* client)
+    Client* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : context_(context),
-      handle_watcher_(FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL),
+      handle_watcher_(FROM_HERE,
+                      mojo::SimpleWatcher::ArmingPolicy::MANUAL,
+                      std::move(task_runner)),
       client_(client) {
   if (client_)
     StartWatching();
@@ -77,7 +81,7 @@ Result WebDataConsumerHandleImpl::ReaderImpl::Read(void* data,
       context_->handle()->ReadData(data, &size_to_pass, flags_to_pass);
   if (rv == MOJO_RESULT_OK)
     *read_size = size_to_pass;
-  if (rv == MOJO_RESULT_OK || rv == MOJO_RESULT_SHOULD_WAIT)
+  if (rv == MOJO_RESULT_SHOULD_WAIT)
     handle_watcher_.ArmOrNotify();
 
   return HandleReadResult(rv);
@@ -100,13 +104,13 @@ Result WebDataConsumerHandleImpl::ReaderImpl::BeginRead(const void** buffer,
       context_->handle()->BeginReadData(buffer, &size_to_pass, flags_to_pass);
   if (rv == MOJO_RESULT_OK)
     *available = size_to_pass;
+  if (rv == MOJO_RESULT_SHOULD_WAIT)
+    handle_watcher_.ArmOrNotify();
   return HandleReadResult(rv);
 }
 
 Result WebDataConsumerHandleImpl::ReaderImpl::EndRead(size_t read_size) {
   MojoResult rv = context_->handle()->EndReadData(read_size);
-  if (rv == MOJO_RESULT_OK)
-    handle_watcher_.ArmOrNotify();
   return rv == MOJO_RESULT_OK ? kOk : kUnexpectedError;
 }
 
@@ -147,8 +151,11 @@ WebDataConsumerHandleImpl::~WebDataConsumerHandleImpl() {
 }
 
 std::unique_ptr<blink::WebDataConsumerHandle::Reader>
-WebDataConsumerHandleImpl::ObtainReader(Client* client) {
-  return base::WrapUnique(new ReaderImpl(context_, client));
+WebDataConsumerHandleImpl::ObtainReader(
+    Client* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  return base::WrapUnique(
+      new ReaderImpl(context_, client, std::move(task_runner)));
 }
 
 const char* WebDataConsumerHandleImpl::DebugName() const {

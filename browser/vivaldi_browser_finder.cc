@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "components/guest_view/browser/guest_view_base.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

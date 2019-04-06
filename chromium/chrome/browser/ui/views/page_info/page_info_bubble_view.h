@@ -12,16 +12,17 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/page_info/page_info_ui.h"
+#include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 #include "chrome/browser/ui/views/page_info/chosen_object_view_observer.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
 #include "chrome/browser/ui/views/page_info/permission_selector_row.h"
 #include "chrome/browser/ui/views/page_info/permission_selector_row_observer.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/link_listener.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/controls/styled_label_listener.h"
 
-class Browser;
 class BubbleHeaderView;
 class GURL;
 class HoverButton;
@@ -31,6 +32,10 @@ class Browser;
 namespace content {
 class WebContents;
 }  // namespace content
+
+namespace gfx {
+class Rect;
+}  // namespace gfx
 
 namespace net {
 class X509Certificate;
@@ -46,6 +51,7 @@ class PageInfoBubbleViewTestApi;
 
 namespace views {
 class Link;
+class View;
 class Widget;
 }  // namespace views
 
@@ -78,8 +84,14 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
   };
 
   // Creates the appropriate page info bubble for the given |url|.
+  // |anchor_view| will be used to place the bubble.  If |anchor_view| is null,
+  // |anchor_rect| will be used instead.  |parent_window| will become the
+  // parent of the widget hosting the bubble view.
   static views::BubbleDialogDelegateView* CreatePageInfoBubble(
-      Browser* browser,
+      views::View* anchor_view,
+      const gfx::Rect& anchor_rect,
+      gfx::NativeWindow parent_window,
+      Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
       const security_state::SecurityInfo& security_info);
@@ -133,6 +145,11 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
   void SetPermissionInfo(const PermissionInfoList& permission_info_list,
                          ChosenObjectInfoList chosen_object_info_list) override;
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  std::unique_ptr<PageInfoUI::SecurityDescription>
+  CreateSecurityDescriptionForPasswordReuse(
+      bool is_enterprise_password) const override;
+#endif
 
   // Creates the contents of the |site_settings_view_|. The ownership of the
   // returned view is transferred to the caller.

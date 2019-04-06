@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/resource_cache.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_namespace.h"
@@ -73,7 +74,7 @@ class POLICY_EXPORT ComponentCloudPolicyStore {
   // The passed credentials are used to validate the cached data, and data
   // stored later.
   // All ValidatePolicy() requests without credentials fail.
-  void SetCredentials(const std::string& username,
+  void SetCredentials(const AccountId& account_id,
                       const std::string& dm_token,
                       const std::string& device_id,
                       const std::string& public_key,
@@ -136,7 +137,7 @@ class POLICY_EXPORT ComponentCloudPolicyStore {
   ResourceCache* const cache_;
 
   // The following fields contain credentials used for validating the policy.
-  std::string username_;
+  AccountId account_id_;
   std::string dm_token_;
   std::string device_id_;
   std::string public_key_;

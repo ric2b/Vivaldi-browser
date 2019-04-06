@@ -4,13 +4,17 @@
 
 #include "components/data_reduction_proxy/core/browser/network_properties_manager.h"
 
+#include <vector>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/time/clock.h"
 #include "base/values.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
 
@@ -46,8 +50,14 @@ base::Optional<NetworkProperties> GetParsedNetworkProperty(
 
 class NetworkPropertiesManager::PrefManager {
  public:
-  explicit PrefManager(PrefService* pref_service)
-      : pref_service_(pref_service), ui_weak_ptr_factory_(this) {}
+  PrefManager(base::Clock* clock, PrefService* pref_service)
+      : clock_(clock), pref_service_(pref_service), ui_weak_ptr_factory_(this) {
+    DCHECK(clock_);
+    DictionaryPrefUpdate update(pref_service_, prefs::kNetworkProperties);
+    base::DictionaryValue* properties_dict = update.Get();
+
+    CleanupOldOrInvalidValues(properties_dict);
+  }
 
   ~PrefManager() {}
 
@@ -111,11 +121,6 @@ class NetworkPropertiesManager::PrefManager {
 
       int64_t timestamp = network_properties.value().last_modified();
 
-      // TODO(tbansal): crbug.com/779219: Consider handling the case when the
-      // device clock is moved back. For example, if the clock is moved back
-      // by a year, then for the next year, those older entries will have
-      // timestamps that are later than any new entries from networks that the
-      // user browses.
       if (timestamp < earliest_timestamp) {
         earliest_timestamp = timestamp;
         key_to_delete = &it.first;
@@ -125,6 +130,44 @@ class NetworkPropertiesManager::PrefManager {
       return;
     properties_dict->RemoveKey(*key_to_delete);
   }
+
+  // Removes all old or invalid values from the dictionary.
+  void CleanupOldOrInvalidValues(base::DictionaryValue* properties_dict) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    // Entries that have not been modified during last |kMaxEntryAge| would be
+    // deleted.
+    static constexpr base::TimeDelta kMaxEntryAge =
+        base::TimeDelta::FromDays(30);
+    const base::Time now = clock_->Now();
+
+    std::vector<std::string> keys_to_delete;
+
+    for (const auto& it : properties_dict->DictItems()) {
+      // At most one entry is deleted within this loop since |it| may not
+      // be valid once an entry is deleted from the dictionary.
+      base::Optional<NetworkProperties> network_properties =
+          GetParsedNetworkProperty(it.second);
+      if (!network_properties) {
+        // Delete the corrupted entry.
+        keys_to_delete.push_back(it.first);
+        continue;
+      }
+
+      base::Time timestamp_entry =
+          base::Time::FromJavaTime(network_properties.value().last_modified());
+      base::TimeDelta entry_age = now - timestamp_entry;
+      if (entry_age < base::TimeDelta() || entry_age > kMaxEntryAge) {
+        keys_to_delete.push_back(it.first);
+        continue;
+      }
+    }
+
+    for (const auto& key : keys_to_delete)
+      properties_dict->RemoveKey(key);
+  }
+
+  base::Clock* clock_;
 
   // Guaranteed to be non-null during the lifetime of |this|.
   PrefService* pref_service_;
@@ -138,15 +181,18 @@ class NetworkPropertiesManager::PrefManager {
 };
 
 NetworkPropertiesManager::NetworkPropertiesManager(
+    base::Clock* clock,
     PrefService* pref_service,
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner)
-    : ui_task_runner_(ui_task_runner),
+    : clock_(clock),
+      ui_task_runner_(ui_task_runner),
       network_properties_container_(ConvertDictionaryValueToParsedPrefs(
           pref_service->GetDictionary(prefs::kNetworkProperties))) {
   DCHECK(ui_task_runner_);
   DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(clock_);
 
-  pref_manager_.reset(new PrefManager(pref_service));
+  pref_manager_.reset(new PrefManager(clock_, pref_service));
   pref_manager_weak_ptr_ = pref_manager_->GetWeakPtr();
 
   ResetWarmupURLFetchMetrics();
@@ -191,6 +237,8 @@ void NetworkPropertiesManager::OnChangeInNetworkID(
   if (it != network_properties_container_.end()) {
     network_properties_ = it->second;
     cached_entry_found = true;
+    if (params::ShouldDiscardCanaryCheckResult())
+      network_properties_.set_secure_proxy_disallowed_by_carrier(false);
 
   } else {
     // Reset to default state.
@@ -217,7 +265,7 @@ void NetworkPropertiesManager::ResetWarmupURLFetchMetrics() {
 void NetworkPropertiesManager::OnChangeInNetworkPropertyOnIOThread() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  network_properties_.set_last_modified(base::Time::Now().ToJavaTime());
+  network_properties_.set_last_modified(clock_->Now().ToJavaTime());
   // Remove the entry from the map, if it is already present.
   network_properties_container_.erase(network_id_);
   network_properties_container_.emplace(
@@ -241,6 +289,8 @@ NetworkPropertiesManager::ConvertDictionaryValueToParsedPrefs(
         GetParsedNetworkProperty(it.second);
     if (!network_properties)
       continue;
+    if (params::ShouldDiscardCanaryCheckResult())
+      network_properties->set_secure_proxy_disallowed_by_carrier(false);
 
     read_prefs.emplace(std::make_pair(it.first, network_properties.value()));
   }
@@ -315,18 +365,41 @@ void NetworkPropertiesManager::SetHasWarmupURLProbeFailed(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (secure_proxy && is_core_proxy) {
+    if (!warmup_url_probe_failed) {
+      UMA_HISTOGRAM_EXACT_LINEAR(
+          "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Secure.Core",
+          warmup_url_fetch_attempt_counts_secure_core_, 10);
+    }
     has_warmup_url_succeded_secure_core_ = !warmup_url_probe_failed;
     network_properties_.mutable_secure_proxy_flags()
         ->set_disallowed_due_to_warmup_probe_failure(warmup_url_probe_failed);
   } else if (secure_proxy && !is_core_proxy) {
+    if (!warmup_url_probe_failed) {
+      UMA_HISTOGRAM_EXACT_LINEAR(
+          "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Secure."
+          "NonCore",
+          warmup_url_fetch_attempt_counts_secure_non_core_, 10);
+    }
     has_warmup_url_succeded_secure_non_core_ = !warmup_url_probe_failed;
     network_properties_.mutable_secure_non_core_proxy_flags()
         ->set_disallowed_due_to_warmup_probe_failure(warmup_url_probe_failed);
   } else if (!secure_proxy && is_core_proxy) {
+    if (!warmup_url_probe_failed) {
+      UMA_HISTOGRAM_EXACT_LINEAR(
+          "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Insecure."
+          "Core",
+          warmup_url_fetch_attempt_counts_insecure_core_, 10);
+    }
     has_warmup_url_succeded_insecure_core_ = !warmup_url_probe_failed;
     network_properties_.mutable_insecure_proxy_flags()
         ->set_disallowed_due_to_warmup_probe_failure(warmup_url_probe_failed);
   } else {
+    if (!warmup_url_probe_failed) {
+      UMA_HISTOGRAM_EXACT_LINEAR(
+          "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Insecure."
+          "NonCore",
+          warmup_url_fetch_attempt_counts_insecure_non_core_, 10);
+    }
     has_warmup_url_succeded_insecure_non_core_ = !warmup_url_probe_failed;
     network_properties_.mutable_insecure_non_core_proxy_flags()
         ->set_disallowed_due_to_warmup_probe_failure(warmup_url_probe_failed);

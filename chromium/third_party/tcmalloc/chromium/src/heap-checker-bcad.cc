@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -44,8 +45,8 @@
 // consider that allocation to be a leak, even though it's not (since
 // the allocated object is reachable from global data and hence "live").
 
+#include <stdlib.h>      // for abort()
 #include <gperftools/malloc_extension.h>
-#include "base/abort.h"
 
 // A dummy variable to refer from heap-checker.cc.  This is to make
 // sure this file is not optimized out by the linker.
@@ -76,7 +77,7 @@ class HeapLeakCheckerGlobalPrePost {
     ++count_;
   }
   ~HeapLeakCheckerGlobalPrePost() {
-    if (count_ <= 0)  tcmalloc::Abort();
+    if (count_ <= 0)  abort();
     --count_;
     if (count_ == 0)  HeapLeakChecker_AfterDestructors();
   }

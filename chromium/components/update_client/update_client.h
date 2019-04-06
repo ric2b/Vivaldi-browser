@@ -258,6 +258,11 @@ struct CrxComponent {
   // For extension, this information is set from the update service, which
   // gets the install source from the update URL.
   std::string install_source;
+
+  // Information about where the component/extension was loaded from.
+  // For extensions, this information is inferred from the extension
+  // registry.
+  std::string install_location;
 };
 
 // Called when a non-blocking call of UpdateClient completes.
@@ -270,8 +275,8 @@ using Callback = base::OnceCallback<void(Error error)>;
 class UpdateClient : public base::RefCounted<UpdateClient> {
  public:
   using CrxDataCallback =
-      base::OnceCallback<void(const std::vector<std::string>& ids,
-                              std::vector<CrxComponent>* components)>;
+      base::OnceCallback<std::vector<std::unique_ptr<CrxComponent>>(
+          const std::vector<std::string>& ids)>;
 
   // Defines an interface to observe the UpdateClient. It provides
   // notifications when state changes occur for the service itself or for the
@@ -299,9 +304,14 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
       // Sent when a CRX has been successfully updated.
       COMPONENT_UPDATED,
 
-      // Sent when a CRX has not been updated following an update check:
-      // either there was no update available, or the update failed.
+      // Sent when a CRX has not been updated because there was no update
+      // available for this component.
       COMPONENT_NOT_UPDATED,
+
+      // Sent when an error ocurred during an update for any reason, including
+      // the update check itself failed, or the download of the update payload
+      // failed, or applying the update failed.
+      COMPONENT_UPDATE_ERROR,
 
       // Sent when CRX bytes are being downloaded.
       COMPONENT_UPDATE_DOWNLOADING,
@@ -344,9 +354,11 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   // is intended to be used for background updates of several CRXs. Overlapping
   // calls to this function result in a queuing behavior, and the execution
   // of each call is serialized. In addition, updates are always queued up when
-  // installs are running.
+  // installs are running. The |is_foreground| parameter must be set to true if
+  // the invocation of this function is a result of a user initiated update.
   virtual void Update(const std::vector<std::string>& ids,
                       CrxDataCallback crx_data_callback,
+                      bool is_foreground,
                       Callback callback) = 0;
 
   // Sends an uninstall ping for the CRX identified by |id| and |version|. The
@@ -382,11 +394,17 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
 
 // Creates an instance of the update client.
 scoped_refptr<UpdateClient> UpdateClientFactory(
-    const scoped_refptr<Configurator>& config);
+    scoped_refptr<Configurator> config);
 
 // This must be called prior to the construction of any Configurator that
 // contains a PrefService.
 void RegisterPrefs(PrefRegistrySimple* registry);
+
+// This must be called prior to the construction of any Configurator that
+// needs access to local user profiles.
+// This function is mostly used for ExtensionUpdater, which requires update
+// info from user profiles.
+void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
 }  // namespace update_client
 

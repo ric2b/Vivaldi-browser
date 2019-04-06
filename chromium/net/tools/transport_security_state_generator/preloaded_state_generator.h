@@ -10,10 +10,10 @@
 #include <memory>
 #include <string>
 
+#include "net/tools/huffman_trie/trie/trie_writer.h"
 #include "net/tools/transport_security_state_generator/pinset.h"
 #include "net/tools/transport_security_state_generator/pinsets.h"
 #include "net/tools/transport_security_state_generator/transport_security_state_entry.h"
-#include "net/tools/transport_security_state_generator/trie/trie_writer.h"
 
 namespace net {
 
@@ -38,9 +38,6 @@ class PreloadedStateGenerator {
   void ProcessExpectCTURIs(const TransportSecurityStateEntries& entries,
                            NameIDMap* expect_ct_report_uri_map,
                            std::string* tpl);
-  void ProcessExpectStapleURIs(const TransportSecurityStateEntries& entries,
-                               NameIDMap* expect_staple_report_uri_map,
-                               std::string* tpl);
   void ProcessPinsets(const Pinsets& pinset,
                       NameIDMap* pinset_map,
                       std::string* tpl);

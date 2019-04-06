@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -130,8 +131,8 @@ static bool IsDebuggerAttached(void) {    // only works under linux, probably
 
 // This is the default if you don't link in -lprofiler
 extern "C" {
-ATTRIBUTE_WEAK PERFTOOLS_DLL_DECL bool ProfilingIsEnabledForAllThreads();
-bool ProfilingIsEnabledForAllThreads() { return false; }
+ATTRIBUTE_WEAK PERFTOOLS_DLL_DECL int ProfilingIsEnabledForAllThreads();
+int ProfilingIsEnabledForAllThreads() { return false; }
 }
 
 //----------------------------------------------------------------------
@@ -223,10 +224,6 @@ DEFINE_int32(heap_check_delay_seconds, 0,
              " its checks. Report any such issues to the heap-checker"
              " maintainer(s).");
 
-DEFINE_int32(heap_check_error_exit_code,
-             EnvToInt("HEAP_CHECK_ERROR_EXIT_CODE", 1),
-             "Exit code to return if any leaks were detected.");
-
 //----------------------------------------------------------------------
 
 DEFINE_string(heap_profile_pprof,
@@ -289,7 +286,7 @@ static const int heap_checker_info_level = 0;
 // Wrapper of LowLevelAlloc for STL_Allocator and direct use.
 // We always access this class under held heap_checker_lock,
 // this allows us to in particular protect the period when threads are stopped
-// at random spots with ListAllProcessThreads by heap_checker_lock,
+// at random spots with TCMalloc_ListAllProcessThreads by heap_checker_lock,
 // w/o worrying about the lock in LowLevelAlloc::Arena.
 // We rely on the fact that we use an own arena with an own lock here.
 class HeapLeakChecker::Allocator {
@@ -498,7 +495,7 @@ class InitThreadDisableCounter {
   InitThreadDisableCounter() {
     perftools_pthread_key_create(&thread_disable_counter_key, NULL);
     // Set up the main thread's value, which we have a special variable for.
-    void* p = (void*)main_thread_counter;   // store the counter directly
+    void* p = (void*)(intptr_t)main_thread_counter;   // store the counter directly
     perftools_pthread_setspecific(thread_disable_counter_key, p);
     use_main_thread_counter = false;
   }
@@ -571,7 +568,7 @@ static void NewHook(const void* ptr, size_t size) {
   if (ptr != NULL) {
     const int counter = get_thread_disable_counter();
     const bool ignore = (counter > 0);
-    RAW_VLOG(16, "Recording Alloc: %p of %"PRIuS "; %d", ptr, size,
+    RAW_VLOG(16, "Recording Alloc: %p of %" PRIuS "; %d", ptr, size,
              int(counter));
 
     // Fetch the caller's stack trace before acquiring heap_checker_lock.
@@ -591,7 +588,7 @@ static void NewHook(const void* ptr, size_t size) {
         }
       }
     }
-    RAW_VLOG(17, "Alloc Recorded: %p of %"PRIuS"", ptr, size);
+    RAW_VLOG(17, "Alloc Recorded: %p of %" PRIuS "", ptr, size);
   }
 }
 
@@ -649,12 +646,12 @@ static void RegisterStackLocked(const void* top_ptr) {
   if (MemoryRegionMap::FindAndMarkStackRegion(top, &region)) {
     // Make the proper portion of the stack live:
     if (stack_direction == GROWS_TOWARDS_LOW_ADDRESSES) {
-      RAW_VLOG(11, "Live stack at %p of %"PRIuPTR" bytes",
+      RAW_VLOG(11, "Live stack at %p of %" PRIuPTR " bytes",
                   top_ptr, region.end_addr - top);
       live_objects->push_back(AllocObject(top_ptr, region.end_addr - top,
                                           THREAD_DATA));
     } else {  // GROWS_TOWARDS_HIGH_ADDRESSES
-      RAW_VLOG(11, "Live stack at %p of %"PRIuPTR" bytes",
+      RAW_VLOG(11, "Live stack at %p of %" PRIuPTR " bytes",
                   AsPtr(region.start_addr),
                   top - region.start_addr);
       live_objects->push_back(AllocObject(AsPtr(region.start_addr),
@@ -696,12 +693,12 @@ static void RegisterStackLocked(const void* top_ptr) {
           }
           // Make the proper portion of the stack live:
           if (stack_direction == GROWS_TOWARDS_LOW_ADDRESSES) {
-            RAW_VLOG(11, "Live stack at %p of %"PRIuPTR" bytes",
+            RAW_VLOG(11, "Live stack at %p of %" PRIuPTR " bytes",
                         top_ptr, stack_end - top);
             live_objects->push_back(
               AllocObject(top_ptr, stack_end - top, THREAD_DATA));
           } else {  // GROWS_TOWARDS_HIGH_ADDRESSES
-            RAW_VLOG(11, "Live stack at %p of %"PRIuPTR" bytes",
+            RAW_VLOG(11, "Live stack at %p of %" PRIuPTR " bytes",
                         AsPtr(stack_start), top - stack_start);
             live_objects->push_back(
               AllocObject(AsPtr(stack_start), top - stack_start, THREAD_DATA));
@@ -774,14 +771,14 @@ static void MakeDisabledLiveCallbackLocked(
         // and the rest of the region where the stack lives can well
         // contain outdated stack variables which are not live anymore,
         // hence should not be treated as such.
-        RAW_VLOG(11, "Not %s-disabling %"PRIuS" bytes at %p"
+        RAW_VLOG(11, "Not %s-disabling %" PRIuS " bytes at %p"
                     ": have stack inside: %p",
                     (stack_disable ? "stack" : "range"),
                     info.object_size, ptr, AsPtr(*iter));
         return;
       }
     }
-    RAW_VLOG(11, "%s-disabling %"PRIuS" bytes at %p",
+    RAW_VLOG(11, "%s-disabling %" PRIuS " bytes at %p",
                 (stack_disable ? "Stack" : "Range"), info.object_size, ptr);
     live_objects->push_back(AllocObject(ptr, info.object_size,
                                         MUST_BE_ON_HEAP));
@@ -1012,6 +1009,15 @@ static enum {
 // due to reliance on locale functions (these are called through RAW_LOG
 // and in other ways).
 //
+
+#if defined(HAVE_LINUX_PTRACE_H) && defined(HAVE_SYS_SYSCALL_H) && defined(DUMPER)
+# if (defined(__i386__) || defined(__x86_64))
+#  define THREAD_REGS i386_regs
+# elif defined(__PPC__)
+#  define THREAD_REGS ppc_regs
+# endif
+#endif
+
 /*static*/ int HeapLeakChecker::IgnoreLiveThreadsLocked(void* parameter,
                                                         int num_threads,
                                                         pid_t* thread_pids,
@@ -1034,12 +1040,11 @@ static enum {
     // specially via self_thread_stack, not here:
     if (thread_pids[i] == self_thread_pid) continue;
     RAW_VLOG(11, "Handling thread with pid %d", thread_pids[i]);
-#if (defined(__i386__) || defined(__x86_64)) && \
-    defined(HAVE_LINUX_PTRACE_H) && defined(HAVE_SYS_SYSCALL_H) && defined(DUMPER)
-    i386_regs thread_regs;
+#ifdef THREAD_REGS
+    THREAD_REGS thread_regs;
 #define sys_ptrace(r, p, a, d)  syscall(SYS_ptrace, (r), (p), (a), (d))
     // We use sys_ptrace to avoid thread locking
-    // because this is called from ListAllProcessThreads
+    // because this is called from TCMalloc_ListAllProcessThreads
     // when all but this thread are suspended.
     if (sys_ptrace(PTRACE_GETREGS, thread_pids[i], NULL, &thread_regs) == 0) {
       // Need to use SP to get all the data from the very last stack frame:
@@ -1065,7 +1070,7 @@ static enum {
   if (thread_registers.size()) {
     // Make thread registers be live heap data sources.
     // we rely here on the fact that vector is in one memory chunk:
-    RAW_VLOG(11, "Live registers at %p of %"PRIuS" bytes",
+    RAW_VLOG(11, "Live registers at %p of %" PRIuS " bytes",
                 &thread_registers[0], thread_registers.size() * sizeof(void*));
     live_objects->push_back(AllocObject(&thread_registers[0],
                                         thread_registers.size() * sizeof(void*),
@@ -1075,7 +1080,7 @@ static enum {
   // Do all other liveness walking while all threads are stopped:
   IgnoreNonThreadLiveObjectsLocked();
   // Can now resume the threads:
-  ResumeAllProcessThreads(num_threads, thread_pids);
+  TCMalloc_ResumeAllProcessThreads(num_threads, thread_pids);
   thread_listing_status = CALLBACK_COMPLETED;
   return failures;
 }
@@ -1102,7 +1107,7 @@ void HeapLeakChecker::IgnoreNonThreadLiveObjectsLocked() {
     for (IgnoredObjectsMap::const_iterator object = ignored_objects->begin();
          object != ignored_objects->end(); ++object) {
       const void* ptr = AsPtr(object->first);
-      RAW_VLOG(11, "Ignored live object at %p of %"PRIuS" bytes",
+      RAW_VLOG(11, "Ignored live object at %p of %" PRIuS " bytes",
                   ptr, object->second);
       live_objects->
         push_back(AllocObject(ptr, object->second, MUST_BE_ON_HEAP));
@@ -1111,7 +1116,7 @@ void HeapLeakChecker::IgnoreNonThreadLiveObjectsLocked() {
       size_t object_size;
       if (!(heap_profile->FindAlloc(ptr, &object_size)  &&
             object->second == object_size)) {
-        RAW_LOG(FATAL, "Object at %p of %"PRIuS" bytes from an"
+        RAW_LOG(FATAL, "Object at %p of %" PRIuS " bytes from an"
                        " IgnoreObject() has disappeared", ptr, object->second);
       }
     }
@@ -1218,7 +1223,7 @@ void HeapLeakChecker::IgnoreNonThreadLiveObjectsLocked() {
       if (VLOG_IS_ON(11)) {
         for (LiveObjectsStack::const_iterator i = l->second.begin();
              i != l->second.end(); ++i) {
-          RAW_VLOG(11, "Library live region at %p of %"PRIuPTR" bytes",
+          RAW_VLOG(11, "Library live region at %p of %" PRIuPTR " bytes",
                       i->ptr, i->size);
         }
       }
@@ -1233,7 +1238,7 @@ void HeapLeakChecker::IgnoreNonThreadLiveObjectsLocked() {
   }
 }
 
-// Callback for ListAllProcessThreads in IgnoreAllLiveObjectsLocked below
+// Callback for TCMalloc_ListAllProcessThreads in IgnoreAllLiveObjectsLocked below
 // to test/verify that we have just the one main thread, in which case
 // we can do everything in that main thread,
 // so that CPU profiler can collect all its samples.
@@ -1244,7 +1249,7 @@ static int IsOneThread(void* parameter, int num_threads,
     RAW_LOG(WARNING, "Have threads: Won't CPU-profile the bulk of leak "
                      "checking work happening in IgnoreLiveThreadsLocked!");
   }
-  ResumeAllProcessThreads(num_threads, thread_pids);
+  TCMalloc_ResumeAllProcessThreads(num_threads, thread_pids);
   return num_threads;
 }
 
@@ -1286,16 +1291,17 @@ void HeapLeakChecker::IgnoreAllLiveObjectsLocked(const void* self_stack_top) {
   if (FLAGS_heap_check_ignore_thread_live) {
     // In case we are doing CPU profiling we'd like to do all the work
     // in the main thread, not in the special thread created by
-    // ListAllProcessThreads, so that CPU profiler can collect all its samples.
-    // The machinery of ListAllProcessThreads conflicts with the CPU profiler
-    // by also relying on signals and ::sigaction.
-    // We can do this (run everything in the main thread) safely
-    // only if there's just the main thread itself in our process.
-    // This variable reflects these two conditions:
+    // TCMalloc_ListAllProcessThreads, so that CPU profiler can
+    // collect all its samples.  The machinery of
+    // TCMalloc_ListAllProcessThreads conflicts with the CPU profiler
+    // by also relying on signals and ::sigaction.  We can do this
+    // (run everything in the main thread) safely only if there's just
+    // the main thread itself in our process.  This variable reflects
+    // these two conditions:
     bool want_and_can_run_in_main_thread =
       ProfilingIsEnabledForAllThreads()  &&
-      ListAllProcessThreads(NULL, IsOneThread) == 1;
-    // When the normal path of ListAllProcessThreads below is taken,
+      TCMalloc_ListAllProcessThreads(NULL, IsOneThread) == 1;
+    // When the normal path of TCMalloc_ListAllProcessThreads below is taken,
     // we fully suspend the threads right here before any liveness checking
     // and keep them suspended for the whole time of liveness checking
     // inside of the IgnoreLiveThreadsLocked callback.
@@ -1304,7 +1310,7 @@ void HeapLeakChecker::IgnoreAllLiveObjectsLocked(const void* self_stack_top) {
     //  graph while we walk it).
     int r = want_and_can_run_in_main_thread
             ? IgnoreLiveThreadsLocked(NULL, 1, &self_thread_pid, dummy_ap)
-            : ListAllProcessThreads(NULL, IgnoreLiveThreadsLocked);
+            : TCMalloc_ListAllProcessThreads(NULL, IgnoreLiveThreadsLocked);
     need_to_ignore_non_thread_objects = r < 0;
     if (r < 0) {
       RAW_LOG(WARNING, "Thread finding failed with %d errno=%d", r, errno);
@@ -1339,7 +1345,7 @@ void HeapLeakChecker::IgnoreAllLiveObjectsLocked(const void* self_stack_top) {
     IgnoreNonThreadLiveObjectsLocked();
   }
   if (live_objects_total) {
-    RAW_VLOG(10, "Ignoring %"PRId64" reachable objects of %"PRId64" bytes",
+    RAW_VLOG(10, "Ignoring %" PRId64 " reachable objects of %" PRId64 " bytes",
                 live_objects_total, live_bytes_total);
   }
   // Free these: we made them here and heap_profile never saw them
@@ -1398,7 +1404,7 @@ static SpinLock alignment_checker_lock(SpinLock::LINKER_INITIALIZED);
       live_object_count += 1;
       live_byte_count += size;
     }
-    RAW_VLOG(13, "Looking for heap pointers in %p of %"PRIuS" bytes",
+    RAW_VLOG(13, "Looking for heap pointers in %p of %" PRIuS " bytes",
                 object, size);
     const char* const whole_object = object;
     size_t const whole_size = size;
@@ -1469,15 +1475,15 @@ static SpinLock alignment_checker_lock(SpinLock::LINKER_INITIALIZED);
           // a heap object which is in fact leaked.
           // I.e. in very rare and probably not repeatable/lasting cases
           // we might miss some real heap memory leaks.
-          RAW_VLOG(14, "Found pointer to %p of %"PRIuS" bytes at %p "
-                      "inside %p of size %"PRIuS"",
+          RAW_VLOG(14, "Found pointer to %p of %" PRIuS " bytes at %p "
+                      "inside %p of size %" PRIuS "",
                       ptr, object_size, object, whole_object, whole_size);
           if (VLOG_IS_ON(15)) {
             // log call stacks to help debug how come something is not a leak
             HeapProfileTable::AllocInfo alloc;
-            bool r = heap_profile->FindAllocDetails(ptr, &alloc);
-            r = r;              // suppress compiler warning in non-debug mode
-            RAW_DCHECK(r, "");  // sanity
+            if (!heap_profile->FindAllocDetails(ptr, &alloc)) {
+              RAW_LOG(FATAL, "FindAllocDetails failed on ptr %p", ptr);
+            }
             RAW_LOG(INFO, "New live %p object's alloc stack:", ptr);
             for (int i = 0; i < alloc.stack_depth; ++i) {
               RAW_LOG(INFO, "  @ %p", alloc.call_stack[i]);
@@ -1495,7 +1501,7 @@ static SpinLock alignment_checker_lock(SpinLock::LINKER_INITIALIZED);
   live_objects_total += live_object_count;
   live_bytes_total += live_byte_count;
   if (live_object_count) {
-    RAW_VLOG(10, "Removed %"PRId64" live heap objects of %"PRId64" bytes: %s%s",
+    RAW_VLOG(10, "Removed %" PRId64 " live heap objects of %" PRId64 " bytes: %s%s",
                 live_object_count, live_byte_count, name, name2);
   }
 }
@@ -1517,7 +1523,7 @@ void HeapLeakChecker::DoIgnoreObject(const void* ptr) {
   if (!HaveOnHeapLocked(&ptr, &object_size)) {
     RAW_LOG(ERROR, "No live heap object at %p to ignore", ptr);
   } else {
-    RAW_VLOG(10, "Going to ignore live object at %p of %"PRIuS" bytes",
+    RAW_VLOG(10, "Going to ignore live object at %p of %" PRIuS " bytes",
                 ptr, object_size);
     if (ignored_objects == NULL)  {
       ignored_objects = new(Allocator::Allocate(sizeof(IgnoredObjectsMap)))
@@ -1544,7 +1550,7 @@ void HeapLeakChecker::UnIgnoreObject(const void* ptr) {
         ignored_objects->erase(object);
         found = true;
         RAW_VLOG(10, "Now not going to ignore live object "
-                    "at %p of %"PRIuS" bytes", ptr, object_size);
+                    "at %p of %" PRIuS " bytes", ptr, object_size);
       }
     }
     if (!found)  RAW_LOG(FATAL, "Object at %p has not been ignored", ptr);
@@ -1592,8 +1598,8 @@ void HeapLeakChecker::Create(const char *name, bool make_start_snapshot) {
       const HeapProfileTable::Stats& t = heap_profile->total();
       const size_t start_inuse_bytes = t.alloc_size - t.free_size;
       const size_t start_inuse_allocs = t.allocs - t.frees;
-      RAW_VLOG(10, "Start check \"%s\" profile: %"PRIuS" bytes "
-               "in %"PRIuS" objects",
+      RAW_VLOG(10, "Start check \"%s\" profile: %" PRIuS " bytes "
+               "in %" PRIuS " objects",
                name_, start_inuse_bytes, start_inuse_allocs);
     } else {
       RAW_LOG(WARNING, "Heap checker is not active, "
@@ -1647,8 +1653,13 @@ ssize_t HeapLeakChecker::ObjectsLeaked() const {
 // Save pid of main thread for using in naming dump files
 static int32 main_thread_pid = getpid();
 #ifdef HAVE_PROGRAM_INVOCATION_NAME
+#ifdef __UCLIBC__
+extern const char* program_invocation_name;
+extern const char* program_invocation_short_name;
+#else
 extern char* program_invocation_name;
 extern char* program_invocation_short_name;
+#endif
 static const char* invocation_name() { return program_invocation_short_name; }
 static string invocation_path() { return program_invocation_name; }
 #else
@@ -1817,7 +1828,7 @@ bool HeapLeakChecker::DoNoLeaks(ShouldSymbolize should_symbolize) {
     RAW_VLOG(heap_checker_info_level,
              "No leaks found for check \"%s\" "
              "(but no 100%% guarantee that there aren't any): "
-             "found %"PRId64" reachable heap objects of %"PRId64" bytes",
+             "found %" PRId64 " reachable heap objects of %" PRId64 " bytes",
              name_,
              int64(stats.allocs - stats.frees),
              int64(stats.alloc_size - stats.free_size));
@@ -2025,9 +2036,9 @@ void HeapLeakChecker_InternalInitStart() {
   // at the right time, on FreeBSD we always check after, even in the
   // less strict modes.  This just means FreeBSD is always a bit
   // stricter in its checking than other OSes.
-#ifdef __FreeBSD__
+  // This now appears to be the case in other OSes as well;
+  // so always check afterwards.
   FLAGS_heap_check_after_destructors = true;
-#endif
 
   { SpinLockHolder l(&heap_checker_lock);
     RAW_DCHECK(heap_checker_pid == getpid(), "");
@@ -2161,8 +2172,7 @@ bool HeapLeakChecker::DoMainHeapCheck() {
     }
     RAW_LOG(ERROR, "Exiting with error code (instead of crashing) "
                    "because of whole-program memory leaks");
-    // We don't want to call atexit() routines!
-    _exit(FLAGS_heap_check_error_exit_code);
+    _exit(1);    // we don't want to call atexit() routines!
   }
   return true;
 }
@@ -2359,7 +2369,7 @@ inline bool HeapLeakChecker::HaveOnHeapLocked(const void** ptr,
   const uintptr_t addr = AsInt(*ptr);
   if (heap_profile->FindInsideAlloc(
         *ptr, max_heap_object_size, ptr, object_size)) {
-    RAW_VLOG(16, "Got pointer into %p at +%"PRIuPTR" offset",
+    RAW_VLOG(16, "Got pointer into %p at +%" PRIuPTR " offset",
              *ptr, addr - AsInt(*ptr));
     return true;
   }

@@ -13,6 +13,7 @@
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/prefs/pref_service.h"
@@ -51,6 +52,14 @@ VoiceInteractionControllerClient::~VoiceInteractionControllerClient() {
   g_voice_interaction_controller_client_instance = nullptr;
 }
 
+void VoiceInteractionControllerClient::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void VoiceInteractionControllerClient::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 // static
 VoiceInteractionControllerClient* VoiceInteractionControllerClient::Get() {
   return g_voice_interaction_controller_client_instance;
@@ -58,7 +67,10 @@ VoiceInteractionControllerClient* VoiceInteractionControllerClient::Get() {
 
 void VoiceInteractionControllerClient::NotifyStatusChanged(
     ash::mojom::VoiceInteractionState state) {
+  voice_interaction_state_ = state;
   voice_interaction_controller_->NotifyStatusChanged(state);
+  for (auto& observer : observers_)
+    observer.OnStateChanged(state);
 }
 
 void VoiceInteractionControllerClient::SetControllerForTesting(
@@ -84,11 +96,22 @@ void VoiceInteractionControllerClient::NotifyContextEnabled() {
   voice_interaction_controller_->NotifyContextEnabled(enabled);
 }
 
+void VoiceInteractionControllerClient::NotifyHotwordEnabled() {
+  DCHECK(profile_);
+  PrefService* prefs = profile_->GetPrefs();
+  // Make sure voice interaction is enabled.
+  DCHECK(prefs->GetBoolean(prefs::kVoiceInteractionEnabled));
+  bool enabled = prefs->GetBoolean(prefs::kVoiceInteractionHotwordEnabled);
+  voice_interaction_controller_->NotifyHotwordEnabled(enabled);
+}
+
 void VoiceInteractionControllerClient::NotifySetupCompleted() {
   DCHECK(profile_);
   PrefService* prefs = profile_->GetPrefs();
   bool completed =
-      prefs->GetBoolean(prefs::kArcVoiceInteractionValuePropAccepted);
+      chromeos::switches::IsAssistantEnabled()
+          ? prefs->GetBoolean(prefs::kVoiceInteractionActivityControlAccepted)
+          : prefs->GetBoolean(prefs::kArcVoiceInteractionValuePropAccepted);
   voice_interaction_controller_->NotifySetupCompleted(completed);
 }
 
@@ -127,11 +150,19 @@ void VoiceInteractionControllerClient::SetProfile(Profile* profile) {
   PrefService* prefs = profile->GetPrefs();
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(prefs);
-  pref_change_registrar_->Add(
-      prefs::kArcVoiceInteractionValuePropAccepted,
-      base::BindRepeating(
-          &VoiceInteractionControllerClient::NotifySetupCompleted,
-          base::Unretained(this)));
+  if (chromeos::switches::IsAssistantEnabled()) {
+    pref_change_registrar_->Add(
+        prefs::kVoiceInteractionActivityControlAccepted,
+        base::BindRepeating(
+            &VoiceInteractionControllerClient::NotifySetupCompleted,
+            base::Unretained(this)));
+  } else {
+    pref_change_registrar_->Add(
+        prefs::kArcVoiceInteractionValuePropAccepted,
+        base::BindRepeating(
+            &VoiceInteractionControllerClient::NotifySetupCompleted,
+            base::Unretained(this)));
+  }
   pref_change_registrar_->Add(
       prefs::kVoiceInteractionEnabled,
       base::BindRepeating(
@@ -142,10 +173,17 @@ void VoiceInteractionControllerClient::SetProfile(Profile* profile) {
       base::BindRepeating(
           &VoiceInteractionControllerClient::NotifyContextEnabled,
           base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kVoiceInteractionHotwordEnabled,
+      base::BindRepeating(
+          &VoiceInteractionControllerClient::NotifyHotwordEnabled,
+          base::Unretained(this)));
 
   NotifySetupCompleted();
   NotifySettingsEnabled();
   NotifyContextEnabled();
+  if (prefs->GetBoolean(prefs::kVoiceInteractionEnabled))
+    NotifyHotwordEnabled();
   NotifyFeatureAllowed();
 }
 

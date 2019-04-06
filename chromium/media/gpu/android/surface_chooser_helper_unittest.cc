@@ -35,10 +35,7 @@ class SurfaceChooserHelperTest : public testing::Test {
 
   void ReplaceHelper(bool is_overlay_required, bool promote_aggressively) {
     // Advance the clock so that time 0 isn't recent.
-    std::unique_ptr<base::SimpleTestTickClock> tick_clock =
-        std::make_unique<base::SimpleTestTickClock>();
-    tick_clock_ = tick_clock.get();
-    tick_clock_->Advance(TimeDelta::FromSeconds(10000));
+    tick_clock_.Advance(TimeDelta::FromSeconds(10000));
 
     std::unique_ptr<MockAndroidVideoSurfaceChooser> chooser =
         std::make_unique<MockAndroidVideoSurfaceChooser>();
@@ -48,7 +45,7 @@ class SurfaceChooserHelperTest : public testing::Test {
     aggregator_ = aggregator.get();
     helper_ = std::make_unique<SurfaceChooserHelper>(
         std::move(chooser), is_overlay_required, promote_aggressively,
-        std::move(aggregator), std::move(tick_clock));
+        std::move(aggregator), &tick_clock_);
   }
 
   // Convenience function.
@@ -57,7 +54,7 @@ class SurfaceChooserHelperTest : public testing::Test {
     helper_->UpdateChooserState(base::Optional<AndroidOverlayFactoryCB>());
   }
 
-  base::SimpleTestTickClock* tick_clock_ = nullptr;
+  base::SimpleTestTickClock tick_clock_;
 
   MockPromotionHintAggregator* aggregator_ = nullptr;
 
@@ -78,6 +75,13 @@ TEST_F(SurfaceChooserHelperTest, SetIsFullscreen) {
   UpdateChooserState();
   ASSERT_FALSE(chooser_->current_state_.is_fullscreen);
   // We don't really care if it sets expecting_relayout, clears it, or not.
+}
+
+TEST_F(SurfaceChooserHelperTest, SetVideoRotation) {
+  // VideoRotation should be forwarded to the chooser.
+  helper_->SetVideoRotation(VIDEO_ROTATION_90);
+  UpdateChooserState();
+  ASSERT_EQ(chooser_->current_state_.video_rotation, VIDEO_ROTATION_90);
 }
 
 TEST_F(SurfaceChooserHelperTest, SetIsOverlayRequired) {
@@ -217,7 +221,7 @@ TEST_F(SurfaceChooserHelperTest, PromotionHintsUpdateChooserStatePeriodically) {
   helper_->NotifyPromotionHintAndUpdateChooser(hint, false);
 
   // Advancing the time and using an overlay should not send a hint.
-  tick_clock_->Advance(base::TimeDelta::FromSeconds(10));
+  tick_clock_.Advance(base::TimeDelta::FromSeconds(10));
   EXPECT_CALL(*chooser_, MockUpdateState()).Times(0);
   helper_->NotifyPromotionHintAndUpdateChooser(hint, true);
 
@@ -245,7 +249,7 @@ TEST_F(SurfaceChooserHelperTest, FrameInformationIsCorrectForL3) {
 
   ASSERT_EQ(SurfaceChooserHelper::FrameInformation::OVERLAY_L3,
             helper_->ComputeFrameInformation(true));
-  ASSERT_EQ(SurfaceChooserHelper::FrameInformation::SURFACETEXTURE_L3,
+  ASSERT_EQ(SurfaceChooserHelper::FrameInformation::NON_OVERLAY_L3,
             helper_->ComputeFrameInformation(false));
 }
 
@@ -254,8 +258,8 @@ TEST_F(SurfaceChooserHelperTest, FrameInformationIsCorrectForInsecure) {
   helper_->SetSecureSurfaceMode(
       SurfaceChooserHelper::SecureSurfaceMode::kInsecure);
 
-  // Not using an overlay should be SURFACETEXTURE_INSECURE
-  ASSERT_EQ(SurfaceChooserHelper::FrameInformation::SURFACETEXTURE_INSECURE,
+  // Not using an overlay should be NON_OVERLAY_INSECURE
+  ASSERT_EQ(SurfaceChooserHelper::FrameInformation::NON_OVERLAY_INSECURE,
             helper_->ComputeFrameInformation(false));
 
   // Fullscreen state should affect the result, so that we can tell the

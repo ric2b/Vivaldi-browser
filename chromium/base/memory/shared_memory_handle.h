@@ -22,10 +22,8 @@
 #elif defined(OS_POSIX)
 #include <sys/types.h>
 #include "base/file_descriptor_posix.h"
-#endif
-
-#if defined(OS_ANDROID)
-extern "C" typedef struct AHardwareBuffer AHardwareBuffer;
+#elif defined(OS_FUCHSIA)
+#include <zircon/types.h>
 #endif
 
 namespace base {
@@ -78,7 +76,31 @@ class BASE_EXPORT SharedMemoryHandle {
   // Returns the size of the memory region that SharedMemoryHandle points to.
   size_t GetSize() const;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_WIN)
+  // Takes implicit ownership of |h|.
+  // |guid| uniquely identifies the shared memory region pointed to by the
+  // underlying OS resource. If the HANDLE is associated with another
+  // SharedMemoryHandle, the caller must pass the |guid| of that
+  // SharedMemoryHandle. Otherwise, the caller should generate a new
+  // UnguessableToken.
+  // Passing the wrong |size| has no immediate consequence, but may cause errors
+  // when trying to map the SharedMemoryHandle at a later point in time.
+  SharedMemoryHandle(HANDLE h, size_t size, const base::UnguessableToken& guid);
+  HANDLE GetHandle() const;
+#elif defined(OS_FUCHSIA)
+  // Takes implicit ownership of |h|.
+  // |guid| uniquely identifies the shared memory region pointed to by the
+  // underlying OS resource. If the zx_handle_t is associated with another
+  // SharedMemoryHandle, the caller must pass the |guid| of that
+  // SharedMemoryHandle. Otherwise, the caller should generate a new
+  // UnguessableToken.
+  // Passing the wrong |size| has no immediate consequence, but may cause errors
+  // when trying to map the SharedMemoryHandle at a later point in time.
+  SharedMemoryHandle(zx_handle_t h,
+                     size_t size,
+                     const base::UnguessableToken& guid);
+  zx_handle_t GetHandle() const;
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
   enum Type {
     // The SharedMemoryHandle is backed by a POSIX fd.
     POSIX,
@@ -109,31 +131,7 @@ class BASE_EXPORT SharedMemoryHandle {
   // On success, |memory| is an output variable that contains the start of the
   // mapped memory.
   bool MapAt(off_t offset, size_t bytes, void** memory, bool read_only);
-#elif defined(OS_FUCHSIA)
-  // Takes implicit ownership of |h|.
-  // |guid| uniquely identifies the shared memory region pointed to by the
-  // underlying OS resource. If the zx_handle_t is associated with another
-  // SharedMemoryHandle, the caller must pass the |guid| of that
-  // SharedMemoryHandle. Otherwise, the caller should generate a new
-  // UnguessableToken.
-  // Passing the wrong |size| has no immediate consequence, but may cause errors
-  // when trying to map the SharedMemoryHandle at a later point in time.
-  SharedMemoryHandle(zx_handle_t h,
-                     size_t size,
-                     const base::UnguessableToken& guid);
-  zx_handle_t GetHandle() const;
-#elif defined(OS_WIN)
-  // Takes implicit ownership of |h|.
-  // |guid| uniquely identifies the shared memory region pointed to by the
-  // underlying OS resource. If the HANDLE is associated with another
-  // SharedMemoryHandle, the caller must pass the |guid| of that
-  // SharedMemoryHandle. Otherwise, the caller should generate a new
-  // UnguessableToken.
-  // Passing the wrong |size| has no immediate consequence, but may cause errors
-  // when trying to map the SharedMemoryHandle at a later point in time.
-  SharedMemoryHandle(HANDLE h, size_t size, const base::UnguessableToken& guid);
-  HANDLE GetHandle() const;
-#else
+#elif defined(OS_POSIX)
   // Creates a SharedMemoryHandle from an |fd| supplied from an external
   // service.
   // Passing the wrong |size| has no immediate consequence, but may cause errors
@@ -149,32 +147,6 @@ class BASE_EXPORT SharedMemoryHandle {
 #endif
 
 #if defined(OS_ANDROID)
-  enum class Type {
-    // The SharedMemoryHandle is not backed by a handle. This is used for
-    // a default-constructed SharedMemoryHandle() or for a failed duplicate.
-    // The other types are assumed to be valid.
-    INVALID,
-    // The SharedMemoryHandle is backed by a valid fd for ashmem.
-    ASHMEM,
-    // The SharedMemoryHandle is backed by a valid AHardwareBuffer object.
-    ANDROID_HARDWARE_BUFFER,
-
-    LAST = ANDROID_HARDWARE_BUFFER
-  };
-  Type GetType() const { return type_; }
-  SharedMemoryHandle(AHardwareBuffer* buffer,
-                     size_t size,
-                     const base::UnguessableToken& guid);
-  // Constructs a handle from file descriptor and type. Both ASHMEM and
-  // AHardwareBuffer types are transported via file descriptor for IPC, so the
-  // type field is needed to distinguish them. The generic file descriptor
-  // constructor below assumes type ASHMEM.
-  SharedMemoryHandle(Type type,
-                     const base::FileDescriptor& file_descriptor,
-                     size_t size,
-                     const base::UnguessableToken& guid);
-  AHardwareBuffer* GetMemoryObject() const;
-
   // Marks the current file descriptor as read-only, for the purpose of
   // mapping. This is independent of the region's read-only status.
   void SetReadOnly() { read_only_ = true; }
@@ -191,7 +163,7 @@ class BASE_EXPORT SharedMemoryHandle {
   bool SetRegionReadOnly() const;
 #endif
 
-#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
+#if defined(OS_POSIX)
   // Constructs a SharedMemoryHandle backed by a FileDescriptor. The newly
   // created instance has the same ownership semantics as base::FileDescriptor.
   // This typically means that the SharedMemoryHandle takes ownership of the
@@ -212,7 +184,19 @@ class BASE_EXPORT SharedMemoryHandle {
 #endif
 
  private:
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_WIN)
+  HANDLE handle_ = nullptr;
+
+  // Whether passing this object as a parameter to an IPC message passes
+  // ownership of |handle_| to the IPC stack. This is meant to mimic the
+  // behavior of the |auto_close| parameter of FileDescriptor. This member only
+  // affects attachment-brokered SharedMemoryHandles.
+  // Defaults to |false|.
+  bool ownership_passes_to_ipc_ = false;
+#elif defined(OS_FUCHSIA)
+  zx_handle_t handle_ = ZX_HANDLE_INVALID;
+  bool ownership_passes_to_ipc_ = false;
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
   friend class SharedMemory;
   friend bool CheckReadOnlySharedMemoryHandleForTesting(
       SharedMemoryHandle handle);
@@ -237,27 +221,9 @@ class BASE_EXPORT SharedMemoryHandle {
 #elif defined(OS_ANDROID)
   friend class SharedMemory;
 
-  // Each instance of a SharedMemoryHandle is either INVALID, or backed by an
-  // ashmem fd, or backed by an AHardwareBuffer. |type_| determines the backing
-  // member.
-  Type type_ = Type::INVALID;
   FileDescriptor file_descriptor_;
-  AHardwareBuffer* memory_object_ = nullptr;
-  bool ownership_passes_to_ipc_ = false;
   bool read_only_ = false;
-#elif defined(OS_FUCHSIA)
-  zx_handle_t handle_ = ZX_HANDLE_INVALID;
-  bool ownership_passes_to_ipc_ = false;
-#elif defined(OS_WIN)
-  HANDLE handle_ = nullptr;
-
-  // Whether passing this object as a parameter to an IPC message passes
-  // ownership of |handle_| to the IPC stack. This is meant to mimic the
-  // behavior of the |auto_close| parameter of FileDescriptor. This member only
-  // affects attachment-brokered SharedMemoryHandles.
-  // Defaults to |false|.
-  bool ownership_passes_to_ipc_ = false;
-#else
+#elif defined(OS_POSIX)
   FileDescriptor file_descriptor_;
 #endif
 

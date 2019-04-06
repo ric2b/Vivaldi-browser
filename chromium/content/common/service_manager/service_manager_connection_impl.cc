@@ -13,10 +13,10 @@
 #include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/common/child.mojom.h"
 #include "content/public/common/connection_filter.h"
 #include "content/public/common/service_names.mojom.h"
@@ -25,9 +25,16 @@
 #include "services/service_manager/embedder/embedded_service_runner.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/interfaces/constants.mojom.h"
-#include "services/service_manager/public/interfaces/service_factory.mojom.h"
+#include "services/service_manager/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/mojom/service_factory.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/jni_android.h"
+#include "jni/ServiceManagerConnectionImpl_jni.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/mojom/connector.mojom.h"
+#endif
 
 namespace content {
 namespace {
@@ -134,15 +141,16 @@ class ServiceManagerConnectionImpl::IOThreadContext
  private:
   friend class base::RefCountedThreadSafe<IOThreadContext>;
 
-  class MessageLoopObserver : public base::MessageLoop::DestructionObserver {
+  class MessageLoopObserver
+      : public base::MessageLoopCurrent::DestructionObserver {
    public:
     explicit MessageLoopObserver(base::WeakPtr<IOThreadContext> context)
         : context_(context) {
-      base::MessageLoop::current()->AddDestructionObserver(this);
+      base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
     }
 
     ~MessageLoopObserver() override {
-      base::MessageLoop::current()->RemoveDestructionObserver(this);
+      base::MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
     }
 
     void ShutDown() {
@@ -350,6 +358,23 @@ class ServiceManagerConnectionImpl::IOThreadContext
 
   DISALLOW_COPY_AND_ASSIGN(IOThreadContext);
 };
+
+#if defined(OS_ANDROID)
+// static
+jint JNI_ServiceManagerConnectionImpl_GetConnectorMessagePipeHandle(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jclass>& jcaller) {
+  DCHECK(ServiceManagerConnection::GetForProcess());
+
+  service_manager::mojom::ConnectorPtrInfo connector_info;
+  ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindConnectorRequest(mojo::MakeRequest(&connector_info));
+
+  return connector_info.PassHandle().release().value();
+}
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // ServiceManagerConnection, public:

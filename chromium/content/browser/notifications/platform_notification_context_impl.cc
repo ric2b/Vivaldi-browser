@@ -18,8 +18,6 @@
 #include "content/public/browser/notification_database_data.h"
 #include "content/public/browser/platform_notification_service.h"
 
-using base::DoNothing;
-
 namespace content {
 namespace {
 
@@ -60,7 +58,7 @@ void PlatformNotificationContextImpl::Initialize() {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&PlatformNotificationContextImpl::InitializeOnIO, this,
-                       base::Passed(&displayed_notifications), false));
+                       std::move(displayed_notifications), false));
     return;
   }
 
@@ -77,7 +75,7 @@ void PlatformNotificationContextImpl::DidGetNotificationsOnUI(
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&PlatformNotificationContextImpl::InitializeOnIO, this,
-                     base::Passed(&displayed_notifications),
+                     std::move(displayed_notifications),
                      supports_synchronization));
 }
 
@@ -107,6 +105,9 @@ void PlatformNotificationContextImpl::InitializeOnIO(
 
 void PlatformNotificationContextImpl::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  services_.clear();
+
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&PlatformNotificationContextImpl::ShutdownOnIO, this));
@@ -115,40 +116,23 @@ void PlatformNotificationContextImpl::Shutdown() {
 void PlatformNotificationContextImpl::ShutdownOnIO() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  services_.clear();
-
   // |service_worker_context_| may be NULL in tests.
   if (service_worker_context_)
     service_worker_context_->RemoveObserver(this);
 }
 
 void PlatformNotificationContextImpl::CreateService(
-    int render_process_id,
     const url::Origin& origin,
     blink::mojom::NotificationServiceRequest request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&PlatformNotificationContextImpl::CreateServiceOnIO, this,
-                     render_process_id, origin,
-                     browser_context_->GetResourceContext(),
-                     base::Passed(&request)));
-}
-
-void PlatformNotificationContextImpl::CreateServiceOnIO(
-    int render_process_id,
-    const url::Origin& origin,
-    ResourceContext* resource_context,
-    mojo::InterfaceRequest<blink::mojom::NotificationService> request) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   services_.push_back(std::make_unique<BlinkNotificationServiceImpl>(
-      this, browser_context_, resource_context, render_process_id, origin,
+      this, browser_context_, service_worker_context_, origin,
       std::move(request)));
 }
 
 void PlatformNotificationContextImpl::RemoveService(
     BlinkNotificationServiceImpl* service) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::EraseIf(
       services_,
       [service](const std::unique_ptr<BlinkNotificationServiceImpl>& ptr) {
@@ -156,27 +140,30 @@ void PlatformNotificationContextImpl::RemoveService(
       });
 }
 
-void PlatformNotificationContextImpl::ReadNotificationData(
+void PlatformNotificationContextImpl::ReadNotificationDataAndRecordInteraction(
     const std::string& notification_id,
     const GURL& origin,
+    const PlatformNotificationContext::Interaction interaction,
     const ReadResultCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   LazyInitialize(
       base::Bind(&PlatformNotificationContextImpl::DoReadNotificationData, this,
-                 notification_id, origin, callback),
+                 notification_id, origin, interaction, callback),
       base::Bind(callback, false /* success */, NotificationDatabaseData()));
 }
 
 void PlatformNotificationContextImpl::DoReadNotificationData(
     const std::string& notification_id,
     const GURL& origin,
+    Interaction interaction,
     const ReadResultCallback& callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   NotificationDatabaseData database_data;
   NotificationDatabase::Status status =
-      database_->ReadNotificationData(notification_id, origin, &database_data);
+      database_->ReadNotificationDataAndRecordInteraction(
+          notification_id, origin, interaction, &database_data);
 
   UMA_HISTOGRAM_ENUMERATION("Notifications.Database.ReadResult", status,
                             NotificationDatabase::STATUS_COUNT);
@@ -212,7 +199,7 @@ void PlatformNotificationContextImpl::
           &PlatformNotificationContextImpl::
               SynchronizeDisplayedNotificationsForServiceWorkerRegistrationOnIO,
           this, origin, service_worker_registration_id, callback,
-          base::Passed(&notification_ids), supports_synchronization));
+          std::move(notification_ids), supports_synchronization));
 }
 
 void PlatformNotificationContextImpl::
@@ -321,17 +308,20 @@ void PlatformNotificationContextImpl::
 }
 
 void PlatformNotificationContextImpl::WriteNotificationData(
+    int64_t persistent_notification_id,
     const GURL& origin,
     const NotificationDatabaseData& database_data,
     const WriteResultCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   LazyInitialize(
       base::Bind(&PlatformNotificationContextImpl::DoWriteNotificationData,
-                 this, origin, database_data, callback),
+                 this, persistent_notification_id, origin, database_data,
+                 callback),
       base::Bind(callback, false /* success */, "" /* notification_id */));
 }
 
 void PlatformNotificationContextImpl::DoWriteNotificationData(
+    int64_t persistent_notification_id,
     const GURL& origin,
     const NotificationDatabaseData& database_data,
     const WriteResultCallback& callback) {
@@ -368,7 +358,7 @@ void PlatformNotificationContextImpl::DoWriteNotificationData(
   write_database_data.notification_id =
       notification_id_generator_.GenerateForPersistentNotification(
           origin, database_data.notification_data.tag,
-          database_->GetNextPersistentNotificationId());
+          persistent_notification_id);
 
   NotificationDatabase::Status status =
       database_->WriteNotificationData(origin, write_database_data);
@@ -440,7 +430,7 @@ void PlatformNotificationContextImpl::OnRegistrationDeleted(
       base::Bind(&PlatformNotificationContextImpl::
                      DoDeleteNotificationsForServiceWorkerRegistration,
                  this, pattern.GetOrigin(), registration_id),
-      base::Bind(&DoNothing));
+      base::DoNothing());
 }
 
 void PlatformNotificationContextImpl::
@@ -472,7 +462,7 @@ void PlatformNotificationContextImpl::OnStorageWiped() {
       base::Bind(
           base::IgnoreResult(&PlatformNotificationContextImpl::DestroyDatabase),
           this),
-      base::Bind(&DoNothing));
+      base::DoNothing());
 }
 
 void PlatformNotificationContextImpl::LazyInitialize(

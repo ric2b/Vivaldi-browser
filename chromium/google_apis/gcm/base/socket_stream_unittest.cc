@@ -7,6 +7,9 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -16,6 +19,7 @@
 #include "net/base/ip_address.h"
 #include "net/log/net_log_source.h"
 #include "net/socket/socket_test_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace gcm {
@@ -30,6 +34,77 @@ const char kReadData2[] = "read_alternate_data";
 const int kReadData2Size = arraysize(kReadData2) - 1;
 const char kWriteData[] = "write_data";
 const int kWriteDataSize = arraysize(kWriteData) - 1;
+
+// A net::StreamSocket that returns a partial write only for the first time.
+class FirstWritePartialSocket : public net::StreamSocket {
+ public:
+  FirstWritePartialSocket() {}
+  ~FirstWritePartialSocket() override {}
+
+  // Returns the data that is actually written to the socket.
+  const std::string& actual_data_written() { return actual_data_written_; }
+
+  // net::Socket implementation.
+  int Write(
+      net::IOBuffer* buf,
+      int buf_len,
+      net::CompletionOnceCallback callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation) override {
+    // Make the first write as a partial write.
+    if (!write_invoked_) {
+      write_invoked_ = true;
+      actual_data_written_.append(buf->data(), buf_len / 2);
+      return buf_len / 2;
+    }
+    // For subsequent writes, write everything that caller has passed to us.
+    actual_data_written_.append(buf->data(), buf_len);
+    return buf_len;
+  }
+  int Read(net::IOBuffer* buf,
+           int buf_len,
+           net::CompletionOnceCallback callback) override {
+    return net::ERR_IO_PENDING;
+  }
+  int ReadIfReady(net::IOBuffer* buf,
+                  int buf_len,
+                  net::CompletionOnceCallback callback) override {
+    return net::ERR_IO_PENDING;
+  }
+  int CancelReadIfReady() override { return net::OK; }
+  int SetReceiveBufferSize(int32_t size) override { return net::OK; }
+  int SetSendBufferSize(int32_t size) override { return net::OK; }
+
+  // net::StreamSocket implementation.
+  int Connect(net::CompletionOnceCallback callback) override { return net::OK; }
+  void Disconnect() override {}
+  bool IsConnected() const override { return true; }
+  bool IsConnectedAndIdle() const override { return true; };
+  int GetPeerAddress(net::IPEndPoint* address) const override {
+    return net::OK;
+  }
+  int GetLocalAddress(net::IPEndPoint* address) const override {
+    return net::OK;
+  }
+  const net::NetLogWithSource& NetLog() const override { return net_log_; }
+  bool WasEverUsed() const override { return true; }
+  bool WasAlpnNegotiated() const override { return false; }
+  net::NextProto GetNegotiatedProtocol() const override {
+    return net::kProtoUnknown;
+  }
+  bool GetSSLInfo(net::SSLInfo* ssl_info) override { return false; }
+  void GetConnectionAttempts(net::ConnectionAttempts* out) const override {}
+  void ClearConnectionAttempts() override {}
+  void AddConnectionAttempts(const net::ConnectionAttempts& attempts) override {
+  }
+  int64_t GetTotalReceivedBytes() const override { return 0; }
+  void ApplySocketTag(const net::SocketTag& tag) override {}
+
+ private:
+  net::NetLogWithSource net_log_;
+  std::string actual_data_written_;
+  // Whether Write() has been invoked before.
+  bool write_invoked_ = false;
+};
 
 class GCMSocketStreamTest : public testing::Test {
  public:
@@ -57,6 +132,10 @@ class GCMSocketStreamTest : public testing::Test {
   SocketInputStream* input_stream() { return socket_input_stream_.get(); }
   SocketOutputStream* output_stream() { return socket_output_stream_.get(); }
   net::StreamSocket* socket() { return socket_.get(); }
+
+  void set_socket_output_stream(std::unique_ptr<SocketOutputStream> stream) {
+    socket_output_stream_ = std::move(stream);
+  }
 
  private:
   void OpenConnection();
@@ -91,9 +170,8 @@ void GCMSocketStreamTest::BuildSocket(const ReadList& read_list,
                                       const WriteList& write_list) {
   mock_reads_ = read_list;
   mock_writes_ = write_list;
-  data_provider_.reset(new net::StaticSocketDataProvider(
-      mock_reads_.data(), mock_reads_.size(), mock_writes_.data(),
-      mock_writes_.size()));
+  data_provider_.reset(
+      new net::StaticSocketDataProvider(mock_reads_, mock_writes_));
   socket_factory_.AddSocketDataProvider(data_provider_.get());
   OpenConnection();
   ResetInputStream();
@@ -194,7 +272,8 @@ void GCMSocketStreamTest::ResetInputStream() {
 
 void GCMSocketStreamTest::ResetOutputStream() {
   DCHECK(socket_.get());
-  socket_output_stream_.reset(new SocketOutputStream(socket_.get()));
+  socket_output_stream_.reset(
+      new SocketOutputStream(socket_.get(), TRAFFIC_ANNOTATION_FOR_TESTS));
 }
 
 // A read where all data is already available.
@@ -326,6 +405,17 @@ TEST_F(GCMSocketStreamTest, WritePartial) {
   ASSERT_EQ(kWriteDataSize,
             DoOutputStreamWrite(base::StringPiece(kWriteData,
                                                   kWriteDataSize)));
+}
+
+// Regression test for crbug.com/866635.
+TEST_F(GCMSocketStreamTest, WritePartialWithLengthChecking) {
+  auto socket = std::make_unique<FirstWritePartialSocket>();
+  auto socket_output_stream = std::make_unique<SocketOutputStream>(
+      socket.get(), TRAFFIC_ANNOTATION_FOR_TESTS);
+  set_socket_output_stream(std::move(socket_output_stream));
+  ASSERT_EQ(kWriteDataSize,
+            DoOutputStreamWrite(base::StringPiece(kWriteData, kWriteDataSize)));
+  EXPECT_EQ(kWriteData, socket->actual_data_written());
 }
 
 // Write a message completely asynchronously (returns IO_PENDING before

@@ -17,6 +17,12 @@
                 "include_events": []
             },
             {
+                "domain": "Target",
+                "include": [ "setRemoteLocations", "createBrowserContext", "getBrowserContexts", "createTarget", "disposeBrowserContext" ],
+                "async": ["disposeBrowserContext"],
+                "include_events": []
+            },
+            {
                 "domain": "WindowManager"
             }
         ]

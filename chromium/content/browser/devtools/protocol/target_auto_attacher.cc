@@ -25,11 +25,11 @@ void GetMatchingHostsByScopeMap(
     const ServiceWorkerDevToolsAgentHost::List& agent_hosts,
     const base::flat_set<GURL>& urls,
     ScopeAgentsMap* scope_agents_map) {
-  base::flat_set<base::StringPiece> host_name_set;
+  base::flat_set<GURL> host_name_set;
   for (const GURL& url : urls)
-    host_name_set.insert(url.host_piece());
+    host_name_set.insert(url.GetOrigin());
   for (const auto& host : agent_hosts) {
-    if (host_name_set.find(host->scope().host_piece()) == host_name_set.end())
+    if (host_name_set.find(host->scope().GetOrigin()) == host_name_set.end())
       continue;
     const auto& it = scope_agents_map->find(host->scope());
     if (it == scope_agents_map->end()) {
@@ -92,8 +92,7 @@ TargetAutoAttacher::TargetAutoAttacher(AttachCallback attach_callback,
       detach_callback_(detach_callback),
       render_frame_host_(nullptr),
       auto_attach_(false),
-      wait_for_debugger_on_start_(false),
-      attach_to_frames_(false) {}
+      wait_for_debugger_on_start_(false) {}
 
 TargetAutoAttacher::~TargetAutoAttacher() {}
 
@@ -109,7 +108,7 @@ void TargetAutoAttacher::UpdateServiceWorkers() {
 }
 
 void TargetAutoAttacher::UpdateFrames() {
-  if (!auto_attach_ || !attach_to_frames_)
+  if (!auto_attach_)
     return;
 
   Hosts new_hosts;
@@ -141,7 +140,7 @@ void TargetAutoAttacher::AgentHostClosed(DevToolsAgentHost* host) {
 }
 
 bool TargetAutoAttacher::ShouldThrottleFramesNavigation() {
-  return auto_attach_ && attach_to_frames_;
+  return auto_attach_;
 }
 
 DevToolsAgentHost* TargetAutoAttacher::AutoAttachToFrame(
@@ -171,7 +170,10 @@ DevToolsAgentHost* TargetAutoAttacher::AutoAttachToFrame(
 
   DCHECK(old_cross_process);
   auto it = auto_attached_hosts_.find(agent_host);
-  DCHECK(it != auto_attached_hosts_.end());
+  // This should not happen in theory, but error pages are sometimes not
+  // picked up. See https://crbug.com/836511 and https://crbug.com/817881.
+  if (it == auto_attached_hosts_.end())
+    return nullptr;
   auto_attached_hosts_.erase(it);
   detach_callback_.Run(agent_host.get());
   return nullptr;
@@ -241,18 +243,6 @@ void TargetAutoAttacher::SetAutoAttach(bool auto_attach,
       auto_attaching_service_workers_ = false;
     }
     DCHECK(auto_attached_hosts_.empty());
-  }
-}
-
-void TargetAutoAttacher::SetAttachToFrames(bool attach_to_frames) {
-  if (attach_to_frames_ == attach_to_frames)
-    return;
-  attach_to_frames_ = attach_to_frames;
-  if (attach_to_frames_) {
-    UpdateFrames();
-  } else {
-    Hosts empty;
-    ReattachTargetsOfType(empty, DevToolsAgentHost::kTypeFrame, false);
   }
 }
 

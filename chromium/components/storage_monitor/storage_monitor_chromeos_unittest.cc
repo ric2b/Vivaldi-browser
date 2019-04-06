@@ -8,12 +8,12 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
@@ -68,8 +68,12 @@ class TestStorageMonitorCros : public StorageMonitorCros {
   ~TestStorageMonitorCros() override {}
 
   void Init() override {
-    SetMediaTransferProtocolManagerForTest(
-        new TestMediaTransferProtocolManagerChromeOS());
+    device::mojom::MtpManagerPtr fake_mtp_manager_ptr;
+    auto* fake_mtp_manager =
+        TestMediaTransferProtocolManagerChromeOS::GetFakeMtpManager();
+    fake_mtp_manager->AddBinding(mojo::MakeRequest(&fake_mtp_manager_ptr));
+    SetMediaTransferProtocolManagerForTest(std::move(fake_mtp_manager_ptr));
+
     StorageMonitorCros::Init();
   }
 

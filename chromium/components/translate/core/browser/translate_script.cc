@@ -65,12 +65,23 @@ void TranslateScript::Request(const RequestCallback& callback) {
   DCHECK(data_.empty()) << "Do not fetch the script if it is already fetched";
   callback_list_.push_back(callback);
 
-  if (fetcher_.get() != nullptr) {
+  if (fetcher_) {
     // If there is already a request in progress, do nothing. |callback| will be
     // run on completion.
     return;
   }
 
+  GURL translate_script_url = GetTranslateScriptURL();
+
+  fetcher_.reset(new TranslateURLFetcher);
+  fetcher_->set_extra_request_header(kRequestHeader);
+  fetcher_->Request(translate_script_url,
+                    base::BindOnce(&TranslateScript::OnScriptFetchComplete,
+                                   base::Unretained(this)));
+}
+
+// static
+GURL TranslateScript::GetTranslateScriptURL() {
   GURL translate_script_url;
   // Check if command-line contains an alternative URL for translate service.
   const base::CommandLine& command_line =
@@ -115,19 +126,11 @@ void TranslateScript::Request(const RequestCallback& callback) {
   translate_script_url = AddHostLocaleToUrl(translate_script_url);
   translate_script_url = AddApiKeyToUrl(translate_script_url);
 
-  fetcher_.reset(new TranslateURLFetcher(kFetcherId));
-  fetcher_->set_extra_request_header(kRequestHeader);
-  fetcher_->Request(
-      translate_script_url,
-      base::Bind(&TranslateScript::OnScriptFetchComplete,
-                 base::Unretained(this)));
+  return translate_script_url;
 }
 
-
-void TranslateScript::OnScriptFetchComplete(
-    int id, bool success, const std::string& data) {
-  DCHECK_EQ(kFetcherId, id);
-
+void TranslateScript::OnScriptFetchComplete(bool success,
+                                            const std::string& data) {
   std::unique_ptr<const TranslateURLFetcher> delete_ptr(fetcher_.release());
 
   if (success) {
@@ -165,7 +168,8 @@ void TranslateScript::OnScriptFetchComplete(
     // scripts.
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&TranslateScript::Clear, weak_method_factory_.GetWeakPtr()),
+        base::BindOnce(&TranslateScript::Clear,
+                       weak_method_factory_.GetWeakPtr()),
         expiration_delay_);
   }
 

@@ -24,6 +24,7 @@
 #include "extensions/browser/warning_set.h"
 
 class DownloadFileIconExtractor;
+class DownloadOpenPrompt;
 
 namespace extensions {
 class ExtensionRegistry;
@@ -69,9 +70,9 @@ namespace extensions {
 
 class DownloadedByExtension : public base::SupportsUserData::Data {
  public:
-  static DownloadedByExtension* Get(content::DownloadItem* item);
+  static DownloadedByExtension* Get(download::DownloadItem* item);
 
-  DownloadedByExtension(content::DownloadItem* item,
+  DownloadedByExtension(download::DownloadItem* item,
                         const std::string& id,
                         const std::string& name);
 
@@ -100,8 +101,8 @@ class DownloadsDownloadFunction : public ChromeAsyncExtensionFunction {
   void OnStarted(const base::FilePath& creator_suggested_filename,
                  extensions::api::downloads::FilenameConflictAction
                      creator_conflict_action,
-                 content::DownloadItem* item,
-                 content::DownloadInterruptReason interrupt_reason);
+                 download::DownloadItem* item,
+                 download::DownloadInterruptReason interrupt_reason);
 
   DISALLOW_COPY_AND_ASSIGN(DownloadsDownloadFunction);
 };
@@ -251,10 +252,20 @@ class DownloadsOpenFunction : public UIThreadExtensionFunction {
   DownloadsOpenFunction();
   ResponseAction Run() override;
 
+  typedef base::OnceCallback<void(DownloadOpenPrompt*)> OnPromptCreatedCallback;
+  static void set_on_prompt_created_cb_for_testing(
+      OnPromptCreatedCallback* on_prompt_created_cb) {
+    on_prompt_created_cb_ = on_prompt_created_cb;
+  }
+
  protected:
   ~DownloadsOpenFunction() override;
 
  private:
+  void OpenPromptDone(int download_id, bool accept);
+
+  static OnPromptCreatedCallback* on_prompt_created_cb_;
+
   DISALLOW_COPY_AND_ASSIGN(DownloadsOpenFunction);
 };
 
@@ -338,7 +349,7 @@ class ExtensionDownloadsEventRouter
   // existing files, then |overwrite| will be true. Returns true on success,
   // false otherwise.
   static bool DetermineFilename(
-      Profile* profile,
+      content::BrowserContext* browser_context,
       bool include_incognito,
       const std::string& ext_id,
       int download_id,
@@ -360,19 +371,18 @@ class ExtensionDownloadsEventRouter
   // an extension wants to change the target filename, then |change| will be
   // called with the new filename and a flag indicating whether the new file
   // should overwrite any old files of the same name.
-  void OnDeterminingFilename(
-      content::DownloadItem* item,
-      const base::FilePath& suggested_path,
-      const base::Closure& no_change,
-      const FilenameChangedCallback& change);
+  void OnDeterminingFilename(download::DownloadItem* item,
+                             const base::FilePath& suggested_path,
+                             const base::Closure& no_change,
+                             const FilenameChangedCallback& change);
 
   // AllDownloadItemNotifier::Observer.
   void OnDownloadCreated(content::DownloadManager* manager,
-                         content::DownloadItem* download_item) override;
+                         download::DownloadItem* download_item) override;
   void OnDownloadUpdated(content::DownloadManager* manager,
-                         content::DownloadItem* download_item) override;
+                         download::DownloadItem* download_item) override;
   void OnDownloadRemoved(content::DownloadManager* manager,
-                         content::DownloadItem* download_item) override;
+                         download::DownloadItem* download_item) override;
 
   // extensions::EventRouter::Observer.
   void OnListenerRemoved(const extensions::EventListenerInfo& details) override;

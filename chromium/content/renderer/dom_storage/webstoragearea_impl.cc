@@ -12,7 +12,7 @@
 #include "content/renderer/dom_storage/dom_storage_cached_area.h"
 #include "content/renderer/dom_storage/dom_storage_dispatcher.h"
 #include "content/renderer/render_thread_impl.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/blink/public/platform/web_url.h"
 
 using blink::WebString;
 using blink::WebURL;
@@ -34,11 +34,11 @@ WebStorageAreaImpl* WebStorageAreaImpl::FromConnectionId(int id) {
   return g_all_areas_map.Pointer()->Lookup(id);
 }
 
-WebStorageAreaImpl::WebStorageAreaImpl(int64_t namespace_id, const GURL& origin)
+WebStorageAreaImpl::WebStorageAreaImpl(const std::string& namespace_id,
+                                       const GURL& origin)
     : connection_id_(g_all_areas_map.Pointer()->Add(this)),
-      cached_area_(dispatcher()->OpenCachedArea(connection_id_,
-                                                namespace_id,
-                                                origin)) {}
+      cached_area_(
+          dispatcher()->OpenCachedArea(connection_id_, namespace_id, origin)) {}
 
 WebStorageAreaImpl::~WebStorageAreaImpl() {
   g_all_areas_map.Pointer()->Remove(connection_id_);
@@ -50,8 +50,9 @@ unsigned WebStorageAreaImpl::length() {
   return cached_area_->GetLength(connection_id_);
 }
 
-WebString WebStorageAreaImpl::Key(unsigned index) {
-  return WebString::FromUTF16(cached_area_->GetKey(connection_id_, index));
+WebString WebStorageAreaImpl::Key(unsigned index, bool* did_decrease_iterator) {
+  return WebString::FromUTF16(
+      cached_area_->GetKey(connection_id_, index, did_decrease_iterator));
 }
 
 WebString WebStorageAreaImpl::GetItem(const WebString& key) {

@@ -12,109 +12,118 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/time/clock.h"
-#include "base/time/tick_clock.h"
 
 namespace base {
-
 namespace {
 
-// MockTickClock --------------------------------------------------------------
-
-// TickClock that always returns the then-current mock time ticks of
-// |task_runner| as the current time ticks.
-class MockTickClock : public TickClock {
+// LegacyMockTickClock and LegacyMockClock are used by deprecated APIs of
+// TestMockTimeTaskRunner. They will be removed after updating callers of
+// GetMockClock() and GetMockTickClock() to GetMockClockPtr() and
+// GetMockTickClockPtr().
+class LegacyMockTickClock : public TickClock {
  public:
-  explicit MockTickClock(
-      scoped_refptr<const TestMockTimeTaskRunner> task_runner);
+  explicit LegacyMockTickClock(
+      scoped_refptr<const TestMockTimeTaskRunner> task_runner)
+      : task_runner_(std::move(task_runner)) {}
 
   // TickClock:
-  TimeTicks NowTicks() override;
+  TimeTicks NowTicks() const override { return task_runner_->NowTicks(); }
 
  private:
   scoped_refptr<const TestMockTimeTaskRunner> task_runner_;
 
-  DISALLOW_COPY_AND_ASSIGN(MockTickClock);
+  DISALLOW_COPY_AND_ASSIGN(LegacyMockTickClock);
 };
 
-MockTickClock::MockTickClock(
-    scoped_refptr<const TestMockTimeTaskRunner> task_runner)
-    : task_runner_(task_runner) {
-}
-
-TimeTicks MockTickClock::NowTicks() {
-  return task_runner_->NowTicks();
-}
-
-// MockClock ------------------------------------------------------------------
-
-// Clock that always returns the then-current mock time of |task_runner| as the
-// current time.
-class MockClock : public Clock {
+class LegacyMockClock : public Clock {
  public:
-  explicit MockClock(scoped_refptr<const TestMockTimeTaskRunner> task_runner);
+  explicit LegacyMockClock(
+      scoped_refptr<const TestMockTimeTaskRunner> task_runner)
+      : task_runner_(std::move(task_runner)) {}
 
   // Clock:
-  Time Now() override;
+  Time Now() const override { return task_runner_->Now(); }
 
  private:
   scoped_refptr<const TestMockTimeTaskRunner> task_runner_;
 
-  DISALLOW_COPY_AND_ASSIGN(MockClock);
+  DISALLOW_COPY_AND_ASSIGN(LegacyMockClock);
 };
 
-MockClock::MockClock(scoped_refptr<const TestMockTimeTaskRunner> task_runner)
-    : task_runner_(task_runner) {
-}
+}  // namespace
 
-Time MockClock::Now() {
-  return task_runner_->Now();
-}
-
-// A SingleThreadTaskRunner which forwards everything to its |target_|. This is
-// useful to break ownership chains when it is known that |target_| will outlive
-// the NonOwningProxyTaskRunner it's injected into. In particular,
-// TestMockTimeTaskRunner is forced to be ref-counted by virtue of being a
-// SingleThreadTaskRunner. As such it is impossible for it to have a
-// ThreadTaskRunnerHandle member that points back to itself as the
-// ThreadTaskRunnerHandle which it owns would hold a ref back to it. To break
-// this dependency cycle, the ThreadTaskRunnerHandle is instead handed a
-// NonOwningProxyTaskRunner which allows the TestMockTimeTaskRunner to not hand
-// a ref to its ThreadTaskRunnerHandle while promising in return that it will
-// outlive that ThreadTaskRunnerHandle instance.
-class NonOwningProxyTaskRunner : public SingleThreadTaskRunner {
+// A SingleThreadTaskRunner which forwards everything to its |target_|. This
+// serves two purposes:
+// 1) If a ThreadTaskRunnerHandle owned by TestMockTimeTaskRunner were to be
+//    set to point to that TestMockTimeTaskRunner, a reference cycle would
+//    result.  As |target_| here is a non-refcounting raw pointer, the cycle is
+//    broken.
+// 2) Since SingleThreadTaskRunner is ref-counted, it's quite easy for it to
+//    accidentally get captured between tests in a singleton somewhere.
+//    Indirecting via NonOwningProxyTaskRunner permits TestMockTimeTaskRunner
+//    to be cleaned up (removing the RunLoop::Delegate in the kBoundToThread
+//    mode), and to also cleanly flag any actual attempts to use the leaked
+//    task runner.
+class TestMockTimeTaskRunner::NonOwningProxyTaskRunner
+    : public SingleThreadTaskRunner {
  public:
   explicit NonOwningProxyTaskRunner(SingleThreadTaskRunner* target)
       : target_(target) {
     DCHECK(target_);
   }
 
+  // Detaches this NonOwningProxyTaskRunner instance from its |target_|. It is
+  // invalid to post tasks after this point but RunsTasksInCurrentSequence()
+  // will still pass on the original thread for convenience with legacy code.
+  void Detach() {
+    AutoLock scoped_lock(lock_);
+    target_ = nullptr;
+  }
+
   // SingleThreadTaskRunner:
   bool RunsTasksInCurrentSequence() const override {
-    return target_->RunsTasksInCurrentSequence();
+    AutoLock scoped_lock(lock_);
+    if (target_)
+      return target_->RunsTasksInCurrentSequence();
+    return thread_checker_.CalledOnValidThread();
   }
+
   bool PostDelayedTask(const Location& from_here,
                        OnceClosure task,
                        TimeDelta delay) override {
-    return target_->PostDelayedTask(from_here, std::move(task), delay);
+    AutoLock scoped_lock(lock_);
+    if (target_)
+      return target_->PostDelayedTask(from_here, std::move(task), delay);
+
+    // The associated TestMockTimeTaskRunner is dead, so fail this PostTask.
+    return false;
   }
+
   bool PostNonNestableDelayedTask(const Location& from_here,
                                   OnceClosure task,
                                   TimeDelta delay) override {
-    return target_->PostNonNestableDelayedTask(from_here, std::move(task),
-                                               delay);
+    AutoLock scoped_lock(lock_);
+    if (target_) {
+      return target_->PostNonNestableDelayedTask(from_here, std::move(task),
+                                                 delay);
+    }
+
+    // The associated TestMockTimeTaskRunner is dead, so fail this PostTask.
+    return false;
   }
 
  private:
   friend class RefCountedThreadSafe<NonOwningProxyTaskRunner>;
   ~NonOwningProxyTaskRunner() override = default;
 
-  SingleThreadTaskRunner* const target_;
+  mutable Lock lock_;
+  SingleThreadTaskRunner* target_;  // guarded by lock_
+
+  // Used to implement RunsTasksInCurrentSequence, without relying on |target_|.
+  ThreadCheckerImpl thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(NonOwningProxyTaskRunner);
 };
-
-}  // namespace
 
 // TestMockTimeTaskRunner::TestOrderedPendingTask -----------------------------
 
@@ -195,15 +204,21 @@ TestMockTimeTaskRunner::TestMockTimeTaskRunner(Type type)
 TestMockTimeTaskRunner::TestMockTimeTaskRunner(Time start_time,
                                                TimeTicks start_ticks,
                                                Type type)
-    : now_(start_time), now_ticks_(start_ticks), tasks_lock_cv_(&tasks_lock_) {
+    : now_(start_time),
+      now_ticks_(start_ticks),
+      tasks_lock_cv_(&tasks_lock_),
+      proxy_task_runner_(MakeRefCounted<NonOwningProxyTaskRunner>(this)),
+      mock_clock_(this) {
   if (type == Type::kBoundToThread) {
     RunLoop::RegisterDelegateForCurrentThread(this);
-    thread_task_runner_handle_ = std::make_unique<ThreadTaskRunnerHandle>(
-        MakeRefCounted<NonOwningProxyTaskRunner>(this));
+    thread_task_runner_handle_ =
+        std::make_unique<ThreadTaskRunnerHandle>(proxy_task_runner_);
   }
 }
 
-TestMockTimeTaskRunner::~TestMockTimeTaskRunner() = default;
+TestMockTimeTaskRunner::~TestMockTimeTaskRunner() {
+  proxy_task_runner_->Detach();
+}
 
 void TestMockTimeTaskRunner::FastForwardBy(TimeDelta delta) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -212,6 +227,10 @@ void TestMockTimeTaskRunner::FastForwardBy(TimeDelta delta) {
   const TimeTicks original_now_ticks = NowTicks();
   ProcessAllTasksNoLaterThan(delta);
   ForwardClocksUntilTickTime(original_now_ticks + delta);
+}
+
+void TestMockTimeTaskRunner::AdvanceMockTickClock(TimeDelta delta) {
+  ForwardClocksUntilTickTime(NowTicks() + delta);
 }
 
 void TestMockTimeTaskRunner::RunUntilIdle() {
@@ -225,10 +244,25 @@ void TestMockTimeTaskRunner::FastForwardUntilNoTasksRemain() {
 }
 
 void TestMockTimeTaskRunner::ClearPendingTasks() {
-  DCHECK(thread_checker_.CalledOnValidThread());
   AutoLock scoped_lock(tasks_lock_);
-  while (!tasks_.empty())
-    tasks_.pop();
+  // This is repeated in case task destruction triggers further tasks.
+  while (!tasks_.empty()) {
+    TaskPriorityQueue cleanup_tasks;
+    tasks_.swap(cleanup_tasks);
+
+    // Destroy task objects with |tasks_lock_| released. Task deletion can cause
+    // calls to NonOwningProxyTaskRunner::RunsTasksInCurrentSequence()
+    // (e.g. for DCHECKs), which causes |NonOwningProxyTaskRunner::lock_| to be
+    // grabbed.
+    //
+    // On the other hand, calls from NonOwningProxyTaskRunner::PostTask ->
+    // TestMockTimeTaskRunner::PostTask acquire locks as
+    // |NonOwningProxyTaskRunner::lock_| followed by |tasks_lock_|, so it's
+    // desirable to avoid the reverse order, for deadlock freedom.
+    AutoUnlock scoped_unlock(tasks_lock_);
+    while (!cleanup_tasks.empty())
+      cleanup_tasks.pop();
+  }
 }
 
 Time TestMockTimeTaskRunner::Now() const {
@@ -241,14 +275,25 @@ TimeTicks TestMockTimeTaskRunner::NowTicks() const {
   return now_ticks_;
 }
 
-std::unique_ptr<Clock> TestMockTimeTaskRunner::GetMockClock() const {
+std::unique_ptr<Clock> TestMockTimeTaskRunner::DeprecatedGetMockClock() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return std::make_unique<MockClock>(this);
+  return std::make_unique<LegacyMockClock>(this);
 }
 
-std::unique_ptr<TickClock> TestMockTimeTaskRunner::GetMockTickClock() const {
+Clock* TestMockTimeTaskRunner::GetMockClock() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return std::make_unique<MockTickClock>(this);
+  return &mock_clock_;
+}
+
+std::unique_ptr<TickClock> TestMockTimeTaskRunner::DeprecatedGetMockTickClock()
+    const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return std::make_unique<LegacyMockTickClock>(this);
+}
+
+const TickClock* TestMockTimeTaskRunner::GetMockTickClock() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return &mock_clock_;
 }
 
 base::circular_deque<TestPendingTask>
@@ -258,27 +303,45 @@ TestMockTimeTaskRunner::TakePendingTasks() {
   while (!tasks_.empty()) {
     // It's safe to remove const and consume |task| here, since |task| is not
     // used for ordering the item.
-    tasks.push_back(
-        std::move(const_cast<TestOrderedPendingTask&>(tasks_.top())));
+    if (!tasks_.top().task.IsCancelled()) {
+      tasks.push_back(
+          std::move(const_cast<TestOrderedPendingTask&>(tasks_.top())));
+    }
     tasks_.pop();
   }
   return tasks;
 }
 
-bool TestMockTimeTaskRunner::HasPendingTask() const {
+bool TestMockTimeTaskRunner::HasPendingTask() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock scoped_lock(tasks_lock_);
+  while (!tasks_.empty() && tasks_.top().task.IsCancelled())
+    tasks_.pop();
   return !tasks_.empty();
 }
 
-size_t TestMockTimeTaskRunner::GetPendingTaskCount() const {
+size_t TestMockTimeTaskRunner::GetPendingTaskCount() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock scoped_lock(tasks_lock_);
+  TaskPriorityQueue preserved_tasks;
+  while (!tasks_.empty()) {
+    if (!tasks_.top().task.IsCancelled()) {
+      preserved_tasks.push(
+          std::move(const_cast<TestOrderedPendingTask&>(tasks_.top())));
+    }
+    tasks_.pop();
+  }
+  tasks_.swap(preserved_tasks);
   return tasks_.size();
 }
 
-TimeDelta TestMockTimeTaskRunner::NextPendingTaskDelay() const {
+TimeDelta TestMockTimeTaskRunner::NextPendingTaskDelay() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock scoped_lock(tasks_lock_);
+  while (!tasks_.empty() && tasks_.top().task.IsCancelled())
+    tasks_.pop();
   return tasks_.empty() ? TimeDelta::Max()
-                        : tasks_.top().GetTimeToRun() - NowTicks();
+                        : tasks_.top().GetTimeToRun() - now_ticks_;
 }
 
 // TODO(gab): Combine |thread_checker_| with a SequenceToken to differentiate
@@ -326,8 +389,9 @@ void TestMockTimeTaskRunner::ProcessAllTasksNoLaterThan(TimeDelta max_delta) {
   // unit tests. Make sure this TestMockTimeTaskRunner's tasks run in its scope.
   ScopedClosureRunner undo_override;
   if (!ThreadTaskRunnerHandle::IsSet() ||
-      ThreadTaskRunnerHandle::Get() != this) {
-    undo_override = ThreadTaskRunnerHandle::OverrideForTesting(this);
+      ThreadTaskRunnerHandle::Get() != proxy_task_runner_.get()) {
+    undo_override =
+        ThreadTaskRunnerHandle::OverrideForTesting(proxy_task_runner_.get());
   }
 
   const TimeTicks original_now_ticks = NowTicks();
@@ -336,6 +400,8 @@ void TestMockTimeTaskRunner::ProcessAllTasksNoLaterThan(TimeDelta max_delta) {
     TestPendingTask task_info;
     if (!DequeueNextTask(original_now_ticks, max_delta, &task_info))
       break;
+    if (task_info.task.IsCancelled())
+      continue;
     // If tasks were posted with a negative delay, task_info.GetTimeToRun() will
     // be less than |now_ticks_|. ForwardClocksUntilTickTime() takes care of not
     // moving the clock backwards in this case.
@@ -418,6 +484,14 @@ void TestMockTimeTaskRunner::Quit() {
 void TestMockTimeTaskRunner::EnsureWorkScheduled() {
   // Nothing to do: TestMockTimeTaskRunner::Run() will always process tasks and
   // doesn't need an extra kick on nested runs.
+}
+
+TimeTicks TestMockTimeTaskRunner::MockClock::NowTicks() const {
+  return task_runner_->NowTicks();
+}
+
+Time TestMockTimeTaskRunner::MockClock::Now() const {
+  return task_runner_->Now();
 }
 
 }  // namespace base

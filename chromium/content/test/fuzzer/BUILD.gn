@@ -22,7 +22,9 @@ source_set("fuzzer_support") {
     "//content/shell:content_shell_lib",
     "//content/test:test_support",
     "//gin",
+    "//tools/v8_context_snapshot",
   ]
+  configs += [ "//tools/v8_context_snapshot:use_v8_context_snapshot" ]
   testonly = true
 }
 
@@ -31,23 +33,23 @@ fuzzer_test("origin_trial_token_fuzzer") {
     "origin_trial_token_fuzzer.cc",
   ]
   deps = [
-    ":fuzzer_support",
+    "//content/test:test_support",
   ]
   dict =
       "//content/test/data/fuzzer_dictionaries/origin_trial_token_fuzzer.dict"
   seed_corpus = "//content/test/data/fuzzer_corpus/origin_trial_token_data/"
 }
 
-fuzzer_test("origin_manifest_parser_fuzzer") {
+fuzzer_test("origin_policy_parser_fuzzer") {
   sources = [
-    "origin_manifest_parser_fuzzer.cc",
+    "origin_policy_parser_fuzzer.cc",
   ]
   deps = [
-    ":fuzzer_support",
-    "//content/browser:for_content_tests",
+    "//content/test:test_support",
   ]
-  dict = "//content/test/data/fuzzer_dictionaries/origin_manifest_parser_fuzzer.dict"
-  seed_corpus = "//content/test/data/fuzzer_corpus/origin_manifest_parser_data/"
+  dict =
+      "//content/test/data/fuzzer_dictionaries/origin_policy_parser_fuzzer.dict"
+  seed_corpus = "//content/test/data/fuzzer_corpus/origin_policy_parser_data/"
 }
 
 fuzzer_test("renderer_fuzzer") {
@@ -74,9 +76,7 @@ fuzzer_test("clear_site_data_fuzzer") {
     "clear_site_data_fuzzer.cc",
   ]
   deps = [
-    ":fuzzer_support",
-    "//base",
-    "//content/browser:for_content_tests",
+    "//content/test:test_support",
   ]
   seed_corpus = "//content/test/data/fuzzer_corpus/clear_site_data/"
 }
@@ -98,4 +98,70 @@ proto_library("html_tree_proto") {
     "html_tree.proto",
   ]
   testonly = true
+}
+
+fuzzer_test("signed_exchange_envelope_fuzzer") {
+  sources = [
+    "signed_exchange_envelope_fuzzer.cc",
+  ]
+  deps = [
+    "//base:i18n",
+    "//content/test:test_support",
+  ]
+  seed_corpus = "//content/test/data/sxg/"
+}
+
+fuzzer_test("signed_exchange_signature_header_field_fuzzer") {
+  sources = [
+    "signed_exchange_signature_header_field_fuzzer.cc",
+  ]
+  deps = [
+    "//base:i18n",
+    "//content/test:test_support",
+  ]
+  seed_corpus = "//content/test/data/fuzzer_corpus/signed_exchange_signature_header_field_data/"
+}
+
+fuzzer_test("signed_exchange_certificate_chain_fuzzer") {
+  sources = [
+    "../../browser/web_package/signed_exchange_certificate_chain_fuzzer.cc",
+  ]
+  deps = [
+    "//content/test:test_support",
+  ]
+  seed_corpus = "//content/test/data/fuzzer_corpus/signed_exchange_certificate_chain_data/"
+}
+
+fuzzer_test("appcache_manifest_parser_fuzzer") {
+  sources = [
+    "appcache_manifest_parser_fuzzer.cc",
+  ]
+  deps = [
+    "//base:i18n",
+    "//content/test:test_support",
+  ]
+  dict = "//content/test/data/fuzzer_dictionaries/appcache_manifest_parser_fuzzer.dict"
+  seed_corpus =
+      "//third_party/WebKit/LayoutTests/http/tests/appcache/resources/"
+}
+
+fuzzer_test("merkle_integrity_source_stream_fuzzer") {
+  sources = [
+    "merkle_integrity_source_stream_fuzzer.cc",
+  ]
+
+  # This fuzzer depends on net::FuzzedSourceStream, in net_fuzzer_test_support,
+  # but both it and //content:test_support set up similar globals. As
+  # MerkleIntegritySourceStream does not depend on anything in //content and
+  # will ultimately live in //net, use the //net one instead of the //content
+  # one.
+  deps = [
+    "//content/browser:for_content_tests",
+    "//content/renderer:for_content_tests",
+    "//content/shell:content_shell_lib",
+    "//content/test:test_support",
+    "//net:net_fuzzer_test_support",
+    "//net:test_support",
+  ]
+  dict = "//content/test/data/fuzzer_dictionaries/merkle_integrity_source_stream_fuzzer.dict"
 }

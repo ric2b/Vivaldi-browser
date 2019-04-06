@@ -31,7 +31,10 @@ namespace feedbackPrivate {
 
     // Flow when the feedback is requested from the sad tab ("Aw, Snap!") page
     // when the renderer crashes.
-    sadTabCrash
+    sadTabCrash,
+
+    // Flow for internal Google users.
+    googleInternal
   };
 
   dictionary FeedbackInfo {
@@ -82,10 +85,17 @@ namespace feedbackPrivate {
 
     // Whether to use the system-provided window frame or custom frame controls.
     boolean? useSystemWindowFrame;
+
+    // Whether or not to send bluetooth logs with this report.
+    boolean? sendBluetoothLogs;
   };
 
   // Status of the sending of a feedback report.
   enum Status {success, delayed};
+
+  // The type of the landing page shown to the user when the feedback report is
+  // successfully sent.
+  enum LandingPageType {normal, techstop};
 
   // Result of presenting the user with a prompt to download SRT.
   enum SrtPromptResult {
@@ -179,7 +189,7 @@ namespace feedbackPrivate {
   callback GetUserEmailCallback = void(DOMString email);
   callback GetSystemInformationCallback =
       void(SystemInformation[] systemInformation);
-  callback SendFeedbackCallback = void(Status status);
+  callback SendFeedbackCallback = void(Status status, LandingPageType type);
   callback GetStringsCallback = void(object result);
   callback ReadLogSourceCallback = void (ReadLogSourceResult result);
 

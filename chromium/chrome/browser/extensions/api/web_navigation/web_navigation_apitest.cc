@@ -7,7 +7,6 @@
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
@@ -37,11 +36,11 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/switches.h"
@@ -50,8 +49,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebContextMenuData.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/web/web_context_menu_data.h"
 
 using content::ResourceType;
 using content::WebContents;
@@ -143,7 +142,7 @@ class DelayLoadStartAndExecuteJavascript
       : public content::NavigationThrottle,
         public base::SupportsWeakPtr<WillStartRequestObserverThrottle> {
    public:
-    WillStartRequestObserverThrottle(content::NavigationHandle* handle)
+    explicit WillStartRequestObserverThrottle(content::NavigationHandle* handle)
         : NavigationThrottle(handle) {}
     ~WillStartRequestObserverThrottle() override {}
 
@@ -208,9 +207,6 @@ class WebNavigationApiTest : public ExtensionApiTest {
 
     FrameNavigationState::set_allow_extension_scheme(true);
 
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kAllowLegacyExtensionManifests);
-
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 
@@ -231,8 +227,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ClientRedirect) {
       << message_;
 }
 
-// http://crbug.com/660288
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_ServerRedirect) {
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirect) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/serverRedirect"))
       << message_;
@@ -240,11 +235,22 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_ServerRedirect) {
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Download) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webnavigation/download"))
-      << message_;
+  content::DownloadManager* download_manager =
+      content::BrowserContext::GetDownloadManager(browser()->profile());
+  content::DownloadTestObserverTerminal observer(
+      download_manager, 1,
+      content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
+  bool result = RunExtensionTest("webnavigation/download");
+  observer.WaitForFinished();
+  ASSERT_TRUE(result) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirectSingleProcess) {
+  // TODO(lukasza): https://crbug.com/671734: Investigate why this test fails
+  // with --site-per-process.
+  if (content::AreAllSitesIsolatedForTesting())
+    return;
+
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Set max renderers to 1 to force running out of processes.
@@ -276,8 +282,6 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirectSingleProcess) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ForwardBack) {
-  if (content::IsBrowserSideNavigationEnabled())
-    return; // TODO(jam): investigate
   ASSERT_TRUE(RunExtensionTest("webnavigation/forwardBack")) << message_;
 }
 
@@ -384,9 +388,9 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, RequestOpenTab) {
   ui_test_utils::NavigateToURL(browser(), url);
 
   // There's a link on a.html. Middle-click on it to open it in a new tab.
-  blink::WebMouseEvent mouse_event(blink::WebInputEvent::kMouseDown,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kMiddle;
   mouse_event.SetPositionInWidget(7, 7);
   mouse_event.click_count = 1;
@@ -416,9 +420,9 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlank) {
 
   // There's a link with target=_blank on a.html. Click on it to open it in a
   // new tab.
-  blink::WebMouseEvent mouse_event(blink::WebInputEvent::kMouseDown,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(7, 7);
   mouse_event.click_count = 1;
@@ -446,9 +450,9 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlankIncognito) {
 
   // There's a link with target=_blank on a.html. Click on it to open it in a
   // new tab.
-  blink::WebMouseEvent mouse_event(blink::WebInputEvent::kMouseDown,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(7, 7);
   mouse_event.click_count = 1;
@@ -503,8 +507,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_CrossProcessFragment) {
       << message_;
 }
 
-// crbug.com/708139.
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_CrossProcessHistory) {
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessHistory) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // See crossProcessHistory/e.html.

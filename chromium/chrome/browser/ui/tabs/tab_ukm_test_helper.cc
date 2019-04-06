@@ -4,13 +4,12 @@
 
 #include "chrome/browser/ui/tabs/tab_ukm_test_helper.h"
 
-#include "chrome/test/base/testing_profile.h"
-#include "components/ukm/ukm_source.h"
-#include "content/public/test/navigation_simulator.h"
-#include "content/public/test/web_contents_tester.h"
-#include "services/metrics/public/interfaces/ukm_interface.mojom.h"
+#include <algorithm>
+#include <sstream>
 
-using content::WebContentsTester;
+#include "components/ukm/ukm_source.h"
+#include "services/metrics/public/mojom/ukm_interface.mojom.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
@@ -31,98 +30,76 @@ void ExpectEntryMetrics(const ukm::mojom::UkmEntry& entry,
   }
 }
 
+// Returns true if each metric in |expected_metrics| has the same value in the
+// given entry. An expected metric value of |nullopt| implies a value shouldn't
+// exist in the entry.
+bool EntryContainsMetrics(const ukm::mojom::UkmEntry* entry,
+                          const UkmMetricMap& expected_metrics) {
+  for (const UkmMetricMap::value_type& expected_pair : expected_metrics) {
+    const int64_t* metric =
+        ukm::TestUkmRecorder::GetEntryMetric(entry, expected_pair.first);
+    if (expected_pair.second.has_value()) {
+      if (!metric || *metric != expected_pair.second.value())
+        return false;
+    } else {
+      // The metric shouldn't exist.
+      if (ukm::TestUkmRecorder::EntryHasMetric(entry, expected_pair.first))
+        return false;
+    }
+  }
+  return true;
+}
+
+// Returns an iterator to an entry whose metrics match |expected_metrics|,
+// or end() if not found.
+std::vector<const ukm::mojom::UkmEntry*>::const_iterator FindMatchingEntry(
+    const std::vector<const ukm::mojom::UkmEntry*>& entries,
+    const UkmMetricMap& expected_metrics) {
+  return std::find_if(entries.begin(), entries.end(),
+                      [&expected_metrics](const auto* entry) {
+                        return EntryContainsMetrics(entry, expected_metrics);
+                      });
+}
+
 }  // namespace
 
-// Helper class to respond to WebContents lifecycle events we can't
-// trigger/simulate.
-class TestWebContentsObserver : public content::WebContentsObserver {
- public:
-  explicit TestWebContentsObserver(content::WebContents* web_contents);
-
-  // content::WebContentsObserver:
-  void WebContentsDestroyed() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestWebContentsObserver);
-};
-
-TestWebContentsObserver::TestWebContentsObserver(
-    content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
-
-void TestWebContentsObserver::WebContentsDestroyed() {
-  // Simulate the WebContents hiding during destruction. This lets tests
-  // validate what is logged when a tab is destroyed.
-  web_contents()->WasHidden();
-}
-
-TabActivityTestBase::TabActivityTestBase() = default;
-TabActivityTestBase::~TabActivityTestBase() = default;
-
-void TabActivityTestBase::Navigate(
-    content::WebContents* web_contents,
-    const GURL& url,
-    ui::PageTransition page_transition = ui::PAGE_TRANSITION_LINK) {
-  std::unique_ptr<content::NavigationSimulator> navigation =
-      content::NavigationSimulator::CreateBrowserInitiated(url, web_contents);
-  navigation->SetTransition(page_transition);
-  navigation->Commit();
-}
-
-content::WebContents* TabActivityTestBase::AddWebContentsAndNavigate(
-    TabStripModel* tab_strip_model,
-    const GURL& initial_url,
-    ui::PageTransition page_transition) {
-  content::WebContents::CreateParams params(profile(), nullptr);
-  // Create as a background tab if there are other tabs in the tab strip.
-  params.initially_hidden = tab_strip_model->count() > 0;
-  content::WebContents* test_contents =
-      WebContentsTester::CreateTestWebContents(params);
-
-  // Create the TestWebContentsObserver to observe |test_contents|. When the
-  // WebContents is destroyed, the observer will be reset automatically.
-  observers_.push_back(
-      std::make_unique<TestWebContentsObserver>(test_contents));
-
-  tab_strip_model->AppendWebContents(test_contents, false);
-  Navigate(test_contents, initial_url, page_transition);
-  return test_contents;
-}
-
-void TabActivityTestBase::SwitchToTabAt(TabStripModel* tab_strip_model,
-                                        int new_index) {
-  int active_index = tab_strip_model->active_index();
-  EXPECT_NE(new_index, active_index);
-
-  content::WebContents* active_contents =
-      tab_strip_model->GetWebContentsAt(active_index);
-  ASSERT_TRUE(active_contents);
-  content::WebContents* new_contents =
-      tab_strip_model->GetWebContentsAt(new_index);
-  ASSERT_TRUE(new_contents);
-
-  // Activate the tab. Normally this would hide the active tab's aura::Window,
-  // which is what actually triggers TabActivityWatcher to log the change. For
-  // a TestWebContents, we must manually call WasHidden(), and do the reverse
-  // for the newly activated tab.
-  tab_strip_model->ActivateTabAt(new_index, true /* user_gesture */);
-  active_contents->WasHidden();
-  new_contents->WasShown();
-}
-
 UkmEntryChecker::UkmEntryChecker() = default;
-UkmEntryChecker::~UkmEntryChecker() = default;
+
+UkmEntryChecker::~UkmEntryChecker() {
+  // Events under test should not have new, unchecked entries.
+  for (const auto& pair : num_entries_) {
+    const std::string& entry_name = pair.first;
+    int num_unexpected_entries = NumNewEntriesRecorded(entry_name);
+    // Could be negative if an expectation has already failed.
+    if (num_unexpected_entries <= 0)
+      continue;
+
+    ADD_FAILURE() << "Found " << num_unexpected_entries
+                  << " unexpected UKM entries at shutdown for: " << entry_name;
+    size_t first_unexpected_index = num_entries_[entry_name];
+    const ukm::mojom::UkmEntry* ukm_entry =
+        ukm_recorder_.GetEntriesByName(entry_name)[first_unexpected_index];
+
+    std::ostringstream entry_metrics;
+    for (const auto& metric : ukm_entry->metrics)
+      entry_metrics << "\n" << metric.first << ": " << metric.second;
+    LOG(ERROR) << "First unexpected entry: " << entry_metrics.str();
+  }
+}
 
 void UkmEntryChecker::ExpectNewEntry(const std::string& entry_name,
                                      const GURL& source_url,
                                      const UkmMetricMap& expected_metrics) {
-  num_entries_[entry_name]++;  // There should only be 1 more entry than before.
+  // There should be at least one new entry, which is the one we're checking.
+  num_entries_[entry_name]++;
   std::vector<const ukm::mojom::UkmEntry*> entries =
       ukm_recorder_.GetEntriesByName(entry_name);
-  EXPECT_EQ(NumEntries(entry_name), entries.size());
+  ASSERT_LE(num_entries_[entry_name], entries.size())
+      << "Expected at least " << num_entries_[entry_name] << " entries, found "
+      << entries.size() << " for " << entry_name;
 
   // Verify the entry is associated with the correct URL.
-  const ukm::mojom::UkmEntry* entry = entries.back();
+  const ukm::mojom::UkmEntry* entry = entries[num_entries_[entry_name] - 1];
   if (!source_url.is_empty())
     ukm_recorder_.ExpectEntrySourceHasUrl(entry, source_url);
 
@@ -130,6 +107,32 @@ void UkmEntryChecker::ExpectNewEntry(const std::string& entry_name,
 }
 
 void UkmEntryChecker::ExpectNewEntries(
+    const std::string& entry_name,
+    const std::vector<UkmMetricMap>& expected_entries) {
+  std::vector<const ukm::mojom::UkmEntry*> entries =
+      ukm_recorder_.GetEntriesByName(entry_name);
+
+  const size_t num_new_entries = expected_entries.size();
+  num_entries_[entry_name] += num_new_entries;
+  ASSERT_LE(num_entries_[entry_name], entries.size())
+      << "Expected at least " << num_entries_[entry_name] << " entries, found "
+      << entries.size() << " for " << entry_name;
+
+  // Remove old entries from |entries| before matching new entries.
+  entries.erase(entries.begin(), entries.end() - num_new_entries);
+  for (size_t i = 0; i < expected_entries.size(); i++) {
+    auto it = FindMatchingEntry(entries, expected_entries[i]);
+    if (it == entries.end()) {
+      ADD_FAILURE() << "Expected entry " << i << " not found.";
+      continue;
+    } else {
+      // Remove the matched entry from the pool of actual entries.
+      entries.erase(it);
+    }
+  }
+}
+
+void UkmEntryChecker::ExpectNewEntriesBySource(
     const std::string& entry_name,
     const SourceUkmMetricMap& expected_data) {
   std::vector<const ukm::mojom::UkmEntry*> entries =
@@ -139,7 +142,7 @@ void UkmEntryChecker::ExpectNewEntries(
   const size_t num_entries = entries.size();
   num_entries_[entry_name] += num_new_entries;
 
-  EXPECT_EQ(NumEntries(entry_name), entries.size());
+  ASSERT_LE(num_entries_[entry_name], entries.size());
   std::set<ukm::SourceId> found_source_ids;
 
   for (size_t i = 0; i < num_new_entries; ++i) {
@@ -166,16 +169,20 @@ void UkmEntryChecker::ExpectNewEntries(
 
 int UkmEntryChecker::NumNewEntriesRecorded(
     const std::string& entry_name) const {
-  const size_t current_ukm_entries =
-      ukm_recorder_.GetEntriesByName(entry_name).size();
-  const size_t previous_num_entries = NumEntries(entry_name);
-  CHECK(current_ukm_entries >= previous_num_entries);
+  const size_t current_ukm_entries = NumEntries(entry_name);
+
+  // If a value hasn't been inserted for |entry_name|, the test hasn't checked
+  // for these entries before, so they all count as new.
+  if (!num_entries_.count(entry_name))
+    return current_ukm_entries;
+
+  size_t previous_num_entries = num_entries_.at(entry_name);
+  EXPECT_GE(current_ukm_entries, previous_num_entries);
   return current_ukm_entries - previous_num_entries;
 }
 
 size_t UkmEntryChecker::NumEntries(const std::string& entry_name) const {
-  const auto it = num_entries_.find(entry_name);
-  return it != num_entries_.end() ? it->second : 0;
+  return ukm_recorder_.GetEntriesByName(entry_name).size();
 }
 
 const ukm::mojom::UkmEntry* UkmEntryChecker::LastUkmEntry(
@@ -184,10 +191,4 @@ const ukm::mojom::UkmEntry* UkmEntryChecker::LastUkmEntry(
       ukm_recorder_.GetEntriesByName(entry_name);
   CHECK(!entries.empty());
   return entries.back();
-}
-
-ukm::SourceId UkmEntryChecker::GetSourceIdForUrl(const GURL& source_url) const {
-  const ukm::UkmSource* source = ukm_recorder_.GetSourceForUrl(source_url);
-  CHECK(source);
-  return source->id();
 }

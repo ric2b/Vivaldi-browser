@@ -24,10 +24,28 @@ config("crashpad_is_in_chromium") {
   }
 }
 
+config("crashpad_is_in_fuchsia") {
+  if (crashpad_is_in_fuchsia) {
+    defines = [ "CRASHPAD_IS_IN_FUCHSIA" ]
+  }
+}
+
 group("default_exe_manifest_win") {
   if (crashpad_is_in_chromium) {
     deps = [
       "//build/win:default_exe_manifest",
     ]
   }
+}
+
+config("crashpad_fuzzer_flags") {
+  cflags = [
+    "-fsanitize=address",
+    "-fsanitize-address-use-after-scope",
+    "-fsanitize=fuzzer",
+  ]
+
+  ldflags = [
+    "-fsanitize=address",
+  ]
 }

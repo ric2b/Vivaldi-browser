@@ -3,9 +3,6 @@
 <translationbundle lang="ro">
 <translation id="1002108253973310084">A fost detectată o versiune de protocol incompatibilă. Asigură-te că ai cea mai recentă versiune de software pe ambele computere și încearcă din nou.</translation>
 <translation id="1050693411695664090">Slabă</translation>
-<translation id="1059802506829356230">• Aspect nou.
-• S-au îmbunătățit performanța, viteza de răspuns și fiabilitatea.
-• Acceptă redarea conținutului audio de pe computerele Windows sau Linux.</translation>
 <translation id="1152528166145813711">Selectează...</translation>
 <translation id="1199593201721843963">Dezactivați conexiunile la distanță</translation>
 <translation id="1291443878853470558">Trebuie să activați conexiunile la distanță dacă doriți să utilizați Chromoting pentru a accesa acest computer.</translation>
@@ -143,10 +140,12 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 <translation id="4145029455188493639">Conectat(ă) ca <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Unele componente necesare lipsesc. Asigură-te că ai instalată cea mai recentă versiune a software-ului și încearcă din nou.</translation>
 <translation id="4156740505453712750">Pentru a proteja accesul la acest computer, alegeți un cod PIN format din <ph name="BOLD_START" />cel puțin șase cifre<ph name="BOLD_END" />. Acest cod PIN va fi necesar când vă conectați din altă locație.</translation>
+<translation id="4169432154993690151">Pentru a alege o fotografie de profil, permite ca Desktop la distanță Chrome să-ți acceseze camera foto</translation>
 <translation id="4176825807642096119">Cod de acces</translation>
 <translation id="4207623512727273241">Rulați programul de instalare înainte de a continua.</translation>
 <translation id="4227991223508142681">Utilitarul de configurare a gazdei</translation>
 <translation id="4240294130679914010">Program de dezinstalare a gazdei Chromoting</translation>
+<translation id="4249741460382919890">Remedieri generale și stabilitate îmbunătățită.</translation>
 <translation id="4277463233460010382">Acest computer este configurat să permită conectarea unuia sau a mai multor clienți fără introducerea unui PIN.</translation>
 <translation id="4277736576214464567">Codul de acces este greșit. Încercați din nou.</translation>
 <translation id="4361728918881830843">Pentru a activa conexiunile la distanță pentru un alt computer, instalați Desktop la distanță Chrome pe acesta și dați clic pe „<ph name="BUTTON_NAME" />”.</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">Gazda la distanță solicită să vă autentificați pe un site terță parte. Pentru a continua, trebuie să acordați permisiuni suplimentare aplicației Desktop la distanță Chrome pentru a accesa această adresă:</translation>
 <translation id="507204348399810022">Sigur dorești să dezactivezi conexiunile la distanță la <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Nu s-a reușit comunicarea cu serverul: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Introduceți același cod PIN în ambele casete.</translation>
 <translation id="5170982930780719864">ID de gazdă nevalid.</translation>
 <translation id="518094545883702183">Această informație este folosită numai pentru diagnosticarea problemei pe care o raportezi, este disponibilă numai pentru persoana care îți examinează raportul și nu este păstrată pentru mai mult de 30 de zile.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Altă problemă.</translation>
 <translation id="6398765197997659313">Ieși din ecranul complet</translation>
 <translation id="6441316101718669559">Integrarea desktop nu este compatibilă cu această platformă. Poți să folosești în continuare această aplicație, însă experiența de utilizare va fi inferioară.</translation>
+<translation id="6502629188777329097">Acces în siguranță la computer</translation>
 <translation id="652218476070540101">Se actualizează codul PIN pentru acest computer…</translation>
 <translation id="6527303717912515753">Trimite</translation>
 <translation id="6541219117979389420">Jurnalele aplicațiilor pot să includă informații private, inclusiv identitatea ta (adresa de e-mail) și numele și proprietățile fișierelor și dosarelor din Google Drive.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">De la</translation>
 <translation id="677755392401385740">Gazda a fost inițiată pentru utilizatorul: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Afișați/Editați</translation>
+<translation id="6913710942997637770">Pentru a alege o fotografie de profil, permite ca Desktop la distanță Chrome să-ți acceseze fotografiile</translation>
 <translation id="6930242544192836755">Durată</translation>
 <translation id="6939719207673461467">Afișați/Ascundeți tastatura.</translation>
 <translation id="6944854424004126054">Restabiliți fereastra</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Conexiunile la distanță pentru acest computer au fost dezactivate.</translation>
 <translation id="7678209621226490279">Andochează în stânga</translation>
 <translation id="7693372326588366043">Actualizați lista gazdelor</translation>
+<translation id="7714222945760997814">Raportează</translation>
 <translation id="7782471917492991422">Verificați setările de gestionare a energiei pentru computerul dvs. și asigurați-vă că nu este configurat să treacă în modul inactiv când este în repaus.</translation>
 <translation id="7810127880729796595">Afișează statisticile (conexiune: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Unele componente necesare lipsesc. Asigură-te că rulezi cea mai recentă versiune Chrome și încearcă din nou.</translation>
@@ -330,7 +333,7 @@ PC</translation>
 <translation id="8712909229180978490">Nu pot vedea fișierele salvate online în Google Drive.</translation>
 <translation id="8743328882720071828">Dorești să-i permiți utilizatorului <ph name="CLIENT_USERNAME" /> să vadă și să îți controleze computerul?</translation>
 <translation id="8747048596626351634">Sesiunea s-a blocat sau nu a pornit. Dacă pe computerul la distanță există ~/.chrome-remote-desktop-session, asigură-te că inițiază un proces în prim-plan de lungă durată, cum ar fi un mediu de desktop sau un manager de ferestre.</translation>
-<translation id="8759753423332885148">Aflați mai multe.</translation>
+<translation id="8759753423332885148">Află mai multe.</translation>
 <translation id="8791202241915690908">Descarcă programul de instalare gazdă pentru Chromoting</translation>
 <translation id="894763922177556086">Bună</translation>
 <translation id="895780780740011433">Pentru Windows 7 și versiuni ulterioare</translation>

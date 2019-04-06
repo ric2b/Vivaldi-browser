@@ -23,7 +23,7 @@
 #include "components/omnibox/browser/shortcuts_backend.h"
 #include "components/omnibox/browser/shortcuts_provider_test_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -40,7 +40,7 @@ struct TestShortcutData shortcut_test_db[] = {
     {"BD85DBA2-8C29-49F9-84AE-48E1E90880F1", "echo echo", "echo echo",
      "chrome-extension://cedabbhfglmiikkmdgcpjdkocfcmbkee/?q=echo",
      "Run Echo command: echo", "0,0", "Echo", "0,4", ui::PAGE_TRANSITION_TYPED,
-     AutocompleteMatchType::EXTENSION_APP, "echo", 1, 1},
+     AutocompleteMatchType::EXTENSION_APP_DEPRECATED, "echo", 1, 1},
 };
 
 }  // namespace
@@ -98,11 +98,7 @@ TEST_F(ShortcutsProviderExtensionTest, Extension) {
 
   // Claim the extension has been unloaded.
   scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionBuilder()
-          .SetManifest(extensions::DictionaryBuilder()
-                           .Set("name", "Echo")
-                           .Set("version", "1.0")
-                           .Build())
+      extensions::ExtensionBuilder("Echo")
           .SetID("cedabbhfglmiikkmdgcpjdkocfcmbkee")
           .Build();
   extensions::ExtensionRegistry::Get(&profile_)->TriggerOnUnloaded(

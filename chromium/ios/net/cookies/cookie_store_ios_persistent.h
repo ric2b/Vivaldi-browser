@@ -46,9 +46,6 @@ class CookieStoreIOSPersistent : public CookieStoreIOS {
                                bool secure_source,
                                bool modify_http_only,
                                SetCookiesCallback callback) override;
-  void GetCookiesWithOptionsAsync(const GURL& url,
-                                  const net::CookieOptions& options,
-                                  GetCookiesCallback callback) override;
   void GetCookieListWithOptionsAsync(const GURL& url,
                                      const net::CookieOptions& options,
                                      GetCookieListCallback callback) override;
@@ -58,14 +55,11 @@ class CookieStoreIOSPersistent : public CookieStoreIOS {
                          base::OnceClosure callback) override;
   void DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
                                   DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
-                                    const base::Time& delete_end,
-                                    DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenWithPredicateAsync(
-      const base::Time& delete_begin,
-      const base::Time& delete_end,
-      const CookiePredicate& predicate,
+  void DeleteAllCreatedInTimeRangeAsync(
+      const net::CookieDeletionInfo::TimeRange& creation_range,
       DeleteCallback callback) override;
+  void DeleteAllMatchingInfoAsync(CookieDeletionInfo delete_info,
+                                  DeleteCallback callback) override;
   void DeleteSessionCookiesAsync(DeleteCallback callback) override;
 
  private:

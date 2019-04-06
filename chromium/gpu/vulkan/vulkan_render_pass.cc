@@ -7,8 +7,8 @@
 #include "base/logging.h"
 #include "gpu/vulkan/vulkan_command_buffer.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_image_view.h"
-#include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_swap_chain.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -74,7 +74,7 @@ bool VulkanRenderPass::AttachmentData::ValidateData(
     return false;
   }
 
-  if (start_layout < ImageLayoutType::IMAGE_LAYOUT_TYPE_IMAGE_VIEW ||
+  if (start_layout < ImageLayoutType::IMAGE_LAYOUT_UNDEFINED ||
       start_layout > ImageLayoutType::IMAGE_LAYOUT_TYPE_PRESENT) {
     DLOG(ERROR) << "Invalid Start Layout: " << static_cast<int>(start_layout);
     return false;
@@ -297,7 +297,7 @@ bool VulkanRenderPass::Initialize(const VulkanSwapChain* swap_chain,
 
       switch (attachment_data.attachment_type) {
         case AttachmentType::ATTACHMENT_TYPE_SWAP_IMAGE:
-          image_view = swap_chain->GetImageView(n);
+          image_view = swap_chain->GetImageView(i);
           break;
         case AttachmentType::ATTACHMENT_TYPE_ATTACHMENT_VIEW:
           image_view = attachment_data.image_view;
@@ -362,6 +362,7 @@ void VulkanRenderPass::BeginRenderPass(
     bool exec_inline) {
   DCHECK(!executing_);
   DCHECK_NE(0u, num_sub_passes_);
+
   executing_ = true;
   execution_type_ = exec_inline ? VK_SUBPASS_CONTENTS_INLINE
                                 : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;

@@ -6,12 +6,18 @@
 #define COMPONENTS_ARC_ARC_SESSION_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "base/optional.h"
-#include "components/arc/arc_instance_mode.h"
 #include "components/arc/arc_stop_reason.h"
+#include "components/arc/arc_supervision_transition.h"
+
+namespace base {
+class FilePath;
+}
 
 namespace arc {
 
@@ -20,23 +26,61 @@ class ArcBridgeService;
 // Starts the ARC instance and bootstraps the bridge connection.
 // Clients should implement the Delegate to be notified upon communications
 // being available.
-// The instance can be safely removed 1) before Start() is called, or 2) after
-// OnSessionStopped() is called.
-// The number of instances must be at most one. Otherwise, ARC instances will
-// conflict.
+// The instance can be safely removed before StartMiniInstance() is called, or
+// after OnSessionStopped() is called.  The number of instances must be at most
+// one. Otherwise, ARC instances will conflict.
 class ArcSession {
  public:
   // Observer to notify events corresponding to one ARC session run.
   class Observer {
    public:
-    // Called when ARC instance is stopped. This is called exactly once
-    // per instance which is Start()ed.
-    // |was_running| is true, if the stopped instance was fully set up
-    // and running.
-    virtual void OnSessionStopped(ArcStopReason reason, bool was_running) = 0;
+    // Called when ARC instance is stopped. This is called exactly once per
+    // instance.  |was_running| is true if the stopped instance was fully set up
+    // and running. |full_requested| is true if the full container was
+    // requested.
+    virtual void OnSessionStopped(ArcStopReason reason,
+                                  bool was_running,
+                                  bool full_requested) = 0;
 
    protected:
     virtual ~Observer() = default;
+  };
+
+  // Parameters to upgrade request.
+  struct UpgradeParams {
+    // Explicit ctor/dtor declaration is necessary for complex struct. See
+    // https://cs.chromium.org/chromium/src/tools/clang/plugins/FindBadConstructsConsumer.cpp
+    UpgradeParams();
+    ~UpgradeParams();
+    UpgradeParams(UpgradeParams&& other);
+    UpgradeParams& operator=(UpgradeParams&& other);
+
+    // Whether the account is a child.
+    bool is_child;
+
+    // The supervision transition state for this account. Indicates whether
+    // child account should become regular, regular account should become child
+    // or neither.
+    ArcSupervisionTransition supervision_transition =
+        ArcSupervisionTransition::NO_TRANSITION;
+
+    // Define language configuration set during Android container boot.
+    // |preferred_languages| may be empty.
+    std::string locale;
+    std::vector<std::string> preferred_languages;
+
+    // Whether ARC is being upgraded in a demo session.
+    bool is_demo_session = false;
+
+    // |demo_session_apps_path| is a file path to the image containing set of
+    // demo apps that should be pre-installed into the Android container for
+    // demo sessions. It might be empty, in which case no demo apps will be
+    // pre-installed.
+    // Should be empty if |is_demo_session| is not set.
+    base::FilePath demo_session_apps_path;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(UpgradeParams);
   };
 
   // Creates a default instance of ArcSession.
@@ -44,20 +88,17 @@ class ArcSession {
       ArcBridgeService* arc_bridge_service);
   virtual ~ArcSession();
 
-  // Starts an instance in the |request_mode|. Start(FULL_INSTANCE) should
-  // not be called twice or more. When Start(MINI_INSTANCE) was called then
-  // Start(FULL_INSTANCE) is called, it upgrades the mini instance to a full
-  // instance.
-  virtual void Start(ArcInstanceMode request_mode) = 0;
+  // Sends D-Bus message to start a mini-container.
+  virtual void StartMiniInstance() = 0;
+
+  // Sends a D-Bus message to upgrade to a full instance if possible. This might
+  // be done asynchronously; the message might only be sent after other
+  // operations have completed.
+  virtual void RequestUpgrade(UpgradeParams params) = 0;
 
   // Requests to stop the currently-running instance regardless of its mode.
   // The completion is notified via OnSessionStopped() of the Observer.
   virtual void Stop() = 0;
-
-  // Returns the current target mode, in which eventually this instance is
-  // running.
-  // If the instance is not yet started, this returns nullopt.
-  virtual base::Optional<ArcInstanceMode> GetTargetMode() = 0;
 
   // Returns true if Stop() has been called already.
   virtual bool IsStopRequested() = 0;

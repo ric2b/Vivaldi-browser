@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -51,7 +52,11 @@ class MockDB : public LevelDB {
                bool(const base::FilePath& database_dir,
                     const leveldb_env::Options& options));
   MOCK_METHOD2(Save, bool(const KeyValueVector&, const KeyVector&));
+  MOCK_METHOD2(UpdateWithRemoveFilter,
+               bool(const base::StringPairs&, const KeyFilter&));
   MOCK_METHOD1(Load, bool(std::vector<std::string>*));
+  MOCK_METHOD2(LoadWithFilter,
+               bool(const KeyFilter&, std::vector<std::string>*));
   MOCK_METHOD3(Get, bool(const std::string&, bool*, std::string*));
   MOCK_METHOD0(Destroy, bool());
 
@@ -113,6 +118,10 @@ class OptionsEqMatcher : public MatcherInterface<const Options&> {
 
 Matcher<const Options&> OptionsEq(const Options& expected) {
   return MakeMatcher(new OptionsEqMatcher(expected));
+}
+
+bool ZeroFilter(const std::string& key) {
+  return key == "0";
 }
 
 }  // namespace
@@ -244,7 +253,7 @@ TEST_F(ProtoDatabaseImplTest, TestDBDestroyFailure) {
 }
 
 ACTION_P(AppendLoadEntries, model) {
-  std::vector<std::string>* output = arg0;
+  std::vector<std::string>* output = arg1;
   for (const auto& pair : model)
     output->push_back(pair.second.SerializeAsString());
 
@@ -273,7 +282,8 @@ TEST_F(ProtoDatabaseImplTest, TestDBLoadSuccess) {
       base::WrapUnique(mock_db), path, CreateSimpleOptions(),
       base::Bind(&MockDatabaseCaller::InitCallback, base::Unretained(&caller)));
 
-  EXPECT_CALL(*mock_db, Load(_)).WillOnce(AppendLoadEntries(model));
+  EXPECT_CALL(*mock_db, LoadWithFilter(_, _))
+      .WillOnce(AppendLoadEntries(model));
   EXPECT_CALL(caller, LoadCallback1(true, _))
       .WillOnce(VerifyLoadEntries(testing::ByRef(model)));
   db_->LoadEntries(
@@ -294,7 +304,7 @@ TEST_F(ProtoDatabaseImplTest, TestDBLoadFailure) {
       base::WrapUnique(mock_db), path, CreateSimpleOptions(),
       base::Bind(&MockDatabaseCaller::InitCallback, base::Unretained(&caller)));
 
-  EXPECT_CALL(*mock_db, Load(_)).WillOnce(Return(false));
+  EXPECT_CALL(*mock_db, LoadWithFilter(_, _)).WillOnce(Return(false));
   EXPECT_CALL(caller, LoadCallback1(false, _));
   db_->LoadEntries(
       base::Bind(&MockDatabaseCaller::LoadCallback, base::Unretained(&caller)));
@@ -345,9 +355,20 @@ TEST_F(ProtoDatabaseImplTest, TestDBGetSuccess) {
   base::RunLoop().RunUntilIdle();
 }
 
-TEST(ProtoDatabaseImplLevelDBTest, TestDBSaveAndLoadKeys) {
-  base::MessageLoop main_loop;
+class ProtoDatabaseImplLevelDBTest : public testing::Test {
+ public:
+  void SetUp() override { main_loop_.reset(new MessageLoop()); }
 
+  void TearDown() override {
+    base::RunLoop().RunUntilIdle();
+    main_loop_.reset();
+  }
+
+ private:
+  std::unique_ptr<MessageLoop> main_loop_;
+};
+
+TEST_F(ProtoDatabaseImplLevelDBTest, TestDBSaveAndLoadKeys) {
   ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::Thread db_thread("dbthread");
@@ -372,8 +393,8 @@ TEST(ProtoDatabaseImplLevelDBTest, TestDBSaveAndLoadKeys) {
   ProtoDatabase<TestProto>::KeyEntryVector data_set(
           {{"0", test_proto}, {"1", test_proto}, {"2", test_proto}});
   db->UpdateEntries(
-      base::MakeUnique<ProtoDatabase<TestProto>::KeyEntryVector>(data_set),
-      base::MakeUnique<std::vector<std::string>>(), expect_update_success);
+      std::make_unique<ProtoDatabase<TestProto>::KeyEntryVector>(data_set),
+      std::make_unique<std::vector<std::string>>(), expect_update_success);
   run_update_entries.Run();
 
   base::RunLoop run_load_keys;
@@ -391,8 +412,8 @@ TEST(ProtoDatabaseImplLevelDBTest, TestDBSaveAndLoadKeys) {
   // Shutdown database.
   db.reset();
   base::RunLoop run_destruction;
-  db_thread.task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(base::DoNothing), run_destruction.QuitClosure());
+  db_thread.task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                            run_destruction.QuitClosure());
   run_destruction.Run();
 }
 
@@ -596,8 +617,8 @@ TEST(ProtoDatabaseImplThreadingTest, TestDBDestruction) {
   db.reset();
 
   base::RunLoop run_loop;
-  db_thread.task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(base::DoNothing), run_loop.QuitClosure());
+  db_thread.task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                            run_loop.QuitClosure());
   run_loop.Run();
 }
 
@@ -628,8 +649,8 @@ TEST(ProtoDatabaseImplThreadingTest, TestDBDestroy) {
   db.reset();
 
   base::RunLoop run_loop;
-  db_thread.task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(base::DoNothing), run_loop.QuitClosure());
+  db_thread.task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                            run_loop.QuitClosure());
   run_loop.Run();
 
   // Verify the db is actually destroyed.
@@ -676,15 +697,43 @@ void TestLevelDBSaveAndLoad(bool close_after_save) {
   ExpectEntryPointersEquals(model, loaded_protos);
 }
 
-TEST(ProtoDatabaseImplLevelDBTest, TestDBSaveAndLoad) {
+TEST_F(ProtoDatabaseImplLevelDBTest, TestDBSaveAndLoad) {
   TestLevelDBSaveAndLoad(false);
 }
 
-TEST(ProtoDatabaseImplLevelDBTest, TestDBCloseAndReopen) {
+TEST_F(ProtoDatabaseImplLevelDBTest, TestDBCloseAndReopen) {
   TestLevelDBSaveAndLoad(true);
 }
 
-TEST(ProtoDatabaseImplLevelDBTest, TestDBInitFail) {
+TEST_F(ProtoDatabaseImplLevelDBTest, TestDBLoadWithFilter) {
+  ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  EntryMap model = GetSmallModel();
+
+  KeyValueVector save_entries;
+  std::vector<std::string> load_entries;
+  KeyVector remove_keys;
+
+  for (const auto& pair : model) {
+    save_entries.push_back(
+        std::make_pair(pair.second.id(), pair.second.SerializeAsString()));
+  }
+
+  std::unique_ptr<LevelDB> db(new LevelDB(kTestLevelDBClientName));
+  EXPECT_TRUE(db->Init(temp_dir.GetPath(), CreateSimpleOptions()));
+  EXPECT_TRUE(db->Save(save_entries, remove_keys));
+
+  EXPECT_TRUE(
+      db->LoadWithFilter(base::BindRepeating(&ZeroFilter), &load_entries));
+
+  EXPECT_EQ(load_entries.size(), 1u);
+  TestProto entry;
+  ASSERT_TRUE(entry.ParseFromString(load_entries[0]));
+  EXPECT_EQ(entry.SerializeAsString(), model["0"].SerializeAsString());
+}
+
+TEST_F(ProtoDatabaseImplLevelDBTest, TestDBInitFail) {
   ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
@@ -701,7 +750,7 @@ TEST(ProtoDatabaseImplLevelDBTest, TestDBInitFail) {
   EXPECT_FALSE(db->Save(save_entries, remove_keys));
 }
 
-TEST(ProtoDatabaseImplLevelDBTest, TestMemoryDatabase) {
+TEST_F(ProtoDatabaseImplLevelDBTest, TestMemoryDatabase) {
   std::unique_ptr<LevelDB> db(new LevelDB(kTestLevelDBClientName));
 
   std::vector<std::string> load_entries;
@@ -722,7 +771,7 @@ TEST(ProtoDatabaseImplLevelDBTest, TestMemoryDatabase) {
   EXPECT_EQ(1u, second_load_entries.size());
 }
 
-TEST(ProtoDatabaseImplLevelDBTest, TestCorruptDBReset) {
+TEST_F(ProtoDatabaseImplLevelDBTest, TestCorruptDBReset) {
   ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
@@ -750,6 +799,42 @@ TEST(ProtoDatabaseImplLevelDBTest, TestCorruptDBReset) {
   ASSERT_TRUE(db.Get("TheKey", &found, &value));
   ASSERT_EQ("", value);
   ASSERT_FALSE(found);
+}
+
+TEST_F(ProtoDatabaseImplLevelDBTest, TestDBDeleteWithFilter) {
+  ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  EntryMap model = GetSmallModel();
+
+  KeyValueVector save_entries;
+  std::vector<std::string> load_entries;
+  KeyVector remove_keys;
+
+  for (const auto& pair : model) {
+    save_entries.push_back(
+        std::make_pair(pair.second.id(), pair.second.SerializeAsString()));
+  }
+
+  std::unique_ptr<LevelDB> db(new LevelDB(kTestLevelDBClientName));
+  EXPECT_TRUE(db->Init(temp_dir.GetPath(), CreateSimpleOptions()));
+  EXPECT_TRUE(db->UpdateWithRemoveFilter(save_entries, LevelDB::KeyFilter()));
+
+  // Make sure the "0" entry is in database.
+  EXPECT_TRUE(
+      db->LoadWithFilter(base::BindRepeating(&ZeroFilter), &load_entries));
+  EXPECT_EQ(load_entries.size(), 1u);
+
+  // Delete "0" entry.
+  save_entries.clear();
+  EXPECT_TRUE(db->UpdateWithRemoveFilter(save_entries,
+                                         base::BindRepeating(&ZeroFilter)));
+
+  // Make sure the "0" entry is not there.
+  load_entries.clear();
+  EXPECT_TRUE(
+      db->LoadWithFilter(base::BindRepeating(&ZeroFilter), &load_entries));
+  EXPECT_EQ(load_entries.size(), 0u);
 }
 
 }  // namespace leveldb_proto

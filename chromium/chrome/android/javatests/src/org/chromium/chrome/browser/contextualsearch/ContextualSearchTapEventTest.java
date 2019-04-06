@@ -61,7 +61,7 @@ public class ContextualSearchTapEventTest {
         }
 
         @Override
-        public void peekPanel(StateChangeReason reason) {
+        public void peekPanel(@StateChangeReason int reason) {
             setHeightForTesting(1);
             super.peekPanel(reason);
         }
@@ -81,7 +81,7 @@ public class ContextualSearchTapEventTest {
             setSelectionController(new MockCSSelectionController(activity, this));
             WebContents webContents = WebContentsFactory.createWebContents(false, false);
             SelectionPopupController selectionPopupController =
-                    SelectionPopupController.createForTesting(activity, null, webContents, null);
+                    SelectionPopupController.createForTesting(activity, null, webContents);
             selectionPopupController.setSelectionClient(this.getContextualSearchSelectionClient());
             MockContextualSearchPolicy policy = new MockContextualSearchPolicy();
             setContextualSearchPolicy(policy);
@@ -200,7 +200,7 @@ public class ContextualSearchTapEventTest {
             @Override
             public void run() {
                 mContextualSearchManager.getGestureStateListener().onTouchDown();
-                mContextualSearchClient.showUnhandledTapUIIfNeeded(0, 0);
+                mContextualSearchManager.onShowUnhandledTapUIIfNeeded(0, 0, 12, 100);
             }
         });
     }
@@ -212,7 +212,7 @@ public class ContextualSearchTapEventTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mContextualSearchClient.showUnhandledTapUIIfNeeded(0, 0);
+                mContextualSearchManager.onShowUnhandledTapUIIfNeeded(0, 0, 0, 0);
                 mContextualSearchClient.onSelectionEvent(
                         SelectionEventType.SELECTION_HANDLES_CLEARED, 0, 0);
             }

@@ -4,10 +4,12 @@
 
 module content.mojom;
 
+import "content/common/input/synchronous_compositor.mojom";
 import "content/common/native_types.mojom";
-import "mojo/common/string16.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "services/ui/public/interfaces/ime/ime.mojom";
-import "third_party/WebKit/public/web/selection_menu_behavior.mojom";
+import "third_party/blink/public/web/selection_menu_behavior.mojom";
 import "ui/events/mojo/event.mojom";
 import "ui/events/mojo/event_constants.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
@@ -30,8 +32,8 @@ struct KeyData {
   int32 native_key_code;
   bool is_system_key;
   bool is_browser_shortcut;
-  mojo.common.mojom.String16 text;
-  mojo.common.mojom.String16 unmodified_text;
+  mojo_base.mojom.String16 text;
+  mojo_base.mojom.String16 unmodified_text;
 };
 
 struct PointerData {
@@ -88,7 +90,6 @@ struct ScrollData {
 };
 
 struct PinchData {
-  bool zoom_disabled;
   float scale;
 };
 
@@ -130,6 +131,7 @@ struct TouchData {
   Cancelability cancelable;
   bool moved_beyond_slop_region;
   bool touch_start_or_first_move;
+  bool hovering;
   uint32 unique_touch_event_id;
   array<TouchPoint> touches;
 };
@@ -137,7 +139,7 @@ struct TouchData {
 struct Event {
   EventType type;
   int32 modifiers;
-  double timestamp_seconds;
+  mojo_base.mojom.TimeTicks timestamp;
   ui.mojom.LatencyInfo latency;
   KeyData? key_data;
   PointerData? pointer_data;
@@ -175,6 +177,9 @@ interface WidgetInputHandlerHost {
   // Sent by the compositor when a fling animation is stopped.
   DidStopFlinging();
 
+  // Sent by the compositor when a GSB has started scrolling the viewport.
+  DidStartScrollingViewport();
+
   // Required for cancelling an ongoing input method composition.
   ImeCancelComposition();
 
@@ -182,6 +187,13 @@ interface WidgetInputHandlerHost {
   // to always have correct bound info.
   ImeCompositionRangeChanged(gfx.mojom.Range range,
                              array<gfx.mojom.Rect> bounds);
+
+  // Updates the mouse capture state of this widget. While capture is enabled,
+  // all mouse events, including those that don't hittest to this widget, will
+  // be targeted to this widget. This enables Blink to behave correctly when
+  // a scrollbar is being dragged, or text is being drag-highlighted, even
+  // when the mouse passes across different RenderWidget areas.
+  SetMouseCapture(bool capture);
 };
 
 // Interface exposed by the renderer to the browser. This class represents
@@ -212,13 +224,13 @@ interface WidgetInputHandler {
   CursorVisibilityChanged(bool visible);
 
   // This message sends a string being composed with an input method.
-  ImeSetComposition(mojo.common.mojom.String16 text,
+  ImeSetComposition(mojo_base.mojom.String16 text,
                     array<ui.mojom.ImeTextSpan> ime_text_spans,
                     gfx.mojom.Range range, int32 start, int32 end);
 
   // This message deletes the current composition, inserts specified text, and
   // moves the cursor.
-  ImeCommitText(mojo.common.mojom.String16 text,
+  ImeCommitText(mojo_base.mojom.String16 text,
                 array<ui.mojom.ImeTextSpan> ime_text_spans,
                 gfx.mojom.Range range, int32 relative_cursor_position);
 
@@ -229,7 +241,7 @@ interface WidgetInputHandler {
   RequestTextInputStateUpdate();
 
   // Request from browser to update the cursor and composition information which
-  // will be sent through InputHostMsg_ImeCompositionRangeChanged. Setting
+  // will be sent through ImeCompositionRangeChanged. Setting
   // |immediate_request| to true  will lead to an immediate update. If
   // |monitor_updates| is set to true then changes to text selection or regular
   // updates in each compositor frame (when there is a change in composition
@@ -250,6 +262,13 @@ interface WidgetInputHandler {
   // of this API is the same as DispatchEvent just that there is no callback
   // after the event is processed.
   DispatchNonBlockingEvent(Event event);
+
+  // Attach the synchronous compositor interface. This method only
+  // should be called for Android WebView.
+  AttachSynchronousCompositor(
+      SynchronousCompositorControlHost control_host,
+      associated SynchronousCompositorHost host,
+      associated SynchronousCompositor& compositor_request);
 };
 
 // This interface provides the input actions associated with the RenderFrame.
@@ -283,7 +302,7 @@ interface FrameInputHandler {
   SetEditableSelectionOffsets(int32 start, int32 end);
 
   // Message payload is the name/value of a WebCore edit command to execute.
-  ExecuteEditCommand(string command, mojo.common.mojom.String16? value);
+  ExecuteEditCommand(string command, mojo_base.mojom.String16? value);
 
   // These messages are typically generated from context menus and request the
   // renderer to apply the specified operation to the current selection.
@@ -300,10 +319,10 @@ interface FrameInputHandler {
 
   // Replaces the selected region or a word around the cursor with the
   // specified string.
-  Replace(mojo.common.mojom.String16 word);
+  Replace(mojo_base.mojom.String16 word);
 
   // Replaces the misspelling in the selected region with the specified string.
-  ReplaceMisspelling(mojo.common.mojom.String16 word);
+  ReplaceMisspelling(mojo_base.mojom.String16 word);
 
   // Requests the renderer to select the region between two points.
   // Expects a SelectRange_ACK message when finished.

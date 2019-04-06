@@ -120,6 +120,12 @@
             "type": "boolean",
             "optional": true,
             "description": "Websites' WebSQL data."
+          },
+          // Vivaldi addition:
+          "siteUsageData": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Delete site and media engagement data."
           }
         }
       }

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef DEVICE_HID_HID_CONNECTION_MAC_H_
-#define DEVICE_HID_HID_CONNECTION_MAC_H_
+#ifndef SERVICES_DEVICE_HID_HID_CONNECTION_MAC_H_
+#define SERVICES_DEVICE_HID_HID_CONNECTION_MAC_H_
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/hid/IOHIDDevice.h>
@@ -31,7 +31,6 @@ class HidConnectionMac : public HidConnection {
 
   // HidConnection implementation.
   void PlatformClose() override;
-  void PlatformRead(ReadCallback callback) override;
   void PlatformWrite(scoped_refptr<base::RefCountedBytes> buffer,
                      WriteCallback callback) override;
   void PlatformGetFeatureReport(uint8_t report_id,
@@ -46,8 +45,6 @@ class HidConnectionMac : public HidConnection {
                                   uint32_t report_id,
                                   uint8_t* report_bytes,
                                   CFIndex report_length);
-  void ProcessInputReport(scoped_refptr<base::RefCountedBytes> buffer);
-  void ProcessReadQueue();
   void GetFeatureReportAsync(uint8_t report_id, ReadCallback callback);
   void SetReportAsync(IOHIDReportType report_type,
                       scoped_refptr<base::RefCountedBytes> buffer,
@@ -59,12 +56,9 @@ class HidConnectionMac : public HidConnection {
   const scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
   std::vector<uint8_t> inbound_buffer_;
 
-  base::queue<PendingHidReport> pending_reports_;
-  base::queue<PendingHidRead> pending_reads_;
-
   DISALLOW_COPY_AND_ASSIGN(HidConnectionMac);
 };
 
 }  // namespace device
 
-#endif  // DEVICE_HID_HID_CONNECTION_MAC_H_
+#endif  // SERVICES_DEVICE_HID_HID_CONNECTION_MAC_H_

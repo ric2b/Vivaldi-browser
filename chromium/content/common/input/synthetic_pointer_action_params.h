@@ -10,7 +10,7 @@
 #include "content/common/input/input_param_traits.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace ipc_fuzzer {
@@ -33,7 +33,14 @@ struct CONTENT_EXPORT SyntheticPointerActionParams {
     POINTER_ACTION_TYPE_MAX = IDLE
   };
 
-  enum class Button { LEFT, MIDDLE, RIGHT, BUTTON_MAX = RIGHT };
+  enum class Button {
+    LEFT,
+    MIDDLE,
+    RIGHT,
+    BACK,
+    FORWARD,
+    BUTTON_MAX = FORWARD
+  };
 
   SyntheticPointerActionParams();
   SyntheticPointerActionParams(PointerActionType action_type);

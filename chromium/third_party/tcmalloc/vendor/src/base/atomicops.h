@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2006, Google Inc.
  * All rights reserved.
  * 
@@ -50,6 +51,16 @@
 // implementations on other archtectures will cause your code to break.  If you
 // do not know what you are doing, avoid these routines, and use a Mutex.
 //
+// These following lower-level operations are typically useful only to people
+// implementing higher-level synchronization operations like spinlocks,
+// mutexes, and condition-variables.  They combine CompareAndSwap(), a load, or
+// a store with appropriate memory-ordering instructions.  "Acquire" operations
+// ensure that no later memory access can be reordered ahead of the operation.
+// "Release" operations ensure that no previous memory access can be reordered
+// after the operation.  "Barrier" operations have both "Acquire" and "Release"
+// semantics.   A MemoryBarrier() has "Barrier" semantics, but does no memory
+// access.
+//
 // It is incorrect to make direct assignments to/from an atomic variable.
 // You should use one of the Load or Store routines.  The NoBarrier
 // versions are provided when no barriers are needed:
@@ -87,26 +98,38 @@
 // ------------------------------------------------------------------------
 
 #include "base/arm_instruction_set_select.h"
+#define GCC_VERSION (__GNUC__ * 10000                 \
+                     + __GNUC_MINOR__ * 100           \
+                     + __GNUC_PATCHLEVEL__)
 
-// TODO(csilvers): match piii, not just __i386.  Also, match k8
-#if defined(__MACH__) && defined(__APPLE__)
+#define CLANG_VERSION (__clang_major__ * 10000         \
+                       + __clang_minor__ * 100         \
+                       + __clang_patchlevel__)
+
+#if defined(TCMALLOC_PREFER_GCC_ATOMICS) && defined(__GNUC__) && GCC_VERSION >= 40700
+#include "base/atomicops-internals-gcc.h"
+#elif defined(TCMALLOC_PREFER_GCC_ATOMICS) && defined(__clang__) && CLANG_VERSION >= 30400
+#include "base/atomicops-internals-gcc.h"
+#elif defined(__MACH__) && defined(__APPLE__)
 #include "base/atomicops-internals-macosx.h"
 #elif defined(__GNUC__) && defined(ARMV6)
 #include "base/atomicops-internals-arm-v6plus.h"
 #elif defined(ARMV3)
 #include "base/atomicops-internals-arm-generic.h"
-#elif defined(_WIN32)
-#include "base/atomicops-internals-windows.h"
 #elif defined(__GNUC__) && (defined(__i386) || defined(__x86_64__))
 #include "base/atomicops-internals-x86.h"
+#elif defined(_WIN32)
+#include "base/atomicops-internals-windows.h"
 #elif defined(__linux__) && defined(__PPC__)
 #include "base/atomicops-internals-linuxppc.h"
+#elif defined(__GNUC__) && defined(__mips__)
+#include "base/atomicops-internals-mips.h"
+#elif defined(__GNUC__) && GCC_VERSION >= 40700
+#include "base/atomicops-internals-gcc.h"
+#elif defined(__clang__) && CLANG_VERSION >= 30400
+#include "base/atomicops-internals-gcc.h"
 #else
-// Assume x86 for now.  If you need to support a new architecture and
-// don't know how to implement atomic ops, you can probably get away
-// with using pthreads, since atomicops is only used by spinlock.h/cc
-//#error You need to implement atomic operations for this architecture
-#include "base/atomicops-internals-x86.h"
+#error You need to implement atomic operations for this architecture
 #endif
 
 // Signed type that can hold a pointer and supports the atomic ops below, as
@@ -149,32 +172,18 @@ inline AtomicWord NoBarrier_AtomicExchange(volatile AtomicWord* ptr,
       reinterpret_cast<volatile AtomicWordCastType*>(ptr), new_value);
 }
 
-// Atomically increment *ptr by "increment".  Returns the new value of
-// *ptr with the increment applied.  This routine implies no memory
-// barriers.
-inline AtomicWord NoBarrier_AtomicIncrement(volatile AtomicWord* ptr,
-                                            AtomicWord increment) {
-  return NoBarrier_AtomicIncrement(
-      reinterpret_cast<volatile AtomicWordCastType*>(ptr), increment);
+inline AtomicWord Acquire_AtomicExchange(volatile AtomicWord* ptr,
+                                         AtomicWord new_value) {
+  return Acquire_AtomicExchange(
+      reinterpret_cast<volatile AtomicWordCastType*>(ptr), new_value);
 }
 
-inline AtomicWord Barrier_AtomicIncrement(volatile AtomicWord* ptr,
-                                          AtomicWord increment) {
-  return Barrier_AtomicIncrement(
-      reinterpret_cast<volatile AtomicWordCastType*>(ptr), increment);
+inline AtomicWord Release_AtomicExchange(volatile AtomicWord* ptr,
+                                         AtomicWord new_value) {
+  return Release_AtomicExchange(
+      reinterpret_cast<volatile AtomicWordCastType*>(ptr), new_value);
 }
 
-// ------------------------------------------------------------------------
-// These following lower-level operations are typically useful only to people
-// implementing higher-level synchronization operations like spinlocks,
-// mutexes, and condition-variables.  They combine CompareAndSwap(), a load, or
-// a store with appropriate memory-ordering instructions.  "Acquire" operations
-// ensure that no later memory access can be reordered ahead of the operation.
-// "Release" operations ensure that no previous memory access can be reordered
-// after the operation.  "Barrier" operations have both "Acquire" and "Release"
-// semantics.   A MemoryBarrier() has "Barrier" semantics, but does no memory
-// access.
-// ------------------------------------------------------------------------
 inline AtomicWord Acquire_CompareAndSwap(volatile AtomicWord* ptr,
                                          AtomicWord old_value,
                                          AtomicWord new_value) {
@@ -250,9 +259,8 @@ Atomic32 NoBarrier_CompareAndSwap(volatile Atomic32* ptr,
                                   Atomic32 old_value,
                                   Atomic32 new_value);
 Atomic32 NoBarrier_AtomicExchange(volatile Atomic32* ptr, Atomic32 new_value);
-Atomic32 NoBarrier_AtomicIncrement(volatile Atomic32* ptr, Atomic32 increment);
-Atomic32 Barrier_AtomicIncrement(volatile Atomic32* ptr,
-                                 Atomic32 increment);
+Atomic32 Acquire_AtomicExchange(volatile Atomic32* ptr, Atomic32 new_value);
+Atomic32 Release_AtomicExchange(volatile Atomic32* ptr, Atomic32 new_value);
 Atomic32 Acquire_CompareAndSwap(volatile Atomic32* ptr,
                                 Atomic32 old_value,
                                 Atomic32 new_value);
@@ -271,8 +279,8 @@ Atomic64 NoBarrier_CompareAndSwap(volatile Atomic64* ptr,
                                   Atomic64 old_value,
                                   Atomic64 new_value);
 Atomic64 NoBarrier_AtomicExchange(volatile Atomic64* ptr, Atomic64 new_value);
-Atomic64 NoBarrier_AtomicIncrement(volatile Atomic64* ptr, Atomic64 increment);
-Atomic64 Barrier_AtomicIncrement(volatile Atomic64* ptr, Atomic64 increment);
+Atomic64 Acquire_AtomicExchange(volatile Atomic64* ptr, Atomic64 new_value);
+Atomic64 Release_AtomicExchange(volatile Atomic64* ptr, Atomic64 new_value);
 
 Atomic64 Acquire_CompareAndSwap(volatile Atomic64* ptr,
                                 Atomic64 old_value,

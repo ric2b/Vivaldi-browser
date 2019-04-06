@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/component_export.h"
 #include "base/files/scoped_file.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process.h"
@@ -43,7 +44,7 @@ class Listener;
 // Channels are implemented using mojo message pipes on all platforms other
 // than NaCl.
 
-class IPC_EXPORT Channel : public Sender {
+class COMPONENT_EXPORT(IPC) Channel : public Sender {
   // Security tests need access to the pipe handle.
   friend class ChannelTest;
 
@@ -84,7 +85,7 @@ class IPC_EXPORT Channel : public Sender {
 
   // Helper interface a Channel may implement to expose support for associated
   // Mojo interfaces.
-  class IPC_EXPORT AssociatedInterfaceSupport {
+  class COMPONENT_EXPORT(IPC) AssociatedInterfaceSupport {
    public:
     using GenericAssociatedInterfaceFactory =
         base::Callback<void(mojo::ScopedInterfaceEndpointHandle)>;
@@ -140,7 +141,11 @@ class IPC_EXPORT Channel : public Sender {
 
   // The maximum message size in bytes. Attempting to receive a message of this
   // size or bigger results in a channel error.
-  static constexpr size_t kMaximumMessageSize = 256 * 1024 * 1024;
+#if defined(OFFICIAL_BUILD)
+  static constexpr size_t kMaximumMessageSize = 128 * 1024 * 1024;
+#else
+  static constexpr size_t kMaximumMessageSize = 512 * 1024 * 1024;
+#endif
 
   // Amount of data to read at once from the pipe.
   static const size_t kReadBufferSize = 4 * 1024;

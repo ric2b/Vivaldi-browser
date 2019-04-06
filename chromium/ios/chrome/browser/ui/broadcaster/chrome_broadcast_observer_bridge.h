@@ -33,8 +33,14 @@ class ChromeBroadcastObserverInterface {
   // Invoked by |-broadcastScrollViewIsDragging:|.
   virtual void OnScrollViewIsDraggingBroadcasted(bool dragging) {}
 
-  // Invoked by |-broadcastToolbarHeight:|.
-  virtual void OnToolbarHeightBroadcasted(CGFloat toolbar_height) {}
+  // Invoked by |-broadcastCollapsedToolbarHeight:|.
+  virtual void OnCollapsedToolbarHeightBroadcasted(CGFloat height) {}
+
+  // Invoked by |-broadcastExpandedToolbarHeight:|.
+  virtual void OnExpandedToolbarHeightBroadcasted(CGFloat height) {}
+
+  // Invoked by |-broadcastBottomToolbarHeight:|.
+  virtual void OnBottomToolbarHeightBroadcasted(CGFloat height) {}
 };
 
 // Bridge object that forwards broadcasted UI state to objects that subclass

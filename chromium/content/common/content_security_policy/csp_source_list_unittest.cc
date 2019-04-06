@@ -15,8 +15,10 @@ namespace {
 bool Allow(const CSPSourceList& source_list,
            const GURL& url,
            CSPContext* context,
-           bool is_redirect = false) {
-  return CSPSourceList::Allow(source_list, url, context, is_redirect);
+           bool is_redirect = false,
+           bool is_response_check = false) {
+  return CSPSourceList::Allow(source_list, url, context, is_redirect,
+                              is_response_check);
 }
 
 }  // namespace
@@ -26,7 +28,8 @@ TEST(CSPSourceList, MultipleSource) {
   context.SetSelf(url::Origin::Create(GURL("http://example.com")));
   CSPSourceList source_list(
       false,  // allow_self
-      false,  // allow_star:
+      false,  // allow_star
+      false,  // allow_redirects
       {CSPSource("", "a.com", false, url::PORT_UNSPECIFIED, false, ""),
        CSPSource("", "b.com", false, url::PORT_UNSPECIFIED, false, "")});
   EXPECT_TRUE(Allow(source_list, GURL("http://a.com"), &context));
@@ -38,12 +41,11 @@ TEST(CSPSourceList, AllowStar) {
   CSPContext context;
   context.SetSelf(url::Origin::Create(GURL("http://example.com")));
   CSPSourceList source_list(false,                      // allow_self
-                            true,                       // allow_star:
+                            true,                       // allow_star
+                            false,                      // allow_redirects
                             std::vector<CSPSource>());  // source_list
   EXPECT_TRUE(Allow(source_list, GURL("http://not-example.com"), &context));
   EXPECT_TRUE(Allow(source_list, GURL("https://not-example.com"), &context));
-  EXPECT_TRUE(Allow(source_list, GURL("http-so://not-example.com"), &context));
-  EXPECT_TRUE(Allow(source_list, GURL("https-so://not-example.com"), &context));
   EXPECT_TRUE(Allow(source_list, GURL("ws://not-example.com"), &context));
   EXPECT_TRUE(Allow(source_list, GURL("wss://not-example.com"), &context));
   EXPECT_TRUE(Allow(source_list, GURL("ftp://not-example.com"), &context));
@@ -61,7 +63,8 @@ TEST(CSPSourceList, AllowSelf) {
   CSPContext context;
   context.SetSelf(url::Origin::Create(GURL("http://example.com")));
   CSPSourceList source_list(true,                       // allow_self
-                            false,                      // allow_star:
+                            false,                      // allow_star
+                            false,                      // allow_redirects
                             std::vector<CSPSource>());  // source_list
   EXPECT_TRUE(Allow(source_list, GURL("http://example.com"), &context));
   EXPECT_FALSE(Allow(source_list, GURL("http://not-example.com"), &context));
@@ -74,6 +77,7 @@ TEST(CSPSourceList, AllowStarAndSelf) {
   context.SetSelf(url::Origin::Create(GURL("https://a.com")));
   CSPSourceList source_list(false,  // allow_self
                             false,  // allow_star
+                            false,  // allow_redirects
                             std::vector<CSPSource>());
 
   // If the request is allowed by {*} and not by {'self'} then it should be
@@ -93,20 +97,22 @@ TEST(CSPSourceList, AllowSelfWithUnspecifiedPort) {
   CSPContext context;
   context.SetSelf(url::Origin::Create(GURL("chrome://print")));
   CSPSourceList source_list(true,                       // allow_self
-                            false,                      // allow_star:
+                            false,                      // allow_star
+                            false,                      // allow_redirects
                             std::vector<CSPSource>());  // source_list
 
-  EXPECT_TRUE(Allow(
-      source_list,
-      GURL("chrome://print/pdf_preview.html?chrome://print/1/0/print.pdf"),
-      &context));
+  EXPECT_TRUE(
+      Allow(source_list,
+            GURL("chrome://print/pdf/index.html?chrome://print/1/0/print.pdf"),
+            &context));
 }
 
 TEST(CSPSourceList, AllowNone) {
   CSPContext context;
   context.SetSelf(url::Origin::Create(GURL("http://example.com")));
   CSPSourceList source_list(false,                      // allow_self
-                            false,                      // allow_star:
+                            false,                      // allow_star
+                            false,                      // allow_redirects
                             std::vector<CSPSource>());  // source_list
   EXPECT_FALSE(Allow(source_list, GURL("http://example.com"), &context));
   EXPECT_FALSE(Allow(source_list, GURL("https://example.test/"), &context));
@@ -115,7 +121,8 @@ TEST(CSPSourceList, AllowNone) {
 TEST(CSPSourceTest, SelfIsUnique) {
   // Policy: 'self'
   CSPSourceList source_list(true,                       // allow_self
-                            false,                      // allow_star:
+                            false,                      // allow_star
+                            false,                      // allow_redirects
                             std::vector<CSPSource>());  // source_list
   CSPContext context;
 

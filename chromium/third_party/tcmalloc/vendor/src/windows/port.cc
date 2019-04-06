@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2007, Google Inc.
  * All rights reserved.
  * 
@@ -40,16 +41,17 @@
 #include <string.h>    // for strlen(), memset(), memcmp()
 #include <assert.h>
 #include <stdarg.h>    // for va_list, va_start, va_end
+#include <algorithm>   // for std:{min,max}
 #include <windows.h>
 #include "port.h"
 #include "base/logging.h"
 #include "base/spinlock.h"
 #include "internal_logging.h"
-#include "system-alloc.h"
 
 // -----------------------------------------------------------------------
 // Basic libraries
 
+PERFTOOLS_DLL_DECL
 int getpagesize() {
   static int pagesize = 0;
   if (pagesize == 0) {
@@ -80,12 +82,6 @@ extern "C" PERFTOOLS_DLL_DECL void WriteToStderr(const char* buf, int len) {
 
 // -----------------------------------------------------------------------
 // Threads code
-
-// Declared (not extern "C") in thread_cache.h
-bool CheckIfKernelSupportsTLS() {
-  // TODO(csilvers): return true (all win's since win95, at least, support this)
-  return false;
-}
 
 // Windows doesn't support pthread_key_create's destr_function, and in
 // fact it's a bit tricky to get code to run when a thread exits.  This
@@ -213,61 +209,6 @@ extern "C" int perftools_pthread_once(pthread_once_t *once_control,
   }
   return 0;
 }
-
-
-// -----------------------------------------------------------------------
-// These functions replace system-alloc.cc
-
-// This is mostly like MmapSysAllocator::Alloc, except it does these weird
-// munmap's in the middle of the page, which is forbidden in windows.
-extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
-                                  size_t alignment) {
-  // Align on the pagesize boundary
-  const int pagesize = getpagesize();
-  if (alignment < pagesize) alignment = pagesize;
-  size = ((size + alignment - 1) / alignment) * alignment;
-
-  // Safest is to make actual_size same as input-size.
-  if (actual_size) {
-    *actual_size = size;
-  }
-
-  // Ask for extra memory if alignment > pagesize
-  size_t extra = 0;
-  if (alignment > pagesize) {
-    extra = alignment - pagesize;
-  }
-
-  void* result = VirtualAlloc(0, size + extra,
-                              MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
-  if (result == NULL)
-    return NULL;
-
-  // Adjust the return memory so it is aligned
-  uintptr_t ptr = reinterpret_cast<uintptr_t>(result);
-  size_t adjust = 0;
-  if ((ptr & (alignment - 1)) != 0) {
-    adjust = alignment - (ptr & (alignment - 1));
-  }
-
-  ptr += adjust;
-  return reinterpret_cast<void*>(ptr);
-}
-
-void TCMalloc_SystemRelease(void* start, size_t length) {
-  // TODO(csilvers): should I be calling VirtualFree here?
-}
-
-bool RegisterSystemAllocator(SysAllocator *allocator, int priority) {
-  return false;   // we don't allow registration on windows, right now
-}
-
-void DumpSystemAllocatorStats(TCMalloc_Printer* printer) {
-  // We don't dump stats on windows, right now
-}
-
-// The current system allocator
-SysAllocator* sys_alloc = NULL;
 
 
 // -----------------------------------------------------------------------

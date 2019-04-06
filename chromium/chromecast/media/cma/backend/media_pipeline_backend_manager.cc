@@ -6,13 +6,15 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/time/time.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "chromecast/media/cma/backend/audio_decoder_wrapper.h"
+#include "chromecast/media/cma/backend/cma_backend.h"
 #include "chromecast/media/cma/backend/media_pipeline_backend_wrapper.h"
 #include "chromecast/public/volume_control.h"
 
@@ -65,7 +67,7 @@ MediaPipelineBackendManager::~MediaPipelineBackendManager() {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
 }
 
-std::unique_ptr<MediaPipelineBackend>
+std::unique_ptr<CmaBackend>
 MediaPipelineBackendManager::CreateMediaPipelineBackend(
     const media::MediaPipelineDeviceParams& params) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
@@ -148,16 +150,24 @@ void MediaPipelineBackendManager::RemoveAllowVolumeFeedbackObserver(
   allow_volume_feedback_observers_->RemoveObserver(observer);
 }
 
-void MediaPipelineBackendManager::LogicalPause(MediaPipelineBackend* backend) {
+void MediaPipelineBackendManager::LogicalPause(CmaBackend* backend) {
   MediaPipelineBackendWrapper* wrapper =
       static_cast<MediaPipelineBackendWrapper*>(backend);
   wrapper->LogicalPause();
 }
 
-void MediaPipelineBackendManager::LogicalResume(MediaPipelineBackend* backend) {
+void MediaPipelineBackendManager::LogicalResume(CmaBackend* backend) {
   MediaPipelineBackendWrapper* wrapper =
       static_cast<MediaPipelineBackendWrapper*>(backend);
   wrapper->LogicalResume();
+}
+
+void MediaPipelineBackendManager::AddExtraPlayingStream(bool sfx) {
+  UpdatePlayingAudioCount(sfx, 1);
+}
+
+void MediaPipelineBackendManager::RemoveExtraPlayingStream(bool sfx) {
+  UpdatePlayingAudioCount(sfx, -1);
 }
 
 void MediaPipelineBackendManager::SetGlobalVolumeMultiplier(

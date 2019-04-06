@@ -5,6 +5,7 @@
 #ifndef CONTENT_RENDERER_INPUT_WIDGET_INPUT_HANDLER_IMPL_H_
 #define CONTENT_RENDERER_INPUT_WIDGET_INPUT_HANDLER_IMPL_H_
 
+#include "base/single_thread_task_runner.h"
 #include "content/common/input/input_handler.mojom.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -52,6 +53,11 @@ class WidgetInputHandlerImpl : public mojom::WidgetInputHandler {
   void DispatchEvent(std::unique_ptr<content::InputEvent>,
                      DispatchEventCallback callback) override;
   void DispatchNonBlockingEvent(std::unique_ptr<content::InputEvent>) override;
+  void AttachSynchronousCompositor(
+      mojom::SynchronousCompositorControlHostPtr control_host,
+      mojom::SynchronousCompositorHostAssociatedPtrInfo host,
+      mojom::SynchronousCompositorAssociatedRequest compositor_request)
+      override;
 
  private:
   bool ShouldProxyToMainThread() const;

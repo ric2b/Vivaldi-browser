@@ -6,6 +6,7 @@ import("//build/config/ui.gni")
 import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 
 # One Big Target for services to register their unit test sources. This exists
 # to avoid having to maintain a separate test binary for every service.
@@ -18,12 +19,11 @@ service_test("services_unittests") {
   # If your service does not run on iOS, its tests should go in the !iOS
   # section below. If you are unsure, contact blundell@chromium.org.
   deps = [
+    "//services/content:tests",
     "//services/identity:tests",
+    "//services/metrics/public/cpp:tests",
+    "//services/network:tests",
     "//services/network/public/cpp:tests",
-  ]
-
-  data_deps = [
-    "//testing/buildbot/filters:services_unittests_filters",
   ]
 
   if (!is_ios) {
@@ -31,33 +31,26 @@ service_test("services_unittests") {
       "//services/audio:tests",
       "//services/data_decoder:tests",
       "//services/device:tests",
-      "//services/network:tests",
       "//services/preferences:tests",
       "//services/proxy_resolver:tests",
       "//services/resource_coordinator:tests",
       "//services/shape_detection:tests",
+      "//services/tracing:tests",
       "//services/viz",
       "//services/viz/privileged/interfaces:unit_tests",
       "//services/viz/public/cpp/compositing:tests",
+      "//services/viz/public/cpp/hit_test:tests",
     ]
   }
 
   if (use_aura) {
     deps += [
-      "//services/ui/clipboard:tests",
       "//services/ui/ime:tests",
       "//services/ui/input_devices:tests",
       "//services/ui/public/cpp/tests",
       "//services/ui/public/interfaces:tests",
+      "//services/ui/ws2:tests",
     ]
-
-    if (is_linux && !is_chromeos) {
-      deps += [ "//services/ui/demo:tests" ]
-    }
-
-    if (use_ozone || (!is_chromeos && !is_mac && !is_ios)) {
-      deps += [ "//services/ui/ws:tests" ]
-    }
   }
 
   if (is_android) {
@@ -65,9 +58,16 @@ service_test("services_unittests") {
       "//services/data_decoder/public/cpp/android:safe_json_java",
       "//services/device:java",
 
-      # Some tests need to initialize V8.
-      "//v8:v8_external_startup_data_assets",
+      # Some tests make network requests.
+      "//net/android:net_java",
     ]
+
+    # Some tests need to initialize V8.
+    if (use_v8_context_snapshot) {
+      deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+    } else {
+      deps += [ "//v8:v8_external_startup_data_assets" ]
+    }
   }
 
   if (!is_android && !is_ios) {
@@ -91,7 +91,10 @@ catalog("services_unittests_catalog") {
 
   # The division between "all platforms" and "!iOS" here needs to match that
   # for the main deps list in the services_unittests target above.
-  catalog_deps = [ "//services/identity:tests_catalog" ]
+  catalog_deps = [
+    "//services/identity:tests_catalog",
+    "//services/network:tests_catalog",
+  ]
 
   if (!is_ios) {
     catalog_deps += [
@@ -99,6 +102,7 @@ catalog("services_unittests_catalog") {
       "//services/device:tests_catalog",
       "//services/preferences:tests_catalog",
       "//services/resource_coordinator:tests_catalog",
+      "//services/tracing:tests_catalog",
       "//services/video_capture:tests_catalog",
       "//services/viz:tests_catalog",
     ]
@@ -106,17 +110,22 @@ catalog("services_unittests_catalog") {
 
   if (use_aura) {
     catalog_deps += [
-      "//services/ui/clipboard:tests_catalog",
       "//services/ui/ime:tests_catalog",
+      "//services/ui/ws2:tests_catalog",
     ]
+  }
+}
 
-    if (is_linux && !is_chromeos) {
-      catalog_deps += [ "//services/ui/demo:tests_catalog" ]
-    }
+if (!is_ios) {
+  service_test("services_perftests") {
+    deps = [
+      "//services/viz/public/cpp/compositing:perftests",
+    ]
+    catalog = ":services_perftests_catalog"
+  }
 
-    if (use_ozone || (!is_chromeos && !is_ios)) {
-      catalog_deps += [ "//services/ui/ws:tests_catalog" ]
-    }
+  catalog("services_perftests_catalog") {
+    testonly = true
   }
 }
 
@@ -125,6 +134,7 @@ if (is_android) {
     java_files = [
       "device/generic_sensor/android/junit/src/org/chromium/device/sensors/PlatformSensorAndProviderTest.java",
       "device/nfc/android/junit/src/org/chromium/device/nfc/NFCTest.java",
+      "device/geolocation/android/junit/src/org/chromium/device/geolocation/LocationProviderTest.java",
       "shape_detection/android/junit/src/org/chromium/shape_detection/BitmapUtilsTest.java",
     ]
     deps = [
@@ -134,13 +144,16 @@ if (is_android) {
       "$google_play_services_package:google_play_services_vision_java",
       "//base:base_java",
       "//base:base_java_test_support",
+      "//base:base_junit_test_support",
       "//mojo/public/java:bindings_java",
       "//mojo/public/java:system_java",
       "//services/device/generic_sensor:java",
+      "//services/device/geolocation:geolocation_java",
       "//services/device/nfc/android:java",
-      "//services/device/public/interfaces:generic_sensor_java",
-      "//services/device/public/interfaces:interfaces_java",
+      "//services/device/public/java:geolocation_java_test_support",
       "//services/device/public/java:nfc_java",
+      "//services/device/public/mojom:generic_sensor_java",
+      "//services/device/public/mojom:mojom_java",
       "//services/shape_detection:shape_detection_java",
       "//skia/public/interfaces:interfaces_java",
       "//third_party/android_tools:android_support_annotations_java",
@@ -162,9 +175,10 @@ if (is_android) {
       "$google_play_services_package:google_play_services_vision_java",
       "//base:base_java",
       "//base:base_java_test_support",
+      "//mojo/public/java:base_java",
       "//mojo/public/java:bindings_java",
       "//services/shape_detection:shape_detection_java",
-      "//services/shape_detection/public/interfaces:interfaces_java",
+      "//services/shape_detection/public/mojom:mojom_java",
       "//skia/public/interfaces:interfaces_java",
       "//third_party/android_support_test_runner:runner_java",
       "//third_party/junit",

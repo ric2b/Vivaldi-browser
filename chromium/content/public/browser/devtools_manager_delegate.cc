@@ -22,6 +22,10 @@ std::string DevToolsManagerDelegate::GetTargetDescription(WebContents* wc) {
   return std::string();
 }
 
+bool DevToolsManagerDelegate::AllowInspectingWebContents(WebContents* wc) {
+  return true;
+}
+
 DevToolsAgentHost::List DevToolsManagerDelegate::RemoteDebuggingTargets() {
   return DevToolsAgentHost::GetOrCreateAll();
 }
@@ -42,21 +46,12 @@ bool DevToolsManagerDelegate::HandleCommand(DevToolsAgentHost* agent_host,
   return false;
 }
 
-bool DevToolsManagerDelegate::HandleAsyncCommand(
-    DevToolsAgentHost* agent_host,
-    DevToolsAgentHostClient* client,
-    base::DictionaryValue* command,
-    const CommandCallback& callback) {
-  return false;
-}
-
 std::string DevToolsManagerDelegate::GetDiscoveryPageHTML() {
   return std::string();
 }
 
-std::string DevToolsManagerDelegate::GetFrontendResource(
-    const std::string& path) {
-  return std::string();
+bool DevToolsManagerDelegate::HasBundledFrontendResources() {
+  return false;
 }
 
 bool DevToolsManagerDelegate::IsBrowserTargetDiscoverable() {

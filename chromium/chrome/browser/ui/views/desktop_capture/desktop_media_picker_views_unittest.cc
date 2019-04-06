@@ -18,7 +18,6 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/aura/window.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
@@ -55,8 +54,12 @@ class DesktopMediaPickerViewsTest : public testing::Test {
     base::string16 app_name = base::ASCIIToUTF16("foo");
 
     picker_views_.reset(new DesktopMediaPickerViews());
-    picker_views_->Show(nullptr, test_helper_.GetContext(), nullptr, app_name,
-                        app_name, std::move(source_lists), true,
+    DesktopMediaPicker::Params picker_params;
+    picker_params.context = test_helper_.GetContext();
+    picker_params.app_name = app_name;
+    picker_params.target_name = app_name;
+    picker_params.request_audio = true;
+    picker_views_->Show(picker_params, std::move(source_lists),
                         base::Bind(&DesktopMediaPickerViewsTest::OnPickerDone,
                                    base::Unretained(this)));
   }

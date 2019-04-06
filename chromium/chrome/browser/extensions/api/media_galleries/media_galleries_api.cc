@@ -24,6 +24,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/api/media_galleries/blob_data_source_factory.h"
+#include "chrome/browser/extensions/api/media_galleries/media_galleries_api_util.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/media_galleries/gallery_watch_manager.h"
@@ -92,7 +94,7 @@ const char kNameKey[] = "name";
 const char kMetadataKey[] = "metadata";
 const char kAttachedImagesBlobInfoKey[] = "attachedImagesBlobInfo";
 const char kBlobUUIDKey[] = "blobUUID";
-const char kTypeKey[] = "type";
+const char kMediaGalleriesApiTypeKey[] = "type";
 const char kSizeKey[] = "size";
 
 const char kInvalidGalleryId[] = "-1";
@@ -674,19 +676,23 @@ void MediaGalleriesGetMetadataFunction::GetMetadata(
       metadata_type == MediaGalleries::GET_METADATA_TYPE_ALL ||
       metadata_type == MediaGalleries::GET_METADATA_TYPE_NONE;
 
-  auto parser = base::MakeRefCounted<SafeMediaMetadataParser>(
-      GetProfile(), blob_uuid, total_blob_length, mime_type,
-      get_attached_images);
-  parser->Start(
+  auto media_data_source_factory =
+      std::make_unique<BlobDataSourceFactory>(GetProfile(), blob_uuid);
+  auto parser = std::make_unique<SafeMediaMetadataParser>(
+      total_blob_length, mime_type, get_attached_images,
+      std::move(media_data_source_factory));
+  SafeMediaMetadataParser* parser_ptr = parser.get();
+  parser_ptr->Start(
       content::ServiceManagerConnection::GetForProcess()->GetConnector(),
-      base::Bind(
+      base::BindOnce(
           &MediaGalleriesGetMetadataFunction::OnSafeMediaMetadataParserDone,
-          this));
+          this, std::move(parser)));
 }
 
 void MediaGalleriesGetMetadataFunction::OnSafeMediaMetadataParserDone(
+    std::unique_ptr<SafeMediaMetadataParser> parser_keep_alive,
     bool parse_success,
-    std::unique_ptr<base::DictionaryValue> metadata_dictionary,
+    chrome::mojom::MediaMetadataPtr metadata,
     std::unique_ptr<std::vector<metadata::AttachedImage>> attached_images) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -695,12 +701,13 @@ void MediaGalleriesGetMetadataFunction::OnSafeMediaMetadataParserDone(
     return;
   }
 
-  DCHECK(metadata_dictionary.get());
-  DCHECK(attached_images.get());
+  DCHECK(metadata);
+  DCHECK(attached_images);
 
   std::unique_ptr<base::DictionaryValue> result_dictionary(
       new base::DictionaryValue);
-  result_dictionary->Set(kMetadataKey, std::move(metadata_dictionary));
+  result_dictionary->Set(kMetadataKey,
+                         SerializeMediaMetadata(std::move(metadata)));
 
   if (attached_images->empty()) {
     SetResult(std::move(result_dictionary));
@@ -713,10 +720,10 @@ void MediaGalleriesGetMetadataFunction::OnSafeMediaMetadataParserDone(
   metadata::AttachedImage* first_image = &attached_images->front();
   content::BrowserContext::CreateMemoryBackedBlob(
       GetProfile(), first_image->data.c_str(), first_image->data.size(), "",
-      base::Bind(&MediaGalleriesGetMetadataFunction::ConstructNextBlob, this,
-                 base::Passed(&result_dictionary),
-                 base::Passed(&attached_images),
-                 base::Passed(base::WrapUnique(new std::vector<std::string>))));
+      base::BindOnce(&MediaGalleriesGetMetadataFunction::ConstructNextBlob,
+                     this, std::move(result_dictionary),
+                     std::move(attached_images),
+                     base::WrapUnique(new std::vector<std::string>)));
 }
 
 void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
@@ -745,7 +752,7 @@ void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
   std::unique_ptr<base::DictionaryValue> attached_image(
       new base::DictionaryValue);
   attached_image->SetString(kBlobUUIDKey, current_blob->GetUUID());
-  attached_image->SetString(kTypeKey, current_image->type);
+  attached_image->SetString(kMediaGalleriesApiTypeKey, current_image->type);
   attached_image->SetInteger(
       kSizeKey, base::checked_cast<int>(current_image->data.size()));
   attached_images_list->Append(std::move(attached_image));
@@ -768,9 +775,9 @@ void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
         &(*attached_images)[blob_uuids->size()];
     content::BrowserContext::CreateMemoryBackedBlob(
         GetProfile(), next_image->data.c_str(), next_image->data.size(), "",
-        base::Bind(&MediaGalleriesGetMetadataFunction::ConstructNextBlob, this,
-                   base::Passed(&result_dictionary),
-                   base::Passed(&attached_images), base::Passed(&blob_uuids)));
+        base::BindOnce(&MediaGalleriesGetMetadataFunction::ConstructNextBlob,
+                       this, std::move(result_dictionary),
+                       std::move(attached_images), std::move(blob_uuids)));
     return;
   }
 

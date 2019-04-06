@@ -8,7 +8,6 @@
 #include <cmath>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -38,11 +37,11 @@ bool DoublesConsideredDifferent(double value1, double value2, double delta) {
   return abs_difference > delta;
 }
 
-std::unique_ptr<base::DictionaryValue> GetScoreDictForSettings(
+std::unique_ptr<base::DictionaryValue> GetSiteEngagementScoreDictForSettings(
     const HostContentSettingsMap* settings,
     const GURL& origin_url) {
   if (!settings)
-    return base::MakeUnique<base::DictionaryValue>();
+    return std::make_unique<base::DictionaryValue>();
 
   std::unique_ptr<base::DictionaryValue> value =
       base::DictionaryValue::From(settings->GetWebsiteSetting(
@@ -52,7 +51,7 @@ std::unique_ptr<base::DictionaryValue> GetScoreDictForSettings(
   if (value.get())
     return value;
 
-  return base::MakeUnique<base::DictionaryValue>();
+  return std::make_unique<base::DictionaryValue>();
 }
 
 }  // namespace
@@ -209,14 +208,13 @@ void SiteEngagementScore::UpdateFromVariations(const char* param_name) {
     SiteEngagementScore::GetParamValues()[i].second = param_vals[i];
 }
 
-SiteEngagementScore::SiteEngagementScore(
-    base::Clock* clock,
-    const GURL& origin,
-    HostContentSettingsMap* settings)
+SiteEngagementScore::SiteEngagementScore(base::Clock* clock,
+                                         const GURL& origin,
+                                         HostContentSettingsMap* settings)
     : SiteEngagementScore(
           clock,
           origin,
-          GetScoreDictForSettings(settings, origin)) {
+          GetSiteEngagementScoreDictForSettings(settings, origin)) {
   settings_map_ = settings;
 }
 

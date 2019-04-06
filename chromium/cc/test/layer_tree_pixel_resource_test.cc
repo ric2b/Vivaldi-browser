@@ -4,7 +4,7 @@
 
 #include "cc/test/layer_tree_pixel_resource_test.h"
 
-#include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "cc/layers/layer.h"
 #include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
@@ -34,10 +34,9 @@ void LayerTreeHostPixelResourceTest::InitializeFromTestCase(
   initialized_ = true;
 }
 
-void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
-    LayerTreeHostImpl* host_impl,
-    std::unique_ptr<RasterBufferProvider>* raster_buffer_provider,
-    std::unique_ptr<ResourcePool>* resource_pool) {
+std::unique_ptr<RasterBufferProvider>
+LayerTreeHostPixelResourceTest::CreateRasterBufferProvider(
+    LayerTreeHostImpl* host_impl) {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       task_runner_provider()->HasImplThread()
           ? task_runner_provider()->ImplThreadTaskRunner()
@@ -45,66 +44,64 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
   DCHECK(task_runner);
   DCHECK(initialized_);
 
+  LayerTreeFrameSink* layer_tree_frame_sink =
+      host_impl->layer_tree_frame_sink();
   viz::ContextProvider* compositor_context_provider =
-      host_impl->layer_tree_frame_sink()->context_provider();
+      layer_tree_frame_sink->context_provider();
   viz::RasterContextProvider* worker_context_provider =
-      host_impl->layer_tree_frame_sink()->worker_context_provider();
-  LayerTreeResourceProvider* resource_provider = host_impl->resource_provider();
+      layer_tree_frame_sink->worker_context_provider();
+  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
+      layer_tree_frame_sink->gpu_memory_buffer_manager();
   int max_bytes_per_copy_operation = 1024 * 1024;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
+
+  viz::ResourceFormat gpu_raster_format;
+  viz::ResourceFormat sw_raster_format;
+  if (compositor_context_provider) {
+    if (host_impl->settings().use_rgba_4444) {
+      gpu_raster_format = sw_raster_format = viz::RGBA_4444;
+    } else {
+      gpu_raster_format = viz::PlatformColor::BestSupportedRenderBufferFormat(
+          compositor_context_provider->ContextCapabilities());
+      sw_raster_format = viz::PlatformColor::BestSupportedTextureFormat(
+          compositor_context_provider->ContextCapabilities());
+    }
+  }
 
   switch (test_case_) {
     case SOFTWARE:
       EXPECT_FALSE(compositor_context_provider);
       EXPECT_EQ(PIXEL_TEST_SOFTWARE, test_type_);
 
-      *raster_buffer_provider =
-          BitmapRasterBufferProvider::Create(resource_provider);
-      *resource_pool = std::make_unique<ResourcePool>(
-          resource_provider, std::move(task_runner),
-          ResourcePool::kDefaultExpirationDelay, false);
-      break;
+      return std::make_unique<BitmapRasterBufferProvider>(
+          host_impl->layer_tree_frame_sink());
     case GPU:
       EXPECT_TRUE(compositor_context_provider);
       EXPECT_TRUE(worker_context_provider);
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
 
-      *raster_buffer_provider = std::make_unique<GpuRasterBufferProvider>(
-          compositor_context_provider, worker_context_provider,
-          resource_provider, false, 0, viz::PlatformColor::BestTextureFormat(),
-          false);
-      *resource_pool = std::make_unique<ResourcePool>(
-          resource_provider, std::move(task_runner),
-          viz::ResourceTextureHint::kFramebuffer,
-          ResourcePool::kDefaultExpirationDelay, false);
-      break;
+      return std::make_unique<GpuRasterBufferProvider>(
+          compositor_context_provider, worker_context_provider, false, 0,
+          gpu_raster_format, gfx::Size(), true, false);
     case ZERO_COPY:
       EXPECT_TRUE(compositor_context_provider);
+      EXPECT_TRUE(gpu_memory_buffer_manager);
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
 
-      *raster_buffer_provider = ZeroCopyRasterBufferProvider::Create(
-          resource_provider, viz::PlatformColor::BestTextureFormat());
-      *resource_pool = std::make_unique<ResourcePool>(
-          resource_provider, std::move(task_runner),
-          gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
-          ResourcePool::kDefaultExpirationDelay, false);
-      break;
+      return std::make_unique<ZeroCopyRasterBufferProvider>(
+          gpu_memory_buffer_manager, compositor_context_provider,
+          sw_raster_format);
     case ONE_COPY:
       EXPECT_TRUE(compositor_context_provider);
       EXPECT_TRUE(worker_context_provider);
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
 
-      *raster_buffer_provider = std::make_unique<OneCopyRasterBufferProvider>(
+      return std::make_unique<OneCopyRasterBufferProvider>(
           task_runner, compositor_context_provider, worker_context_provider,
-          resource_provider, max_bytes_per_copy_operation, false,
-          max_staging_buffer_usage_in_bytes,
-          viz::PlatformColor::BestTextureFormat());
-      *resource_pool = std::make_unique<ResourcePool>(
-          resource_provider, std::move(task_runner),
-          viz::ResourceTextureHint::kDefault,
-          ResourcePool::kDefaultExpirationDelay, false);
-      break;
+          gpu_memory_buffer_manager, max_bytes_per_copy_operation, false, false,
+          max_staging_buffer_usage_in_bytes, sw_raster_format);
   }
+  return {};
 }
 
 void LayerTreeHostPixelResourceTest::RunPixelResourceTest(

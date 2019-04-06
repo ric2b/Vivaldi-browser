@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2007, Google Inc.
  * All rights reserved.
  * 
@@ -40,17 +41,17 @@
 #include <string.h>    // for strlen(), memset(), memcmp()
 #include <assert.h>
 #include <stdarg.h>    // for va_list, va_start, va_end
+#include <algorithm>   // for std:{min,max}
 #include <windows.h>
-#include <algorithm>
 #include "port.h"
 #include "base/logging.h"
 #include "base/spinlock.h"
 #include "internal_logging.h"
-#include "system-alloc.h"
 
 // -----------------------------------------------------------------------
 // Basic libraries
 
+PERFTOOLS_DLL_DECL
 int getpagesize() {
   static int pagesize = 0;
   if (pagesize == 0) {
@@ -81,12 +82,6 @@ extern "C" PERFTOOLS_DLL_DECL void WriteToStderr(const char* buf, int len) {
 
 // -----------------------------------------------------------------------
 // Threads code
-
-// Declared (not extern "C") in thread_cache.h
-bool CheckIfKernelSupportsTLS() {
-  // TODO(csilvers): return true (all win's since win95, at least, support this)
-  return false;
-}
 
 // Windows doesn't support pthread_key_create's destr_function, and in
 // fact it's a bit tricky to get code to run when a thread exits.  This
@@ -154,14 +149,13 @@ static void NTAPI on_tls_callback(HINSTANCE h, DWORD dwReason, PVOID pv) {
 // for the linker /INCLUDE:symbol pragmas above.
 extern "C" {
 // This tells the linker to run these functions.
-// We use CRT$XLY instead of CRT$XLB to ensure we're called LATER in sequence.
-#pragma section(".CRT$XLY", read)
-_declspec(allocate(".CRT$XLY")) \
-  void (NTAPI *p_thread_callback_tcmalloc)(
+#pragma data_seg(push, old_seg)
+#pragma data_seg(".CRT$XLB")
+void (NTAPI *p_thread_callback_tcmalloc)(
     HINSTANCE h, DWORD dwReason, PVOID pv) = on_tls_callback;
-#pragma section(".CRT$XTU", read)
-_declspec(allocate(".CRT$XTU")) \
-  int (*p_process_term_tcmalloc)(void) = on_process_term;
+#pragma data_seg(".CRT$XTU")
+int (*p_process_term_tcmalloc)(void) = on_process_term;
+#pragma data_seg(pop, old_seg)
 }  // extern "C"
 
 #else  // #ifdef _MSC_VER  [probably msys/mingw]
@@ -215,128 +209,6 @@ extern "C" int perftools_pthread_once(pthread_once_t *once_control,
   }
   return 0;
 }
-
-
-// -----------------------------------------------------------------------
-// These functions replace system-alloc.cc
-
-// This is mostly like MmapSysAllocator::Alloc, except it does these weird
-// munmap's in the middle of the page, which is forbidden in windows.
-extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
-                                  size_t alignment) {
-  // Align on the pagesize boundary
-  const int pagesize = getpagesize();
-  if (alignment < pagesize) alignment = pagesize;
-  size = ((size + alignment - 1) / alignment) * alignment;
-
-  // Report the total number of bytes the OS actually delivered.  This might be
-  // greater than |size| because of alignment concerns.  The full size is
-  // necessary so that adjacent spans can be coalesced.
-  // TODO(antonm): proper processing of alignments
-  // in actual_size and decommitting.
-  if (actual_size) {
-    *actual_size = size;
-  }
-
-  // We currently do not support alignments larger than the pagesize or
-  // alignments that are not multiples of the pagesize after being floored.
-  // If this ability is needed it can be done by the caller (assuming it knows
-  // the page size).
-  assert(alignment <= pagesize);
-
-  void* result = VirtualAlloc(0, size,
-                              MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
-  if (result == NULL)
-    return NULL;
-
-  // If the result is not aligned memory fragmentation will result which can
-  // lead to pathological memory use.
-  assert((reinterpret_cast<uintptr_t>(result) & (alignment - 1)) == 0);
-
-  return result;
-}
-
-size_t TCMalloc_SystemAddGuard(void* start, size_t size) {
-  static size_t pagesize = 0;
-  if (pagesize == 0) {
-    SYSTEM_INFO system_info;
-    GetSystemInfo(&system_info);
-    pagesize = system_info.dwPageSize;
-  }
-
-  // We know that TCMalloc_SystemAlloc will give us a correct page alignment
-  // regardless, so we can just assert to detect erroneous callers.
-  assert(reinterpret_cast<size_t>(start) % pagesize == 0);
-
-  // Add a guard page to catch metadata corruption. We're using the
-  // PAGE_GUARD flag rather than NO_ACCESS because we want the unique
-  // exception in crash reports.
-  DWORD permissions = 0;
-  if (size > pagesize &&
-      VirtualProtect(start, pagesize, PAGE_READONLY | PAGE_GUARD,
-                     &permissions)) {
-    return pagesize;
-  }
-
-  return 0;
-}
-
-void TCMalloc_SystemRelease(void* start, size_t length) {
-  if (VirtualFree(start, length, MEM_DECOMMIT))
-    return;
-
-  // The decommit may fail if the memory region consists of allocations
-  // from more than one call to VirtualAlloc.  In this case, fall back to
-  // using VirtualQuery to retrieve the allocation boundaries and decommit
-  // them each individually.
-
-  char* ptr = static_cast<char*>(start);
-  char* end = ptr + length;
-  MEMORY_BASIC_INFORMATION info;
-  while (ptr < end) {
-    size_t resultSize = VirtualQuery(ptr, &info, sizeof(info));
-    assert(resultSize == sizeof(info));
-    size_t decommitSize = std::min<size_t>(info.RegionSize, end - ptr);
-    BOOL success = VirtualFree(ptr, decommitSize, MEM_DECOMMIT);
-    assert(success == TRUE);
-    ptr += decommitSize;
-  }
-}
-
-void TCMalloc_SystemCommit(void* start, size_t length) {
-  if (VirtualAlloc(start, length, MEM_COMMIT, PAGE_READWRITE) == start)
-    return;
-
-  // The commit may fail if the memory region consists of allocations
-  // from more than one call to VirtualAlloc.  In this case, fall back to
-  // using VirtualQuery to retrieve the allocation boundaries and commit them
-  // each individually.
-
-  char* ptr = static_cast<char*>(start);
-  char* end = ptr + length;
-  MEMORY_BASIC_INFORMATION info;
-  while (ptr < end) {
-    size_t resultSize = VirtualQuery(ptr, &info, sizeof(info));
-    assert(resultSize == sizeof(info));
-
-    size_t commitSize = std::min<size_t>(info.RegionSize, end - ptr);
-    void* newAddress = VirtualAlloc(ptr, commitSize, MEM_COMMIT,
-                                    PAGE_READWRITE);
-    assert(newAddress == ptr);
-    ptr += commitSize;
-  }
-}
-
-bool RegisterSystemAllocator(SysAllocator *allocator, int priority) {
-  return false;   // we don't allow registration on windows, right now
-}
-
-void DumpSystemAllocatorStats(TCMalloc_Printer* printer) {
-  // We don't dump stats on windows, right now
-}
-
-// The current system allocator
-SysAllocator* sys_alloc = NULL;
 
 
 // -----------------------------------------------------------------------

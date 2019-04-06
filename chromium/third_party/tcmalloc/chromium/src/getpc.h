@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -62,8 +63,6 @@
 #elif defined(HAVE_CYGWIN_SIGNAL_H)
 #include <cygwin/signal.h>
 typedef ucontext ucontext_t;
-#elif defined(__ANDROID__)
-#include <unwind.h>
 #endif
 
 
@@ -96,7 +95,7 @@ struct CallUnrollInfo {
   int pc_offset;
   // The actual instruction bytes. Feel free to make it larger if you
   // need a longer sequence.
-  char ins[16];
+  unsigned char ins[16];
   // How many bytes to match from ins array?
   int ins_size;
   // The offset from the stack pointer (e)sp where to look for the
@@ -111,8 +110,7 @@ struct CallUnrollInfo {
 // then, is to do the magic call-unrolling for systems that support it.
 
 // -- Special case 1: linux x86, for which we have CallUnrollInfo
-#if defined(__linux) && defined(__i386) && defined(__GNUC__) && \
-    !defined(__ANDROID__)
+#if defined(__linux) && defined(__i386) && defined(__GNUC__)
 static const CallUnrollInfo callunrollinfo[] = {
   // Entry to a function:  push %ebp;  mov  %esp,%ebp
   // Top-of-stack contains the caller IP.
@@ -174,23 +172,19 @@ inline void* GetPC(const struct ucontext_t& signal_ucontext) {
   RAW_LOG(ERROR, "GetPC is not yet implemented on Windows\n");
   return NULL;
 }
-#elif defined(__ANDROID__)
-typedef struct _Unwind_Context ucontext_t;
 
-inline void* GetPC(const ucontext_t& signal_ucontext) {
-  // Bionic doesn't export ucontext, see
-  // https://code.google.com/p/android/issues/detail?id=34784.
-  return reinterpret_cast<void*>(_Unwind_GetIP(
-      const_cast<ucontext_t*>(&signal_ucontext)));
-}
-//
 // Normal cases.  If this doesn't compile, it's probably because
 // PC_FROM_UCONTEXT is the empty string.  You need to figure out
 // the right value for your system, and add it to the list in
 // configure.ac (or set it manually in your config.h).
 #else
 inline void* GetPC(const ucontext_t& signal_ucontext) {
+#if defined(__s390__) && !defined(__s390x__)
+  // Mask out the AMODE31 bit from the PC recorded in the context.
+  return (void*)((unsigned long)signal_ucontext.PC_FROM_UCONTEXT & 0x7fffffffUL);
+#else
   return (void*)signal_ucontext.PC_FROM_UCONTEXT;   // defined in config.h
+#endif
 }
 
 #endif

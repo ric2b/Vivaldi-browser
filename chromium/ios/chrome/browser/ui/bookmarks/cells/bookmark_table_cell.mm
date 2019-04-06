@@ -6,7 +6,8 @@
 
 #include "components/bookmarks/browser/bookmark_model.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_cell_title_edit_delegate.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
@@ -55,9 +56,9 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 
 #pragma mark - Initializer
 
-- (instancetype)initWithReuseIdentifier:(NSString*)bookmarkCellIdentifier {
-  self = [super initWithStyle:UITableViewCellStyleDefault
-              reuseIdentifier:bookmarkCellIdentifier];
+- (instancetype)initWithStyle:(UITableViewCellStyle)style
+              reuseIdentifier:(NSString*)bookmarkCellIdentifier {
+  self = [super initWithStyle:style reuseIdentifier:bookmarkCellIdentifier];
   if (self) {
     _titleText = [[UITextField alloc] initWithFrame:CGRectZero];
     _titleText.textColor = [[MDCPalette greyPalette] tint900];
@@ -87,18 +88,12 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
         constraintEqualToConstant:kBookmarkTableCellImageSize]
         .active = YES;
 
-    // Create stack view.
+    // Create and configure StackView.
     UIStackView* contentStack = [[UIStackView alloc]
         initWithArrangedSubviews:@[ _iconView, _placeholderLabel, _titleText ]];
     [self.contentView addSubview:contentStack];
-
-    contentStack.layoutMargins = UIEdgeInsetsMake(
-        0, kBookmarkTableCellImagePadding, 0, kBookmarkTableCellImagePadding);
-    contentStack.layoutMarginsRelativeArrangement = YES;
     contentStack.spacing = kBookmarkTableCellImagePadding;
     contentStack.alignment = UIStackViewAlignmentCenter;
-
-    // Configure stack view layout.
     contentStack.translatesAutoresizingMaskIntoConstraints = NO;
     [NSLayoutConstraint activateConstraints:@[
       [contentStack.topAnchor
@@ -106,9 +101,11 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
       [contentStack.bottomAnchor
           constraintEqualToAnchor:self.contentView.bottomAnchor],
       [contentStack.leadingAnchor
-          constraintEqualToAnchor:self.contentView.leadingAnchor],
+          constraintEqualToAnchor:self.contentView.leadingAnchor
+                         constant:kBookmarkTableCellImagePadding],
       [contentStack.trailingAnchor
-          constraintEqualToAnchor:self.contentView.trailingAnchor]
+          constraintEqualToAnchor:self.contentView.trailingAnchor
+                         constant:-kBookmarkTableCellImagePadding]
     ]];
 
     // Add separator view.

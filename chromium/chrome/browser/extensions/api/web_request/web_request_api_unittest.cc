@@ -139,6 +139,19 @@ void GetPartOfMessageArguments(IPC::Message* message,
   ASSERT_TRUE(list.GetDictionary(0, out));
 }
 
+base::Value FormBinaryValue(base::StringPiece str) {
+  base::Value list(base::Value::Type::LIST);
+  list.GetList().emplace_back(base::Value(
+      base::Value::BlobStorage(str.data(), str.data() + str.size())));
+  return list;
+}
+
+base::Value FormStringValue(base::StringPiece str) {
+  base::Value list(base::Value::Type::LIST);
+  list.GetList().emplace_back(base::Value(str));
+  return list;
+}
+
 }  // namespace
 
 // A mock event router that responds to events with a pre-arranged queue of
@@ -216,10 +229,8 @@ class ExtensionWebRequestTest : public testing::Test {
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
     ChromeNetworkDelegate::InitializePrefsOnUIThread(
-        &enable_referrers_, nullptr, nullptr, nullptr, nullptr,
-        profile_.GetTestingPrefService());
-    network_delegate_.reset(
-        new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_));
+        nullptr, nullptr, nullptr, profile_.GetTestingPrefService());
+    network_delegate_.reset(new ChromeNetworkDelegate(event_router_.get()));
     network_delegate_->set_profile(&profile_);
     network_delegate_->set_cookie_settings(
         CookieSettingsFactory::GetForProfile(&profile_).get());
@@ -239,7 +250,6 @@ class ExtensionWebRequestTest : public testing::Test {
   TestingProfile profile_;
   TestingProfileManager profile_manager_;
   net::TestDelegate delegate_;
-  BooleanPrefMember enable_referrers_;
   TestIPCSender ipc_sender_;
   scoped_refptr<EventRouterForwarder> event_router_;
   std::unique_ptr<ChromeNetworkDelegate> network_delegate_;
@@ -566,7 +576,7 @@ void ExtensionWebRequestTest::FireURLRequestWithData(
       &(bytes_2[0]), bytes_2.size()));
   request->set_upload(std::make_unique<net::ElementsUploadDataStream>(
       std::move(element_readers), 0));
-  ipc_sender_.PushTask(base::Bind(&base::DoNothing));
+  ipc_sender_.PushTask(base::DoNothing());
   request->Start();
 }
 
@@ -592,17 +602,26 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
   const size_t kPlainBlock2Length = sizeof(kPlainBlock2) - 1;
   std::vector<char> plain_2(kPlainBlock2, kPlainBlock2 + kPlainBlock2Length);
 #define kBoundary "THIS_IS_A_BOUNDARY"
-  const char kFormBlock1[] = "--" kBoundary "\r\n"
+  const char kFormBlock1[] =
+      "--" kBoundary
+      "\r\n"
       "Content-Disposition: form-data; name=\"A\"\r\n"
       "\r\n"
       "test text\r\n"
-      "--" kBoundary "\r\n"
+      "--" kBoundary
+      "\r\n"
       "Content-Disposition: form-data; name=\"B\"; filename=\"\"\r\n"
       "Content-Type: application/octet-stream\r\n"
-      "\r\n";
+      "\r\n"
+      "--" kBoundary
+      "\r\n"
+      "Content-Disposition: form-data; name=\"B_content\"\r\n"
+      "Content-Type: application/octet-stream\r\n"
+      "\r\n"
+      "\uffff\uffff\uffff\uffff\r\n"
+      "--" kBoundary "\r\n";
   std::vector<char> form_1(kFormBlock1, kFormBlock1 + sizeof(kFormBlock1) - 1);
-  const char kFormBlock2[] = "\r\n"
-      "--" kBoundary "\r\n"
+  const char kFormBlock2[] =
       "Content-Disposition: form-data; name=\"C\"\r\n"
       "\r\n"
       "test password\r\n"
@@ -623,10 +642,21 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
     &kRawPath
   };
   // Contents of formData.
-  const char kFormData[] =
-      "{\"A\":[\"test text\"],\"B\":[\"\"],\"C\":[\"test password\"]}";
-  std::unique_ptr<const base::Value> form_data =
-      base::JSONReader::Read(kFormData);
+  struct KeyValuePairs {
+    const char* key;
+    base::Value value;
+  };
+  KeyValuePairs kFormDataPairs[] = {
+      {"A", FormStringValue("test text")},
+      {"B", FormStringValue("")},
+      {"B_content", FormBinaryValue("\uffff\uffff\uffff\uffff")},
+      {"C", FormStringValue("test password")}};
+  std::unique_ptr<base::Value> form_data =
+      std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
+  for (auto& pair : kFormDataPairs) {
+    form_data->SetKey(pair.key, std::move(pair.value));
+  }
+
   ASSERT_TRUE(form_data.get() != NULL);
   ASSERT_TRUE(form_data->type() == base::Value::Type::DICTIONARY);
   // Contents of raw.
@@ -782,7 +812,7 @@ TEST_F(ExtensionWebRequestTest, MinimalAccessRequestBodyData) {
 
   // Only one request is sent, but more than one event will be triggered.
   for (size_t i = 1; i < arraysize(kExpected); ++i)
-    ipc_sender_.PushTask(base::Bind(&base::DoNothing));
+    ipc_sender_.PushTask(base::DoNothing());
 
   const std::vector<char> part_of_body(1);
   FireURLRequestWithData("POST", nullptr, part_of_body, part_of_body);
@@ -855,7 +885,7 @@ TEST_F(ExtensionWebRequestTest, ProperFilteringInPublicSession) {
 
   // Only one request is sent, but more than one event will be triggered.
   for (size_t i = 1; i < arraysize(kExpected); ++i)
-    ipc_sender_.PushTask(base::Bind(&base::DoNothing));
+    ipc_sender_.PushTask(base::DoNothing());
 
   const std::vector<char> part_of_body(1);
   FireURLRequestWithData("POST", nullptr, part_of_body, part_of_body);
@@ -920,7 +950,7 @@ TEST_F(ExtensionWebRequestTest, NoAccessRequestBodyData) {
         context_->CreateRequest(request_url, net::DEFAULT_PRIORITY, &delegate_,
                                 TRAFFIC_ANNOTATION_FOR_TESTS));
     request->set_method(kMethods[i]);
-    ipc_sender_.PushTask(base::Bind(&base::DoNothing));
+    ipc_sender_.PushTask(base::DoNothing());
     request->Start();
   }
 
@@ -1092,10 +1122,8 @@ class ExtensionWebRequestHeaderModificationTest
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
     ChromeNetworkDelegate::InitializePrefsOnUIThread(
-        &enable_referrers_, nullptr, nullptr, nullptr, nullptr,
-        profile_.GetTestingPrefService());
-    network_delegate_.reset(
-        new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_));
+        nullptr, nullptr, nullptr, profile_.GetTestingPrefService());
+    network_delegate_.reset(new ChromeNetworkDelegate(event_router_.get()));
     network_delegate_->set_profile(&profile_);
     network_delegate_->set_cookie_settings(
         CookieSettingsFactory::GetForProfile(&profile_).get());
@@ -1111,7 +1139,6 @@ class ExtensionWebRequestHeaderModificationTest
   TestingProfile profile_;
   TestingProfileManager profile_manager_;
   net::TestDelegate delegate_;
-  BooleanPrefMember enable_referrers_;
   TestIPCSender ipc_sender_;
   scoped_refptr<EventRouterForwarder> event_router_;
   std::unique_ptr<ChromeNetworkDelegate> network_delegate_;
@@ -1195,7 +1222,7 @@ TEST_P(ExtensionWebRequestHeaderModificationTest, TestModifications) {
   }
 
   // Don't do anything for the onSendHeaders message.
-  ipc_sender_.PushTask(base::Bind(&base::DoNothing));
+  ipc_sender_.PushTask(base::DoNothing());
 
   // Note that we mess up the headers slightly:
   // request->Start() will first add additional headers (e.g. the User-Agent)
@@ -1897,8 +1924,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   bool request_headers_modified0;
   net::HttpRequestHeaders headers0;
   headers0.MergeFrom(base_headers);
-  MergeOnBeforeSendHeadersResponses(deltas, &headers0, &warning_set, &logger,
-                                    &request_headers_modified0);
+  MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers0, &warning_set,
+                                    &logger, &request_headers_modified0);
   ASSERT_TRUE(headers0.GetHeader("key1", &header_value));
   EXPECT_EQ("value 1", header_value);
   ASSERT_TRUE(headers0.GetHeader("key2", &header_value));
@@ -1920,8 +1947,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   bool request_headers_modified1;
   net::HttpRequestHeaders headers1;
   headers1.MergeFrom(base_headers);
-  MergeOnBeforeSendHeadersResponses(deltas, &headers1, &warning_set, &logger,
-                                    &request_headers_modified1);
+  MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers1, &warning_set,
+                                    &logger, &request_headers_modified1);
   EXPECT_FALSE(headers1.HasHeader("key1"));
   ASSERT_TRUE(headers1.GetHeader("key2", &header_value));
   EXPECT_EQ("value 3", header_value);
@@ -1945,8 +1972,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   bool request_headers_modified2;
   net::HttpRequestHeaders headers2;
   headers2.MergeFrom(base_headers);
-  MergeOnBeforeSendHeadersResponses(deltas, &headers2, &warning_set, &logger,
-                                    &request_headers_modified2);
+  MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers2, &warning_set,
+                                    &logger, &request_headers_modified2);
   EXPECT_FALSE(headers2.HasHeader("key1"));
   ASSERT_TRUE(headers2.GetHeader("key2", &header_value));
   EXPECT_EQ("value 3", header_value);
@@ -1972,8 +1999,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   bool request_headers_modified3;
   net::HttpRequestHeaders headers3;
   headers3.MergeFrom(base_headers);
-  MergeOnBeforeSendHeadersResponses(deltas, &headers3, &warning_set, &logger,
-                                    &request_headers_modified3);
+  MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers3, &warning_set,
+                                    &logger, &request_headers_modified3);
   EXPECT_FALSE(headers3.HasHeader("key1"));
   ASSERT_TRUE(headers3.GetHeader("key2", &header_value));
   EXPECT_EQ("value 3", header_value);
@@ -2040,8 +2067,8 @@ TEST(ExtensionWebRequestHelpersTest,
   net::HttpRequestHeaders headers1;
   headers1.MergeFrom(base_headers);
   warning_set.clear();
-  MergeOnBeforeSendHeadersResponses(deltas, &headers1, &warning_set, &logger,
-                                    &request_headers_modified1);
+  MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers1, &warning_set,
+                                    &logger, &request_headers_modified1);
   EXPECT_TRUE(headers1.HasHeader("Cookie"));
   ASSERT_TRUE(headers1.GetHeader("Cookie", &header_value));
   EXPECT_EQ("name=new value; name2=new value; name4=\"value 4\"", header_value);
@@ -2114,7 +2141,7 @@ TEST(ExtensionWebRequestHelpersTest,
   deltas.push_back(d0);
   scoped_refptr<net::HttpResponseHeaders> new_headers0;
   MergeCookiesInOnHeadersReceivedResponses(
-      deltas, base_headers.get(), &new_headers0, &warning_set, &logger);
+      GURL(), deltas, base_headers.get(), &new_headers0, &warning_set, &logger);
   EXPECT_FALSE(new_headers0.get());
   EXPECT_EQ(0u, warning_set.size());
   EXPECT_EQ(0u, logger.log_size());
@@ -2283,7 +2310,7 @@ TEST(ExtensionWebRequestHelpersTest,
   scoped_refptr<net::HttpResponseHeaders> new_headers1;
   warning_set.clear();
   MergeCookiesInOnHeadersReceivedResponses(
-      deltas, headers1.get(), &new_headers1, &warning_set, &logger);
+      GURL(), deltas, headers1.get(), &new_headers1, &warning_set, &logger);
 
   EXPECT_TRUE(new_headers1->HasHeader("Foo"));
   size_t iter = 0;

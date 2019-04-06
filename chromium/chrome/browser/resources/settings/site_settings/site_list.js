@@ -11,7 +11,11 @@ Polymer({
 
   is: 'site-list',
 
-  behaviors: [SiteSettingsBehavior, WebUIListenerBehavior],
+  behaviors: [
+    SiteSettingsBehavior,
+    WebUIListenerBehavior,
+    ListPropertyUpdateBehavior,
+  ],
 
   properties: {
     /** @private */
@@ -65,6 +69,12 @@ Polymer({
       value: settings.INVALID_CATEGORY_SUBTYPE,
     },
 
+    /** @private */
+    hasIncognito_: Boolean,
+
+    /** @private */
+    showAddSiteDialog_: Boolean,
+
     /**
      * Whether to show the Allow action in the action menu.
      * @private
@@ -115,6 +125,7 @@ Polymer({
         this.siteWithinCategoryChanged_.bind(this));
     this.addWebUIListener(
         'onIncognitoStatusChanged', this.onIncognitoStatusChanged_.bind(this));
+    this.browserProxy.updateIncognitoStatus();
   },
 
   /**
@@ -134,7 +145,9 @@ Polymer({
    * Another message is sent when the *last* incognito window closes.
    * @private
    */
-  onIncognitoStatusChanged_: function() {
+  onIncognitoStatusChanged_: function(hasIncognito) {
+    this.hasIncognito_ = hasIncognito;
+
     // The SESSION_ONLY list won't have any incognito exceptions. (Minor
     // optimization, not required).
     if (this.categorySubtype == settings.ContentSetting.SESSION_ONLY)
@@ -150,6 +163,9 @@ Polymer({
    * @private
    */
   configureWidget_: function() {
+    if (this.category == undefined)
+      return;
+
     // The observer for All Sites fires before the attached/ready event, so
     // initialize this here.
     if (this.browserProxy_ === undefined) {
@@ -202,23 +218,17 @@ Polymer({
 
   /**
    * A handler for the Add Site button.
-   * @param {!Event} e
    * @private
    */
-  onAddSiteTap_: function(e) {
+  onAddSiteTap_: function() {
     assert(!this.readOnlyList);
-    e.preventDefault();
-    const dialog = document.createElement('add-site-dialog');
-    dialog.category = this.category;
-    dialog.contentSetting = this.categorySubtype;
-    this.shadowRoot.appendChild(dialog);
+    this.showAddSiteDialog_ = true;
+  },
 
-    dialog.open(this.categorySubtype);
-
-    dialog.addEventListener('close', () => {
-      cr.ui.focusWithoutInk(assert(this.$.addSite));
-      dialog.remove();
-    });
+  /** @private */
+  onAddSiteDialogClosed_: function() {
+    this.showAddSiteDialog_ = false;
+    cr.ui.focusWithoutInk(assert(this.$.addSite));
   },
 
   /**
@@ -227,53 +237,24 @@ Polymer({
    */
   populateList_: function() {
     this.browserProxy_.getExceptionList(this.category).then(exceptionList => {
-      this.processExceptions_([exceptionList]);
+      this.processExceptions_(exceptionList);
       this.closeActionMenu_();
     });
   },
 
   /**
    * Process the exception list returned from the native layer.
-   * @param {!Array<!Array<RawSiteException>>} data List of sites (exceptions)
-   *     to process.
+   * @param {!Array<RawSiteException>} exceptionList
    * @private
    */
-  processExceptions_: function(data) {
-    const sites = /** @type {!Array<RawSiteException>} */ ([]);
-    for (let i = 0; i < data.length; ++i) {
-      const exceptionList = data[i];
-      for (let k = 0; k < exceptionList.length; ++k) {
-        if (exceptionList[k].setting == settings.ContentSetting.DEFAULT ||
-            exceptionList[k].setting != this.categorySubtype) {
-          continue;
-        }
-
-        sites.push(exceptionList[k]);
-      }
-    }
-    this.sites = this.toSiteArray_(sites);
-  },
-
-  /**
-   * Converts a list of exceptions received from the C++ handler to
-   * full SiteException objects.
-   * @param {!Array<RawSiteException>} sites A list of sites to convert.
-   * @return {!Array<SiteException>} A list of full SiteExceptions.
-   * @private
-   */
-  toSiteArray_: function(sites) {
-    const results = /** @type {!Array<SiteException>} */ ([]);
-    let lastOrigin = '';
-    let lastEmbeddingOrigin = '';
-    for (let i = 0; i < sites.length; ++i) {
-      /** @type {!SiteException} */
-      const siteException = this.expandSiteException(sites[i]);
-
-      results.push(siteException);
-      lastOrigin = siteException.origin;
-      lastEmbeddingOrigin = siteException.embeddingOrigin;
-    }
-    return results;
+  processExceptions_: function(exceptionList) {
+    const sites =
+        exceptionList
+            .filter(
+                site => site.setting != settings.ContentSetting.DEFAULT &&
+                    site.setting == this.categorySubtype)
+            .map(site => this.expandSiteException(site));
+    this.updateList('sites', x => x.origin, sites);
   },
 
   /**
@@ -362,8 +343,7 @@ Polymer({
   onEditTap_: function() {
     // Close action menu without resetting |this.actionMenuSite_| since it is
     // bound to the dialog.
-    /** @type {!CrActionMenuElement} */ (this.$$('dialog[is=cr-action-menu]'))
-        .close();
+    /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu')).close();
     this.showEditExceptionDialog_ = true;
   },
 
@@ -371,8 +351,10 @@ Polymer({
   onEditExceptionDialogClosed_: function() {
     this.showEditExceptionDialog_ = false;
     this.actionMenuSite_ = null;
-    this.activeDialogAnchor_.focus();
-    this.activeDialogAnchor_ = null;
+    if (this.activeDialogAnchor_) {
+      this.activeDialogAnchor_.focus();
+      this.activeDialogAnchor_ = null;
+    }
   },
 
   /** @private */
@@ -422,7 +404,7 @@ Polymer({
         Polymer.dom(/** @type {!Event} */ (e)).localTarget);
 
     this.actionMenuSite_ = e.model.item;
-    /** @type {!CrActionMenuElement} */ (this.$$('dialog[is=cr-action-menu]'))
+    /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu'))
         .showAt(this.activeDialogAnchor_);
   },
 
@@ -430,8 +412,8 @@ Polymer({
   closeActionMenu_: function() {
     this.actionMenuSite_ = null;
     this.activeDialogAnchor_ = null;
-    const actionMenu = /** @type {!CrActionMenuElement} */ (
-        this.$$('dialog[is=cr-action-menu]'));
+    const actionMenu =
+        /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu'));
     if (actionMenu.open)
       actionMenu.close();
   },

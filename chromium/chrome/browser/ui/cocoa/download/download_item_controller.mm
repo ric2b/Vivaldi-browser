@@ -10,10 +10,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_shelf_context_menu.h"
-#include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #import "chrome/browser/themes/theme_properties.h"
 #import "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/download/download_item_button.h"
@@ -27,7 +29,8 @@
 #import "chrome/browser/ui/cocoa/ui_localizer.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/theme_resources.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/page_navigator.h"
 #include "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
 #include "ui/base/cocoa/a11y_util.h"
@@ -37,8 +40,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/text_elider.h"
 
-using content::DownloadItem;
-using extensions::ExperienceSamplingEvent;
+using download::DownloadItem;
 
 namespace {
 
@@ -89,8 +91,6 @@ class DownloadShelfContextMenuMac : public DownloadShelfContextMenu {
 - (void)themeDidChangeNotification:(NSNotification*)aNotification;
 - (void)updateTheme:(const ui::ThemeProvider*)themeProvider;
 - (void)setState:(DownloadItemState)state;
-- (void)initExperienceSamplingEvent:(const char*)event;
-- (void)updateExperienceSamplingEvent:(const char*)event;
 @end
 
 // Implementation of DownloadItemController
@@ -123,7 +123,6 @@ class DownloadShelfContextMenuMac : public DownloadShelfContextMenu {
 }
 
 - (void)dealloc {
-  [self updateExperienceSamplingEvent:ExperienceSamplingEvent::kIgnore];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   [progressView_ setController:nil];
   [progressView_ setTarget:nil];
@@ -164,13 +163,6 @@ class DownloadShelfContextMenuMac : public DownloadShelfContextMenu {
     return;
 
   [self setState:kDangerous];
-
-  // ExperienceSampling: Dangerous or malicious download warning is being shown
-  // to the user, so we start a new SamplingEvent and track it.
-  const char* event_name = downloadModel->MightBeMalicious()
-                               ? ExperienceSamplingEvent::kMaliciousDownload
-                               : ExperienceSamplingEvent::kDangerousDownload;
-  [self updateExperienceSamplingEvent:event_name];
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   NSImage* alertIcon;
@@ -359,37 +351,28 @@ class DownloadShelfContextMenuMac : public DownloadShelfContextMenu {
   [dangerousDownloadLabel_ setTextColor:color];
 }
 
-- (void)initExperienceSamplingEvent:(const char*)event {
-  sampling_event_.reset(new ExperienceSamplingEvent(
-      event,
-      bridge_->download_model()->download()->GetURL(),
-      bridge_->download_model()->download()->GetReferrerUrl(),
-      bridge_->download_model()->download()->GetBrowserContext()));
-}
-
-- (void)updateExperienceSamplingEvent:(const char*)event {
-  if (sampling_event_.get()) {
-    sampling_event_->CreateUserDecisionEvent(event);
-    sampling_event_.reset(NULL);
-  }
-}
-
 - (IBAction)saveDownload:(id)sender {
   // The user has confirmed a dangerous download.  We record how quickly the
   // user did this to detect whether we're being clickjacked.
   UMA_HISTOGRAM_LONG_TIMES("clickjacking.save_download",
                            base::Time::Now() - creationTime_);
-  // ExperienceSampling: User chose to proceed with dangerous download.
-  [self updateExperienceSamplingEvent:ExperienceSamplingEvent::kProceed];
-  // This will change the state and notify us.
-  bridge_->download_model()->download()->ValidateDangerousDownload();
+
+  DownloadItem* download = bridge_->download_model()->download();
+  if (![self submitDownloadToFeedbackService:download
+                                 withCommand:DownloadCommands::Command::KEEP]) {
+    // This will change the state and notify us.
+    download->ValidateDangerousDownload();
+  }
 }
 
 - (IBAction)discardDownload:(id)sender {
   UMA_HISTOGRAM_LONG_TIMES("clickjacking.discard_download",
                            base::Time::Now() - creationTime_);
   DownloadItem* download = bridge_->download_model()->download();
-  download->Remove();
+  if (!
+      [self submitDownloadToFeedbackService:download
+                                withCommand:DownloadCommands::Command::DISCARD])
+    download->Remove();
   // WARNING: we are deleted at this point.  Don't access 'this'.
 }
 
@@ -397,6 +380,31 @@ class DownloadShelfContextMenuMac : public DownloadShelfContextMenu {
   DCHECK(
       !base::FeatureList::IsEnabled(features::kMacMaterialDesignDownloadShelf));
   [static_cast<DownloadItemButton*>(progressView_) showContextMenu];
+}
+
+- (bool)submitDownloadToFeedbackService:(download::DownloadItem*)download
+                            withCommand:(DownloadCommands::Command)command {
+  safe_browsing::SafeBrowsingService* sb_service =
+      g_browser_process->safe_browsing_service();
+  if (!sb_service)
+    return false;
+
+  safe_browsing::DownloadProtectionService* download_protection_service =
+      sb_service->download_protection_service();
+  if (!download_protection_service)
+    return false;
+
+  DownloadItemModel* download_item_model = bridge_->download_model();
+  const Profile* profile = Profile::FromBrowserContext(
+      content::DownloadItemUtils::GetBrowserContext(download));
+  const PrefService* prefs = profile->GetPrefs();
+  if (!download_item_model->ShouldAllowDownloadFeedback() ||
+      profile->IsOffTheRecord() ||
+      !safe_browsing::IsExtendedReportingEnabled(*prefs))
+    return false;
+  download_protection_service->feedback_service()->BeginFeedbackForDownload(
+      download, command);
+  return true;
 }
 
 @end

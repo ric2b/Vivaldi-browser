@@ -17,7 +17,6 @@
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/ipc/gl_in_process_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/gl/gl_surface.h"
 
 namespace {
 
@@ -35,13 +34,12 @@ class ContextTestBase : public testing::Test {
     attributes.sample_buffers = 1;
     attributes.bind_generates_resource = false;
 
-    auto context = gpu::GLInProcessContext::CreateWithoutInit();
+    auto context = std::make_unique<gpu::GLInProcessContext>();
     auto result = context->Initialize(
         nullptr,                 /* service */
         nullptr,                 /* surface */
         true,                    /* offscreen */
         gpu::kNullSurfaceHandle, /* window */
-        nullptr,                 /* share_context */
         attributes, gpu::SharedMemoryLimits(), gpu_memory_buffer_manager_.get(),
         nullptr, /* image_factory */
         nullptr /* gpu_channel_manager_delegate */,
@@ -78,29 +76,22 @@ class ContextTestBase : public testing::Test {
 #define CONTEXT_TEST_F TEST_F
 #include "gpu/ipc/client/gpu_context_tests.h"
 
-using InProcessCommandBufferTest = ContextTestBase;
+using GLInProcessCommandBufferTest = ContextTestBase;
 
-TEST_F(InProcessCommandBufferTest, CreateImage) {
+TEST_F(GLInProcessCommandBufferTest, CreateImage) {
   constexpr gfx::BufferFormat kBufferFormat = gfx::BufferFormat::RGBA_8888;
   constexpr gfx::BufferUsage kBufferUsage = gfx::BufferUsage::SCANOUT;
   constexpr gfx::Size kBufferSize(100, 100);
-
-#if defined(OS_WIN)
-  // The IPC version of ContextTestBase::SetUpOnMainThread does not succeed on
-  // some platforms.
-  if (!gl_)
-    return;
-#endif
 
   // Calling CreateImageCHROMIUM() should allocate an image id starting at 1.
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer1 =
       gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
           kBufferSize, kBufferFormat, kBufferUsage, gpu::kNullSurfaceHandle);
-  int image_id1 = gl_->CreateImageCHROMIUM(gpu_memory_buffer1->AsClientBuffer(),
-                                           kBufferSize.width(),
-                                           kBufferSize.height(), GL_RGBA);
+  GLuint image_id1 = gl_->CreateImageCHROMIUM(
+      gpu_memory_buffer1->AsClientBuffer(), kBufferSize.width(),
+      kBufferSize.height(), GL_RGBA);
 
-  EXPECT_EQ(image_id1, 1);
+  EXPECT_GT(image_id1, 0u);
 
   // Create a second GLInProcessContext that is backed by a different
   // InProcessCommandBuffer. Calling CreateImageCHROMIUM() should return a
@@ -110,9 +101,10 @@ TEST_F(InProcessCommandBufferTest, CreateImage) {
   std::unique_ptr<gfx::GpuMemoryBuffer> buffer2 =
       gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
           kBufferSize, kBufferFormat, kBufferUsage, gpu::kNullSurfaceHandle);
-  int image_id2 = context2->GetImplementation()->CreateImageCHROMIUM(
+  GLuint image_id2 = context2->GetImplementation()->CreateImageCHROMIUM(
       buffer2->AsClientBuffer(), kBufferSize.width(), kBufferSize.height(),
       GL_RGBA);
 
-  EXPECT_EQ(image_id2, 2);
+  EXPECT_GT(image_id2, 0u);
+  EXPECT_NE(image_id1, image_id2);
 }

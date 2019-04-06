@@ -49,7 +49,9 @@ class ExtensionFrameHelper
       int tab_id,
       ViewType view_type);
   // Same as above, but returns a v8::Array of the v8 global objects for those
-  // frames, and only includes main frames.
+  // frames, and only includes main frames. Note: This only returns contexts
+  // that are accessible by |context|, and |context| must be the current
+  // context.
   // Returns an empty v8::Array if no frames are found.
   static v8::Local<v8::Array> GetV8MainFrames(v8::Local<v8::Context> context,
                                               const std::string& extension_id,
@@ -60,6 +62,13 @@ class ExtensionFrameHelper
   // Returns the main frame of the extension's background page, or null if there
   // isn't one in this process.
   static content::RenderFrame* GetBackgroundPageFrame(
+      const std::string& extension_id);
+  // Same as above, but returns the background page's main frame, or
+  // v8::Undefined if there is none. Note: This will assert that the
+  // isolate's current context can access the returned object; callers should
+  // ensure that the current context is correct.
+  static v8::Local<v8::Value> GetV8BackgroundPageMainFrame(
+      v8::Isolate* isolate,
       const std::string& extension_id);
 
   // Finds a neighboring extension frame with the same extension as the one
@@ -173,6 +182,12 @@ class ExtensionFrameHelper
   std::vector<base::Closure> document_idle_callbacks_;
 
   bool delayed_main_world_script_initialization_ = false;
+
+  // Whether or not a DocumentLoader has been created at least once for this
+  // RenderFrame.
+  // Note: Chrome Apps intentionally do not support new navigations. When a
+  // navigation happens, it is either the initial one or a reload.
+  bool has_started_first_navigation_ = false;
 
   base::WeakPtrFactory<ExtensionFrameHelper> weak_ptr_factory_;
 

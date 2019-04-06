@@ -30,7 +30,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -42,12 +42,16 @@ const size_t kMaximumNumberOfPopups = 25;
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(PopupBlockerTabHelper);
 
 struct PopupBlockerTabHelper::BlockedRequest {
-  BlockedRequest(const NavigateParams& params,
-                 const blink::mojom::WindowFeatures& window_features)
-      : params(params), window_features(window_features) {}
+  BlockedRequest(NavigateParams&& params,
+                 const blink::mojom::WindowFeatures& window_features,
+                 PopupBlockType block_type)
+      : params(std::move(params)),
+        window_features(window_features),
+        block_type(block_type) {}
 
   NavigateParams params;
   blink::mojom::WindowFeatures window_features;
+  PopupBlockType block_type;
 };
 
 PopupBlockerTabHelper::PopupBlockerTabHelper(content::WebContents* web_contents)
@@ -105,17 +109,16 @@ void PopupBlockerTabHelper::PopupNotificationVisibilityChanged(
 bool PopupBlockerTabHelper::MaybeBlockPopup(
     content::WebContents* web_contents,
     const base::Optional<GURL>& opener_url,
-    const NavigateParams& params,
+    NavigateParams* params,
     const content::OpenURLParams* open_url_params,
     const blink::mojom::WindowFeatures& window_features) {
+  DCHECK(web_contents);
   DCHECK(!open_url_params ||
-         open_url_params->user_gesture == params.user_gesture);
+         open_url_params->user_gesture == params->user_gesture);
 
   LogAction(Action::kInitiated);
 
-  const bool user_gesture = params.user_gesture;
-  if (!web_contents)
-    return false;
+  const bool user_gesture = params->user_gesture;
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisablePopupBlocking)) {
@@ -144,6 +147,7 @@ bool PopupBlockerTabHelper::MaybeBlockPopup(
     return false;
   }
 
+  PopupBlockType block_type = PopupBlockType::kNoGesture;
   if (user_gesture) {
     auto* safe_browsing_blocker =
         popup_blocker->safe_browsing_triggered_popup_blocker_.get();
@@ -152,27 +156,29 @@ bool PopupBlockerTabHelper::MaybeBlockPopup(
             open_url_params)) {
       return false;
     }
+    block_type = PopupBlockType::kAbusive;
   }
 
-  popup_blocker->AddBlockedPopup(params, window_features);
+  popup_blocker->AddBlockedPopup(params, window_features, block_type);
   return true;
 }
 
 void PopupBlockerTabHelper::AddBlockedPopup(
-    const NavigateParams& params,
-    const blink::mojom::WindowFeatures& window_features) {
+    NavigateParams* params,
+    const blink::mojom::WindowFeatures& window_features,
+    PopupBlockType block_type) {
   LogAction(Action::kBlocked);
   if (blocked_popups_.size() >= kMaximumNumberOfPopups)
     return;
 
   int id = next_id_;
   next_id_++;
-  blocked_popups_[id] =
-      std::make_unique<BlockedRequest>(params, window_features);
+  blocked_popups_[id] = std::make_unique<BlockedRequest>(
+      std::move(*params), window_features, block_type);
   TabSpecificContentSettings::FromWebContents(web_contents())->
       OnContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS);
   for (auto& observer : observers_)
-    observer.BlockedPopupAdded(id, params.url);
+    observer.BlockedPopupAdded(id, blocked_popups_[id]->params.url);
 }
 
 void PopupBlockerTabHelper::ShowBlockedPopup(
@@ -200,13 +206,13 @@ void PopupBlockerTabHelper::ShowBlockedPopup(
 #else
   Navigate(&popup->params);
 #endif
-  if (popup->params.target_contents) {
-    PopupTracker::CreateForWebContents(popup->params.target_contents,
-                                       web_contents());
+  if (popup->params.navigated_or_inserted_contents) {
+    PopupTracker::CreateForWebContents(
+        popup->params.navigated_or_inserted_contents, web_contents());
 
     if (popup->params.disposition == WindowOpenDisposition::NEW_POPUP) {
       content::RenderFrameHost* host =
-          popup->params.target_contents->GetMainFrame();
+          popup->params.navigated_or_inserted_contents->GetMainFrame();
       DCHECK(host);
       chrome::mojom::ChromeRenderFrameAssociatedPtr client;
       host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
@@ -214,10 +220,18 @@ void PopupBlockerTabHelper::ShowBlockedPopup(
     }
   }
 
+  switch (popup->block_type) {
+    case PopupBlockType::kNoGesture:
+      LogAction(Action::kClickedThroughNoGesture);
+      break;
+    case PopupBlockType::kAbusive:
+      LogAction(Action::kClickedThroughAbusive);
+      break;
+  }
+
   blocked_popups_.erase(id);
   if (blocked_popups_.empty())
     PopupNotificationVisibilityChanged(false);
-  LogAction(Action::kClickedThrough);
 }
 
 size_t PopupBlockerTabHelper::GetBlockedPopupsCount() const {

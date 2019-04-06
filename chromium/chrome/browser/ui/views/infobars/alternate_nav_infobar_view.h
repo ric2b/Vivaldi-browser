@@ -33,8 +33,6 @@ class AlternateNavInfoBarView : public InfoBarView,
 
   // InfoBarView:
   void Layout() override;
-  void ViewHierarchyChanged(
-      const ViewHierarchyChangedDetails& details) override;
   int ContentMinimumWidth() const override;
 
   // views::LinkListener:
@@ -46,9 +44,9 @@ class AlternateNavInfoBarView : public InfoBarView,
   base::string16 link_text_;
   base::string16 label_2_text_;
 
-  views::Label* label_1_;
-  views::Link* link_;
-  views::Label* label_2_;
+  views::Label* label_1_ = nullptr;
+  views::Link* link_ = nullptr;
+  views::Label* label_2_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AlternateNavInfoBarView);
 };

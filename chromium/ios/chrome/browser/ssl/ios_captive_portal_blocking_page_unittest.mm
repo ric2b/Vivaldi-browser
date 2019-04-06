@@ -4,9 +4,9 @@
 
 #import "ios/chrome/browser/ssl/ios_captive_portal_blocking_page.h"
 
-#import "base/mac/bind_objc_block.h"
+#include "base/bind.h"
+#import "base/test/ios/wait_util.h"
 #import "ios/chrome/browser/web/chrome_web_test.h"
-#import "ios/testing/wait_util.h"
 #include "ios/web/public/interstitials/web_interstitial.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "url/gurl.h"
@@ -24,12 +24,11 @@ TEST_F(IOSCaptivePortalBlockingPageTest, PresentAndDismiss) {
   LoadHtml(@"html", url);
 
   __block bool do_not_proceed_callback_called = false;
-  IOSCaptivePortalBlockingPage* page =
-      new IOSCaptivePortalBlockingPage(web_state(), url, GURL("http://landing"),
-                                       base::BindBlockArc(^(bool proceed) {
-                                         EXPECT_FALSE(proceed);
-                                         do_not_proceed_callback_called = true;
-                                       }));
+  IOSCaptivePortalBlockingPage* page = new IOSCaptivePortalBlockingPage(
+      web_state(), url, GURL("http://landing"), base::BindOnce(^(bool proceed) {
+        EXPECT_FALSE(proceed);
+        do_not_proceed_callback_called = true;
+      }));
   page->Show();
 
   // Make sure that interstitial is displayed.
@@ -39,8 +38,8 @@ TEST_F(IOSCaptivePortalBlockingPageTest, PresentAndDismiss) {
 
   // Make sure callback is called on dismissal.
   interstitial->DontProceed();
-  EXPECT_TRUE(
-      testing::WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
+  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForUIElementTimeout, ^{
         return do_not_proceed_callback_called;
       }));
 }

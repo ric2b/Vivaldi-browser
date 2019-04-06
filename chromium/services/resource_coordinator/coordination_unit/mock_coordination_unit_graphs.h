@@ -9,24 +9,28 @@
 
 namespace resource_coordinator {
 
+class CoordinationUnitGraph;
 class FrameCoordinationUnitImpl;
 class PageCoordinationUnitImpl;
 class ProcessCoordinationUnitImpl;
+class SystemCoordinationUnitImpl;
 
 // The following coordination unit graph topology is created to emulate a
-// scenario when a single page are executes in a single process:
+// scenario when a single page executes in a single process:
 //
-// P'  P
+// Pr  Pg
 //  \ /
 //   F
 //
 // Where:
 // F: frame
-// P: process
-// P': page
+// Pr: process(pid:1)
+// Pg: page
 struct MockSinglePageInSingleProcessCoordinationUnitGraph {
-  MockSinglePageInSingleProcessCoordinationUnitGraph();
+  MockSinglePageInSingleProcessCoordinationUnitGraph(
+      CoordinationUnitGraph* graph);
   ~MockSinglePageInSingleProcessCoordinationUnitGraph();
+  TestCoordinationUnitWrapper<SystemCoordinationUnitImpl> system;
   TestCoordinationUnitWrapper<FrameCoordinationUnitImpl> frame;
   TestCoordinationUnitWrapper<ProcessCoordinationUnitImpl> process;
   TestCoordinationUnitWrapper<PageCoordinationUnitImpl> page;
@@ -35,43 +39,45 @@ struct MockSinglePageInSingleProcessCoordinationUnitGraph {
 // The following coordination unit graph topology is created to emulate a
 // scenario where multiple pages are executing in a single process:
 //
-// P'  P  OP'
+// Pg  Pr OPg
 //  \ / \ /
 //   F  OF
 //
 // Where:
 // F: frame
 // OF: other_frame
-// P': page
-// OP': other_page
-// P: process
+// Pg: page
+// OPg: other_page
+// Pr: process(pid:1)
 struct MockMultiplePagesInSingleProcessCoordinationUnitGraph
     : public MockSinglePageInSingleProcessCoordinationUnitGraph {
-  MockMultiplePagesInSingleProcessCoordinationUnitGraph();
+  MockMultiplePagesInSingleProcessCoordinationUnitGraph(
+      CoordinationUnitGraph* graph);
   ~MockMultiplePagesInSingleProcessCoordinationUnitGraph();
   TestCoordinationUnitWrapper<FrameCoordinationUnitImpl> other_frame;
   TestCoordinationUnitWrapper<PageCoordinationUnitImpl> other_page;
 };
 
 // The following coordination unit graph topology is created to emulate a
-// scenario where a single page that has frames executing in different
+// scenario where a single page that has frames is executing in different
 // processes (e.g. out-of-process iFrames):
 //
-// P'  P
+// Pg  Pr
 // |\ /
-// | F  OP
+// | F  OPr
 // |  \ /
 // |__CF
 //
 // Where:
 // F: frame
-// CF: chid_frame
-// P': page
-// P: process
-// OP: other_process
+// CF: child_frame
+// Pg: page
+// Pr: process(pid:1)
+// OPr: other_process(pid:2)
 struct MockSinglePageWithMultipleProcessesCoordinationUnitGraph
     : public MockSinglePageInSingleProcessCoordinationUnitGraph {
-  MockSinglePageWithMultipleProcessesCoordinationUnitGraph();
+  MockSinglePageWithMultipleProcessesCoordinationUnitGraph(
+      CoordinationUnitGraph* graph);
   ~MockSinglePageWithMultipleProcessesCoordinationUnitGraph();
   TestCoordinationUnitWrapper<FrameCoordinationUnitImpl> child_frame;
   TestCoordinationUnitWrapper<ProcessCoordinationUnitImpl> other_process;
@@ -81,23 +87,24 @@ struct MockSinglePageWithMultipleProcessesCoordinationUnitGraph
 // scenario where multiple pages are utilizing multiple processes (e.g.
 // out-of-process iFrames and multiple pages in a process):
 //
-// P'  P  OP'___
+// Pg  Pr OPg___
 //  \ / \ /     |
-//   F   OF  OP |
+//   F   OF OPr |
 //        \ /   |
 //         CF___|
 //
 // Where:
-// F: frame_coordination_unit
-// OF: other_frame_coordination_unit
-// CF: another_frame_coordination_unit
-// P': page_coordination_unit
-// OP': other_page_coordination_unit
-// P: process_coordination_unit
-// OP: other_process_coordination_unit
+// F: frame
+// OF: other_frame
+// CF: another_frame
+// Pg: page
+// OPg: other_page
+// Pr: process(pid:1)
+// OPr: other_process(pid:2)
 struct MockMultiplePagesWithMultipleProcessesCoordinationUnitGraph
     : public MockMultiplePagesInSingleProcessCoordinationUnitGraph {
-  MockMultiplePagesWithMultipleProcessesCoordinationUnitGraph();
+  MockMultiplePagesWithMultipleProcessesCoordinationUnitGraph(
+      CoordinationUnitGraph* graph);
   ~MockMultiplePagesWithMultipleProcessesCoordinationUnitGraph();
   TestCoordinationUnitWrapper<FrameCoordinationUnitImpl> child_frame;
   TestCoordinationUnitWrapper<ProcessCoordinationUnitImpl> other_process;

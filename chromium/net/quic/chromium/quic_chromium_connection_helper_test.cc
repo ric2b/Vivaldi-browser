@@ -4,8 +4,8 @@
 
 #include "net/quic/chromium/quic_chromium_connection_helper.h"
 
-#include "net/quic/test_tools/mock_clock.h"
-#include "net/quic/test_tools/mock_random.h"
+#include "net/third_party/quic/test_tools/mock_clock.h"
+#include "net/third_party/quic/test_tools/mock_random.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -17,8 +17,8 @@ class QuicChromiumConnectionHelperTest : public ::testing::Test {
   QuicChromiumConnectionHelperTest() : helper_(&clock_, &random_generator_) {}
 
   QuicChromiumConnectionHelper helper_;
-  MockClock clock_;
-  MockRandom random_generator_;
+  quic::MockClock clock_;
+  quic::test::MockRandom random_generator_;
 };
 
 TEST_F(QuicChromiumConnectionHelperTest, GetClock) {

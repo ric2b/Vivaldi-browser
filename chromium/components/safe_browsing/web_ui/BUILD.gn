@@ -13,6 +13,7 @@ static_library("web_ui") {
   deps = [
     ":constants",
     "//base",
+    "//components/password_manager/core/browser:hash_password_manager",
     "//components/resources:components_resources_grit",
     "//components/resources:components_scaled_resources_grit",
     "//components/safe_browsing:csd_proto",
@@ -21,6 +22,7 @@ static_library("web_ui") {
     "//components/safe_browsing/common:safe_browsing_prefs",
     "//components/safe_browsing/db:v4_local_database_manager",
     "//components/strings:components_strings_grit",
+    "//components/sync/protocol:protocol",
     "//components/user_prefs:user_prefs",
     "//content/public/browser",
     "//net",

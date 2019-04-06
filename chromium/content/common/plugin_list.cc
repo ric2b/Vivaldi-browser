@@ -114,7 +114,7 @@ void PluginList::LoadPlugins() {
     will_load_callback = will_load_plugins_callback_;
   }
   if (!will_load_callback.is_null())
-    will_load_callback.Run();
+    std::move(will_load_callback).Run();
 
   std::vector<base::FilePath> plugin_paths;
   GetPluginPathsToLoad(&plugin_paths);
@@ -245,8 +245,8 @@ void PluginList::GetPluginInfoArray(
     std::string actual_mime_type;
     for (size_t i = 0; i < plugins_list_.size(); ++i) {
       if (SupportsExtension(plugins_list_[i], extension, &actual_mime_type)) {
-        base::FilePath path = plugins_list_[i].path;
-        if (visited_plugins.insert(path).second) {
+        base::FilePath plugin_path = plugins_list_[i].path;
+        if (visited_plugins.insert(plugin_path).second) {
           info->push_back(plugins_list_[i]);
           if (actual_mime_types)
             actual_mime_types->push_back(actual_mime_type);

@@ -15,6 +15,7 @@
 namespace syncer {
 
 class FakeSyncService;
+class ModelTypeSyncBridge;
 
 // Fake implementation of SyncClient interface for tests.
 class FakeSyncClient : public SyncClient {
@@ -28,13 +29,14 @@ class FakeSyncClient : public SyncClient {
   SyncService* GetSyncService() override;
   PrefService* GetPrefService() override;
   base::FilePath GetLocalSyncBackendFolder() override;
+  ModelTypeStoreService* GetModelTypeStoreService() override;
   bookmarks::BookmarkModel* GetBookmarkModel() override;
   favicon::FaviconService* GetFaviconService() override;
   history::HistoryService* GetHistoryService() override;
   bool HasPasswordStore() override;
   base::Closure GetPasswordStateChangedCallback() override;
-  SyncApiComponentFactory::RegisterDataTypesMethod
-  GetRegisterPlatformTypesCallback() override;
+  DataTypeController::TypeVector CreateDataTypeControllers(
+      LocalDeviceInfoProvider* local_device_info_provider) override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
   BookmarkUndoService* GetBookmarkUndoServiceIfExists() override;
   invalidation::InvalidationService* GetInvalidationService() override;
@@ -42,7 +44,7 @@ class FakeSyncClient : public SyncClient {
   sync_sessions::SyncSessionsClient* GetSyncSessionsClient() override;
   base::WeakPtr<SyncableService> GetSyncableServiceForType(
       ModelType type) override;
-  base::WeakPtr<ModelTypeSyncBridge> GetSyncBridgeForModelType(
+  base::WeakPtr<ModelTypeControllerDelegate> GetControllerDelegateForModelType(
       ModelType type) override;
   scoped_refptr<ModelSafeWorker> CreateModelWorkerForGroup(
       ModelSafeGroup group) override;

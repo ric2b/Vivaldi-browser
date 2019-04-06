@@ -10,9 +10,11 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
-#include "chromeos/login/auth/authpolicy_login_helper.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "chromeos/dbus/util/tpm_util.h"
+#include "components/account_id/account_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace em = enterprise_management;
 
 namespace chromeos {
 namespace {
@@ -31,11 +33,16 @@ class FakeAuthPolicyClientTest : public ::testing::Test {
 
  protected:
   FakeAuthPolicyClient* authpolicy_client() { return auth_policy_client_ptr_; }
+  FakeSessionManagerClient* session_manager_client() {
+    return session_manager_client_ptr_;
+  }
 
   void SetUp() override {
     ::testing::Test::SetUp();
+    auto session_manager_client = std::make_unique<FakeSessionManagerClient>();
+    session_manager_client_ptr_ = session_manager_client.get();
     DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
-        std::make_unique<FakeSessionManagerClient>());
+        std::move(session_manager_client));
     DBusThreadManager::GetSetterForTesting()->SetCryptohomeClient(
         std::make_unique<FakeCryptohomeClient>());
     auto auth_policy_client = std::make_unique<FakeAuthPolicyClient>();
@@ -78,12 +85,25 @@ class FakeAuthPolicyClientTest : public ::testing::Test {
   }
 
   void LockDeviceActiveDirectory() {
-    EXPECT_TRUE(AuthPolicyLoginHelper::LockDeviceActiveDirectoryForTesting(
-        std::string()));
+    EXPECT_TRUE(tpm_util::LockDeviceActiveDirectoryForTesting(std::string()));
   }
+
+  void WaitForServiceToBeAvailable() {
+    authpolicy_client()->WaitForServiceToBeAvailable(base::BindOnce(
+        &FakeAuthPolicyClientTest::OnWaitForServiceToBeAvailableCalled,
+        base::Unretained(this)));
+  }
+
+  void OnWaitForServiceToBeAvailableCalled(bool is_service_available) {
+    EXPECT_TRUE(is_service_available);
+    service_is_available_called_num_++;
+  }
+
+  int service_is_available_called_num_ = 0;
 
  private:
   FakeAuthPolicyClient* auth_policy_client_ptr_;  // not owned.
+  FakeSessionManagerClient* session_manager_client_ptr_;  // not owned.
   base::MessageLoop loop_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeAuthPolicyClientTest);
@@ -91,7 +111,7 @@ class FakeAuthPolicyClientTest : public ::testing::Test {
 
 // Tests parsing machine name.
 TEST_F(FakeAuthPolicyClientTest, JoinAdDomain_ParseMachineName) {
-  authpolicy_client()->set_started(true);
+  authpolicy_client()->SetStarted(true);
   JoinAdDomain("correct_length1", kCorrectUserName,
                base::BindOnce(
                    [](authpolicy::ErrorType error, const std::string& domain) {
@@ -131,7 +151,7 @@ TEST_F(FakeAuthPolicyClientTest, JoinAdDomain_ParseMachineName) {
 
 // Tests join to a different machine domain.
 TEST_F(FakeAuthPolicyClientTest, JoinAdDomain_MachineDomain) {
-  authpolicy_client()->set_started(true);
+  authpolicy_client()->SetStarted(true);
   JoinAdDomainWithMachineDomain(kCorrectMachineName, kMachineDomain,
                                 kCorrectUserName,
                                 base::BindOnce([](authpolicy::ErrorType error,
@@ -155,7 +175,7 @@ TEST_F(FakeAuthPolicyClientTest, JoinAdDomain_MachineDomain) {
 
 // Tests parsing user name.
 TEST_F(FakeAuthPolicyClientTest, JoinAdDomain_ParseUPN) {
-  authpolicy_client()->set_started(true);
+  authpolicy_client()->SetStarted(true);
   JoinAdDomain(kCorrectMachineName, kCorrectUserName,
                base::BindOnce(
                    [](authpolicy::ErrorType error, const std::string& domain) {
@@ -199,9 +219,32 @@ TEST_F(FakeAuthPolicyClientTest, JoinAdDomain_ParseUPN) {
   loop.Run();
 }
 
+// Tests that fake server does not support legacy encryption types.
+TEST_F(FakeAuthPolicyClientTest, JoinAdDomain_NotSupportedEncType) {
+  authpolicy_client()->SetStarted(true);
+  base::RunLoop loop;
+  authpolicy::JoinDomainRequest request;
+  request.set_machine_name(kCorrectMachineName);
+  request.set_user_principal_name(kCorrectUserName);
+  request.set_kerberos_encryption_types(
+      authpolicy::KerberosEncryptionTypes::ENC_TYPES_LEGACY);
+  authpolicy_client()->JoinAdDomain(
+      request, /* password_fd */ -1,
+      base::BindOnce(
+          [](base::OnceClosure closure, authpolicy::ErrorType error,
+             const std::string& domain) {
+            EXPECT_EQ(authpolicy::ERROR_KDC_DOES_NOT_SUPPORT_ENCRYPTION_TYPE,
+                      error);
+            EXPECT_TRUE(domain.empty());
+            std::move(closure).Run();
+          },
+          loop.QuitClosure()));
+  loop.Run();
+}
+
 // Test AuthenticateUser.
 TEST_F(FakeAuthPolicyClientTest, AuthenticateUser_ByAccountId) {
-  authpolicy_client()->set_started(true);
+  authpolicy_client()->SetStarted(true);
   LockDeviceActiveDirectory();
   // Check that account_id do not change.
   AuthenticateUser(
@@ -248,7 +291,7 @@ TEST_F(FakeAuthPolicyClientTest, NotStartedAuthPolicyService) {
 // Tests RefreshDevicePolicy. On a not locked device it should cache policy. On
 // a locked device it should send policy to session_manager.
 TEST_F(FakeAuthPolicyClientTest, NotLockedDeviceCachesPolicy) {
-  authpolicy_client()->set_started(true);
+  authpolicy_client()->SetStarted(true);
   authpolicy_client()->RefreshDevicePolicy(
       base::BindOnce([](authpolicy::ErrorType error) {
         EXPECT_EQ(authpolicy::ERROR_DEVICE_POLICY_CACHED_BUT_NOT_SENT, error);
@@ -262,6 +305,59 @@ TEST_F(FakeAuthPolicyClientTest, NotLockedDeviceCachesPolicy) {
       },
       loop.QuitClosure()));
   loop.Run();
+}
+
+// Tests that RefreshDevicePolicy stores device policy in the session manager.
+TEST_F(FakeAuthPolicyClientTest, RefreshDevicePolicyStoresPolicy) {
+  authpolicy_client()->SetStarted(true);
+  LockDeviceActiveDirectory();
+
+  {
+    // Call RefreshDevicePolicy.
+    base::RunLoop loop;
+    em::ChromeDeviceSettingsProto policy;
+    policy.mutable_allow_new_users()->set_allow_new_users(true);
+    authpolicy_client()->set_device_policy(policy);
+    authpolicy_client()->RefreshDevicePolicy(base::BindOnce(
+        [](base::OnceClosure closure, authpolicy::ErrorType error) {
+          EXPECT_EQ(authpolicy::ERROR_NONE, error);
+          std::move(closure).Run();
+        },
+        loop.QuitClosure()));
+    loop.Run();
+  }
+
+  {
+    // Retrieve device policy from the session manager.
+    std::string response_blob;
+    EXPECT_EQ(
+        SessionManagerClient::RetrievePolicyResponseType::SUCCESS,
+        session_manager_client()->BlockingRetrieveDevicePolicy(&response_blob));
+    em::PolicyFetchResponse response;
+    EXPECT_TRUE(response.ParseFromString(response_blob));
+    EXPECT_TRUE(response.has_policy_data());
+
+    em::PolicyData policy_data;
+    EXPECT_TRUE(policy_data.ParseFromString(response.policy_data()));
+
+    em::ChromeDeviceSettingsProto policy;
+    EXPECT_TRUE(policy.ParseFromString(policy_data.policy_value()));
+    EXPECT_TRUE(policy.has_allow_new_users());
+    EXPECT_TRUE(policy.allow_new_users().allow_new_users());
+  }
+}
+
+TEST_F(FakeAuthPolicyClientTest, WaitForServiceToBeAvailableCalled) {
+  WaitForServiceToBeAvailable();
+  WaitForServiceToBeAvailable();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0, service_is_available_called_num_);
+  authpolicy_client()->SetStarted(true);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(2, service_is_available_called_num_);
+  WaitForServiceToBeAvailable();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(3, service_is_available_called_num_);
 }
 
 }  // namespace chromeos

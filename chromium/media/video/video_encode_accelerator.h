@@ -17,6 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/media_export.h"
+#include "media/base/video_bitrate_allocation.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
 
@@ -24,6 +25,43 @@ namespace media {
 
 class BitstreamBuffer;
 class VideoFrame;
+
+//  Metadata for a VP8 bitstream buffer.
+//  |non_reference| is true iff this frame does not update any reference buffer,
+//                  meaning dropping this frame still results in a decodable
+//                  stream.
+//  |temporal_idx|  indicates the temporal index for this frame.
+//  |layer_sync|    if true iff this frame has |temporal_idx| > 0 and does NOT
+//                  reference any reference buffer containing a frame with
+//                  temporal_idx > 0.
+struct MEDIA_EXPORT Vp8Metadata final {
+  Vp8Metadata();
+  Vp8Metadata(const Vp8Metadata& other);
+  Vp8Metadata(Vp8Metadata&& other);
+  ~Vp8Metadata();
+  bool non_reference;
+  uint8_t temporal_idx;
+  bool layer_sync;
+};
+
+//  Metadata associated with a bitstream buffer.
+//  |payload_size| is the byte size of the used portion of the buffer.
+//  |key_frame| is true if this delivered frame is a keyframe.
+//  |timestamp| is the same timestamp as in VideoFrame passed to Encode().
+//  |vp8|, if set, contains metadata specific to VP8. See above.
+struct MEDIA_EXPORT BitstreamBufferMetadata final {
+  BitstreamBufferMetadata();
+  BitstreamBufferMetadata(BitstreamBufferMetadata&& other);
+  BitstreamBufferMetadata(size_t payload_size_bytes,
+                          bool key_frame,
+                          base::TimeDelta timestamp);
+  ~BitstreamBufferMetadata();
+
+  size_t payload_size_bytes;
+  bool key_frame;
+  base::TimeDelta timestamp;
+  base::Optional<Vp8Metadata> vp8;
+};
 
 // Video encoder interface.
 class MEDIA_EXPORT VideoEncodeAccelerator {
@@ -81,13 +119,10 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     // is transferred back to the VEA::Client once this callback is made.
     // Parameters:
     //  |bitstream_buffer_id| is the id of the buffer that is ready.
-    //  |payload_size| is the byte size of the used portion of the buffer.
-    //  |key_frame| is true if this delivered frame is a keyframe.
-    //  |timestamp| is the same timestamp as in VideoFrame passed to Encode().
-    virtual void BitstreamBufferReady(int32_t bitstream_buffer_id,
-                                      size_t payload_size,
-                                      bool key_frame,
-                                      base::TimeDelta timestamp) = 0;
+    //  |metadata| contains data such as payload size and timestamp. See above.
+    virtual void BitstreamBufferReady(
+        int32_t bitstream_buffer_id,
+        const BitstreamBufferMetadata& metadata) = 0;
 
     // Error notification callback. Note that errors in Initialize() will not be
     // reported here, but will instead be indicated by a false return value
@@ -142,13 +177,23 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   //  |buffer| is the bitstream buffer to use for output.
   virtual void UseOutputBitstreamBuffer(const BitstreamBuffer& buffer) = 0;
 
-  // Request a change to the encoding parameters.  This is only a request,
+  // Request a change to the encoding parameters. This is only a request,
   // fulfilled on a best-effort basis.
   // Parameters:
   //  |bitrate| is the requested new bitrate, in bits per second.
   //  |framerate| is the requested new framerate, in frames per second.
   virtual void RequestEncodingParametersChange(uint32_t bitrate,
                                                uint32_t framerate) = 0;
+
+  // Request a change to the encoding parameters. This is only a request,
+  // fulfilled on a best-effort basis. If not implemented, default behavior is
+  // to get the sum over layers and pass to version with bitrate as uint32_t.
+  // Parameters:
+  //  |bitrate| is the requested new bitrate, per spatial and temporal layer.
+  //  |framerate| is the requested new framerate, in frames per second.
+  virtual void RequestEncodingParametersChange(
+      const VideoBitrateAllocation& bitrate,
+      uint32_t framerate);
 
   // Destroys the encoder: all pending inputs and outputs are dropped
   // immediately and the component is freed.  This call may asynchronously free
@@ -161,27 +206,9 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   // handed back to the client, and afterwards the |flush_callback| will be
   // called. The FlushCallback takes a boolean argument: |true| indicates the
   // flush is complete; |false| indicates the flush is cancelled due to errors
-  // or destruction. The client should not invoke Flush() or Encode() while the\
+  // or destruction. The client should not invoke Flush() or Encode() while the
   // previous Flush() is not finished yet.
   virtual void Flush(FlushCallback flush_callback);
-
-  // Encode tasks include these methods that are used frequently during the
-  // session: Encode(), UseOutputBitstreamBuffer(),
-  // RequestEncodingParametersChange(), Client::BitstreamBufferReady().
-  // If the Client can support running these on a separate thread, it may
-  // call this method to try to set up the VEA implementation to do so.
-  //
-  // If the VEA can support this as well, return true, otherwise return false.
-  // If true is returned, the client may submit each of these calls on
-  // |encode_task_runner|, and then expect Client::BitstreamBufferReady() to be
-  // called on |encode_task_runner| as well; called on |encode_client|, instead
-  // of |client| provided to Initialize().
-  //
-  // One application of this is offloading the GPU main thread. This helps
-  // reduce latency and jitter by avoiding the wait.
-  virtual bool TryToSetupEncodeOnSeparateThread(
-      const base::WeakPtr<Client>& encode_client,
-      const scoped_refptr<base::SingleThreadTaskRunner>& encode_task_runner);
 
  protected:
   // Do not delete directly; use Destroy() or own it with a scoped_ptr, which

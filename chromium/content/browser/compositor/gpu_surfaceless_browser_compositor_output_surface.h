@@ -48,14 +48,18 @@ class GpuSurfacelessBrowserCompositorOutputSurface
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
+  unsigned UpdateGpuFence() override;
 
   // BrowserCompositorOutputSurface implementation.
   void OnGpuSwapBuffersCompleted(
+      std::vector<ui::LatencyInfo> latency_info,
       const gpu::SwapBuffersCompleteParams& params) override;
 
  private:
   gfx::Size reshape_size_;
   gfx::Size swap_size_;
+  bool use_gpu_fence_;
+  unsigned gpu_fence_id_;
 
   std::unique_ptr<viz::GLHelper> gl_helper_;
   std::unique_ptr<viz::BufferQueue> buffer_queue_;

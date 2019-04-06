@@ -26,6 +26,10 @@ int ContentMainDelegate::RunProcess(
   return -1;
 }
 
+ui::DataPack* ContentMainDelegate::LoadServiceManifestDataPack() {
+  return nullptr;
+}
+
 #if defined(OS_MACOSX)
 
 bool ContentMainDelegate::ProcessRegistersWithSystemProcess(
@@ -45,7 +49,8 @@ bool ContentMainDelegate::DelaySandboxInitialization(
 #elif defined(OS_LINUX)
 
 void ContentMainDelegate::ZygoteStarting(
-    std::vector<std::unique_ptr<ZygoteForkDelegate>>* delegates) {}
+    std::vector<std::unique_ptr<service_manager::ZygoteForkDelegate>>*
+        delegates) {}
 
 #endif  // defined(OS_LINUX)
 

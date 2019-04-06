@@ -11,6 +11,7 @@
 #include "base/values.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/hash_util.h"
+#include "components/sync/base/passphrase_type.h"
 #include "components/sync/engine/engine_util.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/typed_url_specifics.pb.h"
@@ -50,7 +51,7 @@ void WriteNode::SetTitle(const std::string& title) {
   // NON_UNIQUE_NAME will still be kEncryptedString, but we store the real title
   // into the specifics. All strings compared are server legal strings.
   std::string new_legal_title;
-  if (type != BOOKMARKS && needs_encryption) {
+  if (type != BOOKMARKS && type != NOTES && needs_encryption) {
     new_legal_title = kEncryptedString;
   } else {
     DCHECK(base::IsStringUTF8(title));
@@ -458,11 +459,6 @@ bool WriteNode::SetPosition(const BaseNode& new_parent,
   // Mark this entry as unsynced, to wake up the syncer.
   MarkForSyncing();
   return true;
-}
-
-void WriteNode::SetAttachmentMetadata(
-    const sync_pb::AttachmentMetadata& attachment_metadata) {
-  entry_->PutAttachmentMetadata(attachment_metadata);
 }
 
 const syncable::Entry* WriteNode::GetEntry() const {

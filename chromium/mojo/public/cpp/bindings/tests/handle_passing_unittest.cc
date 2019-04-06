@@ -6,7 +6,6 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -261,8 +260,7 @@ TEST_P(HandlePassingTest, DataPipe) {
   ScopedDataPipeProducerHandle producer_handle;
   ScopedDataPipeConsumerHandle consumer_handle;
   MojoCreateDataPipeOptions options = {sizeof(MojoCreateDataPipeOptions),
-                                       MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE,
-                                       1,
+                                       MOJO_CREATE_DATA_PIPE_FLAG_NONE, 1,
                                        1024};
   ASSERT_EQ(MOJO_RESULT_OK,
             CreateDataPipe(&options, &producer_handle, &consumer_handle));

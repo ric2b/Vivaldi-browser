@@ -17,7 +17,6 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/auth/chrome_login_performer.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chromeos/cryptohome/async_method_caller.h"
@@ -25,7 +24,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/login/auth/auth_status_consumer.h"
 #include "chromeos/login/auth/user_context.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -109,14 +108,13 @@ class KioskProfileLoader::CryptohomedChecker
       return;
     }
 
-    if (!is_mounted.value())
-      SYSLOG(ERROR) << "Cryptohome is mounted before launching kiosk app.";
-
     // Proceed only when cryptohome is not mounded or running on dev box.
-    if (!is_mounted.value() || !base::SysInfo::IsRunningOnChromeOS())
+    if (!is_mounted.value() || !base::SysInfo::IsRunningOnChromeOS()) {
       ReportCheckResult(KioskAppLaunchError::NONE);
-    else
+    } else {
+      SYSLOG(ERROR) << "Cryptohome is mounted before launching kiosk app.";
       ReportCheckResult(KioskAppLaunchError::ALREADY_MOUNTED);
+    }
   }
 
   void ReportCheckResult(KioskAppLaunchError::Error error) {

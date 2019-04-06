@@ -6,8 +6,8 @@
 
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/events/blink/web_input_event_traits.h"
 
 using blink::WebInputEvent;
@@ -21,8 +21,10 @@ GestureEventStreamValidator::GestureEventStreamValidator()
 GestureEventStreamValidator::~GestureEventStreamValidator() {
 }
 
-bool GestureEventStreamValidator::Validate(const blink::WebGestureEvent& event,
-                                           std::string* error_msg) {
+bool GestureEventStreamValidator::Validate(
+    const blink::WebGestureEvent& event,
+    const bool fling_cancellation_is_deferred,
+    std::string* error_msg) {
   DCHECK(error_msg);
   error_msg->clear();
   if (!WebInputEvent::IsGestureEventType(event.GetType())) {
@@ -31,7 +33,7 @@ bool GestureEventStreamValidator::Validate(const blink::WebGestureEvent& event,
   }
   switch (event.GetType()) {
     case WebInputEvent::kGestureScrollBegin:
-      if (scrolling_)
+      if (scrolling_ && !fling_cancellation_is_deferred)
         error_msg->append("Scroll begin during scroll\n");
       if (pinching_)
         error_msg->append("Scroll begin during pinch\n");
@@ -42,7 +44,7 @@ bool GestureEventStreamValidator::Validate(const blink::WebGestureEvent& event,
         error_msg->append("Scroll update outside of scroll\n");
       break;
     case WebInputEvent::kGestureFlingStart:
-      if (event.source_device == blink::kWebGestureDeviceTouchscreen &&
+      if (event.SourceDevice() == blink::kWebGestureDeviceTouchscreen &&
           !event.data.fling_start.velocity_x &&
           !event.data.fling_start.velocity_y) {
         error_msg->append("Zero velocity touchscreen fling\n");
@@ -51,7 +53,8 @@ bool GestureEventStreamValidator::Validate(const blink::WebGestureEvent& event,
         error_msg->append("Fling start outside of scroll\n");
       if (pinching_)
         error_msg->append("Flinging while pinching\n");
-      scrolling_ = false;
+      // Don't reset scrolling_ since the GSE sent by the fling_controller_ at
+      // the end of the fling resets it.
       break;
     case WebInputEvent::kGestureScrollEnd:
       if (!scrolling_)
@@ -105,10 +108,16 @@ bool GestureEventStreamValidator::Validate(const blink::WebGestureEvent& event,
   // 'continuity check', requiring that all events between an initial tap-down
   // and whatever terminates the sequence to have the same source device type,
   // and that touchpad gestures are only found on ScrollEvents.
-  if (event.source_device == blink::kWebGestureDeviceUninitialized)
+  if (event.SourceDevice() == blink::kWebGestureDeviceUninitialized)
     error_msg->append("Gesture event source is uninitialized.\n");
 
   return error_msg->empty();
+}
+
+bool GestureEventStreamValidator::Validate(const blink::WebGestureEvent& event,
+                                           std::string* error_msg) {
+  return Validate(event, /* fling_cancellation_is_deferred = */ false,
+                  error_msg);
 }
 
 }  // namespace content

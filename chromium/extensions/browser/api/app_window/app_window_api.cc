@@ -19,7 +19,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_client.h"
@@ -73,9 +72,9 @@ constexpr char kImeOptionIsNotSupported[] =
 constexpr char kImeWindowUnsupportedPlatform[] =
     "The \"ime\" option can only be used on ChromeOS.";
 #else
-constexpr char kImeWindowMustBeImeWindowOrPanel[] =
-    "IME extensions must create ime window ( with \"ime: true\" and "
-    "\"frame: 'none'\") or panel window (with \"type: panel\").";
+constexpr char kImeWindowMustBeImeWindow[] =
+    "IME extensions must create an IME window ( with \"ime: true\" and "
+    "\"frame: 'none'\"). Panels are no longer supported for IME extensions.";
 #endif
 constexpr char kShowInShelfWindowKeyNotSet[] =
     "The \"showInShelf\" option requires the \"id\" option to be set.";
@@ -229,13 +228,8 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
       return RespondNow(Error(error));
 
     if (options->type == app_window::WINDOW_TYPE_PANEL) {
-#if defined(OS_CHROMEOS)
-      // Panels for v2 apps are only supported on Chrome OS.
-      create_params.window_type = AppWindow::WINDOW_TYPE_PANEL;
-#else
       WriteToConsole(content::CONSOLE_MESSAGE_LEVEL_WARNING,
-                     "Panels are not supported on this platform");
-#endif
+                     "Panels are no longer supported.");
     }
 
     if (!GetFrameOptions(*options, &create_params, &error))
@@ -256,15 +250,13 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
           Error(app_window_constants::kImeWindowUnsupportedPlatform));
 #else
       // IME extensions must create ime window (with "ime: true" and
-      // "frame: none") or panel window (with "type: panel").
+      // "frame: none").
       if (options->ime.get() && *options->ime.get() &&
           create_params.frame == AppWindow::FRAME_NONE) {
         create_params.is_ime_window = true;
-      } else if (options->type == app_window::WINDOW_TYPE_PANEL) {
-        create_params.window_type = AppWindow::WINDOW_TYPE_PANEL;
       } else {
         return RespondNow(
-            Error(app_window_constants::kImeWindowMustBeImeWindowOrPanel));
+            Error(app_window_constants::kImeWindowMustBeImeWindow));
       }
 #endif  // OS_CHROMEOS
     } else {
@@ -359,21 +351,19 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
       }
     }
 
-    if (options->type != app_window::WINDOW_TYPE_PANEL) {
-      switch (options->state) {
-        case app_window::STATE_NONE:
-        case app_window::STATE_NORMAL:
-          break;
-        case app_window::STATE_FULLSCREEN:
-          create_params.state = ui::SHOW_STATE_FULLSCREEN;
-          break;
-        case app_window::STATE_MAXIMIZED:
-          create_params.state = ui::SHOW_STATE_MAXIMIZED;
-          break;
-        case app_window::STATE_MINIMIZED:
-          create_params.state = ui::SHOW_STATE_MINIMIZED;
-          break;
-      }
+    switch (options->state) {
+      case app_window::STATE_NONE:
+      case app_window::STATE_NORMAL:
+        break;
+      case app_window::STATE_FULLSCREEN:
+        create_params.state = ui::SHOW_STATE_FULLSCREEN;
+        break;
+      case app_window::STATE_MAXIMIZED:
+        create_params.state = ui::SHOW_STATE_MAXIMIZED;
+        break;
+      case app_window::STATE_MINIMIZED:
+        create_params.state = ui::SHOW_STATE_MINIMIZED;
+        break;
     }
   }
 
@@ -447,19 +437,13 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
     return did_respond() ? AlreadyResponded() : RespondLater();
   }
 
-
-  // PlzNavigate: delay sending the response until the newly created window has
-  // been told to navigate, and blink has been correctly initialized in the
-  // renderer.
-  if (content::IsBrowserSideNavigationEnabled()) {
-    // SetOnFirstCommitOrWindowClosedCallback() will respond asynchronously.
-    app_window->SetOnFirstCommitOrWindowClosedCallback(
-        base::Bind(&AppWindowCreateFunction::
-                       OnAppWindowReadyToCommitFirstNavigationOrClosed,
-                   this, base::Passed(&result_arg)));
-    return RespondLater();
-  }
-  return RespondNow(std::move(result_arg));
+  // Delay sending the response until the newly created window has been told to
+  // navigate, and blink has been correctly initialized in the renderer.
+  // SetOnFirstCommitOrWindowClosedCallback() will respond asynchronously.
+  app_window->SetOnFirstCommitOrWindowClosedCallback(base::Bind(
+      &AppWindowCreateFunction::OnAppWindowReadyToCommitFirstNavigationOrClosed,
+      this, base::Passed(&result_arg)));
+  return RespondLater();
 }
 
 void AppWindowCreateFunction::OnAppWindowReadyToCommitFirstNavigationOrClosed(

@@ -12,6 +12,7 @@ import static org.chromium.chrome.browser.download.DownloadNotificationService2.
 import static org.chromium.chrome.browser.download.DownloadNotificationService2.ACTION_DOWNLOAD_RESUME;
 import static org.chromium.chrome.browser.download.DownloadNotificationService2.EXTRA_DOWNLOAD_CONTENTID_ID;
 import static org.chromium.chrome.browser.download.DownloadNotificationService2.EXTRA_DOWNLOAD_CONTENTID_NAMESPACE;
+import static org.chromium.chrome.browser.download.DownloadNotificationService2.EXTRA_DOWNLOAD_STATE_AT_CANCEL;
 import static org.chromium.chrome.browser.download.DownloadNotificationService2.EXTRA_IS_OFF_THE_RECORD;
 import static org.chromium.chrome.browser.download.DownloadNotificationService2.clearResumptionAttemptLeft;
 
@@ -32,7 +33,6 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.download.DownloadUpdate.PendingState;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorNotificationBridgeUiFactory;
 import org.chromium.chrome.browser.init.BrowserParts;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -40,6 +40,7 @@ import org.chromium.chrome.browser.init.EmptyBrowserParts;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
+import org.chromium.components.offline_items_collection.PendingState;
 
 /**
  * Class that spins up native when an interaction with a notification happens and passes the
@@ -47,7 +48,6 @@ import org.chromium.components.offline_items_collection.LegacyHelpers;
  */
 public class DownloadBroadcastManager extends Service {
     private static final String TAG = "DLBroadcastManager";
-    // TODO(jming): Check to see if this wait time is long enough to execute commands on native.
     private static final int WAIT_TIME_MS = 5000;
 
     private final DownloadSharedPreferenceHelper mDownloadSharedPreferenceHelper =
@@ -181,6 +181,13 @@ public class DownloadBroadcastManager extends Service {
                 OfflineContentAggregatorNotificationBridgeUiFactory.instance();
                 propagateInteraction(intent);
             }
+
+            @Override
+            public boolean startServiceManagerOnly() {
+                // TODO(qinmin): change this to return true once ServiceManager can be started
+                // without launching full browser.
+                return false;
+            }
         };
 
         try {
@@ -224,6 +231,9 @@ public class DownloadBroadcastManager extends Service {
         // Handle all remaining actions.
         switch (action) {
             case ACTION_DOWNLOAD_CANCEL:
+                DownloadNotificationUmaHelper.recordStateAtCancelHistogram(
+                        LegacyHelpers.isLegacyDownload(id),
+                        intent.getIntExtra(EXTRA_DOWNLOAD_STATE_AT_CANCEL, -1));
                 downloadServiceDelegate.cancelDownload(id, isOffTheRecord);
                 break;
 
@@ -260,7 +270,8 @@ public class DownloadBroadcastManager extends Service {
 
     /**
      * Retrieves DownloadSharedPreferenceEntry from a download action intent.
-     * TODO(jming): Instead of getting entire entry, pass only id/isOffTheRecord (crbug.com/749323).
+     * TODO(crbug.com/691805):  Instead of getting entire entry, pass only id/isOffTheRecord, after
+     *                          consolidating all downloads-related objects.
      * @param intent Intent that contains the download action.
      */
     private DownloadSharedPreferenceEntry getDownloadEntryFromIntent(Intent intent) {
@@ -326,7 +337,8 @@ public class DownloadBroadcastManager extends Service {
         String originalUrl = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_ORIGINATING_URI);
         String referrer = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_REFERRER);
         DownloadManagerService.openDownloadedContent(context, downloadFilename, isSupportedMimeType,
-                isOffTheRecord, contentId.id, id, originalUrl, referrer);
+                isOffTheRecord, contentId.id, id, originalUrl, referrer,
+                DownloadMetrics.DownloadOpenSource.NOTIFICATION);
     }
 
     @Nullable

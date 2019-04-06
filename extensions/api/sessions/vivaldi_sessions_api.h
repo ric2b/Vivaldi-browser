@@ -59,7 +59,7 @@ class SessionsPrivateOpenFunction : public ChromeAsyncExtensionFunction {
 
 class SessionsPrivateDeleteFunction : public ChromeAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sessionsPrivate.delete", SESSIONS_OPEN)
+  DECLARE_EXTENSION_FUNCTION("sessionsPrivate.delete", SESSIONS_DELETE)
   SessionsPrivateDeleteFunction();
 
  protected:

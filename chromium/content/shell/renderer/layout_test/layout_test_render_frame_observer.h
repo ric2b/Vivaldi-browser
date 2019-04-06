@@ -22,6 +22,8 @@ class LayoutTestRenderFrameObserver : public RenderFrameObserver,
   // RenderFrameObserver implementation.
   void OnDestruct() override;
 
+  void CaptureDump(CaptureDumpCallback callback) override;
+  void CompositeWithRaster(CompositeWithRasterCallback callback) override;
   void DumpFrameLayout(DumpFrameLayoutCallback callback) override;
   void SetTestConfiguration(mojom::ShellTestConfigurationPtr config) override;
   void ReplicateTestConfiguration(

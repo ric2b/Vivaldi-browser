@@ -16,11 +16,19 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "components/bookmarks/browser/bookmark_codec.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/titled_url_index.h"
+#include "components/bookmarks/browser/url_index.h"
 #include "components/bookmarks/common/bookmark_constants.h"
+#include "components/strings/grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_resources.h"
 
 using base::TimeTicks;
 
@@ -51,10 +59,10 @@ void AddBookmarksToIndex(BookmarkLoadDetails* details,
   }
 }
 
-void LoadCallback(const base::FilePath& path,
-                  const base::WeakPtr<BookmarkStorage>& storage,
-                  std::unique_ptr<BookmarkLoadDetails> details,
-                  base::SequencedTaskRunner* task_runner) {
+}  // namespace
+
+void LoadBookmarks(const base::FilePath& path, BookmarkLoadDetails* details) {
+  base::AssertBlockingAllowed();
   bool load_index = false;
   bool bookmark_file_exists = base::PathExists(path);
   if (bookmark_file_exists) {
@@ -65,15 +73,19 @@ void LoadCallback(const base::FilePath& path,
     std::unique_ptr<base::Value> root =
         deserializer.Deserialize(nullptr, nullptr);
 
-    if (root.get()) {
+    if (root) {
       // Building the index can take a while, so we do it on the background
       // thread.
       int64_t max_node_id = 0;
+      std::string sync_metadata_str;
       BookmarkCodec codec;
       TimeTicks start_time = TimeTicks::Now();
-      codec.Decode(details->bb_node(), details->other_folder_node(),
-                   details->mobile_folder_node(), details->trash_folder_node(),
-                   &max_node_id, *root.get());
+      codec.Decode(*root, details->bb_node(), details->other_folder_node(),
+                   details->mobile_folder_node(),
+                   details->trash_folder_node(),
+                   &max_node_id,
+                   &sync_metadata_str);
+      details->set_sync_metadata_str(std::move(sync_metadata_str));
       details->set_max_id(std::max(max_node_id, details->max_id()));
       details->set_computed_checksum(codec.computed_checksum());
       details->set_stored_checksum(codec.stored_checksum());
@@ -83,71 +95,114 @@ void LoadCallback(const base::FilePath& path,
           codec.model_sync_transaction_version());
       UMA_HISTOGRAM_TIMES("Bookmarks.DecodeTime",
                           TimeTicks::Now() - start_time);
+      int64_t size = 0;
+      if (base::GetFileSize(path, &size)) {
+        int64_t size_kb = size / 1024;
+        // For 0 bookmarks, file size is 700 bytes (less than 1KB)
+        // Bookmarks file size is not expected to exceed 50000KB (50MB) for most
+        // of the users.
+        UMA_HISTOGRAM_CUSTOM_COUNTS("Bookmarks.FileSize", size_kb, 1, 50000,
+                                    25);
+      }
 
       load_index = true;
     }
   }
+
+  if (details->LoadExtraNodes())
+    load_index = true;
 
   // Load any extra root nodes now, after the IDs have been potentially
   // reassigned.
-  details->LoadExtraNodes();
-
-  // Load the index if there are any bookmarks in the extra nodes.
-  const BookmarkPermanentNodeList& extra_nodes = details->extra_nodes();
-  for (size_t i = 0; i < extra_nodes.size(); ++i) {
-    if (!extra_nodes[i]->empty()) {
-      load_index = true;
-      break;
-    }
-  }
-
   if (load_index) {
     TimeTicks start_time = TimeTicks::Now();
-    AddBookmarksToIndex(details.get(), details->bb_node());
-    AddBookmarksToIndex(details.get(), details->other_folder_node());
-    AddBookmarksToIndex(details.get(), details->mobile_folder_node());
-    if (details->trash_folder_node())
-      AddBookmarksToIndex(details.get(), details->trash_folder_node());
-    for (size_t i = 0; i < extra_nodes.size(); ++i)
-      AddBookmarksToIndex(details.get(), extra_nodes[i].get());
+    AddBookmarksToIndex(details, details->root_node());
     UMA_HISTOGRAM_TIMES("Bookmarks.CreateBookmarkIndexTime",
                         TimeTicks::Now() - start_time);
   }
 
-  task_runner->PostTask(FROM_HERE,
-                        base::Bind(&BookmarkStorage::OnLoadFinished, storage,
-                                   base::Passed(&details)));
+  details->CreateUrlIndex();
 }
-
-}  // namespace
 
 // BookmarkLoadDetails ---------------------------------------------------------
 
-BookmarkLoadDetails::BookmarkLoadDetails(
-    BookmarkPermanentNode* bb_node,
-    BookmarkPermanentNode* other_folder_node,
-    BookmarkPermanentNode* mobile_folder_node,
-    BookmarkPermanentNode* trash_folder_node,
-    const LoadExtraCallback& load_extra_callback,
-    TitledUrlIndex* index,
-    int64_t max_id)
-    : bb_node_(bb_node),
-      other_folder_node_(other_folder_node),
-      mobile_folder_node_(mobile_folder_node),
-      trash_folder_node_(trash_folder_node),
-      load_extra_callback_(load_extra_callback),
-      index_(index),
+BookmarkLoadDetails::BookmarkLoadDetails(BookmarkClient* client)
+    : load_extra_callback_(client->GetLoadExtraNodesCallback()),
+      index_(std::make_unique<TitledUrlIndex>()),
       model_sync_transaction_version_(
-          BookmarkNode::kInvalidSyncTransactionVersion),
-      max_id_(max_id),
-      ids_reassigned_(false) {}
+          BookmarkNode::kInvalidSyncTransactionVersion) {
+  // WARNING: do NOT add |client| as a member. Much of this code runs on another
+  // thread, and |client_| is not thread safe, and/or may be destroyed before
+  // this.
+  root_node_ = std::make_unique<BookmarkNode>(GURL());
+  root_node_ptr_ = root_node_.get();
+  // WARNING: order is important here, various places assume the order is
+  // constant (but can vary between embedders with the initial visibility
+  // of permanent nodes).
+  bb_node_ = CreatePermanentNode(client, BookmarkNode::BOOKMARK_BAR);
+  other_folder_node_ = CreatePermanentNode(client, BookmarkNode::OTHER_NODE);
+  mobile_folder_node_ = CreatePermanentNode(client, BookmarkNode::MOBILE);
+  trash_folder_node_ = nullptr;
+  if (vivaldi::IsVivaldiRunning())
+    trash_folder_node_ = CreatePermanentNode(client, BookmarkNode::TRASH);
+}
 
 BookmarkLoadDetails::~BookmarkLoadDetails() {
 }
 
-void BookmarkLoadDetails::LoadExtraNodes() {
-  if (!load_extra_callback_.is_null())
-    extra_nodes_ = load_extra_callback_.Run(&max_id_);
+bool BookmarkLoadDetails::LoadExtraNodes() {
+  if (!load_extra_callback_)
+    return false;
+
+  BookmarkPermanentNodeList extra_nodes =
+      std::move(load_extra_callback_).Run(&max_id_);
+  bool has_non_empty_node = false;
+  for (auto& node : extra_nodes) {
+    if (node->child_count() != 0)
+      has_non_empty_node = true;
+    root_node_->Add(std::move(node), root_node_->child_count());
+  }
+  return has_non_empty_node;
+}
+
+void BookmarkLoadDetails::CreateUrlIndex() {
+  url_index_ = base::MakeRefCounted<UrlIndex>(std::move(root_node_));
+}
+
+BookmarkPermanentNode* BookmarkLoadDetails::CreatePermanentNode(
+    BookmarkClient* client,
+    BookmarkNode::Type type) {
+  DCHECK(type == BookmarkNode::BOOKMARK_BAR ||
+         type == BookmarkNode::TRASH ||
+         type == BookmarkNode::OTHER_NODE || type == BookmarkNode::MOBILE);
+  std::unique_ptr<BookmarkPermanentNode> node =
+      std::make_unique<BookmarkPermanentNode>(max_id_++);
+  node->set_type(type);
+  node->set_visible(client->IsPermanentNodeVisible(node.get()));
+
+  int title_id;
+  switch (type) {
+    case BookmarkNode::BOOKMARK_BAR:
+      title_id = IDS_BOOKMARK_BAR_FOLDER_NAME;
+      break;
+    case BookmarkNode::OTHER_NODE:
+      title_id = IDS_BOOKMARK_BAR_OTHER_FOLDER_NAME;
+      break;
+    case BookmarkNode::MOBILE:
+      title_id = IDS_BOOKMARK_BAR_MOBILE_FOLDER_NAME;
+      break;
+    case BookmarkNode::TRASH:
+      title_id = IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME;
+      break;
+    default:
+      NOTREACHED();
+      title_id = IDS_BOOKMARK_BAR_FOLDER_NAME;
+      break;
+  }
+  node->SetTitle(l10n_util::GetStringUTF16(title_id));
+  BookmarkPermanentNode* permanent_node = node.get();
+  root_node_->Add(std::move(node), root_node_->child_count());
+  return permanent_node;
 }
 
 // BookmarkStorage -------------------------------------------------------------
@@ -167,15 +222,6 @@ BookmarkStorage::BookmarkStorage(
 BookmarkStorage::~BookmarkStorage() {
   if (writer_.HasPendingWrite())
     writer_.DoScheduledWrite();
-}
-
-void BookmarkStorage::LoadBookmarks(
-    std::unique_ptr<BookmarkLoadDetails> details,
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
-  sequenced_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&LoadCallback, writer_.path(), weak_factory_.GetWeakPtr(),
-                 base::Passed(&details), base::RetainedRef(task_runner)));
 }
 
 void BookmarkStorage::ScheduleSave() {
@@ -212,18 +258,11 @@ void BookmarkStorage::BookmarkModelDeleted() {
 
 bool BookmarkStorage::SerializeData(std::string* output) {
   BookmarkCodec codec;
-  std::unique_ptr<base::Value> value(codec.Encode(model_));
+  std::unique_ptr<base::Value> value(
+      codec.Encode(model_, model_->client()->EncodeBookmarkSyncMetadata()));
   JSONStringValueSerializer serializer(output);
   serializer.set_pretty_print(true);
   return serializer.Serialize(*(value.get()));
-}
-
-void BookmarkStorage::OnLoadFinished(
-    std::unique_ptr<BookmarkLoadDetails> details) {
-  if (!model_)
-    return;
-
-  model_->DoneLoading(std::move(details));
 }
 
 bool BookmarkStorage::SaveNow() {

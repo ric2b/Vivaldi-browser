@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/memory_pressure_monitor.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -148,7 +147,7 @@ void ResourceReporter::OnTasksRefreshedWithBackgroundCalculations(
         (observed_task_manager()->GetPlatformIndependentCPUUsage(id) /
          base::SysInfo::NumberOfProcessors());
     const int64_t memory_usage =
-        observed_task_manager()->GetPhysicalMemoryUsage(id);
+        observed_task_manager()->GetMemoryFootprintUsage(id);
 
     // Browser and GPU processes are reported later using UMA histograms as they
     // don't have any privacy issues.
@@ -203,7 +202,7 @@ void ResourceReporter::OnTasksRefreshedWithBackgroundCalculations(
 ResourceReporter::ResourceReporter()
     : TaskManagerObserver(base::TimeDelta::FromSeconds(kRefreshIntervalSeconds),
                           task_manager::REFRESH_TYPE_CPU |
-                              task_manager::REFRESH_TYPE_MEMORY |
+                              task_manager::REFRESH_TYPE_MEMORY_FOOTPRINT |
                               task_manager::REFRESH_TYPE_PRIORITY),
       task_manager_to_observe_(nullptr),
       system_cpu_cores_range_(GetCurrentSystemCpuCoresRange()),

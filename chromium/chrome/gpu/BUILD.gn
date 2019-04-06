@@ -19,8 +19,20 @@ static_library("gpu") {
   if (enable_library_cdms) {
     deps += [
       "//media/cdm:cdm_paths",
-      "//media/cdm/ppapi/clear_key_cdm:clear_key_cdm_proxy",
+      "//media/cdm/library_cdm/clear_key_cdm:clear_key_cdm_proxy",
     ]
+
+    if (is_win) {
+      sources += [
+        "widevine_cdm_proxy_factory.cc",
+        "widevine_cdm_proxy_factory.h",
+      ]
+      deps += [
+        "//media",
+        "//media/gpu",
+      ]
+      libs = [ "d3d11.lib" ]
+    }
   }
 
   if (is_chromeos) {

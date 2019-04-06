@@ -16,6 +16,11 @@
 
 namespace gin {
 
+namespace {
+
+// A non-member function to be bound to an ObjectTemplateBuilder.
+void NonMemberMethod() {}
+
 // This useless base class ensures that the value of a pointer to a MyObject
 // (below) is not the same as the value of that pointer cast to the object's
 // WrappableBase base.
@@ -45,47 +50,22 @@ class MyObject : public BaseClass,
   int value() const { return value_; }
   void set_value(int value) { value_ = value; }
 
+  void Method() {}
+
  protected:
   MyObject() : value_(0) {}
   ObjectTemplateBuilder GetObjectTemplateBuilder(v8::Isolate* isolate) final {
     return Wrappable<MyObject>::GetObjectTemplateBuilder(isolate)
-        .SetProperty("value", &MyObject::value, &MyObject::set_value);
+        .SetProperty("value", &MyObject::value, &MyObject::set_value)
+        .SetMethod("memberMethod", &MyObject::Method)
+        .SetMethod("nonMemberMethod", &NonMemberMethod);
   }
   ~MyObject() override = default;
 
  private:
   int value_;
-};
 
-class MyCallableObject : public Wrappable<MyCallableObject> {
- public:
-  static WrapperInfo kWrapperInfo;
-
-  static gin::Handle<MyCallableObject> Create(v8::Isolate* isolate) {
-    return CreateHandle(isolate, new MyCallableObject());
-  }
-
-  int result() { return result_; }
-
- private:
-  ObjectTemplateBuilder GetObjectTemplateBuilder(v8::Isolate* isolate) final {
-    return Wrappable<MyCallableObject>::GetObjectTemplateBuilder(isolate)
-        .SetCallAsFunctionHandler(&MyCallableObject::Call);
-  }
-
-  MyCallableObject() : result_(0) {
-  }
-
-  ~MyCallableObject() override = default;
-
-  void Call(int val1, int val2, int val3, const gin::Arguments& arguments) {
-    if (arguments.IsConstructCall())
-      arguments.ThrowTypeError("Cannot be called as constructor.");
-    else
-      result_ = val1;
-  }
-
-  int result_;
+  DISALLOW_COPY_AND_ASSIGN(MyObject);
 };
 
 class MyObject2 : public Wrappable<MyObject2> {
@@ -93,9 +73,35 @@ class MyObject2 : public Wrappable<MyObject2> {
   static WrapperInfo kWrapperInfo;
 };
 
+class MyNamedObject : public Wrappable<MyNamedObject> {
+ public:
+  static WrapperInfo kWrapperInfo;
+
+  static gin::Handle<MyNamedObject> Create(v8::Isolate* isolate) {
+    return CreateHandle(isolate, new MyNamedObject());
+  }
+
+  void Method() {}
+
+ protected:
+  MyNamedObject() = default;
+  ObjectTemplateBuilder GetObjectTemplateBuilder(v8::Isolate* isolate) final {
+    return Wrappable<MyNamedObject>::GetObjectTemplateBuilder(isolate)
+        .SetMethod("memberMethod", &MyNamedObject::Method)
+        .SetMethod("nonMemberMethod", &NonMemberMethod);
+  }
+  const char* GetTypeName() final { return "MyNamedObject"; }
+  ~MyNamedObject() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MyNamedObject);
+};
+
 WrapperInfo MyObject::kWrapperInfo = { kEmbedderNativeGin };
-WrapperInfo MyCallableObject::kWrapperInfo = { kEmbedderNativeGin };
 WrapperInfo MyObject2::kWrapperInfo = { kEmbedderNativeGin };
+WrapperInfo MyNamedObject::kWrapperInfo = {kEmbedderNativeGin};
+
+}  // namespace
 
 typedef V8Test WrappableTest;
 
@@ -106,7 +112,7 @@ TEST_F(WrappableTest, WrapAndUnwrap) {
   Handle<MyObject> obj = MyObject::Create(isolate);
 
   v8::Local<v8::Value> wrapper =
-      ConvertToV8(isolate->GetCurrentContext(), obj.get()).ToLocalChecked();
+      ConvertToV8(isolate, obj.get()).ToLocalChecked();
   EXPECT_FALSE(wrapper.IsEmpty());
 
   MyObject* unwrapped = NULL;
@@ -131,8 +137,7 @@ TEST_F(WrappableTest, UnwrapFailures) {
 
   // An object that's wrapping a C++ object of the wrong type.
   thing.Clear();
-  thing = ConvertToV8(isolate->GetCurrentContext(), new MyObject2())
-              .ToLocalChecked();
+  thing = ConvertToV8(isolate, new MyObject2()).ToLocalChecked();
   EXPECT_FALSE(ConvertFromV8(isolate, thing, &unwrapped));
   EXPECT_FALSE(unwrapped);
 }
@@ -160,7 +165,7 @@ TEST_F(WrappableTest, GetAndSetProperty) {
   v8::Local<v8::Function> func;
   EXPECT_TRUE(ConvertFromV8(isolate, val, &func));
   v8::Local<v8::Value> argv[] = {
-      ConvertToV8(isolate->GetCurrentContext(), obj.get()).ToLocalChecked(),
+      ConvertToV8(isolate, obj.get()).ToLocalChecked(),
   };
   func->Call(v8::Undefined(isolate), 1, argv);
   EXPECT_FALSE(try_catch.HasCaught());
@@ -169,53 +174,118 @@ TEST_F(WrappableTest, GetAndSetProperty) {
   EXPECT_EQ(191, obj->value());
 }
 
-TEST_F(WrappableTest, CallAsFunction) {
+TEST_F(WrappableTest, MethodInvocationErrorsOnUnnamedObject) {
   v8::Isolate* isolate = instance_->isolate();
   v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = context_.Get(isolate);
 
-  gin::Handle<MyCallableObject> object(MyCallableObject::Create(isolate));
-  EXPECT_EQ(0, object->result());
-  v8::Local<v8::String> source = StringToV8(isolate,
-                                             "(function(obj) {"
-                                             "obj(42, 2, 5);"
-                                             "})");
-  gin::TryCatch try_catch(isolate);
-  v8::Local<v8::Script> script =
-      v8::Script::Compile(context_.Get(isolate), source).ToLocalChecked();
-  v8::Local<v8::Value> val =
-      script->Run(context_.Get(isolate)).ToLocalChecked();
-  v8::Local<v8::Function> func;
-  EXPECT_TRUE(ConvertFromV8(isolate, val, &func));
-  v8::Local<v8::Value> argv[] = {
-      ConvertToV8(isolate->GetCurrentContext(), object.get()).ToLocalChecked(),
+  gin::Handle<MyObject> obj = MyObject::Create(isolate);
+
+  v8::Local<v8::Object> v8_object =
+      ConvertToV8(isolate, obj.get()).ToLocalChecked().As<v8::Object>();
+  v8::Local<v8::Value> member_method =
+      v8_object->Get(context, StringToV8(isolate, "memberMethod"))
+          .ToLocalChecked();
+  ASSERT_TRUE(member_method->IsFunction());
+  v8::Local<v8::Value> non_member_method =
+      v8_object->Get(context, StringToV8(isolate, "nonMemberMethod"))
+          .ToLocalChecked();
+  ASSERT_TRUE(non_member_method->IsFunction());
+
+  auto get_error = [isolate, context](v8::Local<v8::Value> function_to_run,
+                                      v8::Local<v8::Value> context_object) {
+    constexpr char kScript[] =
+        "(function(toRun, contextObject) { toRun.apply(contextObject, []); })";
+    v8::Local<v8::String> source = StringToV8(isolate, kScript);
+    EXPECT_FALSE(source.IsEmpty());
+
+    v8::TryCatch try_catch(isolate);
+    v8::Local<v8::Script> script =
+        v8::Script::Compile(context, source).ToLocalChecked();
+    v8::Local<v8::Value> val = script->Run(context).ToLocalChecked();
+    v8::Local<v8::Function> func;
+    EXPECT_TRUE(ConvertFromV8(isolate, val, &func));
+    v8::Local<v8::Value> argv[] = {function_to_run, context_object};
+    func->Call(v8::Undefined(isolate), arraysize(argv), argv);
+    if (!try_catch.HasCaught())
+      return std::string();
+    return V8ToString(try_catch.Message()->Get());
   };
-  func->Call(v8::Undefined(isolate), 1, argv);
-  EXPECT_FALSE(try_catch.HasCaught());
-  EXPECT_EQ(42, object->result());
+
+  EXPECT_EQ(std::string(), get_error(member_method, v8_object));
+  EXPECT_EQ(std::string(), get_error(non_member_method, v8_object));
+
+  EXPECT_EQ("Uncaught TypeError: Illegal invocation",
+            get_error(member_method, v8::Null(isolate)));
+  // A non-member function shouldn't throw errors for being applied on a
+  // null (or invalid) object.
+  EXPECT_EQ(std::string(), get_error(non_member_method, v8::Null(isolate)));
+
+  v8::Local<v8::Object> wrong_object = v8::Object::New(isolate);
+  // We should get an error for passing the wrong object.
+  EXPECT_EQ("Uncaught TypeError: Illegal invocation",
+            get_error(member_method, wrong_object));
+  // But again, not for a "static" method.
+  EXPECT_EQ(std::string(), get_error(non_member_method, v8::Null(isolate)));
 }
 
-TEST_F(WrappableTest, CallAsConstructor) {
+TEST_F(WrappableTest, MethodInvocationErrorsOnNamedObject) {
   v8::Isolate* isolate = instance_->isolate();
   v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = context_.Get(isolate);
 
-  gin::Handle<MyCallableObject> object(MyCallableObject::Create(isolate));
-  EXPECT_EQ(0, object->result());
-  v8::Local<v8::String> source = StringToV8(isolate,
-                                             "(function(obj) {"
-                                             "new obj(42, 2, 5);"
-                                             "})");
-  gin::TryCatch try_catch(isolate);
-  v8::Local<v8::Script> script =
-      v8::Script::Compile(context_.Get(isolate), source).ToLocalChecked();
-  v8::Local<v8::Value> val =
-      script->Run(context_.Get(isolate)).ToLocalChecked();
-  v8::Local<v8::Function> func;
-  EXPECT_TRUE(ConvertFromV8(isolate, val, &func));
-  v8::Local<v8::Value> argv[] = {
-      ConvertToV8(isolate->GetCurrentContext(), object.get()).ToLocalChecked(),
+  gin::Handle<MyNamedObject> obj = MyNamedObject::Create(isolate);
+
+  v8::Local<v8::Object> v8_object =
+      ConvertToV8(isolate, obj.get()).ToLocalChecked().As<v8::Object>();
+  v8::Local<v8::Value> member_method =
+      v8_object->Get(context, StringToV8(isolate, "memberMethod"))
+          .ToLocalChecked();
+  ASSERT_TRUE(member_method->IsFunction());
+  v8::Local<v8::Value> non_member_method =
+      v8_object->Get(context, StringToV8(isolate, "nonMemberMethod"))
+          .ToLocalChecked();
+  ASSERT_TRUE(non_member_method->IsFunction());
+
+  auto get_error = [isolate, context](v8::Local<v8::Value> function_to_run,
+                                      v8::Local<v8::Value> context_object) {
+    constexpr char kScript[] =
+        "(function(toRun, contextObject) { toRun.apply(contextObject, []); })";
+    v8::Local<v8::String> source = StringToV8(isolate, kScript);
+    EXPECT_FALSE(source.IsEmpty());
+
+    v8::TryCatch try_catch(isolate);
+    v8::Local<v8::Script> script =
+        v8::Script::Compile(context, source).ToLocalChecked();
+    v8::Local<v8::Value> val = script->Run(context).ToLocalChecked();
+    v8::Local<v8::Function> func;
+    EXPECT_TRUE(ConvertFromV8(isolate, val, &func));
+    v8::Local<v8::Value> argv[] = {function_to_run, context_object};
+    func->Call(v8::Undefined(isolate), arraysize(argv), argv);
+    if (!try_catch.HasCaught())
+      return std::string();
+    return V8ToString(try_catch.Message()->Get());
   };
-  func->Call(v8::Undefined(isolate), 1, argv);
-  EXPECT_TRUE(try_catch.HasCaught());
+
+  EXPECT_EQ(std::string(), get_error(member_method, v8_object));
+  EXPECT_EQ(std::string(), get_error(non_member_method, v8_object));
+
+  EXPECT_EQ(
+      "Uncaught TypeError: Illegal invocation: Function must be called on "
+      "an object of type MyNamedObject",
+      get_error(member_method, v8::Null(isolate)));
+  // A non-member function shouldn't throw errors for being applied on a
+  // null (or invalid) object.
+  EXPECT_EQ(std::string(), get_error(non_member_method, v8::Null(isolate)));
+
+  v8::Local<v8::Object> wrong_object = v8::Object::New(isolate);
+  // We should get an error for passing the wrong object.
+  EXPECT_EQ(
+      "Uncaught TypeError: Illegal invocation: Function must be called on "
+      "an object of type MyNamedObject",
+      get_error(member_method, wrong_object));
+  // But again, not for a "static" method.
+  EXPECT_EQ(std::string(), get_error(non_member_method, v8::Null(isolate)));
 }
 
 }  // namespace gin

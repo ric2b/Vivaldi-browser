@@ -53,8 +53,7 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   // thread.
   std::string GetDisplayName() const override;
   void Initialize(DemuxerHost* host,
-                  const PipelineStatusCB& status_cb,
-                  bool enable_text_tracks) override;
+                  const PipelineStatusCB& status_cb) override;
   void Seek(base::TimeDelta time, const PipelineStatusCB& status_cb) override;
   void Stop() override;
   void AbortPendingReads() override;
@@ -63,12 +62,12 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   base::TimeDelta GetStartTime() const override;
   base::Time GetTimelineOffset() const override;
   int64_t GetMemoryUsage() const override;
-  void OnEnabledAudioTracksChanged(
-      const std::vector<MediaTrack::Id>& track_ids,
-      base::TimeDelta currTime) override;
-  void OnSelectedVideoTrackChanged(
-        base::Optional<MediaTrack::Id> track_id,
-        base::TimeDelta currTime) override;
+  void OnEnabledAudioTracksChanged(const std::vector<MediaTrack::Id>& track_ids,
+                                   base::TimeDelta currTime,
+                                   TrackChangeCB change_completed_cb) override;
+  void OnSelectedVideoTrackChanged(const std::vector<MediaTrack::Id>& track_ids,
+                                   base::TimeDelta currTime,
+                                   TrackChangeCB change_completed_cb) override;
 
   // Used to tell the demuxer that a seek request is about to arrive on the
   // media thread.  This lets the demuxer drop everything it was doing and
@@ -77,8 +76,6 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   // This function can be called on any thread.
   void StartWaitingForSeek(base::TimeDelta seek_time) override;
   void CancelPendingSeek(base::TimeDelta seek_time) override;
-
-  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) override;
 
  private:
   // Called when demuxer initiazlizes.

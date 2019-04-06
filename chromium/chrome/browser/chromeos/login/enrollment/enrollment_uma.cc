@@ -25,6 +25,7 @@ void EnrollmentUMA(policy::MetricEnrollment sample,
     case policy::EnrollmentConfig::MODE_LOCAL_ADVERTISED:
     case policy::EnrollmentConfig::MODE_SERVER_ADVERTISED:
     case policy::EnrollmentConfig::MODE_ATTESTATION:
+    case policy::EnrollmentConfig::MODE_OFFLINE_DEMO:
       base::UmaHistogramSparse(kMetricEnrollment, sample);
       break;
     case policy::EnrollmentConfig::MODE_LOCAL_FORCED:

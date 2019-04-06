@@ -15,18 +15,14 @@ source_set("lib") {
 
   deps = [
     "//base",
-    "//mash/public/interfaces",
+    "//mash/public/mojom",
     "//mojo/public/cpp/bindings",
-    "//services/catalog/public/interfaces",
+    "//services/catalog/public/mojom",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//ui/resources",
     "//ui/views",
     "//ui/views/mus:for_mojo_application",
-  ]
-
-  data_deps = [
-    "//services/ui",
   ]
 }
 
@@ -40,7 +36,7 @@ service("catalog_viewer") {
     "//base",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//ui/views/mus:for_mojo_application",
   ]
 

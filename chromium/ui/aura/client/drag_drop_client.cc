@@ -27,29 +27,5 @@ DragDropClient* GetDragDropClient(Window* root_window) {
       root_window->GetProperty(kRootWindowDragDropClientKey) : NULL;
 }
 
-int DragDropClient::StartDragAndDrop(
-    const ui::OSExchangeData& data,
-    aura::Window* root_window,
-    aura::Window* source_window,
-    const gfx::Point& screen_location,
-    int operation,
-    ui::DragDropTypes::DragEventSource source) {
-  bool cancelled;
-  return StartDragAndDrop(data, root_window, source_window, screen_location,
-                          operation, source, cancelled);
-}
-
-int DragDropClient::StartDragAndDrop(const ui::OSExchangeData& data,
-                                     aura::Window* root_window,
-                                     aura::Window* source_window,
-                                     const gfx::Point& screen_location,
-                                     int operation,
-                                     ui::DragDropTypes::DragEventSource source,
-                                     bool& cancelled) {
-  cancelled = false;
-  return StartDragAndDrop(data, root_window, source_window, screen_location,
-                          operation, source);
-}
-
 }  // namespace client
 }  // namespace aura

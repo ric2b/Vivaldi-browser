@@ -8,7 +8,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/weak_ptr.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
@@ -154,9 +154,15 @@ class AuthPolicyClientImpl : public AuthPolicyClient {
       const std::string& signal_name,
       dbus::ObjectProxy::SignalCallback signal_callback,
       dbus::ObjectProxy::OnConnectedCallback on_connected_callback) override {
-    proxy_->ConnectToSignal(authpolicy::kAuthPolicyInterface,
-                            std::move(signal_name), std::move(signal_callback),
+    proxy_->ConnectToSignal(authpolicy::kAuthPolicyInterface, signal_name,
+                            std::move(signal_callback),
                             std::move(on_connected_callback));
+  }
+
+  void WaitForServiceToBeAvailable(
+      dbus::ObjectProxy::WaitForServiceToBeAvailableCallback callback)
+      override {
+    proxy_->WaitForServiceToBeAvailable(std::move(callback));
   }
 
  protected:

@@ -11,8 +11,12 @@
 #include "content/shell/renderer/layout_test/layout_test_render_thread_observer.h"
 #include "content/shell/test_runner/web_test_interfaces.h"
 #include "content/shell/test_runner/web_test_runner.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_registry.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_page_popup.h"
+#include "third_party/blink/public/web/web_view.h"
 
 namespace content {
 
@@ -35,11 +39,34 @@ LayoutTestRenderFrameObserver::~LayoutTestRenderFrameObserver() = default;
 
 void LayoutTestRenderFrameObserver::BindRequest(
     mojom::LayoutTestControlAssociatedRequest request) {
-  binding_.Bind(std::move(request));
+  binding_.Bind(std::move(request),
+                blink::scheduler::GetSingleThreadTaskRunnerForTesting());
 }
 
 void LayoutTestRenderFrameObserver::OnDestruct() {
   delete this;
+}
+
+void LayoutTestRenderFrameObserver::CaptureDump(CaptureDumpCallback callback) {
+  BlinkTestRunner::Get(render_frame()->GetRenderView())
+      ->CaptureDump(std::move(callback));
+}
+
+void LayoutTestRenderFrameObserver::CompositeWithRaster(
+    CompositeWithRasterCallback callback) {
+  blink::WebWidget* widget = render_frame()->GetWebFrame()->FrameWidget();
+  if (widget) {
+    widget->CompositeWithRasterForTesting();
+    // TODO(vmpstr): This doesn't embed the popup frame into the browser. We
+    // likely need to manually readback the pixels here and return them via the
+    // callback, so that the browser can embed it into the final screenshot. If
+    // we do this without using WebPagePopup::CompositeWithRasterForTesting(),
+    // then we can put CompositeWithRasterForTesting() on WebFrameWidgetBase
+    // instead, and remove the overrides from a bunch of places.
+    if (blink::WebPagePopup* popup = widget->GetPagePopup())
+      popup->CompositeWithRasterForTesting();
+  }
+  std::move(callback).Run();
 }
 
 void LayoutTestRenderFrameObserver::DumpFrameLayout(

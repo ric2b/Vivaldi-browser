@@ -29,19 +29,20 @@ class ReportingBrowsingDataRemoverTest : public ReportingTestBase {
     if (remove_clients)
       data_type_mask |= ReportingBrowsingDataRemover::DATA_TYPE_CLIENTS;
 
-    base::RepeatingCallback<bool(const GURL&)> origin_filter;
     if (!host.empty()) {
-      origin_filter =
+      base::RepeatingCallback<bool(const GURL&)> origin_filter =
           base::BindRepeating(&ReportingBrowsingDataRemoverTest::HostIs, host);
+      ReportingBrowsingDataRemover::RemoveBrowsingData(cache(), data_type_mask,
+                                                       origin_filter);
+    } else {
+      ReportingBrowsingDataRemover::RemoveAllBrowsingData(cache(),
+                                                          data_type_mask);
     }
-
-    ReportingBrowsingDataRemover::RemoveBrowsingData(cache(), data_type_mask,
-                                                     origin_filter);
   }
 
   void AddReport(const GURL& url) {
-    cache()->AddReport(url, kGroup_, kType_,
-                       std::make_unique<base::DictionaryValue>(),
+    cache()->AddReport(url, kUserAgent_, kGroup_, kType_,
+                       std::make_unique<base::DictionaryValue>(), 0,
                        tick_clock()->NowTicks(), 0);
   }
 
@@ -73,6 +74,7 @@ class ReportingBrowsingDataRemoverTest : public ReportingTestBase {
   const url::Origin kOrigin1_ = url::Origin::Create(kUrl1_);
   const url::Origin kOrigin2_ = url::Origin::Create(kUrl2_);
   const GURL kEndpoint_ = GURL("https://endpoint/");
+  const std::string kUserAgent_ = "Mozilla/1.0";
   const std::string kGroup_ = "group";
   const std::string kType_ = "default";
 };

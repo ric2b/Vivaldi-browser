@@ -17,7 +17,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
@@ -52,10 +51,14 @@ class GetAPINatives : public ObjectBackedNativeHandler {
  public:
   GetAPINatives(ScriptContext* context,
                 NativeExtensionBindingsSystem* bindings_system)
-      : ObjectBackedNativeHandler(context) {
+      : ObjectBackedNativeHandler(context), bindings_system_(bindings_system) {
     DCHECK_EQ(base::FeatureList::IsEnabled(features::kNativeCrxBindings),
               !!bindings_system);
+  }
+  ~GetAPINatives() override {}
 
+  // ObjectBackedNativeHandler:
+  void AddRoutes() override {
     auto get_api = [](ScriptContext* context,
                       NativeExtensionBindingsSystem* bindings_system,
                       const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -82,8 +85,14 @@ class GetAPINatives : public ObjectBackedNativeHandler {
       args.GetReturnValue().Set(api);
     };
 
-    RouteFunction("get", base::Bind(get_api, context, bindings_system));
+    RouteHandlerFunction("get",
+                         base::Bind(get_api, context(), bindings_system_));
   }
+
+ private:
+  NativeExtensionBindingsSystem* bindings_system_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(GetAPINatives);
 };
 
 }  // namespace
@@ -95,13 +104,14 @@ class ModuleSystemTestEnvironment::AssertNatives
   explicit AssertNatives(ScriptContext* context)
       : ObjectBackedNativeHandler(context),
         assertion_made_(false),
-        failed_(false) {
-    RouteFunction(
-        "AssertTrue",
-        base::Bind(&AssertNatives::AssertTrue, base::Unretained(this)));
-    RouteFunction(
-        "AssertFalse",
-        base::Bind(&AssertNatives::AssertFalse, base::Unretained(this)));
+        failed_(false) {}
+
+  // ObjectBackedNativeHandler:
+  void AddRoutes() override {
+    RouteHandlerFunction("AssertTrue", base::Bind(&AssertNatives::AssertTrue,
+                                                  base::Unretained(this)));
+    RouteHandlerFunction("AssertFalse", base::Bind(&AssertNatives::AssertFalse,
+                                                   base::Unretained(this)));
   }
 
   bool assertion_made() { return assertion_made_; }
@@ -156,7 +166,7 @@ ModuleSystemTestEnvironment::ModuleSystemTestEnvironment(
   {
     std::unique_ptr<ModuleSystem> module_system(
         new ModuleSystem(context_, source_map_.get()));
-    context_->set_module_system(std::move(module_system));
+    context_->SetModuleSystem(std::move(module_system));
   }
   ModuleSystem* module_system = context_->module_system();
   module_system->RegisterNativeHandler(
@@ -209,7 +219,7 @@ void ModuleSystemTestEnvironment::RegisterTestFile(
     const std::string& module_name,
     const std::string& file_name) {
   base::FilePath test_js_file_path;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &test_js_file_path));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &test_js_file_path));
   test_js_file_path = test_js_file_path.AppendASCII(file_name);
   std::string test_js;
   ASSERT_TRUE(base::ReadFileToString(test_js_file_path, &test_js));

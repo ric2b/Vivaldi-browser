@@ -47,6 +47,7 @@ struct TestURLInfo {
   int visit_count;
   int typed_count;
   int age_in_days;
+  bool hidden = false;
 } test_db[] = {
     {"http://www.google.com/", "Google", 3, 3, 80},
 
@@ -111,6 +112,8 @@ struct TestURLInfo {
     // URLs to test exact-matching behavior.
     {"http://go/", "Intranet URL", 1, 1, 80},
     {"http://gooey/", "Intranet URL 2", 5, 5, 80},
+    // This entry is explicitly added as hidden
+    {"http://g/", "Intranet URL", 7, 7, 80, true},
 
     // URLs for testing offset adjustment.
     {"http://www.\xEA\xB5\x90\xEC\x9C\xA1.kr/", "Korean", 2, 2, 80},
@@ -124,9 +127,7 @@ struct TestURLInfo {
 
     // URLs used by EmptyVisits.
     {"http://pandora.com/", "Pandora", 2, 2, 80},
-    // This entry is explicitly added more recently than
-    // history::kLowQualityMatchAgeLimitInDays.
-    // {"http://pa/", "pa", 0, 0, 80},
+    {"http://pa/", "pa", 0, 0, history::kLowQualityMatchAgeLimitInDays - 1},
 
     // For intranet based tests.
     {"http://intra/one", "Intranet", 2, 2, 80},
@@ -293,15 +294,9 @@ void HistoryURLProviderTest::FillData() {
     const GURL current_url(cur.url);
     client_->GetHistoryService()->AddPageWithDetails(
         current_url, base::UTF8ToUTF16(cur.title), cur.visit_count,
-        cur.typed_count, now - TimeDelta::FromDays(cur.age_in_days), false,
+        cur.typed_count, now - TimeDelta::FromDays(cur.age_in_days), cur.hidden,
         history::SOURCE_BROWSED);
   }
-
-  client_->GetHistoryService()->AddPageWithDetails(
-      GURL("http://pa/"), base::UTF8ToUTF16("pa"), 0, 0,
-      Time::Now() -
-          TimeDelta::FromDays(history::kLowQualityMatchAgeLimitInDays - 1),
-      false, history::SOURCE_BROWSED);
 }
 
 void HistoryURLProviderTest::RunTest(
@@ -517,6 +512,8 @@ TEST_F(HistoryURLProviderTest, PromoteShorterURLs) {
     { "http://gooey/", true },
     { "http://www.google.com/", true }
   };
+  // Note that there is an http://g/ URL that is marked as hidden.  It shouldn't
+  // show up at all.  This test implicitly tests this fact too.
   RunTest(ASCIIToUTF16("g"), std::string(), false, short_5a,
           arraysize(short_5a));
   RunTest(ASCIIToUTF16("go"), std::string(), false, short_5b,
@@ -1190,15 +1187,12 @@ TEST_F(HistoryURLProviderTest, HUPScoringExperiment) {
 
 TEST_F(HistoryURLProviderTest, MatchURLFormatting) {
   // Sanity check behavior under default flags.
-  ExpectFormattedFullMatch("abc", L"https://www.abc.def.com/path", 12, 3);
-  ExpectFormattedFullMatch("hij", L"https://www.hij.com/path", 12, 3);
+  ExpectFormattedFullMatch("abc", L"www.abc.def.com/path", 4, 3);
+  ExpectFormattedFullMatch("hij", L"hij.com/path", 0, 3);
 
-  auto feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  feature_list->InitWithFeatures(
-      {omnibox::kUIExperimentHideSuggestionUrlScheme,
-       omnibox::kUIExperimentHideSuggestionUrlTrivialSubdomains,
-       omnibox::kUIExperimentElideSuggestionUrlAfterHost},
-      {});
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      omnibox::kUIExperimentElideSuggestionUrlAfterHost);
 
   // Sanity check that scheme, subdomain, and path can all be trimmed or elided.
   ExpectFormattedFullMatch("hij", L"hij.com/\x2026\x0000", 0, 3);
@@ -1229,22 +1223,6 @@ TEST_F(HistoryURLProviderTest, MatchURLFormatting) {
   ExpectFormattedFullMatch("ww", L"www.hij.com/\x2026\x0000", 0, 2);
   ExpectFormattedFullMatch("https://ww", L"https://www.hij.com/\x2026\x0000", 0,
                            10);
-
-  // Test individual feature flags as a sanity check.
-  feature_list.reset(new base::test::ScopedFeatureList);
-  feature_list->InitAndEnableFeature(
-      omnibox::kUIExperimentHideSuggestionUrlScheme);
-  ExpectFormattedFullMatch("hij", L"www.hij.com/path", 4, 3);
-
-  feature_list.reset(new base::test::ScopedFeatureList);
-  feature_list->InitAndEnableFeature(
-      omnibox::kUIExperimentHideSuggestionUrlTrivialSubdomains);
-  ExpectFormattedFullMatch("hij", L"https://hij.com/path", 8, 3);
-
-  feature_list.reset(new base::test::ScopedFeatureList);
-  feature_list->InitAndEnableFeature(
-      omnibox::kUIExperimentElideSuggestionUrlAfterHost);
-  ExpectFormattedFullMatch("hij", L"https://www.hij.com/\x2026\x0000", 12, 3);
 }
 
 std::unique_ptr<HistoryURLProviderParams> BuildHistoryURLProviderParams(
@@ -1270,7 +1248,7 @@ TEST_F(HistoryURLProviderTest, DoTrimHttpScheme) {
       BuildHistoryURLProviderParams("face", "http://www.facebook.com", false);
 
   AutocompleteMatch match = autocomplete_->HistoryMatchToACMatch(*params, 0, 0);
-  EXPECT_EQ(ASCIIToUTF16("www.facebook.com"), match.contents);
+  EXPECT_EQ(ASCIIToUTF16("facebook.com"), match.contents);
 }
 
 // Make sure "http://" scheme is not trimmed if input has a scheme too.
@@ -1279,7 +1257,7 @@ TEST_F(HistoryURLProviderTest, DontTrimHttpSchemeIfInputHasScheme) {
                                               "http://www.facebook.com", false);
 
   AutocompleteMatch match = autocomplete_->HistoryMatchToACMatch(*params, 0, 0);
-  EXPECT_EQ(ASCIIToUTF16("http://www.facebook.com"), match.contents);
+  EXPECT_EQ(ASCIIToUTF16("http://facebook.com"), match.contents);
 }
 
 // Make sure "http://" scheme is not trimmed if input matches in scheme.
@@ -1288,42 +1266,23 @@ TEST_F(HistoryURLProviderTest, DontTrimHttpSchemeIfInputMatchesInScheme) {
       BuildHistoryURLProviderParams("ht face", "http://www.facebook.com", true);
 
   AutocompleteMatch match = autocomplete_->HistoryMatchToACMatch(*params, 0, 0);
-  EXPECT_EQ(ASCIIToUTF16("http://www.facebook.com"), match.contents);
+  EXPECT_EQ(ASCIIToUTF16("http://facebook.com"), match.contents);
 }
 
-// Make sure "https://" scheme is generally not trimmed.
-TEST_F(HistoryURLProviderTest, DontTrimHttpsScheme) {
-  auto params =
-      BuildHistoryURLProviderParams("face", "https://www.facebook.com", false);
-
-  AutocompleteMatch match = autocomplete_->HistoryMatchToACMatch(*params, 0, 0);
-  EXPECT_EQ(ASCIIToUTF16("https://www.facebook.com"), match.contents);
-}
-
-// Make sure "https://" scheme is not trimmed even when requested by flag
-// if the input has a scheme.
-TEST_F(HistoryURLProviderTest, DontTrimHttpsSchemeDespiteFlag) {
-  auto feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  feature_list->InitWithFeatures(
-      {omnibox::kUIExperimentHideSuggestionUrlScheme}, {});
-
+// Make sure "https://" scheme is not trimmed if the input has a scheme.
+TEST_F(HistoryURLProviderTest, DontTrimHttpsSchemeIfInputMatchesInScheme) {
   auto params = BuildHistoryURLProviderParams(
       "https://face", "https://www.facebook.com", false);
 
   AutocompleteMatch match = autocomplete_->HistoryMatchToACMatch(*params, 0, 0);
-  EXPECT_EQ(ASCIIToUTF16("https://www.facebook.com"), match.contents);
+  EXPECT_EQ(ASCIIToUTF16("https://facebook.com"), match.contents);
 }
 
-// Make sure "https://" scheme is trimmed if requested by flag, and nothing
-// else prevents it.
-TEST_F(HistoryURLProviderTest, DoTrimHttpsSchemeIfFlag) {
-  auto feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  feature_list->InitWithFeatures(
-      {omnibox::kUIExperimentHideSuggestionUrlScheme}, {});
-
+// Make sure "https://" scheme is trimmed if nothing prevents it.
+TEST_F(HistoryURLProviderTest, DoTrimHttpsScheme) {
   auto params =
       BuildHistoryURLProviderParams("face", "https://www.facebook.com", false);
 
   AutocompleteMatch match = autocomplete_->HistoryMatchToACMatch(*params, 0, 0);
-  EXPECT_EQ(ASCIIToUTF16("www.facebook.com"), match.contents);
+  EXPECT_EQ(ASCIIToUTF16("facebook.com"), match.contents);
 }

@@ -13,18 +13,18 @@
 #include "content/browser/renderer_host/media/audio_input_device_manager.h"
 #include "content/common/content_export.h"
 #include "media/audio/audio_input_delegate.h"
+#include "media/mojo/interfaces/audio_logging.mojom.h"
 
 namespace media {
-class AudioLog;
 class AudioManager;
 class AudioInputController;
+class AudioInputSyncWriter;
 class AudioParameters;
 class UserInputMonitor;
 }  // namespace media
 
 namespace content {
 
-class AudioInputSyncWriter;
 class AudioInputDeviceManager;
 class AudioMirroringManager;
 struct MediaStreamDevice;
@@ -43,7 +43,7 @@ class CONTENT_EXPORT AudioInputDelegateImpl : public media::AudioInputDelegate {
       int render_process_id,
       int render_frame_id,
       AudioInputDeviceManager* audio_input_device_manager,
-      media::AudioLog* audio_log,
+      media::mojom::AudioLogPtr audio_log,
       AudioInputDeviceManager::KeyboardMicRegistration
           keyboard_mic_registration,
       uint32_t shared_memory_count,
@@ -57,6 +57,8 @@ class CONTENT_EXPORT AudioInputDelegateImpl : public media::AudioInputDelegate {
   int GetStreamId() override;
   void OnRecordStream() override;
   void OnSetVolume(double volume) override;
+  void OnSetOutputDeviceForAec(
+      const std::string& raw_output_device_id) override;
 
  private:
   AudioInputDelegateImpl(
@@ -65,15 +67,14 @@ class CONTENT_EXPORT AudioInputDelegateImpl : public media::AudioInputDelegate {
       media::UserInputMonitor* user_input_monitor,
       const media::AudioParameters& audio_parameters,
       int render_process_id,
-      int render_frame_id,
-      media::AudioLog* audio_log,
+      media::mojom::AudioLogPtr audio_log,
       AudioInputDeviceManager::KeyboardMicRegistration
           keyboard_mic_registration,
       int stream_id,
       bool automatic_gain_control,
       EventHandler* subscriber,
       const MediaStreamDevice* device,
-      std::unique_ptr<AudioInputSyncWriter> writer,
+      std::unique_ptr<media::AudioInputSyncWriter> writer,
       std::unique_ptr<base::CancelableSyncSocket> foreign_socket);
 
   void SendCreatedNotification(bool initially_muted);
@@ -89,9 +90,9 @@ class CONTENT_EXPORT AudioInputDelegateImpl : public media::AudioInputDelegate {
   // |controller_event_handler_| and |writer_| outlive |this|, see the
   // destructor for details.
   std::unique_ptr<ControllerEventHandler> controller_event_handler_;
-  std::unique_ptr<AudioInputSyncWriter> writer_;
+  std::unique_ptr<media::AudioInputSyncWriter> writer_;
   std::unique_ptr<base::CancelableSyncSocket> foreign_socket_;
-  media::AudioLog* const audio_log_;
+  media::mojom::AudioLogPtr const audio_log_;
   scoped_refptr<media::AudioInputController> controller_;
   const AudioInputDeviceManager::KeyboardMicRegistration
       keyboard_mic_registration_;

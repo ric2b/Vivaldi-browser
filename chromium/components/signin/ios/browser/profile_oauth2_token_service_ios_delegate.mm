@@ -13,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
@@ -51,8 +50,9 @@ GoogleServiceAuthError GetGoogleServiceAuthErrorFromNSError(
       return GoogleServiceAuthError(
           GoogleServiceAuthError::UNEXPECTED_SERVICE_RESPONSE);
     case kAuthenticationErrorCategoryAuthorizationErrors:
-      return GoogleServiceAuthError(
-          GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
+      return GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+          GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+              CREDENTIALS_REJECTED_BY_SERVER);
     case kAuthenticationErrorCategoryAuthorizationForbiddenErrors:
       // HTTP_FORBIDDEN (403) is treated as temporary error, because it may be
       // '403 Rate Limit Exceeded.' (for more details, see
@@ -113,11 +113,11 @@ SSOAccessTokenFetcher::~SSOAccessTokenFetcher() {
 }
 
 void SSOAccessTokenFetcher::Start(const std::string& client_id,
-                                  const std::string& client_secret,
+                                  const std::string& client_secret_unused,
                                   const std::vector<std::string>& scopes) {
   std::set<std::string> scopes_set(scopes.begin(), scopes.end());
   provider_->GetAccessToken(
-      account_.gaia, client_id, client_secret, scopes_set,
+      account_.gaia, client_id, scopes_set,
       base::Bind(&SSOAccessTokenFetcher::OnAccessTokenResponse,
                  weak_factory_.GetWeakPtr()));
 }
@@ -163,10 +163,8 @@ ProfileOAuth2TokenServiceIOSDelegate::AccountStatus::~AccountStatus() {
 
 void ProfileOAuth2TokenServiceIOSDelegate::AccountStatus::SetLastAuthError(
     const GoogleServiceAuthError& error) {
-  if (error.state() != last_auth_error_.state()) {
     last_auth_error_ = error;
     signin_error_controller_->AuthStatusChanged();
-  }
 }
 
 std::string ProfileOAuth2TokenServiceIOSDelegate::AccountStatus::GetAccountId()
@@ -302,7 +300,7 @@ void ProfileOAuth2TokenServiceIOSDelegate::RevokeAllCredentials() {
 OAuth2AccessTokenFetcher*
 ProfileOAuth2TokenServiceIOSDelegate::CreateAccessTokenFetcher(
     const std::string& account_id,
-    net::URLRequestContextGetter* getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     OAuth2AccessTokenConsumer* consumer) {
   AccountInfo account_info =
       account_tracker_service_->GetAccountInfo(account_id);
@@ -324,12 +322,11 @@ bool ProfileOAuth2TokenServiceIOSDelegate::RefreshTokenIsAvailable(
   return accounts_.count(account_id) > 0;
 }
 
-bool ProfileOAuth2TokenServiceIOSDelegate::RefreshTokenHasError(
+GoogleServiceAuthError ProfileOAuth2TokenServiceIOSDelegate::GetAuthError(
     const std::string& account_id) const {
-  DCHECK(thread_checker_.CalledOnValidThread());
   auto it = accounts_.find(account_id);
-  // TODO(rogerta): should we distinguish between transient and persistent?
-  return it == accounts_.end() ? false : IsError(it->second->GetAuthStatus());
+  return (it == accounts_.end()) ? GoogleServiceAuthError::AuthErrorNone()
+                                 : it->second->GetAuthStatus();
 }
 
 void ProfileOAuth2TokenServiceIOSDelegate::UpdateAuthError(
@@ -340,16 +337,19 @@ void ProfileOAuth2TokenServiceIOSDelegate::UpdateAuthError(
   // Do not report connection errors as these are not actually auth errors.
   // We also want to avoid masking a "real" auth error just because we
   // subsequently get a transient network error.
-  if (error.state() == GoogleServiceAuthError::CONNECTION_FAILED ||
-      error.state() == GoogleServiceAuthError::SERVICE_UNAVAILABLE) {
+  if (error.IsTransientError())
     return;
-  }
 
   if (accounts_.count(account_id) == 0) {
     // Nothing to update as the account has already been removed.
     return;
   }
-  accounts_[account_id]->SetLastAuthError(error);
+
+  AccountStatus* status = accounts_[account_id].get();
+  if (error.state() != status->GetAuthStatus().state()) {
+    status->SetLastAuthError(error);
+    FireAuthErrorChanged(account_id, error);
+  }
 }
 
 // Clear the authentication error state and notify all observers that a new
@@ -374,6 +374,7 @@ void ProfileOAuth2TokenServiceIOSDelegate::AddOrUpdateAccount(
   if (!account_present) {
     accounts_[account_id].reset(
         new AccountStatus(signin_error_controller_, account_id));
+    FireAuthErrorChanged(account_id, accounts_[account_id]->GetAuthStatus());
   }
 
   UpdateAuthError(account_id, GoogleServiceAuthError::AuthErrorNone());

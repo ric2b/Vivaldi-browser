@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2005, Google Inc.
  * All rights reserved.
  * 
@@ -32,14 +33,14 @@
  *
  * Module for CPU profiling based on periodic pc-sampling.
  *
- * For full(er) information, see doc/cpuprofile.html
+ * For full(er) information, see docs/cpuprofile.html
  *
  * This module is linked into your program with
  * no slowdown caused by this unless you activate the profiler
  * using one of the following methods:
  *
  *    1. Before starting the program, set the environment variable
- *       "PROFILE" to be the name of the file to which the profile
+ *       "CPUPROFILE" to be the name of the file to which the profile
  *       data should be written.
  *
  *    2. Programmatically, start and stop the profiler using the
@@ -123,7 +124,7 @@ PERFTOOLS_DLL_DECL int ProfilerStart(const char* fname);
  *
  * 'options' may be NULL, in which case all are given default values.
  *
- * Returns nonzero if profiling was started sucessfully, or zero else.
+ * Returns nonzero if profiling was started successfully, or zero else.
  */
 PERFTOOLS_DLL_DECL int ProfilerStartWithOptions(
     const char *fname, const struct ProfilerOptions *options);
@@ -131,26 +132,26 @@ PERFTOOLS_DLL_DECL int ProfilerStartWithOptions(
 /* Stop profiling. Can be started again with ProfilerStart(), but
  * the currently accumulated profiling data will be cleared.
  */
-PERFTOOLS_DLL_DECL void ProfilerStop();
+PERFTOOLS_DLL_DECL void ProfilerStop(void);
 
 /* Flush any currently buffered profiling state to the profile file.
  * Has no effect if the profiler has not been started.
  */
-PERFTOOLS_DLL_DECL void ProfilerFlush();
+PERFTOOLS_DLL_DECL void ProfilerFlush(void);
 
 
 /* DEPRECATED: these functions were used to enable/disable profiling
  * in the current thread, but no longer do anything.
  */
-PERFTOOLS_DLL_DECL void ProfilerEnable();
-PERFTOOLS_DLL_DECL void ProfilerDisable();
+PERFTOOLS_DLL_DECL void ProfilerEnable(void);
+PERFTOOLS_DLL_DECL void ProfilerDisable(void);
 
 /* Returns nonzero if profile is currently enabled, zero if it's not. */
-PERFTOOLS_DLL_DECL int ProfilingIsEnabledForAllThreads();
+PERFTOOLS_DLL_DECL int ProfilingIsEnabledForAllThreads(void);
 
 /* Routine for registering new threads with the profiler.
  */
-PERFTOOLS_DLL_DECL void ProfilerRegisterThread();
+PERFTOOLS_DLL_DECL void ProfilerRegisterThread(void);
 
 /* Stores state about profiler's current status into "*state". */
 struct ProfilerState {

@@ -28,11 +28,9 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.InMemorySharedPreferences;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content.browser.test.NativeLibraryTestRule;
 
 import java.util.ArrayList;
@@ -141,7 +139,6 @@ public class ChannelsUpdaterTest {
     @SmallTest
     @MinAndroidSdkLevel(Build.VERSION_CODES.O)
     @TargetApi(Build.VERSION_CODES.O)
-    @EnableFeatures(ChromeFeatureList.SITE_NOTIFICATION_CHANNELS)
     public void testUpdateChannels_createsExpectedChannelsAndUpdatesPref() throws Exception {
         ChannelsUpdater updater = new ChannelsUpdater(
                 true /* isAtLeastO */, mMockSharedPreferences, mChannelsInitializer, 21);
@@ -149,10 +146,10 @@ public class ChannelsUpdaterTest {
 
         assertThat(getChannelsIgnoringDefault(), hasSize((greaterThan(0))));
         assertThat(getChannelIds(getChannelsIgnoringDefault()),
-                containsInAnyOrder(ChannelDefinitions.CHANNEL_ID_BROWSER,
-                        ChannelDefinitions.CHANNEL_ID_DOWNLOADS,
-                        ChannelDefinitions.CHANNEL_ID_INCOGNITO,
-                        ChannelDefinitions.CHANNEL_ID_MEDIA));
+                containsInAnyOrder(ChannelDefinitions.ChannelId.BROWSER,
+                        ChannelDefinitions.ChannelId.DOWNLOADS,
+                        ChannelDefinitions.ChannelId.INCOGNITO,
+                        ChannelDefinitions.ChannelId.MEDIA));
         assertThat(mMockSharedPreferences.getInt(ChannelsUpdater.CHANNELS_VERSION_KEY, -1), is(21));
     }
 
@@ -160,13 +157,12 @@ public class ChannelsUpdaterTest {
     @SmallTest
     @MinAndroidSdkLevel(Build.VERSION_CODES.O)
     @TargetApi(Build.VERSION_CODES.O)
-    @EnableFeatures(ChromeFeatureList.SITE_NOTIFICATION_CHANNELS)
     public void testUpdateChannels_deletesLegacyChannelsAndCreatesExpectedOnes() throws Exception {
         // Set up any legacy channels.
         for (String id : ChannelDefinitions.getLegacyChannelIds()) {
             NotificationChannel channel =
                     new NotificationChannel(id, id, NotificationManager.IMPORTANCE_LOW);
-            channel.setGroup(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL);
+            channel.setGroup(ChannelDefinitions.ChannelGroupId.GENERAL);
             mNotificationManagerProxy.createNotificationChannel(channel);
         }
 
@@ -175,10 +171,10 @@ public class ChannelsUpdaterTest {
         updater.updateChannels();
 
         assertThat(getChannelIds(getChannelsIgnoringDefault()),
-                containsInAnyOrder(ChannelDefinitions.CHANNEL_ID_BROWSER,
-                        ChannelDefinitions.CHANNEL_ID_DOWNLOADS,
-                        ChannelDefinitions.CHANNEL_ID_INCOGNITO,
-                        ChannelDefinitions.CHANNEL_ID_MEDIA));
+                containsInAnyOrder(ChannelDefinitions.ChannelId.BROWSER,
+                        ChannelDefinitions.ChannelId.DOWNLOADS,
+                        ChannelDefinitions.ChannelId.INCOGNITO,
+                        ChannelDefinitions.ChannelId.MEDIA));
     }
 
     private static List<String> getChannelIds(List<NotificationChannel> channels) {

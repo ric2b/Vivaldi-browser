@@ -7,7 +7,6 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/pattern.h"
@@ -40,7 +39,7 @@ class StringTraceDataEndpoint : public TracingController::TraceDataEndpoint {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::BindOnce(completion_callback_, base::Passed(std::move(metadata)),
+        base::BindOnce(completion_callback_, std::move(metadata),
                        base::RetainedRef(str)));
   }
 
@@ -68,15 +67,16 @@ class FileTraceDataEndpoint : public TracingController::TraceDataEndpoint {
   void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
     background_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&FileTraceDataEndpoint::ReceiveTraceChunkOnBlockingThread,
-                   this, base::Passed(std::move(chunk))));
+        base::BindOnce(
+            &FileTraceDataEndpoint::ReceiveTraceChunkOnBlockingThread, this,
+            std::move(chunk)));
   }
 
   void ReceiveTraceFinalContents(
       std::unique_ptr<const base::DictionaryValue>) override {
     background_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&FileTraceDataEndpoint::CloseOnBlockingThread, this));
+        base::BindOnce(&FileTraceDataEndpoint::CloseOnBlockingThread, this));
   }
 
  private:
@@ -139,7 +139,7 @@ class CompressedTraceDataEndpoint
     background_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&CompressedTraceDataEndpoint::CompressOnBackgroundThread,
-                       this, base::Passed(std::move(chunk))));
+                       this, std::move(chunk)));
   }
 
   void ReceiveTraceFinalContents(
@@ -147,7 +147,7 @@ class CompressedTraceDataEndpoint
     background_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&CompressedTraceDataEndpoint::CloseOnBackgroundThread,
-                       this, base::Passed(std::move(metadata))));
+                       this, std::move(metadata)));
   }
 
  private:

@@ -42,7 +42,7 @@ public class ConnectionInfoPopupTest {
             @Override
             public void run() {
                 ConnectionInfoPopup.show(mActivityTestRule.getActivity(),
-                        mActivityTestRule.getActivity().getActivityTab().getWebContents());
+                        mActivityTestRule.getActivity().getActivityTab());
             }
         });
     }

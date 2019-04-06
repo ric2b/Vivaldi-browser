@@ -11,7 +11,6 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
@@ -46,7 +45,7 @@ const char kTestFileSystemType[] = "vfat";
 class MockOperationManager : public OperationManager {
  public:
   explicit MockOperationManager(content::BrowserContext* context);
-  virtual ~MockOperationManager();
+  ~MockOperationManager() override;
 
   MOCK_METHOD3(OnProgress, void(const ExtensionId& extension_id,
                                 image_writer_api::Stage stage,

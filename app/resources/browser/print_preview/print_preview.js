@@ -565,7 +565,8 @@ cr.define('print_preview', function() {
       }
       const destination = assert(this.destinationStore_.selectedDestination);
       const whenPrintDone = this.sendPrintRequest_(destination);
-      if (destination.isLocal) {
+      if (destination.isLocal ||
+          this.uiState_ == PrintPreviewUiState_.OPENING_PDF_PREVIEW) {
         const onError = destination.id ==
                 print_preview.Destination.GooglePromotedId.SAVE_AS_PDF ?
             this.onFileSelectionCancel_.bind(this) :
@@ -573,7 +574,8 @@ cr.define('print_preview', function() {
         whenPrintDone.then(this.close_.bind(this), onError);
       } else {
         // Cloud print resolves when print data is returned to submit to cloud
-        // print, or if setings are invalid.
+        // print, or if print ticket cannot be read, no PDF data is found, or
+        // PDF is oversized.
         whenPrintDone.then(
             this.onPrintToCloud_.bind(this), this.onPrintFailed_.bind(this));
       }
@@ -1019,13 +1021,15 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * Called when native layer receives invalid settings for a print request.
+     * Called when native layer receives invalid settings for a preview request.
      * @private
      */
     onSettingsInvalid_: function() {
       this.uiState_ = PrintPreviewUiState_.ERROR;
       this.isPreviewGenerationInProgress_ = false;
       this.printHeader_.isPrintButtonEnabled = false;
+      this.previewArea_.setDestinationValid(false);
+      this.updateLinks_();
     },
 
     /**
@@ -1036,7 +1040,16 @@ cr.define('print_preview', function() {
      */
     onTicketChange_: function() {
       this.printHeader_.onTicketChange();
-      const disable = !this.printHeader_.isPrintButtonEnabled;
+      this.updateLinks_();
+    },
+
+    /**
+     * Called to update the state of the system dialog and open in preview
+     * links to reflect invalid print tickets or printers.
+     */
+    updateLinks_: function() {
+      const disable = !this.printTicketStore_.isTicketValid() ||
+          this.uiState_ == print_preview.PrintPreviewUiState_.ERROR;
       if (cr.isWindows && $('system-dialog-link'))
         $('system-dialog-link').disabled = disable;
       if ($('open-pdf-in-preview-link'))
@@ -1123,13 +1136,13 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * Called when printing to a privet or extension printer fails.
+     * Called when printing to a privet, cloud, or extension printer fails.
      * @param {*} httpError The HTTP error code, or -1 or a string describing
      *     the error, if not an HTTP error.
      * @private
      */
     onPrintFailed_: function(httpError) {
-      console.error('Privet printing failed with error code ' + httpError);
+      console.error('Printing failed with error code ' + httpError);
       this.printHeader_.setErrorMessage(
           loadTimeData.getString('couldNotPrint'));
     },
@@ -1211,7 +1224,7 @@ cr.define('print_preview', function() {
         this.nativeLayer_.uiLoadedForTest();
       } else {
         combobox.value = 'landscape';
-        this.layoutSettings_.onSelectChange_();
+        this.layoutSettings_.onSelectChange();
       }
     },
 
@@ -1275,7 +1288,7 @@ cr.define('print_preview', function() {
         this.nativeLayer_.uiLoadedForTest();
       } else if (margins >= 0 && margins < combobox.length) {
         combobox.selectedIndex = margins;
-        this.marginSettings_.onSelectChange_();
+        this.marginSettings_.onSelectChange();
       } else {
         this.nativeLayer_.uiFailedLoadingForTest();
       }
@@ -1311,8 +1324,11 @@ cr.define('print_preview', function() {
       }
       // Reset if we had a bad settings fetch since the user selected a new
       // printer.
-      if (this.uiState_ == PrintPreviewUiState_.ERROR)
+      if (this.uiState_ == PrintPreviewUiState_.ERROR) {
         this.uiState_ = PrintPreviewUiState_.READY;
+        this.updateLinks_();
+        this.previewArea_.setDestinationValid(true);
+      }
       if (this.destinationStore_.selectedDestination &&
           this.isInKioskAutoPrintMode_) {
         this.onPrintButtonClick_();

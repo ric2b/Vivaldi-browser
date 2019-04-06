@@ -1,5 +1,6 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/sanitizers/sanitizers.gni")
+import("//vivaldi/gn/config/version.gni")
 
 if (is_multi_dll_chrome) {
   update_target("//chrome:chrome_child") {
@@ -61,7 +62,6 @@ if (is_win) {
     inputs -= [
       "$root_out_dir/chrome.dll",
       "$root_out_dir/chrome.exe",
-      "$root_out_dir/v8_context_snapshot.bin",
     ]
     inputs += [
       "$root_out_dir/vivaldi.dll",
@@ -101,31 +101,6 @@ if (is_win) {
 
   update_target("//chrome/installer/mini_installer:mini_installer") {
     output_name = "Vivaldi.${vivaldi_version_full}${_platform_suffix}"
-  }
-
-  if (!(is_component_build && is_debug && target_cpu == "x86")) {
-    update_target(
-        "//chrome/installer/mini_installer:next_version_mini_installer") {
-      disabled = true
-      deps = []
-      inputs = []
-    }
-  }
-  if (is_multi_dll_chrome && is_syzyasan) {
-    update_target("//chrome/tools/build/win/syzygy::chrome_dll_syzygy") {
-      dll_name = "vivaldi"
-      binary_name = "vivaldi.dll"
-    }
-    update_target(
-        "//chrome/tools/build/win/syzygy::chrome_child_dll_syzygy") {
-      dll_name = "vivaldi_child"
-      binary_name = "vivaldi_child.dll"
-    }
-    update_target(
-        "//chrome/tools/build/win/syzygy::chrome_child_dll_syzygy_copy") {
-      source -= ["$root_out_dir/chrome_child.dll"]
-      sources += ["$root_out_dir/vivaldi_child.dll"]
-    }
   }
 }
 

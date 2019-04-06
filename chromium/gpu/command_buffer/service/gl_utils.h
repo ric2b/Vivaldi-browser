@@ -8,6 +8,7 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_GL_UTILS_H_
 #define GPU_COMMAND_BUFFER_SERVICE_GL_UTILS_H_
 
+#include <string>
 #include <vector>
 
 #include "build/build_config.h"
@@ -38,8 +39,10 @@ struct Capabilities;
 
 namespace gles2 {
 
+class ErrorState;
 class FeatureInfo;
 class Logger;
+enum class CopyTextureMethod;
 
 struct CALayerSharedState {
   float opacity;
@@ -80,12 +83,52 @@ const char* GetServiceVersionString(const FeatureInfo* feature_info);
 const char* GetServiceShadingLanguageVersionString(
     const FeatureInfo* feature_info);
 
-void InitializeGLDebugLogging(bool log_non_errors, Logger* error_logger);
+void LogGLDebugMessage(GLenum source,
+                       GLenum type,
+                       GLuint id,
+                       GLenum severity,
+                       GLsizei length,
+                       const GLchar* message,
+                       Logger* error_logger);
+void InitializeGLDebugLogging(bool log_non_errors,
+                              GLDEBUGPROC callback,
+                              const void* user_param);
 
 bool ValidContextLostReason(GLenum reason);
 error::ContextLostReason GetContextLostReasonFromResetStatus(
     GLenum reset_status);
 
+bool GetCompressedTexSizeInBytes(const char* function_name,
+                                 GLsizei width,
+                                 GLsizei height,
+                                 GLsizei depth,
+                                 GLenum format,
+                                 GLsizei* size_in_bytes,
+                                 ErrorState* error_state);
+
+bool ValidateCopyTexFormatHelper(const FeatureInfo* feature_info,
+                                 GLenum internal_format,
+                                 GLenum read_format,
+                                 GLenum read_type,
+                                 std::string* output_error_msg);
+
+CopyTextureMethod GetCopyTextureCHROMIUMMethod(const FeatureInfo* feature_info,
+                                               GLenum source_target,
+                                               GLint source_level,
+                                               GLenum source_internal_format,
+                                               GLenum source_type,
+                                               GLenum dest_target,
+                                               GLint dest_level,
+                                               GLenum dest_internal_format,
+                                               bool flip_y,
+                                               bool premultiply_alpha,
+                                               bool unpremultiply_alpha,
+                                               bool dither);
+
+bool ValidateCopyTextureCHROMIUMInternalFormats(const FeatureInfo* feature_info,
+                                                GLenum source_internal_format,
+                                                GLenum dest_internal_format,
+                                                std::string* output_error_msg);
 }  // namespace gles2
 }  // namespace gpu
 

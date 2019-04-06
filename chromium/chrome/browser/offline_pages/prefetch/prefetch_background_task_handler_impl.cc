@@ -4,7 +4,6 @@
 
 #include "chrome/browser/offline_pages/prefetch/prefetch_background_task_handler_impl.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/offline_pages/prefetch/prefetch_background_task_scheduler.h"
 #include "chrome/common/pref_names.h"
@@ -17,7 +16,7 @@ namespace offline_pages {
 
 namespace {
 const int kDefaultSuspensionDays = 1;
-const net::BackoffEntry::Policy kBackoffPolicy = {
+const net::BackoffEntry::Policy kPrefetchBackoffPolicy = {
     0,                 // Number of initial errors to ignore without backoff.
     30 * 1000,         // Initial delay for backoff in ms: 30 seconds.
     2,                 // Factor to multiply for exponential backoff.
@@ -59,10 +58,10 @@ PrefetchBackgroundTaskHandlerImpl::GetCurrentBackoff() const {
   std::unique_ptr<net::BackoffEntry> result;
   if (value) {
     result = net::BackoffEntrySerializer::DeserializeFromValue(
-        *value, &kBackoffPolicy, clock_, base::Time::Now());
+        *value, &kPrefetchBackoffPolicy, clock_, base::Time::Now());
   }
   if (!result)
-    return base::MakeUnique<net::BackoffEntry>(&kBackoffPolicy, clock_);
+    return std::make_unique<net::BackoffEntry>(&kPrefetchBackoffPolicy, clock_);
   return result;
 }
 
@@ -109,7 +108,7 @@ void PrefetchBackgroundTaskHandlerImpl::RemoveSuspension() {
 }
 
 void PrefetchBackgroundTaskHandlerImpl::SetTickClockForTesting(
-    base::TickClock* clock) {
+    const base::TickClock* clock) {
   clock_ = clock;
 }
 

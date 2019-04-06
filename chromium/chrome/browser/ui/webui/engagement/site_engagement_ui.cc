@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -37,7 +38,7 @@ class SiteEngagementDetailsProviderImpl
 
   // mojom::SiteEngagementDetailsProvider overrides:
   void GetSiteEngagementDetails(
-      const GetSiteEngagementDetailsCallback& callback) override {
+      GetSiteEngagementDetailsCallback callback) override {
     SiteEngagementService* service = SiteEngagementService::Get(profile_);
     std::vector<mojom::SiteEngagementDetails> scores = service->GetAllDetails();
 
@@ -50,7 +51,7 @@ class SiteEngagementDetailsProviderImpl
       engagement_info.push_back(std::move(origin_info));
     }
 
-    callback.Run(std::move(engagement_info));
+    std::move(callback).Run(std::move(engagement_info));
   }
 
   void SetSiteEngagementBaseScoreForUrl(const GURL& origin,
@@ -76,7 +77,7 @@ class SiteEngagementDetailsProviderImpl
 }  // namespace
 
 SiteEngagementUI::SiteEngagementUI(content::WebUI* web_ui)
-    : MojoWebUIController<mojom::SiteEngagementDetailsProvider>(web_ui) {
+    : ui::MojoWebUIController(web_ui) {
   // Set up the chrome://site-engagement/ source.
   std::unique_ptr<content::WebUIDataSource> source(
       content::WebUIDataSource::Create(chrome::kChromeUISiteEngagementHost));
@@ -84,15 +85,19 @@ SiteEngagementUI::SiteEngagementUI(content::WebUI* web_ui)
   source->AddResourcePath(
       "chrome/browser/engagement/site_engagement_details.mojom.js",
       IDR_SITE_ENGAGEMENT_MOJO_JS);
-  source->AddResourcePath("url/mojo/url.mojom.js", IDR_URL_MOJO_JS);
+  source->AddResourcePath("url/mojom/url.mojom.js", IDR_URL_MOJO_JS);
   source->SetDefaultResource(IDR_SITE_ENGAGEMENT_HTML);
   source->UseGzip();
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source.release());
+
+  AddHandlerToRegistry(
+      base::BindRepeating(&SiteEngagementUI::BindSiteEngagementDetailsProvider,
+                          base::Unretained(this)));
 }
 
 SiteEngagementUI::~SiteEngagementUI() {}
 
-void SiteEngagementUI::BindUIHandler(
+void SiteEngagementUI::BindSiteEngagementDetailsProvider(
     mojom::SiteEngagementDetailsProviderRequest request) {
   ui_handler_.reset(new SiteEngagementDetailsProviderImpl(
       Profile::FromWebUI(web_ui()), std::move(request)));

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef SkUserConfig_DEFINED
-#define SkUserConfig_DEFINED
+#ifndef SKIA_CONFIG_SKUSERCONFIG_H_
+#define SKIA_CONFIG_SKUSERCONFIG_H_
 
 /*  SkTypes.h, the root of the public header files, does the following trick:
 
@@ -61,60 +61,10 @@
     #define SK_DEBUG
 #endif
 
-/*  If, in debugging mode, Skia needs to stop (presumably to invoke a debugger)
-    it will call SK_CRASH(). If this is not defined it, it is defined in
-    SkPostConfig.h to write to an illegal address
- */
-//#define SK_CRASH() *(int *)(uintptr_t)0 = 0
-
-
-/*  preconfig will have attempted to determine the endianness of the system,
-    but you can change these mutually exclusive flags here.
- */
-//#define SK_CPU_BENDIAN
-//#define SK_CPU_LENDIAN
-
 /*  Define this to provide font subsetter for font subsetting when generating
     PDF documents.
  */
 #define SK_PDF_USE_SFNTLY
-
-/*  To write debug messages to a console, skia will call SkDebugf(...) following
-    printf conventions (e.g. const char* format, ...). If you want to redirect
-    this to something other than printf, define yours here
- */
-//#define SkDebugf(...)  MyFunction(__VA_ARGS__)
-
-
-/*  If SK_DEBUG is defined, then you can optionally define SK_SUPPORT_UNITTEST
-    which will run additional self-tests at startup. These can take a long time,
-    so this flag is optional.
- */
-#ifdef SK_DEBUG
-#define SK_SUPPORT_UNITTEST
-#endif
-
-/* If cross process SkPictureImageFilters are not explicitly enabled then
-   they are always disabled.
- */
-#ifndef SK_ALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS
-    #ifndef SK_DISALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS
-        #define SK_DISALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS
-    #endif
-#endif
-
-
-/* If your system embeds skia and has complex event logging, define this
-   symbol to name a file that maps the following macros to your system's
-   equivalents:
-       SK_TRACE_EVENT0(event)
-       SK_TRACE_EVENT1(event, name1, value1)
-       SK_TRACE_EVENT2(event, name1, value1, name2, value2)
-   src/utils/SkDebugTrace.h has a trivial implementation that writes to
-   the debug output stream. If SK_USER_TRACE_INCLUDE_FILE is not defined,
-   SkTrace.h will define the above three macros to do nothing.
-*/
-#undef SK_USER_TRACE_INCLUDE_FILE
 
 // ===== Begin Chrome-specific definitions =====
 
@@ -126,8 +76,6 @@
 
 #define SK_MSCALAR_IS_FLOAT
 #undef SK_MSCALAR_IS_DOUBLE
-
-#define GR_MAX_OFFSCREEN_AA_DIM     512
 
 // Log the file and line number for assertions.
 #define SkDebugf(...) SkDebugf_FileLine(__FILE__, __LINE__, false, __VA_ARGS__)
@@ -148,14 +96,7 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_B32_SHIFT    0
 #endif
 
-#if defined(SK_BUILD_FOR_WIN32)
-
-#define SK_BUILD_FOR_WIN
-
-// Skia uses this deprecated bzero function to fill zeros into a string.
-#define bzero(str, len) memset(str, 0, len)
-
-#elif defined(SK_BUILD_FOR_MAC)
+#if defined(SK_BUILD_FOR_MAC)
 
 #define SK_CPU_LENDIAN
 #undef  SK_CPU_BENDIAN
@@ -216,19 +157,25 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_DISABLE_RENDER_TARGET_SORTING
 #endif
 
-// This is disabled until crbug.com/802408 and crbug.com/801783 can be sorted
-// out.
-#ifndef SK_DISABLE_TEXTURE_OP_AA
-#define SK_DISABLE_TEXTURE_OP_AA
-#endif
-
-#ifndef SK_SUPPORT_LEGACY_DELTA_AA
-#define SK_SUPPORT_LEGACY_DELTA_AA
-#endif
-
-
 #ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
 #define SK_SUPPORT_LEGACY_TILED_BITMAPS
+#endif
+
+// The matrix image filter imperceptibly alters the following two layout tests:
+//   fast/css/transformed-mask.html
+//   fast/reflections/opacity-reflection-transform.html
+// and changes the following cc_unittests:
+//   LayerTreeHostCommonTest.VisibleRectWithScalingClippingAndFilters
+//   LayerTreeHostCommonTest.VisibleRectWithClippingAndFilters
+// Landing the fix in Skia behind this flag will allow those all to be updated
+// together in Chrome (along with the removal of this flag).
+#ifndef SK_IGNORE_MATRIX_IMAGE_FILTER_FIX
+#define SK_IGNORE_MATRIX_IMAGE_FILTER_FIX
+#endif
+
+// convert from text blob to glyph run
+#ifndef SK_SUPPORT_LEGACY_TEXT_BLOB
+#define SK_SUPPORT_LEGACY_TEXT_BLOB
 #endif
 
 // remove after rebaselining svg layout tests
@@ -236,8 +183,19 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_SUPPORT_LEGACY_SVG_ARC_TO
 #endif
 
-#ifndef SK_SUPPORT_LEGACY_DASH_CULL_PATH
-#define SK_SUPPORT_LEGACY_DASH_CULL_PATH
+// Max. verb count for paths rendered by the edge-AA tessellating path renderer.
+#define GR_AA_TESSELLATOR_MAX_VERB_COUNT 100
+
+// Remove this and rebaseline affected layout tests.
+#define SK_DONT_DROP_UNNECESSARY_AA_IN_TEXTURE_OP
+
+#ifndef SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
+#define SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
+#endif
+
+// Here while the skia's public vulkan interface is getting updated
+#ifndef SK_SUPPORT_LEGACY_VULKAN_INTERFACE
+#define SK_SUPPORT_LEGACY_VULKAN_INTERFACE
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -255,9 +213,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 #define SK_ATTR_DEPRECATED          SK_NOTHING_ARG1
 #define GR_GL_CUSTOM_SETUP_HEADER   "GrGLConfig_chrome.h"
-
-// mtklein's fiddling with Src / SrcOver.  Will rebaseline these only once when done.
-#define SK_SUPPORT_LEGACY_X86_BLITS
 
 // ===== End Chrome-specific definitions =====
 

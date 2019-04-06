@@ -6,6 +6,7 @@
 #define UI_GL_GL_IMAGE_AHARDWAREBUFFER_H_
 
 #include "base/macros.h"
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_image_egl.h"
 
@@ -28,7 +29,9 @@ class GL_EXPORT GLImageAHardwareBuffer : public GLImageEGL {
                             int z_order,
                             gfx::OverlayTransform transform,
                             const gfx::Rect& bounds_rect,
-                            const gfx::RectF& crop_rect) override;
+                            const gfx::RectF& crop_rect,
+                            bool enable_blend,
+                            std::unique_ptr<gfx::GpuFence> gpu_fence) override;
   void SetColorSpace(const gfx::ColorSpace& color_space) override {}
   void Flush() override;
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,

@@ -7,11 +7,10 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
-#include "content/public/browser/readback_types.h"
+#include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/base/page_transition_types.h"
@@ -26,7 +25,7 @@ class ThumbnailService;
 }  // namespace thumbnails
 
 class ThumbnailTabHelper
-    : public content::NotificationObserver,
+    : public content::RenderWidgetHostObserver,
       public content::WebContentsObserver,
       public content::WebContentsUserData<ThumbnailTabHelper> {
  public:
@@ -59,10 +58,11 @@ class ThumbnailTabHelper
     COUNT
   };
 
-  // content::NotificationObserver overrides.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  // content::RenderWidgetHostObserver overrides.
+  void RenderWidgetHostVisibilityChanged(content::RenderWidgetHost* widget_host,
+                                         bool became_visible) override;
+  void RenderWidgetHostDestroyed(
+      content::RenderWidgetHost* widget_host) override;
 
   // content::WebContentsObserver overrides.
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
@@ -87,9 +87,7 @@ class ThumbnailTabHelper
   void StartThumbnailCaptureIfNecessary(TriggerReason trigger);
 
   // Creates a thumbnail from the web contents bitmap.
-  void ProcessCapturedBitmap(TriggerReason trigger,
-                             const SkBitmap& bitmap,
-                             content::ReadbackResponse response);
+  void ProcessCapturedBitmap(TriggerReason trigger, const SkBitmap& bitmap);
 
   // Passes the thumbnail to the thumbnail service.
   void StoreThumbnail(const SkBitmap& thumbnail);
@@ -104,9 +102,8 @@ class ThumbnailTabHelper
 
   static void LogThumbnailingOutcome(TriggerReason trigger, Outcome outcome);
 
-  const bool capture_on_navigating_away_;
-
-  content::NotificationRegistrar registrar_;
+  ScopedObserver<content::RenderWidgetHost, content::RenderWidgetHostObserver>
+      observer_;
 
   bool did_navigation_finish_;
   bool has_received_document_since_navigation_finished_;

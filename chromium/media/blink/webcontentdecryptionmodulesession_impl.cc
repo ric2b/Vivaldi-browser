@@ -23,17 +23,13 @@
 #include "media/blink/cdm_result_promise_helper.h"
 #include "media/blink/cdm_session_adapter.h"
 #include "media/blink/webmediaplayer_util.h"
-#include "media/cdm/json_web_key.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebEncryptedMediaKeyInformation.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/cdm/cenc_utils.h"
-#endif
+#include "media/cdm/json_web_key.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_encrypted_media_key_information.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_vector.h"
 
 namespace media {
 
@@ -72,17 +68,17 @@ CdmSessionType convertSessionType(
     blink::WebEncryptedMediaSessionType session_type) {
   switch (session_type) {
     case blink::WebEncryptedMediaSessionType::kTemporary:
-      return CdmSessionType::TEMPORARY_SESSION;
+      return CdmSessionType::kTemporary;
     case blink::WebEncryptedMediaSessionType::kPersistentLicense:
-      return CdmSessionType::PERSISTENT_LICENSE_SESSION;
-    case blink::WebEncryptedMediaSessionType::kPersistentReleaseMessage:
-      return CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION;
+      return CdmSessionType::kPersistentLicense;
+    case blink::WebEncryptedMediaSessionType::kPersistentUsageRecord:
+      return CdmSessionType::kPersistentUsageRecord;
     case blink::WebEncryptedMediaSessionType::kUnknown:
       break;
   }
 
   NOTREACHED();
-  return CdmSessionType::TEMPORARY_SESSION;
+  return CdmSessionType::kTemporary;
 }
 
 bool SanitizeInitData(EmeInitDataType init_data_type,
@@ -107,17 +103,12 @@ bool SanitizeInitData(EmeInitDataType init_data_type,
       return true;
 
     case EmeInitDataType::CENC:
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
       sanitized_init_data->assign(init_data, init_data + init_data_length);
       if (!ValidatePsshInput(*sanitized_init_data)) {
         error_message->assign("Initialization data for CENC is incorrect.");
         return false;
       }
       return true;
-#else
-      error_message->assign("Initialization data type CENC is not supported.");
-      return false;
-#endif
 
     case EmeInitDataType::KEYIDS: {
       // Extract the keys and then rebuild the message. This ensures that any
@@ -185,7 +176,7 @@ bool SanitizeResponse(const std::string& key_system,
   if (IsClearKey(key_system) || IsExternalClearKey(key_system)) {
     std::string key_string(response, response + response_length);
     KeyIdAndKeyPairs keys;
-    CdmSessionType session_type = CdmSessionType::TEMPORARY_SESSION;
+    CdmSessionType session_type = CdmSessionType::kTemporary;
     if (!ExtractKeysFromJWKSet(key_string, &keys, &session_type))
       return false;
 
@@ -341,15 +332,15 @@ void WebContentDecryptionModuleSessionImpl::InitializeNewSession(
   //      instance value.
   // 10.9 Use the cdm to execute the following steps:
   CdmSessionType cdm_session_type = convertSessionType(session_type);
-  is_persistent_session_ =
-      cdm_session_type != CdmSessionType::TEMPORARY_SESSION;
+  is_persistent_session_ = cdm_session_type != CdmSessionType::kTemporary;
   adapter_->InitializeNewSession(
       eme_init_data_type, sanitized_init_data, cdm_session_type,
       std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
           result, adapter_->GetKeySystemUMAPrefix(), kGenerateRequestUMAName,
           base::Bind(
               &WebContentDecryptionModuleSessionImpl::OnSessionInitialized,
-              weak_ptr_factory_.GetWeakPtr()))));
+              weak_ptr_factory_.GetWeakPtr()),
+          {SessionInitStatus::NEW_SESSION})));
 }
 
 void WebContentDecryptionModuleSessionImpl::Load(
@@ -379,12 +370,14 @@ void WebContentDecryptionModuleSessionImpl::Load(
   // constructor (and removed from initializeNewSession()).
   is_persistent_session_ = true;
   adapter_->LoadSession(
-      CdmSessionType::PERSISTENT_LICENSE_SESSION, sanitized_session_id,
+      CdmSessionType::kPersistentLicense, sanitized_session_id,
       std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
           result, adapter_->GetKeySystemUMAPrefix(), kLoadSessionUMAName,
           base::Bind(
               &WebContentDecryptionModuleSessionImpl::OnSessionInitialized,
-              weak_ptr_factory_.GetWeakPtr()))));
+              weak_ptr_factory_.GetWeakPtr()),
+          {SessionInitStatus::NEW_SESSION,
+           SessionInitStatus::SESSION_NOT_FOUND})));
 }
 
 void WebContentDecryptionModuleSessionImpl::Update(

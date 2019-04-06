@@ -9,7 +9,9 @@
 #include <vector>
 
 #include "content/browser/background_fetch/storage/database_task.h"
-#include "content/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/platform/modules/cache_storage/cache_storage.mojom.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -18,8 +20,9 @@ namespace background_fetch {
 // Deletes Background Fetch registration entries from the database.
 class DeleteRegistrationTask : public background_fetch::DatabaseTask {
  public:
-  DeleteRegistrationTask(BackgroundFetchDataManager* data_manager,
+  DeleteRegistrationTask(DatabaseTaskHost* host,
                          int64_t service_worker_registration_id,
+                         const url::Origin& origin,
                          const std::string& unique_id,
                          HandleBackgroundFetchErrorCallback callback);
 
@@ -28,14 +31,26 @@ class DeleteRegistrationTask : public background_fetch::DatabaseTask {
   void Start() override;
 
  private:
-  void DidGetRegistration(const std::vector<std::string>& data,
-                          ServiceWorkerStatusCode status);
+  void DidGetRegistration(base::OnceClosure done_closure,
+                          const std::vector<std::string>& data,
+                          blink::ServiceWorkerStatusCode status);
 
-  void DidDeleteRegistration(ServiceWorkerStatusCode status);
+  void DidDeleteRegistration(base::OnceClosure done_closure,
+                             blink::ServiceWorkerStatusCode status);
+
+  void DidDeleteCache(base::OnceClosure done_closure,
+                      blink::mojom::CacheStorageError error);
+
+  void FinishWithError(blink::mojom::BackgroundFetchError error) override;
 
   int64_t service_worker_registration_id_;
+  url::Origin origin_;
   std::string unique_id_;
   HandleBackgroundFetchErrorCallback callback_;
+
+  // The error to report once all async work is completed.
+  blink::mojom::BackgroundFetchError error_ =
+      blink::mojom::BackgroundFetchError::NONE;
 
   base::WeakPtrFactory<DeleteRegistrationTask> weak_factory_;  // Keep as last.
 

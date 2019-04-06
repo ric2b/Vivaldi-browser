@@ -32,8 +32,7 @@ namespace media {
 // additional services (FileIO, memory allocation, output protection, and
 // platform verification) are lazily created.
 class MEDIA_MOJO_EXPORT MojoCdmHelper final : public CdmAuxiliaryHelper,
-                                              public MojoCdmFileIO::Delegate,
-                                              public MojoCdmProxy::Delegate {
+                                              public MojoCdmFileIO::Delegate {
  public:
   explicit MojoCdmHelper(
       service_manager::mojom::InterfaceProvider* interface_provider);
@@ -43,6 +42,7 @@ class MEDIA_MOJO_EXPORT MojoCdmHelper final : public CdmAuxiliaryHelper,
   void SetFileReadCB(FileReadCB file_read_cb) final;
   cdm::FileIO* CreateCdmFileIO(cdm::FileIOClient* client) final;
   cdm::CdmProxy* CreateCdmProxy(cdm::CdmProxyClient* client) final;
+  int GetCdmProxyCdmId() final;
   cdm::Buffer* CreateCdmBuffer(size_t capacity) final;
   std::unique_ptr<VideoFrameImpl> CreateCdmVideoFrame() final;
   void QueryStatus(QueryStatusCB callback) final;
@@ -56,9 +56,6 @@ class MEDIA_MOJO_EXPORT MojoCdmHelper final : public CdmAuxiliaryHelper,
   // MojoCdmFileIO::Delegate implementation.
   void CloseCdmFileIO(MojoCdmFileIO* cdm_file_io) final;
   void ReportFileReadSize(int file_size_bytes) final;
-
-  // MojoCdmProxy::Delegate implementation.
-  void DestroyCdmProxy(MojoCdmProxy* cdm_proxy) final;
 
  private:
   // All services are created lazily.

@@ -24,6 +24,7 @@
 #include "net/reporting/reporting_garbage_collector.h"
 #include "net/reporting/reporting_policy.h"
 #include "net/reporting/reporting_uploader.h"
+#include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -34,18 +35,21 @@ namespace {
 
 class PendingUploadImpl : public TestReportingUploader::PendingUpload {
  public:
-  PendingUploadImpl(const GURL& url,
+  PendingUploadImpl(const url::Origin& report_origin,
+                    const GURL& url,
                     const std::string& json,
                     ReportingUploader::UploadCallback callback,
                     base::OnceCallback<void(PendingUpload*)> complete_callback)
-      : url_(url),
+      : report_origin_(report_origin),
+        url_(url),
         json_(json),
         callback_(std::move(callback)),
         complete_callback_(std::move(complete_callback)) {}
 
   ~PendingUploadImpl() override = default;
 
-  // PendingUpload implementationP:
+  // PendingUpload implementation:
+  const url::Origin& report_origin() const override { return report_origin_; }
   const GURL& url() const override { return url_; }
   const std::string& json() const override { return json_; }
   std::unique_ptr<base::Value> GetValue() const override {
@@ -59,6 +63,7 @@ class PendingUploadImpl : public TestReportingUploader::PendingUpload {
   }
 
  private:
+  url::Origin report_origin_;
   GURL url_;
   std::string json_;
   ReportingUploader::UploadCallback callback_;
@@ -97,20 +102,24 @@ TestReportingUploader::PendingUpload::PendingUpload() = default;
 TestReportingUploader::TestReportingUploader() = default;
 TestReportingUploader::~TestReportingUploader() = default;
 
-void TestReportingUploader::StartUpload(const GURL& url,
+void TestReportingUploader::StartUpload(const url::Origin& report_origin,
+                                        const GURL& url,
                                         const std::string& json,
+                                        int max_depth,
                                         UploadCallback callback) {
   pending_uploads_.push_back(std::make_unique<PendingUploadImpl>(
-      url, json, std::move(callback),
+      report_origin, url, json, std::move(callback),
       base::BindOnce(&ErasePendingUpload, &pending_uploads_)));
 }
 
-bool TestReportingUploader::RequestIsUpload(const URLRequest& request) {
+int TestReportingUploader::GetUploadDepth(const URLRequest& request) {
   NOTIMPLEMENTED();
-  return true;
+  return 0;
 }
 
-TestReportingDelegate::TestReportingDelegate() = default;
+TestReportingDelegate::TestReportingDelegate()
+    : test_request_context_(std::make_unique<TestURLRequestContext>()),
+      real_delegate_(ReportingDelegate::Create(test_request_context_.get())) {}
 
 TestReportingDelegate::~TestReportingDelegate() = default;
 
@@ -118,8 +127,28 @@ bool TestReportingDelegate::CanQueueReport(const url::Origin& origin) const {
   return true;
 }
 
-bool TestReportingDelegate::CanSendReport(const url::Origin& origin) const {
-  return true;
+void TestReportingDelegate::CanSendReports(
+    std::set<url::Origin> origins,
+    base::OnceCallback<void(std::set<url::Origin>)> result_callback) const {
+  if (pause_permissions_check_) {
+    saved_origins_ = std::move(origins);
+    permissions_check_callback_ = std::move(result_callback);
+    return;
+  }
+
+  if (disallow_report_uploads_)
+    origins.clear();
+  std::move(result_callback).Run(std::move(origins));
+}
+
+bool TestReportingDelegate::PermissionsCheckPaused() const {
+  return !permissions_check_callback_.is_null();
+}
+
+void TestReportingDelegate::ResumePermissionsCheck() {
+  if (disallow_report_uploads_)
+    saved_origins_.clear();
+  std::move(permissions_check_callback_).Run(std::move(saved_origins_));
 }
 
 bool TestReportingDelegate::CanSetClient(const url::Origin& origin,
@@ -132,8 +161,15 @@ bool TestReportingDelegate::CanUseClient(const url::Origin& origin,
   return true;
 }
 
+void TestReportingDelegate::ParseJson(
+    const std::string& unsafe_json,
+    const JsonSuccessCallback& success_callback,
+    const JsonFailureCallback& failure_callback) const {
+  real_delegate_->ParseJson(unsafe_json, success_callback, failure_callback);
+}
+
 TestReportingContext::TestReportingContext(base::Clock* clock,
-                                           base::TickClock* tick_clock,
+                                           const base::TickClock* tick_clock,
                                            const ReportingPolicy& policy)
     : ReportingContext(
           policy,
@@ -144,11 +180,8 @@ TestReportingContext::TestReportingContext(base::Clock* clock,
           std::make_unique<TestReportingUploader>(),
           std::make_unique<TestReportingDelegate>()),
       rand_counter_(0),
-      delivery_timer_(new base::MockTimer(/* retain_user_task= */ false,
-                                          /* is_repeating= */ false)),
-      garbage_collection_timer_(
-          new base::MockTimer(/* retain_user_task= */ false,
-                              /* is_repeating= */ false)) {
+      delivery_timer_(new base::MockOneShotTimer()),
+      garbage_collection_timer_(new base::MockOneShotTimer()) {
   garbage_collector()->SetTimerForTesting(
       base::WrapUnique(garbage_collection_timer_));
   delivery_agent()->SetTimerForTesting(base::WrapUnique(delivery_timer_));

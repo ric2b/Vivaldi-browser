@@ -15,9 +15,9 @@
 #import "ui/base/cocoa/hover_image_button.h"
 #import "ui/base/test/cocoa_helper.h"
 #include "ui/message_center/fake_message_center.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_types.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 
 using base::ASCIIToUTF16;
 using base::UTF8ToUTF16;
@@ -148,7 +148,7 @@ TEST_F(NotificationControllerTest, BasicLayout) {
 
 TEST_F(NotificationControllerTest, NotificationSetttingsButtonLayout) {
   message_center::RichNotificationData data;
-  data.settings_button_handler = SettingsButtonHandler::TRAY;
+  data.settings_button_handler = SettingsButtonHandler::INLINE;
   std::unique_ptr<message_center::Notification> notification(
       new message_center::Notification(
           message_center::NOTIFICATION_TYPE_SIMPLE, "",
@@ -302,16 +302,16 @@ TEST_F(NotificationControllerTest, Image) {
 
 TEST_F(NotificationControllerTest, List) {
   message_center::RichNotificationData optional;
-  message_center::NotificationItem item1(
-      UTF8ToUTF16("First title"), UTF8ToUTF16("first message"));
+  message_center::NotificationItem item1{UTF8ToUTF16("First title"),
+                                         UTF8ToUTF16("first message")};
   optional.items.push_back(item1);
-  message_center::NotificationItem item2(
+  message_center::NotificationItem item2{
       UTF8ToUTF16("Second title"),
-      UTF8ToUTF16("second slightly longer message"));
+      UTF8ToUTF16("second slightly longer message")};
   optional.items.push_back(item2);
-  message_center::NotificationItem item3(
+  message_center::NotificationItem item3{
       UTF8ToUTF16(""),    // Test for empty string.
-      UTF8ToUTF16(" "));  // Test for string containing only spaces.
+      UTF8ToUTF16(" ")};  // Test for string containing only spaces.
   optional.items.push_back(item3);
   optional.context_message = UTF8ToUTF16("Context Message");
 

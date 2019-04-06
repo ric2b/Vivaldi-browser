@@ -1,6 +1,7 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://bookmarks/actions.html">
@@ -38,7 +39,7 @@
 
       #folder-label {
         -webkit-padding-end: 8px;
-        color: var(--secondary-text-color);
+        color: var(--cr-secondary-text-color);
         flex-grow: 1;
       }
 
@@ -52,7 +53,7 @@
       }
 
       #arrow {
-        color: var(--secondary-text-color);
+        color: var(--cr-secondary-text-color);
         margin: 0 8px;
       }
 
@@ -76,29 +77,29 @@
 
     <div id="container"
         class="v-centered"
-        on-tap="selectFolder_"
+        on-click="selectFolder_"
         on-dblclick="toggleFolder_"
         on-contextmenu="onContextMenu_"
         tabindex$="[[getTabIndex_(selectedFolder_, itemId)]]"
         hidden="[[isRootFolder_(depth)]]"
         role="treeitem">
       <template is="dom-if" if="[[hasChildFolder_]]">
-        <button is="paper-icon-button-light"
-            id="arrow"
-            on-tap="toggleFolder_"
-            on-mousedown="preventDefault_"
-            tabindex="-1"
-            aria-label$="[[getButtonAriaLabel_(isOpen, item_)]]">
-          <iron-icon icon="cr:arrow-drop-down" is-open$="[[isOpen]]">
-          </iron-icon>
-        </button>
+        <paper-icon-button-light id="arrow">
+          <button on-click="toggleFolder_"
+              on-mousedown="preventDefault_"
+              tabindex="-1"
+              aria-label$="[[getButtonAriaLabel_(isOpen, item_)]]">
+            <iron-icon icon="cr:arrow-drop-down" is-open$="[[isOpen]]">
+            </iron-icon>
+          </button>
+        </paper-icon-button-light>
       </template>
       <div id="folder-label" class="v-centered">
         <div class="folder-icon"
             open$="[[isSelectedFolder_]]"
             no-children$="[[!hasChildFolder_]]">
         </div>
-        <div class="menu-label elided-text"" title="[[item_.title]]">
+        <div class="menu-label elided-text" title="[[item_.title]]">
           [[item_.title]]
         </div>
       </div>

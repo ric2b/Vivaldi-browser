@@ -1,11 +1,19 @@
 
 if (is_win) {
   update_target("//chrome/installer/setup:setup") {
+    sources -= [
+      "setup.rc",
+      "setup_exe_version.rc.version",
+      "setup_resource.h",
+    ]
     sources += [
       "//vivaldi/installer/util/vivaldi_install_dialog.cc",
       "//vivaldi/installer/util/vivaldi_install_dialog.h",
       "//vivaldi/installer/util/vivaldi_progress_dialog.cc",
       "//vivaldi/installer/util/vivaldi_progress_dialog.h",
+      "//vivaldi/installer/win/setup/setup.rc",
+      "//vivaldi/installer/win/setup/setup_exe_version.rc.version",
+      "//vivaldi/installer/win/setup/setup_resource.h",
     ]
   }
 

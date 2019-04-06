@@ -285,9 +285,8 @@ BASE_EXPORT bool ContainsOnlyChars(StringPiece16 input,
 BASE_EXPORT bool IsStringUTF8(StringPiece str);
 BASE_EXPORT bool IsStringASCII(StringPiece str);
 BASE_EXPORT bool IsStringASCII(StringPiece16 str);
-BASE_EXPORT bool IsStringASCII(const string16& str);
 #if defined(WCHAR_T_IS_UTF32)
-BASE_EXPORT bool IsStringASCII(const std::wstring& str);
+BASE_EXPORT bool IsStringASCII(WStringPiece str);
 #endif
 
 // Compare the lower-case form of the given string against the given
@@ -477,7 +476,7 @@ BASE_EXPORT string16 ReplaceStringPlaceholders(const string16& format_string,
 
 #if defined(OS_WIN)
 #include "base/strings/string_util_win.h"
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include "base/strings/string_util_posix.h"
 #else
 #error Define string operations appropriately for your platform

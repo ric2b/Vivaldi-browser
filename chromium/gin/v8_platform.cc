@@ -6,25 +6,34 @@
 
 #include <algorithm>
 
+#include "base/allocator/partition_allocator/address_space_randomization.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/bind.h"
 #include "base/bit_cast.h"
+#include "base/bits.h"
 #include "base/debug/stack_trace.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_scheduler.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "gin/per_isolate_data.h"
-#include "gin/v8_background_task_runner.h"
 
 namespace gin {
 
 namespace {
 
 base::LazyInstance<V8Platform>::Leaky g_v8_platform = LAZY_INSTANCE_INITIALIZER;
+
+constexpr base::TaskTraits kDefaultTaskTraits = {
+    base::TaskPriority::USER_VISIBLE};
+
+constexpr base::TaskTraits kBlockingTaskTraits = {
+    base::TaskPriority::USER_BLOCKING};
 
 void PrintStackTrace() {
   base::debug::StackTrace trace;
@@ -153,6 +162,88 @@ class TimeClamper {
 base::LazyInstance<TimeClamper>::Leaky g_time_clamper =
     LAZY_INSTANCE_INITIALIZER;
 
+#if BUILDFLAG(USE_PARTITION_ALLOC)
+base::PageAccessibilityConfiguration GetPageConfig(
+    v8::PageAllocator::Permission permission) {
+  switch (permission) {
+    case v8::PageAllocator::Permission::kRead:
+      return base::PageRead;
+    case v8::PageAllocator::Permission::kReadWrite:
+      return base::PageReadWrite;
+    case v8::PageAllocator::Permission::kReadWriteExecute:
+      return base::PageReadWriteExecute;
+    case v8::PageAllocator::Permission::kReadExecute:
+      return base::PageReadExecute;
+    default:
+      DCHECK_EQ(v8::PageAllocator::Permission::kNoAccess, permission);
+      return base::PageInaccessible;
+  }
+}
+
+class PageAllocator : public v8::PageAllocator {
+ public:
+  ~PageAllocator() override = default;
+
+  size_t AllocatePageSize() override {
+    return base::kPageAllocationGranularity;
+  }
+
+  size_t CommitPageSize() override { return base::kSystemPageSize; }
+
+  void SetRandomMmapSeed(int64_t seed) override {
+    base::SetRandomPageBaseSeed(seed);
+  }
+
+  void* GetRandomMmapAddr() override { return base::GetRandomPageBase(); }
+
+  void* AllocatePages(void* address,
+                      size_t length,
+                      size_t alignment,
+                      v8::PageAllocator::Permission permissions) override {
+    base::PageAccessibilityConfiguration config = GetPageConfig(permissions);
+    bool commit = (permissions != v8::PageAllocator::Permission::kNoAccess);
+    return base::AllocPages(address, length, alignment, config,
+                            base::PageTag::kV8, commit);
+  }
+
+  bool FreePages(void* address, size_t length) override {
+    base::FreePages(address, length);
+    return true;
+  }
+
+  bool ReleasePages(void* address, size_t length, size_t new_length) override {
+    DCHECK_LT(new_length, length);
+    uint8_t* release_base = reinterpret_cast<uint8_t*>(address) + new_length;
+    size_t release_size = length - new_length;
+#if defined(OS_POSIX)
+    // On POSIX, we can unmap the trailing pages.
+    base::FreePages(release_base, release_size);
+#else  // defined(OS_WIN)
+    // On Windows, we can only de-commit the trailing pages.
+    base::DecommitSystemPages(release_base, release_size);
+#endif
+    return true;
+  }
+
+  bool SetPermissions(void* address,
+                      size_t length,
+                      Permission permissions) override {
+    // If V8 sets permissions to none, we can discard the memory.
+    if (permissions == v8::PageAllocator::Permission::kNoAccess) {
+      base::DecommitSystemPages(address, length);
+      return true;
+    } else {
+      return base::SetSystemPagesAccess(address, length,
+                                        GetPageConfig(permissions));
+    }
+  }
+};
+
+base::LazyInstance<PageAllocator>::Leaky g_page_allocator =
+    LAZY_INSTANCE_INITIALIZER;
+
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC)
+
 }  // namespace
 
 class V8Platform::TracingControllerImpl : public v8::TracingController {
@@ -223,13 +314,19 @@ V8Platform::V8Platform() : tracing_controller_(new TracingControllerImpl) {}
 
 V8Platform::~V8Platform() = default;
 
+#if BUILDFLAG(USE_PARTITION_ALLOC)
+v8::PageAllocator* V8Platform::GetPageAllocator() {
+  return g_page_allocator.Pointer();
+}
+
 void V8Platform::OnCriticalMemoryPressure() {
-#if defined(OS_WIN)
-  // Some configurations do not use page_allocator. Only 32 bit Windows systems
-  // reserve memory currently.
+// We only have a reservation on 32-bit Windows systems.
+// TODO(bbudge) Make the #if's in BlinkInitializer match.
+#if defined(OS_WIN) && defined(ARCH_CPU_32_BITS)
   base::ReleaseReservation();
 #endif
 }
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC)
 
 std::shared_ptr<v8::TaskRunner> V8Platform::GetForegroundTaskRunner(
     v8::Isolate* isolate) {
@@ -237,19 +334,37 @@ std::shared_ptr<v8::TaskRunner> V8Platform::GetForegroundTaskRunner(
   return data->task_runner();
 }
 
-std::shared_ptr<v8::TaskRunner> V8Platform::GetBackgroundTaskRunner(
-    v8::Isolate* isolate) {
-  return std::make_shared<V8BackgroundTaskRunner>();
+int V8Platform::NumberOfWorkerThreads() {
+  // V8Platform assumes the scheduler uses the same set of workers for default
+  // and user blocking tasks.
+  const int num_foreground_workers =
+      base::TaskScheduler::GetInstance()
+          ->GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
+              kDefaultTaskTraits);
+  DCHECK_EQ(num_foreground_workers,
+            base::TaskScheduler::GetInstance()
+                ->GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
+                    kBlockingTaskTraits));
+  return std::max(1, num_foreground_workers);
 }
 
-size_t V8Platform::NumberOfAvailableBackgroundThreads() {
-  return V8BackgroundTaskRunner::NumberOfAvailableBackgroundThreads();
+void V8Platform::CallOnWorkerThread(std::unique_ptr<v8::Task> task) {
+  base::PostTaskWithTraits(FROM_HERE, kDefaultTaskTraits,
+                           base::BindOnce(&v8::Task::Run, std::move(task)));
 }
 
-void V8Platform::CallOnBackgroundThread(
-    v8::Task* task,
-    v8::Platform::ExpectedRuntime expected_runtime) {
-  GetBackgroundTaskRunner(nullptr)->PostTask(std::unique_ptr<v8::Task>(task));
+void V8Platform::CallBlockingTaskOnWorkerThread(
+    std::unique_ptr<v8::Task> task) {
+  base::PostTaskWithTraits(FROM_HERE, kBlockingTaskTraits,
+                           base::BindOnce(&v8::Task::Run, std::move(task)));
+}
+
+void V8Platform::CallDelayedOnWorkerThread(std::unique_ptr<v8::Task> task,
+                                           double delay_in_seconds) {
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, kDefaultTaskTraits,
+      base::BindOnce(&v8::Task::Run, std::move(task)),
+      base::TimeDelta::FromSecondsD(delay_in_seconds));
 }
 
 void V8Platform::CallOnForegroundThread(v8::Isolate* isolate, v8::Task* task) {

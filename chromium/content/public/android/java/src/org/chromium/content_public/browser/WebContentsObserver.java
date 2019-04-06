@@ -4,8 +4,13 @@
 
 package org.chromium.content_public.browser;
 
+import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 
+import org.chromium.blink.mojom.ViewportFit;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 
 /**
@@ -16,7 +21,7 @@ public abstract class WebContentsObserver {
     // TODO(jdduke): Remove the destroy method and hold observer embedders
     // responsible for explicit observer detachment.
     // Using a weak reference avoids cycles that might prevent GC of WebView's WebContents.
-    private WeakReference<WebContents> mWebContents;
+    protected WeakReference<WebContents> mWebContents;
 
     public WebContentsObserver(WebContents webContents) {
         mWebContents = new WeakReference<WebContents>(webContents);
@@ -135,6 +140,11 @@ public abstract class WebContentsObserver {
     public void navigationEntryCommitted() {}
 
     /**
+     * Called when navigation entries were removed.
+     */
+    public void navigationEntriesDeleted() {}
+
+    /**
      * Called when an interstitial page gets attached to the tab content.
      */
     public void didAttachInterstitialPage() {}
@@ -155,6 +165,20 @@ public abstract class WebContentsObserver {
      * @param isFullscreen whether fullscreen is being entered or left.
      */
     public void hasEffectivelyFullscreenVideoChange(boolean isFullscreen) {}
+
+    /**
+     * The Viewport Fit Type passed to viewportFitChanged. This is mirrored
+     * in an enum in display_cutout.mojom.
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({ViewportFit.AUTO, ViewportFit.CONTAIN, ViewportFit.COVER})
+    public @interface ViewportFitType {}
+
+    /**
+     * Called when the viewport fit of the Web Contents changes.
+     * @param value the new viewport fit value.
+     */
+    public void viewportFitChanged(@ViewportFitType int value) {}
 
     /**
      * Stop observing the web contents and clean up associated references.

@@ -53,18 +53,6 @@ inline bool IsTrue(v8::Maybe<bool> maybe) {
   return maybe.IsJust() && maybe.FromJust();
 }
 
-// SetProperty() family wraps V8::Object::DefineOwnProperty().
-// Returns true on success.
-// NOTE: Think about whether you want this or SetPrivateProperty() below.
-// TODO(devlin): Sort through more of the callers of this and see if we can
-// convert more to be private.
-inline bool SetProperty(v8::Local<v8::Context> context,
-                        v8::Local<v8::Object> object,
-                        v8::Local<v8::String> key,
-                        v8::Local<v8::Value> value) {
-  return IsTrue(object->DefineOwnProperty(context, key, value));
-}
-
 // Wraps v8::Object::SetPrivate(). When possible, prefer this to SetProperty().
 inline bool SetPrivateProperty(v8::Local<v8::Context> context,
                                v8::Local<v8::Object> object,
@@ -125,14 +113,8 @@ inline bool GetPrivateProperty(v8::Local<v8::Context> context,
          GetPrivateProperty(context, object, v8_key, out);
 }
 
-// GetPropertyUnsafe() family wraps v8::Object::Get(). They crash when an
-// exception is thrown.
-inline v8::Local<v8::Value> GetPropertyUnsafe(v8::Local<v8::Context> context,
-                                              v8::Local<v8::Object> object,
-                                              v8::Local<v8::Value> key) {
-  return object->Get(context, key).ToLocalChecked();
-}
-
+// GetPropertyUnsafe() wraps v8::Object::Get(), and crashes when an exception
+// is thrown.
 inline v8::Local<v8::Value> GetPropertyUnsafe(
     v8::Local<v8::Context> context,
     v8::Local<v8::Object> object,

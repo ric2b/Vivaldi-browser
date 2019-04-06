@@ -27,6 +27,7 @@
 #include "device/bluetooth/bluetooth_advertisement.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
+#include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_local_gatt_service.h"
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_remote_gatt_descriptor.h"
@@ -94,6 +95,10 @@ class ArcBluetoothBridge
                            device::BluetoothDevice* device,
                            bool new_paired_status) override;
 
+  void DeviceMTUChanged(device::BluetoothAdapter* adapter,
+                        device::BluetoothDevice* device,
+                        uint16_t mtu) override;
+
   void DeviceRemoved(device::BluetoothAdapter* adapter,
                      device::BluetoothDevice* device) override;
 
@@ -157,6 +162,15 @@ class ArcBluetoothBridge
       const base::Closure& callback,
       const ErrorCallback& error_callback) override;
 
+  void OnCharacteristicPrepareWriteRequest(
+      const device::BluetoothDevice* device,
+      const device::BluetoothLocalGattCharacteristic* characteristic,
+      const std::vector<uint8_t>& value,
+      int offset,
+      bool has_subsequent_write,
+      const base::Closure& callback,
+      const ErrorCallback& error_callback) override;
+
   void OnDescriptorReadRequest(
       const device::BluetoothDevice* device,
       const device::BluetoothLocalGattDescriptor* descriptor,
@@ -174,6 +188,7 @@ class ArcBluetoothBridge
 
   void OnNotificationsStart(
       const device::BluetoothDevice* device,
+      device::BluetoothGattCharacteristic::NotificationType notification_type,
       const device::BluetoothLocalGattCharacteristic* characteristic) override;
 
   void OnNotificationsStop(
@@ -225,6 +240,7 @@ class ArcBluetoothBridge
       mojom::BluetoothGattServiceIDPtr service_id,
       mojom::BluetoothGattIDPtr char_id,
       mojom::BluetoothGattValuePtr value,
+      bool prepare,
       WriteGattCharacteristicCallback callback) override;
   void ReadGattDescriptor(mojom::BluetoothAddressPtr remote_addr,
                           mojom::BluetoothGattServiceIDPtr service_id,
@@ -237,6 +253,9 @@ class ArcBluetoothBridge
                            mojom::BluetoothGattIDPtr desc_id,
                            mojom::BluetoothGattValuePtr value,
                            WriteGattDescriptorCallback callback) override;
+  void ExecuteWrite(mojom::BluetoothAddressPtr remote_addr,
+                    bool execute,
+                    ExecuteWriteCallback callback) override;
   void RegisterForGattNotification(
       mojom::BluetoothAddressPtr remote_addr,
       mojom::BluetoothGattServiceIDPtr service_id,
@@ -301,15 +320,36 @@ class ArcBluetoothBridge
   // Set up or disable multiple advertising.
   void ReserveAdvertisementHandle(
       ReserveAdvertisementHandleCallback callback) override;
-  void BroadcastAdvertisement(
+  void EnableAdvertisement(
       int32_t adv_handle,
       std::unique_ptr<device::BluetoothAdvertisement::Data> advertisement,
-      BroadcastAdvertisementCallback callback) override;
+      EnableAdvertisementCallback callback) override;
+  void DisableAdvertisement(int32_t adv_handle,
+                            DisableAdvertisementCallback callback) override;
   void ReleaseAdvertisementHandle(
       int32_t adv_handle,
       ReleaseAdvertisementHandleCallback callback) override;
 
  private:
+  template <typename... Args>
+  void AddAdvertisementTask(
+      base::OnceCallback<void(base::OnceCallback<void(Args...)>)> task,
+      base::OnceCallback<void(Args...)> callback);
+  template <typename... Args>
+  void CompleteAdvertisementTask(base::OnceCallback<void(Args...)> callback,
+                                 Args... args);
+  void ReserveAdvertisementHandleImpl(
+      ReserveAdvertisementHandleCallback callback);
+  void EnableAdvertisementImpl(
+      int32_t adv_handle,
+      std::unique_ptr<device::BluetoothAdvertisement::Data> advertisement,
+      EnableAdvertisementCallback callback);
+  void DisableAdvertisementImpl(int32_t adv_handle,
+                                DisableAdvertisementCallback callback);
+  void ReleaseAdvertisementHandleImpl(
+      int32_t adv_handle,
+      ReleaseAdvertisementHandleCallback callback);
+
   template <typename InstanceType, typename HostType>
   class ConnectionObserverImpl;
 
@@ -337,9 +377,8 @@ class ArcBluetoothBridge
   void OnGattConnected(
       mojom::BluetoothAddressPtr addr,
       std::unique_ptr<device::BluetoothGattConnection> connection);
-  void OnGattConnectError(
-      mojom::BluetoothAddressPtr addr,
-      device::BluetoothDevice::ConnectErrorCode error_code) const;
+  void OnGattConnectError(mojom::BluetoothAddressPtr addr,
+                          device::BluetoothDevice::ConnectErrorCode error_code);
   void OnGattDisconnected(mojom::BluetoothAddressPtr addr);
 
   void OnStartLEListenDone(GattStatusCallback callback,
@@ -402,9 +441,6 @@ class ArcBluetoothBridge
   // Send the power status change to Android via an intent.
   void SendBluetoothPoweredStateBroadcast(AdapterPowerState powered) const;
 
-  // Propagates the list of paired device to Android.
-  void SendCachedPairedDevices() const;
-
   bool IsGattServerAttributeHandleAvailable(int need);
   int32_t GetNextGattServerAttributeHandle();
   template <class LocalGattAttribute>
@@ -412,20 +448,29 @@ class ArcBluetoothBridge
 
   // Common code for OnCharacteristicReadRequest and OnDescriptorReadRequest
   template <class LocalGattAttribute>
-  void OnGattAttributeReadRequest(const device::BluetoothDevice* device,
-                                  const LocalGattAttribute* attribute,
-                                  int offset,
-                                  const ValueCallback& success_callback,
-                                  const ErrorCallback& error_callback);
+  void OnGattAttributeReadRequest(
+      const device::BluetoothDevice* device,
+      const LocalGattAttribute* attribute,
+      int offset,
+      mojom::BluetoothGattDBAttributeType attribute_type,
+      const ValueCallback& success_callback,
+      const ErrorCallback& error_callback);
 
   // Common code for OnCharacteristicWriteRequest and OnDescriptorWriteRequest
+  // |is_prepare| is only set when a local characteristic receives a prepare
+  // write request, and |has_subsequent_write| indicates whether there are
+  // subsequent prepare write requests following the current one.
   template <class LocalGattAttribute>
-  void OnGattAttributeWriteRequest(const device::BluetoothDevice* device,
-                                   const LocalGattAttribute* attribute,
-                                   const std::vector<uint8_t>& value,
-                                   int offset,
-                                   const base::Closure& success_callback,
-                                   const ErrorCallback& error_callback);
+  void OnGattAttributeWriteRequest(
+      const device::BluetoothDevice* device,
+      const LocalGattAttribute* attribute,
+      const std::vector<uint8_t>& value,
+      int offset,
+      mojom::BluetoothGattDBAttributeType attribute_type,
+      bool is_prepare,
+      bool has_subsequent_write,
+      const base::Closure& success_callback,
+      const ErrorCallback& error_callback);
 
   void OnSetDiscoverable(bool discoverable, bool success, uint32_t timeout);
   void SetDiscoverable(bool discoverable, uint32_t timeout);
@@ -466,13 +511,18 @@ class ArcBluetoothBridge
       GattStatusCallback callback,
       int32_t adv_handle,
       device::BluetoothAdvertisement::ErrorCode error_code);
-  // Both of the following are called after we've tried to unregister
-  // the advertisement for |adv_handle|. Either way, we will no
-  // longer be broadcasting this advertisement, so in either case, the
-  // handle can be released.
   void OnUnregisterAdvertisementDone(GattStatusCallback callback,
                                      int32_t adv_handle);
   void OnUnregisterAdvertisementError(
+      GattStatusCallback callback,
+      int32_t adv_handle,
+      device::BluetoothAdvertisement::ErrorCode error_code);
+  // Both of the following are called after we've tried to release |adv_handle|.
+  // Either way, we will no longer be broadcasting this advertisement, so in
+  // either case, the handle can be released.
+  void OnReleaseAdvertisementHandleDone(GattStatusCallback callback,
+                                        int32_t adv_handle);
+  void OnReleaseAdvertisementHandleError(
       GattStatusCallback callback,
       int32_t adv_handle,
       device::BluetoothAdvertisement::ErrorCode error_code);
@@ -480,7 +530,21 @@ class ArcBluetoothBridge
   // or return false if the advertisement map is full.
   bool GetAdvertisementHandle(int32_t* adv_handle);
 
+  void SendDevice(const device::BluetoothDevice* device,
+                  bool include_cached_device) const;
+
+  void OnGattServerPrepareWrite(mojom::BluetoothAddressPtr addr,
+                                bool has_subsequent_write,
+                                const base::Closure& success_callback,
+                                const ErrorCallback& error_callback,
+                                mojom::BluetoothGattStatus status);
+
   void SendDevice(const device::BluetoothDevice* device) const;
+
+  // Shows a pairing dialog to handle incoming pairing requests.
+  // Returns the pairing delegate of the dialog UI.
+  device::BluetoothDevice::PairingDelegate* ShowPairingDialog(
+      device::BluetoothDevice* device);
 
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
 
@@ -498,14 +562,25 @@ class ArcBluetoothBridge
   std::unordered_map<int32_t, int32_t> last_characteristic_;
   // Monotonically increasing value to use as handle to give to Android side.
   int32_t gatt_server_attribute_next_handle_ = 0;
-  // Keeps track of all devices which initiated a GATT connection to us.
-  std::unordered_set<std::string> gatt_connection_cache_;
-  // Map of device address to GATT connection objects for connections we
-  // have made. We need to hang on to these as long as the connection is
-  // active since their destructors will drop the connections otherwise.
-  std::unordered_map<std::string,
-                     std::unique_ptr<device::BluetoothGattConnection>>
-      gatt_connections_;
+
+  // For established connection from remote device, this is { CONNECTED, null }.
+  // For ongoing connection to remote device, this is { CONNECTING, null }.
+  // For established connection to remote device, this is { CONNECTED, ptr }.
+  struct GattConnection {
+    enum class ConnectionState { CONNECTING, CONNECTED } state;
+    std::unique_ptr<device::BluetoothGattConnection> connection;
+    GattConnection(ConnectionState state,
+                   std::unique_ptr<device::BluetoothGattConnection> connection);
+    GattConnection();
+    ~GattConnection();
+    GattConnection(GattConnection&&);
+    GattConnection& operator=(GattConnection&&);
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(GattConnection);
+  };
+  std::unordered_map<std::string, GattConnection> gatt_connections_;
+
   // Timer to turn discovery off.
   base::OneShotTimer discovery_off_timer_;
   // Timer to turn adapter discoverable off.
@@ -544,6 +619,7 @@ class ArcBluetoothBridge
   enum { kMaxAdvertisements = 1 };
   std::map<int32_t, scoped_refptr<device::BluetoothAdvertisement>>
       advertisements_;
+  base::queue<base::OnceClosure> advertisement_task_queue_;
 
   THREAD_CHECKER(thread_checker_);
 

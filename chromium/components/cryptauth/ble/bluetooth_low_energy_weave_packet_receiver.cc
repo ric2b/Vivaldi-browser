@@ -10,7 +10,7 @@
 #include <netinet/in.h>
 #endif
 
-#include "components/proximity_auth/logging/logging.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 
 namespace cryptauth {
 namespace weave {
@@ -51,7 +51,6 @@ ReasonForClose BluetoothLowEnergyWeavePacketReceiver::GetReasonForClose() {
 }
 
 ReasonForClose BluetoothLowEnergyWeavePacketReceiver::GetReasonToClose() {
-  DCHECK(state_ == State::ERROR_DETECTED);
   return reason_to_close_;
 }
 

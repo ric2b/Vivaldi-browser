@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/browser_tabrestore.h"
 
+#include <memory>
+#include <utility>
+
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_restore.h"
@@ -23,6 +26,9 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/lazy_load_service.h"
+
 using content::RestoreType;
 using content::WebContents;
 using content::NavigationEntry;
@@ -41,12 +47,13 @@ RestoreType GetRestoreType(Browser* browser, bool from_last_session) {
              : RestoreType::LAST_SESSION_EXITED_CLEANLY;
 }
 
-WebContents* CreateRestoredTab(
+std::unique_ptr<WebContents> CreateRestoredTab(
     Browser* browser,
     const std::vector<SerializedNavigationEntry>& navigations,
     int selected_navigation,
     const std::string& extension_app_id,
     bool from_last_session,
+    base::TimeTicks last_active_time,
     content::SessionStorageNamespace* session_storage_namespace,
     const std::string& user_agent_override,
     bool initially_hidden,
@@ -64,24 +71,30 @@ WebContents* CreateRestoredTab(
       browser->profile(),
       tab_util::GetSiteInstanceForNewTab(browser->profile(), restore_url));
   create_params.initially_hidden = initially_hidden;
+  create_params.desired_renderer_state =
+      WebContents::CreateParams::kNoRendererProcess;
+  create_params.last_active_time = last_active_time;
+
+  create_params.always_create_guest = vivaldi::IsVivaldiRunning();
+
   WebContents* base_web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   if (base_web_contents) {
     create_params.initial_size =
         base_web_contents->GetContainerBounds().size();
   }
-  WebContents* web_contents = content::WebContents::CreateWithSessionStorage(
-      create_params,
-      session_storage_namespace_map);
+  std::unique_ptr<WebContents> web_contents =
+      WebContents::CreateWithSessionStorage(create_params,
+                                            session_storage_namespace_map);
   if (from_session_restore)
-    SessionRestore::OnWillRestoreTab(web_contents);
-  extensions::TabHelper::CreateForWebContents(web_contents);
-  extensions::TabHelper::FromWebContents(web_contents)->
-      SetExtensionAppById(extension_app_id);
+    SessionRestore::OnWillRestoreTab(web_contents.get());
+  extensions::TabHelper::CreateForWebContents(web_contents.get());
+  extensions::TabHelper::FromWebContents(web_contents.get())
+      ->SetExtensionAppById(extension_app_id);
   std::vector<std::unique_ptr<NavigationEntry>> entries =
       ContentSerializedNavigationBuilder::ToNavigationEntries(
           navigations, browser->profile());
-  web_contents->SetUserAgentOverride(user_agent_override);
+  web_contents->SetUserAgentOverride(user_agent_override, false);
   web_contents->SetExtData(ext_data);
   web_contents->GetController().Restore(
       selected_navigation, GetRestoreType(browser, from_last_session),
@@ -93,7 +106,7 @@ WebContents* CreateRestoredTab(
 
 }  // namespace
 
-content::WebContents* AddRestoredTab(
+WebContents* AddRestoredTab(
     Browser* browser,
     const std::vector<SerializedNavigationEntry>& navigations,
     int tab_index,
@@ -102,14 +115,19 @@ content::WebContents* AddRestoredTab(
     bool select,
     bool pin,
     bool from_last_session,
+    base::TimeTicks last_active_time,
     content::SessionStorageNamespace* session_storage_namespace,
     const std::string& user_agent_override,
     bool from_session_restore,
     const std::string& ext_data) {
-  WebContents* web_contents = CreateRestoredTab(
+  std::unique_ptr<WebContents> web_contents = CreateRestoredTab(
       browser, navigations, selected_navigation, extension_app_id,
-      from_last_session, session_storage_namespace, user_agent_override,
-      !select, from_session_restore, ext_data);
+      from_last_session, last_active_time, session_storage_namespace,
+      user_agent_override, !select, from_session_restore, ext_data);
+
+  if (!select)
+    web_contents->SetUserData(&vivaldi::LazyLoadService::kLazyLoadIsSafe,
+                              std::make_unique<base::SupportsUserData::Data>());
 
   int add_types = select ? TabStripModel::ADD_ACTIVE
                          : TabStripModel::ADD_NONE;
@@ -118,8 +136,9 @@ content::WebContents* AddRestoredTab(
         tab_index, browser->tab_strip_model()->IndexOfFirstNonPinnedTab());
     add_types |= TabStripModel::ADD_PINNED;
   }
-  browser->tab_strip_model()->InsertWebContentsAt(tab_index, web_contents,
-                                                  add_types);
+  WebContents* raw_web_contents = web_contents.get();
+  browser->tab_strip_model()->InsertWebContentsAt(
+      tab_index, std::move(web_contents), add_types);
   if (select) {
     browser->window()->Activate();
   } else {
@@ -134,17 +153,22 @@ content::WebContents* AddRestoredTab(
     // yet and the bounds may not be available on all platforms.
     if (size.IsEmpty())
       size = browser->window()->GetRestoredBounds().size();
-    ResizeWebContents(web_contents, gfx::Rect(size));
-    web_contents->WasHidden();
+    // NOTE(tomas@vivaldi.com): Adding create_params.always_create_guest causes
+    // ResizeWebContents(...) to crash when calling
+    // const WebContentsView* WebContentsViewChildFrame::GetOuterView().
+    if (!vivaldi::IsVivaldiRunning()) {
+      ResizeWebContents(raw_web_contents, gfx::Rect(size));
+    }
+    raw_web_contents->WasHidden();
   }
   SessionService* session_service =
       SessionServiceFactory::GetForProfileIfExisting(browser->profile());
   if (session_service)
-    session_service->TabRestored(web_contents, pin);
-  return web_contents;
+    session_service->TabRestored(raw_web_contents, pin);
+  return raw_web_contents;
 }
 
-content::WebContents* ReplaceRestoredTab(
+WebContents* ReplaceRestoredTab(
     Browser* browser,
     const std::vector<SerializedNavigationEntry>& navigations,
     int selected_navigation,
@@ -154,21 +178,21 @@ content::WebContents* ReplaceRestoredTab(
     const std::string& user_agent_override,
     bool from_session_restore,
     const std::string& ext_data) {
-  WebContents* web_contents = CreateRestoredTab(
+  std::unique_ptr<WebContents> web_contents = CreateRestoredTab(
       browser, navigations, selected_navigation, extension_app_id,
-      from_last_session, session_storage_namespace, user_agent_override, false,
-      from_session_restore, ext_data);
+      from_last_session, base::TimeTicks(), session_storage_namespace,
+      user_agent_override, false, from_session_restore, ext_data);
+  WebContents* raw_web_contents = web_contents.get();
 
   // ReplaceWebContentsAt won't animate in the restoration, so manually do the
   // equivalent of ReplaceWebContentsAt.
   TabStripModel* tab_strip = browser->tab_strip_model();
   int insertion_index = tab_strip->active_index();
-  tab_strip->InsertWebContentsAt(insertion_index + 1,
-                                 web_contents,
-                                 TabStripModel::ADD_ACTIVE |
-                                 TabStripModel::ADD_INHERIT_GROUP);
+  tab_strip->InsertWebContentsAt(
+      insertion_index + 1, std::move(web_contents),
+      TabStripModel::ADD_ACTIVE | TabStripModel::ADD_INHERIT_GROUP);
   tab_strip->CloseWebContentsAt(insertion_index, TabStripModel::CLOSE_NONE);
-  return web_contents;
+  return raw_web_contents;
 }
 
 }  // namespace chrome

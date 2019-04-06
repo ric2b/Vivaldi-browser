@@ -6,6 +6,7 @@
 #define IOS_WEB_VIEW_PUBLIC_CWV_AUTOFILL_SUGGESTION_H_
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 #import "cwv_export.h"
 
@@ -44,6 +45,10 @@ CWV_EXPORT
 // The 'name' attribute of the html field element.
 @property(nonatomic, copy, readonly) NSString* fieldName;
 
+// The identifier of the html field element. If the element has an ID, it will
+// be used as identifier. Otherwise, an identifier will be generated.
+@property(nonatomic, copy, readonly) NSString* fieldIdentifier;
+
 // The string that will replace the field with |fieldName|'s value attribute.
 @property(nonatomic, copy, readonly) NSString* value;
 
@@ -51,6 +56,10 @@ CWV_EXPORT
 // Contain extra information from that profile to help differentiate from other
 // suggestions.
 @property(nonatomic, copy, readonly, nullable) NSString* displayDescription;
+
+// The icon image of the suggestion, currently this is only used for displaying
+// credit card network icon.
+@property(nonatomic, readonly, nullable) UIImage* icon;
 
 - (instancetype)init NS_UNAVAILABLE;
 

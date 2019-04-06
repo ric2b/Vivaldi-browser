@@ -19,7 +19,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "components/prefs/pref_member.h"
-#include "components/ssl_config/ssl_config_service_manager.h"
 #include "ios/web/public/web_thread_delegate.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_network_session.h"
@@ -41,7 +40,7 @@ class HttpTransactionFactory;
 class HttpUserAgentSettings;
 class NetworkDelegate;
 class ProxyConfigService;
-class ProxyService;
+class ProxyResolutionService;
 class SSLConfigService;
 class TransportSecurityState;
 class URLRequestContext;
@@ -109,11 +108,11 @@ class IOSIOThread : public web::WebThreadDelegate {
     // pins.
     std::unique_ptr<net::TransportSecurityState> transport_security_state;
     std::unique_ptr<net::CTVerifier> cert_transparency_verifier;
-    scoped_refptr<net::SSLConfigService> ssl_config_service;
+    std::unique_ptr<net::SSLConfigService> ssl_config_service;
     std::unique_ptr<net::HttpAuthPreferences> http_auth_preferences;
     std::unique_ptr<net::HttpAuthHandlerFactory> http_auth_handler_factory;
     std::unique_ptr<net::HttpServerProperties> http_server_properties;
-    std::unique_ptr<net::ProxyService> system_proxy_service;
+    std::unique_ptr<net::ProxyResolutionService> system_proxy_resolution_service;
     std::unique_ptr<net::HttpNetworkSession> system_http_network_session;
     std::unique_ptr<net::HttpTransactionFactory>
         system_http_transaction_factory;
@@ -177,9 +176,6 @@ class IOSIOThread : public web::WebThreadDelegate {
   // Sets up HttpAuthPreferences and HttpAuthHandlerFactory on Globals.
   void CreateDefaultAuthHandlerFactory();
 
-  // Returns an SSLConfigService instance.
-  net::SSLConfigService* GetSSLConfigService();
-
   // Discards confidential data. To be called on IO thread only.
   void ChangedToOnTheRecordOnIOThread();
 
@@ -207,11 +203,6 @@ class IOSIOThread : public web::WebThreadDelegate {
   // Observer that logs network changes to the ChromeNetLog.
   class LoggingNetworkChangeObserver;
   std::unique_ptr<LoggingNetworkChangeObserver> network_change_observer_;
-
-  // This is an instance of the default SSLConfigServiceManager for the current
-  // platform and it gets SSL preferences from local_state object.
-  std::unique_ptr<ssl_config::SSLConfigServiceManager>
-      ssl_config_service_manager_;
 
   // These member variables are initialized by a task posted to the IO thread,
   // which gets posted by calling certain member functions of IOSIOThread.

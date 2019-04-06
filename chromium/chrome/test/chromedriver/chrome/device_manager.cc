@@ -13,12 +13,11 @@
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/test/chromedriver/chrome/adb.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 
-// TODO(craigdh): Remove once Chromedriver no longer supports pre-m33 Chrome.
-const char kChromeCmdLineFileBeforeM33[] = "/data/local/chrome-command-line";
 const char kChromeCmdLineFile[] = "/data/local/tmp/chrome-command-line";
 
 Device::Device(
@@ -32,12 +31,21 @@ Device::~Device() {
   release_callback_.Run();
 }
 
+// Only allow completely alpha exec names.
+bool IsValidExecName(const std::string& exec_name) {
+  return std::find_if_not(exec_name.begin(), exec_name.end(), [](char ch) {
+           return base::IsAsciiAlpha(ch);
+         }) == exec_name.end();
+}
+
 Status Device::SetUp(const std::string& package,
                      const std::string& activity,
                      const std::string& process,
+                     const std::string& device_socket,
+                     const std::string& exec_name,
                      const std::string& args,
                      bool use_running_app,
-                     int port) {
+                     int* devtools_port) {
   if (!active_package_.empty())
     return Status(kUnknownError,
         active_package_ + " was launched and has not been quit");
@@ -48,27 +56,49 @@ Status Device::SetUp(const std::string& package,
 
   std::string known_activity;
   std::string command_line_file;
-  std::string device_socket;
-  std::string exec_name;
+  std::string known_device_socket;
+  std::string known_exec_name;
+  bool use_debug_flag = false;
   if (package.compare("org.chromium.content_shell_apk") == 0) {
     // Chromium content shell.
     known_activity = ".ContentShellActivity";
-    device_socket = "content_shell_devtools_remote";
+    known_device_socket = "content_shell_devtools_remote";
     command_line_file = "/data/local/tmp/content-shell-command-line";
-    exec_name = "content_shell";
+    known_exec_name = "content_shell";
   } else if (package.find("chrome") != std::string::npos &&
              package.find("webview") == std::string::npos) {
     // Chrome.
     known_activity = "com.google.android.apps.chrome.Main";
-    device_socket = "chrome_devtools_remote";
-    command_line_file = kChromeCmdLineFileBeforeM33;
-    exec_name = "chrome";
-    status = adb_->SetDebugApp(serial_, package);
-    if (status.IsError())
-      return status;
+    known_device_socket = "chrome_devtools_remote";
+    command_line_file = kChromeCmdLineFile;
+    known_exec_name = "chrome";
+    use_debug_flag = true;
+  } else if (!exec_name.empty() && IsValidExecName(exec_name)) {
+    // Allow directly specifying executable file name -- uncommon scenario.
+    known_exec_name = exec_name;
+    known_device_socket = device_socket;
+    command_line_file = base::StringPrintf("/data/local/tmp/%s_devtools_remote",
+                                           exec_name.c_str());
+    use_debug_flag = true;
   }
 
   if (!use_running_app) {
+    if (use_debug_flag) {
+      // Some apps (such as Google Chrome) read command line from different
+      // locations depending on if the app debug flag is set. When the debug
+      // flag is not set, they use a location not writable by ChromeDriver
+      // (except on rooted devices). Setting the debug flag allows the apps to
+      // read command line from a location writable by ChromeDriver.
+      //
+      // This is needed only when use_running_app is false, for two reasons:
+      // * It's too late to set the command line if the app is already running.
+      // * Setting the debug flag has the side effect of shutting down the app,
+      //   preventing use_running_app from working.
+      status = adb_->SetDebugApp(serial_, package);
+      if (status.IsError())
+        return status;
+    }
+
     status = adb_->ClearAppData(serial_, package);
     if (status.IsError())
       return status;
@@ -83,23 +113,13 @@ Status Device::SetUp(const std::string& package,
     }
 
     if (!command_line_file.empty()) {
-      // If Chrome is set as the debug app it looks in /data/local/tmp/.
-      // There's no way to know if this is set, so write to both locations.
-      // This can be removed once support for pre-M33 is no longer needed.
-      if (command_line_file == kChromeCmdLineFileBeforeM33) {
-        status = adb_->SetCommandLineFile(
-            serial_, kChromeCmdLineFileBeforeM33, exec_name, args);
-        Status status2 = adb_->SetCommandLineFile(
-            serial_, kChromeCmdLineFile, exec_name, args);
-        if (status.IsError() && status2.IsError())
-          return Status(kUnknownError,
-              "Failed to set Chrome's command line file on device " + serial_);
-      } else {
-        status = adb_->SetCommandLineFile(
-            serial_, command_line_file, exec_name, args);
-        if (status.IsError())
-          return status;
-      }
+      status = adb_->SetCommandLineFile(serial_, command_line_file,
+                                        known_exec_name, args);
+      if (status.IsError())
+        return Status(
+            kUnknownError,
+            "Failed to set Chrome's command line file on device " + serial_,
+            status);
     }
 
     status = adb_->Launch(serial_, package,
@@ -109,15 +129,14 @@ Status Device::SetUp(const std::string& package,
 
     active_package_ = package;
   }
-  this->ForwardDevtoolsPort(package, process, port, &device_socket);
-
-  return status;
+  return this->ForwardDevtoolsPort(package, process, &known_device_socket,
+                                   devtools_port);
 }
 
 Status Device::ForwardDevtoolsPort(const std::string& package,
                                    const std::string& process,
-                                   int port,
-                                   std::string* device_socket) {
+                                   std::string* device_socket,
+                                   int* devtools_port) {
   if (device_socket->empty()) {
     // Assume this is a WebView app.
     int pid;
@@ -130,10 +149,25 @@ Status Device::ForwardDevtoolsPort(const std::string& package,
             "process name must be specified if not equal to package name");
       return status;
     }
-    *device_socket = base::StringPrintf("webview_devtools_remote_%d", pid);
+
+    std::string socket_name;
+    // The leading '@' means abstract UNIX sockets. Some apps have a custom
+    // substring between the required "webview_devtools_remote_" prefix and
+    // their PID, which Chrome DevTools accepts and we also should.
+    std::string pattern =
+        base::StringPrintf("@webview_devtools_remote_.*%d", pid);
+    status = adb_->GetSocketByPattern(serial_, pattern, &socket_name);
+    if (status.IsError()) {
+      if (socket_name.empty())
+        status.AddDetails(
+            "make sure the app has its WebView configured for debugging");
+      return status;
+    }
+    // When used in adb with "localabstract:", the leading '@' is not needed.
+    *device_socket = socket_name.substr(1);
   }
 
-  return adb_->ForwardPort(serial_, port, *device_socket);
+  return adb_->ForwardPort(serial_, *device_socket, devtools_port);
 }
 
 Status Device::TearDown() {

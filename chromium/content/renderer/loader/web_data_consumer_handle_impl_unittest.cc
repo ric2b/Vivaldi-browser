@@ -14,7 +14,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -23,7 +22,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 namespace content {
 
@@ -81,7 +80,9 @@ class ReadDataOperation : public ReadDataOperationBase {
   void ReadData() {
     if (!client_) {
       client_.reset(new ClientImpl(this));
-      reader_ = handle_->ObtainReader(client_.get());
+      reader_ = handle_->ObtainReader(
+          client_.get(),
+          blink::scheduler::GetSingleThreadTaskRunnerForTesting());
     }
 
     Result rv = kOk;
@@ -139,7 +140,9 @@ class TwoPhaseReadDataOperation : public ReadDataOperationBase {
   void ReadData() {
     if (!client_) {
       client_.reset(new ClientImpl(this));
-      reader_ = handle_->ObtainReader(client_.get());
+      reader_ = handle_->ObtainReader(
+          client_.get(),
+          blink::scheduler::GetSingleThreadTaskRunnerForTesting());
     }
 
     Result rv;
@@ -193,7 +196,7 @@ class WebDataConsumerHandleImplTest : public ::testing::Test {
   void SetUp() override {
     MojoCreateDataPipeOptions options;
     options.struct_size = sizeof(MojoCreateDataPipeOptions);
-    options.flags = MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE;
+    options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
     options.element_num_bytes = 1;
     options.capacity_num_bytes = kDataPipeCapacity;
 
@@ -286,8 +289,8 @@ TEST_F(WebDataConsumerHandleImplTest, ZeroSizeRead) {
   constexpr size_t data_size = kDataPipeCapacity - 1;
   std::unique_ptr<WebDataConsumerHandleImpl> handle(
       new WebDataConsumerHandleImpl(std::move(consumer_)));
-  std::unique_ptr<WebDataConsumerHandle::Reader> reader(
-      handle->ObtainReader(nullptr));
+  std::unique_ptr<WebDataConsumerHandle::Reader> reader(handle->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting()));
 
   size_t read_size;
   WebDataConsumerHandle::Result rv =
@@ -323,18 +326,18 @@ class CountDidGetReadableClient : public blink::WebDataConsumerHandle::Client {
 
 TEST_F(WebDataConsumerHandleImplTest, DidGetReadable) {
   static constexpr size_t kBlockSize = kDataPipeCapacity / 3;
-  static constexpr size_t kTotalSize = kBlockSize * 3;
+  static constexpr size_t kTotalSize = kBlockSize * 2;
 
   std::unique_ptr<CountDidGetReadableClient> client =
       std::make_unique<CountDidGetReadableClient>();
   std::unique_ptr<WebDataConsumerHandleImpl> handle(
       new WebDataConsumerHandleImpl(std::move(consumer_)));
-  std::unique_ptr<WebDataConsumerHandle::Reader> reader(
-      handle->ObtainReader(client.get()));
+  std::unique_ptr<WebDataConsumerHandle::Reader> reader(handle->ObtainReader(
+      client.get(), blink::scheduler::GetSingleThreadTaskRunnerForTesting()));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, client->num_did_get_readable_called());
 
-  // Push three blocks.
+  // Push two blocks.
   {
     std::string expected;
     int index = 0;
@@ -362,10 +365,10 @@ TEST_F(WebDataConsumerHandleImplTest, DidGetReadable) {
     EXPECT_EQ(sizeof(buffer), size);
   }
   base::RunLoop().RunUntilIdle();
-  // |client| is notified the pipe is still ready.
-  EXPECT_EQ(2, client->num_did_get_readable_called());
+  // |client| is NOT notified since the data is still available.
+  EXPECT_EQ(1, client->num_did_get_readable_called());
 
-  // Read one more block.
+  // Read the other block.
   {
     const void* buffer = nullptr;
     size_t size = sizeof(buffer);
@@ -375,28 +378,38 @@ TEST_F(WebDataConsumerHandleImplTest, DidGetReadable) {
     EXPECT_TRUE(buffer);
     EXPECT_EQ(kTotalSize - kBlockSize, size);
     base::RunLoop().RunUntilIdle();
-    // |client| is NOT notified until EndRead is called.
-    EXPECT_EQ(2, client->num_did_get_readable_called());
 
     rv = reader->EndRead(kBlockSize);
     EXPECT_EQ(Result::kOk, rv);
   }
   base::RunLoop().RunUntilIdle();
-  // |client| is notified the pipe is still ready.
-  EXPECT_EQ(3, client->num_did_get_readable_called());
+  // |client| is NOT notified the pipe is still waiting for more data.
+  EXPECT_EQ(1, client->num_did_get_readable_called());
 
-  // Read the final block.
+  // Read one more.
   {
     char buffer[kBlockSize];
     size_t size = 0;
     Result rv = reader->Read(&buffer, sizeof(buffer),
                              WebDataConsumerHandle::kFlagNone, &size);
-    EXPECT_EQ(Result::kOk, rv);
-    EXPECT_EQ(sizeof(buffer), size);
+    EXPECT_EQ(Result::kShouldWait, rv);
   }
   base::RunLoop().RunUntilIdle();
-  // |client| is NOT notified because the pipe doesn't have any data.
-  EXPECT_EQ(3, client->num_did_get_readable_called());
+  // |client| is NOT notified because the pipe is still waiting for more data.
+  EXPECT_EQ(1, client->num_did_get_readable_called());
+
+  // Push one more block.
+  {
+    std::string expected(kBlockSize, 'x');
+    uint32_t size = expected.size();
+    MojoResult rv =
+        producer_->WriteData(expected.data(), &size, MOJO_WRITE_DATA_FLAG_NONE);
+    EXPECT_EQ(MOJO_RESULT_OK, rv);
+    EXPECT_EQ(expected.size(), size);
+  }
+  base::RunLoop().RunUntilIdle();
+  // |client| is notified the pipe gets ready.
+  EXPECT_EQ(2, client->num_did_get_readable_called());
 }
 
 }  // namespace

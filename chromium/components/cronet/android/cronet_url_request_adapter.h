@@ -50,7 +50,11 @@ class CronetURLRequestAdapter : public CronetURLRequest::Callback {
                           net::RequestPriority priority,
                           jboolean jdisable_cache,
                           jboolean jdisable_connection_migration,
-                          jboolean jenable_metrics);
+                          jboolean jenable_metrics,
+                          jboolean jtraffic_stats_tag_set,
+                          jint jtraffic_stats_tag,
+                          jboolean jtraffic_stats_uid_set,
+                          jint jtraffic_stats_uid);
   ~CronetURLRequestAdapter() override;
 
   // Methods called prior to Start are never called on network thread.
@@ -109,7 +113,8 @@ class CronetURLRequestAdapter : public CronetURLRequest::Callback {
                          const net::HttpResponseHeaders* headers,
                          bool was_cached,
                          const std::string& negotiated_protocol,
-                         const std::string& proxy_server) override;
+                         const std::string& proxy_server,
+                         int64_t received_byte_count) override;
   void OnReadCompleted(scoped_refptr<net::IOBuffer> buffer,
                        int bytes_read,
                        int64_t received_byte_count) override;

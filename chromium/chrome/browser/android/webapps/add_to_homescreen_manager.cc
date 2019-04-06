@@ -9,7 +9,6 @@
 #include "base/location.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/banners/app_banner_manager_android.h"
@@ -23,7 +22,7 @@
 #include "jni/AddToHomescreenManager_jni.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/modules/installation/installation.mojom.h"
+#include "third_party/blink/public/platform/modules/installation/installation.mojom.h"
 #include "ui/gfx/android/java_bitmap.h"
 
 using base::android::JavaParamRef;
@@ -58,7 +57,7 @@ void AddToHomescreenManager::Destroy(JNIEnv* env,
   delete this;
 }
 
-void AddToHomescreenManager::AddShortcut(
+void AddToHomescreenManager::AddToHomescreen(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& j_user_title) {
@@ -133,7 +132,7 @@ void AddToHomescreenManager::OnUserTitleAvailable(
                url, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
   Java_AddToHomescreenManager_onUserTitleAvailable(
       env, java_ref_, j_user_title, j_url,
-      !is_webapk_compatible_ /* isTitleEditable */);
+      is_webapk_compatible_ /* isWebapp */);
 }
 
 void AddToHomescreenManager::OnDataAvailable(const ShortcutInfo& info,
@@ -144,5 +143,5 @@ void AddToHomescreenManager::OnDataAvailable(const ShortcutInfo& info,
     java_bitmap = gfx::ConvertToJavaBitmap(&primary_icon);
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_AddToHomescreenManager_onReadyToAdd(env, java_ref_, java_bitmap);
+  Java_AddToHomescreenManager_onIconAvailable(env, java_ref_, java_bitmap);
 }

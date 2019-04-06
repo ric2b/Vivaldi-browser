@@ -25,6 +25,8 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       {APIPermission::kExtensionActionUtils, "extensionActionUtils"},
       {APIPermission::kHistoryPrivate, "historyPrivate"},
       {APIPermission::kImportData, "importData"},
+      {APIPermission::kInfobars, "infobars" },
+      {APIPermission::kMailPrivate, "mailPrivate"},
       {APIPermission::kNotes, "notes"},
       {APIPermission::kPrefs, "prefs"},
       {APIPermission::kRuntimePrivate, "runtimePrivate"},

@@ -53,8 +53,8 @@ void MediaRouterMojoMetrics::RecordMediaRouteProviderWakeReason(
 void MediaRouterMojoMetrics::RecordMediaRouteProviderVersion(
     const extensions::Extension& extension) {
   MediaRouteProviderVersion version = MediaRouteProviderVersion::UNKNOWN;
-  version = GetMediaRouteProviderVersion(
-      extension.version(), base::Version(version_info::GetVersionNumber()));
+  version = GetMediaRouteProviderVersion(extension.version(),
+                                         version_info::GetVersion());
 
   DCHECK_LT(static_cast<int>(version),
             static_cast<int>(MediaRouteProviderVersion::TOTAL_COUNT));
@@ -84,6 +84,10 @@ void MediaRouterMojoMetrics::RecordCreateRouteResultCode(
                                 result_code, RouteRequestResult::TOTAL_COUNT);
       break;
     case MediaRouteProviderId::EXTENSION:
+    // TODO(crbug.com/809249): Implement Cast-specific metric.
+    case MediaRouteProviderId::CAST:
+    // TODO(crbug.com/808720): Implement DIAL-specific metric.
+    case MediaRouteProviderId::DIAL:
     case MediaRouteProviderId::UNKNOWN:
       UMA_HISTOGRAM_ENUMERATION(kHistogramProviderCreateRouteResult,
                                 result_code, RouteRequestResult::TOTAL_COUNT);
@@ -102,6 +106,10 @@ void MediaRouterMojoMetrics::RecordJoinRouteResultCode(
                                 result_code, RouteRequestResult::TOTAL_COUNT);
       break;
     case MediaRouteProviderId::EXTENSION:
+    // TODO(crbug.com/809249): Implement Cast-specific metric.
+    case MediaRouteProviderId::CAST:
+    // TODO(crbug.com/808720): Implement DIAL-specific metric.
+    case MediaRouteProviderId::DIAL:
     case MediaRouteProviderId::UNKNOWN:
       UMA_HISTOGRAM_ENUMERATION(kHistogramProviderJoinRouteResult, result_code,
                                 RouteRequestResult::TOTAL_COUNT);
@@ -121,6 +129,10 @@ void MediaRouterMojoMetrics::RecordMediaRouteProviderTerminateRoute(
           RouteRequestResult::TOTAL_COUNT);
       break;
     case MediaRouteProviderId::EXTENSION:
+    // TODO(crbug.com/809249): Implement Cast-specific metric.
+    case MediaRouteProviderId::CAST:
+    // TODO(crbug.com/808720): Implement DIAL-specific metric.
+    case MediaRouteProviderId::DIAL:
     case MediaRouteProviderId::UNKNOWN:
       UMA_HISTOGRAM_ENUMERATION(kHistogramProviderTerminateRouteResult,
                                 result_code, RouteRequestResult::TOTAL_COUNT);

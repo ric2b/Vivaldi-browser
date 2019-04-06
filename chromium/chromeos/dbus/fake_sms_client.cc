@@ -12,13 +12,13 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/dbus/dbus_switches.h"
 #include "chromeos/dbus/fake_sms_client.h"
 #include "dbus/object_path.h"
 
 namespace chromeos {
 
-FakeSMSClient::FakeSMSClient() : weak_ptr_factory_(this) {}
+FakeSMSClient::FakeSMSClient() = default;
 
 FakeSMSClient::~FakeSMSClient() = default;
 
@@ -26,29 +26,19 @@ void FakeSMSClient::Init(dbus::Bus* bus) {}
 
 void FakeSMSClient::GetAll(const std::string& service_name,
                            const dbus::ObjectPath& object_path,
-                           const GetAllCallback& callback) {
+                           GetAllCallback callback) {
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kSmsTestMessages))
     return;
 
   // Ownership passed to callback
-  base::DictionaryValue* sms = new base::DictionaryValue();
-  sms->SetString("Number", "000-000-0000");
-  sms->SetString("Text", "FakeSMSClient: Test Message: " + object_path.value());
-  sms->SetString("Timestamp", "Fri Jun  8 13:26:04 EDT 2012");
+  base::DictionaryValue sms;
+  sms.SetString("Number", "000-000-0000");
+  sms.SetString("Text", "FakeSMSClient: Test Message: " + object_path.value());
+  sms.SetString("Timestamp", "Fri Jun  8 13:26:04 EDT 2012");
 
-  // Run callback asynchronously.
-  if (callback.is_null())
-    return;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&FakeSMSClient::OnGetAll, weak_ptr_factory_.GetWeakPtr(),
-                 base::Owned(sms), callback));
-}
-
-void FakeSMSClient::OnGetAll(base::DictionaryValue* sms,
-                             const GetAllCallback& callback) {
-  callback.Run(*sms);
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(sms)));
 }
 
 }  // namespace chromeos

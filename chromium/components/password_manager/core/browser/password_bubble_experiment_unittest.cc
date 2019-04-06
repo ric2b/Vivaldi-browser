@@ -25,14 +25,15 @@ enum class CustomPassphraseState { NONE, SET };
 class TestSyncService : public syncer::FakeSyncService {
  public:
   // FakeSyncService overrides.
-  bool IsSyncAllowed() const override { return is_sync_allowed_; }
+  int GetDisableReasons() const override { return disable_reasons_; }
+
+  State GetState() const override {
+    return IsFirstSetupComplete() ? State::ACTIVE
+                                  : State::PENDING_DESIRED_CONFIGURATION;
+  }
 
   bool IsFirstSetupComplete() const override {
     return is_first_setup_complete_;
-  }
-
-  bool IsSyncActive() const override {
-    return is_sync_allowed_ && is_first_setup_complete_;
   }
 
   syncer::ModelTypeSet GetActiveDataTypes() const override { return type_set_; }
@@ -53,7 +54,9 @@ class TestSyncService : public syncer::FakeSyncService {
     type_set_ = type_set;
   }
 
-  void set_sync_allowed(bool sync_allowed) { is_sync_allowed_ = sync_allowed; }
+  void set_disable_reasons(int disable_reasons) {
+    disable_reasons_ = disable_reasons;
+  }
 
   void set_first_setup_complete(bool setup_complete) {
     is_first_setup_complete_ = setup_complete;
@@ -61,12 +64,10 @@ class TestSyncService : public syncer::FakeSyncService {
 
   void ClearActiveDataTypes() { type_set_.Clear(); }
 
-  bool CanSyncStart() const override { return true; }
-
  private:
+  int disable_reasons_ = DISABLE_REASON_NONE;
   syncer::ModelTypeSet type_set_;
   bool is_using_secondary_passphrase_ = false;
-  bool is_sync_allowed_ = true;
   bool is_first_setup_complete_ = true;
 };
 
@@ -120,7 +121,10 @@ TEST_F(PasswordManagerPasswordBubbleExperimentTest,
     prefs()->SetInteger(
         password_manager::prefs::kNumberSignInPasswordPromoShown,
         test_case.current_shown_count);
-    sync_service()->set_sync_allowed(test_case.is_sync_allowed);
+    sync_service()->set_disable_reasons(
+        test_case.is_sync_allowed
+            ? syncer::SyncService::DISABLE_REASON_NONE
+            : syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE);
     sync_service()->set_first_setup_complete(test_case.is_first_setup_complete);
 
     EXPECT_EQ(test_case.result,
@@ -132,19 +136,18 @@ TEST_F(PasswordManagerPasswordBubbleExperimentTest, IsSmartLockUser) {
   constexpr struct {
     syncer::ModelType type;
     CustomPassphraseState passphrase_state;
-    bool expected_smart_lock_user;
+    bool expected_sync_user;
   } kTestData[] = {
       {syncer::ModelType::BOOKMARKS, CustomPassphraseState::NONE, false},
       {syncer::ModelType::BOOKMARKS, CustomPassphraseState::SET, false},
       {syncer::ModelType::PASSWORDS, CustomPassphraseState::NONE, true},
-      {syncer::ModelType::PASSWORDS, CustomPassphraseState::SET, false},
+      {syncer::ModelType::PASSWORDS, CustomPassphraseState::SET, true},
   };
   for (const auto& test_case : kTestData) {
     SCOPED_TRACE(testing::Message("#test_case = ") << (&test_case - kTestData));
     SetupFakeSyncServiceForTestCase(test_case.type, test_case.passphrase_state);
 
-    EXPECT_EQ(test_case.expected_smart_lock_user,
-              IsSmartLockUser(sync_service()));
+    EXPECT_EQ(test_case.expected_sync_user, IsSmartLockUser(sync_service()));
   }
 }
 

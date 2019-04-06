@@ -5,6 +5,7 @@
 #include "base/files/dir_reader_posix.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,8 +33,8 @@ TEST(DirReaderPosixUnittest, Read) {
   const char* dir = temp_dir.GetPath().value().c_str();
   ASSERT_TRUE(dir);
 
-  const int prev_wd = open(".", O_RDONLY | O_DIRECTORY);
-  DCHECK_GE(prev_wd, 0);
+  char wdbuf[PATH_MAX];
+  PCHECK(getcwd(wdbuf, PATH_MAX));
 
   PCHECK(chdir(dir) == 0);
 
@@ -84,8 +85,7 @@ TEST(DirReaderPosixUnittest, Read) {
 
   PCHECK(rmdir(dir) == 0);
 
-  PCHECK(fchdir(prev_wd) == 0);
-  PCHECK(close(prev_wd) == 0);
+  PCHECK(chdir(wdbuf) == 0);
 
   EXPECT_TRUE(seen_dot);
   EXPECT_TRUE(seen_dotdot);

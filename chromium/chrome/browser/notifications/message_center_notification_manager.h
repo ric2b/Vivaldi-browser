@@ -15,13 +15,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/notifications/message_center_stats_collector.h"
 #include "chrome/browser/notifications/notification_system_observer.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
-#include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/message_center_types.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/ui_delegate.h"
 
 class Profile;
@@ -30,22 +28,20 @@ class ProfileNotification;
 namespace message_center {
 class Notification;
 class NotificationBlocker;
-FORWARD_DECLARE_TEST(WebNotificationTrayTest, ManuallyCloseMessageCenter);
+FORWARD_DECLARE_TEST(NotificationTrayTest, ManuallyCloseMessageCenter);
 }
 
-#if !defined(OS_CHROMEOS)
 // Implementations are platform specific.
 message_center::UiDelegate* CreateUiDelegate();
-#endif
 
 // This class extends NotificationUIManagerImpl and delegates actual display
-// of notifications to MessageCenter, doing necessary conversions.
+// of notifications to MessageCenter, doing necessary conversions. This is only
+// used on platforms that support non-native notifications.
 class MessageCenterNotificationManager
     : public NotificationUIManager,
       public message_center::MessageCenterObserver {
  public:
-  explicit MessageCenterNotificationManager(
-      message_center::MessageCenter* message_center);
+  MessageCenterNotificationManager();
   ~MessageCenterNotificationManager() override;
 
   // NotificationUIManager
@@ -77,11 +73,10 @@ class MessageCenterNotificationManager
       const std::string& delegate_id, Profile* profile);
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(message_center::WebNotificationTrayTest,
+  FRIEND_TEST_ALL_PREFIXES(message_center::NotificationTrayTest,
                            ManuallyCloseMessageCenter);
 
   std::unique_ptr<message_center::UiDelegate> tray_;
-  message_center::MessageCenter* message_center_;  // Weak, global.
 
   // Use a map by notification_id since this mapping is the most often used.
   std::map<std::string, std::unique_ptr<ProfileNotification>>
@@ -101,9 +96,6 @@ class MessageCenterNotificationManager
   std::vector<std::unique_ptr<message_center::NotificationBlocker>> blockers_;
 
   NotificationSystemObserver system_observer_;
-
-  // Keeps track of all notification statistics for UMA purposes.
-  MessageCenterStatsCollector stats_collector_;
 
   // Tracks if shutdown has started.
   bool is_shutdown_started_ = false;

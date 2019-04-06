@@ -13,7 +13,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/single_thread_task_runner.h"
@@ -286,9 +285,7 @@ std::unique_ptr<AudioManager> AudioManager::Create(
     AudioLogFactory* audio_log_factory) {
   std::unique_ptr<AudioManager> manager =
       CreateAudioManager(std::move(audio_thread), audio_log_factory);
-#if BUILDFLAG(ENABLE_WEBRTC)
   manager->InitializeDebugRecording();
-#endif
   return manager;
 }
 
@@ -351,6 +348,24 @@ bool AudioManager::Shutdown() {
   audio_thread_->Stop();
   shutdown_ = true;
   return true;
+}
+
+void AudioManager::SetDiverterCallbacks(
+    AddDiverterCallback add_callback,
+    RemoveDiverterCallback remove_callback) {
+  add_diverter_callback_ = std::move(add_callback);
+  remove_diverter_callback_ = std::move(remove_callback);
+}
+
+void AudioManager::AddDiverter(const base::UnguessableToken& group_id,
+                               media::AudioSourceDiverter* diverter) {
+  if (!add_diverter_callback_.is_null())
+    add_diverter_callback_.Run(group_id, diverter);
+}
+
+void AudioManager::RemoveDiverter(media::AudioSourceDiverter* diverter) {
+  if (!remove_diverter_callback_.is_null())
+    remove_diverter_callback_.Run(diverter);
 }
 
 }  // namespace media

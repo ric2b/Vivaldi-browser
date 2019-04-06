@@ -99,7 +99,7 @@ config("mesa_internal_config") {
     ]
   }
 
-  if (is_posix) {
+  if (is_posix || is_fuchsia) {
     defines += [
       "HAVE_DLOPEN",
       "HAVE_PTHREAD=1",
@@ -137,9 +137,6 @@ config("mesa_internal_warnings") {
 
       # mesa's STATIC_ASSERT() macro expands to an ununused typedef.
       "-Wno-unused-local-typedef",
-
-      # mesa's flex scanner code uses "register" a lot.
-      "-Wno-deprecated-register",
     ]
   }
   if (is_win) {
@@ -753,18 +750,12 @@ loadable_module("osmesa") {
 
     # http://crbug.com/512956
     ldflags = [ "/ignore:4197" ]
-
-    # TODO(brucedawson) : remove when crbug.com/482671 is resolved by
-    # Microsoft.
-    configs -= [ "//build/config/win:default_incremental_linking" ]
-    configs += [ "//build/config/win:no_incremental_linking" ]
   }
 
   deps = [
     ":mesa",
     ":mesa_headers",
     ":mesa_libglslcommon",
-    "//build/config:exe_and_shlib_deps",
   ]
 
   if (is_win) {

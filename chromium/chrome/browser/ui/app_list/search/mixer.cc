@@ -11,18 +11,16 @@
 #include <utility>
 #include <vector>
 
-#include "ash/app_list/model/search/search_result.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/search_provider.h"
+#include "chrome/browser/ui/app_list/search/chrome_search_result.h"
+#include "chrome/browser/ui/app_list/search/search_provider.h"
 
 namespace app_list {
 
 namespace {
 
-const std::string& GetComparableId(const SearchResult& result) {
+const std::string& GetComparableId(const ChromeSearchResult& result) {
   return !result.comparable_id().empty() ? result.comparable_id() : result.id();
 }
 
@@ -30,7 +28,7 @@ const std::string& GetComparableId(const SearchResult& result) {
 
 Mixer::SortData::SortData() : result(nullptr), score(0.0) {}
 
-Mixer::SortData::SortData(SearchResult* result, double score)
+Mixer::SortData::SortData(ChromeSearchResult* result, double score)
     : result(result), score(score) {}
 
 bool Mixer::SortData::operator<(const SortData& other) const {
@@ -42,18 +40,14 @@ bool Mixer::SortData::operator<(const SortData& other) const {
 class Mixer::Group {
  public:
   Group(size_t max_results, double multiplier, double boost)
-      : max_results_(max_results),
-        multiplier_(multiplier),
-        boost_(boost),
-        is_fullscreen_app_list_enabled_(
-            features::IsFullscreenAppListEnabled()) {}
+      : max_results_(max_results), multiplier_(multiplier), boost_(boost) {}
   ~Group() {}
 
   void AddProvider(SearchProvider* provider) {
     providers_.emplace_back(provider);
   }
 
-  void FetchResults(const KnownResults& known_results) {
+  void FetchResults() {
     results_.clear();
 
     for (const SearchProvider* provider : providers_) {
@@ -65,38 +59,6 @@ class Mixer::Group {
         const double relevance =
             std::min(std::max(result->relevance(), 0.0), 1.0);
         double boost = boost_;
-
-        if (!is_fullscreen_app_list_enabled_) {
-          // Recommendations should not be affected by query-to-launch
-          // correlation from KnownResults as it causes recommendations to
-          // become dominated by previously clicked results. This happens
-          // because the recommendation query is the empty string and the
-          // clicked results get forever boosted.
-          if (result->display_type() != SearchResult::DISPLAY_RECOMMENDATION) {
-            KnownResults::const_iterator known_it =
-                known_results.find(result->id());
-            if (known_it != known_results.end()) {
-              switch (known_it->second) {
-                case PERFECT_PRIMARY:
-                  boost = 4.0;
-                  break;
-                case PREFIX_PRIMARY:
-                  boost = 3.75;
-                  break;
-                case PERFECT_SECONDARY:
-                  boost = 3.25;
-                  break;
-                case PREFIX_SECONDARY:
-                  boost = 3.0;
-                  break;
-                case UNKNOWN_RESULT:
-                  NOTREACHED() << "Unknown result in KnownResults?";
-                  break;
-              }
-            }
-          }
-        }
-
         results_.emplace_back(result.get(), relevance * multiplier_ + boost);
       }
     }
@@ -113,8 +75,6 @@ class Mixer::Group {
   const size_t max_results_;
   const double multiplier_;
   const double boost_;
-
-  const bool is_fullscreen_app_list_enabled_;
 
   Providers providers_;  // Not owned.
   SortedResults results_;
@@ -136,9 +96,8 @@ void Mixer::AddProviderToGroup(size_t group_id, SearchProvider* provider) {
   groups_[group_id]->AddProvider(provider);
 }
 
-void Mixer::MixAndPublish(const KnownResults& known_results,
-                          size_t num_max_results) {
-  FetchResults(known_results);
+void Mixer::MixAndPublish(size_t num_max_results) {
+  FetchResults();
 
   SortedResults results;
   results.reserve(num_max_results);
@@ -176,14 +135,12 @@ void Mixer::MixAndPublish(const KnownResults& known_results,
     std::sort(results.begin() + original_size, results.end());
   }
 
-  std::vector<std::unique_ptr<app_list::SearchResult>> new_results;
+  std::vector<ChromeSearchResult*> new_results;
   for (const SortData& sort_data : results) {
-    std::unique_ptr<app_list::SearchResult> new_result =
-        sort_data.result->Duplicate();
-    new_result->set_relevance(sort_data.score);
-    new_results.push_back(std::move(new_result));
+    sort_data.result->SetDisplayScore(sort_data.score);
+    new_results.push_back(sort_data.result);
   }
-  model_updater_->PublishSearchResults(std::move(new_results));
+  model_updater_->PublishSearchResults(new_results);
 }
 
 void Mixer::RemoveDuplicates(SortedResults* results) {
@@ -201,9 +158,9 @@ void Mixer::RemoveDuplicates(SortedResults* results) {
   results->swap(final);
 }
 
-void Mixer::FetchResults(const KnownResults& known_results) {
+void Mixer::FetchResults() {
   for (const auto& group : groups_)
-    group->FetchResults(known_results);
+    group->FetchResults();
 }
 
 }  // namespace app_list

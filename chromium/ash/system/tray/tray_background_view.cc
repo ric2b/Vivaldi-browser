@@ -7,13 +7,14 @@
 #include <algorithm>
 #include <memory>
 
-#include "ash/ash_constants.h"
 #include "ash/focus_cycler.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/lock_window.h"
+#include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
@@ -308,16 +309,17 @@ void TrayBackgroundView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ActionableView::GetAccessibleNodeData(node_data);
   node_data->SetName(GetAccessibleNameForTray());
 
-  if (LockScreen::IsShown()) {
+  if (LockScreen::HasInstance()) {
     int next_id = views::AXAuraObjCache::GetInstance()->GetID(
         static_cast<views::Widget*>(LockScreen::Get()->window()));
-    node_data->AddIntAttribute(ui::AX_ATTR_NEXT_FOCUS_ID, next_id);
+    node_data->AddIntAttribute(ax::mojom::IntAttribute::kNextFocusId, next_id);
   }
 
   Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
   ShelfWidget* shelf_widget = shelf->shelf_widget();
   int previous_id = views::AXAuraObjCache::GetInstance()->GetID(shelf_widget);
-  node_data->AddIntAttribute(ui::AX_ATTR_PREVIOUS_FOCUS_ID, previous_id);
+  node_data->AddIntAttribute(ax::mojom::IntAttribute::kPreviousFocusId,
+                             previous_id);
 }
 
 void TrayBackgroundView::ChildPreferredSizeChanged(views::View* child) {
@@ -395,6 +397,12 @@ void TrayBackgroundView::UpdateAfterShelfAlignmentChange() {
   tray_container_->UpdateAfterShelfAlignmentChange();
 }
 
+void TrayBackgroundView::UpdateAfterRootWindowBoundsChange(
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds) {
+  // Do nothing by default. Child class may do something.
+}
+
 void TrayBackgroundView::AnchorUpdated() {
   if (GetBubbleView())
     UpdateClippingWindowBounds();
@@ -468,8 +476,14 @@ gfx::Insets TrayBackgroundView::GetBubbleAnchorInsets() const {
   gfx::Insets anchor_insets = GetBubbleAnchor()->GetInsets();
   gfx::Insets tray_bg_insets = GetInsets();
   if (GetAnchorAlignment() == TrayBubbleView::ANCHOR_ALIGNMENT_BOTTOM) {
-    return gfx::Insets(-tray_bg_insets.top(), anchor_insets.left(),
-                       -tray_bg_insets.bottom(), anchor_insets.right());
+    // TODO(blakeo): There are minor variances in padding depending on if the
+    // keyboard is in anchored accessibility mode or in regular mode.
+    const gfx::Rect keyboard_occluding_bounds =
+        shelf_->shelf_layout_manager()->keyboard_bounds();
+    int keyboard_offset = keyboard_occluding_bounds.height();
+    return gfx::Insets(-tray_bg_insets.top() - keyboard_offset,
+                       anchor_insets.left(), -tray_bg_insets.bottom(),
+                       anchor_insets.right());
   } else {
     return gfx::Insets(anchor_insets.top(), -tray_bg_insets.left(),
                        anchor_insets.bottom(), -tray_bg_insets.right());

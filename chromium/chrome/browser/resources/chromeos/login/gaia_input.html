@@ -28,6 +28,8 @@
                   automatically. Can be changed manually or with checkValidity()
                   method.
     'required' - whether empty field is invalid.
+    'pattern' - regular expression. If set input would be validated against it
+                in checkValidity function. Ignored if 'type' == 'email'.
 
   Methods:
     'focus'         - focuses input field.
@@ -41,15 +43,17 @@
   <template>
     <paper-input-container id="decorator" on-tap="onTap"
         invalid="[[isInvalid]]" disabled$="[[disabled]]">
-      <label><span>[[label]]</span></label>
-      <div id="container" class="horizontal layout">
-        <input id="input" is="iron-input" on-keydown="onKeyDown"
-            bind-value="{{value}}" invalid="[[isInvalid]]"
-            required$="[[required]]" disabled$="[[disabled]]" class="flex">
-        <span id="domainLabel">[[domain]]</span>
-      </div>
+      <label slot="label"><span>[[label]]</span></label>
+      <iron-input id="ironInput" slot="input" class="flex"
+          bind-value="{{value}}">
+        <input id="input" on-keydown="onKeyDown"
+          value="{{value::input}}" invalid="[[isInvalid]]"
+          required$="[[required]]" disabled$="[[disabled]]"
+          pattern$="[[pattern]]">
+      </iron-input>
+      <span id="domainLabel" slot="suffix">[[domain]]</span>
       <template is="dom-if" if="[[error]]">
-        <paper-input-error>[[error]]</paper-input-error>
+        <paper-input-error slot="add-on">[[error]]</paper-input-error>
       </template>
     </paper-input-container>
   </template>

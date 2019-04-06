@@ -18,6 +18,7 @@ class TimelineController(object):
   def __init__(self, enable_auto_issuing_record=True):
     super(TimelineController, self).__init__()
     self.trace_categories = None
+    self.enable_systrace = False
     self._model = None
     self._renderer_process = None
     self._smooth_records = []
@@ -37,6 +38,8 @@ class TimelineController(object):
     config = tracing_config.TracingConfig()
     config.chrome_trace_config.category_filter.AddFilterString(
         self.trace_categories)
+    if self.enable_systrace:
+      config.chrome_trace_config.SetEnableSystrace()
     config.enable_chrome_trace = True
     tab.browser.platform.tracing_controller.StartTracing(config)
 
@@ -65,8 +68,8 @@ class TimelineController(object):
         results.current_page, timeline_data, **kwargs))
 
     self._model = TimelineModel(timeline_data)
-    self._renderer_process = self._model.GetRendererProcessFromTabId(tab.id)
-    renderer_thread = self.model.GetRendererThreadFromTabId(tab.id)
+    renderer_thread = self.model.GetFirstRendererThread(tab.id)
+    self._renderer_process = renderer_thread.parent
 
     run_smooth_actions_record = None
     self._smooth_records = []

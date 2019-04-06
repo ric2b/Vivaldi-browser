@@ -48,11 +48,13 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
   static const uint16_t kOpusFrameDurationsMu[];
 
  private:
+  typedef StreamParserBuffer::Type TrackType;
+
   // Helper class that manages per-track state.
   class Track {
    public:
     Track(int track_num,
-          bool is_video,
+          TrackType track_type,
           base::TimeDelta default_duration,
           MediaLog* media_log);
     Track(const Track& other);
@@ -77,11 +79,11 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
     // |last_added_buffer_missing_duration_|. Then, if |buffer| is missing
     // duration, saves |buffer| into |last_added_buffer_missing_duration_|, or
     // otherwise adds |buffer| to |buffers_|.
-    bool AddBuffer(const scoped_refptr<StreamParserBuffer>& buffer);
+    bool AddBuffer(scoped_refptr<StreamParserBuffer> buffer);
 
     // If |last_added_buffer_missing_duration_| is set, updates its duration to
-    // be non-kNoTimestamp value of |estimated_next_frame_duration_| or a
-    // hard-coded default, then adds it to |buffers_| and unsets
+    // be non-kNoTimestamp value of |{min|max}_frame_duration_| or a hard-coded
+    // default, then adds it to |buffers_| and unsets
     // |last_added_buffer_missing_duration_|. (This method helps stream parser
     // emit all buffers in a media segment before signaling end of segment.)
     void ApplyDurationEstimateIfNeeded();
@@ -100,10 +102,10 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
 
    private:
     // Helper that sanity-checks |buffer| duration, updates
-    // |estimated_next_frame_duration_|, and adds |buffer| to |buffers_|.
-    // Returns false if |buffer| failed sanity check and therefore was not added
-    // to |buffers_|. Returns true otherwise.
-    bool QueueBuffer(const scoped_refptr<StreamParserBuffer>& buffer);
+    // |{min|max}_frame_duration_|, and adds |buffer| to |buffers_|. Returns
+    // false if |buffer| failed sanity check and therefore was not added to
+    // |buffers_|. Returns true otherwise.
+    bool QueueBuffer(scoped_refptr<StreamParserBuffer> buffer);
 
     // Helper that calculates the buffer duration to use in
     // ApplyDurationEstimateIfNeeded().
@@ -114,7 +116,7 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
     int num_duration_estimates_ = 0;
 
     int track_num_;
-    bool is_video_;
+    TrackType track_type_;
 
     // Parsed track buffers, each with duration and in (decode) timestamp order,
     // that have not yet been extracted into |ready_buffers_|. Note that up to
@@ -131,15 +133,14 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
     // timestamp).
     BufferQueue ready_buffers_;
 
-    // If kNoTimestamp, then |estimated_next_frame_duration_| will be used.
+    // If kNoTimestamp, then |{min|max}_frame_duration_| will be used.
     base::TimeDelta default_duration_;
 
-    // If kNoTimestamp, then a default value will be used. This estimate is
-    // the maximum (for video), or minimum (for audio) duration seen so far for
-    // this track, and is used only if |default_duration_| is kNoTimestamp.
-    // TODO(chcunningham): Use maximum for audio too, adding checks to disable
-    // splicing when these estimates are observed in SourceBufferStream.
-    base::TimeDelta estimated_next_frame_duration_;
+    // Tracks the max duration seen for this track. Used to estimate block
+    // durations at the end of clusters. Max minimizes the chance of introducing
+    // gaps in the buffered range and is safe for audio because we don't splice
+    // on estimated durations. See http://crbug.com/396634.
+    base::TimeDelta max_frame_duration_;
 
     MediaLog* media_log_;
   };

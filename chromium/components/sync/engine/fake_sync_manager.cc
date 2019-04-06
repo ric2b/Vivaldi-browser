@@ -12,8 +12,7 @@
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/weak_handle.h"
 #include "components/sync/engine/engine_components_factory.h"
 #include "components/sync/engine/net/http_post_provider_factory.h"
@@ -65,15 +64,15 @@ int FakeSyncManager::GetInvalidationCount() const {
 void FakeSyncManager::WaitForSyncThread() {
   // Post a task to |sync_task_runner_| and block until it runs.
   base::RunLoop run_loop;
-  if (!sync_task_runner_->PostTaskAndReply(
-          FROM_HERE, base::Bind(&base::DoNothing), run_loop.QuitClosure())) {
+  if (!sync_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                           run_loop.QuitClosure())) {
     NOTREACHED();
   }
   run_loop.Run();
 }
 
 void FakeSyncManager::Init(InitArgs* args) {
-  sync_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+  sync_task_runner_ = base::SequencedTaskRunnerHandle::Get();
   PurgePartiallySyncedTypes();
 
   test_user_share_.SetUp();
@@ -133,6 +132,10 @@ void FakeSyncManager::UpdateCredentials(const SyncCredentials& credentials) {
   NOTIMPLEMENTED();
 }
 
+void FakeSyncManager::InvalidateCredentials() {
+  NOTIMPLEMENTED();
+}
+
 void FakeSyncManager::StartSyncingNormally(base::Time last_poll_time) {
   // Do nothing.
 }
@@ -188,7 +191,7 @@ void FakeSyncManager::SaveChanges() {
   // Do nothing.
 }
 
-void FakeSyncManager::ShutdownOnSyncThread(ShutdownReason reason) {
+void FakeSyncManager::ShutdownOnSyncThread() {
   DCHECK(sync_task_runner_->RunsTasksInCurrentSequence());
   test_user_share_.TearDown();
 }
@@ -214,7 +217,7 @@ bool FakeSyncManager::ReceivedExperiment(Experiments* experiments) {
   return false;
 }
 
-bool FakeSyncManager::HasUnsyncedItems() {
+bool FakeSyncManager::HasUnsyncedItemsForTest() {
   NOTIMPLEMENTED();
   return false;
 }

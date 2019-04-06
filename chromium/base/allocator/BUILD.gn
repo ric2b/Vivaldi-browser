@@ -11,6 +11,9 @@ declare_args() {
   # e.g. for profiling (it's more rare to profile Debug builds,
   # but people sometimes need to do that).
   enable_debugallocation = is_debug
+
+  # Provide a way to build tcmalloc with a low memory footprint.
+  use_tcmalloc_small_but_slow = false
 }
 
 # This "allocator" meta-target will forward to the default allocator according
@@ -35,6 +38,9 @@ config("tcmalloc_flags") {
   }
   if (use_allocator_shim) {
     defines += [ "TCMALLOC_DONT_REPLACE_SYSTEM_ALLOC" ]
+  }
+  if (use_tcmalloc_small_but_slow) {
+    defines += [ "TCMALLOC_SMALL_BUT_SLOW" ]
   }
   if (is_clang) {
     cflags = [
@@ -68,7 +74,7 @@ config("tcmalloc_flags") {
 if (use_allocator == "tcmalloc") {
   # tcmalloc currently won't compile on Android.
   source_set("tcmalloc") {
-    tcmalloc_dir = "//third_party/tcmalloc/chromium"
+    tcmalloc_dir = "//third_party/tcmalloc/gperftools-2.0/chromium"
 
     # Don't check tcmalloc's includes. These files include various files like
     # base/foo.h and they actually refer to tcmalloc's forked copy of base
@@ -175,6 +181,14 @@ if (use_allocator == "tcmalloc") {
       #"win_allocator.cc",
     ]
 
+    # Not included on mips64el.
+    if (current_cpu == "mips64el") {
+      sources -= [
+        "$tcmalloc_dir/src/base/linuxthreads.cc",
+        "$tcmalloc_dir/src/base/linuxthreads.h",
+      ]
+    }
+
     # Disable the heap checker in tcmalloc.
     defines = [ "NO_HEAP_CHECK" ]
 
@@ -195,8 +209,10 @@ if (use_allocator == "tcmalloc") {
     configs -= [ "//build/config/compiler:compiler_arm_thumb" ]
     configs += [ "//build/config/compiler:compiler_arm" ]
 
-    # TODO(crbug.com/633719) Make tcmalloc work with AFDO if possible.
-    configs -= [ "//build/config/compiler:afdo" ]
+    # TODO(crbug.com/633719) Make tcmalloc work with AFDO on GCC if possible.
+    if (!is_clang) {
+      configs -= [ "//build/config/compiler:afdo" ]
+    }
 
     deps = []
 
@@ -254,8 +270,8 @@ if (use_allocator == "tcmalloc") {
   }
 }  # use_allocator == "tcmalloc"
 
-buildflag_header("features") {
-  header = "features.h"
+buildflag_header("buildflags") {
+  header = "buildflags.h"
   flags = [ "USE_ALLOCATOR_SHIM=$use_allocator_shim" ]
 }
 

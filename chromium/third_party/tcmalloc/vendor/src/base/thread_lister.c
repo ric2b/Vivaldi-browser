@@ -32,11 +32,17 @@
  */
 
 #include "config.h"
+
+#include "base/thread_lister.h"
+
 #include <stdio.h>         /* needed for NULL on some powerpc platforms (?!) */
+#include <sys/types.h>
+#include <unistd.h>        /* for getpid */
+
 #ifdef HAVE_SYS_PRCTL
 # include <sys/prctl.h>
 #endif
-#include "base/thread_lister.h"
+
 #include "base/linuxthreads.h"
 /* Include other thread listers here that define THREADS macro
  * only when they can provide a good implementation.
@@ -48,8 +54,8 @@
  * or if the multi-threading code has not been ported, yet.
  */
 
-int ListAllProcessThreads(void *parameter,
-                          ListAllProcessThreadsCallBack callback, ...) {
+int TCMalloc_ListAllProcessThreads(void *parameter,
+				   ListAllProcessThreadsCallBack callback, ...) {
   int rc;
   va_list ap;
   pid_t pid;
@@ -70,7 +76,7 @@ int ListAllProcessThreads(void *parameter,
   return rc;
 }
 
-int ResumeAllProcessThreads(int num_threads, pid_t *thread_pids) {
+int TCMalloc_ResumeAllProcessThreads(int num_threads, pid_t *thread_pids) {
   return 1;
 }
 

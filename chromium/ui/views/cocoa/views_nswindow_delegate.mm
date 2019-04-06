@@ -4,8 +4,8 @@
 
 #import "ui/views/cocoa/views_nswindow_delegate.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/threading/thread_task_runner_handle.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/bridged_native_widget.h"
@@ -34,7 +34,40 @@
     return;
 
   cursor_.reset([newCursor retain]);
-  [parent_->ns_window() resetCursorRects];
+
+  // The window has a tracking rect that was installed in -[BridgedContentView
+  // initWithView:] that uses the NSTrackingCursorUpdate option. In the case
+  // where the window is the key window, that tracking rect will cause
+  // -cursorUpdate: to be sent up the responder chain, which will cause the
+  // cursor to be set when the message gets to the NativeWidgetMacNSWindow.
+  NSWindow* window = parent_->ns_window();
+  [window resetCursorRects];
+
+  // However, if this window isn't the key window, that tracking area will have
+  // no effect. This is good if this window is just some top-level window that
+  // isn't key, but isn't so good if this window isn't key but is a child window
+  // of a window that is key. To handle that case, the case where the
+  // -cursorUpdate: message will never be sent, just set the cursor here.
+  //
+  // Only do this for non-key windows so that there will be no flickering
+  // between cursors set here and set elsewhere.
+  //
+  // (This is a known issue; see https://stackoverflow.com/questions/45712066/.)
+  if (![window isKeyWindow]) {
+    NSWindow* currentWindow = window;
+    // Walk up the window chain. If there is a key window in the window parent
+    // chain, then work around the issue and set the cursor.
+    while (true) {
+      NSWindow* parentWindow = [currentWindow parentWindow];
+      if (!parentWindow)
+        break;
+      currentWindow = parentWindow;
+      if ([currentWindow isKeyWindow]) {
+        [(newCursor ? newCursor : [NSCursor arrowCursor]) set];
+        break;
+      }
+    }
+  }
 }
 
 - (void)onWindowOrderChanged:(NSNotification*)notification {
@@ -48,10 +81,6 @@
 - (void)sheetDidEnd:(NSWindow*)sheet
          returnCode:(NSInteger)returnCode
         contextInfo:(void*)contextInfo {
-  // |parent_| will be null when triggered from the block in -windowWillClose:.
-  if (!parent_)
-    return;
-
   [sheet orderOut:nil];
   parent_->OnWindowWillClose();
 }
@@ -99,11 +128,6 @@
 }
 
 - (void)windowWillClose:(NSNotification*)notification {
-  // Retain |self|. |parent_| should be cleared. OnWindowWillClose() may delete
-  // |parent_|, but it may also dealloc |self| before returning. However, the
-  // observers it notifies before that need a valid |parent_| on the delegate,
-  // so it can only be cleared after OnWindowWillClose() returns.
-  base::scoped_nsobject<NSObject> keepAlive(self, base::scoped_policy::RETAIN);
   NSWindow* window = parent_->ns_window();
   if (NSWindow* sheetParent = [window sheetParent]) {
     // On no! Something called -[NSWindow close] on a sheet rather than calling
@@ -111,20 +135,23 @@
     // then the parent will never be able to show another sheet. But calling
     // -endSheet: here will block the thread with an animation, so post a task.
     // Use a block: The argument to -endSheet: must be retained, since it's the
-    // window that is closing and -performSelector: won't retain the argument.
-    // The NSWindowDelegate (i.e. |self|) must also be explicitly retained. Even
-    // though the call to OnWindowWillClose() below will remove |self| as the
-    // NSWindow delegate, the call to -[NSApp beginSheet:] also took a weak
-    // reference to the delegate, which will be destroyed when the sheet's
-    // BridgedNativeWidget is destroyed.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, base::BindBlock(^{
-      [sheetParent endSheet:window];
-      [[self retain] release];  // Force |self| to be retained for the block.
-    }));
+    // window that is closing and -performSelector: won't retain the argument
+    // (putting |window| on the stack above causes this block to retain it).
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(base::RetainBlock(^{
+          [sheetParent endSheet:window];
+        })));
   }
   DCHECK([window isEqual:[notification object]]);
   parent_->OnWindowWillClose();
-  parent_ = nullptr;
+  // |self| may be deleted here (it's NSObject, so who really knows).
+  // |parent_| _will_ be deleted for sure.
+
+  // Note OnWindowWillClose() will clear the NSWindow delegate. That is, |self|.
+  // That guarantees that the task possibly-posted above will never call into
+  // our -sheetDidEnd:. (The task's purpose is just to unblock the modal session
+  // on the parent window.)
+  DCHECK(![window delegate]);
 }
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {

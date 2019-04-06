@@ -2,6 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build_overrides/build.gni")
+
+declare_args() {
+  # If true, it assumes that //third_party/abseil-cpp is an available dependency.
+  gtest_enable_absl_printers = false
+}
+
 config("gtest_config") {
   visibility = [ ":*" ]  # gmock also shares this config.
 
@@ -14,20 +21,26 @@ config("gtest_config") {
     # In order to allow regex matches in gtest to be shared between Windows
     # and other systems, we tell gtest to always use its internal engine.
     "GTEST_HAS_POSIX_RE=0",
+
+    # Enables C++11 features.
     "GTEST_LANG_CXX11=1",
 
-    # ::testing::Combine, which is heavily used in Chromium, is gated on
-    # tr1::tuple. Upstream avoids using tr1::tuple on Visual Studio 2017+,
-    # because it causes warnings. We'll take (and ignore) the warnings to keep
-    # our ::testing::Combine.
-    "GTEST_HAS_TR1_TUPLE=1",
+    # Prevents gtest from including both <tr1/tuple> and <tuple>.
+    "GTEST_HAS_TR1_TUPLE=0",
   ]
 
   # Gtest headers need to be able to find themselves.
-  include_dirs = [ "src/googletest/include" ]
+  include_dirs = [
+    "custom",
+    "src/googletest/include",
+  ]
 
   if (is_win) {
     cflags = [ "/wd4800" ]  # Unused variable warning.
+  }
+
+  if (!build_with_chromium && gtest_enable_absl_printers) {
+    defines += [ "GTEST_HAS_ABSL=1" ]
   }
 }
 
@@ -37,6 +50,12 @@ config("gmock_config") {
     "custom",
     "src/googlemock/include",
   ]
+
+  if (is_clang) {
+    # TODO(tikuta): remove this when the issue is fixed.
+    # https://github.com/google/googletest/issues/533
+    cflags = [ "-Wno-inconsistent-missing-override" ]
+  }
 }
 
 # Do NOT depend on this directly. Use //testing/gtest instead.
@@ -44,6 +63,9 @@ config("gmock_config") {
 source_set("gtest") {
   testonly = true
   sources = [
+    "custom/gtest/internal/custom/gtest.h",
+    "custom/gtest/internal/custom/stack_trace_getter.cc",
+    "custom/gtest/internal/custom/stack_trace_getter.h",
     "src/googletest/include/gtest/gtest-death-test.h",
     "src/googletest/include/gtest/gtest-message.h",
     "src/googletest/include/gtest/gtest-param-test.h",
@@ -82,6 +104,31 @@ source_set("gtest") {
 
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  defines = []
+  deps = []
+  public_deps = []
+  if (is_nacl || !build_with_chromium) {
+    defines += [ "GTEST_DISABLE_PRINT_STACK_TRACE" ]
+    sources -= [
+      "custom/gtest/internal/custom/stack_trace_getter.cc",
+      "custom/gtest/internal/custom/stack_trace_getter.h",
+    ]
+    if (gtest_enable_absl_printers) {
+      public_deps += [
+        "//third_party/abseil-cpp/absl/strings",
+        "//third_party/abseil-cpp/absl/types:optional",
+      ]
+    }
+  } else {
+    deps += [ "//base" ]
+  }
+
+  if (is_fuchsia) {
+    deps += [
+      "//third_party/fuchsia-sdk:fdio",
+    ]
+  }
 }
 
 # Do NOT depend on this directly. Use //testing/gtest:gtest_main instead.
@@ -125,9 +172,10 @@ source_set("gmock") {
     "src/googlemock/src/gmock.cc",
   ]
 
+  public_deps = [ ":gtest" ]
+
   public_configs = [
     ":gmock_config",
-    ":gtest_config",
   ]
 }
 

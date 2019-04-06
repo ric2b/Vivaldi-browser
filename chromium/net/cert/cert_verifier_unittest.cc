@@ -30,10 +30,10 @@ TEST(CertVerifierTest, RequestParamsComparators) {
   // Create a certificate that contains both a leaf and an
   // intermediate/root.
   std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> chain;
-  chain.push_back(x509_util::DupCryptoBuffer(root_cert->cert_buffer()));
+  chain.push_back(bssl::UpRef(root_cert->cert_buffer()));
   const scoped_refptr<X509Certificate> combined_cert =
-      X509Certificate::CreateFromBuffer(
-          x509_util::DupCryptoBuffer(ok_cert->cert_buffer()), std::move(chain));
+      X509Certificate::CreateFromBuffer(bssl::UpRef(ok_cert->cert_buffer()),
+                                        std::move(chain));
   ASSERT_TRUE(combined_cert.get());
 
   const CertificateList empty_list;
@@ -87,7 +87,7 @@ TEST(CertVerifierTest, RequestParamsComparators) {
           // The same certificate, chain, and host, but with different flags
           // are different validation keys.
           CertVerifier::RequestParams(ok_cert, "www.example.test",
-                                      CertVerifier::VERIFY_EV_CERT,
+                                      CertVerifier::VERIFY_REV_CHECKING_ENABLED,
                                       std::string(), empty_list),
           CertVerifier::RequestParams(ok_cert, "www.example.test", 0,
                                       std::string(), empty_list),
@@ -110,17 +110,15 @@ TEST(CertVerifierTest, RequestParamsComparators) {
           false,
       },
   };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    SCOPED_TRACE(i);
-
-    const CertVerifier::RequestParams& key1 = tests[i].key1;
-    const CertVerifier::RequestParams& key2 = tests[i].key2;
+  for (const auto& test : tests) {
+    const CertVerifier::RequestParams& key1 = test.key1;
+    const CertVerifier::RequestParams& key2 = test.key2;
 
     // Ensure that the keys are equivalent to themselves.
     EXPECT_FALSE(key1 < key1);
     EXPECT_FALSE(key2 < key2);
 
-    if (tests[i].equal) {
+    if (test.equal) {
       EXPECT_TRUE(!(key1 < key2) && !(key2 < key1));
     } else {
       EXPECT_TRUE((key1 < key2) || (key2 < key1));

@@ -14,8 +14,8 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
-#include "third_party/libaom/av1_features.h"
+#include "media/media_buildflags.h"
+#include "third_party/libaom/av1_buildflags.h"
 #include "ui/display/display_switches.h"
 
 #if defined(OS_ANDROID)
@@ -591,21 +591,21 @@ class AV1MediaCanPlayTypeTest : public MediaCanPlayTypeTest {
 // Note: This must be a separate test since features can not be changed after
 // the initial navigation.
 IN_PROC_BROWSER_TEST_F(AV1MediaCanPlayTypeTest, CodecSupportTest_av1) {
-  // TODO(dalecurtis): This is not the correct final string. Fix before enabling
-  // by default. This test needs to be merged into the existing mp4 and webm
-  // before release as well. http://crbug.com/784607
-  EXPECT_EQ(kProbably, CanPlay("'video/webm; codecs=\"av1\"'"));
-  EXPECT_EQ(kProbably, CanPlay("'video/mp4; codecs=\"av1\"'"));
-}
-#endif  // BUILDFLAG(ENABLE_AV1_DECODER)
-
-IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_av1_unsupported) {
-  // TODO(dalecurtis): This is not the correct final string. Fix before enabling
-  // by default. This test needs to be merged into the existing mp4 and webm
-  // before release as well. http://crbug.com/784607
+  // Fully qualified codec strings are required. These tests are not exhaustive
+  // since codec string parsing is exhaustively tested elsewhere.
   EXPECT_EQ(kNot, CanPlay("'video/webm; codecs=\"av1\"'"));
   EXPECT_EQ(kNot, CanPlay("'video/mp4; codecs=\"av1\"'"));
+  EXPECT_EQ(kProbably, CanPlay("'video/webm; codecs=\"av01.0.04M.08\"'"));
+  EXPECT_EQ(kProbably, CanPlay("'video/mp4; codecs=\"av01.0.04M.08\"'"));
 }
+#else
+// AV1 is enabled by default. However, on platforms where it is not built, such
+// as ARM-based devices, av1 must be unsupported.
+IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_av1_unsupported) {
+  EXPECT_EQ(kNot, CanPlay("'video/webm; codecs=\"av01.0.04M.08\"'"));
+  EXPECT_EQ(kNot, CanPlay("'video/mp4; codecs=\"av01.0.04M.08\"'"));
+}
+#endif  // BUILDFLAG(ENABLE_AV1_DECODER)
 
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_wav) {
   EXPECT_EQ(kMaybe, CanPlay("'audio/wav'"));

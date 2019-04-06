@@ -7,13 +7,14 @@
 #include <utility>
 #include <vector>
 
+#include "ash/app_list/app_list_controller_impl.h"
+#include "ash/app_list/app_list_view_delegate.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_item_list.h"
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/model/search/search_box_model.h"
 #include "ash/app_list/model/search/search_model.h"
 #include "ash/app_list/model/search/search_result.h"
-#include "ash/app_list/model/speech/speech_ui_model.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell/example_factory.h"
@@ -26,8 +27,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "ui/app_list/app_list_view_delegate.h"
-#include "ui/app_list/presenter/app_list.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
@@ -185,11 +184,6 @@ class ExampleSearchResult : public app_list::SearchResult {
 
   WindowTypeShelfItem::Type type() const { return type_; }
 
-  // app_list::SearchResult:
-  std::unique_ptr<SearchResult> Duplicate() const override {
-    return std::unique_ptr<SearchResult>();
-  }
-
  private:
   WindowTypeShelfItem::Type type_;
 
@@ -228,16 +222,15 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
     return search_model_.get();
   }
 
-  app_list::SpeechUIModel* GetSpeechUI() override { return &speech_ui_; }
-
-  void OpenSearchResult(app_list::SearchResult* result,
+  void OpenSearchResult(const std::string& result_id,
                         int event_flags) override {
     const ExampleSearchResult* example_result =
-        static_cast<const ExampleSearchResult*>(result);
+        static_cast<const ExampleSearchResult*>(
+            search_model_->FindSearchResult(result_id));
     WindowTypeShelfItem::ActivateItem(example_result->type(), event_flags);
   }
 
-  void InvokeSearchResultAction(app_list::SearchResult* result,
+  void InvokeSearchResultAction(const std::string& result_id,
                                 int action_index,
                                 int event_flags) override {
     NOTIMPLEMENTED();
@@ -266,29 +259,21 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
     }
   }
 
-  void ViewInitialized() override {
+  void ViewShown(int64_t display_id) override {
     // Nothing needs to be done.
   }
 
-  void Dismiss() override {
+  void DismissAppList() override {
     DCHECK(ShellPort::HasInstance());
-    Shell::Get()->app_list()->Dismiss();
+    Shell::Get()->app_list_controller()->DismissAppList();
   }
 
   void ViewClosing() override {
     // Nothing needs to be done.
   }
 
-  void StartSpeechRecognition() override { NOTIMPLEMENTED(); }
-  void StopSpeechRecognition() override { NOTIMPLEMENTED(); }
-
-  views::View* CreateStartPageWebView(const gfx::Size& size) override {
-    return NULL;
-  }
-
-  bool IsSpeechRecognitionEnabled() override { return false; }
-
-  void GetWallpaperProminentColors(std::vector<SkColor>* colors) override {
+  void GetWallpaperProminentColors(
+      GetWallpaperProminentColorsCallback callback) override {
     NOTIMPLEMENTED();
   }
 
@@ -300,22 +285,36 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
     item->Activate(event_flags);
   }
 
-  ui::MenuModel* GetContextMenuModel(const std::string& id) override {
-    return nullptr;
-  }
-
-  void AddObserver(app_list::AppListViewDelegateObserver* observer) override {
+  void GetContextMenuModel(const std::string& id,
+                           GetContextMenuModelCallback callback) override {
     NOTIMPLEMENTED();
   }
 
-  void RemoveObserver(
-      app_list::AppListViewDelegateObserver* observer) override {
+  void GetSearchResultContextMenuModel(
+      const std::string& result_id,
+      GetContextMenuModelCallback callback) override {
+    NOTIMPLEMENTED();
+  }
+
+  void ContextMenuItemSelected(const std::string& id,
+                               int command_id,
+                               int event_flags) override {
+    NOTIMPLEMENTED();
+  }
+
+  void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
+                                ui::MenuSourceType source_type) override {
+    NOTIMPLEMENTED();
+  }
+
+  void SearchResultContextMenuItemSelected(const std::string& result_id,
+                                           int command_id,
+                                           int event_flags) override {
     NOTIMPLEMENTED();
   }
 
   std::unique_ptr<app_list::AppListModel> model_;
   std::unique_ptr<app_list::SearchModel> search_model_;
-  app_list::SpeechUIModel speech_ui_;
 
   DISALLOW_COPY_AND_ASSIGN(ExampleAppListViewDelegate);
 };

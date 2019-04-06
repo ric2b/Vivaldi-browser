@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/media_log.h"
@@ -23,11 +22,11 @@
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_url_response.h"
 
 using ::testing::_;
 using ::testing::InSequence;
@@ -215,7 +214,6 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
     return url_loader;
   }
 
-  base::MessageLoop message_loop_;
   GURL gurl_;
   int64_t first_position_;
 

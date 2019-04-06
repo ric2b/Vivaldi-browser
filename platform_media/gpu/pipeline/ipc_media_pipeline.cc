@@ -12,22 +12,14 @@
 #include "base/command_line.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
-#if defined(PLATFORM_MEDIA_HWA)
-#include "gpu/ipc/service/gpu_command_buffer_stub.h"
-#endif
 #include "platform_media/gpu/pipeline/platform_media_pipeline_create.h"
 #include "platform_media/gpu/data_source/ipc_data_source_impl.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 #include "platform_media/common/media_pipeline_messages.h"
-#include "gpu/command_buffer/service/texture_manager.h"
 #include "ipc/ipc_sender.h"
 #include "media/base/data_buffer.h"
 
 #include "platform_media/common/platform_logging_util.h"
-#if defined(PLATFORM_MEDIA_HWA)
-#include "platform_media/common/platform_media_pipeline_constants.h"
-#include "ui/gl/gl_surface_egl.h"
-#endif
 #include "platform_media/common/platform_media_pipeline_types.h"
 
 
@@ -37,48 +29,23 @@ namespace {
 
 const char* const kDecodedDataReadTraceEventNames[] = {"GPU ReadAudioData",
                                                        "GPU ReadVideoData"};
-static_assert(arraysize(kDecodedDataReadTraceEventNames) ==
-                  static_cast<size_t>(PlatformMediaDecodingMode::COUNT),
+static_assert(arraysize(kDecodedDataReadTraceEventNames) == static_cast<size_t>(
+  PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT),
               "Incorrect number of defined tracing event names.");
-
-#if defined(PLATFORM_MEDIA_HWA)
-bool MakeDecoderContextCurrent(
-    const base::WeakPtr<gpu::GpuCommandBufferStub>& command_buffer) {
-  if (!command_buffer) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Command buffer missing, can't make GL context current.";
-    return false;
-  }
-
-  if (!command_buffer->decoder()->MakeCurrent()) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to make GL context current.";
-    return false;
-  }
-
-  return true;
-}
-#endif
 }  // namespace
 
 IPCMediaPipeline::IPCMediaPipeline(IPC::Sender* channel,
-                                   int32_t routing_id
-#if defined(PLATFORM_MEDIA_HWA)
-                                   , gpu::GpuCommandBufferStub* command_buffer
-#endif
-                                   )
+                                   int32_t routing_id)
     : state_(CONSTRUCTED),
       channel_(channel),
       routing_id_(routing_id),
-#if defined(PLATFORM_MEDIA_HWA)
-      command_buffer_(command_buffer),
-#endif
       weak_ptr_factory_(this) {
   DCHECK(channel_);
 
   std::fill(has_media_type_,
             has_media_type_ +
-                static_cast<size_t>(PlatformMediaDecodingMode::COUNT),
+                static_cast<size_t>(
+                  PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT),
             false);
 }
 
@@ -104,35 +71,13 @@ void IPCMediaPipeline::OnInitialize(int64_t data_source_size,
   data_source_.reset(new IPCDataSourceImpl(
       channel_, routing_id_, data_source_size, is_data_source_streaming));
 
-  PlatformMediaDecodingMode preferred_video_decoding_mode =
-      PlatformMediaDecodingMode::SOFTWARE;
-
-#if defined(PLATFORM_MEDIA_HWA)
-  PlatformMediaPipeline::MakeGLContextCurrentCB make_gl_context_current_cb;
-  if (command_buffer_) {
-    LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " Setting preferred video decoding to HARDWARE ";
-    preferred_video_decoding_mode = PlatformMediaDecodingMode::HARDWARE;
-    make_gl_context_current_cb =
-        base::Bind(&MakeDecoderContextCurrent, command_buffer_->AsWeakPtr());
-  }
-#else
-  base::Callback<bool(void)> dummy_callback;
-#endif
-
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Creating the PlatformMediaPipeline";
   media_pipeline_.reset(PlatformMediaPipelineCreate(
       data_source_.get(), base::Bind(&IPCMediaPipeline::OnAudioConfigChanged,
                                      weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&IPCMediaPipeline::OnVideoConfigChanged,
-                 weak_ptr_factory_.GetWeakPtr()),
-                 preferred_video_decoding_mode,
-#if defined(PLATFORM_MEDIA_HWA)
-                 make_gl_context_current_cb));
-#else
-                 dummy_callback));
-#endif
+                 weak_ptr_factory_.GetWeakPtr())));
 
   media_pipeline_->Initialize(mime_type,
                               base::Bind(&IPCMediaPipeline::Initialized,
@@ -154,8 +99,6 @@ void IPCMediaPipeline::Initialized(
 
   has_media_type_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] = audio_config.is_valid();
   has_media_type_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO] = video_config.is_valid();
-  if (has_media_type_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO])
-    video_config_ = video_config;
 
   channel_->Send(new MediaPipelineMsg_Initialized(
       routing_id_, success, bitrate, time_info, audio_config, video_config));
@@ -200,27 +143,11 @@ void IPCMediaPipeline::DecodedDataReady(
     PlatformMediaDataType type,
     const scoped_refptr<DataBuffer>& buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
-#if defined(PLATFORM_MEDIA_HWA)
-  DCHECK(!is_handling_accelerated_video_decode(type));
-#endif
-  const uint32_t dummy_client_texture_id = 0;
-  DecodedDataReadyImpl(type, dummy_client_texture_id, buffer);
+  DecodedDataReadyImpl(type, buffer);
 }
-
-#if defined(PLATFORM_MEDIA_HWA)
-void IPCMediaPipeline::DecodedTextureReady(
-    uint32_t client_texture_id,
-    const scoped_refptr<DataBuffer>& buffer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(is_handling_accelerated_video_decode(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO));
-
-  DecodedDataReadyImpl(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO, client_texture_id, buffer);
-}
-#endif
 
 void IPCMediaPipeline::DecodedDataReadyImpl(
     PlatformMediaDataType type,
-    uint32_t client_texture_id,
     const scoped_refptr<DataBuffer>& buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, DECODING);
@@ -236,24 +163,17 @@ void IPCMediaPipeline::DecodedDataReadyImpl(
   } else if (buffer->end_of_stream()) {
     reply_params.status = MediaDataStatus::kEOS;
   } else {
-#if defined(PLATFORM_MEDIA_HWA)
-    if (is_handling_accelerated_video_decode(type)) {
-      reply_params.client_texture_id = client_texture_id;
-    } else
-#endif
-    {
-      if (!shared_decoded_data_[type] ||
-          base::saturated_cast<int>(shared_decoded_data_[type]->mapped_size()) <
-              buffer->data_size()) {
-        pending_output_buffers_[type] = buffer;
-        channel_->Send(new MediaPipelineMsg_RequestBufferForDecodedData(
-            routing_id_, type, buffer->data_size()));
-        return;
-      }
-
-      memcpy(shared_decoded_data_[type]->memory(), buffer->data(),
-             buffer->data_size());
+    if (!shared_decoded_data_[type] ||
+        base::saturated_cast<int>(shared_decoded_data_[type]->mapped_size()) <
+            buffer->data_size()) {
+      pending_output_buffers_[type] = buffer;
+      channel_->Send(new MediaPipelineMsg_RequestBufferForDecodedData(
+          routing_id_, type, buffer->data_size()));
+      return;
     }
+
+    memcpy(shared_decoded_data_[type]->memory(), buffer->data(),
+            buffer->data_size());
 
     reply_params.size = buffer->data_size();
     reply_params.status = MediaDataStatus::kOk;
@@ -287,8 +207,6 @@ void IPCMediaPipeline::OnVideoConfigChanged(
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, DECODING);
   DCHECK(video_config.is_valid());
-
-  video_config_ = video_config;
 
   channel_->Send(
       new MediaPipelineMsg_VideoConfigChanged(routing_id_, video_config));
@@ -361,8 +279,7 @@ bool IPCMediaPipeline::OnMessageReceived(const IPC::Message& msg) {
   return handled;
 }
 
-void IPCMediaPipeline::OnReadDecodedData(PlatformMediaDataType type,
-                                         uint32_t client_texture_id) {
+void IPCMediaPipeline::OnReadDecodedData(PlatformMediaDataType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("IPC_MEDIA", "IPCMediaPipeline::OnReadDecodedData");
 
@@ -380,79 +297,12 @@ void IPCMediaPipeline::OnReadDecodedData(PlatformMediaDataType type,
   TRACE_EVENT_ASYNC_BEGIN0(
       "IPC_MEDIA", kDecodedDataReadTraceEventNames[type], this);
 
-#if defined(PLATFORM_MEDIA_HWA)
-  if (is_handling_accelerated_video_decode(type)) {
-    uint32_t service_texture_id = 0;
-    if (!ClientToServiceTextureId(client_texture_id, &service_texture_id)) {
-      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Error while translating texture ID=" << client_texture_id;
-      DecodedTextureReady(client_texture_id, nullptr);
-      return;
-    }
-    media_pipeline_->ReadVideoData(
-        base::Bind(&IPCMediaPipeline::DecodedTextureReady,
-                   weak_ptr_factory_.GetWeakPtr(), client_texture_id),
-        service_texture_id);
-    return;
-  }
-#endif
-
   const auto read_cb = base::Bind(&IPCMediaPipeline::DecodedDataReady,
                                   weak_ptr_factory_.GetWeakPtr(), type);
   if (type == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) {
     media_pipeline_->ReadAudioData(read_cb);
   } else {
-    const uint32_t dummy_service_texture_id = 0;
-    media_pipeline_->ReadVideoData(read_cb, dummy_service_texture_id);
+    media_pipeline_->ReadVideoData(read_cb);
   }
 }
-
-#if defined(PLATFORM_MEDIA_HWA)
-bool IPCMediaPipeline::ClientToServiceTextureId(uint32_t client_texture_id,
-                                                uint32_t* service_texture_id) {
-  auto it = known_picture_buffers_.find(client_texture_id);
-  if (it != known_picture_buffers_.end()) {
-    *service_texture_id = it->second;
-    return true;
-  }
-
-  if (!MakeDecoderContextCurrent(command_buffer_->AsWeakPtr()))
-    return false;
-
-  gpu::gles2::GLES2Decoder* command_decoder = command_buffer_->decoder();
-  gpu::gles2::TextureManager* texture_manager =
-      command_decoder->GetContextGroup()->texture_manager();
-
-  gpu::gles2::TextureRef* texture_ref =
-      texture_manager->GetTexture(client_texture_id);
-  if (!texture_ref) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to find texture ID";
-    return false;
-  }
-
-  gpu::gles2::Texture* info = texture_ref->texture();
-  if (info->target() != media::kPlatformMediaPipelineTextureTarget) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Texture target mismatch";
-    return false;
-  }
-
-  texture_manager->SetLevelInfo(
-      texture_ref, media::kPlatformMediaPipelineTextureTarget, 0,
-      media::kPlatformMediaPipelineTextureFormat,
-      video_config_.coded_size.width(), video_config_.coded_size.height(), 1, 0,
-      media::kPlatformMediaPipelineTextureFormat, 0, gfx::Rect());
-
-  if (!command_decoder->GetServiceTextureId(client_texture_id,
-                                            service_texture_id)) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to translate texture ID";
-    return false;
-  }
-
-  known_picture_buffers_[client_texture_id] = *service_texture_id;
-  return true;
-}
-#endif
 }  // namespace media

@@ -9,11 +9,11 @@
 #import <UIKit/UIKit.h>
 
 #import "remoting/ios/app/app_delegate.h"
-#import "remoting/ios/app/app_initializer.h"
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
+#include "remoting/client/in_memory_log_handler.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -28,6 +28,8 @@ int main(int argc, char* argv[]) {
   // Required to find the ICU data file, used by some file_util routines.
   base::i18n::InitializeICU();
 
+  remoting::InMemoryLogHandler::Register();
+
 #ifdef DEBUG
   // Set min log level for debug builds.  For some reason this has to be
   // negative.
@@ -40,7 +42,6 @@ int main(int argc, char* argv[]) {
       ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
 
   @autoreleasepool {
-    [AppInitializer initializeApp];
     return UIApplicationMain(
         argc, argv, nil, NSStringFromClass([AppDelegate class]));
   }

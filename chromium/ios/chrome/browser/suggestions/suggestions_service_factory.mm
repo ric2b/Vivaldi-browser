@@ -11,7 +11,6 @@
 #include "base/memory/singleton.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/image_fetcher/core/image_fetcher.h"
@@ -25,10 +24,11 @@
 #include "components/suggestions/suggestions_store.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/web_thread.h"
 #include "services/identity/public/cpp/identity_manager.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -57,7 +57,7 @@ SuggestionsServiceFactory::SuggestionsServiceFactory()
           "SuggestionsService",
           BrowserStateDependencyManager::GetInstance()) {
   DependsOn(IdentityManagerFactory::GetInstance());
-  DependsOn(IOSChromeProfileSyncServiceFactory::GetInstance());
+  DependsOn(ProfileSyncServiceFactory::GetInstance());
 }
 
 SuggestionsServiceFactory::~SuggestionsServiceFactory() {
@@ -71,7 +71,7 @@ SuggestionsServiceFactory::BuildServiceInstanceFor(
   identity::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForBrowserState(browser_state);
   browser_sync::ProfileSyncService* sync_service =
-      IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
+      ProfileSyncServiceFactory::GetForBrowserState(browser_state);
   base::FilePath database_dir(
       browser_state->GetStatePath().Append(kThumbnailDirectory));
 
@@ -89,7 +89,7 @@ SuggestionsServiceFactory::BuildServiceInstanceFor(
   std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher =
       std::make_unique<image_fetcher::ImageFetcherImpl>(
           image_fetcher::CreateIOSImageDecoder(),
-          browser_state->GetRequestContext());
+          browser_state->GetSharedURLLoaderFactory());
 
   std::unique_ptr<ImageManager> thumbnail_manager(
       new ImageManager(std::move(image_fetcher), std::move(db), database_dir));
@@ -97,7 +97,7 @@ SuggestionsServiceFactory::BuildServiceInstanceFor(
   return std::make_unique<SuggestionsServiceImpl>(
       identity_manager, sync_service, browser_state->GetRequestContext(),
       std::move(suggestions_store), std::move(thumbnail_manager),
-      std::move(blacklist_store), std::make_unique<base::DefaultTickClock>());
+      std::move(blacklist_store), base::DefaultTickClock::GetInstance());
 }
 
 void SuggestionsServiceFactory::RegisterBrowserStatePrefs(

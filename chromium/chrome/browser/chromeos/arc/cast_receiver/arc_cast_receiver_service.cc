@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
@@ -97,7 +96,7 @@ void ArcCastReceiverService::OnCastReceiverEnabledChanged() const {
     return;
   cast_receiver_instance->SetEnabled(
       pref_change_registrar_->prefs()->GetBoolean(prefs::kCastReceiverEnabled),
-      base::Bind(&OnResultReceivedIgnoreResult));
+      base::BindOnce(&OnResultReceivedIgnoreResult));
 }
 
 void ArcCastReceiverService::OnCastReceiverNameChanged() const {
@@ -112,8 +111,8 @@ void ArcCastReceiverService::OnCastReceiverNameChanged() const {
       name.empty()) {
     return;
   }
-  cast_receiver_instance->SetName(name,
-                                  base::Bind(&OnResultReceivedIgnoreResult));
+  cast_receiver_instance->SetName(
+      name, base::BindOnce(&OnResultReceivedIgnoreResult));
 }
 
 }  // namespace arc

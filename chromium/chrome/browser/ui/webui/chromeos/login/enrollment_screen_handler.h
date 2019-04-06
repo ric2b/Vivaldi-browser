@@ -15,12 +15,10 @@
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
-#include "chromeos/dbus/auth_policy_client.h"
 #include "net/base/net_errors.h"
 
 namespace chromeos {
 
-class AuthPolicyLoginHelper;
 class ErrorScreensHistogramHelper;
 class HelpAppLauncher;
 
@@ -31,7 +29,21 @@ enum class ActiveDirectoryErrorState {
   MACHINE_NAME_INVALID = 1,
   MACHINE_NAME_TOO_LONG = 2,
   BAD_USERNAME = 3,
-  BAD_PASSWORD = 4,
+  BAD_AUTH_PASSWORD = 4,
+  BAD_UNLOCK_PASSWORD = 5,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class ActiveDirectoryDomainJoinType {
+  // Configuration is not set on the domain.
+  WITHOUT_CONFIGURATION = 0,
+  // Configuration is set but was not unlocked during domain join.
+  NOT_USING_CONFIGURATION = 1,
+  // Configuration is set and was unlocked during domain join.
+  USING_CONFIGURATION = 2,
+  // Number of elements in the enum. Should be last.
+  COUNT,
 };
 
 // WebUIMessageHandler implementation which handles events occurring on the
@@ -57,7 +69,10 @@ class EnrollmentScreenHandler
   void ShowSigninScreen() override;
   void ShowLicenseTypeSelectionScreen(
       const base::DictionaryValue& license_types) override;
-  void ShowAdJoin() override;
+  void ShowActiveDirectoryScreen(const std::string& domain_join_config,
+                                 const std::string& machine_name,
+                                 const std::string& username,
+                                 authpolicy::ErrorType error) override;
   void ShowAttributePromptScreen(const std::string& asset_id,
                                  const std::string& location) override;
   void ShowAttestationBasedEnrollmentSuccessScreen(
@@ -72,6 +87,7 @@ class EnrollmentScreenHandler
   void Initialize() override;
   void DeclareLocalizedValues(
       ::login::LocalizedValuesBuilder* builder) override;
+  void GetAdditionalParameters(base::DictionaryValue* parameters) override;
 
   // Implements NetworkStateInformer::NetworkStateInformerObserver
   void UpdateState(NetworkError::ErrorReason reason) override;
@@ -84,8 +100,10 @@ class EnrollmentScreenHandler
                            const std::string& auth_code);
   void HandleAdCompleteLogin(const std::string& machine_name,
                              const std::string& distinguished_name,
+                             const std::string& encryption_types,
                              const std::string& user_name,
                              const std::string& password);
+  void HandleAdUnlockConfiguration(const std::string& password);
   void HandleRetry();
   void HandleFrameLoadingCompleted();
   void HandleDeviceAttributesProvided(const std::string& asset_id,
@@ -128,11 +146,8 @@ class EnrollmentScreenHandler
   // enrollment sign-in page.
   bool IsEnrollmentScreenHiddenByError() const;
 
-  // Handler callback from AuthPolicyClient.
-  void HandleAdDomainJoin(const std::string& machine_name,
-                          const std::string& user_name,
-                          authpolicy::ErrorType code,
-                          const std::string& machine_domain);
+  // Called after configuration seed was unlocked.
+  void OnAdConfigurationUnlocked(std::string unlocked_data);
 
   // Keeps the controller for this view.
   Controller* controller_ = nullptr;
@@ -141,6 +156,15 @@ class EnrollmentScreenHandler
 
   // The enrollment configuration.
   policy::EnrollmentConfig config_;
+
+  // Active Directory configuration in the form of encrypted binary data.
+  std::string active_directory_domain_join_config_;
+
+  ActiveDirectoryDomainJoinType active_directory_join_type_ =
+      ActiveDirectoryDomainJoinType::COUNT;
+
+  // Whether unlock password input step should be shown.
+  bool show_unlock_password_ = false;
 
   // True if screen was not shown yet.
   bool first_show_ = true;
@@ -159,9 +183,6 @@ class EnrollmentScreenHandler
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;
 
-  // Helper to call AuthPolicyClient and cancel calls if needed. Used to join
-  // Active Directory domain.
-  std::unique_ptr<AuthPolicyLoginHelper> authpolicy_login_helper_;
 
   base::WeakPtrFactory<EnrollmentScreenHandler> weak_ptr_factory_;
 

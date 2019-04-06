@@ -7,7 +7,6 @@
 #include "base/guid.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -17,7 +16,7 @@
 #include "chrome/browser/chromeos/login/signin_partition_manager.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
@@ -39,6 +38,7 @@
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -51,7 +51,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/test_data_directory.h"
-#include "services/network/public/interfaces/cookie_manager.mojom.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 
 namespace em = enterprise_management;
 
@@ -215,8 +215,9 @@ class WebviewLoginTest : public OobeBaseTest {
         guest_view::GuestViewManager::FromBrowserContext(browser_context);
     guest_view_manager->ForEachGuest(
         web_contents,
-        base::Bind(&WebviewLoginTest::WebViewVisited, base::Unretained(this),
-                   browser_context, storage_partition, &web_view_found));
+        base::BindRepeating(&WebviewLoginTest::WebViewVisited,
+                            base::Unretained(this), browser_context,
+                            storage_partition, &web_view_found));
 
     return web_view_found;
   }
@@ -227,18 +228,20 @@ class WebviewLoginTest : public OobeBaseTest {
 
 // Basic signin with username and password.
 IN_PROC_BROWSER_TEST_F(WebviewLoginTest, Basic) {
-  WaitForGaiaPageLoad();
+  WaitForGaiaPageLoadAndPropertyUpdate();
 
   ExpectIdentifierPage();
 
   SetSignFormField("identifier", OobeBaseTest::kFakeUserEmail);
   ClickNext();
+  WaitForGaiaPageBackButtonUpdate();
   ExpectPasswordPage();
 
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
 
+  SetSignFormField("services", "[]");
   SetSignFormField("password", OobeBaseTest::kFakeUserPassword);
   ClickNext();
 
@@ -247,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, Basic) {
 
 // Fails: http://crbug.com/512648.
 IN_PROC_BROWSER_TEST_F(WebviewLoginTest, DISABLED_BackButton) {
-  WaitForGaiaPageLoad();
+  WaitForGaiaPageLoadAndPropertyUpdate();
 
   // Start with identifer page.
   ExpectIdentifierPage();
@@ -255,14 +258,17 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, DISABLED_BackButton) {
   // Move to password page.
   SetSignFormField("identifier", OobeBaseTest::kFakeUserEmail);
   ClickNext();
+  WaitForGaiaPageBackButtonUpdate();
   ExpectPasswordPage();
 
   // Click back to identifier page.
   JS().Evaluate("$('gaia-navigation').$.backButton.click();");
+  WaitForGaiaPageBackButtonUpdate();
   ExpectIdentifierPage();
 
   // Click next to password page, user id is remembered.
   ClickNext();
+  WaitForGaiaPageBackButtonUpdate();
   ExpectPasswordPage();
 
   content::WindowedNotificationObserver session_start_waiter(
@@ -270,6 +276,7 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, DISABLED_BackButton) {
       content::NotificationService::AllSources());
 
   // Finish sign-up.
+  SetSignFormField("services", "[]");
   SetSignFormField("password", OobeBaseTest::kFakeUserPassword);
   ClickNext();
 
@@ -308,7 +315,7 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, EmailPrefill) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebviewLoginTest, StoragePartitionHandling) {
-  WaitForGaiaPageLoad();
+  WaitForGaiaPageLoadAndPropertyUpdate();
 
   // Start with identifer page.
   ExpectIdentifierPage();
@@ -336,7 +343,7 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, StoragePartitionHandling) {
   // Press the back button at a sign-in screen without pre-existing users to
   // start a new sign-in attempt.
   JS().Evaluate("$('signin-back-button').fire('tap')");
-  WaitForGaiaPageReload();
+  WaitForGaiaPageBackButtonUpdate();
   // Expect that we got back to the identifier page, as there are no known users
   // so the sign-in screen will not display user pods.
   ExpectIdentifierPage();
@@ -399,27 +406,6 @@ class WebviewClientCertsLoginTest : public WebviewLoginTest {
  public:
   WebviewClientCertsLoginTest() {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(
-        switches::kDisableSigninFrameClientCertUserSelection);
-    WebviewLoginTest::SetUpCommandLine(command_line);
-  }
-
-  void SetUpInProcessBrowserTestFixture() override {
-    auto fake_session_manager_client =
-        std::make_unique<FakeSessionManagerClient>();
-    fake_session_manager_client_ = fake_session_manager_client.get();
-    DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
-        std::move(fake_session_manager_client));
-    device_policy_test_helper_.InstallOwnerKey();
-    device_policy_test_helper_.MarkAsEnterpriseOwned();
-
-    fake_session_manager_client_->set_device_policy(
-        device_policy_test_helper_.device_policy()->GetBlob());
-
-    WebviewLoginTest::SetUpInProcessBrowserTestFixture();
-  }
-
   // Installs a testing system slot and imports a client certificate into it.
   void SetUpClientCertInSystemSlot() {
     {
@@ -444,11 +430,14 @@ class WebviewClientCertsLoginTest : public WebviewLoginTest {
   }
 
   // Sets up the DeviceLoginScreenAutoSelectCertificateForUrls policy.
-  void SetAutoSelectCertificatePattern(const std::string& autoselect_pattern) {
+  void SetAutoSelectCertificatePatterns(
+      const std::vector<std::string>& autoselect_patterns) {
     em::ChromeDeviceSettingsProto& proto(
         device_policy_test_helper_.device_policy()->payload());
-    proto.mutable_device_login_screen_auto_select_certificate_for_urls()
-        ->add_login_screen_auto_select_certificate_rules(autoselect_pattern);
+    auto* field =
+        proto.mutable_device_login_screen_auto_select_certificate_for_urls();
+    for (const std::string& autoselect_pattern : autoselect_patterns)
+      field->add_login_screen_auto_select_certificate_rules(autoselect_pattern);
 
     device_policy_test_helper_.device_policy()->Build();
 
@@ -528,6 +517,30 @@ class WebviewClientCertsLoginTest : public WebviewLoginTest {
     OobeScreenWaiter(OobeScreen::SCREEN_OOBE_EULA).Wait();
   }
 
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(
+        switches::kDisableSigninFrameClientCertUserSelection);
+    WebviewLoginTest::SetUpCommandLine(command_line);
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    auto fake_session_manager_client =
+        std::make_unique<FakeSessionManagerClient>();
+    fake_session_manager_client_ = fake_session_manager_client.get();
+    DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
+        std::move(fake_session_manager_client));
+    device_policy_test_helper_.InstallOwnerKey();
+    device_policy_test_helper_.MarkAsEnterpriseOwned();
+
+    fake_session_manager_client_->set_device_policy(
+        device_policy_test_helper_.device_policy()->GetBlob());
+
+    WebviewLoginTest::SetUpInProcessBrowserTestFixture();
+  }
+
+  void TearDownOnMainThread() override { TearDownTestSystemSlot(); }
+
  private:
   void SetUpTestSystemSlotOnIO(bool* out_system_slot_constructed_successfully) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -535,6 +548,21 @@ class WebviewClientCertsLoginTest : public WebviewLoginTest {
     *out_system_slot_constructed_successfully =
         test_system_slot_->ConstructedSuccessfully();
   }
+
+  void TearDownTestSystemSlot() {
+    if (!test_system_slot_)
+      return;
+
+    base::RunLoop loop;
+    content::BrowserThread::PostTaskAndReply(
+        content::BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&WebviewClientCertsLoginTest::TearDownTestSystemSlotOnIO,
+                       base::Unretained(this)),
+        loop.QuitClosure());
+    loop.Run();
+  }
+
+  void TearDownTestSystemSlotOnIO() { test_system_slot_.reset(); }
 
   // Builds a device ONC dictionary defining a single untrusted authority
   // certificate.
@@ -572,16 +600,49 @@ class WebviewClientCertsLoginTest : public WebviewLoginTest {
 // Test that client certificate authentication using certificates from the
 // system slot is enabled in the sign-in frame. The server does not request
 // certificates signed by a specific authority.
+//
+// Disabled due to flaky timeouts: https://crbug.com/830337.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_SigninFrameNoAuthorityGiven DISABLED_SigninFrameNoAuthorityGiven
+#else
+#define MAYBE_SigninFrameNoAuthorityGiven SigninFrameNoAuthorityGiven
+#endif
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       SigninFrameNoAuthorityGiven) {
+                       MAYBE_SigninFrameNoAuthorityGiven) {
   ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
 
-  const std::string autoselect_pattern =
-      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})";
-  SetAutoSelectCertificatePattern(autoselect_pattern);
+  const std::vector<std::string> autoselect_patterns = {
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})"};
+  SetAutoSelectCertificatePatterns(autoselect_patterns);
+
+  WaitForGaiaPageLoad();
+
+  std::string https_reply_content = RequestClientCertTestPageInFrame(
+      gaia_frame_parent_, false /* watch_new_webcontents */);
+  EXPECT_EQ(
+      "got client cert with fingerprint: "
+      "c66145f49caca4d1325db96ace0f12f615ba4981",
+      https_reply_content);
+}
+
+// Test that client certificate autoselect selects the right certificate even
+// with multiple filters for the same pattern.
+//
+// Disabled due to flaky timeouts: https://crbug.com/830337.
+IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
+                       DISABLED_SigninFrameCertMultipleFiltersAutoSelected) {
+  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+  net::SpawnedTestServer::SSLOptions ssl_options;
+  ssl_options.request_client_certificate = true;
+  ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
+
+  const std::vector<std::string> autoselect_patterns = {
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})",
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "foo baz bar"}}})"};
+  SetAutoSelectCertificatePatterns(autoselect_patterns);
 
   WaitForGaiaPageLoad();
 
@@ -595,8 +656,16 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 
 // Test that if no client certificate is auto-selected using policy on the
 // sign-in frame, the client does not send up any client certificate.
+//
+// Disabled due to flaky timeouts: https://crbug.com/830337.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_SigninFrameCertNotAutoSelected \
+  DISABLED_SigninFrameCertNotAutoSelected
+#else
+#define MAYBE_SigninFrameCertNotAutoSelected SigninFrameCertNotAutoSelected
+#endif
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       SigninFrameCertNotAutoSelected) {
+                       MAYBE_SigninFrameCertNotAutoSelected) {
   ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
@@ -613,7 +682,15 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // Test that client certificate authentication using certificates from the
 // system slot is enabled in the sign-in frame. The server requests
 // a certificate signed by a specific authority.
-IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest, SigninFrameAuthorityGiven) {
+//
+// Disabled due to flaky timeouts: https://crbug.com/830337.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_SigninFrameAuthorityGiven DISABLED_SigninFrameAuthorityGiven
+#else
+#define MAYBE_SigninFrameAuthorityGiven SigninFrameAuthorityGiven
+#endif
+IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
+                       MAYBE_SigninFrameAuthorityGiven) {
   ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
@@ -622,9 +699,9 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest, SigninFrameAuthorityGiven) {
   ssl_options.client_authorities.push_back(ca_path);
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
 
-  const std::string autoselect_pattern =
-      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})";
-  SetAutoSelectCertificatePattern(autoselect_pattern);
+  const std::vector<std::string> autoselect_patterns = {
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})"};
+  SetAutoSelectCertificatePatterns(autoselect_patterns);
 
   WaitForGaiaPageLoad();
 
@@ -640,8 +717,17 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest, SigninFrameAuthorityGiven) {
 // system slot is enabled in the sign-in frame. The server requests
 // a certificate signed by a specific authority. The client doesn't have a
 // matching certificate.
+//
+// Disabled due to flaky timeouts: https://crbug.com/830337.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_SigninFrameAuthorityGivenNoMatchingCert \
+  DISABLED_SigninFrameAuthorityGivenNoMatchingCert
+#else
+#define MAYBE_SigninFrameAuthorityGivenNoMatchingCert \
+  SigninFrameAuthorityGivenNoMatchingCert
+#endif
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       SigninFrameAuthorityGivenNoMatchingCert) {
+                       MAYBE_SigninFrameAuthorityGivenNoMatchingCert) {
   ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
@@ -650,9 +736,9 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
   ssl_options.client_authorities.push_back(ca_path);
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
 
-  const std::string autoselect_pattern =
-      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})";
-  SetAutoSelectCertificatePattern(autoselect_pattern);
+  const std::vector<std::string> autoselect_patterns = {
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})"};
+  SetAutoSelectCertificatePatterns(autoselect_patterns);
 
   WaitForGaiaPageLoad();
 
@@ -666,8 +752,17 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // issued by an intermediate authority, and the intermediate authority is not
 // known on the device (it has not been made available through device ONC
 // policy).
+//
+// Disabled due to flaky timeouts: https://crbug.com/830337.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_SigninFrameIntermediateAuthorityUnknown \
+  DISABLED_SigninFrameIntermediateAuthorityUnknown
+#else
+#define MAYBE_SigninFrameIntermediateAuthorityUnknown \
+  SigninFrameIntermediateAuthorityUnknown
+#endif
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       SigninFrameIntermediateAuthorityUnknown) {
+                       MAYBE_SigninFrameIntermediateAuthorityUnknown) {
   ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
@@ -676,9 +771,9 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
   ssl_options.client_authorities.push_back(ca_path);
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
 
-  const std::string autoselect_pattern =
-      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})";
-  SetAutoSelectCertificatePattern(autoselect_pattern);
+  const std::vector<std::string> autoselect_patterns = {
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})"};
+  SetAutoSelectCertificatePatterns(autoselect_patterns);
 
   WaitForGaiaPageLoad();
 
@@ -691,8 +786,17 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // certificates signed by a root authority, the installed certificate has been
 // issued by an intermediate authority, and the intermediate authority is
 // known on the device (it has been made available through device ONC policy).
+//
+// Disabled due to flaky timeouts: https://crbug.com/830337.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_SigninFrameIntermediateAuthorityKnown \
+  DISABLED_SigninFrameIntermediateAuthorityKnown
+#else
+#define MAYBE_SigninFrameIntermediateAuthorityKnown \
+  SigninFrameIntermediateAuthorityKnown
+#endif
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       SigninFrameIntermediateAuthorityKnown) {
+                       MAYBE_SigninFrameIntermediateAuthorityKnown) {
   ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
@@ -701,9 +805,10 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
   ssl_options.client_authorities.push_back(ca_path);
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
 
-  const std::string autoselect_pattern =
-      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})";
-  SetAutoSelectCertificatePattern(autoselect_pattern);
+  const std::vector<std::string> autoselect_patterns = {
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})"};
+  SetAutoSelectCertificatePatterns(autoselect_patterns);
+
   base::FilePath intermediate_ca_path =
       net::GetTestCertsDirectory().Append(FILE_PATH_LITERAL("client_1_ca.pem"));
   ASSERT_NO_FATAL_FAILURE(
@@ -722,16 +827,18 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // Tests that client certificate authentication is not enabled in a webview on
 // the sign-in screen which is not the sign-in frame. In this case, the EULA
 // webview is used.
+// TODO(pmarko): This is DISABLED because the eula UI it depends on has been
+// deprecated and removed. https://crbug.com/849710.
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       ClientCertRequestedInOtherWebView) {
+                       DISABLED_ClientCertRequestedInOtherWebView) {
   ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
 
-  const std::string autoselect_pattern =
-      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})";
-  SetAutoSelectCertificatePattern(autoselect_pattern);
+  const std::vector<std::string> autoselect_patterns = {
+      R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})"};
+  SetAutoSelectCertificatePatterns(autoselect_patterns);
 
   ShowEulaScreen();
 
@@ -888,7 +995,8 @@ class WebviewProxyAuthLoginTest : public WebviewLoginTest {
   DISALLOW_COPY_AND_ASSIGN(WebviewProxyAuthLoginTest);
 };
 
-IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, ProxyAuthTransfer) {
+// Disabled fails on msan and also non-msan bots: https://crbug.com/849128.
+IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, DISABLED_ProxyAuthTransfer) {
   WaitForSigninScreen();
 
   LoginHandler* login_handler = WaitForAuthRequested();
@@ -923,7 +1031,7 @@ IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, ProxyAuthTransfer) {
   // This will re-load gaia, rotating the StoragePartition. The new
   // StoragePartition must also have the proxy auth details.
   JS().Evaluate("$('signin-back-button').fire('tap')");
-  WaitForGaiaPageReload();
+  WaitForGaiaPageBackButtonUpdate();
   // Expect that we got back to the identifier page, as there are no known users
   // so the sign-in screen will not display user pods.
   ExpectIdentifierPage();

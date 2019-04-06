@@ -12,11 +12,12 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "net/http/bidirectional_stream_request_info.h"
-#include "net/quic/core/quic_connection.h"
-#include "net/quic/platform/api/quic_string_piece.h"
+#include "net/http/http_util.h"
 #include "net/socket/next_proto.h"
-#include "net/spdy/chromium/spdy_http_utils.h"
-#include "net/spdy/core/spdy_header_block.h"
+#include "net/spdy/spdy_http_utils.h"
+#include "net/third_party/quic/core/quic_connection.h"
+#include "net/third_party/quic/platform/api/quic_string_piece.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
 #include "quic_http_stream.h"
 
 namespace net {
@@ -59,7 +60,7 @@ BidirectionalStreamQuicImpl::BidirectionalStreamQuicImpl(
 BidirectionalStreamQuicImpl::~BidirectionalStreamQuicImpl() {
   if (stream_) {
     delegate_ = nullptr;
-    stream_->Reset(QUIC_STREAM_CANCELLED);
+    stream_->Reset(quic::QUIC_STREAM_CANCELLED);
   }
 }
 
@@ -68,7 +69,8 @@ void BidirectionalStreamQuicImpl::Start(
     const NetLogWithSource& net_log,
     bool send_request_headers_automatically,
     BidirectionalStreamImpl::Delegate* delegate,
-    std::unique_ptr<base::Timer> /* timer */) {
+    std::unique_ptr<base::OneShotTimer> timer,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
   ScopedBoolSaver saver(&may_invoke_callbacks_, false);
   DCHECK(!stream_);
   CHECK(delegate);
@@ -79,10 +81,15 @@ void BidirectionalStreamQuicImpl::Start(
   delegate_ = delegate;
   request_info_ = request_info;
 
+  // Only allow SAFE methods to use early data, unless overriden by the caller.
+  bool use_early_data = !HttpUtil::IsMethodSafe(request_info_->method);
+  use_early_data |= request_info_->allow_early_data_override;
+
   int rv = session_->RequestStream(
-      request_info_->method == "POST",
+      use_early_data,
       base::Bind(&BidirectionalStreamQuicImpl::OnStreamReady,
-                 weak_factory_.GetWeakPtr()));
+                 weak_factory_.GetWeakPtr()),
+      traffic_annotation);
   if (rv == ERR_IO_PENDING)
     return;
 
@@ -114,14 +121,14 @@ void BidirectionalStreamQuicImpl::SendRequestHeaders() {
 int BidirectionalStreamQuicImpl::WriteHeaders() {
   DCHECK(!has_sent_headers_);
 
-  SpdyHeaderBlock headers;
+  spdy::SpdyHeaderBlock headers;
   HttpRequestInfo http_request_info;
   http_request_info.url = request_info_->url;
   http_request_info.method = request_info_->method;
   http_request_info.extra_headers = request_info_->extra_headers;
 
-  CreateSpdyHeadersFromHttpRequest(
-      http_request_info, http_request_info.extra_headers, true, &headers);
+  CreateSpdyHeadersFromHttpRequest(http_request_info,
+                                   http_request_info.extra_headers, &headers);
   int rv = stream_->WriteHeaders(std::move(headers),
                                  request_info_->end_stream_on_headers, nullptr);
   if (rv >= 0) {
@@ -172,8 +179,8 @@ void BidirectionalStreamQuicImpl::SendvData(
     return;
   }
 
-  std::unique_ptr<QuicConnection::ScopedPacketFlusher> bundler(
-      session_->CreatePacketBundler(QuicConnection::SEND_ACK_IF_PENDING));
+  std::unique_ptr<quic::QuicConnection::ScopedPacketFlusher> bundler(
+      session_->CreatePacketBundler(quic::QuicConnection::SEND_ACK_IF_PENDING));
   if (!has_sent_headers_) {
     DCHECK(!send_request_headers_automatically_);
     int rv = WriteHeaders();

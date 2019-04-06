@@ -153,7 +153,7 @@ SkColor NativeThemeGtk2::GetSystemColor(ColorId color_id) const {
 
     case kColorId_EnabledMenuItemForegroundColor:
       return GetTextColor(GetMenuItem(), NORMAL);
-    case kColorId_MenuItemSubtitleColor:
+    case kColorId_MenuItemMinorTextColor:
     case kColorId_DisabledMenuItemForegroundColor:
       return GetTextColor(GetMenuItem(), INSENSITIVE);
     case kColorId_MenuBorderColor:
@@ -161,6 +161,9 @@ SkColor NativeThemeGtk2::GetSystemColor(ColorId color_id) const {
       return GetTextColor(GetMenuItem(), INSENSITIVE);
     case kColorId_MenuBackgroundColor:
       return GetBgColor(GetMenu(), NORMAL);
+    case kColorId_TouchableMenuItemLabelColor:
+    case kColorId_ActionableSubmenuVerticalSeparatorColor:
+      return kInvalidColorIdColor;
 
     // Label
     case kColorId_LabelEnabledColor:

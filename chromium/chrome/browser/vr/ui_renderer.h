@@ -7,6 +7,7 @@
 
 #include "chrome/browser/vr/model/camera_model.h"
 #include "chrome/browser/vr/ui_input_manager.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/transform.h"
 
@@ -21,13 +22,12 @@ class UiElementRenderer;
 // matrix.
 struct RenderInfo {
   gfx::Transform head_pose;
-  gfx::Size surface_texture_size;
   CameraModel left_eye_model;
   CameraModel right_eye_model;
 };
 
 // Renders a UI scene.
-class UiRenderer {
+class VR_UI_EXPORT UiRenderer {
  public:
   UiRenderer(UiScene* scene, UiElementRenderer* ui_element_renderer);
   ~UiRenderer();

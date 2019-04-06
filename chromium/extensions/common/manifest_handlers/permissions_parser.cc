@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "content/public/common/url_constants.h"
@@ -20,6 +20,7 @@
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handler.h"
+#include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -29,10 +30,10 @@
 
 namespace extensions {
 
-namespace {
-
 namespace keys = manifest_keys;
 namespace errors = manifest_errors;
+
+namespace {
 
 struct ManifestPermissions : public Extension::ManifestData {
   ManifestPermissions(std::unique_ptr<const PermissionSet> permissions);
@@ -62,8 +63,10 @@ bool CanSpecifyHostPermission(const Extension* extension,
       return true;
 
     // Component extensions can have access to all of chrome://*.
-    if (PermissionsData::CanExecuteScriptEverywhere(extension))
+    if (PermissionsData::CanExecuteScriptEverywhere(extension->id(),
+                                                    extension->location())) {
       return true;
+    }
 
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kExtensionsOnChromeURLs)) {
@@ -158,11 +161,23 @@ bool ParseHelper(Extension* extension,
     api_permissions->erase(*iter);
   }
 
+  bool can_execute_script_everywhere =
+      PermissionsData::CanExecuteScriptEverywhere(extension->id(),
+                                                  extension->location());
+
+  // Users should be able to enable file access for extensions with activeTab.
+  if (!can_execute_script_everywhere &&
+      base::ContainsKey(*api_permissions, APIPermission::kActiveTab)) {
+    extension->set_wants_file_access(true);
+  }
+
   // Parse host pattern permissions.
-  const int kAllowedSchemes =
-      PermissionsData::CanExecuteScriptEverywhere(extension)
-          ? URLPattern::SCHEME_ALL
-          : Extension::kValidHostPermissionSchemes;
+  const int kAllowedSchemes = can_execute_script_everywhere
+                                  ? URLPattern::SCHEME_ALL
+                                  : Extension::kValidHostPermissionSchemes;
+
+  const bool all_urls_includes_chrome_urls =
+      PermissionsData::AllUrlsIncludesChromeUrls(extension->id());
 
   for (std::vector<std::string>::const_iterator iter = host_data.begin();
        iter != host_data.end();
@@ -178,18 +193,18 @@ bool ParseHelper(Extension* extension,
       pattern.SetPath("/*");
       int valid_schemes = pattern.valid_schemes();
       if (pattern.MatchesScheme(url::kFileScheme) &&
-          !PermissionsData::CanExecuteScriptEverywhere(extension)) {
+          !can_execute_script_everywhere) {
         extension->set_wants_file_access(true);
         if (!(extension->creation_flags() & Extension::ALLOW_FILE_ACCESS))
           valid_schemes &= ~URLPattern::SCHEME_FILE;
       }
 
       if (pattern.scheme() != content::kChromeUIScheme &&
-          !PermissionsData::CanExecuteScriptEverywhere(extension)) {
+          !all_urls_includes_chrome_urls) {
         // Keep chrome:// in allowed schemes only if it's explicitly requested
-        // or CanExecuteScriptEverywhere is true. If the
-        // extensions_on_chrome_urls flag is not set, CanSpecifyHostPermission
-        // will fail, so don't check the flag here.
+        // or been granted by extension ID. If the extensions_on_chrome_urls
+        // flag is not set, CanSpecifyHostPermission will fail, so don't check
+        // the flag here.
         valid_schemes &= ~URLPattern::SCHEME_CHROMEUI;
       }
       pattern.SetValidSchemes(valid_schemes);

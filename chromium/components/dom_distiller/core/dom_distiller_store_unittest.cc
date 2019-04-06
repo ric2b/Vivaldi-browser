@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -18,8 +19,6 @@
 #include "components/dom_distiller/core/article_entry.h"
 #include "components/dom_distiller/core/dom_distiller_test_util.h"
 #include "components/leveldb_proto/testing/fake_db.h"
-#include "components/sync/model/attachments/attachment_id.h"
-#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -123,7 +122,7 @@ ArticleEntry GetSampleEntry(int id) {
 class MockDistillerObserver : public DomDistillerObserver {
  public:
   MOCK_METHOD1(ArticleEntriesUpdated, void(const std::vector<ArticleUpdate>&));
-  virtual ~MockDistillerObserver() {}
+  ~MockDistillerObserver() override {}
 };
 
 }  // namespace
@@ -162,10 +161,8 @@ class DomDistillerStoreTest : public testing::Test {
  protected:
   SyncData CreateSyncData(const ArticleEntry& entry) {
     EntitySpecifics specifics = SpecificsFromEntry(entry);
-    return SyncData::CreateRemoteData(
-        next_sync_id_++, specifics, Time::UnixEpoch(),
-        syncer::AttachmentIdList(),
-        syncer::AttachmentServiceProxyForTest::Create());
+    return SyncData::CreateRemoteData(next_sync_id_++, specifics,
+                                      Time::UnixEpoch());
   }
 
   SyncDataList SyncDataFromEntryMap(const EntryMap& model) {
@@ -310,60 +307,6 @@ TEST_F(DomDistillerStoreTest, TestAddAndUpdateEntry) {
   store_->RemoveEntry(updated_entry);
   EXPECT_FALSE(store_->UpdateEntry(updated_entry));
   EXPECT_FALSE(store_->UpdateEntry(GetSampleEntry(0)));
-}
-
-class MockAttachmentsCallbacks {
- public:
-  MOCK_METHOD2(Get, void(bool, ArticleAttachmentsData*));
-  MOCK_METHOD1(Update, void(bool));
-
-  void GetImpl(bool success,
-               std::unique_ptr<ArticleAttachmentsData> attachments) {
-    Get(success, attachments.get());
-  }
-
-  DomDistillerStore::UpdateAttachmentsCallback UpdateCallback() {
-    return base::Bind(&MockAttachmentsCallbacks::Update,
-                      base::Unretained(this));
-  }
-
-  DomDistillerStore::GetAttachmentsCallback GetCallback() {
-    return base::Bind(&MockAttachmentsCallbacks::GetImpl,
-                      base::Unretained(this));
-  }
-};
-
-TEST_F(DomDistillerStoreTest, TestAttachments) {
-  ArticleEntry entry(GetSampleEntry(0));
-  AddEntry(entry, &db_model_);
-  CreateStore();
-  fake_db_->InitCallback(true);
-  fake_db_->LoadCallback(true);
-  ASSERT_TRUE(AreEntriesEqual(store_->GetEntries(), db_model_));
-
-  MockAttachmentsCallbacks callbacks;
-
-  store_->GetAttachments(entry.entry_id(), callbacks.GetCallback());
-  EXPECT_CALL(callbacks, Get(false, _));
-  base::RunLoop().RunUntilIdle();
-
-  ArticleAttachmentsData attachments, got_attachments;
-  DistilledArticleProto article_proto;
-  article_proto.set_title("A title");
-  attachments.set_distilled_article(article_proto);
-  store_->UpdateAttachments(
-      entry.entry_id(), base::MakeUnique<ArticleAttachmentsData>(attachments),
-      callbacks.UpdateCallback());
-  EXPECT_CALL(callbacks, Update(true));
-  base::RunLoop().RunUntilIdle();
-
-  store_->GetAttachments(entry.entry_id(), callbacks.GetCallback());
-  EXPECT_CALL(callbacks, Get(true, _))
-      .WillOnce(SaveArgPointee<1>(&got_attachments));
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(attachments.ToString(),
-            got_attachments.ToString());
 }
 
 TEST_F(DomDistillerStoreTest, TestSyncMergeWithEmptyDatabase) {

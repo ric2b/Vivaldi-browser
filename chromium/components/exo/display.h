@@ -21,11 +21,17 @@
 #include "ui/gfx/native_pixmap_handle.h"
 #endif
 
+namespace gfx {
+class ClientNativePixmapFactory;
+};
+
 namespace exo {
 class ClientControlledShellSurface;
 class DataDevice;
 class DataDeviceDelegate;
 class FileHelper;
+class InputMethodSurface;
+class InputMethodSurfaceManager;
 class NotificationSurface;
 class NotificationSurfaceManager;
 class SharedMemory;
@@ -45,6 +51,7 @@ class Display {
  public:
   Display();
   Display(NotificationSurfaceManager* notification_surface_manager,
+          InputMethodSurfaceManager* input_method_surface_manager,
           std::unique_ptr<FileHelper> file_helper);
   ~Display();
 
@@ -92,16 +99,22 @@ class Display {
   // Creates a data device for a |delegate|.
   std::unique_ptr<DataDevice> CreateDataDevice(DataDeviceDelegate* delegate);
 
+  // Creates a input method surface for a surface.
+  std::unique_ptr<InputMethodSurface> CreateInputMethodSurface(
+      Surface* surface,
+      double default_device_scale_factor);
+
   // Obtains seat instance.
   Seat* seat() { return &seat_; }
 
  private:
   NotificationSurfaceManager* const notification_surface_manager_;
+  InputMethodSurfaceManager* const input_method_surface_manager_;
   std::unique_ptr<FileHelper> file_helper_;
   Seat seat_;
 
 #if defined(USE_OZONE)
-  std::vector<gfx::BufferFormat> overlay_formats_;
+  std::unique_ptr<gfx::ClientNativePixmapFactory> client_native_pixmap_factory_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(Display);

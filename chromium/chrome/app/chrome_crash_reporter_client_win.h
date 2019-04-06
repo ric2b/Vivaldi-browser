@@ -15,7 +15,7 @@ class ChromeCrashReporterClient : public crash_reporter::CrashReporterClient {
   // class and initializes crash reporting for the process. The instance is
   // leaked.
   static void InitializeCrashReportingForProcess();
-#endif
+#endif  // !defined(NACL_WIN64)
 
   ChromeCrashReporterClient();
   ~ChromeCrashReporterClient() override;

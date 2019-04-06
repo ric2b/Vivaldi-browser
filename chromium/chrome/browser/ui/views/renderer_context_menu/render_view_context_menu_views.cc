@@ -8,7 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/strings/string16.h"
 #include "browser/menus/vivaldi_menus.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -26,6 +26,7 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/widget/widget.h"
 
 using content::WebContents;
@@ -141,6 +142,11 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
     case IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN:
       // Esc only works in HTML5 (site-triggered) fullscreen.
       if (IsHTML5Fullscreen()) {
+        // Per UX design feedback, do not show an accelerator when press and
+        // hold is required to exit fullscreen.
+        if (IsPressAndHoldEscRequiredToExitFullscreen())
+          return false;
+
         *accel = ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE);
         return true;
       }
@@ -282,8 +288,7 @@ void RenderViewContextMenuViews::Show() {
   }
   // Enable recursive tasks on the message loop so we can get updates while
   // the context menu is being displayed.
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
+  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
   RunMenuAt(top_level_widget, screen_point, params().source_type);
 }
 

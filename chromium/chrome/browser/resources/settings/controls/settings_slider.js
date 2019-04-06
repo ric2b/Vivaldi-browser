@@ -21,7 +21,10 @@ Polymer({
     pref: Object,
 
     /** @type {!Array<number>} Values corresponding to each tick. */
-    tickValues: {type: Array, value: []},
+    tickValues: {
+      type: Array,
+      value: () => [],
+    },
 
     /**
      * A scale factor used to support fractional pref values since paper-slider
@@ -85,6 +88,9 @@ Polymer({
    * @private
    */
   valueChanged_: function() {
+    if (this.pref == undefined)
+      return;
+
     // If |tickValues| is empty, simply set current value to the slider.
     if (this.tickValues.length == 0) {
       this.$.slider.value =
@@ -147,14 +153,5 @@ Polymer({
 
     assert(typeof closestIndex != 'undefined');
     return closestIndex;
-  },
-
-  /**
-   * TODO(scottchen): temporary fix until polymer gesture bug resolved. See:
-   * https://github.com/PolymerElements/paper-slider/issues/186
-   * @private
-   */
-  resetTrackLock_: function() {
-    Polymer.Gestures.gestures.tap.reset();
   },
 });

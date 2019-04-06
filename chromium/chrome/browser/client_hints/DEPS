@@ -1,11 +1,8 @@
 include_rules = [
-  # No inclusion of WebKit from the browser, other than strictly enum/POD,
+  # No inclusion of WebKit from the browser, other than the ones in
+  # WebKit/public/common, or the ones that are strictly enum/POD,
   # header-only types, and some selected common code.
-  "-third_party/WebKit",
-  "+third_party/WebKit/public/platform/WebClientHintsType.h",
-
-  # Unlike other WebKit directories WebKit/common is for the files that
-  # are commonly referenced by renderer-side and browser-side code, and
-  # does not use Blink types like WTF.
-  "+third_party/WebKit/common",
+  "-third_party/blink",
+  "+third_party/blink/public/common",
+  "+third_party/blink/public/platform/web_client_hints_type.h",
 ]

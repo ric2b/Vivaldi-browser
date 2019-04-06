@@ -16,8 +16,6 @@ const char* MemoryDumpTypeToString(const MemoryDumpType& dump_type) {
       return "periodic_interval";
     case MemoryDumpType::EXPLICITLY_TRIGGERED:
       return "explicitly_triggered";
-    case MemoryDumpType::PEAK_MEMORY_USAGE:
-      return "peak_memory_usage";
     case MemoryDumpType::SUMMARY_ONLY:
       return "summary_only";
   }
@@ -30,8 +28,6 @@ MemoryDumpType StringToMemoryDumpType(const std::string& str) {
     return MemoryDumpType::PERIODIC_INTERVAL;
   if (str == "explicitly_triggered")
     return MemoryDumpType::EXPLICITLY_TRIGGERED;
-  if (str == "peak_memory_usage")
-    return MemoryDumpType::PEAK_MEMORY_USAGE;
   if (str == "summary_only")
     return MemoryDumpType::SUMMARY_ONLY;
   NOTREACHED();
@@ -45,8 +41,6 @@ const char* MemoryDumpLevelOfDetailToString(
       return "background";
     case MemoryDumpLevelOfDetail::LIGHT:
       return "light";
-    case MemoryDumpLevelOfDetail::VM_REGIONS_ONLY_FOR_HEAP_PROFILER:
-      return "vm_regions_only";
     case MemoryDumpLevelOfDetail::DETAILED:
       return "detailed";
   }
@@ -60,8 +54,6 @@ MemoryDumpLevelOfDetail StringToMemoryDumpLevelOfDetail(
     return MemoryDumpLevelOfDetail::BACKGROUND;
   if (str == "light")
     return MemoryDumpLevelOfDetail::LIGHT;
-  if (str == "vm_regions_only")
-    return MemoryDumpLevelOfDetail::VM_REGIONS_ONLY_FOR_HEAP_PROFILER;
   if (str == "detailed")
     return MemoryDumpLevelOfDetail::DETAILED;
   NOTREACHED();

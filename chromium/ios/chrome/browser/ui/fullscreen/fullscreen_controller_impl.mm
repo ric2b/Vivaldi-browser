@@ -41,7 +41,11 @@ FullscreenControllerImpl::FullscreenControllerImpl()
   [broadcaster_ addObserver:bridge_
                 forSelector:@selector(broadcastScrollViewIsDragging:)];
   [broadcaster_ addObserver:bridge_
-                forSelector:@selector(broadcastToolbarHeight:)];
+                forSelector:@selector(broadcastCollapsedToolbarHeight:)];
+  [broadcaster_ addObserver:bridge_
+                forSelector:@selector(broadcastExpandedToolbarHeight:)];
+  [broadcaster_ addObserver:bridge_
+                forSelector:@selector(broadcastBottomToolbarHeight:)];
 }
 
 FullscreenControllerImpl::~FullscreenControllerImpl() = default;
@@ -83,6 +87,14 @@ void FullscreenControllerImpl::DecrementDisabledCounter() {
   model_->DecrementDisabledCounter();
 }
 
+CGFloat FullscreenControllerImpl::GetProgress() const {
+  return model_->progress();
+}
+
+void FullscreenControllerImpl::ResetModel() {
+  mediator_->AnimateModelReset();
+}
+
 void FullscreenControllerImpl::Shutdown() {
   mediator_->Disconnect();
   [notification_observer_ disconnect];
@@ -103,5 +115,9 @@ void FullscreenControllerImpl::Shutdown() {
   [broadcaster_ removeObserver:bridge_
                    forSelector:@selector(broadcastScrollViewIsDragging:)];
   [broadcaster_ removeObserver:bridge_
-                   forSelector:@selector(broadcastToolbarHeight:)];
+                   forSelector:@selector(broadcastCollapsedToolbarHeight:)];
+  [broadcaster_ removeObserver:bridge_
+                   forSelector:@selector(broadcastExpandedToolbarHeight:)];
+  [broadcaster_ removeObserver:bridge_
+                   forSelector:@selector(broadcastBottomToolbarHeight:)];
 }

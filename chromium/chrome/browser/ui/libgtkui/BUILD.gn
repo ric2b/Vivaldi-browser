@@ -6,7 +6,7 @@ assert(is_linux, "This file should only be referenced on Linux")
 
 import("//build/config/features.gni")
 import("//build/config/linux/gtk/gtk.gni")
-import("//printing/features/features.gni")
+import("//printing/buildflags/buildflags.gni")
 
 # Automatically depends on the GTK version associated with the current build
 # flags.
@@ -86,16 +86,18 @@ template("libgtkui") {
 
     deps = invoker.deps + [
              "//chrome/browser/ui/views",
+             "//chrome/common:constants",
              "//base",
              "//base:i18n",
              "//base/third_party/dynamic_annotations",
              "//cc/paint",
-             "//chrome/common:features",
+             "//chrome/common:buildflags",
              "//chrome:extra_resources",
              "//chrome:resources",
              "//chrome:strings",
              "//chrome/app:command_ids",
              "//chrome/app/theme:theme_resources",
+             "//components/prefs",
              "//components/resources",
              "//content/public/browser",
              "//printing",
@@ -110,6 +112,8 @@ template("libgtkui") {
              "//ui/base/ime",
              "//ui/display",
              "//ui/events",
+             "//ui/events:dom_keyboard_layout",
+             "//ui/events:dom_keycode_converter",
              "//ui/events:events_base",
              "//ui/events/platform/x11",
              "//ui/gfx",

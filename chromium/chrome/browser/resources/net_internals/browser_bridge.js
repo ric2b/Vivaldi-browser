@@ -54,6 +54,8 @@ var BrowserBridge = (function() {
         'altSvcMappings', 'onAltSvcMappingsChanged');
     this.addNetInfoPollableDataHelper('quicInfo', 'onQuicInfoChanged');
     this.addNetInfoPollableDataHelper(
+        'reportingInfo', 'onReportingInfoChanged');
+    this.addNetInfoPollableDataHelper(
         'httpCacheInfo', 'onHttpCacheInfoChanged');
 
     // Add other PollableDataHelpers.
@@ -165,11 +167,8 @@ var BrowserBridge = (function() {
       this.send('hstsQuery', [domain]);
     },
 
-    sendHSTSAdd: function(
-        domain, sts_include_subdomains, pkp_include_subdomains, pins) {
-      this.send(
-          'hstsAdd',
-          [domain, sts_include_subdomains, pkp_include_subdomains, pins]);
+    sendHSTSAdd: function(domain, sts_include_subdomains) {
+      this.send('hstsAdd', [domain, sts_include_subdomains]);
     },
 
     sendDomainSecurityPolicyDelete: function(domain) {
@@ -478,6 +477,17 @@ var BrowserBridge = (function() {
      */
     addQuicInfoObserver: function(observer, ignoreWhenUnchanged) {
       this.pollableDataHelpers_.quicInfo.addObserver(
+          observer, ignoreWhenUnchanged);
+    },
+
+    /**
+     * Adds a listener of the Reporting info. |observer| will be called back
+     * when data is received, through:
+     *
+     *   observer.onReportingInfoChanged(reportingInfo)
+     */
+    addReportingInfoObserver: function(observer, ignoreWhenUnchanged) {
+      this.pollableDataHelpers_.reportingInfo.addObserver(
           observer, ignoreWhenUnchanged);
     },
 

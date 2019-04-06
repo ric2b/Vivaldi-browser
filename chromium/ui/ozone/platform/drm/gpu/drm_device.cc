@@ -15,7 +15,8 @@
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "base/message_loop/message_loop.h"
-#include "base/posix/safe_strerror.h"
+#include "base/message_loop/message_loop_current.h"
+#include "base/message_loop/message_pump_for_io.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -30,9 +31,10 @@ namespace ui {
 
 namespace {
 
-using DrmEventHandler = base::Callback<void(uint32_t /* frame */,
-                                            base::TimeTicks /* timestamp */,
-                                            uint64_t /* id */)>;
+using DrmEventHandler =
+    base::RepeatingCallback<void(uint32_t /* frame */,
+                                 base::TimeTicks /* timestamp */,
+                                 uint64_t /* id */)>;
 
 bool DrmCreateDumbBuffer(int fd,
                          const SkImageInfo& info,
@@ -129,113 +131,16 @@ bool CanQueryForResources(int fd) {
   return !drmIoctl(fd, DRM_IOCTL_MODE_GETRESOURCES, &resources);
 }
 
-using ScopedDrmColorLutPtr = std::unique_ptr<drm_color_lut, base::FreeDeleter>;
-using ScopedDrmColorCtmPtr = std::unique_ptr<drm_color_ctm, base::FreeDeleter>;
-
-ScopedDrmColorLutPtr CreateLutBlob(
-    const std::vector<display::GammaRampRGBEntry>& source) {
-  TRACE_EVENT0("drm", "CreateLutBlob");
-  if (source.empty())
-    return nullptr;
-
-  ScopedDrmColorLutPtr lut(static_cast<drm_color_lut*>(
-      malloc(sizeof(drm_color_lut) * source.size())));
-  drm_color_lut* p = lut.get();
-  for (size_t i = 0; i < source.size(); ++i) {
-    p[i].red = source[i].r;
-    p[i].green = source[i].g;
-    p[i].blue = source[i].b;
-  }
-  return lut;
-}
-
-ScopedDrmColorCtmPtr CreateCTMBlob(
-    const std::vector<float>& correction_matrix) {
-  if (correction_matrix.empty())
-    return nullptr;
-
-  ScopedDrmColorCtmPtr ctm(
-      static_cast<drm_color_ctm*>(malloc(sizeof(drm_color_ctm))));
-  for (size_t i = 0; i < arraysize(ctm->matrix); ++i) {
-    if (correction_matrix[i] < 0) {
-      ctm->matrix[i] = static_cast<uint64_t>(-correction_matrix[i] *
-                                             (static_cast<uint64_t>(1) << 32));
-      ctm->matrix[i] |= static_cast<uint64_t>(1) << 63;
-    } else {
-      ctm->matrix[i] = static_cast<uint64_t>(correction_matrix[i] *
-                                             (static_cast<uint64_t>(1) << 32));
-    }
-  }
-  return ctm;
-}
-
-bool SetBlobProperty(int fd,
-                     uint32_t object_id,
-                     uint32_t object_type,
-                     uint32_t prop_id,
-                     const char* property_name,
-                     unsigned char* data,
-                     size_t length) {
-  uint32_t blob_id = 0;
-  int res;
-
-  if (data) {
-    res = drmModeCreatePropertyBlob(fd, data, length, &blob_id);
-    if (res != 0) {
-      LOG(ERROR) << "Error creating property blob: " << base::safe_strerror(res)
-                 << " for property " << property_name;
-      return false;
-    }
-  }
-
-  bool success = false;
-  res = drmModeObjectSetProperty(fd, object_id, object_type, prop_id, blob_id);
-  if (res != 0) {
-    LOG(ERROR) << "Error updating property: " << base::safe_strerror(res)
-               << " for property " << property_name;
-  } else {
-    success = true;
-  }
-  if (blob_id != 0)
-    drmModeDestroyPropertyBlob(fd, blob_id);
-  return success;
-}
-
-std::vector<display::GammaRampRGBEntry> ResampleLut(
-    const std::vector<display::GammaRampRGBEntry>& lut_in,
-    size_t desired_size) {
-  TRACE_EVENT1("drm", "ResampleLut", "desired_size", desired_size);
-  if (lut_in.empty())
-    return std::vector<display::GammaRampRGBEntry>();
-
-  if (lut_in.size() == desired_size)
-    return lut_in;
-
-  std::vector<display::GammaRampRGBEntry> result;
-  result.resize(desired_size);
-
-  for (size_t i = 0; i < desired_size; ++i) {
-    size_t base_index = lut_in.size() * i / desired_size;
-    size_t remaining = lut_in.size() * i % desired_size;
-    if (base_index < lut_in.size() - 1) {
-      result[i].r = lut_in[base_index].r +
-                    (lut_in[base_index + 1].r - lut_in[base_index].r) *
-                        remaining / desired_size;
-      result[i].g = lut_in[base_index].g +
-                    (lut_in[base_index + 1].g - lut_in[base_index].g) *
-                        remaining / desired_size;
-      result[i].b = lut_in[base_index].b +
-                    (lut_in[base_index + 1].b - lut_in[base_index].b) *
-                        remaining / desired_size;
-    } else {
-      result[i] = lut_in.back();
-    }
-  }
-
-  return result;
-}
-
 }  // namespace
+
+DrmPropertyBlobMetadata::DrmPropertyBlobMetadata(DrmDevice* drm, uint32_t id)
+    : drm_(drm), id_(id) {}
+
+DrmPropertyBlobMetadata::~DrmPropertyBlobMetadata() {
+  DCHECK(drm_);
+  DCHECK(id_);
+  drm_->DestroyPropertyBlob(id_);
+}
 
 class DrmDevice::PageFlipManager {
  public:
@@ -250,21 +155,21 @@ class DrmDevice::PageFlipManager {
       return;
     }
 
-    DrmDevice::PageFlipCallback callback = it->callback;
     it->pending_calls--;
     if (it->pending_calls)
       return;
 
+    DrmDevice::PageFlipCallback callback = std::move(it->callback);
     callbacks_.erase(it);
-    callback.Run(frame, timestamp);
+    std::move(callback).Run(frame, timestamp);
   }
 
   uint64_t GetNextId() { return next_id_++; }
 
   void RegisterCallback(uint64_t id,
                         uint64_t pending_calls,
-                        const DrmDevice::PageFlipCallback& callback) {
-    callbacks_.push_back({id, pending_calls, callback});
+                        DrmDevice::PageFlipCallback callback) {
+    callbacks_.push_back({id, pending_calls, std::move(callback)});
   }
 
  private:
@@ -289,7 +194,7 @@ class DrmDevice::PageFlipManager {
   DISALLOW_COPY_AND_ASSIGN(PageFlipManager);
 };
 
-class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
+class DrmDevice::IOWatcher : public base::MessagePumpLibevent::FdWatcher {
  public:
   IOWatcher(int fd, DrmDevice::PageFlipManager* page_flip_manager)
       : page_flip_manager_(page_flip_manager), controller_(FROM_HERE), fd_(fd) {
@@ -301,8 +206,8 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
  private:
   void Register() {
     DCHECK(base::MessageLoopForIO::IsCurrent());
-    base::MessageLoopForIO::current()->WatchFileDescriptor(
-        fd_, true, base::MessageLoopForIO::WATCH_READ, &controller_, this);
+    base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+        fd_, true, base::MessagePumpForIO::WATCH_READ, &controller_, this);
   }
 
   void Unregister() {
@@ -310,13 +215,14 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
     controller_.StopWatchingFileDescriptor();
   }
 
-  // base::MessagePumpLibevent::Watcher overrides:
+  // base::MessagePumpLibevent::FdWatcher overrides:
   void OnFileCanReadWithoutBlocking(int fd) override {
     DCHECK(base::MessageLoopForIO::IsCurrent());
     TRACE_EVENT1("drm", "OnDrmEvent", "socket", fd);
 
-    if (!ProcessDrmEvent(fd, base::Bind(&DrmDevice::PageFlipManager::OnPageFlip,
-                                        base::Unretained(page_flip_manager_))))
+    if (!ProcessDrmEvent(
+            fd, base::BindRepeating(&DrmDevice::PageFlipManager::OnPageFlip,
+                                    base::Unretained(page_flip_manager_))))
       Unregister();
   }
 
@@ -324,7 +230,7 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::Watcher {
 
   DrmDevice::PageFlipManager* page_flip_manager_;
 
-  base::MessagePumpLibevent::FileDescriptorWatcher controller_;
+  base::MessagePumpLibevent::FdWatchController controller_;
 
   int fd_;
 
@@ -341,7 +247,7 @@ DrmDevice::DrmDevice(const base::FilePath& device_path,
 
 DrmDevice::~DrmDevice() {}
 
-bool DrmDevice::Initialize(bool use_atomic) {
+bool DrmDevice::Initialize() {
   // Ignore devices that cannot perform modesetting.
   if (!CanQueryForResources(file_.GetPlatformFile())) {
     VLOG(2) << "Cannot query for resources for '" << device_path_.value()
@@ -349,13 +255,10 @@ bool DrmDevice::Initialize(bool use_atomic) {
     return false;
   }
 
-  // Use atomic only if the build, kernel & flags all allow it.
-  if (use_atomic && SetCapability(DRM_CLIENT_CAP_ATOMIC, 1))
+  // Use atomic only if kernel allows it.
+  if (SetCapability(DRM_CLIENT_CAP_ATOMIC, 1))
     plane_manager_.reset(new HardwareDisplayPlaneManagerAtomic());
 
-  LOG_IF(WARNING, use_atomic && !plane_manager_)
-      << "Drm atomic requested but capabilities don't allow it. Falling back "
-         "to legacy page flip.";
   if (!plane_manager_)
     plane_manager_.reset(new HardwareDisplayPlaneManagerLegacy());
   if (!plane_manager_->Initialize(this)) {
@@ -373,6 +276,19 @@ bool DrmDevice::Initialize(bool use_atomic) {
       new IOWatcher(file_.GetPlatformFile(), page_flip_manager_.get()));
 
   return true;
+}
+
+ScopedDrmResourcesPtr DrmDevice::GetResources() {
+  DCHECK(file_.IsValid());
+  return ScopedDrmResourcesPtr(drmModeGetResources(file_.GetPlatformFile()));
+}
+
+ScopedDrmObjectPropertyPtr DrmDevice::GetObjectProperties(
+    uint32_t object_id,
+    uint32_t object_type) {
+  DCHECK(file_.IsValid());
+  return ScopedDrmObjectPropertyPtr(drmModeObjectGetProperties(
+      file_.GetPlatformFile(), object_id, object_type));
 }
 
 ScopedDrmCrtcPtr DrmDevice::GetCrtc(uint32_t crtc_id) {
@@ -447,7 +363,7 @@ bool DrmDevice::RemoveFramebuffer(uint32_t framebuffer) {
 
 bool DrmDevice::PageFlip(uint32_t crtc_id,
                          uint32_t framebuffer,
-                         const PageFlipCallback& callback) {
+                         scoped_refptr<PageFlipRequest> page_flip_request) {
   DCHECK(file_.IsValid());
   TRACE_EVENT2("drm", "DrmDevice::PageFlip", "crtc", crtc_id, "framebuffer",
                framebuffer);
@@ -458,7 +374,8 @@ bool DrmDevice::PageFlip(uint32_t crtc_id,
   if (!drmModePageFlip(file_.GetPlatformFile(), crtc_id, framebuffer,
                        DRM_MODE_PAGE_FLIP_EVENT, reinterpret_cast<void*>(id))) {
     // If successful the payload will be removed by a PageFlip event.
-    page_flip_manager_->RegisterCallback(id, 1, callback);
+    page_flip_manager_->RegisterCallback(id, 1,
+                                         page_flip_request->AddPageFlip());
     return true;
   }
 
@@ -486,6 +403,17 @@ ScopedDrmFramebufferPtr DrmDevice::GetFramebuffer(uint32_t framebuffer) {
       drmModeGetFB(file_.GetPlatformFile(), framebuffer));
 }
 
+ScopedDrmPlanePtr DrmDevice::GetPlane(uint32_t plane_id) {
+  DCHECK(file_.IsValid());
+  return ScopedDrmPlanePtr(drmModeGetPlane(file_.GetPlatformFile(), plane_id));
+}
+
+ScopedDrmPlaneResPtr DrmDevice::GetPlaneResources() {
+  DCHECK(file_.IsValid());
+  return ScopedDrmPlaneResPtr(
+      drmModeGetPlaneResources(file_.GetPlatformFile()));
+}
+
 ScopedDrmPropertyPtr DrmDevice::GetProperty(drmModeConnector* connector,
                                             const char* name) {
   TRACE_EVENT2("drm", "DrmDevice::GetProperty", "connector",
@@ -503,6 +431,10 @@ ScopedDrmPropertyPtr DrmDevice::GetProperty(drmModeConnector* connector,
   return ScopedDrmPropertyPtr();
 }
 
+ScopedDrmPropertyPtr DrmDevice::GetProperty(uint32_t id) {
+  return ScopedDrmPropertyPtr(drmModeGetProperty(file_.GetPlatformFile(), id));
+}
+
 bool DrmDevice::SetProperty(uint32_t connector_id,
                             uint32_t property_id,
                             uint64_t value) {
@@ -511,9 +443,27 @@ bool DrmDevice::SetProperty(uint32_t connector_id,
                                       property_id, value);
 }
 
+ScopedDrmPropertyBlob DrmDevice::CreatePropertyBlob(void* blob, size_t size) {
+  uint32_t id = 0;
+  int ret = drmModeCreatePropertyBlob(file_.GetPlatformFile(), blob, size, &id);
+  DCHECK(!ret && id);
+
+  return ScopedDrmPropertyBlob(new DrmPropertyBlobMetadata(this, id));
+}
+
+void DrmDevice::DestroyPropertyBlob(uint32_t id) {
+  drmModeDestroyPropertyBlob(file_.GetPlatformFile(), id);
+}
+
 bool DrmDevice::GetCapability(uint64_t capability, uint64_t* value) {
   DCHECK(file_.IsValid());
   return !drmGetCap(file_.GetPlatformFile(), capability, value);
+}
+
+ScopedDrmPropertyBlobPtr DrmDevice::GetPropertyBlob(uint32_t property_id) {
+  DCHECK(file_.IsValid());
+  return ScopedDrmPropertyBlobPtr(
+      drmModeGetPropertyBlob(file_.GetPlatformFile(), property_id));
 }
 
 ScopedDrmPropertyBlobPtr DrmDevice::GetPropertyBlob(drmModeConnector* connector,
@@ -534,6 +484,15 @@ ScopedDrmPropertyBlobPtr DrmDevice::GetPropertyBlob(drmModeConnector* connector,
   }
 
   return ScopedDrmPropertyBlobPtr();
+}
+
+bool DrmDevice::SetObjectProperty(uint32_t object_id,
+                                  uint32_t object_type,
+                                  uint32_t property_id,
+                                  uint32_t property_value) {
+  DCHECK(file_.IsValid());
+  return !drmModeObjectSetProperty(file_.GetPlatformFile(), object_id,
+                                   object_type, property_id, property_value);
 }
 
 bool DrmDevice::SetCursor(uint32_t crtc_id,
@@ -600,20 +559,23 @@ bool DrmDevice::CloseBufferHandle(uint32_t handle) {
                    &close_request);
 }
 
-bool DrmDevice::CommitProperties(drmModeAtomicReq* properties,
-                                 uint32_t flags,
-                                 uint32_t crtc_count,
-                                 const PageFlipCallback& callback) {
+bool DrmDevice::CommitProperties(
+    drmModeAtomicReq* properties,
+    uint32_t flags,
+    uint32_t crtc_count,
+    scoped_refptr<PageFlipRequest> page_flip_request) {
   uint64_t id = 0;
-  bool page_flip_event_requested = flags & DRM_MODE_PAGE_FLIP_EVENT;
-
-  if (page_flip_event_requested)
+  if (page_flip_request) {
+    flags |= DRM_MODE_PAGE_FLIP_EVENT;
     id = page_flip_manager_->GetNextId();
+  }
 
   if (!drmModeAtomicCommit(file_.GetPlatformFile(), properties, flags,
                            reinterpret_cast<void*>(id))) {
-    if (page_flip_event_requested)
-      page_flip_manager_->RegisterCallback(id, crtc_count, callback);
+    if (page_flip_request) {
+      page_flip_manager_->RegisterCallback(id, crtc_count,
+                                           page_flip_request->AddPageFlip());
+    }
 
     return true;
   }
@@ -686,77 +648,6 @@ bool DrmDevice::SetGammaRamp(
   TRACE_EVENT0("drm", "DrmDevice::SetGamma");
   return (drmModeCrtcSetGamma(file_.GetPlatformFile(), crtc_id, r.size(), &r[0],
                               &g[0], &b[0]) == 0);
-}
-
-bool DrmDevice::SetColorCorrection(
-    uint32_t crtc_id,
-    const std::vector<display::GammaRampRGBEntry>& degamma_lut,
-    const std::vector<display::GammaRampRGBEntry>& gamma_lut,
-    const std::vector<float>& correction_matrix) {
-  ScopedDrmObjectPropertyPtr crtc_props(drmModeObjectGetProperties(
-      file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC));
-  uint64_t degamma_lut_size = 0;
-  uint64_t gamma_lut_size = 0;
-
-  for (uint32_t i = 0; i < crtc_props->count_props; ++i) {
-    ScopedDrmPropertyPtr property(
-        drmModeGetProperty(file_.GetPlatformFile(), crtc_props->props[i]));
-    if (property && !strcmp(property->name, "DEGAMMA_LUT_SIZE")) {
-      degamma_lut_size = crtc_props->prop_values[i];
-    }
-    if (property && !strcmp(property->name, "GAMMA_LUT_SIZE")) {
-      gamma_lut_size = crtc_props->prop_values[i];
-    }
-
-    if (degamma_lut_size && gamma_lut_size)
-      break;
-  }
-
-  // If we can't find the degamma & gamma lut size, it means the properties
-  // aren't available. We should then use the legacy gamma ramp ioctl.
-  if (degamma_lut_size == 0 || gamma_lut_size == 0) {
-    return SetGammaRamp(crtc_id, gamma_lut);
-  }
-
-  ScopedDrmColorLutPtr degamma_blob_data =
-      CreateLutBlob(ResampleLut(degamma_lut, degamma_lut_size));
-  ScopedDrmColorLutPtr gamma_blob_data =
-      CreateLutBlob(ResampleLut(gamma_lut, gamma_lut_size));
-  ScopedDrmColorCtmPtr ctm_blob_data = CreateCTMBlob(correction_matrix);
-
-  for (uint32_t i = 0; i < crtc_props->count_props; ++i) {
-    ScopedDrmPropertyPtr property(
-        drmModeGetProperty(file_.GetPlatformFile(), crtc_props->props[i]));
-    if (!property)
-      continue;
-
-    if (!strcmp(property->name, "DEGAMMA_LUT")) {
-      if (!SetBlobProperty(
-              file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
-              crtc_props->props[i], property->name,
-              reinterpret_cast<unsigned char*>(degamma_blob_data.get()),
-              sizeof(drm_color_lut) * degamma_lut_size))
-        return false;
-    }
-    if (!strcmp(property->name, "GAMMA_LUT")) {
-      if (!SetBlobProperty(
-              file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
-              crtc_props->props[i], property->name,
-              reinterpret_cast<unsigned char*>(gamma_blob_data.get()),
-              sizeof(drm_color_lut) * gamma_lut_size))
-        return false;
-    }
-    if (!strcmp(property->name, "CTM")) {
-      if (!SetBlobProperty(
-              file_.GetPlatformFile(), crtc_id, DRM_MODE_OBJECT_CRTC,
-              crtc_props->props[i], property->name,
-              reinterpret_cast<unsigned char*>(ctm_blob_data.get()),
-              sizeof(drm_color_ctm)))
-        return false;
-    }
-  }
-
-  return true;
 }
 
 }  // namespace ui

@@ -38,21 +38,17 @@ Polymer({
     automatic_: {
       type: Boolean,
       value: true,
-      observer: 'automaticChanged_',
     },
 
     /**
      * The currently visible IP Config property dictionary. The 'RoutingPrefix'
      * property is a human-readable mask instead of a prefix length.
-     * @private {?{
+     * @private {{
      *   ipv4: (!CrOnc.IPConfigUIProperties|undefined),
      *   ipv6: (!CrOnc.IPConfigUIProperties|undefined)
-     * }}
+     * }|undefined}
      */
-    ipConfig_: {
-      type: Object,
-      value: null,
-    },
+    ipConfig_: Object,
 
     /**
      * Array of properties to pass to the property list.
@@ -108,12 +104,12 @@ Polymer({
       }
       this.ipConfig_ = {ipv4: ipv4, ipv6: ipv6};
     } else {
-      this.ipConfig_ = null;
+      this.ipConfig_ = undefined;
     }
   },
 
   /** @private */
-  automaticChanged_: function() {
+  onAutomaticChange_: function() {
     if (!this.automatic_) {
       var defaultIpv4 = {
         Gateway: '192.168.1.1',

@@ -68,8 +68,7 @@ Process Process::OpenWithAccess(ProcessId pid, DWORD desired_access) {
 
 // static
 Process Process::DeprecatedGetProcessFromHandle(ProcessHandle handle) {
-  // andre@vivaldi.com ; this was hitting in --single-process mode
-  //  DCHECK_NE(handle, ::GetCurrentProcess());
+  DCHECK_NE(handle, ::GetCurrentProcess());
   ProcessHandle out_handle;
   if (!::DuplicateHandle(GetCurrentProcess(), handle,
                          GetCurrentProcess(), &out_handle,
@@ -89,7 +88,7 @@ void Process::TerminateCurrentProcessImmediately(int exit_code) {
   ::TerminateProcess(GetCurrentProcess(), exit_code);
   // There is some ambiguity over whether the call above can return. Rather than
   // hitting confusing crashes later on we should crash right here.
-  CHECK(false);
+  IMMEDIATE_CRASH();
 }
 
 bool Process::IsValid() const {

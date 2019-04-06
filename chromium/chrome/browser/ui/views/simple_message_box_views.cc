@@ -32,6 +32,10 @@
 #include "ui/views/win/hwnd_util.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "chrome/browser/ui/cocoa/simple_message_box_cocoa.h"
+#endif
+
 namespace {
 #if defined(OS_WIN)
 UINT GetMessageBoxFlagsFromType(chrome::MessageBoxType type) {
@@ -59,9 +63,7 @@ chrome::MessageBoxResult ShowSync(gfx::NativeWindow parent,
 
   // TODO(pkotwicz): Exit message loop when the dialog is closed by some other
   // means than |Cancel| or |Accept|. crbug.com/404385
-  base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
-  base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
-  base::RunLoop run_loop;
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
 
   SimpleMessageBoxViews::Show(
       parent, title, message, type, yes_text, no_text, checkbox_text,
@@ -114,6 +116,17 @@ chrome::MessageBoxResult SimpleMessageBoxViews::Show(
     std::move(callback).Run((result == IDYES || result == IDOK)
                                 ? chrome::MESSAGE_BOX_RESULT_YES
                                 : chrome::MESSAGE_BOX_RESULT_NO);
+    return chrome::MESSAGE_BOX_RESULT_DEFERRED;
+  }
+#elif defined(OS_MACOSX)
+  if (!base::MessageLoopForUI::IsCurrent() ||
+      !base::RunLoop::IsRunningOnCurrentThread() ||
+      !ui::ResourceBundle::HasSharedInstance()) {
+    // Even though this function could return a value synchronously here in
+    // principle, in practice call sites do not expect any behavior other than a
+    // return of DEFERRED and an invocation of the callback.
+    std::move(callback).Run(
+        chrome::ShowMessageBoxCocoa(message, type, checkbox_text));
     return chrome::MESSAGE_BOX_RESULT_DEFERRED;
   }
 #else
@@ -208,6 +221,12 @@ const views::Widget* SimpleMessageBoxViews::GetWidget() const {
   return message_box_view_->GetWidget();
 }
 
+void SimpleMessageBoxViews::OnWidgetActivationChanged(views::Widget* widget,
+                                                      bool active) {
+  if (!active)
+    GetWidget()->Close();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SimpleMessageBoxViews, private:
 
@@ -242,9 +261,12 @@ SimpleMessageBoxViews::SimpleMessageBoxViews(
   chrome::RecordDialogCreation(chrome::DialogIdentifier::SIMPLE_MESSAGE_BOX);
 }
 
-SimpleMessageBoxViews::~SimpleMessageBoxViews() {}
+SimpleMessageBoxViews::~SimpleMessageBoxViews() {
+  GetWidget()->RemoveObserver(this);
+}
 
 void SimpleMessageBoxViews::Run(MessageBoxResultCallback result_callback) {
+  GetWidget()->AddObserver(this);
   result_callback_ = std::move(result_callback);
 }
 

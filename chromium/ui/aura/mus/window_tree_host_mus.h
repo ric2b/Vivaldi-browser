@@ -12,8 +12,9 @@
 
 #include "base/macros.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
+#include "ui/aura/mus/input_method_mus_delegate.h"
 #include "ui/aura/window_tree_host_platform.h"
 
 namespace display {
@@ -29,7 +30,8 @@ class WindowTreeHostMusDelegate;
 struct DisplayInitParams;
 struct WindowTreeHostMusInitParams;
 
-class AURA_EXPORT WindowTreeHostMus : public WindowTreeHostPlatform {
+class AURA_EXPORT WindowTreeHostMus : public WindowTreeHostPlatform,
+                                      public InputMethodMusDelegate {
  public:
   explicit WindowTreeHostMus(WindowTreeHostMusInitParams init_params);
 
@@ -40,7 +42,8 @@ class AURA_EXPORT WindowTreeHostMus : public WindowTreeHostPlatform {
   static WindowTreeHostMus* ForWindow(aura::Window* window);
 
   // Sets the bounds in pixels.
-  void SetBoundsFromServer(const gfx::Rect& bounds_in_pixels);
+  void SetBoundsFromServerInPixels(const gfx::Rect& bounds_in_pixels,
+                                   const viz::LocalSurfaceId& local_surface_id);
 
   ui::EventDispatchDetails SendEventToSink(ui::Event* event) {
     return aura::WindowTreeHostPlatform::SendEventToSink(event);
@@ -97,7 +100,9 @@ class AURA_EXPORT WindowTreeHostMus : public WindowTreeHostPlatform {
 
   // aura::WindowTreeHostPlatform:
   void HideImpl() override;
-  void SetBoundsInPixels(const gfx::Rect& bounds) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds,
+                         const viz::LocalSurfaceId& local_surface_id =
+                             viz::LocalSurfaceId()) override;
   void DispatchEvent(ui::Event* event) override;
   void OnClosed() override;
   void OnActivationChanged(bool active) override;
@@ -106,6 +111,11 @@ class AURA_EXPORT WindowTreeHostMus : public WindowTreeHostPlatform {
       const gfx::Point& location_in_pixels) override;
   gfx::Transform GetRootTransformForLocalEventCoordinates() const override;
   int64_t GetDisplayId() override;
+
+  // InputMethodMusDelegate:
+  void SetTextInputState(ui::mojom::TextInputStatePtr state) override;
+  void SetImeVisibility(bool visible,
+                        ui::mojom::TextInputStatePtr state) override;
 
  private:
   int64_t display_id_;

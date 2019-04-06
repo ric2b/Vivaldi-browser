@@ -123,7 +123,7 @@ class ResourceCreationProxy : public InterfaceProxy,
       PP_Resource share_context,
       const gpu::ContextCreationAttribs& attrib_helper,
       gpu::Capabilities* capabilities,
-      base::SharedMemoryHandle* shared_state,
+      const base::UnsafeSharedMemoryRegion** shared_state,
       gpu::CommandBufferId* command_buffer_id) override;
   PP_Resource CreateHostResolver(PP_Instance instance) override;
   PP_Resource CreateHostResolverPrivate(PP_Instance instance) override;
@@ -146,7 +146,6 @@ class ResourceCreationProxy : public InterfaceProxy,
       PP_Instance instance,
       const PP_NetAddress_Private& private_addr) override;
   PP_Resource CreateNetworkMonitor(PP_Instance instance) override;
-  PP_Resource CreateOutputProtectionPrivate(PP_Instance instance) override;
   PP_Resource CreatePrinting(PP_Instance) override;
   PP_Resource CreateTCPServerSocketPrivate(PP_Instance instance) override;
   PP_Resource CreateTCPSocket1_0(PP_Instance instance) override;
@@ -177,7 +176,6 @@ class ResourceCreationProxy : public InterfaceProxy,
   PP_Resource CreateFlashMenu(PP_Instance instance,
                               const PP_Flash_Menu* menu_data) override;
   PP_Resource CreateFlashMessageLoop(PP_Instance instance) override;
-  PP_Resource CreatePlatformVerificationPrivate(PP_Instance instance) override;
   PP_Resource CreateVideoCapture(PP_Instance instance) override;
   PP_Resource CreateVideoDecoderDev(
       PP_Instance instance,

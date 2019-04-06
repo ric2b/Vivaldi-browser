@@ -10,7 +10,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
-#include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
@@ -46,8 +45,9 @@ ToolbarActionView* GetExtensionAnchorView(const std::string& extension_id,
       BrowserView::GetBrowserViewForNativeWindow(window);
   if (!browser_view)
     return nullptr;
-  ToolbarActionView* reference_view =
-      browser_view->toolbar()->browser_actions()->GetViewForId(extension_id);
+  ToolbarActionView* reference_view = browser_view->toolbar_button_provider()
+                                          ->GetBrowserActionsContainer()
+                                          ->GetViewForId(extension_id);
   return reference_view && reference_view->visible() ? reference_view : nullptr;
 #else
   // Anchoring is not supported when using Cocoa.
@@ -117,6 +117,7 @@ class ExtensionUninstallDialogDelegateView
 
   ExtensionUninstallDialogViews* dialog_;
   const base::string16 extension_name_;
+  const bool is_bubble_;
 
   views::Label* heading_;
   views::Checkbox* report_abuse_checkbox_;
@@ -141,7 +142,7 @@ ExtensionUninstallDialogViews::~ExtensionUninstallDialogViews() {
 
 void ExtensionUninstallDialogViews::Show() {
   ToolbarActionView* anchor_view =
-      GetExtensionAnchorView(extension()->id(), parent());
+      parent() ? GetExtensionAnchorView(extension()->id(), parent()) : nullptr;
   view_ = new ExtensionUninstallDialogDelegateView(
       this, anchor_view, extension(), triggering_extension(), &icon());
   if (anchor_view) {
@@ -182,9 +183,12 @@ ExtensionUninstallDialogDelegateView::ExtensionUninstallDialogDelegateView(
     const extensions::Extension* extension,
     const extensions::Extension* triggering_extension,
     const gfx::ImageSkia* image)
-    : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
+    : BubbleDialogDelegateView(anchor_view,
+                               anchor_view ? views::BubbleBorder::TOP_RIGHT
+                                           : views::BubbleBorder::NONE),
       dialog_(dialog_view),
       extension_name_(base::UTF8ToUTF16(extension->name())),
+      is_bubble_(anchor_view != nullptr),
       report_abuse_checkbox_(nullptr),
       image_(gfx::ImageSkiaOperations::CreateResizedImage(
           *image,
@@ -275,7 +279,8 @@ bool ExtensionUninstallDialogDelegateView::Cancel() {
 
 gfx::Size ExtensionUninstallDialogDelegateView::CalculatePreferredSize() const {
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
+                        is_bubble_ ? DISTANCE_BUBBLE_PREFERRED_WIDTH
+                                   : DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
                     margins().width();
   return gfx::Size(width, GetHeightForWidth(width));
 }

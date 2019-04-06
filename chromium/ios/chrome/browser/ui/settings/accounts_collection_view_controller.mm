@@ -19,9 +19,9 @@
 #import "ios/chrome/browser/signin/authentication_service.h"
 #include "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_identity_service_observer_bridge.h"
-#include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
+#include "ios/chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -30,12 +30,13 @@
 #import "ios/chrome/browser/ui/authentication/resized_avatar_cache.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_account_item.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
+#import "ios/chrome/browser/ui/collection_view/cells/collection_view_cell_style.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/open_url_command.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_text_item.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/sync_settings_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
@@ -133,10 +134,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _browserState = browserState;
     _closeSettingsOnAddAccount = closeSettingsOnAddAccount;
     browser_sync::ProfileSyncService* syncService =
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(_browserState);
+        ProfileSyncServiceFactory::GetForBrowserState(_browserState);
     _syncObserver.reset(new SyncObserverBridge(self, syncService));
     _tokenServiceObserver.reset(new OAuth2TokenServiceObserverBridge(
-        OAuth2TokenServiceFactory::GetForBrowserState(_browserState), self));
+        ProfileOAuth2TokenServiceFactory::GetForBrowserState(_browserState),
+        self));
     [[NSNotificationCenter defaultCenter]
         addObserver:self
            selector:@selector(willStartSwitchAccount)
@@ -209,7 +211,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Account cells.
   ProfileOAuth2TokenService* oauth2_service =
-      OAuth2TokenServiceFactory::GetForBrowserState(_browserState);
+      ProfileOAuth2TokenServiceFactory::GetForBrowserState(_browserState);
   AccountTrackerService* accountTracker =
       ios::AccountTrackerServiceFactory::GetForBrowserState(_browserState);
   [model addSectionWithIdentifier:SectionIdentifierAccounts];
@@ -245,8 +247,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - Model objects
 
 - (CollectionViewItem*)header {
-  CollectionViewTextItem* header =
-      [[CollectionViewTextItem alloc] initWithType:ItemTypeHeader];
+  SettingsTextItem* header =
+      [[SettingsTextItem alloc] initWithType:ItemTypeHeader];
   header.text = l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_DESCRIPTION);
   header.accessibilityIdentifier = kSettingsHeaderId;
   header.textColor = [[MDCPalette greyPalette] tint500];
@@ -256,6 +258,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (CollectionViewItem*)accountItem:(ChromeIdentity*)identity {
   CollectionViewAccountItem* item =
       [[CollectionViewAccountItem alloc] initWithType:ItemTypeAccount];
+  item.cellStyle = CollectionViewCellStyle::kUIKit;
   [self updateAccountItem:item withIdentity:identity];
   return item;
 }
@@ -271,6 +274,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (CollectionViewItem*)addAccountItem {
   CollectionViewAccountItem* item =
       [[CollectionViewAccountItem alloc] initWithType:ItemTypeAddAccount];
+  item.cellStyle = CollectionViewCellStyle::kUIKit;
   item.text =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_ADD_ACCOUNT_BUTTON);
   item.accessibilityIdentifier = kSettingsAccountsAddAccountCellId;
@@ -281,6 +285,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (CollectionViewItem*)syncItem {
   AccountControlItem* item =
       [[AccountControlItem alloc] initWithType:ItemTypeSync];
+  item.cellStyle = CollectionViewCellStyle::kUIKit;
   item.text = l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_SYNC_TITLE);
   item.accessibilityIdentifier = kSettingsAccountsSyncCellId;
   [self updateSyncItem:item];
@@ -335,6 +340,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (CollectionViewItem*)googleActivityControlsItem {
   AccountControlItem* item =
       [[AccountControlItem alloc] initWithType:ItemTypeGoogleActivityControls];
+  item.cellStyle = CollectionViewCellStyle::kUIKit;
   item.text = l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_GOOGLE_TITLE);
   item.detailText =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_GOOGLE_DESCRIPTION);
@@ -346,8 +352,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (CollectionViewItem*)signOutItem {
-  CollectionViewTextItem* item =
-      [[CollectionViewTextItem alloc] initWithType:ItemTypeSignOut];
+  SettingsTextItem* item =
+      [[SettingsTextItem alloc] initWithType:ItemTypeSignOut];
   item.text = l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_SIGNOUT);
   item.accessibilityTraits |= UIAccessibilityTraitButton;
   item.accessibilityIdentifier = kSettingsAccountsSignoutCellId;
@@ -651,8 +657,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)openURL:(NSURL*)url
               view:(UIView*)view
     viewController:(UIViewController*)viewController {
-  OpenUrlCommand* command =
-      [[OpenUrlCommand alloc] initWithURLFromChrome:net::GURLWithNSURL(url)];
+  OpenNewTabCommand* command =
+      [OpenNewTabCommand commandWithURLFromChrome:net::GURLWithNSURL(url)];
   [self.dispatcher closeSettingsUIAndOpenURL:command];
 }
 

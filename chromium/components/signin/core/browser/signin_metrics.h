@@ -149,12 +149,22 @@ enum class AccessPoint : int {
   ACCESS_POINT_MAX,  // This must be last.
 };
 
-// Enum values which enumerates all user actions on the mobile sign-in promo.
+// Enum values which enumerates all user actions on the sign-in promo.
 enum class PromoAction : int {
   PROMO_ACTION_NO_SIGNIN_PROMO = 0,
+  // The user selected the default account.
   PROMO_ACTION_WITH_DEFAULT,
+  // On desktop, the user selected an account that is not the default. On
+  // mobile, the user selected the generic "Use another account" button.
   PROMO_ACTION_NOT_DEFAULT,
-  PROMO_ACTION_NEW_ACCOUNT,
+  // Non-personalized promo, pre-dice on desktop.
+  PROMO_ACTION_NEW_ACCOUNT_PRE_DICE,
+  // Non personalized promo, when there is no account on the device.
+  PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT,
+  // The user clicked on the "Add account" button, when there are already
+  // accounts on the device. (desktop only, the button does not exist on
+  // mobile).
+  PROMO_ACTION_NEW_ACCOUNT_EXISTING_ACCOUNT
 };
 
 // Enum values which enumerates all reasons to start sign in process.
@@ -301,11 +311,7 @@ enum class ReportingType { PERIODIC, ON_CHANGE };
 // Histograms
 // -----------------------------------------------------------------------------
 
-// Tracks the access point of sign in on desktop.
-void LogSigninAccessPointStarted(AccessPoint access_point);
-void LogSigninAccessPointCompleted(AccessPoint access_point);
-
-// Tracks the access point of sign in on iOS.
+// Tracks the access point of sign in.
 void LogSigninAccessPointStarted(AccessPoint access_point,
                                  PromoAction promo_action);
 void LogSigninAccessPointCompleted(AccessPoint access_point,
@@ -358,7 +364,7 @@ void LogExternalCcResultFetches(
     const base::TimeDelta& time_to_check_connections);
 
 // Track when the current authentication error changed.
-void LogAuthError(GoogleServiceAuthError::State auth_error);
+void LogAuthError(const GoogleServiceAuthError& auth_error);
 
 void LogSigninConfirmHistogramValue(ConfirmationUsage action);
 
@@ -401,8 +407,16 @@ void LogIsShared(const bool is_shared, const ReportingType type);
 // -----------------------------------------------------------------------------
 
 // Records corresponding sign in user action for an access point.
-void RecordSigninUserActionForAccessPoint(
-    signin_metrics::AccessPoint access_point);
+void RecordSigninUserActionForAccessPoint(AccessPoint access_point,
+                                          PromoAction promo_action);
+
+// Records |Signin_ImpressionWithAccount_From*| user action.
+void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point);
+
+// Records |Signin_Impression{With|No}Account_From*| user action.
+void RecordSigninImpressionWithAccountUserActionForAccessPoint(
+    AccessPoint access_point,
+    bool with_account);
 
 }  // namespace signin_metrics
 

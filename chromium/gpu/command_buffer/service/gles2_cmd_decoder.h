@@ -38,19 +38,17 @@ namespace gpu {
 
 class DecoderClient;
 struct Mailbox;
-class ServiceTransferCache;
 
 namespace gles2 {
 
 class ContextGroup;
-class FeatureInfo;
+class CopyTextureCHROMIUMResourceManager;
 class FramebufferManager;
 class GLES2Util;
 class ImageManager;
 class Logger;
 class Outputter;
 class ShaderTranslatorInterface;
-class Texture;
 class TransformFeedbackManager;
 class VertexArrayManager;
 
@@ -66,7 +64,6 @@ struct DisallowedFeatures {
     oes_texture_half_float_linear = false;
   }
 
-  bool gpu_memory_manager = false;
   bool npot_support = false;
   bool chromium_color_buffer_float_rgba = false;
   bool chromium_color_buffer_float_rgb = false;
@@ -99,6 +96,15 @@ class GPU_GLES2_EXPORT GLES2Decoder : public CommonDecoder,
   // DecoderContext implementation.
   bool initialized() const override;
   TextureBase* GetTextureBase(uint32_t client_id) override;
+  void SetLevelInfo(uint32_t client_id,
+                    int level,
+                    unsigned internal_format,
+                    unsigned width,
+                    unsigned height,
+                    unsigned depth,
+                    unsigned format,
+                    unsigned type,
+                    const gfx::Rect& cleared_rect) override;
   void BeginDecoding() override;
   void EndDecoding() override;
   base::StringPiece GetLogPrefix() override;
@@ -121,11 +127,9 @@ class GPU_GLES2_EXPORT GLES2Decoder : public CommonDecoder,
   }
 
   // Set to true to LOG every command.
-  void set_log_commands(bool log_commands) {
-    log_commands_ = log_commands;
-  }
+  void SetLogCommands(bool log_commands) override;
 
-  Outputter* outputter() const { return outputter_; }
+  Outputter* outputter() const override;
 
   // Set the surface associated with the default FBO.
   virtual void SetSurface(const scoped_refptr<gl::GLSurface>& surface) = 0;
@@ -142,14 +146,8 @@ class GPU_GLES2_EXPORT GLES2Decoder : public CommonDecoder,
   // Gets the GLES2 Util which holds info.
   virtual GLES2Util* GetGLES2Util() = 0;
 
-  virtual const FeatureInfo* GetFeatureInfo() const = 0;
-
   // Restore States.
-  virtual void RestoreGlobalState() const = 0;
   virtual void RestoreDeviceWindowRectangles() const = 0;
-
-  virtual void ClearAllAttributes() const = 0;
-  virtual void RestoreAllAttributes() const = 0;
 
   virtual void SetIgnoreCachedStateForTest(bool ignore) = 0;
   virtual void SetForceShaderNameHashingForTest(bool force) = 0;
@@ -169,56 +167,20 @@ class GPU_GLES2_EXPORT GLES2Decoder : public CommonDecoder,
   // Gets the ImageManager for this context.
   virtual ImageManager* GetImageManagerForTest() = 0;
 
-  // Gets the ServiceTransferCache for this context.
-  virtual ServiceTransferCache* GetTransferCacheForTest() = 0;
-
   // Get the service texture ID corresponding to a client texture ID.
   // If no such record is found then return false.
   virtual bool GetServiceTextureId(uint32_t client_texture_id,
                                    uint32_t* service_texture_id);
 
-  // Clears a level sub area of a 2D texture.
-  // Returns false if a GL error should be generated.
-  virtual bool ClearLevel(Texture* texture,
-                          unsigned target,
-                          int level,
-                          unsigned format,
-                          unsigned type,
-                          int xoffset,
-                          int yoffset,
-                          int width,
-                          int height) = 0;
-
-  // Clears a level sub area of a compressed 2D texture.
-  // Returns false if a GL error should be generated.
-  virtual bool ClearCompressedTextureLevel(Texture* texture,
-                                           unsigned target,
-                                           int level,
-                                           unsigned format,
-                                           int width,
-                                           int height) = 0;
-
-  // Indicates whether a given internal format is one for a compressed
-  // texture.
-  virtual bool IsCompressedTextureFormat(unsigned format) = 0;
-
-  // Clears a level of a 3D texture.
-  // Returns false if a GL error should be generated.
-  virtual bool ClearLevel3D(Texture* texture,
-                            unsigned target,
-                            int level,
-                            unsigned format,
-                            unsigned type,
-                            int width,
-                            int height,
-                            int depth) = 0;
-
-  virtual void WaitForReadPixels(base::Closure callback) = 0;
+  virtual void WaitForReadPixels(base::OnceClosure callback) = 0;
 
   virtual Logger* GetLogger() = 0;
 
   virtual scoped_refptr<ShaderTranslatorInterface> GetTranslator(
       unsigned int type) = 0;
+
+  virtual void SetCopyTextureResourceManagerForTest(
+      CopyTextureCHROMIUMResourceManager* copy_texture_resource_manager) = 0;
 
  protected:
   GLES2Decoder(CommandBufferServiceBase* command_buffer_service,

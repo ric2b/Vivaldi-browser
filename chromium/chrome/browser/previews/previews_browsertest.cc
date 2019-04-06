@@ -4,7 +4,7 @@
 
 #include "base/command_line.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -12,48 +12,87 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/optimization_guide/optimization_guide_service.h"
+#include "components/optimization_guide/optimization_guide_service_observer.h"
+#include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/test_component_creator.h"
 #include "components/previews/core/previews_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 
+namespace {
+
+// A test observer which can be configured to wait until the server hints are
+// processed.
+class TestOptimizationGuideServiceObserver
+    : public optimization_guide::OptimizationGuideServiceObserver {
+ public:
+  TestOptimizationGuideServiceObserver()
+      : run_loop_(std::make_unique<base::RunLoop>()) {}
+
+  ~TestOptimizationGuideServiceObserver() override {}
+
+  void WaitForNotification() {
+    run_loop_->Run();
+    run_loop_.reset(new base::RunLoop());
+  }
+
+ private:
+  void OnHintsProcessed(
+      const optimization_guide::proto::Configuration& config,
+      const optimization_guide::ComponentInfo& component_info) override {
+    run_loop_->Quit();
+  }
+
+  std::unique_ptr<base::RunLoop> run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestOptimizationGuideServiceObserver);
+};
+
+}  // namespace
+
 class PreviewsBrowserTest : public InProcessBrowserTest {
  public:
   PreviewsBrowserTest()
-      : https_server_(net::EmbeddedTestServer::TYPE_HTTPS),
-        http_server_(net::EmbeddedTestServer::TYPE_HTTP),
-        noscript_css_requested_(false),
-        noscript_js_requested_(false) {
-    // Set up https server with resource monitor.
-    https_server_.ServeFilesFromSourceDirectory("chrome/test/data/previews");
-    https_server_.RegisterRequestMonitor(base::Bind(
-        &PreviewsBrowserTest::MonitorResourceRequest, base::Unretained(this)));
-    EXPECT_TRUE(https_server_.Start());
-
-    https_url_ = https_server_.GetURL("/noscript_test.html");
-    EXPECT_TRUE(https_url_.SchemeIs(url::kHttpsScheme));
-
-    https_no_transform_url_ =
-        https_server_.GetURL("/noscript_test_with_no_transform_header.html");
-    EXPECT_TRUE(https_no_transform_url_.SchemeIs(url::kHttpsScheme));
-
-    // Set up http server with resource monitor and redirect handler.
-    http_server_.ServeFilesFromSourceDirectory("chrome/test/data/previews");
-    http_server_.RegisterRequestMonitor(base::Bind(
-        &PreviewsBrowserTest::MonitorResourceRequest, base::Unretained(this)));
-    http_server_.RegisterRequestHandler(base::Bind(
-        &PreviewsBrowserTest::HandleRedirectRequest, base::Unretained(this)));
-    EXPECT_TRUE(http_server_.Start());
-
-    http_url_ = http_server_.GetURL("/noscript_test.html");
-    EXPECT_TRUE(http_url_.SchemeIs(url::kHttpScheme));
-
-    redirect_url_ = http_server_.GetURL("/redirect.html");
-    EXPECT_TRUE(redirect_url_.SchemeIs(url::kHttpScheme));
-  }
+      : noscript_css_requested_(false), noscript_js_requested_(false) {}
 
   ~PreviewsBrowserTest() override {}
+
+  void SetUpOnMainThread() override {
+    noscript_css_requested_ = false;
+    noscript_js_requested_ = false;
+
+    // Set up https server with resource monitor.
+    https_server_.reset(
+        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
+    https_server_->ServeFilesFromSourceDirectory("chrome/test/data/previews");
+    https_server_->RegisterRequestMonitor(base::BindRepeating(
+        &PreviewsBrowserTest::MonitorResourceRequest, base::Unretained(this)));
+    ASSERT_TRUE(https_server_->Start());
+
+    https_url_ = https_server_->GetURL("/noscript_test.html");
+    ASSERT_TRUE(https_url_.SchemeIs(url::kHttpsScheme));
+
+    https_no_transform_url_ =
+        https_server_->GetURL("/noscript_test_with_no_transform_header.html");
+    ASSERT_TRUE(https_no_transform_url_.SchemeIs(url::kHttpsScheme));
+
+    // Set up http server with resource monitor and redirect handler.
+    http_server_.reset(
+        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTP));
+    http_server_->ServeFilesFromSourceDirectory("chrome/test/data/previews");
+    http_server_->RegisterRequestMonitor(base::BindRepeating(
+        &PreviewsBrowserTest::MonitorResourceRequest, base::Unretained(this)));
+    http_server_->RegisterRequestHandler(base::BindRepeating(
+        &PreviewsBrowserTest::HandleRedirectRequest, base::Unretained(this)));
+    ASSERT_TRUE(http_server_->Start());
+
+    http_url_ = http_server_->GetURL("/noscript_test.html");
+    ASSERT_TRUE(http_url_.SchemeIs(url::kHttpScheme));
+
+    redirect_url_ = http_server_->GetURL("/redirect.html");
+    ASSERT_TRUE(redirect_url_.SchemeIs(url::kHttpScheme));
+  }
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch("enable-spdy-proxy-auth");
@@ -90,8 +129,8 @@ class PreviewsBrowserTest : public InProcessBrowserTest {
     return std::move(response);
   }
 
-  net::EmbeddedTestServer https_server_;
-  net::EmbeddedTestServer http_server_;
+  std::unique_ptr<net::EmbeddedTestServer> https_server_;
+  std::unique_ptr<net::EmbeddedTestServer> http_server_;
   GURL https_url_;
   GURL https_no_transform_url_;
   GURL http_url_;
@@ -118,14 +157,17 @@ IN_PROC_BROWSER_TEST_F(PreviewsBrowserTest, NoScriptPreviewsDisabled) {
 // This test class enables NoScriptPreviews but without OptimizationHints.
 class PreviewsNoScriptBrowserTest : public PreviewsBrowserTest {
  public:
-  PreviewsNoScriptBrowserTest() {
-    // Explicitly disable server hints.
-    scoped_feature_list_.InitWithFeatures(
-        {previews::features::kNoScriptPreviews},
-        {previews::features::kOptimizationHints});
-  }
+  PreviewsNoScriptBrowserTest() {}
 
   ~PreviewsNoScriptBrowserTest() override {}
+
+  void SetUp() override {
+    // Explicitly disable server hints.
+    scoped_feature_list_.InitWithFeatures(
+        {previews::features::kPreviews, previews::features::kNoScriptPreviews},
+        {previews::features::kOptimizationHints});
+    PreviewsBrowserTest::SetUp();
+  }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -134,14 +176,14 @@ class PreviewsNoScriptBrowserTest : public PreviewsBrowserTest {
 // Previews InfoBar (which these tests triggers) does not work on Mac.
 // See crbug.com/782322 for detail.
 // Also occasional flakes on win7 (crbug.com/789542).
-#if defined(OS_MACOSX) || defined(OS_WIN)
-#define MAYBE_NoScriptPreviewsEnabled DISABLED_NoScriptPreviewsEnabled
-#define MAYBE_NoScriptPreviewsEnabledHttpRedirectToHttps \
-  DISABLED_NoScriptPreviewsEnabledHttpRedirectToHttps
-#else
+#if defined(OS_ANDROID) || defined(OS_LINUX)
 #define MAYBE_NoScriptPreviewsEnabled NoScriptPreviewsEnabled
 #define MAYBE_NoScriptPreviewsEnabledHttpRedirectToHttps \
   NoScriptPreviewsEnabledHttpRedirectToHttps
+#else
+#define MAYBE_NoScriptPreviewsEnabled DISABLED_NoScriptPreviewsEnabled
+#define MAYBE_NoScriptPreviewsEnabledHttpRedirectToHttps \
+  DISABLED_NoScriptPreviewsEnabledHttpRedirectToHttps
 #endif
 
 // Loads a webpage that has both script and noscript tags and also requests
@@ -169,8 +211,16 @@ IN_PROC_BROWSER_TEST_F(PreviewsNoScriptBrowserTest,
   EXPECT_FALSE(noscript_css_requested());
 }
 
+// Flaky in all platforms except Android. See crbug.com/803626 for detail.
+#if defined(OS_ANDROID)
+#define MAYBE_NoScriptPreviewsEnabledButNoTransformDirective \
+  NoScriptPreviewsEnabledButNoTransformDirective
+#else
+#define MAYBE_NoScriptPreviewsEnabledButNoTransformDirective \
+  DISABLED_NoScriptPreviewsEnabledButNoTransformDirective
+#endif
 IN_PROC_BROWSER_TEST_F(PreviewsNoScriptBrowserTest,
-                       NoScriptPreviewsEnabledButNoTransformDirective) {
+                       MAYBE_NoScriptPreviewsEnabledButNoTransformDirective) {
   base::HistogramTester histogram_tester;
   ui_test_utils::NavigateToURL(browser(), https_no_transform_url());
 
@@ -198,25 +248,33 @@ IN_PROC_BROWSER_TEST_F(PreviewsNoScriptBrowserTest,
 // This test class enables NoScriptPreviews with OptimizationHints.
 class PreviewsOptimizationGuideBrowserTest : public PreviewsBrowserTest {
  public:
-  PreviewsOptimizationGuideBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {previews::features::kOptimizationHints,
-         previews::features::kNoScriptPreviews},
-        {});
-  }
+  PreviewsOptimizationGuideBrowserTest() {}
 
   ~PreviewsOptimizationGuideBrowserTest() override {}
+
+  void SetUp() override {
+    scoped_feature_list_.InitWithFeatures(
+        {previews::features::kPreviews, previews::features::kOptimizationHints,
+         previews::features::kNoScriptPreviews},
+        {});
+    PreviewsBrowserTest::SetUp();
+  }
 
   void SetNoScriptWhitelist(
       std::vector<std::string> whitelisted_noscript_sites) {
     const optimization_guide::ComponentInfo& component_info =
-        test_component_creator_.CreateComponentInfoWithNoScriptWhitelist(
-            whitelisted_noscript_sites);
+        test_component_creator_.CreateComponentInfoWithWhitelist(
+            optimization_guide::proto::NOSCRIPT, whitelisted_noscript_sites);
     g_browser_process->optimization_guide_service()->ProcessHints(
         component_info);
 
     // Wait for hints to be processed by PreviewsOptimizationGuide.
     base::RunLoop().RunUntilIdle();
+  }
+
+  void AddTestOptimizationGuideServiceObserver(
+      TestOptimizationGuideServiceObserver* observer) {
+    g_browser_process->optimization_guide_service()->AddObserver(observer);
   }
 
  private:
@@ -226,19 +284,25 @@ class PreviewsOptimizationGuideBrowserTest : public PreviewsBrowserTest {
 
 // Previews InfoBar (which this test triggers) does not work on Mac.
 // See crbug.com/782322 for detail.
-// Also occasional flakes on win7 (crbug.com/789948).
-#if defined(OS_MACOSX) || defined(OS_WIN)
-#define MAYBE_NoScriptPreviewsEnabledByWhitelist \
-  DISABLED_NoScriptPreviewsEnabledByWhitelist
-#else
+// Also occasional flakes on win7 (crbug.com/789948) and Ubuntu 16.04
+// (crbug.com/831838)
+#if defined(OS_ANDROID)
 #define MAYBE_NoScriptPreviewsEnabledByWhitelist \
   NoScriptPreviewsEnabledByWhitelist
+#else
+#define MAYBE_NoScriptPreviewsEnabledByWhitelist \
+  DISABLED_NoScriptPreviewsEnabledByWhitelist
 #endif
 
 IN_PROC_BROWSER_TEST_F(PreviewsOptimizationGuideBrowserTest,
                        MAYBE_NoScriptPreviewsEnabledByWhitelist) {
+  TestOptimizationGuideServiceObserver observer;
+  AddTestOptimizationGuideServiceObserver(&observer);
+  base::RunLoop().RunUntilIdle();
+
   // Whitelist test URL for NoScript.
   SetNoScriptWhitelist({https_url().host()});
+  observer.WaitForNotification();
 
   ui_test_utils::NavigateToURL(browser(), https_url());
 
@@ -249,8 +313,13 @@ IN_PROC_BROWSER_TEST_F(PreviewsOptimizationGuideBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PreviewsOptimizationGuideBrowserTest,
                        NoScriptPreviewsNotEnabledByWhitelist) {
+  TestOptimizationGuideServiceObserver observer;
+  AddTestOptimizationGuideServiceObserver(&observer);
+  base::RunLoop().RunUntilIdle();
+
   // Whitelist random site for NoScript.
   SetNoScriptWhitelist({"foo.com"});
+  observer.WaitForNotification();
 
   ui_test_utils::NavigateToURL(browser(), https_url());
 

@@ -13,7 +13,7 @@
 #   source_is_generated (optional, defaults to false)
 #       Declares that the input (or one of its dependencies) is generated so
 #       that grit_info is not run on the file when
-#       compute_grit_inputs_for_analyze is set (because the file will not
+#       compute_inputs_for_analyze is set (because the file will not
 #       exist at analyze time). For "analyze" to be correct in this case, the
 #       inputs to the grit file must either be listed in the inputs variable
 #       or are listed as inputs to dependencies of this target.
@@ -86,29 +86,18 @@
 #   }
 import("//build/config/android/config.gni")
 import("//build/config/chrome_build.gni")
+import("//build/config/compute_inputs_for_analyze.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//third_party/closure_compiler/closure_args.gni")
 
-if (is_vivaldi) {
+if (defined(is_vivaldi) && is_vivaldi) {
   import("//vivaldi/app/resources/vivaldi_chromium_grit.gni")
 }
 
 assert(!enable_resource_whitelist_generation || is_android,
        "resource whitelist generation only works on android")
-
-declare_args() {
-  # When set, this will fork out to grit at GN-time to get all inputs
-  # referenced by the .grd file.
-  #
-  # Normal builds don't need this since proper incremental builds are handled
-  # by grit writing out the inputs in .d files at build-time. But for analyze
-  # to work on the bots, it needs to know about all input files at GN-time so
-  # it knows which tests to trigger when something changes. This option will
-  # slow down the GN run.
-  compute_grit_inputs_for_analyze = false
-}
 
 grit_defines = []
 
@@ -276,7 +265,7 @@ template("grit") {
     depfile_dir = output_dir
   }
 
-  if (is_vivaldi && defined(invoker.vivaldi_resource_path)) {
+  if (defined(is_vivaldi) && is_vivaldi && defined(invoker.vivaldi_resource_path)) {
     master_resource_ids = resource_ids
     resource_ids = "${invoker.target_dir}/resource_ids"
   }
@@ -288,14 +277,6 @@ template("grit") {
 
   # Compute flags.
   grit_flags = []
-  if (enable_resource_whitelist_generation) {
-    grit_flags += [ "-h" ]
-    if (is_win) {
-      grit_flags += [ "#define {textual_id} __pragma(message(\"whitelisted_resource_{numeric_id}\")) {numeric_id}" ]
-    } else {
-      grit_flags += [ "#define {textual_id} _Pragma(\"whitelisted_resource_{numeric_id}\") {numeric_id}" ]
-    }
-  }
   if (defined(invoker.grit_flags)) {
     grit_flags += invoker.grit_flags
   }
@@ -362,7 +343,7 @@ template("grit") {
 
   grit_extra_target = []
   search_paths = []
-  if (is_vivaldi && defined(invoker.vivaldi_resource_path)) {
+  if (defined(is_vivaldi) && is_vivaldi && defined(invoker.vivaldi_resource_path)) {
     #print("$target_name : merge_$target_name")
     grit_extra_target += [ ":merge_$target_name" ]
     chromium_merge_grit_action("merge_$target_name") {
@@ -445,6 +426,15 @@ template("grit") {
 
     args += define_args + grit_flags + assert_files_flags
 
+    if (enable_resource_whitelist_generation) {
+      args += [ "-h" ]
+      if (is_win) {
+        args += [ "#define {textual_id} __pragma(message(\"whitelisted_resource_{numeric_id}\")) {numeric_id}" ]
+      } else {
+        args += [ "#define {textual_id} _Pragma(\"whitelisted_resource_{numeric_id}\") {numeric_id}" ]
+      }
+    }
+
     foreach(p, search_paths) {
       args += [
         "-I",
@@ -473,7 +463,7 @@ template("grit") {
     # Must be after the args are computed since they are re-used.
     # See the comments for the two variables used in this condition for
     # why this works this way.
-    if (compute_grit_inputs_for_analyze && !source_is_generated) {
+    if (compute_inputs_for_analyze && !source_is_generated) {
       grit_info_script = "//tools/grit/grit_info.py"
       grit_info_args = [
                          "--inputs",

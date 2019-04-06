@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
@@ -18,19 +19,21 @@
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/page_form_analyser_logger.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/strings/grit/components_strings.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebSelectElement.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
+#include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_select_element.h"
 #include "ui/base/l10n/l10n_util.h"
 
+using blink::WebAutofillState;
 using blink::WebConsoleMessage;
 using blink::WebDocument;
 using blink::WebElement;
@@ -47,74 +50,106 @@ namespace autofill {
 
 namespace {
 
+static const char* kSupportedAutocompleteTypes[] = {"given-name",
+                                                    "additional-name",
+                                                    "family-name",
+                                                    "name",
+                                                    "honorific-suffix",
+                                                    "email",
+                                                    "tel-local",
+                                                    "tel-area-code",
+                                                    "tel-country-code",
+                                                    "tel-national",
+                                                    "tel",
+                                                    "tel-extension",
+                                                    "street-address",
+                                                    "address-line1",
+                                                    "address-line2",
+                                                    "address-line3",
+                                                    "address-level1",
+                                                    "address-level2",
+                                                    "address-level3",
+                                                    "postal-code",
+                                                    "country-name",
+                                                    "cc-name",
+                                                    "cc-given-name",
+                                                    "cc-family-name",
+                                                    "cc-number",
+                                                    "cc-exp-month",
+                                                    "cc-exp-year",
+                                                    "cc-exp",
+                                                    "cc-type",
+                                                    "cc-csc",
+                                                    "organization"};
+
 // For a given |type| (a string representation of enum values), return the
 // appropriate autocomplete value that should be suggested to the website
 // developer.
 const char* MapTypePredictionToAutocomplete(base::StringPiece type) {
   if (type == "NAME_FIRST")
-    return "given-name";
+    return kSupportedAutocompleteTypes[0];
   if (type == "NAME_MIDDLE")
-    return "additional-name";
+    return kSupportedAutocompleteTypes[1];
   if (type == "NAME_LAST")
-    return "family-name";
+    return kSupportedAutocompleteTypes[2];
   if (type == "NAME_FULL")
-    return "name";
+    return kSupportedAutocompleteTypes[3];
   if (type == "NAME_SUFFIX")
-    return "honorific-suffix";
+    return kSupportedAutocompleteTypes[4];
   if (type == "EMAIL_ADDRESS")
-    return "email";
+    return kSupportedAutocompleteTypes[5];
   if (type == "PHONE_HOME_NUMBER")
-    return "tel-local";
+    return kSupportedAutocompleteTypes[6];
   if (type == "PHONE_HOME_CITY_CODE")
-    return "tel-area-code";
+    return kSupportedAutocompleteTypes[7];
   if (type == "PHONE_HOME_COUNTRY_CODE")
-    return "tel-country-code";
+    return kSupportedAutocompleteTypes[8];
   if (type == "PHONE_HOME_CITY_AND_NUMBER")
-    return "tel-national";
+    return kSupportedAutocompleteTypes[9];
   if (type == "PHONE_HOME_WHOLE_NUMBER")
-    return "tel";
+    return kSupportedAutocompleteTypes[10];
   if (type == "PHONE_HOME_EXTENSION")
-    return "tel-extension";
+    return kSupportedAutocompleteTypes[11];
   if (type == "ADDRESS_HOME_STREET_ADDRESS")
-    return "street-address";
-  if (type == "ADDRESS_HOME_DEPENDENT_LOCALITY")
-    return "address-level3";
+    return kSupportedAutocompleteTypes[12];
   if (type == "ADDRESS_HOME_LINE1")
-    return "address-line1";
+    return kSupportedAutocompleteTypes[13];
   if (type == "ADDRESS_HOME_LINE2")
-    return "address-line2";
+    return kSupportedAutocompleteTypes[14];
   if (type == "ADDRESS_HOME_LINE3")
-    return "address-line3";
+    return kSupportedAutocompleteTypes[15];
   if (type == "ADDRESS_HOME_CITY")
-    return "address-level2";
+    return kSupportedAutocompleteTypes[16];
   if (type == "ADDRESS_HOME_STATE")
-    return "address-level1";
+    return kSupportedAutocompleteTypes[17];
+  if (type == "ADDRESS_HOME_DEPENDENT_LOCALITY")
+    return kSupportedAutocompleteTypes[18];
   if (type == "ADDRESS_HOME_ZIP")
-    return "postal-code";
+    return kSupportedAutocompleteTypes[19];
   if (type == "ADDRESS_HOME_COUNTRY")
-    return "country-name";
+    return kSupportedAutocompleteTypes[20];
   if (type == "CREDIT_CARD_NAME_FULL")
-    return "cc-name";
+    return kSupportedAutocompleteTypes[21];
   if (type == "CREDIT_CARD_NAME_FIRST")
-    return "cc-given-name";
+    return kSupportedAutocompleteTypes[22];
   if (type == "CREDIT_CARD_NAME_LAST")
-    return "cc-family-name";
+    return kSupportedAutocompleteTypes[23];
   if (type == "CREDIT_CARD_NUMBER")
-    return "cc-number";
+    return kSupportedAutocompleteTypes[24];
   if (type == "CREDIT_CARD_EXP_MONTH")
-    return "cc-exp-month";
+    return kSupportedAutocompleteTypes[25];
   if (type == "CREDIT_CARD_EXP_2_DIGIT_YEAR" ||
       type == "CREDIT_CARD_EXP_4_DIGIT_YEAR")
-    return "cc-exp-year";
+    return kSupportedAutocompleteTypes[26];
   if (type == "CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR" ||
       type == "CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR")
-    return "cc-exp";
+    return kSupportedAutocompleteTypes[27];
   if (type == "CREDIT_CARD_TYPE")
-    return "cc-type";
+    return kSupportedAutocompleteTypes[28];
   if (type == "CREDIT_CARD_VERIFICATION_CODE")
-    return "cc-csc";
+    return kSupportedAutocompleteTypes[29];
   if (type == "COMPANY_NAME")
-    return "organization";
+    return kSupportedAutocompleteTypes[30];
   return "";
 }
 
@@ -265,7 +300,7 @@ void FormCache::Reset() {
   initial_checked_state_.clear();
 }
 
-bool FormCache::ClearFormWithElement(const WebFormControlElement& element) {
+bool FormCache::ClearSectionWithElement(const WebFormControlElement& element) {
   WebFormElement form_element = element.Form();
   std::vector<WebFormControlElement> control_elements;
   if (form_element.IsNull()) {
@@ -285,7 +320,10 @@ bool FormCache::ClearFormWithElement(const WebFormControlElement& element) {
     if (!control_element.IsAutofilled())
       continue;
 
-    control_element.SetAutofilled(false);
+    if (control_element.AutofillSection() != element.AutofillSection())
+      continue;
+
+    control_element.SetAutofillState(WebAutofillState::kNotFilled);
 
     WebInputElement* input_element = ToWebInputElement(&control_element);
     if (form_util::IsTextInput(input_element) ||
@@ -349,22 +387,18 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form,
 
     for (size_t i = 0; i < web_forms.size(); ++i) {
       form_element = web_forms[i];
-      // Note: matching on the form name here which is not guaranteed to be
-      // unique for the page, nor is it guaranteed to be non-empty.  Ideally,
-      // we would have a way to uniquely identify the form cross-process. For
-      // now, we'll check form name and form action for identity.
-      // Also note that WebString() == WebString(string16()) does not evaluate
-      // to |true| -- WebKit distinguishes between a "null" string (lhs) and
-      // an "empty" string (rhs). We don't want that distinction, so forcing
-      // to string16.
+      // To match two forms, we look for the form's name and the number of
+      // fields on that form. (Form names may not be unique.)
+      // Note: WebString() == WebString(string16()) does not evaluate to |true|
+      // -- WebKit distinguishes between a "null" string (lhs) and an "empty"
+      // string (rhs). We don't want that distinction, so forcing to string16.
       base::string16 element_name = form_util::GetFormIdentifier(form_element);
-      GURL action(
-          form_element.GetDocument().CompleteURL(form_element.Action()));
-      if (element_name == form.data.name && action == form.data.action) {
+      if (element_name == form.data.name) {
         found_form = true;
         control_elements =
             form_util::ExtractAutofillableElementsInForm(form_element);
-        break;
+        if (control_elements.size() == form.fields.size())
+          break;
       }
     }
 
@@ -394,15 +428,9 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form,
     // autocomplete attributes.
     const std::string predicted_autocomplete_attribute =
         MapTypePredictionToAutocomplete(field.overall_type);
-    std::string actual_autocomplete_attribute =
-        element.GetAttribute("autocomplete").Utf8();
-    if (!predicted_autocomplete_attribute.empty() &&
-        (actual_autocomplete_attribute.empty() ||
-         !base::ContainsValue(
-             base::SplitStringPiece(actual_autocomplete_attribute, " ",
-                                    base::WhitespaceHandling::TRIM_WHITESPACE,
-                                    base::SplitResult::SPLIT_WANT_NONEMPTY),
-             predicted_autocomplete_attribute))) {
+    if (ShouldShowAutocompleteConsoleWarnings(
+            predicted_autocomplete_attribute,
+            element.GetAttribute("autocomplete").Utf8())) {
       logger.Send(
           base::StringPrintf("Input elements should have autocomplete "
                              "attributes (suggested: autocomplete='%s', "
@@ -418,13 +446,13 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form,
           0, std::min(field_data.label.length(), kMaxLabelSize));
 
       // A rough estimate of the maximum title size is:
-      //    7 field titles at <17 chars each
-      //    + 6 values at <40 chars each
+      //    8 field titles at <17 chars each
+      //    + 7 values at <40 chars each
       //    + 1 truncated label at <kMaxLabelSize;
-      //    = 459 chars, rounded up to the next multiple of 64 = 512
+      //    = 516 chars, rounded up to the next multiple of 64 = 576
       // A particularly large parseable name could blow through this and cause
       // another allocation, but that's OK.
-      constexpr size_t kMaxTitleSize = 512;
+      constexpr size_t kMaxTitleSize = 576;
       std::string title;
       title.reserve(kMaxTitleSize);
       title += "overall type: ";
@@ -437,6 +465,8 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form,
       title += base::UTF16ToUTF8(truncated_label);
       title += "\nparseable name: ";
       title += field.parseable_name;
+      title += "\nsection: ";
+      title += field.section;
       title += "\nfield signature: ";
       title += field.signature;
       title += "\nform signature: ";
@@ -493,6 +523,38 @@ void FormCache::SaveInitialValues(
       }
     }
   }
+}
+
+bool FormCache::ShouldShowAutocompleteConsoleWarnings(
+    const std::string& predicted_autocomplete,
+    const std::string& actual_autocomplete) {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillShowAutocompleteConsoleWarnings)) {
+    return false;
+  }
+
+  // If we have no better prediction, do not show.
+  if (predicted_autocomplete.empty())
+    return false;
+
+  // We should show a warning if the actual autocomplete attribute is empty,
+  // or we recognize the autocomplete attribute, but we think it's the wrong
+  // one.
+  if (actual_autocomplete.empty())
+    return true;
+
+  // An autocomplete attribute can be multiple strings (e.g. "shipping name").
+  // Look at all the tokens.
+  for (base::StringPiece actual : base::SplitStringPiece(
+           actual_autocomplete, " ", base::WhitespaceHandling::TRIM_WHITESPACE,
+           base::SplitResult::SPLIT_WANT_NONEMPTY)) {
+    // If we recognize the value but it's not correct, show a warning.
+    if (base::ContainsValue(kSupportedAutocompleteTypes, actual) &&
+        actual != predicted_autocomplete) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace autofill

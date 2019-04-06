@@ -39,7 +39,15 @@ class FakeDB : public ProtoDatabase<T> {
           entries_to_save,
       std::unique_ptr<std::vector<std::string>> keys_to_remove,
       typename ProtoDatabase<T>::UpdateCallback callback) override;
+  void UpdateEntriesWithRemoveFilter(
+      std::unique_ptr<typename ProtoDatabase<T>::KeyEntryVector>
+          entries_to_save,
+      const LevelDB::KeyFilter& filter,
+      typename ProtoDatabase<T>::UpdateCallback callback) override;
   void LoadEntries(typename ProtoDatabase<T>::LoadCallback callback) override;
+  void LoadEntriesWithFilter(
+      const LevelDB::KeyFilter& key_filter,
+      typename ProtoDatabase<T>::LoadCallback callback) override;
   void LoadKeys(typename ProtoDatabase<T>::LoadKeysCallback callback) override;
   void GetEntry(const std::string& key,
                 typename ProtoDatabase<T>::GetCallback callback) override;
@@ -117,13 +125,41 @@ void FakeDB<T>::UpdateEntries(
 }
 
 template <typename T>
-void FakeDB<T>::LoadEntries(typename ProtoDatabase<T>::LoadCallback callback) {
-  std::unique_ptr<std::vector<T>> entries(new std::vector<T>());
-  for (const auto& pair : *db_)
-    entries->push_back(pair.second);
+void FakeDB<T>::UpdateEntriesWithRemoveFilter(
+    std::unique_ptr<typename ProtoDatabase<T>::KeyEntryVector> entries_to_save,
+    const LevelDB::KeyFilter& delete_key_filter,
+    typename ProtoDatabase<T>::UpdateCallback callback) {
+  for (const auto& pair : *entries_to_save)
+    (*db_)[pair.first] = pair.second;
 
-  load_callback_ = base::BindOnce(RunLoadCallback, std::move(callback),
-                                  base::Passed(&entries));
+  auto it = db_->begin();
+  while (it != db_->end()) {
+    if (!delete_key_filter.is_null() && delete_key_filter.Run(it->first))
+      db_->erase(it++);
+    else
+      ++it;
+  }
+
+  update_callback_ = std::move(callback);
+}
+
+template <typename T>
+void FakeDB<T>::LoadEntries(typename ProtoDatabase<T>::LoadCallback callback) {
+  LoadEntriesWithFilter(LevelDB::KeyFilter(), std::move(callback));
+}
+
+template <typename T>
+void FakeDB<T>::LoadEntriesWithFilter(
+    const LevelDB::KeyFilter& key_filter,
+    typename ProtoDatabase<T>::LoadCallback callback) {
+  std::unique_ptr<std::vector<T>> entries(new std::vector<T>());
+  for (const auto& pair : *db_) {
+    if (key_filter.is_null() || key_filter.Run(pair.first))
+      entries->push_back(pair.second);
+  }
+
+  load_callback_ =
+      base::BindOnce(RunLoadCallback, std::move(callback), std::move(entries));
 }
 
 template <typename T>
@@ -133,8 +169,8 @@ void FakeDB<T>::LoadKeys(typename ProtoDatabase<T>::LoadKeysCallback callback) {
   for (const auto& pair : *db_)
     keys->push_back(pair.first);
 
-  load_keys_callback_ = base::BindOnce(RunLoadKeysCallback, std::move(callback),
-                                       base::Passed(&keys));
+  load_keys_callback_ =
+      base::BindOnce(RunLoadKeysCallback, std::move(callback), std::move(keys));
 }
 
 template <typename T>
@@ -146,7 +182,7 @@ void FakeDB<T>::GetEntry(const std::string& key,
     entry.reset(new T(it->second));
 
   get_callback_ =
-      base::BindOnce(RunGetCallback, std::move(callback), base::Passed(&entry));
+      base::BindOnce(RunGetCallback, std::move(callback), std::move(entry));
 }
 
 template <typename T>

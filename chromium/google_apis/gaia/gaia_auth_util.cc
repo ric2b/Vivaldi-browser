@@ -11,12 +11,10 @@
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "net/base/url_util.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
@@ -58,7 +56,7 @@ std::string CanonicalizeEmailImpl(const std::string& email_address,
 class GaiaURLRequestUserData : public base::SupportsUserData::Data {
  public:
   static std::unique_ptr<base::SupportsUserData::Data> Create() {
-    return base::MakeUnique<GaiaURLRequestUserData>();
+    return std::make_unique<GaiaURLRequestUserData>();
   }
 };
 
@@ -198,16 +196,6 @@ void MarkURLFetcherAsGaia(net::URLFetcher* fetcher) {
   DCHECK(fetcher);
   fetcher->SetURLRequestUserData(kURLRequestUserDataKey,
                                  base::Bind(&GaiaURLRequestUserData::Create));
-}
-
-bool ShouldSkipSavePasswordForGaiaURL(const GURL& url) {
-  if (!IsGaiaSignonRealm(url.GetOrigin()))
-    return false;
-
-  std::string should_skip_password;
-  if (!net::GetValueForKeyInQuery(url, "ssp", &should_skip_password))
-    return false;
-  return should_skip_password == "1";
 }
 
 }  // namespace gaia

@@ -4,16 +4,16 @@
 
 #include "net/socket/udp_client_socket.h"
 
+#include "build/build_config.h"
 #include "net/base/net_errors.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
 UDPClientSocket::UDPClientSocket(DatagramSocket::BindType bind_type,
-                                 const RandIntCallback& rand_int_cb,
                                  net::NetLog* net_log,
                                  const net::NetLogSource& source)
-    : socket_(bind_type, rand_int_cb, net_log, source),
+    : socket_(bind_type, net_log, source),
       network_(NetworkChangeNotifier::kInvalidNetworkHandle) {}
 
 UDPClientSocket::~UDPClientSocket() = default;
@@ -82,16 +82,39 @@ void UDPClientSocket::ApplySocketTag(const SocketTag& tag) {
 
 int UDPClientSocket::Read(IOBuffer* buf,
                           int buf_len,
-                          const CompletionCallback& callback) {
-  return socket_.Read(buf, buf_len, callback);
+                          CompletionOnceCallback callback) {
+  return socket_.Read(buf, buf_len, std::move(callback));
 }
 
 int UDPClientSocket::Write(
     IOBuffer* buf,
     int buf_len,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const NetworkTrafficAnnotationTag& traffic_annotation) {
-  return socket_.Write(buf, buf_len, callback, traffic_annotation);
+  return socket_.Write(buf, buf_len, std::move(callback), traffic_annotation);
+}
+
+int UDPClientSocket::WriteAsync(
+    const char* buffer,
+    size_t buf_len,
+    CompletionOnceCallback callback,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
+  DCHECK(WriteAsyncEnabled());
+  return socket_.WriteAsync(buffer, buf_len, std::move(callback),
+                            traffic_annotation);
+}
+
+int UDPClientSocket::WriteAsync(
+    DatagramBuffers buffers,
+    CompletionOnceCallback callback,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
+  DCHECK(WriteAsyncEnabled());
+  return socket_.WriteAsync(std::move(buffers), std::move(callback),
+                            traffic_annotation);
+}
+
+DatagramBuffers UDPClientSocket::GetUnwrittenBuffers() {
+  return socket_.GetUnwrittenBuffers();
 }
 
 void UDPClientSocket::Close() {
@@ -118,6 +141,10 @@ int UDPClientSocket::SetDoNotFragment() {
   return socket_.SetDoNotFragment();
 }
 
+void UDPClientSocket::SetMsgConfirm(bool confirm) {
+  socket_.SetMsgConfirm(confirm);
+}
+
 const NetLogWithSource& UDPClientSocket::NetLog() const {
   return socket_.NetLog();
 }
@@ -125,6 +152,36 @@ const NetLogWithSource& UDPClientSocket::NetLog() const {
 void UDPClientSocket::UseNonBlockingIO() {
 #if defined(OS_WIN)
   socket_.UseNonBlockingIO();
+#endif
+}
+
+void UDPClientSocket::SetWriteAsyncEnabled(bool enabled) {
+  socket_.SetWriteAsyncEnabled(enabled);
+}
+
+void UDPClientSocket::SetMaxPacketSize(size_t max_packet_size) {
+  socket_.SetMaxPacketSize(max_packet_size);
+}
+
+bool UDPClientSocket::WriteAsyncEnabled() {
+  return socket_.WriteAsyncEnabled();
+}
+
+void UDPClientSocket::SetWriteMultiCoreEnabled(bool enabled) {
+  socket_.SetWriteMultiCoreEnabled(enabled);
+}
+
+void UDPClientSocket::SetSendmmsgEnabled(bool enabled) {
+  socket_.SetSendmmsgEnabled(enabled);
+}
+
+void UDPClientSocket::SetWriteBatchingActive(bool active) {
+  socket_.SetWriteBatchingActive(active);
+}
+
+void UDPClientSocket::EnableRecvOptimization() {
+#if defined(OS_POSIX)
+  socket_.enable_experimental_recv_optimization();
 #endif
 }
 

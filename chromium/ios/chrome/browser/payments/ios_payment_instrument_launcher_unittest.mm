@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/base64.h"
-#include "base/ios/ios_util.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
@@ -75,7 +74,11 @@ class FakePaymentInstrumentDelegate : public PaymentInstrument::Delegate {
 class PaymentRequestIOSPaymentInstrumentLauncherTest : public PlatformTest {
  protected:
   PaymentRequestIOSPaymentInstrumentLauncherTest()
-      : chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {}
+      : chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {
+    test_personal_data_manager_.SetAutofillProfileEnabled(true);
+    test_personal_data_manager_.SetAutofillCreditCardEnabled(true);
+    test_personal_data_manager_.SetAutofillWalletImportEnabled(true);
+  }
 
   std::unique_ptr<base::DictionaryValue> SerializeMethodDataWrapper(
       const std::map<std::string, std::set<std::string>>&
@@ -90,6 +93,7 @@ class PaymentRequestIOSPaymentInstrumentLauncherTest : public PlatformTest {
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
 
+  autofill::TestPersonalDataManager test_personal_data_manager_;
   web::TestWebState web_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
 };
@@ -99,10 +103,9 @@ class PaymentRequestIOSPaymentInstrumentLauncherTest : public PlatformTest {
 TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        EmptyStringifiedMethodDataDictionary) {
   WebPaymentRequest web_payment_request;
-  autofill::TestPersonalDataManager personal_data_manager;
   TestPaymentRequest payment_request(web_payment_request,
                                      chrome_browser_state_.get(), &web_state_,
-                                     &personal_data_manager);
+                                     &test_personal_data_manager_);
 
   base::DictionaryValue expected_dict;
 
@@ -117,30 +120,34 @@ TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        PopulatedStringifiedMethodDataDictionary) {
   WebPaymentRequest web_payment_request;
   PaymentMethodData method_datum1;
-  method_datum1.supported_methods.push_back("https://jefpay.com");
-  method_datum1.supported_methods.push_back("https://bobpay.com");
+  method_datum1.supported_method = "https://jefpay.com";
+  PaymentMethodData method_datum2;
+  method_datum2.supported_method = "https://bobpay.com";
   std::unique_ptr<base::DictionaryValue> data =
       std::make_unique<base::DictionaryValue>();
   data->SetString("Some data", "Some stringified data");
   std::string stringified_data;
   base::JSONWriter::Write(*data, &stringified_data);
   method_datum1.data = stringified_data;
+  method_datum2.data = stringified_data;
   web_payment_request.method_data.push_back(method_datum1);
-  PaymentMethodData method_datum2;
-  method_datum2.supported_methods.push_back("https://alicepay.com");
   web_payment_request.method_data.push_back(method_datum2);
   PaymentMethodData method_datum3;
-  method_datum3.supported_methods.push_back("https://jefpay.com");
+  method_datum3.supported_method = "https://alicepay.com";
   web_payment_request.method_data.push_back(method_datum3);
   PaymentMethodData method_datum4;
-  method_datum4.supported_methods.push_back("https://alicepay.com");
-  method_datum4.supported_methods.push_back("https://bobpay.com");
+  method_datum4.supported_method = "https://jefpay.com";
   web_payment_request.method_data.push_back(method_datum4);
+  PaymentMethodData method_datum5;
+  method_datum5.supported_method = "https://alicepay.com";
+  PaymentMethodData method_datum6;
+  method_datum6.supported_method = "https://bobpay.com";
+  web_payment_request.method_data.push_back(method_datum5);
+  web_payment_request.method_data.push_back(method_datum6);
 
-  autofill::TestPersonalDataManager personal_data_manager;
   TestPaymentRequest payment_request(web_payment_request,
                                      chrome_browser_state_.get(), &web_state_,
-                                     &personal_data_manager);
+                                     &test_personal_data_manager_);
 
   base::DictionaryValue expected_dict;
   base::ListValue jef_data_list;
@@ -169,32 +176,29 @@ TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
 // OnInstrumentDetailsError() function of the delegate.
 TEST_F(PaymentRequestIOSPaymentInstrumentLauncherTest,
        LaunchIOSPaymentInstrument_MalformedUniversalLink) {
-  if (base::ios::IsRunningOnIOS10OrLater()) {
-    std::unique_ptr<web::TestNavigationManager> navigation_manager =
-        std::make_unique<web::TestNavigationManager>();
-    web_state_.SetNavigationManager(std::move(navigation_manager));
+  std::unique_ptr<web::TestNavigationManager> navigation_manager =
+      std::make_unique<web::TestNavigationManager>();
+  web_state_.SetNavigationManager(std::move(navigation_manager));
 
-    WebPaymentRequest web_payment_request =
-        payment_request_test_util::CreateTestWebPaymentRequest();
-    autofill::TestPersonalDataManager personal_data_manager;
-    TestPaymentRequest payment_request(web_payment_request,
-                                       chrome_browser_state_.get(), &web_state_,
-                                       &personal_data_manager);
+  WebPaymentRequest web_payment_request =
+      payment_request_test_util::CreateTestWebPaymentRequest();
+  TestPaymentRequest payment_request(web_payment_request,
+                                     chrome_browser_state_.get(), &web_state_,
+                                     &test_personal_data_manager_);
 
-    FakePaymentInstrumentDelegate instrument_delegate;
-    IOSPaymentInstrumentLauncher launcher;
+  FakePaymentInstrumentDelegate instrument_delegate;
+  IOSPaymentInstrumentLauncher launcher;
 
-    EXPECT_FALSE(instrument_delegate.WasOnInstrumentDetailsReadyCalled());
-    EXPECT_FALSE(instrument_delegate.WasOnInstrumentDetailsErrorCalled());
+  EXPECT_FALSE(instrument_delegate.WasOnInstrumentDetailsReadyCalled());
+  EXPECT_FALSE(instrument_delegate.WasOnInstrumentDetailsErrorCalled());
 
-    GURL malformed_link = GURL("http://bad-link.com");
-    launcher.LaunchIOSPaymentInstrument(&payment_request, &web_state_,
-                                        malformed_link, &instrument_delegate);
-    instrument_delegate.RunLoop();
+  GURL malformed_link = GURL("http://bad-link.com");
+  launcher.LaunchIOSPaymentInstrument(&payment_request, &web_state_,
+                                      malformed_link, &instrument_delegate);
+  instrument_delegate.RunLoop();
 
-    EXPECT_FALSE(instrument_delegate.WasOnInstrumentDetailsReadyCalled());
-    EXPECT_TRUE(instrument_delegate.WasOnInstrumentDetailsErrorCalled());
-  }
+  EXPECT_FALSE(instrument_delegate.WasOnInstrumentDetailsReadyCalled());
+  EXPECT_TRUE(instrument_delegate.WasOnInstrumentDetailsErrorCalled());
 }
 
 // Tests that if the response from the payment app is not a valid JSON

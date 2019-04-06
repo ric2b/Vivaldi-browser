@@ -13,7 +13,7 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/network/public/cpp/proxy_resolving_client_socket.h"
+#include "services/network/proxy_resolving_client_socket.h"
 
 namespace jingle_glue {
 
@@ -24,6 +24,8 @@ XmppClientSocketFactory::XmppClientSocketFactory(
     bool use_fake_ssl_client_socket)
     : client_socket_factory_(client_socket_factory),
       request_context_getter_(request_context_getter),
+      proxy_resolving_socket_factory_(
+          request_context_getter->GetURLRequestContext()),
       ssl_config_(ssl_config),
       use_fake_ssl_client_socket_(use_fake_ssl_client_socket) {
   CHECK(client_socket_factory_);
@@ -35,10 +37,8 @@ std::unique_ptr<net::StreamSocket>
 XmppClientSocketFactory::CreateTransportClientSocket(
     const net::HostPortPair& host_and_port) {
   // TODO(akalin): Use socket pools.
-  std::unique_ptr<net::StreamSocket> transport_socket(
-      new network::ProxyResolvingClientSocket(
-          nullptr, request_context_getter_, ssl_config_,
-          GURL("https://" + host_and_port.ToString())));
+  auto transport_socket = proxy_resolving_socket_factory_.CreateSocket(
+      GURL("https://" + host_and_port.ToString()), false /*use_tls*/);
   return (use_fake_ssl_client_socket_
               ? std::unique_ptr<net::StreamSocket>(
                     new FakeSSLClientSocket(std::move(transport_socket)))

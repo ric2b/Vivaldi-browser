@@ -8,20 +8,19 @@ if (is_android) {
 
 static_library("offline_pages_ui_adapter") {
   sources = [
-    "download_notifying_observer.cc",
-    "download_notifying_observer.h",
     "download_ui_adapter.cc",
     "download_ui_adapter.h",
     "offline_item_conversions.cc",
     "offline_item_conversions.h",
-    "offline_page_download_notifier.h",
   ]
 
   deps = [
     "//base",
     "//components/offline_items_collection/core",
     "//components/offline_pages/core",
+    "//components/offline_pages/core:switches",
     "//components/offline_pages/core/background:background_offliner",
+    "//ui/gfx",
     "//url",
   ]
 }
@@ -29,7 +28,6 @@ static_library("offline_pages_ui_adapter") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "download_notifying_observer_unittest.cc",
     "download_ui_adapter_unittest.cc",
     "offline_item_conversions_unittest.cc",
   ]
@@ -39,10 +37,14 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/offline_items_collection/core",
+    "//components/offline_items_collection/core/test_support",
     "//components/offline_pages/core",
+    "//components/offline_pages/core:switches",
     "//components/offline_pages/core:test_support",
     "//components/offline_pages/core/background:background_offliner",
     "//components/offline_pages/core/background:test_support",
+    "//testing/gmock",
     "//testing/gtest",
+    "//ui/gfx:test_support",
   ]
 }

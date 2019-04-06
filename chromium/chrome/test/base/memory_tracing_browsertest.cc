@@ -4,7 +4,7 @@
 
 #include "chrome/test/base/tracing.h"
 
-#include "base/allocator/features.h"
+#include "base/allocator/buildflags.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/run_loop.h"
@@ -18,7 +18,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -59,12 +58,10 @@ class MemoryTracingBrowserTest : public InProcessBrowserTest {
   // event in RenderFrameImpl::OnJavaScriptExecuteRequestForTests (from the
   // renderer process).
   void ExecuteJavascriptOnCurrentTab() {
-    content::RenderViewHost* rvh = browser()
-                                       ->tab_strip_model()
-                                       ->GetActiveWebContents()
-                                       ->GetRenderViewHost();
-    ASSERT_TRUE(rvh);
-    ASSERT_TRUE(content::ExecuteScript(rvh, ";"));
+    content::WebContents* wc =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    ASSERT_TRUE(wc);
+    ASSERT_TRUE(content::ExecuteScript(wc, ";"));
   }
 
   void PerformDumpMemoryTestActions(
@@ -114,7 +111,13 @@ class MemoryTracingBrowserTest : public InProcessBrowserTest {
   bool should_test_memory_dump_success_;
 };
 
-IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest, TestMemoryInfra) {
+// TODO(crbug.com/806988): Disabled due to excessive output on lsan bots.
+#if defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
+#define MAYBE_TestMemoryInfra DISABLED_TestMemoryInfra
+#else
+#define MAYBE_TestMemoryInfra TestMemoryInfra
+#endif
+IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest, MAYBE_TestMemoryInfra) {
   // TODO(ssid): Test for dump success once the on start tracing done callback
   // is fixed to be called after enable tracing is acked by all processes,
   // crbug.com/709524. The test still tests if dumping does not crash.
@@ -127,7 +130,14 @@ IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest, TestMemoryInfra) {
       base::trace_event::MemoryDumpLevelOfDetail::DETAILED, &json_events);
 }
 
-IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest, TestBackgroundMemoryInfra) {
+// crbug.com/808152: This test is flakily failing on LSAN.
+#if defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
+#define MAYBE_TestBackgroundMemoryInfra DISABLED_TestBackgroundMemoryInfra
+#else
+#define MAYBE_TestBackgroundMemoryInfra TestBackgroundMemoryInfra
+#endif
+IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest,
+                       MAYBE_TestBackgroundMemoryInfra) {
   // TODO(ssid): Test for dump success once the on start tracing done callback
   // is fixed to be called after enable tracing is acked by all processes,
   // crbug.com/709524. The test still tests if dumping does not crash.
@@ -139,49 +149,5 @@ IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest, TestBackgroundMemoryInfra) {
               GetTraceConfig_BackgroundTrigger(200)),
       base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND, &json_events);
 }
-
-#if BUILDFLAG(USE_ALLOCATOR_SHIM) && !defined(OS_NACL)
-IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest, TestHeapProfilingPseudo) {
-  should_test_memory_dump_success_ = true;
-  // TODO(ssid): Enable heap profiling on all processes once the
-  // memory_instrumentation api is available, crbug.com/757747.
-  base::trace_event::MemoryDumpManager::GetInstance()->EnableHeapProfiling(
-      base::trace_event::kHeapProfilingModePseudo);
-  std::string json_events;
-  PerformDumpMemoryTestActions(
-      base::trace_event::TraceConfig(
-          base::trace_event::TraceConfigMemoryTestUtil::
-              GetTraceConfig_PeriodicTriggers(100, 500)),
-      base::trace_event::MemoryDumpLevelOfDetail::DETAILED, &json_events);
-  EXPECT_NE(std::string::npos, json_events.find("stackFrames"));
-  // TODO(ssid): Fix mac and win to get thread names in the allocation context,
-  // crbug.com/764454.
-  EXPECT_NE(std::string::npos, json_events.find("[Thread:"));
-  EXPECT_NE(std::string::npos, json_events.find("MessageLoop::RunTask"));
-  EXPECT_NE(std::string::npos, json_events.find("typeNames"));
-  EXPECT_NE(std::string::npos, json_events.find("content/browser"));
-  EXPECT_NE(std::string::npos, json_events.find("\"malloc\":{\"entries\""));
-}
-
-IN_PROC_BROWSER_TEST_F(MemoryTracingBrowserTest, TestHeapProfilingNoStack) {
-  should_test_memory_dump_success_ = true;
-  // TODO(ssid): Enable heap profiling on all processes once the
-  // memory_instrumentation api is available, crbug.com/757747.
-  base::trace_event::MemoryDumpManager::GetInstance()->EnableHeapProfiling(
-      base::trace_event::kHeapProfilingModeBackground);
-  std::string json_events;
-  PerformDumpMemoryTestActions(
-      base::trace_event::TraceConfig(
-          base::trace_event::TraceConfigMemoryTestUtil::
-              GetTraceConfig_BackgroundTrigger(200)),
-      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND, &json_events);
-  EXPECT_NE(std::string::npos, json_events.find("stackFrames"));
-  EXPECT_NE(std::string::npos, json_events.find("[Thread:"));
-  EXPECT_EQ(std::string::npos, json_events.find("MessageLoop::RunTask"));
-  EXPECT_NE(std::string::npos, json_events.find("typeNames"));
-  EXPECT_NE(std::string::npos, json_events.find("content/browser"));
-  EXPECT_NE(std::string::npos, json_events.find("\"malloc\":{\"entries\""));
-}
-#endif  // BUILDFLAG(USE_ALLOCATOR_SHIM) && !defined(OS_NACL)
 
 }  // namespace

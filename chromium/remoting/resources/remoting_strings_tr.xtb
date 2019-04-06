@@ -3,9 +3,6 @@
 <translationbundle lang="tr">
 <translation id="1002108253973310084">Uyumsuz bir protokol sürümü algılandı. Lütfen her iki bilgisayara da yazılımın en son sürümünü yüklediğinizden emin olun ve tekrar deneyin.</translation>
 <translation id="1050693411695664090">Kötü</translation>
-<translation id="1059802506829356230">• Görünüm ve tarz yenilendi.
-• Performans, yanıt verme hızı ve güvenilirlik iyileştirildi.
-• Windows veya Linux bilgisayarlardan ses çalma desteği getirildi.</translation>
 <translation id="1152528166145813711">Seç...</translation>
 <translation id="1199593201721843963">Uzaktan bağlantıları devre dışı bırak</translation>
 <translation id="1291443878853470558">Bu bilgisayara erişmek için Chromoting'i kullanmak istiyorsanız uzaktan bağlantıları etkinleştirmelisiniz.</translation>
@@ -143,10 +140,12 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="4145029455188493639"><ph name="EMAIL_ADDRESS" /> olarak oturum açtınız.</translation>
 <translation id="4155497795971509630">Bazı gerekli bileşenler eksik. Lütfen yazılımın en son sürümünü yüklediğinizden emin olun ve tekrar deneyin.</translation>
 <translation id="4156740505453712750">Bu bilgisayara erişimi korumak için lütfen <ph name="BOLD_START" />en az altı basamaklı<ph name="BOLD_END" /> bir PIN seçin. Başka bir yerden bağlanırken bu PIN gerekecektir.</translation>
+<translation id="4169432154993690151">Profil resmi seçmek için Chrome Uzaktan Masaüstü'nün kameranıza erişmesine izin verin</translation>
 <translation id="4176825807642096119">Erişim kodu</translation>
 <translation id="4207623512727273241">Devam etmeden önce lütfen yükleyiciyi çalıştırın.</translation>
 <translation id="4227991223508142681">Ana Makine Temel Hazırlık Yardımcı Programı</translation>
 <translation id="4240294130679914010">Chromoting Ana Makine Yüklemesini Kaldırma Programı</translation>
+<translation id="4249741460382919890">Genel düzeltmeler ve kararlılıkla ilgili iyileştirmeler</translation>
 <translation id="4277463233460010382">Bu bilgisayar PIN girmeden bir veya daha fazla istemcinin bağlanmasına izin verecek şekilde yapılandırılmıştır.</translation>
 <translation id="4277736576214464567">Erişim kodu geçersiz. Lütfen tekrar deneyin.</translation>
 <translation id="4361728918881830843">Başka bir bilgisayara uzaktan bağlantıları etkinleştirmek için Chrome Uzaktan Masaüstü'nü o bilgisayara yükleyin ve “<ph name="BUTTON_NAME" />” düğmesini tıklayın.</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (çevrimdışı)</translation>
 <translation id="5070121137485264635">Uzak ana makine üçüncü taraf bir web sitesine kimlik doğrulama işlemi yapmanızı gerektiriyor. Devam etmek üzere şu adrese erişim için Chrome Uzaktan Masaüstü'ne ek izinler vermelisiniz:</translation>
 <translation id="507204348399810022"><ph name="HOSTNAME" /> adlı ana bilgisayara uzaktan bağlantıları devre dışı bırakmak istediğinizden emin misiniz?</translation>
+<translation id="5081343395220691640">Sunucuyla iletişim kurulamadı: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Lütfen her iki kutuya da aynı PIN'i girin.</translation>
 <translation id="5170982930780719864">Ana makine kimliği geçersiz.</translation>
 <translation id="518094545883702183">Bu bilgi yalnızca bildirdiğiniz sorunun teşhisi için kullanılır, yalnızca raporunuzu araştıran kişi tarafından görülebilir ve en fazla 30 gün tutulur.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Başka bir şey.</translation>
 <translation id="6398765197997659313">Tam ekrandan çık</translation>
 <translation id="6441316101718669559">Masaüstü entegrasyonu bu platformda desteklenmiyor. Uygulamayı kullanmaya devam edebilirsiniz, ancak kullanıcı deneyimi olumsuz etkilenecektir.</translation>
+<translation id="6502629188777329097">Bilgisayarınıza güvenle erişin</translation>
 <translation id="652218476070540101">Bu bilgisayarın PIN'i güncelleniyor…</translation>
 <translation id="6527303717912515753">Paylaş</translation>
 <translation id="6541219117979389420">Uygulama günlükleri, kimliğiniz (e-posta adresi) ve Google Drive'daki dosyalarla klasörlerin adları ve özellikleri dahil olmak üzere, bazı gizli bilgiler içerebilir.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">Nereden</translation>
 <translation id="677755392401385740">Ana makine bu kullanıcı için başlatıldı: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Görüntüle/düzenle</translation>
+<translation id="6913710942997637770">Profil resmi seçmek için Chrome Uzaktan Masaüstü'nün fotoğraflarınıza erişmesine izin verin</translation>
 <translation id="6930242544192836755">Süre</translation>
 <translation id="6939719207673461467">Klavyeyi göster/gizle</translation>
 <translation id="6944854424004126054">Pencereyi geri yükle</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Bu bilgisayara uzaktan bağlantılar devre dışı bırakıldı.</translation>
 <translation id="7678209621226490279">Sola Yerleştir</translation>
 <translation id="7693372326588366043">Ana makine listesini yenile</translation>
+<translation id="7714222945760997814">Bunu bildir</translation>
 <translation id="7782471917492991422">Lütfen bilgisayarınızın güç yönetimi ayarlarını kontrol edin ve boşta kaldığında uyku moduna geçecek şekilde ayarlanmadığından emin olun.</translation>
 <translation id="7810127880729796595">İstatistikleri göster (bağlantı: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Bazı gerekli bileşenler eksik. Lütfen Google Chrome'un son sürümünü çalıştırdığınızdan emin olun ve tekrar deneyin.</translation>

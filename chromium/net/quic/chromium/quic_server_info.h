@@ -12,9 +12,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "net/base/completion_callback.h"
-#include "net/quic/core/quic_server_id.h"
-#include "net/quic/platform/api/quic_export.h"
+#include "net/third_party/quic/core/quic_server_id.h"
+#include "net/third_party/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -42,7 +41,7 @@ class QUIC_EXPORT_PRIVATE QuicServerInfo {
     NUM_OF_FAILURES = 12,
   };
 
-  explicit QuicServerInfo(const QuicServerId& server_id);
+  explicit QuicServerInfo(const quic::QuicServerId& server_id);
   virtual ~QuicServerInfo();
 
   // Fetches the server config from the backing store, and returns true
@@ -90,7 +89,7 @@ class QUIC_EXPORT_PRIVATE QuicServerInfo {
 
   // This is the QUIC server (hostname, port, is_https, privacy_mode) tuple for
   // which we restore the crypto_config.
-  const QuicServerId server_id_;
+  const quic::QuicServerId server_id_;
 
  private:
   // ParseInner is a helper function for Parse.

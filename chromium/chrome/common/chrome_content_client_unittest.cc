@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_command_line.h"
@@ -15,7 +14,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
 #include "extensions/common/constants.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -118,7 +117,7 @@ TEST(ChromeContentClientTest, FindMostRecent) {
   // Now test the vector with one element.
   content::PepperPluginInfo info;
   info.version = "1.0.0.0";
-  version_vector.push_back(base::MakeUnique<content::PepperPluginInfo>(info));
+  version_vector.push_back(std::make_unique<content::PepperPluginInfo>(info));
 
   content::PepperPluginInfo* most_recent =
       ChromeContentClient::FindMostRecentPlugin(version_vector);
@@ -133,11 +132,11 @@ TEST(ChromeContentClientTest, FindMostRecent) {
 
   // Test highest version is picked.
   version_vector.clear();
-  version_vector.push_back(base::MakeUnique<content::PepperPluginInfo>(info5));
+  version_vector.push_back(std::make_unique<content::PepperPluginInfo>(info5));
   version_vector.push_back(
-      base::MakeUnique<content::PepperPluginInfo>(info6_12));
+      std::make_unique<content::PepperPluginInfo>(info6_12));
   version_vector.push_back(
-      base::MakeUnique<content::PepperPluginInfo>(info6_13));
+      std::make_unique<content::PepperPluginInfo>(info6_13));
 
   most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
   EXPECT_EQ("6.0.0.13", most_recent->version);
@@ -145,10 +144,10 @@ TEST(ChromeContentClientTest, FindMostRecent) {
   // Test that order does not matter, validates tests below.
   version_vector.clear();
   version_vector.push_back(
-      base::MakeUnique<content::PepperPluginInfo>(info6_13));
+      std::make_unique<content::PepperPluginInfo>(info6_13));
   version_vector.push_back(
-      base::MakeUnique<content::PepperPluginInfo>(info6_12));
-  version_vector.push_back(base::MakeUnique<content::PepperPluginInfo>(info5));
+      std::make_unique<content::PepperPluginInfo>(info6_12));
+  version_vector.push_back(std::make_unique<content::PepperPluginInfo>(info5));
 
   most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
   EXPECT_EQ("6.0.0.13", most_recent->version);
@@ -169,9 +168,9 @@ TEST(ChromeContentClientTest, FindMostRecent) {
   // 2. Component update.
   version_vector.clear();
   version_vector.push_back(
-      base::MakeUnique<content::PepperPluginInfo>(system_flash));
+      std::make_unique<content::PepperPluginInfo>(system_flash));
   version_vector.push_back(
-      base::MakeUnique<content::PepperPluginInfo>(component_flash));
+      std::make_unique<content::PepperPluginInfo>(component_flash));
   most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
   EXPECT_STREQ("system_flash", most_recent->name.c_str());
 }
@@ -203,23 +202,22 @@ class OriginTrialInitializationTestThread
   // Static helper which can also be called from the main thread.
   static void AccessPolicy(
       ChromeContentClient* content_client,
-      std::vector<content::OriginTrialPolicy*>* policy_objects) {
+      std::vector<blink::OriginTrialPolicy*>* policy_objects) {
     // Repeatedly access the lazily-created origin trial policy
     for (int i = 0; i < 20; i++) {
-      content::OriginTrialPolicy* policy =
-          content_client->GetOriginTrialPolicy();
+      blink::OriginTrialPolicy* policy = content_client->GetOriginTrialPolicy();
       policy_objects->push_back(policy);
       base::PlatformThread::YieldCurrentThread();
     }
   }
 
-  const std::vector<content::OriginTrialPolicy*>* policy_objects() const {
+  const std::vector<blink::OriginTrialPolicy*>* policy_objects() const {
     return &policy_objects_;
   }
 
  private:
   ChromeContentClient* chrome_client_;
-  std::vector<content::OriginTrialPolicy*> policy_objects_;
+  std::vector<blink::OriginTrialPolicy*> policy_objects_;
 
   DISALLOW_COPY_AND_ASSIGN(OriginTrialInitializationTestThread);
 };
@@ -229,7 +227,7 @@ class OriginTrialInitializationTestThread
 // race prevention is no longer sufficient.
 TEST(ChromeContentClientTest, OriginTrialPolicyConcurrentInitialization) {
   ChromeContentClient content_client;
-  std::vector<content::OriginTrialPolicy*> policy_objects;
+  std::vector<blink::OriginTrialPolicy*> policy_objects;
   OriginTrialInitializationTestThread thread(&content_client);
   base::PlatformThreadHandle handle;
 
@@ -243,16 +241,16 @@ TEST(ChromeContentClientTest, OriginTrialPolicyConcurrentInitialization) {
 
   ASSERT_EQ(20UL, policy_objects.size());
 
-  content::OriginTrialPolicy* first_policy = policy_objects[0];
+  blink::OriginTrialPolicy* first_policy = policy_objects[0];
 
-  const std::vector<content::OriginTrialPolicy*>* all_policy_objects[] = {
+  const std::vector<blink::OriginTrialPolicy*>* all_policy_objects[] = {
       &policy_objects, thread.policy_objects(),
   };
 
-  for (const std::vector<content::OriginTrialPolicy*>* thread_policy_objects :
+  for (const std::vector<blink::OriginTrialPolicy*>* thread_policy_objects :
        all_policy_objects) {
     EXPECT_GE(20UL, thread_policy_objects->size());
-    for (content::OriginTrialPolicy* policy : *(thread_policy_objects)) {
+    for (blink::OriginTrialPolicy* policy : *(thread_policy_objects)) {
       EXPECT_EQ(first_policy, policy);
     }
   }

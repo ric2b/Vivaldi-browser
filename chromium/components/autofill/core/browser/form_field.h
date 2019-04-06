@@ -37,23 +37,24 @@ class FormField {
   // A bit-field used for matching specific parts of a field in question.
   enum MatchType {
     // Attributes.
-    MATCH_LABEL      = 1 << 0,
-    MATCH_NAME       = 1 << 1,
+    MATCH_LABEL = 1 << 0,
+    MATCH_NAME = 1 << 1,
 
     // Input types.
-    MATCH_TEXT       = 1 << 2,
-    MATCH_EMAIL      = 1 << 3,
-    MATCH_TELEPHONE  = 1 << 4,
-    MATCH_SELECT     = 1 << 5,
-    MATCH_TEXT_AREA  = 1 << 6,
-    MATCH_PASSWORD   = 1 << 7,
-    MATCH_NUMBER     = 1 << 8,
-    MATCH_ALL_INPUTS =
-        MATCH_TEXT | MATCH_EMAIL | MATCH_TELEPHONE | MATCH_SELECT |
-        MATCH_TEXT_AREA | MATCH_PASSWORD | MATCH_NUMBER,
+    MATCH_TEXT = 1 << 2,
+    MATCH_EMAIL = 1 << 3,
+    MATCH_TELEPHONE = 1 << 4,
+    MATCH_SELECT = 1 << 5,
+    MATCH_TEXT_AREA = 1 << 6,
+    MATCH_PASSWORD = 1 << 7,
+    MATCH_NUMBER = 1 << 8,
+    MATCH_SEARCH = 1 << 9,
+    MATCH_ALL_INPUTS = MATCH_TEXT | MATCH_EMAIL | MATCH_TELEPHONE |
+                       MATCH_SELECT | MATCH_TEXT_AREA | MATCH_PASSWORD |
+                       MATCH_NUMBER,
 
     // By default match label and name for input/text types.
-    MATCH_DEFAULT    = MATCH_LABEL | MATCH_NAME | MATCH_TEXT,
+    MATCH_DEFAULT = MATCH_LABEL | MATCH_NAME | MATCH_TEXT,
   };
 
   // Initial values assigned to FieldCandidates by their corresponding parsers.
@@ -62,6 +63,7 @@ class FormField {
   static const float kBaseAddressParserScore;
   static const float kBaseCreditCardParserScore;
   static const float kBaseNameParserScore;
+  static const float kBaseSearchParserScore;
 
   // Only derived classes may instantiate.
   FormField() {}
@@ -74,9 +76,9 @@ class FormField {
 
   // Parses the stream of fields in |scanner| with regular expression |pattern|
   // as specified in the |match_type| bit field (see |MatchType|).  If |match|
-  // is non-NULL and the pattern matches, the matched field is returned.
-  // A |true| result is returned in the case of a successful match, false
-  // otherwise.
+  // is non-NULL and the pattern matches, |match| will be set to the matched
+  // field, and the scanner would advance by one step. A |true| result is
+  // returned in the case of a successful match, false otherwise.
   static bool ParseFieldSpecifics(AutofillScanner* scanner,
                                   const base::string16& pattern,
                                   int match_type,

@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/components/quick_launch/public/mojom/constants.mojom.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
-#include "mash/quick_launch/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/service_test.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/window_server_test.mojom.h"
@@ -14,14 +14,14 @@
 
 namespace ash {
 
-void RunCallback(bool* success, const base::Closure& callback, bool result) {
+void RunCallback(bool* success, base::RepeatingClosure callback, bool result) {
   *success = result;
-  callback.Run();
+  std::move(callback).Run();
 }
 
 class AppLaunchTest : public service_manager::test::ServiceTest {
  public:
-  AppLaunchTest() : ServiceTest("mash_unittests") {}
+  AppLaunchTest() : ServiceTest("ash_unittests") {}
   ~AppLaunchTest() override = default;
 
  private:
@@ -35,9 +35,10 @@ class AppLaunchTest : public service_manager::test::ServiceTest {
   DISALLOW_COPY_AND_ASSIGN(AppLaunchTest);
 };
 
-TEST_F(AppLaunchTest, TestQuickLaunch) {
+// TODO(sky): reenable this once it is actually uses ash with ws2.
+TEST_F(AppLaunchTest, DISABLED_TestQuickLaunch) {
   connector()->StartService(mojom::kServiceName);
-  connector()->StartService(mash::quick_launch::mojom::kServiceName);
+  connector()->StartService(quick_launch::mojom::kServiceName);
 
   ui::mojom::WindowServerTestPtr test_interface;
   connector()->BindInterface(ui::mojom::kServiceName, &test_interface);
@@ -45,8 +46,8 @@ TEST_F(AppLaunchTest, TestQuickLaunch) {
   base::RunLoop run_loop;
   bool success = false;
   test_interface->EnsureClientHasDrawnWindow(
-      mash::quick_launch::mojom::kServiceName,
-      base::Bind(&RunCallback, &success, run_loop.QuitClosure()));
+      quick_launch::mojom::kServiceName,
+      base::BindOnce(&RunCallback, &success, run_loop.QuitClosure()));
   run_loop.Run();
   EXPECT_TRUE(success);
 }

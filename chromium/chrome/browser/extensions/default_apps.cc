@@ -24,8 +24,6 @@
 #include "components/version_info/version_info.h"
 #include "extensions/common/extension.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace {
 
 // Returns true if the app was a default app in Chrome 22
@@ -69,10 +67,6 @@ bool Provider::ShouldInstallInProfile() {
   //   usually set in the master_preferences file.
   bool install_apps =
       profile_->GetPrefs()->GetString(prefs::kDefaultApps) == "install";
-
-  if (vivaldi::IsVivaldiRunning()){
-    install_apps = false;
-  }
 
   InstallState state =
       static_cast<InstallState>(profile_->GetPrefs()->GetInteger(

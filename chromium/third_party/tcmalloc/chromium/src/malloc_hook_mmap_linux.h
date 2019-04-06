@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -40,32 +41,10 @@
 #endif
 
 #include <unistd.h>
-#if defined(__ANDROID__)
-#include <sys/syscall.h>
-#include <sys/linux-syscalls.h>
-#else
 #include <syscall.h>
-#endif
 #include <sys/mman.h>
 #include <errno.h>
 #include "base/linux_syscall_support.h"
-
-// SYS_mmap2, SYS_munmap, SYS_mremap and __off64_t are not defined in Android.
-#if defined(__ANDROID__)
-#if defined(__NR_mmap) && !defined(SYS_mmap)
-#define SYS_mmap __NR_mmap
-#endif
-#ifndef SYS_mmap2
-#define SYS_mmap2 __NR_mmap2
-#endif
-#ifndef SYS_munmap
-#define SYS_munmap __NR_munmap
-#endif
-#ifndef SYS_mremap
-#define SYS_mremap __NR_mremap
-#endif
-typedef off64_t __off64_t;
-#endif  // defined(__ANDROID__)
 
 // The x86-32 case and the x86-64 case differ:
 // 32b has a mmap2() syscall, 64b does not.
@@ -73,14 +52,16 @@ typedef off64_t __off64_t;
 
 // I test for 64-bit first so I don't have to do things like
 // '#if (defined(__mips__) && !defined(__MIPS64__))' as a mips32 check.
-#if defined(__x86_64__) || defined(__PPC64__) || (defined(_MIPS_SIM) && _MIPS_SIM == _ABI64)
+#if defined(__x86_64__) \
+    || defined(__PPC64__) \
+    || defined(__aarch64__) \
+    || (defined(_MIPS_SIM) && (_MIPS_SIM == _ABI64 || _MIPS_SIM == _ABIN32)) \
+    || defined(__s390__)
 
 static inline void* do_mmap64(void *start, size_t length,
                               int prot, int flags,
                               int fd, __off64_t offset) __THROW {
-  // The original gperftools uses sys_mmap() here.  But, it is not allowed by
-  // Chromium's sandbox.
-  return (void *)syscall(SYS_mmap, start, length, prot, flags, fd, offset);
+  return sys_mmap(start, length, prot, flags, fd, offset);
 }
 
 #define MALLOC_HOOK_HAVE_DO_MMAP64 1
@@ -128,7 +109,7 @@ static inline void* do_mmap64(void *start, size_t length,
     // Fall back to old 32-bit offset mmap() call
     // Old syscall interface cannot handle six args, so pass in an array
     int32 args[6] = { (int32) start, (int32) length, prot, flags, fd,
-                      (off_t) offset };
+                      (int32)(off_t) offset };
     result = (void *)syscall(SYS_mmap, args);
   }
 #else
@@ -171,10 +152,8 @@ extern "C" {
   void* mremap(void* old_addr, size_t old_size, size_t new_size,
                int flags, ...) __THROW
     ATTRIBUTE_SECTION(malloc_hook);
-#if !defined(__ANDROID__)
-  void* sbrk(ptrdiff_t increment) __THROW
+  void* sbrk(intptr_t increment) __THROW
     ATTRIBUTE_SECTION(malloc_hook);
-#endif
 }
 
 extern "C" void* mmap64(void *start, size_t length, int prot, int flags,
@@ -210,9 +189,7 @@ extern "C" int munmap(void* start, size_t length) __THROW {
   MallocHook::InvokeMunmapHook(start, length);
   int result;
   if (!MallocHook::InvokeMunmapReplacement(start, length, &result)) {
-    // The original gperftools uses sys_munmap() here.  But, it is not allowed
-    // by Chromium's sandbox.
-    result = syscall(SYS_munmap, start, length);
+    result = sys_munmap(start, length);
   }
   return result;
 }
@@ -223,27 +200,24 @@ extern "C" void* mremap(void* old_addr, size_t old_size, size_t new_size,
   va_start(ap, flags);
   void *new_address = va_arg(ap, void *);
   va_end(ap);
-  // The original gperftools uses sys_mremap() here.  But, it is not allowed by
-  // Chromium's sandbox.
-  void* result = (void *)syscall(
-      SYS_mremap, old_addr, old_size, new_size, flags, new_address);
+  void* result = sys_mremap(old_addr, old_size, new_size, flags, new_address);
   MallocHook::InvokeMremapHook(result, old_addr, old_size, new_size, flags,
                                new_address);
   return result;
 }
 
-// Don't hook sbrk() in Android, since it doesn't expose __sbrk.
-#if !defined(__ANDROID__)
+#ifndef __UCLIBC__
 // libc's version:
-extern "C" void* __sbrk(ptrdiff_t increment);
+extern "C" void* __sbrk(intptr_t increment);
 
-extern "C" void* sbrk(ptrdiff_t increment) __THROW {
+extern "C" void* sbrk(intptr_t increment) __THROW {
   MallocHook::InvokePreSbrkHook(increment);
   void *result = __sbrk(increment);
   MallocHook::InvokeSbrkHook(result, increment);
   return result;
 }
-#endif  // !defined(__ANDROID__)
+
+#endif
 
 /*static*/void* MallocHook::UnhookedMMap(void *start, size_t length, int prot,
                                          int flags, int fd, off_t offset) {

@@ -28,7 +28,7 @@
 #include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/icon_manager.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/font_list.h"
@@ -38,10 +38,6 @@
 
 class DownloadShelfView;
 class DownloadShelfContextMenuView;
-
-namespace extensions {
-class ExperienceSamplingEvent;
-}
 
 namespace gfx {
 class Image;
@@ -65,10 +61,12 @@ class ViewHierarchyChangedDetails;
 class DownloadItemView : public views::InkDropHostView,
                          public views::ButtonListener,
                          public views::ContextMenuController,
-                         public content::DownloadItem::Observer,
+                         public download::DownloadItem::Observer,
                          public gfx::AnimationDelegate {
  public:
-  DownloadItemView(content::DownloadItem* download, DownloadShelfView* parent);
+  DownloadItemView(download::DownloadItem* download,
+                   DownloadShelfView* parent,
+                   views::View* accessible_alert);
   ~DownloadItemView() override;
 
   // Timer callback for handling animations
@@ -82,7 +80,7 @@ class DownloadItemView : public views::InkDropHostView,
   void OnExtractIconComplete(gfx::Image* icon);
 
   // Returns the DownloadItem model object belonging to this item.
-  content::DownloadItem* download() { return model_.download(); }
+  download::DownloadItem* download() { return model_.download(); }
 
   // Submits download to download feedback service if the user has approved and
   // the download is suitable for submission, then apply |download_command|.
@@ -90,10 +88,10 @@ class DownloadItemView : public views::InkDropHostView,
   void MaybeSubmitDownloadToFeedbackService(
       DownloadCommands::Command download_command);
 
-  // content::DownloadItem::Observer:
-  void OnDownloadUpdated(content::DownloadItem* download) override;
-  void OnDownloadOpened(content::DownloadItem* download) override;
-  void OnDownloadDestroyed(content::DownloadItem* download) override;
+  // download::DownloadItem::Observer:
+  void OnDownloadUpdated(download::DownloadItem* download) override;
+  void OnDownloadOpened(download::DownloadItem* download) override;
+  void OnDownloadDestroyed(download::DownloadItem* download) override;
 
   // views::View:
   void Layout() override;
@@ -149,6 +147,43 @@ class DownloadItemView : public views::InkDropHostView,
     DANGEROUS_MODE,   // Displaying the dangerous download warning.
     MALICIOUS_MODE    // Displaying the malicious download warning.
   };
+
+  static constexpr int kTextWidth = 140;
+
+  // Vertical padding between filename and status text.
+  static constexpr int kVerticalTextPadding = 1;
+
+  static constexpr int kTooltipMaxWidth = 800;
+
+  // Padding before the icon and at end of the item.
+  static constexpr int kStartPadding = 12;
+  static constexpr int kEndPadding = 6;
+
+  // Horizontal padding between progress indicator and filename/status text.
+  static constexpr int kProgressTextPadding = 8;
+
+  // The space between the Save and Discard buttons when prompting for a
+  // dangerous download.
+  static constexpr int kSaveDiscardButtonPadding = 5;
+
+  // The touchable space around the dropdown button's icon.
+  static constexpr int kDropdownBorderWidth = 10;
+
+  // The space on the right side of the dangerous download label.
+  static constexpr int kLabelPadding = 8;
+
+  // Height/width of the warning icon, also in dp.
+  static constexpr int kWarningIconSize = 24;
+
+  // How long the 'download complete' animation should last for.
+  static constexpr int kCompleteAnimationDurationMs = 2500;
+
+  // How long the 'download interrupted' animation should last for.
+  static constexpr int kInterruptedAnimationDurationMs = 2500;
+
+  // How long we keep the item disabled after the user clicked it to open the
+  // downloaded item.
+  static constexpr int kDisabledOnOpenDuration = 3000;
 
   void OpenDownload();
 
@@ -241,8 +276,23 @@ class DownloadItemView : public views::InkDropHostView,
 
   // Update the accessible name to reflect the current state of the control,
   // so that screenreaders can access the filename, status text, and
-  // dangerous download warning message (if any).
+  // dangerous download warning message (if any). The name will be presented
+  // when the download item receives focus.
   void UpdateAccessibleName();
+
+  // Update accessible status text.
+  // If |is_last_update| is false, then a timer is used to notify screen readers
+  // to speak the alert text on a regular interval. If |is_last_update| is true,
+  // then the screen reader is notified of the request to speak the alert
+  // immediately, and any running timer is ended.
+  void UpdateAccessibleAlert(const base::string16& alert, bool is_last_update);
+
+  // Get the accessible alert text for a download that is currently in progress.
+  base::string16 GetInProgressAccessibleAlertText();
+
+  // Callback for |accessible_update_timer_|, or can be used to ask a screen
+  // reader to speak the current alert immediately.
+  void AnnounceAccessibleAlert();
 
   // Show/Hide/Reset |animation| based on the state transition specified by
   // |from| and |to|.
@@ -337,14 +387,21 @@ class DownloadItemView : public views::InkDropHostView,
   // The name of this view as reported to assistive technology.
   base::string16 accessible_name_;
 
+  // A hidden view for accessible status alerts, that are spoken by screen
+  // readers when a download changes state.
+  views::View* accessible_alert_;
+
+  // A timer for accessible alerts that helps reduce the number of similar
+  // messages spoken in a short period of time.
+  base::RepeatingTimer accessible_alert_timer_;
+
+  // Force the reading of the current alert text the next time it updates.
+  bool announce_accessible_alert_soon_;
+
   // The icon loaded in the download shelf is based on the file path of the
   // item.  Store the path used, so that we can detect a change in the path
   // and reload the icon.
   base::FilePath last_download_item_path_;
-
-  // ExperienceSampling: This tracks dangerous/malicious downloads warning UI
-  // and the user's decisions about it.
-  std::unique_ptr<extensions::ExperienceSamplingEvent> sampling_event_;
 
   // Method factory used to delay reenabling of the item when opening the
   // downloaded file.

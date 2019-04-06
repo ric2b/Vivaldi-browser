@@ -27,8 +27,6 @@
 #include "chrome/common/web_application_info.h"
 #include "components/favicon/core/favicon_service.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/utility_process_host.h"
-#include "content/public/browser/utility_process_host_client.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/api/management/management_api.h"
@@ -96,20 +94,33 @@ class ManagementUninstallFunctionUninstallDialogDelegate
     extension_uninstall_dialog_.reset(
         extensions::ExtensionUninstallDialog::Create(
             details.GetProfile(), details.GetNativeWindowForUI(), this));
-    extensions::UninstallSource source =
-        function->source_context_type() == extensions::Feature::WEBUI_CONTEXT
-            ? extensions::UNINSTALL_SOURCE_CHROME_EXTENSIONS_PAGE
-            : extensions::UNINSTALL_SOURCE_EXTENSION;
+    bool uninstall_from_webstore =
+        function->extension() &&
+        function->extension()->id() == extensions::kWebStoreAppId;
+    extensions::UninstallSource source;
+    extensions::UninstallReason reason;
+    if (uninstall_from_webstore) {
+      source = extensions::UNINSTALL_SOURCE_CHROME_WEBSTORE;
+      reason = extensions::UNINSTALL_REASON_CHROME_WEBSTORE;
+    } else if (function->source_context_type() ==
+               extensions::Feature::WEBUI_CONTEXT) {
+      source = extensions::UNINSTALL_SOURCE_CHROME_EXTENSIONS_PAGE;
+      // TODO: Update this to a new reason; it shouldn't be lumped in with
+      // other uninstalls if it's from the chrome://extensions page.
+      reason = extensions::UNINSTALL_REASON_MANAGEMENT_API;
+    } else {
+      source = extensions::UNINSTALL_SOURCE_EXTENSION;
+      reason = extensions::UNINSTALL_REASON_MANAGEMENT_API;
+    }
     if (show_programmatic_uninstall_ui) {
       extension_uninstall_dialog_->ConfirmUninstallByExtension(
-          target_extension, function->extension(),
-          extensions::UNINSTALL_REASON_MANAGEMENT_API, source);
+          target_extension, function->extension(), reason, source);
     } else {
-      extension_uninstall_dialog_->ConfirmUninstall(
-          target_extension, extensions::UNINSTALL_REASON_MANAGEMENT_API,
-          source);
+      extension_uninstall_dialog_->ConfirmUninstall(target_extension, reason,
+                                                    source);
     }
   }
+
   ~ManagementUninstallFunctionUninstallDialogDelegate() override {}
 
   // ExtensionUninstallDialog::Delegate implementation.
@@ -305,11 +316,13 @@ void ChromeManagementAPIDelegate::EnableExtension(
 
 void ChromeManagementAPIDelegate::DisableExtension(
     content::BrowserContext* context,
+    const extensions::Extension* source_extension,
     const std::string& extension_id,
     extensions::disable_reason::DisableReason disable_reason) const {
   extensions::ExtensionSystem::Get(context)
       ->extension_service()
-      ->DisableExtension(extension_id, disable_reason);
+      ->DisableExtensionWithSource(source_extension, extension_id,
+                                   disable_reason);
 }
 
 bool ChromeManagementAPIDelegate::UninstallExtension(

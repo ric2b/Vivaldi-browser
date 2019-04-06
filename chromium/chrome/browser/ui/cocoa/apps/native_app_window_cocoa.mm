@@ -25,8 +25,6 @@
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 #include "ui/gfx/skia_util.h"
 
-#import "chrome/browser/app_controller_mac.h"
-
 // NOTE: State Before Update.
 //
 // Internal state, such as |is_maximized_|, must be set before the window
@@ -46,7 +44,7 @@
 
 using extensions::AppWindow;
 
-@interface NSWindow (NSPrivateApis)
+@interface NSWindow (NSPrivateNativeAppWindowApis)
 - (void)setBottomCornerRounded:(BOOL)rounded;
 - (BOOL)_isTitleHidden;
 @end
@@ -198,10 +196,7 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 
 @end
 
-@interface AppFramelessNSWindow : AppNSWindow {
-@private
-  NativeAppWindowCocoa* appWindowCocoa_;
-}
+@interface AppFramelessNSWindow : AppNSWindow
 @end
 
 @implementation AppFramelessNSWindow
@@ -243,7 +238,6 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 
 @interface NSView (WebContentsView)
 - (void)setMouseDownCanMoveWindow:(BOOL)can_move;
-- (void)_addKnownSubview:(NSView *)subview;
 @end
 
 NativeAppWindowCocoa::NativeAppWindowCocoa(
@@ -405,7 +399,6 @@ void NativeAppWindowCocoa::SetFullscreen(int fullscreen_types) {
   // fullscreen.
   if (fullscreen && !shows_fullscreen_controls_)
     gfx::SetNSWindowCanFullscreen(window(), true);
-
   [window() toggleFullScreen:nil];
   is_fullscreen_ = fullscreen;
 }
@@ -482,6 +475,10 @@ void NativeAppWindowCocoa::ShowInactive() {
 
 void NativeAppWindowCocoa::Hide() {
   HideWithoutMarkingHidden();
+}
+
+bool NativeAppWindowCocoa::IsVisible() const {
+  return [window() isVisible];
 }
 
 void NativeAppWindowCocoa::Close() {
@@ -578,7 +575,7 @@ void NativeAppWindowCocoa::HandleKeyboardEvent(
       event.GetType() == content::NativeWebKeyboardEvent::kChar) {
     return;
   }
-  [window() redispatchKeyEvent:event.os_event];
+  [[window() commandDispatcher] redispatchKeyEvent:event.os_event];
 }
 
 void NativeAppWindowCocoa::UpdateDraggableRegionViews() {
@@ -680,10 +677,6 @@ bool NativeAppWindowCocoa::CanHaveAlphaEnabled() const {
 
 void NativeAppWindowCocoa::SetActivateOnPointer(bool activate_on_pointer) {
   NOTIMPLEMENTED();
-}
-
-void NativeAppWindowCocoa::UpdateEventTargeterWithInset() {
-  // Not needed on Mac.
 }
 
 gfx::NativeView NativeAppWindowCocoa::GetHostView() const {

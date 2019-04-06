@@ -12,8 +12,6 @@
 #include "base/callback.h"
 #include "base/strings/string16.h"
 
-class GURL;
-
 namespace aura {
 class Window;
 }
@@ -35,7 +33,6 @@ namespace ash {
 class AccessibilityDelegate;
 class NetworkingConfigDelegate;
 class ScreenshotDelegate;
-class WallpaperDelegate;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
@@ -46,40 +43,22 @@ class ASH_EXPORT ShellDelegate {
   // Returns the connector for the mojo service manager. Returns null in tests.
   virtual service_manager::Connector* GetShellConnector() const = 0;
 
-  // Returns true if we're running in forced app mode.
-  virtual bool IsRunningInForcedAppMode() const = 0;
-
   // Returns true if |window| can be shown for the delegate's concept of current
   // user.
   virtual bool CanShowWindowForUser(aura::Window* window) const = 0;
-
-  // Returns true if the first window shown on first run should be
-  // unconditionally maximized, overriding the heuristic that normally chooses
-  // the window size.
-  virtual bool IsForceMaximizeOnFirstRun() const = 0;
 
   // Called before processing |Shell::Init()| so that the delegate
   // can perform tasks necessary before the shell is initialized.
   virtual void PreInit() = 0;
 
-  // Called at the beginninig of Shell destructor so that
-  // delegate can use Shell instance to perform cleanup tasks.
-  virtual void PreShutdown() = 0;
-
   // Create a shell-specific keyboard::KeyboardUI.
   virtual std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() = 0;
-
-  // Opens the |url| in a new browser tab.
-  virtual void OpenUrlFromArc(const GURL& url) = 0;
 
   // Returns the delegate. May be null in tests.
   virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() = 0;
 
   // TODO(jamescook): Replace with a mojo-compatible interface.
   virtual std::unique_ptr<ScreenshotDelegate> CreateScreenshotDelegate() = 0;
-
-  // Creates a wallpaper delegate. Shell takes ownership of the delegate.
-  virtual std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() = 0;
 
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;

@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include "base/memory/ptr_util.h"
 #include "ui/events/ozone/device/device_manager.h"
 #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
 #include "ui/events/ozone/evdev/event_factory_evdev.h"
@@ -110,8 +109,7 @@ class TestEventFactoryEvdev : public EventFactoryEvdev {
   ~TestEventFactoryEvdev() override {}
 
  private:
-  uint32_t DispatchEvent(PlatformEvent platform_event) override {
-    Event* event = static_cast<Event*>(platform_event);
+  uint32_t DispatchEvent(PlatformEvent event) override {
     callback_.Run(event);
     return POST_DISPATCH_NONE;
   }

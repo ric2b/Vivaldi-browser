@@ -56,11 +56,13 @@ import org.chromium.chrome.browser.widget.selection.SelectableItemView;
 import org.chromium.chrome.browser.widget.selection.SelectableItemViewHolder;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.browser.ChromeModernDesign;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.Date;
@@ -198,7 +200,7 @@ public class HistoryActivityTest {
         Assert.assertEquals(1, mHistoryProvider.removeItemsCallback.getCallCount());
         Assert.assertEquals(3, mAdapter.getItemCount());
         Assert.assertEquals(View.VISIBLE, mRecyclerView.getVisibility());
-        Assert.assertEquals(View.GONE, mHistoryManager.getEmptyView().getVisibility());
+        Assert.assertEquals(View.GONE, mHistoryManager.getEmptyViewForTests().getVisibility());
     }
 
     @Test
@@ -226,7 +228,7 @@ public class HistoryActivityTest {
         Assert.assertEquals(1, mHistoryProvider.removeItemsCallback.getCallCount());
         Assert.assertFalse(mHistoryManager.getSelectionDelegateForTests().isSelectionEnabled());
         Assert.assertEquals(View.GONE, mRecyclerView.getVisibility());
-        Assert.assertEquals(View.VISIBLE, mHistoryManager.getEmptyView().getVisibility());
+        Assert.assertEquals(View.VISIBLE, mHistoryManager.getEmptyViewForTests().getVisibility());
     }
 
     @Test
@@ -323,12 +325,16 @@ public class HistoryActivityTest {
         Assert.assertEquals(mItem1.getUrl(), intent.getDataString());
         Assert.assertFalse(intent.hasExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB));
         Assert.assertFalse(intent.hasExtra(Browser.EXTRA_CREATE_NEW_TAB));
+        Assert.assertEquals(PageTransition.AUTO_BOOKMARK,
+                intent.getIntExtra(IntentHandler.EXTRA_PAGE_TRANSITION_TYPE, -1));
 
         intent = mHistoryManager.getOpenUrlIntent(mItem2.getUrl(), true, true);
         Assert.assertEquals(mItem2.getUrl(), intent.getDataString());
         Assert.assertTrue(
                 intent.getBooleanExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false));
         Assert.assertTrue(intent.getBooleanExtra(Browser.EXTRA_CREATE_NEW_TAB, false));
+        Assert.assertEquals(PageTransition.AUTO_BOOKMARK,
+                intent.getIntExtra(IntentHandler.EXTRA_PAGE_TRANSITION_TYPE, -1));
     }
 
     @Test
@@ -411,6 +417,7 @@ public class HistoryActivityTest {
 
     @Test
     @SmallTest
+    @ChromeModernDesign.Enable
     public void testSearchView() throws Exception {
         final HistoryManagerToolbar toolbar = mHistoryManager.getToolbarForTests();
         View toolbarShadow = mHistoryManager.getSelectableListLayout().getToolbarShadowForTests();
@@ -432,7 +439,7 @@ public class HistoryActivityTest {
         // The selection should be cleared when a search is started.
         mTestObserver.onSelectionCallback.waitForCallback(callCount, 1);
         Assert.assertFalse(mHistoryManager.getSelectionDelegateForTests().isSelectionEnabled());
-        Assert.assertEquals(View.VISIBLE, toolbarShadow.getVisibility());
+        Assert.assertEquals(View.GONE, toolbarShadow.getVisibility());
         Assert.assertEquals(View.VISIBLE, toolbarSearchView.getVisibility());
 
         // Select an item and assert that the search view is no longer showing.
@@ -444,7 +451,7 @@ public class HistoryActivityTest {
         // Clear the selection and assert that the search view is showing again.
         toggleItemSelection(2);
         Assert.assertFalse(mHistoryManager.getSelectionDelegateForTests().isSelectionEnabled());
-        Assert.assertEquals(View.VISIBLE, toolbarShadow.getVisibility());
+        Assert.assertEquals(View.GONE, toolbarShadow.getVisibility());
         Assert.assertEquals(View.VISIBLE, toolbarSearchView.getVisibility());
 
         // Close the search view.
@@ -673,10 +680,9 @@ public class HistoryActivityTest {
         SigninTestUtil.setUpAuthForTest(InstrumentationRegistry.getInstrumentation());
         final Account account = SigninTestUtil.addTestAccount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            SigninManager.get(mActivityTestRule.getActivity()).onFirstRunCheckDone();
-            SigninManager.get(mActivityTestRule.getActivity())
-                    .addSignInStateObserver(mTestObserver);
-            SigninManager.get(mActivityTestRule.getActivity()).signIn(account, null, null);
+            SigninManager.get().onFirstRunCheckDone();
+            SigninManager.get().addSignInStateObserver(mTestObserver);
+            SigninManager.get().signIn(account, null, null);
         });
 
         mTestObserver.onSigninStateChangedCallback.waitForCallback(
@@ -737,7 +743,7 @@ public class HistoryActivityTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                SigninManager.get(mActivityTestRule.getActivity()).signOut(null);
+                SigninManager.get().signOut(null);
             }
         });
         mTestObserver.onSigninStateChangedCallback.waitForCallback(currentCallCount, 1);
@@ -747,8 +753,7 @@ public class HistoryActivityTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                SigninManager.get(mActivityTestRule.getActivity())
-                        .removeSignInStateObserver(mTestObserver);
+                SigninManager.get().removeSignInStateObserver(mTestObserver);
             }
         });
         SigninTestUtil.tearDownAuthForTest();

@@ -8,8 +8,10 @@
 #include <map>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "cc/paint/transfer_cache_deserialize_helper.h"
 #include "cc/paint/transfer_cache_serialize_helper.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 
 class GrContext;
 
@@ -25,31 +27,39 @@ class TransferCacheTestHelper : public TransferCacheDeserializeHelper,
   void SetCachedItemsLimit(size_t limit);
 
   // Direct Access API (simulates ContextSupport methods).
-  bool LockEntryDirect(TransferCacheEntryType type, uint32_t id);
-  void CreateEntryDirect(const ClientTransferCacheEntry& entry);
-  void UnlockEntriesDirect(
-      const std::vector<std::pair<TransferCacheEntryType, uint32_t>>& entries);
-  void DeleteEntryDirect(TransferCacheEntryType type, uint32_t id);
+  bool LockEntryDirect(const EntryKey& key);
 
- protected:
+  void CreateEntryDirect(const EntryKey& key, base::span<uint8_t> data);
+  void UnlockEntriesDirect(const std::vector<EntryKey>& keys);
+  void DeleteEntryDirect(const EntryKey& key);
+
   // Deserialization helpers.
   ServiceTransferCacheEntry* GetEntryInternal(TransferCacheEntryType type,
                                               uint32_t id) override;
 
+  const EntryKey& GetLastAddedEntry() const { return last_added_entry_; }
+
+  void CreateLocalEntry(
+      uint32_t id,
+      std::unique_ptr<ServiceTransferCacheEntry> entry) override;
+
+ protected:
   // Serialization helpers.
-  using EntryKey = std::pair<TransferCacheEntryType, uint32_t>;
-  bool LockEntryInternal(TransferCacheEntryType type, uint32_t id) override;
+  bool LockEntryInternal(const EntryKey& key) override;
   void CreateEntryInternal(const ClientTransferCacheEntry& entry) override;
-  void FlushEntriesInternal(const std::vector<EntryKey>& entries) override;
+  void FlushEntriesInternal(std::set<EntryKey> keys) override;
 
  private:
   // Helper functions.
   void EnforceLimits();
 
   std::map<EntryKey, std::unique_ptr<ServiceTransferCacheEntry>> entries_;
+  std::set<EntryKey> local_entries_;
   std::set<EntryKey> locked_entries_;
+  EntryKey last_added_entry_ = {TransferCacheEntryType::kRawMemory, ~0};
 
   GrContext* context_ = nullptr;
+  sk_sp<GrContext> owned_context_;
   size_t cached_items_limit_ = std::numeric_limits<size_t>::max();
 };
 

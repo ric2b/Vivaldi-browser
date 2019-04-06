@@ -19,17 +19,24 @@
 #include "net/base/net_export.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/http_stream_factory.h"
+#include "net/http/http_stream_request.h"
 #include "net/log/net_log_with_source.h"
+
+namespace base {
+class OneShotTimer;
+}  // namespace base
+
+namespace spdy {
+class SpdyHeaderBlock;
+}  // namespace spdy
 
 namespace net {
 
 class HttpAuthController;
 class HttpNetworkSession;
 class HttpStream;
-class HttpStreamRequest;
 class IOBuffer;
 class ProxyInfo;
-class SpdyHeaderBlock;
 struct BidirectionalStreamRequestInfo;
 struct NetErrorDetails;
 struct SSLConfig;
@@ -62,7 +69,8 @@ class NET_EXPORT BidirectionalStream : public BidirectionalStreamImpl::Delegate,
     // The delegate may call BidirectionalStream::ReadData to start reading,
     // call BidirectionalStream::SendData to send data,
     // or call BidirectionalStream::Cancel to cancel the stream.
-    virtual void OnHeadersReceived(const SpdyHeaderBlock& response_headers) = 0;
+    virtual void OnHeadersReceived(
+        const spdy::SpdyHeaderBlock& response_headers) = 0;
 
     // Called when a pending read is completed asynchronously.
     // |bytes_read| specifies how much data is read.
@@ -82,7 +90,7 @@ class NET_EXPORT BidirectionalStream : public BidirectionalStreamImpl::Delegate,
     // are received, which can happen before a read completes.
     // The delegate is able to continue reading if there is no pending read and
     // EOF has not been received, or to send data if there is no pending send.
-    virtual void OnTrailersReceived(const SpdyHeaderBlock& trailers) = 0;
+    virtual void OnTrailersReceived(const spdy::SpdyHeaderBlock& trailers) = 0;
 
     // Called when an error occurred. Do not call into the stream after this
     // point. No other delegate functions will be called after this.
@@ -116,7 +124,7 @@ class NET_EXPORT BidirectionalStream : public BidirectionalStreamImpl::Delegate,
       HttpNetworkSession* session,
       bool send_request_headers_automatically,
       Delegate* delegate,
-      std::unique_ptr<base::Timer> timer);
+      std::unique_ptr<base::OneShotTimer> timer);
 
   // Cancels |stream_request_| or |stream_impl_| if applicable.
   // |this| should not be destroyed during Delegate::OnHeadersSent or
@@ -176,12 +184,14 @@ class NET_EXPORT BidirectionalStream : public BidirectionalStreamImpl::Delegate,
   void PopulateNetErrorDetails(NetErrorDetails* details);
 
  private:
+  void StartRequest(const SSLConfig& ssl_config);
   // BidirectionalStreamImpl::Delegate implementation:
   void OnStreamReady(bool request_headers_sent) override;
-  void OnHeadersReceived(const SpdyHeaderBlock& response_headers) override;
+  void OnHeadersReceived(
+      const spdy::SpdyHeaderBlock& response_headers) override;
   void OnDataRead(int bytes_read) override;
   void OnDataSent() override;
-  void OnTrailersReceived(const SpdyHeaderBlock& trailers) override;
+  void OnTrailersReceived(const spdy::SpdyHeaderBlock& trailers) override;
   void OnFailed(int error) override;
 
   // HttpStreamRequest::Delegate implementation:
@@ -234,7 +244,7 @@ class NET_EXPORT BidirectionalStream : public BidirectionalStreamImpl::Delegate,
 
   // Timer used to buffer data received in short time-spans and send a single
   // read completion notification.
-  std::unique_ptr<base::Timer> timer_;
+  std::unique_ptr<base::OneShotTimer> timer_;
   // HttpStreamRequest used to request a BidirectionalStreamImpl. This is NULL
   // if the request has been canceled or completed.
   std::unique_ptr<HttpStreamRequest> stream_request_;

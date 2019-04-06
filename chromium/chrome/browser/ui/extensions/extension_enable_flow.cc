@@ -12,12 +12,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
-#include "chrome/browser/ui/user_manager.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+
+#if !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/user_manager.h"
+#endif  // !defined(OS_CHROMEOS)
 
 using extensions::Extension;
 
@@ -49,14 +52,12 @@ void ExtensionEnableFlow::StartForNativeWindow(
   Run();
 }
 
-void ExtensionEnableFlow::StartForCurrentlyNonexistentWindow(
-    base::Callback<gfx::NativeWindow(void)> window_getter) {
-  window_getter_ = window_getter;
+void ExtensionEnableFlow::Start() {
   Run();
 }
 
 void ExtensionEnableFlow::Run() {
-  ExtensionService* service =
+  extensions::ExtensionService* service =
       extensions::ExtensionSystem::Get(profile_)->extension_service();
   const Extension* extension = service->GetExtensionById(extension_id_, true);
   if (!extension) {
@@ -86,7 +87,7 @@ void ExtensionEnableFlow::Run() {
 void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
   extensions::ExtensionSystem* system =
       extensions::ExtensionSystem::Get(profile_);
-  ExtensionService* service = system->extension_service();
+  extensions::ExtensionService* service = system->extension_service();
   const Extension* extension = service->GetExtensionById(extension_id_, true);
 
   bool abort =
@@ -103,8 +104,10 @@ void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
   }
 
   if (profiles::IsProfileLocked(profile_->GetPath())) {
+#if !defined(OS_CHROMEOS)
     UserManager::Show(base::FilePath(),
-                      profiles::USER_MANAGER_SELECT_PROFILE_APP_LAUNCHER);
+                      profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
+#endif  // !defined(OS_CHROMEOS)
     return;
   }
 
@@ -131,11 +134,9 @@ void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
 }
 
 void ExtensionEnableFlow::CreatePrompt() {
-  if (!window_getter_.is_null())
-    parent_window_ = window_getter_.Run();
-  prompt_.reset(parent_contents_ ?
-      new ExtensionInstallPrompt(parent_contents_) :
-      new ExtensionInstallPrompt(profile_, parent_window_));
+  prompt_.reset(parent_contents_
+                    ? new ExtensionInstallPrompt(parent_contents_)
+                    : new ExtensionInstallPrompt(profile_, nullptr));
 }
 
 void ExtensionEnableFlow::StartObserving() {
@@ -181,7 +182,7 @@ void ExtensionEnableFlow::OnExtensionUninstalled(
 void ExtensionEnableFlow::InstallPromptDone(
     ExtensionInstallPrompt::Result result) {
   if (result == ExtensionInstallPrompt::Result::ACCEPTED) {
-    ExtensionService* service =
+    extensions::ExtensionService* service =
         extensions::ExtensionSystem::Get(profile_)->extension_service();
 
     // The extension can be uninstalled in another window while the UI was

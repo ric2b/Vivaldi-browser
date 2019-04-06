@@ -52,6 +52,7 @@
       'target_name': 'crashpad_snapshot_test',
       'type': 'executable',
       'dependencies': [
+        'crashpad_snapshot_test_lib',
         'crashpad_snapshot_test_module',
         'crashpad_snapshot_test_module_large',
         'crashpad_snapshot_test_module_small',
@@ -71,22 +72,27 @@
       'sources': [
         'api/module_annotations_win_test.cc',
         'cpu_context_test.cc',
+        'memory_snapshot_test.cc',
         'crashpad_info_client_options_test.cc',
+        'crashpad_types/crashpad_info_reader_test.cc',
+        'crashpad_types/image_annotation_reader_test.cc',
         'elf/elf_image_reader_test.cc',
         'elf/elf_image_reader_test_note.S',
         'linux/debug_rendezvous_test.cc',
         'linux/exception_snapshot_linux_test.cc',
-        'linux/process_reader_test.cc',
+        'linux/process_reader_linux_test.cc',
         'linux/system_snapshot_linux_test.cc',
         'mac/cpu_context_mac_test.cc',
         'mac/mach_o_image_annotations_reader_test.cc',
         'mac/mach_o_image_reader_test.cc',
         'mac/mach_o_image_segment_reader_test.cc',
-        'mac/process_reader_test.cc',
+        'mac/process_reader_mac_test.cc',
         'mac/process_types_test.cc',
         'mac/system_snapshot_mac_test.cc',
         'minidump/process_snapshot_minidump_test.cc',
         'posix/timezone_test.cc',
+        'sanitized/process_snapshot_sanitized_test.cc',
+        'sanitized/sanitization_information_test.cc',
         'win/cpu_context_win_test.cc',
         'win/exception_snapshot_win_test.cc',
         'win/extra_memory_ranges_test.cc',
@@ -97,6 +103,10 @@
         'win/system_snapshot_win_test.cc',
       ],
       'conditions': [
+        # .gnu.hash is incompatible with the MIPS ABI
+        ['target_arch!="mips"', {
+          'dependencies': ['crashpad_snapshot_test_both_dt_hash_styles']
+        }],
         ['OS=="mac"', {
           'dependencies': [
             'crashpad_snapshot_test_module_crashy_initializer',
@@ -139,6 +149,8 @@
         }, {  # else: OS!="linux" and OS!="android"
           'sources/': [
             ['exclude', '^elf/'],
+            ['exclude', '^crashpad_types/'],
+            ['exclude', '^sanitized/'],
           ],
         }],
       ],
@@ -176,6 +188,19 @@
       'sources': [
         'crashpad_info_size_test_module.cc',
       ],
+      'include_dirs': [
+        '..',
+      ],
+      'conditions': [
+        ['OS=="linux" or OS=="android"', {
+          'sources': [
+            'crashpad_info_size_test_note.S',
+          ],
+          'dependencies': [
+            '../util/util.gyp:crashpad_util',
+          ],
+        }],
+      ],
     },
     {
       'target_name': 'crashpad_snapshot_test_module_small',
@@ -188,6 +213,35 @@
       ],
       'sources': [
         'crashpad_info_size_test_module.cc',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'conditions': [
+        ['OS=="linux" or OS=="android"', {
+          'sources': [
+            'crashpad_info_size_test_note.S',
+          ],
+          'dependencies': [
+            '../util/util.gyp:crashpad_util',
+          ],
+        }],
+      ],
+    },
+    {
+      'target_name': 'crashpad_snapshot_test_both_dt_hash_styles',
+      'type': 'executable',
+      'conditions': [
+        # .gnu.hash is incompatible with the MIPS ABI
+        ['target_arch!="mips"', {
+          'sources': [
+            'hash_types_test.cc',
+          ],
+          'ldflags': [
+            # This makes `ld` emit both .hash and .gnu.hash sections.
+            '-Wl,--hash-style=both',
+          ]},
+        ]
       ],
     },
   ],

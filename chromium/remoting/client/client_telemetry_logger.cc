@@ -34,16 +34,32 @@ struct ClientTelemetryLogger::HostInfo {
 ClientTelemetryLogger::ClientTelemetryLogger(
     ChromotingEventLogWriter* log_writer,
     ChromotingEvent::Mode mode)
-    : mode_(mode), log_writer_(log_writer) {}
+    : mode_(mode), log_writer_(log_writer), weak_factory_(this) {
+  thread_checker_.DetachFromThread();
+}
 
 ClientTelemetryLogger::~ClientTelemetryLogger() {
   DCHECK(thread_checker_.CalledOnValidThread());
 }
 
+void ClientTelemetryLogger::SetAuthMethod(
+    ChromotingEvent::AuthMethod auth_method) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_NE(ChromotingEvent::AuthMethod::NOT_SET, auth_method);
+  auth_method_ = auth_method;
+}
+
 void ClientTelemetryLogger::SetHostInfo(const std::string& host_version,
                                         ChromotingEvent::Os host_os,
                                         const std::string& host_os_version) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   host_info_.reset(new HostInfo{host_version, host_os, host_os_version});
+}
+
+void ClientTelemetryLogger::SetTransportRoute(
+    const protocol::TransportRoute& route) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  transport_route_ = std::make_unique<protocol::TransportRoute>(route);
 }
 
 void ClientTelemetryLogger::LogSessionStateChange(
@@ -57,7 +73,16 @@ void ClientTelemetryLogger::LogSessionStateChange(
 
   ChromotingEvent event =
       ClientTelemetryLogger::MakeSessionStateChangeEvent(state, error);
+
+  const base::Value* previous_state =
+      current_session_state_event_.GetValue(ChromotingEvent::kSessionStateKey);
+  if (previous_state) {
+    event.SetInteger(ChromotingEvent::kPreviousSessionStateKey,
+                     previous_state->GetInt());
+  }
+
   log_writer_->Log(event);
+  current_session_state_event_ = std::move(event);
 
   if (ChromotingEvent::IsEndOfSession(state)) {
     session_id_.clear();
@@ -66,7 +91,7 @@ void ClientTelemetryLogger::LogSessionStateChange(
 }
 
 void ClientTelemetryLogger::LogStatistics(
-    protocol::PerformanceTracker* perf_tracker) {
+    const protocol::PerformanceTracker& perf_tracker) {
   DCHECK(thread_checker_.CalledOnValidThread());
   RefreshSessionIdIfOutdated();
 
@@ -76,28 +101,32 @@ void ClientTelemetryLogger::LogStatistics(
   log_writer_->Log(event);
 }
 
+base::WeakPtr<ClientTelemetryLogger> ClientTelemetryLogger::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 void ClientTelemetryLogger::PrintLogStatistics(
-    protocol::PerformanceTracker* perf_tracker) {
+    const protocol::PerformanceTracker& perf_tracker) {
 #if defined(OS_ANDROID)
   __android_log_print(
       ANDROID_LOG_INFO, "stats",
 #else
-  VLOG(1) << base::StringPrintf(
+  VLOG(0) << base::StringPrintf(
 #endif  // OS_ANDROID
       "Bandwidth:%.0f FrameRate:%.1f;"
       " (Avg, Max) Capture:%.1f, %" PRId64 " Encode:%.1f, %" PRId64
       " Decode:%.1f, %" PRId64 " Render:%.1f, %" PRId64 " RTL:%.0f, %" PRId64,
-      perf_tracker->video_bandwidth(), perf_tracker->video_frame_rate(),
-      perf_tracker->video_capture_ms().Average(),
-      perf_tracker->video_capture_ms().Max(),
-      perf_tracker->video_encode_ms().Average(),
-      perf_tracker->video_encode_ms().Max(),
-      perf_tracker->video_decode_ms().Average(),
-      perf_tracker->video_decode_ms().Max(),
-      perf_tracker->video_paint_ms().Average(),
-      perf_tracker->video_paint_ms().Max(),
-      perf_tracker->round_trip_ms().Average(),
-      perf_tracker->round_trip_ms().Max());
+      perf_tracker.video_bandwidth(), perf_tracker.video_frame_rate(),
+      perf_tracker.video_capture_ms().Average(),
+      perf_tracker.video_capture_ms().Max(),
+      perf_tracker.video_encode_ms().Average(),
+      perf_tracker.video_encode_ms().Max(),
+      perf_tracker.video_decode_ms().Average(),
+      perf_tracker.video_decode_ms().Max(),
+      perf_tracker.video_paint_ms().Average(),
+      perf_tracker.video_paint_ms().Max(),
+      perf_tracker.round_trip_ms().Average(),
+      perf_tracker.round_trip_ms().Max());
 }
 
 void ClientTelemetryLogger::SetSessionIdGenerationTimeForTest(
@@ -107,8 +136,9 @@ void ClientTelemetryLogger::SetSessionIdGenerationTimeForTest(
 
 // static
 ChromotingEvent::SessionState ClientTelemetryLogger::TranslateState(
-    protocol::ConnectionToHost::State state) {
-  switch (state) {
+    protocol::ConnectionToHost::State current_state,
+    protocol::ConnectionToHost::State previous_state) {
+  switch (current_state) {
     case protocol::ConnectionToHost::State::INITIALIZING:
       return ChromotingEvent::SessionState::INITIALIZING;
     case protocol::ConnectionToHost::State::CONNECTING:
@@ -118,7 +148,9 @@ ChromotingEvent::SessionState ClientTelemetryLogger::TranslateState(
     case protocol::ConnectionToHost::State::CONNECTED:
       return ChromotingEvent::SessionState::CONNECTED;
     case protocol::ConnectionToHost::State::FAILED:
-      return ChromotingEvent::SessionState::CONNECTION_FAILED;
+      return previous_state == protocol::ConnectionToHost::State::CONNECTED
+                 ? ChromotingEvent::SessionState::CONNECTION_DROPPED
+                 : ChromotingEvent::SessionState::CONNECTION_FAILED;
     case protocol::ConnectionToHost::State::CLOSED:
       return ChromotingEvent::SessionState::CLOSED;
     default:
@@ -163,15 +195,39 @@ ChromotingEvent::ConnectionError ClientTelemetryLogger::TranslateError(
   }
 }
 
+// static
+ChromotingEvent::ConnectionType ClientTelemetryLogger::TranslateConnectionType(
+    protocol::TransportRoute::RouteType type) {
+  switch (type) {
+    case protocol::TransportRoute::DIRECT:
+      return ChromotingEvent::ConnectionType::DIRECT;
+    case protocol::TransportRoute::STUN:
+      return ChromotingEvent::ConnectionType::STUN;
+    case protocol::TransportRoute::RELAY:
+      return ChromotingEvent::ConnectionType::RELAY;
+    default:
+      NOTREACHED();
+      return ChromotingEvent::ConnectionType::DIRECT;
+  }
+}
+
 void ClientTelemetryLogger::FillEventContext(ChromotingEvent* event) const {
   event->SetEnum(ChromotingEvent::kModeKey, mode_);
   event->SetEnum(ChromotingEvent::kRoleKey, ChromotingEvent::Role::CLIENT);
+  if (auth_method_ != ChromotingEvent::AuthMethod::NOT_SET) {
+    event->SetEnum(ChromotingEvent::kAuthMethodKey, auth_method_);
+  }
   if (host_info_) {
     event->SetString(ChromotingEvent::kHostVersionKey,
                      host_info_->host_version);
     event->SetEnum(ChromotingEvent::kHostOsKey, host_info_->host_os);
     event->SetString(ChromotingEvent::kHostOsVersionKey,
                      host_info_->host_os_version);
+  }
+  if (transport_route_) {
+    ChromotingEvent::ConnectionType connection_type =
+        TranslateConnectionType(transport_route_->type);
+    event->SetEnum(ChromotingEvent::kConnectionTypeKey, connection_type);
   }
   event->AddSystemInfo();
   if (!session_id_.empty()) {
@@ -215,32 +271,32 @@ void ClientTelemetryLogger::RefreshSessionIdIfOutdated() {
 }
 
 ChromotingEvent ClientTelemetryLogger::MakeStatsEvent(
-    protocol::PerformanceTracker* perf_tracker) {
+    const protocol::PerformanceTracker& perf_tracker) {
   ChromotingEvent event(ChromotingEvent::Type::CONNECTION_STATISTICS);
   FillEventContext(&event);
 
   event.SetDouble(ChromotingEvent::kVideoBandwidthKey,
-                  perf_tracker->video_bandwidth());
+                  perf_tracker.video_bandwidth());
   event.SetDouble(ChromotingEvent::kCaptureLatencyKey,
-                  perf_tracker->video_capture_ms().Average());
+                  perf_tracker.video_capture_ms().Average());
   event.SetDouble(ChromotingEvent::kEncodeLatencyKey,
-                  perf_tracker->video_encode_ms().Average());
+                  perf_tracker.video_encode_ms().Average());
   event.SetDouble(ChromotingEvent::kDecodeLatencyKey,
-                  perf_tracker->video_decode_ms().Average());
+                  perf_tracker.video_decode_ms().Average());
   event.SetDouble(ChromotingEvent::kRenderLatencyKey,
-                  perf_tracker->video_paint_ms().Average());
+                  perf_tracker.video_paint_ms().Average());
   event.SetDouble(ChromotingEvent::kRoundtripLatencyKey,
-                  perf_tracker->round_trip_ms().Average());
+                  perf_tracker.round_trip_ms().Average());
   event.SetDouble(ChromotingEvent::kMaxCaptureLatencyKey,
-                  perf_tracker->video_capture_ms().Max());
+                  perf_tracker.video_capture_ms().Max());
   event.SetDouble(ChromotingEvent::kMaxEncodeLatencyKey,
-                  perf_tracker->video_encode_ms().Max());
+                  perf_tracker.video_encode_ms().Max());
   event.SetDouble(ChromotingEvent::kMaxDecodeLatencyKey,
-                  perf_tracker->video_decode_ms().Max());
+                  perf_tracker.video_decode_ms().Max());
   event.SetDouble(ChromotingEvent::kMaxRenderLatencyKey,
-                  perf_tracker->video_paint_ms().Max());
+                  perf_tracker.video_paint_ms().Max());
   event.SetDouble(ChromotingEvent::kMaxRoundtripLatencyKey,
-                  perf_tracker->round_trip_ms().Max());
+                  perf_tracker.round_trip_ms().Max());
 
   return event;
 }

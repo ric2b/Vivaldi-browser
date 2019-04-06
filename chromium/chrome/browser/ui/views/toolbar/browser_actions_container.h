@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar_delegate.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
@@ -25,6 +26,7 @@
 namespace views {
 class BubbleDialogDelegateView;
 class ResizeArea;
+class Separator;
 }
 
 // The BrowserActionsContainer is a container view, responsible for drawing the
@@ -108,10 +110,32 @@ class BrowserActionsContainer : public views::View,
                                 public ToolbarActionView::Delegate,
                                 public views::WidgetObserver {
  public:
+  class Delegate {
+   public:
+    // Returns the view of the toolbar actions overflow menu to use as a
+    // reference point for a popup when this view isn't visible.
+    virtual views::MenuButton* GetOverflowReferenceView() = 0;
+
+    // Returns the maximum width the browser actions container can have. An
+    // empty value means there is no maximum.
+    virtual base::Optional<int> GetMaxBrowserActionsWidth() const = 0;
+
+    // Creates a ToolbarActionsBar for the BrowserActionsContainer to use.
+    virtual std::unique_ptr<ToolbarActionsBar> CreateToolbarActionsBar(
+        ToolbarActionsBarDelegate* delegate,
+        Browser* browser,
+        ToolbarActionsBar* main_bar) const = 0;
+  };
+
   // Constructs a BrowserActionContainer for a particular |browser| object. For
   // documentation of |main_container|, see class comments.
+  //
+  // |interactive| determines whether the bar can be dragged to resize it or do
+  // drag and drop.
   BrowserActionsContainer(Browser* browser,
-                          BrowserActionsContainer* main_container);
+                          BrowserActionsContainer* main_container,
+                          Delegate* delegate,
+                          bool interactive = true);
   ~BrowserActionsContainer() override;
 
   // Get the number of toolbar actions being displayed.
@@ -119,6 +143,8 @@ class BrowserActionsContainer : public views::View,
 
   // Returns the browser this container is associated with.
   Browser* browser() const { return browser_; }
+
+  Delegate* delegate() { return delegate_; }
 
   ToolbarActionsBar* toolbar_actions_bar() {
     return toolbar_actions_bar_.get();
@@ -158,6 +184,10 @@ class BrowserActionsContainer : public views::View,
   // the omnibox, this is probably *not* |max_width|).
   int GetWidthForMaxWidth(int max_width) const;
 
+  // Sets the color for the separator if present, called after construction and
+  // on theme changes.
+  void SetSeparatorColor(SkColor color);
+
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
   int GetHeightForWidth(int width) const override;
@@ -195,6 +225,7 @@ class BrowserActionsContainer : public views::View,
   bool ShownInsideMenu() const override;
   void OnToolbarActionViewDragDone() override;
   views::MenuButton* GetOverflowReferenceView() override;
+  gfx::Size GetToolbarActionSize() override;
 
   // ToolbarActionsBarDelegate:
   void AddViewForAction(ToolbarActionViewController* action,
@@ -231,9 +262,24 @@ class BrowserActionsContainer : public views::View,
   // Clears the |active_bubble_|, and unregisters the container as an observer.
   void ClearActiveBubble(views::Widget* widget);
 
+  // Utility functions for going from/to width and icon counts.
+  size_t WidthToIconCount(int width) const;
+  int GetWidthForIconCount(size_t num_icons) const;
+  int GetWidthWithAllActionsVisible() const;
+
+  // Width allocated for the resize handle, |resize_area_|. 0 when it should not
+  // be shown.
+  int GetResizeAreaWidth() const;
+
+  // Width of the separator and surrounding padding. 0 when the separator should
+  // not be shown.
+  int GetSeparatorAreaWidth() const;
+
   const ToolbarActionsBar::PlatformSettings& platform_settings() const {
     return toolbar_actions_bar_->platform_settings();
   }
+
+  Delegate* const delegate_ = nullptr;
 
   // The controlling ToolbarActionsBar, which handles most non-view logic.
   std::unique_ptr<ToolbarActionsBar> toolbar_actions_bar_;
@@ -252,8 +298,9 @@ class BrowserActionsContainer : public views::View,
   // The resize area for the container.
   views::ResizeArea* resize_area_ = nullptr;
 
-  // The painter used when we are highlighting a subset of extensions.
-  std::unique_ptr<views::Painter> warning_highlight_painter_;
+  // Separator at the end of browser actions to highlight that these actions are
+  // different from built-in toolbar actions.
+  views::Separator* separator_ = nullptr;
 
   // The animation that happens when the container snaps to place.
   std::unique_ptr<gfx::SlideAnimation> resize_animation_;
@@ -262,8 +309,7 @@ class BrowserActionsContainer : public views::View,
   bool added_to_view_ = false;
 
   // When the container is resizing, this is the width at which it started.
-  // If the container is not resizing, -1.
-  int resize_starting_width_ = -1;
+  base::Optional<int> resize_starting_width_;
 
   // This is used while the user is resizing (and when the animations are in
   // progress) to know how wide the delta is between the current state and what
@@ -277,6 +323,9 @@ class BrowserActionsContainer : public views::View,
   // The DropPosition for the current drag-and-drop operation, or NULL if there
   // is none.
   std::unique_ptr<DropPosition> drop_position_;
+
+  // Whether the container can be interacted with (e.g drag/drop, resize).
+  const bool interactive_ = true;
 
   // The extension bubble that is actively showing, if any.
   views::BubbleDialogDelegateView* active_bubble_ = nullptr;

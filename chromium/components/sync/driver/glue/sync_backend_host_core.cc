@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
@@ -62,19 +63,19 @@ SyncBackendHostCore::SyncBackendHostCore(
       sync_data_folder_(sync_data_folder),
       host_(backend),
       weak_ptr_factory_(this) {
-  DCHECK(backend.get());
+  DCHECK(backend);
   // This is constructed on the UI thread but used from the sync thread.
-  thread_checker_.DetachFromThread();
+  DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
 SyncBackendHostCore::~SyncBackendHostCore() {
-  DCHECK(!sync_manager_.get());
+  DCHECK(!sync_manager_);
 }
 
 bool SyncBackendHostCore::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!sync_manager_)
     return false;
   sync_manager_->OnMemoryDump(pmd);
@@ -83,14 +84,14 @@ bool SyncBackendHostCore::OnMemoryDump(
 
 void SyncBackendHostCore::OnSyncCycleCompleted(
     const SyncCycleSnapshot& snapshot) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::HandleSyncCycleCompletedOnFrontendLoop,
              snapshot);
 }
 
 void SyncBackendHostCore::DoRefreshTypes(ModelTypeSet types) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->RefreshTypes(types);
 }
 
@@ -99,10 +100,10 @@ void SyncBackendHostCore::OnInitializationComplete(
     const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
     bool success,
     const ModelTypeSet restored_types) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!success) {
-    DoDestroySyncManager(STOP_SYNC);
+    DoDestroySyncManager();
     host_.Call(FROM_HERE,
                &SyncBackendHostImpl::HandleInitializationFailureOnFrontendLoop);
     return;
@@ -118,7 +119,7 @@ void SyncBackendHostCore::OnInitializationComplete(
 
   // Sync manager initialization is complete, so we can schedule recurring
   // SaveChanges.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&SyncBackendHostCore::StartSavingChanges,
                             weak_ptr_factory_.GetWeakPtr()));
 
@@ -169,7 +170,7 @@ void SyncBackendHostCore::OnInitializationComplete(
 }
 
 void SyncBackendHostCore::OnConnectionStatusChange(ConnectionStatus status) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::HandleConnectionStatusChangeOnFrontendLoop,
              status);
@@ -178,7 +179,7 @@ void SyncBackendHostCore::OnConnectionStatusChange(ConnectionStatus status) {
 void SyncBackendHostCore::OnCommitCountersUpdated(
     ModelType type,
     const CommitCounters& counters) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::HandleDirectoryCommitCountersUpdatedOnFrontendLoop,
@@ -188,7 +189,7 @@ void SyncBackendHostCore::OnCommitCountersUpdated(
 void SyncBackendHostCore::OnUpdateCountersUpdated(
     ModelType type,
     const UpdateCounters& counters) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::HandleDirectoryUpdateCountersUpdatedOnFrontendLoop,
@@ -198,7 +199,7 @@ void SyncBackendHostCore::OnUpdateCountersUpdated(
 void SyncBackendHostCore::OnStatusCountersUpdated(
     ModelType type,
     const StatusCounters& counters) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::HandleDirectoryStatusCountersUpdatedOnFrontendLoop,
@@ -207,21 +208,21 @@ void SyncBackendHostCore::OnStatusCountersUpdated(
 
 void SyncBackendHostCore::OnActionableError(
     const SyncProtocolError& sync_error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::HandleActionableErrorEventOnFrontendLoop,
              sync_error);
 }
 
 void SyncBackendHostCore::OnMigrationRequested(ModelTypeSet types) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::HandleMigrationRequestedOnFrontendLoop,
              types);
 }
 
 void SyncBackendHostCore::OnProtocolEvent(const ProtocolEvent& event) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (forward_protocol_events_) {
     std::unique_ptr<ProtocolEvent> event_clone(event.Clone());
     host_.Call(FROM_HERE,
@@ -231,13 +232,13 @@ void SyncBackendHostCore::OnProtocolEvent(const ProtocolEvent& event) {
 }
 
 void SyncBackendHostCore::DoOnInvalidatorStateChange(InvalidatorState state) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->SetInvalidatorEnabled(state == INVALIDATIONS_ENABLED);
 }
 
 void SyncBackendHostCore::DoOnIncomingInvalidation(
     const ObjectIdInvalidationMap& invalidation_map) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   ObjectIdSet ids = invalidation_map.GetObjectIds();
   for (const invalidation::ObjectId& object_id : ids) {
@@ -273,7 +274,7 @@ void SyncBackendHostCore::DoOnIncomingInvalidation(
 }
 
 void SyncBackendHostCore::DoInitialize(SyncEngine::InitParams params) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Blow away the partial or corrupt sync data folder before doing any more
   // initialization, if necessary.
@@ -328,6 +329,8 @@ void SyncBackendHostCore::DoInitialize(SyncEngine::InitParams params) {
       params.report_unrecoverable_error_function;
   args.cancelation_signal = &stop_syncing_signal_;
   args.saved_nigori_state = std::move(params.saved_nigori_state);
+  args.short_poll_interval = params.short_poll_interval;
+  args.long_poll_interval = params.long_poll_interval;
   sync_manager_->Init(&args);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "SyncDirectory", base::ThreadTaskRunnerHandle::Get());
@@ -335,7 +338,7 @@ void SyncBackendHostCore::DoInitialize(SyncEngine::InitParams params) {
 
 void SyncBackendHostCore::DoUpdateCredentials(
     const SyncCredentials& credentials) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // UpdateCredentials can be called during backend initialization, possibly
   // when backend initialization has failed but hasn't notified the UI thread
   // yet. In that case, the sync manager may have been destroyed on the sync
@@ -345,25 +348,32 @@ void SyncBackendHostCore::DoUpdateCredentials(
   }
 }
 
+void SyncBackendHostCore::DoInvalidateCredentials() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (sync_manager_) {
+    sync_manager_->InvalidateCredentials();
+  }
+}
+
 void SyncBackendHostCore::DoStartConfiguration() {
   sync_manager_->StartConfiguration();
 }
 
 void SyncBackendHostCore::DoStartSyncing(base::Time last_poll_time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->StartSyncingNormally(last_poll_time);
 }
 
 void SyncBackendHostCore::DoSetEncryptionPassphrase(
     const std::string& passphrase,
     bool is_explicit) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->GetEncryptionHandler()->SetEncryptionPassphrase(passphrase,
                                                                  is_explicit);
 }
 
 void SyncBackendHostCore::DoInitialProcessControlTypes() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DVLOG(1) << "Initilalizing Control Types";
 
@@ -401,12 +411,12 @@ void SyncBackendHostCore::DoInitialProcessControlTypes() {
 
 void SyncBackendHostCore::DoSetDecryptionPassphrase(
     const std::string& passphrase) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->GetEncryptionHandler()->SetDecryptionPassphrase(passphrase);
 }
 
 void SyncBackendHostCore::DoEnableEncryptEverything() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->GetEncryptionHandler()->EnableEncryptEverything();
 }
 
@@ -432,9 +442,9 @@ void SyncBackendHostCore::ShutdownOnUIThread() {
 }
 
 void SyncBackendHostCore::DoShutdown(ShutdownReason reason) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  DoDestroySyncManager(reason);
+  DoDestroySyncManager();
 
   registrar_ = nullptr;
 
@@ -445,15 +455,15 @@ void SyncBackendHostCore::DoShutdown(ShutdownReason reason) {
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
-void SyncBackendHostCore::DoDestroySyncManager(ShutdownReason reason) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void SyncBackendHostCore::DoDestroySyncManager() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
   if (sync_manager_) {
     DisableDirectoryTypeDebugInfoForwarding();
     save_changes_timer_.reset();
     sync_manager_->RemoveObserver(this);
-    sync_manager_->ShutdownOnSyncThread(reason);
+    sync_manager_->ShutdownOnSyncThread();
     sync_manager_.reset();
   }
 }
@@ -461,13 +471,13 @@ void SyncBackendHostCore::DoDestroySyncManager(ShutdownReason reason) {
 void SyncBackendHostCore::DoPurgeDisabledTypes(const ModelTypeSet& to_purge,
                                                const ModelTypeSet& to_journal,
                                                const ModelTypeSet& to_unapply) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->PurgeDisabledTypes(to_purge, to_journal, to_unapply);
 }
 
 void SyncBackendHostCore::DoConfigureSyncer(
     ModelTypeConfigurer::ConfigureParams params) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!params.ready_task.is_null());
   DCHECK(!params.retry_callback.is_null());
 
@@ -487,7 +497,7 @@ void SyncBackendHostCore::DoConfigureSyncer(
 void SyncBackendHostCore::DoFinishConfigureDataTypes(
     ModelTypeSet types_to_config,
     const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Update the enabled types for the bridge and sync manager.
   ModelSafeRoutingInfo routing_info;
@@ -507,13 +517,13 @@ void SyncBackendHostCore::DoFinishConfigureDataTypes(
 
 void SyncBackendHostCore::DoRetryConfiguration(
     const base::Closure& retry_callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE, &SyncBackendHostImpl::RetryConfigurationOnFrontendLoop,
              retry_callback);
 }
 
 void SyncBackendHostCore::SendBufferedProtocolEventsAndEnableForwarding() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   forward_protocol_events_ = true;
 
   if (sync_manager_) {
@@ -532,12 +542,12 @@ void SyncBackendHostCore::SendBufferedProtocolEventsAndEnableForwarding() {
 }
 
 void SyncBackendHostCore::DisableProtocolEventForwarding() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   forward_protocol_events_ = false;
 }
 
 void SyncBackendHostCore::EnableDirectoryTypeDebugInfoForwarding() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(sync_manager_);
 
   forward_type_info_ = true;
@@ -548,7 +558,7 @@ void SyncBackendHostCore::EnableDirectoryTypeDebugInfoForwarding() {
 }
 
 void SyncBackendHostCore::DisableDirectoryTypeDebugInfoForwarding() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(sync_manager_);
 
   if (!forward_type_info_)
@@ -561,8 +571,8 @@ void SyncBackendHostCore::DisableDirectoryTypeDebugInfoForwarding() {
 }
 
 void SyncBackendHostCore::StartSavingChanges() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!save_changes_timer_.get());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!save_changes_timer_);
   save_changes_timer_ = std::make_unique<base::RepeatingTimer>();
   save_changes_timer_->Start(
       FROM_HERE, base::TimeDelta::FromSeconds(kSaveChangesIntervalSeconds),
@@ -570,13 +580,13 @@ void SyncBackendHostCore::StartSavingChanges() {
 }
 
 void SyncBackendHostCore::SaveChanges() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->SaveChanges();
 }
 
 void SyncBackendHostCore::DoClearServerData(
     const base::Closure& frontend_callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const base::Closure callback =
       base::Bind(&SyncBackendHostCore::ClearServerDataDone,
                  weak_ptr_factory_.GetWeakPtr(), frontend_callback);
@@ -586,7 +596,7 @@ void SyncBackendHostCore::DoClearServerData(
 void SyncBackendHostCore::DoOnCookieJarChanged(bool account_mismatch,
                                                bool empty_jar,
                                                const base::Closure& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->OnCookieJarChanged(account_mismatch, empty_jar);
   if (!callback.is_null()) {
     host_.Call(FROM_HERE,
@@ -595,9 +605,15 @@ void SyncBackendHostCore::DoOnCookieJarChanged(bool account_mismatch,
   }
 }
 
+bool SyncBackendHostCore::HasUnsyncedItemsForTest() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(sync_manager_);
+  return sync_manager_->HasUnsyncedItemsForTest();
+}
+
 void SyncBackendHostCore::ClearServerDataDone(
     const base::Closure& frontend_callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE, &SyncBackendHostImpl::ClearServerDataDoneOnFrontendLoop,
              frontend_callback);
 }

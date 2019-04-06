@@ -6,7 +6,9 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/location.h"
 #include "base/run_loop.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/arc/test/fake_policy_instance.h"
 
 namespace arc {
@@ -16,7 +18,7 @@ FakePolicyInstance::FakePolicyInstance() = default;
 FakePolicyInstance::~FakePolicyInstance() = default;
 
 void FakePolicyInstance::InitDeprecated(mojom::PolicyHostPtr host_ptr) {
-  Init(std::move(host_ptr), base::BindOnce(&base::DoNothing));
+  Init(std::move(host_ptr), base::DoNothing());
 }
 
 void FakePolicyInstance::Init(mojom::PolicyHostPtr host_ptr,
@@ -26,6 +28,14 @@ void FakePolicyInstance::Init(mojom::PolicyHostPtr host_ptr,
 }
 
 void FakePolicyInstance::OnPolicyUpdated() {}
+
+void FakePolicyInstance::OnCommandReceived(const std::string& command,
+                                           OnCommandReceivedCallback callback) {
+  command_payload_ = command;
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), mojom::CommandResultType::SUCCESS));
+}
 
 void FakePolicyInstance::CallGetPolicies(
     mojom::PolicyHost::GetPoliciesCallback callback) {

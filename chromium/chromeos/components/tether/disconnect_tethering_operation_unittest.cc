@@ -7,11 +7,14 @@
 #include <memory>
 #include <vector>
 
-#include "base/test/histogram_tester.h"
+#include "base/memory/ptr_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
+#include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
+#include "chromeos/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -60,20 +63,24 @@ class DisconnectTetheringOperationTest : public testing::Test {
  protected:
   DisconnectTetheringOperationTest()
       : disconnect_tethering_request_string_(CreateDisconnectTetheringString()),
-        test_device_(cryptauth::GenerateTestRemoteDevices(1)[0]) {}
+        test_device_(cryptauth::CreateRemoteDeviceRefListForTest(1)[0]) {}
 
   void SetUp() override {
+    fake_device_sync_client_ =
+        std::make_unique<device_sync::FakeDeviceSyncClient>();
+    fake_secure_channel_client_ =
+        std::make_unique<secure_channel::FakeSecureChannelClient>();
     fake_ble_connection_manager_ = std::make_unique<FakeBleConnectionManager>();
 
     operation_ = base::WrapUnique(new DisconnectTetheringOperation(
-        test_device_, fake_ble_connection_manager_.get()));
+        test_device_, fake_device_sync_client_.get(),
+        fake_secure_channel_client_.get(), fake_ble_connection_manager_.get()));
 
     test_observer_ = base::WrapUnique(new TestObserver());
     operation_->AddObserver(test_observer_.get());
 
-    test_clock_ = new base::SimpleTestClock();
-    test_clock_->SetNow(base::Time::UnixEpoch());
-    operation_->SetClockForTest(base::WrapUnique(test_clock_));
+    test_clock_.SetNow(base::Time::UnixEpoch());
+    operation_->SetClockForTest(&test_clock_);
 
     operation_->Initialize();
   }
@@ -89,7 +96,7 @@ class DisconnectTetheringOperationTest : public testing::Test {
     EXPECT_EQ(test_device_.GetDeviceId(), sent_messages[0].device_id);
     EXPECT_EQ(disconnect_tethering_request_string_, sent_messages[0].message);
 
-    test_clock_->Advance(kDisconnectTetheringRequestTime);
+    test_clock_.Advance(kDisconnectTetheringRequestTime);
 
     // Now, simulate the message being sent.
     int last_sequence_number =
@@ -107,12 +114,15 @@ class DisconnectTetheringOperationTest : public testing::Test {
   }
 
   const std::string disconnect_tethering_request_string_;
-  const cryptauth::RemoteDevice test_device_;
+  const cryptauth::RemoteDeviceRef test_device_;
 
+  std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
+  std::unique_ptr<secure_channel::SecureChannelClient>
+      fake_secure_channel_client_;
   std::unique_ptr<FakeBleConnectionManager> fake_ble_connection_manager_;
   std::unique_ptr<TestObserver> test_observer_;
 
-  base::SimpleTestClock* test_clock_;
+  base::SimpleTestClock test_clock_;
 
   std::unique_ptr<DisconnectTetheringOperation> operation_;
 
@@ -139,4 +149,4 @@ TEST_F(DisconnectTetheringOperationTest, TestFailure) {
 
 }  // namespace tether
 
-}  // namespace cryptauth
+}  // namespace chromeos

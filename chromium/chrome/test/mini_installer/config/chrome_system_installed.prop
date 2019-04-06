@@ -12,7 +12,7 @@
         {"exists": true},
     "$PROGRAM_FILES\\$CHROME_DIR\\Application\\$MINI_INSTALLER_FILE_VERSION\\$MINI_INSTALLER_FILE_VERSION.manifest":
         {"exists": true},
-    "$PROGRAM_FILES\\$CHROME_DIR\\Application\\$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION":
+    "$PROGRAM_FILES\\$CHROME_DIR\\Application\\$PREVIOUS_VERSION_MINI_INSTALLER_FILE_VERSION":
         {"exists": false}
   },
   "RegistryEntries": {
@@ -22,6 +22,23 @@
         "pv": {
           "type": "SZ",
           "data": "$MINI_INSTALLER_FILE_VERSION"
+        },
+        "opv": { },
+        "cmd": { }
+      },
+      "wow_key": "KEY_WOW64_32KEY"
+    },
+    "HKEY_LOCAL_MACHINE\\$CHROME_UPDATE_REGISTRY_SUBKEY\\Commands\\store-dmtoken": {
+      "condition": "'$CHROME_SHORT_NAME' == 'Chrome'",
+      "exists": "required",
+      "values": {
+        "CommandLine": {
+          "type": "SZ",
+          "data": "\"$PROGRAM_FILES\\$CHROME_DIR\\Application\\$MINI_INSTALLER_FILE_VERSION\\Installer\\setup.exe\" --store-dmtoken=%1 --system-level --verbose-logging"
+        },
+        "WebAccessible": {
+          "type": "DWORD",
+          "data": 1
         }
       },
       "wow_key": "KEY_WOW64_32KEY"
@@ -48,6 +65,13 @@
         }
       },
       "wow_key": "KEY_WOW64_32KEY"
+    },
+    "HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID\\$CHROME_TOAST_ACTIVATOR_CLSID\\LocalServer32": {
+      "exists": "required",
+      "values": {
+        "type": "SZ",
+        "data": "$PROGRAM_FILES\\$CHROME_DIR\\Application\\$MINI_INSTALLER_FILE_VERSION\\notification_helper.exe"
+      }
     },
     "HKEY_LOCAL_MACHINE\\Software\\Classes\\$CHROME_SHORT_NAME": {
       "exists": "forbidden"

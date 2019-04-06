@@ -5,7 +5,6 @@
 #ifndef UI_EVENTS_TEST_SCOPED_EVENT_TEST_TICK_CLOCK_H_
 #define UI_EVENTS_TEST_SCOPED_EVENT_TEST_TICK_CLOCK_H_
 
-#include "base/memory/ptr_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "ui/events/base_event_utils.h"
 
@@ -23,23 +22,18 @@ namespace test {
 //   }
 class ScopedEventTestTickClock {
  public:
-  ScopedEventTestTickClock() {
-    test_clock_ = new base::SimpleTestTickClock();
-    // Give up ownership of the test clock.
-    ui::SetEventTickClockForTesting(base::WrapUnique(test_clock_));
-  }
-
+  ScopedEventTestTickClock() { ui::SetEventTickClockForTesting(&test_clock_); }
   ~ScopedEventTestTickClock() { ui::SetEventTickClockForTesting(nullptr); }
 
   void SetNowSeconds(int64_t seconds) {
-    test_clock_->SetNowTicks(base::TimeTicks() +
-                             base::TimeDelta::FromSeconds(seconds));
+    test_clock_.SetNowTicks(base::TimeTicks() +
+                            base::TimeDelta::FromSeconds(seconds));
   }
 
-  void SetNowTicks(base::TimeTicks ticks) { test_clock_->SetNowTicks(ticks); }
+  void SetNowTicks(base::TimeTicks ticks) { test_clock_.SetNowTicks(ticks); }
 
  private:
-  base::SimpleTestTickClock* test_clock_;
+  base::SimpleTestTickClock test_clock_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedEventTestTickClock);
 };

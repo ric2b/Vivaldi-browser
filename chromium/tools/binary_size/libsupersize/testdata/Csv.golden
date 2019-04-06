@@ -26,7 +26,7 @@ GroupCount,Address,SizeWithoutPadding,Padding,NumAliases,PSS,Section,Name
 ,0x2c17740,789904,0,1,789904.0,R,chrome::mojom::FieldTrialRecorderProxy [vtable]
 ,0x2cd84e0,16,16,1,32.0,R,.Lswitch.table.45
 ,0x2cd84f0,8,0,1,8.0,R,kSystemClassPrefixes
-,0x0,33984171,0,1,33984171.0,o,ELF file overhead
+,0x0,0,33984171,1,33984171.0,o,Overhead: ELF file
 ,0x266e600,5,0,2,2.5,r,string literal
 ,0x266e600,5,0,2,2.5,r,string literal
 ,0x266e605,16,0,1,16.0,r,string literal
@@ -47,12 +47,12 @@ GroupCount,Address,SizeWithoutPadding,Padding,NumAliases,PSS,Section,Name
 ,0x28f000,448,0,1,448.0,t,ucnv_extMatchFromU
 ,0x28f1c8,20,8,1,28.0,t,_GLOBAL__sub_I_SkDeviceProfile.cpp
 ,0x28f1e0,69120,4,1,69124.0,t,foo_bar
-,0x2a0000,16,32,2,24.0,t,blink::ContiguousContainerBase::shrinkToFit
 ,0x2a0000,16,32,2,24.0,t,BazAlias
-,0x2a0010,12,0,4,3.0,t,blink::ContiguousContainerBase::shrinkToFit
-,0x2a0010,12,0,4,3.0,t,blink::ContiguousContainerBase::shrinkToFit
-,0x2a0010,12,0,4,3.0,t,FooAlias
+,0x2a0000,16,32,2,24.0,t,blink::ContiguousContainerBase::shrinkToFit
 ,0x2a0010,12,0,4,3.0,t,BarAlias
+,0x2a0010,12,0,4,3.0,t,FooAlias
+,0x2a0010,12,0,4,3.0,t,blink::ContiguousContainerBase::shrinkToFit
+,0x2a0010,12,0,4,3.0,t,blink::ContiguousContainerBase::shrinkToFit
 ,0x2a0020,24,4,1,28.0,t,blink::ContiguousContainerBase::ContiguousContainerBase
 ,0x2a1000,94,0,1,94.0,t,blink::PaintChunker::releasePaintChunks
 ,0x0,262144,0,1,262144.0,b,ff_cos_131072

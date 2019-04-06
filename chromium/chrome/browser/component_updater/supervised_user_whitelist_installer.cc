@@ -113,7 +113,8 @@ base::FilePath GetRawWhitelistPath(const base::DictionaryValue& manifest,
 
 base::FilePath GetSanitizedWhitelistPath(const std::string& crx_id) {
   base::FilePath base_dir;
-  PathService::Get(chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS, &base_dir);
+  base::PathService::Get(chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS,
+                         &base_dir);
   return base_dir.empty()
              ? base::FilePath()
              : base_dir.AppendASCII(crx_id + kSanitizedWhitelistExtension);
@@ -140,7 +141,7 @@ void DeleteFileOnTaskRunner(const base::FilePath& path) {
 
 void OnWhitelistSanitizationResult(
     const std::string& crx_id,
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     base::OnceClosure callback,
     const std::string& result) {
   const base::FilePath sanitized_whitelist_path =
@@ -164,7 +165,7 @@ void OnWhitelistSanitizationResult(
 void CheckForSanitizedWhitelistOnTaskRunner(
     const std::string& crx_id,
     const base::FilePath& whitelist_path,
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     const base::Closure& callback) {
   if (base::PathExists(GetSanitizedWhitelistPath(crx_id))) {
     task_runner->PostTask(FROM_HERE, callback);
@@ -187,7 +188,7 @@ void CheckForSanitizedWhitelistOnTaskRunner(
 void RemoveUnregisteredWhitelistsOnTaskRunner(
     const std::set<std::string>& registered_whitelists) {
   base::FilePath base_dir;
-  PathService::Get(DIR_SUPERVISED_USER_WHITELISTS, &base_dir);
+  base::PathService::Get(DIR_SUPERVISED_USER_WHITELISTS, &base_dir);
   if (!base_dir.empty()) {
     base::FileEnumerator file_enumerator(base_dir, false,
                                          base::FileEnumerator::DIRECTORIES);
@@ -210,7 +211,8 @@ void RemoveUnregisteredWhitelistsOnTaskRunner(
     }
   }
 
-  PathService::Get(chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS, &base_dir);
+  base::PathService::Get(chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS,
+                         &base_dir);
   if (!base_dir.empty()) {
     base::FilePath pattern(FILE_PATH_LITERAL("*"));
     pattern = pattern.AppendASCII(kSanitizedWhitelistExtension);
@@ -667,7 +669,8 @@ void SupervisedUserWhitelistInstaller::TriggerComponentUpdate(
     OnDemandUpdater* updater,
     const std::string& crx_id) {
   // TODO(sorin): use a callback to check the result (crbug.com/639189).
-  updater->OnDemandUpdate(crx_id, component_updater::Callback());
+  updater->OnDemandUpdate(crx_id, OnDemandUpdater::Priority::FOREGROUND,
+                          component_updater::Callback());
 }
 
 }  // namespace component_updater

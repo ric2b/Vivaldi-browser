@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
@@ -74,7 +73,7 @@ void AnonymizeResults(
 
 LogSourceAccessManager::LogSourceAccessManager(content::BrowserContext* context)
     : context_(context),
-      tick_clock_(std::make_unique<base::DefaultTickClock>()),
+      tick_clock_(base::DefaultTickClock::GetInstance()),
       task_runner_for_anonymizer_(base::CreateSequencedTaskRunnerWithTraits(
           // User visible as the feedback_api is used by the Chrome (OS)
           // feedback extension while the user may be looking at a spinner.
@@ -240,10 +239,9 @@ bool LogSourceAccessManager::UpdateSourceAccessTime(ResourceId id) {
 
   const SourceAndExtension& key = *iter->second;
   if (rate_limiters_.find(key) == rate_limiters_.end()) {
-    rate_limiters_.emplace(
-        key, std::make_unique<AccessRateLimiter>(g_max_num_burst_accesses,
-                                                 GetMinTimeBetweenReads(),
-                                                 tick_clock_.get()));
+    rate_limiters_.emplace(key, std::make_unique<AccessRateLimiter>(
+                                    g_max_num_burst_accesses,
+                                    GetMinTimeBetweenReads(), tick_clock_));
   }
   return rate_limiters_[key]->AttemptAccess();
 }

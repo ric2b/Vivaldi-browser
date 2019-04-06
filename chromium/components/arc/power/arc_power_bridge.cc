@@ -8,17 +8,19 @@
 #include <utility>
 
 #include "ash/shell.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "chromeos/dbus/power_policy_controller.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_service_manager.h"
 #include "content/public/common/service_manager_connection.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/wake_lock.mojom.h"
-#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace arc {
@@ -137,7 +139,7 @@ ArcPowerBridge::~ArcPowerBridge() {
 bool ArcPowerBridge::TriggerNotifyBrightnessTimerForTesting() {
   if (!notify_brightness_timer_.IsRunning())
     return false;
-  notify_brightness_timer_.user_task().Run();
+  notify_brightness_timer_.FireNow();
   return true;
 }
 
@@ -175,9 +177,9 @@ void ArcPowerBridge::SuspendImminent(
   if (!power_instance)
     return;
 
-  power_instance->Suspend(
-      chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-        GetSuspendReadinessCallback());
+  power_instance->Suspend(chromeos::DBusThreadManager::Get()
+                              ->GetPowerManagerClient()
+                              ->GetSuspendReadinessCallback(FROM_HERE));
 }
 
 void ArcPowerBridge::SuspendDone(const base::TimeDelta& sleep_duration) {
@@ -189,18 +191,18 @@ void ArcPowerBridge::SuspendDone(const base::TimeDelta& sleep_duration) {
   power_instance->Resume();
 }
 
-void ArcPowerBridge::BrightnessChanged(int level, bool user_initiated) {
-  double percent = static_cast<double>(level);
+void ArcPowerBridge::ScreenBrightnessChanged(
+    const power_manager::BacklightBrightnessChange& change) {
   const base::TimeTicks now = base::TimeTicks::Now();
   if (last_brightness_changed_time_.is_null() ||
       (now - last_brightness_changed_time_) >= kNotifyBrightnessDelay) {
-    UpdateAndroidScreenBrightness(percent);
+    UpdateAndroidScreenBrightness(change.percent());
     notify_brightness_timer_.Stop();
   } else {
     notify_brightness_timer_.Start(
         FROM_HERE, kNotifyBrightnessDelay,
         base::Bind(&ArcPowerBridge::UpdateAndroidScreenBrightness,
-                   weak_ptr_factory_.GetWeakPtr(), percent));
+                   weak_ptr_factory_.GetWeakPtr(), change.percent()));
   }
   last_brightness_changed_time_ = now;
 }

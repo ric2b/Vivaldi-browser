@@ -13,11 +13,12 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
-#include "content/browser/download/download_task_runner.h"
+#include "components/download/public/common/download_task_runner.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/mhtml_extra_parts.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -33,8 +34,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebFindOptions.h"
-#include "third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h"
+#include "third_party/blink/public/web/web_find_options.h"
+#include "third_party/blink/public/web/web_frame_serializer_cache_control_policy.h"
 
 using testing::ContainsRegex;
 using testing::HasSubstr;
@@ -119,9 +120,8 @@ class MHTMLGenerationTest : public ContentBrowserTest {
     histogram_tester_.reset(new base::HistogramTester());
 
     shell()->web_contents()->GenerateMHTML(
-        params, base::Bind(&MHTMLGenerationTest::MHTMLGenerated,
-                           base::Unretained(this),
-                           run_loop.QuitClosure()));
+        params, base::BindOnce(&MHTMLGenerationTest::MHTMLGenerated,
+                               base::Unretained(this), run_loop.QuitClosure()));
 
     // Block until the MHTML is generated.
     run_loop.Run();
@@ -226,7 +226,7 @@ class MHTMLGenerationTest : public ContentBrowserTest {
   void MHTMLGenerated(base::Closure quit_closure, int64_t size) {
     has_mhtml_callback_run_ = true;
     file_size_ = size;
-    quit_closure.Run();
+    std::move(quit_closure).Run();
   }
 
   bool has_mhtml_callback_run_;
@@ -338,7 +338,7 @@ class GenerateMHTMLAndExitRendererMessageFilter : public BrowserMessageFilter {
   };
 
   void TaskX() {
-    GetDownloadTaskRunner()->PostTask(
+    download::GetDownloadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&GenerateMHTMLAndExitRendererMessageFilter::TaskY,
                        base::Unretained(this)));
@@ -417,6 +417,8 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateNonBinaryMHTMLWithImage) {
     EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: base64"));
     EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: binary")));
     EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+    // Verify the boundary should start with CRLF.
+    EXPECT_THAT(mhtml, HasSubstr("\r\n------MultipartBoundary"));
   }
 }
 
@@ -442,6 +444,8 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateBinaryMHTMLWithImage) {
     EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: binary"));
     EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: base64")));
     EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+    // Verify the boundary should start with CRLF.
+    EXPECT_THAT(mhtml, HasSubstr("\r\n------MultipartBoundary"));
   }
 }
 

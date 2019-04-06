@@ -13,6 +13,7 @@
 #include "headless/public/devtools/domains/page.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_web_contents.h"
+#include "headless/test/test_network_interceptor.h"
 
 namespace base {
 class RunLoop;
@@ -27,7 +28,8 @@ class HeadlessDevToolsClient;
 // A utility class for asynchronously observing load events.
 class LoadObserver : public page::Observer, public network::Observer {
  public:
-  LoadObserver(HeadlessDevToolsClient* devtools_client, base::Closure callback);
+  LoadObserver(HeadlessDevToolsClient* devtools_client,
+               base::OnceClosure callback);
   ~LoadObserver() override;
 
   // page::Observer implementation:
@@ -40,7 +42,7 @@ class LoadObserver : public page::Observer, public network::Observer {
   bool navigation_succeeded() const { return navigation_succeeded_; }
 
  private:
-  base::Closure callback_;
+  base::OnceClosure callback_;
   HeadlessDevToolsClient* devtools_client_;  // Not owned.
 
   bool navigation_succeeded_;
@@ -72,6 +74,9 @@ class HeadlessBrowserTest : public content::BrowserTestBase {
 
   // Synchronously waits for a tab to finish loading.
   bool WaitForLoad(HeadlessWebContents* web_contents);
+
+  // Synchronously waits for a tab to finish loading and to gain focus.
+  void WaitForLoadAndGainFocus(HeadlessWebContents* web_contents);
 
   // Synchronously evaluates a script and returns the result.
   std::unique_ptr<runtime::EvaluateResult> EvaluateScript(
@@ -136,19 +141,16 @@ class HeadlessAsyncDevTooledBrowserTest : public HeadlessBrowserTest,
   // are processed (e.g. in a callback).
   virtual void RunDevTooledTest() = 0;
 
-  // Returns the protocol handlers to construct the browser with.  By default
-  // the map returned is empty.
-  virtual ProtocolHandlerMap GetProtocolHandlers();
-
-  // Whether to allow TabSockets when creating |web_contents_|.
-  virtual bool GetAllowTabSockets();
-
   // Whether to enable BeginFrameControl when creating |web_contents_|.
   virtual bool GetEnableBeginFrameControl();
 
   // Allows the HeadlessBrowserContext used in testing to be customized.
   virtual void CustomizeHeadlessBrowserContext(
       HeadlessBrowserContext::Builder& builder);
+
+  // Allows the HeadlessWebContents used in testing to be customized.
+  virtual void CustomizeHeadlessWebContents(
+      HeadlessWebContents::Builder& builder);
 
  protected:
   void RunTest();
@@ -158,6 +160,7 @@ class HeadlessAsyncDevTooledBrowserTest : public HeadlessBrowserTest,
   std::unique_ptr<HeadlessDevToolsClient> devtools_client_;
   std::unique_ptr<HeadlessDevToolsClient> browser_devtools_client_;
   bool render_process_exited_;
+  std::unique_ptr<TestNetworkInterceptor> interceptor_;
 };
 
 }  // namespace headless

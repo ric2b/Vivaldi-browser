@@ -18,7 +18,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -125,6 +124,7 @@ TouchEventConverterEvdev::TouchEventConverterEvdev(
                           id,
                           devinfo.device_type(),
                           devinfo.name(),
+                          devinfo.phys(),
                           devinfo.vendor_id(),
                           devinfo.product_id()),
       input_device_fd_(std::move(fd)),
@@ -228,6 +228,7 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
                                                         MT_TOOL_FINGER);
       events_[i].tool_type = tool_type;
       events_[i].major = touch_major;
+      events_[i].stylus_button = false;
       if (events_[i].cancelled)
         cancelled_state = true;
     }
@@ -250,22 +251,10 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
   if (cancelled_state)
     CancelAllTouches();
 
-  bool touch_noise_filtering =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kExtraTouchNoiseFiltering);
-  bool edge_touch_filtering =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEdgeTouchFiltering);
-  if (touch_noise_filtering || edge_touch_filtering) {
-    false_touch_finder_.reset(new FalseTouchFinder(touch_noise_filtering,
-                                                  edge_touch_filtering,
-                                                  GetTouchscreenSize()));
-  }
+  false_touch_finder_ = FalseTouchFinder::Create(GetTouchscreenSize());
 }
 
 void TouchEventConverterEvdev::Reinitialize() {
-  ReleaseButtons();
-
   EventDeviceInfo info;
   if (!info.Initialize(fd_, path_)) {
     LOG(ERROR) << "Failed to synchronize state for touch device: "
@@ -297,7 +286,6 @@ void TouchEventConverterEvdev::OnEnabled() {
 
 void TouchEventConverterEvdev::OnDisabled() {
   ReleaseTouches();
-  ReleaseButtons();
   if (enable_palm_suppression_callback_) {
     enable_palm_suppression_callback_.Run(false);
   }
@@ -339,7 +327,7 @@ void TouchEventConverterEvdev::SetTouchEventLoggingEnabled(bool enabled) {
 }
 
 void TouchEventConverterEvdev::SetPalmSuppressionCallback(
-    const base::Callback<void(bool)>& callback) {
+    const base::RepeatingCallback<void(bool)>& callback) {
   enable_palm_suppression_callback_ = callback;
 }
 
@@ -391,8 +379,7 @@ void TouchEventConverterEvdev::EmulateMultitouchEvent(
 void TouchEventConverterEvdev::ProcessKey(const input_event& input) {
   switch (input.code) {
     case BTN_STYLUS:
-      events_[current_slot_].btn_stylus.down = input.value;
-      events_[current_slot_].btn_stylus.changed = true;
+      events_[current_slot_].stylus_button = input.value;
       events_[current_slot_].altered = true;
       break;
     case BTN_TOOL_PEN:
@@ -520,7 +507,7 @@ void TouchEventConverterEvdev::ReportTouchEvent(
   ui::PointerDetails details(event.reported_tool_type, /* pointer_id*/ 0,
                              event.radius_x, event.radius_y, event.pressure,
                              /* twist */ 0, event.tilt_x, event.tilt_y);
-  int flags = event.btn_stylus.down ? ui::EventFlags::EF_LEFT_MOUSE_BUTTON : 0;
+  int flags = event.stylus_button ? ui::EventFlags::EF_LEFT_MOUSE_BUTTON : 0;
   dispatcher_->DispatchTouchEvent(TouchEventParams(
       input_device_.id, event.slot, event_type, gfx::PointF(event.x, event.y),
       details, timestamp, flags));
@@ -587,7 +574,6 @@ void TouchEventConverterEvdev::ReportEvents(base::TimeTicks timestamp) {
     event->was_touching = event->touching;
     event->was_delayed = event->delayed;
     event->altered = false;
-    event->btn_stylus.changed = false;
   }
 }
 
@@ -609,21 +595,9 @@ void TouchEventConverterEvdev::UpdateTrackingId(int slot, int tracking_id) {
 
 void TouchEventConverterEvdev::ReleaseTouches() {
   for (size_t slot = 0; slot < events_.size(); slot++) {
+    events_[slot].stylus_button = false;
     events_[slot].cancelled = true;
     events_[slot].altered = true;
-  }
-
-  ReportEvents(EventTimeForNow());
-}
-
-void TouchEventConverterEvdev::ReleaseButtons() {
-  for (size_t slot = 0; slot < events_.size(); slot++) {
-    InProgressTouchEvdev* event = &events_[slot];
-
-    if (event->btn_stylus.down) {
-      event->btn_stylus.down = false;
-      event->btn_stylus.changed = true;
-    }
   }
 
   ReportEvents(EventTimeForNow());

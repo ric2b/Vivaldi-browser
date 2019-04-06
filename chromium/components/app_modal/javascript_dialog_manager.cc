@@ -56,17 +56,6 @@ bool ShouldDisplaySuppressCheckbox(
   return extra_data->has_already_shown_a_dialog_;
 }
 
-void LogUMAMessageLengthStats(const base::string16& message) {
-  UMA_HISTOGRAM_COUNTS("JSDialogs.CountOfJSDialogMessageCharacters",
-                       static_cast<int32_t>(message.length()));
-
-  int32_t newline_count =
-      std::count_if(message.begin(), message.end(),
-                    [](const base::char16& c) { return c == '\n'; });
-  UMA_HISTOGRAM_COUNTS("JSDialogs.CountOfJSDialogMessageNewlines",
-                       newline_count);
-}
-
 }  // namespace
 
 // static
@@ -162,7 +151,7 @@ base::string16 JavaScriptDialogManager::GetTitleImpl(
 
 void JavaScriptDialogManager::RunJavaScriptDialog(
     content::WebContents* web_contents,
-    const GURL& alerting_frame_url,
+    content::RenderFrameHost* render_frame_host,
     content::JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
@@ -212,11 +201,11 @@ void JavaScriptDialogManager::RunJavaScriptDialog(
     last_close_time_ = base::TimeTicks();
   }
 
-  base::string16 dialog_title = GetTitle(web_contents, alerting_frame_url);
+  base::string16 dialog_title =
+      GetTitle(web_contents, render_frame_host->GetLastCommittedURL());
 
   extensions_client_->OnDialogOpened(web_contents);
 
-  LogUMAMessageLengthStats(message_text);
   AppModalDialogQueue::GetInstance()->AddDialog(new JavaScriptAppModalDialog(
       web_contents, &javascript_dialog_extra_data_, dialog_title, dialog_type,
       message_text, default_prompt_text,
@@ -233,6 +222,16 @@ void JavaScriptDialogManager::RunBeforeUnloadDialog(
     content::RenderFrameHost* render_frame_host,
     bool is_reload,
     DialogClosedCallback callback) {
+  RunBeforeUnloadDialogWithOptions(web_contents, render_frame_host, is_reload,
+                                   false, std::move(callback));
+}
+
+void JavaScriptDialogManager::RunBeforeUnloadDialogWithOptions(
+    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
+    bool is_reload,
+    bool is_app,
+    DialogClosedCallback callback) {
   ChromeJavaScriptDialogExtraData* extra_data =
       &javascript_dialog_extra_data_[web_contents];
 
@@ -244,21 +243,27 @@ void JavaScriptDialogManager::RunBeforeUnloadDialog(
   }
 
   // Build the dialog message. We explicitly do _not_ allow the webpage to
-  // specify the contents of this dialog, because most of the time nowadays it's
-  // used for scams.
+  // specify the contents of this dialog, as per the current spec
   //
-  // This does not violate the spec. Per
-  // https://html.spec.whatwg.org/#prompt-to-unload-a-document, step 7:
+  // https://html.spec.whatwg.org/#unloading-documents, step 8:
   //
-  // "The prompt shown by the user agent may include the string of the
-  // returnValue attribute, or some leading subset thereof."
+  // "The message shown to the user is not customizable, but instead
+  // determined by the user agent. In particular, the actual value of the
+  // returnValue attribute is ignored."
   //
-  // The prompt MAY include the string. It doesn't any more. Scam web page
-  // authors have abused this, so we're taking away the toys from everyone. This
-  // is why we can't have nice things.
+  // This message used to be customizable, but it was frequently abused by
+  // scam websites so the specification was changed.
 
-  const base::string16 title = l10n_util::GetStringUTF16(is_reload ?
-      IDS_BEFORERELOAD_MESSAGEBOX_TITLE : IDS_BEFOREUNLOAD_MESSAGEBOX_TITLE);
+  base::string16 title;
+  if (is_app) {
+    title = l10n_util::GetStringUTF16(
+        is_reload ? IDS_BEFORERELOAD_APP_MESSAGEBOX_TITLE
+                  : IDS_BEFOREUNLOAD_APP_MESSAGEBOX_TITLE);
+  } else {
+    title = l10n_util::GetStringUTF16(is_reload
+                                          ? IDS_BEFORERELOAD_MESSAGEBOX_TITLE
+                                          : IDS_BEFOREUNLOAD_MESSAGEBOX_TITLE);
+  }
   const base::string16 message =
       l10n_util::GetStringUTF16(IDS_BEFOREUNLOAD_MESSAGEBOX_MESSAGE);
 

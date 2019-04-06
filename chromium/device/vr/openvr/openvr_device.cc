@@ -8,9 +8,9 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/numerics/math_constants.h"
 #include "build/build_config.h"
+#include "device/vr/openvr/openvr_gamepad_data_fetcher.h"
 #include "device/vr/openvr/openvr_render_loop.h"
 #include "device/vr/openvr/openvr_type_converters.h"
 #include "third_party/openvr/src/headers/openvr.h"
@@ -36,22 +36,6 @@ mojom::VRFieldOfViewPtr OpenVRFovToWebVRFov(vr::IVRSystem* vr_system,
   out->downDegrees = -gfx::RadToDeg(atanf(up_tan));
   out->leftDegrees = -gfx::RadToDeg(atanf(left_tan));
   out->rightDegrees = gfx::RadToDeg(atanf(right_tan));
-  return out;
-}
-
-std::string GetOpenVRString(vr::IVRSystem* vr_system,
-                            vr::TrackedDeviceProperty prop) {
-  std::string out;
-
-  vr::TrackedPropertyError error = vr::TrackedProp_Success;
-  char openvr_string[vr::k_unMaxPropertyStringSize];
-  vr_system->GetStringTrackedDeviceProperty(
-      vr::k_unTrackedDeviceIndex_Hmd, prop, openvr_string,
-      vr::k_unMaxPropertyStringSize, &error);
-
-  if (error == vr::TrackedProp_Success)
-    out = openvr_string;
-
   return out;
 }
 
@@ -89,6 +73,8 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(vr::IVRSystem* vr_system,
   display_info->capabilities->hasPosition = true;
   display_info->capabilities->hasExternalDisplay = true;
   display_info->capabilities->canPresent = true;
+  display_info->webvr_default_framebuffer_scale = 1.0;
+  display_info->webxr_default_framebuffer_scale = 1.0;
 
   display_info->leftEye = mojom::VREyeParameters::New();
   display_info->rightEye = mojom::VREyeParameters::New();
@@ -142,95 +128,157 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(vr::IVRSystem* vr_system,
 
 }  // namespace
 
-OpenVRDevice::OpenVRDevice(vr::IVRSystem* vr)
-    : vr_system_(vr),
+OpenVRDevice::OpenVRDevice()
+    : VRDeviceBase(VRDeviceId::OPENVR_DEVICE_ID),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      exclusive_controller_binding_(this),
       weak_ptr_factory_(this) {
-  DCHECK(vr_system_);
-  SetVRDisplayInfo(CreateVRDisplayInfo(vr_system_, GetId()));
+  // Initialize OpenVR.
+  openvr_ = std::make_unique<OpenVRWrapper>(false /* presenting */);
+  if (!openvr_->IsInitialized()) {
+    openvr_ = nullptr;
+    return;
+  }
 
-  render_loop_ = std::make_unique<OpenVRRenderLoop>();
+  SetVRDisplayInfo(CreateVRDisplayInfo(openvr_->GetSystem(), GetId()));
+
+  render_loop_ = std::make_unique<OpenVRRenderLoop>(base::BindRepeating(
+      &OpenVRDevice::OnGamepadUpdated, weak_ptr_factory_.GetWeakPtr()));
 
   OnPollingEvents();
 }
 
-OpenVRDevice::~OpenVRDevice() {}
+void OpenVRDevice::OnGamepadUpdated(OpenVRGamepadState state) {
+  if (gamepad_data_fetcher_) {
+    gamepad_data_fetcher_->UpdateGamepadData(state);
+  }
+}
 
-void OpenVRDevice::RequestPresent(
-    VRDisplayImpl* display,
-    mojom::VRSubmitFrameClientPtr submit_client,
-    mojom::VRPresentationProviderRequest request,
-    mojom::VRRequestPresentOptionsPtr present_options,
-    mojom::VRDisplayHost::RequestPresentCallback callback) {
+void OpenVRDevice::RegisterDataFetcher(OpenVRGamepadDataFetcher* fetcher) {
+  gamepad_data_fetcher_ = fetcher;
+}
+
+OpenVRDevice::~OpenVRDevice() {
+  Shutdown();
+}
+
+void OpenVRDevice::Shutdown() {
+  // Wait for the render loop to stop before completing destruction. This will
+  // ensure that the IVRSystem doesn't get shutdown until the render loop is no
+  // longer referencing it.
+  if (render_loop_ && render_loop_->IsRunning())
+    render_loop_->Stop();
+}
+
+void OpenVRDevice::RequestSession(
+    mojom::XRDeviceRuntimeSessionOptionsPtr options,
+    mojom::XRRuntime::RequestSessionCallback callback) {
   if (!render_loop_->IsRunning())
     render_loop_->Start();
 
   if (!render_loop_->IsRunning()) {
-    std::move(callback).Run(false, nullptr);
+    std::move(callback).Run(nullptr, nullptr);
     return;
   }
 
+  // We are done using OpenVR until the presentation session ends.
+  openvr_ = nullptr;
+
   auto my_callback =
-      base::BindOnce(&OpenVRDevice::OnRequestPresentResult,
+      base::BindOnce(&OpenVRDevice::OnRequestSessionResult,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
+
+  auto on_presentation_ended = base::BindOnce(
+      &OpenVRDevice::OnPresentationEnded, weak_ptr_factory_.GetWeakPtr());
+
   render_loop_->task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&OpenVRRenderLoop::RequestPresent,
-                     render_loop_->GetWeakPtr(), submit_client.PassInterface(),
-                     std::move(request), std::move(present_options),
-                     std::move(my_callback)));
+      FROM_HERE, base::BindOnce(&OpenVRRenderLoop::RequestSession,
+                                render_loop_->GetWeakPtr(),
+                                std::move(on_presentation_ended),
+                                std::move(options), std::move(my_callback)));
 }
 
-void OpenVRDevice::OnRequestPresentResult(
-    mojom::VRDisplayHost::RequestPresentCallback callback,
-    bool result,
-    mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
-  std::move(callback).Run(result, std::move(transport_options));
-
-  if (result) {
-    using ViewerMap = std::map<std::string, VrViewerType>;
-    CR_DEFINE_STATIC_LOCAL(
-        ViewerMap, viewer_types,
-        ({
-            {"Oculus Rift CV1", VrViewerType::OPENVR_RIFT_CV1},
-            {"Vive MV", VrViewerType::OPENVR_VIVE},
-        }));
-
-    VrViewerType type = VrViewerType::OPENVR_UNKNOWN;
-    std::string model =
-        GetOpenVRString(vr_system_, vr::Prop_ModelNumber_String);
-    auto it = viewer_types.find(model);
-    if (it != viewer_types.end())
-      type = it->second;
-
-    base::UmaHistogramSparse("VRViewerType", static_cast<int>(type));
+void OpenVRDevice::OnPresentationEnded() {
+  if (!openvr_) {
+    openvr_ = std::make_unique<OpenVRWrapper>(false /* presenting */);
+    if (!openvr_->IsInitialized()) {
+      openvr_ = nullptr;
+      return;
+    }
   }
 }
 
-void OpenVRDevice::ExitPresent() {
+void OpenVRDevice::OnRequestSessionResult(
+    mojom::XRRuntime::RequestSessionCallback callback,
+    bool result,
+    mojom::VRSubmitFrameClientRequest request,
+    mojom::VRPresentationProviderPtrInfo provider_info,
+    mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
+  if (!result) {
+    OnPresentationEnded();
+    std::move(callback).Run(nullptr, nullptr);
+    return;
+  }
+
+  OnStartPresenting();
+
+  auto connection = mojom::XRPresentationConnection::New();
+  connection->client_request = std::move(request);
+  connection->provider = std::move(provider_info);
+  connection->transport_options = std::move(transport_options);
+
+  mojom::XRSessionControllerPtr session_controller;
+  exclusive_controller_binding_.Bind(mojo::MakeRequest(&session_controller));
+
+  // Use of Unretained is safe because the callback will only occur if the
+  // binding is not destroyed.
+  exclusive_controller_binding_.set_connection_error_handler(
+      base::BindOnce(&OpenVRDevice::OnPresentingControllerMojoConnectionError,
+                     base::Unretained(this)));
+
+  std::move(callback).Run(std::move(connection), std::move(session_controller));
+}
+
+// XRSessionController
+void OpenVRDevice::SetFrameDataRestricted(bool restricted) {
+  // Presentation sessions can not currently be restricted.
+  DCHECK(false);
+}
+
+void OpenVRDevice::OnPresentingControllerMojoConnectionError() {
   render_loop_->task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&OpenVRRenderLoop::ExitPresent, render_loop_->GetWeakPtr()));
+  render_loop_->Stop();
+  OnExitPresent();
+  exclusive_controller_binding_.Close();
 }
 
-void OpenVRDevice::OnMagicWindowPoseRequest(
-    mojom::VRMagicWindowProvider::GetPoseCallback callback) {
+void OpenVRDevice::OnMagicWindowFrameDataRequest(
+    mojom::VRPresentationProvider::GetFrameDataCallback callback) {
+  if (!openvr_) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+  const float kPredictionTimeSeconds = 0.03f;
   vr::TrackedDevicePose_t rendering_poses[vr::k_unMaxTrackedDeviceCount];
-  vr_system_->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseSeated, 0.03f,
-                                              rendering_poses,
-                                              vr::k_unMaxTrackedDeviceCount);
-  std::move(callback).Run(mojo::ConvertTo<mojom::VRPosePtr>(
-      rendering_poses[vr::k_unTrackedDeviceIndex_Hmd]));
+  openvr_->GetSystem()->GetDeviceToAbsoluteTrackingPose(
+      vr::TrackingUniverseSeated, kPredictionTimeSeconds, rendering_poses,
+      vr::k_unMaxTrackedDeviceCount);
+  mojom::XRFrameDataPtr data = mojom::XRFrameData::New();
+  data->pose = mojo::ConvertTo<mojom::VRPosePtr>(
+      rendering_poses[vr::k_unTrackedDeviceIndex_Hmd]);
+  std::move(callback).Run(std::move(data));
 }
 
 // Only deal with events that will cause displayInfo changes for now.
 void OpenVRDevice::OnPollingEvents() {
-  if (!vr_system_)
+  if (!openvr_)
     return;
 
   vr::VREvent_t event;
   bool is_changed = false;
-  while (vr_system_->PollNextEvent(&event, sizeof(event))) {
+  while (openvr_->GetSystem()->PollNextEvent(&event, sizeof(event))) {
     if (event.trackedDeviceIndex != vr::k_unTrackedDeviceIndex_Hmd &&
         event.trackedDeviceIndex != vr::k_unTrackedDeviceIndexInvalid) {
       continue;
@@ -251,7 +299,7 @@ void OpenVRDevice::OnPollingEvents() {
   }
 
   if (is_changed)
-    SetVRDisplayInfo(CreateVRDisplayInfo(vr_system_, GetId()));
+    SetVRDisplayInfo(CreateVRDisplayInfo(openvr_->GetSystem(), GetId()));
 
   main_thread_task_runner_->PostDelayedTask(
       FROM_HERE,

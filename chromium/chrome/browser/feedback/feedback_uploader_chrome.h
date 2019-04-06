@@ -8,32 +8,36 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "components/feedback/feedback_uploader.h"
-#include "google_apis/gaia/oauth2_token_service.h"
+#include "services/identity/public/cpp/access_token_info.h"
+
+namespace identity {
+class PrimaryAccountAccessTokenFetcher;
+}  // namespace identity
+
+class GoogleServiceAuthError;
 
 namespace feedback {
 
-class FeedbackUploaderChrome : public OAuth2TokenService::Consumer,
-                               public FeedbackUploader {
+class FeedbackUploaderChrome : public FeedbackUploader {
  public:
   FeedbackUploaderChrome(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       content::BrowserContext* context,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~FeedbackUploaderChrome() override;
 
  private:
-  // OAuth2TokenService::Consumer:
-  void OnGetTokenSuccess(const OAuth2TokenService::Request* request,
-                         const std::string& access_token,
-                         const base::Time& expiration_time) override;
-  void OnGetTokenFailure(const OAuth2TokenService::Request* request,
-                         const GoogleServiceAuthError& error) override;
-
   // feedback::FeedbackUploader:
   void StartDispatchingReport() override;
-  void AppendExtraHeadersToUploadRequest(net::URLFetcher* fetcher) override;
+  void AppendExtraHeadersToUploadRequest(
+      network::ResourceRequest* resource_request) override;
 
-  std::unique_ptr<OAuth2TokenService::Request> access_token_request_;
+  void AccessTokenAvailable(GoogleServiceAuthError error,
+                            identity::AccessTokenInfo access_token_info);
+
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher> token_fetcher_;
 
   std::string access_token_;
 

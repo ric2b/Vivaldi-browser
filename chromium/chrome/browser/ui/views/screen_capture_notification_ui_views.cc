@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/chrome_views_export.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "ui/base/hit_test.h"
@@ -23,14 +24,19 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
-#include "ui/wm/core/shadow_types.h"
 
 #if defined(OS_WIN)
 #include "ui/views/win/hwnd_util.h"
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "ash/shell.h"
+#include "ash/shell.h"  // mash-ok
+#include "mojo/public/cpp/bindings/type_converter.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "ui/base/ui_base_features.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #endif
 
 namespace {
@@ -184,8 +190,14 @@ gfx::NativeViewId ScreenCaptureNotificationUIViews::OnStarted(
   // TODO(sergeyu): The notification bar must be shown on the monitor that's
   // being captured. Make sure it's always the case. Currently we always capture
   // the primary monitor.
-  if (ash::Shell::HasInstance())
+  if (features::IsAshInBrowserProcess()) {
     params.context = ash::Shell::GetPrimaryRootWindow();
+  } else {
+    const display::Display primary_display =
+        display::Screen::GetScreen()->GetPrimaryDisplay();
+    params.mus_properties[ui::mojom::WindowManager::kDisplayId_InitProperty] =
+        mojo::ConvertTo<std::vector<uint8_t>>(primary_display.id());
+  }
 #endif
 
   widget->set_frame_type(views::Widget::FRAME_TYPE_FORCE_CUSTOM);
@@ -328,6 +340,11 @@ void ScreenCaptureNotificationUIViews::NotifyStopped() {
 
 std::unique_ptr<ScreenCaptureNotificationUI>
 ScreenCaptureNotificationUI::Create(const base::string16& text) {
+#if defined(OS_MACOSX)
+  std::unique_ptr<ScreenCaptureNotificationUI> cocoa_ui = CreateCocoa(text);
+  if (cocoa_ui)
+    return cocoa_ui;
+#endif
   return std::unique_ptr<ScreenCaptureNotificationUI>(
       new ScreenCaptureNotificationUIViews(text));
 }

@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -196,7 +195,7 @@ TEST_F(ChromePluginServiceFilterTest, ManagedSetting) {
   sync_preferences::TestingPrefServiceSyncable* prefs =
       profile()->GetTestingPrefService();
   prefs->SetManagedPref(prefs::kManagedDefaultPluginsSetting,
-                        base::MakeUnique<base::Value>(CONTENT_SETTING_ASK));
+                        std::make_unique<base::Value>(CONTENT_SETTING_ASK));
 
   GURL url("http://www.google.com");
   url::Origin main_frame_origin = url::Origin::Create(url);

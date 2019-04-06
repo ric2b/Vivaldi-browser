@@ -6,7 +6,6 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
-#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -15,7 +14,7 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
-#include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #include "ios/chrome/test/earl_grey/accessibility_util.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -35,7 +34,7 @@
 
 using chrome_test_util::ContentSettingsButton;
 using chrome_test_util::GetOriginalBrowserState;
-using chrome_test_util::NavigationBarDoneButton;
+using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SettingsMenuBackButton;
 
 namespace {
@@ -116,7 +115,7 @@ class ScopedBlockPopupsException {
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -211,9 +210,9 @@ class ScopedBlockPopupsException {
   // Toggle the switch off via the UI and make sure the exceptions are not
   // visible.
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::CollectionViewSwitchCell(
+      selectElementWithMatcher:chrome_test_util::SettingsSwitchCell(
                                    @"blockPopupsContentView_switch", YES)]
-      performAction:chrome_test_util::TurnCollectionViewSwitchOn(NO)];
+      performAction:chrome_test_util::TurnSettingsSwitchOn(NO)];
   [[EarlGrey selectElementWithMatcher:grey_text(base::SysUTF8ToNSString(
                                           allowedPattern))]
       assertWithMatcher:grey_notVisible()];
@@ -221,15 +220,14 @@ class ScopedBlockPopupsException {
       selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
                                    IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON))]
       assertWithMatcher:grey_notVisible()];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Toggle the switch back on via the UI and make sure the exceptions are now
   // visible.
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::CollectionViewSwitchCell(
-                                   @"blockPopupsContentView_switch", NO)]
-      performAction:chrome_test_util::TurnCollectionViewSwitchOn(YES)];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsSwitchCell(
+                                          @"blockPopupsContentView_switch", NO)]
+      performAction:chrome_test_util::TurnSettingsSwitchOn(YES)];
   [[EarlGrey selectElementWithMatcher:grey_text(base::SysUTF8ToNSString(
                                           allowedPattern))]
       assertWithMatcher:grey_sufficientlyVisible()];
@@ -243,7 +241,7 @@ class ScopedBlockPopupsException {
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 

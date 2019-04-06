@@ -9,7 +9,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/ssl/channel_id_store.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 class Profile;
 class BrowsingDataFlashLSOHelper;
@@ -43,8 +43,6 @@ class SiteDataCountingHelper {
  private:
   void GetOriginsFromHostContentSettignsMap(HostContentSettingsMap* hcsm,
                                             ContentSettingsType type);
-  void GetCookiesOnIOThread(
-      const scoped_refptr<net::URLRequestContextGetter>& rq_context);
   void GetCookiesCallback(const net::CookieList& cookies);
   void GetSessionStorageUsageInfoCallback(
       const scoped_refptr<storage::SpecialStoragePolicy>&
@@ -68,7 +66,7 @@ class SiteDataCountingHelper {
   base::Time begin_;
   base::Callback<void(int)> completion_callback_;
   int tasks_;
-  std::set<GURL> unique_origins_;
+  std::set<std::string> unique_hosts_;
   scoped_refptr<BrowsingDataFlashLSOHelper> flash_lso_helper_;
 };
 

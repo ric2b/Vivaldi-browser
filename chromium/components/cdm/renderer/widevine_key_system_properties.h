@@ -5,9 +5,11 @@
 #ifndef COMPONENTS_CDM_RENDERER_WIDEVINE_KEY_SYSTEM_PROPERTIES_H_
 #define COMPONENTS_CDM_RENDERER_WIDEVINE_KEY_SYSTEM_PROPERTIES_H_
 
-#include "build/build_config.h"
+#include <string>
+#include <vector>
+
+#include "base/containers/flat_set.h"
 #include "media/base/key_system_properties.h"
-#include "media/media_features.h"
 
 namespace cdm {
 
@@ -27,45 +29,40 @@ class WidevineKeySystemProperties : public media::KeySystemProperties {
   };
 
   WidevineKeySystemProperties(
-      media::SupportedCodecs supported_codecs,
-#if defined(OS_ANDROID)
-      media::SupportedCodecs supported_secure_codecs,
-#endif  // defined(OS_ANDROID)
+      media::SupportedCodecs codecs,
+      base::flat_set<media::EncryptionMode> encryption_schemes,
+      media::SupportedCodecs hw_secure_codecs,
+      base::flat_set<media::EncryptionMode> hw_secure_encryption_schemes,
       Robustness max_audio_robustness,
       Robustness max_video_robustness,
       media::EmeSessionTypeSupport persistent_license_support,
       media::EmeSessionTypeSupport persistent_release_message_support,
       media::EmeFeatureSupport persistent_state_support,
       media::EmeFeatureSupport distinctive_identifier_support);
+  ~WidevineKeySystemProperties() override;
 
   std::string GetKeySystemName() const override;
   bool IsSupportedInitDataType(
       media::EmeInitDataType init_data_type) const override;
-
+  media::EmeConfigRule GetEncryptionSchemeConfigRule(
+      media::EncryptionMode encryption_scheme) const override;
   media::SupportedCodecs GetSupportedCodecs() const override;
-#if defined(OS_ANDROID)
-  media::SupportedCodecs GetSupportedSecureCodecs() const override;
-#endif
-
+  media::SupportedCodecs GetSupportedHwSecureCodecs() const override;
   media::EmeConfigRule GetRobustnessConfigRule(
       media::EmeMediaType media_type,
       const std::string& requested_robustness) const override;
   media::EmeSessionTypeSupport GetPersistentLicenseSessionSupport()
       const override;
-  media::EmeSessionTypeSupport GetPersistentReleaseMessageSessionSupport()
+  media::EmeSessionTypeSupport GetPersistentUsageRecordSessionSupport()
       const override;
   media::EmeFeatureSupport GetPersistentStateSupport() const override;
   media::EmeFeatureSupport GetDistinctiveIdentifierSupport() const override;
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  std::string GetPepperType() const override;
-#endif
-
  private:
-  const media::SupportedCodecs supported_codecs_;
-#if defined(OS_ANDROID)
-  const media::SupportedCodecs supported_secure_codecs_;
-#endif  // defined(OS_ANDROID)
+  const media::SupportedCodecs codecs_;
+  const base::flat_set<media::EncryptionMode> encryption_schemes_;
+  const media::SupportedCodecs hw_secure_codecs_;
+  const base::flat_set<media::EncryptionMode> hw_secure_encryption_schemes_;
   const Robustness max_audio_robustness_;
   const Robustness max_video_robustness_;
   const media::EmeSessionTypeSupport persistent_license_support_;

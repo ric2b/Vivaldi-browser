@@ -9,7 +9,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "chrome/browser/vr/elements/button.h"
+#include "chrome/browser/vr/elements/vector_icon_button.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 #include "ui/gfx/vector_icon_types.h"
 
 namespace vr {
@@ -17,25 +18,21 @@ namespace vr {
 class VectorIcon;
 
 // A disc button has a circle as the background and a vector icon as the
-// foreground.  When hovered, background and foreground both move forward on Z
-// axis.  This matches the Daydream disk-style button.
-class DiscButton : public Button {
+// foreground. When hovered, background and foreground both move forward on Z
+// axis. This matches the Daydream disc-style button.
+class VR_UI_EXPORT DiscButton : public VectorIconButton {
  public:
   DiscButton(base::RepeatingCallback<void()> click_handler,
-             const gfx::VectorIcon& icon);
+             const gfx::VectorIcon& icon,
+             AudioDelegate* audio_delegate);
   ~DiscButton() override;
 
-  VectorIcon* foreground() const { return foreground_; }
-
  private:
-  void OnStateUpdated() override;
-  void OnSetDrawPhase() override;
-  void OnSetName() override;
+  void OnSetCornerRadii(const CornerRadii& radii) override;
   void NotifyClientSizeAnimated(const gfx::SizeF& size,
                                 int target_property_id,
-                                cc::Animation* animation) override;
+                                cc::KeyframeModel* keyframe_model) override;
 
-  VectorIcon* foreground_;
   DISALLOW_COPY_AND_ASSIGN(DiscButton);
 };
 

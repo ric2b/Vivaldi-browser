@@ -5,18 +5,18 @@
 #include <stddef.h>
 
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
 #include "cc/test/fake_content_layer_client.h"
-#include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/layer_tree_test.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/service/display/direct_renderer.h"
+#include "components/viz/test/fake_output_surface.h"
+#include "components/viz/test/test_gles2_interface.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
 
@@ -138,17 +138,19 @@ class LayerTreeHostCopyRequestTestMultipleRequests
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
     if (!use_gl_renderer_) {
-      return FakeOutputSurface::CreateSoftware(
+      return viz::FakeOutputSurface::CreateSoftware(
           std::make_unique<viz::SoftwareOutputDevice>());
     }
 
-    scoped_refptr<TestContextProvider> display_context_provider =
-        TestContextProvider::Create();
-    TestContextSupport* context_support = display_context_provider->support();
+    scoped_refptr<viz::TestContextProvider> display_context_provider =
+        viz::TestContextProvider::Create();
+    viz::TestContextSupport* context_support =
+        display_context_provider->support();
     context_support->set_out_of_order_callbacks(out_of_order_callbacks_);
     display_context_provider->BindToCurrentThread();
 
-    return FakeOutputSurface::Create3d(std::move(display_context_provider));
+    return viz::FakeOutputSurface::Create3d(
+        std::move(display_context_provider));
   }
 
   bool use_gl_renderer_;
@@ -182,6 +184,36 @@ TEST_F(LayerTreeHostCopyRequestTestMultipleRequests,
 TEST_F(LayerTreeHostCopyRequestTestMultipleRequests,
        GLRenderer_RunMultiThread_OutOfOrderCallbacks) {
   use_gl_renderer_ = true;
+  out_of_order_callbacks_ = true;
+  RunTest(CompositorMode::THREADED);
+}
+
+TEST_F(LayerTreeHostCopyRequestTestMultipleRequests,
+       SkiaRenderer_RunSingleThread) {
+  use_gl_renderer_ = true;
+  use_skia_renderer_ = true;
+  RunTest(CompositorMode::SINGLE_THREADED);
+}
+
+TEST_F(LayerTreeHostCopyRequestTestMultipleRequests,
+       SkiaRenderer_RunMultiThread) {
+  use_gl_renderer_ = true;
+  use_skia_renderer_ = true;
+  RunTest(CompositorMode::THREADED);
+}
+
+TEST_F(LayerTreeHostCopyRequestTestMultipleRequests,
+       SkiaRenderer_RunSingleThread_OutOfOrderCallbacks) {
+  use_gl_renderer_ = true;
+  use_skia_renderer_ = true;
+  out_of_order_callbacks_ = true;
+  RunTest(CompositorMode::SINGLE_THREADED);
+}
+
+TEST_F(LayerTreeHostCopyRequestTestMultipleRequests,
+       SkiaRenderer_RunMultiThread_OutOfOrderCallbacks) {
+  use_gl_renderer_ = true;
+  use_skia_renderer_ = true;
   out_of_order_callbacks_ = true;
   RunTest(CompositorMode::THREADED);
 }
@@ -304,7 +336,8 @@ class LayerTreeHostCopyRequestTestLayerDestroyed
         EXPECT_EQ(1, callback_count_);
 
         // Prevent drawing so we can't make a copy of the impl_destroyed layer.
-        layer_tree_host()->SetViewportSize(gfx::Size());
+        layer_tree_host()->SetViewportSizeAndScale(gfx::Size(), 1.f,
+                                                   viz::LocalSurfaceId());
         break;
       case 2:
         // Flush the message loops and make sure the callbacks run.
@@ -702,7 +735,8 @@ class LayerTreeHostTestAsyncTwoReadbacksWithoutDraw
     PostSetNeedsCommitToMainThread();
 
     // Prevent drawing.
-    layer_tree_host()->SetViewportSize(gfx::Size(0, 0));
+    layer_tree_host()->SetViewportSizeAndScale(gfx::Size(0, 0), 1.f,
+                                               viz::LocalSurfaceId());
 
     AddCopyRequest(copy_layer_.get());
   }
@@ -717,7 +751,8 @@ class LayerTreeHostTestAsyncTwoReadbacksWithoutDraw
   void DidCommit() override {
     if (layer_tree_host()->SourceFrameNumber() == 1) {
       // Allow drawing.
-      layer_tree_host()->SetViewportSize(gfx::Size(root_->bounds()));
+      layer_tree_host()->SetViewportSizeAndScale(gfx::Size(root_->bounds()),
+                                                 1.f, viz::LocalSurfaceId());
 
       AddCopyRequest(copy_layer_.get());
     }
@@ -762,9 +797,9 @@ class LayerTreeHostCopyRequestTestDeleteTexture
   std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
-    display_context_provider_ = TestContextProvider::Create();
+    display_context_provider_ = viz::TestContextProvider::Create();
     display_context_provider_->BindToCurrentThread();
-    return FakeOutputSurface::Create3d(display_context_provider_);
+    return viz::FakeOutputSurface::Create3d(display_context_provider_);
   }
 
   void SetupTree() override {
@@ -820,7 +855,7 @@ class LayerTreeHostCopyRequestTestDeleteTexture
     // releasing the copy output request should cause the texture in the request
     // to be destroyed by the compositor, so we should have 1 less by now.
     EXPECT_EQ(num_textures_after_readback_ - 1,
-              display_context_provider_->TestContext3d()->NumTextures());
+              display_context_provider_->TestContextGL()->NumTextures());
 
     // Drop the reference to the context provider on the compositor thread.
     display_context_provider_ = nullptr;
@@ -834,7 +869,7 @@ class LayerTreeHostCopyRequestTestDeleteTexture
         // been allocated.
         EXPECT_FALSE(result_);
         num_textures_without_readback_ =
-            display_context_provider_->TestContext3d()->NumTextures();
+            display_context_provider_->TestContextGL()->NumTextures();
 
         // Request a copy of the layer. This will use another texture.
         MainThreadTaskRunner()->PostTask(
@@ -851,7 +886,7 @@ class LayerTreeHostCopyRequestTestDeleteTexture
       case 2:
         // We did a readback, so there will be a readback texture around now.
         num_textures_after_readback_ =
-            display_context_provider_->TestContext3d()->NumTextures();
+            display_context_provider_->TestContextGL()->NumTextures();
         EXPECT_LT(num_textures_without_readback_, num_textures_after_readback_);
 
         // Now destroy the CopyOutputResult, releasing the texture inside back
@@ -868,7 +903,7 @@ class LayerTreeHostCopyRequestTestDeleteTexture
 
   void AfterTest() override {}
 
-  scoped_refptr<TestContextProvider> display_context_provider_;
+  scoped_refptr<viz::TestContextProvider> display_context_provider_;
   int num_swaps_ = 0;
   size_t num_textures_without_readback_ = 0;
   size_t num_textures_after_readback_ = 0;
@@ -883,11 +918,6 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCopyRequestTestDeleteTexture);
 class LayerTreeHostCopyRequestTestCountTextures
     : public LayerTreeHostCopyRequestTest {
  protected:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    // Always allocate only a single texture at a time through ResourceProvider.
-    settings->resource_settings.texture_id_allocation_chunk_size = 1;
-  }
-
   std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
@@ -895,10 +925,11 @@ class LayerTreeHostCopyRequestTestCountTextures
     // the Display so that sync points are not needed and the texture counts
     // are visible together.
     // Since this test does not override CreateLayerTreeFrameSink, the
-    // |compositor_context_provider| will be a TestContextProvider.
-    display_context_provider_ =
-        static_cast<TestContextProvider*>(compositor_context_provider.get());
-    return FakeOutputSurface::Create3d(std::move(compositor_context_provider));
+    // |compositor_context_provider| will be a viz::TestContextProvider.
+    display_context_provider_ = static_cast<viz::TestContextProvider*>(
+        compositor_context_provider.get());
+    return viz::FakeOutputSurface::Create3d(
+        std::move(compositor_context_provider));
   }
 
   void SetupTree() override {
@@ -950,14 +981,14 @@ class LayerTreeHostCopyRequestTestCountTextures
         // The first frame has been drawn, so textures for drawing have been
         // allocated.
         num_textures_without_readback_ =
-            display_context_provider_->TestContext3d()->NumTextures();
+            display_context_provider_->TestContextGL()->NumTextures();
         break;
       case 1:
         // We did a readback, so there will be a readback texture around now.
         num_textures_with_readback_ =
-            display_context_provider_->TestContext3d()->NumTextures();
+            display_context_provider_->TestContextGL()->NumTextures();
         waited_sync_token_after_readback_ =
-            display_context_provider_->TestContext3d()
+            display_context_provider_->TestContextGL()
                 ->last_waited_sync_token();
 
         // End the test after main thread has a chance to hear about the
@@ -973,7 +1004,7 @@ class LayerTreeHostCopyRequestTestCountTextures
 
   virtual void DoEndTest() { EndTest(); }
 
-  scoped_refptr<TestContextProvider> display_context_provider_;
+  scoped_refptr<viz::TestContextProvider> display_context_provider_;
   int num_swaps_ = 0;
   size_t num_textures_without_readback_ = 0;
   size_t num_textures_with_readback_ = 0;
@@ -1017,63 +1048,6 @@ class LayerTreeHostCopyRequestTestCreatesTexture
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCopyRequestTestCreatesTexture);
-
-class LayerTreeHostCopyRequestTestProvideTexture
-    : public LayerTreeHostCopyRequestTestCountTextures {
- protected:
-  void BeginTest() override {
-    external_context_provider_ = TestContextProvider::Create();
-    EXPECT_EQ(external_context_provider_->BindToCurrentThread(),
-              gpu::ContextResult::kSuccess);
-    LayerTreeHostCopyRequestTestCountTextures::BeginTest();
-  }
-
-  void CopyOutputCallback(std::unique_ptr<viz::CopyOutputResult> result) {
-    EXPECT_FALSE(result->IsEmpty());
-    EXPECT_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
-    ASSERT_NE(nullptr, result->GetTextureResult());
-
-    std::unique_ptr<viz::SingleReleaseCallback> release_callback =
-        result->TakeTextureOwnership();
-    ASSERT_TRUE(release_callback);
-    release_callback->Run(gpu::SyncToken(), false);
-  }
-
-  void RequestCopy(Layer* layer) override {
-    // Request a copy to a provided texture. This should not create a new
-    // texture.
-    std::unique_ptr<viz::CopyOutputRequest> request =
-        std::make_unique<viz::CopyOutputRequest>(
-            viz::CopyOutputRequest::ResultFormat::RGBA_TEXTURE,
-            base::BindOnce(
-                &LayerTreeHostCopyRequestTestProvideTexture::CopyOutputCallback,
-                base::Unretained(this)));
-
-    gpu::gles2::GLES2Interface* gl = external_context_provider_->ContextGL();
-    gpu::Mailbox mailbox;
-    gl->GenMailboxCHROMIUM(mailbox.name);
-
-    gl->GenSyncTokenCHROMIUM(sync_token_.GetData());
-
-    request->SetMailbox(mailbox, sync_token_);
-    EXPECT_TRUE(request->has_mailbox());
-
-    copy_layer_->RequestCopyOfOutput(std::move(request));
-  }
-
-  void AfterTest() override {
-    // Expect the compositor to have waited for the sync point provided with the
-    // mailbox.
-    EXPECT_EQ(sync_token_, waited_sync_token_after_readback_);
-    // Except the copy to have *not* made another texture.
-    EXPECT_EQ(num_textures_without_readback_, num_textures_with_readback_);
-  }
-
-  scoped_refptr<TestContextProvider> external_context_provider_;
-  gpu::SyncToken sync_token_;
-};
-
-SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCopyRequestTestProvideTexture);
 
 class LayerTreeHostCopyRequestTestDestroyBeforeCopy
     : public LayerTreeHostCopyRequestTest {
@@ -1123,7 +1097,8 @@ class LayerTreeHostCopyRequestTestDestroyBeforeCopy
                                base::Unretained(this)));
         copy_layer_->RequestCopyOfOutput(std::move(request));
 
-        layer_tree_host()->SetViewportSize(gfx::Size());
+        layer_tree_host()->SetViewportSizeAndScale(gfx::Size(), 1.f,
+                                                   viz::LocalSurfaceId());
         break;
       }
       case 2:
@@ -1134,8 +1109,9 @@ class LayerTreeHostCopyRequestTestDestroyBeforeCopy
       case 3:
         EXPECT_EQ(1, callback_count_);
         // Allow us to draw now.
-        layer_tree_host()->SetViewportSize(
-            layer_tree_host()->root_layer()->bounds());
+        layer_tree_host()->SetViewportSizeAndScale(
+            layer_tree_host()->root_layer()->bounds(), 1.f,
+            viz::LocalSurfaceId());
         break;
       case 4:
         EXPECT_EQ(1, callback_count_);
@@ -1202,7 +1178,8 @@ class LayerTreeHostCopyRequestTestShutdownBeforeCopy
                                base::Unretained(this)));
         copy_layer_->RequestCopyOfOutput(std::move(request));
 
-        layer_tree_host()->SetViewportSize(gfx::Size());
+        layer_tree_host()->SetViewportSizeAndScale(gfx::Size(), 1.f,
+                                                   viz::LocalSurfaceId());
         break;
       }
       case 2:

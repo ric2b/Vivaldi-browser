@@ -51,7 +51,9 @@ suite('AppearanceFontHandler', function() {
     document.body.appendChild(fontsPage);
   });
 
-  teardown(function() { fontsPage.remove(); });
+  teardown(function() {
+    fontsPage.remove();
+  });
 
   test('fetchFontsData', function() {
     return fontsBrowserProxy.whenCalled('fetchFontsData');
@@ -62,7 +64,7 @@ suite('AppearanceFontHandler', function() {
     Polymer.dom.flush();
     const button = fontsPage.$$('#advancedButton');
     assert(!!button);
-    MockInteractions.tap(button);
+    button.click();
     return fontsBrowserProxy.whenCalled('openAdvancedFontSettings');
   });
 });

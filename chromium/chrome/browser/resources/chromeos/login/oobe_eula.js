@@ -10,6 +10,8 @@
 Polymer({
   is: 'oobe-eula-md',
 
+  behaviors: [I18nBehavior, OobeDialogHostBehavior],
+
   properties: {
     /**
      * Shows "Loading..." section.
@@ -33,6 +35,14 @@ Polymer({
     usageStatsChecked: {
       type: Boolean,
       value: false,
+    },
+
+    /**
+     * The TPM password shown on the installation settings page.
+     */
+    password: {
+      type: String,
+      value: null,
     },
 
     /**
@@ -65,6 +75,7 @@ Polymer({
   updateLocalizedContent: function(event) {
     // This forces frame to reload.
     this.screen.loadEulaToWebview_(this.$.crosEulaFrame);
+    this.i18nUpdateLocale();
   },
 
   /**
@@ -90,8 +101,19 @@ Polymer({
    */
   onInstallationSettingsClicked_: function() {
     chrome.send('eulaOnInstallationSettingsPopupOpened');
-    $('popup-overlay').hidden = false;
-    $('installation-settings-ok-button').focus();
+    this.$.eulaDialog.hidden = true;
+    this.$.installationSettingsDialog.hidden = false;
+    this.$['settings-close-button'].focus();
+  },
+
+  /**
+   * On-tap event handler for the close button on installation settings page.
+   *
+   * @private
+   */
+  onInstallationSettingsCloseClicked_: function() {
+    this.$.installationSettingsDialog.hidden = true;
+    this.$.eulaDialog.hidden = false;
   },
 
   /**
@@ -111,5 +133,23 @@ Polymer({
    */
   onEulaBackButtonPressed_: function() {
     chrome.send('login.EulaScreen.userActed', ['back-button']);
+  },
+
+  /**
+   * Returns true if the TPM password hasn't been received.
+   *
+   * @private
+   */
+  isWaitingForPassword_: function(password) {
+    return password == null;
+  },
+
+  /**
+   * Returns true if the TPM password has been received but it's empty.
+   *
+   * @private
+   */
+  isPasswordEmpty_: function(password) {
+    return password != null && password.length == 0;
   },
 });

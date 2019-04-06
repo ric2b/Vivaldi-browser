@@ -28,8 +28,6 @@ enum class PermissionAction {
   DISMISSED = 2,
   IGNORED = 3,
   REVOKED = 4,
-  REENABLED = 5,
-  REQUESTED = 6,
 
   // Always keep this at the end.
   NUM,
@@ -40,11 +38,6 @@ class PermissionUtil {
  public:
   // Returns the permission string for the given permission.
   static std::string GetPermissionString(ContentSettingsType);
-
-  // Return the stringified version of the ContentSettingsType enum that
-  // Safe Browsing uses for the API Blacklist.
-  static std::string ConvertContentSettingsTypeToSafeBrowsingName(
-      ContentSettingsType permission);
 
   // Returns the request type corresponding to a permission type.
   static PermissionRequestType GetRequestType(ContentSettingsType permission);

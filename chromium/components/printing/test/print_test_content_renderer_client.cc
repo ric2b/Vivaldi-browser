@@ -4,10 +4,11 @@
 
 #include "components/printing/test/print_test_content_renderer_client.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "components/printing/renderer/print_render_frame_helper.h"
-#include "printing/features/features.h"
-#include "third_party/WebKit/public/web/WebElement.h"
+#include "printing/buildflags/buildflags.h"
+#include "third_party/blink/public/web/web_element.h"
 
 namespace printing {
 
@@ -44,7 +45,7 @@ PrintTestContentRendererClient::~PrintTestContentRendererClient() {
 void PrintTestContentRendererClient::RenderFrameCreated(
     content::RenderFrame* render_frame) {
   new PrintRenderFrameHelper(
-      render_frame, base::MakeUnique<PrintRenderFrameHelperDelegate>());
+      render_frame, std::make_unique<PrintRenderFrameHelperDelegate>());
 }
 
 }  // namespace printing

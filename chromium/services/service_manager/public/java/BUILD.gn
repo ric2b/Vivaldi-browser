@@ -6,6 +6,7 @@ import("//build/config/android/rules.gni")
 
 android_library("service_manager_java") {
   java_files = [
+    "src/org/chromium/services/service_manager/Connector.java",
     "src/org/chromium/services/service_manager/InterfaceFactory.java",
     "src/org/chromium/services/service_manager/InterfaceProvider.java",
     "src/org/chromium/services/service_manager/InterfaceRegistry.java",
@@ -14,6 +15,6 @@ android_library("service_manager_java") {
     "//base:base_java",
     "//mojo/public/java:bindings_java",
     "//mojo/public/java:system_java",
-    "//services/service_manager/public/interfaces:interfaces_java",
+    "//services/service_manager/public/mojom:mojom_java",
   ]
 }

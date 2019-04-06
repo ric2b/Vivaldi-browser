@@ -11,9 +11,8 @@
 
 #include "base/containers/queue.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -305,7 +304,7 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
                       AdbMessage::kCommandOKAY,
                       std::string());
         local_sockets_[current_message_->arg0] =
-            base::MakeUnique<MockLocalSocket>(
+            std::make_unique<MockLocalSocket>(
                 base::Bind(&MockUsbDeviceHandle::WriteResponse,
                            base::Unretained(this), last_local_socket_,
                            current_message_->arg0),
@@ -563,7 +562,7 @@ class AndroidUsbCountTest : public AndroidUsbDiscoveryTest {
 class AndroidUsbTraitsTest : public AndroidUsbDiscoveryTest {
  protected:
   std::unique_ptr<MockUsbService> CreateMockService() override {
-    return base::MakeUnique<MockUsbServiceForCheckingTraits>();
+    return std::make_unique<MockUsbServiceForCheckingTraits>();
   }
 };
 
@@ -747,7 +746,7 @@ IN_PROC_BROWSER_TEST_F(AndroidUsbCountTest,
   runner_->Run();
   EXPECT_EQ(1, listener.invoked_);
   EXPECT_EQ(listener.invoked_ - 1, scheduler_invoked_);
-  EXPECT_TRUE(base::MessageLoop::current()->IsIdleForTesting());
+  EXPECT_TRUE(base::MessageLoopCurrent::Get()->IsIdleForTesting());
 }
 
 IN_PROC_BROWSER_TEST_F(AndroidUsbCountTest,
@@ -757,7 +756,7 @@ IN_PROC_BROWSER_TEST_F(AndroidUsbCountTest,
   runner_->Run();
   EXPECT_EQ(3, listener.invoked_);
   EXPECT_EQ(listener.invoked_ - 1, scheduler_invoked_);
-  EXPECT_TRUE(base::MessageLoop::current()->IsIdleForTesting());
+  EXPECT_TRUE(base::MessageLoopCurrent::Get()->IsIdleForTesting());
 }
 
 IN_PROC_BROWSER_TEST_F(AndroidUsbCountTest,
@@ -769,7 +768,7 @@ IN_PROC_BROWSER_TEST_F(AndroidUsbCountTest,
   runner_->Run();
   EXPECT_EQ(1, listener.invoked_);
   EXPECT_EQ(listener.invoked_ - 1, scheduler_invoked_);
-  EXPECT_TRUE(base::MessageLoop::current()->IsIdleForTesting());
+  EXPECT_TRUE(base::MessageLoopCurrent::Get()->IsIdleForTesting());
 }
 
 IN_PROC_BROWSER_TEST_F(AndroidUsbCountTest,
@@ -779,7 +778,7 @@ IN_PROC_BROWSER_TEST_F(AndroidUsbCountTest,
   runner_->Run();
   EXPECT_EQ(2, listener.invoked_);
   EXPECT_EQ(listener.invoked_ - 1, scheduler_invoked_);
-  EXPECT_TRUE(base::MessageLoop::current()->IsIdleForTesting());
+  EXPECT_TRUE(base::MessageLoopCurrent::Get()->IsIdleForTesting());
 }
 
 IN_PROC_BROWSER_TEST_F(AndroidUsbTraitsTest, TestDeviceCounting) {

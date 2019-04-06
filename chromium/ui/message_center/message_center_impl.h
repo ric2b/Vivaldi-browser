@@ -16,19 +16,15 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "ui/message_center/change_queue.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
+#include "ui/message_center/message_center_stats_collector.h"
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notification_blocker.h"
-#include "ui/message_center/notifier_id.h"
 #include "ui/message_center/popup_timers_controller.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 namespace message_center {
-
-namespace internal {
-class ScopedNotificationsIterationLock;
-};
 
 // The default implementation of MessageCenter.
 class MESSAGE_CENTER_EXPORT MessageCenterImpl
@@ -45,11 +41,14 @@ class MESSAGE_CENTER_EXPORT MessageCenterImpl
   void RemoveNotificationBlocker(NotificationBlocker* blocker) override;
   void SetVisibility(Visibility visible) override;
   bool IsMessageCenterVisible() const override;
+  void SetHasMessageCenterView(bool has_message_center_view) override;
+  bool HasMessageCenterView() const override;
   size_t NotificationCount() const override;
   bool HasPopupNotifications() const override;
   bool IsQuietMode() const override;
-  message_center::Notification* FindVisibleNotificationById(
-      const std::string& id) override;
+  Notification* FindVisibleNotificationById(const std::string& id) override;
+  NotificationList::Notifications FindNotificationsByAppId(
+      const std::string& app_id) override;
   const NotificationList::Notifications& GetVisibleNotifications() override;
   NotificationList::PopupNotifications GetPopupNotifications() override;
   void AddNotification(std::unique_ptr<Notification> notification) override;
@@ -88,23 +87,10 @@ class MESSAGE_CENTER_EXPORT MessageCenterImpl
   // NotificationBlocker::Observer overrides:
   void OnBlockingStateChanged(NotificationBlocker* blocker) override;
 
-  // Unexposed methods:
-  void AddNotificationImmediately(std::unique_ptr<Notification> notification);
-  void UpdateNotificationImmediately(
-      const std::string& old_id,
-      std::unique_ptr<Notification> new_notification);
-  void RemoveNotificationImmediately(const std::string& id, bool by_user);
-
  protected:
   void DisableTimersForTest() override;
 
  private:
-  friend internal::ScopedNotificationsIterationLock;
-  class ScopedNotificationsLock;
-
-  Notification* GetLatestNotificationIncludingQueued(
-      const std::string& id) const;
-
   THREAD_CHECKER(thread_checker_);
 
   std::unique_ptr<NotificationList> notification_list_;
@@ -113,14 +99,13 @@ class MESSAGE_CENTER_EXPORT MessageCenterImpl
   std::unique_ptr<PopupTimersController> popup_timers_controller_;
   std::unique_ptr<base::OneShotTimer> quiet_mode_timer_;
   std::vector<NotificationBlocker*> blockers_;
-  std::unique_ptr<ChangeQueue> notification_change_queue_;
 
   bool visible_ = false;
-
-  // modified by ScopedNotificationsIterationLock.
-  bool iterating_ = false;
+  bool has_message_center_view_ = true;
 
   base::string16 system_notification_app_name_;
+
+  MessageCenterStatsCollector stats_collector_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageCenterImpl);
 };

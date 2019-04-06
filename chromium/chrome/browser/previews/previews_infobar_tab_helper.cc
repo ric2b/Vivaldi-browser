@@ -16,8 +16,8 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
+#include "components/offline_pages/buildflags/buildflags.h"
 #include "components/offline_pages/core/offline_page_item.h"
-#include "components/offline_pages/features/features.h"
 #include "components/previews/content/previews_content_util.h"
 #include "components/previews/content/previews_ui_service.h"
 #include "components/previews/core/previews_experiments.h"
@@ -100,6 +100,8 @@ void PreviewsInfoBarTabHelper::DidFinishNavigation(
       offline_pages::OfflinePageTabHelper::FromWebContents(web_contents());
 
   if (tab_helper && tab_helper->GetOfflinePreviewItem()) {
+    DCHECK_EQ(previews::PreviewsType::OFFLINE,
+              previews_user_data_->committed_previews_type());
     if (navigation_handle->IsErrorPage()) {
       // TODO(ryansturm): Add UMA for errors.
       return;
@@ -125,8 +127,9 @@ void PreviewsInfoBarTabHelper::DidFinishNavigation(
 
     data_reduction_proxy_settings->data_reduction_proxy_service()
         ->UpdateContentLengths(0, uncached_size, data_saver_enabled,
-                               data_reduction_proxy::HTTPS,
-                               "multipart/related");
+                               data_reduction_proxy::HTTPS, "multipart/related",
+                               true,
+                               data_use_measurement::DataUseUserData::OTHER, 0);
 
     PreviewsInfoBarDelegate::Create(
         web_contents(), previews::PreviewsType::OFFLINE,

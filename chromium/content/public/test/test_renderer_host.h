@@ -34,6 +34,10 @@ namespace display {
 class Screen;
 }
 
+namespace net {
+class NetworkChangeNotifier;
+}
+
 namespace ui {
 class ScopedOleInitializer;
 }
@@ -122,7 +126,7 @@ class RenderFrameHostTester {
   // can be generalized as needed. Setting a header policy should only be done
   // once per navigation of the RFH.
   virtual void SimulateFeaturePolicyHeader(
-      blink::FeaturePolicyFeature feature,
+      blink::mojom::FeaturePolicyFeature feature,
       const std::vector<url::Origin>& whitelist) = 0;
 
   // Gets all the console messages requested via
@@ -228,15 +232,19 @@ class RenderViewHostTestHarness : public testing::Test {
 
   // Sets the current WebContents for tests that want to alter it. Takes
   // ownership of the WebContents passed.
-  void SetContents(WebContents* contents);
+  void SetContents(std::unique_ptr<WebContents> contents);
 
   // Creates a new test-enabled WebContents. Ownership passes to the
   // caller.
-  WebContents* CreateTestWebContents();
+  std::unique_ptr<WebContents> CreateTestWebContents();
 
   // Cover for |contents()->NavigateAndCommit(url)|. See
   // WebContentsTester::NavigateAndCommit for details.
   void NavigateAndCommit(const GURL& url);
+
+  // Sets the focused frame to the main frame of the WebContents for tests that
+  // rely on the focused frame not being null.
+  void FocusWebContentsOnMainFrame();
 
  protected:
   // testing::Test
@@ -264,6 +272,8 @@ class RenderViewHostTestHarness : public testing::Test {
 
  private:
   std::unique_ptr<TestBrowserThreadBundle> thread_bundle_;
+
+  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
 
   std::unique_ptr<ContentBrowserSanityChecker> sanity_checker_;
 

@@ -28,11 +28,16 @@ class BrowserHandler : public DevToolsDomainHandler, public Browser::Backend {
 
   Response GetHistograms(
       Maybe<std::string> in_query,
+      Maybe<bool> in_delta,
       std::unique_ptr<Array<Browser::Histogram>>* histograms) override;
 
   Response GetHistogram(
       const std::string& in_name,
+      Maybe<bool> in_delta,
       std::unique_ptr<Browser::Histogram>* out_histogram) override;
+
+  Response GetBrowserCommandLine(
+      std::unique_ptr<protocol::Array<String>>* arguments) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BrowserHandler);

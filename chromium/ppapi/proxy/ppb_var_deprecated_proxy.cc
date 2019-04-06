@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "ppapi/c/dev/ppb_var_deprecated.h"
 #include "ppapi/c/pp_var.h"
 #include "ppapi/c/ppb_core.h"
@@ -317,7 +316,7 @@ const PPB_Var_Deprecated* PPB_Var_Deprecated_Proxy::GetProxyInterface() {
 }
 
 bool PPB_Var_Deprecated_Proxy::OnMessageReceived(const IPC::Message& msg) {
-  if (!dispatcher()->permissions().HasPermission(PERMISSION_DEV))
+  if (!dispatcher()->permissions().HasPermission(PERMISSION_FLASH))
     return false;
 
   // Prevent the dispatcher from going away during a call to Call or other

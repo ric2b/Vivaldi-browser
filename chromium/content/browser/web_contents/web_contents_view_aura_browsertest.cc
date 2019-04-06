@@ -28,6 +28,7 @@
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/overscroll_configuration.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -36,6 +37,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/scoped_overscroll_modes.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -120,56 +122,6 @@ class ScreenshotTracker : public NavigationEntryScreenshotManager {
   DISALLOW_COPY_AND_ASSIGN(ScreenshotTracker);
 };
 
-class InputEventMessageFilterWaitsForAcks : public BrowserMessageFilter {
- public:
-  InputEventMessageFilterWaitsForAcks()
-      : BrowserMessageFilter(InputMsgStart),
-        type_(blink::WebInputEvent::kUndefined),
-        state_(INPUT_EVENT_ACK_STATE_UNKNOWN) {}
-
-  void WaitForAck(blink::WebInputEvent::Type type) {
-    base::RunLoop run_loop;
-    base::AutoReset<base::Closure> reset_quit(&quit_, run_loop.QuitClosure());
-    base::AutoReset<blink::WebInputEvent::Type> reset_type(&type_, type);
-    run_loop.Run();
-  }
-
-  InputEventAckState last_ack_state() const { return state_; }
-
- protected:
-  ~InputEventMessageFilterWaitsForAcks() override {}
-
- private:
-  void ReceivedEventAck(blink::WebInputEvent::Type type,
-                        InputEventAckState state) {
-    if (type_ == type) {
-      state_ = state;
-      quit_.Run();
-    }
-  }
-
-  // BrowserMessageFilter:
-  bool OnMessageReceived(const IPC::Message& message) override {
-    if (message.type() == InputHostMsg_HandleInputEvent_ACK::ID) {
-      InputHostMsg_HandleInputEvent_ACK::Param params;
-      InputHostMsg_HandleInputEvent_ACK::Read(&message, &params);
-      blink::WebInputEvent::Type type = std::get<0>(params).type;
-      InputEventAckState ack = std::get<0>(params).state;
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::BindOnce(&InputEventMessageFilterWaitsForAcks::ReceivedEventAck,
-                         this, type, ack));
-    }
-    return false;
-  }
-
-  base::Closure quit_;
-  blink::WebInputEvent::Type type_;
-  InputEventAckState state_;
-
-  DISALLOW_COPY_AND_ASSIGN(InputEventMessageFilterWaitsForAcks);
-};
-
 class WebContentsViewAuraTest : public ContentBrowserTest {
  public:
   WebContentsViewAuraTest() : screenshot_manager_(nullptr) {}
@@ -200,7 +152,8 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
     screenshot_manager_ = new ScreenshotTracker(controller);
     controller->SetScreenshotManager(base::WrapUnique(screenshot_manager_));
 
-    frame_watcher_.Observe(shell()->web_contents());
+    frame_observer_ = std::make_unique<RenderFrameSubmissionObserver>(
+        shell()->web_contents());
   }
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
@@ -335,15 +288,13 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
         GetRenderViewHost()->GetWidget()->GetView());
   }
 
-  InputEventMessageFilterWaitsForAcks* filter() {
-    return filter_.get();
+  void WaitAFrame() {
+    while (!GetRenderWidgetHost()->RequestRepaintForTesting())
+      GiveItSomeTime();
+    frame_observer_->WaitForAnyFrameSubmission();
   }
 
-  void WaitAFrame() {
-    while (!GetRenderWidgetHost()->ScheduleComposite())
-      GiveItSomeTime();
-    frame_watcher_.WaitFrames(1);
-  }
+  void StopObserveringFrames() { frame_observer_.reset(); }
 
  protected:
   ScreenshotTracker* screenshot_manager() { return screenshot_manager_; }
@@ -351,15 +302,16 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
     screenshot_manager_->SetScreenshotInterval(interval_ms);
   }
 
-  void AddInputEventMessageFilter() {
-    filter_ = new InputEventMessageFilterWaitsForAcks();
-    GetRenderWidgetHost()->GetProcess()->AddFilter(filter_.get());
+  // ContentBrowserTest:
+  void PostRunTestOnMainThread() override {
+    // Delete this before the WebContents is destroyed.
+    StopObserveringFrames();
+    ContentBrowserTest::PostRunTestOnMainThread();
   }
 
  private:
   ScreenshotTracker* screenshot_manager_;
-  scoped_refptr<InputEventMessageFilterWaitsForAcks> filter_;
-  FrameWatcher frame_watcher_;
+  std::unique_ptr<RenderFrameSubmissionObserver> frame_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsViewAuraTest);
 };
@@ -422,8 +374,9 @@ class SpuriousMouseMoveEventObserver
 // these should all be marked as synthesized and get dropped while the
 // overscroll gesture is in progress.
 // See crbug.com/731914
+// Disabled due to flakiness: https://crbug.com/807107.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
-                       OverscrollNotInterruptedBySpuriousMouseEvents) {
+                       DISABLED_OverscrollNotInterruptedBySpuriousMouseEvents) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
@@ -454,8 +407,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
   blink::WebGestureEvent gesture_scroll_begin(
       blink::WebGestureEvent::kGestureScrollBegin,
       blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
-  gesture_scroll_begin.source_device = blink::kWebGestureDeviceTouchscreen;
+      blink::WebInputEvent::GetStaticTimeStampForTests(),
+      blink::kWebGestureDeviceTouchscreen);
   gesture_scroll_begin.data.scroll_begin.delta_hint_units =
       blink::WebGestureEvent::ScrollUnits::kPrecisePixels;
   gesture_scroll_begin.data.scroll_begin.delta_x_hint = 0.f;
@@ -465,13 +418,13 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
   blink::WebGestureEvent gesture_scroll_update(
       blink::WebGestureEvent::kGestureScrollUpdate,
       blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
-  gesture_scroll_update.source_device = blink::kWebGestureDeviceTouchscreen;
+      blink::WebInputEvent::GetStaticTimeStampForTests(),
+      blink::kWebGestureDeviceTouchscreen);
   gesture_scroll_update.data.scroll_update.delta_units =
       blink::WebGestureEvent::ScrollUnits::kPrecisePixels;
   gesture_scroll_update.data.scroll_update.delta_y = 0.f;
-  float start_threshold =
-      GetOverscrollConfig(OverscrollConfig::THRESHOLD_START_TOUCHSCREEN);
+  float start_threshold = OverscrollConfig::GetThreshold(
+      OverscrollConfig::Threshold::kStartTouchscreen);
   gesture_scroll_update.data.scroll_update.delta_x = start_threshold + 1;
   GetRenderWidgetHost()->ForwardGestureEvent(gesture_scroll_update);
 
@@ -495,7 +448,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 
 // Disabled because the test always fails the first time it runs on the Win Aura
 // bots, and usually but not always passes second-try (See crbug.com/179532).
-#if defined(OS_WIN)
+// Flaky on CrOS as well: https://crbug.com/856079
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
 #define MAYBE_QuickOverscrollDirectionChange \
         DISABLED_QuickOverscrollDirectionChange
 #else
@@ -600,6 +554,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 #define MAYBE_OverscrollScreenshot OverscrollScreenshot
 #endif
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_OverscrollScreenshot) {
+  ScopedHistoryNavigationMode scoped_mode(
+      OverscrollConfig::HistoryNavigationMode::kParallaxUi);
+
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
@@ -689,6 +646,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_OverscrollScreenshot) {
 // RenderViewHost to be swapped out.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                        MAYBE_ScreenshotForSwappedOutRenderViews) {
+  ScopedHistoryNavigationMode scoped_mode(
+      OverscrollConfig::HistoryNavigationMode::kParallaxUi);
+
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   // Create a new server with a different site.
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
@@ -712,6 +672,11 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
       {GURL(), 0}};
 
   screenshot_manager()->Reset();
+
+  // We are about to destroy the WebContents we are observing, so stop
+  // observation.
+  StopObserveringFrames();
+
   for (int i = 0; !navigations[i].url.is_empty(); ++i) {
     // Navigate via the user initiating a navigation from the UI.
     NavigationController::LoadURLParams params(navigations[i].url);
@@ -754,6 +719,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 // Tests that navigations resulting from reloads, history.replaceState,
 // and history.pushState do not capture screenshots.
 IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ReplaceStateReloadPushState) {
+  ScopedHistoryNavigationMode scoped_mode(
+      OverscrollConfig::HistoryNavigationMode::kParallaxUi);
+
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
@@ -901,22 +869,11 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
   EXPECT_FALSE(controller.CanGoForward());
 }
 
-// Verify that hiding a parent of the renderer will hide the content too.
-IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, HideContentOnParenHide) {
-  ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/title1.html"));
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-  aura::Window* content = web_contents->GetNativeView()->parent();
-  EXPECT_TRUE(web_contents->should_normally_be_visible());
-  content->Hide();
-  EXPECT_FALSE(web_contents->should_normally_be_visible());
-  content->Show();
-  EXPECT_TRUE(web_contents->should_normally_be_visible());
-}
-
 // Ensure that SnapToPhysicalPixelBoundary() is called on WebContentsView parent
 // change. This is a regression test for http://crbug.com/388908.
-IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, WebContentsViewReparent) {
+// Disabled due to flakiness: https://crbug.com/807107.
+IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
+                       DISABLED_WebContentsViewReparent) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
 
   std::unique_ptr<aura::Window> window(new aura::Window(nullptr));
@@ -949,8 +906,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                        MAYBE_OverscrollNavigationTouchThrottling) {
   ASSERT_NO_FATAL_FAILURE(StartTestWithPage("/overscroll_navigation.html"));
 
-  AddInputEventMessageFilter();
-
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   aura::Window* content = web_contents->GetContentNativeView();
@@ -968,24 +923,35 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
       ExecuteSyncJSFunction(web_contents->GetMainFrame(),
                             "reset_touchmove_count()");
     }
+    InputEventAckWaiter touch_start_waiter(
+        GetRenderWidgetHost(),
+        base::BindRepeating([](content::InputEventAckSource,
+                               content::InputEventAckState state,
+                               const blink::WebInputEvent& event) {
+          return event.GetType() == blink::WebGestureEvent::kTouchStart &&
+                 state == content::INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+        }));
     // Send touch press.
     SyntheticWebTouchEvent touch;
     touch.PressPoint(bounds.x() + 2, bounds.y() + 10);
     GetRenderWidgetHost()->ForwardTouchEventWithLatencyInfo(touch,
                                                             ui::LatencyInfo());
-    filter()->WaitForAck(blink::WebInputEvent::kTouchStart);
+    touch_start_waiter.Wait();
     WaitAFrame();
-
-    // Assert on the ack, because we'll end up waiting for acks that will never
-    // come if this is not true.
-    ASSERT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, filter()->last_ack_state());
 
     // Send first touch move, and then a scroll begin.
     touch.MovePoint(0, bounds.x() + 20 + 1 * dx, bounds.y() + 100);
+    InputEventAckWaiter touch_move_waiter(
+        GetRenderWidgetHost(),
+        base::BindRepeating([](content::InputEventAckSource,
+                               content::InputEventAckState state,
+                               const blink::WebInputEvent& event) {
+          return event.GetType() == blink::WebGestureEvent::kTouchMove &&
+                 state == content::INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+        }));
     GetRenderWidgetHost()->ForwardTouchEventWithLatencyInfo(touch,
                                                             ui::LatencyInfo());
-    filter()->WaitForAck(blink::WebInputEvent::kTouchMove);
-    ASSERT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, filter()->last_ack_state());
+    touch_move_waiter.Wait();
 
     blink::WebGestureEvent scroll_begin =
         SyntheticWebGestureEventBuilder::BuildScrollBegin(
@@ -1018,10 +984,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                                                             ui::LatencyInfo());
     WaitAFrame();
 
-    blink::WebGestureEvent scroll_end(
-        blink::WebInputEvent::kGestureScrollEnd,
-        blink::WebInputEvent::kNoModifiers,
-        ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+    blink::WebGestureEvent scroll_end(blink::WebInputEvent::kGestureScrollEnd,
+                                      blink::WebInputEvent::kNoModifiers,
+                                      ui::EventTimeForNow());
     GetRenderWidgetHost()->ForwardGestureEventWithLatencyInfo(
         scroll_end, ui::LatencyInfo());
     WaitAFrame();

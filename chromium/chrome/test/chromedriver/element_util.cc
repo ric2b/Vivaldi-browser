@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/basic_types.h"
+#include "chrome/test/chromedriver/chrome/browser_info.h"
 #include "chrome/test/chromedriver/chrome/chrome.h"
 #include "chrome/test/chromedriver/chrome/js.h"
 #include "chrome/test/chromedriver/chrome/status.h"
@@ -158,6 +159,26 @@ Status ScrollElementRegionIntoViewHelper(
     middle.Offset(region.Width() / 2, region.Height() / 2);
     status = VerifyElementClickable(
         frame, web_view, clickable_element_id, middle);
+    if (status.code() == kUnknownError &&
+        status.message().find("is not clickable") != std::string::npos) {
+      // Clicking at the target location isn't reaching the target element.
+      // One possible cause is a scroll event handler has shifted the element.
+      // Try again to get the updated location of the target element.
+      status = web_view->CallFunction(
+          frame,
+          webdriver::atoms::asString(webdriver::atoms::GET_LOCATION_IN_VIEW),
+          args, &result);
+      if (status.IsError())
+        return status;
+      if (!ParseFromValue(result.get(), &tmp_location)) {
+        return Status(kUnknownError,
+                      "failed to parse value of GET_LOCATION_IN_VIEW");
+      }
+      middle = tmp_location;
+      middle.Offset(region.Width() / 2, region.Height() / 2);
+      status =
+          VerifyElementClickable(frame, web_view, clickable_element_id, middle);
+    }
     if (status.IsError())
       return status;
   }
@@ -209,8 +230,20 @@ Status GetElementBorder(
   base::StringToInt(border_top_str, &border_top_tmp);
   if (border_left_tmp == -1 || border_top_tmp == -1)
     return Status(kUnknownError, "failed to get border width of element");
-  *border_left = border_left_tmp;
-  *border_top = border_top_tmp;
+  std::string padding_left_str;
+  status = GetElementEffectiveStyle(frame, web_view, element_id, "padding-left",
+                                    &padding_left_str);
+  int padding_left = 0;
+  if (status.IsOk())
+    base::StringToInt(padding_left_str, &padding_left);
+  std::string padding_top_str;
+  status = GetElementEffectiveStyle(frame, web_view, element_id, "padding-top",
+                                    &padding_top_str);
+  int padding_top = 0;
+  if (status.IsOk())
+    base::StringToInt(padding_top_str, &padding_top);
+  *border_left = border_left_tmp + padding_left;
+  *border_top = border_top_tmp + padding_top;
   return Status(kOk);
 }
 
@@ -257,14 +290,20 @@ Status FindElement(int interval_ms,
     arguments.Append(CreateElement(*root_element_id));
 
   base::TimeTicks start_time = base::TimeTicks::Now();
+  int context_retry = 0;
   while (true) {
     std::unique_ptr<base::Value> temp;
     Status status = web_view->CallFunction(
         session->GetCurrentFrameId(), script, arguments, &temp);
-    if (status.IsError())
+    // A "Cannot find context" error can occur due to transition from in-process
+    // iFrame to OOPIF. Retry a couple of times.
+    if (status.IsError() &&
+        (status.message().find("Cannot find context") == std::string::npos ||
+         ++context_retry > 2)) {
       return status;
+    }
 
-    if (!temp->is_none()) {
+    if (temp && !temp->is_none()) {
       if (only_one) {
         *value = std::move(temp);
         return Status(kOk);
@@ -623,8 +662,18 @@ Status ScrollElementRegionIntoView(
       "  return document.evaluate(xpath, document, null,"
       "      XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;"
       "}";
+  bool needs_special_oopif_handling =
+      !session->chrome->GetBrowserInfo()->is_android &&
+      session->chrome->GetBrowserInfo()->major_version <= 65;
+  bool has_saved_region_offset = false;
+  WebPoint saved_region_offset;
   for (std::list<FrameInfo>::reverse_iterator rit = session->frames.rbegin();
        rit != session->frames.rend(); ++rit) {
+    if (needs_special_oopif_handling && !has_saved_region_offset &&
+        web_view->IsOOPIF(rit->frame_id)) {
+      saved_region_offset = region_offset;
+      has_saved_region_offset = true;
+    }
     base::ListValue args;
     args.AppendString(
         base::StringPrintf("//*[@cd_frame_id_ = '%s']",
@@ -658,6 +707,8 @@ Status ScrollElementRegionIntoView(
     if (status.IsError())
       return status;
   }
+  if (has_saved_region_offset)
+    region_offset = saved_region_offset;
   *location = region_offset;
   return Status(kOk);
 }

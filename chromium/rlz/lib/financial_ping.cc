@@ -57,7 +57,6 @@ class InternetHandle {
 #else
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "net/base/load_flags.h"
@@ -69,31 +68,6 @@ class InternetHandle {
 #include "url/gurl.h"
 
 #endif
-
-namespace {
-
-// Returns the time relative to a fixed point in the past in multiples of
-// 100 ns stepts. The point in the past is arbitrary but can't change, as the
-// result of this value is stored on disk.
-int64_t GetSystemTimeAsInt64() {
-#if defined(OS_WIN)
-  FILETIME now_as_file_time;
-  // Relative to Jan 1, 1601 (UTC).
-  GetSystemTimeAsFileTime(&now_as_file_time);
-
-  LARGE_INTEGER integer;
-  integer.HighPart = now_as_file_time.dwHighDateTime;
-  integer.LowPart = now_as_file_time.dwLowDateTime;
-  return integer.QuadPart;
-#else
-  // Seconds since epoch (Jan 1, 1970).
-  double now_seconds = base::Time::Now().ToDoubleT();
-  return static_cast<int64_t>(now_seconds * 1000 * 1000 * 10);
-#endif
-}
-
-}  // namespace
-
 
 namespace rlz_lib {
 
@@ -204,6 +178,9 @@ bool FinancialPing::SetURLRequestContext(
   return true;
 }
 
+// Signal to stop the ShutdownCheck() task.
+AtomicWord g_cancelShutdownCheck;
+
 namespace {
 
 // A waitable event used to detect when either:
@@ -278,7 +255,11 @@ bool send_financial_ping_interrupted_for_test = false;
 
 }  // namespace
 
+#if defined(RLZ_NETWORK_IMPLEMENTATION_CHROME_NET)
 void ShutdownCheck(scoped_refptr<RefCountedWaitableEvent> event) {
+  if (base::subtle::Acquire_Load(&g_cancelShutdownCheck))
+    return;
+
   if (!base::subtle::Acquire_Load(&g_context)) {
     send_financial_ping_interrupted_for_test = true;
     event->SignalShutdown();
@@ -288,8 +269,10 @@ void ShutdownCheck(scoped_refptr<RefCountedWaitableEvent> event) {
   // the shutdown condition?
   const base::TimeDelta kInterval = base::TimeDelta::FromMilliseconds(500);
   base::PostDelayedTaskWithTraits(FROM_HERE, {base::TaskPriority::BACKGROUND},
-                                  base::Bind(&ShutdownCheck, event), kInterval);
+                                  base::BindOnce(&ShutdownCheck, event),
+                                  kInterval);
 }
+#endif
 
 void PingRlzServer(std::string url,
                    scoped_refptr<RefCountedWaitableEvent> event) {
@@ -350,9 +333,10 @@ void PingRlzServer(std::string url,
 }
 #endif
 
-bool FinancialPing::PingServer(const char* request, std::string* response) {
+FinancialPing::PingResponse FinancialPing::PingServer(const char* request,
+                                                      std::string* response) {
   if (!response)
-    return false;
+    return PING_FAILURE;
 
   response->clear();
 
@@ -362,14 +346,14 @@ bool FinancialPing::PingServer(const char* request, std::string* response) {
                                              INTERNET_OPEN_TYPE_PRECONFIG,
                                              NULL, NULL, 0);
   if (!inet_handle)
-    return false;
+    return PING_FAILURE;
 
   // Open network connection.
   InternetHandle connection_handle = InternetConnectA(inet_handle,
       kFinancialServer, kFinancialPort, "", "", INTERNET_SERVICE_HTTP,
       INTERNET_FLAG_NO_CACHE_WRITE, 0);
   if (!connection_handle)
-    return false;
+    return PING_FAILURE;
 
   // Prepare the HTTP request.
   const DWORD kFlags = INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_COOKIES |
@@ -378,14 +362,14 @@ bool FinancialPing::PingServer(const char* request, std::string* response) {
       HttpOpenRequestA(connection_handle, "GET", request, NULL, NULL,
                        kFinancialPingResponseObjects, kFlags, NULL);
   if (!http_handle)
-    return false;
+    return PING_FAILURE;
 
   // Timeouts are probably:
   // INTERNET_OPTION_SEND_TIMEOUT, INTERNET_OPTION_RECEIVE_TIMEOUT
 
   // Send the HTTP request. Note: Fails if user is working in off-line mode.
   if (!HttpSendRequest(http_handle, NULL, 0, NULL, 0))
-    return false;
+    return PING_FAILURE;
 
   // Check the response status.
   DWORD status;
@@ -393,12 +377,12 @@ bool FinancialPing::PingServer(const char* request, std::string* response) {
   if (!HttpQueryInfo(http_handle, HTTP_QUERY_STATUS_CODE |
                      HTTP_QUERY_FLAG_NUMBER, &status, &status_size, NULL) ||
       200 != status)
-    return false;
+    return PING_FAILURE;
 
   // Get the response text.
   std::unique_ptr<char[]> buffer(new char[kMaxPingResponseLength]);
   if (buffer.get() == NULL)
-    return false;
+    return PING_FAILURE;
 
   DWORD bytes_read = 0;
   while (InternetReadFile(http_handle, buffer.get(), kMaxPingResponseLength,
@@ -407,7 +391,7 @@ bool FinancialPing::PingServer(const char* request, std::string* response) {
     bytes_read = 0;
   };
 
-  return true;
+  return PING_SUCCESSFUL;
 #else
   std::string url =
       base::StringPrintf("https://%s%s", kFinancialServer, request);
@@ -416,8 +400,10 @@ bool FinancialPing::PingServer(const char* request, std::string* response) {
   // wininet implementation.
   auto event = base::MakeRefCounted<RefCountedWaitableEvent>();
 
+  base::subtle::Release_Store(&g_cancelShutdownCheck, 0);
+
   base::PostTaskWithTraits(FROM_HERE, {base::TaskPriority::BACKGROUND},
-                           base::Bind(&ShutdownCheck, event));
+                           base::BindOnce(&ShutdownCheck, event));
 
   // PingRlzServer must be run in a separate sequence so that the TimedWait()
   // call below does not block the URL fetch response from being handled by
@@ -427,18 +413,27 @@ bool FinancialPing::PingServer(const char* request, std::string* response) {
           {base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
            base::TaskPriority::BACKGROUND}));
   background_runner->PostTask(FROM_HERE,
-                              base::Bind(&PingRlzServer, url, event));
+                              base::BindOnce(&PingRlzServer, url, event));
 
   bool is_signaled;
   {
     base::ScopedAllowBaseSyncPrimitives allow_base_sync_primitives;
     is_signaled = event->TimedWait(base::TimeDelta::FromMinutes(5));
   }
-  if (!is_signaled || event->GetResponseCode() != 200)
-    return false;
+
+  base::subtle::Release_Store(&g_cancelShutdownCheck, 1);
+
+  if (!is_signaled)
+    return PING_FAILURE;
+
+  if (event->GetResponseCode() == net::URLFetcher::RESPONSE_CODE_INVALID) {
+    return PING_SHUTDOWN;
+  } else if (event->GetResponseCode() != 200) {
+    return PING_FAILURE;
+  }
 
   *response = event->TakeResponse();
-  return true;
+  return PING_SUCCESSFUL;
 #endif
 }
 
@@ -487,6 +482,23 @@ bool FinancialPing::ClearLastPingTime(Product product) {
   if (!store || !store->HasAccess(RlzValueStore::kWriteAccess))
     return false;
   return store->ClearPingTime(product);
+}
+
+int64_t FinancialPing::GetSystemTimeAsInt64() {
+#if defined(OS_WIN)
+  FILETIME now_as_file_time;
+  // Relative to Jan 1, 1601 (UTC).
+  GetSystemTimeAsFileTime(&now_as_file_time);
+
+  LARGE_INTEGER integer;
+  integer.HighPart = now_as_file_time.dwHighDateTime;
+  integer.LowPart = now_as_file_time.dwLowDateTime;
+  return integer.QuadPart;
+#else
+  // Seconds since epoch (Jan 1, 1970).
+  double now_seconds = base::Time::Now().ToDoubleT();
+  return static_cast<int64_t>(now_seconds * 1000 * 1000 * 10);
+#endif
 }
 
 #if defined(RLZ_NETWORK_IMPLEMENTATION_CHROME_NET)

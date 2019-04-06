@@ -12,12 +12,13 @@
 #include <memory>
 #include <string>
 
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/process/process.h"
 #include "chromeos/process_proxy/process_output_watcher.h"
 
 namespace base {
-class Process;
 class SingleThreadTaskRunner;
 class TaskRunner;
 }  // namespace base
@@ -39,9 +40,9 @@ class ProcessProxy : public base::RefCountedThreadSafe<ProcessProxy> {
 
   ProcessProxy();
 
-  // Opens a process using command |command|. Returns process ID on success, -1
-  // on failure.
-  int Open(const std::string& command);
+  // Opens a process using command |command| for the user with hash
+  // |user_id_hash|.  Returns process ID on success, -1 on failure.
+  int Open(const base::CommandLine& cmdline, const std::string& user_id_hash);
 
   bool StartWatchingOutput(
       const scoped_refptr<base::SingleThreadTaskRunner>& watcher_runner,
@@ -75,7 +76,9 @@ class ProcessProxy : public base::RefCountedThreadSafe<ProcessProxy> {
   // Launches command in a new terminal process, mapping its stdout and stdin to
   // |slave_fd|.
   // Returns launched process id, or -1 on failure.
-  int LaunchProcess(const std::string& command, int slave_fd);
+  int LaunchProcess(const base::CommandLine& cmdline,
+                    const std::string& user_id_hash,
+                    int slave_fd);
 
   // Gets called by output watcher when the process writes something to its
   // output streams. If set, |callback| should be called when the output is
@@ -109,7 +112,7 @@ class ProcessProxy : public base::RefCountedThreadSafe<ProcessProxy> {
 
   std::unique_ptr<ProcessOutputWatcher> output_watcher_;
 
-  std::unique_ptr<base::Process> process_;
+  base::Process process_;
 
   int pt_pair_[2];
 

@@ -17,8 +17,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -40,7 +40,6 @@ import java.util.concurrent.Callable;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure // crbug.com/637448
 public class BookmarksTest {
     @Rule
     public SyncTestRule mSyncTestRule = new SyncTestRule();
@@ -316,6 +315,7 @@ public class BookmarksTest {
     @Test
     @LargeTest
     @Feature({"Sync"})
+    @DisabledTest(message = "crbug.com/823484")
     public void testUploadMovedBookmark() throws Exception {
         // Add the entity to test moving.
         BookmarkId bookmarkId = addClientBookmark(TITLE, URL);
@@ -494,10 +494,10 @@ public class BookmarksTest {
                 mSyncTestRule.getFakeServerHelper().getSyncEntitiesByModelType(ModelType.BOOKMARKS);
         List<Bookmark> bookmarks = new ArrayList<Bookmark>(entities.size());
         for (SyncEntity entity : entities) {
-            String id = entity.idString;
-            String parentId = entity.parentIdString;
-            BookmarkSpecifics specifics = entity.specifics.bookmark;
-            bookmarks.add(new Bookmark(id, specifics.title, specifics.url, parentId));
+            String id = entity.getIdString();
+            String parentId = entity.getParentIdString();
+            BookmarkSpecifics specifics = entity.getSpecifics().getBookmark();
+            bookmarks.add(new Bookmark(id, specifics.getTitle(), specifics.getUrl(), parentId));
         }
         return bookmarks;
     }

@@ -11,6 +11,8 @@
 #include "base/threading/thread_checker.h"
 #include "chromecast/public/graphics_types.h"
 #include "chromecast/public/video_plane.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/overlay_transform.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -36,10 +38,12 @@ class VideoPlaneController {
       const Size& graphics_resolution,
       scoped_refptr<base::SingleThreadTaskRunner> media_task_runner);
   ~VideoPlaneController();
+
   // Sets the video plane geometry in *graphics plane coordinates*. If there is
   // no change to video plane parameters from the last call to this method, it
   // is a no-op.
-  void SetGeometry(const RectF& display_rect, VideoPlane::Transform transform);
+  void SetGeometry(const gfx::RectF& display_rect,
+                   gfx::OverlayTransform transform);
 
   // Sets physical screen resolution. This must be called at least once when
   // the final output resolution (HDMI signal or panel resolution) is known,

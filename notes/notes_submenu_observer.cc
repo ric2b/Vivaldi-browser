@@ -59,28 +59,33 @@ void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node,
     max_notes_id_ = node->id();
   }
 
-  const int kMaxMenuStringLength = 40;
-  base::string16 data = node->GetTitle();
-  if (data.length() == 0) {
-    data = node->GetContent();
-  }
-  // Remove newlines inside string
-  base::string16 title = base::CollapseWhitespace(data, false);
-  // Remove spaces at start and end
-  base::TrimWhitespace(title, base::TRIM_ALL, &title);
-  // Truncate string if it is too long
-  if (title.length() > kMaxMenuStringLength) {
-    title = title.substr(0, kMaxMenuStringLength - 3) +
-        base::UTF8ToUTF16("...");
-  }
-  if (node->is_folder()) {
-    ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(delegate_);
-    menu_model->AddSubMenu(node->id(), title, child_menu_model);
-    for (int i = 0; i < node->child_count(); i++) {
-      this->AddMenuItems(node->GetChild(i), child_menu_model);
-    }
+  if (node->is_separator()) {
+    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   } else {
-    menu_model->AddItem(node->id(), title);
+    const int kMaxMenuStringLength = 40;
+    base::string16 data = node->GetTitle();
+    if (data.length() == 0) {
+      data = node->GetContent();
+    }
+    // Remove newlines inside string
+    base::string16 title = base::CollapseWhitespace(data, false);
+    // Remove spaces at start and end
+    base::TrimWhitespace(title, base::TRIM_ALL, &title);
+    // Truncate string if it is too long
+    if (title.length() > kMaxMenuStringLength) {
+      title = title.substr(0, kMaxMenuStringLength - 3) +
+          base::UTF8ToUTF16("...");
+    }
+    if (node->is_folder()) {
+      ui::SimpleMenuModel* child_menu_model
+          = new ui::SimpleMenuModel(delegate_);
+      menu_model->AddSubMenu(node->id(), title, child_menu_model);
+      for (int i = 0; i < node->child_count(); i++) {
+        this->AddMenuItems(node->GetChild(i), child_menu_model);
+      }
+    } else {
+      menu_model->AddItem(node->id(), title);
+    }
   }
 }
 

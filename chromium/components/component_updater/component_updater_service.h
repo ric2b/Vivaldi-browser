@@ -39,6 +39,7 @@ namespace component_updater {
 using Callback = update_client::Callback;
 
 class OnDemandUpdater;
+class UpdateScheduler;
 
 using Configurator = update_client::Configurator;
 using CrxComponent = update_client::CrxComponent;
@@ -150,13 +151,17 @@ using ServiceObserver = ComponentUpdateService::Observer;
 
 class OnDemandUpdater {
  public:
+  // The priority of the on demand update. Calls with |BACKGROUND| priority may
+  // be queued up but calls with |FOREGROUND| priority may be processed right
+  // away.
+  enum class Priority { BACKGROUND = 0, FOREGROUND = 1 };
+
   virtual ~OnDemandUpdater() {}
 
  private:
   friend class OnDemandTester;
   friend class policy::ComponentUpdaterPolicyTest;
   friend class SupervisedUserWhitelistInstaller;
-  friend class DownloadableStringsComponentInstallerPolicy;
   friend class ::ComponentsUI;
   friend class ::PluginObserver;
   friend class SwReporterOnDemandFetcher;
@@ -171,12 +176,15 @@ class OnDemandUpdater {
   // the update will be applied. The caller can subscribe to component update
   // service notifications and provide an optional callback to get the result
   // of the call. The function does not implement any cooldown interval.
-  virtual void OnDemandUpdate(const std::string& id, Callback callback) = 0;
+  virtual void OnDemandUpdate(const std::string& id,
+                              Priority priority,
+                              Callback callback) = 0;
 };
 
 // Creates the component updater.
 std::unique_ptr<ComponentUpdateService> ComponentUpdateServiceFactory(
-    const scoped_refptr<Configurator>& config);
+    scoped_refptr<Configurator> config,
+    std::unique_ptr<UpdateScheduler> scheduler);
 
 }  // namespace component_updater
 

@@ -73,10 +73,6 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
   bool OnMessageReceived(const IPC::Message& msg) override;
 
  private:
-#if defined(PLATFORM_MEDIA_HWA)
-  class PictureBufferManager;
-#endif
-
   typedef base::Callback<void(MediaDataStatus status,
                               const uint8_t* data,
                               int data_size,
@@ -107,21 +103,12 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
   void OnReadRawDataFinished(int size);
 
   void DecodedVideoReady(DemuxerStream::Status status,
-                         const scoped_refptr<DecoderBuffer>& buffer);
+                         scoped_refptr<DecoderBuffer> buffer);
 
   void OnDecodedDataReady(
       const MediaPipelineMsg_DecodedDataReady_Params& params);
   void OnAudioConfigChanged(const PlatformAudioConfig& new_audio_config);
   void OnVideoConfigChanged(const PlatformVideoConfig& new_video_config);
-
-#if defined(PLATFORM_MEDIA_HWA)
-  bool is_handling_accelerated_video_decode(
-      PlatformMediaDataType type) const {
-    return type == PlatformMediaDataType::PLATFORM_MEDIA_VIDEO &&
-           video_config_.decoding_mode ==
-               PlatformMediaDecodingMode::HARDWARE;
-  }
-#endif
 
   bool is_read_in_progress(PlatformMediaDataType type) const {
     return !decoded_data_read_callbacks_[type].is_null();
@@ -146,9 +133,6 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
   VideoDecoderConfig config_;
 
   GpuVideoAcceleratorFactories* factories_;
-#if defined(PLATFORM_MEDIA_HWA)
-  std::unique_ptr<PictureBufferManager> picture_buffer_manager_;
-#endif
   base::WeakPtrFactory<IPCMediaPipelineHostImpl> weak_ptr_factory_;
 };
 

@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/util/process_version.gni")
-import("//media/media_options.gni")
 import("//remoting/build/config/remoting_build.gni")
 
 group("all_tests") {
@@ -161,7 +160,6 @@ static_library("host") {
     "host_details.cc",
     "host_details.h",
     "host_event_logger.h",
-    "host_event_logger_posix.cc",
     "host_event_logger_win.cc",
     "host_exit_codes.cc",
     "host_exit_codes.h",
@@ -235,8 +233,6 @@ static_library("host") {
     "pin_hash.h",
     "policy_watcher.cc",
     "policy_watcher.h",
-    "posix/signal_handler.cc",
-    "posix/signal_handler.h",
     "process_stats_agent.h",
     "process_stats_sender.cc",
     "process_stats_sender.h",
@@ -308,6 +304,7 @@ static_library("host") {
     "//remoting/host/security_key",
     "//remoting/protocol",
     "//remoting/resources",
+    "//third_party/webrtc/modules/desktop_capture",
 
     # //remoting uses the power_save_blocker directly. See crbug.com/689423
     "//services/device/wake_lock/power_save_blocker",
@@ -319,6 +316,14 @@ static_library("host") {
   public_deps = [
     "//ipc",
   ]
+
+  if (is_posix) {
+    sources += [
+      "host_event_logger_posix.cc",
+      "posix/signal_handler.cc",
+      "posix/signal_handler.h",
+    ]
+  }
 
   if (!is_ios) {
     deps += [ "//components/policy:generated" ]
@@ -406,10 +411,6 @@ static_library("host") {
 
     public_deps += [ "//remoting/host/win" ]
   }
-
-  if (enable_webrtc) {
-    deps += [ "//third_party/webrtc/modules/desktop_capture" ]
-  }
 }
 
 static_library("test_support") {
@@ -436,16 +437,11 @@ static_library("test_support") {
   public_deps = [
     ":host",
     "//remoting/base:test_support",
+    "//third_party/libjingle_xmpp",
     "//third_party/protobuf:protobuf_lite",
+    "//third_party/webrtc/modules/desktop_capture",
+    "//third_party/webrtc_overrides:init_webrtc",
   ]
-
-  if (enable_webrtc) {
-    public_deps += [
-      "//third_party/libjingle_xmpp",
-      "//third_party/webrtc/modules/desktop_capture",
-      "//third_party/webrtc_overrides:init_webrtc",
-    ]
-  }
 }
 
 # The host portions of the remoting unit tests.
@@ -577,7 +573,8 @@ if (enable_remoting_host) {
     ]
 
     deps = [
-      "//build/config:exe_and_shlib_deps",
+      "//third_party/libjingle_xmpp",
+      "//third_party/webrtc_overrides:init_webrtc",
     ]
 
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
@@ -603,13 +600,6 @@ if (enable_remoting_host) {
         "//google_apis",
         "//net",
         "//remoting/host/setup",
-      ]
-    }
-
-    if (enable_webrtc) {
-      deps += [
-        "//third_party/libjingle_xmpp",
-        "//third_party/webrtc_overrides:init_webrtc",
       ]
     }
   }
@@ -695,8 +685,6 @@ if (enable_remoting_host) {
 if (enable_me2me_host) {
   static_library("remoting_me2me_host_static") {
     sources = [
-      "pam_authorization_factory_posix.cc",
-      "pam_authorization_factory_posix.h",
       "remoting_me2me_host.cc",
     ]
     defines = []
@@ -715,18 +703,20 @@ if (enable_me2me_host) {
       "//remoting/base",
       "//remoting/host",
       "//remoting/proto",
+      "//third_party/libjingle_xmpp",
       "//third_party/webrtc/modules/desktop_capture",
+      "//third_party/webrtc_overrides:init_webrtc",
     ]
+
+    if (is_posix) {
+      sources += [
+        "pam_authorization_factory_posix.cc",
+        "pam_authorization_factory_posix.h",
+      ]
+    }
 
     if (!is_ios) {
       deps += [ "//components/policy:generated" ]
-    }
-
-    if (enable_webrtc) {
-      deps += [
-        "//third_party/libjingle_xmpp",
-        "//third_party/webrtc_overrides:init_webrtc",
-      ]
     }
 
     if (is_desktop_linux) {
@@ -741,10 +731,7 @@ if (enable_me2me_host) {
     }
 
     if (remoting_multi_process != 0) {
-      deps += [
-        "//mojo/edk/embedder:headers",
-        "//mojo/edk/system",
-      ]
+      deps += [ "//mojo/core/embedder" ]
     }
   }
 
@@ -765,6 +752,9 @@ if (enable_me2me_host) {
         "host_main.cc",
         "host_main.h",
       ]
+      deps = [
+        "//base:debugging_buildflags",
+      ]
     }
     if (is_mac) {
       group("remoting_me2me_host") {
@@ -783,7 +773,6 @@ if (enable_me2me_host) {
 
         deps = [
           ":remoting_me2me_host_static",
-          "//build/config:exe_and_shlib_deps",
           "//remoting/base:breakpad",
           "//remoting/host/installer:credits",
           "//remoting/resources",

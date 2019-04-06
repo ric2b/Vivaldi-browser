@@ -29,6 +29,14 @@
 
      tools/binary_size/diagnose_bloat.py AFTER_GIT_REV --reference-rev BEFORE_GIT_REV --subrepo v8 --all
 
+ * You can usually find the before and after revs in the roll commit message
+([example](https://chromium.googlesource.com/chromium/src/+/10c40fd863f4ae106650bba93b845f25c9b733b1))
+    * Note that you may need to click through the link for the list of changes
+      in order to find the actual first commit hash and use that one instead
+      since some rollers (including v8) use extra commits for tagging not in
+      master. In the linked example `BEFORE_GIT_REV` would actually be
+      `876f37c` and not `c1dec05f`.
+
 ### Monochrome.apk Alerts
 
  * The regression most likely already occurred in the upstream
@@ -58,7 +66,7 @@ Otherwise, file a bug (TODO: [Make this template automatic](https://github.com/c
 > Commit: **abc123abc123abc123abc123abc123abc123abcd**
 >
 > Link to size graph:
-> [https://chromeperf.appspot.com/report?sid=a097e74b1aa288511afb4cb616efe0f95ba4d347ad61d5e835072f23450938ba&num_points=10&rev=**480214**](https://chromeperf.appspot.com/report?sid=a097e74b1aa288511afb4cb616efe0f95ba4d347ad61d5e835072f23450938ba&num_points=10&rev=480214)
+> [https://chromeperf.appspot.com/report?sid=bb23072657e2d7ca892a1c3fa4643b1ee29b3a0a44d0732adda87168e89c0380&num_points=10&rev=**480214**](https://chromeperf.appspot.com/report?sid=bb23072657e2d7ca892a1c3fa4643b1ee29b3a0a44d0732adda87168e89c0380&num_points=10&rev=480214)
 >
 > Debugging size regressions is documented at:
 > https://chromium.googlesource.com/chromium/src/+/master/docs/speed/apk_size_regressions.md#Debugging-Apk-Size-Increase
@@ -85,6 +93,12 @@ Otherwise, file a bug (TODO: [Make this template automatic](https://github.com/c
 >
 > 1. Close as "Won't Fix" with a short justification, or
 > 2. Land a revert / fix-up.
+>
+> _**Optional addition for commits > 75kb:**_
+>
+> It typically takes about a week of engineering time to reduce binary size by
+> 100kb so we'd really appreciate you taking some time exploring options to
+> address this regression!
 
 *If you went with **Option 2**, and the regression is > 50kb, add
 ReleaseBlock-Stable **M-6-** (next branch cut).*
@@ -103,6 +117,9 @@ Figure out which file within the `.apk` increased (native library, dex, pak
 resources, etc) by looking at the breakdown in the size graphs linked to in the
 bug (if it was not linked in the bug, see above).
 
+**See [//docs/speed/binary_size/metrics.md](https://chromium.googlesource.com/chromium/src/+/master/docs/speed/binary_size/metrics.md)
+for a description of the metrics we track.**
+
 ## Step 2: Analyze
 
 ### Growth is from Translations
@@ -113,6 +130,8 @@ bug (if it was not linked in the bug, see above).
 ### Growth is from Native Resources (pak files)
 
  * Ensure `compress="gzip"` is used for all `chrome:` pages.
+ * Use [//tools/binary_size/diagnose_bloat.py](https://chromium.googlesource.com/chromium/src/+/master/tools/binary_size/README.md)
+   to show a diff of pak entries.
 
 ### Growth is from Images
 
@@ -134,13 +153,16 @@ to show a diff of ELF symbols.
  [move code out of templates](https://bugs.chromium.org/p/chromium/issues/detail?id=716393)).
  * If symbols are larger than expected, use the `Disassemble()` feature of `supersize console` to see what is going on.
 
-### Growth is from Java code
+### Growth is from Java Code
 
- * Use [tools/android/dexdiffer/dexdiffer.py](https://cs.chromium.org/chromium/src/tools/android/dexdiffer/dexdiffer.py).
-    * This currently just shows a list of symbols added / removed rather than
-      taking into account method body sizes.
-    * Enhancements to this tool tracked at
-      [crbug/678044](https://bugs.chromium.org/p/chromium/issues/detail?id=678044).
+ * Use [//tools/binary_size/diagnose_bloat.py](https://chromium.googlesource.com/chromium/src/+/master/tools/binary_size/README.md)
+   to show a diff of Java symbols.
+ * Ensure any new Java deps are as specific as possible.
+ * If the change doesn't look suspect, check to see if the regression still
+   exists when internal proguard is used (see
+   [downstream graphs](https://chromeperf.appspot.com/report?sid=83bf643964a326648325f7eb6767d8adb85d67db8306dd94aa7476ed70d7dace)
+   or use `diagnose_bloat.py -v --enable-chrome-android-internal REV`
+   to build locally)
 
 ### Growth is from "other lib size" or "Unknown files size"
 
@@ -156,11 +178,21 @@ to show a diff of ELF symbols.
 
 ## Step 1: Check work queue daily
 
- * Bugs requiring sheriffs to take a look at are labeled `Performance-Sheriff` and `Performance-Size`.
+ * Bugs requiring sheriffs to take a look at are labeled `Performance-Sheriff` and `Performance-Size` [here](https://bugs.chromium.org/p/chromium/issues/list?q=label:Performance-Sheriff%20label:Performance-Size&sort=-modified).
  * After resolving the bug by finding an owner or debugging or commenting, remove the `Performance-Sheriff` label.
 
 ## Step 2: Check alerts regularly
 
+ * **IMPORTANT: Check the [perf bot page](https://ci.chromium.org/buildbot/chromium.perf/Android%20Builder%20Perf/)
+ several times a day to make sure it isn't broken (and ping/file a bug if it is).**
+   * At the very least you need to check this once in the morning and once in
+   the afternoon.
+   * If you don't and the builder is broken either you or the next sheriff will
+   have to manually build and diff the broken range (via. diagnose_bloat.py) to
+   see if we missed any regressions.
+   * This is necessary even if the next passing build doesn't create an alert
+   because the range could contain a large regression with multiple offsetting
+   decreases.
  * Check [alert page](https://chromeperf.appspot.com/alerts?sheriff=Binary%20Size%20Sheriff) regularly for new alerts.
  * Join [binary-size-alerts@chromium.org](https://groups.google.com/a/chromium.org/forum/#!forum/binary-size-alerts). Eventually it will be all set up.
  * Deal with alerts as outlined above.

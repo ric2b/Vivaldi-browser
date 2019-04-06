@@ -7,6 +7,8 @@
 #include "base/files/file_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/webui/media_router/media_router_dialog_controller_webui_impl.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -18,7 +20,7 @@ namespace {
 const char kTestSinkName[] = "test-sink-1";
 }
 
-IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest, MANUAL_Dialog_Basic) {
+IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest, Dialog_Basic) {
   OpenTestPage(FILE_PATH_LITERAL("basic_test.html"));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -133,6 +135,7 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest, MANUAL_Dialog_Basic) {
   LOG(INFO) << "Closed dialog, end of test";
 }
 
+// TODO(crbug.com/822301): Flaky in Chromium waterfall.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
                        MANUAL_Dialog_RouteCreationTimedOut) {
   SetTestData(FILE_PATH_LITERAL("route_creation_timed_out.json"));
@@ -168,6 +171,45 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
 
   // Route will still get created, it just takes longer than usual.
   WaitUntilRouteCreated();
+}
+
+IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
+                       PRE_OpenDialogAfterEnablingMediaRouting) {
+  SetEnableMediaRouter(false);
+}
+
+IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
+                       OpenDialogAfterEnablingMediaRouting) {
+  // Enable media routing and open media router dialog.
+  SetEnableMediaRouter(true);
+  OpenTestPage(FILE_PATH_LITERAL("basic_test.html"));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  OpenMRDialog(web_contents);
+
+  MediaRouterDialogControllerWebUIImpl* controller =
+      MediaRouterDialogControllerWebUIImpl::GetOrCreateForWebContents(
+          web_contents);
+  ASSERT_TRUE(controller->IsShowingMediaRouterDialog());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
+                       DisableMediaRoutingWhenDialogIsOpened) {
+  // Open media router dialog.
+  OpenTestPage(FILE_PATH_LITERAL("basic_test.html"));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  OpenMRDialog(web_contents);
+
+  MediaRouterDialogControllerWebUIImpl* controller =
+      MediaRouterDialogControllerWebUIImpl::GetOrCreateForWebContents(
+          web_contents);
+  ASSERT_TRUE(controller->IsShowingMediaRouterDialog());
+
+  // Disable media routing.
+  SetEnableMediaRouter(false);
+
+  ASSERT_FALSE(controller->IsShowingMediaRouterDialog());
 }
 
 }  // namespace media_router

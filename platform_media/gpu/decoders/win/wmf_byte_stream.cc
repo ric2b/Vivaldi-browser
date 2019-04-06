@@ -37,7 +37,6 @@ WMFByteStream::WMFByteStream(DataSource* data_source)
 
 WMFByteStream::~WMFByteStream() {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(read_stream_->HasStopped());
 }
 

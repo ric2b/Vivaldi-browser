@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -17,6 +16,7 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/test/event_generator.h"
@@ -190,10 +190,10 @@ class LabelSelectionTest : public LabelTest {
     return widget()->GetFocusManager()->GetFocusedView();
   }
 
-  void PerformMousePress(const gfx::Point& point, int extra_flags = 0) {
+  void PerformMousePress(const gfx::Point& point) {
     ui::MouseEvent pressed_event = ui::MouseEvent(
         ui::ET_MOUSE_PRESSED, point, point, ui::EventTimeForNow(),
-        ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON | extra_flags);
+        ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
     label()->OnMousePressed(pressed_event);
   }
 
@@ -204,8 +204,8 @@ class LabelSelectionTest : public LabelTest {
     label()->OnMouseReleased(released_event);
   }
 
-  void PerformClick(const gfx::Point& point, int extra_flags = 0) {
-    PerformMousePress(point, extra_flags);
+  void PerformClick(const gfx::Point& point) {
+    PerformMousePress(point);
     PerformMouseRelease(point);
   }
 
@@ -227,7 +227,7 @@ class LabelSelectionTest : public LabelTest {
         label()->GetRenderTextForSelectionController();
     const gfx::Range range(index, index + 1);
     const std::vector<gfx::Rect> bounds =
-        render_text->GetSubstringBoundsForTesting(range);
+        render_text->GetSubstringBounds(range);
     DCHECK_EQ(1u, bounds.size());
     const int mid_y = bounds[0].y() + bounds[0].height() / 2;
 
@@ -277,10 +277,14 @@ class MDLabelTest : public LabelTest,
 
   // LabelTest:
   void SetUp() override {
-    if (GetParam() == SecondaryUiMode::MD)
+    if (GetParam() == SecondaryUiMode::MD) {
       scoped_feature_list_.InitAndEnableFeature(features::kSecondaryUiMd);
-    else
+    } else {
+      // Force Refresh UI to be off, since that mode implies MD secondary UI.
+      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+          switches::kTopChromeMD, switches::kTopChromeMDMaterial);
       scoped_feature_list_.InitAndDisableFeature(features::kSecondaryUiMd);
+    }
     LabelTest::SetUp();
   }
 
@@ -567,9 +571,11 @@ TEST_F(LabelTest, Accessibility) {
 
   ui::AXNodeData node_data;
   label()->GetAccessibleNodeData(&node_data);
-  EXPECT_EQ(ui::AX_ROLE_STATIC_TEXT, node_data.role);
-  EXPECT_EQ(label()->text(), node_data.GetString16Attribute(ui::AX_ATTR_NAME));
-  EXPECT_FALSE(node_data.HasIntAttribute(ui::AX_ATTR_RESTRICTION));
+  EXPECT_EQ(ax::mojom::Role::kStaticText, node_data.role);
+  EXPECT_EQ(label()->text(),
+            node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
+  EXPECT_FALSE(
+      node_data.HasIntAttribute(ax::mojom::IntAttribute::kRestriction));
 }
 
 TEST_F(LabelTest, TextChangeWithoutLayout) {
@@ -1086,7 +1092,7 @@ TEST_F(LabelSelectionTest, DoubleTripleClick) {
   EXPECT_TRUE(GetSelectedText().empty());
 
   // Double clicking should select the word under cursor.
-  PerformClick(GetCursorPoint(0), ui::EF_IS_DOUBLE_CLICK);
+  PerformClick(GetCursorPoint(0));
   EXPECT_STR_EQ("Label", GetSelectedText());
 
   // Triple clicking should select all the text.
@@ -1100,7 +1106,7 @@ TEST_F(LabelSelectionTest, DoubleTripleClick) {
   // Clicking at another location should clear the selection.
   PerformClick(GetCursorPoint(8));
   EXPECT_TRUE(GetSelectedText().empty());
-  PerformClick(GetCursorPoint(8), ui::EF_IS_DOUBLE_CLICK);
+  PerformClick(GetCursorPoint(8));
   EXPECT_STR_EQ("double", GetSelectedText());
 }
 
@@ -1296,7 +1302,7 @@ TEST_F(LabelSelectionTest, MouseDragWord) {
   ASSERT_TRUE(label()->SetSelectable(true));
 
   PerformClick(GetCursorPoint(8));
-  PerformMousePress(GetCursorPoint(8), ui::EF_IS_DOUBLE_CLICK);
+  PerformMousePress(GetCursorPoint(8));
   EXPECT_STR_EQ("drag", GetSelectedText());
 
   PerformMouseDragTo(GetCursorPoint(0));

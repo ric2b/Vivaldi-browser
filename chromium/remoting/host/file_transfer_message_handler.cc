@@ -94,7 +94,7 @@ void FileTransferMessageHandler::ParseNewRequest(
     std::unique_ptr<CompoundBuffer> buffer) {
   std::string message;
   message.resize(buffer->total_bytes());
-  buffer->CopyTo(base::string_as_array(&message), message.size());
+  buffer->CopyTo(base::data(message), message.size());
 
   request_ = std::make_unique<protocol::FileTransferRequest>();
   if (!request_->ParseFromString(message)) {
@@ -103,8 +103,9 @@ void FileTransferMessageHandler::ParseNewRequest(
   }
 
   base::FilePath target_directory;
-  if (!PathService::Get(base::DIR_USER_DESKTOP, &target_directory)) {
-    CancelAndSendError("Failed to get DIR_USER_DESKTOP from PathService::Get");
+  if (!base::PathService::Get(base::DIR_USER_DESKTOP, &target_directory)) {
+    CancelAndSendError(
+        "Failed to get DIR_USER_DESKTOP from base::PathService::Get");
     return;
   }
 

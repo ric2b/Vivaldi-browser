@@ -34,24 +34,12 @@ const int kBufferUtilizationEvaluationMicros = 200000;  // 0.2 seconds
 // reaction time versus over-reacting to outlier data points.
 const int kConsumerCapabilityEvaluationMicros = 1000000;  // 1 second
 
-// The minimum amount of time that must pass between changes to the capture
-// size.  This throttles the rate of size changes, to avoid stressing consumers
-// and to allow the end-to-end system sufficient time to stabilize before
-// re-evaluating the capture size.
-const int kMinSizeChangePeriodMicros = 3000000;  // 3 seconds
-
 // The maximum amount of time that may elapse without a feedback update.  Any
 // longer, and currently-accumulated feedback is not considered recent enough to
 // base decisions off of.  This prevents changes to the capture size when there
 // is an unexpected pause in events.
-const int kMaxTimeSinceLastFeedbackUpdateMicros = 1000000;  // 1 second
-
-// The amount of time, since the source size last changed, to allow frequent
-// increases in capture area.  This allows the system a period of time to
-// quickly explore up and down to find an ideal point before being more careful
-// about capture size increases.
-const int kExplorationPeriodAfterSourceSizeChangeMicros =
-    3 * kMinSizeChangePeriodMicros;
+const base::TimeDelta kMaxTimeSinceLastFeedbackUpdate =
+    base::TimeDelta::FromSeconds(1);
 
 // The amount of additional time, since content animation was last detected, to
 // continue being extra-careful about increasing the capture size.  This is used
@@ -80,28 +68,18 @@ base::TimeTicks JustAfter(base::TimeTicks t) {
   return t + base::TimeDelta::FromMicroseconds(1);
 }
 
-// Returns true if updates have been accumulated by |accumulator| for a
-// sufficient amount of time and the latest update was fairly recent, relative
-// to |now|.
-bool HasSufficientRecentFeedback(
-    const FeedbackSignalAccumulator<base::TimeTicks>& accumulator,
-    base::TimeTicks now) {
-  const base::TimeDelta amount_of_history =
-      accumulator.update_time() - accumulator.reset_time();
-  return (amount_of_history.InMicroseconds() >= kMinSizeChangePeriodMicros) &&
-         ((now - accumulator.update_time()).InMicroseconds() <=
-          kMaxTimeSinceLastFeedbackUpdateMicros);
-}
-
 }  // anonymous namespace
 
 // static
 constexpr base::TimeDelta VideoCaptureOracle::kDefaultMinCapturePeriod;
 
+// static
+constexpr base::TimeDelta VideoCaptureOracle::kDefaultMinSizeChangePeriod;
+
 VideoCaptureOracle::VideoCaptureOracle(bool enable_auto_throttling)
     : auto_throttling_enabled_(enable_auto_throttling),
+      min_size_change_period_(kDefaultMinSizeChangePeriod),
       next_frame_number_(0),
-      source_is_dirty_(true),
       last_successfully_delivered_frame_number_(-1),
       num_frames_pending_(0),
       smoothing_sampler_(kDefaultMinCapturePeriod),
@@ -130,6 +108,20 @@ void VideoCaptureOracle::SetCaptureSizeConstraints(
                                      use_fixed_aspect_ratio);
 }
 
+void VideoCaptureOracle::SetAutoThrottlingEnabled(bool enabled) {
+  if (auto_throttling_enabled_ == enabled)
+    return;
+  auto_throttling_enabled_ = enabled;
+
+  // When not auto-throttling, have the CaptureResolutionChooser target the max
+  // resolution within constraints.
+  if (!enabled)
+    resolution_chooser_.SetTargetFrameArea(std::numeric_limits<int>::max());
+
+  if (next_frame_number_ > 0)
+    CommitCaptureSizeAndReset(GetFrameTimestamp(next_frame_number_ - 1));
+}
+
 void VideoCaptureOracle::SetSourceSize(const gfx::Size& source_size) {
   resolution_chooser_.SetSourceSize(source_size);
   // If the |resolution_chooser_| computed a new capture size, that will become
@@ -150,11 +142,6 @@ bool VideoCaptureOracle::ObserveEventAndDecideCapture(
     return false;
   }
   last_event_time_[event] = event_time;
-
-  // If the event indicates a change to the source content, set a flag that will
-  // prevent passive refresh requests until a capture is made.
-  if (event != kActiveRefreshRequest && event != kPassiveRefreshRequest)
-    source_is_dirty_ = true;
 
   bool should_sample = false;
   duration_of_next_frame_ = base::TimeDelta();
@@ -178,12 +165,7 @@ bool VideoCaptureOracle::ObserveEventAndDecideCapture(
       break;
     }
 
-    case kPassiveRefreshRequest:
-      if (source_is_dirty_)
-        break;
-    // Intentional flow-through to next case here!
-    case kActiveRefreshRequest:
-    case kMouseCursorUpdate:
+    case kRefreshRequest:
       // Only allow non-compositor samplings when content has not recently been
       // animating, and only if there are no samplings currently in progress.
       if (num_frames_pending_ == 0) {
@@ -226,7 +208,7 @@ bool VideoCaptureOracle::ObserveEventAndDecideCapture(
   } else if (capture_size_ != resolution_chooser_.capture_size()) {
     const base::TimeDelta time_since_last_change =
         event_time - buffer_pool_utilization_.reset_time();
-    if (time_since_last_change.InMicroseconds() >= kMinSizeChangePeriodMicros)
+    if (time_since_last_change >= min_size_change_period_)
       CommitCaptureSizeAndReset(GetFrameTimestamp(next_frame_number_ - 1));
   }
 
@@ -236,8 +218,6 @@ bool VideoCaptureOracle::ObserveEventAndDecideCapture(
 
 void VideoCaptureOracle::RecordCapture(double pool_utilization) {
   DCHECK(std::isfinite(pool_utilization) && pool_utilization >= 0.0);
-
-  source_is_dirty_ = false;
 
   smoothing_sampler_.RecordSample();
   const base::TimeTicks timestamp = GetFrameTimestamp(next_frame_number_);
@@ -289,9 +269,6 @@ bool VideoCaptureOracle::CompleteCapture(int frame_number,
 
   if (!capture_was_successful) {
     VLOG(2) << "Capture of frame #" << frame_number << " was not successful.";
-    // Since capture of this frame might have been required for capturing an
-    // update to the source content, set the dirty flag.
-    source_is_dirty_ = true;
     return false;
   }
 
@@ -343,7 +320,6 @@ void VideoCaptureOracle::CancelAllCaptures() {
   //
   // ...which simplifies to:
   num_frames_pending_ = 0;
-  source_is_dirty_ = true;
 }
 
 void VideoCaptureOracle::RecordConsumerFeedback(int frame_number,
@@ -375,17 +351,17 @@ void VideoCaptureOracle::RecordConsumerFeedback(int frame_number,
   estimated_capable_area_.Update(area_at_full_utilization, timestamp);
 }
 
+void VideoCaptureOracle::SetMinSizeChangePeriod(base::TimeDelta period) {
+  min_size_change_period_ = period;
+}
+
 // static
 const char* VideoCaptureOracle::EventAsString(Event event) {
   switch (event) {
     case kCompositorUpdate:
       return "compositor";
-    case kActiveRefreshRequest:
-      return "active_refresh";
-    case kPassiveRefreshRequest:
-      return "passive_refresh";
-    case kMouseCursorUpdate:
-      return "mouse";
+    case kRefreshRequest:
+      return "refresh";
     case kNumEvents:
       break;
   }
@@ -554,9 +530,8 @@ int VideoCaptureOracle::AnalyzeForIncreasedArea(base::TimeTicks analyze_time) {
   // If the under-utilization started soon after the last source size change,
   // permit an immediate increase in the capture area.  This allows the system
   // to quickly step-up to an ideal point.
-  if ((start_time_of_underutilization_ -
-           source_size_change_time_).InMicroseconds() <=
-      kExplorationPeriodAfterSourceSizeChangeMicros) {
+  if (start_time_of_underutilization_ - source_size_change_time_ <=
+      GetExplorationPeriodAfterSourceSizeChange()) {
     VLOG(2) << "Proposing a "
             << (100.0 * (increased_area - current_area) / current_area)
             << "% increase in capture area after source size change.  :-)";
@@ -592,6 +567,20 @@ int VideoCaptureOracle::AnalyzeForIncreasedArea(base::TimeTicks analyze_time) {
           << (100.0 * (increased_area - current_area) / current_area)
           << "% increase in capture area for non-animating content.  :-)";
   return increased_area;
+}
+
+base::TimeDelta
+VideoCaptureOracle::GetExplorationPeriodAfterSourceSizeChange() {
+  return 3 * min_size_change_period_;
+}
+
+bool VideoCaptureOracle::HasSufficientRecentFeedback(
+    const FeedbackSignalAccumulator<base::TimeTicks>& accumulator,
+    base::TimeTicks now) {
+  const base::TimeDelta amount_of_history =
+      accumulator.update_time() - accumulator.reset_time();
+  return (amount_of_history >= min_size_change_period_) &&
+         (now - accumulator.update_time() <= kMaxTimeSinceLastFeedbackUpdate);
 }
 
 }  // namespace media

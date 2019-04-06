@@ -12,8 +12,14 @@
 #include "components/feature_engagement/public/tracker.h"
 #include "components/feature_engagement/test/test_tracker.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
+#import "ios/chrome/browser/ui/tab_grid/tab_grid_egtest_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_egtest_util.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_mode.h"
+#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
+#include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -21,7 +27,6 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/wait_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "url/gurl.h"
@@ -42,7 +47,11 @@ const int kMinChromeOpensRequiredForNewTabTip = 3;
 
 // Matcher for the Reading List Text Badge.
 id<GREYMatcher> ReadingListTextBadge() {
-  return grey_accessibilityID(@"kReadingListTextBadgeAccessibilityIdentifier");
+  return grey_allOf(
+      grey_accessibilityID(@"kToolsMenuTextBadgeAccessibilityIdentifier"),
+      grey_ancestor(grey_allOf(grey_accessibilityID(kToolsMenuReadingListId),
+                               grey_sufficientlyVisible(), nil)),
+      nil);
 }
 
 // Matcher for the New Tab Tip Bubble.
@@ -58,11 +67,21 @@ void OpenAndCloseTabSwitcher() {
                     : chrome_test_util::ShowTabsButton();
   [[EarlGrey selectElementWithMatcher:openTabSwitcherMatcher]
       performAction:grey_tap()];
-  id<GREYMatcher> closeTabSwitcherMatcher =
-      IsIPadIdiom() ? chrome_test_util::TabletTabSwitcherCloseButton()
-                    : chrome_test_util::ShowTabsButton();
-  [[EarlGrey selectElementWithMatcher:closeTabSwitcherMatcher]
-      performAction:grey_tap()];
+
+  switch (GetTabSwitcherMode()) {
+    case TabSwitcherMode::GRID:
+      [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridDoneButton()]
+          performAction:grey_tap()];
+      break;
+    case TabSwitcherMode::TABLET_SWITCHER:
+    case TabSwitcherMode::STACK:
+      id<GREYMatcher> closeTabSwitcherMatcher =
+          IsIPadIdiom() ? chrome_test_util::TabletTabSwitcherCloseButton()
+                        : chrome_test_util::ShowTabsButton();
+      [[EarlGrey selectElementWithMatcher:closeTabSwitcherMatcher]
+          performAction:grey_tap()];
+      break;
+  }
 }
 
 // Create a test FeatureEngagementTracker.
@@ -153,15 +172,42 @@ void EnableNewTabTipTriggering(base::test::ScopedFeatureList& feature_list) {
 
   [ChromeEarlGreyUI openToolsMenu];
 
-  [[EarlGrey selectElementWithMatcher:ReadingListTextBadge()]
-      assertWithMatcher:grey_sufficientlyVisible()];
+  [[[EarlGrey selectElementWithMatcher:ReadingListTextBadge()]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 150)
+      onElementWithMatcher:grey_accessibilityID(kPopupMenuToolsMenuTableViewId)]
+      assertWithMatcher:grey_notNil()];
 
   // Close tools menu by tapping reload.
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::ReloadButton()]
-      performAction:grey_tap()];
+  if (IsUIRefreshPhase1Enabled()) {
+    [[[EarlGrey
+        selectElementWithMatcher:grey_allOf(
+                                     chrome_test_util::ReloadButton(),
+                                     grey_ancestor(grey_accessibilityID(
+                                         kPopupMenuToolsMenuTableViewId)),
+                                     nil)]
+           usingSearchAction:grey_scrollInDirection(kGREYDirectionUp, 150)
+        onElementWithMatcher:grey_accessibilityID(
+                                 kPopupMenuToolsMenuTableViewId)]
+        performAction:grey_tap()];
+  } else {
+    [[[EarlGrey selectElementWithMatcher:chrome_test_util::ReloadButton()]
+           usingSearchAction:grey_scrollInDirection(kGREYDirectionUp, 150)
+        onElementWithMatcher:grey_accessibilityID(
+                                 kPopupMenuToolsMenuTableViewId)]
+        performAction:grey_tap()];
+  }
 
   // Reopen tools menu to verify that the badge does not appear again.
   [ChromeEarlGreyUI openToolsMenu];
+  // Make sure the ReadingList entry is visible.
+  [[[EarlGrey
+      selectElementWithMatcher:grey_allOf(grey_accessibilityID(
+                                              kToolsMenuReadingListId),
+                                          grey_sufficientlyVisible(), nil)]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 150)
+      onElementWithMatcher:grey_accessibilityID(kPopupMenuToolsMenuTableViewId)]
+      assertWithMatcher:grey_notNil()];
+
   [[EarlGrey selectElementWithMatcher:ReadingListTextBadge()]
       assertWithMatcher:grey_notVisible()];
 }
@@ -204,8 +250,15 @@ void EnableNewTabTipTriggering(base::test::ScopedFeatureList& feature_list) {
   }
 
   [chrome_test_util::BrowserCommandDispatcherForMainBVC() showReadingList];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"Done")]
-      performAction:grey_tap()];
+  if (experimental_flags::IsReadingListUIRebootEnabled()) {
+    [[EarlGrey
+        selectElementWithMatcher:grey_accessibilityID(
+                                     kTableViewNavigationDismissButtonId)]
+        performAction:grey_tap()];
+  } else {
+    [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"Done")]
+        performAction:grey_tap()];
+  }
 
   [ChromeEarlGreyUI openToolsMenu];
 
@@ -231,7 +284,7 @@ void EnableNewTabTipTriggering(base::test::ScopedFeatureList& feature_list) {
 
   // Navigate to a page other than the NTP to allow for the New Tab Tip to
   // appear.
-  [ChromeEarlGrey loadURL:GURL("chrome://flags")];
+  [ChromeEarlGrey loadURL:GURL("chrome://version")];
 
   // Open and close the tab switcher to trigger the New Tab tip.
   OpenAndCloseTabSwitcher();

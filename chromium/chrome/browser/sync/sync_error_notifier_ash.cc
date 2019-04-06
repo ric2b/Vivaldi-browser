@@ -4,9 +4,9 @@
 
 #include "chrome/browser/sync/sync_error_notifier_ash.h"
 
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
@@ -21,49 +21,19 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 
 namespace {
 
 const char kProfileSyncNotificationId[] = "chrome://settings/sync/";
 
-// A simple notification delegate for the sync setup button.
-// TODO(estade): should this use a generic notification delegate?
-class SyncNotificationDelegate : public message_center::NotificationDelegate {
- public:
-  explicit SyncNotificationDelegate(Profile* profile);
-
-  // NotificationDelegate:
-  void Click() override;
-
- protected:
-  ~SyncNotificationDelegate() override;
-
- private:
-  void ShowSyncSetup();
-
-  Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncNotificationDelegate);
-};
-
-SyncNotificationDelegate::SyncNotificationDelegate(Profile* profile)
-    : profile_(profile) {}
-
-SyncNotificationDelegate::~SyncNotificationDelegate() {
-}
-
-void SyncNotificationDelegate::Click() {
-  ShowSyncSetup();
-}
-
-void SyncNotificationDelegate::ShowSyncSetup() {
-  LoginUIService* login_ui = LoginUIServiceFactory::GetForProfile(profile_);
+void ShowSyncSetup(Profile* profile) {
+  LoginUIService* login_ui = LoginUIServiceFactory::GetForProfile(profile);
   if (login_ui->current_login_ui()) {
     // TODO(michaelpg): The LoginUI might be on an inactive desktop.
     // See crbug.com/354280.
@@ -71,7 +41,7 @@ void SyncNotificationDelegate::ShowSyncSetup() {
     return;
   }
 
-  chrome::ShowSettingsSubPageForProfile(profile_, chrome::kSyncSetupSubPage);
+  chrome::ShowSettingsSubPageForProfile(profile, chrome::kSyncSetupSubPage);
 }
 
 }  // namespace
@@ -144,9 +114,10 @@ void SyncErrorNotifier::OnErrorChanged() {
           l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
           GURL(notification_id_), notifier_id,
           message_center::RichNotificationData(),
-          new SyncNotificationDelegate(profile_), kNotificationWarningIcon,
+          base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
+              base::BindRepeating(&ShowSyncSetup, profile_)),
+          ash::kNotificationWarningIcon,
           message_center::SystemNotificationWarningLevel::WARNING);
-  notification->set_clickable(true);
 
   display_service->Display(NotificationHandler::Type::TRANSIENT, *notification);
   notification_displayed_ = true;

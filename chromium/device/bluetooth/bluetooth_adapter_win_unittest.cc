@@ -13,6 +13,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_win.h"
+#include "device/bluetooth/bluetooth_classic_win.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_task_manager_win.h"
@@ -57,7 +58,8 @@ class BluetoothAdapterWinTest : public testing::Test {
         adapter_win_(static_cast<BluetoothAdapterWin*>(adapter_.get())),
         observer_(adapter_),
         init_callback_called_(false) {
-    adapter_win_->InitForTest(ui_task_runner_, bluetooth_task_runner_);
+    adapter_win_->InitForTest(nullptr, nullptr, ui_task_runner_,
+                              bluetooth_task_runner_);
   }
 
   void SetUp() override {
@@ -89,19 +91,20 @@ class BluetoothAdapterWinTest : public testing::Test {
     num_stop_discovery_error_callbacks_++;
   }
 
-  typedef base::Callback<void(UMABluetoothDiscoverySessionOutcome)>
+  typedef base::OnceCallback<void(UMABluetoothDiscoverySessionOutcome)>
       DiscoverySessionErrorCallback;
 
-  void CallAddDiscoverySession(
-      const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) {
-    adapter_win_->AddDiscoverySession(nullptr, callback, error_callback);
+  void CallAddDiscoverySession(const base::Closure& callback,
+                               DiscoverySessionErrorCallback error_callback) {
+    adapter_win_->AddDiscoverySession(nullptr, callback,
+                                      std::move(error_callback));
   }
 
   void CallRemoveDiscoverySession(
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) {
-    adapter_win_->RemoveDiscoverySession(nullptr, callback, error_callback);
+      DiscoverySessionErrorCallback error_callback) {
+    adapter_win_->RemoveDiscoverySession(nullptr, callback,
+                                         std::move(error_callback));
   }
 
  protected:

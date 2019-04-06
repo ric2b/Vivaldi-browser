@@ -16,8 +16,9 @@
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/account_control_item.h"
+#import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
 #include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -33,12 +34,10 @@
 #error "This file requires ARC support."
 #endif
 
-using chrome_test_util::AccountConsistencyConfirmationOkButton;
-using chrome_test_util::AccountConsistencySetupSigninButton;
 using chrome_test_util::AccountsSyncButton;
 using chrome_test_util::ButtonWithAccessibilityLabel;
-using chrome_test_util::NavigationBarDoneButton;
 using chrome_test_util::SettingsAccountButton;
+using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SignOutAccountsButton;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SecondarySignInButton;
@@ -46,27 +45,6 @@ using chrome_test_util::SecondarySignInButton;
 typedef NSString* (^ExpectedTextLabelCallback)(NSString* identityEmail);
 
 namespace {
-
-// Accepts account consistency popup prompts after signing in an account via the
-// UI. Should be called right after signing in an account.
-void AcceptAccountConsistencyPopup() {
-  [[EarlGrey selectElementWithMatcher:AccountConsistencySetupSigninButton()]
-      performAction:grey_tap()];
-
-  // The "MORE" button shows up on screens where all content can't be shown, and
-  // must be tapped to bring up the confirmation button.
-  NSError* error = nil;
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"MORE")]
-      assertWithMatcher:grey_notNil()
-                  error:&error];
-  if (error == nil) {
-    [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"MORE")]
-        performAction:grey_tap()];
-  }
-
-  [[EarlGrey selectElementWithMatcher:AccountConsistencyConfirmationOkButton()]
-      performAction:grey_tap()];
-}
 
 // Returns a matcher for a button that matches the userEmail in the given
 // |identity|.
@@ -85,16 +63,10 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
 // signed in account is removed.
 - (void)testSignInPopUpAccountOnSyncSettings {
   ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
 
   // Sign In |identity|, then open the Sync Settings.
+  [SigninEarlGreyUI signinWithIdentity:identity];
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [[EarlGrey selectElementWithMatcher:ButtonWithIdentity(identity)]
-      performAction:grey_tap()];
-  AcceptAccountConsistencyPopup();
-  [SigninEarlGreyUtils assertSignedInWithIdentity:identity];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
   [ChromeEarlGreyUI tapAccountsMenuButton:AccountsSyncButton()];
 
@@ -107,7 +79,7 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       assertWithMatcher:grey_sufficientlyVisible()];
   [SigninEarlGreyUtils assertSignedOut];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -119,12 +91,8 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       identity);
 
   // Sign In |identity|, then open the Account Settings.
+  [SigninEarlGreyUI signinWithIdentity:identity];
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [[EarlGrey selectElementWithMatcher:ButtonWithIdentity(identity)]
-      performAction:grey_tap()];
-  AcceptAccountConsistencyPopup();
-  [SigninEarlGreyUtils assertSignedInWithIdentity:identity];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
   [ChromeEarlGreyUI tapAccountsMenuButton:SignOutAccountsButton()];
 
@@ -137,7 +105,7 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       assertWithMatcher:grey_sufficientlyVisible()];
   [SigninEarlGreyUtils assertSignedOut];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -148,16 +116,11 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
   ChromeIdentity* identity1 = [SigninEarlGreyUtils fakeIdentity1];
   ChromeIdentity* identity2 = [SigninEarlGreyUtils fakeIdentity2];
-  identity_service->AddIdentity(identity1);
   identity_service->AddIdentity(identity2);
 
   // Sign In |identity|, then open the Account Settings.
+  [SigninEarlGreyUI signinWithIdentity:identity1];
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [[EarlGrey selectElementWithMatcher:ButtonWithIdentity(identity1)]
-      performAction:grey_tap()];
-  AcceptAccountConsistencyPopup();
-  [SigninEarlGreyUtils assertSignedInWithIdentity:identity1];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Remove |identity2| from the device.
@@ -175,7 +138,7 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       assertWithMatcher:grey_nil()];
   [SigninEarlGreyUtils assertSignedInWithIdentity:identity1];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -186,16 +149,11 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
   ChromeIdentity* identity1 = [SigninEarlGreyUtils fakeIdentity1];
   ChromeIdentity* identity2 = [SigninEarlGreyUtils fakeIdentity2];
-  identity_service->AddIdentity(identity1);
   identity_service->AddIdentity(identity2);
 
   // Sign In |identity|, then open the Sync Settings.
+  [SigninEarlGreyUI signinWithIdentity:identity1];
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [[EarlGrey selectElementWithMatcher:ButtonWithIdentity(identity1)]
-      performAction:grey_tap()];
-  AcceptAccountConsistencyPopup();
-  [SigninEarlGreyUtils assertSignedInWithIdentity:identity1];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
   [ChromeEarlGreyUI tapAccountsMenuButton:AccountsSyncButton()];
 
@@ -219,7 +177,7 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       assertWithMatcher:grey_nil()];
   [SigninEarlGreyUtils assertSignedInWithIdentity:identity1];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -227,16 +185,10 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
 // when the account is removed.
 - (void)testSignOutOnRemoveAccount {
   ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
 
   // Sign In |identity|, then open the Account Settings.
+  [SigninEarlGreyUI signinWithIdentity:identity];
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [[EarlGrey selectElementWithMatcher:ButtonWithIdentity(identity)]
-      performAction:grey_tap()];
-  AcceptAccountConsistencyPopup();
-  [SigninEarlGreyUtils assertSignedInWithIdentity:identity];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Remove |identity| from the device.
@@ -251,7 +203,7 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       assertWithMatcher:grey_sufficientlyVisible()];
   [SigninEarlGreyUtils assertSignedOut];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -263,16 +215,10 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
   EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
 #endif
   ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
 
   // Sign In |identity|, then open the Account Settings.
+  [SigninEarlGreyUI signinWithIdentity:identity];
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [[EarlGrey selectElementWithMatcher:ButtonWithIdentity(identity)]
-      performAction:grey_tap()];
-  AcceptAccountConsistencyPopup();
-  [SigninEarlGreyUtils assertSignedInWithIdentity:identity];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Open the "Disconnect Account" dialog, then tap "Cancel".
@@ -286,7 +232,7 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
       assertWithMatcher:grey_sufficientlyVisible()];
   [SigninEarlGreyUtils assertSignedInWithIdentity:identity];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -296,20 +242,13 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
     (ExpectedTextLabelCallback)callback {
   NSAssert(callback, @"Need callback");
   ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService* fakeChromeIdentityService =
-      ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
-  fakeChromeIdentityService->AddIdentity(identity);
 
+  // Sign In |identity|, then open the Account Settings.
+  [SigninEarlGreyUI signinWithIdentity:identity];
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [[EarlGrey selectElementWithMatcher:ButtonWithIdentity(identity)]
-      performAction:grey_tap()];
-  AcceptAccountConsistencyPopup();
-
-  NSString* expectedDetailTextLabel = callback([identity userEmail]);
-  [SigninEarlGreyUtils assertSignedInWithIdentity:identity];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
+  NSString* expectedDetailTextLabel = callback([identity userEmail]);
   // Check that account sync button displays the expected detail text label and
   // an image.
   GREYPerformBlock block = ^BOOL(id element, NSError* __strong* errorOrNil) {
@@ -352,7 +291,7 @@ id<GREYMatcher> ButtonWithIdentity(ChromeIdentity* identity) {
     ios::ChromeBrowserState* browser_state =
         chrome_test_util::GetOriginalBrowserState();
     browser_sync::ProfileSyncService* profile_sync_service =
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
+        ProfileSyncServiceFactory::GetForBrowserState(browser_state);
     profile_sync_service->GetEncryptionObserverForTest()->OnPassphraseRequired(
         syncer::REASON_DECRYPTION, sync_pb::EncryptedData());
     return l10n_util::GetNSString(IDS_IOS_SYNC_ENCRYPTION_DESCRIPTION);

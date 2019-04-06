@@ -7,6 +7,7 @@
 #include <map>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/scoped_observer.h"
@@ -246,7 +247,8 @@ bool BrowserListSessionServiceImpl::RestoreSession() {
 
 void BrowserListSessionServiceImpl::ScheduleLastSessionDeletion() {
   DCHECK(browser_list_) << "ScheduleLastSessionDeletion called after Shutdown.";
-  [session_service_ deleteLastSessionFileInDirectory:session_directory_];
+  [session_service_ deleteLastSessionFileInDirectory:session_directory_
+                                          completion:base::DoNothing()];
 }
 
 void BrowserListSessionServiceImpl::ScheduleSaveSession(bool immediately) {

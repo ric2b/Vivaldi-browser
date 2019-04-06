@@ -4,9 +4,6 @@
 
 #include "content/common/service_worker/service_worker_utils.h"
 
-#include <sstream>
-#include <string>
-
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -18,6 +15,7 @@
 #include "content/public/common/origin_util.h"
 #include "net/http/http_byte_range.h"
 #include "net/http/http_util.h"
+#include "services/network/public/cpp/features.h"
 
 namespace content {
 
@@ -55,6 +53,27 @@ bool ServiceWorkerUtils::IsPathRestrictionSatisfied(
     const GURL& script_url,
     const std::string* service_worker_allowed_header_value,
     std::string* error_message) {
+  return IsPathRestrictionSatisfiedInternal(scope, script_url, true,
+                                            service_worker_allowed_header_value,
+                                            error_message);
+}
+
+// static
+bool ServiceWorkerUtils::IsPathRestrictionSatisfiedWithoutHeader(
+    const GURL& scope,
+    const GURL& script_url,
+    std::string* error_message) {
+  return IsPathRestrictionSatisfiedInternal(scope, script_url, false, nullptr,
+                                            error_message);
+}
+
+// static
+bool ServiceWorkerUtils::IsPathRestrictionSatisfiedInternal(
+    const GURL& scope,
+    const GURL& script_url,
+    bool service_worker_allowed_header_supported,
+    const std::string* service_worker_allowed_header_value,
+    std::string* error_message) {
   DCHECK(scope.is_valid());
   DCHECK(!scope.has_ref());
   DCHECK(script_url.is_valid());
@@ -65,7 +84,8 @@ bool ServiceWorkerUtils::IsPathRestrictionSatisfied(
     return false;
 
   std::string max_scope_string;
-  if (service_worker_allowed_header_value) {
+  if (service_worker_allowed_header_value &&
+      service_worker_allowed_header_supported) {
     GURL max_scope = script_url.Resolve(*service_worker_allowed_header_value);
     if (!max_scope.is_valid()) {
       *error_message = "An invalid Service-Worker-Allowed header value ('";
@@ -84,13 +104,19 @@ bool ServiceWorkerUtils::IsPathRestrictionSatisfied(
     *error_message = "The path of the provided scope ('";
     error_message->append(scope_string);
     error_message->append("') is not under the max scope allowed (");
-    if (service_worker_allowed_header_value)
+    if (service_worker_allowed_header_value &&
+        service_worker_allowed_header_supported)
       error_message->append("set by Service-Worker-Allowed: ");
     error_message->append("'");
     error_message->append(max_scope_string);
-    error_message->append(
-        "'). Adjust the scope, move the Service Worker script, or use the "
-        "Service-Worker-Allowed HTTP header to allow the scope.");
+    if (service_worker_allowed_header_supported) {
+      error_message->append(
+          "'). Adjust the scope, move the Service Worker script, or use the "
+          "Service-Worker-Allowed HTTP header to allow the scope.");
+    } else {
+      error_message->append(
+          "'). Adjust the scope or move the Service Worker script.");
+    }
     return false;
   }
   return true;
@@ -140,33 +166,6 @@ bool ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(
   return true;
 }
 
-// static
-bool ServiceWorkerUtils::IsServicificationEnabled() {
-  return IsBrowserSideNavigationEnabled() &&
-         base::FeatureList::IsEnabled(features::kNetworkService);
-}
-
-// static
-bool ServiceWorkerUtils::IsScriptStreamingEnabled() {
-  return base::FeatureList::IsEnabled(features::kServiceWorkerScriptStreaming);
-}
-
-// static
-std::string ServiceWorkerUtils::ErrorTypeToString(
-    blink::mojom::ServiceWorkerErrorType error) {
-  std::ostringstream oss;
-  oss << error;
-  return oss.str();
-}
-
-// static
-std::string ServiceWorkerUtils::ClientTypeToString(
-    blink::mojom::ServiceWorkerClientType type) {
-  std::ostringstream oss;
-  oss << type;
-  return oss.str();
-}
-
 bool ServiceWorkerUtils::ExtractSinglePartHttpRange(
     const net::HttpRequestHeaders& headers,
     bool* has_range_out,
@@ -190,6 +189,12 @@ bool ServiceWorkerUtils::ExtractSinglePartHttpRange(
   const net::HttpByteRange& byte_range = ranges[0];
   if (byte_range.first_byte_position() < 0)
     return false;
+  // Allow the range [0, -1] to be valid and specify the entire range.
+  if (byte_range.first_byte_position() == 0 &&
+      byte_range.last_byte_position() == -1) {
+    *has_range_out = false;
+    return true;
+  }
   if (byte_range.last_byte_position() < 0)
     return false;
 
@@ -208,6 +213,21 @@ bool ServiceWorkerUtils::ExtractSinglePartHttpRange(
   *offset_out = static_cast<uint64_t>(byte_range.first_byte_position());
   *length_out = length.ValueOrDie();
   return true;
+}
+
+bool ServiceWorkerUtils::ShouldBypassCacheDueToUpdateViaCache(
+    bool is_main_script,
+    blink::mojom::ServiceWorkerUpdateViaCache cache_mode) {
+  switch (cache_mode) {
+    case blink::mojom::ServiceWorkerUpdateViaCache::kImports:
+      return is_main_script;
+    case blink::mojom::ServiceWorkerUpdateViaCache::kNone:
+      return true;
+    case blink::mojom::ServiceWorkerUpdateViaCache::kAll:
+      return false;
+  }
+  NOTREACHED() << static_cast<int>(cache_mode);
+  return false;
 }
 
 bool LongestScopeMatcher::MatchLongest(const GURL& scope) {

@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -99,14 +100,16 @@ int main(int argc, char** argv) {
   char* expected = (char*)&RoutineCallingTheSignal;
   char* actual = (char*)getpc_retval;
 
-  // For ia64, ppc64, and parisc64, the function pointer is actually
+  // For ia64, ppc64v1, and parisc64, the function pointer is actually
   // a struct.  For instance, ia64's dl-fptr.h:
   //   struct fdesc {          /* An FDESC is a function descriptor.  */
   //      ElfW(Addr) ip;      /* code entry point */
   //      ElfW(Addr) gp;      /* global pointer */
   //   };
   // We want the code entry point.
-#if defined(__ia64) || defined(__ppc64)     // NOTE: ppc64 is UNTESTED
+  // NOTE: ppc64 ELFv2 (Little Endian) does not have function pointers
+#if defined(__ia64) || \
+    (defined(__powerpc64__) && _CALL_ELF != 2)
   expected = ((char**)expected)[0];         // this is "ip"
 #endif
 

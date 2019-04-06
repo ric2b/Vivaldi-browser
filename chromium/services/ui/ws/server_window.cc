@@ -7,7 +7,6 @@
 #include <inttypes.h>
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/host/renderer_settings_creation.h"
@@ -20,29 +19,15 @@
 namespace ui {
 namespace ws {
 
-ServerWindow::ServerWindow(ServerWindowDelegate* delegate, const WindowId& id)
-    : ServerWindow(delegate,
-                   id,
-                   viz::FrameSinkId(id.client_id, id.window_id),
-                   Properties()) {}
-
 ServerWindow::ServerWindow(ServerWindowDelegate* delegate,
-                           const WindowId& id,
                            const viz::FrameSinkId& frame_sink_id,
                            const Properties& properties)
     : delegate_(delegate),
-      id_(id),
-      parent_(nullptr),
-      stacking_target_(nullptr),
-      transient_parent_(nullptr),
-      modal_type_(MODAL_TYPE_NONE),
-      visible_(false),
+      owning_tree_id_(frame_sink_id.client_id()),
       // Default to kPointer as kNull doesn't change the cursor, it leaves
       // the last non-null cursor.
       cursor_(ui::CursorType::kPointer),
       non_client_cursor_(ui::CursorType::kPointer),
-      opacity_(1),
-      can_focus_(true),
       properties_(properties),
       // Don't notify newly added observers during notification. This causes
       // problems for code that adds an observer as part of an observer
@@ -131,9 +116,7 @@ void ServerWindow::UpdateFrameSinkId(const viz::FrameSinkId& frame_sink_id) {
   auto* host_frame_sink_manager = delegate_->GetVizHostProxy();
   DCHECK(host_frame_sink_manager);
   host_frame_sink_manager->RegisterFrameSinkId(frame_sink_id, this);
-#if DCHECK_IS_ON()
   host_frame_sink_manager->SetFrameSinkDebugLabel(frame_sink_id, GetName());
-#endif
   if (frame_sink_id_.is_valid()) {
     if (parent()) {
       host_frame_sink_manager->UnregisterFrameSinkHierarchy(
@@ -269,19 +252,6 @@ const ServerWindow* ServerWindow::GetRootForDrawn() const {
   return delegate_->GetRootWindowForDrawn(this);
 }
 
-ServerWindow* ServerWindow::GetChildWindow(const WindowId& window_id) {
-  if (id_ == window_id)
-    return this;
-
-  for (ServerWindow* child : children_) {
-    ServerWindow* window = child->GetChildWindow(window_id);
-    if (window)
-      return window;
-  }
-
-  return nullptr;
-}
-
 bool ServerWindow::AddTransientWindow(ServerWindow* child) {
   if (child->transient_parent())
     child->transient_parent()->RemoveTransientWindow(child);
@@ -413,11 +383,9 @@ void ServerWindow::SetProperty(const std::string& name,
   } else if (it != properties_.end()) {
     properties_.erase(it);
   }
-#if DCHECK_IS_ON()
   auto* host_frame_sink_manager = delegate_->GetVizHostProxy();
   if (host_frame_sink_manager && name == mojom::WindowManager::kName_Property)
     host_frame_sink_manager->SetFrameSinkDebugLabel(frame_sink_id_, GetName());
-#endif
 
   for (auto& observer : observers_)
     observer.OnWindowSharedPropertyChanged(this, name, value);
@@ -487,10 +455,9 @@ std::string ServerWindow::GetDebugWindowInfo() const {
   if (has_created_compositor_frame_sink_)
     frame_sink = " [" + frame_sink_id_.ToString() + "]";
 
-  return base::StringPrintf("id=%s visible=%s bounds=%s name=%s%s",
-                            id_.ToString().c_str(), visible_ ? "true" : "false",
-                            bounds_.ToString().c_str(), name.c_str(),
-                            frame_sink.c_str());
+  return base::StringPrintf(
+      "visible=%s bounds=%s name=%s%s", visible_ ? "true" : "false",
+      bounds_.ToString().c_str(), name.c_str(), frame_sink.c_str());
 }
 
 void ServerWindow::BuildDebugInfo(const std::string& depth,

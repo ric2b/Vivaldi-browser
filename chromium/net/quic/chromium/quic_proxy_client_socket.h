@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_CORE_QUIC_PROXY_CLIENT_SOCKET_H_
-#define NET_QUIC_CORE_QUIC_PROXY_CLIENT_SOCKET_H_
+#ifndef NET_QUIC_CHROMIUM_QUIC_PROXY_CLIENT_SOCKET_H_
+#define NET_QUIC_CHROMIUM_QUIC_PROXY_CLIENT_SOCKET_H_
 
 #include <cstdio>
+#include <memory>
 #include <string>
 
+#include "net/base/completion_once_callback.h"
 #include "net/base/load_timing_info.h"
 #include "net/http/proxy_client_socket.h"
 #include "net/quic/chromium/quic_chromium_client_session.h"
 #include "net/quic/chromium/quic_chromium_client_stream.h"
-#include "net/spdy/chromium/spdy_read_queue.h"
+#include "net/spdy/spdy_read_queue.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
@@ -42,18 +44,16 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
   const HttpResponseInfo* GetConnectResponseInfo() const override;
   std::unique_ptr<HttpStream> CreateConnectResponseStream() override;
   const scoped_refptr<HttpAuthController>& GetAuthController() const override;
-  int RestartWithAuth(const CompletionCallback& callback) override;
+  int RestartWithAuth(CompletionOnceCallback callback) override;
   bool IsUsingSpdy() const override;
   NextProto GetProxyNegotiatedProtocol() const override;
 
   // StreamSocket implementation.
-  int Connect(const CompletionCallback& callback) override;
+  int Connect(CompletionOnceCallback callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
   bool IsConnectedAndIdle() const override;
   const NetLogWithSource& NetLog() const override;
-  void SetSubresourceSpeculation() override;
-  void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
   bool WasAlpnNegotiated() const override;
   NextProto GetNegotiatedProtocol() const override;
@@ -67,10 +67,10 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
   // Socket implementation.
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override;
+           CompletionOnceCallback callback) override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override;
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
@@ -89,15 +89,13 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
     STATE_CONNECT_COMPLETE
   };
 
-  void LogBlockedTunnelResponse() const;
-
   void OnIOComplete(int result);  // Callback used during connecting
   void OnReadComplete(int rv);
   void OnWriteComplete(int rv);
 
   // Callback for stream_->ReadInitialHeaders()
   void OnReadResponseHeadersComplete(int result);
-  int ProcessResponseHeaders(const SpdyHeaderBlock& headers);
+  int ProcessResponseHeaders(const spdy::SpdyHeaderBlock& headers);
 
   int DoLoop(int last_io_result);
   int DoGenerateAuthToken();
@@ -118,13 +116,13 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
   std::unique_ptr<QuicChromiumClientSession::Handle> session_;
 
   // Stores the callback for Connect().
-  CompletionCallback connect_callback_;
+  CompletionOnceCallback connect_callback_;
   // Stores the callback for Read().
-  CompletionCallback read_callback_;
+  CompletionOnceCallback read_callback_;
   // Stores the read buffer pointer for Read().
   IOBuffer* read_buf_;
   // Stores the callback for Write().
-  CompletionCallback write_callback_;
+  CompletionOnceCallback write_callback_;
   // Stores the write buffer length for Write().
   int write_buf_len_;
 
@@ -132,7 +130,7 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
   HttpRequestInfo request_;
   HttpResponseInfo response_;
 
-  SpdyHeaderBlock response_header_block_;
+  spdy::SpdyHeaderBlock response_header_block_;
 
   // The hostname and port of the endpoint.  This is not necessarily the one
   // specified by the URL, due to Alternate-Protocol or fixed testing ports.
@@ -158,4 +156,4 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
 
 }  // namespace net
 
-#endif  // NET_QUIC_CORE_ QUIC_PROXY_CLIENT_SOCKET_H_
+#endif  // NET_QUIC_CHROMIUM_QUIC_PROXY_CLIENT_SOCKET_H_

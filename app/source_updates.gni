@@ -1,4 +1,5 @@
 import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/gn/config/version.gni")
 
 update_target("//base:base") {
   if (!defined(sources)) {
@@ -22,6 +23,15 @@ update_target("//base:base_static") {
       "//vivaldi/update_notifier/update_notifier_switches.h",
     ]
   }
+}
+
+update_target("//chrome:visual_elements_resources") {
+  sources = []
+  sources += [
+    "//vivaldi/app/other_resources/$VIVALDI_RELEASE_KIND/win8/Logo.png",
+    "//vivaldi/app/other_resources/$VIVALDI_RELEASE_KIND/win8/SmallLogo.png",
+    "//vivaldi/app/other_resources/vivaldi.VisualElementsManifest.xml",
+  ]
 }
 
 update_target("//chrome/common:non_code_constants") {

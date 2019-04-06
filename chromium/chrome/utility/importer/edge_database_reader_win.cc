@@ -10,7 +10,6 @@
 
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 
 namespace {
 
@@ -226,6 +225,12 @@ bool EdgeDatabaseReader::OpenDatabase(const base::string16& database_file) {
     return false;
   if (!SetLastError(JetCreateInstance(&instance_id_, L"EdgeDataImporter")))
     return false;
+  if (!log_folder_.empty()) {
+    if (!SetLastError(JetSetSystemParameter(&instance_id_, JET_sesidNil,
+                                            JET_paramLogFilePath, 0,
+                                            log_folder_.c_str())))
+      return false;
+  } else
   if (!SetLastError(JetSetSystemParameter(&instance_id_, JET_sesidNil,
                                           JET_paramRecovery, 0, L"Off")))
     return false;
@@ -256,6 +261,6 @@ EdgeDatabaseReader::OpenTableEnumerator(const base::string16& table_name) {
                                  nullptr, 0, JET_bitTableReadOnly, &table_id)))
     return nullptr;
 
-  return base::MakeUnique<EdgeDatabaseTableEnumerator>(table_name, session_id_,
+  return std::make_unique<EdgeDatabaseTableEnumerator>(table_name, session_id_,
                                                        table_id);
 }

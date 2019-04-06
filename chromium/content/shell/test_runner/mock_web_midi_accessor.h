@@ -6,11 +6,12 @@
 #define CONTENT_SHELL_TEST_RUNNER_MOCK_WEB_MIDI_ACCESSOR_H_
 
 #include <stddef.h>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/midi/midi_service.mojom.h"
-#include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessor.h"
+#include "third_party/blink/public/platform/modules/webmidi/web_midi_accessor.h"
 
 namespace blink {
 class WebMIDIAccessorClient;
@@ -31,12 +32,16 @@ class MockWebMIDIAccessor : public blink::WebMIDIAccessor {
   void SendMIDIData(unsigned port_index,
                     const unsigned char* data,
                     size_t length,
-                    double timestamp) override;
+                    base::TimeTicks timestamp) override;
 
  private:
   void addInputPort(midi::mojom::PortState state);
   void addOutputPort(midi::mojom::PortState state);
   void reportStartedSession(midi::mojom::Result result);
+
+  void RunDidReceiveMIDIData(unsigned port_index,
+                             std::vector<unsigned char> data,
+                             base::TimeTicks time_stamp);
 
   blink::WebMIDIAccessorClient* client_;
   TestInterfaces* interfaces_;

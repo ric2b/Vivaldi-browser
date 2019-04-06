@@ -59,7 +59,7 @@ class PasswordReuseDetectionManagerTest : public ::testing::Test {
 };
 
 // Verify that CheckReuse is called on each key pressed event with an argument
-// equal to the last 30 keystrokes typed after the last main frame navigaion.
+// equal to the last 30 keystrokes typed after the last main frame navigation.
 TEST_F(PasswordReuseDetectionManagerTest, CheckReuseCalled) {
   const GURL gurls[] = {GURL("https://www.example.com"),
                         GURL("https://www.otherexample.com")};
@@ -96,17 +96,16 @@ TEST_F(PasswordReuseDetectionManagerTest,
       .WillRepeatedly(testing::Return(store_.get()));
   PasswordReuseDetectionManager manager(&client_);
 
-  std::unique_ptr<base::SimpleTestClock> clock(new base::SimpleTestClock);
+  base::SimpleTestClock clock;
   base::Time now = base::Time::Now();
-  clock->SetNow(now);
-  base::SimpleTestClock* clock_weak = clock.get();
-  manager.SetClockForTesting(std::move(clock));
+  clock.SetNow(now);
+  manager.SetClockForTesting(&clock);
 
   EXPECT_CALL(*store_, CheckReuse(base::ASCIIToUTF16("1"), _, _));
   manager.OnKeyPressed(base::ASCIIToUTF16("1"));
 
   // Simulate 10 seconds of inactivity.
-  clock_weak->SetNow(now + base::TimeDelta::FromSeconds(10));
+  clock.SetNow(now + base::TimeDelta::FromSeconds(10));
   // Expect that a keystroke typed before inactivity is cleared.
   EXPECT_CALL(*store_, CheckReuse(base::ASCIIToUTF16("2"), _, _));
   manager.OnKeyPressed(base::ASCIIToUTF16("2"));
@@ -138,7 +137,7 @@ TEST_F(PasswordReuseDetectionManagerTest, NoReuseCheckingAfterReuseFound) {
   PasswordReuseDetectionManager manager(&client_);
 
   // Simulate that reuse found.
-  manager.OnReuseFound(0ul, true, {}, 0);
+  manager.OnReuseFound(0ul, base::nullopt, {"https://example.com"}, 0);
 
   // Expect no checking of reuse.
   EXPECT_CALL(*store_, CheckReuse(_, _, _)).Times(0);
@@ -150,7 +149,7 @@ TEST_F(PasswordReuseDetectionManagerTest, NoReuseCheckingAfterReuseFound) {
   manager.OnKeyPressed(base::ASCIIToUTF16("1"));
 }
 
-// Verify that keystoke buffer is cleared only on cross host navigation.
+// Verify that keystroke buffer is cleared only on cross host navigation.
 TEST_F(PasswordReuseDetectionManagerTest, DidNavigateMainFrame) {
   EXPECT_CALL(client_, GetPasswordStore())
       .WillRepeatedly(testing::Return(store_.get()));

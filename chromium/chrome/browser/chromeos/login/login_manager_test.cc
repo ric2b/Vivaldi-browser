@@ -6,11 +6,11 @@
 
 #include <string>
 
+#include "ash/public/cpp/ash_switches.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
@@ -24,8 +24,8 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -52,7 +52,8 @@ constexpr char kTestUserinfoToken2[] = "fake-userinfo-token-2";
 constexpr char kTestRefreshToken2[] = "fake-refresh-token-2";
 
 UserContext CreateUserContext(const AccountId& account_id) {
-  UserContext user_context(account_id);
+  UserContext user_context(user_manager::UserType::USER_TYPE_REGULAR,
+                           account_id);
   user_context.SetKey(Key("password"));
   if (account_id.GetUserEmail() == LoginManagerTest::kEnterpriseUser1) {
     user_context.SetRefreshToken(kTestRefreshToken1);
@@ -78,7 +79,7 @@ LoginManagerTest::~LoginManagerTest() {}
 
 void LoginManagerTest::SetUp() {
   base::FilePath test_data_dir;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
 
   embedded_test_server()->RegisterRequestHandler(
@@ -103,6 +104,7 @@ void LoginManagerTest::TearDownOnMainThread() {
 }
 
 void LoginManagerTest::SetUpCommandLine(base::CommandLine* command_line) {
+  command_line->AppendSwitch(ash::switches::kShowWebUiLogin);
   command_line->AppendSwitch(chromeos::switches::kLoginManager);
   command_line->AppendSwitch(chromeos::switches::kForceLoginManagerInTests);
 
@@ -226,8 +228,7 @@ void LoginManagerTest::InitializeWebContents() {
   LoginDisplayHost* host = LoginDisplayHost::default_host();
   EXPECT_TRUE(host != NULL);
 
-  content::WebContents* web_contents =
-      host->GetWebUILoginView()->GetWebContents();
+  content::WebContents* web_contents = host->GetOobeWebContents();
   EXPECT_TRUE(web_contents != NULL);
   set_web_contents(web_contents);
   js_checker_.set_web_contents(web_contents);

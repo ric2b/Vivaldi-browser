@@ -4,11 +4,12 @@
 
 #include "ui/views/style/platform_style.h"
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/range/range.h"
 #include "ui/gfx/shadow_value.h"
+#include "ui/gfx/utf16_indexing.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
@@ -33,6 +34,17 @@ const SkColor kStyleButtonShadowColor = SK_ColorWHITE;
 
 }  // namespace
 
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
+const bool PlatformStyle::kIsOkButtonLeading = true;
+#else
+const bool PlatformStyle::kIsOkButtonLeading = false;
+#endif
+
+// Set kFocusHaloInset to negative half of kFocusHaloThickness to draw half of
+// the focus ring inside and half outside the parent elmeent
+const float PlatformStyle::kFocusHaloThickness = 2.f;
+const float PlatformStyle::kFocusHaloInset = -1.f;
+
 #if !defined(OS_MACOSX)
 
 const int PlatformStyle::kMinLabelButtonWidth = 70;
@@ -48,6 +60,9 @@ const bool PlatformStyle::kReturnClicksFocusedControl = true;
 const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = false;
 const bool PlatformStyle::kUseRipples = true;
 const bool PlatformStyle::kTextfieldScrollsToStartOnFocusChange = false;
+const bool PlatformStyle::kTextfieldUsesDragCursorWhenDraggable = true;
+const bool PlatformStyle::kShouldElideBookmarksInBookmarksBar = false;
+const bool PlatformStyle::kPreferFocusRings = false;
 
 // static
 std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
@@ -60,6 +75,15 @@ std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
 
 // static
 void PlatformStyle::OnTextfieldEditFailed() {}
+
+// static
+gfx::Range PlatformStyle::RangeToDeleteBackwards(const base::string16& text,
+                                                 size_t cursor_position) {
+  // Delete one code point, which may be two UTF-16 words.
+  size_t previous_grapheme_index =
+      gfx::UTF16OffsetToIndex(text, cursor_position, -1);
+  return gfx::Range(cursor_position, previous_grapheme_index);
+}
 
 #endif  // OS_MACOSX
 

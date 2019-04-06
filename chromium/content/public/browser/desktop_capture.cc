@@ -6,8 +6,10 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "content/public/common/content_features.h"
 
 namespace content {
+namespace desktop_capture {
 
 webrtc::DesktopCaptureOptions CreateDesktopCaptureOptions() {
   auto options = webrtc::DesktopCaptureOptions::CreateDefault();
@@ -23,8 +25,23 @@ webrtc::DesktopCaptureOptions CreateDesktopCaptureOptions() {
   } else {
     options.set_allow_use_magnification_api(true);
   }
-#endif  // defined(OS_WIN)
+#elif defined(OS_MACOSX)
+  if (base::FeatureList::IsEnabled(features::kIOSurfaceCapturer)) {
+    options.set_allow_iosurface(true);
+  }
+#endif
   return options;
 }
 
+std::unique_ptr<webrtc::DesktopCapturer> CreateScreenCapturer() {
+  return webrtc::DesktopCapturer::CreateScreenCapturer(
+      CreateDesktopCaptureOptions());
+}
+
+std::unique_ptr<webrtc::DesktopCapturer> CreateWindowCapturer() {
+  return webrtc::DesktopCapturer::CreateWindowCapturer(
+      CreateDesktopCaptureOptions());
+}
+
+}  // namespace desktop_capture
 }  // namespace content

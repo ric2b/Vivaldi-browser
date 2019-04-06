@@ -14,12 +14,11 @@
 #include "chrome/browser/extensions/extension_sync_service_factory.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
-#include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/sync_helper.h"
-#include "chrome/common/features.h"
 #include "chrome/common/web_application_info.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_error_factory.h"
@@ -50,26 +49,6 @@ using extensions::ExtensionSystem;
 using extensions::SyncBundle;
 
 namespace {
-
-// Returns the pref value for "all urls enabled" for the given extension id.
-ExtensionSyncData::OptionalBoolean GetAllowedOnAllUrlsOptionalBoolean(
-    const Extension& extension,
-    content::BrowserContext* context) {
-  extensions::ScriptingPermissionsModifier permissions_modifier(context,
-                                                                &extension);
-  bool allowed_on_all_urls = permissions_modifier.IsAllowedOnAllUrls();
-  // If the extension is not allowed on all urls (which is not the default),
-  // then we have to sync the preference.
-  if (!allowed_on_all_urls)
-    return ExtensionSyncData::BOOLEAN_FALSE;
-
-  // If the user has explicitly set a value, then we sync it.
-  if (permissions_modifier.HasSetAllowedOnAllUrls())
-    return ExtensionSyncData::BOOLEAN_TRUE;
-
-  // Otherwise, unset.
-  return ExtensionSyncData::BOOLEAN_UNSET;
-}
 
 // Returns true if the sync type of |extension| matches |type|.
 bool IsCorrectSyncType(const Extension& extension, syncer::ModelType type) {
@@ -271,23 +250,21 @@ ExtensionSyncData ExtensionSyncService::CreateSyncData(
   bool incognito_enabled = extensions::util::IsIncognitoEnabled(id, profile_);
   bool remote_install = extension_prefs->HasDisableReason(
       id, extensions::disable_reason::DISABLE_REMOTE_INSTALL);
-  ExtensionSyncData::OptionalBoolean allowed_on_all_url =
-      GetAllowedOnAllUrlsOptionalBoolean(extension, profile_);
   bool installed_by_custodian =
       extensions::util::WasInstalledByCustodian(id, profile_);
   AppSorting* app_sorting = ExtensionSystem::Get(profile_)->app_sorting();
 
-  ExtensionSyncData result = extension.is_app()
-      ? ExtensionSyncData(
-            extension, enabled, disable_reasons, incognito_enabled,
-            remote_install, allowed_on_all_url,
-            installed_by_custodian,
-            app_sorting->GetAppLaunchOrdinal(id),
-            app_sorting->GetPageOrdinal(id),
-            extensions::GetLaunchTypePrefValue(extension_prefs, id))
-      : ExtensionSyncData(
-            extension, enabled, disable_reasons, incognito_enabled,
-            remote_install, allowed_on_all_url, installed_by_custodian);
+  ExtensionSyncData result =
+      extension.is_app()
+          ? ExtensionSyncData(
+                extension, enabled, disable_reasons, incognito_enabled,
+                remote_install, installed_by_custodian,
+                app_sorting->GetAppLaunchOrdinal(id),
+                app_sorting->GetPageOrdinal(id),
+                extensions::GetLaunchTypePrefValue(extension_prefs, id))
+          : ExtensionSyncData(extension, enabled, disable_reasons,
+                              incognito_enabled, remote_install,
+                              installed_by_custodian);
 
   // If there's a pending update, send the new version to sync instead of the
   // installed one.
@@ -481,15 +458,6 @@ void ExtensionSyncService::ApplySyncData(
       id, profile_, extension_sync_data.incognito_enabled());
   extension = nullptr;  // No longer safe to use.
 
-  // Update the all urls flag.
-  if (extension_sync_data.all_urls_enabled() !=
-          ExtensionSyncData::BOOLEAN_UNSET) {
-    bool allowed = extension_sync_data.all_urls_enabled() ==
-                   ExtensionSyncData::BOOLEAN_TRUE;
-    extensions::ScriptingPermissionsModifier::SetAllowedOnAllUrlsForSync(
-        allowed, profile_, id);
-  }
-
   // Set app-specific data.
   if (extension_sync_data.is_app()) {
     if (extension_sync_data.app_launch_ordinal().IsValid() &&
@@ -601,7 +569,7 @@ void ExtensionSyncService::DeleteThemeDoNotUse(const Extension& theme) {
       theme.id(), CreateSyncData(theme).GetSyncData());
 }
 
-ExtensionService* ExtensionSyncService::extension_service() const {
+extensions::ExtensionService* ExtensionSyncService::extension_service() const {
   return ExtensionSystem::Get(profile_)->extension_service();
 }
 

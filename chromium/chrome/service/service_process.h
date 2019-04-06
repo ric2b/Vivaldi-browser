@@ -14,8 +14,9 @@
 #include "base/threading/thread.h"
 #include "chrome/service/cloud_print/cloud_print_proxy.h"
 #include "chrome/service/service_ipc_server.h"
-#include "mojo/edk/embedder/named_platform_handle.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
+#include "mojo/public/cpp/platform/named_platform_channel.h"
+#include "mojo/public/cpp/platform/platform_channel_server_endpoint.h"
+#include "mojo/public/cpp/system/isolated_connection.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 class ServiceProcessPrefs;
@@ -28,8 +29,8 @@ class WaitableEvent;
 }
 
 namespace mojo {
-namespace edk {
-class PeerConnection;
+class IsolatedConnection;
+namespace core {
 class ScopedIPCSupport;
 }
 }
@@ -49,11 +50,11 @@ class ServiceProcess : public ServiceIPCServer::Client,
   ServiceProcess();
   ~ServiceProcess() override;
 
-  // Initialize the ServiceProcess with the message loop that it should run on.
-  // ServiceProcess takes ownership of |state|.
-  bool Initialize(base::MessageLoopForUI* message_loop,
+  // Initialize the ServiceProcess. |quit_closure| will be run when the service
+  // process is ready to exit.
+  bool Initialize(base::OnceClosure quit_closure,
                   const base::CommandLine& command_line,
-                  ServiceProcessState* state);
+                  std::unique_ptr<ServiceProcessState> state);
 
   bool Teardown();
 
@@ -116,14 +117,14 @@ class ServiceProcess : public ServiceIPCServer::Client,
   std::unique_ptr<ServiceProcessPrefs> service_prefs_;
   std::unique_ptr<ServiceIPCServer> ipc_server_;
   std::unique_ptr<ServiceProcessState> service_process_state_;
-  std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
-  std::unique_ptr<mojo::edk::PeerConnection> peer_connection_;
+  std::unique_ptr<mojo::core::ScopedIPCSupport> mojo_ipc_support_;
+  std::unique_ptr<mojo::IsolatedConnection> mojo_connection_;
 
   // An event that will be signalled when we shutdown.
   base::WaitableEvent shutdown_event_;
 
-  // Pointer to the main message loop that host this object.
-  base::MessageLoop* main_message_loop_;
+  // Closure to run to cause the main message loop to exit.
+  base::OnceClosure quit_closure_;
 
   // Count of currently enabled services in this process.
   int enabled_services_;
@@ -134,9 +135,9 @@ class ServiceProcess : public ServiceIPCServer::Client,
   scoped_refptr<ServiceURLRequestContextGetter> request_context_getter_;
 
 #if defined(OS_POSIX)
-  mojo::edk::ScopedPlatformHandle server_handle_;
+  mojo::PlatformChannelServerEndpoint server_endpoint_;
 #elif defined(OS_WIN)
-  mojo::edk::NamedPlatformHandle server_handle_;
+  mojo::NamedPlatformChannel::ServerName server_name_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ServiceProcess);

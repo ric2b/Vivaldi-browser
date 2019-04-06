@@ -11,6 +11,7 @@
 
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handler.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 class MimeTypesHandler {
  public:
@@ -51,6 +52,9 @@ class MimeTypesHandler {
   // plugin associated with this MimeTypesHandler.
   base::FilePath GetPluginPath() const;
 
+  // Returns the background color used by the mime handler.
+  SkColor GetBackgroundColor() const;
+
  private:
   // The id for the extension this action belongs to (as defined in the
   // extension manifest).
@@ -70,7 +74,7 @@ class MimeTypesHandlerParser : public extensions::ManifestHandler {
   bool Parse(extensions::Extension* extension, base::string16* error) override;
 
  private:
-  const std::vector<std::string> Keys() const override;
+  base::span<const char* const> Keys() const override;
 };
 
 #endif  // EXTENSIONS_COMMON_MANIFEST_HANDLERS_MIME_TYPES_HANDLER_H_

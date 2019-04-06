@@ -11,6 +11,7 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/keycodes/keyboard_code_conversion_mac.h"
 
 NSEvent* KeyEvent(const NSUInteger modifierFlags,
                   NSString* chars,
@@ -109,6 +110,13 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
   item = MenuItem(@"A", 0);
   ExpectKeyFiresItem(key, item);
   ExpectKeyDoesntFireItem(KeyEvent(0x100, @"a", @"a", 0), item);
+
+  // cmd-shift-t
+  key = KeyEvent(0x12010a, @"t", @"T", 0);
+  item = MenuItem(@"T", 0x100000);
+  ExpectKeyFiresItem(key, item);
+  item = MenuItem(@"t", 0x100000);
+  ExpectKeyDoesntFireItem(key, item);
 
   // cmd-opt-shift-a
   key = KeyEvent(0x1a012a, @"\u00c5", @"A", 0);
@@ -261,14 +269,21 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
 
   // cmd-z on dvorak qwerty layout (so that the key produces ';', but 'z' if
   // cmd is down)
+  SetIsInputSourceDvorakQwertyForTesting(true);
   key = KeyEvent(0x100108, @"z", @";", 6);
   ExpectKeyFiresItem(key, MenuItem(@"z", 0x100000), false);
   ExpectKeyDoesntFireItem(key, MenuItem(@";", 0x100000), false);
+  SetIsInputSourceDvorakQwertyForTesting(false);
 
   // cmd-shift-z on dvorak layout (so that we get a ':')
   key = KeyEvent(0x12010a, @";", @":", 6);
   ExpectKeyFiresItem(key, MenuItem(@":", 0x100000));
   ExpectKeyDoesntFireItem(key, MenuItem(@";", 0x100000));
+
+  // On PT layout, caps lock should not affect the keyEquivalent.
+  key = KeyEvent(0x110108, @"T", @"t", 17);
+  ExpectKeyFiresItem(key, MenuItem(@"t", 0x100000));
+  ExpectKeyDoesntFireItem(key, MenuItem(@"T", 0x100000));
 
   // cmd-s with a serbian layout (just "s" produces something that looks a lot
   // like "c" in some fonts, but is actually \u0441. cmd-s activates a menu item
@@ -276,33 +291,25 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
   key = KeyEvent(0x100108, @"s", @"\u0441", 1);
   ExpectKeyFiresItem(key, MenuItem(@"s", 0x100000), false);
   ExpectKeyDoesntFireItem(key, MenuItem(@"c", 0x100000));
+
+  // ctr + shift + tab produces the "End of Medium" keyEquivalent, even though
+  // it should produce the "Horizontal Tab" keyEquivalent. Check to make sure
+  // it matches anyways.
+  key = KeyEvent(0x60103, @"\x19", @"\x19", 1);
+  ExpectKeyFiresItem(key, MenuItem(@"\x9", NSShiftKeyMask | NSControlKeyMask),
+                     false);
 }
 
 NSString* keyCodeToCharacter(NSUInteger keyCode,
                              EventModifiers modifiers,
                              TISInputSourceRef layout) {
-  CFDataRef uchr = (CFDataRef)TISGetInputSourceProperty(
-      layout, kTISPropertyUnicodeKeyLayoutData);
-  UCKeyboardLayout* keyLayout = (UCKeyboardLayout*)CFDataGetBytePtr(uchr);
+  UInt32 deadKeyStateUnused = 0;
+  UniChar unicodeChar = ui::TranslatedUnicodeCharFromKeyCode(
+      layout, (UInt16)keyCode, kUCKeyActionDown, modifiers, LMGetKbdType(),
+      &deadKeyStateUnused);
 
-  UInt32 deadKeyState = 0;
-  OSStatus err = noErr;
-  UniCharCount maxStringLength = 4, actualStringLength;
-  UniChar unicodeString[4];
-  err = UCKeyTranslate(keyLayout,
-      (UInt16)keyCode,
-      kUCKeyActionDown,
-      modifiers,
-      LMGetKbdType(),
-      kUCKeyTranslateNoDeadKeysBit,
-      &deadKeyState,
-      maxStringLength,
-      &actualStringLength,
-      unicodeString);
-  assert(err == noErr);
-
-  CFStringRef temp = CFStringCreateWithCharacters(
-      kCFAllocatorDefault, unicodeString, 1);
+  CFStringRef temp =
+      CFStringCreateWithCharacters(kCFAllocatorDefault, &unicodeChar, 1);
   return [(NSString*)temp autorelease];
 }
 
@@ -333,12 +340,25 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
         [layoutId isEqualToString:@"com.apple.keylayout.ABC-AZERTY"] ||
         [layoutId hasPrefix:@"com.apple.keylayout.French"]) {
       keyCode = 0x29;
-    } else if ([layoutId isEqualToString:@"com.apple.keylayout.Turkish"]) {
+    } else if ([layoutId isEqualToString:@"com.apple.keylayout.Turkish"] ||
+               [layoutId
+                   isEqualToString:@"com.apple.keylayout.Turkish-Standard"]) {
       keyCode = 0x28;
     } else if ([layoutId isEqualToString:@"com.apple.keylayout.Dvorak-Left"]) {
       keyCode = 0x16;
     } else if ([layoutId isEqualToString:@"com.apple.keylayout.Dvorak-Right"]) {
       keyCode = 0x1a;
+    } else if ([layoutId
+                   isEqualToString:@"com.apple.keylayout.Tibetan-Wylie"]) {
+      // In Tibetan-Wylie, the only way to type the "m" character is with cmd +
+      // key_code=0x2e. As such, it doesn't make sense for this same combination
+      // to trigger a keyEquivalent, since then it won't be possible to type
+      // "m".
+      continue;
+    }
+
+    if ([layoutId isEqualToString:@"com.apple.keylayout.DVORAK-QWERTYCMD"]) {
+      SetIsInputSourceDvorakQwertyForTesting(true);
     }
 
     EventModifiers modifiers = cmdKey >> 8;
@@ -346,6 +366,10 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
     NSString* charsIgnoringMods = keyCodeToCharacter(keyCode, 0, ref);
     NSEvent* key = KeyEvent(0x100000, chars, charsIgnoringMods, keyCode);
     ExpectKeyFiresItem(key, item, false);
+
+    if ([layoutId isEqualToString:@"com.apple.keylayout.DVORAK-QWERTYCMD"]) {
+      SetIsInputSourceDvorakQwertyForTesting(false);
+    }
   }
   CFRelease(list);
 }

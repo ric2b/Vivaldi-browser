@@ -7,14 +7,13 @@
 #include <stdint.h>
 
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/common/origin_util.h"
-#include "third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h"
+#include "third_party/blink/public/platform/modules/budget_service/budget_service.mojom.h"
 #include "url/origin.h"
 
 BudgetManager::BudgetManager(Profile* profile)
@@ -47,7 +46,7 @@ void BudgetManager::GetBudget(const url::Origin& origin,
   }
   db_.GetBudgetDetails(origin, base::BindOnce(&BudgetManager::DidGetBudget,
                                               weak_ptr_factory_.GetWeakPtr(),
-                                              base::Passed(&callback)));
+                                              std::move(callback)));
 }
 
 void BudgetManager::Reserve(const url::Origin& origin,

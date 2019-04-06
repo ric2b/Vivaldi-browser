@@ -8,13 +8,14 @@ What does *not* work:
 
 * goma. Sorry. ([internal bug](http://b/64390790)) You can use the
   [jumbo build](jumbo.md) for faster build times.
-* mini_installer ([bug](https://crbug.com/762073))
+* 64-bit renderer processes don't use V8 snapshots, slowing down their startup
+  ([bug](https://crbug.com/803591))
 * on Mac hosts, building a 32-bit chrome ([bug](https://crbug.com/794838))
 
 All other targets build fine (including `chrome`, `browser_tests`, ...).
 
 Uses of `.asm` files have been stubbed out.  As a result, some of Skia's
-software rendering paths are not present in cross builds, Crashpad cannot
+software rendering fast paths are not present in cross builds, Crashpad cannot
 report crashes, and NaCl defaults to disabled and cannot be enabled in
 cross builds ([.asm bug](https://crbug.com/762167)).
 
@@ -34,16 +35,41 @@ cross builds ([.asm bug](https://crbug.com/762167)).
 1. `gclient sync`, follow instructions on screen.
 
 If you're at Google, this will automatically download the Windows SDK for you.
-If this fails with an error: Please follow the instructions at
-https://www.chromium.org/developers/how-tos/build-instructions-windows
+If this fails with an error:
+
+    Please follow the instructions at
+    https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md
+
 then you may need to re-authenticate via:
 
     cd path/to/chrome/src
     # Follow instructions, enter 0 as project id.
     download_from_google_storage --config
 
-If you are not at Google, you'll have to figure out how to get the SDK, and
-you'll need to put a JSON file describing the SDK layout in a certain location.
+If you are not at Google, you can package your Windows SDK installation
+into a zip file by running the following on a Windows machine:
+
+    cd path/to/depot_tools/win_toolchain
+    # customize the Windows SDK version numbers
+    python package_from_installed.py 2017 -w 10.0.17134.0
+
+These commands create a zip file named `<hash value>.zip`. Then, to use the
+generated file in a Linux or Mac host, the following environment variables
+need to be set:
+
+    export DEPOT_TOOLS_WIN_TOOLCHAIN_BASE_URL=<path/to/sdk/zip/file>
+    export GYP_MSVS_<toolchain hash>=<hash value>
+
+`<toolchain hash>` is hardcoded in `src/build/vs_toolchain.py` and can be found by
+setting `DEPOT_TOOLS_WIN_TOOLCHAIN_BASE_URL` and running `gclient sync`:
+
+    gclient sync
+    ...
+    Running hooks:  17% (11/64) win_toolchain
+    ________ running '/usr/bin/python src/build/vs_toolchain.py update --force' in <chromium dir>
+    Windows toolchain out of date or doesn't exist, updating (Pro)...
+    current_hashes:
+    desired_hash: <toolchain hash>
 
 ## GN setup
 
@@ -51,26 +77,21 @@ Add `target_os = "win"` to your args.gn.  Then just build, e.g.
 
     ninja -C out/gnwin base_unittests.exe
 
+## Copying and running chrome
+
+A convenient way to copy chrome over to a Windows box is to build the
+`mini_installer` target.  Then, copy just `mini_installer.exe` over
+to the Windows box and run it to install the chrome you just built.
+
 ## Running tests on swarming
 
 You can run the Windows binaries you built on swarming, like so:
 
-    tools/mb/mb.py isolate //out/gnwin base_unittests
-    tools/swarming_client/isolate.py archive \
-        -I https://isolateserver.appspot.com \
-        -i out/gnwin/base_unittests.isolate \
-        -s out/gnwin/base_unittests.isolated
-    tools/swarming_client/swarming.py trigger \
-        -S https://chromium-swarm.appspot.com \
-        -I https://isolateserver.appspot.com \
-        -d os Windows -d pool Chrome -s <hash printed by previous command>
-        [ -- <flag to target process, for example --gtest_filter>... ]
+    tools/run-swarmed.py -C out/gnwin -t base_unittests [ --gtest_filter=... ]
 
-Most tests that build should pass.  However, the cross build uses
-the lld linker, and a couple of tests fail when using lld. You can look at
-https://build.chromium.org/p/chromium.clang/builders/CrWinClangLLD%20tester
-to get an idea of which tests fail with lld.
+See the contents of run-swarmed.py for how to do this manually.
 
-TODO(thakis): It'd be nice if there was a script for doing this. Maybe make
-tools/fuchsa/run-swarmed.py work for win cross builds too, or create
-`run_base_unittests` script targets during the build (like Android).
+The
+[linux-win_cross-rel](https://ci.chromium.org/buildbot/chromium.clang/linux-win_cross-rel/)
+buildbot does 64-bit release cross builds, and also runs tests. You can look at
+it to get an idea of which tests pass in the cross build.

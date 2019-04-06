@@ -17,10 +17,10 @@
 #include "content/browser/appcache/appcache_host.h"
 #include "content/browser/appcache/appcache_request_handler.h"
 #include "content/browser/appcache/appcache_service_impl.h"
-#include "content/browser/loader/url_loader_request_handler.h"
-#include "content/browser/url_loader_factory_getter.h"
+#include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/common/content_export.h"
 #include "content/public/common/resource_type.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace net {
 class NetworkDelegate;
@@ -50,7 +50,7 @@ class CONTENT_EXPORT AppCacheRequestHandler
       public AppCacheHost::Observer,
       public AppCacheServiceImpl::Observer,
       public AppCacheStorage::Delegate,
-      public URLLoaderRequestHandler {
+      public NavigationLoaderInterceptor {
  public:
   ~AppCacheRequestHandler() override;
 
@@ -67,21 +67,10 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   void GetExtraResponseInfo(int64_t* cache_id, GURL* manifest_url);
 
-  // Methods to support cross site navigations.
-  void PrepareForCrossSiteTransfer(int old_process_id);
-  void CompleteCrossSiteTransfer(int new_process_id, int new_host_id);
-  void MaybeCompleteCrossSiteTransferInOldProcess(int old_process_id);
-
-  // Useful for detecting storage partition mismatches in the context
-  // of cross site transfer navigations.
-  bool SanityCheckIsSameService(AppCacheService* service) {
-    return !host_ || (host_->service() == service);
-  }
-
   // NetworkService loading
 
-  // URLLoaderRequestHandler overrides - main resource loading.
-  // These methods are used by the NavigationURLLoaderNetworkService.
+  // NavigationLoaderInterceptor overrides - main resource loading.
+  // These methods are used by the NavigationURLLoaderImpl.
   // Internally they use same methods used by the network library based impl,
   // MaybeLoadResource and MaybeLoadFallbackForResponse.
   // Eventually one of the Deliver*Response() methods is called and the
@@ -93,7 +82,8 @@ class CONTENT_EXPORT AppCacheRequestHandler
   bool MaybeCreateLoaderForResponse(
       const network::ResourceResponseHead& response,
       network::mojom::URLLoaderPtr* loader,
-      network::mojom::URLLoaderClientRequest* client_request) override;
+      network::mojom::URLLoaderClientRequest* client_request,
+      ThrottlingURLLoader* url_loader) override;
   base::Optional<SubresourceLoaderParams> MaybeCreateSubresourceLoaderParams()
       override;
 
@@ -119,7 +109,7 @@ class CONTENT_EXPORT AppCacheRequestHandler
   InitializeForNavigationNetworkService(
       const network::ResourceRequest& request,
       AppCacheNavigationHandleCore* appcache_handle_core,
-      URLLoaderFactoryGetter* url_loader_factory_getter);
+      scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory);
 
   static bool IsMainResourceType(ResourceType type) {
     return IsResourceTypeFrame(type) || type == RESOURCE_TYPE_SHARED_WORKER;
@@ -187,14 +177,12 @@ class CONTENT_EXPORT AppCacheRequestHandler
                            const GURL& mainfest_url) override;
 
   // NetworkService loading:
-  // Called when a |callback| that is originally given to
-  // MaybeCreateLoader() runs for the main resource.
-  // This flips should_create_subresource_loader_ if non-null
-  // |start_loader_callback| is given, and then (always) run
-  // |callback| passing in |start_loader_callback|.
+  // Called when a |callback| that is originally given to |MaybeCreateLoader()|
+  // runs for the main resource. This flips |should_create_subresource_loader_|
+  // if a non-null |handler| is given. Always invokes |callback| with |handler|.
   void RunLoaderCallbackForMainResource(
       LoaderCallback callback,
-      StartLoaderCallback start_loader_callback);
+      SingleRequestURLLoaderFactory::RequestHandler handler);
 
   // Sub-resource loading -------------------------------------
   // Dedicated worker and all manner of sub-resources are handled here.
@@ -250,12 +238,6 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // 3) Request has been cancelled, and the job killed.
   base::WeakPtr<AppCacheJob> job_;
 
-  // During a cross site navigation, we transfer ownership the AppcacheHost
-  // from the old processes structures over to the new structures.
-  std::unique_ptr<AppCacheHost> host_for_cross_site_transfer_;
-  int old_process_id_;
-  int old_host_id_;
-
   // Cached information about the response being currently served by the
   // AppCache, if there is one.
   int cache_id_;
@@ -271,12 +253,12 @@ class CONTENT_EXPORT AppCacheRequestHandler
   LoaderCallback loader_callback_;
 
   // Flipped to true if AppCache wants to handle subresource requests
-  // (i.e. when |loader_callback_| is fired with a non-null callback for
-  // non-error cases.
+  // (i.e. when |loader_callback_| is fired with a non-null
+  // RequestHandler for non-error cases.
   bool should_create_subresource_loader_ = false;
 
-  // Points to the getter for the network URL loader.
-  scoped_refptr<URLLoaderFactoryGetter> network_url_loader_factory_getter_;
+  // The network URL loader factory.
+  scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory_;
 
   // The AppCache host instance. We pass this to the
   // AppCacheSubresourceURLFactory instance on creation.

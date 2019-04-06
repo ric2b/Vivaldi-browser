@@ -29,6 +29,8 @@ ResourceTypeProvider::ContentType GetContentTypeInternal(
   content::ResourceType resource_type = request_info->GetResourceType();
   if (resource_type == content::RESOURCE_TYPE_MEDIA)
     return ContentResourceTypeProvider::CONTENT_TYPE_MEDIA;
+  if (resource_type == content::RESOURCE_TYPE_MAIN_FRAME)
+    return ContentResourceTypeProvider::CONTENT_TYPE_MAIN_FRAME;
   return ContentResourceTypeProvider::CONTENT_TYPE_UNKNOWN;
 }
 
@@ -64,6 +66,15 @@ void ContentResourceTypeProvider::SetContentType(
     return;
   }
   resource_content_types_.Put(request.url().spec(), content_type);
+}
+
+bool ContentResourceTypeProvider::IsNonContentInitiatedRequest(
+    const net::URLRequest& request) const {
+  const auto* resource_request_info =
+      content::ResourceRequestInfo::ForRequest(&request);
+  return !resource_request_info ||
+         (resource_request_info->GetGlobalRequestID() ==
+          content::GlobalRequestID());
 }
 
 }  // namespace data_reduction_proxy

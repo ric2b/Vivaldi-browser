@@ -6,8 +6,11 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
+#include "ash/public/cpp/app_menu_constants.h"
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/menu_utils.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/cpp/shelf_types.h"
@@ -16,12 +19,12 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/wallpaper/wallpaper_controller.h"
-#include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/safe_conversions.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/image/image.h"
 
 using l10n_util::GetStringUTF16;
@@ -30,39 +33,6 @@ using SubmenuList = std::vector<std::unique_ptr<ui::MenuModel>>;
 namespace ash {
 
 namespace {
-
-// Find a menu item by command id; returns a stub item if no match was found.
-const mojom::MenuItemPtr& GetItem(const MenuItemList& items, int command_id) {
-  const uint32_t id = base::checked_cast<uint32_t>(command_id);
-  static const mojom::MenuItemPtr item_not_found(mojom::MenuItem::New());
-  for (const mojom::MenuItemPtr& item : items) {
-    if (item->command_id == id)
-      return item;
-    if (item->type == ui::MenuModel::TYPE_SUBMENU &&
-        item->submenu.has_value()) {
-      const mojom::MenuItemPtr& submenu_item =
-          GetItem(item->submenu.value(), command_id);
-      if (submenu_item->command_id == id)
-        return submenu_item;
-    }
-  }
-  return item_not_found;
-}
-
-// A shelf context submenu model; used for shelf alignment.
-class ShelfContextSubMenuModel : public ui::SimpleMenuModel {
- public:
-  ShelfContextSubMenuModel(Delegate* delegate,
-                           const MenuItemList& items,
-                           SubmenuList* submenus)
-      : ui::SimpleMenuModel(delegate) {
-    ShelfContextMenuModel::AddItems(this, delegate, items, submenus);
-  }
-  ~ShelfContextSubMenuModel() override = default;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShelfContextSubMenuModel);
-};
 
 // Returns true if the user can modify the shelf's auto-hide behavior pref.
 bool CanUserModifyShelfAutoHide(PrefService* prefs) {
@@ -142,7 +112,7 @@ void AddLocalMenuItems(MenuItemList* menu, int64_t display_id) {
     menu->push_back(std::move(alignment_menu));
   }
 
-  if (Shell::Get()->wallpaper_delegate()->CanOpenSetWallpaperPage()) {
+  if (Shell::Get()->wallpaper_controller()->CanOpenWallpaperPicker()) {
     mojom::MenuItemPtr wallpaper(mojom::MenuItem::New());
     wallpaper->command_id = ShelfContextMenuModel::MENU_CHANGE_WALLPAPER;
     wallpaper->label = GetStringUTF16(IDS_AURA_SET_DESKTOP_WALLPAPER);
@@ -160,58 +130,27 @@ ShelfContextMenuModel::ShelfContextMenuModel(MenuItemList menu_items,
       menu_items_(std::move(menu_items)),
       delegate_(delegate),
       display_id_(display_id) {
-  // Append some menu items that are handled locally by Ash.
-  AddLocalMenuItems(&menu_items_, display_id);
-  AddItems(this, this, menu_items_, &submenus_);
+  // Append shelf settings and wallpaper items if no shelf item was selected.
+  if (!features::IsTouchableAppContextMenuEnabled() || !delegate)
+    AddLocalMenuItems(&menu_items_, display_id);
+  menu_utils::PopulateMenuFromMojoMenuItems(this, this, menu_items_,
+                                            &submenus_);
 }
 
 ShelfContextMenuModel::~ShelfContextMenuModel() = default;
 
-// static
-void ShelfContextMenuModel::AddItems(ui::SimpleMenuModel* model,
-                                     ui::SimpleMenuModel::Delegate* delegate,
-                                     const MenuItemList& items,
-                                     SubmenuList* submenus) {
-  for (const mojom::MenuItemPtr& item : items) {
-    switch (item->type) {
-      case ui::MenuModel::TYPE_COMMAND:
-        model->AddItem(item->command_id, item->label);
-        break;
-      case ui::MenuModel::TYPE_CHECK:
-        model->AddCheckItem(item->command_id, item->label);
-        break;
-      case ui::MenuModel::TYPE_RADIO:
-        model->AddRadioItem(item->command_id, item->label,
-                            item->radio_group_id);
-        break;
-      case ui::MenuModel::TYPE_SEPARATOR:
-        model->AddSeparator(ui::NORMAL_SEPARATOR);
-        break;
-      case ui::MenuModel::TYPE_BUTTON_ITEM:
-        NOTREACHED() << "TYPE_BUTTON_ITEM is not yet supported.";
-      case ui::MenuModel::TYPE_SUBMENU:
-        if (item->submenu.has_value()) {
-          std::unique_ptr<ui::MenuModel> submenu =
-              std::make_unique<ShelfContextSubMenuModel>(
-                  delegate, item->submenu.value(), submenus);
-          model->AddSubMenu(item->command_id, item->label, submenu.get());
-          submenus->push_back(std::move(submenu));
-        }
-        break;
-    }
-    if (!item->image.isNull()) {
-      model->SetIcon(model->GetIndexOfCommandId(item->command_id),
-                     gfx::Image(item->image));
-    }
-  }
-}
-
 bool ShelfContextMenuModel::IsCommandIdChecked(int command_id) const {
-  return GetItem(menu_items_, command_id)->checked;
+  return menu_utils::GetMenuItemByCommandId(menu_items_, command_id)->checked;
 }
 
 bool ShelfContextMenuModel::IsCommandIdEnabled(int command_id) const {
-  return GetItem(menu_items_, command_id)->enabled;
+  // NOTIFICATION_CONTAINER is always enabled. It is added to this model by
+  // NotificationMenuController, but it is not added to |menu_items_|, so check
+  // for it first.
+  if (command_id == ash::NOTIFICATION_CONTAINER)
+    return true;
+
+  return menu_utils::GetMenuItemByCommandId(menu_items_, command_id)->enabled;
 }
 
 void ShelfContextMenuModel::ExecuteCommand(int command_id, int event_flags) {
@@ -244,7 +183,7 @@ void ShelfContextMenuModel::ExecuteCommand(int command_id, int event_flags) {
       SetShelfAlignmentPref(prefs, display_id_, SHELF_ALIGNMENT_BOTTOM);
       break;
     case MENU_CHANGE_WALLPAPER:
-      Shell::Get()->wallpaper_controller()->OpenSetWallpaperPage();
+      Shell::Get()->wallpaper_controller()->OpenWallpaperPickerIfAllowed();
       break;
     default:
       // Have the shelf item delegate execute the context menu command.

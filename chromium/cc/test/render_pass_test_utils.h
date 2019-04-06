@@ -8,9 +8,6 @@
 #include <stdint.h>
 
 #include "cc/paint/filter_operations.h"
-#include "cc/resources/display_resource_provider.h"
-#include "cc/resources/layer_tree_resource_provider.h"
-#include "cc/resources/resource_provider.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -19,7 +16,14 @@ class Rect;
 class Transform;
 }
 
+namespace gpu {
+struct SyncToken;
+}
+
 namespace viz {
+class ClientResourceProvider;
+class ContextProvider;
+class DisplayResourceProvider;
 class RenderPass;
 class SolidColorDrawQuad;
 }  // namespace viz
@@ -70,18 +74,19 @@ void AddRenderPassQuad(viz::RenderPass* to_pass,
                        gfx::Transform transform,
                        SkBlendMode blend_mode);
 
-void AddOneOfEveryQuadType(viz::RenderPass* to_pass,
-                           LayerTreeResourceProvider* resource_provider,
-                           viz::RenderPassId child_pass_id,
-                           gpu::SyncToken* sync_token_for_mailbox_texture);
+std::vector<viz::ResourceId> AddOneOfEveryQuadType(
+    viz::RenderPass* to_pass,
+    viz::ClientResourceProvider* resource_provider,
+    viz::RenderPassId child_pass_id);
 
 // Adds a render pass quad with the given mask resource, filter, and transform.
-// The resource used in render pass is created by LayerTreeResourceProvider,
-// then transferred to DisplayResourceProvider.
+// The resource used in render pass is created by viz::ClientResourceProvider,
+// then transferred to viz::DisplayResourceProvider.
 void AddOneOfEveryQuadTypeInDisplayResourceProvider(
     viz::RenderPass* to_pass,
-    DisplayResourceProvider* resource_provider,
-    LayerTreeResourceProvider* child_resource_provider,
+    viz::DisplayResourceProvider* resource_provider,
+    viz::ClientResourceProvider* child_resource_provider,
+    viz::ContextProvider* child_context_provider,
     viz::RenderPassId child_pass_id,
     gpu::SyncToken* sync_token_for_mailbox_texture);
 

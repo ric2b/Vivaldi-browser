@@ -25,21 +25,17 @@ DEFAULT_URLS = [
     'https://webvr.info/samples/test-slow-render.html?'
     'latencyPatch=1\&canvasClickPresents=1\&'
     'heavyGpu=1\&workTime=20\&cubeCount=8\&cubeScale=0.4',
-    # Moderate CPU load, light GPU load.
-    'https://webvr.info/samples/test-slow-render.html?'
-    'latencyPatch=1\&canvasClickPresents=1\&'
-    'heavyGpu=1\&workTime=12\&cubeCount=8\&cubeScale=0.3',
-    # Light CPU load, moderate GPU load.
-    'https://webvr.info/samples/test-slow-render.html?'
-    'latencyPatch=1\&canvasClickPresents=1\&'
-    'heavyGpu=1\&workTime=5\&cubeCount=8\&cubeScale=0.4',
-    # Heavy CPU load, very light GPU load.
-    'https://webvr.info/samples/test-slow-render.html?'
-    'latencyPatch=1\&canvasClickPresents=1\&'
-    'workTime=20',
     # No additional CPU load, very light GPU load.
     'https://webvr.info/samples/test-slow-render.html?'
     'latencyPatch=1\&canvasClickPresents=1',
+    # Increased render scale
+    'https://webvr.info/samples/test-slow-render.html?'
+    'latencyPatch=1\&canvasClickPresents=1\&'
+    'renderScale=1.5',
+    # Default render scale, increased load
+    'https://webvr.info/samples/test-slow-render.html?'
+    'latencyPatch=1\&canvasClickPresents=1\&'
+    'renderScale=1\&heavyGpu=1\&cubeScale=0.3\&workTime=10',
 ]
 
 
@@ -140,6 +136,11 @@ class WebVrLatencyTest(object):
         num_retries += 1
         if num_retries > MOTOPHO_THREAD_RETRIES:
           self._ReportSummaryResult(False, url)
+          # Raising an exception with another thread still alive causes the
+          # test to hang until the swarming timeout is hit, so kill the thread
+          # before raising.
+          motopho_thread.Terminate()
+          motopho_thread.join(MOTOPHO_THREAD_TERMINATION_TIMEOUT)
           raise RuntimeError(
               'Motopho thread failed more than %d times, aborting' % (
                   MOTOPHO_THREAD_RETRIES))

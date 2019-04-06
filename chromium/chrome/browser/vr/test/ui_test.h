@@ -31,11 +31,6 @@ class UiTest : public testing::Test {
   void SetUp() override;
 
  protected:
-  enum InCct : bool {
-    kNotInCct = false,
-    kInCct = true,
-  };
-
   enum InWebVr : bool {
     kNotInWebVr = false,
     kInWebVr = true,
@@ -47,10 +42,13 @@ class UiTest : public testing::Test {
   };
 
   void CreateScene(const UiInitialState& state);
-  void CreateScene(InCct in_cct, InWebVr in_web_vr);
-  void CreateSceneForAutoPresentation();
+  void CreateScene(InWebVr in_web_vr);
 
  protected:
+  void CreateSceneInternal(
+      const UiInitialState& state,
+      std::unique_ptr<MockContentInputDelegate> content_input_delegate);
+
   void SetIncognito(bool incognito);
 
   // Check whether a named element is visible. In this test, visibilility is the
@@ -85,26 +83,38 @@ class UiTest : public testing::Test {
   // Check if element is using correct opacity in Render recursively.
   void CheckRendererOpacityRecursive(UiElement* element);
 
-  // Advances current_time_ by delta. This is done in frame increments and
-  // UiScene::OnBeginFrame is called at each increment.
-  bool RunFor(base::TimeDelta delta);
+  // Advances current_time_ by delta. This is done by running the next frame,
+  // then jumping time ahead to the final time. Generally, the UI should not
+  // require all intermediate frames to be called. Tests that require this
+  // should simulate the required intermediate frames.
+  bool RunForMs(float milliseconds);
+  bool RunForSeconds(float seconds);
 
   // A wrapper to call scene_->OnBeginFrame.
   bool OnBeginFrame() const;
 
   // Also wraps scene_->OnBeginFrame, but advances the current time by the given
   // delta before making the call. This is useful for simulating slow frames.
-  bool OnBeginFrame(base::TimeDelta delta);
+  // Generally, don't use this to simulate delay - use RunFor() instead.
+  bool OnDelayedFrame(base::TimeDelta delta);
 
   void GetBackgroundColor(SkColor* background_color) const;
 
-  std::unique_ptr<Ui> ui_;
+  // Synthesize a controller orientation that intersects the element, and cycle
+  // the controller button.  This offers a reasonably correct means of testing
+  // clicks on elements, that's true to hit testability, visbility, etc.
+  void ClickElement(UiElement* element);
+
+  std::unique_ptr<Ui> ui_instance_;
+  UiInterface* ui_ = nullptr;
   std::unique_ptr<MockUiBrowserInterface> browser_;
   MockContentInputDelegate* content_input_delegate_ = nullptr;
   Model* model_ = nullptr;
   UiScene* scene_ = nullptr;
 
  private:
+  bool RunFor(base::TimeDelta delta);
+
   base::TimeTicks current_time_;
 };
 

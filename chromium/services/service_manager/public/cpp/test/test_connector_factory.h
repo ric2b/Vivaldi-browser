@@ -10,8 +10,9 @@
 #include <string>
 
 #include "base/macros.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/interfaces/connector.mojom.h"
+#include "services/service_manager/public/mojom/connector.mojom.h"
 
 namespace service_manager {
 
@@ -56,26 +57,36 @@ class TestConnectorFactory {
   using NameToServiceMap = std::map<std::string, std::unique_ptr<Service>>;
 
   // Constructs a new TestConnectorFactory which creates Connectors whose
-  // requests are routed directly to |service|.
+  // requests are routed directly to |service|. If
+  // |release_service_on_quit_request| is set to true, the Connector will
+  // release the service instance when the service requests to be quit.
   static std::unique_ptr<TestConnectorFactory> CreateForUniqueService(
-      std::unique_ptr<Service> service);
+      std::unique_ptr<Service> service,
+      bool release_service_on_quit_request = false);
 
   // Constructs a new TestConnectorFactory which creates Connectors whose
   // requests are routed directly to a service in |services| based on the name
-  // they are associated with.
+  // they are associated with. If |release_service_on_quit_request|
+  // is set to true, the Connector will release the service instance when the
+  // service requests to be quit.
   static std::unique_ptr<TestConnectorFactory> CreateForServices(
-      NameToServiceMap services);
+      NameToServiceMap services,
+      bool release_service_on_quit_request = false);
 
   // Creates a new connector which routes BindInterfaces requests directly to
   // the Service instance associated with this factory.
   std::unique_ptr<Connector> CreateConnector();
 
+  const std::string& test_user_id() const { return test_user_id_; }
+
  private:
-  explicit TestConnectorFactory(std::unique_ptr<mojom::Connector> impl);
+  explicit TestConnectorFactory(std::unique_ptr<mojom::Connector> impl,
+                                std::string test_user_id);
 
   NameToServiceMap names_to_services_;
 
   std::unique_ptr<mojom::Connector> impl_;
+  std::string test_user_id_;
 
   DISALLOW_COPY_AND_ASSIGN(TestConnectorFactory);
 };

@@ -1,10 +1,10 @@
 #if defined(__x86_64__) && !defined(OPENSSL_NO_ASM)
 .text	
 
-.extern	asm_AES_encrypt
-.hidden asm_AES_encrypt
-.extern	asm_AES_decrypt
-.hidden asm_AES_decrypt
+.extern	aes_nohw_encrypt
+.hidden aes_nohw_encrypt
+.extern	aes_nohw_decrypt
+.hidden aes_nohw_decrypt
 
 .type	_bsaes_encrypt8,@function
 .align	64
@@ -1065,28 +1065,43 @@ _bsaes_key_convert:
 
 	.byte	0xf3,0xc3
 .size	_bsaes_key_convert,.-_bsaes_key_convert
-.extern	asm_AES_cbc_encrypt
-.hidden asm_AES_cbc_encrypt
+.extern	aes_nohw_cbc_encrypt
+.hidden aes_nohw_cbc_encrypt
 .globl	bsaes_cbc_encrypt
 .hidden bsaes_cbc_encrypt
 .type	bsaes_cbc_encrypt,@function
 .align	16
 bsaes_cbc_encrypt:
+.cfi_startproc	
 	cmpl	$0,%r9d
-	jne	asm_AES_cbc_encrypt
+	jne	aes_nohw_cbc_encrypt
 	cmpq	$128,%rdx
-	jb	asm_AES_cbc_encrypt
+	jb	aes_nohw_cbc_encrypt
 
 	movq	%rsp,%rax
 .Lcbc_dec_prologue:
 	pushq	%rbp
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbp,-16
 	pushq	%rbx
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbx,-24
 	pushq	%r12
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r12,-32
 	pushq	%r13
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r13,-40
 	pushq	%r14
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r14,-48
 	pushq	%r15
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r15,-56
 	leaq	-72(%rsp),%rsp
+.cfi_adjust_cfa_offset	0x48
 	movq	%rsp,%rbp
+.cfi_def_cfa_register	%rbp
 	movl	240(%rcx),%eax
 	movq	%rdi,%r12
 	movq	%rsi,%r13
@@ -1289,7 +1304,7 @@ bsaes_cbc_encrypt:
 	leaq	(%r12),%rdi
 	leaq	32(%rbp),%rsi
 	leaq	(%r15),%rdx
-	call	asm_AES_decrypt
+	call	aes_nohw_decrypt
 	pxor	32(%rbp),%xmm14
 	movdqu	%xmm14,(%r13)
 	movdqa	%xmm15,%xmm14
@@ -1306,15 +1321,24 @@ bsaes_cbc_encrypt:
 	ja	.Lcbc_dec_bzero
 
 	leaq	120(%rbp),%rax
+.cfi_def_cfa	%rax,8
 	movq	-48(%rax),%r15
+.cfi_restore	%r15
 	movq	-40(%rax),%r14
+.cfi_restore	%r14
 	movq	-32(%rax),%r13
+.cfi_restore	%r13
 	movq	-24(%rax),%r12
+.cfi_restore	%r12
 	movq	-16(%rax),%rbx
+.cfi_restore	%rbx
 	movq	-8(%rax),%rbp
+.cfi_restore	%rbp
 	leaq	(%rax),%rsp
+.cfi_def_cfa_register	%rsp
 .Lcbc_dec_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	bsaes_cbc_encrypt,.-bsaes_cbc_encrypt
 
 .globl	bsaes_ctr32_encrypt_blocks
@@ -1322,16 +1346,31 @@ bsaes_cbc_encrypt:
 .type	bsaes_ctr32_encrypt_blocks,@function
 .align	16
 bsaes_ctr32_encrypt_blocks:
+.cfi_startproc	
 	movq	%rsp,%rax
 .Lctr_enc_prologue:
 	pushq	%rbp
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbp,-16
 	pushq	%rbx
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbx,-24
 	pushq	%r12
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r12,-32
 	pushq	%r13
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r13,-40
 	pushq	%r14
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r14,-48
 	pushq	%r15
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r15,-56
 	leaq	-72(%rsp),%rsp
+.cfi_adjust_cfa_offset	0x48
 	movq	%rsp,%rbp
+.cfi_def_cfa_register	%rbp
 	movdqu	(%r8),%xmm0
 	movl	240(%rcx),%eax
 	movq	%rdi,%r12
@@ -1481,7 +1520,7 @@ bsaes_ctr32_encrypt_blocks:
 	leaq	32(%rbp),%rdi
 	leaq	48(%rbp),%rsi
 	leaq	(%r15),%rdx
-	call	asm_AES_encrypt
+	call	aes_nohw_encrypt
 	movdqu	(%r12),%xmm0
 	leaq	16(%r12),%r12
 	movl	44(%rbp),%eax
@@ -1506,31 +1545,55 @@ bsaes_ctr32_encrypt_blocks:
 	ja	.Lctr_enc_bzero
 
 	leaq	120(%rbp),%rax
+.cfi_def_cfa	%rax,8
 	movq	-48(%rax),%r15
+.cfi_restore	%r15
 	movq	-40(%rax),%r14
+.cfi_restore	%r14
 	movq	-32(%rax),%r13
+.cfi_restore	%r13
 	movq	-24(%rax),%r12
+.cfi_restore	%r12
 	movq	-16(%rax),%rbx
+.cfi_restore	%rbx
 	movq	-8(%rax),%rbp
+.cfi_restore	%rbp
 	leaq	(%rax),%rsp
+.cfi_def_cfa_register	%rsp
 .Lctr_enc_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	bsaes_ctr32_encrypt_blocks,.-bsaes_ctr32_encrypt_blocks
 .globl	bsaes_xts_encrypt
 .hidden bsaes_xts_encrypt
 .type	bsaes_xts_encrypt,@function
 .align	16
 bsaes_xts_encrypt:
+.cfi_startproc	
 	movq	%rsp,%rax
 .Lxts_enc_prologue:
 	pushq	%rbp
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbp,-16
 	pushq	%rbx
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbx,-24
 	pushq	%r12
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r12,-32
 	pushq	%r13
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r13,-40
 	pushq	%r14
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r14,-48
 	pushq	%r15
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r15,-56
 	leaq	-72(%rsp),%rsp
+.cfi_adjust_cfa_offset	0x48
 	movq	%rsp,%rbp
+.cfi_def_cfa_register	%rbp
 	movq	%rdi,%r12
 	movq	%rsi,%r13
 	movq	%rdx,%r14
@@ -1539,7 +1602,7 @@ bsaes_xts_encrypt:
 	leaq	(%r9),%rdi
 	leaq	32(%rbp),%rsi
 	leaq	(%r8),%rdx
-	call	asm_AES_encrypt
+	call	aes_nohw_encrypt
 
 	movl	240(%r15),%eax
 	movq	%r14,%rbx
@@ -1909,7 +1972,7 @@ bsaes_xts_encrypt:
 	leaq	32(%rbp),%rdi
 	leaq	32(%rbp),%rsi
 	leaq	(%r15),%rdx
-	call	asm_AES_encrypt
+	call	aes_nohw_encrypt
 	pxor	32(%rbp),%xmm15
 
 
@@ -1942,7 +2005,7 @@ bsaes_xts_encrypt:
 	leaq	32(%rbp),%rsi
 	movdqa	%xmm15,32(%rbp)
 	leaq	(%r15),%rdx
-	call	asm_AES_encrypt
+	call	aes_nohw_encrypt
 	pxor	32(%rbp),%xmm6
 	movdqu	%xmm6,-16(%r13)
 
@@ -1957,15 +2020,24 @@ bsaes_xts_encrypt:
 	ja	.Lxts_enc_bzero
 
 	leaq	120(%rbp),%rax
+.cfi_def_cfa	%rax,8
 	movq	-48(%rax),%r15
+.cfi_restore	%r15
 	movq	-40(%rax),%r14
+.cfi_restore	%r14
 	movq	-32(%rax),%r13
+.cfi_restore	%r13
 	movq	-24(%rax),%r12
+.cfi_restore	%r12
 	movq	-16(%rax),%rbx
+.cfi_restore	%rbx
 	movq	-8(%rax),%rbp
+.cfi_restore	%rbp
 	leaq	(%rax),%rsp
+.cfi_def_cfa_register	%rsp
 .Lxts_enc_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	bsaes_xts_encrypt,.-bsaes_xts_encrypt
 
 .globl	bsaes_xts_decrypt
@@ -1973,15 +2045,29 @@ bsaes_xts_encrypt:
 .type	bsaes_xts_decrypt,@function
 .align	16
 bsaes_xts_decrypt:
+.cfi_startproc	
 	movq	%rsp,%rax
 .Lxts_dec_prologue:
 	pushq	%rbp
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbp,-16
 	pushq	%rbx
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%rbx,-24
 	pushq	%r12
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r12,-32
 	pushq	%r13
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r13,-40
 	pushq	%r14
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r14,-48
 	pushq	%r15
+.cfi_adjust_cfa_offset	8
+.cfi_offset	%r15,-56
 	leaq	-72(%rsp),%rsp
+.cfi_adjust_cfa_offset	0x48
 	movq	%rsp,%rbp
 	movq	%rdi,%r12
 	movq	%rsi,%r13
@@ -1991,7 +2077,7 @@ bsaes_xts_decrypt:
 	leaq	(%r9),%rdi
 	leaq	32(%rbp),%rsi
 	leaq	(%r8),%rdx
-	call	asm_AES_encrypt
+	call	aes_nohw_encrypt
 
 	movl	240(%r15),%eax
 	movq	%r14,%rbx
@@ -2368,7 +2454,7 @@ bsaes_xts_decrypt:
 	leaq	32(%rbp),%rdi
 	leaq	32(%rbp),%rsi
 	leaq	(%r15),%rdx
-	call	asm_AES_decrypt
+	call	aes_nohw_decrypt
 	pxor	32(%rbp),%xmm15
 
 
@@ -2399,7 +2485,7 @@ bsaes_xts_decrypt:
 	leaq	32(%rbp),%rsi
 	movdqa	%xmm15,32(%rbp)
 	leaq	(%r15),%rdx
-	call	asm_AES_decrypt
+	call	aes_nohw_decrypt
 	pxor	32(%rbp),%xmm6
 	movq	%r13,%rdx
 	movdqu	%xmm6,(%r13)
@@ -2420,7 +2506,7 @@ bsaes_xts_decrypt:
 	leaq	32(%rbp),%rsi
 	movdqa	%xmm15,32(%rbp)
 	leaq	(%r15),%rdx
-	call	asm_AES_decrypt
+	call	aes_nohw_decrypt
 	pxor	32(%rbp),%xmm5
 	movdqu	%xmm5,(%r13)
 
@@ -2435,15 +2521,24 @@ bsaes_xts_decrypt:
 	ja	.Lxts_dec_bzero
 
 	leaq	120(%rbp),%rax
+.cfi_def_cfa	%rax,8
 	movq	-48(%rax),%r15
+.cfi_restore	%r15
 	movq	-40(%rax),%r14
+.cfi_restore	%r14
 	movq	-32(%rax),%r13
+.cfi_restore	%r13
 	movq	-24(%rax),%r12
+.cfi_restore	%r12
 	movq	-16(%rax),%rbx
+.cfi_restore	%rbx
 	movq	-8(%rax),%rbp
+.cfi_restore	%rbp
 	leaq	(%rax),%rsp
+.cfi_def_cfa_register	%rsp
 .Lxts_dec_epilogue:
 	.byte	0xf3,0xc3
+.cfi_endproc	
 .size	bsaes_xts_decrypt,.-bsaes_xts_decrypt
 .type	_bsaes_const,@object
 .align	64

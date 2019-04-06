@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_connect.h"
 #include "chromeos/network/network_handler.h"
@@ -18,7 +19,6 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_type_pattern.h"
 #include "chromeos/network/shill_property_util.h"
-#include "components/proximity_auth/logging/logging.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace chromeos {
@@ -31,7 +31,7 @@ WifiHotspotConnector::WifiHotspotConnector(
     : network_state_handler_(network_state_handler),
       network_connect_(network_connect),
       timer_(std::make_unique<base::OneShotTimer>()),
-      clock_(std::make_unique<base::DefaultClock>()),
+      clock_(base::DefaultClock::GetInstance()),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this) {
   network_state_handler_->AddObserver(this, FROM_HERE);
@@ -134,8 +134,8 @@ void WifiHotspotConnector::NetworkPropertiesUpdated(
     // notifying observers. See https://crbug.com/800370.
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&WifiHotspotConnector::CompleteActiveConnectionAttempt,
-                   weak_ptr_factory_.GetWeakPtr(), true /* success */));
+        base::BindOnce(&WifiHotspotConnector::CompleteActiveConnectionAttempt,
+                       weak_ptr_factory_.GetWeakPtr(), true /* success */));
     return;
   }
 
@@ -146,8 +146,9 @@ void WifiHotspotConnector::NetworkPropertiesUpdated(
     // notifying observers. See https://crbug.com/800370.
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&WifiHotspotConnector::InitiateConnectionToCurrentNetwork,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(
+            &WifiHotspotConnector::InitiateConnectionToCurrentNetwork,
+            weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -169,8 +170,8 @@ void WifiHotspotConnector::UpdateWaitingForWifi() {
     return;
 
   task_runner_->PostTask(
-      FROM_HERE, base::Bind(&WifiHotspotConnector::CreateWifiConfiguration,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&WifiHotspotConnector::CreateWifiConfiguration,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void WifiHotspotConnector::InitiateConnectionToCurrentNetwork() {
@@ -293,11 +294,11 @@ void WifiHotspotConnector::OnConnectionTimeout() {
 }
 
 void WifiHotspotConnector::SetTestDoubles(
-    std::unique_ptr<base::Timer> test_timer,
-    std::unique_ptr<base::Clock> test_clock,
+    std::unique_ptr<base::OneShotTimer> test_timer,
+    base::Clock* test_clock,
     scoped_refptr<base::TaskRunner> test_task_runner) {
   timer_ = std::move(test_timer);
-  clock_ = std::move(test_clock);
+  clock_ = test_clock;
   task_runner_ = test_task_runner;
 }
 

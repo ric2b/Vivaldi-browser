@@ -6,6 +6,9 @@
 
 const ROOT_PATH = '../../../../../';
 
+GEN('#include "chrome/common/chrome_features.h"');
+GEN('#include "ui/base/ui_base_features.h"');
+
 /**
  * @constructor
  * @extends {testing.Test}
@@ -31,6 +34,9 @@ PrintPreviewUIBrowserTest.prototype = {
   isAsync: true,
 
   /** @override */
+  featureList: ['', 'features::kNewPrintPreview, features::kExperimentalUi'],
+
+  /** @override */
   preLoad: function() {
     window.isTest = true;
     testing.Test.prototype.preLoad.call(this);
@@ -51,57 +57,40 @@ PrintPreviewUIBrowserTest.prototype = {
 
   extraLibraries: [
     ROOT_PATH + 'ui/webui/resources/js/cr.js',
+    ROOT_PATH + 'ui/webui/resources/js/cr/event_target.js',
     ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
     ROOT_PATH + 'third_party/mocha/mocha.js',
     ROOT_PATH + 'chrome/test/data/webui/mocha_adapter.js',
     ROOT_PATH + 'ui/webui/resources/js/util.js',
     ROOT_PATH + 'chrome/test/data/webui/test_browser_proxy.js',
+    ROOT_PATH + 'chrome/test/data/webui/settings/test_util.js',
     'print_preview_tests.js',
     'native_layer_stub.js',
+    'cloud_print_interface_stub.js',
     'plugin_stub.js',
     'print_preview_test_utils.js',
   ],
 };
 
 // Run each mocha test in isolation (within a new TEST_F() call).
-[
-  'PrinterList',
-  'PrinterListCloudEmpty',
-  'RestoreLocalDestination',
-  'RestoreMultipleDestinations',
-  'SaveAppState',
-  'DefaultDestinationSelectionRules',
-  'SystemDialogLinkIsHiddenInAppKioskMode',
-  'SectionsDisabled',
-  'PrintToPDFSelectedCapabilities',
-  'SourceIsHTMLCapabilities',
-  'SourceIsPDFCapabilities',
-  'ScalingUnchecksFitToPage',
-  'CheckNumCopiesPrintPreset',
-  'CheckDuplexPrintPreset',
-  'CustomMarginsControlsCheck',
-  'PageLayoutHasNoMarginsHideHeaderFooter',
-  'PageLayoutHasMarginsShowHeaderFooter',
-  'ZeroTopAndBottomMarginsHideHeaderFooter',
-  'ZeroTopAndNonZeroBottomMarginShowHeaderFooter',
-  'SmallPaperSizeHeaderFooter',
-  'ColorSettingsMonochrome',
-  'ColorSettingsCustomMonochrome',
-  'ColorSettingsColor',
-  'ColorSettingsCustomColor',
-  'ColorSettingsBothStandardDefaultColor',
-  'ColorSettingsBothStandardDefaultMonochrome',
-  'ColorSettingsBothCustomDefaultColor',
-  'DuplexSettingsTrue',
-  'DuplexSettingsFalse',
-  'PrinterChangeUpdatesPreview',
-  'NoPDFPluginErrorMessage',
-  'CustomPaperNames',
-  'InitIssuesOneRequest',
-  'InvalidSettingsError',
-  // TODO(thestig): Re-enable this test when the feature works properly.
-  // https://crbug.com/746768
-  'DISABLED_GenerateDraft',
+['PrinterList', 'RestoreLocalDestination', 'RestoreMultipleDestinations',
+ 'SaveAppState', 'DefaultDestinationSelectionRules',
+ 'SystemDialogLinkIsHiddenInAppKioskMode', 'SectionsDisabled',
+ 'PrintToPDFSelectedCapabilities', 'SourceIsHTMLCapabilities',
+ 'SourceIsPDFCapabilities', 'ScalingUnchecksFitToPage',
+ 'CheckNumCopiesPrintPreset', 'CheckDuplexPrintPreset',
+ 'CustomMarginsControlsCheck', 'PageLayoutHasNoMarginsHideHeaderFooter',
+ 'PageLayoutHasMarginsShowHeaderFooter',
+ 'ZeroTopAndBottomMarginsHideHeaderFooter',
+ 'ZeroTopAndNonZeroBottomMarginShowHeaderFooter', 'SmallPaperSizeHeaderFooter',
+ 'ColorSettingsMonochrome', 'ColorSettingsCustomMonochrome',
+ 'ColorSettingsColor', 'ColorSettingsCustomColor',
+ 'ColorSettingsBothStandardDefaultColor',
+ 'ColorSettingsBothStandardDefaultMonochrome',
+ 'ColorSettingsBothCustomDefaultColor', 'DuplexSettingsTrue',
+ 'DuplexSettingsFalse', 'PrinterChangeUpdatesPreview',
+ 'NoPDFPluginErrorMessage', 'CustomPaperNames', 'InitIssuesOneRequest',
+ 'InvalidSettingsError',
 ].forEach(function(testName) {
   TEST_F('PrintPreviewUIBrowserTest', testName, function() {
     runMochaTest(print_preview_test.suiteName, testName);
@@ -109,12 +98,19 @@ PrintPreviewUIBrowserTest.prototype = {
 });
 
 // Disable accessibility errors for some tests.
-[
-  'RestoreAppState',
-  'AdvancedSettings1Option',
-  'AdvancedSettings2Options',
+['RestoreAppState', 'AdvancedSettings1Option', 'AdvancedSettings2Options', ]
+    .forEach(function(testName) {
+      TEST_F('PrintPreviewUIBrowserTest', testName, function() {
+        this.accessibilityIssuesAreErrors = false;
+        runMochaTest(print_preview_test.suiteName, testName);
+      });
+    });
+
+['InvalidCertificateError', 'InvalidCertificateErrorReselectDestination',
+ 'InvalidCertificateErrorNoPreview',
 ].forEach(function(testName) {
   TEST_F('PrintPreviewUIBrowserTest', testName, function() {
+    loadTimeData.overrideValues({isEnterpriseManaged: false});
     this.accessibilityIssuesAreErrors = false;
     runMochaTest(print_preview_test.suiteName, testName);
   });
@@ -128,10 +124,8 @@ TEST_F('PrintPreviewUIBrowserTest', 'SystemDefaultPrinterPolicy', function() {
 GEN('#endif');
 
 GEN('#if defined(OS_MACOSX)');
-[
-  'MacOpenPDFInPreview',
-  'MacOpenPDFInPreviewBadPrintTicket',
-].forEach(function(testName) {
+['MacOpenPDFInPreview', 'MacOpenPDFInPreviewBadPrintTicket', ].forEach(function(
+    testName) {
   TEST_F('PrintPreviewUIBrowserTest', testName, function() {
     runMochaTest(print_preview_test.suiteName, testName);
   });
@@ -139,10 +133,8 @@ GEN('#if defined(OS_MACOSX)');
 GEN('#endif');
 
 GEN('#if defined(OS_WIN)');
-[
-  'WinSystemDialogLink',
-  'WinSystemDialogLinkBadPrintTicket',
-].forEach(function(testName) {
+['WinSystemDialogLink', 'WinSystemDialogLinkBadPrintTicket', ].forEach(function(
+    testName) {
   TEST_F('PrintPreviewUIBrowserTest', testName, function() {
     runMochaTest(print_preview_test.suiteName, testName);
   });

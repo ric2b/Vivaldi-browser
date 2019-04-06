@@ -91,7 +91,8 @@ class PageInfo : public TabSpecificContentSettings::SiteDataObserver,
     SITE_IDENTITY_STATUS_MALWARE,
     SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING,
     SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE,
-    SITE_IDENTITY_STATUS_PASSWORD_REUSE,
+    SITE_IDENTITY_STATUS_SIGN_IN_PASSWORD_REUSE,
+    SITE_IDENTITY_STATUS_ENTERPRISE_PASSWORD_REUSE,
   };
 
   // Events for UMA. Do not reorder or change! Exposed in header so enum is
@@ -127,6 +128,7 @@ class PageInfo : public TabSpecificContentSettings::SiteDataObserver,
     ContentSettingsType content_settings_type;
     ChooserContextBase* (*get_context)(Profile*);
     int label_string_id;
+    int secondary_label_string_id;
     int delete_tooltip_string_id;
     const char* ui_name_key;
   };
@@ -199,6 +201,13 @@ class PageInfo : public TabSpecificContentSettings::SiteDataObserver,
   // Sets (presents) the information about the site's identity and connection
   // in the |ui_|.
   void PresentSiteIdentity();
+
+  // Helper function to get the site identification status and details by
+  // malicious content status.
+  void GetSiteIdentityByMaliciousContentStatus(
+      security_state::MaliciousContentStatus malicious_content_status,
+      PageInfo::SiteIdentityStatus* status,
+      base::string16* details);
 
   // Retrieves all the permissions that are shown in Page Info.
   // Exposed for testing.
@@ -279,6 +288,9 @@ class PageInfo : public TabSpecificContentSettings::SiteDataObserver,
   // info will include buttons to change corresponding password, and to
   // whitelist current site.
   bool show_change_password_buttons_;
+
+  base::TimeTicks start_time_;
+  bool did_perform_action_;
 
   DISALLOW_COPY_AND_ASSIGN(PageInfo);
 };

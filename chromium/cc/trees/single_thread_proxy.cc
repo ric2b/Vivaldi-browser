@@ -20,6 +20,7 @@
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/mutator_host.h"
+#include "cc/trees/render_frame_metadata_observer.h"
 #include "cc/trees/scoped_abort_remaining_swap_promises.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -138,7 +139,7 @@ void SingleThreadProxy::SetLayerTreeFrameSink(
   {
     DebugScopedSetMainThreadBlocked main_thread_blocked(task_runner_provider_);
     DebugScopedSetImplThread impl(task_runner_provider_);
-    success = host_impl_->InitializeRenderer(layer_tree_frame_sink);
+    success = host_impl_->InitializeFrameSink(layer_tree_frame_sink);
   }
 
   if (success) {
@@ -254,6 +255,10 @@ void SingleThreadProxy::SetNeedsRedraw(const gfx::Rect& damage_rect) {
 void SingleThreadProxy::SetNextCommitWaitsForActivation() {
   // Activation always forced in commit, so nothing to do.
   DCHECK(task_runner_provider_->IsMainThread());
+}
+
+bool SingleThreadProxy::RequestedAnimatePending() {
+  return animate_requested_ || commit_requested_;
 }
 
 void SingleThreadProxy::SetDeferCommits(bool defer_commits) {
@@ -380,8 +385,12 @@ size_t SingleThreadProxy::MainThreadAnimationsCount() const {
   return 0;
 }
 
-size_t SingleThreadProxy::MainThreadCompositableAnimationsCount() const {
-  return 0;
+bool SingleThreadProxy::CurrentFrameHadRAF() const {
+  return false;
+}
+
+bool SingleThreadProxy::NextFrameHasPendingRAF() const {
+  return false;
 }
 
 bool SingleThreadProxy::IsInsideDraw() {
@@ -442,15 +451,17 @@ void SingleThreadProxy::DidReceiveCompositorFrameAckOnImplThread() {
 }
 
 void SingleThreadProxy::OnDrawForLayerTreeFrameSink(
-    bool resourceless_software_draw) {
+    bool resourceless_software_draw,
+    bool skip_draw) {
   NOTREACHED() << "Implemented by ThreadProxy for synchronous compositor.";
 }
 
 void SingleThreadProxy::NeedsImplSideInvalidation(
     bool needs_first_draw_on_activation) {
-  DCHECK(scheduler_on_impl_thread_);
-  scheduler_on_impl_thread_->SetNeedsImplSideInvalidation(
-      needs_first_draw_on_activation);
+  if (scheduler_on_impl_thread_) {
+    scheduler_on_impl_thread_->SetNeedsImplSideInvalidation(
+        needs_first_draw_on_activation);
+  }
 }
 
 void SingleThreadProxy::NotifyImageDecodeRequestFinished() {
@@ -467,12 +478,11 @@ void SingleThreadProxy::NotifyImageDecodeRequestFinished() {
 }
 
 void SingleThreadProxy::DidPresentCompositorFrameOnImplThread(
-    const std::vector<int>& source_frames,
-    base::TimeTicks time,
-    base::TimeDelta refresh,
-    uint32_t flags) {
-  layer_tree_host_->DidPresentCompositorFrame(source_frames, time, refresh,
-                                              flags);
+    uint32_t frame_token,
+    std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
+    const gfx::PresentationFeedback& feedback) {
+  layer_tree_host_->DidPresentCompositorFrame(frame_token, std::move(callbacks),
+                                              feedback);
 }
 
 void SingleThreadProxy::RequestBeginMainFrameNotExpected(bool new_state) {
@@ -482,7 +492,8 @@ void SingleThreadProxy::RequestBeginMainFrameNotExpected(bool new_state) {
   }
 }
 
-void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time) {
+void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time,
+                                             bool raster) {
   TRACE_EVENT0("cc,benchmark", "SingleThreadProxy::CompositeImmediately");
   DCHECK(task_runner_provider_->IsMainThread());
 #if DCHECK_IS_ON()
@@ -514,7 +525,13 @@ void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time) {
 #if DCHECK_IS_ON()
     DCHECK(inside_impl_frame_);
 #endif
+    animate_requested_ = false;
+    // Prevent new commits from being requested inside DoBeginMainFrame.
+    // Note: We do not want to prevent SetNeedsAnimate from requesting
+    // a commit here.
+    commit_requested_ = true;
     DoBeginMainFrame(begin_frame_args);
+    commit_requested_ = false;
     DoPainting();
     DoCommit();
 
@@ -528,17 +545,19 @@ void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time) {
   {
     DebugScopedSetImplThread impl(task_runner_provider_);
     host_impl_->ActivateSyncTree();
-    DCHECK(!host_impl_->active_tree()->needs_update_draw_properties());
-    host_impl_->PrepareTiles();
-    host_impl_->SynchronouslyInitializeAllTiles();
+    if (raster) {
+      host_impl_->PrepareTiles();
+      host_impl_->SynchronouslyInitializeAllTiles();
+    }
 
     // TODO(danakj): Don't do this last... we prepared the wrong things. D:
     host_impl_->Animate();
 
-    LayerTreeHostImpl::FrameData frame;
-    frame.begin_frame_ack = viz::BeginFrameAck(
-        begin_frame_args.source_id, begin_frame_args.sequence_number, true);
-    DoComposite(&frame);
+    if (raster) {
+      LayerTreeHostImpl::FrameData frame;
+      frame.begin_frame_ack = viz::BeginFrameAck(begin_frame_args, true);
+      DoComposite(&frame);
+    }
 
     // DoComposite could abort, but because this is a synchronous composite
     // another draw will never be scheduled, so break remaining promises.
@@ -628,20 +647,25 @@ bool SingleThreadProxy::MainFrameWillHappenForTesting() {
   return scheduler_on_impl_thread_->MainFrameForTestingWillHappen();
 }
 
-void SingleThreadProxy::ClearHistoryOnNavigation() {
+void SingleThreadProxy::ClearHistory() {
   DCHECK(task_runner_provider_->IsImplThread());
   if (scheduler_on_impl_thread_)
-    scheduler_on_impl_thread_->ClearHistoryOnNavigation();
+    scheduler_on_impl_thread_->ClearHistory();
 }
 
-void SingleThreadProxy::WillBeginImplFrame(const viz::BeginFrameArgs& args) {
+void SingleThreadProxy::SetRenderFrameObserver(
+    std::unique_ptr<RenderFrameMetadataObserver> observer) {
+  host_impl_->SetRenderFrameObserver(std::move(observer));
+}
+
+bool SingleThreadProxy::WillBeginImplFrame(const viz::BeginFrameArgs& args) {
   DebugScopedSetImplThread impl(task_runner_provider_);
 #if DCHECK_IS_ON()
   DCHECK(!inside_impl_frame_)
       << "WillBeginImplFrame called while already inside an impl frame!";
   inside_impl_frame_ = true;
 #endif
-  host_impl_->WillBeginImplFrame(args);
+  return host_impl_->WillBeginImplFrame(args);
 }
 
 void SingleThreadProxy::ScheduledActionSendBeginMainFrame(
@@ -729,8 +753,8 @@ void SingleThreadProxy::BeginMainFrame(
   // know we will commit since QueueSwapPromise itself requests a commit.
   ui::LatencyInfo new_latency_info(ui::SourceEventType::FRAME);
   new_latency_info.AddLatencyNumberWithTimestamp(
-      ui::LATENCY_BEGIN_FRAME_UI_MAIN_COMPONENT, 0, 0,
-      begin_frame_args.frame_time, 1);
+      ui::LATENCY_BEGIN_FRAME_UI_MAIN_COMPONENT, begin_frame_args.frame_time,
+      1);
   layer_tree_host_->QueueSwapPromise(
       std::make_unique<LatencyInfoSwapPromise>(new_latency_info));
 
@@ -739,12 +763,11 @@ void SingleThreadProxy::BeginMainFrame(
 
 void SingleThreadProxy::DoBeginMainFrame(
     const viz::BeginFrameArgs& begin_frame_args) {
-  // In the single-threaded case, the scale deltas should never be touched on
-  // the impl layer tree. However, impl-side scroll deltas may be manipulated
-  // directly via the InputHandler on the UI thread.
+  // The impl-side scroll deltas may be manipulated directly via the
+  // InputHandler on the UI thread and the scale deltas may change when they are
+  // clamped on the impl thread.
   std::unique_ptr<ScrollAndScaleSet> scroll_info =
       host_impl_->ProcessScrollDeltas();
-  DCHECK_EQ(1.f, scroll_info->page_scale_delta);
   layer_tree_host_->ApplyScrollAndScale(scroll_info.get());
 
   layer_tree_host_->WillBeginMainFrame();
@@ -820,8 +843,11 @@ void SingleThreadProxy::ScheduledActionPrepareTiles() {
   host_impl_->PrepareTiles();
 }
 
-void SingleThreadProxy::ScheduledActionInvalidateLayerTreeFrameSink() {
-  NOTREACHED();
+void SingleThreadProxy::ScheduledActionInvalidateLayerTreeFrameSink(
+    bool needs_redraw) {
+  // This is an Android WebView codepath, which only uses multi-thread
+  // compositor. So this should not occur in single-thread mode.
+  NOTREACHED() << "Android Webview use-case, so multi-thread only";
 }
 
 void SingleThreadProxy::ScheduledActionPerformImplSideInvalidation() {

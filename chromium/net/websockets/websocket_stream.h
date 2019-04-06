@@ -11,9 +11,10 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/optional.h"
 #include "base/time/time.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/websockets/websocket_event_interface.h"
 #include "net/websockets/websocket_handshake_request_info.h"
@@ -22,7 +23,7 @@
 class GURL;
 
 namespace base {
-class Timer;
+class OneShotTimer;
 }
 
 namespace url {
@@ -31,24 +32,38 @@ class Origin;
 
 namespace net {
 
+class AuthChallengeInfo;
+class AuthCredentials;
+class HostPortPair;
+class HttpRequestHeaders;
+class HttpResponseHeaders;
 class NetLogWithSource;
 class URLRequest;
 class URLRequestContext;
 struct WebSocketFrame;
-class WebSocketHandshakeStreamBase;
+class WebSocketBasicHandshakeStream;
+class WebSocketHttp2HandshakeStream;
 class WebSocketHandshakeStreamCreateHelper;
 
 // WebSocketStreamRequest is the caller's handle to the process of creation of a
-// WebSocketStream. Deleting the object before the OnSuccess or OnFailure
-// callbacks are called will cancel the request (and neither callback will be
-// called). After OnSuccess or OnFailure have been called, this object may be
-// safely deleted without side-effects.
+// WebSocketStream. Deleting the object before the ConnectDelegate OnSuccess or
+// OnFailure callbacks are called will cancel the request (and neither callback
+// will be called). After OnSuccess or OnFailure have been called, this object
+// may be safely deleted without side-effects.
 class NET_EXPORT_PRIVATE WebSocketStreamRequest {
  public:
   virtual ~WebSocketStreamRequest();
+};
 
-  virtual void OnHandshakeStreamCreated(
-      WebSocketHandshakeStreamBase* handshake_stream) = 0;
+// A subclass of WebSocketStreamRequest that exposes methods that are used as
+// part of the handshake.
+class NET_EXPORT_PRIVATE WebSocketStreamRequestAPI
+    : public WebSocketStreamRequest {
+ public:
+  virtual void OnBasicHandshakeStreamCreated(
+      WebSocketBasicHandshakeStream* handshake_stream) = 0;
+  virtual void OnHttp2HandshakeStreamCreated(
+      WebSocketHttp2HandshakeStream* handshake_stream) = 0;
   virtual void OnFailure(const std::string& message) = 0;
 };
 
@@ -64,6 +79,11 @@ class NET_EXPORT_PRIVATE WebSocketStreamRequest {
 // be finished synchronously, the function returns ERR_IO_PENDING, and
 // |callback| will be called when the operation is finished. Non-null |callback|
 // must be provided to these functions.
+//
+// Please update the traffic annotations in the websocket_basic_stream.cc and
+// websocket_stream.cc if the class is used for any communication with Google.
+// In such a case, annotation should be passed from the callers to this class
+// and a local annotation can not be used anymore.
 
 class NET_EXPORT_PRIVATE WebSocketStream {
  public:
@@ -99,6 +119,22 @@ class NET_EXPORT_PRIVATE WebSocketStream {
             ssl_error_callbacks,
         const SSLInfo& ssl_info,
         bool fatal) = 0;
+
+    // Called when authentication is required. Returns a net error. The opening
+    // handshake is blocked when this function returns ERR_IO_PENDING.
+    // In that case calling |callback| resumes the handshake. |callback| can be
+    // called during the opening handshake. An implementation can rewrite
+    // |*credentials| (in the sync case) or provide new credentials (in the
+    // async case).
+    // Providing null credentials (nullopt in the sync case and nullptr in the
+    // async case) cancels authentication. Otherwise the new credentials are set
+    // and the opening handshake will be retried with the credentials.
+    virtual int OnAuthRequired(
+        scoped_refptr<AuthChallengeInfo> auth_info,
+        scoped_refptr<HttpResponseHeaders> response_headers,
+        const HostPortPair& host_port_pair,
+        base::OnceCallback<void(const AuthCredentials*)> callback,
+        base::Optional<AuthCredentials>* credentials) = 0;
   };
 
   // Create and connect a WebSocketStream of an appropriate type. The actual
@@ -118,24 +154,27 @@ class NET_EXPORT_PRIVATE WebSocketStream {
       std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper,
       const url::Origin& origin,
       const GURL& site_for_cookies,
-      const std::string& additional_headers,
+      const HttpRequestHeaders& additional_headers,
       URLRequestContext* url_request_context,
       const NetLogWithSource& net_log,
       std::unique_ptr<ConnectDelegate> connect_delegate);
 
   // Alternate version of CreateAndConnectStream() for testing use only. It
-  // takes |timer| as the handshake timeout timer.
+  // takes |timer| as the handshake timeout timer, and for methods on
+  // WebSocketStreamRequestAPI calls the |api_delegate| object before the
+  // in-built behaviour if non-null.
   static std::unique_ptr<WebSocketStreamRequest>
   CreateAndConnectStreamForTesting(
       const GURL& socket_url,
       std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper,
       const url::Origin& origin,
       const GURL& site_for_cookies,
-      const std::string& additional_headers,
+      const HttpRequestHeaders& additional_headers,
       URLRequestContext* url_request_context,
       const NetLogWithSource& net_log,
       std::unique_ptr<ConnectDelegate> connect_delegate,
-      std::unique_ptr<base::Timer> timer);
+      std::unique_ptr<base::OneShotTimer> timer,
+      std::unique_ptr<WebSocketStreamRequestAPI> api_delegate);
 
   // Derived classes must make sure Close() is called when the stream is not
   // closed on destruction.
@@ -184,7 +223,7 @@ class NET_EXPORT_PRIVATE WebSocketStream {
   // set correctly. If the reserved header bits are set incorrectly, it is okay
   // to leave it to the caller to report the error.
   virtual int ReadFrames(std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-                         const CompletionCallback& callback) = 0;
+                         CompletionOnceCallback callback) = 0;
 
   // Writes WebSocket frame data.
   //
@@ -201,7 +240,7 @@ class NET_EXPORT_PRIVATE WebSocketStream {
   // this. This generally means returning to the event loop immediately after
   // calling the callback.
   virtual int WriteFrames(std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-                          const CompletionCallback& callback) = 0;
+                          CompletionOnceCallback callback) = 0;
 
   // Closes the stream. All pending I/O operations (if any) are cancelled
   // at this point, so |frames| can be freed.
@@ -237,6 +276,7 @@ void WebSocketDispatchOnFinishOpeningHandshake(
     WebSocketStream::ConnectDelegate* connect_delegate,
     const GURL& gurl,
     const scoped_refptr<HttpResponseHeaders>& headers,
+    const HostPortPair& socket_address,
     base::Time response_time);
 
 }  // namespace net

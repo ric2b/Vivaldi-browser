@@ -18,6 +18,7 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 namespace aura {
 
@@ -40,16 +41,20 @@ TestScreen* TestScreen::Create(const gfx::Size& size,
                         window_tree_client);
 }
 
-TestScreen::~TestScreen() {}
+TestScreen::~TestScreen() {
+  delete host_;
+}
 
 WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay() {
   DCHECK(!host_);
-  if (window_tree_client_) {
+  if (window_tree_client_ && window_tree_client_->config() ==
+                                 WindowTreeClient::Config::kMashDeprecated) {
     host_ = WindowTreeClientPrivate(window_tree_client_)
                 .CallWmNewDisplayAdded(GetPrimaryDisplay());
   } else {
-    host_ =
-        WindowTreeHost::Create(gfx::Rect(GetPrimaryDisplay().GetSizeInPixel()));
+    host_ = WindowTreeHost::Create(ui::PlatformWindowInitProperties{gfx::Rect(
+                                       GetPrimaryDisplay().GetSizeInPixel())})
+                .release();
   }
   // Some tests don't correctly manage window focus/activation states.
   // Makes sure InputMethod is default focused so that IME basics can work.
@@ -148,8 +153,10 @@ void TestScreen::OnWindowBoundsChanged(Window* window,
 }
 
 void TestScreen::OnWindowDestroying(Window* window) {
-  if (host_->window() == window)
-    host_ = NULL;
+  if (host_->window() == window) {
+    host_->window()->RemoveObserver(this);
+    host_ = nullptr;
+  }
 }
 
 gfx::Point TestScreen::GetCursorScreenPoint() {

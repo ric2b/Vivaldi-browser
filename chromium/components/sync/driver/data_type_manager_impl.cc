@@ -14,8 +14,9 @@
 #include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/driver/data_type_encryption_handler.h"
 #include "components/sync/driver/data_type_manager_observer.h"
@@ -297,9 +298,11 @@ void DataTypeManagerImpl::Restart(ConfigureReason reason) {
   // If we're performing a "catch up", first stop the model types to ensure the
   // call to Initialize triggers model association.
   if (catch_up_in_progress_)
-    model_association_manager_.Stop();
+    model_association_manager_.Stop(KEEP_METADATA);
   download_started_ = false;
-  model_association_manager_.Initialize(last_enabled_types_);
+  model_association_manager_.Initialize(
+      last_enabled_types_ /* desired_types */,
+      last_requested_types_ /* preferred_types */);
 }
 
 void DataTypeManagerImpl::OnAllDataTypesReadyForConfigure() {
@@ -669,7 +672,7 @@ void DataTypeManagerImpl::OnSingleDataTypeWillStop(ModelType type,
       // Do this asynchronously so the ModelAssociationManager has a chance to
       // finish stopping this type, otherwise DeactivateDataType() and Stop()
       // end up getting called twice on the controller.
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::Bind(&DataTypeManagerImpl::ProcessReconfigure,
                                 weak_ptr_factory_.GetWeakPtr()));
     }
@@ -757,12 +760,12 @@ void DataTypeManagerImpl::OnModelAssociationDone(
   }
 }
 
-void DataTypeManagerImpl::Stop() {
+void DataTypeManagerImpl::Stop(ShutdownReason reason) {
   if (state_ == STOPPED)
     return;
 
   bool need_to_notify = state_ == CONFIGURING;
-  StopImpl();
+  StopImpl(reason);
 
   if (need_to_notify) {
     ConfigureResult result(ABORTED, last_requested_types_);
@@ -773,23 +776,40 @@ void DataTypeManagerImpl::Stop() {
 void DataTypeManagerImpl::Abort(ConfigureStatus status) {
   DCHECK_EQ(CONFIGURING, state_);
 
-  StopImpl();
+  StopImpl(STOP_SYNC);
 
   DCHECK_NE(OK, status);
   ConfigureResult result(status, last_requested_types_);
   NotifyDone(result);
 }
 
-void DataTypeManagerImpl::StopImpl() {
+void DataTypeManagerImpl::StopImpl(ShutdownReason reason) {
   state_ = STOPPING;
 
   // Invalidate weak pointer to drop download callbacks.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
+  // Leave metadata If we do not disable sync completely.
+  SyncStopMetadataFate metadata_fate = KEEP_METADATA;
+  switch (reason) {
+    case STOP_SYNC:
+      break;
+    case DISABLE_SYNC:
+      metadata_fate = CLEAR_METADATA;
+      break;
+    case BROWSER_SHUTDOWN:
+      break;
+  }
+
   // Stop all data types. This may trigger association callback but the
   // callback will do nothing because state is set to STOPPING above.
-  model_association_manager_.Stop();
+  model_association_manager_.Stop(metadata_fate);
 
+  // Individual data type controllers might still be STOPPING, but we don't
+  // reflect that in |state_| because, for all practical matters, the manager is
+  // in a ready state and reconfguration can be triggered.
+  // TODO(mastiz): Reconsider waiting in STOPPING state until all datatypes have
+  // stopped.
   state_ = STOPPED;
 }
 

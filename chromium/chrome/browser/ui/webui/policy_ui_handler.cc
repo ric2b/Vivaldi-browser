@@ -16,7 +16,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/task_scheduler/post_task.h"
@@ -52,7 +51,7 @@
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
@@ -144,6 +143,8 @@ void GetStatusFromCore(const policy::CloudPolicyCore* core,
     dict->SetString("location", policy->annotated_location());
   if (policy && policy->has_directory_api_id())
     dict->SetString("directoryApiId", policy->directory_api_id());
+  if (policy && policy->has_gaia_id())
+    dict->SetString("gaiaId", policy->gaia_id());
 
   base::TimeDelta refresh_interval =
       base::TimeDelta::FromMilliseconds(refresh_scheduler ?
@@ -633,16 +634,16 @@ void PolicyUIHandler::RegisterMessages() {
   registry->AddObserver(this);
 
   web_ui()->RegisterMessageCallback(
-      "initialized",
-      base::Bind(&PolicyUIHandler::HandleInitialized, base::Unretained(this)));
+      "initialized", base::BindRepeating(&PolicyUIHandler::HandleInitialized,
+                                         base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "reloadPolicies",
-      base::Bind(&PolicyUIHandler::HandleReloadPolicies,
-                 base::Unretained(this)));
+      base::BindRepeating(&PolicyUIHandler::HandleReloadPolicies,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "exportPoliciesJSON",
-      base::Bind(&PolicyUIHandler::HandleExportPoliciesJSON,
-                 base::Unretained(this)));
+      base::BindRepeating(&PolicyUIHandler::HandleExportPoliciesJSON,
+                          base::Unretained(this)));
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -734,12 +735,11 @@ void PolicyUIHandler::SendPolicyNames() const {
 }
 
 void PolicyUIHandler::SendPolicyValues() const {
-  std::unique_ptr<base::DictionaryValue> all_policies =
-      policy::GetAllPolicyValuesAsDictionary(
-          web_ui()->GetWebContents()->GetBrowserContext(),
-          true /* with_user_policies */, true /* convert_values */);
+  base::Value all_policies = policy::GetAllPolicyValuesAsDictionary(
+      web_ui()->GetWebContents()->GetBrowserContext(),
+      true /* with_user_policies */, true /* convert_values */);
   web_ui()->CallJavascriptFunctionUnsafe("policy.Page.setPolicyValues",
-                                         *all_policies);
+                                         all_policies);
 }
 
 void PolicyUIHandler::SendStatus() const {
@@ -772,20 +772,26 @@ void PolicyUIHandler::HandleInitialized(const base::ListValue* args) {
 
 void PolicyUIHandler::HandleReloadPolicies(const base::ListValue* args) {
 #if defined(OS_CHROMEOS)
-  // Allow user to manually fetch remote commands, in case invalidation
-  // service is not working properly.
-  // TODO(binjin): evaluate and possibly remove this after invalidation
-  // service is landed and tested. http://crbug.com/480982
-  policy::CloudPolicyManager* manager =
+  // Allow user to manually fetch remote commands. Useful for testing or when
+  // the invalidation service is not working properly.
+  policy::CloudPolicyManager* const device_manager =
       g_browser_process->platform_part()
           ->browser_policy_connector_chromeos()
           ->GetDeviceCloudPolicyManager();
-  // Active Directory management has no CloudPolicyManager.
-  if (manager) {
-    policy::RemoteCommandsService* remote_commands_service =
-        manager->core()->remote_commands_service();
-    if (remote_commands_service)
-      remote_commands_service->FetchRemoteCommands();
+  Profile* const profile = Profile::FromWebUI(web_ui());
+  policy::CloudPolicyManager* const user_manager =
+      policy::UserPolicyManagerFactoryChromeOS::GetCloudPolicyManagerForProfile(
+          profile);
+
+  // Fetch both device and user remote commands.
+  for (policy::CloudPolicyManager* manager : {device_manager, user_manager}) {
+    // Active Directory management has no CloudPolicyManager.
+    if (manager) {
+      policy::RemoteCommandsService* const remote_commands_service =
+          manager->core()->remote_commands_service();
+      if (remote_commands_service)
+        remote_commands_service->FetchRemoteCommands();
+    }
   }
 #endif
   GetPolicyService()->RefreshPolicies(base::Bind(
@@ -801,7 +807,7 @@ void PolicyUIHandler::WritePoliciesToJSONFile(
     const base::FilePath& path) const {
   std::string json_policies = policy::GetAllPolicyValuesAsJSON(
       web_ui()->GetWebContents()->GetBrowserContext(),
-      true /* with_user_policies */);
+      true /* with_user_policies */, false /* with device identity */);
 
   base::PostTaskWithTraits(
       FROM_HERE,

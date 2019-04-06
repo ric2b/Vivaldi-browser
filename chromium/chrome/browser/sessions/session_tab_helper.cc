@@ -18,8 +18,9 @@
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(SessionTabHelper);
 
 SessionTabHelper::SessionTabHelper(content::WebContents* contents)
-    : content::WebContentsObserver(contents) {
-}
+    : content::WebContentsObserver(contents),
+      session_id_(SessionID::NewUnique()),
+      window_id_(SessionID::InvalidValue()) {}
 
 SessionTabHelper::~SessionTabHelper() {
 }
@@ -36,18 +37,20 @@ void SessionTabHelper::SetWindowID(const SessionID& id) {
 }
 
 // static
-SessionID::id_type SessionTabHelper::IdForTab(const content::WebContents* tab) {
+SessionID SessionTabHelper::IdForTab(const content::WebContents* tab) {
   const SessionTabHelper* session_tab_helper =
       tab ? SessionTabHelper::FromWebContents(tab) : NULL;
-  return session_tab_helper ? session_tab_helper->session_id().id() : -1;
+  return session_tab_helper ? session_tab_helper->session_id()
+                            : SessionID::InvalidValue();
 }
 
 // static
-SessionID::id_type SessionTabHelper::IdForWindowContainingTab(
+SessionID SessionTabHelper::IdForWindowContainingTab(
     const content::WebContents* tab) {
   const SessionTabHelper* session_tab_helper =
       tab ? SessionTabHelper::FromWebContents(tab) : NULL;
-  return session_tab_helper ? session_tab_helper->window_id().id() : -1;
+  return session_tab_helper ? session_tab_helper->window_id()
+                            : SessionID::InvalidValue();
 }
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -92,6 +95,15 @@ void SessionTabHelper::NavigationListPruned(
         window_id(), session_id(),
         web_contents()->GetController().GetEntryCount());
   }
+}
+
+void SessionTabHelper::NavigationEntriesDeleted() {
+  SessionService* session_service = SessionServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
+  if (!session_service)
+    return;
+
+  session_service->TabNavigationPathEntriesDeleted(window_id(), session_id());
 }
 
 void SessionTabHelper::NavigationEntryChanged(

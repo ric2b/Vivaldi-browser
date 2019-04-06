@@ -16,7 +16,7 @@
 #include "base/observer_list.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_manager_export.h"
@@ -195,7 +195,10 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
   // Removes a regular or supervised user from the user list.
   // Returns the user if found or NULL otherwise.
   // Also removes the user from the persistent user list.
-  User* RemoveRegularOrSupervisedUserFromList(const AccountId& account_id);
+  // |notify| is true when OnUserRemoved() should be triggered,
+  // meaning that the user won't be added after the removal.
+  User* RemoveRegularOrSupervisedUserFromList(const AccountId& account_id,
+                                              bool notify);
 
   // Implementation for RemoveUser method. This is an asynchronous part of the
   // method, that verifies that owner will not get deleted, and calls

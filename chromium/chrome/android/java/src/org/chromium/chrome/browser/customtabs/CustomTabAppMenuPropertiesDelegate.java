@@ -4,11 +4,6 @@
 
 package org.chromium.chrome.browser.customtabs;
 
-import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.CUSTOM_TABS_UI_TYPE_MEDIA_VIEWER;
-import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.CUSTOM_TABS_UI_TYPE_MINIMAL_UI_WEBAPP;
-import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.CUSTOM_TABS_UI_TYPE_PAYMENT_REQUEST;
-import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.CUSTOM_TABS_UI_TYPE_READER_MODE;
-
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -84,7 +79,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             boolean addToHomeScreenVisible = true;
             boolean requestDesktopSiteVisible = true;
 
-            if (mUiType == CUSTOM_TABS_UI_TYPE_MEDIA_VIEWER) {
+            if (mUiType == CustomTabsUiType.MEDIA_VIEWER) {
                 // Most of the menu items don't make sense when viewing media.
                 menu.findItem(R.id.icon_row_menu_id).setVisible(false);
                 menu.findItem(R.id.find_in_page_id).setVisible(false);
@@ -93,7 +88,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 openInChromeItemVisible = false;
                 requestDesktopSiteVisible = false;
                 addToHomeScreenVisible = false;
-            } else if (mUiType == CUSTOM_TABS_UI_TYPE_PAYMENT_REQUEST) {
+            } else if (mUiType == CustomTabsUiType.PAYMENT_REQUEST) {
                 // Only the icon row and 'find in page' are shown for opening payment request UI
                 // from Chrome.
                 openInChromeItemVisible = false;
@@ -101,7 +96,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 addToHomeScreenVisible = false;
                 downloadItemVisible = false;
                 bookmarkItemVisible = false;
-            } else if (mUiType == CUSTOM_TABS_UI_TYPE_READER_MODE) {
+            } else if (mUiType == CustomTabsUiType.READER_MODE) {
                 // Only 'find in page' and the reader mode preference are shown for Reader Mode UI.
                 menu.findItem(R.id.icon_row_menu_id).setVisible(false);
                 bookmarkItemVisible = false; // Set to skip initialization.
@@ -111,11 +106,17 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 addToHomeScreenVisible = false;
 
                 menu.findItem(R.id.reader_mode_prefs_id).setVisible(true);
-            } else if (mUiType == CUSTOM_TABS_UI_TYPE_MINIMAL_UI_WEBAPP) {
+            } else if (mUiType == CustomTabsUiType.MINIMAL_UI_WEBAPP) {
                 requestDesktopSiteVisible = false;
                 addToHomeScreenVisible = false;
                 downloadItemVisible = false;
                 bookmarkItemVisible = false;
+            } else if (mUiType == CustomTabsUiType.OFFLINE_PAGE) {
+                openInChromeItemVisible = false;
+                bookmarkItemVisible = true;
+                downloadItemVisible = false;
+                addToHomeScreenVisible = false;
+                requestDesktopSiteVisible = true;
             }
 
             if (!FirstRunStatus.getFirstRunFlowComplete()) {
@@ -181,7 +182,11 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
 
     @Override
     public int getFooterResourceId() {
-        return mUiType == CUSTOM_TABS_UI_TYPE_MEDIA_VIEWER ? 0 : R.layout.powered_by_chrome_footer;
+        // Avoid showing the branded menu footer for media and offline pages.
+        if (mUiType == CustomTabsUiType.MEDIA_VIEWER || mUiType == CustomTabsUiType.OFFLINE_PAGE) {
+            return 0;
+        }
+        return R.layout.powered_by_chrome_footer;
     }
 
     /**

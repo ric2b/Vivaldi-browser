@@ -12,17 +12,17 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/test/scoped_task_environment.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/media_stream_audio_source.h"
-#include "content/renderer/media/media_stream_video_track.h"
-#include "content/renderer/media/mock_media_stream_video_sink.h"
-#include "content/renderer/media/mock_media_stream_video_source.h"
+#include "content/renderer/media/stream/media_stream_audio_source.h"
+#include "content/renderer/media/stream/media_stream_video_track.h"
+#include "content/renderer/media/stream/mock_media_stream_video_sink.h"
+#include "content/renderer/media/stream/mock_media_stream_video_source.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_heap.h"
 
 namespace content {
 
@@ -37,7 +37,6 @@ class WebRtcMediaStreamTrackAdapterTest : public ::testing::Test {
     if (track_adapter_) {
       EXPECT_TRUE(track_adapter_->is_initialized());
       track_adapter_->Dispose();
-      EXPECT_FALSE(track_adapter_->is_initialized());
       track_adapter_ = nullptr;
       RunMessageLoopsUntilIdle();
     }
@@ -80,9 +79,9 @@ class WebRtcMediaStreamTrackAdapterTest : public ::testing::Test {
         dependency_factory_.get(), main_thread_, webrtc_track);
   }
 
-  // Runs message loops on the webrtc signaling thread and the main thread until
-  // idle.
-  void RunMessageLoopsUntilIdle() {
+  // Runs message loops on the webrtc signaling thread and optionally the main
+  // thread until idle.
+  void RunMessageLoopsUntilIdle(bool run_loop_on_main_thread = true) {
     base::WaitableEvent waitable_event(
         base::WaitableEvent::ResetPolicy::MANUAL,
         base::WaitableEvent::InitialState::NOT_SIGNALED);
@@ -91,7 +90,8 @@ class WebRtcMediaStreamTrackAdapterTest : public ::testing::Test {
                                       RunMessageLoopUntilIdleOnSignalingThread,
                                   base::Unretained(this), &waitable_event));
     waitable_event.Wait();
-    base::RunLoop().RunUntilIdle();
+    if (run_loop_on_main_thread)
+      base::RunLoop().RunUntilIdle();
   }
 
   void RunMessageLoopUntilIdleOnSignalingThread(
@@ -156,7 +156,8 @@ TEST_F(WebRtcMediaStreamTrackAdapterTest, RemoteAudioTrack) {
       FROM_HERE,
       base::BindOnce(
           &WebRtcMediaStreamTrackAdapterTest::CreateRemoteTrackAdapter,
-          base::Unretained(this), webrtc_track.get()));
+          base::Unretained(this), base::Unretained(webrtc_track.get())));
+  // The adapter is initialized implicitly in a PostTask, allow it to run.
   RunMessageLoopsUntilIdle();
   DCHECK(track_adapter_);
   EXPECT_TRUE(track_adapter_->is_initialized());
@@ -180,7 +181,8 @@ TEST_F(WebRtcMediaStreamTrackAdapterTest, RemoteVideoTrack) {
       FROM_HERE,
       base::BindOnce(
           &WebRtcMediaStreamTrackAdapterTest::CreateRemoteTrackAdapter,
-          base::Unretained(this), webrtc_track.get()));
+          base::Unretained(this), base::Unretained(webrtc_track.get())));
+  // The adapter is initialized implicitly in a PostTask, allow it to run.
   RunMessageLoopsUntilIdle();
   DCHECK(track_adapter_);
   EXPECT_TRUE(track_adapter_->is_initialized());
@@ -195,6 +197,35 @@ TEST_F(WebRtcMediaStreamTrackAdapterTest, RemoteVideoTrack) {
   EXPECT_TRUE(track_adapter_->GetRemoteVideoTrackAdapterForTesting());
   EXPECT_TRUE(
       track_adapter_->GetRemoteVideoTrackAdapterForTesting()->initialized());
+}
+
+TEST_F(WebRtcMediaStreamTrackAdapterTest, RemoteTrackExplicitlyInitialized) {
+  scoped_refptr<MockWebRtcAudioTrack> webrtc_track =
+      MockWebRtcAudioTrack::Create("remote_audio_track");
+  dependency_factory_->GetWebRtcSignalingThread()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &WebRtcMediaStreamTrackAdapterTest::CreateRemoteTrackAdapter,
+          base::Unretained(this), base::Unretained(webrtc_track.get())));
+  // Wait for the CreateRemoteTrackAdapter() call, but don't run the main thread
+  // loop that would have implicitly initialized the adapter.
+  RunMessageLoopsUntilIdle(false);
+  DCHECK(track_adapter_);
+  EXPECT_FALSE(track_adapter_->is_initialized());
+  // Explicitly initialize before the main thread loop has a chance to run.
+  track_adapter_->InitializeOnMainThread();
+  EXPECT_TRUE(track_adapter_->is_initialized());
+  EXPECT_TRUE(!track_adapter_->web_track().IsNull());
+  EXPECT_EQ(track_adapter_->web_track().Source().GetType(),
+            blink::WebMediaStreamSource::kTypeAudio);
+  EXPECT_TRUE(track_adapter_->webrtc_track());
+  EXPECT_EQ(track_adapter_->webrtc_track()->kind(),
+            webrtc::MediaStreamTrackInterface::kAudioKind);
+  EXPECT_EQ(track_adapter_->webrtc_track()->id().c_str(),
+            track_adapter_->web_track().Id());
+  EXPECT_TRUE(track_adapter_->GetRemoteAudioTrackAdapterForTesting());
+  EXPECT_TRUE(
+      track_adapter_->GetRemoteAudioTrackAdapterForTesting()->initialized());
 }
 
 }  // namespace content

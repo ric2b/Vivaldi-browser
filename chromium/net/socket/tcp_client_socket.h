@@ -17,6 +17,7 @@
 #include "net/socket/connection_attempts.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/tcp_socket.h"
+#include "net/socket/transport_client_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
@@ -26,7 +27,7 @@ struct NetLogSource;
 class SocketPerformanceWatcher;
 
 // A client socket that uses TCP as the transport layer.
-class NET_EXPORT TCPClientSocket : public StreamSocket {
+class NET_EXPORT TCPClientSocket : public TransportClientSocket {
  public:
   // The IP address(es) and port number to connect to.  The TCP socket will try
   // each IP address in the list until it succeeds in establishing a
@@ -44,19 +45,19 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
 
   ~TCPClientSocket() override;
 
-  // Binds the socket to a local IP address and port.
-  int Bind(const IPEndPoint& address);
+  // TransportClientSocket implementation.
+  int Bind(const IPEndPoint& address) override;
+  bool SetKeepAlive(bool enable, int delay) override;
+  bool SetNoDelay(bool no_delay) override;
 
   // StreamSocket implementation.
-  int Connect(const CompletionCallback& callback) override;
+  int Connect(CompletionOnceCallback callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
   bool IsConnectedAndIdle() const override;
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
   const NetLogWithSource& NetLog() const override;
-  void SetSubresourceSpeculation() override;
-  void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
   void EnableTCPFastOpenIfSupported() override;
   bool WasAlpnNegotiated() const override;
@@ -73,19 +74,17 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   // Full duplex mode (reading and writing at the same time) is supported.
   int Read(IOBuffer* buf,
            int buf_len,
-           const CompletionCallback& callback) override;
+           CompletionOnceCallback callback) override;
   int ReadIfReady(IOBuffer* buf,
                   int buf_len,
-                  const CompletionCallback& callback) override;
+                  CompletionOnceCallback callback) override;
+  int CancelReadIfReady() override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override;
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
-
-  virtual bool SetKeepAlive(bool enable, int delay);
-  virtual bool SetNoDelay(bool no_delay);
 
  private:
   // State machine for connecting the socket.
@@ -99,7 +98,7 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   // set to true, ReadIfReady() will be used instead of Read().
   int ReadCommon(IOBuffer* buf,
                  int buf_len,
-                 const CompletionCallback& callback,
+                 const CompletionOnceCallback callback,
                  bool read_if_ready);
 
   // State machine used by Connect().
@@ -112,9 +111,9 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   void DoDisconnect();
 
   void DidCompleteConnect(int result);
-  void DidCompleteRead(const CompletionCallback& callback, int result);
-  void DidCompleteWrite(const CompletionCallback& callback, int result);
-  void DidCompleteReadWrite(const CompletionCallback& callback, int result);
+  void DidCompleteRead(CompletionOnceCallback callback, int result);
+  void DidCompleteWrite(CompletionOnceCallback callback, int result);
+  void DidCompleteReadWrite(CompletionOnceCallback callback, int result);
 
   int OpenSocket(AddressFamily family);
 
@@ -142,7 +141,7 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   int current_address_index_;
 
   // External callback; called when connect is complete.
-  CompletionCallback connect_callback_;
+  CompletionOnceCallback connect_callback_;
 
   // The next state for the Connect() state machine.
   ConnectState next_connect_state_;
@@ -150,15 +149,13 @@ class NET_EXPORT TCPClientSocket : public StreamSocket {
   // This socket was previously disconnected and has not been re-connected.
   bool previously_disconnected_;
 
-  // Record of connectivity and transmissions, for use in speculative connection
-  // histograms.
-  UseHistory use_history_;
-
   // Failed connection attempts made while trying to connect this socket.
   ConnectionAttempts connection_attempts_;
 
   // Total number of bytes received by the socket.
   int64_t total_received_bytes_;
+
+  bool was_ever_used_;
 
   DISALLOW_COPY_AND_ASSIGN(TCPClientSocket);
 };

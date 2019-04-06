@@ -16,7 +16,7 @@
 #include "base/containers/queue.h"
 #include "base/i18n/streaming_utf8_validator.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "net/base/net_export.h"
@@ -31,8 +31,9 @@ class Origin;
 
 namespace net {
 
-class NetLogWithSource;
+class HttpRequestHeaders;
 class IOBuffer;
+class NetLogWithSource;
 class URLRequest;
 class URLRequestContext;
 struct WebSocketHandshakeRequestInfo;
@@ -53,7 +54,7 @@ class NET_EXPORT WebSocketChannel {
       std::unique_ptr<WebSocketHandshakeStreamCreateHelper>,
       const url::Origin&,
       const GURL&,
-      const std::string&,
+      const HttpRequestHeaders&,
       URLRequestContext*,
       const NetLogWithSource&,
       std::unique_ptr<WebSocketStream::ConnectDelegate>)>
@@ -62,7 +63,7 @@ class NET_EXPORT WebSocketChannel {
   // Methods which return a value of type ChannelState may delete |this|. If the
   // return value is CHANNEL_DELETED, then the caller must return without making
   // any further access to member variables or methods.
-  using ChannelState = WebSocketEventInterface::ChannelState;
+  enum ChannelState { CHANNEL_ALIVE, CHANNEL_DELETED };
 
   // Creates a new WebSocketChannel in an idle state.
   // SendAddChannelRequest() must be called immediately afterwards to start the
@@ -77,7 +78,7 @@ class NET_EXPORT WebSocketChannel {
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
       const GURL& site_for_cookies,
-      const std::string& additional_headers);
+      const HttpRequestHeaders& additional_headers);
 
   // Sends a data frame to the remote side. It is the responsibility of the
   // caller to ensure that they have sufficient send quota to send this data,
@@ -129,7 +130,7 @@ class NET_EXPORT WebSocketChannel {
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
       const GURL& site_for_cookies,
-      const std::string& additional_headers,
+      const HttpRequestHeaders& additional_headers,
       const WebSocketStreamRequestCreationCallback& callback);
 
   // The default timout for the closing handshake is a sensible value (see
@@ -153,7 +154,6 @@ class NET_EXPORT WebSocketChannel {
       std::unique_ptr<WebSocketHandshakeResponseInfo> response);
 
  private:
-  class HandshakeNotificationSender;
   class PendingReceivedFrame;
 
   // The object passes through a linear progression of states from
@@ -188,7 +188,7 @@ class NET_EXPORT WebSocketChannel {
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
       const GURL& site_for_cookies,
-      const std::string& additional_headers,
+      const HttpRequestHeaders& additional_headers,
       const WebSocketStreamRequestCreationCallback& callback);
 
   // Called when a URLRequest is created for handshaking.
@@ -211,9 +211,13 @@ class NET_EXPORT WebSocketChannel {
       const SSLInfo& ssl_info,
       bool fatal);
 
-  // Posts a task that sends pending notifications relating WebSocket Opening
-  // Handshake to the renderer.
-  void ScheduleOpeningHandshakeNotification();
+  // Authentication request from WebSocketStream::CreateAndConnectStream().
+  // Forwards the request to the event interface.
+  int OnAuthRequired(scoped_refptr<AuthChallengeInfo> auth_info,
+                     scoped_refptr<HttpResponseHeaders> response_headers,
+                     const HostPortPair& host_port_pair,
+                     base::OnceCallback<void(const AuthCredentials*)> callback,
+                     base::Optional<AuthCredentials>* credentials);
 
   // Sets |state_| to |new_state| and updates UMA if necessary.
   void SetState(State new_state);
@@ -289,12 +293,11 @@ class NET_EXPORT WebSocketChannel {
   // Javascript. Javascript will see a Close code of AbnormalClosure (1006) with
   // an empty reason string. If state_ is CONNECTED then a Close message is sent
   // to the remote host containing the supplied |code| and |reason|. If the
-  // stream is open, closes it and sets state_ to CLOSED.  FailChannel() always
-  // returns CHANNEL_DELETED. It is not valid to access any member variables or
-  // methods after calling FailChannel().
-  ChannelState FailChannel(const std::string& message,
-                           uint16_t code,
-                           const std::string& reason) WARN_UNUSED_RESULT;
+  // stream is open, closes it and sets state_ to CLOSED. This function deletes
+  // |this|.
+  void FailChannel(const std::string& message,
+                   uint16_t code,
+                   const std::string& reason);
 
   // Sends a Close frame to Start the WebSocket Closing Handshake, or to respond
   // to a Close frame from the server. As a special case, setting |code| to
@@ -317,12 +320,8 @@ class NET_EXPORT WebSocketChannel {
 
   // Drop this channel.
   // If there are pending opening handshake notifications, notify them
-  // before dropping.
-  //
-  // Always returns CHANNEL_DELETED.
-  ChannelState DoDropChannel(bool was_clean,
-                             uint16_t code,
-                             const std::string& reason);
+  // before dropping. This function deletes |this|.
+  void DoDropChannel(bool was_clean, uint16_t code, const std::string& reason);
 
   // Called if the closing handshake times out. Closes the connection and
   // informs the |event_interface_| if appropriate.
@@ -394,9 +393,6 @@ class NET_EXPORT WebSocketChannel {
   // The current state of the channel. Mainly used for sanity checking, but also
   // used to track the close state.
   State state_;
-
-  // |notification_sender_| is owned by this object.
-  std::unique_ptr<HandshakeNotificationSender> notification_sender_;
 
   // UTF-8 validator for outgoing Text messages.
   base::StreamingUtf8Validator outgoing_utf8_validator_;

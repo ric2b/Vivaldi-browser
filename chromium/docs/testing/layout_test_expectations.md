@@ -97,17 +97,17 @@ platforms.
 
 The recommended way to rebaseline for a currently-in-progress CL is to use
 results from try jobs, by using the command-tool
-`third_party/WebKit/Tools/Scripts/webkit-patch rebaseline-cl`:
+`third_party/blink/tools/blink_tool.py rebaseline-cl`:
 
 1. First, upload a CL.
-2. Trigger try jobs by running `webkit-patch rebaseline-cl`. This should
+2. Trigger try jobs by running `blink_tool.py rebaseline-cl`. This should
    trigger jobs on
    [tryserver.blink](https://build.chromium.org/p/tryserver.blink/builders).
 3. Wait for all try jobs to finish.
-4. Run `webkit-patch rebaseline-cl` again to fetch new baselines.
+4. Run `blink_tool.py rebaseline-cl` again to fetch new baselines.
    By default, this will download new baselines for any failing tests
    in the try jobs.
-   (Run `webkit-patch rebaseline-cl --help` for more specific options.)
+   (Run `blink_tool.py rebaseline-cl --help` for more specific options.)
 5. Commit the new baselines and upload a new patch.
 
 This way, the new baselines can be reviewed along with the changes, which helps
@@ -118,7 +118,7 @@ is no period of time when the layout test results are ignored.
 
 ### Rebaselining with try jobs
 
-The tests which `webkit-patch rebaseline-cl` tries to download new baselines for
+The tests which `blink_tool.py rebaseline-cl` tries to download new baselines for
 depends on its arguments.
 
 * By default, it tries to download all baselines for tests that failed in the
@@ -130,15 +130,6 @@ depends on its arguments.
 * If some of the try jobs failed to run, and you wish to continue rebaselining
   assuming that there are no platform-specific results for those platforms,
   you can add the flag `--fill-missing`.
-
-### Rebaselining manually
-
-1. If the tests is already listed in TestExpectations as flaky, mark the test
-   `NeedsManualRebaseline` and comment out the flaky line so that your patch can
-   land without turning the tree red. If the test is not in TestExpectations,
-   you can add a `[ Rebaseline ]` line to TestExpectations.
-2. Run `third_party/WebKit/Tools/Scripts/webkit-patch rebaseline-expectations`
-3. Post the patch created in step 2 for review.
 
 ## Kinds of expectations files
 
@@ -209,10 +200,10 @@ The syntax of a line is roughly:
   `Android`, `Release`, `Debug`.
 * Some modifiers are meta keywords, e.g. `Win` represents both `Win7` and
   `Win10`. See the `CONFIGURATION_SPECIFIER_MACROS` dictionary in
-  [third_party/WebKit/Tools/Scripts/webkitpy/layout_tests/port/base.py](../../third_party/WebKit/Tools/Scripts/webkitpy/layout_tests/port/base.py)
+  [third_party/blink/tools/blinkpy/web_tests/port/base.py](../../third_party/blink/tools/blinkpy/web_tests/port/base.py)
   for the meta keywords and which modifiers they represent.
 * Expectations can be one or more of `Crash`, `Failure`, `Pass`, `Rebaseline`,
-  `Slow`, `Skip`, `Timeout`, `WontFix`, `Missing`, `NeedsManualRebaseline`.
+  `Slow`, `Skip`, `Timeout`, `WontFix`, `Missing`.
   If multiple expectations are listed, the test is considered "flaky" and any
   of those results will be considered as expected.
 
@@ -289,7 +280,7 @@ You can verify that any changes you've made to an expectations file are correct
 by running:
 
 ```bash
-third_party/WebKit/Tools/Scripts/lint-test-expectations
+third_party/blink/tools/lint_test_expectations.py
 ```
 
 which will cycle through all of the possible combinations of configurations

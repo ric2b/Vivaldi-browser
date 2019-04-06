@@ -29,6 +29,7 @@ TEST(MimeUtilTest, ExtensionTest) {
     {FILE_PATH_LITERAL("css"), "text/css", true},
     {FILE_PATH_LITERAL("pjp"), "image/jpeg", true},
     {FILE_PATH_LITERAL("pjpeg"), "image/jpeg", true},
+    {FILE_PATH_LITERAL("json"), "application/json", true},
 #if defined(OS_CHROMEOS)
     // These are test cases for testing platform mime types on Chrome OS.
     {FILE_PATH_LITERAL("epub"), "application/epub+zip", true},
@@ -46,11 +47,11 @@ TEST(MimeUtilTest, ExtensionTest) {
   std::string mime_type;
   bool rv;
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    rv = GetMimeTypeFromExtension(tests[i].extension, &mime_type);
-    EXPECT_EQ(tests[i].valid, rv);
+  for (const auto& test : tests) {
+    rv = GetMimeTypeFromExtension(test.extension, &mime_type);
+    EXPECT_EQ(test.valid, rv);
     if (rv)
-      EXPECT_EQ(tests[i].mime_type, mime_type);
+      EXPECT_EQ(test.mime_type, mime_type);
   }
 }
 
@@ -72,12 +73,11 @@ TEST(MimeUtilTest, FileTest) {
   std::string mime_type;
   bool rv;
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    rv = GetMimeTypeFromFile(base::FilePath(tests[i].file_path),
-                                  &mime_type);
-    EXPECT_EQ(tests[i].valid, rv);
+  for (const auto& test : tests) {
+    rv = GetMimeTypeFromFile(base::FilePath(test.file_path), &mime_type);
+    EXPECT_EQ(test.valid, rv);
     if (rv)
-      EXPECT_EQ(tests[i].mime_type, mime_type);
+      EXPECT_EQ(test.mime_type, mime_type);
   }
 }
 

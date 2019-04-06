@@ -16,11 +16,16 @@
 #include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/observer_list.h"
+#include "content/browser/background_fetch/background_fetch.pb.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/background_fetch/background_fetch_scheduler.h"
 #include "content/browser/background_fetch/storage/database_task.h"
+#include "content/browser/background_fetch/storage/get_initialization_data_task.h"
+#include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/platform/modules/background_fetch/background_fetch.mojom.h"
+#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
 #include "url/origin.h"
 
 namespace storage {
@@ -29,9 +34,11 @@ class BlobDataHandle;
 
 namespace content {
 
+class BackgroundFetchDataManagerObserver;
 class BackgroundFetchRequestInfo;
 struct BackgroundFetchSettledFetch;
 class BrowserContext;
+class CacheStorageManager;
 class ChromeBlobStorageContext;
 class ServiceWorkerContextWrapper;
 
@@ -47,24 +54,45 @@ class ServiceWorkerContextWrapper;
 //
 // Storage schema is documented in storage/README.md
 class CONTENT_EXPORT BackgroundFetchDataManager
-    : public BackgroundFetchScheduler::RequestProvider {
+    : public BackgroundFetchScheduler::RequestProvider,
+      public background_fetch::DatabaseTaskHost {
  public:
+  using GetInitializationDataCallback = base::OnceCallback<void(
+      blink::mojom::BackgroundFetchError,
+      std::vector<background_fetch::BackgroundFetchInitializationData>)>;
   using SettledFetchesCallback = base::OnceCallback<void(
       blink::mojom::BackgroundFetchError,
       bool /* background_fetch_succeeded */,
       std::vector<BackgroundFetchSettledFetch>,
       std::vector<std::unique_ptr<storage::BlobDataHandle>>)>;
+  using GetMetadataCallback =
+      base::OnceCallback<void(blink::mojom::BackgroundFetchError,
+                              std::unique_ptr<proto::BackgroundFetchMetadata>)>;
   using GetRegistrationCallback =
       base::OnceCallback<void(blink::mojom::BackgroundFetchError,
                               std::unique_ptr<BackgroundFetchRegistration>)>;
   using NextRequestCallback =
       base::OnceCallback<void(scoped_refptr<BackgroundFetchRequestInfo>)>;
+  using NumRequestsCallback = base::OnceCallback<void(size_t)>;
 
   BackgroundFetchDataManager(
       BrowserContext* browser_context,
-      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context);
+      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
+      scoped_refptr<CacheStorageContextImpl> cache_storage_context);
 
   ~BackgroundFetchDataManager() override;
+
+  // Grabs a reference to CacheStorageManager.
+  virtual void InitializeOnIOThread();
+
+  // Adds or removes the given |observer| to this data manager instance.
+  void AddObserver(BackgroundFetchDataManagerObserver* observer);
+  void RemoveObserver(BackgroundFetchDataManagerObserver* observer);
+
+  // Gets the required data to initialize BackgroundFetchContext with the
+  // appropriate JobControllers. This will be called when BackgroundFetchContext
+  // is being intialized on the IO thread.
+  void GetInitializationData(GetInitializationDataCallback callback);
 
   // Creates and stores a new registration with the given properties. Will
   // invoke the |callback| when the registration has been created, which may
@@ -73,9 +101,16 @@ class CONTENT_EXPORT BackgroundFetchDataManager
       const BackgroundFetchRegistrationId& registration_id,
       const std::vector<ServiceWorkerFetchRequest>& requests,
       const BackgroundFetchOptions& options,
+      const SkBitmap& icon,
       GetRegistrationCallback callback);
 
-  // Get the BackgroundFetchOptions for a registration.
+  // Get the BackgroundFetchMetadata.
+  void GetMetadata(int64_t service_worker_registration_id,
+                   const url::Origin& origin,
+                   const std::string& developer_id,
+                   GetMetadataCallback callback);
+
+  // Get the BackgroundFetchRegistration.
   void GetRegistration(int64_t service_worker_registration_id,
                        const url::Origin& origin,
                        const std::string& developer_id,
@@ -83,7 +118,7 @@ class CONTENT_EXPORT BackgroundFetchDataManager
 
   // Updates the UI values for a Background Fetch registration.
   void UpdateRegistrationUI(
-      const std::string& unique_id,
+      const BackgroundFetchRegistrationId& registration_id,
       const std::string& title,
       blink::mojom::BackgroundFetchService::UpdateUICallback callback);
 
@@ -122,52 +157,74 @@ class CONTENT_EXPORT BackgroundFetchDataManager
       const url::Origin& origin,
       blink::mojom::BackgroundFetchService::GetDeveloperIdsCallback callback);
 
-  int GetTotalNumberOfRequests(
-      const BackgroundFetchRegistrationId& registration_id) const;
+  const base::ObserverList<BackgroundFetchDataManagerObserver>& observers() {
+    return observers_;
+  }
 
   // BackgroundFetchScheduler::RequestProvider implementation:
   void PopNextRequest(const BackgroundFetchRegistrationId& registration_id,
                       NextRequestCallback callback) override;
+
   void MarkRequestAsComplete(
       const BackgroundFetchRegistrationId& registration_id,
       BackgroundFetchRequestInfo* request,
       BackgroundFetchScheduler::MarkedCompleteCallback callback) override;
 
+  void ShutdownOnIO();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(BackgroundFetchDataManagerTest, Cleanup);
   friend class BackgroundFetchDataManagerTest;
+  friend class BackgroundFetchTestDataManager;
   friend class background_fetch::DatabaseTask;
 
-  class RegistrationData;
+  // Accessors for tests and DatabaseTasks.
+  ServiceWorkerContextWrapper* service_worker_context() const {
+    return service_worker_context_.get();
+  }
+  scoped_refptr<CacheStorageManager> cache_manager() const {
+    return cache_manager_;
+  }
+  std::set<std::string>& ref_counted_unique_ids() {
+    return ref_counted_unique_ids_;
+  }
+  ChromeBlobStorageContext* blob_storage_context() const {
+    return blob_storage_context_.get();
+  }
+
+  void AddStartNextPendingRequestTask(
+      int64_t service_worker_registration_id,
+      NextRequestCallback callback,
+      blink::mojom::BackgroundFetchError error,
+      std::unique_ptr<proto::BackgroundFetchMetadata> metadata);
 
   void AddDatabaseTask(std::unique_ptr<background_fetch::DatabaseTask> task);
 
-  void OnDatabaseTaskFinished(background_fetch::DatabaseTask* task);
-
-  // Returns true if not aborted/completed/failed.
-  bool IsActive(const BackgroundFetchRegistrationId& registration_id);
+  // DatabaseTaskHost implementation.
+  void OnTaskFinished(background_fetch::DatabaseTask* task) override;
+  BackgroundFetchDataManager* data_manager() override;
 
   void Cleanup();
 
+  // Whether Shutdown was called on BackgroundFetchContext.
+  bool shutting_down_ = false;
+
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
+
+  scoped_refptr<CacheStorageContextImpl> cache_storage_context_;
+
+  // The BackgroundFetch stores its own reference to CacheStorageManager
+  // in case StoragePartitionImpl is destoyed, which releases the reference.
+  scoped_refptr<CacheStorageManager> cache_manager_;
 
   // The blob storage request with which response information will be stored.
   scoped_refptr<ChromeBlobStorageContext> blob_storage_context_;
 
-  // Map from {service_worker_registration_id, origin, developer_id} tuples to
-  // the |unique_id|s of active background fetch registrations (not
-  // completed/failed/aborted, so there will never be more than one entry for a
-  // given key).
-  std::map<std::tuple<int64_t, url::Origin, std::string>, std::string>
-      active_registration_unique_ids_;
-
-  // Map from the |unique_id|s of known (but possibly inactive) background fetch
-  // registrations to their associated data.
-  std::map<std::string, std::unique_ptr<RegistrationData>> registrations_;
-
   // Pending database operations, serialized to ensure consistency.
   // Invariant: the frontmost task, if any, has already been started.
   base::queue<std::unique_ptr<background_fetch::DatabaseTask>> database_tasks_;
+
+  base::ObserverList<BackgroundFetchDataManagerObserver> observers_;
 
   // The |unique_id|s of registrations that have been deactivated since the
   // browser was last started. They will be automatically deleted when the

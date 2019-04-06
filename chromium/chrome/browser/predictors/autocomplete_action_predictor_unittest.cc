@@ -29,8 +29,10 @@
 #include "components/history/core/browser/in_memory_database.h"
 #include "components/history/core/browser/url_database.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/autocomplete_result.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
@@ -85,6 +87,17 @@ struct TestUrlInfo {
     AutocompleteActionPredictor::ACTION_NONE }
 };
 
+GURL GenerateTestURL(size_t size) {
+  std::string prefix = "http://b/";
+  // Cannot generate an URL shorter than |prefix|.
+  DCHECK_GE(size, prefix.size());
+  size_t suffix_len = size - prefix.size();
+  std::string suffix(suffix_len, 'c');
+  GURL url(prefix + suffix);
+  DCHECK_EQ(url.spec().size(), size);
+  return url;
+}
+
 }  // end namespace
 
 namespace predictors {
@@ -120,11 +133,6 @@ class AutocompleteActionPredictorTest : public testing::Test {
   typedef AutocompleteActionPredictor::DBCacheMap DBCacheMap;
   typedef AutocompleteActionPredictor::DBIdCacheMap DBIdCacheMap;
 
-  void AddAllRowsToHistory() {
-    for (size_t i = 0; i < arraysize(test_url_db); ++i)
-      ASSERT_TRUE(AddRowToHistory(test_url_db[i]));
-  }
-
   history::URLID AddRowToHistory(const TestUrlInfo& test_row) {
     history::HistoryService* history = HistoryServiceFactory::GetForProfile(
         profile_.get(), ServiceAccessType::EXPLICIT_ACCESS);
@@ -155,7 +163,7 @@ class AutocompleteActionPredictorTest : public testing::Test {
   }
 
   void AddAllRows() {
-    for (size_t i = 0; i < arraysize(test_url_db); ++i)
+    for (size_t i = 0; i < base::size(test_url_db); ++i)
       AddRow(test_url_db[i]);
   }
 
@@ -177,12 +185,66 @@ class AutocompleteActionPredictorTest : public testing::Test {
         AutocompleteActionPredictorTable::Rows(1, row));
   }
 
+  void OnURLsDeletedTest(bool expired) {
+    ASSERT_NO_FATAL_FAILURE(AddAllRows());
+
+    EXPECT_EQ(base::size(test_url_db), db_cache()->size());
+    EXPECT_EQ(base::size(test_url_db), db_id_cache()->size());
+
+    std::vector<size_t> expected;
+    history::URLRows rows;
+    for (size_t i = 0; i < base::size(test_url_db); ++i) {
+      bool expect_deleted = false;
+
+      if (i < 2) {
+        rows.push_back(history::URLRow(test_url_db[i].url));
+        expect_deleted = true;
+      }
+
+      if (!expired &&
+          test_url_db[i].days_from_now > maximum_days_to_keep_entry()) {
+        expect_deleted = true;
+      }
+
+      if (i != 3 && i != 4)
+        ASSERT_TRUE(AddRowToHistory(test_url_db[i]));
+      else if (!expired)
+        expect_deleted = true;
+
+      if (!expect_deleted)
+        expected.push_back(i);
+    }
+
+    history::HistoryService* history_service =
+        HistoryServiceFactory::GetForProfile(
+            profile_.get(), ServiceAccessType::EXPLICIT_ACCESS);
+    ASSERT_TRUE(history_service);
+
+    predictor_->OnURLsDeleted(
+        history_service,
+        history::DeletionInfo(history::DeletionTimeRange::Invalid(), expired,
+                              rows, std::set<GURL>(), base::nullopt));
+
+    EXPECT_EQ(expected.size(), db_cache()->size());
+    EXPECT_EQ(expected.size(), db_id_cache()->size());
+
+    for (size_t i = 0; i < base::size(test_url_db); ++i) {
+      DBCacheKey key = {test_url_db[i].user_text, test_url_db[i].url};
+
+      bool deleted = !base::ContainsValue(expected, i);
+      EXPECT_EQ(deleted, db_cache()->find(key) == db_cache()->end());
+      EXPECT_EQ(deleted, db_id_cache()->find(key) == db_id_cache()->end());
+    }
+  }
+
   void DeleteAllRows() {
     predictor_->DeleteAllRows();
   }
 
-  void DeleteRowsWithURLs(const history::URLRows& rows) {
-    predictor_->DeleteRowsWithURLs(rows);
+  void DeleteRowsFromCaches(
+      const history::URLRows& rows,
+      std::vector<AutocompleteActionPredictorTable::Row::Id>* id_list) {
+    predictor_->DeleteRowsFromCaches(rows, id_list);
   }
 
   void DeleteOldIdsFromCaches(
@@ -195,10 +257,6 @@ class AutocompleteActionPredictorTest : public testing::Test {
     history::URLDatabase* url_db = history_service->InMemoryDatabase();
     ASSERT_TRUE(url_db);
 
-    // Reset the predictor's |initialized_| flag for the life of this call,
-    // since outside of testing this function is only supposed to be reached
-    // before initialization is completed.
-    base::AutoReset<bool> initialized_reset(&predictor_->initialized_, false);
     predictor_->DeleteOldIdsFromCaches(url_db, id_list);
   }
 
@@ -206,9 +264,21 @@ class AutocompleteActionPredictorTest : public testing::Test {
 
   DBCacheMap* db_cache() { return &predictor_->db_cache_; }
   DBIdCacheMap* db_id_cache() { return &predictor_->db_id_cache_; }
+  std::vector<AutocompleteActionPredictor::TransitionalMatch>*
+  transitional_matches() {
+    return &predictor_->transitional_matches_;
+  }
 
   static int maximum_days_to_keep_entry() {
     return AutocompleteActionPredictor::kMaximumDaysToKeepEntry;
+  }
+
+  static size_t minimum_user_text_length() {
+    return AutocompleteActionPredictor::kMinimumUserTextLength;
+  }
+
+  static size_t maximum_string_length() {
+    return AutocompleteActionPredictor::kMaximumStringLength;
   }
 
  private:
@@ -240,8 +310,8 @@ TEST_F(AutocompleteActionPredictorTest, AddRow) {
 TEST_F(AutocompleteActionPredictorTest, UpdateRow) {
   ASSERT_NO_FATAL_FAILURE(AddAllRows());
 
-  EXPECT_EQ(arraysize(test_url_db), db_cache()->size());
-  EXPECT_EQ(arraysize(test_url_db), db_id_cache()->size());
+  EXPECT_EQ(base::size(test_url_db), db_cache()->size());
+  EXPECT_EQ(base::size(test_url_db), db_id_cache()->size());
 
   // Get the data back out of the cache.
   const DBCacheKey key = { test_url_db[0].user_text, test_url_db[0].url };
@@ -276,8 +346,8 @@ TEST_F(AutocompleteActionPredictorTest, UpdateRow) {
 TEST_F(AutocompleteActionPredictorTest, DeleteAllRows) {
   ASSERT_NO_FATAL_FAILURE(AddAllRows());
 
-  EXPECT_EQ(arraysize(test_url_db), db_cache()->size());
-  EXPECT_EQ(arraysize(test_url_db), db_id_cache()->size());
+  EXPECT_EQ(base::size(test_url_db), db_cache()->size());
+  EXPECT_EQ(base::size(test_url_db), db_id_cache()->size());
 
   DeleteAllRows();
 
@@ -285,27 +355,34 @@ TEST_F(AutocompleteActionPredictorTest, DeleteAllRows) {
   EXPECT_TRUE(db_id_cache()->empty());
 }
 
-TEST_F(AutocompleteActionPredictorTest, DeleteRowsWithURLs) {
-  ASSERT_NO_FATAL_FAILURE(AddAllRows());
-
-  EXPECT_EQ(arraysize(test_url_db), db_cache()->size());
-  EXPECT_EQ(arraysize(test_url_db), db_id_cache()->size());
-
+TEST_F(AutocompleteActionPredictorTest, DeleteRowsFromCaches) {
+  std::vector<AutocompleteActionPredictorTable::Row::Id> all_ids;
   history::URLRows rows;
-  for (size_t i = 0; i < 2; ++i)
-    rows.push_back(history::URLRow(test_url_db[i].url));
+  for (size_t i = 0; i < base::size(test_url_db); ++i) {
+    std::string row_id = AddRow(test_url_db[i]);
+    all_ids.push_back(row_id);
 
-  DeleteRowsWithURLs(rows);
+    if (i < 2)
+      rows.push_back(history::URLRow(test_url_db[i].url));
+  }
 
-  EXPECT_EQ(arraysize(test_url_db) - 2, db_cache()->size());
-  EXPECT_EQ(arraysize(test_url_db) - 2, db_id_cache()->size());
+  EXPECT_EQ(base::size(test_url_db), all_ids.size());
+  EXPECT_EQ(base::size(test_url_db), db_cache()->size());
+  EXPECT_EQ(base::size(test_url_db), db_id_cache()->size());
 
-  for (size_t i = 0; i < arraysize(test_url_db); ++i) {
+  std::vector<AutocompleteActionPredictorTable::Row::Id> id_list;
+  DeleteRowsFromCaches(rows, &id_list);
+
+  EXPECT_EQ(base::size(test_url_db) - 2, db_cache()->size());
+  EXPECT_EQ(base::size(test_url_db) - 2, db_id_cache()->size());
+
+  for (size_t i = 0; i < base::size(test_url_db); ++i) {
     DBCacheKey key = { test_url_db[i].user_text, test_url_db[i].url };
 
     bool deleted = (i < 2);
     EXPECT_EQ(deleted, db_cache()->find(key) == db_cache()->end());
     EXPECT_EQ(deleted, db_id_cache()->find(key) == db_id_cache()->end());
+    EXPECT_EQ(deleted, base::ContainsValue(id_list, all_ids[i]));
   }
 }
 
@@ -313,7 +390,7 @@ TEST_F(AutocompleteActionPredictorTest, DeleteOldIdsFromCaches) {
   std::vector<AutocompleteActionPredictorTable::Row::Id> expected;
   std::vector<AutocompleteActionPredictorTable::Row::Id> all_ids;
 
-  for (size_t i = 0; i < arraysize(test_url_db); ++i) {
+  for (size_t i = 0; i < base::size(test_url_db); ++i) {
     std::string row_id = AddRow(test_url_db[i]);
     all_ids.push_back(row_id);
 
@@ -334,13 +411,19 @@ TEST_F(AutocompleteActionPredictorTest, DeleteOldIdsFromCaches) {
   EXPECT_EQ(all_ids.size() - expected.size(), db_cache()->size());
   EXPECT_EQ(all_ids.size() - expected.size(), db_id_cache()->size());
 
-  for (std::vector<AutocompleteActionPredictorTable::Row::Id>::iterator it =
-       all_ids.begin();
-       it != all_ids.end(); ++it) {
+  for (auto it = all_ids.begin(); it != all_ids.end(); ++it) {
     bool in_expected = base::ContainsValue(expected, *it);
     bool in_list = base::ContainsValue(id_list, *it);
     EXPECT_EQ(in_expected, in_list);
   }
+}
+
+TEST_F(AutocompleteActionPredictorTest, OnURLsDeletedExpired) {
+  OnURLsDeletedTest(true);
+}
+
+TEST_F(AutocompleteActionPredictorTest, OnURLsDeletedNonExpired) {
+  OnURLsDeletedTest(false);
 }
 
 TEST_F(AutocompleteActionPredictorTest, RecommendActionURL) {
@@ -352,7 +435,7 @@ TEST_F(AutocompleteActionPredictorTest, RecommendActionURL) {
   prerender::PrerenderManager::SetMode(
       prerender::PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
 
-  for (size_t i = 0; i < arraysize(test_url_db); ++i) {
+  for (size_t i = 0; i < base::size(test_url_db); ++i) {
     match.destination_url = GURL(test_url_db[i].url);
     EXPECT_EQ(test_url_db[i].expected_action,
               predictor()->RecommendAction(test_url_db[i].user_text, match))
@@ -369,7 +452,7 @@ TEST_F(AutocompleteActionPredictorTest, RecommendActionSearch) {
   prerender::PrerenderManager::SetMode(
       prerender::PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
 
-  for (size_t i = 0; i < arraysize(test_url_db); ++i) {
+  for (size_t i = 0; i < base::size(test_url_db); ++i) {
     match.destination_url = GURL(test_url_db[i].url);
     AutocompleteActionPredictor::Action expected_action =
         (test_url_db[i].expected_action ==
@@ -380,6 +463,55 @@ TEST_F(AutocompleteActionPredictorTest, RecommendActionSearch) {
               predictor()->RecommendAction(test_url_db[i].user_text, match))
         << "Unexpected action for " << match.destination_url;
   }
+}
+
+TEST_F(AutocompleteActionPredictorTest,
+       RegisterTransitionalMatchesUserTextSizeLimits) {
+  auto test = [this](const base::string16& user_text,
+                     bool should_be_registered) {
+    predictor()->RegisterTransitionalMatches(user_text, AutocompleteResult());
+    bool registered = (std::find(transitional_matches()->begin(),
+                                 transitional_matches()->end(),
+                                 user_text) != transitional_matches()->end());
+    EXPECT_EQ(registered, should_be_registered);
+  };
+
+  base::string16 short_text =
+      ASCIIToUTF16(std::string(minimum_user_text_length(), 'g'));
+  test(short_text, true);
+
+  base::string16 too_short_text =
+      ASCIIToUTF16(std::string(minimum_user_text_length() - 1, 'g'));
+  test(too_short_text, false);
+
+  base::string16 long_text =
+      ASCIIToUTF16(std::string(maximum_string_length(), 'g'));
+  test(long_text, true);
+
+  base::string16 too_long_text =
+      ASCIIToUTF16(std::string(maximum_string_length() + 1, 'g'));
+  test(too_long_text, false);
+}
+
+TEST_F(AutocompleteActionPredictorTest,
+       RegisterTransitionalMatchesURLSizeLimits) {
+  GURL urls[] = {GenerateTestURL(10), GenerateTestURL(maximum_string_length()),
+                 GenerateTestURL(maximum_string_length() + 1),
+                 GenerateTestURL(maximum_string_length() * 10)};
+  ACMatches matches;
+  for (const auto& url : urls) {
+    AutocompleteMatch match;
+    match.destination_url = url;
+    matches.push_back(match);
+  }
+  AutocompleteResult result;
+  result.AppendMatches(AutocompleteInput(), matches);
+  base::string16 user_text = ASCIIToUTF16("google");
+  predictor()->RegisterTransitionalMatches(user_text, result);
+  auto it = std::find(transitional_matches()->begin(),
+                      transitional_matches()->end(), user_text);
+  ASSERT_NE(it, transitional_matches()->end());
+  EXPECT_THAT(it->urls, ::testing::ElementsAre(urls[0], urls[1]));
 }
 
 }  // namespace predictors

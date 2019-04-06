@@ -12,7 +12,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
@@ -53,7 +52,8 @@ class CloudPolicyValidatorTest : public testing::Test {
         existing_dm_token_(PolicyBuilder::kFakeToken),
         existing_device_id_(PolicyBuilder::kFakeDeviceId),
         owning_domain_(PolicyBuilder::kFakeDomain),
-        cached_key_signature_(PolicyBuilder::GetTestSigningKeySignature()) {
+        cached_key_signature_(PolicyBuilder::GetTestSigningKeySignature()),
+        validate_by_gaia_id_(true) {
     policy_.SetDefaultNewSigningKey();
   }
 
@@ -70,8 +70,8 @@ class CloudPolicyValidatorTest : public testing::Test {
         CreateValidator(std::move(policy_response));
 
     // Run validation and check the result.
-    EXPECT_CALL(*this, ValidationCompletion(validator.get())).WillOnce(
-        check_action);
+    EXPECT_CALL(*this, ValidationCompletion(validator.get()))
+        .WillOnce(check_action);
     UserCloudPolicyValidator::StartValidation(
         std::move(validator),
         base::Bind(&CloudPolicyValidatorTest::ValidationCompletion,
@@ -85,19 +85,22 @@ class CloudPolicyValidatorTest : public testing::Test {
     std::string public_key = PolicyBuilder::GetPublicTestKeyAsString();
     EXPECT_FALSE(public_key.empty());
 
-    std::unique_ptr<UserCloudPolicyValidator> validator =
-        UserCloudPolicyValidator::Create(std::move(policy_response),
-                                         base::ThreadTaskRunnerHandle::Get());
+    auto validator = std::make_unique<UserCloudPolicyValidator>(
+        std::move(policy_response), base::ThreadTaskRunnerHandle::Get());
     validator->ValidateTimestamp(timestamp_, timestamp_option_);
-    validator->ValidateUsername(PolicyBuilder::kFakeUsername, true);
+    if (validate_by_gaia_id_) {
+      validator->ValidateUser(
+          AccountId::FromGaiaId(PolicyBuilder::kFakeGaiaId));
+    } else {
+      validator->ValidateUsername(PolicyBuilder::kFakeUsername, true);
+    }
     if (!owning_domain_.empty())
       validator->ValidateDomain(owning_domain_);
     validator->ValidateDMToken(existing_dm_token_, dm_token_option_);
     validator->ValidateDeviceId(existing_device_id_, device_id_option_);
     validator->ValidatePolicyType(dm_protocol::kChromeUserPolicyType);
     validator->ValidatePayload();
-    validator->ValidateCachedKey(public_key,
-                                 cached_key_signature_,
+    validator->ValidateCachedKey(public_key, cached_key_signature_,
                                  owning_domain_);
     if (allow_key_rotation_) {
       validator->ValidateSignatureAllowingRotation(public_key, owning_domain_);
@@ -107,7 +110,6 @@ class CloudPolicyValidatorTest : public testing::Test {
     }
     return validator;
   }
-
 
   void CheckSuccessfulValidation(UserCloudPolicyValidator* validator) {
     EXPECT_TRUE(validator->success());
@@ -130,6 +132,7 @@ class CloudPolicyValidatorTest : public testing::Test {
   std::string existing_device_id_;
   std::string owning_domain_;
   std::string cached_key_signature_;
+  bool validate_by_gaia_id_;
 
   UserPolicyBuilder policy_;
 
@@ -284,13 +287,31 @@ TEST_F(CloudPolicyValidatorTest, ErrorInvalidPolicyValue) {
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorNoUsername) {
+  validate_by_gaia_id_ = false;
   policy_.policy_data().clear_username();
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_USERNAME));
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_USER));
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorInvalidUsername) {
+  validate_by_gaia_id_ = false;
   policy_.policy_data().set_username("invalid@example.com");
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_USERNAME));
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_USER));
+}
+
+TEST_F(CloudPolicyValidatorTest, SuccessfulByUsername) {
+  validate_by_gaia_id_ = false;
+  policy_.policy_data().clear_gaia_id();
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_OK));
+}
+
+TEST_F(CloudPolicyValidatorTest, ErrorNoGaiaId) {
+  policy_.policy_data().clear_gaia_id();
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_USER));
+}
+
+TEST_F(CloudPolicyValidatorTest, ErrorInvalidGaiaId) {
+  policy_.policy_data().set_gaia_id("other-gaia-id");
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_USER));
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorErrorMessage) {
@@ -354,9 +375,10 @@ TEST_F(CloudPolicyValidatorTest, ErrorInvalidPublicKeyVerificationSignature) {
   policy_.Build();
   policy_.policy().set_new_public_key_verification_signature_deprecated(
       "invalid");
-  ValidatePolicy(CheckStatus(
-      CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE),
-                 policy_.GetCopy());
+  ValidatePolicy(
+      CheckStatus(
+          CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE),
+      policy_.GetCopy());
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorDomainMismatchForKeyVerification) {
@@ -364,9 +386,10 @@ TEST_F(CloudPolicyValidatorTest, ErrorDomainMismatchForKeyVerification) {
   // Generate a non-matching owning_domain, which should cause a validation
   // failure.
   owning_domain_ = "invalid.com";
-  ValidatePolicy(CheckStatus(
-      CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE),
-                 policy_.GetCopy());
+  ValidatePolicy(
+      CheckStatus(
+          CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE),
+      policy_.GetCopy());
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorDomainExtractedFromUsernameMismatch) {
@@ -377,9 +400,10 @@ TEST_F(CloudPolicyValidatorTest, ErrorDomainExtractedFromUsernameMismatch) {
   // Pass an empty domain to tell validator to extract the domain from the
   // policy's |username| field.
   owning_domain_ = "";
-  ValidatePolicy(CheckStatus(
-      CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE),
-                 policy_.GetCopy());
+  ValidatePolicy(
+      CheckStatus(
+          CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE),
+      policy_.GetCopy());
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorNoCachedKeySignature) {

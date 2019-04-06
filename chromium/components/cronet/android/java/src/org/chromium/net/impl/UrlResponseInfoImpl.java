@@ -79,10 +79,12 @@ public final class UrlResponseInfoImpl extends UrlResponseInfo {
      *         otherwise.
      * @param negotiatedProtocol the protocol negotiated with the server.
      * @param proxyServer the proxy server that was used for the request.
+     * @param receivedByteCount minimum count of bytes received from the network to process this
+     *         request.
      */
     public UrlResponseInfoImpl(List<String> urlChain, int httpStatusCode, String httpStatusText,
             List<Map.Entry<String, String>> allHeadersList, boolean wasCached,
-            String negotiatedProtocol, String proxyServer) {
+            String negotiatedProtocol, String proxyServer, long receivedByteCount) {
         mResponseInfoUrlChain = Collections.unmodifiableList(urlChain);
         mHttpStatusCode = httpStatusCode;
         mHttpStatusText = httpStatusText;
@@ -90,7 +92,18 @@ public final class UrlResponseInfoImpl extends UrlResponseInfo {
         mWasCached = wasCached;
         mNegotiatedProtocol = negotiatedProtocol;
         mProxyServer = proxyServer;
-        mReceivedByteCount = new AtomicLong();
+        mReceivedByteCount = new AtomicLong(receivedByteCount);
+    }
+
+    /**
+     * Constructor for backwards compatibility.  See main constructor above for more info.
+     */
+    @Deprecated
+    public UrlResponseInfoImpl(List<String> urlChain, int httpStatusCode, String httpStatusText,
+            List<Map.Entry<String, String>> allHeadersList, boolean wasCached,
+            String negotiatedProtocol, String proxyServer) {
+        this(urlChain, httpStatusCode, httpStatusText, allHeadersList, wasCached,
+                negotiatedProtocol, proxyServer, 0);
     }
 
     @Override

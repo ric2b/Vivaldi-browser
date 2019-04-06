@@ -9,7 +9,6 @@
 #include "base/sequenced_task_runner.h"
 #include "storage/browser/fileapi/file_system_usage_cache.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend_delegate.h"
-#include "storage/browser/fileapi/timed_task_helper.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/common/fileapi/file_system_util.h"
@@ -42,10 +41,8 @@ void SandboxQuotaObserver::OnUpdate(const FileSystemURL& url, int64_t delta) {
 
   if (quota_manager_proxy_.get()) {
     quota_manager_proxy_->NotifyStorageModified(
-        storage::QuotaClient::kFileSystem,
-        url.origin(),
-        FileSystemTypeToQuotaStorageType(url.type()),
-        delta);
+        storage::QuotaClient::kFileSystem, url::Origin::Create(url.origin()),
+        FileSystemTypeToQuotaStorageType(url.type()), delta);
   }
 
   base::FilePath usage_file_path = GetUsageCachePath(url);
@@ -53,10 +50,8 @@ void SandboxQuotaObserver::OnUpdate(const FileSystemURL& url, int64_t delta) {
     return;
 
   pending_update_notification_[usage_file_path] += delta;
-  if (!delayed_cache_update_helper_) {
-    delayed_cache_update_helper_.reset(
-        new TimedTaskHelper(update_notify_runner_.get()));
-    delayed_cache_update_helper_->Start(
+  if (!delayed_cache_update_helper_.IsRunning()) {
+    delayed_cache_update_helper_.Start(
         FROM_HERE,
         base::TimeDelta(),  // No delay.
         base::Bind(&SandboxQuotaObserver::ApplyPendingUsageUpdate,
@@ -84,8 +79,7 @@ void SandboxQuotaObserver::OnEndUpdate(const FileSystemURL& url) {
 void SandboxQuotaObserver::OnAccess(const FileSystemURL& url) {
   if (quota_manager_proxy_.get()) {
     quota_manager_proxy_->NotifyStorageAccessed(
-        storage::QuotaClient::kFileSystem,
-        url.origin(),
+        storage::QuotaClient::kFileSystem, url::Origin::Create(url.origin()),
         FileSystemTypeToQuotaStorageType(url.type()));
   }
 }
@@ -96,10 +90,8 @@ void SandboxQuotaObserver::SetUsageCacheEnabled(
     bool enabled) {
   if (quota_manager_proxy_.get()) {
     quota_manager_proxy_->SetUsageCacheEnabled(
-        storage::QuotaClient::kFileSystem,
-        origin,
-        FileSystemTypeToQuotaStorageType(type),
-        enabled);
+        storage::QuotaClient::kFileSystem, url::Origin::Create(origin),
+        FileSystemTypeToQuotaStorageType(type), enabled);
   }
 }
 
@@ -119,13 +111,9 @@ base::FilePath SandboxQuotaObserver::GetUsageCachePath(
 }
 
 void SandboxQuotaObserver::ApplyPendingUsageUpdate() {
-  delayed_cache_update_helper_.reset();
-  for (PendingUpdateNotificationMap::iterator itr =
-           pending_update_notification_.begin();
-       itr != pending_update_notification_.end();
-       ++itr) {
-    UpdateUsageCacheFile(itr->first, itr->second);
-  }
+  delayed_cache_update_helper_.Stop();
+  for (const auto& path_delta_pair : pending_update_notification_)
+    UpdateUsageCacheFile(path_delta_pair.first, path_delta_pair.second);
   pending_update_notification_.clear();
 }
 

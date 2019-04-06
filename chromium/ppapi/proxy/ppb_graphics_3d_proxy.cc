@@ -29,11 +29,10 @@ namespace proxy {
 namespace {
 
 #if !defined(OS_NACL)
-base::SharedMemoryHandle TransportSHMHandle(
+base::UnsafeSharedMemoryRegion TransportSHMHandle(
     Dispatcher* dispatcher,
-    const base::SharedMemoryHandle& handle) {
-  // Don't close the handle, it doesn't belong to us.
-  return dispatcher->ShareSharedMemoryHandleWithRemote(handle);
+    const base::UnsafeSharedMemoryRegion& region) {
+  return dispatcher->ShareUnsafeSharedMemoryRegionWithRemote(region);
 }
 #endif  // !defined(OS_NACL)
 
@@ -45,9 +44,10 @@ gpu::CommandBuffer::State GetErrorState() {
 
 }  // namespace
 
-Graphics3D::Graphics3D(const HostResource& resource, const gfx::Size& size)
-    : PPB_Graphics3D_Shared(resource, size) {
-}
+Graphics3D::Graphics3D(const HostResource& resource,
+                       const gfx::Size& size,
+                       const bool single_buffer)
+    : PPB_Graphics3D_Shared(resource, size), single_buffer(single_buffer) {}
 
 Graphics3D::~Graphics3D() {
   DestroyGLES2Impl();
@@ -55,15 +55,18 @@ Graphics3D::~Graphics3D() {
 
 bool Graphics3D::Init(gpu::gles2::GLES2Implementation* share_gles2,
                       const gpu::Capabilities& capabilities,
-                      const SerializedHandle& shared_state,
+                      SerializedHandle shared_state,
                       gpu::CommandBufferId command_buffer_id) {
   PluginDispatcher* dispatcher = PluginDispatcher::GetForResource(this);
   if (!dispatcher)
     return false;
 
+  InstanceData* data = dispatcher->GetInstanceData(host_resource().instance());
+  DCHECK(data);
+
   command_buffer_.reset(new PpapiCommandBufferProxy(
-      host_resource(), dispatcher, capabilities, shared_state,
-      command_buffer_id));
+      host_resource(), &data->flush_info, dispatcher, capabilities,
+      std::move(shared_state), command_buffer_id));
 
   return CreateGLES2Impl(share_gles2);
 }
@@ -121,11 +124,13 @@ int32_t Graphics3D::DoSwapBuffers(const gpu::SyncToken& sync_token,
   DCHECK(!sync_token.HasData());
 
   gpu::gles2::GLES2Implementation* gl = gles2_impl();
-  gl->SwapBuffers();
+  gl->SwapBuffers(swap_id_++);
 
-  PluginDispatcher::GetForResource(this)->Send(
-      new PpapiHostMsg_PPBGraphics3D_TakeFrontBuffer(API_ID_PPB_GRAPHICS_3D,
-                                                     host_resource()));
+  if (!single_buffer || swap_id_ == 1) {
+    PluginDispatcher::GetForResource(this)->Send(
+        new PpapiHostMsg_PPBGraphics3D_TakeFrontBuffer(API_ID_PPB_GRAPHICS_3D,
+                                                       host_resource()));
+  }
 
   gpu::SyncToken new_sync_token;
   gl->GenSyncTokenCHROMIUM(new_sync_token.GetData());
@@ -237,8 +242,9 @@ PP_Resource PPB_Graphics3D_Proxy::CreateProxyResource(
     return 0;
 
   scoped_refptr<Graphics3D> graphics_3d(
-      new Graphics3D(result, attrib_helper.offscreen_framebuffer_size));
-  if (!graphics_3d->Init(share_gles2, capabilities, shared_state,
+      new Graphics3D(result, attrib_helper.offscreen_framebuffer_size,
+                     attrib_helper.single_buffer));
+  if (!graphics_3d->Init(share_gles2, capabilities, std::move(shared_state),
                          command_buffer_id)) {
     return 0;
   }
@@ -295,14 +301,15 @@ void PPB_Graphics3D_Proxy::OnMsgCreate(
   if (!enter.succeeded())
     return;
 
-  base::SharedMemoryHandle handle;
+  const base::UnsafeSharedMemoryRegion* region = nullptr;
   result->SetHostResource(
       instance, enter.functions()->CreateGraphics3DRaw(
                     instance, share_context.host_resource(), attrib_helper,
-                    capabilities, &handle, command_buffer_id));
+                    capabilities, &region, command_buffer_id));
   if (!result->is_null()) {
-    shared_state->set_shmem(TransportSHMHandle(dispatcher(), handle),
-                            sizeof(gpu::CommandBuffer::State));
+    shared_state->set_shmem_region(
+        base::UnsafeSharedMemoryRegion::TakeHandleForSerialization(
+            TransportSHMHandle(dispatcher(), *region)));
   }
 }
 
@@ -357,7 +364,7 @@ void PPB_Graphics3D_Proxy::OnMsgCreateTransferBuffer(
     uint32_t size,
     int32_t* id,
     SerializedHandle* transfer_buffer) {
-  transfer_buffer->set_null_shmem();
+  transfer_buffer->set_null_shmem_region();
   EnterHostFromHostResource<PPB_Graphics3D_API> enter(context);
   if (enter.succeeded()) {
     scoped_refptr<gpu::Buffer> buffer =
@@ -366,10 +373,10 @@ void PPB_Graphics3D_Proxy::OnMsgCreateTransferBuffer(
       return;
     gpu::SharedMemoryBufferBacking* backing =
         static_cast<gpu::SharedMemoryBufferBacking*>(buffer->backing());
-    DCHECK(backing && backing->shared_memory());
-    transfer_buffer->set_shmem(
-        TransportSHMHandle(dispatcher(), backing->shared_memory()->handle()),
-        base::checked_cast<uint32_t>(buffer->size()));
+    DCHECK(backing && backing->shared_memory_region().IsValid());
+    transfer_buffer->set_shmem_region(
+        base::UnsafeSharedMemoryRegion::TakeHandleForSerialization(
+            TransportSHMHandle(dispatcher(), backing->shared_memory_region())));
   } else {
     *id = -1;
   }

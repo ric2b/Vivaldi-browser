@@ -8,6 +8,7 @@
 
 #include "base/process/process_handle.h"
 #include "base/time/time.h"
+#include "services/resource_coordinator/coordination_unit/coordination_unit_graph.h"
 #include "services/resource_coordinator/coordination_unit/frame_coordination_unit_impl.h"
 #include "services/resource_coordinator/coordination_unit/page_coordination_unit_impl.h"
 #include "services/resource_coordinator/coordination_unit/process_coordination_unit_impl.h"
@@ -15,15 +16,17 @@
 
 namespace resource_coordinator {
 
-CoordinationUnitIntrospectorImpl::CoordinationUnitIntrospectorImpl() = default;
+CoordinationUnitIntrospectorImpl::CoordinationUnitIntrospectorImpl(
+    CoordinationUnitGraph* graph)
+    : graph_(graph) {}
 
 CoordinationUnitIntrospectorImpl::~CoordinationUnitIntrospectorImpl() = default;
 
 void CoordinationUnitIntrospectorImpl::GetProcessToURLMap(
-    const GetProcessToURLMapCallback& callback) {
+    GetProcessToURLMapCallback callback) {
   std::vector<resource_coordinator::mojom::ProcessInfoPtr> process_infos;
   std::vector<ProcessCoordinationUnitImpl*> process_cus =
-      ProcessCoordinationUnitImpl::GetAllProcessCoordinationUnits();
+      graph_->GetAllProcessCoordinationUnits();
   for (auto* process_cu : process_cus) {
     int64_t pid;
     if (!process_cu->GetProperty(mojom::PropertyType::kPID, &pid))
@@ -59,7 +62,7 @@ void CoordinationUnitIntrospectorImpl::GetProcessToURLMap(
     }
     process_infos.push_back(std::move(process_info));
   }
-  callback.Run(std::move(process_infos));
+  std::move(callback).Run(std::move(process_infos));
 }
 
 void CoordinationUnitIntrospectorImpl::BindToInterface(

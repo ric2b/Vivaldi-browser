@@ -35,7 +35,7 @@ static const char kModelOffline[] = "Offline";
 
 static const char kRequestLineFormat[] = "GET %s HTTP/1.1";
 
-net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+net::NetworkTrafficAnnotationTag kAndroidDeviceManagerTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("android_device_manager_socket", R"(
         semantics {
           sender: "Android Device Manager"
@@ -85,7 +85,7 @@ static void PostHttpUpgradeCallback(
     std::unique_ptr<net::StreamSocket> socket) {
   response_task_runner->PostTask(
       FROM_HERE, base::BindOnce(callback, result, extensions, body_head,
-                                base::Passed(&socket)));
+                                std::move(socket)));
 }
 
 class HttpRequest {
@@ -167,7 +167,7 @@ class HttpRequest {
       result = socket_->Write(
           request_.get(), request_->BytesRemaining(),
           base::Bind(&HttpRequest::DoSendRequest, base::Unretained(this)),
-          kTrafficAnnotation);
+          kAndroidDeviceManagerTrafficAnnotation);
     }
   }
 
@@ -357,7 +357,7 @@ class DevicesRequest : public base::RefCountedThreadSafe<DevicesRequest> {
   friend class base::RefCountedThreadSafe<DevicesRequest>;
   ~DevicesRequest() {
     response_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(callback_, base::Passed(&descriptors_)));
+        FROM_HERE, base::BindOnce(callback_, std::move(descriptors_)));
   }
 
   typedef std::vector<std::string> Serials;

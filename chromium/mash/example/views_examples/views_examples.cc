@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "mash/public/interfaces/launchable.mojom.h"
+#include "mash/public/mojom/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -31,10 +31,11 @@ class ViewsExamples : public service_manager::Service,
  private:
   // service_manager::Service:
   void OnStart() override {
-    aura_init_ =
-        views::AuraInit::Create(context()->connector(), context()->identity(),
-                                "views_mus_resources.pak", std::string(),
-                                nullptr, views::AuraInit::Mode::AURA_MUS);
+    views::AuraInit::InitParams params;
+    params.connector = context()->connector();
+    params.identity = context()->identity();
+    params.mode = views::AuraInit::Mode::AURA_MUS;
+    aura_init_ = views::AuraInit::Create(params);
     if (!aura_init_)
       context()->QuitNow();
   }

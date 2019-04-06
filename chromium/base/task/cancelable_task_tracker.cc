@@ -8,6 +8,8 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
@@ -68,8 +70,7 @@ CancelableTaskTracker::TaskId CancelableTaskTracker::PostTask(
     OnceClosure task) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
-  return PostTaskAndReply(task_runner, from_here, std::move(task),
-                          BindOnce(&DoNothing));
+  return PostTaskAndReply(task_runner, from_here, std::move(task), DoNothing());
 }
 
 CancelableTaskTracker::TaskId CancelableTaskTracker::PostTaskAndReply(
@@ -120,9 +121,9 @@ CancelableTaskTracker::TaskId CancelableTaskTracker::NewTrackedTaskId(
 
   // Will always run |untrack_and_delete_flag| on current sequence.
   ScopedClosureRunner* untrack_and_delete_flag_runner =
-      new ScopedClosureRunner(Bind(
+      new ScopedClosureRunner(BindOnce(
           &RunOrPostToTaskRunner, RetainedRef(SequencedTaskRunnerHandle::Get()),
-          Passed(&untrack_and_delete_flag)));
+          std::move(untrack_and_delete_flag)));
 
   *is_canceled_cb =
       Bind(&IsCanceled, flag, Owned(untrack_and_delete_flag_runner));
@@ -151,6 +152,8 @@ void CancelableTaskTracker::TryCancelAll() {
   DCHECK(sequence_checker_.CalledOnValidSequence());
   for (const auto& it : task_flags_)
     it.second->Set();
+  weak_factory_.InvalidateWeakPtrs();
+  task_flags_.clear();
 }
 
 bool CancelableTaskTracker::HasTrackedTasks() const {

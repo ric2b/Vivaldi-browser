@@ -30,6 +30,14 @@ Notes_Node::Notes_Node(int64_t id)
 
 Notes_Node::~Notes_Node() {}
 
+void Notes_Node::SetType(Type type) {
+  type_ = type;
+  if (type == SEPARATOR && GetTitle().empty())
+    // Makes it easier to match for Sync
+    SetTitle(base::UTF8ToUTF16("--- SEPARATOR ") +
+             base::NumberToString16(creation_time_.ToInternalValue()));
+}
+
 std::unique_ptr<base::Value> Notes_Node::Encode(
     NotesCodec* checksummer,
     const std::vector<const Notes_Node*>* extra_nodes) const {
@@ -59,6 +67,9 @@ std::unique_ptr<base::Value> Notes_Node::Encode(
     case OTHER:
       type = "other";
       break;
+    case SEPARATOR:
+      type = "separator";
+      break;
     default:
       NOTREACHED();
       break;
@@ -81,12 +92,7 @@ std::unique_ptr<base::Value> Notes_Node::Encode(
       }
     }
     value->Set("children", std::move(children));
-  } else {
-    if (!filename_.empty()) {
-      value->SetString("filename", filename_);
-      checksummer->UpdateChecksum(filename_);
-    }
-
+  } else if (type_ == NOTE) {
     value->SetString("content", content_);
     checksummer->UpdateChecksum(content_);
 
@@ -157,17 +163,14 @@ bool Notes_Node::Decode(const base::DictionaryValue& d_input,
     return false;
   }
 
-  if (temp != "folder" && temp != "note" && temp != "trash" && temp != "other")
+  if (temp != "folder" && temp != "note" && temp != "trash" &&
+      temp != "other" && temp != "separator") {
     return false;
+  }
   checksummer->UpdateChecksum(temp);
 
   if (temp == "note") {
     type_ = NOTE;
-
-    if (d_input.GetString("filename", &filename_)) {
-      checksummer->UpdateChecksum(filename_);
-      // OK, load later
-    }
 
     if (!d_input.GetString("content", &content_))
       return false;
@@ -198,6 +201,8 @@ bool Notes_Node::Decode(const base::DictionaryValue& d_input,
       type_ = TRASH;
     else if (temp == "other")
       type_ = OTHER;
+    else if (temp == "separator")
+      type_ = SEPARATOR;
     else
       type_ = FOLDER;
 
@@ -212,7 +217,7 @@ bool Notes_Node::Decode(const base::DictionaryValue& d_input,
       if (!children->GetDictionary(i, &item))
         return false;
 
-      std::unique_ptr<Notes_Node> child = base::MakeUnique<Notes_Node>(0);
+      std::unique_ptr<Notes_Node> child = std::make_unique<Notes_Node>(0);
 
       child->Decode(*item, max_node_id, checksummer);
 

@@ -30,12 +30,20 @@ class PreviewsDecider {
       const net::URLRequest& request,
       PreviewsType type,
       net::EffectiveConnectionType effective_connection_type_threshold,
-      const std::vector<std::string>& host_blacklist_from_server) const = 0;
+      const std::vector<std::string>& host_blacklist_from_server,
+      bool ignore_long_term_black_list_rules) const = 0;
 
   // Same as ShouldAllowPreviewAtECT, but uses the previews default
   // EffectiveConnectionType and no blacklisted hosts from the server.
   virtual bool ShouldAllowPreview(const net::URLRequest& request,
                                   PreviewsType type) const = 0;
+
+  // Whether the URL in |request| is allowed to show a preview of |type|.
+  // This only considers whether the URL is constrained/allowed in
+  // blacklists/whitelists. It does not include other constraints such
+  // as the effective connection type.
+  virtual bool IsURLAllowedForPreview(const net::URLRequest& request,
+                                      PreviewsType type) const = 0;
 
  protected:
   PreviewsDecider() {}

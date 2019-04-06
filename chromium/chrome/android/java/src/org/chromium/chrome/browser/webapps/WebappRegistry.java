@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.webapps;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.os.AsyncTask;
 import android.text.TextUtils;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
@@ -120,7 +120,7 @@ public class WebappRegistry {
                 // Access the WebappDataStorage to force it to finish loading. A strict mode
                 // exception is thrown if the WebappDataStorage is accessed on the UI thread prior
                 // to the storage being fully loaded.
-                storage.getLastUsedTime();
+                storage.getLastUsedTimeMs();
                 return storage;
             }
 
@@ -235,7 +235,7 @@ public class WebappRegistry {
                         && isWebApkInstalled(webApkPackage)) {
                     continue;
                 }
-            } else if ((currentTime - storage.getLastUsedTime())
+            } else if ((currentTime - storage.getLastUsedTimeMs())
                     < WEBAPP_UNOPENED_CLEANUP_DURATION) {
                 continue;
             }

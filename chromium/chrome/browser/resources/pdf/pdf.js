@@ -22,6 +22,7 @@ function getScrollbarWidth() {
 
 /**
  * Return the filename component of a URL, percent decoded if possible.
+ *
  * @param {string} url The URL to get the filename from.
  * @return {string} The filename component.
  */
@@ -42,6 +43,7 @@ function getFilenameFromURL(url) {
 /**
  * Whether keydown events should currently be ignored. Events are ignored when
  * an editable element has focus, to allow for proper editing controls.
+ *
  * @param {HTMLElement} activeElement The currently selected DOM node.
  * @return {boolean} True if keydown events should be ignored.
  */
@@ -88,17 +90,19 @@ PDFViewer.DARK_BACKGROUND_COLOR = '0xFF525659';
 /**
  * Creates a new PDFViewer. There should only be one of these objects per
  * document.
- * @constructor
+ *
  * @param {!BrowserApi} browserApi An object providing an API to the browser.
+ * @constructor
  */
 function PDFViewer(browserApi) {
   this.browserApi_ = browserApi;
   this.originalUrl_ = this.browserApi_.getStreamInfo().originalUrl;
+  this.javascript_ = this.browserApi_.getStreamInfo().javascript || 'block';
   this.loadState_ = LoadState.LOADING;
   this.parentWindow_ = null;
   this.parentOrigin_ = null;
   this.isFormFieldFocused_ = false;
-
+  this.beepCount_ = 0;
   this.delayedScriptingMessages_ = [];
 
   this.isPrintPreview_ = location.origin === 'chrome://print';
@@ -106,15 +110,20 @@ function PDFViewer(browserApi) {
   this.isUserInitiatedEvent_ = true;
 
   /**
-   * @type {PDFMetrics}
+   * @type {!PDFMetrics}
    */
   this.metrics =
       (chrome.metricsPrivate ? new PDFMetricsImpl() : new PDFMetricsDummy());
   this.metrics.onDocumentOpened();
 
+  /**
+   * @private {!PDFCoordsTransformer}
+   */
+  this.coordsTransformer_ =
+      new PDFCoordsTransformer(this.postMessage_.bind(this));
+
   // Parse open pdf parameters.
-  this.paramsParser_ =
-      new OpenPDFParamsParser(this.getNamedDestination_.bind(this));
+  this.paramsParser_ = new OpenPDFParamsParser(this.postMessage_.bind(this));
   var toolbarEnabled =
       this.paramsParser_.getUiUrlParams(this.originalUrl_).toolbar &&
       !this.isPrintPreview_;
@@ -182,6 +191,7 @@ function PDFViewer(browserApi) {
   var backgroundColor = PDFViewer.DARK_BACKGROUND_COLOR;
   this.plugin_.setAttribute('background-color', backgroundColor);
   this.plugin_.setAttribute('top-toolbar-height', topToolbarHeight);
+  this.plugin_.setAttribute('javascript', this.javascript_);
 
   if (this.browserApi_.getStreamInfo().embedded) {
     this.plugin_.setAttribute(
@@ -223,9 +233,6 @@ function PDFViewer(browserApi) {
 
     this.toolbar_.docTitle = getFilenameFromURL(this.originalUrl_);
   }
-
-  this.coordsTransformer_ =
-      new PDFCoordsTransformer(this.plugin_.postMessage.bind(this.plugin_));
 
   document.body.addEventListener('change-page', e => {
     this.viewport_.goToPage(e.detail.page);
@@ -287,10 +294,11 @@ function PDFViewer(browserApi) {
 
 PDFViewer.prototype = {
   /**
-   * @private
    * Handle key events. These may come from the user directly or via the
    * scripting API.
+   *
    * @param {KeyboardEvent} e the event to handle.
+   * @private
    */
   handleKeyEvent_: function(e) {
     var position = this.viewport_.position;
@@ -391,7 +399,7 @@ PDFViewer.prototype = {
         return;
       case 65:  // 'a' key.
         if (e.ctrlKey || e.metaKey) {
-          this.plugin_.postMessage({type: 'selectAll'});
+          this.postMessage_({type: 'selectAll'});
           // Since we do selection ourselves.
           e.preventDefault();
         }
@@ -446,27 +454,30 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * Rotate the plugin clockwise.
+   *
+   * @private
    */
   rotateClockwise_: function() {
     this.metrics.onRotation();
-    this.plugin_.postMessage({type: 'rotateClockwise'});
+    this.postMessage_({type: 'rotateClockwise'});
   },
 
   /**
-   * @private
    * Rotate the plugin counter-clockwise.
+   *
+   * @private
    */
   rotateCounterClockwise_: function() {
     this.metrics.onRotation();
-    this.plugin_.postMessage({type: 'rotateCounterclockwise'});
+    this.postMessage_({type: 'rotateCounterclockwise'});
   },
 
   /**
-   * @private
    * Request to change the viewport fitting type.
+   *
    * @param {CustomEvent} e Event received with the new FittingType as detail.
+   * @private
    */
   fitToChanged_: function(e) {
     if (e.detail.fittingType == FittingType.FIT_TO_PAGE) {
@@ -484,35 +495,28 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * Notify the plugin to print.
+   *
+   * @private
    */
   print_: function() {
-    this.plugin_.postMessage({type: 'print'});
+    this.postMessage_({type: 'print'});
   },
 
   /**
-   * @private
    * Notify the plugin to save.
+   *
+   * @private
    */
   save_: function() {
-    this.plugin_.postMessage({type: 'save'});
+    this.postMessage_({type: 'save'});
   },
 
   /**
-   * Fetches the page number corresponding to the given named destination from
-   * the plugin.
-   * @param {string} name The namedDestination to fetch page number from plugin.
-   */
-  getNamedDestination_: function(name) {
-    this.plugin_.postMessage(
-        {type: 'getNamedDestination', namedDestination: name});
-  },
-
-  /**
-   * @private
    * Sends a 'documentLoaded' message to the PDFScriptingAPI if the document has
    * finished loading.
+   *
+   * @private
    */
   sendDocumentLoadedMessage_: function() {
     if (this.loadState_ == LoadState.LOADING)
@@ -524,11 +528,12 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * Handle open pdf parameters. This function updates the viewport as per
    * the parameters mentioned in the url while opening pdf. The order is
    * important as later actions can override the effects of previous actions.
+   *
    * @param {Object} params The open params passed in the URL.
+   * @private
    */
   handleURLParams_: function(params) {
     if (params.zoom)
@@ -558,13 +563,14 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * Moves the viewport to a point in a page. Called back after a
    * 'transformPagePointReply' is returned from the plugin.
+   *
    * @param {string} origin Identifier for the caller for logging purposes.
    * @param {number} page The index of the page to go to. zero-based.
    * @param {Object} message Message received from the plugin containing the
    *     x and y to navigate to in screen coordinates.
+   * @private
    */
   goToPageAndXY_: function(origin, page, message) {
     this.viewport_.goToPageAndXY(page, message.x, message.y);
@@ -573,10 +579,11 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * Update the loading progress of the document in response to a progress
    * message being received from the plugin.
+   *
    * @param {number} progress the progress as a percentage.
+   * @private
    */
   updateProgress_: function(progress) {
     if (this.toolbar_)
@@ -608,10 +615,11 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * Load a dictionary of translated strings into the UI. Used as a callback for
    * chrome.resourcesPrivate.
+   *
    * @param {Object} strings Dictionary of translated strings
+   * @private
    */
   handleStrings_: function(strings) {
     document.documentElement.dir = strings.textdirection;
@@ -624,23 +632,40 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * An event handler for handling password-submitted events. These are fired
    * when an event is entered into the password screen.
+   *
    * @param {Object} event a password-submitted event.
+   * @private
    */
   onPasswordSubmitted_: function(event) {
-    this.plugin_.postMessage(
+    this.postMessage_(
         {type: 'getPasswordComplete', password: event.detail.password});
   },
 
   /**
+   * Post a message to the PPAPI plugin. Some messages will cause an async reply
+   * to be received through handlePluginMessage_().
+   *
+   * @param {Object} message Message to post.
    * @private
+   */
+  postMessage_: function(message) {
+    this.plugin_.postMessage(message);
+  },
+
+  /**
    * An event handler for handling message events received from the plugin.
+   *
    * @param {MessageObject} message a message event.
+   * @private
    */
   handlePluginMessage_: function(message) {
     switch (message.data.type.toString()) {
+      case 'beep':
+        // Beeps are annoying, so just track count for now.
+        this.beepCount_ += 1;
+        break;
       case 'documentDimensions':
         this.documentDimensions_ = message.data;
         this.isUserInitiatedEvent_ = false;
@@ -697,12 +722,10 @@ PDFViewer.prototype = {
         this.sendDocumentLoadedMessage_();
         break;
       case 'setScrollPosition':
-        var position = this.viewport_.position;
-        if (message.data.x !== undefined)
-          position.x = message.data.x;
-        if (message.data.y !== undefined)
-          position.y = message.data.y;
-        this.viewport_.position = position;
+        this.viewport_.scrollTo(/** @type {!PartialPoint} */ (message.data));
+        break;
+      case 'scrollBy':
+        this.viewport_.scrollBy(/** @type {!Point} */ (message.data));
         break;
       case 'cancelStreamUrl':
         chrome.mimeHandlerPrivate.abortStream();
@@ -742,18 +765,19 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * A callback that's called before the zoom changes. Notify the plugin to stop
    * reacting to scroll events while zoom is taking place to avoid flickering.
+   *
+   * @private
    */
   beforeZoom_: function() {
-    this.plugin_.postMessage({type: 'stopScrolling'});
+    this.postMessage_({type: 'stopScrolling'});
 
     if (this.viewport_.pinchPhase == Viewport.PinchPhase.PINCH_START) {
       var position = this.viewport_.position;
       var zoom = this.viewport_.zoom;
       var pinchPhase = this.viewport_.pinchPhase;
-      this.plugin_.postMessage({
+      this.postMessage_({
         type: 'viewport',
         userInitiated: true,
         zoom: zoom,
@@ -765,9 +789,10 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * A callback that's called after the zoom changes. Notify the plugin of the
    * zoom change and to continue reacting to scroll events.
+   *
+   * @private
    */
   afterZoom_: function() {
     var position = this.viewport_.position;
@@ -776,7 +801,7 @@ PDFViewer.prototype = {
     var pinchCenter = this.viewport_.pinchCenter || {x: 0, y: 0};
     var pinchPhase = this.viewport_.pinchPhase;
 
-    this.plugin_.postMessage({
+    this.postMessage_({
       type: 'viewport',
       userInitiated: this.isUserInitiatedEvent_,
       zoom: zoom,
@@ -792,10 +817,10 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @param {boolean} userInitiated The value to set |isUserInitiatedEvent_|
-   *     to.
-   * @private
    * A callback that sets |isUserInitiatedEvent_| to |userInitiated|.
+   *
+   * @param {boolean} userInitiated The value to set |isUserInitiatedEvent_| to.
+   * @private
    */
   setUserInitiated_: function(userInitiated) {
     if (this.isUserInitiatedEvent_ == userInitiated) {
@@ -805,9 +830,10 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * A callback that's called when an update to a pinch zoom is detected.
+   *
    * @param {!Object} e the pinch event.
+   * @private
    */
   onPinchUpdate_: function(e) {
     // Throttle number of pinch events to one per frame.
@@ -821,9 +847,10 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * A callback that's called when the end of a pinch zoom is detected.
+   *
    * @param {!Object} e the pinch event.
+   * @private
    */
   onPinchEnd_: function(e) {
     // Using rAF for pinch end prevents pinch updates scheduled by rAF getting
@@ -834,9 +861,10 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * A callback that's called when the start of a pinch zoom is detected.
+   *
    * @param {!Object} e the pinch event.
+   * @private
    */
   onPinchStart_: function(e) {
     // We also use rAF for pinch start, so that if there is a pinch end event
@@ -847,8 +875,9 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * A callback that's called after the viewport changes.
+   *
+   * @private
    */
   viewportChanged_: function() {
     if (!this.documentDimensions_)
@@ -910,6 +939,7 @@ PDFViewer.prototype = {
    * Handle a scripting message from outside the extension (typically sent by
    * PDFScriptingAPI in a page containing the extension) to interact with the
    * plugin.
+   *
    * @param {MessageObject} message the message to handle.
    */
   handleScriptingMessage: function(message) {
@@ -935,16 +965,17 @@ PDFViewer.prototype = {
       case 'getSelectedText':
       case 'print':
       case 'selectAll':
-        this.plugin_.postMessage(message.data);
+        this.postMessage_(message.data);
         break;
     }
   },
 
   /**
-   * @private
    * Handle scripting messages specific to print preview.
+   *
    * @param {MessageObject} message the message to handle.
    * @return {boolean} true if the message was handled, false otherwise.
+   * @private
    */
   handlePrintPreviewScriptingMessage_: function(message) {
     if (!this.isPrintPreview_)
@@ -952,7 +983,7 @@ PDFViewer.prototype = {
 
     switch (message.data.type.toString()) {
       case 'loadPreviewPage':
-        this.plugin_.postMessage(message.data);
+        this.postMessage_(message.data);
         return true;
       case 'resetPrintPreviewMode':
         this.loadState_ = LoadState.LOADING;
@@ -977,7 +1008,7 @@ PDFViewer.prototype = {
 
         this.pageIndicator_.pageLabels = message.data.pageNumbers;
 
-        this.plugin_.postMessage({
+        this.postMessage_({
           type: 'resetPrintPreviewMode',
           url: message.data.url,
           grayscale: message.data.grayscale,
@@ -996,10 +1027,11 @@ PDFViewer.prototype = {
   },
 
   /**
-   * @private
    * Send a scripting message outside the extension (typically to
    * PDFScriptingAPI in a page containing the extension).
+   *
    * @param {Object} message the message to send.
+   * @private
    */
   sendScriptingMessage_: function(message) {
     if (this.parentWindow_ && this.parentOrigin_) {
@@ -1030,6 +1062,7 @@ PDFViewer.prototype = {
    * - title
    * - page (optional)
    * - array of children (themselves bookmarks)
+   *
    * @type {Array} the top-level bookmarks of the PDF.
    */
   get bookmarks() {

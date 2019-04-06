@@ -45,10 +45,12 @@ class NET_EXPORT NameConstraints {
   // RDNSequence (not including Sequence tag), and may be an empty ASN.1
   // sequence. |subject_alt_names| should be the parsed representation of the
   // subjectAltName extension or nullptr if the extension was not present.
+  // If the certificate is not allowed, an error will be added to |errors|.
   // Note that this method does not check hostname or IP address in commonName,
   // which is deprecated (crbug.com/308330).
-  bool IsPermittedCert(const der::Input& subject_rdn_sequence,
-                       const GeneralNames* subject_alt_names) const;
+  void IsPermittedCert(const der::Input& subject_rdn_sequence,
+                       const GeneralNames* subject_alt_names,
+                       CertErrors* errors) const;
 
   // Returns true if the ASCII hostname |name| is permitted.
   // |name| may be a wildcard hostname (starts with "*."). Eg, "*.bar.com"
@@ -80,6 +82,9 @@ class NET_EXPORT NameConstraints {
   // extension of a subsequent certificate, then the application MUST
   // either process the constraint or reject the certificate.
   int constrained_name_types() const { return constrained_name_types_; }
+
+  const GeneralNames& permitted_subtrees() const { return permitted_subtrees_; }
+  const GeneralNames& excluded_subtrees() const { return excluded_subtrees_; }
 
  private:
   bool Parse(const der::Input& extension_value,

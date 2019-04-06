@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/debug/stack_trace.h"
+#include "base/mac/foundation_util.h"
 #include "base/mac/scoped_block.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/strings/string_util.h"
@@ -16,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #import "chrome/browser/ui/cocoa/bubble_view.h"
+#include "chrome/browser/ui/cocoa/cocoa_util.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/url_formatter/url_formatter.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
@@ -31,10 +33,10 @@
 
 namespace {
 
-const int kWindowHeight = 18;
+const int kStatusBubbleWindowHeight = 18;
 
 // The width of the bubble in relation to the width of the parent window.
-const CGFloat kWindowWidthPercent = 1.0 / 3.0;
+const CGFloat kStatusBubbleWindowWidthPercent = 1.0 / 3.0;
 
 // How close the mouse can get to the infobubble before it starts sliding
 // off-screen.
@@ -52,12 +54,6 @@ const int64_t kHideDelayMS = 250;
 // How long each fade should last.
 const NSTimeInterval kShowFadeInDurationSeconds = 0.120;
 const NSTimeInterval kHideFadeOutDurationSeconds = 0.200;
-
-// The minimum representable time interval.  This can be used as the value
-// passed to +[NSAnimationContext setDuration:] to stop an in-progress
-// animation as quickly as possible.
-const NSTimeInterval kMinimumTimeInterval =
-    std::numeric_limits<NSTimeInterval>::min();
 
 // How quickly the status bubble should expand.
 const CGFloat kExpansionDurationSeconds = 0.125;
@@ -201,8 +197,8 @@ void StatusBubbleMac::SetURL(const GURL& url) {
       gfx::Font(gfx::PlatformFont::CreateFromNativeFont(font)));
 
   base::string16 original_url_text = url_formatter::FormatUrl(url);
-  base::string16 status =
-      url_formatter::ElideUrl(url, font_list_chr, text_width);
+  base::string16 status = url_formatter::ElideUrl(
+      url, font_list_chr, text_width, gfx::Typesetter::BROWSER);
 
   SetText(status, true);
 
@@ -282,9 +278,10 @@ void StatusBubbleMac::Hide() {
 
     if (!immediate_) {
       // An animation is in progress.  Cancel it by starting a new animation.
-      // Use kMinimumTimeInterval to set the opacity as rapidly as possible.
+      // Use cocoa_util::kMinimumTimeInterval to set the opacity as rapidly as
+      // possible.
       fade_out = true;
-      AnimateWindowAlpha(0.0, kMinimumTimeInterval);
+      AnimateWindowAlpha(0.0, cocoa_util::kMinimumTimeInterval);
     }
   }
 
@@ -299,7 +296,8 @@ void StatusBubbleMac::Hide() {
   // Stop any width animation and reset the bubble size.
   if (!immediate_) {
     [NSAnimationContext beginGrouping];
-    [[NSAnimationContext currentContext] setDuration:kMinimumTimeInterval];
+    [[NSAnimationContext currentContext]
+        setDuration:cocoa_util::kMinimumTimeInterval];
     [[window_ animator] setFrame:frame display:NO];
     [NSAnimationContext endGrouping];
   } else {
@@ -393,7 +391,9 @@ void StatusBubbleMac::SetFrameAvoidingMouse(
 
   corner_flags |= OSDependentCornerFlags(window_frame);
 
-  [[window_ contentView] setCornerFlags:corner_flags];
+  BubbleView* contentView =
+      base::mac::ObjCCast<BubbleView>([window_ contentView]);
+  [contentView setCornerFlags:corner_flags];
   [window_ setFrame:window_frame display:YES];
 }
 
@@ -535,7 +535,7 @@ void StatusBubbleMac::Fade(bool show) {
 
   // 0.0 will not cancel an in-progress animation.
   if (duration == 0.0)
-    duration = kMinimumTimeInterval;
+    duration = cocoa_util::kMinimumTimeInterval;
 
   // Cancel an in-progress transition and replace it with this fade.
   AnimateWindowAlpha(opacity, duration);
@@ -669,7 +669,7 @@ void StatusBubbleMac::ExpandBubble() {
   gfx::FontList font_list_chr(
       gfx::Font(gfx::PlatformFont::CreateFromNativeFont(font)));
   base::string16 expanded_url = url_formatter::ElideUrl(
-      url_, font_list_chr, max_bubble_width);
+      url_, font_list_chr, max_bubble_width, gfx::Typesetter::BROWSER);
 
   // Scale width from gfx::Font in view coordinates to window coordinates.
   int required_width_for_string =
@@ -713,10 +713,11 @@ void StatusBubbleMac::ExpandBubble() {
 
   // Get the current corner flags and see what needs to change based on the
   // expansion.
-  unsigned long corner_flags = [[window_ contentView] cornerFlags];
+  BubbleView* contentView =
+      base::mac::ObjCCast<BubbleView>([window_ contentView]);
+  unsigned long corner_flags = [contentView cornerFlags];
   corner_flags |= OSDependentCornerFlags(actual_window_frame);
-  [[window_ contentView] setCornerFlags:corner_flags];
-
+  [contentView setCornerFlags:corner_flags];
 
   [NSAnimationContext beginGrouping];
   [[NSAnimationContext currentContext] setDuration:kExpansionDurationSeconds];
@@ -755,13 +756,13 @@ NSRect StatusBubbleMac::CalculateWindowFrame(bool expanded_width) {
     screenRect = [parent_ frame];
   }
 
-  NSSize size = NSMakeSize(0, kWindowHeight);
+  NSSize size = NSMakeSize(0, kStatusBubbleWindowHeight);
   size = [[parent_ contentView] convertSize:size toView:nil];
 
   if (expanded_width) {
     size.width = screenRect.size.width;
   } else {
-    size.width = kWindowWidthPercent * screenRect.size.width;
+    size.width = kStatusBubbleWindowWidthPercent * screenRect.size.width;
   }
 
   screenRect.size = size;

@@ -5,11 +5,10 @@
 #ifndef NET_WEBSOCKETS_WEBSOCKET_HANDSHAKE_RESPONSE_INFO_H_
 #define NET_WEBSOCKETS_WEBSOCKET_HANDSHAKE_RESPONSE_INFO_H_
 
-#include <string>
-
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/net_export.h"
 #include "url/gurl.h"
 
@@ -19,19 +18,16 @@ class HttpResponseHeaders;
 
 struct NET_EXPORT WebSocketHandshakeResponseInfo {
   WebSocketHandshakeResponseInfo(const GURL& url,
-                                 int status_code,
-                                 const std::string& status_text,
                                  scoped_refptr<HttpResponseHeaders> headers,
+                                 const HostPortPair& socket_address,
                                  base::Time response_time);
   ~WebSocketHandshakeResponseInfo();
   // The request URL
   GURL url;
-  // HTTP status code
-  int status_code;
-  // HTTP status text
-  std::string status_text;
   // HTTP response headers
   scoped_refptr<HttpResponseHeaders> headers;
+  // Remote address of the socket.
+  HostPortPair socket_address;
   // The time that this response arrived
   base::Time response_time;
 

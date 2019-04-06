@@ -23,7 +23,7 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles);
 
 class OperaImporter : public Importer {
  public:
-  explicit OperaImporter(const importer::ImportConfig& import_config);
+  OperaImporter();
 
   void StartImport(const importer::SourceProfile& source_profile,
                    uint16_t items,

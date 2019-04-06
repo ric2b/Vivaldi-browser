@@ -11,7 +11,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "components/prefs/pref_service.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "prefs/vivaldi_pref_names.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

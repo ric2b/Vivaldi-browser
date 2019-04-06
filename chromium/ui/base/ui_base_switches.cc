@@ -4,14 +4,6 @@
 
 #include "ui/base/ui_base_switches.h"
 
-namespace features {
-
-// Enables the floating virtual keyboard behavior.
-const base::Feature kEnableFloatingVirtualKeyboard = {
-    "enable-floating-virtual-keyboard", base::FEATURE_DISABLED_BY_DEFAULT};
-
-}  // namespace features
-
 namespace switches {
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -22,6 +14,9 @@ const char kDisableAVFoundationOverlays[] = "disable-avfoundation-overlays";
 // based overlay display path.
 const char kDisableMacOverlays[] = "disable-mac-overlays";
 
+// Disable animations for showing and hiding modal dialogs.
+const char kDisableModalAnimations[] = "disable-modal-animations";
+
 // Disable use of cross-process CALayers to display content directly from the
 // GPU process on Mac.
 const char kDisableRemoteCoreAnimation[] = "disable-remote-core-animation";
@@ -29,6 +24,10 @@ const char kDisableRemoteCoreAnimation[] = "disable-remote-core-animation";
 // Show borders around CALayers corresponding to overlays and partial damage.
 const char kShowMacOverlayBorders[] = "show-mac-overlay-borders";
 #endif
+
+// Scale factor to apply to every animation duration. Must be >= 0.0. This will
+// only apply to LinearAnimation and its subclasses.
+const char kAnimationDurationScale[] = "animation-duration-scale";
 
 // Disables layer-edge anti-aliasing in the compositor.
 const char kDisableCompositedAntialiasing[] = "disable-composited-antialiasing";
@@ -44,6 +43,10 @@ const char kDisableTouchDragDrop[] = "disable-touch-drag-drop";
 
 // Enables touch event based drag and drop.
 const char kEnableTouchDragDrop[] = "enable-touch-drag-drop";
+
+// Enables touchable app context menus.
+const char kEnableTouchableAppContextMenu[] =
+    "enable-touchable-app-context-menus";
 
 // Forces high-contrast mode in native UI drawing, regardless of system
 // settings. Note that this has limited effect on Windows: only Aura colors will
@@ -78,8 +81,18 @@ const char kTopChromeMDMaterialAuto[] = "material-auto";
 // mouse/touch hybrid devices.
 const char kTopChromeMDMaterialHybrid[] = "material-hybrid";
 
-// Classic, non-material, mode for the |kTopChromeMD| switch.
-const char kTopChromeMDNonMaterial[] = "non-material";
+// Material design mode that is more optimized for touch devices for the
+// |kTopChromeMD| switch.
+const char kTopChromeMDMaterialTouchOptimized[] = "material-touch-optimized";
+
+// Material design mode that represents a refresh of the Chrome UI for the
+// |kTopChromeMD| switch.
+const char kTopChromeMDMaterialRefresh[] = "material-refresh";
+
+// Material design mode that represents a touchable version of material-refresh
+// for the |kTopChromeMD| switch.
+const char kTopChromeMDMaterialRefreshTouchOptimized[] =
+    "material-refresh-touch-optimized";
 
 // Disable partial swap which is needed for some OpenGL drivers / emulators.
 const char kUIDisablePartialSwap[] = "ui-disable-partial-swap";
@@ -95,12 +108,6 @@ const char kUIDisablePartialSwap[] = "ui-disable-partial-swap";
 // Pink: Overdrawn three times.
 // Red: Overdrawn four or more times.
 const char kShowOverdrawFeedback[] = "show-overdraw-feedback";
-
-// Use draw occlusion to skip draw quads when they are not shown on screen.
-const char kEnableDrawOcclusion[] = "enable-draw-occlusion";
-
-// Use SkiaRenderer instead of GLRenderer for direct rendering.
-const char kUseSkiaRenderer[] = "use-skia-renderer";
 
 // Disable re-use of non-exact resources to fulfill ResourcePool requests.
 // Intended only for use in layout or pixel tests to reduce noise.
@@ -119,15 +126,5 @@ const char kSlowDownCompositingScaleFactor[] =
 
 // Tint GL-composited color.
 const char kTintGlCompositedContent[] = "tint-gl-composited-content";
-
-#if defined(USE_AURA)
-// Used to enable the mus service (aka the UI service). This makes mus run in
-// process. It is also used to notify the clients that the UI service is being
-// used.
-const char kMus[] = "mus";
-
-// If set mus is hosting Viz. Only applicable is kMus if specified.
-const char kMusHostingViz[] = "mus-hosting-viz";
-#endif
 
 }  // namespace switches

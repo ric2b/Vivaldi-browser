@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "media/base/android/android_overlay.h"
+#include "media/base/video_rotation.h"
 #include "media/gpu/media_gpu_export.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -43,6 +44,9 @@ class MEDIA_GPU_EXPORT AndroidVideoSurfaceChooser {
     // signals, like fs or secure, before we promote.
     bool promote_aggressively = false;
 
+    // Default orientation for the video.
+    VideoRotation video_rotation = VIDEO_ROTATION_0;
+
     // Hint to use for the initial position when transitioning to an overlay.
     gfx::Rect initial_position;
   };
@@ -54,17 +58,16 @@ class MEDIA_GPU_EXPORT AndroidVideoSurfaceChooser {
 
   // Notify the client that the most recently provided overlay should be
   // discarded.  The overlay is still valid, but we recommend against
-  // using it soon, in favor of a SurfaceTexture.
-  using UseSurfaceTextureCB = base::RepeatingCallback<void(void)>;
+  // using it soon, in favor of a TextureOwner.
+  using UseTextureOwnerCB = base::RepeatingCallback<void(void)>;
 
   AndroidVideoSurfaceChooser() {}
   virtual ~AndroidVideoSurfaceChooser() {}
 
   // Sets the client callbacks to be called when a new surface choice is made.
   // Must be called before UpdateState();
-  virtual void SetClientCallbacks(
-      UseOverlayCB use_overlay_cb,
-      UseSurfaceTextureCB use_surface_texture_cb) = 0;
+  virtual void SetClientCallbacks(UseOverlayCB use_overlay_cb,
+                                  UseTextureOwnerCB use_texture_owner_cb) = 0;
 
   // Updates the current state and makes a new surface choice with the new
   // state. If |new_factory| is empty, the factory is left as-is. Otherwise,

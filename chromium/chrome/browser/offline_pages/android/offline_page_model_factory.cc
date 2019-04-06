@@ -14,13 +14,14 @@
 #include "base/time/default_clock.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/offline_pages/android/cct_origin_observer.h"
+#include "chrome/browser/offline_pages/android/offline_pages_download_manager_bridge.h"
+#include "chrome/browser/offline_pages/download_archive_manager.h"
 #include "chrome/browser/offline_pages/fresh_offline_content_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/offline_pages/core/archive_manager.h"
 #include "components/offline_pages/core/model/offline_page_model_taskified.h"
-#include "components/offline_pages/core/offline_page_metadata_store_sql.h"
+#include "components/offline_pages/core/offline_page_metadata_store.h"
 
 namespace offline_pages {
 
@@ -49,26 +50,31 @@ KeyedService* OfflinePageModelFactory::BuildServiceInstanceFor(
 
   base::FilePath store_path =
       profile->GetPath().Append(chrome::kOfflinePageMetadataDirname);
-  std::unique_ptr<OfflinePageMetadataStoreSQL> metadata_store(
-      new OfflinePageMetadataStoreSQL(background_task_runner, store_path));
+  std::unique_ptr<OfflinePageMetadataStore> metadata_store(
+      new OfflinePageMetadataStore(background_task_runner, store_path));
 
   base::FilePath persistent_archives_dir =
       profile->GetPath().Append(chrome::kOfflinePageArchivesDirname);
-  // If PathService::Get returns false, the temporary_archives_dir will be
+  // If base::PathService::Get returns false, the temporary_archives_dir will be
   // empty, and no temporary pages will be saved during this chrome lifecycle.
   base::FilePath temporary_archives_dir;
-  if (PathService::Get(base::DIR_CACHE, &temporary_archives_dir)) {
+  if (base::PathService::Get(base::DIR_CACHE, &temporary_archives_dir)) {
     temporary_archives_dir =
         temporary_archives_dir.Append(chrome::kOfflinePageArchivesDirname);
   }
-  std::unique_ptr<ArchiveManager> archive_manager(new ArchiveManager(
+  std::unique_ptr<ArchiveManager> archive_manager(new DownloadArchiveManager(
       temporary_archives_dir, persistent_archives_dir,
-      DownloadPrefs::GetDefaultDownloadDirectory(), background_task_runner));
-  auto clock = base::MakeUnique<base::DefaultClock>();
+      DownloadPrefs::GetDefaultDownloadDirectory(), background_task_runner,
+      profile));
+  auto clock = std::make_unique<base::DefaultClock>();
+
+  std::unique_ptr<SystemDownloadManager> download_manager(
+      new android::OfflinePagesDownloadManagerBridge());
 
   OfflinePageModelTaskified* model = new OfflinePageModelTaskified(
       std::move(metadata_store), std::move(archive_manager),
-      background_task_runner, std::move(clock));
+      std::move(download_manager), background_task_runner,
+      base::DefaultClock::GetInstance());
 
   CctOriginObserver::AttachToOfflinePageModel(model);
 

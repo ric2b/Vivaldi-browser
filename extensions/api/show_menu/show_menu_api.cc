@@ -21,12 +21,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/apps/app_load_service.h"
+#include "chrome/browser/apps/platform_apps/app_load_service.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
@@ -35,12 +36,14 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/manifest_constants.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_context_menu.h"
 #include "ui/vivaldi_main_menu.h"
 
@@ -477,11 +480,11 @@ void ShowMenuAPI::OnAddBookmark(int id) {
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<ShowMenuAPI>>::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_factory_menu = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<ShowMenuAPI>* ShowMenuAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_menu.Pointer();
 }
 
 void ShowMenuAPI::OnListenerAdded(const EventListenerInfo& details) {
@@ -491,7 +494,7 @@ void ShowMenuAPI::OnListenerAdded(const EventListenerInfo& details) {
 }
 
 VivaldiMenuController::BookmarkSupport::BookmarkSupport()
-  :icons(kMax) {}
+  :icons(kMax), observer_enabled(false) {}
 VivaldiMenuController::BookmarkSupport::~BookmarkSupport() {}
 
 const gfx::Image& VivaldiMenuController::BookmarkSupport::iconForNode(
@@ -518,10 +521,7 @@ VivaldiMenuController::VivaldiMenuController(
       is_shown_(false) {}
 
 VivaldiMenuController::~VivaldiMenuController() {
-  bookmarks::BookmarkModel* model =
-      BookmarkModelFactory::GetForBrowserContext(
-          web_contents_->GetBrowserContext());
-  model->RemoveObserver(this);
+  EnableBookmarkObserver(false);
 }
 
 void VivaldiMenuController::Show(
@@ -543,8 +543,9 @@ void VivaldiMenuController::Show(
 
   if (HasDeveloperTools()) {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP,
-                                    IDS_CONTENT_CONTEXT_RELOAD_PACKAGED_APP);
+    // NOTE(pettern): Reload will not work with our app, disable it for now.
+//    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP,
+//                                    IDS_CONTENT_CONTEXT_RELOAD_PACKAGED_APP);
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP,
                                     IDS_CONTENT_CONTEXT_RESTART_APP);
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
@@ -557,7 +558,7 @@ void VivaldiMenuController::Show(
   SanitizeModel(&menu_model_);
 
   menu_.reset(::vivaldi::CreateVivaldiContextMenu(
-      web_contents->GetFocusedFrame(), &menu_model_, menu_params));
+      web_contents, &menu_model_, menu_params));
   ShowMenuAPI::GetFactoryInstance()->Get(profile_)->OnOpen();
   menu_->Show();
 }
@@ -608,7 +609,7 @@ bool VivaldiMenuController::HasDeveloperTools() {
 }
 
 bool VivaldiMenuController::IsDeveloperTools(int command_id) const {
-  return command_id == IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP ||
+  return /* command_id == IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP ||*/
          command_id == IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP ||
          command_id == IDC_CONTENT_CONTEXT_INSPECTELEMENT ||
          command_id == IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE;
@@ -630,8 +631,19 @@ void VivaldiMenuController::HandleDeveloperToolsCommand(int command_id) {
 
     case IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP:
       if (platform_app && platform_app->is_platform_app()) {
-        apps::AppLoadService::Get(profile)->RestartApplication(
-            platform_app->id());
+        extensions::DevtoolsConnectorAPI* api =
+          extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
+            Profile::FromBrowserContext(browser_context));
+        DCHECK(api);
+        api->CloseAllDevtools();
+
+        extensions::VivaldiUtilitiesAPI* utils_api =
+          extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+            browser_context);
+        DCHECK(utils_api);
+        utils_api->CloseAllThumbnailWindows();
+
+        chrome::AttemptRestart();
       }
       break;
 
@@ -669,10 +681,8 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
   if (item->name.find("---") == 0) {
     menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   } else if (item->container_type == show_menu::CONTAINER_TYPE_BOOKMARKS) {
-    bookmarks::BookmarkModel* model =
-        BookmarkModelFactory::GetForBrowserContext(
-            web_contents_->GetBrowserContext());
-    model->AddObserver(this);
+    EnableBookmarkObserver(true);
+    bookmarks::BookmarkModel* model = GetBookmarkModel();
 
     // Get label for adding new bookmarks
     bookmark_support_.add_label = label;
@@ -766,6 +776,24 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
         url_map_[id] = item->url.get();
         LoadFavicon(id, *item->url);
       }
+    }
+  }
+}
+
+bookmarks::BookmarkModel* VivaldiMenuController::GetBookmarkModel() {
+  return BookmarkModelFactory::GetForBrowserContext(
+      web_contents_->GetBrowserContext());
+}
+
+void VivaldiMenuController::EnableBookmarkObserver(bool enable) {
+  if (bookmark_support_.observer_enabled != enable) {
+    bookmark_support_.observer_enabled = enable;
+    bookmarks::BookmarkModel* model = GetBookmarkModel();
+    if (model) {
+      if (enable)
+        model->AddObserver(this);
+      else
+        model->RemoveObserver(this);
     }
   }
 }
@@ -925,10 +953,7 @@ void VivaldiMenuController::BookmarkNodeFaviconChanged(
     const bookmarks::BookmarkNode* node) {
   const gfx::Image& image = model->GetFavicon(node);
   if (!image.IsEmpty()) {
-    int id = BOOKMARK_ID_BASE + node->id();
-    if (menu_model_.GetIndexOfCommandId(id) != -1) {
-      menu_->SetIcon(image, id);
-    }
+    menu_->SetIcon(image, BOOKMARK_ID_BASE + node->id());
   }
 }
 
@@ -1016,9 +1041,7 @@ void VivaldiMenuController::CommandIdHighlighted(int command_id) {
     is_url_highlighted_ = false;
     if (current_highlighted_id_ >= BOOKMARK_ID_BASE) {
       int id = command_id - BOOKMARK_ID_BASE;
-      bookmarks::BookmarkModel* model =
-          BookmarkModelFactory::GetForBrowserContext(
-              web_contents_->GetBrowserContext());
+      bookmarks::BookmarkModel* model = GetBookmarkModel();
       const bookmarks::BookmarkNode* node = bookmarks::GetBookmarkNodeByID(
           model, id);
       if (node) {
@@ -1064,6 +1087,7 @@ void VivaldiMenuController::ExecuteCommand(int command_id, int event_flags) {
   } else {
     delegate_->OnMenuActivated(command_id, event_flags);
   }
+  EnableBookmarkObserver(false);
   delegate_ = nullptr;
 }
 
@@ -1088,15 +1112,15 @@ bool ShowMenuCreateFunction::RunAsync() {
     // Menu is deallocated when main menu model is closed.
     VivaldiMenuController* menu =
         new VivaldiMenuController(this, &params_->create_properties.items);
-    menu->Show(GetAssociatedWebContents(), menu_params);
+    menu->Show(dispatcher()->GetAssociatedWebContents(), menu_params);
 #if defined(OS_MACOSX)
   } else {
     // Mac needs to update the menu even with no open windows. So we allow
     // a nullptr profile when calling the api.
     Profile* profile = nullptr;
-    if (GetAssociatedWebContents()) {
+    if (dispatcher()->GetAssociatedWebContents()) {
       content::BrowserContext* browser_context =
-          GetAssociatedWebContents()->GetBrowserContext();
+          dispatcher()->GetAssociatedWebContents()->GetBrowserContext();
       profile = Profile::FromBrowserContext(browser_context);
     }
     ::vivaldi::CreateVivaldiMainMenu(profile, &params_->create_properties.items,

@@ -21,23 +21,19 @@ Polymer({
     // <if expr="chromeos">
     showAndroidApps: Boolean,
 
+    showCrostini: Boolean,
+
     showMultidevice: Boolean,
 
     havePlayStoreApp: Boolean,
     // </if>
 
+    // TODO(jdoerrie): https://crbug.com/854562.
+    // Remove once Autofill Home is launched.
+    autofillHomeEnabled: Boolean,
+
     /** @type {!AndroidAppsInfo|undefined} */
     androidAppsInfo: Object,
-
-    // <if expr="_google_chrome and is_win">
-    showChromeCleanup: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('chromeCleanupEnabled') &&
-            !loadTimeData.getBoolean('userInitiatedCleanupsEnabled');
-      },
-    },
-    // </if>
 
     showChangePassword: {
       type: Boolean,
@@ -57,6 +53,7 @@ Polymer({
 
     advancedToggleExpanded: {
       type: Boolean,
+      value: false,
       notify: true,
       observer: 'advancedToggleExpandedChanged_',
     },
@@ -92,6 +89,16 @@ Polymer({
       type: Boolean,
       computed: 'computeShowSecondaryUserBanner_(hasExpandedSection_)',
     },
+
+    /**
+     * Whether the account supports the features controlled in the multidevice
+     * section.
+     * @private {boolean}
+     */
+    doesAccountSupportMultiDeviceSection_: {
+      type: Boolean,
+      value: false,
+    },
     // </if>
 
     /** @private {!settings.Route|undefined} */
@@ -106,15 +113,15 @@ Polymer({
     'subpage-expand': 'onSubpageExpanded_',
   },
 
+  /**
+   * Used to avoid handling a new toggle while currently toggling.
+   * @private {boolean}
+   */
+  advancedTogglingInProgress_: false,
+
   /** @override */
   attached: function() {
     this.currentRoute_ = settings.getCurrentRoute();
-
-    // <if expr="_google_chrome and is_win">
-    this.addEventListener('chrome-cleanup-dismissed', () => {
-      this.showChromeCleanup = false;
-    });
-    // </if>
 
     this.addWebUIListener('change-password-visibility', visibility => {
       this.showChangePassword = visibility;
@@ -246,13 +253,27 @@ Polymer({
   },
 
   /**
-   * @return {boolean} Whether to show the multidevice settings page.
+   * @return {boolean} Whether the account supports the features managed in
+   * this section.
    * @private
    */
-  shouldShowMultidevice_: function() {
+  canShowMultideviceSection_: function() {
     const visibility = /** @type {boolean|undefined} */ (
         this.get('pageVisibility.multidevice'));
     return this.showMultidevice && this.showPage_(visibility);
+  },
+
+  /**
+   * @return {boolean} Whether to show the passwords and forms settings page.
+   * TODO(jdoerrie): https://crbug.com/854562. With Autofill Home enabled,
+   * the passwords and autofill sections are moved from the advanced page
+   * to the people page. Remove once Autofill Home is fully launched.
+   * @private
+   */
+  shouldShowPasswordsAndForms_: function() {
+    const visibility = /** @type {boolean|undefined} */ (
+        this.get('pageVisibility.passwordAndForms'));
+    return !this.autofillHomeEnabled && this.showPage_(visibility);
   },
 
   /**
@@ -271,6 +292,35 @@ Polymer({
     if (this.advancedToggleExpanded) {
       this.async(() => {
         this.$$('#advancedPageTemplate').get();
+      });
+    }
+  },
+
+  advancedToggleClicked_: function() {
+    if (this.advancedTogglingInProgress_)
+      return;
+
+    this.advancedTogglingInProgress_ = true;
+    const toggle = this.$$('#toggleContainer');
+    if (!this.advancedToggleExpanded) {
+      this.advancedToggleExpanded = true;
+      this.async(() => {
+        this.$$('#advancedPageTemplate').get().then(() => {
+          this.fire('scroll-to-top', {
+            top: toggle.offsetTop,
+            callback: () => {
+              this.advancedTogglingInProgress_ = false;
+            }
+          });
+        });
+      });
+    } else {
+      this.fire('scroll-to-bottom', {
+        bottom: toggle.offsetTop + toggle.offsetHeight + 24,
+        callback: () => {
+          this.advancedToggleExpanded = false;
+          this.advancedTogglingInProgress_ = false;
+        }
       });
     }
   },

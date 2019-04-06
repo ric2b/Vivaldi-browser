@@ -23,7 +23,7 @@ void PhonenumberRow::Swap(PhonenumberRow* other) {
   std::swap(contact_id_, other->contact_id_);
   std::swap(type_, other->type_);
   std::swap(phonenumber_, other->phonenumber_);
-  std::swap(is_default_, other->is_default_);
+  std::swap(favorite_, other->favorite_);
 }
 
 PhonenumberRow::PhonenumberRow(const PhonenumberRow& other) = default;

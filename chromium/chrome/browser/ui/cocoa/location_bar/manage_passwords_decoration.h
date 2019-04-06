@@ -27,7 +27,6 @@ class ManagePasswordsIconCocoa : public ManagePasswordsIcon {
   void UpdateVisibleUI() override;
   void OnChangingState() override;
 
-  int icon_id() { return icon_id_; }
   int tooltip_text_id() { return tooltip_text_id_; }
 
  private:
@@ -67,6 +66,10 @@ class ManagePasswordsDecoration : public ImageDecoration {
 
   // Updates child view states.
   void UpdateUIState();
+
+  // Whether a bubble is already showing. Handles both views and Cocoa
+  // bubbles.
+  bool IsBubbleShowing();
 
   // Shows the manage passwords bubble.
   CommandUpdater* command_updater_;  // Weak, owned by Browser.

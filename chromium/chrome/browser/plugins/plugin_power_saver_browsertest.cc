@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -28,7 +29,6 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/policy_constants.h"
 #include "components/zoom/zoom_controller.h"
-#include "content/public/browser/readback_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -40,7 +40,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/display.h"
@@ -161,10 +161,10 @@ void VerifyPluginMarkedEssential(content::WebContents* contents,
   EXPECT_TRUE(PluginLoaded(contents, element_id));
 }
 
-void VerifyVisualStateUpdated(const base::Closure& done_cb,
+void VerifyVisualStateUpdated(base::OnceClosure done_cb,
                               bool visual_state_updated) {
   ASSERT_TRUE(visual_state_updated);
-  done_cb.Run();
+  std::move(done_cb).Run();
 }
 
 bool SnapshotMatches(const base::FilePath& reference, const SkBitmap& bitmap) {
@@ -180,10 +180,10 @@ bool SnapshotMatches(const base::FilePath& reference, const SkBitmap& bitmap) {
   int w = 0;
   int h = 0;
   std::vector<unsigned char> decoded;
-  if (!gfx::PNGCodec::Decode(reinterpret_cast<unsigned char*>(
-                                 base::string_as_array(&reference_data)),
-                             reference_data.size(), gfx::PNGCodec::FORMAT_BGRA,
-                             &decoded, &w, &h)) {
+  if (!gfx::PNGCodec::Decode(
+          reinterpret_cast<const unsigned char*>(base::data(reference_data)),
+          reference_data.size(), gfx::PNGCodec::FORMAT_BGRA, &decoded, &w,
+          &h)) {
     return false;
   }
 
@@ -226,11 +226,10 @@ bool SnapshotMatches(const base::FilePath& reference, const SkBitmap& bitmap) {
 void CompareSnapshotToReference(const base::FilePath& reference,
                                 bool* snapshot_matches,
                                 const base::Closure& done_cb,
-                                const SkBitmap& bitmap,
-                                content::ReadbackResponse response) {
+                                const SkBitmap& bitmap) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   DCHECK(snapshot_matches);
-  ASSERT_EQ(content::READBACK_SUCCESS, response);
+  ASSERT_FALSE(bitmap.drawsNothing());
 
   *snapshot_matches = SnapshotMatches(reference, bitmap);
 
@@ -373,10 +372,12 @@ class PluginPowerSaverBrowserTest : public InProcessBrowserTest {
         base::FilePath(FILE_PATH_LITERAL("plugin_power_saver")),
         base::FilePath(expected_filename));
 
-    GetActiveWebContents()->GetMainFrame()->InsertVisualStateCallback(
-        base::Bind(&VerifyVisualStateUpdated,
-                   base::MessageLoop::QuitWhenIdleClosure()));
-    content::RunMessageLoop();
+    {
+      base::RunLoop run_loop;
+      GetActiveWebContents()->GetMainFrame()->InsertVisualStateCallback(
+          base::BindOnce(&VerifyVisualStateUpdated, run_loop.QuitClosure()));
+      run_loop.Run();
+    }
 
     content::RenderWidgetHost* rwh =
         GetActiveWebContents()->GetRenderViewHost()->GetWidget();
@@ -387,13 +388,14 @@ class PluginPowerSaverBrowserTest : public InProcessBrowserTest {
     }
 
     bool snapshot_matches = false;
-    rwh->GetView()->CopyFromSurface(
-        gfx::Rect(), gfx::Size(),
-        base::Bind(&CompareSnapshotToReference, reference, &snapshot_matches,
-                   base::MessageLoop::QuitWhenIdleClosure()),
-        kN32_SkColorType);
-
-    content::RunMessageLoop();
+    {
+      base::RunLoop run_loop;
+      rwh->GetView()->CopyFromSurface(
+          gfx::Rect(), gfx::Size(),
+          base::BindOnce(&CompareSnapshotToReference, reference,
+                         &snapshot_matches, run_loop.QuitClosure()));
+      run_loop.Run();
+    }
 
     return snapshot_matches;
   }
@@ -603,7 +605,7 @@ IN_PROC_BROWSER_TEST_F(PluginPowerSaverBrowserTest, RunAllFlashInAllowMode) {
   policy::PolicyMap policy;
   policy.Set(policy::key::kRunAllFlashInAllowMode,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-             policy::POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(true),
+             policy::POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true),
              nullptr);
   provider_.UpdateChromePolicy(policy);
   content::RunAllPendingInMessageLoop();

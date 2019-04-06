@@ -24,7 +24,6 @@
 
 namespace media {
 
-class TextTrackConfig;
 class MediaTracks;
 
 class MEDIA_EXPORT DemuxerHost {
@@ -48,13 +47,6 @@ class MEDIA_EXPORT DemuxerHost {
   // called with an error.
   virtual void OnDemuxerError(PipelineStatus error) = 0;
 
-  // Add |text_stream| to the collection managed by the text renderer.
-  virtual void AddTextStream(DemuxerStream* text_stream,
-                             const TextTrackConfig& config) = 0;
-
-  // Remove |text_stream| from the presentation.
-  virtual void RemoveTextStream(DemuxerStream* text_stream) = 0;
-
  protected:
   virtual ~DemuxerHost();
 };
@@ -74,6 +66,12 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
   using MediaTracksUpdatedCB =
       base::Callback<void(std::unique_ptr<MediaTracks>)>;
 
+  // Called once the demuxer has finished enabling or disabling tracks. The type
+  // argument is required because the vector may be empty.
+  using TrackChangeCB =
+      base::OnceCallback<void(DemuxerStream::Type type,
+                              const std::vector<DemuxerStream*>&)>;
+
   Demuxer();
   ~Demuxer() override;
 
@@ -86,8 +84,7 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
   // lifetime of the demuxer. Don't delete it!  |status_cb| must only be run
   // after this method has returned.
   virtual void Initialize(DemuxerHost* host,
-                          const PipelineStatusCB& status_cb,
-                          bool enable_text_tracks) = 0;
+                          const PipelineStatusCB& status_cb) = 0;
 
   // Aborts any pending read operations that the demuxer is involved with; any
   // read aborted will be aborted with a status of kAborted. Future reads will
@@ -142,15 +139,19 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
   // Returns the memory usage in bytes for the demuxer.
   virtual int64_t GetMemoryUsage() const = 0;
 
+  // The |track_ids| vector has either 1 track, or is empty, indicating that
+  // all tracks should be disabled. |change_completed_cb| is fired after the
+  // demuxer streams are disabled, however this callback should then notify
+  // the appropriate renderer in order for tracks to be switched fully.
   virtual void OnEnabledAudioTracksChanged(
       const std::vector<MediaTrack::Id>& track_ids,
-      base::TimeDelta curr_time) = 0;
+      base::TimeDelta curr_time,
+      TrackChangeCB change_completed_cb) = 0;
 
-  // |track_id| either contains the selected video track id or is null,
-  // indicating that all video tracks are deselected/disabled.
   virtual void OnSelectedVideoTrackChanged(
-      base::Optional<MediaTrack::Id> track_id,
-      base::TimeDelta curr_time) = 0;
+      const std::vector<MediaTrack::Id>& track_ids,
+      base::TimeDelta curr_time,
+      TrackChangeCB change_completed_cb) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Demuxer);

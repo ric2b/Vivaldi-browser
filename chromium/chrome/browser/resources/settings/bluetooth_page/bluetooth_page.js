@@ -74,7 +74,7 @@ Polymer({
         if (settings.routes.BLUETOOTH_DEVICES) {
           map.set(
               settings.routes.BLUETOOTH_DEVICES.path,
-              '#bluetoothDevices .subpage-arrow');
+              '#bluetoothDevices .subpage-arrow button');
         }
         return map;
       },
@@ -144,7 +144,7 @@ Polymer({
   getIcon_: function() {
     if (!this.bluetoothToggleState_)
       return 'settings:bluetooth-disabled';
-    return 'settings:bluetooth';
+    return 'cr:bluetooth';
   },
 
   /**
@@ -186,14 +186,6 @@ Polymer({
       this.bluetoothToggleState_ = true;
     else
       this.openSubpage_();
-  },
-
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  stopTap_: function(e) {
-    e.stopPropagation();
   },
 
   /**

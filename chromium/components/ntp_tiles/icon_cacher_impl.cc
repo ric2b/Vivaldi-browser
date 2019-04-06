@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/favicon/core/favicon_server_fetcher_params.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon/core/favicon_util.h"
 #include "components/favicon/core/large_icon_service.h"
@@ -137,7 +137,7 @@ void IconCacherImpl::OnGetFaviconImageForPageURLFinished(
           setting: "This feature cannot be disabled in settings."
           policy_exception_justification: "Not implemented."
         })");
-  image_fetcher_->StartOrQueueNetworkRequest(
+  image_fetcher_->FetchImage(
       std::string(), IconURL(site),
       base::Bind(&IconCacherImpl::OnPopularSitesFaviconDownloaded,
                  base::Unretained(this), site,
@@ -265,9 +265,10 @@ void IconCacherImpl::OnGetLargeIconOrFallbackStyleFinished(
         })");
   large_icon_service_
       ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
-          page_url,
-          GetMinimumFetchingSizeForChromeSuggestionsFaviconsFromServer(),
-          GetDesiredFetchingSizeForChromeSuggestionsFaviconsFromServer(),
+          favicon::FaviconServerFetcherParams::CreateForMobile(
+              page_url,
+              GetMinimumFetchingSizeForChromeSuggestionsFaviconsFromServer(),
+              GetDesiredFetchingSizeForChromeSuggestionsFaviconsFromServer()),
           /*may_page_url_be_private=*/true, traffic_annotation,
           base::Bind(&IconCacherImpl::OnMostLikelyFaviconDownloaded,
                      weak_ptr_factory_.GetWeakPtr(), page_url));

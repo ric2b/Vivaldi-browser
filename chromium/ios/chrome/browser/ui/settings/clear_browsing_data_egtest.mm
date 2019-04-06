@@ -4,7 +4,9 @@
 
 #import <XCTest/XCTest.h>
 
+#include "base/test/scoped_feature_list.h"
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -18,14 +20,15 @@
 #endif
 
 using chrome_test_util::ButtonWithAccessibilityLabel;
-using chrome_test_util::ButtonWithAccessibilityLabelId;
-using chrome_test_util::NavigationBarDoneButton;
+using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SettingsMenuPrivacyButton;
 
 @interface ClearBrowsingDataSettingsTestCase : ChromeTestCase
 @end
 
-@implementation ClearBrowsingDataSettingsTestCase
+@implementation ClearBrowsingDataSettingsTestCase {
+  base::test::ScopedFeatureList _featureList;
+}
 
 - (void)openClearBrowsingDataDialog {
   [ChromeEarlGreyUI openSettingsMenu];
@@ -38,19 +41,24 @@ using chrome_test_util::SettingsMenuPrivacyButton;
       performAction:grey_tap()];
 }
 
-// Test that opening the clear browsing data dialog does not cause a crash.
-// TODO(crbug.com/760084): Disabled as the user default do not longer exists
-- (void)DISABLED_testOpeningClearBrowsingData {
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  NSString* oldSetting =
-      [defaults stringForKey:@"EnableNewClearBrowsingDataUI"];
-  [defaults setObject:@"Enabled" forKey:@"EnableNewClearBrowsingDataUI"];
+// Test that opening the clear browsing data dialog does not cause a crash
+// with the old UI.
+- (void)testOpenClearBrowsingDataDialogOldUI {
+  _featureList.InitAndDisableFeature(kNewClearBrowsingDataUI);
 
   [self openClearBrowsingDataDialog];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
+}
 
-  [defaults setObject:oldSetting forKey:@"EnableNewClearBrowsingDataUI"];
+// Test that opening the clear browsing data dialog does not cause a crash
+// with the new UI.
+- (void)testOpenClearBrowsingDataDialogNewUI {
+  _featureList.InitAndEnableFeature(kNewClearBrowsingDataUI);
+
+  [self openClearBrowsingDataDialog];
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+      performAction:grey_tap()];
 }
 
 @end

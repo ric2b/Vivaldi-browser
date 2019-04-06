@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -15,33 +16,48 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/win/windows_version.h"
+#include "device/base/features.h"
+#include "device/bluetooth/bluetooth_adapter_winrt.h"
+#include "device/bluetooth/bluetooth_classic_win.h"
 #include "device/bluetooth/bluetooth_device_win.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_socket_thread.h"
 #include "device/bluetooth/bluetooth_socket_win.h"
 #include "device/bluetooth/bluetooth_task_manager_win.h"
 #include "device/bluetooth/bluetooth_uuid.h"
-#include "net/log/net_log_source.h"
 
 namespace device {
 
 // static
 base::WeakPtr<BluetoothAdapter> BluetoothAdapter::CreateAdapter(
-    const InitCallback& init_callback) {
-  return BluetoothAdapterWin::CreateAdapter(init_callback);
+    InitCallback init_callback) {
+  return BluetoothAdapterWin::CreateAdapter(std::move(init_callback));
 }
 
 // static
 base::WeakPtr<BluetoothAdapter> BluetoothAdapterWin::CreateAdapter(
-    const InitCallback& init_callback) {
-  BluetoothAdapterWin* adapter = new BluetoothAdapterWin(init_callback);
+    InitCallback init_callback) {
+  if (UseNewBLEWinImplementation()) {
+    auto* adapter = new BluetoothAdapterWinrt();
+    adapter->Init(std::move(init_callback));
+    return adapter->weak_ptr_factory_.GetWeakPtr();
+  }
+
+  auto* adapter = new BluetoothAdapterWin(std::move(init_callback));
   adapter->Init();
   return adapter->weak_ptr_factory_.GetWeakPtr();
 }
 
-BluetoothAdapterWin::BluetoothAdapterWin(const InitCallback& init_callback)
+// static
+bool BluetoothAdapterWin::UseNewBLEWinImplementation() {
+  return base::FeatureList::IsEnabled(kNewBLEWinImplementation) &&
+         base::win::GetVersion() >= base::win::VERSION_WIN10;
+}
+
+BluetoothAdapterWin::BluetoothAdapterWin(InitCallback init_callback)
     : BluetoothAdapter(),
-      init_callback_(init_callback),
+      init_callback_(std::move(init_callback)),
       initialized_(false),
       powered_(false),
       discovery_status_(NOT_DISCOVERING),
@@ -107,21 +123,23 @@ bool BluetoothAdapterWin::IsDiscovering() const {
 }
 
 static void RunDiscoverySessionErrorCallback(
-    const base::Callback<void(UMABluetoothDiscoverySessionOutcome)>& callback,
+    base::OnceCallback<void(UMABluetoothDiscoverySessionOutcome)>
+        error_callback,
     UMABluetoothDiscoverySessionOutcome outcome) {
-  callback.Run(outcome);
+  std::move(error_callback).Run(outcome);
 }
 
 void BluetoothAdapterWin::DiscoveryStarted(bool success) {
   discovery_status_ = success ? DISCOVERING : NOT_DISCOVERING;
-  for (const auto& callbacks : on_start_discovery_callbacks_) {
+  for (auto& callbacks : on_start_discovery_callbacks_) {
     if (success)
       ui_task_runner_->PostTask(FROM_HERE, callbacks.first);
     else
       ui_task_runner_->PostTask(
           FROM_HERE,
-          base::Bind(&RunDiscoverySessionErrorCallback, callbacks.second,
-                     UMABluetoothDiscoverySessionOutcome::UNKNOWN));
+          base::BindOnce(&RunDiscoverySessionErrorCallback,
+                         std::move(callbacks.second),
+                         UMABluetoothDiscoverySessionOutcome::UNKNOWN));
   }
   num_discovery_listeners_ = on_start_discovery_callbacks_.size();
   on_start_discovery_callbacks_.clear();
@@ -221,7 +239,7 @@ void BluetoothAdapterWin::AdapterStateChanged(
   }
   if (!initialized_) {
     initialized_ = true;
-    init_callback_.Run();
+    std::move(init_callback_).Run();
   }
 }
 
@@ -261,12 +279,12 @@ void BluetoothAdapterWin::DevicesPolled(
       base::STLSetIntersection<DeviceAddressSet>(known_devices, new_devices);
   for (const auto& device_state : devices) {
     if (added_devices.find(device_state->address) != added_devices.end()) {
-      BluetoothDeviceWin* device_win =
-          new BluetoothDeviceWin(this, *device_state, ui_task_runner_,
-                                 socket_thread_, NULL, net::NetLogSource());
-      devices_[device_state->address] = base::WrapUnique(device_win);
+      auto device_win = std::make_unique<BluetoothDeviceWin>(
+          this, *device_state, ui_task_runner_, socket_thread_);
+      BluetoothDeviceWin* device_win_raw = device_win.get();
+      devices_[device_state->address] = std::move(device_win);
       for (auto& observer : observers_)
-        observer.DeviceAdded(this, device_win);
+        observer.DeviceAdded(this, device_win_raw);
     } else if (changed_devices.find(device_state->address) !=
                changed_devices.end()) {
       auto iter = devices_.find(device_state->address);
@@ -289,28 +307,35 @@ void BluetoothAdapterWin::DevicesPolled(
   }
 }
 
+// BluetoothAdapterWin should override SetPowered() instead.
+bool BluetoothAdapterWin::SetPoweredImpl(bool powered) {
+  NOTREACHED();
+  return false;
+}
+
 // If the method is called when |discovery_status_| is DISCOVERY_STOPPING,
 // starting again is handled by BluetoothAdapterWin::DiscoveryStopped().
 void BluetoothAdapterWin::AddDiscoverySession(
     BluetoothDiscoveryFilter* discovery_filter,
     const base::Closure& callback,
-    const DiscoverySessionErrorCallback& error_callback) {
+    DiscoverySessionErrorCallback error_callback) {
   if (discovery_status_ == DISCOVERING) {
     num_discovery_listeners_++;
     callback.Run();
     return;
   }
   on_start_discovery_callbacks_.push_back(
-      std::make_pair(callback, error_callback));
+      std::make_pair(callback, std::move(error_callback)));
   MaybePostStartDiscoveryTask();
 }
 
 void BluetoothAdapterWin::RemoveDiscoverySession(
     BluetoothDiscoveryFilter* discovery_filter,
     const base::Closure& callback,
-    const DiscoverySessionErrorCallback& error_callback) {
+    DiscoverySessionErrorCallback error_callback) {
   if (discovery_status_ == NOT_DISCOVERING) {
-    error_callback.Run(UMABluetoothDiscoverySessionOutcome::NOT_ACTIVE);
+    std::move(error_callback)
+        .Run(UMABluetoothDiscoverySessionOutcome::NOT_ACTIVE);
     return;
   }
   on_stop_discovery_callbacks_.push_back(callback);
@@ -320,28 +345,31 @@ void BluetoothAdapterWin::RemoveDiscoverySession(
 void BluetoothAdapterWin::SetDiscoveryFilter(
     std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
     const base::Closure& callback,
-    const DiscoverySessionErrorCallback& error_callback) {
+    DiscoverySessionErrorCallback error_callback) {
   NOTIMPLEMENTED();
-  error_callback.Run(UMABluetoothDiscoverySessionOutcome::NOT_IMPLEMENTED);
+  std::move(error_callback)
+      .Run(UMABluetoothDiscoverySessionOutcome::NOT_IMPLEMENTED);
 }
 
 void BluetoothAdapterWin::Init() {
   ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   socket_thread_ = BluetoothSocketThread::Get();
   task_manager_ =
-      new BluetoothTaskManagerWin(ui_task_runner_);
+      base::MakeRefCounted<BluetoothTaskManagerWin>(ui_task_runner_);
   task_manager_->AddObserver(this);
   task_manager_->Initialize();
 }
 
 void BluetoothAdapterWin::InitForTest(
-    scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
+    std::unique_ptr<win::BluetoothClassicWrapper> classic_wrapper,
+    std::unique_ptr<win::BluetoothLowEnergyWrapper> le_wrapper,
+    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
     scoped_refptr<base::SequencedTaskRunner> bluetooth_task_runner) {
   ui_task_runner_ = ui_task_runner;
   if (!ui_task_runner_)
     ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
-  task_manager_ =
-      new BluetoothTaskManagerWin(ui_task_runner_);
+  task_manager_ = BluetoothTaskManagerWin::CreateForTesting(
+      std::move(classic_wrapper), std::move(le_wrapper), ui_task_runner_);
   task_manager_->AddObserver(this);
   task_manager_->InitializeWithBluetoothTaskRunner(bluetooth_task_runner);
 }

@@ -24,7 +24,7 @@
 #include "storage/browser/quota/quota_callbacks.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/fileapi/file_system_util.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -34,10 +34,6 @@ namespace storage {
 class FileSystemContext;
 class FileSystemOperationRunner;
 class FileSystemURL;
-}
-
-namespace leveldb {
-class Env;
 }
 
 namespace net {
@@ -74,7 +70,7 @@ class CannedSyncableFileSystem
 
   CannedSyncableFileSystem(
       const GURL& origin,
-      leveldb::Env* env_override,
+      bool in_memory_file_system,
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
       const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner);
   ~CannedSyncableFileSystem() override;
@@ -213,7 +209,7 @@ class CannedSyncableFileSystem
                      const WriteCallback& callback);
   void DoGetUsageAndQuota(int64_t* usage,
                           int64_t* quota,
-                          const storage::StatusCallback& callback);
+                          storage::StatusCallback callback);
 
  private:
   typedef base::ObserverListThreadSafe<LocalFileSyncStatus::Observer>
@@ -241,7 +237,7 @@ class CannedSyncableFileSystem
   base::File::Error result_;
   sync_file_system::SyncStatusCode sync_status_;
 
-  leveldb::Env* env_override_;
+  const bool in_memory_file_system_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
 

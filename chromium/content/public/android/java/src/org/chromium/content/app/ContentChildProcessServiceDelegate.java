@@ -16,6 +16,7 @@ import android.view.Surface;
 import org.chromium.base.CommandLine;
 import org.chromium.base.JNIUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.UnguessableToken;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -23,13 +24,14 @@ import org.chromium.base.annotations.MainDex;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.Linker;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.base.memory.MemoryPressureUma;
 import org.chromium.base.process_launcher.ChildProcessServiceDelegate;
-import org.chromium.content.browser.ChildProcessCreationParams;
+import org.chromium.content.browser.ChildProcessCreationParamsImpl;
 import org.chromium.content.browser.ContentChildProcessConstants;
-import org.chromium.content.common.ContentSwitches;
 import org.chromium.content.common.IGpuProcessCallback;
 import org.chromium.content.common.SurfaceWrapper;
 import org.chromium.content_public.common.ContentProcessInfo;
+import org.chromium.content_public.common.ContentSwitches;
 
 import java.util.List;
 
@@ -67,7 +69,8 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
     @Override
     public void onServiceBound(Intent intent) {
         mLinkerParams = ChromiumLinkerParams.create(intent.getExtras());
-        mLibraryProcessType = ChildProcessCreationParams.getLibraryProcessType(intent.getExtras());
+        mLibraryProcessType =
+                ChildProcessCreationParamsImpl.getLibraryProcessType(intent.getExtras());
     }
 
     @Override
@@ -80,10 +83,11 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
         mCpuFeatures = connectionBundle.getLong(ContentChildProcessConstants.EXTRA_CPU_FEATURES);
         assert mCpuCount > 0;
 
-        Bundle sharedRelros = connectionBundle.getBundle(Linker.EXTRA_LINKER_SHARED_RELROS);
-        if (sharedRelros != null) {
-            getLinker().useSharedRelros(sharedRelros);
-            sharedRelros = null;
+        if (LibraryLoader.useCrazyLinker()) {
+            Bundle sharedRelros = connectionBundle.getBundle(Linker.EXTRA_LINKER_SHARED_RELROS);
+            if (sharedRelros != null) {
+                getLinker().useSharedRelros(sharedRelros);
+            }
         }
     }
 
@@ -92,12 +96,7 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
         // This function can be called before command line is set. That is fine because
         // preloading explicitly doesn't run any Chromium code, see NativeLibraryPreloader
         // for more info.
-        try {
-            LibraryLoader libraryLoader = LibraryLoader.get(mLibraryProcessType);
-            libraryLoader.preloadNowOverrideApplicationContext(hostContext);
-        } catch (ProcessInitException e) {
-            Log.w(TAG, "Failed to preload native library", e);
-        }
+        LibraryLoader.getInstance().preloadNowOverrideApplicationContext(hostContext);
     }
 
     @Override
@@ -111,7 +110,7 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
 
         Linker linker = null;
         boolean requestedSharedRelro = false;
-        if (Linker.isUsed()) {
+        if (LibraryLoader.useCrazyLinker()) {
             assert mLinkerParams != null;
             linker = getLinker();
             if (mLinkerParams.mWaitForSharedRelro) {
@@ -121,12 +120,10 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
                 linker.disableSharedRelros();
             }
         }
-        LibraryLoader libraryLoader = null;
         boolean isLoaded = false;
         boolean loadAtFixedAddressFailed = false;
         try {
-            libraryLoader = LibraryLoader.get(mLibraryProcessType);
-            libraryLoader.loadNowOverrideApplicationContext(hostContext);
+            LibraryLoader.getInstance().loadNowOverrideApplicationContext(hostContext);
             isLoaded = true;
         } catch (ProcessInitException e) {
             if (requestedSharedRelro) {
@@ -138,10 +135,10 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
                 Log.e(TAG, "Failed to load native library", e);
             }
         }
-        if (!isLoaded && libraryLoader != null && requestedSharedRelro) {
+        if (!isLoaded && requestedSharedRelro) {
             linker.disableSharedRelros();
             try {
-                libraryLoader.loadNowOverrideApplicationContext(hostContext);
+                LibraryLoader.getInstance().loadNowOverrideApplicationContext(hostContext);
                 isLoaded = true;
             } catch (ProcessInitException e) {
                 Log.e(TAG, "Failed to load native library on retry", e);
@@ -150,10 +147,10 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
         if (!isLoaded) {
             return false;
         }
-        libraryLoader.registerRendererProcessHistogram(
+        LibraryLoader.getInstance().registerRendererProcessHistogram(
                 requestedSharedRelro, loadAtFixedAddressFailed);
         try {
-            libraryLoader.initialize();
+            LibraryLoader.getInstance().initialize(mLibraryProcessType);
         } catch (ProcessInitException e) {
             Log.w(TAG, "startup failed: %s", e);
             return false;
@@ -176,6 +173,7 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
     @Override
     public void onBeforeMain() {
         nativeInitChildProcess(mCpuCount, mCpuFeatures);
+        ThreadUtils.postOnUiThread(() -> MemoryPressureUma.initializeForChildService());
     }
 
     @Override
@@ -187,7 +185,7 @@ public class ContentChildProcessServiceDelegate implements ChildProcessServiceDe
 
     @Override
     public void runMain() {
-        ContentMain.start();
+        ContentMain.start(false);
     }
 
     // Return a Linker instance. If testing, the Linker needs special setup.

@@ -5,8 +5,17 @@
 #include "media/capture/video/video_capture_device_descriptor.h"
 
 #include "base/logging.h"
+#include "base/strings/string_util.h"
 
 namespace media {
+namespace {
+std::string TrimDisplayName(const std::string& display_name) {
+  std::string trimmed_name;
+  base::TrimWhitespaceASCII(display_name, base::TrimPositions::TRIM_TRAILING,
+                            &trimmed_name);
+  return trimmed_name;
+}
+}  // namespace
 
 VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor()
     : facing(VideoFacingMode::MEDIA_VIDEO_FACING_NONE),
@@ -18,11 +27,11 @@ VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     const std::string& device_id,
     VideoCaptureApi capture_api,
     VideoCaptureTransportType transport_type)
-    : display_name(display_name),
-      device_id(device_id),
+    : device_id(device_id),
       facing(VideoFacingMode::MEDIA_VIDEO_FACING_NONE),
       capture_api(capture_api),
-      transport_type(transport_type) {}
+      transport_type(transport_type),
+      display_name_(TrimDisplayName(display_name)) {}
 
 VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     const std::string& display_name,
@@ -31,12 +40,12 @@ VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     VideoCaptureApi capture_api,
     VideoCaptureTransportType transport_type,
     VideoFacingMode facing)
-    : display_name(display_name),
-      device_id(device_id),
+    : device_id(device_id),
       model_id(model_id),
       facing(facing),
       capture_api(capture_api),
-      transport_type(transport_type) {}
+      transport_type(transport_type),
+      display_name_(TrimDisplayName(display_name)) {}
 
 VideoCaptureDeviceDescriptor::~VideoCaptureDeviceDescriptor() = default;
 
@@ -52,10 +61,10 @@ bool VideoCaptureDeviceDescriptor::operator<(
                 "FACING_ENVIRONMENT has a wrong value");
   static_assert(kFacingMapping[MEDIA_VIDEO_FACING_USER] == 2,
                 "FACING_USER has a wrong value");
-  if (kFacingMapping[facing] > kFacingMapping[other.facing])
-    return true;
-  if (device_id < other.device_id)
-    return true;
+  if (kFacingMapping[facing] != kFacingMapping[other.facing])
+    return kFacingMapping[facing] > kFacingMapping[other.facing];
+  if (device_id != other.device_id)
+    return device_id < other.device_id;
   return capture_api < other.capture_api;
 }
 
@@ -65,6 +74,8 @@ const char* VideoCaptureDeviceDescriptor::GetCaptureApiTypeString() const {
       return "V4L2 SPLANE";
     case VideoCaptureApi::WIN_MEDIA_FOUNDATION:
       return "Media Foundation";
+    case VideoCaptureApi::WIN_MEDIA_FOUNDATION_SENSOR:
+      return "Media Foundation Sensor Camera";
     case VideoCaptureApi::WIN_DIRECT_SHOW:
       return "Direct Show";
     case VideoCaptureApi::MACOSX_AVFOUNDATION:
@@ -79,19 +90,21 @@ const char* VideoCaptureDeviceDescriptor::GetCaptureApiTypeString() const {
       return "Camera API2 Full";
     case VideoCaptureApi::ANDROID_API2_LIMITED:
       return "Camera API2 Limited";
-    case VideoCaptureApi::ANDROID_TANGO:
-      return "Tango API";
-    default:
-      NOTREACHED() << "Unknown Video Capture API type: "
-                   << static_cast<int>(capture_api);
-      return "Unknown API";
+    case VideoCaptureApi::VIRTUAL_DEVICE:
+      return "Virtual Device";
+    case VideoCaptureApi::UNKNOWN:
+      return "Unknown";
   }
 }
 
 std::string VideoCaptureDeviceDescriptor::GetNameAndModel() const {
   if (model_id.empty())
-    return display_name;
-  return display_name + " (" + model_id + ")";
+    return display_name_;
+  return display_name_ + " (" + model_id + ')';
+}
+
+void VideoCaptureDeviceDescriptor::set_display_name(const std::string& name) {
+  display_name_ = TrimDisplayName(name);
 }
 
 }  // namespace media

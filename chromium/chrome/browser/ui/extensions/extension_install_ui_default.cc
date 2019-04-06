@@ -76,7 +76,7 @@ ExtensionInstallUIDefault::~ExtensionInstallUIDefault() {}
 
 void ExtensionInstallUIDefault::OnInstallSuccess(const Extension* extension,
                                                  const SkBitmap* icon) {
-  if (skip_post_install_ui_ || extension->is_theme())
+  if (disable_ui_for_tests() || skip_post_install_ui_ || extension->is_theme())
     return;
 
   if (!profile_) {
@@ -115,7 +115,7 @@ void ExtensionInstallUIDefault::OnInstallSuccess(const Extension* extension,
 void ExtensionInstallUIDefault::OnInstallFailure(
     const extensions::CrxInstallError& error) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (disable_failure_ui_for_tests() || skip_post_install_ui_)
+  if (disable_ui_for_tests() || skip_post_install_ui_)
     return;
 
   Browser* browser = chrome::FindLastActiveWithProfile(profile_);
@@ -144,7 +144,7 @@ void ExtensionInstallUIDefault::OpenAppInstalledUI(const std::string& app_id) {
 
     content::NotificationService::current()->Notify(
         chrome::NOTIFICATION_APP_INSTALLED_TO_NTP,
-        content::Source<WebContents>(params.target_contents),
+        content::Source<WebContents>(params.navigated_or_inserted_contents),
         content::Details<const std::string>(&app_id));
   }
 #endif

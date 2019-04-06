@@ -43,6 +43,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -99,12 +100,12 @@ public class TileGroupTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    public void testDismissTileWithContextMenu() throws InterruptedException, TimeoutException {
+    public void testDismissTileWithContextMenu() throws Exception {
         SiteSuggestion siteToDismiss = mMostVisitedSites.getCurrentSites().get(0);
         final View tileView = getTileViewFor(siteToDismiss);
 
         // Dismiss the tile using the context menu.
-        invokeContextMenu(tileView, ContextMenuManager.ID_REMOVE);
+        invokeContextMenu(tileView, ContextMenuManager.ContextMenuItemId.REMOVE);
         Assert.assertTrue(mMostVisitedSites.isUrlBlacklisted(mSiteSuggestionUrls[0]));
 
         // Ensure that the removal is reflected in the ui.
@@ -123,14 +124,14 @@ public class TileGroupTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    public void testDismissTileUndo() throws InterruptedException, TimeoutException {
+    public void testDismissTileUndo() throws Exception {
         SiteSuggestion siteToDismiss = mMostVisitedSites.getCurrentSites().get(0);
         final ViewGroup tileContainer = getTileGridLayout();
         final View tileView = getTileViewFor(siteToDismiss);
         Assert.assertEquals(3, tileContainer.getChildCount());
 
         // Dismiss the tile using the context menu.
-        invokeContextMenu(tileView, ContextMenuManager.ID_REMOVE);
+        invokeContextMenu(tileView, ContextMenuManager.ContextMenuItemId.REMOVE);
 
         // Ensure that the removal update goes through.
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -170,10 +171,10 @@ public class TileGroupTest {
     }
 
     private TileGridLayout getTileGridLayout() {
-        ViewGroup aboveTheFoldView = getRecyclerView().getAboveTheFoldView();
-        Assert.assertNotNull("Unable to retrieve the AboveTheFold view.", aboveTheFoldView);
+        ViewGroup newTabPageLayout = mNtp.getNewTabPageLayout();
+        Assert.assertNotNull("Unable to retrieve the NewTabPageLayout.", newTabPageLayout);
 
-        TileGridLayout tileGridLayout = aboveTheFoldView.findViewById(R.id.tile_grid_layout);
+        TileGridLayout tileGridLayout = newTabPageLayout.findViewById(R.id.tile_grid_layout);
         Assert.assertNotNull("Unable to retrieve the TileGridLayout.", tileGridLayout);
         return tileGridLayout;
     }
@@ -185,8 +186,9 @@ public class TileGroupTest {
         return tileView;
     }
 
-    private void invokeContextMenu(View view, int contextMenuItemId) {
-        TestTouchUtils.longClickView(InstrumentationRegistry.getInstrumentation(), view);
+    private void invokeContextMenu(View view, int contextMenuItemId) throws ExecutionException {
+        TestTouchUtils.performLongClickOnMainSync(
+                InstrumentationRegistry.getInstrumentation(), view);
         Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
                 mActivityTestRule.getActivity(), contextMenuItemId, 0));
     }

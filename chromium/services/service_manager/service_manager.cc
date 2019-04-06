@@ -27,16 +27,16 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/catalog/entry.h"
 #include "services/catalog/instance.h"
-#include "services/catalog/public/interfaces/constants.mojom.h"
+#include "services/catalog/public/mojom/constants.mojom.h"
 #include "services/service_manager/connect_util.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/interfaces/connector.mojom.h"
-#include "services/service_manager/public/interfaces/constants.mojom.h"
-#include "services/service_manager/public/interfaces/service.mojom.h"
-#include "services/service_manager/public/interfaces/service_control.mojom.h"
-#include "services/service_manager/public/interfaces/service_manager.mojom.h"
+#include "services/service_manager/public/mojom/connector.mojom.h"
+#include "services/service_manager/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
+#include "services/service_manager/public/mojom/service_control.mojom.h"
+#include "services/service_manager/public/mojom/service_manager.mojom.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 
 #if !defined(OS_IOS)
@@ -228,6 +228,8 @@ class ServiceManager::Instance
   }
 
   void Stop() {
+    DCHECK_NE(state_, State::STOPPED);
+
     // Shutdown all bindings. This way the process should see the pipes closed
     // and exit, as well as waking up any potential
     // sync/WaitForIncomingResponse().
@@ -244,10 +246,15 @@ class ServiceManager::Instance
       // Notify the ServiceManager that this Instance is really going away.
       service_manager_->OnInstanceStopped(identity_);
     }
+
+    state_ = State::STOPPED;
   }
 
   ~Instance() override {
-    Stop();
+    // The instance may have already been stopped prior to destruction if the
+    // ServiceManager itself is being torn down.
+    if (state_ != State::STOPPED)
+      Stop();
   }
 
   bool CallOnBindInterface(std::unique_ptr<ConnectParams>* in_params) {
@@ -373,7 +380,10 @@ class ServiceManager::Instance
     STARTING,
 
     // The service was started successfully.
-    STARTED
+    STARTED,
+
+    // The service has been stopped.
+    STOPPED,
   };
 
   class InterfaceProviderImpl : public mojom::InterfaceProvider {
@@ -866,7 +876,7 @@ ServiceManager::ServiceManager(std::unique_ptr<ServiceProcessLauncherFactory>
       weak_ptr_factory_(this) {
   InterfaceProviderSpec spec;
   spec.provides[kCapability_ServiceManager].insert(
-      "service_manager::mojom::ServiceManager");
+      "service_manager.mojom.ServiceManager");
   spec.requires["*"].insert("service_manager:service_factory");
   InterfaceProviderSpecMap specs;
   specs[mojom::kServiceManager_ConnectorSpec] = std::move(spec);
@@ -897,10 +907,12 @@ ServiceManager::~ServiceManager() {
   // the case where one Instance's destructor blocks waiting for its Runner to
   // quit, while that Runner's corresponding Service blocks its shutdown on a
   // distinct Service receiving a connection error.
-  for (const auto& instance : instances_)
-    instance.first->Stop();
-  service_manager_instance->Stop();
+  for (const auto& instance : instances_) {
+    if (instance.first != service_manager_instance_)
+      instance.first->Stop();
+  }
 
+  service_manager_instance->Stop();
   instances_.clear();
 }
 
@@ -1095,9 +1107,9 @@ void ServiceManager::InitCatalog(mojom::ServicePtr catalog) {
   // TODO(beng): It'd be great to build this from the manifest, however there's
   //             a bit of a chicken-and-egg problem.
   InterfaceProviderSpec spec;
-  spec.provides["directory"].insert("filesystem::mojom::Directory");
-  spec.provides["catalog:catalog"].insert("catalog::mojom::Catalog");
-  spec.provides["control"].insert("catalog::mojom::CatalogControl");
+  spec.provides["directory"].insert("filesystem.mojom.Directory");
+  spec.provides["catalog:catalog"].insert("catalog.mojom.Catalog");
+  spec.provides["control"].insert("catalog.mojom.CatalogControl");
   InterfaceProviderSpecMap specs;
   specs[mojom::kServiceManager_ConnectorSpec] = std::move(spec);
 

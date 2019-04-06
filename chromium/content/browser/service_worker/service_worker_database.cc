@@ -4,6 +4,7 @@
 
 #include "content/browser/service_worker/service_worker_database.h"
 
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
@@ -17,8 +18,9 @@
 #include "content/browser/service_worker/service_worker_database.pb.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "content/public/common/content_switches.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
@@ -273,6 +275,7 @@ const char* ServiceWorkerDatabase::StatusToString(
 
 ServiceWorkerDatabase::RegistrationData::RegistrationData()
     : registration_id(blink::mojom::kInvalidServiceWorkerRegistrationId),
+      update_via_cache(blink::mojom::ServiceWorkerUpdateViaCache::kImports),
       version_id(blink::mojom::kInvalidServiceWorkerVersionId),
       is_active(false),
       has_fetch_handler(false),
@@ -1223,12 +1226,8 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::DestroyDatabase() {
     return STATUS_OK;
   }
 
-  // Directly delete the database instead of calling leveldb::DestroyDB()
-  // because the API does not delete the directory if there are unrelated files.
-  // (https://code.google.com/p/chromium/issues/detail?id=468926#c24)
-  Status status = base::DeleteFile(path_, true /* recursive */)
-                      ? STATUS_OK
-                      : STATUS_ERROR_FAILED;
+  Status status = LevelDBStatusToServiceWorkerDBStatus(
+      leveldb_chrome::DeleteDB(path_, leveldb_env::Options()));
   ServiceWorkerMetrics::RecordDestroyDatabaseResult(status);
   return status;
 }
@@ -1243,22 +1242,24 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::LazyOpen(
   if (IsOpen())
     return STATUS_OK;
 
-  if (!create_if_missing) {
+  if (!create_if_missing &&
+      (IsDatabaseInMemory() ||
+       !leveldb_chrome::PossiblyValidDB(path_, leveldb::Env::Default()))) {
     // Avoid opening a database if it does not exist at the |path_|.
-    if (IsDatabaseInMemory() || !base::PathExists(path_) ||
-        base::IsDirectoryEmpty(path_)) {
-      return STATUS_ERROR_NOT_FOUND;
-    }
+    return STATUS_ERROR_NOT_FOUND;
   }
 
   leveldb_env::Options options;
   options.create_if_missing = create_if_missing;
   if (IsDatabaseInMemory()) {
-    env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    env_ = leveldb_chrome::NewMemEnv("service-worker");
     options.env = env_.get();
   } else {
     options.env = g_service_worker_env.Pointer();
   }
+  // The data size is usually small, but the values are changed frequently. So,
+  // set a low write buffer size to trigger compaction more often.
+  options.write_buffer_size = 512 * 1024;
 
   Status status = LevelDBStatusToServiceWorkerDBStatus(
       leveldb_env::OpenDB(options, path_.AsUTF8Unsafe(), &db_));
@@ -1409,6 +1410,17 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::ParseRegistrationData(
   for (uint32_t feature : data.used_features())
     out->used_features.insert(feature);
 
+  if (data.has_update_via_cache()) {
+    auto value = data.update_via_cache();
+    if (!ServiceWorkerRegistrationData_ServiceWorkerUpdateViaCacheType_IsValid(
+            value)) {
+      DLOG(ERROR) << "Update via cache mode '" << value << "' is not valid.";
+      return ServiceWorkerDatabase::STATUS_ERROR_CORRUPTED;
+    }
+    out->update_via_cache =
+        static_cast<blink::mojom::ServiceWorkerUpdateViaCache>(value);
+  }
+
   return ServiceWorkerDatabase::STATUS_OK;
 }
 
@@ -1449,6 +1461,11 @@ void ServiceWorkerDatabase::WriteRegistrationDataInBatch(
   for (uint32_t feature : registration.used_features)
     data.add_used_features(feature);
 
+  data.set_update_via_cache(
+      static_cast<
+          ServiceWorkerRegistrationData_ServiceWorkerUpdateViaCacheType>(
+          registration.update_via_cache));
+
   std::string value;
   bool success = data.SerializeToString(&value);
   DCHECK(success);
@@ -1469,7 +1486,7 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::ReadResourceRecords(
     std::unique_ptr<leveldb::Iterator> itr(
         db_->NewIterator(leveldb::ReadOptions()));
     for (itr->Seek(prefix); itr->Valid(); itr->Next()) {
-      Status status = LevelDBStatusToServiceWorkerDBStatus(itr->status());
+      status = LevelDBStatusToServiceWorkerDBStatus(itr->status());
       if (status != STATUS_OK) {
         resources->clear();
         break;

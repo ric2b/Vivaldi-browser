@@ -35,6 +35,8 @@ class ASH_EXPORT LoginUserView : public views::View,
 
     views::View* user_label() const;
     views::View* tap_button() const;
+    views::View* dropdown() const;
+    LoginBubble* menu() const;
 
     bool is_opaque() const;
 
@@ -43,13 +45,20 @@ class ASH_EXPORT LoginUserView : public views::View,
   };
 
   using OnTap = base::RepeatingClosure;
+  using OnRemoveWarningShown = base::RepeatingClosure;
+  using OnRemove = base::RepeatingClosure;
 
   // Returns the width of this view for the given display style.
   static int WidthForLayoutStyle(LoginDisplayStyle style);
 
+  // Use null callbacks for |on_remove_warning_shown| and |on_remove| when
+  // |show_dropdown| arg is false.
   LoginUserView(LoginDisplayStyle style,
                 bool show_dropdown,
-                const OnTap& on_tap);
+                bool show_domain,
+                const OnTap& on_tap,
+                const OnRemoveWarningShown& on_remove_warning_shown,
+                const OnRemove& on_remove);
   ~LoginUserView() override;
 
   // Update the user view to display the given user information.
@@ -67,11 +76,13 @@ class ASH_EXPORT LoginUserView : public views::View,
   const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
+  void RequestFocus() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
+  class UserDomainInfoView;
   class UserImage;
   class UserLabel;
   class TapButton;
@@ -89,6 +100,10 @@ class ASH_EXPORT LoginUserView : public views::View,
 
   // Executed when the user view is pressed.
   OnTap on_tap_;
+  // Executed when the user has seen the remove user warning.
+  OnRemoveWarningShown on_remove_warning_shown_;
+  // Executed when a user-remove has been requested.
+  OnRemove on_remove_;
 
   // The user that is currently being displayed (or will be displayed when an
   // animation completes).
@@ -100,9 +115,14 @@ class ASH_EXPORT LoginUserView : public views::View,
   LoginDisplayStyle display_style_;
   UserImage* user_image_ = nullptr;
   UserLabel* user_label_ = nullptr;
+  // TODO(jdufault): Rename user_dropdown_ to dropdown_.
   LoginButton* user_dropdown_ = nullptr;
   TapButton* tap_button_ = nullptr;
+  // TODO(jdufault): Rename user_menu_ to menu_ or popup_menu_.
   std::unique_ptr<LoginBubble> user_menu_;
+
+  // Show the domain information for public account user.
+  UserDomainInfoView* user_domain_ = nullptr;
 
   // True iff the view is currently opaque (ie, opacity = 1).
   bool is_opaque_ = false;

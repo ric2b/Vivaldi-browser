@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
@@ -29,11 +28,6 @@ namespace {
 
 const char kDNTHeader[] = "DNT";
 
-void ReportInvalidReferrerSendOnUI() {
-  base::RecordAction(
-      base::UserMetricsAction("Net.URLRequest_StartJob_InvalidReferrer"));
-}
-
 void ReportInvalidReferrerSend(const GURL& target_url,
                                const GURL& referrer_url) {
   LOG(ERROR) << "Cancelling request to " << target_url
@@ -41,8 +35,6 @@ void ReportInvalidReferrerSend(const GURL& target_url,
   // Record information to help debug http://crbug.com/422871
   if (!target_url.SchemeIsHTTPOrHTTPS())
     return;
-  web::WebThread::PostTask(web::WebThread::UI, FROM_HERE,
-                           base::Bind(&ReportInvalidReferrerSendOnUI));
   base::debug::DumpWithoutCrashing();
   NOTREACHED();
 }
@@ -83,7 +75,7 @@ void IOSChromeNetworkDelegate::InitializePrefsOnUIThread(
 
 int IOSChromeNetworkDelegate::OnBeforeURLRequest(
     net::URLRequest* request,
-    const net::CompletionCallback& callback,
+    net::CompletionOnceCallback callback,
     GURL* new_url) {
   if (enable_do_not_track_ && enable_do_not_track_->GetValue())
     request->SetExtraRequestHeaderByName(kDNTHeader, "1", true /* override */);
@@ -94,15 +86,6 @@ void IOSChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
                                            bool started,
                                            int net_error) {
   RecordNetworkErrorHistograms(request, net_error);
-}
-
-net::NetworkDelegate::AuthRequiredResponse
-IOSChromeNetworkDelegate::OnAuthRequired(
-    net::URLRequest* request,
-    const net::AuthChallengeInfo& auth_info,
-    const AuthCallback& callback,
-    net::AuthCredentials* credentials) {
-  return net::NetworkDelegate::AUTH_REQUIRED_RESPONSE_NO_ACTION;
 }
 
 bool IOSChromeNetworkDelegate::OnCanGetCookies(

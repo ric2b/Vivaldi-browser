@@ -63,6 +63,10 @@ std::unique_ptr<FormField> AddressField::Parse(AutofillScanner* scanner) {
         ParseField(scanner, base::UTF8ToUTF16(kAddressNameIgnoredRe),
                    nullptr)) {
       continue;
+      // Ignore email addresses.
+    } else if (ParseFieldSpecifics(scanner, base::UTF8ToUTF16(kEmailRe),
+                                   MATCH_DEFAULT | MATCH_TEXT_AREA, nullptr)) {
+      continue;
     } else if (address_field->ParseAddressLines(scanner) ||
         address_field->ParseCityStateZipCode(scanner) ||
         address_field->ParseCountry(scanner) ||
@@ -98,20 +102,14 @@ std::unique_ptr<FormField> AddressField::Parse(AutofillScanner* scanner) {
 
   // If we have identified any address fields in this field then it should be
   // added to the list of fields.
-  if (address_field->company_ ||
-      address_field->address1_ ||
-      address_field->address2_ ||
-      address_field->address3_ ||
-      address_field->street_address_ ||
-      address_field->city_ ||
-      address_field->state_ ||
-      address_field->zip_ ||
-      address_field->zip4_ ||
+  if (address_field->company_ || address_field->address1_ ||
+      address_field->address2_ || address_field->address3_ ||
+      address_field->street_address_ || address_field->city_ ||
+      address_field->state_ || address_field->zip_ || address_field->zip4_ ||
       address_field->country_) {
     // Don't slurp non-labeled fields at the end into the address.
     if (has_trailing_non_labeled_fields)
       scanner->RewindTo(begin_trailing_non_labeled_fields);
-
     return std::move(address_field);
   }
 
@@ -161,7 +159,7 @@ void AddressField::AddClassifications(
 }
 
 bool AddressField::ParseCompany(AutofillScanner* scanner) {
-  if (company_ && !company_->IsEmpty())
+  if (company_)
     return false;
 
   return ParseField(scanner, UTF8ToUTF16(kCompanyRe), &company_);
@@ -225,7 +223,7 @@ bool AddressField::ParseAddressLines(AutofillScanner* scanner) {
 }
 
 bool AddressField::ParseCountry(AutofillScanner* scanner) {
-  if (country_ && !country_->IsEmpty())
+  if (country_)
     return false;
 
   scanner->SaveCursor();

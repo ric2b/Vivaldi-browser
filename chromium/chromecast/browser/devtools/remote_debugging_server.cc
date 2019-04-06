@@ -4,14 +4,18 @@
 
 #include "chromecast/browser/devtools/remote_debugging_server.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "chromecast/base/cast_paths.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/devtools/cast_devtools_manager_delegate.h"
 #include "chromecast/common/cast_content_client.h"
@@ -19,6 +23,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_socket_factory.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
 #include "net/base/net_errors.h"
@@ -35,8 +40,6 @@ namespace shell {
 
 namespace {
 
-const char kFrontEndURL[] =
-    "https://chrome-devtools-frontend.appspot.com/serve_rev/%s/inspector.html";
 const uint16_t kDefaultRemoteDebuggingPort = 9222;
 
 const int kBackLog = 10;
@@ -115,10 +118,6 @@ std::unique_ptr<content::DevToolsSocketFactory> CreateSocketFactory(
 #endif
 }
 
-std::string GetFrontendUrl() {
-  return base::StringPrintf(kFrontEndURL, content::GetWebKitRevision().c_str());
-}
-
 uint16_t GetPort() {
   std::string port_str =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -136,51 +135,105 @@ uint16_t GetPort() {
 
 }  // namespace
 
+class RemoteDebuggingServer::WebContentsObserver
+    : public content::WebContentsObserver {
+ public:
+  WebContentsObserver(content::WebContents* contents,
+                      RemoteDebuggingServer* server)
+      : server_(server) {
+    Observe(contents);
+  }
+
+  ~WebContentsObserver() override {}
+
+  // content::WebContentsObserver implementation:
+  void WebContentsDestroyed() override {
+    // Alert the server that |web_contents_| will be destroyed. Do not call
+    // anything after this line; |this| will be destroyed.
+    server_->DisableWebContentsForDebugging(web_contents());
+  }
+
+ private:
+  RemoteDebuggingServer* const server_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebContentsObserver);
+};
+
 RemoteDebuggingServer::RemoteDebuggingServer(bool start_immediately)
     : port_(GetPort()), is_started_(false) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
 RemoteDebuggingServer::~RemoteDebuggingServer() {
-  if (is_started_) {
-    content::DevToolsAgentHost::StopRemoteDebuggingServer();
+  StopIfNeeded();
+  for (const auto& observer : observers_)
+    DisableWebContentsForDebugging(observer.first);
+}
+
+CastDevToolsManagerDelegate* RemoteDebuggingServer::GetDevtoolsDelegate() {
+  // TODO(slan): This class uses a broken pattern of ownership and access which
+  // requires careful handling when obtaining a reference. DevToolsManager
+  // "owns" the single instance of this class, and could theoretically destroy
+  // it without warning.
+  auto* dev_tools_delegate =
+      chromecast::shell::CastDevToolsManagerDelegate::GetInstance();
+  DCHECK(dev_tools_delegate);
+  return dev_tools_delegate;
+}
+
+void RemoteDebuggingServer::StartIfNeeded() {
+  if (is_started_)
+    return;
+
+  base::FilePath output_dir;
+  if (!port_) {
+    // Providing a defined output_dir causes DevTools to write the port
+    // number chosen to a file named DevToolsActivePort. This file is
+    // used by test automation tools like ChromeDriver. ChromeDriver passes
+    // in --remote-debugging-port=0 so that cast_shell picks its own port to
+    // binds to so that there is no race condition.
+    bool result =
+        base::PathService::Get(chromecast::DIR_CAST_HOME, &output_dir);
+    DCHECK(result);
   }
+
+  content::DevToolsAgentHost::StartRemoteDebuggingServer(
+      CreateSocketFactory(port_), output_dir, base::FilePath());
+  LOG(INFO) << "Devtools started";
+  is_started_ = true;
+}
+
+void RemoteDebuggingServer::StopIfNeeded() {
+  // TODO(seantopping): The debugging server goes down temporarily when there
+  // are no active apps. This can sometimes break in-progress traces. Find a
+  // fix for this.
+  if (!is_started_ || GetDevtoolsDelegate()->HasEnabledWebContents())
+    return;
+
+  LOG(INFO) << "Stopping Devtools server.";
+  content::DevToolsAgentHost::StopRemoteDebuggingServer();
+  is_started_ = false;
 }
 
 void RemoteDebuggingServer::EnableWebContentsForDebugging(
     content::WebContents* web_contents) {
   DCHECK(web_contents);
 
-  if (!is_started_) {
-    content::DevToolsAgentHost::StartRemoteDebuggingServer(
-        CreateSocketFactory(port_), GetFrontendUrl(), base::FilePath(),
-        base::FilePath());
-    LOG(INFO) << "Devtools started: port=" << port_;
-    is_started_ = true;
-  }
+  StartIfNeeded();
 
-  auto* dev_tools_delegate =
-      chromecast::shell::CastDevToolsManagerDelegate::GetInstance();
-  DCHECK(dev_tools_delegate);
-  dev_tools_delegate->EnableWebContentsForDebugging(web_contents);
+  GetDevtoolsDelegate()->EnableWebContentsForDebugging(web_contents);
+  observers_.insert(std::make_pair(
+      web_contents, std::make_unique<WebContentsObserver>(web_contents, this)));
 }
 
 void RemoteDebuggingServer::DisableWebContentsForDebugging(
     content::WebContents* web_contents) {
   DCHECK(web_contents);
-  auto* dev_tools_delegate =
-      chromecast::shell::CastDevToolsManagerDelegate::GetInstance();
-  DCHECK(dev_tools_delegate);
-  dev_tools_delegate->DisableWebContentsForDebugging(web_contents);
 
-  if (is_started_ && !dev_tools_delegate->HasEnabledWebContents()) {
-    // TODO(seantopping): The debugging server goes down temporarily when there
-    // are no active apps. This can sometimes break in-progress traces. Find a
-    // fix for this.
-    LOG(INFO) << "Stopping Devtools server.";
-    content::DevToolsAgentHost::StopRemoteDebuggingServer();
-    is_started_ = false;
-  }
+  observers_.erase(web_contents);
+  GetDevtoolsDelegate()->DisableWebContentsForDebugging(web_contents);
+
+  StopIfNeeded();
 }
 
 }  // namespace shell

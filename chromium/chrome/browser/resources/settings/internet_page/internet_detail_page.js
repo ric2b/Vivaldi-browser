@@ -85,7 +85,10 @@ Polymer({
     },
 
     /** @type {!chrome.networkingPrivate.GlobalPolicy|undefined} */
-    globalPolicy: Object,
+    globalPolicy: {
+      type: Object,
+      value: null,
+    },
 
     /**
      * Interface for networkingPrivate calls, passed from internet_page.
@@ -246,10 +249,10 @@ Polymer({
     if (!this.didSetFocus_) {
       // Focus a button once the initial state is set.
       this.didSetFocus_ = true;
-      const button = this.$$('#titleDiv .primary-button:not([hidden])') ||
+      const button = this.$$('#titleDiv .action-button:not([hidden])') ||
           this.$$('#titleDiv paper-button:not([hidden])');
       if (button)
-        button.focus();
+        setTimeout(() => button.focus());
     }
 
     if (this.shouldShowConfigureWhenNetworkLoaded_ &&
@@ -468,10 +471,17 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  connectNotAllowed_: function(networkProperties, globalPolicy) {
-    return networkProperties.Type == CrOnc.Type.WI_FI &&
-        !!globalPolicy.AllowOnlyPolicyNetworksToConnect &&
-        !this.isPolicySource(networkProperties.Source);
+  isBlockedByPolicy_: function(networkProperties, globalPolicy) {
+    if (networkProperties.Type != CrOnc.Type.WI_FI ||
+        this.isPolicySource(networkProperties.Source)) {
+      return false;
+    }
+    return !!globalPolicy &&
+        (!!globalPolicy.AllowOnlyPolicyNetworksToConnect ||
+         (!!networkProperties.WiFi && !!networkProperties.WiFi.HexSSID &&
+          !!globalPolicy.BlacklistedHexSSIDs &&
+          globalPolicy.BlacklistedHexSSIDs.includes(
+              CrOnc.getStateOrActiveString(networkProperties.WiFi.HexSSID))));
   },
 
   /**
@@ -481,7 +491,7 @@ Polymer({
    * @private
    */
   showConnect_: function(networkProperties, globalPolicy) {
-    if (this.connectNotAllowed_(networkProperties, globalPolicy))
+    if (this.isBlockedByPolicy_(networkProperties, globalPolicy))
       return false;
     // TODO(lgcheng@) support connect Arc VPN from UI once Android support API
     // to initiate a VPN session.
@@ -510,6 +520,8 @@ Polymer({
    * @private
    */
   showForget_: function(networkProperties) {
+    if (this.isSecondaryUser_)
+      return false;
     const type = networkProperties.Type;
     if (type != CrOnc.Type.WI_FI && type != CrOnc.Type.VPN)
       return false;
@@ -525,6 +537,8 @@ Polymer({
    * @private
    */
   showActivate_: function(networkProperties) {
+    if (this.isSecondaryUser_)
+      return false;
     if (!this.isCellular_(networkProperties))
       return false;
     const activation = networkProperties.Cellular.ActivationState;
@@ -539,11 +553,19 @@ Polymer({
    * @private
    */
   showConfigure_: function(networkProperties, globalPolicy) {
-    if (this.connectNotAllowed_(networkProperties, globalPolicy))
+    if (this.isSecondaryUser_)
+      return false;
+    if (this.isBlockedByPolicy_(networkProperties, globalPolicy))
       return false;
     const type = networkProperties.Type;
     if (type == CrOnc.Type.CELLULAR || type == CrOnc.Type.TETHER)
       return false;
+    if (type == CrOnc.Type.WI_FI) {
+      const security = networkProperties.WiFi &&
+          CrOnc.getActiveValue(networkProperties.WiFi.Security);
+      if (!security || security == CrOnc.Security.NONE)
+        return false;
+    }
     if ((type == CrOnc.Type.WI_FI || type == CrOnc.Type.WI_MAX) &&
         networkProperties.ConnectionState !=
             CrOnc.ConnectionState.NOT_CONNECTED) {
@@ -562,6 +584,9 @@ Polymer({
    * @private
    */
   showViewAccount_: function(networkProperties) {
+    if (this.isSecondaryUser_)
+      return false;
+
     // Show either the 'Activate' or the 'View Account' button (Cellular only).
     if (!this.isCellular_(networkProperties) ||
         this.showActivate_(networkProperties)) {
@@ -593,18 +618,20 @@ Polymer({
   /**
    * @param {!CrOnc.NetworkProperties} networkProperties
    * @param {?CrOnc.NetworkStateProperties} defaultNetwork
-   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @param {boolean} networkPropertiesReceived
    * @param {boolean} outOfRange
+   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @return {boolean} Whether or not to enable the network connect button.
    * @private
    */
   enableConnect_: function(
-      networkProperties, defaultNetwork, globalPolicy,
-      networkPropertiesReceived, outOfRange) {
+      networkProperties, defaultNetwork, networkPropertiesReceived, outOfRange,
+      globalPolicy) {
     if (!this.showConnect_(networkProperties, globalPolicy))
       return false;
     if (!networkPropertiesReceived || outOfRange)
+      return false;
+    if (this.isSecondaryUser_ && this.networkProperties.Connectable === false)
       return false;
     if ((networkProperties.Type == CrOnc.Type.CELLULAR) &&
         (CrOnc.isSimLocked(networkProperties) ||
@@ -630,7 +657,6 @@ Polymer({
       this.showTetherDialog_();
       return;
     }
-
     this.fire('network-connect', {networkProperties: this.networkProperties});
   },
 
@@ -662,15 +688,14 @@ Polymer({
 
   /** @private */
   onConfigureTap_: function() {
-    if (this.networkProperties && this.isArcVpn_(this.networkProperties)) {
-      this.browserProxy_.showNetworkConfigure(this.guid);
+    if (this.networkProperties &&
+        (this.isThirdPartyVpn_(this.networkProperties) ||
+         this.isArcVpn_(this.networkProperties))) {
+      this.browserProxy_.configureThirdPartyVpn(this.guid);
       return;
     }
 
-    if (loadTimeData.getBoolean('networkSettingsConfig'))
-      this.fire('show-config', this.networkProperties);
-    else
-      chrome.send('configureNetwork', [this.guid]);
+    this.fire('show-config', this.networkProperties);
   },
 
   /** @private */
@@ -719,25 +744,36 @@ Polymer({
 
   /**
    * Event triggered for elements associated with network properties.
-   * @param {!{detail: !{field: string, value: (string|!Object)}}} event
+   * @param {!{detail: !{field: string, value: !CrOnc.NetworkPropertyType}}} e
    * @private
    */
-  onNetworkPropertyChange_: function(event) {
+  onNetworkPropertyChange_: function(e) {
     if (!this.networkProperties)
       return;
-    const field = event.detail.field;
-    const value = event.detail.value;
+    const field = e.detail.field;
+    const value = e.detail.value;
     const onc = this.getEmptyNetworkProperties_();
     if (field == 'APN') {
       CrOnc.setTypeProperty(onc, 'APN', value);
     } else if (field == 'SIMLockStatus') {
       CrOnc.setTypeProperty(onc, 'SIMLockStatus', value);
-    } else if (field == 'VPN.Host') {
-      // TODO(stevenjb): Generalize this section if we add more editable fields.
-      CrOnc.setProperty(onc, field, value);
     } else {
-      console.error('Unexpected property change event: ' + field);
-      return;
+      const valueType = typeof value;
+      if (valueType == 'string' || valueType == 'number' ||
+          valueType == 'boolean' || Array.isArray(value)) {
+        CrOnc.setProperty(onc, field, value);
+        // Ensure any required configuration properties are also set.
+        if (field.match(/^VPN/)) {
+          const vpnType = CrOnc.getActiveValue(this.networkProperties.VPN.Type);
+          assert(vpnType);
+          CrOnc.setProperty(onc, 'VPN.Type', vpnType);
+        }
+      } else {
+        console.error(
+            'Unexpected property change event, Key: ' + field +
+            ' Value: ' + JSON.stringify(value));
+        return;
+      }
     }
     this.setNetworkProperties_(onc);
   },
@@ -843,23 +879,27 @@ Polymer({
 
   /**
    * @param {!CrOnc.NetworkProperties} networkProperties
+   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @return {boolean} True if the shared message should be shown.
    * @private
    */
-  showShared_: function(networkProperties) {
-    return networkProperties.Source == 'Device' ||
-        networkProperties.Source == 'DevicePolicy';
+  showShared_: function(networkProperties, globalPolicy) {
+    return (networkProperties.Source == 'Device' ||
+            networkProperties.Source == 'DevicePolicy') &&
+        !this.isBlockedByPolicy_(networkProperties, globalPolicy);
   },
 
   /**
    * @param {!CrOnc.NetworkProperties} networkProperties
+   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @return {boolean} True if the AutoConnect checkbox should be shown.
    * @private
    */
-  showAutoConnect_: function(networkProperties) {
+  showAutoConnect_: function(networkProperties, globalPolicy) {
     return networkProperties.Type != CrOnc.Type.ETHERNET &&
         this.isRemembered_(networkProperties) &&
-        !this.isArcVpn_(networkProperties);
+        !this.isArcVpn_(networkProperties) &&
+        !this.isBlockedByPolicy_(networkProperties, globalPolicy);
   },
 
   /**
@@ -869,7 +909,7 @@ Polymer({
    * @private
    */
   enableAutoConnect_: function(networkProperties, globalPolicy) {
-    if (networkProperties.Type == CrOnc.Type.WI_FI &&
+    if (networkProperties.Type == CrOnc.Type.WI_FI && !!globalPolicy &&
         !!globalPolicy.AllowOnlyPolicyNetworksToAutoconnect &&
         !this.isPolicySource(networkProperties.Source)) {
       return false;
@@ -889,14 +929,16 @@ Polymer({
 
   /**
    * @param {!CrOnc.NetworkProperties} networkProperties
+   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @return {boolean} True if the prefer network checkbox should be shown.
    * @private
    */
-  showPreferNetwork_: function(networkProperties) {
+  showPreferNetwork_: function(networkProperties, globalPolicy) {
     // TODO(stevenjb): Resolve whether or not we want to allow "preferred" for
     // networkProperties.Type == CrOnc.Type.ETHERNET.
     return this.isRemembered_(networkProperties) &&
-        !this.isArcVpn_(networkProperties);
+        !this.isArcVpn_(networkProperties) &&
+        !this.isBlockedByPolicy_(networkProperties, globalPolicy);
   },
 
   /**
@@ -918,7 +960,8 @@ Polymer({
    * @private
    */
   hasInfoFields_: function() {
-    return this.hasVisibleFields_(this.getInfoFields_());
+    return this.getInfoEditFieldTypes_().length > 0 ||
+        this.hasVisibleFields_(this.getInfoFields_());
   },
 
   /**
@@ -938,16 +981,21 @@ Polymer({
           'Tether.Carrier');
     } else if (type == CrOnc.Type.VPN && !!this.networkProperties.VPN) {
       const vpnType = CrOnc.getActiveValue(this.networkProperties.VPN.Type);
-      if (vpnType == 'ThirdPartyVPN') {
-        fields.push('VPN.ThirdPartyVPN.ProviderName');
-      } else if (vpnType == 'ARCVPN') {
-        fields.push('VPN.Type');
-      } else {
-        fields.push('VPN.Host', 'VPN.Type');
-        if (vpnType == 'OpenVPN')
-          fields.push('VPN.OpenVPN.Username');
-        else if (vpnType == 'L2TP-IPsec')
-          fields.push('VPN.L2TP.Username');
+      switch (vpnType) {
+        case CrOnc.VPNType.THIRD_PARTY_VPN:
+          fields.push('VPN.ThirdPartyVPN.ProviderName');
+          break;
+        case CrOnc.VPNType.ARCVPN:
+          fields.push('VPN.Type');
+          break;
+        case CrOnc.VPNType.OPEN_VPN:
+          fields.push(
+              'VPN.Type', 'VPN.Host', 'VPN.OpenVPN.Username',
+              'VPN.OpenVPN.ExtraHosts');
+          break;
+        case CrOnc.VPNType.L2TP_IPSEC:
+          fields.push('VPN.Type', 'VPN.Host', 'VPN.L2TP.Username');
+          break;
       }
     } else if (type == CrOnc.Type.WI_FI) {
       fields.push('RestrictedConnectivity');
@@ -966,8 +1014,12 @@ Polymer({
     const type = this.networkProperties.Type;
     if (type == CrOnc.Type.VPN && !!this.networkProperties.VPN) {
       const vpnType = CrOnc.getActiveValue(this.networkProperties.VPN.Type);
-      if (vpnType != 'ThirdPartyVPN')
+      if (vpnType != CrOnc.VPNType.THIRD_PARTY_VPN)
         editFields['VPN.Host'] = 'String';
+      if (vpnType == CrOnc.VPNType.OPEN_VPN) {
+        editFields['VPN.OpenVPN.Username'] = 'String';
+        editFields['VPN.OpenVPN.ExtraHosts'] = 'StringArray';
+      }
     }
     return editFields;
   },
@@ -1056,16 +1108,17 @@ Polymer({
 
   /**
    * @param {!CrOnc.NetworkProperties} networkProperties
+   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @return {boolean}
    * @private
    */
-  hasNetworkSection_: function(networkProperties) {
+  hasNetworkSection_: function(networkProperties, globalPolicy) {
     if (networkProperties.Type == CrOnc.Type.TETHER) {
       // These settings apply to the underlying WiFi network, not the Tether
       // network.
       return false;
     }
-    if (networkProperties.Type == CrOnc.Type.VPN)
+    if (this.isBlockedByPolicy_(networkProperties, globalPolicy))
       return false;
     if (networkProperties.Type == CrOnc.Type.CELLULAR)
       return true;
@@ -1074,15 +1127,18 @@ Polymer({
 
   /**
    * @param {!CrOnc.NetworkProperties} networkProperties
+   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
    * @return {boolean}
    * @private
    */
-  hasProxySection_: function(networkProperties) {
+  hasProxySection_: function(networkProperties, globalPolicy) {
     if (networkProperties.Type == CrOnc.Type.TETHER) {
       // Proxy settings apply to the underlying WiFi network, not the Tether
       // network.
       return false;
     }
+    if (this.isBlockedByPolicy_(networkProperties, globalPolicy))
+      return false;
     return this.isRememberedOrConnected_(networkProperties);
   },
 
@@ -1114,7 +1170,19 @@ Polymer({
    */
   isArcVpn_: function(networkProperties) {
     return !!networkProperties.VPN &&
-        CrOnc.getActiveValue(networkProperties.VPN.Type) == 'ARCVPN';
+        CrOnc.getActiveValue(networkProperties.VPN.Type) ==
+        CrOnc.VPNType.ARCVPN;
+  },
+
+  /**
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
+   * @private
+   */
+  isThirdPartyVpn_: function(networkProperties) {
+    return !!networkProperties.VPN &&
+        CrOnc.getActiveValue(networkProperties.VPN.Type) ==
+        CrOnc.VPNType.THIRD_PARTY_VPN;
   },
 
   /**
@@ -1149,6 +1217,6 @@ Polymer({
         return false;
     }
     return true;
-  }
+  },
 });
 })();

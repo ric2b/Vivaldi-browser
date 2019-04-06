@@ -6,8 +6,11 @@
 #define CHROME_BROWSER_OFFLINE_PAGES_OFFLINE_PAGE_UTILS_H_
 
 #include <stdint.h>
+#include <string>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/files/file_util.h"
 #include "components/offline_pages/core/offline_page_model.h"
 #include "components/offline_pages/core/offline_page_types.h"
 #include "url/gurl.h"
@@ -51,6 +54,8 @@ class OfflinePageUtils {
     // All actions.
     ALL = 0xFFFF
   };
+
+  static const base::FilePath::CharType kMHTMLExtension[];
 
   // Callback to inform the duplicate checking result.
   using DuplicateCheckCallback = base::Callback<void(DuplicateCheckResult)>;
@@ -148,7 +153,7 @@ class OfflinePageUtils {
   // means no callback should be expected.
   static bool GetCachedOfflinePageSizeBetween(
       content::BrowserContext* browser_context,
-      const SizeInBytesCallback& callback,
+      SizeInBytesCallback callback,
       const base::Time& begin_time,
       const base::Time& end_time);
 
@@ -158,6 +163,15 @@ class OfflinePageUtils {
   // exists.
   static std::string ExtractOfflineHeaderValueFromNavigationEntry(
       const content::NavigationEntry& entry);
+
+  // Returns true if |web_contents| is showing a trusted offline page.
+  static bool IsShowingTrustedOfflinePage(content::WebContents* web_contents);
+
+  // Tries to acquires the file access permission. |callback| will be called
+  // to inform if the file access permission is granted.
+  static void AcquireFileAccessPermission(
+      content::WebContents* web_contents,
+      base::OnceCallback<void(bool)> callback);
 };
 
 }  // namespace offline_pages

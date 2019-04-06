@@ -17,9 +17,9 @@
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_preferences.h"
 #include "media/base/android/media_codec_bridge_impl.h"
-#include "media/base/android/media_drm_bridge_cdm_context.h"
+#include "media/base/android/media_crypto_context.h"
 #include "media/base/android_overlay_mojo_factory.h"
 #include "media/base/content_decryption_module.h"
 #include "media/gpu/android/avda_codec_allocator.h"
@@ -35,7 +35,6 @@
 
 namespace media {
 class AndroidVideoSurfaceChooser;
-class SharedMemoryRegion;
 class PromotionHintAggregator;
 
 // A VideoDecodeAccelerator implementation for Android. This class decodes the
@@ -120,7 +119,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // |surface_chooser_| with our initial factory from VDA::Config.
   void StartSurfaceChooser();
 
-  // Start a transition to an overlay, or, if |!overlay|, SurfaceTexture.  The
+  // Start a transition to an overlay, or, if |!overlay|, TextureOwner.  The
   // transition doesn't have to be immediate; we'll favor not dropping frames.
   void OnSurfaceTransition(std::unique_ptr<AndroidOverlay> overlay);
 
@@ -305,8 +304,8 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
     BitstreamBuffer buffer;
 
-    // |memory| is not mapped, and may be null if buffer has no data.
-    std::unique_ptr<SharedMemoryRegion> memory;
+    // |memory| may be null if buffer has no data.
+    std::unique_ptr<WritableUnalignedMapping> memory;
   };
 
   // Encoded bitstream buffers to be passed to media codec, queued until an
@@ -334,7 +333,8 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // Holds a ref-count to the CDM to avoid using the CDM after it's destroyed.
   scoped_refptr<ContentDecryptionModule> cdm_for_reference_holding_only_;
 
-  MediaDrmBridgeCdmContext* media_drm_bridge_cdm_context_;
+  // Owned by CDM which is external to this decoder.
+  MediaCryptoContext* media_crypto_context_;
 
   // MediaDrmBridge requires registration/unregistration of the player, this
   // registration id is used for this.
@@ -369,11 +369,6 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // been defered until the first Decode() call.
   bool defer_surface_creation_;
 
-  // Has a value if a SetSurface() call has occurred and a new surface should be
-  // switched to when possible. Cleared during OnSurfaceDestroyed() and if all
-  // pictures have been rendered in DequeueOutput().
-  base::Optional<int32_t> pending_surface_id_;
-
   // Copy of the VDA::Config we were given.
   Config config_;
 
@@ -385,7 +380,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   scoped_refptr<AVDASurfaceBundle> incoming_bundle_;
 
   // If we have been given an overlay to use, then this is it.  If we've been
-  // told to move to SurfaceTexture, then this will be value() == nullptr.
+  // told to move to TextureOwner, then this will be value() == nullptr.
   base::Optional<std::unique_ptr<AndroidOverlay>> incoming_overlay_;
 
   SurfaceChooserHelper surface_chooser_helper_;
@@ -393,6 +388,8 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   DeviceInfo* device_info_;
 
   bool force_defer_surface_creation_for_testing_;
+
+  bool force_allow_software_decoding_for_testing_;
 
   // Optional factory to produce mojo AndroidOverlay instances.
   AndroidOverlayMojoFactoryCB overlay_factory_cb_;
@@ -405,7 +402,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // Most recently cached frame information, so that we can dispatch it without
   // recomputing it on every frame.  It changes very rarely.
   SurfaceChooserHelper::FrameInformation cached_frame_information_ =
-      SurfaceChooserHelper::FrameInformation::SURFACETEXTURE_INSECURE;
+      SurfaceChooserHelper::FrameInformation::NON_OVERLAY_INSECURE;
 
   // WeakPtrFactory for posting tasks back to |this|.
   base::WeakPtrFactory<AndroidVideoDecodeAccelerator> weak_this_factory_;

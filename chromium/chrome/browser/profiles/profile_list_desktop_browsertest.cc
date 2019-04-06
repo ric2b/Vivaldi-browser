@@ -6,7 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -22,6 +21,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 
 namespace {
@@ -87,6 +87,10 @@ IN_PROC_BROWSER_TEST_F(ProfileListDesktopBrowserTest, MAYBE_SignOut) {
       chrome::NOTIFICATION_BROWSER_CLOSED,
       content::Source<Browser>(browser()));
 
+  content::WindowedNotificationObserver system_profile_created_observer(
+      chrome::NOTIFICATION_PROFILE_CREATED,
+      content::NotificationService::AllSources());
+
   EXPECT_FALSE(entry->IsSigninRequired());
   profiles::LockProfile(current_profile);
   window_close_observer.Wait();  // rely on test time-out for failure indication
@@ -95,6 +99,9 @@ IN_PROC_BROWSER_TEST_F(ProfileListDesktopBrowserTest, MAYBE_SignOut) {
   EXPECT_EQ(0u, browser_list->size());
 
   // Signing out brings up the User Manager which we should close before exit.
+  // But the User Manager is shown only when the system profile is created,
+  // which happens asynchronously.
+  system_profile_created_observer.Wait();
   UserManager::Hide();
 }
 

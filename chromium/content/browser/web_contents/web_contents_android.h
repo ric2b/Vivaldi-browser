@@ -41,6 +41,14 @@ class CONTENT_EXPORT WebContentsAndroid
   base::android::ScopedJavaLocalRef<jobject> GetTopLevelNativeWindow(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  void SetTopLevelNativeWindow(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jwindow_android);
+  void SetViewAndroidDelegate(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jview_delegate);
   base::android::ScopedJavaLocalRef<jobject> GetMainFrame(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj) const;
@@ -92,10 +100,6 @@ class CONTENT_EXPORT WebContentsAndroid
                      const base::android::JavaParamRef<jobject>& jobj,
                      jboolean mute);
 
-  void ShowInterstitialPage(JNIEnv* env,
-                            const base::android::JavaParamRef<jobject>& obj,
-                            const base::android::JavaParamRef<jstring>& jurl,
-                            jlong delegate_ptr);
   jboolean IsShowingInterstitialPage(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -107,12 +111,6 @@ class CONTENT_EXPORT WebContentsAndroid
       const base::android::JavaParamRef<jobject>& obj);
   void ExitFullscreen(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& obj);
-  void UpdateBrowserControlsState(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      bool enable_hiding,
-      bool enable_showing,
-      bool animate);
   void ScrollFocusedEditableNodeIntoView(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -180,11 +178,13 @@ class CONTENT_EXPORT WebContentsAndroid
       const base::android::JavaParamRef<jobject>& overscroll_refresh_handler);
 
   // Relay the access from Java layer to RWHV::CopyFromSurface() through JNI.
-  void GetContentBitmap(JNIEnv* env,
-                        const base::android::JavaParamRef<jobject>& obj,
-                        jint width,
-                        jint height,
-                        const base::android::JavaParamRef<jobject>& jcallback);
+  void WriteContentBitmapToDisk(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint width,
+      jint height,
+      const base::android::JavaParamRef<jstring>& jpath,
+      const base::android::JavaParamRef<jobject>& jcallback);
 
   void ReloadLoFiImages(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj);
@@ -209,6 +209,10 @@ class CONTENT_EXPORT WebContentsAndroid
   bool HasActiveEffectivelyFullscreenVideo(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  bool IsPictureInPictureAllowedForFullscreenVideo(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
   base::android::ScopedJavaLocalRef<jobject> GetFullscreenVideoSize(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -216,6 +220,8 @@ class CONTENT_EXPORT WebContentsAndroid
                const base::android::JavaParamRef<jobject>& obj,
                jint width,
                jint height);
+  int GetWidth(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  int GetHeight(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   base::android::ScopedJavaLocalRef<jobject> GetOrCreateEventForwarder(
       JNIEnv* env,
@@ -224,13 +230,39 @@ class CONTENT_EXPORT WebContentsAndroid
   void SetMediaSession(
       const base::android::ScopedJavaLocalRef<jobject>& j_media_session);
 
+  void SendOrientationChangeEvent(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint orientation);
+
+  void OnScaleFactorChanged(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>& obj);
+  void SetFocus(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& obj,
+                jboolean focused);
+  bool IsBeingDestroyed(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
+
+  // Returns the amount of the top controls height if controls are in the state
+  // of shrinking Blink's view size, otherwise 0.
+  int GetTopControlsShrinkBlinkHeightPixForTesting(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
+  void SetDisplayCutoutSafeArea(JNIEnv* env,
+                                const base::android::JavaParamRef<jobject>& obj,
+                                int top,
+                                int left,
+                                int bottom,
+                                int right);
+
  private:
   RenderWidgetHostViewAndroid* GetRenderWidgetHostViewAndroid();
 
   void OnFinishGetContentBitmap(const base::android::JavaRef<jobject>& obj,
                                 const base::android::JavaRef<jobject>& callback,
-                                const SkBitmap& bitmap,
-                                ReadbackResponse response);
+                                const std::string& path,
+                                const SkBitmap& bitmap);
 
   void OnFinishDownloadImage(const base::android::JavaRef<jobject>& obj,
                              const base::android::JavaRef<jobject>& callback,
@@ -241,6 +273,7 @@ class CONTENT_EXPORT WebContentsAndroid
                              const std::vector<gfx::Size>& sizes);
 
   WebContentsImpl* web_contents_;
+
   NavigationControllerAndroid navigation_controller_;
   base::android::ScopedJavaGlobalRef<jobject> obj_;
 

@@ -11,14 +11,50 @@
 #include "ash/cast_config_controller.h"
 #include "ash/shell_observer.h"
 #include "ash/system/tray/system_tray_item.h"
+#include "ash/system/tray/tray_detailed_view.h"
 #include "base/macros.h"
 
 namespace ash {
 namespace tray {
 class CastTrayView;
-class CastDetailedView;
 class CastDuplexView;
+
+// This view displays a list of cast receivers that can be clicked on and casted
+// to. It is activated by clicking on the chevron inside of
+// |CastSelectDefaultView|.
+class CastDetailedView : public TrayDetailedView {
+ public:
+  CastDetailedView(DetailedViewDelegate* delegate,
+                   const std::vector<mojom::SinkAndRoutePtr>& sinks_and_routes);
+  ~CastDetailedView() override;
+
+  // Makes the detail view think the view associated with the given receiver_id
+  // was clicked. This will start a cast.
+  void SimulateViewClickedForTest(const std::string& receiver_id);
+
+  // Updates the list of available receivers.
+  void UpdateReceiverList(
+      const std::vector<mojom::SinkAndRoutePtr>& sinks_routes);
+
+ private:
+  void CreateItems();
+
+  void UpdateReceiverListFromCachedData();
+
+  // TrayDetailedView:
+  void HandleViewClicked(views::View* view) override;
+
+  // A mapping from the receiver id to the receiver/activity data.
+  std::map<std::string, ash::mojom::SinkAndRoutePtr> sinks_and_routes_;
+  // A mapping from the view pointer to the associated activity id.
+  std::map<views::View*, ash::mojom::CastSinkPtr> view_to_sink_map_;
+
+  DISALLOW_COPY_AND_ASSIGN(CastDetailedView);
+};
+
 }  // namespace tray
+
+class DetailedViewDelegate;
 
 class ASH_EXPORT TrayCast : public SystemTrayItem,
                             public ShellObserver,
@@ -28,15 +64,10 @@ class ASH_EXPORT TrayCast : public SystemTrayItem,
   ~TrayCast() override;
 
  private:
-  // Helper/utility methods for testing.
-  friend class TrayCastTestAPI;
-  void StartCastForTest(const std::string& sink_id);
-  void StopCastForTest();
   // Returns the id of the item we are currently displaying in the cast view.
   // This assumes that the cast view is active.
   const std::string& GetDisplayedCastId();
   const views::View* GetDefaultView() const;
-  enum ChildViewId { TRAY_VIEW = 1, SELECT_VIEW, CAST_VIEW };
 
   // Overridden from SystemTrayItem.
   views::View* CreateTrayView(LoginStatus status) override;
@@ -59,12 +90,6 @@ class ASH_EXPORT TrayCast : public SystemTrayItem,
   // casting session.
   void UpdatePrimaryView();
 
-  // Returns true if there is an active cast route. The route may be DIAL based,
-  // such as casting YouTube where the cast sink directly streams content from
-  // another server. In that case, is_mirror_casting_ will be false since this
-  // device is not actively transmitting information to the cast sink.
-  bool HasActiveRoute();
-
   std::vector<mojom::SinkAndRoutePtr> sinks_and_routes_;
 
   // True if there is a mirror-based cast session and the active-cast tray icon
@@ -75,6 +100,8 @@ class ASH_EXPORT TrayCast : public SystemTrayItem,
   tray::CastTrayView* tray_ = nullptr;
   tray::CastDuplexView* default_ = nullptr;
   tray::CastDetailedView* detailed_ = nullptr;
+
+  const std::unique_ptr<DetailedViewDelegate> detailed_view_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayCast);
 };

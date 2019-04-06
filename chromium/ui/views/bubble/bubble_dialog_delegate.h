@@ -10,6 +10,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -46,7 +47,7 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
   // Create and initialize the bubble Widget(s) with proper bounds.
   static Widget* CreateBubble(BubbleDialogDelegateView* bubble_delegate);
 
-  // WidgetDelegateView:
+  // DialogDelegateView:
   BubbleDialogDelegateView* AsBubbleDialogDelegate() override;
   bool ShouldShowCloseButton() const override;
   ClientView* CreateClientView(Widget* widget) override;
@@ -125,14 +126,34 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
   // bounds change as a result of the widget's bounds changing.
   void OnAnchorBoundsChanged();
 
+  // If this is called, enables focus to traverse from the anchor view
+  // to inside this dialog and back out. This may become the default in
+  // the future.
+  void EnableFocusTraversalFromAnchorView();
+
  protected:
   BubbleDialogDelegateView();
-  BubbleDialogDelegateView(View* anchor_view, BubbleBorder::Arrow arrow);
+  // |shadow| usually doesn't need to be explicitly set, just uses the default
+  // argument. Unless on Mac when the bubble needs to use Views base shadow,
+  // override it with suitable bubble border type.
+  BubbleDialogDelegateView(
+      View* anchor_view,
+      BubbleBorder::Arrow arrow,
+      BubbleBorder::Shadow shadow = BubbleBorder::DIALOG_SHADOW);
 
   // Get bubble bounds from the anchor rect and client view's preferred size.
   virtual gfx::Rect GetBubbleBounds();
 
-  // View overrides:
+  // DialogDelegateView:
+  ax::mojom::Role GetAccessibleWindowRole() const override;
+
+  // Disallow overrides of GetMinimumSize and GetMaximumSize(). These would only
+  // be called by the FrameView, but the BubbleFrameView ignores these. Bubbles
+  // are not user-sizable and always size to their preferred size (plus any
+  // border / frame).
+  gfx::Size GetMinimumSize() const final;
+  gfx::Size GetMaximumSize() const final;
+
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
   // Perform view initialization on the contents for bubble sizing.
@@ -165,6 +186,9 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   // Called when a deactivation is detected.
   void OnDeactivate();
+
+  // When a bubble is visible, the anchor widget should always render as active.
+  void UpdateAnchorWidgetRenderState(bool visible);
 
   // A flag controlling bubble closure on deactivation.
   bool close_on_deactivate_;

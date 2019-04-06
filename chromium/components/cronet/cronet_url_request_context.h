@@ -31,7 +31,6 @@ class TimeTicks;
 
 namespace net {
 enum EffectiveConnectionType;
-class CertVerifier;
 class NetLog;
 class ProxyConfigService;
 class URLRequestContext;
@@ -58,16 +57,6 @@ class CronetURLRequestContext {
 
     // Invoked on network thread immediately prior to destruction.
     virtual void OnDestroyNetworkThread() = 0;
-
-    // Invoked on network thread to initialze |cert_verifier| using
-    // |cert_verifier_data|.
-    virtual void OnInitCertVerifierData(
-        net::CertVerifier* cert_verifier,
-        const std::string& cert_verifier_data) = 0;
-
-    // Invoked on network thread to save |cert_verifier| data for use in
-    // OnInitCertVerifierData().
-    virtual void OnSaveCertVerifierData(net::CertVerifier* cert_verifier) = 0;
 
     // net::NetworkQualityEstimator::EffectiveConnectionTypeObserver forwarder.
     virtual void OnEffectiveConnectionTypeChanged(
@@ -100,9 +89,14 @@ class CronetURLRequestContext {
   // Constructs CronetURLRequestContext using |context_config|. The |callback|
   // is owned by |this| and is deleted on network thread.
   // All |callback| methods are invoked on network thread.
+  // If the network_task_runner is not assigned, a network thread would be
+  // created for network tasks. Otherwise the tasks would be running on the
+  // assigned task runner.
   CronetURLRequestContext(
       std::unique_ptr<URLRequestContextConfig> context_config,
-      std::unique_ptr<Callback> callback);
+      std::unique_ptr<Callback> callback,
+      scoped_refptr<base::SingleThreadTaskRunner> network_task_runner =
+          nullptr);
 
   // Releases all resources for the request context and deletes the object.
   // Blocks until network thread is destroyed after running all pending tasks.
@@ -114,7 +108,7 @@ class CronetURLRequestContext {
   // Posts a task that might depend on the context being initialized
   // to the network thread.
   void PostTaskToNetworkThread(const base::Location& posted_from,
-                               const base::Closure& callback);
+                               base::OnceClosure callback);
 
   // Returns true if running on network thread.
   bool IsOnNetworkThread() const;
@@ -136,10 +130,6 @@ class CronetURLRequestContext {
   // Stops NetLog logging to file. This can be called on any thread. This will
   // flush any remaining writes to disk.
   void StopNetLog();
-
-  // Posts a task to Network thread to get serialized results of certificate
-  // verifications of |context_|'s |cert_verifier|.
-  void GetCertVerifierData();
 
   // Default net::LOAD flags used to create requests.
   int default_load_flags() const;
@@ -182,11 +172,7 @@ class CronetURLRequestContext {
 
     // Runs a task that might depend on the context being initialized.
     void RunTaskAfterContextInit(
-        const base::Closure& task_to_run_after_context_init);
-
-    // Serializes results of certificate verifications of |context_|'s
-    // |cert_verifier|.
-    void GetCertVerifierData();
+        base::OnceClosure task_to_run_after_context_init);
 
     // Configures the network quality estimator to observe requests to
     // localhost, to use smaller responses when estimating throughput, and to
@@ -273,7 +259,7 @@ class CronetURLRequestContext {
     std::unique_ptr<base::DictionaryValue> effective_experimental_options_;
 
     // A queue of tasks that need to be run after context has been initialized.
-    base::queue<base::Closure> tasks_waiting_for_context_;
+    base::queue<base::OnceClosure> tasks_waiting_for_context_;
 
     // Task runner that runs network tasks.
     scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
@@ -300,7 +286,10 @@ class CronetURLRequestContext {
   NetworkTasks* network_tasks_;
 
   // Network thread is destroyed from client thread.
-  base::Thread network_thread_;
+  std::unique_ptr<base::Thread> network_thread_;
+
+  // Task runner that runs network tasks.
+  scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(CronetURLRequestContext);
 };

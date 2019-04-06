@@ -4,6 +4,7 @@
 
 #include "net/reporting/reporting_cache.h"
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <string>
@@ -15,6 +16,7 @@
 #include "base/stl_util.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "net/log/net_log.h"
 #include "net/reporting/reporting_client.h"
 #include "net/reporting/reporting_context.h"
 #include "net/reporting/reporting_report.h"
@@ -42,6 +44,11 @@ std::string GetSuperdomain(const std::string& domain) {
   return domain.substr(dot_pos + 1);
 }
 
+struct ClientMetadata {
+  base::TimeTicks last_used;
+  ReportingCache::ClientStatistics stats;
+};
+
 class ReportingCacheImpl : public ReportingCache {
  public:
   ReportingCacheImpl(ReportingContext* context) : context_(context) {
@@ -64,13 +71,15 @@ class ReportingCacheImpl : public ReportingCache {
   }
 
   void AddReport(const GURL& url,
+                 const std::string& user_agent,
                  const std::string& group,
                  const std::string& type,
                  std::unique_ptr<const base::Value> body,
+                 int depth,
                  base::TimeTicks queued,
                  int attempts) override {
     auto report = std::make_unique<ReportingReport>(
-        url, group, type, std::move(body), queued, attempts);
+        url, user_agent, group, type, std::move(body), depth, queued, attempts);
 
     auto inserted =
         reports_.insert(std::make_pair(report.get(), std::move(report)));
@@ -97,6 +106,60 @@ class ReportingCacheImpl : public ReportingCache {
     for (const auto& it : reports_) {
       if (!base::ContainsKey(doomed_reports_, it.first))
         reports_out->push_back(it.second.get());
+    }
+  }
+
+  base::Value GetReportsAsValue() const override {
+    // Sort the queued reports by origin and timestamp.
+    std::vector<const ReportingReport*> sorted_reports;
+    sorted_reports.reserve(reports_.size());
+    for (const auto& it : reports_) {
+      sorted_reports.push_back(it.second.get());
+    }
+    std::sort(
+        sorted_reports.begin(), sorted_reports.end(),
+        [](const ReportingReport* report1, const ReportingReport* report2) {
+          if (report1->queued < report2->queued)
+            return true;
+          else if (report1->queued > report2->queued)
+            return false;
+          else
+            return report1->url < report2->url;
+        });
+
+    std::vector<base::Value> report_list;
+    for (const ReportingReport* report : sorted_reports) {
+      base::Value report_dict(base::Value::Type::DICTIONARY);
+      report_dict.SetKey("url", base::Value(report->url.spec()));
+      report_dict.SetKey("group", base::Value(report->group));
+      report_dict.SetKey("type", base::Value(report->type));
+      report_dict.SetKey("depth", base::Value(report->depth));
+      report_dict.SetKey(
+          "queued", base::Value(NetLog::TickCountToString(report->queued)));
+      report_dict.SetKey("attempts", base::Value(report->attempts));
+      if (report->body) {
+        report_dict.SetKey("body", report->body->Clone());
+      }
+      if (base::ContainsKey(doomed_reports_, report)) {
+        report_dict.SetKey("status", base::Value("doomed"));
+      } else if (base::ContainsKey(pending_reports_, report)) {
+        report_dict.SetKey("status", base::Value("pending"));
+      } else {
+        report_dict.SetKey("status", base::Value("queued"));
+      }
+      report_list.push_back(std::move(report_dict));
+    }
+    return base::Value(std::move(report_list));
+  }
+
+  void GetNonpendingReports(
+      std::vector<const ReportingReport*>* reports_out) const override {
+    reports_out->clear();
+    for (const auto& it : reports_) {
+      if (!base::ContainsKey(pending_reports_, it.first) &&
+          !base::ContainsKey(doomed_reports_, it.first)) {
+        reports_out->push_back(it.second.get());
+      }
     }
   }
 
@@ -133,6 +196,23 @@ class ReportingCacheImpl : public ReportingCache {
     }
 
     context_->NotifyCacheUpdated();
+  }
+
+  void IncrementEndpointDeliveries(const url::Origin& origin,
+                                   const GURL& endpoint,
+                                   int reports_delivered,
+                                   bool successful) override {
+    const ReportingClient* client =
+        GetClientByOriginAndEndpoint(origin, endpoint);
+    if (client) {
+      auto& metadata = client_metadata_[client];
+      metadata.stats.attempted_uploads++;
+      metadata.stats.attempted_reports += reports_delivered;
+      if (successful) {
+        metadata.stats.successful_uploads++;
+        metadata.stats.successful_reports += reports_delivered;
+      }
+    }
   }
 
   void RemoveReports(const std::vector<const ReportingReport*>& reports,
@@ -181,7 +261,7 @@ class ReportingCacheImpl : public ReportingCache {
     const ReportingClient* old_client =
         GetClientByOriginAndEndpoint(origin, endpoint);
     if (old_client) {
-      last_used = client_last_used_[old_client];
+      last_used = client_metadata_[old_client].last_used;
       RemoveClient(old_client);
     }
 
@@ -190,10 +270,10 @@ class ReportingCacheImpl : public ReportingCache {
                                           expires, priority, weight),
         last_used);
 
-    if (client_last_used_.size() > context_->policy().max_client_count) {
+    if (client_metadata_.size() > context_->policy().max_client_count) {
       // There should only ever be one extra client, added above.
       DCHECK_EQ(context_->policy().max_client_count + 1,
-                client_last_used_.size());
+                client_metadata_.size());
       // And that shouldn't happen if it was replaced, not added.
       DCHECK(!old_client);
       const ReportingClient* to_evict =
@@ -205,12 +285,9 @@ class ReportingCacheImpl : public ReportingCache {
     context_->NotifyCacheUpdated();
   }
 
-  void MarkClientUsed(const url::Origin& origin,
-                      const GURL& endpoint) override {
-    const ReportingClient* client =
-        GetClientByOriginAndEndpoint(origin, endpoint);
+  void MarkClientUsed(const ReportingClient* client) override {
     DCHECK(client);
-    client_last_used_[client] = tick_clock()->NowTicks();
+    client_metadata_[client].last_used = tick_clock()->NowTicks();
   }
 
   void GetClients(
@@ -219,6 +296,73 @@ class ReportingCacheImpl : public ReportingCache {
     for (const auto& it : clients_)
       for (const auto& endpoint_and_client : it.second)
         clients_out->push_back(endpoint_and_client.second.get());
+  }
+
+  base::Value GetClientsAsValue() const override {
+    std::map<const url::Origin,
+             std::map<const std::string, std::vector<const ReportingClient*>>>
+        clients_by_origin_and_group;
+    for (const auto& it : clients_) {
+      const url::Origin& origin = it.first;
+      for (const auto& endpoint_and_client : it.second) {
+        const ReportingClient* client = endpoint_and_client.second.get();
+        clients_by_origin_and_group[origin][client->group].push_back(client);
+      }
+    }
+
+    std::vector<base::Value> origin_list;
+    for (const auto& it : clients_by_origin_and_group) {
+      const url::Origin& origin = it.first;
+      base::Value origin_dict(base::Value::Type::DICTIONARY);
+      origin_dict.SetKey("origin", base::Value(origin.Serialize()));
+      std::vector<base::Value> group_list;
+      for (const auto& group_and_clients : it.second) {
+        const std::string& group = group_and_clients.first;
+        const std::vector<const ReportingClient*>& clients =
+            group_and_clients.second;
+        base::Value group_dict(base::Value::Type::DICTIONARY);
+        group_dict.SetKey("name", base::Value(group));
+        std::vector<base::Value> endpoint_list;
+        for (const ReportingClient* client : clients) {
+          base::Value endpoint_dict(base::Value::Type::DICTIONARY);
+          // Reporting defines the group as a whole to have an expiration time
+          // and subdomains flag, not the individual endpoints within the group.
+          group_dict.SetKey(
+              "expires",
+              base::Value(NetLog::TickCountToString(client->expires)));
+          group_dict.SetKey("includeSubdomains",
+                            base::Value(client->subdomains ==
+                                        ReportingClient::Subdomains::INCLUDE));
+          endpoint_dict.SetKey("url", base::Value(client->endpoint.spec()));
+          endpoint_dict.SetKey("priority", base::Value(client->priority));
+          endpoint_dict.SetKey("weight", base::Value(client->weight));
+          auto metadata_it = client_metadata_.find(client);
+          if (metadata_it != client_metadata_.end()) {
+            const ClientStatistics& stats = metadata_it->second.stats;
+            base::Value successful_dict(base::Value::Type::DICTIONARY);
+            successful_dict.SetKey("uploads",
+                                   base::Value(stats.successful_uploads));
+            successful_dict.SetKey("reports",
+                                   base::Value(stats.successful_reports));
+            endpoint_dict.SetKey("successful", std::move(successful_dict));
+            base::Value failed_dict(base::Value::Type::DICTIONARY);
+            failed_dict.SetKey("uploads",
+                               base::Value(stats.attempted_uploads -
+                                           stats.successful_uploads));
+            failed_dict.SetKey("reports",
+                               base::Value(stats.attempted_reports -
+                                           stats.successful_reports));
+            endpoint_dict.SetKey("failed", std::move(failed_dict));
+          }
+          endpoint_list.push_back(std::move(endpoint_dict));
+        }
+        group_dict.SetKey("endpoints", base::Value(std::move(endpoint_list)));
+        group_list.push_back(std::move(group_dict));
+      }
+      origin_dict.SetKey("groups", base::Value(std::move(group_list)));
+      origin_list.push_back(std::move(origin_dict));
+    }
+    return base::Value(std::move(origin_list));
   }
 
   void GetClientsForOriginAndGroup(
@@ -236,7 +380,7 @@ class ReportingCacheImpl : public ReportingCache {
     }
 
     // If no clients were found, try successive superdomain suffixes until a
-    // client with includeSubdomains is found or there are no more domain
+    // client with include_subdomains is found or there are no more domain
     // components left.
     std::string domain = origin.host();
     while (clients_out->empty() && !domain.empty()) {
@@ -293,9 +437,21 @@ class ReportingCacheImpl : public ReportingCache {
   void RemoveAllClients() override {
     clients_.clear();
     wildcard_clients_.clear();
-    client_last_used_.clear();
+    client_metadata_.clear();
 
     context_->NotifyCacheUpdated();
+  }
+
+  ClientStatistics GetStatisticsForOriginAndEndpoint(
+      const url::Origin& origin,
+      const GURL& endpoint) const override {
+    const ReportingClient* client =
+        GetClientByOriginAndEndpoint(origin, endpoint);
+    auto it = client_metadata_.find(client);
+    if (it == client_metadata_.end()) {
+      return ClientStatistics();
+    }
+    return it->second.stats;
   }
 
   size_t GetFullReportCountForTesting() const override {
@@ -339,9 +495,9 @@ class ReportingCacheImpl : public ReportingCache {
     url::Origin origin = client->origin;
     GURL endpoint = client->endpoint;
 
-    auto inserted_last_used =
-        client_last_used_.insert(std::make_pair(client.get(), last_used));
-    DCHECK(inserted_last_used.second);
+    auto inserted_metadata = client_metadata_.insert(
+        std::make_pair(client.get(), ClientMetadata{last_used}));
+    DCHECK(inserted_metadata.second);
 
     if (client->subdomains == ReportingClient::Subdomains::INCLUDE) {
       const std::string& domain = origin.host();
@@ -371,8 +527,8 @@ class ReportingCacheImpl : public ReportingCache {
       }
     }
 
-    size_t erased_last_used = client_last_used_.erase(client);
-    DCHECK_EQ(1u, erased_last_used);
+    size_t erased_metadata = client_metadata_.erase(client);
+    DCHECK_EQ(1u, erased_metadata);
 
     size_t erased_endpoint = clients_[origin].erase(endpoint);
     DCHECK_EQ(1u, erased_endpoint);
@@ -414,15 +570,15 @@ class ReportingCacheImpl : public ReportingCache {
   }
 
   const ReportingClient* FindClientToEvict(base::TimeTicks now) const {
-    DCHECK(!client_last_used_.empty());
+    DCHECK(!client_metadata_.empty());
 
     const ReportingClient* earliest_used = nullptr;
     base::TimeTicks earliest_used_last_used;
     const ReportingClient* earliest_expired = nullptr;
 
-    for (const auto& it : client_last_used_) {
+    for (const auto& it : client_metadata_) {
       const ReportingClient* client = it.first;
-      base::TimeTicks client_last_used = it.second;
+      base::TimeTicks client_last_used = it.second.last_used;
       if (earliest_used == nullptr ||
           client_last_used < earliest_used_last_used) {
         earliest_used = client;
@@ -441,7 +597,7 @@ class ReportingCacheImpl : public ReportingCache {
       return earliest_used;
   }
 
-  base::TickClock* tick_clock() { return context_->tick_clock(); }
+  const base::TickClock* tick_clock() { return context_->tick_clock(); }
 
   ReportingContext* context_;
 
@@ -463,13 +619,13 @@ class ReportingCacheImpl : public ReportingCache {
   std::map<url::Origin, std::map<GURL, std::unique_ptr<ReportingClient>>>
       clients_;
 
-  // References but does not own all clients with includeSubdomains set, keyed
+  // References but does not own all clients with include_subdomains set, keyed
   // by domain name.
   std::unordered_map<std::string, std::unordered_set<const ReportingClient*>>
       wildcard_clients_;
 
   // The time that each client has last been used.
-  std::unordered_map<const ReportingClient*, base::TimeTicks> client_last_used_;
+  std::unordered_map<const ReportingClient*, ClientMetadata> client_metadata_;
 };
 
 }  // namespace

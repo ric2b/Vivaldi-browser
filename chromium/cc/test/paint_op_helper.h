@@ -219,6 +219,10 @@ class PaintOpHelper {
     return base::StringPrintf("%.3f", scalar);
   }
 
+  static std::string SkiaTypeToString(const SkPoint& point) {
+    return base::StringPrintf("[%.3f,%.3f]", point.fX, point.fY);
+  }
+
   static std::string SkiaTypeToString(const SkRect& rect) {
     return base::StringPrintf("[%.3f,%.3f %.3fx%.3f]", rect.x(), rect.y(),
                               rect.width(), rect.height());
@@ -240,9 +244,10 @@ class PaintOpHelper {
   }
 
   static std::string SkiaTypeToString(const SkMatrix& matrix) {
-    SkString str;
-    matrix.toString(&str);
-    return str.c_str();
+    return base::StringPrintf(
+        "[%8.4f %8.4f %8.4f][%8.4f %8.4f %8.4f][%8.4f %8.4f %8.4f]", matrix[0],
+        matrix[1], matrix[2], matrix[3], matrix[4], matrix[5], matrix[6],
+        matrix[7], matrix[8]);
   }
 
   static std::string SkiaTypeToString(const SkColor& color) {
@@ -415,33 +420,25 @@ class PaintOpHelper {
   static std::string SkiaTypeToString(const sk_sp<SkColorFilter>& filter) {
     if (!filter)
       return "(nil)";
-    SkString str;
-    filter->toString(&str);
-    return str.c_str();
+    return "SkColorFilter";
   }
 
   static std::string SkiaTypeToString(const sk_sp<SkMaskFilter>& filter) {
     if (!filter)
       return "(nil)";
-    SkString str;
-    filter->toString(&str);
-    return str.c_str();
+    return "SkMaskFilter";
   }
 
   static std::string SkiaTypeToString(const sk_sp<SkPathEffect>& effect) {
     if (!effect)
       return "(nil)";
-    SkString str;
-    effect->toString(&str);
-    return str.c_str();
+    return "SkPathEffect";
   }
 
   static std::string SkiaTypeToString(const sk_sp<SkDrawLooper>& looper) {
     if (!looper)
       return "(nil)";
-    SkString str;
-    looper->toString(&str);
-    return str.c_str();
+    return "SkDrawLooper";
   }
 
   template <typename T>
@@ -476,6 +473,38 @@ class PaintOpHelper {
     return "<unknown SrcRectConstraint>";
   }
 
+  static std::string EnumToString(PaintShader::ScalingBehavior behavior) {
+    switch (behavior) {
+      case PaintShader::ScalingBehavior::kRasterAtScale:
+        return "kRasterAtScale";
+      case PaintShader::ScalingBehavior::kFixedScale:
+        return "kFixedScale";
+    }
+    return "<unknown ScalingBehavior>";
+  }
+
+  static std::string EnumToString(PaintShader::Type type) {
+    switch (type) {
+      case PaintShader::Type::kColor:
+        return "kColor";
+      case PaintShader::Type::kLinearGradient:
+        return "kLinearGradient";
+      case PaintShader::Type::kRadialGradient:
+        return "kRadialGradient";
+      case PaintShader::Type::kTwoPointConicalGradient:
+        return "kTwoPointConicalGradient";
+      case PaintShader::Type::kSweepGradient:
+        return "kSweepGradient";
+      case PaintShader::Type::kImage:
+        return "kImage";
+      case PaintShader::Type::kPaintRecord:
+        return "kPaintRecord";
+      case PaintShader::Type::kShaderCount:
+        return "kShaderCount";
+    }
+    return "<unknown PaintShader::Type>";
+  }
+
   static std::string ImageToString(const PaintImage& image) {
     return "<paint image>";
   }
@@ -490,7 +519,61 @@ class PaintOpHelper {
   }
 
   static std::string PaintShaderToString(const PaintShader* shader) {
-    return shader ? "<PaintShader>" : "(nil)";
+    if (!shader)
+      return "(nil)";
+    std::ostringstream str;
+    str << "[type=" << EnumToString(shader->shader_type());
+    str << ", flags=" << shader->flags_;
+    str << ", end_radius=" << shader->end_radius_;
+    str << ", start_radius=" << shader->start_radius_;
+    str << ", tx=" << shader->tx_;
+    str << ", ty=" << shader->ty_;
+    str << ", fallback_color=" << shader->fallback_color_;
+    str << ", scaling_behavior=" << EnumToString(shader->scaling_behavior_);
+    if (shader->local_matrix_.has_value()) {
+      str << ", local_matrix=" << SkiaTypeToString(*shader->local_matrix_);
+    } else {
+      str << ", local_matrix=(nil)";
+    }
+    str << ", center=" << SkiaTypeToString(shader->center_);
+    str << ", tile=" << SkiaTypeToString(shader->tile_);
+    str << ", start_point=" << SkiaTypeToString(shader->start_point_);
+    str << ", end_point=" << SkiaTypeToString(shader->end_point_);
+    str << ", start_degrees=" << shader->start_degrees_;
+    str << ", end_degrees=" << shader->end_degrees_;
+    if (shader->shader_type() == PaintShader::Type::kImage)
+      str << ", image=" << ImageToString(shader->image_);
+    else
+      str << ", image=(nil)";
+    str << ", record=" << RecordToString(shader->record_);
+    str << ", id=" << shader->id_;
+    str << ", tile_scale=";
+    if (shader->tile_scale_) {
+      str << "[" << shader->tile_scale_->ToString() << "]";
+    } else {
+      str << "(nil)";
+    }
+    if (shader->colors_.size() > 0) {
+      str << ", colors=[" << shader->colors_[0];
+      for (size_t i = 1; i < shader->colors_.size(); ++i) {
+        str << ", " << shader->colors_[i];
+      }
+      str << "]";
+    } else {
+      str << ", colors=(nil)";
+    }
+    if (shader->positions_.size() > 0) {
+      str << ", positions=[" << shader->positions_[0];
+      for (size_t i = 1; i < shader->positions_.size(); ++i) {
+        str << ", " << shader->positions_[i];
+      }
+      str << "]";
+    } else {
+      str << ", positions=(nil)";
+    }
+    str << "]";
+
+    return str.str();
   }
 
   static std::string PaintFilterToString(const sk_sp<PaintFilter> filter) {

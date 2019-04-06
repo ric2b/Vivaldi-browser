@@ -12,7 +12,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -145,6 +144,14 @@ class MockRemoteSuggestionsProvider : public RemoteSuggestionsProvider {
   }
   MOCK_METHOD2(FetchSuggestionImage,
                void(const ContentSuggestion::ID&, ImageFetchedCallback*));
+
+  void FetchSuggestionImageData(const ContentSuggestion::ID& suggestion_id,
+                                ImageDataFetchedCallback callback) override {
+    FetchSuggestionImageData(suggestion_id, &callback);
+  }
+  MOCK_METHOD2(FetchSuggestionImageData,
+               void(const ContentSuggestion::ID&, ImageDataFetchedCallback*));
+
   void GetDismissedSuggestionsForDebugging(
       Category category,
       DismissedSuggestionsCallback callback) override {

@@ -39,18 +39,18 @@ class WindowPortForShutdown : public WindowPort {
                          int64_t old_value,
                          std::unique_ptr<ui::PropertyData> data) override;
   std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink() override;
-  viz::SurfaceId GetSurfaceId() const override;
   void AllocateLocalSurfaceId() override;
+  bool IsLocalSurfaceIdAllocationSuppressed() const override;
+  viz::ScopedSurfaceIdAllocator GetSurfaceIdAllocator(
+      base::OnceCallback<void()> allocation_task) override;
+  void UpdateLocalSurfaceIdFromEmbeddedClient(
+      const viz::LocalSurfaceId& embedded_client_local_surface_id) override;
   const viz::LocalSurfaceId& GetLocalSurfaceId() override;
-  viz::FrameSinkId GetFrameSinkId() const override;
-  void OnWindowAddedToRootWindow() override;
-  void OnWillRemoveWindowFromRootWindow() override;
   void OnEventTargetingPolicyChanged() override;
   bool ShouldRestackTransientChildren() override;
 
  private:
   viz::LocalSurfaceId local_surface_id_;
-  viz::FrameSinkId frame_sink_id_;
   DISALLOW_COPY_AND_ASSIGN(WindowPortForShutdown);
 };
 

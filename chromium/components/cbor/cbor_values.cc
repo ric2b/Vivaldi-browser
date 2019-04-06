@@ -46,6 +46,16 @@ CBORValue::CBORValue(Type type) : type_(type) {
   NOTREACHED();
 }
 
+CBORValue::CBORValue(SimpleValue in_simple)
+    : type_(Type::SIMPLE_VALUE), simple_value_(in_simple) {
+  CHECK(static_cast<int>(in_simple) >= 20 && static_cast<int>(in_simple) <= 23);
+}
+
+CBORValue::CBORValue(bool boolean_value) : type_(Type::SIMPLE_VALUE) {
+  simple_value_ = boolean_value ? CBORValue::SimpleValue::TRUE_VALUE
+                                : CBORValue::SimpleValue::FALSE_VALUE;
+}
+
 CBORValue::CBORValue(int integer_value)
     : CBORValue(base::checked_cast<int64_t>(integer_value)) {}
 
@@ -53,22 +63,48 @@ CBORValue::CBORValue(int64_t integer_value) : integer_value_(integer_value) {
   type_ = integer_value >= 0 ? Type::UNSIGNED : Type::NEGATIVE;
 }
 
-CBORValue::CBORValue(const BinaryValue& in_bytes)
-    : type_(Type::BYTE_STRING), bytestring_value_(in_bytes) {}
+CBORValue::CBORValue(base::span<const uint8_t> in_bytes)
+    : type_(Type::BYTE_STRING),
+      bytestring_value_(in_bytes.begin(), in_bytes.end()) {}
 
 CBORValue::CBORValue(BinaryValue&& in_bytes) noexcept
     : type_(Type::BYTE_STRING), bytestring_value_(std::move(in_bytes)) {}
 
-CBORValue::CBORValue(const char* in_string)
-    : CBORValue(std::string(in_string)) {}
+CBORValue::CBORValue(const char* in_string, Type type)
+    : CBORValue(base::StringPiece(in_string), type) {}
 
-CBORValue::CBORValue(std::string&& in_string) noexcept
-    : type_(Type::STRING), string_value_(std::move(in_string)) {
-  DCHECK(base::IsStringUTF8(string_value_));
+CBORValue::CBORValue(std::string&& in_string, Type type) noexcept
+    : type_(type) {
+  switch (type_) {
+    case Type::STRING:
+      new (&string_value_) std::string();
+      string_value_ = std::move(in_string);
+      DCHECK(base::IsStringUTF8(string_value_));
+      break;
+    case Type::BYTE_STRING:
+      new (&bytestring_value_) BinaryValue();
+      bytestring_value_ = BinaryValue(in_string.begin(), in_string.end());
+      break;
+    default:
+      NOTREACHED();
+  }
 }
 
-CBORValue::CBORValue(base::StringPiece in_string)
-    : CBORValue(in_string.as_string()) {}
+CBORValue::CBORValue(base::StringPiece in_string, Type type) : type_(type) {
+  switch (type_) {
+    case Type::STRING:
+      new (&string_value_) std::string();
+      string_value_ = in_string.as_string();
+      DCHECK(base::IsStringUTF8(string_value_));
+      break;
+    case Type::BYTE_STRING:
+      new (&bytestring_value_) BinaryValue();
+      bytestring_value_ = BinaryValue(in_string.begin(), in_string.end());
+      break;
+    default:
+      NOTREACHED();
+  }
+}
 
 CBORValue::CBORValue(const ArrayValue& in_array)
     : type_(Type::ARRAY), array_value_() {
@@ -89,11 +125,6 @@ CBORValue::CBORValue(const MapValue& in_map) : type_(Type::MAP), map_value_() {
 
 CBORValue::CBORValue(MapValue&& in_map) noexcept
     : type_(Type::MAP), map_value_(std::move(in_map)) {}
-
-CBORValue::CBORValue(SimpleValue in_simple)
-    : type_(Type::SIMPLE_VALUE), simple_value_(in_simple) {
-  CHECK(static_cast<int>(in_simple) >= 20 && static_cast<int>(in_simple) <= 23);
-}
 
 CBORValue& CBORValue::operator=(CBORValue&& that) noexcept {
   InternalCleanup();
@@ -129,6 +160,16 @@ CBORValue CBORValue::Clone() const {
   return CBORValue();
 }
 
+CBORValue::SimpleValue CBORValue::GetSimpleValue() const {
+  CHECK(is_simple());
+  return simple_value_;
+}
+
+bool CBORValue::GetBool() const {
+  CHECK(is_bool());
+  return simple_value_ == SimpleValue::TRUE_VALUE;
+}
+
 const int64_t& CBORValue::GetInteger() const {
   CHECK(is_integer());
   return integer_value_;
@@ -156,6 +197,14 @@ const CBORValue::BinaryValue& CBORValue::GetBytestring() const {
   return bytestring_value_;
 }
 
+base::StringPiece CBORValue::GetBytestringAsString() const {
+  CHECK(is_bytestring());
+  const auto& bytestring_value = GetBytestring();
+  return base::StringPiece(
+      reinterpret_cast<const char*>(bytestring_value.data()),
+      bytestring_value.size());
+}
+
 const CBORValue::ArrayValue& CBORValue::GetArray() const {
   CHECK(is_array());
   return array_value_;
@@ -164,11 +213,6 @@ const CBORValue::ArrayValue& CBORValue::GetArray() const {
 const CBORValue::MapValue& CBORValue::GetMap() const {
   CHECK(is_map());
   return map_value_;
-}
-
-CBORValue::SimpleValue CBORValue::GetSimpleValue() const {
-  CHECK(is_simple());
-  return simple_value_;
 }
 
 void CBORValue::InternalMoveConstructFrom(CBORValue&& that) {

@@ -9,40 +9,33 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <utility>
-
-#include "base/bind.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/json/json_file_value_serializer.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/no_destructor.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/time/default_tick_clock.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "sql/connection_memory_dump_provider.h"
+#include "sql/initialization.h"
 #include "sql/meta_table.h"
 #include "sql/statement.h"
 #include "sql/vfs_wrapper.h"
 #include "third_party/sqlite/sqlite3.h"
-
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-#include "base/ios/ios_util.h"
-#include "third_party/sqlite/src/ext/icu/sqliteicu.h"
-#endif
 
 namespace {
 
@@ -80,10 +73,10 @@ class ScopedWritableSchema {
  public:
   explicit ScopedWritableSchema(sqlite3* db)
       : db_(db) {
-    sqlite3_exec(db_, "PRAGMA writable_schema=1", NULL, NULL, NULL);
+    sqlite3_exec(db_, "PRAGMA writable_schema=1", nullptr, nullptr, nullptr);
   }
   ~ScopedWritableSchema() {
-    sqlite3_exec(db_, "PRAGMA writable_schema=0", NULL, NULL, NULL);
+    sqlite3_exec(db_, "PRAGMA writable_schema=0", nullptr, nullptr, nullptr);
   }
 
  private:
@@ -130,70 +123,14 @@ bool ValidAttachmentPoint(const char* attachment_point) {
   return true;
 }
 
-void RecordSqliteMemory10Min() {
-  const int64_t used = sqlite3_memory_used();
-  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.TenMinutes", used / 1024);
-}
-
-void RecordSqliteMemoryHour() {
-  const int64_t used = sqlite3_memory_used();
-  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.OneHour", used / 1024);
-}
-
-void RecordSqliteMemoryDay() {
-  const int64_t used = sqlite3_memory_used();
-  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.OneDay", used / 1024);
-}
-
-void RecordSqliteMemoryWeek() {
-  const int64_t used = sqlite3_memory_used();
-  UMA_HISTOGRAM_COUNTS("Sqlite.MemoryKB.OneWeek", used / 1024);
-}
-
-// SQLite automatically calls sqlite3_initialize() lazily, but
-// sqlite3_initialize() uses double-checked locking and thus can have
-// data races.
-//
-// TODO(shess): Another alternative would be to have
-// sqlite3_initialize() called as part of process bring-up.  If this
-// is changed, remove the dynamic_annotations dependency in sql.gyp.
-base::LazyInstance<base::Lock>::Leaky
-    g_sqlite_init_lock = LAZY_INSTANCE_INITIALIZER;
-void InitializeSqlite() {
-  base::AutoLock lock(g_sqlite_init_lock.Get());
-  static bool first_call = true;
-  if (first_call) {
-    sqlite3_initialize();
-
-    // Schedule callback to record memory footprint histograms at 10m, 1h, and
-    // 1d. There may not be a registered task runner in tests.
-    if (base::SequencedTaskRunnerHandle::IsSet()) {
-      base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&RecordSqliteMemory10Min),
-          base::TimeDelta::FromMinutes(10));
-      base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&RecordSqliteMemoryHour),
-          base::TimeDelta::FromHours(1));
-      base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&RecordSqliteMemoryDay),
-          base::TimeDelta::FromDays(1));
-      base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&RecordSqliteMemoryWeek),
-          base::TimeDelta::FromDays(7));
-    }
-
-    first_call = false;
-  }
-}
-
 // Helper to get the sqlite3_file* associated with the "main" database.
 int GetSqlite3File(sqlite3* db, sqlite3_file** file) {
-  *file = NULL;
-  int rc = sqlite3_file_control(db, NULL, SQLITE_FCNTL_FILE_POINTER, file);
+  *file = nullptr;
+  int rc = sqlite3_file_control(db, nullptr, SQLITE_FCNTL_FILE_POINTER, file);
   if (rc != SQLITE_OK)
     return rc;
 
-  // TODO(shess): NULL in file->pMethods has been observed on android_dbg
+  // TODO(shess): null in file->pMethods has been observed on android_dbg
   // content_unittests, even though it should not be possible.
   // http://crbug.com/329982
   if (!*file || !(*file)->pMethods)
@@ -225,7 +162,7 @@ base::HistogramBase* GetMediumTimeHistogram(const std::string& name) {
 std::string AsUTF8ForSQL(const base::FilePath& path) {
 #if defined(OS_WIN)
   return base::WideToUTF8(path.value());
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return path.value();
 #endif
 }
@@ -235,7 +172,7 @@ std::string AsUTF8ForSQL(const base::FilePath& path) {
 namespace sql {
 
 // static
-Connection::ErrorExpecterCallback* Connection::current_expecter_cb_ = NULL;
+Connection::ErrorExpecterCallback* Connection::current_expecter_cb_ = nullptr;
 
 // static
 bool Connection::IsExpectedSqliteError(int error) {
@@ -256,20 +193,14 @@ void Connection::ReportDiagnosticInfo(int extended_error, Statement* stmt) {
 
 // static
 void Connection::SetErrorExpecter(Connection::ErrorExpecterCallback* cb) {
-  CHECK(current_expecter_cb_ == NULL);
+  CHECK(!current_expecter_cb_);
   current_expecter_cb_ = cb;
 }
 
 // static
 void Connection::ResetErrorExpecter() {
   CHECK(current_expecter_cb_);
-  current_expecter_cb_ = NULL;
-}
-
-bool StatementID::operator<(const StatementID& other) const {
-  if (number_ != other.number_)
-    return number_ < other.number_;
-  return strcmp(str_, other.str_) < 0;
+  current_expecter_cb_ = nullptr;
 }
 
 Connection::StatementRef::StatementRef(Connection* connection,
@@ -299,9 +230,9 @@ void Connection::StatementRef::Close(bool forced) {
     // of the function. http://crbug.com/136655.
     AssertIOAllowed();
     sqlite3_finalize(stmt_);
-    stmt_ = NULL;
+    stmt_ = nullptr;
   }
-  connection_ = NULL;  // The connection may be getting deleted.
+  connection_ = nullptr;  // The connection may be getting deleted.
 
   // Forced close is expected to happen from a statement error
   // handler.  In that case maintain the sense of |was_valid_| which
@@ -310,7 +241,7 @@ void Connection::StatementRef::Close(bool forced) {
 }
 
 Connection::Connection()
-    : db_(NULL),
+    : db_(nullptr),
       page_size_(0),
       cache_size_(0),
       exclusive_locking_(false),
@@ -323,13 +254,12 @@ Connection::Connection()
       mmap_disabled_(false),
       mmap_enabled_(false),
       total_changes_at_last_release_(0),
-      stats_histogram_(NULL),
-      commit_time_histogram_(NULL),
-      autocommit_time_histogram_(NULL),
-      update_time_histogram_(NULL),
-      query_time_histogram_(NULL),
-      clock_(new TimeSource()) {
-}
+      stats_histogram_(nullptr),
+      commit_time_histogram_(nullptr),
+      autocommit_time_histogram_(nullptr),
+      update_time_histogram_(nullptr),
+      query_time_histogram_(nullptr),
+      clock_(std::make_unique<base::DefaultTickClock>()) {}
 
 Connection::~Connection() {
   Close();
@@ -436,9 +366,8 @@ void Connection::CloseInternal(bool forced) {
   DCHECK(forced || open_statements_.empty());
 
   // Deactivate any outstanding statements so sqlite3_close() works.
-  for (StatementRefSet::iterator i = open_statements_.begin();
-       i != open_statements_.end(); ++i)
-    (*i)->Close(forced);
+  for (StatementRef* statement_ref : open_statements_)
+    statement_ref->Close(forced);
   open_statements_.clear();
 
   if (db_) {
@@ -467,7 +396,7 @@ void Connection::CloseInternal(bool forced) {
       DLOG(DCHECK) << "sqlite3_close failed: " << GetErrorMessage();
     }
   }
-  db_ = NULL;
+  db_ = nullptr;
 }
 
 void Connection::Close() {
@@ -497,7 +426,7 @@ void Connection::Preload() {
   if (preload_size < 1)
     return;
 
-  sqlite3_file* file = NULL;
+  sqlite3_file* file = nullptr;
   sqlite3_int64 file_size = 0;
   int rc = GetSqlite3FileAndSize(db_, &file, &file_size);
   if (rc != SQLITE_OK)
@@ -599,7 +528,7 @@ base::FilePath Connection::DbPath() const {
   const base::StringPiece db_path(path);
 #if defined(OS_WIN)
   return base::FilePath(base::UTF8ToWide(db_path));
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return base::FilePath(db_path);
 #else
   NOTREACHED();
@@ -642,7 +571,8 @@ bool Connection::RegisterIntentToUpload() const {
   // is _probably_ something systemic wrong with the user's system.  So the lock
   // should never be contended, but when it is the database experience is
   // already bad.
-  base::AutoLock lock(g_sqlite_init_lock.Get());
+  static base::NoDestructor<base::Lock> lock;
+  base::AutoLock auto_lock(*lock);
 
   std::unique_ptr<base::Value> root;
   if (!base::PathExists(breadcrumb_path)) {
@@ -732,7 +662,7 @@ std::string Connection::CollectErrorInfo(int error, Statement* stmt) const {
   // from posix.
 #if defined(OS_WIN)
   base::StringAppendF(&debug_info, "LastError: %d\n", GetLastErrno());
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   base::StringAppendF(&debug_info, "errno: %d\n", GetLastErrno());
 #else
   NOTREACHED();  // Add appropriate log info.
@@ -888,13 +818,6 @@ bool Connection::SetMmapAltStatus(int64_t status) {
 size_t Connection::GetAppropriateMmapSize() {
   AssertIOAllowed();
 
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    // iOS SQLite does not support memory mapping.
-    return 0;
-  }
-#endif
-
   // How much to map if no errors are found.  50MB encompasses the 99th
   // percentile of Chrome databases in the wild, so this should be good.
   const size_t kMmapEverything = 256 * 1024 * 1024;
@@ -937,7 +860,7 @@ size_t Connection::GetAppropriateMmapSize() {
     // Read more of the database looking for errors.  The VFS interface is used
     // to assure that the reads are valid for SQLite.  |g_reads_allowed| is used
     // to limit checking to 20MB per run of Chromium.
-    sqlite3_file* file = NULL;
+    sqlite3_file* file = nullptr;
     sqlite3_int64 db_size = 0;
     if (SQLITE_OK != GetSqlite3FileAndSize(db_, &file, &db_size)) {
       RecordOneEvent(EVENT_MMAP_VFS_FAILURE);
@@ -951,7 +874,8 @@ size_t Connection::GetAppropriateMmapSize() {
     if (amount < 0)
       amount = 0;
     if (amount > 0) {
-      base::AutoLock lock(g_sqlite_init_lock.Get());
+      static base::NoDestructor<base::Lock> lock;
+      base::AutoLock auto_lock(*lock);
       static sqlite3_int64 g_reads_allowed = 20 * 1024 * 1024;
       if (g_reads_allowed < amount)
         amount = g_reads_allowed;
@@ -1136,7 +1060,7 @@ bool Connection::Raze() {
   // TODO(shess): Maybe it would be worthwhile to just truncate from
   // the get-go?
   if (rc == SQLITE_NOTADB || rc == SQLITE_IOERR_SHORT_READ) {
-    sqlite3_file* file = NULL;
+    sqlite3_file* file = nullptr;
     rc = GetSqlite3File(db_, &file);
     if (rc != SQLITE_OK) {
       DLOG(DCHECK) << "Failure getting file handle.";
@@ -1220,10 +1144,9 @@ bool Connection::Delete(const base::FilePath& path) {
   std::string wal_str = AsUTF8ForSQL(wal_path);
   std::string path_str = AsUTF8ForSQL(path);
 
-  // Make sure sqlite3_initialize() is called before anything else.
-  InitializeSqlite();
+  EnsureSqliteInitialized();
 
-  sqlite3_vfs* vfs = sqlite3_vfs_find(NULL);
+  sqlite3_vfs* vfs = sqlite3_vfs_find(nullptr);
   CHECK(vfs);
   CHECK(vfs->xDelete);
   CHECK(vfs->xAccess);
@@ -1313,9 +1236,9 @@ bool Connection::CommitTransaction() {
 
   // Collect the commit time manually, sql::Statement would register it as query
   // time only.
-  const base::TimeTicks before = Now();
+  const base::TimeTicks before = NowTicks();
   bool ret = commit.RunWithoutTimers();
-  const base::TimeDelta delta = Now() - before;
+  const base::TimeDelta delta = NowTicks() - before;
 
   RecordCommitTime(delta);
   RecordOneEvent(EVENT_COMMIT);
@@ -1340,8 +1263,10 @@ bool Connection::AttachDatabase(const base::FilePath& other_db_path,
   Statement s(GetUniqueStatement("ATTACH DATABASE ? AS ?"));
 #if OS_WIN
   s.BindString16(0, other_db_path.value());
-#else
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   s.BindString(0, other_db_path.value());
+#else
+#error Unsupported platform
 #endif
   s.BindString(1, attachment_point);
   return s.Run();
@@ -1369,10 +1294,10 @@ int Connection::ExecuteAndReturnErrorCode(const char* sql) {
   RecordOneEvent(EVENT_EXECUTE);
   int rc = SQLITE_OK;
   while ((rc == SQLITE_OK) && *sql) {
-    sqlite3_stmt *stmt = NULL;
+    sqlite3_stmt* stmt = nullptr;
     const char *leftover_sql;
 
-    const base::TimeTicks before = Now();
+    const base::TimeTicks before = NowTicks();
     rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, &leftover_sql);
     sql = leftover_sql;
 
@@ -1410,7 +1335,7 @@ int Connection::ExecuteAndReturnErrorCode(const char* sql) {
       sql++;
     }
 
-    const base::TimeDelta delta = Now() - before;
+    const base::TimeDelta delta = NowTicks() - before;
     RecordTimeAndChanges(delta, read_only);
   }
 
@@ -1430,7 +1355,7 @@ bool Connection::Execute(const char* sql) {
 
   int error = ExecuteAndReturnErrorCode(sql);
   if (error != SQLITE_OK)
-    error = OnSqliteError(error, NULL, sql);
+    error = OnSqliteError(error, nullptr, sql);
 
   // This needs to be a FATAL log because the error case of arriving here is
   // that there's a malformed SQL statement. This can arise in development if
@@ -1452,22 +1377,22 @@ bool Connection::ExecuteWithTimeout(const char* sql, base::TimeDelta timeout) {
   return Execute(sql);
 }
 
-bool Connection::HasCachedStatement(const StatementID& id) const {
-  return statement_cache_.find(id) != statement_cache_.end();
-}
-
 scoped_refptr<Connection::StatementRef> Connection::GetCachedStatement(
-    const StatementID& id,
+    StatementID id,
     const char* sql) {
-  CachedStatementMap::iterator i = statement_cache_.find(id);
-  if (i != statement_cache_.end()) {
-    // Statement is in the cache. It should still be active (we're the only
-    // one invalidating cached statements, and we'll remove it from the cache
-    // if we do that. Make sure we reset it before giving out the cached one in
-    // case it still has some stuff bound.
-    DCHECK(i->second->is_valid());
-    sqlite3_reset(i->second->stmt());
-    return i->second;
+  auto it = statement_cache_.find(id);
+  if (it != statement_cache_.end()) {
+    // Statement is in the cache. It should still be active. We're the only
+    // one invalidating cached statements, and we remove them from the cache
+    // when we do that.
+    DCHECK(it->second->is_valid());
+
+    DCHECK_EQ(std::string(sql), std::string(sqlite3_sql(it->second->stmt())))
+        << "GetCachedStatement used with same ID but different SQL";
+
+    // Reset the statement so it can be reused.
+    sqlite3_reset(it->second->stmt());
+    return it->second;
   }
 
   scoped_refptr<StatementRef> statement = GetUniqueStatement(sql);
@@ -1485,34 +1410,34 @@ scoped_refptr<Connection::StatementRef> Connection::GetStatementImpl(
     sql::Connection* tracking_db, const char* sql) const {
   AssertIOAllowed();
   DCHECK(sql);
-  DCHECK(!tracking_db || const_cast<Connection*>(tracking_db)==this);
+  DCHECK(!tracking_db || tracking_db == this);
 
   // Return inactive statement.
   if (!db_)
-    return new StatementRef(NULL, NULL, poisoned_);
+    return base::MakeRefCounted<StatementRef>(nullptr, nullptr, poisoned_);
 
-  sqlite3_stmt* stmt = NULL;
-  int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL);
+  sqlite3_stmt* stmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
     // This is evidence of a syntax error in the incoming SQL.
     DCHECK_NE(rc, SQLITE_ERROR) << "SQL compile error " << GetErrorMessage();
 
     // It could also be database corruption.
-    OnSqliteError(rc, NULL, sql);
-    return new StatementRef(NULL, NULL, false);
+    OnSqliteError(rc, nullptr, sql);
+    return base::MakeRefCounted<StatementRef>(nullptr, nullptr, false);
   }
-  return new StatementRef(tracking_db, stmt, true);
+  return base::MakeRefCounted<StatementRef>(tracking_db, stmt, true);
 }
 
 scoped_refptr<Connection::StatementRef> Connection::GetUntrackedStatement(
     const char* sql) const {
-  return GetStatementImpl(NULL, sql);
+  return GetStatementImpl(nullptr, sql);
 }
 
 std::string Connection::GetSchema() const {
   // The ORDER BY should not be necessary, but relying on organic
   // order for something like this is questionable.
-  const char* kSql =
+  static const char kSql[] =
       "SELECT type, name, tbl_name, sql "
       "FROM sqlite_master ORDER BY 1, 2, 3, 4";
   Statement statement(GetUntrackedStatement(kSql));
@@ -1539,8 +1464,8 @@ bool Connection::IsSQLValid(const char* sql) {
     return false;
   }
 
-  sqlite3_stmt* stmt = NULL;
-  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL) != SQLITE_OK)
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
     return false;
 
   sqlite3_finalize(stmt);
@@ -1624,7 +1549,7 @@ int Connection::GetLastErrno() const {
     return -1;
 
   int err = 0;
-  if (SQLITE_OK != sqlite3_file_control(db_, NULL, SQLITE_LAST_ERRNO, &err))
+  if (SQLITE_OK != sqlite3_file_control(db_, nullptr, SQLITE_LAST_ERRNO, &err))
     return -2;
 
   return err;
@@ -1645,8 +1570,7 @@ bool Connection::OpenInternal(const std::string& file_name,
     return false;
   }
 
-  // Make sure sqlite3_initialize() is called before anything else.
-  InitializeSqlite();
+  EnsureSqliteInitialized();
 
   // Setup the stats histograms immediately rather than allocating lazily.
   // Connections which won't exercise all of these probably shouldn't exist.
@@ -1698,7 +1622,7 @@ bool Connection::OpenInternal(const std::string& file_name,
     // purposes.
     base::UmaHistogramSparse("Sqlite.OpenFailure", err);
 
-    OnSqliteError(err, NULL, "-- sqlite3_open()");
+    OnSqliteError(err, nullptr, "-- sqlite3_open()");
     bool was_poisoned = poisoned_;
     Close();
 
@@ -1708,7 +1632,7 @@ bool Connection::OpenInternal(const std::string& file_name,
   }
 
   // TODO(shess): OS_WIN support?
-#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
+#if defined(OS_POSIX)
   if (restrict_to_user_) {
     DCHECK_NE(file_name, std::string(":memory"));
     base::FilePath file_path(file_name);
@@ -1729,14 +1653,14 @@ bool Connection::OpenInternal(const std::string& file_name,
       base::SetPosixFilePermissions(wal_path, mode);
     }
   }
-#endif  // defined(OS_POSIX) && !defined(OS_FUCHSIA)
+#endif  // defined(OS_POSIX)
 
   // SQLite uses a lookaside buffer to improve performance of small mallocs.
   // Chromium already depends on small mallocs being efficient, so we disable
   // this to avoid the extra memory overhead.
   // This must be called immediatly after opening the database before any SQL
   // statements are run.
-  sqlite3_db_config(db_, SQLITE_DBCONFIG_LOOKASIDE, NULL, 0, 0);
+  sqlite3_db_config(db_, SQLITE_DBCONFIG_LOOKASIDE, nullptr, 0, 0);
 
   // Enable extended result codes to provide more color on I/O errors.
   // Not having extended result codes is not a fatal problem, as
@@ -1768,13 +1692,6 @@ bool Connection::OpenInternal(const std::string& file_name,
       return false;
     }
   }
-
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  // The version of SQLite shipped with iOS doesn't enable ICU, which includes
-  // REGEXP support. Add it in dynamically.
-  err = sqlite3IcuInit(db_);
-  DCHECK_EQ(err, SQLITE_OK) << "Could not enable ICU support";
-#endif  // OS_IOS && USE_SYSTEM_SQLITE
 
   // If indicated, lock up the database before doing anything else, so
   // that the following code doesn't have to deal with locking.
@@ -1834,14 +1751,14 @@ bool Connection::OpenInternal(const std::string& file_name,
   // Database sizes seem to be bimodal, some clients have consistently small
   // databases (<20k) while other clients have a broad distribution of sizes
   // (hundreds of kilobytes to many megabytes).
-  sqlite3_file* file = NULL;
+  sqlite3_file* file = nullptr;
   sqlite3_int64 db_size = 0;
   int rc = GetSqlite3FileAndSize(db_, &file, &db_size);
   if (rc == SQLITE_OK && db_size > 16 * 1024) {
     int chunk_size = 4 * 1024;
     if (db_size > 128 * 1024)
       chunk_size = 32 * 1024;
-    sqlite3_file_control(db_, NULL, SQLITE_FCNTL_CHUNK_SIZE, &chunk_size);
+    sqlite3_file_control(db_, nullptr, SQLITE_FCNTL_CHUNK_SIZE, &chunk_size);
   }
 
   // Enable memory-mapped access.  The explicit-disable case is because SQLite
@@ -1877,9 +1794,9 @@ void Connection::DoRollback() {
 
   // Collect the rollback time manually, sql::Statement would register it as
   // query time only.
-  const base::TimeTicks before = Now();
+  const base::TimeTicks before = NowTicks();
   rollback.RunWithoutTimers();
-  const base::TimeDelta delta = Now() - before;
+  const base::TimeDelta delta = NowTicks() - before;
 
   RecordUpdateTime(delta);
   RecordOneEvent(EVENT_ROLLBACK);
@@ -1893,20 +1810,20 @@ void Connection::DoRollback() {
 }
 
 void Connection::StatementRefCreated(StatementRef* ref) {
-  DCHECK(open_statements_.find(ref) == open_statements_.end());
+  DCHECK(!open_statements_.count(ref))
+      << __func__ << " already called with this statement";
   open_statements_.insert(ref);
 }
 
 void Connection::StatementRefDeleted(StatementRef* ref) {
-  StatementRefSet::iterator i = open_statements_.find(ref);
-  if (i == open_statements_.end())
-    DLOG(DCHECK) << "Could not find statement";
-  else
-    open_statements_.erase(i);
+  DCHECK(open_statements_.count(ref))
+      << __func__ << " called with non-existing statement";
+  open_statements_.erase(ref);
 }
 
 void Connection::set_histogram_tag(const std::string& tag) {
   DCHECK(!is_open());
+
   histogram_tag_ = tag;
 }
 
@@ -2016,8 +1933,8 @@ bool Connection::IntegrityCheckHelper(
   // allows SQLite to process through certain cases of corruption.
   // Failing to set this pragma probably means that the database is
   // beyond recovery.
-  const char kWritableSchema[] = "PRAGMA writable_schema = ON";
-  if (!Execute(kWritableSchema))
+  static const char kWritableSchemaSql[] = "PRAGMA writable_schema = ON";
+  if (!Execute(kWritableSchemaSql))
     return false;
 
   bool ret = false;
@@ -2036,8 +1953,8 @@ bool Connection::IntegrityCheckHelper(
   }
 
   // Best effort to put things back as they were before.
-  const char kNoWritableSchema[] = "PRAGMA writable_schema = OFF";
-  ignore_result(Execute(kNoWritableSchema));
+  static const char kNoWritableSchemaSql[] = "PRAGMA writable_schema = OFF";
+  ignore_result(Execute(kNoWritableSchemaSql));
 
   return ret;
 }
@@ -2046,10 +1963,6 @@ bool Connection::ReportMemoryUsage(base::trace_event::ProcessMemoryDump* pmd,
                                    const std::string& dump_name) {
   return memory_dump_provider_ &&
          memory_dump_provider_->ReportMemoryUsage(pmd, dump_name);
-}
-
-base::TimeTicks TimeSource::Now() {
-  return base::TimeTicks::Now();
 }
 
 }  // namespace sql

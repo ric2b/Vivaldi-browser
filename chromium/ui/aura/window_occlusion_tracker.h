@@ -9,6 +9,7 @@
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "ui/aura/aura_export.h"
+#include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/compositor/layer_animation_observer.h"
 
@@ -21,7 +22,9 @@ class Transform;
 
 namespace aura {
 
-class Window;
+namespace test {
+class WindowOcclusionTrackerTestApi;
+}
 
 // Notifies tracked Windows when their occlusion state change.
 //
@@ -55,20 +58,34 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
   static void Track(Window* window);
 
  private:
+  friend class test::WindowOcclusionTrackerTestApi;
+
+  struct RootWindowState {
+    // Number of Windows whose occlusion state is tracked under this root
+    // Window.
+    int num_tracked_windows = 0;
+
+    // Whether the occlusion state of tracked Windows under this root is stale.
+    bool dirty = false;
+  };
+
   WindowOcclusionTracker();
   ~WindowOcclusionTracker() override;
+
+  static WindowOcclusionTracker* GetInstance();
 
   // Recomputes the occlusion state of tracked windows under roots marked as
   // dirty in |root_windows_| if there are no active
   // ScopedPauseOcclusionTracking instance.
-  void MaybeRecomputeOcclusion();
+  void MaybeComputeOcclusion();
 
   // Recomputes the occlusion state of |window| and its descendants.
   // |parent_transform_relative_to_root| is the transform of |window->parent()|
   // relative to the root window. |clipped_bounds| is an optional mask for the
   // bounds of |window| and its descendants. |occluded_region| is a region
-  // covered by windows which are on top of |window|.
-  void RecomputeOcclusionImpl(
+  // covered by windows which are on top of |window|. Returns true if at least
+  // one window in the hierarchy starting at |window| is NOT_OCCLUDED.
+  bool RecomputeOcclusionImpl(
       Window* window,
       const gfx::Transform& parent_transform_relative_to_root,
       const SkIRect* clipped_bounds,
@@ -82,13 +99,14 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
   // |animated_windows_|, adds |window| to |animated_windows_| and returns true.
   bool MaybeObserveAnimatedWindow(Window* window);
 
-  // Calls SetOccluded(|is_occluded|) on |window| and its descendants if they
-  // are in |tracked_windows_|.
+  // Calls SetOccluded() with |is_occluded| as argument for |window| and its
+  // descendants.
   void SetWindowAndDescendantsAreOccluded(Window* window, bool is_occluded);
 
-  // Calls SetOccluded() on |window| with |occluded| as argument if |window| is
-  // in |tracked_windows_|.
-  void SetOccluded(Window* window, bool occluded);
+  // Updates the occlusion state of |window| in |tracked_windows_|, based on
+  // |is_occluded| and window->IsVisible(). No-op if |window| is not in
+  // |tracked_windows_|.
+  void SetOccluded(Window* window, bool is_occluded);
 
   // Returns true if |window| is in |tracked_windows_|.
   bool WindowIsTracked(Window* window) const;
@@ -97,12 +115,15 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
   bool WindowIsAnimated(Window* window) const;
 
   // If the root of |window| is not dirty and |predicate| is true, marks the
-  // root of |window| as dirty. Then, calls MaybeRecomputeOcclusion().
+  // root of |window| as dirty. Then, calls MaybeComputeOcclusion().
   // |predicate| is not evaluated if the root of |window| is already dirty when
   // this is called.
   template <typename Predicate>
-  void MarkRootWindowAsDirtyAndMaybeRecomputeOcclusionIf(Window* window,
-                                                         Predicate predicate);
+  void MarkRootWindowAsDirtyAndMaybeComputeOcclusionIf(Window* window,
+                                                       Predicate predicate);
+
+  // Marks |root_window| as dirty.
+  void MarkRootWindowAsDirty(RootWindowState* root_window_state);
 
   // Returns true if |window| or one of its parents is in |animated_windows_|.
   bool WindowOrParentIsAnimated(Window* window) const;
@@ -162,17 +183,8 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
                                       Window* new_root) override;
   void OnWindowLayerRecreated(Window* window) override;
 
-  struct RootWindowState {
-    // Number of Windows whose occlusion state is tracked under this root
-    // Window.
-    int num_tracked_windows = 0;
-
-    // Whether the occlusion state of tracked Windows under this root is stale.
-    bool dirty = false;
-  };
-
   // Windows whose occlusion state is tracked.
-  base::flat_set<Window*> tracked_windows_;
+  base::flat_map<Window*, Window::OcclusionState> tracked_windows_;
 
   // Windows whose bounds or transform are animated.
   //
@@ -185,6 +197,19 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
 
   // Root Windows of Windows in |tracked_windows_|.
   base::flat_map<Window*, RootWindowState> root_windows_;
+
+  // Number of times that occlusion has been recomputed in this process. We keep
+  // track of this for tests.
+  int num_times_occlusion_recomputed_ = 0;
+
+  // Number of times that the current call to MaybeComputeOcclusion() has
+  // recomputed occlusion states. Always 0 when not in MaybeComputeOcclusion().
+  int num_times_occlusion_recomputed_in_current_step_ = 0;
+
+  // Set to true when occlusion is recomputed too many times before it becomes
+  // stable. Reset in
+  // WindowOcclusionTrackerTestApi::WasOcclusionRecomputedTooManyTimes().
+  bool was_occlusion_recomputed_too_many_times_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WindowOcclusionTracker);
 };

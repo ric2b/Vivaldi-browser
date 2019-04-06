@@ -7,16 +7,13 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
-#include "chrome/browser/ui/ash/test_wallpaper_controller.h"
-#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/test_browser_window_aura.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
 
@@ -67,19 +64,12 @@ class BrowserFinderChromeOSTest : public BrowserWithTestWindowTest {
     test_account_id2_ = AccountId::FromUserEmail(kTestAccount2);
     BrowserWithTestWindowTest::SetUp();
     profile_manager()->SetLoggedIn(true);
-    chromeos::WallpaperManager::Initialize();
-    wallpaper_controller_client_ =
-        std::make_unique<WallpaperControllerClient>();
-    wallpaper_controller_client_->InitForTesting(
-        test_wallpaper_controller_.CreateInterfacePtr());
     second_profile_ = CreateMultiUserProfile(test_account_id2_);
   }
 
   void TearDown() override {
     MultiUserWindowManager::DeleteInstance();
     BrowserWithTestWindowTest::TearDown();
-    chromeos::WallpaperManager::Shutdown();
-    wallpaper_controller_client_.reset();
   }
 
   TestingProfile* CreateProfile() override {
@@ -92,10 +82,6 @@ class BrowserFinderChromeOSTest : public BrowserWithTestWindowTest {
   // |fake_user_manager_| is owned by |user_manager_enabler_|
   chromeos::FakeChromeUserManager* fake_user_manager_;
   user_manager::ScopedUserManager user_manager_enabler_;
-
-  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
-
-  TestWallpaperController test_wallpaper_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserFinderChromeOSTest);
 };

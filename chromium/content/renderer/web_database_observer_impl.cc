@@ -9,10 +9,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/renderer/storage_util.h"
-#include "storage/common/database/database_identifier.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/sqlite/sqlite3.h"
 
 using blink::WebSecurityOrigin;
@@ -56,18 +54,12 @@ int DetermineHistogramResult(int websql_error, int sqlite_error) {
     } \
   } while (0)
 
-// TODO(jsbell): Replace with use of url::Origin end-to-end.
-// https://crbug.com/591482
-std::string GetIdentifierFromOrigin(const WebSecurityOrigin& origin) {
-  return storage::GetIdentifierFromOrigin(WebSecurityOriginToGURL(origin));
-}
 
 }  // namespace
 
 WebDatabaseObserverImpl::WebDatabaseObserverImpl(
     scoped_refptr<blink::mojom::ThreadSafeWebDatabaseHostPtr> web_database_host)
     : web_database_host_(std::move(web_database_host)),
-      open_connections_(new storage::DatabaseConnectionsWrapper),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   DCHECK(main_thread_task_runner_);
 }
@@ -79,8 +71,6 @@ void WebDatabaseObserverImpl::DatabaseOpened(
     const WebString& database_name,
     const WebString& database_display_name,
     unsigned long estimated_size) {
-  open_connections_->AddOpenConnection(GetIdentifierFromOrigin(origin),
-                                       database_name.Utf16());
   GetWebDatabaseHost().Opened(origin, database_name.Utf16(),
                               database_display_name.Utf16(), estimated_size);
 }
@@ -94,8 +84,6 @@ void WebDatabaseObserverImpl::DatabaseClosed(const WebSecurityOrigin& origin,
                                              const WebString& database_name) {
   DCHECK(!main_thread_task_runner_->RunsTasksInCurrentSequence());
   GetWebDatabaseHost().Closed(origin, database_name.Utf16());
-  open_connections_->RemoveOpenConnection(GetIdentifierFromOrigin(origin),
-                                          database_name.Utf16());
 }
 
 void WebDatabaseObserverImpl::ReportOpenDatabaseResult(
@@ -104,17 +92,15 @@ void WebDatabaseObserverImpl::ReportOpenDatabaseResult(
     int callsite,
     int websql_error,
     int sqlite_error,
-    double call_time) {
+    base::TimeDelta call_time) {
   UMA_HISTOGRAM_WEBSQL_RESULT("OpenResult", callsite,
                               websql_error, sqlite_error);
   HandleSqliteError(origin, database_name, sqlite_error);
 
   if (websql_error == kWebSQLSuccess && sqlite_error == SQLITE_OK) {
-    UMA_HISTOGRAM_TIMES("websql.Async.OpenTime.Success",
-                        base::TimeDelta::FromSecondsD(call_time));
+    UMA_HISTOGRAM_TIMES("websql.Async.OpenTime.Success", call_time);
   } else {
-    UMA_HISTOGRAM_TIMES("websql.Async.OpenTime.Error",
-                        base::TimeDelta::FromSecondsD(call_time));
+    UMA_HISTOGRAM_TIMES("websql.Async.OpenTime.Error", call_time);
   }
 }
 
@@ -170,12 +156,6 @@ void WebDatabaseObserverImpl::ReportVacuumDatabaseResult(
   UMA_HISTOGRAM_ENUMERATION("websql.Async.VacuumResult",
                               result, kResultHistogramSize);
   HandleSqliteError(origin, database_name, sqlite_error);
-}
-
-bool WebDatabaseObserverImpl::WaitForAllDatabasesToClose(
-    base::TimeDelta timeout) {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
-  return open_connections_->WaitForAllDatabasesToClose(timeout);
 }
 
 void WebDatabaseObserverImpl::HandleSqliteError(const WebSecurityOrigin& origin,

@@ -11,7 +11,6 @@
 #include "base/optional.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
-#include "components/ukm/ukm_source.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -32,8 +31,11 @@ class PopupOpenerTabHelper
     : public content::WebContentsObserver,
       public content::WebContentsUserData<PopupOpenerTabHelper> {
  public:
+  // |tick_clock| overrides the internal time for testing. This doesn't take the
+  // ownership of the clock. |tick_clock| must outlive the PopupOpenerTabHelper
+  // instance.
   static void CreateForWebContents(content::WebContents* contents,
-                                   std::unique_ptr<base::TickClock> tick_clock);
+                                   const base::TickClock* tick_clock);
   ~PopupOpenerTabHelper() override;
 
   void OnOpenedPopup(PopupTracker* popup_tracker);
@@ -47,21 +49,16 @@ class PopupOpenerTabHelper
     return visible_time_before_tab_under_.has_value();
   }
 
-  const base::Optional<ukm::SourceId>& last_committed_source_id() {
-    return last_committed_source_id_;
-  }
-
  private:
   friend class content::WebContentsUserData<PopupOpenerTabHelper>;
 
   PopupOpenerTabHelper(content::WebContents* web_contents,
-                       std::unique_ptr<base::TickClock> tick_clock);
+                       const base::TickClock* tick_clock);
 
   // content::WebContentsObserver:
-  void DidFinishNavigation(
+  void OnVisibilityChanged(content::Visibility visibility) override;
+  void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void WasShown() override;
-  void WasHidden() override;
   void DidGetUserInteraction(const blink::WebInputEvent::Type type) override;
 
   // Visible time for this tab until a tab-under is detected. At which point it
@@ -69,12 +66,8 @@ class PopupOpenerTabHelper
   // tab-under is detected.
   base::Optional<base::TimeDelta> visible_time_before_tab_under_;
 
-  // The UKM source id of the current page load. i.e. the id of the last
-  // committed main frame navigation.
-  base::Optional<ukm::SourceId> last_committed_source_id_;
-
   // The clock which is used by the visibility trackers.
-  std::unique_ptr<base::TickClock> tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // Keeps track of the total foreground time for this tab.
   std::unique_ptr<ScopedVisibilityTracker> visibility_tracker_;

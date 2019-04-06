@@ -13,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
-#include "base/message_loop/message_loop.h"
 #include "extensions/browser/updater/request_queue.h"
 
 namespace extensions {
@@ -23,9 +22,7 @@ RequestQueue<T>::RequestQueue(
     const net::BackoffEntry::Policy* const backoff_policy,
     const base::Closure& start_request_callback)
     : backoff_policy_(backoff_policy),
-      start_request_callback_(start_request_callback),
-      timer_(false, false) {
-}
+      start_request_callback_(start_request_callback) {}
 
 template <typename T>
 RequestQueue<T>::~RequestQueue() {

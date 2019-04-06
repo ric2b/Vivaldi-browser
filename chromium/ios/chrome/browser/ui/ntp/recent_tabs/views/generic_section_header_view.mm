@@ -10,7 +10,7 @@
 #include "ios/chrome/browser/ui/ntp/recent_tabs/views/disclosure_view.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/views_utils.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -93,8 +93,7 @@ const CGFloat kDesiredHeight = 48;
       @"H:|-16-[icon]-16-[label]-(>=16)-[disclosureView]-16-|",
       @"V:|-12-[label]-12-|"
     ];
-    ApplyVisualConstraintsWithOptions(constraints, viewsDictionary,
-                                      LayoutOptionForRTLSupport(), self);
+    ApplyVisualConstraints(constraints, viewsDictionary);
     [self addConstraint:[NSLayoutConstraint
                             constraintWithItem:_disclosureView
                                      attribute:NSLayoutAttributeCenterY

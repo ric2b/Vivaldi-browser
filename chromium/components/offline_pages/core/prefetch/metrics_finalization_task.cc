@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -203,9 +202,6 @@ void ReportMetricsFor(const PrefetchItemStats& url, const base::Time now) {
 }
 
 bool ReportMetricsAndFinalizeSync(sql::Connection* db) {
-  if (!db)
-    return false;
-
   sql::Transaction transaction(db);
   if (!transaction.Begin())
     return false;
@@ -224,13 +220,13 @@ bool ReportMetricsAndFinalizeSync(sql::Connection* db) {
 
   if (transaction.Commit()) {
     for (const auto& url : urls) {
-      DVLOG(1) << "Finalized prefetch item: (" << url.offline_id << ", "
-               << url.generate_bundle_attempts << ", "
+      DVLOG(1) << "Finalized prefetch item with error code "
+               << static_cast<int>(url.error_code) << ": (" << url.offline_id
+               << ", " << url.generate_bundle_attempts << ", "
                << url.get_operation_attempts << ", "
                << url.download_initiation_attempts << ", "
                << url.archive_body_length << ", " << url.creation_time << ", "
-               << static_cast<int>(url.error_code) << ", " << url.file_size
-               << ")";
+               << url.file_size << ")";
       ReportMetricsFor(url, now);
     }
     return true;
@@ -250,7 +246,8 @@ void MetricsFinalizationTask::Run() {
   prefetch_store_->Execute(
       base::BindOnce(&ReportMetricsAndFinalizeSync),
       base::BindOnce(&MetricsFinalizationTask::MetricsFinalized,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr()),
+      false);
 }
 
 void MetricsFinalizationTask::MetricsFinalized(bool result) {

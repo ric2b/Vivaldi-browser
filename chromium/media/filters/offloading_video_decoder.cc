@@ -4,7 +4,9 @@
 
 #include "media/filters/offloading_video_decoder.h"
 
+#include "base/bind_helpers.h"
 #include "base/sequenced_task_runner.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/task_scheduler/post_task.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
@@ -12,7 +14,45 @@
 
 namespace media {
 
-static void ReleaseDecoder(std::unique_ptr<VideoDecoder> decoder) {}
+// Helper class which manages cancellation of Decode() after Reset() and makes
+// it easier to destruct on the proper thread.
+class CancellationHelper {
+ public:
+  CancellationHelper(std::unique_ptr<OffloadableVideoDecoder> decoder)
+      : cancellation_flag_(std::make_unique<base::AtomicFlag>()),
+        decoder_(std::move(decoder)) {}
+
+  // Safe to call from any thread.
+  void Cancel() { cancellation_flag_->Set(); }
+
+  void Decode(scoped_refptr<DecoderBuffer> buffer,
+              const VideoDecoder::DecodeCB& decode_cb) {
+    if (cancellation_flag_->IsSet()) {
+      decode_cb.Run(DecodeStatus::ABORTED);
+      return;
+    }
+
+    decoder_->Decode(std::move(buffer), decode_cb);
+  }
+
+  void Reset(const base::Closure& reset_cb) {
+    // OffloadableVideoDecoders are required to have a synchronous Reset(), so
+    // we don't need to wait for the Reset to complete. Despite this, we don't
+    // want to run |reset_cb| before we've reset the cancellation flag or the
+    // client may end up issuing another Reset() before this code runs.
+    decoder_->Reset(base::DoNothing());
+    cancellation_flag_.reset(new base::AtomicFlag());
+    reset_cb.Run();
+  }
+
+  OffloadableVideoDecoder* decoder() const { return decoder_.get(); }
+
+ private:
+  std::unique_ptr<base::AtomicFlag> cancellation_flag_;
+  std::unique_ptr<OffloadableVideoDecoder> decoder_;
+
+  DISALLOW_COPY_AND_ASSIGN(CancellationHelper);
+};
 
 OffloadingVideoDecoder::OffloadingVideoDecoder(
     int min_offloading_width,
@@ -20,7 +60,7 @@ OffloadingVideoDecoder::OffloadingVideoDecoder(
     std::unique_ptr<OffloadableVideoDecoder> decoder)
     : min_offloading_width_(min_offloading_width),
       supported_codecs_(std::move(supported_codecs)),
-      decoder_(std::move(decoder)),
+      helper_(std::make_unique<CancellationHelper>(std::move(decoder))),
       weak_factory_(this) {
   DETACH_FROM_THREAD(thread_checker_);
 }
@@ -28,23 +68,24 @@ OffloadingVideoDecoder::OffloadingVideoDecoder(
 OffloadingVideoDecoder::~OffloadingVideoDecoder() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (offload_task_runner_) {
-    // Can't use DeleteSoon() here since VideoDecoder has a custom deleter.
-    offload_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&ReleaseDecoder, base::Passed(&decoder_)));
-  }
+  // The |helper_| must always be destroyed on the |offload_task_runner_| since
+  // we may still have tasks posted to it.
+  if (offload_task_runner_)
+    offload_task_runner_->DeleteSoon(FROM_HERE, std::move(helper_));
 }
 
 std::string OffloadingVideoDecoder::GetDisplayName() const {
   // This call is expected to be static and safe to call from any thread.
-  return decoder_->GetDisplayName();
+  return helper_->decoder()->GetDisplayName();
 }
 
-void OffloadingVideoDecoder::Initialize(const VideoDecoderConfig& config,
-                                        bool low_delay,
-                                        CdmContext* cdm_context,
-                                        const InitCB& init_cb,
-                                        const OutputCB& output_cb) {
+void OffloadingVideoDecoder::Initialize(
+    const VideoDecoderConfig& config,
+    bool low_delay,
+    CdmContext* cdm_context,
+    const InitCB& init_cb,
+    const OutputCB& output_cb,
+    const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(config.IsValidConfig());
 
@@ -63,19 +104,20 @@ void OffloadingVideoDecoder::Initialize(const VideoDecoderConfig& config,
       offload_task_runner_->PostTaskAndReply(
           FROM_HERE,
           base::BindOnce(&OffloadableVideoDecoder::Detach,
-                         base::Unretained(decoder_.get())),
+                         base::Unretained(helper_->decoder())),
           // We must trampoline back trough OffloadingVideoDecoder because it's
           // possible for this class to be destroyed during Initialize().
           base::BindOnce(&OffloadingVideoDecoder::Initialize,
                          weak_factory_.GetWeakPtr(), config, low_delay,
-                         cdm_context, init_cb, output_cb));
+                         cdm_context, init_cb, output_cb,
+                         waiting_for_decryption_key_cb));
       return;
     }
 
     // We're transitioning from no offloading to offloading, so detach from the
     // media thread so we can run on the offloading thread.
     if (!disable_offloading && !offload_task_runner_)
-      decoder_->Detach();
+      helper_->decoder()->Detach();
   }
 
   DCHECK(!initialized_);
@@ -89,8 +131,9 @@ void OffloadingVideoDecoder::Initialize(const VideoDecoderConfig& config,
   // If we're not offloading just pass through to the wrapped decoder.
   if (disable_offloading) {
     offload_task_runner_ = nullptr;
-    decoder_->Initialize(config, low_delay, cdm_context, bound_init_cb,
-                         bound_output_cb);
+    helper_->decoder()->Initialize(config, low_delay, cdm_context,
+                                   bound_init_cb, bound_output_cb,
+                                   waiting_for_decryption_key_cb);
     return;
   }
 
@@ -102,11 +145,12 @@ void OffloadingVideoDecoder::Initialize(const VideoDecoderConfig& config,
   offload_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&OffloadableVideoDecoder::Initialize,
-                     base::Unretained(decoder_.get()), config, low_delay,
-                     cdm_context, bound_init_cb, bound_output_cb));
+                     base::Unretained(helper_->decoder()), config, low_delay,
+                     cdm_context, bound_init_cb, bound_output_cb,
+                     waiting_for_decryption_key_cb));
 }
 
-void OffloadingVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void OffloadingVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                     const DecodeCB& decode_cb) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(buffer);
@@ -114,14 +158,14 @@ void OffloadingVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 
   DecodeCB bound_decode_cb = BindToCurrentLoop(decode_cb);
   if (!offload_task_runner_) {
-    decoder_->Decode(buffer, bound_decode_cb);
+    helper_->decoder()->Decode(std::move(buffer), bound_decode_cb);
     return;
   }
 
   offload_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&OffloadableVideoDecoder::Decode,
-                                base::Unretained(decoder_.get()), buffer,
-                                bound_decode_cb));
+      FROM_HERE, base::BindOnce(&CancellationHelper::Decode,
+                                base::Unretained(helper_.get()),
+                                std::move(buffer), bound_decode_cb));
 }
 
 void OffloadingVideoDecoder::Reset(const base::Closure& reset_cb) {
@@ -129,14 +173,24 @@ void OffloadingVideoDecoder::Reset(const base::Closure& reset_cb) {
 
   base::Closure bound_reset_cb = BindToCurrentLoop(reset_cb);
   if (!offload_task_runner_) {
-    decoder_->Reset(bound_reset_cb);
-    return;
+    helper_->Reset(bound_reset_cb);
+  } else {
+    helper_->Cancel();
+    offload_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CancellationHelper::Reset,
+                       base::Unretained(helper_.get()), bound_reset_cb));
   }
+}
 
-  offload_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&OffloadableVideoDecoder::Reset,
-                     base::Unretained(decoder_.get()), bound_reset_cb));
+int OffloadingVideoDecoder::GetMaxDecodeRequests() const {
+  // If we're offloading, try to parallelize decodes as well. Take care when
+  // adjusting this number as it may dramatically increase memory usage and
+  // reduce seek times. See http://crbug.com/731841.
+  //
+  // The current value of 2 was determined via experimental adjustment until a
+  // 4K60 VP9 playback dropped zero frames.
+  return offload_task_runner_ ? 2 : 1;
 }
 
 }  // namespace media

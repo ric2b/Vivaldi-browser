@@ -4,13 +4,14 @@
 
 #include "ash/system/enterprise/tray_enterprise.h"
 
-#include "ash/ash_view_ids.h"
 #include "ash/login_status.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/model/enterprise_domain_model.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/label_tray_view.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
@@ -21,16 +22,17 @@ namespace ash {
 namespace {
 
 base::string16 GetEnterpriseMessage() {
-  SystemTrayController* controller = Shell::Get()->system_tray_controller();
+  EnterpriseDomainModel* model =
+      Shell::Get()->system_tray_model()->enterprise_domain();
 
   // Active Directory devices do not show a domain name.
-  if (controller->active_directory_managed())
+  if (model->active_directory_managed())
     return l10n_util::GetStringUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED);
 
-  if (!controller->enterprise_display_domain().empty()) {
+  if (!model->enterprise_display_domain().empty()) {
     return l10n_util::GetStringFUTF16(
         IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
-        base::UTF8ToUTF16(controller->enterprise_display_domain()));
+        base::UTF8ToUTF16(model->enterprise_display_domain()));
   }
   return base::string16();
 }
@@ -38,12 +40,13 @@ base::string16 GetEnterpriseMessage() {
 }  // namespace
 
 TrayEnterprise::TrayEnterprise(SystemTray* system_tray)
-    : SystemTrayItem(system_tray, UMA_ENTERPRISE), tray_view_(nullptr) {
-  Shell::Get()->system_tray_notifier()->AddEnterpriseDomainObserver(this);
+    : SystemTrayItem(system_tray, SystemTrayItemUmaType::UMA_ENTERPRISE),
+      tray_view_(nullptr) {
+  Shell::Get()->system_tray_model()->enterprise_domain()->AddObserver(this);
 }
 
 TrayEnterprise::~TrayEnterprise() {
-  Shell::Get()->system_tray_notifier()->RemoveEnterpriseDomainObserver(this);
+  Shell::Get()->system_tray_model()->enterprise_domain()->RemoveObserver(this);
 }
 
 void TrayEnterprise::UpdateEnterpriseMessage() {
@@ -72,7 +75,7 @@ void TrayEnterprise::OnEnterpriseDomainChanged() {
 }
 
 void TrayEnterprise::OnViewClicked(views::View* sender) {
-  Shell::Get()->system_tray_controller()->ShowEnterpriseInfo();
+  Shell::Get()->system_tray_model()->client_ptr()->ShowEnterpriseInfo();
 }
 
 }  // namespace ash

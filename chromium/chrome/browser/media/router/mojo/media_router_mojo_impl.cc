@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/observer_list.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -24,10 +23,10 @@
 #include "chrome/browser/media/router/mojo/media_route_controller.h"
 #include "chrome/browser/media/router/mojo/media_route_provider_util_win.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_metrics.h"
+#include "chrome/browser/media/router/mojo/media_sink_service_status.h"
 #include "chrome/browser/media/router/route_message_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/media_router/media_source_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -48,6 +47,42 @@ void RunRouteRequestCallbacks(
     std::vector<MediaRouteResponseCallback> callbacks) {
   for (MediaRouteResponseCallback& callback : callbacks)
     std::move(callback).Run(*result);
+}
+
+// TODO(crbug.com/831416): Delete temporary code once we can use
+// presentation.mojom types here.
+blink::mojom::PresentationConnectionCloseReason
+PresentationConnectionCloseReasonToBlink(
+    mojom::MediaRouter::PresentationConnectionCloseReason reason) {
+  switch (reason) {
+    case mojom::MediaRouter::PresentationConnectionCloseReason::
+        CONNECTION_ERROR:
+      return blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR;
+    case mojom::MediaRouter::PresentationConnectionCloseReason::CLOSED:
+      return blink::mojom::PresentationConnectionCloseReason::CLOSED;
+    case mojom::MediaRouter::PresentationConnectionCloseReason::WENT_AWAY:
+      return blink::mojom::PresentationConnectionCloseReason::WENT_AWAY;
+  }
+  NOTREACHED() << "Unknown PresentationConnectionCloseReason " << reason;
+  return blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR;
+}
+
+// TODO(crbug.com/831416): Delete temporary code once we can use
+// presentation.mojom types here.
+blink::mojom::PresentationConnectionState PresentationConnectionStateToBlink(
+    mojom::MediaRouter::PresentationConnectionState state) {
+  switch (state) {
+    case mojom::MediaRouter::PresentationConnectionState::CONNECTING:
+      return blink::mojom::PresentationConnectionState::CONNECTING;
+    case mojom::MediaRouter::PresentationConnectionState::CONNECTED:
+      return blink::mojom::PresentationConnectionState::CONNECTED;
+    case mojom::MediaRouter::PresentationConnectionState::CLOSED:
+      return blink::mojom::PresentationConnectionState::CLOSED;
+    case mojom::MediaRouter::PresentationConnectionState::TERMINATED:
+      return blink::mojom::PresentationConnectionState::TERMINATED;
+  }
+  NOTREACHED() << "Unknown PresentationConnectionState " << state;
+  return blink::mojom::PresentationConnectionState::CONNECTING;
 }
 
 }  // namespace
@@ -193,13 +228,33 @@ void MediaRouterMojoImpl::CreateRoute(
     return;
   }
 
+  if (IsTabMirroringMediaSource(MediaSource(source_id))) {
+    // Ensure the CastRemotingConnector is created before mirroring starts.
+    CastRemotingConnector* const connector =
+        CastRemotingConnector::Get(web_contents);
+    connector->ResetRemotingPermission();
+  }
+
   MediaRouterMetrics::RecordMediaSinkType(sink->icon_type());
   MediaRouteProviderId provider_id = sink->provider_id();
-  int tab_id = SessionTabHelper::IdForTab(web_contents);
+
+  // This is a hack to ensure the extension handles the CreateRoute call until
+  // the CastMediaRouteProvider supports it.
+  // TODO(crbug.com/698940): Remove check for Cast when CastMediaRouteProvider
+  // supports route management.
+  // TODO(https://crbug.com/808720): Remove check for DIAL when in-browser DIAL
+  // MRP is fully implemented.
+  if (provider_id == MediaRouteProviderId::CAST ||
+      (provider_id == MediaRouteProviderId::DIAL &&
+       !DialMediaRouteProviderEnabled())) {
+    provider_id = MediaRouteProviderId::EXTENSION;
+  }
+
+  int tab_id = SessionTabHelper::IdForTab(web_contents).id();
   std::string presentation_id = MediaRouterBase::CreatePresentationId();
   auto callback = base::BindOnce(
       &MediaRouterMojoImpl::RouteResponseReceived, weak_factory_.GetWeakPtr(),
-      presentation_id, provider_id, incognito, base::Passed(&callbacks), false);
+      presentation_id, provider_id, incognito, std::move(callbacks), false);
   media_route_providers_[provider_id]->CreateRoute(
       source_id, sink_id, presentation_id, origin, tab_id, timeout, incognito,
       std::move(callback));
@@ -228,10 +283,10 @@ void MediaRouterMojoImpl::JoinRoute(
     return;
   }
 
-  int tab_id = SessionTabHelper::IdForTab(web_contents);
+  int tab_id = SessionTabHelper::IdForTab(web_contents).id();
   auto callback = base::BindOnce(
       &MediaRouterMojoImpl::RouteResponseReceived, weak_factory_.GetWeakPtr(),
-      presentation_id, *provider_id, incognito, base::Passed(&callbacks), true);
+      presentation_id, *provider_id, incognito, std::move(callbacks), true);
   media_route_providers_[*provider_id]->JoinRoute(
       source_id, presentation_id, origin, tab_id, timeout, incognito,
       std::move(callback));
@@ -255,11 +310,11 @@ void MediaRouterMojoImpl::ConnectRouteByRouteId(
     return;
   }
 
-  int tab_id = SessionTabHelper::IdForTab(web_contents);
+  int tab_id = SessionTabHelper::IdForTab(web_contents).id();
   std::string presentation_id = MediaRouterBase::CreatePresentationId();
   auto callback = base::BindOnce(
       &MediaRouterMojoImpl::RouteResponseReceived, weak_factory_.GetWeakPtr(),
-      presentation_id, *provider_id, incognito, base::Passed(&callbacks), true);
+      presentation_id, *provider_id, incognito, std::move(callbacks), true);
   media_route_providers_[*provider_id]->ConnectRouteByRouteId(
       source_id, route_id, presentation_id, origin, tab_id, timeout, incognito,
       std::move(callback));
@@ -382,11 +437,8 @@ scoped_refptr<MediaRouteController> MediaRouterMojoImpl::GetRouteController(
           new HangoutsMediaRouteController(route_id, context_, this);
       break;
     case RouteControllerType::kMirroring:
-      // TODO(imcheng): Remove this check when remoting is default enabled.
       route_controller =
-          base::FeatureList::IsEnabled(features::kMediaRemoting)
-              ? new MirroringMediaRouteController(route_id, context_, this)
-              : new MediaRouteController(route_id, context_, this);
+          new MirroringMediaRouteController(route_id, context_, this);
       break;
   }
   DCHECK(route_controller);
@@ -600,8 +652,9 @@ bool MediaRouterMojoImpl::RegisterMediaSinksObserver(
   // no need to call MRPs.
   if (is_new_query) {
     for (const auto& provider : media_route_providers_) {
-      if (sink_availability_.IsAvailableForProvider(provider.first))
+      if (sink_availability_.IsAvailableForProvider(provider.first)) {
         provider.second->StartObservingMediaSinks(source_id);
+      }
     }
   }
   return true;
@@ -625,8 +678,9 @@ void MediaRouterMojoImpl::UnregisterMediaSinksObserver(
     // Only ask MRPs to stop observing media sinks if there are sinks available.
     // Otherwise, the MRPs would have discarded the queries already.
     for (const auto& provider : media_route_providers_) {
-      if (sink_availability_.IsAvailableForProvider(provider.first))
+      if (sink_availability_.IsAvailableForProvider(provider.first)) {
         provider.second->StopObservingMediaSinks(source_id);
+      }
     }
     sinks_queries_.erase(source_id);
   }
@@ -757,7 +811,7 @@ void MediaRouterMojoImpl::DetachRouteController(
 
 void MediaRouterMojoImpl::OnRouteMessagesReceived(
     const std::string& route_id,
-    const std::vector<content::PresentationConnectionMessage>& messages) {
+    std::vector<mojom::RouteMessagePtr> messages) {
   DVLOG_WITH_INSTANCE(1) << "OnRouteMessagesReceived";
 
   if (messages.empty())
@@ -767,8 +821,16 @@ void MediaRouterMojoImpl::OnRouteMessagesReceived(
   if (it == message_observers_.end())
     return;
 
-  for (auto& observer : *it->second)
-    observer.OnMessagesReceived(messages);
+  for (auto& observer : *it->second) {
+    // TODO(mfoltz): We have to clone the messages here in case there are
+    // multiple observers.  This can be removed once we stop passing messages
+    // through the MR and use the PresentationConnectionPtr directly.
+    std::vector<mojom::RouteMessagePtr> messages_copy;
+    for (auto& message : messages)
+      messages_copy.emplace_back(message->Clone());
+
+    observer.OnMessagesReceived(std::move(messages_copy));
+  }
 }
 
 void MediaRouterMojoImpl::OnSinkAvailabilityUpdated(
@@ -792,15 +854,17 @@ void MediaRouterMojoImpl::OnSinkAvailabilityUpdated(
 
 void MediaRouterMojoImpl::OnPresentationConnectionStateChanged(
     const std::string& route_id,
-    content::PresentationConnectionState state) {
-  NotifyPresentationConnectionStateChange(route_id, state);
+    media_router::mojom::MediaRouter::PresentationConnectionState state) {
+  NotifyPresentationConnectionStateChange(
+      route_id, PresentationConnectionStateToBlink(state));
 }
 
 void MediaRouterMojoImpl::OnPresentationConnectionClosed(
     const std::string& route_id,
-    content::PresentationConnectionCloseReason reason,
+    media_router::mojom::MediaRouter::PresentationConnectionCloseReason reason,
     const std::string& message) {
-  NotifyPresentationConnectionClose(route_id, reason, message);
+  NotifyPresentationConnectionClose(
+      route_id, PresentationConnectionCloseReasonToBlink(reason), message);
 }
 
 void MediaRouterMojoImpl::OnTerminateRouteResult(
@@ -881,7 +945,7 @@ void MediaRouterMojoImpl::OnMediaRemoterCreated(
     media::mojom::MirrorServiceRemotingSourceRequest source_request) {
   DVLOG_WITH_INSTANCE(1) << __func__ << ": tab_id = " << tab_id;
 
-  auto it = remoting_sources_.find(tab_id);
+  auto it = remoting_sources_.find(SessionID::FromSerializedValue(tab_id));
   if (it == remoting_sources_.end()) {
     LOG(WARNING) << __func__
                  << ": No registered remoting source for tab_id = " << tab_id;
@@ -890,6 +954,12 @@ void MediaRouterMojoImpl::OnMediaRemoterCreated(
 
   CastRemotingConnector* connector = it->second;
   connector->ConnectToService(std::move(source_request), std::move(remoter));
+}
+
+void MediaRouterMojoImpl::GetMediaSinkServiceStatus(
+    mojom::MediaRouter::GetMediaSinkServiceStatusCallback callback) {
+  MediaSinkServiceStatus status;
+  std::move(callback).Run(status.GetStatusAsJSONString());
 }
 
 void MediaRouterMojoImpl::BindToMojoRequest(

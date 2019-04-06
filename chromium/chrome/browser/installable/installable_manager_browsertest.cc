@@ -5,10 +5,9 @@
 #include "chrome/browser/installable/installable_manager.h"
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/installable/installable_metrics.h"
@@ -19,7 +18,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-using IconPurpose = content::Manifest::Icon::IconPurpose;
+using IconPurpose = blink::Manifest::ImageResource::Purpose;
 
 namespace {
 
@@ -117,7 +116,7 @@ class CallbackTester {
 
   InstallableStatusCode error_code() const { return error_code_; }
   const GURL& manifest_url() const { return manifest_url_; }
-  const content::Manifest& manifest() const { return manifest_; }
+  const blink::Manifest& manifest() const { return manifest_; }
   const GURL& primary_icon_url() const { return primary_icon_url_; }
   const SkBitmap* primary_icon() const { return primary_icon_.get(); }
   const GURL& badge_icon_url() const { return badge_icon_url_; }
@@ -129,7 +128,7 @@ class CallbackTester {
   base::Closure quit_closure_;
   InstallableStatusCode error_code_;
   GURL manifest_url_;
-  content::Manifest manifest_;
+  blink::Manifest manifest_;
   GURL primary_icon_url_;
   std::unique_ptr<SkBitmap> primary_icon_;
   GURL badge_icon_url_;
@@ -188,7 +187,7 @@ class NestedCallbackTester {
   base::Closure quit_closure_;
   InstallableStatusCode error_code_;
   GURL manifest_url_;
-  content::Manifest manifest_;
+  blink::Manifest manifest_;
   GURL primary_icon_url_;
   std::unique_ptr<SkBitmap> primary_icon_;
   bool valid_manifest_;
@@ -494,7 +493,8 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
 
     NavigateAndRunInstallableManager(browser(), tester.get(),
                                      GetManifestParams(),
-                                     "/banners/play_app_test_page.html");
+                                     GetURLOfPageWithServiceWorkerAndManifest(
+                                         "/banners/play_app_manifest.json"));
     run_loop.Run();
 
     EXPECT_FALSE(tester->manifest().IsEmpty());
@@ -949,7 +949,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  auto manager = base::MakeUnique<LazyWorkerInstallableManager>(
+  auto manager = std::make_unique<LazyWorkerInstallableManager>(
       web_contents, sw_run_loop.QuitClosure());
 
   {
@@ -1043,7 +1043,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  auto manager = base::MakeUnique<LazyWorkerInstallableManager>(
+  auto manager = std::make_unique<LazyWorkerInstallableManager>(
       web_contents, sw_run_loop.QuitClosure());
 
   // Load a URL with no service worker.
@@ -1088,7 +1088,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  auto manager = base::MakeUnique<LazyWorkerInstallableManager>(
+  auto manager = std::make_unique<LazyWorkerInstallableManager>(
       web_contents, sw_run_loop.QuitClosure());
 
   manager->RecordMenuOpenHistogram();
@@ -1142,7 +1142,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   base::RunLoop sw_run_loop;
-  auto manager = base::MakeUnique<LazyWorkerInstallableManager>(
+  auto manager = std::make_unique<LazyWorkerInstallableManager>(
       web_contents, sw_run_loop.QuitClosure());
 
   // Load a URL with no service worker.
@@ -1328,7 +1328,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
                        ManifestUrlChangeFlushesState) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  auto manager = base::MakeUnique<ResetDataInstallableManager>(web_contents);
+  auto manager = std::make_unique<ResetDataInstallableManager>(web_contents);
 
   // Start on a page with no manifest.
   ui_test_utils::NavigateToURL(

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
@@ -26,8 +25,6 @@ const unsigned int ExtensionThrottleManager::kRequestsBetweenCollecting = 200;
 
 ExtensionThrottleManager::ExtensionThrottleManager()
     : requests_since_last_gc_(0),
-      enable_thread_checks_(false),
-      logged_for_localhost_disabled_(false),
       registered_from_thread_(base::kInvalidThreadId),
       ignore_user_gesture_load_flag_for_tests_(false) {
   url_id_replacements_.ClearPassword();
@@ -67,9 +64,7 @@ ExtensionThrottleManager::MaybeCreateThrottle(const net::URLRequest* request) {
 
 scoped_refptr<ExtensionThrottleEntryInterface>
 ExtensionThrottleManager::RegisterRequestUrl(const GURL& url) {
-#if DCHECK_IS_ON()
-  DCHECK(!enable_thread_checks_ || sequence_checker_.CalledOnValidSequence());
-#endif  // DCHECK_IS_ON()
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Normalize the url.
   std::string url_id = GetIdFromUrl(url);
@@ -103,13 +98,6 @@ ExtensionThrottleManager::RegisterRequestUrl(const GURL& url) {
     // just constructed.  This is to allow unit tests to explicitly override
     // the entry for localhost URLs.
     if (net::IsLocalhost(url)) {
-      if (!logged_for_localhost_disabled_) {
-        logged_for_localhost_disabled_ = true;
-        std::string host = url.host();
-        net_log_.AddEvent(net::NetLogEventType::THROTTLING_DISABLED_FOR_HOST,
-                          net::NetLog::StringCallback("host", &host));
-      }
-
       // TODO(joi): Once sliding window is separate from back-off throttling,
       // we can simply return a dummy implementation of
       // ExtensionThrottleEntryInterface here that never blocks anything.
@@ -146,24 +134,6 @@ void ExtensionThrottleManager::EraseEntryForTests(const GURL& url) {
 void ExtensionThrottleManager::SetIgnoreUserGestureLoadFlagForTests(
     bool ignore_user_gesture_load_flag_for_tests) {
   ignore_user_gesture_load_flag_for_tests_ = true;
-}
-
-void ExtensionThrottleManager::set_enable_thread_checks(bool enable) {
-  enable_thread_checks_ = enable;
-}
-
-bool ExtensionThrottleManager::enable_thread_checks() const {
-  return enable_thread_checks_;
-}
-
-void ExtensionThrottleManager::set_net_log(net::NetLog* net_log) {
-  DCHECK(net_log);
-  net_log_ = net::NetLogWithSource::Make(
-      net_log, net::NetLogSourceType::EXPONENTIAL_BACKOFF_THROTTLING);
-}
-
-net::NetLog* ExtensionThrottleManager::net_log() const {
-  return net_log_.net_log();
 }
 
 void ExtensionThrottleManager::OnNetworkChanged(

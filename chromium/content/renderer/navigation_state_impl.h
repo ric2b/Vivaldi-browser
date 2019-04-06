@@ -8,8 +8,11 @@
 #include <string>
 
 #include "base/macros.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/navigation_params.h"
 #include "content/public/renderer/navigation_state.h"
+#include "content/renderer/navigation_client.h"
+#include "third_party/blink/public/web/commit_result.mojom.h"
 
 namespace content {
 
@@ -19,7 +22,9 @@ class CONTENT_EXPORT NavigationStateImpl : public NavigationState {
 
   static NavigationStateImpl* CreateBrowserInitiated(
       const CommonNavigationParams& common_params,
-      const RequestNavigationParams& request_params);
+      const RequestNavigationParams& request_params,
+      base::TimeTicks time_commit_requested,
+      mojom::FrameNavigationControl::CommitNavigationCallback callback);
 
   static NavigationStateImpl* CreateContentInitiated();
 
@@ -42,10 +47,30 @@ class CONTENT_EXPORT NavigationStateImpl : public NavigationState {
     common_params_.transition = transition;
   }
 
+  base::TimeTicks time_commit_requested() const {
+    return time_commit_requested_;
+  }
+
+  // Only used when PerNavigationMojoInterface is enabled.
+  void set_navigation_client(
+      std::unique_ptr<NavigationClient> navigation_client_impl) {
+    navigation_client_ = std::move(navigation_client_impl);
+  }
+
+  void set_navigation_start(const base::TimeTicks& navigation_start) {
+    common_params_.navigation_start = navigation_start;
+  }
+
+  void RunCommitNavigationCallback(blink::mojom::CommitResult result);
+
  private:
-  NavigationStateImpl(const CommonNavigationParams& common_params,
-                      const RequestNavigationParams& request_params,
-                      bool is_content_initiated);
+  NavigationStateImpl(
+      const CommonNavigationParams& common_params,
+      const RequestNavigationParams& request_params,
+      base::TimeTicks time_commit_requested,
+      bool is_content_initiated,
+      content::mojom::FrameNavigationControl::CommitNavigationCallback
+          callback);
 
   bool request_committed_;
   bool was_within_same_document_;
@@ -67,6 +92,18 @@ class CONTENT_EXPORT NavigationStateImpl : public NavigationState {
   // FrameLoader has committedFirstRealDocumentLoad as a replacement. (Added for
   // http://crbug.com/178380).
   const RequestNavigationParams request_params_;
+
+  // Time when RenderFrameImpl::CommitNavigation() is called.
+  base::TimeTicks time_commit_requested_;
+
+  // The NavigationClient interface gives control over the navigation ongoing in
+  // the browser process.
+  // Only used when PerNavigationMojoInterface is enabled.
+  std::unique_ptr<NavigationClient> navigation_client_;
+
+  // Used to notify whether a commit request from the browser process was
+  // successful or not.
+  mojom::FrameNavigationControl::CommitNavigationCallback commit_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationStateImpl);
 };

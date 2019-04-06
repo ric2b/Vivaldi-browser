@@ -12,6 +12,7 @@
 #include "chrome/browser/chromeos/settings/device_settings_provider.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/prefs/pref_value_map.h"
+#include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 
@@ -52,10 +53,16 @@ bool GetPlatformKnownUserId(const std::string& user_email,
     return true;
   }
 
+  if (user_email == user_manager::kStubAdUserEmail) {
+    *out_account_id = user_manager::StubAdAccountId();
+    return true;
+  }
+
   if (user_email == user_manager::kGuestUserName) {
     *out_account_id = user_manager::GuestAccountId();
     return true;
   }
+
   return false;
 }
 
@@ -104,6 +111,23 @@ bool AreSupervisedUsersAllowed(const CrosSettings* cros_settings) {
 }
 
 bool IsGuestSessionAllowed(const CrosSettings* cros_settings) {
+  const AccountId& owner_account_id =
+      user_manager::UserManager::Get()->GetOwnerAccountId();
+  if (owner_account_id.is_valid()) {
+    // Some Autotest policy tests appear to wipe the user list in Local State
+    // but preserve a policy file referencing an owner: https://crbug.com/850139
+    const user_manager::User* owner_user =
+        user_manager::UserManager::Get()->FindUser(owner_account_id);
+    if (owner_user &&
+        owner_user->GetType() == user_manager::UserType::USER_TYPE_CHILD) {
+      return false;
+    }
+  }
+
+  // In tests CrosSettings might not be initialized.
+  if (!cros_settings)
+    return false;
+
   bool is_guest_allowed = false;
   cros_settings->GetBoolean(kAccountsPrefAllowGuest, &is_guest_allowed);
   return is_guest_allowed;

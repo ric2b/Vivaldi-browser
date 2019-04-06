@@ -3,14 +3,14 @@
  * found in the LICENSE file. */
 
 :root {
-  --oobe-dialog-list-item-border: 1px solid rgba(0, 0, 0, 0.06);
+  --oobe-dialog-list-item-border: 1px solid rgb(235,235,235); /* #EBEBEB */
+  --oobe-a11y-dialog-list-item-border: 1px solid var(--google-grey-200);
 }
 
 /************* Language Screen **************/
 #languageScreen .language-selection-entry {
   border-top: var(--oobe-dialog-list-item-border);
-  height: 44px;
-  padding: 0 10px;
+  min-height: 64px;
 }
 
 #languageScreen .language-selection-entry:last-of-type {
@@ -18,42 +18,24 @@
 }
 
 #languageScreen .language-selection-title {
-  color: rgba(0, 0, 0, 0.87);
-  font: 13px Roboto, sans-serif;
-}
-
-#languageScreen .bottom-buttons {
-  padding: 0 24px;
+  color: var(--google-grey-900);
+  font-size: 13px;
 }
 
 /************* Accessibility Screen **************/
 #accessibilityScreen oobe-a11y-option {
-  border-top: var(--oobe-dialog-list-item-border);
-  min-height: 56px;
+  border-top: var(--oobe-a11y-dialog-list-item-border);
+  min-height: 64px;
 }
 
 #accessibilityScreen oobe-a11y-option:last-of-type {
-  border-bottom: var(--oobe-dialog-list-item-border);
-}
-
-#accessibilityScreen .bottom-buttons {
-  padding: 0 24px;
-}
-
-/************* Network Selection Screen **************/
-#networkSelectionScreen .footer {
-  max-height: 313px;
-}
-
-#networkSelectionScreen .bottom-buttons {
-  padding: 0 6px; /* = 8px - 2px back button border */
+  border-bottom: var(--oobe-a11y-dialog-list-item-border);
 }
 
 /************* Timezone Screen **************/
 #timezoneScreen .timezone-selection-entry {
   border-top: var(--oobe-dialog-list-item-border);
-  height: 44px;
-  padding: 0 20px;
+  min-height: 48px;
 }
 
 #timezoneScreen .timezone-selection-entry:last-of-type {
@@ -61,19 +43,21 @@
 }
 
 #timezoneScreen .timezone-selection-title {
-  color: rgba(0, 0, 0, 0.87);
-  font: 13px Roboto, sans-serif;
-}
-
-#timezoneScreen .bottom-buttons {
-  padding: 0 24px;
+  color: var(--google-grey-900);
+  font-size: 13px;
 }
 
 /************* Advanced Options screen **************/
 #oobeAdvancedOptionsScreen .advanced-options-entry {
   border-top: var(--oobe-dialog-list-item-border);
-  height: 56px;
-  padding: 0 10px;
+  min-height: 64px;
+}
+
+#oobeAdvancedOptionsScreen .advanced-options-entry button {
+  background: unset;
+  border: unset;
+  font: unset;
+  text-align: unset;
 }
 
 #oobeAdvancedOptionsScreen .advanced-options-entry:last-of-type {
@@ -81,15 +65,11 @@
 }
 
 #oobeAdvancedOptionsScreen .advanced-option-title {
-  color: rgba(0, 0, 0, 0.87);
-  font: 13px Roboto, sans-serif;
+  color: var(--google-grey-900);
+  font-size: 13px;
 }
 
 #oobeAdvancedOptionsScreen .advanced-option-subtitle {
-  color: rgba(0, 0, 0, 0.54);
-  font: 13px Roboto, sans-serif;
-}
-
-#oobeAdvancedOptionsScreen .bottom-buttons {
-  padding: 0 24px;
+  color: var(--google-grey-900);
+  font-size: 13px;
 }

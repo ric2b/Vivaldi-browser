@@ -22,6 +22,7 @@ class AXViewObjWrapper : public AXAuraObjWrapper {
   View* view() { return view_; }
 
   // AXAuraObjWrapper overrides.
+  bool IsIgnored() override;
   AXAuraObjWrapper* GetParent() override;
   void GetChildren(std::vector<AXAuraObjWrapper*>* out_children) override;
   void Serialize(ui::AXNodeData* out_node_data) override;
@@ -29,7 +30,7 @@ class AXViewObjWrapper : public AXAuraObjWrapper {
   bool HandleAccessibleAction(const ui::AXActionData& action) override;
 
  private:
-  View* view_;
+  View* const view_;
 
   DISALLOW_COPY_AND_ASSIGN(AXViewObjWrapper);
 };

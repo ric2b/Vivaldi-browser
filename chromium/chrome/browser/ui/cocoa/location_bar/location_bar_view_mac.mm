@@ -5,6 +5,7 @@
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #import "base/mac/mac_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -42,6 +43,7 @@
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/content_setting_image_model.h"
+#include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
@@ -69,6 +71,8 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
+
+#include "app/vivaldi_apptools.h"
 
 using content::WebContents;
 
@@ -123,8 +127,7 @@ LocationBarViewMac::LocationBarViewMac(AutocompleteTextField* field,
       base::Bind(&LocationBarViewMac::OnEditBookmarksEnabledChanged,
                  base::Unretained(this)));
 
-  zoom::ZoomEventManager::GetForBrowserContext(profile)
-      ->AddZoomEventManagerObserver(this);
+  zoom::ZoomEventManager::GetForBrowserContext(profile)->AddObserver(this);
 
   [[field_ cell] setIsPopupMode:
       !browser->SupportsWindowFeature(Browser::FEATURE_TABSTRIP)];
@@ -138,8 +141,7 @@ LocationBarViewMac::~LocationBarViewMac() {
   // Disconnect from cell in case it outlives us.
   [[field_ cell] clearDecorations];
 
-  zoom::ZoomEventManager::GetForBrowserContext(profile())
-      ->RemoveZoomEventManagerObserver(this);
+  zoom::ZoomEventManager::GetForBrowserContext(profile())->RemoveObserver(this);
 }
 
 GURL LocationBarViewMac::GetDestinationURL() const {
@@ -201,18 +203,13 @@ void LocationBarViewMac::UpdateSaveCreditCardIcon() {
   OnDecorationsChanged();
 }
 
-void LocationBarViewMac::UpdateFindBarIconVisibility() {
-  // TODO(crbug/651643): Implement for mac.
+void LocationBarViewMac::UpdateLocalCardMigrationIcon() {
+  // TODO(crbug.com/859652): Implement for mac.
   NOTIMPLEMENTED();
 }
 
 void LocationBarViewMac::UpdateBookmarkStarVisibility() {
   star_decoration_->SetVisible(IsStarEnabled());
-}
-
-void LocationBarViewMac::UpdateZoomViewVisibility() {
-  UpdateZoomDecoration(/*default_zoom_changed=*/false);
-  OnChanged();
 }
 
 void LocationBarViewMac::UpdateLocationBarVisibility(bool visible,
@@ -264,6 +261,11 @@ bool LocationBarViewMac::TestContentSettingImagePressed(size_t index) {
   NSRect frame = [cell frameForDecoration:decoration inFrame:[field_ bounds]];
   decoration->OnMousePressed(frame, NSZeroPoint);
   return true;
+}
+
+bool LocationBarViewMac::IsContentSettingBubbleShowing(size_t index) {
+  return index < content_setting_decorations_.size() &&
+         content_setting_decorations_[index]->IsShowingBubble();
 }
 
 void LocationBarViewMac::SetEditable(bool editable) {
@@ -322,10 +324,6 @@ NSPoint LocationBarViewMac::GetSaveCreditCardBubblePoint() const {
 
 NSPoint LocationBarViewMac::GetPageInfoBubblePoint() const {
   return [field_ bubblePointForDecoration:page_info_decoration_.get()];
-}
-
-NSPoint LocationBarViewMac::GetInfoBarAnchorPoint() const {
-  return [field_ arrowAnchorPointForDecoration:page_info_decoration_.get()];
 }
 
 void LocationBarViewMac::OnDecorationsChanged() {
@@ -452,15 +450,19 @@ void LocationBarViewMac::UpdateWithoutTabRestore() {
 
 void LocationBarViewMac::UpdateLocationIcon() {
   SkColor vector_icon_color = GetLocationBarIconColor();
-  const gfx::VectorIcon& vector_icon_id =
-      GetPageInfoVerboseType() == PageInfoVerboseType::kEVCert
-          ? toolbar::kHttpsValidIcon
-          : omnibox_view_->GetVectorIcon();
+  gfx::ImageSkia image_skia;
+  if (GetPageInfoVerboseType() == PageInfoVerboseType::kEVCert) {
+    image_skia = gfx::CreateVectorIcon(toolbar::kHttpsValidIcon,
+                                       kDefaultIconSize, vector_icon_color);
+  } else {
+    // The view may return an icon asynchronously when certain flags are on,
+    // but the Cocoa implementation should just ignore them.
+    image_skia = omnibox_view_->GetIcon(kDefaultIconSize, vector_icon_color,
+                                        base::DoNothing());
+  }
 
   NSImage* image = NSImageFromImageSkiaWithColorSpace(
-      gfx::CreateVectorIcon(vector_icon_id, kDefaultIconSize,
-                            vector_icon_color),
-      base::mac::GetSRGBColorSpace());
+      image_skia, base::mac::GetSRGBColorSpace());
   page_info_decoration_->SetImage(image);
   page_info_decoration_->SetLabelColor(vector_icon_color);
 
@@ -506,6 +508,22 @@ WebContents* LocationBarViewMac::GetWebContents() {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
 
+void LocationBarViewMac::UpdatePageActionIcon(PageActionIconType type) {
+  // TODO(https://crbug.com/788051): Return page action icons for updating here
+  // as update methods are migrated out of LocationBar to the
+  // PageActionIconContainer interface.
+  switch (type) {
+    case PageActionIconType::kFind:
+      // TODO(crbug/651643): Implement for mac.
+      NOTIMPLEMENTED();
+      break;
+    case PageActionIconType::kZoom:
+      UpdateZoomDecoration(/*default_zoom_changed=*/false);
+      OnChanged();
+      break;
+  }
+}
+
 PageInfoVerboseType LocationBarViewMac::GetPageInfoVerboseType() const {
   if (omnibox_view_->IsEditingOrEmpty() ||
       omnibox_view_->model()->is_keyword_hint()) {
@@ -527,12 +545,7 @@ bool LocationBarViewMac::HasSecurityVerboseText() const {
   if (GetPageInfoVerboseType() != PageInfoVerboseType::kSecurity)
     return false;
 
-  security_state::SecurityLevel security =
-      GetToolbarModel()->GetSecurityLevel(false);
-  return security == security_state::EV_SECURE ||
-         security == security_state::SECURE ||
-         security == security_state::DANGEROUS ||
-         security == security_state::HTTP_SHOW_WARNING;
+  return !GetToolbarModel()->GetSecureVerboseText().empty();
 }
 
 bool LocationBarViewMac::IsLocationBarDark() const {
@@ -598,7 +611,7 @@ void LocationBarViewMac::UpdatePageInfoText() {
   base::string16 label;
   PageInfoVerboseType type = GetPageInfoVerboseType();
   if (type == PageInfoVerboseType::kEVCert) {
-    label = GetToolbarModel()->GetEVCertName();
+    label = GetToolbarModel()->GetSecureVerboseText();
   } else if (type == PageInfoVerboseType::kExtension && GetWebContents()) {
     label = extensions::ui_util::GetEnabledExtensionNameForUrl(
         GetToolbarModel()->GetURL(), GetWebContents()->GetBrowserContext());
@@ -624,6 +637,13 @@ bool LocationBarViewMac::RefreshContentSettingsDecorations() {
 }
 
 void LocationBarViewMac::UpdateTranslateDecoration() {
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(espen@vivaldi.com): Vivaldi does not set up translation code so
+    // the language state is not defined. We get to this code in external 
+    // inspect windows.
+    return;
+  }
+
   if (!TranslateService::IsTranslateBubbleEnabled())
     return;
 

@@ -13,9 +13,9 @@
 #include "ios/chrome/browser/signin/account_tracker_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_delegate.h"
-#include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
+#include "ios/chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -53,10 +53,10 @@ AuthenticationServiceFactory::AuthenticationServiceFactory()
           "AuthenticationService",
           BrowserStateDependencyManager::GetInstance()) {
   DependsOn(ios::AccountTrackerServiceFactory::GetInstance());
-  DependsOn(OAuth2TokenServiceFactory::GetInstance());
+  DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
   DependsOn(ios::SigninManagerFactory::GetInstance());
   DependsOn(SyncSetupServiceFactory::GetInstance());
-  DependsOn(IOSChromeProfileSyncServiceFactory::GetInstance());
+  DependsOn(ProfileSyncServiceFactory::GetInstance());
 }
 
 AuthenticationServiceFactory::~AuthenticationServiceFactory() {}
@@ -68,11 +68,11 @@ AuthenticationServiceFactory::BuildServiceInstanceFor(
       ios::ChromeBrowserState::FromBrowserState(context);
   return std::make_unique<AuthenticationService>(
       browser_state->GetPrefs(),
-      OAuth2TokenServiceFactory::GetForBrowserState(browser_state),
+      ProfileOAuth2TokenServiceFactory::GetForBrowserState(browser_state),
       SyncSetupServiceFactory::GetForBrowserState(browser_state),
       ios::AccountTrackerServiceFactory::GetForBrowserState(browser_state),
       ios::SigninManagerFactory::GetForBrowserState(browser_state),
-      IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state));
+      ProfileSyncServiceFactory::GetForBrowserState(browser_state));
 }
 
 void AuthenticationServiceFactory::RegisterBrowserStatePrefs(

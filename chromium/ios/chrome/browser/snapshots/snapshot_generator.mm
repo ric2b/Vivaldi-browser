@@ -18,6 +18,7 @@
 #import "ios/chrome/browser/snapshots/snapshot_generator_delegate.h"
 #import "ios/chrome/browser/snapshots/snapshot_overlay.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/web/public/features.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 
@@ -153,10 +154,9 @@ BOOL ViewHierarchyContainsWKWebView(UIView* view) {
 - (void)retrieveSnapshot:(void (^)(UIImage*))callback {
   DCHECK(callback);
 
-  __weak SnapshotGenerator* weakSelf = self;
   void (^wrappedCallback)(UIImage*) = ^(UIImage* image) {
     if (!image) {
-      image = [weakSelf updateSnapshotWithOverlays:YES visibleFrameOnly:YES];
+      image = [SnapshotGenerator defaultSnapshotImage];
     }
     callback(image);
   };
@@ -196,23 +196,12 @@ BOOL ViewHierarchyContainsWKWebView(UIView* view) {
                       visibleFrameOnly:(BOOL)visibleFrameOnly {
   UIImage* snapshot = [self generateSnapshotWithOverlays:shouldAddOverlay
                                         visibleFrameOnly:visibleFrameOnly];
-
   // Return default snapshot without caching it if the generation failed.
-  if (!snapshot)
+  if (!snapshot) {
     return [[self class] defaultSnapshotImage];
-
-  UIImage* snapshotToCache = snapshot;
-  if (!visibleFrameOnly) {
-    UIEdgeInsets insets = [_delegate snapshotEdgeInsetsForWebState:_webState];
-    if (!UIEdgeInsetsEqualToEdgeInsets(insets, UIEdgeInsetsZero)) {
-      CGRect cropRect =
-          UIEdgeInsetsInsetRect(CGRect{CGPointZero, [snapshot size]}, insets);
-      snapshotToCache = CropImage(snapshot, cropRect);
-    }
   }
 
-  [self.snapshotCache setImage:snapshotToCache
-                 withSessionID:_snapshotSessionId];
+  [self.snapshotCache setImage:snapshot withSessionID:_snapshotSessionId];
   return snapshot;
 }
 
@@ -279,10 +268,14 @@ BOOL ViewHierarchyContainsWKWebView(UIView* view) {
 
   UIView* view = _webState->GetView();
   CGRect frame = [view bounds];
+  UIEdgeInsets headerInsets = UIEdgeInsetsZero;
   if (visibleFrameOnly) {
-    UIEdgeInsets insets = [_delegate snapshotEdgeInsetsForWebState:_webState];
-    frame = UIEdgeInsetsInsetRect(frame, insets);
+    headerInsets = [_delegate snapshotEdgeInsetsForWebState:_webState];
+  } else if (base::FeatureList::IsEnabled(
+                 web::features::kBrowserContainerFullscreen)) {
+    headerInsets = UIEdgeInsetsMake(StatusBarHeight(), 0, 0, 0);
   }
+  frame = UIEdgeInsetsInsetRect(frame, headerInsets);
 
   return frame;
 }

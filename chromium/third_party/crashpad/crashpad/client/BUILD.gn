@@ -36,12 +36,26 @@ static_library("client") {
 
   if (crashpad_is_mac) {
     sources += [
-      "capture_context_mac.S",
-      "capture_context_mac.h",
       "crash_report_database_mac.mm",
       "crashpad_client_mac.cc",
       "simulate_crash_mac.cc",
       "simulate_crash_mac.h",
+    ]
+  }
+
+  if (crashpad_is_linux || crashpad_is_android) {
+    set_sources_assignment_filter([])
+    sources += [
+      "crashpad_client_linux.cc",
+      "simulate_crash_linux.h",
+    ]
+  }
+
+  if (crashpad_is_linux || crashpad_is_android || crashpad_is_fuchsia) {
+    sources += [
+      "client_argv_handling.cc",
+      "client_argv_handling.h",
+      "crashpad_info_note.S",
     ]
   }
 
@@ -54,10 +68,11 @@ static_library("client") {
   }
 
   if (crashpad_is_fuchsia) {
-    sources += [
-      "crash_report_database_fuchsia.cc",
-      "crashpad_client_fuchsia.cc",
-    ]
+    sources += [ "crashpad_client_fuchsia.cc" ]
+  }
+
+  if (crashpad_is_linux || crashpad_is_android || crashpad_is_fuchsia) {
+    sources += [ "crash_report_database_generic.cc" ]
   }
 
   public_configs = [ "..:crashpad_config" ]
@@ -71,6 +86,12 @@ static_library("client") {
   if (crashpad_is_win) {
     libs = [ "rpcrt4.lib" ]
     cflags = [ "/wd4201" ]  # nonstandard extension used : nameless struct/union
+  }
+
+  if (crashpad_is_fuchsia && crashpad_is_in_fuchsia) {
+    deps += [
+      "//zircon/public/lib/fdio",
+    ]
   }
 }
 
@@ -88,19 +109,21 @@ source_set("client_test") {
   ]
 
   if (crashpad_is_mac) {
-    sources += [
-      "capture_context_mac_test.cc",
-      "simulate_crash_mac_test.cc",
-    ]
+    sources += [ "simulate_crash_mac_test.cc" ]
   }
 
   if (crashpad_is_win) {
     sources += [ "crashpad_client_win_test.cc" ]
   }
 
+  if (crashpad_is_linux || crashpad_is_android) {
+    sources += [ "crashpad_client_linux_test.cc" ]
+  }
+
   deps = [
     ":client",
     "../compat",
+    "../snapshot",
     "../test",
     "../third_party/gtest:gmock",
     "../third_party/gtest:gtest",

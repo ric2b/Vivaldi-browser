@@ -17,36 +17,39 @@ namespace safe_browsing {
 // them to the ExperimentalFeaturesList below to start displaying their status
 // on the chrome://safe-browsing page.
 
-// Allows an ad sample report to be created but not sent. Used to measure
-// performance impact of report generation.
-const base::Feature kAdSamplerCollectButDontSendFeature{
-    "SafeBrowsingAdSamplerCollectButDontSend",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls various parameters related to occasionally collecting ad samples,
 // for example to control how often collection should occur.
 const base::Feature kAdSamplerTriggerFeature{"SafeBrowsingAdSamplerTrigger",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kGaiaPasswordReuseReporting{
-    "SyncPasswordReuseEvent", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kGoogleBrandedPhishingWarning{
-    "PasswordProtectionGoogleBrandedPhishingWarning",
+// If enabled in pre-network-service world, SafeBrowsing URL checks are done by
+// applying SafeBrowsing's URLLoaderThrottle subclasses to ThrottlingURLLoader.
+//
+// This flag has no effect if network service is enabled. With network service,
+// SafeBrowsing URL checks are always done by SafeBrowsing's URLLoaderThrottle
+// subclasses.
+const base::Feature kCheckByURLLoaderThrottle{
+    "S13nSafeBrowsingCheckByURLLoaderThrottle",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kThreatDomDetailsTagAndAttributeFeature{
     "ThreatDomDetailsTagAttributes", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kSuspiciousSiteTriggerQuotaFeature{
+    "SafeBrowsingSuspiciousSiteTriggerQuota", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kTriggerThrottlerDailyQuotaFeature{
     "SafeBrowsingTriggerThrottlerDailyQuota",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kDispatchSafetyNetCheckOffThread{
-    "DispatchSafetyNetCheckOffThread", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kInspectDownloadedRarFiles{
+    "InspectDownloadedRarFiles", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kAppendRecentNavigationEvents{
-    "AppendRecentNavigationEvents", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnterprisePasswordProtectionV1{
+    "EnterprisePasswordProtectionV1", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kForceEnableResetPasswordWebUI{
+    "ForceEnableResetPasswordWebUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace {
 // List of experimental features. Boolean value for each list member should be
@@ -57,14 +60,13 @@ constexpr struct {
   // True if the feature is running at a probability other than 1 or 0.
   bool probabilistically_enabled;
 } kExperimentalFeatures[]{
-    {&kAdSamplerCollectButDontSendFeature, false},
     {&kAdSamplerTriggerFeature, false},
-    {&kAppendRecentNavigationEvents, true},
-    {&kGaiaPasswordReuseReporting, true},
-    {&kGoogleBrandedPhishingWarning, true},
+    {&kCheckByURLLoaderThrottle, true},
+    {&kForceEnableResetPasswordWebUI, true},
+    {&kInspectDownloadedRarFiles, true},
+    {&kSuspiciousSiteTriggerQuotaFeature, true},
     {&kThreatDomDetailsTagAndAttributeFeature, false},
     {&kTriggerThrottlerDailyQuotaFeature, false},
-    {&kDispatchSafetyNetCheckOffThread, false},
 };
 
 // Adds the name and the enabled/disabled status of a given feature.

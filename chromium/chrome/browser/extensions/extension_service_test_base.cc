@@ -15,6 +15,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/component_loader.h"
+#include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_garbage_collector_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
@@ -30,6 +31,8 @@
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/pref_names.h"
@@ -86,7 +89,7 @@ ExtensionServiceTestBase::ExtensionServiceTestBase()
       testing_local_state_(TestingBrowserProcess::GetGlobal()),
       registry_(nullptr) {
   base::FilePath test_data_dir;
-  if (!PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir)) {
+  if (!base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir)) {
     ADD_FAILURE();
     return;
   }
@@ -278,6 +281,15 @@ void ExtensionServiceTestBase::ValidateStringPref(
 
 void ExtensionServiceTestBase::SetUp() {
   LoadErrorReporter::GetInstance()->ClearErrors();
+}
+
+void ExtensionServiceTestBase::TearDown() {
+  if (profile_) {
+    auto* partition =
+        content::BrowserContext::GetDefaultStoragePartition(profile_.get());
+    if (partition)
+      partition->WaitForDeletionTasksForTesting();
+  }
 }
 
 void ExtensionServiceTestBase::SetUpTestCase() {

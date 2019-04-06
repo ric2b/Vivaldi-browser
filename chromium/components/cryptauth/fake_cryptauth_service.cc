@@ -4,9 +4,9 @@
 
 #include "components/cryptauth/fake_cryptauth_service.h"
 
+#include <memory>
+
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
-#include "components/cryptauth/fake_secure_message_delegate.h"
 #include "components/cryptauth/mock_cryptauth_client.h"
 
 namespace cryptauth {
@@ -32,14 +32,9 @@ std::string FakeCryptAuthService::GetAccountId() {
   return account_id_;
 }
 
-std::unique_ptr<SecureMessageDelegate>
-FakeCryptAuthService::CreateSecureMessageDelegate() {
-  return base::MakeUnique<FakeSecureMessageDelegate>();
-}
-
 std::unique_ptr<CryptAuthClientFactory>
 FakeCryptAuthService::CreateCryptAuthClientFactory() {
-  return base::MakeUnique<MockCryptAuthClientFactory>(
+  return std::make_unique<MockCryptAuthClientFactory>(
       MockCryptAuthClientFactory::MockType::MAKE_NICE_MOCKS);
 }
 

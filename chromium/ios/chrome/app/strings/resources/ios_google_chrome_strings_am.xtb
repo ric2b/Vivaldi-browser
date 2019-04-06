@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="am">
+<translation id="114721135501989771">Google ዘመናዊ ነገሮችን በChrome ላይ ያግኙ</translation>
 <translation id="1326317727527857210">ትሮችዎን ከሌሎች መሣሪያዎችዎ ለማግኘት ወደ Chrome ይግቡ።</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1816764564654397850">የGoogle Chrome ግላዊነት ማስታወቂያ</translation>
@@ -9,9 +10,11 @@
 <translation id="2334084861041072223">የቅጂ መብት <ph name="YEAR" /> Google Inc.። ሁሉም መብቶች የተጠበቁ ናቸው።</translation>
 <translation id="2342981853652716282">የእርስዎን ዕልባቶች፣ የይለፍ ቃላት እና በሁሉም የእርስዎ መሣሪያዎች ላይ ተጨማሪ ለማግኘት ወደ Chrome በመለያ ይግቡ።</translation>
 <translation id="2347208864470321755">ይህ ባህሪ ሲበራ Chrome በሌሎች ቋንቋዎች የተጻፉ ገጾች Google ትርጉምን በመጠቀም እንዲተረጎምልዎ ይጠይቀዎታል። <ph name="BEGIN_LINK" />ተጨማሪ ለመረዳት<ph name="END_LINK" /></translation>
+<translation id="2436117022029368436">አሰሳን እና Chromeን ለማሻሻል ከGoogle ጋር ይገናኛል</translation>
 <translation id="2441696206556358796">ምስሎችን ለማስቀመጥ Chrome የእርስዎን ፎቶዎች መጠቀም እንዲችል በቅንብሮች ላይ መታ ያድርጉ።</translation>
 <translation id="2576431527583832481">Chrome አሁን ተሻሽሏል! አዲስ ስሪት አለ።</translation>
 <translation id="257708665678654955">Google Chrome በሚቀጥለው ጊዜ ከዚህ ጣቢያ የመጡ የ<ph name="LANGUAGE_NAME" /> ገጾች እንዲተረጎምልዎ ይፈልጋሉ?</translation>
+<translation id="2943166482989655199">የሥርዓት እና አጠቃቀም ውሂብ ወደ Google በመላክ Chrome እና ደህንነቱን ያሻሽሉ</translation>
 <translation id="3148434565183091099">የእርስዎን ዕልባቶች በሁሉም መሣሪያዎችዎ ላይ ለማግኘት ወደ Chrome ይግቡ።</translation>
 <translation id="3148688391461398285">Chrome ውስጥ በአካባቢዎ ላይ የተመሠረተ የተሻለ ተሞክሮ ያግኙ።</translation>
 <translation id="3167189358072330585">መለያዎ በGoogle Chrome ላይ አይሠራም። እባክዎ የጎራዎ አስተዳዳሪውን ያነጋግሩ ወይም ለመግባት መደበኛ የሆነ የGoogle መለያ ይጠቀሙ።</translation>
@@ -26,12 +29,15 @@
 <translation id="4099578267706723511">የአጠቃቀም ስታቲክሶችን እና የብልሽት ሪፖርቶችን ወደ Google በመላክ Chromeን የተሻለ ለማድረግ እገዛ ያድርጉ።</translation>
 <translation id="415767770115540173">በአካባቢዎ ላይ በመመስረት የተሻለ የGoogle ተሞክሮ በChrome ውስጥ ያግኙ።</translation>
 <translation id="424864128008805179">ከChrome ተዘግቶ ይወጣ?</translation>
+<translation id="447252321002412580">የChrome ባህሪያት እና አፈጻጸም እንዲሻሻል ያግዙ</translation>
 <translation id="4523886039239821078">አንዳንድ ተጨማሪዎች Chrome እንዲበላሽ ያደርጋሉ። እባክዎ የሚከተለውን ያራግፉ፦</translation>
 <translation id="4615174829807303908">በ<ph name="SIGNOUT_MANAGED_DOMAIN" /> ከሚተዳደር መለያ ዘግተው እየወጡ ነው። ይሄ የChrome ውሂብዎን ከዚህ መሣሪያ ይሰርዘዋል፣ ነገር ግን ውሂብዎ አሁንም በእርስዎ የGoogle መለያ ውስጥ እንዳለ ይቆያል።</translation>
 <translation id="5389212809648216794">ሌላ መተግበሪያ ካሜራዎን እየተጠቀመበት ስለሆነ Google Chrome ካሜራዎን መጠቀም አይችልም</translation>
+<translation id="5489543008378040943"><ph name="BEGIN_LINK" />ቅንብሮች<ph name="END_LINK" />ን በማንኛውም ጊዜ ማበጀት ይችላሉ። Chromeን እና እንደ ትርጉም፣ ፍለጋ እና ማስታወቂያዎች ያሉ ሌሎች የGoogle አገልግሎቶችን ግላዊነት ለማላበስ Google እርስዎ በሚጎበኟቸው ጣቢያዎች ላይ ያለ ይዘትን እና የአሰሳ እንቅስቃሴ ሊጠቀም ይችላል።</translation>
 <translation id="5639704535586432836">ቅንብሮች &gt; ግላዊነት &gt; ካሜራ &gt; Google Chromeን ይክፈቱና ካሜራውን ያብሩ።</translation>
 <translation id="5642200033778930880">Google Chrome ካሜራዎን በተከፈለ እይታ ሁነታ መጠቀም አይችልም</translation>
 <translation id="5703130498371792817">በChrome እየተደሰቱ ነው? <ph name="BEGIN_LINK" />ለዚህ መተግበሪያ ደረጃ ይስጡ።<ph name="END_LINK" /></translation>
+<translation id="5854621639439811139">የChrome ጠቃሚ ምክር። አሁን እንደ ተመለስ፣ ወደፊት እና ፍለጋ ያሉ አንዳንድ አዝራሮች በማያ ገጽዎ ግርጌ ላይ ናቸው።</translation>
 <translation id="6036420186814142909">Google Chrome እርስዎ የበይነመረብ ውሂብዎን እና ድረ-ገጾችን በምን ያህል ፍጥነት መጫን እንደሚችሉ እንዲያቀናብሩ የሚያስችሉዎት ባህሪያት አሉት።
 <ph name="BEGIN_LINK" />ተጨማሪ ለመረዳት<ph name="END_LINK" /></translation>
 <translation id="6573431926118603307">በሌሎች መሣሪያዎችዎ ላይ ባለ Chrome ላይ የከፈቷቸው ትሮች እዚህ ይመጣሉ።</translation>
@@ -50,4 +56,5 @@
 <translation id="8459495907675268833">የተመረጠው ውሂብ ከChrome እና የሰመሩ መሣሪያዎች ተወግዷል። የGoogle መለያዎ history.google.com ላይ እንደ የሌሎች Google አገልግሎቶች ፍለጋዎች እና እንቅስቃሴ ያለ ሌሎች የአሰሳ ታሪክ ዓይነት ሊኖረው ይችላል።</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8606668294522778825">Google Chrome የአሰሳ ተሞክሮዎን ለማሻሻል የድር አገልግሎቶችን ሊጠቀም ይችላል። እነዚህን አገልግሎቶች በአማራጭነት ሊያሰናክሏቸው ይችላሉ። <ph name="BEGIN_LINK" />ተጨማሪ ለመረዳት<ph name="END_LINK" /></translation>
+<translation id="96145293669295453">የChrome ጠቃሚ ምክር። ተጨማሪ የትር አማራጮችን ለማግኘት በመሣሪያ አሞሌው ውስጥ የትሮችን አሳይ አዝራሩን ተጭነው ይያዙ፣ ይህ በማያ ገጽዎ አናት ወይም ግርጌ ላይ ነው ያለው።</translation>
 </translationbundle>

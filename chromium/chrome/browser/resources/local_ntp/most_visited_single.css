@@ -3,6 +3,24 @@
  * found in the LICENSE file. */
 
 html {
+  /* Material Design constants */
+  --md-edit-menu-size: 20px;
+  --md-fallback-letter-size: 21px;
+  --md-favicon-size: 24px;
+  --md-icon-margin-bottom: 16px;
+  --md-icon-size: 48px;
+  --md-max-tiles-row: 5;
+  --md-menu-margin-side: 2px;
+  --md-menu-margin-top: 4px;
+  --md-menu-size: 12px;
+  --md-tile-height: 112px;
+  --md-tile-margin: 16px;
+  --md-tile-padding-horizontal: 8px;
+  --md-tile-padding-vertical: 16px;
+  --md-tile-width: 112px;
+  --md-title-font-size: 12px;
+  --md-title-height: 16px;
+
   /* Constants. */
   --tile-height: 128px;
   --tile-margin: 16px;
@@ -40,6 +58,11 @@ a:visited {
   user-select: none;
 }
 
+.md #most-visited {
+  margin: 10px 0;
+  width: 100%
+}
+
 #mv-tiles,
 .mv-tiles-old {
   font-size: 0;
@@ -55,6 +78,23 @@ a:visited {
   text-align: -webkit-auto;
   transition: opacity 1s;
   user-select: none;
+}
+
+.md #mv-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  height: auto;
+  justify-content: center;
+  line-height: normal;
+  margin: 0;
+  /* 5 88px tiles per row. If you change this, also change the corresponding
+   * values in local_ntp.css. */
+  max-width: calc(var(--md-tile-width) * var(--md-max-tiles-row));
+  position: static;
+}
+
+.md .mv-tiles-old {
+  display: none;
 }
 
 .mv-tile,
@@ -74,58 +114,23 @@ a:visited {
   width: var(--tile-width);
 }
 
-/* Min height for showing 1 row: 4px + 128px + 8px
-   Min height for showing 2 rows: 4px + 128px + 16px + 128px + 8px
-   In both cases, give it half a px of tolerance, because otherwise rounding
-   errors at some zoom levels break this and a row sometimes doesn't show up.
-*/
-
-/* Minimal layout: 1 row, 2 columns; only first 2 tiles are visible. */
-@media (min-height: 139.5px) {
-  .mv-tile:nth-child(-n+2),
-  .mv-empty-tile:nth-child(-n+2) {
-    display: inline-block;
-  }
+/* Minimal layout: 2 columns; only first 4 tiles are visible. */
+.mv-tile:nth-child(-n+4),
+.mv-empty-tile:nth-child(-n+4) {
+  display: inline-block;
 }
 
 /* width >= (3 cols * (16px + 154px))
- * 1 row, 3 columns; first 3 tiles are visible. */
-@media (min-height: 139.5px) and (min-width: 510px) {
-  .mv-tile:nth-child(-n+3),
-  .mv-empty-tile:nth-child(-n+3) {
-    display: inline-block;
-  }
-}
-
-/* width >= (4 cols * (16px + 154px))
- * 1 row, 4 columns; first 4 tiles are visible. */
-@media (min-height: 139.5px) and (min-width: 680px) {
-  .mv-tile:nth-child(-n+4),
-  .mv-empty-tile:nth-child(-n+4) {
-    display: inline-block;
-  }
-}
-
-/* 2 rows, 2 columns; only first 4 tiles are visible. */
-@media (min-height: 283.5px) {
-  .mv-tile:nth-child(-n+4),
-  .mv-empty-tile:nth-child(-n+4) {
-    display: inline-block;
-  }
-}
-
-/* width >= (3 cols * (16px + 154px))
- * 2 rows, 3 columns; first 6 tiles are visible. */
-@media (min-height: 283.5px) and (min-width: 510px) {
+ * 3 columns; first 6 tiles are visible. */
+@media (min-width: 510px) {
   .mv-tile:nth-child(-n+6),
   .mv-empty-tile:nth-child(-n+6) {
     display: inline-block;
   }
 }
-
 /* width >= (4 cols * (16px + 154px))
- * 2 rows, 4 columns; first 8 tiles are visible. */
-@media (min-height: 283.5px) and (min-width: 680px) {
+ * 4 columns; first 8 tiles are visible. */
+@media (min-width: 680px) {
   .mv-tile:nth-child(-n+8),
   .mv-empty-tile:nth-child(-n+8) {
     display: inline-block;
@@ -236,7 +241,7 @@ body.dark-theme .mv-thumb.failed-img {
   background-color: #555;
 }
 
-/* We use ::after without content to provide an aditional element on top of the
+/* We use ::after without content to provide an additional element on top of the
  * thumbnail. */
 .mv-thumb.failed-img::after {
   border: 8px solid rgb(215,215,215);
@@ -368,4 +373,210 @@ html[dir=rtl] .mv-favicon {
 
 .mv-favicon.failed-favicon img {
   display: none;
+}
+
+.mouse-navigation {
+  outline: none;
+}
+
+.md-tile-container {
+  border-radius: 4px;
+  box-sizing: border-box;
+  height: var(--md-tile-height);
+  margin-bottom: var(--md-tile-margin);
+  opacity: 1;
+  position: relative;
+  transition-property:
+      background, background-color, border-color, box-shadow, opacity,
+      text-shadow;
+  width: var(--md-tile-width);
+}
+
+.md-tile {
+  cursor: pointer;
+  padding: var(--md-tile-padding-vertical) var(--md-tile-padding-horizontal);
+}
+
+.md-empty-tile {
+  display: none;
+}
+
+.md-tile-container:hover {
+  background-color: rgba(33, 32, 36, 0.06);
+}
+
+body.dark-theme .md-tile-container:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.md-tile-container:hover .md-menu {
+  opacity: 1;
+  transition-delay: 500ms;
+}
+
+body.dark-theme .md-tile-container:active + .md-menu::after {
+  background-color: rgb(189, 193, 198);
+  transition-delay: 0ms;
+}
+
+.md-tile-container.blacklisted {
+  margin: 0;
+  padding: 0;
+  transform: scale(0, 0);
+  transition-duration: 200ms;
+  transition-property: transform, box-shadow, margin, opacity, padding, width;
+  width: 0;
+}
+
+.md-tile-inner {
+  align-items: center;
+  display: flex;
+  flex-flow: column nowrap;
+  height: 100%;
+  position: relative;
+  width: 100%;
+  z-index: -1;
+}
+
+.md-icon {
+  margin-bottom: var(--md-icon-margin-bottom);
+}
+
+.md-favicon {
+  pointer-events: none;
+}
+
+.md-favicon img {
+  /* Icons returned by the NTP Icon Source are always of this size. */
+  height: var(--md-icon-size);
+  width: var(--md-icon-size);
+}
+
+.md-fallback-background,
+.md-add-background {
+  align-items: center;
+  background-color: rgb(136, 136, 136);
+  border-radius: 50%;
+  display: flex;
+  height: var(--md-icon-size);
+  justify-content: center;
+  width: var(--md-icon-size);
+}
+
+.md-fallback-letter {
+  color: white;
+  font-family: sans-serif;
+  font-size: var(--md-fallback-letter-size);
+  height: var(--md-fallback-letter-size);
+  line-height: var(--md-fallback-letter-size);
+  text-align: center;
+  width: var(--md-fallback-letter-size);
+}
+
+.md-add-background {
+  background-color: rgb(241, 243, 244);
+}
+
+.md-add-icon {
+  background: url(chrome-search://most-visited/add_link.svg) no-repeat center;
+  height: var(--md-favicon-size);
+  width: var(--md-favicon-size);
+}
+
+.md-title {
+  color: rgba(33, 32, 36, 0.86);
+  font-family: 'Roboto', arial, sans-serif;
+  font-size: var(--md-title-font-size);
+  font-weight: 500;
+  height: var(--md-title-height);
+  line-height: var(--md-title-height);
+  text-align: center;
+  width: 96px;
+  word-break: break-word;
+  word-wrap: break-word;
+}
+
+/* Apply when a custom background is set */
+body.dark-theme .md-title {
+  color: rgb(248, 249, 250);
+  text-shadow: 0 0 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Apply only when a theme is installed */
+body.using-theme .md-title-container {
+  background-color: white;
+  border-radius: 12px;
+  padding: 4px;
+}
+
+body.using-theme .md-title {
+  color: rgba(33, 32, 36, 0.86);
+  text-shadow: unset;
+}
+
+.md-menu {
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  height: var(--md-menu-size);
+  margin: var(--md-menu-margin-top) var(--md-menu-margin-side);
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: var(--md-menu-size);
+}
+
+.md-menu:active,
+.md-menu:focus:not(.mouse-navigation) {
+  opacity: 1;
+}
+
+/* We use ::after without content to provide the masked X element. */
+.md-menu::after {
+  --mask-width: calc(var(--md-menu-size) - 2);
+  -webkit-mask-image: -webkit-image-set(
+      url(chrome-search://local-ntp/images/close_3_mask.png) 1x,
+      url(chrome-search://local-ntp/images/close_3_mask.png@2x) 2x);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: var(--mask-width);
+  background-color: rgba(33, 32, 36, 0.55);
+  content: '';
+  display: block;
+  height: var(--md-menu-size);
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: var(--md-menu-size);
+}
+
+.md-edit-menu {
+  height: var(--md-edit-menu-size);
+  width: var(--md-edit-menu-size);
+}
+
+.md-edit-menu::after {
+  --mask-width: var(--md-edit-menu-size);
+  -webkit-mask-image: url(chrome-search://most-visited/edit_menu.svg);
+  height: var(--md-edit-menu-size);
+  width: var(--md-edit-menu-size);
+}
+
+body.dark-theme .md-menu::after {
+  background-color: white;
+}
+
+html[dir=rtl] .md-menu {
+  left: 0;
+  right: auto;
+}
+
+.md-menu:hover::after,
+.md-menu:focus::after {
+  background-color: rgba(33, 32, 36, 0.71);
+}
+
+body.dark-theme .md-menu:hover::after,
+body.dark-theme .md-menu:focus::after {
+  background-color: rgb(218, 220, 224);
 }

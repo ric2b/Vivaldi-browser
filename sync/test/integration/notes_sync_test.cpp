@@ -2,17 +2,11 @@
 
 #include "sync/test/integration/notes_sync_test.h"
 
-#include <vector>
-
-#include "base/callback.h"
-#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-
 #include "components/sync/test/fake_server/fake_server_verifier.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_observer.h"
-#include "sync/test/fake_server/notes_entity_builder.h"
 #include "sync/test/integration/notes_helper.h"
 
 using notes_helper::GetNotesModel;
@@ -51,8 +45,7 @@ void WaitForNotesModelToLoad(Notes_Model* model) {
   if (model->loaded())
     return;
   base::RunLoop run_loop;
-  base::MessageLoop::ScopedNestableTaskAllower allow(
-      base::MessageLoop::current());
+  base::MessageLoop::ScopedNestableTaskAllower allow;
 
   NotesLoadObserver observer(run_loop.QuitClosure());
   model->AddObserver(&observer);

@@ -70,7 +70,7 @@ class MOJO_CPP_BINDINGS_EXPORT InterfacePtrStateBase {
   void Swap(InterfacePtrStateBase* other);
   void Bind(ScopedMessagePipeHandle handle,
             uint32_t version,
-            scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+            scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   ScopedMessagePipeHandle PassMessagePipe() {
     endpoint_client_.reset();
@@ -131,6 +131,11 @@ class InterfacePtrState : public InterfacePtrStateBase {
     endpoint_client()->FlushForTesting();
   }
 
+  void FlushAsyncForTesting(base::OnceClosure callback) {
+    ConfigureProxyIfNecessary();
+    endpoint_client()->FlushAsyncForTesting(std::move(callback));
+  }
+
   void CloseWithReason(uint32_t custom_reason, const std::string& description) {
     ConfigureProxyIfNecessary();
     endpoint_client()->CloseWithReason(custom_reason, description);
@@ -143,7 +148,7 @@ class InterfacePtrState : public InterfacePtrStateBase {
   }
 
   void Bind(InterfacePtrInfo<Interface> info,
-            scoped_refptr<base::SingleThreadTaskRunner> runner) {
+            scoped_refptr<base::SequencedTaskRunner> runner) {
     DCHECK(!proxy_);
     InterfacePtrStateBase::Bind(info.PassHandle(), info.version(),
                                 std::move(runner));
@@ -191,6 +196,11 @@ class InterfacePtrState : public InterfacePtrStateBase {
                                    std::unique_ptr<MessageReceiver> responder) {
     ConfigureProxyIfNecessary();
     endpoint_client()->AcceptWithResponder(&message, std::move(responder));
+  }
+
+  void RaiseError() {
+    ConfigureProxyIfNecessary();
+    endpoint_client()->RaiseError();
   }
 
  private:

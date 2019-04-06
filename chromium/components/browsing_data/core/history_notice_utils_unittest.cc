@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
 #include "components/history/core/test/fake_web_history_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/fake_sync_service.h"
@@ -24,9 +25,16 @@ namespace {
 class TestSyncService : public syncer::FakeSyncService {
  public:
   // Getters (FakeSyncService implementation). ---------------------------------
-  bool IsSyncActive() const override { return sync_active_; }
+  int GetDisableReasons() const override { return DISABLE_REASON_NONE; }
 
-  bool IsLocalSyncEnabled() const override { return false; }
+  State GetState() const override {
+    return IsFirstSetupComplete() ? State::ACTIVE
+                                  : State::PENDING_DESIRED_CONFIGURATION;
+  }
+
+  bool IsFirstSetupComplete() const override {
+    return is_first_setup_complete_;
+  }
 
   syncer::ModelTypeSet GetActiveDataTypes() const override {
     return active_data_types_;
@@ -37,8 +45,8 @@ class TestSyncService : public syncer::FakeSyncService {
   }
 
   // Setters. ------------------------------------------------------------------
-  void set_sync_active(bool active) {
-    sync_active_ = active;
+  void set_first_setup_complete(bool complete) {
+    is_first_setup_complete_ = complete;
   }
 
   void set_active_data_types(syncer::ModelTypeSet data_types) {
@@ -50,9 +58,9 @@ class TestSyncService : public syncer::FakeSyncService {
   }
 
  private:
+  bool is_first_setup_complete_ = false;
   syncer::ModelTypeSet active_data_types_;
   bool using_secondary_passphrase_ = false;
-  bool sync_active_ = false;
 };
 
 }  // namespace
@@ -64,8 +72,7 @@ class HistoryNoticeUtilsTest : public ::testing::Test {
 
   void SetUp() override {
     sync_service_.reset(new TestSyncService());
-    history_service_.reset(new history::FakeWebHistoryService(
-        url_request_context_));
+    history_service_ = std::make_unique<history::FakeWebHistoryService>();
     history_service_->SetupFakeResponse(true /* success */, net::HTTP_OK);
   }
 
@@ -79,44 +86,27 @@ class HistoryNoticeUtilsTest : public ::testing::Test {
 
   void ExpectShouldPopupDialogAboutOtherFormsOfBrowsingHistoryWithResult(
       bool expected_test_case_result) {
-    bool got_result = false;
-
+    bool result;
+    base::RunLoop run_loop;
     ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
-        sync_service_.get(),
-        history_service_.get(),
-        version_info::Channel::STABLE,
-        base::Bind(
-            &HistoryNoticeUtilsTest::Callback,
-            base::Unretained(this),
-            base::Unretained(&got_result)));
-
-    if (!got_result) {
-      run_loop_.reset(new base::RunLoop());
-      run_loop_->Run();
-    }
+        sync_service_.get(), history_service_.get(),
+        version_info::Channel::STABLE, base::BindLambdaForTesting([&](bool r) {
+          result = r;
+          run_loop.Quit();
+        }));
+    run_loop.Run();
 
     // Process the DeleteSoon() called on MergeBooleanCallbacks, otherwise
     // this it will be considered to be leaked.
     base::RunLoop().RunUntilIdle();
 
-    EXPECT_EQ(expected_test_case_result, result_);
+    EXPECT_EQ(expected_test_case_result, result);
   }
 
  private:
-  void Callback(bool* got_result, bool result) {
-    *got_result = true;
-    result_ = result;
-
-    if (run_loop_)
-      run_loop_->Quit();
-  }
-
   scoped_refptr<net::URLRequestContextGetter> url_request_context_;
   std::unique_ptr<TestSyncService> sync_service_;
   std::unique_ptr<history::FakeWebHistoryService> history_service_;
-
-  std::unique_ptr<base::RunLoop> run_loop_;
-  bool result_;
 
   base::MessageLoop message_loop_;
 };
@@ -126,7 +116,7 @@ TEST_F(HistoryNoticeUtilsTest, NotSyncing) {
 }
 
 TEST_F(HistoryNoticeUtilsTest, SyncingWithWrongParameters) {
-  sync_service()->set_sync_active(true);
+  sync_service()->set_first_setup_complete(true);
 
   // Regardless of the state of the web history...
   history_service()->SetWebAndAppActivityEnabled(true);
@@ -146,7 +136,7 @@ TEST_F(HistoryNoticeUtilsTest, SyncingWithWrongParameters) {
 
 TEST_F(HistoryNoticeUtilsTest, WebHistoryStates) {
   // If history Sync is active...
-  sync_service()->set_sync_active(true);
+  sync_service()->set_first_setup_complete(true);
   sync_service()->set_active_data_types(syncer::ModelTypeSet::All());
 
   // ...the result is true if both web history queries return true...

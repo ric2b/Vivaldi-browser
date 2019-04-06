@@ -26,11 +26,13 @@ class AutofillProviderAndroid : public AutofillProvider {
   ~AutofillProviderAndroid() override;
 
   // AutofillProvider:
-  void OnQueryFormFieldAutofill(AutofillHandlerProxy* handler,
-                                int32_t id,
-                                const FormData& form,
-                                const FormFieldData& field,
-                                const gfx::RectF& bounding_box) override;
+  void OnQueryFormFieldAutofill(
+      AutofillHandlerProxy* handler,
+      int32_t id,
+      const FormData& form,
+      const FormFieldData& field,
+      const gfx::RectF& bounding_box,
+      bool /*unused_autoselect_first_suggestion*/) override;
   void OnTextFieldDidChange(AutofillHandlerProxy* handler,
                             const FormData& form,
                             const FormFieldData& field,
@@ -40,7 +42,11 @@ class AutofillProviderAndroid : public AutofillProvider {
                             const FormData& form,
                             const FormFieldData& field,
                             const gfx::RectF& bounding_box) override;
-  bool OnFormSubmitted(AutofillHandlerProxy* handler,
+  void OnSelectControlDidChange(AutofillHandlerProxy* handler,
+                                const FormData& form,
+                                const FormFieldData& field,
+                                const gfx::RectF& bounding_box) override;
+  void OnFormSubmitted(AutofillHandlerProxy* handler,
                        const FormData& form,
                        bool known_success,
                        SubmissionSource source,
@@ -67,12 +73,24 @@ class AutofillProviderAndroid : public AutofillProvider {
   void OnFocusChanged(bool focus_on_form,
                       size_t index,
                       const gfx::RectF& bounding_box);
+  void FireFormFieldDidChanged(AutofillHandlerProxy* handler,
+                               const FormData& form,
+                               const FormFieldData& field,
+                               const gfx::RectF& bounding_box);
 
   bool IsCurrentlyLinkedHandler(AutofillHandlerProxy* handler);
 
   bool IsCurrentlyLinkedForm(const FormData& form);
 
   gfx::RectF ToClientAreaBound(const gfx::RectF& bounding_box);
+
+  bool ShouldStartNewSession(AutofillHandlerProxy* handler,
+                             const FormData& form);
+
+  void StartNewSession(AutofillHandlerProxy* handler,
+                       const FormData& form,
+                       const FormFieldData& field,
+                       const gfx::RectF& bounding_box);
 
   void Reset();
 
@@ -84,6 +102,8 @@ class AutofillProviderAndroid : public AutofillProvider {
   bool check_submission_;
   // Valid only if check_submission_ is true.
   SubmissionSource pending_submission_source_;
+
+  base::WeakPtr<AutofillHandlerProxy> handler_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillProviderAndroid);
 };

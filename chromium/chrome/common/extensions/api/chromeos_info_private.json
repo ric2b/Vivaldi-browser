@@ -26,7 +26,8 @@
                  "a11yFocusHighlightEnabled",
                  "a11ySelectToSpeakEnabled",
                  "a11ySwitchAccessEnabled",
-                 "sendFunctionKeys"],
+                 "sendFunctionKeys",
+                 "cameraMediaConsolidated"],
         "description": "Chrome OS system property name"
       },
       {
@@ -52,6 +53,12 @@
         "type": "string",
         "enum": ["chromebase", "chromebit", "chromebook", "chromebox", "chromedevice"],
         "description": "Device type."
+      },
+      {
+        "id": "StylusStatus",
+        "type": "string",
+        "enum": ["unsupported", "supported"],
+        "description": "Status of stylus."
       }
     ],
     "functions": [
@@ -85,6 +92,7 @@
                   "playStoreStatus": {"$ref": "PlayStoreStatus", "optional": true},
                   "managedDeviceStatus": {"$ref": "ManagedDeviceStatus", "optional": true},
                   "deviceType": {"$ref": "DeviceType", "optional": true},
+                  "stylusStatus": {"$ref": "StylusStatus", "optional": true},
                   "clientId" : {"type": "string", "optional": true, "description": "Device client id"},
                   "timezone" : {"type": "string", "optional": true, "description": "Timezone"},
                   "a11yLargeCursorEnabled" : {"type": "boolean", "optional": true, "description": "If true, ChromeOS is showing enlarged cursor."},
@@ -95,6 +103,7 @@
                   "a11yAutoClickEnabled" : {"type": "boolean", "optional": true, "description": "If true, auto mouse click accessibility feature is turned on."},
                   "a11yVirtualKeyboardEnabled" : {"type": "boolean", "optional": true, "description": "If true, virtual keyboard will be enabled."},
                   "sendFunctionKeys" : {"type": "boolean", "optional": true, "description": "If true, the ChromeOS top row keys send function keys."},
+                  "cameraMediaConsolidated" : {"type": "boolean", "optional": true, "description": "True if camera photos and videos have been consolidated to one place."},
                   "supportedTimezones" : {
                     "type": "array",
                     "items": {

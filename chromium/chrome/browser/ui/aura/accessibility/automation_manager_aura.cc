@@ -18,7 +18,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "ui/accessibility/ax_action_data.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_tree_id_registry.h"
 #include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/env.h"
@@ -29,9 +29,11 @@
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/shell.h"           // nogncheck
-#include "ash/wm/window_util.h"  // nogncheck
+#include "ash/shell.h"
+#include "ash/wm/window_util.h"
+#include "chrome/browser/chromeos/accessibility/ax_host_service.h"
 #include "components/session_manager/core/session_manager.h"
+#include "ui/base/ui_base_features.h"
 #endif
 
 using content::BrowserContext;
@@ -40,7 +42,8 @@ using extensions::AutomationEventRouter;
 namespace {
 
 // Returns default browser context for sending events in case it was not
-// provided.
+// provided. This works around a crash in profile creation during OOBE when
+// accessibility is enabled. https://crbug.com/738003
 BrowserContext* GetDefaultEventContext() {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   if (!profile_manager)
@@ -83,27 +86,35 @@ void AutomationManagerAura::Enable(BrowserContext* context) {
   enabled_ = true;
   Reset(false);
 
-  SendEvent(context, current_tree_->GetRoot(), ui::AX_EVENT_LOAD_COMPLETE);
+  SendEvent(context, current_tree_->GetRoot(), ax::mojom::Event::kLoadComplete);
   views::AXAuraObjCache::GetInstance()->SetDelegate(this);
 
 #if defined(OS_CHROMEOS)
-  aura::Window* active_window = ash::wm::GetActiveWindow();
-  if (active_window) {
-    views::AXAuraObjWrapper* focus =
-        views::AXAuraObjCache::GetInstance()->GetOrCreate(active_window);
-    SendEvent(context, focus, ui::AX_EVENT_CHILDREN_CHANGED);
+  if (features::IsAshInBrowserProcess()) {
+    aura::Window* active_window = ash::wm::GetActiveWindow();
+    if (active_window) {
+      views::AXAuraObjWrapper* focus =
+          views::AXAuraObjCache::GetInstance()->GetOrCreate(active_window);
+      SendEvent(context, focus, ax::mojom::Event::kChildrenChanged);
+    }
   }
+  // Gain access to out-of-process native windows.
+  AXHostService::SetAutomationEnabled(true);
 #endif
 }
 
 void AutomationManagerAura::Disable() {
   enabled_ = false;
   Reset(true);
+
+#if defined(OS_CHROMEOS)
+  AXHostService::SetAutomationEnabled(false);
+#endif
 }
 
 void AutomationManagerAura::HandleEvent(BrowserContext* context,
                                         views::View* view,
-                                        ui::AXEvent event_type) {
+                                        ax::mojom::Event event_type) {
   if (!enabled_)
     return;
 
@@ -121,7 +132,7 @@ void AutomationManagerAura::HandleAlert(content::BrowserContext* context,
   views::AXAuraObjWrapper* obj =
       static_cast<AXRootObjWrapper*>(current_tree_->GetRoot())
           ->GetAlertForText(text);
-  SendEvent(context, obj, ui::AX_EVENT_ALERT);
+  SendEvent(context, obj, ax::mojom::Event::kAlert);
 }
 
 void AutomationManagerAura::PerformAction(const ui::AXActionData& data) {
@@ -129,7 +140,7 @@ void AutomationManagerAura::PerformAction(const ui::AXActionData& data) {
 
   // Unlike all of the other actions, a hit test requires determining the
   // node to perform the action on first.
-  if (data.action == ui::AX_ACTION_HIT_TEST) {
+  if (data.action == ax::mojom::Action::kHitTest) {
     PerformHitTest(data);
     return;
   }
@@ -145,11 +156,11 @@ void AutomationManagerAura::OnChildWindowRemoved(
   if (!parent)
     parent = current_tree_->GetRoot();
 
-  SendEvent(nullptr, parent, ui::AX_EVENT_CHILDREN_CHANGED);
+  SendEvent(nullptr, parent, ax::mojom::Event::kChildrenChanged);
 }
 
 void AutomationManagerAura::OnEvent(views::AXAuraObjWrapper* aura_obj,
-                                    ui::AXEvent event_type) {
+                                    ax::mojom::Event event_type) {
   SendEvent(nullptr, aura_obj, event_type);
 }
 
@@ -171,7 +182,7 @@ void AutomationManagerAura::Reset(bool reset_serializer) {
 
 void AutomationManagerAura::SendEvent(BrowserContext* context,
                                       views::AXAuraObjWrapper* aura_obj,
-                                      ui::AXEvent event_type) {
+                                      ax::mojom::Event event_type) {
   if (!current_tree_serializer_)
     return;
 
@@ -189,24 +200,33 @@ void AutomationManagerAura::SendEvent(BrowserContext* context,
   }
   processing_events_ = true;
 
-  ExtensionMsg_AccessibilityEventParams params;
-  if (!current_tree_serializer_->SerializeChanges(aura_obj, &params.update)) {
+  ExtensionMsg_AccessibilityEventBundleParams event_bundle;
+  event_bundle.tree_id = extensions::api::automation::kDesktopTreeID;
+  event_bundle.mouse_location = aura::Env::GetInstance()->last_mouse_location();
+
+  ui::AXTreeUpdate update;
+  if (!current_tree_serializer_->SerializeChanges(aura_obj, &update)) {
     LOG(ERROR) << "Unable to serialize one accessibility event.";
     return;
   }
+  event_bundle.updates.push_back(update);
 
   // Make sure the focused node is serialized.
   views::AXAuraObjWrapper* focus =
       views::AXAuraObjCache::GetInstance()->GetFocus();
-  if (focus)
-    current_tree_serializer_->SerializeChanges(focus, &params.update);
+  if (focus) {
+    ui::AXTreeUpdate focused_node_update;
+    current_tree_serializer_->SerializeChanges(focus, &focused_node_update);
+    event_bundle.updates.push_back(focused_node_update);
+  }
 
-  params.tree_id = 0;
-  params.id = aura_obj->GetUniqueId().Get();
-  params.event_type = event_type;
-  params.mouse_location = aura::Env::GetInstance()->last_mouse_location();
+  ui::AXEvent event;
+  event.id = aura_obj->GetUniqueId().Get();
+  event.event_type = event_type;
+  event_bundle.events.push_back(event);
+
   AutomationEventRouter* router = AutomationEventRouter::GetInstance();
-  router->DispatchAccessibilityEvent(params);
+  router->DispatchAccessibilityEvents(event_bundle);
 
   processing_events_ = false;
   auto pending_events_copy = pending_events_;

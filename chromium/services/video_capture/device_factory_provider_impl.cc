@@ -4,34 +4,90 @@
 
 #include "services/video_capture/device_factory_provider_impl.h"
 
-#include "base/memory/ptr_util.h"
+#include "base/task_scheduler/post_task.h"
+#include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
+#include "media/capture/video/create_video_capture_device_factory.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "media/capture/video/video_capture_buffer_tracker.h"
-#include "media/capture/video/video_capture_jpeg_decoder.h"
 #include "media/capture/video/video_capture_system_impl.h"
+#include "services/ui/public/cpp/gpu/gpu.h"
 #include "services/video_capture/device_factory_media_to_mojo_adapter.h"
 #include "services/video_capture/virtual_device_enabled_device_factory.h"
 
-namespace {
-
-// TODO(chfremer): Replace with an actual decoder factory.
-// https://crbug.com/584797
-std::unique_ptr<media::VideoCaptureJpegDecoder> CreateJpegDecoder() {
-  return nullptr;
-}
-
-}  // anonymous namespace
-
 namespace video_capture {
 
-DeviceFactoryProviderImpl::DeviceFactoryProviderImpl(
-    std::unique_ptr<service_manager::ServiceContextRef> service_ref,
-    base::Callback<void(float)> set_shutdown_delay_cb)
-    : service_ref_(std::move(service_ref)),
-      set_shutdown_delay_cb_(std::move(set_shutdown_delay_cb)) {}
+// Intended usage of this class is to instantiate on any sequence, and then
+// operate and release the instance on the task runner exposed via
+// GetTaskRunner() via WeakPtrs provided via GetWeakPtr(). To this end,
+// GetTaskRunner() and GetWeakPtr() can be called from any sequence, typically
+// the same as the one calling the constructor.
+class DeviceFactoryProviderImpl::GpuDependenciesContext {
+ public:
+  GpuDependenciesContext() : weak_factory_for_gpu_io_thread_(this) {
+    gpu_io_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+        {base::TaskPriority::BACKGROUND, base::MayBlock()});
+  }
 
-DeviceFactoryProviderImpl::~DeviceFactoryProviderImpl() {}
+  ~GpuDependenciesContext() {
+    DCHECK(gpu_io_task_runner_->RunsTasksInCurrentSequence());
+  }
+
+  base::WeakPtr<GpuDependenciesContext> GetWeakPtr() {
+    return weak_factory_for_gpu_io_thread_.GetWeakPtr();
+  }
+
+  scoped_refptr<base::SequencedTaskRunner> GetTaskRunner() {
+    return gpu_io_task_runner_;
+  }
+
+  void InjectGpuDependencies(
+      mojom::AcceleratorFactoryPtrInfo accelerator_factory_info) {
+    DCHECK(gpu_io_task_runner_->RunsTasksInCurrentSequence());
+    accelerator_factory_.Bind(std::move(accelerator_factory_info));
+  }
+
+  void CreateJpegDecodeAccelerator(
+      media::mojom::JpegDecodeAcceleratorRequest request) {
+    DCHECK(gpu_io_task_runner_->RunsTasksInCurrentSequence());
+    if (!accelerator_factory_)
+      return;
+    accelerator_factory_->CreateJpegDecodeAccelerator(std::move(request));
+  }
+
+ private:
+  // Task runner for operating |accelerator_factory_| and
+  // |gpu_memory_buffer_manager_| on. This must be a different thread from the
+  // main service thread in order to avoid a deadlock during shutdown where
+  // the main service thread joins a video capture device thread that, in turn,
+  // will try to post the release of the jpeg decoder to the thread it is
+  // operated on.
+  scoped_refptr<base::SequencedTaskRunner> gpu_io_task_runner_;
+  mojom::AcceleratorFactoryPtr accelerator_factory_;
+  base::WeakPtrFactory<GpuDependenciesContext> weak_factory_for_gpu_io_thread_;
+};
+
+DeviceFactoryProviderImpl::DeviceFactoryProviderImpl(
+    std::unique_ptr<service_manager::ServiceContextRef> service_ref)
+    : service_ref_(std::move(service_ref)) {}
+
+DeviceFactoryProviderImpl::~DeviceFactoryProviderImpl() {
+  factory_bindings_.CloseAllBindings();
+  device_factory_.reset();
+  if (gpu_dependencies_context_) {
+    gpu_dependencies_context_->GetTaskRunner()->DeleteSoon(
+        FROM_HERE, std::move(gpu_dependencies_context_));
+  }
+}
+
+void DeviceFactoryProviderImpl::InjectGpuDependencies(
+    mojom::AcceleratorFactoryPtr accelerator_factory) {
+  LazyInitializeGpuDependenciesContext();
+  gpu_dependencies_context_->GetTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&GpuDependenciesContext::InjectGpuDependencies,
+                                gpu_dependencies_context_->GetWeakPtr(),
+                                accelerator_factory.PassInterface()));
+}
 
 void DeviceFactoryProviderImpl::ConnectToDeviceFactory(
     mojom::DeviceFactoryRequest request) {
@@ -39,24 +95,24 @@ void DeviceFactoryProviderImpl::ConnectToDeviceFactory(
   factory_bindings_.AddBinding(device_factory_.get(), std::move(request));
 }
 
-void DeviceFactoryProviderImpl::SetShutdownDelayInSeconds(float seconds) {
-  set_shutdown_delay_cb_.Run(seconds);
+void DeviceFactoryProviderImpl::LazyInitializeGpuDependenciesContext() {
+  if (!gpu_dependencies_context_)
+    gpu_dependencies_context_ = std::make_unique<GpuDependenciesContext>();
 }
 
 void DeviceFactoryProviderImpl::LazyInitializeDeviceFactory() {
   if (device_factory_)
     return;
 
+  LazyInitializeGpuDependenciesContext();
+
   // Create the platform-specific device factory.
   // The task runner passed to CreateFactory is used for things that need to
   // happen on a "UI thread equivalent", e.g. obtaining screen rotation on
   // Chrome OS.
   std::unique_ptr<media::VideoCaptureDeviceFactory> media_device_factory =
-      media::VideoCaptureDeviceFactory::CreateFactory(
-          base::ThreadTaskRunnerHandle::Get(),
-          // TODO(jcliang): Create a GpuMemoryBufferManager from GpuService
-          // here.
-          nullptr);
+      media::CreateVideoCaptureDeviceFactory(
+          base::ThreadTaskRunnerHandle::Get());
   auto video_capture_system = std::make_unique<media::VideoCaptureSystemImpl>(
       std::move(media_device_factory));
 
@@ -64,7 +120,10 @@ void DeviceFactoryProviderImpl::LazyInitializeDeviceFactory() {
       service_ref_->Clone(),
       std::make_unique<DeviceFactoryMediaToMojoAdapter>(
           service_ref_->Clone(), std::move(video_capture_system),
-          base::Bind(CreateJpegDecoder)));
+          base::BindRepeating(
+              &GpuDependenciesContext::CreateJpegDecodeAccelerator,
+              gpu_dependencies_context_->GetWeakPtr()),
+          gpu_dependencies_context_->GetTaskRunner()));
 }
 
 }  // namespace video_capture

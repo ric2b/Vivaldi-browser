@@ -29,7 +29,15 @@ constexpr char kText[] = "My text";
 constexpr char kUrlSpec[] = "https://www.google.com/";
 
 constexpr char kTargetName[] = "Share Target";
-constexpr char kUrlTemplate[] = "share?title={title}&text={text}&url={url}";
+constexpr char kUrlTemplateHigh[] =
+    "https://www.example-high.com/target/"
+    "share?title={title}&text={text}&url={url}";
+constexpr char kUrlTemplateLow[] =
+    "https://www.example-low.com/target/"
+    "share?title={title}&text={text}&url={url}";
+constexpr char kUrlTemplateMin[] =
+    "https://www.example-min.com/target/"
+    "share?title={title}&text={text}&url={url}";
 constexpr char kManifestUrlHigh[] =
     "https://www.example-high.com/target/manifest.json";
 constexpr char kManifestUrlLow[] =
@@ -112,7 +120,7 @@ class ShareServiceTestImpl : public ShareServiceImpl {
 
     // Quit the test's run loop. It is the test's responsibility to call the
     // callback, to simulate the user's choice.
-    quit_run_loop_.Run();
+    std::move(quit_run_loop_).Run();
   }
 
   void OpenTargetURL(const GURL& target_url) override {
@@ -130,7 +138,7 @@ class ShareServiceTestImpl : public ShareServiceImpl {
 
   std::map<std::string, blink::mojom::EngagementLevel> engagement_map_;
   // Closure to quit the test's run loop.
-  base::Closure quit_run_loop_;
+  base::OnceClosure quit_run_loop_;
 
   // The last URL passed to OpenTargetURL.
   std::string last_used_target_url_;
@@ -149,7 +157,7 @@ class ShareServiceImplUnittest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    share_service_helper_ = base::MakeUnique<ShareServiceTestImpl>(
+    share_service_helper_ = std::make_unique<ShareServiceTestImpl>(
         mojo::MakeRequest(&share_service_));
 
     share_service_helper_->SetEngagementForTarget(
@@ -183,29 +191,30 @@ class ShareServiceImplUnittest : public ChromeRenderViewHostTestHarness {
 // parameters.
 TEST_F(ShareServiceImplUnittest, ShareCallbackParams) {
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlLow, kTargetName,
-                                                kUrlTemplate);
+                                                kUrlTemplateLow);
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlHigh, kTargetName,
-                                                kUrlTemplate);
+                                                kUrlTemplateHigh);
   // Expect this invalid URL to be ignored (not crash);
   // https://crbug.com/762388.
-  share_service_helper()->AddShareTargetToPrefs("", kTargetName, kUrlTemplate);
+  share_service_helper()->AddShareTargetToPrefs("", kTargetName,
+                                                kUrlTemplateHigh);
 
-  base::Callback<void(blink::mojom::ShareError)> callback =
-      base::Bind(&DidShare, blink::mojom::ShareError::OK);
+  base::OnceCallback<void(blink::mojom::ShareError)> callback =
+      base::BindOnce(&DidShare, blink::mojom::ShareError::OK);
 
   base::RunLoop run_loop;
   share_service_helper()->set_run_loop(&run_loop);
 
   const GURL url(kUrlSpec);
-  share_service()->Share(kTitle, kText, url, callback);
+  share_service()->Share(kTitle, kText, url, std::move(callback));
 
   run_loop.Run();
 
   std::vector<WebShareTarget> expected_targets;
   expected_targets.emplace_back(GURL(kManifestUrlHigh), kTargetName,
-                                kUrlTemplate);
+                                GURL(kUrlTemplateHigh));
   expected_targets.emplace_back(GURL(kManifestUrlLow), kTargetName,
-                                kUrlTemplate);
+                                GURL(kUrlTemplateLow));
   EXPECT_EQ(expected_targets, share_service_helper()->GetTargetsInPicker());
 
   // Pick example-low.com.
@@ -222,14 +231,14 @@ TEST_F(ShareServiceImplUnittest, ShareCallbackParams) {
 // any targets.
 TEST_F(ShareServiceImplUnittest, ShareCancelNoTargets) {
   // Expect an error message in response.
-  base::Callback<void(blink::mojom::ShareError)> callback =
-      base::Bind(&DidShare, blink::mojom::ShareError::CANCELED);
+  base::OnceCallback<void(blink::mojom::ShareError)> callback =
+      base::BindOnce(&DidShare, blink::mojom::ShareError::CANCELED);
 
   base::RunLoop run_loop;
   share_service_helper()->set_run_loop(&run_loop);
 
   const GURL url(kUrlSpec);
-  share_service()->Share(kTitle, kText, url, callback);
+  share_service()->Share(kTitle, kText, url, std::move(callback));
 
   run_loop.Run();
 
@@ -244,27 +253,27 @@ TEST_F(ShareServiceImplUnittest, ShareCancelNoTargets) {
 // Tests the result of cancelling the share in the picker UI, that has targets.
 TEST_F(ShareServiceImplUnittest, ShareCancelWithTargets) {
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlHigh, kTargetName,
-                                                kUrlTemplate);
+                                                kUrlTemplateHigh);
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlLow, kTargetName,
-                                                kUrlTemplate);
+                                                kUrlTemplateLow);
 
   // Expect an error message in response.
-  base::Callback<void(blink::mojom::ShareError)> callback =
-      base::Bind(&DidShare, blink::mojom::ShareError::CANCELED);
+  base::OnceCallback<void(blink::mojom::ShareError)> callback =
+      base::BindOnce(&DidShare, blink::mojom::ShareError::CANCELED);
 
   base::RunLoop run_loop;
   share_service_helper()->set_run_loop(&run_loop);
 
   const GURL url(kUrlSpec);
-  share_service()->Share(kTitle, kText, url, callback);
+  share_service()->Share(kTitle, kText, url, std::move(callback));
 
   run_loop.Run();
 
   std::vector<WebShareTarget> expected_targets;
   expected_targets.emplace_back(GURL(kManifestUrlHigh), kTargetName,
-                                kUrlTemplate);
+                                GURL(kUrlTemplateHigh));
   expected_targets.emplace_back(GURL(kManifestUrlLow), kTargetName,
-                                kUrlTemplate);
+                                GURL(kUrlTemplateLow));
   EXPECT_EQ(expected_targets, share_service_helper()->GetTargetsInPicker());
 
   // Cancel the dialog.
@@ -277,25 +286,26 @@ TEST_F(ShareServiceImplUnittest, ShareCancelWithTargets) {
 TEST_F(ShareServiceImplUnittest, ShareBrokenUrl) {
   // Invalid placeholders. Detailed tests for broken templates are in the
   // ReplacePlaceholders test; this just tests the share response.
-  constexpr char kBrokenUrlTemplate[] = "share?title={title";
+  constexpr char kBrokenUrlTemplate[] =
+      "http://webshare.com/share?title={title";
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlHigh, kTargetName,
                                                 kBrokenUrlTemplate);
 
   // Expect an error message in response.
-  base::Callback<void(blink::mojom::ShareError)> callback =
-      base::Bind(&DidShare, blink::mojom::ShareError::INTERNAL_ERROR);
+  base::OnceCallback<void(blink::mojom::ShareError)> callback =
+      base::BindOnce(&DidShare, blink::mojom::ShareError::INTERNAL_ERROR);
 
   base::RunLoop run_loop;
   share_service_helper()->set_run_loop(&run_loop);
 
   const GURL url(kUrlSpec);
-  share_service()->Share(kTitle, kText, url, callback);
+  share_service()->Share(kTitle, kText, url, std::move(callback));
 
   run_loop.Run();
 
   std::vector<WebShareTarget> expected_targets;
   expected_targets.emplace_back(GURL(kManifestUrlHigh), kTargetName,
-                                kBrokenUrlTemplate);
+                                GURL(kBrokenUrlTemplate));
   EXPECT_EQ(expected_targets, share_service_helper()->GetTargetsInPicker());
 
   // Pick example-high.com.
@@ -307,24 +317,24 @@ TEST_F(ShareServiceImplUnittest, ShareBrokenUrl) {
 // Test to check that only targets with enough engagement were in picker.
 TEST_F(ShareServiceImplUnittest, ShareWithSomeInsufficientlyEngagedTargets) {
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlMin, kTargetName,
-                                                kUrlTemplate);
+                                                kUrlTemplateMin);
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlLow, kTargetName,
-                                                kUrlTemplate);
+                                                kUrlTemplateLow);
 
-  base::Callback<void(blink::mojom::ShareError)> callback =
-      base::Bind(&DidShare, blink::mojom::ShareError::OK);
+  base::OnceCallback<void(blink::mojom::ShareError)> callback =
+      base::BindOnce(&DidShare, blink::mojom::ShareError::OK);
 
   base::RunLoop run_loop;
   share_service_helper()->set_run_loop(&run_loop);
 
   const GURL url(kUrlSpec);
-  share_service()->Share(kTitle, kText, url, callback);
+  share_service()->Share(kTitle, kText, url, std::move(callback));
 
   run_loop.Run();
 
   std::vector<WebShareTarget> expected_targets;
   expected_targets.emplace_back(GURL(kManifestUrlLow), kTargetName,
-                                kUrlTemplate);
+                                GURL(kUrlTemplateLow));
   EXPECT_EQ(expected_targets, share_service_helper()->GetTargetsInPicker());
 
   // Pick example-low.com.
@@ -341,7 +351,7 @@ TEST_F(ShareServiceImplUnittest, ShareWithSomeInsufficientlyEngagedTargets) {
 // (https://crbug.com/690775).
 TEST_F(ShareServiceImplUnittest, ShareServiceDeletion) {
   share_service_helper()->AddShareTargetToPrefs(kManifestUrlLow, kTargetName,
-                                                kUrlTemplate);
+                                                kUrlTemplateLow);
 
   base::RunLoop run_loop;
   share_service_helper()->set_run_loop(&run_loop);
@@ -351,15 +361,15 @@ TEST_F(ShareServiceImplUnittest, ShareServiceDeletion) {
   // destroyed before the picker is closed).
   // TODO(mgiuca): This probably should still complete the share, if not
   // cancelled, even if the underlying tab is closed.
-  base::Callback<void(blink::mojom::ShareError)> callback =
-      base::Bind([](blink::mojom::ShareError error) { FAIL(); });
-  share_service()->Share(kTitle, kText, url, callback);
+  base::OnceCallback<void(blink::mojom::ShareError)> callback =
+      base::BindOnce([](blink::mojom::ShareError error) { FAIL(); });
+  share_service()->Share(kTitle, kText, url, std::move(callback));
 
   run_loop.Run();
 
   std::vector<WebShareTarget> expected_targets;
   expected_targets.emplace_back(GURL(kManifestUrlLow), kTargetName,
-                                kUrlTemplate);
+                                GURL(kUrlTemplateLow));
   EXPECT_EQ(expected_targets, share_service_helper()->GetTargetsInPicker());
 
   chrome::WebShareTargetPickerCallback picker_callback =
@@ -369,208 +379,4 @@ TEST_F(ShareServiceImplUnittest, ShareServiceDeletion) {
 
   // Pick example-low.com.
   std::move(picker_callback).Run(&expected_targets[0]);
-}
-
-// Replace various numbers of placeholders in various orders. Placeholders are
-// adjacent to eachother; there are no padding characters.
-TEST_F(ShareServiceImplUnittest, ReplacePlaceholders) {
-  const GURL url(kUrlSpec);
-  std::string url_template_filled;
-  bool succeeded;
-
-  // No placeholders
-  std::string url_template = "blank";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("blank", url_template_filled);
-
-  // Empty |url_template|
-  url_template = "";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("", url_template_filled);
-
-  // One title placeholder.
-  url_template = "{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("My%20title", url_template_filled);
-
-  // One text placeholder.
-  url_template = "{text}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("My%20text", url_template_filled);
-
-  // One url placeholder.
-  url_template = "{url}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("https%3A%2F%2Fwww.google.com%2F", url_template_filled);
-
-  // One of each placeholder, in title, text, url order.
-  url_template = "{title}{text}{url}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("My%20titleMy%20texthttps%3A%2F%2Fwww.google.com%2F",
-            url_template_filled);
-
-  // One of each placeholder, in url, text, title order.
-  url_template = "{url}{text}{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("https%3A%2F%2Fwww.google.com%2FMy%20textMy%20title",
-            url_template_filled);
-
-  // Two of each placeholder, some next to each other, others not.
-  url_template = "{title}{url}{text}{text}{title}{url}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ(
-      "My%20titlehttps%3A%2F%2Fwww.google.com%2FMy%20textMy%20textMy%20"
-      "titlehttps%3A%2F%2Fwww.google.com%2F",
-      url_template_filled);
-
-  // Placeholders are in a query string, as values. The expected use case.
-  // Two of each placeholder, some next to each other, others not.
-  url_template =
-      "?title={title}&url={url}&text={text}&text={text}&"
-      "title={title}&url={url}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ(
-      "?title=My%20title&url=https%3A%2F%2Fwww.google.com%2F&text=My%20text&"
-      "text=My%20text&title=My%20title&url=https%3A%2F%2Fwww.google.com%2F",
-      url_template_filled);
-
-  // Badly nested placeholders.
-  url_template = "{";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_FALSE(succeeded);
-
-  url_template = "{title";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_FALSE(succeeded);
-
-  url_template = "{title{text}}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_FALSE(succeeded);
-
-  url_template = "{title{}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_FALSE(succeeded);
-
-  url_template = "{title}}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_FALSE(succeeded);
-
-  // Placeholder with non-identifier character.
-  url_template = "{title?}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_FALSE(succeeded);
-
-  // Placeholder with digit character.
-  url_template = "{title1}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("", url_template_filled);
-
-  // Empty placeholder.
-  url_template = "{}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("", url_template_filled);
-
-  // Unexpected placeholders.
-  url_template = "{nonexistentplaceholder}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("", url_template_filled);
-
-  // |url_template| with % escapes.
-  url_template = "%20{title}%20";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(url_template, kTitle, kText,
-                                                    url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("%20My%20title%20", url_template_filled);
-
-  // Share data that contains percent escapes.
-  url_template = "{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(
-      url_template, "My%20title", kText, url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("My%2520title", url_template_filled);
-
-  // Share data that contains placeholders. These should not be replaced.
-  url_template = "{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(
-      url_template, "{title}", kText, url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("%7Btitle%7D", url_template_filled);
-
-  // All characters that shouldn't be escaped.
-  url_template = "{title}";
-  succeeded =
-      ShareServiceImpl::ReplacePlaceholders(url_template,
-                                            "-_.!~*'()0123456789"
-                                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                            "abcdefghijklmnopqrstuvwxyz",
-                                            kText, url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ(
-      "-_.!~*'()0123456789"
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      "abcdefghijklmnopqrstuvwxyz",
-      url_template_filled);
-
-  // All characters that should be escaped.
-  url_template = "{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(
-      url_template, " \"#$%&+,/:;<=>?@[\\]^`{|}", kText, url,
-      &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ(
-      "%20%22%23%24%25%26%2B%2C%2F%3A%3B%3C%3D%3E%3F%40%5B%5C%5D%5E%60%7B%7C%"
-      "7D",
-      url_template_filled);
-
-  // Unicode chars.
-  // U+263B
-  url_template = "{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(
-      url_template, "\xe2\x98\xbb", kText, url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("%E2%98%BB", url_template_filled);
-
-  // U+00E9
-  url_template = "{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(
-      url_template, "\xc3\xa9", kText, url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("%C3%A9", url_template_filled);
-
-  // U+1F4A9
-  url_template = "{title}";
-  succeeded = ShareServiceImpl::ReplacePlaceholders(
-      url_template, "\xf0\x9f\x92\xa9", kText, url, &url_template_filled);
-  EXPECT_TRUE(succeeded);
-  EXPECT_EQ("%F0%9F%92%A9", url_template_filled);
 }

@@ -15,7 +15,6 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/crl_set.h"
-#include "net/cert/crl_set_storage.h"
 #include "net/cert/test_keychain_search_list_mac.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
@@ -72,12 +71,11 @@ TEST(CertVerifyProcMacTest, MacCRLIntermediate) {
 
   std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> intermediates;
   intermediates.push_back(
-      x509_util::DupCryptoBuffer(path_2_certs[1]->cert_buffer()));  // B-by-C
+      bssl::UpRef(path_2_certs[1]->cert_buffer()));  // B-by-C
   intermediates.push_back(
-      x509_util::DupCryptoBuffer(path_2_certs[2]->cert_buffer()));  // C-by-E
+      bssl::UpRef(path_2_certs[2]->cert_buffer()));  // C-by-E
   scoped_refptr<X509Certificate> cert = X509Certificate::CreateFromBuffer(
-      x509_util::DupCryptoBuffer(path_3_certs[0]->cert_buffer()),
-      std::move(intermediates));
+      bssl::UpRef(path_3_certs[0]->cert_buffer()), std::move(intermediates));
   ASSERT_TRUE(cert);
 
   std::unique_ptr<TestKeychainSearchList> test_keychain_search_list(
@@ -103,7 +101,7 @@ TEST(CertVerifyProcMacTest, MacCRLIntermediate) {
   EXPECT_TRUE(base::ReadFileToString(
       GetTestCertsDirectory().AppendASCII("multi-root-crlset-C.raw"),
       &crl_set_bytes));
-  ASSERT_TRUE(CRLSetStorage::Parse(crl_set_bytes, &crl_set));
+  ASSERT_TRUE(CRLSet::Parse(crl_set_bytes, &crl_set));
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -123,11 +121,11 @@ TEST(CertVerifyProcMacTest, MacCRLIntermediate) {
 
   scoped_refptr<X509Certificate> intermediate =
       X509Certificate::CreateFromBuffer(
-          x509_util::DupCryptoBuffer(verified_intermediates[1].get()), {});
+          bssl::UpRef(verified_intermediates[1].get()), {});
   ASSERT_TRUE(intermediate);
 
   scoped_refptr<X509Certificate> expected_intermediate = path_3_certs[2];
-  EXPECT_TRUE(expected_intermediate->Equals(intermediate.get()))
+  EXPECT_TRUE(expected_intermediate->EqualsExcludingChain(intermediate.get()))
       << "Expected: " << expected_intermediate->subject().common_name
       << " issued by " << expected_intermediate->issuer().common_name
       << "; Got: " << intermediate->subject().common_name << " issued by "
@@ -138,9 +136,9 @@ TEST(CertVerifyProcMacTest, MacCRLIntermediate) {
 // one using SHA1), that the keychain reordering hack will cause the better
 // root in the System Roots to be used instead.
 TEST(CertVerifyProcMacTest, MacKeychainReordering) {
-  // Note: target cert expires Apr  2 23:59:59 2018 GMT
+  // Note: target cert expires Dec 30 23:59:59 2019 GMT
   scoped_refptr<X509Certificate> cert = CreateCertificateChainFromFile(
-      GetTestCertsDirectory(), "tripadvisor-verisign-chain.pem",
+      GetTestCertsDirectory(), "gms.hongleong.com.my-verisign-chain.pem",
       X509Certificate::FORMAT_AUTO);
   ASSERT_TRUE(cert);
 
@@ -166,12 +164,11 @@ TEST(CertVerifyProcMacTest, MacKeychainReordering) {
   int flags = 0;
   CertVerifyResult verify_result;
   scoped_refptr<CertVerifyProc> verify_proc = new CertVerifyProcMac;
-  int error = verify_proc->Verify(cert.get(), "www.tripadvisor.com",
+  int error = verify_proc->Verify(cert.get(), "gms.hongleong.com.my",
                                   std::string(), flags, nullptr /* crl_set */,
                                   CertificateList(), &verify_result);
 
   ASSERT_EQ(OK, error);
-  EXPECT_EQ(0U, verify_result.cert_status);
   EXPECT_FALSE(verify_result.has_sha1);
   ASSERT_TRUE(verify_result.verified_cert.get());
 

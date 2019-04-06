@@ -10,7 +10,12 @@
 #include <memory>
 
 struct wl_buffer;
+struct wl_callback;
 struct wl_compositor;
+struct wl_data_device_manager;
+struct wl_data_device;
+struct wl_data_offer;
+struct wl_data_source;
 struct wl_keyboard;
 struct wl_output;
 struct wl_pointer;
@@ -18,12 +23,18 @@ struct wl_registry;
 struct wl_seat;
 struct wl_shm;
 struct wl_shm_pool;
+struct wl_subcompositor;
+struct wl_subsurface;
 struct wl_surface;
+struct wl_touch;
 struct xdg_shell;
 struct xdg_surface;
+struct xdg_popup;
 struct zxdg_shell_v6;
 struct zxdg_surface_v6;
 struct zxdg_toplevel_v6;
+struct zxdg_popup_v6;
+struct zxdg_positioner_v6;
 
 namespace wl {
 
@@ -37,9 +48,39 @@ struct ObjectTraits<wl_buffer> {
 };
 
 template <>
+struct ObjectTraits<wl_callback> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_callback*);
+};
+
+template <>
 struct ObjectTraits<wl_compositor> {
   static const wl_interface* interface;
   static void (*deleter)(wl_compositor*);
+};
+
+template <>
+struct ObjectTraits<wl_data_device_manager> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_data_device_manager*);
+};
+
+template <>
+struct ObjectTraits<wl_data_device> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_data_device*);
+};
+
+template <>
+struct ObjectTraits<wl_data_offer> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_data_offer*);
+};
+
+template <>
+struct ObjectTraits<wl_data_source> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_data_source*);
 };
 
 template <>
@@ -91,9 +132,27 @@ struct ObjectTraits<wl_shm_pool> {
 };
 
 template <>
+struct ObjectTraits<wl_subcompositor> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_subcompositor*);
+};
+
+template <>
+struct ObjectTraits<wl_subsurface> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_subsurface*);
+};
+
+template <>
 struct ObjectTraits<wl_surface> {
   static const wl_interface* interface;
   static void (*deleter)(wl_surface*);
+};
+
+template <>
+struct ObjectTraits<wl_touch> {
+  static const wl_interface* interface;
+  static void (*deleter)(wl_touch*);
 };
 
 template <>
@@ -106,6 +165,12 @@ template <>
 struct ObjectTraits<xdg_surface> {
   static const wl_interface* interface;
   static void (*deleter)(xdg_surface*);
+};
+
+template <>
+struct ObjectTraits<xdg_popup> {
+  static const wl_interface* interface;
+  static void (*deleter)(xdg_popup*);
 };
 
 template <>
@@ -124,6 +189,18 @@ template <>
 struct ObjectTraits<zxdg_toplevel_v6> {
   static const wl_interface* interface;
   static void (*deleter)(zxdg_toplevel_v6*);
+};
+
+template <>
+struct ObjectTraits<zxdg_popup_v6> {
+  static const wl_interface* interface;
+  static void (*deleter)(zxdg_popup_v6*);
+};
+
+template <>
+struct ObjectTraits<zxdg_positioner_v6> {
+  static const wl_interface* interface;
+  static void (*deleter)(zxdg_positioner_v6*);
 };
 
 struct Deleter {

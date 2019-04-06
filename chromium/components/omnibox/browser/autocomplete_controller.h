@@ -15,6 +15,7 @@
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -22,6 +23,7 @@
 #include "components/omnibox/browser/autocomplete_result.h"
 
 class AutocompleteControllerDelegate;
+class DocumentProvider;
 class HistoryURLProvider;
 class KeywordProvider;
 class SearchProvider;
@@ -48,7 +50,8 @@ class ZeroSuggestProvider;
 //
 // The coordinator for autocomplete queries, responsible for combining the
 // matches from a series of providers into one AutocompleteResult.
-class AutocompleteController : public AutocompleteProviderListener {
+class AutocompleteController : public AutocompleteProviderListener,
+                               public base::trace_event::MemoryDumpProvider {
  public:
   typedef std::vector<scoped_refptr<AutocompleteProvider> > Providers;
 
@@ -147,8 +150,10 @@ class AutocompleteController : public AutocompleteProviderListener {
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewTest, DoesNotUpdateAutocompleteOnBlur);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, FriendlyAccessibleLabel);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, AccessiblePopup);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelTest, SetSelectedLine);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelTest, TestFocusFixing);
 
   // Updates |result_| to reflect the current provider state and fires
   // notifications.  If |regenerate_result| then we clear the result
@@ -199,6 +204,11 @@ class AutocompleteController : public AutocompleteProviderListener {
   void StopHelper(bool clear_result,
                   bool due_to_user_inactivity);
 
+  // MemoryDumpProvider:
+  bool OnMemoryDump(
+      const base::trace_event::MemoryDumpArgs& args,
+      base::trace_event::ProcessMemoryDump* process_memory_dump) override;
+
   AutocompleteControllerDelegate* delegate_;
 
   // The client passed to the providers.
@@ -206,6 +216,8 @@ class AutocompleteController : public AutocompleteProviderListener {
 
   // A list of all providers.
   Providers providers_;
+
+  DocumentProvider* document_provider_;
 
   HistoryURLProvider* history_url_provider_;
 

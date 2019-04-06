@@ -20,17 +20,23 @@ per-file transform*=vollick@chromium.org
 per-file interpolated_transform*=danakj@chromium.org
 per-file interpolated_transform*=vollick@chromium.org
 
+# Skia geometry helpers.
+per-file skia_util*=danakj@chromium.org
+
 # GPU memory buffer and GpuFence interfaces.
 per-file gpu_fence*=reveman@chromium.org
+per-file gpu_fence*=dcastagna@chromium.org
 per-file gpu_memory_buffer*=reveman@chromium.org
+per-file gpu_memory_buffer*=dcastagna@chromium.org
 per-file buffer_format*=reveman@chromium.org
+per-file buffer_format*=dcastagna@chromium.org
 per-file *buffer_types.*=reveman@chromium.org
+per-file *buffer_types.*=dcastagna@chromium.org
 
 # Vector icons.
 per-file *vector_icon*=estade@chromium.org
 
 # If you're doing structural changes get a review from one of the OWNERS.
-per-file *.gyp*=*
 per-file BUILD.gn=*
 
 # COMPONENT: UI>GFX

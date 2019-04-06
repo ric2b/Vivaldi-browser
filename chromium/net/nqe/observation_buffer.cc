@@ -23,7 +23,7 @@ namespace internal {
 
 ObservationBuffer::ObservationBuffer(
     const NetworkQualityEstimatorParams* params,
-    base::TickClock* tick_clock,
+    const base::TickClock* tick_clock,
     double weight_multiplier_per_second,
     double weight_multiplier_per_signal_level)
     : params_(params),
@@ -37,6 +37,15 @@ ObservationBuffer::ObservationBuffer(
   DCHECK_GE(1.0, weight_multiplier_per_signal_level_);
   DCHECK(params_);
   DCHECK(tick_clock_);
+}
+
+ObservationBuffer::ObservationBuffer(const ObservationBuffer& other)
+    : params_(other.params_),
+      weight_multiplier_per_second_(other.weight_multiplier_per_second_),
+      weight_multiplier_per_signal_level_(
+          other.weight_multiplier_per_signal_level_),
+      tick_clock_(other.tick_clock_) {
+  DCHECK(other.observations_.empty());
 }
 
 ObservationBuffer::~ObservationBuffer() = default;

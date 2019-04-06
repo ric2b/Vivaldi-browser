@@ -24,7 +24,6 @@ import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.widget.ListMenuButton;
 import org.chromium.chrome.browser.widget.TintedImageView;
 
@@ -40,7 +39,7 @@ public class LanguageListBaseAdapter
     private static final int ANIMATION_DELAY_MS = 100;
 
     /**
-     * Listener used to respond to click event on a langauge item.
+     * Listener used to respond to click event on a language item.
      */
     interface ItemClickListener {
         /**
@@ -105,9 +104,8 @@ public class LanguageListBaseAdapter
             mMoreButton.setVisibility(View.VISIBLE);
             mMoreButton.setDelegate(delegate);
             // Set item row end padding 0 when MenuButton is visible.
-            ApiCompatibilityUtils.setPaddingRelative(itemView,
-                    ApiCompatibilityUtils.getPaddingStart(itemView), itemView.getPaddingTop(), 0,
-                    itemView.getPaddingBottom());
+            ViewCompat.setPaddingRelative(itemView, ViewCompat.getPaddingStart(itemView),
+                    itemView.getPaddingTop(), 0, itemView.getPaddingBottom());
         }
 
         /**
@@ -239,13 +237,8 @@ public class LanguageListBaseAdapter
 
                     // Commit the postion change for the dragged language when it's dropped.
                     if (mDraggedLanguage != null) {
-                        int offset = viewHolder.getAdapterPosition() - mDraggedLanguage.first;
-                        if (offset != 0) {
-                            PrefServiceBridge.getInstance().moveAcceptLanguage(
-                                    mDraggedLanguage.second, offset);
-                            LanguagesManager.recordAction(
-                                    LanguagesManager.ACTION_LANGUAGE_LIST_REORDERED);
-                        }
+                        LanguagesManager.getInstance().moveLanguagePosition(mDraggedLanguage.second,
+                                viewHolder.getAdapterPosition() - mDraggedLanguage.first, false);
                         mDraggedLanguage = null;
                     }
 
@@ -291,5 +284,12 @@ public class LanguageListBaseAdapter
     void disableDrag() {
         mDragEnabled = false;
         if (mItemTouchHelper != null) mItemTouchHelper.attachToRecyclerView(null);
+    }
+
+    /**
+     * Returns whether the drag & drop is enabled.
+     */
+    boolean isDragEnabled() {
+        return mDragEnabled;
     }
 }

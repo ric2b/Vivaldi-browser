@@ -4,7 +4,7 @@
 
 #include "ash/system/tray/actionable_view.h"
 
-#include "ash/ash_constants.h"
+#include "ash/public/cpp/ash_constants.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/tray/tray_constants.h"
@@ -63,12 +63,12 @@ bool ActionableView::OnKeyPressed(const ui::KeyEvent& event) {
 }
 
 void ActionableView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->role = ax::mojom::Role::kButton;
   node_data->SetName(accessible_name());
 }
 
 std::unique_ptr<views::InkDrop> ActionableView::CreateInkDrop() {
-  return TrayPopupUtils::CreateInkDrop(ink_drop_style_, this);
+  return TrayPopupUtils::CreateInkDrop(this);
 }
 
 std::unique_ptr<views::InkDropRipple> ActionableView::CreateInkDropRipple()

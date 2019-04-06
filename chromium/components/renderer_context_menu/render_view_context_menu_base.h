@@ -20,7 +20,7 @@
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "content/public/common/context_menu_params.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -50,6 +50,8 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
                                 const base::string16& title) = 0;
 #if defined(OS_CHROMEOS)
     virtual void UpdateMenuIcon(int command_id, const gfx::Image& image) = 0;
+
+    virtual void AddSeparatorAt(int index) = 0;
 #endif
   };
 
@@ -105,6 +107,7 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
                       bool hidden,
                       const base::string16& title) override;
   void UpdateMenuIcon(int command_id, const gfx::Image& image) override;
+  void AddSeparatorBelowMenuItem(int command_id) override;
   content::RenderViewHost* GetRenderViewHost() const override;
   content::WebContents* GetWebContents() const override;
   content::BrowserContext* GetBrowserContext() const override;

@@ -8,9 +8,11 @@
 #include "base/threading/thread_checker.h"
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_capture_device_client.h"
+#include "media/capture/video/video_capture_device_factory.h"
+#include "media/capture/video/video_capture_jpeg_decoder.h"
 #include "media/capture/video_capture_types.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
-#include "services/video_capture/public/interfaces/device.mojom.h"
+#include "services/video_capture/public/mojom/device.mojom.h"
 
 namespace video_capture {
 
@@ -23,8 +25,8 @@ class DeviceMediaToMojoAdapter : public mojom::Device {
   DeviceMediaToMojoAdapter(
       std::unique_ptr<service_manager::ServiceContextRef> service_ref,
       std::unique_ptr<media::VideoCaptureDevice> device,
-      const media::VideoCaptureJpegDecoderFactoryCB&
-          jpeg_decoder_factory_callback);
+      media::MojoJpegDecodeAcceleratorFactoryCB jpeg_decoder_factory_callback,
+      scoped_refptr<base::SequencedTaskRunner> jpeg_decoder_task_runner);
   ~DeviceMediaToMojoAdapter() override;
 
   // mojom::Device implementation.
@@ -50,10 +52,13 @@ class DeviceMediaToMojoAdapter : public mojom::Device {
  private:
   const std::unique_ptr<service_manager::ServiceContextRef> service_ref_;
   const std::unique_ptr<media::VideoCaptureDevice> device_;
-  media::VideoCaptureJpegDecoderFactoryCB jpeg_decoder_factory_callback_;
+  const media::MojoJpegDecodeAcceleratorFactoryCB
+      jpeg_decoder_factory_callback_;
+  scoped_refptr<base::SequencedTaskRunner> jpeg_decoder_task_runner_;
+  std::unique_ptr<ReceiverMojoToMediaAdapter> receiver_;
   bool device_started_;
-  ReceiverMojoToMediaAdapter* receiver_adapter_ptr_ = nullptr;
   base::ThreadChecker thread_checker_;
+  base::WeakPtrFactory<DeviceMediaToMojoAdapter> weak_factory_;
 };
 
 }  // namespace video_capture

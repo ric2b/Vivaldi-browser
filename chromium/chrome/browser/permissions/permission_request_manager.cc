@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/containers/circular_deque.h"
+#include "base/feature_list.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string16.h"
@@ -24,67 +25,14 @@
 #include "content/public/browser/navigation_handle.h"
 #include "url/origin.h"
 
-#if !defined(OS_ANDROID)
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/chrome_feature_list.h"
+#else  // !defined(OS_ANDROID)
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "extensions/common/constants.h"
-#endif  // !defined(OS_ANDROID)
+#endif
 
 namespace {
-
-class CancelledRequest : public PermissionRequest {
- public:
-  explicit CancelledRequest(PermissionRequest* cancelled)
-      : icon_(cancelled->GetIconId()),
-#if defined(OS_ANDROID)
-        message_(cancelled->GetMessageText()),
-#endif
-        message_fragment_(cancelled->GetMessageTextFragment()),
-        origin_(cancelled->GetOrigin()),
-        request_type_(cancelled->GetPermissionRequestType()),
-        gesture_type_(cancelled->GetGestureType()),
-        content_settings_type_(cancelled->GetContentSettingsType()) {
-  }
-  ~CancelledRequest() override {}
-
-  IconId GetIconId() const override { return icon_; }
-#if defined(OS_ANDROID)
-  base::string16 GetMessageText() const override { return message_; }
-#endif
-  base::string16 GetMessageTextFragment() const override {
-    return message_fragment_;
-  }
-  GURL GetOrigin() const override { return origin_; }
-
-  // These are all no-ops since the placeholder is non-forwarding.
-  void PermissionGranted() override {}
-  void PermissionDenied() override {}
-  void Cancelled() override {}
-
-  void RequestFinished() override { delete this; }
-
-  PermissionRequestType GetPermissionRequestType() const override {
-    return request_type_;
-  }
-
-  PermissionRequestGestureType GetGestureType() const override {
-    return gesture_type_;
-  }
-
-  ContentSettingsType GetContentSettingsType() const override {
-    return content_settings_type_;
-  }
-
- private:
-  IconId icon_;
-#if defined(OS_ANDROID)
-  base::string16 message_;
-#endif
-  base::string16 message_fragment_;
-  GURL origin_;
-  PermissionRequestType request_type_;
-  PermissionRequestGestureType gesture_type_;
-  ContentSettingsType content_settings_type_;
-};
 
 bool IsMessageTextEqual(PermissionRequest* a,
                         PermissionRequest* b) {
@@ -138,7 +86,8 @@ PermissionRequestManager::PermissionRequestManager(
       view_factory_(base::Bind(&PermissionPrompt::Create)),
       view_(nullptr),
       main_frame_has_fully_loaded_(false),
-      tab_is_visible_(web_contents->IsVisible()),
+      tab_is_hidden_(web_contents->GetVisibility() ==
+                     content::Visibility::HIDDEN),
       auto_response_for_test_(NONE),
       weak_factory_(this) {}
 
@@ -149,7 +98,11 @@ PermissionRequestManager::~PermissionRequestManager() {
 }
 
 void PermissionRequestManager::AddRequest(PermissionRequest* request) {
-  DCHECK(!vr::VrTabHelper::IsInVr(web_contents()));
+#if defined(OS_ANDROID)
+  DCHECK(!vr::VrTabHelper::IsInVr(web_contents()) ||
+         base::FeatureList::IsEnabled(
+             chrome::android::kVrBrowsingNativeAndroidUi));
+#endif
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDenyPermissionPrompts)) {
@@ -201,56 +154,6 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
 
   if (!IsBubbleVisible())
     ScheduleShowBubble();
-}
-
-void PermissionRequestManager::CancelRequest(PermissionRequest* request) {
-  // First look in the queued requests, where we can simply finish the request
-  // and go on.
-  base::circular_deque<PermissionRequest*>::iterator queued_requests_iter;
-  for (queued_requests_iter = queued_requests_.begin();
-       queued_requests_iter != queued_requests_.end(); queued_requests_iter++) {
-    if (*queued_requests_iter == request) {
-      RequestFinishedIncludingDuplicates(*queued_requests_iter);
-      queued_requests_.erase(queued_requests_iter);
-      return;
-    }
-  }
-
-  if (!requests_.empty() && requests_[0] == request) {
-    // Grouped (mic+camera) requests are currently never cancelled.
-    // TODO(timloh): We should fix this at some point.
-    DCHECK_EQ(static_cast<size_t>(1), requests_.size());
-
-    // We can finalize the prompt if we aren't showing the dialog (because we
-    // switched tabs with an active prompt), or if we are showing it and it
-    // can accept the update.
-    if (!view_ || view_->CanAcceptRequestUpdate()) {
-      FinalizeBubble(PermissionAction::IGNORED);
-      return;
-    }
-
-    // Cancel the existing request and replace it with a dummy.
-    PermissionRequest* cancelled_request = new CancelledRequest(request);
-    RequestFinishedIncludingDuplicates(request);
-    requests_[0] = cancelled_request;
-    return;
-  }
-
-  // Since |request| wasn't found in queued_requests_ or
-  // requests_ it must have been marked as a duplicate. We can't search
-  // duplicate_requests_ by value, so instead use GetExistingRequest to find the
-  // key (request it was duped against), and iterate through duplicates of that.
-  PermissionRequest* existing_request = GetExistingRequest(request);
-  auto range = duplicate_requests_.equal_range(existing_request);
-  for (auto it = range.first; it != range.second; ++it) {
-    if (request == it->second) {
-      it->second->RequestFinished();
-      duplicate_requests_.erase(it);
-      return;
-    }
-  }
-
-  NOTREACHED();  // Callers should not cancel requests that are not pending.
 }
 
 void PermissionRequestManager::UpdateAnchorPosition() {
@@ -307,38 +210,34 @@ void PermissionRequestManager::WebContentsDestroyed() {
   // returning from this function is the only safe thing to do.
 }
 
-void PermissionRequestManager::WasShown() {
-  // This function can be called when the tab is already showing.
-  if (tab_is_visible_)
+void PermissionRequestManager::OnVisibilityChanged(
+    content::Visibility visibility) {
+  bool tab_was_hidden = tab_is_hidden_;
+  tab_is_hidden_ = visibility == content::Visibility::HIDDEN;
+  if (tab_was_hidden == tab_is_hidden_)
     return;
 
-  tab_is_visible_ = true;
+  if (tab_is_hidden_) {
+#if !defined(OS_ANDROID)
+    if (view_)
+      DeleteBubble();
+#endif
+    return;
+  }
 
   if (!main_frame_has_fully_loaded_)
     return;
 
   if (requests_.empty()) {
     DequeueRequestsAndShowBubble();
-  } else {
-    // We switched tabs away and back while a prompt was active.
-#if defined(OS_ANDROID)
-    DCHECK(view_);
-#else
-    ShowBubble(/*is_reshow=*/true);
-#endif
-  }
-}
-
-void PermissionRequestManager::WasHidden() {
-  // This function can be called when the tab is not showing.
-  if (!tab_is_visible_)
     return;
+  }
 
-  tab_is_visible_ = false;
-
-#if !defined(OS_ANDROID)
-  if (view_)
-    DeleteBubble();
+#if defined(OS_ANDROID)
+  // We switched tabs away and back while a prompt was active.
+  DCHECK(view_);
+#else
+  ShowBubble(/*is_reshow=*/true);
 #endif
 }
 
@@ -420,7 +319,7 @@ void PermissionRequestManager::ScheduleShowBubble() {
 void PermissionRequestManager::DequeueRequestsAndShowBubble() {
   if (view_)
     return;
-  if (!main_frame_has_fully_loaded_ || !tab_is_visible_)
+  if (!main_frame_has_fully_loaded_ || tab_is_hidden_)
     return;
   if (queued_requests_.empty())
     return;
@@ -442,7 +341,7 @@ void PermissionRequestManager::ShowBubble(bool is_reshow) {
   DCHECK(!view_);
   DCHECK(!requests_.empty());
   DCHECK(main_frame_has_fully_loaded_);
-  DCHECK(tab_is_visible_);
+  DCHECK(!tab_is_hidden_);
 
   view_ = view_factory_.Run(web_contents(), this);
   if (!is_reshow)

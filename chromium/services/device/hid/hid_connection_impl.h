@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef DEVICE_HID_HID_CONNECTION_IMPL_H_
-#define DEVICE_HID_HID_CONNECTION_IMPL_H_
+#ifndef SERVICES_DEVICE_HID_HID_CONNECTION_IMPL_H_
+#define SERVICES_DEVICE_HID_HID_CONNECTION_IMPL_H_
 
 #include "base/memory/ref_counted.h"
 #include "services/device/hid/hid_connection.h"
-#include "services/device/public/interfaces/hid.mojom.h"
+#include "services/device/public/mojom/hid.mojom.h"
 
 namespace device {
 
@@ -50,4 +50,4 @@ class HidConnectionImpl : public mojom::HidConnection {
 
 }  // namespace device
 
-#endif  // DEVICE_HID_HID_CONNECTION_IMPL_H_
+#endif  // SERVICES_DEVICE_HID_HID_CONNECTION_IMPL_H_

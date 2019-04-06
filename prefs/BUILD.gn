@@ -1,3 +1,5 @@
+import("//build/config/jumbo.gni")
+
 config("prefs_include_dirs") {
   include_dirs=["$root_gen_dir/vivaldi"]
 }
@@ -40,17 +42,26 @@ static_library("prefs") {
     "vivaldi_browser_prefs_linux.cc",
     "vivaldi_browser_prefs_mac.mm",
     "vivaldi_browser_prefs_win.cc",
-    "vivaldi_pref_names.cc",
-    "vivaldi_pref_names.h",
   ]
   sources += get_target_outputs(":prefs_files_generator")
   deps = [
     "//skia",
     ":prefs_files_generator",
+    ":prefs_strings",
+  ]
+  if(!is_android) {
+    deps += [ "//apps:apps" ]
+  }
+}
+
+static_library("prefs_strings") {
+  sources = [
+    "vivaldi_pref_names.cc",
+    "vivaldi_pref_names.h",
   ]
 }
 
-static_library("browser_prefs") {
+jumbo_static_library("browser_prefs") {
   sources = [
     "native_settings_observer.cc",
     "native_settings_observer.h",

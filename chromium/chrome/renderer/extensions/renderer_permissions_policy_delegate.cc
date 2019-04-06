@@ -4,8 +4,9 @@
 
 #include "chrome/renderer/extensions/renderer_permissions_policy_delegate.h"
 
+#include "base/command_line.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/renderer/searchbox/search_bouncer.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/manifest_constants.h"
@@ -24,27 +25,23 @@ RendererPermissionsPolicyDelegate::~RendererPermissionsPolicyDelegate() {
   PermissionsData::SetPolicyDelegate(NULL);
 }
 
-bool RendererPermissionsPolicyDelegate::CanExecuteScriptOnPage(
-    const Extension* extension,
+bool RendererPermissionsPolicyDelegate::IsRestrictedUrl(
     const GURL& document_url,
-    int tab_id,
     std::string* error) {
-  if (PermissionsData::CanExecuteScriptEverywhere(extension))
-    return true;
-
   if (dispatcher_->IsExtensionActive(kWebStoreAppId)) {
     if (error)
       *error = errors::kCannotScriptGallery;
-    return false;
+    return true;
   }
 
-  if (SearchBouncer::GetInstance()->IsNewTabPage(document_url)) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kInstantProcess)) {
     if (error)
       *error = errors::kCannotScriptNtp;
-    return false;
+    return true;
   }
 
-  return true;
+  return false;
 }
 
 }  // namespace extensions

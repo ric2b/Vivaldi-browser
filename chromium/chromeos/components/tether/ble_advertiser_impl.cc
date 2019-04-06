@@ -5,17 +5,34 @@
 #include "chromeos/components/tether/ble_advertiser_impl.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/components/tether/error_tolerant_ble_advertisement_impl.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/services/secure_channel/ble_service_data_helper.h"
+#include "chromeos/services/secure_channel/device_id_pair.h"
+#include "chromeos/services/secure_channel/error_tolerant_ble_advertisement_impl.h"
 #include "components/cryptauth/ble/ble_advertisement_generator.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
-#include "components/cryptauth/remote_device.h"
-#include "components/proximity_auth/logging/logging.h"
+#include "components/cryptauth/remote_device_ref.h"
 #include "device/bluetooth/bluetooth_advertisement.h"
 
 namespace chromeos {
 
 namespace tether {
+
+namespace {
+
+const char kStubLocalDeviceId[] = "N/A";
+
+// Instant Tethering does not make use of the "local device ID" argument, since
+// all connections are from the same device.
+// TODO(hansberry): Remove when SecureChannelClient migration is complete.
+secure_channel::DeviceIdPair StubDeviceIdPair(
+    const std::string& remote_device_id) {
+  return secure_channel::DeviceIdPair(remote_device_id, kStubLocalDeviceId);
+}
+
+}  // namespace
 
 // static
 BleAdvertiserImpl::Factory* BleAdvertiserImpl::Factory::factory_instance_ =
@@ -23,14 +40,13 @@ BleAdvertiserImpl::Factory* BleAdvertiserImpl::Factory::factory_instance_ =
 
 // static
 std::unique_ptr<BleAdvertiser> BleAdvertiserImpl::Factory::NewInstance(
-    cryptauth::LocalDeviceDataProvider* local_device_data_provider,
-    cryptauth::RemoteBeaconSeedFetcher* remote_beacon_seed_fetcher,
-    BleSynchronizerBase* ble_synchronizer) {
+    secure_channel::BleServiceDataHelper* ble_service_data_helper,
+    secure_channel::BleSynchronizerBase* ble_synchronizer) {
   if (!factory_instance_)
     factory_instance_ = new Factory();
 
-  return factory_instance_->BuildInstance(
-      local_device_data_provider, remote_beacon_seed_fetcher, ble_synchronizer);
+  return factory_instance_->BuildInstance(ble_service_data_helper,
+                                          ble_synchronizer);
 }
 
 // static
@@ -39,11 +55,10 @@ void BleAdvertiserImpl::Factory::SetInstanceForTesting(Factory* factory) {
 }
 
 std::unique_ptr<BleAdvertiser> BleAdvertiserImpl::Factory::BuildInstance(
-    cryptauth::LocalDeviceDataProvider* local_device_data_provider,
-    cryptauth::RemoteBeaconSeedFetcher* remote_beacon_seed_fetcher,
-    BleSynchronizerBase* ble_synchronizer) {
-  return std::make_unique<BleAdvertiserImpl>(
-      local_device_data_provider, remote_beacon_seed_fetcher, ble_synchronizer);
+    secure_channel::BleServiceDataHelper* ble_service_data_helper,
+    secure_channel::BleSynchronizerBase* ble_synchronizer) {
+  return base::WrapUnique(
+      new BleAdvertiserImpl(ble_service_data_helper, ble_synchronizer));
 }
 
 BleAdvertiserImpl::AdvertisementMetadata::AdvertisementMetadata(
@@ -54,11 +69,9 @@ BleAdvertiserImpl::AdvertisementMetadata::AdvertisementMetadata(
 BleAdvertiserImpl::AdvertisementMetadata::~AdvertisementMetadata() = default;
 
 BleAdvertiserImpl::BleAdvertiserImpl(
-    cryptauth::LocalDeviceDataProvider* local_device_data_provider,
-    cryptauth::RemoteBeaconSeedFetcher* remote_beacon_seed_fetcher,
-    BleSynchronizerBase* ble_synchronizer)
-    : remote_beacon_seed_fetcher_(remote_beacon_seed_fetcher),
-      local_device_data_provider_(local_device_data_provider),
+    secure_channel::BleServiceDataHelper* ble_service_data_helper,
+    secure_channel::BleSynchronizerBase* ble_synchronizer)
+    : ble_service_data_helper_(ble_service_data_helper),
       ble_synchronizer_(ble_synchronizer),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this) {}
@@ -67,7 +80,7 @@ BleAdvertiserImpl::~BleAdvertiserImpl() = default;
 
 bool BleAdvertiserImpl::StartAdvertisingToDevice(const std::string& device_id) {
   int index_for_device = -1;
-  for (size_t i = 0; i < kMaxConcurrentAdvertisements; ++i) {
+  for (size_t i = 0; i < secure_channel::kMaxConcurrentAdvertisements; ++i) {
     if (!registered_device_metadata_[i]) {
       index_for_device = i;
       break;
@@ -81,11 +94,12 @@ bool BleAdvertiserImpl::StartAdvertisingToDevice(const std::string& device_id) {
   }
 
   std::unique_ptr<cryptauth::DataWithTimestamp> service_data =
-      cryptauth::BleAdvertisementGenerator::GenerateBleAdvertisement(
-          device_id, local_device_data_provider_, remote_beacon_seed_fetcher_);
+      ble_service_data_helper_->GenerateForegroundAdvertisement(
+          secure_channel::DeviceIdPair(device_id /* remote_device_id */,
+                                       kStubLocalDeviceId));
   if (!service_data) {
     PA_LOG(WARNING) << "Error generating advertisement for device with ID "
-                    << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(
+                    << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
                            device_id)
                     << ". Cannot advertise.";
     return false;
@@ -125,11 +139,11 @@ void BleAdvertiserImpl::SetTaskRunnerForTesting(
 }
 
 void BleAdvertiserImpl::UpdateAdvertisements() {
-  for (size_t i = 0; i < kMaxConcurrentAdvertisements; ++i) {
+  for (size_t i = 0; i < secure_channel::kMaxConcurrentAdvertisements; ++i) {
     std::unique_ptr<AdvertisementMetadata>& metadata =
         registered_device_metadata_[i];
-    std::unique_ptr<ErrorTolerantBleAdvertisement>& advertisement =
-        advertisements_[i];
+    std::unique_ptr<secure_channel::ErrorTolerantBleAdvertisement>&
+        advertisement = advertisements_[i];
 
     // If there is a registered device but no associated advertisement, create
     // the advertisement.
@@ -138,9 +152,9 @@ void BleAdvertiserImpl::UpdateAdvertisements() {
           std::make_unique<cryptauth::DataWithTimestamp>(
               *metadata->service_data);
       advertisements_[i] =
-          ErrorTolerantBleAdvertisementImpl::Factory::NewInstance(
-              metadata->device_id, std::move(service_data_copy),
-              ble_synchronizer_);
+          secure_channel::ErrorTolerantBleAdvertisementImpl::Factory::Get()
+              ->BuildInstance(StubDeviceIdPair(metadata->device_id),
+                              std::move(service_data_copy), ble_synchronizer_);
       continue;
     }
 
@@ -160,9 +174,9 @@ void BleAdvertiserImpl::OnAdvertisementStopped(size_t index) {
 
   // Update advertisements, but do so as part of a new task in the run loop to
   // prevent the possibility of a crash. See crbug.com/776241.
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&BleAdvertiserImpl::UpdateAdvertisements,
-                                    weak_ptr_factory_.GetWeakPtr()));
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&BleAdvertiserImpl::UpdateAdvertisements,
+                                weak_ptr_factory_.GetWeakPtr()));
 
   if (!AreAdvertisementsRegistered())
     NotifyAllAdvertisementsUnregistered();

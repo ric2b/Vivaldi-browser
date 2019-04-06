@@ -11,15 +11,8 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
-#include "base/synchronization/lock.h"
-#include "base/time/time.h"
 #include "storage/common/storage_common_export.h"
-
-namespace base {
-class WaitableEvent;
-}
 
 namespace storage {
 
@@ -42,11 +35,10 @@ class STORAGE_COMMON_EXPORT DatabaseConnections {
                         const base::string16& database_name);
 
   void RemoveAllConnections();
-  void RemoveConnections(
-      const DatabaseConnections& connections,
-      std::vector<std::pair<std::string, base::string16> >* closed_dbs);
+  std::vector<std::pair<std::string, base::string16>> RemoveConnections(
+      const DatabaseConnections& connections);
 
-  // Database sizes can be kept only if IsDatabaseOpened returns true.
+  // Can be called only if IsDatabaseOpened would have returned true.
   int64_t GetOpenDatabaseSize(const std::string& origin_identifier,
                               const base::string16& database_name) const;
   void SetOpenDatabaseSize(const std::string& origin_identifier,
@@ -54,45 +46,20 @@ class STORAGE_COMMON_EXPORT DatabaseConnections {
                            int64_t size);
 
   // Returns a list of the connections, <origin_id, name>.
-  void ListConnections(
-      std::vector<std::pair<std::string, base::string16> > *list) const;
+  std::vector<std::pair<std::string, base::string16>> ListConnections() const;
 
  private:
-  // Mapping from name to <openCount, size>
-  typedef std::map<base::string16, std::pair<int, int64_t>> DBConnections;
-  typedef std::map<std::string, DBConnections> OriginConnections;
-  mutable OriginConnections connections_;  // mutable for GetOpenDatabaseSize
+  // Maps database names to (open count, database size).
+  using DBConnections = std::map<base::string16, std::pair<int, int64_t>>;
+  // Maps origin identifiers to DBConnections.
+  using OriginConnections = std::map<std::string, DBConnections>;
+
+  OriginConnections connections_;
 
   // Returns true if the last connection was removed.
   bool RemoveConnectionsHelper(const std::string& origin_identifier,
                                const base::string16& database_name,
                                int num_connections);
-};
-
-// A wrapper class that provides thread-safety and the
-// ability to wait until all connections have closed.
-// Intended for use in renderer processes.
-class STORAGE_COMMON_EXPORT DatabaseConnectionsWrapper
-    : public base::RefCountedThreadSafe<DatabaseConnectionsWrapper> {
- public:
-  DatabaseConnectionsWrapper();
-
-  bool HasOpenConnections();
-  void AddOpenConnection(const std::string& origin_identifier,
-                         const base::string16& database_name);
-  void RemoveOpenConnection(const std::string& origin_identifier,
-                            const base::string16& database_name);
-
-  // Returns true if all databases are closed.
-  bool WaitForAllDatabasesToClose(base::TimeDelta timeout);
-
- private:
-  ~DatabaseConnectionsWrapper();
-  friend class base::RefCountedThreadSafe<DatabaseConnectionsWrapper>;
-
-  base::Lock open_connections_lock_;
-  DatabaseConnections open_connections_;
-  base::WaitableEvent* waiting_to_close_event_ = nullptr;
 };
 
 }  // namespace storage

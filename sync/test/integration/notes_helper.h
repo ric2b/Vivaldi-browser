@@ -6,16 +6,9 @@
 #ifndef SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
 #define SYNC_TEST_INTEGRATION_NOTES_HELPER_H_
 
-#include <set>
-#include <string>
-#include <vector>
-
-#include "base/compiler_specific.h"
 #include "notes/notes_model.h"
 #include "notes/notesnode.h"
 #include "notes/tests/notes_contenthelper.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "url/gurl.h"
 
 class GURL;
 using vivaldi::Notes_Model;

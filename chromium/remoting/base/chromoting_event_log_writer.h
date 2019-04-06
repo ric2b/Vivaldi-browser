@@ -13,8 +13,6 @@ class ChromotingEventLogWriter {
  public:
   virtual ~ChromotingEventLogWriter(){};
 
-  virtual void SetAuthToken(const std::string& auth_token) = 0;
-  virtual void SetAuthClosure(const base::Closure& closure) = 0;
   virtual void Log(const ChromotingEvent& entry) = 0;
 };
 

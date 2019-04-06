@@ -615,7 +615,6 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
     destroyed_ = true;
   }
   int GetDialogButtons() const override { return ui::DIALOG_BUTTON_OK; }
-  gfx::Size GetMinimumSize() const override { return gfx::Size(); }
   gfx::Size CalculatePreferredSize() const override {
     return gfx::Size(200, 200);
   }
@@ -790,6 +789,7 @@ TEST_F(BubbleFrameViewTest, LayoutWithIcon) {
   delegate.SetAnchorView(anchor.widget().GetContentsView());
   SkBitmap bitmap;
   bitmap.allocN32Pixels(20, 80);
+  bitmap.eraseColor(SK_ColorYELLOW);
   delegate.set_icon(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
 
   Widget* widget = BubbleDialogDelegateView::CreateBubble(&delegate);

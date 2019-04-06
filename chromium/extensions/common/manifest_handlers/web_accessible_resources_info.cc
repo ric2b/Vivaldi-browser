@@ -39,12 +39,6 @@ WebAccessibleResourcesInfo::~WebAccessibleResourcesInfo() {
 bool WebAccessibleResourcesInfo::IsResourceWebAccessible(
     const Extension* extension,
     const std::string& relative_path) {
-  // For old manifest versions which do not specify web_accessible_resources
-  // we always allow resource loads.
-  if (extension->manifest_version() < 2 &&
-      !WebAccessibleResourcesInfo::HasWebAccessibleResources(extension))
-    return true;
-
   const WebAccessibleResourcesInfo* info = GetResourcesInfo(extension);
   return info &&
          extension->ResourceMatches(
@@ -96,8 +90,9 @@ bool WebAccessibleResourcesHandler::Parse(Extension* extension,
   return true;
 }
 
-const std::vector<std::string> WebAccessibleResourcesHandler::Keys() const {
-  return SingleKey(keys::kWebAccessibleResources);
+base::span<const char* const> WebAccessibleResourcesHandler::Keys() const {
+  static constexpr const char* kKeys[] = {keys::kWebAccessibleResources};
+  return kKeys;
 }
 
 }  // namespace extensions

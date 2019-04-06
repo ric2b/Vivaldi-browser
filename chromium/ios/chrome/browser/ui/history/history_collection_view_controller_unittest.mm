@@ -2,24 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import "ios/chrome/browser/ui/history/history_collection_view_controller.h"
+#import "ios/chrome/browser/ui/history/legacy_history_collection_view_controller.h"
 
 #include <memory>
 
 #include "base/callback.h"
 #include "base/strings/string16.h"
 #import "base/test/ios/wait_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/history/core/browser/browsing_history_service.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/signin/authentication_service_factory.h"
 #include "ios/chrome/browser/signin/authentication_service_fake.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_test_util.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service_mock.h"
 #import "ios/chrome/browser/ui/history/ios_browsing_history_driver.h"
+#include "ios/chrome/browser/ui/history/ios_browsing_history_driver.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #include "ios/chrome/test/block_cleanup_test.h"
 #include "ios/web/public/test/test_web_thread.h"
@@ -58,22 +64,21 @@ std::unique_ptr<KeyedService> BuildMockSyncSetupService(
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
   syncer::SyncService* sync_service =
-      IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
+      ProfileSyncServiceFactory::GetForBrowserState(browser_state);
   return std::make_unique<SyncSetupServiceMock>(sync_service,
                                                 browser_state->GetPrefs());
 }
 
 }  // namespace
 
-@interface HistoryCollectionViewController (
-    Testing)<BrowsingHistoryDriverDelegate>
+@interface LegacyHistoryCollectionViewController (Testing)<HistoryConsumer>
 - (void)didPressClearBrowsingBar;
 @end
 
-class HistoryCollectionViewControllerTest : public BlockCleanupTest {
+class LegacyHistoryCollectionViewControllerTest : public BlockCleanupTest {
  public:
-  HistoryCollectionViewControllerTest() {}
-  ~HistoryCollectionViewControllerTest() override {}
+  LegacyHistoryCollectionViewControllerTest() {}
+  ~LegacyHistoryCollectionViewControllerTest() override {}
 
   void SetUp() override {
     BlockCleanupTest::SetUp();
@@ -88,13 +93,27 @@ class HistoryCollectionViewControllerTest : public BlockCleanupTest {
     sync_setup_service_mock_ = static_cast<SyncSetupServiceMock*>(
         SyncSetupServiceFactory::GetForBrowserState(mock_browser_state_.get()));
     mock_delegate_ = [OCMockObject
-        niceMockForProtocol:@protocol(HistoryCollectionViewControllerDelegate)];
+        niceMockForProtocol:@protocol(
+                                LegacyHistoryCollectionViewControllerDelegate)];
     mock_url_loader_ = [OCMockObject niceMockForProtocol:@protocol(UrlLoader)];
     history_collection_view_controller_ =
-        [[HistoryCollectionViewController alloc]
+        [[LegacyHistoryCollectionViewController alloc]
             initWithLoader:mock_url_loader_
               browserState:mock_browser_state_.get()
                   delegate:mock_delegate_];
+
+    _browsingHistoryDriver = std::make_unique<IOSBrowsingHistoryDriver>(
+        mock_browser_state_.get(), history_collection_view_controller_);
+
+    _browsingHistoryService = std::make_unique<history::BrowsingHistoryService>(
+        _browsingHistoryDriver.get(),
+        ios::HistoryServiceFactory::GetForBrowserState(
+            mock_browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS),
+        ProfileSyncServiceFactory::GetForBrowserState(
+            mock_browser_state_.get()));
+
+    history_collection_view_controller_.historyService =
+        _browsingHistoryService.get();
   }
 
   void TearDown() override {
@@ -108,24 +127,28 @@ class HistoryCollectionViewControllerTest : public BlockCleanupTest {
     BrowsingHistoryService::QueryResultsInfo query_results_info;
     query_results_info.reached_beginning = true;
     [history_collection_view_controller_
-        onQueryCompleteWithResults:results
-                  queryResultsInfo:query_results_info
-               continuationClosure:base::OnceClosure()];
+        historyQueryWasCompletedWithResults:results
+                           queryResultsInfo:query_results_info
+                        continuationClosure:base::OnceClosure()];
   }
 
  protected:
   web::TestWebThreadBundle thread_bundle_;
   id<UrlLoader> mock_url_loader_;
   std::unique_ptr<TestChromeBrowserState> mock_browser_state_;
-  id<HistoryCollectionViewControllerDelegate> mock_delegate_;
-  HistoryCollectionViewController* history_collection_view_controller_;
+  id<LegacyHistoryCollectionViewControllerDelegate> mock_delegate_;
+  LegacyHistoryCollectionViewController* history_collection_view_controller_;
   bool privacy_settings_opened_;
   SyncSetupServiceMock* sync_setup_service_mock_;
-  DISALLOW_COPY_AND_ASSIGN(HistoryCollectionViewControllerTest);
+  DISALLOW_COPY_AND_ASSIGN(LegacyHistoryCollectionViewControllerTest);
+  std::unique_ptr<IOSBrowsingHistoryDriver> _browsingHistoryDriver;
+  std::unique_ptr<history::BrowsingHistoryService> _browsingHistoryService;
 };
 
 // Tests that isEmpty property returns NO after entries have been received.
-TEST_F(HistoryCollectionViewControllerTest, IsEmpty) {
+TEST_F(LegacyHistoryCollectionViewControllerTest, IsEmpty) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kUIRefreshPhase1);
   QueryHistory({{GURL(kTestUrl1), Time::Now()}});
   EXPECT_FALSE([history_collection_view_controller_ isEmpty]);
 }
@@ -134,7 +157,9 @@ TEST_F(HistoryCollectionViewControllerTest, IsEmpty) {
 // HISTORY_DELETE_DIRECTIVES is enabled, and sync_returned is false.
 // This ensures that when HISTORY_DELETE_DIRECTIVES is disabled,
 // only local device history items are shown.
-TEST_F(HistoryCollectionViewControllerTest, IsNotEmptyWhenSyncEnabled) {
+TEST_F(LegacyHistoryCollectionViewControllerTest, IsNotEmptyWhenSyncEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kUIRefreshPhase1);
   EXPECT_CALL(*sync_setup_service_mock_, IsSyncEnabled())
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*sync_setup_service_mock_,
@@ -147,7 +172,9 @@ TEST_F(HistoryCollectionViewControllerTest, IsNotEmptyWhenSyncEnabled) {
 
 // Tests adding two entries to history from the same day, then deleting the
 // first of them results in one history entry in the collection.
-TEST_F(HistoryCollectionViewControllerTest, DeleteSingleEntry) {
+TEST_F(LegacyHistoryCollectionViewControllerTest, DeleteSingleEntry) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kUIRefreshPhase1);
   QueryHistory(
       {{GURL(kTestUrl1), Time::Now()}, {GURL(kTestUrl2), Time::Now()}});
 
@@ -166,7 +193,10 @@ TEST_F(HistoryCollectionViewControllerTest, DeleteSingleEntry) {
 
 // Tests that adding two entries to history from the same day then deleting
 // both of them results in only the header section in the collection.
-TEST_F(HistoryCollectionViewControllerTest, DeleteMultipleEntries) {
+TEST_F(LegacyHistoryCollectionViewControllerTest, DeleteMultipleEntries) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kUIRefreshPhase1);
+
   QueryHistory(
       {{GURL(kTestUrl1), Time::Now()}, {GURL(kTestUrl2), Time::Now()}});
 
@@ -191,7 +221,9 @@ TEST_F(HistoryCollectionViewControllerTest, DeleteMultipleEntries) {
 
 // Tests that adding two entries to history from different days then deleting
 // both of them results in only the header section in the collection.
-TEST_F(HistoryCollectionViewControllerTest, DeleteMultipleSections) {
+TEST_F(LegacyHistoryCollectionViewControllerTest, DeleteMultipleSections) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kUIRefreshPhase1);
   QueryHistory({{GURL(kTestUrl1), Time::Now() - TimeDelta::FromDays(1)},
                 {GURL(kTestUrl2), Time::Now()}});
 

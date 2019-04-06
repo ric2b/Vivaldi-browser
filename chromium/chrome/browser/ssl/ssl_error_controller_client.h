@@ -17,9 +17,19 @@ class WebContents;
 class SSLErrorControllerClient
     : public security_interstitials::SecurityInterstitialControllerClient {
  public:
+  // Actions recorded on recurrent error interstitials. This enum is
+  // histogrammed, so do not add, reorder, or remove values. Exposed for
+  // testing.
+  enum class RecurrentErrorAction {
+    kShow,
+    kProceed,
+    kMaxValue = kProceed,
+  };
+
   SSLErrorControllerClient(
       content::WebContents* web_contents,
       const net::SSLInfo& ssl_info,
+      int cert_error,
       const GURL& request_url,
       std::unique_ptr<security_interstitials::MetricsHelper> metrics_helper);
   ~SSLErrorControllerClient() override;
@@ -29,10 +39,12 @@ class SSLErrorControllerClient
   void Proceed() override;
   bool CanLaunchDateAndTimeSettings() override;
   void LaunchDateAndTimeSettings() override;
+  bool HasSeenRecurrentError() override;
 
  private:
   const net::SSLInfo ssl_info_;
   const GURL request_url_;
+  const int cert_error_;
 
   DISALLOW_COPY_AND_ASSIGN(SSLErrorControllerClient);
 };

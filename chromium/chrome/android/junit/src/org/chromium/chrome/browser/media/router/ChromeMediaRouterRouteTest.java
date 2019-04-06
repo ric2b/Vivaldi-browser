@@ -8,16 +8,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.verify;
 
-import org.chromium.base.test.util.Feature;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Feature;
+
 /**
  * Route tests for ChromeMediaRouter.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
     @Test
@@ -34,7 +35,7 @@ public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
         mChromeMediaRouter.onRouteCreated(
                 routeId1, SINK_ID1, REQUEST_ID1, mRouteProvider, true);
 
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 1);
+        assertEquals(1, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
         assertTrue(mChromeMediaRouter.getRouteIdsToProvidersForTest().containsKey(routeId1));
     }
 
@@ -57,7 +58,7 @@ public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
         mChromeMediaRouter.onRouteCreated(
                 routeId2, SINK_ID2, REQUEST_ID2, mRouteProvider, true);
 
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 2);
+        assertEquals(2, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
         assertTrue(mChromeMediaRouter.getRouteIdsToProvidersForTest().containsKey(routeId2));
     }
 
@@ -71,7 +72,7 @@ public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
                 SOURCE_ID1, SINK_ID1, PRESENTATION_ID1, ORIGIN1, TAB_ID1, false, REQUEST_ID1);
         mChromeMediaRouter.onRouteRequestError("ERROR", REQUEST_ID1);
 
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 0);
+        assertEquals(0, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
     }
 
     @Test
@@ -93,7 +94,7 @@ public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
         mChromeMediaRouter.onRouteCreated(
                 routeId2, SINK_ID1, REQUEST_ID2, mRouteProvider, true);
 
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 2);
+        assertEquals(2, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
         assertTrue(mChromeMediaRouter.getRouteIdsToProvidersForTest().containsKey(routeId2));
     }
 
@@ -114,7 +115,7 @@ public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
 
         mChromeMediaRouter.onRouteRequestError("error", REQUEST_ID2);
 
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 1);
+        assertEquals(1, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
     }
 
     @Test
@@ -130,7 +131,7 @@ public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
         mChromeMediaRouter.detachRoute(routeId1);
         verify(mRouteProvider).detachRoute(routeId1);
 
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 0);
+        assertEquals(0, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
     }
 
     @Test
@@ -145,9 +146,9 @@ public class ChromeMediaRouterRouteTest extends ChromeMediaRouterTestBase {
 
         mChromeMediaRouter.closeRoute(routeId1);
         verify(mRouteProvider).closeRoute(routeId1);
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 1);
+        assertEquals(1, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
 
         mChromeMediaRouter.onRouteClosed(routeId1);
-        assertEquals(mChromeMediaRouter.getRouteIdsToProvidersForTest().size(), 0);
+        assertEquals(0, mChromeMediaRouter.getRouteIdsToProvidersForTest().size());
     }
 }

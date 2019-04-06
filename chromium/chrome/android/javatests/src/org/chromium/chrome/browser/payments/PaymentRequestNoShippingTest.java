@@ -8,7 +8,6 @@ import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.DECEMB
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_BILLING_ADDRESS;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NEXT_YEAR;
 
-import android.content.DialogInterface;
 import android.os.Build;
 import android.support.test.filters.MediumTest;
 
@@ -28,6 +27,7 @@ import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
@@ -107,9 +107,9 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
-                new String[] {"Jon Doe", "4111111111111111", "12", "2050", "visa", "123"});
+                new String[] {"Jon Doe", "4111111111111111", "12", "2050", "basic-card", "123"});
     }
 
     /** Click [PAY], type in "123" into the CVC dialog, then submit the payment. */
@@ -122,15 +122,15 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_NEGATIVE, mPaymentRequestTestRule.getReadyToPay());
+                ModalDialogView.ButtonType.NEGATIVE, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
-                new String[] {"Jon Doe", "4111111111111111", "12", "2050", "visa", "123"});
+                new String[] {"Jon Doe", "4111111111111111", "12", "2050", "basic-card", "123"});
     }
 
     /** Attempt to add an invalid credit card number and cancel payment. */
@@ -143,7 +143,7 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         // still being ready to pay with the previously selected credit card.
         fillNewCardForm("123", "Bob", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);
         mPaymentRequestTestRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getEditorValidationError());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getEditorValidationError());
         mPaymentRequestTestRule.clickInCardEditorAndWait(
                 R.id.payments_edit_cancel_button, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
@@ -160,7 +160,7 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
             throws InterruptedException, ExecutionException, TimeoutException {
         fillNewCardForm("5454-5454-5454-5454", "", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);
         mPaymentRequestTestRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getEditorValidationError());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getEditorValidationError());
         mPaymentRequestTestRule.clickInCardEditorAndWait(
                 R.id.payments_edit_cancel_button, mPaymentRequestTestRule.getReadyForInput());
         mPaymentRequestTestRule.clickAndWait(
@@ -176,13 +176,13 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
             throws InterruptedException, ExecutionException, TimeoutException {
         fillNewCardForm("5454-5454-5454-5454", "Bob", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);
         mPaymentRequestTestRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"5454545454545454", "12", "Bob"});
     }
@@ -200,13 +200,13 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
                 R.id.payments_edit_checkbox, false, mPaymentRequestTestRule.getReadyToEdit());
 
         mPaymentRequestTestRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"5454545454545454", "12", "Bob"});
     }
@@ -252,16 +252,16 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
                         "94043", "650-253-0000"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToEdit());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToEdit());
 
         mPaymentRequestTestRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"5454545454545454", "12", "Bob", "Google", "1600 Amphitheatre Pkwy",
                         "Mountain View", "CA", "94043", "+16502530000"});

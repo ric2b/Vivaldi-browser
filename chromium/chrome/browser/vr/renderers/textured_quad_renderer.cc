@@ -124,6 +124,7 @@ static constexpr char const* kVertexShader = SHADER(
   attribute vec2 a_OffsetScale;
   varying vec2 v_TexCoordinate;
   varying vec2 v_CornerPosition;
+  uniform bool u_UsesOverlay;
 
   void main() {
     v_CornerPosition = a_CornerPosition;
@@ -140,17 +141,21 @@ static constexpr char const* kVertexShader = SHADER(
 static constexpr char const* kFragmentShader = SHADER(
   precision highp float;
   uniform sampler2D u_Texture;
-  uniform vec4 u_CopyRect;
+  uniform sampler2D u_OverlayTexture;
+  uniform vec2 u_ClipRect[2];
   varying vec2 v_TexCoordinate;
   varying vec2 v_CornerPosition;
   uniform mediump float u_Opacity;
+  uniform mediump float u_OverlayOpacity;
+
   void main() {
-    vec2 scaledTex =
-        vec2(u_CopyRect[0] + v_TexCoordinate.x * u_CopyRect[2],
-        u_CopyRect[1] + v_TexCoordinate.y * u_CopyRect[3]);
-    lowp vec4 color = texture2D(u_Texture, scaledTex);
+    vec2 s = step(u_ClipRect[0], v_TexCoordinate)
+        - step(u_ClipRect[1], v_TexCoordinate);
+    float insideClip = s.x * s.y;
+
+    lowp vec4 color = texture2D(u_Texture, v_TexCoordinate);
     float mask = 1.0 - step(1.0, length(v_CornerPosition));
-    gl_FragColor = color * u_Opacity * mask;
+    gl_FragColor = insideClip * color * u_Opacity * mask;
   }
 );
 // clang-format on
@@ -171,27 +176,36 @@ TexturedQuadRenderer::TexturedQuadRenderer(const char* vertex_src,
       glGetAttribLocation(program_handle_, "a_CornerPosition");
   offset_scale_handle_ = glGetAttribLocation(program_handle_, "a_OffsetScale");
 
-  copy_rect_handler_ = glGetUniformLocation(program_handle_, "u_CopyRect");
-
   opacity_handle_ = glGetUniformLocation(program_handle_, "u_Opacity");
+  overlay_opacity_handle_ =
+      glGetUniformLocation(program_handle_, "u_OverlayOpacity");
   texture_handle_ = glGetUniformLocation(program_handle_, "u_Texture");
+  overlay_texture_handle_ =
+      glGetUniformLocation(program_handle_, "u_OverlayTexture");
+  uses_overlay_handle_ = glGetUniformLocation(program_handle_, "u_UsesOverlay");
 }
 
 TexturedQuadRenderer::~TexturedQuadRenderer() = default;
 
 void TexturedQuadRenderer::AddQuad(int texture_data_handle,
+                                   int overlay_texture_data_handle,
                                    const gfx::Transform& model_view_proj_matrix,
-                                   const gfx::RectF& copy_rect,
+                                   const gfx::RectF& clip_rect,
                                    float opacity,
                                    const gfx::SizeF& element_size,
-                                   float corner_radius) {
+                                   float corner_radius,
+                                   bool blend) {
+  if (!clip_rect.Intersects(gfx::RectF(1.0f, 1.0f)))
+    return;
   QuadData quad;
   quad.texture_data_handle = texture_data_handle;
+  quad.overlay_texture_data_handle = overlay_texture_data_handle;
   quad.model_view_proj_matrix = model_view_proj_matrix;
-  quad.copy_rect = copy_rect;
+  quad.clip_rect = clip_rect;
   quad.opacity = opacity;
   quad.element_size = element_size;
   quad.corner_radius = corner_radius;
+  quad.blend = blend;
   quad_queue_.push(quad);
 }
 
@@ -199,23 +213,24 @@ void TexturedQuadRenderer::Flush() {
   if (quad_queue_.empty())
     return;
 
-  int last_texture = 0;
+  int last_texture = -1;
+  int last_overlay_texture = -1;
   float last_opacity = -1.0f;
   gfx::SizeF last_element_size;
   float last_corner_radius = -1.0f;
-  gfx::RectF last_copy_rect;
+  gfx::RectF last_clip_rect;
+  bool last_blend = true;  // All elements blend by default.
 
   // Set up GL state that doesn't change between draw calls.
   glUseProgram(program_handle_);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
 
   // Link texture data with texture unit.
-  glActiveTexture(GL_TEXTURE0);
   glUniform1i(texture_handle_, 0);
+
+  glUniform1i(overlay_texture_handle_, 1);
 
   // Set up position attribute.
   glVertexAttribPointer(position_handle_, kPositionDataSize, GL_FLOAT, false,
@@ -234,17 +249,39 @@ void TexturedQuadRenderer::Flush() {
                         VOID_OFFSET(kCornerPositionDataOffset));
   glEnableVertexAttribArray(corner_position_handle_);
 
+  glUniform1i(uses_overlay_handle_, false);
+
   // TODO(bajones): This should eventually be changed to use instancing so that
   // the entire queue can be processed in one draw call. For now this still
   // significantly reduces the amount of state changes made per draw.
   while (!quad_queue_.empty()) {
     const QuadData& quad = quad_queue_.front();
 
+    if (last_blend != quad.blend) {
+      last_blend = quad.blend;
+      if (quad.blend) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+      } else {
+        glDisable(GL_BLEND);
+      }
+    }
+
     // Only change texture ID or opacity when they differ between quads.
     if (last_texture != quad.texture_data_handle) {
       last_texture = quad.texture_data_handle;
+      glActiveTexture(GL_TEXTURE0);
       glBindTexture(TextureType(), last_texture);
       SetTexParameters(TextureType());
+    }
+
+    if (last_overlay_texture != quad.overlay_texture_data_handle) {
+      last_overlay_texture = quad.overlay_texture_data_handle;
+      glUniform1i(uses_overlay_handle_, quad.overlay_texture_data_handle != 0);
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(TextureType(), last_overlay_texture);
+      SetTexParameters(TextureType());
+      glUniform1f(overlay_opacity_handle_, last_overlay_texture ? 1.0f : 0.0f);
     }
 
     if (last_opacity != quad.opacity) {
@@ -271,10 +308,12 @@ void TexturedQuadRenderer::Flush() {
     glUniformMatrix4fv(model_view_proj_matrix_handle_, 1, false,
                        MatrixToGLArray(quad.model_view_proj_matrix).data());
 
-    if (last_copy_rect != quad.copy_rect) {
-      last_copy_rect = quad.copy_rect;
-      glUniform4f(copy_rect_handler_, quad.copy_rect.x(), quad.copy_rect.y(),
-                  quad.copy_rect.width(), quad.copy_rect.height());
+    if (last_clip_rect != quad.clip_rect) {
+      last_clip_rect = quad.clip_rect;
+      const GLfloat clip_rect_data[4] = {quad.clip_rect.x(), quad.clip_rect.y(),
+                                         quad.clip_rect.right(),
+                                         quad.clip_rect.bottom()};
+      glUniform2fv(clip_rect_handle_, 2, clip_rect_data);
     }
 
     if (quad.corner_radius == 0.0f) {
@@ -285,6 +324,11 @@ void TexturedQuadRenderer::Flush() {
     }
 
     quad_queue_.pop();
+  }
+
+  if (!last_blend) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
   }
 
   glDisableVertexAttribArray(position_handle_);

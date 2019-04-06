@@ -13,12 +13,12 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
-#include "gpu/command_buffer/tests/gl_manager.h"
-#include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "gpu/command_buffer/tests/gl_test_utils.h"
 #include "gpu/config/gpu_info_collector.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_util.h"
+#include "gpu/ipc/in_process_command_buffer.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/gl/init/gl_factory.h"
 
 namespace {
 
@@ -29,18 +29,21 @@ int RunHelper(base::TestSuite* testSuite) {
   base::MessageLoopForIO message_loop;
 #endif
   base::FeatureList::InitializeInstance(std::string(), std::string());
+  gpu::GLTestHelper::InitializeGLDefault();
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   gpu::GPUInfo gpu_info;
-  gpu::CollectBasicGraphicsInfo(&gpu_info);
-  gpu::GLManager::g_gpu_feature_info =
-      gpu::ComputeGpuFeatureInfo(gpu_info,
-                                 false,  // ignore_gpu_blacklist
-                                 false,  // disable_gpu_driver_bug_workarounds
-                                 false,  // log_gpu_control_list_decisions
-                                 base::CommandLine::ForCurrentProcess());
-  gl::init::InitializeGLNoExtensionsOneOff();
-  gl::init::SetDisabledExtensionsPlatform(
-      gpu::GLManager::g_gpu_feature_info.disabled_extensions);
-  gl::init::InitializeExtensionSettingsOneOffPlatform();
+  gpu::CollectGraphicsInfoForTesting(&gpu_info);
+  gpu::GpuFeatureInfo gpu_feature_info = gpu::ComputeGpuFeatureInfo(
+      gpu_info, gpu::GpuPreferences(), command_line, nullptr);
+  // Always enable gpu and oop raster, regardless of platform and blacklist.
+  gpu_feature_info.status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] =
+      gpu::kGpuFeatureStatusEnabled;
+  gpu_feature_info.status_values[gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION] =
+      gpu::kGpuFeatureStatusEnabled;
+  gpu::InProcessCommandBuffer::InitializeDefaultServiceForTesting(
+      gpu_feature_info);
+
   ::gles2::Initialize();
   return testSuite->Run();
 }

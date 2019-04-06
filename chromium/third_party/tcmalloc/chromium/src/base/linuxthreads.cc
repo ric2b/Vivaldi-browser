@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2005-2007, Google Inc.
  * All rights reserved.
  *
@@ -45,6 +46,8 @@ extern "C" {
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
+#include <semaphore.h>
 
 #include "base/linux_syscall_support.h"
 #include "base/thread_lister.h"
@@ -94,6 +97,14 @@ static int local_clone (int (*fn)(void *), void *arg, ...)
 #endif
 #endif
 
+/* To avoid the gap cross page boundaries, increase by the large parge
+ * size mostly PowerPC system uses.  */
+#ifdef __PPC64__
+#define CLONE_STACK_SIZE 65536
+#else
+#define CLONE_STACK_SIZE 4096
+#endif
+
 static int local_clone (int (*fn)(void *), void *arg, ...) {
   /* Leave 4kB of gap between the callers stack and the new clone. This
    * should be more than sufficient for the caller to call waitpid() until
@@ -109,7 +120,7 @@ static int local_clone (int (*fn)(void *), void *arg, ...) {
    * is being debugged. This is OK and the error code will be reported
    * correctly.
    */
-  return sys_clone(fn, (char *)&arg - 4096,
+  return sys_clone(fn, (char *)&arg - CLONE_STACK_SIZE,
                    CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_UNTRACED, arg, 0, 0, 0);
 }
 
@@ -183,9 +194,9 @@ static int c_open(const char *fname, int flags, int mode) {
  * In order to find the main application from the signal handler, we
  * need to store information about it in global variables. This is
  * safe, because the main application should be suspended at this
- * time. If the callback ever called ResumeAllProcessThreads(), then
+ * time. If the callback ever called TCMalloc_ResumeAllProcessThreads(), then
  * we are running a higher risk, though. So, try to avoid calling
- * abort() after calling ResumeAllProcessThreads.
+ * abort() after calling TCMalloc_ResumeAllProcessThreads.
  */
 static volatile int *sig_pids, sig_num_threads, sig_proc, sig_marker;
 
@@ -204,7 +215,7 @@ static void SignalHandler(int signum, siginfo_t *si, void *data) {
         sys_ptrace(PTRACE_KILL, sig_pids[sig_num_threads], 0, 0);
       }
     } else if (sig_num_threads > 0) {
-      ResumeAllProcessThreads(sig_num_threads, (int *)sig_pids);
+      TCMalloc_ResumeAllProcessThreads(sig_num_threads, (int *)sig_pids);
     }
   }
   sig_pids = NULL;
@@ -240,6 +251,7 @@ struct ListerParams {
   ListAllProcessThreadsCallBack callback;
   void        *parameter;
   va_list     ap;
+  sem_t       *lock;
 };
 
 
@@ -253,6 +265,13 @@ static void ListerThread(struct ListerParams *args) {
   int                max_threads = 0, sig;
   struct kernel_stat marker_sb, proc_sb;
   stack_t            altstack;
+
+  /* Wait for parent thread to set appropriate permissions
+   * to allow ptrace activity
+   */
+  if (sem_wait(args->lock) < 0) {
+    goto failure;
+  }
 
   /* Create "marker" that we can use to detect threads sharing the same
    * address space and the same file handles. By setting the FD_CLOEXEC flag
@@ -351,10 +370,10 @@ static void ListerThread(struct ListerParams *args) {
       sig_num_threads     = num_threads;
       sig_pids            = pids;
       for (;;) {
-        struct kernel_dirent *entry;
+        struct KERNEL_DIRENT *entry;
         char buf[4096];
-        ssize_t nbytes = sys_getdents(proc, (struct kernel_dirent *)buf,
-                                      sizeof(buf));
+        ssize_t nbytes = GETDENTS(proc, (struct KERNEL_DIRENT *)buf,
+                                         sizeof(buf));
         if (nbytes < 0)
           goto failure;
         else if (nbytes == 0) {
@@ -370,9 +389,9 @@ static void ListerThread(struct ListerParams *args) {
           }
           break;
         }
-        for (entry = (struct kernel_dirent *)buf;
-             entry < (struct kernel_dirent *)&buf[nbytes];
-             entry = (struct kernel_dirent *)((char *)entry+entry->d_reclen)) {
+        for (entry = (struct KERNEL_DIRENT *)buf;
+             entry < (struct KERNEL_DIRENT *)&buf[nbytes];
+             entry = (struct KERNEL_DIRENT *)((char *)entry+entry->d_reclen)) {
           if (entry->d_ino != 0) {
             const char *ptr = entry->d_name;
             pid_t pid;
@@ -442,7 +461,7 @@ static void ListerThread(struct ListerParams *args) {
                     goto next_entry;
                   }
                 }
-                
+
                 if (sys_ptrace(PTRACE_PEEKDATA, pid, &i, &j) || i++ != j ||
                     sys_ptrace(PTRACE_PEEKDATA, pid, &i, &j) || i   != j) {
                   /* Address spaces are distinct, even though both
@@ -478,7 +497,7 @@ static void ListerThread(struct ListerParams *args) {
          * error to the caller.
          */
         if (!found_parent) {
-          ResumeAllProcessThreads(num_threads, pids);
+          TCMalloc_ResumeAllProcessThreads(num_threads, pids);
           sys__exit(3);
         }
 
@@ -490,7 +509,7 @@ static void ListerThread(struct ListerParams *args) {
         args->err = errno;
 
         /* Callback should have resumed threads, but better safe than sorry  */
-        if (ResumeAllProcessThreads(num_threads, pids)) {
+        if (TCMalloc_ResumeAllProcessThreads(num_threads, pids)) {
           /* Callback forgot to resume at least one thread, report error     */
           args->err    = EINVAL;
           args->result = -1;
@@ -500,7 +519,7 @@ static void ListerThread(struct ListerParams *args) {
       }
     detach_threads:
       /* Resume all threads prior to retrying the operation                  */
-      ResumeAllProcessThreads(num_threads, pids);
+      TCMalloc_ResumeAllProcessThreads(num_threads, pids);
       sig_pids = NULL;
       num_threads = 0;
       sig_num_threads = num_threads;
@@ -518,24 +537,25 @@ static void ListerThread(struct ListerParams *args) {
  * address space, the filesystem, and the filehandles with the caller. Most
  * notably, it does not share the same pid and ppid; and if it terminates,
  * the rest of the application is still there. 'callback' is supposed to do
- * or arrange for ResumeAllProcessThreads. This happens automatically, if
+ * or arrange for TCMalloc_ResumeAllProcessThreads. This happens automatically, if
  * the thread raises a synchronous signal (e.g. SIGSEGV); asynchronous
  * signals are blocked. If the 'callback' decides to unblock them, it must
  * ensure that they cannot terminate the application, or that
- * ResumeAllProcessThreads will get called.
+ * TCMalloc_ResumeAllProcessThreads will get called.
  * It is an error for the 'callback' to make any library calls that could
  * acquire locks. Most notably, this means that most system calls have to
  * avoid going through libc. Also, this means that it is not legal to call
  * exit() or abort().
  * We return -1 on error and the return value of 'callback' on success.
  */
-int ListAllProcessThreads(void *parameter,
-                          ListAllProcessThreadsCallBack callback, ...) {
+int TCMalloc_ListAllProcessThreads(void *parameter,
+                                   ListAllProcessThreadsCallBack callback, ...) {
   char                   altstack_mem[ALT_STACKSIZE];
   struct ListerParams    args;
   pid_t                  clone_pid;
   int                    dumpable = 1, sig;
   struct kernel_sigset_t sig_blocked, sig_old;
+  sem_t                  lock;
 
   va_start(args.ap, callback);
 
@@ -565,6 +585,7 @@ int ListAllProcessThreads(void *parameter,
   args.altstack_mem = altstack_mem;
   args.parameter    = parameter;
   args.callback     = callback;
+  args.lock         = &lock;
 
   /* Before cloning the thread lister, block all asynchronous signals, as we */
   /* are not prepared to handle them.                                        */
@@ -596,42 +617,63 @@ int ListAllProcessThreads(void *parameter,
       #undef  SYS_LINUX_SYSCALL_SUPPORT_H
       #include "linux_syscall_support.h"
     #endif
-  
-    int clone_errno;
-    clone_pid = local_clone((int (*)(void *))ListerThread, &args);
-    clone_errno = errno;
 
-    sys_sigprocmask(SIG_SETMASK, &sig_old, &sig_old);
+    /* Lock before clone so that parent can set
+	 * ptrace permissions (if necessary) prior
+     * to ListerThread actually executing
+     */
+    if (sem_init(&lock, 0, 0) == 0) {
 
-    if (clone_pid >= 0) {
-      int status, rc;
-      while ((rc = sys0_waitpid(clone_pid, &status, __WALL)) < 0 &&
-             ERRNO == EINTR) {
-             /* Keep waiting                                                 */
-      }
-      if (rc < 0) {
-        args.err = ERRNO;
-        args.result = -1;
-      } else if (WIFEXITED(status)) {
-        switch (WEXITSTATUS(status)) {
-          case 0: break;             /* Normal process termination           */
-          case 2: args.err = EFAULT; /* Some fault (e.g. SIGSEGV) detected   */
-                  args.result = -1;
-                  break;
-          case 3: args.err = EPERM;  /* Process is already being traced      */
-                  args.result = -1;
-                  break;
-          default:args.err = ECHILD; /* Child died unexpectedly              */
-                  args.result = -1;
-                  break;
+      int clone_errno;
+      clone_pid = local_clone((int (*)(void *))ListerThread, &args);
+      clone_errno = errno;
+
+      sys_sigprocmask(SIG_SETMASK, &sig_old, &sig_old);
+
+      if (clone_pid >= 0) {
+#ifdef PR_SET_PTRACER
+        /* In newer versions of glibc permission must explicitly
+         * be given to allow for ptrace.
+         */
+        prctl(PR_SET_PTRACER, clone_pid, 0, 0, 0);
+#endif
+        /* Releasing the lock here allows the
+         * ListerThread to execute and ptrace us.
+		 */
+        sem_post(&lock);
+        int status, rc;
+        while ((rc = sys0_waitpid(clone_pid, &status, __WALL)) < 0 &&
+               ERRNO == EINTR) {
+                /* Keep waiting                                                 */
         }
-      } else if (!WIFEXITED(status)) {
-        args.err    = EFAULT;        /* Terminated due to an unhandled signal*/
+        if (rc < 0) {
+          args.err = ERRNO;
+          args.result = -1;
+        } else if (WIFEXITED(status)) {
+          switch (WEXITSTATUS(status)) {
+            case 0: break;             /* Normal process termination           */
+            case 2: args.err = EFAULT; /* Some fault (e.g. SIGSEGV) detected   */
+                    args.result = -1;
+                    break;
+            case 3: args.err = EPERM;  /* Process is already being traced      */
+                    args.result = -1;
+                    break;
+            default:args.err = ECHILD; /* Child died unexpectedly              */
+                    args.result = -1;
+                    break;
+          }
+        } else if (!WIFEXITED(status)) {
+          args.err    = EFAULT;        /* Terminated due to an unhandled signal*/
+          args.result = -1;
+        }
+        sem_destroy(&lock);
+      } else {
         args.result = -1;
+        args.err    = clone_errno;
       }
     } else {
       args.result = -1;
-      args.err    = clone_errno;
+      args.err    = errno;
     }
   }
 
@@ -647,11 +689,11 @@ failed:
 }
 
 /* This function resumes the list of all linux threads that
- * ListAllProcessThreads pauses before giving to its callback.
+ * TCMalloc_ListAllProcessThreads pauses before giving to its callback.
  * The function returns non-zero if at least one thread was
  * suspended and has now been resumed.
  */
-int ResumeAllProcessThreads(int num_threads, pid_t *thread_pids) {
+int TCMalloc_ResumeAllProcessThreads(int num_threads, pid_t *thread_pids) {
   int detached_at_least_one = 0;
   while (num_threads-- > 0) {
     detached_at_least_one |= sys_ptrace_detach(thread_pids[num_threads]) >= 0;

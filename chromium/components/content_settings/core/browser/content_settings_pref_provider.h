@@ -74,6 +74,12 @@ class PrefProvider : public UserModifiableProvider {
   // Clean up the obsolete preferences from the user's profile.
   void DiscardObsoletePreferences();
 
+  // Returns true if this provider supports the given |content_type|.
+  bool supports_type(ContentSettingsType content_type) const {
+    return content_settings_prefs_.find(content_type) !=
+           content_settings_prefs_.end();
+  }
+
   // Weak; owned by the Profile and reset in ShutdownOnUIThread.
   PrefService* prefs_;
 
@@ -85,6 +91,10 @@ class PrefProvider : public UserModifiableProvider {
 
   std::map<ContentSettingsType, std::unique_ptr<ContentSettingsPref>>
       content_settings_prefs_;
+
+  // TODO(https://crbug.com/850062): Remove after M71, two milestones after
+  // migration of the Flash permissions to ephemeral provider.
+  std::unique_ptr<ContentSettingsPref> flash_content_settings_pref_;
 
   base::ThreadChecker thread_checker_;
 

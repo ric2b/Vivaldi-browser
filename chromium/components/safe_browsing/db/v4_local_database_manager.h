@@ -12,6 +12,7 @@
 #include <unordered_set>
 
 #include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner.h"
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/db/hit_report.h"
 #include "components/safe_browsing/db/v4_database.h"
@@ -19,7 +20,6 @@
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/db/v4_update_protocol_manager.h"
 #include "components/safe_browsing/proto/webui.pb.h"
-#include "content/public/browser/notification_service.h"
 #include "url/gurl.h"
 
 namespace safe_browsing {
@@ -52,7 +52,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
 
   void CancelCheck(Client* client) override;
   bool CanCheckResourceType(content::ResourceType resource_type) const override;
-  bool CanCheckSubresourceFilter() const override;
   bool CanCheckUrl(const GURL& url) const override;
   bool ChecksAreAlwaysAsync() const override;
   bool CheckBrowseUrl(const GURL& url,
@@ -75,8 +74,9 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   safe_browsing::ThreatSource GetThreatSource() const override;
   bool IsDownloadProtectionEnabled() const override;
   bool IsSupported() const override;
-  void StartOnIOThread(net::URLRequestContextGetter* request_context_getter,
-                       const V4ProtocolConfig& config) override;
+  void StartOnIOThread(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      const V4ProtocolConfig& config) override;
   void StopOnIOThread(bool shutdown) override;
 
   // The stores/lists to always get full hashes for, regardless of which store
@@ -278,11 +278,10 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
                                     const FullHashToStoreAndHashPrefixesMap&
                                         full_hash_to_store_and_hash_prefixes);
 
-  // Post a notification about the completion of database update process.
-  // This is currently used by the extension blacklist checker to disable any
-  // installed extensions that have been blacklisted since.
-  static void PostUpdateNotificationOnUIThread(
-      const content::NotificationSource& source);
+  // Make callbacks about the completion of database update process. This is
+  // currently used by the extension blacklist checker to disable any installed
+  // extensions that have been blacklisted since.
+  void PostUpdateNotificationOnUIThread();
 
   // When the database is ready to use, process the checks that were queued
   // while the database was loading from disk.
@@ -302,7 +301,7 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
 
   // Instantiates and initializes |v4_update_protocol_manager_|.
   void SetupUpdateProtocolManager(
-      net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const V4ProtocolConfig& config);
 
   // Updates the |list_client_states_| with the state information in

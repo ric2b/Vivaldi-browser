@@ -9,6 +9,7 @@ import android.util.Pair;
 
 import org.chromium.net.CronetEngine;
 import org.chromium.net.ExperimentalUrlRequest;
+import org.chromium.net.RequestFinishedInfo;
 import org.chromium.net.UploadDataProvider;
 import org.chromium.net.UrlRequest;
 
@@ -53,6 +54,11 @@ public class UrlRequestBuilderImpl extends ExperimentalUrlRequest.Builder {
     // Executor to call upload data provider back on.
     private Executor mUploadDataProviderExecutor;
     private boolean mAllowDirectExecutor = false;
+    private boolean mTrafficStatsTagSet;
+    private int mTrafficStatsTag;
+    private boolean mTrafficStatsUidSet;
+    private int mTrafficStatsUid;
+    private RequestFinishedInfo.Listener mRequestFinishedListener;
 
     /**
      * Creates a builder for {@link UrlRequest} objects. All callbacks for
@@ -169,11 +175,32 @@ public class UrlRequestBuilderImpl extends ExperimentalUrlRequest.Builder {
     }
 
     @Override
+    public UrlRequestBuilderImpl setTrafficStatsTag(int tag) {
+        mTrafficStatsTagSet = true;
+        mTrafficStatsTag = tag;
+        return this;
+    }
+
+    @Override
+    public UrlRequestBuilderImpl setTrafficStatsUid(int uid) {
+        mTrafficStatsUidSet = true;
+        mTrafficStatsUid = uid;
+        return this;
+    }
+
+    @Override
+    public UrlRequestBuilderImpl setRequestFinishedListener(RequestFinishedInfo.Listener listener) {
+        mRequestFinishedListener = listener;
+        return this;
+    }
+
+    @Override
     public UrlRequestBase build() {
         @SuppressLint("WrongConstant") // TODO(jbudorick): Remove this after rolling to the N SDK.
         final UrlRequestBase request = mCronetEngine.createRequest(mUrl, mCallback, mExecutor,
                 mPriority, mRequestAnnotations, mDisableCache, mDisableConnectionMigration,
-                mAllowDirectExecutor);
+                mAllowDirectExecutor, mTrafficStatsTagSet, mTrafficStatsTag, mTrafficStatsUidSet,
+                mTrafficStatsUid, mRequestFinishedListener);
         if (mMethod != null) {
             request.setHttpMethod(mMethod);
         }

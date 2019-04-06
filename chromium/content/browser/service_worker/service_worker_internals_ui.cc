@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
@@ -33,7 +32,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/url_constants.h"
-#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 
 using base::DictionaryValue;
 using base::ListValue;
@@ -51,7 +50,7 @@ using GetRegistrationsCallback =
 
 void OperationCompleteCallback(WeakPtr<ServiceWorkerInternalsUI> internals,
                                int callback_id,
-                               ServiceWorkerStatusCode status) {
+                               blink::ServiceWorkerStatusCode status) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                             base::BindOnce(OperationCompleteCallback, internals,
@@ -83,7 +82,7 @@ base::ProcessId GetRealProcessId(int process_host_id) {
   if (!rph)
     return base::kNullProcessId;
 
-  base::ProcessHandle handle = rph->GetHandle();
+  base::ProcessHandle handle = rph->GetProcess().Handle();
   if (handle == base::kNullProcessHandle)
     return base::kNullProcessId;
   // TODO(nhiroki): On Windows, |rph->GetHandle()| does not duplicate ownership
@@ -207,7 +206,7 @@ std::unique_ptr<ListValue> GetVersionListValue(
 void DidGetStoredRegistrationsOnIOThread(
     scoped_refptr<ServiceWorkerContextWrapper> context,
     const GetRegistrationsCallback& callback,
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     const std::vector<ServiceWorkerRegistrationInfo>& stored_registrations) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(
@@ -221,7 +220,7 @@ void GetRegistrationsOnIOThread(
     const GetRegistrationsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   context->GetAllRegistrations(
-      base::Bind(DidGetStoredRegistrationsOnIOThread, context, callback));
+      base::BindOnce(DidGetStoredRegistrationsOnIOThread, context, callback));
 }
 
 void DidGetRegistrations(
@@ -269,15 +268,11 @@ class ServiceWorkerInternalsUI::PartitionObserver
         Value(base::Int64ToString(version_id)));
   }
   void OnErrorReported(int64_t version_id,
-                       int process_id,
-                       int thread_id,
                        const ErrorInfo& info) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     std::vector<std::unique_ptr<const Value>> args;
     args.push_back(std::make_unique<Value>(partition_id_));
     args.push_back(std::make_unique<Value>(base::Int64ToString(version_id)));
-    args.push_back(std::make_unique<Value>(process_id));
-    args.push_back(std::make_unique<Value>(thread_id));
     auto value = std::make_unique<DictionaryValue>();
     value->SetString("message", info.error_message);
     value->SetInteger("lineNumber", info.line_number);
@@ -288,15 +283,11 @@ class ServiceWorkerInternalsUI::PartitionObserver
                                           ConvertToRawPtrVector(args));
   }
   void OnReportConsoleMessage(int64_t version_id,
-                              int process_id,
-                              int thread_id,
                               const ConsoleMessage& message) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     std::vector<std::unique_ptr<const Value>> args;
     args.push_back(std::make_unique<Value>(partition_id_));
     args.push_back(std::make_unique<Value>(base::Int64ToString(version_id)));
-    args.push_back(std::make_unique<Value>(process_id));
-    args.push_back(std::make_unique<Value>(thread_id));
     auto value = std::make_unique<DictionaryValue>();
     value->SetInteger("sourceIdentifier", message.source_identifier);
     value->SetInteger("message_level", message.message_level);
@@ -307,11 +298,11 @@ class ServiceWorkerInternalsUI::PartitionObserver
     web_ui_->CallJavascriptFunctionUnsafe(
         "serviceworker.onConsoleMessageReported", ConvertToRawPtrVector(args));
   }
-  void OnRegistrationStored(int64_t registration_id,
-                            const GURL& pattern) override {
+  void OnRegistrationCompleted(int64_t registration_id,
+                               const GURL& pattern) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    web_ui_->CallJavascriptFunctionUnsafe("serviceworker.onRegistrationStored",
-                                          Value(pattern.spec()));
+    web_ui_->CallJavascriptFunctionUnsafe(
+        "serviceworker.onRegistrationCompleted", Value(pattern.spec()));
   }
   void OnRegistrationDeleted(int64_t registration_id,
                              const GURL& pattern) override {
@@ -329,6 +320,8 @@ ServiceWorkerInternalsUI::ServiceWorkerInternalsUI(WebUI* web_ui)
     : WebUIController(web_ui), next_partition_id_(0) {
   WebUIDataSource* source =
       WebUIDataSource::Create(kChromeUIServiceWorkerInternalsHost);
+  source->OverrideContentSecurityPolicyScriptSrc(
+      "script-src chrome://resources 'self' 'unsafe-eval';");
   source->SetJsonPath("strings.js");
   source->AddResourcePath("serviceworker_internals.js",
                           IDR_SERVICE_WORKER_INTERNALS_JS);
@@ -343,31 +336,27 @@ ServiceWorkerInternalsUI::ServiceWorkerInternalsUI(WebUI* web_ui)
   WebUIDataSource::Add(browser_context, source);
 
   web_ui->RegisterMessageCallback(
-      "GetOptions",
-      base::Bind(&ServiceWorkerInternalsUI::GetOptions,
-                 base::Unretained(this)));
+      "GetOptions", base::BindRepeating(&ServiceWorkerInternalsUI::GetOptions,
+                                        base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "SetOption",
-      base::Bind(&ServiceWorkerInternalsUI::SetOption, base::Unretained(this)));
+      "SetOption", base::BindRepeating(&ServiceWorkerInternalsUI::SetOption,
+                                       base::Unretained(this)));
   web_ui->RegisterMessageCallback(
       "getAllRegistrations",
-      base::Bind(&ServiceWorkerInternalsUI::GetAllRegistrations,
-                 base::Unretained(this)));
+      base::BindRepeating(&ServiceWorkerInternalsUI::GetAllRegistrations,
+                          base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "stop", base::Bind(&ServiceWorkerInternalsUI::StopWorker,
-                         base::Unretained(this)));
+      "stop", base::BindRepeating(&ServiceWorkerInternalsUI::StopWorker,
+                                  base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "inspect",
-      base::Bind(&ServiceWorkerInternalsUI::InspectWorker,
-                 base::Unretained(this)));
+      "inspect", base::BindRepeating(&ServiceWorkerInternalsUI::InspectWorker,
+                                     base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "unregister",
-      base::Bind(&ServiceWorkerInternalsUI::Unregister,
-                 base::Unretained(this)));
+      "unregister", base::BindRepeating(&ServiceWorkerInternalsUI::Unregister,
+                                        base::Unretained(this)));
   web_ui->RegisterMessageCallback(
-      "start",
-      base::Bind(&ServiceWorkerInternalsUI::StartWorker,
-                 base::Unretained(this)));
+      "start", base::BindRepeating(&ServiceWorkerInternalsUI::StartWorker,
+                                   base::Unretained(this)));
 }
 
 ServiceWorkerInternalsUI::~ServiceWorkerInternalsUI() {
@@ -378,7 +367,8 @@ ServiceWorkerInternalsUI::~ServiceWorkerInternalsUI() {
   BrowserContext::StoragePartitionCallback remove_observer_cb =
       base::Bind(&ServiceWorkerInternalsUI::RemoveObserverFromStoragePartition,
                  base::Unretained(this));
-  BrowserContext::ForEachStoragePartition(browser_context, remove_observer_cb);
+  BrowserContext::ForEachStoragePartition(browser_context,
+                                          std::move(remove_observer_cb));
 }
 
 void ServiceWorkerInternalsUI::GetOptions(const ListValue* args) {
@@ -409,7 +399,8 @@ void ServiceWorkerInternalsUI::GetAllRegistrations(const ListValue* args) {
   BrowserContext::StoragePartitionCallback add_context_cb =
       base::Bind(&ServiceWorkerInternalsUI::AddContextFromStoragePartition,
                  base::Unretained(this));
-  BrowserContext::ForEachStoragePartition(browser_context, add_context_cb);
+  BrowserContext::ForEachStoragePartition(browser_context,
+                                          std::move(add_context_cb));
 }
 
 void ServiceWorkerInternalsUI::AddContextFromStoragePartition(
@@ -473,7 +464,8 @@ bool ServiceWorkerInternalsUI::GetServiceWorkerContext(
                  base::Unretained(this),
                  partition_id,
                  &result_partition);
-  BrowserContext::ForEachStoragePartition(browser_context, find_context_cb);
+  BrowserContext::ForEachStoragePartition(browser_context,
+                                          std::move(find_context_cb));
   if (!result_partition)
     return false;
   *context = static_cast<ServiceWorkerContextWrapper*>(
@@ -498,8 +490,8 @@ void ServiceWorkerInternalsUI::StopWorker(const ListValue* args) {
     return;
   }
 
-  base::OnceCallback<void(ServiceWorkerStatusCode)> callback =
-      base::Bind(OperationCompleteCallback, AsWeakPtr(), callback_id);
+  base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback =
+      base::BindOnce(OperationCompleteCallback, AsWeakPtr(), callback_id);
   StopWorkerWithId(context, version_id, std::move(callback));
 }
 
@@ -516,18 +508,18 @@ void ServiceWorkerInternalsUI::InspectWorker(const ListValue* args) {
                             &devtools_agent_route_id)) {
     return;
   }
-  base::Callback<void(ServiceWorkerStatusCode)> callback =
-      base::Bind(OperationCompleteCallback, AsWeakPtr(), callback_id);
+  base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback =
+      base::BindOnce(OperationCompleteCallback, AsWeakPtr(), callback_id);
   scoped_refptr<ServiceWorkerDevToolsAgentHost> agent_host(
       ServiceWorkerDevToolsManager::GetInstance()
           ->GetDevToolsAgentHostForWorker(process_host_id,
                                           devtools_agent_route_id));
   if (!agent_host.get()) {
-    callback.Run(SERVICE_WORKER_ERROR_NOT_FOUND);
+    std::move(callback).Run(blink::ServiceWorkerStatusCode::kErrorNotFound);
     return;
   }
   agent_host->Inspect();
-  callback.Run(SERVICE_WORKER_OK);
+  std::move(callback).Run(blink::ServiceWorkerStatusCode::kOk);
 }
 
 void ServiceWorkerInternalsUI::Unregister(const ListValue* args) {
@@ -545,9 +537,9 @@ void ServiceWorkerInternalsUI::Unregister(const ListValue* args) {
     return;
   }
 
-  base::Callback<void(ServiceWorkerStatusCode)> callback =
-      base::Bind(OperationCompleteCallback, AsWeakPtr(), callback_id);
-  UnregisterWithScope(context, GURL(scope_string), callback);
+  base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback =
+      base::BindOnce(OperationCompleteCallback, AsWeakPtr(), callback_id);
+  UnregisterWithScope(context, GURL(scope_string), std::move(callback));
 }
 
 void ServiceWorkerInternalsUI::StartWorker(const ListValue* args) {
@@ -564,9 +556,9 @@ void ServiceWorkerInternalsUI::StartWorker(const ListValue* args) {
       !cmd_args->GetString("scope", &scope_string)) {
     return;
   }
-  base::Callback<void(ServiceWorkerStatusCode)> callback =
-      base::Bind(OperationCompleteCallback, AsWeakPtr(), callback_id);
-  context->StartServiceWorker(GURL(scope_string), callback);
+  base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback =
+      base::BindOnce(OperationCompleteCallback, AsWeakPtr(), callback_id);
+  context->StartServiceWorker(GURL(scope_string), std::move(callback));
 }
 
 void ServiceWorkerInternalsUI::StopWorkerWithId(
@@ -585,13 +577,14 @@ void ServiceWorkerInternalsUI::StopWorkerWithId(
   scoped_refptr<ServiceWorkerVersion> version =
       context->GetLiveVersion(version_id);
   if (!version.get()) {
-    std::move(callback).Run(SERVICE_WORKER_ERROR_NOT_FOUND);
+    std::move(callback).Run(blink::ServiceWorkerStatusCode::kErrorNotFound);
     return;
   }
 
   // ServiceWorkerVersion::StopWorker() takes a base::OnceClosure for argument,
-  // so bind SERVICE_WORKER_OK to callback here.
-  version->StopWorker(base::BindOnce(std::move(callback), SERVICE_WORKER_OK));
+  // so bind blink::ServiceWorkerStatusCode::kOk to callback here.
+  version->StopWorker(
+      base::BindOnce(std::move(callback), blink::ServiceWorkerStatusCode::kOk));
 }
 
 void ServiceWorkerInternalsUI::UnregisterWithScope(
@@ -608,7 +601,7 @@ void ServiceWorkerInternalsUI::UnregisterWithScope(
   }
 
   if (!context->context()) {
-    std::move(callback).Run(SERVICE_WORKER_ERROR_ABORT);
+    std::move(callback).Run(blink::ServiceWorkerStatusCode::kErrorAbort);
     return;
   }
 

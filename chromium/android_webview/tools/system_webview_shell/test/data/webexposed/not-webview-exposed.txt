@@ -80,6 +80,32 @@ interface MediaDevices : EventTarget
     getter ondevicechange
     setter ondevicechange
 
+# WebAuthN API should not be exposed in WebView, crbug.com/828168
+interface AuthenticatorAssertionResponse : AuthenticatorResponse
+interface PublicKeyCredential : Credential
+interface AuthenticatorResponse
+interface AuthenticatorAttestationResponse : AuthenticatorResponse
+
+# Picture-in-Picture API is disabled in Android WebView, crbug.com/852449
+interface PictureInPictureWindow : EventTarget
+interface Document : Node
+    method exitPictureInPicture
+    getter pictureInPictureElement
+    getter pictureInPictureEnabled
+interface ShadowRoot : DocumentFragment
+    getter pictureInPictureElement
+interface HTMLVideoElement : HTMLMediaElement
+    getter disablePictureInPicture
+    setter disablePictureInPicture
+    method requestPictureInPicture
+    getter onenterpictureinpicture
+    setter onenterpictureinpicture
+    getter onleavepictureinpicture
+    setter onleavepictureinpicture
+
+# support_webgl2_compute_context not supported on android, crbug.com/865569
+interface WebGL2ComputeRenderingContext
+
 [GLOBAL OBJECT]
     method openDatabase
     attribute eventSender                    # test only

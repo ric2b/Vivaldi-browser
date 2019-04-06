@@ -4,19 +4,6 @@
 
 source_set("fullscreen") {
   sources = [
-    "fullscreen_features.h",
-    "fullscreen_features.mm",
-  ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
-
-  deps = [
-    "//base",
-  ]
-}
-
-source_set("new_fullscreen") {
-  sources = [
     "animated_scoped_fullscreen_disabler.h",
     "animated_scoped_fullscreen_disabler.mm",
     "fullscreen_controller.h",
@@ -28,11 +15,11 @@ source_set("new_fullscreen") {
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
-  allow_circular_includes_from = [ ":new_fullscreen_internal" ]
+  allow_circular_includes_from = [ ":internal" ]
 
   deps = [
-    ":new_fullscreen_internal",
-    ":new_fullscreen_ui",
+    ":internal",
+    ":ui",
     "//base",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
@@ -42,7 +29,21 @@ source_set("new_fullscreen") {
   ]
 }
 
-source_set("new_fullscreen_coordinators") {
+source_set("feature_flags") {
+  sources = [
+    "fullscreen_features.h",
+    "fullscreen_features.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  deps = [
+    "//base",
+    "//components/flags_ui",
+  ]
+}
+
+source_set("coordinators") {
   sources = [
     "chrome_coordinator+fullscreen_disabling.h",
     "chrome_coordinator+fullscreen_disabling.mm",
@@ -51,14 +52,16 @@ source_set("new_fullscreen_coordinators") {
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
-    ":new_fullscreen",
+    ":fullscreen",
     "//base",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
   ]
 }
 
-source_set("new_fullscreen_internal") {
+source_set("internal") {
   sources = [
+    "fullscreen_content_adjustment_util.h",
+    "fullscreen_content_adjustment_util.mm",
     "fullscreen_controller_factory.mm",
     "fullscreen_controller_impl.h",
     "fullscreen_controller_impl.mm",
@@ -76,36 +79,31 @@ source_set("new_fullscreen_internal") {
     "fullscreen_web_state_observer.mm",
     "fullscreen_web_view_proxy_observer.h",
     "fullscreen_web_view_proxy_observer.mm",
-    "fullscreen_web_view_scroll_view_replacement_util.h",
-    "fullscreen_web_view_scroll_view_replacement_util.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
-    ":fullscreen",
-    ":new_fullscreen_ui",
+    ":feature_flags",
+    ":ui",
     "//base",
     "//components/keyed_service/ios",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/ui:ui_util",
     "//ios/chrome/browser/ui/broadcaster",
     "//ios/chrome/browser/ui/browser_list",
+    "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/web_state_list",
+    "//ios/chrome/common:timing",
     "//ios/web",
+    "//ui/gfx/geometry",
   ]
 }
 
-source_set("new_fullscreen_ui") {
+source_set("ui") {
   sources = [
     "fullscreen_animator.h",
     "fullscreen_animator.mm",
-    "fullscreen_foreground_animator.h",
-    "fullscreen_foreground_animator.mm",
-    "fullscreen_scroll_end_animator.h",
-    "fullscreen_scroll_end_animator.mm",
-    "fullscreen_scroll_to_top_animator.h",
-    "fullscreen_scroll_to_top_animator.mm",
     "fullscreen_ui_element.h",
   ]
 
@@ -113,12 +111,13 @@ source_set("new_fullscreen_ui") {
 
   deps = [
     "//base",
+    "//ios/chrome/browser/ui/util",
     "//ios/chrome/common:timing",
     "//ui/gfx/geometry",
   ]
 }
 
-source_set("new_unit_tests") {
+source_set("unit_tests") {
   testonly = true
   sources = [
     "fullscreen_mediator_unittest.mm",
@@ -131,54 +130,16 @@ source_set("new_unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
-    ":new_fullscreen",
-    ":new_fullscreen_internal",
-    ":new_fullscreen_ui",
+    ":fullscreen",
+    ":internal",
+    ":ui",
+    "//base/test:test_support",
+    "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui:ui_util",
     "//ios/chrome/browser/ui/broadcaster",
     "//ios/chrome/browser/ui/fullscreen/test",
     "//ios/chrome/browser/web_state_list",
     "//ios/chrome/browser/web_state_list:test_support",
-    "//ios/web",
-    "//ios/web/public",
-    "//ios/web/public/test/fakes",
-    "//testing/gtest",
-  ]
-}
-
-source_set("legacy_fullscreen") {
-  sources = [
-    "legacy_fullscreen_controller.h",
-    "legacy_fullscreen_controller.mm",
-  ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
-
-  deps = [
-    "//base",
-    "//ios/chrome/browser/ui:notifications",
-    "//ios/chrome/browser/ui/history_popup/requirements",
-    "//ios/chrome/browser/ui/overscroll_actions",
-    "//ios/chrome/browser/ui/page_info:coordinator",
-    "//ios/chrome/browser/ui/side_swipe",
-    "//ios/chrome/browser/ui/tabs/requirements",
-    "//ios/chrome/browser/ui/toolbar/public",
-    "//ios/chrome/browser/ui/tools_menu/public",
-    "//ios/chrome/browser/ui/voice",
-    "//ios/web",
-  ]
-}
-
-source_set("legacy_unit_tests") {
-  testonly = true
-  sources = [
-    "legacy_fullscreen_controller_unittest.mm",
-  ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
-
-  deps = [
-    ":legacy_fullscreen",
     "//ios/web",
     "//ios/web/public",
     "//ios/web/public/test/fakes",
@@ -198,12 +159,13 @@ source_set("eg_tests") {
   deps = [
     ":fullscreen",
     "//base",
+    "//base/test:test_support",
     "//ios/chrome/browser/ui:ui_util",
     "//ios/chrome/browser/ui/side_swipe",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
-    "//ios/testing:ios_test_support",
     "//ios/web:earl_grey_test_support",
+    "//ios/web/public",
     "//ios/web/public/test",
     "//ios/web/public/test/http_server",
   ]

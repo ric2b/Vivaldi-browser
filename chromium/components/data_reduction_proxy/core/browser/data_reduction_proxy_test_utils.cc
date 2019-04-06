@@ -36,9 +36,9 @@
 #include "components/prefs/testing_pref_service.h"
 #include "net/base/network_delegate_impl.h"
 #include "net/nqe/network_quality_estimator_test_util.h"
-#include "net/proxy/proxy_config.h"
-#include "net/proxy/proxy_info.h"
-#include "net/proxy/proxy_list.h"
+#include "net/proxy_resolution/proxy_config.h"
+#include "net/proxy_resolution/proxy_info.h"
+#include "net/proxy_resolution/proxy_list.h"
 #include "net/socket/socket_test_util.h"
 #include "net/url_request/url_request_context_storage.h"
 #include "net/url_request/url_request_intercepting_job_factory.h"
@@ -194,12 +194,12 @@ TestDataReductionProxyConfigServiceClient::TestTickClock::TestTickClock(
 }
 
 base::TimeTicks
-TestDataReductionProxyConfigServiceClient::TestTickClock::NowTicks() {
+TestDataReductionProxyConfigServiceClient::TestTickClock::NowTicks() const {
   return base::TimeTicks::UnixEpoch() + (time_ - base::Time::UnixEpoch());
 }
 
-base::Time
-TestDataReductionProxyConfigServiceClient::TestTickClock::Now() {
+base::Time TestDataReductionProxyConfigServiceClient::TestTickClock::Now()
+    const {
   return time_;
 }
 
@@ -611,7 +611,7 @@ void DataReductionProxyTestContext::InitSettings() {
 void DataReductionProxyTestContext::DestroySettings() {
   // Force destruction of |DBDataOwner|, which lives on DB task runner and is
   // indirectly owned by |settings_|.
-  if (settings_.get()) {
+  if (settings_) {
     settings_.reset();
     storage_delegate_->SetStorageDelegate(nullptr);
     RunUntilIdle();
@@ -687,7 +687,7 @@ void DataReductionProxyTestContext::
       net::MockRead(net::SYNCHRONOUS, net::OK),
   };
   net::StaticSocketDataProvider socket_data_provider(
-      mock_reads, arraysize(mock_reads), nullptr, 0);
+      mock_reads, base::span<net::MockWrite>());
   mock_socket_factory_->AddSocketDataProvider(&socket_data_provider);
 
   // Set the pref to cause the secure proxy check to be issued.

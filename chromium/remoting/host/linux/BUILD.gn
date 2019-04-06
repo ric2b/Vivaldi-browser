@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/c++/c++.gni")
 import("//remoting/build/config/remoting_build.gni")
 
 group("all_tests") {
@@ -16,7 +17,6 @@ if (enable_me2me_host) {
 
     deps = [
       "//base",
-      "//build/config:exe_and_shlib_deps",
     ]
 
     libs = [ "pam" ]
@@ -60,14 +60,12 @@ if (enable_me2me_host) {
       ":remoting_user_session",
     ]
     if (is_component_build) {
-      sources += [
-        "$root_build_dir/libbase.so",
-        "$root_build_dir/libc++.so",
-      ]
-      deps += [
-        "//base:base",
-        "//buildtools/third_party/libc++:libc++",
-      ]
+      sources += [ "$root_build_dir/libbase.so" ]
+      deps += [ "//base:base" ]
+    }
+    if (!libcpp_is_static && use_custom_libcxx) {
+      sources += [ "$root_build_dir/libc++.so" ]
+      deps += [ "//buildtools/third_party/libc++" ]
     }
   }
 
@@ -134,7 +132,6 @@ executable("remoting_native_messaging_host") {
 
   deps = [
     "//base",
-    "//build/config:exe_and_shlib_deps",
     "//net",
     "//remoting/base:breakpad",
     "//remoting/host",

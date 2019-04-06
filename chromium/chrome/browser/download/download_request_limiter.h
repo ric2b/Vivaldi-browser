@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -22,12 +23,13 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents_observer.h"
 
+#include "content/public/browser/web_contents_delegate.h"
+
 class HostContentSettingsMap;
 
 namespace content {
 class WebContents;
 struct DownloadInformation;
-struct DownloadItemAction;
 }
 
 // DownloadRequestLimiter is responsible for determining whether a download
@@ -78,9 +80,8 @@ class DownloadRequestLimiter
   static const size_t kMaxDownloadsAtOnce = 50;
 
   // The callback from CanDownloadOnIOThread. This is invoked on the io thread.
-  // The boolean parameter indicates whether or not the download is allowed
-  // |open| means that the downloaded file should open when finished.
-  typedef base::Callback<void(const content::DownloadItemAction&)> Callback;
+  // The boolean parameter indicates whether or not the download is allowed.
+  typedef base::Callback<void(bool /*allow*/)> Callback;
 
   // TabDownloadState maintains the download state for a particular tab.
   // TabDownloadState prompts the user with an infobar as necessary.
@@ -128,8 +129,6 @@ class DownloadRequestLimiter
         content::NavigationHandle* navigation_handle) override;
     void DidFinishNavigation(
         content::NavigationHandle* navigation_handle) override;
-    // Invoked when a user gesture occurs (mouse click, mouse scroll, tap, or
-    // key down). This may result in invoking Remove on DownloadRequestLimiter.
     void DidGetUserInteraction(const blink::WebInputEvent::Type type) override;
     void WebContentsDestroyed() override;
 
@@ -155,12 +154,15 @@ class DownloadRequestLimiter
     // given to the info bar delegate or permission bubble request.
     bool is_showing_prompt() const;
 
+    // This may result in invoking Remove on DownloadRequestLimiter.
+    void OnUserInteraction();
+
     // content_settings::Observer overrides.
     void OnContentSettingChanged(
         const ContentSettingsPattern& primary_pattern,
         const ContentSettingsPattern& secondary_pattern,
         ContentSettingsType content_type,
-        std::string resource_identifier) override;
+        const std::string& resource_identifier) override;
 
     // Remember to either block or allow automatic downloads from this origin.
     void SetContentSetting(ContentSetting setting);
@@ -173,6 +175,10 @@ class DownloadRequestLimiter
     // guarantee that |status| and |setting| correspond to each other.
     void SetDownloadStatusAndNotifyImpl(DownloadStatus status,
                                         ContentSetting setting);
+
+    // Check if download is restricted (either requires prompting or is blocked)
+    // for the |navigation_handle|.
+    bool IsNavigationRestricted(content::NavigationHandle* navigation_handle);
 
     content::WebContents* web_contents_;
 
@@ -194,6 +200,10 @@ class DownloadRequestLimiter
     // See description above CanDownloadOnIOThread for details on lifetime of
     // callbacks.
     std::vector<DownloadRequestLimiter::Callback> callbacks_;
+
+    // A list of hosts that won't cause tab's download state to change if the
+    // state is PROMPT_BEFORE_DOWNLOAD or DOWNLOADS_NOT_ALLOWED.
+    std::set<std::string> restricted_hosts_;
 
     ScopedObserver<HostContentSettingsMap, content_settings::Observer>
         observer_;
@@ -222,11 +232,14 @@ class DownloadRequestLimiter
                        web_contents_getter,
                    const GURL& url,
                    const std::string& request_method,
-                   const content::DownloadInformation& info,
-                   const Callback& callback);
+                   const Callback& callback,
+                   const content::DownloadInformation& info =
+                       content::DownloadInformation());
 
  private:
   FRIEND_TEST_ALL_PREFIXES(DownloadTest, DownloadResourceThrottleCancels);
+  FRIEND_TEST_ALL_PREFIXES(DownloadTest,
+                           DownloadRequestLimiterDisallowsAnchorDownloadTag);
   FRIEND_TEST_ALL_PREFIXES(ContentSettingBubbleControllerTest, Init);
   FRIEND_TEST_ALL_PREFIXES(ContentSettingImageModelBrowserTest,
                            CreateBubbleModel);
@@ -253,9 +266,7 @@ class DownloadRequestLimiter
   // potentially prompting the user.
   void CanDownloadImpl(content::WebContents* originating_contents,
                        const std::string& request_method,
-                       const Callback& callback,
-                       const bool open,
-                       const bool ask);
+                       const Callback& callback);
 
   // Invoked when decision to download has been made.
   void OnCanDownloadDecided(
@@ -263,7 +274,7 @@ class DownloadRequestLimiter
           web_contents_getter,
       const std::string& request_method,
       const Callback& orig_callback,
-      const content::DownloadItemAction& action);
+      bool allow);
 
   // Removes the specified TabDownloadState from the internal map and deletes
   // it. This has the effect of resetting the status for the tab to
@@ -273,6 +284,9 @@ class DownloadRequestLimiter
   static HostContentSettingsMap* GetContentSettings(
       content::WebContents* contents);
 
+  // Sets the callback for tests to know the result of OnCanDownloadDecided().
+  void SetOnCanDownloadDecidedCallbackForTesting(Callback callback);
+
   // TODO(bauerb): Change this to use WebContentsUserData.
   // Maps from tab to download state. The download state for a tab only exists
   // if the state is other than ALLOW_ONE_DOWNLOAD. Similarly once the state
@@ -280,6 +294,8 @@ class DownloadRequestLimiter
   // the TabDownloadState is removed and deleted (by way of Remove).
   typedef std::map<content::WebContents*, TabDownloadState*> StateMap;
   StateMap state_map_;
+
+  Callback on_can_download_decided_callback_;
 
   // Weak ptr factory used when |CanDownload| asks the delegate asynchronously
   // about the download.

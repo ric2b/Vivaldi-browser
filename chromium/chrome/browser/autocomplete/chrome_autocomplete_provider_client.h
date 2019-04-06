@@ -16,13 +16,17 @@ namespace content {
 class StoragePartition;
 }
 
+namespace unified_consent {
+class UrlKeyedDataCollectionConsentHelper;
+}
+
 class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
  public:
   explicit ChromeAutocompleteProviderClient(Profile* profile);
   ~ChromeAutocompleteProviderClient() override;
 
   // AutocompleteProviderClient:
-  net::URLRequestContextGetter* GetRequestContext() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   PrefService* GetPrefs() override;
   const AutocompleteSchemeClassifier& GetSchemeClassifier() const override;
   AutocompleteClassifier* GetAutocompleteClassifier() override;
@@ -35,12 +39,13 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   const TemplateURLService* GetTemplateURLService() const override;
   ContextualSuggestionsService* GetContextualSuggestionsService(
       bool create_if_necessary) const override;
+  DocumentSuggestionsService* GetDocumentSuggestionsService(
+      bool create_if_necessary) const override;
   const SearchTermsData& GetSearchTermsData() const override;
   scoped_refptr<ShortcutsBackend> GetShortcutsBackend() override;
   scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() override;
   std::unique_ptr<KeywordExtensionsDelegate> GetKeywordExtensionsDelegate(
       KeywordProvider* keyword_provider) override;
-  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
   std::string GetAcceptLanguages() const override;
   std::string GetEmbedderRepresentationOfAboutScheme() override;
   std::vector<base::string16> GetBuiltinURLs() override;
@@ -50,7 +55,7 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   base::Time GetCurrentVisitTimestamp() const override;
   bool IsOffTheRecord() const override;
   bool SearchSuggestEnabled() const override;
-  bool TabSyncEnabledAndUnencrypted() const override;
+  bool IsPersonalizedUrlDataCollectionActive() const override;
   bool IsAuthenticated() const override;
   void Classify(
       const base::string16& text,
@@ -66,17 +71,24 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   void StartServiceWorker(const GURL& destination_url) override;
   void OnAutocompleteControllerResultReady(
       AutocompleteController* controller) override;
-  bool IsTabOpenWithURL(const GURL& url) override;
+  bool IsTabOpenWithURL(const GURL& url,
+                        const AutocompleteInput* input) override;
 
   // For testing.
   void set_storage_partition(content::StoragePartition* storage_partition) {
     storage_partition_ = storage_partition;
   }
 
+  bool StrippedURLsAreEqual(const GURL& url1,
+                            const GURL& url2,
+                            const AutocompleteInput* input) const;
+
  private:
   Profile* profile_;
   ChromeAutocompleteSchemeClassifier scheme_classifier_;
   UIThreadSearchTermsData search_terms_data_;
+  std::unique_ptr<unified_consent::UrlKeyedDataCollectionConsentHelper>
+      url_consent_helper_;
 
   // Injectable storage partitiion, used for testing.
   content::StoragePartition* storage_partition_;

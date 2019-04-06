@@ -81,7 +81,7 @@ int MDnsConnection::SocketHandler::DoLoop(int rv) {
       connection_->OnDatagramReceived(&response_, recv_addr_, rv);
 
     rv = socket_->RecvFrom(
-        response_.io_buffer(), response_.io_buffer()->size(), &recv_addr_,
+        response_.io_buffer(), response_.io_buffer_size(), &recv_addr_,
         base::Bind(&MDnsConnection::SocketHandler::OnDatagramReceived,
                    base::Unretained(this)));
   } while (rv > 0);
@@ -196,11 +196,10 @@ void MDnsConnection::OnDatagramReceived(
   delegate_->HandlePacket(response, bytes_read);
 }
 
-MDnsClientImpl::Core::Core(base::Clock* clock, base::Timer* timer)
+MDnsClientImpl::Core::Core(base::Clock* clock, base::OneShotTimer* timer)
     : clock_(clock),
       cleanup_timer_(timer),
-      connection_(new MDnsConnection(this)) {
-}
+      connection_(new MDnsConnection(this)) {}
 
 MDnsClientImpl::Core::~Core() = default;
 
@@ -227,7 +226,7 @@ void MDnsClientImpl::Core::HandlePacket(DnsResponse* response,
   // erroneous behavior in case a packet contains multiple exclusive
   // records with the same type and name.
   std::map<MDnsCache::Key, MDnsCache::UpdateType> update_keys;
-
+  DCHECK_GT(bytes_read, 0);
   if (!response->InitParseWithoutQuery(bytes_read)) {
     DVLOG(1) << "Could not understand an mDNS packet.";
     return;  // Message is unreadable.
@@ -418,10 +417,10 @@ void MDnsClientImpl::Core::QueryCache(
 
 MDnsClientImpl::MDnsClientImpl()
     : clock_(base::DefaultClock::GetInstance()),
-      cleanup_timer_(new base::Timer(false, false)) {}
+      cleanup_timer_(new base::OneShotTimer()) {}
 
 MDnsClientImpl::MDnsClientImpl(base::Clock* clock,
-                               std::unique_ptr<base::Timer> timer)
+                               std::unique_ptr<base::OneShotTimer> timer)
     : clock_(clock), cleanup_timer_(std::move(timer)) {}
 
 MDnsClientImpl::~MDnsClientImpl() = default;

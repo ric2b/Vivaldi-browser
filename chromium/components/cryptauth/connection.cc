@@ -7,22 +7,23 @@
 #include <sstream>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/logging.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/connection_observer.h"
 #include "components/cryptauth/wire_message.h"
-#include "components/proximity_auth/logging/logging.h"
 
 namespace cryptauth {
 
-Connection::Connection(const RemoteDevice& remote_device)
+Connection::Connection(RemoteDeviceRef remote_device)
     : remote_device_(remote_device),
-      status_(DISCONNECTED),
+      status_(Status::DISCONNECTED),
       is_sending_message_(false) {}
 
 Connection::~Connection() {}
 
 bool Connection::IsConnected() const {
-  return status_ == CONNECTED;
+  return status_ == Status::CONNECTED;
 }
 
 void Connection::SendMessage(std::unique_ptr<WireMessage> message) {
@@ -50,8 +51,9 @@ void Connection::RemoveObserver(ConnectionObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-std::string Connection::GetDeviceAddress() {
-  return remote_device_.bluetooth_address;
+void Connection::GetConnectionRssi(
+    base::OnceCallback<void(base::Optional<int32_t>)> callback) {
+  std::move(callback).Run(base::nullopt);
 }
 
 void Connection::SetStatus(Status status) {
@@ -108,16 +110,28 @@ std::unique_ptr<WireMessage> Connection::DeserializeWireMessage(
   return WireMessage::Deserialize(received_bytes_, is_incomplete_message);
 }
 
-void Connection::NotifyGattCharacteristicsNotAvailable() {
-  for (auto& observer : observers_)
-    observer.OnGattCharacteristicsNotAvailable();
-}
-
 std::string Connection::GetDeviceInfoLogString() {
   std::stringstream ss;
   ss << "{id: \"" << remote_device().GetTruncatedDeviceIdForLogs()
      << "\", addr: \"" << GetDeviceAddress() << "\"}";
   return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& stream,
+                         const Connection::Status& status) {
+  switch (status) {
+    case Connection::Status::DISCONNECTED:
+      stream << "[disconnected]";
+      break;
+    case Connection::Status::IN_PROGRESS:
+      stream << "[in progress]";
+      break;
+    case Connection::Status::CONNECTED:
+      stream << "[connected]";
+      break;
+  }
+
+  return stream;
 }
 
 }  // namespace cryptauth

@@ -6,7 +6,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/version.h"
@@ -15,11 +14,12 @@
 
 namespace update_client {
 
-TaskSendUninstallPing::TaskSendUninstallPing(UpdateEngine* update_engine,
-                                             const std::string& id,
-                                             const base::Version& version,
-                                             int reason,
-                                             Callback callback)
+TaskSendUninstallPing::TaskSendUninstallPing(
+    scoped_refptr<UpdateEngine> update_engine,
+    const std::string& id,
+    const base::Version& version,
+    int reason,
+    Callback callback)
     : update_engine_(update_engine),
       id_(id),
       version_(version),
@@ -40,8 +40,7 @@ void TaskSendUninstallPing::Run() {
 
   update_engine_->SendUninstallPing(
       id_, version_, reason_,
-      base::BindOnce(&TaskSendUninstallPing::TaskComplete,
-                     base::Unretained(this)));
+      base::BindOnce(&TaskSendUninstallPing::TaskComplete, this));
 }
 
 void TaskSendUninstallPing::Cancel() {
@@ -58,7 +57,8 @@ void TaskSendUninstallPing::TaskComplete(Error error) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback_), this, error));
+      FROM_HERE,
+      base::BindOnce(std::move(callback_), scoped_refptr<Task>(this), error));
 }
 
 }  // namespace update_client

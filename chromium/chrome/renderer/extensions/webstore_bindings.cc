@@ -14,12 +14,12 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/renderer/script_context.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "url/gurl.h"
 #include "v8/include/v8.h"
 
@@ -52,8 +52,6 @@ int g_next_install_id = 0;
 
 WebstoreBindings::WebstoreBindings(ScriptContext* context)
     : ObjectBackedNativeHandler(context) {
-  RouteFunction("Install", "webstore",
-                base::Bind(&WebstoreBindings::Install, base::Unretained(this)));
   content::RenderFrame* render_frame = context->GetRenderFrame();
   if (render_frame)
     render_frame->GetRemoteAssociatedInterfaces()->GetInterface(
@@ -61,6 +59,12 @@ WebstoreBindings::WebstoreBindings(ScriptContext* context)
 }
 
 WebstoreBindings::~WebstoreBindings() {}
+
+void WebstoreBindings::AddRoutes() {
+  RouteHandlerFunction(
+      "Install", "webstore",
+      base::Bind(&WebstoreBindings::Install, base::Unretained(this)));
+}
 
 void WebstoreBindings::InlineInstallResponse(int install_id,
                                              bool success,

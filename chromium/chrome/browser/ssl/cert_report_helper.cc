@@ -38,7 +38,7 @@ namespace {
 
 // Certificate reports are only sent from official builds, but this flag can be
 // set by tests.
-static bool g_is_fake_official_build_for_testing = false;
+static bool g_is_fake_official_build_for_cert_report_testing = false;
 
 // Returns a pointer to the Profile associated with |web_contents|.
 Profile* GetProfile(content::WebContents* web_contents) {
@@ -60,7 +60,7 @@ CertReportHelper::CertReportHelper(
     content::WebContents* web_contents,
     const GURL& request_url,
     const net::SSLInfo& ssl_info,
-    certificate_reporting::ErrorReport::InterstitialReason interstitial_reason,
+    CertificateErrorReport::InterstitialReason interstitial_reason,
     bool overridable,
     const base::Time& interstitial_time,
     security_interstitials::MetricsHelper* metrics_helper)
@@ -78,7 +78,7 @@ CertReportHelper::~CertReportHelper() {
 
 // static
 void CertReportHelper::SetFakeOfficialBuildForTesting() {
-  g_is_fake_official_build_for_testing = true;
+  g_is_fake_official_build_for_cert_report_testing = true;
 }
 
 void CertReportHelper::PopulateExtendedReportingOption(
@@ -130,10 +130,10 @@ void CertReportHelper::HandleReportingCommands(
           safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
       break;
     case security_interstitials::CMD_PROCEED:
-      user_action_ = certificate_reporting::ErrorReport::USER_PROCEEDED;
+      user_action_ = CertificateErrorReport::USER_PROCEEDED;
       break;
     case security_interstitials::CMD_DONT_PROCEED:
-      user_action_ = certificate_reporting::ErrorReport::USER_DID_NOT_PROCEED;
+      user_action_ = CertificateErrorReport::USER_DID_NOT_PROCEED;
       break;
     default:
       // Other commands can be ignored.
@@ -158,7 +158,7 @@ void CertReportHelper::FinishCertCollection() {
     return;
 
   std::string serialized_report;
-  certificate_reporting::ErrorReport report(request_url_.host(), ssl_info_);
+  CertificateErrorReport report(request_url_.host(), ssl_info_);
 
   report.AddNetworkTimeInfo(g_browser_process->network_time_tracker());
 
@@ -174,9 +174,8 @@ void CertReportHelper::FinishCertCollection() {
 
   report.SetInterstitialInfo(
       interstitial_reason_, user_action_,
-      overridable_
-          ? certificate_reporting::ErrorReport::INTERSTITIAL_OVERRIDABLE
-          : certificate_reporting::ErrorReport::INTERSTITIAL_NOT_OVERRIDABLE,
+      overridable_ ? CertificateErrorReport::INTERSTITIAL_OVERRIDABLE
+                   : CertificateErrorReport::INTERSTITIAL_NOT_OVERRIDABLE,
       interstitial_time_);
 
   if (!report.Serialize(&serialized_report)) {
@@ -192,17 +191,20 @@ bool CertReportHelper::ShouldShowCertificateReporterCheckbox() {
   // and the window is not incognito and the feature is not disabled by policy.
   const bool in_incognito =
       web_contents_->GetBrowserContext()->IsOffTheRecord();
+  const PrefService* pref_service = GetProfile(web_contents_)->GetPrefs();
+  bool can_show_checkbox =
+      safe_browsing::IsExtendedReportingOptInAllowed(*pref_service) &&
+      !safe_browsing::IsExtendedReportingPolicyManaged(*pref_service);
+
   return base::FieldTrialList::FindFullName(kFinchExperimentName) ==
              kFinchGroupShowPossiblySend &&
-         !in_incognito &&
-         safe_browsing::IsExtendedReportingOptInAllowed(
-             *GetProfile(web_contents_)->GetPrefs());
+         !in_incognito && can_show_checkbox;
 }
 
 bool CertReportHelper::ShouldReportCertificateError() {
   DCHECK(ShouldShowCertificateReporterCheckbox());
 
-  bool is_official_build = g_is_fake_official_build_for_testing;
+  bool is_official_build = g_is_fake_official_build_for_cert_report_testing;
 #if defined(OFFICIAL_BUILD) && defined(GOOGLE_CHROME_BUILD)
   is_official_build = true;
 #endif

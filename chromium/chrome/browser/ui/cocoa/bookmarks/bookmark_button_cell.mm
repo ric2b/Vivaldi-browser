@@ -12,6 +12,7 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_button.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_context_menu_cocoa_controller.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/grit/generated_resources.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "ui/base/cocoa/nsview_additions.h"
@@ -32,7 +33,7 @@ const int kHierarchyButtonTrailingPadding = 4;
 const int kHierarchyButtonLeadingPadding = 11;
 
 const int kIconTextSpacer = 4;
-const int kTrailingPadding = 4;
+const int kTrailingCellPadding = 4;
 const int kIconLeadingPadding = 4;
 
 const int kDefaultFontSize = 12;
@@ -132,9 +133,10 @@ const CGFloat kKernAmount = 0.2;
       NSKernAttributeName : @(kKernAmount),
       NSFontAttributeName : [self fontForBookmarkBarCell],
     }];
-    width += kIconTextSpacer + std::ceil(titleSize.width) + kTrailingPadding;
+    width +=
+        kIconTextSpacer + std::ceil(titleSize.width) + kTrailingCellPadding;
   } else {
-    width += kTrailingPadding;
+    width += kTrailingCellPadding;
   }
   return width;
 }
@@ -377,12 +379,13 @@ const CGFloat kKernAmount = 0.2;
   // Return the space needed to display the image and title, with a little
   // distance between them.
   cellSize = NSMakeSize(kIconLeadingPadding + [[self image] size].width,
-                        bookmarks::kBookmarkButtonHeight);
+                        GetCocoaLayoutConstant(BOOKMARK_BAR_HEIGHT));
   NSString* title = [self visibleTitle];
   if ([title length] > 0) {
     CGFloat textWidth =
         [title sizeWithAttributes:[self titleTextAttributes]].width;
-    cellSize.width += kIconTextSpacer + std::ceil(textWidth) + kTrailingPadding;
+    cellSize.width +=
+        kIconTextSpacer + std::ceil(textWidth) + kTrailingCellPadding;
   } else {
     cellSize.width += kIconLeadingPadding;
   }
@@ -414,7 +417,8 @@ const CGFloat kKernAmount = 0.2;
                          ? NSWidth(theRect) - NSMinX(imageRect)  // Un-flip
                          : NSMaxX(imageRect);
   textRect.origin.x = imageEnd + kIconTextSpacer;
-  textRect.size.width = NSWidth(theRect) - NSMinX(textRect) - kTrailingPadding;
+  textRect.size.width =
+      NSWidth(theRect) - NSMinX(textRect) - kTrailingCellPadding;
   if (drawFolderArrow_)
     textRect.size.width -=
         [arrowImage_ size].width + kHierarchyButtonTrailingPadding;

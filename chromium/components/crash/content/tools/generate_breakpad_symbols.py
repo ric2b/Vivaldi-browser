@@ -29,21 +29,6 @@ BINARY_INFO = collections.namedtuple('BINARY_INFO',
                                      ['platform', 'arch', 'hash', 'name'])
 
 
-def GetCommandOutput(command):
-  """Runs the command list, returning its output.
-
-  Prints the given command (which should be a list of one or more strings),
-  then runs it and returns its output (stdout) as a string.
-
-  From chromium_utils.
-  """
-  devnull = open(os.devnull, 'w')
-  proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=devnull,
-                          bufsize=1)
-  output = proc.communicate()[0]
-  return output
-
-
 def GetDumpSymsBinary(build_dir=None):
   """Returns the path to the dump_syms binary."""
   DUMP_SYMS = 'dump_syms'
@@ -67,8 +52,7 @@ def Resolve(path, exe_path, loader_path, rpaths):
   path = path.replace('@executable_path', exe_path)
   if path.find('@rpath') != -1:
     for rpath in rpaths:
-      new_path = Resolve(path.replace('@rpath', rpath), exe_path, loader_path,
-                         [])
+      new_path = path.replace('@rpath', rpath)
       if os.access(new_path, os.X_OK):
         return new_path
     return ''
@@ -79,7 +63,10 @@ def GetSharedLibraryDependenciesLinux(binary):
   """Return absolute paths to all shared library dependecies of the binary.
 
   This implementation assumes that we're running on a Linux system."""
-  ldd = GetCommandOutput(['ldd', binary])
+  # TODO(thakis): Figure out how to make this work for android
+  # (https://crbug.com/849904) and use check_output().
+  p = subprocess.Popen(['ldd', binary], stdout=subprocess.PIPE)
+  ldd = p.communicate()[0]
   lib_re = re.compile('\t.* => (.+) \(.*\)$')
   result = []
   for line in ldd.splitlines():
@@ -89,27 +76,90 @@ def GetSharedLibraryDependenciesLinux(binary):
   return result
 
 
+def GetDeveloperDirMac():
+  """Finds a good DEVELOPER_DIR value to run Mac dev tools.
+
+  It checks the existing DEVELOPER_DIR and `xcode-select -p` and uses
+  one of those if the folder exists, and falls back to one of the
+  existing system folders with dev tools.
+
+  Returns:
+    (string) path to assign to DEVELOPER_DIR env var.
+  """
+  candidate_paths = []
+  if 'DEVELOPER_DIR' in os.environ:
+    candidate_paths.append(os.environ['DEVELOPER_DIR'])
+  candidate_paths.extend([
+    subprocess.check_output(['xcode-select', '-p']).strip(),
+    # Most Mac 10.1[0-2] bots have at least one Xcode installed.
+    '/Applications/Xcode.app',
+    '/Applications/Xcode9.0.app',
+    '/Applications/Xcode8.0.app',
+    # Mac 10.13 bots don't have any Xcode installed, but have CLI tools as a
+    # temporary workaround.
+    '/Library/Developer/CommandLineTools',
+  ])
+  for path in candidate_paths:
+    if os.path.exists(path):
+      return path
+  print 'WARNING: no value found for DEVELOPER_DIR. Some commands may fail.'
+
+
 def GetSharedLibraryDependenciesMac(binary, exe_path):
   """Return absolute paths to all shared library dependecies of the binary.
 
   This implementation assumes that we're running on a Mac system."""
-  loader_path = os.path.dirname(binary)
-  otool = GetCommandOutput(['otool', '-l', binary]).splitlines()
+  # realpath() serves two purposes:
+  # 1. If an executable is linked against a framework, it links against
+  #    Framework.framework/Framework, which is a symlink to
+  #    Framework.framework/Framework/Versions/A/Framework. rpaths are relative
+  #    to the real location, so resolving the symlink is important.
+  # 2. It converts binary to an absolute path. If binary is just
+  #    "foo.dylib" in the current directory, dirname() would return an empty
+  #    string, causing "@loader_path/foo" to incorrectly expand to "/foo".
+  loader_path = os.path.dirname(os.path.realpath(binary))
+  env = os.environ.copy()
+  developer_dir = GetDeveloperDirMac()
+  if developer_dir:
+    env['DEVELOPER_DIR'] = developer_dir
+  otool = subprocess.check_output(['otool', '-l', binary], env=env).splitlines()
   rpaths = []
+  dylib_id = None
   for idx, line in enumerate(otool):
     if line.find('cmd LC_RPATH') != -1:
       m = re.match(' *path (.*) \(offset .*\)$', otool[idx+2])
-      rpaths.append(m.group(1))
+      rpath = m.group(1)
+      rpath = rpath.replace('@loader_path', loader_path)
+      rpath = rpath.replace('@executable_path', exe_path)
+      rpaths.append(rpath)
+    elif line.find('cmd LC_ID_DYLIB') != -1:
+      m = re.match(' *name (.*) \(offset .*\)$', otool[idx+2])
+      dylib_id = m.group(1)
+  # `man dyld` says that @rpath is resolved against a stack of LC_RPATHs from
+  # all executable images leading to the load of the current module. This is
+  # intentionally not implemented here, since we require that every .dylib
+  # contains all the rpaths it needs on its own, without relying on rpaths of
+  # the loading executables.
 
-  otool = GetCommandOutput(['otool', '-L', binary]).splitlines()
+  otool = subprocess.check_output(['otool', '-L', binary], env=env).splitlines()
   lib_re = re.compile('\t(.*) \(compatibility .*\)$')
   deps = []
   for line in otool:
     m = lib_re.match(line)
     if m:
+      # For frameworks and shared libraries, `otool -L` prints the LC_ID_DYLIB
+      # as the first line. Filter that out.
+      if m.group(1) == dylib_id:
+        continue
       dep = Resolve(m.group(1), exe_path, loader_path, rpaths)
       if dep:
         deps.append(os.path.normpath(dep))
+      else:
+        print >>sys.stderr, (
+            'ERROR: failed to resolve %s, exe_path %s, loader_path %s, '
+            'rpaths %s' % (m.group(1), exe_path, loader_path,
+                           ', '.join(rpaths)))
+        sys.exit(1)
   return deps
 
 
@@ -175,7 +225,7 @@ def GenerateSymbols(options, binaries):
           break
 
         binary_info = GetBinaryInfoFromHeaderInfo(
-            GetCommandOutput([dump_syms, '-i', binary]).splitlines()[0])
+            subprocess.check_output([dump_syms, '-i', binary]).splitlines()[0])
         if not binary_info:
           should_dump_syms = False
           reason = "Could not obtain binary information."
@@ -212,11 +262,10 @@ def GenerateSymbols(options, binaries):
         with print_lock:
           print "Generating symbols for %s" % binary
 
-      syms = GetCommandOutput([dump_syms, '-r', binary])
       mkdir_p(os.path.dirname(output_path))
       try:
         with open(output_path, 'wb') as f:
-          f.write(syms)
+          subprocess.check_call([dump_syms, '-r', binary], stdout=f)
       except Exception, e:
         # Not much we can do about this.
         with print_lock:

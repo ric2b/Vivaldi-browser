@@ -6,7 +6,6 @@
 
 #include <unordered_map>
 
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_host.h"
 #include "cc/input/scrollbar_animation_controller.h"
@@ -29,9 +28,7 @@
 #include "cc/test/layer_tree_test.h"
 #include "cc/test/mock_occlusion_tracker.h"
 #include "cc/test/stub_layer_tree_host_single_thread_client.h"
-#include "cc/test/test_context_provider.h"
 #include "cc/test/test_task_graph_runner.h"
-#include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -40,6 +37,8 @@
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/tree_synchronizer.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
+#include "components/viz/test/test_context_provider.h"
+#include "components/viz/test/test_gles2_interface.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -220,7 +219,6 @@ TEST_F(ScrollbarLayerTest, RepaintOverlayWhenResourceDisposed) {
     scrollbar_layer->SetBounds(gfx::Size(100, 100));
     layer_tree_root->SetBounds(gfx::Size(100, 200));
     content_layer->SetBounds(gfx::Size(100, 200));
-    scrollbar_layer->set_visible_layer_rect(gfx::Rect(0, 0, 100, 200));
   }
 
   // First call to update should create a resource. The scrollbar itself thinks
@@ -966,10 +964,6 @@ TEST_F(AuraScrollbarLayerTest, ScrollbarLayerCreateAfterSetScrollable) {
   layer_tree_host_->CommitAndCreatePendingTree();
   host_impl->ActivateSyncTree();
 
-  LayerImpl* scroll_layer_impl =
-      host_impl->active_tree()->LayerByElementId(scroll_layer->element_id());
-  EXPECT_TRUE(scroll_layer_impl->needs_show_scrollbars());
-
   std::unique_ptr<Scrollbar> scrollbar(new FakeScrollbar(false, true, true));
   scoped_refptr<Layer> scrollbar_layer = SolidColorScrollbarLayer::Create(
       scrollbar->Orientation(), kThumbThickness, kTrackStart,
@@ -1125,11 +1119,9 @@ class ScrollbarLayerTestResourceCreationAndRelease : public ScrollbarLayerTest {
     layer_tree_root->SetScrollOffset(gfx::ScrollOffset(10, 20));
     layer_tree_root->SetBounds(gfx::Size(100, 200));
     content_layer->SetBounds(gfx::Size(100, 200));
-    scrollbar_layer->set_visible_layer_rect(gfx::Rect(0, 0, 100, 200));
 
     testing::Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-    EXPECT_EQ(scrollbar_layer->GetLayerTreeHostForTesting(),
-              layer_tree_host_.get());
+    EXPECT_EQ(scrollbar_layer->layer_tree_host(), layer_tree_host_.get());
 
     for (int update_counter = 0; update_counter < num_updates; update_counter++)
       scrollbar_layer->Update();
@@ -1184,11 +1176,9 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   scrollbar_layer->SetPosition(gfx::PointF(scrollbar_location));
   layer_tree_root->SetBounds(gfx::Size(100, 200));
   content_layer->SetBounds(gfx::Size(100, 200));
-  scrollbar_layer->set_visible_layer_rect(gfx::Rect(0, 0, 100, 200));
 
   testing::Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-  EXPECT_EQ(scrollbar_layer->GetLayerTreeHostForTesting(),
-            layer_tree_host_.get());
+  EXPECT_EQ(scrollbar_layer->layer_tree_host(), layer_tree_host_.get());
 
   size_t resource_count;
   int expected_created, expected_deleted;
@@ -1311,7 +1301,10 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_EQ(gfx::Size(90, 15), fake_ui_resource_manager_->ui_resource_size(
                                    scrollbar_layer->track_resource_id()));
 
-  scrollbar_layer->ResetNeedsDisplayForTesting();
+  // Simulate commit to compositor thread.
+  scrollbar_layer->PushPropertiesTo(
+      scrollbar_layer->CreateLayerImpl(layer_tree_host_->active_tree()).get());
+
   EXPECT_FALSE(scrollbar_layer->Update());
   EXPECT_NE(0, scrollbar_layer->track_resource_id());
   EXPECT_EQ(0, scrollbar_layer->thumb_resource_id());
@@ -1344,13 +1337,12 @@ class ScaledScrollbarLayerTestResourceCreation : public ScrollbarLayerTest {
     scrollbar_layer->SetPosition(gfx::PointF(scrollbar_location));
     layer_tree_root->SetBounds(gfx::Size(100, 200));
     content_layer->SetBounds(gfx::Size(100, 200));
-    scrollbar_layer->set_visible_layer_rect(
-        gfx::Rect(scrollbar_location, scrollbar_layer->bounds()));
 
-    EXPECT_EQ(scrollbar_layer->GetLayerTreeHostForTesting(),
-              layer_tree_host_.get());
+    EXPECT_EQ(scrollbar_layer->layer_tree_host(), layer_tree_host_.get());
 
-    layer_tree_host_->SetDeviceScaleFactor(test_scale);
+    layer_tree_host_->SetViewportSizeAndScale(
+        layer_tree_host_->device_viewport_size(), test_scale,
+        layer_tree_host_->local_surface_id_from_parent());
 
     scrollbar_layer->Update();
 
@@ -1382,10 +1374,11 @@ TEST_F(ScaledScrollbarLayerTestResourceCreation, ScaledResourceUpload) {
 
   // Try something extreme to be larger than max texture size, and make it a
   // non-integer for funsies.
-  scoped_refptr<TestContextProvider> context = TestContextProvider::Create();
+  scoped_refptr<viz::TestContextProvider> context =
+      viz::TestContextProvider::Create();
   // Keep the max texture size reasonable so we don't OOM on low end devices
   // (crbug.com/642333).
-  context->UnboundTestContext3d()->set_max_texture_size(512);
+  context->UnboundTestContextGL()->set_max_texture_size(512);
   context->BindToCurrentThread();
   int max_texture_size = 0;
   context->ContextGL()->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
@@ -1411,9 +1404,10 @@ class ScaledScrollbarLayerTestScaledRasterization : public ScrollbarLayerTest {
     scrollbar_layer->SetPosition(gfx::PointF(scrollbar_rect.origin()));
     scrollbar_layer->fake_scrollbar()->set_location(scrollbar_rect.origin());
     scrollbar_layer->fake_scrollbar()->set_track_rect(scrollbar_rect);
-    scrollbar_layer->set_visible_layer_rect(scrollbar_rect);
 
-    layer_tree_host_->SetDeviceScaleFactor(test_scale);
+    layer_tree_host_->SetViewportSizeAndScale(
+        layer_tree_host_->device_viewport_size(), test_scale,
+        layer_tree_host_->local_surface_id_from_parent());
 
     scrollbar_layer->Update();
 

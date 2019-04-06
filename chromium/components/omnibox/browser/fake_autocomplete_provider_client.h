@@ -49,9 +49,14 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
     in_memory_url_index_ = std::move(index);
   }
 
-  bool IsTabOpenWithURL(const GURL& url) override;
-  void set_is_tab_open_with_url(bool is_open) {
-    is_tab_open_with_url_ = is_open;
+  bool IsTabOpenWithURL(const GURL& url,
+                        const AutocompleteInput* input) override;
+
+  // A test calls this to establish the set of URLs that will return
+  // true from IsTabOpenWithURL() above. It's a simple substring match
+  // of the URL.
+  void set_url_substring_match(const std::string& substr) {
+    substring_to_match_ = substr;
   }
 
  private:
@@ -61,8 +66,10 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
   SearchTermsData search_terms_data_;
   std::unique_ptr<InMemoryURLIndex> in_memory_url_index_;
   std::unique_ptr<history::HistoryService> history_service_;
-  bool is_tab_open_with_url_;
   scoped_refptr<ShortcutsBackend> shortcuts_backend_;
+
+  // Substring used to match URLs for IsTabOpenWithURL().
+  std::string substring_to_match_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeAutocompleteProviderClient);
 };

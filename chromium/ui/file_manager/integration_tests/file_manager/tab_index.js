@@ -7,7 +7,7 @@
 /**
  * Tests the focus behavior of the search box.
  */
-testcase.searchBoxFocus = function() {
+testcase.tabindexSearchBoxFocus = function() {
   var appId;
   StepsRunner.run([
     // Set up File Manager.
@@ -29,13 +29,14 @@ testcase.searchBoxFocus = function() {
     // Check that the search box has the focus.
     function(result) {
       chrome.test.assertTrue(result);
-      remoteCall.waitForElement(appId, ['#search-box input:focus']).
-          then(this.next); },
+      remoteCall.waitForElement(appId, ['#search-box cr-input:focus-within'])
+          .then(this.next);
+    },
     // Press the Esc key.
     function(element) {
       remoteCall.callRemoteTestUtil(
           'fakeKeyDown', appId,
-          ['#search-box input', 'Escape', 'U+001B', false, false, false],
+          ['#search-box cr-input', 'Escape', 'U+001B', false, false, false],
           this.next);
     },
     // Check that the file list has the focus.
@@ -115,12 +116,13 @@ testcase.tabindexFocusDownloads = function() {
     function(results) {
       appId = results.windowId;
       remoteCall.waitForElement(appId, ['#file-list:focus']).then(this.next);
-    },
-    // Press the Tab key.
-    function(element) {
+    }, function(element) {
       remoteCall.callRemoteTestUtil('getActiveElement', appId, [], this.next);
     }, function(element) {
       chrome.test.assertEq('list', element.attributes['class']);
+      remoteCall.checkNextTabFocus(appId, 'breadcrumb-path-0').then(this.next);
+    }, function(result) {
+      chrome.test.assertTrue(result);
       remoteCall.checkNextTabFocus(appId, 'search-button').then(this.next);
     }, function(result) {
       chrome.test.assertTrue(result);
@@ -254,7 +256,7 @@ function tabindexFocus(dialogParams, volumeName, expectedSet, initialize,
     if (dialogParams.type === 'saveFile') {
       promise = promise.then(function() {
         return remoteCall.waitForElement(
-            appId, ['#filename-input-textbox:focus']);
+            appId, ['#filename-input-textbox:focus-within']);
       });
     } else {
       promise = promise.then(function() {
@@ -308,8 +310,9 @@ testcase.tabindexOpenDialogDownloads = function() {
             'selectFile', appId, ['hello.txt']);
       },
       ['#ok-button:not([disabled])'],
-      ['ok-button', 'cancel-button', 'search-button', 'view-button',
-       'sort-button', 'gear-button', 'directory-tree', 'file-list']));
+      ['ok-button', 'cancel-button', 'breadcrumb-path-0', 'search-button',
+      'view-button', 'sort-button', 'gear-button', 'directory-tree',
+      'file-list']));
 };
 
 /**
@@ -338,9 +341,9 @@ testcase.tabindexSaveFileDialogDownloads = function() {
       },
       'downloads', BASIC_LOCAL_ENTRY_SET, null,
       ['#ok-button:not([disabled])'],
-      ['ok-button', 'cancel-button', 'search-button', 'view-button',
-       'sort-button', 'gear-button', 'directory-tree', 'file-list',
-       'new-folder-button', 'filename-input-textbox']));
+      ['ok-button', 'cancel-button', 'breadcrumb-path-0', 'search-button',
+      'view-button', 'sort-button', 'gear-button', 'directory-tree',
+      'file-list', 'new-folder-button', 'filename-input-textbox']));
 };
 
 /**

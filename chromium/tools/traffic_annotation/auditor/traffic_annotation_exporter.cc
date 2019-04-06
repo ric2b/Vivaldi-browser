@@ -77,9 +77,12 @@ TrafficAnnotationExporter::TrafficAnnotationExporter(
     const base::FilePath& source_path)
     : source_path_(source_path), modified_(false) {
   all_supported_platforms_.push_back("linux");
+  all_supported_platforms_.push_back("mac");
   all_supported_platforms_.push_back("windows");
 #if defined(OS_LINUX)
   current_platform_ = "linux";
+#elif defined(OS_MACOSX)
+  current_platform_ = "mac";
 #elif defined(OS_WIN)
   current_platform_ = "windows";
 #else
@@ -276,6 +279,7 @@ bool TrafficAnnotationExporter::UpdateAnnotations(
 std::string TrafficAnnotationExporter::GenerateSerializedXML() const {
   XmlWriter writer;
   writer.StartWriting();
+  writer.AppendElementContent(kXmlComment);
   writer.StartElement("annotations");
 
   for (const auto& item : archive_) {
@@ -334,11 +338,8 @@ std::string TrafficAnnotationExporter::GenerateSerializedXML() const {
   writer.EndElement();
 
   writer.StopWriting();
-  std::string xml_content = writer.GetWrittenString();
-  // Add comment before annotation tag (and after xml version).
-  xml_content.insert(xml_content.find("<annotations>"), kXmlComment);
 
-  return xml_content;
+  return writer.GetWrittenString();
 }
 
 bool TrafficAnnotationExporter::SaveAnnotationsXML() const {

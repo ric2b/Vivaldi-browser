@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_APP_SHORTCUT_LAUNCHER_ITEM_CONTROLLER_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_APP_SHORTCUT_LAUNCHER_ITEM_CONTROLLER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,8 @@ class WebContents;
 namespace extensions {
 class Extension;
 }
+
+class LauncherContextMenu;
 
 // Item controller for an app shortcut.
 // If the associated app is a platform or ARC app, launching the app replaces
@@ -47,7 +50,8 @@ class AppShortcutLauncherItemController : public ash::ShelfItemDelegate {
                     ash::ShelfLaunchSource source,
                     ItemSelectedCallback callback) override;
   ash::MenuItemList GetAppMenuItems(int event_flags) override;
-  std::unique_ptr<ui::MenuModel> GetContextMenu(int64_t display_id) override;
+  void GetContextMenu(int64_t display_id,
+                      GetMenuModelCallback callback) override;
   void ExecuteCommand(bool from_context_menu,
                       int64_t command_id,
                       int32_t event_flags,
@@ -99,6 +103,8 @@ class AppShortcutLauncherItemController : public ash::ShelfItemDelegate {
 
   // The cached list of open app web contents shown in an application menu.
   std::vector<content::WebContents*> app_menu_items_;
+
+  std::unique_ptr<LauncherContextMenu> context_menu_;
 
   DISALLOW_COPY_AND_ASSIGN(AppShortcutLauncherItemController);
 };

@@ -27,7 +27,6 @@
 #include "base/timer/timer.h"
 #include "chromeos/chromeos_switches.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/app_list/presenter/app_list.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
 #include "ui/compositor/layer_animation_element.h"

@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 
+#include "base/bind_helpers.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -58,7 +59,6 @@ void ReadFromReader(LocalFileStreamReader* reader,
 }
 
 void NeverCalled(int) { ADD_FAILURE(); }
-void EmptyCallback() {}
 
 void QuitLoop() {
   base::RunLoop::QuitCurrentWhenIdleDeprecated();
@@ -68,8 +68,7 @@ void QuitLoop() {
 
 class LocalFileStreamReaderTest : public testing::Test {
  public:
-  LocalFileStreamReaderTest()
-      : file_thread_("FileUtilProxyTestFileThread") {}
+  LocalFileStreamReaderTest() : file_thread_("TestFileThread") {}
 
   void SetUp() override {
     ASSERT_TRUE(file_thread_.Start());
@@ -120,8 +119,8 @@ class LocalFileStreamReaderTest : public testing::Test {
   }
 
   void EnsureFileTaskFinished() {
-    file_task_runner()->PostTaskAndReply(
-        FROM_HERE, base::Bind(&EmptyCallback), base::Bind(&QuitLoop));
+    file_task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                         base::BindOnce(&QuitLoop));
     base::RunLoop().Run();
   }
 

@@ -29,18 +29,16 @@ class WebState;
 @protocol LocationBarURLLoader;
 @class PageInfoBridge;
 class OmniboxViewIOS;
-@class OmniboxClearButtonBridge;
 @class OmniboxPopupCoordinator;
 @protocol OmniboxPopupPositioner;
-@class LocationBarView;
+@class LocationBarLegacyView;
 class ScopedFullscreenDisabler;
 class ToolbarModel;
 
 // Concrete implementation of the LocationBarController interface.
-class LocationBarControllerImpl : public LocationBarController,
-                                  public LeftImageProvider {
+class LocationBarControllerImpl : public LocationBarController {
  public:
-  LocationBarControllerImpl(LocationBarView* location_bar_view,
+  LocationBarControllerImpl(LocationBarLegacyView* location_bar_view,
                             ios::ChromeBrowserState* browser_state,
                             id<LocationBarDelegate> delegate,
                             id<BrowserCommands> dispatcher);
@@ -77,9 +75,6 @@ class LocationBarControllerImpl : public LocationBarController,
   OmniboxView* GetLocationEntry() override;
   bool IsShowingPlaceholderWhileCollapsed() override;
 
-  // LeftImageProvider implementation.
-  void SetLeftImage(int ImageId) override;
-
  private:
   // Installs a UIButton that serves as the location icon and lock icon.  This
   // button is installed as a left view of |field_|.
@@ -89,22 +84,14 @@ class LocationBarControllerImpl : public LocationBarController,
   // Does nothing on tablet.
   void InstallVoiceSearchIcon();
 
-  // Creates the clear text UIButton to be used as a right view of |field_|.
-  void CreateClearTextIcon(bool is_incognito);
-
-  // Updates the view to show the appropriate button (e.g. clear text or voice
-  // search) on the right side of |field_|.
-  void UpdateRightDecorations();
 
   bool show_hint_text_;
-  __strong UIButton* clear_text_button_;
   std::unique_ptr<OmniboxViewIOS> edit_view_;
 
-  __strong OmniboxClearButtonBridge* clear_button_bridge_;
   // A bridge from a UIControl action to the dispatcher to display a page
   // info popup.
   __strong PageInfoBridge* page_info_bridge_;
-  LocationBarView* location_bar_view_;
+  LocationBarLegacyView* location_bar_view_;
   __weak id<LocationBarDelegate> delegate_;
   __weak id<LocationBarURLLoader> URLLoader_;
   // Dispatcher to send commands from the location bar.

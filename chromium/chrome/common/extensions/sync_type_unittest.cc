@@ -5,7 +5,6 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "extensions/common/extension.h"
@@ -39,10 +38,11 @@ class ExtensionSyncTypeTest : public testing::Test {
     base::DictionaryValue source;
     source.SetString(keys::kName, "PossiblySyncableExtension");
     source.SetString(keys::kVersion, "0.0.0.0");
+    source.SetInteger(keys::kManifestVersion, 2);
     if (type == APP)
       source.SetString(keys::kApp, "true");
     if (type == THEME)
-      source.Set(keys::kTheme, base::MakeUnique<base::DictionaryValue>());
+      source.Set(keys::kTheme, std::make_unique<base::DictionaryValue>());
     if (!update_url.is_empty()) {
       source.SetString(keys::kUpdateURL, update_url.spec());
     }
@@ -226,7 +226,7 @@ TEST_F(ExtensionSyncTypeTest, DontSyncExtensionInDoNotSyncList) {
                             base::FilePath(), Extension::NO_FLAGS));
   EXPECT_TRUE(extension->is_extension());
   EXPECT_TRUE(sync_helper::IsSyncable(extension.get()));
-  SimpleFeature::ScopedThreadUnsafeWhitelistForTest whitelist(extension->id());
+  SimpleFeature::ScopedThreadUnsafeAllowlistForTest allowlist(extension->id());
   EXPECT_FALSE(sync_helper::IsSyncable(extension.get()));
 }
 

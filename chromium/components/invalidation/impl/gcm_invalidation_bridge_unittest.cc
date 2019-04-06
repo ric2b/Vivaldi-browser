@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -15,10 +16,10 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/gcm_driver/fake_gcm_driver.h"
 #include "components/gcm_driver/gcm_driver.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "google_apis/gaia/fake_identity_provider.h"
+#include "components/invalidation/impl/profile_identity_provider.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/ip_endpoint.h"
+#include "services/identity/public/cpp/identity_test_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace invalidation {
@@ -54,12 +55,12 @@ class GCMInvalidationBridgeTest : public ::testing::Test {
   ~GCMInvalidationBridgeTest() override {}
 
   void SetUp() override {
-    token_service_.reset(new FakeProfileOAuth2TokenService());
-    token_service_->set_auto_post_fetch_response_on_message_loop(true);
-    token_service_->UpdateCredentials("", "fake_refresh_token");
     gcm_driver_.reset(new CustomFakeGCMDriver());
 
-    identity_provider_.reset(new FakeIdentityProvider(token_service_.get()));
+    identity_test_env_.MakePrimaryAccountAvailable("me@me.com");
+
+    identity_provider_.reset(
+        new ProfileIdentityProvider(identity_test_env_.identity_manager()));
     bridge_.reset(new GCMInvalidationBridge(gcm_driver_.get(),
                                             identity_provider_.get()));
 
@@ -67,7 +68,7 @@ class GCMInvalidationBridgeTest : public ::testing::Test {
     delegate_->Initialize(
         base::Bind(&GCMInvalidationBridgeTest::ConnectionStateChanged,
                    base::Unretained(this)),
-        base::Bind(&base::DoNothing) /* store_reset_callback */);
+        base::DoNothing() /* store_reset_callback */);
     RunLoop();
   }
 
@@ -82,10 +83,13 @@ class GCMInvalidationBridgeTest : public ::testing::Test {
     registration_id_ = registration_id;
   }
 
-  void RequestTokenFinished(const GoogleServiceAuthError& error,
+  void RequestTokenFinished(const base::RepeatingClosure quit_callback,
+                            const GoogleServiceAuthError& error,
                             const std::string& token) {
     issued_tokens_.push_back(token);
     request_token_errors_.push_back(error);
+
+    quit_callback.Run();
   }
 
   void ConnectionStateChanged(bool online) {
@@ -93,9 +97,9 @@ class GCMInvalidationBridgeTest : public ::testing::Test {
   }
 
   base::MessageLoop message_loop_;
-  std::unique_ptr<FakeProfileOAuth2TokenService> token_service_;
+  identity::IdentityTestEnvironment identity_test_env_;
   std::unique_ptr<gcm::GCMDriver> gcm_driver_;
-  std::unique_ptr<FakeIdentityProvider> identity_provider_;
+  std::unique_ptr<ProfileIdentityProvider> identity_provider_;
 
   std::vector<std::string> issued_tokens_;
   std::vector<GoogleServiceAuthError> request_token_errors_;
@@ -107,27 +111,48 @@ class GCMInvalidationBridgeTest : public ::testing::Test {
 };
 
 TEST_F(GCMInvalidationBridgeTest, RequestToken) {
+  base::RunLoop run_loop;
+
   // Make sure that call to RequestToken reaches OAuth2TokenService and gets
   // back to callback.
   delegate_->RequestToken(
       base::Bind(&GCMInvalidationBridgeTest::RequestTokenFinished,
-                 base::Unretained(this)));
-  RunLoop();
+                 base::Unretained(this), run_loop.QuitClosure()));
+
+  identity_test_env_.WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      "access_token", base::Time::Now() + base::TimeDelta::FromHours(1));
+
+  // GCMInvalidationBridge internally posts a task to invoke *its* consumer when
+  // it receives an access token, so spin the runloop until the consumer is
+  // invoked.
+  run_loop.Run();
+
   EXPECT_EQ(1U, issued_tokens_.size());
   EXPECT_NE("", issued_tokens_[0]);
   EXPECT_EQ(GoogleServiceAuthError::AuthErrorNone(), request_token_errors_[0]);
 }
 
 TEST_F(GCMInvalidationBridgeTest, RequestTokenTwoConcurrentRequests) {
+  base::RunLoop run_loop;
+  base::RunLoop run_loop2;
+
   // First call should finish with REQUEST_CANCELLED error.
   delegate_->RequestToken(
       base::Bind(&GCMInvalidationBridgeTest::RequestTokenFinished,
-                 base::Unretained(this)));
+                 base::Unretained(this), run_loop.QuitClosure()));
   // Second request should succeed.
   delegate_->RequestToken(
       base::Bind(&GCMInvalidationBridgeTest::RequestTokenFinished,
-                 base::Unretained(this)));
-  RunLoop();
+                 base::Unretained(this), run_loop2.QuitClosure()));
+
+  identity_test_env_.WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      "access_token", base::Time::Now() + base::TimeDelta::FromHours(1));
+
+  // GCMInvalidationBridge internally posts a task to invoke *its* consumer when
+  // it either receives an access token or receives a new request while a
+  // request is ongoing, so spin the runloops until both consumers are invoked.
+  run_loop.Run();
+  run_loop2.Run();
 
   EXPECT_EQ(2U, issued_tokens_.size());
 

@@ -7,10 +7,15 @@
 #include <memory>
 
 MockAutocompleteProviderClient::MockAutocompleteProviderClient() {
+  shared_factory_ =
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          &test_url_loader_factory_);
+
   contextual_suggestions_service_ =
       std::make_unique<ContextualSuggestionsService>(
-          /*signin_manager=*/nullptr, /*token_service=*/nullptr,
-          GetRequestContext());
+          /*identity_manager=*/nullptr, GetURLLoaderFactory());
+  document_suggestions_service_ = std::make_unique<DocumentSuggestionsService>(
+      /*identity_manager=*/nullptr, GetURLLoaderFactory());
 }
 
 MockAutocompleteProviderClient::~MockAutocompleteProviderClient() {

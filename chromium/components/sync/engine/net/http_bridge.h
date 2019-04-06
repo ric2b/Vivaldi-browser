@@ -103,7 +103,7 @@ class HttpBridge : public base::RefCountedThreadSafe<HttpBridge>,
   // callbacks coming from the IO thread en route to finally destroying the
   // fetcher.
   void DestroyURLFetcherOnIOThread(net::URLFetcher* fetcher,
-                                   base::Timer* fetch_timer);
+                                   base::OneShotTimer* fetch_timer);
 
   void UpdateNetworkTime();
 
@@ -161,7 +161,7 @@ class HttpBridge : public base::RefCountedThreadSafe<HttpBridge>,
 
     // Timer to ensure http requests aren't stalled. Reset every time upload or
     // download progress is made.
-    std::unique_ptr<base::Timer> http_request_timeout_timer;
+    std::unique_ptr<base::OneShotTimer> http_request_timeout_timer;
   };
 
   // This lock synchronizes use of state involved in the flow to fetch a URL
@@ -218,6 +218,7 @@ class HttpBridgeFactory : public HttpPostProviderFactory,
   NetworkTimeUpdateCallback network_time_update_callback_;
 
   CancelationSignal* const cancelation_signal_;
+  bool registered_for_cancelation_ = false;
 
   // A callback to tag Sync request to be able to record data use of this
   // service by data_use_measurement component.

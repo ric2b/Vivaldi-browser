@@ -8,11 +8,10 @@
 
 #include <cmath>
 
+#include "base/bind.h"
 #include "base/i18n/rtl.h"
-#include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -302,7 +301,8 @@ bool IsInternalURL(const GURL& url) {
 
 - (void)showWindow:(id)sender {
   if (!vivaldi::IsVivaldiRunning()) {
-  BrowserWindowController* controller = [[self parentWindow] windowController];
+  BrowserWindowController* controller = [BrowserWindowController
+      browserWindowControllerForWindow:[self parentWindow]];
   LocationBarViewMac* locationBar = [controller locationBarBridge];
   if (locationBar) {
     decoration_ = locationBar->page_info_decoration();
@@ -1035,10 +1035,10 @@ bool IsInternalURL(const GURL& url) {
                                       atPoint:(NSPoint)point {
   GURL url = webContents_ ? webContents_->GetURL() : GURL();
   __block PageInfoBubbleController* weakSelf = self;
-  PermissionMenuModel::ChangeCallback callback =
-      base::BindBlock(^(const PageInfoUI::PermissionInfo& permission) {
+  PermissionMenuModel::ChangeCallback callback = base::BindRepeating(
+      base::RetainBlock(^(const PageInfoUI::PermissionInfo& permission) {
         [weakSelf onPermissionChanged:permission.type to:permission.setting];
-      });
+      }));
   base::scoped_nsobject<PermissionSelectorButton> button(
       [[PermissionSelectorButton alloc] initWithPermissionInfo:permissionInfo
                                                         forURL:url
@@ -1070,10 +1070,10 @@ bool IsInternalURL(const GURL& url) {
                                      toView:(NSView*)view
                                     atPoint:(NSPoint)point {
   __block PageInfoBubbleController* weakSelf = self;
-  auto callback =
-      base::BindBlock(^(const PageInfoUI::ChosenObjectInfo& objectInfo) {
+  auto callback = base::BindRepeating(
+      base::RetainBlock(^(const PageInfoUI::ChosenObjectInfo& objectInfo) {
         [weakSelf onChosenObjectDeleted:objectInfo];
-      });
+      }));
   base::scoped_nsobject<ChosenObjectDeleteButton> button(
       [[ChosenObjectDeleteButton alloc]
           initWithChosenObject:std::move(objectInfo)
@@ -1242,8 +1242,8 @@ bool IsInternalURL(const GURL& url) {
       [label setFrameOrigin:point];
     }
 
-    label.textColor = skia::SkColorToSRGBNSColor(
-        PageInfoUI::GetPermissionDecisionTextColor());
+    label.textColor =
+        skia::SkColorToSRGBNSColor(PageInfoUI::GetSecondaryTextColor());
     point.y += NSHeight(label.frame);
   }
 
@@ -1514,10 +1514,11 @@ void PageInfoUIBridge::DidFinishNavigation(
 void ShowPageInfoDialogImpl(Browser* browser,
                             content::WebContents* web_contents,
                             const GURL& virtual_url,
-                            const security_state::SecurityInfo& security_info) {
+                            const security_state::SecurityInfo& security_info,
+                            bubble_anchor_util::Anchor anchor) {
   if (chrome::ShowAllDialogsWithViewsToolkit()) {
     chrome::ShowPageInfoBubbleViews(browser, web_contents, virtual_url,
-                                    security_info);
+                                    security_info, anchor);
     return;
   }
 

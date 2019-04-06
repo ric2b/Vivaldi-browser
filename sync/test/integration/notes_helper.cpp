@@ -5,30 +5,11 @@
 
 #include "sync/test/integration/notes_helper.h"
 
-#include <stack>
-
-#include "base/compiler_specific.h"
-#include "base/files/file_util.h"
-#include "base/path_service.h"
-#include "base/rand_util.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/synchronization/waitable_event.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/multi_client_status_change_checker.h"
-#include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
-#include "chrome/common/chrome_paths.h"
-#include "chrome/test/base/ui_test_utils.h"
-#include "components/favicon_base/favicon_util.h"
 #include "notes/notes_factory.h"
-#include "notes/notes_model.h"
-#include "notes/notes_model_observer.h"
-#include "notes/notesnode.h"
-#include "sync/glue/notes_change_processor.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 using vivaldi::NotesModelFactory;

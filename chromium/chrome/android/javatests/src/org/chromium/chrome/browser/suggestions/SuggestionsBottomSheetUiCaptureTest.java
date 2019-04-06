@@ -13,6 +13,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ntp.NtpUiCaptureTestData;
@@ -26,6 +27,7 @@ import org.chromium.ui.test.util.UiRestriction;
 /**
  * Tests for the appearance of the home sheet in different bottom sheet states.
  */
+@DisabledTest
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
 public class SuggestionsBottomSheetUiCaptureTest {
@@ -49,17 +51,16 @@ public class SuggestionsBottomSheetUiCaptureTest {
     @Test
     @MediumTest
     @Feature({"UiCatalogue"})
-    @ScreenShooter.Directory("SuggestionsBottomSheetPosition")
     public void testBottomSheetPosition() throws Exception {
-        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_HALF, false);
+        mActivityRule.setSheetState(BottomSheet.SheetState.HALF, false);
         waitForWindowUpdates();
         mScreenShooter.shoot("Half");
 
-        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_FULL, false);
+        mActivityRule.setSheetState(BottomSheet.SheetState.FULL, false);
         waitForWindowUpdates();
         mScreenShooter.shoot("Full");
 
-        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_PEEK, false);
+        mActivityRule.setSheetState(BottomSheet.SheetState.PEEK, false);
         waitForWindowUpdates();
         mScreenShooter.shoot("Peek");
     }

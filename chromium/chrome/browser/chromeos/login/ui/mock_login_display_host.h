@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_UI_MOCK_LOGIN_DISPLAY_HOST_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_UI_MOCK_LOGIN_DISPLAY_HOST_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
@@ -17,9 +19,11 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   MockLoginDisplayHost();
   virtual ~MockLoginDisplayHost();
 
-  MOCK_METHOD1(CreateLoginDisplay, LoginDisplay*(LoginDisplay::Delegate*));
+  MOCK_METHOD0(GetLoginDisplay, LoginDisplay*());
+  MOCK_METHOD0(GetExistingUserController, ExistingUserController*());
   MOCK_CONST_METHOD0(GetNativeWindow, gfx::NativeWindow(void));
   MOCK_CONST_METHOD0(GetOobeUI, OobeUI*(void));
+  MOCK_CONST_METHOD0(GetOobeWebContents, content::WebContents*(void));
   MOCK_CONST_METHOD0(GetWebUILoginView, WebUILoginView*(void));
   MOCK_METHOD0(BeforeSessionStart, void(void));
 
@@ -30,9 +34,9 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   }
 
   MOCK_METHOD1(SetStatusAreaVisible, void(bool));
-  MOCK_METHOD0(ShowBackground, void(void));
   MOCK_METHOD1(StartWizard, void(OobeScreen));
   MOCK_METHOD0(GetWizardController, WizardController*(void));
+  MOCK_METHOD0(GetAppLaunchController, AppLaunchController*(void));
 
   // Workaround for move-only args in GMock.
   MOCK_METHOD1(MockStartUserAdding, void(base::OnceClosure*));
@@ -41,15 +45,37 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   }
 
   MOCK_METHOD0(CancelUserAdding, void(void));
-  MOCK_METHOD1(OnStartSignInScreen, void(const LoginScreenContext&));
-  MOCK_METHOD0(ResumeSignInScreen, void(void));
+  MOCK_METHOD1(StartSignInScreen, void(const LoginScreenContext&));
   MOCK_METHOD0(OnPreferencesChanged, void(void));
   MOCK_METHOD0(PrewarmAuthentication, void(void));
-  MOCK_METHOD0(OnStartAppLaunch, void());
+  MOCK_METHOD3(StartAppLaunch, void(const std::string&, bool, bool));
   MOCK_METHOD0(StartDemoAppLaunch, void(void));
-  MOCK_METHOD0(OnStartArcKiosk, void());
+  MOCK_METHOD1(StartArcKiosk, void(const AccountId&));
   MOCK_METHOD0(StartVoiceInteractionOobe, void(void));
   MOCK_METHOD0(IsVoiceInteractionOobe, bool(void));
+  MOCK_METHOD2(ShowGaiaDialog,
+               void(bool can_close,
+                    const base::Optional<AccountId>& prefilled_account));
+  MOCK_METHOD0(HideOobeDialog, void());
+  MOCK_METHOD2(UpdateOobeDialogSize, void(int width, int height));
+  MOCK_METHOD0(GetUsers, const user_manager::UserList(void));
+
+  MOCK_METHOD1(CompleteLogin, void(const UserContext&));
+  MOCK_METHOD0(OnGaiaScreenReady, void());
+  MOCK_METHOD1(SetDisplayEmail, void(const std::string&));
+  MOCK_METHOD2(SetDisplayAndGivenName,
+               void(const std::string&, const std::string&));
+  MOCK_METHOD1(LoadWallpaper, void(const AccountId&));
+  MOCK_METHOD0(LoadSigninWallpaper, void());
+  MOCK_METHOD1(IsUserWhitelisted, bool(const AccountId&));
+  MOCK_METHOD0(CancelPasswordChangedFlow, void());
+  MOCK_METHOD1(MigrateUserData, void(const std::string&));
+  MOCK_METHOD0(ResyncUserData, void());
+  MOCK_METHOD0(ShowFeedback, void());
+  MOCK_METHOD0(OnCancelPasswordChangedFlow, void());
+  MOCK_METHOD0(ShowDialogForCaptivePortal, void());
+  MOCK_METHOD0(HideDialogForCaptivePortal, void());
+  MOCK_METHOD0(UpdateAddUserButtonStatus, void());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockLoginDisplayHost);

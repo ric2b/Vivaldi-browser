@@ -148,6 +148,12 @@ class InfoBarDelegate {
     FRAMEBUST_BLOCK_INFOBAR_ANDROID = 77,
     SURVEY_INFOBAR_ANDROID = 78,
     NEAR_OOM_INFOBAR_ANDROID = 79,
+    INSTALLABLE_AMBIENT_BADGE_INFOBAR_DELEGATE = 80,
+    PAGE_LOAD_CAPPING_INFOBAR_DELEGATE = 81,
+    DOWNLOAD_PROGRESS_INFOBAR_ANDROID = 82,
+    AR_CORE_UPGRADE_ANDROID = 83,
+    BLOATED_RENDERER_INFOBAR_DELEGATE = 84,
+    SUPERVISED_USERS_DEPRECATED_INFOBAR_DELEGATE = 85,
   };
 
   // Describes navigation events, used to decide whether infobars should be
@@ -169,10 +175,6 @@ class InfoBarDelegate {
   // Called when the InfoBar that owns this delegate is being destroyed.  At
   // this point nothing is visible onscreen.
   virtual ~InfoBarDelegate();
-
-  // Returns the type of the infobar.  The type determines the appearance (such
-  // as background color) of the infobar.
-  virtual Type GetInfoBarType() const;
 
   // Returns a unique value identifying the infobar.
   // New implementers must append a new value to the InfoBarIdentifier enum here

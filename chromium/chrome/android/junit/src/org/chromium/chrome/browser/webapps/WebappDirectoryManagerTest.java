@@ -20,15 +20,14 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowLooper;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.PathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.test.ShadowRecordHistogram;
+import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.asynctask.CustomShadowAsyncTask;
 import org.chromium.base.test.util.Feature;
-import org.chromium.testing.local.CustomShadowAsyncTask;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
 import java.io.File;
@@ -39,7 +38,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Tests that directories for WebappActivities are managed correctly.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE,
         shadows = {CustomShadowAsyncTask.class, ShadowRecordHistogram.class})
 public class WebappDirectoryManagerTest {
@@ -74,7 +73,6 @@ public class WebappDirectoryManagerTest {
     @Before
     public void setUp() throws Exception {
         mContext = RuntimeEnvironment.application;
-        ContextUtils.initApplicationContextForTests(mContext);
         ThreadUtils.setThreadAssertsDisabledForTesting(true);
         PathUtils.setPrivateDataDirectorySuffix("chrome");
         mWebappDirectoryManager = new TestWebappDirectoryManager();
@@ -235,7 +233,7 @@ public class WebappDirectoryManagerTest {
     @Test
     @Feature({"Webapps"})
     public void testCountsOldWebApkUpdateFiles() throws Exception {
-        File directory = new File(mWebappDirectoryManager.getWebApkUpdateDirectory(), WEBAPK_ID_1);
+        File directory = new File(WebappDirectoryManager.getWebApkUpdateDirectory(), WEBAPK_ID_1);
         directory.mkdirs();
         registerWebapp(WEBAPK_ID_1);
         WebappDataStorage storage = WebappRegistry.getInstance().getWebappDataStorage(WEBAPK_ID_1);
@@ -256,7 +254,7 @@ public class WebappDirectoryManagerTest {
     @Test
     @Feature({"Webapps"})
     public void testDoesNotCountFilesForNewlyScheduledUpdates() throws Exception {
-        File directory = new File(mWebappDirectoryManager.getWebApkUpdateDirectory(), WEBAPK_ID_1);
+        File directory = new File(WebappDirectoryManager.getWebApkUpdateDirectory(), WEBAPK_ID_1);
         directory.mkdirs();
         registerWebapp(WEBAPK_ID_1);
         WebappDataStorage storage = WebappRegistry.getInstance().getWebappDataStorage(WEBAPK_ID_1);

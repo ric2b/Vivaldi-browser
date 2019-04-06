@@ -5,31 +5,34 @@
 #include "chrome/browser/ui/webui/print_preview/local_printer_handler_chromeos.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
+#include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/ppd_provider_factory.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/print_preview/printer_capabilities.h"
+#include "chrome/browser/ui/webui/print_preview/print_preview_utils.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
 #include "chromeos/printing/ppd_provider.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "components/printing/common/printer_capabilities.h"
 #include "content/public/browser/browser_thread.h"
 #include "printing/backend/print_backend_consts.h"
 
 namespace {
 
 using chromeos::CupsPrintersManager;
+using chromeos::CupsPrintersManagerFactory;
 
 // Store the name used in CUPS, Printer#id in |printer_name|, the description
 // as the system_driverinfo option value, and the Printer#display_name in
@@ -65,7 +68,7 @@ void FetchCapabilities(std::unique_ptr<chromeos::Printer> printer,
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::BindOnce(&printing::GetSettingsOnBlockingPool, printer->id(),
-                     basic_info),
+                     basic_info, nullptr),
       std::move(cb));
 }
 
@@ -75,11 +78,10 @@ LocalPrinterHandlerChromeos::LocalPrinterHandlerChromeos(
     Profile* profile,
     content::WebContents* preview_web_contents)
     : preview_web_contents_(preview_web_contents),
-      printers_manager_(CupsPrintersManager::Create(profile)),
+      printers_manager_(
+          CupsPrintersManagerFactory::GetForBrowserContext(profile)),
       printer_configurer_(chromeos::PrinterConfigurer::Create(profile)),
       weak_factory_(this) {
-  printers_manager_->Start();
-
   // Construct the CupsPrintJobManager to listen for printing events.
   chromeos::CupsPrintJobManagerFactory::GetForBrowserContext(profile);
 }
@@ -182,9 +184,12 @@ void LocalPrinterHandlerChromeos::HandlePrinterSetup(
       break;
     case chromeos::PrinterSetupResult::kPrinterUnreachable:
     case chromeos::PrinterSetupResult::kDbusError:
+    case chromeos::PrinterSetupResult::kComponentUnavailable:
     case chromeos::PrinterSetupResult::kPpdTooLarge:
     case chromeos::PrinterSetupResult::kInvalidPpd:
     case chromeos::PrinterSetupResult::kFatalError:
+    case chromeos::PrinterSetupResult::kNativePrintersNotAllowed:
+    case chromeos::PrinterSetupResult::kInvalidPrinterUpdate:
       LOG(ERROR) << "Unexpected error in printer setup." << result;
       break;
     case chromeos::PrinterSetupResult::kMaxValue:
@@ -202,7 +207,7 @@ void LocalPrinterHandlerChromeos::StartPrint(
     const base::string16& job_title,
     const std::string& ticket_json,
     const gfx::Size& page_size,
-    const scoped_refptr<base::RefCountedBytes>& print_data,
+    const scoped_refptr<base::RefCountedMemory>& print_data,
     PrintCallback callback) {
   printing::StartLocalPrint(ticket_json, print_data, preview_web_contents_,
                             std::move(callback));

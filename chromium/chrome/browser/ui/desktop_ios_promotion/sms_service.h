@@ -19,12 +19,13 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "url/gurl.h"
 
-namespace net {
-class URLRequestContextGetter;
+namespace identity {
+class IdentityManager;
 }
 
-class OAuth2TokenService;
-class SigninManagerBase;
+namespace network {
+class SharedURLLoaderFactory;
+}
 
 // Provides an API for querying a logged in users's verified phone number,
 // and sending a predetermined promotional SMS to that number.  This class is
@@ -61,10 +62,8 @@ class SMSService : public KeyedService {
       PhoneNumberCallback;
   typedef base::Callback<void(Request*, bool success)> CompletionCallback;
 
-  SMSService(
-      OAuth2TokenService* token_service,
-      SigninManagerBase* signin_manager,
-      const scoped_refptr<net::URLRequestContextGetter>& request_context);
+  SMSService(identity::IdentityManager* identity_manager,
+             scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   ~SMSService() override;
 
   // Query the logged in user's verified phone number.
@@ -89,14 +88,12 @@ class SMSService : public KeyedService {
   virtual Request* CreateRequest(const GURL& url,
                                  const CompletionCallback& callback);
 
-  // Stores pointer to OAuth2TokenService and SigninManagerBase instance. They
-  // must outlive the SMSService and can be null during
-  // tests.
-  OAuth2TokenService* token_service_;
-  SigninManagerBase* signin_manager_;
+  // Stores pointer to the IdentityManager instance. It must outlive the
+  // SMSService and can be null during tests.
+  identity::IdentityManager* identity_manager_;
 
   // Request context getter to use.
-  scoped_refptr<net::URLRequestContextGetter> request_context_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // Pending expiration requests to be canceled if not complete by profile
   // shutdown.

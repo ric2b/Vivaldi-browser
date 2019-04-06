@@ -4,9 +4,6 @@
 
 #include "chrome/browser/vr/test/mock_content_input_delegate.h"
 
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "ui/gfx/geometry/point_f.h"
-
 namespace vr {
 
 MockContentInputDelegate::MockContentInputDelegate()

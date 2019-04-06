@@ -77,7 +77,6 @@ cr.define('cr.ui.Oobe', function() {
     handleHighContrastClick: function(e) {},
     handleScreenMagnifierClick: function(e) {},
     setUsageStats: function(checked) {},
-    setOemEulaUrl: function(oemEulaUrl) {},
     setTpmPassword: function(password) {},
     refreshA11yInfo: function(data) {},
     reloadEulaContent: function(data) {},
@@ -98,6 +97,14 @@ cr.define('cr.ui.Oobe', function() {
      */
     setTabletModeState: function(isInTabletMode) {
       Oobe.getInstance().setTabletModeState_(isInTabletMode);
+    },
+
+    /**
+     * Updates OOBE configuration when it is loaded.
+     * @param {dictionary} configuration OOBE configuration.
+     */
+    updateOobeConfiguration: function(configuration) {
+      // Do nothing in lock mode.
     },
   };
 });

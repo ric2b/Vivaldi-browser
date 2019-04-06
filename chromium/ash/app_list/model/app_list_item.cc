@@ -13,7 +13,10 @@ AppListItem::AppListItem(const std::string& id)
     : metadata_(ash::mojom::AppListItemMetadata::New(id,
                                                      std::string(),
                                                      std::string(),
+                                                     std::string(),
                                                      syncer::StringOrdinal(),
+                                                     false,
+                                                     gfx::ImageSkia(),
                                                      false)),
       highlighted_(false),
       is_installing_(false),
@@ -25,8 +28,8 @@ AppListItem::~AppListItem() {
 }
 
 void AppListItem::SetIcon(const gfx::ImageSkia& icon) {
-  icon_ = icon;
-  icon_.EnsureRepsForSupportedScales();
+  metadata_->icon = icon;
+  metadata_->icon.EnsureRepsForSupportedScales();
   for (auto& observer : observers_)
     observer.ItemIconChanged();
 }
@@ -67,10 +70,6 @@ AppListItem* AppListItem::FindChildItem(const std::string& id) {
 }
 
 size_t AppListItem::ChildItemCount() const {
-  return 0;
-}
-
-size_t AppListItem::BadgedItemCount() const {
   return 0;
 }
 

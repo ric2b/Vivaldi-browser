@@ -20,8 +20,8 @@ AndroidLiveTabContext::AndroidLiveTabContext(TabModel* tab_model)
 void AndroidLiveTabContext::ShowBrowserWindow() {
 }
 
-const SessionID& AndroidLiveTabContext::GetSessionID() const {
-  return tab_model_->SessionId();
+SessionID AndroidLiveTabContext::GetSessionID() const {
+  return tab_model_->GetSessionId();
 }
 
 int AndroidLiveTabContext::GetTabCount() const {
@@ -92,15 +92,17 @@ sessions::LiveTab* AndroidLiveTabContext::AddRestoredTab(
             navigations, profile);
 
   // Restore web contents with navigation history.
-  content::WebContents* web_contents = content::WebContents::Create(
-          content::WebContents::CreateParams(profile));
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContents::Create(content::WebContents::CreateParams(profile));
+  content::WebContents* raw_web_contents = web_contents.get();
   web_contents->GetController().Restore(
       selected_navigation, content::RestoreType::CURRENT_SESSION, &nav_entries);
 
-  // Create new tab.
-  tab_model_->CreateTab(nullptr, web_contents, -1);
-  web_contents->GetController().LoadIfNecessary();
-  return sessions::ContentLiveTab::GetForWebContents(web_contents);
+  // Create new tab. Ownership is passed into java, which in turn creates a new
+  // TabAndroid instance to own the WebContents.
+  tab_model_->CreateTab(nullptr, web_contents.release(), -1);
+  raw_web_contents->GetController().LoadIfNecessary();
+  return sessions::ContentLiveTab::GetForWebContents(raw_web_contents);
 }
 
 // Currently does nothing.
@@ -127,15 +129,14 @@ sessions::LiveTabContext* AndroidLiveTabContext::FindContextForWebContents(
   if (!tab_android)
     return nullptr;
 
-  TabModel* model = TabModelList::FindTabModelWithId(
-      tab_android->window_id().id());
+  TabModel* model = TabModelList::FindTabModelWithId(tab_android->window_id());
 
   return model ? model->GetLiveTabContext() : nullptr;
 }
 
 // static.
 sessions::LiveTabContext* AndroidLiveTabContext::FindContextWithID(
-    SessionID::id_type desired_id) {
+    SessionID desired_id) {
   // Find the model with desired id.
   TabModel* tab_model = TabModelList::FindTabModelWithId(desired_id);
 

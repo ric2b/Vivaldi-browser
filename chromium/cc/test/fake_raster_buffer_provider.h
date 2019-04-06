@@ -20,10 +20,10 @@ class FakeRasterBufferProviderImpl : public RasterBufferProvider {
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
       uint64_t previous_content_id) override;
-  void OrderingBarrier() override;
   void Flush() override;
-  viz::ResourceFormat GetResourceFormat(bool must_support_alpha) const override;
-  bool IsResourceSwizzleRequired(bool must_support_alpha) const override;
+  viz::ResourceFormat GetResourceFormat() const override;
+  bool IsResourceSwizzleRequired() const override;
+  bool IsResourcePremultiplied() const override;
   bool CanPartialRasterIntoProvidedResource() const override;
   bool IsResourceReadyToDraw(
       const ResourcePool::InUsePoolResource& resource) const override;

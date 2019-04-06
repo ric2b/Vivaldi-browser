@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 
@@ -78,9 +77,9 @@ SwapThrashingMonitor::SwapThrashingMonitor()
     : current_swap_thrashing_level_(
           SwapThrashingLevel::SWAP_THRASHING_LEVEL_NONE) {
 #if defined(OS_WIN)
-  delegate_ = base::MakeUnique<SwapThrashingMonitorDelegateWin>();
+  delegate_ = std::make_unique<SwapThrashingMonitorDelegateWin>();
 #else
-  delegate_ = base::MakeUnique<SwapThrashingMonitorDelegate>();
+  delegate_ = std::make_unique<SwapThrashingMonitorDelegate>();
 #endif
   StartObserving();
 }

@@ -7,15 +7,15 @@
 #include <memory>
 
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/time/tick_clock.h"
 #include "content/browser/indexed_db/leveldb/leveldb_comparator.h"
 #include "content/browser/indexed_db/leveldb/leveldb_database.h"
 #include "content/browser/indexed_db/leveldb/mock_level_db.h"
 #include "content/common/indexed_db/indexed_db_metadata.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/env_chromium.h"
@@ -66,7 +66,7 @@ class MockTickClock : public base::TickClock {
   MockTickClock() {}
   ~MockTickClock() override {}
 
-  MOCK_METHOD0(NowTicks, base::TimeTicks());
+  MOCK_CONST_METHOD0(NowTicks, base::TimeTicks());
 };
 
 class Comparator : public LevelDBComparator {
@@ -159,19 +159,18 @@ class IndexedDBTombstoneSweeperTest : public testing::TestWithParam<Mode> {
     std::string category = reached_max ? "MaxIterations" : "Complete";
     if (GetParam() == Mode::STATISTICS) {
       histogram_tester_.ExpectUniqueSample(
-          "WebCore.IndexedDB.TombstoneSweeper." + category + ".NumTombstones",
-          num, 1);
+          "WebCore.IndexedDB.TombstoneSweeper.NumTombstones." + category, num,
+          1);
       histogram_tester_.ExpectUniqueSample(
-          "WebCore.IndexedDB.TombstoneSweeper." + category + ".TombstonesSize",
-          size, 1);
+          "WebCore.IndexedDB.TombstoneSweeper.TombstonesSize." + category, size,
+          1);
     } else {
       histogram_tester_.ExpectUniqueSample(
-          "WebCore.IndexedDB.TombstoneSweeper." + category +
-              ".NumDeletedTombstones",
+          "WebCore.IndexedDB.TombstoneSweeper.NumDeletedTombstones." + category,
           num, 1);
       histogram_tester_.ExpectUniqueSample(
-          "WebCore.IndexedDB.TombstoneSweeper." + category +
-              ".DeletedTombstonesSize",
+          "WebCore.IndexedDB.TombstoneSweeper.DeletedTombstonesSize." +
+              category,
           size, 1);
     }
   }
@@ -179,11 +178,11 @@ class IndexedDBTombstoneSweeperTest : public testing::TestWithParam<Mode> {
   void ExpectTaskTimeRecorded() {
     if (GetParam() == Mode::STATISTICS) {
       histogram_tester_.ExpectTimeBucketCount(
-          "WebCore.IndexedDB.TombstoneSweeper.Complete.StatsTotalTime",
+          "WebCore.IndexedDB.TombstoneSweeper.StatsTotalTime.Complete",
           base::TimeDelta::FromSeconds(1), 1);
     } else {
       histogram_tester_.ExpectTimeBucketCount(
-          "WebCore.IndexedDB.TombstoneSweeper.Complete.DeletionTotalTime",
+          "WebCore.IndexedDB.TombstoneSweeper.DeletionTotalTime.Complete",
           base::TimeDelta::FromSeconds(1), 1);
     }
   }
@@ -244,6 +243,9 @@ class IndexedDBTombstoneSweeperTest : public testing::TestWithParam<Mode> {
 
   // Used to verify recorded data.
   base::HistogramTester histogram_tester_;
+
+ private:
+  TestBrowserThreadBundle thread_bundle_;
 };
 
 TEST_P(IndexedDBTombstoneSweeperTest, EmptyDB) {

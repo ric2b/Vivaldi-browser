@@ -11,7 +11,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "gpu/config/gpu_preferences.h"
 #include "media/base/android_overlay_mojo_factory.h"
 #include "media/cdm/cdm_proxy.h"
 #include "media/mojo/services/mojo_media_client.h"
@@ -28,6 +29,7 @@ class GpuMojoMediaClient : public MojoMediaClient {
   // CdmProxy is not supported on the platform.
   GpuMojoMediaClient(
       const gpu::GpuPreferences& gpu_preferences,
+      const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
       scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
       base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager,
       AndroidOverlayMojoFactoryCB android_overlay_factory_cb,
@@ -42,7 +44,8 @@ class GpuMojoMediaClient : public MojoMediaClient {
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       MediaLog* media_log,
       mojom::CommandBufferIdPtr command_buffer_id,
-      RequestOverlayInfoCB request_overlay_info_cb) final;
+      RequestOverlayInfoCB request_overlay_info_cb,
+      const gfx::ColorSpace& target_color_space) final;
   std::unique_ptr<CdmFactory> CreateCdmFactory(
       service_manager::mojom::InterfaceProvider* interface_provider) final;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -51,6 +54,7 @@ class GpuMojoMediaClient : public MojoMediaClient {
 
  private:
   gpu::GpuPreferences gpu_preferences_;
+  gpu::GpuDriverBugWorkarounds gpu_workarounds_;
   scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner_;
   base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager_;
   AndroidOverlayMojoFactoryCB android_overlay_factory_cb_;

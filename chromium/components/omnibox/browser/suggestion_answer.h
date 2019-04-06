@@ -28,7 +28,7 @@ class DictionaryValue;
 // When represented in the UI, these elements should be styled and laid out
 // according to the specification at https://goto.google.com/ais_api.
 //
-// Each of the three classes has either an explicit or implicity copy
+// Each of the three classes has either an explicit or implicit copy
 // constructor to support copying answer values (via SuggestionAnswer::copy) as
 // members of SuggestResult and AutocompleteMatch.
 class SuggestionAnswer {
@@ -36,6 +36,27 @@ class SuggestionAnswer {
   class TextField;
   typedef std::vector<TextField> TextFields;
   typedef std::vector<GURL> URLs;
+
+  // These values are based on the server-side type AnswerTriggererKey. Do not
+  // remove values from this enum (or the client/server will become out of
+  // sync).
+  enum AnswerType {
+    ANSWER_TYPE_INVALID,
+    ANSWER_TYPE_DICTIONARY,
+    ANSWER_TYPE_FINANCE,
+    ANSWER_TYPE_KNOWLEDGE_GRAPH,
+    ANSWER_TYPE_LOCAL,
+    ANSWER_TYPE_SPORTS,
+    ANSWER_TYPE_SUNRISE,
+    ANSWER_TYPE_TRANSLATION,
+    ANSWER_TYPE_WEATHER,
+    ANSWER_TYPE_WHEN_IS,
+    ANSWER_TYPE_CURRENCY,
+    ANSWER_TYPE_LOCAL_TIME,
+    ANSWER_TYPE_PLAY_INSTALL,
+  };
+  static_assert(ANSWER_TYPE_PLAY_INSTALL == 12,
+                "Do not remove enums from AnswerType");
 
   // These values are named and numbered to match a specification at go/ais_api.
   // The values are only used for answer results.
@@ -80,6 +101,10 @@ class SuggestionAnswer {
 
     bool Equals(const TextField& field) const;
 
+    // Estimates dynamic memory usage.
+    // See base/trace_event/memory_usage_estimator.h for more info.
+    size_t EstimateMemoryUsage() const;
+
    private:
     base::string16 text_;
     int type_;
@@ -89,7 +114,7 @@ class SuggestionAnswer {
     FRIEND_TEST_ALL_PREFIXES(SuggestionAnswerTest, DifferentValuesAreUnequal);
 
     // No DISALLOW_COPY_AND_ASSIGN since we depend on the copy constructor in
-    // SuggestionAnswer::copy and the assigment operator as values in vector.
+    // SuggestionAnswer::copy and the assignment operator as values in vector.
   };
 
   class ImageLine {
@@ -116,6 +141,10 @@ class SuggestionAnswer {
     // content of this line.
     base::string16 AccessibleText() const;
 
+    // Estimates dynamic memory usage.
+    // See base/trace_event/memory_usage_estimator.h for more info.
+    size_t EstimateMemoryUsage() const;
+
    private:
     // Forbid assignment.
     ImageLine& operator=(const ImageLine&);
@@ -130,7 +159,7 @@ class SuggestionAnswer {
   };
 
   SuggestionAnswer();
-  SuggestionAnswer(const SuggestionAnswer& answer) = default;
+  SuggestionAnswer(const SuggestionAnswer& answer);
   ~SuggestionAnswer();
 
   // Parses |answer_json| and returns a SuggestionAnswer containing the
@@ -147,6 +176,7 @@ class SuggestionAnswer {
     return base::WrapUnique(source ? new SuggestionAnswer(*source) : nullptr);
   }
 
+  const GURL& image_url() const { return image_url_; }
   const ImageLine& first_line() const { return first_line_; }
   const ImageLine& second_line() const { return second_line_; }
 
@@ -160,10 +190,15 @@ class SuggestionAnswer {
   // Retrieves any image URLs appearing in this answer and adds them to |urls|.
   void AddImageURLsTo(URLs* urls) const;
 
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
+
  private:
   // Forbid assignment.
   SuggestionAnswer& operator=(const SuggestionAnswer&);
 
+  GURL image_url_;
   ImageLine first_line_;
   ImageLine second_line_;
   int type_;

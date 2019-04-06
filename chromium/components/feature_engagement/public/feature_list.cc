@@ -4,7 +4,7 @@
 
 #include "components/feature_engagement/public/feature_list.h"
 
-#include "components/feature_engagement/features.h"
+#include "components/feature_engagement/buildflags.h"
 #include "components/feature_engagement/public/feature_constants.h"
 
 namespace feature_engagement {
@@ -22,13 +22,18 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDownloadPageFeature,
     &kIPHDownloadPageScreenshotFeature,
     &kIPHChromeHomeExpandFeature,
-    &kIPHChromeHomeMenuHeaderFeature,
     &kIPHChromeHomePullToRefreshFeature,
     &kIPHMediaDownloadFeature,
     &kIPHContextualSearchWebSearchFeature,
     &kIPHContextualSearchPromoteTapFeature,
     &kIPHContextualSearchPromotePanelOpenFeature,
     &kIPHContextualSearchOptInFeature,
+    &kIPHContextualSuggestionsFeature,
+    &kIPHDownloadSettingsFeature,
+    &kIPHDownloadInfoBarDownloadContinuingFeature,
+    &kIPHDownloadInfoBarDownloadsAreFasterFeature,
+    &kIPHHomePageButtonFeature,
+    &kIPHNewTabPageButtonFeature,
 #endif  // defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
     &kIPHBookmarkFeature,
@@ -36,6 +41,8 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHNewTabFeature,
 #endif  // BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 #if defined(OS_IOS)
+    &kIPHBottomToolbarTipFeature,
+    &kIPHLongPressToolbarTipFeature,
     &kIPHNewTabTipFeature,
     &kIPHNewIncognitoTabTipFeature,
     &kIPHBadgedReadingListFeature,

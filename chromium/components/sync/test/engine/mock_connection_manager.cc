@@ -49,7 +49,6 @@ MockConnectionManager::MockConnectionManager(syncable::Directory* directory,
       partial_failure_(false),
       fail_non_periodic_get_updates_(false),
       next_position_in_parent_(2),
-      use_legacy_bookmarks_protocol_(false),
       num_get_updates_requests_(0) {
   SetNewTimestamp(0);
   SetAuthToken(kValidAuthToken);
@@ -221,20 +220,11 @@ sync_pb::GetUpdatesResponse* MockConnectionManager::GetUpdateResponse() {
 
 void MockConnectionManager::AddDefaultBookmarkData(sync_pb::SyncEntity* entity,
                                                    bool is_folder) {
-  if (use_legacy_bookmarks_protocol_) {
-    sync_pb::SyncEntity_BookmarkData* data = entity->mutable_bookmarkdata();
-    data->set_bookmark_folder(is_folder);
-
-    if (!is_folder) {
-      data->set_bookmark_url("http://google.com");
-    }
-  } else {
-    entity->set_folder(is_folder);
-    entity->mutable_specifics()->mutable_bookmark();
-    if (!is_folder) {
-      entity->mutable_specifics()->mutable_bookmark()->set_url(
-          "http://google.com");
-    }
+  entity->set_folder(is_folder);
+  entity->mutable_specifics()->mutable_bookmark();
+  if (!is_folder) {
+    entity->mutable_specifics()->mutable_bookmark()->set_url(
+        "http://google.com");
   }
 }
 
@@ -544,18 +534,15 @@ bool MockConnectionManager::ProcessGetUpdates(
   const GetUpdatesMessage& gu = csm->get_updates();
   num_get_updates_requests_++;
   EXPECT_FALSE(gu.has_from_timestamp());
-  EXPECT_FALSE(gu.has_requested_types());
 
   if (fail_non_periodic_get_updates_) {
-    EXPECT_EQ(sync_pb::GetUpdatesCallerInfo::PERIODIC,
-              gu.caller_info().source());
+    EXPECT_EQ(sync_pb::SyncEnums::PERIODIC, gu.get_updates_origin());
   }
 
   // Verify that the items we're about to send back to the client are of
   // the types requested by the client.  If this fails, it probably indicates
   // a test bug.
   EXPECT_TRUE(gu.fetch_folders());
-  EXPECT_FALSE(gu.has_requested_types());
   if (update_queue_.empty()) {
     GetUpdateResponse();
   }
@@ -592,7 +579,7 @@ bool MockConnectionManager::ProcessGetUpdates(
   update_queue_.pop_front();
 
   if (gu_client_command_) {
-    response->mutable_client_command()->CopyFrom(*gu_client_command_.get());
+    response->mutable_client_command()->CopyFrom(*gu_client_command_);
   }
   return true;
 }
@@ -695,7 +682,7 @@ bool MockConnectionManager::ProcessCommit(
 
   if (commit_client_command_) {
     response_buffer->mutable_client_command()->CopyFrom(
-        *commit_client_command_.get());
+        *commit_client_command_);
   }
   return true;
 }

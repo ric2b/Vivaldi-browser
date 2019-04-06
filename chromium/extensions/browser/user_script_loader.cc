@@ -10,7 +10,6 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
@@ -418,7 +417,7 @@ void UserScriptLoader::SendUpdate(content::RenderProcessHost* process,
 
   // If the process is being started asynchronously, early return.  We'll end up
   // calling InitUserScripts when it's created which will call this again.
-  base::ProcessHandle handle = process->GetHandle();
+  base::ProcessHandle handle = process->GetProcess().Handle();
   if (!handle)
     return;
 

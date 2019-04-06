@@ -12,7 +12,8 @@
 #include "base/sequence_checker.h"
 #include "media/audio/audio_system_helper.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/audio/public/interfaces/system_info.mojom.h"
+#include "services/audio/public/mojom/system_info.mojom.h"
+#include "services/audio/traced_service_ref.h"
 
 namespace media {
 class AudioManager;
@@ -25,7 +26,7 @@ class SystemInfo : public mojom::SystemInfo {
   explicit SystemInfo(media::AudioManager* audio_manager);
   ~SystemInfo() override;
 
-  void Bind(mojom::SystemInfoRequest request);
+  void Bind(mojom::SystemInfoRequest request, TracedServiceRef context_ref);
 
  private:
   // audio::mojom::SystemInfo implementation.
@@ -48,7 +49,10 @@ class SystemInfo : public mojom::SystemInfo {
                           GetInputDeviceInfoCallback callback) override;
 
   media::AudioSystemHelper helper_;
-  mojo::BindingSet<mojom::SystemInfo> bindings_;
+
+  // Each binding increases ref count of the service context, so that the
+  // service knows when it is in use.
+  mojo::BindingSet<mojom::SystemInfo, TracedServiceRef> bindings_;
 
   // Validates thread-safe access to |bindings_| only. |helper_| takes care of
   // its thread safety/affinity itself.

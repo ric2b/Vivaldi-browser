@@ -16,7 +16,7 @@
 #include "base/logging.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -71,8 +71,7 @@ void ExecuteCreateSession(
   }
 
   thread->task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SetThreadLocalSession, base::Passed(&session)));
+      FROM_HERE, base::BindOnce(&SetThreadLocalSession, std::move(session)));
   session_thread_map
       ->insert(std::make_pair(new_id, make_linked_ptr(thread.release())));
   init_session_cmd.Run(params, new_id, callback);
@@ -134,7 +133,7 @@ void ExecuteGetSessions(const Command& session_capabilities_command,
   }
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::TimeDelta::FromSeconds(10));
-  base::MessageLoop::current()->SetNestableTasksAllowed(true);
+  base::MessageLoopCurrent::Get()->SetNestableTasksAllowed(true);
   run_loop.Run();
 
   callback.Run(Status(kOk), std::move(session_list), session_id, false);
@@ -186,7 +185,7 @@ void ExecuteQuitAll(
       FROM_HERE, run_loop.QuitClosure(), base::TimeDelta::FromSeconds(10));
   // Uses a nested run loop to block this thread until all the quit
   // commands have executed, or the timeout expires.
-  base::MessageLoop::current()->SetNestableTasksAllowed(true);
+  base::MessageLoopCurrent::Get()->SetNestableTasksAllowed(true);
   run_loop.Run();
   callback.Run(Status(kOk), std::unique_ptr<base::Value>(),
                session_id, false);
@@ -213,8 +212,7 @@ void ExecuteSessionCommandOnSessionThread(
         FROM_HERE,
         base::BindOnce(callback_on_cmd,
                        Status(return_ok_without_session ? kOk : kNoSuchSession),
-                       base::Passed(std::unique_ptr<base::Value>()),
-                       std::string(), false));
+                       std::unique_ptr<base::Value>(), std::string(), false));
     return;
   }
 
@@ -290,7 +288,7 @@ void ExecuteSessionCommandOnSessionThread(
   }
 
   cmd_task_runner->PostTask(
-      FROM_HERE, base::BindOnce(callback_on_cmd, status, base::Passed(&value),
+      FROM_HERE, base::BindOnce(callback_on_cmd, status, std::move(value),
                                 session->id, session->w3c_compliant));
 
   if (session->quit) {
@@ -319,7 +317,7 @@ void ExecuteSessionCommand(
         FROM_HERE,
         base::BindOnce(&ExecuteSessionCommandOnSessionThread, command_name,
                        command, return_ok_without_session,
-                       base::Passed(base::WrapUnique(params.DeepCopy())),
+                       base::WrapUnique(params.DeepCopy()),
                        base::ThreadTaskRunnerHandle::Get(), callback,
                        base::Bind(&TerminateSessionThreadOnCommandThread,
                                   session_thread_map, session_id)));
@@ -329,7 +327,7 @@ void ExecuteSessionCommand(
 namespace internal {
 
 void CreateSessionOnSessionThreadForTesting(const std::string& id) {
-  SetThreadLocalSession(base::MakeUnique<Session>(id));
+  SetThreadLocalSession(std::make_unique<Session>(id));
 }
 
 }  // namespace internal

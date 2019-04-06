@@ -89,11 +89,6 @@ const int kUndefinedResultCount = -1;
 - (id)initWithBrowser:(Browser*)browser {
   if ((self = [super initWithNibName:@"FindBar"
                               bundle:base::mac::FrameworkBundle()])) {
-    [[NSNotificationCenter defaultCenter]
-        addObserver:self
-           selector:@selector(findPboardUpdated:)
-               name:kFindPasteboardChangedNotification
-             object:[FindPasteboard sharedInstance]];
     browser_ = browser;
   }
   return self;
@@ -184,9 +179,9 @@ const int kUndefinedResultCount = -1;
 }
 
 - (void)findPboardUpdated:(NSNotification*)notification {
+  [self clearFindResultsForCurrentBrowser];
   if (!suppressPboardUpdateActions_)
     [self prepopulateText:[[FindPasteboard sharedInstance] findText]];
-  [self clearFindResultsForCurrentBrowser];
 }
 
 - (void)positionFindBarViewAtMaxY:(CGFloat)maxY maxWidth:(CGFloat)maxWidth {

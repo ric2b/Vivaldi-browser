@@ -7,10 +7,19 @@
 
 #include <map>
 
+#include "base/optional.h"
 #include "chromeos/components/tether/disconnect_tethering_operation.h"
 #include "chromeos/components/tether/disconnect_tethering_request_sender.h"
 
 namespace chromeos {
+
+namespace device_sync {
+class DeviceSyncClient;
+}  // namespace device_sync
+
+namespace secure_channel {
+class SecureChannelClient;
+}  // namespace secure_channel
 
 namespace tether {
 
@@ -24,6 +33,8 @@ class DisconnectTetheringRequestSenderImpl
   class Factory {
    public:
     static std::unique_ptr<DisconnectTetheringRequestSender> NewInstance(
+        device_sync::DeviceSyncClient* device_sync_client,
+        secure_channel::SecureChannelClient* secure_channel_client,
         BleConnectionManager* ble_connection_manager,
         TetherHostFetcher* tether_host_fetcher);
 
@@ -31,6 +42,8 @@ class DisconnectTetheringRequestSenderImpl
 
    protected:
     virtual std::unique_ptr<DisconnectTetheringRequestSender> BuildInstance(
+        device_sync::DeviceSyncClient* device_sync_client,
+        secure_channel::SecureChannelClient* secure_channel_client,
         BleConnectionManager* ble_connection_manager,
         TetherHostFetcher* tether_host_fetcher);
 
@@ -38,9 +51,6 @@ class DisconnectTetheringRequestSenderImpl
     static Factory* factory_instance_;
   };
 
-  DisconnectTetheringRequestSenderImpl(
-      BleConnectionManager* ble_connection_manager,
-      TetherHostFetcher* tether_host_fetcher);
   ~DisconnectTetheringRequestSenderImpl() override;
 
   // DisconnectTetheringRequestSender:
@@ -50,11 +60,20 @@ class DisconnectTetheringRequestSenderImpl
   // DisconnectTetheringOperation::Observer:
   void OnOperationFinished(const std::string& device_id, bool success) override;
 
+ protected:
+  DisconnectTetheringRequestSenderImpl(
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
+      BleConnectionManager* ble_connection_manager,
+      TetherHostFetcher* tether_host_fetcher);
+
  private:
   void OnTetherHostFetched(
       const std::string& device_id,
-      std::unique_ptr<cryptauth::RemoteDevice> tether_host);
+      base::Optional<cryptauth::RemoteDeviceRef> tether_host);
 
+  device_sync::DeviceSyncClient* device_sync_client_;
+  secure_channel::SecureChannelClient* secure_channel_client_;
   BleConnectionManager* ble_connection_manager_;
   TetherHostFetcher* tether_host_fetcher_;
 

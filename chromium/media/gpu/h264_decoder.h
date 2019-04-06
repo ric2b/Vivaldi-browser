@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/limits.h"
+#include "media/base/subsample_entry.h"
 #include "media/gpu/accelerated_video_decoder.h"
 #include "media/gpu/h264_dpb.h"
 #include "media/gpu/media_gpu_export.h"
@@ -33,6 +34,22 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
  public:
   class MEDIA_GPU_EXPORT H264Accelerator {
    public:
+    // Methods may return kTryAgain if they need additional data (provided
+    // independently) in order to proceed. Examples are things like not having
+    // an appropriate key to decode encrypted content, or needing to wait
+    // until hardware buffers are available. This is not considered an
+    // unrecoverable error, but rather a pause to allow an application to
+    // independently provide the required data. When H264Decoder::Decode()
+    // is called again, it will attempt to resume processing of the stream
+    // by calling the same method again.
+    enum class Status {
+      kOk,        // Operation completed successfully.
+      kFail,      // Operation failed.
+      kTryAgain,  // Operation failed because some external data is missing.
+                  // Retry the same operation later, once the data has been
+                  // provided.
+    };
+
     H264Accelerator();
     virtual ~H264Accelerator();
 
@@ -53,37 +70,44 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
     // Note that this does not run decode in the accelerator and the decoder
     // is expected to follow this call with one or more SubmitSlice() calls
     // before calling SubmitDecode().
-    // Return true if successful.
-    virtual bool SubmitFrameMetadata(const H264SPS* sps,
-                                     const H264PPS* pps,
-                                     const H264DPB& dpb,
-                                     const H264Picture::Vector& ref_pic_listp0,
-                                     const H264Picture::Vector& ref_pic_listb0,
-                                     const H264Picture::Vector& ref_pic_listb1,
-                                     const scoped_refptr<H264Picture>& pic) = 0;
+    // Returns kOk if successful, kFail if there are errors, or kTryAgain if
+    // the accelerator needs additional data before being able to proceed.
+    virtual Status SubmitFrameMetadata(
+        const H264SPS* sps,
+        const H264PPS* pps,
+        const H264DPB& dpb,
+        const H264Picture::Vector& ref_pic_listp0,
+        const H264Picture::Vector& ref_pic_listb0,
+        const H264Picture::Vector& ref_pic_listb1,
+        const scoped_refptr<H264Picture>& pic) = 0;
 
     // Submit one slice for the current frame, passing the current |pps| and
     // |pic| (same as in SubmitFrameMetadata()), the parsed header for the
     // current slice in |slice_hdr|, and the reordered |ref_pic_listX|,
     // as per H264 spec.
-    // |data| pointing to the full slice (including the unparsed header| of
+    // |data| pointing to the full slice (including the unparsed header) of
     // |size| in bytes.
+    // |subsamples| specifies which part of the slice data is encrypted.
     // This must be called one or more times per frame, before SubmitDecode().
     // Note that |data| does not have to remain valid after this call returns.
-    // Return true if successful.
-    virtual bool SubmitSlice(const H264PPS* pps,
-                             const H264SliceHeader* slice_hdr,
-                             const H264Picture::Vector& ref_pic_list0,
-                             const H264Picture::Vector& ref_pic_list1,
-                             const scoped_refptr<H264Picture>& pic,
-                             const uint8_t* data,
-                             size_t size) = 0;
+    // Returns kOk if successful, kFail if there are errors, or kTryAgain if
+    // the accelerator needs additional data before being able to proceed.
+    virtual Status SubmitSlice(
+        const H264PPS* pps,
+        const H264SliceHeader* slice_hdr,
+        const H264Picture::Vector& ref_pic_list0,
+        const H264Picture::Vector& ref_pic_list1,
+        const scoped_refptr<H264Picture>& pic,
+        const uint8_t* data,
+        size_t size,
+        const std::vector<SubsampleEntry>& subsamples) = 0;
 
     // Execute the decode in hardware for |pic|, using all the slices and
     // metadata submitted via SubmitFrameMetadata() and SubmitSlice() since
     // the previous call to SubmitDecode().
-    // Return true if successful.
-    virtual bool SubmitDecode(const scoped_refptr<H264Picture>& pic) = 0;
+    // Returns kOk if successful, kFail if there are errors, or kTryAgain if
+    // the accelerator needs additional data before being able to proceed.
+    virtual Status SubmitDecode(const scoped_refptr<H264Picture>& pic) = 0;
 
     // Schedule output (display) of |pic|. Note that returning from this
     // method does not mean that |pic| has already been outputted (displayed),
@@ -101,16 +125,32 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
     DISALLOW_COPY_AND_ASSIGN(H264Accelerator);
   };
 
-  H264Decoder(H264Accelerator* accelerator);
+  H264Decoder(std::unique_ptr<H264Accelerator> accelerator,
+              const VideoColorSpace& container_color_space = VideoColorSpace());
   ~H264Decoder() override;
 
   // AcceleratedVideoDecoder implementation.
+  void SetStream(int32_t id,
+                 const uint8_t* ptr,
+                 size_t size,
+                 const DecryptConfig* decrypt_config = nullptr) override;
   bool Flush() override WARN_UNUSED_RESULT;
   void Reset() override;
-  void SetStream(const uint8_t* ptr, size_t size) override;
   DecodeResult Decode() override WARN_UNUSED_RESULT;
   gfx::Size GetPicSize() const override;
   size_t GetRequiredNumOfPictures() const override;
+
+  // Return true if we need to start a new picture.
+  static bool IsNewPrimaryCodedPicture(const H264Picture* curr_pic,
+                                       int curr_pps_id,
+                                       const H264SPS* sps,
+                                       const H264SliceHeader& slice_hdr);
+
+  // Fill a H264Picture in |pic| from given |sps| and |slice_hdr|. Return false
+  // when there is an error.
+  static bool FillH264PictureFromSliceHeader(const H264SPS* sps,
+                                             const H264SliceHeader& slice_hdr,
+                                             H264Picture* pic);
 
  private:
   // We need to keep at most kDPBMaxSize pictures in DPB for
@@ -126,22 +166,32 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
 
   // Internal state of the decoder.
   enum State {
-    kNeedStreamMetadata,  // After initialization, need an SPS.
-    kDecoding,            // Ready to decode from any point.
-    kAfterReset,          // After Reset(), need a resume point.
-    kError,               // Error in decode, can't continue.
+    // After initialization, need an SPS.
+    kNeedStreamMetadata,
+    // Ready to decode from any point.
+    kDecoding,
+    // After Reset(), need a resume point.
+    kAfterReset,
+    // The following keep track of what step is next in Decode() processing
+    // in order to resume properly after H264Decoder::kTryAgain (or another
+    // retryable error) is returned. The next time Decode() is called the call
+    // that previously failed will be retried and execution continues from
+    // there (if possible).
+    kTryPreprocessCurrentSlice,
+    kEnsurePicture,
+    kTryNewFrame,
+    kTryCurrentSlice,
+    // Error in decode, can't continue.
+    kError,
   };
 
   // Process H264 stream structures.
   bool ProcessSPS(int sps_id, bool* need_new_buffers);
   // Process current slice header to discover if we need to start a new picture,
   // finishing up the current one.
-  bool PreprocessCurrentSlice();
+  H264Accelerator::Status PreprocessCurrentSlice();
   // Process current slice as a slice of the current picture.
-  bool ProcessCurrentSlice();
-
-  // Return true if we need to start a new picture.
-  bool IsNewPrimaryCodedPicture(const H264SliceHeader* slice_hdr) const;
+  H264Accelerator::Status ProcessCurrentSlice();
 
   // Initialize the current picture according to data in |slice_hdr|.
   bool InitCurrPicture(const H264SliceHeader* slice_hdr);
@@ -196,10 +246,10 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
   bool HandleFrameNumGap(int frame_num);
 
   // Start processing a new frame.
-  bool StartNewFrame(const H264SliceHeader* slice_hdr);
+  H264Accelerator::Status StartNewFrame(const H264SliceHeader* slice_hdr);
 
   // All data for a frame received, process it and decode.
-  bool FinishPrevFrameIfPresent();
+  H264Accelerator::Status FinishPrevFrameIfPresent();
 
   // Called after we are done processing |pic|. Performs all operations to be
   // done after decoding, including DPB management, reference picture marking
@@ -214,7 +264,7 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
   void ClearDPB();
 
   // Commits all pending data for HW decoder and starts HW decoder.
-  bool DecodePicture();
+  H264Accelerator::Status DecodePicture();
 
   // Notifies client that a picture is ready for output.
   void OutputPic(scoped_refptr<H264Picture> pic);
@@ -225,11 +275,20 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
   // Decoder state.
   State state_;
 
+  // The colorspace for the h264 container.
+  const VideoColorSpace container_color_space_;
+
   // Parser in use.
   H264Parser parser_;
 
+  // Decrypting config for the most recent data passed to SetStream().
+  std::unique_ptr<DecryptConfig> current_decrypt_config_;
+
   // DPB in use.
   H264DPB dpb_;
+
+  // Current stream buffer id; to be assigned to pictures decoded from it.
+  int32_t stream_id_ = -1;
 
   // Picture currently being processed/decoded.
   scoped_refptr<H264Picture> curr_pic_;
@@ -273,7 +332,7 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
   // PicOrderCount of the previously outputted frame.
   int last_output_poc_;
 
-  H264Accelerator* accelerator_;
+  const std::unique_ptr<H264Accelerator> accelerator_;
 
   DISALLOW_COPY_AND_ASSIGN(H264Decoder);
 };

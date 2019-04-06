@@ -18,8 +18,12 @@ TestToolbarModel::TestToolbarModel()
 
 TestToolbarModel::~TestToolbarModel() {}
 
-base::string16 TestToolbarModel::GetFormattedURL(size_t* prefix_end) const {
-  return text_;
+base::string16 TestToolbarModel::GetFormattedFullURL() const {
+  return formatted_full_url_;
+}
+
+base::string16 TestToolbarModel::GetURLForDisplay() const {
+  return url_for_display_;
 }
 
 GURL TestToolbarModel::GetURL() const {
@@ -36,6 +40,10 @@ const gfx::VectorIcon& TestToolbarModel::GetVectorIcon() const {
 }
 
 base::string16 TestToolbarModel::GetSecureVerboseText() const {
+  return base::string16();
+}
+
+base::string16 TestToolbarModel::GetSecureAccessibilityText() const {
   return base::string16();
 }
 

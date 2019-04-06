@@ -35,6 +35,7 @@ bool ConvertChangeResourceToResourceEntry(
       // latter doesn't exist for deleted items.
       converted.set_resource_id(input.team_drive_id());
       converted.mutable_file_info()->set_is_directory(true);
+      converted.mutable_file_info()->set_is_team_drive_root(true);
       converted.set_parent_local_id(util::kDriveTeamDrivesDirLocalId);
     }
   } else {
@@ -79,6 +80,8 @@ bool ConvertFileResourceToResourceEntry(
   converted.set_starred(input.labels().is_starred());
   converted.set_shared_with_me(!input.shared_with_me_date().is_null());
   converted.set_shared(input.shared());
+  if (!input.alternate_link().is_empty())
+    converted.set_alternate_url(input.alternate_link().spec());
 
   PlatformFileInfoProto* file_info = converted.mutable_file_info();
 
@@ -91,6 +94,19 @@ bool ConvertFileResourceToResourceEntry(
   file_info->set_last_accessed(
       input.last_viewed_by_me_date().ToInternalValue());
   file_info->set_creation_time(input.created_date().ToInternalValue());
+
+  // Set the capabilities.
+  const google_apis::FileResourceCapabilities& capabilities =
+      input.capabilities();
+  converted.mutable_capabilities_info()->set_can_copy(capabilities.can_copy());
+  converted.mutable_capabilities_info()->set_can_delete(
+      capabilities.can_delete());
+  converted.mutable_capabilities_info()->set_can_rename(
+      capabilities.can_rename());
+  converted.mutable_capabilities_info()->set_can_add_children(
+      capabilities.can_add_children());
+  converted.mutable_capabilities_info()->set_can_share(
+      capabilities.can_share());
 
   if (input.IsDirectory()) {
     file_info->set_is_directory(true);
@@ -120,9 +136,6 @@ bool ConvertFileResourceToResourceEntry(
     file_info->set_is_directory(false);
     file_specific_info->set_content_mime_type(input.mime_type());
 
-    if (!input.alternate_link().is_empty())
-      file_specific_info->set_alternate_url(input.alternate_link().spec());
-
     const int64_t image_width = input.image_media_metadata().width();
     if (image_width != -1)
       file_specific_info->set_image_width(image_width);
@@ -146,10 +159,23 @@ void ConvertTeamDriveResourceToResourceEntry(
     ResourceEntry* out_entry) {
   DCHECK(out_entry);
   out_entry->mutable_file_info()->set_is_directory(true);
+  out_entry->mutable_file_info()->set_is_team_drive_root(true);
   out_entry->set_title(input.name());
   out_entry->set_base_name(input.name());
   out_entry->set_resource_id(input.id());
   out_entry->set_parent_local_id(util::kDriveTeamDrivesDirLocalId);
+
+  // Set all the capabilities.
+  const google_apis::TeamDriveCapabilities& capabilities = input.capabilities();
+  out_entry->mutable_capabilities_info()->set_can_copy(capabilities.can_copy());
+  out_entry->mutable_capabilities_info()->set_can_delete(
+      capabilities.can_delete_team_drive());
+  out_entry->mutable_capabilities_info()->set_can_rename(
+      capabilities.can_rename_team_drive());
+  out_entry->mutable_capabilities_info()->set_can_add_children(
+      capabilities.can_add_children());
+  out_entry->mutable_capabilities_info()->set_can_share(
+      capabilities.can_share());
 }
 
 void ConvertResourceEntryToFileInfo(const ResourceEntry& entry,

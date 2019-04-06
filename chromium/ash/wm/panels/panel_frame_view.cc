@@ -7,6 +7,7 @@
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/frame/default_frame_header.h"
 #include "ash/frame/frame_border_hit_test.h"
+#include "ash/public/cpp/ash_constants.h"
 #include "ash/shell.h"
 #include "ash/wm/resize_handle_window_targeter.h"
 #include "ash/wm/window_util.h"
@@ -36,13 +37,6 @@ PanelFrameView::~PanelFrameView() {
   Shell::Get()->RemoveShellObserver(this);
 }
 
-void PanelFrameView::SetFrameColors(SkColor active_frame_color,
-                                    SkColor inactive_frame_color) {
-  frame_header_->SetFrameColors(active_frame_color, inactive_frame_color);
-  GetWidgetWindow()->SetProperty(aura::client::kTopViewColor,
-                                 frame_header_->GetInactiveFrameColor());
-}
-
 const char* PanelFrameView::GetClassName() const {
   return kViewClassName;
 }
@@ -53,13 +47,11 @@ void PanelFrameView::InitFrameHeader() {
 
   frame_header_ = std::make_unique<DefaultFrameHeader>(
       frame_, this, caption_button_container_);
-  GetWidgetWindow()->SetProperty(aura::client::kTopViewColor,
-                                 frame_header_->GetInactiveFrameColor());
 
   if (frame_->widget_delegate()->ShouldShowWindowIcon()) {
     window_icon_ = new views::ImageView();
     AddChildView(window_icon_);
-    frame_header_->set_left_header_view(window_icon_);
+    frame_header_->SetLeftHeaderView(window_icon_);
   }
 }
 

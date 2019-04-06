@@ -34,17 +34,16 @@ instead.
 | crbug [Stability=Memory](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=Stability%3DMemory) label | Tracks mostly OOM crashes. |
 
 
-## I have a reproducible memory problem, what do I do?
+## I have memory problem, what do I do?
 
-Yay! Please file a [memory
-bug](https://bugs.chromium.org/p/chromium/issues/entry?template=Memory%20usage).
+Follow [these instructions](/docs/memory/filing_memory_bugs.md) to file a high
+quality bug.
 
-If you are willing to do a bit more, please grab a memory infra trace and upload
-that. Here are [instructions for MacOS](https://docs.google.com/document/d/15mBOu_uZbgP5bpdHZJXEnF9csSRq7phUWXnZcteVr0o/edit).
-(TODO: Add instructions for easily grabbing a trace for all platforms.)
+## I'm a developer trying to investigate a memory issues, what do I do?
 
+See [this page](/docs/memory/debugging_memory_issues.md) for further instructions.
 
-## I'm a dev and I want to help. How do I get started?
+## I'm a developer looking for more information. How do I get started?
 
 Great! First, sign up for the mailing lists above and check out the slack channel.
 
@@ -54,7 +53,6 @@ Second, familiarize yourself with the following:
 |-------|-------------|
 | [Key Concepts in Chrome Memory](/docs/memory/key_concepts.md) | Primer for memory terminology in Chrome. |
 | [memory-infra](/docs/memory-infra/README.md) | The primary tool used for inspecting allocations. |
-
 
 ## What are people actively working on?
 | Project | Description |
@@ -70,15 +68,15 @@ Second, familiarize yourself with the following:
 ## Key knowledge areas and contacts
 | Knowledge Area | Contact points |
 |----------------|----------------|
-| Chrome on Android | mariakhomenko, dskiba, ssid |
-| Browser Process | mariakhomenko, dskiba, ssid |
+| Chrome on Android | lizeb, pasko, ssid |
+| Browser Process | ssid, erikchen, etienneb |
 | GPU/cc | ericrk |
-| Memory metrics | erikchen, primano, ajwong, wez |
-| Native Heap Profiling | primiano, dskiba, ajwong |
+| Memory metrics | ssid, erikchen, primano, ajwong, wez |
+| Native Heap Profiling | primiano, ajwong |
 | Net Stack | mmenke, rsleevi, xunjieli |
 | Renderer Process | haraken, tasak, hajimehoshi, keishi, hiroshige |
 | V8 | hpayer, ulan, verwaest, mlippautz |
-| Out of Process Heap Profiling | erikchen, ajwong, brettw, etienneb
+| Out of Process Heap Profiling | erikchen, ajwong, brettw, etienneb |
 
 
 ## Other docs

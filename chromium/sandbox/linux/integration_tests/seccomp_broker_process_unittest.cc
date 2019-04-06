@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
@@ -35,10 +36,6 @@ using bpf_dsl::Allow;
 using bpf_dsl::ResultExpr;
 using bpf_dsl::Trap;
 
-bool NoOpCallback() {
-  return true;
-}
-
 // Test a trap handler that makes use of a broker process to open().
 
 class InitializedOpenBroker {
@@ -52,7 +49,7 @@ class InitializedOpenBroker {
         syscall_broker::BrokerFilePermission::ReadOnly("/proc/cpuinfo")};
     broker_process_ = std::make_unique<syscall_broker::BrokerProcess>(
         EPERM, command_set, permissions);
-    BPF_ASSERT(broker_process_->Init(base::Bind(&NoOpCallback)));
+    BPF_ASSERT(broker_process_->Init(base::Bind([]() { return true; })));
     initialized_ = true;
   }
 

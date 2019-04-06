@@ -36,7 +36,21 @@ PaintFlags::PaintFlags(const PaintFlags& flags) = default;
 
 PaintFlags::PaintFlags(PaintFlags&& other) = default;
 
-PaintFlags::~PaintFlags() = default;
+PaintFlags::~PaintFlags() {
+  // TODO(enne): non-default dtor to investigate http://crbug.com/790915
+
+  // Sanity check accessing this object doesn't crash.
+  blend_mode_ = static_cast<uint32_t>(SkBlendMode::kLastMode);
+
+  // Free refcounted objects one by one.
+  typeface_.reset();
+  path_effect_.reset();
+  shader_.reset();
+  mask_filter_.reset();
+  color_filter_.reset();
+  draw_looper_.reset();
+  image_filter_.reset();
+}
 
 PaintFlags& PaintFlags::operator=(const PaintFlags& other) = default;
 
@@ -199,13 +213,8 @@ bool PaintFlags::operator==(const PaintFlags& other) const {
 }
 
 bool PaintFlags::HasDiscardableImages() const {
-  if (!shader_)
-    return false;
-  else if (shader_->shader_type() == PaintShader::Type::kImage)
-    return shader_->paint_image().IsLazyGenerated();
-  else if (shader_->shader_type() == PaintShader::Type::kPaintRecord)
-    return shader_->paint_record()->HasDiscardableImages();
-  return false;
+  return (shader_ && shader_->has_discardable_images()) ||
+         (image_filter_ && image_filter_->has_discardable_images());
 }
 
 size_t PaintFlags::GetSerializedSize() const {

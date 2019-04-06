@@ -4,6 +4,8 @@
 
 static_library("browser") {
   sources = [
+    "copying_file_stream.cc",
+    "copying_file_stream.h",
     "ruleset_service.cc",
     "ruleset_service.h",
     "ruleset_service_delegate.h",
@@ -16,7 +18,6 @@ static_library("browser") {
     "//base",
     "//components/prefs",
     "//components/subresource_filter/core/common",
-    "//components/variations",
     "//third_party/protobuf:protobuf_lite",
   ]
 }
@@ -49,6 +50,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/prefs:test_support",
+    "//components/subresource_filter/core/common:common",
     "//components/subresource_filter/core/common:test_support",
     "//components/url_pattern_index/proto:url_pattern_index",
     "//components/variations",

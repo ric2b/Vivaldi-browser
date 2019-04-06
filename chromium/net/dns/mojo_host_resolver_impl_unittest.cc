@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -15,6 +16,7 @@
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -101,7 +103,7 @@ class CallbackMockHostResolver : public MockHostResolver {
   int Resolve(const RequestInfo& info,
               RequestPriority priority,
               AddressList* addresses,
-              const CompletionCallback& callback,
+              CompletionOnceCallback callback,
               std::unique_ptr<Request>* request,
               const NetLogWithSource& net_log) override;
 
@@ -112,21 +114,20 @@ class CallbackMockHostResolver : public MockHostResolver {
 int CallbackMockHostResolver::Resolve(const RequestInfo& info,
                                       RequestPriority priority,
                                       AddressList* addresses,
-                                      const CompletionCallback& callback,
+                                      CompletionOnceCallback callback,
                                       std::unique_ptr<Request>* request,
                                       const NetLogWithSource& net_log) {
-  int result = MockHostResolver::Resolve(info, priority, addresses, callback,
-                                         request, net_log);
+  int result = MockHostResolver::Resolve(info, priority, addresses,
+                                         std::move(callback), request, net_log);
   if (!resolve_callback_.is_null()) {
-    resolve_callback_.Run();
-    resolve_callback_.Reset();
+    std::move(resolve_callback_).Run();
   }
   return result;
 }
 
 }  // namespace
 
-class MojoHostResolverImplTest : public testing::Test {
+class MojoHostResolverImplTest : public TestWithScopedTaskEnvironment {
  protected:
   void SetUp() override {
     mock_host_resolver_.rules()->AddRule("example.com", "1.2.3.4");

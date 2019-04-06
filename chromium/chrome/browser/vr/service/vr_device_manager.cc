@@ -8,17 +8,22 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
+#include "chrome/browser/vr/service/browser_xr_device.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/service_manager_connection.h"
-#include "device/vr/features/features.h"
+#include "device/vr/buildflags/buildflags.h"
 #include "device/vr/orientation/orientation_device_provider.h"
 #include "device/vr/vr_device_provider.h"
 
 #if defined(OS_ANDROID)
+
+#if BUILDFLAG(ENABLE_ARCORE)
+#include "device/vr/android/arcore/arcore_device_provider_factory.h"
+#endif
+
 #include "device/vr/android/gvr/gvr_device_provider.h"
 #endif
 
@@ -42,6 +47,12 @@ VRDeviceManager* VRDeviceManager::GetInstance() {
     ProviderList providers;
 
 #if defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_ARCORE)
+    if (base::FeatureList::IsEnabled(features::kWebXrHitTest)) {
+      providers.emplace_back(device::ARCoreDeviceProviderFactory::Create());
+    }
+#endif
+
     providers.emplace_back(std::make_unique<device::GvrDeviceProvider>());
 #endif
 
@@ -51,7 +62,13 @@ VRDeviceManager* VRDeviceManager::GetInstance() {
 #endif
 
 #if BUILDFLAG(ENABLE_OCULUS_VR)
-    providers.emplace_back(std::make_unique<device::OculusVRDeviceProvider>());
+    // For now, only use the Oculus when OpenVR is not enabled.
+    // TODO(billorr): Add more complicated logic to avoid routing Oculus devices
+    // through OpenVR.
+    if (base::FeatureList::IsEnabled(features::kOculusVR) &&
+        providers.size() == 0)
+      providers.emplace_back(
+          std::make_unique<device::OculusVRDeviceProvider>());
 #endif
 
     if (base::FeatureList::IsEnabled(features::kWebXrOrientationSensorDevice)) {
@@ -64,9 +81,63 @@ VRDeviceManager* VRDeviceManager::GetInstance() {
       }
     }
 
+    // The constructor sets g_vr_device_manager, which is cleaned up when
+    // RemoveService is called, when the last active VRServiceImpl is destroyed.
     new VRDeviceManager(std::move(providers));
   }
   return g_vr_device_manager;
+}
+
+BrowserXrDevice* VRDeviceManager::GetImmersiveDevice() {
+#if defined(OS_ANDROID)
+  auto* gvr = GetDevice(device::VRDeviceId::GVR_DEVICE_ID);
+  if (gvr)
+    return gvr;
+#endif
+
+#if BUILDFLAG(ENABLE_OPENVR)
+  auto* openvr = GetDevice(device::VRDeviceId::OPENVR_DEVICE_ID);
+  if (openvr)
+    return openvr;
+#endif
+
+#if BUILDFLAG(ENABLE_OCULUS_VR)
+  auto* oculus = GetDevice(device::VRDeviceId::OCULUS_DEVICE_ID);
+  if (oculus)
+    return oculus;
+#endif
+
+  return nullptr;
+}
+
+BrowserXrDevice* VRDeviceManager::GetDevice(device::VRDeviceId id) {
+  auto it = devices_.find(static_cast<unsigned int>(id));
+  if (it == devices_.end())
+    return nullptr;
+
+  return it->second.get();
+}
+
+BrowserXrDevice* VRDeviceManager::GetDeviceForOptions(
+    device::mojom::XRSessionOptions* options) {
+  // Examine options to determine which device provider we should use.
+  if (options->immersive && !options->provide_passthrough_camera) {
+    return GetImmersiveDevice();
+  } else if (options->provide_passthrough_camera && !options->immersive) {
+    return GetDevice(device::VRDeviceId::ARCORE_DEVICE_ID);
+  } else if (!options->provide_passthrough_camera && !options->immersive) {
+    // Magic window session.
+    // Try the orientation provider if it exists.
+    auto* orientation_device =
+        GetDevice(device::VRDeviceId::ORIENTATION_DEVICE_ID);
+    if (orientation_device) {
+      return orientation_device;
+    }
+
+    // Otherwise fall back to immersive providers.
+    return GetImmersiveDevice();
+  }
+  return nullptr;
 }
 
 bool VRDeviceManager::HasInstance() {
@@ -93,11 +164,6 @@ void VRDeviceManager::AddService(VRServiceImpl* service) {
   // when they are created.
   InitializeProviders();
 
-  for (const DeviceMap::value_type& map_entry : devices_) {
-    if (!map_entry.second->IsFallbackDevice() || devices_.size() == 1)
-      service->ConnectDevice(map_entry.second);
-  }
-
   if (AreAllProvidersInitialized())
     service->InitializationComplete();
 
@@ -114,61 +180,49 @@ void VRDeviceManager::RemoveService(VRServiceImpl* service) {
   }
 }
 
-void VRDeviceManager::AddDevice(device::VRDevice* device) {
+void VRDeviceManager::AddDevice(unsigned int id,
+                                device::mojom::VRDisplayInfoPtr info,
+                                device::mojom::XRRuntimePtr runtime) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(devices_.find(device->GetId()) == devices_.end());
-  // Ignore any devices with VR_DEVICE_LAST_ID, which is used to prevent
-  // wraparound of device ids.
-  if (device->GetId() == device::VR_DEVICE_LAST_ID)
-    return;
+  DCHECK(devices_.find(id) == devices_.end());
 
-  // If we were previously using a fallback device, remove it.
-  // TODO(offenwanger): This has the potential to cause device change events to
-  // fire in rapid succession. This should be discussed and resolved when we
-  // start to actually add and remove devices.
-  if (devices_.size() == 1 && devices_.begin()->second->IsFallbackDevice()) {
-    device::VRDevice* device = devices_.begin()->second;
-    for (VRServiceImpl* service : services_)
-      service->RemoveDevice(device);
-  }
-
-  devices_[device->GetId()] = device;
-  if (!device->IsFallbackDevice() || devices_.size() == 1) {
-    for (VRServiceImpl* service : services_)
-      service->ConnectDevice(device);
-  }
+  devices_[id] =
+      std::make_unique<BrowserXrDevice>(std::move(runtime), std::move(info));
+  for (VRServiceImpl* service : services_)
+    service->ConnectDevice(devices_[id].get());
 }
 
-void VRDeviceManager::RemoveDevice(device::VRDevice* device) {
+void VRDeviceManager::RemoveDevice(unsigned int id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (device->GetId() == device::VR_DEVICE_LAST_ID)
-    return;
-  auto it = devices_.find(device->GetId());
+  auto it = devices_.find(id);
   DCHECK(it != devices_.end());
 
-  for (VRServiceImpl* service : services_)
-    service->RemoveDevice(device);
-
+  // Remove the device from devices_ before notifying services that it was
+  // removed, since they will query for devices in RemoveDevice.
+  std::unique_ptr<BrowserXrDevice> removed_device = std::move(it->second);
   devices_.erase(it);
 
-  if (devices_.size() == 1 && devices_.begin()->second->IsFallbackDevice()) {
-    device::VRDevice* device = devices_.begin()->second;
-    for (VRServiceImpl* service : services_)
-      service->ConnectDevice(device);
-  }
+  for (VRServiceImpl* service : services_)
+    service->RemoveDevice(removed_device.get());
 }
 
-device::VRDevice* VRDeviceManager::GetDevice(unsigned int index) {
+void VRDeviceManager::RecordVrStartupHistograms() {
+#if BUILDFLAG(ENABLE_OPENVR)
+  device::OpenVRDeviceProvider::RecordRuntimeAvailability();
+#endif
+}
+
+device::mojom::XRRuntime* VRDeviceManager::GetRuntime(unsigned int id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (index == 0)
+  if (id == 0)
     return nullptr;
 
-  DeviceMap::iterator iter = devices_.find(index);
+  DeviceMap::iterator iter = devices_.find(id);
   if (iter == devices_.end())
     return nullptr;
 
-  return iter->second;
+  return iter->second->GetRuntime();
 }
 
 void VRDeviceManager::InitializeProviders() {
@@ -176,11 +230,12 @@ void VRDeviceManager::InitializeProviders() {
     return;
 
   for (const auto& provider : providers_) {
-    provider->Initialize(
-        base::Bind(&VRDeviceManager::AddDevice, base::Unretained(this)),
-        base::Bind(&VRDeviceManager::RemoveDevice, base::Unretained(this)),
-        base::BindOnce(&VRDeviceManager::OnProviderInitialized,
-                       base::Unretained(this)));
+    provider->Initialize(base::BindRepeating(&VRDeviceManager::AddDevice,
+                                             base::Unretained(this)),
+                         base::BindRepeating(&VRDeviceManager::RemoveDevice,
+                                             base::Unretained(this)),
+                         base::BindOnce(&VRDeviceManager::OnProviderInitialized,
+                                        base::Unretained(this)));
   }
 
   providers_initialized_ = true;

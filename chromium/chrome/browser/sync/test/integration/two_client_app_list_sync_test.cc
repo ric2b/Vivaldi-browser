@@ -53,9 +53,7 @@ const app_list::AppListSyncableService::SyncItem* GetSyncItem(
 
 class TwoClientAppListSyncTest : public SyncTest {
  public:
-  TwoClientAppListSyncTest() : SyncTest(TWO_CLIENT_LEGACY) {
-    DisableVerifier();
-  }
+  TwoClientAppListSyncTest() : SyncTest(TWO_CLIENT) { DisableVerifier(); }
 
   ~TwoClientAppListSyncTest() override {}
 
@@ -90,7 +88,7 @@ class TwoClientAppListSyncTest : public SyncTest {
   }
 
   void WaitForExtensionsServiceToLoadForProfile(Profile* profile) {
-    ExtensionService* extension_service =
+    extensions::ExtensionService* extension_service =
         extensions::ExtensionSystem::Get(profile)->extension_service();
     if (extension_service && extension_service->is_ready())
       return;
@@ -128,9 +126,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientAppListSyncTest, StartWithSameApps) {
 // Install some apps on both clients, some on only one client, some on only the
 // other, and sync.  Both clients should end up with all apps, and the app and
 // page ordinals should be identical.
-// Disabled, see http://crbug.com/434438 for details.
-IN_PROC_BROWSER_TEST_F(TwoClientAppListSyncTest,
-                       DISABLED_StartWithDifferentApps) {
+IN_PROC_BROWSER_TEST_F(TwoClientAppListSyncTest, StartWithDifferentApps) {
   ASSERT_TRUE(SetupClients());
 
   int i = 0;
@@ -466,11 +462,15 @@ IN_PROC_BROWSER_TEST_F(TwoClientAppListSyncTest, FolderAddRemove) {
   const size_t kNumAppsToMove = 3;
   std::string folder_id = "Folder 0";
   // The folder will be created at the end of the list; always move the
-  // first non default item in the list.
+  // non default items in the list.
+  // Note: We don't care about the order of items in Chrome, so when we
+  //       changes a file's folder, its index in the list remains unchanged.
+  //       The |kNumAppsToMove| items to move are
+  //       app_ids[item_index..(item_index+kNumAppsToMove-1)].
   size_t item_index = kNumDefaultApps;
   for (size_t i = 0; i < kNumAppsToMove; ++i) {
     SyncAppListHelper::GetInstance()->MoveAppToFolder(
-        GetProfile(0), app_ids[item_index], folder_id);
+        GetProfile(0), app_ids[item_index + i], folder_id);
   }
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllProfilesHaveSameAppList());

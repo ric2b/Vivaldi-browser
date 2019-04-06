@@ -55,6 +55,8 @@ inline const CMTimeRange& CoreMediaGlueCMTimeRangeToCMTimeRange(
 MEDIA_EXPORT AudioChannelLayoutTag
 ChromeChannelLayoutToCoreAudioTag(ChannelLayout chrome_layout);
 
+MEDIA_EXPORT std::string Loggable(AudioChannelLayoutTag tag);
+
 std::string FourCCToString(uint32_t fourcc);
 
 }  // namespace media

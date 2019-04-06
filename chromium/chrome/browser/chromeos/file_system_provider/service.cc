@@ -20,7 +20,6 @@
 #include "chrome/browser/chromeos/file_system_provider/throttled_file_system.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_id.h"
@@ -181,8 +180,10 @@ base::File::Error Service::MountFileSystemInternal(
   mount_point_name_to_key_map_[mount_point_name] =
       FileSystemKey(provider_id.ToString(), options.file_system_id);
   if (options.persistent) {
-    registry_->RememberFileSystem(file_system_info,
-                                  *file_system_ptr->GetWatchers());
+    const Watchers& watchers = file_system_info.watchable()
+                                   ? *file_system_ptr->GetWatchers()
+                                   : Watchers();
+    registry_->RememberFileSystem(file_system_info, watchers);
   }
 
   for (auto& observer : observers_) {
@@ -260,24 +261,8 @@ bool Service::RequestUnmount(const ProviderId& provider_id,
 bool Service::RequestMount(const ProviderId& provider_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  extensions::EventRouter* const event_router =
-      extensions::EventRouter::Get(profile_);
-  DCHECK(event_router);
-
-  if (!event_router->ExtensionHasEventListener(
-          provider_id.GetExtensionId(), extensions::api::file_system_provider::
-                                            OnMountRequested::kEventName)) {
-    return false;
-  }
-
-  event_router->DispatchEventToExtension(
-      provider_id.GetExtensionId(),
-      std::make_unique<extensions::Event>(
-          extensions::events::FILE_SYSTEM_PROVIDER_ON_MOUNT_REQUESTED,
-          extensions::api::file_system_provider::OnMountRequested::kEventName,
-          std::unique_ptr<base::ListValue>(new base::ListValue())));
-
-  return true;
+  ProviderInterface* const provider = GetProvider(provider_id);
+  return provider->RequestMount(profile_);
 }
 
 std::vector<ProvidedFileSystemInfo> Service::GetProvidedFileSystemInfoList() {
@@ -288,6 +273,23 @@ std::vector<ProvidedFileSystemInfo> Service::GetProvidedFileSystemInfoList() {
     result.push_back(it->second->GetFileSystemInfo());
   }
   return result;
+}
+
+std::vector<ProvidedFileSystemInfo> Service::GetProvidedFileSystemInfoList(
+    const ProviderId& provider_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  const std::vector<ProvidedFileSystemInfo> full_list =
+      GetProvidedFileSystemInfoList();
+  std::vector<ProvidedFileSystemInfo> filtered_list;
+
+  for (const auto& file_system : full_list) {
+    if (file_system.provider_id() == provider_id) {
+      filtered_list.push_back(file_system);
+    }
+  }
+
+  return filtered_list;
 }
 
 ProvidedFileSystemInterface* Service::GetProvidedFileSystem(
@@ -376,8 +378,11 @@ void Service::RestoreFileSystems(const ProviderId& provider_id) {
         GetProvidedFileSystem(restored_file_system.provider_id,
                               restored_file_system.options.file_system_id);
     DCHECK(file_system);
-    file_system->GetWatchers()->insert(restored_file_system.watchers.begin(),
-                                       restored_file_system.watchers.end());
+
+    if (file_system->GetFileSystemInfo().watchable()) {
+      file_system->GetWatchers()->insert(restored_file_system.watchers.begin(),
+                                         restored_file_system.watchers.end());
+    }
   }
 }
 

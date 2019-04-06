@@ -32,7 +32,7 @@ void AddTabAt(Browser* browser, const GURL& url, int idx, bool foreground) {
   params.tabstrip_index = idx;
   Navigate(&params);
   CoreTabHelper* core_tab_helper =
-      CoreTabHelper::FromWebContents(params.target_contents);
+      CoreTabHelper::FromWebContents(params.navigated_or_inserted_contents);
   if (core_tab_helper) {
   core_tab_helper->set_new_tab_start_time(new_tab_start_time);
   }
@@ -45,21 +45,20 @@ content::WebContents* AddSelectedTabWithURL(
   NavigateParams params(browser, url, transition);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);
-  return params.target_contents;
+  return params.navigated_or_inserted_contents;
 }
 
 void AddWebContents(Browser* browser,
                     content::WebContents* source_contents,
-                    content::WebContents* new_contents,
+                    std::unique_ptr<content::WebContents> new_contents,
                     WindowOpenDisposition disposition,
-                    const gfx::Rect& initial_rect,
-                    bool user_gesture) {
+                    const gfx::Rect& initial_rect) {
   // No code for this yet.
   DCHECK(disposition != WindowOpenDisposition::SAVE_TO_DISK);
   // Can't create a new contents for the current tab - invalid case.
   DCHECK(disposition != WindowOpenDisposition::CURRENT_TAB);
 
-  NavigateParams params(browser, new_contents);
+  NavigateParams params(browser, std::move(new_contents));
   params.source_contents = source_contents;
   params.disposition = disposition;
   params.window_bounds = initial_rect;

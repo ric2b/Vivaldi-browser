@@ -4,8 +4,9 @@
 
 #include "content/public/test/mock_download_manager.h"
 
+#include "components/download/public/common/download_create_info.h"
+#include "components/download/public/common/download_url_loader_factory_getter.h"
 #include "content/browser/byte_stream.h"
-#include "content/browser/download/download_create_info.h"
 
 namespace content {
 
@@ -28,13 +29,13 @@ MockDownloadManager::CreateDownloadItemAdapter::CreateDownloadItemAdapter(
     int64_t received_bytes,
     int64_t total_bytes,
     const std::string& hash,
-    DownloadItem::DownloadState state,
-    DownloadDangerType danger_type,
-    DownloadInterruptReason interrupt_reason,
+    download::DownloadItem::DownloadState state,
+    download::DownloadDangerType danger_type,
+    download::DownloadInterruptReason interrupt_reason,
     bool opened,
     base::Time last_access_time,
     bool transient,
-    const std::vector<DownloadItem::ReceivedSlice>& received_slices)
+    const std::vector<download::DownloadItem::ReceivedSlice>& received_slices)
     : guid(guid),
       id(id),
       current_path(current_path),
@@ -109,13 +110,15 @@ MockDownloadManager::MockDownloadManager() {}
 MockDownloadManager::~MockDownloadManager() {}
 
 void MockDownloadManager::StartDownload(
-    std::unique_ptr<DownloadCreateInfo> info,
-    std::unique_ptr<DownloadManager::InputStream> stream,
-    const DownloadUrlParameters::OnStartedCallback& callback) {
+    std::unique_ptr<download::DownloadCreateInfo> info,
+    std::unique_ptr<download::InputStream> stream,
+    scoped_refptr<download::DownloadURLLoaderFactoryGetter>
+        url_loader_factory_getter,
+    const download::DownloadUrlParameters::OnStartedCallback& callback) {
   MockStartDownload(info.get(), stream.get());
 }
 
-DownloadItem* MockDownloadManager::CreateDownloadItem(
+download::DownloadItem* MockDownloadManager::CreateDownloadItem(
     const std::string& guid,
     uint32_t id,
     const base::FilePath& current_path,
@@ -134,13 +137,13 @@ DownloadItem* MockDownloadManager::CreateDownloadItem(
     int64_t received_bytes,
     int64_t total_bytes,
     const std::string& hash,
-    DownloadItem::DownloadState state,
-    DownloadDangerType danger_type,
-    DownloadInterruptReason interrupt_reason,
+    download::DownloadItem::DownloadState state,
+    download::DownloadDangerType danger_type,
+    download::DownloadInterruptReason interrupt_reason,
     bool opened,
     base::Time last_access_time,
     bool transient,
-    const std::vector<DownloadItem::ReceivedSlice>& received_slices) {
+    const std::vector<download::DownloadItem::ReceivedSlice>& received_slices) {
   CreateDownloadItemAdapter adapter(
       guid, id, current_path, target_path, url_chain, referrer_url, site_url,
       tab_url, tab_referrer_url, mime_type, original_mime_type, start_time,
@@ -148,6 +151,11 @@ DownloadItem* MockDownloadManager::CreateDownloadItem(
       danger_type, interrupt_reason, opened, last_access_time, transient,
       received_slices);
   return MockCreateDownloadItem(adapter);
+}
+
+void MockDownloadManager::OnHistoryQueryComplete(
+    base::OnceClosure load_history_downloads_cb) {
+  std::move(load_history_downloads_cb).Run();
 }
 
 }  // namespace content

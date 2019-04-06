@@ -2,9 +2,11 @@ include_rules = [
   "-content/shell/browser/layout_test",
   "+components/keyed_service/content",
   "+components/network_session_configurator/common",
-  "+device/geolocation/public",
+  "+services/device/public/cpp",
   "+services/service_manager/public/cpp",
   "+services/service_manager/sandbox",
+  "+services/network/public",
+  "+ui/ozone/public",
 ]
 
 specific_include_rules = {

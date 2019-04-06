@@ -11,9 +11,10 @@ suite('item tests', function() {
     document.body.appendChild(item);
   });
 
-  test("dangerous downloads aren't linkable", function() {
+  test('dangerous downloads aren\'t linkable', function() {
     item.set('data', {
       danger_type: downloads.DangerType.DANGEROUS_FILE,
+      hideDate: true,
       file_externally_removed: false,
       state: downloads.States.DANGEROUS,
       url: 'http://evil.com'

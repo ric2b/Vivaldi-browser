@@ -119,8 +119,20 @@ class MetricsServiceClient {
   // Returns whether cellular logic is enabled for metrics reporting.
   virtual bool IsUMACellularUploadLogicEnabled();
 
-  // Returns if history sync is enabled on all active profiles.
-  virtual bool IsHistorySyncEnabledOnAllProfiles();
+  // Returns true iff sync is in a state that allows UKM to be enabled.
+  // See //components/ukm/observers/sync_disable_observer.h for details.
+  virtual bool SyncStateAllowsUkm();
+
+  // Returns true iff sync is in a state that allows UKM to capture extensions.
+  // See //components/ukm/observers/sync_disable_observer.h for details.
+  virtual bool SyncStateAllowsExtensionUkm();
+
+  // Returns whether UKM notification listeners were attached to all profiles.
+  virtual bool AreNotificationListenersEnabledOnAllProfiles();
+
+  // Gets the Chrome package name for Android. Returns empty string for other
+  // platforms.
+  virtual std::string GetAppPackageName();
 
   // Sets the callback to run MetricsServiceManager::UpdateRunningServices.
   void SetUpdateRunningServicesCallback(const base::Closure& callback);

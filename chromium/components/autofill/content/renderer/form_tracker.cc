@@ -8,11 +8,11 @@
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/navigation_state.h"
 #include "content/public/renderer/render_frame.h"
-#include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
-#include "third_party/WebKit/public/web/modules/password_manager/WebFormElementObserver.h"
-#include "third_party/WebKit/public/web/modules/password_manager/WebFormElementObserverCallback.h"
+#include "third_party/blink/public/web/modules/autofill/web_form_element_observer.h"
+#include "third_party/blink/public/web/modules/autofill/web_form_element_observer_callback.h"
+#include "third_party/blink/public/web/web_input_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "ui/base/page_transition_types.h"
 
 using blink::WebDocumentLoader;
@@ -71,32 +71,9 @@ void FormTracker::TextFieldDidChange(const WebFormControlElement& element) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
   DCHECK(ToWebInputElement(&element) || form_util::IsTextAreaElement(element));
 
-  if (ignore_text_changes_)
+  if (ignore_control_changes_)
     return;
 
-  // Disregard text changes that aren't caused by user gestures or pastes. Note
-  // that pastes aren't necessarily user gestures because Blink's conception of
-  // user gestures is centered around creating new windows/tabs.
-  if (user_gesture_required_ &&
-      !blink::WebUserGestureIndicator::IsProcessingUserGesture() &&
-      !render_frame()->IsPasting())
-    return;
-
-  // We post a task for doing the Autofill as the caret position is not set
-  // properly at this point (http://bugs.webkit.org/show_bug.cgi?id=16976) and
-  // it is needed to trigger autofill.
-  weak_ptr_factory_.InvalidateWeakPtrs();
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&FormTracker::TextFieldDidChangeImpl,
-                            weak_ptr_factory_.GetWeakPtr(), element));
-}
-
-void FormTracker::FireProbablyFormSubmittedForTesting() {
-  FireProbablyFormSubmitted();
-}
-
-void FormTracker::TextFieldDidChangeImpl(const WebFormControlElement& element) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
   // If the element isn't focused then the changes don't matter. This check is
   // required to properly handle IME interactions.
   if (!element.Focused())
@@ -106,24 +83,75 @@ void FormTracker::TextFieldDidChangeImpl(const WebFormControlElement& element) {
   if (!input_element)
     return;
 
+  // Disregard text changes that aren't caused by user gestures or pastes. Note
+  // that pastes aren't necessarily user gestures because Blink's conception of
+  // user gestures is centered around creating new windows/tabs.
+  if (user_gesture_required_ &&
+      !blink::WebUserGestureIndicator::IsProcessingUserGesture(
+          render_frame()->GetWebFrame()) &&
+      !render_frame()->IsPasting())
+    return;
+
+  // We post a task for doing the Autofill as the caret position is not set
+  // properly at this point (http://bugs.webkit.org/show_bug.cgi?id=16976) and
+  // it is needed to trigger autofill.
+  weak_ptr_factory_.InvalidateWeakPtrs();
+  render_frame()
+      ->GetWebFrame()
+      ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
+      ->PostTask(FROM_HERE,
+                 base::BindRepeating(
+                     &FormTracker::FormControlDidChangeImpl,
+                     weak_ptr_factory_.GetWeakPtr(), element,
+                     Observer::ElementChangeSource::TEXTFIELD_CHANGED));
+}
+
+void FormTracker::SelectControlDidChange(const WebFormControlElement& element) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
+
+  if (ignore_control_changes_)
+    return;
+
+  // Post a task to avoid processing select control change while it is changing.
+  weak_ptr_factory_.InvalidateWeakPtrs();
+  render_frame()
+      ->GetWebFrame()
+      ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
+      ->PostTask(FROM_HERE, base::BindRepeating(
+                                &FormTracker::FormControlDidChangeImpl,
+                                weak_ptr_factory_.GetWeakPtr(), element,
+                                Observer::ElementChangeSource::SELECT_CHANGED));
+}
+
+void FormTracker::FireProbablyFormSubmittedForTesting() {
+  FireProbablyFormSubmitted();
+}
+
+void FormTracker::FormControlDidChangeImpl(
+    const WebFormControlElement& element,
+    Observer::ElementChangeSource change_source) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
+  // Render frame could be gone as this is the post task.
+  if (!render_frame()) return;
+
   if (element.Form().IsNull()) {
-    last_interacted_formless_element_ = *input_element;
+    last_interacted_formless_element_ = element;
   } else {
     last_interacted_form_ = element.Form();
   }
 
   for (auto& observer : observers_) {
-    observer.OnProvisionallySaveForm(
-        element.Form(), *input_element,
-        Observer::ElementChangeSource::TEXTFIELD_CHANGED);
+    observer.OnProvisionallySaveForm(element.Form(), element, change_source);
   }
 }
 
 void FormTracker::DidCommitProvisionalLoad(bool is_new_navigation,
                                            bool is_same_document_navigation) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
-  if (!is_same_document_navigation)
+  if (!is_same_document_navigation) {
+    ResetLastInteractedElements();
     return;
+  }
 
   FireSubmissionIfFormDisappear(SubmissionSource::SAME_DOCUMENT_NAVIGATION);
 }
@@ -151,11 +179,16 @@ void FormTracker::DidStartProvisionalLoad(WebDocumentLoader* document_loader) {
   if (!navigation_state)
     return;
 
-  ui::PageTransition type = navigation_state->GetTransitionType();
-  if (ui::PageTransitionIsWebTriggerable(type) &&
-      ui::PageTransitionIsNewNavigation(type) &&
-      !blink::WebUserGestureIndicator::IsProcessingUserGesture(
-          navigated_frame)) {
+  // We are interested only in content initiated navigations.  Explicit browser
+  // initiated navigations (e.g. via omnibox) are discarded here.  Similarly
+  // PlzNavigate navigations originating from the browser are discarded because
+  // they were already processed as a content initiated one
+  // (i.e. DidStartProvisionalLoad is called twice in this case).  The check for
+  // kWebNavigationTypeLinkClicked is reliable only for content initiated
+  // navigations.
+  if (navigation_state->IsContentInitiated() &&
+      document_loader->GetNavigationType() !=
+          blink::kWebNavigationTypeLinkClicked) {
     FireProbablyFormSubmitted();
   }
 }
@@ -170,7 +203,7 @@ void FormTracker::WillSendSubmitEvent(const WebFormElement& form) {
   last_interacted_form_ = form;
   for (auto& observer : observers_) {
     observer.OnProvisionallySaveForm(
-        form, blink::WebInputElement(),
+        form, blink::WebFormControlElement(),
         Observer::ElementChangeSource::WILL_SEND_SUBMIT_EVENT);
   }
 }

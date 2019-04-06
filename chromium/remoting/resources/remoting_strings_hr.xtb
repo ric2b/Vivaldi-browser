@@ -3,9 +3,6 @@
 <translationbundle lang="hr">
 <translation id="1002108253973310084">Otkrivena je nekompatibilna verzija protokola. Provjerite je li na oba računala instalirana najnovija verzija softvera pa pokušajte ponovo.</translation>
 <translation id="1050693411695664090">Slaba</translation>
-<translation id="1059802506829356230">• Novi izgled i stil.
-• Poboljšana izvedba, brzina reakcije i pouzdanost.
-• Podrška za reprodukciju zvuka s Windows ili Linux računala.</translation>
 <translation id="1152528166145813711">Odaberite…</translation>
 <translation id="1199593201721843963">Onemogući daljinske veze</translation>
 <translation id="1291443878853470558">Ako želite da aplikacija Chromoting ima pristup ovom računalu, morate omogućiti daljinski pristup.</translation>
@@ -143,10 +140,12 @@ Informacije o privatnosti potražite u Googleovim pravilima o privatnosti (http:
 <translation id="4145029455188493639">Prijavljeni ste kao <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Nedostaju neke obavezne komponente. Provjerite jeste li instalirali najnoviju verziju softvera i pokušajte ponovo.</translation>
 <translation id="4156740505453712750">Da biste zaštitili pristup ovom računalu, odaberite PIN s <ph name="BOLD_START" />najmanje šest brojeva<ph name="BOLD_END" />. Taj će PIN biti potreban pri povezivanju s druge lokacije.</translation>
+<translation id="4169432154993690151">Za odabir profilne slike dopustite Udaljenoj radnoj površini Chrome da pristupi vašem fotoaparatu</translation>
 <translation id="4176825807642096119">Pristupni kôd</translation>
 <translation id="4207623512727273241">Ponovo pokrenite instalacijski program prije nastavka.</translation>
 <translation id="4227991223508142681">Uslužni program za pružanje usluge hosta</translation>
 <translation id="4240294130679914010">Program za deinstaliranje usluge Chromoting</translation>
+<translation id="4249741460382919890">Općeniti ispravci programskih pogrešaka i poboljšanja stabilnosti.</translation>
 <translation id="4277463233460010382">To je računalo konfigurirano tako da dozvoljava povezivanje jednog ili više klijenata bez unosa PIN-a.</translation>
 <translation id="4277736576214464567">Pristupni je kôd nevažeći. Pokušajte ponovo.</translation>
 <translation id="4361728918881830843">Da biste omogućili povezivanje s različitim udaljenim računalima, na njima instalirajte Udaljenu radnu površinu Chrome pa kliknite gumb "<ph name="BUTTON_NAME" />".</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (van mreže)</translation>
 <translation id="5070121137485264635">Udaljeni host zahtijeva autentifikaciju web-lokacije treće strane. Da biste nastavili, morate dati Udaljenoj radnoj površini Chrome dodatne dozvole za pristup ovoj adresi:</translation>
 <translation id="507204348399810022">Jeste li sigurni da želite onemogućiti daljinske veze s hostom <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Komunikacija s poslužiteljem nije uspjela: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Unesite isti PIN u oba polja.</translation>
 <translation id="5170982930780719864">Nevažeći ID hosta.</translation>
 <translation id="518094545883702183">Informacije se upotrebljavaju samo za dijagnosticiranje problema koji prijavljujete, dostupne su samo osobi koja istražuje vaše izvješće i ne zadržavaju se dulje od 30 dana.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Nešto drugo.</translation>
 <translation id="6398765197997659313">Izađi iz cijelog zaslona</translation>
 <translation id="6441316101718669559">Ova platforma ne podržava integraciju radne površine. Aplikacija se može upotrebljavati, ali uz lošiji korisnički doživljaj.</translation>
+<translation id="6502629188777329097">Siguran pristup računalu</translation>
 <translation id="652218476070540101">U tijeku je ažuriranje PIN-a za ovo računalo…</translation>
 <translation id="6527303717912515753">Podijeli</translation>
 <translation id="6541219117979389420">Zapisnici aplikacija mogu uključivati osobne podatke, uključujući vaš identitet (e-adresu) te nazive i svojstva datoteka i mapa na Google disku.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">Od</translation>
 <translation id="677755392401385740">Host je pokrenut za korisnika: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Prikaz/uređivanje</translation>
+<translation id="6913710942997637770">Za odabir profilne slike dopustite Udaljenoj radnoj površini Chrome da pristupi vašim fotografijama</translation>
 <translation id="6930242544192836755">Trajanje</translation>
 <translation id="6939719207673461467">Prikaži/sakrij tipkovnicu.</translation>
 <translation id="6944854424004126054">Vraćanje prozora</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Na ovom su računalu onemogućene daljinske veze.</translation>
 <translation id="7678209621226490279">Usidri ulijevo</translation>
 <translation id="7693372326588366043">Osvježi popis hostova</translation>
+<translation id="7714222945760997814">Prijavite ovo</translation>
 <translation id="7782471917492991422">Provjerite postavke upravljanja potrošnjom energije svojeg računala i provjerite da nije konfigurirano tako da prelazi u stanje mirovanja kad je neaktivno.</translation>
 <translation id="7810127880729796595">Prikaži statistiku (veza: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Nedostaju neke obavezne komponente. Provjerite jeste li pokrenuli najnoviju verziju Chromea i pokušajte ponovo.</translation>

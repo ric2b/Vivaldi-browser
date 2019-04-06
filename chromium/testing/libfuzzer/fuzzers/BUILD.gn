@@ -49,24 +49,6 @@ fuzzer_test("snappy_fuzzer") {
   ]
 }
 
-fuzzer_test("string_tokenizer_fuzzer") {
-  sources = [
-    "string_tokenizer_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-  ]
-}
-
-fuzzer_test("string_to_int_fuzzer") {
-  sources = [
-    "string_to_int_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-  ]
-}
-
 fuzzer_test("template_url_parser_fuzzer") {
   sources = [
     "template_url_parser_fuzzer.cc",
@@ -78,18 +60,6 @@ fuzzer_test("template_url_parser_fuzzer") {
   ]
   dict = "dicts/xml.dict"
   libfuzzer_options = [ "max_len=4096" ]
-}
-
-fuzzer_test("url_parse_fuzzer") {
-  sources = [
-    "url_parse_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-    "//base:i18n",
-    "//url:url",
-  ]
-  dict = "dicts/generated/url_parse_fuzzer.dict"
 }
 
 fuzzer_test("url_parse_proto_fuzzer") {
@@ -128,15 +98,6 @@ fuzzer_test("libsrtp_fuzzer") {
     "//third_party/libsrtp",
   ]
   libfuzzer_options = [ "max_len=1500" ]
-}
-
-fuzzer_test("base_json_reader_fuzzer") {
-  sources = [
-    "base_json_reader_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-  ]
 }
 
 libpng_seed_corpuses = [
@@ -220,6 +181,20 @@ fuzzer_test("v8_regexp_parser_fuzzer") {
   libfuzzer_options = [ "max_len=64" ]
 }
 
+fuzzer_test("v8_regexp_builtins_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:regexp_builtins_fuzzer",
+  ]
+}
+
+fuzzer_test("v8_multi_return_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:multi_return_fuzzer",
+  ]
+}
+
 fuzzer_test("v8_wasm_code_fuzzer") {
   sources = []
   deps = [
@@ -232,14 +207,6 @@ fuzzer_test("v8_wasm_compile_fuzzer") {
   sources = []
   deps = [
     "//v8:wasm_compile_fuzzer",
-  ]
-  libfuzzer_options = [ "max_len=500" ]
-}
-
-fuzzer_test("v8_wasm_call_fuzzer") {
-  sources = []
-  deps = [
-    "//v8:wasm_call_fuzzer",
   ]
   libfuzzer_options = [ "max_len=500" ]
 }
@@ -406,6 +373,7 @@ fuzzer_test("angle_translator_fuzzer") {
     "//third_party/angle:translator_fuzzer",
   ]
   libfuzzer_options = [ "max_len=1000" ]
+  dict = "dicts/webgl-glsl.dict"
 }
 
 if (target_cpu == "x86" || target_cpu == "x64") {
@@ -503,7 +471,6 @@ fuzzer_test("javascript_parser_proto_fuzzer") {
     "//v8:v8",
     "//v8:v8_libplatform",
   ]
-  include_dirs = [ "$root_build_dir/$target_gen_dir" ]
 }
 
 fuzzer_test("v8_fully_instrumented_fuzzer") {
@@ -517,4 +484,21 @@ fuzzer_test("v8_fully_instrumented_fuzzer") {
   ]
   dict = "dicts/generated/javascript.dict"
   libfuzzer_options = [ "only_ascii=1" ]
+}
+
+if (!is_win) {
+  fuzzer_test("skia_image_filter_proto_fuzzer") {
+    sources = [
+      "skia_image_filter_proto_fuzzer.cc",
+    ]
+
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//skia",
+      "//testing/libfuzzer/proto:skia_image_filter_converter",
+      "//testing/libfuzzer/proto:skia_image_filter_proto",
+      "//third_party/libprotobuf-mutator",
+    ]
+  }
 }

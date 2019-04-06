@@ -7,9 +7,9 @@
 #include "base/run_loop.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chrome/test/views/chrome_test_views_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_utils.h"
-#include "ui/views/test/test_views_delegate.h"
 
 class ReloadButtonTest : public ChromeRenderViewHostTestHarness {
  public:
@@ -31,13 +31,13 @@ class ReloadButtonTest : public ChromeRenderViewHostTestHarness {
   ReloadButton* reload() { return &reload_; }
 
  private:
-  views::TestViewsDelegate views_delegate_;
+  ChromeTestViewsDelegate views_delegate_;
   ReloadButton reload_;
 
   DISALLOW_COPY_AND_ASSIGN(ReloadButtonTest);
 };
 
-ReloadButtonTest::ReloadButtonTest() : reload_(profile(), nullptr) {
+ReloadButtonTest::ReloadButtonTest() : reload_(nullptr) {
   // Set the timer delays to 0 so that timers will fire as soon as we tell the
   // message loop to run pending tasks.
   reload_.double_click_timer_delay_ = base::TimeDelta();

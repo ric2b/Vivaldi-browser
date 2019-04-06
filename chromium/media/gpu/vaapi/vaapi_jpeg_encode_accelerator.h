@@ -11,8 +11,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/bitstream_buffer.h"
+#include "media/base/unaligned_shared_memory.h"
 #include "media/gpu/media_gpu_export.h"
-#include "media/gpu/shared_memory_region.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "media/video/jpeg_encode_accelerator.h"
 
@@ -41,19 +41,24 @@ class MEDIA_GPU_EXPORT VaapiJpegEncodeAccelerator
   // Currently only I420 format is supported for |video_frame|.
   void Encode(scoped_refptr<media::VideoFrame> video_frame,
               int quality,
-              const BitstreamBuffer& bitstream_buffer) override;
+              const BitstreamBuffer* exif_buffer,
+              const BitstreamBuffer& output_buffer) override;
 
  private:
   // An input video frame and the corresponding output buffer awaiting
   // consumption, provided by the client.
   struct EncodeRequest {
-    EncodeRequest(scoped_refptr<media::VideoFrame> video_frame,
-                  std::unique_ptr<SharedMemoryRegion> shm,
+    EncodeRequest(int32_t buffer_id,
+                  scoped_refptr<media::VideoFrame> video_frame,
+                  std::unique_ptr<UnalignedSharedMemory> exif_shm,
+                  std::unique_ptr<UnalignedSharedMemory> output_shm,
                   int quality);
     ~EncodeRequest();
 
+    int32_t buffer_id;
     scoped_refptr<media::VideoFrame> video_frame;
-    std::unique_ptr<SharedMemoryRegion> shm;
+    std::unique_ptr<UnalignedSharedMemory> exif_shm;
+    std::unique_ptr<UnalignedSharedMemory> output_shm;
     int quality;
 
     DISALLOW_COPY_AND_ASSIGN(EncodeRequest);
@@ -65,9 +70,9 @@ class MEDIA_GPU_EXPORT VaapiJpegEncodeAccelerator
 
   // Notifies the client that an error has occurred and encoding cannot
   // continue.
-  void NotifyError(int video_frame_id, Status status);
+  void NotifyError(int32_t buffer_id, Status status);
 
-  void VideoFrameReady(int video_frame_id, size_t encoded_picture_size);
+  void VideoFrameReady(int32_t buffer_id, size_t encoded_picture_size);
 
   // ChildThread's task runner.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

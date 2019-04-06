@@ -38,6 +38,15 @@ bool IsSupportedPlaybackToMemoryFormat(viz::ResourceFormat format) {
     case viz::LUMINANCE_F16:
     case viz::RGBA_F16:
     case viz::R16_EXT:
+    case viz::BGR_565:
+    case viz::RG_88:
+    case viz::RGBX_8888:
+    case viz::BGRX_8888:
+    case viz::RGBX_1010102:
+    case viz::BGRX_1010102:
+    case viz::YVU_420:
+    case viz::YUV_420_BIPLANAR:
+    case viz::UYVY_422:
       return false;
   }
   NOTREACHED();
@@ -57,6 +66,7 @@ void RasterBufferProvider::PlaybackToMemory(
     const gfx::Rect& canvas_playback_rect,
     const gfx::AxisTransform2d& transform,
     const gfx::ColorSpace& target_color_space,
+    bool gpu_compositing,
     const RasterSource::PlaybackSettings& playback_settings) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "RasterBufferProvider::PlaybackToMemory");
@@ -78,6 +88,8 @@ void RasterBufferProvider::PlaybackToMemory(
     stride = info.minRowBytes();
   DCHECK_GT(stride, 0u);
 
+  gfx::Size content_size = raster_source->GetContentSize(transform.scale());
+
   switch (format) {
     case viz::RGBA_8888:
     case viz::BGRA_8888:
@@ -90,18 +102,18 @@ void RasterBufferProvider::PlaybackToMemory(
       // See: http://crbug.com/721744.
       CHECK(surface);
       raster_source->PlaybackToCanvas(surface->getCanvas(), target_color_space,
-                                      canvas_bitmap_rect, canvas_playback_rect,
-                                      transform, playback_settings);
+                                      content_size, canvas_bitmap_rect,
+                                      canvas_playback_rect, transform,
+                                      playback_settings);
       return;
     }
-    case viz::RGBA_4444:
-    case viz::ETC1: {
+    case viz::RGBA_4444: {
       sk_sp<SkSurface> surface = SkSurface::MakeRaster(info, &surface_props);
       // TODO(reveman): Improve partial raster support by reducing the size of
       // playback rect passed to PlaybackToCanvas. crbug.com/519070
-      raster_source->PlaybackToCanvas(surface->getCanvas(), target_color_space,
-                                      canvas_bitmap_rect, canvas_bitmap_rect,
-                                      transform, playback_settings);
+      raster_source->PlaybackToCanvas(
+          surface->getCanvas(), target_color_space, content_size,
+          canvas_bitmap_rect, canvas_bitmap_rect, transform, playback_settings);
 
       if (format == viz::ETC1) {
         TRACE_EVENT0("cc",
@@ -119,47 +131,34 @@ void RasterBufferProvider::PlaybackToMemory(
       } else {
         TRACE_EVENT0("cc",
                      "RasterBufferProvider::PlaybackToMemory::ConvertRGBA4444");
-        SkImageInfo dst_info =
-            info.makeColorType(ResourceFormatToClosestSkColorType(format));
+        SkImageInfo dst_info = info.makeColorType(
+            ResourceFormatToClosestSkColorType(gpu_compositing, format));
         bool rv = surface->readPixels(dst_info, memory, stride, 0, 0);
         DCHECK(rv);
       }
       return;
     }
-    case viz::ALPHA_8:
-    case viz::LUMINANCE_8:
-    case viz::RGB_565:
-    case viz::RED_8:
-    case viz::LUMINANCE_F16:
-    case viz::R16_EXT:
-      NOTREACHED();
-      return;
-  }
-
-  NOTREACHED();
-}
-
-bool RasterBufferProvider::ResourceFormatRequiresSwizzle(
-    viz::ResourceFormat format) {
-  switch (format) {
-    case viz::RGBA_8888:
-    case viz::BGRA_8888:
-      // Initialize resource using the preferred viz::PlatformColor component
-      // order and swizzle in the shader instead of in software.
-      return !viz::PlatformColor::SameComponentOrder(format);
-    case viz::RGBA_4444:
     case viz::ETC1:
     case viz::ALPHA_8:
     case viz::LUMINANCE_8:
     case viz::RGB_565:
     case viz::RED_8:
     case viz::LUMINANCE_F16:
-    case viz::RGBA_F16:
     case viz::R16_EXT:
-      return false;
+    case viz::BGR_565:
+    case viz::RG_88:
+    case viz::RGBX_8888:
+    case viz::BGRX_8888:
+    case viz::RGBX_1010102:
+    case viz::BGRX_1010102:
+    case viz::YVU_420:
+    case viz::YUV_420_BIPLANAR:
+    case viz::UYVY_422:
+      NOTREACHED();
+      return;
   }
+
   NOTREACHED();
-  return false;
 }
 
 }  // namespace cc

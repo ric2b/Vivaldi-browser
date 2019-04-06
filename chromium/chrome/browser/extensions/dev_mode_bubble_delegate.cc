@@ -6,6 +6,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -16,12 +17,14 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/ui_features.h"
 
 namespace extensions {
 
 namespace {
 
-base::LazyInstance<std::set<Profile*>>::Leaky g_shown =
+base::LazyInstance<std::set<Profile*>>::Leaky g_dev_mode_shown =
     LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
@@ -73,7 +76,14 @@ base::string16 DevModeBubbleDelegate::GetActionButtonLabel() const {
 }
 
 base::string16 DevModeBubbleDelegate::GetDismissButtonLabel() const {
-  return l10n_util::GetStringUTF16(IDS_CANCEL);
+// TODO(https://crbug.com/671656): Keep the cancel button on MACOSX unless
+// using views or the Cocoa version is updated.
+#if defined(OS_MACOSX)
+  if (!ui::MaterialDesignController::IsSecondaryUiMaterial())
+    return l10n_util::GetStringUTF16(IDS_CANCEL);
+#endif
+
+  return base::string16();
 }
 
 bool DevModeBubbleDelegate::ShouldCloseOnDeactivate() const {
@@ -87,19 +97,19 @@ bool DevModeBubbleDelegate::ShouldAcknowledgeOnDeactivate() const {
 bool DevModeBubbleDelegate::ShouldShow(
     const ExtensionIdList& extensions) const {
   DCHECK_LE(1u, extensions.size());
-  return !g_shown.Get().count(profile_);
+  return !g_dev_mode_shown.Get().count(profile_->GetOriginalProfile());
 }
 
 void DevModeBubbleDelegate::OnShown(const ExtensionIdList& extensions) {
   DCHECK_LE(1u, extensions.size());
-  DCHECK(!g_shown.Get().count(profile_));
-  g_shown.Get().insert(profile_);
+  DCHECK(!g_dev_mode_shown.Get().count(profile_));
+  g_dev_mode_shown.Get().insert(profile_->GetOriginalProfile());
 }
 
 void DevModeBubbleDelegate::OnAction() {}
 
 void DevModeBubbleDelegate::ClearProfileSetForTesting() {
-  g_shown.Get().clear();
+  g_dev_mode_shown.Get().clear();
 }
 
 bool DevModeBubbleDelegate::ShouldShowExtensionList() const {

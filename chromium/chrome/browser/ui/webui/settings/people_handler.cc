@@ -21,18 +21,18 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
+#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_ui_util.h"
+#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/singleton_tabs.h"
-#include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -43,6 +43,7 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_metrics.h"
@@ -60,9 +61,19 @@
 #include "ui/base/webui/web_ui_util.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #else
+#include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/webui/profile_helper.h"
 #include "components/signin/core/browser/signin_manager.h"
+#endif
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
+#include "chrome/browser/signin/account_tracker_service_factory.h"
+#include "components/signin/core/browser/account_tracker_service.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/image/image.h"
 #endif
 
 using browser_sync::ProfileSyncService;
@@ -186,14 +197,22 @@ PeopleHandler::PeopleHandler(Profile* profile)
     : profile_(profile),
       configuring_sync_(false),
       signin_observer_(this),
-      sync_service_observer_(this) {}
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+      sync_service_observer_(this),
+      account_tracker_observer_(this) {
+}
+#else
+      sync_service_observer_(this) {
+}
+#endif
 
 PeopleHandler::~PeopleHandler() {
   // Early exit if running unit tests (no actual WebUI is attached).
   if (!web_ui())
     return;
 
-  // This case is hit when the user performs a back navigation.
+  // Note that if the user left the sync page by closing the tab, refresh,
+  // or via the back navigation, it would first go through OnDidClosePage().
   CloseSyncSetup();
 }
 
@@ -201,35 +220,55 @@ void PeopleHandler::RegisterMessages() {
   InitializeSyncBlocker();
   web_ui()->RegisterMessageCallback(
       "SyncSetupDidClosePage",
-      base::Bind(&PeopleHandler::OnDidClosePage, base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::OnDidClosePage,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupSetDatatypes",
-      base::Bind(&PeopleHandler::HandleSetDatatypes, base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::HandleSetDatatypes,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupSetEncryption",
-      base::Bind(&PeopleHandler::HandleSetEncryption, base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::HandleSetEncryption,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupShowSetupUI",
-      base::Bind(&PeopleHandler::HandleShowSetupUI, base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::HandleShowSetupUI,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupGetSyncStatus",
-      base::Bind(&PeopleHandler::HandleGetSyncStatus, base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::HandleGetSyncStatus,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupManageOtherPeople",
-      base::Bind(&PeopleHandler::HandleManageOtherPeople,
-                 base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::HandleManageOtherPeople,
+                          base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "AttemptUserExit",
-      base::Bind(&PeopleHandler::HandleAttemptUserExit,
-                 base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::HandleAttemptUserExit,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "RequestPinLoginState",
+      base::BindRepeating(&PeopleHandler::HandleRequestPinLoginState,
+                          base::Unretained(this)));
 #else
   web_ui()->RegisterMessageCallback(
-      "SyncSetupStopSyncing",
-      base::Bind(&PeopleHandler::HandleStopSyncing, base::Unretained(this)));
+      "SyncSetupSignout", base::BindRepeating(&PeopleHandler::HandleSignout,
+                                              base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupStartSignIn",
-      base::Bind(&PeopleHandler::HandleStartSignin, base::Unretained(this)));
+      base::BindRepeating(&PeopleHandler::HandleStartSignin,
+                          base::Unretained(this)));
+#endif
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  web_ui()->RegisterMessageCallback(
+      "SyncSetupGetStoredAccounts",
+      base::BindRepeating(&PeopleHandler::HandleGetStoredAccounts,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "SyncSetupStartSyncingWithEmail",
+      base::BindRepeating(&PeopleHandler::HandleStartSyncingWithEmail,
+                          base::Unretained(this)));
 #endif
 }
 
@@ -245,16 +284,28 @@ void PeopleHandler::OnJavascriptAllowed() {
   if (signin_manager)
     signin_observer_.Add(signin_manager);
 
+  // This is intentionally not using GetSyncService(), to go around the
+  // Profile::IsSyncAllowed() check.
   ProfileSyncService* sync_service(
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_));
   if (sync_service)
     sync_service_observer_.Add(sync_service);
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  AccountTrackerService* account_tracker(
+      AccountTrackerServiceFactory::GetForProfile(profile_));
+  if (account_tracker)
+    account_tracker_observer_.Add(account_tracker);
+#endif
 }
 
 void PeopleHandler::OnJavascriptDisallowed() {
   profile_pref_registrar_.RemoveAll();
   signin_observer_.RemoveAll();
   sync_service_observer_.RemoveAll();
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  account_tracker_observer_.RemoveAll();
+#endif
 }
 
 #if !defined(OS_CHROMEOS)
@@ -318,6 +369,12 @@ void PeopleHandler::DisplayGaiaLoginInNewTabOrWindow(
 }
 #endif
 
+#if defined(OS_CHROMEOS)
+void PeopleHandler::OnPinLoginAvailable(bool is_available) {
+  FireWebUIListener("pin-login-available-changed", base::Value(is_available));
+}
+#endif
+
 void PeopleHandler::DisplaySpinner() {
   configuring_sync_ = true;
 
@@ -342,7 +399,12 @@ void PeopleHandler::DisplayTimeout() {
 }
 
 void PeopleHandler::OnDidClosePage(const base::ListValue* args) {
-  MarkFirstSetupComplete();
+  // Don't mark setup as complete if "didAbort" is true, or if authentication
+  // is still needed.
+  if (!args->GetList()[0].GetBool() && !IsProfileAuthNeededOrHasErrors()) {
+    MarkFirstSetupComplete();
+  }
+
   CloseSyncSetup();
 }
 
@@ -406,6 +468,70 @@ void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
   if (!configuration.sync_everything)
     ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CHOOSE);
 }
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+void PeopleHandler::HandleGetStoredAccounts(const base::ListValue* args) {
+  CHECK_EQ(1U, args->GetSize());
+  const base::Value* callback_id;
+  CHECK(args->Get(0, &callback_id));
+
+  ResolveJavascriptCallback(*callback_id, *GetStoredAccountsList());
+}
+
+void PeopleHandler::OnAccountUpdated(const AccountInfo& info) {
+  FireWebUIListener("stored-accounts-updated", *GetStoredAccountsList());
+}
+
+void PeopleHandler::OnAccountRemoved(const AccountInfo& info) {
+  FireWebUIListener("stored-accounts-updated", *GetStoredAccountsList());
+}
+
+std::unique_ptr<base::ListValue> PeopleHandler::GetStoredAccountsList() {
+  std::vector<AccountInfo> accounts =
+      signin_ui_util::GetAccountsForDicePromos(profile_);
+
+  AccountTrackerService* account_tracker =
+      AccountTrackerServiceFactory::GetForProfile(profile_);
+  std::unique_ptr<base::ListValue> accounts_list(new base::ListValue);
+  accounts_list->Reserve(accounts.size());
+
+  for (auto const& account : accounts) {
+    accounts_list->GetList().push_back(
+        base::Value(base::Value::Type::DICTIONARY));
+    base::Value& acc = accounts_list->GetList().back();
+    acc.SetKey("email", base::Value(account.email));
+    acc.SetKey("fullName", base::Value(account.full_name));
+    acc.SetKey("givenName", base::Value(account.given_name));
+    const gfx::Image& account_image =
+        account_tracker->GetAccountImage(account.account_id);
+    if (!account_image.IsEmpty()) {
+      acc.SetKey(
+          "avatarImage",
+          base::Value(webui::GetBitmapDataUrl(account_image.AsBitmap())));
+    }
+  }
+
+  return accounts_list;
+}
+
+void PeopleHandler::HandleStartSyncingWithEmail(const base::ListValue* args) {
+  const base::Value* email;
+  const base::Value* is_default_promo_account;
+  CHECK(args->Get(0, &email));
+  CHECK(args->Get(1, &is_default_promo_account));
+
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
+
+  AccountTrackerService* account_tracker =
+      AccountTrackerServiceFactory::GetForProfile(profile_);
+  AccountInfo account =
+      account_tracker->FindAccountInfoByEmail(email->GetString());
+  signin_ui_util::EnableSyncFromPromo(
+      browser, account, signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS,
+      is_default_promo_account->GetBool());
+}
+#endif
 
 void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
   DCHECK(!sync_startup_tracker_);
@@ -487,13 +613,33 @@ void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
 void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
   AllowJavascript();
 
-  if (!GetSyncService()) {
+  ProfileSyncService* service = GetSyncService();
+
+  // Just let the page open for now, even when the user's not signed in or sync
+  // is disabled.
+  // TODO(scottchen): finish the UI for signed-out users
+  //    (https://crbug.com/800972).
+  if (IsUnifiedConsentEnabled(profile_) &&
+      (IsProfileAuthNeededOrHasErrors() || !service)) {
+    if (service && !sync_blocker_)
+      sync_blocker_ = service->GetSetupInProgressHandle();
+
+    // Preemptively mark login UI as active, because the user could potentially
+    // sign-in directly from this UI without triggering handleShowSetupUI again.
+    GetLoginUIService()->SetLoginUI(this);
+    FireWebUIListener("sync-prefs-changed", base::DictionaryValue());
+    return;
+  }
+
+  if (!service) {
     CloseUI();
     return;
   }
 
-  SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile_);
-  if (!signin->IsAuthenticated()) {
+  // This if-statement is not using IsProfileAuthNeededOrHasErrors(), because
+  // in some error cases (e.g. "confirmSyncSettings") the UI still needs to
+  // show.
+  if (!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated()) {
     // For web-based signin, the signin page is not displayed in an overlay
     // on the settings page. So if we get here, it must be due to the user
     // cancelling signin (by reloading the sync settings page during initial
@@ -504,7 +650,38 @@ void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
     return;
   }
 
-  OpenSyncSetup();
+  // Notify services that login UI is now active.
+  GetLoginUIService()->SetLoginUI(this);
+
+  if (!sync_blocker_)
+    sync_blocker_ = service->GetSetupInProgressHandle();
+
+  // Early exit if there is already a preferences push pending sync startup.
+  if (sync_startup_tracker_)
+    return;
+
+  if (!service->IsEngineInitialized()) {
+    // Requesting the sync service to start may trigger call to PushSyncPrefs.
+    // Setting up the startup tracker beforehand correctly signals the
+    // re-entrant call to early exit.
+    sync_startup_tracker_.reset(new SyncStartupTracker(profile_, this));
+    service->RequestStart();
+
+    // See if it's even possible to bring up the sync engine - if not
+    // (unrecoverable error?), don't bother displaying a spinner that will be
+    // immediately closed because this leads to some ugly infinite UI loop (see
+    // http://crbug.com/244769).
+    if (SyncStartupTracker::GetSyncServiceState(profile_) !=
+        SyncStartupTracker::SYNC_STARTUP_ERROR) {
+      DisplaySpinner();
+    }
+    return;
+  }
+
+  // User is already logged in. They must have brought up the config wizard
+  // via the "Advanced..." button or through One-Click signin (cases 4-6), or
+  // they are re-enabling sync after having disabled it (case 7).
+  PushSyncPrefs();
 }
 
 #if defined(OS_CHROMEOS)
@@ -514,6 +691,13 @@ void PeopleHandler::HandleAttemptUserExit(const base::ListValue* args) {
   DVLOG(1) << "Signing out the user to fix a sync error.";
   chrome::AttemptUserExit();
 }
+
+void PeopleHandler::HandleRequestPinLoginState(const base::ListValue* args) {
+  AllowJavascript();
+  chromeos::quick_unlock::PinBackend::GetInstance()->HasLoginSupport(
+      base::BindOnce(&PeopleHandler::OnPinLoginAvailable,
+                     weak_factory_.GetWeakPtr()));
+}
 #endif
 
 #if !defined(OS_CHROMEOS)
@@ -522,30 +706,39 @@ void PeopleHandler::HandleStartSignin(const base::ListValue* args) {
 
   // Should only be called if the user is not already signed in or has an auth
   // error.
-  DCHECK(!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
-         SigninErrorControllerFactory::GetForProfile(profile_)->HasError());
+  DCHECK(IsProfileAuthNeededOrHasErrors());
 
-  OpenSyncSetup();
+  DisplayGaiaLogin(signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
 }
 
-void PeopleHandler::HandleStopSyncing(const base::ListValue* args) {
+void PeopleHandler::HandleSignout(const base::ListValue* args) {
   bool delete_profile = false;
   args->GetBoolean(0, &delete_profile);
 
-  if (!SigninManagerFactory::GetForProfile(profile_)->IsSignoutProhibited()) {
-    if (GetSyncService())
-      ProfileSyncService::SyncEvent(ProfileSyncService::STOP_FROM_OPTIONS);
+  SigninManager* signin_manager = SigninManagerFactory::GetForProfile(profile_);
+  if (signin_manager->IsSignoutProhibited()) {
+    // If the user cannot signout, the profile must be destroyed.
+    DCHECK(delete_profile);
+  } else {
+    if (signin_manager->IsAuthenticated()) {
+      if (GetSyncService())
+        ProfileSyncService::SyncEvent(ProfileSyncService::STOP_FROM_OPTIONS);
 
-    signin_metrics::SignoutDelete delete_metric =
-        delete_profile ? signin_metrics::SignoutDelete::DELETED
-                       : signin_metrics::SignoutDelete::KEEPING;
-    SigninManagerFactory::GetForProfile(profile_)
-        ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, delete_metric);
+      signin_metrics::SignoutDelete delete_metric =
+          delete_profile ? signin_metrics::SignoutDelete::DELETED
+                         : signin_metrics::SignoutDelete::KEEPING;
+      signin_manager->SignOutAndRemoveAllAccounts(
+          signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, delete_metric);
+    } else {
+      DCHECK(!delete_profile)
+          << "Deleting the profile should only be offered the user is syncing.";
+      ProfileOAuth2TokenServiceFactory::GetForProfile(profile_)
+          ->RevokeAllCredentials();
+    }
   }
 
   if (delete_profile) {
     webui::DeleteProfileAtPath(profile_->GetPath(),
-                               web_ui(),
                                ProfileMetrics::DELETE_PROFILE_SETTINGS);
   }
 }
@@ -562,8 +755,10 @@ void PeopleHandler::HandleGetSyncStatus(const base::ListValue* args) {
 }
 
 void PeopleHandler::HandleManageOtherPeople(const base::ListValue* /* args */) {
+#if !defined(OS_CHROMEOS)
   UserManager::Show(base::FilePath(),
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
+#endif  // !defined(OS_CHROMEOS)
 }
 
 void PeopleHandler::CloseSyncSetup() {
@@ -601,7 +796,6 @@ void PeopleHandler::CloseSyncSetup() {
 #if !defined(OS_CHROMEOS)
           // Sign out the user on desktop Chrome if they click cancel during
           // initial setup.
-          // TODO(rsimha): Revisit this for M30. See http://crbug.com/252049.
           if (sync_service->IsFirstSetupInProgress()) {
             SigninManagerFactory::GetForProfile(profile_)
                 ->SignOut(signin_metrics::ABORT_SIGNIN,
@@ -621,72 +815,6 @@ void PeopleHandler::CloseSyncSetup() {
   sync_blocker_.reset();
 
   configuring_sync_ = false;
-}
-
-void PeopleHandler::OpenSyncSetup() {
-  // Notify services that login UI is now active.
-  GetLoginUIService()->SetLoginUI(this);
-
-  ProfileSyncService* service = GetSyncService();
-  if (service && !sync_blocker_)
-    sync_blocker_ = service->GetSetupInProgressHandle();
-
-  // There are several different UI flows that can bring the user here:
-  // 1) Signin promo.
-  // 2) Normal signin through settings page (IsAuthenticated() is false).
-  // 3) Previously working credentials have expired.
-  // 4) User is signed in, but has stopped sync via the google dashboard, and
-  //    signout is prohibited by policy so we need to force a re-auth.
-  // 5) User clicks [Advanced Settings] button on options page while already
-  //    logged in.
-  // 6) One-click signin (credentials are already available, so should display
-  //    sync configure UI, not login UI).
-  // 7) User re-enables sync after disabling it via advanced settings.
-#if !defined(OS_CHROMEOS)
-  if (!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
-      SigninErrorControllerFactory::GetForProfile(profile_)->HasError()) {
-    // User is not logged in (cases 1-2), or login has been specially requested
-    // because previously working credentials have expired (case 3). Close sync
-    // setup including any visible overlays, and display the gaia auth page.
-    // Control will be returned to the sync settings page once auth is complete.
-    CloseUI();
-    DisplayGaiaLogin(signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
-    return;
-  }
-#endif
-  if (!service) {
-    // This can happen if the user directly navigates to /settings/syncSetup.
-    DLOG(WARNING) << "Cannot display sync UI when sync is disabled";
-    CloseUI();
-    return;
-  }
-
-  // Early exit if there is already a preferences push pending sync startup.
-  if (sync_startup_tracker_)
-    return;
-
-  if (!service->IsEngineInitialized()) {
-    // Requesting the sync service to start may trigger call to PushSyncPrefs.
-    // Setting up the startup tracker beforehand correctly signals the
-    // re-entrant call to early exit.
-    sync_startup_tracker_.reset(new SyncStartupTracker(profile_, this));
-    service->RequestStart();
-
-    // See if it's even possible to bring up the sync engine - if not
-    // (unrecoverable error?), don't bother displaying a spinner that will be
-    // immediately closed because this leads to some ugly infinite UI loop (see
-    // http://crbug.com/244769).
-    if (SyncStartupTracker::GetSyncServiceState(profile_) !=
-        SyncStartupTracker::SYNC_STARTUP_ERROR) {
-      DisplaySpinner();
-    }
-    return;
-  }
-
-  // User is already logged in. They must have brought up the config wizard
-  // via the "Advanced..." button or through One-Click signin (cases 4-6), or
-  // they are re-enabling sync after having disabled it (case 7).
-  PushSyncPrefs();
 }
 
 void PeopleHandler::InitializeSyncBlocker() {
@@ -758,15 +886,20 @@ PeopleHandler::GetSyncStatusDictionary() {
   }
 #endif
 
+  // This is intentionally not using GetSyncService(), in order to access more
+  // nuanced information, since GetSyncService() returns nullptr if anything
+  // makes Profile::IsSyncAllowed() false.
   ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
+  bool disallowed_by_policy =
+      service && service->HasDisableReason(
+                     syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
   sync_status->SetBoolean("signinAllowed", signin->IsSigninAllowed());
   sync_status->SetBoolean("syncSystemEnabled", (service != nullptr));
-  sync_status->SetBoolean("setupCompleted",
-                          service && service->IsFirstSetupComplete());
-  sync_status->SetBoolean(
-      "setupInProgress",
-      service && !service->IsManaged() && service->IsFirstSetupInProgress());
+  sync_status->SetBoolean("setupInProgress",
+                          service && !disallowed_by_policy &&
+                              service->IsFirstSetupInProgress() &&
+                              signin->IsAuthenticated());
 
   base::string16 status_label;
   base::string16 link_label;
@@ -780,23 +913,25 @@ PeopleHandler::GetSyncStatusDictionary() {
   sync_status->SetBoolean("hasError", status_has_error);
   sync_status->SetString("statusAction", GetSyncErrorAction(action_type));
 
-  sync_status->SetBoolean("managed", service && service->IsManaged());
+  sync_status->SetBoolean("managed", disallowed_by_policy);
+  sync_status->SetBoolean(
+      "disabled",
+      !service || disallowed_by_policy ||
+          service->HasDisableReason(
+              syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE));
   sync_status->SetBoolean("signedIn", signin->IsAuthenticated());
   sync_status->SetString("signedInUsername",
                          signin_ui_util::GetAuthenticatedUsername(signin));
   sync_status->SetBoolean("hasUnrecoverableError",
                           service && service->HasUnrecoverableError());
-
   return sync_status;
 }
 
 void PeopleHandler::PushSyncPrefs() {
 #if !defined(OS_CHROMEOS)
   // Early exit if the user has not signed in yet.
-  if (!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
-      SigninErrorControllerFactory::GetForProfile(profile_)->HasError()) {
+  if (IsProfileAuthNeededOrHasErrors())
     return;
-  }
 #endif
 
   ProfileSyncService* service = GetSyncService();
@@ -923,6 +1058,12 @@ void PeopleHandler::MarkFirstSetupComplete() {
   // start syncing.
   sync_blocker_.reset();
   service->SetFirstSetupComplete();
+  FireWebUIListener("sync-settings-saved");
+}
+
+bool PeopleHandler::IsProfileAuthNeededOrHasErrors() {
+  return !SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
+         SigninErrorControllerFactory::GetForProfile(profile_)->HasError();
 }
 
 }  // namespace settings

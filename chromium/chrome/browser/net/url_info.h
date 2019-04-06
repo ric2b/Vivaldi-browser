@@ -22,6 +22,7 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "net/base/host_port_pair.h"
+#include "net/dns/host_resolver.h"
 #include "url/gurl.h"
 
 namespace chrome_browser_net {
@@ -64,8 +65,6 @@ class UrlInfo {
       NO_SUCH_NAME,  // DNS resolution completed.
   };
 
-  typedef std::vector<UrlInfo> UrlInfoTable;
-
   static base::TimeDelta NullDuration() {
     return base::TimeDelta::FromMilliseconds(-1);
   }
@@ -74,7 +73,8 @@ class UrlInfo {
   // initializing of the Predictor's map (of info for Hostnames).
   UrlInfo();
 
-  UrlInfo(const UrlInfo& other);
+  UrlInfo(UrlInfo&& other);
+  UrlInfo& operator=(UrlInfo&& other);
 
   ~UrlInfo();
 
@@ -117,15 +117,14 @@ class UrlInfo {
 
   void DLogResultsStats(const char* message) const;
 
-  static void GetHtmlTable(const UrlInfoTable& host_infos,
-                           const char* description,
-                           bool brief,
-                           std::string* output);
-
   // For testing, and use in printing tables of info, we sometimes need to
   // adjust the time manually.  Usually, this value is maintained by state
   // transition, and this call is not made.
   void set_time(const base::TimeTicks& time) { time_ = time; }
+
+  void set_request(std::unique_ptr<net::HostResolver::Request> request) {
+    request_ = std::move(request);
+  }
 
  private:
   base::TimeDelta GetDuration() {
@@ -140,9 +139,6 @@ class UrlInfo {
   // Record why we created, or have updated (reqested pre-resolution) of this
   // instance.
   void SetMotivation(ResolutionMotivation motivation);
-
-  // Helper function for about:dns printing.
-  std::string GetAsciiMotivation() const;
 
   // The current state of this instance.
   DnsProcessingState state_;
@@ -169,9 +165,10 @@ class UrlInfo {
   // Record if the motivation for prefetching was ever a page-link-scan.
   bool was_linked_;
 
-  // We put these objects into a std::map, and hence we
-  // need some "evil" constructors.
-  // DISALLOW_COPY_AND_ASSIGN(UrlInfo);
+  // Request object cancels the request to the host resolver on deletion.
+  std::unique_ptr<net::HostResolver::Request> request_;
+
+  DISALLOW_COPY_AND_ASSIGN(UrlInfo);
 };
 
 }  // namespace chrome_browser_net

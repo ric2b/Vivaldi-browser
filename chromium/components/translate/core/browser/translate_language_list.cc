@@ -163,7 +163,7 @@ TranslateLanguageList::TranslateLanguageList()
   if (update_is_disabled)
     return;
 
-  language_list_fetcher_.reset(new TranslateURLFetcher(kFetcherId));
+  language_list_fetcher_.reset(new TranslateURLFetcher);
   language_list_fetcher_->set_max_retry_on_5xx(kMaxRetryOn5xx);
 }
 
@@ -248,13 +248,20 @@ TranslateLanguageList::RegisterEventCallback(const EventCallback& callback) {
   return callback_list_.Add(callback);
 }
 
+bool TranslateLanguageList::HasOngoingLanguageListLoadingForTesting() {
+  return language_list_fetcher_->state() == TranslateURLFetcher::REQUESTING;
+}
+
+GURL TranslateLanguageList::LanguageFetchURLForTesting() {
+  return AddApiKeyToUrl(AddHostLocaleToUrl(TranslateLanguageUrl()));
+}
+
 // static
 void TranslateLanguageList::DisableUpdate() {
   update_is_disabled = true;
 }
 
 void TranslateLanguageList::OnLanguageListFetchComplete(
-    int id,
     bool success,
     const std::string& data) {
   if (!success) {
@@ -269,8 +276,6 @@ void TranslateLanguageList::OnLanguageListFetchComplete(
   }
 
   NotifyEvent(__LINE__, "Language list is updated");
-
-  DCHECK_EQ(kFetcherId, id);
 
   bool parsed_correctly = SetSupportedLanguages(data);
   language_list_fetcher_.reset();

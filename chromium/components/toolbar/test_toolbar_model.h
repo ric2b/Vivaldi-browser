@@ -23,17 +23,24 @@ class TestToolbarModel : public ToolbarModel {
  public:
   TestToolbarModel();
   ~TestToolbarModel() override;
-  base::string16 GetFormattedURL(size_t* prefix_end) const override;
+  base::string16 GetFormattedFullURL() const override;
+  base::string16 GetURLForDisplay() const override;
   GURL GetURL() const override;
   security_state::SecurityLevel GetSecurityLevel(
       bool ignore_editing) const override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetSecureVerboseText() const override;
+  base::string16 GetSecureAccessibilityText() const override;
   base::string16 GetEVCertName() const override;
   bool ShouldDisplayURL() const override;
   bool IsOfflinePage() const override;
 
-  void set_text(const base::string16& text) { text_ = text; }
+  void set_formatted_full_url(const base::string16& url) {
+    formatted_full_url_ = url;
+  }
+  void set_url_for_display(const base::string16& url) {
+    url_for_display_ = url;
+  }
   void set_url(const GURL& url) { url_ = url; }
   void set_security_level(security_state::SecurityLevel security_level) {
     security_level_ = security_level;
@@ -48,7 +55,8 @@ class TestToolbarModel : public ToolbarModel {
   void set_offline_page(bool offline_page) { offline_page_ = offline_page; }
 
  private:
-  base::string16 text_;
+  base::string16 formatted_full_url_;
+  base::string16 url_for_display_;
   GURL url_;
   security_state::SecurityLevel security_level_ = security_state::NONE;
   const gfx::VectorIcon* icon_ = nullptr;

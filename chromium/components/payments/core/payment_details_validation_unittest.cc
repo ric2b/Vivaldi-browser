@@ -265,7 +265,7 @@ INSTANTIATE_TEST_CASE_P(TestCases,
         "amount": {"currency": "USD", "value": "-0.01"}
     }],
     "modifiers": [{
-      "supportedMethods": ["basic-card"],
+      "supportedMethods": "basic-card",
       "data": {
         "supportedTypes": ["debit"]
       },
@@ -275,6 +275,19 @@ INSTANTIATE_TEST_CASE_P(TestCases,
       },
       "additionalDisplayItems": [{
         "label": "Debit card discount",
+        "amount": {"currency": "USD", "value": "-0.20"}
+      }]
+    }, {
+      "supportedMethods": "basic-card",
+      "data": {
+        "supportedTypes": ["mastercard"]
+      },
+      "total": {
+        "label": "MasterCard discounted total",
+        "amount": {"currency": "USD", "value": "0.80"}
+      },
+      "additionalDisplayItems": [{
+        "label": "MasterCard discount",
         "amount": {"currency": "USD", "value": "-0.20"}
       }]
     }]
@@ -291,7 +304,7 @@ INSTANTIATE_TEST_CASE_P(TestCases,
         "amount": {"currency": "USD", "value": "-0.01"}
     }],
     "modifiers": [{
-      "supportedMethods": ["basic-card"],
+      "supportedMethods": "basic-card",
       "data": {
         "supportedTypes": ["debit"]
       },
@@ -317,7 +330,7 @@ INSTANTIATE_TEST_CASE_P(TestCases,
         "amount": {"currency": "USD", "value": "-0.01"}
     }],
     "modifiers": [{
-      "supportedMethods": ["basic-card"],
+      "supportedMethods": "basic-card",
       "data": {
         "supportedTypes": ["debit"]
       },
@@ -343,7 +356,7 @@ INSTANTIATE_TEST_CASE_P(TestCases,
         "amount": {"currency": "USD", "value": "-0.01"}
     }],
     "modifiers": [{
-      "supportedMethods": ["basic-card"],
+      "supportedMethods": "basic-card",
       "data": {
         "supportedTypes": ["debit"]
       },
@@ -369,7 +382,7 @@ INSTANTIATE_TEST_CASE_P(TestCases,
         "amount": {"currency": "USD", "value": "-0.01"}
     }],
     "modifiers": [{
-      "supportedMethods": ["basic-card"],
+      "supportedMethods": "basic-card",
       "data": {
         "supportedTypes": ["debit"]
       },
@@ -395,7 +408,7 @@ INSTANTIATE_TEST_CASE_P(TestCases,
         "amount": {"currency": "USD", "value": "-0.01"}
     }],
     "modifiers": [{
-      "supportedMethods": ["basic-card"],
+      "supportedMethods": "basic-card",
       "data": {
         "supportedTypes": ["debit"]
       },

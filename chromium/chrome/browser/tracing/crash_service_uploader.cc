@@ -26,8 +26,8 @@
 #include "net/base/mime_util.h"
 #include "net/base/network_delegate.h"
 #include "net/http/http_status_code.h"
-#include "net/proxy/proxy_config.h"
-#include "net/proxy/proxy_config_service.h"
+#include "net/proxy_resolution/proxy_config.h"
+#include "net/proxy_resolution/proxy_config_service.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context.h"
@@ -98,7 +98,7 @@ void TraceCrashServiceUploader::OnURLFetchComplete(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(done_callback_, success, feedback));
+      base::BindOnce(std::move(done_callback_), success, feedback));
   url_fetcher_.reset();
 }
 
@@ -123,11 +123,11 @@ void TraceCrashServiceUploader::DoUpload(
     UploadMode upload_mode,
     std::unique_ptr<const base::DictionaryValue> metadata,
     const UploadProgressCallback& progress_callback,
-    const UploadDoneCallback& done_callback) {
+    UploadDoneCallback done_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   progress_callback_ = progress_callback;
-  done_callback_ = done_callback;
+  done_callback_ = std::move(done_callback);
 
   base::PostTaskWithTraits(
       FROM_HERE, {base::TaskPriority::BACKGROUND},
@@ -152,12 +152,14 @@ void TraceCrashServiceUploader::DoCompressOnBackgroundThread(
   const char product[] = "Chrome";
 #elif defined(OS_MACOSX)
   const char product[] = "Chrome_Mac";
+#elif defined(OS_CHROMEOS)
+  // On ChromeOS, defined(OS_LINUX) also evalutes to true, so the
+  // defined(OS_CHROMEOS) block must come first.
+  const char product[] = "Chrome_ChromeOS";
 #elif defined(OS_LINUX)
   const char product[] = "Chrome_Linux";
 #elif defined(OS_ANDROID)
   const char product[] = "Chrome_Android";
-#elif defined(OS_CHROMEOS)
-  const char product[] = "Chrome_ChromeOS";
 #else
 #error Platform not supported.
 #endif
@@ -214,7 +216,7 @@ void TraceCrashServiceUploader::OnUploadError(
   LOG(ERROR) << error_message;
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(done_callback_, false, error_message));
+      base::BindOnce(std::move(done_callback_), false, error_message));
 }
 
 void TraceCrashServiceUploader::SetupMultipart(

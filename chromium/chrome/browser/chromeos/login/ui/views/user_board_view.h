@@ -12,7 +12,7 @@
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 
 class AccountId;
 
@@ -42,7 +42,8 @@ class UserBoardView {
                                        std::unique_ptr<base::ListValue> locales,
                                        const std::string& default_locale,
                                        bool multiple_recommended_locales) = 0;
-  virtual void ShowBannerMessage(const base::string16& message) = 0;
+  virtual void ShowBannerMessage(const base::string16& message,
+                                 bool is_warning) = 0;
   virtual void ShowUserPodCustomIcon(
       const AccountId& account_id,
       const proximity_auth::ScreenlockBridge::UserPodCustomIconOptions&

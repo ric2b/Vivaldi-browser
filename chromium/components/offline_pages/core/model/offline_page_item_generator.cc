@@ -28,8 +28,14 @@ OfflinePageItem OfflinePageItemGenerator::CreateItem() {
   item.url = url_;
   item.original_url = original_url_;
   item.file_size = file_size_;
+  item.creation_time = creation_time_;
   item.last_access_time = last_access_time_;
   item.access_count = access_count_;
+  item.digest = digest_;
+  item.file_missing_time = file_missing_time_;
+  if (use_offline_id_as_system_download_id_) {
+    item.system_download_id = item.offline_id;
+  }
   return item;
 }
 
@@ -72,6 +78,10 @@ void OfflinePageItemGenerator::SetFileSize(int64_t file_size) {
   file_size_ = file_size;
 }
 
+void OfflinePageItemGenerator::SetCreationTime(base::Time creation_time) {
+  creation_time_ = creation_time;
+}
+
 void OfflinePageItemGenerator::SetLastAccessTime(base::Time last_access_time) {
   last_access_time_ = last_access_time;
 }
@@ -83,6 +93,19 @@ void OfflinePageItemGenerator::SetAccessCount(int access_count) {
 void OfflinePageItemGenerator::SetArchiveDirectory(
     const base::FilePath& archive_dir) {
   archive_dir_ = archive_dir;
+}
+
+void OfflinePageItemGenerator::SetDigest(const std::string& digest) {
+  digest_ = digest;
+}
+
+void OfflinePageItemGenerator::SetFileMissingTime(
+    base::Time file_missing_time) {
+  file_missing_time_ = file_missing_time;
+}
+
+void OfflinePageItemGenerator::SetUseOfflineIdAsSystemDownloadId(bool enable) {
+  use_offline_id_as_system_download_id_ = enable;
 }
 
 }  // namespace offline_pages

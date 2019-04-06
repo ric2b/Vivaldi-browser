@@ -5,10 +5,13 @@
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
 
 #include "base/memory/ptr_util.h"
+#include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/ios/browser/autofill_driver_ios_bridge.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/origin_util.h"
 #include "ios/web/public/web_state/web_state.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -58,6 +61,12 @@ net::URLRequestContextGetter* AutofillDriverIOS::GetURLRequestContext() {
   return web_state_->GetBrowserState()->GetRequestContext();
 }
 
+scoped_refptr<network::SharedURLLoaderFactory>
+AutofillDriverIOS::GetURLLoaderFactory() {
+  return base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+      web_state_->GetBrowserState()->GetURLLoaderFactory());
+}
+
 bool AutofillDriverIOS::RendererIsAvailable() {
   return true;
 }
@@ -76,7 +85,8 @@ void AutofillDriverIOS::PropagateAutofillPredictions(
 
 void AutofillDriverIOS::SendAutofillTypePredictionsToRenderer(
     const std::vector<FormStructure*>& forms) {
-  [bridge_ sendAutofillTypePredictionsToRenderer:forms];
+  [bridge_ sendAutofillTypePredictionsToRenderer:
+               FormStructure::GetFieldTypePredictions(forms)];
 }
 
 void AutofillDriverIOS::RendererShouldAcceptDataListSuggestion(
@@ -89,8 +99,7 @@ void AutofillDriverIOS::DidInteractWithCreditCardForm() {
   }
 }
 
-void AutofillDriverIOS::RendererShouldClearFilledForm() {
-}
+void AutofillDriverIOS::RendererShouldClearFilledSection() {}
 
 void AutofillDriverIOS::RendererShouldClearPreviewedForm() {
 }

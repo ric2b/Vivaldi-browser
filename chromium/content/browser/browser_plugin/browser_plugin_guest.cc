@@ -12,23 +12,18 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/user_metrics.h"
 #include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_info.h"
-#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
-#include "content/browser/browser_thread_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
-#include "content/browser/mus_util.h"
 #include "content/browser/renderer_host/cursor_manager.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -40,8 +35,8 @@
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/drag_messages.h"
+#include "content/common/frame_visual_properties.h"
 #include "content/common/input/ime_text_span_conversions.h"
-#include "content/common/input_messages.h"
 #include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
@@ -54,7 +49,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/drop_data.h"
-#include "ui/base/ui_base_switches_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
@@ -63,30 +58,13 @@
 #include "content/common/frame_messages.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace content {
-
-namespace {
-
-std::vector<ui::ImeTextSpan> ConvertToUiImeTextSpan(
-    const std::vector<blink::WebImeTextSpan>& ime_text_spans) {
-  std::vector<ui::ImeTextSpan> ui_ime_text_spans;
-  for (const auto& ime_text_span : ime_text_spans) {
-    ui_ime_text_spans.emplace_back(ui::ImeTextSpan(
-        ConvertWebImeTextSpanTypeToUiType(ime_text_span.type),
-        ime_text_span.start_offset, ime_text_span.end_offset,
-        ime_text_span.underline_color, ime_text_span.thick,
-        ime_text_span.background_color,
-        ime_text_span.suggestion_highlight_color, ime_text_span.suggestions));
-  }
-  return ui_ime_text_spans;
-}
-
-};  // namespace
 
 class BrowserPluginGuest::EmbedderVisibilityObserver
     : public WebContentsObserver {
@@ -99,12 +77,8 @@ class BrowserPluginGuest::EmbedderVisibilityObserver
   ~EmbedderVisibilityObserver() override {}
 
   // WebContentsObserver implementation.
-  void WasShown() override {
-    browser_plugin_guest_->EmbedderVisibilityChanged(true);
-  }
-
-  void WasHidden() override {
-    browser_plugin_guest_->EmbedderVisibilityChanged(false);
+  void OnVisibilityChanged(content::Visibility visibility) override {
+    browser_plugin_guest_->EmbedderVisibilityChanged(visibility);
   }
 
  private:
@@ -119,13 +93,12 @@ BrowserPluginGuest::BrowserPluginGuest(bool has_render_view,
     : WebContentsObserver(web_contents),
       owner_web_contents_(nullptr),
       attached_(false),
-      has_attached_since_surface_set_(false),
       browser_plugin_instance_id_(browser_plugin::kInstanceIDNone),
       focused_(false),
       mouse_locked_(false),
       pending_lock_request_(false),
       guest_visible_(false),
-      embedder_visible_(true),
+      embedder_visibility_(Visibility::VISIBLE),
       is_full_page_plugin_(false),
       has_render_view_(has_render_view),
       is_in_destruction_(false),
@@ -196,11 +169,22 @@ int BrowserPluginGuest::LoadURLWithParams(
   return GetGuestProxyRoutingID();
 }
 
-void BrowserPluginGuest::ResizeDueToAutoResize(const gfx::Size& new_size,
-                                               uint64_t sequence_number) {
+void BrowserPluginGuest::EnableAutoResize(const gfx::Size& min_size,
+                                          const gfx::Size& max_size) {
+  SendMessageToEmbedder(std::make_unique<BrowserPluginMsg_EnableAutoResize>(
+      browser_plugin_instance_id_, min_size, max_size));
+}
+
+void BrowserPluginGuest::DisableAutoResize() {
+  SendMessageToEmbedder(std::make_unique<BrowserPluginMsg_DisableAutoResize>(
+      browser_plugin_instance_id_));
+}
+
+void BrowserPluginGuest::DidUpdateVisualProperties(
+    const cc::RenderFrameMetadata& metadata) {
   SendMessageToEmbedder(
-      std::make_unique<BrowserPluginMsg_ResizeDueToAutoResize>(
-          browser_plugin_instance_id_, sequence_number));
+      std::make_unique<BrowserPluginMsg_DidUpdateVisualProperties>(
+          browser_plugin_instance_id_, metadata));
 }
 
 void BrowserPluginGuest::SizeContents(const gfx::Size& new_size) {
@@ -240,15 +224,6 @@ base::WeakPtr<BrowserPluginGuest> BrowserPluginGuest::AsWeakPtr() {
 void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
                                   bool focused,
                                   blink::WebFocusType focus_type) {
-  // NOTE(andre@vivaldi.com) : The |report_focus_change| check was added
-  // because when showing an internal page, ie. the startpage, the
-  // InputMsg_SetFocus would be sent back to the RenderView causing a loop of
-  // SetFocus(false) calls.
-  bool report_focus_change =
-      (focus_state_.first != rwh) || (focus_state_.second != focused);
-  if (!report_focus_change)
-    return;
-  focus_state_ = std::make_pair(rwh, focused);
   focused_ = focused;
   if (!rwh)
     return;
@@ -258,6 +233,10 @@ void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
     static_cast<RenderViewHostImpl*>(RenderViewHost::From(rwh))
         ->SetInitialFocus(focus_type == blink::kWebFocusTypeBackward);
   }
+  // NOTE(julien): Setting focus to a pdf currently causes it to set the focus
+  // to the top frame. We can remove this if once
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=863943 is fixed
+  if (!vivaldi::IsVivaldiRunning())
   RenderWidgetHostImpl::From(rwh)->GetWidgetInputHandler()->SetFocus(focused);
   if (!focused && mouse_locked_)
     OnUnlockMouse();
@@ -266,15 +245,6 @@ void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
   RenderWidgetHostViewBase* rwhv = static_cast<RenderWidgetHostViewBase*>(
       rwh->GetView());
   SendTextInputTypeChangedToView(rwhv);
-}
-
-void BrowserPluginGuest::SetTooltipText(const base::string16& tooltip_text) {
-  if (tooltip_text == current_tooltip_text_)
-    return;
-  current_tooltip_text_ = tooltip_text;
-
-  SendMessageToEmbedder(std::make_unique<BrowserPluginMsg_SetTooltipText>(
-      browser_plugin_instance_id_, tooltip_text));
 }
 
 bool BrowserPluginGuest::LockMouse(bool allowed) {
@@ -326,10 +296,8 @@ bool BrowserPluginGuest::OnMessageReceivedFromEmbedder(
     IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_SetFocus, OnSetFocus)
     IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_SetVisibility, OnSetVisibility)
     IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_UnlockMouse_ACK, OnUnlockMouseAck)
-    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_UpdateResizeParams,
-                        OnUpdateResizeParams)
-    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_SatisfySequence, OnSatisfySequence)
-    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_RequireSequence, OnRequireSequence)
+    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_SynchronizeVisualProperties,
+                        OnSynchronizeVisualProperties)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -387,20 +355,24 @@ void BrowserPluginGuest::InitInternal(
 
   DCHECK(GetWebContents()->GetRenderViewHost());
 
-  // Initialize the device scale factor by calling |NotifyScreenInfoChanged|.
-  auto* render_widget_host = RenderWidgetHostImpl::From(
-      GetWebContents()->GetRenderViewHost()->GetWidget());
-  render_widget_host->NotifyScreenInfoChanged();
-
   // TODO(chrishtr): this code is wrong. The navigate_on_drag_drop field will
   // be reset again the next time preferences are updated.
   WebPreferences prefs =
       GetWebContents()->GetRenderViewHost()->GetWebkitPreferences();
   prefs.navigate_on_drag_drop = false;
   GetWebContents()->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
+
+  base::Optional<viz::LocalSurfaceId> child_local_surface_id;
+  if (local_surface_id_.is_valid())
+    child_local_surface_id = local_surface_id_;
+  SendMessageToEmbedder(std::make_unique<BrowserPluginMsg_Attach_ACK>(
+      browser_plugin_instance_id(), child_local_surface_id));
 }
 
 BrowserPluginGuest::~BrowserPluginGuest() {
+  if (delegate_) {
+    delegate_->SetGuestHost(nullptr);
+  }
 }
 
 // static
@@ -438,8 +410,8 @@ BrowserPluginGuest::GetBrowserPluginGuestManager() const {
   return GetWebContents()->GetBrowserContext()->GetGuestManager();
 }
 
-void BrowserPluginGuest::EmbedderVisibilityChanged(bool visible) {
-  embedder_visible_ = visible;
+void BrowserPluginGuest::EmbedderVisibilityChanged(Visibility visibility) {
+  embedder_visibility_ = visibility;
   UpdateVisibility();
 }
 
@@ -448,28 +420,13 @@ void BrowserPluginGuest::PointerLockPermissionResponse(bool allow) {
       browser_plugin_instance_id(), allow));
 }
 
-void BrowserPluginGuest::SetChildFrameSurface(
-    const viz::SurfaceInfo& surface_info,
-    const viz::SurfaceSequence& sequence) {
-  has_attached_since_surface_set_ = false;
-  if (!switches::IsMusHostingViz()) {
+void BrowserPluginGuest::FirstSurfaceActivation(
+    const viz::SurfaceInfo& surface_info) {
+  if (features::IsAshInBrowserProcess()) {
     SendMessageToEmbedder(
-        std::make_unique<BrowserPluginMsg_SetChildFrameSurface>(
-            browser_plugin_instance_id(), surface_info, sequence));
+        std::make_unique<BrowserPluginMsg_FirstSurfaceActivation>(
+            browser_plugin_instance_id(), surface_info));
   }
-}
-
-void BrowserPluginGuest::OnSatisfySequence(
-    int instance_id,
-    const viz::SurfaceSequence& sequence) {
-  GetFrameSinkManager()->surface_manager()->SatisfySequence(sequence);
-}
-
-void BrowserPluginGuest::OnRequireSequence(
-    int instance_id,
-    const viz::SurfaceId& id,
-    const viz::SurfaceSequence& sequence) {
-  GetFrameSinkManager()->surface_manager()->RequireSequence(id, sequence);
 }
 
 void BrowserPluginGuest::ResendEventToEmbedder(
@@ -485,8 +442,8 @@ void BrowserPluginGuest::ResendEventToEmbedder(
   if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
     blink::WebGestureEvent resent_gesture_event;
     memcpy(&resent_gesture_event, &event, sizeof(blink::WebGestureEvent));
-    resent_gesture_event.x += offset_from_embedder.x();
-    resent_gesture_event.y += offset_from_embedder.y();
+    resent_gesture_event.SetPositionInWidget(
+        resent_gesture_event.PositionInWidget() + offset_from_embedder);
     // Mark the resend source with the browser plugin's instance id, so the
     // correct browser_plugin will know to ignore the event.
     resent_gesture_event.resending_plugin_id = browser_plugin_instance_id_;
@@ -683,7 +640,7 @@ void BrowserPluginGuest::SendTextInputTypeChangedToView(
 
   if (last_text_input_state_.get()) {
     guest_rwhv->TextInputStateChanged(*last_text_input_state_);
-    if (auto* rwh = guest_rwhv->GetRenderWidgetHostImpl()) {
+    if (auto* rwh = guest_rwhv->host()) {
       // We need composition range information for some IMEs. To get the
       // updates, we need to explicitly ask the renderer to monitor and send the
       // composition information changes. RenderWidgetHostView of the page will
@@ -710,6 +667,11 @@ void BrowserPluginGuest::RenderViewReady() {
   RenderViewHost* rvh = GetWebContents()->GetRenderViewHost();
   // TODO(fsamuel): Investigate whether it's possible to update state earlier
   // here (see http://crbug.com/158151).
+
+  // NOTE(julien): Setting focus to a pdf currently causes it to set the focus
+  // to the top frame. We can remove this if once
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=863943 is fixed
+  if (!vivaldi::IsVivaldiRunning())
   RenderWidgetHostImpl::From(rvh->GetWidget())
       ->GetWidgetInputHandler()
       ->SetFocus(focused_);
@@ -718,7 +680,7 @@ void BrowserPluginGuest::RenderViewReady() {
   // In case we've created a new guest render process after a crash, let the
   // associated BrowserPlugin know. We only need to send this if we're attached,
   // as guest_crashed_ is cleared automatically on attach anyways.
-  if (attached() && !switches::IsMusHostingViz()) {
+  if (attached() && features::IsAshInBrowserProcess()) {
     RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
         web_contents()->GetRenderWidgetHostView());
     if (rwhv) {
@@ -772,8 +734,6 @@ bool BrowserPluginGuest::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   // In --site-per-process, we do not need most of BrowserPluginGuest to drive
   // inner WebContents.
-  // Right now InputHostMsg_ImeCompositionRangeChanged hits NOTREACHED() in
-  // RWHVChildFrame, so we're disabling message handling entirely here.
   // TODO(lazyboy): Fix this as part of http://crbug.com/330264. The required
   // parts of code from this class should be extracted to a separate class for
   // --site-per-process.
@@ -781,12 +741,6 @@ bool BrowserPluginGuest::OnMessageReceived(const IPC::Message& message) {
     return false;
 
   IPC_BEGIN_MESSAGE_MAP(BrowserPluginGuest, message)
-    IPC_MESSAGE_HANDLER(InputHostMsg_ImeCancelComposition,
-                        OnImeCancelComposition)
-#if defined(OS_MACOSX) || defined(USE_AURA)
-    IPC_MESSAGE_HANDLER(InputHostMsg_ImeCompositionRangeChanged,
-                        OnImeCompositionRangeChanged)
-#endif
     IPC_MESSAGE_HANDLER(ViewHostMsg_HasTouchEventHandlers,
                         OnHasTouchEventHandlers)
     IPC_MESSAGE_HANDLER(ViewHostMsg_LockMouse, OnLockMouse)
@@ -829,7 +783,6 @@ void BrowserPluginGuest::Attach(
     WebContentsImpl* embedder_web_contents,
     const BrowserPluginHostMsg_Attach_Params& params) {
   browser_plugin_instance_id_ = browser_plugin_instance_id;
-
   // The guest is owned by the embedder. Attach is queued up so we cannot
   // change embedders before attach completes. If the embedder goes away,
   // so does the guest and so we will never call WillAttachComplete because
@@ -864,7 +817,6 @@ void BrowserPluginGuest::OnWillAttachComplete(
   InitInternal(params, embedder_web_contents);
 
   attached_ = true;
-  has_attached_since_surface_set_ = true;
   SendQueuedMessages();
 
   delegate_->DidAttach(GetGuestProxyRoutingID());
@@ -964,7 +916,7 @@ void BrowserPluginGuest::OnImeSetComposition(
     int browser_plugin_instance_id,
     const BrowserPluginHostMsg_SetComposition_Params& params) {
   std::vector<ui::ImeTextSpan> ui_ime_text_spans =
-      ConvertToUiImeTextSpan(params.ime_text_spans);
+      ConvertBlinkImeTextSpansToUiImeTextSpans(params.ime_text_spans);
   GetWebContents()
       ->GetRenderViewHost()
       ->GetWidget()
@@ -981,7 +933,7 @@ void BrowserPluginGuest::OnImeCommitText(
     const gfx::Range& replacement_range,
     int relative_cursor_pos) {
   std::vector<ui::ImeTextSpan> ui_ime_text_spans =
-      ConvertToUiImeTextSpan(ime_text_spans);
+      ConvertBlinkImeTextSpansToUiImeTextSpans(ime_text_spans);
   GetWebContents()
       ->GetRenderViewHost()
       ->GetWidget()
@@ -1071,10 +1023,15 @@ void BrowserPluginGuest::OnSetVisibility(int browser_plugin_instance_id,
     return;
 
   guest_visible_ = visible;
-  if (embedder_visible_ && guest_visible_)
+
+  // Do not use WebContents::UpdateWebContentsVisibility() because it ignores
+  // visibility changes that come before the first change to VISIBLE.
+  if (!guest_visible_ || embedder_visibility_ == Visibility::HIDDEN)
+    GetWebContents()->WasHidden();
+  else if (embedder_visibility_ == Visibility::VISIBLE)
     GetWebContents()->WasShown();
   else
-    GetWebContents()->WasHidden();
+    GetWebContents()->WasOccluded();
 }
 
 void BrowserPluginGuest::OnUnlockMouse() {
@@ -1094,15 +1051,16 @@ void BrowserPluginGuest::OnUnlockMouseAck(int browser_plugin_instance_id) {
   mouse_locked_ = false;
 }
 
-void BrowserPluginGuest::OnUpdateResizeParams(
+void BrowserPluginGuest::OnSynchronizeVisualProperties(
     int browser_plugin_instance_id,
-    const gfx::Rect& frame_rect,
-    const ScreenInfo& screen_info,
-    uint64_t sequence_number,
-    const viz::LocalSurfaceId& local_surface_id) {
-  if ((frame_rect_.size() != frame_rect.size() ||
-       screen_info_ != screen_info) &&
-      local_surface_id_ == local_surface_id) {
+    const viz::LocalSurfaceId& local_surface_id,
+    const FrameVisualProperties& visual_properties) {
+  if (local_surface_id_ > local_surface_id ||
+      ((frame_rect_.size() != visual_properties.screen_space_rect.size() ||
+        screen_info_ != visual_properties.screen_info ||
+        capture_sequence_number_ != visual_properties.capture_sequence_number ||
+        zoom_level_ != visual_properties.zoom_level) &&
+       local_surface_id_ == local_surface_id)) {
     SiteInstance* owner_site_instance = delegate_->GetOwnerSiteInstance();
     bad_message::ReceivedBadMessage(
         owner_site_instance->GetProcess(),
@@ -1110,25 +1068,37 @@ void BrowserPluginGuest::OnUpdateResizeParams(
     return;
   }
 
-  screen_info_ = screen_info;
-  frame_rect_ = frame_rect;
+  screen_info_ = visual_properties.screen_info;
+  frame_rect_ = visual_properties.screen_space_rect;
+  zoom_level_ = visual_properties.zoom_level;
+
   GetWebContents()->SendScreenRects();
   local_surface_id_ = local_surface_id;
+  bool capture_sequence_number_changed =
+      capture_sequence_number_ != visual_properties.capture_sequence_number;
+  capture_sequence_number_ = visual_properties.capture_sequence_number;
 
   RenderWidgetHostView* view = web_contents()->GetRenderWidgetHostView();
   if (!view)
     return;
 
+  // We could add functionality to set a specific capture sequence number on the
+  // |view|, but knowing that it's changed is sufficient for us simply request
+  // that our RenderWidgetHostView synchronizes its surfaces. Note that this
+  // should only happen during layout tests, since that is the only call that
+  // should trigger the capture sequence number to change.
+  if (capture_sequence_number_changed)
+    view->EnsureSurfaceSynchronizedForLayoutTest();
+
   RenderWidgetHostImpl* render_widget_host =
       RenderWidgetHostImpl::From(view->GetRenderWidgetHost());
   DCHECK(render_widget_host);
 
-  if (render_widget_host->auto_resize_enabled()) {
-    render_widget_host->DidAllocateLocalSurfaceIdForAutoResize(sequence_number);
-    return;
-  }
+  render_widget_host->SetAutoResize(visual_properties.auto_resize_enabled,
+                                    visual_properties.min_size_for_auto_resize,
+                                    visual_properties.max_size_for_auto_resize);
 
-  render_widget_host->WasResized();
+  render_widget_host->SynchronizeVisualProperties();
 }
 
 void BrowserPluginGuest::OnHasTouchEventHandlers(bool accept) {
@@ -1180,41 +1150,6 @@ void BrowserPluginGuest::OnTextInputStateChanged(const TextInputState& params) {
   SendTextInputTypeChangedToView(
       static_cast<RenderWidgetHostViewBase*>(
           web_contents()->GetRenderWidgetHostView()));
-}
-
-void BrowserPluginGuest::OnImeCancelComposition() {
-  static_cast<RenderWidgetHostViewBase*>(
-      web_contents()->GetRenderWidgetHostView())->ImeCancelComposition();
-}
-
-#if defined(OS_MACOSX) || defined(USE_AURA)
-void BrowserPluginGuest::OnImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) {
-  // NOTE(andre@vivaldi.com): If a page had a focus in a textfield before the
-  // guest was fully created this would crash due to no created view. See
-  // VB-14681.
-  if (web_contents()->GetRenderWidgetHostView())
-  static_cast<RenderWidgetHostViewBase*>(
-      web_contents()->GetRenderWidgetHostView())->ImeCompositionRangeChanged(
-          range, character_bounds);
-}
-#endif
-
-void BrowserPluginGuest::SetContextMenuPosition(const gfx::Point& position) {
-  if (vivaldi::IsVivaldiRunning()) {
-    // Same transformation as in RenderFrameHostImpl::OnContextMenu()
-    if (web_contents()->GetRenderWidgetHostView()) {
-      gfx::Point point = static_cast<RenderWidgetHostViewBase*>(
-          web_contents()->GetRenderWidgetHostView())->
-              TransformPointToRootCoordSpace(position);
-      if (delegate_)
-        delegate_->SetContextMenuPosition(point);
-    }
-  } else {
-  if (delegate_)
-    delegate_->SetContextMenuPosition(position);
-  }
 }
 
 }  // namespace content

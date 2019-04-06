@@ -259,7 +259,7 @@ Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
 
   int64_t id = GetNewIndex();
 
-  std::unique_ptr<Notes_Node> new_node = base::MakeUnique<Notes_Node>(id);
+  std::unique_ptr<Notes_Node> new_node = std::make_unique<Notes_Node>(id);
   new_node->SetTitle(subject);
   new_node->SetContent(content);
   new_node->SetURL(url);
@@ -282,7 +282,7 @@ Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
 
   int64_t id = GetNewIndex();
 
-  std::unique_ptr<Notes_Node> new_node = base::MakeUnique<Notes_Node>(id);
+  std::unique_ptr<Notes_Node> new_node = std::make_unique<Notes_Node>(id);
   new_node->SetTitle(note.title);
   new_node->SetCreationTime(note.creation_time);
 
@@ -303,7 +303,7 @@ Notes_Node* Notes_Model::AddFolder(const Notes_Node* parent,
     return NULL;
 
   int64_t id = GetNewIndex();
-  std::unique_ptr<Notes_Node> new_node = base::MakeUnique<Notes_Node>(id);
+  std::unique_ptr<Notes_Node> new_node = std::make_unique<Notes_Node>(id);
   new_node->SetTitle(name);
   new_node->SetType(Notes_Node::FOLDER);
   DCHECK(new_node->GetTitle() == name);
@@ -688,7 +688,7 @@ Notes_Node* Notes_Model::GetOrCreateTrashNode() {
     }
   }
   std::unique_ptr<Notes_Node> trash =
-      base::MakeUnique<Notes_Node>(GetNewIndex());
+      std::make_unique<Notes_Node>(GetNewIndex());
   Notes_Node* trash_p = trash.get();
   if (trash) {
     trash->SetType(Notes_Node::TRASH);

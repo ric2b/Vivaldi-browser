@@ -32,13 +32,14 @@
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_pump_for_io.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
-#include "net/base/completion_callback.h"
+#include "build/build_config.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/file_stream.h"
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <errno.h>
 #endif
 
@@ -51,8 +52,8 @@ namespace net {
 class IOBuffer;
 
 #if defined(OS_WIN)
-class FileStream::Context : public base::MessageLoopForIO::IOHandler {
-#elif defined(OS_POSIX)
+class FileStream::Context : public base::MessagePumpForIO::IOHandler {
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 class FileStream::Context {
 #endif
  public:
@@ -65,17 +66,13 @@ class FileStream::Context {
   Context(base::File file, const scoped_refptr<base::TaskRunner>& task_runner);
 #if defined(OS_WIN)
   ~Context() override;
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   ~Context();
 #endif
 
-  int Read(IOBuffer* buf,
-           int buf_len,
-           const CompletionCallback& callback);
+  int Read(IOBuffer* buf, int buf_len, CompletionOnceCallback callback);
 
-  int Write(IOBuffer* buf,
-            int buf_len,
-            const CompletionCallback& callback);
+  int Write(IOBuffer* buf, int buf_len, CompletionOnceCallback callback);
 
   bool async_in_progress() const { return async_in_progress_; }
 
@@ -90,17 +87,17 @@ class FileStream::Context {
 
   void Open(const base::FilePath& path,
             int open_flags,
-            const CompletionCallback& callback);
+            CompletionOnceCallback callback);
 
-  void Close(const CompletionCallback& callback);
+  void Close(CompletionOnceCallback callback);
 
   // Seeks |offset| bytes from the start of the file.
-  void Seek(int64_t offset, const Int64CompletionCallback& callback);
+  void Seek(int64_t offset, Int64CompletionOnceCallback callback);
 
   void GetFileInfo(base::File::Info* file_info,
-                   const CompletionCallback& callback);
+                   CompletionOnceCallback callback);
 
-  void Flush(const CompletionCallback& callback);
+  void Flush(CompletionOnceCallback callback);
 
   bool IsOpen() const;
 
@@ -128,27 +125,6 @@ class FileStream::Context {
     DISALLOW_COPY_AND_ASSIGN(OpenResult);
   };
 
-  // TODO(xunjieli): Remove after crbug.com/732321 is fixed.
-  enum LastOperation {
-    // FileStream has a pending Open().
-    OPEN,
-    // FileStream has a pending Write().
-    WRITE,
-    // FileStream has a pending Read().
-    READ,
-    // FileStream has a pending Seek().
-    SEEK,
-    // FileStream has a pending Flush().
-    FLUSH,
-    // FileStream has a pending Close().
-    CLOSE,
-    // FileStream doesn't have any pending operation.
-    NONE
-  };
-
-  // TODO(xunjieli): Remove after crbug.com/732321 is fixed.
-  void CheckNoAsyncInProgress() const;
-
   ////////////////////////////////////////////////////////////////////////////
   // Platform-independent methods implemented in file_stream_context.cc.
   ////////////////////////////////////////////////////////////////////////////
@@ -161,16 +137,15 @@ class FileStream::Context {
 
   IOResult FlushFileImpl();
 
-  void OnOpenCompleted(const CompletionCallback& callback,
-                       OpenResult open_result);
+  void OnOpenCompleted(CompletionOnceCallback callback, OpenResult open_result);
 
   void CloseAndDelete();
 
-  Int64CompletionCallback IntToInt64(const CompletionCallback& callback);
+  Int64CompletionOnceCallback IntToInt64(CompletionOnceCallback callback);
 
   // Called when Open() or Seek() completes. |result| contains the result or a
   // network error code.
-  void OnAsyncCompleted(const Int64CompletionCallback& callback,
+  void OnAsyncCompleted(Int64CompletionOnceCallback callback,
                         const IOResult& result);
 
   ////////////////////////////////////////////////////////////////////////////
@@ -184,10 +159,10 @@ class FileStream::Context {
   void OnFileOpened();
 
 #if defined(OS_WIN)
-  void IOCompletionIsPending(const CompletionCallback& callback, IOBuffer* buf);
+  void IOCompletionIsPending(CompletionOnceCallback callback, IOBuffer* buf);
 
-  // Implementation of MessageLoopForIO::IOHandler.
-  void OnIOCompleted(base::MessageLoopForIO::IOContext* context,
+  // Implementation of MessagePumpForIO::IOHandler.
+  void OnIOCompleted(base::MessagePumpForIO::IOContext* context,
                      DWORD bytes_read,
                      DWORD error) override;
 
@@ -230,7 +205,7 @@ class FileStream::Context {
   // the ReadFile API.
   void ReadAsyncResult(BOOL read_file_ret, DWORD bytes_read, DWORD os_error);
 
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   // ReadFileImpl() is a simple wrapper around read() that handles EINTR
   // signals and calls RecordAndMapError() to map errno to net error codes.
   IOResult ReadFileImpl(scoped_refptr<IOBuffer> buf, int buf_len);
@@ -239,20 +214,17 @@ class FileStream::Context {
   // signals and calls MapSystemError() to map errno to net error codes.
   // It tries to write to completion.
   IOResult WriteFileImpl(scoped_refptr<IOBuffer> buf, int buf_len);
-#endif
+#endif  // defined(OS_WIN)
 
   base::File file_;
   bool async_in_progress_;
-
-  // TODO(xunjieli): Remove after crbug.com/732321 is fixed.
-  LastOperation last_operation_;
 
   bool orphaned_;
   scoped_refptr<base::TaskRunner> task_runner_;
 
 #if defined(OS_WIN)
-  base::MessageLoopForIO::IOContext io_context_;
-  CompletionCallback callback_;
+  base::MessagePumpForIO::IOContext io_context_;
+  CompletionOnceCallback callback_;
   scoped_refptr<IOBuffer> in_flight_buf_;
   // This flag is set to true when we receive a Read request which is queued to
   // the thread pool.

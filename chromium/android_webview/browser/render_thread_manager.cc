@@ -122,7 +122,7 @@ void RenderThreadManager::ClientRequestInvokeGL(bool for_idle) {
   } else {
     if (!g_request_invoke_gl_tracker.Get().ShouldRequestOnNonUiThread(this))
       return;
-    base::Closure callback;
+    base::OnceClosure callback;
     {
       base::AutoLock lock(lock_);
       callback = request_draw_gl_closure_;
@@ -131,7 +131,7 @@ void RenderThreadManager::ClientRequestInvokeGL(bool for_idle) {
     // after the next frame so that the idle work is taken care off by
     // the next frame instead.
     ui_loop_->PostDelayedTask(
-        FROM_HERE, callback,
+        FROM_HERE, std::move(callback),
         for_idle ? base::TimeDelta::FromMilliseconds(17) : base::TimeDelta());
   }
 }
@@ -143,7 +143,7 @@ void RenderThreadManager::DidInvokeGLProcess() {
 void RenderThreadManager::ResetRequestInvokeGLCallback() {
   DCHECK(ui_loop_->BelongsToCurrentThread());
   base::AutoLock lock(lock_);
-  request_draw_gl_cancelable_closure_.Reset(base::Bind(
+  request_draw_gl_cancelable_closure_.Reset(base::BindRepeating(
       &RenderThreadManager::ClientRequestInvokeGLOnUI, base::Unretained(this)));
   request_draw_gl_closure_ = request_draw_gl_cancelable_closure_.callback();
 }
@@ -178,27 +178,14 @@ gfx::Vector2d RenderThreadManager::GetScrollOffsetOnRT() {
 std::unique_ptr<ChildFrame> RenderThreadManager::SetFrameOnUI(
     std::unique_ptr<ChildFrame> new_frame) {
   DCHECK(new_frame);
-  base::AutoLock lock(lock_);
-
   has_received_frame_ = true;
 
+  base::AutoLock lock(lock_);
   if (child_frames_.empty()) {
     child_frames_.emplace_back(std::move(new_frame));
     return nullptr;
   }
   std::unique_ptr<ChildFrame> uncommitted_frame;
-  if (new_frame->frame) {
-    // Optimization for synchronous path.
-    // TODO(boliu): Remove when synchronous path is fully removed.
-    DCHECK_LE(child_frames_.size(), 1u);
-    if (!child_frames_.empty()) {
-      uncommitted_frame = std::move(child_frames_.front());
-      child_frames_.pop_front();
-    }
-    child_frames_.emplace_back(std::move(new_frame));
-    return uncommitted_frame;
-  }
-
   DCHECK_LE(child_frames_.size(), 2u);
   ChildFrameQueue pruned_frames =
       HardwareRenderer::WaitAndPruneFrameQueue(&child_frames_);
@@ -235,8 +222,8 @@ void RenderThreadManager::PostExternalDrawConstraintsToChildCompositorOnRT(
   // No need to hold the lock_ during the post task.
   ui_loop_->PostTask(
       FROM_HERE,
-      base::Bind(&RenderThreadManager::UpdateParentDrawConstraintsOnUI,
-                 ui_thread_weak_ptr_));
+      base::BindOnce(&RenderThreadManager::UpdateParentDrawConstraintsOnUI,
+                     ui_thread_weak_ptr_));
 }
 
 ParentCompositorDrawConstraints
@@ -288,7 +275,7 @@ bool RenderThreadManager::ReturnedResourcesEmptyOnUI() const {
 }
 
 void RenderThreadManager::DrawGL(AwDrawGLInfo* draw_info) {
-  TRACE_EVENT0("android_webview", "DrawFunctor");
+  TRACE_EVENT0("android_webview,toplevel", "DrawFunctor");
   if (draw_info->mode == AwDrawGLInfo::kModeSync) {
     TRACE_EVENT_INSTANT0("android_webview", "kModeSync",
                          TRACE_EVENT_SCOPE_THREAD);
@@ -296,6 +283,9 @@ void RenderThreadManager::DrawGL(AwDrawGLInfo* draw_info) {
       hardware_renderer_->CommitFrame();
     return;
   }
+
+  // Force GL binding init if it's not yet initialized.
+  DeferredGpuCommandService::GetInstance();
 
   // kModeProcessNoContext should never happen because we tear down hardware
   // in onTrimMemory. However that guarantee is maintained outside of chromium
@@ -359,8 +349,6 @@ void RenderThreadManager::DeleteHardwareRendererOnUI() {
 
   // If the WebView gets onTrimMemory >= MODERATE twice in a row, the 2nd
   // onTrimMemory will result in an unnecessary Render Thread InvokeGL call.
-  // TODO(boliu): removing the requirement that the first frame be
-  // synchronous will require changing the following test.
   if (has_received_frame_) {
     // Receiving at least one frame is a precondition for
     // initialization (such as looing up GL bindings and constructing
@@ -399,11 +387,6 @@ void RenderThreadManager::SetCompositorFrameProducer(
          compositor_frame_producer_ == nullptr ||
          compositor_frame_producer == nullptr);
   compositor_frame_producer_ = compositor_frame_producer;
-}
-
-bool RenderThreadManager::HasFrameOnUI() const {
-  base::AutoLock lock(lock_);
-  return has_received_frame_;
 }
 
 bool RenderThreadManager::HasFrameForHardwareRendererOnRT() const {

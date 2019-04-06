@@ -17,10 +17,8 @@
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/process/process_metrics.h"
-#include "base/system_monitor/system_monitor.h"
 #include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_scheduler.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #import "ios/web/net/cookie_notification_bridge.h"
 #include "ios/web/public/app/web_main_parts.h"
@@ -77,11 +75,8 @@ void WebMainLoop::MainMessageLoopStart() {
 
   InitializeMainThread();
 
-#if 0
-  // TODO(crbug.com/228014): SystemMonitor is not working properly on iOS.
-  system_monitor_.reset(new base::SystemMonitor);
-#endif
-  // TODO(rohitrao): Do we need PowerMonitor on iOS, or can we get rid of it?
+  // TODO(crbug.com/807279): Do we need PowerMonitor on iOS, or can we get rid
+  // of it?
   std::unique_ptr<base::PowerMonitorSource> power_monitor_source(
       new base::PowerMonitorDeviceSource());
   power_monitor_.reset(new base::PowerMonitor(std::move(power_monitor_source)));
@@ -128,8 +123,6 @@ int WebMainLoop::CreateThreads(
     init_params = std::move(init_params_callback).Run();
   }
   ios_global_state::StartTaskScheduler(init_params.get());
-
-  base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
 
   base::Thread::Options io_message_loop_options;
   io_message_loop_options.message_loop_type = base::MessageLoop::TYPE_IO;

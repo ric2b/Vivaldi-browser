@@ -24,12 +24,15 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.notifications.NotificationChannelStatus;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
 import org.chromium.chrome.browser.notifications.NotificationSettingsBridge;
+import org.chromium.chrome.browser.preferences.website.ContentSetting;
+import org.chromium.chrome.browser.preferences.website.PermissionInfo;
 import org.chromium.content.browser.test.NativeLibraryTestRule;
 
 import java.util.ArrayList;
@@ -54,9 +57,7 @@ public class SiteChannelsManagerTest {
 
     @Before
     public void setUp() throws Exception {
-        // Not initializing the browser process is safe because
-        // UrlFormatter.formatUrlForSecurityDisplay() is stand-alone.
-        mNativeLibraryTestRule.loadNativeLibraryNoBrowserProcess();
+        mNativeLibraryTestRule.loadNativeLibraryAndInitBrowserProcess();
 
         Context mContext = InstrumentationRegistry.getTargetContext();
         NotificationManagerProxy notificationManagerProxy = new NotificationManagerProxyImpl(
@@ -71,7 +72,7 @@ public class SiteChannelsManagerTest {
             if (channel.getId().startsWith(ChannelDefinitions.CHANNEL_ID_PREFIX_SITES)
                     || (channel.getGroup() != null
                                && channel.getGroup().equals(
-                                          ChannelDefinitions.CHANNEL_GROUP_ID_SITES))) {
+                                          ChannelDefinitions.ChannelGroupId.SITES))) {
                 notificationManagerProxy.deleteNotificationChannel(channel.getId());
             }
         }
@@ -184,6 +185,16 @@ public class SiteChannelsManagerTest {
         mSiteChannelsManager.deleteSiteChannel(channel.getId());
         assertThat(mSiteChannelsManager.getChannelStatus(channel.getId()),
                 matchesChannelStatus(NotificationChannelStatus.UNAVAILABLE));
+    }
+
+    @Test
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @SmallTest
+    public void testBlockingPermissionInIncognitoCreatesNoChannels() throws Exception {
+        PermissionInfo info = new PermissionInfo(
+                PermissionInfo.Type.NOTIFICATION, "https://example-incognito.com", null, true);
+        ThreadUtils.runOnUiThreadBlocking(() -> info.setContentSetting(ContentSetting.BLOCK));
+        assertThat(Arrays.asList(mSiteChannelsManager.getSiteChannels()), hasSize(0));
     }
 
     private static Matcher<Integer> matchesChannelStatus(

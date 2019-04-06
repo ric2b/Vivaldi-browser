@@ -1,0 +1,9 @@
+<!-- This is only meant to be copied by chrome.exe in developer builds. -->
+<Application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <VisualElements
+    BackgroundColor="#EF3939"
+    ShowNameOnSquare150x150Logo="off"
+    ForegroundText="light"
+    Square150x150Logo="Vivaldi/Logo.png"
+    Square70x70Logo="Vivaldi/SmallLogo.png"/>
+</Application>

@@ -57,7 +57,7 @@ Polymer({
   /**
    * Handler for an input method checkbox.
    * @param {!{model: !{item: chrome.languageSettingsPrivate.InputMethod},
-   *           target: !PaperCheckboxElement}} e
+   *           target: !Element}} e
    * @private
    */
   onCheckboxChange_: function(e) {
@@ -70,7 +70,7 @@ Polymer({
   },
 
   /**
-   * Returns true if the input method can be removed.
+   * Returns true if the input method can be added/removed.
    * @param {!chrome.languageSettingsPrivate.InputMethod} targetInputMethod
    * @param {!Object} change Polymer change object (provided in the HTML so this
    *     gets called whenever languages.inputMethods.enabled.* changes).
@@ -78,6 +78,9 @@ Polymer({
    * @private
    */
   enableInputMethodCheckbox_: function(targetInputMethod, change) {
+    if (targetInputMethod.isProhibitedByPolicy)
+      return false;
+
     if (!targetInputMethod.enabled)
       return true;
 
@@ -150,6 +153,17 @@ Polymer({
         usedLanguages.add(languageFamilyCodes[k]);
     }
 
+    // Add ARC IMEs to the bottom if any.
+    const arcInputMethods = this.getInputMethodsForLanguages(
+        [this.languageHelper.getArcImeLanguageCode()]);
+    if (arcInputMethods.length) {
+      languageList.push({
+        language: this.languageHelper.getLanguage(
+            this.languageHelper.getArcImeLanguageCode()),
+        inputMethods: arcInputMethods,
+      });
+    }
+
     this.languageList_ = languageList;
     this.notifyInputMethodsChanged_();
   },
@@ -194,4 +208,13 @@ Polymer({
       }
     }
   },
+
+  /**
+   * @param {Object} allowedInputMethods
+   * @return {boolean}
+   * @private
+   */
+  inputMethodsLimitedByPolicy_: function(allowedInputMethods) {
+    return !!allowedInputMethods && allowedInputMethods.value.length > 0;
+  }
 });

@@ -5,11 +5,15 @@
 #include "content/browser/renderer_host/render_widget_targeter.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "content/browser/renderer_host/input/one_shot_timeout_monitor.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "content/public/browser/site_isolation_policy.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/events/blink/blink_event_util.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace content {
 
@@ -52,8 +56,8 @@ class TracingUmaTracker {
         metric_name_(metric_name),
         tracing_category_(tracing_category) {
     TRACE_EVENT_ASYNC_BEGIN0(
-        tracing_category_.c_str(), metric_name_.c_str(),
-        TRACE_ID_WITH_SCOPE(metric_name_.c_str(), TRACE_ID_LOCAL(id_)));
+        tracing_category_, metric_name_,
+        TRACE_ID_WITH_SCOPE(metric_name_, TRACE_ID_LOCAL(id_)));
   }
   ~TracingUmaTracker() = default;
   TracingUmaTracker(TracingUmaTracker&& tracker) = default;
@@ -61,17 +65,19 @@ class TracingUmaTracker {
 
   void Stop() {
     TRACE_EVENT_ASYNC_END0(
-        tracing_category_.c_str(), metric_name_.c_str(),
-        TRACE_ID_WITH_SCOPE(metric_name_.c_str(), TRACE_ID_LOCAL(id_)));
-    UmaHistogramTimes(metric_name_.c_str(),
-                      base::TimeTicks::Now() - start_time_);
+        tracing_category_, metric_name_,
+        TRACE_ID_WITH_SCOPE(metric_name_, TRACE_ID_LOCAL(id_)));
+    UmaHistogramTimes(metric_name_, base::TimeTicks::Now() - start_time_);
   }
 
  private:
   const int id_;
   const base::TimeTicks start_time_;
-  std::string metric_name_;
-  std::string tracing_category_;
+
+  // These variables must be string literals and live for the duration
+  // of the program since tracing stores pointers.
+  const char* metric_name_;
+  const char* tracing_category_;
 
   static int next_id_;
 
@@ -88,10 +94,12 @@ RenderWidgetTargetResult::RenderWidgetTargetResult(
 RenderWidgetTargetResult::RenderWidgetTargetResult(
     RenderWidgetHostViewBase* in_view,
     bool in_should_query_view,
-    base::Optional<gfx::PointF> in_location)
+    base::Optional<gfx::PointF> in_location,
+    bool in_latched_target)
     : view(in_view),
       should_query_view(in_should_query_view),
-      target_location(in_location) {}
+      target_location(in_location),
+      latched_target(in_latched_target) {}
 
 RenderWidgetTargetResult::~RenderWidgetTargetResult() = default;
 
@@ -112,15 +120,63 @@ RenderWidgetTargeter::RenderWidgetTargeter(Delegate* delegate)
 
 RenderWidgetTargeter::~RenderWidgetTargeter() = default;
 
+void RenderWidgetTargeter::SendEventToRootView(
+    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewBase* target,
+    const blink::WebInputEvent& event,
+    const ui::LatencyInfo& latency) {
+  if (vivaldi::IsVivaldiRunning() && target != root_view &&
+    // Switch Tabs by Scrolling & Use Ctrl+Scroll to Zoom Page
+    // We can not test for mouse wheel here and send the event to the root view
+    // here as that breaks page scrolling on mac when using swipe gestures on
+    // the trackpad. The event needs to go the the correct view so that a page,
+    // or a scrollable element inside a page, can be correctly scrolled. Sending
+    // it to the root view means history navigtion can occur when regular
+    // scrolling should take place.
+    /*event.GetType() == blink::WebInputEvent::kMouseWheel ||*/
+      // Mouse Gestures
+      (event.GetType() == blink::WebInputEvent::kMouseUp ||
+      (event.GetType() == blink::WebInputEvent::kMouseDown &&
+        event.GetModifiers() & blink::WebInputEvent::kRightButtonDown) ||
+      (event.GetType() == blink::WebInputEvent::kMouseMove &&
+        (event.GetModifiers() & blink::WebInputEvent::kAltKey ||
+        event.GetModifiers() & blink::WebInputEvent::kRightButtonDown)))) {
+    // NOTE(tomas@vivaldi.com): Send the event to the root view, so that mouse
+    // gestures can work. See VB-41799, VB-41071, VB-42761
+    auto* event_router = root_view->host()->delegate()->GetInputEventRouter();
+    event_router->SetSkipCursorUpdateOnMouseEvent(true);
+    delegate_->DispatchEventToTarget(root_view, root_view, event, latency,
+                                ComputeEventLocation(event));
+    event_router->SetSkipCursorUpdateOnMouseEvent(false);
+  }
+}
+
 void RenderWidgetTargeter::FindTargetAndDispatch(
     RenderWidgetHostViewBase* root_view,
     const blink::WebInputEvent& event,
     const ui::LatencyInfo& latency) {
+  DCHECK(blink::WebInputEvent::IsMouseEventType(event.GetType()) ||
+         event.GetType() == blink::WebInputEvent::kMouseWheel ||
+         blink::WebInputEvent::IsTouchEventType(event.GetType()) ||
+         (blink::WebInputEvent::IsGestureEventType(event.GetType()) &&
+          (static_cast<const blink::WebGestureEvent&>(event).SourceDevice() ==
+               blink::WebGestureDevice::kWebGestureDeviceTouchscreen ||
+           static_cast<const blink::WebGestureEvent&>(event).SourceDevice() ==
+               blink::WebGestureDevice::kWebGestureDeviceTouchpad)));
+
+  RenderWidgetTargetResult result =
+      delegate_->FindTargetSynchronously(root_view, event);
+
+  RenderWidgetHostViewBase* target = result.view;
+
   if (request_in_flight_) {
     if (!requests_.empty()) {
       auto& request = requests_.back();
-      if (MergeEventIfPossible(event, &request.event))
+      if (MergeEventIfPossible(event, &request.event)) {
+        // NOTE(bjorgvin@vivaldi.com): VB-41799 Page is loading.
+        SendEventToRootView(root_view, target, event, latency);
         return;
+      }
     }
     TargetingRequest request;
     request.root_view = root_view->GetWeakPtr();
@@ -132,21 +188,14 @@ void RenderWidgetTargeter::FindTargetAndDispatch(
     return;
   }
 
-  RenderWidgetTargetResult result =
-      delegate_->FindTargetSynchronously(root_view, event);
+  SendEventToRootView(root_view, target, event, latency);
 
-  RenderWidgetHostViewBase* target = result.view;
   auto* event_ptr = &event;
+  async_depth_ = 0;
   // TODO(kenrb, wjmaclean): Asynchronous hit tests don't work properly with
   // GuestViews, so rely on the synchronous result.
   // See https://crbug.com/802378.
-  if (result.should_query_view && (!target->IsRenderWidgetHostViewGuest() ||
-      event.GetType() == blink::WebInputEvent::kMouseDown ||
-      (event.GetType() == blink::WebInputEvent::kMouseMove &&
-        (target->GetFrameSinkId().sink_id() != last_sink_id ||
-        target->GetFrameSinkId().client_id() != last_client_id ||
-        event.GetModifiers() & blink::WebInputEvent::kAltKey)) ||
-      event.GetType() == blink::WebInputEvent::kMouseUp)) {
+  if (result.should_query_view && !target->IsRenderWidgetHostViewGuest()) {
     // TODO(kenrb, sadrul): When all event types support asynchronous hit
     // testing, we should be able to have FindTargetSynchronously return the
     // view and location to use for the renderer hit test query.
@@ -156,18 +205,29 @@ void RenderWidgetTargeter::FindTargetAndDispatch(
     QueryClient(root_view, root_view, *event_ptr, latency,
                 ComputeEventLocation(event), nullptr, gfx::PointF());
   } else {
-    FoundTarget(root_view, target, *event_ptr, latency, result.target_location);
-  }
-
-  // NOTE(tomas@vivaldi.com): Hack to fix VB-38880
-  if (event.GetType() == blink::WebInputEvent::kMouseMove) {
-    last_sink_id = target->GetFrameSinkId().sink_id();
-    last_client_id = target->GetFrameSinkId().client_id();
+    FoundTarget(root_view, target, *event_ptr, latency, result.target_location,
+                result.latched_target);
   }
 }
 
 void RenderWidgetTargeter::ViewWillBeDestroyed(RenderWidgetHostViewBase* view) {
   unresponsive_views_.erase(view);
+  if (vivaldi::IsVivaldiRunning() && vivaldi_active_down_target_ == view) {
+    vivaldi_active_down_target_ = nullptr;
+  }
+
+  if (vivaldi::IsVivaldiRunning() && vivaldi_active_requested_view_ == view) {
+    // NOTE(espen@vivaldi.com) The view we are in the progress of querying is
+    // about to be destroyed. This can happen for guest views when we navigate
+    // from a page to a start page (or similar without a guest view) while we at
+    // the same time move the mouse. We must kill the in-flight flag and
+    // discard the queued events. See VB-41355
+    vivaldi_active_requested_view_ = nullptr;
+    async_hit_test_timeout_.reset(nullptr);
+    request_in_flight_ = false;
+    std::queue<TargetingRequest> empty;
+    std::swap(requests_, empty);
+  }
 }
 
 void RenderWidgetTargeter::QueryClient(
@@ -180,38 +240,36 @@ void RenderWidgetTargeter::QueryClient(
     const gfx::PointF& last_target_location) {
   DCHECK(!request_in_flight_);
 
-  request_in_flight_ = true;
-  auto* target_client =
-      target->GetRenderWidgetHostImpl()->input_target_client();
-  TracingUmaTracker tracker("Event.AsyncTargeting.ResponseTime",
-                            "input,latency");
-  if (blink::WebInputEvent::IsMouseEventType(event.GetType()) ||
-      event.GetType() == blink::WebInputEvent::kMouseWheel ||
-      event.GetType() == blink::WebInputEvent::kTouchStart ||
-      (blink::WebInputEvent::IsGestureEventType(event.GetType()) &&
-       (static_cast<const blink::WebGestureEvent&>(event).source_device ==
-            blink::WebGestureDevice::kWebGestureDeviceTouchscreen ||
-        static_cast<const blink::WebGestureEvent&>(event).source_device ==
-            blink::WebGestureDevice::kWebGestureDeviceTouchpad))) {
-    async_hit_test_timeout_.reset(new OneShotTimeoutMonitor(
-        base::BindOnce(
-            &RenderWidgetTargeter::AsyncHitTestTimedOut,
-            weak_ptr_factory_.GetWeakPtr(), root_view->GetWeakPtr(),
-            target->GetWeakPtr(), target_location,
-            last_request_target ? last_request_target->GetWeakPtr() : nullptr,
-            last_target_location, ui::WebInputEventTraits::Clone(event),
-            latency),
-        async_hit_test_timeout_delay_));
-    target_client->FrameSinkIdAt(
-        gfx::ToCeiledPoint(target_location),
-        base::BindOnce(
-            &RenderWidgetTargeter::FoundFrameSinkId,
-            weak_ptr_factory_.GetWeakPtr(), root_view->GetWeakPtr(),
-            target->GetWeakPtr(), ui::WebInputEventTraits::Clone(event),
-            latency, ++last_request_id_, target_location, std::move(tracker)));
+  auto* target_client = target->host()->input_target_client();
+  // |target_client| may not be set yet for this |target| on Mac, need to
+  // understand why this happens. https://crbug.com/859492
+  if (!target_client) {
+    FoundTarget(root_view, target, event, latency, target_location, false);
     return;
   }
-  NOTREACHED();
+
+  if (vivaldi::IsVivaldiRunning())
+    vivaldi_active_requested_view_ = target;
+
+  request_in_flight_ = true;
+  async_depth_++;
+  TracingUmaTracker tracker("Event.AsyncTargeting.ResponseTime",
+                            "input,latency");
+  async_hit_test_timeout_.reset(new OneShotTimeoutMonitor(
+      base::BindOnce(
+          &RenderWidgetTargeter::AsyncHitTestTimedOut,
+          weak_ptr_factory_.GetWeakPtr(), root_view->GetWeakPtr(),
+          target->GetWeakPtr(), target_location,
+          last_request_target ? last_request_target->GetWeakPtr() : nullptr,
+          last_target_location, ui::WebInputEventTraits::Clone(event), latency),
+      async_hit_test_timeout_delay_));
+  target_client->FrameSinkIdAt(
+      gfx::ToCeiledPoint(target_location),
+      base::BindOnce(&RenderWidgetTargeter::FoundFrameSinkId,
+                     weak_ptr_factory_.GetWeakPtr(), root_view->GetWeakPtr(),
+                     target->GetWeakPtr(),
+                     ui::WebInputEventTraits::Clone(event), latency,
+                     ++last_request_id_, target_location, std::move(tracker)));
 }
 
 void RenderWidgetTargeter::FlushEventQueue() {
@@ -249,6 +307,10 @@ void RenderWidgetTargeter::FoundFrameSinkId(
 
   request_in_flight_ = false;
   async_hit_test_timeout_.reset(nullptr);
+
+  if (vivaldi::IsVivaldiRunning())
+    vivaldi_active_requested_view_ = nullptr;
+
   auto* view = delegate_->FindViewFromFrameSinkId(frame_sink_id);
   if (!view)
     view = target.get();
@@ -257,7 +319,7 @@ void RenderWidgetTargeter::FoundFrameSinkId(
   // asking the clients until a client claims an event for itself.
   if (view == target.get() ||
       unresponsive_views_.find(view) != unresponsive_views_.end()) {
-    FoundTarget(root_view.get(), view, *event, latency, target_location);
+    FoundTarget(root_view.get(), view, *event, latency, target_location, false);
   } else {
     gfx::PointF location = target_location;
     target->TransformPointToCoordSpaceForView(location, view, &location);
@@ -271,36 +333,41 @@ void RenderWidgetTargeter::FoundTarget(
     RenderWidgetHostViewBase* target,
     const blink::WebInputEvent& event,
     const ui::LatencyInfo& latency,
-    const base::Optional<gfx::PointF>& target_location) {
+    const base::Optional<gfx::PointF>& target_location,
+    bool latched_target) {
+  if (SiteIsolationPolicy::UseDedicatedProcessesForAllSites() &&
+      !latched_target) {
+    UMA_HISTOGRAM_COUNTS_100("Event.AsyncTargeting.AsyncClientDepth",
+                             async_depth_);
+  }
+
   // RenderWidgetHostViewMac can be deleted asynchronously, in which case the
   // View will be valid but there will no longer be a RenderWidgetHostImpl.
   if (!root_view || !root_view->GetRenderWidgetHost())
     return;
-  // TODO: Unify position conversion for all event types.
-  if (blink::WebInputEvent::IsMouseEventType(event.GetType())) {
-    blink::WebMouseEvent mouse_event =
-        static_cast<const blink::WebMouseEvent&>(event);
-    if (target_location.has_value()) {
-      mouse_event.SetPositionInWidget(target_location->x(),
-                                      target_location->y());
+
+  delegate_->DispatchEventToTarget(root_view, target, event, latency,
+                                   target_location);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(espen@vivaldi.com): Work around a problem with multi document setups
+    // like Vivaldi is. When seleting text with a mouse in edit fields we must
+    // make sure the final up event gets sent to the same document to reset it
+    // a proper state. See VB-42829. Regular Chrome does not have this problem
+    // as there is only one document in action.
+    if (event.GetType() == blink::WebInputEvent::kMouseDown &&
+        (event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown)) {
+      vivaldi_active_down_target_ = target;
+    } else if (event.GetType() == blink::WebInputEvent::kMouseUp &&
+               vivaldi_active_down_target_) {
+      if (vivaldi_active_down_target_ != target) {
+        delegate_->DispatchEventToTarget(root_view, vivaldi_active_down_target_,
+                                         event, latency, target_location);
+      }
+      vivaldi_active_down_target_ = nullptr;
     }
-    if (mouse_event.GetType() != blink::WebInputEvent::kUndefined)
-      delegate_->DispatchEventToTarget(root_view, target, mouse_event, latency,
-                                       target_location);
-  } else if (event.GetType() == blink::WebInputEvent::kMouseWheel ||
-             blink::WebInputEvent::IsTouchEventType(event.GetType()) ||
-             blink::WebInputEvent::IsGestureEventType(event.GetType())) {
-    DCHECK(!blink::WebInputEvent::IsGestureEventType(event.GetType()) ||
-           (static_cast<const blink::WebGestureEvent&>(event).source_device ==
-                blink::WebGestureDevice::kWebGestureDeviceTouchscreen ||
-            static_cast<const blink::WebGestureEvent&>(event).source_device ==
-                blink::WebGestureDevice::kWebGestureDeviceTouchpad));
-    delegate_->DispatchEventToTarget(root_view, target, event, latency,
-                                     target_location);
-  } else {
-    NOTREACHED();
-    return;
   }
+
   FlushEventQueue();
 }
 
@@ -315,6 +382,9 @@ void RenderWidgetTargeter::AsyncHitTestTimedOut(
   DCHECK(request_in_flight_);
   request_in_flight_ = false;
 
+  if (vivaldi::IsVivaldiRunning())
+    vivaldi_active_requested_view_ = nullptr;
+
   if (!current_request_root_view)
     return;
 
@@ -328,10 +398,10 @@ void RenderWidgetTargeter::AsyncHitTestTimedOut(
     // renderer fails to process it.
     FoundTarget(current_request_root_view.get(),
                 current_request_root_view.get(), *event, latency,
-                current_target_location);
+                current_target_location, false);
   } else {
     FoundTarget(current_request_root_view.get(), last_request_target.get(),
-                *event, latency, last_target_location);
+                *event, latency, last_target_location, false);
   }
 }
 

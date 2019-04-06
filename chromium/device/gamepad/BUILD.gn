@@ -19,6 +19,10 @@ component("gamepad") {
     "dualshock4_controller_base.h",
     "dualshock4_controller_linux.cc",
     "dualshock4_controller_linux.h",
+    "dualshock4_controller_mac.cc",
+    "dualshock4_controller_mac.h",
+    "dualshock4_controller_win.cc",
+    "dualshock4_controller_win.h",
     "game_controller_data_fetcher_mac.h",
     "game_controller_data_fetcher_mac.mm",
     "gamepad_consumer.cc",
@@ -64,6 +68,12 @@ component("gamepad") {
     "hid_dll_functions_win.h",
     "raw_input_data_fetcher_win.cc",
     "raw_input_data_fetcher_win.h",
+    "raw_input_gamepad_device_win.cc",
+    "raw_input_gamepad_device_win.h",
+    "switch_pro_controller_base.cc",
+    "switch_pro_controller_base.h",
+    "switch_pro_controller_linux.cc",
+    "switch_pro_controller_linux.h",
     "udev_gamepad_linux.cc",
     "udev_gamepad_linux.h",
     "xbox_controller_mac.h",
@@ -79,9 +89,10 @@ component("gamepad") {
     "//base/third_party/dynamic_annotations",
     "//device/base/synchronization",
     "//device/gamepad/public/cpp:shared_with_blink",
-    "//device/gamepad/public/interfaces",
+    "//device/gamepad/public/cpp:switches",
+    "//device/gamepad/public/mojom",
     "//mojo/public/cpp/system",
-    "//third_party/WebKit/public:blink_headers",
+    "//third_party/blink/public:blink_headers",
   ]
 
   defines = [ "DEVICE_GAMEPAD_IMPLEMENTATION" ]
@@ -129,7 +140,7 @@ static_library("test_helpers") {
     ":gamepad",
     "//base",
     "//device/gamepad/public/cpp:shared_with_blink",
-    "//third_party/WebKit/public:blink_headers",
+    "//third_party/blink/public:blink_headers",
   ]
 }
 

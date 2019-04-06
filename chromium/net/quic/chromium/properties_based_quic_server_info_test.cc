@@ -6,10 +6,12 @@
 
 #include <string>
 
+#include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
+#include "net/base/privacy_mode.h"
 #include "net/http/http_server_properties_impl.h"
-#include "net/quic/core/quic_server_id.h"
 #include "net/test/gtest_util.h"
+#include "net/third_party/quic/core/quic_server_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -57,9 +59,8 @@ class PropertiesBasedQuicServerInfoTest : public ::testing::Test {
   }
 
   HttpServerPropertiesImpl http_server_properties_;
-  QuicServerId server_id_;
+  quic::QuicServerId server_id_;
   PropertiesBasedQuicServerInfo server_info_;
-  CompletionCallback callback_;
 };
 
 // Test persisting, reading and verifying and then updating and verifing.

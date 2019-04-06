@@ -170,14 +170,14 @@ class NaClBrowserTestGLibcExtension : public NaClBrowserTestGLibc {
 // PNaCl tests take a long time on windows debug builds
 // and sometimes time out.  Disable until it is made faster:
 // https://code.google.com/p/chromium/issues/detail?id=177555
-#if (defined(OS_WIN) && !defined(NDEBUG)) || defined(DISABLE_NACL)
+#if (defined(OS_WIN) && !defined(NDEBUG))
 #  define MAYBE_PNACL(test_name) DISABLED_##test_name
 #else
 #  define MAYBE_PNACL(test_name) test_name
 #endif
 
 // NaCl glibc toolchain is not available on MIPS
-#if defined(ARCH_CPU_MIPS_FAMILY) || defined(DISABLE_NACL)
+#if defined(ARCH_CPU_MIPS_FAMILY)
 #  define MAYBE_GLIBC(test_name) DISABLED_##test_name
 #else
 #  define MAYBE_GLIBC(test_name) test_name

@@ -82,8 +82,7 @@ gfx::GpuMemoryBufferHandle GpuMemoryBufferFactoryDXGI::CreateGpuMemoryBuffer(
   if (!BufferSizeForBufferFormatChecked(size, format, &buffer_size))
     return handle;
 
-  handle.handle = base::SharedMemoryHandle(texture_handle, buffer_size,
-                                           base::UnguessableToken::Create());
+  handle.dxgi_handle = IPC::PlatformFileForTransit(texture_handle);
   handle.type = gfx::DXGI_SHARED_HANDLE;
   handle.id = id;
 
@@ -110,21 +109,11 @@ GpuMemoryBufferFactoryDXGI::CreateImageForGpuMemoryBuffer(
     return nullptr;
   // Transfer ownership of handle to GLImageDXGIHandle.
   base::win::ScopedHandle handle_owner;
-  handle_owner.Set(handle.handle.GetHandle());
+  handle_owner.Set(handle.dxgi_handle.GetHandle());
   auto image = base::MakeRefCounted<gl::GLImageDXGIHandle>(size, 0, format);
   if (!image->Initialize(std::move(handle_owner)))
     return nullptr;
   return image;
-}
-
-scoped_refptr<gl::GLImage> GpuMemoryBufferFactoryDXGI::CreateAnonymousImage(
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    gfx::BufferUsage usage,
-    unsigned internalformat,
-    bool* is_cleared) {
-  NOTIMPLEMENTED();
-  return nullptr;
 }
 
 unsigned GpuMemoryBufferFactoryDXGI::RequiredTextureType() {

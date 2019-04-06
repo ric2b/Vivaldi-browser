@@ -5,6 +5,7 @@
 #include "ui/ozone/public/ozone_gpu_test_helper.h"
 
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ipc/ipc_listener.h"
@@ -55,7 +56,7 @@ class FakeGpuProcess : public IPC::Channel {
   // IPC::Channel implementation:
   bool Send(IPC::Message* msg) override {
     ui_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&DispatchToGpuPlatformSupportHostTask, msg));
+        FROM_HERE, base::BindOnce(&DispatchToGpuPlatformSupportHostTask, msg));
     return true;
   }
 
@@ -80,8 +81,8 @@ class FakeGpuProcessHost {
   ~FakeGpuProcessHost() {}
 
   void InitOnIO() {
-    base::Callback<void(IPC::Message*)> sender =
-        base::Bind(&DispatchToGpuPlatformSupportTaskOnIO);
+    base::RepeatingCallback<void(IPC::Message*)> sender =
+        base::BindRepeating(&DispatchToGpuPlatformSupportTaskOnIO);
 
     ui::OzonePlatform::GetInstance()
         ->GetGpuPlatformSupportHost()
@@ -109,15 +110,23 @@ bool OzoneGpuTestHelper::Initialize(
 
   fake_gpu_process_.reset(new FakeGpuProcess(ui_task_runner));
   io_helper_thread_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&FakeGpuProcess::InitOnIO,
-                            base::Unretained(fake_gpu_process_.get())));
+      FROM_HERE, base::BindOnce(&FakeGpuProcess::InitOnIO,
+                                base::Unretained(fake_gpu_process_.get())));
 
   fake_gpu_process_host_.reset(new FakeGpuProcessHost(
       ui_task_runner, io_helper_thread_->task_runner()));
   io_helper_thread_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&FakeGpuProcessHost::InitOnIO,
-                            base::Unretained(fake_gpu_process_host_.get())));
+      FROM_HERE,
+      base::BindOnce(&FakeGpuProcessHost::InitOnIO,
+                     base::Unretained(fake_gpu_process_host_.get())));
   io_helper_thread_->FlushForTesting();
+
+  // Give the UI thread a chance to run any tasks posted from the IO thread
+  // after the GPU process is launched. This is needed for Ozone DRM, see
+  // https://crbug.com/830233.
+  base::RunLoop run_loop;
+  ui_task_runner->PostTask(FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
 
   return true;
 }

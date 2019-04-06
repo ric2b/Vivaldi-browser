@@ -10,18 +10,60 @@
 Polymer({
   is: 'all-sites',
 
-  behaviors: [SiteSettingsBehavior, WebUIListenerBehavior],
+  behaviors: [
+    SiteSettingsBehavior,
+    WebUIListenerBehavior,
+    settings.RouteObserverBehavior,
+    settings.GlobalScrollTargetBehavior,
+  ],
 
   properties: {
     /**
-     * Array of sites to display in the widget.
-     * @type {!Array<!SiteException>}
+     * Array of sites to display in the widget, grouped into their eTLD+1s.
+     * @type {!Array<!SiteGroup>}
      */
-    sites: {
+    siteGroupList: {
       type: Array,
       value: function() {
         return [];
       },
+    },
+
+    /**
+     * Needed by GlobalScrollTargetBehavior.
+     * @override
+     */
+    subpageRoute: {
+      type: Object,
+      value: settings.routes.SITE_SETTINGS_ALL,
+      readOnly: true,
+    },
+
+    /**
+     * The search query entered into the All Sites search textbox. Used to
+     * filter the All Sites list.
+     * @private
+     */
+    searchQuery_: {
+      type: String,
+      value: '',
+    },
+
+    /**
+     * All possible sort methods.
+     * @type {Object}
+     * @private
+     */
+    sortMethods_: {
+      type: Object,
+      value: function() {
+        return {
+          name: 'name',
+          mostVisited: 'most-visited',
+          storage: 'data-stored',
+        };
+      },
+      readOnly: true,
     },
   },
 
@@ -31,118 +73,99 @@ Polymer({
         settings.SiteSettingsPrefsBrowserProxyImpl.getInstance();
     this.addWebUIListener(
         'contentSettingSitePermissionChanged', this.populateList_.bind(this));
+    this.addEventListener(
+        'site-entry-resized', this.resizeListIfScrollTargetActive_.bind(this));
     this.populateList_();
+  },
+
+  /** @override */
+  attached: function() {
+    // Set scrollOffset so the iron-list scrolling accounts for the space the
+    // title takes.
+    Polymer.RenderStatus.afterNextRender(this, () => {
+      this.$.allSitesList.scrollOffset = this.$.allSitesList.offsetTop;
+    });
   },
 
   /**
    * Retrieves a list of all known sites with site details.
-   * @return {!Promise<!Array<!RawSiteException>>}
    * @private
    */
-  getAllSitesList_: function() {
-    /** @type {!Array<!RawSiteException>} */
-    const promiseList = [];
-
-    const types = Object.values(settings.ContentSettingsTypes);
-    for (let i = 0; i < types.length; i++) {
-      const type = types[i];
-      // <if expr="not chromeos">
-      if (type == settings.ContentSettingsTypes.PROTECTED_CONTENT)
-        continue;
-      // </if>
-      if (type == settings.ContentSettingsTypes.PROTOCOL_HANDLERS ||
-          type == settings.ContentSettingsTypes.USB_DEVICES ||
-          type == settings.ContentSettingsTypes.ZOOM_LEVELS) {
-        // Some categories store their data in a custom way.
-        continue;
-      }
-
-      promiseList.push(this.browserProxy_.getExceptionList(type));
-    }
-
-    return Promise.all(promiseList);
-  },
-
-  /**
-   * A handler for selecting a site (by clicking on the origin).
-   * @param {!{model: !{item: !SiteException}}} event
-   * @private
-   */
-  onOriginTap_: function(event) {
-    settings.navigateTo(
-        settings.routes.SITE_SETTINGS_SITE_DETAILS,
-        new URLSearchParams('site=' + event.model.item.origin));
-  },
-
-  /** @private */
   populateList_: function() {
-    this.getAllSitesList_().then(this.processExceptions_.bind(this));
-  },
+    /** @type {!Array<settings.ContentSettingsTypes>} */
+    const contentTypes = this.getCategoryList();
+    // Make sure to include cookies, because All Sites handles data storage +
+    // cookies as well as regular settings.ContentSettingsTypes.
+    if (!contentTypes.includes(settings.ContentSettingsTypes.COOKIES))
+      contentTypes.push(settings.ContentSettingsTypes.COOKIES);
 
-  /**
-   * Process the exception list returned from the native layer.
-   * @param {!Array<!RawSiteException>} data List of sites (exceptions)
-   *     to process.
-   * @private
-   */
-  processExceptions_: function(data) {
-    const sites = /** @type {!Array<!RawSiteException>} */ ([]);
-    for (let i = 0; i < data.length; ++i) {
-      const exceptionList = data[i];
-      for (let k = 0; k < exceptionList.length; ++k) {
-        sites.push(exceptionList[k]);
-      }
-    }
-    this.sites = this.toSiteArray_(sites);
-  },
-
-  /**
-   * TODO(dschuyler): Move this processing to C++ handler.
-   * Converts a list of exceptions received from the C++ handler to
-   * full SiteException objects. The list is sorted by site name, then protocol
-   * and port and de-duped (by origin).
-   * @param {!Array<!RawSiteException>} sites A list of sites to convert.
-   * @return {!Array<!SiteException>} A list of full SiteExceptions. Sorted and
-   *    deduped.
-   * @private
-   */
-  toSiteArray_: function(sites) {
-    const self = this;
-    sites.sort(function(a, b) {
-      const url1 = self.toUrl(a.origin);
-      const url2 = self.toUrl(b.origin);
-      let comparison = url1.host.localeCompare(url2.host);
-      if (comparison == 0) {
-        comparison = url1.protocol.localeCompare(url2.protocol);
-        if (comparison == 0) {
-          comparison = url1.port.localeCompare(url2.port);
-          if (comparison == 0) {
-            // Compare hosts for the embedding origins.
-            let host1 = self.toUrl(a.embeddingOrigin);
-            let host2 = self.toUrl(b.embeddingOrigin);
-            host1 = (host1 == null) ? '' : host1.host;
-            host2 = (host2 == null) ? '' : host2.host;
-            return host1.localeCompare(host2);
-          }
-        }
-      }
-      return comparison;
+    this.browserProxy_.getAllSites(contentTypes).then((response) => {
+      this.siteGroupList = this.sortSiteGroupList_(response);
     });
-    const results = /** @type {!Array<!SiteException>} */ ([]);
-    let lastOrigin = '';
-    let lastEmbeddingOrigin = '';
-    for (let i = 0; i < sites.length; ++i) {
-      // Remove duplicates.
-      if (sites[i].origin == lastOrigin &&
-          sites[i].embeddingOrigin == lastEmbeddingOrigin) {
-        continue;
-      }
-      /** @type {!SiteException} */
-      const siteException = this.expandSiteException(sites[i]);
-      results.push(siteException);
-      lastOrigin = siteException.origin;
-      lastEmbeddingOrigin = siteException.embeddingOrigin;
-    }
-    return results;
+  },
+
+  /**
+   * Filters |this.siteGroupList| with the given search query text.
+   * @param {!Array<!SiteGroup>} siteGroupList The list of sites to filter.
+   * @param {string} searchQuery The filter text.
+   * @return {!Array<!SiteGroup>}
+   * @private
+   */
+  filterPopulatedList_: function(siteGroupList, searchQuery) {
+    if (searchQuery.length == 0)
+      return siteGroupList;
+
+    return siteGroupList.filter((siteGroup) => {
+      return siteGroup.origins.find(origin => {
+        return origin.includes(searchQuery);
+      });
+    });
+  },
+
+  /**
+   * Sorts the given SiteGroup list with the currently selected sort method.
+   * @param {!Array<!SiteGroup>} siteGroupList The list of sites to sort.
+   * @return {!Array<!SiteGroup>}
+   * @private
+   */
+  sortSiteGroupList_: function(siteGroupList) {
+    const sortMethod = this.$.sortMethod.value;
+    if (sortMethod == this.sortMethods_.name)
+      siteGroupList.sort(this.nameComparator_);
+    return siteGroupList;
+  },
+
+  nameComparator_: function(siteGroup1, siteGroup2) {
+    return siteGroup1.etldPlus1.localeCompare(siteGroup2.etldPlus1);
+  },
+
+  /**
+   * Called when the input text in the search textbox is updated.
+   * @private
+   */
+  onSearchChanged_: function() {
+    const searchElement = /** @type {SettingsSubpageSearchElement} */ (
+        this.$$('settings-subpage-search'));
+    this.searchQuery_ = searchElement.getSearchInput().value.toLowerCase();
+  },
+
+  /**
+   * Called when the user chooses a different sort method to the default.
+   * @private
+   */
+  onSortMethodChanged_: function() {
+    this.siteGroupList = this.sortSiteGroupList_(this.siteGroupList);
+    // Force the iron-list to rerender its items, as the order has changed.
+    this.$.allSitesList.fire('iron-resize');
+  },
+
+  /**
+   * Called when a list item changes its size, and thus the positions and sizes
+   * of the items in the entire list also need updating.
+   * @private
+   */
+  resizeListIfScrollTargetActive_: function() {
+    if (settings.getCurrentRoute() == this.subpageRoute)
+      this.$.allSitesList.fire('iron-resize');
   },
 });

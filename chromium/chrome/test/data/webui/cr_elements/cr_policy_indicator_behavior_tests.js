@@ -4,9 +4,8 @@
 
 /** @fileoverview Suite of tests for CrPolicyIndicatorBehavior. */
 suite('CrPolicyIndicatorBehavior', function() {
-  let TestIndicator;
   suiteSetup(function() {
-    TestIndicator = Polymer({
+    Polymer({
       is: 'test-indicator',
 
       behaviors: [CrPolicyIndicatorBehavior],
@@ -15,7 +14,9 @@ suite('CrPolicyIndicatorBehavior', function() {
 
   let indicator;
   setup(function() {
-    indicator = new TestIndicator;
+    PolymerTest.clearBody();
+    indicator = document.createElement('test-indicator');
+    document.body.appendChild(indicator);
   });
 
   test('default indicator is blank', function() {
@@ -28,7 +29,10 @@ suite('CrPolicyIndicatorBehavior', function() {
 
     assertTrue(indicator.indicatorVisible);
     assertEquals('cr20:domain', indicator.indicatorIcon);
-    assertEquals('policy', indicator.indicatorTooltip);
+    assertEquals(
+        'policy',
+        indicator.getIndicatorTooltip(
+            indicator.indicatorType, indicator.indicatorSourceName));
   });
 
   test('recommended indicator', function() {
@@ -46,6 +50,30 @@ suite('CrPolicyIndicatorBehavior', function() {
             indicator.indicatorType, indicator.indicatorSourceName, false));
   });
 
+  test('extension indicator', function() {
+    indicator.indicatorType = CrPolicyIndicatorType.EXTENSION;
+    indicator.indicatorSourceName = 'Extension name';
+
+    assertTrue(indicator.indicatorVisible);
+    assertEquals('cr:extension', indicator.indicatorIcon);
+    assertEquals(
+        'extension: Extension name',
+        indicator.getIndicatorTooltip(
+            indicator.indicatorType, indicator.indicatorSourceName));
+  });
+
+  test('extension indicator without extension name', function() {
+    indicator.indicatorType = CrPolicyIndicatorType.EXTENSION;
+    indicator.indicatorSourceName = '';
+
+    assertTrue(indicator.indicatorVisible);
+    assertEquals('cr:extension', indicator.indicatorIcon);
+    assertEquals(
+        'extension',
+        indicator.getIndicatorTooltip(
+            indicator.indicatorType, indicator.indicatorSourceName));
+  });
+
   if (cr.isChromeOS) {
     test('primary-user controlled indicator', function() {
       indicator.indicatorType = CrPolicyIndicatorType.PRIMARY_USER;
@@ -53,7 +81,10 @@ suite('CrPolicyIndicatorBehavior', function() {
 
       assertTrue(indicator.indicatorVisible);
       assertEquals('cr:group', indicator.indicatorIcon);
-      assertEquals('shared: user@example.com', indicator.indicatorTooltip);
+      assertEquals(
+          'shared: user@example.com',
+          indicator.getIndicatorTooltip(
+              indicator.indicatorType, indicator.indicatorSourceName));
     });
   }
 });

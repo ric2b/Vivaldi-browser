@@ -327,6 +327,8 @@ class AppList {
 
 // Capabilities of a Team Drive indicate the permissions granted to the user
 // for the Team Drive and items within the Team Drive.
+// See "capabilities" in
+// https://developers.google.com/drive/v2/reference/teamdrives#resource.
 class TeamDriveCapabilities {
  public:
   TeamDriveCapabilities();
@@ -344,36 +346,63 @@ class TeamDriveCapabilities {
 
   // Whether the current user can add children to folders in this Team Drive.
   bool can_add_children() const { return can_add_children_; }
+  void set_can_add_children(bool can_add_children) {
+    can_add_children_ = can_add_children;
+  }
   // Whether the current user can comment on files in this Team Drive.
   bool can_comment() const { return can_comment_; }
+  void set_can_comment(bool can_comment) { can_comment_ = can_comment; }
   // Whether files in this Team Drive can be copied by the current user.
   bool can_copy() const { return can_copy_; }
+  void set_can_copy(bool can_copy) { can_copy_ = can_copy; }
   // Whether this Team Drive can be deleted by the current user.
   bool can_delete_team_drive() const { return can_delete_team_drive_; }
+  void set_can_delete_team_drive(bool can_delete_team_drive) {
+    can_delete_team_drive_ = can_delete_team_drive;
+  }
   // Whether files in this Team Drive can be edited by the current user.
   bool can_download() const { return can_download_; }
+  void set_can_download(bool can_download) { can_download_ = can_download; }
   // Whether files in this Team Drive can be edited by current user.
   bool can_edit() const { return can_edit_; }
+  void set_can_edit(bool can_edit) { can_edit_ = can_edit; }
   // Whether the current user can list the children of folders in this Team
   // Drive.
   bool can_list_children() const { return can_list_children_; }
+  void set_can_list_children(bool can_list_children) {
+    can_list_children_ = can_list_children;
+  }
   // Whether the current user can add members to this Team Drive or remove them
   // or change their role.
   bool can_manage_members() const { return can_manage_members_; }
+  void set_can_manage_members(bool can_manage_members) {
+    can_manage_members_ = can_manage_members;
+  }
   // Whether the current user has read access to the Revisions resource of files
   // in this Team Drive.
   bool can_read_revisions() const { return can_read_revisions_; }
+  void set_can_read_revisions(bool can_read_revisions) {
+    can_read_revisions_ = can_read_revisions;
+  }
   // Whether the current user can remove children from folders in this Team
   // Drive.
   bool can_remove_children() const { return can_remove_children_; }
+  void set_can_remove_children(bool can_remove_children) {
+    can_remove_children_ = can_remove_children;
+  }
   // Whether files or folders in this Team Drive can be renamed by the current
   // user.
   bool can_rename() const { return can_rename_; }
+  void set_can_rename(bool can_rename) { can_rename_ = can_rename; }
   // Whether this Team Drive can be renamed by the current user.
   bool can_rename_team_drive() const { return can_rename_team_drive_; }
+  void set_can_rename_team_drive(bool can_rename_team_drive) {
+    can_rename_team_drive_ = can_rename_team_drive;
+  }
   // Whether files or folders in this Team Drive can be shared by the current
   // user.
   bool can_share() const { return can_share_; }
+  void set_can_share(bool can_share) { can_share_ = can_share; }
 
  private:
   bool can_add_children_;
@@ -416,6 +445,9 @@ class TeamDriveResource {
   void set_name(const std::string& name) { name_ = name; }
   // Capabilities the current user has on this Team Drive.
   const TeamDriveCapabilities& capabilities() const { return capabilities_; }
+  void set_capabilities(const TeamDriveCapabilities& capabilities) {
+    capabilities_ = capabilities;
+  }
 
  private:
   friend class DriveAPIParserTest;
@@ -579,6 +611,130 @@ class ImageMediaMetadata {
   int rotation_;
 };
 
+// Capabilities of a file resource indicate the permissions granted to the user
+// for the file (or items within the folder).
+// See "capabilities" in
+// https://developers.google.com/drive/v2/reference/files#resource.
+class FileResourceCapabilities {
+ public:
+  FileResourceCapabilities();
+  FileResourceCapabilities(const FileResourceCapabilities& src);
+  ~FileResourceCapabilities();
+
+  // Registers the mapping between JSON field names and the members in this
+  // class.
+  static void RegisterJSONConverter(
+      base::JSONValueConverter<FileResourceCapabilities>* converter);
+
+  // Creates a FileResourceCapabilities from parsed JSON.
+  static std::unique_ptr<FileResourceCapabilities> CreateFrom(
+      const base::Value& value);
+
+  // Whether the current user can add children to this folder. This is always
+  // false when the item is not a folder.
+  bool can_add_children() const { return can_add_children_; }
+  void set_can_add_children(bool can_add_children) {
+    can_add_children_ = can_add_children;
+  }
+  // Whether the current user can change the restricted download label of this
+  // file.
+  bool can_change_restricted_download() const {
+    return can_change_restricted_download_;
+  }
+  void set_can_change_restricted_download(bool can_change_restricted_download) {
+    can_change_restricted_download_ = can_change_restricted_download;
+  }
+  // Whether the current user can comment on this file.
+  bool can_comment() const { return can_comment_; }
+  void set_can_comment(bool can_comment) { can_comment_ = can_comment; }
+  // Whether the current user can copy this file. For a Team Drive item, whether
+  // the current user can copy non-folder descendants of this item, or this item
+  // itself if it is not a folder.
+  bool can_copy() const { return can_copy_; }
+  void set_can_copy(bool can_copy) { can_copy_ = can_copy; }
+  // Whether the current user can delete this file.
+  bool can_delete() const { return can_delete_; }
+  void set_can_delete(bool can_delete) { can_delete_ = can_delete; }
+  // Whether the current user can download this file.
+  bool can_download() const { return can_download_; }
+  void set_can_download(bool can_download) { can_download_ = can_download; }
+  // Whether the current user can edit this file.
+  bool can_edit() const { return can_edit_; }
+  void set_can_edit(bool can_edit) { can_edit_ = can_edit; }
+  // Whether the current user can list the children of this folder. This is
+  // always false when the item is not a folder.
+  bool can_list_children() const { return can_list_children_; }
+  void set_can_list_children(bool can_list_children) {
+    can_list_children_ = can_list_children;
+  }
+  // Whether the current user can move this item into a Team Drive. If the item
+  // is in a Team Drive, this field is equivalent to canMoveTeamDriveItem.
+  bool can_move_item_into_team_drive() const {
+    return can_move_item_into_team_drive_;
+  }
+  void set_can_move_item_into_team_drive(bool can_move_item_into_team_drive) {
+    can_move_item_into_team_drive_ = can_move_item_into_team_drive;
+  }
+  // Whether the current user can move this Team Drive item by changing its
+  // parent. Note that a request to change the parent for this item may still
+  // fail depending on the new parent that is being added. Only populated for
+  // Team Drive files.
+  bool can_move_team_drive_item() const { return can_move_team_drive_item_; }
+  void set_can_move_team_drive_item(bool can_move_team_drive_item) {
+    can_move_team_drive_item_ = can_move_team_drive_item;
+  }
+  // Whether the current user can read the revisions resource of this file. For
+  // a Team Drive item, whether revisions of non-folder descendants of this
+  // item, or this item itself if it is not a folder, can be read.
+  bool can_read_revisions() const { return can_read_revisions_; }
+  void set_can_read_revisions(bool can_read_revisions) {
+    can_read_revisions_ = can_read_revisions;
+  }
+  // Whether the current user can read the Team Drive to which this file
+  // belongs. Only populated for Team Drive files.
+  bool can_read_team_drive() const { return can_read_team_drive_; }
+  void set_can_read_team_drive(bool can_read_team_drive) {
+    can_read_team_drive_ = can_read_team_drive;
+  }
+  // Whether the current user can remove children from this folder. This is
+  // always false when the item is not a folder.
+  bool can_remove_children() const { return can_remove_children_; }
+  void set_can_remove_children(bool can_remove_children) {
+    can_remove_children_ = can_remove_children;
+  }
+  // Whether the current user can rename this file.
+  bool can_rename() const { return can_rename_; }
+  void set_can_rename(bool can_rename) { can_rename_ = can_rename; }
+  // Whether the current user can modify the sharing settings for this file.
+  bool can_share() const { return can_share_; }
+  void set_can_share(bool can_share) { can_share_ = can_share; }
+  // Whether the current user can move this file to trash.
+  bool can_trash() const { return can_trash_; }
+  void set_can_trash(bool can_trash) { can_trash_ = can_trash; }
+  // Whether the current user can restore this file from trash.
+  bool can_untrash() const { return can_untrash_; }
+  void set_can_untrash(bool can_untrash) { can_untrash_ = can_untrash; }
+
+ private:
+  bool can_add_children_;
+  bool can_change_restricted_download_;
+  bool can_comment_;
+  bool can_copy_;
+  bool can_delete_;
+  bool can_download_;
+  bool can_edit_;
+  bool can_list_children_;
+  bool can_move_item_into_team_drive_;
+  bool can_move_team_drive_item_;
+  bool can_read_revisions_;
+  bool can_read_team_drive_;
+  bool can_remove_children_;
+  bool can_rename_;
+  bool can_share_;
+  bool can_trash_;
+  bool can_untrash_;
+};
+
 // FileResource represents a file or folder metadata in Drive.
 // https://developers.google.com/drive/v2/reference/files
 class FileResource {
@@ -725,6 +881,18 @@ class FileResource {
   std::vector<OpenWithLink>* mutable_open_with_links() {
     return &open_with_links_;
   }
+  // Capabilities the current user has on this file resource.
+  const FileResourceCapabilities& capabilities() const { return capabilities_; }
+  void set_capabilities(const FileResourceCapabilities& capabilities) {
+    capabilities_ = capabilities;
+  }
+
+  // ID of the Team Drive the file resides in. Will be empty if the file
+  // is not in a team drive.
+  const std::string& team_drive_id() const { return team_drive_id_; }
+  void set_team_drive_id(const std::string& team_drive_id) {
+    team_drive_id_ = team_drive_id;
+  }
 
  private:
   friend class base::internal::RepeatedMessageConverter<FileResource>;
@@ -753,6 +921,8 @@ class FileResource {
   GURL share_link_;
   std::vector<ParentReference> parents_;
   std::vector<OpenWithLink> open_with_links_;
+  FileResourceCapabilities capabilities_;
+  std::string team_drive_id_;
 };
 
 // FileList represents a collection of files and folders.
@@ -940,6 +1110,12 @@ class ChangeList {
   // Returns the largest change ID number.
   int64_t largest_change_id() const { return largest_change_id_; }
 
+  // Returns the new start page token, only if the end of current change list
+  // was reached.
+  const std::string& new_start_page_token() const {
+    return new_start_page_token_;
+  }
+
   // Returns a set of changes in this list.
   const std::vector<std::unique_ptr<ChangeResource>>& items() const {
     return items_;
@@ -954,6 +1130,9 @@ class ChangeList {
   void set_largest_change_id(int64_t largest_change_id) {
     largest_change_id_ = largest_change_id;
   }
+  void set_new_start_page_token(const std::string& new_start_page_token) {
+    new_start_page_token_ = new_start_page_token;
+  }
 
  private:
   friend class DriveAPIParserTest;
@@ -965,9 +1144,40 @@ class ChangeList {
 
   GURL next_link_;
   int64_t largest_change_id_;
+  std::string new_start_page_token_;
   std::vector<std::unique_ptr<ChangeResource>> items_;
 
   DISALLOW_COPY_AND_ASSIGN(ChangeList);
+};
+
+// StartPageToken represets the starting pageToken for listing changes in the
+// users corpus or in a team drive.
+// https://developers.google.com/drive/v2/reference/changes/getStartPageToken
+class StartPageToken {
+ public:
+  StartPageToken();
+  ~StartPageToken();
+
+  // Registers the mapping between JSON field names and the members in this
+  // class.
+  static void RegisterJSONConverter(
+      base::JSONValueConverter<StartPageToken>* converter);
+
+  // Creates StartPageToken from parsed JSON
+  static std::unique_ptr<StartPageToken> CreateFrom(const base::Value& value);
+
+  const std::string& start_page_token() const { return start_page_token_; }
+
+  void set_start_page_token(const std::string& token) {
+    start_page_token_ = token;
+  }
+
+ private:
+  // Pareses and initializes data members from content of |value|.
+  // Returns false if parsing fails.
+  bool Parse(const base::Value& value);
+
+  std::string start_page_token_;
 };
 
 }  // namespace google_apis

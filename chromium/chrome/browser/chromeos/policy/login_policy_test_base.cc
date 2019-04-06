@@ -6,6 +6,8 @@
 
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/login/screens/gaia_view.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/user_policy_test_helper.h"
@@ -32,6 +34,8 @@ constexpr char kTestSessionLSIDCookie[] = "fake-session-LSID-cookie";
 
 const char LoginPolicyTestBase::kAccountPassword[] = "letmein";
 const char LoginPolicyTestBase::kAccountId[] = "user@example.com";
+// Empty services list for userInfo.
+const char LoginPolicyTestBase::kEmptyServices[] = "[]";
 
 LoginPolicyTestBase::LoginPolicyTestBase() {
   set_open_about_blank_on_browser_launch(false);
@@ -45,7 +49,7 @@ void LoginPolicyTestBase::SetUp() {
   GetMandatoryPoliciesValue(&mandatory);
   base::DictionaryValue recommended;
   GetRecommendedPoliciesValue(&recommended);
-  user_policy_helper_.reset(new UserPolicyTestHelper(kAccountId));
+  user_policy_helper_.reset(new UserPolicyTestHelper(GetAccount()));
   user_policy_helper_->Init(mandatory, recommended);
   OobeBaseTest::SetUp();
 }
@@ -57,8 +61,20 @@ void LoginPolicyTestBase::SetUpCommandLine(base::CommandLine* command_line) {
 
 void LoginPolicyTestBase::SetUpOnMainThread() {
   SetMergeSessionParams();
-  SetupFakeGaiaForLogin(kAccountId, "", kTestRefreshToken);
+  SetupFakeGaiaForLogin(GetAccount(), "", kTestRefreshToken);
   OobeBaseTest::SetUpOnMainThread();
+
+  FakeGaia::MergeSessionParams params;
+  params.id_token = GetIdToken();
+  fake_gaia_->UpdateMergeSessionParams(params);
+}
+
+std::string LoginPolicyTestBase::GetAccount() const {
+  return kAccountId;
+}
+
+std::string LoginPolicyTestBase::GetIdToken() const {
+  return std::string();
 }
 
 void LoginPolicyTestBase::GetMandatoryPoliciesValue(
@@ -76,10 +92,11 @@ void LoginPolicyTestBase::SetMergeSessionParams() {
   params.auth_code = kTestAuthCode;
   params.refresh_token = kTestRefreshToken;
   params.access_token = kTestAuthLoginAccessToken;
+  params.id_token = GetIdToken();
   params.gaia_uber_token = kTestGaiaUberToken;
   params.session_sid_cookie = kTestSessionSIDCookie;
   params.session_lsid_cookie = kTestSessionLSIDCookie;
-  params.email = kAccountId;
+  params.email = GetAccount();
   fake_gaia_->SetMergeSessionParams(params);
 }
 
@@ -96,8 +113,12 @@ void LoginPolicyTestBase::SkipToLoginScreen() {
 }
 
 void LoginPolicyTestBase::LogIn(const std::string& user_id,
-                                const std::string& password) {
-  GetLoginDisplay()->ShowSigninScreenForCreds(user_id, password);
+                                const std::string& password,
+                                const std::string& services) {
+  chromeos::LoginDisplayHost::default_host()
+      ->GetOobeUI()
+      ->GetGaiaScreenView()
+      ->ShowSigninScreenForTest(user_id, password, services);
 
   content::WindowedNotificationObserver(
       chrome::NOTIFICATION_SESSION_STARTED,

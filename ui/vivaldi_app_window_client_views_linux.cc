@@ -9,7 +9,7 @@
 #include "ui/vivaldi_native_app_window_views_aura.h"
 
 // static
-extensions::NativeAppWindow* VivaldiAppWindowClient::CreateNativeAppWindowImpl(
+VivaldiNativeAppWindow* VivaldiAppWindowClient::CreateNativeAppWindowImpl(
     VivaldiBrowserWindow* app_window,
     const extensions::AppWindow::CreateParams& params) {
   VivaldiNativeAppWindowViewsAura* window = new VivaldiNativeAppWindowViewsAura;

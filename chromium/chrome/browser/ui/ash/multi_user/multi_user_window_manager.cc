@@ -4,16 +4,14 @@
 
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 
-#include "ash/multi_profile_uma.h"
 #include "base/logging.h"
-#include "build/build_config.h"
-#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_stub.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "components/user_manager/user_manager.h"
+#include "ui/base/ui_base_features.h"
 
 namespace {
 MultiUserWindowManager* g_multi_user_window_manager_instance = nullptr;
@@ -26,24 +24,19 @@ MultiUserWindowManager* MultiUserWindowManager::GetInstance() {
 
 MultiUserWindowManager* MultiUserWindowManager::CreateInstance() {
   DCHECK(!g_multi_user_window_manager_instance);
-  ash::MultiProfileUMA::SessionMode mode =
-      ash::MultiProfileUMA::SESSION_SINGLE_USER_MODE;
   // TODO(crbug.com/557406): Enable this component in Mash. The object itself
   // has direct ash dependencies.
-  if (!ash_util::IsRunningInMash() &&
+  if (features::IsAshInBrowserProcess() &&
       SessionControllerClient::IsMultiProfileAvailable()) {
     MultiUserWindowManagerChromeOS* manager =
         new MultiUserWindowManagerChromeOS(
             user_manager::UserManager::Get()->GetActiveUser()->GetAccountId());
     g_multi_user_window_manager_instance = manager;
     manager->Init();
-    mode = ash::MultiProfileUMA::SESSION_SEPARATE_DESKTOP_MODE;
-  }
-  ash::MultiProfileUMA::RecordSessionMode(mode);
-
-  // If there was no instance created yet we create a dummy instance.
-  if (!g_multi_user_window_manager_instance)
+  } else {
+    // Use a stub when multi-profile is not available.
     g_multi_user_window_manager_instance = new MultiUserWindowManagerStub();
+  }
 
   return g_multi_user_window_manager_instance;
 }
@@ -69,6 +62,7 @@ void MultiUserWindowManager::DeleteInstance() {
   g_multi_user_window_manager_instance = nullptr;
 }
 
+// static
 void MultiUserWindowManager::SetInstanceForTest(
     MultiUserWindowManager* instance) {
   if (g_multi_user_window_manager_instance)

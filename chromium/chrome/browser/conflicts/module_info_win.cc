@@ -13,9 +13,9 @@
 
 #include "base/file_version_info.h"
 #include "base/i18n/case_conversion.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 
 namespace {
 
@@ -82,16 +82,18 @@ ModuleInspectionResult::~ModuleInspectionResult() = default;
 
 // ModuleInfoData --------------------------------------------------------------
 
-ModuleInfoData::ModuleInfoData() : process_types(0), module_types(0) {}
+ModuleInfoData::ModuleInfoData() : process_types(0), module_properties(0) {}
 
 ModuleInfoData::~ModuleInfoData() = default;
+
+ModuleInfoData::ModuleInfoData(ModuleInfoData&& module_data) noexcept = default;
 
 // -----------------------------------------------------------------------------
 
 std::unique_ptr<ModuleInspectionResult> InspectModule(
     const StringMapping& env_variable_mapping,
     const ModuleInfoKey& module_key) {
-  auto inspection_result = base::MakeUnique<ModuleInspectionResult>();
+  auto inspection_result = std::make_unique<ModuleInspectionResult>();
 
   PopulateModuleInfoData(module_key, inspection_result.get());
   internal::NormalizeInspectionResult(inspection_result.get());
@@ -99,6 +101,11 @@ std::unique_ptr<ModuleInspectionResult> InspectModule(
                                &inspection_result->location);
 
   return inspection_result;
+}
+
+std::string GenerateCodeId(const ModuleInfoKey& module_key) {
+  return base::StringPrintf("%08X%x", module_key.module_time_date_stamp,
+                            module_key.module_size);
 }
 
 namespace internal {
@@ -134,11 +141,6 @@ void NormalizeInspectionResult(ModuleInspectionResult* inspection_result) {
   if (first_space != base::string16::npos)
     inspection_result->version =
         inspection_result->version.substr(0, first_space);
-
-  // The signer may be returned with trailing nulls.
-  size_t first_null = inspection_result->certificate_info.subject.find(L'\0');
-  if (first_null != base::string16::npos)
-    inspection_result->certificate_info.subject.resize(first_null);
 }
 
 }  // namespace internal

@@ -14,7 +14,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -67,7 +66,7 @@ class LocalFileSyncContextTest : public testing::Test {
   void SetUp() override {
     RegisterSyncableFileSystem();
     ASSERT_TRUE(dir_.CreateUniqueTempDir());
-    in_memory_env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    in_memory_env_ = leveldb_chrome::NewMemEnv("LocalFileSyncContextTest");
 
     ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
     io_task_runner_ = BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
@@ -170,7 +169,7 @@ class LocalFileSyncContextTest : public testing::Test {
     sync_context_->FinalizeExclusiveSync(
         file_system_context, url,
         status == SYNC_STATUS_OK /* clear_local_changes */,
-        base::MessageLoop::QuitWhenIdleClosure());
+        base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
   }
 
   void StartModifyFileOnIOThread(CannedSyncableFileSystem* file_system,
@@ -216,14 +215,13 @@ class LocalFileSyncContextTest : public testing::Test {
                           SyncStatusCode status,
                           LocalFileSyncContext::SyncMode sync_mode) {
     if (sync_mode == LocalFileSyncContext::SYNC_SNAPSHOT) {
-      sync_context_->FinalizeSnapshotSync(
-          file_system_context, url, status,
-          base::Bind(&base::DoNothing));
+      sync_context_->FinalizeSnapshotSync(file_system_context, url, status,
+                                          base::DoNothing());
     } else {
       sync_context_->FinalizeExclusiveSync(
           file_system_context, url,
           status == SYNC_STATUS_OK /* clear_local_changes */,
-          base::Bind(&base::DoNothing));
+          base::DoNothing());
     }
   }
 

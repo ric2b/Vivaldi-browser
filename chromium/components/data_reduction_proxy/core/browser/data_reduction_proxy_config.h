@@ -16,17 +16,20 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/secure_proxy_checker.h"
 #include "components/data_reduction_proxy/core/browser/warmup_url_fetcher.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_type_info.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/previews/core/previews_experiments.h"
 #include "net/base/network_change_notifier.h"
 #include "net/log/net_log_with_source.h"
-#include "net/proxy/proxy_config.h"
-#include "net/proxy/proxy_retry_info.h"
+#include "net/proxy_resolution/proxy_config.h"
+#include "net/proxy_resolution/proxy_retry_info.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -119,34 +122,16 @@ class DataReductionProxyConfig
   // InitDataReductionProxySettings.
   void SetProxyConfig(bool enabled, bool at_startup);
 
-  // Returns true if a Data Reduction Proxy was used for the given |request|.
-  // If true, |proxy_info.proxy_servers.front()| will contain the name of the
-  // proxy that was used. Subsequent entries in |proxy_info.proxy_servers| will
-  // contain the names of the Data Reduction Proxy servers that would be used if
-  // |proxy_info.proxy_servers.front()| is bypassed, if any exist. In addition,
-  // |proxy_info| will note if the proxy used was a fallback. |proxy_info| can
-  // be NULL if the caller isn't interested in its values.
-  virtual bool WasDataReductionProxyUsed(
-      const net::URLRequest* request,
-      DataReductionProxyTypeInfo* proxy_info) const;
-
-  // Returns true if the specified |proxy_server| matches a Data Reduction
-  // Proxy. If true, |proxy_info.proxy_servers.front()| will contain the name of
-  // the proxy that matches. Subsequent entries in |proxy_info.proxy_servers|
-  // will contain the name of the Data Reduction Proxy servers that would be
-  // used if |proxy_info.proxy_servers.front()| is bypassed, if any exist. In
-  // addition, |proxy_info| will note if the proxy was a fallback. |proxy_info|
-  // can be NULL if the caller isn't interested in its values. Virtual for
-  // testing.
-  virtual bool IsDataReductionProxy(
-      const net::ProxyServer& proxy_server,
-      DataReductionProxyTypeInfo* proxy_info) const;
+  // If the specified |proxy_server| matches a Data Reduction Proxy, returns the
+  // DataReductionProxyTypeInfo showing where that proxy is in the list of
+  // configured proxies, otherwise returns an empty optional value.
+  base::Optional<DataReductionProxyTypeInfo> FindConfiguredDataReductionProxy(
+      const net::ProxyServer& proxy_server) const;
 
   // Returns true if this request would be bypassed by the Data Reduction Proxy
   // based on applying the |data_reduction_proxy_config| param rules to the
   // request URL.
-  // Virtualized for mocking.
-  virtual bool IsBypassedByDataReductionProxyLocalRules(
+  bool IsBypassedByDataReductionProxyLocalRules(
       const net::URLRequest& request,
       const net::ProxyConfig& data_reduction_proxy_config) const;
 
@@ -157,8 +142,7 @@ class DataReductionProxyConfig
   // reduction proxies in min_retry_delay (if not NULL). If there are no
   // bypassed data reduction proxies for the request scheme, returns false and
   // does not assign min_retry_delay.
-  // Virtualized for mocking.
-  virtual bool AreDataReductionProxiesBypassed(
+  bool AreDataReductionProxiesBypassed(
       const net::URLRequest& request,
       const net::ProxyConfig& data_reduction_proxy_config,
       base::TimeDelta* min_retry_delay) const;
@@ -204,9 +188,25 @@ class DataReductionProxyConfig
 
   // Returns the details of the proxy to which the warmup URL probe is
   // in-flight. Returns base::nullopt if no warmup probe is in-flight.
+  // Virtualized for testing.
   virtual base::Optional<
       std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
   GetInFlightWarmupProxyDetails() const;
+
+#if defined(OS_CHROMEOS)
+  // Enables getting the network id asynchronously when
+  // GatherEstimatesForNextConnectionType(). This should always be called in
+  // production, because getting the network id involves a blocking call to
+  // recv() in AddressTrackerLinux, and the IO thread should never be blocked.
+  // TODO(https://crbug.com/821607): Remove after the bug is resolved.
+  void EnableGetNetworkIdAsynchronously();
+#endif  // defined(OS_CHROMEOS)
+
+  // When triggering previews, prevent long term black list rules.
+  void SetIgnoreLongTermBlackListRules(bool ignore_long_term_black_list_rules);
+
+  // Returns the value set in SetIgnoreLongTermBlackListRules.
+  bool IgnoreBlackListLongTermRulesForTesting() const;
 
  protected:
   virtual base::TimeTicks GetTicksNow() const;
@@ -274,6 +274,13 @@ class DataReductionProxyConfig
   void OnNetworkChanged(
       net::NetworkChangeNotifier::ConnectionType type) override;
 
+  // Invoked to continue network changed handling after the network id is
+  // retrieved. If |get_network_id_asynchronously_| is set, the network id is
+  // fetched on the worker thread. Otherwise, OnNetworkChanged calls this
+  // directly. This is a workaround for https://crbug.com/821607 where
+  // net::GetWifiSSID() call gets stuck.
+  void ContinueNetworkChanged(const std::string& network_id);
+
   // Requests the secure proxy check URL. Upon completion, returns the results
   // to the caller via the |fetcher_callback|. Virtualized for unit testing.
   virtual void SecureProxyCheck(SecureProxyCheckerCallback fetcher_callback);
@@ -310,18 +317,12 @@ class DataReductionProxyConfig
   // the use of secure proxies.
   void HandleCaptivePortal();
 
-  // Returns true if the current network has captive portal. Virtualized
-  // for testing.
+  // Returns true if the current network has captive portal. Virtualized for
+  // testing.
   virtual bool GetIsCaptivePortal() const;
 
   // Fetches the warmup URL.
   void FetchWarmupProbeURL();
-
-  // Returns true if |proxy_server| is a core data reduction proxy server.
-  // Should be called only if |proxy_server| is a valid data reduction proxy
-  // server.
-  bool IsDataReductionProxyServerCore(
-      const net::ProxyServer& proxy_server) const;
 
   // URL fetcher used for performing the secure proxy check.
   std::unique_ptr<SecureProxyChecker> secure_proxy_checker_;
@@ -336,6 +337,11 @@ class DataReductionProxyConfig
   std::unique_ptr<DataReductionProxyConfigValues> config_values_;
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
+
+#if defined(OS_CHROMEOS)
+  // Whether the network id should be obtained on a worker thread.
+  bool get_network_id_asynchronously_ = false;
+#endif
 
   // The caller must ensure that the |net_log_|, if set, outlives this instance.
   // It is used to create new instances of |net_log_with_source_| on secure
@@ -362,6 +368,9 @@ class DataReductionProxyConfig
   // in-flight.
   bool warmup_url_fetch_in_flight_secure_proxy_;
   bool warmup_url_fetch_in_flight_core_proxy_;
+
+  // When triggerring previews, prevent long term black list rules.
+  bool ignore_long_term_black_list_rules_;
 
   // Should be accessed only on the IO thread. Guaranteed to be non-null during
   // the lifetime of |this| if accessed on the IO thread.

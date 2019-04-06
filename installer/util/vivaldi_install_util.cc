@@ -9,6 +9,7 @@
 #include <shldisp.h>
 #include <shlobj.h>
 #include <stdlib.h>
+#include <tlhelp32.h>
 
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
@@ -19,10 +20,40 @@
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/wmi.h"
 
-// Some of the following code is borrowed from:
-// installer\util\google_chrome_distribution.cc
+using base::PathService;
+
 namespace vivaldi {
 
+namespace constants {
+const wchar_t kVivaldiAutoUpdate[] = L"AutoUpdate";
+const wchar_t kVivaldiDeltaPatchFailed[] = L"DeltaPatchFailed";
+const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
+const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
+
+// Vivaldi installer settings from last install.
+const wchar_t kVivaldiInstallerDestinationFolder[] = L"DestinationFolder";
+const wchar_t kVivaldiInstallerInstallType[] = L"InstallType";
+const wchar_t kVivaldiInstallerDefaultBrowser[] = L"DefaultBrowser";
+const wchar_t kVivaldiInstallerRegisterBrowser[] = L"RegisterBrowser";
+const wchar_t kVivaldiInstallerAdvancedMode[] = L"AdvancedMode";
+
+// Vivaldi paths and filenames
+const wchar_t kVivaldiUpdateNotifierExe[] = L"update_notifier.exe";
+const wchar_t kVivaldiUpdateNotifierOldExe[] = L"update_notifier.old";
+
+// Vivaldi installer command line switches.
+const char kVivaldi[] = "vivaldi";
+const char kVivaldiInstallDir[] = "vivaldi-install-dir";
+const char kVivaldiStandalone[] = "vivaldi-standalone";
+const char kVivaldiForceLaunch[] = "vivaldi-force-launch";
+const char kVivaldiUpdate[] = "vivaldi-update";
+const char kVivaldiRegisterStandalone[] = "vivaldi-register-standalone";
+const char kVivaldiSilent[] = "vivaldi-silent";
+
+} // namespace constants
+
+// Some of the following code is borrowed from:
+// installer\util\google_chrome_distribution.cc
 base::string16 LocalizeUrl(const wchar_t* url) {
   std::wstring lang = installer::GetCurrentTranslation();
   return base::ReplaceStringPlaceholders(url, lang.c_str(), NULL);
@@ -173,11 +204,79 @@ base::string16 GetNewFeaturesUrl(const base::Version& version) {
         os_version;
   return url;
 }
+
+std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
+  const base::FilePath& path) {
+  std::vector<base::win::ScopedHandle> processes;
+
+  if (path.empty())
+    return processes;
+  VLOG(1) << "GetRunningProcessesForPath: path=" << path.value();
+  PROCESSENTRY32 entry = { sizeof(PROCESSENTRY32) };
+  base::win::ScopedHandle snapshot(
+    CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
+  if (!snapshot.IsValid() || Process32First(snapshot.Get(), &entry) == FALSE)
+    return processes;
+  do {
+    if (!base::FilePath::CompareEqualIgnoreCase(
+      entry.szExeFile, path.BaseName().value()))  // vivaldi.exe
+      continue;
+    base::win::ScopedHandle process(
+      OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+        entry.th32ProcessID));
+    if (!process.IsValid())
+      continue;
+
+    // Check if process is dead already.
+    if (WaitForSingleObject(process.Get(), 0) == WAIT_TIMEOUT)
+      continue;
+
+    wchar_t process_image_name[MAX_PATH];
+    DWORD size = arraysize(process_image_name);
+    if (QueryFullProcessImageName(process.Get(), 0, process_image_name,
+      &size) == FALSE)
+      continue;
+    VLOG(1) << "GetRunningProcessesForPath: process_image_name=" << process_image_name;
+    if (!base::FilePath::CompareEqualIgnoreCase(path.value(),
+      process_image_name))
+      continue;
+
+    processes.push_back(std::move(process));
+  } while (Process32Next(snapshot.Get(), &entry) != FALSE);
+  VLOG(1) << "GetRunningProcessesForPath: processes.size()=" << processes.size();
+  return processes;
+}
+
+void KillProcesses(const std::vector<base::win::ScopedHandle>& processes) {
+  base::string16 cmd_line_string(L"taskkill.exe /F");
+  std::vector<DWORD>::iterator it;
+  for (auto& process : processes) {
+    DCHECK(process.IsValid());
+    cmd_line_string +=
+      base::StringPrintf(L" /PID %u", GetProcessId(process.Get()));
+  }
+
+  WCHAR* cmd_line = new WCHAR[cmd_line_string.length() + 1];
+  std::copy(cmd_line_string.begin(), cmd_line_string.end(), cmd_line);
+  cmd_line[cmd_line_string.length()] = 0;
+
+  STARTUPINFO si = { sizeof(si) };
+  PROCESS_INFORMATION pi = { 0 };
+
+  if (CreateProcess(NULL, cmd_line, NULL, NULL, FALSE,
+    CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  }
+  delete[] cmd_line;
+}
+
 }  // namespace vivaldi
 
 // static
 void InstallUtil::ShowInstallerResultMessage(installer::InstallStatus status, int string_resource_id) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(installer::switches::kVivaldi) &&
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(vivaldi::constants::kVivaldi) &&
     !base::CommandLine::ForCurrentProcess()->HasSwitch(installer::switches::kUninstall)) {
     base::string16 msg = installer::GetLocalizedString(string_resource_id);
     MessageBox(NULL, msg.c_str(), NULL, MB_ICONINFORMATION | MB_SETFOREGROUND);

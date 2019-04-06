@@ -1,5 +1,5 @@
 include_rules = [
   "+components/crash/core/common/crash_key.h",
   "+crypto",
-  "+ppapi/cpp/logging.h",
+  "+third_party/boringssl/src/include",
 ]

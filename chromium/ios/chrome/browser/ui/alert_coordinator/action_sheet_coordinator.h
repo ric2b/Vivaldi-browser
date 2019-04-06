@@ -10,7 +10,7 @@
 // Coordinator for displaying Action Sheets.
 @interface ActionSheetCoordinator : AlertCoordinator
 
-// Init with the parameters for anchoring the popover.
+// Init with the parameters for anchoring the popover to a UIView.
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                      title:(NSString*)title
                                    message:(NSString*)message
@@ -18,9 +18,20 @@
                                       view:(UIView*)view
     NS_DESIGNATED_INITIALIZER;
 
+// Init with the parameters for anchoring the popover to a UIBarButtonItem.
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                     title:(NSString*)title
+                                   message:(NSString*)message
+                             barButtonItem:(UIBarButtonItem*)barButtonItem
+    NS_DESIGNATED_INITIALIZER;
+
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                      title:(NSString*)title
                                    message:(NSString*)message NS_UNAVAILABLE;
+
+// Configures the underlying UIAlertController's popover arrow direction.
+// Default is UIPopoverArrowDirectionAny.
+@property(nonatomic, assign) UIPopoverArrowDirection popoverArrowDirection;
 
 @end
 

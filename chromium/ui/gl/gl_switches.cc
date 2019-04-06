@@ -7,27 +7,30 @@
 
 namespace gl {
 
-const char kGLImplementationDesktopName[]     = "desktop";
-const char kGLImplementationOSMesaName[]      = "osmesa";
-const char kGLImplementationAppleName[]       = "apple";
-const char kGLImplementationEGLName[]         = "egl";
-const char kGLImplementationANGLEName[]       = "angle";
+const char kGLImplementationDesktopName[] = "desktop";
+const char kGLImplementationOSMesaName[] = "osmesa";
+const char kGLImplementationAppleName[] = "apple";
+const char kGLImplementationEGLName[] = "egl";
+const char kGLImplementationANGLEName[] = "angle";
 const char kGLImplementationSwiftShaderName[] = "swiftshader";
 const char kGLImplementationSwiftShaderForWebGLName[] = "swiftshader-webgl";
-const char kGLImplementationMockName[]        = "mock";
+const char kGLImplementationMockName[] = "mock";
 const char kGLImplementationStubName[] = "stub";
+const char kGLImplementationDisabledName[] = "disabled";
 
 const char kANGLEImplementationDefaultName[]  = "default";
 const char kANGLEImplementationD3D9Name[]     = "d3d9";
 const char kANGLEImplementationD3D11Name[]    = "d3d11";
 const char kANGLEImplementationOpenGLName[]   = "gl";
 const char kANGLEImplementationOpenGLESName[] = "gles";
-const char kANGLEImplementationNullName[]     = "null";
+const char kANGLEImplementationNullName[] = "null";
+const char kANGLEImplementationVulkanName[] = "vulkan";
 
 // Special switches for "NULL"/stub driver implementations.
 const char kANGLEImplementationD3D11NULLName[] = "d3d11-null";
 const char kANGLEImplementationOpenGLNULLName[] = "gl-null";
 const char kANGLEImplementationOpenGLESNULLName[] = "gles-null";
+const char kANGLEImplementationVulkanNULLName[] = "vulkan-null";
 
 }  // namespace gl
 
@@ -39,12 +42,7 @@ const char kDisableD3D11[]                  = "disable-d3d11";
 // Disables use of ES3 backend (use ES2 backend instead).
 const char kDisableES3GLContext[]           = "disable-es3-gl-context";
 
-// Stop the GPU from synchronizing on the vsync before presenting.
-// We can select from the options below:
-//  beginframe: Next frame can start without any delay on cc::scheduler in
-//              renderer compositors.
-//  gpu: Disable display and browser vsync.
-//  default: Set both flags.
+// Stop the GPU from synchronizing presentation with vblank.
 const char kDisableGpuVsync[]               = "disable-gpu-vsync";
 
 // Turns on GPU logging (debug build only).
@@ -114,9 +112,6 @@ const char kEnableDirectCompositionLayers[] =
 const char kDisableDirectCompositionLayers[] =
     "disable-direct-composition-layers";
 
-// Enables the presentation callback for SwapBuffers, SwapBuffersAsync, etc.
-const char kEnablePresentationCallback[] = "enable-presentation-callback";
-
 // This is the list of switches passed from this file that are passed from the
 // GpuProcessHost to the GPU Process. Add your switch to this list if you need
 // to read it in the GPU process, else don't add it.
@@ -135,7 +130,6 @@ const char* const kGLSwitchesCopiedFromGpuProcessHost[] = {
     kEnableSwapBuffersWithBounds,
     kEnableDirectCompositionLayers,
     kDisableDirectCompositionLayers,
-    kEnablePresentationCallback,
 };
 const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
     arraysize(kGLSwitchesCopiedFromGpuProcessHost);
@@ -143,12 +137,6 @@ const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
 }  // namespace switches
 
 namespace features {
-
-#if defined(OS_WIN)
-// Wait for D3D VSync signals in GPU process (as opposed to delay based VSync
-// generated in Browser process based on VSync parameters).
-const base::Feature kD3DVsync{"D3DVsync", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_WIN)
 
 // Allow putting a video swapchain underneath the main swapchain, so overlays
 // can be used even if there are controls on top of the video. This requires
@@ -164,5 +152,9 @@ const base::Feature kDirectCompositionComplexOverlays{
 // Allow using overlays for non-root render passes.
 const base::Feature kDirectCompositionNonrootOverlays{
     "DirectCompositionNonrootOverlays", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Default to using ANGLE's OpenGL backend
+const base::Feature kDefaultANGLEOpenGL{"DefaultANGLEOpenGL",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features

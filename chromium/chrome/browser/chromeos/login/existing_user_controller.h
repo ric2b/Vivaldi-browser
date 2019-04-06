@@ -30,7 +30,7 @@
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chromeos/login/auth/login_performer.h"
 #include "chromeos/login/auth/user_context.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -49,20 +49,16 @@ class CloudPolicySettings;
 namespace chromeos {
 
 class CrosSettings;
-class LoginDisplayHost;
+class LoginDisplay;
 class OAuth2TokenInitializer;
 
 namespace login {
 class NetworkStateHelper;
 }
 
-// ExistingUserController is used to handle login when someone has
-// already logged into the machine.
-// To use ExistingUserController create an instance of it and invoke Init.
-// When Init is called it creates LoginDisplay instance which encapsulates
-// all login UI implementation.
-// ExistingUserController maintains it's own life cycle and deletes itself when
-// the user logs in (or chooses to see other settings).
+// ExistingUserController is used to handle login when someone has already
+// logged into the machine. ExistingUserController is created and owned by
+// LoginDisplayHost.
 class ExistingUserController
     : public LoginDisplay::Delegate,
       public content::NotificationObserver,
@@ -71,14 +67,13 @@ class ExistingUserController
       public ArcKioskAppManager::ArcKioskAppManagerObserver,
       public policy::MinimumVersionPolicyHandler::Observer {
  public:
-  // All UI initialization is deferred till Init() call.
-  explicit ExistingUserController(LoginDisplayHost* host);
-  ~ExistingUserController() override;
+  // Returns the current existing user controller fetched from the current
+  // LoginDisplayHost instance.
+  static ExistingUserController* current_controller();
 
-  // Returns the current existing user controller if it has been created.
-  static ExistingUserController* current_controller() {
-    return current_controller_;
-  }
+  // All UI initialization is deferred till Init() call.
+  ExistingUserController();
+  ~ExistingUserController() override;
 
   // Creates and shows login UI for known users.
   void Init(const user_manager::UserList& users);
@@ -89,29 +84,38 @@ class ExistingUserController
   // Stop the auto-login timer when a login attempt begins.
   void StopAutoLoginTimer();
 
+  // Cancels current password changed flow.
+  void CancelPasswordChangedFlow();
+
+  // Decrypt cryptohome using user provided |old_password| and migrate to new
+  // password.
+  void MigrateUserData(const std::string& old_password);
+
+  // Ignore password change, remove existing cryptohome and force full sync of
+  // user data.
+  void ResyncUserData();
+
   // LoginDisplay::Delegate: implementation
-  void CancelPasswordChangedFlow() override;
-  void CompleteLogin(const UserContext& user_context) override;
   base::string16 GetConnectedNetworkName() override;
   bool IsSigninInProgress() const override;
   void Login(const UserContext& user_context,
              const SigninSpecifics& specifics) override;
-  void MigrateUserData(const std::string& old_password) override;
   void OnSigninScreenReady() override;
-  void OnGaiaScreenReady() override;
   void OnStartEnterpriseEnrollment() override;
   void OnStartEnableDebuggingScreen() override;
   void OnStartKioskEnableScreen() override;
   void OnStartKioskAutolaunchScreen() override;
   void ResetAutoLoginTimer() override;
-  void ResyncUserData() override;
-  void SetDisplayEmail(const std::string& email) override;
-  void SetDisplayAndGivenName(const std::string& display_name,
-                              const std::string& given_name) override;
   void ShowWrongHWIDScreen() override;
   void ShowUpdateRequiredScreen() override;
   void Signout() override;
-  bool IsUserWhitelisted(const AccountId& account_id) override;
+
+  void CompleteLogin(const UserContext& user_context);
+  void OnGaiaScreenReady();
+  void SetDisplayEmail(const std::string& email);
+  void SetDisplayAndGivenName(const std::string& display_name,
+                              const std::string& given_name);
+  bool IsUserWhitelisted(const AccountId& account_id);
 
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -129,13 +133,6 @@ class ExistingUserController
   void set_login_status_consumer(AuthStatusConsumer* consumer) {
     auth_status_consumer_ = consumer;
   }
-
-  // Returns the LoginDisplay created and owned by this controller.
-  // Used for testing.
-  LoginDisplay* login_display() { return login_display_.get(); }
-
-  // Returns the LoginDisplayHost for this controller.
-  LoginDisplayHost* login_display_host() { return host_; }
 
   // Returns value of LoginPerformer::auth_mode() (cached if performer is
   // destroyed).
@@ -303,6 +300,9 @@ class ExistingUserController
                      bool success,
                      cryptohome::MountError return_code);
 
+  // Triggers online login for the given |account_id|.
+  void ForceOnlineLoginForAccountId(const AccountId& account_id);
+
   // Clear the recorded displayed email, displayed name, given name so it won't
   // affect any future attempts.
   void ClearRecordedNames();
@@ -317,6 +317,9 @@ class ExistingUserController
 
   // Auto-login timeout, in milliseconds.
   int auto_login_delay_;
+
+  // True if a profile has been prepared.
+  bool profile_prepared_ = false;
 
   // AccountId for public session auto-login.
   AccountId public_session_auto_login_account_id_ = EmptyAccountId();
@@ -337,19 +340,9 @@ class ExistingUserController
   // Whether the last login attempt was an auto login.
   bool last_login_attempt_was_auto_login_ = false;
 
-  // OOBE/login display host.
-  LoginDisplayHost* host_;
-
-  // Login UI implementation instance.
-  std::unique_ptr<LoginDisplay> login_display_;
-
   // Number of login attempts. Used to show help link when > 1 unsuccessful
   // logins for the same user.
   size_t num_login_attempts_ = 0;
-
-  // Pointer to the current instance of the controller to be used by
-  // automation tests.
-  static ExistingUserController* current_controller_;
 
   // Interface to the signed settings store.
   CrosSettings* cros_settings_;

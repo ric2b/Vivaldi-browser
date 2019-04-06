@@ -21,11 +21,9 @@
 #include "media/base/audio_discard_helper.h"
 #include "media/base/demuxer_stream.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
-#include "platform_media/common/pipeline_stats.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_mime_util.h"
 #include "platform_media/renderer/decoders/mac/at_aac_helper.h"
-#include "platform_media/renderer/decoders/mac/at_mp3_helper.h"
 
 namespace media {
 
@@ -126,10 +124,6 @@ std::unique_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
   switch (codec) {
     case AudioCodec::kCodecAAC:
       return base::WrapUnique(new ATAACHelper);
-#if defined(PLATFORM_MEDIA_MP3)
-    case AudioCodec::kCodecMP3:
-      return base::WrapUnique(new ATMP3Helper);
-#endif
     default:
       LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                 << " Unsupported codec : " << GetCodecName(codec);
@@ -224,15 +218,21 @@ std::string ATAudioDecoder::GetDisplayName() const {
 void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                 CdmContext* cdm_context,
                                 const InitCB& init_cb,
-                                const OutputCB& output_cb) {
+                                const OutputCB& output_cb,
+                                const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(config.IsValidConfig());
-
-  pipeline_stats::AddDecoderClass(GetDisplayName());
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " with AudioDecoderConfig :"
           << Loggable(config);
+
+  if (config.is_encrypted()) {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Unsupported Encrypted Audio codec : " << GetCodecName(config.codec());
+    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
+    return;
+  }
 
   codec_helper_ = CreateCodecHelper(config.codec());
   if (!codec_helper_) {
@@ -267,7 +267,6 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
           base::Bind(&ATAudioDecoder::ConvertAudio, base::Unretained(this)))) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": Initialize helper failed for codec : " << GetCodecName(config.codec());
-    pipeline_stats::ReportAudioDecoderInitResult(false);
     task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
   }
@@ -275,13 +274,16 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << ": Initialize helper successful for codec : " << GetCodecName(config.codec());
 
-  pipeline_stats::ReportAudioDecoderInitResult(true);
+  debug_buffer_logger_.Initialize(GetCodecName(config_.codec()));
+
   task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, true));
 }
 
-void ATAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                             const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+
+  debug_buffer_logger_.Log(buffer);
 
   const DecodeStatus status =
       codec_helper_->ProcessBuffer(buffer) ? DecodeStatus::OK : DecodeStatus::DECODE_ERROR;
@@ -289,6 +291,9 @@ void ATAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   if (status == DecodeStatus::DECODE_ERROR) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " ProcessBuffer failed : DECODE_ERROR";
+  } else {
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " ProcessBuffer succeeded";
   }
 
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
@@ -324,32 +329,67 @@ bool ATAudioDecoder::InitializeConverter(
   OSStatus status = AudioConverterNew(&input_format, &output_format_,
                                       converter_.InitializeInto());
   if (status != noErr) {
-    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << ": Failed to create AudioConverter"
-                             << " Error Status : " << status;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": Failed to create AudioConverter"
+               << " Error Status : " << status;
     return false;
   }
 
   status = AudioConverterSetProperty(
       converter_, kAudioConverterInputChannelLayout,
       sizeof(*input_channel_layout), input_channel_layout.get());
+
+  if (status == kAudio_ParamError &&
+     input_channel_layout->mChannelLayoutTag == kAudioChannelLayoutTag_Mono) {
+    // Fix for VB-41624 and VB-40534 - Doesn't like Mono as input layout for AAC
+    input_channel_layout->mChannelLayoutTag = kAudioChannelLayoutTag_Stereo;
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Changed input layout from Mono to Stereo";
+    status = AudioConverterSetProperty(
+        converter_, kAudioConverterInputChannelLayout,
+        sizeof(*input_channel_layout), input_channel_layout.get());
+  }
   if (status != noErr) {
-    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << ": Failed to set input channel layout"
-                             << " Error Status : " << status;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": Failed to set input channel layout"
+               << " Error Status : " << status;
     return false;
   }
 
   AudioChannelLayout output_channel_layout = {0};
   output_channel_layout.mChannelLayoutTag =
       ChromeChannelLayoutToCoreAudioTag(config_.channel_layout());
+
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Input Channel Layout : " << Loggable(input_channel_layout->mChannelLayoutTag);
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Output Channel Layout : " << Loggable(output_channel_layout.mChannelLayoutTag);
+
+  // Fix for VB-40530 : If output layout is Mono and input layout is not, the
+  // below call to AudioConverterSetProperty will fail, so in that case use the
+  // input channel layout
+  // See also these tests :
+  // LegacyByDts/MSEPipelineIntegrationTest.ADTS/0
+  // LegacyByDts/MSEPipelineIntegrationTest.ADTS_TimestampOffset/0
+
+  if (output_channel_layout.mChannelLayoutTag == kAudioChannelLayoutTag_Mono &&
+      input_channel_layout->mChannelLayoutTag != kAudioChannelLayoutTag_Mono) {
+    output_channel_layout.mChannelLayoutTag = input_channel_layout->mChannelLayoutTag;
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Changed output layout from Mono to "
+                 << Loggable(input_channel_layout->mChannelLayoutTag);
+  } else {
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Kept layout " << Loggable(output_channel_layout.mChannelLayoutTag);
+  }
+
   status = AudioConverterSetProperty(
       converter_, kAudioConverterOutputChannelLayout,
       sizeof(output_channel_layout), &output_channel_layout);
   if (status != noErr) {
-    OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << ": Failed to set output channel layout :"
-                             << " Error Status : " << status;
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": Failed to set output channel layout :"
+               << " Error Status : " << status;
     return false;
   }
 
@@ -375,7 +415,6 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
   // defined below.
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " input_samples_per_second : " << config_.input_samples_per_second()
           << " samples_per_second : " << config_.samples_per_second();
 
   ChannelLayout layout = config_.channel_layout();
@@ -383,7 +422,6 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
   if (channels != config_.channels())
     layout = GuessChannelLayout(channels);
 
-  // FEATURE_INPUT_SAMPLES_PER_SECOND
   scoped_refptr<AudioBuffer> output =
       AudioBuffer::CreateBuffer(kOutputSampleFormat, layout, channels,
                                 output_format_.mSampleRate, output_frame_count);
@@ -450,7 +488,7 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
             << dequeued_input->timestamp();
 
     // ProcessBuffers() computes and sets the timestamp on |output|.
-    if (discard_helper_->ProcessBuffers(dequeued_input, output))
+    if (discard_helper_->ProcessBuffers(*dequeued_input, output))
       task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
   }
 
@@ -477,10 +515,8 @@ void ATAudioDecoder::ResetTimestampState() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " input_samples_per_second : " << config_.input_samples_per_second()
           << " samples_per_second : " << config_.samples_per_second();
 
-  // FEATURE_INPUT_SAMPLES_PER_SECOND
   discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
                                                config_.codec_delay(), false));
   discard_helper_->Reset(config_.codec_delay());

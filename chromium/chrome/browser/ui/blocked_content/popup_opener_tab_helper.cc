@@ -14,19 +14,18 @@
 #include "chrome/browser/ui/blocked_content/tab_under_navigation_throttle.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
-#include "services/metrics/public/cpp/ukm_source_id.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(PopupOpenerTabHelper);
 
 // static
 void PopupOpenerTabHelper::CreateForWebContents(
     content::WebContents* contents,
-    std::unique_ptr<base::TickClock> tick_clock) {
+    const base::TickClock* tick_clock) {
   DCHECK(contents);
   if (!FromWebContents(contents)) {
-    contents->SetUserData(UserDataKey(),
-                          base::WrapUnique(new PopupOpenerTabHelper(
-                              contents, std::move(tick_clock))));
+    contents->SetUserData(
+        UserDataKey(),
+        base::WrapUnique(new PopupOpenerTabHelper(contents, tick_clock)));
   }
 }
 
@@ -62,35 +61,31 @@ void PopupOpenerTabHelper::OnDidTabUnder() {
   visible_time_before_tab_under_ = visibility_tracker_->GetForegroundDuration();
 }
 
-PopupOpenerTabHelper::PopupOpenerTabHelper(
-    content::WebContents* web_contents,
-    std::unique_ptr<base::TickClock> tick_clock)
-    : content::WebContentsObserver(web_contents),
-      tick_clock_(std::move(tick_clock)) {
+PopupOpenerTabHelper::PopupOpenerTabHelper(content::WebContents* web_contents,
+                                           const base::TickClock* tick_clock)
+    : content::WebContentsObserver(web_contents), tick_clock_(tick_clock) {
   visibility_tracker_ = std::make_unique<ScopedVisibilityTracker>(
-      tick_clock_.get(), web_contents->IsVisible());
+      tick_clock_,
+      web_contents->GetVisibility() != content::Visibility::HIDDEN);
 }
 
-void PopupOpenerTabHelper::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->HasCommitted() ||
-      !navigation_handle->IsInMainFrame() ||
-      navigation_handle->IsSameDocument()) {
-    return;
-  }
-  last_committed_source_id_ = ukm::ConvertToSourceId(
-      navigation_handle->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
-}
-
-void PopupOpenerTabHelper::WasShown() {
-  visibility_tracker_->OnShown();
-}
-
-void PopupOpenerTabHelper::WasHidden() {
-  visibility_tracker_->OnHidden();
+void PopupOpenerTabHelper::OnVisibilityChanged(content::Visibility visibility) {
+  // TODO(csharrison): Consider handling OCCLUDED tabs the same way as HIDDEN
+  // tabs.
+  if (visibility == content::Visibility::HIDDEN)
+    visibility_tracker_->OnHidden();
+  else
+    visibility_tracker_->OnShown();
 }
 
 void PopupOpenerTabHelper::DidGetUserInteraction(
     const blink::WebInputEvent::Type type) {
   has_opened_popup_since_last_user_gesture_ = false;
+}
+
+void PopupOpenerTabHelper::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  // Treat browser-initiated navigations as user interactions.
+  if (!navigation_handle->IsRendererInitiated())
+    has_opened_popup_since_last_user_gesture_ = false;
 }

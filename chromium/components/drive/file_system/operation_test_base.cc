@@ -4,14 +4,21 @@
 
 #include "components/drive/file_system/operation_test_base.h"
 
+#include <memory>
+
 #include "base/task_scheduler/post_task.h"
+#include "components/drive/chromeos/about_resource_loader.h"
+#include "components/drive/chromeos/about_resource_root_folder_id_loader.h"
 #include "components/drive/chromeos/change_list_loader.h"
 #include "components/drive/chromeos/fake_free_disk_space_getter.h"
 #include "components/drive/chromeos/file_cache.h"
 #include "components/drive/chromeos/file_system/operation_delegate.h"
+#include "components/drive/chromeos/loader_controller.h"
 #include "components/drive/chromeos/resource_metadata.h"
+#include "components/drive/chromeos/start_page_token_loader.h"
 #include "components/drive/event_logger.h"
 #include "components/drive/file_change.h"
+#include "components/drive/file_system_core_util.h"
 #include "components/drive/job_scheduler.h"
 #include "components/drive/service/fake_drive_service.h"
 #include "components/drive/service/test_util.h"
@@ -22,11 +29,9 @@
 namespace drive {
 namespace file_system {
 
-OperationTestBase::LoggingDelegate::LoggingDelegate() {
-}
+OperationTestBase::LoggingDelegate::LoggingDelegate() = default;
 
-OperationTestBase::LoggingDelegate::~LoggingDelegate() {
-}
+OperationTestBase::LoggingDelegate::~LoggingDelegate() = default;
 
 void OperationTestBase::LoggingDelegate::OnFileChangedByOperation(
     const FileChange& changed_files) {
@@ -51,33 +56,31 @@ bool OperationTestBase::LoggingDelegate::WaitForSyncComplete(
       false : wait_for_sync_complete_handler_.Run(local_id, callback);
 }
 
-OperationTestBase::OperationTestBase() {
-}
+OperationTestBase::OperationTestBase() = default;
 
 OperationTestBase::OperationTestBase(int test_thread_bundle_options)
     : thread_bundle_(test_thread_bundle_options) {
 }
 
-OperationTestBase::~OperationTestBase() {
-}
+OperationTestBase::~OperationTestBase() = default;
 
 void OperationTestBase::SetUp() {
   blocking_task_runner_ =
       base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()});
 
-  pref_service_.reset(new TestingPrefServiceSimple);
+  pref_service_ = std::make_unique<TestingPrefServiceSimple>();
   test_util::RegisterDrivePrefs(pref_service_->registry());
 
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
-  logger_.reset(new EventLogger);
+  logger_ = std::make_unique<EventLogger>();
 
-  fake_drive_service_.reset(new FakeDriveService);
+  fake_drive_service_ = std::make_unique<FakeDriveService>();
   ASSERT_TRUE(test_util::SetUpTestEntries(fake_drive_service_.get()));
 
-  scheduler_.reset(new JobScheduler(pref_service_.get(), logger_.get(),
-                                    fake_drive_service_.get(),
-                                    blocking_task_runner_.get(), nullptr));
+  scheduler_ = std::make_unique<JobScheduler>(
+      pref_service_.get(), logger_.get(), fake_drive_service_.get(),
+      blocking_task_runner_.get(), nullptr);
 
   metadata_storage_.reset(new internal::ResourceMetadataStorage(
       temp_dir_.GetPath(), blocking_task_runner_.get()));
@@ -91,7 +94,7 @@ void OperationTestBase::SetUp() {
   content::RunAllTasksUntilIdle();
   ASSERT_TRUE(success);
 
-  fake_free_disk_space_getter_.reset(new FakeFreeDiskSpaceGetter);
+  fake_free_disk_space_getter_ = std::make_unique<FakeFreeDiskSpaceGetter>();
   cache_.reset(new internal::FileCache(
       metadata_storage_.get(), temp_dir_.GetPath(), blocking_task_runner_.get(),
       fake_free_disk_space_getter_.get()));
@@ -120,16 +123,19 @@ void OperationTestBase::SetUp() {
   ASSERT_EQ(FILE_ERROR_OK, error);
 
   // Makes sure the FakeDriveService's content is loaded to the metadata_.
-  about_resource_loader_.reset(new internal::AboutResourceLoader(
-      scheduler_.get()));
-  loader_controller_.reset(new internal::LoaderController);
-  change_list_loader_.reset(new internal::ChangeListLoader(
-      logger_.get(),
-      blocking_task_runner_.get(),
-      metadata_.get(),
-      scheduler_.get(),
-      about_resource_loader_.get(),
-      loader_controller_.get()));
+  about_resource_loader_ =
+      std::make_unique<internal::AboutResourceLoader>(scheduler_.get());
+  root_folder_id_loader_ =
+      std::make_unique<internal::AboutResourceRootFolderIdLoader>(
+          about_resource_loader_.get());
+  start_page_token_loader_ = std::make_unique<internal::StartPageTokenLoader>(
+      drive::util::kTeamDriveIdDefaultCorpus, scheduler_.get());
+  loader_controller_ = std::make_unique<internal::LoaderController>();
+  change_list_loader_ = std::make_unique<internal::ChangeListLoader>(
+      logger_.get(), blocking_task_runner_.get(), metadata_.get(),
+      scheduler_.get(), root_folder_id_loader_.get(),
+      start_page_token_loader_.get(), loader_controller_.get(),
+      util::kTeamDriveIdDefaultCorpus, util::GetDriveMyDriveRootPath());
   change_list_loader_->LoadIfNeeded(
       google_apis::test_util::CreateCopyResultCallback(&error));
   content::RunAllTasksUntilIdle();

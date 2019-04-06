@@ -31,6 +31,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -122,6 +123,12 @@ class NetInternalsTest::MessageHandler : public content::WebUIMessageHandler {
  private:
   void RegisterMessages() override;
 
+  void RegisterMessage(const std::string& message,
+                       const content::WebUI::MessageCallback& handler);
+
+  void HandleMessage(const content::WebUI::MessageCallback& handler,
+                     const base::ListValue* data);
+
   // Runs NetInternalsTest.callback with the given value.
   void RunJavascriptCallback(base::Value* value);
 
@@ -187,43 +194,67 @@ NetInternalsTest::MessageHandler::MessageHandler(
 }
 
 void NetInternalsTest::MessageHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("getTestServerURL",
-      base::Bind(&NetInternalsTest::MessageHandler::GetTestServerURL,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("addCacheEntry",
-      base::Bind(&NetInternalsTest::MessageHandler::AddCacheEntry,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+  RegisterMessage(
+      "getTestServerURL",
+      base::BindRepeating(&NetInternalsTest::MessageHandler::GetTestServerURL,
+                          base::Unretained(this)));
+  RegisterMessage(
+      "addCacheEntry",
+      base::BindRepeating(&NetInternalsTest::MessageHandler::AddCacheEntry,
+                          base::Unretained(this)));
+  RegisterMessage(
       "changeNetwork",
-      base::Bind(&NetInternalsTest::MessageHandler::ChangeNetwork,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("loadPage",
-      base::Bind(&NetInternalsTest::MessageHandler::LoadPage,
-                  base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("prerenderPage",
-      base::Bind(&NetInternalsTest::MessageHandler::PrerenderPage,
-                  base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("navigateToPrerender",
-      base::Bind(&NetInternalsTest::MessageHandler::NavigateToPrerender,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("createIncognitoBrowser",
-      base::Bind(&NetInternalsTest::MessageHandler::CreateIncognitoBrowser,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("closeIncognitoBrowser",
-      base::Bind(&NetInternalsTest::MessageHandler::CloseIncognitoBrowser,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("getNetLogFileContents",
-      base::Bind(
-          &NetInternalsTest::MessageHandler::GetNetLogFileContents,
-          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
+      base::BindRepeating(&NetInternalsTest::MessageHandler::ChangeNetwork,
+                          base::Unretained(this)));
+  RegisterMessage("loadPage", base::BindRepeating(
+                                  &NetInternalsTest::MessageHandler::LoadPage,
+                                  base::Unretained(this)));
+  RegisterMessage(
+      "prerenderPage",
+      base::BindRepeating(&NetInternalsTest::MessageHandler::PrerenderPage,
+                          base::Unretained(this)));
+  RegisterMessage("navigateToPrerender",
+                  base::BindRepeating(
+                      &NetInternalsTest::MessageHandler::NavigateToPrerender,
+                      base::Unretained(this)));
+  RegisterMessage("createIncognitoBrowser",
+                  base::BindRepeating(
+                      &NetInternalsTest::MessageHandler::CreateIncognitoBrowser,
+                      base::Unretained(this)));
+  RegisterMessage("closeIncognitoBrowser",
+                  base::BindRepeating(
+                      &NetInternalsTest::MessageHandler::CloseIncognitoBrowser,
+                      base::Unretained(this)));
+  RegisterMessage("getNetLogFileContents",
+                  base::BindRepeating(
+                      &NetInternalsTest::MessageHandler::GetNetLogFileContents,
+                      base::Unretained(this)));
+  RegisterMessage(
       "setUpTestReportURI",
-      base::Bind(&NetInternalsTest::MessageHandler::SetUpTestReportURI,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("enableDataReductionProxy",
-      base::Bind(
+      base::BindRepeating(&NetInternalsTest::MessageHandler::SetUpTestReportURI,
+                          base::Unretained(this)));
+  RegisterMessage(
+      "enableDataReductionProxy",
+      base::BindRepeating(
           &NetInternalsTest::MessageHandler::EnableDataReductionProxy,
           base::Unretained(this)));
+}
+
+void NetInternalsTest::MessageHandler::RegisterMessage(
+    const std::string& message,
+    const content::WebUI::MessageCallback& handler) {
+  web_ui()->RegisterMessageCallback(
+      message,
+      base::BindRepeating(&NetInternalsTest::MessageHandler::HandleMessage,
+                          base::Unretained(this), handler));
+}
+
+void NetInternalsTest::MessageHandler::HandleMessage(
+    const content::WebUI::MessageCallback& handler,
+    const base::ListValue* data) {
+  // The handler might run a nested loop to wait for something.
+  base::MessageLoopCurrent::ScopedNestableTaskAllower nestable_task_allower;
+  handler.Run(data);
 }
 
 void NetInternalsTest::MessageHandler::RunJavascriptCallback(
@@ -330,7 +361,7 @@ void NetInternalsTest::MessageHandler::GetNetLogFileContents(
 
   std::unique_ptr<base::Value> constants(net_log::ChromeNetLog::GetConstants(
       base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
-      chrome::GetChannelString()));
+      chrome::GetChannelName()));
 
   std::unique_ptr<net::FileNetLogObserver> net_log_logger =
       net::FileNetLogObserver::CreateUnbounded(state->log_path,

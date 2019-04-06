@@ -17,13 +17,14 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
 namespace {
 
-class ReportingUploaderTest : public ::testing::Test {
+class ReportingUploaderTest : public TestWithScopedTaskEnvironment {
  protected:
   ReportingUploaderTest()
       : server_(test_server::EmbeddedTestServer::TYPE_HTTPS),
@@ -32,17 +33,38 @@ class ReportingUploaderTest : public ::testing::Test {
   TestURLRequestContext context_;
   test_server::EmbeddedTestServer server_;
   std::unique_ptr<ReportingUploader> uploader_;
+
+  const url::Origin kOrigin = url::Origin::Create(GURL("https://origin/"));
 };
 
 const char kUploadBody[] = "{}";
 
 void CheckUpload(const test_server::HttpRequest& request) {
-  EXPECT_EQ("POST", request.method_string);
+  if (request.method_string != "POST") {
+    return;
+  }
   auto it = request.headers.find("Content-Type");
   EXPECT_TRUE(it != request.headers.end());
-  EXPECT_EQ(ReportingUploader::kUploadContentType, it->second);
+  EXPECT_EQ("application/reports+json", it->second);
   EXPECT_TRUE(request.has_content);
   EXPECT_EQ(kUploadBody, request.content);
+}
+
+std::unique_ptr<test_server::HttpResponse> AllowPreflight(
+    const test_server::HttpRequest& request) {
+  if (request.method_string != "OPTIONS") {
+    return std::unique_ptr<test_server::HttpResponse>();
+  }
+  auto it = request.headers.find("Origin");
+  EXPECT_TRUE(it != request.headers.end());
+  auto response = std::make_unique<test_server::BasicHttpResponse>();
+  response->AddCustomHeader("Access-Control-Allow-Origin", it->second);
+  response->AddCustomHeader("Access-Control-Allow-Methods", "POST");
+  response->AddCustomHeader("Access-Control-Allow-Headers", "Content-Type");
+  response->set_code(HTTP_OK);
+  response->set_content("");
+  response->set_content_type("text/plain");
+  return std::move(response);
 }
 
 std::unique_ptr<test_server::HttpResponse> ReturnResponse(
@@ -105,20 +127,24 @@ class TestUploadCallback {
 
 TEST_F(ReportingUploaderTest, Upload) {
   server_.RegisterRequestMonitor(base::BindRepeating(&CheckUpload));
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
   callback.WaitForCall();
 }
 
 TEST_F(ReportingUploaderTest, Success) {
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
   callback.WaitForCall();
 
   EXPECT_EQ(ReportingUploader::Outcome::SUCCESS, callback.outcome());
@@ -130,42 +156,206 @@ TEST_F(ReportingUploaderTest, NetworkError1) {
   ASSERT_TRUE(server_.ShutdownAndWaitUntilComplete());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(url, kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, url, kUploadBody, 0, callback.callback());
   callback.WaitForCall();
 
   EXPECT_EQ(ReportingUploader::Outcome::FAILURE, callback.outcome());
 }
 
 TEST_F(ReportingUploaderTest, NetworkError2) {
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnInvalidResponse));
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
   callback.WaitForCall();
 
   EXPECT_EQ(ReportingUploader::Outcome::FAILURE, callback.outcome());
 }
 
 TEST_F(ReportingUploaderTest, ServerError) {
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnResponse, HTTP_INTERNAL_SERVER_ERROR));
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
+  callback.WaitForCall();
+
+  EXPECT_EQ(ReportingUploader::Outcome::FAILURE, callback.outcome());
+}
+
+std::unique_ptr<test_server::HttpResponse> VerifyPreflight(
+    bool* preflight_received_out,
+    const test_server::HttpRequest& request) {
+  if (request.method_string != "OPTIONS") {
+    return std::unique_ptr<test_server::HttpResponse>();
+  }
+  *preflight_received_out = true;
+  return AllowPreflight(request);
+}
+
+TEST_F(ReportingUploaderTest, VerifyPreflight) {
+  bool preflight_received = false;
+  server_.RegisterRequestHandler(
+      base::BindRepeating(&VerifyPreflight, &preflight_received));
+  server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
+  ASSERT_TRUE(server_.Start());
+
+  TestUploadCallback callback;
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
+  callback.WaitForCall();
+
+  EXPECT_TRUE(preflight_received);
+  EXPECT_EQ(ReportingUploader::Outcome::SUCCESS, callback.outcome());
+}
+
+TEST_F(ReportingUploaderTest, SkipPreflightForSameOrigin) {
+  bool preflight_received = false;
+  server_.RegisterRequestHandler(
+      base::BindRepeating(&VerifyPreflight, &preflight_received));
+  server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
+  ASSERT_TRUE(server_.Start());
+
+  TestUploadCallback callback;
+  auto server_origin = url::Origin::Create(server_.base_url());
+  uploader_->StartUpload(server_origin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
+  callback.WaitForCall();
+
+  EXPECT_FALSE(preflight_received);
+  EXPECT_EQ(ReportingUploader::Outcome::SUCCESS, callback.outcome());
+}
+
+std::unique_ptr<test_server::HttpResponse> ReturnPreflightError(
+    const test_server::HttpRequest& request) {
+  if (request.method_string != "OPTIONS") {
+    return std::unique_ptr<test_server::HttpResponse>();
+  }
+  auto response = std::make_unique<test_server::BasicHttpResponse>();
+  response->set_code(HTTP_FORBIDDEN);
+  response->set_content("");
+  response->set_content_type("text/plain");
+  return std::move(response);
+}
+
+TEST_F(ReportingUploaderTest, FailedCORSPreflight) {
+  server_.RegisterRequestHandler(base::BindRepeating(&ReturnPreflightError));
+  server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
+  ASSERT_TRUE(server_.Start());
+
+  TestUploadCallback callback;
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
+  callback.WaitForCall();
+
+  EXPECT_EQ(ReportingUploader::Outcome::FAILURE, callback.outcome());
+}
+
+std::unique_ptr<test_server::HttpResponse> ReturnPreflightWithoutOrigin(
+    const test_server::HttpRequest& request) {
+  if (request.method_string != "OPTIONS") {
+    return std::unique_ptr<test_server::HttpResponse>();
+  }
+  auto it = request.headers.find("Origin");
+  EXPECT_TRUE(it != request.headers.end());
+  auto response = std::make_unique<test_server::BasicHttpResponse>();
+  response->AddCustomHeader("Access-Control-Allow-Methods", "POST");
+  response->AddCustomHeader("Access-Control-Allow-Headers", "Content-Type");
+  response->set_code(HTTP_OK);
+  response->set_content("");
+  response->set_content_type("text/plain");
+  return std::move(response);
+}
+
+TEST_F(ReportingUploaderTest, CORSPreflightWithoutOrigin) {
+  server_.RegisterRequestHandler(
+      base::BindRepeating(&ReturnPreflightWithoutOrigin));
+  server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
+  ASSERT_TRUE(server_.Start());
+
+  TestUploadCallback callback;
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
+  callback.WaitForCall();
+
+  EXPECT_EQ(ReportingUploader::Outcome::FAILURE, callback.outcome());
+}
+
+std::unique_ptr<test_server::HttpResponse> ReturnPreflightWithoutMethods(
+    const test_server::HttpRequest& request) {
+  if (request.method_string != "OPTIONS") {
+    return std::unique_ptr<test_server::HttpResponse>();
+  }
+  auto it = request.headers.find("Origin");
+  EXPECT_TRUE(it != request.headers.end());
+  auto response = std::make_unique<test_server::BasicHttpResponse>();
+  response->AddCustomHeader("Access-Control-Allow-Origin", it->second);
+  response->AddCustomHeader("Access-Control-Allow-Headers", "Content-Type");
+  response->set_code(HTTP_OK);
+  response->set_content("");
+  response->set_content_type("text/plain");
+  return std::move(response);
+}
+
+TEST_F(ReportingUploaderTest, CORSPreflightWithoutMethods) {
+  server_.RegisterRequestHandler(
+      base::BindRepeating(&ReturnPreflightWithoutMethods));
+  server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
+  ASSERT_TRUE(server_.Start());
+
+  TestUploadCallback callback;
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
+  callback.WaitForCall();
+
+  EXPECT_EQ(ReportingUploader::Outcome::FAILURE, callback.outcome());
+}
+
+std::unique_ptr<test_server::HttpResponse> ReturnPreflightWithoutHeaders(
+    const test_server::HttpRequest& request) {
+  if (request.method_string != "OPTIONS") {
+    return std::unique_ptr<test_server::HttpResponse>();
+  }
+  auto it = request.headers.find("Origin");
+  EXPECT_TRUE(it != request.headers.end());
+  auto response = std::make_unique<test_server::BasicHttpResponse>();
+  response->AddCustomHeader("Access-Control-Allow-Origin", it->second);
+  response->AddCustomHeader("Access-Control-Allow-Methods", "POST");
+  response->set_code(HTTP_OK);
+  response->set_content("");
+  response->set_content_type("text/plain");
+  return std::move(response);
+}
+
+TEST_F(ReportingUploaderTest, CORSPreflightWithoutHeaders) {
+  server_.RegisterRequestHandler(
+      base::BindRepeating(&ReturnPreflightWithoutHeaders));
+  server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
+  ASSERT_TRUE(server_.Start());
+
+  TestUploadCallback callback;
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
   callback.WaitForCall();
 
   EXPECT_EQ(ReportingUploader::Outcome::FAILURE, callback.outcome());
 }
 
 TEST_F(ReportingUploaderTest, RemoveEndpoint) {
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnResponse, HTTP_GONE));
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
   callback.WaitForCall();
 
   EXPECT_EQ(ReportingUploader::Outcome::REMOVE_ENDPOINT, callback.outcome());
@@ -200,6 +390,7 @@ std::unique_ptr<test_server::HttpResponse> CheckRedirect(
 
 TEST_F(ReportingUploaderTest, FollowHttpsRedirect) {
   bool followed = false;
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnRedirect, kRedirectPath));
   server_.RegisterRequestHandler(
@@ -207,7 +398,8 @@ TEST_F(ReportingUploaderTest, FollowHttpsRedirect) {
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
   callback.WaitForCall();
 
   EXPECT_TRUE(followed);
@@ -223,12 +415,14 @@ TEST_F(ReportingUploaderTest, DontFollowHttpRedirect) {
   ASSERT_TRUE(http_server_.Start());
 
   const GURL target = http_server_.GetURL(kRedirectPath);
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnRedirect, target.spec()));
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody, callback.callback());
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
+                         callback.callback());
   callback.WaitForCall();
 
   EXPECT_FALSE(followed);
@@ -242,6 +436,7 @@ void CheckNoCookie(const test_server::HttpRequest& request) {
 
 TEST_F(ReportingUploaderTest, DontSendCookies) {
   server_.RegisterRequestMonitor(base::BindRepeating(&CheckNoCookie));
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
   ASSERT_TRUE(server_.Start());
 
@@ -254,7 +449,7 @@ TEST_F(ReportingUploaderTest, DontSendCookies) {
   ASSERT_TRUE(cookie_callback.result());
 
   TestUploadCallback upload_callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody,
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
                          upload_callback.callback());
   upload_callback.WaitForCall();
 }
@@ -270,11 +465,12 @@ std::unique_ptr<test_server::HttpResponse> SendCookie(
 }
 
 TEST_F(ReportingUploaderTest, DontSaveCookies) {
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(base::BindRepeating(&SendCookie));
   ASSERT_TRUE(server_.Start());
 
   TestUploadCallback upload_callback;
-  uploader_->StartUpload(server_.GetURL("/"), kUploadBody,
+  uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
                          upload_callback.callback());
   upload_callback.WaitForCall();
 
@@ -306,13 +502,14 @@ std::unique_ptr<test_server::HttpResponse> ReturnCacheableResponse(
 // testing actual functionality, not a default.
 TEST_F(ReportingUploaderTest, DontCacheResponse) {
   int request_count = 0;
+  server_.RegisterRequestHandler(base::BindRepeating(&AllowPreflight));
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnCacheableResponse, &request_count));
   ASSERT_TRUE(server_.Start());
 
   {
     TestUploadCallback callback;
-    uploader_->StartUpload(server_.GetURL("/"), kUploadBody,
+    uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
                            callback.callback());
     callback.WaitForCall();
   }
@@ -320,7 +517,7 @@ TEST_F(ReportingUploaderTest, DontCacheResponse) {
 
   {
     TestUploadCallback callback;
-    uploader_->StartUpload(server_.GetURL("/"), kUploadBody,
+    uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,
                            callback.callback());
     callback.WaitForCall();
   }

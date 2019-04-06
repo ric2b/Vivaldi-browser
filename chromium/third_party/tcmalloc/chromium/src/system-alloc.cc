@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -65,7 +66,7 @@
 // yet. Among other things, using compile-time detection leads to poor
 // results when compiling on a system with MADV_FREE and running on a
 // system without it. See https://github.com/gperftools/gperftools/issues/780.
-#if defined(__linux__) && defined(MADV_FREE)
+#if defined(__linux__) && defined(MADV_FREE) && !defined(TCMALLOC_USE_MADV_FREE)
 # undef MADV_FREE
 #endif
 
@@ -95,175 +96,30 @@ static const bool kDebugMode = true;
 using tcmalloc::kLog;
 using tcmalloc::Log;
 
-// Anonymous namespace to avoid name conflicts on "CheckAddressBits".
-namespace {
-
 // Check that no bit is set at position ADDRESS_BITS or higher.
-template <int ADDRESS_BITS> bool CheckAddressBits(uintptr_t ptr) {
-  return (ptr >> ADDRESS_BITS) == 0;
+static bool CheckAddressBits(uintptr_t ptr) {
+  bool always_ok = (kAddressBits == 8 * sizeof(void*));
+  // this is a bit insane but otherwise we get compiler warning about
+  // shifting right by word size even if this code is dead :(
+  int shift_bits = always_ok ? 0 : kAddressBits;
+  return always_ok || ((ptr >> shift_bits) == 0);
 }
-
-// Specialize for the bit width of a pointer to avoid undefined shift.
-template <> bool CheckAddressBits<8 * sizeof(void*)>(uintptr_t ptr) {
-  return true;
-}
-
-#if defined(OS_LINUX) && defined(__x86_64__)
-#define ASLR_IS_SUPPORTED
-#endif
-
-#if defined(ASLR_IS_SUPPORTED)
-// From libdieharder, public domain library by Bob Jenkins (rngav.c).
-// Described at http://burtleburtle.net/bob/rand/smallprng.html.
-// Not cryptographically secure, but good enough for what we need.
-typedef uint32_t u4;
-struct ranctx {
-  u4 a;
-  u4 b;
-  u4 c;
-  u4 d;
-};
-
-#define rot(x,k) (((x)<<(k))|((x)>>(32-(k))))
-
-u4 ranval(ranctx* x) {
-  /* xxx: the generator being tested */
-  u4 e = x->a - rot(x->b, 27);
-  x->a = x->b ^ rot(x->c, 17);
-  x->b = x->c + x->d;
-  x->c = x->d + e;
-  x->d = e + x->a;
-  return x->d;
-}
-
-void raninit(ranctx* x, u4 seed) {
-  u4 i;
-  x->a = 0xf1ea5eed;
-  x->b = x->c = x->d = seed;
-  for (i = 0; i < 20; ++i) {
-    (void) ranval(x);
-  }
-}
-
-// If the kernel cannot honor the hint in arch_get_unmapped_area_topdown, it
-// will simply ignore it. So we give a hint that has a good chance of
-// working.
-// The mmap top-down allocator will normally allocate below TASK_SIZE - gap,
-// with a gap that depends on the max stack size. See x86/mm/mmap.c. We
-// should make allocations that are below this area, which would be
-// 0x7ffbf8000000.
-// We use 0x3ffffffff000 as the mask so that we only "pollute" half of the
-// address space. In the unlikely case where fragmentation would become an
-// issue, the kernel will still have another half to use.
-const uint64_t kRandomAddressMask = 0x3ffffffff000ULL;
-
-#endif  // defined(ASLR_IS_SUPPORTED)
-
-// Give a random "hint" that is suitable for use with mmap(). This cannot make
-// mmap fail, as the kernel will simply not follow the hint if it can't.
-// However, this will create address space fragmentation.  Currently, we only
-// implement it on x86_64, where we have a 47 bits userland address space and
-// fragmentation is not an issue.
-void* GetRandomAddrHint() {
-#if !defined(ASLR_IS_SUPPORTED)
-  return NULL;
-#else
-  // Note: we are protected by the general TCMalloc_SystemAlloc spinlock. Given
-  // the nature of what we're doing, it wouldn't be critical if we weren't for
-  // ctx, but it is for the "initialized" variable.
-  // It's nice to share the state between threads, because scheduling will add
-  // some randomness to the succession of ranval() calls.
-  static ranctx ctx;
-  static bool initialized = false;
-  if (!initialized) {
-    initialized = true;
-    // We really want this to be a stack variable and don't want any compiler
-    // optimization. We're using its address as a poor-man source of
-    // randomness.
-    volatile char c;
-    // Pre-initialize our seed with a "random" address in case /dev/urandom is
-    // not available.
-    uint32_t seed = (reinterpret_cast<uint64_t>(&c) >> 32) ^
-                    reinterpret_cast<uint64_t>(&c);
-    int urandom_fd = open("/dev/urandom", O_RDONLY);
-    if (urandom_fd >= 0) {
-      ssize_t len;
-      len = read(urandom_fd, &seed, sizeof(seed));
-      ASSERT(len == sizeof(seed));
-      int ret = close(urandom_fd);
-      ASSERT(ret == 0);
-    }
-    raninit(&ctx, seed);
-  }
-  uint64_t random_address = (static_cast<uint64_t>(ranval(&ctx)) << 32) |
-                            ranval(&ctx);
-  // A a bit-wise "and" won't bias our random distribution.
-  random_address &= kRandomAddressMask;
-  return reinterpret_cast<void*>(random_address);
-#endif  // ASLR_IS_SUPPORTED
-}
-
-// Allocate |length| bytes of memory using mmap(). The memory will be
-// readable and writeable, but not executable.
-// Like mmap(), we will return MAP_FAILED on failure.
-// |is_aslr_enabled| controls address space layout randomization. When true, we
-// will put the first mapping at a random address and will then try to grow it.
-// If it's not possible to grow an existing mapping, a new one will be created.
-void* AllocWithMmap(size_t length, bool is_aslr_enabled) {
-  // Note: we are protected by the general TCMalloc_SystemAlloc spinlock.
-  static void* address_hint = NULL;
-#if defined(ASLR_IS_SUPPORTED)
-  if (is_aslr_enabled &&
-      (!address_hint ||
-       reinterpret_cast<uint64_t>(address_hint) & ~kRandomAddressMask)) {
-    address_hint = GetRandomAddrHint();
-  }
-#endif  // ASLR_IS_SUPPORTED
-
-  // address_hint is likely to make us grow an existing mapping.
-  void* result = mmap(address_hint, length, PROT_READ|PROT_WRITE,
-                      MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-#if defined(ASLR_IS_SUPPORTED)
-  if (result == address_hint) {
-    // If mmap() succeeded at a address_hint, our next mmap() will try to grow
-    // the current mapping as long as it's compatible with our ASLR mask.
-    // This has been done for performance reasons, see crbug.com/173371.
-    // It should be possible to strike a better balance between performance
-    // and security but will be done at a later date.
-    // If this overflows, it could only set address_hint to NULL, which is
-    // what we want (and can't happen on the currently supported architecture).
-    address_hint = static_cast<char*>(result) + length;
-  } else {
-    // mmap failed or a collision prevented the kernel from honoring the hint,
-    // reset the hint.
-    address_hint = NULL;
-  }
-#endif  // ASLR_IS_SUPPORTED
-  return result;
-}
-
-}  // Anonymous namespace to avoid name conflicts on "CheckAddressBits".
 
 COMPILE_ASSERT(kAddressBits <= 8 * sizeof(void*),
                address_bits_larger_than_pointer_size);
 
-// Structure for discovering alignment
-union MemoryAligner {
-  void*  p;
-  double d;
-  size_t s;
-} CACHELINE_ALIGNED;
-
 static SpinLock spinlock(SpinLock::LINKER_INITIALIZED);
 
 #if defined(HAVE_MMAP) || defined(MADV_FREE)
-#ifdef HAVE_GETPAGESIZE
+// Page size is initialized on demand (only needed for mmap-based allocators)
 static size_t pagesize = 0;
-#endif
 #endif
 
 // The current system allocator
-SysAllocator* sys_alloc = NULL;
+SysAllocator* tcmalloc_sys_alloc = NULL;
+
+// Number of bytes taken from system.
+size_t TCMalloc_SystemTaken = 0;
 
 // Configuration parameters.
 DEFINE_int32(malloc_devmem_start,
@@ -280,14 +136,10 @@ DEFINE_bool(malloc_skip_sbrk,
 DEFINE_bool(malloc_skip_mmap,
             EnvToBool("TCMALLOC_SKIP_MMAP", false),
             "Whether mmap can be used to obtain memory.");
-
-DEFINE_bool(malloc_random_allocator,
-#if defined(ASLR_IS_SUPPORTED)
-            EnvToBool("TCMALLOC_ASLR", true),
-#else
-            EnvToBool("TCMALLOC_ASLR", false),
-#endif
-            "Whether to randomize the address space via mmap().");
+DEFINE_bool(malloc_disable_memory_release,
+            EnvToBool("TCMALLOC_DISABLE_MEMORY_RELEASE", false),
+            "Whether MADV_FREE/MADV_DONTNEED should be used"
+            " to return unused memory to the system.");
 
 // static allocators
 class SbrkSysAllocator : public SysAllocator {
@@ -296,7 +148,10 @@ public:
   }
   void* Alloc(size_t size, size_t *actual_size, size_t alignment);
 };
-static char sbrk_space[sizeof(SbrkSysAllocator)];
+static union {
+  char buf[sizeof(SbrkSysAllocator)];
+  void *ptr;
+} sbrk_space;
 
 class MmapSysAllocator : public SysAllocator {
 public:
@@ -304,7 +159,10 @@ public:
   }
   void* Alloc(size_t size, size_t *actual_size, size_t alignment);
 };
-static char mmap_space[sizeof(MmapSysAllocator)];
+static union {
+  char buf[sizeof(MmapSysAllocator)];
+  void *ptr;
+} mmap_space;
 
 class DevMemSysAllocator : public SysAllocator {
 public:
@@ -338,14 +196,17 @@ class DefaultSysAllocator : public SysAllocator {
   SysAllocator* allocs_[kMaxAllocators];
   const char* names_[kMaxAllocators];
 };
-static char default_space[sizeof(DefaultSysAllocator)];
+static union {
+  char buf[sizeof(DefaultSysAllocator)];
+  void *ptr;
+} default_space;
 static const char sbrk_name[] = "SbrkSysAllocator";
 static const char mmap_name[] = "MmapSysAllocator";
 
 
 void* SbrkSysAllocator::Alloc(size_t size, size_t *actual_size,
                               size_t alignment) {
-#ifndef HAVE_SBRK
+#if !defined(HAVE_SBRK) || defined(__UCLIBC__)
   return NULL;
 #else
   // Check if we should use sbrk allocation.
@@ -454,7 +315,10 @@ void* MmapSysAllocator::Alloc(size_t size, size_t *actual_size,
   //            size + alignment < (1<<NBITS).
   // and        extra <= alignment
   // therefore  size + extra < (1<<NBITS)
-  void* result = AllocWithMmap(size + extra, FLAGS_malloc_random_allocator);
+  void* result = mmap(NULL, size + extra,
+                      PROT_READ|PROT_WRITE,
+                      MAP_PRIVATE|MAP_ANONYMOUS,
+                      -1, 0);
   if (result == reinterpret_cast<void*>(MAP_FAILED)) {
     return NULL;
   }
@@ -587,10 +451,16 @@ void* DefaultSysAllocator::Alloc(size_t size, size_t *actual_size,
   return NULL;
 }
 
+ATTRIBUTE_WEAK ATTRIBUTE_NOINLINE
+SysAllocator *tc_get_sysalloc_override(SysAllocator *def)
+{
+  return def;
+}
+
 static bool system_alloc_inited = false;
 void InitSystemAllocators(void) {
-  MmapSysAllocator *mmap = new (mmap_space) MmapSysAllocator();
-  SbrkSysAllocator *sbrk = new (sbrk_space) SbrkSysAllocator();
+  MmapSysAllocator *mmap = new (mmap_space.buf) MmapSysAllocator();
+  SbrkSysAllocator *sbrk = new (sbrk_space.buf) SbrkSysAllocator();
 
   // In 64-bit debug mode, place the mmap allocator first since it
   // allocates pointers that do not fit in 32 bits and therefore gives
@@ -599,13 +469,7 @@ void InitSystemAllocators(void) {
   // likely to look like pointers and therefore the conservative gc in
   // the heap-checker is less likely to misinterpret a number as a
   // pointer).
-  DefaultSysAllocator *sdef = new (default_space) DefaultSysAllocator();
-  // Unfortunately, this code runs before flags are initialized. So
-  // we can't use FLAGS_malloc_random_allocator.
-#if defined(ASLR_IS_SUPPORTED)
-  // Our only random allocator is mmap.
-  sdef->SetChildAllocator(mmap, 0, mmap_name);
-#else
+  DefaultSysAllocator *sdef = new (default_space.buf) DefaultSysAllocator();
   if (kDebugMode && sizeof(void*) > 4) {
     sdef->SetChildAllocator(mmap, 0, mmap_name);
     sdef->SetChildAllocator(sbrk, 1, sbrk_name);
@@ -613,8 +477,8 @@ void InitSystemAllocators(void) {
     sdef->SetChildAllocator(sbrk, 0, sbrk_name);
     sdef->SetChildAllocator(mmap, 1, mmap_name);
   }
-#endif  // ASLR_IS_SUPPORTED
-  sys_alloc = sdef;
+
+  tcmalloc_sys_alloc = tc_get_sysalloc_override(sdef);
 }
 
 void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
@@ -632,41 +496,28 @@ void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
   // Enforce minimum alignment
   if (alignment < sizeof(MemoryAligner)) alignment = sizeof(MemoryAligner);
 
-  void* result = sys_alloc->Alloc(size, actual_size, alignment);
+  size_t actual_size_storage;
+  if (actual_size == NULL) {
+    actual_size = &actual_size_storage;
+  }
+
+  void* result = tcmalloc_sys_alloc->Alloc(size, actual_size, alignment);
   if (result != NULL) {
-    if (actual_size) {
-      CheckAddressBits<kAddressBits>(
-          reinterpret_cast<uintptr_t>(result) + *actual_size - 1);
-    } else {
-      CheckAddressBits<kAddressBits>(
-          reinterpret_cast<uintptr_t>(result) + size - 1);
-    }
+    CHECK_CONDITION(
+      CheckAddressBits(reinterpret_cast<uintptr_t>(result) + *actual_size - 1));
+    TCMalloc_SystemTaken += *actual_size;
   }
   return result;
 }
 
-size_t TCMalloc_SystemAddGuard(void* start, size_t size) {
-#ifdef HAVE_GETPAGESIZE
-  if (pagesize == 0)
-    pagesize = getpagesize();
-
-  if (size < pagesize || (reinterpret_cast<size_t>(start) % pagesize) != 0)
-    return 0;
-
-  if (!mprotect(start, pagesize, PROT_NONE))
-    return pagesize;
-#endif
-
-  return 0;
-}
-
-void TCMalloc_SystemRelease(void* start, size_t length) {
+bool TCMalloc_SystemRelease(void* start, size_t length) {
 #ifdef MADV_FREE
   if (FLAGS_malloc_devmem_start) {
     // It's not safe to use MADV_FREE/MADV_DONTNEED if we've been
     // mapping /dev/mem for heap memory.
-    return;
+    return false;
   }
+  if (FLAGS_malloc_disable_memory_release) return false;
   if (pagesize == 0) pagesize = getpagesize();
   const size_t pagemask = pagesize - 1;
 
@@ -685,15 +536,16 @@ void TCMalloc_SystemRelease(void* start, size_t length) {
   ASSERT(new_end <= end);
 
   if (new_end > new_start) {
-    // Note -- ignoring most return codes, because if this fails it
-    // doesn't matter...
-    while (madvise(reinterpret_cast<char*>(new_start), new_end - new_start,
-                   MADV_FREE) == -1 &&
-           errno == EAGAIN) {
-      // NOP
-    }
+    int result;
+    do {
+      result = madvise(reinterpret_cast<char*>(new_start),
+          new_end - new_start, MADV_FREE);
+    } while (result == -1 && errno == EAGAIN);
+
+    return result != -1;
   }
 #endif
+  return false;
 }
 
 void TCMalloc_SystemCommit(void* start, size_t length) {

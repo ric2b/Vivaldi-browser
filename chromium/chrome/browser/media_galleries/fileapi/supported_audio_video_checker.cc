@@ -24,7 +24,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "net/base/mime_util.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/WebKit/common/mime_util/mime_util.h"
+#include "third_party/blink/public/common/mime_util/mime_util.h"
 
 namespace {
 
@@ -130,7 +130,7 @@ void SupportedAudioVideoChecker::OnFileOpen(
     return;
   }
 
-  safe_checker_ = new SafeAudioVideoChecker(std::move(file), callback_,
-                                            std::move(connector));
+  safe_checker_ = std::make_unique<SafeAudioVideoChecker>(
+      std::move(file), callback_, std::move(connector));
   safe_checker_->Start();
 }

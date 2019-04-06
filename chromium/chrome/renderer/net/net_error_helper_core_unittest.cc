@@ -19,7 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/timer/mock_timer.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
@@ -81,7 +81,7 @@ const NavigationCorrection kDefaultCorrections[] = {
 
 std::string SuggestionsToResponse(const NavigationCorrection* corrections,
                                   int num_corrections) {
-  auto url_corrections = base::MakeUnique<base::ListValue>();
+  auto url_corrections = std::make_unique<base::ListValue>();
   for (int i = 0; i < num_corrections; ++i)
     url_corrections->Append(corrections[i].ToValue());
 
@@ -177,10 +177,10 @@ class NetErrorHelperCoreTest : public testing::Test,
                  bool visible) {
     // The old value of timer_, if any, will be freed by the old core_ being
     // destructed, since core_ takes ownership of the timer.
-    timer_ = new base::MockTimer(false, false);
+    timer_ = new base::MockOneShotTimer();
     core_.reset(new NetErrorHelperCore(this, auto_reload_enabled,
                                        auto_reload_visible_only, visible));
-    core_->set_timer_for_testing(std::unique_ptr<base::Timer>(timer_));
+    core_->set_timer_for_testing(base::WrapUnique(timer_));
   }
 
   NetErrorHelperCore* core() { return core_.get(); }
@@ -232,7 +232,7 @@ class NetErrorHelperCoreTest : public testing::Test,
   }
   int tracking_request_count() const { return tracking_request_count_; }
 
-  base::MockTimer* timer() { return timer_; }
+  base::MockOneShotTimer* timer() { return timer_; }
 
   void NavigationCorrectionsLoadSuccess(const NavigationCorrection* corrections,
                                         int num_corrections) {
@@ -431,7 +431,7 @@ class NetErrorHelperCoreTest : public testing::Test,
     EXPECT_TRUE(StringValueEquals(*dict, "params.key", kApiKey));
   }
 
-  base::MockTimer* timer_;
+  base::MockOneShotTimer* timer_;
 
   std::unique_ptr<NetErrorHelperCore> core_;
 
@@ -2253,6 +2253,9 @@ TEST_F(NetErrorHelperCoreAutoReloadTest, DoesNotReload) {
   EXPECT_FALSE(timer()->IsRunning());
 
   DoErrorLoad(net::ERR_SSL_PROTOCOL_ERROR);
+  EXPECT_FALSE(timer()->IsRunning());
+
+  DoErrorLoad(net::ERR_BLOCKED_BY_ADMINISTRATOR);
   EXPECT_FALSE(timer()->IsRunning());
 
   DoErrorLoad(net::ERR_BAD_SSL_CLIENT_AUTH_CERT);

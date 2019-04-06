@@ -49,7 +49,7 @@ GetSupportedFileExtensions() {
 base::FilePath GetDefaultFilepathForPasswordFile(
     const base::FilePath::StringType& default_extension) {
   base::FilePath default_path;
-  PathService::Get(chrome::DIR_USER_DOCUMENTS, &default_path);
+  base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &default_path);
 #if defined(OS_WIN)
   base::string16 file_name =
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_DEFAULT_EXPORT_FILENAME);
@@ -105,23 +105,52 @@ void PasswordImportConsumer::ConsumePassword(
 
 PasswordManagerPorter::PasswordManagerPorter(
     password_manager::CredentialProviderInterface*
-        credential_provider_interface)
-    : PasswordManagerPorter(
-          std::make_unique<password_manager::PasswordManagerExporter>(
-              credential_provider_interface)) {}
-
-PasswordManagerPorter::PasswordManagerPorter(
-    std::unique_ptr<password_manager::PasswordManagerExporter> exporter)
-    : exporter_(std::move(exporter)) {}
+        credential_provider_interface,
+    ProgressCallback on_export_progress_callback)
+    : credential_provider_interface_(credential_provider_interface),
+      on_export_progress_callback_(on_export_progress_callback) {}
 
 PasswordManagerPorter::~PasswordManagerPorter() {}
 
-void PasswordManagerPorter::Store() {
+bool PasswordManagerPorter::Store() {
   // In unittests a null WebContents means: "Abort creating the file Selector."
   if (!web_contents_)
-    return;
+    return true;
+
+  if (exporter_ && exporter_->GetProgressStatus() ==
+                       password_manager::ExportProgressStatus::IN_PROGRESS) {
+    return false;
+  }
+
+  // Set a new exporter for this request.
+  exporter_ =
+      exporter_for_testing_
+          ? std::move(exporter_for_testing_)
+          : std::make_unique<password_manager::PasswordManagerExporter>(
+                credential_provider_interface_, on_export_progress_callback_);
+
+  // Start serialising while the user selects a file.
+  exporter_->PreparePasswordsForExport();
   PresentFileSelector(web_contents_,
                       PasswordManagerPorter::Type::PASSWORD_EXPORT);
+
+  return true;
+}
+
+void PasswordManagerPorter::CancelStore() {
+  if (exporter_)
+    exporter_->Cancel();
+}
+
+password_manager::ExportProgressStatus
+PasswordManagerPorter::GetExportProgressStatus() {
+  return exporter_ ? exporter_->GetProgressStatus()
+                   : password_manager::ExportProgressStatus::NOT_STARTED;
+}
+
+void PasswordManagerPorter::SetExporterForTesting(
+    std::unique_ptr<password_manager::PasswordManagerExporter> exporter) {
+  exporter_for_testing_ = std::move(exporter);
 }
 
 void PasswordManagerPorter::Load() {
@@ -188,6 +217,12 @@ void PasswordManagerPorter::FileSelected(const base::FilePath& path,
   }
 }
 
+void PasswordManagerPorter::FileSelectionCanceled(void* params) {
+  if (reinterpret_cast<uintptr_t>(params) == PASSWORD_EXPORT) {
+    exporter_->Cancel();
+  }
+}
+
 void PasswordManagerPorter::ImportPasswordsFromPath(
     const base::FilePath& path) {
   // Set up a |PasswordImportConsumer| to process each password entry.
@@ -200,7 +235,4 @@ void PasswordManagerPorter::ImportPasswordsFromPath(
 
 void PasswordManagerPorter::ExportPasswordsToPath(const base::FilePath& path) {
   exporter_->SetDestination(path);
-
-  // TODO(crbug.com/785237) Do this independently from setting the destination.
-  exporter_->PreparePasswordsForExport();
 }

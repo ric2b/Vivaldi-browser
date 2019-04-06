@@ -134,8 +134,13 @@ void SafeBrowsingUrlCheckerImpl::OnCheckBrowseUrlResult(
       "safe_browsing", "CheckUrl", this, "result",
       threat_type == SB_THREAT_TYPE_SAFE ? "safe" : "unsafe");
 
-  if (threat_type == SB_THREAT_TYPE_SAFE) {
+  if (threat_type == SB_THREAT_TYPE_SAFE ||
+      threat_type == SB_THREAT_TYPE_SUSPICIOUS_SITE) {
     state_ = STATE_NONE;
+
+    if (threat_type == SB_THREAT_TYPE_SUSPICIOUS_SITE) {
+      url_checker_delegate_->NotifySuspiciousSiteDetected(web_contents_getter_);
+    }
 
     if (!RunNextCallback(true, false))
       return;

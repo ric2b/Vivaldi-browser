@@ -5,10 +5,10 @@ default	rel
 section	.text code align=64
 
 EXTERN	OPENSSL_ia32cap_P
-global	aesni_encrypt
+global	aes_hw_encrypt
 
 ALIGN	16
-aesni_encrypt:
+aes_hw_encrypt:
 	movups	xmm2,XMMWORD[rcx]
 	mov	eax,DWORD[240+r8]
 	movups	xmm0,XMMWORD[r8]
@@ -29,10 +29,10 @@ DB	102,15,56,221,209
 	DB	0F3h,0C3h		;repret
 
 
-global	aesni_decrypt
+global	aes_hw_decrypt
 
 ALIGN	16
-aesni_decrypt:
+aes_hw_decrypt:
 	movups	xmm2,XMMWORD[rcx]
 	mov	eax,DWORD[240+r8]
 	movups	xmm0,XMMWORD[r8]
@@ -494,14 +494,14 @@ DB	102,68,15,56,223,192
 DB	102,68,15,56,223,200
 	DB	0F3h,0C3h		;repret
 
-global	aesni_ecb_encrypt
+global	aes_hw_ecb_encrypt
 
 ALIGN	16
-aesni_ecb_encrypt:
+aes_hw_ecb_encrypt:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_ecb_encrypt:
+$L$SEH_begin_aes_hw_ecb_encrypt:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
@@ -864,15 +864,15 @@ $L$ecb_enc_ret:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_ecb_encrypt:
-global	aesni_ccm64_encrypt_blocks
+$L$SEH_end_aes_hw_ecb_encrypt:
+global	aes_hw_ccm64_encrypt_blocks
 
 ALIGN	16
-aesni_ccm64_encrypt_blocks:
+aes_hw_ccm64_encrypt_blocks:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_ccm64_encrypt_blocks:
+$L$SEH_begin_aes_hw_ccm64_encrypt_blocks:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
@@ -957,15 +957,15 @@ $L$ccm64_enc_ret:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_ccm64_encrypt_blocks:
-global	aesni_ccm64_decrypt_blocks
+$L$SEH_end_aes_hw_ccm64_encrypt_blocks:
+global	aes_hw_ccm64_decrypt_blocks
 
 ALIGN	16
-aesni_ccm64_decrypt_blocks:
+aes_hw_ccm64_decrypt_blocks:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_ccm64_decrypt_blocks:
+$L$SEH_begin_aes_hw_ccm64_decrypt_blocks:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
@@ -1084,20 +1084,21 @@ $L$ccm64_dec_ret:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_ccm64_decrypt_blocks:
-global	aesni_ctr32_encrypt_blocks
+$L$SEH_end_aes_hw_ccm64_decrypt_blocks:
+global	aes_hw_ctr32_encrypt_blocks
 
 ALIGN	16
-aesni_ctr32_encrypt_blocks:
+aes_hw_ctr32_encrypt_blocks:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_ctr32_encrypt_blocks:
+$L$SEH_begin_aes_hw_ctr32_encrypt_blocks:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
 	mov	rcx,r9
 	mov	r8,QWORD[40+rsp]
+
 
 
 	cmp	rdx,1
@@ -1130,7 +1131,9 @@ DB	102,15,56,221,209
 ALIGN	16
 $L$ctr32_bulk:
 	lea	r11,[rsp]
+
 	push	rbp
+
 	sub	rsp,288
 	and	rsp,-16
 	movaps	XMMWORD[(-168)+r11],xmm6
@@ -1686,20 +1689,23 @@ $L$ctr32_done:
 	movaps	XMMWORD[96+rsp],xmm0
 	movaps	XMMWORD[112+rsp],xmm0
 	mov	rbp,QWORD[((-8))+r11]
+
 	lea	rsp,[r11]
+
 $L$ctr32_epilogue:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_ctr32_encrypt_blocks:
-global	aesni_xts_encrypt
+
+$L$SEH_end_aes_hw_ctr32_encrypt_blocks:
+global	aes_hw_xts_encrypt
 
 ALIGN	16
-aesni_xts_encrypt:
+aes_hw_xts_encrypt:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_xts_encrypt:
+$L$SEH_begin_aes_hw_xts_encrypt:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
@@ -1708,8 +1714,11 @@ $L$SEH_begin_aesni_xts_encrypt:
 	mov	r9,QWORD[48+rsp]
 
 
+
 	lea	r11,[rsp]
+
 	push	rbp
+
 	sub	rsp,272
 	and	rsp,-16
 	movaps	XMMWORD[(-168)+r11],xmm6
@@ -2185,20 +2194,23 @@ $L$xts_enc_ret:
 	movaps	XMMWORD[80+rsp],xmm0
 	movaps	XMMWORD[96+rsp],xmm0
 	mov	rbp,QWORD[((-8))+r11]
+
 	lea	rsp,[r11]
+
 $L$xts_enc_epilogue:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_xts_encrypt:
-global	aesni_xts_decrypt
+
+$L$SEH_end_aes_hw_xts_encrypt:
+global	aes_hw_xts_decrypt
 
 ALIGN	16
-aesni_xts_decrypt:
+aes_hw_xts_decrypt:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_xts_decrypt:
+$L$SEH_begin_aes_hw_xts_decrypt:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
@@ -2207,8 +2219,11 @@ $L$SEH_begin_aesni_xts_decrypt:
 	mov	r9,QWORD[48+rsp]
 
 
+
 	lea	r11,[rsp]
+
 	push	rbp
+
 	sub	rsp,272
 	and	rsp,-16
 	movaps	XMMWORD[(-168)+r11],xmm6
@@ -2721,20 +2736,23 @@ $L$xts_dec_ret:
 	movaps	XMMWORD[80+rsp],xmm0
 	movaps	XMMWORD[96+rsp],xmm0
 	mov	rbp,QWORD[((-8))+r11]
+
 	lea	rsp,[r11]
+
 $L$xts_dec_epilogue:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_xts_decrypt:
-global	aesni_ocb_encrypt
+
+$L$SEH_end_aes_hw_xts_decrypt:
+global	aes_hw_ocb_encrypt
 
 ALIGN	32
-aesni_ocb_encrypt:
+aes_hw_ocb_encrypt:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_ocb_encrypt:
+$L$SEH_begin_aes_hw_ocb_encrypt:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
@@ -2743,12 +2761,18 @@ $L$SEH_begin_aesni_ocb_encrypt:
 	mov	r9,QWORD[48+rsp]
 
 
+
 	lea	rax,[rsp]
 	push	rbx
+
 	push	rbp
+
 	push	r12
+
 	push	r13
+
 	push	r14
+
 	lea	rsp,[((-160))+rsp]
 	movaps	XMMWORD[rsp],xmm6
 	movaps	XMMWORD[16+rsp],xmm7
@@ -2949,16 +2973,23 @@ $L$ocb_enc_done:
 	lea	rax,[((160+40))+rsp]
 $L$ocb_enc_pop:
 	mov	r14,QWORD[((-40))+rax]
+
 	mov	r13,QWORD[((-32))+rax]
+
 	mov	r12,QWORD[((-24))+rax]
+
 	mov	rbp,QWORD[((-16))+rax]
+
 	mov	rbx,QWORD[((-8))+rax]
+
 	lea	rsp,[rax]
+
 $L$ocb_enc_epilogue:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_ocb_encrypt:
+
+$L$SEH_end_aes_hw_ocb_encrypt:
 
 
 ALIGN	32
@@ -3166,14 +3197,14 @@ DB	102,15,56,221,215
 	DB	0F3h,0C3h		;repret
 
 
-global	aesni_ocb_decrypt
+global	aes_hw_ocb_decrypt
 
 ALIGN	32
-aesni_ocb_decrypt:
+aes_hw_ocb_decrypt:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_ocb_decrypt:
+$L$SEH_begin_aes_hw_ocb_decrypt:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
@@ -3182,12 +3213,18 @@ $L$SEH_begin_aesni_ocb_decrypt:
 	mov	r9,QWORD[48+rsp]
 
 
+
 	lea	rax,[rsp]
 	push	rbx
+
 	push	rbp
+
 	push	r12
+
 	push	r13
+
 	push	r14
+
 	lea	rsp,[((-160))+rsp]
 	movaps	XMMWORD[rsp],xmm6
 	movaps	XMMWORD[16+rsp],xmm7
@@ -3410,16 +3447,23 @@ $L$ocb_dec_done:
 	lea	rax,[((160+40))+rsp]
 $L$ocb_dec_pop:
 	mov	r14,QWORD[((-40))+rax]
+
 	mov	r13,QWORD[((-32))+rax]
+
 	mov	r12,QWORD[((-24))+rax]
+
 	mov	rbp,QWORD[((-16))+rax]
+
 	mov	rbx,QWORD[((-8))+rax]
+
 	lea	rsp,[rax]
+
 $L$ocb_dec_epilogue:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_ocb_decrypt:
+
+$L$SEH_end_aes_hw_ocb_decrypt:
 
 
 ALIGN	32
@@ -3615,20 +3659,21 @@ DB	102,15,56,222,209
 DB	102,15,56,223,215
 	DB	0F3h,0C3h		;repret
 
-global	aesni_cbc_encrypt
+global	aes_hw_cbc_encrypt
 
 ALIGN	16
-aesni_cbc_encrypt:
+aes_hw_cbc_encrypt:
 	mov	QWORD[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD[16+rsp],rsi
 	mov	rax,rsp
-$L$SEH_begin_aesni_cbc_encrypt:
+$L$SEH_begin_aes_hw_cbc_encrypt:
 	mov	rdi,rcx
 	mov	rsi,rdx
 	mov	rdx,r8
 	mov	rcx,r9
 	mov	r8,QWORD[40+rsp]
 	mov	r9,QWORD[48+rsp]
+
 
 
 	test	rdx,rdx
@@ -3724,7 +3769,9 @@ DB	102,15,56,223,209
 ALIGN	16
 $L$cbc_decrypt_bulk:
 	lea	r11,[rsp]
+
 	push	rbp
+
 	sub	rsp,176
 	and	rsp,-16
 	movaps	XMMWORD[16+rsp],xmm6
@@ -4236,17 +4283,22 @@ $L$cbc_dec_ret:
 	movaps	xmm15,XMMWORD[160+rsp]
 	movaps	XMMWORD[160+rsp],xmm0
 	mov	rbp,QWORD[((-8))+r11]
+
 	lea	rsp,[r11]
+
 $L$cbc_ret:
 	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD[16+rsp]
 	DB	0F3h,0C3h		;repret
-$L$SEH_end_aesni_cbc_encrypt:
-global	aesni_set_decrypt_key
+
+$L$SEH_end_aes_hw_cbc_encrypt:
+global	aes_hw_set_decrypt_key
 
 ALIGN	16
-aesni_set_decrypt_key:
+aes_hw_set_decrypt_key:
+
 DB	0x48,0x83,0xEC,0x08
+
 	call	__aesni_set_encrypt_key
 	shl	edx,4
 	test	eax,eax
@@ -4279,15 +4331,19 @@ DB	102,15,56,219,192
 	pxor	xmm0,xmm0
 $L$dec_key_ret:
 	add	rsp,8
+
 	DB	0F3h,0C3h		;repret
+
 $L$SEH_end_set_decrypt_key:
 
-global	aesni_set_encrypt_key
+global	aes_hw_set_encrypt_key
 
 ALIGN	16
-aesni_set_encrypt_key:
+aes_hw_set_encrypt_key:
 __aesni_set_encrypt_key:
+
 DB	0x48,0x83,0xEC,0x08
+
 	mov	rax,-1
 	test	rcx,rcx
 	jz	NEAR $L$enc_key_ret
@@ -4581,7 +4637,9 @@ $L$enc_key_ret:
 	pxor	xmm4,xmm4
 	pxor	xmm5,xmm5
 	add	rsp,8
+
 	DB	0F3h,0C3h		;repret
+
 $L$SEH_end_set_encrypt_key:
 
 ALIGN	16
@@ -4908,46 +4966,46 @@ $L$common_seh_tail:
 
 section	.pdata rdata align=4
 ALIGN	4
-	DD	$L$SEH_begin_aesni_ecb_encrypt wrt ..imagebase
-	DD	$L$SEH_end_aesni_ecb_encrypt wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_ecb_encrypt wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_ecb_encrypt wrt ..imagebase
 	DD	$L$SEH_info_ecb wrt ..imagebase
 
-	DD	$L$SEH_begin_aesni_ccm64_encrypt_blocks wrt ..imagebase
-	DD	$L$SEH_end_aesni_ccm64_encrypt_blocks wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_ccm64_encrypt_blocks wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_ccm64_encrypt_blocks wrt ..imagebase
 	DD	$L$SEH_info_ccm64_enc wrt ..imagebase
 
-	DD	$L$SEH_begin_aesni_ccm64_decrypt_blocks wrt ..imagebase
-	DD	$L$SEH_end_aesni_ccm64_decrypt_blocks wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_ccm64_decrypt_blocks wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_ccm64_decrypt_blocks wrt ..imagebase
 	DD	$L$SEH_info_ccm64_dec wrt ..imagebase
 
-	DD	$L$SEH_begin_aesni_ctr32_encrypt_blocks wrt ..imagebase
-	DD	$L$SEH_end_aesni_ctr32_encrypt_blocks wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_ctr32_encrypt_blocks wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_ctr32_encrypt_blocks wrt ..imagebase
 	DD	$L$SEH_info_ctr32 wrt ..imagebase
 
-	DD	$L$SEH_begin_aesni_xts_encrypt wrt ..imagebase
-	DD	$L$SEH_end_aesni_xts_encrypt wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_xts_encrypt wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_xts_encrypt wrt ..imagebase
 	DD	$L$SEH_info_xts_enc wrt ..imagebase
 
-	DD	$L$SEH_begin_aesni_xts_decrypt wrt ..imagebase
-	DD	$L$SEH_end_aesni_xts_decrypt wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_xts_decrypt wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_xts_decrypt wrt ..imagebase
 	DD	$L$SEH_info_xts_dec wrt ..imagebase
 
-	DD	$L$SEH_begin_aesni_ocb_encrypt wrt ..imagebase
-	DD	$L$SEH_end_aesni_ocb_encrypt wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_ocb_encrypt wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_ocb_encrypt wrt ..imagebase
 	DD	$L$SEH_info_ocb_enc wrt ..imagebase
 
-	DD	$L$SEH_begin_aesni_ocb_decrypt wrt ..imagebase
-	DD	$L$SEH_end_aesni_ocb_decrypt wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_ocb_decrypt wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_ocb_decrypt wrt ..imagebase
 	DD	$L$SEH_info_ocb_dec wrt ..imagebase
-	DD	$L$SEH_begin_aesni_cbc_encrypt wrt ..imagebase
-	DD	$L$SEH_end_aesni_cbc_encrypt wrt ..imagebase
+	DD	$L$SEH_begin_aes_hw_cbc_encrypt wrt ..imagebase
+	DD	$L$SEH_end_aes_hw_cbc_encrypt wrt ..imagebase
 	DD	$L$SEH_info_cbc wrt ..imagebase
 
-	DD	aesni_set_decrypt_key wrt ..imagebase
+	DD	aes_hw_set_decrypt_key wrt ..imagebase
 	DD	$L$SEH_end_set_decrypt_key wrt ..imagebase
 	DD	$L$SEH_info_key wrt ..imagebase
 
-	DD	aesni_set_encrypt_key wrt ..imagebase
+	DD	aes_hw_set_encrypt_key wrt ..imagebase
 	DD	$L$SEH_end_set_encrypt_key wrt ..imagebase
 	DD	$L$SEH_info_key wrt ..imagebase
 section	.xdata rdata align=8

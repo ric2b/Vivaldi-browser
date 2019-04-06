@@ -5,7 +5,6 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_contents.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
-#include "android_webview/browser/aw_safe_browsing_config_helper.h"
 #include "android_webview/browser/aw_safe_browsing_whitelist_manager.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 #include "base/android/jni_array.h"
@@ -41,7 +40,7 @@ void ClientCertificatesCleared(const JavaRef<jobject>& callback) {
 
 void NotifyClientCertificatesChanged() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  net::CertDatabase::GetInstance()->OnAndroidKeyStoreChanged();
+  net::CertDatabase::GetInstance()->NotifyObserversCertDBChanged();
 }
 
 void SafeBrowsingWhitelistAssigned(const JavaRef<jobject>& callback,
@@ -58,10 +57,13 @@ ScopedJavaLocalRef<jstring>
 JNI_AwContentsStatics_GetSafeBrowsingPrivacyPolicyUrl(
     JNIEnv* env,
     const JavaParamRef<jclass>&) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   GURL privacy_policy_url(
       security_interstitials::kSafeBrowsingPrivacyPolicyUrl);
-  privacy_policy_url = google_util::AppendGoogleLocaleParam(
-      privacy_policy_url, AwContents::GetLocale());
+  std::string locale =
+      AwBrowserContext::GetDefault()->GetSafeBrowsingUIManager()->app_locale();
+  privacy_policy_url =
+      google_util::AppendGoogleLocaleParam(privacy_policy_url, locale);
   return base::android::ConvertUTF8ToJavaString(env, privacy_policy_url.spec());
 }
 
@@ -73,9 +75,9 @@ void JNI_AwContentsStatics_ClearClientCertPreferences(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   BrowserThread::PostTaskAndReply(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&NotifyClientCertificatesChanged),
-      base::Bind(&ClientCertificatesCleared,
-                 ScopedJavaGlobalRef<jobject>(env, callback)));
+      base::BindOnce(&NotifyClientCertificatesChanged),
+      base::BindOnce(&ClientCertificatesCleared,
+                     ScopedJavaGlobalRef<jobject>(env, callback)));
 }
 
 // static
@@ -95,21 +97,6 @@ ScopedJavaLocalRef<jstring> JNI_AwContentsStatics_GetProductVersion(
 }
 
 // static
-jboolean JNI_AwContentsStatics_GetSafeBrowsingEnabledByManifest(
-    JNIEnv* env,
-    const JavaParamRef<jclass>&) {
-  return AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabledByManifest();
-}
-
-// static
-void JNI_AwContentsStatics_SetSafeBrowsingEnabledByManifest(
-    JNIEnv* env,
-    const JavaParamRef<jclass>&,
-    jboolean enable) {
-  AwSafeBrowsingConfigHelper::SetSafeBrowsingEnabledByManifest(enable);
-}
-
-// static
 void JNI_AwContentsStatics_SetSafeBrowsingWhitelist(
     JNIEnv* env,
     const JavaParamRef<jclass>&,
@@ -121,8 +108,8 @@ void JNI_AwContentsStatics_SetSafeBrowsingWhitelist(
       AwBrowserContext::GetDefault()->GetSafeBrowsingWhitelistManager();
   whitelist_manager->SetWhitelistOnUIThread(
       std::move(rules),
-      base::Bind(&SafeBrowsingWhitelistAssigned,
-                 ScopedJavaGlobalRef<jobject>(env, callback)));
+      base::BindOnce(&SafeBrowsingWhitelistAssigned,
+                     ScopedJavaGlobalRef<jobject>(env, callback)));
 }
 
 // static

@@ -151,17 +151,18 @@ bool DnsRecordParser::SkipQuestion() {
 }
 
 DnsResponse::DnsResponse()
-    : io_buffer_(new IOBufferWithSize(dns_protocol::kMaxUDPSize + 1)) {
-}
+    : io_buffer_(new IOBuffer(dns_protocol::kMaxUDPSize + 1)),
+      io_buffer_size_(dns_protocol::kMaxUDPSize + 1) {}
+
+DnsResponse::DnsResponse(IOBuffer* buffer, size_t size)
+    : io_buffer_(buffer), io_buffer_size_(size) {}
 
 DnsResponse::DnsResponse(size_t length)
-    : io_buffer_(new IOBufferWithSize(length)) {
-}
+    : io_buffer_(new IOBuffer(length)), io_buffer_size_(length) {}
 
-DnsResponse::DnsResponse(const void* data,
-                         size_t length,
-                         size_t answer_offset)
+DnsResponse::DnsResponse(const void* data, size_t length, size_t answer_offset)
     : io_buffer_(new IOBufferWithSize(length)),
+      io_buffer_size_(length),
       parser_(io_buffer_->data(), length, answer_offset) {
   DCHECK(data);
   memcpy(io_buffer_->data(), data, length);
@@ -169,11 +170,12 @@ DnsResponse::DnsResponse(const void* data,
 
 DnsResponse::~DnsResponse() = default;
 
-bool DnsResponse::InitParse(int nbytes, const DnsQuery& query) {
-  DCHECK_GE(nbytes, 0);
+bool DnsResponse::InitParse(size_t nbytes, const DnsQuery& query) {
   // Response includes query, it should be at least that size.
-  if (nbytes < query.io_buffer()->size() || nbytes >= io_buffer_->size())
+  if (nbytes < static_cast<size_t>(query.io_buffer()->size()) ||
+      nbytes >= io_buffer_size_) {
     return false;
+  }
 
   // Match the query id.
   if (base::NetToHost16(header()->id) != query.id())
@@ -196,11 +198,10 @@ bool DnsResponse::InitParse(int nbytes, const DnsQuery& query) {
   return true;
 }
 
-bool DnsResponse::InitParseWithoutQuery(int nbytes) {
-  DCHECK_GE(nbytes, 0);
-
-  if (nbytes < static_cast<int>(kHeaderSize) || nbytes >= io_buffer_->size())
+bool DnsResponse::InitParseWithoutQuery(size_t nbytes) {
+  if (nbytes < kHeaderSize || nbytes >= io_buffer_size_) {
     return false;
+  }
 
   parser_ = DnsRecordParser(io_buffer_->data(), nbytes, kHeaderSize);
 
@@ -298,6 +299,7 @@ DnsResponse::Result DnsResponse::ParseToAddressList(
   DnsRecordParser parser = Parser();
   DnsResourceRecord record;
   unsigned ancount = answer_count();
+
   for (unsigned i = 0; i < ancount; ++i) {
     if (!parser.ReadRecord(&record))
       return DNS_MALFORMED_RESPONSE;
@@ -329,7 +331,15 @@ DnsResponse::Result DnsResponse::ParseToAddressList(
     }
   }
 
-  // TODO(szym): Extract TTL for NODATA results. http://crbug.com/115051
+  // NXDOMAIN or NODATA cases respectively.
+  if (rcode() == dns_protocol::kRcodeNXDOMAIN ||
+      (ancount == 0 && rcode() == dns_protocol::kRcodeNOERROR)) {
+    unsigned nscount = base::NetToHost16(header()->nscount);
+    for (unsigned i = 0; i < nscount; ++i) {
+      if (parser.ReadRecord(&record) && record.type == dns_protocol::kTypeSOA)
+        ttl_sec = std::min(ttl_sec, record.ttl);
+    }
+  }
 
   // getcanonname in eglibc returns the first owner name of an A or AAAA RR.
   // If the response passed all the checks so far, then |expected_name| is it.

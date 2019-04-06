@@ -24,11 +24,17 @@ namespace content {
 namespace {
 
 const char* const BOOL_ATTRIBUTES[] = {
-    "checkable",       "checked",         "clickable", "collection",
-    "collection_item", "content_invalid", "disabled",  "dismissable",
-    "editable_text",   "focusable",       "focused",   "has_non_empty_value",
-    "heading",         "hierarchical",    "invisible", "link",
-    "multiline",       "password",        "range",     "scrollable",
+    "checkable",       "checked",
+    "clickable",       "collection",
+    "collection_item", "content_invalid",
+    "disabled",        "dismissable",
+    "editable_text",   "focusable",
+    "focused",         "has_character_locations",
+    "has_image",       "has_non_empty_value",
+    "heading",         "hierarchical",
+    "invisible",       "link",
+    "multiline",       "password",
+    "range",           "scrollable",
     "selected",        "interesting"};
 
 const char* const STRING_ATTRIBUTES[] = {
@@ -105,6 +111,9 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolean("editable_text", android_node->IsEditableText());
   dict->SetBoolean("focusable", android_node->IsFocusable());
   dict->SetBoolean("focused", android_node->IsFocused());
+  dict->SetBoolean("has_character_locations",
+                   android_node->HasCharacterLocations());
+  dict->SetBoolean("has_image", android_node->HasImage());
   dict->SetBoolean("has_non_empty_value", android_node->HasNonEmptyValue());
   dict->SetBoolean("heading", android_node->IsHeading());
   dict->SetBoolean("hierarchical", android_node->IsHierarchical());

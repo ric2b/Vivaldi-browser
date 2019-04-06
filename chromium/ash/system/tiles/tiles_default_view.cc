@@ -6,18 +6,20 @@
 
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shutdown_controller.h"
 #include "ash/shutdown_reason.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/night_light/night_light_toggle_button.h"
 #include "ash/system/tray/system_menu_button.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -67,16 +69,14 @@ void TilesDefaultView::Init() {
   // |power_button_| which is always shown as enabled.
   const bool can_show_web_ui = TrayPopupUtils::CanOpenWebUISettings();
 
-  settings_button_ = new SystemMenuButton(
-      this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuSettingsIcon,
-      IDS_ASH_STATUS_TRAY_SETTINGS);
+  settings_button_ = new SystemMenuButton(this, kSystemMenuSettingsIcon,
+                                          IDS_ASH_STATUS_TRAY_SETTINGS);
   settings_button_->SetEnabled(can_show_web_ui);
   AddChildView(settings_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
 
   help_button_ =
-      new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
-                           kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
+      new SystemMenuButton(this, kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
   if (base::i18n::IsRTL() &&
       base::i18n::GetConfiguredLocale() == kHebrewLocale) {
     // The asset for the help button is a question mark '?'. Normally this asset
@@ -88,7 +88,7 @@ void TilesDefaultView::Init() {
   AddChildView(help_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
 
-  if (switches::IsNightLightEnabled()) {
+  if (features::IsNightLightEnabled()) {
     night_light_button_ = new NightLightToggleButton(this);
     night_light_button_->SetEnabled(can_show_web_ui);
     AddChildView(night_light_button_);
@@ -96,23 +96,22 @@ void TilesDefaultView::Init() {
   }
 
   lock_button_ =
-      new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
-                           kSystemMenuLockIcon, IDS_ASH_STATUS_TRAY_LOCK);
+      new SystemMenuButton(this, kSystemMenuLockIcon, IDS_ASH_STATUS_TRAY_LOCK);
   lock_button_->SetEnabled(can_show_web_ui &&
                            Shell::Get()->session_controller()->CanLockScreen());
 
   AddChildView(lock_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
 
-  power_button_ =
-      new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
-                           kSystemMenuPowerIcon, IDS_ASH_STATUS_TRAY_SHUTDOWN);
+  power_button_ = new SystemMenuButton(this, kSystemMenuPowerIcon,
+                                       IDS_ASH_STATUS_TRAY_SHUTDOWN);
   AddChildView(power_button_);
   // This object is recreated every time the menu opens. Don't bother updating
   // the tooltip if the shutdown policy changes while the menu is open.
   bool reboot = Shell::Get()->shutdown_controller()->reboot_on_shutdown();
   power_button_->SetTooltipText(l10n_util::GetStringUTF16(
       reboot ? IDS_ASH_STATUS_TRAY_REBOOT : IDS_ASH_STATUS_TRAY_SHUTDOWN));
+  power_button_->set_id(VIEW_ID_POWER_BUTTON);
 }
 
 void TilesDefaultView::ButtonPressed(views::Button* sender,
@@ -120,11 +119,11 @@ void TilesDefaultView::ButtonPressed(views::Button* sender,
   DCHECK(sender);
   if (sender == settings_button_) {
     Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_SETTINGS);
-    Shell::Get()->system_tray_controller()->ShowSettings();
+    Shell::Get()->system_tray_model()->client_ptr()->ShowSettings();
   } else if (sender == help_button_) {
     Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_HELP);
-    Shell::Get()->system_tray_controller()->ShowHelp();
-  } else if (switches::IsNightLightEnabled() && sender == night_light_button_) {
+    Shell::Get()->system_tray_model()->client_ptr()->ShowHelp();
+  } else if (features::IsNightLightEnabled() && sender == night_light_button_) {
     Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_NIGHT_LIGHT);
     night_light_button_->Toggle();
   } else if (sender == lock_button_) {

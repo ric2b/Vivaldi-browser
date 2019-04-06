@@ -5,11 +5,11 @@
 /**
  * Test suite for Android's default ProxySelector implementation. The purpose of these tests
  * is to check that the behaviour of the ProxySelector implementation matches what we have
- * implemented in net/proxy/proxy_config_service_android.cc.
+ * implemented in net/proxy_resolution/proxy_config_service_android.cc.
  *
  * IMPORTANT: These test cases are generated from net/android/tools/proxy_test_cases.py, so if any
  * of these tests fail, please be sure to edit that file and regenerate the test cases here and also
- * in net/proxy/proxy_config_service_android_unittests.cc if required.
+ * in net/proxy_resolution/proxy_config_service_android_unittests.cc if required.
  */
 
 package org.chromium.net;
@@ -47,7 +47,7 @@ public class AndroidProxySelectorTest {
     }
 
     static String toString(Proxy proxy) {
-        if (proxy == Proxy.NO_PROXY) return "DIRECT";
+        if (proxy.equals(Proxy.NO_PROXY)) return "DIRECT";
         // java.net.Proxy only knows about http and socks proxies.
         Proxy.Type type = proxy.type();
         switch (type) {

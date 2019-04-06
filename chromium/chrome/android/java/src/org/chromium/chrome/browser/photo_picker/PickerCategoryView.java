@@ -146,7 +146,7 @@ public class PickerCategoryView extends RelativeLayout
         PhotoPickerToolbar toolbar = (PhotoPickerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.photo_picker_toolbar, mSelectionDelegate,
                 R.string.photo_picker_select_images, null, 0, 0, R.color.default_primary_color,
-                null, false);
+                null, false, false);
         toolbar.setNavigationOnClickListener(this);
         Button doneButton = (Button) toolbar.findViewById(R.id.done);
         doneButton.setOnClickListener(this);
@@ -360,7 +360,8 @@ public class PickerCategoryView extends RelativeLayout
         }
 
         mEnumStartTime = SystemClock.elapsedRealtime();
-        mWorkerTask = new FileEnumWorkerTask(this, new MimeTypeFileFilter(mMimeTypes));
+        mWorkerTask = new FileEnumWorkerTask(
+                mActivity.getWindowAndroid(), this, new MimeTypeFileFilter(mMimeTypes));
         mWorkerTask.execute();
     }
 
@@ -423,7 +424,7 @@ public class PickerCategoryView extends RelativeLayout
      * @param umaId The UMA value to record with the action.
      */
     private void executeAction(PhotoPickerListener.Action action, String[] photos, int umaId) {
-        mListener.onPickerUserAction(action, photos);
+        mListener.onPhotoPickerUserAction(action, photos);
         mDialog.dismiss();
         UiUtils.onPhotoPickerDismissed();
         recordFinalUmaStats(umaId);

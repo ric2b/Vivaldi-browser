@@ -9,15 +9,6 @@ import("//ui/base/ui_features.gni")
 assert(is_chromeos)
 assert(enable_hidpi)
 
-grit("resources") {
-  source = "ash_resources.grd"
-  outputs = [
-    "grit/ash_resources.h",
-    "ash_resources_100_percent.pak",
-    "ash_resources_200_percent.pak",
-  ]
-}
-
 # Repacks resources needed for ash_unittests, etc. at a given scale.
 # TODO(msw): Use ui_test.pak instead of its pieces? (no 200% support?)
 template("ash_test_resources") {
@@ -27,8 +18,9 @@ template("ash_test_resources") {
     output = "$root_build_dir/${target_name}.pak"
 
     sources = [
-      "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak",
-      "$root_gen_dir/ui/app_list/resources/app_list_resources_${percent}_percent.pak",
+      "$root_gen_dir/ash/app_list/resources/app_list_resources_${percent}_percent.pak",
+      "$root_gen_dir/ash/components/resources/ash_components_resources_${percent}_percent.pak",
+      "$root_gen_dir/ash/public/cpp/resources/ash_public_unscaled_resources.pak",
       "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak",
       "$root_gen_dir/ui/resources/ui_resources_${percent}_percent.pak",
       "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak",
@@ -46,9 +38,10 @@ template("ash_test_resources") {
     }
 
     deps = [
-      "//ash/resources",
+      "//ash/app_list/resources",
+      "//ash/components/resources",
+      "//ash/public/cpp/resources:ash_public_unscaled_resources",
       "//mojo/public/js:resources",
-      "//ui/app_list/resources",
       "//ui/chromeos/resources",
       "//ui/resources",
       "//ui/views/resources",
@@ -60,8 +53,10 @@ template("ash_test_resources") {
 
     if (percent == "100") {
       # TODO(msw): This seems bad, but follows repack_ui_test_pak's example.
-      deps += [ "//third_party/WebKit/public:resources_grit" ]
-      sources += [ "$root_gen_dir/blink/public/resources/blink_resources.pak" ]
+      deps += [ "//third_party/blink/public:resources_grit" ]
+      sources += [
+        "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+      ]
     }
   }
 }
@@ -79,9 +74,11 @@ ash_test_resources("200_percent") {
 ash_test_resources("with_content_100_percent") {
   percent = "100"
   sources = [
+    "$root_gen_dir/ash/shell/ash_shell_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
   ]
   deps = [
+    "//ash/shell:resources",
     "//content:resources",
   ]
 }

@@ -6,17 +6,15 @@
 
 #include <utility>
 
-#include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/chrome_devtools_session.h"
 #include "chrome/browser/devtools/device/android_device_manager.h"
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
-#include "chrome/browser/devtools/devtools_protocol.h"
-#include "chrome/browser/devtools/devtools_protocol_constants.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/devtools/protocol/target_handler.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/policy/developer_tools_policy_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -30,7 +28,13 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/manifest.h"
 #include "ui/base/resource/resource_bundle.h"
+
+#if defined(OS_CHROMEOS)
+#include "base/command_line.h"
+#include "chromeos/chromeos_switches.h"
+#endif
 
 using content::DevToolsAgentHost;
 
@@ -39,10 +43,6 @@ const char ChromeDevToolsManagerDelegate::kTypeBackgroundPage[] =
     "background_page";
 
 namespace {
-
-const char kLocationsParam[] = "locations";
-const char kHostParam[] = "host";
-const char kPortParam[] = "port";
 
 bool GetExtensionInfo(content::WebContents* wc,
                       std::string* name,
@@ -71,35 +71,23 @@ bool GetExtensionInfo(content::WebContents* wc,
   return false;
 }
 
-std::string ToString(std::unique_ptr<base::DictionaryValue> value) {
-  std::string json;
-  base::JSONWriter::Write(*value, &json);
-  return json;
-}
+ChromeDevToolsManagerDelegate* g_instance;
 
 }  // namespace
 
-class ChromeDevToolsManagerDelegate::HostData {
- public:
-  HostData() {}
-  ~HostData() {}
-
-  RemoteLocations& remote_locations() { return remote_locations_; }
-
-  void set_remote_locations(RemoteLocations& locations) {
-    remote_locations_.swap(locations);
-  }
-
- private:
-  RemoteLocations remote_locations_;
-};
+// static
+ChromeDevToolsManagerDelegate* ChromeDevToolsManagerDelegate::GetInstance() {
+  return g_instance;
+}
 
 ChromeDevToolsManagerDelegate::ChromeDevToolsManagerDelegate() {
-  content::DevToolsAgentHost::AddObserver(this);
+  DCHECK(!g_instance);
+  g_instance = this;
 }
 
 ChromeDevToolsManagerDelegate::~ChromeDevToolsManagerDelegate() {
-  content::DevToolsAgentHost::RemoveObserver(this);
+  DCHECK(g_instance == this);
+  g_instance = nullptr;
 }
 
 void ChromeDevToolsManagerDelegate::Inspect(
@@ -111,19 +99,6 @@ bool ChromeDevToolsManagerDelegate::HandleCommand(
     DevToolsAgentHost* agent_host,
     content::DevToolsAgentHostClient* client,
     base::DictionaryValue* command_dict) {
-  int id = 0;
-  std::string method;
-  base::DictionaryValue* params = nullptr;
-  if (!DevToolsProtocol::ParseCommand(command_dict, &id, &method, &params))
-    return false;
-
-  if (method == chrome::devtools::Target::setRemoteLocations::kName) {
-    auto result = SetRemoteLocations(agent_host, id, params);
-    DCHECK(result);
-    client->DispatchProtocolMessage(agent_host, ToString(std::move(result)));
-    return true;
-  }
-
   DCHECK(sessions_.find(client) != sessions_.end());
   auto response = sessions_[client]->dispatcher()->dispatch(
       protocol::toProtocolValue(command_dict, 1000));
@@ -132,10 +107,10 @@ bool ChromeDevToolsManagerDelegate::HandleCommand(
 
 std::string ChromeDevToolsManagerDelegate::GetTargetType(
     content::WebContents* web_contents) {
-  for (TabContentsIterator it; !it.done(); it.Next()) {
-    if (*it == web_contents)
-      return DevToolsAgentHost::kTypePage;
-  }
+  auto& all_tabs = AllTabContentses();
+  auto it = std::find(all_tabs.begin(), all_tabs.end(), web_contents);
+  if (it != all_tabs.end())
+    return DevToolsAgentHost::kTypePage;
 
   std::string extension_name;
   std::string extension_type;
@@ -151,6 +126,66 @@ std::string ChromeDevToolsManagerDelegate::GetTargetTitle(
   if (!GetExtensionInfo(web_contents, &extension_name, &extension_type))
     return std::string();
   return extension_name;
+}
+
+bool ChromeDevToolsManagerDelegate::AllowInspectingWebContents(
+    content::WebContents* web_contents) {
+  return AllowInspection(
+      Profile::FromBrowserContext(web_contents->GetBrowserContext()),
+      web_contents);
+}
+
+// static
+bool ChromeDevToolsManagerDelegate::AllowInspection(
+    Profile* profile,
+    content::WebContents* web_contents) {
+  const extensions::Extension* extension = nullptr;
+  if (web_contents) {
+    extension =
+        extensions::ProcessManager::Get(
+            Profile::FromBrowserContext(web_contents->GetBrowserContext()))
+            ->GetExtensionForWebContents(web_contents);
+  }
+  return AllowInspection(profile, extension);
+}
+
+// static
+bool ChromeDevToolsManagerDelegate::AllowInspection(
+    Profile* profile,
+    const extensions::Extension* extension) {
+#if defined(OS_CHROMEOS)
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(chromeos::switches::kForceDevToolsAvailable))
+    return true;
+#endif
+
+  using Availability = policy::DeveloperToolsPolicyHandler::Availability;
+  Availability availability =
+      policy::DeveloperToolsPolicyHandler::GetDevToolsAvailability(
+          profile->GetPrefs());
+#if defined(OS_CHROMEOS)
+  // Do not create DevTools if it's disabled for primary profile.
+  if (Profile* primary_profile = ProfileManager::GetPrimaryUserProfile()) {
+    availability =
+        policy::DeveloperToolsPolicyHandler::GetMostRestrictiveAvailability(
+            availability,
+            policy::DeveloperToolsPolicyHandler::GetDevToolsAvailability(
+                primary_profile->GetPrefs()));
+  }
+#endif
+
+  switch (availability) {
+    case Availability::kDisallowed:
+      return false;
+    case Availability::kAllowed:
+      return true;
+    case Availability::kDisallowedForForceInstalledExtensions:
+      return !extension ||
+             !extensions::Manifest::IsPolicyLocation(extension->location());
+    default:
+      NOTREACHED() << "Unknown developer tools policy";
+      return true;
+  }
 }
 
 void ChromeDevToolsManagerDelegate::ClientAttached(
@@ -173,9 +208,10 @@ ChromeDevToolsManagerDelegate::CreateNewTarget(const GURL& url) {
                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);
-  if (!params.target_contents)
+  if (!params.navigated_or_inserted_contents)
     return nullptr;
-  return DevToolsAgentHost::GetOrCreateFor(params.target_contents);
+  return DevToolsAgentHost::GetOrCreateFor(
+      params.navigated_or_inserted_contents);
 }
 
 std::string ChromeDevToolsManagerDelegate::GetDiscoveryPageHTML() {
@@ -184,24 +220,8 @@ std::string ChromeDevToolsManagerDelegate::GetDiscoveryPageHTML() {
       .as_string();
 }
 
-std::string ChromeDevToolsManagerDelegate::GetFrontendResource(
-    const std::string& path) {
-  return content::DevToolsFrontendHost::GetFrontendResource(path).as_string();
-}
-
-void ChromeDevToolsManagerDelegate::DevToolsAgentHostAttached(
-    content::DevToolsAgentHost* agent_host) {
-  DCHECK(host_data_.find(agent_host) == host_data_.end());
-  host_data_[agent_host].reset(new ChromeDevToolsManagerDelegate::HostData());
-}
-
-void ChromeDevToolsManagerDelegate::DevToolsAgentHostDetached(
-    content::DevToolsAgentHost* agent_host) {
-  // This class is created lazily, so it may not know about some attached hosts.
-  if (host_data_.find(agent_host) != host_data_.end()) {
-    host_data_.erase(agent_host);
-    UpdateDeviceDiscovery();
-  }
+bool ChromeDevToolsManagerDelegate::HasBundledFrontendResources() {
+  return true;
 }
 
 void ChromeDevToolsManagerDelegate::DevicesAvailable(
@@ -218,8 +238,11 @@ void ChromeDevToolsManagerDelegate::DevicesAvailable(
 
 void ChromeDevToolsManagerDelegate::UpdateDeviceDiscovery() {
   RemoteLocations remote_locations;
-  for (const auto& pair : host_data_) {
-    RemoteLocations& locations = pair.second->remote_locations();
+  for (const auto& it : sessions_) {
+    TargetHandler* target_handler = it.second->target_handler();
+    if (!target_handler)
+      continue;
+    RemoteLocations& locations = target_handler->remote_locations();
     remote_locations.insert(locations.begin(), locations.end());
   }
 
@@ -256,44 +279,4 @@ void ChromeDevToolsManagerDelegate::UpdateDeviceDiscovery() {
                    base::Unretained(this))));
   }
   remote_locations_.swap(remote_locations);
-}
-
-std::unique_ptr<base::DictionaryValue>
-ChromeDevToolsManagerDelegate::SetRemoteLocations(
-    content::DevToolsAgentHost* agent_host,
-    int command_id,
-    base::DictionaryValue* params) {
-  // Could have been created late.
-  if (host_data_.find(agent_host) == host_data_.end())
-    DevToolsAgentHostAttached(agent_host);
-
-  std::set<net::HostPortPair> tcp_locations;
-  base::ListValue* locations;
-  if (!params->GetList(kLocationsParam, &locations))
-    return DevToolsProtocol::CreateInvalidParamsResponse(command_id,
-                                                         kLocationsParam);
-  for (const auto& item : *locations) {
-    if (!item.is_dict()) {
-      return DevToolsProtocol::CreateInvalidParamsResponse(command_id,
-                                                           kLocationsParam);
-    }
-    const base::DictionaryValue* dictionary =
-        static_cast<const base::DictionaryValue*>(&item);
-    std::string host;
-    if (!dictionary->GetStringWithoutPathExpansion(kHostParam, &host)) {
-      return DevToolsProtocol::CreateInvalidParamsResponse(command_id,
-                                                           kLocationsParam);
-    }
-    int port = 0;
-    if (!dictionary->GetIntegerWithoutPathExpansion(kPortParam, &port)) {
-      return DevToolsProtocol::CreateInvalidParamsResponse(command_id,
-                                                           kLocationsParam);
-    }
-    tcp_locations.insert(net::HostPortPair(host, port));
-  }
-
-  host_data_[agent_host]->set_remote_locations(tcp_locations);
-  UpdateDeviceDiscovery();
-
-  return DevToolsProtocol::CreateSuccessResponse(command_id, nullptr);
 }

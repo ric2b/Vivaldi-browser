@@ -8,8 +8,8 @@
 
 #include "ash/login_status.h"
 #include "ash/shell.h"
-#include "ash/system/power/convertible_power_button_controller_test_api.h"
 #include "ash/system/power/power_button_controller.h"
+#include "ash/system/power/power_button_controller_test_api.h"
 #include "ash/system/power/power_button_screenshot_controller_test_api.h"
 #include "ash/system/power/power_button_test_base.h"
 #include "ash/test_screenshot_delegate.h"
@@ -30,14 +30,17 @@ class PowerButtonScreenshotControllerTest : public PowerButtonTestBase {
   // PowerButtonTestBase:
   void SetUp() override {
     PowerButtonTestBase::SetUp();
-    InitPowerButtonControllerMembers(true /* send_accelerometer_update */);
+    InitPowerButtonControllerMembers(
+        chromeos::PowerManagerClient::TabletMode::ON);
     InitScreenshotTestApi();
     screenshot_delegate_ = GetScreenshotDelegate();
     EnableTabletMode(true);
 
-    // Advances a long duration from initialized last resume time in
-    // TabletPowerButtonController to avoid cross interference.
-    tick_clock_->Advance(base::TimeDelta::FromMilliseconds(3000));
+    // Advance a duration longer than |kIgnorePowerButtonAfterResumeDelay| to
+    // avoid events being ignored.
+    tick_clock_.Advance(
+        PowerButtonController::kIgnorePowerButtonAfterResumeDelay +
+        base::TimeDelta::FromMilliseconds(2));
   }
 
  protected:
@@ -124,22 +127,22 @@ TEST_F(PowerButtonScreenshotControllerTest, ReleaseBeforeAnotherPressed) {
 TEST_F(PowerButtonScreenshotControllerTest,
        PowerButtonPressedFirst_ScreenshotChord) {
   PressPowerButton();
-  tick_clock_->Advance(PowerButtonScreenshotController::kScreenshotChordDelay -
-                       base::TimeDelta::FromMilliseconds(2));
+  tick_clock_.Advance(PowerButtonScreenshotController::kScreenshotChordDelay -
+                      base::TimeDelta::FromMilliseconds(2));
   PressKey(ui::VKEY_VOLUME_DOWN);
   // Verifies screenshot is taken, volume down is consumed.
   EXPECT_EQ(1, GetScreenshotCount());
   EXPECT_TRUE(LastKeyConsumed());
   // Keeps pressing volume down key under screenshot chord condition will not
   // take screenshot again, volume down is also consumed.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(1));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(1));
   ResetScreenshotCount();
   PressKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_EQ(0, GetScreenshotCount());
   EXPECT_TRUE(LastKeyConsumed());
   // Keeps pressing volume down key off screenshot chord condition will not
   // take screenshot and still consume volume down event.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(2));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(2));
   PressKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_EQ(0, GetScreenshotCount());
   EXPECT_TRUE(LastKeyConsumed());
@@ -158,14 +161,14 @@ TEST_F(PowerButtonScreenshotControllerTest,
 TEST_F(PowerButtonScreenshotControllerTest,
        PowerButtonPressedFirst_NoScreenshotChord) {
   PressPowerButton();
-  tick_clock_->Advance(PowerButtonScreenshotController::kScreenshotChordDelay +
-                       base::TimeDelta::FromMilliseconds(1));
+  tick_clock_.Advance(PowerButtonScreenshotController::kScreenshotChordDelay +
+                      base::TimeDelta::FromMilliseconds(1));
   PressKey(ui::VKEY_VOLUME_DOWN);
   // Verifies screenshot is not taken, volume down is not consumed.
   EXPECT_EQ(0, GetScreenshotCount());
   EXPECT_FALSE(LastKeyConsumed());
   // Keeps pressing volume down key should continue triggerring volume down.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(2));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(2));
   PressKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_EQ(0, GetScreenshotCount());
   EXPECT_FALSE(LastKeyConsumed());
@@ -178,52 +181,45 @@ TEST_F(PowerButtonScreenshotControllerTest,
   EXPECT_FALSE(LastKeyConsumed());
 }
 
-// Tests volume key pressed cancels the ongoing convertible power button.
+// Tests volume key pressed cancels the ongoing power button behavior.
 TEST_F(PowerButtonScreenshotControllerTest,
-       PowerButtonPressedFirst_VolumeKeyCancelConvertiblePowerButton) {
-  // Tests volume down key can stop convertible power button's shutdown timer.
+       PowerButtonPressedFirst_VolumeKeyCancelPowerButton) {
+  // Tests volume down key can stop power button's shutdown timer and power
+  // button menu timer.
   PressPowerButton();
-  EXPECT_TRUE(convertible_test_api_->ShutdownTimerIsRunning());
+  EXPECT_TRUE(power_button_test_api_->PowerButtonMenuTimerIsRunning());
   PressKey(ui::VKEY_VOLUME_DOWN);
-  EXPECT_FALSE(convertible_test_api_->ShutdownTimerIsRunning());
+  EXPECT_FALSE(power_button_test_api_->PowerButtonMenuTimerIsRunning());
   ReleasePowerButton();
   ReleaseKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_FALSE(power_manager_client_->backlights_forced_off());
 
-  // Tests volume down key can stop shutdown animation timer.
+  // Tests volume up key can stop power button's shutdown timer and power button
+  // menu timer. Also tests that volume up key is not consumed.
   PressPowerButton();
-  EXPECT_TRUE(convertible_test_api_->TriggerShutdownTimeout());
+  EXPECT_TRUE(power_button_test_api_->PowerButtonMenuTimerIsRunning());
+  PressKey(ui::VKEY_VOLUME_UP);
+  EXPECT_FALSE(LastKeyConsumed());
+  EXPECT_FALSE(power_button_test_api_->PowerButtonMenuTimerIsRunning());
+  ReleasePowerButton();
+  ReleaseKey(ui::VKEY_VOLUME_UP);
+  EXPECT_FALSE(power_manager_client_->backlights_forced_off());
+  EXPECT_FALSE(LastKeyConsumed());
+}
+
+// Tests volume key pressed can not cancel the started pre-shutdown animation.
+TEST_F(PowerButtonScreenshotControllerTest,
+       PowerButtonPressedFirst_VolumeKeyNotCancelPowerButton) {
+  PressPowerButton();
+  ASSERT_TRUE(power_button_test_api_->TriggerPowerButtonMenuTimeout());
+  EXPECT_TRUE(power_button_test_api_->PreShutdownTimerIsRunning());
+  EXPECT_TRUE(power_button_test_api_->TriggerPreShutdownTimeout());
   EXPECT_TRUE(lock_state_test_api_->shutdown_timer_is_running());
   PressKey(ui::VKEY_VOLUME_DOWN);
-  EXPECT_FALSE(lock_state_test_api_->shutdown_timer_is_running());
-  ReleasePowerButton();
   ReleaseKey(ui::VKEY_VOLUME_DOWN);
-  EXPECT_FALSE(power_manager_client_->backlights_forced_off());
-
-  // Tests volume up key can stop convertible power button's shutdown timer.
-  // Also tests that volume up key is not consumed.
-  PressPowerButton();
-  EXPECT_TRUE(convertible_test_api_->ShutdownTimerIsRunning());
-  PressKey(ui::VKEY_VOLUME_UP);
-  EXPECT_FALSE(LastKeyConsumed());
-  EXPECT_FALSE(convertible_test_api_->ShutdownTimerIsRunning());
-  ReleasePowerButton();
-  ReleaseKey(ui::VKEY_VOLUME_UP);
-  EXPECT_FALSE(power_manager_client_->backlights_forced_off());
-  EXPECT_FALSE(LastKeyConsumed());
-
-  // Tests volume up key can stop shutdown animation timer.
-  // Also tests that volume up key is not consumed.
-  PressPowerButton();
-  EXPECT_TRUE(convertible_test_api_->TriggerShutdownTimeout());
   EXPECT_TRUE(lock_state_test_api_->shutdown_timer_is_running());
-  PressKey(ui::VKEY_VOLUME_UP);
-  EXPECT_FALSE(LastKeyConsumed());
-  EXPECT_FALSE(lock_state_test_api_->shutdown_timer_is_running());
   ReleasePowerButton();
-  ReleaseKey(ui::VKEY_VOLUME_UP);
-  EXPECT_FALSE(power_manager_client_->backlights_forced_off());
-  EXPECT_FALSE(LastKeyConsumed());
+  EXPECT_FALSE(lock_state_test_api_->shutdown_timer_is_running());
 }
 
 // Tests volume down key pressed first and meets screenshot chord condition.
@@ -235,20 +231,20 @@ TEST_F(PowerButtonScreenshotControllerTest,
   EXPECT_TRUE(LastKeyConsumed());
   // Presses power button under screenshot chord condition, and verifies that
   // screenshot is taken.
-  tick_clock_->Advance(PowerButtonScreenshotController::kScreenshotChordDelay -
-                       base::TimeDelta::FromMilliseconds(2));
+  tick_clock_.Advance(PowerButtonScreenshotController::kScreenshotChordDelay -
+                      base::TimeDelta::FromMilliseconds(2));
   PressPowerButton();
   EXPECT_EQ(1, GetScreenshotCount());
   // Keeps pressing volume down key under screenshot chord condition will not
   // take screenshot again, volume down is also consumed.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(1));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(1));
   ResetScreenshotCount();
   PressKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_EQ(0, GetScreenshotCount());
   EXPECT_TRUE(LastKeyConsumed());
   // Keeps pressing volume down key off screenshot chord condition will not take
   // screenshot and still consume volume down event.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(2));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(2));
   PressKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_EQ(0, GetScreenshotCount());
   EXPECT_TRUE(LastKeyConsumed());
@@ -273,14 +269,14 @@ TEST_F(PowerButtonScreenshotControllerTest,
   // Advances |tick_clock_| to off screenshot chord point. This will also
   // trigger volume down timer timeout, which will perform a volume down
   // operation.
-  tick_clock_->Advance(PowerButtonScreenshotController::kScreenshotChordDelay +
-                       base::TimeDelta::FromMilliseconds(1));
+  tick_clock_.Advance(PowerButtonScreenshotController::kScreenshotChordDelay +
+                      base::TimeDelta::FromMilliseconds(1));
   EXPECT_TRUE(screenshot_test_api_->TriggerVolumeDownTimer());
   // Presses power button would not take screenshot.
   PressPowerButton();
   EXPECT_EQ(0, GetScreenshotCount());
   // Keeps pressing volume down key should continue triggerring volume down.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(2));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(2));
   PressKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_EQ(0, GetScreenshotCount());
   EXPECT_FALSE(LastKeyConsumed());
@@ -293,120 +289,27 @@ TEST_F(PowerButtonScreenshotControllerTest,
   EXPECT_FALSE(LastKeyConsumed());
 }
 
-// Tests volume key pressed first invalidates convertible power button behavior.
+// Tests volume key pressed first invalidates the power button behavior.
 TEST_F(PowerButtonScreenshotControllerTest,
        VolumeKeyPressedFirst_InvalidateConvertiblePowerButton) {
-  // Tests volume down key invalidates convertible power button behavior.
+  // Tests volume down key invalidates the power button behavior.
   PressKey(ui::VKEY_VOLUME_DOWN);
   PressPowerButton();
-  EXPECT_FALSE(convertible_test_api_->ShutdownTimerIsRunning());
+  EXPECT_FALSE(power_button_test_api_->PowerButtonMenuTimerIsRunning());
   ReleasePowerButton();
   ReleaseKey(ui::VKEY_VOLUME_DOWN);
   EXPECT_FALSE(power_manager_client_->backlights_forced_off());
 
-  // Tests volume up key invalidates convertible power button behavior. Also
+  // Tests volume up key invalidates the power button behavior. Also
   // tests that volume up key is not consumed.
   PressKey(ui::VKEY_VOLUME_UP);
   PressPowerButton();
   EXPECT_FALSE(LastKeyConsumed());
-  EXPECT_FALSE(convertible_test_api_->ShutdownTimerIsRunning());
+  EXPECT_FALSE(power_button_test_api_->PowerButtonMenuTimerIsRunning());
   ReleasePowerButton();
   ReleaseKey(ui::VKEY_VOLUME_UP);
   EXPECT_FALSE(power_manager_client_->backlights_forced_off());
   EXPECT_FALSE(LastKeyConsumed());
-}
-
-// Test fixture used for testing power button screenshot behavior under forced
-// clamshell power button.
-class ClamshellPowerButtonScreenshotControllerTest
-    : public PowerButtonScreenshotControllerTest {
- public:
-  ClamshellPowerButtonScreenshotControllerTest() = default;
-  ~ClamshellPowerButtonScreenshotControllerTest() override = default;
-
-  // PowerButtonScreenshotControllerTest:
-  void SetUp() override {
-    PowerButtonScreenshotControllerTest::SetUp();
-    ForceClamshellPowerButton();
-    SendAccelerometerUpdate(kSidewaysVector, kSidewaysVector);
-    InitScreenshotTestApi();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ClamshellPowerButtonScreenshotControllerTest);
-};
-
-// Tests on user session power button pressed first for waiting volume down key,
-// and it timeouts.
-TEST_F(ClamshellPowerButtonScreenshotControllerTest,
-       PowerButtonPressedFirst_UserSessionWaitForVolumeDownKey) {
-  Initialize(ButtonType::NORMAL, LoginStatus::USER);
-  PressPowerButton();
-  // Verifies that lock animation is not running when waiting for volume key.
-  EXPECT_TRUE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
-  EXPECT_FALSE(lock_state_test_api_->is_animating_lock());
-  // Starts lock animation once it is done with waiting.
-  EXPECT_TRUE(screenshot_test_api_->TriggerClamshellPowerButtonTimer());
-  EXPECT_TRUE(lock_state_test_api_->is_animating_lock());
-  ReleasePowerButton();
-}
-
-// Tests on non user session power button pressed first for waiting volume down
-// key, and it timeouts.
-TEST_F(ClamshellPowerButtonScreenshotControllerTest,
-       PowerButtonPressedFirst_NonUserSessionWaitForVolumeDownKey) {
-  Initialize(ButtonType::NORMAL, LoginStatus::NOT_LOGGED_IN);
-  PressPowerButton();
-  // Verifies that shutdown animation is not running when waiting for volume
-  // key.
-  EXPECT_TRUE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
-  EXPECT_FALSE(lock_state_test_api_->shutdown_timer_is_running());
-  // Starts shutdown animation once it is done with waiting.
-  EXPECT_TRUE(screenshot_test_api_->TriggerClamshellPowerButtonTimer());
-  EXPECT_TRUE(lock_state_test_api_->shutdown_timer_is_running());
-  ReleasePowerButton();
-}
-
-// Tests when power button pressed first, its release or volume key pressed
-// should stop clamshell power button timer to invalidate the delayed power
-// button behavior.
-TEST_F(ClamshellPowerButtonScreenshotControllerTest,
-       PowerButtonPressedFirst_StopClamshellPowerButtonTimer) {
-  Initialize(ButtonType::NORMAL, LoginStatus::USER);
-  // Tests volume down key stops clamshell power button timer.
-  PressPowerButton();
-  EXPECT_TRUE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
-  tick_clock_->Advance(PowerButtonScreenshotController::kScreenshotChordDelay -
-                       base::TimeDelta::FromMilliseconds(1));
-  PressKey(ui::VKEY_VOLUME_DOWN);
-  // Under screenshot chord condition, screenshot is taken and volume down key
-  // pressed is consumed.
-  EXPECT_EQ(1, GetScreenshotCount());
-  EXPECT_TRUE(LastKeyConsumed());
-  EXPECT_FALSE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
-  ReleaseKey(ui::VKEY_VOLUME_DOWN);
-  ReleasePowerButton();
-  EXPECT_FALSE(LastKeyConsumed());
-
-  // Tests volume up key stops clamshell power button timer.
-  ResetScreenshotCount();
-  PressPowerButton();
-  EXPECT_TRUE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
-  PressKey(ui::VKEY_VOLUME_UP);
-  // volume up is not used for taking screenshot so it is not consumed.
-  EXPECT_EQ(0, GetScreenshotCount());
-  EXPECT_FALSE(LastKeyConsumed());
-  EXPECT_FALSE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
-  ReleaseKey(ui::VKEY_VOLUME_UP);
-  ReleasePowerButton();
-  EXPECT_FALSE(LastKeyConsumed());
-
-  // Tests power button release before its timeout stops clamshell power button
-  // timer.
-  PressPowerButton();
-  EXPECT_TRUE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
-  ReleasePowerButton();
-  EXPECT_FALSE(screenshot_test_api_->ClamshellPowerButtonTimerIsRunning());
 }
 
 }  // namespace ash

@@ -53,7 +53,8 @@ bool CanonicalizeWebFacetURI(const std::string& input_uri,
   url::StdStringCanonOutput canonical_output(canonical_uri);
 
   bool canonicalization_succeeded = url::CanonicalizeStandardURL(
-      input_uri.c_str(), input_uri.size(), input_parsed, nullptr,
+      input_uri.c_str(), input_uri.size(), input_parsed,
+      url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION, nullptr,
       &canonical_output, &canonical_parsed);
   canonical_output.Complete();
 
@@ -155,7 +156,7 @@ bool CanonicalizeAndroidFacetURI(const std::string& input_uri,
   // We cannot use url::CanonicalizeHost as that would convert the package name
   // to lower case, but the package name is case sensitive.
   success &= CanonicalizePackageNameComponent(
-      ComponentString(input_uri.data(), input_parsed.host), &canonical_output);
+      ComponentString(input_uri, input_parsed.host), &canonical_output);
 
   canonical_output.Complete();
 

@@ -115,6 +115,53 @@ class DeletedDefaultConstructor {
   int foo_;
 };
 
+class DeletedCopy {
+ public:
+  explicit DeletedCopy(int foo) : foo_(foo) {}
+  DeletedCopy(const DeletedCopy&) = delete;
+  DeletedCopy(DeletedCopy&&) = default;
+
+  DeletedCopy& operator=(const DeletedCopy&) = delete;
+  DeletedCopy& operator=(DeletedCopy&&) = default;
+
+  int foo() const { return foo_; }
+
+ private:
+  int foo_;
+};
+
+class DeletedMove {
+ public:
+  explicit DeletedMove(int foo) : foo_(foo) {}
+  DeletedMove(const DeletedMove&) = default;
+  DeletedMove(DeletedMove&&) = delete;
+
+  DeletedMove& operator=(const DeletedMove&) = default;
+  DeletedMove& operator=(DeletedMove&&) = delete;
+
+  int foo() const { return foo_; }
+
+ private:
+  int foo_;
+};
+
+class NonTriviallyDestructibleDeletedCopyConstructor {
+ public:
+  explicit NonTriviallyDestructibleDeletedCopyConstructor(int foo)
+      : foo_(foo) {}
+  NonTriviallyDestructibleDeletedCopyConstructor(
+      const NonTriviallyDestructibleDeletedCopyConstructor&) = delete;
+  NonTriviallyDestructibleDeletedCopyConstructor(
+      NonTriviallyDestructibleDeletedCopyConstructor&&) = default;
+
+  ~NonTriviallyDestructibleDeletedCopyConstructor() {}
+
+  int foo() const { return foo_; }
+
+ private:
+  int foo_;
+};
+
 class DeleteNewOperators {
  public:
   void* operator new(size_t) = delete;
@@ -131,6 +178,10 @@ static_assert(std::is_trivially_destructible<Optional<int>>::value,
 static_assert(
     !std::is_trivially_destructible<Optional<NonTriviallyDestructible>>::value,
     "OptionalIsTriviallyDestructible");
+
+static_assert(sizeof(Optional<int>) == sizeof(internal::OptionalBase<int>),
+              "internal::{Copy,Move}{Constructible,Assignable} structs "
+              "should be 0-sized");
 
 TEST(OptionalTest, DefaultConstructor) {
   {
@@ -161,6 +212,15 @@ TEST(OptionalTest, CopyConstructor) {
 
   {
     Optional<std::string> first("foo");
+    Optional<std::string> other(first);
+
+    EXPECT_TRUE(other);
+    EXPECT_EQ(other.value(), "foo");
+    EXPECT_EQ(first, other);
+  }
+
+  {
+    const Optional<std::string> first("foo");
     Optional<std::string> other(first);
 
     EXPECT_TRUE(other);
@@ -210,32 +270,66 @@ TEST(OptionalTest, MoveConstructor) {
     constexpr Optional<float> first(0.1f);
     constexpr Optional<float> second(std::move(first));
 
-    EXPECT_TRUE(second);
+    EXPECT_TRUE(second.has_value());
     EXPECT_EQ(second.value(), 0.1f);
 
-    EXPECT_TRUE(first);
+    EXPECT_TRUE(first.has_value());
   }
 
   {
     Optional<std::string> first("foo");
     Optional<std::string> second(std::move(first));
 
-    EXPECT_TRUE(second);
+    EXPECT_TRUE(second.has_value());
     EXPECT_EQ("foo", second.value());
 
-    EXPECT_TRUE(first);
+    EXPECT_TRUE(first.has_value());
   }
 
   {
     Optional<TestObject> first(TestObject(3, 0.1));
     Optional<TestObject> second(std::move(first));
 
-    EXPECT_TRUE(!!second);
+    EXPECT_TRUE(second.has_value());
     EXPECT_EQ(TestObject::State::MOVE_CONSTRUCTED, second->state());
     EXPECT_TRUE(TestObject(3, 0.1) == second.value());
 
-    EXPECT_TRUE(!!first);
+    EXPECT_TRUE(first.has_value());
     EXPECT_EQ(TestObject::State::MOVED_FROM, first->state());
+  }
+
+  // Even if copy constructor is deleted, move constructor needs to work.
+  // Note that it couldn't be constexpr.
+  {
+    Optional<DeletedCopy> first(in_place, 42);
+    Optional<DeletedCopy> second(std::move(first));
+
+    EXPECT_TRUE(second.has_value());
+    EXPECT_EQ(42, second->foo());
+
+    EXPECT_TRUE(first.has_value());
+  }
+
+  {
+    Optional<DeletedMove> first(in_place, 42);
+    Optional<DeletedMove> second(std::move(first));
+
+    EXPECT_TRUE(second.has_value());
+    EXPECT_EQ(42, second->foo());
+
+    EXPECT_TRUE(first.has_value());
+  }
+
+  {
+    Optional<NonTriviallyDestructibleDeletedCopyConstructor> first(in_place,
+                                                                   42);
+    Optional<NonTriviallyDestructibleDeletedCopyConstructor> second(
+        std::move(first));
+
+    EXPECT_TRUE(second.has_value());
+    EXPECT_EQ(42, second->foo());
+
+    EXPECT_TRUE(first.has_value());
   }
 }
 
@@ -271,6 +365,65 @@ TEST(OptionalTest, MoveValueConstructor) {
     EXPECT_TRUE(o);
     EXPECT_EQ(TestObject::State::MOVE_CONSTRUCTED, o->state());
     EXPECT_EQ(TestObject(3, 0.1), o.value());
+  }
+}
+
+TEST(OptionalTest, ConvertingCopyConstructor) {
+  {
+    Optional<int> first(1);
+    Optional<double> second(first);
+    EXPECT_TRUE(second.has_value());
+    EXPECT_EQ(1.0, second.value());
+  }
+
+  // Make sure explicit is not marked for convertible case.
+  {
+    Optional<int> o(1);
+    ignore_result<Optional<double>>(o);
+  }
+}
+
+TEST(OptionalTest, ConvertingMoveConstructor) {
+  {
+    Optional<int> first(1);
+    Optional<double> second(std::move(first));
+    EXPECT_TRUE(second.has_value());
+    EXPECT_EQ(1.0, second.value());
+  }
+
+  // Make sure explicit is not marked for convertible case.
+  {
+    Optional<int> o(1);
+    ignore_result<Optional<double>>(std::move(o));
+  }
+
+  {
+    class Test1 {
+     public:
+      explicit Test1(int foo) : foo_(foo) {}
+
+      int foo() const { return foo_; }
+
+     private:
+      int foo_;
+    };
+
+    // Not copyable but convertible from Test1.
+    class Test2 {
+     public:
+      Test2(const Test2&) = delete;
+      explicit Test2(Test1&& other) : bar_(other.foo()) {}
+
+      double bar() const { return bar_; }
+
+     private:
+      double bar_;
+    };
+
+    Optional<Test1> first(in_place, 42);
+    Optional<Test2> second(std::move(first));
+    EXPECT_TRUE(second.has_value());
+    EXPECT_EQ(42.0, second->bar());
   }
 }
 
@@ -313,6 +466,83 @@ TEST(OptionalTest, ConstructorForwardInitListAndArguments) {
     EXPECT_TRUE(opt);
     EXPECT_THAT(*opt, ElementsAre(3, 1));
     EXPECT_EQ(2u, opt->size());
+  }
+}
+
+TEST(OptionalTest, ForwardConstructor) {
+  {
+    Optional<double> a(1);
+    EXPECT_TRUE(a.has_value());
+    EXPECT_EQ(1.0, a.value());
+  }
+
+  // Test that default type of 'U' is value_type.
+  {
+    struct TestData {
+      int a;
+      double b;
+      bool c;
+    };
+
+    Optional<TestData> a({1, 2.0, true});
+    EXPECT_TRUE(a.has_value());
+    EXPECT_EQ(1, a->a);
+    EXPECT_EQ(2.0, a->b);
+    EXPECT_TRUE(a->c);
+  }
+
+  // If T has a constructor with a param Optional<U>, and another ctor with a
+  // param U, then T(Optional<U>) should be used for Optional<T>(Optional<U>)
+  // constructor.
+  {
+    enum class ParamType {
+      DEFAULT_CONSTRUCTED,
+      COPY_CONSTRUCTED,
+      MOVE_CONSTRUCTED,
+      INT,
+      IN_PLACE,
+      OPTIONAL_INT,
+    };
+    struct Test {
+      Test() : param_type(ParamType::DEFAULT_CONSTRUCTED) {}
+      Test(const Test& param) : param_type(ParamType::COPY_CONSTRUCTED) {}
+      Test(Test&& param) : param_type(ParamType::MOVE_CONSTRUCTED) {}
+      explicit Test(int param) : param_type(ParamType::INT) {}
+      explicit Test(in_place_t param) : param_type(ParamType::IN_PLACE) {}
+      explicit Test(Optional<int> param)
+          : param_type(ParamType::OPTIONAL_INT) {}
+
+      ParamType param_type;
+    };
+
+    // Overload resolution with copy-conversion constructor.
+    {
+      const Optional<int> arg(in_place, 1);
+      Optional<Test> testee(arg);
+      EXPECT_EQ(ParamType::OPTIONAL_INT, testee->param_type);
+    }
+
+    // Overload resolution with move conversion constructor.
+    {
+      Optional<Test> testee(Optional<int>(in_place, 1));
+      EXPECT_EQ(ParamType::OPTIONAL_INT, testee->param_type);
+    }
+
+    // Default constructor should be used.
+    {
+      Optional<Test> testee(in_place);
+      EXPECT_EQ(ParamType::DEFAULT_CONSTRUCTED, testee->param_type);
+    }
+  }
+
+  {
+    struct Test {
+      Test(int a) {}  // NOLINT(runtime/explicit)
+    };
+    // If T is convertible from U, it is not marked as explicit.
+    static_assert(std::is_convertible<int, Test>::value,
+                  "Int should be convertible to Test.");
+    ([](Optional<Test> param) {})(1);
   }
 }
 
@@ -403,6 +633,57 @@ TEST(OptionalTest, AssignObject) {
     EXPECT_TRUE(a.value() == TestObject(3, 0.1));
     EXPECT_TRUE(a == b);
   }
+
+  {
+    Optional<DeletedMove> a(in_place, 42);
+    Optional<DeletedMove> b;
+    b = a;
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(a->foo(), b->foo());
+  }
+
+  {
+    Optional<DeletedMove> a(in_place, 42);
+    Optional<DeletedMove> b(in_place, 1);
+    b = a;
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(a->foo(), b->foo());
+  }
+
+  // Converting assignment.
+  {
+    Optional<int> a(in_place, 1);
+    Optional<double> b;
+    b = a;
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(1, a.value());
+    EXPECT_EQ(1.0, b.value());
+  }
+
+  {
+    Optional<int> a(in_place, 42);
+    Optional<double> b(in_place, 1);
+    b = a;
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(42, a.value());
+    EXPECT_EQ(42.0, b.value());
+  }
+
+  {
+    Optional<int> a;
+    Optional<double> b(in_place, 1);
+    b = a;
+    EXPECT_FALSE(!!a);
+    EXPECT_FALSE(!!b);
+  }
 }
 
 TEST(OptionalTest, AssignObject_rvalue) {
@@ -451,6 +732,56 @@ TEST(OptionalTest, AssignObject_rvalue) {
     EXPECT_EQ(TestObject::State::MOVE_ASSIGNED, a->state());
     EXPECT_EQ(TestObject::State::MOVED_FROM, b->state());
   }
+
+  {
+    Optional<DeletedMove> a(in_place, 42);
+    Optional<DeletedMove> b;
+    b = std::move(a);
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(42, b->foo());
+  }
+
+  {
+    Optional<DeletedMove> a(in_place, 42);
+    Optional<DeletedMove> b(in_place, 1);
+    b = std::move(a);
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(42, b->foo());
+  }
+
+  // Converting assignment.
+  {
+    Optional<int> a(in_place, 1);
+    Optional<double> b;
+    b = std::move(a);
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(1.0, b.value());
+  }
+
+  {
+    Optional<int> a(in_place, 42);
+    Optional<double> b(in_place, 1);
+    b = std::move(a);
+
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(42.0, b.value());
+  }
+
+  {
+    Optional<int> a;
+    Optional<double> b(in_place, 1);
+    b = std::move(a);
+
+    EXPECT_FALSE(!!a);
+    EXPECT_FALSE(!!b);
+  }
 }
 
 TEST(OptionalTest, AssignNull) {
@@ -476,6 +807,190 @@ TEST(OptionalTest, AssignNull) {
     a = base::nullopt;
     b = base::nullopt;
     EXPECT_TRUE(a == b);
+  }
+}
+
+TEST(OptionalTest, AssignOverload) {
+  struct Test1 {
+    enum class State {
+      CONSTRUCTED,
+      MOVED,
+    };
+    State state = State::CONSTRUCTED;
+  };
+
+  // Here, Optional<Test2> can be assigned from Optioanl<Test1>.
+  // In case of move, marks MOVED to Test1 instance.
+  struct Test2 {
+    enum class State {
+      DEFAULT_CONSTRUCTED,
+      COPY_CONSTRUCTED_FROM_TEST1,
+      MOVE_CONSTRUCTED_FROM_TEST1,
+      COPY_ASSIGNED_FROM_TEST1,
+      MOVE_ASSIGNED_FROM_TEST1,
+    };
+
+    Test2() = default;
+    explicit Test2(const Test1& test1)
+        : state(State::COPY_CONSTRUCTED_FROM_TEST1) {}
+    explicit Test2(Test1&& test1) : state(State::MOVE_CONSTRUCTED_FROM_TEST1) {
+      test1.state = Test1::State::MOVED;
+    }
+    Test2& operator=(const Test1& test1) {
+      state = State::COPY_ASSIGNED_FROM_TEST1;
+      return *this;
+    }
+    Test2& operator=(Test1&& test1) {
+      state = State::MOVE_ASSIGNED_FROM_TEST1;
+      test1.state = Test1::State::MOVED;
+      return *this;
+    }
+
+    State state = State::DEFAULT_CONSTRUCTED;
+  };
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test2> b;
+
+    b = a;
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::CONSTRUCTED, a->state);
+    EXPECT_EQ(Test2::State::COPY_CONSTRUCTED_FROM_TEST1, b->state);
+  }
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test2> b(in_place);
+
+    b = a;
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::CONSTRUCTED, a->state);
+    EXPECT_EQ(Test2::State::COPY_ASSIGNED_FROM_TEST1, b->state);
+  }
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test2> b;
+
+    b = std::move(a);
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::MOVED, a->state);
+    EXPECT_EQ(Test2::State::MOVE_CONSTRUCTED_FROM_TEST1, b->state);
+  }
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test2> b(in_place);
+
+    b = std::move(a);
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::MOVED, a->state);
+    EXPECT_EQ(Test2::State::MOVE_ASSIGNED_FROM_TEST1, b->state);
+  }
+
+  // Similar to Test2, but Test3 also has copy/move ctor and assign operators
+  // from Optional<Test1>, too. In this case, for a = b where a is
+  // Optional<Test3> and b is Optional<Test1>,
+  // Optional<T>::operator=(U&&) where U is Optional<Test1> should be used
+  // rather than Optional<T>::operator=(Optional<U>&&) where U is Test1.
+  struct Test3 {
+    enum class State {
+      DEFAULT_CONSTRUCTED,
+      COPY_CONSTRUCTED_FROM_TEST1,
+      MOVE_CONSTRUCTED_FROM_TEST1,
+      COPY_CONSTRUCTED_FROM_OPTIONAL_TEST1,
+      MOVE_CONSTRUCTED_FROM_OPTIONAL_TEST1,
+      COPY_ASSIGNED_FROM_TEST1,
+      MOVE_ASSIGNED_FROM_TEST1,
+      COPY_ASSIGNED_FROM_OPTIONAL_TEST1,
+      MOVE_ASSIGNED_FROM_OPTIONAL_TEST1,
+    };
+
+    Test3() = default;
+    explicit Test3(const Test1& test1)
+        : state(State::COPY_CONSTRUCTED_FROM_TEST1) {}
+    explicit Test3(Test1&& test1) : state(State::MOVE_CONSTRUCTED_FROM_TEST1) {
+      test1.state = Test1::State::MOVED;
+    }
+    explicit Test3(const Optional<Test1>& test1)
+        : state(State::COPY_CONSTRUCTED_FROM_OPTIONAL_TEST1) {}
+    explicit Test3(Optional<Test1>&& test1)
+        : state(State::MOVE_CONSTRUCTED_FROM_OPTIONAL_TEST1) {
+      // In the following senarios, given |test1| should always have value.
+      DCHECK(test1.has_value());
+      test1->state = Test1::State::MOVED;
+    }
+    Test3& operator=(const Test1& test1) {
+      state = State::COPY_ASSIGNED_FROM_TEST1;
+      return *this;
+    }
+    Test3& operator=(Test1&& test1) {
+      state = State::MOVE_ASSIGNED_FROM_TEST1;
+      test1.state = Test1::State::MOVED;
+      return *this;
+    }
+    Test3& operator=(const Optional<Test1>& test1) {
+      state = State::COPY_ASSIGNED_FROM_OPTIONAL_TEST1;
+      return *this;
+    }
+    Test3& operator=(Optional<Test1>&& test1) {
+      state = State::MOVE_ASSIGNED_FROM_OPTIONAL_TEST1;
+      // In the following senarios, given |test1| should always have value.
+      DCHECK(test1.has_value());
+      test1->state = Test1::State::MOVED;
+      return *this;
+    }
+
+    State state = State::DEFAULT_CONSTRUCTED;
+  };
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test3> b;
+
+    b = a;
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::CONSTRUCTED, a->state);
+    EXPECT_EQ(Test3::State::COPY_CONSTRUCTED_FROM_OPTIONAL_TEST1, b->state);
+  }
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test3> b(in_place);
+
+    b = a;
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::CONSTRUCTED, a->state);
+    EXPECT_EQ(Test3::State::COPY_ASSIGNED_FROM_OPTIONAL_TEST1, b->state);
+  }
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test3> b;
+
+    b = std::move(a);
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::MOVED, a->state);
+    EXPECT_EQ(Test3::State::MOVE_CONSTRUCTED_FROM_OPTIONAL_TEST1, b->state);
+  }
+
+  {
+    Optional<Test1> a(in_place);
+    Optional<Test3> b(in_place);
+
+    b = std::move(a);
+    EXPECT_TRUE(!!a);
+    EXPECT_TRUE(!!b);
+    EXPECT_EQ(Test1::State::MOVED, a->state);
+    EXPECT_EQ(Test3::State::MOVE_ASSIGNED_FROM_OPTIONAL_TEST1, b->state);
   }
 }
 
@@ -524,6 +1039,18 @@ TEST(OptionalTest, ValueOr) {
 
     a = base::nullopt;
     EXPECT_EQ(0.0f, a.value_or(0.0f));
+  }
+
+  // value_or() can be constexpr.
+  {
+    constexpr Optional<int> a(in_place, 1);
+    constexpr int value = a.value_or(10);
+    EXPECT_EQ(1, value);
+  }
+  {
+    constexpr Optional<int> a;
+    constexpr int value = a.value_or(10);
+    EXPECT_EQ(10, value);
   }
 
   {
@@ -598,7 +1125,7 @@ TEST(OptionalTest, Swap_bothValue) {
 TEST(OptionalTest, Emplace) {
   {
     Optional<float> a(0.1f);
-    a.emplace(0.3f);
+    EXPECT_EQ(0.3f, a.emplace(0.3f));
 
     EXPECT_TRUE(a);
     EXPECT_EQ(0.3f, a.value());
@@ -606,7 +1133,7 @@ TEST(OptionalTest, Emplace) {
 
   {
     Optional<std::string> a("foo");
-    a.emplace("bar");
+    EXPECT_EQ("bar", a.emplace("bar"));
 
     EXPECT_TRUE(a);
     EXPECT_EQ("bar", a.value());
@@ -614,7 +1141,7 @@ TEST(OptionalTest, Emplace) {
 
   {
     Optional<TestObject> a(TestObject(0, 0.1));
-    a.emplace(TestObject(1, 0.2));
+    EXPECT_EQ(TestObject(1, 0.2), a.emplace(TestObject(1, 0.2)));
 
     EXPECT_TRUE(!!a);
     EXPECT_TRUE(TestObject(1, 0.2) == a.value());
@@ -1372,34 +1899,34 @@ TEST(OptionalTest, NotEqualsNull) {
 
 TEST(OptionalTest, MakeOptional) {
   {
-    Optional<float> o = base::make_optional(32.f);
+    Optional<float> o = make_optional(32.f);
     EXPECT_TRUE(o);
     EXPECT_EQ(32.f, *o);
 
     float value = 3.f;
-    o = base::make_optional(std::move(value));
+    o = make_optional(std::move(value));
     EXPECT_TRUE(o);
     EXPECT_EQ(3.f, *o);
   }
 
   {
-    Optional<std::string> o = base::make_optional(std::string("foo"));
+    Optional<std::string> o = make_optional(std::string("foo"));
     EXPECT_TRUE(o);
     EXPECT_EQ("foo", *o);
 
     std::string value = "bar";
-    o = base::make_optional(std::move(value));
+    o = make_optional(std::move(value));
     EXPECT_TRUE(o);
     EXPECT_EQ(std::string("bar"), *o);
   }
 
   {
-    Optional<TestObject> o = base::make_optional(TestObject(3, 0.1));
+    Optional<TestObject> o = make_optional(TestObject(3, 0.1));
     EXPECT_TRUE(!!o);
     EXPECT_TRUE(TestObject(3, 0.1) == *o);
 
     TestObject value = TestObject(0, 0.42);
-    o = base::make_optional(std::move(value));
+    o = make_optional(std::move(value));
     EXPECT_TRUE(!!o);
     EXPECT_TRUE(TestObject(0, 0.42) == *o);
     EXPECT_EQ(TestObject::State::MOVED_FROM, value.state());
@@ -1407,6 +1934,22 @@ TEST(OptionalTest, MakeOptional) {
 
     EXPECT_EQ(TestObject::State::MOVE_CONSTRUCTED,
               base::make_optional(std::move(value))->state());
+  }
+
+  {
+    struct Test {
+      Test(int a, double b, bool c) : a(a), b(b), c(c) {}
+
+      int a;
+      double b;
+      bool c;
+    };
+
+    Optional<Test> o = make_optional<Test>(1, 2.0, true);
+    EXPECT_TRUE(!!o);
+    EXPECT_EQ(1, o->a);
+    EXPECT_EQ(2.0, o->b);
+    EXPECT_TRUE(o->c);
   }
 
   {
@@ -1569,6 +2112,74 @@ TEST(OptionalTest, DontCallNewMemberFunction) {
 
   a = DeleteNewOperators();
   EXPECT_TRUE(a.has_value());
+}
+
+TEST(OptionalTest, Noexcept) {
+  // Trivial copy ctor, non-trivial move ctor, nothrow move assign.
+  struct Test1 {
+    Test1(const Test1&) = default;
+    Test1(Test1&&) {}
+    Test1& operator=(Test1&&) = default;
+  };
+  // Non-trivial copy ctor, trivial move ctor, throw move assign.
+  struct Test2 {
+    Test2(const Test2&) {}
+    Test2(Test2&&) = default;
+    Test2& operator=(Test2&&) { return *this; }
+  };
+  // Trivial copy ctor, non-trivial nothrow move ctor.
+  struct Test3 {
+    Test3(const Test3&) = default;
+    Test3(Test3&&) noexcept {}
+  };
+  // Non-trivial copy ctor, non-trivial nothrow move ctor.
+  struct Test4 {
+    Test4(const Test4&) {}
+    Test4(Test4&&) noexcept {}
+  };
+  // Non-trivial copy ctor, non-trivial move ctor.
+  struct Test5 {
+    Test5(const Test5&) {}
+    Test5(Test5&&) {}
+  };
+
+  static_assert(
+      noexcept(Optional<int>(std::declval<Optional<int>>())),
+      "move constructor for noexcept move-constructible T must be noexcept "
+      "(trivial copy, trivial move)");
+  static_assert(
+      !noexcept(Optional<Test1>(std::declval<Optional<Test1>>())),
+      "move constructor for non-noexcept move-constructible T must not be "
+      "noexcept (trivial copy)");
+  static_assert(
+      noexcept(Optional<Test2>(std::declval<Optional<Test2>>())),
+      "move constructor for noexcept move-constructible T must be noexcept "
+      "(non-trivial copy, trivial move)");
+  static_assert(
+      noexcept(Optional<Test3>(std::declval<Optional<Test3>>())),
+      "move constructor for noexcept move-constructible T must be noexcept "
+      "(trivial copy, non-trivial move)");
+  static_assert(
+      noexcept(Optional<Test4>(std::declval<Optional<Test4>>())),
+      "move constructor for noexcept move-constructible T must be noexcept "
+      "(non-trivial copy, non-trivial move)");
+  static_assert(
+      !noexcept(Optional<Test5>(std::declval<Optional<Test5>>())),
+      "move constructor for non-noexcept move-constructible T must not be "
+      "noexcept (non-trivial copy)");
+
+  static_assert(
+      noexcept(std::declval<Optional<int>>() = std::declval<Optional<int>>()),
+      "move assign for noexcept move-constructible/move-assignable T "
+      "must be noexcept");
+  static_assert(
+      !noexcept(std::declval<Optional<Test1>>() =
+                    std::declval<Optional<Test1>>()),
+      "move assign for non-noexcept move-constructible T must not be noexcept");
+  static_assert(
+      !noexcept(std::declval<Optional<Test2>>() =
+                    std::declval<Optional<Test2>>()),
+      "move assign for non-noexcept move-assignable T must not be noexcept");
 }
 
 }  // namespace base

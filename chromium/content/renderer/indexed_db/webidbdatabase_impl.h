@@ -14,9 +14,9 @@
 #include "content/common/content_export.h"
 #include "content/common/indexed_db/indexed_db.mojom.h"
 #include "content/common/indexed_db/indexed_db_constants.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBCursor.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabase.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_cursor.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_types.h"
 
 namespace blink {
 class WebBlobInfo;
@@ -132,8 +132,6 @@ class CONTENT_EXPORT WebIDBDatabaseImpl : public blink::WebIDBDatabase {
                    const blink::WebString& new_name) override;
   void Abort(long long transaction_id) override;
   void Commit(long long transaction_id) override;
-  void AckReceivedBlobs(
-      const blink::WebVector<blink::WebString>& uuids) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(WebIDBDatabaseImplTest, ValueSizeTest);

@@ -3,8 +3,12 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 
 <!-- Common css variables for Material Design WebUI. -->
+<custom-style>
 <style is="custom-style">
-  :root {
+  html {
+    --cr-primary-text-color: var(--google-grey-900);
+    --cr-secondary-text-color: var(--google-grey-refresh-700);
+
     --cr-actionable: {
       cursor: pointer;
     };
@@ -31,6 +35,14 @@
 
     --cr-icon-ripple-margin: calc(var(--cr-icon-ripple-padding) * -1);
 
+    /* Common properties for WebUI pages. */
+    --cr-page-host: {
+      color: var(--cr-primary-text-color);
+      line-height: 154%; /* Apply 20px default line-height to all text. */
+      overflow: hidden;  /* Prevent double scroll bar bugs. */
+      user-select: text;
+    };
+
     --cr-paper-icon-button-margin: {
       /* Shift button so ripple overlaps the end of the row. */
       -webkit-margin-end: var(--cr-icon-ripple-margin);
@@ -38,12 +50,12 @@
     }
 
     --cr-primary-text: {
-        color: var(--paper-grey-900);
+        color: var(--cr-primary-text-color);
         line-height: 154%;  /* 20px. */
      }
 
     --cr-secondary-text: {
-      color: var(--paper-grey-600);
+      color: var(--cr-secondary-text-color);
       font-weight: 400;
     }
 
@@ -67,6 +79,12 @@
       padding: 0 var(--cr-section-padding);
     };
 
+    --cr-text-elide: {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    };
+
     --cr-title-text: {
         color: rgb(90, 90, 90);
         font-size: 107.6923%;  /* Go to 14px from 13px. */
@@ -74,7 +92,7 @@
     };
 
     --cr-section-text: {
-        color: var(--paper-grey-700);
+        color: var(--google-grey-refresh-700);
         font-size: 100%;  /* Likely to be 13px. */
         font-weight: 500;
     };
@@ -96,6 +114,8 @@
     --cr-separator-height: 1px;
     --cr-separator-line: var(--cr-separator-height) solid rgba(0, 0, 0, 0.06);
 
+    --cr-toolbar-overlay-animation-duration: 150ms;
+
     --cr-container-shadow: {
       box-shadow: inset 0 5px 6px -3px rgba(0, 0, 0, 0.4);
       height: 6px;
@@ -111,5 +131,41 @@
     }
 
     --cr-container-shadow-max-opacity: 1;
+
+    /** MD Refresh Styles */
+    --cr-card-border-radius: 4px;
+    --cr-card-elevation: {
+      /* google-grey-800 with opacity */
+      box-shadow: rgba(60, 64, 67, .3) 0 1px 2px 0,
+                  rgba(60, 64, 67, .15) 0 1px 3px 1px;
+    }
+    --cr-disabled-opacity: 0.38;
+    --cr-form-field-bottom-spacing: 16px;
+    --cr-form-field-label-font-size: 0.625rem;
+    --cr-form-field-label: {
+      color: var(--google-grey-refresh-700);
+      display: block;
+      font-size: var(--cr-form-field-label-font-size);
+      font-weight: 500;
+      letter-spacing: 0.4px;
+      line-height: var(--cr-form-field-label-font-size);
+      margin-bottom: 8px;
+    }
+    --google-blue-50: #E8F0FE;
+    --google-blue-600: #1A73E8;
+    /* -refresh differentiates from google-green-700 in polymer's color.html. */
+    --google-green-refresh-700: #188038;
+    --google-blue-600-opacity-24: rgba(26, 115, 232, 0.24);
+    /* -refresh differentiates from google-grey-100 in polymer's color.html. */
+    --google-grey-refresh-100: #F1F3F4;
+    --google-grey-200: #E8EAED;
+    --google-grey-400: #BDC1C6;
+    --google-grey-600: #80868B;
+    --google-grey-600-opacity-24: rgba(128, 134, 139, 0.24);
+    /* -refresh differentiates from google-grey-700 in polymer's color.html. */
+    --google-grey-refresh-700: #5F6368;
+    --google-grey-900: #202124;
+    --google-red-600: #D93025;
   }
 </style>
+</custom-style>

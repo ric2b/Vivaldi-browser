@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "chromeos/components/tether/asynchronous_shutdown_object_container_impl.h"
 #include "chromeos/components/tether/crash_recovery_manager_impl.h"
 #include "chromeos/components/tether/fake_active_host.h"
@@ -51,6 +52,8 @@ class FakeAsynchronousShutdownObjectContainerFactory
   std::unique_ptr<AsynchronousShutdownObjectContainer> BuildInstance(
       scoped_refptr<device::BluetoothAdapter> adapter,
       cryptauth::CryptAuthService* cryptauth_service,
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
       TetherHostFetcher* tether_host_fetcher,
       NetworkStateHandler* network_state_handler,
       ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
@@ -81,7 +84,10 @@ class FakeSynchronousShutdownObjectContainerFactory
       PrefService* pref_service,
       NetworkStateHandler* network_state_handler,
       NetworkConnect* network_connect,
-      NetworkConnectionHandler* network_connection_handler) override {
+      NetworkConnectionHandler* network_connection_handler,
+      session_manager::SessionManager* session_manager,
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client) override {
     return base::WrapUnique(fake_synchronous_container_);
   }
 
@@ -154,14 +160,15 @@ class TetherComponentImplTest : public testing::Test {
     CrashRecoveryManagerImpl::Factory::SetInstanceForTesting(
         fake_crash_recovery_manager_factory_.get());
 
-    component_ = std::make_unique<TetherComponentImpl>(
-        nullptr /* cryptauth_service */, nullptr /* tether_host_fetcher */,
+    component_ = TetherComponentImpl::Factory::NewInstance(
+        nullptr /* cryptauth_service */, nullptr /* device_sync_client */,
+        nullptr /* secure_channel_client */, nullptr /* tether_host_fetcher */,
         nullptr /* notification_presenter */,
         nullptr /* gms_core_notifications_state_tracker */,
         nullptr /* pref_service */, nullptr /* network_state_handler */,
         nullptr /* managed_network_configuration_handler */,
         nullptr /* network_connect */, nullptr /* network_connection_handler */,
-        nullptr /* adapter */);
+        nullptr /* adapter */, nullptr /* session_manager */);
 
     test_observer_ = std::make_unique<TestTetherComponentObserver>();
     component_->AddObserver(test_observer_.get());
@@ -208,7 +215,7 @@ class TetherComponentImplTest : public testing::Test {
   std::unique_ptr<FakeCrashRecoveryManagerFactory>
       fake_crash_recovery_manager_factory_;
 
-  std::unique_ptr<TetherComponentImpl> component_;
+  std::unique_ptr<TetherComponent> component_;
 
   std::unique_ptr<TestTetherComponentObserver> test_observer_;
 

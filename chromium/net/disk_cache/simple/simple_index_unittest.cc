@@ -24,11 +24,11 @@
 #include "base/time/time.h"
 #include "net/base/cache_type.h"
 #include "net/disk_cache/backend_cleanup_tracker.h"
-#include "net/disk_cache/simple/simple_experiment.h"
 #include "net/disk_cache/simple/simple_index_delegate.h"
 #include "net/disk_cache/simple/simple_index_file.h"
 #include "net/disk_cache/simple/simple_test_util.h"
 #include "net/disk_cache/simple/simple_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace disk_cache {
@@ -107,7 +107,8 @@ class MockSimpleIndexFile : public SimpleIndexFile,
   SimpleIndex::EntrySet disk_write_entry_set_;
 };
 
-class SimpleIndexTest  : public testing::Test, public SimpleIndexDelegate {
+class SimpleIndexTest : public net::TestWithScopedTaskEnvironment,
+                        public SimpleIndexDelegate {
  protected:
   SimpleIndexTest()
       : hashes_(base::Bind(&HashesInitializer)),
@@ -138,7 +139,7 @@ class SimpleIndexTest  : public testing::Test, public SimpleIndexDelegate {
 
   // From SimpleIndexDelegate:
   void DoomEntries(std::vector<uint64_t>* entry_hashes,
-                   const net::CompletionCallback& callback) override {
+                   net::CompletionOnceCallback callback) override {
     for (const uint64_t& entry_hash : *entry_hashes)
       index_->Remove(entry_hash);
     last_doom_entry_hashes_ = *entry_hashes;
@@ -734,11 +735,9 @@ TEST_F(SimpleIndexTest, DiskWriteExecuted) {
   index()->Insert(kHash1);
   index()->UpdateEntrySize(kHash1, 20u);
   EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
-  base::Closure user_task(index()->write_to_disk_timer_.user_task());
-  index()->write_to_disk_timer_.Stop();
 
   EXPECT_EQ(0, index_file_->disk_writes());
-  user_task.Run();
+  index()->write_to_disk_timer_.FireNow();
   EXPECT_EQ(1, index_file_->disk_writes());
   SimpleIndex::EntrySet entry_set;
   index_file_->GetAndResetDiskWriteEntrySet(&entry_set);

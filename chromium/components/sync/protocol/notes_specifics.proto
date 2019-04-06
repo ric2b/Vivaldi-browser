@@ -29,6 +29,7 @@ message NotesSpecifics {
   enum VivaldiSpecialNotesType {
     NORMAL = 0;
     TRASH_NODE = 1;
+    SEPARATOR = 2;
   }
 
   optional string url = 1;

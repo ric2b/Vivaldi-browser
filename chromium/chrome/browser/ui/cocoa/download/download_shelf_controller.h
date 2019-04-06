@@ -19,13 +19,16 @@ class Browser;
 @class BrowserWindowController;
 @class DownloadItemController;
 class DownloadShelf;
-@class DownloadShelfView;
+@class DownloadShelfViewCocoa;
 @class HyperlinkButtonCell;
-@class HoverButton;
+@class HoverButtonCocoa;
 
 namespace content {
-class DownloadItem;
 class PageNavigator;
+}
+
+namespace download {
+class DownloadItem;
 }
 
 // A controller class that manages the download shelf for one window. It is
@@ -48,7 +51,7 @@ class PageNavigator;
 @interface DownloadShelfController
     : NSViewController<NSTextViewDelegate, HasWeakBrowserPointer> {
  @private
-  IBOutlet HoverButton* hoverCloseButton_;
+  IBOutlet HoverButtonCocoa* hoverCloseButton_;
 
   // YES if the download shelf is intended to be displayed. The shelf animates
   // out when it is closing. During this time, barIsVisible_ is NO although the
@@ -116,7 +119,7 @@ class PageNavigator;
 
 // Add a new download item to the leftmost position of the download shelf. The
 // item should not have been already added to this shelf.
-- (void)addDownloadItem:(content::DownloadItem*)downloadItem;
+- (void)addDownloadItem:(download::DownloadItem*)downloadItem;
 
 // Similar to addDownloadItem above, but adds a DownloadItemController.
 - (void)add:(DownloadItemController*)download;

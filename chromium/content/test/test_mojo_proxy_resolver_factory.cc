@@ -7,13 +7,12 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace content {
 
 TestMojoProxyResolverFactory::TestMojoProxyResolverFactory()
-    : service_ref_factory_(base::Bind(&base::DoNothing)), binding_(this) {
+    : service_ref_factory_(base::DoNothing()), binding_(this) {
   proxy_resolver_factory_impl_.BindRequest(mojo::MakeRequest(&factory_),
                                            &service_ref_factory_);
 }

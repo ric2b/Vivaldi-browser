@@ -24,15 +24,15 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/attestation/attestation_constants.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/mock_async_method_caller.h"
+#include "chromeos/dbus/attestation_constants.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "extensions/common/extension_builder.h"
@@ -320,7 +320,8 @@ TEST_F(EPKPChallengeMachineKeyTest, KeyExists) {
   EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, _))
       .Times(0);
 
-  EXPECT_TRUE(utils::RunFunction(func_.get(), kArgs, browser(), utils::NONE));
+  EXPECT_TRUE(utils::RunFunction(func_.get(), kArgs, browser(),
+                                 extensions::api_test_utils::NONE));
 }
 
 TEST_F(EPKPChallengeMachineKeyTest, AttestationNotPrepared) {
@@ -363,7 +364,7 @@ TEST_P(EPKPChallengeMachineKeyAllProfilesTest, Success) {
       .Times(1);
 
   std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func_.get(), kArgs, browser(), utils::NONE));
+      func_.get(), kArgs, browser(), extensions::api_test_utils::NONE));
 
   std::string response;
   value->GetAsString(&response);
@@ -490,15 +491,16 @@ TEST_F(EPKPChallengeUserKeyTest, KeyExists) {
   EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, _))
       .Times(0);
 
-  EXPECT_TRUE(utils::RunFunction(func_.get(), kArgs, browser(), utils::NONE));
+  EXPECT_TRUE(utils::RunFunction(func_.get(), kArgs, browser(),
+                                 extensions::api_test_utils::NONE));
 }
 
 TEST_F(EPKPChallengeUserKeyTest, KeyNotRegistered) {
   EXPECT_CALL(mock_async_method_caller_, TpmAttestationRegisterKey(_, _, _, _))
       .Times(0);
 
-  EXPECT_TRUE(utils::RunFunction(
-      func_.get(), "[\"Y2hhbGxlbmdl\", false]", browser(), utils::NONE));
+  EXPECT_TRUE(utils::RunFunction(func_.get(), "[\"Y2hhbGxlbmdl\", false]",
+                                 browser(), extensions::api_test_utils::NONE));
 }
 
 TEST_F(EPKPChallengeUserKeyTest, PersonalDevice) {
@@ -533,7 +535,7 @@ TEST_F(EPKPChallengeUserKeyTest, Success) {
       .Times(1);
 
   std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func_.get(), kArgs, browser(), utils::NONE));
+      func_.get(), kArgs, browser(), extensions::api_test_utils::NONE));
 
   std::string response;
   value->GetAsString(&response);

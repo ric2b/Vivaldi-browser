@@ -12,6 +12,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "extensions/common/extension.h"
 
 class StartupHelperBrowserTest : public InProcessBrowserTest {
  public:
@@ -20,12 +21,16 @@ class StartupHelperBrowserTest : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kNoStartupWindow);
-    PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_);
+
+    base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_);
     test_data_dir_ = test_data_dir_.AppendASCII("extensions");
+    InProcessBrowserTest::SetUpCommandLine(command_line);
   }
 
  protected:
   base::FilePath test_data_dir_;
+
+  DISALLOW_COPY_AND_ASSIGN(StartupHelperBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(StartupHelperBrowserTest, ValidateCrx) {

@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
+#include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -40,6 +41,7 @@ CupsPrintJobManagerFactory::CupsPrintJobManagerFactory()
           "CupsPrintJobManagerFactory",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(chromeos::SyncedPrintersManagerFactory::GetInstance());
+  DependsOn(chromeos::CupsPrintersManagerFactory::GetInstance());
 }
 
 CupsPrintJobManagerFactory::~CupsPrintJobManagerFactory() {}

@@ -4,14 +4,11 @@
 
 #include "content/public/browser/ax_event_notification_details.h"
 
+#include "ui/accessibility/ax_event.h"
+
 namespace content {
 
-AXEventNotificationDetails::AXEventNotificationDetails()
-    : event_type(ui::AX_EVENT_NONE),
-      id(-1),
-      ax_tree_id(-1),
-      event_from(ui::AX_EVENT_FROM_NONE),
-      action_request_id(-1) {}
+AXEventNotificationDetails::AXEventNotificationDetails() : ax_tree_id(-1) {}
 
 AXEventNotificationDetails::AXEventNotificationDetails(
     const AXEventNotificationDetails& other) = default;

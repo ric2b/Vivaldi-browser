@@ -33,7 +33,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -61,7 +61,7 @@ class CookiesTreeModelTest : public testing::Test {
   void SetUp() override {
     profile_.reset(new TestingProfile());
     mock_browsing_data_cookie_helper_ =
-        new MockBrowsingDataCookieHelper(profile_->GetRequestContext());
+        new MockBrowsingDataCookieHelper(profile_.get());
     mock_browsing_data_database_helper_ =
         new MockBrowsingDataDatabaseHelper(profile_.get());
     mock_browsing_data_local_storage_helper_ =
@@ -118,7 +118,7 @@ class CookiesTreeModelTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
   std::unique_ptr<CookiesTreeModel> CreateCookiesTreeModelWithInitialSample() {
-    LocalDataContainer* container = new LocalDataContainer(
+    auto container = std::make_unique<LocalDataContainer>(
         mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
         mock_browsing_data_local_storage_helper_,
         mock_browsing_data_session_storage_helper_,
@@ -132,8 +132,8 @@ class CookiesTreeModelTest : public testing::Test {
         mock_browsing_data_flash_lso_helper_,
         mock_browsing_data_media_license_helper_);
 
-    CookiesTreeModel* cookies_model =
-        new CookiesTreeModel(container, special_storage_policy());
+    auto cookies_model = std::make_unique<CookiesTreeModel>(
+        std::move(container), special_storage_policy());
     mock_browsing_data_cookie_helper_->
         AddCookieSamples(GURL("http://foo1"), "A=1");
     mock_browsing_data_cookie_helper_->
@@ -204,34 +204,32 @@ class CookiesTreeModelTest : public testing::Test {
       // sharedworkerhost2 -> shared worker -> https://sharedworkerhost2:2,
       // xyz.com -> flash_lsos
       EXPECT_EQ(77, cookies_model->GetRoot()->GetTotalNodeCount());
-      EXPECT_EQ("A,B,C", GetDisplayedCookies(cookies_model));
-      EXPECT_EQ("db1,db2", GetDisplayedDatabases(cookies_model));
+      EXPECT_EQ("A,B,C", GetDisplayedCookies(cookies_model.get()));
+      EXPECT_EQ("db1,db2", GetDisplayedDatabases(cookies_model.get()));
       EXPECT_EQ("http://host1:1/,http://host2:2/",
-                GetDisplayedLocalStorages(cookies_model));
+                GetDisplayedLocalStorages(cookies_model.get()));
       EXPECT_EQ("http://host1:1/,http://host2:2/",
-                GetDisplayedSessionStorages(cookies_model));
+                GetDisplayedSessionStorages(cookies_model.get()));
       EXPECT_EQ("http://idbhost1:1/,http://idbhost2:2/",
-                GetDisplayedIndexedDBs(cookies_model));
+                GetDisplayedIndexedDBs(cookies_model.get()));
       EXPECT_EQ("http://fshost1:1/,http://fshost2:2/,http://fshost3:3/",
-                GetDisplayedFileSystems(cookies_model));
+                GetDisplayedFileSystems(cookies_model.get()));
       EXPECT_EQ("quotahost1,quotahost2",
-                GetDisplayedQuotas(cookies_model));
-      EXPECT_EQ("sbc1,sbc2",
-                GetDisplayedChannelIDs(cookies_model));
+                GetDisplayedQuotas(cookies_model.get()));
+      EXPECT_EQ("sbc1,sbc2", GetDisplayedChannelIDs(cookies_model.get()));
       EXPECT_EQ("https://swhost1:1/,https://swhost2:2/",
-                GetDisplayedServiceWorkers(cookies_model));
+                GetDisplayedServiceWorkers(cookies_model.get()));
       EXPECT_EQ(
           "https://sharedworkerhost1:1/app/worker.js,"
           "https://sharedworkerhost2:2/worker.js",
-          GetDisplayedSharedWorkers(cookies_model));
+          GetDisplayedSharedWorkers(cookies_model.get()));
       EXPECT_EQ("https://cshost1:1/,https://cshost2:2/",
-                GetDisplayedCacheStorages(cookies_model));
-      EXPECT_EQ("xyz.com",
-                GetDisplayedFlashLSOs(cookies_model));
+                GetDisplayedCacheStorages(cookies_model.get()));
+      EXPECT_EQ("xyz.com", GetDisplayedFlashLSOs(cookies_model.get()));
       EXPECT_EQ("https://media1/,https://media2/",
-                GetDisplayedMediaLicenses(cookies_model));
+                GetDisplayedMediaLicenses(cookies_model.get()));
     }
-    return base::WrapUnique(cookies_model);
+    return cookies_model;
   }
 
   // Checks that, when setting content settings for host nodes in the
@@ -319,65 +317,6 @@ class CookiesTreeModelTest : public testing::Test {
       default:
         return std::string();
     }
-  }
-
-  std::string GetCookiesOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(node, CookieTreeNode::DetailedInfo::TYPE_COOKIE);
-  }
-
-  std::string GetDatabasesOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(node,
-                              CookieTreeNode::DetailedInfo::TYPE_DATABASE);
-  }
-
-  std::string GetLocalStoragesOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(node,
-                              CookieTreeNode::DetailedInfo::TYPE_LOCAL_STORAGE);
-  }
-
-  std::string GetSessionStoragesOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(
-        node, CookieTreeNode::DetailedInfo::TYPE_SESSION_STORAGE);
-  }
-
-  std::string GetIndexedDBsOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(
-        node, CookieTreeNode::DetailedInfo::TYPE_INDEXED_DB);
-  }
-
-  std::string GetFileSystemsOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(
-        node, CookieTreeNode::DetailedInfo::TYPE_FILE_SYSTEM);
-  }
-
-  std::string GetFileQuotaOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(
-        node, CookieTreeNode::DetailedInfo::TYPE_QUOTA);
-  }
-
-  std::string GetServiceWorkersOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(
-        node, CookieTreeNode::DetailedInfo::TYPE_SERVICE_WORKER);
-  }
-
-  std::string GetSharedWorkersOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(node,
-                              CookieTreeNode::DetailedInfo::TYPE_SHARED_WORKER);
-  }
-
-  std::string GetCacheStoragesOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(node,
-                              CookieTreeNode::DetailedInfo::TYPE_CACHE_STORAGE);
-  }
-
-  std::string GetFlashLSOsOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(
-        node, CookieTreeNode::DetailedInfo::TYPE_FLASH_LSO);
-  }
-
-  std::string GetMediaLicensesOfChildren(const CookieTreeNode* node) {
-    return GetNodesOfChildren(node,
-                              CookieTreeNode::DetailedInfo::TYPE_MEDIA_LICENSE);
   }
 
   // Get the nodes names displayed in the view (if we had one) in the order
@@ -1393,7 +1332,7 @@ TEST_F(CookiesTreeModelTest, RemoveCookieNode) {
 }
 
 TEST_F(CookiesTreeModelTest, RemoveSingleCookieNode) {
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1406,7 +1345,8 @@ TEST_F(CookiesTreeModelTest, RemoveSingleCookieNode) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->
       AddCookieSamples(GURL("http://foo1"), "A=1");
@@ -1512,7 +1452,7 @@ TEST_F(CookiesTreeModelTest, RemoveSingleCookieNode) {
 }
 
 TEST_F(CookiesTreeModelTest, RemoveSingleCookieNodeOf3) {
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1525,7 +1465,8 @@ TEST_F(CookiesTreeModelTest, RemoveSingleCookieNodeOf3) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->
       AddCookieSamples(GURL("http://foo1"), "A=1");
@@ -1634,7 +1575,7 @@ TEST_F(CookiesTreeModelTest, RemoveSingleCookieNodeOf3) {
 }
 
 TEST_F(CookiesTreeModelTest, RemoveSecondOrigin) {
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1647,7 +1588,8 @@ TEST_F(CookiesTreeModelTest, RemoveSecondOrigin) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->
       AddCookieSamples(GURL("http://foo1"), "A=1");
@@ -1678,7 +1620,7 @@ TEST_F(CookiesTreeModelTest, RemoveSecondOrigin) {
 }
 
 TEST_F(CookiesTreeModelTest, OriginOrdering) {
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1691,7 +1633,8 @@ TEST_F(CookiesTreeModelTest, OriginOrdering) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->
       AddCookieSamples(GURL("http://a.foo2.com"), "A=1");
@@ -1727,7 +1670,7 @@ TEST_F(CookiesTreeModelTest, OriginOrdering) {
 
 TEST_F(CookiesTreeModelTest, ContentSettings) {
   GURL host("http://xyz.com/");
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1740,7 +1683,8 @@ TEST_F(CookiesTreeModelTest, ContentSettings) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->AddCookieSamples(host, "A=1");
   mock_browsing_data_cookie_helper_->Notify();
@@ -1854,7 +1798,7 @@ TEST_F(CookiesTreeModelTest, CacheStorageFilter) {
 }
 
 TEST_F(CookiesTreeModelTest, CookiesFilter) {
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1867,7 +1811,8 @@ TEST_F(CookiesTreeModelTest, CookiesFilter) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->
       AddCookieSamples(GURL("http://123.com"), "A=1");
@@ -1896,7 +1841,7 @@ TEST_F(CookiesTreeModelTest, CookiesFilter) {
 // Tests that cookie source URLs are stored correctly in the cookies
 // tree model.
 TEST_F(CookiesTreeModelTest, CanonicalizeCookieSource) {
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1909,7 +1854,8 @@ TEST_F(CookiesTreeModelTest, CanonicalizeCookieSource) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->AddCookieSamples(
       GURL("file:///tmp/test.html"), "A=1");
@@ -1984,7 +1930,7 @@ TEST_F(CookiesTreeModelTest, CanonicalizeCookieSource) {
 TEST_F(CookiesTreeModelTest, CookiesFilterWithoutSource) {
   // CanonicalCookies don't persist their source_ field. This is a regression
   // test for crbug.com/601582.
-  LocalDataContainer* container = new LocalDataContainer(
+  auto container = std::make_unique<LocalDataContainer>(
       mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
       mock_browsing_data_local_storage_helper_,
       mock_browsing_data_session_storage_helper_,
@@ -1997,52 +1943,13 @@ TEST_F(CookiesTreeModelTest, CookiesFilterWithoutSource) {
       mock_browsing_data_cache_storage_helper_,
       mock_browsing_data_flash_lso_helper_,
       mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
+  CookiesTreeModel cookies_model(std::move(container),
+                                 special_storage_policy());
 
   mock_browsing_data_cookie_helper_->
       AddCookieSamples(GURL(), "A=1");
   mock_browsing_data_cookie_helper_->Notify();
   EXPECT_EQ("A", GetDisplayedCookies(&cookies_model));
-}
-
-TEST_F(CookiesTreeModelTest, Suborigins) {
-  LocalDataContainer* container = new LocalDataContainer(
-      mock_browsing_data_cookie_helper_, mock_browsing_data_database_helper_,
-      mock_browsing_data_local_storage_helper_,
-      mock_browsing_data_session_storage_helper_,
-      mock_browsing_data_appcache_helper_,
-      mock_browsing_data_indexed_db_helper_,
-      mock_browsing_data_file_system_helper_, mock_browsing_data_quota_helper_,
-      mock_browsing_data_channel_id_helper_,
-      mock_browsing_data_service_worker_helper_,
-      mock_browsing_data_shared_worker_helper_,
-      mock_browsing_data_cache_storage_helper_,
-      mock_browsing_data_flash_lso_helper_,
-      mock_browsing_data_media_license_helper_);
-  CookiesTreeModel cookies_model(container, special_storage_policy());
-
-  mock_browsing_data_local_storage_helper_
-      ->AddLocalStorageSamplesWithSuborigins();
-  mock_browsing_data_local_storage_helper_->Notify();
-  {
-    SCOPED_TRACE(
-        "Suborigins get their own storage partitions and are folded into their "
-        "respective hosts");
-    // root
-    // host4 -> local storage -> http-so://foobar.host4:4
-    //                        -> http://host4:4
-    // host3 -> local storage -> http-so://foobar.host3:3
-    // host2 -> local storage -> http://host2:2
-    // host1 -> local storage -> http://host1:1
-    EXPECT_EQ(14, cookies_model.GetRoot()->GetTotalNodeCount());
-    EXPECT_EQ(
-        "http://host1:1/,http://host2:2/,http-so://foobar.host3:3/,"
-        "http-so://foobar.host4:4/,http://host4:4/",
-        GetDisplayedLocalStorages(&cookies_model));
-    // Delete host4, which should delete foobar_host4:4 in addition to host4:4
-    DeleteStoredObjects(cookies_model.GetRoot()->GetChild(3));
-    EXPECT_EQ(10, cookies_model.GetRoot()->GetTotalNodeCount());
-  }
 }
 
 }  // namespace

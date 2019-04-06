@@ -12,6 +12,14 @@ void URLLoaderThrottle::Delegate::SetPriority(net::RequestPriority priority) {}
 void URLLoaderThrottle::Delegate::PauseReadingBodyFromNet() {}
 void URLLoaderThrottle::Delegate::ResumeReadingBodyFromNet() {}
 
+void URLLoaderThrottle::Delegate::InterceptResponse(
+    network::mojom::URLLoaderPtr new_loader,
+    network::mojom::URLLoaderClientRequest new_client_request,
+    network::mojom::URLLoaderPtr* original_loader,
+    network::mojom::URLLoaderClientRequest* original_client_request) {
+  NOTIMPLEMENTED();
+}
+
 URLLoaderThrottle::Delegate::~Delegate() {}
 
 URLLoaderThrottle::~URLLoaderThrottle() {}
@@ -26,7 +34,8 @@ void URLLoaderThrottle::WillStartRequest(network::ResourceRequest* request,
 void URLLoaderThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
     const network::ResourceResponseHead& response_head,
-    bool* defer) {}
+    bool* defer,
+    std::vector<std::string>* to_be_removed_request_headers) {}
 
 void URLLoaderThrottle::WillProcessResponse(
     const GURL& response_url,

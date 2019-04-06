@@ -11,8 +11,8 @@
       "isEnabled": false
    },
    "fileAccess": {
-      "isActive": false,
-      "isEnabled": false
+      "isActive": true,
+      "isEnabled": true
    },
    "homePage": {
       "specified": false,
@@ -29,10 +29,6 @@
    "mustRemainInstalled": false,
    "name": "My extension 3",
    "offlineEnabled": false,
-   "runOnAllUrls": {
-      "isActive": true,
-      "isEnabled": false
-   },
    "runtimeErrors": [  ],
    "runtimeWarnings": [  ],
    "state": "ENABLED",

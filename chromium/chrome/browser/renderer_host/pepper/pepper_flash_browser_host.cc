@@ -22,8 +22,8 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/proxy/resource_message_params.h"
 #include "ppapi/shared_impl/time_conversion.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "url/gurl.h"
 
@@ -54,7 +54,7 @@ scoped_refptr<content_settings::CookieSettings> GetCookieSettings(
   return NULL;
 }
 
-void BindConnectorRequest(
+void PepperBindConnectorRequest(
     service_manager::mojom::ConnectorRequest connector_request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(ServiceManagerConnection::GetForProcess());
@@ -194,9 +194,9 @@ device::mojom::WakeLock* PepperFlashBrowserHost::GetWakeLock() {
   // The existing connector is bound to the UI thread, the current thread is
   // IO thread. So bind the ConnectorRequest of IO thread to the connector
   // in UI thread.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&BindConnectorRequest, std::move(connector_request)));
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(&PepperBindConnectorRequest,
+                                         std::move(connector_request)));
 
   device::mojom::WakeLockProviderPtr wake_lock_provider;
   connector->BindInterface(device::mojom::kServiceName,

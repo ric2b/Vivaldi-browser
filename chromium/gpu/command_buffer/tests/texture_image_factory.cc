@@ -35,7 +35,9 @@ class TextureImage : public gl::GLImage {
                             int z_order,
                             gfx::OverlayTransform transform,
                             const gfx::Rect& bounds_rect,
-                            const gfx::RectF& crop_rect) override {
+                            const gfx::RectF& crop_rect,
+                            bool enable_blend,
+                            std::unique_ptr<gfx::GpuFence> gpu_fence) override {
     return false;
   }
   void SetColorSpace(const gfx::ColorSpace& color_space) override {}
@@ -57,6 +59,10 @@ scoped_refptr<gl::GLImage> TextureImageFactory::CreateImageForGpuMemoryBuffer(
     int client_id,
     SurfaceHandle surface_handle) {
   return nullptr;
+}
+
+bool TextureImageFactory::SupportsCreateAnonymousImage() const {
+  return true;
 }
 
 scoped_refptr<gl::GLImage> TextureImageFactory::CreateAnonymousImage(

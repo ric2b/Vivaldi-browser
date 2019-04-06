@@ -11,9 +11,9 @@
 #include "base/logging.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "skia/ext/image_operations.h"
-#include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebImage.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/blink/public/platform/web_data.h"
+#include "third_party/blink/public/platform/web_image.h"
+#include "third_party/blink/public/platform/web_size.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 #if defined(OS_CHROMEOS)
@@ -97,12 +97,10 @@ void ImageDecoderImpl::DecodeImage(const std::vector<uint8_t>& encoded_data,
   }
 #endif  // defined(OS_CHROMEOS)
   if (codec == mojom::ImageCodec::DEFAULT) {
-    decoded_image =
-        blink::WebImage::FromData(
-            blink::WebData(reinterpret_cast<const char*>(encoded_data.data()),
-                           encoded_data.size()),
-            desired_image_frame_size)
-            .GetSkBitmap();
+    decoded_image = blink::WebImage::FromData(
+        blink::WebData(reinterpret_cast<const char*>(encoded_data.data()),
+                       encoded_data.size()),
+        desired_image_frame_size);
   }
 
   if (!decoded_image.isNull())

@@ -21,16 +21,19 @@ CameraBufferFactory::CreateGpuMemoryBuffer(const gfx::Size& size,
     LOG(ERROR) << "GpuMemoryBufferManager not set";
     return std::unique_ptr<gfx::GpuMemoryBuffer>();
   }
-  return buf_manager->CreateGpuMemoryBuffer(
-      size, format, gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
-      gpu::kNullSurfaceHandle);
+  gfx::BufferUsage buffer_usage = gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE;
+  if (format == gfx::BufferFormat::R_8) {
+    buffer_usage = gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE;
+  }
+  return buf_manager->CreateGpuMemoryBuffer(size, format, buffer_usage,
+                                            gpu::kNullSurfaceHandle);
 }
 
 // There's no good way to resolve the HAL pixel format to the platform-specific
 // DRM format, other than to actually allocate the buffer and see if the
 // allocation succeeds.
 ChromiumPixelFormat CameraBufferFactory::ResolveStreamBufferFormat(
-    arc::mojom::HalPixelFormat hal_format) {
+    cros::mojom::HalPixelFormat hal_format) {
   if (resolved_hal_formats_.find(hal_format) != resolved_hal_formats_.end()) {
     return resolved_hal_formats_[hal_format];
   }

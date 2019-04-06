@@ -2,8 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef ASH_WM_BASE_STATE_H_
+#define ASH_WM_BASE_STATE_H_
+
 #include "ash/wm/window_state.h"
+#include "ash/wm/wm_event.h"
 #include "base/macros.h"
+
+namespace aura {
+class Window;
+}  // namespace aura
 
 namespace ash {
 namespace wm {
@@ -23,26 +31,34 @@ class BaseState : public WindowState::State {
   static mojom::WindowStateType GetStateForTransitionEvent(
       const WMEvent* event);
 
-  // Handle workspace related events, such as DISPLAY_BOUNDS_CHANGED.
+  static void CenterWindow(WindowState* window_state);
+  static void CycleSnap(WindowState* window_state, WMEventType event);
+
+  // Handles workspace related events, such as DISPLAY_BOUNDS_CHANGED.
   virtual void HandleWorkspaceEvents(WindowState* window_state,
                                      const WMEvent* event) = 0;
 
-  // Handle state dependent events, such as TOGGLE_MAXIMIZED,
+  // Handles state dependent events, such as TOGGLE_MAXIMIZED,
   // TOGGLE_FULLSCREEN.
   virtual void HandleCompoundEvents(WindowState* window_state,
                                     const WMEvent* event) = 0;
 
-  // Handle bounds change events: SET_BOUNDS and CENTER.
+  // Handles bounds change events: SET_BOUNDS and CENTER.
   virtual void HandleBoundsEvents(WindowState* window_state,
                                   const WMEvent* event) = 0;
 
-  // Handle state transition events, such as MAXIMZIED, MINIMIZED.
+  // Handles state transition events, such as MAXIMZIED, MINIMIZED.
   virtual void HandleTransitionEvents(WindowState* window_state,
                                       const WMEvent* event) = 0;
 
-  // Show/Hide window when minimized state changes.
+  // Shows/Hides window when minimized state changes.
   void UpdateMinimizedState(WindowState* window_state,
                             mojom::WindowStateType previous_state_type);
+
+  // Returns the window bounds for snapped window state.
+  gfx::Rect GetSnappedWindowBoundsInParent(
+      aura::Window* window,
+      const mojom::WindowStateType state_type);
 
   // The current type of the window.
   mojom::WindowStateType state_type_;
@@ -53,3 +69,5 @@ class BaseState : public WindowState::State {
 
 }  // namespace wm
 }  // namespace ash
+
+#endif  // ASH_WM_BASE_STATE_H_

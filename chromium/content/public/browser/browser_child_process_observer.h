@@ -10,6 +10,7 @@
 namespace content {
 
 struct ChildProcessData;
+struct ChildProcessTerminationInfo;
 
 // An observer API implemented by classes which are interested in browser child
 // process events. Note that render processes cannot be observed through this
@@ -31,15 +32,20 @@ class CONTENT_EXPORT BrowserChildProcessObserver {
       const ChildProcessData& data) {}
 
   // Called when a child process disappears unexpectedly as a result of a crash.
-  // |exit_code| contains the exit code from the process.
-  virtual void BrowserChildProcessCrashed(const ChildProcessData& data,
-                                          int exit_code) {}
+  virtual void BrowserChildProcessCrashed(
+      const ChildProcessData& data,
+      const ChildProcessTerminationInfo& info) {}
 
   // Called when a child process disappears unexpectedly as a result of being
   // killed.
-  // |exit_code| contains the exit code from the process.
-  virtual void BrowserChildProcessKilled(const ChildProcessData& data,
-                                         int exit_code) {}
+  virtual void BrowserChildProcessKilled(
+      const ChildProcessData& data,
+      const ChildProcessTerminationInfo& info) {}
+
+  // Note for Android. There is no way to reliably distinguish between Crash
+  // and Kill. Arbitrarily choose all abnormal terminations on Android to call
+  // BrowserChildProcessKilled, which means BrowserChildProcessCrashed will
+  // never be called on Android.
 
  protected:
   // The observer can be destroyed on any thread.

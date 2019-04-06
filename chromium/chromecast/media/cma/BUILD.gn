@@ -21,19 +21,20 @@ cast_source_set("test_support") {
     "test/frame_generator_for_test.h",
     "test/frame_segmenter_for_test.cc",
     "test/frame_segmenter_for_test.h",
+    "test/mock_cma_backend.cc",
+    "test/mock_cma_backend.h",
+    "test/mock_cma_backend_factory.cc",
+    "test/mock_cma_backend_factory.h",
     "test/mock_frame_consumer.cc",
     "test/mock_frame_consumer.h",
     "test/mock_frame_provider.cc",
     "test/mock_frame_provider.h",
-    "test/mock_media_pipeline_backend.cc",
-    "test/mock_media_pipeline_backend.h",
-    "test/mock_media_pipeline_backend_factory.cc",
-    "test/mock_media_pipeline_backend_factory.h",
   ]
 
   deps = [
     "//base",
     "//chromecast/media/cma/backend",
+    "//chromecast/media/cma/backend:null_video",
     "//chromecast/media/cma/base",
     "//media:test_support",
     "//testing/gmock",
@@ -68,6 +69,10 @@ cast_source_set("unittests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
+
+  if (enable_video_with_mixed_audio) {
+    defines = [ "ENABLE_VIDEO_WITH_MIXED_AUDIO" ]
+  }
 
   data = [
     "//media/test/data/",

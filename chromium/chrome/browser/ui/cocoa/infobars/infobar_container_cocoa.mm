@@ -30,16 +30,6 @@ void InfoBarContainerCocoa::PlatformSpecificRemoveInfoBar(
   [controller_ removeInfoBar:infobar_cocoa];
 }
 
-SkColor InfoBarContainerCocoa::GetInfoBarSeparatorColor() const {
-  return SK_ColorBLACK;
-}
-
 void InfoBarContainerCocoa::InfoBarContainerStateChanged(bool is_animating) {
   [controller_ positionInfoBarsAndRedraw:is_animating];
-}
-
-bool InfoBarContainerCocoa::DrawInfoBarArrows(int* x) const {
-  if (x)
-    *x = [controller_ infobarArrowX];
-  return ![controller_ shouldSuppressTopInfoBarTip];
 }

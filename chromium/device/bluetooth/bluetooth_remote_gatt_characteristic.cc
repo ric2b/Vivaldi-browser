@@ -4,6 +4,8 @@
 
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -23,14 +25,29 @@ BluetoothRemoteGattCharacteristic::~BluetoothRemoteGattCharacteristic() {
 }
 
 std::vector<BluetoothRemoteGattDescriptor*>
+BluetoothRemoteGattCharacteristic::GetDescriptors() const {
+  std::vector<BluetoothRemoteGattDescriptor*> descriptors;
+  descriptors.reserve(descriptors_.size());
+  for (const auto& pair : descriptors_)
+    descriptors.push_back(pair.second.get());
+  return descriptors;
+}
+
+BluetoothRemoteGattDescriptor* BluetoothRemoteGattCharacteristic::GetDescriptor(
+    const std::string& identifier) const {
+  auto iter = descriptors_.find(identifier);
+  return iter != descriptors_.end() ? iter->second.get() : nullptr;
+}
+
+std::vector<BluetoothRemoteGattDescriptor*>
 BluetoothRemoteGattCharacteristic::GetDescriptorsByUUID(
     const BluetoothUUID& uuid) const {
   std::vector<BluetoothRemoteGattDescriptor*> descriptors;
-  for (BluetoothRemoteGattDescriptor* descriptor : GetDescriptors()) {
-    if (descriptor->GetUUID() == uuid) {
-      descriptors.push_back(descriptor);
-    }
+  for (const auto& pair : descriptors_) {
+    if (pair.second->GetUUID() == uuid)
+      descriptors.push_back(pair.second.get());
   }
+
   return descriptors;
 }
 
@@ -71,9 +88,42 @@ void BluetoothRemoteGattCharacteristic::NotifySessionCommand::Cancel() {
 void BluetoothRemoteGattCharacteristic::StartNotifySession(
     const NotifySessionCallback& callback,
     const ErrorCallback& error_callback) {
+  StartNotifySessionInternal(base::nullopt, callback, error_callback);
+}
+
+#if defined(OS_CHROMEOS)
+void BluetoothRemoteGattCharacteristic::StartNotifySession(
+    NotificationType notification_type,
+    const NotifySessionCallback& callback,
+    const ErrorCallback& error_callback) {
+  StartNotifySessionInternal(notification_type, callback, error_callback);
+}
+#endif
+
+bool BluetoothRemoteGattCharacteristic::WriteWithoutResponse(
+    base::span<const uint8_t> value) {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+bool BluetoothRemoteGattCharacteristic::AddDescriptor(
+    std::unique_ptr<BluetoothRemoteGattDescriptor> descriptor) {
+  if (!descriptor)
+    return false;
+
+  auto* descriptor_raw = descriptor.get();
+  return descriptors_
+      .try_emplace(descriptor_raw->GetIdentifier(), std::move(descriptor))
+      .second;
+}
+
+void BluetoothRemoteGattCharacteristic::StartNotifySessionInternal(
+    const base::Optional<NotificationType>& notification_type,
+    const NotifySessionCallback& callback,
+    const ErrorCallback& error_callback) {
   NotifySessionCommand* command = new NotifySessionCommand(
       base::Bind(&BluetoothRemoteGattCharacteristic::ExecuteStartNotifySession,
-                 GetWeakPtr(), callback, error_callback),
+                 GetWeakPtr(), notification_type, callback, error_callback),
       base::Bind(&BluetoothRemoteGattCharacteristic::CancelStartNotifySession,
                  GetWeakPtr(),
                  base::Bind(error_callback,
@@ -86,6 +136,7 @@ void BluetoothRemoteGattCharacteristic::StartNotifySession(
 }
 
 void BluetoothRemoteGattCharacteristic::ExecuteStartNotifySession(
+    const base::Optional<NotificationType>& notification_type,
     NotifySessionCallback callback,
     ErrorCallback error_callback,
     NotifySessionCommand::Type previous_command_type,
@@ -97,31 +148,29 @@ void BluetoothRemoteGattCharacteristic::ExecuteStartNotifySession(
     if (previous_command_result == NotifySessionCommand::RESULT_SUCCESS) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(
+          base::BindOnce(
               &BluetoothRemoteGattCharacteristic::OnStartNotifySessionSuccess,
               GetWeakPtr(), callback));
       return;
     } else {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(
+          base::BindOnce(
               &BluetoothRemoteGattCharacteristic::OnStartNotifySessionError,
               GetWeakPtr(), error_callback, previous_command_error_code));
       return;
     }
   }
 
-  // Check that the characteristic supports either notifications or
-  // indications.
-  Properties properties = GetProperties();
-  bool hasNotify = (properties & PROPERTY_NOTIFY) != 0;
-  bool hasIndicate = (properties & PROPERTY_INDICATE) != 0;
-
-  if (!hasNotify && !hasIndicate) {
-    LOG(ERROR) << "Characteristic needs NOTIFY or INDICATE";
+  if (!IsNotificationTypeSupported(notification_type)) {
+    if (notification_type)
+      LOG(ERROR) << "Characteristic doesn't support specified "
+                 << "notification_type";
+    else
+      LOG(ERROR) << "Characteristic needs NOTIFY or INDICATE";
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &BluetoothRemoteGattCharacteristic::OnStartNotifySessionError,
             GetWeakPtr(), error_callback,
             BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED));
@@ -134,7 +183,7 @@ void BluetoothRemoteGattCharacteristic::ExecuteStartNotifySession(
   if (IsNotifying()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &BluetoothRemoteGattCharacteristic::OnStartNotifySessionSuccess,
             GetWeakPtr(), callback));
     return;
@@ -150,7 +199,7 @@ void BluetoothRemoteGattCharacteristic::ExecuteStartNotifySession(
                << " client characteristic configuration descriptors.";
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &BluetoothRemoteGattCharacteristic::OnStartNotifySessionError,
             GetWeakPtr(), error_callback,
             (ccc_descriptor.size() == 0)
@@ -164,6 +213,11 @@ void BluetoothRemoteGattCharacteristic::ExecuteStartNotifySession(
   // do whatever else is needed to get the notifications flowing.
   SubscribeToNotifications(
       ccc_descriptor[0],
+#if defined(OS_CHROMEOS)
+      notification_type.value_or((GetProperties() & PROPERTY_NOTIFY)
+                                     ? NotificationType::kNotification
+                                     : NotificationType::kIndication),
+#endif
       base::Bind(
           &BluetoothRemoteGattCharacteristic::OnStartNotifySessionSuccess,
           GetWeakPtr(), callback),
@@ -243,9 +297,10 @@ void BluetoothRemoteGattCharacteristic::ExecuteStopNotifySession(
   if (session_iterator == notify_sessions_.end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&BluetoothRemoteGattCharacteristic::OnStopNotifySessionError,
-                   GetWeakPtr(), session, callback,
-                   BluetoothRemoteGattService::GATT_ERROR_FAILED));
+        base::BindOnce(
+            &BluetoothRemoteGattCharacteristic::OnStopNotifySessionError,
+            GetWeakPtr(), session, callback,
+            BluetoothRemoteGattService::GATT_ERROR_FAILED));
     return;
   }
 
@@ -253,7 +308,7 @@ void BluetoothRemoteGattCharacteristic::ExecuteStopNotifySession(
   if (notify_sessions_.size() > 1) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &BluetoothRemoteGattCharacteristic::OnStopNotifySessionSuccess,
             GetWeakPtr(), session, callback));
     return;
@@ -269,9 +324,10 @@ void BluetoothRemoteGattCharacteristic::ExecuteStopNotifySession(
                << " client characteristic configuration descriptors.";
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&BluetoothRemoteGattCharacteristic::OnStopNotifySessionError,
-                   GetWeakPtr(), session, callback,
-                   BluetoothRemoteGattService::GATT_ERROR_FAILED));
+        base::BindOnce(
+            &BluetoothRemoteGattCharacteristic::OnStopNotifySessionError,
+            GetWeakPtr(), session, callback,
+            BluetoothRemoteGattService::GATT_ERROR_FAILED));
     return;
   }
 
@@ -326,6 +382,21 @@ void BluetoothRemoteGattCharacteristic::OnStopNotifySessionError(
     pending_notify_commands_.front()->Execute(
         NotifySessionCommand::COMMAND_STOP, NotifySessionCommand::RESULT_ERROR,
         error);
+  }
+}
+
+bool BluetoothRemoteGattCharacteristic::IsNotificationTypeSupported(
+    const base::Optional<NotificationType>& notification_type) {
+  Properties properties = GetProperties();
+  bool hasNotify = (properties & PROPERTY_NOTIFY) != 0;
+  bool hasIndicate = (properties & PROPERTY_INDICATE) != 0;
+  if (!notification_type)
+    return hasNotify || hasIndicate;
+  switch (notification_type.value()) {
+    case NotificationType::kNotification:
+      return hasNotify;
+    case NotificationType::kIndication:
+      return hasIndicate;
   }
 }
 

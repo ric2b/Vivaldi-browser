@@ -47,11 +47,10 @@
 #include "net/http/http_auth_handler_factory.h"
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log_util.h"
-#include "net/nqe/external_estimate_provider.h"
 #include "net/nqe/network_quality_estimator_params.h"
-#include "net/proxy/proxy_service.h"
-#include "net/quic/core/quic_versions.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/channel_id_service.h"
+#include "net/third_party/quic/core/quic_versions.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -103,52 +102,6 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
 
  private:
   // net::NetworkDelegate implementation.
-  int OnBeforeURLRequest(net::URLRequest* request,
-                         const net::CompletionCallback& callback,
-                         GURL* new_url) override {
-    return net::OK;
-  }
-
-  int OnBeforeStartTransaction(net::URLRequest* request,
-                               const net::CompletionCallback& callback,
-                               net::HttpRequestHeaders* headers) override {
-    return net::OK;
-  }
-
-  void OnStartTransaction(net::URLRequest* request,
-                          const net::HttpRequestHeaders& headers) override {}
-
-  int OnHeadersReceived(
-      net::URLRequest* request,
-      const net::CompletionCallback& callback,
-      const net::HttpResponseHeaders* original_response_headers,
-      scoped_refptr<net::HttpResponseHeaders>* _response_headers,
-      GURL* allowed_unsafe_redirect_url) override {
-    return net::OK;
-  }
-
-  void OnBeforeRedirect(net::URLRequest* request,
-                        const GURL& new_location) override {}
-
-  void OnResponseStarted(net::URLRequest* request, int net_error) override {}
-
-  void OnCompleted(net::URLRequest* request,
-                   bool started,
-                   int net_error) override {}
-
-  void OnURLRequestDestroyed(net::URLRequest* request) override {}
-
-  void OnPACScriptError(int line_number, const base::string16& error) override {
-  }
-
-  NetworkDelegate::AuthRequiredResponse OnAuthRequired(
-      net::URLRequest* request,
-      const net::AuthChallengeInfo& auth_info,
-      const AuthCallback& callback,
-      net::AuthCredentials* credentials) override {
-    return net::NetworkDelegate::AUTH_REQUIRED_RESPONSE_NO_ACTION;
-  }
-
   bool OnCanGetCookies(const net::URLRequest& request,
                        const net::CookieList& cookie_list) override {
     // Disallow sending cookies by default.
@@ -177,16 +130,21 @@ namespace cronet {
 
 CronetURLRequestContext::CronetURLRequestContext(
     std::unique_ptr<URLRequestContextConfig> context_config,
-    std::unique_ptr<Callback> callback)
+    std::unique_ptr<Callback> callback,
+    scoped_refptr<base::SingleThreadTaskRunner> network_task_runner)
     : default_load_flags_(
           net::LOAD_NORMAL |
           (context_config->load_disable_cache ? net::LOAD_DISABLE_CACHE : 0)),
       network_tasks_(
           new NetworkTasks(std::move(context_config), std::move(callback))),
-      network_thread_("network") {
-  base::Thread::Options options;
-  options.message_loop_type = base::MessageLoop::TYPE_IO;
-  network_thread_.StartWithOptions(options);
+      network_task_runner_(network_task_runner) {
+  if (!network_task_runner_) {
+    network_thread_ = std::make_unique<base::Thread>("network");
+    base::Thread::Options options;
+    options.message_loop_type = base::MessageLoop::TYPE_IO;
+    network_thread_->StartWithOptions(options);
+    network_task_runner_ = network_thread_->task_runner();
+  }
 }
 
 CronetURLRequestContext::~CronetURLRequestContext() {
@@ -225,10 +183,10 @@ void CronetURLRequestContext::InitRequestContextOnInitThread() {
   g_net_log.Get().EnsureInitializedOnInitThread();
   GetNetworkTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&CronetURLRequestContext::NetworkTasks::Initialize,
-                 base::Unretained(network_tasks_), GetNetworkTaskRunner(),
-                 GetFileThread()->task_runner(),
-                 base::Passed(&proxy_config_service)));
+      base::BindOnce(&CronetURLRequestContext::NetworkTasks::Initialize,
+                     base::Unretained(network_tasks_), GetNetworkTaskRunner(),
+                     GetFileThread()->task_runner(),
+                     std::move(proxy_config_service)));
 }
 
 void CronetURLRequestContext::NetworkTasks::
@@ -250,10 +208,10 @@ void CronetURLRequestContext::ConfigureNetworkQualityEstimatorForTesting(
     bool disable_offline_check) {
   PostTaskToNetworkThread(
       FROM_HERE,
-      base::Bind(&CronetURLRequestContext::NetworkTasks::
-                     ConfigureNetworkQualityEstimatorForTesting,
-                 base::Unretained(network_tasks_), use_local_host_requests,
-                 use_smaller_responses, disable_offline_check));
+      base::BindOnce(&CronetURLRequestContext::NetworkTasks::
+                         ConfigureNetworkQualityEstimatorForTesting,
+                     base::Unretained(network_tasks_), use_local_host_requests,
+                     use_smaller_responses, disable_offline_check));
 }
 
 void CronetURLRequestContext::NetworkTasks::ProvideRTTObservations(
@@ -271,8 +229,9 @@ void CronetURLRequestContext::NetworkTasks::ProvideRTTObservations(
 void CronetURLRequestContext::ProvideRTTObservations(bool should) {
   PostTaskToNetworkThread(
       FROM_HERE,
-      base::Bind(&CronetURLRequestContext::NetworkTasks::ProvideRTTObservations,
-                 base::Unretained(network_tasks_), should));
+      base::BindOnce(
+          &CronetURLRequestContext::NetworkTasks::ProvideRTTObservations,
+          base::Unretained(network_tasks_), should));
 }
 
 void CronetURLRequestContext::NetworkTasks::ProvideThroughputObservations(
@@ -290,7 +249,7 @@ void CronetURLRequestContext::NetworkTasks::ProvideThroughputObservations(
 void CronetURLRequestContext::ProvideThroughputObservations(bool should) {
   PostTaskToNetworkThread(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &CronetURLRequestContext::NetworkTasks::ProvideThroughputObservations,
           base::Unretained(network_tasks_), should));
 }
@@ -310,7 +269,6 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
     std::unique_ptr<net::ProxyConfigService> proxy_config_service) {
   DCHECK_CALLED_ON_VALID_THREAD(network_thread_checker_);
   DCHECK(!is_context_initialized_);
-  DCHECK(proxy_config_service);
 
   std::unique_ptr<URLRequestContextConfig> config(std::move(context_config_));
   network_task_runner_ = network_task_runner;
@@ -320,8 +278,9 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
       std::make_unique<BasicNetworkDelegate>());
   context_builder.set_net_log(g_net_log.Get().net_log());
 
-  context_builder.set_proxy_service(cronet::CreateProxyService(
-      std::move(proxy_config_service), g_net_log.Get().net_log()));
+  context_builder.set_proxy_resolution_service(
+      cronet::CreateProxyResolutionService(std::move(proxy_config_service),
+                                           g_net_log.Get().net_log()));
 
   config->ConfigureURLRequestContextBuilder(&context_builder,
                                             g_net_log.Get().net_log());
@@ -339,8 +298,7 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
     }
 
     network_quality_estimator_ = std::make_unique<net::NetworkQualityEstimator>(
-        std::unique_ptr<net::ExternalEstimateProvider>(), std::move(nqe_params),
-        g_net_log.Get().net_log());
+        std::move(nqe_params), g_net_log.Get().net_log());
     network_quality_estimator_->AddEffectiveConnectionTypeObserver(this);
     network_quality_estimator_->AddRTTAndThroughputEstimatesObserver(this);
 
@@ -352,7 +310,12 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
 
   // Set up pref file if storage path is specified.
   if (!config->storage_path.empty()) {
+#if defined(OS_WIN)
+    base::FilePath storage_path(
+        base::FilePath::FromUTF8Unsafe(config->storage_path));
+#else
     base::FilePath storage_path(config->storage_path);
+#endif
     // Set up the HttpServerPropertiesManager.
     cronet_prefs_manager_ = std::make_unique<CronetPrefsManager>(
         config->storage_path, network_task_runner_, file_task_runner,
@@ -418,15 +381,9 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
           static_cast<uint16_t>(quic_hint->alternate_port));
       context_->http_server_properties()->SetQuicAlternativeService(
           quic_server, alternative_service, base::Time::Max(),
-          net::QuicTransportVersionVector());
+          quic::QuicTransportVersionVector());
     }
   }
-
-  // If there is a cert_verifier, then populate its cache with
-  // |cert_verifier_data|.
-  if (!config->cert_verifier_data.empty() && context_->cert_verifier())
-    callback_->OnInitCertVerifierData(context_->cert_verifier(),
-                                      config->cert_verifier_data);
 
   // Iterate through PKP configuration for every host.
   for (const auto& pkp : config->pkp_list) {
@@ -450,12 +407,13 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
     // after the bug has been fixed.
     network_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&CronetURLRequestContext::NetworkTasks::InitializeNQEPrefs,
-                   base::Unretained(this)));
+        base::BindOnce(
+            &CronetURLRequestContext::NetworkTasks::InitializeNQEPrefs,
+            base::Unretained(this)));
   }
 
   while (!tasks_waiting_for_context_.empty()) {
-    tasks_waiting_for_context_.front().Run();
+    std::move(tasks_waiting_for_context_.front()).Run();
     tasks_waiting_for_context_.pop();
   }
 }
@@ -476,23 +434,23 @@ net::URLRequestContext* CronetURLRequestContext::GetURLRequestContext() {
 
 void CronetURLRequestContext::PostTaskToNetworkThread(
     const base::Location& posted_from,
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   GetNetworkTaskRunner()->PostTask(
       posted_from,
-      base::Bind(
+      base::BindOnce(
           &CronetURLRequestContext::NetworkTasks::RunTaskAfterContextInit,
-          base::Unretained(network_tasks_), callback));
+          base::Unretained(network_tasks_), std::move(callback)));
 }
 
 void CronetURLRequestContext::NetworkTasks::RunTaskAfterContextInit(
-    const base::Closure& task_to_run_after_context_init) {
+    base::OnceClosure task_to_run_after_context_init) {
   DCHECK_CALLED_ON_VALID_THREAD(network_thread_checker_);
   if (is_context_initialized_) {
     DCHECK(tasks_waiting_for_context_.empty());
-    task_to_run_after_context_init.Run();
+    std::move(task_to_run_after_context_init).Run();
     return;
   }
-  tasks_waiting_for_context_.push(task_to_run_after_context_init);
+  tasks_waiting_for_context_.push(std::move(task_to_run_after_context_init));
 }
 
 bool CronetURLRequestContext::IsOnNetworkThread() const {
@@ -501,12 +459,16 @@ bool CronetURLRequestContext::IsOnNetworkThread() const {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 CronetURLRequestContext::GetNetworkTaskRunner() const {
-  return network_thread_.task_runner();
+  return network_task_runner_;
 }
 
 bool CronetURLRequestContext::StartNetLogToFile(const std::string& file_name,
                                                 bool log_all) {
+#if defined(OS_WIN)
+  base::FilePath file_path(base::FilePath::FromUTF8Unsafe(file_name));
+#else
   base::FilePath file_path(file_name);
+#endif
   base::ScopedFILE file(base::OpenFile(file_path, "w"));
   if (!file) {
     LOG(ERROR) << "Failed to open NetLog file for writing.";
@@ -514,8 +476,8 @@ bool CronetURLRequestContext::StartNetLogToFile(const std::string& file_name,
   }
   PostTaskToNetworkThread(
       FROM_HERE,
-      base::Bind(&CronetURLRequestContext::NetworkTasks::StartNetLog,
-                 base::Unretained(network_tasks_), file_path, log_all));
+      base::BindOnce(&CronetURLRequestContext::NetworkTasks::StartNetLog,
+                     base::Unretained(network_tasks_), file_path, log_all));
   return true;
 }
 
@@ -524,7 +486,7 @@ void CronetURLRequestContext::StartNetLogToDisk(const std::string& dir_name,
                                                 int max_size) {
   PostTaskToNetworkThread(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &CronetURLRequestContext::NetworkTasks::StartNetLogToBoundedFile,
           base::Unretained(network_tasks_), dir_name, log_all, max_size));
 }
@@ -532,21 +494,9 @@ void CronetURLRequestContext::StartNetLogToDisk(const std::string& dir_name,
 void CronetURLRequestContext::StopNetLog() {
   DCHECK(!GetNetworkTaskRunner()->BelongsToCurrentThread());
   PostTaskToNetworkThread(
-      FROM_HERE, base::Bind(&CronetURLRequestContext::NetworkTasks::StopNetLog,
-                            base::Unretained(network_tasks_)));
-}
-
-void CronetURLRequestContext::GetCertVerifierData() {
-  PostTaskToNetworkThread(
       FROM_HERE,
-      base::Bind(&CronetURLRequestContext::NetworkTasks::GetCertVerifierData,
-                 base::Unretained(network_tasks_)));
-}
-
-void CronetURLRequestContext::NetworkTasks::GetCertVerifierData() {
-  DCHECK_CALLED_ON_VALID_THREAD(network_thread_checker_);
-  callback_->OnSaveCertVerifierData(
-      is_context_initialized_ ? context_->cert_verifier() : nullptr);
+      base::BindOnce(&CronetURLRequestContext::NetworkTasks::StopNetLog,
+                     base::Unretained(network_tasks_)));
 }
 
 int CronetURLRequestContext::default_load_flags() const {
@@ -639,8 +589,13 @@ void CronetURLRequestContext::NetworkTasks::StartNetLogToBoundedFile(
 
   // TODO(eroman): The cronet API passes a directory here. But it should now
   // just pass a file path.
-  base::FilePath file_path =
-      base::FilePath(dir_path).AppendASCII("netlog.json");
+#if defined(OS_WIN)
+  base::FilePath file_path(base::FilePath::FromUTF8Unsafe(dir_path));
+#else
+  base::FilePath file_path(dir_path);
+#endif
+  file_path = file_path.AppendASCII("netlog.json");
+
   {
     base::ScopedAllowBlocking allow_blocking;
     if (!base::PathIsWritable(file_path)) {
@@ -668,8 +623,9 @@ void CronetURLRequestContext::NetworkTasks::StopNetLog() {
     return;
   net_log_file_observer_->StopObserving(
       GetNetLogInfo(),
-      base::Bind(&CronetURLRequestContext::NetworkTasks::StopNetLogCompleted,
-                 base::Unretained(this)));
+      base::BindOnce(
+          &CronetURLRequestContext::NetworkTasks::StopNetLogCompleted,
+          base::Unretained(this)));
   net_log_file_observer_.reset();
 }
 

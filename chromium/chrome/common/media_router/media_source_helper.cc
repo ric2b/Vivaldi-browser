@@ -80,8 +80,7 @@ bool IsMirroringMediaSource(const MediaSource& source) {
          IsTabMirroringMediaSource(source);
 }
 
-bool CanConnectToMediaSource(const MediaSource& source) {
-  // Compare host, port, scheme, and path prefix for source.url().
+bool IsCastPresentationUrl(const MediaSource& source) {
   const GURL& url = source.url();
   return url.SchemeIs(kCastPresentationUrlScheme) ||
          IsLegacyCastPresentationUrl(url);
@@ -114,6 +113,14 @@ bool IsValidPresentationUrl(const GURL& url) {
 
 bool IsAutoJoinPresentationId(const std::string& presentation_id) {
   return presentation_id == kAutoJoinPresentationId;
+}
+
+bool IsDialMediaSource(const MediaSource& source) {
+  return source.url().SchemeIs(kCastDialPresentationUrlScheme);
+}
+
+std::string AppNameFromDialMediaSource(const MediaSource& source) {
+  return IsDialMediaSource(source) ? source.url().path() : "";
 }
 
 }  // namespace media_router

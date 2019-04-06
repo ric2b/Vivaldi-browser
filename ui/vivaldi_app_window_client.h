@@ -17,6 +17,7 @@ struct DefaultSingletonTraits;
 }
 
 class VivaldiBrowserWindow;
+class VivaldiNativeAppWindow;
 
 class VivaldiAppWindowClient {
  public:
@@ -32,7 +33,7 @@ class VivaldiAppWindowClient {
   // Initialize the app window system with this app window client.
   static void Set(VivaldiAppWindowClient* client);
 
-  extensions::NativeAppWindow* CreateNativeAppWindow(
+  VivaldiNativeAppWindow* CreateNativeAppWindow(
     VivaldiBrowserWindow* window,
     extensions::AppWindow::CreateParams* params);
 
@@ -40,7 +41,7 @@ private:
   friend struct base::DefaultSingletonTraits<VivaldiAppWindowClient>;
 
   // Implemented in platform specific code.
-  static extensions::NativeAppWindow* CreateNativeAppWindowImpl(
+  static VivaldiNativeAppWindow* CreateNativeAppWindowImpl(
       VivaldiBrowserWindow* window,
       const extensions::AppWindow::CreateParams& params);
 

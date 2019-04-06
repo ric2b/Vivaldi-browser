@@ -41,7 +41,6 @@ public class ContentShellShellManagementTest {
                 mActivityTestRule.launchContentShellWithUrl(TEST_PAGE_1);
         Assert.assertEquals(TEST_PAGE_1,
                 activity.getActiveShell()
-                        .getContentViewCore()
                         .getWebContents()
                         .getVisibleUrl());
 
@@ -51,13 +50,12 @@ public class ContentShellShellManagementTest {
         mActivityTestRule.loadNewShell(TEST_PAGE_2);
         Assert.assertEquals(TEST_PAGE_2,
                 activity.getActiveShell()
-                        .getContentViewCore()
                         .getWebContents()
                         .getVisibleUrl());
 
         Assert.assertNotSame(previousActiveShell, activity.getActiveShell());
+        Assert.assertNull(previousActiveShell.getWebContents());
         Assert.assertTrue(previousActiveShell.isDestroyed());
-        Assert.assertFalse(previousActiveShell.getContentViewCore().isAlive());
     }
 
 }

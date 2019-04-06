@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "base/values.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/page_setup.h"
 #include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
@@ -76,6 +76,7 @@ PrintingContext::Result PrintingContext::UsePdfSettings() {
   pdf_settings->SetBoolean(kSettingPrintWithExtension, false);
   pdf_settings->SetInteger(kSettingScaleFactor, 100);
   pdf_settings->SetBoolean(kSettingRasterizePdf, false);
+  pdf_settings->SetInteger(kSettingPagesPerSheet, 1);
   return UpdatePrintSettings(*pdf_settings);
 }
 
@@ -112,12 +113,13 @@ PrintingContext::Result PrintingContext::UpdatePrintSettings(
     settings_.set_dpi(kDefaultPdfDpi);
     gfx::Size paper_size(GetPdfPaperSizeDeviceUnits());
     if (!settings_.requested_media().size_microns.IsEmpty()) {
-      float deviceMicronsPerDeviceUnit =
-          (kHundrethsMMPerInch * 10.0f) / settings_.device_units_per_inch();
+      float device_microns_per_device_unit =
+          static_cast<float>(kMicronsPerInch) /
+          settings_.device_units_per_inch();
       paper_size = gfx::Size(settings_.requested_media().size_microns.width() /
-                                 deviceMicronsPerDeviceUnit,
+                                 device_microns_per_device_unit,
                              settings_.requested_media().size_microns.height() /
-                                 deviceMicronsPerDeviceUnit);
+                                 device_microns_per_device_unit);
     }
     gfx::Rect paper_rect(0, 0, paper_size.width(), paper_size.height());
     if (print_to_cloud || print_with_privet) {
@@ -130,9 +132,7 @@ PrintingContext::Result PrintingContext::UpdatePrintSettings(
   }
 
   bool show_system_dialog = false;
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   job_settings.GetBoolean(kSettingShowSystemDialog, &show_system_dialog);
-#endif
 
   int page_count = 0;
   job_settings.GetInteger(kSettingPreviewPageCount, &page_count);
@@ -140,5 +140,17 @@ PrintingContext::Result PrintingContext::UpdatePrintSettings(
   return UpdatePrinterSettings(open_in_external_preview, show_system_dialog,
                                page_count);
 }
+
+#if defined(OS_CHROMEOS)
+PrintingContext::Result PrintingContext::UpdatePrintSettingsFromPOD(
+    std::unique_ptr<PrintSettings> job_settings) {
+  ResetSettings();
+  settings_ = *job_settings;
+
+  return UpdatePrinterSettings(false /* external_preview */,
+                               false /* show_system_dialog */,
+                               0 /* page_count is only used on Android */);
+}
+#endif
 
 }  // namespace printing

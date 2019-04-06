@@ -15,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task_runner.h"
 #include "ui/events/ozone/evdev/event_converter_evdev.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
@@ -63,8 +64,6 @@ class EVENTS_OZONE_EVDEV_EXPORT InputDeviceFactoryEvdev {
 
   base::WeakPtr<InputDeviceFactoryEvdev> GetWeakPtr();
 
-  void EnablePalmSuppression(bool enabled);
-
  private:
   // Open device at path & starting processing events.
   void AttachInputDevice(std::unique_ptr<EventConverterEvdev> converter);
@@ -94,6 +93,8 @@ class EVENTS_OZONE_EVDEV_EXPORT InputDeviceFactoryEvdev {
   void SetBoolPropertyForOneType(const EventDeviceType type,
                                  const std::string& name,
                                  bool value);
+  void EnablePalmSuppression(bool enabled);
+  void EnableDevices();
 
   // Task runner for our thread.
   scoped_refptr<base::TaskRunner> task_runner_;

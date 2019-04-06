@@ -18,6 +18,10 @@
       font-size: 14px;
     }
 
+    button {
+      margin-bottom: 20px;
+    }
+
     table {
       border-collapse: collapse;
       margin-bottom: 20px;
@@ -50,7 +54,6 @@
 
     .origin-cell {
       background-color: rgba(230, 230, 230, 0.5);
-      min-width: 500px;
     }
 
     .visits-count-cell,
@@ -60,6 +63,7 @@
     .significant-playbacks-count-cell {
       background-color: rgba(230, 230, 230, 0.5);
       text-align: right;
+      white-space: nowrap;
     }
 
     .base-score-input {
@@ -96,6 +100,7 @@
 </head>
 <body>
   <h1>Media Engagement</h1>
+  <button id="copy-all-to-clipboard">Copy all to clipboard</button>
   <table>
     <thead>
       <tr id="config-table-header">
@@ -110,6 +115,12 @@
     <tbody id="config-table-body">
     </tbody>
   </table>
+  <p>
+    <label>
+      <input id="show-no-playbacks" type="checkbox">
+      Show sessions with no playbacks
+    </label>
+  </p>
   <table>
     <thead>
       <tr id="engagement-table-header">
@@ -117,10 +128,10 @@
           Origin
         </th>
         <th sort-key="visits" sort-reverse>
-          Visits
+          Sessions
         </th>
         <th sort-key="mediaPlaybacks" sort-reverse>
-          Playbacks
+          Sessions with playback
         </th>
         <th sort-key="audiblePlaybacks" sort-reverse>
           Audible Playbacks*
@@ -133,6 +144,9 @@
         </th>
         <th sort-key="isHigh" sort-reverse>
           Is High
+        </th>
+        <th sort-key="highScoreChanges" sort-reverse>
+          Is High Changes
         </th>
         <th sort-key="totalScore" class="sort-column" sort-reverse>
           Score
@@ -156,6 +170,7 @@
       <td class="significant-playbacks-count-cell"></td>
       <td class="last-playback-time-cell"></td>
       <td class="is-high-cell"></td>
+      <td class="is-high-changes-cell"></td>
       <td class="total-score-cell"></td>
       <td class="engagement-bar-cell">
         <div class="engagement-bar"></div>

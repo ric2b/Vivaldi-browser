@@ -28,7 +28,9 @@ namespace content {
 // S13nServiceWorker:
 // 1) Event timeout: when an event starts, StartEvent() records the expiration
 // time of the event (kEventTimeout). If EndEvent() has not been called within
-// the timeout time, |abort_callback| passed to StartEvent() is called.
+// the timeout time, |abort_callback| passed to StartEvent() is called. Also,
+// |zero_idle_timer_delay_| is set to true to shut down the worker as soon as
+// possible since the worker may have gone into bad state.
 // 2) Idle timeout: when a certain time has passed (kIdleDelay) since all of
 // events have ended, ServiceWorkerTimeoutTimer calls the |idle_callback|.
 // |idle_callback| will be continuously called at a certain interval
@@ -45,7 +47,7 @@ class CONTENT_EXPORT ServiceWorkerTimeoutTimer {
   explicit ServiceWorkerTimeoutTimer(base::RepeatingClosure idle_callback);
   // For testing.
   ServiceWorkerTimeoutTimer(base::RepeatingClosure idle_callback,
-                            std::unique_ptr<base::TickClock> tick_clock);
+                            const base::TickClock* tick_clock);
   ~ServiceWorkerTimeoutTimer();
 
   // StartEvent() should be called at the beginning of an event. It returns an
@@ -54,6 +56,11 @@ class CONTENT_EXPORT ServiceWorkerTimeoutTimer {
   // run in order synchronouslly in StartEvent().
   // See the class comment to know when |abort_callback| runs.
   int StartEvent(base::OnceCallback<void(int /* event_id */)> abort_callback);
+  // This is basically the same as StartEvent, but you can customize the
+  // timeout time until |abort_callback| runs by |timeout|.
+  int StartEventWithCustomTimeout(
+      base::OnceCallback<void(int /* event_id */)> abort_callback,
+      base::TimeDelta timeout);
   void EndEvent(int event_id);
 
   // Pushes a task which is expected to run after any event starts again to a
@@ -135,7 +142,8 @@ class CONTENT_EXPORT ServiceWorkerTimeoutTimer {
   // |timer_| invokes UpdateEventStatus() periodically.
   base::RepeatingTimer timer_;
 
-  std::unique_ptr<base::TickClock> tick_clock_;
+  // |tick_clock_| outlives |this|.
+  const base::TickClock* const tick_clock_;
 };
 
 }  // namespace content

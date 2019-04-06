@@ -10,6 +10,8 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_checker.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
@@ -17,12 +19,13 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/gpu_service_registry.h"
 #include "content/public/common/service_manager_connection.h"
-#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
+#include "mojo/public/cpp/platform/platform_channel.h"
+#include "mojo/public/cpp/system/invitation.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/interfaces/arc.mojom.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
-#include "ui/base/ui_base_switches_util.h"
+#include "ui/base/ui_base_features.h"
 
 namespace arc {
 
@@ -49,7 +52,9 @@ class GpuArcVideoServiceHostFactory
 
 class VideoAcceleratorFactoryService : public mojom::VideoAcceleratorFactory {
  public:
-  VideoAcceleratorFactoryService() { DCHECK(!switches::IsMusHostingViz()); }
+  VideoAcceleratorFactoryService() {
+    DCHECK(features::IsAshInBrowserProcess());
+  }
 
   ~VideoAcceleratorFactoryService() override = default;
 
@@ -71,6 +76,15 @@ class VideoAcceleratorFactoryService : public mojom::VideoAcceleratorFactory {
             std::move(request)));
   }
 
+  void CreateProtectedBufferAllocator(
+      mojom::VideoProtectedBufferAllocatorRequest request) override {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&content::BindInterfaceInGpuProcess<
+                           mojom::VideoProtectedBufferAllocator>,
+                       std::move(request)));
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(VideoAcceleratorFactoryService);
 };
@@ -79,7 +93,7 @@ class VideoAcceleratorFactoryServiceViz
     : public mojom::VideoAcceleratorFactory {
  public:
   VideoAcceleratorFactoryServiceViz() {
-    DCHECK(switches::IsMusHostingViz());
+    DCHECK(!features::IsAshInBrowserProcess());
     DETACH_FROM_THREAD(thread_checker_);
     auto* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
@@ -102,6 +116,12 @@ class VideoAcceleratorFactoryServiceViz
     arc_->CreateVideoEncodeAccelerator(std::move(request));
   }
 
+  void CreateProtectedBufferAllocator(
+      mojom::VideoProtectedBufferAllocatorRequest request) override {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    arc_->CreateVideoProtectedBufferAllocator(std::move(request));
+  }
+
  private:
   THREAD_CHECKER(thread_checker_);
 
@@ -112,7 +132,7 @@ class VideoAcceleratorFactoryServiceViz
 
 std::unique_ptr<mojom::VideoAcceleratorFactory>
 CreateVideoAcceleratorFactory() {
-  if (switches::IsMusHostingViz())
+  if (!features::IsAshInBrowserProcess())
     return std::make_unique<VideoAcceleratorFactoryServiceViz>();
   return std::make_unique<VideoAcceleratorFactoryService>();
 }
@@ -145,27 +165,18 @@ void GpuArcVideoServiceHost::OnBootstrapVideoAcceleratorFactory(
   // Hardcode pid 0 since it is unused in mojo.
   const base::ProcessHandle kUnusedChildProcessHandle =
       base::kNullProcessHandle;
-  mojo::edk::OutgoingBrokerClientInvitation invitation;
-  mojo::edk::PlatformChannelPair channel_pair;
-  std::string token = mojo::edk::GenerateRandomToken();
+  mojo::OutgoingInvitation invitation;
+  mojo::PlatformChannel channel;
+  std::string pipe_name = base::NumberToString(base::RandUint64());
   mojo::ScopedMessagePipeHandle server_pipe =
-      invitation.AttachMessagePipe(token);
-  invitation.Send(
-      kUnusedChildProcessHandle,
-      mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
-                                  channel_pair.PassServerHandle()));
+      invitation.AttachMessagePipe(pipe_name);
+  mojo::OutgoingInvitation::Send(std::move(invitation),
+                                 kUnusedChildProcessHandle,
+                                 channel.TakeLocalEndpoint());
 
-  MojoHandle wrapped_handle;
-  MojoResult wrap_result = mojo::edk::CreatePlatformHandleWrapper(
-      channel_pair.PassClientHandle(), &wrapped_handle);
-  if (wrap_result != MOJO_RESULT_OK) {
-    LOG(ERROR) << "Pipe failed to wrap handles. Closing: " << wrap_result;
-    std::move(callback).Run(mojo::ScopedHandle(), std::string());
-    return;
-  }
-  mojo::ScopedHandle child_handle{mojo::Handle(wrapped_handle)};
-
-  std::move(callback).Run(std::move(child_handle), token);
+  mojo::ScopedHandle client_handle = mojo::WrapPlatformHandle(
+      channel.TakeRemoteEndpoint().TakePlatformHandle());
+  std::move(callback).Run(std::move(client_handle), pipe_name);
 
   // The binding will be removed automatically, when the binding is destroyed.
   video_accelerator_factory_bindings_.AddBinding(

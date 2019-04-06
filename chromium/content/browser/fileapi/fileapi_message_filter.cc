@@ -19,12 +19,14 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
 #include "content/common/fileapi/file_system_messages.h"
 #include "content/common/fileapi/webblob_messages.h"
+#include "content/public/browser/browser_thread.h"
 #include "ipc/ipc_platform_file.h"
 #include "net/base/mime_util.h"
 #include "net/url_request/url_request_context.h"
@@ -36,7 +38,6 @@
 #include "storage/browser/fileapi/file_permission_policy.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/isolated_context.h"
-#include "storage/common/fileapi/directory_entry.h"
 #include "storage/common/fileapi/file_system_info.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/fileapi/file_system_util.h"
@@ -501,7 +502,7 @@ void FileAPIMessageFilter::DidGetMetadataForStreaming(
 void FileAPIMessageFilter::DidReadDirectory(
     int request_id,
     base::File::Error result,
-    std::vector<storage::DirectoryEntry> entries,
+    std::vector<filesystem::mojom::DirectoryEntry> entries,
     bool has_more) {
   if (result == base::File::FILE_OK) {
     if (!entries.empty() || !has_more)
@@ -604,7 +605,7 @@ void FileAPIMessageFilter::DidCreateSnapshot(
           context_->default_file_task_runner());
     }
     file_ref->AddFinalReleaseCallback(
-        base::Bind(&RevokeFilePermission, process_id_));
+        base::BindOnce(&RevokeFilePermission, process_id_));
   }
 
   if (file_ref.get()) {

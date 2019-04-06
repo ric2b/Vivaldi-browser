@@ -58,12 +58,15 @@ MojoResult WriteDataToProducerHandle(DataPipeProducerHandle producer,
 StringDataPipeProducer::StringDataPipeProducer(
     ScopedDataPipeProducerHandle producer)
     : producer_(std::move(producer)),
-      watcher_(FROM_HERE, SimpleWatcher::ArmingPolicy::AUTOMATIC),
+      watcher_(FROM_HERE,
+               SimpleWatcher::ArmingPolicy::AUTOMATIC,
+               base::SequencedTaskRunnerHandle::Get()),
       weak_factory_(this) {}
 
 StringDataPipeProducer::~StringDataPipeProducer() = default;
 
 void StringDataPipeProducer::Write(const base::StringPiece& data,
+                                   AsyncWritingMode mode,
                                    CompletionCallback callback) {
   DCHECK(!callback_);
   callback_ = std::move(callback);
@@ -80,8 +83,12 @@ void StringDataPipeProducer::Write(const base::StringPiece& data,
   } else {
     // Copy whatever data didn't make the cut and try again when the pipe has
     // some more capacity.
-    data_ = std::string(data.data() + size, data.size() - size);
-    data_view_ = data_;
+    if (mode == AsyncWritingMode::STRING_MAY_BE_INVALIDATED_BEFORE_COMPLETION) {
+      data_ = std::string(data.data() + size, data.size() - size);
+      data_view_ = data_;
+    } else {
+      data_view_ = base::StringPiece(data.data() + size, data.size() - size);
+    }
     watcher_.Watch(producer_.get(), MOJO_HANDLE_SIGNAL_WRITABLE,
                    MOJO_WATCH_CONDITION_SATISFIED,
                    base::Bind(&StringDataPipeProducer::OnProducerHandleReady,

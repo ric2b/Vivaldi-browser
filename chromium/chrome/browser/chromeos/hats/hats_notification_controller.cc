@@ -4,11 +4,10 @@
 
 #include "chrome/browser/chromeos/hats/hats_notification_controller.h"
 
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/hats/hats_dialog.h"
 #include "chrome/browser/chromeos/hats/hats_finch_helper.h"
@@ -26,8 +25,8 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/strings/grit/ui_strings.h"
 
 namespace {
@@ -156,13 +155,9 @@ bool HatsNotificationController::ShouldShowSurveyToProfile(Profile* profile) {
   return true;
 }
 
-// message_center::NotificationDelegate override:
-void HatsNotificationController::Click() {
-  ButtonClick(0 /* unused */);
-}
-
-// message_center::NotificationDelegate override:
-void HatsNotificationController::ButtonClick(int /* button_index */) {
+void HatsNotificationController::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
   UpdateLastInteractionTime();
 
   // The dialog deletes itslef on close.
@@ -203,7 +198,8 @@ void HatsNotificationController::OnPortalDetectionCompleted(
           GURL(kNotificationOriginUrl),
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT, kNotifierHats),
-          message_center::RichNotificationData(), this, kNotificationGoogleIcon,
+          message_center::RichNotificationData(), this,
+          ash::kNotificationGoogleIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);
 
   NotificationDisplayService::GetForProfile(profile_)->Display(

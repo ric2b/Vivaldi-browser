@@ -33,17 +33,17 @@ using content::NavigationEntry;
 
 namespace {
 
-const char kMetricsName[] = "mitm_software";
+const char kMitmSoftwareMetricsName[] = "mitm_software";
 
-std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
+std::unique_ptr<ChromeMetricsHelper> CreateMitmSoftwareMetricsHelper(
     content::WebContents* web_contents,
     const GURL& request_url) {
   // Set up the metrics helper for the MITMSoftwareUI.
   security_interstitials::MetricsHelper::ReportDetails reporting_info;
-  reporting_info.metric_prefix = kMetricsName;
+  reporting_info.metric_prefix = kMitmSoftwareMetricsName;
   std::unique_ptr<ChromeMetricsHelper> metrics_helper =
       std::make_unique<ChromeMetricsHelper>(web_contents, request_url,
-                                            reporting_info, kMetricsName);
+                                            reporting_info);
   metrics_helper.get()->StartRecordingCaptivePortalMetrics(false);
   return metrics_helper;
 }
@@ -70,7 +70,8 @@ MITMSoftwareBlockingPage::MITMSoftwareBlockingPage(
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
     : SSLBlockingPageBase(
           web_contents,
-          certificate_reporting::ErrorReport::INTERSTITIAL_MITM_SOFTWARE,
+          cert_error,
+          CertificateErrorReport::INTERSTITIAL_MITM_SOFTWARE,
           ssl_info,
           request_url,
           std::move(ssl_cert_reporter),
@@ -79,8 +80,9 @@ MITMSoftwareBlockingPage::MITMSoftwareBlockingPage(
           std::make_unique<SSLErrorControllerClient>(
               web_contents,
               ssl_info,
+              cert_error,
               request_url,
-              CreateMetricsHelper(web_contents, request_url))),
+              CreateMitmSoftwareMetricsHelper(web_contents, request_url))),
       callback_(callback),
       ssl_info_(ssl_info),
       mitm_software_ui_(
@@ -117,12 +119,6 @@ void MITMSoftwareBlockingPage::OverrideEntry(NavigationEntry* entry) {
   entry->GetSSL() = content::SSLStatus(ssl_info_);
 }
 
-void MITMSoftwareBlockingPage::SetSSLCertReporterForTesting(
-    std::unique_ptr<SSLCertReporter> ssl_cert_reporter) {
-  cert_report_helper()->SetSSLCertReporterForTesting(
-      std::move(ssl_cert_reporter));
-}
-
 // This handles the commands sent from the interstitial JavaScript.
 void MITMSoftwareBlockingPage::CommandReceived(const std::string& command) {
   if (command == "\"pageLoadComplete\"") {
@@ -149,8 +145,7 @@ void MITMSoftwareBlockingPage::OverrideRendererPrefs(
     content::RendererPreferences* prefs) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile,
-                                                      web_contents());
+  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile);
 }
 
 void MITMSoftwareBlockingPage::OnDontProceed() {

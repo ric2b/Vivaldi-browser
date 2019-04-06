@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -21,14 +20,12 @@
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/rappor/public/rappor_parameters.h"
-#include "components/rappor/public/rappor_utils.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service.h"
-#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_activation_throttle.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
+#include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/activation_scope.h"
 #include "components/subresource_filter/core/common/activation_state.h"
@@ -41,118 +38,102 @@
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ChromeSubresourceFilterClient);
 
-namespace {
-
-scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> GetDatabaseManager() {
-  safe_browsing::SafeBrowsingService* safe_browsing_service =
-      g_browser_process->safe_browsing_service();
-  bool has_supported_manager =
-      safe_browsing_service &&
-      safe_browsing_service->database_manager()->IsSupported() &&
-      safe_browsing_service->database_manager()->CanCheckSubresourceFilter();
-  return has_supported_manager ? safe_browsing_service->database_manager()
-                               : nullptr;
-}
-
-}  // namespace
-
 ChromeSubresourceFilterClient::ChromeSubresourceFilterClient(
     content::WebContents* web_contents)
-    : web_contents_(web_contents) {
+    : content::WebContentsObserver(web_contents) {
   DCHECK(web_contents);
   SubresourceFilterProfileContext* context =
       SubresourceFilterProfileContextFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents_->GetBrowserContext()));
+          Profile::FromBrowserContext(web_contents->GetBrowserContext()));
   settings_manager_ = context->settings_manager();
-  subresource_filter::ContentSubresourceFilterDriverFactory::
-      CreateForWebContents(web_contents, this);
+
+  subresource_filter::ContentRulesetService* ruleset_service =
+      g_browser_process->subresource_filter_ruleset_service();
+  subresource_filter::VerifiedRulesetDealer::Handle* dealer =
+      ruleset_service ? ruleset_service->ruleset_dealer() : nullptr;
+  throttle_manager_ = std::make_unique<
+      subresource_filter::ContentSubresourceFilterThrottleManager>(
+      this, dealer, web_contents);
 }
 
 ChromeSubresourceFilterClient::~ChromeSubresourceFilterClient() {}
 
+void ChromeSubresourceFilterClient::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->IsInMainFrame() &&
+      !navigation_handle->IsSameDocument()) {
+    // TODO(csharrison): This should probably be reset at commit time, not at
+    // navigation start.
+    did_show_ui_for_navigation_ = false;
+  }
+}
+
 void ChromeSubresourceFilterClient::MaybeAppendNavigationThrottles(
     content::NavigationHandle* navigation_handle,
     std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles) {
-  if (navigation_handle->IsInMainFrame()) {
+  safe_browsing::SafeBrowsingService* safe_browsing_service =
+      g_browser_process->safe_browsing_service();
+  if (navigation_handle->IsInMainFrame() && safe_browsing_service) {
     throttles->push_back(
-        base::MakeUnique<subresource_filter::
+        std::make_unique<subresource_filter::
                              SubresourceFilterSafeBrowsingActivationThrottle>(
             navigation_handle, this,
             content::BrowserThread::GetTaskRunnerForThread(
                 content::BrowserThread::IO),
-            GetDatabaseManager()));
+            safe_browsing_service->database_manager()));
   }
 
-  auto* driver_factory =
-      subresource_filter::ContentSubresourceFilterDriverFactory::
-          FromWebContents(navigation_handle->GetWebContents());
-  driver_factory->throttle_manager()->MaybeAppendNavigationThrottles(
-      navigation_handle, throttles);
+  throttle_manager_->MaybeAppendNavigationThrottles(navigation_handle,
+                                                    throttles);
 }
 
 void ChromeSubresourceFilterClient::OnReloadRequested() {
-  UMA_HISTOGRAM_BOOLEAN("SubresourceFilter.Prompt.NumReloads", true);
-  const GURL& whitelist_url = web_contents_->GetLastCommittedURL();
-
-  // Only whitelist via content settings when using the experimental UI,
-  // otherwise could get into a situation where content settings cannot be
-  // adjusted.
-  if (base::FeatureList::IsEnabled(
-          subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI)) {
-    WhitelistByContentSettings(whitelist_url);
-  } else {
-    WhitelistInCurrentWebContents(whitelist_url);
-  }
-  web_contents_->GetController().Reload(content::ReloadType::NORMAL, true);
+  LogAction(SubresourceFilterAction::kWhitelistedSite);
+  WhitelistByContentSettings(web_contents()->GetLastCommittedURL());
+  web_contents()->GetController().Reload(content::ReloadType::NORMAL, true);
 }
 
 void ChromeSubresourceFilterClient::ShowNotification() {
-  // Do not show the UI if we're forcing activation due to a devtools toggle.
-  // This complicates the meaning of our persistent storage (e.g. our metadata
-  // that assumes showing UI implies site is blacklisted).
-  if (activated_via_devtools_) {
-    LogAction(kActionForcedActivationNoUIResourceBlocked);
-    return;
-  }
   if (did_show_ui_for_navigation_)
     return;
 
-  const GURL& top_level_url = web_contents_->GetLastCommittedURL();
+  const GURL& top_level_url = web_contents()->GetLastCommittedURL();
   if (settings_manager_->ShouldShowUIForSite(top_level_url)) {
     ShowUI(top_level_url);
   } else {
-    LogAction(kActionUISuppressed);
+    LogAction(SubresourceFilterAction::kUISuppressed);
   }
 }
 
-void ChromeSubresourceFilterClient::OnNewNavigationStarted() {
-  did_show_ui_for_navigation_ = false;
-  LogAction(kActionNavigationStarted);
-}
-
-bool ChromeSubresourceFilterClient::OnPageActivationComputed(
+subresource_filter::ActivationLevel
+ChromeSubresourceFilterClient::OnPageActivationComputed(
     content::NavigationHandle* navigation_handle,
-    bool activated,
-    bool suppressing_notifications) {
-  const GURL& url(navigation_handle->GetURL());
+    subresource_filter::ActivationLevel initial_activation_level,
+    subresource_filter::ActivationDecision* decision) {
   DCHECK(navigation_handle->IsInMainFrame());
 
-  if (url.SchemeIsHTTPOrHTTPS()) {
-    // With respect to persistent metadata, do not consider the site activated
-    // if it is forced via devtools, or if we are suppressing notifications.
-    settings_manager_->ResetSiteMetadataBasedOnActivation(
-        url,
-        activated && !activated_via_devtools_ && !suppressing_notifications);
+  subresource_filter::ActivationLevel effective_activation_level =
+      initial_activation_level;
+  if (activated_via_devtools_) {
+    effective_activation_level = subresource_filter::ActivationLevel::ENABLED;
+    *decision = subresource_filter::ActivationDecision::FORCED_ACTIVATION;
   }
 
-  // Return whether the activation should be whitelisted.
-  // Note: Could consider skipping this if forcing activation, but it isn't
-  // critical.
-  return whitelisted_hosts_.count(url.host()) ||
-         settings_manager_->GetSitePermission(url) == CONTENT_SETTING_ALLOW;
-  // TODO(csharrison): Consider setting the metadata to an empty dict here if
-  // the site is activated and not whitelisted. Need to be careful about various
-  // edge cases like |should_suppress_notification| and DRYRUN activation.
+  const GURL& url(navigation_handle->GetURL());
+  if (url.SchemeIsHTTPOrHTTPS()) {
+    settings_manager_->ResetSiteMetadataBasedOnActivation(
+        url, effective_activation_level ==
+                 subresource_filter::ActivationLevel::ENABLED);
+  }
+
+  if (settings_manager_->GetSitePermission(url) == CONTENT_SETTING_ALLOW) {
+    if (effective_activation_level ==
+        subresource_filter::ActivationLevel::ENABLED) {
+      *decision = subresource_filter::ActivationDecision::URL_WHITELISTED;
+    }
+    return subresource_filter::ActivationLevel::DISABLED;
+  }
+  return effective_activation_level;
 }
 
 void ChromeSubresourceFilterClient::WhitelistByContentSettings(
@@ -160,60 +141,29 @@ void ChromeSubresourceFilterClient::WhitelistByContentSettings(
   settings_manager_->WhitelistSite(top_level_url);
 }
 
-bool ChromeSubresourceFilterClient::ForceActivationInCurrentWebContents() {
-  return activated_via_devtools_;
-}
-
-void ChromeSubresourceFilterClient::WhitelistInCurrentWebContents(
-    const GURL& url) {
-  if (url.SchemeIsHTTPOrHTTPS())
-    whitelisted_hosts_.insert(url.host());
-}
-
 void ChromeSubresourceFilterClient::ToggleForceActivationInCurrentWebContents(
     bool force_activation) {
   if (!activated_via_devtools_ && force_activation)
-    LogAction(kActionForcedActivationEnabled);
+    LogAction(SubresourceFilterAction::kForcedActivationEnabled);
   activated_via_devtools_ = force_activation;
 }
 
 // static
 void ChromeSubresourceFilterClient::LogAction(SubresourceFilterAction action) {
-  UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.Actions", action,
-                            kActionLastEntry);
-}
-
-subresource_filter::VerifiedRulesetDealer::Handle*
-ChromeSubresourceFilterClient::GetRulesetDealer() {
-  subresource_filter::ContentRulesetService* ruleset_service =
-      g_browser_process->subresource_filter_ruleset_service();
-  return ruleset_service ? ruleset_service->ruleset_dealer() : nullptr;
+  UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.Actions2", action);
 }
 
 void ChromeSubresourceFilterClient::ShowUI(const GURL& url) {
-  DCHECK(!activated_via_devtools_);
-  DCHECK_NE(subresource_filter::ContentSubresourceFilterDriverFactory::
-                FromWebContents(web_contents_)
-                    ->GetMatchedConfigurationForLastCommittedPageLoad(),
-            subresource_filter::Configuration::MakeForForcedActivation());
-
 #if defined(OS_ANDROID)
   InfoBarService* infobar_service =
-      InfoBarService::FromWebContents(web_contents_);
+      InfoBarService::FromWebContents(web_contents());
   AdsBlockedInfobarDelegate::Create(infobar_service);
 #endif
   TabSpecificContentSettings* content_settings =
-      TabSpecificContentSettings::FromWebContents(web_contents_);
+      TabSpecificContentSettings::FromWebContents(web_contents());
   content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_ADS);
 
-  LogAction(kActionUIShown);
-
-  if (rappor::RapporService* rappor_service =
-          g_browser_process->rappor_service()) {
-    rappor_service->RecordSampleString(
-        "SubresourceFilter.UIShown", rappor::UMA_RAPPOR_TYPE,
-        rappor::GetDomainAndRegistrySampleFromGURL(url));
-  }
+  LogAction(SubresourceFilterAction::kUIShown);
   did_show_ui_for_navigation_ = true;
   settings_manager_->OnDidShowUI(url);
 }

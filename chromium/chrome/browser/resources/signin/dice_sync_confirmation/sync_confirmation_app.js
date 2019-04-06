@@ -5,9 +5,28 @@
 Polymer({
   is: 'sync-confirmation-app',
 
-  listeners: {
-    // This is necessary since the settingsLink element is inserted by i18nRaw.
-    'settingsLink.tap': 'onGoToSettings_'
+  properties: {
+    /** @private */
+    isConsentBump_: {
+      type: Boolean,
+      value: function() {
+        return window.location.search.includes('consent-bump');
+      },
+    },
+
+    /** @private */
+    showMoreOptions_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private */
+    accountImageSrc_: {
+      type: String,
+      value: function() {
+        return loadTimeData.getString('accountPictureUrl');
+      },
+    },
   },
 
   /** @private {?sync.confirmation.SyncConfirmationBrowserProxy} */
@@ -33,25 +52,81 @@ Polymer({
   },
 
   /** @private */
-  onConfirm_: function() {
-    this.syncConfirmationBrowserProxy_.confirm();
+  onConfirm_: function(e) {
+    this.syncConfirmationBrowserProxy_.confirm(
+        this.getConsentDescription_(), this.getConsentConfirmation_(e.path),
+        this.isConsentBump_, this.showMoreOptions_);
   },
 
   /** @private */
   onUndo_: function() {
-    this.syncConfirmationBrowserProxy_.undo();
+    this.syncConfirmationBrowserProxy_.undo(this.isConsentBump_);
   },
 
   /** @private */
-  onGoToSettings_: function() {
-    this.syncConfirmationBrowserProxy_.goToSettings();
+  onGoToSettings_: function(e) {
+    this.syncConfirmationBrowserProxy_.goToSettings(
+        this.getConsentDescription_(), this.getConsentConfirmation_(e.path),
+        this.isConsentBump_);
   },
 
   /** @private */
   onKeyDown_: function(e) {
     if (e.key == 'Enter' && !/^(A|PAPER-BUTTON)$/.test(e.path[0].tagName)) {
-      this.onConfirm_();
+      this.onConfirm_(e);
       e.preventDefault();
     }
   },
+
+  /**
+   * @param {!Array<!HTMLElement>} path Path of the click event. Must contain
+   *     a consent confirmation element.
+   * @return {string} The text of the consent confirmation element.
+   * @private
+   */
+  getConsentConfirmation_: function(path) {
+    for (var element of path) {
+      if (element.hasAttribute('consent-confirmation'))
+        return element.innerHTML.trim();
+    }
+    assertNotReached('No consent confirmation element found.');
+    return '';
+  },
+
+  /** @return {!Array<string>} Text of the consent description elements. */
+  getConsentDescription_: function() {
+    var consentDescription =
+        Array.from(this.shadowRoot.querySelectorAll('[consent-description]'))
+            .filter(element => element.clientWidth * element.clientHeight > 0)
+            .map(element => element.innerHTML.trim());
+    assert(consentDescription);
+    return consentDescription;
+  },
+
+  /** @private */
+  onOK_: function(e) {
+    switch (this.$$('paper-radio-group').selected) {
+      case 'reviewSettings':
+        this.onGoToSettings_(e);
+        break;
+      case 'noChanges':
+        this.onUndo_();
+        break;
+      case 'defaultSettings':
+        this.onConfirm_(e);
+        break;
+    }
+    assertNotReached();
+  },
+
+  /** @private */
+  onMoreOptions_: function() {
+    this.showMoreOptions_ = true;
+  },
+
+  /** @private */
+  onBack_: function() {
+    this.showMoreOptions_ = false;
+  },
+
 });

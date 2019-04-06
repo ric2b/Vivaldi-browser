@@ -20,7 +20,7 @@
 #include "content/public/browser/notification_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace chromeos {
 namespace quick_unlock {
@@ -57,6 +57,8 @@ QuickUnlockNotificationController::CreateForPin(Profile* profile) {
   NotificationParams* params = &controller->params_;
   params->title_message_id = IDS_QUICK_UNLOCK_NOTIFICATION_TITLE;
   params->body_message_id = IDS_QUICK_UNLOCK_NOTIFICATION_BODY;
+  // TODO(http://crbug.com/291747): Change this to actual icon for quick unlock
+  // feature notification, also use a vector icon instead of raster asset.
   params->icon_id = IDR_SCREENSHOT_NOTIFICATION_ICON;
   params->notifier = kNotifierPinUnlock;
   params->feature_name_id = IDS_PIN_UNLOCK_FEATURE_NOTIFIER_NAME;
@@ -90,13 +92,9 @@ bool QuickUnlockNotificationController::ShouldShowPinNotification(
     return false;
   }
 
-  // Do not show the notification if the pin is already set.
-  PinStorage* pin_storage =
-      QuickUnlockFactory::GetForProfile(profile)->pin_storage();
-  if (pin_storage->IsPinSet())
-    return false;
-
-  // TODO(jdufault): Enable once quick unlock settings land(crbug.com/291747).
+  // TODO(jdufault): Enable once quick unlock settings land. See
+  // https://crbug.com/826773. Do not show the notification if the PIN is
+  // already set.
   return false;
 }
 
@@ -110,6 +108,7 @@ QuickUnlockNotificationController::CreateForFingerprint(Profile* profile) {
   NotificationParams* params = &controller->params_;
   params->title_message_id = IDS_FINGERPRINT_NOTIFICATION_TITLE;
   params->body_message_id = IDS_FINGERPRINT_NOTIFICATION_BODY;
+  // TODO(sammiequon): Change to a vector icon identifier.
   params->icon_id = IDR_NOTIFICATION_FINGERPRINT;
   params->notifier = kNotifierFingerprintUnlock;
   params->feature_name_id = IDS_FINGERPRINT_UNLOCK_FEATURE_NOTIFIER_NAME;
@@ -182,7 +181,9 @@ void QuickUnlockNotificationController::Close(bool by_user) {
 }
 
 // message_center::NotificationDelegate override:
-void QuickUnlockNotificationController::Click() {
+void QuickUnlockNotificationController::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
   NavigateParams params(profile_, params_.url, ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   params.window_action = NavigateParams::SHOW_WINDOW;
@@ -215,8 +216,6 @@ QuickUnlockNotificationController::CreateNotification() {
       message_center::NOTIFICATION_TYPE_SIMPLE, params_.notification_id,
       l10n_util::GetStringUTF16(params_.title_message_id),
       l10n_util::GetStringUTF16(params_.body_message_id),
-      // TODO(http://crbug.com/291747): Change this to actual icon for
-      // quick unlock feature notification.
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(params_.icon_id),
       l10n_util::GetStringUTF16(params_.feature_name_id), GURL(),
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,

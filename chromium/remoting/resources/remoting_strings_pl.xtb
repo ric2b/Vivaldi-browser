@@ -3,9 +3,6 @@
 <translationbundle lang="pl">
 <translation id="1002108253973310084">Wykryto niezgodną wersję protokołu. Upewnij się, że na obu komputerach masz zainstalowaną najnowszą wersję oprogramowania, i spróbuj ponownie.</translation>
 <translation id="1050693411695664090">Słaba</translation>
-<translation id="1059802506829356230">• Nowy wygląd.
-• Zwiększona wydajność, szybkość reakcji i niezawodność.
-• Obsługa odtwarzania dźwięku z komputerów z systemem Windows lub Linux.</translation>
 <translation id="1152528166145813711">Wybierz…</translation>
 <translation id="1199593201721843963">Wyłącz połączenia zdalne</translation>
 <translation id="1291443878853470558">Jeśli chcesz korzystać z tego komputera przez Chromoting, musisz włączyć połączenia zdalne.</translation>
@@ -143,10 +140,12 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="4145029455188493639">W tej chwili używasz konta <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Brak niektórych wymaganych komponentów. Upewnij się, że masz zainstalowaną najnowszą wersję oprogramowania, i spróbuj ponownie.</translation>
 <translation id="4156740505453712750">Aby zabezpieczyć dostęp do tego komputera, wybierz PIN złożony z <ph name="BOLD_START" />co najmniej sześciu cyfr<ph name="BOLD_END" />. Będzie on wymagany przy łączeniu się z innej lokalizacji.</translation>
+<translation id="4169432154993690151">Aby wybrać zdjęcie profilowe, zezwól Pulpitowi zdalnemu Chrome na dostęp do kamery</translation>
 <translation id="4176825807642096119">Kod dostępu</translation>
 <translation id="4207623512727273241">Najpierw uruchom instalatora.</translation>
 <translation id="4227991223508142681">Narzędzie konfiguracji hosta</translation>
 <translation id="4240294130679914010">Program do odinstalowywania hosta funkcji Chromoting</translation>
+<translation id="4249741460382919890">Ogólne poprawki i lepsza stabilność.</translation>
 <translation id="4277463233460010382">Ten komputer jest skonfigurowany do zezwalania jednemu lub wielu klientom na łączenie się bez podawania kodu PIN.</translation>
 <translation id="4277736576214464567">Kod dostępu jest nieprawidłowy. Spróbuj ponownie.</translation>
 <translation id="4361728918881830843">Aby umożliwić zdalne połączenia z innym komputerem, zainstaluj na nim Pulpit zdalny Chrome i kliknij „<ph name="BUTTON_NAME" />”.</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">Host zdalny wymaga uwierzytelnienia w witrynie innej firmy. Aby kontynuować, musisz udzielić Pulpitowi zdalnemu Chrome dodatkowych uprawnień dostępu do tego adresu:</translation>
 <translation id="507204348399810022">Na pewno chcesz wyłączyć połączenia zdalne z: <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Nie udało się nawiązać połączenia z serwerem: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Wpisz ten sam PIN w obu polach.</translation>
 <translation id="5170982930780719864">Nieprawidłowy identyfikator hosta.</translation>
 <translation id="518094545883702183">Użyjemy tych informacji jedynie do zdiagnozowania zgłoszonego problemu, udostępnimy je tylko osobie sprawdzającej zgłoszenie i usuniemy w ciągu 30 dni.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Inny problem.</translation>
 <translation id="6398765197997659313">Zamknij pełny ekran</translation>
 <translation id="6441316101718669559">Integracja pulpitu jest niedostępna na tej platformie. Wciąż możesz używać aplikacji, jednak praca będzie mniej wygodna.</translation>
+<translation id="6502629188777329097">Bezpieczny dostęp do komputera</translation>
 <translation id="652218476070540101">Aktualizuję PIN tego komputera…</translation>
 <translation id="6527303717912515753">Udostępnij</translation>
 <translation id="6541219117979389420">Dzienniki aplikacji mogą zawierać informacje prywatne, w tym Twoje dane osobowe (adres e-mail) oraz nazwy i właściwości plików i folderów na Dysku Google.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">Od</translation>
 <translation id="677755392401385740">Uruchomiono host dla użytkownika: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Wyświetl/edytuj</translation>
+<translation id="6913710942997637770">Aby wybrać zdjęcie profilowe, zezwól Pulpitowi zdalnemu Chrome na dostęp do Twoich zdjęć</translation>
 <translation id="6930242544192836755">Czas trwania</translation>
 <translation id="6939719207673461467">Pokaż/ukryj klawiaturę.</translation>
 <translation id="6944854424004126054">Przywróć okno</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Połączenia zdalne z tym komputerem zostały wyłączone.</translation>
 <translation id="7678209621226490279">Zadokuj do lewej</translation>
 <translation id="7693372326588366043">Odśwież listę hostów</translation>
+<translation id="7714222945760997814">Zgłoś to</translation>
 <translation id="7782471917492991422">Sprawdź ustawienia zarządzania zasilaniem komputera i upewnij się, że nie jest on skonfigurowany do przechodzenia podczas bezczynności w tryb uśpienia.</translation>
 <translation id="7810127880729796595">Pokaż statystyki (jakość połączenia: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Brak niektórych wymaganych komponentów. Upewnij się, że korzystasz z najnowszej wersji Chrome, i spróbuj ponownie.</translation>

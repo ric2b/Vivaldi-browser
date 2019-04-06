@@ -14,14 +14,17 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_client_registration_helper.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace policy {
 
@@ -32,13 +35,15 @@ UserPolicySigninService::UserPolicySigninService(
     UserCloudPolicyManager* policy_manager,
     SigninManager* signin_manager,
     scoped_refptr<net::URLRequestContextGetter> system_request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory,
     ProfileOAuth2TokenService* token_service)
     : UserPolicySigninServiceBase(profile,
                                   local_state,
                                   device_management_service,
                                   policy_manager,
                                   signin_manager,
-                                  system_request_context),
+                                  system_request_context,
+                                  system_url_loader_factory),
       profile_(profile),
       oauth2_token_service_(token_service) {
   // ProfileOAuth2TokenService should not yet have loaded its tokens since this
@@ -171,15 +176,17 @@ void UserPolicySigninService::TryInitializeForSignedInUser() {
   }
 
   InitializeForSignedInUser(
-      signin_manager()->GetAuthenticatedAccountInfo().email,
-      profile_->GetRequestContext());
+      AccountIdFromAccountInfo(signin_manager()->GetAuthenticatedAccountInfo()),
+      profile_->GetRequestContext(),
+      content::BrowserContext::GetDefaultStoragePartition(profile_)
+          ->GetURLLoaderFactoryForBrowserProcess());
 }
 
 void UserPolicySigninService::InitializeUserCloudPolicyManager(
-    const std::string& username,
+    const AccountId& account_id,
     std::unique_ptr<CloudPolicyClient> client) {
   UserPolicySigninServiceBase::InitializeUserCloudPolicyManager(
-      username, std::move(client));
+      account_id, std::move(client));
   ProhibitSignoutIfNeeded();
 }
 

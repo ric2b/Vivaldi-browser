@@ -6,6 +6,9 @@
 
 #include <stdint.h>
 
+#include <utility>
+
+#include "base/memory/read_only_shared_memory_region.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -68,6 +71,53 @@ TEST(RefCountedMemoryUnitTest, RefCountedString) {
   EXPECT_EQ('d', mem->front()[0]);
   EXPECT_EQ('e', mem->front()[1]);
   EXPECT_EQ('e', mem->front()[9]);
+}
+
+TEST(RefCountedMemoryUnitTest, RefCountedSharedMemory) {
+  static const char kData[] = "shm_dummy_data";
+  auto shm = std::make_unique<SharedMemory>();
+  ASSERT_TRUE(shm->CreateAndMapAnonymous(sizeof(kData)));
+  memcpy(shm->memory(), kData, sizeof(kData));
+
+  auto mem =
+      MakeRefCounted<RefCountedSharedMemory>(std::move(shm), sizeof(kData));
+  ASSERT_EQ(sizeof(kData), mem->size());
+  EXPECT_EQ('s', mem->front()[0]);
+  EXPECT_EQ('h', mem->front()[1]);
+  EXPECT_EQ('_', mem->front()[9]);
+}
+
+TEST(RefCountedMemoryUnitTest, RefCountedSharedMemoryMapping) {
+  static const char kData[] = "mem_region_dummy_data";
+  scoped_refptr<RefCountedSharedMemoryMapping> mem;
+  {
+    MappedReadOnlyRegion region =
+        ReadOnlySharedMemoryRegion::Create(sizeof(kData));
+    ReadOnlySharedMemoryMapping ro_mapping = region.region.Map();
+    WritableSharedMemoryMapping rw_mapping = std::move(region.mapping);
+    ASSERT_TRUE(rw_mapping.IsValid());
+    memcpy(rw_mapping.memory(), kData, sizeof(kData));
+    mem = MakeRefCounted<RefCountedSharedMemoryMapping>(std::move(ro_mapping));
+  }
+
+  ASSERT_LE(sizeof(kData), mem->size());
+  EXPECT_EQ('e', mem->front()[1]);
+  EXPECT_EQ('m', mem->front()[2]);
+  EXPECT_EQ('o', mem->front()[8]);
+
+  {
+    MappedReadOnlyRegion region =
+        ReadOnlySharedMemoryRegion::Create(sizeof(kData));
+    WritableSharedMemoryMapping rw_mapping = std::move(region.mapping);
+    ASSERT_TRUE(rw_mapping.IsValid());
+    memcpy(rw_mapping.memory(), kData, sizeof(kData));
+    mem = RefCountedSharedMemoryMapping::CreateFromWholeRegion(region.region);
+  }
+
+  ASSERT_LE(sizeof(kData), mem->size());
+  EXPECT_EQ('_', mem->front()[3]);
+  EXPECT_EQ('r', mem->front()[4]);
+  EXPECT_EQ('i', mem->front()[7]);
 }
 
 TEST(RefCountedMemoryUnitTest, Equals) {

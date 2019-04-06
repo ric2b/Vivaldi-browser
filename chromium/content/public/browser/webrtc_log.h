@@ -10,11 +10,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "content/common/content_export.h"
-#include "media/media_features.h"
-
-#if !BUILDFLAG(ENABLE_WEBRTC)
-#error "WebRTC not enabled."
-#endif
+#include "media/media_buildflags.h"
 
 namespace content {
 

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_CLOSE_BUTTON_H_
 
 #include "base/callback_forward.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/masked_targeter_delegate.h"
 
@@ -27,11 +28,18 @@ class TabCloseButton : public views::ImageButton,
                  MouseEventCallback mouse_event_callback);
   ~TabCloseButton() override;
 
+  // Returns the width of the tab close button.
+  static int GetWidth();
+
   // This function must be called before the tab is painted so it knows what
-  // color to use. It must also be called when the background color of the tab
+  // colors to use. It must also be called when the background color of the tab
   // changes (this class does not track tab activation state), and when the
   // theme changes.
-  void SetTabColor(SkColor color);
+  void SetIconColors(SkColor icon_color,
+                     SkColor hovered_icon_color,
+                     SkColor pressed_icon_color,
+                     SkColor hovered_color,
+                     SkColor pressed_color);
 
   // views::View:
   View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
@@ -40,13 +48,31 @@ class TabCloseButton : public views::ImageButton,
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   const char* GetClassName() const override;
+  void Layout() override;
+  gfx::Size CalculatePreferredSize() const override;
+
+ protected:
+  void PaintButtonContents(gfx::Canvas* canvas) override;
 
  private:
   // views::MaskedTargeterDelegate:
   views::View* TargetForRect(views::View* root, const gfx::Rect& rect) override;
   bool GetHitTestMask(gfx::Path* mask) const override;
 
+  // Draw the highlight circle.
+  void DrawHighlight(gfx::Canvas* canvas, ButtonState state);
+
+  // Draw the close "X" glyph.
+  void DrawCloseGlyph(gfx::Canvas* canvas, ButtonState state);
+
+  // In material refresh mode, calculates opacity based on the current state of
+  // the hover animation on the parent tab.
+  SkAlpha GetOpacity();
+
   MouseEventCallback mouse_event_callback_;
+
+  SkColor icon_colors_[views::Button::STATE_PRESSED + 1];
+  SkColor highlight_colors_[views::Button::STATE_PRESSED + 1];
 
   DISALLOW_COPY_AND_ASSIGN(TabCloseButton);
 };

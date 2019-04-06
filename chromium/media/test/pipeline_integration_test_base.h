@@ -27,7 +27,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/gpu/test/platform_pipeline_test_base.h"
+#include "platform_media/test/platform_pipeline_test_base.h"
 #endif
 
 using ::testing::NiceMock;
@@ -53,10 +53,10 @@ class DummyTickClock : public base::TickClock {
  public:
   DummyTickClock() : now_() {}
   ~DummyTickClock() override {}
-  base::TimeTicks NowTicks() override;
+  base::TimeTicks NowTicks() const override;
 
  private:
-  base::TimeTicks now_;
+  mutable base::TimeTicks now_;
 };
 
 class PipelineTestRendererFactory {
@@ -96,7 +96,11 @@ class PipelineIntegrationTestBase : public Pipeline::Client
     kExpectDemuxerFailure = 4,
     kUnreliableDuration = 8,
     kWebAudio = 16,
+    kMonoOutput = 32,
   };
+
+  // Setup method to intialize various state according to flags.
+  void ParseTestTypeFlags(uint8_t flags);
 
   // Starts the pipeline with a file specified by |filename|, optionally with a
   // CdmContext or a |test_type|, returning the final status code after it has
@@ -171,6 +175,7 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   bool hashing_enabled_;
   bool clockless_playback_;
   bool webaudio_attached_;
+  bool mono_output_;
   std::unique_ptr<Demuxer> demuxer_;
   std::unique_ptr<DataSource> data_source_;
   std::unique_ptr<PipelineImpl> pipeline_;
@@ -264,19 +269,18 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   MOCK_METHOD1(OnVideoDecoderChange, void(const std::string&));
 
  private:
-  // Helpers that run |*run_loop|, where OnEnded() or OnError() are each
-  // conditionally setup to quit |*run_loop| when it becomes idle. Once
-  // |*run_loop|'s Run() Quits, these helpers also run
-  // |scoped_task_environment_| until Idle.
-  void RunUntilIdle(base::RunLoop* run_loop);
-  void RunUntilIdleOrEnded(base::RunLoop* run_loop);
-  void RunUntilIdleOrEndedOrError(base::RunLoop* run_loop);
-  void RunUntilIdleEndedOrErrorInternal(base::RunLoop* run_loop,
-                                        bool run_until_ended,
-                                        bool run_until_error);
+  // Runs |run_loop| until it is explicitly Quit() by some part of the calling
+  // test fixture or when an error occurs (by setting |on_error_closure_|). The
+  // |scoped_task_environment_| is RunUntilIdle() after the RunLoop finishes
+  // running, before returning to the caller.
+  void RunUntilQuitOrError(base::RunLoop* run_loop);
 
-  base::Closure on_ended_closure_;
-  base::Closure on_error_closure_;
+  // Configures |on_ended_closure_| to quit |run_loop| and then calls
+  // RunUntilQuitOrError() on it.
+  void RunUntilQuitOrEndedOrError(base::RunLoop* run_loop);
+
+  base::OnceClosure on_ended_closure_;
+  base::OnceClosure on_error_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(PipelineIntegrationTestBase);
 };

@@ -65,7 +65,7 @@ Polymer({
       return loadTimeData.getStringF(
           'triggeredResetPageTitle', this.triggeredResetToolName_);
     }
-    return loadTimeData.getStringF('resetTrigger');
+    return loadTimeData.getStringF('resetDialogCommit');
   },
 
   /** @override */
@@ -76,13 +76,8 @@ Polymer({
       this.browserProxy_.onHideResetProfileDialog();
     });
 
-    this.$$('paper-checkbox a')
-        .addEventListener('tap', this.onShowReportedSettingsTap_.bind(this));
-    // Prevent toggling of the checkbox when hitting the "Enter" key on the
-    // link.
-    this.$$('paper-checkbox a').addEventListener('keydown', function(e) {
-      e.stopPropagation();
-    });
+    this.$$('cr-checkbox a')
+        .addEventListener('click', this.onShowReportedSettingsTap_.bind(this));
   },
 
   /** @private */
@@ -115,7 +110,12 @@ Polymer({
 
   /** @private */
   onCancelTap_: function() {
-    this.$.dialog.cancel();
+    this.cancel();
+  },
+
+  cancel: function() {
+    if (this.$.dialog.open)
+      this.$.dialog.cancel();
   },
 
   /** @private */

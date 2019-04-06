@@ -13,7 +13,7 @@
 #include "base/threading/thread.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/resource_coordinator/public/interfaces/tracing/tracing.mojom.h"
+#include "services/tracing/public/mojom/tracing.mojom.h"
 #include "tools/battor_agent/battor_agent.h"
 #include "tools/battor_agent/battor_error.h"
 
@@ -57,23 +57,22 @@ class PowerTracingAgent : public Agent, public battor::BattOrAgent::Listener {
   // tracing::mojom::Agent. Called by Mojo internals on the UI thread.
   void StartTracing(const std::string& config,
                     base::TimeTicks coordinator_time,
-                    const Agent::StartTracingCallback& callback) override;
+                    Agent::StartTracingCallback callback) override;
   void StopAndFlush(tracing::mojom::RecorderPtr recorder) override;
   void RequestClockSyncMarker(
       const std::string& sync_id,
-      const Agent::RequestClockSyncMarkerCallback& callback) override;
-  void GetCategories(const Agent::GetCategoriesCallback& callback) override;
+      Agent::RequestClockSyncMarkerCallback callback) override;
+  void GetCategories(Agent::GetCategoriesCallback callback) override;
   void RequestBufferStatus(
-      const Agent::RequestBufferStatusCallback& callback) override;
+      Agent::RequestBufferStatusCallback callback) override;
 
-  void FindBattOrOnBackgroundThread(
-      const Agent::StartTracingCallback& callback);
+  void FindBattOrOnBackgroundThread(Agent::StartTracingCallback callback);
   void StartTracingOnIOThread(const std::string& path,
-                              const Agent::StartTracingCallback& callback);
+                              Agent::StartTracingCallback callback);
   void StopAndFlushOnIOThread(tracing::mojom::RecorderPtr recorder);
   void RequestClockSyncMarkerOnIOThread(
       const std::string& sync_id,
-      const Agent::RequestClockSyncMarkerCallback& callback);
+      Agent::RequestClockSyncMarkerCallback callback);
 
   // Returns the path of a BattOr (e.g. /dev/ttyUSB0), or an empty string if
   // none are found.

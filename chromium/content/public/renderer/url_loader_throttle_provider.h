@@ -11,7 +11,7 @@
 #include "content/common/content_export.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/url_loader_throttle.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 
 namespace content {
 
@@ -28,12 +28,15 @@ class CONTENT_EXPORT URLLoaderThrottleProvider {
  public:
   virtual ~URLLoaderThrottleProvider() {}
 
+  // Used to copy a URLLoaderThrottleProvider between worker threads.
+  virtual std::unique_ptr<URLLoaderThrottleProvider> Clone() = 0;
+
   // For requests from frames and dedicated workers, |render_frame_id| should be
   // set to the corresponding frame. For requests from shared or
   // service workers, |render_frame_id| should be set to MSG_ROUTING_NONE.
   virtual std::vector<std::unique_ptr<URLLoaderThrottle>> CreateThrottles(
       int render_frame_id,
-      const blink::WebURL& url,
+      const blink::WebURLRequest& request,
       ResourceType resource_type) = 0;
 };
 

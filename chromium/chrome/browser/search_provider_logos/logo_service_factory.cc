@@ -14,7 +14,8 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/search_provider_logos/logo_service.h"
 #include "components/search_provider_logos/logo_service_impl.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "content/public/browser/storage_partition.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/feature_utilities.h"
@@ -30,7 +31,7 @@ constexpr base::FilePath::CharType kCachedLogoDirectory[] =
 
 bool UseGrayLogo() {
 #if defined(OS_ANDROID)
-  return !chrome::android::GetIsChromeHomeEnabled();
+  return !chrome::android::GetIsChromeModernDesignEnabled();
 #else
   return false;
 #endif
@@ -67,6 +68,8 @@ KeyedService* LogoServiceFactory::BuildServiceInstanceFor(
       profile->GetPath().Append(kCachedLogoDirectory),
       GaiaCookieManagerServiceFactory::GetForProfile(profile),
       TemplateURLServiceFactory::GetForProfile(profile),
-      base::MakeUnique<suggestions::ImageDecoderImpl>(),
-      profile->GetRequestContext(), base::BindRepeating(&UseGrayLogo));
+      std::make_unique<suggestions::ImageDecoderImpl>(),
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess(),
+      base::BindRepeating(&UseGrayLogo));
 }

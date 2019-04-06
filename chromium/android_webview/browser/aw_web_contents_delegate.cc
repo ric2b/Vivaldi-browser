@@ -121,12 +121,13 @@ void AwWebContentsDelegate::RunFileChooser(
       params.capture);
 }
 
-void AwWebContentsDelegate::AddNewContents(WebContents* source,
-                                           WebContents* new_contents,
-                                           WindowOpenDisposition disposition,
-                                           const gfx::Rect& initial_rect,
-                                           bool user_gesture,
-                                           bool* was_blocked) {
+void AwWebContentsDelegate::AddNewContents(
+    WebContents* source,
+    std::unique_ptr<WebContents> new_contents,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
+    bool user_gesture,
+    bool* was_blocked) {
   JNIEnv* env = AttachCurrentThread();
 
   bool is_dialog = disposition == WindowOpenDisposition::NEW_POPUP;
@@ -144,17 +145,22 @@ void AwWebContentsDelegate::AddNewContents(WebContents* source,
     // it. The source AwContents takes ownership of the new WebContents
     // until then, and when the callback is made we will swap the WebContents
     // out into the new AwContents.
+    WebContents* raw_new_contents = new_contents.get();
     AwContents::FromWebContents(source)->SetPendingWebContentsForPopup(
-        base::WrapUnique(new_contents));
+        std::move(new_contents));
+    // It's possible that SetPendingWebContentsForPopup deletes |new_contents|,
+    // but it only does so asynchronously, so it's safe to use a raw pointer
+    // here.
     // Hide the WebContents for the pop up now, we will show it again
     // when the user calls us back with an AwContents to use to show it.
-    new_contents->WasHidden();
+    raw_new_contents->WasHidden();
   } else {
     // The embedder has forgone their chance to display this popup
     // window, so we're done with the WebContents now. We use
     // DeleteSoon as WebContentsImpl may call methods on |new_contents|
     // after this method returns.
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, new_contents);
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
+                                                    std::move(new_contents));
   }
 
   if (was_blocked) {
@@ -226,32 +232,34 @@ bool AwWebContentsDelegate::ShouldResumeRequestsForCreatedWindow() {
 void AwWebContentsDelegate::RequestMediaAccessPermission(
     WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback) {
+    content::MediaResponseCallback callback) {
   AwContents* aw_contents = AwContents::FromWebContents(web_contents);
   if (!aw_contents) {
-    callback.Run(content::MediaStreamDevices(),
-                 content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
-                 std::unique_ptr<content::MediaStreamUI>());
+    std::move(callback).Run(content::MediaStreamDevices(),
+                            content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
+                            std::unique_ptr<content::MediaStreamUI>());
     return;
   }
   aw_contents->GetPermissionRequestHandler()->SendRequest(
       std::unique_ptr<AwPermissionRequestDelegate>(
-          new MediaAccessPermissionRequest(request, callback)));
+          new MediaAccessPermissionRequest(request, std::move(callback))));
 }
 
 void AwWebContentsDelegate::EnterFullscreenModeForTab(
     content::WebContents* web_contents,
-    const GURL& origin) {
-  WebContentsDelegateAndroid::EnterFullscreenModeForTab(web_contents, origin);
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
+  WebContentsDelegateAndroid::EnterFullscreenModeForTab(web_contents, origin,
+                                                        options);
   is_fullscreen_ = true;
-  web_contents->GetRenderViewHost()->GetWidget()->WasResized();
+  web_contents->GetRenderViewHost()->GetWidget()->SynchronizeVisualProperties();
 }
 
 void AwWebContentsDelegate::ExitFullscreenModeForTab(
     content::WebContents* web_contents) {
   WebContentsDelegateAndroid::ExitFullscreenModeForTab(web_contents);
   is_fullscreen_ = false;
-  web_contents->GetRenderViewHost()->GetWidget()->WasResized();
+  web_contents->GetRenderViewHost()->GetWidget()->SynchronizeVisualProperties();
 }
 
 bool AwWebContentsDelegate::IsFullscreenForTabOrPending(

@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <utility>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/containers/stack_container.h"
@@ -16,8 +18,6 @@
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
@@ -125,15 +125,13 @@ void AsyncClose(FILE** file) {
 struct VisitedLinkMaster::LoadFromFileResult
     : public base::RefCountedThreadSafe<LoadFromFileResult> {
   LoadFromFileResult(base::ScopedFILE file,
-                     mojo::ScopedSharedBufferHandle shared_memory,
-                     mojo::ScopedSharedBufferMapping hash_table,
+                     base::MappedReadOnlyRegion hash_table_memory,
                      int32_t num_entries,
                      int32_t used_count,
                      uint8_t salt[LINK_SALT_LENGTH]);
 
   base::ScopedFILE file;
-  mojo::ScopedSharedBufferHandle shared_memory;
-  mojo::ScopedSharedBufferMapping hash_table;
+  base::MappedReadOnlyRegion hash_table_memory;
   int32_t num_entries;
   int32_t used_count;
   uint8_t salt[LINK_SALT_LENGTH];
@@ -147,14 +145,12 @@ struct VisitedLinkMaster::LoadFromFileResult
 
 VisitedLinkMaster::LoadFromFileResult::LoadFromFileResult(
     base::ScopedFILE file,
-    mojo::ScopedSharedBufferHandle shared_memory,
-    mojo::ScopedSharedBufferMapping hash_table,
+    base::MappedReadOnlyRegion hash_table_memory,
     int32_t num_entries,
     int32_t used_count,
     uint8_t salt[LINK_SALT_LENGTH])
     : file(std::move(file)),
-      shared_memory(std::move(shared_memory)),
-      hash_table(std::move(hash_table)),
+      hash_table_memory(std::move(hash_table_memory)),
       num_entries(num_entries),
       used_count(used_count) {
   memcpy(this->salt, salt, LINK_SALT_LENGTH);
@@ -226,10 +222,9 @@ VisitedLinkMaster::VisitedLinkMaster(content::BrowserContext* browser_context,
                                      bool persist_to_disk)
     : browser_context_(browser_context),
       delegate_(delegate),
-      listener_(base::MakeUnique<VisitedLinkEventListener>(browser_context)),
+      listener_(std::make_unique<VisitedLinkEventListener>(browser_context)),
       persist_to_disk_(persist_to_disk),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 VisitedLinkMaster::VisitedLinkMaster(Listener* listener,
                                      VisitedLinkDelegate* delegate,
@@ -241,7 +236,7 @@ VisitedLinkMaster::VisitedLinkMaster(Listener* listener,
       persist_to_disk_(persist_to_disk),
       weak_ptr_factory_(this) {
   listener_.reset(listener);
-  DCHECK(listener_.get());
+  DCHECK(listener_);
 
   database_name_override_ = filename;
   table_size_override_ = default_table_size;
@@ -249,7 +244,7 @@ VisitedLinkMaster::VisitedLinkMaster(Listener* listener,
 }
 
 VisitedLinkMaster::~VisitedLinkMaster() {
-  if (table_builder_.get()) {
+  if (table_builder_) {
     // Prevent the table builder from calling us back now that we're being
     // destroyed. Note that we DON'T delete the object, since the history
     // system is still writing into it. When that is complete, the table
@@ -281,8 +276,8 @@ bool VisitedLinkMaster::Init() {
   if (!CreateURLTable(DefaultTableSize()))
     return false;
 
-  if (shared_memory_.is_valid())
-    listener_->NewTable(shared_memory_.get());
+  if (mapped_table_memory_.region.IsValid())
+    listener_->NewTable(&mapped_table_memory_.region);
 
 #ifndef NDEBUG
   DebugValidate();
@@ -348,9 +343,7 @@ void VisitedLinkMaster::PostIOTask(const base::Location& from_here,
 
 void VisitedLinkMaster::AddURL(const GURL& url) {
   Hash index = TryToAddURL(url);
-  if (!table_builder_.get() &&
-      !table_is_loading_from_file_ &&
-      index != null_hash_) {
+  if (!table_builder_ && !table_is_loading_from_file_ && index != null_hash_) {
     // Not rebuilding, so we want to keep the file on disk up to date.
     if (persist_to_disk_) {
       WriteUsedItemCountToFile();
@@ -363,16 +356,12 @@ void VisitedLinkMaster::AddURL(const GURL& url) {
 void VisitedLinkMaster::AddURLs(const std::vector<GURL>& urls) {
   for (const GURL& url : urls) {
     Hash index = TryToAddURL(url);
-    if (!table_builder_.get() &&
-        !table_is_loading_from_file_ &&
-        index != null_hash_)
+    if (!table_builder_ && !table_is_loading_from_file_ && index != null_hash_)
       ResizeTableIfNecessary();
   }
 
   // Keeps the file on disk up to date.
-  if (!table_builder_.get() &&
-      !table_is_loading_from_file_ &&
-      persist_to_disk_)
+  if (!table_builder_ && !table_is_loading_from_file_ && persist_to_disk_)
     WriteFullTable();
 }
 
@@ -651,20 +640,19 @@ bool VisitedLinkMaster::LoadApartFromFile(
     return false;  // Header isn't valid.
 
   // Allocate and read the table.
-  mojo::ScopedSharedBufferHandle shared_memory;
-  mojo::ScopedSharedBufferMapping hash_table;
-  if (!CreateApartURLTable(num_entries, salt, &shared_memory, &hash_table))
+  base::MappedReadOnlyRegion hash_table_memory;
+  if (!CreateApartURLTable(num_entries, salt, &hash_table_memory))
     return false;
 
   if (!ReadFromFile(file_closer.get(), kFileHeaderSize,
-                    GetHashTableFromMapping(hash_table),
+                    GetHashTableFromMapping(hash_table_memory.mapping),
                     num_entries * sizeof(Fingerprint))) {
     return false;
   }
 
   *load_from_file_result = new LoadFromFileResult(
-      std::move(file_closer), std::move(shared_memory), std::move(hash_table),
-      num_entries, used_count, salt);
+      std::move(file_closer), std::move(hash_table_memory), num_entries,
+      used_count, salt);
   return true;
 }
 
@@ -673,7 +661,7 @@ void VisitedLinkMaster::OnTableLoadComplete(
     scoped_refptr<LoadFromFileResult> load_from_file_result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(persist_to_disk_);
-  DCHECK(!table_builder_.get());
+  DCHECK(!table_builder_);
 
   // When the apart table was loading from the database file the current table
   // have been cleared.
@@ -702,12 +690,11 @@ void VisitedLinkMaster::OnTableLoadComplete(
   added_since_rebuild_.clear();
   deleted_since_rebuild_.clear();
 
-  DCHECK(load_from_file_result.get());
+  DCHECK(load_from_file_result);
 
   // Delete the previous table.
-  DCHECK(shared_memory_.is_valid());
-  shared_memory_.reset();
-  hash_table_mapping_.reset();
+  DCHECK(mapped_table_memory_.region.IsValid());
+  mapped_table_memory_ = base::MappedReadOnlyRegion();
 
   // Assign the open file.
   DCHECK(!file_);
@@ -716,12 +703,11 @@ void VisitedLinkMaster::OnTableLoadComplete(
   *file_ = load_from_file_result->file.release();
 
   // Assign the loaded table.
-  DCHECK(load_from_file_result->shared_memory.is_valid());
-  DCHECK(load_from_file_result->hash_table);
+  DCHECK(load_from_file_result->hash_table_memory.region.IsValid() &&
+         load_from_file_result->hash_table_memory.mapping.IsValid());
   memcpy(salt_, load_from_file_result->salt, LINK_SALT_LENGTH);
-  shared_memory_ = std::move(load_from_file_result->shared_memory);
-  hash_table_mapping_ = std::move(load_from_file_result->hash_table);
-  hash_table_ = GetHashTableFromMapping(hash_table_mapping_);
+  mapped_table_memory_ = std::move(load_from_file_result->hash_table_memory);
+  hash_table_ = GetHashTableFromMapping(mapped_table_memory_.mapping);
   table_length_ = load_from_file_result->num_entries;
   used_items_ = load_from_file_result->used_count;
 
@@ -730,7 +716,7 @@ void VisitedLinkMaster::OnTableLoadComplete(
 #endif
 
   // Send an update notification to all child processes.
-  listener_->NewTable(shared_memory_.get());
+  listener_->NewTable(&mapped_table_memory_.region);
 
   if (!added_since_load_.empty() || !deleted_since_load_.empty()) {
     // Resize the table if the table doesn't have enough capacity.
@@ -850,12 +836,10 @@ bool VisitedLinkMaster::GetDatabaseFileName(base::FilePath* filename) {
 // Initializes the shared memory structure. The salt should already be filled
 // in so that it can be written to the shared memory
 bool VisitedLinkMaster::CreateURLTable(int32_t num_entries) {
-  mojo::ScopedSharedBufferHandle shared_memory;
-  mojo::ScopedSharedBufferMapping hash_table;
-  if (CreateApartURLTable(num_entries, salt_, &shared_memory, &hash_table)) {
-    shared_memory_ = std::move(shared_memory);
-    hash_table_mapping_ = std::move(hash_table);
-    hash_table_ = GetHashTableFromMapping(hash_table_mapping_);
+  base::MappedReadOnlyRegion table_memory;
+  if (CreateApartURLTable(num_entries, salt_, &table_memory)) {
+    mapped_table_memory_ = std::move(table_memory);
+    hash_table_ = GetHashTableFromMapping(mapped_table_memory_.mapping);
     table_length_ = num_entries;
     used_items_ = 0;
     return true;
@@ -868,49 +852,36 @@ bool VisitedLinkMaster::CreateURLTable(int32_t num_entries) {
 bool VisitedLinkMaster::CreateApartURLTable(
     int32_t num_entries,
     const uint8_t salt[LINK_SALT_LENGTH],
-    mojo::ScopedSharedBufferHandle* shared_memory,
-    mojo::ScopedSharedBufferMapping* hash_table) {
+    base::MappedReadOnlyRegion* memory) {
   DCHECK(salt);
-  DCHECK(shared_memory);
-  DCHECK(hash_table);
+  DCHECK(memory);
 
   // The table is the size of the table followed by the entries.
   uint32_t alloc_size =
       num_entries * sizeof(Fingerprint) + sizeof(SharedHeader);
 
   // Create the shared memory object.
-  mojo::ScopedSharedBufferHandle shared_buffer =
-      mojo::SharedBufferHandle::Create(alloc_size);
-  if (!shared_buffer.is_valid())
-    return false;
-  mojo::ScopedSharedBufferMapping hash_table_mapping =
-      shared_buffer->Map(alloc_size);
-  if (!hash_table_mapping)
+  *memory = base::ReadOnlySharedMemoryRegion::Create(alloc_size);
+  if (!memory->IsValid())
     return false;
 
-  memset(hash_table_mapping.get(), 0, alloc_size);
+  memset(memory->mapping.memory(), 0, alloc_size);
 
   // Save the header for other processes to read.
-  SharedHeader* header = static_cast<SharedHeader*>(hash_table_mapping.get());
+  SharedHeader* header = static_cast<SharedHeader*>(memory->mapping.memory());
   header->length = num_entries;
   memcpy(header->salt, salt, LINK_SALT_LENGTH);
-
-  *shared_memory = std::move(shared_buffer);
-  *hash_table = std::move(hash_table_mapping);
 
   return true;
 }
 
 bool VisitedLinkMaster::BeginReplaceURLTable(int32_t num_entries) {
-  mojo::ScopedSharedBufferHandle old_shared_memory = std::move(shared_memory_);
-  mojo::ScopedSharedBufferMapping old_hash_table_mapping =
-      std::move(hash_table_mapping_);
+  base::MappedReadOnlyRegion old_memory = std::move(mapped_table_memory_);
   int32_t old_table_length = table_length_;
   if (!CreateURLTable(num_entries)) {
     // Try to put back the old state.
-    shared_memory_ = std::move(old_shared_memory);
-    hash_table_mapping_ = std::move(old_hash_table_mapping);
-    hash_table_ = GetHashTableFromMapping(hash_table_mapping_);
+    mapped_table_memory_ = std::move(old_memory);
+    hash_table_ = GetHashTableFromMapping(mapped_table_memory_.mapping);
     table_length_ = old_table_length;
     return false;
   }
@@ -923,8 +894,7 @@ bool VisitedLinkMaster::BeginReplaceURLTable(int32_t num_entries) {
 }
 
 void VisitedLinkMaster::FreeURLTable() {
-  shared_memory_.reset();
-  hash_table_mapping_.reset();
+  mapped_table_memory_ = base::MappedReadOnlyRegion();
   if (!persist_to_disk_ || !file_)
     return;
   PostIOTask(FROM_HERE, base::Bind(&AsyncClose, file_));
@@ -957,19 +927,19 @@ bool VisitedLinkMaster::ResizeTableIfNecessary() {
 }
 
 void VisitedLinkMaster::ResizeTable(int32_t new_size) {
-  DCHECK(shared_memory_.is_valid() && hash_table_mapping_);
+  DCHECK(mapped_table_memory_.region.IsValid() &&
+         mapped_table_memory_.mapping.IsValid());
   shared_memory_serial_++;
 
 #ifndef NDEBUG
   DebugValidate();
 #endif
 
-  mojo::ScopedSharedBufferMapping old_hash_table_mapping =
-      std::move(hash_table_mapping_);
+  auto old_hash_table_mapping = std::move(mapped_table_memory_.mapping);
   int32_t old_table_length = table_length_;
   if (!BeginReplaceURLTable(new_size)) {
-    hash_table_mapping_ = std::move(old_hash_table_mapping);
-    hash_table_ = GetHashTableFromMapping(hash_table_mapping_);
+    mapped_table_memory_.mapping = std::move(old_hash_table_mapping);
+    hash_table_ = GetHashTableFromMapping(mapped_table_memory_.mapping);
     return;
   }
   {
@@ -983,11 +953,10 @@ void VisitedLinkMaster::ResizeTable(int32_t new_size) {
         AddFingerprint(cur, false);
     }
   }
-  old_hash_table_mapping.reset();
 
   // Send an update notification to all child processes so they read the new
   // table.
-  listener_->NewTable(shared_memory_.get());
+  listener_->NewTable(&mapped_table_memory_.region);
 
 #ifndef NDEBUG
   DebugValidate();
@@ -1039,7 +1008,7 @@ uint32_t VisitedLinkMaster::NewTableSizeForCount(int32_t item_count) const {
 
 // See the TableBuilder definition in the header file for how this works.
 bool VisitedLinkMaster::RebuildTableFromDelegate() {
-  DCHECK(!table_builder_.get());
+  DCHECK(!table_builder_);
 
   // TODO(brettw) make sure we have reasonable salt!
   table_builder_ = new TableBuilder(this, salt_);
@@ -1075,7 +1044,7 @@ void VisitedLinkMaster::OnTableRebuildComplete(
       deleted_since_rebuild_.clear();
 
       // Send an update notification to all child processes.
-      listener_->NewTable(shared_memory_.get());
+      listener_->NewTable(&mapped_table_memory_.region);
       // All tabs which was loaded when table was being rebuilt
       // invalidate their links again.
       listener_->Reset(false);
@@ -1186,11 +1155,11 @@ void VisitedLinkMaster::TableBuilder::OnCompleteMainThread() {
 
 // static
 VisitedLinkCommon::Fingerprint* VisitedLinkMaster::GetHashTableFromMapping(
-    const mojo::ScopedSharedBufferMapping& hash_table_mapping) {
-  DCHECK(hash_table_mapping);
+    const base::WritableSharedMemoryMapping& hash_table_mapping) {
+  DCHECK(hash_table_mapping.IsValid());
   // Our table pointer is just the data immediately following the header.
   return reinterpret_cast<Fingerprint*>(
-      static_cast<char*>(hash_table_mapping.get()) + sizeof(SharedHeader));
+      static_cast<char*>(hash_table_mapping.memory()) + sizeof(SharedHeader));
 }
 
 }  // namespace visitedlink

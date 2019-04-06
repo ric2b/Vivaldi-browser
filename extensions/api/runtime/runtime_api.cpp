@@ -21,7 +21,7 @@
 #if defined(OS_MACOSX)
 #include "chrome/common/chrome_paths_internal.h"
 #endif  // defined(OS_MACOSX)
-#include "components/download/public/download_service.h"
+#include "components/download/public/background_service/download_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_filter.h"
@@ -29,8 +29,10 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/runtime_private.h"
-#include "ui/devtools/devtools_connector.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "ui/devtools/devtools_connector.h"
+
+using base::PathService;
 
 namespace extensions {
 

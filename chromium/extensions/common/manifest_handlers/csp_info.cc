@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -113,24 +112,23 @@ CSPHandler::~CSPHandler() {
 bool CSPHandler::Parse(Extension* extension, base::string16* error) {
   const std::string key = Keys()[0];
   if (!extension->manifest()->HasPath(key)) {
-    if (extension->manifest_version() >= 2) {
-      // TODO(abarth): Should we continue to let extensions override the
-      //               default Content-Security-Policy?
-      //todo Arnar@vivaldi.com. Based on which property should the Vivaldi app
-     // be identified on for relaxing special permissions.
-      std::string content_security_policy = is_platform_app_ &&
-      !vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi() ?
-          kDefaultPlatformAppContentSecurityPolicy :
-          kDefaultContentSecurityPolicy;
+    // TODO(abarth): Should we continue to let extensions override the
+    //               default Content-Security-Policy?
+    //todo Arnar@vivaldi.com. Based on which property should the Vivaldi app
+    // be identified on for relaxing special permissions.
+    std::string content_security_policy =
+        is_platform_app_ &&
+           !vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi()
+                         ? kDefaultPlatformAppContentSecurityPolicy
+                         : kDefaultContentSecurityPolicy;
 
-      CHECK_EQ(content_security_policy,
-               SanitizeContentSecurityPolicy(content_security_policy,
-                                             GetValidatorOptions(extension),
-                                             NULL));
-      extension->SetManifestData(
-          keys::kContentSecurityPolicy,
-          std::make_unique<CSPInfo>(content_security_policy));
-    }
+    CHECK_EQ(
+        content_security_policy,
+        SanitizeContentSecurityPolicy(content_security_policy,
+                                      GetValidatorOptions(extension), NULL));
+    extension->SetManifestData(
+        keys::kContentSecurityPolicy,
+        std::make_unique<CSPInfo>(content_security_policy));
     return true;
   }
 
@@ -143,15 +141,10 @@ bool CSPHandler::Parse(Extension* extension, base::string16* error) {
     *error = base::ASCIIToUTF16(errors::kInvalidContentSecurityPolicy);
     return false;
   }
-  std::string sanitized_csp;
-  if (extension->manifest_version() >= 2) {
-    std::vector<InstallWarning> warnings;
-    content_security_policy =
-        SanitizeContentSecurityPolicy(content_security_policy,
-                                      GetValidatorOptions(extension),
-                                      &warnings);
-    extension->AddInstallWarnings(warnings);
-  }
+  std::vector<InstallWarning> warnings;
+  content_security_policy = SanitizeContentSecurityPolicy(
+      content_security_policy, GetValidatorOptions(extension), &warnings);
+  extension->AddInstallWarnings(warnings);
 
   extension->SetManifestData(
       keys::kContentSecurityPolicy,
@@ -167,10 +160,14 @@ bool CSPHandler::AlwaysParseForType(Manifest::Type type) const {
         type == Manifest::TYPE_LEGACY_PACKAGED_APP;
 }
 
-const std::vector<std::string> CSPHandler::Keys() const {
-  const std::string& key = is_platform_app_ ?
-      keys::kPlatformAppContentSecurityPolicy : keys::kContentSecurityPolicy;
-  return SingleKey(key);
+base::span<const char* const> CSPHandler::Keys() const {
+  if (is_platform_app_) {
+    static constexpr const char* kKeys[] = {
+        keys::kPlatformAppContentSecurityPolicy};
+    return kKeys;
+  }
+  static constexpr const char* kKeys[] = {keys::kContentSecurityPolicy};
+  return kKeys;
 }
 
 }  // namespace extensions

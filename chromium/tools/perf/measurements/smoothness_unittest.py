@@ -57,13 +57,13 @@ class SmoothnessUnitTest(page_test_test_case.PageTestTestCase):
     self._options = options_for_unittests.GetCopy()
     self._options.browser_options.wpr_mode = wpr_modes.WPR_OFF
 
-  # crbug.com/483212
-  @decorators.Disabled('chromeos')
+  # crbug.com/483212 and crbug.com/713260
+  @decorators.Disabled('chromeos', 'linux')
   def testSmoothness(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir('scrollable_page.html')
     measurement = smoothness.Smoothness()
     results = self.RunMeasurement(measurement, ps, options=self._options)
-    self.assertEquals(0, len(results.failures))
+    self.assertFalse(results.had_failures)
 
     frame_times = results.FindAllPageSpecificValuesNamed('frame_times')
     self.assertEquals(len(frame_times), 1)
@@ -95,7 +95,7 @@ class SmoothnessUnitTest(page_test_test_case.PageTestTestCase):
     ps = self.CreateStorySetFromFileInUnittestDataDir('scrollable_page.html')
     measurement = smoothness.Smoothness()
     results = self.RunMeasurement(measurement, ps, options=self._options)
-    self.assertEquals(0, len(results.failures))
+    self.assertFalse(results.had_failures)
 
     avg_surface_fps = results.FindAllPageSpecificValuesNamed('avg_surface_fps')
     self.assertEquals(1, len(avg_surface_fps))

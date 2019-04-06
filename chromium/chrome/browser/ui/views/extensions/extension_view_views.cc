@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -24,6 +25,10 @@
 #include "ui/base/cursor/cursor.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
+#endif
+
 ExtensionViewViews::ExtensionViewViews(extensions::ExtensionHost* host,
                                        Browser* browser)
     : views::WebView(browser ? browser->profile() : nullptr),
@@ -31,6 +36,11 @@ ExtensionViewViews::ExtensionViewViews(extensions::ExtensionHost* host,
       browser_(browser),
       container_(nullptr) {
   SetWebContents(host_->web_contents());
+  if (host->extension_host_type() == extensions::VIEW_TYPE_EXTENSION_POPUP) {
+    EnableSizingFromWebContents(
+        gfx::Size(ExtensionPopup::kMinWidth, ExtensionPopup::kMinHeight),
+        gfx::Size(ExtensionPopup::kMaxWidth, ExtensionPopup::kMaxHeight));
+  }
 }
 
 ExtensionViewViews::~ExtensionViewViews() {
@@ -75,41 +85,31 @@ void ExtensionViewViews::ResizeDueToAutoResize(
     return;
   }
 
-  if (new_size != GetPreferredSize())
-    SetPreferredSize(new_size);
+  WebView::ResizeDueToAutoResize(web_contents, new_size);
 }
 
 void ExtensionViewViews::RenderViewCreated(
     content::RenderViewHost* render_view_host) {
-  extensions::ViewType host_type = host_->extension_host_type();
-  if (host_type == extensions::VIEW_TYPE_EXTENSION_POPUP) {
-    host_->render_view_host()->EnableAutoResize(
-        gfx::Size(ExtensionPopup::kMinWidth, ExtensionPopup::kMinHeight),
-        gfx::Size(ExtensionPopup::kMaxWidth, ExtensionPopup::kMaxHeight));
-  }
+  WebView::RenderViewCreated(render_view_host);
 }
 
 void ExtensionViewViews::HandleKeyboardEvent(
     content::WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
-  if (browser_) {
-    // Handle lower priority browser shortcuts such as Ctrl-f.
-    browser_->HandleKeyboardEvent(source, event);
-    return;
-  }
-
   unhandled_keyboard_event_handler_.HandleKeyboardEvent(event,
                                                         GetFocusManager());
 }
 
-void ExtensionViewViews::DidStopLoading() {
-  // We wait to show the ExtensionViewViews until it has loaded, and the view
-  // has actually been created. These can happen in different orders.
-  // TODO(devlin): Can they? Isn't the view created during construction?
-  if (!visible() && host_->has_loaded_once()) {
-    SetVisible(true);
-    ResizeDueToAutoResize(web_contents(), pending_preferred_size_);
-  }
+void ExtensionViewViews::OnLoaded() {
+  DCHECK(host_->has_loaded_once());
+
+  // ExtensionPopup delegates showing the view to OnLoaded(). ExtensionDialog
+  // handles visibility directly.
+  if (visible())
+    return;
+
+  SetVisible(true);
+  ResizeDueToAutoResize(web_contents(), pending_preferred_size_);
 }
 
 gfx::NativeCursor ExtensionViewViews::GetCursor(const ui::MouseEvent& event) {
@@ -139,6 +139,11 @@ namespace extensions {
 std::unique_ptr<ExtensionView> ExtensionViewHost::CreateExtensionView(
     ExtensionViewHost* host,
     Browser* browser) {
+#if defined(OS_MACOSX)
+  if (!chrome::ShowAllDialogsWithViewsToolkit()) {
+    return CreateExtensionViewCocoa(host, browser);
+  }
+#endif
   std::unique_ptr<ExtensionViewViews> view(
       new ExtensionViewViews(host, browser));
   // We own |view_|, so don't auto delete when it's removed from the view

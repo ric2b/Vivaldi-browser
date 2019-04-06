@@ -23,7 +23,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
 
@@ -34,6 +36,8 @@ class OmniboxEditModel;
 
 class OmniboxView {
  public:
+  using IconFetchedCallback = base::OnceCallback<void(const gfx::Image& icon)>;
+
   // Represents the changes between two State objects.  This is used by the
   // model to determine how its internal state should be updated after the view
   // state changes.  See OmniboxEditModel::OnAfterPossibleChange().
@@ -84,8 +88,11 @@ class OmniboxView {
   // the field is empty.
   bool IsEditingOrEmpty() const;
 
-  // Returns the vector icon to display as the location icon.
-  const gfx::VectorIcon& GetVectorIcon() const;
+  // Returns the icon to display as the location icon. If a favicon is
+  // available, |on_icon_fetched| may be called later asynchronously.
+  gfx::ImageSkia GetIcon(int dip_size,
+                         SkColor color,
+                         IconFetchedCallback on_icon_fetched) const;
 
   // The user text is the text the user has manually keyed in.  When present,
   // this is shown in preference to the permanent text; hitting escape will
@@ -109,11 +116,8 @@ class OmniboxView {
   // preserving and selecting the user's text if they already typed in a query.
   virtual void EnterKeywordModeForDefaultSearchProvider() = 0;
 
-  // Returns true if all text is selected or there is no text at all.
+  // Returns true if all text is selected. Returns false if there is no text.
   virtual bool IsSelectAll() const = 0;
-
-  // Returns true if the user deleted the suggested text.
-  virtual bool DeleteAtEndPressed() = 0;
 
   // Fills |start| and |end| with the indexes of the current selection's bounds.
   // It is not guaranteed that |*start < *end|, as the selection can be
@@ -203,8 +207,11 @@ class OmniboxView {
   // which may overlap the omnibox's popup window.
   virtual bool IsImeShowingPopup() const;
 
-  // Display a virtual keybaord or alternate input view if enabled.
-  virtual void ShowImeIfNeeded();
+  // Display a virtual keyboard or alternate input view if enabled.
+  virtual void ShowVirtualKeyboardIfEnabled();
+
+  // Hides a virtual keyboard or alternate input view if enabled.
+  virtual void HideImeIfNeeded();
 
   // Returns true if the view is displaying UI that indicates that query
   // refinement will take place when the user selects the current match.  For
@@ -277,17 +284,16 @@ class OmniboxView {
   // draw attention to whatever best represents the "identity" of the current
   // URL.
   void UpdateTextStyle(const base::string16& display_text,
+                       const bool text_is_url,
                        const AutocompleteSchemeClassifier& classifier);
-
-  void OnShiftKeyChanged(bool down) { shift_key_down_ = down; }
 
  private:
   friend class OmniboxViewMacTest;
+  friend class TestOmniboxView;
 
   // |model_| can be NULL in tests.
   std::unique_ptr<OmniboxEditModel> model_;
   OmniboxEditController* controller_;
-  bool shift_key_down_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxView);
 };

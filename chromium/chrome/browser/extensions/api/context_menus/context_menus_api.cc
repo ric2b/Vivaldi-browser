@@ -19,7 +19,6 @@
 #include "app/vivaldi_apptools.h"
 
 using extensions::ErrorUtils;
-namespace helpers = extensions::context_menus_api_helpers;
 
 namespace {
 
@@ -29,10 +28,6 @@ const char kIdRequiredError[] = "Extensions using event pages must pass an "
 }  // namespace
 
 namespace extensions {
-
-namespace Create = api::context_menus::Create;
-namespace Remove = api::context_menus::Remove;
-namespace Update = api::context_menus::Update;
 
 ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
   MenuItem::Id id(browser_context()->IsOffTheRecord(),
@@ -44,7 +39,8 @@ ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
   // removed at the same time. VB-34390
   if (id.incognito && vivaldi::IsVivaldiApp(extension_id()))
     id.incognito = false;
-  std::unique_ptr<Create::Params> params(Create::Params::Create(*args_));
+  std::unique_ptr<api::context_menus::Create::Params> params(
+      api::context_menus::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (params->create_properties.id.get()) {
@@ -56,13 +52,14 @@ ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
     // The Generated Id is added by context_menus_custom_bindings.js.
     base::DictionaryValue* properties = NULL;
     EXTENSION_FUNCTION_VALIDATE(args_->GetDictionary(0, &properties));
-    EXTENSION_FUNCTION_VALIDATE(
-        properties->GetInteger(helpers::kGeneratedIdKey, &id.uid));
+    EXTENSION_FUNCTION_VALIDATE(properties->GetInteger(
+        extensions::context_menus_api_helpers::kGeneratedIdKey, &id.uid));
   }
 
   std::string error;
-  if (!helpers::CreateMenuItem(params->create_properties, browser_context(),
-                               extension(), id, &error)) {
+  if (!extensions::context_menus_api_helpers::CreateMenuItem(
+          params->create_properties, browser_context(), extension(), id,
+          &error)) {
     return RespondNow(Error(error));
   }
   return RespondNow(NoArguments());
@@ -73,7 +70,8 @@ ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
                        MenuItem::ExtensionKey(extension_id()));
   if (item_id.incognito && vivaldi::IsVivaldiApp(extension_id()))
     item_id.incognito = false;
-  std::unique_ptr<Update::Params> params(Update::Params::Create(*args_));
+  std::unique_ptr<api::context_menus::Update::Params> params(
+      api::context_menus::Update::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
   if (params->id.as_string)
@@ -84,15 +82,17 @@ ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
     NOTREACHED();
 
   std::string error;
-  if (!helpers::UpdateMenuItem(params->update_properties, browser_context(),
-                               extension(), item_id, &error)) {
+  if (!extensions::context_menus_api_helpers::UpdateMenuItem(
+          params->update_properties, browser_context(), extension(), item_id,
+          &error)) {
     return RespondNow(Error(error));
   }
   return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction ContextMenusRemoveFunction::Run() {
-  std::unique_ptr<Remove::Params> params(Remove::Params::Create(*args_));
+  std::unique_ptr<api::context_menus::Remove::Params> params(
+      api::context_menus::Remove::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   MenuManager* manager = MenuManager::Get(browser_context());
@@ -112,7 +112,8 @@ ExtensionFunction::ResponseAction ContextMenusRemoveFunction::Run() {
   // Ensure one extension can't remove another's menu items.
   if (!item || item->extension_id() != extension_id()) {
     return RespondNow(
-        Error(helpers::kCannotFindItemError, helpers::GetIDString(id)));
+        Error(extensions::context_menus_api_helpers::kCannotFindItemError,
+              extensions::context_menus_api_helpers::GetIDString(id)));
   }
 
   if (!manager->RemoveContextMenuItem(id))

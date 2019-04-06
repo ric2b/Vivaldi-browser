@@ -36,7 +36,6 @@ import java.util.concurrent.TimeoutException;
 // clang-format off
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@ScreenShooter.Directory("InfoBars")
 public class InfoBarAppearanceTest {
     // clang-format on
 
@@ -62,7 +61,7 @@ public class InfoBarAppearanceTest {
 
     @Test
     @MediumTest
-    @Feature({"InfoBars", "Catalogue"})
+    @Feature({"InfoBars", "UiCatalogue"})
     public void testFramebustBlockInfoBar() throws Exception {
         FramebustBlockInfoBar infobar = new FramebustBlockInfoBar("http://very.evil.biz");
         captureMiniAndRegularInfobar(infobar);
@@ -146,7 +145,7 @@ public class InfoBarAppearanceTest {
 
     @Test
     @MediumTest
-    @Feature({"InfoBars", "Catalogue"})
+    @Feature({"InfoBars", "UiCatalogue"})
     public void testFramebustBlockInfoBarWithLongMessages() throws Exception {
         FramebustBlockInfoBar infobar = new FramebustBlockInfoBar("https://someverylonglink"
                 + "thatwilldefinitelynotfitevenwhenremovingthefilepath.com/somemorestuff");
@@ -155,7 +154,7 @@ public class InfoBarAppearanceTest {
 
     @Test
     @MediumTest
-    @Feature({"InfoBars", "Catalogue"})
+    @Feature({"InfoBars", "UiCatalogue"})
     public void testOomInfoBar() throws TimeoutException, InterruptedException {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> mTab.getInfoBarContainer().addInfoBarForTesting(new NearOomInfoBar()));

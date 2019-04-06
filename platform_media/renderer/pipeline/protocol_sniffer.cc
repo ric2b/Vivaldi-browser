@@ -114,11 +114,6 @@ std::string DetermineContainer(const uint8_t* data, size_t data_size) {
     case container_names::CONTAINER_AAC:
       return "audio/aac";
 
-#if defined(PLATFORM_MEDIA_MP3)
-    case container_names::CONTAINER_MP3:
-      return "audio/mp3";
-#endif // PLATFORM_MEDIA_MP3
-
     case container_names::CONTAINER_WAV:
       return "audio/wav";
 
@@ -130,21 +125,6 @@ std::string DetermineContainer(const uint8_t* data, size_t data_size) {
               << " Ignored container : " << GetContainerName(container);
       break;
   }
-
-#if defined(PLATFORM_MEDIA_MP3)
-  // Also check for Shoutcast, a popular live streaming protocol.
-  if (data_size >= 3 && data[0] == 'I' && data[1] == 'C' && data[2] == 'Y') {
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " audio/mp3";
-    return "audio/mp3";
-  }
-
-  // It might happen that we do not have enough data to correctly sniff mp3 with
-  // OperaDetermineContainer, so we assume mp3 just by checking the header tag.
-  if (data_size >= 3 && data[0] == 'I' && data[1] == 'D' && data[2] == '3') {
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " audio/mp3";
-    return "audio/mp3";
-  }
-#endif // PLATFORM_MEDIA_MP3
 
   return std::string();
 }

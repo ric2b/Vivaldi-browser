@@ -5,6 +5,7 @@
 #include "device/bluetooth/dbus/bluetooth_media_client.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -16,10 +17,6 @@
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace {
-
-// Since there is no property associated with Media objects, an empty callback
-// is used.
-void DoNothing(const std::string& property_name) {}
 
 // TODO(mcchou): Add these service constants into dbus/service_constants.h
 // later.
@@ -67,7 +64,7 @@ class BluetoothMediaClientImpl : public BluetoothMediaClient,
       const dbus::ObjectPath& object_path,
       const std::string& interface_name) override {
     return new dbus::PropertySet(object_proxy, interface_name,
-                                 base::Bind(&DoNothing));
+                                 base::DoNothing());
   }
 
   void ObjectAdded(const dbus::ObjectPath& object_path,
@@ -144,10 +141,10 @@ class BluetoothMediaClientImpl : public BluetoothMediaClient,
         object_manager_->GetObjectProxy(object_path));
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothMediaClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothMediaClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothMediaClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothMediaClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   void UnregisterEndpoint(const dbus::ObjectPath& object_path,
@@ -168,17 +165,18 @@ class BluetoothMediaClientImpl : public BluetoothMediaClient,
         object_manager_->GetObjectProxy(object_path));
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothMediaClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothMediaClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothMediaClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothMediaClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
  protected:
-  void Init(dbus::Bus* bus) override {
+  void Init(dbus::Bus* bus,
+            const std::string& bluetooth_service_name) override {
     DCHECK(bus);
     object_manager_ = bus->GetObjectManager(
-        bluetooth_object_manager::kBluetoothObjectManagerServiceName,
+        bluetooth_service_name,
         dbus::ObjectPath(
             bluetooth_object_manager::kBluetoothObjectManagerServicePath));
     object_manager_->RegisterInterface(kBluetoothMediaInterface, this);

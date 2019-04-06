@@ -41,18 +41,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
 
-#include "app/vivaldi_apptools.h"
-
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/task_manager/web_contents_tags.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/guest_view/browser/guest_view_manager.h"
-#include "components/guest_view/browser/guest_view_manager_delegate.h"
-#include "content/browser/web_contents/web_contents_impl.h"
-#include "extensions/browser/api/extensions_api_client.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
-
 using content::BrowserContext;
 using content::OpenURLParams;
 using content::RenderProcessHost;
@@ -76,47 +64,12 @@ ExtensionHost::ExtensionHost(const Extension* extension,
       document_element_available_(false),
       initial_url_(url),
       extension_host_type_(host_type) {
-  // Not used for panels, see PanelHost.
   DCHECK(host_type == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE ||
          host_type == VIEW_TYPE_EXTENSION_DIALOG ||
          host_type == VIEW_TYPE_EXTENSION_POPUP);
-
-  WebContents::CreateParams create_params =
-      WebContents::CreateParams(browser_context_, site_instance);
-
-  // This is to make sure that the webcontents created by the background page is
-  // created as a guest so we can use this in Vivaldi. Directly without
-  // recreating.
-  if (vivaldi::IsVivaldiRunning() &&
-      extension_host_type_ == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE) {
-    auto* guest_view_manager =
-        guest_view::GuestViewManager::FromBrowserContext(browser_context_);
-    if (!guest_view_manager) {
-      guest_view_manager = guest_view::GuestViewManager::CreateWithDelegate(
-          browser_context_,
-          ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(
-              browser_context_));
-    }
-
-    if (guest_view_manager) {
-      WebContents::CreateParams guest_create_params =
-          WebContents::CreateParams(browser_context_);
-
-      guest_owner_contents_.reset(WebContents::Create(guest_create_params));
-      content::WebContents* guest_content =
-          guest_view_manager->CreateGuestWithWebContentsParams(
-              WebViewGuest::Type, guest_owner_contents_.get(),
-              guest_create_params);
-      // We don't need to clutter the taskmanager with this.
-      task_manager::WebContentsTags::ClearTag(guest_content);
-      auto* guest = WebViewGuest::FromWebContents(guest_content);
-      create_params.guest_delegate = guest;
-    }
-  }
-
-  host_contents_.reset(WebContents::Create(create_params)),
-      content::WebContentsObserver::Observe(host_contents_.get());
-
+  host_contents_ = WebContents::Create(
+      WebContents::CreateParams(browser_context_, site_instance)),
+  content::WebContentsObserver::Observe(host_contents_.get());
   host_contents_->SetDelegate(this);
   SetViewType(host_contents_.get(), host_type);
 
@@ -164,20 +117,6 @@ ExtensionHost::~ExtensionHost() {
   content::WebContentsObserver::Observe(nullptr);
 }
 
-#ifdef VIVALDI_BUILD
-void ExtensionHost::SetHostContentsAndRenderView(
-    content::WebContents *web_contents) {
-  host_contents_.reset(web_contents);
-  render_view_host_ = web_contents->GetRenderViewHost();
-}
-
-void ExtensionHost::ReleaseHostContents() {
-  // Note(andre@vivaldi.com) : host_contents_ should be released since it's
-  // owned by another object, most likely a webviewguest.
-  ignore_result(host_contents_.release());
-}
-#endif //VIVALDI_BUILD
-
 content::RenderProcessHost* ExtensionHost::render_process_host() const {
   return render_view_host()->GetProcess();
 }
@@ -192,7 +131,8 @@ bool ExtensionHost::IsRenderViewLive() const {
 }
 
 void ExtensionHost::CreateRenderViewSoon() {
-  if (render_process_host() && render_process_host()->HasConnection()) {
+  if (render_process_host() &&
+      render_process_host()->IsInitializedAndNotDead()) {
     // If the process is already started, go ahead and initialize the RenderView
     // synchronously. The process creation is the real meaty part that we want
     // to defer.
@@ -335,10 +275,7 @@ void ExtensionHost::DidStopLoading() {
   bool first_load = !has_loaded_once_;
   has_loaded_once_ = true;
   if (first_load) {
-    // Note(andre@vivaldi.com): We do the startload in a webview in Vivaldi.
-    if(!vivaldi::IsVivaldiRunning()) {
     RecordStopLoadingUMA();
-    }
     OnDidStopFirstLoad();
     content::NotificationService::current()->Notify(
         extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
@@ -350,12 +287,8 @@ void ExtensionHost::DidStopLoading() {
 }
 
 void ExtensionHost::OnDidStopFirstLoad() {
-  if (!vivaldi::IsVivaldiRunning()) {
-  // Vivaldi might use ExtensionHost to set up the renderer for extension popups
-  // used in webviewguests.
   DCHECK_EQ(extension_host_type_, VIEW_TYPE_EXTENSION_BACKGROUND_PAGE);
   // Nothing to do for background pages.
-  }
 }
 
 void ExtensionHost::DocumentAvailableInMainFrame() {
@@ -456,7 +389,7 @@ content::JavaScriptDialogManager* ExtensionHost::GetJavaScriptDialogManager(
 }
 
 void ExtensionHost::AddNewContents(WebContents* source,
-                                   WebContents* new_contents,
+                                   std::unique_ptr<WebContents> new_contents,
                                    WindowOpenDisposition disposition,
                                    const gfx::Rect& initial_rect,
                                    bool user_gesture,
@@ -476,27 +409,16 @@ void ExtensionHost::AddNewContents(WebContents* source,
             new_contents->GetBrowserContext()) {
       WebContentsDelegate* delegate = associated_contents->GetDelegate();
       if (delegate) {
-        delegate->AddNewContents(
-            associated_contents, new_contents, disposition, initial_rect,
-            user_gesture, was_blocked);
+        delegate->AddNewContents(associated_contents, std::move(new_contents),
+                                 disposition, initial_rect, user_gesture,
+                                 was_blocked);
         return;
       }
     }
   }
 
-  delegate_->CreateTab(
-      new_contents, extension_id_, disposition, initial_rect, user_gesture);
-}
-
-content::WebContents *ExtensionHost::GetAssociatedWebContents() const {
-  bool match_original_profiles = true;
-  Profile *profile = Profile::FromBrowserContext(browser_context_);
-  Browser *browser = chrome::FindTabbedBrowser(profile, match_original_profiles);
-  if (browser) {
-    TabStripModel *tab_strip = browser->tab_strip_model();
-    return tab_strip->GetActiveWebContents();
-  }
-  return nullptr;
+  delegate_->CreateTab(std::move(new_contents), extension_id_, disposition,
+                       initial_rect, user_gesture);
 }
 
 void ExtensionHost::RenderViewReady() {
@@ -504,30 +426,22 @@ void ExtensionHost::RenderViewReady() {
       extensions::NOTIFICATION_EXTENSION_HOST_CREATED,
       content::Source<BrowserContext>(browser_context_),
       content::Details<ExtensionHost>(this));
-  if (vivaldi::IsVivaldiRunning()) {
-    // This is needed when running as Vivaldi since a BrowserPluginGuest is not
-    // visible, and hence the content is throttled causing timers to be stalled
-    // etc., until it is attached.
-    content::WebContentsImpl* contentsimpl =
-        static_cast<content::WebContentsImpl*>(host_contents_.get());
-    contentsimpl->WasShown();
-  }
 }
 
 void ExtensionHost::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback) {
-  delegate_->ProcessMediaAccessRequest(
-      web_contents, request, callback, extension());
+    content::MediaResponseCallback callback) {
+  delegate_->ProcessMediaAccessRequest(web_contents, request,
+                                       std::move(callback), extension());
 }
 
 bool ExtensionHost::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type) {
   return delegate_->CheckMediaAccessPermission(
-      web_contents, security_origin, type, extension());
+      render_frame_host, security_origin, type, extension());
 }
 
 bool ExtensionHost::IsNeverVisible(content::WebContents* web_contents) {

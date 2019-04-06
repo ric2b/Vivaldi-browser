@@ -1,4 +1,27 @@
-# TODO(michaelpg): Dedupe common functionality with the Chrome installer.
+# TODO(michaelpg): Dedupe common functionality with the Chrome installer. See
+# https://crbug.com/820270.
+
+# Shows the output of a given command only on failure, or when VERBOSE is set.
+log_cmd() {
+  if [ "${VERBOSE:-}" ]; then
+    "$@"
+  else
+    # Record $- into a separate variable because it gets reset in the subshell.
+    FORWARD_SHELL_OPTS=$-
+    ERREXIT=$(echo ${FORWARD_SHELL_OPTS} | grep -o e || true)
+    set +${ERREXIT}
+    CMD_OUTPUT=$("$@" 2>&1)
+    ERRCODE=$?
+    set -${ERREXIT}
+    if [ ${ERRCODE} -ne 0 ]; then
+      echo "$@"
+      echo "${CMD_OUTPUT}"
+      if [ ${ERREXIT} ]; then
+        exit ${ERRCODE}
+      fi
+    fi
+  fi
+}
 
 # Recursively replace @@include@@ template variables with the referenced file,
 # and write the resulting text to stdout.
@@ -53,6 +76,7 @@ process_template() (
   TMPLINCL="$(process_template_includes "$TMPLIN")"
   sed \
     -e "s#@@PACKAGE@@#${PACKAGE}#g" \
+    -e "s#@@PACKAGE_ORIG@@#${PACKAGE_ORIG}#g" \
     -e "s#@@PACKAGE_FILENAME@@#${PACKAGE_FILENAME}#g" \
     -e "s#@@PROGNAME@@#${PROGNAME}#g" \
     -e "s#@@CHANNEL@@#${CHANNEL}#g" \
@@ -68,9 +92,8 @@ process_template() (
     -e "s#@@PRODUCTURL@@#${PRODUCTURL}#g" \
     -e "s#@@PREDEPENDS@@#${PREDEPENDS}#g" \
     -e "s#@@DEPENDS@@#${DEPENDS}#g" \
+    -e "s#@@RECOMMENDS@@#${RECOMMENDS}#g" \
     -e "s#@@PROVIDES@@#${PROVIDES}#g" \
-    -e "s#@@REPLACES@@#${REPLACES}#g" \
-    -e "s#@@CONFLICTS@@#${CONFLICTS}#g" \
     -e "s#@@ARCHITECTURE@@#${ARCHITECTURE}#g" \
     -e "s#@@MAINTNAME@@#${MAINTNAME}#g" \
     -e "s#@@MAINTMAIL@@#${MAINTMAIL}#g" \
@@ -79,6 +102,8 @@ process_template() (
     -e "s#@@SHORTDESC@@#${SHORTDESC}#g" \
     -e "s#@@FULLDESC@@#${FULLDESC}#g" \
     -e "s#@@USR_BIN_SYMLINK_NAME@@#${USR_BIN_SYMLINK_NAME:-}#g" \
+    -e "s#@@LOGO_RESOURCES_PNG@@#${LOGO_RESOURCES_PNG}#g" \
+    -e "s#@@LOGO_RESOURCE_XPM@@#${LOGO_RESOURCE_XPM}#g" \
     > "$TMPLOUT" <<< "$TMPLINCL"
 )
 
@@ -102,7 +127,7 @@ get_version_info() {
 }
 
 stage_install_common() {
-  echo "Staging common install files in '${STAGEDIR}'..."
+  log_cmd echo "Staging common install files in '${STAGEDIR}'..."
 
   # Note: Changes here may also need to be applied to ChromeOS's
   # chromite/lib/chrome_util.py.
@@ -122,11 +147,17 @@ stage_install_common() {
   # ICU data file; Necessary when the GN icu_use_data_file flag is true.
   install -m 644 "${BUILDDIR}/icudtl.dat" "${STAGEDIR}/${INSTALLDIR}/"
 
-  # V8 snapshot files; Necessary when the GN v8_use_external_startup_data flag
+  # V8 snapshot files; Necessary when the GN v8_use_external_startup_data flag 
   # is true.
   if [ -f "${BUILDDIR}/natives_blob.bin" ]; then
     install -m 644 "${BUILDDIR}/natives_blob.bin" "${STAGEDIR}/${INSTALLDIR}/"
-    install -m 644 "${BUILDDIR}/snapshot_blob.bin" "${STAGEDIR}/${INSTALLDIR}/"
+    # Use v8_context_snapshot.bin instead of snapshot_blob.bin if it is available.
+    # TODO(crbug.com/764576): Unship snapshot_blob.bin on ChromeOS and drop this branch
+    if [ -f "${BUILDDIR}/v8_context_snapshot.bin" ]; then
+      install -m 644 "${BUILDDIR}/v8_context_snapshot.bin" "${STAGEDIR}/${INSTALLDIR}/"
+    else
+      install -m 644 "${BUILDDIR}/snapshot_blob.bin" "${STAGEDIR}/${INSTALLDIR}/"
+    fi
   fi
 
   # ANGLE

@@ -5,11 +5,16 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SESSION_USER_SESSION_MANAGER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SESSION_USER_SESSION_MANAGER_H_
 
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -34,6 +39,7 @@
 class AccountId;
 class GURL;
 class PrefRegistrySimple;
+class PrefService;
 class Profile;
 class TokenHandleFetcher;
 
@@ -43,6 +49,10 @@ class CommandLine;
 
 namespace net {
 class URLRequestContextGetter;
+}
+
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace user_manager {
@@ -55,7 +65,6 @@ namespace test {
 class UserSessionManagerTestApi;
 }  // namespace test
 
-class AppTerminatingStackDumper;
 class EasyUnlockKeyManager;
 class InputEventsBlocker;
 class LoginDisplayHost;
@@ -110,6 +119,33 @@ class UserSessionManager
     SECONDARY_USER_SESSION_AFTER_CRASH,
   } StartSessionType;
 
+  // Types of command-line switches for a user session. The command-line
+  // switches of all types are combined.
+  enum class CommandLineSwitchesType {
+    // Switches for controlling session initialization, such as if the profile
+    // requires enterprise policy.
+    kSessionControl,
+    // Switches derived from user policy, from user-set flags and kiosk app
+    // control switches.
+    // TODO(pmarko): Split this into multiple categories, such as kPolicy,
+    // kFlags, kKioskControl. Consider also adding sentinels automatically and
+    // pre-filling these switches from the command-line if the chrome has been
+    // started with the --login-user flag (https://crbug.com/832857).
+    kPolicyAndFlagsAndKioskControl
+  };
+
+  // Parameters to use when initializing the RLZ library.  These fields need
+  // to be retrieved from a blocking task and this structure is used to pass
+  // the data.
+  struct RlzInitParams {
+    // Set to true if RLZ is disabled.
+    bool disabled;
+
+    // The elapsed time since the device went through the OOBE.  This can
+    // be a very long time.
+    base::TimeDelta time_since_oobe_completion;
+  };
+
   // Returns UserSessionManager instance.
   static UserSessionManager* GetInstance();
 
@@ -121,7 +157,8 @@ class UserSessionManager
 
   // Appends additional command switches to the given command line if
   // SitePerProcess/IsolateOrigins policy is present.
-  static void MaybeAppendPolicySwitches(base::CommandLine* user_flags);
+  static void MaybeAppendPolicySwitches(PrefService* user_profile_prefs,
+                                        base::CommandLine* user_flags);
 
   // Invoked after the tmpfs is successfully mounted.
   // Asks session_manager to restart Chrome in Guest session mode.
@@ -248,8 +285,11 @@ class UserSessionManager
   // Update Easy unlock cryptohome keys for given user context.
   void UpdateEasyUnlockKeys(const UserContext& user_context);
 
-  // Returns the auth request context associated with auth data.
+  // Returns the auth request context/URLLoaderFactory associated with auth
+  // data.
   net::URLRequestContextGetter* GetAuthRequestContext() const;
+  scoped_refptr<network::SharedURLLoaderFactory> GetAuthURLLoaderFactory()
+      const;
 
   // Removes a profile from the per-user input methods states map.
   void RemoveProfileForTesting(Profile* profile);
@@ -262,6 +302,25 @@ class UserSessionManager
   void WaitForEasyUnlockKeyOpsFinished(base::OnceClosure callback);
 
   void Shutdown();
+
+  // Sets the command-line switches to be set by session manager for a user
+  // session associated with |account_id| when chrome restarts. Overwrites
+  // switches for |switches_type| with |switches|. The resulting command-line
+  // switches will be the command-line switches for all types combined. Note:
+  // |account_id| is currently ignored, because session manager ignores the
+  // passed account id. For each type, only the last-set switches will be
+  // honored.
+  // TODO(pmarko): Introduce a CHECK making sure that |account_id| is the
+  // primary user (https://crbug.com/832857).
+  void SetSwitchesForUser(const AccountId& account_id,
+                          CommandLineSwitchesType switches_type,
+                          const std::vector<std::string>& switches);
+
+  // Called when the user network policy has been parsed. If |send_password| is
+  // true, the user's password will be sent over dbus to the session manager to
+  // save in a keyring. Before the function exits, it will clear the user
+  // password from the UserContext regardless of the value of |send_password|.
+  void OnUserNetworkPolicyParsed(bool send_password);
 
  private:
   friend class test::UserSessionManagerTestApi;
@@ -300,6 +359,15 @@ class UserSessionManager
   // created yet and user services were not yet initialized. Can store
   // information in Local State like GAIA ID.
   void StoreUserContextDataBeforeProfileIsCreated();
+
+  // Initializes |chromeos::DemoSession| if starting user session for demo mode.
+  // Runs |callback| when demo session initialization finishes, i.e. when the
+  // offline demo session resources are loaded.
+  void InitDemoSessionIfNeeded(base::OnceClosure callback);
+
+  // Updates ARC file system compatibility pref, and then calls
+  // PrepareProfile().
+  void UpdateArcFileSystemCompatibilityAndPrepareProfile();
 
   void StartCrosSession();
   void PrepareProfile();
@@ -357,7 +425,7 @@ class UserSessionManager
   void RestoreAuthSessionImpl(Profile* profile, bool restore_from_auth_cookies);
 
   // Initializes RLZ. If |disabled| is true, RLZ pings are disabled.
-  void InitRlzImpl(Profile* profile, bool disabled);
+  void InitRlzImpl(Profile* profile, const RlzInitParams& params);
 
   // If |user| is not a kiosk app, sets session type as seen by extensions
   // feature system according to |user|'s type.
@@ -379,10 +447,6 @@ class UserSessionManager
 
   // Notifies observers that user pending sessions restore has finished.
   void NotifyPendingUserSessionsRestoreFinished();
-
-  // Attempts restarting the browser process and esures that this does
-  // not happen while we are still fetching new OAuth refresh tokens.
-  void AttemptRestart(Profile* profile);
 
   // Callback invoked when Easy unlock key operations are finished.
   void OnEasyUnlockKeyOpsFinished(const std::string& user_id, bool success);
@@ -422,6 +486,10 @@ class UserSessionManager
 
   // Controls whether token handle fetching is enabled (used in tests).
   void SetShouldObtainHandleInTests(bool should_obtain_handles);
+
+  // Sets the function which is used to request a chrome restart.
+  void SetAttemptRestartClosureInTests(
+      const base::RepeatingClosure& attempt_restart_closure);
 
   // The user pods display type for histogram.
   enum UserPodsDisplay {
@@ -476,9 +544,6 @@ class UserSessionManager
 
   // OAuth2 session related members.
 
-  // True if we should restart chrome right after session restore.
-  bool exit_after_session_restore_;
-
   // Sesion restore strategy.
   OAuth2LoginManager::SessionRestoreStrategy session_restore_strategy_;
 
@@ -513,6 +578,13 @@ class UserSessionManager
            ProfileCompare>
       fingerprint_unlock_notification_handler_;
 
+  // Maps command-line switch types to the currently set command-line switches
+  // for that type. Note: This is not per Profile/AccountId, because session
+  // manager currently doesn't support setting command-line switches per
+  // AccountId.
+  base::flat_map<CommandLineSwitchesType, std::vector<std::string>>
+      command_line_switches_;
+
   // Manages Easy unlock cryptohome keys.
   std::unique_ptr<EasyUnlockKeyManager> easy_unlock_key_manager_;
   bool running_easy_unlock_key_ops_;
@@ -538,11 +610,8 @@ class UserSessionManager
 
   std::vector<base::OnceClosure> easy_unlock_key_ops_finished_callbacks_;
 
-  // Helper to dump app terminating stack during the primary user profile
-  // loading. It is instantiated on loading primary user profile and destroyed
-  // after the primary user profile is loaded.
-  // TODO(crbug.com/717585): Remove after the root cause of bug identified.
-  std::unique_ptr<AppTerminatingStackDumper> app_terminating_stack_dumper_;
+  // Mapped to |chrome::AttemptRestart|, except in tests.
+  base::RepeatingClosure attempt_restart_closure_;
 
   base::WeakPtrFactory<UserSessionManager> weak_factory_;
 

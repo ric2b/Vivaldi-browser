@@ -69,7 +69,7 @@ AccessibilityTest.define('SettingsA11yManagePasswords', {
         // Passwords section should be loaded before setup is complete.
         this.passwordsSection = settingsUi.$$('settings-main')
                                     .$$('settings-basic-page')
-                                    .$$('settings-passwords-and-forms-page')
+                                    .$$('settings-people-page')
                                     .$$('passwords-section');
         assertTrue(!!this.passwordsSection);
 
@@ -101,12 +101,7 @@ AccessibilityTest.define('SettingsA11yManagePasswords', {
       assertEquals(10, this.passwordsSection.savedPasswords.length);
     },
   },
+
   /** @override */
-  violationFilter:
-      Object.assign({}, SettingsAccessibilityTest.violationFilter, {
-        'button-name': function(nodeResult) {
-          const node = nodeResult.element;
-          return node.classList.contains('icon-expand-more');
-        },
-      }),
+  violationFilter: SettingsAccessibilityTest.violationFilter,
 });

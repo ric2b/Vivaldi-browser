@@ -15,6 +15,8 @@
 #include "ui/aura/window.h"
 #include "ui/events/event_sink.h"
 #include "ui/events/null_event_targeter.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 namespace ash {
 
@@ -27,11 +29,29 @@ AshWindowTreeHostMus::AshWindowTreeHostMus(
 
 AshWindowTreeHostMus::~AshWindowTreeHostMus() = default;
 
-bool AshWindowTreeHostMus::ConfineCursorToRootWindow() {
+void AshWindowTreeHostMus::ConfineCursorToRootWindow() {
+  if (!allow_confine_cursor())
+    return;
+
   gfx::Rect confined_bounds(GetBoundsInPixels().size());
   confined_bounds.Inset(transformer_helper_->GetHostInsets());
+  last_cursor_confine_bounds_in_pixels_ = confined_bounds;
   ConfineCursorToBounds(confined_bounds);
-  return true;
+}
+
+void AshWindowTreeHostMus::ConfineCursorToBoundsInRoot(
+    const gfx::Rect& bounds_in_root) {
+  if (!allow_confine_cursor())
+    return;
+
+  gfx::RectF bounds_f(bounds_in_root);
+  GetRootTransform().TransformRect(&bounds_f);
+  last_cursor_confine_bounds_in_pixels_ = gfx::ToEnclosingRect(bounds_f);
+  ConfineCursorToBounds(last_cursor_confine_bounds_in_pixels_);
+}
+
+gfx::Rect AshWindowTreeHostMus::GetLastCursorConfineBoundsInPixels() const {
+  return last_cursor_confine_bounds_in_pixels_;
 }
 
 void AshWindowTreeHostMus::SetRootWindowTransformer(
@@ -92,9 +112,9 @@ gfx::Transform AshWindowTreeHostMus::GetInverseRootTransform() const {
   return transformer_helper_->GetInverseTransform();
 }
 
-void AshWindowTreeHostMus::UpdateRootWindowSizeInPixels(
-    const gfx::Size& host_size_in_pixels) {
-  transformer_helper_->UpdateWindowSize(host_size_in_pixels);
+gfx::Rect AshWindowTreeHostMus::GetTransformedRootWindowBoundsInPixels(
+    const gfx::Size& host_size_in_pixels) const {
+  return transformer_helper_->GetTransformedWindowBounds(host_size_in_pixels);
 }
 
 void AshWindowTreeHostMus::OnCursorVisibilityChangedNative(bool show) {

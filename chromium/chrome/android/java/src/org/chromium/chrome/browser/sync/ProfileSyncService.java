@@ -144,11 +144,6 @@ public class ProfileSyncService {
         nativeSignOutSync(mNativeProfileSyncServiceAndroid);
     }
 
-    public String querySyncStatus() {
-        ThreadUtils.assertOnUiThread();
-        return nativeQuerySyncStatusSummary(mNativeProfileSyncServiceAndroid);
-    }
-
     /**
      * Sets the the machine tag used by session sync.
      */
@@ -408,6 +403,18 @@ public class ProfileSyncService {
     }
 
     /**
+     * Returns whether either personalized or anonymized URL keyed data collection is enabled.
+     *
+     * @param personlized Whether to check for personalized data collection. If false, this will
+     *                    check for anonymized data collection.
+     * @return Whether URL-keyed data collection is enabled for the current profile.
+     */
+    public boolean isUrlKeyedDataCollectionEnabled(boolean personalized) {
+        return nativeIsUrlKeyedDataCollectionEnabled(
+                mNativeProfileSyncServiceAndroid, personalized);
+    }
+
+    /**
      * Called when the state of the native sync engine has changed, so various
      * UI elements can update themselves.
      */
@@ -536,7 +543,6 @@ public class ProfileSyncService {
     private native void nativeFlushDirectory(long nativeProfileSyncServiceAndroid);
     private native void nativeSignOutSync(long nativeProfileSyncServiceAndroid);
     private native void nativeSetSyncSessionsId(long nativeProfileSyncServiceAndroid, String tag);
-    private native String nativeQuerySyncStatusSummary(long nativeProfileSyncServiceAndroid);
     private native int nativeGetAuthError(long nativeProfileSyncServiceAndroid);
     private native int nativeGetProtocolErrorClientAction(long nativeProfileSyncServiceAndroid);
     private native boolean nativeIsEngineInitialized(long nativeProfileSyncServiceAndroid);
@@ -574,6 +580,8 @@ public class ProfileSyncService {
     private native boolean nativeIsSyncActive(long nativeProfileSyncServiceAndroid);
     private native boolean nativeHasKeepEverythingSynced(long nativeProfileSyncServiceAndroid);
     private native boolean nativeHasUnrecoverableError(long nativeProfileSyncServiceAndroid);
+    private native boolean nativeIsUrlKeyedDataCollectionEnabled(
+            long nativeProfileSyncServiceAndroid, boolean personalized);
     private native boolean nativeIsPassphrasePrompted(long nativeProfileSyncServiceAndroid);
     private native void nativeSetPassphrasePrompted(long nativeProfileSyncServiceAndroid,
                                                     boolean prompted);

@@ -45,7 +45,7 @@ suite('ImportDataDialog', function() {
       favorites: true,
       history: true,
       index: 0,
-      name: "Mozilla Firefox",
+      name: 'Mozilla Firefox',
       passwords: true,
       search: true
     },
@@ -54,7 +54,7 @@ suite('ImportDataDialog', function() {
       favorites: true,
       history: false,
       index: 1,
-      name: "Bookmarks HTML File",
+      name: 'Bookmarks HTML File',
       passwords: false,
       search: false
     },
@@ -152,7 +152,7 @@ suite('ImportDataDialog', function() {
 
   test('ImportFromBookmarksFile', function() {
     simulateBrowserProfileChange(1);
-    MockInteractions.tap(dialog.$.import);
+    dialog.$.import.click();
     return browserProxy.whenCalled('importFromBookmarksFile').then(function() {
       simulateImportStatusChange(settings.ImportDataStatus.IN_PROGRESS);
       assertInProgressButtons();
@@ -170,7 +170,7 @@ suite('ImportDataDialog', function() {
 
     const expectedIndex = 0;
     simulateBrowserProfileChange(expectedIndex);
-    MockInteractions.tap(dialog.$.import);
+    dialog.$.import.click();
     return browserProxy.whenCalled('importData').then(function(actualIndex) {
       assertEquals(expectedIndex, actualIndex);
 

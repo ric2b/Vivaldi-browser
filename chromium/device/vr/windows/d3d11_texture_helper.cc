@@ -21,6 +21,10 @@ D3D11TextureHelper::D3D11TextureHelper() {}
 
 D3D11TextureHelper::~D3D11TextureHelper() {}
 
+void D3D11TextureHelper::Reset() {
+  render_state_ = {};
+}
+
 bool D3D11TextureHelper::CopyTextureToBackBuffer(bool flipY) {
   if (!EnsureInitialized())
     return false;
@@ -210,7 +214,7 @@ void D3D11TextureHelper::AllocateBackBuffer() {
     D3D11_TEXTURE2D_DESC desc_target;
     render_state_.target_texture_->GetDesc(&desc_target);
     // If the target should change size, format, or other properties reallocate
-    // a new target.
+    // a new texture and new render target view.
     if (desc_source.Width != desc_target.Width ||
         desc_source.Height != desc_target.Height ||
         desc_source.MipLevels != desc_target.MipLevels ||
@@ -223,6 +227,7 @@ void D3D11TextureHelper::AllocateBackBuffer() {
         desc_source.CPUAccessFlags != desc_target.CPUAccessFlags ||
         desc_source.MiscFlags != desc_target.MiscFlags) {
       render_state_.target_texture_ = nullptr;
+      render_state_.render_target_view_ = nullptr;
     }
   }
 
@@ -241,6 +246,9 @@ D3D11TextureHelper::GetBackbuffer() {
 
 void D3D11TextureHelper::SetBackbuffer(
     Microsoft::WRL::ComPtr<ID3D11Texture2D> back_buffer) {
+  if (render_state_.target_texture_ != back_buffer) {
+    render_state_.render_target_view_ = nullptr;
+  }
   render_state_.target_texture_ = back_buffer;
 }
 
@@ -281,9 +289,6 @@ bool D3D11TextureHelper::EnsureInitialized() {
   D3D_FEATURE_LEVEL feature_levels[] = {D3D_FEATURE_LEVEL_11_1};
   UINT flags = 0;
   D3D_FEATURE_LEVEL feature_level_out = D3D_FEATURE_LEVEL_11_1;
-#if defined _DEBUG
-  flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
 
   Microsoft::WRL::ComPtr<IDXGIAdapter> adapter = GetAdapter();
   if (!adapter) {

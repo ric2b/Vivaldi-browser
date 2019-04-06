@@ -15,7 +15,7 @@
 #include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/url_util.h"
 
@@ -64,6 +64,11 @@ std::string MediaBrowserTest::RunTest(const GURL& gurl,
   NavigateToURL(shell(), gurl);
   base::string16 result = title_watcher.WaitAndGetTitle();
 
+  CleanupTest();
+  return base::UTF16ToASCII(result);
+}
+
+void MediaBrowserTest::CleanupTest() {
 #if defined(OS_ANDROID)
   // We only do this cleanup on Android, as a workaround for a test-only OOM
   // bug. See http://crbug.com/727542
@@ -75,8 +80,6 @@ std::string MediaBrowserTest::RunTest(const GURL& gurl,
   base::string16 cleaner_result = clean_title_watcher.WaitAndGetTitle();
   EXPECT_EQ(cleaner_result, cleaner_title);
 #endif
-
-  return base::UTF16ToASCII(result);
 }
 
 std::string MediaBrowserTest::EncodeErrorMessage(

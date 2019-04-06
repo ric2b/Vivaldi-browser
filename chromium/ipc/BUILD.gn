@@ -4,18 +4,14 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/nacl/config.gni")
+import("//ipc/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 import("//third_party/protobuf/proto_library.gni")
 
-declare_args() {
-  # Enabling debug builds automatically sets enable_ipc_logging to true.
-  enable_ipc_logging = is_debug
-}
-
-buildflag_header("ipc_features") {
-  header = "ipc_features.h"
+buildflag_header("ipc_buildflags") {
+  header = "ipc_buildflags.h"
 
   flags = [ "IPC_MESSAGE_LOG_ENABLED=$enable_ipc_logging" ]
 }
@@ -36,7 +32,6 @@ component("ipc") {
     "ipc_channel_proxy.h",
     "ipc_channel_reader.cc",
     "ipc_channel_reader.h",
-    "ipc_export.h",
     "ipc_listener.h",
     "ipc_logging.cc",
     "ipc_logging.h",
@@ -80,14 +75,15 @@ component("ipc") {
     ]
   }
 
-  defines = [ "IPC_IMPLEMENTATION" ]
+  defines = [ "IS_IPC_IMPL" ]
 
   public_deps = [
-    ":ipc_features",
+    ":ipc_buildflags",
     ":message_support",
     ":mojom",
     ":native_handle_type_converters",
     ":param_traits",
+    "//mojo/public/cpp/base",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
   ]
@@ -126,8 +122,6 @@ component("message_support") {
     "ipc_mojo_message_helper.h",
     "ipc_platform_file.cc",
     "ipc_platform_file.h",
-    "ipc_platform_file_attachment_posix.cc",
-    "ipc_platform_file_attachment_posix.h",
     "ipc_sync_message.cc",
     "ipc_sync_message.h",
     "mach_port_attachment_mac.cc",
@@ -135,6 +129,13 @@ component("message_support") {
     "mach_port_mac.cc",
     "mach_port_mac.h",
   ]
+
+  if (is_posix || is_fuchsia) {
+    sources += [
+      "ipc_platform_file_attachment_posix.cc",
+      "ipc_platform_file_attachment_posix.h",
+    ]
+  }
 
   if (is_fuchsia) {
     sources += [
@@ -148,7 +149,7 @@ component("message_support") {
   defines = [ "IPC_MESSAGE_SUPPORT_IMPL" ]
 
   public_deps = [
-    ":ipc_features",
+    ":ipc_buildflags",
     ":param_traits",
     "//base",
     "//mojo/public/cpp/system",
@@ -181,7 +182,8 @@ mojom_component("mojom") {
     "ipc.mojom",
   ]
   public_deps = [
-    "//mojo/common:read_only_buffer",
+    "//mojo/public/interfaces/bindings",
+    "//mojo/public/mojom/base",
   ]
 
   # Don't generate a variant sources since we depend on generated internal
@@ -222,8 +224,8 @@ if (!is_ios) {
     deps = [
       "//base",
       "//base/test:test_support",
-      "//mojo/edk/system",
-      "//mojo/edk/test:test_support",
+      "//mojo/core/embedder",
+      "//mojo/core/test:test_support",
     ]
   }
 
@@ -239,7 +241,6 @@ if (!is_ios) {
       "ipc_channel_proxy_unittest.cc",
       "ipc_channel_reader_unittest.cc",
       "ipc_fuzzing_tests.cc",
-      "ipc_message_attachment_set_posix_unittest.cc",
       "ipc_message_unittest.cc",
       "ipc_message_utils_unittest.cc",
       "ipc_mojo_bootstrap_unittest.cc",
@@ -251,6 +252,10 @@ if (!is_ios) {
       "ipc_test_messages.h",
       "sync_socket_unittest.cc",
     ]
+
+    if (is_posix || is_fuchsia) {
+      sources += [ "ipc_message_attachment_set_posix_unittest.cc" ]
+    }
 
     if (!is_ios) {
       sources += [ "ipc_send_fds_test.cc" ]
@@ -266,8 +271,8 @@ if (!is_ios) {
       "//base:i18n",
       "//base/test:test_support",
       "//crypto",
-      "//mojo/edk/system",
-      "//mojo/edk/test:test_support",
+      "//mojo/core/embedder",
+      "//mojo/core/test:test_support",
       "//testing/gtest",
     ]
 
@@ -305,9 +310,9 @@ if (!is_ios) {
       "//base",
       "//base:i18n",
       "//base/test:test_support",
-      "//mojo/edk/system",
-      "//mojo/edk/test:test_support",
-      "//mojo/edk/test:test_support_impl",
+      "//mojo/core/embedder",
+      "//mojo/core/test:test_support",
+      "//mojo/core/test:test_support_impl",
       "//testing/gtest",
     ]
   }
@@ -330,7 +335,7 @@ if (!is_ios) {
     deps = [
       "//base",
       "//base/test:test_support",
-      "//mojo/edk/test:test_support",
+      "//mojo/core/test:test_support",
       "//testing/gtest",
     ]
   }

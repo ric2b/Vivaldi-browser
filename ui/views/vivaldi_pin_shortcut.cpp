@@ -15,6 +15,7 @@
 #include "base/win/registry.h"
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/browser/web_applications/web_app_win.h"
 #include "ui/vivaldi_browser_window.h"
 

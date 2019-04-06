@@ -13,12 +13,12 @@ aggregate_vector_icons("message_center_vector_icons") {
   icon_directory = "vector_icons"
 
   icons = [
-    "notification_close_button.1x.icon",
     "notification_close_button.icon",
     "notification_expand_less.icon",
     "notification_expand_more.icon",
-    "notification_settings_button.1x.icon",
+    "notification_inline_reply.icon",
     "notification_settings_button.icon",
+    "notification_snooze_button.icon",
     "product.icon",
   ]
 }
@@ -28,9 +28,12 @@ jumbo_component("message_center") {
   deps = [
     "//base",
     "//ui/base",
-    "//ui/message_center/public/cpp",
     "//ui/strings",
     "//url",
+  ]
+
+  public_deps = [
+    "//ui/message_center/public/cpp",
   ]
 
   defines = [ "MESSAGE_CENTER_IMPLEMENTATION" ]
@@ -45,6 +48,7 @@ jumbo_component("message_center") {
       "//ui/accessibility",
       "//ui/display",
       "//ui/events",
+      "//ui/events:gesture_detection",
       "//ui/gfx",
       "//ui/gfx/geometry",
       "//ui/native_theme",
@@ -58,8 +62,6 @@ jumbo_component("message_center") {
       "//build/config/compiler:no_size_t_to_int_warning",
     ]
     sources = [
-      "change_queue.cc",
-      "change_queue.h",
       "cocoa/notification_controller.h",
       "cocoa/notification_controller.mm",
       "cocoa/opaque_views.h",
@@ -74,21 +76,15 @@ jumbo_component("message_center") {
       "message_center_impl.cc",
       "message_center_impl.h",
       "message_center_observer.h",
+      "message_center_stats_collector.cc",
+      "message_center_stats_collector.h",
       "message_center_style.cc",
       "message_center_style.h",
       "message_center_types.h",
-      "notification.cc",
-      "notification.h",
       "notification_blocker.cc",
       "notification_blocker.h",
-      "notification_delegate.cc",
-      "notification_delegate.h",
       "notification_list.cc",
       "notification_list.h",
-      "notification_types.cc",
-      "notification_types.h",
-      "notifier_id.cc",
-      "notifier_id.h",
       "popup_timer.cc",
       "popup_timer.h",
       "popup_timers_controller.cc",
@@ -120,7 +116,6 @@ jumbo_component("message_center") {
       sources += [
         "views/bounded_label.cc",
         "views/bounded_label.h",
-        "views/constants.h",
         "views/desktop_popup_alignment_delegate.cc",
         "views/desktop_popup_alignment_delegate.h",
         "views/message_popup_collection.cc",
@@ -129,6 +124,8 @@ jumbo_component("message_center") {
         "views/message_view.h",
         "views/message_view_factory.cc",
         "views/message_view_factory.h",
+        "views/notification_background_painter.cc",
+        "views/notification_background_painter.h",
         "views/notification_button.cc",
         "views/notification_button.h",
         "views/notification_control_buttons_view.cc",
@@ -168,21 +165,7 @@ jumbo_component("message_center") {
     # Notification service disabled.
     sources = [
       "dummy_message_center.cc",
-      "notification_delegate.cc",
-      "notification_delegate.h",
     ]
-
-    # Android implements its own notification UI manager instead of deferring to
-    # the message center (when notifications are enabled). Include a minimal
-    # set of files required for notifications on Android.
-    if (is_android) {
-      sources += [
-        "notification.cc",
-        "notification.h",
-        "notifier_id.cc",
-        "notifier_id.h",
-      ]
-    }
   }
 }
 
@@ -207,18 +190,18 @@ if (enable_message_center) {
 
     public_deps = [
       ":message_center",
+      "//ui/message_center/public/cpp",
     ]
   }
 
   test("message_center_unittests") {
     sources = [
-      "change_queue_unittest.cc",
       "cocoa/notification_controller_unittest.mm",
       "cocoa/popup_collection_unittest.mm",
       "cocoa/popup_controller_unittest.mm",
       "message_center_impl_unittest.cc",
-      "notification_delegate_unittest.cc",
       "notification_list_unittest.cc",
+      "public/cpp/notification_delegate_unittest.cc",
       "test/run_all_unittests.cc",
       "ui_controller_unittest.cc",
     ]
@@ -228,6 +211,7 @@ if (enable_message_center) {
       ":test_support",
       "//base",
       "//base/test:test_support",
+      "//mojo/core/embedder",
       "//skia",
       "//testing/gmock",
       "//testing/gtest",
@@ -252,10 +236,10 @@ if (enable_message_center) {
     ]
 
     if (is_chromeos) {
-      sources += [ "mojo/struct_traits_unittest.cc" ]
+      sources += [ "public/mojo/struct_traits_unittest.cc" ]
       deps += [
-        "//mojo/edk/system",
-        "//ui/message_center/mojo:test_interfaces",
+        "//mojo/core/embedder",
+        "//ui/message_center/public/mojo:test_interfaces",
       ]
     }
 

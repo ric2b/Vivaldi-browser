@@ -14,13 +14,13 @@
 #include "content/shell/browser/layout_test/blink_test_controller.h"
 #include "content/shell/browser/layout_test/layout_test_browser_context.h"
 #include "content/shell/browser/layout_test/layout_test_content_browser_client.h"
-#include "content/shell/browser/layout_test/layout_test_notification_manager.h"
 #include "content/shell/browser/layout_test/layout_test_permission_manager.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_network_delegate.h"
 #include "content/shell/common/layout_test/layout_test_messages.h"
 #include "content/shell/test_runner/web_test_delegate.h"
+#include "content/test/mock_platform_notification_service.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
@@ -35,15 +35,23 @@ LayoutTestMessageFilter::LayoutTestMessageFilter(
     int render_process_id,
     storage::DatabaseTracker* database_tracker,
     storage::QuotaManager* quota_manager,
-    net::URLRequestContextGetter* request_context_getter)
+    net::URLRequestContextGetter* request_context_getter,
+    network::mojom::NetworkContext* network_context)
     : BrowserMessageFilter(LayoutTestMsgStart),
       render_process_id_(render_process_id),
       database_tracker_(database_tracker),
       quota_manager_(quota_manager),
       request_context_getter_(request_context_getter) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (network_context)
+    network_context->GetCookieManager(mojo::MakeRequest(&cookie_manager_));
 }
 
 LayoutTestMessageFilter::~LayoutTestMessageFilter() {
+}
+
+void LayoutTestMessageFilter::OnDestruct() const {
+  BrowserThread::DeleteOnUIThread::Destruct(this);
 }
 
 base::TaskRunner* LayoutTestMessageFilter::OverrideTaskRunnerForMessage(
@@ -57,7 +65,9 @@ base::TaskRunner* LayoutTestMessageFilter::OverrideTaskRunnerForMessage(
     case LayoutTestHostMsg_ResetPermissions::ID:
     case LayoutTestHostMsg_LayoutTestRuntimeFlagsChanged::ID:
     case LayoutTestHostMsg_TestFinishedInSecondaryRenderer::ID:
+    case LayoutTestHostMsg_InitiateCaptureDump::ID:
     case LayoutTestHostMsg_InspectSecondaryWindow::ID:
+    case LayoutTestHostMsg_DeleteAllCookiesForNetworkService::ID:
       return BrowserThread::GetTaskRunnerForThread(BrowserThread::UI).get();
   }
   return nullptr;
@@ -76,15 +86,17 @@ bool LayoutTestMessageFilter::OnMessageReceived(const IPC::Message& message) {
                         OnSimulateWebNotificationClick)
     IPC_MESSAGE_HANDLER(LayoutTestHostMsg_SimulateWebNotificationClose,
                         OnSimulateWebNotificationClose)
-    IPC_MESSAGE_HANDLER(LayoutTestHostMsg_BlockThirdPartyCookies,
-                        OnBlockThirdPartyCookies)
     IPC_MESSAGE_HANDLER(LayoutTestHostMsg_DeleteAllCookies, OnDeleteAllCookies)
+    IPC_MESSAGE_HANDLER(LayoutTestHostMsg_DeleteAllCookiesForNetworkService,
+                        OnDeleteAllCookiesForNetworkService)
     IPC_MESSAGE_HANDLER(LayoutTestHostMsg_SetPermission, OnSetPermission)
     IPC_MESSAGE_HANDLER(LayoutTestHostMsg_ResetPermissions, OnResetPermissions)
     IPC_MESSAGE_HANDLER(LayoutTestHostMsg_LayoutTestRuntimeFlagsChanged,
                         OnLayoutTestRuntimeFlagsChanged)
     IPC_MESSAGE_HANDLER(LayoutTestHostMsg_TestFinishedInSecondaryRenderer,
                         OnTestFinishedInSecondaryRenderer)
+    IPC_MESSAGE_HANDLER(LayoutTestHostMsg_InitiateCaptureDump,
+                        OnInitiateCaptureDump);
     IPC_MESSAGE_HANDLER(LayoutTestHostMsg_InspectSecondaryWindow,
                         OnInspectSecondaryWindow)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -139,30 +151,39 @@ void LayoutTestMessageFilter::OnSimulateWebNotificationClick(
     const base::Optional<int>& action_index,
     const base::Optional<base::string16>& reply) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  LayoutTestNotificationManager* manager =
-      LayoutTestContentBrowserClient::Get()->GetLayoutTestNotificationManager();
-  if (manager)
-    manager->SimulateClick(title, action_index, reply);
+  MockPlatformNotificationService* platform_notification_service =
+      static_cast<MockPlatformNotificationService*>(
+          LayoutTestContentBrowserClient::Get()
+              ->GetPlatformNotificationService());
+
+  platform_notification_service->SimulateClick(title, action_index, reply);
 }
 
 void LayoutTestMessageFilter::OnSimulateWebNotificationClose(
     const std::string& title, bool by_user) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  LayoutTestNotificationManager* manager =
-      LayoutTestContentBrowserClient::Get()->GetLayoutTestNotificationManager();
-  if (manager)
-    manager->SimulateClose(title, by_user);
-}
+  MockPlatformNotificationService* platform_notification_service =
+      static_cast<MockPlatformNotificationService*>(
+          LayoutTestContentBrowserClient::Get()
+              ->GetPlatformNotificationService());
 
-void LayoutTestMessageFilter::OnBlockThirdPartyCookies(bool block) {
-  ShellNetworkDelegate::SetBlockThirdPartyCookies(block);
+  platform_notification_service->SimulateClose(title, by_user);
 }
 
 void LayoutTestMessageFilter::OnDeleteAllCookies() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext* context =
       request_context_getter_->GetURLRequestContext();
   if (context)
     context->cookie_store()->DeleteAllAsync(net::CookieStore::DeleteCallback());
+}
+
+void LayoutTestMessageFilter::OnDeleteAllCookiesForNetworkService() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (cookie_manager_) {
+    cookie_manager_->DeleteCookies(network::mojom::CookieDeletionFilter::New(),
+                                   base::BindOnce([](uint32_t) {}));
+  }
 }
 
 void LayoutTestMessageFilter::OnSetPermission(
@@ -191,6 +212,11 @@ void LayoutTestMessageFilter::OnSetPermission(
     type = PermissionType::CLIPBOARD_READ;
   } else if (name == "clipboard-write") {
     type = PermissionType::CLIPBOARD_WRITE;
+  } else if (name == "payment-handler") {
+    type = PermissionType::PAYMENT_HANDLER;
+  } else if (name == "accelerometer" || name == "gyroscope" ||
+             name == "magnetometer" || name == "ambient-light-sensor") {
+    type = PermissionType::SENSORS;
   } else {
     NOTREACHED();
     type = PermissionType::NOTIFICATIONS;
@@ -224,6 +250,16 @@ void LayoutTestMessageFilter::OnTestFinishedInSecondaryRenderer() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (BlinkTestController::Get())
     BlinkTestController::Get()->OnTestFinishedInSecondaryRenderer();
+}
+
+void LayoutTestMessageFilter::OnInitiateCaptureDump(
+    bool capture_navigation_history,
+    bool capture_pixels) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (BlinkTestController::Get()) {
+    BlinkTestController::Get()->OnInitiateCaptureDump(
+        capture_navigation_history, capture_pixels);
+  }
 }
 
 void LayoutTestMessageFilter::OnInspectSecondaryWindow() {

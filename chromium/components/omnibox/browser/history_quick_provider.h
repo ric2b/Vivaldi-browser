@@ -30,6 +30,10 @@ class HistoryQuickProvider : public HistoryProvider {
   // completion performed.
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
 
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const override;
+
   // Disable this provider. For unit testing purposes only. This is required
   // because this provider is closely associated with the HistoryURLProvider
   // and in order to properly test the latter the HistoryQuickProvider must
@@ -46,10 +50,11 @@ class HistoryQuickProvider : public HistoryProvider {
                            DontTrimHttpSchemeIfInputHasScheme);
   FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest,
                            DontTrimHttpSchemeIfInputMatches);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest, DontTrimHttpsScheme);
   FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest,
-                           DontTrimHttpsSchemeDespiteFlag);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest, DoTrimHttpsSchemeIfFlag);
+                           DontTrimHttpsSchemeIfInputHasScheme);
+  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest, DoTrimHttpsScheme);
+  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest,
+                           CorrectAutocompleteWithTrailingSlash);
 
   ~HistoryQuickProvider() override;
 

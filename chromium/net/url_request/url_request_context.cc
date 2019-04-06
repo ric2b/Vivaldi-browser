@@ -34,7 +34,8 @@ URLRequestContext::URLRequestContext()
       cert_verifier_(nullptr),
       channel_id_service_(nullptr),
       http_auth_handler_factory_(nullptr),
-      proxy_service_(nullptr),
+      proxy_resolution_service_(nullptr),
+      ssl_config_service_(nullptr),
       network_delegate_(nullptr),
       http_server_properties_(nullptr),
       http_user_agent_settings_(nullptr),
@@ -48,7 +49,7 @@ URLRequestContext::URLRequestContext()
       network_quality_estimator_(nullptr),
 #if BUILDFLAG(ENABLE_REPORTING)
       reporting_service_(nullptr),
-      network_error_logging_delegate_(nullptr),
+      network_error_logging_service_(nullptr),
 #endif  // BUILDFLAG(ENABLE_REPORTING)
       url_requests_(std::make_unique<std::set<const URLRequest*>>()),
       enable_brotli_(false),
@@ -72,8 +73,8 @@ void URLRequestContext::CopyFrom(const URLRequestContext* other) {
   set_cert_verifier(other->cert_verifier_);
   set_channel_id_service(other->channel_id_service_);
   set_http_auth_handler_factory(other->http_auth_handler_factory_);
-  set_proxy_service(other->proxy_service_);
-  set_ssl_config_service(other->ssl_config_service_.get());
+  set_proxy_resolution_service(other->proxy_resolution_service_);
+  set_ssl_config_service(other->ssl_config_service_);
   set_network_delegate(other->network_delegate_);
   set_http_server_properties(other->http_server_properties_);
   set_cookie_store(other->cookie_store_);
@@ -87,7 +88,7 @@ void URLRequestContext::CopyFrom(const URLRequestContext* other) {
   set_network_quality_estimator(other->network_quality_estimator_);
 #if BUILDFLAG(ENABLE_REPORTING)
   set_reporting_service(other->reporting_service_);
-  set_network_error_logging_delegate(other->network_error_logging_delegate_);
+  set_network_error_logging_service(other->network_error_logging_service_);
 #endif  // BUILDFLAG(ENABLE_REPORTING)
   set_enable_brotli(other->enable_brotli_);
   set_check_cleartext_permitted(other->check_cleartext_permitted_);
@@ -171,6 +172,9 @@ bool URLRequestContext::OnMemoryDump(
     HttpCache* http_cache = transaction_factory->GetCache();
     if (http_cache)
       http_cache->DumpMemoryStats(pmd, dump->absolute_name());
+  }
+  if (cookie_store_) {
+    cookie_store_->DumpMemoryStats(pmd, dump->absolute_name());
   }
   return true;
 }

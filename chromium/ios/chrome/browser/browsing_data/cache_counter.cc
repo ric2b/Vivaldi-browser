@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ios/chrome/browser/browsing_data/cache_counter.h"
 #include "base/bind.h"
 #include "components/browsing_data/core/pref_names.h"
-#include "ios/chrome/browser/browsing_data/cache_counter.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/web_thread.h"
 #include "net/base/completion_callback.h"
@@ -29,9 +30,10 @@ class IOThreadCacheCounter {
         backend_(nullptr) {}
 
   void Count() {
-    web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
-                             base::Bind(&IOThreadCacheCounter::CountInternal,
-                                        base::Unretained(this), net::OK));
+    web::WebThread::PostTask(
+        web::WebThread::IO, FROM_HERE,
+        base::BindRepeating(&IOThreadCacheCounter::CountInternal,
+                            base::Unretained(this), net::OK));
   }
 
  private:
@@ -61,8 +63,9 @@ class IOThreadCacheCounter {
                                            ->GetCache();
 
           rv = http_cache->GetBackend(
-              &backend_, base::Bind(&IOThreadCacheCounter::CountInternal,
-                                    base::Unretained(this)));
+              &backend_,
+              base::BindRepeating(&IOThreadCacheCounter::CountInternal,
+                                  base::Unretained(this)));
           break;
         }
 
@@ -70,7 +73,7 @@ class IOThreadCacheCounter {
           next_step_ = STEP_CALLBACK;
 
           DCHECK(backend_);
-          rv = backend_->CalculateSizeOfAllEntries(base::Bind(
+          rv = backend_->CalculateSizeOfAllEntries(base::BindRepeating(
               &IOThreadCacheCounter::CountInternal, base::Unretained(this)));
           break;
         }
@@ -81,8 +84,8 @@ class IOThreadCacheCounter {
 
           web::WebThread::PostTask(
               web::WebThread::UI, FROM_HERE,
-              base::Bind(&IOThreadCacheCounter::OnCountingFinished,
-                         base::Unretained(this)));
+              base::BindOnce(&IOThreadCacheCounter::OnCountingFinished,
+                             base::Unretained(this)));
 
           break;
         }
@@ -109,25 +112,25 @@ class IOThreadCacheCounter {
 
 }  // namespace
 
-CacheCounter::CacheCounter(web::BrowserState* browser_state)
+CacheCounter::CacheCounter(ios::ChromeBrowserState* browser_state)
     : browser_state_(browser_state), weak_ptr_factory_(this) {}
 
-CacheCounter::~CacheCounter() {}
+CacheCounter::~CacheCounter() = default;
 
 const char* CacheCounter::GetPrefName() const {
   return browsing_data::prefs::kDeleteCache;
 }
 
 void CacheCounter::Count() {
-  // TODO(msramek): disk_cache::Backend currently does not implement counting
-  // for subsets of cache, only for the entire cache. Thus, we ignore the time
-  // period setting and always request counting for the unbounded time interval.
-  // It is up to the UI to interpret the results for finite time intervals as
-  // upper estimates.
+  // disk_cache::Backend currently does not implement counting for subsets of
+  // cache, only for the entire cache. Thus, ignore the time period setting and
+  // always request counting for the unbounded time interval. It is up to the
+  // UI to interpret the results for finite time intervals as upper estimates.
   // IOThreadCacheCounter deletes itself when done.
-  (new IOThreadCacheCounter(browser_state_->GetRequestContext(),
-                            base::Bind(&CacheCounter::OnCacheSizeCalculated,
-                                       weak_ptr_factory_.GetWeakPtr())))
+  (new IOThreadCacheCounter(
+       browser_state_->GetRequestContext(),
+       base::BindRepeating(&CacheCounter::OnCacheSizeCalculated,
+                           weak_ptr_factory_.GetWeakPtr())))
       ->Count();
 }
 

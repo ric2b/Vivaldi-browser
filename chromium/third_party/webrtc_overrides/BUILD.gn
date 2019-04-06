@@ -82,6 +82,10 @@ static_library("webrtc") {
       "field_trial.cc",
       "runtime_enabled_features.cc",
     ]
+    deps += [
+      "//base",
+      "//third_party/webrtc/system_wrappers:runtime_enabled_features_api",
+    ]
   }
 
   configs += [
@@ -112,6 +116,9 @@ static_library("init_webrtc") {
   ]
   deps = [
     ":task_queue_impl",
+    "//base",
+    "//third_party/webrtc/rtc_base",
+    "//third_party/webrtc/system_wrappers",
   ]
 }
 
@@ -131,7 +138,6 @@ source_set("libjingle_webrtc_common") {
     "//third_party/usrsctp",
     "//third_party/webrtc/media:rtc_media",
     "//third_party/webrtc/media:rtc_media_base",
-    "//third_party/webrtc/modules/media_file",
     "//third_party/webrtc/modules/video_capture",
     "//third_party/webrtc/pc:libjingle_peerconnection",
     "//third_party/webrtc/pc:rtc_pc",
@@ -144,6 +150,8 @@ source_set("task_queue_impl") {
     "rtc_base/task_queue.cc",
   ]
   deps = [
+    "//base",
+    "//third_party/webrtc/rtc_base:refcount",
     "//third_party/webrtc/rtc_base:rtc_task_queue_api",
   ]
 }

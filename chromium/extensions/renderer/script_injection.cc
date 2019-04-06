@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
@@ -25,11 +24,11 @@
 #include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/script_injection_callback.h"
 #include "extensions/renderer/scripts_run_info.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_source.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -205,13 +204,13 @@ ScriptInjection::InjectionResult ScriptInjection::TryToInject(
   switch (injector_->CanExecuteOnFrame(
       injection_host_.get(), web_frame,
       ExtensionFrameHelper::Get(render_frame_)->tab_id())) {
-    case PermissionsData::ACCESS_DENIED:
+    case PermissionsData::PageAccess::kDenied:
       NotifyWillNotInject(ScriptInjector::NOT_ALLOWED);
       return INJECTION_FINISHED;  // We're done.
-    case PermissionsData::ACCESS_WITHHELD:
+    case PermissionsData::PageAccess::kWithheld:
       RequestPermissionFromBrowser();
       return INJECTION_WAITING;  // Wait around for permission.
-    case PermissionsData::ACCESS_ALLOWED:
+    case PermissionsData::PageAccess::kAllowed:
       InjectionResult result =
           Inject(scripts_run_info, std::move(async_run_info));
       // If the injection is blocked, we need to set the manager so we can
@@ -322,9 +321,7 @@ void ScriptInjection::InjectJs(
         sources.front(), is_user_gesture, callback.release());
   } else {
     blink::WebLocalFrame::ScriptExecutionType option;
-    if (injector_->script_type() == UserScript::CONTENT_SCRIPT &&
-        base::FeatureList::IsEnabled(
-            features::kYieldBetweenContentScriptRuns)) {
+    if (injector_->script_type() == UserScript::CONTENT_SCRIPT) {
       switch (run_location_) {
         case UserScript::DOCUMENT_END:
         case UserScript::DOCUMENT_IDLE:
@@ -402,8 +399,19 @@ void ScriptInjection::InjectCss(std::set<std::string>* injected_stylesheets,
   std::vector<blink::WebString> css_sources = injector_->GetCssSources(
       run_location_, injected_stylesheets, num_injected_stylesheets);
   blink::WebLocalFrame* web_frame = render_frame_->GetWebFrame();
+  // Default CSS origin is "author", but can be overridden to "user" by scripts.
+  base::Optional<CSSOrigin> css_origin = injector_->GetCssOrigin();
+  blink::WebDocument::CSSOrigin blink_css_origin =
+      css_origin && *css_origin == CSS_ORIGIN_USER
+          ? blink::WebDocument::kUserOrigin
+          : blink::WebDocument::kAuthorOrigin;
+  blink::WebStyleSheetKey style_sheet_key;
+  if (const base::Optional<std::string>& injection_key =
+          injector_->GetInjectionKey())
+    style_sheet_key = blink::WebString::FromASCII(*injection_key);
   for (const blink::WebString& css : css_sources)
-    web_frame->GetDocument().InsertStyleSheet(css);
+    web_frame->GetDocument().InsertStyleSheet(css, &style_sheet_key,
+                                              blink_css_origin);
 }
 
 }  // namespace extensions

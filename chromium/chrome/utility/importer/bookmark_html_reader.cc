@@ -154,8 +154,8 @@ void ImportBookmarksFile(
                                           charset,
                                           &last_folder,
                                           &last_folder_on_toolbar,
-                                          &last_folder_speeddial,
-                                          &last_folder_add_date)) {
+                                          &last_folder_add_date,
+                                          &last_folder_speeddial)) {
       has_last_folder = true;
       continue;
     }
@@ -219,7 +219,6 @@ void ImportBookmarksFile(
         }
         entry.path.assign(path.begin(), path.end());
       }
-
       bookmarks->push_back(entry);
 
       // Save the favicon. DataURLToFaviconUsage will handle the case where
@@ -326,8 +325,8 @@ bool ParseFolderNameFromLine(const std::string& lineDt,
                              const std::string& charset,
                              base::string16* folder_name,
                              bool* is_toolbar_folder,
-                             bool* is_speeddial_folder,
-                             base::Time* add_date) {
+                             base::Time* add_date,
+                             bool* is_speeddial_folder) {
   const char kFolderOpen[] = "<H3";
   const char kFolderClose[] = "</H3>";
   const char kToolbarFolderAttribute[] = "PERSONAL_TOOLBAR_FOLDER";
@@ -368,11 +367,13 @@ bool ParseFolderNameFromLine(const std::string& lineDt,
   else
     *is_toolbar_folder = false;
 
-  if (GetAttribute(attribute_list, kSpeedDialAttribute, &value) &&
-    base::LowerCaseEqualsASCII(value, "true"))
-    *is_speeddial_folder = true;
-  else
-    *is_speeddial_folder = false;
+  if (is_speeddial_folder) {
+    if (GetAttribute(attribute_list, kSpeedDialAttribute, &value) &&
+        base::LowerCaseEqualsASCII(value, "true"))
+      *is_speeddial_folder = true;
+    else
+      *is_speeddial_folder = false;
+  }
 
   return true;
 }

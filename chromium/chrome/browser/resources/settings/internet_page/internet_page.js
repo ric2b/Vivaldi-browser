@@ -10,8 +10,10 @@
 Polymer({
   is: 'settings-internet-page',
 
-  behaviors:
-      [I18nBehavior, settings.RouteObserverBehavior, WebUIListenerBehavior],
+  behaviors: [
+    I18nBehavior, settings.RouteObserverBehavior, WebUIListenerBehavior,
+    NetworkListenerBehavior
+  ],
 
   properties: {
     /**
@@ -78,6 +80,27 @@ Polymer({
     /** @private {!chrome.networkingPrivate.GlobalPolicy|undefined} */
     globalPolicy_: Object,
 
+    /** Overridden from NetworkListenerBehavior. */
+    networkListChangeSubscriberSelectors_: {
+      type: Array,
+      value: function() {
+        return [
+          'network-summary',
+          'settings-internet-detail-page',
+          'settings-internet-known-networks-page',
+          'settings-internet-subpage',
+        ];
+      }
+    },
+
+    /** Overridden from NetworkListenerBehavior. */
+    networksChangeSubscriberSelectors_: {
+      type: Array,
+      value: function() {
+        return ['network-summary', 'settings-internet-detail-page'];
+      }
+    },
+
     /**
      * List of third party VPN providers.
      * @type {!Array<!chrome.networkingPrivate.ThirdPartyVPNProperties>}
@@ -124,13 +147,6 @@ Polymer({
     'show-networks': 'onShowNetworks_',
   },
 
-  // chrome.networkingPrivate listeners
-  /** @private {?function(!Array<string>)} */
-  networkListChangedListener_: null,
-
-  /** @private {?function(!Array<string>)} */
-  networksChangedListener_: null,
-
   // chrome.management listeners
   /** @private {Function} */
   onExtensionAddedListener_: null,
@@ -158,16 +174,6 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.networkListChangedListener_ = this.networkListChangedListener_ ||
-        this.onNetworkListChanged_.bind(this);
-    this.networkingPrivate.onNetworkListChanged.addListener(
-        this.networkListChangedListener_);
-
-    this.networksChangedListener_ =
-        this.networksChangedListener_ || this.onNetworksChanged_.bind(this);
-    this.networkingPrivate.onNetworksChanged.addListener(
-        this.networksChangedListener_);
-
     this.onExtensionAddedListener_ =
         this.onExtensionAddedListener_ || this.onExtensionAdded_.bind(this);
     chrome.management.onInstalled.addListener(this.onExtensionAddedListener_);
@@ -191,11 +197,6 @@ Polymer({
 
   /** @override */
   detached: function() {
-    this.networkingPrivate.onNetworkListChanged.removeListener(
-        assert(this.networkListChangedListener_));
-    this.networkingPrivate.onNetworksChanged.removeListener(
-        assert(this.networksChangedListener_));
-
     chrome.management.onInstalled.removeListener(
         assert(this.onExtensionAddedListener_));
     chrome.management.onEnabled.removeListener(
@@ -245,7 +246,8 @@ Polymer({
       // entire list for now.
       selector = '* /deep/ #networkList';
     } else if (this.detailType_) {
-      selector = '* /deep/ #' + this.detailType_ + ' /deep/ .subpage-arrow';
+      selector =
+          '* /deep/ #' + this.detailType_ + ' /deep/ .subpage-arrow button';
     }
     if (selector && this.querySelector(selector))
       this.focusConfig_.set(oldRoute.path, selector);
@@ -272,27 +274,27 @@ Polymer({
    */
   onShowConfig_: function(event) {
     const properties = event.detail;
+    let configAndConnect = !properties.GUID;  // New configuration
     this.showConfig_(
-        properties.Type, properties.GUID, CrOnc.getNetworkName(properties));
+        configAndConnect, properties.Type, properties.GUID,
+        CrOnc.getNetworkName(properties));
   },
 
   /**
+   * @param {boolean} configAndConnect
    * @param {string} type
    * @param {string=} guid
    * @param {string=} name
    * @private
    */
-  showConfig_: function(type, guid, name) {
-    if (!loadTimeData.getBoolean('networkSettingsConfig')) {
-      chrome.send('configureNetwork', [guid]);
-      return;
-    }
+  showConfig_: function(configAndConnect, type, guid, name) {
     const configDialog =
         /** @type {!InternetConfigElement} */ (this.$.configDialog);
     configDialog.type =
         /** @type {chrome.networkingPrivate.NetworkType} */ (type);
     configDialog.guid = guid || '';
     configDialog.name = name || '';
+    configDialog.showConnect = configAndConnect;
     configDialog.open();
   },
 
@@ -315,7 +317,7 @@ Polymer({
    * @private
    */
   onShowNetworks_: function(event) {
-    this.showNetworksSubpage_(event.detail.Type);
+    this.showNetworksSubpage_(event.detail.type);
   },
 
   /**
@@ -332,12 +334,7 @@ Polymer({
    * @private
    */
   getAddNetworkClass_: function(type) {
-    if (loadTimeData.getBoolean('networkSettingsConfig')) {
-      if (type == CrOnc.Type.WI_FI)
-        return 'icon-add-wifi';
-      return 'icon-add-circle';
-    }
-    return 'icon-external';
+    return type == CrOnc.Type.WI_FI ? 'icon-add-wifi' : 'icon-add-circle';
   },
 
   /**
@@ -361,15 +358,15 @@ Polymer({
    * @private
    */
   onShowKnownNetworks_: function(event) {
-    this.detailType_ = event.detail.Type;
+    this.detailType_ = event.detail.type;
     const params = new URLSearchParams;
-    params.append('type', event.detail.Type);
+    params.append('type', event.detail.type);
     this.knownNetworksType_ = event.detail.type;
     settings.navigateTo(settings.routes.KNOWN_NETWORKS, params);
   },
 
   /**
-   * Event triggered when the 'Add connections' div is tapped.
+   * Event triggered when the 'Add connections' div is clicked.
    * @param {!Event} event
    * @private
    */
@@ -381,18 +378,12 @@ Polymer({
 
   /** @private */
   onAddWiFiTap_: function() {
-    if (loadTimeData.getBoolean('networkSettingsConfig'))
-      this.showConfig_(CrOnc.Type.WI_FI);
-    else
-      chrome.send('addNetwork', [CrOnc.Type.WI_FI]);
+    this.showConfig_(true /* configAndConnect */, CrOnc.Type.WI_FI);
   },
 
   /** @private */
   onAddVPNTap_: function() {
-    if (loadTimeData.getBoolean('networkSettingsConfig'))
-      this.showConfig_(CrOnc.Type.VPN);
-    else
-      chrome.send('addNetwork', [CrOnc.Type.VPN]);
+    this.showConfig_(true /* configAndConnect */, CrOnc.Type.VPN);
   },
 
   /**
@@ -403,7 +394,7 @@ Polymer({
    */
   onAddThirdPartyVpnTap_: function(event) {
     const provider = event.model.item;
-    this.browserProxy_.addThirdPartyVpn(CrOnc.Type.VPN, provider.ExtensionID);
+    this.browserProxy_.addThirdPartyVpn(provider.ExtensionID);
   },
 
   /** @private */
@@ -457,45 +448,6 @@ Polymer({
       ProviderName: extension.name,
     };
     vpnProviders.push(newProvider);
-  },
-
-  /**
-   * This event is triggered when the list of networks changes.
-   * |networkIds| contains the ids for all visible or configured networks.
-   * networkingPrivate.onNetworkListChanged event callback.
-   * @param {!Array<string>} networkIds
-   * @private
-   */
-  onNetworkListChanged_: function(networkIds) {
-    const event = new CustomEvent('network-list-changed', {detail: networkIds});
-    this.maybeDispatchEvent_('network-summary', event);
-    this.maybeDispatchEvent_('settings-internet-detail-page', event);
-    this.maybeDispatchEvent_('settings-internet-known-networks-page', event);
-    this.maybeDispatchEvent_('settings-internet-subpage', event);
-  },
-
-  /**
-   * This event is triggered when interesting properties of a network change.
-   * |networkIds| contains the ids for networks whose properties have changed.
-   * networkingPrivate.onNetworksChanged event callback.
-   * @param {!Array<string>} networkIds
-   * @private
-   */
-  onNetworksChanged_: function(networkIds) {
-    const event = new CustomEvent('networks-changed', {detail: networkIds});
-    this.maybeDispatchEvent_('network-summary', event);
-    this.maybeDispatchEvent_('settings-internet-detail-page', event);
-  },
-
-  /**
-   * @param {!Event} event
-   * @private
-   */
-  maybeDispatchEvent_: function(identifier, event) {
-    const element = this.$$(identifier);
-    if (!element)
-      return;
-    element.dispatchEvent(event);
   },
 
   /**
@@ -604,7 +556,8 @@ Polymer({
     }
 
     if (properties.Connectable === false || properties.ErrorState) {
-      this.showConfig_(properties.Type, properties.GUID, name);
+      this.showConfig_(
+          true /* configAndConnect */, properties.Type, properties.GUID, name);
       return;
     }
 
@@ -618,7 +571,9 @@ Polymer({
         console.error(
             'networkingPrivate.startConnect error: ' + message +
             ' For: ' + properties.GUID);
-        this.showConfig_(properties.Type, properties.GUID, name);
+        this.showConfig_(
+            true /* configAndConnect */, properties.Type, properties.GUID,
+            name);
       }
     });
   },

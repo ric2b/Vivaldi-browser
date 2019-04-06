@@ -16,9 +16,10 @@
 #include "chrome/common/extensions/api/streams_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/download/public/common/download_item.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/download_test_observer.h"
@@ -31,14 +32,15 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using content::BrowserContext;
 using content::BrowserThread;
-using content::DownloadItem;
 using content::DownloadManager;
-using content::DownloadUrlParameters;
 using content::WebContents;
+using download::DownloadItem;
+using download::DownloadUrlParameters;
 using extensions::Event;
 using extensions::ExtensionSystem;
 using extensions::ResultCatcher;
@@ -129,7 +131,7 @@ std::unique_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
 // The test extension expects the resources that should be handed to the
 // extension to have MIME type 'application/msword' and the resources that
 // should be downloaded by the browser to have MIME type 'text/plain'.
-class StreamsPrivateApiTest : public ExtensionApiTest {
+class StreamsPrivateApiTest : public extensions::ExtensionApiTest {
  public:
   StreamsPrivateApiTest() {}
 
@@ -141,25 +143,19 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
     test_server_->RegisterRequestHandler(base::Bind(&HandleRequest));
     ASSERT_TRUE(test_server_->Start());
     host_resolver()->AddRule("*", "127.0.0.1");
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
   }
 
   void TearDownOnMainThread() override {
     // Tear down the test server.
     EXPECT_TRUE(test_server_->ShutdownAndWaitUntilComplete());
     test_server_.reset();
-    ExtensionApiTest::TearDownOnMainThread();
+    extensions::ExtensionApiTest::TearDownOnMainThread();
   }
 
   void InitializeDownloadSettings() {
-    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(browser());
-    ASSERT_TRUE(downloads_dir_.CreateUniqueTempDir());
 
-    // Setup default downloads directory to the scoped tmp directory created for
-    // the test.
-    browser()->profile()->GetPrefs()->SetFilePath(
-        prefs::kDownloadDefaultDirectory, downloads_dir_.GetPath());
     // Ensure there are no prompts for download during the test.
     browser()->profile()->GetPrefs()->SetBoolean(
         prefs::kPromptForDownload, false);
@@ -236,13 +232,15 @@ class StreamsPrivateApiTest : public ExtensionApiTest {
   std::string test_extension_id_;
   // The HTTP server used in the tests.
   std::unique_ptr<net::EmbeddedTestServer> test_server_;
-  base::ScopedTempDir downloads_dir_;
 };
 
 // Tests that navigating to a resource with a MIME type handleable by an
 // installed, white-listed extension invokes the extension's
 // onExecuteContentHandler event (and does not start a download).
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Navigate) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -267,6 +265,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Navigate) {
 // Tests that navigating to a file URL also intercepts despite there being no
 // HTTP headers. This is a regression test for https://crbug.com/416433.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, FileURL) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -291,6 +292,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, FileURL) {
 // onExecuteContentHandler event (and does not start a download).
 // Regression test for http://crbug.com/342999.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, NavigateCrossSite) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -332,6 +336,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, NavigateCrossSite) {
 // extension with a file browser handler that can handle the attachment's MIME
 // type.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_NavigateToAnAttachment) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   InitializeDownloadSettings();
 
   ASSERT_TRUE(LoadTestExtension()) << message_;
@@ -377,6 +384,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_NavigateToAnAttachment) {
 // StreamsResourceThrottle, even if there is an extension with a file
 // browser handler that can handle the download's MIME type.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_DirectDownload) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   InitializeDownloadSettings();
 
   ASSERT_TRUE(LoadTestExtension()) << message_;
@@ -392,15 +402,18 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_DirectDownload) {
 
   // The download's target file path.
   base::FilePath target_path =
-      downloads_dir_.GetPath().Append(FILE_PATH_LITERAL("download_target.txt"));
+      DownloadPrefs(browser()->profile())
+          .DownloadPath()
+          .Append(FILE_PATH_LITERAL("download_target.txt"));
 
   // Set the downloads parameters.
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(web_contents);
   std::unique_ptr<DownloadUrlParameters> params(
-      DownloadUrlParameters::CreateForWebContentsMainFrame(
+      content::DownloadRequestUtils::CreateDownloadForWebContentsMainFrame(
           web_contents, url, TRAFFIC_ANNOTATION_FOR_TESTS));
+
   params->set_file_path(target_path);
 
   // Start download of the URL with a path "/text_path.txt" on the test server.
@@ -429,6 +442,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_DirectDownload) {
 // Tests that response headers are correctly passed to the API and that multiple
 // repsonse headers with the same name are merged correctly.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Headers) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;
@@ -452,6 +468,9 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Headers) {
 
 // Tests that chrome.streamsPrivate.abort() works correctly.
 IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, Abort) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;  // Streams not used with network service.
+
   ASSERT_TRUE(LoadTestExtension()) << message_;
 
   ResultCatcher catcher;

@@ -11,8 +11,6 @@
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/memory/memory_pressure_listener.h"
-#include "base/memory/memory_pressure_monitor.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
@@ -25,8 +23,6 @@
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer_client.h"
 #include "media/base/video_frame.h"
-#include "media/video/gpu_memory_buffer_video_frame_pool.h"
-#include "media/video/gpu_video_accelerator_factories.h"
 
 namespace media {
 
@@ -108,25 +104,22 @@ bool ShouldUseLowDelayMode(DemuxerStream* stream) {
 
 VideoRendererImpl::VideoRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-    const scoped_refptr<base::TaskRunner>& worker_task_runner,
     VideoRendererSink* sink,
     const CreateVideoDecodersCB& create_video_decoders_cb,
     bool drop_frames,
-    GpuVideoAcceleratorFactories* gpu_factories,
-    MediaLog* media_log)
+    MediaLog* media_log,
+    std::unique_ptr<GpuMemoryBufferVideoFramePool> gmb_pool)
     : task_runner_(media_task_runner),
       sink_(sink),
       sink_started_(false),
       client_(nullptr),
-      gpu_memory_buffer_pool_(nullptr),
+      gpu_memory_buffer_pool_(std::move(gmb_pool)),
       media_log_(media_log),
       low_delay_(false),
       received_end_of_stream_(false),
       rendered_end_of_stream_(false),
       state_(kUninitialized),
       create_video_decoders_cb_(create_video_decoders_cb),
-      gpu_factories_(gpu_factories),
-      worker_task_runner_(worker_task_runner),
       pending_read_(false),
       drop_frames_(drop_frames),
       buffering_state_(BUFFERING_HAVE_NOTHING),
@@ -137,11 +130,6 @@ VideoRendererImpl::VideoRendererImpl(
       last_frame_opaque_(false),
       painted_first_frame_(false),
       min_buffered_frames_(limits::kMaxVideoFrames),
-      max_buffered_frames_(min_buffered_frames_),
-      read_durations_(VideoRendererAlgorithm::kMovingAverageSamples),
-      has_playback_met_watch_time_duration_requirement_(false),
-      use_complexity_based_buffering_(
-          base::FeatureList::IsEnabled(kComplexityBasedVideoBuffering)),
       weak_factory_(this),
       frame_callback_weak_factory_(this) {
   DCHECK(create_video_decoders_cb_);
@@ -184,10 +172,12 @@ void VideoRendererImpl::Flush(const base::Closure& callback) {
 
   // Reset |video_frame_stream_| and drop any pending read callbacks from it.
   pending_read_ = false;
+  if (gpu_memory_buffer_pool_)
+    gpu_memory_buffer_pool_->Abort();
   frame_callback_weak_factory_.InvalidateWeakPtrs();
   video_frame_stream_->Reset(
-      base::Bind(&VideoRendererImpl::OnVideoFrameStreamResetDone,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&VideoRendererImpl::OnVideoFrameStreamResetDone,
+                     weak_factory_.GetWeakPtr()));
 
   // To avoid unnecessary work by VDAs, only delete queued frames after
   // resetting |video_frame_stream_|. If this is done in the opposite order VDAs
@@ -197,8 +187,7 @@ void VideoRendererImpl::Flush(const base::Closure& callback) {
   painted_first_frame_ = false;
 
   // Reset preroll capacity so seek time is not penalized.
-  min_buffered_frames_ = max_buffered_frames_ = limits::kMaxVideoFrames;
-  read_durations_.Reset();
+  min_buffered_frames_ = limits::kMaxVideoFrames;
 }
 
 void VideoRendererImpl::StartPlayingFrom(base::TimeDelta timestamp) {
@@ -212,8 +201,8 @@ void VideoRendererImpl::StartPlayingFrom(base::TimeDelta timestamp) {
   state_ = kPlaying;
   start_timestamp_ = timestamp;
   painted_first_frame_ = false;
-  has_playback_met_watch_time_duration_requirement_ = false;
   last_render_time_ = last_frame_ready_time_ = base::TimeTicks();
+  video_frame_stream_->SkipPrepareUntil(start_timestamp_);
   AttemptRead_Locked();
 }
 
@@ -234,19 +223,15 @@ void VideoRendererImpl::Initialize(
   DCHECK(!time_progressing_);
 
   video_frame_stream_.reset(new VideoFrameStream(
+      std::make_unique<VideoFrameStream::StreamTraits>(media_log_),
       task_runner_, create_video_decoders_cb_, media_log_));
   video_frame_stream_->set_config_change_observer(base::Bind(
       &VideoRendererImpl::OnConfigChange, weak_factory_.GetWeakPtr()));
-
-  // Always re-initialize or reset the |gpu_memory_buffer_pool_| in case we are
-  // switching between video tracks with incompatible video formats (e.g. 8-bit
-  // H.264 to 10-bit H264 or vice versa).
-  if (gpu_factories_ &&
-      gpu_factories_->ShouldUseGpuMemoryBuffersForVideoFrames()) {
-    gpu_memory_buffer_pool_.reset(new GpuMemoryBufferVideoFramePool(
-        task_runner_, worker_task_runner_, gpu_factories_));
-  } else {
-    gpu_memory_buffer_pool_.reset();
+  if (gpu_memory_buffer_pool_) {
+    video_frame_stream_->SetPrepareCB(base::BindRepeating(
+        &GpuMemoryBufferVideoFramePool::MaybeCreateHardwareFrame,
+        // Safe since VideoFrameStream won't issue calls after destruction.
+        base::Unretained(gpu_memory_buffer_pool_.get())));
   }
 
   low_delay_ = ShouldUseLowDelayMode(stream);
@@ -267,12 +252,14 @@ void VideoRendererImpl::Initialize(
   DCHECK(current_decoder_config_.IsValidConfig());
 
   video_frame_stream_->Initialize(
-      stream, base::Bind(&VideoRendererImpl::OnVideoFrameStreamInitialized,
-                         weak_factory_.GetWeakPtr()),
-      cdm_context, base::Bind(&VideoRendererImpl::OnStatisticsUpdate,
-                              weak_factory_.GetWeakPtr()),
-      base::Bind(&VideoRendererImpl::OnWaitingForDecryptionKey,
-                 weak_factory_.GetWeakPtr()));
+      stream,
+      base::BindOnce(&VideoRendererImpl::OnVideoFrameStreamInitialized,
+                     weak_factory_.GetWeakPtr()),
+      cdm_context,
+      base::BindRepeating(&VideoRendererImpl::OnStatisticsUpdate,
+                          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&VideoRendererImpl::OnWaitingForDecryptionKey,
+                          weak_factory_.GetWeakPtr()));
 }
 
 scoped_refptr<VideoFrame> VideoRendererImpl::Render(
@@ -395,13 +382,9 @@ void VideoRendererImpl::OnConfigChange(const VideoDecoderConfig& config) {
   }
 }
 
-void VideoRendererImpl::SetTickClockForTesting(base::TickClock* tick_clock) {
+void VideoRendererImpl::SetTickClockForTesting(
+    const base::TickClock* tick_clock) {
   tick_clock_ = tick_clock;
-}
-
-void VideoRendererImpl::SetGpuMemoryBufferVideoForTesting(
-    std::unique_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool) {
-  gpu_memory_buffer_pool_.swap(gpu_memory_buffer_pool);
 }
 
 void VideoRendererImpl::OnTimeProgressing() {
@@ -454,39 +437,15 @@ void VideoRendererImpl::OnTimeStopped() {
     // If we've underflowed, increase the number of frames required to reach
     // BUFFERING_HAVE_ENOUGH upon resume; this will help prevent us from
     // repeatedly underflowing.
-    if (use_complexity_based_buffering_) {
-      if (min_buffered_frames_ < max_buffered_frames_) {
-        min_buffered_frames_ = max_buffered_frames_;
-        DVLOG(2) << "Increased min buffered frames to " << min_buffered_frames_;
-      }
-    } else {
-      const size_t kMaxBufferedFrames = 2 * limits::kMaxVideoFrames;
-      if (min_buffered_frames_ < kMaxBufferedFrames) {
-        ++min_buffered_frames_;
-        DVLOG(2) << "Increased min buffered frames to " << min_buffered_frames_;
-      }
+    const size_t kMaxBufferedFrames = 2 * limits::kMaxVideoFrames;
+    if (min_buffered_frames_ < kMaxBufferedFrames) {
+      ++min_buffered_frames_;
+      DVLOG(2) << "Increased min buffered frames to " << min_buffered_frames_;
     }
   }
 }
 
-void VideoRendererImpl::FrameReadyForCopyingToGpuMemoryBuffers(
-    base::TimeTicks read_time,
-    VideoFrameStream::Status status,
-    const scoped_refptr<VideoFrame>& frame) {
-  if (status != VideoFrameStream::OK || IsBeforeStartTime(frame->timestamp())) {
-    VideoRendererImpl::FrameReady(read_time, status, frame);
-    return;
-  }
-
-  DCHECK(frame);
-  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
-      frame,
-      base::Bind(&VideoRendererImpl::FrameReady,
-                 frame_callback_weak_factory_.GetWeakPtr(), read_time, status));
-}
-
-void VideoRendererImpl::FrameReady(base::TimeTicks read_time,
-                                   VideoFrameStream::Status status,
+void VideoRendererImpl::FrameReady(VideoFrameStream::Status status,
                                    const scoped_refptr<VideoFrame>& frame) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   base::AutoLock auto_lock(lock_);
@@ -510,7 +469,6 @@ void VideoRendererImpl::FrameReady(base::TimeTicks read_time,
   }
 
   last_frame_ready_time_ = tick_clock_->NowTicks();
-  read_durations_.AddSample(last_frame_ready_time_ - read_time);
 
   UMA_HISTOGRAM_ENUMERATION("Media.VideoFrame.ColorSpace",
                             ColorSpaceUMAHelper(frame->ColorSpace()),
@@ -537,13 +495,6 @@ void VideoRendererImpl::FrameReady(base::TimeTicks read_time,
     if (!sink_started_ && frame->timestamp() <= start_timestamp_)
       algorithm_->Reset();
 
-    if (!has_playback_met_watch_time_duration_requirement_ &&
-        frame->timestamp() - start_timestamp_ >
-            base::TimeDelta::FromSeconds(
-                limits::kMinimumElapsedWatchTimeSecs)) {
-      has_playback_met_watch_time_duration_requirement_ = true;
-    }
-
     // Provide frame duration information so that even if we only have one frame
     // in the queue we can properly estimate duration. This allows the call to
     // RemoveFramesForUnderflowOrBackgroundRendering() below to actually expire
@@ -555,7 +506,6 @@ void VideoRendererImpl::FrameReady(base::TimeTicks read_time,
     }
 
     AddReadyFrame_Locked(frame);
-    UpdateMaxBufferedFrames();
   }
 
   // Attempt to purge bad frames in case of underflow or backgrounding.
@@ -601,12 +551,8 @@ bool VideoRendererImpl::HaveEnoughData_Locked() const {
   if (received_end_of_stream_)
     return true;
 
-  if (use_complexity_based_buffering_) {
-    if (algorithm_->effective_frames_queued() >= min_buffered_frames_)
-      return true;
-  } else if (HaveReachedBufferingCap()) {
+  if (HaveReachedBufferingCap())
     return true;
-  }
 
   // If we've decoded any frames since the last render, signal have enough to
   // avoid underflowing when video is not visible unless we run out of frames.
@@ -687,17 +633,9 @@ void VideoRendererImpl::AttemptRead_Locked() {
   switch (state_) {
     case kPlaying:
       pending_read_ = true;
-      if (gpu_memory_buffer_pool_) {
-        video_frame_stream_->Read(base::Bind(
-            &VideoRendererImpl::FrameReadyForCopyingToGpuMemoryBuffers,
-            frame_callback_weak_factory_.GetWeakPtr(),
-            tick_clock_->NowTicks()));
-      } else {
-        video_frame_stream_->Read(
-            base::Bind(&VideoRendererImpl::FrameReady,
-                       frame_callback_weak_factory_.GetWeakPtr(),
-                       tick_clock_->NowTicks()));
-      }
+      video_frame_stream_->Read(
+          base::BindOnce(&VideoRendererImpl::FrameReady,
+                         frame_callback_weak_factory_.GetWeakPtr()));
       return;
     case kUninitialized:
     case kInitializing:
@@ -749,9 +687,6 @@ void VideoRendererImpl::UpdateStats_Locked() {
 
 bool VideoRendererImpl::HaveReachedBufferingCap() const {
   DCHECK(task_runner_->BelongsToCurrentThread());
-
-  if (use_complexity_based_buffering_)
-    return algorithm_->effective_frames_queued() >= max_buffered_frames_;
 
   // When the display rate is less than the frame rate, the effective frames
   // queued may be much smaller than the actual number of frames queued.  Here
@@ -900,80 +835,6 @@ void VideoRendererImpl::AttemptReadAndCheckForMetadataChanges(
   base::AutoLock auto_lock(lock_);
   CheckForMetadataChanges(pixel_format, natural_size);
   AttemptRead_Locked();
-}
-
-void VideoRendererImpl::UpdateMaxBufferedFrames() {
-  if (!use_complexity_based_buffering_)
-    return;
-
-  // Only allow extended buffering if we can compute the number frames cover the
-  // duration of a read and playback is actually progressing.
-  const base::TimeDelta frame_duration = algorithm_->average_frame_duration();
-  if (frame_duration.is_zero() || !time_progressing_)
-    return;
-
-  DCHECK(read_durations_.count());
-
-  // If we're background rendering or reads are faster than the frame duration,
-  // our maximum doesn't matter.
-  if (was_background_rendering_ || read_durations_.max() <= frame_duration) {
-    max_buffered_frames_ = min_buffered_frames_;
-    return;
-  }
-
-  // Conversely if the reads are always longer than the frame duration, there's
-  // no point in trying to buffer more, we will not be able to play the video in
-  // real time. If we've already buffered more though, assume this is momentary
-  // and avoid changing |max_buffered_frames_| for now.
-  if (min_buffered_frames_ == max_buffered_frames_ &&
-      frame_duration < read_durations_.Average()) {
-    DVLOG(3) << "Decoding is not fast enough for real time playback.";
-    return;
-  }
-
-  // Only allow extended buffering when there's no memory pressure.
-  if (auto* monitor = base::MemoryPressureMonitor::Get()) {
-    if (monitor->GetCurrentPressureLevel() !=
-        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
-      max_buffered_frames_ = min_buffered_frames_;
-      return;
-    }
-  }
-
-  // Only allow extended buffering for playbacks which have been running long
-  // enough to be considered as having user engagement.
-  if (!has_playback_met_watch_time_duration_requirement_)
-    return;
-
-  // Maximum number of buffered frames, regardless of the resolution.
-  const size_t kMaxBufferedFrames = 16;
-
-  // Choose a maximum that ensures we have enough frames to cover the length of
-  // the longest seen read duration.
-  //
-  // In a perfect world with absolute future knowledge we want to have a buffer
-  // of (sum(decode_duration) - sum(frame_duration)) / frame_duration. We
-  // don't know the duration though, so the best we can do is make an estimate
-  // based on how long it would take to play out |min_buffered_frames_|.
-  const size_t max_buffered_frames = std::min(
-      min_buffered_frames_ *
-          static_cast<size_t>(std::ceil(
-              (read_durations_.max() - frame_duration).InMillisecondsF() /
-              frame_duration.InMillisecondsF())),
-      kMaxBufferedFrames);
-
-  if (max_buffered_frames_ != max_buffered_frames) {
-    MEDIA_LOG(INFO, media_log_)
-        << "Updating max buffered frames to " << max_buffered_frames
-        << ", average frame duration: " << frame_duration.InMillisecondsF()
-        << "ms, average read duration: "
-        << read_durations_.Average().InMillisecondsF()
-        << "ms, max read duration: " << read_durations_.max().InMillisecondsF()
-        << "ms. [" << min_buffered_frames_ << ", " << max_buffered_frames_
-        << "]";
-  }
-
-  max_buffered_frames_ = max_buffered_frames;
 }
 
 }  // namespace media

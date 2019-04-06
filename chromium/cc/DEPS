@@ -1,5 +1,6 @@
 include_rules = [
   "+components/ukm/test_ukm_recorder.h",
+  "+components/viz/client",
   "+components/viz/common",
   "+gpu/GLES2",
   "+gpu/command_buffer/client/context_support.h",
@@ -19,16 +20,22 @@ include_rules = [
   "+gpu/config/gpu_feature_info.h",
   "+gpu/vulkan",
   "+media",
+  "+mojo/public/cpp/system/buffer.h",
+  "+mojo/public/cpp/system/platform_handle.h",
   "+skia/ext",
   "+services/metrics/public/cpp",
   "+third_party/khronos/GLES2/gl2.h",
   "+third_party/khronos/GLES2/gl2ext.h",
   "+third_party/libyuv",
   "+third_party/skia/include",
-  "+ui/latency/latency_info.h",
+  "+third_party/skia/src/core/SkRemoteGlyphCache.h",
+  "+ui/latency",
   "+ui/gfx",
   "+ui/gl",
-  "-cc/blink",
+
+  # Do not use mojo bindings in cc/. This library should be agnostic about how
+  # to communicate with viz.
+  "-mojo/public/cpp/bindings",
 ]
 
 specific_include_rules = {

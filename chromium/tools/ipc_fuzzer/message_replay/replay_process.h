@@ -24,10 +24,10 @@ class ServiceManagerConnection;
 }
 
 namespace mojo {
-namespace edk {
-class IncomingBrokerClientInvitation;
+class IncomingInvitation;
+namespace core {
 class ScopedIPCSupport;
-}  // namespace edk
+}  // namespace core
 }  // namespace mojo
 
 namespace ipc_fuzzer {
@@ -58,16 +58,14 @@ class ReplayProcess : public IPC::Listener {
  private:
   void SendNextMessage();
 
-  std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
-  std::unique_ptr<mojo::edk::IncomingBrokerClientInvitation>
-      broker_client_invitation_;
+  std::unique_ptr<mojo::core::ScopedIPCSupport> mojo_ipc_support_;
+  std::unique_ptr<mojo::IncomingInvitation> mojo_invitation_;
   std::unique_ptr<content::ServiceManagerConnection>
       service_manager_connection_;
   std::unique_ptr<IPC::ChannelProxy> channel_;
   base::MessageLoop main_loop_;
   base::Thread io_thread_;
   base::WaitableEvent shutdown_event_;
-  std::unique_ptr<base::Timer> timer_;
   MessageVector messages_;
   size_t message_index_;
 

@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,7 +19,6 @@
 #include "chrome/browser/predictors/preconnect_manager.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
-#include "chrome/browser/predictors/resource_prefetcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "url/gurl.h"
@@ -29,7 +29,6 @@ namespace predictors {
 
 class ResourcePrefetchPredictor;
 class LoadingStatsCollector;
-class TestLoadingObserver;
 
 // Entry point for the Loading predictor.
 // From a high-level request (GURL and motivation) and a database of historical
@@ -43,7 +42,6 @@ class TestLoadingObserver;
 //
 // All methods must be called from the UI thread.
 class LoadingPredictor : public KeyedService,
-                         public ResourcePrefetcher::Delegate,
                          public PreconnectManager::Delegate {
  public:
   LoadingPredictor(const LoadingPredictorConfig& config, Profile* profile);
@@ -69,26 +67,17 @@ class LoadingPredictor : public KeyedService,
   // KeyedService:
   void Shutdown() override;
 
-  void OnMainFrameRequest(const URLRequestSummary& summary);
-  void OnMainFrameRedirect(const URLRequestSummary& summary);
-  void OnMainFrameResponse(const URLRequestSummary& summary);
+  void OnNavigationStarted(const NavigationID& navigation_id);
+  void OnNavigationFinished(const NavigationID& old_navigation_id,
+                            const NavigationID& new_navigation_id,
+                            bool is_error_page);
 
   base::WeakPtr<LoadingPredictor> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
 
-  // ResourcePrefetcher::Delegate:
-  void ResourcePrefetcherFinished(
-      ResourcePrefetcher* prefetcher,
-      std::unique_ptr<ResourcePrefetcher::PrefetcherStats> stats) override;
-
   // PreconnectManager::Delegate:
   void PreconnectFinished(std::unique_ptr<PreconnectStats> stats) override;
-
-  // Sets the |observer| to be notified when prefetches start and
-  // finish. A previously registered observer will be discarded. Call this with
-  // a nullptr parameter to de-register the observer.
-  void SetObserverForTesting(TestLoadingObserver* observer);
 
  private:
   // Cancels an active hint, from its iterator inside |active_hints_|. If the
@@ -97,14 +86,6 @@ class LoadingPredictor : public KeyedService,
   std::map<GURL, base::TimeTicks>::iterator CancelActiveHint(
       std::map<GURL, base::TimeTicks>::iterator hint_it);
   void CleanupAbandonedHintsAndNavigations(const NavigationID& navigation_id);
-
-  // May start a prefetch of |urls| for |url| with a given hint |origin|. A new
-  // prefetch may not start if there is already one in flight, for instance.
-  void MaybeAddPrefetch(const GURL& url,
-                        const std::vector<GURL>& urls,
-                        HintOrigin origin);
-  // If a prefetch exists for |url|, stop it.
-  void MaybeRemovePrefetch(const GURL& url);
 
   // May start preconnect and preresolve jobs according to |requests| for |url|
   // with a given hint |origin|.
@@ -130,6 +111,12 @@ class LoadingPredictor : public KeyedService,
     preconnect_manager_ = std::move(preconnect_manager);
   }
 
+  // For testing.
+  void set_mock_loading_data_collector(
+      std::unique_ptr<LoadingDataCollector> loading_data_collector) {
+    loading_data_collector_ = std::move(loading_data_collector);
+  }
+
   LoadingPredictorConfig config_;
   Profile* profile_;
   std::unique_ptr<ResourcePrefetchPredictor> resource_prefetch_predictor_;
@@ -137,12 +124,7 @@ class LoadingPredictor : public KeyedService,
   std::unique_ptr<LoadingDataCollector> loading_data_collector_;
   std::unique_ptr<PreconnectManager> preconnect_manager_;
   std::map<GURL, base::TimeTicks> active_hints_;
-  // Initial URL.
-  std::map<NavigationID, GURL> active_navigations_;
-  // The value is {prefetcher, already deleted}.
-  std::map<std::string, std::pair<std::unique_ptr<ResourcePrefetcher>, bool>>
-      prefetches_;
-  TestLoadingObserver* observer_;
+  std::set<NavigationID> active_navigations_;
   bool shutdown_ = false;
 
   GURL last_omnibox_origin_;
@@ -151,6 +133,7 @@ class LoadingPredictor : public KeyedService,
 
   friend class LoadingPredictorTest;
   friend class LoadingPredictorPreconnectTest;
+  friend class LoadingPredictorTabHelperTest;
   FRIEND_TEST_ALL_PREFIXES(LoadingPredictorTest,
                            TestMainFrameResponseCancelsHint);
   FRIEND_TEST_ALL_PREFIXES(LoadingPredictorTest,
@@ -166,30 +149,6 @@ class LoadingPredictor : public KeyedService,
   base::WeakPtrFactory<LoadingPredictor> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(LoadingPredictor);
-};
-
-// An interface used to notify that data in the LoadingPredictor has
-// changed. All methods are called on the UI thread.
-class TestLoadingObserver {
- public:
-  // De-registers itself from |predictor_| on destruction.
-  virtual ~TestLoadingObserver();
-
-  virtual void OnPrefetchingStarted(const GURL& main_frame_url) {}
-
-  virtual void OnPrefetchingStopped(const GURL& main_frame_url) {}
-
-  virtual void OnPrefetchingFinished(const GURL& main_frame_url) {}
-
- protected:
-  // |predictor| must be non-NULL and has to outlive the LoadingTestObserver.
-  // Also the predictor must not have a LoadingTestObserver set.
-  explicit TestLoadingObserver(LoadingPredictor* predictor);
-
- private:
-  LoadingPredictor* predictor_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestLoadingObserver);
 };
 
 }  // namespace predictors

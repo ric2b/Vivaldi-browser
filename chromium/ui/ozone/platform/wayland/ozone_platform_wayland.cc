@@ -4,7 +4,6 @@
 
 #include "ui/ozone/platform/wayland/ozone_platform_wayland.h"
 
-#include "base/memory/ptr_util.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/base/ui_features.h"
 #include "ui/display/manager/fake_display_delegate.h"
@@ -12,11 +11,13 @@
 #include "ui/events/system_input_injector.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
 #include "ui/ozone/platform/wayland/wayland_connection.h"
+#include "ui/ozone/platform/wayland/wayland_native_display_delegate.h"
 #include "ui/ozone/platform/wayland/wayland_surface_factory.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 #if BUILDFLAG(USE_XKBCOMMON)
 #include "ui/events/ozone/layout/xkb/xkb_evdev_codes.h"
@@ -61,23 +62,22 @@ class OzonePlatformWayland : public OzonePlatform {
 
   std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
-      const gfx::Rect& bounds) override {
-    auto window =
-        std::make_unique<WaylandWindow>(delegate, connection_.get(), bounds);
-    if (!window->Initialize())
+      PlatformWindowInitProperties properties) override {
+    auto window = std::make_unique<WaylandWindow>(delegate, connection_.get());
+    if (!window->Initialize(std::move(properties)))
       return nullptr;
     return std::move(window);
   }
 
   std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
       override {
-    return std::make_unique<display::FakeDisplayDelegate>();
+    return std::make_unique<WaylandNativeDisplayDelegate>(connection_.get());
   }
 
   void InitializeUI(const InitParams& args) override {
 #if BUILDFLAG(USE_XKBCOMMON)
     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<WaylandXkbKeyboardLayoutEngineImpl>(
+        std::make_unique<WaylandXkbKeyboardLayoutEngine>(
             xkb_evdev_code_converter_));
 #else
     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(

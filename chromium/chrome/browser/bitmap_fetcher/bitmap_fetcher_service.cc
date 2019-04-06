@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/storage_partition.h"
@@ -18,7 +19,19 @@
 namespace {
 
 const size_t kMaxRequests = 25;  // Maximum number of inflight requests allowed.
-const int kMaxCacheEntries = 5;  // Maximum number of cache entries.
+
+// Maximum number of cache entries. This was 5 before, which worked well enough
+// for few images like weather answers, but with rich entity suggestions showing
+// several images at once, even changing some while the user types, a larger
+// cache is necessary to avoid flickering. Each cache entry is expected to take
+// 16kb (64x64 @ 32bpp), and experimentation shows 18 entries is enough to
+// eliminate flicker with the standard 6 suggestion omnibox filled with entities
+// so the maximum expected memory consumption is ~288kb per browser window.
+#if defined(OS_ANDROID)
+const int kMaxCacheEntries = 5;
+#else
+const int kMaxCacheEntries = 18;
+#endif
 
 }  // namespace.
 
@@ -84,16 +97,18 @@ BitmapFetcherService::RequestId BitmapFetcherService::RequestImage(
     const GURL& url,
     Observer* observer,
     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
+  // Reject invalid URLs and limit number of simultaneous in-flight requests.
+  if (!url.is_valid() || requests_.size() > kMaxRequests) {
+    delete observer;
+    return REQUEST_ID_INVALID;
+  }
+
   // Create a new request, assigning next available request ID.
   ++current_request_id_;
   if (current_request_id_ == REQUEST_ID_INVALID)
     ++current_request_id_;
   int request_id = current_request_id_;
-  auto request = base::MakeUnique<BitmapFetcherRequest>(request_id, observer);
-
-  // Reject invalid URLs.
-  if (!url.is_valid())
-    return REQUEST_ID_INVALID;
+  auto request = std::make_unique<BitmapFetcherRequest>(request_id, observer);
 
   // Check for existing images first.
   auto iter = cache_.Get(url);
@@ -105,16 +120,12 @@ BitmapFetcherService::RequestId BitmapFetcherService::RequestImage(
     return REQUEST_ID_INVALID;
   }
 
-  // Limit number of simultaneous in-flight requests.
-  if (requests_.size() > kMaxRequests)
-    return REQUEST_ID_INVALID;
-
   // Make sure there's a fetcher for this URL and attach to request.
   const BitmapFetcher* fetcher = EnsureFetcherForUrl(url, traffic_annotation);
   request->set_fetcher(fetcher);
 
   requests_.push_back(std::move(request));
-  return requests_.back()->request_id();
+  return request_id;
 }
 
 void BitmapFetcherService::Prefetch(
@@ -136,7 +147,8 @@ std::unique_ptr<BitmapFetcher> BitmapFetcherService::CreateFetcher(
       net::LOAD_NORMAL);
   new_fetcher->Start(
       content::BrowserContext::GetDefaultStoragePartition(context_)
-          ->GetURLLoaderFactoryForBrowserProcess());
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get());
   return new_fetcher;
 }
 

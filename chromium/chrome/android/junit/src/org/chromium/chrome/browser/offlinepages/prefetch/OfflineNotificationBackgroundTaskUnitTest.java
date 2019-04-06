@@ -40,10 +40,10 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.multidex.ShadowMultiDex;
 
-import org.chromium.base.BaseChromiumApplication;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.init.BrowserParts;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.offlinepages.DeviceConditions;
@@ -55,7 +55,6 @@ import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskInfo;
 import org.chromium.components.background_task_scheduler.TaskParameters;
 import org.chromium.net.ConnectionType;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -63,9 +62,8 @@ import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
 /** Unit tests for {@link OfflineNotificationBackgroundTask}. */
-@RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
-        shadows = {ShadowMultiDex.class, ShadowDeviceConditions.class})
+@RunWith(BaseRobolectricTestRunner.class)
+@Config(manifest = Config.NONE, shadows = {ShadowMultiDex.class, ShadowDeviceConditions.class})
 public class OfflineNotificationBackgroundTaskUnitTest {
     /**
      * Fake of BackgroundTaskScheduler system service.
@@ -105,22 +103,22 @@ public class OfflineNotificationBackgroundTaskUnitTest {
     @Mock
     private ChromeBrowserInitializer mChromeBrowserInitializer;
     @Captor
-    ArgumentCaptor<BrowserParts> mBrowserParts;
+    private ArgumentCaptor<BrowserParts> mBrowserParts;
     @Mock
-    OfflinePageBridge mOfflinePageBridge;
+    private OfflinePageBridge mOfflinePageBridge;
     @Mock
-    PrefetchedPagesNotifier mPrefetchedPagesNotifier;
+    private PrefetchedPagesNotifier mPrefetchedPagesNotifier;
 
     private FakeBackgroundTaskScheduler mFakeTaskScheduler;
     private Calendar mCalendar;
 
     private String mContentHost = "www.example.com";
 
+    @SuppressWarnings("unchecked")
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         // Set up the context.
-        ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
         doNothing().when(mChromeBrowserInitializer).handlePreNativeStartup(any(BrowserParts.class));
         try {
             doAnswer(new Answer<Void>() {
@@ -204,8 +202,8 @@ public class OfflineNotificationBackgroundTaskUnitTest {
         DeviceConditions deviceConditions =
                 new DeviceConditions(false /* POWER_CONNECTED */, 75 /* BATTERY_LEVEL */,
                         online ? ConnectionType.CONNECTION_WIFI : ConnectionType.CONNECTION_NONE,
-                        false /* POWER_SAVE */);
-        ShadowDeviceConditions.setCurrentConditions(deviceConditions, false /* metered */);
+                        false /* POWER_SAVE */, false /* metered */);
+        ShadowDeviceConditions.setCurrentConditions(deviceConditions);
     }
 
     public void assertTaskScheduledForOfflineDelay(String message) {

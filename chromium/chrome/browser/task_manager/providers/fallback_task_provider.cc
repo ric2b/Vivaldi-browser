@@ -5,7 +5,6 @@
 #include "chrome/browser/task_manager/providers/fallback_task_provider.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/process/process.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -39,9 +38,9 @@ FallbackTaskProvider::FallbackTaskProvider(
     std::unique_ptr<TaskProvider> primary_subprovider,
     std::unique_ptr<TaskProvider> secondary_subprovider)
     : sources_{
-          base::MakeUnique<SubproviderSource>(this,
+          std::make_unique<SubproviderSource>(this,
                                               std::move(primary_subprovider)),
-          base::MakeUnique<SubproviderSource>(
+          std::make_unique<SubproviderSource>(
               this,
               std::move(secondary_subprovider))} {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);

@@ -61,7 +61,7 @@ BookmarkChangeProcessor::~BookmarkChangeProcessor() {
 }
 
 void BookmarkChangeProcessor::StartImpl() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!bookmark_model_);
   bookmark_model_ = sync_client_->GetBookmarkModel();
   DCHECK(bookmark_model_->loaded());
@@ -559,7 +559,7 @@ void BookmarkChangeProcessor::ApplyChangesFromSyncModel(
     const syncer::BaseTransaction* trans,
     int64_t model_version,
     const syncer::ImmutableChangeRecordList& changes) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // A note about ordering.  Sync backend is responsible for ordering the change
   // records in the following order:
   //
@@ -839,12 +839,9 @@ const BookmarkNode* BookmarkChangeProcessor::CreateBookmarkNode(
     const int64_t create_time_internal = specifics.creation_time_us();
     base::Time create_time = (create_time_internal == 0) ?
         base::Time::Now() : base::Time::FromInternalValue(create_time_internal);
-    base::string16 dummy;
     node = model->AddURLWithCreationTimeAndMetaInfo(
         parent, index, title, url, create_time,
-        GetBookmarkMetaInfo(sync_node).get(),
-        //TODO: add info about new fields to syncer
-        dummy,dummy,dummy);
+        GetBookmarkMetaInfo(sync_node).get());
     if (node)
       SetBookmarkFavicon(sync_node, node, model, sync_client);
   }

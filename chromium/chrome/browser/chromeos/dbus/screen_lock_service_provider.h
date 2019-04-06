@@ -20,8 +20,8 @@ class MethodCall;
 
 namespace chromeos {
 
-// This class exports a "LockScreen" D-Bus methods that the session manager
-// calls to instruct Chrome to lock the screen.
+// This class exports a D-Bus method that the session_manager calls to instruct
+// Chrome to show the lock screen.
 class ScreenLockServiceProvider
     : public CrosDBusService::ServiceProviderInterface {
  public:
@@ -39,8 +39,8 @@ class ScreenLockServiceProvider
                   bool success);
 
   // Called on UI thread in response to D-Bus requests.
-  void LockScreen(dbus::MethodCall* method_call,
-                  dbus::ExportedObject::ResponseSender response_sender);
+  void ShowLockScreen(dbus::MethodCall* method_call,
+                      dbus::ExportedObject::ResponseSender response_sender);
 
   // Keep this last so that all weak pointers will be invalidated at the
   // beginning of destruction.

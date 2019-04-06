@@ -16,7 +16,6 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_test_utils.h"
@@ -28,6 +27,7 @@
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "extensions/common/extension.h"
+#include "extensions/test/test_extension_dir.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -97,7 +97,8 @@ const char kManifestToOverrideStartupUrls[] =
     "  }"
     "}";
 
-class SettingsResetPromptModelBrowserTest : public ExtensionBrowserTest {
+class SettingsResetPromptModelBrowserTest
+    : public extensions::ExtensionBrowserTest {
  public:
   virtual void OnResetDone() { ++reset_callbacks_; }
 
@@ -108,7 +109,7 @@ class SettingsResetPromptModelBrowserTest : public ExtensionBrowserTest {
       : startup_pref_(SessionStartupPref::URLS) {}
 
   void SetUpOnMainThread() override {
-    ExtensionBrowserTest::SetUpOnMainThread();
+    extensions::ExtensionBrowserTest::SetUpOnMainThread();
 
     // Set up an active homepage with visible homepage button.
     PrefService* prefs = profile()->GetPrefs();

@@ -7,7 +7,6 @@
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/aura/window.h"
@@ -84,6 +83,9 @@ void NotifyCaretBoundsChanged(ui::InputMethod* input_method) {
 
 }  // namespace
 
+// static
+bool Widget::g_disable_activation_change_handling_ = false;
+
 // A default implementation of WidgetDelegate, used by Widget when no
 // WidgetDelegate is supplied.
 class DefaultWidgetDelegate : public WidgetDelegate {
@@ -135,7 +137,6 @@ Widget::InitParams::InitParams(Type type)
       layer_type(ui::LAYER_TEXTURED),
       context(nullptr),
       force_show_in_taskbar(false),
-      thumbnail_window(false),
       force_software_compositing(false) {}
 
 Widget::InitParams::InitParams(const InitParams& other) = default;
@@ -325,6 +326,9 @@ void Widget::Init(const InitParams& in_params) {
   widget_delegate_ = params.delegate ?
       params.delegate : new DefaultWidgetDelegate(this);
   widget_delegate_->set_can_activate(can_activate);
+
+  // Henceforth, ensure the delegate outlives the Widget.
+  widget_delegate_->can_delete_this_ = false;
 
   ownership_ = params.ownership;
   native_widget_ = CreateNativeWidget(params, this)->AsNativeWidgetPrivate();
@@ -520,17 +524,7 @@ void Widget::CenterWindow(const gfx::Size& size) {
 }
 
 void Widget::SetBoundsConstrained(const gfx::Rect& bounds) {
-  gfx::Rect work_area = display::Screen::GetScreen()
-                            ->GetDisplayNearestPoint(bounds.origin())
-                            .work_area();
-  if (work_area.IsEmpty()) {
-    SetBounds(bounds);
-  } else {
-    // Inset the work area slightly.
-    work_area.Inset(10, 10, 10, 10);
-    work_area.AdjustToFit(bounds);
-    SetBounds(work_area);
-  }
+  native_widget_->SetBoundsConstrained(bounds);
 }
 
 void Widget::SetVisibilityChangedAnimationsEnabled(bool value) {
@@ -724,6 +718,10 @@ void Widget::SetOpacity(float opacity) {
   native_widget_->SetOpacity(opacity);
 }
 
+void Widget::SetAspectRatio(const gfx::SizeF& aspect_ratio) {
+  native_widget_->SetAspectRatio(aspect_ratio);
+}
+
 void Widget::FlashFrame(bool flash) {
   native_widget_->FlashFrame(flash);
 }
@@ -836,6 +834,7 @@ void Widget::UpdateWindowTitle() {
   base::i18n::AdjustStringForLocaleDirection(&window_title);
   if (!native_widget_->SetWindowTitle(window_title))
     return;
+
   non_client_view_->UpdateWindowTitle();
 
   // If the non-client view is rendering its own title, it'll need to relayout
@@ -1001,7 +1000,8 @@ bool Widget::IsTranslucentWindowOpacitySupported() const {
 
 void Widget::OnSizeConstraintsChanged() {
   native_widget_->OnSizeConstraintsChanged();
-  non_client_view_->SizeConstraintsChanged();
+  if (non_client_view_)
+    non_client_view_->SizeConstraintsChanged();
 }
 
 void Widget::OnOwnerClosing() {}
@@ -1029,7 +1029,10 @@ bool Widget::IsAlwaysRenderAsActive() const {
   return always_render_as_active_;
 }
 
-void Widget::OnNativeWidgetActivationChanged(bool active) {
+bool Widget::OnNativeWidgetActivationChanged(bool active) {
+  if (g_disable_activation_change_handling_)
+    return false;
+
   // On windows we may end up here before we've completed initialization (from
   // an WM_NCACTIVATE). If that happens the WidgetDelegate likely doesn't know
   // the Widget and will crash attempting to access it.
@@ -1041,6 +1044,8 @@ void Widget::OnNativeWidgetActivationChanged(bool active) {
 
   if (non_client_view())
     non_client_view()->frame_view()->ActivationChanged(active);
+
+  return true;
 }
 
 void Widget::OnNativeFocus() {
@@ -1091,6 +1096,7 @@ void Widget::OnNativeWidgetDestroying() {
 void Widget::OnNativeWidgetDestroyed() {
   for (WidgetObserver& observer : observers_)
     observer.OnWidgetDestroyed(this);
+  widget_delegate_->can_delete_this_ = true;
   widget_delegate_->DeleteDelegate();
   widget_delegate_ = NULL;
   native_widget_destroyed_ = true;
@@ -1497,7 +1503,7 @@ void Widget::SetInitialBounds(const gfx::Rect& bounds) {
       if (bounds.origin().IsOrigin()) {
         // No initial bounds supplied, so size the window to its content and
         // center over its parent.
-        native_widget_->CenterWindow(non_client_view_->GetPreferredSize());
+        CenterWindow(non_client_view_->GetPreferredSize());
       } else {
         // Use the preferred size and the supplied origin.
         gfx::Rect preferred_bounds(bounds);

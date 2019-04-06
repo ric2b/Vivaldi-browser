@@ -13,7 +13,6 @@
 #include "ui/aura/window_observer.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
-#include "ui/keyboard/keyboard_export.h"
 #include "ui/keyboard/keyboard_ui.h"
 
 namespace {
@@ -25,15 +24,13 @@ class Window;
 namespace gfx {
 class Rect;
 }
-namespace wm {
-class Shadow;
-}
 namespace content {
 class BrowserContext;
 class WebContents;
 }  // namespace content
 namespace ui {
 class InputMethod;
+class Shadow;
 }
 
 // Subclass of KeyboardUI. It is used by KeyboardController to get
@@ -44,16 +41,11 @@ class ChromeKeyboardUI : public keyboard::KeyboardUI,
  public:
   class TestApi {
    public:
-    explicit TestApi(ChromeKeyboardUI* ui) : ui_(ui) {}
-
-    const content::WebContents* keyboard_contents() const {
-      return ui_->keyboard_contents_.get();
-    }
+    // Use an empty |url| to clear the override.
+    static void SetOverrideVirtualKeyboardUrl(const GURL& url);
 
    private:
-    ChromeKeyboardUI* ui_;
-
-    DISALLOW_COPY_AND_ASSIGN(TestApi);
+    DISALLOW_IMPLICIT_CONSTRUCTORS(TestApi);
   };
 
   explicit ChromeKeyboardUI(content::BrowserContext* context);
@@ -62,14 +54,14 @@ class ChromeKeyboardUI : public keyboard::KeyboardUI,
   // Requests the audio input from microphone for speech input.
   void RequestAudioInput(content::WebContents* web_contents,
                          const content::MediaStreamRequest& request,
-                         const content::MediaResponseCallback& callback);
+                         content::MediaResponseCallback callback);
 
   // Called when a window being observed changes bounds, to update its insets.
   void UpdateInsetsForWindow(aura::Window* window);
 
   // Overridden from KeyboardUI:
-  aura::Window* GetContentsWindow() override;
-  bool HasContentsWindow() const override;
+  aura::Window* GetKeyboardWindow() override;
+  bool HasKeyboardWindow() const override;
   bool ShouldWindowOverscroll(aura::Window* window) const override;
   void ReloadKeyboardIfNeeded() override;
   void InitInsets(const gfx::Rect& new_bounds) override;
@@ -89,7 +81,7 @@ class ChromeKeyboardUI : public keyboard::KeyboardUI,
 
   const aura::Window* GetKeyboardRootWindow() const;
 
-  virtual content::WebContents* CreateWebContents();
+  virtual std::unique_ptr<content::WebContents> CreateWebContents();
 
  private:
   friend class TestApi;
@@ -121,19 +113,20 @@ class ChromeKeyboardUI : public keyboard::KeyboardUI,
   // Overridden from KeyboardUI:
   ui::InputMethod* GetInputMethod() override;
   void SetController(keyboard::KeyboardController* controller) override;
-  void ShowKeyboardContainer(aura::Window* container) override;
 
   // content::WebContentsObserver overrides
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
 
   // The BrowserContext to use for creating the WebContents hosting the
   // keyboard.
-  content::BrowserContext* browser_context_;
+  content::BrowserContext* const browser_context_;
 
   const GURL default_url_;
 
   std::unique_ptr<content::WebContents> keyboard_contents_;
-  std::unique_ptr<wm::Shadow> shadow_;
+  std::unique_ptr<ui::Shadow> shadow_;
 
   std::unique_ptr<keyboard::KeyboardControllerObserver> observer_;
   std::unique_ptr<WindowBoundsChangeObserver> window_bounds_observer_;

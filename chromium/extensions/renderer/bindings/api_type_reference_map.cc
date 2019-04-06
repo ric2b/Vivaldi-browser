@@ -76,4 +76,32 @@ bool APITypeReferenceMap::HasTypeMethodSignature(
   return type_methods_.find(name) != type_methods_.end();
 }
 
+void APITypeReferenceMap::AddCallbackSignature(
+    const std::string& name,
+    std::unique_ptr<APISignature> signature) {
+  DCHECK(callback_signatures_.find(name) == callback_signatures_.end())
+      << "Cannot re-register signature for: " << name;
+  callback_signatures_[name] = std::move(signature);
+}
+
+const APISignature* APITypeReferenceMap::GetCallbackSignature(
+    const std::string& name) const {
+  auto iter = callback_signatures_.find(name);
+  return iter == callback_signatures_.end() ? nullptr : iter->second.get();
+}
+
+void APITypeReferenceMap::AddCustomSignature(
+    const std::string& name,
+    std::unique_ptr<APISignature> signature) {
+  DCHECK(custom_signatures_.find(name) == custom_signatures_.end())
+      << "Cannot re-register signature for: " << name;
+  custom_signatures_[name] = std::move(signature);
+}
+
+const APISignature* APITypeReferenceMap::GetCustomSignature(
+    const std::string& name) const {
+  auto iter = custom_signatures_.find(name);
+  return iter != custom_signatures_.end() ? iter->second.get() : nullptr;
+}
+
 }  // namespace extensions

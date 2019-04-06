@@ -3,16 +3,22 @@
 // found in the LICENSE file.
 
 /**
+ * A single action, that can be taken on a set of entries.
  * @interface
  */
 function Action() {
 }
 
+/**
+ * Executes this action on the set of entries.
+ */
 Action.prototype.execute = function() {
 };
 
 /**
- * @return {boolean}
+ * Checks whether this action can execute on the set of entries.
+ *
+ * @return {boolean} True if the function can execute, false if not.
  */
 Action.prototype.canExecute = function() {
 };
@@ -35,18 +41,25 @@ var ActionModelUI;
 
 /**
  * @param {!Entry} entry
+ * @param {!MetadataModel} metadataModel
  * @param {!ActionModelUI} ui
  * @param {!VolumeManagerWrapper} volumeManager
  * @implements {Action}
  * @constructor
  * @struct
  */
-function DriveShareAction(entry, volumeManager, ui) {
+function DriveShareAction(entry, metadataModel, volumeManager, ui) {
   /**
    * @private {!Entry}
    * @const
    */
   this.entry_ = entry;
+
+  /**
+   * @private {!MetadataModel}
+   * @const
+   */
+  this.metadataModel_ = metadataModel;
 
   /**
    * @private {!VolumeManagerWrapper}
@@ -63,21 +76,43 @@ function DriveShareAction(entry, volumeManager, ui) {
 
 /**
  * @param {!Array<!Entry>} entries
+ * @param {!MetadataModel} metadataModel
  * @param {!ActionModelUI} ui
  * @param {!VolumeManagerWrapper} volumeManager
  * @return {DriveShareAction}
  */
-DriveShareAction.create = function(entries, volumeManager, ui) {
+DriveShareAction.create = function(entries, metadataModel, volumeManager, ui) {
   if (entries.length !== 1)
     return null;
-
-  return new DriveShareAction(entries[0], volumeManager, ui);
+  return new DriveShareAction(entries[0], metadataModel, volumeManager, ui);
 };
 
 /**
  * @override
  */
 DriveShareAction.prototype.execute = function() {
+  // For Team Drives entries, open the Sharing dialog in a new window.
+  if (util.isTeamDriveEntry(this.entry_)) {
+    chrome.fileManagerPrivate.getEntryProperties(
+        [this.entry_], ['shareUrl'], function(results) {
+          if (chrome.runtime.lastError) {
+            console.error(chrome.runtime.lastError.message);
+            return;
+          }
+          if (results.length != 1) {
+            console.error(
+                'getEntryProperties for shareUrl should return 1 entry ' +
+                '(returned ' + results.length + ')');
+            return;
+          }
+          if (results[0].shareUrl === undefined) {
+            console.error('getEntryProperties shareUrl is undefined');
+            return;
+          }
+          util.visitURL(results[0].shareUrl);
+        }.bind(this));
+    return;
+  }
   this.ui_.shareDialog.showEntry(this.entry_, function(result) {
     if (result == ShareDialog.Result.NETWORK_ERROR)
       this.ui_.errorDialog.show(str('SHARE_ERROR'), null, null, null);
@@ -88,9 +123,12 @@ DriveShareAction.prototype.execute = function() {
  * @override
  */
 DriveShareAction.prototype.canExecute = function() {
+  const metadata = this.metadataModel_.getCache([this.entry_], ['canShare']);
+  assert(metadata.length === 1);
+  const canShareItem = metadata[0].canShare !== false;
   return this.volumeManager_.getDriveConnectionState().type !==
       VolumeManagerCommon.DriveConnectionType.OFFLINE &&
-      !util.isTeamDriveRoot(this.entry_);
+      !util.isTeamDriveRoot(this.entry_) && canShareItem;
 };
 
 /**
@@ -400,7 +438,99 @@ DriveRemoveFolderShortcutAction.prototype.getTitle = function() {
   return null;
 };
 
+
 /**
+ * Opens the entry in Drive Web for the user to manage permissions etc.
+ *
+ * @param {!Entry} entry The entry to open the 'Manage' page for.
+ * @param {!ActionModelUI} ui
+ * @param {!VolumeManagerWrapper} volumeManager
+ * @implements {Action}
+ * @constructor
+ * @struct
+ */
+function DriveManageAction(entry, volumeManager, ui) {
+  /**
+   * The entry to open the 'Manage' page for.
+   *
+   * @private {!Entry}
+   * @const
+   */
+  this.entry_ = entry;
+
+  /**
+   * @private {!VolumeManagerWrapper}
+   * @const
+   */
+  this.volumeManager_ = volumeManager;
+
+  /**
+   * @private {!ActionModelUI}
+   * @const
+   */
+  this.ui_ = ui;
+}
+
+/**
+ * Creates a new DriveManageAction object.
+ * |entries| must contain only a single entry.
+ *
+ * @param {!Array<!Entry>} entries
+ * @param {!ActionModelUI} ui
+ * @param {!VolumeManagerWrapper} volumeManager
+ * @return {DriveManageAction}
+ */
+DriveManageAction.create = function(entries, volumeManager, ui) {
+  if (entries.length !== 1)
+    return null;
+
+  return new DriveManageAction(entries[0], volumeManager, ui);
+};
+
+/**
+ * @override
+ */
+DriveManageAction.prototype.execute = function() {
+  chrome.fileManagerPrivate.getEntryProperties(
+      [this.entry_], ['alternateUrl'], function(results) {
+        if (chrome.runtime.lastError) {
+          console.error(chrome.runtime.lastError.message);
+          return;
+        }
+        if (results.length != 1) {
+          console.error(
+              'getEntryProperties for alternateUrl should return 1 entry ' +
+              '(returned ' + results.length + ')');
+          return;
+        }
+        if (results[0].alternateUrl === undefined) {
+          console.error('getEntryProperties alternateUrl is undefined');
+          return;
+        }
+        util.visitURL(results[0].alternateUrl);
+      }.bind(this));
+};
+
+/**
+ * @override
+ */
+DriveManageAction.prototype.canExecute = function() {
+  return this.volumeManager_.getDriveConnectionState().type !==
+      VolumeManagerCommon.DriveConnectionType.OFFLINE &&
+      !util.isTeamDriveRoot(this.entry_);
+};
+
+/**
+ * @return {?string}
+ */
+DriveManageAction.prototype.getTitle = function() {
+  return null;
+};
+
+
+/**
+ * A custom action set by the FSP API.
+ *
  * @param {!Array<!Entry>} entries
  * @param {string} id
  * @param {?string} title
@@ -464,7 +594,8 @@ CustomAction.prototype.getTitle = function() {
 };
 
 /**
- * Represents a set of actions for a set of entries.
+ * Represents a set of actions for a set of entries. Includes actions set
+ * locally in JS, as well as those retrieved from the FSP API.
  *
  * @param {!VolumeManagerWrapper} volumeManager
  * @param {!MetadataModel} metadataModel
@@ -556,10 +687,13 @@ ActionsModel.CommonActionId = {
  */
 ActionsModel.InternalActionId = {
   CREATE_FOLDER_SHORTCUT: 'create-folder-shortcut',
-  REMOVE_FOLDER_SHORTCUT: 'remove-folder-shortcut'
+  REMOVE_FOLDER_SHORTCUT: 'remove-folder-shortcut',
+  MANAGE_IN_DRIVE: 'manage-in-drive'
 };
 
 /**
+ * Initializes the ActionsModel, including populating the list of available
+ * actions for the given entries.
  * @return {!Promise}
  */
 ActionsModel.prototype.initialize = function() {
@@ -581,6 +715,7 @@ ActionsModel.prototype.initialize = function() {
     }
     // All entries need to be on the same volume to execute ActionsModel
     // commands.
+    // TODO(sashab): Move this to util.js.
     for (var i = 1; i < this.entries_.length; i++) {
       var volumeInfoToCompare =
           this.volumeManager_.getVolumeInfo(this.entries_[i]);
@@ -596,7 +731,7 @@ ActionsModel.prototype.initialize = function() {
       // For Drive, actions are constructed directly in the Files app code.
       case VolumeManagerCommon.VolumeType.DRIVE:
         var shareAction = DriveShareAction.create(
-            this.entries_, this.volumeManager_, this.ui_);
+            this.entries_, this.metadataModel_, this.volumeManager_, this.ui_);
         if (shareAction)
           actions[ActionsModel.CommonActionId.SHARE] = shareAction;
 
@@ -632,6 +767,14 @@ ActionsModel.prototype.initialize = function() {
           actions[ActionsModel.InternalActionId.REMOVE_FOLDER_SHORTCUT] =
               removeFolderShortcutAction;
         }
+
+        var manageInDriveAction = DriveManageAction.create(
+            this.entries_, this.volumeManager_, this.ui_);
+        if (manageInDriveAction) {
+          actions[ActionsModel.InternalActionId.MANAGE_IN_DRIVE] =
+              manageInDriveAction;
+        }
+
         fulfill(actions);
         break;
 

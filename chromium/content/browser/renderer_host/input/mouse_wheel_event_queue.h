@@ -13,7 +13,7 @@
 #include "content/common/content_export.h"
 #include "content/public/common/input_event_ack_source.h"
 #include "content/public/common/input_event_ack_state.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace content {
 
@@ -33,18 +33,16 @@ class CONTENT_EXPORT MouseWheelEventQueueClient {
   virtual void OnMouseWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
                                     InputEventAckSource ack_source,
                                     InputEventAckState ack_result) = 0;
+  virtual bool IsWheelScrollInProgress() = 0;
 };
 
 // A queue for throttling and coalescing mouse wheel events.
 class CONTENT_EXPORT MouseWheelEventQueue {
  public:
-  // The |client| must outlive the MouseWheelEventQueue. |send_gestures|
-  // indicates whether mouse wheel events should generate
-  // Scroll[Begin|Update|End] on unhandled acknowledge events.
-  // |scroll_transaction_ms| is the duration in which the
-  // ScrollEnd should be sent after a ScrollUpdate.
-  MouseWheelEventQueue(MouseWheelEventQueueClient* client,
-                       bool enable_scroll_latching);
+  // The |client| must outlive the MouseWheelEventQueue.
+  // |IsWheelScrollInProgress| indicates whether mouse wheel events should
+  // generate Scroll[Begin|Update|End] on unhandled acknowledge events.
+  MouseWheelEventQueue(MouseWheelEventQueueClient* client);
 
   ~MouseWheelEventQueue();
 
@@ -82,28 +80,14 @@ class CONTENT_EXPORT MouseWheelEventQueue {
                        bool synthetic);
   void RecordLatchingUmaMetric(bool latched);
 
+  // True if gesture scroll events can be generated for the wheel event sent for
+  // ack.
+  bool CanGenerateGestureScroll(InputEventAckState ack_result) const;
+
   MouseWheelEventQueueClient* client_;
 
   base::circular_deque<std::unique_ptr<QueuedWebMouseWheelEvent>> wheel_queue_;
   std::unique_ptr<QueuedWebMouseWheelEvent> event_sent_for_gesture_ack_;
-
-  // True if a non-synthetic GSB needs to be sent before a GSU is sent.
-  // This variable is used only when scroll latching is disabled.
-  bool needs_scroll_begin_when_scroll_latching_disabled_;
-
-  // True if a non-synthetic GSE needs to be sent because a non-synthetic
-  // GSB has been sent in the past.
-  // This variable is used only when scroll latching is disabled.
-  bool needs_scroll_end_when_scroll_latching_disabled_;
-
-  // True when a GSB is sent and its corresponding GSE is not sent.
-  bool scroll_in_progress_;
-
-  // True if the touchpad and wheel scroll latching flag is enabled.
-  bool enable_scroll_latching_;
-
-  // True if the async wheel events flag is enabled.
-  bool enable_async_wheel_events_;
 
   // True if the ack for the first wheel event in a scroll sequence is not
   // consumed. This lets us to send the rest of the wheel events in the sequence

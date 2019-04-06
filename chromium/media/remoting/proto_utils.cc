@@ -10,6 +10,8 @@
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "media/base/decrypt_config.h"
+#include "media/base/encryption_pattern.h"
 #include "media/base/encryption_scheme.h"
 #include "media/base/timestamp_constants.h"
 #include "media/remoting/proto_enum_utils.h"
@@ -30,6 +32,11 @@ std::unique_ptr<DecryptConfig> ConvertProtoToDecryptConfig(
   if (!config_message.has_iv())
     return nullptr;
 
+  if (!config_message.has_mode()) {
+    // Assume it's unencrypted.
+    return nullptr;
+  }
+
   std::vector<SubsampleEntry> entries(config_message.sub_samples_size());
   for (int i = 0; i < config_message.sub_samples_size(); ++i) {
     entries.push_back(
@@ -37,9 +44,24 @@ std::unique_ptr<DecryptConfig> ConvertProtoToDecryptConfig(
                        config_message.sub_samples(i).cypher_bytes()));
   }
 
-  std::unique_ptr<DecryptConfig> decrypt_config(
-      new DecryptConfig(config_message.key_id(), config_message.iv(), entries));
-  return decrypt_config;
+  if (config_message.mode() == pb::EncryptionMode::kCenc) {
+    return DecryptConfig::CreateCencConfig(config_message.key_id(),
+                                           config_message.iv(), entries);
+  }
+
+  base::Optional<EncryptionPattern> pattern;
+  if (config_message.has_crypt_byte_block()) {
+    pattern = EncryptionPattern(config_message.crypt_byte_block(),
+                                config_message.skip_byte_block());
+  }
+
+  if (config_message.mode() == pb::EncryptionMode::kCbcs) {
+    return DecryptConfig::CreateCbcsConfig(config_message.key_id(),
+                                           config_message.iv(), entries,
+                                           std::move(pattern));
+  }
+
+  return nullptr;
 }
 
 scoped_refptr<DecoderBuffer> ConvertProtoToDecoderBuffer(
@@ -110,6 +132,15 @@ void ConvertDecryptConfigToProto(const DecryptConfig& decrypt_config,
         config_message->add_sub_samples();
     sub_sample->set_clear_bytes(entry.clear_bytes);
     sub_sample->set_cypher_bytes(entry.cypher_bytes);
+  }
+
+  config_message->set_mode(
+      ToProtoEncryptionMode(decrypt_config.encryption_mode()).value());
+  if (decrypt_config.HasPattern()) {
+    config_message->set_crypt_byte_block(
+        decrypt_config.encryption_pattern()->crypt_byte_block());
+    config_message->set_skip_byte_block(
+        decrypt_config.encryption_pattern()->skip_byte_block());
   }
 }
 
@@ -210,16 +241,15 @@ void ConvertEncryptionSchemeToProto(const EncryptionScheme& encryption_scheme,
   DCHECK(message);
   message->set_mode(
       ToProtoEncryptionSchemeCipherMode(encryption_scheme.mode()).value());
-  message->set_encrypt_blocks(encryption_scheme.pattern().encrypt_blocks());
-  message->set_skip_blocks(encryption_scheme.pattern().skip_blocks());
+  message->set_encrypt_blocks(encryption_scheme.pattern().crypt_byte_block());
+  message->set_skip_blocks(encryption_scheme.pattern().skip_byte_block());
 }
 
 EncryptionScheme ConvertProtoToEncryptionScheme(
     const pb::EncryptionScheme& message) {
   return EncryptionScheme(
       ToMediaEncryptionSchemeCipherMode(message.mode()).value(),
-      EncryptionScheme::Pattern(message.encrypt_blocks(),
-                                message.skip_blocks()));
+      EncryptionPattern(message.encrypt_blocks(), message.skip_blocks()));
 }
 
 void ConvertAudioDecoderConfigToProto(const AudioDecoderConfig& audio_config,

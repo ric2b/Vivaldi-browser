@@ -74,10 +74,11 @@ class CoreTabHelper : public content::WebContentsObserver,
 
   // content::WebContentsObserver overrides:
   void DidStartLoading() override;
-  void WasShown() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
   void WebContentsDestroyed() override;
   void BeforeUnloadFired(const base::TimeTicks& proceed_time) override;
   void BeforeUnloadDialogCancelled() override;
+  void NavigationEntriesDeleted() override;
 
   void DoSearchByImageInNewTab(
       chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame,

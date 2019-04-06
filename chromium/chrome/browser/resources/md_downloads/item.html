@@ -1,7 +1,10 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
@@ -10,7 +13,6 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-progress/paper-progress.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
 <link rel="import" href="chrome://downloads/browser_proxy.html">
 <link rel="import" href="chrome://downloads/constants.html">
 <link rel="import" href="chrome://downloads/i18n_setup.html">
@@ -18,7 +20,7 @@
 
 <dom-module id="downloads-item">
   <template>
-    <style include="action-link cr-hidden-style">
+    <style include="action-link cr-hidden-style cr-icons paper-button-style">
       :host {
         display: flex;
         flex-direction: column;
@@ -31,10 +33,13 @@
       }
 
       #date {
-        color: var(--paper-grey-700);
-        font-size: 100%;
-        font-weight: 500;
+        color: var(--google-grey-900);
+        font-size: 0.875rem;
+        font-weight: 400;
+        letter-spacing: .25px;
         margin: 24px auto 10px;
+        padding-bottom: 4px;
+        padding-top: 8px;
         width: var(--downloads-card-width);
       }
 
@@ -44,7 +49,7 @@
 
       #content {
         background: white;
-        border-radius: 2px;
+        border-radius: var(--cr-card-border-radius);
         display: flex;
         flex: none;
         margin: 6px auto;
@@ -54,14 +59,12 @@
       }
 
       #content.is-active {
-        @apply(--shadow-elevation-2dp);
+        @apply --cr-card-elevation;
       }
 
       #content:not(.is-active) {
         background: rgba(255, 255, 255, .6);
-        box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .03),
-                    0 1px 4px 0 rgba(0, 0, 0, .048),
-                    0 3px 1px -2px rgba(0, 0, 0, .12);
+        border: 1px var(--google-grey-300) solid;
       }
 
       #details {
@@ -130,13 +133,12 @@
         word-break: break-all;
       }
 
-      #name {
-        -webkit-margin-end: 12px;  /* Only really affects #tag. */
+      .is-active :-webkit-any(#name, #file-link, #show) {
+        color: var(--google-blue-600);
       }
 
-      #pause-or-resume,
-      .is-active :-webkit-any(#name, #file-link, #show) {
-        color: rgb(51, 103, 214);
+      #name {
+        -webkit-margin-end: 12px;  /* Only really affects #tag. */
       }
 
       #tag {
@@ -155,7 +157,7 @@
       }
 
       .is-active #url {
-        color: var(--paper-grey-600);
+        color: var(--cr-secondary-text-color);
       }
 
       #progress,
@@ -169,24 +171,13 @@
       }
 
       #progress {
-        --paper-progress-active-color: rgb(54, 126, 237);
+        --paper-progress-active-color: var(--google-blue-600);
         --paper-progress-container-color: rgb(223, 222, 223);
         width: auto;
       }
 
-      .controls {
-        -webkit-margin-start: -.57em;
-      }
-
-      #cancel,
-      #retry,
-      .keep,
-      .discard {
-        color: #5a5a5a;
-      }
-
       #show {
-        margin: .7em .57em;
+        margin: .7em 0;
       }
 
       #controlled-by {
@@ -203,7 +194,7 @@
       }
 
       .is-active #controlled-by a {
-        color: rgb(51, 103, 214);
+        color: var(--google-blue-600);
       }
 
       #remove-wrapper {
@@ -211,11 +202,11 @@
         margin: 0;
       }
 
-      #remove {
-        color: var(--paper-grey-700);
-        font-size: 16px;
+      #remove-wrapper > paper-icon-button-light {
+        -webkit-margin-end: 0;
+        -webkit-margin-start: 0;
+        color: var(--google-grey-refresh-700);
         height: 32px;
-        line-height: 17px;  /* TODO(dbeam): why is this necesssary? */
         width: 32px;
       }
 
@@ -244,7 +235,7 @@
         <div id="title-area"><!--
           Can't have any line breaks.
           --><a is="action-link" id="file-link" href="[[data.url]]"
-              on-tap="onFileLinkTap_"
+              on-click="onFileLinkTap_"
               hidden="[[!completelyOnDisk_]]">[[data.file_name]]</a><!--
           Before #name.
           --><span id="name"
@@ -263,20 +254,21 @@
         </template>
 
         <div id="safe" class="controls" hidden="[[isDangerous_]]">
-          <a is="action-link" id="show" on-tap="onShowTap_"
+          <a is="action-link" id="show" on-click="onShowTap_"
               hidden="[[!completelyOnDisk_]]">$i18n{controlShowInFolder}</a>
           <template is="dom-if" if="[[data.retry]]">
-            <paper-button id="retry" on-tap="onRetryTap_">
+            <paper-button class="action-button" on-click="onRetryTap_">
               $i18n{controlRetry}
             </paper-button>
           </template>
           <template is="dom-if" if="[[pauseOrResumeText_]]">
-            <paper-button id="pause-or-resume" on-tap="onPauseOrResumeTap_">
+            <paper-button class$="[[pauseOrResumeClass_]]"
+                on-click="onPauseOrResumeTap_">
               [[pauseOrResumeText_]]
             </paper-button>
           </template>
           <template is="dom-if" if="[[showCancel_]]">
-            <paper-button id="cancel" on-tap="onCancelTap_">
+            <paper-button on-click="onCancelTap_">
               $i18n{controlCancel}
             </paper-button>
           </template>
@@ -287,28 +279,32 @@
           <div id="dangerous" class="controls">
             <!-- Dangerous file types (e.g. .exe, .jar). -->
             <template is="dom-if" if="[[!isMalware_]]">
-              <paper-button id="discard" on-tap="onDiscardDangerousTap_"
-                  class="discard">$i18n{dangerDiscard}</paper-button>
-              <paper-button id="save" on-tap="onSaveDangerousTap_"
-                  class="keep">$i18n{dangerSave}</paper-button>
+              <paper-button on-click="onDiscardDangerousTap_"
+                  class="action-button">$i18n{dangerDiscard}</paper-button>
+              <paper-button on-click="onSaveDangerousTap_">
+                $i18n{dangerSave}</paper-button>
             </template>
 
             <!-- Things that safe browsing has determined to be dangerous. -->
             <template is="dom-if" if="[[isMalware_]]">
-              <paper-button id="danger-remove" on-tap="onDiscardDangerousTap_"
-                  class="discard">$i18n{controlRemoveFromList}</paper-button>
-              <paper-button id="restore" on-tap="onSaveDangerousTap_"
-                  class="keep">$i18n{dangerRestore}</paper-button>
+              <paper-button on-click="onDiscardDangerousTap_"
+                  class="action-button">
+                $i18n{controlRemoveFromList}</paper-button>
+              <paper-button on-click="onSaveDangerousTap_">
+                $i18n{dangerRestore}</paper-button>
             </template>
           </div>
         </template>
       </div>
 
-      <div id="remove-wrapper" class="icon-wrapper">
-        <button is="paper-icon-button-light" id="remove"
-            title="$i18n{controlRemoveFromList}"
-            style$="[[computeRemoveStyle_(isDangerous_, showCancel_)]]"
-            on-tap="onRemoveTap_">&#x2715;</button>
+      <div id="remove-wrapper" class="icon-wrapper ">
+        <paper-icon-button-light class="icon-clear"
+            style$="[[computeRemoveStyle_(isDangerous_, showCancel_)]]">
+          <button id="remove"
+              title="$i18n{controlRemoveFromList}"
+              aria-label="$i18n{controlRemoveFromList}"
+              on-click="onRemoveTap_"></button>
+        </paper-icon-button-light>
       </div>
 
       <div id="incognito" title="$i18n{inIncognito}" hidden="[[!data.otr]]">

@@ -24,6 +24,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/layout.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/reflector.h"
 #include "ui/display/display_layout.h"
@@ -182,12 +183,9 @@ void MirrorWindowController::UpdateWindow(
       mirroring_host_info_map_[display_info.id()] = host_info;
 
       aura::WindowTreeHost* host = host_info->ash_host->AsWindowTreeHost();
-      // TODO: Config::MUS should not install an InputMethod.
-      // http://crbug.com/706913
-      if (!host->has_input_method()) {
-        host->SetSharedInputMethod(
-            Shell::Get()->window_tree_host_manager()->input_method());
-      }
+      DCHECK(!host->has_input_method());
+      host->SetSharedInputMethod(
+          Shell::Get()->window_tree_host_manager()->input_method());
       host->window()->SetName(
           base::StringPrintf("MirrorRootWindow-%d", mirror_host_count++));
       host->compositor()->SetBackgroundColor(SK_ColorBLACK);
@@ -305,15 +303,15 @@ void MirrorWindowController::CloseIfNotNecessary() {
 }
 
 void MirrorWindowController::Close(bool delay_host_deletion) {
-  for (auto& info : mirroring_host_info_map_)
-    CloseAndDeleteHost(info.second, delay_host_deletion);
-
-  mirroring_host_info_map_.clear();
   if (reflector_) {
     aura::Env::GetInstance()->context_factory_private()->RemoveReflector(
         reflector_.get());
     reflector_.reset();
   }
+
+  for (auto& info : mirroring_host_info_map_)
+    CloseAndDeleteHost(info.second, delay_host_deletion);
+  mirroring_host_info_map_.clear();
 }
 
 void MirrorWindowController::OnHostResized(aura::WindowTreeHost* host) {
@@ -323,8 +321,6 @@ void MirrorWindowController::OnHostResized(aura::WindowTreeHost* host) {
       if (info->mirror_window_host_size == host->GetBoundsInPixels().size())
         return;
       info->mirror_window_host_size = host->GetBoundsInPixels().size();
-      // TODO: |reflector_| should always be non-null here, but isn't in MUS
-      // yet because of http://crbug.com/601869.
       if (reflector_)
         reflector_->OnMirroringCompositorResized();
       // No need to update the transformer as new transformer is already set
@@ -342,7 +338,7 @@ void MirrorWindowController::OnAcceleratedWidgetOverridden(
     aura::WindowTreeHost* host) {
   DCHECK_NE(host->GetAcceleratedWidget(), gfx::kNullAcceleratedWidget);
   DCHECK_NE(Shell::GetAshConfig(), Config::CLASSIC);
-  DCHECK(!switches::IsMusHostingViz());
+  DCHECK(!base::FeatureList::IsEnabled(features::kMashDeprecated));
   MirroringHostInfo* info = mirroring_host_info_map_[host->GetDisplayId()];
   if (reflector_) {
     reflector_->AddMirroringLayer(info->mirror_window->layer());
@@ -414,8 +410,7 @@ void MirrorWindowController::CloseAndDeleteHost(MirroringHostInfo* host_info,
   host->RemoveObserver(Shell::Get()->window_tree_host_manager());
   host->RemoveObserver(this);
   host_info->ash_host->PrepareForShutdown();
-  // TODO: |reflector_| should always be non-null here, but isn't in MUS yet
-  // because of http://crbug.com/601869.
+  // |reflector_| may be null during display disconnect or shutdown.
   if (reflector_ && host_info->mirror_window->layer()->GetCompositor())
     reflector_->RemoveMirroringLayer(host_info->mirror_window->layer());
 

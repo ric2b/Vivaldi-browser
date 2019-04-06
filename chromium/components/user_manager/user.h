@@ -13,7 +13,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_info.h"
 #include "components/user_manager/user_manager_export.h"
@@ -87,6 +87,9 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // Returns the user type.
   virtual UserType GetType() const = 0;
 
+  // Will LOG(FATAL) unless overridden.
+  virtual void UpdateType(UserType user_type);
+
   // Returns true if user has gaia account. True for users of types
   // USER_TYPE_REGULAR and USER_TYPE_CHILD.
   virtual bool HasGaiaAccount() const;
@@ -96,6 +99,9 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   // Returns true if user is supervised.
   virtual bool IsSupervised() const;
+
+  // Returns true if user is child.
+  virtual bool IsChild() const;
 
   // True if user image can be synced.
   virtual bool CanSyncImage() const;
@@ -158,6 +164,11 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // Whether the user's session has completed initialization yet.
   bool profile_ever_initialized() const { return profile_ever_initialized_; }
 
+  // Public so it can be called via tests.
+  void set_profile_ever_initialized(bool profile_ever_initialized) {
+    profile_ever_initialized_ = profile_ever_initialized;
+  }
+
   // True if the user's session can be locked (i.e. the user has a password with
   // which to unlock the session).
   bool can_lock() const;
@@ -176,6 +187,12 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   static User* CreatePublicAccountUserForTesting(const AccountId& account_id) {
     return CreatePublicAccountUser(account_id);
+  }
+
+  static User* CreateRegularUserForTesting(const AccountId& account_id) {
+    User* user = CreateRegularUser(account_id, USER_TYPE_REGULAR);
+    user->SetImage(std::unique_ptr<UserImage>(new UserImage), 0);
+    return user;
   }
 
   void AddProfileCreatedObserver(base::OnceClosure on_profile_created);
@@ -243,10 +260,6 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   void set_force_online_signin(bool force_online_signin) {
     force_online_signin_ = force_online_signin;
-  }
-
-  void set_profile_ever_initialized(bool profile_ever_initialized) {
-    profile_ever_initialized_ = profile_ever_initialized;
   }
 
   void set_username_hash(const std::string& username_hash) {

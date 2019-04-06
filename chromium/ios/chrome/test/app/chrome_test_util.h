@@ -15,7 +15,6 @@ class ChromeBrowserState;
 
 @protocol ApplicationCommands;
 @class DeviceSharingManager;
-@class GenericChromeCommand;
 @class MainController;
 @class NewTabPageController;
 @class UIViewController;
@@ -97,6 +96,12 @@ void WaitForBreakpadQueue();
 
 // Simulates launching Chrome from another application.
 void OpenChromeFromExternalApp(const GURL& url);
+
+// Purges cached web view page, so the next time back navigation will not use
+// cached page. Browsers don't have to use fresh version for back forward
+// navigation for HTTP pages and may serve version from the cache even if
+// Cache-Control response header says otherwise.
+bool PurgeCachedWebViewPages() WARN_UNUSED_RESULT;
 
 }  // namespace chrome_test_util
 

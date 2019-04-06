@@ -7,14 +7,13 @@
 #include <AVFoundation/AVFoundation.h>
 #include <set>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/mac/bind_objc_block.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_checker.h"
-#include "media/audio/mac/audio_device_listener_mac.h"
 
 namespace {
 
@@ -206,10 +205,10 @@ void SuspendObserverDelegate::StartObserver(
   // done on UI thread. The devices array is retained in |device_thread| and
   // released in DoStartObserver().
   base::PostTaskAndReplyWithResult(
-      device_thread.get(), FROM_HERE, base::BindBlock(^{
+      device_thread.get(), FROM_HERE, base::BindOnce(base::RetainBlock(^{
         return [[AVCaptureDevice devices] retain];
-      }),
-      base::Bind(&SuspendObserverDelegate::DoStartObserver, this));
+      })),
+      base::BindOnce(&SuspendObserverDelegate::DoStartObserver, this));
 }
 
 void SuspendObserverDelegate::OnDeviceChanged(
@@ -219,10 +218,10 @@ void SuspendObserverDelegate::OnDeviceChanged(
   // new devices and the old ones to be done on main thread. The devices array
   // is retained in |device_thread| and released in DoOnDeviceChanged().
   PostTaskAndReplyWithResult(
-      device_thread.get(), FROM_HERE, base::BindBlock(^{
+      device_thread.get(), FROM_HERE, base::BindOnce(base::RetainBlock(^{
         return [[AVCaptureDevice devices] retain];
-      }),
-      base::Bind(&SuspendObserverDelegate::DoOnDeviceChanged, this));
+      })),
+      base::BindOnce(&SuspendObserverDelegate::DoOnDeviceChanged, this));
 }
 
 void SuspendObserverDelegate::ResetDeviceMonitor() {
@@ -444,14 +443,6 @@ void DeviceMonitorMac::StartMonitoring() {
   DVLOG(1) << "Monitoring via AVFoundation";
   device_monitor_impl_ =
       std::make_unique<AVFoundationMonitorImpl>(this, device_task_runner_);
-  audio_device_listener_ = std::make_unique<AudioDeviceListenerMac>(
-      base::BindRepeating([] {
-        if (base::SystemMonitor::Get()) {
-          base::SystemMonitor::Get()->ProcessDevicesChanged(
-              base::SystemMonitor::DEVTYPE_AUDIO);
-        }
-      }),
-      true /* monitor_default_input */, true /* monitor_addition_removal */);
 }
 
 void DeviceMonitorMac::NotifyDeviceChanged(

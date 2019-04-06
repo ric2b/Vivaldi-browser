@@ -13,11 +13,11 @@
 #include "base/stl_util.h"
 #include "services/ui/public/cpp/input_devices/input_device_client_test_api.h"
 #include "ui/display/display.h"
-#include "ui/display/manager/chromeos/test/touch_device_manager_test_api.h"
-#include "ui/display/manager/chromeos/test/touch_transform_controller_test_api.h"
-#include "ui/display/manager/chromeos/touch_device_manager.h"
-#include "ui/display/manager/chromeos/touch_transform_setter.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/manager/test/touch_device_manager_test_api.h"
+#include "ui/display/manager/test/touch_transform_controller_test_api.h"
+#include "ui/display/manager/touch_device_manager.h"
+#include "ui/display/manager/touch_transform_setter.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/devices/touch_device_transform.h"
@@ -145,8 +145,8 @@ class TouchCalibratorControllerTest : public AshTestBase {
       }
     }
 
-    ui::test::EventGenerator& eg = GetEventGenerator();
-    eg.set_current_target(event_target);
+    ui::test::EventGenerator* eg = GetEventGenerator();
+    eg->set_current_target(event_target);
 
     ui::TouchEvent press_touch_event(
         ui::ET_TOUCH_PRESSED, location, ui::EventTimeForNow(),
@@ -162,8 +162,8 @@ class TouchCalibratorControllerTest : public AshTestBase {
     press_touch_event.set_source_device_id(touch_device_id);
     release_touch_event.set_source_device_id(touch_device_id);
 
-    eg.Dispatch(&press_touch_event);
-    eg.Dispatch(&release_touch_event);
+    eg->Dispatch(&press_touch_event);
+    eg->Dispatch(&release_touch_event);
   }
 
   ui::TouchscreenDevice InitTouchDevice(
@@ -195,7 +195,7 @@ TEST_F(TouchCalibratorControllerTest, StartCalibration) {
   StartCalibrationChecks(&touch_calibrator_controller, touch_display);
 
   ui::EventTargetTestApi test_api(Shell::Get());
-  const ui::EventHandlerList& handlers = test_api.pre_target_handlers();
+  ui::EventHandlerList handlers = test_api.GetPreTargetHandlers();
   EXPECT_TRUE(base::ContainsValue(handlers, &touch_calibrator_controller));
 }
 
@@ -204,9 +204,9 @@ TEST_F(TouchCalibratorControllerTest, KeyEventIntercept) {
   TouchCalibratorController touch_calibrator_controller;
   StartCalibrationChecks(&touch_calibrator_controller, touch_display);
 
-  ui::test::EventGenerator& eg = GetEventGenerator();
+  ui::test::EventGenerator* eg = GetEventGenerator();
   EXPECT_TRUE(touch_calibrator_controller.IsCalibrating());
-  eg.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  eg->PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   EXPECT_FALSE(touch_calibrator_controller.IsCalibrating());
 }
 

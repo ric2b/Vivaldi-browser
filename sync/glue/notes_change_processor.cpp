@@ -74,7 +74,6 @@ void NotesChangeProcessor::UpdateSyncNodeProperties(
   dst->SetIsFolder(src->is_folder());
   dst->SetTitle(base::UTF16ToUTF8(src->GetTitle()));
   sync_pb::NotesSpecifics notes_specifics(dst->GetNotesSpecifics());
-  notes_specifics.set_subject(base::UTF16ToUTF8(src->GetTitle()));
   if (!src->is_folder()) {
     if (!src->GetURL().is_empty() && !src->GetURL().is_valid()) {
       // Report the invalid URL and continue.
@@ -96,6 +95,8 @@ void NotesChangeProcessor::UpdateSyncNodeProperties(
   }
   if (src->is_trash())
     notes_specifics.set_special_node_type(sync_pb::NotesSpecifics::TRASH_NODE);
+  if (src->is_separator())
+    notes_specifics.set_special_node_type(sync_pb::NotesSpecifics::SEPARATOR);
   notes_specifics.set_creation_time_us(
       src->GetCreationTime().ToInternalValue());
   notes_specifics.set_content(base::UTF16ToUTF8(src->GetContent()));
@@ -674,7 +675,7 @@ void NotesChangeProcessor::UpdateNoteWithSyncData(
   const sync_pb::NotesSpecifics& specifics = sync_node.GetNotesSpecifics();
   if (!sync_node.GetIsFolder())
     model->SetURL(node, GURL(specifics.url()));
-  model->SetTitle(node, base::UTF8ToUTF16(specifics.subject()));
+  model->SetTitle(node, base::UTF8ToUTF16(sync_node.GetTitle()));
   model->SetContent(node, base::UTF8ToUTF16(specifics.content()));
   if (specifics.has_creation_time_us()) {
     model->SetDateAdded(
@@ -701,6 +702,9 @@ void NotesChangeProcessor::UpdateNoteWithAttachmentData(
     switch (specifics.special_node_type()) {
       case sync_pb::NotesSpecifics::TRASH_NODE:
         mutable_node->SetType(Notes_Node::TRASH);
+        break;
+      case sync_pb::NotesSpecifics::SEPARATOR:
+        mutable_node->SetType(Notes_Node::SEPARATOR);
         break;
       default:
         break;
@@ -751,11 +755,9 @@ const Notes_Node* NotesChangeProcessor::CreateNotesEntry(
   const Notes_Node* node;
   const sync_pb::NotesSpecifics& specifics = sync_node->GetNotesSpecifics();
   if (sync_node->GetIsFolder()) {
-    node = model->AddFolder(parent, index,
-                            base::UTF8ToUTF16(sync_node->GetTitle()));
+    node = model->AddFolder(parent, index, title);
   } else {
-    node = model->AddNote(parent, index, base::UTF8ToUTF16(specifics.subject()),
-                          GURL(specifics.url()),
+    node = model->AddNote(parent, index, title, GURL(specifics.url()),
                           base::UTF8ToUTF16(specifics.content()));
   }
   UpdateNoteWithAttachmentData(specifics, node);

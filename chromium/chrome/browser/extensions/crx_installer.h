@@ -28,7 +28,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
 
-class ExtensionService;
 class ExtensionServiceTest;
 class SkBitmap;
 struct WebApplicationInfo;
@@ -37,8 +36,13 @@ namespace base {
 class SequencedTaskRunner;
 }
 
+namespace service_manager {
+class Connector;
+}
+
 namespace extensions {
 class CrxInstallError;
+class ExtensionService;
 class ExtensionUpdaterTest;
 class PreloadCheckGroup;
 
@@ -237,6 +241,10 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // invalid if this isn't an update.
   const base::Version& current_version() const { return current_version_; }
 
+  static void set_connector_for_test(service_manager::Connector* connector) {
+    connector_for_test_ = connector;
+  }
+
  private:
   friend class ::ExtensionServiceTest;
   friend class ExtensionUpdaterTest;
@@ -254,7 +262,7 @@ class CrxInstaller : public SandboxedUnpackerClient {
 
   // Called after OnUnpackSuccess as a last check to see whether the install
   // should complete.
-  CrxInstallError AllowInstall(const Extension* extension);
+  base::Optional<CrxInstallError> AllowInstall(const Extension* extension);
 
   // SandboxedUnpackerClient
   void OnUnpackFailure(const CrxInstallError& error) override;
@@ -294,7 +302,7 @@ class CrxInstaller : public SandboxedUnpackerClient {
   void ReportSuccessFromFileThread();
   void ReportSuccessFromUIThread();
   void NotifyCrxInstallBegin();
-  void NotifyCrxInstallComplete(bool success);
+  void NotifyCrxInstallComplete(const base::Optional<CrxInstallError>& error);
 
   // Deletes temporary directory and crx file if needed.
   void CleanupTempFiles();
@@ -306,6 +314,9 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // Show re-enable prompt if the update is initiated from the settings page
   // and needs additional permissions.
   void ConfirmReEnable();
+
+  // Returns the connector to the ServiceManager.
+  service_manager::Connector* GetConnector() const;
 
   void set_install_flag(int flag, bool val) {
     if (val)
@@ -438,7 +449,7 @@ class CrxInstaller : public SandboxedUnpackerClient {
   extension_misc::CrxInstallCause install_cause_;
 
   // Creation flags to use for the extension.  These flags will be used
-  // when calling Extenion::Create() by the crx installer.
+  // when calling Extension::Create() by the crx installer.
   int creation_flags_;
 
   // Whether to allow off store installation.
@@ -483,6 +494,8 @@ class CrxInstaller : public SandboxedUnpackerClient {
 
   // Invoked when the install is completed.
   InstallerResultCallback installer_callback_;
+
+  static service_manager::Connector* connector_for_test_;
 
   DISALLOW_COPY_AND_ASSIGN(CrxInstaller);
 };

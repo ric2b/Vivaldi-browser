@@ -24,9 +24,9 @@ cr.define('languages_page_tests', function() {
     let browserProxy = null;
 
     // Enabled language pref name for the platform.
-    const languagesPref =
-        cr.isChromeOS ? 'settings.language.preferred_languages'
-                      : 'intl.accept_languages';
+    const languagesPref = cr.isChromeOS ?
+        'settings.language.preferred_languages' :
+        'intl.accept_languages';
 
     // Initial value of enabled languages pref used in tests.
     const initialLanguages = 'en-US,sw';
@@ -87,9 +87,9 @@ cr.define('languages_page_tests', function() {
       // test_util.whenAttributeIs for use elsewhere.
       const onMutation = function(mutations, observer) {
         if (mutations.some(function(mutation) {
-          return mutation.type == 'childList' &&
-              Array.from(mutation.removedNodes).includes(dialog);
-        })) {
+              return mutation.type == 'childList' &&
+                  Array.from(mutation.removedNodes).includes(dialog);
+            })) {
           // Sanity check: the dialog should no longer be in the DOM.
           assertEquals(null, languagesPage.$$('settings-add-languages-dialog'));
           observer.disconnect();
@@ -101,7 +101,7 @@ cr.define('languages_page_tests', function() {
       setup(function(done) {
         const addLanguagesButton =
             languagesCollapse.querySelector('#addLanguages');
-        MockInteractions.tap(addLanguagesButton);
+        addLanguagesButton.click();
 
         // The page stamps the dialog, registers listeners, and populates the
         // iron-list asynchronously at microtask timing, so wait for a new task.
@@ -139,45 +139,45 @@ cr.define('languages_page_tests', function() {
 
       test('cancel', function() {
         // Canceling the dialog should close and remove it.
-        MockInteractions.tap(cancelButton);
+        cancelButton.click();
 
         return dialogClosedResolver.promise;
       });
 
       test('add languages and cancel', function() {
         // Check some languages.
-        MockInteractions.tap(dialogItems[1]);  // en-CA.
-        MockInteractions.tap(dialogItems[2]);  // tk.
+        dialogItems[1].click();  // en-CA.
+        dialogItems[2].click();  // tk.
 
         // Canceling the dialog should close and remove it without enabling
         // the checked languages.
-        MockInteractions.tap(cancelButton);
+        cancelButton.click();
         return dialogClosedResolver.promise.then(function() {
-          assertEquals(initialLanguages,
-                       languageHelper.getPref(languagesPref).value);
+          assertEquals(
+              initialLanguages, languageHelper.getPref(languagesPref).value);
         });
       });
 
       test('add languages and confirm', function() {
         // No languages have been checked, so the action button is inert.
-        MockInteractions.tap(actionButton);
+        actionButton.click();
         Polymer.dom.flush();
         assertEquals(dialog, languagesPage.$$('settings-add-languages-dialog'));
 
         // Check and uncheck one language.
-        MockInteractions.tap(dialogItems[0]);
+        dialogItems[0].click();
         assertFalse(actionButton.disabled);
-        MockInteractions.tap(dialogItems[0]);
+        dialogItems[0].click();
         assertTrue(actionButton.disabled);
 
         // Check multiple languages.
-        MockInteractions.tap(dialogItems[0]);  // en.
-        MockInteractions.tap(dialogItems[2]);  // tk.
+        dialogItems[0].click();  // en.
+        dialogItems[2].click();  // tk.
         assertFalse(actionButton.disabled);
 
         // The action button should close and remove the dialog, enabling the
         // checked languages.
-        MockInteractions.tap(actionButton);
+        actionButton.click();
 
         assertEquals(
             initialLanguages + ',en,tk',
@@ -212,6 +212,27 @@ cr.define('languages_page_tests', function() {
         searchInput.setValue('egaugnal');
         Polymer.dom.flush();
         assertEquals(0, getItems().length);
+
+        // Issue query that should never match any language.
+        searchInput.setValue('_arc_ime_language_');
+        Polymer.dom.flush();
+        assertEquals(0, getItems().length);
+      });
+
+      test('Escape key behavior', function() {
+        const searchInput = dialog.$$('settings-subpage-search');
+        searchInput.setValue('dummyquery');
+
+        // Test that dialog is not closed if 'Escape' is pressed on the input
+        // and a search query exists.
+        MockInteractions.keyDownOn(searchInput, 19, [], 'Escape');
+        assertTrue(dialog.$.dialog.open);
+
+        // Test that dialog is closed if 'Escape' is pressed on the input and no
+        // search query exists.
+        searchInput.setValue('');
+        MockInteractions.keyDownOn(searchInput, 19, [], 'Escape');
+        assertFalse(dialog.$.dialog.open);
       });
     });
 
@@ -238,16 +259,17 @@ cr.define('languages_page_tests', function() {
         assertTrue(actionMenu.open);
         for (const buttonKey of Object.keys(buttonVisibility)) {
           const buttonItem = getMenuItem(buttonKey);
-          assertEquals(!buttonVisibility[buttonKey], buttonItem.hidden,
-                       'Menu item "' + buttonKey + '" hidden');
+          assertEquals(
+              !buttonVisibility[buttonKey], buttonItem.hidden,
+              'Menu item "' + buttonKey + '" hidden');
         }
       }
 
       test('structure', function() {
-        const languageOptionsDropdownTrigger = languagesCollapse.querySelector(
-            'button');
+        const languageOptionsDropdownTrigger =
+            languagesCollapse.querySelector('button');
         assertTrue(!!languageOptionsDropdownTrigger);
-        MockInteractions.tap(languageOptionsDropdownTrigger);
+        languageOptionsDropdownTrigger.click();
         assertTrue(actionMenu.open);
 
         const separator = actionMenu.querySelector('hr');
@@ -267,12 +289,12 @@ cr.define('languages_page_tests', function() {
         assertTrue(!!settingsToggle);
 
         // Clicking on the toggle switches it to false.
-        MockInteractions.tap(settingsToggle);
+        settingsToggle.click();
         let newToggleValue = languageHelper.prefs.translate.enabled.value;
         assertFalse(newToggleValue);
 
         // Clicking on the toggle switches it to true again.
-        MockInteractions.tap(settingsToggle);
+        settingsToggle.click();
         newToggleValue = languageHelper.prefs.translate.enabled.value;
         assertTrue(newToggleValue);
       });
@@ -282,7 +304,7 @@ cr.define('languages_page_tests', function() {
         const languageOptionsDropdownTrigger =
             languagesCollapse.querySelectorAll('button')[1];
         assertTrue(!!languageOptionsDropdownTrigger);
-        MockInteractions.tap(languageOptionsDropdownTrigger);
+        languageOptionsDropdownTrigger.click();
         assertTrue(actionMenu.open);
 
         // 'sw' supports translate to the target language ('en').
@@ -291,7 +313,7 @@ cr.define('languages_page_tests', function() {
         assertTrue(translateOption.checked);
 
         // Toggle the translate option.
-        MockInteractions.tap(translateOption);
+        translateOption.click();
 
         // Menu should stay open briefly.
         assertTrue(actionMenu.open);
@@ -313,7 +335,7 @@ cr.define('languages_page_tests', function() {
         const languageOptionsDropdownTrigger =
             languagesCollapse.querySelectorAll('button')[1];
         assertTrue(!!languageOptionsDropdownTrigger);
-        MockInteractions.tap(languageOptionsDropdownTrigger);
+        languageOptionsDropdownTrigger.click();
         assertTrue(actionMenu.open);
 
         // The language-specific translation option should be hidden.
@@ -331,20 +353,20 @@ cr.define('languages_page_tests', function() {
 
         // Find the new language item.
         const items = languagesCollapse.querySelectorAll('.list-item');
-        const domRepeat = assert(
-            languagesCollapse.querySelector('template[is="dom-repeat"]'));
+        const domRepeat = assert(languagesCollapse.querySelector(
+            Polymer.DomRepeat ? 'dom-repeat' : 'template[is="dom-repeat"]'));
         const item = Array.from(items).find(function(el) {
           return domRepeat.itemForElement(el) &&
               domRepeat.itemForElement(el).language.code == 'no';
         });
 
         // Open the menu and select Remove.
-        MockInteractions.tap(item.querySelector('button'));
+        item.querySelector('button').click();
 
         assertTrue(actionMenu.open);
         const removeMenuItem = getMenuItem('removeLanguage');
         assertFalse(removeMenuItem.disabled);
-        MockInteractions.tap(removeMenuItem);
+        removeMenuItem.click();
         assertFalse(actionMenu.open);
 
         assertEquals(
@@ -358,35 +380,42 @@ cr.define('languages_page_tests', function() {
 
         Polymer.dom.flush();
 
-        const menuButtons =
-            languagesCollapse.querySelectorAll(
-                '.list-item button.icon-more-vert');
+        const menuButtons = languagesCollapse.querySelectorAll(
+            '.list-item paper-icon-button-light.icon-more-vert');
 
         // First language should not have "Move up" or "Move to top".
-        MockInteractions.tap(menuButtons[0]);
+        menuButtons[0].querySelector('button').click();
         assertMenuItemButtonsVisible({
-          moveToTop: false, moveUp: false, moveDown: true,
+          moveToTop: false,
+          moveUp: false,
+          moveDown: true,
         });
         actionMenu.close();
 
         // Second language should not have "Move up".
-        MockInteractions.tap(menuButtons[1]);
+        menuButtons[1].querySelector('button').click();
         assertMenuItemButtonsVisible({
-          moveToTop: true, moveUp: false, moveDown: true,
+          moveToTop: true,
+          moveUp: false,
+          moveDown: true,
         });
         actionMenu.close();
 
         // Middle languages should have all buttons.
-        MockInteractions.tap(menuButtons[2]);
+        menuButtons[2].querySelector('button').click();
         assertMenuItemButtonsVisible({
-          moveToTop: true, moveUp: true, moveDown: true,
+          moveToTop: true,
+          moveUp: true,
+          moveDown: true,
         });
         actionMenu.close();
 
         // Last language should not have "Move down".
-        MockInteractions.tap(menuButtons[menuButtons.length - 1]);
+        menuButtons[menuButtons.length - 1].querySelector('button').click();
         assertMenuItemButtonsVisible({
-          moveToTop: true, moveUp: true, moveDown: false,
+          moveToTop: true,
+          moveUp: true,
+          moveDown: false,
         });
         actionMenu.close();
       });
@@ -399,43 +428,44 @@ cr.define('languages_page_tests', function() {
         assertTrue(inputMethodSettingsExist);
         const manageInputMethodsButton =
             inputMethodsCollapse.querySelector('#manageInputMethods');
-        MockInteractions.tap(manageInputMethodsButton);
+        manageInputMethodsButton.click();
         assertTrue(!!languagesPage.$$('settings-manage-input-methods-page'));
       } else {
         assertFalse(inputMethodSettingsExist);
       }
     });
 
-    test(TestNames.Spellcheck, function() {
-      const spellCheckCollapse = languagesPage.$.spellCheckCollapse;
-      const spellCheckSettingsExist = !!spellCheckCollapse;
-      if (cr.isMac) {
-        assertFalse(spellCheckSettingsExist);
-      } else {
+    suite(TestNames.Spellcheck, function() {
+      test('structure', function() {
+        const spellCheckCollapse = languagesPage.$.spellCheckCollapse;
+        const spellCheckSettingsExist = !!spellCheckCollapse;
+        if (cr.isMac) {
+          assertFalse(spellCheckSettingsExist);
+          return;
+        }
+
         assertTrue(spellCheckSettingsExist);
 
-        // The row button should have a secondary row specifying which language
-        // spell check is enabled for.
+        // The row button should have a secondary row specifying which
+        // language spell check is enabled for.
         const triggerRow = languagesPage.$.spellCheckSubpageTrigger;
 
         // en-US starts with spellcheck enabled, so the secondary row is
         // populated.
         assertTrue(triggerRow.classList.contains('two-line'));
-        assertLT(
-            0, triggerRow.querySelector('.secondary').textContent.length);
+        assertLT(0, triggerRow.querySelector('.secondary').textContent.length);
 
-        MockInteractions.tap(triggerRow);
+        triggerRow.click();
         Polymer.dom.flush();
 
         // Disable spellcheck for en-US.
         const spellcheckLanguageToggle =
             spellCheckCollapse.querySelector('cr-toggle[checked]');
         assertTrue(!!spellcheckLanguageToggle);
-        MockInteractions.tap(spellcheckLanguageToggle);
+        spellcheckLanguageToggle.click();
         assertFalse(spellcheckLanguageToggle.checked);
         assertEquals(
-            0,
-            languageHelper.prefs.spellcheck.dictionaries.value.length);
+            0, languageHelper.prefs.spellcheck.dictionaries.value.length);
 
         // Now the secondary row is empty, so it shouldn't be shown.
         assertFalse(triggerRow.classList.contains('two-line'));
@@ -447,11 +477,29 @@ cr.define('languages_page_tests', function() {
 
         // The second row should no longer be empty.
         assertTrue(triggerRow.classList.contains('two-line'));
-        assertLT(
-            0, triggerRow.querySelector('.secondary').textContent.length);
+        assertLT(0, triggerRow.querySelector('.secondary').textContent.length);
+
+        // Sets |browser.enable_spellchecking| to |value| as if it was set by
+        // policy.
+        const setEnableSpellcheckingViaPolicy = function(value) {
+          const newPrefValue = {
+            key: 'browser.enable_spellchecking',
+            type: chrome.settingsPrivate.PrefType.BOOLEAN,
+            value: value,
+            enforcement: chrome.settingsPrivate.Enforcement.ENFORCED,
+            controlledBy: chrome.settingsPrivate.ControlledBy.DEVICE_POLICY
+          };
+
+          // First set the prefValue, then override the actual preference
+          // object in languagesPage. This is necessary, to avoid a mismatch
+          // between the settings state and |languagesPage.prefs|, which would
+          // cause the value to be reset in |languagesPage.prefs|.
+          languageHelper.setPrefValue('browser.enable_spellchecking', value);
+          languagesPage.set('prefs.browser.enable_spellchecking', newPrefValue);
+        };
 
         // Force-disable spellchecking via policy.
-        languageHelper.setPrefValue('browser.enable_spellchecking', false);
+        setEnableSpellcheckingViaPolicy(false);
         Polymer.dom.flush();
 
         // The second row should not be empty.
@@ -464,10 +512,60 @@ cr.define('languages_page_tests', function() {
         // Force-enable spellchecking via policy, and ensure that the policy
         // indicator is not present. |enable_spellchecking| can be forced to
         // true by policy, but no indicator should be shown in that case.
-        languageHelper.setPrefValue('browser.enable_spellchecking', true);
+        setEnableSpellcheckingViaPolicy(true);
         Polymer.dom.flush();
         assertFalse(!!triggerRow.querySelector('cr-policy-pref-indicator'));
-      }
+      });
+
+      test('error handling', function() {
+        if (cr.isMac)
+          return;
+
+        const checkAllHidden = nodes => {
+          assertTrue(nodes.every(node => node.hidden));
+        };
+
+        const languageSettingsPrivate =
+            browserProxy.getLanguageSettingsPrivate();
+        const spellCheckCollapse = languagesPage.$.spellCheckCollapse;
+        const errorDivs = Array.from(
+            spellCheckCollapse.querySelectorAll('.name-with-error-list div'));
+        assertEquals(4, errorDivs.length);
+        checkAllHidden(errorDivs);
+
+        const retryButtons =
+            Array.from(spellCheckCollapse.querySelectorAll('paper-button'));
+        assertEquals(2, retryButtons.length);
+        checkAllHidden(retryButtons);
+
+        const languageCode =
+            languagesPage.get('languages.enabled.0.language.code');
+        languageSettingsPrivate.onSpellcheckDictionariesChanged.callListeners([
+          {languageCode, isReady: false, downloadFailed: true},
+        ]);
+
+        Polymer.dom.flush();
+        assertFalse(errorDivs[0].hidden);
+        checkAllHidden(errorDivs.slice(1));
+        assertFalse(retryButtons[0].hidden);
+        assertTrue(retryButtons[1].hidden);
+
+        // Check that more information is provided when subsequent downloads
+        // fail.
+        const moreInfo = errorDivs[1];
+        assertTrue(moreInfo.hidden);
+        // No change when status is the same as last update.
+        const currentStatus =
+            languagesPage.get('languages.enabled.0.downloadDictionaryStatus');
+        languageSettingsPrivate.onSpellcheckDictionariesChanged.callListeners(
+            [currentStatus]);
+        Polymer.dom.flush();
+        assertTrue(moreInfo.hidden);
+
+        retryButtons[0].click();
+        Polymer.dom.flush();
+        assertFalse(moreInfo.hidden);
+      });
     });
   });
 

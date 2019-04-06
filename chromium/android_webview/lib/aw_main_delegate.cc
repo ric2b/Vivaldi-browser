@@ -8,7 +8,6 @@
 
 #include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/aw_media_url_interceptor.h"
-#include "android_webview/browser/aw_safe_browsing_config_helper.h"
 #include "android_webview/browser/browser_view_renderer.h"
 #include "android_webview/browser/command_line_helper.h"
 #include "android_webview/browser/deferred_gpu_command_service.h"
@@ -16,10 +15,11 @@
 #include "android_webview/common/aw_descriptors.h"
 #include "android_webview/common/aw_paths.h"
 #include "android_webview/common/aw_switches.h"
-#include "android_webview/common/crash_reporter/aw_microdump_crash_reporter.h"
+#include "android_webview/common/crash_reporter/aw_crash_reporter_client.h"
 #include "android_webview/common/crash_reporter/crash_keys.h"
 #include "android_webview/gpu/aw_content_gpu_client.h"
 #include "android_webview/renderer/aw_content_renderer_client.h"
+#include "android_webview/utility/aw_content_utility_client.h"
 #include "base/android/apk_assets.h"
 #include "base/android/build_info.h"
 #include "base/command_line.h"
@@ -30,10 +30,12 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "cc/base/switches.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/crash/content/app/breakpad_linux.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/safe_browsing/android/safe_browsing_api_handler_bridge.h"
-#include "components/spellcheck/common/spellcheck_features.h"
+#include "components/services/heap_profiling/public/cpp/allocator_shim.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "content/public/browser/android/browser_media_player_manager_register.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/browser_thread.h"
@@ -46,9 +48,13 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/ipc/gl_in_process_context.h"
 #include "media/base/media_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
+
+#if BUILDFLAG(ENABLE_SPELLCHECK)
+#include "components/spellcheck/common/spellcheck_features.h"
+#endif  // ENABLE_SPELLCHECK
 
 namespace android_webview {
 
@@ -76,10 +82,11 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // Web Notification API and the Push API are not supported (crbug.com/434712)
   cl->AppendSwitch(switches::kDisableNotifications);
 
-#if BUILDFLAG(ENABLE_WEBRTC)
   // WebRTC hardware decoding is not supported, internal bug 15075307
   cl->AppendSwitch(switches::kDisableWebRtcHWDecoding);
-#endif
+
+  // Check damage in OnBeginFrame to prevent unnecessary draws.
+  cl->AppendSwitch(cc::switches::kCheckDamageEarly);
 
   // This is needed for sharing textures across the different GL threads.
   cl->AppendSwitch(switches::kEnableThreadedTextureMailboxes);
@@ -126,12 +133,19 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     base::android::RegisterApkAssetWithFileDescriptorStore(
         content::kV8NativesDataDescriptor,
         gin::V8Initializer::GetNativesFilePath());
+#if defined(USE_V8_CONTEXT_SNAPSHOT)
+    gin::V8Initializer::V8SnapshotFileType file_type =
+        gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
+#else
+    gin::V8Initializer::V8SnapshotFileType file_type =
+        gin::V8Initializer::V8SnapshotFileType::kDefault;
+#endif
     base::android::RegisterApkAssetWithFileDescriptorStore(
         content::kV8Snapshot32DataDescriptor,
-        gin::V8Initializer::GetSnapshotFilePath(true));
+        gin::V8Initializer::GetSnapshotFilePath(true, file_type));
     base::android::RegisterApkAssetWithFileDescriptorStore(
         content::kV8Snapshot64DataDescriptor,
-        gin::V8Initializer::GetSnapshotFilePath(false));
+        gin::V8Initializer::GetSnapshotFilePath(false, file_type));
   }
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
@@ -140,20 +154,32 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     cl->AppendSwitch(switches::kInProcessGPU);
   }
 
+#if BUILDFLAG(ENABLE_SPELLCHECK)
   CommandLineHelper::AddEnabledFeature(
       *cl, spellcheck::kAndroidSpellCheckerNonLowEnd.name);
+#endif  // ENABLE_SPELLCHECK
 
   CommandLineHelper::AddDisabledFeature(*cl, features::kWebPayments.name);
 
   // WebView does not support AndroidOverlay yet for video overlays.
   CommandLineHelper::AddDisabledFeature(*cl, media::kUseAndroidOverlay.name);
 
+  // WebView doesn't support embedding CompositorFrameSinks which is needed for
+  // UseSurfaceLayerForVideo feature. https://crbug.com/853832
+  CommandLineHelper::AddDisabledFeature(*cl,
+                                        media::kUseSurfaceLayerForVideo.name);
+
   // WebView does not support EME persistent license yet, because it's not
   // clear on how user can remove persistent media licenses from UI.
   CommandLineHelper::AddDisabledFeature(*cl,
                                         media::kMediaDrmPersistentLicense.name);
 
-  CommandLineHelper::AddDisabledFeature(*cl, features::kMojoInputMessages.name);
+  CommandLineHelper::AddEnabledFeature(
+      *cl, autofill::features::kAutofillSkipComparingInferredLabels.name);
+
+  CommandLineHelper::AddDisabledFeature(
+      *cl, autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout
+               .name);
 
   android_webview::RegisterPathProvider();
 
@@ -165,7 +191,15 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // Used only if the argument filter is enabled in tracing config,
   // as is the case by default in aw_tracing_controller.cc
   base::trace_event::TraceLog::GetInstance()->SetArgumentFilterPredicate(
-      base::Bind(&IsTraceEventArgsWhitelisted));
+      base::BindRepeating(&IsTraceEventArgsWhitelisted));
+
+  // The TLS slot used by the memlog allocator shim needs to be initialized
+  // early to ensure that it gets assigned a low slot number. If it gets
+  // initialized too late, the glibc TLS system will require a malloc call in
+  // order to allocate storage for a higher slot number. Since malloc is hooked,
+  // this causes re-entrancy into the allocator shim, while the TLS object is
+  // partially-initialized, which the TLS object is supposed to protect again.
+  heap_profiling::InitTLSSlot();
 
   return false;
 }
@@ -219,11 +253,11 @@ void AwMainDelegate::PreSandboxStartup() {
 
   static ::crash_reporter::CrashKeyString<64> app_name_key(
       crash_keys::kAppPackageName);
-  app_name_key.Set(android_build_info->package_name());
+  app_name_key.Set(android_build_info->host_package_name());
 
   static ::crash_reporter::CrashKeyString<64> app_version_key(
       crash_keys::kAppPackageVersionCode);
-  app_version_key.Set(android_build_info->package_version_code());
+  app_version_key.Set(android_build_info->host_version_code());
 
   static ::crash_reporter::CrashKeyString<8> sdk_int_key(
       crash_keys::kAndroidSdkInt);
@@ -268,28 +302,22 @@ gpu::SyncPointManager* GetSyncPointManager() {
   DCHECK(DeferredGpuCommandService::GetInstance());
   return DeferredGpuCommandService::GetInstance()->sync_point_manager();
 }
-
-const gpu::GPUInfo& GetGPUInfo() {
-  DCHECK(DeferredGpuCommandService::GetInstance());
-  return DeferredGpuCommandService::GetInstance()->gpu_info();
-}
-
-const gpu::GpuFeatureInfo& GetGpuFeatureInfo() {
-  DCHECK(DeferredGpuCommandService::GetInstance());
-  return DeferredGpuCommandService::GetInstance()->gpu_feature_info();
-}
 }  // namespace
 
 content::ContentGpuClient* AwMainDelegate::CreateContentGpuClient() {
-  content_gpu_client_.reset(new AwContentGpuClient(
-      base::Bind(&GetSyncPointManager), base::Bind(&GetGPUInfo),
-      base::Bind(&GetGpuFeatureInfo)));
+  content_gpu_client_.reset(
+      new AwContentGpuClient(base::BindRepeating(&GetSyncPointManager)));
   return content_gpu_client_.get();
 }
 
 content::ContentRendererClient* AwMainDelegate::CreateContentRendererClient() {
   content_renderer_client_.reset(new AwContentRendererClient());
   return content_renderer_client_.get();
+}
+
+content::ContentUtilityClient* AwMainDelegate::CreateContentUtilityClient() {
+  content_utility_client_.reset(new AwContentUtilityClient());
+  return content_utility_client_.get();
 }
 
 }  // namespace android_webview

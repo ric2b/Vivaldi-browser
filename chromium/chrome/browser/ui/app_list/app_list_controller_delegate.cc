@@ -4,6 +4,10 @@
 
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 
+#include <utility>
+
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -12,7 +16,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/extension_uninstaller.h"
 #include "chrome/browser/ui/apps/app_info_dialog.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -22,10 +29,7 @@
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "net/base/url_util.h"
-#include "rlz/features/features.h"
-#include "ui/app_list/app_list_switches.h"
-#include "ui/display/display.h"
-#include "ui/display/screen.h"
+#include "rlz/buildflags/buildflags.h"
 #include "ui/gfx/geometry/rect.h"
 
 #if BUILDFLAG(ENABLE_RLZ)
@@ -46,23 +50,15 @@ const extensions::Extension* GetExtension(Profile* profile,
 
 }  // namespace
 
+AppListControllerDelegate::AppListControllerDelegate()
+    : is_home_launcher_enabled_(app_list::features::IsHomeLauncherEnabled()),
+      weak_ptr_factory_(this) {}
+
 AppListControllerDelegate::~AppListControllerDelegate() {}
 
-void AppListControllerDelegate::ViewClosing() {}
-
-int64_t AppListControllerDelegate::GetAppListDisplayId() {
-  auto* screen = display::Screen::GetScreen();
-  return screen ? screen->GetDisplayNearestWindow(GetAppListWindow()).id()
-                : display::kInvalidDisplayId;
-}
-
-gfx::Rect AppListControllerDelegate::GetAppInfoDialogBounds() {
-  return gfx::Rect();
-}
-
-void AppListControllerDelegate::OnShowChildDialog() {
-}
-void AppListControllerDelegate::OnCloseChildDialog() {
+void AppListControllerDelegate::GetAppInfoDialogBounds(
+    GetAppInfoDialogBoundsCallback callback) {
+  std::move(callback).Run(gfx::Rect());
 }
 
 std::string AppListControllerDelegate::AppListSourceToString(
@@ -95,10 +91,14 @@ void AppListControllerDelegate::DoShowAppInfoFlow(
     Profile* profile,
     const std::string& extension_id) {
   DCHECK(CanDoShowAppInfoFlow());
+
   const extensions::Extension* extension = GetExtension(profile, extension_id);
   DCHECK(extension);
-
-  OnShowChildDialog();
+  if (extension->is_hosted_app() && extension->from_bookmark()) {
+    chrome::ShowSiteSettings(
+        profile, extensions::AppLaunchInfo::GetFullLaunchURL(extension));
+    return;
+  }
 
   UMA_HISTOGRAM_ENUMERATION("Apps.AppInfoDialog.Launches",
                             AppInfoLaunchSource::FROM_APP_LIST,
@@ -106,17 +106,21 @@ void AppListControllerDelegate::DoShowAppInfoFlow(
 
   // Since the AppListControllerDelegate is a leaky singleton, passing its raw
   // pointer around is OK.
-  ShowAppInfoInAppList(
-      GetAppListWindow(), GetAppInfoDialogBounds(), profile, extension,
-      base::Bind(&AppListControllerDelegate::OnCloseChildDialog,
-                 base::Unretained(this)));
+  GetAppInfoDialogBounds(base::BindOnce(
+      [](base::WeakPtr<AppListControllerDelegate> self, Profile* profile,
+         const std::string& extension_id, const gfx::Rect& bounds) {
+        const extensions::Extension* extension =
+            GetExtension(profile, extension_id);
+        DCHECK(extension);
+        ShowAppInfoInAppList(bounds, profile, extension);
+      },
+      weak_ptr_factory_.GetWeakPtr(), profile, extension_id));
 }
 
 void AppListControllerDelegate::UninstallApp(Profile* profile,
                                              const std::string& app_id) {
   // ExtensionUninstall deletes itself when done or aborted.
-  ExtensionUninstaller* uninstaller =
-      new ExtensionUninstaller(profile, app_id, this);
+  ExtensionUninstaller* uninstaller = new ExtensionUninstaller(profile, app_id);
   uninstaller->Run();
 }
 
@@ -205,4 +209,9 @@ void AppListControllerDelegate::OnSearchStarted() {
 #if BUILDFLAG(ENABLE_RLZ)
   rlz::RLZTracker::RecordAppListSearch();
 #endif
+}
+
+bool AppListControllerDelegate::IsHomeLauncherEnabledInTabletMode() const {
+  return is_home_launcher_enabled_ && TabletModeClient::Get() &&
+         TabletModeClient::Get()->tablet_mode_enabled();
 }

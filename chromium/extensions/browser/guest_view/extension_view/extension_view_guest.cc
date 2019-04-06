@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "components/crx_file/id_util.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "content/public/browser/navigation_handle.h"
@@ -70,14 +69,14 @@ bool ExtensionViewGuest::NavigateGuest(const std::string& src,
 // GuestViewBase implementation.
 void ExtensionViewGuest::CreateWebContents(
     const base::DictionaryValue& create_params,
-    const WebContentsCreatedCallback& callback) {
+    WebContentsCreatedCallback callback) {
   // Gets the extension ID.
   std::string extension_id;
   create_params.GetString(extensionview::kAttributeExtension, &extension_id);
 
   if (!crx_file::id_util::IdIsValid(extension_id) ||
       !IsExtensionIdWhitelisted(extension_id)) {
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
@@ -86,7 +85,7 @@ void ExtensionViewGuest::CreateWebContents(
       extensions::Extension::GetBaseURLFromExtensionId(extension_id);
 
   if (!extension_url_.is_valid()) {
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
@@ -94,7 +93,9 @@ void ExtensionViewGuest::CreateWebContents(
       browser_context(),
       content::SiteInstance::CreateForURL(browser_context(), extension_url_));
   params.guest_delegate = this;
-  callback.Run(WebContents::Create(params));
+  // TODO(erikchen): Fix ownership semantics for guest views.
+  // https://crbug.com/832879.
+  std::move(callback).Run(WebContents::Create(params).release());
 }
 
 void ExtensionViewGuest::DidInitialize(

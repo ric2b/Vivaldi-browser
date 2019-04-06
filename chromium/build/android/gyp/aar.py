@@ -16,6 +16,7 @@ from xml.etree import ElementTree
 import zipfile
 
 from util import build_utils
+from util import md5_check
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.pardir, os.pardir)))
@@ -99,7 +100,6 @@ def main():
   _AddCommonArgs(subp)
   subp.add_argument('--output',
                     help='Output file.',
-                    type=argparse.FileType('w'),
                     default='-')
 
   subp = command_parsers.add_parser('extract', help='Extracts the .aar')
@@ -123,13 +123,40 @@ def main():
         raise Exception('android_aar_prebuilt() cached .info file is '
                         'out-of-date. Run gn gen with '
                         'update_android_aar_prebuilts=true to update it.')
-    # Clear previously extracted versions of the AAR.
-    shutil.rmtree(args.output_dir, True)
-    build_utils.ExtractAll(args.aar_file, path=args.output_dir)
+
+    def clobber():
+      # Clear previously extracted versions of the AAR if it is obsolete.
+      shutil.rmtree(args.output_dir, ignore_errors=True)
+      build_utils.ExtractAll(args.aar_file, path=args.output_dir)
+
+    with zipfile.ZipFile(args.aar_file) as zf:
+      md5_check.CallAndRecordIfStale(
+          clobber, input_paths=[args.aar_file],
+          output_paths=[
+              os.path.join(args.output_dir, n) for n in zf.namelist()])
 
   elif args.command == 'list':
-    args.output.write(_CreateInfo(args.aar_file))
+    aar_info = _CreateInfo(args.aar_file)
+    aar_output_present = args.output != '-' and os.path.isfile(args.output)
+    if aar_output_present:
+      # Some .info files are read-only, for examples the cipd-controlled ones
+      # under third_party/android_deps/repositoty. To deal with these, first
+      # that its content is correct, and if it is, exit without touching
+      # the file system.
+      file_info = open(args.output, 'r').read()
+      if file_info == aar_info:
+        return
 
+    # Try to write the file. This may fail for read-only ones that were
+    # not updated.
+    try:
+      with open(args.output, 'w') as f:
+        f.write(aar_info)
+    except IOError as e:
+      if not aar_output_present:
+        raise e
+      raise Exception('Could not update output file: %s\n%s\n' %
+                      (args.output, e))
 
 if __name__ == '__main__':
   sys.exit(main())

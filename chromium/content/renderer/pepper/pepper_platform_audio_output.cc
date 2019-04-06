@@ -11,7 +11,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/audio_output_ipc_factory.h"
+#include "content/renderer/media/audio/audio_output_ipc_factory.h"
 #include "content/renderer/pepper/audio_helper.h"
 #include "ppapi/shared_impl/ppb_audio_config_shared.h"
 
@@ -89,25 +89,27 @@ void PepperPlatformAudioOutput::OnDeviceAuthorized(
 }
 
 void PepperPlatformAudioOutput::OnStreamCreated(
-    base::SharedMemoryHandle handle,
-    base::SyncSocket::Handle socket_handle) {
-  DCHECK(handle.IsValid());
+    base::UnsafeSharedMemoryRegion shared_memory_region,
+    base::SyncSocket::Handle socket_handle,
+    bool playing_automatically) {
+  DCHECK(shared_memory_region.IsValid());
 #if defined(OS_WIN)
   DCHECK(socket_handle);
 #else
   DCHECK_NE(-1, socket_handle);
 #endif
-  DCHECK(handle.GetSize());
+  DCHECK_GT(shared_memory_region.GetSize(), 0u);
 
   if (base::ThreadTaskRunnerHandle::Get().get() == main_task_runner_.get()) {
     // Must dereference the client only on the main thread. Shutdown may have
     // occurred while the request was in-flight, so we need to NULL check.
     if (client_)
-      client_->StreamCreated(handle, handle.GetSize(), socket_handle);
+      client_->StreamCreated(std::move(shared_memory_region), socket_handle);
   } else {
     main_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&PepperPlatformAudioOutput::OnStreamCreated,
-                                  this, handle, socket_handle));
+                                  this, std::move(shared_memory_region),
+                                  socket_handle, playing_automatically));
   }
 }
 
@@ -139,7 +141,6 @@ bool PepperPlatformAudioOutput::Initialize(int sample_rate,
   media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
                                 media::CHANNEL_LAYOUT_STEREO,
                                 sample_rate,
-                                ppapi::kBitsPerAudioOutputSample,
                                 frames_per_buffer);
 
   io_task_runner_->PostTask(

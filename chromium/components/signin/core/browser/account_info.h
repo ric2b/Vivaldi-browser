@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "components/account_id/account_id.h"
+
 // Information about a specific account.
 struct AccountInfo {
   AccountInfo();
@@ -23,10 +25,18 @@ struct AccountInfo {
   std::string picture_url;
   bool is_child_account;
 
+  // Returns true if all fields in the account info are empty.
+  bool IsEmpty() const;
+
+  // Returns true if all fields in this account info are filled.
   bool IsValid() const;
+
   // Updates the empty fields of |this| with |other|. Returns whether at least
   // one field was updated.
   bool UpdateWith(const AccountInfo& other);
 };
+
+// Returns AccountID populated from |account_info|.
+AccountId AccountIdFromAccountInfo(const AccountInfo& account_info);
 
 #endif  // COMPONENTS_SIGNIN_CORE_BROWSER_ACCOUNT_INFO_H_

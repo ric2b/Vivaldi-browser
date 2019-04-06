@@ -268,7 +268,7 @@ background-image: url(../path/to/image.svg);
 The contents of file.png are base64-encoded and the `url()` is replaced with
 
 ```css
-background-image: url(data:image/xml+svg;base64,...);
+background-image: url(data:image/svg+xml;base64,...);
 ```
 
 if `flattenhtml="true"` is specified in your .grd file.
@@ -331,11 +331,11 @@ Guide](https://google.github.io/styleguide/jsguide.html).
   compiler](https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md)
   to identify JS type errors and enforce correct JSDoc annotations.
 
-* Add a `compiled_resources2.gyp` file to any new web UI code directory.
+* Add a `BUILD.gn` file to any new web UI code directory.
 
-* Ensure that your `compiled_resources2.gyp` file is included in
-  `third_party/closure_compiler/compiled_resources2.gyp` (or somewhere in its
-  include hierarchy) so that your code is typechecked in an automated way.
+* Ensure that your `BUILD.gn` file is included in
+  `src/BUILD.gn:webui_closure_compile` (or somewhere in its
+  deps hierarchy) so that your code is typechecked in an automated way.
 
 * Type Polymer elements by appending 'Element' to the element name, e.g.
   `/** @type {IronIconElement} */`
@@ -381,8 +381,8 @@ Also see the [Google Polymer Style Guide](http://go/polymer-style).
     * `created`, `ready`, `attached`, `detached`
     * public methods
     * event handlers, computed functions, and private methods
- 
-* Use camelCase for element IDs to simplify local DOM accessors (i.e. 
+
+* Use camelCase for element IDs to simplify local DOM accessors (i.e.
   `this.$.camelCase` instead of `this.$[‘dash-case’]`).
 
 * Use `this.foo` instead of `newFoo` arguments in observers when possible.
@@ -399,6 +399,22 @@ fooChanged_: function() {
   this.bar = this.derive(this.foo);
 },
 ```
+
+* Make good use of the  [`dom-if` template](
+https://www.polymer-project.org/2.0/docs/devguide/templates#dom-if):
+  * Consider using `dom-if` to lazily render parts of the DOM that are hidden by
+  default. Also consider using [`cr-lazy-render`](
+  https://cs.chromium.org/chromium/src/ui/webui/resources/cr_elements/cr_lazy_render/cr_lazy_render.js)
+  instead.
+  * **Only use`dom-if`** if the DOM subtree is non-trivial, defined as:
+      * Contains more than 10 native elements, OR
+      * Contain **any** custom elements, OR
+      * Has many data bindings, OR
+      * Includes non-text content (e.g images).
+
+    For trivial DOM subtrees using the HTML [`hidden` attribute](
+    https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/hidden)
+    yields better performance, than adding a custom `dom-if` element.
 
 ## Grit processing
 

@@ -9,7 +9,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/active_tab_permission_granter.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
-#include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
@@ -19,7 +18,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/extensions/browser_action_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
@@ -136,11 +138,27 @@ class CommandsApiTest : public ExtensionApiTest {
   CommandsApiTest() {}
   ~CommandsApiTest() override {}
 
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+#if defined(OS_MACOSX)
+    // ExtensionKeybindingRegistryViews doesn't get registered until BrowserView
+    // is activated at least once.
+    // TODO(crbug.com/839469): Registry creation should happen independent of
+    // activation. Focus manager lifetime may make this tricky to untangle.
+    // TODO(crbug.com/650859): Reassess after activation is restored in the
+    // focus manager.
+    ui_test_utils::BrowserActivationWaiter waiter(browser());
+    ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
+    waiter.WaitForActivation();
+    ASSERT_TRUE(browser()->window()->IsActive());
+#endif
+  }
+
  protected:
   bool IsGrantedForTab(const Extension* extension,
                        const content::WebContents* web_contents) {
     return extension->permissions_data()->HasAPIPermissionForTab(
-        SessionTabHelper::IdForTab(web_contents), APIPermission::kTab);
+        SessionTabHelper::IdForTab(web_contents).id(), APIPermission::kTab);
   }
 
 #if defined(OS_CHROMEOS)
@@ -187,9 +205,9 @@ IN_PROC_BROWSER_TEST_F(CommandsApiTest, Basic) {
   // immaterial to this test).
   ASSERT_TRUE(RunExtensionTest("keybinding/conflicting")) << message_;
 
-  BrowserActionTestUtil browser_actions_bar(browser());
+  auto browser_actions_bar = BrowserActionTestUtil::Create(browser());
   // Test that there are two browser actions in the toolbar.
-  ASSERT_EQ(2, browser_actions_bar.NumberOfBrowserActions());
+  ASSERT_EQ(2, browser_actions_bar->NumberOfBrowserActions());
 
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/extensions/test_file.txt"));
@@ -250,7 +268,7 @@ IN_PROC_BROWSER_TEST_F(CommandsApiTest, PageAction) {
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(
       browser(), ui::VKEY_F, false, true, true, false));
 
-  test_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(test_listener.WaitUntilSatisfied());
   EXPECT_EQ("clicked", test_listener.message());
 }
 
@@ -281,7 +299,59 @@ IN_PROC_BROWSER_TEST_F(CommandsApiTest, PageActionKeyUpdated) {
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(
       browser(), ui::VKEY_G, false, true, true, false));
 
-  test_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(test_listener.WaitUntilSatisfied());
+  EXPECT_EQ("clicked", test_listener.message());
+}
+
+IN_PROC_BROWSER_TEST_F(CommandsApiTest, PageActionOverrideChromeShortcut) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(RunExtensionTest("keybinding/page_action")) << message_;
+  const Extension* extension = GetSingleLoadedExtension();
+  ASSERT_TRUE(extension) << message_;
+
+  CommandService* command_service = CommandService::Get(browser()->profile());
+// Simulate the user setting the keybinding to override the print shortcut.
+#if defined(OS_MACOSX)
+  std::string print_shortcut = "Command+P";
+#else
+  std::string print_shortcut = "Ctrl+P";
+#endif
+  command_service->UpdateKeybindingPrefs(
+      extension->id(), manifest_values::kPageActionCommandEvent,
+      print_shortcut);
+
+  {
+    // Load a page. The extension will detect the navigation and request to show
+    // the page action icon.
+    ResultCatcher catcher;
+    ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL("/extensions/test_file.txt"));
+    ASSERT_TRUE(catcher.GetNextResult());
+  }
+
+  ExtensionTestMessageListener test_listener(false);  // Won't reply.
+  test_listener.set_extension_id(extension->id());
+
+  bool control_is_modifier = false;
+  bool command_is_modifier = false;
+#if defined(OS_MACOSX)
+  command_is_modifier = true;
+#else
+  control_is_modifier = true;
+#endif
+
+  // Activate the omnibox. This checks to ensure that the extension shortcut
+  // still works even if the WebContents isn't focused.
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_L,
+                                              control_is_modifier, false, false,
+                                              command_is_modifier));
+
+  // Activate the shortcut.
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_P,
+                                              control_is_modifier, false, false,
+                                              command_is_modifier));
+
+  EXPECT_TRUE(test_listener.WaitUntilSatisfied());
   EXPECT_EQ("clicked", test_listener.message());
 }
 
@@ -502,6 +572,12 @@ IN_PROC_BROWSER_TEST_F(CommandsApiTest,
 // web pages.
 IN_PROC_BROWSER_TEST_F(CommandsApiTest,
                        OverwriteBookmarkShortcutByUserOverridesWebKeybinding) {
+#if defined(OS_MACOSX)
+  // This doesn't work in MacViews mode: https://crbug.com/845503 is the likely
+  // root cause.
+  if (!views_mode_controller::IsViewsBrowserCocoa())
+    return;
+#endif
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));

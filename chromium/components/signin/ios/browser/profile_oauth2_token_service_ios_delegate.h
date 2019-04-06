@@ -28,14 +28,15 @@ class ProfileOAuth2TokenServiceIOSDelegate : public OAuth2TokenServiceDelegate {
 
   OAuth2AccessTokenFetcher* CreateAccessTokenFetcher(
       const std::string& account_id,
-      net::URLRequestContextGetter* getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       OAuth2AccessTokenConsumer* consumer) override;
 
   // KeyedService
   void Shutdown() override;
 
   bool RefreshTokenIsAvailable(const std::string& account_id) const override;
-  bool RefreshTokenHasError(const std::string& account_id) const override;
+  GoogleServiceAuthError GetAuthError(
+      const std::string& account_id) const override;
   void UpdateAuthError(const std::string& account_id,
                        const GoogleServiceAuthError& error) override;
 

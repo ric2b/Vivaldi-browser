@@ -12,6 +12,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/arc/arc_features.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -82,7 +83,7 @@ bool IsWebstoreSearchEnabled() {
 }
 
 bool IsPlayStoreAvailable() {
-  if (IsRobotAccountMode())
+  if (IsRobotOrOfflineDemoAccountMode())
     return false;
   const auto* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(chromeos::switches::kArcStartMode))
@@ -100,6 +101,11 @@ bool ShouldArcAlwaysStart() {
   const std::string value =
       command_line->GetSwitchValueASCII(chromeos::switches::kArcStartMode);
   return value == kAlwaysStartWithNoPlayStore || value == kAlwaysStart;
+}
+
+bool ShouldShowOptInForTesting() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kArcForceShowOptInUi);
 }
 
 void SetArcAlwaysStartForTesting(bool play_store_available) {
@@ -137,7 +143,7 @@ bool IsArcKioskMode() {
          user_manager::UserManager::Get()->IsLoggedInAsArcKioskApp();
 }
 
-bool IsRobotAccountMode() {
+bool IsRobotOrOfflineDemoAccountMode() {
   return user_manager::UserManager::IsInitialized() &&
          (user_manager::UserManager::Get()->IsLoggedInAsArcKioskApp() ||
           user_manager::UserManager::Get()->IsLoggedInAsPublicAccount());
@@ -165,7 +171,8 @@ bool IsArcAllowedForUser(const user_manager::User* user) {
     return false;
   }
 
-  if (user->GetType() == user_manager::USER_TYPE_CHILD) {
+  if (user->GetType() == user_manager::USER_TYPE_CHILD &&
+      !base::FeatureList::IsEnabled(arc::kAvailableForChildAccountFeature)) {
     VLOG(1) << "ARC usage by Child users is prohibited";
     return false;
   }
@@ -174,12 +181,11 @@ bool IsArcAllowedForUser(const user_manager::User* user) {
 }
 
 bool IsArcOptInVerificationDisabled() {
-  const auto* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kDisableArcOptInVerification);
 }
 
-bool IsArcAppWindow(aura::Window* window) {
+bool IsArcAppWindow(const aura::Window* window) {
   if (!window)
     return false;
   return window->GetProperty(aura::client::kAppType) ==
@@ -197,7 +203,12 @@ void SetArcCpuRestriction(bool do_restrict) {
       do_restrict ? login_manager::CONTAINER_CPU_RESTRICTION_BACKGROUND
                   : login_manager::CONTAINER_CPU_RESTRICTION_FOREGROUND;
   session_manager_client->SetArcCpuRestriction(
-      state, base::Bind(SetArcCpuRestrictionCallback, state));
+      state, base::BindOnce(SetArcCpuRestrictionCallback, state));
+}
+
+bool IsArcDataCleanupOnStartRequested() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kArcDataCleanupOnStart);
 }
 
 }  // namespace arc

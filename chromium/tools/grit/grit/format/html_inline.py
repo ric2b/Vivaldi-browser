@@ -28,6 +28,9 @@ from grit.format import minifier
 mimetypes.init([])
 mimetypes.add_type('image/svg+xml', '.svg')
 
+# webm video type is not always available if mimetype package is outdated.
+mimetypes.add_type('video/webm', '.webm')
+
 DIST_DEFAULT = 'chromium'
 DIST_ENV_VAR = 'CHROMIUM_BUILD'
 DIST_SUBSTR = '%DISTRIBUTION%'
@@ -369,6 +372,7 @@ def DoInline(
     if names_only:
       inlined_files.update(GetResourceFilenames(
           filepath,
+          grd_node,
           allow_external_script,
           rewrite_function,
           filename_expansion_function=filename_expansion_function))
@@ -557,6 +561,7 @@ def InlineToFile(input_filename, output_filename, grd_node):
 
 
 def GetResourceFilenames(filename,
+                         grd_node,
                          allow_external_script=False,
                          rewrite_function=None,
                          filename_expansion_function=None):
@@ -564,7 +569,7 @@ def GetResourceFilenames(filename,
   try:
     return DoInline(
         filename,
-        None,
+        grd_node,
         names_only=True,
         preprocess_only=False,
         allow_external_script=allow_external_script,

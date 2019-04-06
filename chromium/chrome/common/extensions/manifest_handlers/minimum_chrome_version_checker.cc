@@ -39,7 +39,7 @@ bool MinimumChromeVersionChecker::Parse(Extension* extension,
     return false;
   }
 
-  base::Version current_version(version_info::GetVersionNumber());
+  const base::Version& current_version = version_info::GetVersion();
   if (!current_version.IsValid()) {
     NOTREACHED();
     return false;
@@ -55,8 +55,9 @@ bool MinimumChromeVersionChecker::Parse(Extension* extension,
   return true;
 }
 
-const std::vector<std::string> MinimumChromeVersionChecker::Keys() const {
-  return SingleKey(keys::kMinimumChromeVersion);
+base::span<const char* const> MinimumChromeVersionChecker::Keys() const {
+  static constexpr const char* kKeys[] = {keys::kMinimumChromeVersion};
+  return kKeys;
 }
 
 }  // namespace extensions

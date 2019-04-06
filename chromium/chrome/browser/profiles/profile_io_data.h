@@ -23,39 +23,29 @@
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/storage_partition_descriptor.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/prefs/pref_member.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
-#include "content/public/network/url_request_context_owner.h"
-#include "extensions/features/features.h"
-#include "net/cookies/cookie_store.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
+#include "net/net_buildflags.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "net/url_request/url_request_job_factory.h"
-#include "services/network/public/interfaces/network_service.mojom.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/url_request_context_owner.h"
 
-class ChromeHttpUserAgentSettings;
 class ChromeNetworkDelegate;
 class ChromeURLRequestContextGetter;
-class ChromeExpectCTReporter;
 class HostContentSettingsMap;
 class ProtocolHandlerRegistry;
 
 namespace chromeos {
 class CertificateProvider;
-}
-
-namespace chrome_browser_net {
-class LoadingPredictorObserver;
-}
-
-namespace certificate_transparency {
-class CTPolicyManager;
-class TreeStateTracker;
 }
 
 namespace content_settings {
@@ -81,20 +71,21 @@ class ChannelIDService;
 class ClientCertStore;
 class CookieStore;
 class HttpTransactionFactory;
-class ReportingService;
-class ReportSender;
-class SSLConfigService;
 class URLRequestContextBuilder;
 class URLRequestJobFactoryImpl;
+
+#if BUILDFLAG(ENABLE_REPORTING)
+class NetworkErrorLoggingService;
+class ReportingService;
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 }  // namespace net
 
 namespace policy {
 class PolicyCertVerifier;
-class PolicyHeaderIOHelper;
 }  // namespace policy
 
 namespace previews {
-class PreviewsIOData;
+class PreviewsDeciderImpl;
 }
 
 // Conceptually speaking, the ProfileIOData represents data that lives on the IO
@@ -184,11 +175,21 @@ class ProfileIOData {
     return &safe_browsing_enabled_;
   }
 
+  StringListPrefMember* safe_browsing_whitelist_domains() const {
+    return &safe_browsing_whitelist_domains_;
+  }
+
   IntegerPrefMember* network_prediction_options() const {
     return &network_prediction_options_;
   }
 
-  BooleanPrefMember* dice_enabled() const { return dice_enabled_.get(); }
+  signin::AccountConsistencyMethod account_consistency() const {
+    return account_consistency_;
+  }
+
+#if !defined(OS_CHROMEOS)
+  std::string GetSigninScopedDeviceId() const;
+#endif
 
 #if defined(OS_CHROMEOS)
   std::string username_hash() const {
@@ -206,20 +207,17 @@ class ProfileIOData {
     return &incognito_availibility_pref_;
   }
 
+#if BUILDFLAG(ENABLE_PLUGINS)
+  BooleanPrefMember* always_open_pdf_externally() const {
+    return &always_open_pdf_externally_;
+  }
+#endif
+
 #if defined(OS_CHROMEOS)
   BooleanPrefMember* account_consistency_mirror_required() const {
     return &account_consistency_mirror_required_pref_;
   }
 #endif
-
-  chrome_browser_net::LoadingPredictorObserver* loading_predictor_observer()
-      const {
-    return loading_predictor_observer_.get();
-  }
-
-  policy::PolicyHeaderIOHelper* policy_header_helper() const {
-    return policy_header_helper_.get();
-  }
 
   // Initialize the member needed to track the metrics enabled state. This is
   // only to be called on the UI thread.
@@ -240,8 +238,8 @@ class ProfileIOData {
     return data_reduction_proxy_io_data_.get();
   }
 
-  previews::PreviewsIOData* previews_io_data() const {
-    return previews_io_data_.get();
+  previews::PreviewsDeciderImpl* previews_decider_impl() const {
+    return previews_decider_impl_.get();
   }
 
   // Returns the predictor service for this Profile. Returns nullptr if there is
@@ -298,8 +296,13 @@ class ProfileIOData {
     void SetHttpTransactionFactory(
         std::unique_ptr<net::HttpTransactionFactory> http_factory);
     void SetJobFactory(std::unique_ptr<net::URLRequestJobFactory> job_factory);
+#if BUILDFLAG(ENABLE_REPORTING)
     void SetReportingService(
         std::unique_ptr<net::ReportingService> reporting_service);
+    void SetNetworkErrorLoggingService(
+        std::unique_ptr<net::NetworkErrorLoggingService>
+            network_error_logging_service);
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
    private:
     ~AppRequestContext() override;
@@ -309,7 +312,11 @@ class ProfileIOData {
     std::unique_ptr<net::HttpNetworkSession> http_network_session_;
     std::unique_ptr<net::HttpTransactionFactory> http_factory_;
     std::unique_ptr<net::URLRequestJobFactory> job_factory_;
+#if BUILDFLAG(ENABLE_REPORTING)
     std::unique_ptr<net::ReportingService> reporting_service_;
+    std::unique_ptr<net::NetworkErrorLoggingService>
+        network_error_logging_service_;
+#endif  // BUILDFLAG(ENABLE_REPORTING)
   };
 
   // Created on the UI thread, read on the IO thread during ProfileIOData lazy
@@ -319,7 +326,7 @@ class ProfileIOData {
     ~ProfileParams();
 
     base::FilePath path;
-    IOThread* io_thread;
+    IOThread* io_thread = nullptr;
 
     // Used to configure the main URLRequestContext through the IOThread's
     // in-process network service.
@@ -328,12 +335,11 @@ class ProfileIOData {
 
     scoped_refptr<content_settings::CookieSettings> cookie_settings;
     scoped_refptr<HostContentSettingsMap> host_content_settings_map;
-    scoped_refptr<net::SSLConfigService> ssl_config_service;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     scoped_refptr<extensions::InfoMap> extension_info_map;
 #endif
-    std::unique_ptr<chrome_browser_net::LoadingPredictorObserver>
-        loading_predictor_observer_;
+    signin::AccountConsistencyMethod account_consistency =
+        signin::AccountConsistencyMethod::kDisabled;
 
     // This pointer exists only as a means of conveying a url job factory
     // pointer from the protocol handler registry on the UI thread to the
@@ -349,14 +355,14 @@ class ProfileIOData {
 #if defined(OS_CHROMEOS)
     std::unique_ptr<policy::PolicyCertVerifier> policy_cert_verifier;
     std::string username_hash;
-    SystemKeySlotUseType system_key_slot_use_type;
+    SystemKeySlotUseType system_key_slot_use_type = SystemKeySlotUseType::kNone;
     std::unique_ptr<chromeos::CertificateProvider> certificate_provider;
 #endif
 
     // The profile this struct was populated from. It's passed as a void* to
     // ensure it's not accidently used on the IO thread. Before using it on the
     // UI thread, call ProfileManager::IsValidProfile to ensure it's alive.
-    void* profile;
+    void* profile = nullptr;
   };
 
   explicit ProfileIOData(Profile::ProfileType profile_type);
@@ -409,8 +415,8 @@ class ProfileIOData {
       std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
           data_reduction_proxy_io_data) const;
 
-  void set_previews_io_data(
-      std::unique_ptr<previews::PreviewsIOData> previews_io_data) const;
+  void set_previews_decider_impl(std::unique_ptr<previews::PreviewsDeciderImpl>
+                                     previews_decider_impl) const;
 
   net::URLRequestContext* main_request_context() const {
     return main_request_context_;
@@ -436,9 +442,6 @@ class ProfileIOData {
       net::HttpTransactionFactory* main_http_factory,
       std::unique_ptr<net::HttpCache::BackendFactory> backend) const;
 
-  void SetCookieSettingsForTesting(
-      content_settings::CookieSettings* cookie_settings);
-
  private:
   class ResourceContext : public content::ResourceContext {
    public:
@@ -446,7 +449,6 @@ class ProfileIOData {
     ~ResourceContext() override;
 
     // ResourceContext implementation:
-    net::HostResolver* GetHostResolver() override;
     net::URLRequestContext* GetRequestContext() override;
 
    private:
@@ -454,7 +456,6 @@ class ProfileIOData {
 
     ProfileIOData* const io_data_;
 
-    net::HostResolver* host_resolver_;
     net::URLRequestContext* request_context_;
   };
 
@@ -555,37 +556,39 @@ class ProfileIOData {
   mutable BooleanPrefMember sync_has_auth_error_;
   mutable BooleanPrefMember sync_suppress_start_;
   mutable BooleanPrefMember sync_first_setup_complete_;
-  mutable std::unique_ptr<BooleanPrefMember> dice_enabled_;
+  mutable signin::AccountConsistencyMethod account_consistency_;
+
+#if !defined(OS_CHROMEOS)
+  mutable StringPrefMember signin_scoped_device_id_;
+#endif
 
   // Member variables which are pointed to by the various context objects.
-  mutable BooleanPrefMember enable_referrers_;
-  mutable BooleanPrefMember enable_do_not_track_;
   mutable BooleanPrefMember force_google_safesearch_;
   mutable IntegerPrefMember force_youtube_restrict_;
   mutable BooleanPrefMember safe_browsing_enabled_;
+  mutable StringListPrefMember safe_browsing_whitelist_domains_;
   mutable StringPrefMember allowed_domains_for_apps_;
   mutable IntegerPrefMember network_prediction_options_;
   mutable IntegerPrefMember incognito_availibility_pref_;
+#if BUILDFLAG(ENABLE_PLUGINS)
+  mutable BooleanPrefMember always_open_pdf_externally_;
+#endif
 #if defined(OS_CHROMEOS)
   mutable BooleanPrefMember account_consistency_mirror_required_pref_;
 #endif
 
   BooleanPrefMember enable_metrics_;
 
-  // Pointed to by NetworkDelegate.
-  mutable std::unique_ptr<policy::PolicyHeaderIOHelper> policy_header_helper_;
-
   // Pointed to by URLRequestContext.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   mutable scoped_refptr<extensions::InfoMap> extension_info_map_;
 #endif
 
-  mutable std::unique_ptr<previews::PreviewsIOData> previews_io_data_;
+  mutable std::unique_ptr<previews::PreviewsDeciderImpl> previews_decider_impl_;
 
   mutable std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
       data_reduction_proxy_io_data_;
 
-  mutable std::unique_ptr<ChromeExpectCTReporter> expect_ct_reporter_;
 #if defined(OS_CHROMEOS)
   mutable std::string username_hash_;
   mutable SystemKeySlotUseType system_key_slot_use_type_;
@@ -596,15 +599,8 @@ class ProfileIOData {
   // content::NetworkContext class that owns |main_request_context_|.
   mutable std::unique_ptr<network::mojom::NetworkContext> main_network_context_;
   // When the network service is disabled, this owns |system_request_context|.
-  mutable content::URLRequestContextOwner main_request_context_owner_;
+  mutable network::URLRequestContextOwner main_request_context_owner_;
   mutable net::URLRequestContext* main_request_context_;
-
-  // Pointed to by the TransportSecurityState (owned by
-  // URLRequestContextStorage), and must be disconnected from it before it's
-  // destroyed.
-  mutable std::unique_ptr<net::ReportSender> certificate_report_sender_;
-  mutable std::unique_ptr<certificate_transparency::CTPolicyManager>
-      ct_policy_manager_;
 
   mutable std::unique_ptr<net::URLRequestContext> extensions_request_context_;
   // One URLRequestContext per isolated app for main and media requests.
@@ -617,21 +613,11 @@ class ProfileIOData {
 
   mutable scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
 
-  mutable std::unique_ptr<chrome_browser_net::LoadingPredictorObserver>
-      loading_predictor_observer_;
-
-  mutable std::unique_ptr<ChromeHttpUserAgentSettings>
-      chrome_http_user_agent_settings_;
-
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Is NULL if switches::kDisableExtensionsHttpThrottling is on.
   mutable std::unique_ptr<extensions::ExtensionThrottleManager>
       extension_throttle_manager_;
 #endif
-
-  mutable std::unique_ptr<certificate_transparency::TreeStateTracker>
-      ct_tree_tracker_;
-  mutable base::Closure ct_tree_tracker_unregistration_;
 
   // Owned by the ChromeNetworkDelegate, which is owned (possibly with one or
   // more layers of LayeredNetworkDelegate) by the URLRequestContext, which is

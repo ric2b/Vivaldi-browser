@@ -12,8 +12,6 @@
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/test/https_forwarder.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
-#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/test_utils.h"
@@ -34,13 +32,14 @@ namespace chromeos {
 class NetworkPortalDetectorTestImpl;
 
 // Base class for OOBE, login, SAML and Kiosk tests.
-class OobeBaseTest : public ExtensionApiTest {
+class OobeBaseTest : public extensions::ExtensionApiTest {
  public:
   // Default fake user email and password, may be used by tests.
 
   static const char kFakeUserEmail[];
   static const char kFakeUserPassword[];
   static const char kFakeUserGaiaId[];
+  static const char kEmptyUserServices[];
 
   // FakeGaia is configured to return these cookies for kFakeUserEmail.
   static const char kFakeSIDCookie[];
@@ -87,11 +86,11 @@ class OobeBaseTest : public ExtensionApiTest {
   // Returns chrome://oobe WebUI.
   content::WebUI* GetLoginUI();
 
-  // Returns login display.
-  LoginDisplayWebUI* GetLoginDisplay();
-
   void WaitForGaiaPageLoad();
+  void WaitForGaiaPageLoadAndPropertyUpdate();
   void WaitForGaiaPageReload();
+  void WaitForGaiaPageBackButtonUpdate();
+  void WaitForGaiaPageEvent(const std::string& event);
   void WaitForSigninScreen();
   void ExecuteJsInSigninFrame(const std::string& js);
   void SetSignFormField(const std::string& field_id,

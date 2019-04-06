@@ -27,9 +27,7 @@ CrasInputStream::CrasInputStream(const AudioParameters& params,
       stream_id_(0),
       stream_direction_(CRAS_STREAM_INPUT),
       pin_device_(NO_DEVICE),
-      is_loopback_(
-          device_id == AudioDeviceDescription::kLoopbackInputDeviceId ||
-          device_id == AudioDeviceDescription::kLoopbackWithMuteDeviceId),
+      is_loopback_(AudioDeviceDescription::IsLoopbackDevice(device_id)),
       mute_system_audio_(device_id ==
                          AudioDeviceDescription::kLoopbackWithMuteDeviceId),
       mute_done_(false) {
@@ -61,13 +59,6 @@ bool CrasInputStream::Open() {
   if (AudioParameters::AUDIO_PCM_LINEAR != params_.format() &&
       AudioParameters::AUDIO_PCM_LOW_LATENCY != params_.format()) {
     DLOG(WARNING) << "Unsupported audio format.";
-    return false;
-  }
-
-  snd_pcm_format_t pcm_format =
-      AudioManagerCras::BitsToFormat(params_.bits_per_sample());
-  if (pcm_format == SND_PCM_FORMAT_UNKNOWN) {
-    DLOG(WARNING) << "Unsupported bits/sample: " << params_.bits_per_sample();
     return false;
   }
 
@@ -130,6 +121,10 @@ void CrasInputStream::Close() {
   audio_manager_->ReleaseInputStream(this);
 }
 
+inline bool CrasInputStream::UseCrasAec() const {
+  return params_.effects() & AudioParameters::ECHO_CANCELLER;
+}
+
 void CrasInputStream::Start(AudioInputCallback* callback) {
   DCHECK(client_);
   DCHECK(callback);
@@ -163,9 +158,7 @@ void CrasInputStream::Start(AudioInputCallback* callback) {
   // Prepare |audio_format| and |stream_params| for the stream we
   // will create.
   cras_audio_format* audio_format = cras_audio_format_create(
-      AudioManagerCras::BitsToFormat(params_.bits_per_sample()),
-      params_.sample_rate(),
-      params_.channels());
+      SND_PCM_FORMAT_S16, params_.sample_rate(), params_.channels());
   if (!audio_format) {
     DLOG(WARNING) << "Error setting up audio parameters.";
     callback_->OnError();
@@ -214,6 +207,9 @@ void CrasInputStream::Start(AudioInputCallback* callback) {
     cras_audio_format_destroy(audio_format);
     return;
   }
+
+  if (UseCrasAec())
+    cras_client_stream_params_enable_aec(stream_params);
 
   // Before starting the stream, save the number of bytes in a frame for use in
   // the callback.
@@ -302,8 +298,8 @@ void CrasInputStream::ReadAudio(size_t frames,
   DCHECK_EQ(base::TimeTicks::GetClock(),
             base::TimeTicks::Clock::LINUX_CLOCK_MONOTONIC);
 
-  audio_bus_->FromInterleaved(buffer, audio_bus_->frames(),
-                              params_.bits_per_sample() / 8);
+  audio_bus_->FromInterleaved<SignedInt16SampleTypeTraits>(
+      reinterpret_cast<int16_t*>(buffer), audio_bus_->frames());
   callback_->OnData(audio_bus_.get(), capture_time, normalized_volume);
 }
 
@@ -346,6 +342,11 @@ double CrasInputStream::GetVolume() {
 
 bool CrasInputStream::IsMuted() {
   return false;
+}
+
+void CrasInputStream::SetOutputDeviceForAec(
+    const std::string& output_device_id) {
+  // Not supported. Do nothing.
 }
 
 double CrasInputStream::GetVolumeRatioFromDecibels(double dB) const {

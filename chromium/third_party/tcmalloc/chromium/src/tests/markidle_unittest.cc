@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2003, Google Inc.
 // All rights reserved.
 // 
@@ -92,9 +93,26 @@ static void TestIdleUsage() {
   CHECK_LE(post_idle, original);
 
   // Log after testing because logging can allocate heap memory.
-  VLOG(0, "Original usage: %"PRIuS"\n", original);
-  VLOG(0, "Post allocation: %"PRIuS"\n", post_allocation);
-  VLOG(0, "Post idle: %"PRIuS"\n", post_idle);
+  VLOG(0, "Original usage: %" PRIuS "\n", original);
+  VLOG(0, "Post allocation: %" PRIuS "\n", post_allocation);
+  VLOG(0, "Post idle: %" PRIuS "\n", post_idle);
+}
+
+static void TestTemporarilyIdleUsage() {
+  const size_t original = MallocExtension::instance()->GetThreadCacheSize();
+
+  TestAllocation();
+  const size_t post_allocation = MallocExtension::instance()->GetThreadCacheSize();
+  CHECK_GT(post_allocation, original);
+
+  MallocExtension::instance()->MarkThreadIdle();
+  const size_t post_idle = MallocExtension::instance()->GetThreadCacheSize();
+  CHECK_EQ(post_idle, 0);
+
+  // Log after testing because logging can allocate heap memory.
+  VLOG(0, "Original usage: %" PRIuS "\n", original);
+  VLOG(0, "Post allocation: %" PRIuS "\n", post_allocation);
+  VLOG(0, "Post idle: %" PRIuS "\n", post_idle);
 }
 
 int main(int argc, char** argv) {
@@ -102,6 +120,7 @@ int main(int argc, char** argv) {
   RunThread(&TestAllocation);
   RunThread(&MultipleIdleCalls);
   RunThread(&MultipleIdleNonIdlePhases);
+  RunThread(&TestTemporarilyIdleUsage);
 
   printf("PASS\n");
   return 0;

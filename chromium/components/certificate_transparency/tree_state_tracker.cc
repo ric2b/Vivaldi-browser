@@ -4,8 +4,11 @@
 
 #include "components/certificate_transparency/tree_state_tracker.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
+#include "components/certificate_transparency/features.h"
 #include "components/certificate_transparency/log_dns_client.h"
 #include "components/certificate_transparency/single_tree_tracker.h"
 #include "net/base/network_change_notifier.h"
@@ -14,7 +17,6 @@
 #include "net/cert/signed_tree_head.h"
 #include "net/cert/x509_certificate.h"
 #include "net/dns/dns_client.h"
-#include "net/dns/dns_config_service.h"
 #include "net/log/net_log.h"
 
 using net::X509Certificate;
@@ -28,20 +30,13 @@ const size_t kMaxConcurrentDnsQueries = 1;
 
 namespace certificate_transparency {
 
-// Enables or disables auditing Certificate Transparency logs over DNS.
-const base::Feature kCTLogAuditing = {"CertificateTransparencyLogAuditing",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
-
 TreeStateTracker::TreeStateTracker(
     std::vector<scoped_refptr<const CTLogVerifier>> ct_logs,
     net::HostResolver* host_resolver,
     net::NetLog* net_log) {
-  if (!base::FeatureList::IsEnabled(kCTLogAuditing))
-    return;
-
   std::unique_ptr<net::DnsClient> dns_client =
       net::DnsClient::CreateClient(net_log);
-  dns_client_ = base::MakeUnique<LogDnsClient>(
+  dns_client_ = std::make_unique<LogDnsClient>(
       std::move(dns_client),
       net::NetLogWithSource::Make(net_log,
                                   net::NetLogSourceType::CT_TREE_STATE_TRACKER),

@@ -65,8 +65,10 @@ void OnDirectorySizeCalculated(
 
 base::FilePath PrettifyPath(const base::FilePath& source_path) {
   base::FilePath home_path;
-  if (source_path.empty() || !PathService::Get(base::DIR_HOME, &home_path))
+  if (source_path.empty() ||
+      !base::PathService::Get(base::DIR_HOME, &home_path)) {
     return source_path;
+  }
 
   base::FilePath display_path = base::FilePath(kHomeShortcut);
   if (source_path == home_path)
@@ -113,6 +115,27 @@ void CalculateAndFormatExtensionDirectorySize(
       base::BindOnce(&base::ComputeDirectorySize, extension_path),
       base::BindOnce(&OnDirectorySizeCalculated, message_id,
                      std::move(callback)));
+}
+
+base::FilePath ResolveHomeDirectory(const base::FilePath& path) {
+#if defined(OS_WIN)
+  return path;
+#else
+  const auto& value = path.value();
+  // Look for a path starting with the "~" character. It must be alone or
+  // followed by a separator.
+  if (value.empty() || value[0] != FILE_PATH_LITERAL('~') ||
+      (value.length() > 1 && !base::FilePath::IsSeparator(value[1]))) {
+    return path;
+  }
+  base::FilePath result;
+  base::PathService::Get(base::DIR_HOME, &result);
+  // The user could specify "~" or "~/", so be safe.
+  if (value.length() > 2) {
+    result = result.Append(value.substr(2));
+  }
+  return result;
+#endif
 }
 
 }  // namespace path_util

@@ -98,23 +98,6 @@ BaseNode::InitByLookupResult ReadNode::InitByTagLookupForBookmarks(
   return DecryptIfNecessary() ? INIT_OK : INIT_FAILED_DECRYPT_IF_NECESSARY;
 }
 
-BaseNode::InitByLookupResult ReadNode::InitByTagLookupForNotes(
-    const std::string& tag) {
-  DCHECK(!entry_) << "Init called twice";
-  if (tag.empty())
-    return INIT_FAILED_PRECONDITION;
-  syncable::BaseTransaction* trans = transaction_->GetWrappedTrans();
-  entry_ = new syncable::Entry(trans, syncable::GET_BY_SERVER_TAG, tag);
-  if (!entry_->good())
-    return INIT_FAILED_ENTRY_NOT_GOOD;
-  if (entry_->GetIsDel())
-    return INIT_FAILED_ENTRY_IS_DEL;
-  ModelType model_type = GetModelType();
-  DCHECK_EQ(model_type, NOTES)
-      << "InitByTagLookup deprecated for all types except notes.";
-  return DecryptIfNecessary() ? INIT_OK : INIT_FAILED_DECRYPT_IF_NECESSARY;
-}
-
 BaseNode::InitByLookupResult ReadNode::InitTypeRoot(ModelType type) {
   DCHECK(!entry_) << "Init called twice";
   if (!IsRealDataType(type))

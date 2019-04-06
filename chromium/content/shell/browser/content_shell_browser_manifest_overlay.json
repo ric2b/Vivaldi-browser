@@ -4,9 +4,11 @@
     "service_manager:connector": {
       "provides": {
         "renderer": [
-          "content::mojom::LayoutTestBluetoothFakeAdapterSetter",
-          "content::mojom::MojoLayoutTestHelper",
-          "bluetooth::mojom::FakeBluetooth"
+          "content.mojom.LayoutTestBluetoothFakeAdapterSetter",
+          "content.mojom.MojoLayoutTestHelper",
+          "content.mojom.FakeBluetoothChooser",
+          "bluetooth.mojom.FakeBluetooth",
+          "blink.test.mojom.WebPackageInternals"
         ]
       },
       "requires": {
@@ -19,7 +21,7 @@
     "navigation:frame": {
       "provides": {
         "renderer": [
-          "content::mojom::MojoLayoutTestHelper"
+          "content.mojom.MojoLayoutTestHelper"
         ]
       }
     }

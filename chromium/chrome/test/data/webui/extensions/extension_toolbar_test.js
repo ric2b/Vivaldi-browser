@@ -5,23 +5,24 @@
 /** @fileoverview Suite of tests for extension-toolbar. */
 cr.define('extension_toolbar_tests', function() {
   /** @enum {string} */
-  var TestNames = {
+  const TestNames = {
     Layout: 'layout',
     ClickHandlers: 'click handlers',
     DevModeToggle: 'dev mode toggle',
+    KioskMode: 'kiosk mode button'
   };
 
-  var suiteName = 'ExtensionToolbarTest';
+  const suiteName = 'ExtensionToolbarTest';
   suite(suiteName, function() {
     /** @type {MockDelegate} */
-    var mockDelegate;
+    let mockDelegate;
 
     /** @type {extensions.Toolbar} */
-    var toolbar;
+    let toolbar;
 
     setup(function() {
-      toolbar = document.querySelector('extensions-manager').$$(
-          'extensions-toolbar');
+      toolbar =
+          document.querySelector('extensions-manager').$$('extensions-toolbar');
       mockDelegate = new extensions.TestService();
       toolbar.set('delegate', mockDelegate);
     });
@@ -29,33 +30,33 @@ cr.define('extension_toolbar_tests', function() {
     test(assert(TestNames.Layout), function() {
       extension_test_util.testIcons(toolbar);
 
-      var testVisible = extension_test_util.testVisible.bind(null, toolbar);
-      testVisible('#dev-mode', true);
-      assertEquals(toolbar.$$('#dev-mode').disabled, false);
-      testVisible('#load-unpacked', false);
-      testVisible('#pack-extensions', false);
-      testVisible('#update-now', false);
+      const testVisible = extension_test_util.testVisible.bind(null, toolbar);
+      testVisible('#devMode', true);
+      assertEquals(toolbar.$.devMode.disabled, false);
+      testVisible('#loadUnpacked', false);
+      testVisible('#packExtensions', false);
+      testVisible('#updateNow', false);
 
       toolbar.set('inDevMode', true);
       Polymer.dom.flush();
 
-      testVisible('#dev-mode', true);
-      assertEquals(toolbar.$$('#dev-mode').disabled, false);
-      testVisible('#load-unpacked', true);
-      testVisible('#pack-extensions', true);
-      testVisible('#update-now', true);
+      testVisible('#devMode', true);
+      assertEquals(toolbar.$.devMode.disabled, false);
+      testVisible('#loadUnpacked', true);
+      testVisible('#packExtensions', true);
+      testVisible('#updateNow', true);
 
       toolbar.set('canLoadUnpacked', false);
       Polymer.dom.flush();
 
-      testVisible('#dev-mode', true);
-      testVisible('#load-unpacked', false);
-      testVisible('#pack-extensions', true);
-      testVisible('#update-now', true);
+      testVisible('#devMode', true);
+      testVisible('#loadUnpacked', false);
+      testVisible('#packExtensions', true);
+      testVisible('#updateNow', true);
     });
 
     test(assert(TestNames.DevModeToggle), function() {
-      const toggle = toolbar.$$('#dev-mode');
+      const toggle = toolbar.$.devMode;
       assertFalse(toggle.disabled);
 
       // Test that the dev-mode toggle is disabled when a policy exists.
@@ -77,26 +78,56 @@ cr.define('extension_toolbar_tests', function() {
       toolbar.set('inDevMode', true);
       Polymer.dom.flush();
 
-      MockInteractions.tap(toolbar.$['dev-mode']);
-      return mockDelegate.whenCalled('setProfileInDevMode').then(function(arg) {
-        assertFalse(arg);
-        mockDelegate.reset();
-        MockInteractions.tap(toolbar.$['dev-mode']);
-        return mockDelegate.whenCalled('setProfileInDevMode');
-      }).then(function(arg) {
-        assertTrue(arg);
-        MockInteractions.tap(toolbar.$$('#load-unpacked'));
-        return mockDelegate.whenCalled('loadUnpacked');
-      }).then(function() {
-        MockInteractions.tap(toolbar.$$('#update-now'));
-        return mockDelegate.whenCalled('updateAllExtensions');
-      }).then(function() {
-        var listener = new extension_test_util.ListenerMock();
-        listener.addListener(toolbar, 'pack-tap');
-        MockInteractions.tap(toolbar.$$('#pack-extensions'));
-        listener.verify();
-      });
+      toolbar.$.devMode.click();
+      return mockDelegate.whenCalled('setProfileInDevMode')
+          .then(function(arg) {
+            assertFalse(arg);
+            mockDelegate.reset();
+            toolbar.$.devMode.click();
+            return mockDelegate.whenCalled('setProfileInDevMode');
+          })
+          .then(function(arg) {
+            assertTrue(arg);
+            toolbar.$.loadUnpacked.click();
+            return mockDelegate.whenCalled('loadUnpacked');
+          })
+          .then(function() {
+            assertFalse(toolbar.$$('cr-toast').open);
+            toolbar.$.updateNow.click();
+            // Simulate user rapidly clicking update button multiple times.
+            toolbar.$.updateNow.click();
+            assertTrue(toolbar.$$('cr-toast').open);
+            return mockDelegate.whenCalled('updateAllExtensions');
+          })
+          .then(function() {
+            assertEquals(1, mockDelegate.getCallCount('updateAllExtensions'));
+            assertFalse(!!toolbar.$$('extensions-pack-dialog'));
+            toolbar.$.packExtensions.click();
+            Polymer.dom.flush();
+            const dialog = toolbar.$$('extensions-pack-dialog');
+            assertTrue(!!dialog);
+
+            if (!cr.isMac) {
+              const whenFocused =
+                  test_util.eventToPromise('focus', toolbar.$.packExtensions);
+              dialog.$.dialog.cancel();
+              return whenFocused;
+            }
+          });
     });
+
+    if (cr.isChromeOS) {
+      test(assert(TestNames.KioskMode), function() {
+        const button = toolbar.$.kioskExtensions;
+        expectTrue(button.hidden);
+        toolbar.kioskEnabled = true;
+        expectFalse(button.hidden);
+
+        const whenTapped = test_util.eventToPromise('kiosk-tap', toolbar);
+        button.click();
+        return whenTapped;
+      });
+    }
   });
 
   return {

@@ -5,16 +5,11 @@
 #ifndef CHROME_BROWSER_UI_ASH_WALLPAPER_CONTROLLER_CLIENT_H_
 #define CHROME_BROWSER_UI_ASH_WALLPAPER_CONTROLLER_CLIENT_H_
 
+#include "ash/public/cpp/wallpaper_types.h"
 #include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/ash/wallpaper_policy_handler.h"
 #include "mojo/public/cpp/bindings/binding.h"
-
-namespace wallpaper {
-class WallpaperFilesId;
-enum WallpaperLayout;
-enum WallpaperType;
-}  // namespace wallpaper
 
 // Handles method calls sent from ash to chrome. Also sends messages from chrome
 // to ash.
@@ -32,42 +27,80 @@ class WallpaperControllerClient : public ash::mojom::WallpaperControllerClient,
 
   static WallpaperControllerClient* Get();
 
-  // TODO(crbug.com/776464): Move this to anonymous namesapce.
-  // Returns true if wallpaper files id can be returned successfully.
-  bool CanGetWallpaperFilesId() const;
-
   // Returns files identifier for the |account_id|.
-  wallpaper::WallpaperFilesId GetFilesId(const AccountId& account_id) const;
+  std::string GetFilesId(const AccountId& account_id) const;
 
   // Wrappers around the ash::mojom::WallpaperController interface.
   void SetCustomWallpaper(const AccountId& account_id,
-                          const wallpaper::WallpaperFilesId& wallpaper_files_id,
+                          const std::string& wallpaper_files_id,
                           const std::string& file_name,
-                          wallpaper::WallpaperLayout layout,
-                          wallpaper::WallpaperType type,
+                          ash::WallpaperLayout layout,
                           const gfx::ImageSkia& image,
-                          bool show_wallpaper);
-  void SetOnlineWallpaper(const AccountId& account_id,
-                          const gfx::ImageSkia& image,
-                          const std::string& url,
-                          wallpaper::WallpaperLayout layout,
-                          bool show_wallpaper);
+                          bool preview_mode);
+  void SetOnlineWallpaperIfExists(
+      const AccountId& account_id,
+      const std::string& url,
+      ash::WallpaperLayout layout,
+      bool preview_mode,
+      ash::mojom::WallpaperController::SetOnlineWallpaperIfExistsCallback
+          callback);
+  void SetOnlineWallpaperFromData(
+      const AccountId& account_id,
+      const std::string& image_data,
+      const std::string& url,
+      ash::WallpaperLayout layout,
+      bool preview_mode,
+      ash::mojom::WallpaperController::SetOnlineWallpaperFromDataCallback
+          callback);
   void SetDefaultWallpaper(const AccountId& account_id, bool show_wallpaper);
-  void SetCustomizedDefaultWallpaper(const GURL& wallpaper_url,
-                                     const base::FilePath& file_path,
-                                     const base::FilePath& resized_directory);
+  void SetCustomizedDefaultWallpaperPaths(
+      const base::FilePath& customized_default_small_path,
+      const base::FilePath& customized_default_large_path);
+  void SetPolicyWallpaper(const AccountId& account_id,
+                          std::unique_ptr<std::string> data);
+  void SetThirdPartyWallpaper(
+      const AccountId& account_id,
+      const std::string& wallpaper_files_id,
+      const std::string& file_name,
+      ash::WallpaperLayout layout,
+      const gfx::ImageSkia& image,
+      ash::mojom::WallpaperController::SetThirdPartyWallpaperCallback callback);
+  void ConfirmPreviewWallpaper();
+  void CancelPreviewWallpaper();
   void UpdateCustomWallpaperLayout(const AccountId& account_id,
-                                   wallpaper::WallpaperLayout layout);
+                                   ash::WallpaperLayout layout);
   void ShowUserWallpaper(const AccountId& account_id);
   void ShowSigninWallpaper();
   void RemoveUserWallpaper(const AccountId& account_id);
-
-  // ash::mojom::WallpaperControllerClient:
-  void OpenWallpaperPicker() override;
+  void RemovePolicyWallpaper(const AccountId& account_id);
+  void GetOfflineWallpaperList(
+      ash::mojom::WallpaperController::GetOfflineWallpaperListCallback
+          callback);
+  void SetAnimationDuration(const base::TimeDelta& animation_duration);
+  void OpenWallpaperPickerIfAllowed();
+  void MinimizeInactiveWindows(const std::string& user_id_hash);
+  void RestoreMinimizedWindows(const std::string& user_id_hash);
+  void AddObserver(ash::mojom::WallpaperObserverAssociatedPtrInfo observer);
+  void GetWallpaperImage(
+      ash::mojom::WallpaperController::GetWallpaperImageCallback callback);
+  void GetWallpaperColors(
+      ash::mojom::WallpaperController::GetWallpaperColorsCallback callback);
+  void IsWallpaperBlurred(
+      ash::mojom::WallpaperController::IsWallpaperBlurredCallback callback);
+  void IsActiveUserWallpaperControlledByPolicy(
+      ash::mojom::WallpaperController::
+          IsActiveUserWallpaperControlledByPolicyCallback callback);
+  void GetActiveUserWallpaperInfo(
+      ash::mojom::WallpaperController::GetActiveUserWallpaperInfoCallback
+          callback);
+  void ShouldShowWallpaperSetting(
+      ash::mojom::WallpaperController::ShouldShowWallpaperSettingCallback
+          callback);
 
   // chromeos::WallpaperPolicyHandler::Delegate:
   void OnDeviceWallpaperChanged() override;
   void OnDeviceWallpaperPolicyCleared() override;
+  void OnShowUserNamesOnLoginPolicyChanged() override;
 
   // Flushes the mojo pipe to ash.
   void FlushForTesting();
@@ -76,6 +109,20 @@ class WallpaperControllerClient : public ash::mojom::WallpaperControllerClient,
   // Binds this object to its mojo interface and sets it as the ash client.
   void BindAndSetClient();
 
+  // Shows the wallpaper of the first user in |UserManager::GetUsers|, or a
+  // default signin wallpaper if there's no user. This ensures the wallpaper is
+  // shown right after boot, regardless of when the login screen is available.
+  //
+  // TODO(wzang|784495): Consider deprecating this method after views-based
+  // login is enabled. It should be fast enough to request the first wallpaper
+  // so that there's no visible delay.
+  void ShowWallpaperOnLoginScreen();
+
+  // ash::mojom::WallpaperControllerClient:
+  void OpenWallpaperPicker() override;
+  void OnReadyToSetWallpaper() override;
+  void OnFirstWallpaperAnimationFinished() override;
+
   // WallpaperController interface in ash.
   ash::mojom::WallpaperControllerPtr wallpaper_controller_;
 
@@ -83,6 +130,8 @@ class WallpaperControllerClient : public ash::mojom::WallpaperControllerClient,
 
   // Binds to the client interface.
   mojo::Binding<ash::mojom::WallpaperControllerClient> binding_;
+
+  base::WeakPtrFactory<WallpaperControllerClient> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(WallpaperControllerClient);
 };

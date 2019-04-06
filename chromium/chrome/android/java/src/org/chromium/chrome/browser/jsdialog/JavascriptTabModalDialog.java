@@ -97,11 +97,11 @@ public class JavascriptTabModalDialog implements ModalDialogView.Controller {
     @Override
     public void onClick(@ModalDialogView.ButtonType int buttonType) {
         switch (buttonType) {
-            case ModalDialogView.BUTTON_POSITIVE:
+            case ModalDialogView.ButtonType.POSITIVE:
                 accept(mDialogView.getPromptText());
                 mModalDialogManager.dismissDialog(mDialogView);
                 break;
-            case ModalDialogView.BUTTON_NEGATIVE:
+            case ModalDialogView.ButtonType.NEGATIVE:
                 cancel();
                 mModalDialogManager.dismissDialog(mDialogView);
                 break;
@@ -114,6 +114,9 @@ public class JavascriptTabModalDialog implements ModalDialogView.Controller {
     public void onCancel() {
         cancel();
     }
+
+    @Override
+    public void onDismiss() {}
 
     /**
      * Sends notification to native that the user accepts the dialog.

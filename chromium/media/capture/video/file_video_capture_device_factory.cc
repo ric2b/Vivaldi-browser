@@ -32,10 +32,10 @@ std::unique_ptr<VideoCaptureDevice> FileVideoCaptureDeviceFactory::CreateDevice(
   base::AssertBlockingAllowed();
 #if defined(OS_WIN)
   return std::unique_ptr<VideoCaptureDevice>(new FileVideoCaptureDevice(
-      base::FilePath(base::SysUTF8ToWide(device_descriptor.display_name))));
+      base::FilePath(base::SysUTF8ToWide(device_descriptor.display_name()))));
 #else
   return std::unique_ptr<VideoCaptureDevice>(new FileVideoCaptureDevice(
-      base::FilePath(device_descriptor.display_name)));
+      base::FilePath(device_descriptor.display_name())));
 #endif
 }
 
@@ -76,6 +76,12 @@ void FileVideoCaptureDeviceFactory::GetSupportedFormats(
   }
 
   supported_formats->push_back(capture_format);
+}
+
+void FileVideoCaptureDeviceFactory::GetCameraLocationsAsync(
+    std::unique_ptr<VideoCaptureDeviceDescriptors> device_descriptors,
+    DeviceDescriptorsCallback result_callback) {
+  base::ResetAndReturn(&result_callback).Run(std::move(device_descriptors));
 }
 
 }  // namespace media

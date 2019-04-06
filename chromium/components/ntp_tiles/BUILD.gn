@@ -12,8 +12,11 @@ static_library("ntp_tiles") {
     "constants.h",
     "country_code_ios.h",
     "country_code_ios.mm",
-    "field_trial.cc",
-    "field_trial.h",
+    "custom_links_manager.h",
+    "custom_links_manager_impl.cc",
+    "custom_links_manager_impl.h",
+    "custom_links_store.cc",
+    "custom_links_store.h",
     "icon_cacher.h",
     "icon_cacher_impl.cc",
     "icon_cacher_impl.h",
@@ -61,12 +64,9 @@ static_library("ntp_tiles") {
     "//components/url_formatter",
     "//components/variations",
     "//components/variations/service",
+    "//services/network/public/cpp",
     "//ui/base",
   ]
-
-  if (is_android) {
-    deps += [ "android:ntp_tiles_jni_headers" ]
-  }
 }
 
 # If you want to use this, let us (ntp-dev@chromium.org) know. In that case, it
@@ -88,6 +88,8 @@ source_set("json_unsafe_parser") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "custom_links_manager_impl_unittest.cc",
+    "custom_links_store_unittest.cc",
     "icon_cacher_impl_unittest.cc",
     "metrics_unittest.cc",
     "most_visited_sites_unittest.cc",
@@ -101,10 +103,13 @@ source_set("unit_tests") {
     "//components/favicon/core",
     "//components/favicon_base",
     "//components/image_fetcher/core",
+    "//components/image_fetcher/core:test_support",
     "//components/pref_registry:pref_registry",
     "//components/rappor:test_support",
     "//components/sync_preferences:test_support",
     "//net:test_support",
+    "//services/network:test_support",
+    "//services/network/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/base",

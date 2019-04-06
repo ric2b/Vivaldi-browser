@@ -12,7 +12,7 @@
 #include "base/feature_list.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
+#include "components/password_manager/core/browser/hash_password_manager.h"
 
 using autofill::PasswordForm;
 
@@ -59,17 +59,6 @@ std::unique_ptr<PasswordForm> FillPasswordFormWithData(
         url::Origin::Create(GURL("https://accounts.google.com/login"));
   }
   return form;
-}
-
-std::vector<std::unique_ptr<PasswordForm>> WrapForms(
-    std::vector<PasswordForm> forms) {
-  std::vector<std::unique_ptr<PasswordForm>> results;
-  results.reserve(forms.size());
-  std::transform(forms.begin(), forms.end(), std::back_inserter(results),
-                 [](PasswordForm& form) {
-                   return std::make_unique<PasswordForm>(std::move(form));
-                 });
-  return results;
 }
 
 bool ContainsEqualPasswordFormsUnordered(
@@ -122,21 +111,38 @@ MockPasswordStoreObserver::~MockPasswordStoreObserver() {}
 MockPasswordReuseDetectorConsumer::MockPasswordReuseDetectorConsumer() {}
 
 MockPasswordReuseDetectorConsumer::~MockPasswordReuseDetectorConsumer() {}
+
+PasswordHashDataMatcher::PasswordHashDataMatcher(
+    base::Optional<PasswordHashData> expected)
+    : expected_(expected) {}
+
+bool PasswordHashDataMatcher::MatchAndExplain(
+    base::Optional<PasswordHashData> hash_data,
+    ::testing::MatchResultListener* listener) const {
+  if (expected_ == base::nullopt)
+    return hash_data == base::nullopt;
+
+  if (hash_data == base::nullopt)
+    return false;
+
+  return expected_->username == hash_data->username &&
+         expected_->length == hash_data->length &&
+         expected_->is_gaia_password == hash_data->is_gaia_password;
+}
+
+void PasswordHashDataMatcher::DescribeTo(::std::ostream* os) const {
+  *os << "matches password hash data for " << expected_->username;
+}
+
+void PasswordHashDataMatcher::DescribeNegationTo(::std::ostream* os) const {
+  *os << "doesn't match password hash data for " << expected_->username;
+}
+
+::testing::Matcher<base::Optional<PasswordHashData>> Matches(
+    base::Optional<PasswordHashData> expected) {
+  return ::testing::MakeMatcher(new PasswordHashDataMatcher(expected));
+}
+
 #endif
 
-HSTSStateManager::HSTSStateManager(net::TransportSecurityState* state,
-                                   bool is_hsts,
-                                   const std::string& host)
-    : state_(state), is_hsts_(is_hsts), host_(host) {
-  if (is_hsts_) {
-    base::Time expiry = base::Time::Max();
-    bool include_subdomains = false;
-    state_->AddHSTS(host_, expiry, include_subdomains);
-  }
-}
-
-HSTSStateManager::~HSTSStateManager() {
-  if (is_hsts_)
-    state_->DeleteDynamicDataForHost(host_);
-}
 }  // namespace password_manager

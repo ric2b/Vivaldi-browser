@@ -19,11 +19,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/win/windows_version.h"
 #include "media/audio/audio_device_description.h"
+#include "media/audio/audio_features.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/win/audio_device_listener_win.h"
 #include "media/audio/win/audio_low_latency_input_win.h"
@@ -92,12 +92,20 @@ AudioManagerWin::AudioManagerWin(std::unique_ptr<AudioThread> audio_thread,
 
   SetMaxOutputStreamsAllowed(kMaxOutputStreams);
 
-  // WARNING: This is executed on the UI loop, do not add any code here which
-  // loads libraries or attempts to call out into the OS.  Instead add such code
-  // to the InitializeOnAudioThread() method below.
+  // WARNING: This may be executed on the UI loop, do not add any code here
+  // which loads libraries or attempts to call out into the OS.  Instead add
+  // such code to the InitializeOnAudioThread() method below.
+
+  // In case we are already on the audio thread (i.e. when running out of
+  // process audio), don't post.
+  if (GetTaskRunner()->BelongsToCurrentThread()) {
+    this->InitializeOnAudioThread();
+    return;
+  }
 
   // Task must be posted last to avoid races from handing out "this" to the
-  // audio thread.
+  // audio thread. Unretained is safe since we join the audio thread before
+  // destructing |this|.
   GetTaskRunner()->PostTask(
       FROM_HERE, base::Bind(&AudioManagerWin::InitializeOnAudioThread,
                             base::Unretained(this)));
@@ -172,12 +180,15 @@ AudioParameters AudioManagerWin::GetInputStreamParameters(
     // code path somehow for a configuration - e.g. tab capture).
     parameters =
         AudioParameters(AudioParameters::AUDIO_PCM_LINEAR,
-                        CHANNEL_LAYOUT_STEREO, 48000, 16, kFallbackBufferSize);
+                        CHANNEL_LAYOUT_STEREO, 48000, kFallbackBufferSize);
   }
 
   int user_buffer_size = GetUserBufferSize();
   if (user_buffer_size)
     parameters.set_frames_per_buffer(user_buffer_size);
+
+  parameters.set_effects(parameters.effects() |
+                         AudioParameters::EXPERIMENTAL_ECHO_CANCELLER);
 
   return parameters;
 }
@@ -249,7 +260,14 @@ AudioInputStream* AudioManagerWin::MakeLowLatencyInputStream(
     const LogCallback& log_callback) {
   // Used for both AUDIO_PCM_LOW_LATENCY and AUDIO_PCM_LINEAR.
   DVLOG(1) << "MakeLowLatencyInputStream: " << device_id;
-  return new WASAPIAudioInputStream(this, params, device_id, log_callback);
+
+  VoiceProcessingMode voice_processing_mode =
+      params.effects() & AudioParameters::ECHO_CANCELLER
+          ? VoiceProcessingMode::kEnabled
+          : VoiceProcessingMode::kDisabled;
+
+  return new WASAPIAudioInputStream(this, params, device_id, log_callback,
+                                    voice_processing_mode);
 }
 
 std::string AudioManagerWin::GetDefaultInputDeviceID() {
@@ -275,7 +293,6 @@ AudioParameters AudioManagerWin::GetPreferredOutputStreamParameters(
   ChannelLayout channel_layout = CHANNEL_LAYOUT_STEREO;
   int sample_rate = 48000;
   int buffer_size = kFallbackBufferSize;
-  int bits_per_sample = 16;
   int effects = AudioParameters::NO_EFFECTS;
 
   // TODO(henrika): Remove kEnableExclusiveAudio and related code. It doesn't
@@ -307,7 +324,6 @@ AudioParameters AudioManagerWin::GetPreferredOutputStreamParameters(
       return AudioParameters();
     }
 
-    bits_per_sample = params.bits_per_sample();
     buffer_size = params.frames_per_buffer();
     channel_layout = params.channel_layout();
     sample_rate = params.sample_rate();
@@ -350,7 +366,7 @@ AudioParameters AudioManagerWin::GetPreferredOutputStreamParameters(
     buffer_size = user_buffer_size;
 
   AudioParameters params(AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-                         sample_rate, bits_per_sample, buffer_size);
+                         sample_rate, buffer_size);
   params.set_effects(effects);
   return params;
 }

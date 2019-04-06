@@ -32,7 +32,6 @@
 #include "device/bluetooth/dbus/bluetooth_profile_service_provider.h"
 
 namespace base {
-class SequencedTaskRunner;
 class TimeDelta;
 }  // namespace base
 
@@ -85,7 +84,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ
 
   // Calls |init_callback| after a BluetoothAdapter is fully initialized.
   static base::WeakPtr<BluetoothAdapter> CreateAdapter(
-      const InitCallback& init_callback);
+      InitCallback init_callback);
 
   // BluetoothAdapter:
   void Shutdown() override;
@@ -164,6 +163,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ
   // Announce to observers a device address change.
   void NotifyDeviceAddressChanged(BluetoothDeviceBlueZ* device,
                                   const std::string& old_address);
+
+  // Announce to observers MTU change in ATT communication to |device|.
+  void NotifyDeviceMTUChanged(BluetoothDeviceBlueZ* device, uint16_t mtu);
 
   // Returns the object path of the adapter.
   const dbus::ObjectPath& object_path() const { return object_path_; }
@@ -244,7 +246,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ
   using RegisterProfileCompletionPair =
       std::pair<base::Closure, ErrorCompletionCallback>;
 
-  explicit BluetoothAdapterBlueZ(const InitCallback& init_callback);
+  explicit BluetoothAdapterBlueZ(InitCallback init_callback);
   ~BluetoothAdapterBlueZ() override;
 
   // Init will get asynchronouly called once we know if Object Manager is
@@ -336,49 +338,46 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ
                                  bool success);
 
   // BluetoothAdapter:
+  bool SetPoweredImpl(bool powered) override;
   void AddDiscoverySession(
       device::BluetoothDiscoveryFilter* discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) override;
+      DiscoverySessionErrorCallback error_callback) override;
   void RemoveDiscoverySession(
       device::BluetoothDiscoveryFilter* discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) override;
+      DiscoverySessionErrorCallback error_callback) override;
   void SetDiscoveryFilter(
       std::unique_ptr<device::BluetoothDiscoveryFilter> discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) override;
+      DiscoverySessionErrorCallback error_callback) override;
 
   // Called by dbus:: on completion of the D-Bus method call to start discovery.
   void OnStartDiscovery(const base::Closure& callback,
-                        const DiscoverySessionErrorCallback& error_callback);
-  void OnStartDiscoveryError(
-      const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback,
-      const std::string& error_name,
-      const std::string& error_message);
+                        DiscoverySessionErrorCallback error_callback);
+  void OnStartDiscoveryError(const base::Closure& callback,
+                             DiscoverySessionErrorCallback error_callback,
+                             const std::string& error_name,
+                             const std::string& error_message);
 
   // Called by dbus:: on completion of the D-Bus method call to stop discovery.
   void OnStopDiscovery(const base::Closure& callback);
-  void OnStopDiscoveryError(const DiscoverySessionErrorCallback& error_callback,
+  void OnStopDiscoveryError(DiscoverySessionErrorCallback error_callback,
                             const std::string& error_name,
                             const std::string& error_message);
 
-  void OnPreSetDiscoveryFilter(
-      const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback);
+  void OnPreSetDiscoveryFilter(const base::Closure& callback,
+                               DiscoverySessionErrorCallback error_callback);
   void OnPreSetDiscoveryFilterError(
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback,
+      DiscoverySessionErrorCallback error_callback,
       device::UMABluetoothDiscoverySessionOutcome outcome);
-  void OnSetDiscoveryFilter(
-      const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback);
-  void OnSetDiscoveryFilterError(
-      const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback,
-      const std::string& error_name,
-      const std::string& error_message);
+  void OnSetDiscoveryFilter(const base::Closure& callback,
+                            DiscoverySessionErrorCallback error_callback);
+  void OnSetDiscoveryFilterError(const base::Closure& callback,
+                                 DiscoverySessionErrorCallback error_callback,
+                                 const std::string& error_name,
+                                 const std::string& error_message);
 
   // Called by dbus:: on completion of the D-Bus method to register a profile.
   void OnRegisterProfile(const device::BluetoothUUID& uuid,
@@ -469,8 +468,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ
   // our own class as its delegate.
   std::unique_ptr<bluez::BluetoothAgentServiceProvider> agent_;
 
-  // UI thread task runner and socket thread object used to create sockets.
-  scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
+  // Socket thread object used to create sockets.
   scoped_refptr<device::BluetoothSocketThread> socket_thread_;
 
   // The profiles we have registered with the bluetooth daemon.

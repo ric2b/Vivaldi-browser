@@ -6,8 +6,8 @@
 #define CONTENT_RENDERER_DOM_STORAGE_LOCAL_STORAGE_NAMESPACE_H_
 
 #include "base/macros.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebStorageNamespace.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_storage_namespace.h"
 
 namespace content {
 class LocalStorageCachedAreas;
@@ -22,6 +22,9 @@ class LocalStorageNamespace : public blink::WebStorageNamespace {
   // blink::WebStorageNamespace:
   blink::WebStorageArea* CreateStorageArea(
       const blink::WebSecurityOrigin& origin) override;
+
+  blink::WebString GetNamespaceId() const override;
+
   bool IsSameNamespace(const WebStorageNamespace&) const override;
 
  private:

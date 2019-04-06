@@ -16,11 +16,6 @@
 #error \
     "Failed to include content/common/browser_plugin/browser_plugin_messages.h"
 #endif
-#undef CONTENT_COMMON_CACHE_STORAGE_CACHE_STORAGE_MESSAGES_H_
-#include "content/common/cache_storage/cache_storage_messages.h"
-#ifndef CONTENT_COMMON_CACHE_STORAGE_CACHE_STORAGE_MESSAGES_H_
-#error "Failed to include content/common/cache_storage/cache_storage_messages.h"
-#endif
 #undef CONTENT_COMMON_DOM_STORAGE_DOM_STORAGE_MESSAGES_H_
 #include "content/common/dom_storage/dom_storage_messages.h"
 #ifndef CONTENT_COMMON_DOM_STORAGE_DOM_STORAGE_MESSAGES_H_
@@ -57,21 +52,10 @@
 #ifndef CONTENT_COMMON_MEDIA_AEC_DUMP_MESSAGES_H_
 #error "Failed to include content/common/media/aec_dump_messages.h"
 #endif
-#undef CONTENT_COMMON_MEDIA_AUDIO_MESSAGES_H_
-#include "content/common/media/audio_messages.h"
-#ifndef CONTENT_COMMON_MEDIA_AUDIO_MESSAGES_H_
-#error "Failed to include content/common/media/audio_messages.h"
-#endif
 #undef CONTENT_COMMON_MEDIA_MEDIA_PLAYER_DELEGATE_MESSAGES_H_
 #include "content/common/media/media_player_delegate_messages.h"
 #ifndef CONTENT_COMMON_MEDIA_MEDIA_PLAYER_DELEGATE_MESSAGES_H_
 #error "Failed to include content/common/media/media_player_delegate_messages.h"
-#endif
-#undef CONTENT_COMMON_MEDIA_MEDIA_STREAM_TRACK_METRICS_HOST_MESSAGES_H_
-#include "content/common/media/media_stream_track_metrics_host_messages.h"
-#ifndef CONTENT_COMMON_MEDIA_MEDIA_STREAM_TRACK_METRICS_HOST_MESSAGES_H_
-#error \
-    "Failed to include content/common/media/media_stream_track_metrics_host_messages.h"
 #endif
 #undef CONTENT_COMMON_MEDIA_MIDI_MESSAGES_H_
 #include "content/common/media/midi_messages.h"
@@ -89,32 +73,21 @@
 #ifndef CONTENT_COMMON_PAGE_MESSAGES_H_
 #error "Failed to include content/common/page_messages.h"
 #endif
-#undef CONTENT_COMMON_PLATFORM_NOTIFICATION_MESSAGES_H_
-#include "content/common/platform_notification_messages.h"
-#ifndef CONTENT_COMMON_PLATFORM_NOTIFICATION_MESSAGES_H_
-#error "Failed to include content/common/platform_notification_messages.h"
+#undef CONTENT_COMMON_PLATFORM_NOTIFICATION_PARAM_TRAITS_H_
+#include "content/common/platform_notification_param_traits.h"
+#ifndef CONTENT_COMMON_PLATFORM_NOTIFICATION_PARAM_TRAITS_H_
+#error "Failed to include content/common/platform_notification_param_traits.h"
 #endif
 #undef CONTENT_COMMON_RESOURCE_MESSAGES_H_
 #include "content/common/resource_messages.h"
 #ifndef CONTENT_COMMON_RESOURCE_MESSAGES_H_
 #error "Failed to include content/common/resource_messages.h"
 #endif
-#undef CONTENT_COMMON_SERVICE_WORKER_EMBEDDED_WORKER_MESSAGES_H_
-#include "content/common/service_worker/embedded_worker_messages.h"
-#ifndef CONTENT_COMMON_SERVICE_WORKER_EMBEDDED_WORKER_MESSAGES_H_
-#error \
-    "Failed to include content/common/service_worker/embedded_worker_messages.h"
-#endif
 #undef CONTENT_COMMON_SERVICE_WORKER_SERVICE_WORKER_MESSAGES_H_
 #include "content/common/service_worker/service_worker_messages.h"
 #ifndef CONTENT_COMMON_SERVICE_WORKER_SERVICE_WORKER_MESSAGES_H_
 #error \
     "Failed to include content/common/service_worker/service_worker_messages.h"
-#endif
-#undef CONTENT_COMMON_SPEECH_RECOGNITION_MESSAGES_H_
-#include "content/common/speech_recognition_messages.h"
-#ifndef CONTENT_COMMON_SPEECH_RECOGNITION_MESSAGES_H_
-#error "Failed to include content/common/speech_recognition_messages.h"
 #endif
 #undef CONTENT_COMMON_TEXT_INPUT_CLIENT_MESSAGES_H_
 #include "content/common/text_input_client_messages.h"
@@ -126,7 +99,7 @@
 #ifndef CONTENT_COMMON_VIEW_MESSAGES_H_
 #error "Failed to include content/common/view_messages.h"
 #endif
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 #undef CONTENT_COMMON_SYNC_COMPOSITOR_MESSAGES_H_
 #include "content/common/input/sync_compositor_messages.h"
@@ -134,12 +107,10 @@
 #error "Failed to include content/common/input/sync_compositor_messages.h"
 #endif
 
-#if BUILDFLAG(ENABLE_WEBRTC)
 #undef CONTENT_COMMON_P2P_MESSAGES_H_
 #include "content/common/p2p_messages.h"
 #ifndef CONTENT_COMMON_P2P_MESSAGES_H_
 #error "Failed to include content/common/p2p_messages.h"
-#endif
 #endif
 
 #if defined(OS_ANDROID)
@@ -153,12 +124,10 @@
 #ifndef CONTENT_COMMON_MEDIA_MEDIA_PLAYER_MESSAGES_ANDROID_H_
 #error "Failed to include content/common/media/media_player_messages_android.h"
 #endif
-#undef CONTENT_COMMON_MEDIA_SURFACE_VIEW_MANAGER_MESSAGES_ANDROID_H_
-#include "content/common/media/surface_view_manager_messages_android.h"
-#ifndef CONTENT_COMMON_MEDIA_SURFACE_VIEW_MANAGER_MESSAGES_ANDROID_H_
-#error \
-    "Failed to include content/common/media/surface_view_manager_messages_android.h"
-#endif
 #endif  // defined(OS_ANDROID)
 
+#undef RENDER_VIVALDI_RENDER_MESSAGES_H_
 #include "renderer/vivaldi_render_messages.h"
+#ifndef RENDER_VIVALDI_RENDER_MESSAGES_H_
+#error "Failed to include renderer/vivaldi_render_messages.h"
+#endif

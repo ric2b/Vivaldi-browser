@@ -8,33 +8,34 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
 
+class AppListControllerDelegate;
 class AppListModelUpdater;
+class ChromeSearchResult;
 
 namespace app_list {
 
-class History;
 class SearchProvider;
-class SearchResult;
 
 // Controller that collects query from given SearchBoxModel, dispatches it
 // to all search providers, then invokes the mixer to mix and to publish the
 // results to the given SearchResults UI model.
 class SearchController {
  public:
-  SearchController(AppListModelUpdater* model_updater, History* history);
+  SearchController(AppListModelUpdater* model_updater,
+                   AppListControllerDelegate* list_controller);
   virtual ~SearchController();
 
-  // TODO(hejq): can we accept a trimmed query here?
-  void Start(const base::string16& raw_query);
+  void Start(const base::string16& query);
 
-  void OpenResult(SearchResult* result, int event_flags);
-  void InvokeResultAction(SearchResult* result,
+  void OpenResult(ChromeSearchResult* result, int event_flags);
+  void InvokeResultAction(ChromeSearchResult* result,
                           int action_index,
                           int event_flags);
 
@@ -44,11 +45,12 @@ class SearchController {
   // Takes ownership of |provider| and associates it with given mixer group.
   void AddProvider(size_t group_id, std::unique_ptr<SearchProvider> provider);
 
+  ChromeSearchResult* FindSearchResult(const std::string& result_id);
+  ChromeSearchResult* GetResultByTitleForTest(const std::string& title);
+
  private:
   // Invoked when the search results are changed.
   void OnResultsChanged();
-
-  base::string16 last_raw_query_;
 
   bool dispatching_query_ = false;
 
@@ -58,7 +60,7 @@ class SearchController {
   using Providers = std::vector<std::unique_ptr<SearchProvider>>;
   Providers providers_;
   std::unique_ptr<Mixer> mixer_;
-  History* history_;  // KeyedService, not owned.
+  AppListControllerDelegate* list_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchController);
 };

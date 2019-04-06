@@ -30,37 +30,31 @@ var SEARCH_RESULTS_ENTRY_SET = [
  */
 function getStepsForSearchResultsAutoComplete() {
   var appId;
-  var steps =
-  [
+  var steps = [
     function() {
       setupAndWaitUntilReady(null, RootPath.DRIVE, this.next);
     },
     // Focus the search box.
     function(results) {
       appId = results.windowId;
-      remoteCall.callRemoteTestUtil('fakeEvent',
-                                    appId,
-                                    ['#search-box input', 'focus'],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'fakeEvent', appId, ['#search-box cr-input', 'focus'], this.next);
     },
     // Input a text.
     function(result) {
       chrome.test.assertTrue(result);
-      remoteCall.callRemoteTestUtil('inputText',
-                                    appId,
-                                    ['#search-box input', 'hello'],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'inputText', appId, ['#search-box cr-input', 'hello'], this.next);
     },
     // Notify the element of the input.
     function() {
-      remoteCall.callRemoteTestUtil('fakeEvent',
-                                    appId,
-                                    ['#search-box input', 'input'],
-                                    this.next);
+      remoteCall.callRemoteTestUtil(
+          'fakeEvent', appId, ['#search-box cr-input', 'input'], this.next);
     },
     // Wait for the auto complete list getting the expected contents.
     function(result) {
       chrome.test.assertTrue(result);
+      var caller = getCaller();
       repeatUntil(function() {
         return remoteCall.callRemoteTestUtil('queryAllElements',
                                              appId,
@@ -70,7 +64,7 @@ function getStepsForSearchResultsAutoComplete() {
                   function(element) { return element.text; });
               return chrome.test.checkDeepEq(EXPECTED_AUTOCOMPLETE_LIST, list) ?
                   undefined :
-                  pending('Current auto complete list: %j.', list);
+                  pending(caller, 'Current auto complete list: %j.', list);
             });
         }).
         then(this.next);
@@ -78,8 +72,7 @@ function getStepsForSearchResultsAutoComplete() {
     function() {
       checkIfNoErrorsOccured(this.next);
     },
-    function()
-    {
+    function() {
       this.next(appId);
     }
   ];
@@ -88,11 +81,11 @@ function getStepsForSearchResultsAutoComplete() {
 
 /**
  * Tests opening the "Offline" on the sidebar navigation by clicking the icon,
- * and checks contenets of the file list. Only the entries "available offline"
- * should be shown. "Available offline" entires are hosted documents and the
+ * and checks contents of the file list. Only the entries "available offline"
+ * should be shown. "Available offline" entries are hosted documents and the
  * entries cached by DriveCache.
  */
-testcase.openSidebarOffline = function() {
+testcase.driveOpenSidebarOffline = function() {
   var appId;
   StepsRunner.run([
     function() {
@@ -125,7 +118,7 @@ testcase.openSidebarOffline = function() {
  * icon, and checks contents of the file list. Only the entries labeled with
  * "shared-with-me" should be shown.
  */
-testcase.openSidebarSharedWithMe = function() {
+testcase.driveOpenSidebarSharedWithMe = function() {
   var appId;
   StepsRunner.run([
     function() {
@@ -156,10 +149,9 @@ testcase.openSidebarSharedWithMe = function() {
 };
 
 /**
- * Tests autocomplete with a query 'hello'. This test is only available for
- * Drive.
+ * Tests autocomplete with a query 'hello'.
  */
-testcase.autocomplete = function() {
+testcase.driveAutoCompleteQuery = function() {
   StepsRunner.run(getStepsForSearchResultsAutoComplete());
 };
 
@@ -167,7 +159,7 @@ testcase.autocomplete = function() {
  * Tests that clicking the first option in the autocomplete box shows all of
  * the results for that query.
  */
-testcase.clickFirstSearchResult = function() {
+testcase.driveClickFirstSearchResult = function() {
   var appId;
   var steps = getStepsForSearchResultsAutoComplete();
   steps.push(
@@ -212,45 +204,43 @@ testcase.clickFirstSearchResult = function() {
  * Tests that pressing enter after typing a search shows all of
  * the results for that query.
  */
-testcase.pressEnterToSearch = function() {
+testcase.drivePressEnterToSearch = function() {
   var appId;
   var steps = getStepsForSearchResultsAutoComplete();
   steps.push(
-    function(id) {
-      appId = id;
-      remoteCall.callRemoteTestUtil(
-          'fakeEvent', appId,
-          ['#search-box input', 'focus'],
-          this.next);
-    },
-    function(result) {
-      remoteCall.callRemoteTestUtil(
-          'fakeKeyDown', appId,
-          ['#search-box input', 'Enter', 'Enter', false, false, false],
-          this.next);
-    },
-    function(result) {
-      remoteCall.waitForFileListChange(appId, BASIC_DRIVE_ENTRY_SET.length).
-      then(this.next);
-    },
-    function(actualFilesAfter) {
-      chrome.test.assertEq(
-          TestEntryInfo.getExpectedRows(SEARCH_RESULTS_ENTRY_SET).sort(),
-          actualFilesAfter);
-      checkIfNoErrorsOccured(this.next);
-    }
-  );
+      function(id) {
+        appId = id;
+        remoteCall.callRemoteTestUtil(
+            'fakeEvent', appId, ['#search-box cr-input', 'focus'], this.next);
+      },
+      function(result) {
+        remoteCall.callRemoteTestUtil(
+            'fakeKeyDown', appId,
+            ['#search-box cr-input', 'Enter', 'Enter', false, false, false],
+            this.next);
+      },
+      function(result) {
+        remoteCall.waitForFileListChange(appId, BASIC_DRIVE_ENTRY_SET.length)
+            .then(this.next);
+      },
+      function(actualFilesAfter) {
+        chrome.test.assertEq(
+            TestEntryInfo.getExpectedRows(SEARCH_RESULTS_ENTRY_SET).sort(),
+            actualFilesAfter);
+        checkIfNoErrorsOccured(this.next);
+      });
 
   StepsRunner.run(steps);
 };
 
 /**
- * Tests pinning a file on mobile network.
+ * Tests pinning a file to a mobile network.
  */
-testcase.pinFileOnMobileNetwork = function() {
+testcase.drivePinFileMobileNetwork = function() {
   testPromise(setupAndWaitUntilReady(null, RootPath.DRIVE).then(
       function(results) {
         var windowId = results.windowId;
+        var caller = getCaller();
         return sendTestMessage(
             {name: 'useCellularNetwork'}).then(function(result) {
           return remoteCall.callRemoteTestUtil(
@@ -258,7 +248,8 @@ testcase.pinFileOnMobileNetwork = function() {
         }).then(function() {
           return repeatUntil(function() {
             return navigator.connection.type != 'cellular' ?
-                pending('Network state is not changed to cellular.') : null;
+                pending(caller, 'Network state is not changed to cellular.') :
+                null;
           });
         }).then(function() {
           return remoteCall.waitForElement(windowId, ['.table-row[selected]']);
@@ -290,7 +281,8 @@ testcase.pinFileOnMobileNetwork = function() {
             return remoteCall.callRemoteTestUtil(
                 'getNotificationIDs', null, []).then(function(idSet) {
               return !idSet['disabled-mobile-sync'] ?
-                  pending('Sync disable notification is not found.') : null;
+                  pending(caller, 'Sync disable notification is not found.') :
+                  null;
             });
           });
         }).then(function() {
@@ -305,9 +297,50 @@ testcase.pinFileOnMobileNetwork = function() {
             return remoteCall.callRemoteTestUtil(
                 'getPreferences', null, []).then(function(preferences) {
               return preferences.cellularDisabled ?
-                  pending('Drive sync is still disabled.') : null;
+                  pending(caller, 'Drive sync is still disabled.') : null;
             });
           });
         });
       }));
+};
+
+/**
+ * Tests that pressing Ctrl+A (select all files) from the search box doesn't put
+ * the Files App into check-select mode (crbug.com/849253).
+ */
+testcase.drivePressCtrlAFromSearch = function() {
+  var appId;
+  var steps = [
+    function() {
+      setupAndWaitUntilReady(null, RootPath.DRIVE, this.next);
+    },
+    // Focus the search box.
+    function(results) {
+      appId = results.windowId;
+      remoteCall.callRemoteTestUtil(
+          'fakeMouseClick', appId, ['#search-button'], this.next);
+    },
+    // Wait for the search box to be visible.
+    function(result) {
+      chrome.test.assertTrue(result);
+      remoteCall.waitForElement(appId, ['#search-box cr-input:not([hidden])'])
+          .then(this.next);
+    },
+    // Press Ctrl+A inside the search box.
+    function(result) {
+      remoteCall.callRemoteTestUtil(
+          'fakeKeyDown', appId,
+          ['#search-box cr-input', 'A', 'A', true, false, false], this.next);
+    },
+    // Check we didn't enter check-select mode.
+    function(result) {
+      chrome.test.assertTrue(result);
+      remoteCall.waitForElement(appId, ['body:not(.check-select)'])
+          .then(this.next);
+    },
+    function(result) {
+      checkIfNoErrorsOccured(this.next);
+    },
+  ];
+  StepsRunner.run(steps);
 };

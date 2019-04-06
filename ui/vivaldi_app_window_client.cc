@@ -19,6 +19,8 @@
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #endif
 
+class VivaldiNativeAppWindow;
+
 VivaldiAppWindowClient::VivaldiAppWindowClient() {
 }
 
@@ -32,7 +34,7 @@ VivaldiAppWindowClient* VivaldiAppWindowClient::GetInstance() {
       base::LeakySingletonTraits<VivaldiAppWindowClient>>::get();
 }
 
-extensions::NativeAppWindow* VivaldiAppWindowClient::CreateNativeAppWindow(
+VivaldiNativeAppWindow* VivaldiAppWindowClient::CreateNativeAppWindow(
     VivaldiBrowserWindow* window,
     extensions::AppWindow::CreateParams* params) {
 #if defined(OS_ANDROID)

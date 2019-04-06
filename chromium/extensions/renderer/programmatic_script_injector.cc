@@ -18,10 +18,10 @@
 #include "extensions/renderer/injection_host.h"
 #include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/script_context.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_source.h"
 
 namespace extensions {
 
@@ -47,6 +47,15 @@ bool ProgrammaticScriptInjector::IsUserGesture() const {
   return params_->user_gesture;
 }
 
+base::Optional<CSSOrigin> ProgrammaticScriptInjector::GetCssOrigin() const {
+  return params_->css_origin;
+}
+
+const base::Optional<std::string>
+ProgrammaticScriptInjector::GetInjectionKey() const {
+  return params_->injection_key;
+}
+
 bool ProgrammaticScriptInjector::ExpectsResults() const {
   return params_->wants_result;
 }
@@ -63,7 +72,7 @@ bool ProgrammaticScriptInjector::ShouldInjectCss(
   return params_->run_at == run_location && !params_->is_javascript;
 }
 
-PermissionsData::AccessType ProgrammaticScriptInjector::CanExecuteOnFrame(
+PermissionsData::PageAccess ProgrammaticScriptInjector::CanExecuteOnFrame(
     const InjectionHost* injection_host,
     blink::WebLocalFrame* frame,
     int tab_id) {
@@ -80,12 +89,12 @@ PermissionsData::AccessType ProgrammaticScriptInjector::CanExecuteOnFrame(
   if (params_->is_web_view) {
     if (frame->Parent()) {
       // This is a subframe inside <webview>, so allow it.
-      return PermissionsData::ACCESS_ALLOWED;
+      return PermissionsData::PageAccess::kAllowed;
     }
 
     return effective_document_url == params_->webview_src
-               ? PermissionsData::ACCESS_ALLOWED
-               : PermissionsData::ACCESS_DENIED;
+               ? PermissionsData::PageAccess::kAllowed
+               : PermissionsData::PageAccess::kDenied;
   }
   DCHECK_EQ(injection_host->id().type(), HostID::EXTENSIONS);
 

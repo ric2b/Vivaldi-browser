@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 
 struct AutocompleteMatch;
@@ -40,7 +41,6 @@ class TestOmniboxView : public OmniboxView {
   void SetCaretPos(size_t caret_pos) override {}
   void EnterKeywordModeForDefaultSearchProvider() override {}
   bool IsSelectAll() const override;
-  bool DeleteAtEndPressed() override;
   void GetSelectionBounds(size_t* start, size_t* end) const override {}
   void SelectAll(bool reversed) override {}
   void RevertAll() override {}
@@ -66,6 +66,7 @@ class TestOmniboxView : public OmniboxView {
   void EmphasizeURLComponents() override {}
   void SetEmphasis(bool emphasize, const gfx::Range& range) override {}
   void UpdateSchemeStyle(const gfx::Range& range) override {}
+  void SetModel(OmniboxEditModel* model);
 
  private:
   base::string16 text_;

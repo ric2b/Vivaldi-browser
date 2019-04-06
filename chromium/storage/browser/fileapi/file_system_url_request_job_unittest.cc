@@ -63,11 +63,10 @@ const char kValidExternalMountPoint[] = "mnt_name";
 // An auto mounter that will try to mount anything for |storage_domain| =
 // "automount", but will only succeed for the mount point "mnt_name".
 bool TestAutoMountForURLRequest(
-    const net::URLRequest* /*url_request*/,
+    const storage::FileSystemRequestInfo& request_info,
     const storage::FileSystemURL& filesystem_url,
-    const std::string& storage_domain,
     base::OnceCallback<void(base::File::Error result)> callback) {
-  if (storage_domain != "automount")
+  if (request_info.storage_domain != "automount")
     return false;
   std::vector<base::FilePath::StringType> components;
   filesystem_url.path().GetComponents(&components);
@@ -143,11 +142,10 @@ class FileSystemURLRequestJobTest : public testing::Test {
         CreateFileSystemContextForTesting(NULL, temp_dir_.GetPath());
 
     file_system_context_->OpenFileSystem(
-        GURL("http://remote/"),
-        storage::kFileSystemTypeTemporary,
+        GURL("http://remote/"), storage::kFileSystemTypeTemporary,
         storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-        base::Bind(&FileSystemURLRequestJobTest::OnOpenFileSystem,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&FileSystemURLRequestJobTest::OnOpenFileSystem,
+                       weak_factory_.GetWeakPtr()));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -188,9 +186,6 @@ class FileSystemURLRequestJobTest : public testing::Test {
                          bool run_to_completion,
                          FileSystemContext* file_system_context) {
     delegate_.reset(new net::TestDelegate());
-    // Make delegate_ exit the MessageLoop when the request is done.
-    delegate_->set_quit_on_complete(true);
-    delegate_->set_quit_on_redirect(true);
 
     job_factory_.reset(new FileSystemURLRequestJobFactory(
         url.GetOrigin().host(), file_system_context));
@@ -205,7 +200,7 @@ class FileSystemURLRequestJobTest : public testing::Test {
     request_->Start();
     ASSERT_TRUE(request_->is_pending());  // verify that we're starting async
     if (run_to_completion)
-      base::RunLoop().Run();
+      delegate_->RunUntilComplete();
   }
 
   void TestRequest(const GURL& url) {
@@ -358,14 +353,15 @@ TEST_F(FileSystemURLRequestJobTest, RangeOutOfBounds) {
 
 TEST_F(FileSystemURLRequestJobTest, FileDirRedirect) {
   CreateDirectory("dir");
-  TestRequest(CreateFileSystemURL("dir"));
+  TestRequestNoRun(CreateFileSystemURL("dir"));
+  delegate_->RunUntilRedirect();
 
   EXPECT_EQ(1, delegate_->received_redirect_count());
   EXPECT_FALSE(delegate_->request_failed());
 
   // We've deferred the redirect; now cancel the request to avoid following it.
   request_->Cancel();
-  base::RunLoop().Run();
+  delegate_->RunUntilComplete();
 }
 
 TEST_F(FileSystemURLRequestJobTest, InvalidURL) {

@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/native_browser_frame_factory.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/grit/chromium_strings.h"
 #if defined(USE_AURA)
 #include "ui/aura/client/aura_constants.h"
@@ -20,6 +22,11 @@
 // static
 BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser,
                                                   bool user_gesture) {
+#if defined(OS_MACOSX)
+  if (views_mode_controller::IsViewsBrowserCocoa())
+    return BrowserWindow::CreateBrowserWindowCocoa(browser, user_gesture);
+#endif
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (browser->is_vivaldi()) {
     std::string base_url;

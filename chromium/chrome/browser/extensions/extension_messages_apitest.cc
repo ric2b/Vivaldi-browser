@@ -28,7 +28,6 @@
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_util.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -37,6 +36,9 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/crx_file/id_util.h"
+#include "components/network_session_configurator/common/network_features.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -44,6 +46,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/messaging/message_property_provider.h"
+#include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -57,6 +60,7 @@
 #include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/jwk_serializer.h"
 #include "net/dns/mock_host_resolver.h"
@@ -83,6 +87,10 @@ void CreateDomainBoundCertOnIOThread(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   net::ChannelIDService* channel_id_service =
       request_context_getter->GetURLRequestContext()->channel_id_service();
+  if (!channel_id_service) {
+    waitable_event->Signal();
+    return;
+  }
   int status = channel_id_service->GetOrCreateChannelID(
       url.host(), channel_id_key,
       base::BindRepeating(&GotDomainBoundCert, waitable_event), request);
@@ -108,7 +116,7 @@ std::string CreateTlsChannelId(
   waitable_event.Wait();
   // Create the expected value.
   std::vector<uint8_t> spki_vector;
-  if (!channel_id_key->ExportPublicKey(&spki_vector))
+  if (!channel_id_key || !channel_id_key->ExportPublicKey(&spki_vector))
     return std::string();
   base::StringPiece spki(reinterpret_cast<char*>(spki_vector.data()),
                          spki_vector.size());
@@ -262,6 +270,12 @@ IN_PROC_BROWSER_TEST_P(MessagingApiTest, MessagingBackgroundOnly) {
 // Tests whether an extension in an interstitial page can send messages to the
 // background page.
 IN_PROC_BROWSER_TEST_P(MessagingApiTest, MessagingInterstitial) {
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  // TODO(https://crbug.com/833429): Intermittent timeouts when run with
+  // --site-per-process on Windows.
+  if (content::AreAllSitesIsolatedForTesting())
+    return;
+#endif
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
   ASSERT_TRUE(https_server.Start());
@@ -501,7 +515,7 @@ class ExternallyConnectableMessagingTest : public MessagingApiTest {
 
   void SetUpOnMainThread() override {
     base::FilePath test_data;
-    EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data));
+    EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data));
     embedded_test_server()->ServeFilesFromDirectory(test_data.AppendASCII(
         "extensions/api_test/messaging/externally_connectable/sites"));
     MessagingApiTest::SetUpOnMainThread();
@@ -1131,6 +1145,12 @@ IN_PROC_BROWSER_TEST_P(ExternallyConnectableMessagingTest,
                        WebConnectableWithNonEmptyTlsChannelId) {
   std::string expected_tls_channel_id_value =
       CreateTlsChannelId(profile()->GetRequestContext(), chromium_org_url());
+  bool expect_empty_id = false;
+  if (!base::FeatureList::IsEnabled(::features::kChannelID) &&
+      !base::FeatureList::IsEnabled(::features::kTokenBinding)) {
+    expected_tls_channel_id_value = "";
+    expect_empty_id = true;
+  }
 
   scoped_refptr<const Extension> chromium_connectable =
       LoadChromiumConnectableExtensionWithTlsChannelId();
@@ -1148,7 +1168,7 @@ IN_PROC_BROWSER_TEST_P(ExternallyConnectableMessagingTest,
   // If the page does ask to send the TLS channel ID, it's sent and non-empty.
   std::string tls_channel_id_from_port_connect =
       GetTlsChannelIdFromPortConnect(chromium_connectable.get(), true);
-  EXPECT_NE(0u, tls_channel_id_from_port_connect.size());
+  EXPECT_EQ(tls_channel_id_from_port_connect.empty(), expect_empty_id);
 
   // The same value is received by both connect and sendMessage.
   std::string tls_channel_id_from_send_message =
@@ -1180,6 +1200,54 @@ IN_PROC_BROWSER_TEST_P(ExternallyConnectableMessagingTest,
       GetTlsChannelIdFromSendMessage(chromium_connectable.get(), true);
   EXPECT_EQ(tls_channel_id, tls_channel_id2);
 }
+
+class ExternallyConnectableMessagingTestNoChannelID
+    : public ExternallyConnectableMessagingTest {
+ public:
+  ExternallyConnectableMessagingTestNoChannelID() {}
+  ~ExternallyConnectableMessagingTestNoChannelID() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    std::vector<base::Feature> enabled_features;
+    std::vector<base::Feature> disabled_features = {::features::kChannelID,
+                                                    ::features::kTokenBinding};
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+    ExternallyConnectableMessagingTest::SetUpCommandLine(command_line);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExternallyConnectableMessagingTestNoChannelID);
+};
+
+IN_PROC_BROWSER_TEST_P(ExternallyConnectableMessagingTestNoChannelID,
+                       TlsChannelIdEmptyWhenDisabled) {
+  std::string expected_tls_channel_id_value =
+      CreateTlsChannelId(profile()->GetRequestContext(), chromium_org_url());
+
+  scoped_refptr<const Extension> chromium_connectable =
+      LoadChromiumConnectableExtensionWithTlsChannelId();
+  ASSERT_TRUE(chromium_connectable.get());
+
+  ui_test_utils::NavigateToURL(browser(), chromium_org_url());
+
+  // Check that both connect and sendMessage don't report a Channel ID.
+  std::string tls_channel_id_from_port_connect =
+      GetTlsChannelIdFromPortConnect(chromium_connectable.get(), true);
+  EXPECT_EQ(0u, tls_channel_id_from_port_connect.size());
+
+  std::string tls_channel_id_from_send_message =
+      GetTlsChannelIdFromSendMessage(chromium_connectable.get(), true);
+  EXPECT_EQ(0u, tls_channel_id_from_send_message.size());
+}
+
+INSTANTIATE_TEST_CASE_P(NativeBindingsNoChannelID,
+                        ExternallyConnectableMessagingTestNoChannelID,
+                        ::testing::Values(NATIVE_BINDINGS));
+INSTANTIATE_TEST_CASE_P(JavaScriptBindingsNoChannelID,
+                        ExternallyConnectableMessagingTestNoChannelID,
+                        ::testing::Values(JAVASCRIPT_BINDINGS));
 
 // Tests a web connectable extension that receives TLS channel id, but
 // immediately closes its background page upon receipt of a message.
@@ -1233,14 +1301,21 @@ IN_PROC_BROWSER_TEST_P(MessagingApiTest, MessagingUserGesture) {
   const Extension* sender = LoadExtension(sender_dir.UnpackedPath());
   ASSERT_TRUE(sender);
 
-  EXPECT_EQ("false",
-      ExecuteScriptInBackgroundPage(sender->id(),
-                                    base::StringPrintf(
-          "chrome.test.runWithoutUserGesture(function() {\n"
-          "  chrome.runtime.sendMessage('%s', {}, function(response)  {\n"
-          "    window.domAutomationController.send('' + response.result);\n"
-          "  });\n"
-          "});", receiver->id().c_str())));
+  EXPECT_EQ(
+      "false",
+      ExecuteScriptInBackgroundPage(
+          sender->id(),
+          base::StringPrintf(
+              "if (chrome.test.isProcessingUserGesture()) {\n"
+              "  domAutomationController.send("
+              "      'Error: unexpected user gesture');\n"
+              "} else {\n"
+              "  chrome.runtime.sendMessage('%s', {}, function(response) {\n"
+              "    domAutomationController.send('' + response.result);\n"
+              "  });\n"
+              "}",
+              receiver->id().c_str()),
+          extensions::browsertest_util::ScriptUserActivation::kDontActivate));
 
   EXPECT_EQ("true",
       ExecuteScriptInBackgroundPage(sender->id(),
@@ -1282,8 +1357,7 @@ IN_PROC_BROWSER_TEST_P(ExternallyConnectableMessagingTest,
 
   scoped_refptr<const Extension> invalid =
       ExtensionBuilder()
-          // A bit scary that this works...
-          .SetID("invalid")
+          .SetID(crx_file::id_util::GenerateId("invalid"))
           .SetManifest(DictionaryBuilder()
                            .Set("name", "Fake extension")
                            .Set("version", "1")
@@ -1396,6 +1470,10 @@ IN_PROC_BROWSER_TEST_P(MessagingApiTest,
   std::string tls_channel_id = CreateTlsChannelId(
       app_storage_partition->GetURLRequestContext(), background_url);
   ASSERT_FALSE(tls_channel_id.empty());
+  if (!base::FeatureList::IsEnabled(::features::kChannelID) &&
+      !base::FeatureList::IsEnabled(::features::kTokenBinding)) {
+    tls_channel_id = "undefined";
+  }
 
   // Load up an extension that the app can message, which we will use to
   // verify the TLS channel id sent to the message listener.

@@ -8,6 +8,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
@@ -30,8 +31,8 @@ import android.widget.FrameLayout;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.InsetObserverView;
 import org.chromium.chrome.browser.compositor.Invalidator.Client;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -49,14 +50,11 @@ import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.widget.ClipDrawableProgressBar.DrawingInfo;
 import org.chromium.chrome.browser.widget.ControlContainer;
-import org.chromium.content.browser.ContentView;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.UiUtils;
+import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.SPenSupport;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.resources.ResourceManager;
@@ -74,7 +72,9 @@ import java.util.List;
  */
 public class CompositorViewHolder extends FrameLayout
         implements ContentOffsetProvider, LayoutManagerHost, LayoutRenderHost, Invalidator.Host,
-                FullscreenListener {
+                   FullscreenListener, InsetObserverView.WindowInsetObserver {
+    private static final long SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS = 500;
+
     private boolean mIsKeyboardShowing;
 
     private final Invalidator mInvalidator = new Invalidator();
@@ -103,29 +103,27 @@ public class CompositorViewHolder extends FrameLayout
     /** The toolbar control container. **/
     private ControlContainer mControlContainer;
 
+    private InsetObserverView mInsetObserverView;
+    private boolean mShowingFullscreenNonVideoContent;
+    private Runnable mSystemUiFullscreenResizeRunnable;
+
     /** The currently visible Tab. */
     private Tab mTabVisible;
 
     /** The currently attached View. */
     private View mView;
 
-    private TabModelSelectorObserver mTabModelSelectorObserver;
     private TabObserver mTabObserver;
 
     // Cache objects that should not be created frequently.
     private final RectF mCacheViewport = new RectF();
-    private DrawingInfo mProgressBarDrawingInfo;
+    private final Rect mCacheRect = new Rect();
+    private final Point mCachePoint = new Point();
 
     // If we've drawn at least one frame.
     private boolean mHasDrawnOnce;
 
-    /**
-     * The information about {@link ContentView} for overlay panel. Used to adjust the backing
-     * size of the content accordingly.
-     */
-    private View mOverlayContentView;
-    private int mOverlayContentWidthMeasureSpec = ContentView.DEFAULT_MEASURE_SPEC;
-    private int mOverlayContentHeightMeasureSpec = ContentView.DEFAULT_MEASURE_SPEC;
+    private boolean mIsInVr;
 
     /**
      * This view is created on demand to display debugging information.
@@ -184,7 +182,7 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public PointerIcon onResolvePointerIcon(MotionEvent event, int pointerIndex) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null;
-        View activeView = getActiveView();
+        View activeView = getContentView();
         if (activeView == null || !ViewCompat.isAttachedToWindow(activeView)) return null;
         return activeView.onResolvePointerIcon(event, pointerIndex);
     }
@@ -208,18 +206,6 @@ public class CompositorViewHolder extends FrameLayout
             }
         };
 
-        mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
-            @Override
-            public void onChange() {
-                onContentChanged();
-            }
-
-            @Override
-            public void onNewTabCreated(Tab tab) {
-                initializeTab(tab);
-            }
-        };
-
         addOnLayoutChangeListener(new OnLayoutChangeListener() {
             @Override
             public void onLayoutChange(View v, int left, int top, int right, int bottom,
@@ -227,9 +213,10 @@ public class CompositorViewHolder extends FrameLayout
                 // Have content pick up the size and browser control information when the content
                 // view got laid out. Successive calls with the same values are ignored by
                 // ViewAndroid that stores the size.
-                View view = getActiveView();
+                View view = getContentView();
                 if (view != null) {
-                    setSize(getActiveWebContents(), view, view.getWidth(), view.getHeight());
+                    Point viewportSize = getViewportSize();
+                    setSize(getWebContents(), view, viewportSize.x, viewportSize.y);
                 }
                 onViewportChanged();
 
@@ -249,6 +236,95 @@ public class CompositorViewHolder extends FrameLayout
         // mCompositorView should always be the first child.
         addView(mCompositorView, 0,
                 new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+
+        setOnSystemUiVisibilityChangeListener(new OnSystemUiVisibilityChangeListener() {
+            @Override
+            public void onSystemUiVisibilityChange(int visibility) {
+                handleSystemUiVisibilityChange();
+            }
+        });
+        handleSystemUiVisibilityChange();
+    }
+
+    private Point getViewportSize() {
+        // When in fullscreen mode, the window does not get resized when showing the onscreen
+        // keyboard[1].  To work around this, we monitor the visible display frame to mimic the
+        // resize state to ensure the web contents has the correct width and height.
+        //
+        // This path should not be used in the non-fullscreen case as it would negate the
+        // performance benefits of the app setting SOFT_INPUT_ADJUST_PAN.  This would force the
+        // app into a constant SOFT_INPUT_ADJUST_RESIZE mode, which causes more churn on the page
+        // layout than required in cases that you're editing in Chrome UI outside of the web
+        // contents.
+        //
+        // [1] - https://developer.android.com/reference/android/view/WindowManager.LayoutParams.html#FLAG_FULLSCREEN
+        if (mShowingFullscreenNonVideoContent && UiUtils.isKeyboardShowing(getContext(), this)) {
+            getWindowVisibleDisplayFrame(mCacheRect);
+
+            // On certain devices, getWindowVisibleDisplayFrame is larger than the screen size, so
+            // this ensures we never draw beyond the underlying dimensions of the view.
+            // https://crbug.com/854109
+            mCachePoint.set(Math.min(mCacheRect.width(), getWidth()),
+                    Math.min(mCacheRect.height(), getHeight()));
+        } else {
+            mCachePoint.set(getWidth(), getHeight());
+        }
+        return mCachePoint;
+    }
+
+    private void handleSystemUiVisibilityChange() {
+        boolean isInFullscreen = false;
+        boolean layoutFullscreen = false;
+
+        View view = getContentView();
+        if (view == null || !ViewCompat.isAttachedToWindow(view)) view = this;
+
+        while (view != null) {
+            int uiVisibility = view.getSystemUiVisibility();
+            layoutFullscreen |= (uiVisibility & View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) != 0;
+            isInFullscreen |= (uiVisibility & View.SYSTEM_UI_FLAG_FULLSCREEN) != 0;
+            if (layoutFullscreen && isInFullscreen) break;
+            if (!(view.getParent() instanceof View)) break;
+            view = (View) view.getParent();
+        }
+
+        if (!isInFullscreen && !mShowingFullscreenNonVideoContent) return;
+
+        if (isInFullscreen && mFullscreenManager != null
+                && mFullscreenManager.getPersistentFullscreenMode()) {
+            Tab tab = getCurrentTab();
+            WebContents webContents = tab != null ? tab.getWebContents() : null;
+            // When playing fullscreen video, the inset size adjustments are always temporary and
+            // should be ignored to avoid relayout janks.
+            if (webContents != null && webContents.hasActiveEffectivelyFullscreenVideo()) {
+                isInFullscreen = false;
+            }
+        }
+
+        if (mShowingFullscreenNonVideoContent == isInFullscreen) return;
+        mShowingFullscreenNonVideoContent = isInFullscreen;
+
+        if (mSystemUiFullscreenResizeRunnable == null) {
+            mSystemUiFullscreenResizeRunnable = () -> {
+                View contentView = getContentView();
+                if (contentView != null) {
+                    Point viewportSize = getViewportSize();
+                    setSize(getWebContents(), contentView, viewportSize.x, viewportSize.y);
+                }
+                onViewportChanged();
+            };
+        } else {
+            getHandler().removeCallbacks(mSystemUiFullscreenResizeRunnable);
+        }
+
+        // If SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN is set, defer updating the viewport to allow
+        // Android's animations to complete.  The getWindowVisibleDisplayFrame values do not get
+        // updated until a fair amount after onSystemUiVisibilityChange is broadcast.
+        //
+        // SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS was chosen by increasing the time until the UI did
+        // not reliably jump from updating the viewport too early.
+        long delay = layoutFullscreen ? SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS : 0;
+        postDelayed(mSystemUiFullscreenResizeRunnable, delay);
     }
 
     /**
@@ -265,18 +341,6 @@ public class CompositorViewHolder extends FrameLayout
      */
     public void setRootView(View view) {
         mCompositorView.setRootView(view);
-    }
-
-    /**
-     * Set the desired size of the overlay content view.
-     * @param overlayContentView {@link ContentView} used for overlay panel.
-     * @param width The width of the content view in {@link MeasureSpec}.
-     * @param height The height of the content view in {@link MeasureSpec}.
-     */
-    public void setOverlayContentInfo(View overlayContentView, int width, int height) {
-        mOverlayContentView = overlayContentView;
-        mOverlayContentWidthMeasureSpec = width;
-        mOverlayContentHeightMeasureSpec = height;
     }
 
     /**
@@ -297,6 +361,29 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     /**
+     * Set the InsetObserverView that can be monitored for changes to the window insets from Android
+     * system UI.
+     */
+    public void setInsetObserverView(InsetObserverView view) {
+        if (mInsetObserverView != null) {
+            mInsetObserverView.removeObserver(this);
+        }
+        mInsetObserverView = view;
+        if (mInsetObserverView != null) {
+            mInsetObserverView.addObserver(this);
+            onViewportChanged();
+        }
+    }
+
+    @Override
+    public void onInsetChanged(int top, int left, int bottom, int right) {
+        if (mShowingFullscreenNonVideoContent) onViewportChanged();
+    }
+
+    @Override
+    public void onSafeAreaChanged(Rect area) {}
+
+    /**
      * Should be called for cleanup when the CompositorView instance is no longer used.
      */
     public void shutDown() {
@@ -304,6 +391,10 @@ public class CompositorViewHolder extends FrameLayout
         if (mLayerTitleCache != null) mLayerTitleCache.shutDown();
         mCompositorView.shutDown();
         if (mLayoutManager != null) mLayoutManager.destroy();
+        if (mInsetObserverView != null) {
+            mInsetObserverView.removeObserver(this);
+            mInsetObserverView = null;
+        }
     }
 
     /**
@@ -399,17 +490,18 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public boolean dispatchDragEvent(DragEvent e) {
         if (mTabVisible == null) return false;
-        ContentViewCore contentViewCore = mTabVisible.getContentViewCore();
-        if (contentViewCore == null) return false;
+        WebContents webContents = mTabVisible.getWebContents();
+        if (webContents == null) return false;
 
         if (mLayoutManager != null) mLayoutManager.getViewportPixel(mCacheViewport);
-        contentViewCore.setCurrentTouchEventOffsets(-mCacheViewport.left, -mCacheViewport.top);
+        EventForwarder forwarder = webContents.getEventForwarder();
+        forwarder.setCurrentTouchEventOffsets(-mCacheViewport.left, -mCacheViewport.top);
         boolean ret = super.dispatchDragEvent(e);
 
         int action = e.getAction();
         if (action == DragEvent.ACTION_DRAG_EXITED || action == DragEvent.ACTION_DRAG_ENDED
                 || action == DragEvent.ACTION_DROP) {
-            contentViewCore.setCurrentTouchEventOffsets(0.f, 0.f);
+            forwarder.setCurrentTouchEventOffsets(0.f, 0.f);
         }
         return ret;
     }
@@ -428,6 +520,13 @@ public class CompositorViewHolder extends FrameLayout
         return mCompositorView;
     }
 
+    /**
+     * @return The active {@link android.view.SurfaceView} of the Compositor.
+     */
+    public View getActiveSurfaceView() {
+        return mCompositorView.getActiveSurfaceView();
+    }
+
     private Tab getCurrentTab() {
         if (mLayoutManager == null || mTabModelSelector == null) return null;
         Tab currentTab = mTabModelSelector.getCurrentTab();
@@ -438,17 +537,12 @@ public class CompositorViewHolder extends FrameLayout
         return currentTab;
     }
 
-    private View getActiveView() {
+    private View getContentView() {
         Tab tab = getCurrentTab();
         return tab != null ? tab.getContentView() : null;
     }
 
-    private ContentViewCore getActiveContent() {
-        Tab tab = getCurrentTab();
-        return tab != null ? tab.getActiveContentViewCore() : null;
-    }
-
-    private WebContents getActiveWebContents() {
+    private WebContents getWebContents() {
         Tab tab = getCurrentTab();
         return tab != null ? tab.getWebContents() : null;
     }
@@ -458,11 +552,12 @@ public class CompositorViewHolder extends FrameLayout
         super.onSizeChanged(w, h, oldw, oldh);
         if (mTabModelSelector == null) return;
 
+        Point viewportSize = getViewportSize();
         for (TabModel tabModel : mTabModelSelector.getModels()) {
             for (int i = 0; i < tabModel.getCount(); ++i) {
                 Tab tab = tabModel.getTabAt(i);
                 if (tab == null) continue;
-                setSize(tab.getWebContents(), tab.getContentView(), w, h);
+                setSize(tab.getWebContents(), tab.getContentView(), viewportSize.x, viewportSize.y);
             }
         }
     }
@@ -475,8 +570,12 @@ public class CompositorViewHolder extends FrameLayout
      * @param w Width of the view.
      * @param h Height of the view.
      */
-    public void setSize(WebContents webContents, View view, int w, int h) {
+    private void setSize(WebContents webContents, View view, int w, int h) {
         if (webContents == null || view == null) return;
+
+        // When in VR, the CompositorView doesn't control the size of the WebContents.
+        if (mIsInVr) return;
+
         // The view size takes into account of the browser controls whose height
         // should be subtracted from the view if they are visible, therefore shrink
         // Blink-side view size.
@@ -497,10 +596,16 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public void onSurfaceResized(int width, int height) {
-        View view = getActiveView();
-        WebContents webContents = getActiveWebContents();
+        View view = getContentView();
+        WebContents webContents = getWebContents();
         if (view == null || webContents == null) return;
-        adjustPhysicalBackingSize(view, webContents, width, height);
+        onPhysicalBackingSizeChanged(webContents, width, height);
+    }
+
+    private void onPhysicalBackingSizeChanged(WebContents webContents, int width, int height) {
+        if (mCompositorView != null) {
+            mCompositorView.onPhysicalBackingSizeChanged(webContents, width, height);
+        }
     }
 
     /**
@@ -535,8 +640,9 @@ public class CompositorViewHolder extends FrameLayout
     public void onBottomControlsHeightChanged(int bottomControlsHeight) {
         if (mTabVisible == null) return;
         mTabVisible.setBottomControlsHeight(bottomControlsHeight);
-        setSize(mTabVisible.getWebContents(), mTabVisible.getContentView(), getWidth(),
-                getHeight());
+        Point viewportSize = getViewportSize();
+        setSize(mTabVisible.getWebContents(), mTabVisible.getContentView(), viewportSize.x,
+                viewportSize.y);
     }
 
     @Override
@@ -548,8 +654,9 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public void onUpdateViewportSize() {
-        // Reflect the changes that may have happend in in view/control size.
-        setSize(getActiveWebContents(), getActiveView(), getWidth(), getHeight());
+        // Reflect the changes that may have happened in in view/control size.
+        Point viewportSize = getViewportSize();
+        setSize(getWebContents(), getContentView(), viewportSize.x, viewportSize.y);
     }
 
     /**
@@ -565,19 +672,21 @@ public class CompositorViewHolder extends FrameLayout
         // TODO(dtrainor): Factor this out to LayoutDriver.
         if (e == null || mTabVisible == null) return;
 
-        ContentViewCore contentViewCore = mTabVisible.getContentViewCore();
-        if (contentViewCore == null) return;
+        WebContents webContents = mTabVisible.getWebContents();
+        if (webContents == null) return;
 
         int actionMasked = SPenSupport.convertSPenEventAction(e.getActionMasked());
 
         if (actionMasked == MotionEvent.ACTION_DOWN
-                || actionMasked == MotionEvent.ACTION_HOVER_ENTER) {
+                || actionMasked == MotionEvent.ACTION_HOVER_ENTER
+                || actionMasked == MotionEvent.ACTION_HOVER_MOVE) {
             if (mLayoutManager != null) mLayoutManager.getViewportPixel(mCacheViewport);
-            contentViewCore.setCurrentTouchEventOffsets(-mCacheViewport.left, -mCacheViewport.top);
+            webContents.getEventForwarder().setCurrentTouchEventOffsets(
+                    -mCacheViewport.left, -mCacheViewport.top);
         } else if (canClear && (actionMasked == MotionEvent.ACTION_UP
                                        || actionMasked == MotionEvent.ACTION_CANCEL
                                        || actionMasked == MotionEvent.ACTION_HOVER_EXIT)) {
-            contentViewCore.setCurrentTouchEventOffsets(0.f, 0.f);
+            webContents.getEventForwarder().setCurrentTouchEventOffsets(0.f, 0.f);
         }
     }
 
@@ -601,7 +710,8 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public void getWindowViewport(RectF outRect) {
-        outRect.set(0, 0, getWidth(), getHeight());
+        Point viewportSize = getViewportSize();
+        outRect.set(0, 0, viewportSize.x, viewportSize.y);
     }
 
     @Override
@@ -631,7 +741,6 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public float getHeightMinusBrowserControls() {
         return getHeight() - (getTopControlsHeightPixels() + getBottomControlsHeightPixels());
-
     }
 
     @Override
@@ -747,16 +856,12 @@ public class CompositorViewHolder extends FrameLayout
                 : ColorUtils.getTextBoxAlphaForToolbarBackground(mTabVisible);
     }
 
-    /**
-     * @return The height of the top browser controls in pixels.
-     */
+    @Override
     public int getTopControlsHeightPixels() {
         return mFullscreenManager != null ? mFullscreenManager.getTopControlsHeight() : 0;
     }
 
-    /**
-     * @return The height of the bottom conrols in pixels.
-     */
+    @Override
     public int getBottomControlsHeightPixels() {
         return mFullscreenManager != null ? mFullscreenManager.getBottomControlsHeight() : 0;
     }
@@ -840,14 +945,27 @@ public class CompositorViewHolder extends FrameLayout
                 androidContentContainer, contextualSearchManager,
                 mCompositorView.getResourceManager().getDynamicResourceLoader());
 
-        attachToTabModelSelector(tabModelSelector);
+        mTabModelSelector = tabModelSelector;
+        tabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {
+            @Override
+            public void onChange() {
+                onContentChanged();
+            }
+
+            @Override
+            public void onNewTabCreated(Tab tab) {
+                initializeTab(tab);
+            }
+        });
+
+        mLayerTitleCache.setTabModelSelector(mTabModelSelector);
 
         onContentChanged();
     }
 
     private void updateContentOverlayVisibility(boolean show) {
         if (mView == null) return;
-        ContentViewCore content = getActiveContent();
+        WebContents webContents = getWebContents();
         if (show) {
             if (mView.getParent() != this) {
                 // During tab creation, we temporarily add the new tab's view to a FrameLayout to
@@ -855,9 +973,9 @@ public class CompositorViewHolder extends FrameLayout
                 // Therefore we should remove the view from that temporary FrameLayout here.
                 UiUtils.removeViewFromParent(mView);
 
-                if (content != null) {
-                    assert content.isAlive();
-                    content.getContainerView().setVisibility(View.VISIBLE);
+                if (webContents != null) {
+                    assert !webContents.isDestroyed();
+                    getContentView().setVisibility(View.VISIBLE);
                     if (mFullscreenManager != null) mFullscreenManager.updateViewportSize();
                 }
 
@@ -875,8 +993,8 @@ public class CompositorViewHolder extends FrameLayout
                 setFocusable(true);
                 setFocusableInTouchMode(true);
 
-                if (content != null) {
-                    if (content.isAlive()) content.getContainerView().setVisibility(View.INVISIBLE);
+                if (webContents != null && !webContents.isDestroyed()) {
+                    getContentView().setVisibility(View.INVISIBLE);
                 }
                 removeView(mView);
             }
@@ -892,13 +1010,6 @@ public class CompositorViewHolder extends FrameLayout
         }
         Tab tab = mTabModelSelector.getCurrentTab();
         setTab(tab);
-    }
-
-    @Override
-    public void onOverlayPanelContentViewCoreAdded(ContentViewCore content) {
-        // TODO(dtrainor): Look into rolling this into onContentChanged().
-        initializeContentViewCore(content);
-        setSizeOfUnattachedView(content.getContainerView(), content.getWebContents(), 0);
     }
 
     private void setTab(Tab tab) {
@@ -926,47 +1037,18 @@ public class CompositorViewHolder extends FrameLayout
 
     /**
      * Sets the correct size for {@link View} on {@code tab} and sets the correct rendering
-     * parameters on {@link ContentViewCore} on {@code tab}.
+     * parameters on {@link WebContents} on {@code tab}.
      * @param tab The {@link Tab} to initialize.
      */
     private void initializeTab(Tab tab) {
-        ContentViewCore content = tab.getActiveContentViewCore();
-        if (content != null) initializeContentViewCore(content);
-
-        View view = tab.getContentView();
-        if (view == null || (tab.isNativePage() && view == tab.getView())) return;
+        WebContents webContents = tab.getWebContents();
+        if (webContents != null) {
+            onPhysicalBackingSizeChanged(
+                    webContents, mCompositorView.getWidth(), mCompositorView.getHeight());
+        }
+        if (tab.getView() == null) return;
         tab.setTopControlsHeight(getTopControlsHeightPixels(), controlsResizeView());
         tab.setBottomControlsHeight(getBottomControlsHeightPixels());
-    }
-
-    /**
-     * Initializes the rendering surface parameters of {@code contentViewCore}.  Note that this does
-     * not size the actual {@link ContentViewCore}.
-     * @param contentViewCore The {@link ContentViewCore} to initialize.
-     */
-    private void initializeContentViewCore(ContentViewCore contentViewCore) {
-        contentViewCore.setCurrentTouchEventOffsets(0.f, 0.f);
-        adjustPhysicalBackingSize(contentViewCore.getContainerView(),
-                contentViewCore.getWebContents(), mCompositorView.getWidth(),
-                mCompositorView.getHeight());
-    }
-
-    /**
-     * Adjusts the physical backing size of a given contents. This method checks
-     * the associated container view to see if the size needs to be overriden,
-     * such as when used for {@link OverlayPanel}.
-     * @param view {@link View} to get the size info from.
-     * @param webContents {@link WebContents} associated with the backing size to adjust.
-     * @param width The default width.
-     * @param height The default height.
-     */
-    private void adjustPhysicalBackingSize(
-            View view, WebContents webContents, int width, int height) {
-        if (view == mOverlayContentView) {
-            width = MeasureSpec.getSize(mOverlayContentWidthMeasureSpec);
-            height = MeasureSpec.getSize(mOverlayContentHeightMeasureSpec);
-        }
-        mCompositorView.onPhysicalBackingSizeChanged(webContents, width, height);
     }
 
     /**
@@ -982,8 +1064,9 @@ public class CompositorViewHolder extends FrameLayout
         // size than the ContentViewCore it might think a future size update is a NOOP and not call
         // onSizeChanged() on the ContentViewCore.
         if (isAttachedToWindow(view)) return;
-        int width = getWidth();
-        int height = getHeight();
+        Point viewportSize = getViewportSize();
+        int width = viewportSize.x;
+        int height = viewportSize.y;
         view.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
         view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
@@ -1014,37 +1097,18 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     /**
-     * Detach and return the {@link TabModelSelector} in order to disconnect this
-     * {@link CompositorViewHolder} so that VR can take ownership of Chrome's rendering.
-     * @return The detached {@link TabModelSelector}.
+     * Called when VR is entered. The CompositorViewHolder loses control over WebContents sizing.
      */
-    public TabModelSelector detachForVr() {
-        if (mTabModelSelector != null) mTabModelSelector.removeObserver(mTabModelSelectorObserver);
-        TabModelSelector selector = mTabModelSelector;
-        mTabModelSelector = null;
-        mLayerTitleCache.setTabModelSelector(null);
-        setTab(null);
-        getCompositorView().setVisibility(View.INVISIBLE);
-        return selector;
+    public void onEnterVr() {
+        mIsInVr = true;
     }
 
     /**
-     * Restores the {@link TabModelSelector} to this {@link CompositorViewHolder} after exiting VR
-     * so that it can take back ownership of Chrome's rendering.
-     * @param tabModelSelector
+     * Called when VR is exited. The CompositorViewHolder regains control over WebContents sizing.
      */
-    public void onExitVr(TabModelSelector tabModelSelector) {
-        getCompositorView().setVisibility(View.VISIBLE);
-        attachToTabModelSelector(tabModelSelector);
-    }
-
-    private void attachToTabModelSelector(TabModelSelector tabModelSelector) {
-        assert mTabModelSelector == null;
-        mTabModelSelector = tabModelSelector;
-        mTabModelSelector.addObserver(mTabModelSelectorObserver);
-
-        mLayerTitleCache.setTabModelSelector(mTabModelSelector);
-        onContentChanged();
+    public void onExitVr() {
+        mIsInVr = false;
+        onUpdateViewportSize();
     }
 
     @Override

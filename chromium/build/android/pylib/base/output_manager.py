@@ -11,9 +11,10 @@ from devil.utils import reraiser_thread
 
 
 class Datatype(object):
-  HTML = 'html'
-  IMAGE = 'image'
-  TEXT = 'text'
+  HTML = 'text/html'
+  JSON = 'application/json'
+  PNG = 'image/png'
+  TEXT = 'text/plain'
 
 
 class OutputManager(object):

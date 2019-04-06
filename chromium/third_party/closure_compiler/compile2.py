@@ -31,8 +31,6 @@ class Checker(object):
     "-XX:+TieredCompilation"
   ]
 
-  _MAP_FILE_FORMAT = "%s.map"
-
   _POLYMER_EXTERNS = os.path.join(_CURRENT_DIR, "externs", "polymer-1.0.js")
 
   def __init__(self, verbose=False):
@@ -174,6 +172,8 @@ class Checker(object):
       closure_args: Arguments passed directly to the Closure compiler.
       custom_sources: Whether |sources| was customized by the target (e.g. not
           in GYP dependency order).
+      custom_includes: Whether <include>s are processed when |custom_sources|
+          is True.
 
     Returns:
       (found_errors, stderr) A boolean indicating whether errors were found and
@@ -239,7 +239,6 @@ class Checker(object):
 
     if not checks_only:
       args += ["--js_output_file=%s" % out_file]
-      args += ["--create_source_map=%s" % (self._MAP_FILE_FORMAT % out_file)]
 
     self._log_debug("Args: %s" % " ".join(args))
 
@@ -260,8 +259,6 @@ class Checker(object):
     if summary.group('error_count') != "0":
       if os.path.exists(out_file):
         os.remove(out_file)
-      if os.path.exists(self._MAP_FILE_FORMAT % out_file):
-        os.remove(self._MAP_FILE_FORMAT % out_file)
     elif checks_only and return_code == 0:
       # Compile succeeded but --checks_only disables --js_output_file from
       # actually writing a file. Write a file ourselves so incremental builds
@@ -291,8 +288,8 @@ if __name__ == "__main__":
   parser.add_argument("--custom_sources", action="store_true",
                       help="Whether this rules has custom sources.")
   parser.add_argument("--custom_includes", action="store_true",
-                      help="If present, <include>s are processed when"
-                           "using --custom_files.")
+                      help="If present, <include>s are processed when "
+                           "using --custom_sources.")
   parser.add_argument("-o", "--out_file", required=True,
                       help="A file where the compiled output is written to")
   parser.add_argument("-c", "--closure_args", nargs=argparse.ZERO_OR_MORE,

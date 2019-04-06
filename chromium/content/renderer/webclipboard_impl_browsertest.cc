@@ -44,13 +44,7 @@ IN_PROC_BROWSER_TEST_F(WebClipboardImplTest, ImageCopy) {
   clipboard.SetText("");
 
   base::string16 expected_types;
-#if !defined(OS_MACOSX)
-  // See comments in WebClipboardImpl::WriteImage for why the expected types
-  // are platform-specific.
   expected_types = base::ASCIIToUTF16("file;image/png string;text/html");
-#else
-  expected_types = base::ASCIIToUTF16("file;image/png");
-#endif
 
   NavigateToURL(shell(), GetTestUrl(".", "image_copy_types.html"));
   WebContents* web_contents = shell()->web_contents();
@@ -61,10 +55,11 @@ IN_PROC_BROWSER_TEST_F(WebClipboardImplTest, ImageCopy) {
   NavigateIframeToURL(web_contents, "copyme",
                       GetTestUrl(".", "media/blackwhite.png"));
 
-  // Run script to copy image contents and wait for completion.
-  web_contents->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
-      base::ASCIIToUTF16("frames[0].document.execCommand('copy');"
-                         "document.title = 'copied';"));
+  // Run script in child frame to copy image contents and wait for completion.
+  RenderFrameHost* child_frame = ChildFrameAt(web_contents->GetMainFrame(), 0);
+  child_frame->ExecuteJavaScriptWithUserGestureForTests(
+      base::ASCIIToUTF16("document.execCommand('copy');"
+                         "parent.document.title = 'copied';"));
   TitleWatcher watcher1(web_contents, base::ASCIIToUTF16("copied"));
   EXPECT_EQ(base::ASCIIToUTF16("copied"), watcher1.WaitAndGetTitle());
 

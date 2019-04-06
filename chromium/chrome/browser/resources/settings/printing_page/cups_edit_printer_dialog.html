@@ -1,7 +1,7 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_input/cr_input.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
 <link rel="import" href="cups_add_printer_dialog_util.html">
 <link rel="import" href="cups_printer_shared_css.html">
 <link rel="import" href="cups_printers_browser_proxy.html">
@@ -9,112 +9,112 @@
 
 <dom-module id="settings-cups-edit-printer-dialog">
   <template>
-    <style include="cups-printer-shared"></style>
+    <style include="cups-printer-shared">
+      /* This is needed to line up the existing PDD text with cr-input.
+         TODO(scottchen): move away from using .settings-box just for margin,
+         and then remove this hacky alignment. */
+      .last {
+        align-items: start;
+        flex-direction: column;
+      }
+    </style>
     <add-printer-dialog>
       <div slot="dialog-title">$i18n{editPrinterDialogTitle}</div>
       <div slot="dialog-body">
         <div class="settings-box first two-line">
-          <div class="start">
-            <div class="label">$i18n{printerName}</div>
-            <div class="secondary">
-              <paper-input class="printer-name-input" no-label-float autofocus
-                  value="{{activePrinter.printerName}}">
-              </paper-input>
-            </div>
-          </div>
+          <cr-input class="printer-name-input" autofocus
+              value="{{activePrinter.printerName}}"
+              label="$i18n{printerName}">
+          </cr-input>
         </div>
         <div class="settings-box two-line">
-          <div class="start">
-            <div class="label">$i18n{printerAddress}</div>
-            <div class="secondary">
-              <paper-input no-label-float
-                  value="{{activePrinter.printerAddress}}">
-              </paper-input>
-            </div>
-          </div>
+          <cr-input label="$i18n{printerAddress}"
+              value="{{activePrinter.printerAddress}}"
+              disabled="[[!networkProtocolActive_]]">
+          </cr-input>
         </div>
         <div class="settings-box two-line">
           <div class="start">
             <div id="printerProtocol" class="label">$i18n{printerProtocol}</div>
             <div class="secondary">
-              <div class="md-select-wrapper">
-                <select class="md-select" aria-labelledby="printerProtocol"
-                    value="[[activePrinter.printerProtocol]]"
-                    on-change="onProtocolChange_">
-                  <option value="ipp">$i18n{printerProtocolIpp}</option>
-                  <option value="ipps">$i18n{printerProtocolIpps}</option>
-                  <option value="http">$i18n{printerProtocolHttp}</option>
-                  <option value="https">$i18n{printerProtocolHttps}</option>
-                  <option value="socket">$i18n{printerProtocolAppSocket}
-                  </option>
-                  <option value="lpd">$i18n{printerProtocolLpd}</option>
-                </select>
-                <span class="md-select-underline"></span>
-              </div>
+              <select class="md-select" aria-labelledby="printerProtocol"
+                  value="[[activePrinter.printerProtocol]]"
+                  on-change="onProtocolChange_"
+                  disabled="[[!networkProtocolActive_]]">
+                <option value="ipp" disabled="[[!networkProtocolActive_]]">
+                  $i18n{printerProtocolIpp}
+                </option>
+                <option value="ipps" disabled="[[!networkProtocolActive_]]">
+                  $i18n{printerProtocolIpps}
+                </option>
+                <option value="http" disabled="[[!networkProtocolActive_]]">
+                  $i18n{printerProtocolHttp}
+                </option>
+                <option value="https" disabled="[[!networkProtocolActive_]]">
+                  $i18n{printerProtocolHttps}
+                </option>
+                <option value="socket" disabled="[[!networkProtocolActive_]]">
+                  $i18n{printerProtocolAppSocket}
+                </option>
+                <option value="lpd" disabled="[[!networkProtocolActive_]]">
+                  $i18n{printerProtocolLpd}
+                </option>
+                <option value="usb" disabled="[[networkProtocolActive_]]">
+                  $i18n{printerProtocolUsb}
+                </option>
+                <option value="ippusb" disabled="[[networkProtocolActive_]]">
+                  $i18n{printerProtocolIppUsb}
+                </option>
+              </select>
             </div>
           </div>
         </div>
         <div class="settings-box two-line">
-          <div class="start">
-            <div class="label">$i18n{printerQueue}</div>
-            <div class="secondary">
-              <paper-input no-label-float
-                  value="{{activePrinter.printerQueue}}">
-              </paper-input>
-            </div>
-          </div>
+          <cr-input label="$i18n{printerQueue}"
+              value="{{activePrinter.printerQueue}}"
+              disabled="[[!networkProtocolActive_]]">
+          </cr-input>
         </div>
         <div class="settings-box two-line">
-          <div class="start">
-            <div class="label">$i18n{printerURI}</div>
-            <div class="secondary">
-              <paper-input no-label-float disabled
-                  value="[[getPrinterURI_(activePrinter)]]">
-              </paper-input>
-            </div>
-          </div>
+          <cr-input label="$i18n{printerURI}" readonly
+              value="[[getPrinterURI_(activePrinter)]]">
+          </cr-input>
         </div>
         <div class="settings-box two-line">
-          <div class="start">
-            <div class="label">$i18n{printerManufacturer}</div>
-            <div class="secondary">
-              <drop-down-search-box items="[[manufacturerList]]"
-                  selected-item="{{activePrinter.ppdManufacturer}}">
-              </drop-down-search-box>
-            </div>
-          </div>
+          <drop-down-search-box items="[[manufacturerList]]"
+              label="$i18n{printerManufacturer}"
+              value="{{activePrinter.ppdManufacturer}}">
+          </drop-down-search-box>
         </div>
         <div class="settings-box two-line">
-          <div class="start">
-            <div class="label">$i18n{printerModel}</div>
-            <div class="secondary">
-              <drop-down-search-box items="[[modelList]]"
-                  selected-item="{{activePrinter.ppdModel}}">
-              </drop-down-search-box>
-            </div>
-          </div>
+          <drop-down-search-box items="[[modelList]]"
+              label="$i18n{printerModel}"
+              value="{{activePrinter.ppdModel}}">
+          </drop-down-search-box>
         </div>
         <div class="settings-box two-line last">
-          <div class="start">
-            <div class="label">$i18n{selectDriver}</div>
-            <div class="secondary">
-              <paper-input class="browse-file-input" no-label-float readonly
-                  value="[[getBaseName_(activePrinter.printerPPDPath)]]">
-                <paper-button class="browse-button" suffix
-                    on-tap="onBrowseFile_">
-                  $i18n{selectDriverButtonText}
-                </paper-button>
-              </paper-input>
+          <cr-input class="browse-file-input" readonly tabindex="-1"
+              value="[[newUserPPD_]]" label="$i18n{selectDriver}"
+              error-message="$i18n{selectDriverErrorMessage}"
+              invalid="[[invalidPPD_]]">
+            <paper-button class="browse-button" on-click="onBrowseFile_"
+                slot="suffix">
+              $i18n{selectDriverButtonText}
+            </paper-button>
+          </cr-input>
+          <template is="dom-if" if="[[existingUserPPDMessage_]]">
+            <div class="secondary" id="existingUserPPD">
+              [[existingUserPPDMessage_]]
             </div>
-          </div>
+          </template>
         </div>
       </div>
       <div slot="dialog-buttons">
         <paper-button class="cancel-button secondary-button"
-            on-tap="onCancelTap_">
+            on-click="onCancelTap_">
           $i18n{cancel}
         </paper-button>
-        <paper-button class="action-button" on-tap="onSaveTap_">
+        <paper-button class="action-button" on-click="onSaveTap_">
           $i18n{editPrinterButtonText}
         </paper-button>
       </div>

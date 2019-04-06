@@ -41,7 +41,7 @@ class LocalPrinterHandlerChromeos : public PrinterHandler {
                   const base::string16& job_title,
                   const std::string& ticket_json,
                   const gfx::Size& page_size,
-                  const scoped_refptr<base::RefCountedBytes>& print_data,
+                  const scoped_refptr<base::RefCountedMemory>& print_data,
                   PrintCallback callback) override;
 
  private:
@@ -50,7 +50,7 @@ class LocalPrinterHandlerChromeos : public PrinterHandler {
                           chromeos::PrinterSetupResult result);
 
   content::WebContents* const preview_web_contents_;
-  std::unique_ptr<chromeos::CupsPrintersManager> printers_manager_;
+  chromeos::CupsPrintersManager* printers_manager_;
   scoped_refptr<chromeos::PpdProvider> ppd_provider_;
   std::unique_ptr<chromeos::PrinterConfigurer> printer_configurer_;
   base::WeakPtrFactory<LocalPrinterHandlerChromeos> weak_factory_;

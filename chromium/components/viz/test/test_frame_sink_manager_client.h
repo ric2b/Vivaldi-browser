@@ -38,16 +38,9 @@ class TestFrameSinkManagerClient : public mojom::FrameSinkManagerClient {
   // mojom::FrameSinkManagerClient:
   void OnSurfaceCreated(const SurfaceId& surface_id) override;
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override {}
-  void OnClientConnectionClosed(const FrameSinkId& frame_sink_id) override {}
   void OnAggregatedHitTestRegionListUpdated(
       const FrameSinkId& frame_sink_id,
-      mojo::ScopedSharedBufferHandle active_handle,
-      uint32_t active_handle_size,
-      mojo::ScopedSharedBufferHandle idle_handle,
-      uint32_t idle_handle_sizes) override {}
-  void SwitchActiveAggregatedHitTestRegionList(
-      const FrameSinkId& frame_sink_id,
-      uint8_t active_handle_index) override {}
+      const std::vector<AggregatedHitTestRegion>& hit_test_data) override {}
   void OnFrameTokenChanged(const FrameSinkId& frame_sink_id,
                            uint32_t frame_token) override {}
 

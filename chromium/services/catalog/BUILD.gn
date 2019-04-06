@@ -20,7 +20,7 @@ source_set("constants") {
   ]
 }
 
-source_set("lib") {
+component("lib") {
   sources = [
     "catalog.cc",
     "catalog.h",
@@ -38,16 +38,20 @@ source_set("lib") {
   deps = [
     ":constants",
     "//base",
-    "//components/filesystem:lib",
+    "//components/services/filesystem:lib",
     "//services/catalog/public/cpp",
-    "//services/catalog/public/interfaces",
+    "//services/catalog/public/mojom",
     "//services/service_manager/public/cpp",
   ]
 
   public_deps = [
     # directory.mojom.h is #included by catalog.h
-    "//components/filesystem/public/interfaces",
+    "//components/services/filesystem/public/interfaces",
   ]
+
+  output_name = "catalog_lib"
+
+  defines = [ "IS_CATALOG_IMPL" ]
 }
 
 service_manifest("manifest") {

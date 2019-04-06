@@ -11,7 +11,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/chrome_paths.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_clipping_feature.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -20,11 +19,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-// A category for making existing methods visible for use in these tests.
-@interface OmniboxTextFieldIOS (VisibleForTesting)
-- (CGRect)rectForDrawTextInRect:(CGRect)rect;
-@end
 
 namespace {
 
@@ -143,98 +137,9 @@ TEST_F(OmniboxTextFieldTest, enterPreEditState_preEditTextAlignment_change) {
   [textfield_ resignFirstResponder];
 }
 
-TEST_F(OmniboxTextFieldTest, rectForDrawTextInRect_entireURLFits) {
-  if (base::FeatureList::IsEnabled(kClippingTextfield)) {
-    // This test is expected to not work with new text field clipping because
-    // the code to implement clipping will be removed.
-    return;
-  }
-
-  NSString* text = @"http://www.google.com";
-  [textfield_ setText:text];
-  CGSize textSize = [[textfield_ attributedText] size];
-  CGFloat widthForEntireURL = ceil(textSize.width) + 10;
-
-  CGRect inputRect = CGRectMake(0, 0, widthForEntireURL, textSize.height);
-  CGRect actualRect = [textfield_ rectForDrawTextInRect:inputRect];
-  ExpectRectEqual(inputRect, actualRect);
-}
-
-TEST_F(OmniboxTextFieldTest, rectForDrawTextInRect_clippedPrefix) {
-  if (base::FeatureList::IsEnabled(kClippingTextfield)) {
-    // This test is expected to not work with new text field clipping because
-    // the code to implement clipping will be removed.
-    return;
-  }
-
-  NSString* text = @"http://www.google.com";
-  [textfield_ setText:text];
-  CGSize textSize = [[textfield_ attributedText] size];
-  CGFloat clippedWidth = 10;
-  CGFloat widthForPartOfHost = ceil(textSize.width) - clippedWidth;
-
-  CGRect inputRect = CGRectMake(0, 0, widthForPartOfHost, textSize.height);
-  CGRect actualRect = [textfield_ rectForDrawTextInRect:inputRect];
-  CGRect expectedRect =
-      CGRectMake(-1 * clippedWidth, 0, ceil(textSize.width), textSize.height);
-  ExpectRectEqual(expectedRect, actualRect);
-}
-
-TEST_F(OmniboxTextFieldTest, rectForDrawTextInRect_clippedSuffix) {
-  if (base::FeatureList::IsEnabled(kClippingTextfield)) {
-    // This test is expected to not work with new text field clipping because
-    // the code to implement clipping will be removed.
-    return;
-  }
-
-  NSString* text = @"http://www.google.com/somelongpath";
-  [textfield_ setText:text];
-  CGSize textSize = [[textfield_ attributedText] size];
-  CGFloat widthForPartOfPath = ceil(textSize.width) - 10;
-
-  CGRect inputRect = CGRectMake(0, 0, widthForPartOfPath, textSize.height);
-  CGRect actualRect = [textfield_ rectForDrawTextInRect:inputRect];
-  CGRect expectedRect = CGRectMake(0, 0, ceil(textSize.width), textSize.height);
-  ExpectRectEqual(expectedRect, actualRect);
-}
-
-TEST_F(OmniboxTextFieldTest, rectForDrawTextInRect_noScheme) {
-  if (base::FeatureList::IsEnabled(kClippingTextfield)) {
-    // This test is expected to not work with new text field clipping because
-    // the code to implement clipping will be removed.
-    return;
-  }
-
-  NSString* text = @"www.google.com";
-  [textfield_ setText:text];
-  CGSize textSize = [[textfield_ attributedText] size];
-
-  CGRect inputRect = CGRectMake(0, 0, ceil(textSize.width), textSize.height);
-  CGRect actualRect = [textfield_ rectForDrawTextInRect:inputRect];
-  ExpectRectEqual(inputRect, actualRect);
-}
-
-// When the text doesn't contain a host the method bails early and returns
-// the |rect| passed in.
-TEST_F(OmniboxTextFieldTest, rectForDrawTextInRect_noHost) {
-  if (base::FeatureList::IsEnabled(kClippingTextfield)) {
-    // This test is expected to not work with new text field clipping because
-    // the code to implement clipping will be removed.
-    return;
-  }
-
-  NSString* text = @"http://";
-  [textfield_ setText:text];
-  CGSize textSize = [[textfield_ attributedText] size];
-
-  CGRect inputRect = CGRectMake(0, 0, ceil(textSize.width), textSize.height);
-  CGRect actualRect = [textfield_ rectForDrawTextInRect:inputRect];
-  ExpectRectEqual(inputRect, actualRect);
-}
-
 TEST_F(OmniboxTextFieldTest, SelectedRanges) {
   base::FilePath test_data_directory;
-  ASSERT_TRUE(PathService::Get(ios::DIR_TEST_DATA, &test_data_directory));
+  ASSERT_TRUE(base::PathService::Get(ios::DIR_TEST_DATA, &test_data_directory));
   base::FilePath test_file = test_data_directory.Append(
       FILE_PATH_LITERAL("omnibox/selected_ranges.txt"));
   ASSERT_TRUE(base::PathExists(test_file));

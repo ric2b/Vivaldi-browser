@@ -31,12 +31,11 @@ import org.junit.runner.RunWith;
 import org.mockito.InOrder;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.BaseChromiumApplication;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.media.ui.MediaNotificationManager.ListenerService;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
 import org.chromium.content_public.common.MediaMetadata;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.concurrent.TimeoutException;
 
@@ -44,8 +43,8 @@ import java.util.concurrent.TimeoutException;
  * JUnit tests for checking {@link MediaNotificationManager} handles the listener service life cycle
  * correctly.
  */
-@RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
+@RunWith(BaseRobolectricTestRunner.class)
+@Config(manifest = Config.NONE,
         // Remove this after updating to a version of Robolectric that supports
         // notification channel creation. crbug.com/774315
         sdk = Build.VERSION_CODES.N_MR1,
@@ -200,8 +199,8 @@ public class MediaNotificationManagerServiceLifecycleTest extends MediaNotificat
         order.verify(getManager(), times(1)).onServiceStarted(mService);
         order.verify(getManager(), times(1)).updateNotification(anyBoolean());
         verify(mMockUmaTracker)
-                .onNotificationShown(
-                        NotificationUmaTracker.MEDIA, ChannelDefinitions.CHANNEL_ID_MEDIA);
+                .onNotificationShown(NotificationUmaTracker.SystemNotificationType.MEDIA,
+                        ChannelDefinitions.ChannelId.MEDIA);
     }
 
     @Test

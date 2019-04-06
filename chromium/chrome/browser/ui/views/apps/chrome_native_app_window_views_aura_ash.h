@@ -55,9 +55,8 @@ class ChromeNativeAppWindowViewsAuraAsh
       const extensions::AppWindow::CreateParams& create_params,
       views::Widget::InitParams* init_params,
       views::Widget* widget) override;
-  void OnBeforePanelWidgetInit(views::Widget::InitParams* init_params,
-                               views::Widget* widget) override;
   views::NonClientFrameView* CreateNonStandardAppFrame() override;
+  bool ShouldRemoveStandardFrame() override;
 
   // ui::BaseWindow:
   gfx::Rect GetRestoredBounds() const override;
@@ -95,11 +94,14 @@ class ChromeNativeAppWindowViewsAuraAsh
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
       ExclusiveAccessBubbleType bubble_type,
-      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback) override;
+      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
+      bool force_update) override;
   void OnExclusiveAccessUserInput() override;
   content::WebContents* GetActiveWebContents() override;
   void UnhideDownloadShelf() override;
   void HideDownloadShelf() override;
+  bool ShouldHideUIForFullscreen() const override;
+  ExclusiveAccessBubbleViews* GetExclusiveAccessBubble() override;
 
   // ExclusiveAccessBubbleViewsContext:
   ExclusiveAccessManager* GetExclusiveAccessManager() override;
@@ -113,11 +115,18 @@ class ChromeNativeAppWindowViewsAuraAsh
   void DestroyAnyExclusiveAccessBubble() override;
   bool CanTriggerOnMouse() const override;
 
+  // WidgetObserver:
+  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeNativeAppWindowViewsAuraAshBrowserTest,
                            ImmersiveWorkFlow);
   FRIEND_TEST_ALL_PREFIXES(ChromeNativeAppWindowViewsAuraAshBrowserTest,
                            ImmersiveModeFullscreenRestoreType);
+  FRIEND_TEST_ALL_PREFIXES(ChromeNativeAppWindowViewsAuraAshBrowserTest,
+                           NoImmersiveModeWhenForcedFullscreen);
+  FRIEND_TEST_ALL_PREFIXES(ChromeNativeAppWindowViewsAuraAshBrowserTest,
+                           PublicSessionImmersiveMode);
   FRIEND_TEST_ALL_PREFIXES(ChromeNativeAppWindowViewsAuraAshInteractiveTest,
                            NoImmersiveOrBubbleOutsidePublicSessionWindow);
   FRIEND_TEST_ALL_PREFIXES(ChromeNativeAppWindowViewsAuraAshInteractiveTest,
@@ -132,9 +141,12 @@ class ChromeNativeAppWindowViewsAuraAsh
   // Callback for MenuRunner
   void OnMenuClosed();
 
-  // Helper function which returns true if in tablet mode, the auto hide
-  // titlebars feature is turned on, and the widget is maximizable.
-  bool CanAutohideTitlebarsInTabletMode() const;
+  // Whether immersive mode should be enabled.
+  bool ShouldEnableImmersiveMode() const;
+
+  // Helper function to update the immersive mode based on the current
+  // app's and window manager's state.
+  void UpdateImmersiveMode();
 
   // Used to put non-frameless windows into immersive fullscreen on ChromeOS. In
   // immersive fullscreen, the window header (title bar and window controls)

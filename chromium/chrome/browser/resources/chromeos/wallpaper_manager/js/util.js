@@ -244,7 +244,8 @@ WallpaperUtil.setCustomWallpaperFromSyncFS = function(
             var reader = new FileReader();
             reader.onloadend = function() {
               chrome.wallpaperPrivate.setCustomWallpaper(
-                  reader.result, wallpaperLayout, true, wallpaperFilename,
+                  reader.result, wallpaperLayout, true /*generateThumbnail=*/,
+                  wallpaperFilename, false /*previewMode=*/,
                   function(thumbnailData) {
                     // TODO(ranj): Ignore 'canceledWallpaper' error.
                     if (chrome.runtime.lastError) {
@@ -364,28 +365,127 @@ WallpaperUtil.fetchURL = function(url, type, onSuccess, onFailure, opt_xhr) {
 };
 
 /**
- * Sets wallpaper to online wallpaper specified by url and layout
+ * A convenience wrapper for setting online wallpapers with preview disabled.
  * @param {string} url The url address where we should fetch resources.
  * @param {string} layout The layout of online wallpaper.
  * @param {function} onSuccess The success callback.
  * @param {function} onFailure The failure callback.
  */
-WallpaperUtil.setOnlineWallpaper = function(url, layout, onSuccess, onFailure) {
-  var self = this;
-  chrome.wallpaperPrivate.setWallpaperIfExists(url, layout, function(exists) {
-    if (exists) {
-      onSuccess();
-      return;
-    }
+WallpaperUtil.setOnlineWallpaperWithoutPreview = function(
+    url, layout, onSuccess, onFailure) {
+  chrome.wallpaperPrivate.setWallpaperIfExists(
+      url, layout, false /*previewMode=*/, exists => {
+        if (exists) {
+          onSuccess();
+          return;
+        }
 
-    self.fetchURL(url, 'arraybuffer', function(xhr) {
-      if (xhr.response != null) {
-        chrome.wallpaperPrivate.setWallpaper(
-            xhr.response, layout, url, onSuccess);
-      } else {
-        onFailure();
-      }
-    }, onFailure);
+        this.fetchURL(url, 'arraybuffer', xhr => {
+          if (xhr.response != null) {
+            chrome.wallpaperPrivate.setWallpaper(
+                xhr.response, layout, url, false /*previewMode=*/, onSuccess);
+          } else {
+            onFailure();
+          }
+        }, onFailure);
+      });
+};
+
+/**
+ * Gets the suffix to append to the base url of an online wallpaper. The
+ * requested thumbnail is displayed in the wallpaper picker grid.
+ */
+WallpaperUtil.getOnlineWallpaperThumbnailSuffix = function() {
+  return loadTimeData.getBoolean('useNewWallpaperPicker') ? '' :
+                                                            '_thumbnail.png';
+};
+
+/**
+ * Creates a blob of type 'image/png'.
+ * @param {string} data The image data.
+ */
+WallpaperUtil.createPngBlob = function(data) {
+  return new Blob([new Int8Array(data)], {'type': 'image/png'});
+};
+
+/**
+ * Displays the image by creating an image blob.
+ * @param {Object} imageElement The image element.
+ * @param {string} data The image data.
+ * @param {function} opt_callback An optional callback, called after the image
+ *     finishes loading.
+ */
+WallpaperUtil.displayImage = function(imageElement, data, opt_callback) {
+  imageElement.src =
+      window.URL.createObjectURL(WallpaperUtil.createPngBlob(data));
+  imageElement.addEventListener('load', function(e) {
+    if (opt_callback)
+      opt_callback();
+    // Revoke the url since it won't be used anymore after the image is loaded.
+    window.URL.revokeObjectURL(imageElement.src);
+  });
+};
+
+/**
+ * Sets the value of the surprise me checkbox (or the daily refresh toggle on
+ * the new picker).
+ * @param {boolean} checked The value used to set the checkbox.
+ */
+WallpaperUtil.setSurpriseMeCheckboxValue = function(checked) {
+  if (loadTimeData.getBoolean('useNewWallpaperPicker')) {
+    document.querySelectorAll('.daily-refresh-slider').forEach(element => {
+      element.classList.toggle('checked', checked);
+    });
+  } else {
+    $('surprise-me')
+        .querySelector('#checkbox')
+        .classList.toggle('checked', checked);
+  }
+};
+
+/**
+ * Gets the value of the surprise me checkbox (or the value of the daily refresh
+ * toggle on the new picker).
+ * @return {boolean} The value of the checkbox.
+ */
+WallpaperUtil.getSurpriseMeCheckboxValue = function() {
+  if (loadTimeData.getBoolean('useNewWallpaperPicker')) {
+    return document.querySelector('.daily-refresh-slider')
+        .classList.contains('checked');
+  }
+  return $('surprise-me')
+      .querySelector('#checkbox')
+      .classList.contains('checked');
+};
+
+/**
+ * A convenience wrapper for displaying the thumbnail image.
+ * @param {Object} imageElement The image element.
+ * @param {string} url The base url of the wallpaper.
+ * @param {string} source The source of the wallpaper corresponding to
+ *     |WallpaperSourceEnum|.
+ */
+WallpaperUtil.displayThumbnail = function(imageElement, url, source) {
+  chrome.wallpaperPrivate.getThumbnail(url, source, data => {
+    if (data) {
+      WallpaperUtil.displayImage(imageElement, data, null /*opt_callback=*/);
+    } else {
+      // The only known case for hitting this branch is when showing the
+      // wallpaper picker for the first time after OOBE, the |saveThumbnail|
+      // operation within |WallpaperThumbnailsGridItem.decorate| hasn't
+      // completed. See http://crbug.com/792829.
+      var xhr = new XMLHttpRequest();
+      xhr.open(
+          'GET', url + WallpaperUtil.getOnlineWallpaperThumbnailSuffix(), true);
+      xhr.responseType = 'arraybuffer';
+      xhr.send(null);
+      xhr.addEventListener('load', function(e) {
+        if (xhr.status === 200) {
+          WallpaperUtil.displayImage(
+              imageElement, xhr.response, null /*opt_callback=*/);
+        }
+      });
+    }
   });
 };
 
@@ -399,4 +499,78 @@ WallpaperUtil.testSendMessage = function(message) {
   var test = chrome.test || window.top.chrome.test;
   if (test)
     test.sendMessage(message);
+};
+
+/**
+ * Gets the daily refresh info from sync storage, or local storage if the former
+ * is not available.
+ * @param {function} callback A callback that takes the value of the info, or
+ *     null if the value is invalid.
+ */
+WallpaperUtil.getDailyRefreshInfo = function(callback) {
+  WallpaperUtil.enabledSyncThemesCallback(syncEnabled => {
+    var parseInfo = dailyRefreshInfoJson => {
+      if (!dailyRefreshInfoJson) {
+        callback(null);
+        return;
+      }
+
+      var dailyRefreshInfo = JSON.parse(dailyRefreshInfoJson);
+      if (!dailyRefreshInfo || !dailyRefreshInfo.hasOwnProperty('enabled') ||
+          !dailyRefreshInfo.hasOwnProperty('collectionId') ||
+          !dailyRefreshInfo.hasOwnProperty('resumeToken')) {
+        callback(null);
+        return;
+      }
+      callback(dailyRefreshInfo);
+    };
+
+    if (syncEnabled) {
+      Constants.WallpaperSyncStorage.get(
+          Constants.AccessSyncDailyRefreshInfoKey, items => {
+            var dailyRefreshInfoJson =
+                items[Constants.AccessSyncDailyRefreshInfoKey];
+            if (dailyRefreshInfoJson) {
+              parseInfo(dailyRefreshInfoJson);
+            } else {
+              Constants.WallpaperLocalStorage.get(
+                  Constants.AccessLocalDailyRefreshInfoKey, items => {
+                    dailyRefreshInfoJson =
+                        items[Constants.AccessLocalDailyRefreshInfoKey];
+                    parseInfo(dailyRefreshInfoJson);
+                    if (dailyRefreshInfoJson) {
+                      WallpaperUtil.saveToSyncStorage(
+                          Constants.AccessSyncDailyRefreshInfoKey,
+                          dailyRefreshInfoJson);
+                    }
+                  });
+            }
+          });
+    } else {
+      Constants.WallpaperLocalStorage.get(
+          Constants.AccessLocalDailyRefreshInfoKey, items => {
+            parseInfo(items[Constants.AccessLocalDailyRefreshInfoKey]);
+          });
+    }
+  });
+};
+
+/**
+ * Saves the daily refresh info to local and sync storage.
+ * @param {Object} dailyRefreshInfo The daily refresh info.
+ */
+WallpaperUtil.saveDailyRefreshInfo = function(dailyRefreshInfo) {
+  // Discard |resumeToken| to prevent the server from potentially fingerprinting
+  // the end user. Therefore, |resumeToken| will always be null when sending
+  // |getSurpriseMeImage| requests.
+  // TODO(crbug.com/810169): Implement the mechanism to avoid duplicate
+  // wallpapers on the client side.
+  dailyRefreshInfo.resumeToken = null;
+  var dailyRefreshInfoJson = JSON.stringify(dailyRefreshInfo);
+  WallpaperUtil.saveToLocalStorage(
+      Constants.AccessLocalDailyRefreshInfoKey, dailyRefreshInfoJson,
+      null /*opt_callback=*/);
+  WallpaperUtil.saveToSyncStorage(
+      Constants.AccessSyncDailyRefreshInfoKey, dailyRefreshInfoJson,
+      null /*opt_callback=*/);
 };

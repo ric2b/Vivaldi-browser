@@ -6,11 +6,10 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "chrome/browser/download/download_status_updater.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -29,21 +28,22 @@ class TestDownloadStatusUpdater : public DownloadStatusUpdater {
  public:
   TestDownloadStatusUpdater()
       : notification_count_(0), acceptable_notification_item_(nullptr) {}
-  void SetAcceptableNotificationItem(content::DownloadItem* item) {
+  void SetAcceptableNotificationItem(download::DownloadItem* item) {
     acceptable_notification_item_ = item;
   }
   size_t NotificationCount() {
     return notification_count_;
   }
  protected:
-  void UpdateAppIconDownloadProgress(content::DownloadItem* download) override {
+  void UpdateAppIconDownloadProgress(
+      download::DownloadItem* download) override {
     ++notification_count_;
     if (acceptable_notification_item_)
       EXPECT_EQ(acceptable_notification_item_, download);
   }
  private:
   size_t notification_count_;
-  content::DownloadItem* acceptable_notification_item_;
+  download::DownloadItem* acceptable_notification_item_;
 };
 
 class DownloadStatusUpdaterTest : public testing::Test {
@@ -72,7 +72,7 @@ class DownloadStatusUpdaterTest : public testing::Test {
     DCHECK_EQ(0U, managers_.size());
     for (int i = 0; i < manager_count; ++i) {
       managers_.push_back(
-          base::MakeUnique<StrictMock<content::MockDownloadManager>>());
+          std::make_unique<StrictMock<content::MockDownloadManager>>());
     }
   }
 
@@ -102,13 +102,13 @@ class DownloadStatusUpdaterTest : public testing::Test {
     if (manager_items_.size() <= static_cast<size_t>(manager_index))
       manager_items_.resize(manager_index+1);
 
-    std::vector<content::DownloadItem*> item_list;
+    std::vector<download::DownloadItem*> item_list;
     for (int i = 0; i < item_count; ++i) {
-      std::unique_ptr<content::MockDownloadItem> item =
-          base::MakeUnique<StrictMock<content::MockDownloadItem>>();
-      content::DownloadItem::DownloadState state =
-          i < in_progress_count ? content::DownloadItem::IN_PROGRESS
-              : content::DownloadItem::CANCELLED;
+      std::unique_ptr<download::MockDownloadItem> item =
+          std::make_unique<StrictMock<download::MockDownloadItem>>();
+      download::DownloadItem::DownloadState state =
+          i < in_progress_count ? download::DownloadItem::IN_PROGRESS
+                                : download::DownloadItem::CANCELLED;
       EXPECT_CALL(*item, GetState()).WillRepeatedly(Return(state));
       manager_items_[manager_index].push_back(item.get());
       all_owned_items_.push_back(std::move(item));
@@ -124,12 +124,12 @@ class DownloadStatusUpdaterTest : public testing::Test {
   }
 
   // Return the specified item.
-  content::MockDownloadItem* Item(int manager_index, int item_index) {
+  download::MockDownloadItem* Item(int manager_index, int item_index) {
     DCHECK_GT(manager_items_.size(), static_cast<size_t>(manager_index));
     DCHECK_GT(manager_items_[manager_index].size(),
               static_cast<size_t>(item_index));
     // All DownloadItems in manager_items_ are MockDownloadItems.
-    return static_cast<content::MockDownloadItem*>(
+    return static_cast<download::MockDownloadItem*>(
         manager_items_[manager_index][item_index]);
   }
 
@@ -137,7 +137,7 @@ class DownloadStatusUpdaterTest : public testing::Test {
   // for the specified item.
   void SetItemValues(int manager_index, int item_index,
                      int received_bytes, int total_bytes, bool notify) {
-    content::MockDownloadItem* item(Item(manager_index, item_index));
+    download::MockDownloadItem* item(Item(manager_index, item_index));
     EXPECT_CALL(*item, GetReceivedBytes())
         .WillRepeatedly(Return(received_bytes));
     EXPECT_CALL(*item, GetTotalBytes())
@@ -148,9 +148,9 @@ class DownloadStatusUpdaterTest : public testing::Test {
 
   // Transition specified item to completed.
   void CompleteItem(int manager_index, int item_index) {
-    content::MockDownloadItem* item(Item(manager_index, item_index));
+    download::MockDownloadItem* item(Item(manager_index, item_index));
     EXPECT_CALL(*item, GetState())
-        .WillRepeatedly(Return(content::DownloadItem::COMPLETE));
+        .WillRepeatedly(Return(download::DownloadItem::COMPLETE));
     updater_->OnDownloadUpdated(managers_[manager_index].get(), item);
   }
 
@@ -169,9 +169,9 @@ class DownloadStatusUpdaterTest : public testing::Test {
   // top-level vector is the manager index, and the inner vector is the list of
   // items of that manager. The inner vector is a vector<DownloadItem*> for
   // compatibility with the return value of DownloadManager::GetAllDownloads().
-  std::vector<std::vector<content::DownloadItem*>> manager_items_;
+  std::vector<std::vector<download::DownloadItem*>> manager_items_;
   // An owning container for items in |manager_items_|.
-  std::vector<std::unique_ptr<content::DownloadItem>> all_owned_items_;
+  std::vector<std::unique_ptr<download::DownloadItem>> all_owned_items_;
   int manager_observer_index_;
 
   std::vector<content::DownloadManager::Observer*> manager_observers_;
@@ -213,7 +213,7 @@ TEST_F(DownloadStatusUpdaterTest, OneManagerNoItems) {
 }
 
 // Test updater with non-null manager, including transition an item to
-// |content::DownloadItem::COMPLETE| and adding a new item.
+// |download::DownloadItem::COMPLETE| and adding a new item.
 TEST_F(DownloadStatusUpdaterTest, OneManagerManyItems) {
   SetupManagers(1);
   AddItems(0, 3, 2);

@@ -13,7 +13,6 @@ import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSession;
 import org.chromium.chrome.browser.widget.TintedDrawable;
@@ -29,14 +28,10 @@ public class RecentTabsGroupView extends RelativeLayout {
     private static final int DRAWABLE_LEVEL_COLLAPSED = 0;
     private static final int DRAWABLE_LEVEL_EXPANDED = 1;
 
-    private ImageView mDeviceIcon;
+    private RecentTabsGroupView mRow;
     private ImageView mExpandCollapseIcon;
     private TextView mDeviceLabel;
     private TextView mTimeLabel;
-    private int mDeviceLabelExpandedColor;
-    private int mDeviceLabelCollapsedColor;
-    private int mTimeLabelExpandedColor;
-    private int mTimeLabelCollapsedColor;
 
     /**
      * Constructor for inflating from XML.
@@ -46,18 +41,12 @@ public class RecentTabsGroupView extends RelativeLayout {
      */
     public RecentTabsGroupView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        Resources res = getResources();
-        mDeviceLabelExpandedColor = ApiCompatibilityUtils.getColor(res, R.color.light_active_color);
-        mDeviceLabelCollapsedColor = ApiCompatibilityUtils.getColor(res, R.color.black_alpha_87);
-        mTimeLabelExpandedColor = ApiCompatibilityUtils.getColor(res, R.color.google_blue_700);
-        mTimeLabelCollapsedColor =
-                ApiCompatibilityUtils.getColor(res, R.color.ntp_list_header_subtext);
     }
 
     @Override
     public void onFinishInflate() {
         super.onFinishInflate();
-        mDeviceIcon = (ImageView) findViewById(R.id.device_icon);
+        mRow = getRootView().findViewById(R.id.recent_tabs_group_view);
         mTimeLabel = (TextView) findViewById(R.id.time_label);
         mDeviceLabel = (TextView) findViewById(R.id.device_label);
         mExpandCollapseIcon = (ImageView) findViewById(R.id.expand_collapse_icon);
@@ -65,11 +54,10 @@ public class RecentTabsGroupView extends RelativeLayout {
         // Create drawable for expand/collapse arrow.
         LevelListDrawable collapseIcon = new LevelListDrawable();
         collapseIcon.addLevel(DRAWABLE_LEVEL_COLLAPSED, DRAWABLE_LEVEL_COLLAPSED,
-                TintedDrawable.constructTintedDrawable(getResources(), R.drawable.ic_expanded));
-        TintedDrawable collapse =
-                TintedDrawable.constructTintedDrawable(getResources(), R.drawable.ic_collapsed);
-        collapse.setTint(
-                ApiCompatibilityUtils.getColorStateList(getResources(), R.color.blue_mode_tint));
+                TintedDrawable.constructTintedDrawable(
+                        getContext(), R.drawable.ic_expand_more_black_24dp));
+        TintedDrawable collapse = TintedDrawable.constructTintedDrawable(
+                getContext(), R.drawable.ic_expand_less_black_24dp);
         collapseIcon.addLevel(DRAWABLE_LEVEL_EXPANDED, DRAWABLE_LEVEL_EXPANDED, collapse);
         mExpandCollapseIcon.setImageDrawable(collapseIcon);
     }
@@ -81,21 +69,10 @@ public class RecentTabsGroupView extends RelativeLayout {
      * @param isExpanded Whether the view is expanded or collapsed.
      */
     public void configureForForeignSession(ForeignSession session, boolean isExpanded) {
-        mDeviceIcon.setVisibility(View.VISIBLE);
         mDeviceLabel.setText(session.name);
-        setTimeLabelVisibility(View.VISIBLE);
+        mTimeLabel.setVisibility(View.VISIBLE);
         mTimeLabel.setText(getTimeString(session));
-        switch (session.deviceType) {
-            case ForeignSession.DEVICE_TYPE_PHONE:
-                mDeviceIcon.setImageResource(R.drawable.recent_phone);
-                break;
-            case ForeignSession.DEVICE_TYPE_TABLET:
-                mDeviceIcon.setImageResource(R.drawable.recent_tablet);
-                break;
-            default:
-                mDeviceIcon.setImageResource(R.drawable.recent_laptop);
-                break;
-        }
+        setGroupViewHeight(true);
         configureExpandedCollapsed(isExpanded);
     }
 
@@ -105,10 +82,9 @@ public class RecentTabsGroupView extends RelativeLayout {
      * @param isExpanded Whether the view is expanded or collapsed.
      */
     public void configureForRecentlyClosedTabs(boolean isExpanded) {
-        mDeviceIcon.setVisibility(View.VISIBLE);
-        mDeviceIcon.setImageResource(R.drawable.recent_recently_closed);
         mDeviceLabel.setText(R.string.recently_closed);
-        setTimeLabelVisibility(View.GONE);
+        mTimeLabel.setVisibility(View.GONE);
+        setGroupViewHeight(false);
         configureExpandedCollapsed(isExpanded);
     }
 
@@ -118,27 +94,26 @@ public class RecentTabsGroupView extends RelativeLayout {
      * @param isExpanded Whether the view is expanded or collapsed.
      */
     public void configureForPromo(boolean isExpanded) {
-        mDeviceIcon.setVisibility(View.VISIBLE);
-        mDeviceIcon.setImageResource(R.drawable.recent_laptop);
         mDeviceLabel.setText(R.string.ntp_recent_tabs_sync_promo_title);
-        setTimeLabelVisibility(View.GONE);
+        mTimeLabel.setVisibility(View.GONE);
+        setGroupViewHeight(false);
         configureExpandedCollapsed(isExpanded);
     }
 
     private void configureExpandedCollapsed(boolean isExpanded) {
-        String description = getResources().getString(isExpanded
-                ? R.string.ntp_recent_tabs_accessibility_expanded_group
-                : R.string.ntp_recent_tabs_accessibility_collapsed_group);
+        String description =
+                getResources().getString(isExpanded ? R.string.accessibility_collapse_section_header
+                                                    : R.string.accessibility_expand_section_header);
         mExpandCollapseIcon.setContentDescription(description);
 
         int level = isExpanded ? DRAWABLE_LEVEL_EXPANDED : DRAWABLE_LEVEL_COLLAPSED;
         mExpandCollapseIcon.getDrawable().setLevel(level);
-        mDeviceIcon.setActivated(isExpanded);
+    }
 
-        mDeviceLabel.setTextColor(isExpanded
-                ? mDeviceLabelExpandedColor
-                : mDeviceLabelCollapsedColor);
-        mTimeLabel.setTextColor(isExpanded ? mTimeLabelExpandedColor : mTimeLabelCollapsedColor);
+    private void setGroupViewHeight(boolean isTimeLabelVisible) {
+        mRow.getLayoutParams().height = getResources().getDimensionPixelOffset(isTimeLabelVisible
+                        ? R.dimen.recent_tabs_foreign_session_group_item_height
+                        : R.dimen.recent_tabs_default_group_item_height);
     }
 
     private CharSequence getTimeString(ForeignSession session) {
@@ -163,28 +138,5 @@ public class RecentTabsGroupView extends RelativeLayout {
         }
 
         return getResources().getString(R.string.ntp_recent_tabs_last_synced, relativeTime);
-    }
-
-    /**
-     * Shows or hides the time label (e.g. "Last synced: just now") and adjusts the positions of the
-     * icon and device label. In particular, the icon and device label are top-aligned when the time
-     * is visible, but are vertically centered when the time is gone.
-     */
-    private void setTimeLabelVisibility(int visibility) {
-        if (mTimeLabel.getVisibility() == visibility) return;
-        mTimeLabel.setVisibility(visibility);
-        if (visibility == View.GONE) {
-            replaceRule(mDeviceIcon, ALIGN_PARENT_TOP, CENTER_VERTICAL);
-            replaceRule(mDeviceLabel, ALIGN_PARENT_TOP, CENTER_VERTICAL);
-        } else {
-            replaceRule(mDeviceIcon, CENTER_VERTICAL, ALIGN_PARENT_TOP);
-            replaceRule(mDeviceLabel, CENTER_VERTICAL, ALIGN_PARENT_TOP);
-        }
-    }
-
-    private static void replaceRule(View view, int oldRule, int newRule) {
-        RelativeLayout.LayoutParams lp = ((RelativeLayout.LayoutParams) view.getLayoutParams());
-        lp.addRule(oldRule, 0);
-        lp.addRule(newRule);
     }
 }

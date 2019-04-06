@@ -30,10 +30,21 @@ TestWebContentsFactory::~TestWebContentsFactory() {
 
 WebContents* TestWebContentsFactory::CreateWebContents(
     BrowserContext* context) {
-  web_contents_.push_back(base::WrapUnique(
-      WebContentsTester::CreateTestWebContents(context, nullptr)));
+  web_contents_.push_back(
+      WebContentsTester::CreateTestWebContents(context, nullptr));
   DCHECK(web_contents_.back());
   return web_contents_.back().get();
+}
+
+void TestWebContentsFactory::DestroyWebContents(WebContents* contents) {
+  auto it = web_contents_.begin();
+  for (; it != web_contents_.end(); ++it) {
+    if (it->get() == contents)
+      break;
+  }
+  if (it == web_contents_.end())
+    return;
+  web_contents_.erase(it);
 }
 
 }  // namespace content

@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/base/ui_base_features.h"
+
 // This entire test suite relies on the translate infobar which has been removed
 // from Aura. The file should be ported to use the bubble.
-#if !defined(USE_AURA)
+#if !defined(USE_AURA) && !BUILDFLAG(MAC_VIEWS_BROWSER)
 
 #include <stddef.h>
 
@@ -14,7 +16,8 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chrome_notification_types.h"
+#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/infobars/infobar_observer.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/browser.h"
@@ -28,7 +31,6 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_script.h"
 #include "components/translate/core/common/translate_switches.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -61,6 +63,9 @@ class TranslateBaseBrowserTest : public InProcessBrowserTest {
   TranslateBaseBrowserTest() {}
 
   void SetUp() override {
+    // --secondary-ui-md forces the bubble to be enabled, so explicitly
+    // disable it since this test deals with the infobar.
+    scoped_feature_list_.InitAndDisableFeature(features::kSecondaryUiMd);
     set_open_about_blank_on_browser_launch(false);
     translate::TranslateManager::SetIgnoreMissingKeyForTesting(true);
     InProcessBrowserTest::SetUp();
@@ -78,6 +83,7 @@ class TranslateBaseBrowserTest : public InProcessBrowserTest {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   DISALLOW_COPY_AND_ASSIGN(TranslateBaseBrowserTest);
 };
 
@@ -127,15 +133,14 @@ class TranslateBrowserTest : public TranslateBaseBrowserTest {
 
   void LoadPageWithInfobar(const std::string& path) {
     // Setup infobar observer.
-    content::WindowedNotificationObserver infobar(
-        chrome::NOTIFICATION_TAB_CONTENTS_INFOBAR_ADDED,
-        content::NotificationService::AllSources());
+    InfoBarObserver observer(infobar_service_,
+                             InfoBarObserver::Type::kInfoBarAdded);
 
     // Visit non-secure page which is going to be translated.
     ui_test_utils::NavigateToURL(browser(), GetNonSecureURL(path));
 
     // Wait for Chrome Translate infobar.
-    infobar.Wait();
+    observer.Wait();
   }
 
   void LoadPageWithoutInfobar(const std::string& path) {

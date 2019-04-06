@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/cast_channel/cast_socket_service.h"
+#include "base/memory/ptr_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/test_simple_task_runner.h"
 #include "components/cast_channel/cast_test_util.h"
@@ -41,18 +42,18 @@ class CastSocketServiceTest : public testing::Test {
 };
 
 TEST_F(CastSocketServiceTest, TestAddSocket) {
-  auto socket1 = base::MakeUnique<MockCastSocket>();
+  auto socket1 = std::make_unique<MockCastSocket>();
   auto* socket_ptr1 = AddSocket(std::move(socket1));
   EXPECT_NE(0, socket_ptr1->id());
 
-  auto socket2 = base::MakeUnique<MockCastSocket>();
+  auto socket2 = std::make_unique<MockCastSocket>();
   auto* socket_ptr2 = AddSocket(std::move(socket2));
   EXPECT_NE(socket_ptr1->id(), socket_ptr2->id());
 
   auto removed_socket = cast_socket_service_->RemoveSocket(socket_ptr2->id());
   EXPECT_EQ(socket_ptr2, removed_socket.get());
 
-  auto socket3 = base::MakeUnique<MockCastSocket>();
+  auto socket3 = std::make_unique<MockCastSocket>();
   auto* socket_ptr3 = AddSocket(std::move(socket3));
   EXPECT_NE(socket_ptr1->id(), socket_ptr3->id());
   EXPECT_NE(socket_ptr2->id(), socket_ptr3->id());
@@ -65,7 +66,7 @@ TEST_F(CastSocketServiceTest, TestRemoveAndGetSocket) {
   auto socket = cast_socket_service_->RemoveSocket(channel_id);
   EXPECT_FALSE(socket);
 
-  auto mock_socket = base::MakeUnique<MockCastSocket>();
+  auto mock_socket = std::make_unique<MockCastSocket>();
 
   auto* mock_socket_ptr = AddSocket(std::move(mock_socket));
   channel_id = mock_socket_ptr->id();

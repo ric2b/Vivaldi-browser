@@ -50,24 +50,25 @@ TEST(ModuleInfoTest, InspectModule) {
                inspection_result->certificate_info.subject.c_str());
 }
 
+TEST(ModuleInfoTest, GenerateCodeId) {
+  static const char kExpected[] = "00000BADf00d";
+  ModuleInfoKey module_key = {base::FilePath(), 0xf00d, 0xbad, 1};
+  EXPECT_STREQ(kExpected, GenerateCodeId(module_key).c_str());
+}
+
 TEST(ModuleInfoTest, NormalizeInspectionResult) {
   ModuleInspectionResult test_case;
   test_case.location = L"%variable%\\PATH\\TO\\file.txt";
   test_case.version = L"23, 32, 43, 55 win7_rtm.123456-1234";
-  test_case.certificate_info.subject = base::string16(L"signer\0", 7);
-  EXPECT_EQ(7u, test_case.certificate_info.subject.length());
 
   ModuleInspectionResult expected;
   expected.location = L"%variable%\\path\\to\\";
   expected.basename = L"file.txt";
   expected.version = L"23.32.43.55";
-  expected.certificate_info.subject = L"signer";
 
   internal::NormalizeInspectionResult(&test_case);
 
   EXPECT_EQ(test_case.location, expected.location);
   EXPECT_EQ(test_case.basename, expected.basename);
   EXPECT_EQ(test_case.version, expected.version);
-  EXPECT_EQ(test_case.certificate_info.subject,
-            expected.certificate_info.subject);
 }

@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/buildflag.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/browser_window_controller.h"
+#include "ui/base/ui_features.h"
 
 #include "ui/cocoa/vivaldi_browser_window_cocoa.h"
 
 // Create the controller for the Browser, which handles loading the browser
 // window from the nib. The controller takes ownership of |browser|.
 // static
-BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser,
-                                                  bool user_gesture) {
+BrowserWindow* BrowserWindow::CreateBrowserWindowCocoa(Browser* browser,
+                                                       bool user_gesture) {
   if (browser->is_vivaldi()) {
     std::string base_url;
     extensions::AppWindow::CreateParams params =
@@ -26,3 +28,12 @@ BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser,
       [[BrowserWindowController alloc] initWithBrowser:browser];
   return [controller browserWindow];
 }
+
+#if !BUILDFLAG(MAC_VIEWS_BROWSER)
+// Cocoa-only builds always use Cocoa browser windows.
+// static
+BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser,
+                                                  bool user_gesture) {
+  return CreateBrowserWindowCocoa(browser, user_gesture);
+}
+#endif

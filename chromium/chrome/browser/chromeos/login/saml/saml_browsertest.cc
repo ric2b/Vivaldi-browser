@@ -26,12 +26,12 @@
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
+#include "chrome/browser/chromeos/login/screens/gaia_view.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/https_forwarder.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
-#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/affiliation_test_helper.h"
@@ -61,6 +61,7 @@
 #include "chromeos/dbus/shill_manager_client.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/account_id/account_id.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
@@ -75,6 +76,7 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -120,14 +122,24 @@ constexpr char kTestAuthSIDCookie2[] = "fake-auth-SID-cookie-2";
 constexpr char kTestAuthLSIDCookie1[] = "fake-auth-LSID-cookie-1";
 constexpr char kTestAuthLSIDCookie2[] = "fake-auth-LSID-cookie-2";
 
-constexpr char kFirstSAMLUserEmail[] = "bob@example.com";
-constexpr char kSecondSAMLUserEmail[] = "alice@example.com";
-constexpr char kHTTPSAMLUserEmail[] = "carol@example.com";
-constexpr char kNonSAMLUserEmail[] = "dan@example.com";
+// Note: SAML account cannot be @gmail or @example.com account.  The former by
+// design, the latter because @example.com is used in another tests as regular
+// user. So we use @corp.example.com and @example.test, so that we can handle
+// it specially in embedded_setup_chromeos.html .
+constexpr char kFirstSAMLUserEmail[] = "bob@corp.example.com";
+constexpr char kSecondSAMLUserEmail[] = "alice@corp.example.com";
+constexpr char kHTTPSAMLUserEmail[] = "carol@corp.example.com";
+constexpr char kNonSAMLUserEmail[] = "dan@corp.example.com";
 constexpr char kDifferentDomainSAMLUserEmail[] = "eve@example.test";
 
-constexpr char kIdPHost[] = "login.example.com";
-constexpr char kAdditionalIdPHost[] = "login2.example.com";
+constexpr char kFirstSAMLUserGaiaId[] = "bob-gaia";
+constexpr char kSecondSAMLUserGaiaId[] = "alice-gaia";
+constexpr char kHTTPSAMLUserGaiaId[] = "carol-gaia";
+constexpr char kNonSAMLUserGaiaId[] = "dan-gaia";
+constexpr char kDifferentDomainSAMLUserGaiaId[] = "eve-gaia";
+
+constexpr char kIdPHost[] = "login.corp.example.com";
+constexpr char kAdditionalIdPHost[] = "login2.corp.example.com";
 
 constexpr char kSAMLIdPCookieName[] = "saml";
 constexpr char kSAMLIdPCookieValue1[] = "value-1";
@@ -185,7 +197,7 @@ FakeSamlIdp::~FakeSamlIdp() {}
 
 void FakeSamlIdp::SetUp(const std::string& base_path, const GURL& gaia_url) {
   base::FilePath test_data_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
   html_template_dir_ = test_data_dir.Append("login");
 
   login_path_ = base_path;
@@ -325,7 +337,7 @@ class SamlTest : public OobeBaseTest {
         kHTTPSAMLUserEmail,
         embedded_test_server()->base_url().Resolve("/SAML"));
     fake_gaia_->RegisterSamlUser(kDifferentDomainSAMLUserEmail, saml_idp_url);
-    fake_gaia_->RegisterSamlDomainRedirectUrl("example.com", saml_idp_url);
+    fake_gaia_->RegisterSamlDomainRedirectUrl("corp.example.com", saml_idp_url);
 
     OobeBaseTest::SetUpCommandLine(command_line);
   }
@@ -365,7 +377,10 @@ class SamlTest : public OobeBaseTest {
     SetupAuthFlowChangeListener();
 
     content::DOMMessageQueue message_queue;  // Start observe before SAML.
-    GetLoginDisplay()->ShowSigninScreenForCreds(gaia_email, "");
+    LoginDisplayHost::default_host()
+        ->GetOobeUI()
+        ->GetGaiaScreenView()
+        ->ShowSigninScreenForTest(gaia_email, "", "[]");
 
     std::string message;
     ASSERT_TRUE(message_queue.WaitForMessage(&message));
@@ -432,7 +447,9 @@ class SamlTest : public OobeBaseTest {
 // gaia on clicking.
 //
 // Times out on CrOS MSAN. https://crbug.com/504141
-#if defined(MEMORY_SANITIZER)
+// Times out on CrOS ASAN/LSAN. https://crbug.com/830322
+#if defined(MEMORY_SANITIZER) || defined(LEAK_SANITIZER) || \
+    defined(ADDRESS_SANITIZER)
 #define MAYBE_SamlUI DISABLED_SamlUI
 #else
 #define MAYBE_SamlUI SamlUI
@@ -502,7 +519,14 @@ IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_CredentialPassingAPI) {
 }
 
 // Tests the single password scraped flow.
-IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedSingle) {
+//
+// Disabled since it's occasionally timed out: https://crbug.com/830322.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_ScrapedSingle DISABLED_ScrapedSingle
+#else
+#define MAYBE_ScrapedSingle ScrapedSingle
+#endif
+IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_ScrapedSingle) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
 
@@ -534,7 +558,14 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedSingle) {
 }
 
 // Tests password scraping from a dynamically created password field.
-IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedDynamic) {
+//
+// Disabled since it's occasionally timed out: https://crbug.com/830322.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_ScrapedDynamic DISABLED_ScrapedDynamic
+#else
+#define MAYBE_ScrapedDynamic ScrapedDynamic
+#endif
+IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_ScrapedDynamic) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
 
@@ -560,7 +591,9 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedDynamic) {
 }
 
 // Tests the multiple password scraped flow.
-IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedMultiple) {
+//
+// Disabled due to flakiness: crbug.com/834703
+IN_PROC_BROWSER_TEST_F(SamlTest, DISABLED_ScrapedMultiple) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_two_passwords.html");
 
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
@@ -613,17 +646,25 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedNone) {
   session_start_waiter.Wait();
 }
 
-// Types |bob@example.com| into the GAIA login form but then authenticates as
-// |alice@example.com| via SAML. Verifies that the logged-in user is correctly
-// identified as Alice.
-IN_PROC_BROWSER_TEST_F(SamlTest, UseAutenticatedUserEmailAddress) {
+// Types |bob@corp.example.com| into the GAIA login form but then authenticates
+// as |alice@corp.example.com| via SAML. Verifies that the logged-in user is
+// correctly identified as Alice.
+//
+// Disabled since it's occasionally timed out: https://crbug.com/830322.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_UseAutenticatedUserEmailAddress \
+  DISABLED_UseAutenticatedUserEmailAddress
+#else
+#define MAYBE_UseAutenticatedUserEmailAddress UseAutenticatedUserEmailAddress
+#endif
+IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_UseAutenticatedUserEmailAddress) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
-  // Type |bob@example.com| into the GAIA login form.
+  // Type |bob@corp.example.com| into the GAIA login form.
   StartSamlAndWaitForIdpPageLoad(kSecondSAMLUserEmail);
 
-  // Authenticate as alice@example.com via SAML (the |Email| provided here is
-  // irrelevant - the authenticated user's e-mail address that FakeGAIA
-  // reports was set via |SetFakeMergeSessionParams|.
+  // Authenticate as alice@corp.example.com via SAML (the |Email| provided here
+  // is irrelevant - the authenticated user's e-mail address that FakeGAIA
+  // reports was set via |SetFakeMergeSessionParams|).
   SetSignFormField("Email", "fake_user");
   SetSignFormField("Password", "fake_password");
 
@@ -657,7 +698,14 @@ IN_PROC_BROWSER_TEST_F(SamlTest, FailToRetrieveAutenticatedUserEmailAddress) {
 
 // Tests the password confirm flow when more than one password is scraped: show
 // error on the first failure and fatal error on the second failure.
-IN_PROC_BROWSER_TEST_F(SamlTest, PasswordConfirmFlow) {
+//
+// Disabled since it's occasionally timed out: https://crbug.com/830322.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_PasswordConfirmFlow DISABLED_PasswordConfirmFlow
+#else
+#define MAYBE_PasswordConfirmFlow PasswordConfirmFlow
+#endif
+IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_PasswordConfirmFlow) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_two_passwords.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
 
@@ -689,7 +737,14 @@ IN_PROC_BROWSER_TEST_F(SamlTest, PasswordConfirmFlow) {
 // Verifies that when the login flow redirects from one host to another, the
 // notice shown to the user is updated. This guards against regressions of
 // http://crbug.com/447818.
-IN_PROC_BROWSER_TEST_F(SamlTest, NoticeUpdatedOnRedirect) {
+//
+// Disabled since it's occasionally timed out: https://crbug.com/830322.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_NoticeUpdatedOnRedirect DISABLED_NoticeUpdatedOnRedirect
+#else
+#define MAYBE_NoticeUpdatedOnRedirect NoticeUpdatedOnRedirect
+#endif
+IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_NoticeUpdatedOnRedirect) {
   // Start another https server at |kAdditionalIdPHost|.
   HTTPSForwarder saml_https_forwarder_2;
   ASSERT_TRUE(saml_https_forwarder_2.Initialize(
@@ -740,7 +795,10 @@ IN_PROC_BROWSER_TEST_F(SamlTest, HTTPRedirectDisallowed) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
 
   WaitForSigninScreen();
-  GetLoginDisplay()->ShowSigninScreenForCreds(kHTTPSAMLUserEmail, "");
+  LoginDisplayHost::default_host()
+      ->GetOobeUI()
+      ->GetGaiaScreenView()
+      ->ShowSigninScreenForTest(kHTTPSAMLUserEmail, "", "[]");
 
   const GURL url = embedded_test_server()->base_url().Resolve("/SAML");
   EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL,
@@ -751,13 +809,23 @@ IN_PROC_BROWSER_TEST_F(SamlTest, HTTPRedirectDisallowed) {
 // Verifies that when GAIA attempts to redirect to a page served over http, not
 // https, via an HTML meta refresh, the redirect is blocked and an error message
 // is shown. This guards against regressions of http://crbug.com/359515.
-IN_PROC_BROWSER_TEST_F(SamlTest, MetaRefreshToHTTPDisallowed) {
+//
+// Disabled since it's occasionally timed out: https://crbug.com/830322.
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_MetaRefreshToHTTPDisallowed DISABLED_MetaRefreshToHTTPDisallowed
+#else
+#define MAYBE_MetaRefreshToHTTPDisallowed MetaRefreshToHTTPDisallowed
+#endif
+IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_MetaRefreshToHTTPDisallowed) {
   const GURL url = embedded_test_server()->base_url().Resolve("/SSO");
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_instant_meta_refresh.html");
   fake_saml_idp()->SetRefreshURL(url);
 
   WaitForSigninScreen();
-  GetLoginDisplay()->ShowSigninScreenForCreds(kFirstSAMLUserEmail, "");
+  LoginDisplayHost::default_host()
+      ->GetOobeUI()
+      ->GetGaiaScreenView()
+      ->ShowSigninScreenForTest(kFirstSAMLUserEmail, "", "[]");
 
   EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL,
                                       base::UTF8ToUTF16(url.spec())),
@@ -1024,26 +1092,32 @@ void SAMLPolicyTest::SetUpOnMainThread() {
 
   // Pretend that the test users' OAuth tokens are valid.
   user_manager::UserManager::Get()->SaveUserOAuthStatus(
-      AccountId::FromUserEmail(kFirstSAMLUserEmail),
+      AccountId::FromUserEmailGaiaId(kFirstSAMLUserEmail, kFirstSAMLUserGaiaId),
       user_manager::User::OAUTH2_TOKEN_STATUS_VALID);
   user_manager::UserManager::Get()->SaveUserOAuthStatus(
-      AccountId::FromUserEmail(kNonSAMLUserEmail),
+      AccountId::FromUserEmailGaiaId(kNonSAMLUserEmail, kNonSAMLUserGaiaId),
       user_manager::User::OAUTH2_TOKEN_STATUS_VALID);
   user_manager::UserManager::Get()->SaveUserOAuthStatus(
-      AccountId::FromUserEmail(kDifferentDomainSAMLUserEmail),
+      AccountId::FromUserEmailGaiaId(kDifferentDomainSAMLUserEmail,
+                                     kDifferentDomainSAMLUserGaiaId),
       user_manager::User::OAUTH2_TOKEN_STATUS_VALID);
 
   // Give affiliated users appropriate affiliation IDs.
   std::set<std::string> user_affiliation_ids;
   user_affiliation_ids.insert(kAffiliationID);
-  chromeos::ChromeUserManager::Get()->SetUserAffiliation(kFirstSAMLUserEmail,
-                                                         user_affiliation_ids);
-  chromeos::ChromeUserManager::Get()->SetUserAffiliation(kSecondSAMLUserEmail,
-                                                         user_affiliation_ids);
-  chromeos::ChromeUserManager::Get()->SetUserAffiliation(kHTTPSAMLUserEmail,
-                                                         user_affiliation_ids);
-  chromeos::ChromeUserManager::Get()->SetUserAffiliation(kNonSAMLUserEmail,
-                                                         user_affiliation_ids);
+  chromeos::ChromeUserManager::Get()->SetUserAffiliation(
+      AccountId::FromUserEmailGaiaId(kFirstSAMLUserEmail, kFirstSAMLUserGaiaId),
+      user_affiliation_ids);
+  chromeos::ChromeUserManager::Get()->SetUserAffiliation(
+      AccountId::FromUserEmailGaiaId(kSecondSAMLUserEmail,
+                                     kSecondSAMLUserGaiaId),
+      user_affiliation_ids);
+  chromeos::ChromeUserManager::Get()->SetUserAffiliation(
+      AccountId::FromUserEmailGaiaId(kHTTPSAMLUserEmail, kHTTPSAMLUserGaiaId),
+      user_affiliation_ids);
+  chromeos::ChromeUserManager::Get()->SetUserAffiliation(
+      AccountId::FromUserEmailGaiaId(kNonSAMLUserEmail, kNonSAMLUserGaiaId),
+      user_affiliation_ids);
 
   // Set up fake networks.
   DBusThreadManager::Get()
@@ -1245,7 +1319,10 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_NoSAML) {
   SetupFakeGaiaForLogin(kNonSAMLUserEmail, "", kTestRefreshToken);
 
   // Log in without SAML.
-  GetLoginDisplay()->ShowSigninScreenForCreds(kNonSAMLUserEmail, "password");
+  LoginDisplayHost::default_host()
+      ->GetOobeUI()
+      ->GetGaiaScreenView()
+      ->ShowSigninScreenForTest(kNonSAMLUserEmail, "password", "[]");
 
   content::WindowedNotificationObserver(
       chrome::NOTIFICATION_SESSION_STARTED,
@@ -1438,7 +1515,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
 
   const GURL url1("https://google.com");
-  const GURL url2("https://example.com");
+  const GURL url2("https://corp.example.com");
   const GURL url3("https://not-allowed.com");
   SetLoginVideoCaptureAllowedUrls({url1, url2});
   WaitForSigninScreen();
@@ -1448,20 +1525,24 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
   // Mic should always be blocked.
   EXPECT_FALSE(
       MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
-          web_contents, url1, content::MEDIA_DEVICE_AUDIO_CAPTURE));
+          web_contents->GetMainFrame(), url1,
+          content::MEDIA_DEVICE_AUDIO_CAPTURE));
 
   // Camera should be allowed if allowed by the whitelist, otherwise blocked.
   EXPECT_TRUE(
       MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
-          web_contents, url1, content::MEDIA_DEVICE_VIDEO_CAPTURE));
+          web_contents->GetMainFrame(), url1,
+          content::MEDIA_DEVICE_VIDEO_CAPTURE));
 
   EXPECT_TRUE(
       MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
-          web_contents, url2, content::MEDIA_DEVICE_VIDEO_CAPTURE));
+          web_contents->GetMainFrame(), url2,
+          content::MEDIA_DEVICE_VIDEO_CAPTURE));
 
   EXPECT_FALSE(
       MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
-          web_contents, url3, content::MEDIA_DEVICE_VIDEO_CAPTURE));
+          web_contents->GetMainFrame(), url3,
+          content::MEDIA_DEVICE_VIDEO_CAPTURE));
 
   // Camera should be blocked in the login screen, even if it's allowed via
   // content setting.
@@ -1474,7 +1555,8 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
 
   EXPECT_FALSE(
       MediaCaptureDevicesDispatcher::GetInstance()->CheckMediaAccessPermission(
-          web_contents, url3, content::MEDIA_DEVICE_VIDEO_CAPTURE));
+          web_contents->GetMainFrame(), url3,
+          content::MEDIA_DEVICE_VIDEO_CAPTURE));
 }
 
 }  // namespace chromeos

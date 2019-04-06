@@ -18,7 +18,6 @@
 #include "chrome/browser/ui/cocoa/infobars/infobar_cocoa.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_controller.h"
-#import "chrome/browser/ui/cocoa/infobars/infobar_gradient_view.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_utilities.h"
 #include "chrome/browser/ui/cocoa/infobars/translate_message_infobar_controller.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
@@ -26,13 +25,22 @@
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_features.h"
 
 using InfoBarUtilities::MoveControl;
-using InfoBarUtilities::VerticallyCenterView;
 using InfoBarUtilities::CreateLabel;
 using InfoBarUtilities::AddMenuItem;
 
 namespace {
+
+// Vertically center |toMove| in its container.
+void VerticallyCenterView(NSView* toMove) {
+  NSRect superViewFrame = [[toMove superview] frame];
+  NSRect viewFrame = [toMove frame];
+  viewFrame.origin.y =
+      floor((NSHeight(superViewFrame) - NSHeight(viewFrame)) / 2.0);
+  [toMove setFrame:viewFrame];
+}
 
 // Check that the control |before| is ordered visually before the |after|
 // control. Also, check that there is space between them. Is RTL-aware.
@@ -46,7 +54,7 @@ bool VerifyControlOrderAndSpacing(id before, id after) {
 
 }  // namespace
 
-std::unique_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
+std::unique_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBarCocoa(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
   std::unique_ptr<InfoBarCocoa> infobar(new InfoBarCocoa(std::move(delegate)));
   base::scoped_nsobject<TranslateInfoBarControllerBase> infobar_controller;
@@ -70,6 +78,13 @@ std::unique_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
   infobar->set_controller(infobar_controller);
   return std::move(infobar);
 }
+
+#if !BUILDFLAG(MAC_VIEWS_BROWSER)
+std::unique_ptr<infobars::InfoBar> ChromeTranslateClient::CreateInfoBar(
+    std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
+  return CreateInfoBarCocoa(std::move(delegate));
+}
+#endif
 
 @implementation TranslateInfoBarControllerBase (FrameChangeObserver)
 

@@ -11,7 +11,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "third_party/WebKit/common/message_port/message_port_channel.h"
+#include "third_party/blink/public/common/message_port/message_port_channel.h"
 
 namespace content {
 
@@ -33,19 +33,31 @@ void SharedWorkerConnectorImpl::Connect(
     mojom::SharedWorkerInfoPtr info,
     mojom::SharedWorkerClientPtr client,
     blink::mojom::SharedWorkerCreationContextType creation_context_type,
-    mojo::ScopedMessagePipeHandle message_port) {
+    mojo::ScopedMessagePipeHandle message_port,
+    blink::mojom::BlobURLTokenPtr blob_url_token) {
   RenderProcessHost* host = RenderProcessHost::FromID(process_id_);
   // The render process was already terminated.
   if (!host) {
     client->OnScriptLoadFailed();
     return;
   }
+  scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory;
+  if (blob_url_token) {
+    if (!info->url.SchemeIsBlob()) {
+      mojo::ReportBadMessage("SWCI_BLOB_URL_TOKEN_FOR_NON_BLOB_URL");
+      return;
+    }
+    blob_url_loader_factory =
+        ChromeBlobStorageContext::URLLoaderFactoryForToken(
+            host->GetBrowserContext(), std::move(blob_url_token));
+  }
   SharedWorkerServiceImpl* service =
       static_cast<StoragePartitionImpl*>(host->GetStoragePartition())
           ->GetSharedWorkerService();
   service->ConnectToWorker(process_id_, frame_id_, std::move(info),
                            std::move(client), creation_context_type,
-                           blink::MessagePortChannel(std::move(message_port)));
+                           blink::MessagePortChannel(std::move(message_port)),
+                           std::move(blob_url_loader_factory));
 }
 
 }  // namespace content

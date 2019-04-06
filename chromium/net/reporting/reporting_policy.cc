@@ -4,9 +4,31 @@
 
 #include "net/reporting/reporting_policy.h"
 
+#include "base/no_destructor.h"
 #include "base/time/time.h"
 
 namespace net {
+
+namespace {
+
+ReportingPolicy* policy_for_testing = nullptr;
+
+}  // namespace
+
+// static
+std::unique_ptr<ReportingPolicy> ReportingPolicy::Create() {
+  if (policy_for_testing != nullptr) {
+    return std::make_unique<ReportingPolicy>(*policy_for_testing);
+  }
+  return std::make_unique<ReportingPolicy>();
+}
+
+// static
+void ReportingPolicy::UsePolicyForTesting(const ReportingPolicy& policy) {
+  static base::NoDestructor<ReportingPolicy> owned_policy;
+  policy_for_testing = owned_policy.get();
+  *owned_policy = policy;
+}
 
 ReportingPolicy::ReportingPolicy()
     : max_report_count(100u),
@@ -18,8 +40,8 @@ ReportingPolicy::ReportingPolicy()
       garbage_collection_interval(base::TimeDelta::FromMinutes(5)),
       max_report_age(base::TimeDelta::FromMinutes(15)),
       max_report_attempts(5),
-      clear_reports_on_network_changes(true),
-      clear_clients_on_network_changes(false) {
+      persist_reports_across_network_changes(false),
+      persist_clients_across_network_changes(true) {
   endpoint_backoff_policy.num_errors_to_ignore = 0;
   endpoint_backoff_policy.initial_delay_ms = 60 * 1000;  // 1 minute
   endpoint_backoff_policy.multiply_factor = 2.0;

@@ -4,7 +4,6 @@
 
 #include "cc/trees/swap_promise_manager.h"
 
-#include "base/memory/ptr_util.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,12 +30,9 @@ class MockSwapPromise : public SwapPromise {
   ~MockSwapPromise() override = default;
 
   void DidActivate() override {}
-  void WillSwap(viz::CompositorFrameMetadata* compositor_frame_metadata,
-                RenderFrameMetadata* render_frame_metadata) override {}
+  void WillSwap(viz::CompositorFrameMetadata* metadata) override {}
   void DidSwap() override {}
-  DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
-    return DidNotSwapAction::BREAK_PROMISE;
-  }
+  void DidNotSwap(DidNotSwapReason reason) override {}
   MOCK_METHOD0(OnCommit, void());
   int64_t TraceId() const override { return 0; }
 };

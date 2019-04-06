@@ -11,7 +11,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -67,6 +67,7 @@ class CONTENT_EXPORT PermissionServiceImpl
   blink::mojom::PermissionStatus GetPermissionStatusFromType(
       PermissionType type);
   void ResetPermissionStatus(PermissionType type);
+  void ReceivedBadMessage();
 
   RequestsMap pending_requests_;
   // context_ owns |this|.

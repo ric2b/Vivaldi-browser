@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "extensions/browser/api/idle/idle_api_constants.h"
 #include "extensions/browser/api/idle/idle_manager.h"
@@ -33,10 +32,10 @@ namespace {
 class MockEventDelegate : public IdleManager::EventDelegate {
  public:
   MockEventDelegate() {}
-  virtual ~MockEventDelegate() {}
+  ~MockEventDelegate() override {}
   MOCK_METHOD2(OnStateChanged, void(const std::string&, ui::IdleState));
-  virtual void RegisterObserver(EventRouter::Observer* observer) {}
-  virtual void UnregisterObserver(EventRouter::Observer* observer) {}
+  void RegisterObserver(EventRouter::Observer* observer) override {}
+  void UnregisterObserver(EventRouter::Observer* observer) override {}
 };
 
 class TestIdleProvider : public IdleManager::IdleTimeProvider {

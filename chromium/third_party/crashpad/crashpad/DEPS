@@ -14,21 +14,26 @@
 
 vars = {
   'chromium_git': 'https://chromium.googlesource.com',
+  'pull_linux_clang': False,
+  'pull_win_toolchain': False
 }
 
 deps = {
   'buildtools':
       Var('chromium_git') + '/chromium/buildtools.git@' +
-      '505de88083136eefd056e5ee4ca0f01fe9b33de8',
+      '6fe4a3251488f7af86d64fc25cf442e817cf6133',
   'crashpad/third_party/gtest/gtest':
       Var('chromium_git') + '/external/github.com/google/googletest@' +
-      'd175c8bf823e709d570772b038757fadf63bc632',
+      'c091b0469ab4c04ee9411ef770f32360945f4c53',
   'crashpad/third_party/gyp/gyp':
       Var('chromium_git') + '/external/gyp@' +
       '5e2b3ddde7cda5eb6bc09a5546a76b00e49d888f',
   'crashpad/third_party/mini_chromium/mini_chromium':
       Var('chromium_git') + '/chromium/mini_chromium@' +
-      'edfe51ce818e55eae73ab3f144a360e855533888',
+      '793e94e2c652831af2d25bb5288b04e59048c62d',
+  'crashpad/third_party/libfuzzer/src':
+      Var('chromium_git') + '/chromium/llvm-project/compiler-rt/lib/fuzzer.git@' +
+      'fda403cf93ecb8792cb1d061564d89a6553ca020',
   'crashpad/third_party/zlib/zlib':
       Var('chromium_git') + '/chromium/src/third_party/zlib@' +
       '13dc246a58e4b72104d35f9b1809af95221ebda7',
@@ -115,8 +120,40 @@ hooks = [
   },
   {
     # This uses “cipd install” so that mac-amd64 and linux-amd64 can coexist
-    # peacefully. “cipd ensure” would remove the Linux package when running on a
-    # macOS build host and vice-versa. https://crbug.com/789364.
+    # peacefully. “cipd ensure” would remove the macOS package when running on a
+    # Linux build host and vice-versa. https://crbug.com/789364. This package is
+    # only updated when the solution in .gclient includes an entry like:
+    #   "custom_vars": { "pull_linux_clang": True }
+    # The ref used is "goma". This is like "latest", but is considered a more
+    # stable latest by the Fuchsia toolchain team.
+    'name': 'clang_linux',
+    'pattern': '.',
+    'condition': 'checkout_linux and pull_linux_clang',
+    'action': [
+      'cipd',
+      'install',
+      # sic, using Fuchsia team's generic build of clang for linux-amd64 to
+      # build for linux-amd64 target too.
+      'fuchsia/clang/linux-amd64',
+      'goma',
+      '-root', 'crashpad/third_party/linux/clang/linux-amd64',
+      '-log-level', 'info',
+    ],
+  },
+  {
+    # If using a local clang ("pull_linux_clang" above), also pull down a
+    # sysroot.
+    'name': 'sysroot_linux',
+    'pattern': '.',
+    'condition': 'checkout_linux and pull_linux_clang',
+    'action': [
+      'crashpad/build/install_linux_sysroot.py',
+    ],
+  },
+  {
+    # Same rationale for using "install" rather than "ensure" as for first clang
+    # package. https://crbug.com/789364.
+    # Same rationale for using "goma" instead of "latest" as clang_linux above.
     'name': 'fuchsia_clang_mac',
     'pattern': '.',
     'condition': 'checkout_fuchsia and host_os == "mac"',
@@ -124,15 +161,15 @@ hooks = [
       'cipd',
       'install',
       'fuchsia/clang/mac-amd64',
-      'latest',
+      'goma',
       '-root', 'crashpad/third_party/fuchsia/clang/mac-amd64',
       '-log-level', 'info',
     ],
   },
   {
-    # This uses “cipd install” so that mac-amd64 and linux-amd64 can coexist
-    # peacefully. “cipd ensure” would remove the macOS package when running on a
-    # Linux build host and vice-versa. https://crbug.com/789364.
+    # Same rationale for using "install" rather than "ensure" as for first clang
+    # package. https://crbug.com/789364.
+    # Same rationale for using "goma" instead of "latest" as clang_linux above.
     'name': 'fuchsia_clang_linux',
     'pattern': '.',
     'condition': 'checkout_fuchsia and host_os == "linux"',
@@ -140,7 +177,7 @@ hooks = [
       'cipd',
       'install',
       'fuchsia/clang/linux-amd64',
-      'latest',
+      'goma',
       '-root', 'crashpad/third_party/fuchsia/clang/linux-amd64',
       '-log-level', 'info',
     ],
@@ -192,6 +229,23 @@ hooks = [
       'fuchsia/sdk/linux-amd64',
       'latest',
       '-root', 'crashpad/third_party/fuchsia/sdk/linux-amd64',
+      '-log-level', 'info',
+    ],
+  },
+  {
+    'name': 'toolchain_win',
+    'pattern': '.',
+    # This package is only updated when the solution in .gclient includes an
+    # entry like:
+    #   "custom_vars": { "pull_win_toolchain": True }
+    # This is because the contained bits are not redistributable.
+    'condition': 'checkout_win and pull_win_toolchain',
+    'action': [
+      'cipd',
+      'install',
+      'chrome_internal/third_party/sdk/windows',
+      'uploaded:2018-06-13',
+      '-root', 'crashpad/third_party/win/toolchain',
       '-log-level', 'info',
     ],
   },

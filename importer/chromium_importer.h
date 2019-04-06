@@ -16,7 +16,6 @@ class ImportedNoteEntry;
 class ChromiumImporter : public Importer {
  public:
   ChromiumImporter();
-  explicit ChromiumImporter(const importer::ImportConfig& import_config);
   void ImportPasswords();
 
   // Importer

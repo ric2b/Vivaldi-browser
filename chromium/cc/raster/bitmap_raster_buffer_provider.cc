@@ -10,28 +10,41 @@
 #include <algorithm>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/raster/raster_source.h"
-#include "cc/resources/layer_tree_resource_provider.h"
-#include "cc/resources/resource.h"
+#include "cc/trees/layer_tree_frame_sink.h"
+#include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/platform_color.h"
 
 namespace cc {
 namespace {
 
+class BitmapSoftwareBacking : public ResourcePool::SoftwareBacking {
+ public:
+  ~BitmapSoftwareBacking() override {
+    frame_sink->DidDeleteSharedBitmap(shared_bitmap_id);
+  }
+
+  base::UnguessableToken SharedMemoryGuid() override {
+    return shared_memory->mapped_id();
+  }
+
+  LayerTreeFrameSink* frame_sink;
+  std::unique_ptr<base::SharedMemory> shared_memory;
+};
+
 class BitmapRasterBufferImpl : public RasterBuffer {
  public:
-  BitmapRasterBufferImpl(LayerTreeResourceProvider* resource_provider,
-                         const ResourcePool::InUsePoolResource& in_use_resource,
+  BitmapRasterBufferImpl(const gfx::Size& size,
+                         const gfx::ColorSpace& color_space,
+                         void* pixels,
                          uint64_t resource_content_id,
                          uint64_t previous_content_id)
-      : lock_(resource_provider,
-              in_use_resource.software_backing_resource_id()),
-        resource_format_(in_use_resource.format()),
-        resource_size_(in_use_resource.size()),
+      : resource_size_(size),
+        color_space_(color_space),
+        pixels_(pixels),
         resource_has_previous_content_(
             resource_content_id && resource_content_id == previous_content_id) {
   }
@@ -54,15 +67,15 @@ class BitmapRasterBufferImpl : public RasterBuffer {
 
     size_t stride = 0u;
     RasterBufferProvider::PlaybackToMemory(
-        lock_.sk_bitmap().getPixels(), resource_format_, resource_size_, stride,
-        raster_source, raster_full_rect, playback_rect, transform,
-        lock_.color_space_for_raster(), playback_settings);
+        pixels_, viz::RGBA_8888, resource_size_, stride, raster_source,
+        raster_full_rect, playback_rect, transform, color_space_,
+        /*gpu_compositing=*/false, playback_settings);
   }
 
  private:
-  LayerTreeResourceProvider::ScopedWriteLockSoftware lock_;
-  const viz::ResourceFormat resource_format_;
   const gfx::Size resource_size_;
+  const gfx::ColorSpace color_space_;
+  void* const pixels_;
   bool resource_has_previous_content_;
 
   DISALLOW_COPY_AND_ASSIGN(BitmapRasterBufferImpl);
@@ -70,16 +83,9 @@ class BitmapRasterBufferImpl : public RasterBuffer {
 
 }  // namespace
 
-// static
-std::unique_ptr<RasterBufferProvider> BitmapRasterBufferProvider::Create(
-    LayerTreeResourceProvider* resource_provider) {
-  return base::WrapUnique<RasterBufferProvider>(
-      new BitmapRasterBufferProvider(resource_provider));
-}
-
 BitmapRasterBufferProvider::BitmapRasterBufferProvider(
-    LayerTreeResourceProvider* resource_provider)
-    : resource_provider_(resource_provider) {}
+    LayerTreeFrameSink* frame_sink)
+    : frame_sink_(frame_sink) {}
 
 BitmapRasterBufferProvider::~BitmapRasterBufferProvider() = default;
 
@@ -88,24 +94,48 @@ BitmapRasterBufferProvider::AcquireBufferForRaster(
     const ResourcePool::InUsePoolResource& resource,
     uint64_t resource_content_id,
     uint64_t previous_content_id) {
-  return std::make_unique<BitmapRasterBufferImpl>(
-      resource_provider_, resource, resource_content_id, previous_content_id);
-}
+  DCHECK_EQ(resource.format(), viz::RGBA_8888);
 
-void BitmapRasterBufferProvider::OrderingBarrier() {
-  // No need to sync resources as this provider does not use GL context.
+  const gfx::Size& size = resource.size();
+  const gfx::ColorSpace& color_space = resource.color_space();
+  if (!resource.software_backing()) {
+    auto backing = std::make_unique<BitmapSoftwareBacking>();
+    backing->frame_sink = frame_sink_;
+    backing->shared_bitmap_id = viz::SharedBitmap::GenerateId();
+    backing->shared_memory =
+        viz::bitmap_allocation::AllocateMappedBitmap(size, viz::RGBA_8888);
+
+    mojo::ScopedSharedBufferHandle handle =
+        viz::bitmap_allocation::DuplicateAndCloseMappedBitmap(
+            backing->shared_memory.get(), size, viz::RGBA_8888);
+    frame_sink_->DidAllocateSharedBitmap(std::move(handle),
+                                         backing->shared_bitmap_id);
+
+    resource.set_software_backing(std::move(backing));
+  }
+  BitmapSoftwareBacking* backing =
+      static_cast<BitmapSoftwareBacking*>(resource.software_backing());
+
+  return std::make_unique<BitmapRasterBufferImpl>(
+      size, color_space, backing->shared_memory->memory(), resource_content_id,
+      previous_content_id);
 }
 
 void BitmapRasterBufferProvider::Flush() {}
 
-viz::ResourceFormat BitmapRasterBufferProvider::GetResourceFormat(
-    bool must_support_alpha) const {
-  return resource_provider_->best_texture_format();
+viz::ResourceFormat BitmapRasterBufferProvider::GetResourceFormat() const {
+  return viz::RGBA_8888;
 }
 
-bool BitmapRasterBufferProvider::IsResourceSwizzleRequired(
-    bool must_support_alpha) const {
-  return ResourceFormatRequiresSwizzle(GetResourceFormat(must_support_alpha));
+bool BitmapRasterBufferProvider::IsResourceSwizzleRequired() const {
+  // This value only used by gpu compositing. Software compositing resources
+  // are all in the native skia byte ordering, and the display compositor will
+  // do its drawing in the same order.
+  return false;
+}
+
+bool BitmapRasterBufferProvider::IsResourcePremultiplied() const {
+  return true;
 }
 
 bool BitmapRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {

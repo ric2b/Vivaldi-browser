@@ -8,7 +8,6 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_reg_util_win.h"
@@ -30,15 +29,15 @@ TEST(ProductTest, ProductInstallBasic) {
   machine_state.Initialize();
 
   std::unique_ptr<Product> product =
-      base::MakeUnique<Product>(BrowserDistribution::GetDistribution());
+      std::make_unique<Product>(BrowserDistribution::GetDistribution());
   BrowserDistribution* distribution = product->distribution();
 
   base::FilePath user_data_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   EXPECT_FALSE(user_data_dir.empty());
 
   base::FilePath program_files;
-  ASSERT_TRUE(PathService::Get(base::DIR_PROGRAM_FILES, &program_files));
+  ASSERT_TRUE(base::PathService::Get(base::DIR_PROGRAM_FILES, &program_files));
   // The User Data path should never be under program files, even though
   // system_level is true.
   EXPECT_EQ(std::wstring::npos,

@@ -10,7 +10,9 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/ime/input_method_keyboard_controller_stub.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ime/ui_base_ime_export.h"
 
@@ -32,8 +34,12 @@ class UI_BASE_IME_EXPORT MockInputMethod : public InputMethod {
   void SetDelegate(internal::InputMethodDelegate* delegate) override;
   void OnFocus() override;
   void OnBlur() override;
-  bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
+
+#if defined(OS_WIN)
+  bool OnUntranslatedIMEMessage(const MSG event,
                                 NativeEventResult* result) override;
+#endif
+
   void SetFocusedTextInputClient(TextInputClient* client) override;
   void DetachTextInputClient(TextInputClient* client) override;
   TextInputClient* GetTextInputClient() const override;
@@ -48,9 +54,11 @@ class UI_BASE_IME_EXPORT MockInputMethod : public InputMethod {
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   bool IsCandidatePopupOpen() const override;
-  void ShowImeIfNeeded() override;
+  bool GetClientShouldDoLearning() override;
+  void ShowVirtualKeyboardIfEnabled() override;
   void AddObserver(InputMethodObserver* observer) override;
   void RemoveObserver(InputMethodObserver* observer) override;
+  InputMethodKeyboardController* GetInputMethodKeyboardController() override;
 
  private:
   // InputMethod:
@@ -62,6 +70,7 @@ class UI_BASE_IME_EXPORT MockInputMethod : public InputMethod {
   internal::InputMethodDelegate* delegate_;
 
   std::vector<std::unique_ptr<ui::KeyEvent>> key_events_for_testing_;
+  InputMethodKeyboardControllerStub keyboard_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(MockInputMethod);
 };

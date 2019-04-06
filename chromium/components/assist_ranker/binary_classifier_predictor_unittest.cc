@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/assist_ranker/fake_ranker_model_loader.h"
 #include "components/assist_ranker/proto/ranker_model.pb.h"
 #include "components/assist_ranker/ranker_model.h"
@@ -21,6 +21,8 @@ using ::assist_ranker::testing::FakeRankerModelLoader;
 
 class BinaryClassifierPredictorTest : public ::testing::Test {
  public:
+  void SetUp() override;
+
   std::unique_ptr<BinaryClassifierPredictor> InitPredictor(
       std::unique_ptr<RankerModel> ranker_model,
       const PredictorConfig& config);
@@ -32,8 +34,15 @@ class BinaryClassifierPredictorTest : public ::testing::Test {
 
  protected:
   const std::string feature_ = "feature";
+  const float weight_ = 1.0;
   const float threshold_ = 0.5;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+void BinaryClassifierPredictorTest::SetUp() {
+  ::testing::Test::SetUp();
+  scoped_feature_list_.Init();
+}
 
 std::unique_ptr<BinaryClassifierPredictor>
 BinaryClassifierPredictorTest::InitPredictor(
@@ -69,14 +78,14 @@ BinaryClassifierPredictorTest::GetSimpleLogisticRegressionModel() {
   GenericLogisticRegressionModel lr_model;
   lr_model.set_bias(-0.5);
   lr_model.set_threshold(threshold_);
-  (*lr_model.mutable_weights())[feature_].set_scalar(1.0);
+  (*lr_model.mutable_weights())[feature_].set_scalar(weight_);
   return lr_model;
 }
 
 // TODO(hamelphi): Test BinaryClassifierPredictor::Create.
 
 TEST_F(BinaryClassifierPredictorTest, EmptyRankerModel) {
-  auto ranker_model = base::MakeUnique<RankerModel>();
+  auto ranker_model = std::make_unique<RankerModel>();
   auto predictor = InitPredictor(std::move(ranker_model), GetConfig());
   EXPECT_FALSE(predictor->IsReady());
 
@@ -90,7 +99,7 @@ TEST_F(BinaryClassifierPredictorTest, EmptyRankerModel) {
 }
 
 TEST_F(BinaryClassifierPredictorTest, NoInferenceModuleForModel) {
-  auto ranker_model = base::MakeUnique<RankerModel>();
+  auto ranker_model = std::make_unique<RankerModel>();
   // TranslateRankerModel does not have an inference module. Validation will
   // fail.
   ranker_model->mutable_proto()
@@ -110,9 +119,38 @@ TEST_F(BinaryClassifierPredictorTest, NoInferenceModuleForModel) {
 }
 
 TEST_F(BinaryClassifierPredictorTest, GenericLogisticRegressionModel) {
-  auto ranker_model = base::MakeUnique<RankerModel>();
+  auto ranker_model = std::make_unique<RankerModel>();
   *ranker_model->mutable_proto()->mutable_logistic_regression() =
       GetSimpleLogisticRegressionModel();
+  auto predictor = InitPredictor(std::move(ranker_model), GetConfig());
+  EXPECT_TRUE(predictor->IsReady());
+
+  RankerExample ranker_example;
+  auto& features = *ranker_example.mutable_features();
+  features[feature_].set_bool_value(true);
+  bool bool_response;
+  EXPECT_TRUE(predictor->Predict(ranker_example, &bool_response));
+  EXPECT_TRUE(bool_response);
+  float float_response;
+  EXPECT_TRUE(predictor->PredictScore(ranker_example, &float_response));
+  EXPECT_GT(float_response, threshold_);
+
+  features[feature_].set_bool_value(false);
+  EXPECT_TRUE(predictor->Predict(ranker_example, &bool_response));
+  EXPECT_FALSE(bool_response);
+  EXPECT_TRUE(predictor->PredictScore(ranker_example, &float_response));
+  EXPECT_LT(float_response, threshold_);
+}
+
+TEST_F(BinaryClassifierPredictorTest,
+       GenericLogisticRegressionPreprocessedModel) {
+  auto ranker_model = std::make_unique<RankerModel>();
+  auto& glr = *ranker_model->mutable_proto()->mutable_logistic_regression();
+  glr = GetSimpleLogisticRegressionModel();
+  glr.clear_weights();
+  glr.set_is_preprocessed_model(true);
+  (*glr.mutable_fullname_weights())[feature_] = weight_;
+
   auto predictor = InitPredictor(std::move(ranker_model), GetConfig());
   EXPECT_TRUE(predictor->IsReady());
 

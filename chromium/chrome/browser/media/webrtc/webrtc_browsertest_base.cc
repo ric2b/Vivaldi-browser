@@ -154,13 +154,6 @@ std::vector<std::string> JsonArrayToVectorOfStrings(
 
 }  // namespace
 
-WebRtcTestBase::TrackEvent::TrackEvent(const std::string& track_id)
-    : track_id(track_id) {}
-
-WebRtcTestBase::TrackEvent::TrackEvent(const TrackEvent&) = default;
-
-WebRtcTestBase::TrackEvent::~TrackEvent() = default;
-
 WebRtcTestBase::WebRtcTestBase(): detect_errors_in_javascript_(false) {
   // The handler gets set for each test method, but that's fine since this
   // set operation is idempotent.
@@ -388,6 +381,17 @@ void WebRtcTestBase::SetupPeerconnectionWithCertificateWithoutLocalStream(
   EXPECT_EQ("ok-peerconnection-created", ExecuteJavascript(javascript, tab));
 }
 
+void WebRtcTestBase::SetupPeerconnectionWithConstraintsAndLocalStream(
+    content::WebContents* tab,
+    const std::string& constraints,
+    const std::string& certificate_keygen_algorithm) const {
+  std::string javascript = base::StringPrintf(
+      "preparePeerConnection(%s, %s)", certificate_keygen_algorithm.c_str(),
+      constraints.c_str());
+  EXPECT_EQ("ok-peerconnection-created", ExecuteJavascript(javascript, tab));
+  EXPECT_EQ("ok-added", ExecuteJavascript("addLocalStream()", tab));
+}
+
 std::string WebRtcTestBase::CreateLocalOffer(
     content::WebContents* from_tab) const {
   std::string response = ExecuteJavascript("createLocalOffer({})", from_tab);
@@ -596,151 +600,6 @@ void WebRtcTestBase::EnableOpusDtx(content::WebContents* tab) const {
   EXPECT_EQ("ok-forced", ExecuteJavascript("forceOpusDtx()", tab));
 }
 
-void WebRtcTestBase::CreateAndAddStreams(content::WebContents* tab,
-                                         size_t count) const {
-  EXPECT_EQ(
-      "ok-streams-created-and-added",
-      ExecuteJavascript(
-          "createAndAddStreams(" + base::NumberToString(count) + ")", tab));
-}
-
-void WebRtcTestBase::VerifyRtpSenders(
-    content::WebContents* tab,
-    base::Optional<size_t> expected_num_tracks) const {
-  std::string javascript =
-      expected_num_tracks ? "verifyRtpSenders(" +
-                                base::NumberToString(*expected_num_tracks) + ")"
-                          : "verifyRtpSenders()";
-  EXPECT_EQ("ok-senders-verified", ExecuteJavascript(javascript, tab));
-}
-
-void WebRtcTestBase::VerifyRtpReceivers(
-    content::WebContents* tab,
-    base::Optional<size_t> expected_num_tracks) const {
-  std::string javascript =
-      expected_num_tracks ? "verifyRtpReceivers(" +
-                                base::NumberToString(*expected_num_tracks) + ")"
-                          : "verifyRtpReceivers()";
-  EXPECT_EQ("ok-receivers-verified", ExecuteJavascript(javascript, tab));
-}
-
-std::vector<std::string> WebRtcTestBase::CreateAndAddAudioAndVideoTrack(
-    content::WebContents* tab,
-    StreamArgumentType stream_argument_type) const {
-  const char* string_argument_type_str = nullptr;
-  switch (stream_argument_type) {
-    case StreamArgumentType::NO_STREAM:
-      string_argument_type_str = "'no-stream'";
-      break;
-    case StreamArgumentType::SHARED_STREAM:
-      string_argument_type_str = "'shared-stream'";
-      break;
-    case StreamArgumentType::INDIVIDUAL_STREAMS:
-      string_argument_type_str = "'individual-streams'";
-      break;
-  }
-  std::string result =
-      ExecuteJavascript(base::StringPrintf("createAndAddAudioAndVideoTrack(%s)",
-                                           string_argument_type_str),
-                        tab);
-  EXPECT_TRUE(base::StartsWith(result, "ok-", base::CompareCase::SENSITIVE));
-  std::vector<std::string> ids = base::SplitString(
-      result.substr(3), " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
-  EXPECT_EQ(4u, ids.size());
-  return ids;
-}
-
-void WebRtcTestBase::RemoveTrack(content::WebContents* tab,
-                                 const std::string& track_id) const {
-  EXPECT_EQ(
-      "ok-sender-removed",
-      ExecuteJavascript(
-          base::StringPrintf("removeTrack('%s')", track_id.c_str()), tab));
-}
-
-bool WebRtcTestBase::HasLocalStreamWithTrack(
-    content::WebContents* tab,
-    const std::string& stream_id,
-    const std::string& track_id) const {
-  return HasStreamWithTrack(tab, "hasLocalStreamWithTrack", stream_id,
-                            track_id);
-}
-
-bool WebRtcTestBase::HasRemoteStreamWithTrack(
-    content::WebContents* tab,
-    const std::string& stream_id,
-    const std::string& track_id) const {
-  return HasStreamWithTrack(tab, "hasRemoteStreamWithTrack", stream_id,
-                            track_id);
-}
-
-bool WebRtcTestBase::HasStreamWithTrack(content::WebContents* tab,
-                                        const char* function_name,
-                                        std::string stream_id,
-                                        std::string track_id) const {
-  if (stream_id != kUndefined)
-    stream_id = "'" + stream_id + "'";
-  std::string javascript = base::StringPrintf(
-      "%s(%s, '%s')", function_name, stream_id.c_str(), track_id.c_str());
-  std::string result = ExecuteJavascript(javascript, tab);
-  EXPECT_TRUE(result == "ok-stream-with-track-found" ||
-              result == "ok-stream-with-track-not-found");
-  return result == "ok-stream-with-track-found";
-}
-
-bool WebRtcTestBase::HasSenderWithTrack(content::WebContents* tab,
-                                        std::string track_id) const {
-  std::string javascript =
-      base::StringPrintf("hasSenderWithTrack('%s')", track_id.c_str());
-  std::string result = ExecuteJavascript(javascript, tab);
-  EXPECT_TRUE(result == "ok-sender-with-track-found" ||
-              result == "ok-sender-with-track-not-found");
-  return result == "ok-sender-with-track-found";
-}
-
-bool WebRtcTestBase::HasReceiverWithTrack(content::WebContents* tab,
-                                          std::string track_id) const {
-  std::string javascript =
-      base::StringPrintf("hasReceiverWithTrack('%s')", track_id.c_str());
-  std::string result = ExecuteJavascript(javascript, tab);
-  EXPECT_TRUE(result == "ok-receiver-with-track-found" ||
-              result == "ok-receiver-with-track-not-found");
-  return result == "ok-receiver-with-track-found";
-}
-
-size_t WebRtcTestBase::GetNegotiationNeededCount(
-    content::WebContents* tab) const {
-  std::string result = ExecuteJavascript("getNegotiationNeededCount()", tab);
-  EXPECT_TRUE(base::StartsWith(result, "ok-negotiation-count-is-",
-                               base::CompareCase::SENSITIVE));
-  size_t count = 0;
-  EXPECT_TRUE(base::StringToSizeT(result.substr(24), &count));
-  return count;
-}
-
-std::vector<WebRtcTestBase::TrackEvent> WebRtcTestBase::GetTrackEvents(
-    content::WebContents* tab) const {
-  std::string result = ExecuteJavascript("getTrackEvents()", tab);
-  EXPECT_TRUE(base::StartsWith(result, "ok-", base::CompareCase::SENSITIVE));
-  std::vector<std::string> tokens = base::SplitString(
-      result.substr(3), " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
-  std::vector<TrackEvent> events;
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    if (tokens[i] == "RTCTrackEvent") {
-      DCHECK_LT(i + 1, tokens.size());
-      events.push_back(TrackEvent(tokens[++i]));
-    } else {
-      DCHECK(!events.empty());
-      events[events.size() - 1].stream_ids.push_back(tokens[i]);
-    }
-  }
-  return events;
-}
-
-void WebRtcTestBase::CollectGarbage(content::WebContents* tab) const {
-  EXPECT_EQ("ok-gc", ExecuteJavascript("collectGarbage()", tab));
-}
-
 std::string WebRtcTestBase::GetDesktopMediaStream(content::WebContents* tab) {
   DCHECK(static_cast<bool>(LoadDesktopCaptureExtension()));
 
@@ -753,7 +612,7 @@ base::Optional<std::string> WebRtcTestBase::LoadDesktopCaptureExtension() {
   if (!desktop_capture_extension_.get()) {
     extensions::ChromeTestExtensionLoader loader(browser()->profile());
     base::FilePath extension_path;
-    EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &extension_path));
+    EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &extension_path));
     extension_path = extension_path.AppendASCII("extensions/desktop_capture");
     desktop_capture_extension_ = loader.LoadExtension(extension_path);
     LOG(INFO) << "Loaded desktop capture extension, id = "

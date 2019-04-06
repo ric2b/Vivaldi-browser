@@ -17,7 +17,7 @@
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
 #include "services/shape_detection/face_detection_provider_win.h"
-#include "services/shape_detection/public/interfaces/facedetection_provider.mojom.h"
+#include "services/shape_detection/public/mojom/facedetection_provider.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 
@@ -72,7 +72,7 @@ TEST_F(FaceDetectionImplWinTest, ScanOneFace) {
 
   // Load image data from test directory.
   base::FilePath image_path;
-  ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &image_path));
+  ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &image_path));
   image_path = image_path.Append(FILE_PATH_LITERAL("services"))
                    .Append(FILE_PATH_LITERAL("test"))
                    .Append(FILE_PATH_LITERAL("data"))

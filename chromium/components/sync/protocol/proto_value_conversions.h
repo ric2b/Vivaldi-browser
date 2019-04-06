@@ -19,7 +19,6 @@ class AppSettingSpecifics;
 class AppSpecifics;
 class ArcPackageSpecifics;
 class ArticleSpecifics;
-class AttachmentIdProto;
 class AutofillProfileSpecifics;
 class AutofillSpecifics;
 class AutofillWalletSpecifics;
@@ -47,6 +46,7 @@ class ManagedUserSettingSpecifics;
 class ManagedUserSharedSettingSpecifics;
 class ManagedUserSpecifics;
 class ManagedUserWhitelistSpecifics;
+class MountainShareSpecifics;
 class NavigationRedirect;
 class NigoriSpecifics;
 class NotesSpecifics;
@@ -70,6 +70,7 @@ class TabNavigation;
 class ThemeSpecifics;
 class TimeRangeDirective;
 class TypedUrlSpecifics;
+class UserConsentSpecifics;
 class UserEventSpecifics;
 class WalletMaskedCreditCard;
 class WalletMetadataSpecifics;
@@ -106,9 +107,6 @@ std::unique_ptr<base::DictionaryValue> ArcPackageSpecificsToValue(
 
 std::unique_ptr<base::DictionaryValue> ArticleSpecificsToValue(
     const sync_pb::ArticleSpecifics& article_specifics);
-
-std::unique_ptr<base::DictionaryValue> AttachmentIdProtoToValue(
-    const sync_pb::AttachmentIdProto& proto);
 
 std::unique_ptr<base::DictionaryValue> AutofillProfileSpecificsToValue(
     const sync_pb::AutofillProfileSpecifics& autofill_profile_specifics);
@@ -191,6 +189,9 @@ std::unique_ptr<base::DictionaryValue> ManagedUserWhitelistSpecificsToValue(
     const sync_pb::ManagedUserWhitelistSpecifics&
         managed_user_whitelist_specifics);
 
+std::unique_ptr<base::DictionaryValue> MountainShareSpecificsToValue(
+    const sync_pb::MountainShareSpecifics& mountain_share_specifics);
+
 std::unique_ptr<base::DictionaryValue> NavigationRedirectToValue(
     const sync_pb::NavigationRedirect& navigation_redirect);
 
@@ -255,6 +256,9 @@ std::unique_ptr<base::DictionaryValue> TimeRangeDirectiveToValue(
 
 std::unique_ptr<base::DictionaryValue> TypedUrlSpecificsToValue(
     const sync_pb::TypedUrlSpecifics& typed_url_specifics);
+
+std::unique_ptr<base::DictionaryValue> UserConsentSpecificsToValue(
+    const sync_pb::UserConsentSpecifics& user_consent_specifics);
 
 std::unique_ptr<base::DictionaryValue> UserEventSpecificsToValue(
     const sync_pb::UserEventSpecifics& user_event_specifics);

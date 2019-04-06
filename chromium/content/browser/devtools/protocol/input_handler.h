@@ -7,6 +7,8 @@
 
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
@@ -14,22 +16,16 @@
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/public/browser/render_widget_host.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "ui/gfx/geometry/size_f.h"
-
-namespace viz {
-class CompositorFrameMetadata;
-}
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace content {
 class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
+class RenderWidgetHostImpl;
 
 namespace protocol {
 
-class InputHandler : public DevToolsDomainHandler,
-                     public Input::Backend,
-                     public RenderWidgetHost::InputEventObserver {
+class InputHandler : public DevToolsDomainHandler, public Input::Backend {
  public:
   InputHandler();
   ~InputHandler() override;
@@ -37,11 +33,10 @@ class InputHandler : public DevToolsDomainHandler,
   static std::vector<InputHandler*> ForAgentHost(DevToolsAgentHostImpl* host);
 
   void Wire(UberDispatcher* dispatcher) override;
-  void SetRenderer(RenderProcessHost* process_host,
+  void SetRenderer(int process_host_id,
                    RenderFrameHostImpl* frame_host) override;
 
-  void OnSwapCompositorFrame(
-      const viz::CompositorFrameMetadata& frame_metadata);
+  void OnPageScaleFactorChanged(float page_scale_factor);
   Response Disable() override;
 
   void DispatchKeyEvent(
@@ -83,8 +78,8 @@ class InputHandler : public DevToolsDomainHandler,
   Response EmulateTouchFromMouseEvent(const std::string& type,
                                       int x,
                                       int y,
-                                      double timestamp,
                                       const std::string& button,
+                                      Maybe<double> timestamp,
                                       Maybe<double> delta_x,
                                       Maybe<double> delta_y,
                                       Maybe<int> modifiers,
@@ -124,13 +119,10 @@ class InputHandler : public DevToolsDomainHandler,
       std::unique_ptr<SynthesizeTapGestureCallback> callback) override;
 
  private:
-  // InputEventObserver
-  void OnInputEvent(const blink::WebInputEvent& event) override;
-  void OnInputEventAck(InputEventAckSource source,
-                       InputEventAckState state,
-                       const blink::WebInputEvent& event) override;
+  class InputInjector;
 
   void SynthesizeRepeatingScroll(
+      base::WeakPtr<RenderWidgetHostImpl> widget_host,
       SyntheticSmoothScrollGestureParams gesture_params,
       int repeat_count,
       base::TimeDelta repeat_delay,
@@ -139,6 +131,7 @@ class InputHandler : public DevToolsDomainHandler,
       std::unique_ptr<SynthesizeScrollGestureCallback> callback);
 
   void OnScrollFinished(
+      base::WeakPtr<RenderWidgetHostImpl> widget_host,
       SyntheticSmoothScrollGestureParams gesture_params,
       int repeat_count,
       base::TimeDelta repeat_delay,
@@ -149,17 +142,14 @@ class InputHandler : public DevToolsDomainHandler,
 
   void ClearInputState();
   bool PointIsWithinContents(gfx::PointF point) const;
+  InputInjector* EnsureInjector(RenderWidgetHostImpl* widget_host);
+  RenderWidgetHostImpl* FindTargetWidgetHost(const gfx::PointF& point,
+                                             gfx::PointF* transformed);
 
   RenderFrameHostImpl* host_;
-  // Callbacks for calls to Input.dispatchKey/MouseEvent that have been sent to
-  // the renderer, but that we haven't yet received an ack for.
-  bool input_queued_;
-  base::circular_deque<std::unique_ptr<DispatchKeyEventCallback>>
-      pending_key_callbacks_;
-  base::circular_deque<std::unique_ptr<DispatchMouseEventCallback>>
-      pending_mouse_callbacks_;
+  base::flat_set<std::unique_ptr<InputInjector>, base::UniquePtrComparator>
+      injectors_;
   float page_scale_factor_;
-  gfx::SizeF scrollable_viewport_size_;
   int last_id_;
   bool ignore_input_events_ = false;
   base::flat_map<int, blink::WebTouchPoint> touch_points_;

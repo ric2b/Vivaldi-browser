@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef DEVICE_HID_HID_SERVICE_H_
-#define DEVICE_HID_HID_SERVICE_H_
+#ifndef SERVICES_DEVICE_HID_HID_SERVICE_H_
+#define SERVICES_DEVICE_HID_HID_SERVICE_H_
 
 #include <map>
 #include <memory>
@@ -20,7 +20,7 @@
 #include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread_checker.h"
 #include "services/device/hid/hid_device_info.h"
-#include "services/device/public/interfaces/hid.mojom.h"
+#include "services/device/public/mojom/hid.mojom.h"
 
 namespace device {
 
@@ -101,4 +101,4 @@ class HidService {
 
 }  // namespace device
 
-#endif  // DEVICE_HID_HID_SERVICE_H_
+#endif  // SERVICES_DEVICE_HID_HID_SERVICE_H_

@@ -21,18 +21,17 @@
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetcher.h"
 #include "components/password_manager/core/browser/android_affiliation/facet_manager.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace password_manager {
 
 AffiliationBackend::AffiliationBackend(
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-    std::unique_ptr<base::Clock> time_source,
-    std::unique_ptr<base::TickClock> time_tick_source)
-    : request_context_getter_(request_context_getter),
-      task_runner_(task_runner),
-      clock_(std::move(time_source)),
-      tick_clock_(std::move(time_tick_source)),
+    base::Clock* time_source,
+    const base::TickClock* time_tick_source)
+    : task_runner_(task_runner),
+      clock_(time_source),
+      tick_clock_(time_tick_source),
       construction_time_(clock_->Now()),
       weak_ptr_factory_(this) {
   DCHECK_LT(base::Time(), clock_->Now());
@@ -42,11 +41,14 @@ AffiliationBackend::AffiliationBackend(
 AffiliationBackend::~AffiliationBackend() {
 }
 
-void AffiliationBackend::Initialize(const base::FilePath& db_path) {
+void AffiliationBackend::Initialize(
+    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+        url_loader_factory_info,
+    const base::FilePath& db_path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!throttler_);
   throttler_.reset(
-      new AffiliationFetchThrottler(this, task_runner_, tick_clock_.get()));
+      new AffiliationFetchThrottler(this, task_runner_, tick_clock_));
 
   // TODO(engedy): Currently, when Init() returns false, it always poisons the
   // DB, so subsequent operations will silently fail. Consider either fully
@@ -54,6 +56,10 @@ void AffiliationBackend::Initialize(const base::FilePath& db_path) {
   // return value here. See: https://crbug.com/478831.
   cache_.reset(new AffiliationDatabase());
   cache_->Init(db_path);
+  DCHECK(url_loader_factory_info);
+  DCHECK(!url_loader_factory_);
+  url_loader_factory_ = network::SharedURLLoaderFactory::Create(
+      std::move(url_loader_factory_info));
 }
 
 void AffiliationBackend::GetAffiliationsAndBranding(
@@ -114,8 +120,7 @@ FacetManager* AffiliationBackend::GetOrCreateFacetManager(
     const FacetURI& facet_uri) {
   std::unique_ptr<FacetManager>& facet_manager = facet_managers_[facet_uri];
   if (!facet_manager) {
-    facet_manager =
-        std::make_unique<FacetManager>(facet_uri, this, clock_.get());
+    facet_manager = std::make_unique<FacetManager>(facet_uri, this, clock_);
   }
   return facet_manager.get();
 }
@@ -253,7 +258,7 @@ bool AffiliationBackend::OnCanSendNetworkRequest() {
   if (requested_facet_uris.empty())
     return false;
 
-  fetcher_.reset(AffiliationFetcher::Create(request_context_getter_.get(),
+  fetcher_.reset(AffiliationFetcher::Create(url_loader_factory_,
                                             requested_facet_uris, this));
   fetcher_->StartRequest();
   ReportStatistics(requested_facet_uris.size());

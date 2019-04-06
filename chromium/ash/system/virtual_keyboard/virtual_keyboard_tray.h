@@ -6,6 +6,7 @@
 #define ASH_SYSTEM_VIRTUAL_KEYBOARD_VIRTUAL_KEYBOARD_TRAY_H_
 
 #include "ash/keyboard/keyboard_ui_observer.h"
+#include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "base/macros.h"
@@ -21,7 +22,8 @@ namespace ash {
 class VirtualKeyboardTray : public TrayBackgroundView,
                             public KeyboardUIObserver,
                             public keyboard::KeyboardControllerObserver,
-                            public ShellObserver {
+                            public ShellObserver,
+                            public SessionObserver {
  public:
   explicit VirtualKeyboardTray(Shelf* shelf);
   ~VirtualKeyboardTray() override;
@@ -36,19 +38,27 @@ class VirtualKeyboardTray : public TrayBackgroundView,
   void OnKeyboardEnabledStateChanged(bool new_enabled) override;
 
   // keyboard::KeyboardControllerObserver:
-  void OnKeyboardAvailabilityChanging(const bool is_available) override;
+  void OnKeyboardVisibilityStateChanged(bool is_visible) override;
 
   // ShellObserver:
   void OnKeyboardControllerCreated() override;
+
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
  private:
   void ObserveKeyboardController();
   void UnobserveKeyboardController();
 
+  // Updates the icon UI.
+  void UpdateIcon();
+
   // Weak pointer, will be parented by TrayContainer for its lifetime.
   views::ImageView* icon_;
 
   Shelf* shelf_;
+
+  ScopedSessionObserver session_observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(VirtualKeyboardTray);
 };

@@ -59,13 +59,15 @@ class GPU_EXPORT CommandBufferDirect : public CommandBuffer,
   bool OnWaitSyncToken(const gpu::SyncToken&) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;
+  void OnSwapBuffers(uint64_t swap_id, uint32_t flags) override;
+  void ScheduleGrContextCleanup() override {}
 
   CommandBufferNamespace GetNamespaceID() const;
   CommandBufferId GetCommandBufferID() const;
 
   void SetCommandsPaused(bool paused);
   void SignalSyncToken(const gpu::SyncToken& sync_token,
-                       const base::Closure& callback);
+                       base::OnceClosure callback);
 
   scoped_refptr<Buffer> CreateTransferBufferWithId(size_t size, int32_t id);
 

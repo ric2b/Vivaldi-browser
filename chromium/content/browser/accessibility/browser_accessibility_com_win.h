@@ -12,8 +12,6 @@
 #include <stdint.h>
 #include <vector>
 
-#include <UIAutomationCore.h>
-
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -26,6 +24,19 @@
 #include "third_party/isimpledom/ISimpleDOMText.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
+
+// These nonstandard GUIDs are taken directly from the Mozilla sources
+// (accessible/src/msaa/nsAccessNodeWrap.cpp); some documentation is here:
+// http://developer.mozilla.org/en/Accessibility/AT-APIs/ImplementationFeatures/MSAA
+const GUID GUID_ISimpleDOM = {0x0c539790,
+                              0x12e4,
+                              0x11cf,
+                              {0xb6, 0x61, 0x00, 0xaa, 0x00, 0x4c, 0xd6, 0xd8}};
+const GUID GUID_IAccessibleContentDocument = {
+    0xa5d8e1f3,
+    0x3571,
+    0x4d8f,
+    {0x95, 0x21, 0x07, 0xed, 0x28, 0xfb, 0x07, 0x2e}};
 
 namespace ui {
 enum TextBoundaryDirection;
@@ -56,19 +67,15 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
                                  public IAccessibleValue,
                                  public ISimpleDOMDocument,
                                  public ISimpleDOMNode,
-                                 public ISimpleDOMText,
-                                 public IAccessibleEx,
-                                 public IRawElementProviderSimple {
+                                 public ISimpleDOMText {
  public:
   BEGIN_COM_MAP(BrowserAccessibilityComWin)
   COM_INTERFACE_ENTRY(IAccessibleAction)
   COM_INTERFACE_ENTRY(IAccessibleApplication)
-  COM_INTERFACE_ENTRY(IAccessibleEx)
   COM_INTERFACE_ENTRY(IAccessibleHyperlink)
   COM_INTERFACE_ENTRY(IAccessibleHypertext)
   COM_INTERFACE_ENTRY(IAccessibleImage)
   COM_INTERFACE_ENTRY(IAccessibleValue)
-  COM_INTERFACE_ENTRY(IRawElementProviderSimple)
   COM_INTERFACE_ENTRY(ISimpleDOMDocument)
   COM_INTERFACE_ENTRY(ISimpleDOMNode)
   COM_INTERFACE_ENTRY(ISimpleDOMText)
@@ -365,37 +372,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
                                            REFIID riid,
                                            void** object) override;
 
-  // IAccessibleEx methods not implemented.
-  CONTENT_EXPORT STDMETHODIMP GetObjectForChild(long child_id,
-                                                IAccessibleEx** ret) override;
-
-  CONTENT_EXPORT STDMETHODIMP GetIAccessiblePair(IAccessible** acc,
-                                                 long* child_id) override;
-
-  CONTENT_EXPORT STDMETHODIMP GetRuntimeId(SAFEARRAY** runtime_id) override;
-
-  CONTENT_EXPORT STDMETHODIMP
-  ConvertReturnedElement(IRawElementProviderSimple* element,
-                         IAccessibleEx** acc) override;
-
-  //
-  // IRawElementProviderSimple methods.
-  //
-  // The GetPatternProvider/GetPropertyValue methods need to be implemented for
-  // the on-screen keyboard to show up in Windows 8 metro.
-  CONTENT_EXPORT STDMETHODIMP GetPatternProvider(PATTERNID id,
-                                                 IUnknown** provider) override;
-  CONTENT_EXPORT STDMETHODIMP GetPropertyValue(PROPERTYID id,
-                                               VARIANT* ret) override;
-
-  //
-  // IRawElementProviderSimple methods not implemented
-  //
-  CONTENT_EXPORT STDMETHODIMP
-  get_ProviderOptions(enum ProviderOptions* ret) override;
-  CONTENT_EXPORT STDMETHODIMP
-  get_HostRawElementProvider(IRawElementProviderSimple** provider) override;
-
   //
   // CComObjectRootEx methods.
   //
@@ -467,8 +443,10 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   // Retrieve the value of an attribute from the string attribute map and
   // if found and nonempty, allocate a new BSTR (with SysAllocString)
   // and return S_OK. If not found or empty, return S_FALSE.
-  HRESULT GetStringAttributeAsBstr(ui::AXStringAttribute attribute,
+  HRESULT GetStringAttributeAsBstr(ax::mojom::StringAttribute attribute,
                                    BSTR* value_bstr);
+
+  base::string16 GetInvalidValue() const;
 
   // Merges the given spelling attributes, i.e. document marker information,
   // into the given text attributes starting at the given character offset. This

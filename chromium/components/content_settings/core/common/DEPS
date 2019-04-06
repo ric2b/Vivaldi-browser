@@ -1,7 +1,8 @@
 include_rules = [
-  "+mojo/common",
+  "+mojo/public/cpp/base",
   "+mojo/public/cpp/bindings",
   "+net/base",
+  "+net/cookies/cookie_util.h",
   "+testing",
   "+url",
 ]

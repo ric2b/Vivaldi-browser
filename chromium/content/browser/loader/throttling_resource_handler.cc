@@ -10,8 +10,6 @@
 #include "net/url_request/url_request.h"
 #include "services/network/public/cpp/resource_response.h"
 
-#include "content/browser/loader/resource_request_info_impl.h"
-
 namespace content {
 
 ThrottlingResourceHandler::ThrottlingResourceHandler(
@@ -94,9 +92,7 @@ void ThrottlingResourceHandler::OnWillStart(
 
 void ThrottlingResourceHandler::OnResponseStarted(
     network::ResourceResponse* response,
-    std::unique_ptr<ResourceController> controller,
-    bool open_when_done,
-    bool ask_for_target) {
+    std::unique_ptr<ResourceController> controller) {
   DCHECK(!cancelled_by_resource_throttle_);
   DCHECK(!has_controller());
 
@@ -118,8 +114,7 @@ void ThrottlingResourceHandler::OnResponseStarted(
 
   next_index_ = 0;  // Reset for next time.
 
-  return next_handler_->OnResponseStarted(response, ReleaseController(),
-                                          open_when_done, ask_for_target);
+  return next_handler_->OnResponseStarted(response, ReleaseController());
 }
 
 void ThrottlingResourceHandler::Cancel() {
@@ -140,7 +135,7 @@ void ThrottlingResourceHandler::CancelWithError(int error_code) {
   ResourceHandler::CancelWithError(error_code);
 }
 
-void ThrottlingResourceHandler::Resume(bool open_when_done, bool ask_for_target) {
+void ThrottlingResourceHandler::Resume() {
   // Throttles expect to be able to cancel requests out-of-band, so just do
   // nothing if one request resumes after another cancels. Can't even recognize
   // out-of-band cancels and for synchronous teardown, since don't know if the
@@ -150,11 +145,6 @@ void ThrottlingResourceHandler::Resume(bool open_when_done, bool ask_for_target)
 
   DCHECK(has_controller());
 
-  ResourceRequestInfoImpl* info = GetRequestInfo();
-  if(info) {
-    info->set_ask_for_save_target(ask_for_target);
-    info->set_open_when_downloaded(open_when_done);
-  }
   DeferredStage last_deferred_stage = deferred_stage_;
   deferred_stage_ = DEFERRED_NONE;
   // Clear information about the throttle that delayed the request.
@@ -170,7 +160,7 @@ void ThrottlingResourceHandler::Resume(bool open_when_done, bool ask_for_target)
       ResumeRedirect();
       break;
     case DEFERRED_RESPONSE:
-      ResumeResponse(open_when_done, ask_for_target);
+      ResumeResponse();
       break;
   }
 }
@@ -197,15 +187,14 @@ void ThrottlingResourceHandler::ResumeRedirect() {
   OnRequestRedirected(redirect_info, response.get(), ReleaseController());
 }
 
-void ThrottlingResourceHandler::ResumeResponse(bool open_when_done, bool ask_for_target) {
+void ThrottlingResourceHandler::ResumeResponse() {
   DCHECK(!cancelled_by_resource_throttle_);
   DCHECK(has_controller());
 
   scoped_refptr<network::ResourceResponse> response;
   deferred_response_.swap(response);
 
-  OnResponseStarted(response.get(), ReleaseController(),
-                    open_when_done, ask_for_target);
+  OnResponseStarted(response.get(), ReleaseController());
 }
 
 void ThrottlingResourceHandler::OnRequestDeferred(int throttle_index) {

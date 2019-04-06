@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,7 +27,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/media_stream_request.h"
 #include "extensions/browser/app_window/app_delegate.h"
 #include "extensions/browser/app_window/app_web_contents_helper.h"
@@ -41,7 +39,6 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/suggest_permission_util.h"
@@ -63,25 +60,22 @@
 #include "extensions/browser/pref_names.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_download_status.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/zoom/zoom_controller.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/browser/guest_view/web_view/web_view_constants.h"
+#include "extensions/helper/vivaldi_app_helper.h"
+#include "ui/vivaldi_ui_utils.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#endif
-
-#include "app/vivaldi_apptools.h"
-#include "extensions/helper/vivaldi_app_helper.h"
-
-#if defined(OS_WIN)
 #include "ui/display/win/screen_win.h"
 #endif
-#include "ui/vivaldi_ui_utils.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 using content::BrowserContext;
 using content::ConsoleMessageLevel;
@@ -264,17 +258,9 @@ AppWindow::AppWindow(BrowserContext* context,
                      const Extension* extension)
     : browser_context_(context),
       extension_id_(extension->id()),
-      window_type_(WINDOW_TYPE_DEFAULT),
+      session_id_(SessionID::NewUnique()),
       app_delegate_(app_delegate),
-      fullscreen_types_(FULLSCREEN_TYPE_NONE),
-      has_been_shown_(false),
-      is_hidden_(false),
       initial_state_(ui::SHOW_STATE_NORMAL),
-      cached_always_on_top_(false),
-      requested_alpha_enabled_(false),
-      is_ime_window_(false),
-      show_on_lock_screen_(false),
-      show_in_shelf_(false),
       image_loader_ptr_factory_(this) {
   ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
   CHECK(!client->IsGuestSession(context) || context->IsOffTheRecord())
@@ -378,9 +364,7 @@ void AppWindow::Init(const GURL& url,
     // notifies observers of the window being hidden.
     Hide();
   } else {
-    // Panels are not activated by default.
-    Show(window_type_is_panel() || !new_params.focused ? SHOW_INACTIVE
-                                                       : SHOW_ACTIVE);
+    Show(SHOW_INACTIVE);
 
     // These states may cause the window to show, so they are ignored if the
     // window is initially hidden.
@@ -390,6 +374,8 @@ void AppWindow::Init(const GURL& url,
       Maximize();
     else if (new_params.state == ui::SHOW_STATE_MINIMIZED)
       Minimize();
+
+    Show(new_params.focused ? SHOW_ACTIVE : SHOW_INACTIVE);
   }
 
   OnNativeWindowChanged();
@@ -411,16 +397,19 @@ AppWindow::~AppWindow() {
 void AppWindow::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback) {
+    content::MediaResponseCallback callback) {
   DCHECK_EQ(AppWindow::web_contents(), web_contents);
-  helper_->RequestMediaAccessPermission(request, callback);
+  helper_->RequestMediaAccessPermission(request, std::move(callback));
 }
 
-bool AppWindow::CheckMediaAccessPermission(content::WebContents* web_contents,
-                                           const GURL& security_origin,
-                                           content::MediaStreamType type) {
-  DCHECK_EQ(AppWindow::web_contents(), web_contents);
-  return helper_->CheckMediaAccessPermission(security_origin, type);
+bool AppWindow::CheckMediaAccessPermission(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& security_origin,
+    content::MediaStreamType type) {
+  DCHECK_EQ(AppWindow::web_contents(),
+            content::WebContents::FromRenderFrameHost(render_frame_host));
+  return helper_->CheckMediaAccessPermission(render_frame_host, security_origin,
+                                             type);
 }
 
 WebContents* AppWindow::OpenURLFromTab(WebContents* source,
@@ -430,14 +419,14 @@ WebContents* AppWindow::OpenURLFromTab(WebContents* source,
 }
 
 void AppWindow::AddNewContents(WebContents* source,
-                               WebContents* new_contents,
+                               std::unique_ptr<WebContents> new_contents,
                                WindowOpenDisposition disposition,
                                const gfx::Rect& initial_rect,
                                bool user_gesture,
                                bool* was_blocked) {
   DCHECK(new_contents->GetBrowserContext() == browser_context_);
-  app_delegate_->AddNewContents(browser_context_, new_contents, disposition,
-                                initial_rect, user_gesture);
+  app_delegate_->AddNewContents(browser_context_, std::move(new_contents),
+                                disposition, initial_rect, user_gesture);
 }
 
 content::KeyboardEventProcessingResult AppWindow::PreHandleKeyboardEvent(
@@ -515,22 +504,6 @@ bool AppWindow::OnMessageReceived(const IPC::Message& message,
   return handled;
 }
 
-void AppWindow::ContentsMouseEvent(WebContents* source,
-                                   bool motion,
-                                   bool exited) {
-  extensions::WebViewGuest* guest =
-      vivaldi::ui_tools::GetActiveWebViewGuest(GetBaseWindow());
-  if (guest) {
-    if (exited) {
-      guest->OnMouseLeave();
-      mouse_has_entered_ = false;
-    } else if (!mouse_has_entered_) {
-      guest->OnMouseEnter();
-      mouse_has_entered_ = true;
-    }
-  }
-}
-
 void AppWindow::RenderViewCreated(content::RenderViewHost* render_view_host) {
   app_delegate_->RenderViewCreated(render_view_host);
 }
@@ -542,14 +515,8 @@ void AppWindow::SetOnFirstCommitOrWindowClosedCallback(
 }
 
 void AppWindow::OnReadyToCommitFirstNavigation() {
-  if (!content::IsBrowserSideNavigationEnabled())
-    return;
-
-  // PlzNavigate: execute renderer-side setup now that there is a renderer
-  // process assigned to the navigation. With renderer-side navigation, this
-  // would happen before the navigation starts, but PlzNavigate must wait until
-  // this point in time in the navigation.
-
+  // Execute renderer-side setup now that there is a renderer process assigned
+  // to the navigation. We must wait until this point in time in the navigation.
   if (on_first_commit_or_window_closed_callback_.is_null())
     return;
   // It is important that the callback executes after the calls to
@@ -617,10 +584,6 @@ void AppWindow::OnNativeWindowChanged() {
   }
 #endif
 
-  if (native_app_window_) {
-    native_app_window_->UpdateEventTargeterWithInset();
-  }
-
   if (app_window_contents_)
     app_window_contents_->NativeWindowChanged(native_app_window_.get());
 }
@@ -674,16 +637,14 @@ base::string16 AppWindow::GetTitle() const {
 }
 
 void AppWindow::SetAppIconUrl(const GURL& url) {
-  // Avoid using any previous icons that were being downloaded.
-  image_loader_ptr_factory_.InvalidateWeakPtrs();
   app_icon_url_ = url;
-  web_contents()->DownloadImage(
-      url,
-      true,   // is a favicon
-      0,      // no maximum size
-      false,  // normal cache policy
-      base::Bind(&AppWindow::DidDownloadFavicon,
-                 image_loader_ptr_factory_.GetWeakPtr()));
+
+  // Don't start custom app icon loading in the case window is not ready yet.
+  // see crbug.com/788531.
+  if (!window_ready_)
+    return;
+
+  StartAppIconDownload();
 }
 
 void AppWindow::UpdateShape(std::unique_ptr<ShapeRects> rects) {
@@ -735,6 +696,10 @@ bool AppWindow::IsForcedFullscreen() const {
 
 bool AppWindow::IsHtmlApiFullscreen() const {
   return (fullscreen_types_ & FULLSCREEN_TYPE_HTML_API) != 0;
+}
+
+bool AppWindow::IsOsFullscreen() const {
+  return (fullscreen_types_ & FULLSCREEN_TYPE_OS) != 0;
 }
 
 void AppWindow::Fullscreen() {
@@ -881,6 +846,19 @@ void AppWindow::GetSerializedState(base::DictionaryValue* properties) const {
 
 //------------------------------------------------------------------------------
 // Private methods
+void AppWindow::StartAppIconDownload() {
+  DCHECK(app_icon_url_.is_valid());
+
+  // Avoid using any previous icons that were being downloaded.
+  image_loader_ptr_factory_.InvalidateWeakPtrs();
+  web_contents()->DownloadImage(
+      app_icon_url_,
+      true,   // is a favicon
+      0,      // no maximum size
+      false,  // normal cache policy
+      base::BindOnce(&AppWindow::DidDownloadFavicon,
+                     image_loader_ptr_factory_.GetWeakPtr()));
+}
 
 void AppWindow::DidDownloadFavicon(
     int id,
@@ -964,21 +942,12 @@ content::ColorChooser* AppWindow::OpenColorChooser(
 
 void AppWindow::RunFileChooser(content::RenderFrameHost* render_frame_host,
                                const content::FileChooserParams& params) {
-  if (window_type_is_panel()) {
-    // Panels can't host a file dialog, abort. TODO(stevenjb): allow file
-    // dialogs to be unhosted but still close with the owning web contents.
-    // crbug.com/172502.
-    LOG(WARNING) << "File dialog opened by panel.";
-    return;
-  }
-
   app_delegate_->RunFileChooser(render_frame_host, params);
 }
 
-bool AppWindow::IsPopupOrPanel(const WebContents* source) const { return true; }
-
-void AppWindow::MoveContents(WebContents* source, const gfx::Rect& pos) {
-  native_app_window_->SetBounds(pos);
+void AppWindow::SetContentsBounds(WebContents* source,
+                                  const gfx::Rect& bounds) {
+  native_app_window_->SetBounds(bounds);
 }
 
 void AppWindow::NavigationStateChanged(content::WebContents* source,
@@ -989,8 +958,10 @@ void AppWindow::NavigationStateChanged(content::WebContents* source,
     native_app_window_->UpdateWindowIcon();
 }
 
-void AppWindow::EnterFullscreenModeForTab(content::WebContents* source,
-                                          const GURL& origin) {
+void AppWindow::EnterFullscreenModeForTab(
+    content::WebContents* source,
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
   ToggleFullscreenModeForTab(source, true);
 }
 
@@ -999,8 +970,10 @@ void AppWindow::ExitFullscreenModeForTab(content::WebContents* source) {
 }
 
 void AppWindow::OnAppWindowReady() {
-  if (app_window_contents_)
-    app_window_contents_->OnWindowReady();
+  window_ready_ = true;
+
+  if (app_icon_url_.is_valid())
+    StartAppIconDownload();
 }
 
 void AppWindow::ToggleFullscreenModeForTab(content::WebContents* source,

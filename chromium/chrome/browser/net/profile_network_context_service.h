@@ -7,9 +7,10 @@
 
 #include "base/macros.h"
 #include "chrome/browser/net/proxy_config_monitor.h"
+#include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_member.h"
-#include "services/network/public/interfaces/network_service.mojom.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 
 class Profile;
 
@@ -19,7 +20,8 @@ class PrefRegistrySyncable;
 
 // KeyedService that initializes and provides access to the NetworkContexts for
 // a Profile. This will eventually replace ProfileIOData.
-class ProfileNetworkContextService : public KeyedService {
+class ProfileNetworkContextService : public KeyedService,
+                                     public content_settings::Observer {
  public:
   explicit ProfileNetworkContextService(Profile* profile);
   ~ProfileNetworkContextService() override;
@@ -29,6 +31,12 @@ class ProfileNetworkContextService : public KeyedService {
   // NetworkService. This may be called either before or after
   // SetUpProfileIODataMainContext.
   network::mojom::NetworkContextPtr CreateMainNetworkContext();
+
+  // Create a network context for the given |relative_parition_path|. This is
+  // only used when the network service is enabled for now.
+  network::mojom::NetworkContextPtr CreateNetworkContextForPartition(
+      bool in_memory,
+      const base::FilePath& relative_partition_path);
 
   // Initializes |*network_context_params| to set up the ProfileIOData's
   // main URLRequestContext and |*network_context_request| to be one end of a
@@ -61,9 +69,35 @@ class ProfileNetworkContextService : public KeyedService {
   // Checks |quic_allowed_|, and disables QUIC if needed.
   void DisableQuicIfNotAllowed();
 
+  // Forwards changes to |pref_accept_language_| to the NetworkContext, after
+  // formatting them as appropriate.
+  void UpdateAcceptLanguage();
+
+  // Forwards changes to |block_third_party_cookies_| to the NetworkContext.
+  void UpdateBlockThirdPartyCookies();
+
+  // Computes appropriate value of Accept-Language header based on
+  // |pref_accept_language_|
+  std::string ComputeAcceptLanguage() const;
+
+  void UpdateReferrersEnabled();
+
   // Creates parameters for the NetworkContext. May only be called once, since
   // it initializes some class members.
   network::mojom::NetworkContextParamsPtr CreateMainNetworkContextParams();
+
+  // Creates parameters for the NetworkContext. Use |in_memory| instead of
+  // |profile_->IsOffTheRecord()| because sometimes normal profiles want off the
+  // record partitions (e.g. for webview tag).
+  network::mojom::NetworkContextParamsPtr CreateNetworkContextParams(
+      bool in_memory,
+      const base::FilePath& relative_partition_path);
+
+  // content_settings::Observer:
+  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
+                               const ContentSettingsPattern& secondary_pattern,
+                               ContentSettingsType content_type,
+                               const std::string& resource_identifier) override;
 
   Profile* const profile_;
 
@@ -80,6 +114,10 @@ class ProfileNetworkContextService : public KeyedService {
   network::mojom::NetworkContextRequest profile_io_data_context_request_;
 
   BooleanPrefMember quic_allowed_;
+  StringPrefMember pref_accept_language_;
+  BooleanPrefMember block_third_party_cookies_;
+
+  BooleanPrefMember enable_referrers_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileNetworkContextService);
 };

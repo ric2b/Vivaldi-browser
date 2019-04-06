@@ -10,3 +10,18 @@ if(!is_android) {
     ]
   }
 }
+
+update_template_instance("//components/sync:sync") {
+  sources += [
+    "//vivaldi/sync/vivaldi_hash_util.h",
+    "//vivaldi/sync/vivaldi_prefs_names.cc",
+    "//vivaldi/sync/vivaldi_prefs_names.h",
+    "//vivaldi/sync/vivaldi_sync_utils.cc",
+  ]
+}
+
+update_target("//components/sync_sessions:sync_sessions") {
+  sources += [
+    "//vivaldi/sync/glue/vivaldi_synced_tab_delegate.cc",
+  ]
+}

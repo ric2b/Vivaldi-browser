@@ -9,12 +9,21 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "chromeos/components/tether/active_host.h"
 #include "chromeos/components/tether/device_status_util.h"
 #include "chromeos/components/tether/keep_alive_operation.h"
 
 namespace chromeos {
+
+namespace device_sync {
+class DeviceSyncClient;
+}  // namespace device_sync
+
+namespace secure_channel {
+class SecureChannelClient;
+}  // namespace secure_channel
 
 namespace tether {
 
@@ -29,6 +38,8 @@ class KeepAliveScheduler : public ActiveHost::Observer,
                            public KeepAliveOperation::Observer {
  public:
   KeepAliveScheduler(
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
       ActiveHost* active_host,
       BleConnectionManager* connection_manager,
       HostScanCache* host_scan_cache,
@@ -41,30 +52,34 @@ class KeepAliveScheduler : public ActiveHost::Observer,
 
   // KeepAliveOperation::Observer:
   void OnOperationFinished(
-      const cryptauth::RemoteDevice& remote_device,
+      cryptauth::RemoteDeviceRef remote_device,
       std::unique_ptr<DeviceStatus> device_status) override;
 
  private:
   friend class KeepAliveSchedulerTest;
 
   KeepAliveScheduler(
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
       ActiveHost* active_host,
       BleConnectionManager* connection_manager,
       HostScanCache* host_scan_cache,
       DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map,
-      std::unique_ptr<base::Timer> timer);
+      std::unique_ptr<base::RepeatingTimer> timer);
 
   void SendKeepAliveTickle();
 
   static const uint32_t kKeepAliveIntervalMinutes;
 
+  device_sync::DeviceSyncClient* device_sync_client_;
+  secure_channel::SecureChannelClient* secure_channel_client_;
   ActiveHost* active_host_;
   BleConnectionManager* connection_manager_;
   HostScanCache* host_scan_cache_;
   DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map_;
 
-  std::unique_ptr<base::Timer> timer_;
-  std::shared_ptr<cryptauth::RemoteDevice> active_host_device_;
+  std::unique_ptr<base::RepeatingTimer> timer_;
+  base::Optional<cryptauth::RemoteDeviceRef> active_host_device_;
   std::unique_ptr<KeepAliveOperation> keep_alive_operation_;
 
   base::WeakPtrFactory<KeepAliveScheduler> weak_ptr_factory_;

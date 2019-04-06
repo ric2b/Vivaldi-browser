@@ -12,20 +12,21 @@
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/android/android_theme_resources.h"
-#include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/infobars/mock_infobar_service.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
@@ -34,6 +35,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/blacklist/opt_out_blacklist/opt_out_blacklist_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
@@ -42,7 +44,7 @@
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/network_time/network_time_test_utils.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "components/previews/content/previews_io_data.h"
+#include "components/previews/content/previews_decider_impl.h"
 #include "components/previews/content/previews_ui_service.h"
 #include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_features.h"
@@ -56,8 +58,10 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/referrer.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -160,7 +164,7 @@ class PreviewsInfoBarDelegateUnitTest
 
   void SetUp() override {
     PageLoadMetricsObserverTestHarness::SetUp();
-    InfoBarService::CreateForWebContents(web_contents());
+    MockInfoBarService::CreateForWebContents(web_contents());
     PreviewsInfoBarTabHelper::CreateForWebContents(web_contents());
     TestPreviewsWebContentsObserver::CreateForWebContents(web_contents());
 
@@ -183,6 +187,7 @@ class PreviewsInfoBarDelegateUnitTest
     data_reduction_proxy_settings->InitDataReductionProxySettings(
         drp_test_context_->io_data(), drp_test_context_->pref_service(),
         drp_test_context_->request_context_getter(),
+        nullptr /* url_loader_factory */,
         base::WrapUnique(new data_reduction_proxy::DataStore()),
         base::ThreadTaskRunnerHandle::Get(),
         base::ThreadTaskRunnerHandle::Get());
@@ -192,15 +197,18 @@ class PreviewsInfoBarDelegateUnitTest
     network_time::NetworkTimeTracker::RegisterPrefs(registry);
 
     std::unique_ptr<TestPreviewsLogger> previews_logger =
-        base::MakeUnique<TestPreviewsLogger>();
+        std::make_unique<TestPreviewsLogger>();
     previews_logger_ = previews_logger.get();
-    previews_io_data_ = base::MakeUnique<previews::PreviewsIOData>(
-        base::MessageLoop::current()->task_runner(),
-        base::MessageLoop::current()->task_runner());
-    previews_ui_service_ = base::MakeUnique<previews::PreviewsUIService>(
-        previews_io_data_.get(), base::MessageLoop::current()->task_runner(),
+    previews_decider_impl_ = std::make_unique<previews::PreviewsDeciderImpl>(
+        base::MessageLoopCurrent::Get()->task_runner(),
+        base::MessageLoopCurrent::Get()->task_runner(),
+        base::DefaultClock::GetInstance());
+    previews_ui_service_ = std::make_unique<previews::PreviewsUIService>(
+        previews_decider_impl_.get(),
+        base::MessageLoopCurrent::Get()->task_runner(),
         nullptr /* previews_opt_out_store */, nullptr /* previews_opt_guide */,
-        base::Bind(&IsPreviewsEnabled), std::move(previews_logger));
+        base::BindRepeating(&IsPreviewsEnabled), std::move(previews_logger),
+        blacklist::BlacklistData::AllowedTypesAndVersions());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -220,12 +228,10 @@ class PreviewsInfoBarDelegateUnitTest
                    base::Unretained(this)),
         previews_ui_service_.get());
 
-    InfoBarService* infobar_service =
-        InfoBarService::FromWebContents(web_contents());
-    EXPECT_EQ(1U, infobar_service->infobar_count());
+    EXPECT_EQ(1U, infobar_service()->infobar_count());
 
     return static_cast<PreviewsInfoBarDelegate*>(
-        infobar_service->infobar_at(0)->delegate());
+        infobar_service()->infobar_at(0)->delegate());
   }
 
   void EnableStalePreviewsTimestamp(
@@ -261,7 +267,7 @@ class PreviewsInfoBarDelegateUnitTest
     tester_->ExpectBucketCount(kUMAPreviewsInfoBarTimestamp, expected_bucket,
                                1);
     // Dismiss the infobar.
-    InfoBarService::FromWebContents(web_contents())->RemoveAllInfoBars(false);
+    infobar_service()->RemoveAllInfoBars(false);
     PreviewsInfoBarTabHelper::FromWebContents(web_contents())
         ->set_displayed_preview_infobar(false);
   }
@@ -278,7 +284,7 @@ class PreviewsInfoBarDelegateUnitTest
   TestPreviewsLogger* previews_logger() const { return previews_logger_; }
 
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
-    tracker->AddObserver(base::MakeUnique<TestOptOutObserver>(base::Bind(
+    tracker->AddObserver(std::make_unique<TestOptOutObserver>(base::Bind(
         &PreviewsInfoBarDelegateUnitTest::OptOut, base::Unretained(this))));
   }
 
@@ -295,7 +301,7 @@ class PreviewsInfoBarDelegateUnitTest
   std::unique_ptr<base::HistogramTester> tester_;
 
   TestPreviewsLogger* previews_logger_;
-  std::unique_ptr<previews::PreviewsIOData> previews_io_data_;
+  std::unique_ptr<previews::PreviewsDeciderImpl> previews_decider_impl_;
   std::unique_ptr<previews::PreviewsUIService> previews_ui_service_;
 };
 
@@ -350,9 +356,7 @@ TEST_F(PreviewsInfoBarDelegateUnitTest,
   EXPECT_EQ(1U, infobar_service()->infobar_count());
 
   // Navigate to test URL as a reload to dismiss the infobar.
-  controller().LoadURL(GURL(kTestUrl), content::Referrer(),
-                       ui::PAGE_TRANSITION_RELOAD, std::string());
-  content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
+  content::NavigationSimulator::Reload(web_contents());
 
   EXPECT_EQ(0U, infobar_service()->infobar_count());
   EXPECT_FALSE(user_opt_out_.value());
@@ -414,10 +418,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest,
           "DataReductionProxyPreviewsBlackListTransition", "Enabled_");
     }
 
-    // Call Reload and CommitPendingNavigation to force DidFinishNavigation.
-    web_contents()->GetController().Reload(content::ReloadType::NORMAL, true);
-    content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
-
+    // Call Reload to force DidFinishNavigation.
+    content::NavigationSimulator::Reload(web_contents());
     ConfirmInfoBarDelegate* infobar =
         CreateInfoBar(previews::PreviewsType::LOFI, base::Time(),
                       true /* is_data_saver_user */, false /* is_reload */);
@@ -452,9 +454,12 @@ TEST_F(PreviewsInfoBarDelegateUnitTest,
       kUMAPreviewsInfoBarActionLitePage,
       PreviewsInfoBarDelegate::INFOBAR_LOAD_ORIGINAL_CLICKED, 1);
 
-  content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
+  std::unique_ptr<content::NavigationSimulator> simulator =
+      content::NavigationSimulator::CreateFromPendingBrowserInitiated(
+          web_contents());
+  simulator->Commit();
 
-  EXPECT_EQ(content::ReloadType::DISABLE_PREVIEWS,
+  EXPECT_EQ(content::ReloadType::ORIGINAL_REQUEST_URL,
             TestPreviewsWebContentsObserver::FromWebContents(web_contents())
                 ->last_navigation_reload_type());
 
@@ -593,9 +598,12 @@ TEST_F(PreviewsInfoBarDelegateUnitTest,
     infobar_service()->infobar_at(0)->RemoveSelf();
   EXPECT_EQ(0U, infobar_service()->infobar_count());
 
-  content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
+  std::unique_ptr<content::NavigationSimulator> simulator =
+      content::NavigationSimulator::CreateFromPendingBrowserInitiated(
+          web_contents());
+  simulator->Commit();
 
-  EXPECT_EQ(content::ReloadType::DISABLE_PREVIEWS,
+  EXPECT_EQ(content::ReloadType::ORIGINAL_REQUEST_URL,
             TestPreviewsWebContentsObserver::FromWebContents(web_contents())
                 ->last_navigation_reload_type());
 

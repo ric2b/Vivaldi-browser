@@ -19,8 +19,6 @@ class TickClock;
 
 namespace ash {
 
-class ConvertiblePowerButtonController;
-
 // Handles power button screenshot accelerator. The screenshot condition is
 // pressing power button and volume down key simultaneously, similar to Android
 // phones.
@@ -31,10 +29,7 @@ class ASH_EXPORT PowerButtonScreenshotController : public ui::EventHandler {
   static constexpr base::TimeDelta kScreenshotChordDelay =
       base::TimeDelta::FromMilliseconds(150);
 
-  PowerButtonScreenshotController(
-      ConvertiblePowerButtonController* tablet_controller,
-      base::TickClock* tick_clock,
-      bool force_clamshell_power_button);
+  explicit PowerButtonScreenshotController(const base::TickClock* tick_clock);
   ~PowerButtonScreenshotController() override;
 
   // Returns true if power button event is consumed by |this|, otherwise false.
@@ -53,10 +48,6 @@ class ASH_EXPORT PowerButtonScreenshotController : public ui::EventHandler {
 
   // Called by |volume_down_timer_| to perform volume down accelerator.
   void OnVolumeDownTimeout();
-
-  // Called by |clamshell_power_button_timer_| to start clamshell power button
-  // behavior.
-  void OnClamshellPowerButtonTimeout();
 
   // True if volume down key is pressed.
   bool volume_down_key_pressed_ = false;
@@ -81,19 +72,8 @@ class ASH_EXPORT PowerButtonScreenshotController : public ui::EventHandler {
   // volume down accelerator.
   base::OneShotTimer volume_down_timer_;
 
-  // Started when clamshell power button is pressed and volume key is not
-  // pressed. Stopped when volume key is pressed or power button is released.
-  // Runs OnClamshellTimeout to start clamshell power button behavior.
-  base::OneShotTimer clamshell_power_button_timer_;
-
-  ConvertiblePowerButtonController* convertible_controller_;  // Not owned.
-
   // Time source for performed action times.
-  base::TickClock* tick_clock_;  // Not owned.
-
-  // Initialized by PowerButtonController to indicate using non-tablet-style
-  // power button behavior even if we're running on a convertible device.
-  const bool force_clamshell_power_button_;
+  const base::TickClock* tick_clock_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(PowerButtonScreenshotController);
 };

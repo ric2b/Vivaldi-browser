@@ -7,57 +7,54 @@
 
 #include <memory>
 
+#include "ash/session/session_observer.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/tray/system_tray_item.h"
+#include "ash/system/tray/tray_item_view.h"
 #include "base/macros.h"
-
-namespace message_center {
-class MessageCenter;
-}
 
 namespace ash {
 
-class BatteryNotification;
-class DualRoleNotification;
-
 namespace tray {
-class PowerTrayView;
-}
 
-class ASH_EXPORT TrayPower : public SystemTrayItem,
-                             public PowerStatus::Observer {
+class PowerTrayView : public TrayItemView,
+                      public PowerStatus::Observer,
+                      public SessionObserver {
  public:
-  enum NotificationState {
-    NOTIFICATION_NONE,
+  explicit PowerTrayView(SystemTrayItem* owner);
 
-    // Low battery charge.
-    NOTIFICATION_LOW_POWER,
+  ~PowerTrayView() override;
 
-    // Critically low battery charge.
-    NOTIFICATION_CRITICAL,
-  };
+  // views::View:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
-  // Time-based notification thresholds when on battery power.
-  static const int kCriticalMinutes;
-  static const int kLowPowerMinutes;
-  static const int kNoWarningMinutes;
+  // PowerStatus::Observer:
+  void OnPowerStatusChanged() override;
 
-  // Percentage-based notification thresholds when using a low-power charger.
-  static const int kCriticalPercentage;
-  static const int kLowPowerPercentage;
-  static const int kNoWarningPercentage;
-
-  static const char kUsbNotificationId[];
-
-  TrayPower(SystemTray* system_tray,
-            message_center::MessageCenter* message_center);
-  ~TrayPower() override;
-
-  void NotifyUsbNotificationClosedByUser();
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
  private:
-  friend class TrayPowerTest;
+  void UpdateStatus();
+  void UpdateImage();
 
+  base::string16 accessible_name_;
+  base::Optional<PowerStatus::BatteryImageInfo> info_;
+  session_manager::SessionState icon_session_state_color_ =
+      session_manager::SessionState::UNKNOWN;
+  ScopedSessionObserver session_observer_{this};
+
+  DISALLOW_COPY_AND_ASSIGN(PowerTrayView);
+};
+
+}  // namespace tray
+
+class ASH_EXPORT TrayPower : public SystemTrayItem {
+ public:
+  explicit TrayPower(SystemTray* system_tray);
+  ~TrayPower() override;
+
+ private:
   // This enum is used for histogram. The existing values should not be removed,
   // and the new values should be added just before CHARGER_TYPE_COUNT.
   enum ChargerType {
@@ -74,37 +71,7 @@ class ASH_EXPORT TrayPower : public SystemTrayItem,
   views::View* CreateDefaultView(LoginStatus status) override;
   void OnTrayViewDestroyed() override;
 
-  // Overridden from PowerStatus::Observer.
-  void OnPowerStatusChanged() override;
-
-  // Shows a notification that a low-power USB charger has been connected.
-  // Returns true if a notification was shown or explicitly hidden.
-  bool MaybeShowUsbChargerNotification();
-
-  // Shows a notification when dual-role devices are connected.
-  void MaybeShowDualRoleNotification();
-
-  // Sets |notification_state_|. Returns true if a notification should be shown.
-  bool UpdateNotificationState();
-  bool UpdateNotificationStateForRemainingTime();
-  bool UpdateNotificationStateForRemainingPercentage();
-
-  message_center::MessageCenter* message_center_;  // Not owned.
-  tray::PowerTrayView* power_tray_;
-  std::unique_ptr<BatteryNotification> battery_notification_;
-  std::unique_ptr<DualRoleNotification> dual_role_notification_;
-  NotificationState notification_state_;
-
-  // Was a USB charger connected the last time OnPowerStatusChanged() was
-  // called?
-  bool usb_charger_was_connected_;
-
-  // Was line power connected the last time onPowerStatusChanged() was called?
-  bool line_power_was_connected_;
-
-  // Has the user already dismissed a low-power notification? Should be set
-  // back to false when all power sources are disconnected.
-  bool usb_notification_dismissed_;
+  tray::PowerTrayView* power_tray_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TrayPower);
 };

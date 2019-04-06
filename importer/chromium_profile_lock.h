@@ -35,13 +35,6 @@ class ChromiumProfileLock {
 // The handle of the lock file.
 #if defined(OS_WIN)
   HANDLE lock_handle_;
-#elif defined(OS_POSIX)
-  int lock_fd_;
-
-  // Method that tries to put a fcntl lock on file specified by |lock_file_|.
-  // Returns false if lock is already held by another process. true in all
-  // other cases.
-  bool LockWithFcntl();
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ChromiumProfileLock);

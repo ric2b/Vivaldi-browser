@@ -5,8 +5,10 @@
 #include "chrome/browser/media/media_engagement_session.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/media/media_engagement_preloaded_list.h"
 #include "chrome/browser/media/media_engagement_score.h"
 #include "chrome/browser/media/media_engagement_service.h"
+#include "media/base/media_switches.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_entry_builder.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -127,6 +129,13 @@ void MediaEngagementSession::RecordUkmMetrics() {
   if (!ukm_recorder)
     return;
 
+  bool is_preloaded = false;
+  if (base::FeatureList::IsEnabled(media::kPreloadMediaEngagementData)) {
+    is_preloaded =
+        MediaEngagementPreloadedList::GetInstance()->CheckOriginIsPresent(
+            origin_);
+  }
+
   MediaEngagementScore score =
       service_->CreateEngagementScore(origin_.GetURL());
   ukm::builders::Media_Engagement_SessionFinished(ukm_source_id_)
@@ -135,6 +144,9 @@ void MediaEngagementSession::RecordUkmMetrics() {
       .SetEngagement_Score(round(score.actual_score() * 100))
       .SetPlaybacks_Delta(significant_playback_recorded_)
       .SetEngagement_IsHigh(score.high_score())
+      .SetEngagement_IsHigh_Changed(high_score_changed_)
+      .SetEngagement_IsHigh_Changes(score.high_score_changes())
+      .SetEngagement_IsPreloaded(is_preloaded)
       .SetPlayer_Audible_Delta(audible_players_total_)
       .SetPlayer_Audible_Total(score.audible_playbacks())
       .SetPlayer_Significant_Delta(significant_players_total_)
@@ -170,6 +182,7 @@ void MediaEngagementSession::CommitPendingData() {
 
   MediaEngagementScore score =
       service_->CreateEngagementScore(origin_.GetURL());
+  bool previous_high_value = score.high_score();
 
   if (pending_data_to_commit_.visit)
     score.IncrementVisits();
@@ -204,6 +217,9 @@ void MediaEngagementSession::CommitPendingData() {
   }
 
   score.Commit();
+
+  // If the high state has changed store that in a bool.
+  high_score_changed_ = previous_high_value != score.high_score();
 
   pending_data_to_commit_.visit = pending_data_to_commit_.playback =
       pending_data_to_commit_.players = false;

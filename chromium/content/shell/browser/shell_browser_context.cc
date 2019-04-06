@@ -30,6 +30,8 @@
 #include "base/nix/xdg_util.h"
 #elif defined(OS_MACOSX)
 #include "base/base_paths_mac.h"
+#elif defined(OS_FUCHSIA)
+#include "base/base_paths_fuchsia.h"
 #endif
 
 namespace content {
@@ -40,12 +42,6 @@ ShellBrowserContext::ShellResourceContext::ShellResourceContext()
 ShellBrowserContext::ShellResourceContext::~ShellResourceContext() {
 }
 
-net::HostResolver*
-ShellBrowserContext::ShellResourceContext::GetHostResolver() {
-  CHECK(getter_);
-  return getter_->host_resolver();
-}
-
 net::URLRequestContext*
 ShellBrowserContext::ShellResourceContext::GetRequestContext() {
   CHECK(getter_);
@@ -53,18 +49,23 @@ ShellBrowserContext::ShellResourceContext::GetRequestContext() {
 }
 
 ShellBrowserContext::ShellBrowserContext(bool off_the_record,
-                                         net::NetLog* net_log)
+                                         net::NetLog* net_log,
+                                         bool delay_services_creation)
     : resource_context_(new ShellResourceContext),
       ignore_certificate_errors_(false),
       off_the_record_(off_the_record),
       net_log_(net_log),
       guest_manager_(nullptr) {
   InitWhileIOAllowed();
-  BrowserContextDependencyManager::GetInstance()->
-      CreateBrowserContextServices(this);
+  if (!delay_services_creation) {
+    BrowserContextDependencyManager::GetInstance()
+        ->CreateBrowserContextServices(this);
+  }
 }
 
 ShellBrowserContext::~ShellBrowserContext() {
+  NotifyWillBeDestroyed(this);
+
   BrowserContextDependencyManager::GetInstance()->
       DestroyBrowserContextServices(this);
   // Need to destruct the ResourceContext before posting tasks which may delete
@@ -105,7 +106,7 @@ void ShellBrowserContext::InitWhileIOAllowed() {
   }
 
 #if defined(OS_WIN)
-  CHECK(PathService::Get(base::DIR_LOCAL_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_LOCAL_APP_DATA, &path_));
   path_ = path_.Append(std::wstring(L"content_shell"));
 #elif defined(OS_LINUX)
   std::unique_ptr<base::Environment> env(base::Environment::Create());
@@ -115,10 +116,13 @@ void ShellBrowserContext::InitWhileIOAllowed() {
                                  base::nix::kDotConfigDir));
   path_ = config_dir.Append("content_shell");
 #elif defined(OS_MACOSX)
-  CHECK(PathService::Get(base::DIR_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_APP_DATA, &path_));
   path_ = path_.Append("Chromium Content Shell");
 #elif defined(OS_ANDROID)
-  CHECK(PathService::Get(base::DIR_ANDROID_APP_DATA, &path_));
+  CHECK(base::PathService::Get(base::DIR_ANDROID_APP_DATA, &path_));
+  path_ = path_.Append(FILE_PATH_LITERAL("content_shell"));
+#elif defined(OS_FUCHSIA)
+  CHECK(base::PathService::Get(base::DIR_APP_DATA, &path_));
   path_ = path_.Append(FILE_PATH_LITERAL("content_shell"));
 #else
   NOTIMPLEMENTED();
@@ -180,7 +184,13 @@ ShellBrowserContext::CreateRequestContextForStoragePartition(
     bool in_memory,
     ProtocolHandlerMap* protocol_handlers,
     URLRequestInterceptorScopedVector request_interceptors) {
-  return nullptr;
+  scoped_refptr<ShellURLRequestContextGetter>& context_getter =
+      isolated_url_request_getters_[partition_path];
+  if (!context_getter) {
+    context_getter = CreateURLRequestContextGetter(
+        protocol_handlers, std::move(request_interceptors));
+  }
+  return context_getter.get();
 }
 
 net::URLRequestContextGetter*
@@ -216,7 +226,8 @@ SSLHostStateDelegate* ShellBrowserContext::GetSSLHostStateDelegate() {
   return nullptr;
 }
 
-PermissionManager* ShellBrowserContext::GetPermissionManager() {
+PermissionControllerDelegate*
+ShellBrowserContext::GetPermissionControllerDelegate() {
   if (!permission_manager_.get())
     permission_manager_.reset(new ShellPermissionManager());
   return permission_manager_.get();

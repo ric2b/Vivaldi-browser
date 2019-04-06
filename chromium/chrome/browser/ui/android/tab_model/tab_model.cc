@@ -9,8 +9,8 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/glue/synced_window_delegate_android.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "components/browser_sync/profile_sync_service.h"
+#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router.h"
+#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
 #include "components/toolbar/toolbar_model_impl.h"
 #include "content/public/browser/notification_service.h"
 
@@ -25,7 +25,8 @@ TabModel::TabModel(Profile* profile, bool is_tabbed_activity)
       live_tab_context_(new AndroidLiveTabContext(this)),
       synced_window_delegate_(
           new browser_sync::SyncedWindowDelegateAndroid(this,
-                                                        is_tabbed_activity)) {
+                                                        is_tabbed_activity)),
+      session_id_(SessionID::NewUnique()) {
   if (profile) {
     // A normal Profile creates an OTR profile if it does not exist when
     // GetOffTheRecordProfile() is called, so we guard it with
@@ -61,11 +62,7 @@ sync_sessions::SyncedWindowDelegate* TabModel::GetSyncedWindowDelegate() const {
   return synced_window_delegate_.get();
 }
 
-SessionID::id_type TabModel::GetSessionId() const {
-  return session_id_.id();
-}
-
-const SessionID& TabModel::SessionId() const {
+SessionID TabModel::GetSessionId() const {
   return session_id_;
 }
 
@@ -82,10 +79,11 @@ content::WebContents* TabModel::GetActiveWebContents() const {
 
 void TabModel::BroadcastSessionRestoreComplete() {
   if (profile_) {
-    browser_sync::ProfileSyncService* sync_service =
-        ProfileSyncServiceFactory::GetForProfile(profile_);
-    if (sync_service)
-      sync_service->OnSessionRestoreComplete();
+    sync_sessions::SyncSessionsWebContentsRouter* router =
+        sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
+            profile_);
+    if (router)
+      router->NotifySessionRestoreComplete();
   } else {
     // TODO(nyquist): Uncomment this once downstream Android uses new
     // constructor that takes a Profile* argument. See crbug.com/159704.

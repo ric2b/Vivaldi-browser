@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -104,7 +103,7 @@ class PhishingTermFeatureExtractorTest : public ::testing::Test {
         shingle_hashes,
         base::Bind(&PhishingTermFeatureExtractorTest::ExtractionDone,
                    base::Unretained(this)));
-    active_run_loop_ = base::MakeUnique<base::RunLoop>();
+    active_run_loop_ = std::make_unique<base::RunLoop>();
     active_run_loop_->Run();
     return success_;
   }
@@ -122,7 +121,7 @@ class PhishingTermFeatureExtractorTest : public ::testing::Test {
         FROM_HERE,
         base::BindOnce(&PhishingTermFeatureExtractorTest::QuitExtraction,
                        base::Unretained(this)));
-    active_run_loop_ = base::MakeUnique<base::RunLoop>();
+    active_run_loop_ = std::make_unique<base::RunLoop>();
     active_run_loop_->RunUntilIdle();
   }
 

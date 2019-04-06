@@ -29,10 +29,7 @@
 #include "components/autofill/core/browser/country_names.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/browser/webdata/autocomplete_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
-#include "components/autofill/core/browser/webdata/autofill_data_type_controller.h"
-#include "components/autofill/core/browser/webdata/autofill_entry.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_data_type_controller.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
@@ -57,13 +54,12 @@
 #include "components/version_info/version_info.h"
 #include "components/webdata/common/web_database.h"
 #include "components/webdata_services/web_data_service_test_util.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using autofill::AutocompleteSyncableService;
 using autofill::AutofillChange;
 using autofill::AutofillChangeList;
-using autofill::AutofillEntry;
 using autofill::AutofillKey;
 using autofill::AutofillProfile;
 using autofill::AutofillProfileChange;
@@ -77,7 +73,6 @@ using base::ASCIIToUTF16;
 using base::Time;
 using base::TimeDelta;
 using base::WaitableEvent;
-using syncer::AUTOFILL;
 using syncer::AUTOFILL_PROFILE;
 using syncer::BaseNode;
 using syncer::syncable::CREATE;
@@ -100,10 +95,9 @@ namespace {
 void RegisterAutofillPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(autofill::prefs::kAutofillCreditCardEnabled,
                                 true);
+  registry->RegisterBooleanPref(autofill::prefs::kAutofillProfileEnabled, true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillEnabled, true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillWalletImportEnabled,
-                                true);
-  registry->RegisterBooleanPref(autofill::prefs::kAutofillProfileUseDatesFixed,
                                 true);
   registry->RegisterIntegerPref(autofill::prefs::kAutofillLastVersionDeduped,
                                 atoi(version_info::GetVersionNumber().c_str()));
@@ -113,31 +107,9 @@ void RegisterAutofillPrefs(user_prefs::PrefRegistrySyncable* registry) {
                                 true);
 }
 
-void RunAndSignal(const base::Closure& cb, WaitableEvent* event) {
-  cb.Run();
+void RunAndSignal(base::OnceClosure cb, WaitableEvent* event) {
+  std::move(cb).Run();
   event->Signal();
-}
-
-AutofillEntry MakeAutofillEntry(const std::string& name,
-                                const std::string& value,
-                                int time_shift0,
-                                int time_shift1) {
-  // Time deep in the past would cause Autocomplete sync to discard the
-  // entries.
-  static Time base_time = Time::Now().LocalMidnight();
-
-  Time date_created = base_time + TimeDelta::FromSeconds(time_shift0);
-  Time date_last_used = date_created;
-  if (time_shift1 >= 0)
-    date_last_used = base_time + TimeDelta::FromSeconds(time_shift1);
-  return AutofillEntry(AutofillKey(ASCIIToUTF16(name), ASCIIToUTF16(value)),
-                       date_created, date_last_used);
-}
-
-AutofillEntry MakeAutofillEntry(const std::string& name,
-                                const std::string& value,
-                                int time_shift) {
-  return MakeAutofillEntry(name, value, time_shift, -1);
 }
 
 }  // namespace
@@ -148,15 +120,11 @@ class AutofillTableMock : public AutofillTable {
   MOCK_METHOD2(RemoveFormElement,
                bool(const base::string16& name,
                     const base::string16& value));  // NOLINT
-  MOCK_METHOD1(GetAllAutofillEntries,
-               bool(std::vector<AutofillEntry>* entries));  // NOLINT
   MOCK_METHOD4(GetAutofillTimestamps,
                bool(const base::string16& name,  // NOLINT
                     const base::string16& value,
                     Time* date_created,
                     Time* date_last_used));
-  MOCK_METHOD1(UpdateAutofillEntries,
-               bool(const std::vector<AutofillEntry>&));  // NOLINT
   MOCK_METHOD1(GetAutofillProfiles,
                bool(std::vector<std::unique_ptr<AutofillProfile>>*));  // NOLINT
   MOCK_METHOD1(UpdateAutofillProfile, bool(const AutofillProfile&));  // NOLINT
@@ -185,8 +153,8 @@ class MockAutofillBackend : public autofill::AutofillWebDataBackend {
  public:
   MockAutofillBackend(
       WebDatabase* web_database,
-      const base::Closure& on_changed,
-      const base::Callback<void(syncer::ModelType)>& on_sync_started,
+      const base::RepeatingClosure& on_changed,
+      const base::RepeatingCallback<void(syncer::ModelType)>& on_sync_started,
       const scoped_refptr<base::SequencedTaskRunner>& ui_task_runner)
       : web_database_(web_database),
         on_changed_(on_changed),
@@ -209,32 +177,17 @@ class MockAutofillBackend : public autofill::AutofillWebDataBackend {
   void NotifyThatSyncHasStarted(syncer::ModelType model_type) override {
     DCHECK(!ui_task_runner_->RunsTasksInCurrentSequence());
     ui_task_runner_->PostTask(FROM_HERE,
-                              base::Bind(on_sync_started_, model_type));
+                              base::BindOnce(on_sync_started_, model_type));
   }
 
  private:
   WebDatabase* web_database_;
-  base::Closure on_changed_;
-  base::Callback<void(syncer::ModelType)> on_sync_started_;
+  base::RepeatingClosure on_changed_;
+  base::RepeatingCallback<void(syncer::ModelType)> on_sync_started_;
   const scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
 };
 
 class ProfileSyncServiceAutofillTest;
-
-template <class AutofillProfile>
-syncer::ModelType GetModelType() {
-  return syncer::UNSPECIFIED;
-}
-
-template <>
-syncer::ModelType GetModelType<AutofillEntry>() {
-  return AUTOFILL;
-}
-
-template <>
-syncer::ModelType GetModelType<AutofillProfile>() {
-  return AUTOFILL_PROFILE;
-}
 
 class TokenWebDataServiceFake : public TokenWebData {
  public:
@@ -270,7 +223,6 @@ class WebDataServiceFake : public AutofillWebDataService {
       const scoped_refptr<base::SingleThreadTaskRunner>& db_task_runner)
       : AutofillWebDataService(ui_task_runner, db_task_runner),
         web_database_(nullptr),
-        autocomplete_syncable_service_(nullptr),
         autofill_profile_syncable_service_(nullptr),
         syncable_service_created_or_destroyed_(
             base::WaitableEvent::ResetPolicy::AUTOMATIC,
@@ -283,17 +235,17 @@ class WebDataServiceFake : public AutofillWebDataService {
   void StartSyncableService() {
     // The |autofill_profile_syncable_service_| must be constructed on the DB
     // sequence.
-    const base::Closure& on_changed_callback = base::Bind(
+    const base::RepeatingClosure& on_changed_callback = base::BindRepeating(
         &WebDataServiceFake::NotifyAutofillMultipleChangedOnUISequence,
         AsWeakPtr());
-    const base::Callback<void(syncer::ModelType)> on_sync_started_callback =
-        base::Bind(&WebDataServiceFake::NotifySyncStartedOnUISequence,
-                   AsWeakPtr());
+    const base::RepeatingCallback<void(syncer::ModelType)>&
+        on_sync_started_callback = base::BindRepeating(
+            &WebDataServiceFake::NotifySyncStartedOnUISequence, AsWeakPtr());
 
     db_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&WebDataServiceFake::CreateSyncableService,
-                              base::Unretained(this), on_changed_callback,
-                              on_sync_started_callback));
+        FROM_HERE, base::BindOnce(&WebDataServiceFake::CreateSyncableService,
+                                  base::Unretained(this), on_changed_callback,
+                                  std::move(on_sync_started_callback)));
     syncable_service_created_or_destroyed_.Wait();
   }
 
@@ -301,8 +253,8 @@ class WebDataServiceFake : public AutofillWebDataService {
     // The |autofill_profile_syncable_service_| must be destructed on the DB
     // sequence.
     db_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&WebDataServiceFake::DestroySyncableService,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&WebDataServiceFake::DestroySyncableService,
+                                  base::Unretained(this)));
     syncable_service_created_or_destroyed_.Wait();
   }
 
@@ -310,27 +262,15 @@ class WebDataServiceFake : public AutofillWebDataService {
 
   WebDatabase* GetDatabase() override { return web_database_; }
 
-  void OnAutofillEntriesChanged(const AutofillChangeList& changes) {
-    WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
-                        base::WaitableEvent::InitialState::NOT_SIGNALED);
-
-    base::Closure notify_cb =
-        base::Bind(&AutocompleteSyncableService::AutofillEntriesChanged,
-                   base::Unretained(autocomplete_syncable_service_), changes);
-    db_task_runner_->PostTask(FROM_HERE,
-                              base::Bind(&RunAndSignal, notify_cb, &event));
-    event.Wait();
-  }
-
   void OnAutofillProfileChanged(const AutofillProfileChange& changes) {
     WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
                         base::WaitableEvent::InitialState::NOT_SIGNALED);
 
-    base::Closure notify_cb = base::Bind(
-        &AutocompleteSyncableService::AutofillProfileChanged,
+    base::OnceClosure notify_cb = base::BindOnce(
+        &AutofillProfileSyncableService::AutofillProfileChanged,
         base::Unretained(autofill_profile_syncable_service_), changes);
-    db_task_runner_->PostTask(FROM_HERE,
-                              base::Bind(&RunAndSignal, notify_cb, &event));
+    db_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&RunAndSignal, std::move(notify_cb), &event));
     event.Wait();
   }
 
@@ -338,20 +278,16 @@ class WebDataServiceFake : public AutofillWebDataService {
   ~WebDataServiceFake() override {}
 
   void CreateSyncableService(
-      const base::Closure& on_changed_callback,
-      const base::Callback<void(syncer::ModelType)>& on_sync_started) {
+      const base::RepeatingClosure& on_changed_callback,
+      const base::RepeatingCallback<void(syncer::ModelType)>& on_sync_started) {
     ASSERT_TRUE(db_task_runner_->RunsTasksInCurrentSequence());
     // These services are deleted in DestroySyncableService().
     backend_ = std::make_unique<MockAutofillBackend>(
         GetDatabase(), on_changed_callback, on_sync_started,
         ui_task_runner_.get());
-    AutocompleteSyncableService::CreateForWebDataServiceAndBackend(
-        this, backend_.get());
     AutofillProfileSyncableService::CreateForWebDataServiceAndBackend(
         this, backend_.get(), "en-US");
 
-    autocomplete_syncable_service_ =
-        AutocompleteSyncableService::FromWebDataService(this);
     autofill_profile_syncable_service_ =
         AutofillProfileSyncableService::FromWebDataService(this);
 
@@ -360,14 +296,12 @@ class WebDataServiceFake : public AutofillWebDataService {
 
   void DestroySyncableService() {
     ASSERT_TRUE(db_task_runner_->RunsTasksInCurrentSequence());
-    autocomplete_syncable_service_ = nullptr;
     autofill_profile_syncable_service_ = nullptr;
     backend_.reset();
     syncable_service_created_or_destroyed_.Signal();
   }
 
   WebDatabase* web_database_;
-  AutocompleteSyncableService* autocomplete_syncable_service_;
   AutofillProfileSyncableService* autofill_profile_syncable_service_;
   std::unique_ptr<autofill::AutofillWebDataBackend> backend_;
 
@@ -382,8 +316,8 @@ class WebDataServiceFake : public AutofillWebDataService {
 ACTION_P2(ReturnNewDataTypeManagerWithDebugListener,
           sync_client,
           debug_listener) {
-  return new syncer::DataTypeManagerImpl(sync_client, arg0, debug_listener,
-                                         arg2, arg3, arg4, arg5);
+  return std::make_unique<syncer::DataTypeManagerImpl>(
+      sync_client, arg0, debug_listener, arg2, arg3, arg4, arg5);
 }
 
 class MockPersonalDataManager : public PersonalDataManager {
@@ -395,8 +329,7 @@ class MockPersonalDataManager : public PersonalDataManager {
   MOCK_METHOD0(Refresh, void());
 };
 
-template <class T>
-class AddAutofillHelper;
+class AddAutofillProfileHelper;
 
 class ProfileSyncServiceAutofillTest
     : public AbstractProfileSyncServiceTest,
@@ -427,7 +360,7 @@ class ProfileSyncServiceAutofillTest
         new TokenWebDataServiceFake(base::ThreadTaskRunnerHandle::Get(),
                                     data_type_thread()->task_runner()));
     web_data_service_ = static_cast<WebDataServiceFake*>(
-        web_data_wrapper_->GetAutofillWebData().get());
+        web_data_wrapper_->GetProfileAutofillWebData().get());
     web_data_service_->SetDatabase(web_database_.get());
 
     personal_data_manager_ = std::make_unique<MockPersonalDataManager>();
@@ -435,10 +368,11 @@ class ProfileSyncServiceAutofillTest
     EXPECT_CALL(personal_data_manager(), LoadProfiles());
     EXPECT_CALL(personal_data_manager(), LoadCreditCards());
 
-    personal_data_manager_->Init(
-        web_data_service_, profile_sync_service_bundle()->pref_service(),
-        profile_sync_service_bundle()->account_tracker(),
-        profile_sync_service_bundle()->signin_manager(), false);
+    personal_data_manager_->Init(web_data_service_,
+                                 /*account_database=*/nullptr,
+                                 profile_sync_service_bundle()->pref_service(),
+                                 /*identity_manager=*/nullptr,
+                                 /*is_off_the_record=*/false);
 
     web_data_service_->StartSyncableService();
 
@@ -446,18 +380,12 @@ class ProfileSyncServiceAutofillTest
         profile_sync_service_bundle());
     builder.SetPersonalDataManager(personal_data_manager_.get());
     builder.SetSyncServiceCallback(GetSyncServiceCallback());
-    builder.SetSyncableServiceCallback(
-        base::Bind(&ProfileSyncServiceAutofillTest::GetSyncableServiceForType,
-                   base::Unretained(this)));
+    builder.SetSyncableServiceCallback(base::BindRepeating(
+        &ProfileSyncServiceAutofillTest::GetSyncableServiceForType,
+        base::Unretained(this)));
     builder.set_activate_model_creation();
     sync_client_owned_ = builder.Build();
     sync_client_ = sync_client_owned_.get();
-
-    // When UpdateAutofillEntries() is called with an empty list, the return
-    // value should be |true|, rather than the default of |false|.
-    std::vector<AutofillEntry> empty;
-    EXPECT_CALL(autofill_table_, UpdateAutofillEntries(empty))
-        .WillRepeatedly(Return(true));
   }
 
   ~ProfileSyncServiceAutofillTest() override {
@@ -472,21 +400,32 @@ class ProfileSyncServiceAutofillTest
     sync_service()->Shutdown();
   }
 
-  int GetSyncCount(syncer::ModelType type) {
+  int GetSyncCount() {
     syncer::ReadTransaction trans(FROM_HERE, sync_service()->GetUserShare());
     syncer::ReadNode node(&trans);
-    if (node.InitTypeRoot(type) != BaseNode::INIT_OK)
+    if (node.InitTypeRoot(AUTOFILL_PROFILE) != BaseNode::INIT_OK)
       return 0;
     return node.GetTotalNodeCount() - 1;
   }
 
-  void StartSyncService(const base::Closure& callback,
-                        bool will_fail_association,
-                        syncer::ModelType type) {
-    SigninManagerBase* signin = profile_sync_service_bundle()->signin_manager();
-    signin->SetAuthenticatedAccountInfo("12345", "test_user@gmail.com");
-    CreateSyncService(std::move(sync_client_owned_), callback);
+  void StartAutofillProfileSyncService(base::OnceClosure callback) {
+    identity::MakePrimaryAccountAvailable(
+        profile_sync_service_bundle()->signin_manager(),
+        profile_sync_service_bundle()->auth_service(),
+        profile_sync_service_bundle()->identity_manager(),
+        "test_user@gmail.com");
+    CreateSyncService(std::move(sync_client_owned_), std::move(callback));
 
+    EXPECT_CALL(*profile_sync_service_bundle()->component_factory(),
+                CreateCommonDataTypeControllers(_, _))
+        .WillOnce(testing::InvokeWithoutArgs([=]() {
+          syncer::DataTypeController::TypeVector controllers;
+          controllers.push_back(
+              std::make_unique<AutofillProfileDataTypeController>(
+                  data_type_thread()->task_runner(), base::DoNothing(),
+                  sync_client_, web_data_service_));
+          return controllers;
+        }));
     EXPECT_CALL(*profile_sync_service_bundle()->component_factory(),
                 CreateDataTypeManager(_, _, _, _, _, _))
         .WillOnce(ReturnNewDataTypeManagerWithDebugListener(
@@ -496,41 +435,19 @@ class ProfileSyncServiceAutofillTest
     EXPECT_CALL(personal_data_manager(), IsDataLoaded())
         .WillRepeatedly(Return(true));
 
-    // We need tokens to get the tests going
-    profile_sync_service_bundle()->auth_service()->UpdateCredentials(
-        signin->GetAuthenticatedAccountId(), "oauth2_login_token");
-
-    sync_service()->RegisterDataTypeController(CreateDataTypeController(type));
     sync_service()->Initialize();
     base::RunLoop().Run();
 
     // It's possible this test triggered an unrecoverable error, in which case
     // we can't get the sync count.
     if (sync_service()->IsSyncActive()) {
-      EXPECT_EQ(GetSyncCount(type),
+      EXPECT_EQ(GetSyncCount(),
                 association_stats_.num_sync_items_after_association);
     }
     EXPECT_EQ(association_stats_.num_sync_items_after_association,
               association_stats_.num_sync_items_before_association +
                   association_stats_.num_sync_items_added -
                   association_stats_.num_sync_items_deleted);
-  }
-
-  bool AddAutofillSyncNode(const AutofillEntry& entry) {
-    syncer::WriteTransaction trans(FROM_HERE, sync_service()->GetUserShare());
-    syncer::WriteNode node(&trans);
-    std::string tag = AutocompleteSyncableService::KeyToTag(
-        base::UTF16ToUTF8(entry.key().name()),
-        base::UTF16ToUTF8(entry.key().value()));
-    syncer::WriteNode::InitUniqueByCreationResult result =
-        node.InitUniqueByCreation(AUTOFILL, tag);
-    if (result != syncer::WriteNode::INIT_SUCCESS)
-      return false;
-
-    sync_pb::EntitySpecifics specifics;
-    AutocompleteSyncableService::WriteAutofillEntry(entry, &specifics);
-    node.SetEntitySpecifics(specifics);
-    return true;
   }
 
   bool AddAutofillSyncNode(const AutofillProfile& profile) {
@@ -545,45 +462,6 @@ class ProfileSyncServiceAutofillTest
     sync_pb::EntitySpecifics specifics;
     AutofillProfileSyncableService::WriteAutofillProfile(profile, &specifics);
     node.SetEntitySpecifics(specifics);
-    return true;
-  }
-
-  bool GetAutofillEntriesFromSyncDB(std::vector<AutofillEntry>* entries,
-                                    std::vector<AutofillProfile>* profiles) {
-    syncer::ReadTransaction trans(FROM_HERE, sync_service()->GetUserShare());
-    syncer::ReadNode autofill_root(&trans);
-    if (autofill_root.InitTypeRoot(AUTOFILL) != BaseNode::INIT_OK) {
-      return false;
-    }
-
-    int64_t child_id = autofill_root.GetFirstChildId();
-    while (child_id != syncer::kInvalidId) {
-      syncer::ReadNode child_node(&trans);
-      if (child_node.InitByIdLookup(child_id) != BaseNode::INIT_OK)
-        return false;
-
-      const sync_pb::AutofillSpecifics& autofill(
-          child_node.GetEntitySpecifics().autofill());
-      if (autofill.has_value()) {
-        AutofillKey key(base::UTF8ToUTF16(autofill.name()),
-                        base::UTF8ToUTF16(autofill.value()));
-        std::vector<Time> timestamps;
-        int timestamps_count = autofill.usage_timestamp_size();
-        for (int i = 0; i < timestamps_count; ++i) {
-          timestamps.push_back(
-              Time::FromInternalValue(autofill.usage_timestamp(i)));
-        }
-        entries->push_back(
-            AutofillEntry(key, timestamps.front(), timestamps.back()));
-      } else if (autofill.has_profile()) {
-        AutofillProfile p;
-        p.set_guid(autofill.profile().guid());
-        AutofillProfileSyncableService::OverwriteProfileWithServerData(
-            autofill.profile(), &p);
-        profiles->push_back(p);
-      }
-      child_id = child_node.GetSuccessorId();
-    }
     return true;
   }
 
@@ -616,24 +494,6 @@ class ProfileSyncServiceAutofillTest
   void SetIdleChangeProcessorExpectations() {
     EXPECT_CALL(autofill_table_, RemoveFormElement(_, _)).Times(0);
     EXPECT_CALL(autofill_table_, GetAutofillTimestamps(_, _, _, _)).Times(0);
-
-    // Only permit UpdateAutofillEntries() to be called with an empty list.
-    std::vector<AutofillEntry> empty;
-    EXPECT_CALL(autofill_table_, UpdateAutofillEntries(Not(empty))).Times(0);
-  }
-
-  std::unique_ptr<syncer::DataTypeController> CreateDataTypeController(
-      syncer::ModelType type) {
-    DCHECK(type == AUTOFILL || type == AUTOFILL_PROFILE);
-    if (type == AUTOFILL) {
-      return std::make_unique<AutofillDataTypeController>(
-          data_type_thread()->task_runner(), base::Bind(&base::DoNothing),
-          sync_client_, web_data_service_);
-    } else {
-      return std::make_unique<AutofillProfileDataTypeController>(
-          data_type_thread()->task_runner(), base::Bind(&base::DoNothing),
-          sync_client_, web_data_service_);
-    }
   }
 
   AutofillTableMock& autofill_table() { return autofill_table_; }
@@ -645,21 +505,14 @@ class ProfileSyncServiceAutofillTest
   WebDataServiceFake* web_data_service() { return web_data_service_.get(); }
 
  private:
-  friend class AddAutofillHelper<AutofillEntry>;
-  friend class AddAutofillHelper<AutofillProfile>;
+  friend class AddAutofillProfileHelper;
 
   base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
       syncer::ModelType type) {
-    DCHECK(type == AUTOFILL || type == AUTOFILL_PROFILE);
-    if (type == AUTOFILL) {
-      return AutocompleteSyncableService::FromWebDataService(
-                 web_data_service_.get())
-          ->AsWeakPtr();
-    } else {
-      return AutofillProfileSyncableService::FromWebDataService(
-                 web_data_service_.get())
-          ->AsWeakPtr();
-    }
+    DCHECK(type == AUTOFILL_PROFILE);
+    return AutofillProfileSyncableService::FromWebDataService(
+               web_data_service_.get())
+        ->AsWeakPtr();
   }
 
   AutofillTableMock autofill_table_;
@@ -678,24 +531,23 @@ class ProfileSyncServiceAutofillTest
   DISALLOW_COPY_AND_ASSIGN(ProfileSyncServiceAutofillTest);
 };
 
-template <class T>
-class AddAutofillHelper {
+class AddAutofillProfileHelper {
  public:
-  AddAutofillHelper(ProfileSyncServiceAutofillTest* test,
-                    const std::vector<T>& entries)
-      : callback_(base::Bind(&AddAutofillHelper::AddAutofillCallback,
-                             base::Unretained(this),
-                             test,
-                             entries)),
+  AddAutofillProfileHelper(ProfileSyncServiceAutofillTest* test,
+                           const std::vector<AutofillProfile>& entries)
+      : callback_(base::BindOnce(&AddAutofillProfileHelper::AddAutofillCallback,
+                                 base::Unretained(this),
+                                 test,
+                                 entries)),
         success_(false) {}
 
-  const base::Closure& callback() const { return callback_; }
+  base::OnceClosure callback() { return std::move(callback_); }
   bool success() { return success_; }
 
  private:
   void AddAutofillCallback(ProfileSyncServiceAutofillTest* test,
-                           const std::vector<T>& entries) {
-    if (!test->CreateRoot(GetModelType<T>()))
+                           const std::vector<AutofillProfile>& entries) {
+    if (!test->CreateRoot(AUTOFILL_PROFILE))
       return;
 
     for (size_t i = 0; i < entries.size(); ++i) {
@@ -705,166 +557,9 @@ class AddAutofillHelper {
     success_ = true;
   }
 
-  base::Closure callback_;
+  base::OnceClosure callback_;
   bool success_;
 };
-
-// Overload write transaction to use custom NotifyTransactionComplete
-class WriteTransactionTest : public WriteTransaction {
- public:
-  WriteTransactionTest(const base::Location& from_here,
-                       WriterTag writer,
-                       syncer::syncable::Directory* directory,
-                       WaitableEvent* wait_for_syncapi)
-      : WriteTransaction(from_here, writer, directory),
-        wait_for_syncapi_(wait_for_syncapi) {}
-
-  void NotifyTransactionComplete(syncer::ModelTypeSet types) override {
-    // This is where we differ. Force a thread change here, giving another
-    // thread a chance to create a WriteTransaction
-    wait_for_syncapi_->Wait();
-
-    WriteTransaction::NotifyTransactionComplete(types);
-  }
-
- private:
-  WaitableEvent* const wait_for_syncapi_;
-};
-
-// Our fake server updater. Needs the RefCountedThreadSafe inheritance so we can
-// post tasks with it.
-class FakeServerUpdater : public base::RefCountedThreadSafe<FakeServerUpdater> {
- public:
-  FakeServerUpdater(TestProfileSyncService* service,
-                    WaitableEvent* wait_for_start,
-                    WaitableEvent* wait_for_syncapi,
-                    scoped_refptr<base::SequencedTaskRunner> db_task_runner)
-      : entry_(MakeAutofillEntry("0", "0", 0)),
-        service_(service),
-        wait_for_start_(wait_for_start),
-        wait_for_syncapi_(wait_for_syncapi),
-        is_finished_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                     base::WaitableEvent::InitialState::NOT_SIGNALED),
-        db_task_runner_(db_task_runner) {}
-
-  void Update() {
-    // This gets called in a modelsafeworker thread.
-    ASSERT_TRUE(db_task_runner_->RunsTasksInCurrentSequence());
-
-    syncer::UserShare* user_share = service_->GetUserShare();
-    syncer::syncable::Directory* directory = user_share->directory.get();
-
-    // Create autofill protobuf.
-    std::string tag = AutocompleteSyncableService::KeyToTag(
-        base::UTF16ToUTF8(entry_.key().name()),
-        base::UTF16ToUTF8(entry_.key().value()));
-    sync_pb::AutofillSpecifics new_autofill;
-    new_autofill.set_name(base::UTF16ToUTF8(entry_.key().name()));
-    new_autofill.set_value(base::UTF16ToUTF8(entry_.key().value()));
-    new_autofill.add_usage_timestamp(entry_.date_created().ToInternalValue());
-    if (entry_.date_created() != entry_.date_last_used()) {
-      new_autofill.add_usage_timestamp(
-          entry_.date_last_used().ToInternalValue());
-    }
-
-    sync_pb::EntitySpecifics entity_specifics;
-    entity_specifics.mutable_autofill()->CopyFrom(new_autofill);
-
-    {
-      // Tell main thread we've started
-      wait_for_start_->Signal();
-
-      // Create write transaction.
-      WriteTransactionTest trans(FROM_HERE, UNITTEST, directory,
-                                 wait_for_syncapi_);
-
-      // Create actual entry based on autofill protobuf information.
-      // Simulates effects of UpdateLocalDataFromServerData
-      MutableEntry parent(&trans, GET_TYPE_ROOT, AUTOFILL);
-      MutableEntry item(&trans, CREATE, AUTOFILL, parent.GetId(), tag);
-      ASSERT_TRUE(item.good());
-      item.PutSpecifics(entity_specifics);
-      item.PutServerSpecifics(entity_specifics);
-      item.PutBaseVersion(1);
-      syncer::syncable::Id server_item_id =
-          service_->id_factory()->NewServerId();
-      item.PutId(server_item_id);
-      syncer::syncable::Id new_predecessor;
-      ASSERT_TRUE(item.PutPredecessor(new_predecessor));
-    }
-    DVLOG(1) << "FakeServerUpdater finishing.";
-    is_finished_.Signal();
-  }
-
-  void CreateNewEntry(const AutofillEntry& entry) {
-    entry_ = entry;
-    ASSERT_FALSE(db_task_runner_->RunsTasksInCurrentSequence());
-    if (!db_task_runner_->PostTask(
-            FROM_HERE, base::Bind(&FakeServerUpdater::Update, this))) {
-      NOTREACHED() << "Failed to post task to the db sequence.";
-      return;
-    }
-  }
-
-  void WaitForUpdateCompletion() { is_finished_.Wait(); }
-
- private:
-  friend class base::RefCountedThreadSafe<FakeServerUpdater>;
-  ~FakeServerUpdater() {}
-
-  AutofillEntry entry_;
-  TestProfileSyncService* service_;
-  WaitableEvent* const wait_for_start_;
-  WaitableEvent* const wait_for_syncapi_;
-  WaitableEvent is_finished_;
-  syncer::syncable::Id parent_id_;
-  scoped_refptr<base::SequencedTaskRunner> db_task_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeServerUpdater);
-};
-
-// TODO(skrul): Test abort startup.
-// TODO(skrul): Test processing of cloud changes.
-// TODO(tim): Add autofill data type controller test, and a case to cover
-//            waiting for the PersonalDataManager.
-TEST_F(ProfileSyncServiceAutofillTest, FailModelAssociation) {
-  // Don't create the root autofill node so startup fails.
-  StartSyncService(base::Closure(), true, AUTOFILL);
-  EXPECT_TRUE(sync_service()->HasUnrecoverableError());
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, EmptyNativeEmptySync) {
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(Return(true));
-  SetIdleChangeProcessorExpectations();
-  CreateRootHelper create_root(this, AUTOFILL);
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(create_root.callback(), false, AUTOFILL);
-  EXPECT_TRUE(create_root.success());
-  std::vector<AutofillEntry> sync_entries;
-  std::vector<AutofillProfile> sync_profiles;
-  ASSERT_TRUE(GetAutofillEntriesFromSyncDB(&sync_entries, &sync_profiles));
-  EXPECT_EQ(0U, sync_entries.size());
-  EXPECT_EQ(0U, sync_profiles.size());
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, HasNativeEntriesEmptySync) {
-  std::vector<AutofillEntry> entries;
-  entries.push_back(MakeAutofillEntry("foo", "bar", 1));
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgPointee<0>(entries), Return(true)));
-  SetIdleChangeProcessorExpectations();
-  CreateRootHelper create_root(this, AUTOFILL);
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(create_root.callback(), false, AUTOFILL);
-  ASSERT_TRUE(create_root.success());
-  std::vector<AutofillEntry> sync_entries;
-  std::vector<AutofillProfile> sync_profiles;
-  ASSERT_TRUE(GetAutofillEntriesFromSyncDB(&sync_entries, &sync_profiles));
-  ASSERT_EQ(1U, sync_entries.size());
-  EXPECT_EQ(entries[0], sync_entries[0]);
-  EXPECT_EQ(0U, sync_profiles.size());
-}
 
 TEST_F(ProfileSyncServiceAutofillTest, HasProfileEmptySync) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
@@ -883,146 +578,12 @@ TEST_F(ProfileSyncServiceAutofillTest, HasProfileEmptySync) {
   EXPECT_CALL(personal_data_manager(), Refresh());
   SetIdleChangeProcessorExpectations();
   CreateRootHelper create_root(this, AUTOFILL_PROFILE);
-  StartSyncService(create_root.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(create_root.callback());
   ASSERT_TRUE(create_root.success());
   std::vector<AutofillProfile> sync_profiles;
   ASSERT_TRUE(GetAutofillProfilesFromSyncDBUnderProfileNode(&sync_profiles));
   EXPECT_EQ(1U, sync_profiles.size());
   EXPECT_EQ(0, expected_profiles[0].Compare(sync_profiles[0]));
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, HasNativeWithDuplicatesEmptySync) {
-  // There is buggy autofill code that allows duplicate name/value
-  // pairs to exist in the database with separate pair_ids.
-  std::vector<AutofillEntry> entries;
-  entries.push_back(MakeAutofillEntry("foo", "bar", 1));
-  entries.push_back(MakeAutofillEntry("dup", "", 2));
-  entries.push_back(MakeAutofillEntry("dup", "", 3));
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgPointee<0>(entries), Return(true)));
-  SetIdleChangeProcessorExpectations();
-  CreateRootHelper create_root(this, AUTOFILL);
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(create_root.callback(), false, AUTOFILL);
-  ASSERT_TRUE(create_root.success());
-  std::vector<AutofillEntry> sync_entries;
-  std::vector<AutofillProfile> sync_profiles;
-  ASSERT_TRUE(GetAutofillEntriesFromSyncDB(&sync_entries, &sync_profiles));
-  EXPECT_EQ(2U, sync_entries.size());
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncNoMerge) {
-  AutofillEntry native_entry(MakeAutofillEntry("native", "entry", 1));
-  AutofillEntry sync_entry(MakeAutofillEntry("sync", "entry", 2));
-
-  std::vector<AutofillEntry> native_entries;
-  native_entries.push_back(native_entry);
-
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgPointee<0>(native_entries), Return(true)));
-
-  std::vector<AutofillEntry> sync_entries;
-  sync_entries.push_back(sync_entry);
-
-  AddAutofillHelper<AutofillEntry> add_autofill(this, sync_entries);
-
-  EXPECT_CALL(autofill_table(), UpdateAutofillEntries(ElementsAre(sync_entry)))
-      .WillOnce(Return(true));
-
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(add_autofill.callback(), false, AUTOFILL);
-  ASSERT_TRUE(add_autofill.success());
-
-  std::set<AutofillEntry> expected_entries;
-  expected_entries.insert(native_entry);
-  expected_entries.insert(sync_entry);
-
-  std::vector<AutofillEntry> new_sync_entries;
-  std::vector<AutofillProfile> new_sync_profiles;
-  ASSERT_TRUE(
-      GetAutofillEntriesFromSyncDB(&new_sync_entries, &new_sync_profiles));
-  std::set<AutofillEntry> new_sync_entries_set(new_sync_entries.begin(),
-                                               new_sync_entries.end());
-
-  EXPECT_EQ(expected_entries, new_sync_entries_set);
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncNoMerge_NullTerminated) {
-  const char kEntry[] = "entry";
-  // A value which contains null terminating symbol.
-  std::string entry(kEntry, arraysize(kEntry));
-  AutofillEntry native_entry0(MakeAutofillEntry("native", kEntry, 1));
-  AutofillEntry native_entry1(MakeAutofillEntry("native", entry, 1));
-  AutofillEntry sync_entry0(MakeAutofillEntry("sync", kEntry, 2));
-  AutofillEntry sync_entry1(MakeAutofillEntry("sync", entry, 2));
-
-  std::vector<AutofillEntry> native_entries;
-  native_entries.push_back(native_entry0);
-  native_entries.push_back(native_entry1);
-
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgPointee<0>(native_entries), Return(true)));
-
-  std::vector<AutofillEntry> sync_entries;
-  sync_entries.push_back(sync_entry0);
-  sync_entries.push_back(sync_entry1);
-
-  AddAutofillHelper<AutofillEntry> add_autofill(this, sync_entries);
-
-  // Expecting that sync_entry0 and sync_entry1 will be written in an autofill
-  // table and a value in sync_entry1 won't lose null terminating symbol.
-  EXPECT_CALL(autofill_table(),
-              UpdateAutofillEntries(ElementsAre(sync_entry0, sync_entry1)))
-      .WillOnce(Return(true));
-
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(add_autofill.callback(), false, AUTOFILL);
-  ASSERT_TRUE(add_autofill.success());
-
-  // Expecting that native_entry0 and native_entry1 won't merge into one entry.
-  std::set<AutofillEntry> expected_entries;
-  expected_entries.insert(native_entry0);
-  expected_entries.insert(native_entry1);
-  expected_entries.insert(sync_entry0);
-  expected_entries.insert(sync_entry1);
-
-  std::vector<AutofillEntry> new_sync_entries;
-  std::vector<AutofillProfile> new_sync_profiles;
-  ASSERT_TRUE(
-      GetAutofillEntriesFromSyncDB(&new_sync_entries, &new_sync_profiles));
-  std::set<AutofillEntry> new_sync_entries_set(new_sync_entries.begin(),
-                                               new_sync_entries.end());
-
-  EXPECT_EQ(expected_entries, new_sync_entries_set);
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncMergeEntry) {
-  AutofillEntry native_entry(MakeAutofillEntry("merge", "entry", 1));
-  AutofillEntry sync_entry(MakeAutofillEntry("merge", "entry", 2));
-  AutofillEntry merged_entry(MakeAutofillEntry("merge", "entry", 1, 2));
-
-  std::vector<AutofillEntry> native_entries;
-  native_entries.push_back(native_entry);
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgPointee<0>(native_entries), Return(true)));
-
-  std::vector<AutofillEntry> sync_entries;
-  sync_entries.push_back(sync_entry);
-  AddAutofillHelper<AutofillEntry> add_autofill(this, sync_entries);
-
-  EXPECT_CALL(autofill_table(),
-              UpdateAutofillEntries(ElementsAre(merged_entry)))
-      .WillOnce(Return(true));
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(add_autofill.callback(), false, AUTOFILL);
-  ASSERT_TRUE(add_autofill.success());
-
-  std::vector<AutofillEntry> new_sync_entries;
-  std::vector<AutofillProfile> new_sync_profiles;
-  ASSERT_TRUE(
-      GetAutofillEntriesFromSyncDB(&new_sync_entries, &new_sync_profiles));
-  ASSERT_EQ(1U, new_sync_entries.size());
-  EXPECT_EQ(merged_entry, new_sync_entries[0]);
 }
 
 TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncMergeProfile) {
@@ -1049,13 +610,13 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSyncMergeProfile) {
 
   std::vector<AutofillProfile> sync_profiles;
   sync_profiles.push_back(sync_profile);
-  AddAutofillHelper<AutofillProfile> add_autofill(this, sync_profiles);
+  AddAutofillProfileHelper add_autofill(this, sync_profiles);
 
   EXPECT_CALL(autofill_table(),
               UpdateAutofillProfile(MatchProfiles(sync_profile)))
       .WillOnce(Return(true));
   EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(add_autofill.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(add_autofill.callback());
   ASSERT_TRUE(add_autofill.success());
 
   std::vector<AutofillProfile> new_sync_profiles;
@@ -1108,11 +669,11 @@ TEST_F(
       .WillOnce(Return(true));
   std::vector<AutofillProfile> sync_profiles;
   sync_profiles.push_back(sync_profile);
-  AddAutofillHelper<AutofillProfile> add_autofill(this, sync_profiles);
+  AddAutofillProfileHelper add_autofill(this, sync_profiles);
 
   EXPECT_CALL(personal_data_manager(), Refresh());
   // Adds all entries in |sync_profiles| to sync.
-  StartSyncService(add_autofill.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(add_autofill.callback());
   ASSERT_TRUE(add_autofill.success());
 
   std::vector<AutofillProfile> new_sync_profiles;
@@ -1173,11 +734,11 @@ TEST_F(ProfileSyncServiceAutofillTest,
       .WillOnce(Return(true));
   std::vector<AutofillProfile> sync_profiles;
   sync_profiles.push_back(sync_profile);
-  AddAutofillHelper<AutofillProfile> add_autofill(this, sync_profiles);
+  AddAutofillProfileHelper add_autofill(this, sync_profiles);
 
   EXPECT_CALL(personal_data_manager(), Refresh());
   // Adds all entries in |sync_profiles| to sync.
-  StartSyncService(add_autofill.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(add_autofill.callback());
   ASSERT_TRUE(add_autofill.success());
 
   std::vector<AutofillProfile> new_sync_profiles;
@@ -1240,11 +801,11 @@ TEST_F(ProfileSyncServiceAutofillTest,
       .WillOnce(Return(true));
   std::vector<AutofillProfile> sync_profiles;
   sync_profiles.push_back(sync_profile);
-  AddAutofillHelper<AutofillProfile> add_autofill(this, sync_profiles);
+  AddAutofillProfileHelper add_autofill(this, sync_profiles);
 
   EXPECT_CALL(personal_data_manager(), Refresh());
   // Adds all entries in |sync_profiles| to sync.
-  StartSyncService(add_autofill.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(add_autofill.callback());
   ASSERT_TRUE(add_autofill.success());
 
   std::vector<AutofillProfile> new_sync_profiles;
@@ -1292,11 +853,11 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSync_DifferentPrimaryInfo) {
       .WillOnce(Return(true));
   std::vector<AutofillProfile> sync_profiles;
   sync_profiles.push_back(sync_profile);
-  AddAutofillHelper<AutofillProfile> add_autofill(this, sync_profiles);
+  AddAutofillProfileHelper add_autofill(this, sync_profiles);
 
   EXPECT_CALL(personal_data_manager(), Refresh());
   // Adds all entries in |sync_profiles| to sync.
-  StartSyncService(add_autofill.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(add_autofill.callback());
   ASSERT_TRUE(add_autofill.success());
 
   std::vector<AutofillProfile> new_sync_profiles;
@@ -1339,13 +900,13 @@ TEST_F(ProfileSyncServiceAutofillTest, MergeProfileWithDifferentGuid) {
 
   std::vector<AutofillProfile> sync_profiles;
   sync_profiles.push_back(sync_profile);
-  AddAutofillHelper<AutofillProfile> add_autofill(this, sync_profiles);
+  AddAutofillProfileHelper add_autofill(this, sync_profiles);
 
   EXPECT_CALL(autofill_table(), AddAutofillProfile(_)).WillOnce(Return(true));
   EXPECT_CALL(autofill_table(), RemoveAutofillProfile(native_guid))
       .WillOnce(Return(true));
   EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(add_autofill.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(add_autofill.callback());
   ASSERT_TRUE(add_autofill.success());
 
   std::vector<AutofillProfile> new_sync_profiles;
@@ -1362,41 +923,13 @@ TEST_F(ProfileSyncServiceAutofillTest, MergeProfileWithDifferentGuid) {
   EXPECT_EQ(base::Time::FromTimeT(1234), new_sync_profiles[0].use_date());
 }
 
-TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeAddEntry) {
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(Return(true));
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  SetIdleChangeProcessorExpectations();
-  CreateRootHelper create_root(this, AUTOFILL);
-  StartSyncService(create_root.callback(), false, AUTOFILL);
-  ASSERT_TRUE(create_root.success());
-
-  AutofillEntry added_entry(MakeAutofillEntry("added", "entry", 1));
-
-  EXPECT_CALL(autofill_table(), GetAutofillTimestamps(_, _, _, _))
-      .WillOnce(DoAll(SetArgPointee<2>(added_entry.date_created()),
-                      SetArgPointee<3>(added_entry.date_last_used()),
-                      Return(true)));
-
-  AutofillChangeList changes;
-  changes.push_back(AutofillChange(AutofillChange::ADD, added_entry.key()));
-
-  web_data_service()->OnAutofillEntriesChanged(changes);
-
-  std::vector<AutofillEntry> new_sync_entries;
-  std::vector<AutofillProfile> new_sync_profiles;
-  ASSERT_TRUE(
-      GetAutofillEntriesFromSyncDB(&new_sync_entries, &new_sync_profiles));
-  ASSERT_EQ(1U, new_sync_entries.size());
-  EXPECT_EQ(added_entry, new_sync_entries[0]);
-}
 
 TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeAddProfile) {
   EXPECT_CALL(autofill_table(), GetAutofillProfiles(_)).WillOnce(Return(true));
   EXPECT_CALL(personal_data_manager(), Refresh());
   SetIdleChangeProcessorExpectations();
   CreateRootHelper create_root(this, AUTOFILL_PROFILE);
-  StartSyncService(create_root.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(create_root.callback());
   ASSERT_TRUE(create_root.success());
 
   AutofillProfile added_profile;
@@ -1414,62 +947,6 @@ TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeAddProfile) {
       GetAutofillProfilesFromSyncDBUnderProfileNode(&new_sync_profiles));
   ASSERT_EQ(1U, new_sync_profiles.size());
   EXPECT_EQ(0, added_profile.Compare(new_sync_profiles[0]));
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeUpdateEntry) {
-  AutofillEntry original_entry(MakeAutofillEntry("my", "entry", 1));
-  std::vector<AutofillEntry> original_entries;
-  original_entries.push_back(original_entry);
-
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgPointee<0>(original_entries), Return(true)));
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  CreateRootHelper create_root(this, AUTOFILL);
-  StartSyncService(create_root.callback(), false, AUTOFILL);
-  ASSERT_TRUE(create_root.success());
-
-  AutofillEntry updated_entry(MakeAutofillEntry("my", "entry", 1, 2));
-
-  EXPECT_CALL(autofill_table(), GetAutofillTimestamps(_, _, _, _))
-      .WillOnce(DoAll(SetArgPointee<2>(updated_entry.date_created()),
-                      SetArgPointee<3>(updated_entry.date_last_used()),
-                      Return(true)));
-
-  AutofillChangeList changes;
-  changes.push_back(
-      AutofillChange(AutofillChange::UPDATE, updated_entry.key()));
-  web_data_service()->OnAutofillEntriesChanged(changes);
-
-  std::vector<AutofillEntry> new_sync_entries;
-  std::vector<AutofillProfile> new_sync_profiles;
-  ASSERT_TRUE(
-      GetAutofillEntriesFromSyncDB(&new_sync_entries, &new_sync_profiles));
-  ASSERT_EQ(1U, new_sync_entries.size());
-  EXPECT_EQ(updated_entry, new_sync_entries[0]);
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeRemoveEntry) {
-  AutofillEntry original_entry(MakeAutofillEntry("my", "entry", 1));
-  std::vector<AutofillEntry> original_entries;
-  original_entries.push_back(original_entry);
-
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .WillOnce(DoAll(SetArgPointee<0>(original_entries), Return(true)));
-  EXPECT_CALL(personal_data_manager(), Refresh());
-  CreateRootHelper create_root(this, AUTOFILL);
-  StartSyncService(create_root.callback(), false, AUTOFILL);
-  ASSERT_TRUE(create_root.success());
-
-  AutofillChangeList changes;
-  changes.push_back(
-      AutofillChange(AutofillChange::REMOVE, original_entry.key()));
-  web_data_service()->OnAutofillEntriesChanged(changes);
-
-  std::vector<AutofillEntry> new_sync_entries;
-  std::vector<AutofillProfile> new_sync_profiles;
-  ASSERT_TRUE(
-      GetAutofillEntriesFromSyncDB(&new_sync_entries, &new_sync_profiles));
-  ASSERT_EQ(0U, new_sync_entries.size());
 }
 
 TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeRemoveProfile) {
@@ -1495,9 +972,9 @@ TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeRemoveProfile) {
 
   std::vector<AutofillProfile> sync_profiles;
   sync_profiles.push_back(sync_profile);
-  AddAutofillHelper<AutofillProfile> add_autofill(this, sync_profiles);
+  AddAutofillProfileHelper add_autofill(this, sync_profiles);
   EXPECT_CALL(personal_data_manager(), Refresh());
-  StartSyncService(add_autofill.callback(), false, AUTOFILL_PROFILE);
+  StartAutofillProfileSyncService(add_autofill.callback());
   ASSERT_TRUE(add_autofill.success());
 
   AutofillProfileChange change(AutofillProfileChange::REMOVE,
@@ -1508,64 +985,6 @@ TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeRemoveProfile) {
   ASSERT_TRUE(
       GetAutofillProfilesFromSyncDBUnderProfileNode(&new_sync_profiles));
   ASSERT_EQ(0U, new_sync_profiles.size());
-}
-
-TEST_F(ProfileSyncServiceAutofillTest, ServerChangeRace) {
-  // Once for MergeDataAndStartSyncing() and twice for ProcessSyncChanges(), via
-  // LoadAutofillData().
-  EXPECT_CALL(autofill_table(), GetAllAutofillEntries(_))
-      .Times(3)
-      .WillRepeatedly(Return(true));
-  // On the other hand Autofill and Autocomplete are separated now, so
-  // GetAutofillProfiles() should not be called.
-  EXPECT_CALL(autofill_table(), GetAutofillProfiles(_)).Times(0);
-  EXPECT_CALL(autofill_table(), UpdateAutofillEntries(_))
-      .WillRepeatedly(Return(true));
-  EXPECT_CALL(personal_data_manager(), Refresh()).Times(3);
-  CreateRootHelper create_root(this, AUTOFILL);
-  StartSyncService(create_root.callback(), false, AUTOFILL);
-  ASSERT_TRUE(create_root.success());
-
-  std::unique_ptr<WaitableEvent> wait_for_start(
-      new WaitableEvent(base::WaitableEvent::ResetPolicy::MANUAL,
-                        base::WaitableEvent::InitialState::NOT_SIGNALED));
-  std::unique_ptr<WaitableEvent> wait_for_syncapi(
-      new WaitableEvent(base::WaitableEvent::ResetPolicy::MANUAL,
-                        base::WaitableEvent::InitialState::NOT_SIGNALED));
-  scoped_refptr<FakeServerUpdater> updater(new FakeServerUpdater(
-      sync_service(), wait_for_start.get(), wait_for_syncapi.get(),
-      data_type_thread()->task_runner()));
-
-  // This server side update will stall waiting for CommitWaiter.
-  updater->CreateNewEntry(MakeAutofillEntry("server", "entry", 1));
-  wait_for_start->Wait();
-
-  AutofillEntry syncapi_entry(MakeAutofillEntry("syncapi", "entry", 2));
-  ASSERT_TRUE(AddAutofillSyncNode(syncapi_entry));
-  DVLOG(1) << "Syncapi update finished.";
-
-  // If we reach here, it means syncapi succeeded and we didn't deadlock. Yay!
-  // Signal FakeServerUpdater that it can complete.
-  wait_for_syncapi->Signal();
-
-  // Make another entry to ensure nothing broke afterwards and wait for finish
-  // to clean up.
-  updater->WaitForUpdateCompletion();
-  updater->CreateNewEntry(MakeAutofillEntry("server2", "entry2", 3));
-  updater->WaitForUpdateCompletion();
-
-  // Let callbacks posted on UI sequence execute.
-  base::RunLoop().RunUntilIdle();
-
-  std::vector<AutofillEntry> sync_entries;
-  std::vector<AutofillProfile> sync_profiles;
-  ASSERT_TRUE(GetAutofillEntriesFromSyncDB(&sync_entries, &sync_profiles));
-  EXPECT_EQ(3U, sync_entries.size());
-  EXPECT_EQ(0U, sync_profiles.size());
-  for (size_t i = 0; i < sync_entries.size(); i++) {
-    DVLOG(1) << "Entry " << i << ": " << sync_entries[i].key().name() << ", "
-             << sync_entries[i].key().value();
-  }
 }
 
 }  // namespace browser_sync

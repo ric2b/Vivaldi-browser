@@ -9,18 +9,13 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_main_delegate.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "content/public/app/content_main.h"
 #include "content/public/common/content_switches.h"
 #include "headless/public/headless_shell.h"
-#include "ui/base/ui_base_switches.h"
-#include "ui/base/ui_features.h"
 #include "ui/gfx/switches.h"
 
-#if BUILDFLAG(ENABLE_MUS)
-#include "services/service_manager/runner/common/client_util.h"
-#endif
 
 #if defined(VIVALDI_BUILD)
 #if defined(OS_WIN)
@@ -123,28 +118,6 @@ int ChromeMain(int argc, const char** argv) {
     return headless::HeadlessShellMain(params);
   }
 #endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
-
-#if BUILDFLAG(ENABLE_MUS)
-  // In config==mus the ui service runs in process and is shut down well before
-  // the rest of Chrome. Have Chrome create the DiscardableSharedMemoryManager
-  // to ensure the DiscardableSharedMemoryManager is destroyed later on. Doing
-  // this avoids lifetime issues when internal implementation details of
-  // DiscardableSharedMemoryManager assume DiscardableSharedMemoryManager is
-  // long lived.
-  if (command_line->HasSwitch(switches::kMus)) {
-    params.create_discardable_memory = true;
-    params.env_mode = aura::Env::Mode::MUS;
-  }
-#if defined(OS_CHROMEOS)
-  if (command_line->HasSwitch(switches::kMash)) {
-    params.create_discardable_memory = false;
-    params.env_mode = aura::Env::Mode::MUS;
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kMus);
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kMusHostingViz);
-  }
-#endif  // defined(OS_CHROMEOS)
-#endif  // BUILDFLAG(ENABLE_MUS)
 
   int rv = content::ContentMain(params);
 

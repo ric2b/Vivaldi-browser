@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/browser/ui/views/harmony/harmony_layout_provider.h"
+#include "chrome/browser/ui/views/harmony/material_refresh_layout_provider.h"
 #include "ui/base/material_design/material_design_controller.h"
 
 namespace {
@@ -37,6 +38,8 @@ ChromeLayoutProvider* ChromeLayoutProvider::Get() {
 // static
 std::unique_ptr<views::LayoutProvider>
 ChromeLayoutProvider::CreateLayoutProvider() {
+  if (ui::MaterialDesignController::IsRefreshUi())
+    return std::make_unique<MaterialRefreshLayoutProvider>();
   return ui::MaterialDesignController::IsSecondaryUiMaterial()
              ? std::make_unique<HarmonyLayoutProvider>()
              : std::make_unique<ChromeLayoutProvider>();
@@ -44,10 +47,12 @@ ChromeLayoutProvider::CreateLayoutProvider() {
 
 gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
   switch (metric) {
-    case ChromeInsetsMetric::INSETS_OMNIBOX:
-      return gfx::Insets(3);
     case ChromeInsetsMetric::INSETS_TOAST:
       return gfx::Insets(0, 8);
+    case INSETS_BOOKMARKS_BAR_BUTTON:
+      if (ui::MaterialDesignController::IsTouchOptimizedUiEnabled())
+        return gfx::Insets(8, 12);
+      return GetInsetsMetric(views::InsetsMetric::INSETS_LABEL_BUTTON);
     default:
       return views::LayoutProvider::GetInsetsMetric(metric);
   }

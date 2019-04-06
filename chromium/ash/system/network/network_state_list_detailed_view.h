@@ -8,7 +8,7 @@
 #include <string>
 
 #include "ash/login_status.h"
-#include "ash/system/tray/tray_details_view.h"
+#include "ash/system/tray/tray_detailed_view.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 
@@ -17,13 +17,12 @@ class Button;
 }
 
 namespace ash {
-class SystemTrayItem;
 
 namespace tray {
 
 // Exported for tests.
 class ASH_EXPORT NetworkStateListDetailedView
-    : public TrayDetailsView,
+    : public TrayDetailedView,
       public base::SupportsWeakPtr<NetworkStateListDetailedView> {
  public:
   ~NetworkStateListDetailedView() override;
@@ -39,7 +38,7 @@ class ASH_EXPORT NetworkStateListDetailedView
  protected:
   enum ListType { LIST_TYPE_NETWORK, LIST_TYPE_VPN };
 
-  NetworkStateListDetailedView(SystemTrayItem* owner,
+  NetworkStateListDetailedView(DetailedViewDelegate* delegate,
                                ListType list_type,
                                LoginStatus login);
 
@@ -54,7 +53,7 @@ class ASH_EXPORT NetworkStateListDetailedView
  private:
   class InfoBubble;
 
-  // TrayDetailsView:
+  // TrayDetailedView:
   void HandleViewClicked(views::View* view) override;
   void HandleButtonPressed(views::Button* sender,
                            const ui::Event& event) override;

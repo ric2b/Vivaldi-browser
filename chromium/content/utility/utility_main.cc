@@ -20,8 +20,12 @@
 #include "services/service_manager/sandbox/sandbox.h"
 
 #if defined(OS_LINUX)
-#include "content/network/network_sandbox_hook_linux.h"
+#include "services/network/network_sandbox_hook_linux.h"
 #include "services/service_manager/sandbox/linux/sandbox_linux.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "base/message_loop/message_pump_mac.h"
 #endif
 
 #if defined(OS_WIN)
@@ -39,6 +43,20 @@ int UtilityMain(const MainFunctionParams& parameters) {
       parameters.command_line.HasSwitch(switches::kMessageLoopTypeUi)
           ? base::MessageLoop::TYPE_UI
           : base::MessageLoop::TYPE_DEFAULT;
+
+#if defined(OS_MACOSX)
+  // On Mac, the TYPE_UI pump for the main thread is an NSApplication loop. In
+  // a sandboxed utility process, NSApp attempts to acquire more Mach resources
+  // than a restrictive sandbox policy should allow. Services that require a
+  // TYPE_UI pump generally just need a NS/CFRunLoop to pump system work
+  // sources, so choose that pump type instead. A NSRunLoop MessagePump is used
+  // for TYPE_UI MessageLoops on non-main threads.
+  base::MessageLoop::InitMessagePumpForUIFactory(
+      []() -> std::unique_ptr<base::MessagePump> {
+        return std::make_unique<base::MessagePumpNSRunLoop>();
+      });
+#endif
+
   // The main message loop of the utility process.
   base::MessageLoop main_message_loop(message_loop_type);
   base::PlatformThread::SetName("CrUtilityMain");
@@ -56,7 +74,7 @@ int UtilityMain(const MainFunctionParams& parameters) {
       sandbox_type == service_manager::SANDBOX_TYPE_NETWORK) {
     service_manager::SandboxLinux::PreSandboxHook pre_sandbox_hook;
     if (sandbox_type == service_manager::SANDBOX_TYPE_NETWORK)
-      pre_sandbox_hook = base::BindOnce(&NetworkPreSandboxHook);
+      pre_sandbox_hook = base::BindOnce(&network::NetworkPreSandboxHook);
     service_manager::Sandbox::Initialize(
         sandbox_type, std::move(pre_sandbox_hook),
         service_manager::SandboxLinux::Options());

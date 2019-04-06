@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/service/command_buffer_direct.h"
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 
@@ -155,6 +156,8 @@ void CommandBufferDirect::OnRescheduleAfterFinished() {
   service_.SetScheduled(true);
 }
 
+void CommandBufferDirect::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {}
+
 gpu::CommandBufferNamespace CommandBufferDirect::GetNamespaceID() const {
   return gpu::CommandBufferNamespace::IN_PROCESS;
 }
@@ -168,17 +171,19 @@ void CommandBufferDirect::SetCommandsPaused(bool paused) {
 }
 
 void CommandBufferDirect::SignalSyncToken(const gpu::SyncToken& sync_token,
-                                          const base::Closure& callback) {
+                                          base::OnceClosure callback) {
   if (sync_point_manager_) {
     DCHECK(!paused_order_num_);
     uint32_t order_num =
         sync_point_order_data_->GenerateUnprocessedOrderNumber();
     sync_point_order_data_->BeginProcessingOrderNumber(order_num);
-    if (!sync_point_client_state_->Wait(sync_token, callback))
-      callback.Run();
+    base::RepeatingClosure maybe_pass_callback =
+        base::AdaptCallbackForRepeating(std::move(callback));
+    if (!sync_point_client_state_->Wait(sync_token, maybe_pass_callback))
+      maybe_pass_callback.Run();
     sync_point_order_data_->FinishProcessingOrderNumber(order_num);
   } else {
-    callback.Run();
+    std::move(callback).Run();
   }
 }
 

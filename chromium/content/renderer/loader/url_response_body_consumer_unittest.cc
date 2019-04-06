@@ -7,22 +7,21 @@
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "content/common/weak_wrapper_shared_url_loader_factory.h"
-#include "content/public/common/service_worker_modes.h"
 #include "content/public/renderer/request_peer.h"
+#include "content/renderer/loader/navigation_response_override_parameters.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/resource_dispatcher.h"
 #include "net/base/request_priority.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -51,8 +50,9 @@ class TestRequestPeer : public RequestPeer {
     ADD_FAILURE() << "OnReceivedResponse should not be called.";
   }
 
-  void OnDownloadedData(int len, int encoded_data_length) override {
-    ADD_FAILURE() << "OnDownloadedData should not be called.";
+  void OnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body) override {
+    ADD_FAILURE() << "OnStartLoadingResponseBody should not be called.";
   }
 
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override {
@@ -113,8 +113,7 @@ class URLResponseBodyConsumerTest : public ::testing::Test {
     std::vector<network::mojom::URLLoaderClientPtr> clients_;
   };
 
-  URLResponseBodyConsumerTest()
-      : dispatcher_(new ResourceDispatcher(message_loop_.task_runner())) {}
+  URLResponseBodyConsumerTest() : dispatcher_(new ResourceDispatcher()) {}
 
   ~URLResponseBodyConsumerTest() override {
     dispatcher_.reset();
@@ -141,7 +140,7 @@ class URLResponseBodyConsumerTest : public ::testing::Test {
   MojoCreateDataPipeOptions CreateDataPipeOptions() {
     MojoCreateDataPipeOptions options;
     options.struct_size = sizeof(MojoCreateDataPipeOptions);
-    options.flags = MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE;
+    options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
     options.element_num_bytes = 1;
     options.capacity_num_bytes = 1024;
     return options;
@@ -152,12 +151,15 @@ class URLResponseBodyConsumerTest : public ::testing::Test {
                        TestRequestPeer::Context* context) {
     return dispatcher_->StartAsync(
         std::move(request), 0,
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting(), url::Origin(),
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
         TRAFFIC_ANNOTATION_FOR_TESTS, false,
+        false /* pass_response_pipe_to_peer */,
         std::make_unique<TestRequestPeer>(context, message_loop_.task_runner()),
-        base::MakeRefCounted<WeakWrapperSharedURLLoaderFactory>(&factory_),
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+            &factory_),
         std::vector<std::unique_ptr<URLLoaderThrottle>>(),
-        network::mojom::URLLoaderClientEndpointsPtr());
+        nullptr /* navigation_response_override_params */,
+        nullptr /* continue_navigation_function */);
   }
 
   void Run(TestRequestPeer::Context* context) {

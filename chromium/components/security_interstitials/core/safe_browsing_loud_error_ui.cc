@@ -105,6 +105,10 @@ void SafeBrowsingLoudErrorUI::PopulateStringsForHtml(
       break;
   }
 
+  // Not used by this interstitial.
+  load_time_data->SetString("recurrentErrorParagraph", base::string16());
+  load_time_data->SetBoolean("show_recurrent_error_paragraph", false);
+
   PopulateExtendedReportingOption(load_time_data);
 }
 
@@ -119,8 +123,9 @@ void SafeBrowsingLoudErrorUI::HandleCommand(
         controller()->Proceed();
         break;
       }
+      // If the user can't proceed, fall through to CMD_DONT_PROCEED.
+      FALLTHROUGH;
     }
-    // If the user can't proceed, fall through to CMD_DONT_PROCEED.
     case CMD_DONT_PROCEED: {
       // User pressed on the button to return to safety.
       // Don't record the user action here because there are other ways of

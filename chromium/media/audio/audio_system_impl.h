@@ -5,6 +5,10 @@
 #ifndef MEDIA_AUDIO_AUDIO_SYSTEM_IMPL_H_
 #define MEDIA_AUDIO_AUDIO_SYSTEM_IMPL_H_
 
+#include <memory>
+#include <string>
+
+#include "base/callback.h"
 #include "base/threading/thread_checker.h"
 #include "media/audio/audio_system.h"
 #include "media/audio/audio_system_helper.h"
@@ -14,6 +18,10 @@ class AudioManager;
 
 class MEDIA_EXPORT AudioSystemImpl : public AudioSystem {
  public:
+  // Creates AudioSystem using the global AudioManager instance, which must be
+  // created prior to that.
+  static std::unique_ptr<AudioSystem> CreateInstance();
+
   explicit AudioSystemImpl(AudioManager* audio_manager);
 
   // AudioSystem implementation.

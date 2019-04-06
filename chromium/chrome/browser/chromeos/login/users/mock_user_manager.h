@@ -13,7 +13,7 @@
 #include "chrome/browser/chromeos/login/users/affiliation.h"
 #include "chrome/browser/chromeos/login/users/avatar/mock_user_image_manager.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,7 +36,6 @@ class MockUserManager : public ChromeUserManager {
   MOCK_CONST_METHOD0(GetLRULoggedInUsers, const user_manager::UserList&(void));
   MOCK_METHOD4(UserLoggedIn,
                void(const AccountId&, const std::string&, bool, bool));
-  MOCK_METHOD1(SwitchActiveUser, void(const AccountId& account_id));
   MOCK_METHOD0(SessionStarted, void(void));
   MOCK_METHOD2(RemoveUser,
                void(const AccountId&, user_manager::RemoveUserDelegate*));
@@ -61,6 +60,7 @@ class MockUserManager : public ChromeUserManager {
   MOCK_CONST_METHOD0(CanCurrentUserLock, bool(void));
   MOCK_CONST_METHOD0(IsUserLoggedIn, bool(void));
   MOCK_CONST_METHOD0(IsLoggedInAsUserWithGaiaAccount, bool(void));
+  MOCK_CONST_METHOD0(IsLoggedInAsChildUser, bool(void));
   MOCK_CONST_METHOD0(IsLoggedInAsPublicAccount, bool(void));
   MOCK_CONST_METHOD0(IsLoggedInAsGuest, bool(void));
   MOCK_CONST_METHOD0(IsLoggedInAsSupervisedUser, bool(void));
@@ -118,9 +118,9 @@ class MockUserManager : public ChromeUserManager {
   MOCK_METHOD1(OnUserRemoved, void(const AccountId&));
   MOCK_CONST_METHOD1(GetResourceImagekiaNamed, const gfx::ImageSkia&(int));
   MOCK_CONST_METHOD1(GetResourceStringUTF16, base::string16(int));
-  MOCK_CONST_METHOD3(ScheduleResolveLocale,
+  MOCK_CONST_METHOD3(DoScheduleResolveLocale,
                      void(const std::string&,
-                          const base::Closure&,
+                          base::OnceClosure*,
                           std::string*));
   MOCK_CONST_METHOD1(IsValidDefaultUserImageId, bool(int));
 
@@ -142,10 +142,17 @@ class MockUserManager : public ChromeUserManager {
   UserFlow* GetCurrentUserFlow() const override;
   UserFlow* GetUserFlow(const AccountId&) const override;
   MOCK_METHOD2(SetUserAffiliation,
-               void(const std::string& user_id,
+               void(const AccountId& account_id,
                     const chromeos::AffiliationIDSet& user_affiliation_ids));
 
   bool ShouldReportUser(const std::string& user_id) const override;
+
+  // We cannot mock ScheduleResolveLocale directly because of
+  // base::OnceClosure's removed deleter. This is a trampoline to the actual
+  // mock.
+  void ScheduleResolveLocale(const std::string& locale,
+                             base::OnceClosure on_resolved_callback,
+                             std::string* out_resolved_locale) const override;
 
   // Sets a new User instance. Users previously created by this MockUserManager
   // become invalid.
@@ -165,8 +172,10 @@ class MockUserManager : public ChromeUserManager {
   void AddUser(const AccountId& account_id);
 
   // The same as AddUser, but allows specifying affiliation with the domain,
-  // that owns the device.
-  void AddUserWithAffiliation(const AccountId& account_id, bool is_affiliated);
+  // that owns the device and user type.
+  void AddUserWithAffiliationAndType(const AccountId& account_id,
+                                     bool is_affiliated,
+                                     user_manager::UserType user_type);
 
   // Clears the user list and the active user. Users previously created by this
   // MockUserManager become invalid.

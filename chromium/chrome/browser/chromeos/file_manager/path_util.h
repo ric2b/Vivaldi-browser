@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "storage/browser/fileapi/file_system_url.h"
 
 class GURL;
 class Profile;
@@ -18,6 +19,9 @@ namespace util {
 // Absolute base path for removable media on Chrome OS. Exposed here so it can
 // be used by tests.
 extern const base::FilePath::CharType kRemovableMediaPath[];
+
+// Absolute path for the folder containing Android files.
+extern const base::FilePath::CharType kAndroidFilesPath[];
 
 // Gets the absolute path for the 'Downloads' folder for the |profile|.
 base::FilePath GetDownloadsFolderForProfile(Profile* profile);
@@ -42,9 +46,33 @@ bool MigratePathFromOldFormat(Profile* profile,
 // The canonical mount point name for "Downloads" folder.
 std::string GetDownloadsMountPointName(Profile* profile);
 
-// Converts a Chrome OS file path to an ARC file URL. Returns true if the path
-// was converted successfully and false otherwise.
+// The canonical mount point name for crostini "Linux Files" folder.
+std::string GetCrostiniMountPointName(Profile* profile);
+
+// The actual directory the crostini "Linux Files" folder is mounted.
+base::FilePath GetCrostiniMountDirectory(Profile* profile);
+
+// Convert a cracked url to a path inside the Crostini VM.
+std::string ConvertFileSystemURLToPathInsideCrostini(
+    Profile* profile,
+    const storage::FileSystemURL& file_system_url);
+
+// DEPRECATED. Use |ConvertToContentUrls| instead.
+// While this function can convert paths under Downloads, /media/removable
+// and /special/drive, this CANNOT convert paths under ARC media directories
+// (/special/arc-documents-provider).
+// TODO(crbug.com/811679): Migrate all callers and remove this.
 bool ConvertPathToArcUrl(const base::FilePath& path, GURL* arc_url_out);
+
+using ConvertToContentUrlsCallback =
+    base::OnceCallback<void(const std::vector<GURL>& content_urls)>;
+
+// Asynchronously converts Chrome OS file system URLs to content:// URLs.
+// Always returns a vector of the same size as |file_system_urls|.
+// Empty GURLs are filled in the vector if conversion fails.
+void ConvertToContentUrls(
+    const std::vector<storage::FileSystemURL>& file_system_urls,
+    ConvertToContentUrlsCallback callback);
 
 }  // namespace util
 }  // namespace file_manager

@@ -4,11 +4,13 @@
 
 #include "android_webview/renderer/aw_print_render_frame_helper_delegate.h"
 
-#include "third_party/WebKit/public/web/WebElement.h"
+#include "third_party/blink/public/web/web_element.h"
 
 namespace android_webview {
 
-AwPrintRenderFrameHelperDelegate::~AwPrintRenderFrameHelperDelegate() {}
+AwPrintRenderFrameHelperDelegate::AwPrintRenderFrameHelperDelegate() = default;
+
+AwPrintRenderFrameHelperDelegate::~AwPrintRenderFrameHelperDelegate() = default;
 
 bool AwPrintRenderFrameHelperDelegate::CancelPrerender(
     content::RenderFrame* render_frame) {

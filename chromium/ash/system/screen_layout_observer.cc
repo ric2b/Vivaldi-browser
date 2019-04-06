@@ -8,18 +8,18 @@
 #include <utility>
 #include <vector>
 
-#include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
-#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/tray/system_tray_controller.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -28,8 +28,8 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/strings/grit/ui_strings.h"
 
 using message_center::Notification;
@@ -55,9 +55,8 @@ base::string16 GetDisplaySize(int64_t display_id) {
   // to empty string if this happens on release build.
   const display::DisplayIdList id_list =
       display_manager->GetMirroringDestinationDisplayIdList();
-  const bool mirroring =
-      display_manager->IsInMirrorMode() &&
-      std::find(id_list.begin(), id_list.end(), display_id) != id_list.end();
+  const bool mirroring = display_manager->IsInMirrorMode() &&
+                         base::ContainsValue(id_list, display_id);
   DCHECK(!mirroring);
   if (mirroring)
     return base::string16();
@@ -69,17 +68,20 @@ base::string16 GetDisplaySize(int64_t display_id) {
 }
 
 // Callback to handle a user selecting the notification view.
-void OpenSettingsFromNotification(base::Optional<int> button_index) {
+void OnNotificationClicked(base::Optional<int> button_index) {
   DCHECK(!button_index);
 
   Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_DISPLAY_NOTIFICATION_SELECTED);
   // Settings may be blocked, e.g. at the lock screen.
-  if (Shell::Get()->session_controller()->ShouldEnableSettings()) {
-    Shell::Get()->system_tray_controller()->ShowDisplaySettings();
+  if (Shell::Get()->session_controller()->ShouldEnableSettings() &&
+      Shell::Get()->system_tray_model()->client_ptr()) {
+    Shell::Get()->system_tray_model()->client_ptr()->ShowDisplaySettings();
     Shell::Get()->metrics()->RecordUserMetricsAction(
         UMA_STATUS_AREA_DISPLAY_NOTIFICATION_SHOW_SETTINGS);
   }
+  message_center::MessageCenter::Get()->RemoveNotification(
+      ScreenLayoutObserver::kNotificationId, true /* by_user */);
 }
 
 // Returns the name of the currently connected external display whose ID is
@@ -305,7 +307,7 @@ bool ScreenLayoutObserver::GetDisplayMessageForNotification(
       continue;
     // b) the source is accelerometer.
     if (iter.second.active_rotation_source() ==
-        display::Display::ROTATION_SOURCE_ACCELEROMETER) {
+        display::Display::RotationSource::ACCELEROMETER) {
       continue;
     }
     // c) if the device is in tablet mode, and source is not user.
@@ -313,7 +315,7 @@ bool ScreenLayoutObserver::GetDisplayMessageForNotification(
             ->tablet_mode_controller()
             ->IsTabletModeWindowManagerEnabled() &&
         iter.second.active_rotation_source() !=
-            display::Display::ROTATION_SOURCE_USER) {
+            display::Display::RotationSource::USER) {
       continue;
     }
 
@@ -371,10 +373,9 @@ void ScreenLayoutObserver::CreateOrUpdateNotification(
               message_center::NotifierId::SYSTEM_COMPONENT, kNotifierDisplay),
           message_center::RichNotificationData(),
           new message_center::HandleNotificationClickDelegate(
-              base::Bind(&OpenSettingsFromNotification)),
+              base::Bind(&OnNotificationClicked)),
           kNotificationScreenIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);
-  notification->set_clickable(true);
   notification->set_priority(message_center::SYSTEM_PRIORITY);
 
   Shell::Get()->metrics()->RecordUserMetricsAction(

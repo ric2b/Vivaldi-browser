@@ -9,127 +9,72 @@
 
 #include "ash/ash_export.h"
 #include "ash/frame/frame_header.h"
-#include "ash/public/interfaces/window_style.mojom.h"
+#include "ash/public/cpp/ash_constants.h"
 #include "base/compiler_specific.h"  // override
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "third_party/skia/include/core/SkColor.h"
-#include "ui/gfx/animation/animation_delegate.h"
-
-namespace gfx {
-class Rect;
-class SlideAnimation;
-}  // namespace gfx
-
-namespace views {
-class View;
-class Widget;
-}  // namespace views
 
 namespace ash {
-class FrameCaptionButton;
-class FrameCaptionButtonContainerView;
 
-// Helper class for managing the default window header.
-class ASH_EXPORT DefaultFrameHeader : public FrameHeader,
-                                      public gfx::AnimationDelegate {
+// Helper class for managing the default window header, which is used for
+// Chrome apps (but not bookmark apps), for example.
+class ASH_EXPORT DefaultFrameHeader : public FrameHeader {
  public:
   // DefaultFrameHeader does not take ownership of any of the parameters.
-  DefaultFrameHeader(
-      views::Widget* frame,
-      views::View* header_view,
-      FrameCaptionButtonContainerView* caption_button_container,
-      mojom::WindowStyle window_style = mojom::WindowStyle::DEFAULT);
+  DefaultFrameHeader(views::Widget* target_widget,
+                     views::View* header_view,
+                     FrameCaptionButtonContainerView* caption_button_container);
   ~DefaultFrameHeader() override;
 
-  // FrameHeader overrides:
-  int GetMinimumHeaderWidth() const override;
-  void PaintHeader(gfx::Canvas* canvas, Mode mode) override;
-  void LayoutHeader() override;
-  int GetHeaderHeight() const override;
-  int GetHeaderHeightForPainting() const override;
-  void SetHeaderHeightForPainting(int height) override;
-  void SchedulePaintForTitle() override;
-  void SetPaintAsActive(bool paint_as_active) override;
-
-  void set_left_header_view(views::View* left_header_view) {
-    left_header_view_ = left_header_view;
+  SkColor active_frame_color_for_testing() {
+    return active_frame_color_.target_color();
   }
-
-  void set_back_button(FrameCaptionButton* back_button) {
-    back_button_ = back_button;
+  SkColor inactive_frame_color_for_testing() {
+    return inactive_frame_color_.target_color();
   }
-
-  // Sets the active and inactive frame colors. Note the inactive frame color
-  // will have some transparency added when the frame is drawn.
-  void SetFrameColors(SkColor active_frame_color, SkColor inactive_frame_color);
-  SkColor GetActiveFrameColor() const;
-  SkColor GetInactiveFrameColor() const;
-
-  // Gets the color of the title text.
-  SkColor GetTitleColor() const;
-
-  // Whether light caption images should be used. This is the case when the
-  // background of the frame is dark.
-  bool ShouldUseLightImages() const;
 
  protected:
-  // Paints the title bar, primarily the title string.
-  virtual void PaintTitleBar(gfx::Canvas* canvas);
-
-  // Returns the bounds for the title.
-  gfx::Rect GetAvailableTitleBounds() const;
-
-  views::View* view() { return view_; }
+  // FrameHeader:
+  void DoPaintHeader(gfx::Canvas* canvas) override;
+  void DoSetFrameColors(SkColor active_frame_color,
+                        SkColor inactive_frame_color) override;
+  AshLayoutSize GetButtonLayoutSize() const override;
+  SkColor GetTitleColor() const override;
+  SkColor GetCurrentFrameColor() const override;
+  void SetWidthInPixels(int width_in_pixels) override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(DefaultFrameHeaderTest, BackButtonAlignment);
-  FRIEND_TEST_ALL_PREFIXES(DefaultFrameHeaderTest, TitleIconAlignment);
-  FRIEND_TEST_ALL_PREFIXES(DefaultFrameHeaderTest, LightIcons);
+  FRIEND_TEST_ALL_PREFIXES(DefaultFrameHeaderTest, FrameColors);
 
-  // gfx::AnimationDelegate override:
-  void AnimationProgressed(const gfx::Animation* animation) override;
+  gfx::SlideAnimation* GetAnimationForActiveFrameColorForTest();
+  SkColor GetActiveFrameColorForPaintForTest();
 
-  // Paints highlight around the edge of the header for inactive restored
-  // windows.
-  void PaintHighlightForInactiveRestoredWindow(gfx::Canvas* canvas);
+  // A utility class to animate color value.
+  class ColorAnimator {
+   public:
+    explicit ColorAnimator(gfx::AnimationDelegate* delegate);
+    ~ColorAnimator();
 
-  // Paints the header/content separator.
-  void PaintHeaderContentSeparator(gfx::Canvas* canvas);
+    void SetTargetColor(SkColor target);
+    SkColor target_color() const { return target_color_; };
+    SkColor GetCurrentColor();
+    float get_value() const { return animation_.GetCurrentValue(); }
 
-  // Update all the images in the caption buttons.
-  void UpdateAllButtonImages();
+    gfx::SlideAnimation* animation() { return &animation_; }
 
-  // Updates the size button's images.
-  void UpdateSizeButtonImages();
+   private:
+    gfx::SlideAnimation animation_;
+    SkColor start_color_ = kDefaultFrameColor;
+    SkColor target_color_ = kDefaultFrameColor;
+    SkColor current_color_ = kDefaultFrameColor;
 
-  // Returns the header bounds in the coordinates of |view_|. The header is
-  // assumed to be positioned at the top left corner of |view_| and to have the
-  // same width as |view_|.
-  gfx::Rect GetLocalBounds() const;
+    DISALLOW_COPY_AND_ASSIGN(ColorAnimator);
+  };
 
-  // Returns whether the frame uses custom frame coloring.
-  bool UsesCustomFrameColors() const;
+  ColorAnimator active_frame_color_;
+  ColorAnimator inactive_frame_color_;
 
-  const mojom::WindowStyle window_style_;
-  views::Widget* frame_;
-  views::View* view_;
-  FrameCaptionButton* back_button_;  // May be nullptr.
-  views::View* left_header_view_;    // May be nullptr.
-  SkColor active_frame_color_;
-  SkColor inactive_frame_color_;
-  FrameCaptionButtonContainerView* caption_button_container_;
-
-  // The height of the header to paint.
-  int painted_height_;
-
-  // Whether the header should be painted as active.
-  Mode mode_;
-
-  // Whether the header is painted for the first time.
-  bool initial_paint_;
-
-  std::unique_ptr<gfx::SlideAnimation> activation_animation_;
+  int width_in_pixels_ = -1;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultFrameHeader);
 };

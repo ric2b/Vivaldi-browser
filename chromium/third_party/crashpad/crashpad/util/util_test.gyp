@@ -67,6 +67,11 @@
         'mach/symbolic_constants_mach_test.cc',
         'mach/task_memory_test.cc',
         'misc/arraysize_unsafe_test.cc',
+        'misc/capture_context_test.cc',
+        'misc/capture_context_test_util.h',
+        'misc/capture_context_test_util_linux.cc',
+        'misc/capture_context_test_util_mac.cc',
+        'misc/capture_context_test_util_win.cc',
         'misc/clock_test.cc',
         'misc/from_pointer_cast_test.cc',
         'misc/initialization_state_dcheck_test.cc',
@@ -74,6 +79,7 @@
         'misc/paths_test.cc',
         'misc/scoped_forbid_return_test.cc',
         'misc/random_string_test.cc',
+        'misc/range_set_test.cc',
         'misc/reinterpret_bytes_test.cc',
         'misc/time_test.cc',
         'misc/uuid_test.cc',
@@ -105,7 +111,6 @@
         'thread/thread_log_messages_test.cc',
         'thread/thread_test.cc',
         'thread/worker_thread_test.cc',
-        'win/capture_context_test.cc',
         'win/command_line_test.cc',
         'win/critical_section_with_debug_info_test.cc',
         'win/exception_handler_server_test.cc',
@@ -156,12 +161,41 @@
         ['OS=="android"', {
           'sources/': [
             ['include', '^linux/'],
+            ['include', '^misc/capture_context_test_util_linux\\.cc$'],
           ],
         }],
       ],
     },
   ],
   'conditions': [
+    ['OS!="android"', {
+      'targets': [
+        {
+          'target_name': 'http_transport_test_server',
+          'type': 'executable',
+          'dependencies': [
+            '../third_party/mini_chromium/mini_chromium.gyp:base',
+            '../third_party/zlib/zlib.gyp:zlib',
+            '../tools/tools.gyp:crashpad_tool_support',
+            '../util/util.gyp:crashpad_util',
+          ],
+          'sources': [
+            'net/http_transport_test_server.cc',
+          ],
+          'include_dirs': [
+            '..',
+          ],
+          'xcode_settings': {
+            'WARNING_CFLAGS!': [
+              '-Wexit-time-destructors',
+            ],
+          },
+          'cflags!': [
+            '-Wexit-time-destructors',
+          ],
+        },
+      ],
+    }],
     ['OS=="win"', {
       'targets': [
         {

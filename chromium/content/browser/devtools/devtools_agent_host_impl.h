@@ -12,16 +12,18 @@
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/process/kill.h"
 #include "content/browser/devtools/devtools_io_context.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/devtools_agent_host.h"
-#include "third_party/WebKit/public/web/devtools_agent.mojom.h"
+#include "third_party/blink/public/web/devtools_agent.mojom.h"
 
 namespace content {
 
 class BrowserContext;
 class DevToolsSession;
+class TargetRegistry;
 
 // Describes interface for managing devtools agents from the browser process.
 class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
@@ -37,12 +39,12 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
 
   // DevToolsAgentHost implementation.
   void AttachClient(DevToolsAgentHostClient* client) override;
-  void ForceAttachClient(DevToolsAgentHostClient* client) override;
+  bool AttachRestrictedClient(DevToolsAgentHostClient* client) override;
   bool DetachClient(DevToolsAgentHostClient* client) override;
   bool DispatchProtocolMessage(DevToolsAgentHostClient* client,
                                const std::string& message) override;
   bool IsAttached() override;
-  void InspectElement(DevToolsAgentHostClient* client, int x, int y) override;
+  void InspectElement(RenderFrameHost* frame_host, int x, int y) override;
   std::string GetId() override;
   std::string GetParentId() override;
   std::string GetOpenerId() override;
@@ -63,30 +65,42 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
 
   static bool ShouldForceCreation();
 
-  virtual void AttachSession(DevToolsSession* session) = 0;
-  virtual void DetachSession(DevToolsSession* session) = 0;
-  virtual bool DispatchProtocolMessage(
-      DevToolsSession* session,
-      const std::string& message) = 0;
-  virtual void InspectElement(DevToolsSession* session, int x, int y);
+  // Returning |false| will block the attach.
+  virtual bool AttachSession(DevToolsSession* session,
+                             TargetRegistry* registry);
+  virtual void DetachSession(DevToolsSession* session);
+
+  virtual bool DispatchProtocolMessage(DevToolsAgentHostClient* client,
+                                       const std::string& message,
+                                       base::DictionaryValue* parsed_message);
 
   void NotifyCreated();
   void NotifyNavigated();
-  void ForceDetachAllClients();
-  void ForceDetachSession(DevToolsSession* session);
+  void NotifyCrashed(base::TerminationStatus status);
+  void ForceDetachAllSessions();
+  void ForceDetachRestrictedSessions(
+      const std::vector<DevToolsSession*>& restricted_sessions);
   DevToolsIOContext* GetIOContext() { return &io_context_; }
 
   base::flat_set<DevToolsSession*>& sessions() { return sessions_; }
 
  private:
-  friend class DevToolsAgentHost; // for static methods
+  friend class DevToolsAgentHost;  // for static methods
   friend class DevToolsSession;
-  void InnerAttachClient(DevToolsAgentHostClient* client);
+  friend class TargetRegistry;  // for subtarget management
+
+  bool InnerAttachClient(DevToolsAgentHostClient* client,
+                         TargetRegistry* registry,
+                         bool restricted);
   void InnerDetachClient(DevToolsAgentHostClient* client);
   void NotifyAttached();
   void NotifyDetached();
   void NotifyDestroyed();
   DevToolsSession* SessionByClient(DevToolsAgentHostClient* client);
+
+  // TargetRegistry API for subtarget management.
+  void AttachSubtargetClient(DevToolsAgentHostClient* client,
+                             TargetRegistry* registry);
 
   const std::string id_;
   base::flat_set<DevToolsSession*> sessions_;

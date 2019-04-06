@@ -4,6 +4,8 @@
 #include "base/vivaldi_paths.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 
+using base::PathService;
+
 namespace extensions {
 
 class VivaldiExtensionApiTest : public ExtensionApiTest {

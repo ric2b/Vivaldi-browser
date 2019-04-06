@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/ash/system_tray_client.h"
 
-#include "ash/login_status.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/shell.h"
@@ -16,7 +15,6 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
-#include "chrome/browser/chromeos/options/network_config_view.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -25,13 +23,13 @@
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/webui/chromeos/bluetooth_pairing_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_config_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
+#include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chrome/browser/upgrade_detector.h"
 #include "chrome/common/url_constants.h"
 #include "chromeos/chromeos_switches.h"
@@ -41,6 +39,7 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_util.h"
+#include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/tether_constants.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
@@ -57,14 +56,15 @@
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/event_constants.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
 using chromeos::DBusThreadManager;
 using chromeos::UpdateEngineClient;
-using session_manager::SessionState;
 using session_manager::SessionManager;
+using session_manager::SessionState;
 using views::Widget;
 
 namespace {
@@ -87,8 +87,6 @@ ash::mojom::UpdateSeverity GetUpdateSeverity(UpgradeDetector* detector) {
       return ash::mojom::UpdateSeverity::ELEVATED;
     case UpgradeDetector::UPGRADE_ANNOYANCE_HIGH:
       return ash::mojom::UpdateSeverity::HIGH;
-    case UpgradeDetector::UPGRADE_ANNOYANCE_SEVERE:
-      return ash::mojom::UpdateSeverity::SEVERE;
     case UpgradeDetector::UPGRADE_ANNOYANCE_CRITICAL:
       return ash::mojom::UpdateSeverity::CRITICAL;
   }
@@ -179,7 +177,7 @@ Widget* SystemTrayClient::CreateUnownedDialogWidget(
   // Place the dialog in the appropriate modal dialog container, either above
   // or below the lock screen, based on the login state.
   int container_id = GetDialogParentContainerId();
-  if (ash_util::IsRunningInMash()) {
+  if (!features::IsAshInBrowserProcess()) {
     using ui::mojom::WindowManager;
     params.mus_properties[WindowManager::kContainerId_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(container_id);
@@ -341,31 +339,21 @@ void SystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
     return;
   }
 
-  if (chromeos::switches::IsNetworkSettingsConfigEnabled())
-    chromeos::InternetConfigDialog::ShowDialogForNetworkId(network_id);
-  else
-    chromeos::NetworkConfigView::ShowForNetworkId(network_id);
+  chromeos::InternetConfigDialog::ShowDialogForNetworkId(network_id);
 }
 
 void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
-  if (type == shill::kTypeCellular) {
+  if (type == ::onc::network_type::kCellular) {
     const chromeos::NetworkState* cellular =
         chromeos::NetworkHandler::Get()
             ->network_state_handler()
-            ->FirstNetworkByType(chromeos::NetworkTypePattern::Primitive(type));
+            ->FirstNetworkByType(
+                chromeos::onc::NetworkTypePatternFromOncType(type));
     std::string network_id = cellular ? cellular->guid() : "";
     ShowNetworkSettingsHelper(network_id, false /* show_configure */);
     return;
   }
-  if (chromeos::switches::IsNetworkSettingsConfigEnabled()) {
-    // TODO(stevenjb): Pass ONC type to ShowNetworkCreate once NetworkConfigView
-    // is deprecated.
-    std::string onc_type =
-        chromeos::network_util::TranslateShillTypeToONC(type);
-    chromeos::InternetConfigDialog::ShowDialogForNetworkType(onc_type);
-  } else {
-    chromeos::NetworkConfigView::ShowForType(type);
-  }
+  chromeos::InternetConfigDialog::ShowDialogForNetworkType(type);
 }
 
 void SystemTrayClient::ShowThirdPartyVpnCreate(
@@ -386,7 +374,8 @@ void SystemTrayClient::ShowArcVpnCreate(const std::string& app_id) {
   if (!profile)
     return;
 
-  arc::LaunchApp(profile, app_id, ui::EF_NONE);
+  arc::LaunchApp(profile, app_id, ui::EF_NONE,
+                 arc::UserInteractionType::APP_STARTED_FROM_SETTINGS);
 }
 
 void SystemTrayClient::ShowNetworkSettings(const std::string& network_id) {
@@ -429,6 +418,10 @@ void SystemTrayClient::ShowNetworkSettingsHelper(const std::string& network_id,
   ShowSettingsSubPageForActiveUser(page);
 }
 
+void SystemTrayClient::ShowMultiDeviceSetup() {
+  chromeos::multidevice_setup::MultiDeviceSetupDialog::Show();
+}
+
 void SystemTrayClient::RequestRestartForUpdate() {
   // Flash updates on Chrome OS require device reboot.
   const browser_shutdown::RebootPolicy reboot_policy =
@@ -460,7 +453,7 @@ void SystemTrayClient::HandleUpdateAvailable() {
                                            : ash::mojom::UpdateType::FLASH;
 
   system_tray_->ShowUpdateIcon(severity, detector->is_factory_reset_required(),
-                               update_type);
+                               detector->is_rollback(), update_type);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

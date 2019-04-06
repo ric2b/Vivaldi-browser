@@ -11,13 +11,13 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 
-#import "base/mac/bind_objc_block.h"
+#import "base/bind.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #import "remoting/ios/facade/host_info.h"
 #import "remoting/ios/facade/host_list_fetcher.h"
 #import "remoting/ios/facade/ios_client_runtime_delegate.h"
 #import "remoting/ios/facade/remoting_service.h"
-#import "remoting/ios/keychain_wrapper.h"
+#import "remoting/ios/persistence/remoting_keychain.h"
 #import "remoting/ios/persistence/remoting_preferences.h"
 
 #include "base/logging.h"
@@ -26,9 +26,17 @@
 #include "remoting/base/oauth_token_getter.h"
 #include "remoting/base/oauth_token_getter_impl.h"
 
-const char kOauthRedirectUrl[] =
+static const char kOauthRedirectUrl[] =
     "https://chromoting-oauth.talkgadget."
     "google.com/talkgadget/oauth/chrome-remote-desktop/dev";
+
+// We currently don't support multi-account sign in for OAuth authentication, so
+// we store the current refresh token for an unspecified account. If we later
+// decide to support multi-account sign in, we may use the user email as the
+// account name when storing the refresh token and store the current user email
+// in UserDefaults.
+static const auto kRefreshTokenAccount =
+    remoting::Keychain::kUnspecifiedAccount;
 
 std::unique_ptr<remoting::OAuthTokenGetter>
 CreateOAuthTokenGetterWithAuthorizationCode(
@@ -79,7 +87,6 @@ RemotingAuthenticationStatus oauthStatusToRemotingAuthenticationStatus(
 
 @interface RemotingOAuthAuthentication () {
   std::unique_ptr<remoting::OAuthTokenGetter> _tokenGetter;
-  KeychainWrapper* _keychainWrapper;
   BOOL _firstLoadUserAttempt;
 }
 @end
@@ -92,7 +99,6 @@ RemotingAuthenticationStatus oauthStatusToRemotingAuthenticationStatus(
 - (instancetype)init {
   self = [super init];
   if (self) {
-    _keychainWrapper = KeychainWrapper.instance;
     _user = nil;
     _firstLoadUserAttempt = YES;
   }
@@ -121,7 +127,7 @@ RemotingAuthenticationStatus oauthStatusToRemotingAuthenticationStatus(
   __weak RemotingOAuthAuthentication* weakSelf = self;
   _tokenGetter = CreateOAuthTokenGetterWithAuthorizationCode(
       std::string(base::SysNSStringToUTF8(authorizationCode)),
-      base::BindBlockArc(
+      base::BindRepeating(
           ^(const std::string& user_email, const std::string& refresh_token) {
             VLOG(1) << "New Creds: " << user_email << " " << refresh_token;
             UserInfo* user = [[UserInfo alloc] init];
@@ -163,7 +169,7 @@ RemotingAuthenticationStatus oauthStatusToRemotingAuthenticationStatus(
   // Be careful here since a failure to reset onAccessToken will end up with
   // retain cycle and memory leakage.
   if (_tokenGetter) {
-    _tokenGetter->CallWithToken(base::BindBlockArc(
+    _tokenGetter->CallWithToken(base::BindRepeating(
         ^(remoting::OAuthTokenGetter::Status status,
           const std::string& user_email, const std::string& access_token) {
           onAccessToken(oauthStatusToRemotingAuthenticationStatus(status),
@@ -183,19 +189,24 @@ RemotingAuthenticationStatus oauthStatusToRemotingAuthenticationStatus(
 - (void)storeUserInfo:(UserInfo*)user {
   if (user) {
     [RemotingPreferences instance].activeUserKey = user.userEmail;
-    // TODO(nicholss): Need to match the token with the email.
-    [_keychainWrapper setRefreshToken:user.refreshToken];
+    std::string refreshToken = base::SysNSStringToUTF8(user.refreshToken);
+    remoting::RemotingKeychain::GetInstance()->SetData(
+        remoting::Keychain::Key::REFRESH_TOKEN, kRefreshTokenAccount,
+        refreshToken);
   } else {
     [RemotingPreferences instance].activeUserKey = nil;
-    [_keychainWrapper resetKeychainItem];
+    remoting::RemotingKeychain::GetInstance()->RemoveData(
+        remoting::Keychain::Key::REFRESH_TOKEN, kRefreshTokenAccount);
   }
 }
 
 - (UserInfo*)loadUserInfo {
   UserInfo* user = [[UserInfo alloc] init];
   user.userEmail = [RemotingPreferences instance].activeUserKey;
-  // TODO(nicholss): Need to match the token with the email.
-  user.refreshToken = [_keychainWrapper refreshToken];
+  std::string refreshTokenString =
+      remoting::RemotingKeychain::GetInstance()->GetData(
+          remoting::Keychain::Key::REFRESH_TOKEN, kRefreshTokenAccount);
+  user.refreshToken = base::SysUTF8ToNSString(refreshTokenString);
 
   if (!user || ![user isAuthenticated]) {
     user = nil;

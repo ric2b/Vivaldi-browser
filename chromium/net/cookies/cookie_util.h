@@ -18,6 +18,11 @@ class GURL;
 namespace net {
 namespace cookie_util {
 
+// Constants for use in VLOG
+const int kVlogPerCookieMonster = 1;
+const int kVlogSetCookies = 7;
+const int kVlogGarbageCollection = 5;
+
 // Returns the effective TLD+1 for a given host. This only makes sense for http
 // and https schemes. For other schemes, the host will be returned unchanged
 // (minus any leading period).
@@ -47,6 +52,11 @@ NET_EXPORT base::Time ParseCookieExpirationTime(const std::string& time_string);
 
 // Convenience for converting a cookie origin (domain and https pair) to a URL.
 NET_EXPORT GURL CookieOriginToURL(const std::string& domain, bool is_https);
+
+// Returns true if the cookie |domain| matches the given |host| as described
+// in section 5.1.3 of RFC 6265.
+NET_EXPORT bool IsDomainMatch(const std::string& domain,
+                              const std::string& host);
 
 // A ParsedRequestCookie consists of the key and value of the cookie.
 typedef std::pair<base::StringPiece, base::StringPiece> ParsedRequestCookie;

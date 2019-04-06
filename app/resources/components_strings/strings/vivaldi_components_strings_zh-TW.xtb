@@ -104,7 +104,7 @@
 <translation id="4506599922270137252">與系統管理員聯絡</translation>
 <translation id="4522570452068850558">詳細資訊</translation>
 <translation id="4552089082226364758">Flash</translation>
-<translation id="4558551763791394412">試試看停用擴充功能。</translation>
+<translation id="4558551763791394412">試試看停用延伸套件。</translation>
 <translation id="4592951414987517459">您的 <ph name="DOMAIN" /> 連線使用新型加密套件進行加密。</translation>
 <translation id="4611292653554630842">登入</translation>
 <translation id="4690462567478992370">停用無效的憑證</translation>
@@ -148,7 +148,7 @@
 <translation id="5838278095973806738">請勿在這個網站上輸入任何機密資訊 (例如密碼或信用卡號碼)，以免遭到攻擊者竊取。</translation>
 <translation id="5869405914158311789">無法訪問這個網站</translation>
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{目前使用 1 個 Cookie}other{目前使用 # 個 Cookie}}</translation>
-<translation id="5990559369517809815">擴充功能已封鎖要傳送至伺服器的要求。</translation>
+<translation id="5990559369517809815">延伸套件已封鎖要傳送至伺服器的要求。</translation>
 <translation id="6051221802930200923">目前無法造訪 <ph name="SITE" />，因為這個網站使用憑證鎖定功能。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
 <translation id="6080696365213338172">你使用了管理員提供的憑證存取內容，因此管理員可攔截你傳送至「<ph name="DOMAIN" />」的資料。</translation>
 <translation id="6146055958333702838">檢查您的網路線是否穩固連接。重新啟動您可能正在使用的任何路由器、數據機或其他網路裝置。</translation>
@@ -167,7 +167,7 @@
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒絕連線。</translation>
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6556239504065605927">安全連線</translation>
-<translation id="6569060085658103619">目前顯示的是擴充功能頁面</translation>
+<translation id="6569060085658103619">目前顯示的是延伸套件頁面</translation>
 <translation id="6657585470893396449">密碼</translation>
 <translation id="6685834062052613830">請登出並完成設定程序</translation>
 <translation id="6711464428925977395">代理伺服器發生錯誤，或是網址不正確。</translation>
@@ -176,7 +176,7 @@
 <translation id="7053983685419859001">封鎖</translation>
 <translation id="7079718277001814089">這個網站含有惡意軟體</translation>
 <translation id="7090678807593890770">請透過 Google 搜尋「<ph name="LINK" />」</translation>
-<translation id="7108819624672055576">依據擴充功能設定允許</translation>
+<translation id="7108819624672055576">依據延伸套件設定允許</translation>
 <translation id="7111012039238467737">(有效)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
 <translation id="7219179957768738017">這個連線使用 <ph name="SSL_VERSION" />。</translation>
@@ -189,7 +189,7 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">這個網頁需要使用您先前輸入的資料才能正確顯示。您可以重新傳送這些資料，不過這麼做會重複執行這個網頁先前執行過的任何動作。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> 目前無法處理這項要求。</translation>
-<translation id="7662298039739062396">由擴充功能控制的設定</translation>
+<translation id="7662298039739062396">由延伸套件控制的設定</translation>
 <translation id="7663736086183791259">憑證 <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7669271284792375604">攻擊者可能會試圖透過這個網站誘使你安裝對瀏覽體驗有害 (例如變更你的首頁，或是在你造訪的網站上顯示多餘的廣告) 的程式。</translation>
 <translation id="7714464543167945231">憑證</translation>
@@ -224,7 +224,7 @@
 <translation id="9011424611726486705">開啟網站設定</translation>
 <translation id="9025348182339809926">(無效)</translation>
 <translation id="9039213469156557790">此外，這個網頁含有其他不安全的資源。其他人可能會在資源傳輸期間檢視這些資源，攻擊者也可能會修改這些資源，進而變更網頁行為。</translation>
-<translation id="9069693763241529744">依據擴充功能設定封鎖</translation>
+<translation id="9069693763241529744">依據延伸套件設定封鎖</translation>
 <translation id="910908805481542201">請協助我解決這個問題</translation>
 <translation id="9169664750068251925">永遠禁止在這個網站執行</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不支援的通訊協定。</translation>

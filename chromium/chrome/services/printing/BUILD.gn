@@ -15,11 +15,12 @@ source_set("lib") {
 
   deps = [
     "//base",
+    "//components/pwg_encoder",
     "//mojo/public/cpp/bindings",
   ]
 
   public_deps = [
-    "//chrome/services/printing/public/interfaces",
+    "//chrome/services/printing/public/mojom",
     "//services/service_manager/public/cpp",
   ]
 

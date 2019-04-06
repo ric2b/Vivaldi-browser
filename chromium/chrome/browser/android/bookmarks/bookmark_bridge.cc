@@ -237,6 +237,7 @@ void BookmarkBridge::GetTopLevelFolderIDs(
 
   if (get_normal) {
     DCHECK_EQ(bookmark_model_->root_node()->child_count(), 5 +1 /* trash */);
+
     const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
     for (int i = 0; i < mobile_node->child_count(); ++i) {
       const BookmarkNode* node = mobile_node->GetChild(i);

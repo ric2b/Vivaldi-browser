@@ -93,7 +93,7 @@ public class BrowserSessionContentUtils {
                 CustomTabsConnection.getInstance().getClientPackageNameForSession(session);
         if (TextUtils.isEmpty(packageName)) return false;
         boolean valid = OriginVerifier.isValidOrigin(
-                packageName, referrer, CustomTabsService.RELATION_USE_AS_ORIGIN);
+                packageName, new Origin(referrer), CustomTabsService.RELATION_USE_AS_ORIGIN);
 
         // OriginVerifier should only be allowing https schemes.
         assert valid == UrlConstants.HTTPS_SCHEME.equals(referrer.getScheme());
@@ -108,6 +108,15 @@ public class BrowserSessionContentUtils {
     public static String getCurrentUrlForActiveBrowserSession() {
         if (sActiveContentHandler == null) return null;
         return sActiveContentHandler.getCurrentUrl();
+    }
+
+    /**
+     * @return The pending url for the page about to be displayed using the current {@link
+     * BrowserSessionContentHandler}.
+     */
+    public static String getPendingUrlForActiveBrowserSession() {
+        if (sActiveContentHandler == null) return null;
+        return sActiveContentHandler.getPendingUrl();
     }
 
     /**

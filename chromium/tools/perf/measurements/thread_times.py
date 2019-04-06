@@ -29,6 +29,8 @@ class ThreadTimes(legacy_page_test.LegacyPageTest):
       category_filter = chrome_trace_category_filter.CreateLowOverheadFilter()
       if self.options and self.options.extra_chrome_categories:
         category_filter.AddFilterString(self.options.extra_chrome_categories)
+      if self.options and self.options.enable_systrace:
+        self._timeline_controller.enable_systrace = True
       self._timeline_controller.trace_categories = category_filter.filter_string
     self._timeline_controller.SetUp(page, tab)
 
@@ -41,7 +43,7 @@ class ThreadTimes(legacy_page_test.LegacyPageTest):
     self._timeline_controller.Stop(tab, results)
     metric = timeline.ThreadTimesTimelineMetric()
     renderer_thread = \
-        self._timeline_controller.model.GetRendererThreadFromTabId(tab.id)
+        self._timeline_controller.model.GetFirstRendererThread(tab.id)
     if self._report_silk_details:
       metric.details_to_report = timeline.ReportSilkDetails
     metric.AddResults(self._timeline_controller.model, renderer_thread,

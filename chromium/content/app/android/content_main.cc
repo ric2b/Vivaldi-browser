@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "content/app/content_service_manager_main_delegate.h"
 #include "content/public/app/content_main.h"
@@ -28,14 +27,26 @@ LazyInstance<std::unique_ptr<ContentMainDelegate>>::DestructorAtExit
 
 }  // namespace
 
+// TODO(qinmin/hanxi): split this function into 2 separate methods: One to
+// start the ServiceManager and one to start the remainder of the browser
+// process. The first method should always be called upon browser start, and
+// the second method can be deferred. See http://crbug.com/854209.
 static jint JNI_ContentMain_Start(JNIEnv* env,
-                                  const JavaParamRef<jclass>& clazz) {
+                                  const JavaParamRef<jclass>& clazz,
+                                  jboolean start_service_manager_only) {
   TRACE_EVENT0("startup", "content::Start");
 
-  DCHECK(!g_service_manager_main_delegate.Get());
-  g_service_manager_main_delegate.Get() =
-      std::make_unique<ContentServiceManagerMainDelegate>(
-          ContentMainParams(g_content_main_delegate.Get().get()));
+  DCHECK(!g_service_manager_main_delegate.Get() || !start_service_manager_only);
+
+  if (!g_service_manager_main_delegate.Get()) {
+    g_service_manager_main_delegate.Get() =
+        std::make_unique<ContentServiceManagerMainDelegate>(
+            ContentMainParams(g_content_main_delegate.Get().get()));
+  }
+
+  static_cast<ContentServiceManagerMainDelegate*>(
+      g_service_manager_main_delegate.Get().get())
+      ->SetStartServiceManagerOnly(start_service_manager_only);
 
   service_manager::MainParams main_params(
       g_service_manager_main_delegate.Get().get());

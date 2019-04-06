@@ -162,7 +162,7 @@ class SQLiteChannelIDStore::Backend
   std::unique_ptr<sql::Connection> db_;
   sql::MetaTable meta_table_;
 
-  typedef std::list<PendingOperation*> PendingOperationsList;
+  typedef std::list<std::unique_ptr<PendingOperation>> PendingOperationsList;
   PendingOperationsList pending_;
   PendingOperationsList::size_type num_pending_;
   // True if the persistent store should skip clear on exit rules.
@@ -202,8 +202,6 @@ void SQLiteChannelIDStore::Backend::LoadInBackground(
 
   // This method should be called only once per instance.
   DCHECK(!db_.get());
-
-  base::TimeTicks start = base::TimeTicks::Now();
 
   // Ensure the parent directory for storing certs is created before reading
   // from it.
@@ -275,17 +273,6 @@ void SQLiteChannelIDStore::Backend::LoadInBackground(
     channel_ids->push_back(std::move(channel_id));
   }
 
-  UMA_HISTOGRAM_COUNTS_10000(
-      "DomainBoundCerts.DBLoadedCount",
-      static_cast<base::HistogramBase::Sample>(channel_ids->size()));
-  base::TimeDelta load_time = base::TimeTicks::Now() - start;
-  UMA_HISTOGRAM_CUSTOM_TIMES("DomainBoundCerts.DBLoadTime",
-                             load_time,
-                             base::TimeDelta::FromMilliseconds(1),
-                             base::TimeDelta::FromMinutes(1),
-                             50);
-  DVLOG(1) << "loaded " << channel_ids->size() << " in "
-           << load_time.InMilliseconds() << " ms";
   RecordDbLoadStatus(load_result);
 }
 
@@ -427,7 +414,7 @@ void SQLiteChannelIDStore::Backend::BatchOperation(
   PendingOperationsList::size_type num_pending;
   {
     base::AutoLock locked(lock_);
-    pending_.push_back(po.release());
+    pending_.push_back(std::move(po));
     num_pending = ++num_pending_;
   }
 
@@ -453,7 +440,7 @@ void SQLiteChannelIDStore::Backend::PrunePendingOperationsForDeletes(
        it != pending_.end();) {
     if (base::ContainsValue(server_identifiers,
                             (*it)->channel_id().server_identifier())) {
-      std::unique_ptr<PendingOperation> po(*it);
+      std::unique_ptr<PendingOperation> po(std::move(*it));
       it = pending_.erase(it);
       --num_pending_;
     } else {
@@ -504,7 +491,7 @@ void SQLiteChannelIDStore::Backend::Commit() {
   for (PendingOperationsList::iterator it = ops.begin(); it != ops.end();
        ++it) {
     // Free the certs as we commit them to the database.
-    std::unique_ptr<PendingOperation> po(*it);
+    std::unique_ptr<PendingOperation> po(std::move(*it));
     switch (po->op()) {
       case PendingOperation::CHANNEL_ID_ADD: {
         add_statement.Reset(true);

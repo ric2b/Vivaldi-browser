@@ -9,7 +9,7 @@
 #include "base/memory/singleton.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
 #include "content/public/common/page_state.h"
-#include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
+#include "third_party/blink/public/platform/web_referrer_policy.h"
 
 namespace sessions {
 
@@ -81,7 +81,7 @@ void ContentSerializedNavigationDriver::RegisterExtendedInfoHandler(
     std::unique_ptr<ExtendedInfoHandler> handler) {
   DCHECK(!key.empty());
   DCHECK(!extended_info_handler_map_.count(key));
-  DCHECK(handler.get());
+  DCHECK(handler);
   extended_info_handler_map_[key] = std::move(handler);
 }
 

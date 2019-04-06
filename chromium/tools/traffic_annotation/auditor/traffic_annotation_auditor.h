@@ -20,7 +20,8 @@ struct AuditorException {
     ALL,                // Ignore all errors (doesn't check the files at all).
     MISSING,            // Ignore missing annotations.
     DIRECT_ASSIGNMENT,  // Ignore direct assignment of annotation value.
-    EXCEPTION_TYPE_LAST = DIRECT_ASSIGNMENT
+    TEST_ANNOTATION,    // Ignore usages of annotation for tests.
+    EXCEPTION_TYPE_LAST = TEST_ANNOTATION
   } type;
 
   static bool TypeFromString(const std::string& type_string,
@@ -31,6 +32,8 @@ struct AuditorException {
       *type_value = ExceptionType::MISSING;
     } else if (type_string == "direct_assignment") {
       *type_value = ExceptionType::DIRECT_ASSIGNMENT;
+    } else if (type_string == "test_annotation") {
+      *type_value = ExceptionType::TEST_ANNOTATION;
     } else {
       return false;
     }
@@ -56,9 +59,15 @@ class TrafficAnnotationAuditor {
   // filtered to only process the relevant files. If |use_compile_commands| flag
   // is set, the list of files is extracted from compile_commands.json instead
   // of git and will not be filtered.
+  // If clang tool returns error, and |rerun_on_errors| is true, the tool is run
+  // again to record errors.
+  // Errors are written to |errors_file| if it is not empty, otherwise
+  // LOG(ERROR).
   bool RunClangTool(const std::vector<std::string>& path_filters,
                     bool filter_files_based_on_heuristics,
-                    bool use_compile_commands);
+                    bool use_compile_commands,
+                    bool rerun_on_errors,
+                    const base::FilePath& errors_file);
 
   // Parses the output of clang tool (|clang_tool_raw_output_|) and populates
   // |extracted_annotations_|, |extracted_calls_|, and |errors_|.
@@ -152,6 +161,10 @@ class TrafficAnnotationAuditor {
   const base::FilePath source_path_;
   const base::FilePath build_path_;
   const base::FilePath clang_tool_path_;
+
+  base::FilePath absolute_source_path_;
+
+  std::vector<std::string> clang_tool_switches_;
 
   TrafficAnnotationExporter exporter_;
 

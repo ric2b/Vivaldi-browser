@@ -16,13 +16,14 @@
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/quic/chromium/crypto/proof_source_chromium.h"
-#include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
-#include "net/tools/quic/quic_dispatcher.h"
-#include "net/tools/quic/quic_http_response_cache.h"
-#include "net/tools/quic/quic_simple_dispatcher.h"
+#include "net/test/test_with_scoped_task_environment.h"
+#include "net/third_party/quic/core/quic_dispatcher.h"
+#include "net/third_party/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quic/tools/quic_memory_cache_backend.h"
+#include "net/third_party/quic/tools/quic_simple_dispatcher.h"
 #include "net/tools/quic/quic_simple_server.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
@@ -42,7 +43,7 @@ const char kHelloPath[] = "/hello.txt";
 const char kHelloBodyValue[] = "Hello from QUIC Server";
 const int kHelloStatus = 200;
 
-class URLRequestQuicTest : public ::testing::Test {
+class URLRequestQuicTest : public TestWithScopedTaskEnvironment {
  protected:
   URLRequestQuicTest() : context_(new TestURLRequestContext(true)) {
     StartQuicServer();
@@ -102,8 +103,8 @@ class URLRequestQuicTest : public ::testing::Test {
   }
 
   unsigned int GetRstErrorCountReceivedByServer(
-      QuicRstStreamErrorCode error_code) const {
-    return (static_cast<QuicSimpleDispatcher*>(server_->dispatcher()))
+      quic::QuicRstStreamErrorCode error_code) const {
+    return (static_cast<quic::QuicSimpleDispatcher*>(server_->dispatcher()))
         ->GetRstErrorCount(error_code);
   }
 
@@ -137,10 +138,10 @@ class URLRequestQuicTest : public ::testing::Test {
  private:
   void StartQuicServer() {
     // Set up in-memory cache.
-    response_cache_.AddSimpleResponse(kTestServerHost, kHelloPath, kHelloStatus,
-                                      kHelloBodyValue);
-    response_cache_.InitializeFromDirectory(ServerPushCacheDirectory());
-    net::QuicConfig config;
+    memory_cache_backend_.AddSimpleResponse(kTestServerHost, kHelloPath,
+                                            kHelloStatus, kHelloBodyValue);
+    memory_cache_backend_.InitializeBackend(ServerPushCacheDirectory());
+    quic::QuicConfig config;
     // Set up server certs.
     std::unique_ptr<net::ProofSourceChromium> proof_source(
         new net::ProofSourceChromium());
@@ -150,9 +151,9 @@ class URLRequestQuicTest : public ::testing::Test {
         directory.Append(FILE_PATH_LITERAL("quic-leaf-cert.key")),
         base::FilePath()));
     server_.reset(new QuicSimpleServer(
-        test::crypto_test_utils::ProofSourceForTesting(), config,
-        net::QuicCryptoServerConfig::ConfigOptions(), AllSupportedVersions(),
-        &response_cache_));
+        quic::test::crypto_test_utils::ProofSourceForTesting(), config,
+        quic::QuicCryptoServerConfig::ConfigOptions(),
+        quic::AllSupportedVersions(), &memory_cache_backend_));
     int rv =
         server_->Listen(net::IPEndPoint(net::IPAddress::IPv4AllZeros(), 0));
     EXPECT_GE(rv, 0) << "Quic server fails to start";
@@ -169,7 +170,7 @@ class URLRequestQuicTest : public ::testing::Test {
 
   std::string ServerPushCacheDirectory() {
     base::FilePath path;
-    PathService::Get(base::DIR_SOURCE_ROOT, &path);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
     path = path.AppendASCII("net").AppendASCII("data").AppendASCII(
         "quic_http_response_cache_data_with_push");
     // The file path is known to be an ascii string.
@@ -180,7 +181,7 @@ class URLRequestQuicTest : public ::testing::Test {
   std::unique_ptr<QuicSimpleServer> server_;
   std::unique_ptr<TestURLRequestContext> context_;
   TestNetLog net_log_;
-  QuicHttpResponseCache response_cache_;
+  quic::QuicMemoryCacheBackend memory_cache_backend_;
   MockCertVerifier cert_verifier_;
 };
 
@@ -262,14 +263,13 @@ TEST_F(URLRequestQuicTest, TestGetRequest) {
 
   request->Start();
   ASSERT_TRUE(request->is_pending());
-  base::RunLoop().Run();
+  delegate.RunUntilComplete();
 
   EXPECT_TRUE(request->status().is_success());
   EXPECT_EQ(kHelloBodyValue, delegate.data_received());
 }
 
 TEST_F(URLRequestQuicTest, CancelPushIfCached_SomeCached) {
-  base::RunLoop run_loop;
   Init();
 
   // Send a request to the pushed url: /kitten-1.jpg to pull the resource into
@@ -341,11 +341,10 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached_SomeCached) {
   EXPECT_EQ(net_error, -400);
 
   // Verify the reset error count received on the server side.
-  EXPECT_LE(1u, GetRstErrorCountReceivedByServer(QUIC_STREAM_CANCELLED));
+  EXPECT_LE(1u, GetRstErrorCountReceivedByServer(quic::QUIC_STREAM_CANCELLED));
 }
 
 TEST_F(URLRequestQuicTest, CancelPushIfCached_AllCached) {
-  base::RunLoop run_loop;
   Init();
 
   // Send a request to the pushed url: /kitten-1.jpg to pull the resource into
@@ -433,11 +432,10 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached_AllCached) {
   EXPECT_FALSE(end_entry_2->GetIntegerValue("net_error", &net_error));
 
   // Verify the reset error count received on the server side.
-  EXPECT_LE(2u, GetRstErrorCountReceivedByServer(QUIC_STREAM_CANCELLED));
+  EXPECT_LE(2u, GetRstErrorCountReceivedByServer(quic::QUIC_STREAM_CANCELLED));
 }
 
 TEST_F(URLRequestQuicTest, DoNotCancelPushIfNotFoundInCache) {
-  base::RunLoop run_loop;
   Init();
 
   // Send a request to /index2.hmtl which pushes /kitten-1.jpg and /favicon.ico
@@ -486,7 +484,7 @@ TEST_F(URLRequestQuicTest, DoNotCancelPushIfNotFoundInCache) {
   EXPECT_EQ(net_error, -400);
 
   // Verify the reset error count received on the server side.
-  EXPECT_EQ(0u, GetRstErrorCountReceivedByServer(QUIC_STREAM_CANCELLED));
+  EXPECT_EQ(0u, GetRstErrorCountReceivedByServer(quic::QUIC_STREAM_CANCELLED));
 }
 
 // Tests that if two requests use the same QUIC session, the second request
@@ -498,14 +496,14 @@ TEST_F(URLRequestQuicTest, TestTwoRequests) {
   SetNetworkDelegate(&network_delegate);
   Init();
   CheckLoadTimingDelegate delegate(false);
-  delegate.set_quit_on_complete(false);
+  delegate.set_on_complete(base::DoNothing());
   std::string url =
       base::StringPrintf("https://%s%s", kTestServerHost, kHelloPath);
   std::unique_ptr<URLRequest> request =
       CreateRequest(GURL(url), DEFAULT_PRIORITY, &delegate);
 
   CheckLoadTimingDelegate delegate2(true);
-  delegate2.set_quit_on_complete(false);
+  delegate2.set_on_complete(base::DoNothing());
   std::unique_ptr<URLRequest> request2 =
       CreateRequest(GURL(url), DEFAULT_PRIORITY, &delegate2);
   request->Start();

@@ -23,6 +23,11 @@ enum ContentSettingsType {
   CONTENT_SETTINGS_TYPE_IMAGES,
   CONTENT_SETTINGS_TYPE_JAVASCRIPT,
   CONTENT_SETTINGS_TYPE_PLUGINS,
+
+  // This setting governs both popups and unwanted redirects like tab-unders and
+  // framebusting.
+  // TODO(csharrison): Consider renaming it to POPUPS_AND_REDIRECTS, but it
+  // might not be worth the trouble.
   CONTENT_SETTINGS_TYPE_POPUPS,
   CONTENT_SETTINGS_TYPE_GEOLOCATION,
   CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
@@ -99,6 +104,18 @@ enum ContentSettingsType {
   // This is special-cased in the permissions layer to always allow, and as
   // such doesn't have associated prefs data.
   CONTENT_SETTINGS_TYPE_CLIPBOARD_WRITE,
+
+  // Used to store whether the user has ever changed the Flash permission for
+  // a site.
+  CONTENT_SETTINGS_TYPE_PLUGINS_DATA,
+
+  // Used to store whether to allow a website to install a payment handler.
+  CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER,
+
+  // Content setting which stores whether to allow sites to ask for permission
+  // to access USB devices. If this is allowed specific device permissions are
+  // stored under CONTENT_SETTINGS_TYPE_USB_CHOOSER_DATA.
+  CONTENT_SETTINGS_TYPE_USB_GUARD,
 
   CONTENT_SETTINGS_NUM_TYPES,
 };

@@ -18,8 +18,7 @@ source_set("mojo") {
     "//device/base",
     "//device/usb",
     "//device/usb/public/cpp",
-    "//device/usb/public/interfaces",
-    "//mojo/common",
+    "//device/usb/public/mojom",
     "//mojo/public/cpp/bindings",
     "//net",
   ]

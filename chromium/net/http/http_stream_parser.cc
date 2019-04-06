@@ -4,9 +4,11 @@
 
 #include "net/http/http_stream_parser.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -165,7 +167,7 @@ class HttpStreamParser::SeekableIOBuffer : public IOBuffer {
 
   // Returns the capacity of the buffer. The capacity is the size used when
   // the object is created.
-  int capacity() const { return capacity_; };
+  int capacity() const { return capacity_; }
 
  private:
   ~SeekableIOBuffer() override {
@@ -209,8 +211,8 @@ HttpStreamParser::HttpStreamParser(ClientSocketHandle* connection,
       weak_ptr_factory_(this) {
   CHECK(connection_) << "ClientSocketHandle passed to HttpStreamParser must "
                         "not be NULL. See crbug.com/790776";
-  io_callback_ = base::Bind(&HttpStreamParser::OnIOComplete,
-                            weak_ptr_factory_.GetWeakPtr());
+  io_callback_ = base::BindRepeating(&HttpStreamParser::OnIOComplete,
+                                     weak_ptr_factory_.GetWeakPtr());
 }
 
 HttpStreamParser::~HttpStreamParser() = default;
@@ -220,7 +222,7 @@ int HttpStreamParser::SendRequest(
     const HttpRequestHeaders& headers,
     const NetworkTrafficAnnotationTag& traffic_annotation,
     HttpResponseInfo* response,
-    const CompletionCallback& callback) {
+    CompletionOnceCallback callback) {
   DCHECK_EQ(STATE_NONE, io_state_);
   DCHECK(callback_.is_null());
   DCHECK(!callback.is_null());
@@ -279,7 +281,8 @@ int HttpStreamParser::SendRequest(
     uint64_t todo = request_->upload_data_stream->size();
     while (todo) {
       int consumed = request_->upload_data_stream->Read(
-          request_headers_.get(), static_cast<int>(todo), CompletionCallback());
+          request_headers_.get(), static_cast<int>(todo),
+          CompletionOnceCallback());
       // Read() must succeed synchronously if not chunked and in memory.
       DCHECK_GT(consumed, 0);
       request_headers_->DidConsume(consumed);
@@ -307,12 +310,12 @@ int HttpStreamParser::SendRequest(
 
   result = DoLoop(OK);
   if (result == ERR_IO_PENDING)
-    callback_ = callback;
+    callback_ = std::move(callback);
 
   return result > 0 ? OK : result;
 }
 
-int HttpStreamParser::ReadResponseHeaders(const CompletionCallback& callback) {
+int HttpStreamParser::ReadResponseHeaders(CompletionOnceCallback callback) {
   DCHECK(io_state_ == STATE_NONE || io_state_ == STATE_DONE);
   DCHECK(callback_.is_null());
   DCHECK(!callback.is_null());
@@ -337,7 +340,7 @@ int HttpStreamParser::ReadResponseHeaders(const CompletionCallback& callback) {
 
   result = DoLoop(result);
   if (result == ERR_IO_PENDING)
-    callback_ = callback;
+    callback_ = std::move(callback);
 
   return result > 0 ? OK : result;
 }
@@ -348,8 +351,9 @@ void HttpStreamParser::Close(bool not_reusable) {
   connection_->Reset();
 }
 
-int HttpStreamParser::ReadResponseBody(IOBuffer* buf, int buf_len,
-                                       const CompletionCallback& callback) {
+int HttpStreamParser::ReadResponseBody(IOBuffer* buf,
+                                       int buf_len,
+                                       CompletionOnceCallback callback) {
   DCHECK(io_state_ == STATE_NONE || io_state_ == STATE_DONE);
   DCHECK(callback_.is_null());
   DCHECK(!callback.is_null());
@@ -373,7 +377,7 @@ int HttpStreamParser::ReadResponseBody(IOBuffer* buf, int buf_len,
 
   int result = DoLoop(OK);
   if (result == ERR_IO_PENDING)
-    callback_ = callback;
+    callback_ = std::move(callback);
 
   return result;
 }
@@ -384,9 +388,7 @@ void HttpStreamParser::OnIOComplete(int result) {
   // The client callback can do anything, including destroying this class,
   // so any pending callback must be issued after everything else is done.
   if (result != ERR_IO_PENDING && !callback_.is_null()) {
-    CompletionCallback c = callback_;
-    callback_.Reset();
-    c.Run(result);
+    base::ResetAndReturn(&callback_).Run(result);
   }
 }
 
@@ -522,9 +524,10 @@ int HttpStreamParser::DoSendBody() {
 
   request_body_read_buf_->Clear();
   io_state_ = STATE_SEND_REQUEST_READ_BODY_COMPLETE;
-  return request_->upload_data_stream->Read(request_body_read_buf_.get(),
-                                            request_body_read_buf_->capacity(),
-                                            io_callback_);
+  return request_->upload_data_stream->Read(
+      request_body_read_buf_.get(), request_body_read_buf_->capacity(),
+      base::BindOnce(&HttpStreamParser::OnIOComplete,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 int HttpStreamParser::DoSendBodyComplete(int result) {
@@ -865,7 +868,7 @@ int HttpStreamParser::HandleReadHeaderResult(int result) {
   DCHECK_LE(read_buf_->offset(), read_buf_->capacity());
   DCHECK_GT(result, 0);
 
-  int end_of_header_offset = FindAndParseResponseHeaders();
+  int end_of_header_offset = FindAndParseResponseHeaders(result);
 
   // Note: -1 is special, it indicates we haven't found the end of headers.
   // Anything less than -1 is a net::Error, so we bail out.
@@ -923,9 +926,10 @@ int HttpStreamParser::HandleReadHeaderResult(int result) {
   return OK;
 }
 
-int HttpStreamParser::FindAndParseResponseHeaders() {
-  int end_offset = -1;
+int HttpStreamParser::FindAndParseResponseHeaders(int new_bytes) {
+  DCHECK_GT(new_bytes, 0);
   DCHECK_EQ(0, read_buf_unused_offset_);
+  int end_offset = -1;
 
   // Look for the start of the status line, if it hasn't been found yet.
   if (response_header_start_offset_ < 0) {
@@ -934,9 +938,16 @@ int HttpStreamParser::FindAndParseResponseHeaders() {
   }
 
   if (response_header_start_offset_ >= 0) {
-    end_offset = HttpUtil::LocateEndOfHeaders(read_buf_->StartOfBuffer(),
-                                              read_buf_->offset(),
-                                              response_header_start_offset_);
+    // LocateEndOfHeaders looks for two line breaks in a row (With or without
+    // carriage returns). So the end of the headers includes at most the last 3
+    // bytes of the buffer from the past read. This optimization avoids O(n^2)
+    // performance in the case each read only returns a couple bytes. It's not
+    // too important in production, but for fuzzers with memory instrumentation,
+    // it's needed to avoid timing out.
+    int search_start = std::max(response_header_start_offset_,
+                                read_buf_->offset() - new_bytes - 3);
+    end_offset = HttpUtil::LocateEndOfHeaders(
+        read_buf_->StartOfBuffer(), read_buf_->offset(), search_start);
   } else if (read_buf_->offset() >= 8) {
     // Enough data to decide that this is an HTTP/0.9 response.
     // 8 bytes = (4 bytes of junk) + "http".length()
@@ -1113,18 +1124,14 @@ bool HttpStreamParser::CanReuseConnection() const {
 
 void HttpStreamParser::GetSSLInfo(SSLInfo* ssl_info) {
   if (request_->url.SchemeIsCryptographic() && connection_->socket()) {
-    SSLClientSocket* ssl_socket =
-        static_cast<SSLClientSocket*>(connection_->socket());
-    ssl_socket->GetSSLInfo(ssl_info);
+    connection_->socket()->GetSSLInfo(ssl_info);
   }
 }
 
 void HttpStreamParser::GetSSLCertRequestInfo(
     SSLCertRequestInfo* cert_request_info) {
   if (request_->url.SchemeIsCryptographic() && connection_->socket()) {
-    SSLClientSocket* ssl_socket =
-        static_cast<SSLClientSocket*>(connection_->socket());
-    ssl_socket->GetSSLCertRequestInfo(cert_request_info);
+    connection_->socket()->GetSSLCertRequestInfo(cert_request_info);
   }
 }
 
@@ -1135,9 +1142,7 @@ Error HttpStreamParser::GetTokenBindingSignature(crypto::ECPrivateKey* key,
     NOTREACHED();
     return ERR_FAILED;
   }
-  SSLClientSocket* ssl_socket =
-      static_cast<SSLClientSocket*>(connection_->socket());
-  return ssl_socket->GetTokenBindingSignature(key, tb_type, out);
+  return connection_->socket()->GetTokenBindingSignature(key, tb_type, out);
 }
 
 int HttpStreamParser::EncodeChunk(const base::StringPiece& payload,

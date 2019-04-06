@@ -101,7 +101,7 @@ void LabelExample::CreateExampleView(View* container) {
   label->SetFontList(gfx::FontList("Courier, 18px"));
   gfx::ShadowValues shadows(1,
                             gfx::ShadowValue(gfx::Vector2d(), 1, SK_ColorRED));
-  gfx::ShadowValue shadow(gfx::Vector2d(2, 2), 0, SK_ColorGRAY);
+  constexpr gfx::ShadowValue shadow(gfx::Vector2d(2, 2), 0, SK_ColorGRAY);
   shadows.push_back(shadow);
   label->SetShadows(shadows);
   container->AddChildView(label);
@@ -200,14 +200,11 @@ void LabelExample::AddCustomLabel(View* container) {
   column_set->AddColumn(GridLayout::LEADING, GridLayout::LEADING, 0,
                         GridLayout::USE_PREF, 0, 0);
   layout->StartRow(0, 1);
-  multiline_ = new Checkbox(base::ASCIIToUTF16("Multiline"));
-  multiline_->set_listener(this);
+  multiline_ = new Checkbox(base::ASCIIToUTF16("Multiline"), this);
   layout->AddView(multiline_);
-  shadows_ = new Checkbox(base::ASCIIToUTF16("Shadows"));
-  shadows_->set_listener(this);
+  shadows_ = new Checkbox(base::ASCIIToUTF16("Shadows"), this);
   layout->AddView(shadows_);
-  selectable_ = new Checkbox(base::ASCIIToUTF16("Selectable"));
-  selectable_->set_listener(this);
+  selectable_ = new Checkbox(base::ASCIIToUTF16("Selectable"), this);
   layout->AddView(selectable_);
   layout->AddPaddingRow(0, 8);
 

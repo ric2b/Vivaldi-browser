@@ -7,14 +7,12 @@
 #include "base/barrier_closure.h"
 #include "base/callback.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread.h"
-#include "content/browser/browser_thread_impl.h"
 #include "content/browser/indexed_db/indexed_db_callbacks.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_database_callbacks.h"
@@ -34,7 +32,7 @@
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
 #include "url/origin.h"
 
 using indexed_db::mojom::Callbacks;
@@ -279,7 +277,7 @@ TEST_F(IndexedDBDispatcherHostTest, CloseAfterUpgrade) {
         *connection.open_callbacks,
         MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     ASSERT_TRUE(connection.database.is_bound());
     connection.database->CreateObjectStore(kTransactionId, kObjectStoreId,
@@ -346,7 +344,7 @@ TEST_F(IndexedDBDispatcherHostTest, OpenNewConnectionWhileUpgrading) {
         MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(true), _))
         .WillOnce(testing::DoAll(MoveArg<0>(&database_info2),
                                  testing::SaveArg<1>(&metadata2),
-                                 RunClosure(quit_closure)));
+                                 RunClosure(std::move(quit_closure))));
 
     // Create object store.
     ASSERT_TRUE(connection1.database.is_bound());
@@ -419,7 +417,7 @@ TEST_F(IndexedDBDispatcherHostTest, PutWithInvalidBlob) {
     EXPECT_CALL(*connection.open_callbacks,
                 Error(blink::kWebIDBDatabaseExceptionAbortError, _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     ASSERT_TRUE(connection.database.is_bound());
     connection.database->CreateObjectStore(kTransactionId, kObjectStoreId,
@@ -427,8 +425,11 @@ TEST_F(IndexedDBDispatcherHostTest, PutWithInvalidBlob) {
                                            content::IndexedDBKeyPath(), false);
     // Call Put with an invalid blob.
     std::vector<::indexed_db::mojom::BlobInfoPtr> blobs;
+    blink::mojom::BlobPtrInfo blob;
+    // Ignore the result of MakeRequest, to end up with an invalid blob.
+    mojo::MakeRequest(&blob);
     blobs.push_back(::indexed_db::mojom::BlobInfo::New(
-        nullptr, "fakeUUID", base::string16(), 100, nullptr));
+        std::move(blob), "fakeUUID", base::string16(), 100, nullptr));
     connection.database->Put(kTransactionId, kObjectStoreId,
                              Value::New("hello", std::move(blobs)),
                              content::IndexedDBKey(base::UTF8ToUTF16("hello")),
@@ -880,7 +881,7 @@ TEST_F(IndexedDBDispatcherHostTest, DISABLED_NotifyIndexedDBListChanged) {
         *connection1.open_callbacks,
         MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     ASSERT_TRUE(connection1.database.is_bound());
     connection1.database->CreateObjectStore(kTransactionId1, kObjectStoreId,
@@ -935,7 +936,7 @@ TEST_F(IndexedDBDispatcherHostTest, DISABLED_NotifyIndexedDBListChanged) {
         *connection2.open_callbacks,
         MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     ASSERT_TRUE(connection2.database.is_bound());
     connection2.database->DeleteIndex(kTransactionId2, kObjectStoreId,
@@ -985,7 +986,7 @@ TEST_F(IndexedDBDispatcherHostTest, DISABLED_NotifyIndexedDBListChanged) {
         *connection3.open_callbacks,
         MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     ASSERT_TRUE(connection3.database.is_bound());
     connection3.database->DeleteObjectStore(kTransactionId3, kObjectStoreId);
@@ -1055,7 +1056,7 @@ TEST_F(IndexedDBDispatcherHostTest, NotifyIndexedDBContentChanged) {
         *connection1.open_callbacks,
         MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     ASSERT_TRUE(connection1.database.is_bound());
     connection1.database->CreateObjectStore(kTransactionId1, kObjectStoreId,
@@ -1121,7 +1122,7 @@ TEST_F(IndexedDBDispatcherHostTest, NotifyIndexedDBContentChanged) {
         *connection2.open_callbacks,
         MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
         .Times(1)
-        .WillOnce(RunClosure(quit_closure));
+        .WillOnce(RunClosure(std::move(quit_closure)));
 
     ASSERT_TRUE(connection2.database.is_bound());
     connection2.database->Clear(kTransactionId2, kObjectStoreId,

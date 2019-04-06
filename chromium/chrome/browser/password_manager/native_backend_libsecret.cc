@@ -9,7 +9,6 @@
 
 #include <libsecret/secret.h>
 
-#include <limits>
 #include <list>
 #include <memory>
 #include <utility>
@@ -18,8 +17,8 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/password_manager/password_manager_util_linux.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "url/origin.h"
@@ -31,13 +30,6 @@ using password_manager::MatchResult;
 using password_manager::PasswordStore;
 
 namespace {
-const char kEmptyString[] = "";
-const int kMaxPossibleTimeTValue = std::numeric_limits<int>::max();
-}  // namespace
-
-namespace {
-
-const char kLibsecretAppString[] = "chrome";
 
 // Schema is analagous to the fields in PasswordForm.
 const SecretSchema kLibsecretSchema = {
@@ -71,7 +63,7 @@ const SecretSchema kLibsecretSchema = {
 
 const char* GetStringFromAttributes(GHashTable* attrs, const char* keyname) {
   gpointer value = g_hash_table_lookup(attrs, keyname);
-  return value ? static_cast<char*>(value) : kEmptyString;
+  return value ? static_cast<char*>(value) : "";
 }
 
 uint32_t GetUintFromAttributes(GHashTable* attrs, const char* keyname) {
@@ -89,7 +81,7 @@ uint32_t GetUintFromAttributes(GHashTable* attrs, const char* keyname) {
 // Returns nullptr if the attributes are for the wrong application.
 std::unique_ptr<PasswordForm> FormOutOfAttributes(GHashTable* attrs) {
   base::StringPiece app_value = GetStringFromAttributes(attrs, "application");
-  if (!app_value.starts_with(kLibsecretAppString))
+  if (!app_value.starts_with(kLibsecretAndGnomeAppString))
     return std::unique_ptr<PasswordForm>();
 
   std::unique_ptr<PasswordForm> form(new PasswordForm());
@@ -152,14 +144,6 @@ std::unique_ptr<PasswordForm> FormOutOfAttributes(GHashTable* attrs) {
     LogFormDataDeserializationStatus(status);
   }
   return form;
-}
-
-// Generates a profile-specific app string based on profile_id_.
-std::string GetProfileSpecificAppString(LocalProfileId id) {
-  // Originally, the application string was always just "chrome" and used only
-  // so that we had *something* to search for since GNOME Keyring won't search
-  // for nothing. Now we use it to distinguish passwords for different profiles.
-  return base::StringPrintf("%s-%d", kLibsecretAppString, id);
 }
 
 }  // namespace
@@ -507,13 +491,6 @@ NativeBackendLibsecret::ConvertFormList(
   for (GList* element = g_list_first(found); element != nullptr;
        element = g_list_next(element)) {
     SecretItem* secretItem = static_cast<SecretItem*>(element->data);
-    LibsecretLoader::secret_item_load_secret_sync(secretItem, nullptr, &error);
-    if (error) {
-      LOG(ERROR) << "Unable to load secret item" << error->message;
-      g_error_free(error);
-      error = nullptr;
-      continue;
-    }
     GHashTable* attrs = LibsecretLoader::secret_item_get_attributes(secretItem);
     std::unique_ptr<PasswordForm> form(FormOutOfAttributes(attrs));
     g_hash_table_unref(attrs);
@@ -540,6 +517,14 @@ NativeBackendLibsecret::ConvertFormList(
           form->is_public_suffix_match = true;
           break;
       }
+    }
+
+    LibsecretLoader::secret_item_load_secret_sync(secretItem, nullptr, &error);
+    if (error) {
+      LOG(ERROR) << "Unable to load secret item" << error->message;
+      g_error_free(error);
+      error = nullptr;
+      continue;
     }
 
     SecretValue* secretValue =

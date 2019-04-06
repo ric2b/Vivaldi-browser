@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/process/process_metrics.h"
+#include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 
@@ -19,7 +20,8 @@
 // callbacks when the monitor detects near-OOM situation.
 class NearOomMonitor {
  public:
-  // Returns nullptr when the monitor isn't available.
+  // Returns nullptr when the monitor isn't enabled by
+  // OomInterventionConfig::is_swap_monitor_enabled().
   static NearOomMonitor* GetInstance();
 
   virtual ~NearOomMonitor();

@@ -13,6 +13,7 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/transferrable_url_loader.mojom.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_info.h"
@@ -22,6 +23,7 @@
 class GURL;
 
 namespace net {
+class HttpRequestHeaders;
 class HttpResponseHeaders;
 }  // namespace net
 
@@ -29,6 +31,7 @@ namespace content {
 struct GlobalRequestID;
 class NavigationData;
 class NavigationThrottle;
+class NavigationUIData;
 class RenderFrameHost;
 class SiteInstance;
 class WebContents;
@@ -72,12 +75,19 @@ class CONTENT_EXPORT NavigationHandle {
   // of the main frame. This remains constant over the navigation lifetime.
   virtual bool IsParentMainFrame() = 0;
 
-  // Whether the navigation was initated by the renderer process. Examples of
+  // Whether the navigation was initiated by the renderer process. Examples of
   // renderer-initiated navigations include:
   //  * <a> link click
   //  * changing window.location.href
   //  * redirect via the <meta http-equiv="refresh"> tag
   //  * using window.history.pushState
+  //
+  // This method returns false for browser-initiated navigations, including:
+  //  * any navigation initiated from the omnibox
+  //  * navigations via suggestions in browser UI
+  //  * navigations via browser UI: Ctrl-R, refresh/forward/back/home buttons
+  //  * using window.history.forward() or window.history.back()
+  //  * any other "explicit" URL navigations, e.g. bookmarks
   virtual bool IsRendererInitiated() = 0;
 
   // Returns the FrameTreeNode ID for the frame in which the navigation is
@@ -145,6 +155,9 @@ class CONTENT_EXPORT NavigationHandle {
   // Returns the page transition type.
   virtual ui::PageTransition GetPageTransition() = 0;
 
+  // Returns the NavigationUIData associated with the navigation.
+  virtual const NavigationUIData* GetNavigationUIData() = 0;
+
   // Whether the target URL cannot be handled by the browser's internal protocol
   // handlers.
   virtual bool IsExternalProtocol() = 0;
@@ -155,13 +168,10 @@ class CONTENT_EXPORT NavigationHandle {
   // be net::OK.
   virtual net::Error GetNetErrorCode() = 0;
 
-  // Returns the RenderFrameHost this navigation is taking place in. This can
-  // only be accessed after a response has been delivered for processing.
-  //
-  // If PlzNavigate is active, the RenderFrameHost returned will be the final
-  // host for the navigation. If PlzNavigate is inactive, the navigation may
-  // transfer to a new host up until the point that DidFinishNavigation is
-  // called.
+  // Returns the RenderFrameHost this navigation is committing in.  The
+  // RenderFrameHost returned will be the final host for the navigation.  This
+  // can only be accessed after a response has been delivered for processing,
+  // or after the navigation fails with an error page.
   virtual RenderFrameHost* GetRenderFrameHost() = 0;
 
   // Whether the navigation happened without changing document. Examples of
@@ -218,6 +228,9 @@ class CONTENT_EXPORT NavigationHandle {
   // Returns the remote address of the socket which fetched this resource.
   virtual net::HostPortPair GetSocketAddress() = 0;
 
+  // Returns the headers used for this request.
+  virtual const net::HttpRequestHeaders& GetRequestHeaders() = 0;
+
   // Returns the response headers for the request, or nullptr if there aren't
   // any response headers or they have not been received yet. The response
   // headers may change during the navigation (e.g. after encountering a server
@@ -250,9 +263,8 @@ class CONTENT_EXPORT NavigationHandle {
   // navigation when processing final (post redirect) HTTP response headers.
   virtual bool IsDownload() = 0;
 
-  // If this navigation was triggered by an anchor with a download attribute,
-  // this returns the (possibly empty) value of that attribute.
-  virtual const base::Optional<std::string>& GetSuggestedFilename() = 0;
+  // Returns true if this navigation was initiated by a form submission.
+  virtual bool IsFormSubmission() = 0;
 
   // Testing methods ----------------------------------------------------------
   //
@@ -265,7 +277,8 @@ class CONTENT_EXPORT NavigationHandle {
       net::Error error = net::OK,
       bool is_same_document = false,
       bool is_post = false,
-      ui::PageTransition transition = ui::PAGE_TRANSITION_LINK);
+      ui::PageTransition transition = ui::PAGE_TRANSITION_LINK,
+      bool is_form_submission = false);
 
   // Registers a NavigationThrottle for tests. The throttle can
   // modify the request, pause the request or cancel the request. This will
@@ -290,6 +303,7 @@ class CONTENT_EXPORT NavigationHandle {
 
   // Simulates the network request failing.
   virtual NavigationThrottle::ThrottleCheckResult CallWillFailRequestForTesting(
+      RenderFrameHost* render_frame_host,
       base::Optional<net::SSLInfo> ssl_info) = 0;
 
   // Simulates the reception of the network response.
@@ -309,6 +323,9 @@ class CONTENT_EXPORT NavigationHandle {
   // ResourceDispatcherHostDelegate::GetNavigationData during commit. This will
   // be a clone of the NavigationData.
   virtual NavigationData* GetNavigationData() = 0;
+
+  virtual void RegisterSubresourceOverride(
+      mojom::TransferrableURLLoaderPtr transferrable_loader) = 0;
 };
 
 }  // namespace content

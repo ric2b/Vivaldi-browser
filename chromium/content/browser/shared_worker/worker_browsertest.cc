@@ -3,14 +3,15 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
-#include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_certificate_delegate.h"
@@ -22,8 +23,8 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_content_browser_client.h"
-#include "content/shell/browser/shell_resource_dispatcher_host_delegate.h"
 #include "net/base/escape.h"
+#include "net/base/filename_util.h"
 #include "net/ssl/ssl_server_config.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
@@ -56,6 +57,7 @@ class WorkerTest : public ContentBrowserTest {
     ShellContentBrowserClient::Get()->set_select_client_certificate_callback(
         base::Bind(&WorkerTest::OnSelectClientCertificate,
                    base::Unretained(this)));
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
   void TearDownOnMainThread() override {
@@ -65,33 +67,43 @@ class WorkerTest : public ContentBrowserTest {
 
   int select_certificate_count() const { return select_certificate_count_; }
 
-  GURL GetTestURL(const std::string& test_case, const std::string& query) {
-    base::FilePath test_file_path = GetTestFilePath(
-        "workers", test_case.c_str());
-    return GetFileUrlWithQuery(test_file_path, query);
+  GURL GetTestFileURL(const std::string& test_case) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::FilePath path;
+    EXPECT_TRUE(base::PathService::Get(content::DIR_TEST_DATA, &path));
+    path = path.AppendASCII("workers").AppendASCII(test_case);
+    return net::FilePathToFileURL(path);
   }
 
-  void RunTest(Shell* window, const GURL& url) {
-    const base::string16 expected_title = base::ASCIIToUTF16("OK");
-    TitleWatcher title_watcher(window->web_contents(), expected_title);
+  GURL GetTestURL(const std::string& test_case, const std::string& query) {
+    std::string url_string = "/workers/" + test_case + "?" + query;
+    return embedded_test_server()->GetURL(url_string);
+  }
+
+  void RunTest(Shell* window, const GURL& url, bool expect_failure = false) {
+    const base::string16 ok_title = base::ASCIIToUTF16("OK");
+    const base::string16 fail_title = base::ASCIIToUTF16("FAIL");
+    TitleWatcher title_watcher(window->web_contents(), ok_title);
+    title_watcher.AlsoWaitForTitle(fail_title);
     NavigateToURL(window, url);
     base::string16 final_title = title_watcher.WaitAndGetTitle();
-    EXPECT_EQ(expected_title, final_title);
+    EXPECT_EQ(expect_failure ? fail_title : ok_title, final_title);
   }
 
-  void RunTest(const GURL& url) { RunTest(shell(), url); }
+  void RunTest(const GURL& url, bool expect_failure = false) {
+    RunTest(shell(), url, expect_failure);
+  }
 
   static void QuitUIMessageLoop(base::Callback<void()> callback) {
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback);
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, std::move(callback));
   }
 
   void NavigateAndWaitForAuth(const GURL& url) {
     ShellContentBrowserClient* browser_client =
         ShellContentBrowserClient::Get();
     scoped_refptr<MessageLoopRunner> runner = new MessageLoopRunner();
-    browser_client->resource_dispatcher_host_delegate()->
-        set_login_request_callback(
-            base::Bind(&QuitUIMessageLoop, runner->QuitClosure()));
+    browser_client->set_login_request_callback(
+        base::Bind(&QuitUIMessageLoop, runner->QuitClosure()));
     shell()->LoadURL(url);
     runner->Run();
   }
@@ -104,6 +116,18 @@ class WorkerTest : public ContentBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(WorkerTest, SingleWorker) {
   RunTest(GetTestURL("single_worker.html", std::string()));
+}
+
+IN_PROC_BROWSER_TEST_F(WorkerTest, SingleWorkerFromFile) {
+  RunTest(GetTestFileURL("single_worker.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(WorkerTest, HttpPageCantCreateFileWorker) {
+  GURL url = GetTestURL(
+      "single_worker.html",
+      "workerUrl=" + net::EscapeQueryParamValue(
+                         GetTestFileURL("worker_common.js").spec(), true));
+  RunTest(url, /*expect_failure=*/true);
 }
 
 IN_PROC_BROWSER_TEST_F(WorkerTest, MultipleWorkers) {
@@ -131,11 +155,6 @@ IN_PROC_BROWSER_TEST_F(WorkerTest, IncognitoSharedWorkers) {
   if (!SupportsSharedWorker())
     return;
 
-  // Launch the server to host a shared worker on http environment because a
-  // local file (file://) is treated like it has an opaque origin and the
-  // shared worker on the origin cannot be shared.
-  ASSERT_TRUE(embedded_test_server()->Start());
-
   // Load a non-incognito tab and have it create a shared worker
   RunTest(embedded_test_server()->GetURL("/workers/incognito_worker.html"));
 
@@ -147,25 +166,8 @@ IN_PROC_BROWSER_TEST_F(WorkerTest, IncognitoSharedWorkers) {
 // Make sure that auth dialog is displayed from worker context.
 // http://crbug.com/33344
 IN_PROC_BROWSER_TEST_F(WorkerTest, WorkerHttpAuth) {
-  ASSERT_TRUE(embedded_test_server()->Start());
   GURL url = embedded_test_server()->GetURL("/workers/worker_auth.html");
 
-  NavigateAndWaitForAuth(url);
-}
-
-// Make sure that HTTP auth dialog is displayed from shared worker context.
-// http://crbug.com/33344
-//
-// TODO(davidben): HTTP auth dialogs are no longer displayed on shared workers,
-// but this test only tests that the delegate is called. Move handling the
-// WebContentsless case from chrome/ to content/ and adjust the test
-// accordingly.
-IN_PROC_BROWSER_TEST_F(WorkerTest, SharedWorkerHttpAuth) {
-  if (!SupportsSharedWorker())
-    return;
-
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url = embedded_test_server()->GetURL("/workers/shared_worker_auth.html");
   NavigateAndWaitForAuth(url);
 }
 

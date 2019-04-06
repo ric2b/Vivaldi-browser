@@ -12,8 +12,9 @@ static_library("sandbox") {
   sources = [
     "src/acl.cc",
     "src/acl.h",
-    "src/app_container_profile.cc",
     "src/app_container_profile.h",
+    "src/app_container_profile_base.cc",
+    "src/app_container_profile_base.h",
     "src/broker_services.cc",
     "src/broker_services.h",
     "src/crosscall_client.h",
@@ -173,6 +174,7 @@ static_library("sandbox") {
   deps = [
     "//base",
     "//base:base_static",
+    "//sandbox:common",
   ]
 }
 
@@ -233,7 +235,6 @@ executable("cfi_unittest_exe") {
   ]
   deps = [
     "//base",
-    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
   ]
 }
@@ -359,8 +360,4 @@ shared_library("pocdll") {
   ]
 
   defines = [ "POCDLL_EXPORTS" ]
-
-  deps = [
-    "//build/config:exe_and_shlib_deps",
-  ]
 }

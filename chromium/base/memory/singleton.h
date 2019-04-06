@@ -37,10 +37,6 @@
 
 namespace base {
 
-namespace internal {
-class DeleteTraceLogForTesting;
-}  // namespace internal
-
 // Default traits for Singleton<Type>. Calls operator new and operator delete on
 // the object. Registers automatic deletion at process exit.
 // Overload if you need arguments or another memory allocation function.
@@ -227,9 +223,6 @@ class Singleton {
   // method and call Singleton::get() from within that.
   friend Type* Type::GetInstance();
 
-  // Allow TraceLog tests to test tracing after OnExit.
-  friend class internal::DeleteTraceLogForTesting;
-
   // This class is safe to be constructed and copy-constructed since it has no
   // member.
 
@@ -240,10 +233,14 @@ class Singleton {
       ThreadRestrictions::AssertSingletonAllowed();
 #endif
 
-    return static_cast<Type*>(internal::GetOrCreateLazyPointer(
-        &instance_, &Traits::New, Traits::kRegisterAtExit ? OnExit : nullptr,
-        nullptr));
+    return subtle::GetOrCreateLazyPointer(
+        &instance_, &CreatorFunc, nullptr,
+        Traits::kRegisterAtExit ? OnExit : nullptr, nullptr);
   }
+
+  // Internal method used as an adaptor for GetOrCreateLazyPointer(). Do not use
+  // outside of that use case.
+  static Type* CreatorFunc(void* /* creator_arg*/) { return Traits::New(); }
 
   // Adapter function for use with AtExit().  This should be called single
   // threaded, so don't use atomic operations.

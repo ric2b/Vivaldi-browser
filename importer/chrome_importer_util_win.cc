@@ -24,6 +24,8 @@
 #include "importer/chromium_profile_importer.h"
 #include "ui/base/l10n/l10n_util.h"
 
+using base::PathService;
+
 base::FilePath GetProfileDir(importer::ImporterType importerType) {
   base::FilePath profile_path;
   base::FilePath app_data_path;

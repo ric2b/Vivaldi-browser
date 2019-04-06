@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/chrome_app_icon_service.h"
@@ -55,7 +54,13 @@ float GetScaleFactor(gfx::NativeWindow window) {
   return screen->GetPrimaryDisplay().device_scale_factor();
 }
 
+ExtensionUninstallDialog::OnWillShowCallback* g_on_will_show_callback = nullptr;
 }  // namespace
+
+void ExtensionUninstallDialog::SetOnShownCallbackForTesting(
+    ExtensionUninstallDialog::OnWillShowCallback* callback) {
+  g_on_will_show_callback = callback;
+}
 
 ExtensionUninstallDialog::ExtensionUninstallDialog(
     Profile* profile,
@@ -109,7 +114,6 @@ void ExtensionUninstallDialog::OnIconUpdated(ChromeAppIcon* icon) {
   // Ignore initial update.
   if (!icon_ || dialog_shown_)
     return;
-
   DCHECK_EQ(icon, icon_.get());
 
   dialog_shown_ = true;
@@ -118,6 +122,9 @@ void ExtensionUninstallDialog::OnIconUpdated(ChromeAppIcon* icon) {
     OnDialogClosed(CLOSE_ACTION_CANCELED);
     return;
   }
+
+  if (g_on_will_show_callback != nullptr)
+    g_on_will_show_callback->Run(this);
 
   switch (ScopedTestDialogAutoConfirm::GetAutoConfirmValue()) {
     case ScopedTestDialogAutoConfirm::NONE:

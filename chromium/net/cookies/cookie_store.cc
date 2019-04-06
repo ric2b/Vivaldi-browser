@@ -12,30 +12,9 @@ namespace net {
 
 CookieStore::~CookieStore() = default;
 
-bool CookieStore::ChangeCauseIsDeletion(CookieStore::ChangeCause cause) {
-  return cause != CookieStore::ChangeCause::INSERTED;
-}
-
-// Keep in sync with CanonicalCookie::BuildCookieLine.
-std::string CookieStore::BuildCookieLine(
-    const std::vector<CanonicalCookie*>& cookies) {
-  std::string cookie_line;
-  for (auto* cookie : cookies) {
-    if (!cookie_line.empty())
-      cookie_line += "; ";
-    // In Mozilla, if you set a cookie like "AAA", it will have an empty token
-    // and a value of "AAA". When it sends the cookie back, it will send "AAA",
-    // so we need to avoid sending "=AAA" for a blank token value.
-    if (!cookie->Name().empty())
-      cookie_line += cookie->Name() + "=";
-    cookie_line += cookie->Value();
-  }
-  return cookie_line;
-}
-
 void CookieStore::DeleteAllAsync(DeleteCallback callback) {
-  DeleteAllCreatedBetweenAsync(base::Time(), base::Time::Max(),
-                               std::move(callback));
+  DeleteAllCreatedInTimeRangeAsync(CookieDeletionInfo::TimeRange(),
+                                   std::move(callback));
 }
 
 void CookieStore::SetForceKeepSessionState() {
@@ -60,6 +39,10 @@ void CookieStore::SetChannelIDServiceID(int id) {
 int CookieStore::GetChannelIDServiceID() {
   return channel_id_service_id_;
 }
+
+void CookieStore::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& parent_absolute_name) const {}
 
 CookieStore::CookieStore() : channel_id_service_id_(-1) {}
 

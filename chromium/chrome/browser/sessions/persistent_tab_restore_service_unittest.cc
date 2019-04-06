@@ -15,7 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/test/bind_test_util.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/sessions/chrome_tab_restore_service_client.h"
 #include "chrome/browser/sessions/session_service.h"
@@ -41,6 +41,7 @@
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+typedef sessions::TabRestoreService::Entry Entry;
 typedef sessions::TabRestoreService::Tab Tab;
 typedef sessions::TabRestoreService::Window Window;
 
@@ -67,14 +68,15 @@ class PersistentTabRestoreTimeFactory
 class PersistentTabRestoreServiceTest : public ChromeRenderViewHostTestHarness {
  public:
   PersistentTabRestoreServiceTest()
-    : url1_("http://1"),
-      url2_("http://2"),
-      url3_("http://3"),
-      user_agent_override_(
-          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/535.19"
-          " (KHTML, like Gecko) Chrome/18.0.1025.45 Safari/535.19"),
-      time_factory_(NULL) {
-  }
+      : url1_("http://1"),
+        url2_("http://2"),
+        url3_("http://3"),
+        user_agent_override_(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/535.19"
+            " (KHTML, like Gecko) Chrome/18.0.1025.45 Safari/535.19"),
+        time_factory_(NULL),
+        window_id_(SessionID::FromSerializedValue(1)),
+        tab_id_(SessionID::FromSerializedValue(2)) {}
 
   ~PersistentTabRestoreServiceTest() override {}
 
@@ -92,7 +94,7 @@ class PersistentTabRestoreServiceTest : public ChromeRenderViewHostTestHarness {
     live_tab_ = base::WrapUnique(new sessions::ContentLiveTab(web_contents()));
     time_factory_ = new PersistentTabRestoreTimeFactory();
     service_.reset(new sessions::PersistentTabRestoreService(
-        base::MakeUnique<ChromeTabRestoreServiceClient>(profile()),
+        std::make_unique<ChromeTabRestoreServiceClient>(profile()),
         time_factory_));
   }
 
@@ -132,7 +134,7 @@ class PersistentTabRestoreServiceTest : public ChromeRenderViewHostTestHarness {
     content::RunAllTasksUntilIdle();
     service_.reset();
     service_.reset(new sessions::PersistentTabRestoreService(
-        base::MakeUnique<ChromeTabRestoreServiceClient>(profile()),
+        std::make_unique<ChromeTabRestoreServiceClient>(profile()),
         time_factory_));
     SynchronousLoadTabsFromLastSession();
   }
@@ -141,8 +143,8 @@ class PersistentTabRestoreServiceTest : public ChromeRenderViewHostTestHarness {
   // If |pinned| is true, the tab is marked as pinned in the session service.
   void AddWindowWithOneTabToSessionService(bool pinned) {
     // Create new window / tab IDs so that these remain distinct.
-    window_id_ = SessionID();
-    tab_id_ = SessionID();
+    window_id_ = SessionID::NewUnique();
+    tab_id_ = SessionID::NewUnique();
 
     SessionService* session_service =
         SessionServiceFactory::GetForProfile(profile());
@@ -205,8 +207,6 @@ class TestTabRestoreServiceObserver
   bool got_loaded() const { return got_loaded_; }
 
   // TabRestoreServiceObserver:
-  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override {
-  }
   void TabRestoreServiceDestroyed(
       sessions::TabRestoreService* service) override {}
   void TabRestoreServiceLoaded(sessions::TabRestoreService* service) override {
@@ -232,7 +232,7 @@ TEST_F(PersistentTabRestoreServiceTest, Basic) {
   ASSERT_EQ(1U, service_->entries().size());
 
   // Make sure the entry matches.
-  sessions::TabRestoreService::Entry* entry = service_->entries().front().get();
+  Entry* entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
   Tab* tab = static_cast<Tab*>(entry);
   EXPECT_FALSE(tab->pinned);
@@ -249,7 +249,7 @@ TEST_F(PersistentTabRestoreServiceTest, Basic) {
   NavigateToIndex(1);
 
   // And check again, but set the user agent override this time.
-  web_contents()->SetUserAgentOverride(user_agent_override_);
+  web_contents()->SetUserAgentOverride(user_agent_override_, false);
   service_->CreateHistoricalTab(live_tab(), -1);
 
   // There should be two entries now.
@@ -291,8 +291,7 @@ TEST_F(PersistentTabRestoreServiceTest, Restore) {
   ASSERT_EQ(1U, service_->entries().size());
 
   // And verify the entry.
-  sessions::PersistentTabRestoreService::Entry* entry =
-      service_->entries().front().get();
+  Entry* entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
   Tab* tab = static_cast<Tab*>(entry);
   EXPECT_FALSE(tab->pinned);
@@ -303,6 +302,33 @@ TEST_F(PersistentTabRestoreServiceTest, Restore) {
   EXPECT_EQ(2, tab->current_navigation_index);
   EXPECT_EQ(time_factory_->TimeNow().ToInternalValue(),
             tab->timestamp.ToInternalValue());
+}
+
+// Tests restoring a tab with more than gMaxPersistNavigationCount entries.
+TEST_F(PersistentTabRestoreServiceTest, RestoreManyNavigations) {
+  AddThreeNavigations();
+  AddThreeNavigations();
+  AddThreeNavigations();
+
+  // Have the service record the tab.
+  service_->CreateHistoricalTab(live_tab(), -1);
+
+  // Recreate the service and have it load the tabs.
+  RecreateService();
+
+  // One entry should be created.
+  ASSERT_EQ(1U, service_->entries().size());
+
+  // And verify the entry.
+  Entry* entry = service_->entries().front().get();
+  ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
+  Tab* tab = static_cast<Tab*>(entry);
+  // Only gMaxPersistNavigationCount + 1 (current navigation) are persisted.
+  ASSERT_EQ(7U, tab->navigations.size());
+  // Check that they are created with correct indices.
+  EXPECT_EQ(0, tab->navigations[0].index());
+  EXPECT_EQ(6, tab->navigations[6].index());
+  EXPECT_EQ(6, tab->current_navigation_index);
 }
 
 // Tests restoring a single pinned tab.
@@ -317,7 +343,7 @@ TEST_F(PersistentTabRestoreServiceTest, RestorePinnedAndApp) {
 
   // We have to explicitly mark the tab as pinned as there is no browser for
   // these tests.
-  sessions::TabRestoreService::Entry* entry = service_->entries().front().get();
+  Entry* entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
   Tab* tab = static_cast<Tab*>(entry);
   tab->pinned = true;
@@ -343,6 +369,91 @@ TEST_F(PersistentTabRestoreServiceTest, RestorePinnedAndApp) {
   EXPECT_TRUE(extension_app_id == tab->extension_app_id);
 }
 
+// Tests deleting entries.
+TEST_F(PersistentTabRestoreServiceTest, DeleteNavigationEntries) {
+  SynchronousLoadTabsFromLastSession();
+  AddThreeNavigations();
+
+  // Have the service record the tab.
+  service_->CreateHistoricalTab(live_tab(), -1);
+
+  service_->DeleteNavigationEntries(
+      base::BindLambdaForTesting([&](const SerializedNavigationEntry& entry) {
+        return entry.virtual_url() == url2_;
+      }));
+
+  // The entry should still exist but url2_ was removed and indices adjusted.
+  ASSERT_EQ(1U, service_->entries().size());
+  Entry* entry = service_->entries().front().get();
+  ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
+  Tab* tab = static_cast<Tab*>(entry);
+  ASSERT_EQ(2U, tab->navigations.size());
+  EXPECT_EQ(url1_, tab->navigations[0].virtual_url());
+  EXPECT_EQ(0, tab->navigations[0].index());
+  EXPECT_EQ(url3_, tab->navigations[1].virtual_url());
+  EXPECT_EQ(1, tab->navigations[1].index());
+  EXPECT_EQ(1, tab->current_navigation_index);
+
+  service_->DeleteNavigationEntries(base::BindRepeating(
+      [](const SerializedNavigationEntry& entry) { return true; }));
+
+  // The entry should be removed.
+  EXPECT_EQ(0U, service_->entries().size());
+}
+
+// Tests deleting entries.
+TEST_F(PersistentTabRestoreServiceTest, DeleteCurrentEntry) {
+  SynchronousLoadTabsFromLastSession();
+  AddThreeNavigations();
+
+  // Have the service record the tab.
+  service_->CreateHistoricalTab(live_tab(), -1);
+
+  service_->DeleteNavigationEntries(
+      base::BindLambdaForTesting([&](const SerializedNavigationEntry& entry) {
+        return entry.virtual_url() == url3_;
+      }));
+
+  // The entry should be deleted because the current url was deleted.
+  EXPECT_EQ(0U, service_->entries().size());
+}
+
+// Tests deleting entries.
+TEST_F(PersistentTabRestoreServiceTest, DeleteEntriesAndRecreate) {
+  SynchronousLoadTabsFromLastSession();
+  AddThreeNavigations();
+
+  // Have the service record the tab.
+  service_->CreateHistoricalTab(live_tab(), -1);
+
+  // Delete the navigation for url2_.
+  service_->DeleteNavigationEntries(
+      base::BindLambdaForTesting([&](const SerializedNavigationEntry& entry) {
+        return entry.virtual_url() == url2_;
+      }));
+  // Recreate the service and have it load the tabs.
+  RecreateService();
+  // The entry should still exist but url2_ was removed and indices adjusted.
+  ASSERT_EQ(1U, service_->entries().size());
+  Entry* entry = service_->entries().front().get();
+  ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
+  Tab* tab = static_cast<Tab*>(entry);
+  ASSERT_EQ(2U, tab->navigations.size());
+  EXPECT_EQ(url1_, tab->navigations[0].virtual_url());
+  EXPECT_EQ(0, tab->navigations[0].index());
+  EXPECT_EQ(url3_, tab->navigations[1].virtual_url());
+  EXPECT_EQ(1, tab->navigations[1].index());
+  EXPECT_EQ(1, tab->current_navigation_index);
+
+  // Delete all entries.
+  service_->DeleteNavigationEntries(base::BindRepeating(
+      [](const SerializedNavigationEntry& entry) { return true; }));
+  // Recreate the service and have it load the tabs.
+  RecreateService();
+  // The entry should be removed.
+  ASSERT_EQ(0U, service_->entries().size());
+}
+
 // Make sure we persist entries to disk that have post data.
 TEST_F(PersistentTabRestoreServiceTest, DontPersistPostData) {
   AddThreeNavigations();
@@ -360,8 +471,7 @@ TEST_F(PersistentTabRestoreServiceTest, DontPersistPostData) {
   // One entry should be created.
   ASSERT_EQ(1U, service_->entries().size());
 
-  const sessions::TabRestoreService::Entry* restored_entry =
-      service_->entries().front().get();
+  const Entry* restored_entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::TAB, restored_entry->type);
 
   const Tab* restored_tab =
@@ -408,8 +518,7 @@ TEST_F(PersistentTabRestoreServiceTest, LoadPreviousSession) {
 
   // Make sure we get back one entry with one tab whose url is url1.
   ASSERT_EQ(1U, service_->entries().size());
-  sessions::TabRestoreService::Entry* entry2 =
-      service_->entries().front().get();
+  Entry* entry2 = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::WINDOW, entry2->type);
   sessions::TabRestoreService::Window* window =
       static_cast<sessions::TabRestoreService::Window*>(entry2);
@@ -468,7 +577,7 @@ TEST_F(PersistentTabRestoreServiceTest, LoadPreviousSessionAndTabs) {
   // the tab restore service. The previous session entry should be first.
   ASSERT_EQ(2U, service_->entries().size());
   // The first entry should come from the session service.
-  sessions::TabRestoreService::Entry* entry = service_->entries().front().get();
+  Entry* entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::WINDOW, entry->type);
   sessions::TabRestoreService::Window* window =
       static_cast<sessions::TabRestoreService::Window*>(entry);
@@ -522,7 +631,7 @@ TEST_F(PersistentTabRestoreServiceTest, LoadWindowBoundsAndWorkspace) {
   ASSERT_EQ(2U, service_->entries().size());
 
   // The first entry should come from the session service.
-  sessions::TabRestoreService::Entry* entry = service_->entries().front().get();
+  Entry* entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::WINDOW, entry->type);
   sessions::TabRestoreService::Window* window =
       static_cast<sessions::TabRestoreService::Window*>(entry);
@@ -565,7 +674,7 @@ TEST_F(PersistentTabRestoreServiceTest, LoadPreviousSessionAndTabsPinned) {
   // the tab restore service. The previous session entry should be first.
   ASSERT_EQ(2U, service_->entries().size());
   // The first entry should come from the session service.
-  sessions::TabRestoreService::Entry* entry = service_->entries().front().get();
+  Entry* entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::WINDOW, entry->type);
   sessions::TabRestoreService::Window* window =
       static_cast<sessions::TabRestoreService::Window*>(entry);
@@ -610,7 +719,7 @@ TEST_F(PersistentTabRestoreServiceTest, ManyWindowsInSessionService) {
   ASSERT_EQ(static_cast<size_t>(kMaxEntries), service_->entries().size());
 
   // The first entry should come from the session service.
-  sessions::TabRestoreService::Entry* entry = service_->entries().front().get();
+  Entry* entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::WINDOW, entry->type);
   sessions::TabRestoreService::Window* window =
       static_cast<sessions::TabRestoreService::Window*>(entry);
@@ -639,8 +748,7 @@ TEST_F(PersistentTabRestoreServiceTest, TimestampSurvivesRestore) {
   std::vector<SerializedNavigationEntry> old_navigations;
   {
     // |entry|/|tab| doesn't survive after RecreateService().
-    sessions::TabRestoreService::Entry* entry =
-        service_->entries().front().get();
+    Entry* entry = service_->entries().front().get();
     ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
     Tab* tab = static_cast<Tab*>(entry);
     tab->timestamp = tab_timestamp;
@@ -661,8 +769,7 @@ TEST_F(PersistentTabRestoreServiceTest, TimestampSurvivesRestore) {
   ASSERT_EQ(1U, service_->entries().size());
 
   // And verify the entry.
-  sessions::TabRestoreService::Entry* restored_entry =
-      service_->entries().front().get();
+  Entry* restored_entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::TAB, restored_entry->type);
   Tab* restored_tab =
       static_cast<Tab*>(restored_entry);
@@ -689,8 +796,7 @@ TEST_F(PersistentTabRestoreServiceTest, StatusCodesSurviveRestore) {
   std::vector<sessions::SerializedNavigationEntry> old_navigations;
   {
     // |entry|/|tab| doesn't survive after RecreateService().
-    sessions::TabRestoreService::Entry* entry =
-        service_->entries().front().get();
+    Entry* entry = service_->entries().front().get();
     ASSERT_EQ(sessions::TabRestoreService::TAB, entry->type);
     Tab* tab = static_cast<Tab*>(entry);
     old_navigations = tab->navigations;
@@ -710,8 +816,7 @@ TEST_F(PersistentTabRestoreServiceTest, StatusCodesSurviveRestore) {
   ASSERT_EQ(1U, service_->entries().size());
 
   // And verify the entry.
-  sessions::TabRestoreService::Entry* restored_entry =
-      service_->entries().front().get();
+  Entry* restored_entry = service_->entries().front().get();
   ASSERT_EQ(sessions::TabRestoreService::TAB, restored_entry->type);
   Tab* restored_tab =
       static_cast<Tab*>(restored_entry);
@@ -732,7 +837,7 @@ TEST_F(PersistentTabRestoreServiceTest, PruneEntries) {
             base::StringPrintf("http://%d", static_cast<int>(i)),
             base::NumberToString(i));
 
-    auto tab = base::MakeUnique<Tab>();
+    auto tab = std::make_unique<Tab>();
     tab->navigations.push_back(navigation);
     tab->current_navigation_index = 0;
 
@@ -752,7 +857,7 @@ TEST_F(PersistentTabRestoreServiceTest, PruneEntries) {
   SerializedNavigationEntry navigation =
       SerializedNavigationEntryTestHelper::CreateNavigation(kRecentUrl,
                                                             "Most recent");
-  auto tab = base::MakeUnique<Tab>();
+  auto tab = std::make_unique<Tab>();
   tab->navigations.push_back(navigation);
   tab->current_navigation_index = 0;
   mutable_entries()->push_front(std::move(tab));
@@ -767,7 +872,7 @@ TEST_F(PersistentTabRestoreServiceTest, PruneEntries) {
   navigation = SerializedNavigationEntryTestHelper::CreateNavigation(
       chrome::kChromeUINewTabURL, "New tab");
 
-  tab = base::MakeUnique<Tab>();
+  tab = std::make_unique<Tab>();
   tab->navigations.push_back(navigation);
   tab->current_navigation_index = 0;
   mutable_entries()->push_front(std::move(tab));
@@ -780,7 +885,7 @@ TEST_F(PersistentTabRestoreServiceTest, PruneEntries) {
                                   .virtual_url());
 
   // Don't prune pinned NTPs.
-  tab = base::MakeUnique<Tab>();
+  tab = std::make_unique<Tab>();
   tab->pinned = true;
   tab->current_navigation_index = 0;
   tab->navigations.push_back(navigation);
@@ -796,7 +901,7 @@ TEST_F(PersistentTabRestoreServiceTest, PruneEntries) {
   // Don't prune NTPs that have multiple navigations.
   // (Erase the last NTP first.)
   mutable_entries()->erase(mutable_entries()->begin());
-  tab = base::MakeUnique<Tab>();
+  tab = std::make_unique<Tab>();
   tab->current_navigation_index = 1;
   tab->navigations.push_back(navigation);
   tab->navigations.push_back(navigation);

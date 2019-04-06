@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2006, Google Inc.
  * All rights reserved.
  * 
@@ -84,9 +85,10 @@
 // which (sometimes) causes mmap, which calls our hook, and so on.
 // We do this as follows: on a recursive call of MemoryRegionMap's
 // mmap/sbrk/mremap hook we record the data about the allocation in a
-// static fixed-sized stack (saved_regions), when the recursion unwinds
-// but before returning from the outer hook call we unwind this stack and
-// move the data from saved_regions to its permanent place in the RegionSet,
+// static fixed-sized stack (saved_regions and saved_buckets), when the
+// recursion unwinds but before returning from the outer hook call we unwind
+// this stack and move the data from saved_regions and saved_buckets to its
+// permanent place in the RegionSet and "bucket_table" respectively,
 // which can cause more allocations and mmap-s and recursion and unwinding,
 // but the whole process ends eventually due to the fact that for the small
 // allocations we are doing LowLevelAlloc reuses one mmap call and parcels out
@@ -118,6 +120,7 @@
 
 #include "memory_region_map.h"
 
+#include "base/googleinit.h"
 #include "base/logging.h"
 #include "base/low_level_alloc.h"
 #include "malloc_hook-inl.h"
@@ -147,13 +150,21 @@ int MemoryRegionMap::recursion_count_ = 0;  // GUARDED_BY(owner_lock_)
 pthread_t MemoryRegionMap::lock_owner_tid_;  // GUARDED_BY(owner_lock_)
 int64 MemoryRegionMap::map_size_ = 0;
 int64 MemoryRegionMap::unmap_size_ = 0;
+HeapProfileBucket** MemoryRegionMap::bucket_table_ = NULL;  // GUARDED_BY(lock_)
+int MemoryRegionMap::num_buckets_ = 0;  // GUARDED_BY(lock_)
+int MemoryRegionMap::saved_buckets_count_ = 0;  // GUARDED_BY(lock_)
+HeapProfileBucket MemoryRegionMap::saved_buckets_[20];  // GUARDED_BY(lock_)
+
+// GUARDED_BY(lock_)
+const void* MemoryRegionMap::saved_buckets_keys_[20][kMaxStackDepth];
 
 // ========================================================================= //
 
 // Simple hook into execution of global object constructors,
 // so that we do not call pthread_self() when it does not yet work.
 static bool libpthread_initialized = false;
-static bool initializer = (libpthread_initialized = true, true);
+REGISTER_MODULE_INITIALIZER(libpthread_initialized_setter,
+                            libpthread_initialized = true);
 
 static inline bool current_thread_is(pthread_t should_be) {
   // Before main() runs, there's only one thread, so we're always that thread
@@ -182,7 +193,7 @@ static MemoryRegionMap::RegionSetRep regions_rep;
 // (or rather should we *not* use regions_ to record a hooked mmap).
 static bool recursive_insert = false;
 
-void MemoryRegionMap::Init(int max_stack_depth) {
+void MemoryRegionMap::Init(int max_stack_depth, bool use_buckets) {
   RAW_VLOG(10, "MemoryRegionMap Init");
   RAW_CHECK(max_stack_depth >= 0, "");
   // Make sure we don't overflow the memory in region stacks:
@@ -214,6 +225,15 @@ void MemoryRegionMap::Init(int max_stack_depth) {
     // Can't instead use HandleSavedRegionsLocked(&DoInsertRegionLocked) before
     // recursive_insert = false; as InsertRegionLocked will also construct
     // regions_ on demand for us.
+  if (use_buckets) {
+    const int table_bytes = kHashTableSize * sizeof(*bucket_table_);
+    recursive_insert = true;
+    bucket_table_ = static_cast<HeapProfileBucket**>(
+        MyAllocator::Allocate(table_bytes));
+    recursive_insert = false;
+    memset(bucket_table_, 0, table_bytes);
+    num_buckets_ = 0;
+  }
   Unlock();
   RAW_VLOG(10, "MemoryRegionMap Init done");
 }
@@ -227,6 +247,19 @@ bool MemoryRegionMap::Shutdown() {
     Unlock();
     RAW_VLOG(10, "MemoryRegionMap Shutdown decrement done");
     return true;
+  }
+  if (bucket_table_ != NULL) {
+    for (int i = 0; i < kHashTableSize; i++) {
+      for (HeapProfileBucket* curr = bucket_table_[i]; curr != 0; /**/) {
+        HeapProfileBucket* bucket = curr;
+        curr = curr->next;
+        MyAllocator::Free(bucket->stack, 0);
+        MyAllocator::Free(bucket, 0);
+      }
+    }
+    MyAllocator::Free(bucket_table_, 0);
+    num_buckets_ = 0;
+    bucket_table_ = NULL;
   }
   RAW_CHECK(MallocHook::RemoveMmapHook(&MmapHook), "");
   RAW_CHECK(MallocHook::RemoveMremapHook(&MremapHook), "");
@@ -243,6 +276,11 @@ bool MemoryRegionMap::Shutdown() {
   Unlock();
   RAW_VLOG(10, "MemoryRegionMap Shutdown done");
   return deleted_arena;
+}
+
+bool MemoryRegionMap::IsRecordingLocked() {
+  RAW_CHECK(LockIsHeld(), "should be held (by this thread)");
+  return client_count_ > 0;
 }
 
 // Invariants (once libpthread_initialized is true):
@@ -336,6 +374,62 @@ bool MemoryRegionMap::FindAndMarkStackRegion(uintptr_t stack_top,
   return region != NULL;
 }
 
+HeapProfileBucket* MemoryRegionMap::GetBucket(int depth,
+                                              const void* const key[]) {
+  RAW_CHECK(LockIsHeld(), "should be held (by this thread)");
+  // Make hash-value
+  uintptr_t hash = 0;
+  for (int i = 0; i < depth; i++) {
+    hash += reinterpret_cast<uintptr_t>(key[i]);
+    hash += hash << 10;
+    hash ^= hash >> 6;
+  }
+  hash += hash << 3;
+  hash ^= hash >> 11;
+
+  // Lookup stack trace in table
+  unsigned int hash_index = (static_cast<unsigned int>(hash)) % kHashTableSize;
+  for (HeapProfileBucket* bucket = bucket_table_[hash_index];
+       bucket != 0;
+       bucket = bucket->next) {
+    if ((bucket->hash == hash) && (bucket->depth == depth) &&
+        std::equal(key, key + depth, bucket->stack)) {
+      return bucket;
+    }
+  }
+
+  // Create new bucket
+  const size_t key_size = sizeof(key[0]) * depth;
+  HeapProfileBucket* bucket;
+  if (recursive_insert) {  // recursion: save in saved_buckets_
+    const void** key_copy = saved_buckets_keys_[saved_buckets_count_];
+    std::copy(key, key + depth, key_copy);
+    bucket = &saved_buckets_[saved_buckets_count_];
+    memset(bucket, 0, sizeof(*bucket));
+    ++saved_buckets_count_;
+    bucket->stack = key_copy;
+    bucket->next  = NULL;
+  } else {
+    recursive_insert = true;
+    const void** key_copy = static_cast<const void**>(
+        MyAllocator::Allocate(key_size));
+    recursive_insert = false;
+    std::copy(key, key + depth, key_copy);
+    recursive_insert = true;
+    bucket = static_cast<HeapProfileBucket*>(
+        MyAllocator::Allocate(sizeof(HeapProfileBucket)));
+    recursive_insert = false;
+    memset(bucket, 0, sizeof(*bucket));
+    bucket->stack = key_copy;
+    bucket->next  = bucket_table_[hash_index];
+  }
+  bucket->hash = hash;
+  bucket->depth = depth;
+  bucket_table_[hash_index] = bucket;
+  ++num_buckets_;
+  return bucket;
+}
+
 MemoryRegionMap::RegionIterator MemoryRegionMap::BeginRegionLocked() {
   RAW_CHECK(LockIsHeld(), "should be held (by this thread)");
   RAW_CHECK(regions_ != NULL, "");
@@ -404,6 +498,44 @@ inline void MemoryRegionMap::HandleSavedRegionsLocked(
   }
 }
 
+void MemoryRegionMap::RestoreSavedBucketsLocked() {
+  RAW_CHECK(LockIsHeld(), "should be held (by this thread)");
+  while (saved_buckets_count_ > 0) {
+    HeapProfileBucket bucket = saved_buckets_[--saved_buckets_count_];
+    unsigned int hash_index =
+        static_cast<unsigned int>(bucket.hash) % kHashTableSize;
+    bool is_found = false;
+    for (HeapProfileBucket* curr = bucket_table_[hash_index];
+         curr != 0;
+         curr = curr->next) {
+      if ((curr->hash == bucket.hash) && (curr->depth == bucket.depth) &&
+          std::equal(bucket.stack, bucket.stack + bucket.depth, curr->stack)) {
+        curr->allocs += bucket.allocs;
+        curr->alloc_size += bucket.alloc_size;
+        curr->frees += bucket.frees;
+        curr->free_size += bucket.free_size;
+        is_found = true;
+        break;
+      }
+    }
+    if (is_found) continue;
+
+    const size_t key_size = sizeof(bucket.stack[0]) * bucket.depth;
+    const void** key_copy = static_cast<const void**>(
+        MyAllocator::Allocate(key_size));
+    std::copy(bucket.stack, bucket.stack + bucket.depth, key_copy);
+    HeapProfileBucket* new_bucket = static_cast<HeapProfileBucket*>(
+        MyAllocator::Allocate(sizeof(HeapProfileBucket)));
+    memset(new_bucket, 0, sizeof(*new_bucket));
+    new_bucket->hash = bucket.hash;
+    new_bucket->depth = bucket.depth;
+    new_bucket->stack = key_copy;
+    new_bucket->next = bucket_table_[hash_index];
+    bucket_table_[hash_index] = new_bucket;
+    ++num_buckets_;
+  }
+}
+
 inline void MemoryRegionMap::InsertRegionLocked(const Region& region) {
   RAW_CHECK(LockIsHeld(), "should be held (by this thread)");
   // We can be called recursively, because RegionSet constructor
@@ -452,11 +584,31 @@ void MemoryRegionMap::RecordRegionAddition(const void* start, size_t size) {
   Region region;
   region.Create(start, size);
   // First get the call stack info into the local varible 'region':
-  const int depth =
-    max_stack_depth_ > 0
-    ? MallocHook::GetCallerStackTrace(const_cast<void**>(region.call_stack),
-                                      max_stack_depth_, kStripFrames + 1)
-    : 0;
+  int depth = 0;
+  // NOTE: libunwind also does mmap and very much likely while holding
+  // it's own lock(s). So some threads may first take libunwind lock,
+  // and then take region map lock (necessary to record mmap done from
+  // inside libunwind). On the other hand other thread(s) may do
+  // normal mmap. Which would call this method to record it. Which
+  // would then proceed with installing that record to region map
+  // while holding region map lock. That may cause mmap from our own
+  // internal allocators, so attempt to unwind in this case may cause
+  // reverse order of taking libuwind and region map locks. Which is
+  // obvious deadlock.
+  //
+  // Thankfully, we can easily detect if we're holding region map lock
+  // and avoid recording backtrace in this (rare and largely
+  // irrelevant) case. By doing this we "declare" that thread needing
+  // both locks must take region map lock last. In other words we do
+  // not allow taking libuwind lock when we already have region map
+  // lock. Note, this is generally impossible when somebody tries to
+  // mix cpu profiling and heap checking/profiling, because cpu
+  // profiler grabs backtraces at arbitrary places. But at least such
+  // combination is rarer and less relevant.
+  if (max_stack_depth_ > 0 && !LockIsHeld()) {
+    depth = MallocHook::GetCallerStackTrace(const_cast<void**>(region.call_stack),
+                                            max_stack_depth_, kStripFrames + 1);
+  }
   region.set_call_stack_depth(depth);  // record stack info fully
   RAW_VLOG(10, "New global region %p..%p from %p",
               reinterpret_cast<void*>(region.start_addr),
@@ -468,6 +620,16 @@ void MemoryRegionMap::RecordRegionAddition(const void* start, size_t size) {
   InsertRegionLocked(region);
     // This will (eventually) allocate storage for and copy over the stack data
     // from region.call_stack_data_ that is pointed by region.call_stack().
+  if (bucket_table_ != NULL) {
+    HeapProfileBucket* b = GetBucket(depth, region.call_stack);
+    ++b->allocs;
+    b->alloc_size += size;
+    if (!recursive_insert) {
+      recursive_insert = true;
+      RestoreSavedBucketsLocked();
+      recursive_insert = false;
+    }
+  }
   Unlock();
 }
 
@@ -486,6 +648,7 @@ void MemoryRegionMap::RecordRegionRemoval(const void* start, size_t size) {
       Region& r = saved_regions[i];
       if (r.start_addr == start_addr && r.end_addr == end_addr) {
         // An exact match, so it's safe to remove.
+        RecordRegionRemovalInBucket(r.call_stack_depth, r.call_stack, size);
         --saved_regions_count;
         --put_pos;
         RAW_VLOG(10, ("Insta-Removing saved region %p..%p; "
@@ -512,7 +675,7 @@ void MemoryRegionMap::RecordRegionRemoval(const void* start, size_t size) {
   uintptr_t start_addr = reinterpret_cast<uintptr_t>(start);
   uintptr_t end_addr = start_addr + size;
   // subtract start_addr, end_addr from all the regions
-  RAW_VLOG(10, "Removing global region %p..%p; have %"PRIuS" regions",
+  RAW_VLOG(10, "Removing global region %p..%p; have %" PRIuS " regions",
               reinterpret_cast<void*>(start_addr),
               reinterpret_cast<void*>(end_addr),
               regions_->size());
@@ -530,6 +693,8 @@ void MemoryRegionMap::RecordRegionRemoval(const void* start, size_t size) {
       RAW_VLOG(12, "Deleting region %p..%p",
                   reinterpret_cast<void*>(region->start_addr),
                   reinterpret_cast<void*>(region->end_addr));
+      RecordRegionRemovalInBucket(region->call_stack_depth, region->call_stack,
+                                  region->end_addr - region->start_addr);
       RegionSet::iterator d = region;
       ++region;
       regions_->erase(d);
@@ -539,6 +704,8 @@ void MemoryRegionMap::RecordRegionRemoval(const void* start, size_t size) {
       RAW_VLOG(12, "Splitting region %p..%p in two",
                   reinterpret_cast<void*>(region->start_addr),
                   reinterpret_cast<void*>(region->end_addr));
+      RecordRegionRemovalInBucket(region->call_stack_depth, region->call_stack,
+                                  end_addr - start_addr);
       // Make another region for the start portion:
       // The new region has to be the start portion because we can't
       // just modify region->end_addr as it's the sorting key.
@@ -552,12 +719,16 @@ void MemoryRegionMap::RecordRegionRemoval(const void* start, size_t size) {
       RAW_VLOG(12, "Start-chopping region %p..%p",
                   reinterpret_cast<void*>(region->start_addr),
                   reinterpret_cast<void*>(region->end_addr));
+      RecordRegionRemovalInBucket(region->call_stack_depth, region->call_stack,
+                                  end_addr - region->start_addr);
       const_cast<Region&>(*region).set_start_addr(end_addr);
     } else if (start_addr > region->start_addr  &&
                start_addr < region->end_addr) {  // cut from end
       RAW_VLOG(12, "End-chopping region %p..%p",
                   reinterpret_cast<void*>(region->start_addr),
                   reinterpret_cast<void*>(region->end_addr));
+      RecordRegionRemovalInBucket(region->call_stack_depth, region->call_stack,
+                                  region->end_addr - start_addr);
       // Can't just modify region->end_addr (it's the sorting key):
       Region r = *region;
       r.set_end_addr(start_addr);
@@ -571,7 +742,7 @@ void MemoryRegionMap::RecordRegionRemoval(const void* start, size_t size) {
     }
     ++region;
   }
-  RAW_VLOG(12, "Removed region %p..%p; have %"PRIuS" regions",
+  RAW_VLOG(12, "Removed region %p..%p; have %" PRIuS " regions",
               reinterpret_cast<void*>(start_addr),
               reinterpret_cast<void*>(end_addr),
               regions_->size());
@@ -580,14 +751,24 @@ void MemoryRegionMap::RecordRegionRemoval(const void* start, size_t size) {
   Unlock();
 }
 
+void MemoryRegionMap::RecordRegionRemovalInBucket(int depth,
+                                                  const void* const stack[],
+                                                  size_t size) {
+  RAW_CHECK(LockIsHeld(), "should be held (by this thread)");
+  if (bucket_table_ == NULL) return;
+  HeapProfileBucket* b = GetBucket(depth, stack);
+  ++b->frees;
+  b->free_size += size;
+}
+
 void MemoryRegionMap::MmapHook(const void* result,
                                const void* start, size_t size,
                                int prot, int flags,
                                int fd, off_t offset) {
-  // TODO(maxim): replace all 0x%"PRIxS" by %p when RAW_VLOG uses a safe
+  // TODO(maxim): replace all 0x%" PRIxS " by %p when RAW_VLOG uses a safe
   // snprintf reimplementation that does not malloc to pretty-print NULL
-  RAW_VLOG(10, "MMap = 0x%"PRIxPTR" of %"PRIuS" at %"PRIu64" "
-              "prot %d flags %d fd %d offs %"PRId64,
+  RAW_VLOG(10, "MMap = 0x%" PRIxPTR " of %" PRIuS " at %" PRIu64 " "
+              "prot %d flags %d fd %d offs %" PRId64,
               reinterpret_cast<uintptr_t>(result), size,
               reinterpret_cast<uint64>(start), prot, flags, fd,
               static_cast<int64>(offset));
@@ -597,7 +778,7 @@ void MemoryRegionMap::MmapHook(const void* result,
 }
 
 void MemoryRegionMap::MunmapHook(const void* ptr, size_t size) {
-  RAW_VLOG(10, "MUnmap of %p %"PRIuS"", ptr, size);
+  RAW_VLOG(10, "MUnmap of %p %" PRIuS "", ptr, size);
   if (size != 0) {
     RecordRegionRemoval(ptr, size);
   }
@@ -607,8 +788,8 @@ void MemoryRegionMap::MremapHook(const void* result,
                                  const void* old_addr, size_t old_size,
                                  size_t new_size, int flags,
                                  const void* new_addr) {
-  RAW_VLOG(10, "MRemap = 0x%"PRIxPTR" of 0x%"PRIxPTR" %"PRIuS" "
-              "to %"PRIuS" flags %d new_addr=0x%"PRIxPTR,
+  RAW_VLOG(10, "MRemap = 0x%" PRIxPTR " of 0x%" PRIxPTR " %" PRIuS " "
+              "to %" PRIuS " flags %d new_addr=0x%" PRIxPTR,
               (uintptr_t)result, (uintptr_t)old_addr,
                old_size, new_size, flags,
                flags & MREMAP_FIXED ? (uintptr_t)new_addr : 0);
@@ -618,10 +799,8 @@ void MemoryRegionMap::MremapHook(const void* result,
   }
 }
 
-extern "C" void* __sbrk(ptrdiff_t increment);  // defined in libc
-
 void MemoryRegionMap::SbrkHook(const void* result, ptrdiff_t increment) {
-  RAW_VLOG(10, "Sbrk = 0x%"PRIxPTR" of %"PRIdS"", (uintptr_t)result, increment);
+  RAW_VLOG(10, "Sbrk = 0x%" PRIxPTR " of %" PRIdS "", (uintptr_t)result, increment);
   if (result != reinterpret_cast<void*>(-1)) {
     if (increment > 0) {
       void* new_end = sbrk(0);
@@ -641,8 +820,8 @@ void MemoryRegionMap::LogAllLocked() {
   uintptr_t previous = 0;
   for (RegionSet::const_iterator r = regions_->begin();
        r != regions_->end(); ++r) {
-    RAW_LOG(INFO, "Memory region 0x%"PRIxPTR"..0x%"PRIxPTR" "
-                  "from 0x%"PRIxPTR" stack=%d",
+    RAW_LOG(INFO, "Memory region 0x%" PRIxPTR "..0x%" PRIxPTR " "
+                  "from 0x%" PRIxPTR " stack=%d",
                   r->start_addr, r->end_addr, r->caller(), r->is_stack);
     RAW_CHECK(previous < r->end_addr, "wow, we messed up the set order");
       // this must be caused by uncontrolled recursive operations on regions_

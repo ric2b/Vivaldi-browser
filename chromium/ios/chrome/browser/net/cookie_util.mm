@@ -9,13 +9,14 @@
 #include <stdint.h>
 #include <sys/sysctl.h>
 
+#include "base/bind.h"
 #include "base/logging.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_scheduler/post_task.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/net/cookies/cookie_store_ios_persistent.h"
 #import "ios/net/cookies/system_cookie_store.h"
+#include "ios/web/public/features.h"
 #include "ios/web/public/web_thread.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
@@ -33,9 +34,6 @@ namespace {
 
 // Date of the last cookie deletion.
 NSString* const kLastCookieDeletionDate = @"LastCookieDeletionDate";
-
-// Empty callback.
-void DoNothing(uint32_t n) {}
 
 // Creates a SQLitePersistentCookieStore running on a background thread.
 scoped_refptr<net::SQLitePersistentCookieStore> CreatePersistentCookieStore(
@@ -91,6 +89,17 @@ std::unique_ptr<net::CookieStore> CreateCookieStore(
   if (config.cookie_store_type == CookieStoreConfig::COOKIE_MONSTER)
     return CreateCookieMonster(config);
 
+  // On iOS 11, there is no need to use PersistentCookieStore or CookieMonster
+  // because there is a way to access cookies in WKHTTPCookieStore. This will
+  // allow URLFetcher and anyother users of net:CookieStore to in iOS to set
+  // and get cookies directly in WKHTTPCookieStore.
+  if (@available(iOS 11, *)) {
+    if (base::FeatureList::IsEnabled(web::features::kWKHTTPSystemCookieStore)) {
+      return std::make_unique<net::CookieStoreIOS>(
+          std::move(system_cookie_store));
+    }
+  }
+
   scoped_refptr<net::SQLitePersistentCookieStore> persistent_store = nullptr;
   if (config.session_cookie_mode ==
       CookieStoreConfig::RESTORED_SESSION_COOKIES) {
@@ -126,12 +135,11 @@ bool ShouldClearSessionCookies() {
 void ClearSessionCookies(ios::ChromeBrowserState* browser_state) {
   scoped_refptr<net::URLRequestContextGetter> getter =
       browser_state->GetRequestContext();
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
-        getter->GetURLRequestContext()
-            ->cookie_store()
-            ->DeleteSessionCookiesAsync(base::Bind(&DoNothing));
-      }));
+  web::WebThread::PostTask(web::WebThread::IO, FROM_HERE, base::BindOnce(^{
+                             getter->GetURLRequestContext()
+                                 ->cookie_store()
+                                 ->DeleteSessionCookiesAsync(base::DoNothing());
+                           }));
 }
 
 }  // namespace cookie_util

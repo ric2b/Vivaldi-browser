@@ -13,9 +13,14 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/logging.h"
-#import "base/mac/bind_objc_block.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "ios/web/navigation/placeholder_navigation_util.h"
+#include "base/test/scoped_feature_list.h"
+#import "ios/web/interstitials/html_web_interstitial_impl.h"
+#import "ios/web/navigation/wk_navigation_util.h"
+#import "ios/web/public/crw_navigation_item_storage.h"
+#import "ios/web/public/crw_session_storage.h"
+#include "ios/web/public/features.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
 #include "ios/web/public/load_committed_details.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
@@ -24,11 +29,11 @@
 #import "ios/web/public/test/fakes/test_web_state_observer.h"
 #include "ios/web/public/test/web_test.h"
 #import "ios/web/public/web_state/context_menu_params.h"
-#include "ios/web/public/web_state/form_activity_params.h"
 #include "ios/web/public/web_state/global_web_state_observer.h"
 #import "ios/web/public/web_state/web_state_delegate.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/public/web_state/web_state_policy_decider.h"
+#import "ios/web/test/fakes/mock_interstitial_delegate.h"
 #include "ios/web/web_state/global_web_state_event_tracker.h"
 #import "ios/web/web_state/navigation_context_impl.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
@@ -51,6 +56,13 @@ using testing::Return;
 
 namespace web {
 namespace {
+
+// WebStateImplTest is parameterized on this enum to test both implementations
+// of navigation manager.
+enum class NavigationManagerChoice {
+  LEGACY,
+  WK_BASED,
+};
 
 // Test observer to check that the GlobalWebStateObserver methods are called as
 // expected.
@@ -143,7 +155,8 @@ class MockWebStatePolicyDecider : public WebStatePolicyDecider {
   virtual ~MockWebStatePolicyDecider() {}
 
   MOCK_METHOD2(ShouldAllowRequest,
-               bool(NSURLRequest* request, ui::PageTransition transition));
+               bool(NSURLRequest* request,
+                    const WebStatePolicyDecider::RequestInfo& request_info));
   MOCK_METHOD2(ShouldAllowResponse,
                bool(NSURLResponse* response, bool for_main_frame));
   MOCK_METHOD0(WebStateDestroyed, void());
@@ -168,29 +181,65 @@ bool HandleScriptCommand(bool* is_called,
                          bool should_handle,
                          base::DictionaryValue* expected_value,
                          const GURL& expected_url,
+                         bool expected_is_main_frame,
                          const base::DictionaryValue& value,
                          const GURL& url,
-                         bool user_is_interacting) {
+                         bool user_is_interacting,
+                         bool is_main_frame) {
   *is_called = true;
   EXPECT_TRUE(expected_value->Equals(&value));
   EXPECT_EQ(expected_url, url);
+  EXPECT_EQ(expected_is_main_frame, is_main_frame);
   return should_handle;
 }
 
 }  // namespace
 
 // Test fixture for web::WebStateImpl class.
-class WebStateImplTest : public web::WebTest {
+class WebStateImplTest
+    : public web::WebTest,
+      public ::testing::WithParamInterface<NavigationManagerChoice> {
  protected:
   WebStateImplTest() : web::WebTest() {
+    if (GetParam() == NavigationManagerChoice::LEGACY) {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kSlimNavigationManager);
+    } else {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSlimNavigationManager);
+    }
+
     web::WebState::CreateParams params(GetBrowserState());
     web_state_ = std::make_unique<web::WebStateImpl>(params);
   }
 
+  // Adds PendingNavigationItem and commits it.
+  void AddCommittedNavigationItem() {
+    web_state_->GetNavigationManagerImpl().InitializeSession();
+    web_state_->GetNavigationManagerImpl().AddPendingItem(
+        GURL::EmptyGURL(), web::Referrer(), ui::PAGE_TRANSITION_LINK,
+        NavigationInitiationType::RENDERER_INITIATED,
+        NavigationManager::UserAgentOverrideOption::DESKTOP);
+    web_state_->GetNavigationManagerImpl().CommitPendingItem();
+  }
+
+  // Creates interstitial raw pointer and calls Show(). The pointer must be
+  // deleted by dismissing the interstitial.
+  WebInterstitialImpl* ShowInterstitial() {
+    auto delegate = std::make_unique<MockInterstitialDelegate>();
+    WebInterstitialImpl* result =
+        new HtmlWebInterstitialImpl(web_state_.get(), /*new_navigation=*/true,
+                                    GURL::EmptyGURL(), std::move(delegate));
+    result->Show();
+    return result;
+  }
   std::unique_ptr<WebStateImpl> web_state_;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(WebStateImplTest, WebUsageEnabled) {
+TEST_P(WebStateImplTest, WebUsageEnabled) {
   // Default is false.
   ASSERT_TRUE(web_state_->IsWebUsageEnabled());
 
@@ -203,7 +252,7 @@ TEST_F(WebStateImplTest, WebUsageEnabled) {
   EXPECT_TRUE(web_state_->GetWebController().webUsageEnabled);
 }
 
-TEST_F(WebStateImplTest, ShouldSuppressDialogs) {
+TEST_P(WebStateImplTest, ShouldSuppressDialogs) {
   // Default is false.
   ASSERT_FALSE(web_state_->ShouldSuppressDialogs());
 
@@ -216,7 +265,7 @@ TEST_F(WebStateImplTest, ShouldSuppressDialogs) {
   EXPECT_FALSE(web_state_->GetWebController().shouldSuppressDialogs);
 }
 
-TEST_F(WebStateImplTest, ResponseHeaders) {
+TEST_P(WebStateImplTest, ResponseHeaders) {
   GURL real_url("http://foo.com/bar");
   GURL frame_url("http://frames-r-us.com/");
   scoped_refptr<net::HttpResponseHeaders> real_headers(HeadersFromString(
@@ -247,7 +296,7 @@ TEST_F(WebStateImplTest, ResponseHeaders) {
   EXPECT_EQ("text/html", web_state_->GetContentsMimeType());
 }
 
-TEST_F(WebStateImplTest, ResponseHeaderClearing) {
+TEST_P(WebStateImplTest, ResponseHeaderClearing) {
   GURL url("http://foo.com/");
   scoped_refptr<net::HttpResponseHeaders> headers(HeadersFromString(
       "HTTP/1.1 200 OK\r\n"
@@ -272,7 +321,7 @@ TEST_F(WebStateImplTest, ResponseHeaderClearing) {
 }
 
 // Tests forwarding to WebStateObserver callbacks.
-TEST_F(WebStateImplTest, ObserverTest) {
+TEST_P(WebStateImplTest, ObserverTest) {
   std::unique_ptr<TestWebStateObserver> observer(
       new TestWebStateObserver(web_state_.get()));
   EXPECT_EQ(web_state_.get(), observer->web_state());
@@ -285,6 +334,11 @@ TEST_F(WebStateImplTest, ObserverTest) {
   EXPECT_EQ(web_state_.get(), observer->was_shown_info()->web_state);
   EXPECT_TRUE(web_state_->IsVisible());
 
+  // Test that WasShown() callback is not called for the second time.
+  observer = std::make_unique<TestWebStateObserver>(web_state_.get());
+  web_state_->WasShown();
+  EXPECT_FALSE(observer->was_shown_info());
+
   // Test that WasHidden() is called.
   ASSERT_TRUE(web_state_->IsVisible());
   ASSERT_FALSE(observer->was_hidden_info());
@@ -292,6 +346,11 @@ TEST_F(WebStateImplTest, ObserverTest) {
   ASSERT_TRUE(observer->was_hidden_info());
   EXPECT_EQ(web_state_.get(), observer->was_hidden_info()->web_state);
   EXPECT_FALSE(web_state_->IsVisible());
+
+  // Test that WasHidden() callback is not called for the second time.
+  observer = std::make_unique<TestWebStateObserver>(web_state_.get());
+  web_state_->WasHidden();
+  EXPECT_FALSE(observer->was_hidden_info());
 
   // Test that LoadProgressChanged() is called.
   ASSERT_FALSE(observer->change_loading_progress_info());
@@ -322,42 +381,6 @@ TEST_F(WebStateImplTest, ObserverTest) {
   web_state_->OnDialogSuppressed();
   ASSERT_TRUE(observer->did_suppress_dialog_info());
   EXPECT_EQ(web_state_.get(), observer->did_suppress_dialog_info()->web_state);
-
-  // Test that DocumentSubmitted() is called.
-  ASSERT_FALSE(observer->submit_document_info());
-  const std::string kTestFormName("form-name");
-  bool user_initiated = true;
-  bool is_main_frame = false;
-  web_state_->OnDocumentSubmitted(kTestFormName, user_initiated, is_main_frame);
-  ASSERT_TRUE(observer->submit_document_info());
-  EXPECT_EQ(web_state_.get(), observer->submit_document_info()->web_state);
-  EXPECT_EQ(kTestFormName, observer->submit_document_info()->form_name);
-  EXPECT_EQ(user_initiated, observer->submit_document_info()->user_initiated);
-  EXPECT_EQ(is_main_frame, observer->submit_document_info()->is_main_frame);
-
-  // Test that FormActivityRegistered() is called.
-  ASSERT_FALSE(observer->form_activity_info());
-  FormActivityParams params;
-  params.form_name = kTestFormName;
-  params.field_name = "field-name";
-  params.field_type = "field-type";
-  params.type = "type";
-  params.value = "value";
-  params.input_missing = true;
-  params.is_main_frame = false;
-  web_state_->OnFormActivityRegistered(params);
-  ASSERT_TRUE(observer->form_activity_info());
-  EXPECT_EQ(web_state_.get(), observer->form_activity_info()->web_state);
-  EXPECT_EQ(params.form_name,
-            observer->form_activity_info()->form_activity.form_name);
-  EXPECT_EQ(params.field_name,
-            observer->form_activity_info()->form_activity.field_name);
-  EXPECT_EQ(params.field_type,
-            observer->form_activity_info()->form_activity.field_type);
-  EXPECT_EQ(params.type, observer->form_activity_info()->form_activity.type);
-  EXPECT_EQ(params.value, observer->form_activity_info()->form_activity.value);
-  EXPECT_TRUE(observer->form_activity_info()->form_activity.input_missing);
-  EXPECT_FALSE(observer->form_activity_info()->form_activity.is_main_frame);
 
   // Test that FaviconUrlUpdated() is called.
   ASSERT_FALSE(observer->update_favicon_url_candidates_info());
@@ -393,8 +416,9 @@ TEST_F(WebStateImplTest, ObserverTest) {
   const GURL url("http://test");
   std::unique_ptr<web::NavigationContext> context =
       NavigationContextImpl::CreateNavigationContext(
-          web_state_.get(), url,
-          ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK, true);
+          web_state_.get(), url, /*has_user_gesture=*/true,
+          ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK,
+          /*is_renderer_initiated=*/true);
   web_state_->OnNavigationFinished(context.get());
   ASSERT_TRUE(observer->did_finish_navigation_info());
   EXPECT_EQ(web_state_.get(),
@@ -447,7 +471,6 @@ TEST_F(WebStateImplTest, ObserverTest) {
       observer->commit_navigation_info()->load_details;
   EXPECT_EQ(details.item, actual_details.item);
   EXPECT_EQ(details.previous_item_index, actual_details.previous_item_index);
-  EXPECT_EQ(details.previous_url, actual_details.previous_url);
   EXPECT_EQ(details.is_in_page, actual_details.is_in_page);
 
   // Test that OnPageLoaded() is called with success when there is no error.
@@ -477,11 +500,11 @@ TEST_F(WebStateImplTest, ObserverTest) {
 }
 
 // Tests that placeholder navigations are not visible to WebStateObservers.
-TEST_F(WebStateImplTest, PlaceholderNavigationNotExposedToObservers) {
+TEST_P(WebStateImplTest, PlaceholderNavigationNotExposedToObservers) {
   TestWebStateObserver observer(web_state_.get());
   FakeNavigationContext context;
-  context.SetUrl(placeholder_navigation_util::CreatePlaceholderUrlForUrl(
-      GURL("chrome://newtab")));
+  context.SetUrl(
+      wk_navigation_util::CreatePlaceholderUrlForUrl(GURL("chrome://newtab")));
 
   // Test that OnPageLoaded() is not called.
   web_state_->OnPageLoaded(context.GetUrl(), true /* load_success */);
@@ -499,7 +522,7 @@ TEST_F(WebStateImplTest, PlaceholderNavigationNotExposedToObservers) {
 }
 
 // Tests that WebStateDelegate methods appropriately called.
-TEST_F(WebStateImplTest, DelegateTest) {
+TEST_P(WebStateImplTest, DelegateTest) {
   TestWebStateDelegate delegate;
   web_state_->SetDelegate(&delegate);
 
@@ -563,7 +586,7 @@ TEST_F(WebStateImplTest, DelegateTest) {
 
   __block bool callback_called = false;
   web_state_->RunJavaScriptDialog(GURL(), JAVASCRIPT_DIALOG_TYPE_ALERT, @"",
-                                  nil, base::BindBlockArc(^(bool, NSString*) {
+                                  nil, base::BindOnce(^(bool, NSString*) {
                                     callback_called = true;
                                   }));
 
@@ -613,10 +636,16 @@ TEST_F(WebStateImplTest, DelegateTest) {
   web_state_->CommitPreviewingViewController(previewing_view_controller);
   EXPECT_EQ(previewing_view_controller,
             delegate.last_previewing_view_controller());
+
+  // Test that ShouldAllowAppLaunching() is delegated correctly.
+  delegate.SetShouldAllowAppLaunching(true);
+  EXPECT_TRUE(web_state_->ShouldAllowAppLaunching());
+  delegate.SetShouldAllowAppLaunching(false);
+  EXPECT_FALSE(web_state_->ShouldAllowAppLaunching());
 }
 
 // Verifies that GlobalWebStateObservers are called when expected.
-TEST_F(WebStateImplTest, GlobalObserverTest) {
+TEST_P(WebStateImplTest, GlobalObserverTest) {
   std::unique_ptr<TestGlobalWebStateObserver> observer(
       new TestGlobalWebStateObserver());
 
@@ -665,15 +694,20 @@ TEST_F(WebStateImplTest, GlobalObserverTest) {
   EXPECT_TRUE(observer->web_state_destroyed_called());
 }
 
-// A Google Mock matcher which matches ui::PAGE_TRANSITION_LINK.
-// This is needed because ui::PageTransition doesn't support operator==.
-MATCHER(IsPageTransitionLink, /* argument_name = */ "") {
-  return ui::PageTransitionTypeIncludingQualifiersIs(arg,
-                                                     ui::PAGE_TRANSITION_LINK);
+// A Google Mock matcher which matches WebStatePolicyDecider::RequestInfo.
+// This is needed because WebStatePolicyDecider::RequestInfo doesn't support
+// operator==.
+MATCHER_P(RequestInfoMatch, expected_request_info, /* argument_name = */ "") {
+  return ui::PageTransitionTypeIncludingQualifiersIs(
+             arg.transition_type, expected_request_info.transition_type) &&
+         arg.source_url == expected_request_info.source_url &&
+         arg.target_frame_is_main ==
+             expected_request_info.target_frame_is_main &&
+         arg.has_user_gesture == expected_request_info.has_user_gesture;
 }
 
 // Verifies that policy deciders are correctly called by the web state.
-TEST_F(WebStateImplTest, PolicyDeciderTest) {
+TEST_P(WebStateImplTest, PolicyDeciderTest) {
   MockWebStatePolicyDecider decider(web_state_.get());
   MockWebStatePolicyDecider decider2(web_state_.get());
   EXPECT_EQ(web_state_.get(), decider.web_state());
@@ -685,29 +719,57 @@ TEST_F(WebStateImplTest, PolicyDeciderTest) {
                                          expectedContentLength:0
                                               textEncodingName:nil];
 
-  // Test that ShouldAllowRequest() is called.
-  EXPECT_CALL(decider, ShouldAllowRequest(request, IsPageTransitionLink()))
+  // Test that ShouldAllowRequest() is called for the same parameters.
+  WebStatePolicyDecider::RequestInfo request_info_main_frame(
+      ui::PageTransition::PAGE_TRANSITION_LINK,
+      /*source_url=*/GURL::EmptyGURL(), /*target_main_frame=*/true,
+      /*has_user_gesture=*/false);
+  EXPECT_CALL(decider, ShouldAllowRequest(
+                           request, RequestInfoMatch(request_info_main_frame)))
       .Times(1)
       .WillOnce(Return(true));
-  EXPECT_CALL(decider2, ShouldAllowRequest(request, IsPageTransitionLink()))
+  EXPECT_CALL(decider2, ShouldAllowRequest(
+                            request, RequestInfoMatch(request_info_main_frame)))
       .Times(1)
       .WillOnce(Return(true));
-  EXPECT_TRUE(
-      web_state_->ShouldAllowRequest(request, ui::PAGE_TRANSITION_LINK));
+
+  EXPECT_TRUE(web_state_->ShouldAllowRequest(request, request_info_main_frame));
+
+  WebStatePolicyDecider::RequestInfo request_info_iframe(
+      ui::PageTransition::PAGE_TRANSITION_LINK,
+      /*source_url=*/GURL::EmptyGURL(), /*target_main_frame=*/false,
+      /*has_user_gesture=*/false);
+
+  EXPECT_CALL(decider, ShouldAllowRequest(
+                           request, RequestInfoMatch(request_info_iframe)))
+      .Times(1)
+      .WillOnce(Return(true));
+  EXPECT_CALL(decider2, ShouldAllowRequest(
+                            request, RequestInfoMatch(request_info_iframe)))
+
+      .Times(1)
+      .WillOnce(Return(true));
+
+  EXPECT_TRUE(web_state_->ShouldAllowRequest(request, request_info_iframe));
 
   // Test that ShouldAllowRequest() is stopping on negative answer. Only one
   // one the decider should be called.
   {
     bool decider_called = false;
     bool decider2_called = false;
-    EXPECT_CALL(decider, ShouldAllowRequest(request, IsPageTransitionLink()))
+    EXPECT_CALL(
+        decider,
+        ShouldAllowRequest(request, RequestInfoMatch(request_info_main_frame)))
         .Times(AtMost(1))
         .WillOnce(DoAll(Assign(&decider_called, true), Return(false)));
-    EXPECT_CALL(decider2, ShouldAllowRequest(request, IsPageTransitionLink()))
+    EXPECT_CALL(
+        decider2,
+        ShouldAllowRequest(request, RequestInfoMatch(request_info_main_frame)))
         .Times(AtMost(1))
         .WillOnce(DoAll(Assign(&decider2_called, true), Return(false)));
+
     EXPECT_FALSE(
-        web_state_->ShouldAllowRequest(request, ui::PAGE_TRANSITION_LINK));
+        web_state_->ShouldAllowRequest(request, request_info_main_frame));
     EXPECT_FALSE(decider_called && decider2_called);
   }
 
@@ -743,8 +805,8 @@ TEST_F(WebStateImplTest, PolicyDeciderTest) {
 }
 
 // Tests that script command callbacks are called correctly.
-TEST_F(WebStateImplTest, ScriptCommand) {
-  // Set up two script command callbacks.
+TEST_P(WebStateImplTest, ScriptCommand) {
+  // Set up three script command callbacks.
   const std::string kPrefix1("prefix1");
   const std::string kCommand1("prefix1.command1");
   base::DictionaryValue value_1;
@@ -752,7 +814,9 @@ TEST_F(WebStateImplTest, ScriptCommand) {
   const GURL kUrl1("http://foo");
   bool is_called_1 = false;
   web_state_->AddScriptCommandCallback(
-      base::Bind(&HandleScriptCommand, &is_called_1, true, &value_1, kUrl1),
+      base::BindRepeating(&HandleScriptCommand, &is_called_1,
+                          /*should_handle*/ true, &value_1, kUrl1,
+                          /*expected_is_main_frame*/ true),
       kPrefix1);
 
   const std::string kPrefix2("prefix2");
@@ -762,47 +826,81 @@ TEST_F(WebStateImplTest, ScriptCommand) {
   const GURL kUrl2("http://bar");
   bool is_called_2 = false;
   web_state_->AddScriptCommandCallback(
-      base::Bind(&HandleScriptCommand, &is_called_2, false, &value_2, kUrl2),
+      base::BindRepeating(&HandleScriptCommand, &is_called_2,
+                          /*should_handle*/ false, &value_2, kUrl2,
+                          /*expected_is_main_frame*/ true),
       kPrefix2);
 
+  const std::string kPrefix3("prefix3");
+  const std::string kCommand3("prefix3.command3");
+  base::DictionaryValue value_3;
+  value_3.SetString("e", "f");
+  const GURL kUrl3("http://iframe");
+  bool is_called_3 = false;
+  web_state_->AddScriptCommandCallback(
+      base::BindRepeating(&HandleScriptCommand, &is_called_3,
+                          /*should_handle*/ true, &value_3, kUrl3,
+                          /*expected_is_main_frame*/ false),
+      kPrefix3);
+
   // Check that a irrelevant or invalid command does not trigger the callbacks.
-  EXPECT_FALSE(
-      web_state_->OnScriptCommandReceived("wohoo.blah", value_1, kUrl1, false));
+  EXPECT_FALSE(web_state_->OnScriptCommandReceived(
+      "wohoo.blah", value_1, kUrl1,
+      /*user_is_interacting*/ false, /*is_main_frame*/ true));
   EXPECT_FALSE(is_called_1);
   EXPECT_FALSE(is_called_2);
+  EXPECT_FALSE(is_called_3);
 
   EXPECT_FALSE(web_state_->OnScriptCommandReceived(
-      "prefix1ButMissingDot", value_1, kUrl1, false));
+      "prefix1ButMissingDot", value_1, kUrl1, /*user_is_interacting*/ false,
+      /*is_main_frame*/ true));
   EXPECT_FALSE(is_called_1);
   EXPECT_FALSE(is_called_2);
+  EXPECT_FALSE(is_called_3);
 
   // Check that only the callback matching the prefix is called, with the
   // expected parameters and return value;
-  EXPECT_TRUE(
-      web_state_->OnScriptCommandReceived(kCommand1, value_1, kUrl1, false));
+  EXPECT_TRUE(web_state_->OnScriptCommandReceived(kCommand1, value_1, kUrl1,
+                                                  /*user_is_interacting*/ false,
+                                                  /*is_main_frame*/ true));
   EXPECT_TRUE(is_called_1);
   EXPECT_FALSE(is_called_2);
-
-  // Remove the callback and check it is no longer called.
+  EXPECT_FALSE(is_called_3);
   is_called_1 = false;
-  web_state_->RemoveScriptCommandCallback(kPrefix1);
-  EXPECT_FALSE(
-      web_state_->OnScriptCommandReceived(kCommand1, value_1, kUrl1, false));
+
+  // Check that sending message from iframe sets |is_main_frame| to false.
+  EXPECT_TRUE(web_state_->OnScriptCommandReceived(kCommand3, value_3, kUrl3,
+                                                  /*user_is_interacting*/ false,
+                                                  /*is_main_frame*/ false));
   EXPECT_FALSE(is_called_1);
   EXPECT_FALSE(is_called_2);
+  EXPECT_TRUE(is_called_3);
+  is_called_3 = false;
+
+  // Remove the callback and check it is no longer called.
+  web_state_->RemoveScriptCommandCallback(kPrefix1);
+  EXPECT_FALSE(web_state_->OnScriptCommandReceived(
+      kCommand1, value_1, kUrl1,
+      /*user_is_interacting*/ false, /*is_main_frame*/ true));
+  EXPECT_FALSE(is_called_1);
+  EXPECT_FALSE(is_called_2);
+  EXPECT_FALSE(is_called_3);
 
   // Check that a false return value is forwarded correctly.
-  EXPECT_FALSE(
-      web_state_->OnScriptCommandReceived(kCommand2, value_2, kUrl2, false));
+  EXPECT_FALSE(web_state_->OnScriptCommandReceived(
+      kCommand2, value_2, kUrl2,
+      /*user_is_interacting*/ false, /*is_main_frame*/ true));
   EXPECT_FALSE(is_called_1);
   EXPECT_TRUE(is_called_2);
+  EXPECT_FALSE(is_called_3);
 
   web_state_->RemoveScriptCommandCallback(kPrefix2);
+  web_state_->RemoveScriptCommandCallback(kPrefix3);
 }
 
 // Tests that WebState::CreateParams::created_with_opener is translated to
 // WebState::HasOpener() return values.
-TEST_F(WebStateImplTest, CreatedWithOpener) {
+TEST_P(WebStateImplTest, CreatedWithOpener) {
   // Verify that the HasOpener() returns false if not specified in the create
   // params.
   EXPECT_FALSE(web_state_->HasOpener());
@@ -817,7 +915,7 @@ TEST_F(WebStateImplTest, CreatedWithOpener) {
 
 // Tests that WebStateObserver::FaviconUrlUpdated is called for same-document
 // navigations.
-TEST_F(WebStateImplTest, FaviconUpdateForSameDocumentNavigations) {
+TEST_P(WebStateImplTest, FaviconUpdateForSameDocumentNavigations) {
   auto observer = std::make_unique<TestWebStateObserver>(web_state_.get());
 
   // No callback if icons has not been fetched yet.
@@ -863,5 +961,148 @@ TEST_F(WebStateImplTest, FaviconUpdateForSameDocumentNavigations) {
   web_state_->OnNavigationFinished(&context);
   EXPECT_FALSE(observer->update_favicon_url_candidates_info());
 }
+
+// Tests that BuildSessionStorage() and GetTitle() return information about the
+// most recently restored session if no navigation item has been committed.
+TEST_P(WebStateImplTest, UncommittedRestoreSession) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      web::features::kSlimNavigationManager);
+
+  CRWSessionStorage* session_storage = [[CRWSessionStorage alloc] init];
+  session_storage.lastCommittedItemIndex = 0;
+  CRWNavigationItemStorage* item_storage =
+      [[CRWNavigationItemStorage alloc] init];
+  item_storage.title = base::SysNSStringToUTF16(@"Title");
+  session_storage.itemStorages = @[ item_storage ];
+
+  web::WebState::CreateParams params(GetBrowserState());
+  WebStateImpl web_state(params, session_storage);
+
+  CRWSessionStorage* extracted_session_storage =
+      web_state.BuildSessionStorage();
+  EXPECT_EQ(0, extracted_session_storage.lastCommittedItemIndex);
+  EXPECT_EQ(1U, extracted_session_storage.itemStorages.count);
+  EXPECT_NSEQ(@"Title", base::SysUTF16ToNSString(web_state.GetTitle()));
+}
+
+TEST_P(WebStateImplTest, NoUncommittedRestoreSession) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      web::features::kSlimNavigationManager);
+
+  CRWSessionStorage* session_storage = web_state_->BuildSessionStorage();
+  EXPECT_EQ(-1, session_storage.lastCommittedItemIndex);
+  EXPECT_NSEQ(@[], session_storage.itemStorages);
+  EXPECT_TRUE(web_state_->GetTitle().empty());
+}
+
+// Tests showing and clearing interstitial when NavigationManager is
+// empty.
+TEST_P(WebStateImplTest, ShowAndClearInterstitialWithNoCommittedItems) {
+  web_state_->GetNavigationManagerImpl().InitializeSession();
+
+  // Existence of a pending item is a precondition for a transient item.
+  web_state_->GetNavigationManagerImpl().AddPendingItem(
+      GURL::EmptyGURL(), web::Referrer(), ui::PAGE_TRANSITION_LINK,
+      NavigationInitiationType::BROWSER_INITIATED,
+      NavigationManager::UserAgentOverrideOption::DESKTOP);
+
+  // Show the interstitial.
+  ASSERT_FALSE(web_state_->IsShowingWebInterstitial());
+  ASSERT_FALSE(web_state_->GetWebInterstitial());
+  WebInterstitialImpl* interstitial = ShowInterstitial();
+  ASSERT_EQ(interstitial, web_state_->GetWebInterstitial());
+  ASSERT_TRUE(web_state_->IsShowingWebInterstitial());
+
+  // Clear the interstitial.
+  TestWebStateObserver observer(web_state_.get());
+  ASSERT_FALSE(observer.did_change_visible_security_state_info());
+  web_state_->ClearTransientContent();
+
+  // Verify that interstitial was removed and DidChangeVisibleSecurityState was
+  // called.
+  EXPECT_FALSE(web_state_->IsShowingWebInterstitial());
+  EXPECT_FALSE(web_state_->GetWebInterstitial());
+  ASSERT_TRUE(observer.did_change_visible_security_state_info());
+  EXPECT_EQ(web_state_.get(),
+            observer.did_change_visible_security_state_info()->web_state);
+}
+
+// Tests showing and clearing interstitial when NavigationManager has a
+// committed item.
+TEST_P(WebStateImplTest, ShowAndClearInterstitialWithCommittedItem) {
+  if (GetParam() == NavigationManagerChoice::WK_BASED) {
+    // TODO(crbug.com/862733): This test requires injecting a committed item to
+    // navigation manager, which can't be done with WKBasedNavigationManager.
+    // Re-enable this test after switching to TestNavigationManager.
+    return;
+  }
+
+  // Add SECURITY_STYLE_AUTHENTICATED committed item to navigation manager.
+  AddCommittedNavigationItem();
+  web_state_->GetNavigationManagerImpl()
+      .GetLastCommittedItem()
+      ->GetSSL()
+      .security_style = SECURITY_STYLE_AUTHENTICATED;
+
+  // Show the interstitial.
+  ASSERT_FALSE(web_state_->IsShowingWebInterstitial());
+  ASSERT_FALSE(web_state_->GetWebInterstitial());
+  WebInterstitialImpl* interstitial = ShowInterstitial();
+  ASSERT_TRUE(web_state_->IsShowingWebInterstitial());
+  ASSERT_EQ(interstitial, web_state_->GetWebInterstitial());
+
+  // Clear the interstitial.
+  TestWebStateObserver observer(web_state_.get());
+  ASSERT_FALSE(observer.did_change_visible_security_state_info());
+  web_state_->ClearTransientContent();
+
+  // Verify that interstitial was removed and DidChangeVisibleSecurityState was
+  // called.
+  EXPECT_FALSE(web_state_->IsShowingWebInterstitial());
+  EXPECT_FALSE(web_state_->GetWebInterstitial());
+  ASSERT_TRUE(observer.did_change_visible_security_state_info());
+  EXPECT_EQ(web_state_.get(),
+            observer.did_change_visible_security_state_info()->web_state);
+}
+
+// Tests showing and clearing interstitial when visible SSL status does not
+// change.
+TEST_P(WebStateImplTest, ShowAndClearInterstitialWithoutChangingSslStatus) {
+  if (GetParam() == NavigationManagerChoice::WK_BASED) {
+    // TODO(crbug.com/862733): This test requires injecting a committed item to
+    // navigation manager, which can't be done with WKBasedNavigationManager.
+    // Re-enable this test after switching to TestNavigationManager.
+    return;
+  }
+
+  // Add a committed item to navigation manager with default SSL status.
+  AddCommittedNavigationItem();
+
+  // Show the interstitial.
+  ASSERT_FALSE(web_state_->IsShowingWebInterstitial());
+  ASSERT_FALSE(web_state_->GetWebInterstitial());
+  WebInterstitialImpl* interstitial = ShowInterstitial();
+  ASSERT_TRUE(web_state_->IsShowingWebInterstitial());
+  ASSERT_EQ(interstitial, web_state_->GetWebInterstitial());
+
+  // Clear the interstitial.
+  TestWebStateObserver observer(web_state_.get());
+  ASSERT_FALSE(observer.did_change_visible_security_state_info());
+  web_state_->ClearTransientContent();
+
+  // Verify that interstitial was removed.
+  EXPECT_FALSE(web_state_->IsShowingWebInterstitial());
+  EXPECT_FALSE(web_state_->GetWebInterstitial());
+  // DidChangeVisibleSecurityState is not called, because last committed and
+  // transient items had the same SSL status.
+  EXPECT_FALSE(observer.did_change_visible_security_state_info());
+}
+
+INSTANTIATE_TEST_CASE_P(ProgrammaticWebStateImplTest,
+                        WebStateImplTest,
+                        ::testing::Values(NavigationManagerChoice::LEGACY,
+                                          NavigationManagerChoice::WK_BASED));
 
 }  // namespace web

@@ -8,16 +8,10 @@
 
 namespace ui {
 
-InputMethodMac::InputMethodMac(internal::InputMethodDelegate* delegate) {
-  SetDelegate(delegate);
-}
+InputMethodMac::InputMethodMac(internal::InputMethodDelegate* delegate)
+    : InputMethodBase(delegate) {}
 
 InputMethodMac::~InputMethodMac() {
-}
-
-bool InputMethodMac::OnUntranslatedIMEMessage(const base::NativeEvent& event,
-                                              NativeEventResult* result) {
-  return false;
 }
 
 ui::EventDispatchDetails InputMethodMac::DispatchKeyEvent(ui::KeyEvent* event) {

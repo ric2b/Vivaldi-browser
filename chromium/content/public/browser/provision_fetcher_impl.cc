@@ -4,21 +4,21 @@
 
 #include "content/public/browser/provision_fetcher_impl.h"
 
-#include "base/memory/ptr_util.h"
 #include "content/public/browser/provision_fetcher_factory.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace content {
 
 // static
 void ProvisionFetcherImpl::Create(
-    net::URLRequestContextGetter* context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     media::mojom::ProvisionFetcherRequest request) {
-  DCHECK(context_getter);
-  mojo::MakeStrongBinding(std::make_unique<ProvisionFetcherImpl>(
-                              CreateProvisionFetcher(context_getter)),
-                          std::move(request));
+  DCHECK(url_loader_factory);
+  mojo::MakeStrongBinding(
+      std::make_unique<ProvisionFetcherImpl>(
+          CreateProvisionFetcher(std::move(url_loader_factory))),
+      std::move(request));
 }
 
 ProvisionFetcherImpl::ProvisionFetcherImpl(

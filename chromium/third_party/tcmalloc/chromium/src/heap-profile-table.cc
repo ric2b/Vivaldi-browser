@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2006, Google Inc.
 // All rights reserved.
 // 
@@ -100,10 +101,7 @@ const char HeapProfileTable::kFileExt[] = ".heap";
 //----------------------------------------------------------------------
 
 static const int kHashTableSize = 179999;   // Size for bucket_table_.
-// GCC requires this declaration, but MSVC does not allow it.
-#if !defined(COMPILER_MSVC)
 /*static*/ const int HeapProfileTable::kMaxStackDepth;
-#endif
 
 //----------------------------------------------------------------------
 
@@ -129,8 +127,8 @@ HeapProfileTable::HeapProfileTable(Allocator alloc,
                                    bool profile_mmap)
     : alloc_(alloc),
       dealloc_(dealloc),
-      bucket_table_(NULL),
       profile_mmap_(profile_mmap),
+      bucket_table_(NULL),
       num_buckets_(0),
       address_map_(NULL) {
   // Make a hash table for buckets.
@@ -278,23 +276,6 @@ void HeapProfileTable::MarkAsIgnored(const void* ptr) {
   }
 }
 
-void HeapProfileTable::IterateAllocationAddresses(AddressIterator f,
-                                                  void* data) {
-  const AllocationAddressIteratorArgs args(f, data);
-  address_map_->Iterate<const AllocationAddressIteratorArgs&>(
-      AllocationAddressesIterator, args);
-}
-
-void HeapProfileTable::MarkCurrentAllocations(AllocationMark mark) {
-  const MarkArgs args(mark, true);
-  address_map_->Iterate<const MarkArgs&>(MarkIterator, args);
-}
-
-void HeapProfileTable::MarkUnmarkedAllocations(AllocationMark mark) {
-  const MarkArgs args(mark, false);
-  address_map_->Iterate<const MarkArgs&>(MarkIterator, args);
-}
-
 // We'd be happier using snprintfer, but we don't to reduce dependencies.
 int HeapProfileTable::UnparseBucket(const Bucket& b,
                                     char* buf, int buflen, int bufsize,
@@ -307,8 +288,7 @@ int HeapProfileTable::UnparseBucket(const Bucket& b,
     profile_stats->free_size += b.free_size;
   }
   int printed =
-    snprintf(buf + buflen, bufsize - buflen,
-             "%6d: %8" PRId64 " [%6d: %8" PRId64 "] @%s",
+    snprintf(buf + buflen, bufsize - buflen, "%6d: %8" PRId64 " [%6d: %8" PRId64 "] @%s",
              b.allocs - b.frees,
              b.alloc_size - b.free_size,
              b.allocs,
@@ -346,18 +326,6 @@ HeapProfileTable::MakeSortedBucketList() const {
   return list;
 }
 
-void HeapProfileTable::DumpMarkedObjects(AllocationMark mark,
-                                         const char* file_name) {
-  RawFD fd = RawOpenForWriting(file_name);
-  if (fd == kIllegalRawFD) {
-    RAW_LOG(ERROR, "Failed dumping live objects to %s", file_name);
-    return;
-  }
-  const DumpMarkedArgs args(fd, mark);
-  address_map_->Iterate<const DumpMarkedArgs&>(DumpMarkedIterator, args);
-  RawClose(fd);
-}
-
 void HeapProfileTable::IterateOrderedAllocContexts(
     AllocContextIterator callback) const {
   Bucket** list = MakeSortedBucketList();
@@ -382,7 +350,10 @@ int HeapProfileTable::FillOrderedProfile(char buf[], int size) const {
   // is remaining, and then move the maps info one last time to close
   // any gaps.  Whew!
   int map_length = snprintf(buf, size, "%s", kProcSelfMapsHeader);
-  if (map_length < 0 || map_length >= size) return 0;
+  if (map_length < 0 || map_length >= size) {
+      dealloc_(list);
+      return 0;
+  }
   bool dummy;   // "wrote_all" -- did /proc/self/maps fit in its entirety?
   map_length += FillProcSelfMaps(buf + map_length, size - map_length, &dummy);
   RAW_DCHECK(map_length <= size, "");
@@ -393,7 +364,10 @@ int HeapProfileTable::FillOrderedProfile(char buf[], int size) const {
   Stats stats;
   memset(&stats, 0, sizeof(stats));
   int bucket_length = snprintf(buf, size, "%s", kProfileHeader);
-  if (bucket_length < 0 || bucket_length >= size) return 0;
+  if (bucket_length < 0 || bucket_length >= size) {
+      dealloc_(list);
+      return 0;
+  }
   bucket_length = UnparseBucket(total_, buf, bucket_length, size,
                                 " heapprofile", &stats);
 
@@ -446,40 +420,6 @@ void HeapProfileTable::DumpNonLiveIterator(const void* ptr, AllocValue* v,
   RawWrite(args.fd, buf, len);
 }
 
-inline
-void HeapProfileTable::DumpMarkedIterator(const void* ptr, AllocValue* v,
-                                          const DumpMarkedArgs& args) {
-  if (v->mark() != args.mark)
-    return;
-  Bucket b;
-  memset(&b, 0, sizeof(b));
-  b.allocs = 1;
-  b.alloc_size = v->bytes;
-  b.depth = v->bucket()->depth;
-  b.stack = v->bucket()->stack;
-  char addr[16];
-  snprintf(addr, 16, "0x%08" PRIxPTR, reinterpret_cast<uintptr_t>(ptr));
-  char buf[1024];
-  int len = UnparseBucket(b, buf, 0, sizeof(buf), addr, NULL);
-  RawWrite(args.fd, buf, len);
-}
-
-inline
-void HeapProfileTable::AllocationAddressesIterator(
-    const void* ptr,
-    AllocValue* v,
-    const AllocationAddressIteratorArgs& args) {
-  args.callback(args.data, ptr);
-}
-
-inline
-void HeapProfileTable::MarkIterator(const void* ptr, AllocValue* v,
-                                    const MarkArgs& args) {
-  if (!args.mark_all && v->mark() != UNMARKED)
-    return;
-  v->set_mark(args.mark);
-}
-
 // Callback from NonLiveSnapshot; adds entry to arg->dest
 // if not the entry is not live and is not present in arg->base.
 void HeapProfileTable::AddIfNonLive(const void* ptr, AllocValue* v,
@@ -500,30 +440,28 @@ bool HeapProfileTable::WriteProfile(const char* file_name,
                                     AllocationMap* allocations) {
   RAW_VLOG(1, "Dumping non-live heap profile to %s", file_name);
   RawFD fd = RawOpenForWriting(file_name);
-  if (fd == kIllegalRawFD) {
+  if (fd != kIllegalRawFD) {
+    RawWrite(fd, kProfileHeader, strlen(kProfileHeader));
+    char buf[512];
+    int len = UnparseBucket(total, buf, 0, sizeof(buf), " heapprofile",
+                            NULL);
+    RawWrite(fd, buf, len);
+    const DumpArgs args(fd, NULL);
+    allocations->Iterate<const DumpArgs&>(DumpNonLiveIterator, args);
+    RawWrite(fd, kProcSelfMapsHeader, strlen(kProcSelfMapsHeader));
+    DumpProcSelfMaps(fd);
+    RawClose(fd);
+    return true;
+  } else {
     RAW_LOG(ERROR, "Failed dumping filtered heap profile to %s", file_name);
     return false;
   }
-  RawWrite(fd, kProfileHeader, strlen(kProfileHeader));
-  char buf[512];
-  int len = UnparseBucket(total, buf, 0, sizeof(buf), " heapprofile",
-                          NULL);
-  RawWrite(fd, buf, len);
-  const DumpArgs args(fd, NULL);
-  allocations->Iterate<const DumpArgs&>(DumpNonLiveIterator, args);
-  RawWrite(fd, kProcSelfMapsHeader, strlen(kProcSelfMapsHeader));
-  DumpProcSelfMaps(fd);
-  RawClose(fd);
-  return true;
 }
 
 void HeapProfileTable::CleanupOldProfiles(const char* prefix) {
   if (!FLAGS_cleanup_old_heap_profiles)
     return;
-  char buf[1000];
-  snprintf(buf, 1000,"%s.%05d.", prefix, getpid());
-  string pattern = string(buf) + ".*" + kFileExt;
-
+  string pattern = string(prefix) + ".*" + kFileExt;
 #if defined(HAVE_GLOB_H)
   glob_t g;
   const int r = glob(pattern.c_str(), GLOB_ERR, NULL, &g);

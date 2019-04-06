@@ -9,23 +9,20 @@ import static org.chromium.chrome.browser.ChromeSwitches.DISABLE_FIRST_RUN_EXPER
 
 import android.support.test.InstrumentationRegistry;
 import android.support.test.uiautomator.UiDevice;
+import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContentController;
 import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
-import org.chromium.chrome.test.util.browser.ChromeHome;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
 
 /**
- * Junit4 rule for tests testing the Chrome Home bottom sheet.
+ * Junit4 rule for tests testing the bottom sheet. This rule creates a new, separate bottom sheet
+ * to test with.
  */
 @CommandLineFlags.Add({DISABLE_FIRST_RUN_EXPERIENCE})
 public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
@@ -59,7 +56,7 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
         }
 
         @Override
-        public void onSheetOffsetChanged(float heightFraction) {
+        public void onSheetOffsetChanged(float heightFraction, float offsetPx) {
             mLastOffsetChangedValue = heightFraction;
             mOffsetChangedCallbackHelper.notifyCalled();
         }
@@ -90,36 +87,30 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
         }
     }
 
+    /** A bottom sheet to test with. */
+    private BottomSheet mBottomSheet;
+
     /** A handle to the sheet's observer. */
     private Observer mObserver;
 
-    private ChromeHome.Processor mChromeHomeEnabler = new ChromeHome.Processor();
-
-    private @BottomSheet.SheetState int mStartingBottomSheetState = BottomSheet.SHEET_STATE_FULL;
-
-    protected void beforeStartingActivity() {
-        Features.getInstance().enable(ChromeFeatureList.CHROME_HOME);
-        mChromeHomeEnabler.setPrefs(true);
-    }
+    private @BottomSheet.SheetState int mStartingBottomSheetState = BottomSheet.SheetState.FULL;
 
     protected void afterStartingActivity() {
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            ViewGroup coordinator = getActivity().findViewById(R.id.coordinator);
+            mBottomSheet = getActivity()
+                                   .getLayoutInflater()
+                                   .inflate(R.layout.bottom_sheet, coordinator)
+                                   .findViewById(R.id.bottom_sheet);
+            mBottomSheet.init(coordinator, getActivity());
+        });
+
         mObserver = new Observer();
         getBottomSheet().addObserver(mObserver);
 
-        if (mStartingBottomSheetState == BottomSheet.SHEET_STATE_PEEK) return;
+        if (mStartingBottomSheetState == BottomSheet.SheetState.PEEK) return;
 
         setSheetState(mStartingBottomSheetState, /* animate = */ false);
-
-        // The default BottomSheetContent is SuggestionsBottomSheetContent, whose content view is a
-        // RecyclerView.
-        RecyclerViewTestUtils.waitForStableRecyclerView(
-                getBottomSheetContent().getContentView().findViewById(R.id.recycler_view));
-    }
-
-    @Override
-    protected void afterActivityFinished() {
-        super.afterActivityFinished();
-        mChromeHomeEnabler.clearTestState();
     }
 
     public void startMainActivityOnBottomSheet(@BottomSheet.SheetState int startingSheetState)
@@ -134,7 +125,6 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
     // See https://crbug.com/726444.
     @Override
     public void startMainActivityOnBlankPage() throws InterruptedException {
-        beforeStartingActivity();
         super.startMainActivityOnBlankPage();
         afterStartingActivity();
     }
@@ -144,11 +134,7 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
     }
 
     public BottomSheet getBottomSheet() {
-        return getActivity().getBottomSheet();
-    }
-
-    public BottomSheetContentController getBottomSheetContentController() {
-        return getActivity().getBottomSheetContentController();
+        return mBottomSheet;
     }
 
     /**
@@ -173,15 +159,6 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
 
     public BottomSheetContent getBottomSheetContent() {
         return getBottomSheet().getCurrentSheetContent();
-    }
-
-    /**
-     * @param itemId The id of the MenuItem corresponding to the {@link BottomSheetContent} to
-     *               select.
-     */
-    public void selectBottomSheetContent(int itemId) {
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> getBottomSheetContentController().selectItem(itemId));
     }
 
     /**

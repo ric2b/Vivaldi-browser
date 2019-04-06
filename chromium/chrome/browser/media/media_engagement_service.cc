@@ -29,11 +29,24 @@ const char MediaEngagementService::kHistogramScoreAtStartupName[] =
 const char MediaEngagementService::kHistogramURLsDeletedScoreReductionName[] =
     "Media.Engagement.URLsDeletedScoreReduction";
 
+const char MediaEngagementService::kHistogramClearName[] =
+    "Media.Engagement.Clear";
+
 namespace {
 
 // The current schema version of the MEI data. If this value is higher
 // than the stored value, all MEI data will be wiped.
 static const int kSchemaVersion = 4;
+
+// Do not change the values of this enum as it is used for UMA.
+enum class MediaEngagementClearReason {
+  kDataAll = 0,
+  kDataRange = 1,
+  kHistoryAll = 2,
+  kHistoryRange = 3,
+  kHistoryExpired = 4,
+  kCount
+};
 
 bool MediaEngagementFilterAdapter(
     const GURL& predicate,
@@ -64,6 +77,11 @@ void RecordURLsDeletedScoreReduction(double previous_score,
   UMA_HISTOGRAM_PERCENTAGE(
       MediaEngagementService::kHistogramURLsDeletedScoreReductionName,
       difference);
+}
+
+void RecordClear(MediaEngagementClearReason reason) {
+  UMA_HISTOGRAM_ENUMERATION(MediaEngagementService::kHistogramClearName, reason,
+                            MediaEngagementClearReason::kCount);
 }
 
 }  // namespace
@@ -149,9 +167,15 @@ void MediaEngagementService::SetSchemaVersion(int version) {
 void MediaEngagementService::ClearDataBetweenTime(
     const base::Time& delete_begin,
     const base::Time& delete_end) {
+  if (delete_begin == base::Time() && delete_end == base::Time::Max())
+    RecordClear(MediaEngagementClearReason::kDataAll);
+  else
+    RecordClear(MediaEngagementClearReason::kDataRange);
+
   HostContentSettingsMapFactory::GetForProfile(profile_)
       ->ClearSettingsForOneTypeWithPredicate(
           CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT, base::Time(),
+          base::Time::Max(),
           base::Bind(&MediaEngagementTimeFilterAdapter, this, delete_begin,
                      delete_end));
 }
@@ -173,18 +197,42 @@ void MediaEngagementService::RecordStoredScoresToHistogram() {
 
 void MediaEngagementService::OnURLsDeleted(
     history::HistoryService* history_service,
-    bool all_history,
-    bool expired,
-    const history::URLRows& deleted_rows,
-    const std::set<GURL>& favicon_urls) {
+    const history::DeletionInfo& deletion_info) {
+  if (deletion_info.IsAllHistory()) {
+    RecordClear(MediaEngagementClearReason::kHistoryAll);
+
+    HostContentSettingsMapFactory::GetForProfile(profile_)
+        ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT);
+    return;
+  }
+
+  // If origins are expired by the history service delete them if they have no
+  // more visits.
+  if (deletion_info.is_from_expiration()) {
+    DCHECK(history_service);
+
+    // Build a set of all origins in |deleted_rows|.
+    std::set<GURL> origins;
+    for (const history::URLRow& row : deletion_info.deleted_rows()) {
+      origins.insert(row.url().GetOrigin());
+    }
+
+    // Check if any origins no longer have any visits.
+    RemoveOriginsWithNoVisits(origins, deletion_info.deleted_urls_origin_map());
+    return;
+  }
+
   std::map<GURL, int> origins;
-  for (const history::URLRow& row : deleted_rows) {
+  for (const history::URLRow& row : deletion_info.deleted_rows()) {
     GURL origin = row.url().GetOrigin();
     if (origins.find(origin) == origins.end()) {
       origins[origin] = 0;
     }
     origins[origin]++;
   }
+
+  if (!origins.empty())
+    RecordClear(MediaEngagementClearReason::kHistoryRange);
 
   for (auto const& kv : origins) {
     // Remove the number of visits consistent with the number
@@ -210,10 +258,30 @@ void MediaEngagementService::OnURLsDeleted(
   }
 }
 
+void MediaEngagementService::RemoveOriginsWithNoVisits(
+    const std::set<GURL>& deleted_origins,
+    const history::OriginCountAndLastVisitMap& origin_data) {
+  // Find all origins that are in |deleted_origins| and not in
+  // |remaining_origins| and clear MEI data on them.
+  bool has_deleted_origins = false;
+  for (const GURL& origin : deleted_origins) {
+    const auto& origin_count = origin_data.find(origin);
+    if (origin_count == origin_data.end() || origin_count->second.first > 0)
+      continue;
+
+    Clear(origin);
+    has_deleted_origins = true;
+  }
+
+  if (has_deleted_origins)
+    RecordClear(MediaEngagementClearReason::kHistoryExpired);
+}
+
 void MediaEngagementService::Clear(const GURL& url) {
   HostContentSettingsMapFactory::GetForProfile(profile_)
       ->ClearSettingsForOneTypeWithPredicate(
           CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT, base::Time(),
+          base::Time::Max(),
           base::Bind(&MediaEngagementFilterAdapter, base::ConstRef(url)));
 }
 
@@ -322,7 +390,7 @@ std::vector<MediaEngagementScore> MediaEngagementService::GetAllStoredScores()
     auto* const site = it.second;
 
     std::unique_ptr<base::Value> clone =
-        std::make_unique<base::Value>(site->setting_value->Clone());
+        base::Value::ToUniquePtrValue(site->setting_value.Clone());
 
     data.push_back(MediaEngagementScore(
         clock_, origin, base::DictionaryValue::From(std::move(clone)),

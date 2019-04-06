@@ -16,6 +16,7 @@
 #include "chromeos/network/network_ui_data.h"
 #include "chromeos/network/onc/onc_signature.h"
 #include "chromeos/network/onc/onc_test_utils.h"
+#include "chromeos/tools/variable_expander.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -83,22 +84,12 @@ namespace {
 const char* kLoginId = "hans";
 const char* kLoginEmail = "hans@my.domain.com";
 
-class StringSubstitutionStub : public StringSubstitution {
- public:
-  StringSubstitutionStub() = default;
-  bool GetSubstitute(const std::string& placeholder,
-                     std::string* substitute) const override {
-    if (placeholder == ::onc::substitutes::kLoginIDField)
-      *substitute = kLoginId;
-    else if (placeholder ==::onc::substitutes::kEmailField)
-      *substitute = kLoginEmail;
-    else
-      return false;
-    return true;
-  }
- private:
-  DISALLOW_COPY_AND_ASSIGN(StringSubstitutionStub);
-};
+std::map<std::string, std::string> GetTestStringSubstutions() {
+  std::map<std::string, std::string> substitutions;
+  substitutions[::onc::substitutes::kLoginID] = kLoginId;
+  substitutions[::onc::substitutes::kLoginEmail] = kLoginEmail;
+  return substitutions;
+}
 
 }  // namespace
 
@@ -106,8 +97,8 @@ TEST(ONCStringExpansion, OpenVPN) {
   std::unique_ptr<base::DictionaryValue> vpn_onc =
       test_utils::ReadTestDictionary("valid_openvpn.onc");
 
-  StringSubstitutionStub substitution;
-  ExpandStringsInOncObject(kNetworkConfigurationSignature, substitution,
+  VariableExpander variable_expander(GetTestStringSubstutions());
+  ExpandStringsInOncObject(kNetworkConfigurationSignature, variable_expander,
                            vpn_onc.get());
 
   std::string actual_expanded;
@@ -119,8 +110,8 @@ TEST(ONCStringExpansion, WiFi_EAP) {
   std::unique_ptr<base::DictionaryValue> wifi_onc =
       test_utils::ReadTestDictionary("wifi_clientcert_with_cert_pems.onc");
 
-  StringSubstitutionStub substitution;
-  ExpandStringsInOncObject(kNetworkConfigurationSignature, substitution,
+  VariableExpander variable_expander(GetTestStringSubstutions());
+  ExpandStringsInOncObject(kNetworkConfigurationSignature, variable_expander,
                            wifi_onc.get());
 
   std::string actual_expanded;
@@ -230,6 +221,49 @@ TEST(ONCUtils, ProxyConfigToOncProxySettings) {
     EXPECT_TRUE(
         test_utils::Equals(onc_proxy_settings, actual_proxy_settings.get()));
   }
+}
+
+TEST(ONCPasswordVariable, PasswordAvailable) {
+  const auto wifi_onc = test_utils::ReadTestDictionary(
+      "wifi_eap_ttls_with_password_variable.onc");
+
+  EXPECT_TRUE(HasUserPasswordSubsitutionVariable(kNetworkConfigurationSignature,
+                                                 wifi_onc.get()));
+}
+
+TEST(ONCPasswordVariable, PasswordNotAvailable) {
+  const auto wifi_onc = test_utils::ReadTestDictionary("wifi_eap_ttls.onc");
+
+  EXPECT_FALSE(HasUserPasswordSubsitutionVariable(
+      kNetworkConfigurationSignature, wifi_onc.get()));
+}
+
+TEST(ONCPasswordVariable, PasswordHarcdoded) {
+  const auto wifi_onc = test_utils::ReadTestDictionary(
+      "wifi_eap_ttls_with_hardcoded_password.onc");
+
+  EXPECT_FALSE(HasUserPasswordSubsitutionVariable(
+      kNetworkConfigurationSignature, wifi_onc.get()));
+}
+
+TEST(ONCPasswordVariable, MultipleNetworksPasswordAvailable) {
+  const auto network_dictionary = test_utils::ReadTestDictionary(
+      "managed_toplevel_with_password_variable.onc");
+
+  const auto network_list = std::make_unique<base::ListValue>(base::ListValue(
+      network_dictionary->FindKey("NetworkConfigurations")->GetList()));
+
+  EXPECT_TRUE(HasUserPasswordSubsitutionVariable(network_list.get()));
+}
+
+TEST(ONCPasswordVariable, MultipleNetworksPasswordNotAvailable) {
+  const auto network_dictionary = test_utils::ReadTestDictionary(
+      "managed_toplevel_with_no_password_variable.onc");
+
+  const auto network_list = std::make_unique<base::ListValue>(base::ListValue(
+      network_dictionary->FindKey("NetworkConfigurations")->GetList()));
+
+  EXPECT_FALSE(HasUserPasswordSubsitutionVariable(network_list.get()));
 }
 
 }  // namespace onc

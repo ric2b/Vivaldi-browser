@@ -10,11 +10,9 @@
 #include <limits>
 #include <set>
 
-#include "app/vivaldi_apptools.h"
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
@@ -38,7 +36,7 @@
 #include "content/common/indexed_db/indexed_db_key_range.h"
 #include "content/public/common/content_switches.h"
 #include "storage/browser/blob/blob_data_handle.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "url/origin.h"
 
@@ -623,7 +621,7 @@ void IndexedDBDatabase::RenameObjectStore(IndexedDBTransaction* transaction,
 
   transaction->ScheduleAbortTask(
       base::BindOnce(&IndexedDBDatabase::RenameObjectStoreAbortOperation, this,
-                     object_store_id, base::Passed(&old_name)));
+                     object_store_id, std::move(old_name)));
 }
 
 void IndexedDBDatabase::CreateIndex(IndexedDBTransaction* transaction,
@@ -719,7 +717,7 @@ Status IndexedDBDatabase::DeleteIndexOperation(
 
   transaction->ScheduleAbortTask(
       base::BindOnce(&IndexedDBDatabase::DeleteIndexAbortOperation, this,
-                     object_store_id, base::Passed(&index_metadata)));
+                     object_store_id, std::move(index_metadata)));
   return s;
 }
 
@@ -762,7 +760,7 @@ void IndexedDBDatabase::RenameIndex(IndexedDBTransaction* transaction,
 
   transaction->ScheduleAbortTask(
       base::BindOnce(&IndexedDBDatabase::RenameIndexAbortOperation, this,
-                     object_store_id, index_id, base::Passed(&old_name)));
+                     object_store_id, index_id, std::move(old_name)));
 }
 
 void IndexedDBDatabase::RenameIndexAbortOperation(int64_t object_store_id,
@@ -893,7 +891,7 @@ void IndexedDBDatabase::GetAll(IndexedDBTransaction* transaction,
 
   transaction->ScheduleTask(base::BindOnce(
       &IndexedDBDatabase::GetAllOperation, this, object_store_id, index_id,
-      base::Passed(&key_range),
+      std::move(key_range),
       key_only ? indexed_db::CURSOR_KEY_ONLY : indexed_db::CURSOR_KEY_AND_VALUE,
       max_count, callbacks));
 }
@@ -912,7 +910,7 @@ void IndexedDBDatabase::Get(IndexedDBTransaction* transaction,
 
   transaction->ScheduleTask(base::BindOnce(
       &IndexedDBDatabase::GetOperation, this, object_store_id, index_id,
-      base::Passed(&key_range),
+      std::move(key_range),
       key_only ? indexed_db::CURSOR_KEY_ONLY : indexed_db::CURSOR_KEY_AND_VALUE,
       callbacks));
 }
@@ -1151,8 +1149,6 @@ Status IndexedDBDatabase::GetAllOperation(
     else
       response_size += return_value.SizeEstimate();
     if (response_size > GetMaxMessageSizeInBytes()) {
-      LOG(ERROR) << "size " << response_size << " maxsize is "
-                 << GetMaxMessageSizeInBytes();
       callbacks->OnError(
           IndexedDBDatabaseError(blink::kWebIDBDatabaseExceptionUnknownError,
                                  "Maximum IPC message size exceeded."));
@@ -1258,7 +1254,7 @@ void IndexedDBDatabase::Put(
   params->callbacks = callbacks;
   params->index_keys = index_keys;
   transaction->ScheduleTask(base::BindOnce(&IndexedDBDatabase::PutOperation,
-                                           this, base::Passed(&params)));
+                                           this, std::move(params)));
 }
 
 Status IndexedDBDatabase::PutOperation(
@@ -1503,7 +1499,7 @@ void IndexedDBDatabase::OpenCursor(
   params->task_type = task_type;
   params->callbacks = callbacks;
   transaction->ScheduleTask(base::BindOnce(
-      &IndexedDBDatabase::OpenCursorOperation, this, base::Passed(&params)));
+      &IndexedDBDatabase::OpenCursorOperation, this, std::move(params)));
 }
 
 Status IndexedDBDatabase::OpenCursorOperation(
@@ -1595,9 +1591,9 @@ void IndexedDBDatabase::Count(IndexedDBTransaction* transaction,
   if (!ValidateObjectStoreIdAndOptionalIndexId(object_store_id, index_id))
     return;
 
-  transaction->ScheduleTask(
-      base::BindOnce(&IndexedDBDatabase::CountOperation, this, object_store_id,
-                     index_id, base::Passed(&key_range), callbacks));
+  transaction->ScheduleTask(base::BindOnce(&IndexedDBDatabase::CountOperation,
+                                           this, object_store_id, index_id,
+                                           std::move(key_range), callbacks));
 }
 
 Status IndexedDBDatabase::CountOperation(
@@ -1653,7 +1649,7 @@ void IndexedDBDatabase::DeleteRange(
 
   transaction->ScheduleTask(
       base::BindOnce(&IndexedDBDatabase::DeleteRangeOperation, this,
-                     object_store_id, base::Passed(&key_range), callbacks));
+                     object_store_id, std::move(key_range), callbacks));
 }
 
 Status IndexedDBDatabase::DeleteRangeOperation(
@@ -1740,7 +1736,7 @@ Status IndexedDBDatabase::DeleteObjectStoreOperation(
   }
   transaction->ScheduleAbortTask(
       base::BindOnce(&IndexedDBDatabase::DeleteObjectStoreAbortOperation, this,
-                     base::Passed(&object_store_metadata)));
+                     std::move(object_store_metadata)));
   return s;
 }
 

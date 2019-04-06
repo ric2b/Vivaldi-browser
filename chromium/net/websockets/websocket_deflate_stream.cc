@@ -7,15 +7,13 @@
 #include <stdint.h>
 
 #include <algorithm>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ref_counted.h"
-#include "net/base/completion_callback.h"
+#include "base/memory/scoped_refptr.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/websockets/websocket_deflate_parameters.h"
@@ -64,30 +62,28 @@ WebSocketDeflateStream::~WebSocketDeflateStream() = default;
 
 int WebSocketDeflateStream::ReadFrames(
     std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-    const CompletionCallback& callback) {
+    CompletionOnceCallback callback) {
+  read_callback_ = std::move(callback);
   int result = stream_->ReadFrames(
-      frames,
-      base::Bind(&WebSocketDeflateStream::OnReadComplete,
-                 base::Unretained(this),
-                 base::Unretained(frames),
-                 callback));
+      frames, base::BindOnce(&WebSocketDeflateStream::OnReadComplete,
+                             base::Unretained(this), base::Unretained(frames)));
   if (result < 0)
     return result;
   DCHECK_EQ(OK, result);
   DCHECK(!frames->empty());
 
-  return InflateAndReadIfNecessary(frames, callback);
+  return InflateAndReadIfNecessary(frames);
 }
 
 int WebSocketDeflateStream::WriteFrames(
     std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-    const CompletionCallback& callback) {
+    CompletionOnceCallback callback) {
   int result = Deflate(frames);
   if (result != OK)
     return result;
   if (frames->empty())
     return OK;
-  return stream_->WriteFrames(frames, callback);
+  return stream_->WriteFrames(frames, std::move(callback));
 }
 
 void WebSocketDeflateStream::Close() { stream_->Close(); }
@@ -102,17 +98,16 @@ std::string WebSocketDeflateStream::GetExtensions() const {
 
 void WebSocketDeflateStream::OnReadComplete(
     std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-    const CompletionCallback& callback,
     int result) {
   if (result != OK) {
     frames->clear();
-    callback.Run(result);
+    std::move(read_callback_).Run(result);
     return;
   }
 
-  int r = InflateAndReadIfNecessary(frames, callback);
+  int r = InflateAndReadIfNecessary(frames);
   if (r != ERR_IO_PENDING)
-    callback.Run(r);
+    std::move(read_callback_).Run(r);
 }
 
 int WebSocketDeflateStream::Deflate(
@@ -218,7 +213,7 @@ int WebSocketDeflateStream::AppendCompressedFrame(
              << "deflater_.GetOutput() returns an error.";
     return ERR_WS_PROTOCOL_ERROR;
   }
-  std::unique_ptr<WebSocketFrame> compressed(new WebSocketFrame(opcode));
+  auto compressed = std::make_unique<WebSocketFrame>(opcode);
   compressed->header.CopyFrom(header);
   compressed->header.opcode = opcode;
   compressed->header.final = header.final;
@@ -269,7 +264,7 @@ int WebSocketDeflateStream::AppendPossiblyCompressedMessage(
     frames->clear();
     return OK;
   }
-  std::unique_ptr<WebSocketFrame> compressed(new WebSocketFrame(opcode));
+  auto compressed = std::make_unique<WebSocketFrame>(opcode);
   compressed->header.CopyFrom((*frames)[0]->header);
   compressed->header.opcode = opcode;
   compressed->header.final = true;
@@ -343,8 +338,8 @@ int WebSocketDeflateStream::Inflate(
       while (inflater_.CurrentOutputSize() >= kChunkSize ||
              frame->header.final) {
         size_t size = std::min(kChunkSize, inflater_.CurrentOutputSize());
-        std::unique_ptr<WebSocketFrame> inflated(
-            new WebSocketFrame(WebSocketFrameHeader::kOpCodeText));
+        auto inflated =
+            std::make_unique<WebSocketFrame>(WebSocketFrameHeader::kOpCodeText);
         scoped_refptr<IOBufferWithSize> data = inflater_.GetOutput(size);
         bool is_final = !inflater_.CurrentOutputSize() && frame->header.final;
         if (!data.get()) {
@@ -376,18 +371,15 @@ int WebSocketDeflateStream::Inflate(
 }
 
 int WebSocketDeflateStream::InflateAndReadIfNecessary(
-    std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-    const CompletionCallback& callback) {
+    std::vector<std::unique_ptr<WebSocketFrame>>* frames) {
   int result = Inflate(frames);
   while (result == ERR_IO_PENDING) {
     DCHECK(frames->empty());
 
     result = stream_->ReadFrames(
         frames,
-        base::Bind(&WebSocketDeflateStream::OnReadComplete,
-                   base::Unretained(this),
-                   base::Unretained(frames),
-                   callback));
+        base::BindOnce(&WebSocketDeflateStream::OnReadComplete,
+                       base::Unretained(this), base::Unretained(frames)));
     if (result < 0)
       break;
     DCHECK_EQ(OK, result);

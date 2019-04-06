@@ -12,11 +12,11 @@
 #include "base/android/build_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_errors.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_response_headers.h"
-#include "net/proxy/proxy_info.h"
-#include "net/proxy/proxy_server.h"
+#include "net/proxy_resolution/proxy_info.h"
 #include "net/url_request/url_request.h"
 
 using content::BrowserThread;
@@ -28,7 +28,7 @@ namespace {
 void OnReceivedHttpErrorOnUiThread(
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     const AwWebResourceRequest& request,
-    scoped_refptr<const net::HttpResponseHeaders> original_response_headers) {
+    std::unique_ptr<AwContentsClientBridge::HttpErrorInfo> http_error_info) {
   AwContentsClientBridge* client =
       AwContentsClientBridge::FromWebContentsGetter(web_contents_getter);
   if (!client) {
@@ -36,7 +36,7 @@ void OnReceivedHttpErrorOnUiThread(
                   << request.url;
     return;
   }
-  client->OnReceivedHttpError(request, original_response_headers);
+  client->OnReceivedHttpError(request, std::move(http_error_info));
 }
 
 }  // namespace
@@ -48,12 +48,12 @@ AwNetworkDelegate::~AwNetworkDelegate() {
 
 int AwNetworkDelegate::OnBeforeStartTransaction(
     net::URLRequest* request,
-    const net::CompletionCallback& callback,
+    net::CompletionOnceCallback callback,
     net::HttpRequestHeaders* headers) {
   DCHECK(headers);
   headers->SetHeaderIfMissing(
       "X-Requested-With",
-      base::android::BuildInfo::GetInstance()->package_name());
+      base::android::BuildInfo::GetInstance()->host_package_name());
   return net::OK;
 }
 
@@ -63,7 +63,7 @@ void AwNetworkDelegate::OnStartTransaction(
 
 int AwNetworkDelegate::OnHeadersReceived(
     net::URLRequest* request,
-    const net::CompletionCallback& callback,
+    net::CompletionOnceCallback callback,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
     GURL* allowed_unsafe_redirect_url) {
@@ -74,42 +74,18 @@ int AwNetworkDelegate::OnHeadersReceived(
     // A request info may not exist for requests not originating from content.
     if (request_info == nullptr)
         return net::OK;
-    // keep a ref before binding and posting to UI thread.
-    scoped_refptr<const net::HttpResponseHeaders> response_headers(
-        original_response_headers);
+
+    // extract out the info we need before posting to UI thread.
+    std::unique_ptr<AwContentsClientBridge::HttpErrorInfo> error_info =
+        AwContentsClientBridge::ExtractHttpErrorInfo(original_response_headers);
+
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&OnReceivedHttpErrorOnUiThread,
-                   request_info->GetWebContentsGetterForRequest(),
-                   AwWebResourceRequest(*request), response_headers));
+        base::BindOnce(&OnReceivedHttpErrorOnUiThread,
+                       request_info->GetWebContentsGetterForRequest(),
+                       AwWebResourceRequest(*request), std::move(error_info)));
   }
   return net::OK;
-}
-
-void AwNetworkDelegate::OnBeforeRedirect(net::URLRequest* request,
-                                         const GURL& new_location) {
-}
-
-void AwNetworkDelegate::OnResponseStarted(net::URLRequest* request,
-                                          int net_error) {}
-
-void AwNetworkDelegate::OnCompleted(net::URLRequest* request,
-                                    bool started,
-                                    int net_error) {}
-
-void AwNetworkDelegate::OnURLRequestDestroyed(net::URLRequest* request) {
-}
-
-void AwNetworkDelegate::OnPACScriptError(int line_number,
-                                         const base::string16& error) {
-}
-
-net::NetworkDelegate::AuthRequiredResponse AwNetworkDelegate::OnAuthRequired(
-    net::URLRequest* request,
-    const net::AuthChallengeInfo& auth_info,
-    const AuthCallback& callback,
-    net::AuthCredentials* credentials) {
-  return AUTH_REQUIRED_RESPONSE_NO_ACTION;
 }
 
 bool AwNetworkDelegate::OnCanGetCookies(const net::URLRequest& request,

@@ -4,11 +4,11 @@
 
 #include "components/guest_view/browser/guest_view_base.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -27,7 +27,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
 
 #ifdef VIVALDI_BUILD
 #include "app/vivaldi_apptools.h"
@@ -35,7 +35,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/helper/vivaldi_app_helper.h"
@@ -150,7 +150,7 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
     if (destroyed_)
       return;
     destroyed_ = true;
-    guest_->Destroy(true);
+    guest_->Destroy(guest_->web_contents_is_owned_by_this_);
   }
 
   DISALLOW_COPY_AND_ASSIGN(OwnerContentsObserver);
@@ -199,6 +199,9 @@ GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
 }
 
 GuestViewBase::~GuestViewBase() {
+  if (delegate_to_browser_plugin_) {
+    delegate_to_browser_plugin_->set_delegate(nullptr);
+  }
   // Make sure destroy is called so the guestview manager is updated.
   // This can happen when the guest is automatically deleted via webcontents
   // being destroyed when attached to a widget. (I.e. an AppWindow.)
@@ -206,7 +209,7 @@ GuestViewBase::~GuestViewBase() {
 }
 
 void GuestViewBase::Init(const base::DictionaryValue& create_params,
-                         const WebContentsCreatedCallback& callback) {
+                         WebContentsCreatedCallback callback) {
   if (initialized_)
     return;
   initialized_ = true;
@@ -215,16 +218,23 @@ void GuestViewBase::Init(const base::DictionaryValue& create_params,
     // The derived class did not create a WebContents so this class serves no
     // purpose. Let's self-destruct.
     delete this;
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
   std::unique_ptr<base::DictionaryValue> params(create_params.DeepCopy());
   CreateWebContents(create_params,
-                    base::Bind(&GuestViewBase::CompleteInit,
-                               weak_ptr_factory_.GetWeakPtr(),
-                               base::Passed(&params),
-                               callback));
+                    base::BindOnce(&GuestViewBase::CompleteInit,
+                                   weak_ptr_factory_.GetWeakPtr(),
+                                   base::Passed(&params), std::move(callback)));
+
+  // web_contents() will not be set in some cases (like when we avctivate an
+  // non-loaded pdf-tab). We can deal with an unset delegate_to_browser_plugin_.
+  if (vivaldi::IsVivaldiRunning() && web_contents()) {
+    delegate_to_browser_plugin_ =
+      static_cast<content::WebContentsImpl*>(web_contents())
+      ->GetBrowserPluginGuest();
+  }
 }
 
 void GuestViewBase::InitWithWebContents(
@@ -251,7 +261,7 @@ void GuestViewBase::InitWithWebContents(
   // an observer to the owner WebContents. This observer will be responsible
   // for destroying the guest WebContents if the owner goes away.
   owner_contents_observer_ =
-      base::MakeUnique<OwnerContentsObserver>(this, owner_web_contents_);
+      std::make_unique<OwnerContentsObserver>(this, owner_web_contents_);
 
   WebContentsObserver::Observe(guest_web_contents);
   guest_web_contents->SetDelegate(this);
@@ -286,13 +296,13 @@ void GuestViewBase::DispatchOnResizeEvent(const gfx::Size& old_size,
     return;
 
   // Dispatch the onResize event.
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(kOldWidth, old_size.width());
   args->SetInteger(kOldHeight, old_size.height());
   args->SetInteger(kNewWidth, new_size.width());
   args->SetInteger(kNewHeight, new_size.height());
   DispatchEventToGuestProxy(
-      base::MakeUnique<GuestViewEvent>(kEventResize, std::move(args)));
+      std::make_unique<GuestViewEvent>(kEventResize, std::move(args)));
 }
 
 gfx::Size GuestViewBase::GetDefaultSize() const {
@@ -332,10 +342,12 @@ void GuestViewBase::SetSize(const SetSizeParams& params) {
   enable_auto_size &= !min_auto_size_.IsEmpty() && !max_auto_size_.IsEmpty() &&
                       IsAutoSizeSupported();
 
-  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+  content::RenderWidgetHostView* rwhv =
+      web_contents()->GetRenderWidgetHostView();
   if (enable_auto_size) {
     // Autosize is being enabled.
-    rvh->EnableAutoResize(min_auto_size_, max_auto_size_);
+    if (rwhv)
+      rwhv->EnableAutoResize(min_auto_size_, max_auto_size_);
     normal_size_.SetSize(0, 0);
   } else {
     // Autosize is being disabled.
@@ -357,11 +369,14 @@ void GuestViewBase::SetSize(const SetSizeParams& params) {
     bool changed_due_to_auto_resize = false;
     if (auto_size_enabled_) {
       // Autosize was previously enabled.
-      rvh->DisableAutoResize(new_size);
+      if (rwhv)
+        rwhv->DisableAutoResize(new_size);
       changed_due_to_auto_resize = true;
     } else {
       // Autosize was already disabled.
-      guest_host_->SizeContents(new_size);
+      if (guest_host_) {
+        guest_host_->SizeContents(new_size);
+      }
     }
 
     UpdateGuestSize(new_size, changed_due_to_auto_resize);
@@ -423,8 +438,6 @@ bool GuestViewBase::IsPreferredSizeModeEnabled() const {
 bool GuestViewBase::ZoomPropagatesFromEmbedderToGuest() const {
   return true;
 }
-
-void GuestViewBase::SetContextMenuPosition(const gfx::Point& position) {}
 
 GuestViewManager* GuestViewBase::GetGuestViewManager() {
   return GuestViewManager::FromBrowserContext(browser_context());
@@ -515,19 +528,17 @@ void GuestViewBase::Destroy(bool also_delete) {
   // may wish to access their openers.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
-  // Vivaldi; we might end up here after the webcontents and guest_host_ has
-  // been destroyed.
-  if (guest_host_) {
   // Give the content module an opportunity to perform some cleanup.
+  if (guest_host_) {
   guest_host_->WillDestroy();
+  }
   guest_host_ = nullptr;
 
-  g_webcontents_guestview_map.Get().erase(web_contents());
-  GetGuestViewManager()->RemoveGuest(guest_instance_id_);
   pending_events_.clear();
-  }
 
   if (web_contents()) {
+    GetGuestViewManager()->RemoveGuest(guest_instance_id_);
+    g_webcontents_guestview_map.Get().erase(web_contents());
     if (
 #if BUILDFLAG(ENABLE_EXTENSIONS)
       HandOverToBrowser(web_contents()) ||
@@ -556,7 +567,7 @@ void GuestViewBase::SetOpener(GuestViewBase* guest) {
     opener_ = guest->weak_ptr_factory_.GetWeakPtr();
     if (!attached()) {
       opener_lifetime_observer_ =
-          base::MakeUnique<OpenerLifetimeObserver>(this);
+          std::make_unique<OpenerLifetimeObserver>(this);
     }
     return;
   }
@@ -565,6 +576,10 @@ void GuestViewBase::SetOpener(GuestViewBase* guest) {
 }
 
 void GuestViewBase::SetGuestHost(content::GuestHost* guest_host) {
+  if (guest_host) {
+    delegate_to_browser_plugin_ =
+        static_cast<content::BrowserPluginGuest*>(guest_host);
+  }
   guest_host_ = guest_host;
 }
 
@@ -590,7 +605,7 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
       DCHECK_EQ(owner_contents_observer_->web_contents(), owner_web_contents_);
     owner_web_contents_ = embedder_web_contents;
     owner_contents_observer_ =
-        base::MakeUnique<OwnerContentsObserver>(this, embedder_web_contents);
+        std::make_unique<OwnerContentsObserver>(this, embedder_web_contents);
     SetOwnerHost();
   }
 
@@ -640,24 +655,7 @@ void GuestViewBase::RenderViewReady() {
   GuestReady();
 }
 
-namespace webview {
-// NOTE(andre@vivaldi.com) : Leaving this here since we are now in a component.
-const char kEventWebContentsDiscarded[] =
-    "webViewPrivate.onWebcontentsDiscarded";
-}  // webview
-
 void GuestViewBase::WebContentsDestroyed() {
-
-  if (vivaldi::IsVivaldiRunning()) {
-    // Signal that the <webview> has been destroyed so that the client can do
-    // what is needed. For instance re-create the <webview> element.
-    // We have to do this before the embedder association is nulled.
-    std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-    DispatchEventToView(base::WrapUnique(
-        new GuestViewEvent(webview::kEventWebContentsDiscarded,
-                           std::move(args))));
-  }
-
   Destroy(false);
 
   // Let the derived class know that its WebContents is in the process of
@@ -756,7 +754,11 @@ bool GuestViewBase::ShouldFocusPageAfterCrash() {
 
 bool GuestViewBase::PreHandleGestureEvent(WebContents* source,
                                           const blink::WebGestureEvent& event) {
+  if (vivaldi::IsVivaldiRunning()) {
+    return false; // NOTE(espen@vivaldi.com): We do want pinching. Do not stop.
+  } else {
   return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
+  }
 }
 
 void GuestViewBase::UpdatePreferredSize(WebContents* target_web_contents,
@@ -867,17 +869,17 @@ void GuestViewBase::SendQueuedEvents() {
 
 void GuestViewBase::CompleteInit(
     std::unique_ptr<base::DictionaryValue> create_params,
-    const WebContentsCreatedCallback& callback,
+    WebContentsCreatedCallback callback,
     WebContents* guest_web_contents) {
   if (!guest_web_contents) {
     // The derived class did not create a WebContents so this class serves no
     // purpose. Let's self-destruct.
     delete this;
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
   InitWithWebContents(*create_params, guest_web_contents);
-  callback.Run(guest_web_contents);
+  std::move(callback).Run(guest_web_contents);
 }
 
 double GuestViewBase::GetEmbedderZoomFactor() const {

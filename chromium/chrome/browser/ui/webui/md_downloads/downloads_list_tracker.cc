@@ -21,8 +21,9 @@
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/download/public/common/download_item.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_system.h"
@@ -31,7 +32,7 @@
 #include "ui/base/l10n/time_format.h"
 
 using content::BrowserContext;
-using content::DownloadItem;
+using download::DownloadItem;
 using content::DownloadManager;
 
 using DownloadVector = DownloadManager::DownloadVector;
@@ -42,24 +43,25 @@ namespace {
 // CreateDownloadItemValue().  Only return strings for DANGEROUS_FILE,
 // DANGEROUS_URL, DANGEROUS_CONTENT, and UNCOMMON_CONTENT because the
 // |danger_type| value is only defined if the value of |state| is |DANGEROUS|.
-const char* GetDangerTypeString(content::DownloadDangerType danger_type) {
+const char* GetDangerTypeString(download::DownloadDangerType danger_type) {
   switch (danger_type) {
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
       return "DANGEROUS_FILE";
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
       return "DANGEROUS_URL";
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
       return "DANGEROUS_CONTENT";
-    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
       return "UNCOMMON_CONTENT";
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
       return "DANGEROUS_HOST";
-    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
       return "POTENTIALLY_UNWANTED";
-    case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
-    case content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-    case content::DOWNLOAD_DANGER_TYPE_MAX:
+    case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+    case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+    case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
+    case download::DOWNLOAD_DANGER_TYPE_MAX:
       break;
   }
   // Don't return a danger type string if it is NOT_DANGEROUS,
@@ -185,7 +187,7 @@ DownloadsListTracker::DownloadsListTracker(
 
 std::unique_ptr<base::DictionaryValue>
 DownloadsListTracker::CreateDownloadItemValue(
-    content::DownloadItem* download_item) const {
+    download::DownloadItem* download_item) const {
   // TODO(asanka): Move towards using download_model here for getting status and
   // progress. The difference currently only matters to Drive downloads and
   // those don't show up on the downloads page, but should.
@@ -225,9 +227,12 @@ DownloadsListTracker::CreateDownloadItemValue(
     // language. This won't work if the extension was uninstalled, so the name
     // might be the wrong language.
     bool include_disabled = true;
-    const extensions::Extension* extension = extensions::ExtensionSystem::Get(
-        Profile::FromBrowserContext(download_item->GetBrowserContext()))->
-        extension_service()->GetExtensionById(by_ext->id(), include_disabled);
+    const extensions::Extension* extension =
+        extensions::ExtensionSystem::Get(
+            Profile::FromBrowserContext(
+                content::DownloadItemUtils::GetBrowserContext(download_item)))
+            ->extension_service()
+            ->GetExtensionById(by_ext->id(), include_disabled);
     if (extension)
       by_ext_name = extension->name();
   }
@@ -256,7 +261,7 @@ DownloadsListTracker::CreateDownloadItemValue(
   const char* state = nullptr;
 
   switch (download_item->GetState()) {
-    case content::DownloadItem::IN_PROGRESS: {
+    case download::DownloadItem::IN_PROGRESS: {
       if (download_item->IsDangerous()) {
         state = "DANGEROUS";
         danger_type = GetDangerTypeString(download_item->GetDangerType());
@@ -270,7 +275,7 @@ DownloadsListTracker::CreateDownloadItemValue(
       break;
     }
 
-    case content::DownloadItem::INTERRUPTED:
+    case download::DownloadItem::INTERRUPTED:
       state = "INTERRUPTED";
       progress_status_text = download_model.GetTabProgressStatusText();
 
@@ -282,23 +287,24 @@ DownloadsListTracker::CreateDownloadItemValue(
       // GetStatusText() as a temporary measure until the layout is fixed to
       // accommodate the longer string. http://crbug.com/609255
       last_reason_text = download_model.GetStatusText();
-      if (content::DOWNLOAD_INTERRUPT_REASON_CRASH ==
-          download_item->GetLastReason() && !download_item->CanResume()) {
+      if (download::DOWNLOAD_INTERRUPT_REASON_CRASH ==
+              download_item->GetLastReason() &&
+          !download_item->CanResume()) {
         retry = true;
       }
       break;
 
-    case content::DownloadItem::CANCELLED:
+    case download::DownloadItem::CANCELLED:
       state = "CANCELLED";
       retry = true;
       break;
 
-    case content::DownloadItem::COMPLETE:
+    case download::DownloadItem::COMPLETE:
       DCHECK(!download_item->IsDangerous());
       state = "COMPLETE";
       break;
 
-    case content::DownloadItem::MAX_DOWNLOAD_STATE:
+    case download::DownloadItem::MAX_DOWNLOAD_STATE:
       NOTREACHED();
   }
 
@@ -343,8 +349,9 @@ bool DownloadsListTracker::ShouldShow(const DownloadItem& item) const {
          DownloadQuery::MatchesQuery(search_terms_, item);
 }
 
-bool DownloadsListTracker::StartTimeComparator::operator() (
-    const content::DownloadItem* a, const content::DownloadItem* b) const {
+bool DownloadsListTracker::StartTimeComparator::operator()(
+    const download::DownloadItem* a,
+    const download::DownloadItem* b) const {
   return a->GetStartTime() > b->GetStartTime();
 }
 

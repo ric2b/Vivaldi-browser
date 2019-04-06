@@ -21,10 +21,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformMediaDataType,
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaDataStatus,
                           media::MediaDataStatus::kCount - 1)
 
-IPC_ENUM_TRAITS_MAX_VALUE(
-    media::PlatformMediaDecodingMode,
-    static_cast<int>(media::PlatformMediaDecodingMode::COUNT) - 1)
-
 IPC_STRUCT_TRAITS_BEGIN(media::PlatformMediaTimeInfo)
   IPC_STRUCT_TRAITS_MEMBER(duration)
   IPC_STRUCT_TRAITS_MEMBER(start_time)
@@ -48,7 +44,6 @@ IPC_STRUCT_TRAITS_BEGIN(media::PlatformVideoConfig)
   IPC_STRUCT_TRAITS_MEMBER(natural_size)
   IPC_STRUCT_TRAITS_MEMBER(planes)
   IPC_STRUCT_TRAITS_MEMBER(rotation)
-  IPC_STRUCT_TRAITS_MEMBER(decoding_mode)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(MediaPipelineMsg_DecodedDataReady_Params)
@@ -57,8 +52,6 @@ IPC_STRUCT_BEGIN(MediaPipelineMsg_DecodedDataReady_Params)
   IPC_STRUCT_MEMBER(int, size)
   IPC_STRUCT_MEMBER(base::TimeDelta, timestamp)
   IPC_STRUCT_MEMBER(base::TimeDelta, duration)
-  // Relevant only when hardware accelerated video decoding is used.
-  IPC_STRUCT_MEMBER(uint32_t, client_texture_id)
 IPC_STRUCT_END()
 
 IPC_SYNC_MESSAGE_CONTROL2_0(
@@ -92,10 +85,8 @@ IPC_MESSAGE_ROUTED2(MediaPipelineMsg_ReadRawData,
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_RawDataReady,
                     int /* size (DataSource::kReadError on error, 0 on EOS) */)
 
-IPC_MESSAGE_ROUTED2(MediaPipelineMsg_ReadDecodedData,
-                    media::PlatformMediaDataType /* type */,
-                    // Relevant only for hardware accelarated video decoding.
-                    uint32_t /* texture_id */)
+IPC_MESSAGE_ROUTED1(MediaPipelineMsg_ReadDecodedData,
+                    media::PlatformMediaDataType /* type */)
 
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_DecodedDataReady,
                     MediaPipelineMsg_DecodedDataReady_Params /* data */)

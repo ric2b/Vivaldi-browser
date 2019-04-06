@@ -13,10 +13,8 @@ class TestOmniboxEditController : public OmniboxEditController {
   TestOmniboxEditController() {}
 
   // OmniboxEditController:
-  void OnInputInProgress(bool in_progress) override {}
-  void OnChanged() override {}
-  ToolbarModel* GetToolbarModel() override;
-  const ToolbarModel* GetToolbarModel() const override;
+  TestToolbarModel* GetToolbarModel() override;
+  const TestToolbarModel* GetToolbarModel() const override;
 
  private:
   TestToolbarModel toolbar_model_;

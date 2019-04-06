@@ -34,7 +34,9 @@ namespace internal {
 
 namespace {
 
-constexpr size_t kNumWorkersInWorkerPool = 4;
+constexpr size_t kMaxTasks = 4;
+// By default, tests allow half of the pool to be used by background tasks.
+constexpr size_t kMaxBackgroundTasks = kMaxTasks / 2;
 constexpr size_t kNumThreadsPostingTasks = 4;
 constexpr size_t kNumTasksPostedPerThread = 150;
 
@@ -111,13 +113,13 @@ class TaskSchedulerWorkerPoolTest
     switch (GetParam().pool_type) {
       case PoolType::GENERIC:
         worker_pool_ = std::make_unique<SchedulerWorkerPoolImpl>(
-            "TestWorkerPool", "A", ThreadPriority::NORMAL, &task_tracker_,
-            &delayed_task_manager_);
+            "TestWorkerPool", "A", ThreadPriority::NORMAL,
+            task_tracker_.GetTrackedRef(), &delayed_task_manager_);
         break;
 #if defined(OS_WIN)
       case PoolType::WINDOWS:
         worker_pool_ = std::make_unique<PlatformNativeWorkerPoolWin>(
-            &task_tracker_, &delayed_task_manager_);
+            task_tracker_.GetTrackedRef(), &delayed_task_manager_);
         break;
 #endif
     }
@@ -131,9 +133,8 @@ class TaskSchedulerWorkerPoolTest
         SchedulerWorkerPoolImpl* scheduler_worker_pool_impl =
             static_cast<SchedulerWorkerPoolImpl*>(worker_pool_.get());
         scheduler_worker_pool_impl->Start(
-            SchedulerWorkerPoolParams(kNumWorkersInWorkerPool,
-                                      TimeDelta::Max()),
-            service_thread_.task_runner(),
+            SchedulerWorkerPoolParams(kMaxTasks, TimeDelta::Max()),
+            kMaxBackgroundTasks, service_thread_.task_runner(), nullptr,
             SchedulerWorkerPoolImpl::WorkerEnvironment::NONE);
         break;
       }
@@ -148,11 +149,11 @@ class TaskSchedulerWorkerPoolTest
     }
   }
 
-  std::unique_ptr<SchedulerWorkerPool> worker_pool_;
-
-  TaskTracker task_tracker_ = {"Test"};
   Thread service_thread_;
+  TaskTracker task_tracker_ = {"Test"};
   DelayedTaskManager delayed_task_manager_;
+
+  std::unique_ptr<SchedulerWorkerPool> worker_pool_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TaskSchedulerWorkerPoolTest);
@@ -182,7 +183,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostTasks) {
 
   // Flush the task tracker to be sure that no task accesses its TestTaskFactory
   // after |thread_posting_tasks| is destroyed.
-  task_tracker_.Flush();
+  task_tracker_.FlushForTesting();
 }
 
 TEST_P(TaskSchedulerWorkerPoolTest, NestedPostTasks) {
@@ -204,7 +205,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, NestedPostTasks) {
 
   // Flush the task tracker to be sure that no task accesses its TestTaskFactory
   // after |thread_posting_tasks| is destroyed.
-  task_tracker_.Flush();
+  task_tracker_.FlushForTesting();
 }
 
 // Verify that a Task can't be posted after shutdown.
@@ -222,7 +223,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostAfterDestroy) {
   StartWorkerPool();
   auto task_runner = test::CreateTaskRunnerWithExecutionMode(
       worker_pool_.get(), GetParam().execution_mode);
-  EXPECT_TRUE(task_runner->PostTask(FROM_HERE, BindOnce(&DoNothing)));
+  EXPECT_TRUE(task_runner->PostTask(FROM_HERE, DoNothing()));
   task_tracker_.Shutdown();
   worker_pool_->JoinForTesting();
   worker_pool_.reset();
@@ -232,23 +233,31 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostAfterDestroy) {
 // Verify that a Task runs shortly after its delay expires.
 TEST_P(TaskSchedulerWorkerPoolTest, PostDelayedTask) {
   StartWorkerPool();
-  TimeTicks start_time = TimeTicks::Now();
+
+  WaitableEvent task_ran(WaitableEvent::ResetPolicy::AUTOMATIC,
+                         WaitableEvent::InitialState::NOT_SIGNALED);
+
+  auto task_runner = test::CreateTaskRunnerWithExecutionMode(
+      worker_pool_.get(), GetParam().execution_mode);
+
+  // Wait until the task runner is up and running to make sure the test below is
+  // solely timing the delayed task, not bringing up a physical thread.
+  task_runner->PostTask(
+      FROM_HERE, BindOnce(&WaitableEvent::Signal, Unretained(&task_ran)));
+  task_ran.Wait();
+  ASSERT_TRUE(!task_ran.IsSignaled());
 
   // Post a task with a short delay.
-  WaitableEvent task_ran(WaitableEvent::ResetPolicy::MANUAL,
-                         WaitableEvent::InitialState::NOT_SIGNALED);
-  EXPECT_TRUE(test::CreateTaskRunnerWithExecutionMode(worker_pool_.get(),
-                                                      GetParam().execution_mode)
-                  ->PostDelayedTask(
-                      FROM_HERE,
-                      BindOnce(&WaitableEvent::Signal, Unretained(&task_ran)),
-                      TestTimeouts::tiny_timeout()));
+  TimeTicks start_time = TimeTicks::Now();
+  EXPECT_TRUE(task_runner->PostDelayedTask(
+      FROM_HERE, BindOnce(&WaitableEvent::Signal, Unretained(&task_ran)),
+      TestTimeouts::tiny_timeout()));
 
   // Wait until the task runs.
   task_ran.Wait();
 
-  // Expect the task to run after its delay expires, but not more than 250 ms
-  // after that.
+  // Expect the task to run after its delay expires, but no more than 250
+  // ms after that.
   const TimeDelta actual_delay = TimeTicks::Now() - start_time;
   EXPECT_GE(actual_delay, TestTimeouts::tiny_timeout());
   EXPECT_LT(actual_delay,
@@ -267,8 +276,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, SequencedRunsTasksInCurrentSequence) {
   auto sequenced_task_runner =
       worker_pool_->CreateSequencedTaskRunnerWithTraits(TaskTraits());
 
-  WaitableEvent task_ran(WaitableEvent::ResetPolicy::MANUAL,
-                         WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent task_ran;
   task_runner->PostTask(
       FROM_HERE,
       BindOnce(
@@ -283,10 +291,8 @@ TEST_P(TaskSchedulerWorkerPoolTest, SequencedRunsTasksInCurrentSequence) {
 
 // Verify that tasks posted before Start run after Start.
 TEST_P(TaskSchedulerWorkerPoolTest, PostBeforeStart) {
-  WaitableEvent task_1_running(WaitableEvent::ResetPolicy::MANUAL,
-                               WaitableEvent::InitialState::NOT_SIGNALED);
-  WaitableEvent task_2_running(WaitableEvent::ResetPolicy::MANUAL,
-                               WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent task_1_running;
+  WaitableEvent task_2_running;
 
   scoped_refptr<TaskRunner> task_runner =
       worker_pool_->CreateTaskRunnerWithTraits({WithBaseSyncPrimitives()});
@@ -308,7 +314,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostBeforeStart) {
   task_1_running.Wait();
   task_2_running.Wait();
 
-  task_tracker_.Flush();
+  task_tracker_.FlushForTesting();
 }
 
 INSTANTIATE_TEST_CASE_P(GenericParallel,

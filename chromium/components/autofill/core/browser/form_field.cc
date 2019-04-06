@@ -23,6 +23,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/name_field.h"
 #include "components/autofill/core/browser/phone_field.h"
+#include "components/autofill/core/browser/search_field.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/autofill_util.h"
@@ -30,13 +31,14 @@
 namespace autofill {
 
 // There's an implicit precedence determined by the values assigned here. Email
-// is currently the most important followed by Phone, Address, Credit Card and
-// finally Name.
+// is currently the most important followed by Phone, Address, Credit Card,
+// Name, and Search.
 const float FormField::kBaseEmailParserScore = 1.4f;
 const float FormField::kBasePhoneParserScore = 1.3f;
 const float FormField::kBaseAddressParserScore = 1.2f;
 const float FormField::kBaseCreditCardParserScore = 1.1f;
 const float FormField::kBaseNameParserScore = 1.0f;
+const float FormField::kBaseSearchParserScore = 0.9f;
 
 // static
 FieldCandidatesMap FormField::ParseFormFields(
@@ -48,10 +50,11 @@ FieldCandidatesMap FormField::ParseFormFields(
     // Ignore checkable fields as they interfere with parsers assuming context.
     // Eg., while parsing address, "Is PO box" checkbox after ADDRESS_LINE1
     // interferes with correctly understanding ADDRESS_LINE2.
-    // Ignore fields marked as presentational. See
-    // http://www.w3.org/TR/wai-aria/roles#presentation
+    // Ignore fields marked as presentational, unless for 'select' fields (for
+    // synthetic fields.)
     if (IsCheckable(field->check_status) ||
-        field->role == FormFieldData::ROLE_ATTRIBUTE_PRESENTATION) {
+        (field->role == FormFieldData::ROLE_ATTRIBUTE_PRESENTATION &&
+         field->form_control_type != "select-one")) {
       continue;
     }
     processed_fields.push_back(field.get());
@@ -75,6 +78,9 @@ FieldCandidatesMap FormField::ParseFormFields(
 
   // Name pass.
   ParseFormFieldsPass(NameField::Parse, processed_fields, &field_candidates);
+
+  // Search pass.
+  ParseFormFieldsPass(SearchField::Parse, processed_fields, &field_candidates);
 
   // Do not autofill a form if there aren't enough fields. Otherwise, it is
   // very easy to have false positives. See http://crbug.com/447332

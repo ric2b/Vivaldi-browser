@@ -6,9 +6,11 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/notification_types.h"
 
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 #include "chrome/browser/ui/tabs/tab_utils.h"
+
+#include "content/browser/browser_plugin/browser_plugin_guest.h"
 
 #include "content/public/browser/render_widget_host.h"
 
@@ -24,18 +26,3 @@
 #include "ui/devtools/devtools_connector.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "browser/startup_vivaldi_browser.h"
-
-namespace extensions {
-
-class ExtensionHostForWebContents : public ExtensionHost {
- public:
-  ExtensionHostForWebContents(const Extension* extension,
-                              content::SiteInstance* site_instance,
-                              const GURL& url,
-                              ViewType host_type,
-                              content::WebContents* host_contents);
-
-  ~ExtensionHostForWebContents() override;
-};
-
-}  // extensions

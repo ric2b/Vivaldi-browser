@@ -8,10 +8,7 @@
 #include "base/memory/ptr_util.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller_observer.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_foreground_animator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_end_animator.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_to_top_animator.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -33,34 +30,55 @@ FullscreenMediator::~FullscreenMediator() {
 }
 
 void FullscreenMediator::ScrollToTop() {
-  DCHECK(!scroll_to_top_animator_);
-  CGFloat progress = model_->progress();
-  scroll_to_top_animator_ =
-      [[FullscreenScrollToTopAnimator alloc] initWithStartProgress:progress];
-  SetUpAnimator(&scroll_to_top_animator_);
+  FullscreenAnimatorStyle scrollToTopStyle =
+      FullscreenAnimatorStyle::EXIT_FULLSCREEN;
+  if (animator_ && animator_.style == scrollToTopStyle)
+    return;
+  StopAnimating(true);
+
+  SetUpAnimator(scrollToTopStyle);
   for (auto& observer : observers_) {
-    observer.FullscreenWillScrollToTop(controller_, scroll_to_top_animator_);
+    observer.FullscreenWillScrollToTop(controller_, animator_);
   }
-  [scroll_to_top_animator_ startAnimation];
+  StartAnimator();
 }
 
 void FullscreenMediator::WillEnterForeground() {
-  DCHECK(!foreground_animator_);
-  CGFloat progress = model_->progress();
-  foreground_animator_ =
-      [[FullscreenForegroundAnimator alloc] initWithStartProgress:progress];
-  SetUpAnimator(&foreground_animator_);
+  FullscreenAnimatorStyle enterForegroundStyle =
+      FullscreenAnimatorStyle::EXIT_FULLSCREEN;
+  if (animator_ && animator_.style == enterForegroundStyle)
+    return;
+  StopAnimating(true);
+
+  SetUpAnimator(enterForegroundStyle);
   for (auto& observer : observers_) {
-    observer.FullscreenWillEnterForeground(controller_, foreground_animator_);
+    observer.FullscreenWillEnterForeground(controller_, animator_);
   }
-  [foreground_animator_ startAnimation];
+  StartAnimator();
+}
+
+void FullscreenMediator::AnimateModelReset() {
+  FullscreenAnimatorStyle resetStyle = FullscreenAnimatorStyle::EXIT_FULLSCREEN;
+  if (animator_ && animator_.style == resetStyle)
+    return;
+  StopAnimating(true);
+
+  SetUpAnimator(resetStyle);
+  for (auto& observer : observers_) {
+    observer.FullscreenModelWasReset(controller_, animator_);
+  }
+
+  // Instruct the model to ignore the remainder of the current scroll when
+  // starting this animator.  This prevents the toolbar from immediately being
+  // hidden if AnimateModelReset() is called while a scroll view is
+  // decelerating.
+  model_->IgnoreRemainderOfCurrentScroll();
+  StartAnimator();
 }
 
 void FullscreenMediator::Disconnect() {
-  [scroll_end_animator_ stopAnimation:YES];
-  scroll_end_animator_ = nil;
-  [scroll_to_top_animator_ stopAnimation:YES];
-  scroll_to_top_animator_ = nil;
+  [animator_ stopAnimation:YES];
+  animator_ = nil;
   model_->RemoveObserver(this);
   model_ = nullptr;
   controller_ = nullptr;
@@ -93,17 +111,18 @@ void FullscreenMediator::FullscreenModelScrollEventStarted(
 void FullscreenMediator::FullscreenModelScrollEventEnded(
     FullscreenModel* model) {
   DCHECK_EQ(model_, model);
-  DCHECK(!scroll_end_animator_);
-  CGFloat progress = model_->progress();
-  if (AreCGFloatsEqual(progress, 0.0) || AreCGFloatsEqual(progress, 1.0))
+  FullscreenAnimatorStyle scrollEndStyle =
+      model_->progress() >= 0.5 ? FullscreenAnimatorStyle::EXIT_FULLSCREEN
+                                : FullscreenAnimatorStyle::ENTER_FULLSCREEN;
+  if (animator_ && animator_.style == scrollEndStyle)
     return;
-  scroll_end_animator_ =
-      [[FullscreenScrollEndAnimator alloc] initWithStartProgress:progress];
-  SetUpAnimator(&scroll_end_animator_);
+  StopAnimating(true);
+
+  SetUpAnimator(scrollEndStyle);
   for (auto& observer : observers_) {
-    observer.FullscreenScrollEventEnded(controller_, scroll_end_animator_);
+    observer.FullscreenScrollEventEnded(controller_, animator_);
   }
-  [scroll_end_animator_ startAnimation];
+  StartAnimator();
 }
 
 void FullscreenMediator::FullscreenModelWasReset(FullscreenModel* model) {
@@ -117,49 +136,41 @@ void FullscreenMediator::FullscreenModelWasReset(FullscreenModel* model) {
   }
 }
 
-void FullscreenMediator::SetUpAnimator(__strong FullscreenAnimator** animator) {
-  DCHECK(animator);
-  DCHECK(*animator);
-  DCHECK(*animator == scroll_end_animator_ ||
-         *animator == scroll_to_top_animator_ ||
-         *animator == foreground_animator_);
-  [*animator addCompletion:^(UIViewAnimatingPosition finalPosition) {
+void FullscreenMediator::SetUpAnimator(FullscreenAnimatorStyle style) {
+  DCHECK(!animator_);
+  animator_ =
+      [[FullscreenAnimator alloc] initWithStartProgress:model_->progress()
+                                                  style:style];
+  __weak FullscreenAnimator* weakAnimator = animator_;
+  FullscreenModel** modelPtr = &model_;
+  [animator_ addCompletion:^(UIViewAnimatingPosition finalPosition) {
     DCHECK_EQ(finalPosition, UIViewAnimatingPositionEnd);
+    if (!weakAnimator || !*modelPtr)
+      return;
     model_->AnimationEndedWithProgress(
-        [*animator progressForAnimatingPosition:finalPosition]);
-    *animator = nil;
+        [weakAnimator progressForAnimatingPosition:finalPosition]);
+    animator_ = nil;
   }];
 }
 
-void FullscreenMediator::StopAnimating(bool update_model) {
-  if (!scroll_end_animator_ && !scroll_to_top_animator_ &&
-      !foreground_animator_) {
-    return;
+void FullscreenMediator::StartAnimator() {
+  // Only start the animator if animations have been added and it has a non-zero
+  // progress change.
+  if (animator_.hasAnimations &&
+      !AreCGFloatsEqual(animator_.startProgress, animator_.finalProgress)) {
+    [animator_ startAnimation];
+  } else {
+    animator_ = nil;
   }
-
-  // At most one animator should be non-nil.
-  DCHECK_EQ((scroll_end_animator_ ? 1 : 0) + (scroll_to_top_animator_ ? 1 : 0) +
-                (foreground_animator_ ? 1 : 0),
-            1);
-
-  if (scroll_end_animator_)
-    StopAnimator(&scroll_end_animator_, update_model);
-  if (scroll_to_top_animator_)
-    StopAnimator(&scroll_to_top_animator_, update_model);
-  if (foreground_animator_)
-    StopAnimator(&foreground_animator_, update_model);
 }
 
-void FullscreenMediator::StopAnimator(__strong FullscreenAnimator** animator,
-                                      bool update_model) {
-  DCHECK(animator);
-  DCHECK(*animator);
-  DCHECK(*animator == scroll_end_animator_ ||
-         *animator == scroll_to_top_animator_ ||
-         *animator == foreground_animator_);
-  DCHECK_EQ((*animator).state, UIViewAnimatingStateActive);
+void FullscreenMediator::StopAnimating(bool update_model) {
+  if (!animator_)
+    return;
+
+  DCHECK_EQ(animator_.state, UIViewAnimatingStateActive);
   if (update_model)
-    model_->AnimationEndedWithProgress((*animator).currentProgress);
-  [*animator stopAnimation:YES];
-  *animator = nil;
+    model_->AnimationEndedWithProgress(animator_.currentProgress);
+  [animator_ stopAnimation:YES];
+  animator_ = nil;
 }

@@ -19,8 +19,7 @@ GlRenderer::GlRenderer(gfx::AcceleratedWidget widget,
                        const gfx::Size& size)
     : RendererBase(widget, size), surface_(surface), weak_ptr_factory_(this) {}
 
-GlRenderer::~GlRenderer() {
-}
+GlRenderer::~GlRenderer() {}
 
 bool GlRenderer::Initialize() {
   context_ = gl::init::CreateGLContext(nullptr, surface_.get(),
@@ -37,6 +36,7 @@ bool GlRenderer::Initialize() {
     return false;
   }
 
+  // Schedule the initial render.
   PostRenderFrameTask(gfx::SwapResult::SWAP_ACK);
   return true;
 }
@@ -49,7 +49,7 @@ void GlRenderer::RenderFrame() {
   context_->MakeCurrent(surface_.get());
 
   glViewport(0, 0, size_.width(), size_.height());
-  glClearColor(1 - fraction, fraction, 0.0, 1.0);
+  glClearColor(1.f - fraction, fraction, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   if (surface_->SupportsAsyncSwap()) {

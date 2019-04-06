@@ -9,13 +9,13 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/presentation_feedback.h"
+#include "ui/ozone/common/linux/drm_util_linux.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_buffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
@@ -27,6 +27,7 @@
 #include "ui/ozone/platform/drm/gpu/gbm_device.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
+#include "ui/ozone/platform/drm/gpu/scanout_buffer_generator.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
 #include "ui/ozone/public/ozone_switches.h"
 
@@ -42,10 +43,15 @@ class GbmBufferGenerator : public ScanoutBufferGenerator {
   // ScanoutBufferGenerator:
   scoped_refptr<ScanoutBuffer> Create(const scoped_refptr<DrmDevice>& drm,
                                       uint32_t format,
+                                      const std::vector<uint64_t>& modifiers,
                                       const gfx::Size& size) override {
     scoped_refptr<GbmDevice> gbm(static_cast<GbmDevice*>(drm.get()));
-    // TODO(dcastagna): Use GBM_BO_USE_MAP modifier once minigbm exposes it.
-    return GbmBuffer::CreateBuffer(gbm, format, size, GBM_BO_USE_SCANOUT);
+    if (modifiers.size() > 0) {
+      return GbmBuffer::CreateBufferWithModifiers(
+          gbm, format, size, GBM_BO_USE_SCANOUT, modifiers);
+    } else {
+      return GbmBuffer::CreateBuffer(gbm, format, size, GBM_BO_USE_SCANOUT);
+    }
   }
 
  protected:
@@ -54,7 +60,7 @@ class GbmBufferGenerator : public ScanoutBufferGenerator {
 
 class GbmDeviceGenerator : public DrmDeviceGenerator {
  public:
-  GbmDeviceGenerator(bool use_atomic) : use_atomic_(use_atomic) {}
+  GbmDeviceGenerator() {}
   ~GbmDeviceGenerator() override {}
 
   // DrmDeviceGenerator:
@@ -63,53 +69,57 @@ class GbmDeviceGenerator : public DrmDeviceGenerator {
                                         bool is_primary_device) override {
     scoped_refptr<DrmDevice> drm =
         new GbmDevice(path, std::move(file), is_primary_device);
-    if (drm->Initialize(use_atomic_))
+    if (drm->Initialize())
       return drm;
 
     return nullptr;
   }
 
  private:
-  bool use_atomic_;
 
   DISALLOW_COPY_AND_ASSIGN(GbmDeviceGenerator);
 };
 
 }  // namespace
 
-DrmThread::DrmThread()
-    : base::Thread("DrmThread"), binding_(this), weak_ptr_factory_(this) {}
+DrmThread::DrmThread() : base::Thread("DrmThread"), weak_ptr_factory_(this) {}
 
 DrmThread::~DrmThread() {
   Stop();
 }
 
-void DrmThread::Start() {
+void DrmThread::Start(base::OnceClosure binding_completer) {
+  complete_early_binding_requests_ = std::move(binding_completer);
   base::Thread::Options thread_options;
   thread_options.message_loop_type = base::MessageLoop::TYPE_IO;
   thread_options.priority = base::ThreadPriority::DISPLAY;
+
   if (!StartWithOptions(thread_options))
     LOG(FATAL) << "Failed to create DRM thread";
 }
 
 void DrmThread::Init() {
-  bool use_atomic = false;
-  use_atomic = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableDrmAtomic);
-
   device_manager_.reset(
-      new DrmDeviceManager(std::make_unique<GbmDeviceGenerator>(use_atomic)));
+      new DrmDeviceManager(std::make_unique<GbmDeviceGenerator>()));
   buffer_generator_.reset(new GbmBufferGenerator());
   screen_manager_.reset(new ScreenManager(buffer_generator_.get()));
 
   display_manager_.reset(
       new DrmGpuDisplayManager(screen_manager_.get(), device_manager_.get()));
+
+  DCHECK(task_runner())
+      << "DrmThread::Init -- thread doesn't have a task_runner";
+
+  // DRM thread is running now so can safely handle binding requests. So drain
+  // the queue of as-yet unhandled binding requests if there are any.
+  std::move(complete_early_binding_requests_).Run();
 }
 
 void DrmThread::CreateBuffer(gfx::AcceleratedWidget widget,
                              const gfx::Size& size,
                              gfx::BufferFormat format,
                              gfx::BufferUsage usage,
+                             uint32_t client_flags,
                              scoped_refptr<GbmBuffer>* buffer) {
   scoped_refptr<GbmDevice> gbm =
       static_cast<GbmDevice*>(device_manager_->GetDrmDevice(widget).get());
@@ -127,11 +137,16 @@ void DrmThread::CreateBuffer(gfx::AcceleratedWidget widget,
       flags = GBM_BO_USE_LINEAR | GBM_BO_USE_CAMERA_WRITE | GBM_BO_USE_SCANOUT |
               GBM_BO_USE_TEXTURING;
       break;
+    case gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE:
+      flags =
+          GBM_BO_USE_LINEAR | GBM_BO_USE_CAMERA_WRITE | GBM_BO_USE_TEXTURING;
+      break;
     case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
       flags = GBM_BO_USE_LINEAR | GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING;
       break;
     case gfx::BufferUsage::SCANOUT_VDA_WRITE:
-      flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING;
+      flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING |
+              GBM_BO_USE_HW_VIDEO_DECODER;
       break;
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
@@ -155,7 +170,8 @@ void DrmThread::CreateBuffer(gfx::AcceleratedWidget widget,
   // buffer in that case.
   bool retry_without_scanout = usage != gfx::BufferUsage::SCANOUT;
   do {
-    if (modifiers.size() > 0 && !(flags & GBM_BO_USE_LINEAR))
+    if (modifiers.size() > 0 && !(flags & GBM_BO_USE_LINEAR) &&
+        !(client_flags & GbmBuffer::kFlagNoModifiers))
       *buffer = GbmBuffer::CreateBufferWithModifiers(gbm, fourcc_format, size,
                                                      flags, modifiers);
     else
@@ -170,7 +186,7 @@ void DrmThread::CreateBufferFromFds(
     gfx::AcceleratedWidget widget,
     const gfx::Size& size,
     gfx::BufferFormat format,
-    std::vector<base::ScopedFD>&& fds,
+    std::vector<base::ScopedFD> fds,
     const std::vector<gfx::NativePixmapPlane>& planes,
     scoped_refptr<GbmBuffer>* buffer) {
   scoped_refptr<GbmDevice> gbm =
@@ -187,29 +203,33 @@ void DrmThread::GetScanoutFormats(
   display_manager_->GetScanoutFormats(widget, scanout_formats);
 }
 
-void DrmThread::SchedulePageFlip(gfx::AcceleratedWidget widget,
-                                 const std::vector<OverlayPlane>& planes,
-                                 SwapCompletionOnceCallback callback) {
+void DrmThread::SchedulePageFlip(
+    gfx::AcceleratedWidget widget,
+    std::vector<DrmOverlayPlane> planes,
+    SwapCompletionOnceCallback submission_callback,
+    PresentationOnceCallback presentation_callback) {
   scoped_refptr<ui::DrmDevice> drm_device =
       device_manager_->GetDrmDevice(widget);
 
   drm_device->plane_manager()->RequestPlanesReadyCallback(
-      planes, base::BindOnce(&DrmThread::OnPlanesReadyForPageFlip,
-                             weak_ptr_factory_.GetWeakPtr(), widget, planes,
-                             base::Passed(&callback)));
+      std::move(planes), base::BindOnce(&DrmThread::OnPlanesReadyForPageFlip,
+                                        weak_ptr_factory_.GetWeakPtr(), widget,
+                                        std::move(submission_callback),
+                                        std::move(presentation_callback)));
 }
 
 void DrmThread::OnPlanesReadyForPageFlip(
     gfx::AcceleratedWidget widget,
-    const std::vector<OverlayPlane>& planes,
-    SwapCompletionOnceCallback callback) {
+    SwapCompletionOnceCallback submission_callback,
+    PresentationOnceCallback presentation_callback,
+    std::vector<DrmOverlayPlane> planes) {
   DrmWindow* window = screen_manager_->GetWindow(widget);
   if (window) {
-    bool result = window->SchedulePageFlip(planes, std::move(callback));
-    CHECK(result) << "DrmThread::SchedulePageFlip failed.";
+    window->SchedulePageFlip(std::move(planes), std::move(submission_callback),
+                             std::move(presentation_callback));
   } else {
-    std::move(callback).Run(gfx::SwapResult::SWAP_ACK,
-                            gfx::PresentationFeedback());
+    std::move(submission_callback).Run(gfx::SwapResult::SWAP_ACK, nullptr);
+    std::move(presentation_callback).Run(gfx::PresentationFeedback::Failure());
   }
 }
 
@@ -224,24 +244,24 @@ void DrmThread::GetVSyncParameters(
     window->GetVSyncParameters(callback);
 }
 
-void DrmThread::CreateWindow(const gfx::AcceleratedWidget& widget) {
+void DrmThread::CreateWindow(gfx::AcceleratedWidget widget) {
   std::unique_ptr<DrmWindow> window(
       new DrmWindow(widget, device_manager_.get(), screen_manager_.get()));
   window->Initialize(buffer_generator_.get());
   screen_manager_->AddWindow(widget, std::move(window));
 }
 
-void DrmThread::DestroyWindow(const gfx::AcceleratedWidget& widget) {
+void DrmThread::DestroyWindow(gfx::AcceleratedWidget widget) {
   std::unique_ptr<DrmWindow> window = screen_manager_->RemoveWindow(widget);
   window->Shutdown();
 }
 
-void DrmThread::SetWindowBounds(const gfx::AcceleratedWidget& widget,
+void DrmThread::SetWindowBounds(gfx::AcceleratedWidget widget,
                                 const gfx::Rect& bounds) {
   screen_manager_->GetWindow(widget)->SetBounds(bounds);
 }
 
-void DrmThread::SetCursor(const gfx::AcceleratedWidget& widget,
+void DrmThread::SetCursor(gfx::AcceleratedWidget widget,
                           const std::vector<SkBitmap>& bitmaps,
                           const gfx::Point& location,
                           int32_t frame_delay_ms) {
@@ -249,15 +269,15 @@ void DrmThread::SetCursor(const gfx::AcceleratedWidget& widget,
       ->SetCursor(bitmaps, location, frame_delay_ms);
 }
 
-void DrmThread::MoveCursor(const gfx::AcceleratedWidget& widget,
+void DrmThread::MoveCursor(gfx::AcceleratedWidget widget,
                            const gfx::Point& location) {
   screen_manager_->GetWindow(widget)->MoveCursor(location);
 }
 
 void DrmThread::CheckOverlayCapabilities(
-    const gfx::AcceleratedWidget& widget,
+    gfx::AcceleratedWidget widget,
     const OverlaySurfaceCandidateList& overlays,
-    base::OnceCallback<void(const gfx::AcceleratedWidget&,
+    base::OnceCallback<void(gfx::AcceleratedWidget,
                             const OverlaySurfaceCandidateList&,
                             const OverlayStatusList&)> callback) {
   TRACE_EVENT0("drm,hwoverlays", "DrmThread::CheckOverlayCapabilities");
@@ -322,13 +342,16 @@ void DrmThread::SetHDCPState(int64_t display_id,
                           display_manager_->SetHDCPState(display_id, state));
 }
 
-void DrmThread::SetColorCorrection(
+void DrmThread::SetColorMatrix(int64_t display_id,
+                               const std::vector<float>& color_matrix) {
+  display_manager_->SetColorMatrix(display_id, color_matrix);
+}
+
+void DrmThread::SetGammaCorrection(
     int64_t display_id,
     const std::vector<display::GammaRampRGBEntry>& degamma_lut,
-    const std::vector<display::GammaRampRGBEntry>& gamma_lut,
-    const std::vector<float>& correction_matrix) {
-  display_manager_->SetColorCorrection(display_id, degamma_lut, gamma_lut,
-                                       correction_matrix);
+    const std::vector<display::GammaRampRGBEntry>& gamma_lut) {
+  display_manager_->SetGammaCorrection(display_id, degamma_lut, gamma_lut);
 }
 
 void DrmThread::StartDrmDevice(StartDrmDeviceCallback callback) {
@@ -343,12 +366,12 @@ void DrmThread::StartDrmDevice(StartDrmDeviceCallback callback) {
 // be used from multiple threads in multiple processes.
 void DrmThread::AddBindingCursorDevice(
     ozone::mojom::DeviceCursorRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+  cursor_bindings_.AddBinding(this, std::move(request));
 }
 
 void DrmThread::AddBindingDrmDevice(ozone::mojom::DrmDeviceRequest request) {
   TRACE_EVENT0("drm", "DrmThread::AddBindingDrmDevice");
-  binding_.Bind(std::move(request));
+  drm_bindings_.AddBinding(this, std::move(request));
 }
 
 }  // namespace ui

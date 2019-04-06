@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/speech/tts_controller.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_registry.h"
+#include "third_party/blink/public/platform/web_speech_synthesis_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace constants = tts_extension_api_constants;
@@ -140,7 +140,7 @@ void TtsExtensionEventHandler::OnTtsEvent(Utterance* utterance,
   std::unique_ptr<base::ListValue> arguments(new base::ListValue());
   arguments->Append(std::move(details));
 
-  auto event = base::MakeUnique<extensions::Event>(
+  auto event = std::make_unique<extensions::Event>(
       ::extensions::events::TTS_ON_EVENT, ::events::kOnEvent,
       std::move(arguments), utterance->browser_context());
   event->event_url = utterance->src_url();
@@ -196,7 +196,7 @@ bool TtsSpeakFunction::RunAsync() {
     return false;
   }
 
-  double rate = 1.0;
+  double rate = blink::SpeechSynthesisConstants::kDoublePrefNotSet;
   if (options->HasKey(constants::kRateKey)) {
     EXTENSION_FUNCTION_VALIDATE(
         options->GetDouble(constants::kRateKey, &rate));
@@ -206,7 +206,7 @@ bool TtsSpeakFunction::RunAsync() {
     }
   }
 
-  double pitch = 1.0;
+  double pitch = blink::SpeechSynthesisConstants::kDoublePrefNotSet;
   if (options->HasKey(constants::kPitchKey)) {
     EXTENSION_FUNCTION_VALIDATE(
         options->GetDouble(constants::kPitchKey, &pitch));
@@ -216,7 +216,7 @@ bool TtsSpeakFunction::RunAsync() {
     }
   }
 
-  double volume = 1.0;
+  double volume = blink::SpeechSynthesisConstants::kDoublePrefNotSet;
   if (options->HasKey(constants::kVolumeKey)) {
     EXTENSION_FUNCTION_VALIDATE(
         options->GetDouble(constants::kVolumeKey, &volume));
@@ -310,7 +310,7 @@ ExtensionFunction::ResponseAction TtsResumeFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction TtsIsSpeakingFunction::Run() {
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
+  return RespondNow(OneArgument(std::make_unique<base::Value>(
       TtsController::GetInstance()->IsSpeaking())));
 }
 
@@ -318,7 +318,7 @@ ExtensionFunction::ResponseAction TtsGetVoicesFunction::Run() {
   std::vector<VoiceData> voices;
   TtsController::GetInstance()->GetVoices(browser_context(), &voices);
 
-  auto result_voices = base::MakeUnique<base::ListValue>();
+  auto result_voices = std::make_unique<base::ListValue>();
   for (size_t i = 0; i < voices.size(); ++i) {
     const VoiceData& voice = voices[i];
     std::unique_ptr<base::DictionaryValue> result_voice(
@@ -334,7 +334,7 @@ ExtensionFunction::ResponseAction TtsGetVoicesFunction::Run() {
     if (!voice.extension_id.empty())
       result_voice->SetString(constants::kExtensionIdKey, voice.extension_id);
 
-    auto event_types = base::MakeUnique<base::ListValue>();
+    auto event_types = std::make_unique<base::ListValue>();
     for (std::set<TtsEventType>::iterator iter = voice.events.begin();
          iter != voice.events.end(); ++iter) {
       const char* event_name_constant = TtsEventTypeToString(*iter);
@@ -349,15 +349,16 @@ ExtensionFunction::ResponseAction TtsGetVoicesFunction::Run() {
 }
 
 TtsAPI::TtsAPI(content::BrowserContext* context) {
-  ExtensionFunctionRegistry* registry =
+  ExtensionFunctionRegistry& registry =
       ExtensionFunctionRegistry::GetInstance();
-  registry->RegisterFunction<ExtensionTtsEngineSendTtsEventFunction>();
-  registry->RegisterFunction<TtsGetVoicesFunction>();
-  registry->RegisterFunction<TtsIsSpeakingFunction>();
-  registry->RegisterFunction<TtsSpeakFunction>();
-  registry->RegisterFunction<TtsStopSpeakingFunction>();
-  registry->RegisterFunction<TtsPauseFunction>();
-  registry->RegisterFunction<TtsResumeFunction>();
+  registry.RegisterFunction<ExtensionTtsEngineUpdateVoicesFunction>();
+  registry.RegisterFunction<ExtensionTtsEngineSendTtsEventFunction>();
+  registry.RegisterFunction<TtsGetVoicesFunction>();
+  registry.RegisterFunction<TtsIsSpeakingFunction>();
+  registry.RegisterFunction<TtsSpeakFunction>();
+  registry.RegisterFunction<TtsStopSpeakingFunction>();
+  registry.RegisterFunction<TtsPauseFunction>();
+  registry.RegisterFunction<TtsResumeFunction>();
 
   // Ensure we're observing newly added engines for the given context.
   TtsEngineExtensionObserver::GetInstance(Profile::FromBrowserContext(context));

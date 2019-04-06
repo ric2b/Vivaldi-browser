@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
@@ -30,6 +32,7 @@
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_url_handler.h"
@@ -39,11 +42,12 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
+#include "url/url_constants.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #endif
 
 #if defined(USE_AURA)
@@ -51,13 +55,17 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #endif
 
+#include "content/browser/frame_host/navigation_controller_impl.h"
+#include "content/browser/frame_host/navigation_entry_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "app/vivaldi_apptools.h"
 
 using content::GlobalRequestID;
@@ -99,7 +107,7 @@ Browser* GetOrCreateBrowser(Profile* profile, bool user_gesture) {
 // Returns true on success. Otherwise, if changing params leads the browser into
 // an erroneous state, returns false.
 bool AdjustNavigateParamsForURL(NavigateParams* params) {
-  if (params->target_contents != NULL ||
+  if (params->contents_to_insert || params->switch_to_singleton_tab ||
       IsURLAllowedInIncognito(params->url, params->initiating_profile) ||
       params->initiating_profile->IsGuestSession()) {
     return true;
@@ -136,6 +144,24 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
     const NavigateParams& params) {
   Profile* profile = params.initiating_profile;
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  if (base::FeatureList::IsEnabled(features::kDesktopPWAWindowing) &&
+      params.open_pwa_window_if_possible) {
+    const extensions::Extension* app = extensions::util::GetInstalledPwaForUrl(
+        profile, params.url, extensions::LAUNCH_CONTAINER_WINDOW);
+    if (app) {
+      std::string app_name =
+          web_app::GenerateApplicationNameFromExtensionId(app->id());
+      return {
+          new Browser(Browser::CreateParams::CreateForApp(
+              app_name,
+              true,  // trusted_source. Installed PWAs are considered trusted.
+              params.window_bounds, profile, params.user_gesture)),
+          -1};
+    }
+  }
+#endif
+
   switch (params.disposition) {
     case WindowOpenDisposition::SWITCH_TO_TAB:
 #if !defined(OS_ANDROID)
@@ -152,7 +178,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
         }
       }
 #endif
-    // fall through
+      FALLTHROUGH;
     case WindowOpenDisposition::CURRENT_TAB:
       if (params.browser)
         return {params.browser, -1};
@@ -164,7 +190,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
       if (index >= 0)
         return {params.browser, index};
     }
-    // fall through
+      FALLTHROUGH;
     case WindowOpenDisposition::NEW_FOREGROUND_TAB:
     case WindowOpenDisposition::NEW_BACKGROUND_TAB:
       // See if we can open the tab in the window this navigator is bound to.
@@ -256,7 +282,7 @@ void NormalizeDisposition(NavigateParams* params) {
       // automatically.
       if (params->window_action == NavigateParams::NO_ACTION)
         params->window_action = NavigateParams::SHOW_WINDOW;
-      // Fall-through.
+      FALLTHROUGH;
     }
     case WindowOpenDisposition::NEW_FOREGROUND_TAB:
     case WindowOpenDisposition::SINGLETON_TAB:
@@ -302,7 +328,16 @@ void LoadURLInContents(WebContents* target_contents,
       params->should_replace_current_entry;
   load_url_params.is_renderer_initiated = params->is_renderer_initiated;
   load_url_params.started_from_context_menu = params->started_from_context_menu;
-  load_url_params.suggested_filename = params->suggested_filename;
+  load_url_params.has_user_gesture = params->user_gesture;
+  load_url_params.blob_url_loader_factory = params->blob_url_loader_factory;
+
+  // |frame_tree_node_id| is kNoFrameTreeNodeId for main frame navigations.
+  if (params->frame_tree_node_id ==
+      content::RenderFrameHost::kNoFrameTreeNodeId) {
+    load_url_params.navigation_ui_data =
+        ChromeNavigationUIData::CreateForMainFrameNavigation(
+            target_contents, params->disposition);
+  }
 
   if (params->uses_post) {
     load_url_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
@@ -312,11 +347,34 @@ void LoadURLInContents(WebContents* target_contents,
   target_contents->GetController().LoadURLWithParams(load_url_params);
 }
 
+void LoadURLAsPendingEntry(WebContents* target_contents,
+                       const GURL& url,
+                       NavigateParams* params) {
+
+  content::WebContentsImpl* contentsimpl =
+    static_cast<content::WebContentsImpl*>(target_contents);
+  content::NavigationControllerImpl* controller =
+      &contentsimpl->GetController();
+
+  std::unique_ptr<content::NavigationEntryImpl> entry =
+    content::NavigationEntryImpl::FromNavigationEntry(
+      controller->CreateNavigationEntry(
+        url, params->referrer, params->transition,
+        params->is_renderer_initiated, params->extra_headers,
+        controller->GetBrowserContext(),
+        nullptr /* blob_url_loader_factory */));
+
+  controller->SetPendingEntry(std::move(entry));
+  controller->SetNeedsReload();
+}
+
 // This class makes sure the Browser object held in |params| is made visible
 // by the time it goes out of scope, provided |params| wants it to be shown.
 class ScopedBrowserShower {
  public:
-  explicit ScopedBrowserShower(NavigateParams* params) : params_(params) {}
+  explicit ScopedBrowserShower(NavigateParams* params,
+                               content::WebContents** contents)
+      : params_(params), contents_(contents) {}
   ~ScopedBrowserShower() {
     if (params_->window_action == NavigateParams::SHOW_WINDOW_INACTIVE) {
       params_->browser->window()->ShowInactive();
@@ -326,8 +384,8 @@ class ScopedBrowserShower {
       // If a user gesture opened a popup window, focus the contents.
       if (params_->user_gesture &&
           params_->disposition == WindowOpenDisposition::NEW_POPUP &&
-          params_->target_contents) {
-        params_->target_contents->Focus();
+          *contents_) {
+        (*contents_)->Focus();
         window->Activate();
       }
     }
@@ -335,44 +393,13 @@ class ScopedBrowserShower {
 
  private:
   NavigateParams* params_;
+  content::WebContents** contents_;
   DISALLOW_COPY_AND_ASSIGN(ScopedBrowserShower);
 };
 
-// This class manages the lifetime of a WebContents created by the
-// Navigate() function. When Navigate() creates a WebContents for a URL,
-// an instance of this class takes ownership of it via TakeOwnership() until the
-// WebContents is added to a tab strip at which time ownership is
-// relinquished via ReleaseOwnership(). If this object goes out of scope without
-// being added to a tab strip, the created WebContents is deleted to
-// avoid a leak and the params->target_contents field is set to NULL.
-class ScopedTargetContentsOwner {
- public:
-  explicit ScopedTargetContentsOwner(NavigateParams* params)
-      : params_(params) {}
-  ~ScopedTargetContentsOwner() {
-    if (target_contents_owner_.get())
-      params_->target_contents = NULL;
-  }
-
-  // Assumes ownership of |params_|' target_contents until ReleaseOwnership
-  // is called.
-  void TakeOwnership() {
-    target_contents_owner_.reset(params_->target_contents);
-  }
-
-  // Relinquishes ownership of |params_|' target_contents.
-  WebContents* ReleaseOwnership() {
-    return target_contents_owner_.release();
-  }
-
- private:
-  NavigateParams* params_;
-  std::unique_ptr<WebContents> target_contents_owner_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedTargetContentsOwner);
-};
-
-content::WebContents* CreateTargetContents(const NavigateParams& params,
-                                           const GURL& url) {
+std::unique_ptr<content::WebContents> CreateTargetContents(
+    const NavigateParams& params,
+    const GURL& url) {
   // Always create the new WebContents in a new SiteInstance (and therefore a
   // new BrowsingInstance), *unless* there's a |params.opener|.
   //
@@ -412,26 +439,33 @@ content::WebContents* CreateTargetContents(const NavigateParams& params,
   }
 #endif
 
-  WebContents* target_contents = WebContents::Create(create_params);
+  create_params.always_create_guest = params.should_create_guestframe;
+
+  std::unique_ptr<WebContents> target_contents =
+      WebContents::Create(create_params);
 
   // New tabs can have WebUI URLs that will make calls back to arbitrary
   // tab helpers, so the entire set of tab helpers needs to be set up
   // immediately.
-  BrowserNavigatorWebContentsAdoption::AttachTabHelpers(target_contents);
+  BrowserNavigatorWebContentsAdoption::AttachTabHelpers(target_contents.get());
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::TabHelper::FromWebContents(target_contents)->
-      SetExtensionAppById(params.extension_app_id);
+  extensions::TabHelper::FromWebContents(target_contents.get())
+      ->SetExtensionAppById(params.extension_app_id);
 #endif
 
   return target_contents;
 }
 
-// If a prerendered page exists for |url|, replace the page at
-// |params->target_contents| with it and update to point to the swapped-in
-// WebContents.
-bool SwapInPrerender(const GURL& url, NavigateParams* params) {
-  Profile* profile =
-      Profile::FromBrowserContext(params->target_contents->GetBrowserContext());
+// If a prerendered page exists for |url|, then replace
+// params.contents_being_navigated with it. When this occurs, the new page is
+// stored in params.replaced_contents.
+// This method updates the underlying storage mechanism as well. e.g. On
+// Desktop, |contents_being_navigated| is replaced in the tabstrip by
+// |replaced_contents|.
+bool SwapInPrerender(const GURL& url,
+                     prerender::PrerenderManager::Params* params) {
+  Profile* profile = Profile::FromBrowserContext(
+      params->contents_being_navigated->GetBrowserContext());
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
   return prerender_manager &&
@@ -459,13 +493,6 @@ void Navigate(NavigateParams* params) {
     params->url = GURL(chrome::kExtensionInvalidRequestURL);
 #endif
 
-  // The browser window may want to adjust the disposition.
-  if (params->disposition == WindowOpenDisposition::NEW_POPUP &&
-      source_browser && source_browser->window()) {
-    params->disposition =
-        source_browser->window()->GetDispositionForPopupBounds(
-            params->window_bounds);
-  }
   // Trying to open a background tab when in an app browser results in
   // focusing a regular browser window an opening a tab in the background
   // of that window. Change the disposition to NEW_FOREGROUND_TAB so that
@@ -483,13 +510,20 @@ void Navigate(NavigateParams* params) {
     params->source_contents =
         params->browser->tab_strip_model()->GetActiveWebContents();
   }
+
+  WebContents* contents_to_navigate_or_insert =
+      params->contents_to_insert.get();
+  if (params->switch_to_singleton_tab) {
+    DCHECK_EQ(params->disposition, WindowOpenDisposition::SINGLETON_TAB);
+    contents_to_navigate_or_insert = params->switch_to_singleton_tab;
+  }
   int singleton_index;
   std::tie(params->browser, singleton_index) =
       GetBrowserAndTabForDisposition(*params);
   if (!params->browser)
     return;
   if (singleton_index != -1) {
-    params->target_contents =
+    contents_to_navigate_or_insert =
         params->browser->tab_strip_model()->GetWebContentsAt(singleton_index);
   }
 #if defined(OS_CHROMEOS)
@@ -527,11 +561,12 @@ void Navigate(NavigateParams* params) {
   }
 
   // Make sure the Browser is shown if params call for it.
-  ScopedBrowserShower shower(params);
+  ScopedBrowserShower shower(params, &contents_to_navigate_or_insert);
 
   // Makes sure any WebContents created by this function is destroyed if
   // not properly added to a tab strip.
-  ScopedTargetContentsOwner target_contents_owner(params);
+  std::unique_ptr<WebContents> contents_to_insert =
+      std::move(params->contents_to_insert);
 
   // Some dispositions need coercion to base types.
   NormalizeDisposition(params);
@@ -573,27 +608,31 @@ void Navigate(NavigateParams* params) {
   // If no target WebContents was specified (and we didn't seek and find a
   // singleton), we need to construct one if we are supposed to target a new
   // tab.
-  if (!params->target_contents) {
+  bool made_new_contents = false;
+  if (!contents_to_navigate_or_insert) {
     DCHECK(!params->url.is_empty());
     if (params->disposition != WindowOpenDisposition::CURRENT_TAB) {
-      params->target_contents = CreateTargetContents(*params, params->url);
-
-      // This function takes ownership of |params->target_contents| until it
-      // is added to a TabStripModel.
-      target_contents_owner.TakeOwnership();
+      contents_to_insert = CreateTargetContents(*params, params->url);
+      contents_to_navigate_or_insert = contents_to_insert.get();
+      made_new_contents = true;
     } else {
       // ... otherwise if we're loading in the current tab, the target is the
       // same as the source.
       DCHECK(params->source_contents);
-      params->target_contents = params->source_contents;
+      contents_to_navigate_or_insert = params->source_contents;
+
+      prerender::PrerenderManager::Params prerender_params(
+          params, params->source_contents);
 
       // Prerender can only swap in CURRENT_TAB navigations; others have
       // different sessionStorage namespaces.
-      swapped_in_prerender = SwapInPrerender(params->url, params);
+      swapped_in_prerender = SwapInPrerender(params->url, &prerender_params);
+      if (swapped_in_prerender)
+        contents_to_navigate_or_insert = prerender_params.replaced_contents;
     }
 
     if (user_initiated)
-      params->target_contents->UserGestureDone();
+      contents_to_navigate_or_insert->NavigatedByUser();
 
     if (!swapped_in_prerender) {
       // Try to handle non-navigational URLs that popup dialogs and such, these
@@ -602,13 +641,25 @@ void Navigate(NavigateParams* params) {
         // Perform the actual navigation, tracking whether it came from the
         // renderer.
 
-        LoadURLInContents(params->target_contents, params->url, params);
+        if (made_new_contents && params->browser->is_vivaldi()) {
+          // NOTE(julien): We get in here if we are about to navigate to a
+          // URL for a tab we just created. In this case, we
+          // need to wait for a webview to be associated with that tab, so
+          // that the WebContents gets its delegate set up properly. If
+          // a navigation occurs before the delegate is set, we can run into
+          // issues such as VB-39613
+          if (!params->url.SchemeIs(url::kJavaScriptScheme))
+            LoadURLAsPendingEntry(contents_to_navigate_or_insert, params->url,
+                                params);
+        } else
+          LoadURLInContents(contents_to_navigate_or_insert, params->url,
+                          params);
       }
     }
   } else {
-    // |target_contents| was specified non-NULL, and so we assume it has already
-    // been navigated appropriately. We need to do nothing more other than
-    // add it to the appropriate tabstrip.
+    // |contents_to_navigate_or_insert| was specified non-NULL, and so we assume
+    // it has already been navigated appropriately. We need to do nothing more
+    // other than add it to the appropriate tabstrip.
   }
 
   // We cannot call focus directly on the contents in Vivaldi as they are
@@ -624,28 +675,24 @@ void Navigate(NavigateParams* params) {
     params->source_contents->Focus();
   }
 
-  if (params->source_contents == params->target_contents ||
+  if (params->source_contents == contents_to_navigate_or_insert ||
       (swapped_in_prerender &&
        params->disposition == WindowOpenDisposition::CURRENT_TAB)) {
     // The navigation occurred in the source tab.
     params->browser->UpdateUIForNavigationInTab(
-        params->target_contents, params->transition, params->window_action,
-        user_initiated);
+        contents_to_navigate_or_insert, params->transition,
+        params->window_action, user_initiated);
   } else if (singleton_index == -1) {
     // If some non-default value is set for the index, we should tell the
     // TabStripModel to respect it.
     if (params->tabstrip_index != -1)
       params->tabstrip_add_types |= TabStripModel::ADD_FORCE_INDEX;
 
+    DCHECK(contents_to_insert);
     // The navigation should insert a new tab into the target Browser.
     params->browser->tab_strip_model()->AddWebContents(
-        params->target_contents,
-        params->tabstrip_index,
-        params->transition,
-        params->tabstrip_add_types);
-    // Now that the |params->target_contents| is safely owned by the target
-    // Browser's TabStripModel, we can release ownership.
-    target_contents_owner.ReleaseOwnership();
+        std::move(contents_to_insert), params->tabstrip_index,
+        params->transition, params->tabstrip_add_types);
   }
 
   if (singleton_index >= 0) {
@@ -654,30 +701,34 @@ void Navigate(NavigateParams* params) {
         params->browser != source_browser)
       params->window_action = NavigateParams::SHOW_WINDOW;
 
-    if (params->target_contents->IsCrashed()) {
-      params->target_contents->GetController().Reload(
+    if (contents_to_navigate_or_insert->IsCrashed()) {
+      contents_to_navigate_or_insert->GetController().Reload(
           content::ReloadType::NORMAL, true);
     } else if (params->path_behavior == NavigateParams::IGNORE_AND_NAVIGATE &&
-               params->target_contents->GetURL() != params->url) {
-      LoadURLInContents(params->target_contents, params->url, params);
+               contents_to_navigate_or_insert->GetURL() != params->url) {
+      LoadURLInContents(contents_to_navigate_or_insert, params->url, params);
     }
 
     // If the singleton tab isn't already selected, select it.
-    if (params->source_contents != params->target_contents) {
+    if (params->source_contents != contents_to_navigate_or_insert) {
+      // Use the index before the potential close below, because it could
+      // make the index refer to a different tab.
+      params->browser->tab_strip_model()->ActivateTabAt(singleton_index,
+                                                        user_initiated);
       if (params->disposition == WindowOpenDisposition::SWITCH_TO_TAB) {
-        // Close orphaned NTPs with no history when the user switches away from
-        // them.
+        // Close orphaned NTP (and the like) with no history when the user
+        // switches away from them.
         if (params->source_contents->GetController().CanGoBack() ||
             (params->source_contents->GetLastCommittedURL().spec() !=
                  chrome::kChromeUINewTabURL &&
              params->source_contents->GetLastCommittedURL().spec() !=
-                 chrome::kChromeSearchLocalNtpUrl))
+                 chrome::kChromeSearchLocalNtpUrl &&
+             params->source_contents->GetLastCommittedURL().spec() !=
+                 url::kAboutBlankURL))
           params->source_contents->Focus();
         else
           params->source_contents->Close();
       }
-      params->browser->tab_strip_model()->ActivateTabAt(singleton_index,
-                                                        user_initiated);
     }
   }
 
@@ -685,8 +736,10 @@ void Navigate(NavigateParams* params) {
     content::NotificationService::current()->Notify(
         chrome::NOTIFICATION_TAB_ADDED,
         content::Source<content::WebContentsDelegate>(params->browser),
-        content::Details<WebContents>(params->target_contents));
+        content::Details<WebContents>(contents_to_navigate_or_insert));
   }
+
+  params->navigated_or_inserted_contents = contents_to_navigate_or_insert;
 }
 
 bool IsURLAllowedInIncognito(const GURL& url,
@@ -706,15 +759,13 @@ bool IsURLAllowedInIncognito(const GURL& url,
   // chrome://extensions is on the list because it redirects to
   // chrome://settings.
   if (url.scheme() == content::kChromeUIScheme &&
-      (url.host_piece() == chrome::kChromeUIDownloadInternalsHost ||
+      (url.host_piece() == chrome::kChromeUIAppLauncherPageHost ||
        url.host_piece() == chrome::kChromeUISettingsHost ||
        url.host_piece() == chrome::kChromeUIHelpHost ||
        url.host_piece() == chrome::kChromeUIHistoryHost ||
        url.host_piece() == chrome::kChromeUIExtensionsHost ||
        url.host_piece() == chrome::kChromeUIBookmarksHost ||
-#if !defined(OS_CHROMEOS)
        url.host_piece() == chrome::kChromeUIChromeSigninHost ||
-#endif
        url.host_piece() == chrome::kChromeUIUberHost ||
        url.host_piece() == chrome::kChromeUIThumbnailHost ||
        url.host_piece() == chrome::kChromeUIThumbnailHost2 ||

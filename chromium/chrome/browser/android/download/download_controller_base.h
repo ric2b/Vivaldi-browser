@@ -8,7 +8,8 @@
 #include <string>
 
 #include "base/callback.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_item.h"
+#include "components/download/public/common/download_start_observer.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/context_menu_params.h"
 #include "net/http/http_content_disposition.h"
@@ -23,6 +24,13 @@ class URLRequest;
 namespace content {
 class WebContents;
 }
+
+extern const char kOMADrmMessageMimeType[];
+extern const char kOMADrmContentMimeType[];
+extern const char kOMADrmRightsMimeType1[];
+extern const char kOMADrmRightsMimeType2[];
+
+content::WebContents* GetWebContents(int render_process_id, int render_view_id);
 
 // Used to store all the information about an Android download.
 struct DownloadInfo {
@@ -51,7 +59,8 @@ struct DownloadInfo {
 
 // Interface to request GET downloads and send notifications for POST
 // downloads.
-class DownloadControllerBase : public content::DownloadItem::Observer {
+class DownloadControllerBase : public download::DownloadItem::Observer,
+                               public download::DownloadStartObserver {
  public:
   // Returns the singleton instance of the DownloadControllerBase.
   static DownloadControllerBase* Get();
@@ -59,11 +68,6 @@ class DownloadControllerBase : public content::DownloadItem::Observer {
   // Called to set the DownloadControllerBase instance.
   static void SetDownloadControllerBase(
       DownloadControllerBase* download_controller);
-
-  // Should be called when a download is started. It can be either a GET
-  // request with authentication or a POST request. Notifies the embedding
-  // app about the download. Should be called on the UI thread.
-  virtual void OnDownloadStarted(content::DownloadItem* download_item) = 0;
 
   // Called when a download is initiated by context menu.
   virtual void StartContextMenuDownload(
@@ -73,13 +77,13 @@ class DownloadControllerBase : public content::DownloadItem::Observer {
 
   // Callback when user permission prompt finishes. Args: whether file access
   // permission is acquired.
-  typedef base::Callback<void(bool)> AcquireFileAccessPermissionCallback;
+  using AcquireFileAccessPermissionCallback = base::OnceCallback<void(bool)>;
 
   // Called to prompt the user for file access permission. When finished,
   // |callback| will be executed.
   virtual void AcquireFileAccessPermission(
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
-      const AcquireFileAccessPermissionCallback& callback) = 0;
+      AcquireFileAccessPermissionCallback callback) = 0;
 
   // Called by unit test to approve or disapprove file access request.
   virtual void SetApproveFileAccessRequestForTesting(bool approve) {}
@@ -91,7 +95,7 @@ class DownloadControllerBase : public content::DownloadItem::Observer {
       const DownloadInfo& info) = 0;
 
   // Called before resuming a download.
-  virtual void AboutToResumeDownload(content::DownloadItem* download_item) = 0;
+  virtual void AboutToResumeDownload(download::DownloadItem* download_item) = 0;
 
  protected:
   ~DownloadControllerBase() override {}

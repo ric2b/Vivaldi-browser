@@ -13,12 +13,12 @@
 #include "base/trace_event/trace_event.h"
 #import "chrome/browser/app_controller_mac.h"
 #import "chrome/browser/mac/exception_processor.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/crash/core/common/crash_key.h"
 #import "components/crash/core/common/objc_zombie.h"
 #include "content/public/browser/browser_accessibility_state.h"
 
-#include "app/vivaldi_apptools.h"
 
 namespace chrome_browser_application_mac {
 
@@ -36,6 +36,62 @@ void CancelTerminate() {
 
 }  // namespace chrome_browser_application_mac
 
+namespace {
+
+// Calling -[NSEvent description] is rather slow to build up the event
+// description. The description is stored in a crash key to aid debugging, so
+// this helper function constructs a shorter, but still useful, description.
+// See <https://crbug.com/770405>.
+std::string DescriptionForNSEvent(NSEvent* event) {
+  std::string desc = base::StringPrintf(
+      "NSEvent type=%ld modifierFlags=0x%lx locationInWindow=(%g,%g)",
+      event.type, event.modifierFlags, event.locationInWindow.x,
+      event.locationInWindow.y);
+  switch (event.type) {
+    case NSEventTypeKeyDown:
+    case NSEventTypeKeyUp: {
+      // Some NSEvents return a string with NUL in event.characters, see
+      // <https://crbug.com/826908>.
+      std::string characters = base::SysNSStringToUTF8([event.characters
+          stringByReplacingOccurrencesOfString:@"\0"
+                                    withString:@"\\x00"]);
+      std::string unmodified_characters =
+          base::SysNSStringToUTF8([event.charactersIgnoringModifiers
+              stringByReplacingOccurrencesOfString:@"\0"
+                                        withString:@"\\x00"]);
+      desc += base::StringPrintf(
+          " keyCode=0x%d ARepeat=%d characters='%s' unmodifiedCharacters='%s'",
+          event.keyCode, event.ARepeat, characters.c_str(),
+          unmodified_characters.c_str());
+      break;
+    }
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeLeftMouseDragged:
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeOtherMouseDragged:
+    case NSEventTypeOtherMouseUp:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeRightMouseDragged:
+    case NSEventTypeRightMouseUp:
+      desc += base::StringPrintf(" buttonNumber=%ld clickCount=%ld",
+                                 event.buttonNumber, event.clickCount);
+      break;
+    case NSAppKitDefined:
+    case NSSystemDefined:
+    case NSApplicationDefined:
+    case NSPeriodic:
+      desc += base::StringPrintf(" subtype=%d data1=%ld data2=%ld",
+                                 event.subtype, event.data1, event.data2);
+      break;
+    default:
+      break;
+  }
+  return desc;
+}
+
+}  // namespace
+
 // Method exposed for the purposes of overriding.
 // Used to determine when a Panel window can become the key window.
 @interface NSApplication (PanelsCanBecomeKey)
@@ -50,6 +106,8 @@ void CancelTerminate() {
   ObjcEvilDoers::ZombieEnable(true, 10000);
 
   chrome::InstallObjcExceptionPreprocessor();
+
+  cocoa_l10n_util::ApplyForcedRTL();
 }
 
 - (id)init {
@@ -246,9 +304,10 @@ void CancelTerminate() {
 
 - (void)sendEvent:(NSEvent*)event {
   TRACE_EVENT0("toplevel", "BrowserCrApplication::sendEvent");
+
   static crash_reporter::CrashKeyString<256> nseventKey("nsevent");
-  crash_reporter::ScopedCrashKeyString scopedKey(
-      &nseventKey, base::SysNSStringToUTF8([event description]));
+  crash_reporter::ScopedCrashKeyString scopedKey(&nseventKey,
+                                                 DescriptionForNSEvent(event));
 
   base::mac::CallWithEHFrame(^{
     switch (event.type) {
@@ -262,15 +321,10 @@ void CancelTerminate() {
         bool ctrlDown = [event modifierFlags] & NSControlKeyMask;
         if (kioskMode && ([event type] == NSRightMouseDown || ctrlDown))
           break;
+        FALLTHROUGH;  // Not menu-generating, so pass on the event.
       }
 
       default: {
-        if (vivaldi::IsVivaldiRunning()) {
-          if (event.type == NSEventTypeSmartMagnify) {
-            // Disables the two finger zoom.
-            break;
-          }
-        }
         base::mac::ScopedSendingEvent sendingEventScoper;
         [super sendEvent:event];
       }

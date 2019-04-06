@@ -17,7 +17,7 @@ namespace net {
 class NetLog;
 class NetworkDelegate;
 class ProxyConfigService;
-class ProxyService;
+class ProxyResolutionService;
 class URLRequestContext;
 }
 
@@ -37,8 +37,9 @@ class PROXY_CONFIG_EXPORT ProxyServiceFactory {
   static std::unique_ptr<PrefProxyConfigTracker>
   CreatePrefProxyConfigTrackerOfLocalState(PrefService* local_state_prefs);
 
-  // Create a proxy service.
-  static std::unique_ptr<net::ProxyService> CreateProxyService(
+  // Create a proxy resolution service.
+  static std::unique_ptr<net::ProxyResolutionService>
+  CreateProxyResolutionService(
       net::NetLog* net_log,
       net::URLRequestContext* context,
       net::NetworkDelegate* network_delegate,

@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_CHILD_PROCESS_LAUNCHER_H_
 
 #include <memory>
+#include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -14,13 +15,14 @@
 #include "base/process/kill.h"
 #include "base/process/process.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_launcher_helper.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_termination_info.h"
 #include "content/public/common/result_codes.h"
-#include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
+#include "mojo/public/cpp/system/invitation.h"
 
 #if defined(OS_ANDROID)
 #include "content/public/browser/android/child_process_importance.h"
@@ -54,16 +56,75 @@ static_assert(static_cast<int>(LAUNCH_RESULT_START) >
 #endif
 
 struct ChildProcessLauncherPriority {
-  bool background;
-  bool boost_for_pending_views;
+  ChildProcessLauncherPriority(bool visible,
+                               bool has_media_stream,
+                               unsigned int frame_depth,
+                               bool boost_for_pending_views,
+                               bool should_boost_for_pending_views
 #if defined(OS_ANDROID)
-  ChildProcessImportance importance;
+                               ,
+                               ChildProcessImportance importance
 #endif
+                               )
+      : visible(visible),
+        has_media_stream(has_media_stream),
+        frame_depth(frame_depth),
+        boost_for_pending_views(boost_for_pending_views),
+        should_boost_for_pending_views(should_boost_for_pending_views)
+#if defined(OS_ANDROID)
+        ,
+        importance(importance)
+#endif
+  {
+  }
+
+  // Returns true if the child process is backgrounded.
+  bool is_background() const {
+    return !visible && !has_media_stream &&
+           !(should_boost_for_pending_views && boost_for_pending_views);
+  }
 
   bool operator==(const ChildProcessLauncherPriority& other) const;
   bool operator!=(const ChildProcessLauncherPriority& other) const {
     return !(*this == other);
   }
+
+  // Prefer |is_background()| to inspecting these fields individually (to ensure
+  // all logic uses the same notion of "backgrounded").
+
+  // |visible| is true if the process is responsible for one or more widget(s)
+  // in foreground tabs. The notion of "visible" is determined by the embedder
+  // but is ideally a widget in a non-minimized, non-background, non-occluded
+  // tab (i.e. with pixels visible on the screen).
+  bool visible;
+
+  // |has_media_stream| is true when the process is responsible for "hearable"
+  // content.
+  bool has_media_stream;
+
+  // |frame_depth| is the depth of the shallowest frame this process is
+  // responsible for which has |visible| visibility. It only makes sense to
+  // compare this property for two ChildProcessLauncherPriority instances with
+  // matching |visible| properties.
+  unsigned int frame_depth;
+
+  // |boost_for_pending_views| is true if this process is responsible for a
+  // pending view (this is used to boost priority of a process responsible for
+  // foreground content which hasn't yet been added as a visible widget -- i.e.
+  // during navigation).
+  bool boost_for_pending_views;
+
+  // True iff |boost_for_pending_views| should be considered in
+  // |is_background()|. This needs to be a separate parameter as opposed to
+  // having the experiment set |boost_for_pending_views == false| when
+  // |!should_boost_for_pending_views| as that would result in different
+  // |is_background()| logic than before and defeat the purpose of the
+  // experiment. TODO(gab): Remove this field when the
+  // BoostRendererPriorityForPendingViews desktop experiment is over.
+  bool should_boost_for_pending_views;
+#if defined(OS_ANDROID)
+  ChildProcessImportance importance;
+#endif
 };
 
 // Launches a process asynchronously and notifies the client of the process
@@ -77,7 +138,7 @@ class CONTENT_EXPORT ChildProcessLauncher {
     // constructed on.
     virtual void OnProcessLaunched() = 0;
 
-    virtual void OnProcessLaunchFailed(int error_code) {};
+    virtual void OnProcessLaunchFailed(int error_code) {}
 
    protected:
     virtual ~Client() {}
@@ -97,9 +158,8 @@ class CONTENT_EXPORT ChildProcessLauncher {
       std::unique_ptr<base::CommandLine> cmd_line,
       int child_process_id,
       Client* client,
-      std::unique_ptr<mojo::edk::OutgoingBrokerClientInvitation>
-          broker_client_invitation,
-      const mojo::edk::ProcessErrorCallback& process_error_callback,
+      mojo::OutgoingInvitation mojo_invitation,
+      const mojo::ProcessErrorCallback& process_error_callback,
       bool terminate_on_shutdown = true);
   ~ChildProcessLauncher();
 
@@ -117,11 +177,7 @@ class CONTENT_EXPORT ChildProcessLauncher {
   // process could be seen as running. With |known_dead| set to true, the
   // process will be killed if it was still running. See ZygoteHostImpl for
   // more discussion of Linux implementation details.
-  // |exit_code| is the exit code of the process if it exited (e.g. status from
-  // waitpid if on posix, from GetExitCodeProcess on Windows). |exit_code| may
-  // be NULL.
-  base::TerminationStatus GetChildTerminationStatus(bool known_dead,
-                                                    int* exit_code);
+  ChildProcessTerminationInfo GetChildTerminationInfo(bool known_dead);
 
   // Changes whether the process runs in the background or not.  Only call
   // this after the process has started.
@@ -130,15 +186,13 @@ class CONTENT_EXPORT ChildProcessLauncher {
   // Terminates the process associated with this ChildProcessLauncher.
   // Returns true if the process was stopped, false if the process had not been
   // started yet or could not be stopped.
-  // Note that |exit_code| and |wait| are not used on Android.
-  bool Terminate(int exit_code, bool wait);
+  // Note that |exit_code| is not used on Android.
+  bool Terminate(int exit_code);
 
   // Similar to Terminate() but takes in a |process|.
   // On Android |process| must have been started by ChildProcessLauncher for
   // this method to work.
-  static bool TerminateProcess(const base::Process& process,
-                               int exit_code,
-                               bool wait);
+  static bool TerminateProcess(const base::Process& process, int exit_code);
 
   // Replaces the ChildProcessLauncher::Client for testing purposes. Returns the
   // previous  client.
@@ -154,11 +208,6 @@ class CONTENT_EXPORT ChildProcessLauncher {
   // support multiple shell context creation in unit_tests.
   static void ResetRegisteredFilesForTesting();
 
-#if defined(OS_ANDROID)
-  // Temporary until crbug.com/693484 is fixed.
-  static size_t GetNumberOfRendererSlots();
-#endif  // OS_ANDROID
-
  private:
   friend class internal::ChildProcessLauncherHelper;
 
@@ -173,9 +222,9 @@ class CONTENT_EXPORT ChildProcessLauncher {
   // ChildProcessLauncherHelper once the process was started.
   internal::ChildProcessLauncherHelper::Process process_;
 
-  base::TerminationStatus termination_status_;
-  int exit_code_;
+  ChildProcessTerminationInfo termination_info_;
   bool starting_;
+  base::TimeTicks start_time_;
 
   // Controls whether the child process should be terminated on browser
   // shutdown. Default behavior is to terminate the child.

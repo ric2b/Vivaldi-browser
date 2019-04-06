@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
@@ -16,6 +15,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display.h"
 #include "ui/display/display_list.h"
@@ -93,16 +93,13 @@ WindowServerTestBase::ReleaseMostRecentClient() {
 }
 
 void WindowServerTestBase::SetUp() {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kMus);
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kMusHostingViz);
+  feature_list_.InitAndEnableFeature(features::kMashDeprecated);
   WindowServerServiceTestBase::SetUp();
 
   env_ = aura::Env::CreateInstance(aura::Env::Mode::MUS);
   display::Screen::SetScreenInstance(&screen_);
   std::unique_ptr<aura::WindowTreeClient> window_manager_window_tree_client =
-      std::make_unique<aura::WindowTreeClient>(connector(), this, this);
-  window_manager_window_tree_client->ConnectAsWindowManager();
+      aura::WindowTreeClient::CreateForWindowManager(connector(), this, this);
   window_manager_ = window_manager_window_tree_client.get();
   window_tree_clients_.push_back(std::move(window_manager_window_tree_client));
 
@@ -149,6 +146,7 @@ void WindowServerTestBase::OnEmbedRootDestroyed(
 }
 
 void WindowServerTestBase::OnPointerEventObserved(const ui::PointerEvent& event,
+                                                  int64_t display_id,
                                                   aura::Window* target) {}
 
 aura::PropertyConverter* WindowServerTestBase::GetPropertyConverter() {
@@ -242,7 +240,7 @@ void WindowServerTestBase::OnWmDisplayModified(
 ui::mojom::EventResult WindowServerTestBase::OnAccelerator(
     uint32_t accelerator_id,
     const ui::Event& event,
-    std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
+    base::flat_map<std::string, std::vector<uint8_t>>* properties) {
   return window_manager_delegate_ ? window_manager_delegate_->OnAccelerator(
                                         accelerator_id, event, properties)
                                   : ui::mojom::EventResult::UNHANDLED;
@@ -291,11 +289,10 @@ void WindowServerTestBase::OnWmDeactivateWindow(aura::Window* window) {
 }
 
 void WindowServerTestBase::BindWindowTreeClientRequest(
-    mojom::WindowTreeClientRequest request) {
+    ui::mojom::WindowTreeClientRequest request) {
   const bool create_discardable_memory = false;
-  window_tree_clients_.push_back(std::make_unique<aura::WindowTreeClient>(
-      connector(), this, nullptr, std::move(request), nullptr,
-      create_discardable_memory));
+  window_tree_clients_.push_back(aura::WindowTreeClient::CreateForEmbedding(
+      connector(), this, std::move(request), create_discardable_memory));
 }
 
 bool WindowServerTestBase::DeleteWindowTreeHost(

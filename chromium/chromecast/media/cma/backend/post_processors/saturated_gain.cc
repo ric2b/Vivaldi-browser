@@ -34,7 +34,7 @@ SaturatedGain::SaturatedGain(const std::string& config, int channels)
   double gain_db;
   CHECK(config_dict->GetDouble(kGainKey, &gain_db)) << config;
   gain_ = DbFsToScale(gain_db);
-  LOG(INFO) << "Created a SaturatedGain: gain = " << gain_db;
+  LOG(INFO) << "Created a SaturatedGain: gain = " << gain_db << "db";
 }
 
 SaturatedGain::~SaturatedGain() = default;
@@ -49,6 +49,9 @@ int SaturatedGain::ProcessFrames(float* data,
                                  int frames,
                                  float volume,
                                  float volume_dbfs) {
+  DCHECK(data);
+
+  data_ = data;
   if (volume_dbfs != last_volume_dbfs_) {
     last_volume_dbfs_ = volume_dbfs;
     // Don't apply more gain than attenuation.
@@ -63,6 +66,19 @@ int SaturatedGain::ProcessFrames(float* data,
 
 int SaturatedGain::GetRingingTimeInFrames() {
   return 0;
+}
+
+int SaturatedGain::NumOutputChannels() {
+  return channels_;
+}
+
+float* SaturatedGain::GetOutputBuffer() {
+  DCHECK(data_);
+  return data_;
+}
+
+bool SaturatedGain::UpdateParameters(const std::string& message) {
+  return false;
 }
 
 }  // namespace media

@@ -6,7 +6,6 @@
 
 #include "base/big_endian.h"
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 
 namespace media {
@@ -66,7 +65,7 @@ struct PacedSender::RtpSession {
 PacedSender::PacedSender(
     size_t target_burst_size,
     size_t max_burst_size,
-    base::TickClock* clock,
+    const base::TickClock* clock,
     std::vector<PacketEvent>* recent_packet_events,
     PacketTransport* transport,
     const scoped_refptr<base::SingleThreadTaskRunner>& transport_task_runner)

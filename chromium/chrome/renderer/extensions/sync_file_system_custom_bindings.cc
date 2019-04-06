@@ -8,16 +8,18 @@
 
 #include "extensions/renderer/script_context.h"
 #include "storage/common/fileapi/file_system_util.h"
-#include "third_party/WebKit/public/web/WebDOMFileSystem.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_dom_file_system.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "v8/include/v8.h"
 
 namespace extensions {
 
 SyncFileSystemCustomBindings::SyncFileSystemCustomBindings(
     ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction(
+    : ObjectBackedNativeHandler(context) {}
+
+void SyncFileSystemCustomBindings::AddRoutes() {
+  RouteHandlerFunction(
       "GetSyncFileSystemObject", "syncFileSystem",
       base::Bind(&SyncFileSystemCustomBindings::GetSyncFileSystemObject,
                  base::Unretained(this)));

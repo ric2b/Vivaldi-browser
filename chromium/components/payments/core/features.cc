@@ -7,6 +7,9 @@
 namespace payments {
 namespace features {
 
+const base::Feature kReturnGooglePayInBasicCard{
+    "ReturnGooglePayInBasicCard", base::FEATURE_ENABLED_BY_DEFAULT};
+
 #if defined(OS_IOS)
 const base::Feature kWebPayments{"WebPayments",
                                  base::FEATURE_ENABLED_BY_DEFAULT};
@@ -21,5 +24,15 @@ const base::Feature kWebPaymentsMethodSectionOrderV2{
 const base::Feature kWebPaymentsModifiers{"WebPaymentsModifiers",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
+#if defined(OS_ANDROID)
+const base::Feature kWebPaymentsSingleAppUiSkip{
+    "WebPaymentsSingleAppUiSkip", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
+const base::Feature kWebPaymentsSingleAppUiSkip{
+    "WebPaymentsSingleAppUiSkip", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+const base::Feature kWebPaymentsJustInTimePaymentApp{
+    "WebPaymentsJustInTimePaymentApp", base::FEATURE_DISABLED_BY_DEFAULT};
 }  // namespace features
 }  // namespace payments

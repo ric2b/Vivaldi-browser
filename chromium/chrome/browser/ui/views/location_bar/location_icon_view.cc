@@ -10,9 +10,13 @@
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/strings/grit/components_strings.h"
+#include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/views/controls/label.h"
 
 using content::WebContents;
@@ -65,21 +69,54 @@ bool LocationIconView::GetTooltipText(const gfx::Point& p,
 }
 
 SkColor LocationIconView::GetTextColor() const {
-  return location_bar_->GetColor(LocationBarView::SECURITY_CHIP_TEXT);
+  return location_bar_->GetSecurityChipColor(
+      location_bar_->GetToolbarModel()->GetSecurityLevel(false));
+}
+
+bool LocationIconView::ShouldShowSeparator() const {
+  if (ShouldShowLabel())
+    return true;
+
+  if (OmniboxFieldTrial::IsJogTextfieldOnPopupEnabled())
+    return false;
+
+  return ui::MaterialDesignController::IsRefreshUi() &&
+         !location_bar_->GetOmniboxView()->IsEditingOrEmpty();
+}
+
+bool LocationIconView::ShouldShowExtraEndSpace() const {
+  if (OmniboxFieldTrial::IsJogTextfieldOnPopupEnabled())
+    return false;
+
+  return ui::MaterialDesignController::IsRefreshUi() &&
+         location_bar_->GetOmniboxView()->IsEditingOrEmpty();
 }
 
 bool LocationIconView::ShowBubble(const ui::Event& event) {
-  return ShowPageInfoDialog(location_bar_->GetWebContents());
+  auto* contents = location_bar_->GetWebContents();
+  if (!contents)
+    return false;
+  return location_bar_->ShowPageInfoDialog(contents);
 }
 
 void LocationIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (location_bar_->GetOmniboxView()->IsEditingOrEmpty()) {
-    node_data->role = ui::AX_ROLE_NONE;
+    node_data->role = ax::mojom::Role::kImage;
+    node_data->SetName(l10n_util::GetStringUTF8(IDS_ACC_SEARCH_ICON));
     return;
   }
 
+  security_state::SecurityLevel security_level =
+      location_bar_->GetToolbarModel()->GetSecurityLevel(false);
+  if (label()->text().empty() && (security_level == security_state::EV_SECURE ||
+                                  security_level == security_state::SECURE)) {
+    node_data->AddStringAttribute(
+        ax::mojom::StringAttribute::kDescription,
+        l10n_util::GetStringUTF8(IDS_SECURE_VERBOSE_STATE));
+  }
+
   IconLabelBubbleView::GetAccessibleNodeData(node_data);
-  node_data->role = ui::AX_ROLE_POP_UP_BUTTON;
+  node_data->role = ax::mojom::Role::kPopUpButton;
 }
 
 bool LocationIconView::IsBubbleShowing() const {
@@ -89,9 +126,17 @@ bool LocationIconView::IsBubbleShowing() const {
 
 gfx::Size LocationIconView::GetMinimumSizeForLabelText(
     const base::string16& text) const {
-  views::Label label(text, {font_list()});
-  return GetMinimumSizeForPreferredSize(
-      GetSizeForLabelWidth(label.GetPreferredSize().width()));
+  int width = 0;
+  if (text == label()->text()) {
+    // Optimize this common case by not creating a new label.
+    // GetPreferredSize is not dependent on the label's current
+    // width, so this returns the same value as the branch below.
+    width = label()->GetPreferredSize().width();
+  } else {
+    views::Label label(text, {font_list()});
+    width = label.GetPreferredSize().width();
+  }
+  return GetMinimumSizeForPreferredSize(GetSizeForLabelWidth(width));
 }
 
 void LocationIconView::SetTextVisibility(bool should_show,

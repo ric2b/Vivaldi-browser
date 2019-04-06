@@ -6,13 +6,16 @@
 #define SERVICES_UI_WS_DRAG_CONTROLLER_H_
 
 #include <map>
+#include <memory>
 #include <set>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/server_window_observer.h"
+#include "services/ui/ws/server_window_tracker.h"
 
 namespace gfx {
 class Point;
@@ -49,7 +52,7 @@ class DragController : public ServerWindowObserver {
       ServerWindow* source_window,
       DragTargetConnection* source_connection,
       int32_t drag_pointer,
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data,
+      const base::flat_map<std::string, std::vector<uint8_t>>& mime_data,
       DropEffectBitmask drag_operations);
   ~DragController() override;
 
@@ -104,9 +107,12 @@ class DragController : public ServerWindowObserver {
   void DispatchOperation(ServerWindow* window, WindowState* state);
   void OnRespondToOperation(ServerWindow* window);
 
-  // Callback methods.
-  void OnDragStatusCompleted(const WindowId& id, DropEffectBitmask bitmask);
-  void OnDragDropCompleted(const WindowId& id, DropEffect action);
+  // Callback methods. |tracker| contains the window being queried and is null
+  // if the window was destroyed while waiting for client.
+  void OnDragStatusCompleted(std::unique_ptr<ServerWindowTracker> tracker,
+                             DropEffectBitmask bitmask);
+  void OnDragDropCompleted(std::unique_ptr<ServerWindowTracker> tracker,
+                           DropEffect action);
 
   // ServerWindowObserver:
   void OnWindowDestroying(ServerWindow* window) override;
@@ -139,7 +145,7 @@ class DragController : public ServerWindowObserver {
   DragTargetConnection* source_connection_;
 
   // A list of the offered mime types.
-  std::unordered_map<std::string, std::vector<uint8_t>> mime_data_;
+  base::flat_map<std::string, std::vector<uint8_t>> mime_data_;
 
   // We need to keep track of state on a per window basis. A window being in
   // this map means that we're observing it. WindowState also keeps track of

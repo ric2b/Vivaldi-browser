@@ -6,9 +6,18 @@ var pass = chrome.test.callbackPass;
 var fail = chrome.test.callbackFail;
 
 var debuggee;
-var protocolVersion = "1.2";
+var protocolVersion = "1.3";
 
 chrome.test.runTests([
+
+  function attachToWebUI() {
+    chrome.tabs.create({url:"chrome://version"}, function(tab) {
+      var debuggee = {tabId: tab.id};
+      chrome.debugger.attach(debuggee, protocolVersion,
+          fail("Cannot attach to this target."));
+      chrome.tabs.remove(tab.id);
+    });
+  },
 
   function attach() {
     var extensionId = chrome.extension.getURL('').split('/')[2];

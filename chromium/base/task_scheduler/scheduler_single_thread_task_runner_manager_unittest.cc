@@ -5,11 +5,13 @@
 #include "base/task_scheduler/scheduler_single_thread_task_runner_manager.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/delayed_task_manager.h"
+#include "base/task_scheduler/environment_config.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_tracker.h"
@@ -19,6 +21,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_restrictions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -43,7 +46,7 @@ class TaskSchedulerSingleThreadTaskRunnerManagerTest : public testing::Test {
     delayed_task_manager_.Start(service_thread_.task_runner());
     single_thread_task_runner_manager_ =
         std::make_unique<SchedulerSingleThreadTaskRunnerManager>(
-            &task_tracker_, &delayed_task_manager_);
+            task_tracker_.GetTrackedRef(), &delayed_task_manager_);
     StartSingleThreadTaskRunnerManagerFromSetUp();
   }
 
@@ -63,14 +66,13 @@ class TaskSchedulerSingleThreadTaskRunnerManagerTest : public testing::Test {
     single_thread_task_runner_manager_.reset();
   }
 
+  Thread service_thread_;
+  TaskTracker task_tracker_ = {"Test"};
+  DelayedTaskManager delayed_task_manager_;
   std::unique_ptr<SchedulerSingleThreadTaskRunnerManager>
       single_thread_task_runner_manager_;
-  TaskTracker task_tracker_ = {"Test"};
 
  private:
-  Thread service_thread_;
-  DelayedTaskManager delayed_task_manager_;
-
   DISALLOW_COPY_AND_ASSIGN(TaskSchedulerSingleThreadTaskRunnerManagerTest);
 };
 
@@ -187,10 +189,54 @@ TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerTest,
 
 TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerTest,
        SharedWithBaseSyncPrimitivesDCHECKs) {
+  testing::GTEST_FLAG(death_test_style) = "threadsafe";
   EXPECT_DCHECK_DEATH({
     single_thread_task_runner_manager_->CreateSingleThreadTaskRunnerWithTraits(
         {WithBaseSyncPrimitives()}, SingleThreadTaskRunnerThreadMode::SHARED);
   });
+}
+
+// Regression test for https://crbug.com/829786
+TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerTest,
+       ContinueOnShutdownDoesNotBlockBlockShutdown) {
+  WaitableEvent task_has_started;
+  WaitableEvent task_can_continue;
+
+  // Post a CONTINUE_ON_SHUTDOWN task that waits on
+  // |task_can_continue| to a shared SingleThreadTaskRunner.
+  single_thread_task_runner_manager_
+      ->CreateSingleThreadTaskRunnerWithTraits(
+          {TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+          SingleThreadTaskRunnerThreadMode::SHARED)
+      ->PostTask(FROM_HERE, base::BindOnce(
+                                [](WaitableEvent* task_has_started,
+                                   WaitableEvent* task_can_continue) {
+                                  task_has_started->Signal();
+                                  ScopedAllowBaseSyncPrimitivesForTesting
+                                      allow_base_sync_primitives;
+                                  task_can_continue->Wait();
+                                },
+                                Unretained(&task_has_started),
+                                Unretained(&task_can_continue)));
+
+  task_has_started.Wait();
+
+  // Post a BLOCK_SHUTDOWN task to a shared SingleThreadTaskRunner.
+  single_thread_task_runner_manager_
+      ->CreateSingleThreadTaskRunnerWithTraits(
+          {TaskShutdownBehavior::BLOCK_SHUTDOWN},
+          SingleThreadTaskRunnerThreadMode::SHARED)
+      ->PostTask(FROM_HERE, DoNothing());
+
+  // Shutdown should not hang even though the first task hasn't finished.
+  task_tracker_.Shutdown();
+
+  // Let the first task finish.
+  task_can_continue.Signal();
+
+  // Tear down from the test body to prevent accesses to |task_can_continue|
+  // after it goes out of scope.
+  TearDownSingleThreadTaskRunnerManager();
 }
 
 namespace {
@@ -225,9 +271,7 @@ TEST_P(TaskSchedulerSingleThreadTaskRunnerManagerCommonTest,
   ThreadPriority thread_priority_background;
   task_runner_background->PostTask(
       FROM_HERE, BindOnce(&CaptureThreadPriority, &thread_priority_background));
-  WaitableEvent waitable_event_background(
-      WaitableEvent::ResetPolicy::MANUAL,
-      WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent waitable_event_background;
   task_runner_background->PostTask(
       FROM_HERE,
       BindOnce(&WaitableEvent::Signal, Unretained(&waitable_event_background)));
@@ -235,9 +279,7 @@ TEST_P(TaskSchedulerSingleThreadTaskRunnerManagerCommonTest,
   ThreadPriority thread_priority_normal;
   task_runner_normal->PostTask(
       FROM_HERE, BindOnce(&CaptureThreadPriority, &thread_priority_normal));
-  WaitableEvent waitable_event_normal(
-      WaitableEvent::ResetPolicy::MANUAL,
-      WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent waitable_event_normal;
   task_runner_normal->PostTask(
       FROM_HERE,
       BindOnce(&WaitableEvent::Signal, Unretained(&waitable_event_normal)));
@@ -245,12 +287,10 @@ TEST_P(TaskSchedulerSingleThreadTaskRunnerManagerCommonTest,
   waitable_event_background.Wait();
   waitable_event_normal.Wait();
 
-  if (Lock::HandlesMultipleThreadPriorities() &&
-      PlatformThread::CanIncreaseCurrentThreadPriority()) {
+  if (CanUseBackgroundPriorityForSchedulerWorker())
     EXPECT_EQ(ThreadPriority::BACKGROUND, thread_priority_background);
-  } else {
+  else
     EXPECT_EQ(ThreadPriority::NORMAL, thread_priority_background);
-  }
   EXPECT_EQ(ThreadPriority::NORMAL, thread_priority_normal);
 }
 
@@ -310,12 +350,20 @@ TEST_P(TaskSchedulerSingleThreadTaskRunnerManagerCommonTest,
 TEST_P(TaskSchedulerSingleThreadTaskRunnerManagerCommonTest, PostDelayedTask) {
   TimeTicks start_time = TimeTicks::Now();
 
-  // Post a task with a short delay.
-  WaitableEvent task_ran(WaitableEvent::ResetPolicy::MANUAL,
+  WaitableEvent task_ran(WaitableEvent::ResetPolicy::AUTOMATIC,
                          WaitableEvent::InitialState::NOT_SIGNALED);
   auto task_runner =
       single_thread_task_runner_manager_
           ->CreateSingleThreadTaskRunnerWithTraits(TaskTraits(), GetParam());
+
+  // Wait until the task runner is up and running to make sure the test below is
+  // solely timing the delayed task, not bringing up a physical thread.
+  task_runner->PostTask(
+      FROM_HERE, BindOnce(&WaitableEvent::Signal, Unretained(&task_ran)));
+  task_ran.Wait();
+  ASSERT_TRUE(!task_ran.IsSignaled());
+
+  // Post a task with a short delay.
   EXPECT_TRUE(task_runner->PostDelayedTask(
       FROM_HERE, BindOnce(&WaitableEvent::Signal, Unretained(&task_ran)),
       TestTimeouts::tiny_timeout()));
@@ -323,7 +371,7 @@ TEST_P(TaskSchedulerSingleThreadTaskRunnerManagerCommonTest, PostDelayedTask) {
   // Wait until the task runs.
   task_ran.Wait();
 
-  // Expect the task to run after its delay expires, but not more than 250 ms
+  // Expect the task to run after its delay expires, but no more than 250 ms
   // after that.
   const TimeDelta actual_delay = TimeTicks::Now() - start_time;
   EXPECT_GE(actual_delay, TestTimeouts::tiny_timeout());
@@ -338,7 +386,7 @@ TEST_P(TaskSchedulerSingleThreadTaskRunnerManagerCommonTest,
   auto task_runner =
       single_thread_task_runner_manager_
           ->CreateSingleThreadTaskRunnerWithTraits(TaskTraits(), GetParam());
-  EXPECT_TRUE(task_runner->PostTask(FROM_HERE, BindOnce(&DoNothing)));
+  EXPECT_TRUE(task_runner->PostTask(FROM_HERE, DoNothing()));
   task_tracker_.Shutdown();
   TearDownSingleThreadTaskRunnerManager();
   EXPECT_FALSE(task_runner->PostTask(FROM_HERE, BindOnce(&ShouldNotRun)));
@@ -357,9 +405,7 @@ class CallJoinFromDifferentThread : public SimpleThread {
   CallJoinFromDifferentThread(
       SchedulerSingleThreadTaskRunnerManager* manager_to_join)
       : SimpleThread("SchedulerSingleThreadTaskRunnerManagerJoinThread"),
-        manager_to_join_(manager_to_join),
-        run_started_event_(WaitableEvent::ResetPolicy::MANUAL,
-                           WaitableEvent::InitialState::NOT_SIGNALED) {}
+        manager_to_join_(manager_to_join) {}
 
   ~CallJoinFromDifferentThread() override = default;
 
@@ -398,10 +444,8 @@ class TaskSchedulerSingleThreadTaskRunnerManagerJoinTest
 TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerJoinTest, ConcurrentJoin) {
   // Exercises the codepath where the workers are unavailable for unregistration
   // because of a Join call.
-  WaitableEvent task_running(WaitableEvent::ResetPolicy::MANUAL,
-                             WaitableEvent::InitialState::NOT_SIGNALED);
-  WaitableEvent task_blocking(WaitableEvent::ResetPolicy::MANUAL,
-                              WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent task_running;
+  WaitableEvent task_blocking;
 
   {
     auto task_runner = single_thread_task_runner_manager_
@@ -428,10 +472,8 @@ TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerJoinTest,
        ConcurrentJoinExtraSkippedTask) {
   // Tests to make sure that tasks are properly cleaned up at Join, allowing
   // SingleThreadTaskRunners to unregister themselves.
-  WaitableEvent task_running(WaitableEvent::ResetPolicy::MANUAL,
-                             WaitableEvent::InitialState::NOT_SIGNALED);
-  WaitableEvent task_blocking(WaitableEvent::ResetPolicy::MANUAL,
-                              WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent task_running;
+  WaitableEvent task_blocking;
 
   {
     auto task_runner = single_thread_task_runner_manager_
@@ -443,7 +485,7 @@ TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerJoinTest,
         BindOnce(&WaitableEvent::Signal, Unretained(&task_running))));
     EXPECT_TRUE(task_runner->PostTask(
         FROM_HERE, BindOnce(&WaitableEvent::Wait, Unretained(&task_blocking))));
-    EXPECT_TRUE(task_runner->PostTask(FROM_HERE, BindOnce(&DoNothing)));
+    EXPECT_TRUE(task_runner->PostTask(FROM_HERE, DoNothing()));
   }
 
   task_running.Wait();
@@ -554,7 +596,7 @@ TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerTestWin, PumpsMessages) {
              HWND* hwnd) { *hwnd = test_harness->CreateTestWindow(); },
           Unretained(this), &hwnd));
 
-  task_tracker_.Flush();
+  task_tracker_.FlushForTesting();
 
   ASSERT_NE(hwnd, nullptr);
   // If the message pump isn't running, we will hang here. This simulates how
@@ -590,8 +632,7 @@ class TaskSchedulerSingleThreadTaskRunnerManagerStartTest
 TEST_F(TaskSchedulerSingleThreadTaskRunnerManagerStartTest,
        PostTaskBeforeStart) {
   AtomicFlag manager_started;
-  WaitableEvent task_finished(WaitableEvent::ResetPolicy::MANUAL,
-                              WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent task_finished;
   single_thread_task_runner_manager_
       ->CreateSingleThreadTaskRunnerWithTraits(
           TaskTraits(), SingleThreadTaskRunnerThreadMode::DEDICATED)

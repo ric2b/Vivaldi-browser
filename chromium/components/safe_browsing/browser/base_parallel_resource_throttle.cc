@@ -32,7 +32,8 @@ class BaseParallelResourceThrottle::URLLoaderThrottleHolder
   uint32_t inside_delegate_calls() const { return inside_delegate_calls_; }
 
   // content::URLLoaderThrottle::Delegate implementation:
-  void CancelWithError(int error_code) override {
+  void CancelWithError(int error_code,
+                       base::StringPiece custom_reason) override {
     if (!owner_)
       return;
 
@@ -142,8 +143,9 @@ void BaseParallelResourceThrottle::WillRedirectRequest(
   // The safe browsing URLLoaderThrottle doesn't use ResourceResponse, so pass
   // in an empty struct to avoid changing ResourceThrottle signature.
   network::ResourceResponseHead resource_response;
+  std::vector<std::string> to_be_removed_headers;
   url_loader_throttle_holder_->throttle()->WillRedirectRequest(
-      redirect_info, resource_response, defer);
+      redirect_info, resource_response, defer, &to_be_removed_headers);
   DCHECK(!*defer);
   throttle_in_band_ = false;
 }

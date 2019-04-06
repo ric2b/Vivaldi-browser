@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/audio/audio_input_device.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
@@ -9,17 +10,17 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sync_socket.h"
-#include "media/audio/audio_input_device.h"
+#include "base/test/scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::CancelableSyncSocket;
-using base::SharedMemory;
 using base::SyncSocket;
 using testing::_;
 using testing::DoAll;
 using testing::Invoke;
+using testing::InvokeWithoutArgs;
 
 namespace media {
 
@@ -32,14 +33,14 @@ class MockAudioInputIPC : public AudioInputIPC {
   MockAudioInputIPC() = default;
   ~MockAudioInputIPC() override = default;
 
-  MOCK_METHOD5(CreateStream,
+  MOCK_METHOD4(CreateStream,
                void(AudioInputIPCDelegate* delegate,
-                    int session_id,
                     const AudioParameters& params,
                     bool automatic_gain_control,
                     uint32_t total_segments));
   MOCK_METHOD0(RecordStream, void());
   MOCK_METHOD1(SetVolume, void(double volume));
+  MOCK_METHOD1(SetOutputDeviceForAec, void(const std::string&));
   MOCK_METHOD0(CloseStream, void());
 };
 
@@ -59,20 +60,14 @@ class MockCaptureCallback : public AudioCapturerSource::CaptureCallback {
   MOCK_METHOD1(OnCaptureMuted, void(bool is_muted));
 };
 
-// Used to terminate a loop from a different thread than the loop belongs to.
-// |task_runner| should be a SingleThreadTaskRunner.
-ACTION_P(QuitLoop, task_runner) {
-  task_runner->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
-}
-
 }  // namespace.
 
 // Regular construction.
 TEST(AudioInputDeviceTest, Noop) {
   base::MessageLoopForIO io_loop;
   MockAudioInputIPC* input_ipc = new MockAudioInputIPC();
-  scoped_refptr<AudioInputDevice> device(
-      new AudioInputDevice(base::WrapUnique(input_ipc), io_loop.task_runner()));
+  scoped_refptr<AudioInputDevice> device(new AudioInputDevice(
+      base::WrapUnique(input_ipc), base::ThreadPriority::REALTIME_AUDIO));
 }
 
 ACTION_P(ReportStateChange, device) {
@@ -82,70 +77,64 @@ ACTION_P(ReportStateChange, device) {
 // Verify that we get an OnCaptureError() callback if CreateStream fails.
 TEST(AudioInputDeviceTest, FailToCreateStream) {
   AudioParameters params(AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                         CHANNEL_LAYOUT_STEREO, 48000, 16, 480);
+                         CHANNEL_LAYOUT_STEREO, 48000, 480);
 
-  base::MessageLoopForIO io_loop;
   MockCaptureCallback callback;
   MockAudioInputIPC* input_ipc = new MockAudioInputIPC();
-  scoped_refptr<AudioInputDevice> device(
-      new AudioInputDevice(base::WrapUnique(input_ipc), io_loop.task_runner()));
-  device->Initialize(params, &callback, 1);
-  device->Start();
-  EXPECT_CALL(*input_ipc, CreateStream(_, _, _, _, _))
+  scoped_refptr<AudioInputDevice> device(new AudioInputDevice(
+      base::WrapUnique(input_ipc), base::ThreadPriority::REALTIME_AUDIO));
+  device->Initialize(params, &callback);
+  EXPECT_CALL(*input_ipc, CreateStream(_, _, _, _))
       .WillOnce(ReportStateChange(device.get()));
-  EXPECT_CALL(callback, OnCaptureError(_))
-      .WillOnce(QuitLoop(io_loop.task_runner()));
-  base::RunLoop().Run();
+  EXPECT_CALL(callback, OnCaptureError(_));
+  device->Start();
   device->Stop();
-  base::RunLoop().RunUntilIdle();
-}
-
-ACTION_P3(ReportOnStreamCreated, device, handle, socket) {
-  static_cast<AudioInputIPCDelegate*>(device)->OnStreamCreated(handle, socket,
-                                                               false);
 }
 
 TEST(AudioInputDeviceTest, CreateStream) {
   AudioParameters params(AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                         CHANNEL_LAYOUT_STEREO, 48000, 16, 480);
-  SharedMemory shared_memory;
+                         CHANNEL_LAYOUT_STEREO, 48000, 480);
+  base::MappedReadOnlyRegion shared_memory;
   CancelableSyncSocket browser_socket;
   CancelableSyncSocket renderer_socket;
 
   const uint32_t memory_size =
       media::ComputeAudioInputBufferSize(params, kMemorySegmentCount);
 
-  ASSERT_TRUE(shared_memory.CreateAndMapAnonymous(memory_size));
-  memset(shared_memory.memory(), 0xff, memory_size);
+  shared_memory = base::ReadOnlySharedMemoryRegion::Create(memory_size);
+  ASSERT_TRUE(shared_memory.IsValid());
+  memset(shared_memory.mapping.memory(), 0xff, memory_size);
 
   ASSERT_TRUE(
       CancelableSyncSocket::CreatePair(&browser_socket, &renderer_socket));
   SyncSocket::TransitDescriptor audio_device_socket_descriptor;
   ASSERT_TRUE(renderer_socket.PrepareTransitDescriptor(
       base::GetCurrentProcessHandle(), &audio_device_socket_descriptor));
-  base::SharedMemoryHandle duplicated_memory_handle =
-      shared_memory.handle().Duplicate();
-  ASSERT_TRUE(duplicated_memory_handle.IsValid());
+  base::ReadOnlySharedMemoryRegion duplicated_shared_memory_region =
+      shared_memory.region.Duplicate();
+  ASSERT_TRUE(duplicated_shared_memory_region.IsValid());
 
-  base::MessageLoopForIO io_loop;
+  base::test::ScopedTaskEnvironment ste;
   MockCaptureCallback callback;
   MockAudioInputIPC* input_ipc = new MockAudioInputIPC();
-  scoped_refptr<AudioInputDevice> device(
-      new AudioInputDevice(base::WrapUnique(input_ipc), io_loop.task_runner()));
-  device->Initialize(params, &callback, 1);
-  device->Start();
+  scoped_refptr<AudioInputDevice> device(new AudioInputDevice(
+      base::WrapUnique(input_ipc), base::ThreadPriority::REALTIME_AUDIO));
+  device->Initialize(params, &callback);
 
-  EXPECT_CALL(*input_ipc, CreateStream(_, _, _, _, _))
-      .WillOnce(ReportOnStreamCreated(
-          device.get(), duplicated_memory_handle,
-          SyncSocket::UnwrapHandle(audio_device_socket_descriptor)));
+  EXPECT_CALL(*input_ipc, CreateStream(_, _, _, _))
+      .WillOnce(InvokeWithoutArgs([&]() {
+        static_cast<AudioInputIPCDelegate*>(device.get())
+            ->OnStreamCreated(
+                std::move(duplicated_shared_memory_region),
+                SyncSocket::UnwrapHandle(audio_device_socket_descriptor),
+                false);
+      }));
   EXPECT_CALL(*input_ipc, RecordStream());
-  EXPECT_CALL(callback, OnCaptureStarted())
-      .WillOnce(QuitLoop(io_loop.task_runner()));
-  base::RunLoop().Run();
+
+  EXPECT_CALL(callback, OnCaptureStarted());
+  device->Start();
+  EXPECT_CALL(*input_ipc, CloseStream());
   device->Stop();
-  base::RunLoop().RunUntilIdle();
-  duplicated_memory_handle.Close();
 }
 
 }  // namespace media.

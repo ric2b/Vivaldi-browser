@@ -37,13 +37,13 @@ class CONTENT_EXPORT StartupTaskRunner {
  public:
   // Constructor: Note that |startup_complete_callback| is optional. If it is
   // not null it will be called once all the startup tasks have run.
-  StartupTaskRunner(base::Callback<void(int)> startup_complete_callback,
+  StartupTaskRunner(base::OnceCallback<void(int)> startup_complete_callback,
                     scoped_refptr<base::SingleThreadTaskRunner> proxy);
 
   ~StartupTaskRunner();
 
   // Add a task to the queue of startup tasks to be run.
-  void AddTask(StartupTask& callback);
+  void AddTask(StartupTask callback);
 
   // Start running the tasks asynchronously.
   void StartRunningTasksAsync();
@@ -57,7 +57,7 @@ class CONTENT_EXPORT StartupTaskRunner {
   std::list<StartupTask> task_list_;
   void WrappedTask();
 
-  base::Callback<void(int)> startup_complete_callback_;
+  base::OnceCallback<void(int)> startup_complete_callback_;
   scoped_refptr<base::SingleThreadTaskRunner> proxy_;
 
   DISALLOW_COPY_AND_ASSIGN(StartupTaskRunner);

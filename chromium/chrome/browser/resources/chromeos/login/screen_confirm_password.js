@@ -30,6 +30,14 @@ login.createScreen('ConfirmPasswordScreen', 'confirm-password', function() {
       }.bind(this));
     },
 
+    /**
+     * Returns default event target element.
+     * @type {Object}
+     */
+    get defaultControl() {
+      return $('saml-confirm-password');
+    },
+
     /** @override */
     onBeforeShow: function(data) {
       $('login-header-bar').signinUIState =
@@ -63,7 +71,6 @@ login.createScreen('ConfirmPasswordScreen', 'confirm-password', function() {
       if (attemptCount > 0)
         this.confirmPasswordForm_.invalidate();
       Oobe.showScreen({id: SCREEN_CONFIRM_PASSWORD});
-      $('progress-dots').hidden = true;
     }
   };
 });

@@ -7,8 +7,6 @@
 
 #include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
 
-#include "platform_media/common/pipeline_stats.h"
-
 namespace media {
 
 WMFVideoDecoder::WMFVideoDecoder(
@@ -27,13 +25,12 @@ void WMFVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                  bool low_delay,
                                  CdmContext* cdm_context,
                                  const InitCB& init_cb,
-                                 const OutputCB& output_cb) {
-  pipeline_stats::AddDecoderClass(GetDisplayName());
-
+                                 const OutputCB& output_cb,
+                                 const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
   impl_.Initialize(config, init_cb, output_cb);
 }
 
-void WMFVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void WMFVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                              const DecodeCB& decode_cb) {
   impl_.Decode(buffer, decode_cb);
 }

@@ -35,7 +35,7 @@ TEST(MessageTest, AppendAndPopByte) {
 
   uint8_t byte_value = 0;
   ASSERT_TRUE(reader.PopByte(&byte_value));
-  EXPECT_EQ(123, byte_value);  // Should match with the input.
+  EXPECT_EQ(123, byte_value);          // Should match with the input.
   ASSERT_FALSE(reader.HasMoreData());  // Should not have more data to read.
 
   // Try to get another byte. Should fail.
@@ -240,6 +240,48 @@ TEST(MessageTest, ArrayOfBytes) {
   EXPECT_EQ(3, output_bytes[2]);
 }
 
+TEST(MessageTest, ArrayOfInt32s) {
+  std::unique_ptr<Response> message(Response::CreateEmpty());
+  MessageWriter writer(message.get());
+  std::vector<int32_t> int32s;
+  int32s.push_back(1);
+  int32s.push_back(2);
+  int32s.push_back(3);
+  writer.AppendArrayOfInt32s(int32s.data(), int32s.size());
+
+  MessageReader reader(message.get());
+  const int32_t* output_int32s = nullptr;
+  size_t length = 0;
+  ASSERT_EQ("ai", reader.GetDataSignature());
+  ASSERT_TRUE(reader.PopArrayOfInt32s(&output_int32s, &length));
+  ASSERT_FALSE(reader.HasMoreData());
+  ASSERT_EQ(3U, length);
+  EXPECT_EQ(1, output_int32s[0]);
+  EXPECT_EQ(2, output_int32s[1]);
+  EXPECT_EQ(3, output_int32s[2]);
+}
+
+TEST(MessageTest, ArrayOfUint32s) {
+  std::unique_ptr<Response> message(Response::CreateEmpty());
+  MessageWriter writer(message.get());
+  std::vector<uint32_t> uint32s;
+  uint32s.push_back(1);
+  uint32s.push_back(2);
+  uint32s.push_back(3);
+  writer.AppendArrayOfUint32s(uint32s.data(), uint32s.size());
+
+  MessageReader reader(message.get());
+  const uint32_t* output_uint32s = nullptr;
+  size_t length = 0;
+  ASSERT_EQ("au", reader.GetDataSignature());
+  ASSERT_TRUE(reader.PopArrayOfUint32s(&output_uint32s, &length));
+  ASSERT_FALSE(reader.HasMoreData());
+  ASSERT_EQ(3U, length);
+  EXPECT_EQ(1U, output_uint32s[0]);
+  EXPECT_EQ(2U, output_uint32s[1]);
+  EXPECT_EQ(3U, output_uint32s[2]);
+}
+
 TEST(MessageTest, ArrayOfDoubles) {
   std::unique_ptr<Response> message(Response::CreateEmpty());
   MessageWriter writer(message.get());
@@ -334,7 +376,6 @@ TEST(MessageTest, ProtoBuf) {
   EXPECT_EQ(receive_message.text(), send_message.text());
   EXPECT_EQ(receive_message.number(), send_message.number());
 }
-
 
 // Test that an array can be properly written and read. We only have this
 // test for array, as repeating this for other container types is too
@@ -512,15 +553,16 @@ TEST(MessageTest, MethodCall) {
   MessageWriter writer(&method_call);
   writer.AppendString("payload");
 
-  EXPECT_EQ("message_type: MESSAGE_METHOD_CALL\n"
-            "destination: com.example.Service\n"
-            "path: /com/example/Object\n"
-            "interface: com.example.Interface\n"
-            "member: SomeMethod\n"
-            "signature: s\n"
-            "\n"
-            "string \"payload\"\n",
-            method_call.ToString());
+  EXPECT_EQ(
+      "message_type: MESSAGE_METHOD_CALL\n"
+      "destination: com.example.Service\n"
+      "path: /com/example/Object\n"
+      "interface: com.example.Interface\n"
+      "member: SomeMethod\n"
+      "signature: s\n"
+      "\n"
+      "string \"payload\"\n",
+      method_call.ToString());
 }
 
 TEST(MessageTest, MethodCall_FromRawMessage) {
@@ -544,14 +586,15 @@ TEST(MessageTest, Signal) {
   MessageWriter writer(&signal);
   writer.AppendString("payload");
 
-  EXPECT_EQ("message_type: MESSAGE_SIGNAL\n"
-            "path: /com/example/Object\n"
-            "interface: com.example.Interface\n"
-            "member: SomeSignal\n"
-            "signature: s\n"
-            "\n"
-            "string \"payload\"\n",
-            signal.ToString());
+  EXPECT_EQ(
+      "message_type: MESSAGE_SIGNAL\n"
+      "path: /com/example/Object\n"
+      "interface: com.example.Interface\n"
+      "member: SomeSignal\n"
+      "signature: s\n"
+      "\n"
+      "string \"payload\"\n",
+      signal.ToString());
 }
 
 TEST(MessageTest, Signal_FromRawMessage) {
@@ -585,7 +628,7 @@ TEST(MessageTest, Response_FromMethodCall) {
 
 TEST(MessageTest, ErrorResponse_FromMethodCall) {
   const uint32_t kSerial = 123;
-const char kErrorMessage[] = "error message";
+  const char kErrorMessage[] = "error message";
 
   MethodCall method_call("com.example.Interface", "SomeMethod");
   method_call.SetSerial(kSerial);
@@ -672,12 +715,13 @@ TEST(MessageTest, ToString_LongString) {
   MessageWriter writer(message.get());
   writer.AppendString(kLongString);
 
-  ASSERT_EQ("message_type: MESSAGE_METHOD_RETURN\n"
-            "signature: s\n\n"
-            "string \"oooooooooooooooooooooooooooooooooooooooooooooooo"
-            "oooooooooooooooooooooooooooooooooooooooooooooooooooo... "
-            "(1000 bytes in total)\"\n",
-            message->ToString());
+  ASSERT_EQ(
+      "message_type: MESSAGE_METHOD_RETURN\n"
+      "signature: s\n\n"
+      "string \"oooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooo... "
+      "(1000 bytes in total)\"\n",
+      message->ToString());
 }
 
 }  // namespace dbus

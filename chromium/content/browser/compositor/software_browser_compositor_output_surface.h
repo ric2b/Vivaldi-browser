@@ -7,15 +7,11 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/common/content_export.h"
-#include "gpu/vulkan/features.h"
-
-namespace cc {
-class SoftwareOutputDevice;
-}
+#include "gpu/vulkan/buildflags.h"
+#include "ui/latency/latency_tracker.h"
 
 namespace content {
 
@@ -24,8 +20,7 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
  public:
   SoftwareBrowserCompositorOutputSurface(
       std::unique_ptr<viz::SoftwareOutputDevice> software_device,
-      const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+      const UpdateVSyncParametersCallback& update_vsync_parameters_callback);
 
   ~SoftwareBrowserCompositorOutputSurface() override;
 
@@ -44,26 +39,21 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   gfx::BufferFormat GetOverlayBufferFormat() const override;
-  bool SurfaceIsSuspendForRecycle() const override;
   uint32_t GetFramebufferCopyTextureFormat() override;
 #if BUILDFLAG(ENABLE_VULKAN)
   gpu::VulkanSurface* GetVulkanSurface() override;
 #endif
+  unsigned UpdateGpuFence() override;
 
  private:
-  // BrowserCompositorOutputSurface implementation.
-#if defined(OS_MACOSX)
-  void SetSurfaceSuspendedForRecycle(bool suspended) override;
-#endif
-
-  void SwapBuffersCallback(uint64_t swap_id);
+  void SwapBuffersCallback(const std::vector<ui::LatencyInfo>& latency_info,
+                           bool need_presentation_feedback);
   void UpdateVSyncCallback(const base::TimeTicks timebase,
                            const base::TimeDelta interval);
 
   viz::OutputSurfaceClient* client_ = nullptr;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  uint64_t swap_id_ = 0;
   base::TimeDelta refresh_interval_;
+  ui::LatencyTracker latency_tracker_;
   base::WeakPtrFactory<SoftwareBrowserCompositorOutputSurface> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareBrowserCompositorOutputSurface);

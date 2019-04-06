@@ -17,8 +17,8 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/scoped_task_environment.h"
@@ -44,6 +44,8 @@
 #include "sql/test/test_helpers.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -51,41 +53,7 @@ using blink::mojom::StorageType;
 
 namespace {
 
-const base::Time kZeroTime;
-const GURL kManifestUrl("http://blah/manifest");
-const GURL kManifestUrl2("http://blah/manifest2");
-const GURL kManifestUrl3("http://blah/manifest3");
-const GURL kEntryUrl("http://blah/entry");
-const GURL kEntryUrl2("http://blah/entry2");
-const GURL kFallbackNamespace("http://blah/fallback_namespace/");
-const GURL kFallbackNamespace2("http://blah/fallback_namespace/longer");
-const GURL kFallbackTestUrl("http://blah/fallback_namespace/longer/test");
-const GURL kOnlineNamespace("http://blah/online_namespace");
-const GURL kOnlineNamespaceWithinFallback(
-    "http://blah/fallback_namespace/online/");
-const GURL kInterceptNamespace("http://blah/intercept_namespace/");
-const GURL kInterceptNamespace2("http://blah/intercept_namespace/longer/");
-const GURL kInterceptTestUrl("http://blah/intercept_namespace/longer/test");
-const GURL kInterceptPatternNamespace("http://blah/intercept_pattern/*/bar");
-const GURL kInterceptPatternTestPositiveUrl(
-    "http://blah/intercept_pattern/foo/bar");
-const GURL kInterceptPatternTestNegativeUrl(
-    "http://blah/intercept_pattern/foo/not_bar");
-const GURL kFallbackPatternNamespace("http://blah/fallback_pattern/*/bar");
-const GURL kFallbackPatternTestPositiveUrl(
-    "http://blah/fallback_pattern/foo/bar");
-const GURL kFallbackPatternTestNegativeUrl(
-    "http://blah/fallback_pattern/foo/not_bar");
-const GURL kOrigin(kManifestUrl.GetOrigin());
-
-const int kManifestEntryIdOffset = 100;
-const int kFallbackEntryIdOffset = 1000;
-
-const GURL kDefaultEntryUrl("http://blah/makecacheandgroup_default_entry");
-const int kDefaultEntrySize = 10;
-const int kDefaultEntryIdOffset = 12345;
-
-const int kMockQuota = 5000;
+constexpr int kMockQuota = 5000;
 
 // The Reinitialize test needs some http accessible resources to run,
 // we mock stuff inprocess for that.
@@ -288,19 +256,21 @@ class AppCacheStorageImplTest : public testing::Test {
 
     void GetUsageAndQuota(const GURL& origin,
                           StorageType type,
-                          const UsageAndQuotaCallback& callback) override {
+                          UsageAndQuotaCallback callback) override {
       EXPECT_EQ(StorageType::kTemporary, type);
       if (async_) {
         base::SequencedTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, base::BindOnce(&MockQuotaManager::CallCallback,
-                                      base::Unretained(this), callback));
+            FROM_HERE,
+            base::BindOnce(&MockQuotaManager::CallCallback,
+                           base::Unretained(this), std::move(callback)));
         return;
       }
-      CallCallback(callback);
+      CallCallback(std::move(callback));
     }
 
-    void CallCallback(const UsageAndQuotaCallback& callback) {
-      callback.Run(blink::mojom::QuotaStatusCode::kOk, 0, kMockQuota);
+    void CallCallback(UsageAndQuotaCallback callback) {
+      std::move(callback).Run(blink::mojom::QuotaStatusCode::kOk, 0,
+                              kMockQuota);
     }
 
     bool async_;
@@ -321,7 +291,7 @@ class AppCacheStorageImplTest : public testing::Test {
     }
 
     void NotifyStorageAccessed(storage::QuotaClient::ID client_id,
-                               const GURL& origin,
+                               const url::Origin& origin,
                                StorageType type) override {
       EXPECT_EQ(storage::QuotaClient::kAppcache, client_id);
       EXPECT_EQ(StorageType::kTemporary, type);
@@ -330,7 +300,7 @@ class AppCacheStorageImplTest : public testing::Test {
     }
 
     void NotifyStorageModified(storage::QuotaClient::ID client_id,
-                               const GURL& origin,
+                               const url::Origin& origin,
                                StorageType type,
                                int64_t delta) override {
       EXPECT_EQ(storage::QuotaClient::kAppcache, client_id);
@@ -342,20 +312,20 @@ class AppCacheStorageImplTest : public testing::Test {
 
     // Not needed for our tests.
     void RegisterClient(storage::QuotaClient* client) override {}
-    void NotifyOriginInUse(const GURL& origin) override {}
-    void NotifyOriginNoLongerInUse(const GURL& origin) override {}
+    void NotifyOriginInUse(const url::Origin& origin) override {}
+    void NotifyOriginNoLongerInUse(const url::Origin& origin) override {}
     void SetUsageCacheEnabled(storage::QuotaClient::ID client_id,
-                              const GURL& origin,
+                              const url::Origin& origin,
                               StorageType type,
                               bool enabled) override {}
     void GetUsageAndQuota(base::SequencedTaskRunner* original_task_runner,
-                          const GURL& origin,
+                          const url::Origin& origin,
                           StorageType type,
-                          const UsageAndQuotaCallback& callback) override {}
+                          UsageAndQuotaCallback callback) override {}
 
     int notify_storage_accessed_count_;
     int notify_storage_modified_count_;
-    GURL last_origin_;
+    url::Origin last_origin_;
     int last_delta_;
     scoped_refptr<MockQuotaManager> mock_manager_;
 
@@ -405,7 +375,9 @@ class AppCacheStorageImplTest : public testing::Test {
 
   // Test harness --------------------------------------------------
 
-  AppCacheStorageImplTest() { request_delegate_.set_quit_on_complete(false); }
+  AppCacheStorageImplTest() {
+    request_delegate_.set_on_complete(base::DoNothing());
+  }
 
   template <class Method>
   void RunTestOnIOThread(Method method) {
@@ -851,7 +823,7 @@ class AppCacheStorageImplTest : public testing::Test {
     fallback_namespace_record.cache_id = 1;
     fallback_namespace_record.namespace_.target_url = kEntryUrl;
     fallback_namespace_record.namespace_.namespace_url = kFallbackNamespace;
-    fallback_namespace_record.origin = kManifestUrl.GetOrigin();
+    fallback_namespace_record.origin = url::Origin::Create(kManifestUrl);
     EXPECT_TRUE(database()->InsertNamespace(&fallback_namespace_record));
 
     AppCacheDatabase::OnlineWhiteListRecord online_whitelist_record;
@@ -1092,13 +1064,10 @@ class AppCacheStorageImplTest : public testing::Test {
                               &fallbacks,
                               &whitelists);
 
-    std::vector<AppCacheDatabase::EntryRecord>::const_iterator iter =
-        entries.begin();
-    while (iter != entries.end()) {
+    for (const auto& entry : entries) {
       // MakeCacheAndGroup has inserted the default entry record already.
-      if (iter->url != kDefaultEntryUrl)
-        EXPECT_TRUE(database()->InsertEntry(&(*iter)));
-      ++iter;
+      if (entry.url != kDefaultEntryUrl)
+        EXPECT_TRUE(database()->InsertEntry(&entry));
     }
 
     EXPECT_TRUE(database()->InsertNamespaceRecords(fallbacks));
@@ -1166,13 +1135,10 @@ class AppCacheStorageImplTest : public testing::Test {
                               &fallbacks,
                               &whitelists);
 
-    std::vector<AppCacheDatabase::EntryRecord>::const_iterator iter =
-        entries.begin();
-    while (iter != entries.end()) {
+    for (const auto& entry : entries) {
       // MakeCacheAndGroup has inserted  the default entry record already
-      if (iter->url != kDefaultEntryUrl)
-        EXPECT_TRUE(database()->InsertEntry(&(*iter)));
-      ++iter;
+      if (entry.url != kDefaultEntryUrl)
+        EXPECT_TRUE(database()->InsertEntry(&entry));
     }
 
     EXPECT_TRUE(database()->InsertNamespaceRecords(intercepts));
@@ -1233,13 +1199,10 @@ class AppCacheStorageImplTest : public testing::Test {
                               &fallbacks,
                               &whitelists);
 
-    std::vector<AppCacheDatabase::EntryRecord>::const_iterator iter =
-        entries.begin();
-    while (iter != entries.end()) {
+    for (const auto& entry : entries) {
       // MakeCacheAndGroup has inserted  the default entry record already
-      if (iter->url != kDefaultEntryUrl)
-        EXPECT_TRUE(database()->InsertEntry(&(*iter)));
-      ++iter;
+      if (entry.url != kDefaultEntryUrl)
+        EXPECT_TRUE(database()->InsertEntry(&entry));
     }
 
     EXPECT_TRUE(database()->InsertNamespaceRecords(intercepts));
@@ -1320,13 +1283,10 @@ class AppCacheStorageImplTest : public testing::Test {
                               &fallbacks,
                               &whitelists);
 
-    std::vector<AppCacheDatabase::EntryRecord>::const_iterator iter =
-        entries.begin();
-    while (iter != entries.end()) {
+    for (const auto& entry : entries) {
       // MakeCacheAndGroup has inserted the default entry record already.
-      if (iter->url != kDefaultEntryUrl)
-        EXPECT_TRUE(database()->InsertEntry(&(*iter)));
-      ++iter;
+      if (entry.url != kDefaultEntryUrl)
+        EXPECT_TRUE(database()->InsertEntry(&entry));
     }
 
     EXPECT_TRUE(database()->InsertNamespaceRecords(fallbacks));
@@ -1434,7 +1394,7 @@ class AppCacheStorageImplTest : public testing::Test {
     fallback_namespace_record.cache_id = id;
     fallback_namespace_record.namespace_.target_url = entry_record.url;
     fallback_namespace_record.namespace_.namespace_url = kFallbackNamespace;
-    fallback_namespace_record.origin = manifest_url.GetOrigin();
+    fallback_namespace_record.origin = url::Origin::Create(manifest_url);
     EXPECT_TRUE(database()->InsertNamespace(&fallback_namespace_record));
     cache_->fallback_namespaces_.push_back(
         AppCacheNamespace(APPCACHE_FALLBACK_NAMESPACE,
@@ -1577,7 +1537,7 @@ class AppCacheStorageImplTest : public testing::Test {
     fallback_namespace_record.cache_id = 1;
     fallback_namespace_record.namespace_.target_url = kEntryUrl2;
     fallback_namespace_record.namespace_.namespace_url = kFallbackNamespace;
-    fallback_namespace_record.origin = kManifestUrl.GetOrigin();
+    fallback_namespace_record.origin = url::Origin::Create(kManifestUrl);
     EXPECT_TRUE(database()->InsertNamespace(&fallback_namespace_record));
     whitelist_record.cache_id = 1;
     whitelist_record.namespace_url = kOnlineNamespaceWithinFallback;
@@ -1609,8 +1569,8 @@ class AppCacheStorageImplTest : public testing::Test {
     if (phase == 1) {
       // We should not find anything for the online namespace.
       PushNextTask(
-          base::Bind(&AppCacheStorageImplTest::Verify_ExclusionNotFound,
-                     base::Unretained(this), kOnlineNamespace, 2));
+          base::BindOnce(&AppCacheStorageImplTest::Verify_ExclusionNotFound,
+                         base::Unretained(this), kOnlineNamespace, 2));
       storage()->FindResponseForMainRequest(
           kOnlineNamespace, GURL(), delegate());
       return;
@@ -1731,7 +1691,7 @@ class AppCacheStorageImplTest : public testing::Test {
       AppCacheDatabase::GroupRecord group_record;
       group_record.group_id = 1;
       group_record.manifest_url = manifest_url;
-      group_record.origin = manifest_url.GetOrigin();
+      group_record.origin = url::Origin::Create(manifest_url);
       EXPECT_TRUE(db.InsertGroup(&group_record));
       AppCacheDatabase::CacheRecord cache_record;
       cache_record.cache_id = 1;
@@ -1881,11 +1841,12 @@ class AppCacheStorageImplTest : public testing::Test {
     cache_->AddEntry(kDefaultEntryUrl, default_entry);
     cache_->set_complete(true);
     group_->AddCache(cache_.get());
+    url::Origin manifest_origin(url::Origin::Create(manifest_url));
     if (add_to_database) {
       AppCacheDatabase::GroupRecord group_record;
       group_record.group_id = group_id;
       group_record.manifest_url = manifest_url;
-      group_record.origin = manifest_url.GetOrigin();
+      group_record.origin = manifest_origin;
       EXPECT_TRUE(database()->InsertGroup(&group_record));
       AppCacheDatabase::CacheRecord cache_record;
       cache_record.cache_id = cache_id;
@@ -1902,8 +1863,7 @@ class AppCacheStorageImplTest : public testing::Test {
       entry_record.response_size = default_entry.response_size();
       EXPECT_TRUE(database()->InsertEntry(&entry_record));
 
-      storage()->usage_map_[manifest_url.GetOrigin()] =
-          default_entry.response_size();
+      storage()->usage_map_[manifest_origin] = default_entry.response_size();
     }
   }
 
@@ -1925,8 +1885,49 @@ class AppCacheStorageImplTest : public testing::Test {
   std::unique_ptr<AppCacheBackendImpl> backend_;
   net::TestDelegate request_delegate_;
   std::unique_ptr<net::URLRequest> request_;
-};
 
+  // Test data
+  const base::Time kZeroTime;
+  const GURL kManifestUrl = GURL("http://blah/manifest");
+  const GURL kManifestUrl2 = GURL("http://blah/manifest2");
+  const GURL kManifestUrl3 = GURL("http://blah/manifest3");
+  const GURL kEntryUrl = GURL("http://blah/entry");
+  const GURL kEntryUrl2 = GURL("http://blah/entry2");
+  const GURL kFallbackNamespace = GURL("http://blah/fallback_namespace/");
+  const GURL kFallbackNamespace2 =
+      GURL("http://blah/fallback_namespace/longer");
+  const GURL kFallbackTestUrl =
+      GURL("http://blah/fallback_namespace/longer/test");
+  const GURL kOnlineNamespace = GURL("http://blah/online_namespace");
+  const GURL kOnlineNamespaceWithinFallback =
+      GURL("http://blah/fallback_namespace/online/");
+  const GURL kInterceptNamespace = GURL("http://blah/intercept_namespace/");
+  const GURL kInterceptNamespace2 =
+      GURL("http://blah/intercept_namespace/longer/");
+  const GURL kInterceptTestUrl =
+      GURL("http://blah/intercept_namespace/longer/test");
+  const GURL kInterceptPatternNamespace =
+      GURL("http://blah/intercept_pattern/*/bar");
+  const GURL kInterceptPatternTestPositiveUrl =
+      GURL("http://blah/intercept_pattern/foo/bar");
+  const GURL kInterceptPatternTestNegativeUrl =
+      GURL("http://blah/intercept_pattern/foo/not_bar");
+  const GURL kFallbackPatternNamespace =
+      GURL("http://blah/fallback_pattern/*/bar");
+  const GURL kFallbackPatternTestPositiveUrl =
+      GURL("http://blah/fallback_pattern/foo/bar");
+  const GURL kFallbackPatternTestNegativeUrl =
+      GURL("http://blah/fallback_pattern/foo/not_bar");
+  const url::Origin kOrigin = url::Origin::Create(kManifestUrl.GetOrigin());
+
+  const int kManifestEntryIdOffset = 100;
+  const int kFallbackEntryIdOffset = 1000;
+
+  const GURL kDefaultEntryUrl =
+      GURL("http://blah/makecacheandgroup_default_entry");
+  const int kDefaultEntrySize = 10;
+  const int kDefaultEntryIdOffset = 12345;
+};
 
 TEST_F(AppCacheStorageImplTest, LoadCache_Miss) {
   RunTestOnIOThread(&AppCacheStorageImplTest::LoadCache_Miss);

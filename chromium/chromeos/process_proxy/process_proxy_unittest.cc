@@ -11,8 +11,8 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
+#include "base/command_line.h"
 #include "base/location.h"
-#include "base/message_loop/message_loop.h"
 #include "base/process/kill.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
@@ -32,6 +32,7 @@ const char kTestLineToSend[] = "abcdefgh\n";
 const char kTestLineExpected[] = "abcdefgh\r\n";
 
 const char kCatCommand[] = "cat";
+const char kFakeUserHash[] = "0123456789abcdef";
 const char kStdoutType[] = "stdout";
 const int kTestLineNum = 100;
 
@@ -153,6 +154,7 @@ class RegistryNotifiedOnProcessExitTestRunner : public TestRunner {
                   const std::string& output) override {
     EXPECT_EQ(terminal_id_, terminal_id);
     if (!output_received_) {
+      base::ScopedAllowBaseSyncPrimitivesForTesting allow_sync_primitives;
       output_received_ = true;
       EXPECT_EQ(type, "stdout");
       EXPECT_EQ(output, "p");
@@ -185,8 +187,9 @@ class ProcessProxyTest : public testing::Test {
   void InitRegistryTest(base::OnceClosure done_closure) {
     registry_ = ProcessProxyRegistry::Get();
 
+    base::CommandLine cmdline{{kCatCommand}};
     terminal_id_ = registry_->OpenProcess(
-        kCatCommand,
+        cmdline, kFakeUserHash,
         base::Bind(&ProcessProxyTest::HandleRead, base::Unretained(this)));
 
     EXPECT_GE(terminal_id_, 0);
@@ -210,6 +213,7 @@ class ProcessProxyTest : public testing::Test {
         base::GetTerminationStatus(terminal_id_, &unused_exit_code);
     EXPECT_NE(base::TERMINATION_STATUS_STILL_RUNNING, status);
     if (status == base::TERMINATION_STATUS_STILL_RUNNING) {
+      base::ScopedAllowBaseSyncPrimitivesForTesting allow_sync_primitives;
       base::Process process =
           base::Process::DeprecatedGetProcessFromHandle(terminal_id_);
       process.Terminate(0, true);

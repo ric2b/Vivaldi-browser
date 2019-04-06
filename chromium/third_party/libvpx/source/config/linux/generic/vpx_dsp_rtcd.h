@@ -471,6 +471,11 @@ void vpx_hadamard_16x16_c(const int16_t* src_diff,
                           tran_low_t* coeff);
 #define vpx_hadamard_16x16 vpx_hadamard_16x16_c
 
+void vpx_hadamard_32x32_c(const int16_t* src_diff,
+                          ptrdiff_t src_stride,
+                          tran_low_t* coeff);
+#define vpx_hadamard_32x32 vpx_hadamard_32x32_c
+
 void vpx_hadamard_8x8_c(const int16_t* src_diff,
                         ptrdiff_t src_stride,
                         tran_low_t* coeff);
@@ -1723,10 +1728,10 @@ unsigned int vpx_highbd_avg_8x8_c(const uint8_t*, int p);
 #define vpx_highbd_avg_8x8 vpx_highbd_avg_8x8_c
 
 void vpx_highbd_comp_avg_pred_c(uint16_t* comp_pred,
-                                const uint8_t* pred8,
+                                const uint16_t* pred,
                                 int width,
                                 int height,
-                                const uint8_t* ref8,
+                                const uint16_t* ref,
                                 int ref_stride);
 #define vpx_highbd_comp_avg_pred vpx_highbd_comp_avg_pred_c
 

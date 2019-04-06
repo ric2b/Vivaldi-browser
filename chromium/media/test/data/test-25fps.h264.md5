@@ -3,6 +3,9 @@
 1a69a608521e3542f6fb060855f5ba14
 # Intel - VA_FILTER_SCALING_DEFAULT
 d924f9464d01847f3c3d2dee739603cc
+# Intel - VA decode to NV12, EGLImage CSC
+82a05426b6ef227e5147eb7b710423fb
+d1ba5f08cdbcc39ee24d99acaf9477ea
 # TODO(hiroh): Update X11 value
 # Intel - Haswell - X11
 # Intel - Ivy Bridge - X11
@@ -15,3 +18,5 @@ d924f9464d01847f3c3d2dee739603cc
 b55cda7d10c37104d8c49d27c2699e40
 # ARM - MediaTek
 af21b8aa5ea63c4e88f0472ee948d01a
+# AMD - Stoney Ridge
+7ad287d048d6bdee63fbe37a3cd2c760

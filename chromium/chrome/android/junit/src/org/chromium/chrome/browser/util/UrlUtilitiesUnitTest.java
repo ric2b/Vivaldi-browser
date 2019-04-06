@@ -9,12 +9,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.annotation.Config;
 
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 
 /**
  * Unit tests for non-native part of {@link UrlUtilities}.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class UrlUtilitiesUnitTest {
     @Test
@@ -113,5 +113,15 @@ public class UrlUtilitiesUnitTest {
                 "intent://testing/#Intent;package=cybergoat.noodle.crumpet;"
                 + "component=wump.noodle/Crumpet;i.pumpkinCount%%3D=42;"
                 + "S.goat=&leg;end"));
+    }
+
+    @Test
+    public void testStripPath() throws InterruptedException {
+        Assert.assertEquals("https://example.com:9000",
+                UrlUtilities.stripPath("https://user:pass@example.com:9000/path/#extra"));
+        Assert.assertEquals("http://awesome.example.com",
+                UrlUtilities.stripPath("http://awesome.example.com/?query"));
+        Assert.assertEquals("http://localhost", UrlUtilities.stripPath("http://localhost/"));
+        Assert.assertEquals("http://", UrlUtilities.stripPath("http:"));
     }
 }

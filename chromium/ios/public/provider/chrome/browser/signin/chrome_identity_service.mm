@@ -87,7 +87,6 @@ void ChromeIdentityService::GetAccessToken(ChromeIdentity* identity,
 
 void ChromeIdentityService::GetAccessToken(ChromeIdentity* identity,
                                            const std::string& client_id,
-                                           const std::string& client_secret,
                                            const std::set<std::string>& scopes,
                                            AccessTokenCallback callback) {}
 

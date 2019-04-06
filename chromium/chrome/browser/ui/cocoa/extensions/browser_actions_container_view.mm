@@ -30,7 +30,7 @@ NSString* const kBrowserActionsContainerKeyEventKey =
     @"BrowserActionsContainerKeyEventKey";
 
 namespace {
-const CGFloat kAnimationDuration = 0.2;
+const CGFloat kBrowserActionsResizeAnimationDuration = 0.2;
 const CGFloat kGrippyWidth = 3.0;
 }  // namespace
 
@@ -59,7 +59,7 @@ const CGFloat kGrippyWidth = 3.0;
     resizable_ = YES;
 
     resizeAnimation_.reset([[NSViewAnimation alloc] init]);
-    [resizeAnimation_ setDuration:kAnimationDuration];
+    [resizeAnimation_ setDuration:kBrowserActionsResizeAnimationDuration];
     [resizeAnimation_ setAnimationBlockingMode:NSAnimationNonblocking];
     [resizeAnimation_ setDelegate:self];
 
@@ -140,7 +140,7 @@ const CGFloat kGrippyWidth = 3.0;
   if (highlight || highlight_) {
     highlight_ = std::move(highlight);
     // We don't allow resizing when the container is highlighting.
-    resizable_ = highlight.get() == nullptr;
+    resizable_ = highlight_.get() == nullptr;
     [self setNeedsDisplay:YES];
   }
 }
@@ -300,6 +300,10 @@ const CGFloat kGrippyWidth = 3.0;
 - (void)stopAnimation {
   if ([resizeAnimation_ isAnimating])
     [resizeAnimation_ stopAnimation];
+}
+
+- (BOOL)canBeResized {
+  return resizable_;
 }
 
 #pragma mark -

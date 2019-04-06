@@ -6,15 +6,15 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/test_completion_callback.h"
-#include "net/proxy/mock_proxy_resolver.h"
-#include "net/proxy/proxy_resolver_v8_tracing.h"
+#include "net/proxy_resolution/mock_proxy_resolver.h"
+#include "net/proxy_resolution/proxy_resolver_v8_tracing.h"
 #include "net/test/event_waiter.h"
 #include "net/test/gtest_util.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
@@ -40,7 +40,7 @@ class FakeProxyResolver : public net::ProxyResolverV8Tracing {
   // net::ProxyResolverV8Tracing overrides.
   void GetProxyForURL(const GURL& url,
                       net::ProxyInfo* results,
-                      const net::CompletionCallback& callback,
+                      net::CompletionOnceCallback callback,
                       std::unique_ptr<net::ProxyResolver::Request>* request,
                       std::unique_ptr<Bindings> bindings) override {}
 
@@ -58,7 +58,7 @@ class TestProxyResolverFactory : public net::ProxyResolverV8TracingFactory {
  public:
   struct PendingRequest {
     std::unique_ptr<net::ProxyResolverV8Tracing>* resolver;
-    net::CompletionCallback callback;
+    net::CompletionOnceCallback callback;
   };
 
   explicit TestProxyResolverFactory(net::EventWaiter<Event>* waiter)
@@ -67,10 +67,10 @@ class TestProxyResolverFactory : public net::ProxyResolverV8TracingFactory {
   ~TestProxyResolverFactory() override {}
 
   void CreateProxyResolverV8Tracing(
-      const scoped_refptr<net::ProxyResolverScriptData>& pac_script,
+      const scoped_refptr<net::PacFileData>& pac_script,
       std::unique_ptr<net::ProxyResolverV8Tracing::Bindings> bindings,
       std::unique_ptr<net::ProxyResolverV8Tracing>* resolver,
-      const net::CompletionCallback& callback,
+      net::CompletionOnceCallback callback,
       std::unique_ptr<net::ProxyResolverFactory::Request>* request) override {
     requests_handled_++;
     waiter_->NotifyEvent(RESOLVER_CREATED);
@@ -78,7 +78,7 @@ class TestProxyResolverFactory : public net::ProxyResolverV8TracingFactory {
     EXPECT_TRUE(resolver);
     pending_request_.reset(new PendingRequest);
     pending_request_->resolver = resolver;
-    pending_request_->callback = callback;
+    pending_request_->callback = std::move(callback);
 
     ASSERT_TRUE(bindings);
 
@@ -88,7 +88,7 @@ class TestProxyResolverFactory : public net::ProxyResolverV8TracingFactory {
   }
 
   size_t requests_handled() { return requests_handled_; }
-  const PendingRequest* pending_request() { return pending_request_.get(); }
+  PendingRequest* pending_request() { return pending_request_.get(); }
 
  private:
   net::EventWaiter<Event>* waiter_;
@@ -132,7 +132,9 @@ class ProxyResolverFactoryImplTest
     waiter_.NotifyEvent(RESOLVER_DESTROYED);
   }
 
-  void ReportResult(int32_t error) override { create_callback_.Run(error); }
+  void ReportResult(int32_t error) override {
+    std::move(create_callback_).Run(error);
+  }
 
   void Alert(const std::string& message) override {}
 
@@ -170,7 +172,7 @@ class ProxyResolverFactoryImplTest
   std::unique_ptr<base::RunLoop> service_ref_run_loop_;
 
   int instances_destroyed_ = 0;
-  net::CompletionCallback create_callback_;
+  net::CompletionOnceCallback create_callback_;
 
   net::EventWaiter<Event> waiter_;
 };
@@ -194,7 +196,7 @@ TEST_F(ProxyResolverFactoryImplTest, DisconnectProxyResolverClient) {
   mock_factory_->pending_request()->resolver->reset(new FakeProxyResolver(
       base::Bind(&ProxyResolverFactoryImplTest::OnFakeProxyInstanceDestroyed,
                  base::Unretained(this))));
-  mock_factory_->pending_request()->callback.Run(net::OK);
+  std::move(mock_factory_->pending_request()->callback).Run(net::OK);
   EXPECT_THAT(create_callback.WaitForResult(), IsOk());
   EXPECT_FALSE(service_ref_factory_.HasNoRefs());
 
@@ -232,7 +234,7 @@ TEST_F(ProxyResolverFactoryImplTest, DisconnectProxyResolverFactory) {
   mock_factory_->pending_request()->resolver->reset(new FakeProxyResolver(
       base::Bind(&ProxyResolverFactoryImplTest::OnFakeProxyInstanceDestroyed,
                  base::Unretained(this))));
-  mock_factory_->pending_request()->callback.Run(net::OK);
+  std::move(mock_factory_->pending_request()->callback).Run(net::OK);
   EXPECT_THAT(create_callback.WaitForResult(), IsOk());
   EXPECT_FALSE(service_ref_factory_.HasNoRefs());
 
@@ -262,7 +264,8 @@ TEST_F(ProxyResolverFactoryImplTest, Error) {
   net::TestCompletionCallback create_callback;
   create_callback_ = create_callback.callback();
   ASSERT_TRUE(mock_factory_->pending_request());
-  mock_factory_->pending_request()->callback.Run(net::ERR_PAC_SCRIPT_FAILED);
+  std::move(mock_factory_->pending_request()->callback)
+      .Run(net::ERR_PAC_SCRIPT_FAILED);
   EXPECT_THAT(create_callback.WaitForResult(),
               IsError(net::ERR_PAC_SCRIPT_FAILED));
 }

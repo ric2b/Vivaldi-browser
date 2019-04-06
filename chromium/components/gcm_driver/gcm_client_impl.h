@@ -43,8 +43,12 @@ class DataMessageStanza;
 }  // namespace mcs_proto
 
 namespace net {
-class HttpNetworkSession;
+class URLRequestContext;
 }  // namespace net
+
+namespace network {
+class SharedURLLoaderFactory;
+}  // namespace network
 
 namespace gcm {
 
@@ -59,7 +63,7 @@ class GCMInternalsBuilder {
   GCMInternalsBuilder();
   virtual ~GCMInternalsBuilder();
 
-  virtual std::unique_ptr<base::Clock> BuildClock();
+  virtual base::Clock* GetClock();
   virtual std::unique_ptr<MCSClient> BuildMCSClient(
       const std::string& version,
       base::Clock* clock,
@@ -69,8 +73,7 @@ class GCMInternalsBuilder {
   virtual std::unique_ptr<ConnectionFactory> BuildConnectionFactory(
       const std::vector<GURL>& endpoints,
       const net::BackoffEntry::Policy& backoff_policy,
-      net::HttpNetworkSession* gcm_network_session,
-      net::HttpNetworkSession* http_network_session,
+      net::URLRequestContext* url_request_context,
       GCMStatsRecorder* recorder);
 };
 
@@ -111,6 +114,7 @@ class GCMClientImpl
       const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
       const scoped_refptr<net::URLRequestContextGetter>&
           url_request_context_getter,
+      const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
       std::unique_ptr<Encryptor> encryptor,
       GCMClient::Delegate* delegate) override;
   void Start(StartMode start_mode) override;
@@ -134,7 +138,8 @@ class GCMClientImpl
   void UpdateAccountMapping(const AccountMapping& account_mapping) override;
   void RemoveAccountMapping(const std::string& account_id) override;
   void SetLastTokenFetchTime(const base::Time& time) override;
-  void UpdateHeartbeatTimer(std::unique_ptr<base::Timer> timer) override;
+  void UpdateHeartbeatTimer(
+      std::unique_ptr<base::RetainingOneShotTimer> timer) override;
   void AddInstanceIDData(const std::string& app_id,
                          const std::string& instance_id,
                          const std::string& extra_data) override;
@@ -345,9 +350,8 @@ class GCMClientImpl
   // Device checkin info (android ID and security token used by device).
   CheckinInfo device_checkin_info_;
 
-  // Clock used for timing of retry logic. Passed in for testing. Owned by
-  // GCMClientImpl.
-  std::unique_ptr<base::Clock> clock_;
+  // Clock used for timing of retry logic. Passed in for testing.
+  base::Clock* clock_;
 
   // Information about the chrome build.
   // TODO(fgorski): Check if it can be passed in constructor and made const.
@@ -364,9 +368,9 @@ class GCMClientImpl
   // resetting and loading from the store again and again.
   bool gcm_store_reset_;
 
-  std::unique_ptr<net::HttpNetworkSession> network_session_;
   std::unique_ptr<ConnectionFactory> connection_factory_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // Controls receiving and sending of packets and reliable message queueing.
   // Must be destroyed before |network_session_|.

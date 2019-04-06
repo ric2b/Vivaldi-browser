@@ -9,9 +9,6 @@
 
 #include <stdint.h>
 
-// Vivaldi constants
-#include "extensions/api/guest_view/vivaldi_web_view_constants.h"
-
 namespace webview {
 
 // Attributes.
@@ -75,8 +72,6 @@ extern const char kContextMenuItems[];
 extern const char kDefaultPromptText[];
 extern const char kFindSearchText[];
 extern const char kFindFinalUpdate[];
-extern const char kInitialHeight[];
-extern const char kInitialLeft[];
 extern const char kInitialTop[];
 extern const char kInitialWidth[];
 extern const char kLastUnlockedBySelf[];

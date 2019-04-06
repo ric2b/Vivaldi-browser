@@ -17,19 +17,37 @@ print_preview_new.SelectOption;
 Polymer({
   is: 'print-preview-settings-select',
 
-  behaviors: [SettingsBehavior],
+  behaviors: [SettingsBehavior, print_preview_new.SelectBehavior],
 
   properties: {
     /** @type {{ option: Array<!print_preview_new.SelectOption> }} */
     capability: Object,
 
-    /** @type {string} */
     settingName: String,
+
+    disabled: Boolean,
+
+    /** @private {string} */
+    selectedValue_: {
+      type: String,
+      notify: true,
+      value: '',
+    },
+  },
+
+  /**
+   * @param {!print_preview_new.SelectOption} option Option to check.
+   * @return {boolean} Whether the option is selected.
+   * @private
+   */
+  isSelected_: function(option) {
+    return this.getValue_(option) == this.selectedValue_ ||
+        (!!option.is_default && this.selectedValue_ == '');
   },
 
   /** @param {string} value The value to select. */
   selectValue: function(value) {
-    this.$$('select').value = value;
+    this.selectedValue_ = value;
   },
 
   /**
@@ -57,15 +75,15 @@ Polymer({
     return displayName || option.name || '';
   },
 
-  /** @private */
-  onChange_: function() {
-    let value = null;
+  /** @param {string} value The new select value. */
+  onProcessSelectChange: function(value) {
+    let newValue = null;
     try {
-      value = JSON.parse(this.$$('select').value);
+      newValue = JSON.parse(value);
     } catch (e) {
       assertNotReached();
       return;
     }
-    this.setSetting(this.settingName, /** @type {Object} */ (value));
+    this.setSetting(this.settingName, /** @type {Object} */ (newValue));
   },
 });

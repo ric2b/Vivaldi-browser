@@ -6,14 +6,15 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 
 namespace ui {
 
-LayerOwner::LayerOwner() : layer_(NULL) {}
-
-LayerOwner::~LayerOwner() {
+LayerOwner::LayerOwner(std::unique_ptr<Layer> layer) {
+  if (layer)
+    SetLayer(std::move(layer));
 }
+
+LayerOwner::~LayerOwner() = default;
 
 void LayerOwner::SetLayer(std::unique_ptr<Layer> layer) {
   DCHECK(!OwnsLayer());

@@ -40,6 +40,7 @@ const char HttpRequestHeaders::kProxyAuthorization[] = "Proxy-Authorization";
 const char HttpRequestHeaders::kProxyConnection[] = "Proxy-Connection";
 const char HttpRequestHeaders::kRange[] = "Range";
 const char HttpRequestHeaders::kReferer[] = "Referer";
+const char HttpRequestHeaders::kSecOriginPolicy[] = "Sec-Origin-Policy";
 const char HttpRequestHeaders::kTransferEncoding[] = "Transfer-Encoding";
 const char HttpRequestHeaders::kTokenBinding[] = "Sec-Token-Binding";
 const char HttpRequestHeaders::kUserAgent[] = "User-Agent";
@@ -75,7 +76,13 @@ bool HttpRequestHeaders::Iterator::GetNext() {
 HttpRequestHeaders::HttpRequestHeaders() = default;
 HttpRequestHeaders::HttpRequestHeaders(const HttpRequestHeaders& other) =
     default;
+HttpRequestHeaders::HttpRequestHeaders(HttpRequestHeaders&& other) = default;
 HttpRequestHeaders::~HttpRequestHeaders() = default;
+
+HttpRequestHeaders& HttpRequestHeaders::operator=(
+    const HttpRequestHeaders& other) = default;
+HttpRequestHeaders& HttpRequestHeaders::operator=(HttpRequestHeaders&& other) =
+    default;
 
 bool HttpRequestHeaders::GetHeader(const base::StringPiece& key,
                                    std::string* out) const {

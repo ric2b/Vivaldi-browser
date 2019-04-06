@@ -4,6 +4,8 @@
 
 #include "components/sync/model/stub_model_type_sync_bridge.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "components/sync/model/fake_model_type_change_processor.h"
 
@@ -11,11 +13,11 @@ namespace syncer {
 
 StubModelTypeSyncBridge::StubModelTypeSyncBridge()
     : StubModelTypeSyncBridge(
-          base::Bind(&FakeModelTypeChangeProcessor::Create)) {}
+          std::make_unique<FakeModelTypeChangeProcessor>()) {}
 
 StubModelTypeSyncBridge::StubModelTypeSyncBridge(
-    const ChangeProcessorFactory& change_processor_factory)
-    : ModelTypeSyncBridge(change_processor_factory, PREFERENCES) {}
+    std::unique_ptr<ModelTypeChangeProcessor> change_processor)
+    : ModelTypeSyncBridge(std::move(change_processor)) {}
 
 StubModelTypeSyncBridge::~StubModelTypeSyncBridge() {}
 
@@ -39,7 +41,7 @@ base::Optional<ModelError> StubModelTypeSyncBridge::ApplySyncChanges(
 void StubModelTypeSyncBridge::GetData(StorageKeyList storage_keys,
                                       DataCallback callback) {}
 
-void StubModelTypeSyncBridge::GetAllData(DataCallback callback) {}
+void StubModelTypeSyncBridge::GetAllDataForDebugging(DataCallback callback) {}
 
 std::string StubModelTypeSyncBridge::GetClientTag(
     const EntityData& entity_data) {

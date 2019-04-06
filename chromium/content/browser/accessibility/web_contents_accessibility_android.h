@@ -151,12 +151,18 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
       jint id,
       jint cursor_index);
 
-  // Set accessibility focus. This sends a message to the renderer to
-  // asynchronously load inline text boxes for this node only, enabling more
-  // accurate movement by granularities on this node.
-  void SetAccessibilityFocus(JNIEnv* env,
-                             const base::android::JavaParamRef<jobject>& obj,
-                             jint id);
+  // Move accessibility focus. This sends a message to the renderer to
+  // clear accessibility focus on the previous node and set accessibility
+  // focus on the current node. This isn't exposed to the open web, but used
+  // internally.
+  //
+  // In addition, when a node gets accessibility focus we asynchronously
+  // load inline text boxes for this node only, enabling more accurate
+  // movement by granularities on this node.
+  void MoveAccessibilityFocus(JNIEnv* env,
+                              const base::android::JavaParamRef<jobject>& obj,
+                              jint old_unique_id,
+                              jint new_unique_id);
 
   // Returns true if the object is a slider.
   bool IsSlider(JNIEnv* env,
@@ -213,7 +219,7 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
       jint start,
       jint len);
 
-  void UpdateFrameInfo();
+  void UpdateFrameInfo(float page_scale);
 
   void set_root_manager(BrowserAccessibilityManagerAndroid* manager) {
     root_manager_ = manager;
@@ -252,6 +258,8 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   WebContentsImpl* const web_contents_;
 
   bool frame_info_initialized_;
+
+  float page_scale_ = 1.f;
 
   BrowserAccessibilityManagerAndroid* root_manager_;
 

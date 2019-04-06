@@ -5,11 +5,11 @@
 #include "content/public/test/mock_render_thread.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "content/common/dom_storage/dom_storage_types.h"
 #include "content/common/frame_messages.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/view_messages.h"
@@ -21,7 +21,7 @@
 #include "ipc/message_filter.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebScriptController.h"
+#include "third_party/blink/public/web/web_script_controller.h"
 
 namespace content {
 
@@ -85,14 +85,10 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
     std::move(callback).Run(false);
   }
 
+#if defined(OS_LINUX)
   void SetThreadPriority(int32_t platform_thread_id,
                          base::ThreadPriority thread_priority) override {}
-
-  void LoadFont(const base::string16& font_name,
-                const float font_size_point,
-                LoadFontCallback callback) override {
-    NOTREACHED();
-  }
+#endif
 
  private:
   MockRenderThread* const thread_;
@@ -217,10 +213,6 @@ MockRenderThread::HostAllocateSharedMemoryBuffer(size_t buffer_size) {
   return std::unique_ptr<base::SharedMemory>(shared_buf.release());
 }
 
-viz::SharedBitmapManager* MockRenderThread::GetSharedBitmapManager() {
-  return &shared_bitmap_manager_;
-}
-
 void MockRenderThread::RegisterExtension(v8::Extension* extension) {
   blink::WebScriptController::RegisterExtension(extension);
 }
@@ -256,14 +248,24 @@ int32_t MockRenderThread::GetClientId() {
 void MockRenderThread::SetRendererProcessType(
     blink::scheduler::RendererProcessType type) {}
 
+blink::WebString MockRenderThread::GetUserAgent() const {
+  return blink::WebString();
+}
+
 #if defined(OS_WIN)
 void MockRenderThread::PreCacheFont(const LOGFONT& log_font) {
 }
 
 void MockRenderThread::ReleaseCachedFonts() {
 }
-
-#endif  // OS_WIN
+#elif defined(OS_MACOSX)
+bool MockRenderThread::LoadFont(const base::string16& font_name,
+                                float font_point_size,
+                                mojo::ScopedSharedBufferHandle* out_font_data,
+                                uint32_t* out_font_id) {
+  return false;  // Not implemented.
+}
+#endif
 
 ServiceManagerConnection* MockRenderThread::GetServiceManagerConnection() {
   return nullptr;
@@ -368,11 +370,8 @@ void MockRenderThread::OnCreateWindow(
   frame_routing_id_to_initial_interface_provider_requests_.emplace(
       reply->main_frame_route_id,
       mojo::MakeRequest(&reply->main_frame_interface_provider));
-  // TODO(avi): Widget routing IDs should be distinct from the view routing IDs,
-  // once RenderWidgetHost is distilled from RenderViewHostImpl.
-  // See: https://crbug.com/545684.
-  reply->main_frame_widget_route_id = reply->route_id;
-  reply->cloned_session_storage_namespace_id = 0;
+  reply->main_frame_widget_route_id = GetNextRoutingID();
+  reply->cloned_session_storage_namespace_id = "";
 }
 
 }  // namespace content

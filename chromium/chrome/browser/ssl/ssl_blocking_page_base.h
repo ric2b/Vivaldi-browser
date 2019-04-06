@@ -5,7 +5,8 @@
 #ifndef CHROME_BROWSER_SSL_SSL_BLOCKING_PAGE_BASE_H_
 #define CHROME_BROWSER_SSL_SSL_BLOCKING_PAGE_BASE_H_
 
-#include "components/certificate_reporting/error_report.h"
+#include "chrome/browser/ssl/cert_report_helper.h"
+#include "chrome/browser/ssl/certificate_error_report.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
 
 namespace base {
@@ -26,8 +27,8 @@ class SSLBlockingPageBase
  public:
   SSLBlockingPageBase(
       content::WebContents* web_contents,
-      certificate_reporting::ErrorReport::InterstitialReason
-          interstitial_reason,
+      int cert_error,
+      CertificateErrorReport::InterstitialReason interstitial_reason,
       const net::SSLInfo& ssl_info,
       const GURL& request_url,
       std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
@@ -40,6 +41,9 @@ class SSLBlockingPageBase
 
   // security_interstitials::SecurityInterstitialPage:
   void OnInterstitialClosing() override;
+
+  void SetSSLCertReporterForTesting(
+      std::unique_ptr<SSLCertReporter> ssl_cert_reporter);
 
  protected:
   CertReportHelper* cert_report_helper();

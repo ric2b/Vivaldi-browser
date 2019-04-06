@@ -16,12 +16,12 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #endif
 
 namespace chrome {
 
-GURL GetTargetTabUrl(int session_id, int index) {
+GURL GetTargetTabUrl(SessionID session_id, int index) {
   Browser* browser = chrome::FindBrowserWithID(session_id);
   // Sanity checks.
   if (!browser || index >= browser->tab_strip_model()->count())

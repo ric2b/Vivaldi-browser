@@ -17,6 +17,8 @@ namespace signin_metrics {
 enum class AccessPoint;
 }
 
+extern const char kSignInPromoQueryKeyShowAccountManagement[];
+
 // The base class handler for the inline login WebUI.
 class InlineLoginHandler : public content::WebUIMessageHandler {
  public:
@@ -28,7 +30,7 @@ class InlineLoginHandler : public content::WebUIMessageHandler {
 
  protected:
   // Enum for gaia auth mode, must match AuthMode defined in
-  // chrome/browser/resources/gaia_auth_host/gaia_auth_host.js.
+  // chrome/browser/resources/gaia_auth_host/authenticator.js.
   enum AuthMode {
     kDefaultAuthMode = 0,
     kOfflineAuthMode = 1,

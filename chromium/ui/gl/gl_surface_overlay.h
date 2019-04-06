@@ -9,10 +9,15 @@
 #include "base/memory/ref_counted.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/overlay_transform.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_image.h"
+
+namespace gfx {
+class GpuFence;
+}  // namespace gfx
 
 namespace gl {
 
@@ -23,13 +28,17 @@ class GL_EXPORT GLSurfaceOverlay {
                    gfx::OverlayTransform transform,
                    GLImage* image,
                    const gfx::Rect& bounds_rect,
-                   const gfx::RectF& crop_rect);
-  GLSurfaceOverlay(const GLSurfaceOverlay& other);
+                   const gfx::RectF& crop_rect,
+                   bool enable_blend,
+                   std::unique_ptr<gfx::GpuFence> gpu_fence);
+  GLSurfaceOverlay(GLSurfaceOverlay&& other);
   ~GLSurfaceOverlay();
 
   // Schedule the image as an overlay plane to be shown at swap time for
   // |widget|.
-  bool ScheduleOverlayPlane(gfx::AcceleratedWidget widget) const;
+  //
+  // This should be called at most once.
+  bool ScheduleOverlayPlane(gfx::AcceleratedWidget widget);
 
   void Flush() const;
 
@@ -39,6 +48,8 @@ class GL_EXPORT GLSurfaceOverlay {
   scoped_refptr<GLImage> image_;
   gfx::Rect bounds_rect_;
   gfx::RectF crop_rect_;
+  bool enable_blend_;
+  std::unique_ptr<gfx::GpuFence> gpu_fence_;
 };
 
 }  // namespace gl

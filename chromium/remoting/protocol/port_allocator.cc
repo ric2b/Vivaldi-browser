@@ -8,12 +8,14 @@
 #include <map>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "net/base/escape.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "remoting/protocol/native_ip_synthesizer.h"
 #include "remoting/protocol/network_settings.h"
 #include "remoting/protocol/transport_context.h"
 
@@ -53,8 +55,11 @@ PortAllocator::PortAllocator(
   // performance when combined with TCP-based transport, so we have to disable
   // TCP ports. ENABLE_SHARED_UFRAG flag is specified so that the same username
   // fragment is shared between all candidates.
+  // TODO(crbug.com/488760): Ideally we want to add
+  // PORTALLOCATOR_DISABLE_COSTLY_NETWORKS, but this is unreliable on iOS and
+  // may end up removing mobile networks when no WiFi is available. We may want
+  // to add this flag only if there is WiFi interface.
   int flags = cricket::PORTALLOCATOR_DISABLE_TCP |
-              cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
               cricket::PORTALLOCATOR_ENABLE_IPV6 |
               cricket::PORTALLOCATOR_ENABLE_IPV6_ON_WIFI;
 
@@ -69,6 +74,7 @@ PortAllocator::PortAllocator(
   set_flags(flags);
   SetPortRange(network_settings.port_range.min_port,
                network_settings.port_range.max_port);
+  Initialize();
 }
 
 PortAllocator::~PortAllocator() = default;
@@ -227,8 +233,9 @@ void PortAllocatorSession::OnSessionRequestResult(
       base::StringToUint(relay_port, &relay_port_int)) {
     cricket::RelayServerConfig relay_config(cricket::RELAY_GTURN);
     rtc::SocketAddress address(relay_ip, relay_port_int);
+    // |relay_ip| is in IPv4 so we will need to do an IPv6 synthesis.
     relay_config.ports.push_back(
-        cricket::ProtocolAddress(address, cricket::PROTO_UDP));
+        cricket::ProtocolAddress(ToNativeSocket(address), cricket::PROTO_UDP));
     config->AddRelay(relay_config);
   }
 

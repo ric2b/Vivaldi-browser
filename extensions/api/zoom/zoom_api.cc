@@ -47,11 +47,11 @@ ZoomAPI::ZoomAPI(content::BrowserContext* context) : browser_context_(context) {
 ZoomAPI::~ZoomAPI() {}
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<ZoomAPI> >::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_factory_zoom = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<ZoomAPI>* ZoomAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_zoom.Pointer();
 }
 
 void ZoomAPI::OnListenerAdded(const EventListenerInfo& details) {
@@ -122,7 +122,7 @@ bool ZoomSetVivaldiUIZoomFunction::RunAsync() {
       zoom_level, dispatcher()->GetAssociatedWebContents(), extension());
 
   // Set for windows using off the record profile, if any.
-  Profile* profile = GetProfile();
+  Profile* profile = GetProfile()->GetOriginalProfile();
   if (profile->HasOffTheRecordProfile()) {
     VivaldiBrowserWindow* window =
       VivaldiBrowserWindow::GetBrowserWindowForBrowser(

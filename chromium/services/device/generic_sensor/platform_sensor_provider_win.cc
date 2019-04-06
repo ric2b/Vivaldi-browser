@@ -4,13 +4,16 @@
 
 #include "services/device/generic_sensor/platform_sensor_provider_win.h"
 
+#include <comdef.h>
 #include <objbase.h>
 
-#include "base/memory/ptr_util.h"
+#include <iomanip>
+
 #include "base/memory/singleton.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "services/device/generic_sensor/linear_acceleration_fusion_algorithm_using_accelerometer.h"
+#include "services/device/generic_sensor/orientation_euler_angles_fusion_algorithm_using_quaternion.h"
 #include "services/device/generic_sensor/platform_sensor_fusion.h"
 #include "services/device/generic_sensor/platform_sensor_win.h"
 
@@ -33,8 +36,19 @@ class PlatformSensorProviderWin::SensorThread final : public base::Thread {
   void Init() override {
     if (sensor_manager_)
       return;
-    ::CoCreateInstance(CLSID_SensorManager, nullptr, CLSCTX_ALL,
-                       IID_PPV_ARGS(&sensor_manager_));
+    HRESULT hr = ::CoCreateInstance(CLSID_SensorManager, nullptr, CLSCTX_ALL,
+                                    IID_PPV_ARGS(&sensor_manager_));
+    if (FAILED(hr)) {
+      // Only log this error the first time.
+      static bool logged_failure = false;
+      if (!logged_failure) {
+        LOG(ERROR) << "Unable to create instance of SensorManager: "
+                   << _com_error(hr).ErrorMessage() << " (0x" << std::hex
+                   << std::uppercase << std::setfill('0') << std::setw(8) << hr
+                   << ")";
+        logged_failure = true;
+      }
+    }
   }
 
   void CleanUp() override { sensor_manager_.Reset(); }
@@ -123,8 +137,22 @@ void PlatformSensorProviderWin::SensorReaderCreated(
     std::unique_ptr<PlatformSensorReaderWin> sensor_reader) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!sensor_reader) {
-    callback.Run(nullptr);
-    return;
+    // Fallback options for sensors that can be implemented using sensor
+    // fusion. Note that it is important not to generate a cycle by adding a
+    // fallback here that depends on one of the other fallbacks provided.
+    switch (type) {
+      case mojom::SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES: {
+        auto algorithm = std::make_unique<
+            OrientationEulerAnglesFusionAlgorithmUsingQuaternion>(
+            true /* absolute */);
+        PlatformSensorFusion::Create(reading_buffer, this, std::move(algorithm),
+                                     std::move(callback));
+        return;
+      }
+      default:
+        callback.Run(nullptr);
+        return;
+    }
   }
 
   scoped_refptr<PlatformSensor> sensor = new PlatformSensorWin(

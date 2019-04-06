@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -16,6 +17,7 @@
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "media/video/video_decode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace base {
@@ -54,7 +56,8 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
                VideoDecodeAccelerator::Capabilities());
   MOCK_METHOD0(GetVideoEncodeAcceleratorSupportedProfiles,
                VideoEncodeAccelerator::SupportedProfiles());
-  MOCK_METHOD0(GetMediaContextProvider, viz::ContextProvider*());
+  MOCK_METHOD0(GetMediaContextProvider,
+               scoped_refptr<ui::ContextProviderCommandBuffer>());
   MOCK_METHOD1(SetRenderingColorSpace, void(const gfx::ColorSpace&));
 
   std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBuffer(
@@ -62,14 +65,14 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
       gfx::BufferFormat format,
       gfx::BufferUsage usage) override;
 
-  bool ShouldUseGpuMemoryBuffersForVideoFrames() const override;
+  bool ShouldUseGpuMemoryBuffersForVideoFrames(
+      bool for_media_stream) const override;
   unsigned ImageTextureTarget(gfx::BufferFormat format) override;
   OutputFormat VideoFrameOutputFormat(size_t bit_depth) override {
     return video_frame_output_format_;
   };
 
-  std::unique_ptr<GpuVideoAcceleratorFactories::ScopedGLContextLock>
-  GetGLContextLock() override;
+  gpu::gles2::GLES2Interface* ContextGL() override { return gles2_; }
 
   void SetVideoFrameOutputFormat(const OutputFormat video_frame_output_format) {
     video_frame_output_format_ = video_frame_output_format;
@@ -91,6 +94,10 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
 
   gpu::gles2::GLES2Interface* GetGLES2Interface() { return gles2_; }
 
+  const std::vector<gfx::GpuMemoryBuffer*>& created_memory_buffers() {
+    return created_memory_buffers_;
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(MockGpuVideoAcceleratorFactories);
 
@@ -100,6 +107,8 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
   bool fail_to_allocate_gpu_memory_buffer_ = false;
 
   gpu::gles2::GLES2Interface* gles2_;
+
+  std::vector<gfx::GpuMemoryBuffer*> created_memory_buffers_;
 };
 
 }  // namespace media

@@ -22,6 +22,7 @@
 #include "chrome/browser/media_galleries/media_file_system_registry.h"
 #include "chrome/common/extensions/api/media_galleries.h"
 #include "chrome/common/media_galleries/metadata_types.h"
+#include "chrome/services/media_gallery_util/public/mojom/media_parser.mojom.h"
 #include "components/storage_monitor/media_storage_util.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
@@ -32,6 +33,8 @@ namespace MediaGalleries = extensions::api::media_galleries;
 namespace content {
 class BlobHandle;
 }
+
+class SafeMediaMetadataParser;
 
 namespace extensions {
 
@@ -177,8 +180,9 @@ class MediaGalleriesGetMetadataFunction : public ChromeAsyncExtensionFunction {
                    int64_t total_blob_length);
 
   void OnSafeMediaMetadataParserDone(
+      std::unique_ptr<SafeMediaMetadataParser> parser_keep_alive,
       bool parse_success,
-      std::unique_ptr<base::DictionaryValue> result_dictionary,
+      chrome::mojom::MediaMetadataPtr metadata,
       std::unique_ptr<std::vector<metadata::AttachedImage>> attached_images);
 
   void ConstructNextBlob(

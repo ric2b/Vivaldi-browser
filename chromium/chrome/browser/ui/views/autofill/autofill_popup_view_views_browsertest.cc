@@ -45,6 +45,7 @@ class MockAutofillPopupController : public AutofillPopupController {
   MOCK_METHOD1(SetSelectionAtPoint, void(const gfx::Point& point));
   MOCK_METHOD0(AcceptSelectedLine, bool());
   MOCK_METHOD0(SelectionCleared, void());
+  MOCK_CONST_METHOD0(HasSelection, bool());
   MOCK_CONST_METHOD0(popup_bounds, gfx::Rect());
   MOCK_METHOD0(container_view, gfx::NativeView());
   MOCK_CONST_METHOD0(element_bounds, const gfx::RectF&());
@@ -74,6 +75,7 @@ class MockAutofillPopupController : public AutofillPopupController {
   MOCK_METHOD1(RemoveSuggestion, bool(int index));
   MOCK_CONST_METHOD1(GetBackgroundColorIDForRow,
                      ui::NativeTheme::ColorId(int index));
+  MOCK_METHOD1(SetSelectedLine, void(base::Optional<int> selected_line));
   MOCK_CONST_METHOD0(selected_line, base::Optional<int>());
   const AutofillPopupLayoutModel& layout_model() const override {
     return *layout_model_;

@@ -5,22 +5,21 @@
 #ifndef CONTENT_BROWSER_SPEECH_SPEECH_RECOGNITION_MANAGER_IMPL_H_
 #define CONTENT_BROWSER_SPEECH_SPEECH_RECOGNITION_MANAGER_IMPL_H_
 
-#include <map>
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/speech_recognition_event_listener.h"
 #include "content/public/browser/speech_recognition_manager.h"
 #include "content/public/browser/speech_recognition_session_config.h"
 #include "content/public/browser/speech_recognition_session_context.h"
-#include "content/public/common/speech_recognition_error.h"
+#include "third_party/blink/public/mojom/speech/speech_recognition_error.mojom.h"
 
 namespace media {
 class AudioSystem;
-class AudioManager;
 }
 
 namespace content {
@@ -41,7 +40,7 @@ class SpeechRecognizer;
 // are waiting for results but not recording audio.
 //
 // The SpeechRecognitionManager has the following responsibilities:
-//  - Handles requests received from various render views and makes sure only
+//  - Handles requests received from various render frames and makes sure only
 //    one of them accesses the audio device at any given time.
 //  - Handles the instantiation of SpeechRecognitionEngine objects when
 //    requested by SpeechRecognitionSessions.
@@ -61,17 +60,13 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   int CreateSession(const SpeechRecognitionSessionConfig& config) override;
   void StartSession(int session_id) override;
   void AbortSession(int session_id) override;
-  void AbortAllSessionsForRenderProcess(int render_process_id) override;
-  void AbortAllSessionsForRenderView(int render_process_id,
-                                     int render_view_id) override;
+  void AbortAllSessionsForRenderFrame(int render_process_id,
+                                      int render_frame_id) override;
   void StopAudioCaptureForSession(int session_id) override;
   const SpeechRecognitionSessionConfig& GetSessionConfig(
       int session_id) const override;
   SpeechRecognitionSessionContext GetSessionContext(
       int session_id) const override;
-  int GetSession(int render_process_id,
-                 int render_view_id,
-                 int request_id) const override;
 
   // SpeechRecognitionEventListener methods.
   void OnRecognitionStart(int session_id) override;
@@ -81,10 +76,13 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   void OnSoundEnd(int session_id) override;
   void OnAudioEnd(int session_id) override;
   void OnRecognitionEnd(int session_id) override;
-  void OnRecognitionResults(int session_id,
-                            const SpeechRecognitionResults& result) override;
-  void OnRecognitionError(int session_id,
-                          const SpeechRecognitionError& error) override;
+  void OnRecognitionResults(
+      int session_id,
+      const std::vector<blink::mojom::SpeechRecognitionResultPtr>& result)
+      override;
+  void OnRecognitionError(
+      int session_id,
+      const blink::mojom::SpeechRecognitionError& error) override;
   void OnAudioLevelsChange(int session_id,
                            float volume,
                            float noise_volume) override;
@@ -100,11 +98,12 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   friend class base::DeleteHelper<content::SpeechRecognitionManagerImpl>;
 
   SpeechRecognitionManagerImpl(media::AudioSystem* audio_system,
-                               media::AudioManager* audio_manager,
                                MediaStreamManager* media_stream_manager);
   ~SpeechRecognitionManagerImpl() override;
 
  private:
+  class FrameDeletionObserver;
+
   // Data types for the internal Finite State Machine (FSM).
   enum FSMState {
     SESSION_STATE_IDLE = 0,
@@ -128,12 +127,13 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
 
     int id;
     bool abort_requested;
-    bool listener_is_active;
     SpeechRecognitionSessionConfig config;
     SpeechRecognitionSessionContext context;
     scoped_refptr<SpeechRecognizer> recognizer;
     std::unique_ptr<MediaStreamUIProxy> ui;
   };
+
+  void AbortSessionImpl(int session_id);
 
   // Callback issued by the SpeechRecognitionManagerDelegate for reporting
   // asynchronously the result of the CheckRecognitionIsAllowed call.
@@ -175,11 +175,14 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   SpeechRecognitionEventListener* GetDelegateListener() const;
   int GetNextSessionID();
 
+  // This class lives on the UI thread; all access to it must be done on that
+  // thread.
+  std::unique_ptr<FrameDeletionObserver, BrowserThread::DeleteOnUIThread>
+      frame_deletion_observer_;
+
   media::AudioSystem* audio_system_;
-  media::AudioManager* audio_manager_;
   MediaStreamManager* media_stream_manager_;
-  typedef std::map<int, Session*> SessionsTable;
-  SessionsTable sessions_;
+  base::flat_map<int, std::unique_ptr<Session>> sessions_;
   int primary_session_id_;
   int last_session_id_;
   bool is_dispatching_event_;

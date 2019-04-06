@@ -9,15 +9,14 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "content/child/image_decoder.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/fetchers/multi_resolution_image_resource_fetcher.h"
 #include "net/base/data_url.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/url_constants.h"
@@ -62,28 +61,27 @@ ImageDownloaderBase::~ImageDownloaderBase() {
 void ImageDownloaderBase::DownloadImage(const GURL& image_url,
                                         bool is_favicon,
                                         bool bypass_cache,
-                                        const DownloadCallback& callback) {
-  std::vector<SkBitmap> result_images;
-
-  if (image_url.SchemeIs(url::kDataScheme)) {
-    SkBitmap data_image = ImageFromDataUrl(image_url);
-    // Drop null or empty SkBitmap.
-    if (!data_image.drawsNothing())
-      result_images.push_back(data_image);
-  } else {
-    if (FetchImage(image_url, is_favicon, bypass_cache, callback)) {
-      // Will complete asynchronously via ImageDownloaderBase::DidFetchImage
-      return;
-    }
+                                        DownloadCallback callback) {
+  if (!image_url.SchemeIs(url::kDataScheme)) {
+    FetchImage(image_url, is_favicon, bypass_cache, std::move(callback));
+    // Will complete asynchronously via ImageDownloaderBase::DidFetchImage.
+    return;
   }
 
-  callback.Run(0, result_images);
+  std::vector<SkBitmap> result_images;
+  SkBitmap data_image = ImageFromDataUrl(image_url);
+
+  // Drop null or empty SkBitmap.
+  if (!data_image.drawsNothing())
+    result_images.push_back(data_image);
+
+  std::move(callback).Run(0, result_images);
 }
 
-bool ImageDownloaderBase::FetchImage(const GURL& image_url,
+void ImageDownloaderBase::FetchImage(const GURL& image_url,
                                      bool is_favicon,
                                      bool bypass_cache,
-                                     const DownloadCallback& callback) {
+                                     DownloadCallback callback) {
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   DCHECK(frame);
 
@@ -95,13 +93,12 @@ bool ImageDownloaderBase::FetchImage(const GURL& image_url,
                      : WebURLRequest::kRequestContextImage,
           bypass_cache ? blink::mojom::FetchCacheMode::kBypassCache
                        : blink::mojom::FetchCacheMode::kDefault,
-          base::Bind(&ImageDownloaderBase::DidFetchImage,
-                     base::Unretained(this), callback)));
-  return true;
+          base::BindOnce(&ImageDownloaderBase::DidFetchImage,
+                         base::Unretained(this), std::move(callback))));
 }
 
 void ImageDownloaderBase::DidFetchImage(
-    const DownloadCallback& callback,
+    DownloadCallback callback,
     MultiResolutionImageResourceFetcher* fetcher,
     const std::vector<SkBitmap>& images) {
   int32_t http_status_code = fetcher->http_status_code();
@@ -114,14 +111,14 @@ void ImageDownloaderBase::DidFetchImage(
       iter->release();
       image_fetchers_.erase(iter);
       render_frame()
-          ->GetTaskRunner(blink::TaskType::kUnthrottled)
+          ->GetTaskRunner(blink::TaskType::kInternalLoading)
           ->DeleteSoon(FROM_HERE, fetcher);
       break;
     }
   }
 
   // |this| may be destructed after callback is run.
-  callback.Run(http_status_code, images);
+  std::move(callback).Run(http_status_code, images);
 }
 
 void ImageDownloaderBase::OnDestruct() {

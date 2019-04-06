@@ -10,6 +10,8 @@
 <translation id="1054153489933238809">Abrir &amp;imagem original num novo separador</translation>
 <translation id="1056898198331236512">Aviso</translation>
 <translation id="1084824384139382525">Copiar &amp;endereço do link</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD, plural,
+        =1 {Continuar transferência} other {Continuar transferências}}</translation>
 <translation id="1128109161498068552">Não permitir que os sites utilizem mensagens exclusivas do sistema para aceder a dispositivos MIDI</translation>
 <translation id="114140604515785785">Diretório raiz da extensão:</translation>
 <translation id="1163361280229063150">{NUM_DOWNLOAD, plural, 
@@ -148,6 +150,7 @@
 <translation id="2890678560483811744">Referência da página fora dos limites</translation>
 <translation id="2902127500170292085">A extensão <ph name="EXTENSION_NAME" /> não conseguiu comunicar com esta impressora. Certifique-se de que a impressora está ligada à corrente e tente novamente.</translation>
 <translation id="2904456025988372123">Perguntar sempre que um site tentar transferir ficheiros automaticamente após o primeiro ficheiro</translation>
+<translation id="2911898792135283060">Gerar senha...</translation>
 <translation id="2913331724188855103">Permitir que os sites guardem e leiam dados de cookies (recomendado)</translation>
 <translation id="2916745397441987255">Procurar extensões</translation>
 <translation id="2932883381142163287">Denunciar abuso</translation>
@@ -206,6 +209,8 @@
 <translation id="3494769164076977169">Perguntar sempre que um site tentar transferir ficheiros automaticamente após o primeiro ficheiro (recomendado)</translation>
 <translation id="3505030558724226696">Revogar acesso aos dispositivos</translation>
 <translation id="3511307672085573050">Copiar &amp;endereço da ligação</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD, plural,
+        =1 {Cancelar transferência} other {Cancelar transferências}}</translation>
 <translation id="3523642406908660543">Perguntar quando um site pretender utilizar um plug-in para aceder ao seu computador (recomendado)</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; pretende partilhar uma impressora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; com um grupo de que é proprietário: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Se aceitar, todos os membros do grupo poderão utilizar a impressora.</translation>
 <translation id="3587482841069643663">Tudo</translation>
@@ -613,6 +618,8 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="9027459031423301635">Abrir ligação num novo &amp;separador</translation>
 <translation id="9056810968620647706">Não foram encontradas correspondências.</translation>
 <translation id="9088234649737575428">O <ph name="PLUGIN_NAME" /> está bloqueado pela política da empresa</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD, plural,
+       =1 {Transferência em curso} other {Transferências em curso}}</translation>
 <translation id="9137916601698928395">Abrir ligação como <ph name="USER" /></translation>
 <translation id="9153341767479566106">Outras extensões cujo carregamento falhou:</translation>
 <translation id="9170848237812810038">An&amp;ular</translation>

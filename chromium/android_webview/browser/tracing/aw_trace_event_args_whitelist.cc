@@ -18,12 +18,17 @@ struct WhitelistEntry {
   const char* const* arg_name_filter;
 };
 
+const char* const kMemoryDumpAllowedArgs[] = {"dumps", nullptr};
+
 const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "thread_name", nullptr},
     {"__metadata", "process_name", nullptr},
     {"__metadata", "process_uptime_seconds", nullptr},
     {"__metadata", "stackFrames", nullptr},
     {"__metadata", "typeNames", nullptr},
+    // Redefined the string since MemoryDumpManager::kTraceCategory causes
+    // static initialization of this struct.
+    {TRACE_DISABLED_BY_DEFAULT("memory-infra"), "*", kMemoryDumpAllowedArgs},
     {nullptr, nullptr, nullptr}};
 
 }  // namespace
@@ -60,8 +65,8 @@ bool IsTraceEventArgsWhitelisted(
                              whitelist_entry.category_name) &&
           base::MatchPattern(event_name, whitelist_entry.event_name)) {
         if (whitelist_entry.arg_name_filter) {
-          *arg_name_filter = base::Bind(&IsTraceArgumentNameWhitelisted,
-                                        whitelist_entry.arg_name_filter);
+          *arg_name_filter = base::BindRepeating(
+              &IsTraceArgumentNameWhitelisted, whitelist_entry.arg_name_filter);
         }
         return true;
       }

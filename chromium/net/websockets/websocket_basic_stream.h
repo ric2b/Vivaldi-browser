@@ -9,9 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/websockets/websocket_frame_parser.h"
 #include "net/websockets/websocket_stream.h"
 
@@ -26,14 +27,36 @@ struct WebSocketFrameChunk;
 
 // Implementation of WebSocketStream for non-multiplexed ws:// connections (or
 // the physical side of a multiplexed ws:// connection).
+//
+// Please update the traffic annotations in the websocket_basic_stream.cc and
+// websocket_stream.cc if the class is used for any communication with Google.
+// In such a case, annotation should be passed from the callers to this class
+// and a local annotation can not be used anymore.
 class NET_EXPORT_PRIVATE WebSocketBasicStream : public WebSocketStream {
  public:
   typedef WebSocketMaskingKey (*WebSocketMaskingKeyGeneratorFunction)();
 
+  // Adapter that allows WebSocketBasicStream to use
+  // either a TCP/IP or TLS socket, or an HTTP/2 stream.
+  class Adapter {
+   public:
+    virtual ~Adapter() = default;
+    virtual int Read(IOBuffer* buf,
+                     int buf_len,
+                     CompletionOnceCallback callback) = 0;
+    virtual int Write(
+        IOBuffer* buf,
+        int buf_len,
+        CompletionOnceCallback callback,
+        const NetworkTrafficAnnotationTag& traffic_annotation) = 0;
+    virtual void Disconnect() = 0;
+    virtual bool is_initialized() const = 0;
+  };
+
   // This class should not normally be constructed directly; see
   // WebSocketStream::CreateAndConnectStream() and
   // WebSocketBasicHandshakeStream::Upgrade().
-  WebSocketBasicStream(std::unique_ptr<ClientSocketHandle> connection,
+  WebSocketBasicStream(std::unique_ptr<Adapter> connection,
                        const scoped_refptr<GrowableIOBuffer>& http_read_buffer,
                        const std::string& sub_protocol,
                        const std::string& extensions);
@@ -44,10 +67,10 @@ class NET_EXPORT_PRIVATE WebSocketBasicStream : public WebSocketStream {
 
   // WebSocketStream implementation.
   int ReadFrames(std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-                 const CompletionCallback& callback) override;
+                 CompletionOnceCallback callback) override;
 
   int WriteFrames(std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-                  const CompletionCallback& callback) override;
+                  CompletionOnceCallback callback) override;
 
   void Close() override;
 
@@ -67,14 +90,24 @@ class NET_EXPORT_PRIVATE WebSocketBasicStream : public WebSocketStream {
       WebSocketMaskingKeyGeneratorFunction key_generator_function);
 
  private:
-  // Returns OK or calls |callback| when the |buffer| is fully drained or
-  // something has failed.
-  int WriteEverything(const scoped_refptr<DrainableIOBuffer>& buffer,
-                      const CompletionCallback& callback);
+  // Reads until socket read returns asynchronously or returns error.
+  // If returns ERR_IO_PENDING, then |read_callback_| will be called with result
+  // later.
+  int ReadEverything(std::vector<std::unique_ptr<WebSocketFrame>>* frames);
 
-  // Wraps the |callback| to continue writing until everything has been written.
+  // Called when a read completes. Parses the result, tries to read more.
+  // Might call |read_callback_|.
+  void OnReadComplete(std::vector<std::unique_ptr<WebSocketFrame>>* frames,
+                      int result);
+
+  // Writes until |buffer| is fully drained (in which case returns OK) or a
+  // socket write returns asynchronously or returns an error.  If returns
+  // ERR_IO_PENDING, then |write_callback_| will be called with result later.
+  int WriteEverything(const scoped_refptr<DrainableIOBuffer>& buffer);
+
+  // Called when a write completes.  Tries to write more.
+  // Might call |write_callback_|.
   void OnWriteComplete(const scoped_refptr<DrainableIOBuffer>& buffer,
-                       const CompletionCallback& callback,
                        int result);
 
   // Attempts to parse the output of a read as WebSocket frames. On success,
@@ -114,12 +147,6 @@ class NET_EXPORT_PRIVATE WebSocketBasicStream : public WebSocketStream {
   void AddToIncompleteControlFrameBody(
       const scoped_refptr<IOBufferWithSize>& data_buffer);
 
-  // Called when a read completes. Parses the result and (unless no complete
-  // header has been received) calls |callback|.
-  void OnReadComplete(std::vector<std::unique_ptr<WebSocketFrame>>* frames,
-                      const CompletionCallback& callback,
-                      int result);
-
   // Storage for pending reads. All active WebSockets spend all the time with a
   // call to ReadFrames() pending, so there is no benefit in trying to share
   // this between sockets.
@@ -127,7 +154,7 @@ class NET_EXPORT_PRIVATE WebSocketBasicStream : public WebSocketStream {
 
   // The connection, wrapped in a ClientSocketHandle so that we can prevent it
   // from being returned to the pool.
-  std::unique_ptr<ClientSocketHandle> connection_;
+  std::unique_ptr<Adapter> connection_;
 
   // Frame header for the frame currently being received. Only non-NULL while we
   // are processing the frame. If the frame arrives in multiple chunks, it can
@@ -161,6 +188,10 @@ class NET_EXPORT_PRIVATE WebSocketBasicStream : public WebSocketStream {
   // use a Callback here because a function pointer is faster and good enough
   // for our purposes.
   WebSocketMaskingKeyGeneratorFunction generate_websocket_masking_key_;
+
+  // User callback saved for asynchronous writes and reads.
+  CompletionOnceCallback write_callback_;
+  CompletionOnceCallback read_callback_;
 };
 
 }  // namespace net

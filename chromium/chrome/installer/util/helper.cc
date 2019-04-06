@@ -10,15 +10,20 @@
 
 #include "base/command_line.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 namespace installer {
 
 base::FilePath GetChromeInstallPath(bool system_install) {
   base::FilePath install_path;
 
-  // Vivaldi customization. Use the install path provided by the command line switch: --vivaldi-install-dir=<filepath>
-  const base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kVivaldiInstallDir)) {
-    install_path = command_line.GetSwitchValuePath(switches::kVivaldiInstallDir).Append(kInstallBinaryDir);
+  // Use the install path provided by
+  // the command line switch: --vivaldi-install-dir=<filepath>
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
+    install_path = command_line.GetSwitchValuePath(
+        vivaldi::constants::kVivaldiInstallDir).Append(kInstallBinaryDir);
     return install_path;
   }
 #if defined(_WIN64)
@@ -29,7 +34,7 @@ base::FilePath GetChromeInstallPath(bool system_install) {
 #else
   int key = system_install ? base::DIR_PROGRAM_FILES : base::DIR_LOCAL_APP_DATA;
 #endif
-  if (PathService::Get(key, &install_path)) {
+  if (base::PathService::Get(key, &install_path)) {
     install_path =
         install_path.Append(install_static::GetChromeInstallSubDirectory());
     install_path = install_path.Append(kInstallBinaryDir);

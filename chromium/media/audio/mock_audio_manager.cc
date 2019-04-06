@@ -8,6 +8,7 @@
 
 #include "base/callback.h"
 #include "base/logging.h"
+#include "media/audio/mock_audio_debug_recording_manager.h"
 #include "media/base/audio_parameters.h"
 
 namespace media {
@@ -120,16 +121,28 @@ std::string MockAudioManager::GetCommunicationsOutputDeviceID() {
 }
 
 std::unique_ptr<AudioLog> MockAudioManager::CreateAudioLog(
-    AudioLogFactory::AudioComponent component) {
+    AudioLogFactory::AudioComponent component,
+    int component_id) {
   return nullptr;
 }
 
-void MockAudioManager::InitializeDebugRecording() {}
+void MockAudioManager::InitializeDebugRecording() {
+  if (!GetTaskRunner()->BelongsToCurrentThread()) {
+    GetTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(&MockAudioManager::InitializeDebugRecording,
+                                  base::Unretained(this)));
+    return;
+  }
 
-void MockAudioManager::EnableDebugRecording(
-    const base::FilePath& base_file_name) {}
+  DCHECK(!debug_recording_manager_);
+  debug_recording_manager_ =
+      std::make_unique<MockAudioDebugRecordingManager>(GetTaskRunner());
+}
 
-void MockAudioManager::DisableDebugRecording() {}
+AudioDebugRecordingManager* MockAudioManager::GetAudioDebugRecordingManager() {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  return debug_recording_manager_.get();
+}
 
 const char* MockAudioManager::GetName() {
   return nullptr;

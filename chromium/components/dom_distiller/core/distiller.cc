@@ -5,6 +5,7 @@
 #include "components/dom_distiller/core/distiller.h"
 
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -125,7 +126,7 @@ void DistillerImpl::DistillNextPage() {
     DCHECK(started_pages_index_.find(page_num) == started_pages_index_.end());
     DCHECK(finished_pages_index_.find(page_num) == finished_pages_index_.end());
     seen_urls_.insert(url.spec());
-    pages_.push_back(base::MakeUnique<DistilledPageData>());
+    pages_.push_back(std::make_unique<DistilledPageData>());
     started_pages_index_[page_num] = pages_.size() - 1;
     distiller_page_->DistillPage(
         url,
@@ -158,7 +159,7 @@ void DistillerImpl::OnPageDistillationFinished(
     }
   }
 
-  DCHECK(distiller_result.get());
+  DCHECK(distiller_result);
   DistilledPageData* page_data =
       GetPageAtIndex(started_pages_index_[page_num]);
   page_data->distilled_page_proto =
@@ -310,7 +311,7 @@ void DistillerImpl::OnFetchImageDone(int page_num,
                                      const std::string& response) {
   DCHECK(started_pages_index_.find(page_num) != started_pages_index_.end());
   DistilledPageData* page_data = GetPageAtIndex(started_pages_index_[page_num]);
-  DCHECK(page_data->distilled_page_proto.get());
+  DCHECK(page_data->distilled_page_proto);
   DCHECK(url_fetcher);
   auto fetcher_it = std::find_if(
       page_data->image_fetchers_.begin(), page_data->image_fetchers_.end(),

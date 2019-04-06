@@ -8,7 +8,12 @@
 #define COMPONENTS_SAFE_BROWSING_COMMON_UTILS_H_
 
 #include "base/time/time.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "url/gurl.h"
+
+namespace policy {
+class BrowserPolicyConnector;
+}  // namespace policy
 
 namespace safe_browsing {
 
@@ -22,6 +27,12 @@ std::string ShortURLForReporting(const GURL& url);
 // for each resource load. If SafeBrowsing causes delays at different stages of
 // a load, the sum of all the delays will be reported.
 void LogNoUserActionResourceLoadingDelay(base::TimeDelta time);
+
+// Gets the |ProfileManagementStatus| for the current machine. The method
+// currently works only on Windows and ChromeOS. The |bpc| parameter is used
+// only on ChromeOS, and may be |nullptr|.
+ChromeUserPopulation::ProfileManagementStatus GetProfileManagementStatus(
+    const policy::BrowserPolicyConnector* bpc);
 
 }  // namespace safe_browsing
 

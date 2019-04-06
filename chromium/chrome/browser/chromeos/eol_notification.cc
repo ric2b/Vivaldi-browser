@@ -4,7 +4,7 @@
 
 #include "chrome/browser/chromeos/eol_notification.h"
 
-#include "chrome/app/vector_icons/vector_icons.h"
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/notifications/notification_display_service.h"
@@ -18,13 +18,12 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "components/prefs/pref_service.h"
-#include "components/vector_icons/vector_icons.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
-using message_center::MessageCenter;
 using l10n_util::GetStringUTF16;
 
 namespace chromeos {
@@ -47,8 +46,12 @@ class EolNotificationDelegate : public message_center::NotificationDelegate {
   ~EolNotificationDelegate() override = default;
 
   // NotificationDelegate overrides:
-  void ButtonClick(int button_index) override {
-    switch (button_index) {
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override {
+    if (!button_index)
+      return;
+
+    switch (*button_index) {
       case BUTTON_MORE_INFO: {
         // show eol link
         NavigateParams params(profile_, GURL(chrome::kEolNotificationURL),
@@ -140,7 +143,7 @@ void EolNotification::Update() {
   message_center::RichNotificationData data;
 
   DCHECK_EQ(BUTTON_MORE_INFO, data.buttons.size());
-  data.buttons.emplace_back(GetStringUTF16(IDS_EOL_MORE_INFO_BUTTON));
+  data.buttons.emplace_back(GetStringUTF16(IDS_LEARN_MORE));
 
   DCHECK_EQ(BUTTON_DISMISS, data.buttons.size());
   data.buttons.emplace_back(GetStringUTF16(IDS_EOL_DISMISS_BUTTON));
@@ -155,7 +158,7 @@ void EolNotification::Update() {
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT, kEolNotificationId),
           data, new EolNotificationDelegate(profile_),
-          kNotificationEndOfSupportIcon,
+          ash::kNotificationEndOfSupportIcon,
           message_center::SystemNotificationWarningLevel::CRITICAL_WARNING);
 
   NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(

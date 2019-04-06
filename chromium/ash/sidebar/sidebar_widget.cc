@@ -4,25 +4,28 @@
 
 #include "ash/sidebar/sidebar_widget.h"
 
+#include <memory>
+#include <utility>
+
+#include "ash/app_list/views/app_list_view.h"
 #include "ash/message_center/message_center_view.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
+#include "ash/system/message_center/notification_tray.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/system/web_notification/web_notification_tray.h"
 #include "base/strings/utf_string_conversions.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/views/app_list_view.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_style.h"
-#include "ui/message_center/views/constants.h"
+#include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
@@ -71,16 +74,12 @@ class SidebarWidget::DelegateView : public views::WidgetDelegateView,
       background_->layer()->SetBackgroundBlur(kSidebarBackgroundBlurRadius);
 
     auto* message_center = message_center::MessageCenter::Get();
-    auto* ui_controller = shelf->shelf_widget()
-                              ->status_area_widget()
-                              ->web_notification_tray()
-                              ->message_center_ui_controller();
     gfx::Rect display_bounds = shelf->GetUserWorkAreaBounds();
     bool initially_message_center_settings_visible =
         (mode == SidebarInitMode::MESSAGE_CENTER_SETTINGS);
-    message_center_view_ = new MessageCenterView(
-        message_center, ui_controller, display_bounds.height(),
-        initially_message_center_settings_visible);
+    message_center_view_ =
+        new MessageCenterView(message_center, display_bounds.height(),
+                              initially_message_center_settings_visible);
     message_center_view_->SetNotifications(
         message_center->GetVisibleNotifications());
 

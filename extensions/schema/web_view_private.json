@@ -214,21 +214,6 @@
         ]
       },
       {
-        "name": "setExtensionHost",
-        "type": "function",
-        "description": "Will create an |ExtensionHost| for the webview making it capable of running extension content.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "string",
-            "name": "extensionId"
-          }
-        ]
-      },
-      {
         "name": "allowBlockedInsecureContent",
         "type": "function",
         "description": "Will load all blocked content in a page.",
@@ -273,17 +258,6 @@
                 "description": "Element role"
               }
             ]
-          }
-        ]
-      },
-      {
-        "name": "resetGestureState",
-        "type": "function",
-        "description": "Resets the context menu blocking mechanism in case a mousegesture was fired.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
           }
         ]
       },

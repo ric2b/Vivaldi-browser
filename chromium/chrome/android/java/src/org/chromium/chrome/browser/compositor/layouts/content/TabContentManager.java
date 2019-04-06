@@ -7,8 +7,8 @@ package org.chromium.chrome.browser.compositor.layouts.content;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.util.SparseArray;
 import android.view.View;
+import android.view.ViewGroup.MarginLayoutParams;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.annotations.CalledByNative;
@@ -18,6 +18,7 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.display.DisplayAndroid;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,21 +36,8 @@ public class TabContentManager {
     private int[] mPriorityTabIds;
     private long mNativeTabContentManager;
 
-    /**
-     * A callback interface for decompressing the thumbnail for a tab into a bitmap.
-     */
-    public static interface DecompressThumbnailCallback {
-        /**
-         * Called when the decompression finishes.
-         * @param bitmap     The {@link Bitmap} of the content.  Null will be passed for failure.
-         */
-        public void onFinishGetBitmap(Bitmap bitmap);
-    }
-
     private final ArrayList<ThumbnailChangeListener> mListeners =
             new ArrayList<ThumbnailChangeListener>();
-    private final SparseArray<DecompressThumbnailCallback> mDecompressRequests =
-            new SparseArray<TabContentManager.DecompressThumbnailCallback>();
 
     private boolean mSnapshotsEnabled;
 
@@ -110,8 +98,9 @@ public class TabContentManager {
 
         float thumbnailScale = 1.f;
         boolean useApproximationThumbnails;
-        float deviceDensity = mContext.getResources().getDisplayMetrics().density;
-        if (DeviceFormFactor.isTablet()) {
+        DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(mContext);
+        float deviceDensity = display.getDipScale();
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)) {
             // Scale all tablets to MDPI.
             thumbnailScale = 1.f / deviceDensity;
             useApproximationThumbnails = false;
@@ -185,10 +174,19 @@ public class TabContentManager {
 
         float overlayTranslateY = mContentOffsetProvider.getOverlayTranslateY();
 
+        float leftMargin = 0.f;
+        float topMargin = 0.f;
+        if (viewToDraw.getLayoutParams() instanceof MarginLayoutParams) {
+            MarginLayoutParams params = (MarginLayoutParams) viewToDraw.getLayoutParams();
+            leftMargin = params.leftMargin;
+            topMargin = params.topMargin;
+        }
+
         try {
             bitmap = Bitmap.createBitmap(
-                    (int) (viewToDraw.getWidth() * mThumbnailScale),
-                    (int) ((viewToDraw.getHeight() - overlayTranslateY) * mThumbnailScale),
+                    (int) ((viewToDraw.getWidth() + leftMargin) * mThumbnailScale),
+                    (int) ((viewToDraw.getHeight() + topMargin - overlayTranslateY)
+                            * mThumbnailScale),
                     Bitmap.Config.ARGB_8888);
         } catch (OutOfMemoryError ex) {
             return null;
@@ -196,7 +194,7 @@ public class TabContentManager {
 
         Canvas c = new Canvas(bitmap);
         c.scale(scale, scale);
-        c.translate(0.f, -overlayTranslateY);
+        c.translate(leftMargin, -overlayTranslateY + topMargin);
         if (page instanceof InvalidationAwareThumbnailProvider) {
             ((InvalidationAwareThumbnailProvider) page).captureThumbnail(c);
         } else {
@@ -233,14 +231,6 @@ public class TabContentManager {
                 nativeCacheTab(mNativeTabContentManager, tab, mThumbnailScale);
             }
         }
-    }
-
-    @CalledByNative
-    private void notifyDecompressBitmapFinished(int tabId, Bitmap bitmap) {
-        DecompressThumbnailCallback callback = mDecompressRequests.get(tabId);
-        mDecompressRequests.remove(tabId);
-        if (callback == null) return;
-        callback.onFinishGetBitmap(bitmap);
     }
 
     /**

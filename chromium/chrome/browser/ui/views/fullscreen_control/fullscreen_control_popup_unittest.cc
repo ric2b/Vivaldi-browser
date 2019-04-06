@@ -29,8 +29,7 @@ class FullscreenControlPopupTest : public views::test::WidgetTest {
     parent_widget_->SetBounds(gfx::Rect(100, 100, 640, 480));
     parent_widget_->Show();
     popup_ = std::make_unique<FullscreenControlPopup>(
-        parent_widget_->GetNativeView(), base::BindRepeating(&base::DoNothing),
-        base::BindRepeating(&base::DoNothing));
+        parent_widget_->GetNativeView(), base::DoNothing(), base::DoNothing());
     animation_api_ = std::make_unique<gfx::AnimationTestApi>(
         popup_->GetAnimationForTesting());
   }
@@ -80,13 +79,13 @@ TEST_F(FullscreenControlPopupTest, ShowPopupAnimated) {
   // started.
   EXPECT_GT(GetParentBounds().y(), GetPopupBounds().y());
 
-  gfx::Rect final_bounds = popup_->GetFinalBounds();
-  EXPECT_LT(GetParentBounds().y(), final_bounds.y());
   CompleteAnimation();
 
   EXPECT_FALSE(popup_->IsAnimating());
   EXPECT_TRUE(popup_->IsVisible());
-  EXPECT_EQ(final_bounds, GetPopupBounds());
+  int final_bottom =
+      FullscreenControlPopup::GetButtonBottomOffset() + GetParentBounds().y();
+  EXPECT_EQ(final_bottom, GetPopupBounds().bottom());
 }
 
 TEST_F(FullscreenControlPopupTest, HidePopupWhileStillShowing) {

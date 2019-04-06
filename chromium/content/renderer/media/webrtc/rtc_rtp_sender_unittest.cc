@@ -10,18 +10,23 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/media_stream_audio_source.h"
+#include "content/renderer/media/stream/media_stream_audio_source.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
-#include "content/renderer/media/webrtc/webrtc_media_stream_adapter_map.h"
+#include "content/renderer/media/webrtc/mock_peer_connection_impl.h"
+#include "content/renderer/media/webrtc/test/webrtc_stats_report_obtainer.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebRTCVoidRequest.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/web_rtc_stats.h"
+#include "third_party/blink/public/platform/web_rtc_void_request.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_heap.h"
+#include "third_party/webrtc/api/stats/rtcstats_objects.h"
+#include "third_party/webrtc/api/stats/rtcstatsreport.h"
 #include "third_party/webrtc/api/test/mock_rtpsender.h"
 
 using ::testing::_;
@@ -34,14 +39,31 @@ class RTCRtpSenderTest : public ::testing::Test {
   void SetUp() override {
     dependency_factory_.reset(new MockPeerConnectionDependencyFactory());
     main_thread_ = blink::scheduler::GetSingleThreadTaskRunnerForTesting();
-    stream_map_ = new WebRtcMediaStreamAdapterMap(
-        dependency_factory_.get(), main_thread_,
-        new WebRtcMediaStreamTrackAdapterMap(dependency_factory_.get(),
-                                             main_thread_));
+    track_map_ = new WebRtcMediaStreamTrackAdapterMap(dependency_factory_.get(),
+                                                      main_thread_);
+    peer_connection_ = new rtc::RefCountedObject<MockPeerConnectionImpl>(
+        dependency_factory_.get(), nullptr);
     mock_webrtc_sender_ = new rtc::RefCountedObject<webrtc::MockRtpSender>();
   }
 
-  void TearDown() override { blink::WebHeap::CollectAllGarbageForTesting(); }
+  void TearDown() override {
+    sender_.reset();
+    // Syncing up with the signaling thread ensures any pending operations on
+    // that thread are executed. If they post back to the main thread, such as
+    // the sender's destructor traits, this is allowed to execute before the
+    // test shuts down the threads.
+    SyncWithSignalingThread();
+    blink::WebHeap::CollectAllGarbageForTesting();
+  }
+
+  // Wait for the signaling thread to perform any queued tasks, executing tasks
+  // posted to the current thread in the meantime while waiting.
+  void SyncWithSignalingThread() const {
+    base::RunLoop run_loop;
+    dependency_factory_->GetWebRtcSignalingThread()->PostTask(
+        FROM_HERE, run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   blink::WebMediaStreamTrack CreateWebTrack(const std::string& id) {
     blink::WebMediaStreamSource web_source;
@@ -59,10 +81,18 @@ class RTCRtpSenderTest : public ::testing::Test {
 
   std::unique_ptr<RTCRtpSender> CreateSender(
       blink::WebMediaStreamTrack web_track) {
-    return std::make_unique<RTCRtpSender>(
-        main_thread_, dependency_factory_->GetWebRtcSignalingThread(),
-        stream_map_, mock_webrtc_sender_.get(), std::move(web_track),
-        std::vector<blink::WebMediaStream>());
+    std::unique_ptr<WebRtcMediaStreamTrackAdapterMap::AdapterRef> track_ref;
+    if (!web_track.IsNull()) {
+      track_ref = track_map_->GetOrCreateLocalTrackAdapter(web_track);
+      DCHECK(track_ref->is_initialized());
+    }
+    RtpSenderState sender_state(main_thread_,
+                                dependency_factory_->GetWebRtcSignalingThread(),
+                                mock_webrtc_sender_.get(), std::move(track_ref),
+                                std::vector<std::string>());
+    sender_state.Initialize();
+    return std::make_unique<RTCRtpSender>(peer_connection_.get(), track_map_,
+                                          std::move(sender_state));
   }
 
   // Calls replaceTrack(), which is asynchronous, returning a callback that when
@@ -83,6 +113,13 @@ class RTCRtpSenderTest : public ::testing::Test {
     return base::BindOnce(&RTCRtpSenderTest::RunLoopAndReturnResult,
                           base::Unretained(this), std::move(result_holder),
                           std::move(run_loop));
+  }
+
+  scoped_refptr<WebRTCStatsReportObtainer> CallGetStats() {
+    scoped_refptr<WebRTCStatsReportObtainer> obtainer =
+        new WebRTCStatsReportObtainer();
+    sender_->GetStats(obtainer->GetStatsCallbackWrapper());
+    return obtainer;
   }
 
  protected:
@@ -106,7 +143,8 @@ class RTCRtpSenderTest : public ::testing::Test {
 
   std::unique_ptr<MockPeerConnectionDependencyFactory> dependency_factory_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
-  scoped_refptr<WebRtcMediaStreamAdapterMap> stream_map_;
+  scoped_refptr<WebRtcMediaStreamTrackAdapterMap> track_map_;
+  rtc::scoped_refptr<MockPeerConnectionImpl> peer_connection_;
   rtc::scoped_refptr<webrtc::MockRtpSender> mock_webrtc_sender_;
   std::unique_ptr<RTCRtpSender> sender_;
 };
@@ -174,6 +212,32 @@ TEST_F(RTCRtpSenderTest, ReplaceTrackIsNotSetSynchronously) {
   EXPECT_NE(web_track2.UniqueId(), sender_->Track().UniqueId());
   // Wait for operation to run to ensure EXPECT_CALL is satisfied.
   std::move(replaceTrackRunLoopAndGetResult).Run();
+}
+
+TEST_F(RTCRtpSenderTest, GetStats) {
+  auto web_track = CreateWebTrack("track_id");
+  sender_ = CreateSender(web_track);
+
+  // Make the mock return a blink version of the |webtc_report|. The mock does
+  // not perform any stats filtering, we just set it to a dummy value.
+  rtc::scoped_refptr<webrtc::RTCStatsReport> webrtc_report =
+      webrtc::RTCStatsReport::Create(0u);
+  webrtc_report->AddStats(
+      std::make_unique<webrtc::RTCOutboundRTPStreamStats>("stats-id", 1234u));
+  peer_connection_->SetGetStatsReport(webrtc_report);
+
+  auto obtainer = CallGetStats();
+  // Make sure the operation is async.
+  EXPECT_FALSE(obtainer->report());
+  // Wait for the report, this performs the necessary run-loop.
+  auto* report = obtainer->WaitForReport();
+  EXPECT_TRUE(report);
+
+  // Verify dummy value.
+  EXPECT_EQ(report->Size(), 1u);
+  auto stats = report->GetStats(blink::WebString::FromUTF8("stats-id"));
+  EXPECT_TRUE(stats);
+  EXPECT_EQ(stats->Timestamp(), 1.234);
 }
 
 TEST_F(RTCRtpSenderTest, CopiedSenderSharesInternalStates) {

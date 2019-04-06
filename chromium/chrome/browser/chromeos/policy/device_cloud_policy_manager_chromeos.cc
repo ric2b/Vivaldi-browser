@@ -69,6 +69,14 @@ const char kRialtoRequisition[] = "rialto";
 const char kZeroTouchEnrollmentForced[] = "forced";
 const char kZeroTouchEnrollmentHandsOff[] = "hands-off";
 
+// Default frequency for uploading enterprise status reports. Can be overriden
+// by Device Policy.
+constexpr base::TimeDelta kDeviceStatusUploadFrequency =
+    base::TimeDelta::FromHours(3);
+
+// Start of the day for activity data aggregation. Defaults to midnight.
+constexpr base::TimeDelta kActivityDayStart;
+
 // Fetches a machine statistic value from StatisticsProvider, returns an empty
 // string on failure.
 std::string GetMachineStatistic(const std::string& key) {
@@ -95,8 +103,7 @@ bool GetMachineFlag(const std::string& key, bool default_value) {
 
 // Checks whether forced re-enrollment is enabled.
 bool ForcedReEnrollmentEnabled() {
-  return chromeos::AutoEnrollmentController::GetMode() ==
-         chromeos::AutoEnrollmentController::MODE_FORCED_RE_ENROLLMENT;
+  return chromeos::AutoEnrollmentController::IsFREEnabled();
 }
 
 }  // namespace
@@ -205,6 +212,7 @@ void DeviceCloudPolicyManagerChromeOS::RegisterPrefs(
   registry->RegisterBooleanPref(prefs::kDeviceEnrollmentAutoStart, false);
   registry->RegisterBooleanPref(prefs::kDeviceEnrollmentCanExit, true);
   registry->RegisterDictionaryPref(prefs::kServerBackedDeviceState);
+  registry->RegisterBooleanPref(prefs::kRemoveUsersRemoteCommand, false);
 }
 
 // static
@@ -246,8 +254,8 @@ void DeviceCloudPolicyManagerChromeOS::StartConnection(
   // exposing policy for extensions.
   if (!component_policy_disabled_for_testing_) {
     base::FilePath component_policy_cache_dir;
-    CHECK(PathService::Get(chromeos::DIR_SIGNIN_PROFILE_COMPONENT_POLICY,
-                           &component_policy_cache_dir));
+    CHECK(base::PathService::Get(chromeos::DIR_SIGNIN_PROFILE_COMPONENT_POLICY,
+                                 &component_policy_cache_dir));
     CHECK(signin_profile_forwarding_schema_registry_);
     CreateComponentCloudPolicyService(
         dm_protocol::kChromeSigninExtensionPolicyType,
@@ -375,8 +383,9 @@ void DeviceCloudPolicyManagerChromeOS::CreateStatusUploader() {
           DeviceStatusCollector::VolumeInfoFetcher(),
           DeviceStatusCollector::CPUStatisticsFetcher(),
           DeviceStatusCollector::CPUTempFetcher(),
-          DeviceStatusCollector::AndroidStatusFetcher()),
-      task_runner_));
+          DeviceStatusCollector::AndroidStatusFetcher(), kActivityDayStart,
+          true /* is_enterprise_device */),
+      task_runner_, kDeviceStatusUploadFrequency));
 }
 
 }  // namespace policy

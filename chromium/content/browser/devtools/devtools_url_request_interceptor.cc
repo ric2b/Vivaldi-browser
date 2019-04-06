@@ -4,7 +4,6 @@
 
 #include "content/browser/devtools/devtools_url_request_interceptor.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/devtools/devtools_interceptor_controller.h"
@@ -15,22 +14,6 @@
 #include "net/url_request/url_request.h"
 
 namespace content {
-
-InterceptedRequestInfo::InterceptedRequestInfo()
-    : response_error_code(net::OK) {}
-
-InterceptedRequestInfo::~InterceptedRequestInfo() = default;
-
-DevToolsURLRequestInterceptor::FilterEntry::FilterEntry(
-    const base::UnguessableToken& target_id,
-    std::vector<Pattern> patterns,
-    RequestInterceptedCallback callback)
-    : target_id(target_id),
-      patterns(std::move(patterns)),
-      callback(std::move(callback)) {}
-
-DevToolsURLRequestInterceptor::FilterEntry::FilterEntry(FilterEntry&&) {}
-DevToolsURLRequestInterceptor::FilterEntry::~FilterEntry() {}
 
 // static
 bool DevToolsURLRequestInterceptor::IsNavigationRequest(
@@ -58,20 +41,6 @@ DevToolsURLRequestInterceptor::~DevToolsURLRequestInterceptor() {
   // DevToolsURLRequestInterceptorUserData explicitly.
 }
 
-DevToolsURLRequestInterceptor::Pattern::Pattern() = default;
-
-DevToolsURLRequestInterceptor::Pattern::~Pattern() = default;
-
-DevToolsURLRequestInterceptor::Pattern::Pattern(const Pattern& other) = default;
-
-DevToolsURLRequestInterceptor::Pattern::Pattern(
-    const std::string& url_pattern,
-    base::flat_set<ResourceType> resource_types,
-    InterceptionStage interception_stage)
-    : url_pattern(url_pattern),
-      resource_types(std::move(resource_types)),
-      interception_stage(interception_stage) {}
-
 const DevToolsTargetRegistry::TargetInfo*
 DevToolsURLRequestInterceptor::TargetInfoForRequestInfo(
     const ResourceRequestInfo* request_info) const {
@@ -93,7 +62,7 @@ void DevToolsURLRequestInterceptor::ContinueInterceptedRequest(
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(
             &ContinueInterceptedRequestCallback::sendFailure,
-            base::Passed(std::move(callback)),
+            std::move(callback),
             protocol::Response::InvalidParams("Invalid InterceptionId.")));
     return;
   }
@@ -250,7 +219,9 @@ DevToolsURLRequestInterceptor::FilterEntryForRequest(
     return nullptr;
 
   const std::vector<std::unique_ptr<FilterEntry>>& entries = it->second;
-  const std::string url_str = protocol::NetworkHandler::ClearUrlRef(url).spec();
+  std::string unused;
+  const std::string url_str =
+      protocol::NetworkHandler::ExtractFragment(url, &unused);
   for (const auto& entry : entries) {
     for (const Pattern& pattern : entry->patterns) {
       if (!pattern.resource_types.empty() &&
@@ -333,26 +304,5 @@ void DevToolsURLRequestInterceptor::JobFinished(
       base::BindOnce(&DevToolsInterceptorController::NavigationFinished,
                      controller_, interception_id));
 }
-
-DevToolsURLRequestInterceptor::Modifications::Modifications(
-    base::Optional<net::Error> error_reason,
-    base::Optional<std::string> raw_response,
-    protocol::Maybe<std::string> modified_url,
-    protocol::Maybe<std::string> modified_method,
-    protocol::Maybe<std::string> modified_post_data,
-    protocol::Maybe<protocol::Network::Headers> modified_headers,
-    protocol::Maybe<protocol::Network::AuthChallengeResponse>
-        auth_challenge_response,
-    bool mark_as_canceled)
-    : error_reason(std::move(error_reason)),
-      raw_response(std::move(raw_response)),
-      modified_url(std::move(modified_url)),
-      modified_method(std::move(modified_method)),
-      modified_post_data(std::move(modified_post_data)),
-      modified_headers(std::move(modified_headers)),
-      auth_challenge_response(std::move(auth_challenge_response)),
-      mark_as_canceled(mark_as_canceled) {}
-
-DevToolsURLRequestInterceptor::Modifications::~Modifications() {}
 
 }  // namespace content

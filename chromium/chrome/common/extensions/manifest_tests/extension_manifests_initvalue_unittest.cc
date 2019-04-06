@@ -23,8 +23,8 @@ namespace extensions {
 
 namespace {
 
-// The ID of test manifests requiring whitelisting.
-const char kWhitelistID[] = "lmadimbbgapmngbiclpjjngmdickadpl";
+// The ID of test manifests requiring allowlisting.
+const char kAllowlistID[] = "lmadimbbgapmngbiclpjjngmdickadpl";
 
 }  // namespace
 
@@ -35,7 +35,7 @@ class InitValueManifestTest : public ChromeManifestTest {
 };
 
 TEST_F(InitValueManifestTest, InitFromValueInvalid) {
-  SimpleFeature::ScopedThreadUnsafeWhitelistForTest whitelist(kWhitelistID);
+  SimpleFeature::ScopedThreadUnsafeAllowlistForTest allowlist(kAllowlistID);
   Testcase testcases[] = {
       Testcase("init_invalid_version_missing.json", errors::kInvalidVersion),
       Testcase("init_invalid_version_invalid.json", errors::kInvalidVersion),
@@ -96,7 +96,7 @@ TEST_F(InitValueManifestTest, InitFromValueValid) {
       "init_valid_minimal.json"));
 
   base::FilePath path;
-  PathService::Get(chrome::DIR_TEST_DATA, &path);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &path);
   path = path.AppendASCII("extensions");
 
   EXPECT_TRUE(crx_file::id_util::IdIsValid(extension->id()));

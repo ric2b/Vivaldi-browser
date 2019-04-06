@@ -14,14 +14,13 @@
 
 namespace cc {
 
+class Animation;
 class AnimationHost;
-class AnimationPlayer;
 
-// An AnimationTimeline owns a group of AnimationPlayers.
-// This is a cc counterpart for blink::AnimationTimeline (in 1:1 relationship).
-// Each AnimationTimeline and its AnimationPlayers have their copies on
-// the impl thread. We synchronize main thread and impl thread instances
-// using integer IDs.
+// An AnimationTimeline owns a group of Animations.
+//
+// Each AnimationTimeline and its Animations have copies on the impl thread. We
+// synchronize the main and impl thread instances using their IDs.
 class CC_ANIMATION_EXPORT AnimationTimeline
     : public base::RefCounted<AnimationTimeline> {
  public:
@@ -38,14 +37,14 @@ class CC_ANIMATION_EXPORT AnimationTimeline
   void set_is_impl_only(bool is_impl_only) { is_impl_only_ = is_impl_only; }
   bool is_impl_only() const { return is_impl_only_; }
 
-  void AttachPlayer(scoped_refptr<AnimationPlayer> player);
-  void DetachPlayer(scoped_refptr<AnimationPlayer> player);
+  void AttachAnimation(scoped_refptr<Animation> animation);
+  void DetachAnimation(scoped_refptr<Animation> animation);
 
-  void ClearPlayers();
+  void ClearAnimations();
 
   void PushPropertiesTo(AnimationTimeline* timeline_impl);
 
-  AnimationPlayer* GetPlayerById(int player_id) const;
+  Animation* GetAnimationById(int animation_id) const;
 
   void SetNeedsPushProperties();
   bool needs_push_properties() const { return needs_push_properties_; }
@@ -56,15 +55,16 @@ class CC_ANIMATION_EXPORT AnimationTimeline
   explicit AnimationTimeline(int id);
   virtual ~AnimationTimeline();
 
-  void PushAttachedPlayersToImplThread(AnimationTimeline* timeline) const;
-  void RemoveDetachedPlayersFromImplThread(AnimationTimeline* timeline) const;
+  void PushAttachedAnimationsToImplThread(AnimationTimeline* timeline) const;
+  void RemoveDetachedAnimationsFromImplThread(
+      AnimationTimeline* timeline) const;
   void PushPropertiesToImplThread(AnimationTimeline* timeline);
 
-  void ErasePlayer(scoped_refptr<AnimationPlayer> player);
+  void EraseAnimation(scoped_refptr<Animation> animation);
 
-  // A list of all players which this timeline owns.
-  using IdToPlayerMap = std::unordered_map<int, scoped_refptr<AnimationPlayer>>;
-  IdToPlayerMap id_to_player_map_;
+  // A list of all animations which this timeline owns.
+  using IdToAnimationMap = std::unordered_map<int, scoped_refptr<Animation>>;
+  IdToAnimationMap id_to_animation_map_;
 
   int id_;
   AnimationHost* animation_host_;

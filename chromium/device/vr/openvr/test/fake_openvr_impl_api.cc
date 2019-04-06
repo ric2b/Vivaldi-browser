@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
+#include "device/vr/openvr/test/test_helper.h"
+#include "device/vr/openvr/test/test_hook.h"
 #include "third_party/openvr/src/headers/openvr.h"
 #include "third_party/openvr/src/src/ivrclientcore.h"
 
 #include <D3D11_1.h>
 #include <DXGI1_4.h>
 #include <wrl.h>
+#include <memory>
 
 namespace vr {
 
@@ -98,7 +102,9 @@ class TestVRSystem : public IVRSystem {
   }
   ETrackedDeviceClass GetTrackedDeviceClass(
       TrackedDeviceIndex_t unDeviceIndex) override {
-    NOTIMPLEMENTED();
+    // Not yet implemented, but avoid calling NOTIMPLEMENTED() because it floods
+    // logs, and will be called to enumerate input devices.
+    // TODO(crbug.com/863487) - implement this and test input.
     return TrackedDeviceClass_Invalid;
   }
   bool IsTrackedDeviceConnected(TrackedDeviceIndex_t unDeviceIndex) override {
@@ -393,6 +399,7 @@ class TestVRClientCore : public IVRClientCore {
   }
 };
 
+TestHelper g_test_helper;
 TestVRSystem g_system;
 TestVRCompositor g_compositor;
 TestVRClientCore g_loader;
@@ -401,7 +408,8 @@ EVRInitError TestVRClientCore::Init(EVRApplicationType eApplicationType) {
   return VRInitError_None;
 }
 
-void TestVRClientCore::Cleanup() {}
+void TestVRClientCore::Cleanup() {
+}
 
 EVRInitError TestVRClientCore::IsInterfaceVersionValid(
     const char* pchInterfaceVersion) {
@@ -412,9 +420,11 @@ void* TestVRClientCore::GetGenericInterface(const char* pchNameAndVersion,
                                             EVRInitError* peError) {
   *peError = VRInitError_None;
   if (strcmp(pchNameAndVersion, IVRSystem_Version) == 0)
-    return (IVRSystem*)(&g_system);
+    return static_cast<IVRSystem*>(&g_system);
   if (strcmp(pchNameAndVersion, IVRCompositor_Version) == 0)
-    return (IVRCompositor*)(&g_compositor);
+    return static_cast<IVRCompositor*>(&g_compositor);
+  if (strcmp(pchNameAndVersion, device::kChromeOpenVRTestHookAPI) == 0)
+    return static_cast<device::TestHookRegistration*>(&g_test_helper);
 
   *peError = VRInitError_Init_InvalidInterface;
   return nullptr;
@@ -443,9 +453,6 @@ void TestVRSystem::GetDXGIOutputInfo(int32_t* pnAdapterIndex) {
     D3D_FEATURE_LEVEL feature_levels[] = {D3D_FEATURE_LEVEL_11_1};
     UINT flags = 0;
     D3D_FEATURE_LEVEL feature_level_out = D3D_FEATURE_LEVEL_11_1;
-#if defined _DEBUG
-    flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
 
     Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11_device_context;
@@ -465,10 +472,11 @@ void TestVRSystem::GetProjectionRaw(EVREye eEye,
                                     float* pfRight,
                                     float* pfTop,
                                     float* pfBottom) {
-  *pfLeft = 1;
-  *pfRight = 1;
-  *pfTop = 1;
-  *pfBottom = 1;
+  auto proj = g_test_helper.GetProjectionRaw(eEye == EVREye::Eye_Left);
+  *pfLeft = proj.projection[0];
+  *pfRight = proj.projection[1];
+  *pfTop = proj.projection[2];
+  *pfBottom = proj.projection[3];
 }
 
 HmdMatrix34_t TestVRSystem::GetEyeToHeadTransform(EVREye eEye) {
@@ -486,19 +494,8 @@ void TestVRSystem::GetDeviceToAbsoluteTrackingPose(
     VR_ARRAY_COUNT(unTrackedDevicePoseArrayCount)
         TrackedDevicePose_t* pTrackedDevicePoseArray,
     uint32_t unTrackedDevicePoseArrayCount) {
-  TrackedDevicePose_t pose = {};
-  pose.mDeviceToAbsoluteTracking.m[0][0] = 1;
-  pose.mDeviceToAbsoluteTracking.m[1][1] = 1;
-  pose.mDeviceToAbsoluteTracking.m[2][2] = 1;
-  pose.mDeviceToAbsoluteTracking.m[0][2] = 5;
-
-  pose.vVelocity = {0, 0, 0};
-  pose.vAngularVelocity = {0, 0, 0};
-  pose.eTrackingResult = TrackingResult_Running_OK;
-  pose.bPoseIsValid = true;
-  pose.bDeviceIsConnected = true;
+  TrackedDevicePose_t pose = g_test_helper.GetPose(false /* presenting pose */);
   pTrackedDevicePoseArray[0] = pose;
-
   for (unsigned int i = 1; i < unTrackedDevicePoseArrayCount; ++i) {
     TrackedDevicePose_t pose = {};
     pTrackedDevicePoseArray[i] = pose;
@@ -531,7 +528,7 @@ float TestVRSystem::GetFloatTrackedDeviceProperty(
   }
   switch (prop) {
     case Prop_UserIpdMeters_Float:
-      return 0.06f;
+      return g_test_helper.GetIpd();
     default:
       NOTIMPLEMENTED();
   }
@@ -555,21 +552,24 @@ EVRCompositorError TestVRCompositor::WaitGetPoses(TrackedDevicePose_t* poses1,
                                                   unsigned int count1,
                                                   TrackedDevicePose_t* poses2,
                                                   unsigned int count2) {
-  if (poses1)
-    g_system.GetDeviceToAbsoluteTrackingPose(TrackingUniverseSeated, 0, poses1,
-                                             count1);
+  TrackedDevicePose_t pose = g_test_helper.GetPose(true /* presenting pose */);
+  for (unsigned int i = 0; i < count1; ++i) {
+    poses1[i] = pose;
+  }
 
-  if (poses2)
-    g_system.GetDeviceToAbsoluteTrackingPose(TrackingUniverseSeated, 0, poses2,
-                                             count2);
+  for (unsigned int i = 0; i < count2; ++i) {
+    poses2[i] = pose;
+  }
 
   return VRCompositorError_None;
 }
 
-EVRCompositorError TestVRCompositor::Submit(EVREye,
-                                            Texture_t const*,
-                                            VRTextureBounds_t const*,
+EVRCompositorError TestVRCompositor::Submit(EVREye eye,
+                                            Texture_t const* texture,
+                                            VRTextureBounds_t const* bounds,
                                             EVRSubmitFlags) {
+  g_test_helper.OnPresentedFrame(
+      reinterpret_cast<ID3D11Texture2D*>(texture->handle), bounds, eye);
   return VRCompositorError_None;
 }
 

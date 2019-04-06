@@ -11,7 +11,6 @@ const ROOT_PATH = '../../../../../';
 
 GEN_INCLUDE(
     [ROOT_PATH + 'chrome/test/data/webui/polymer_interactive_ui_test.js']);
-GEN('#include "chrome/common/chrome_features.h"');
 
 function MaterialBookmarksFocusTest() {}
 
@@ -19,8 +18,6 @@ MaterialBookmarksFocusTest.prototype = {
   __proto__: PolymerInteractiveUITest.prototype,
 
   browsePreload: 'chrome://bookmarks',
-
-  featureList: ['features::kMaterialDesignBookmarks', ''],
 
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
     'test_command_manager.js',
@@ -251,14 +248,16 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       let focusedItem = items[0];
       assertEquals('0', focusedItem.getAttribute('tabindex'));
       assertEquals(
-          '0', focusedItem.$$('.more-vert-button').getAttribute('tabindex'));
+          '0',
+          focusedItem.$$('.more-vert-button button').getAttribute('tabindex'));
       focusedItem.focus();
 
       keydown(focusedItem, 'ArrowDown');
       focusedItem = items[1];
       assertEquals('0', focusedItem.getAttribute('tabindex'));
       assertEquals(
-          '0', focusedItem.$$('.more-vert-button').getAttribute('tabindex'));
+          '0',
+          focusedItem.$$('.more-vert-button button').getAttribute('tabindex'));
       assertDeepEquals(['3'], normalizeIterable(store.data.selection.items));
 
       keydown(focusedItem, 'ArrowUp');
@@ -413,7 +412,7 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       // Iron-list attempts to focus the whole <bookmarks-item> when pressing
       // enter on the menu button. This checks that we block this behavior
       // during keydown on <bookmarks-list>.
-      const button = items[0].$$('.more-vert-button');
+      const button = items[0].$$('.more-vert-button button');
       button.focus();
       keydown(button, 'Enter');
 
@@ -477,7 +476,7 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       focusedItem.focus();
       assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
 
-      commandManager.openCommandMenuAtPosition(0, 0);
+      commandManager.openCommandMenuAtPosition(0, 0, MenuSource.ITEM);
       const dropdown = commandManager.$.dropdown.getIfExists();
 
       assertTrue(dropdown.open);
@@ -496,7 +495,7 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       focusedItem.focus();
       assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
 
-      commandManager.openCommandMenuAtPosition(0, 0);
+      commandManager.openCommandMenuAtPosition(0, 0, MenuSource.ITEM);
       const dropdown = commandManager.$.dropdown.getIfExists();
       dropdown.close();
       assertNotEquals(focusedItem, dialogFocusManager.getFocusedElement_());
@@ -522,14 +521,14 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       focusedItem.focus();
       assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
 
-      commandManager.openCommandMenuAtPosition(0, 0);
+      commandManager.openCommandMenuAtPosition(0, 0, MenuSource.ITEM);
       assertNotEquals(focusedItem, dialogFocusManager.getFocusedElement_());
       const dropdown = commandManager.$.dropdown.getIfExists();
       dropdown.close();
 
       focusedItem = items[3];
       focusedItem.focus();
-      commandManager.openCommandMenuAtPosition(0, 0);
+      commandManager.openCommandMenuAtPosition(0, 0, MenuSource.ITEM);
 
       return waitForClose(dropdown)
           .then(() => {

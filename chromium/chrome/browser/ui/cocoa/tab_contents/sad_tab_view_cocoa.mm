@@ -43,20 +43,22 @@ const CGFloat kMaxTopMargin = 130;
 }
 @end
 
-@interface SadTabView ()<NSTextViewDelegate>
+@interface SadTabViewCocoa ()<NSTextViewDelegate>
 @end
 
-@implementation SadTabView {
+@implementation SadTabViewCocoa {
   NSView* container_;
   NSTextView* message_;
   HyperlinkTextView* help_;
   NSButton* button_;
   SadTab* sadTab_;
+  BOOL recordedFirstPaint_;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame sadTab:(SadTab*)sadTab {
   if ((self = [super initWithFrame:frame])) {
     sadTab_ = sadTab;
+    recordedFirstPaint_ = NO;
 
     self.wantsLayer = YES;
     self.layer.backgroundColor =
@@ -104,7 +106,7 @@ const CGFloat kMaxTopMargin = 130;
     [message_.textStorage
         appendAttributedString:[[[NSAttributedString alloc]
                                    initWithString:l10n_util::GetNSString(
-                                                      sadTab->GetMessage())
+                                                      sadTab->GetInfoMessage())
                                        attributes:@{
                                          NSFontAttributeName : messageFont,
                                          NSForegroundColorAttributeName :
@@ -182,9 +184,13 @@ const CGFloat kMaxTopMargin = 130;
 }
 
 - (void)updateLayer {
-  // Currently, updateLayer is only called once. If that changes, a DCHECK in
-  // SadTab::RecordFirstPaint will pipe up and we should add a guard here.
-  sadTab_->RecordFirstPaint();
+  // updateLayer seems to be called whenever NSBackingLayerDisplayIfNeeded is
+  // called by AppKit, which could be multiple times - at least twice has been
+  // observed. Guard against repeated recordings of first paint.
+  if (!recordedFirstPaint_) {
+    sadTab_->RecordFirstPaint();
+    recordedFirstPaint_ = YES;
+  }
 }
 
 - (void)resizeSubviewsWithOldSize:(NSSize)oldSize {

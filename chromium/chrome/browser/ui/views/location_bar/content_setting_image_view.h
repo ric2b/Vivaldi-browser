@@ -66,11 +66,6 @@ class ContentSettingImageView : public IconLabelBubbleView {
 
   void disable_animation() { can_animate_ = false; }
 
- private:
-  // The total animation time, including open and close as well as an
-  // intervening "stay open" period.
-  static const int kAnimationDurationMS;
-
   // IconLabelBubbleView:
   const char* GetClassName() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
@@ -80,10 +75,18 @@ class ContentSettingImageView : public IconLabelBubbleView {
   SkColor GetInkDropBaseColor() const override;
   SkColor GetTextColor() const override;
   bool ShouldShowLabel() const override;
+  bool ShouldShowSeparator() const override;
   double WidthMultiplier() const override;
   bool IsShrinking() const override;
   bool ShowBubble(const ui::Event& event) override;
   bool IsBubbleShowing() const override;
+
+  ContentSettingImageModel::ImageType GetTypeForTesting() const;
+
+ private:
+  // The total animation time, including open and close as well as an
+  // intervening "stay open" period.
+  static const int kAnimationDurationMS;
 
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;

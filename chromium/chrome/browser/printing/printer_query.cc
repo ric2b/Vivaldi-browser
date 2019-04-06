@@ -9,18 +9,24 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/printing/print_job_worker.h"
 #include "content/public/browser/browser_thread.h"
+#include "printing/print_job_constants.h"
+#include "printing/print_settings.h"
 
 namespace printing {
 
 PrinterQuery::PrinterQuery(int render_process_id, int render_frame_id)
-    : worker_(std::make_unique<PrintJobWorker>(render_process_id,
+    : cookie_(PrintSettings::NewCookie()),
+      task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      worker_(std::make_unique<PrintJobWorker>(render_process_id,
                                                render_frame_id,
-                                               this)),
-      cookie_(PrintSettings::NewCookie()) {
+                                               this)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 }
 
@@ -49,12 +55,10 @@ void PrinterQuery::GetSettingsDone(const PrintSettings& new_settings,
   }
 }
 
-std::unique_ptr<PrintJobWorker> PrinterQuery::DetachWorker(
-    PrintJobWorkerOwner* new_owner) {
+std::unique_ptr<PrintJobWorker> PrinterQuery::DetachWorker() {
   DCHECK(!callback_);
   DCHECK(worker_);
 
-  worker_->SetNewOwner(new_owner);
   return std::move(worker_);
 }
 
@@ -64,6 +68,10 @@ const PrintSettings& PrinterQuery::settings() const {
 
 int PrinterQuery::cookie() const {
   return cookie_;
+}
+
+void PrinterQuery::set_callback(base::OnceClosure callback) {
+  callback_ = std::move(callback);
 }
 
 void PrinterQuery::GetSettings(GetSettingsAskParam ask_user_for_settings,
@@ -83,9 +91,10 @@ void PrinterQuery::GetSettings(GetSettingsAskParam ask_user_for_settings,
       ask_user_for_settings == GetSettingsAskParam::ASK_USER;
   worker_->PostTask(
       FROM_HERE,
-      base::Bind(&PrintJobWorker::GetSettings, base::Unretained(worker_.get()),
-                 is_print_dialog_box_shown_, expected_page_count, has_selection,
-                 margin_type, is_scripted, is_modifiable));
+      base::BindOnce(&PrintJobWorker::GetSettings,
+                     base::Unretained(worker_.get()),
+                     is_print_dialog_box_shown_, expected_page_count,
+                     has_selection, margin_type, is_scripted, is_modifiable));
 }
 
 void PrinterQuery::SetSettings(
@@ -93,11 +102,23 @@ void PrinterQuery::SetSettings(
     base::OnceClosure callback) {
   StartWorker(std::move(callback));
 
-  worker_->PostTask(FROM_HERE,
-                    base::Bind(&PrintJobWorker::SetSettings,
-                               base::Unretained(worker_.get()),
-                               base::Passed(&new_settings)));
+  worker_->PostTask(FROM_HERE, base::BindOnce(&PrintJobWorker::SetSettings,
+                                              base::Unretained(worker_.get()),
+                                              std::move(new_settings)));
 }
+
+#if defined(OS_CHROMEOS)
+void PrinterQuery::SetSettingsFromPOD(
+    std::unique_ptr<printing::PrintSettings> new_settings,
+    base::OnceClosure callback) {
+  StartWorker(std::move(callback));
+
+  worker_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PrintJobWorker::SetSettingsFromPOD,
+                     base::Unretained(worker_.get()), std::move(new_settings)));
+}
+#endif
 
 void PrinterQuery::StartWorker(base::OnceClosure callback) {
   DCHECK(!callback_);
@@ -119,6 +140,15 @@ void PrinterQuery::StopWorker() {
     worker_->Stop();
     worker_.reset();
   }
+}
+
+bool PrinterQuery::RunsTasksInCurrentSequence() const {
+  return task_runner_->RunsTasksInCurrentSequence();
+}
+
+bool PrinterQuery::PostTask(const base::Location& from_here,
+                            base::OnceClosure task) {
+  return task_runner_->PostTask(from_here, std::move(task));
 }
 
 bool PrinterQuery::is_callback_pending() const {

@@ -24,7 +24,7 @@ class AutoUpdateCheckForUpdatesFunction : public ChromeAsyncExtensionFunction {
 };
 
 class AutoUpdateIsUpdateNotifierEnabledFunction
-    : public AsyncExtensionFunction {
+    : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.isUpdateNotifierEnabled",
                              AUTOUPDATE_ISUPDATENOTIFIERENABLED)
@@ -36,7 +36,7 @@ class AutoUpdateIsUpdateNotifierEnabledFunction
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateIsUpdateNotifierEnabledFunction);
 };
 
-class AutoUpdateEnableUpdateNotifierFunction : public AsyncExtensionFunction {
+class AutoUpdateEnableUpdateNotifierFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.enableUpdateNotifier",
                              AUTOUPDATE_ENABLEUPDATENOTIFIER)
@@ -48,7 +48,7 @@ class AutoUpdateEnableUpdateNotifierFunction : public AsyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateEnableUpdateNotifierFunction);
 };
 
-class AutoUpdateDisableUpdateNotifierFunction : public AsyncExtensionFunction {
+class AutoUpdateDisableUpdateNotifierFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.disableUpdateNotifier",
                              AUTOUPDATE_DISABLEUPDATENOTIFIER)

@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -22,11 +21,8 @@
 namespace viz {
 
 SoftwareOutputSurface::SoftwareOutputSurface(
-    std::unique_ptr<SoftwareOutputDevice> software_device,
-    scoped_refptr<base::SequencedTaskRunner> task_runner)
-    : OutputSurface(std::move(software_device)),
-      task_runner_(std::move(task_runner)),
-      weak_factory_(this) {}
+    std::unique_ptr<SoftwareOutputDevice> software_device)
+    : OutputSurface(std::move(software_device)), weak_factory_(this) {}
 
 SoftwareOutputSurface::~SoftwareOutputSurface() = default;
 
@@ -66,14 +62,15 @@ void SoftwareOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
   base::TimeTicks swap_time = base::TimeTicks::Now();
   for (auto& latency : frame.latency_info) {
     latency.AddLatencyNumberWithTimestamp(
-        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, 0, 0, swap_time, 1);
+        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, swap_time, 1);
     latency.AddLatencyNumberWithTimestamp(
-        ui::INPUT_EVENT_LATENCY_TERMINATED_FRAME_SWAP_COMPONENT, 0, 0,
-        swap_time, 1);
+        ui::INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT, swap_time, 1);
   }
-  // TODO(danakj): Send frame.latency_info somewhere like
-  // RenderWidgetHostImpl::OnGpuSwapBuffersCompleted. It should go to the
-  // ui::LatencyTracker in the viz process.
+
+  DCHECK(stored_latency_info_.empty())
+      << "A second frame is not expected to "
+      << "arrive before the previous latency info is processed.";
+  stored_latency_info_ = std::move(frame.latency_info);
 
   // TODO(danakj): Update vsync params.
   // gfx::VSyncProvider* vsync_provider = software_device()->GetVSyncProvider();
@@ -81,10 +78,9 @@ void SoftwareOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
   //  vsync_provider->GetVSyncParameters(update_vsync_parameters_callback_);
   // Update refresh_interval_ as well.
 
-  ++swap_id_;
-  task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&SoftwareOutputSurface::SwapBuffersCallback,
-                                weak_factory_.GetWeakPtr(), swap_id_));
+  software_device()->OnSwapBuffers(base::BindOnce(
+      &SoftwareOutputSurface::SwapBuffersCallback, weak_factory_.GetWeakPtr(),
+      frame.need_presentation_feedback));
 }
 
 bool SoftwareOutputSurface::IsDisplayedAsOverlayPlane() const {
@@ -111,21 +107,22 @@ bool SoftwareOutputSurface::HasExternalStencilTest() const {
 
 void SoftwareOutputSurface::ApplyExternalStencil() {}
 
-bool SoftwareOutputSurface::SurfaceIsSuspendForRecycle() const {
-  return false;
-}
-
 uint32_t SoftwareOutputSurface::GetFramebufferCopyTextureFormat() {
   // Not used for software surfaces.
   NOTREACHED();
   return 0;
 }
 
-void SoftwareOutputSurface::SwapBuffersCallback(uint64_t swap_id) {
-  client_->DidReceiveSwapBuffersAck(swap_id);
-  client_->DidReceivePresentationFeedback(
-      swap_id,
-      gfx::PresentationFeedback(base::TimeTicks::Now(), refresh_interval_, 0u));
+void SoftwareOutputSurface::SwapBuffersCallback(
+    bool need_presentation_feedback) {
+  latency_tracker_.OnGpuSwapBuffersCompleted(stored_latency_info_);
+  client_->DidFinishLatencyInfo(stored_latency_info_);
+  std::vector<ui::LatencyInfo>().swap(stored_latency_info_);
+  client_->DidReceiveSwapBuffersAck();
+  if (need_presentation_feedback) {
+    client_->DidReceivePresentationFeedback(gfx::PresentationFeedback(
+        base::TimeTicks::Now(), refresh_interval_, 0u));
+  }
 }
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -134,5 +131,9 @@ gpu::VulkanSurface* SoftwareOutputSurface::GetVulkanSurface() {
   return nullptr;
 }
 #endif
+
+unsigned SoftwareOutputSurface::UpdateGpuFence() {
+  return 0;
+}
 
 }  // namespace viz

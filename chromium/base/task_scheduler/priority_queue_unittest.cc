@@ -30,9 +30,7 @@ class ThreadBeginningTransaction : public SimpleThread {
  public:
   explicit ThreadBeginningTransaction(PriorityQueue* priority_queue)
       : SimpleThread("ThreadBeginningTransaction"),
-        priority_queue_(priority_queue),
-        transaction_began_(WaitableEvent::ResetPolicy::MANUAL,
-                           WaitableEvent::InitialState::NOT_SIGNALED) {}
+        priority_queue_(priority_queue) {}
 
   // SimpleThread:
   void Run() override {
@@ -60,25 +58,25 @@ class ThreadBeginningTransaction : public SimpleThread {
 TEST(TaskSchedulerPriorityQueueTest, PushPopPeek) {
   // Create test sequences.
   scoped_refptr<Sequence> sequence_a(new Sequence);
-  sequence_a->PushTask(Task(FROM_HERE, Bind(&DoNothing),
+  sequence_a->PushTask(Task(FROM_HERE, DoNothing(),
                             TaskTraits(TaskPriority::USER_VISIBLE),
                             TimeDelta()));
   SequenceSortKey sort_key_a = sequence_a->GetSortKey();
 
   scoped_refptr<Sequence> sequence_b(new Sequence);
-  sequence_b->PushTask(Task(FROM_HERE, Bind(&DoNothing),
+  sequence_b->PushTask(Task(FROM_HERE, DoNothing(),
                             TaskTraits(TaskPriority::USER_BLOCKING),
                             TimeDelta()));
   SequenceSortKey sort_key_b = sequence_b->GetSortKey();
 
   scoped_refptr<Sequence> sequence_c(new Sequence);
-  sequence_c->PushTask(Task(FROM_HERE, Bind(&DoNothing),
+  sequence_c->PushTask(Task(FROM_HERE, DoNothing(),
                             TaskTraits(TaskPriority::USER_BLOCKING),
                             TimeDelta()));
   SequenceSortKey sort_key_c = sequence_c->GetSortKey();
 
   scoped_refptr<Sequence> sequence_d(new Sequence);
-  sequence_d->PushTask(Task(FROM_HERE, Bind(&DoNothing),
+  sequence_d->PushTask(Task(FROM_HERE, DoNothing(),
                             TaskTraits(TaskPriority::BACKGROUND), TimeDelta()));
   SequenceSortKey sort_key_d = sequence_d->GetSortKey();
 

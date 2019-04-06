@@ -130,7 +130,7 @@ size of the message sent to the native messaging host is 4 GB.
 
 <p>
 The first argument to the native messaging host is the origin of the caller,
-usually <code>chrome-extension://[ID of whitelisted extension]</code>.
+usually <code>chrome-extension://[ID of allowed extension]</code>.
 This allows native messaging hosts to identify the source of the message when
 multiple extensions are specified in the <code>allowed_origins</code> key in the
 <a href="#native-messaging-host-manifest">native messaging host manifest</a>.
@@ -268,7 +268,7 @@ Here are some errors and tips for solving the issues:
       which corrupts the message format as line breaks (<code>\n</code> =
       <code>0A</code>) are replaced with Windows-style line endings
       (<code>\r\n</code> = <code>0D 0A</code>). The I/O mode can be set using
-      <a href="http://msdn.microsoft.com/en-us/library/tw4k6df8.aspx"><code>__setmode</code></a>.
+      <a href="https://msdn.microsoft.com/en-us/library/tw4k6df8.aspx"><code>__setmode</code></a>.
   </ul>
 </dl>
 

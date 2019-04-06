@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/export.h"
@@ -18,6 +17,7 @@
 
 namespace service_manager {
 
+// See //services/service_manager/README.md#onbindinterface for details on this.
 template <typename... BinderArgs>
 class BinderRegistryWithArgs {
  public:
@@ -139,6 +139,7 @@ class BinderRegistryWithArgs {
   DISALLOW_COPY_AND_ASSIGN(BinderRegistryWithArgs);
 };
 
+// See //services/service_manager/README.md#onbindinterface for details on this.
 using BinderRegistry = BinderRegistryWithArgs<>;
 
 }  // namespace service_manager

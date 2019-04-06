@@ -16,6 +16,7 @@
 <translation id="1476607407192946488">&amp;tungumálastillingar</translation>
 <translation id="1588870296199743671">Opna hlekk með...</translation>
 <translation id="1620510694547887537">Myndavél</translation>
+<translation id="1706625117072057435">Stækkunarstig</translation>
 <translation id="1723824996674794290">&amp;Nýr gluggi</translation>
 <translation id="1725149567830788547">Sýna &amp;stjórntæki</translation>
 <translation id="176587472219019965">&amp;Nýr gluggi</translation>
@@ -58,6 +59,7 @@
 <translation id="3319048459796106952">Nýr &amp;huliðnsgluggi</translation>
 <translation id="3347086966102161372">A&amp;frita veffang myndar</translation>
 <translation id="3435896845095436175">Virkja</translation>
+<translation id="3440761377721825626">Fá upplýsingar um hvenær síða reynir að nota viðbætur til þess að fá aðgang að tölvunni þinni</translation>
 <translation id="345693547134384690">Opna &amp;mynd í nýjum flipa</translation>
 <translation id="3467267818798281173">Biddu Google um tillögur</translation>
 <translation id="3494769164076977169">Spyrja hvenær síða reynir að hlaða sjálfkrafa niður skrám eftir fyrstu skrá (mælt með)</translation>
@@ -92,6 +94,7 @@
 <translation id="49896407730300355">Snúa r&amp;rangsælis</translation>
 <translation id="5036662165765606524">Ekki leyfa neinni síðu að hlaða niður mörgum skrám sjálfkrafa</translation>
 <translation id="5039804452771397117">Leyfa</translation>
+<translation id="5063480226653192405">Notkun</translation>
 <translation id="5068918910148307423">Ekki leyfa síðum sem nýlega hefur verið lokað að klára að senda og taka á móti gögnum</translation>
 <translation id="5087249366037322692">Bætt við af þriðja aðila</translation>
 <translation id="5116628073786783676">Vi&amp;sta hljóð sem...</translation>
@@ -110,10 +113,12 @@
 <translation id="577624874850706961">Leita að kökum</translation>
 <translation id="5804241973901381774">Leyfi</translation>
 <translation id="5838456317242088717">Núverandi einkaseta</translation>
+<translation id="5908769186679515905">Hindra síður í að keyra Flash</translation>
 <translation id="5910363049092958439">Vis&amp;ta mynd sem...</translation>
 <translation id="6040143037577758943">Loka</translation>
 <translation id="6042308850641462728">Meira</translation>
 <translation id="6059925163896151826">USB tæki</translation>
+<translation id="6124650939968185064">Eftirfarandi viðbætur eru háðar þessari viðbót:</translation>
 <translation id="6165508094623778733">Læra meira</translation>
 <translation id="6171948306033499786">Setja prentun á pásu</translation>
 <translation id="6196640612572343990">Útiloka kökur þriðja aðila</translation>
@@ -127,8 +132,10 @@
 <translation id="6447842834002726250">Kökur</translation>
 <translation id="6498249116389603658">&amp;Öll þín tungumál</translation>
 <translation id="6518014396551869914">Afrit&amp;a mynd</translation>
+<translation id="6612358246767739896">Varið efni</translation>
 <translation id="6639554308659482635">SQLite minni</translation>
 <translation id="6691936601825168937">&amp;Áfram</translation>
+<translation id="6782111308708962316">Hindra vefsíður þriðja aðila í að vista og lesa gögn á kökum</translation>
 <translation id="6786747875388722282">Viðbætur</translation>
 <translation id="6787839852456839824">Lyklaborðsflýtilyklar</translation>
 <translation id="6817174620439930047">Spyrja ef síða vill nota kerfistilkynningar fyrir aðgang að MIDI tækjum (mælt með)</translation>
@@ -138,13 +145,17 @@
 <translation id="6943176775188458830">Hætta við prentun</translation>
 <translation id="6974053822202609517">Hægri til vinstri</translation>
 <translation id="7030031465713069059">Vista lykilorð</translation>
+<translation id="7053983685419859001">Banna</translation>
 <translation id="708060913198414444">V&amp;ista veffang hljóðskrár</translation>
+<translation id="7084192839369222683">Bara keyra miklvæg gögn</translation>
 <translation id="7270858098575133036">Spyrja ef síða vill nota kerfistilkynningar fyrir aðgang að MIDI tækjum</translation>
 <translation id="7309257895202129721">Sýna &amp;stjórntæki</translation>
 <translation id="7311079019872751559">Viðbót hefur aðgang út fyrir sandkassa vafrans</translation>
 <translation id="7421925624202799674">&amp;Sýna frumkóða síðu</translation>
+<translation id="7423098979219808738">Spurðu fyrst</translation>
 <translation id="7473891865547856676">Nei takk</translation>
 <translation id="7521387064766892559">JavaScript</translation>
+<translation id="7661259717474717992">Leyfa síðum að vista og lesa efni frá vefkökum</translation>
 <translation id="7685049629764448582">JavaScript minni</translation>
 <translation id="7751260505918304024">Sýna allt</translation>
 <translation id="7782102568078991263">Ekki fleiri tillögur frá Google</translation>
@@ -167,6 +178,7 @@
 <translation id="8605428685123651449">SQLite minni</translation>
 <translation id="8661290697478713397">Opna hlekk í hu&amp;liðs glugga</translation>
 <translation id="8664389313780386848">&amp;Skoða frumgögn síðu</translation>
+<translation id="8708000541097332489">Henda við lokun</translation>
 <translation id="8798099450830957504">Sjálfgefið</translation>
 <translation id="8823514049557262177">Afrita hlekk te&amp;xta</translation>
 <translation id="8845001906332463065">Hjálp</translation>

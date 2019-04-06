@@ -1,6 +1,0 @@
-include_rules = [
-    "-modules",
-    "+modules/EventModules.h",
-    "+modules/background_sync",
-    "+modules/serviceworkers",
-]

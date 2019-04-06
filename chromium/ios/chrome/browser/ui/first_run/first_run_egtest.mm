@@ -30,7 +30,6 @@
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
-#import "ios/testing/wait_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -40,7 +39,7 @@
 using chrome_test_util::AccountConsistencySetupSigninButton;
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
-using chrome_test_util::NavigationBarDoneButton;
+using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SettingsMenuBackButton;
 
 namespace {
@@ -76,8 +75,8 @@ void WaitForMatcher(id<GREYMatcher> matcher) {
                                                              error:&error];
     return error == nil;
   };
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
-                 testing::kWaitForUIElementTimeout, condition),
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 base::test::ios::kWaitForUIElementTimeout, condition),
              @"Waiting for matcher %@ failed.", matcher);
 }
 }
@@ -258,7 +257,7 @@ void WaitForMatcher(id<GREYMatcher> matcher) {
                   @"Sync shouldn't have finished its original setup yet");
 
   // Close Settings, user is still signed in and sync is now starting.
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
   [SigninEarlGreyUtils assertSignedInWithIdentity:identity];
   GREYAssertTrue(sync_service->HasFinishedInitialSetup(),

@@ -20,7 +20,7 @@
 #include "components/grit/components_resources.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#include "ios/chrome/browser/services/gcm/ios_chrome_gcm_profile_service_factory.h"
+#include "ios/chrome/browser/gcm/ios_chrome_gcm_profile_service_factory.h"
 #include "ios/web/public/web_ui_ios_data_source.h"
 #include "ios/web/public/webui/web_ui_ios.h"
 #include "ios/web/public/webui/web_ui_ios_message_handler.h"
@@ -144,12 +144,12 @@ void GcmInternalsUIMessageHandler::RequestGCMStatisticsFinished(
 void GcmInternalsUIMessageHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       gcm_driver::kGetGcmInternalsInfo,
-      base::Bind(&GcmInternalsUIMessageHandler::RequestAllInfo,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&GcmInternalsUIMessageHandler::RequestAllInfo,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       gcm_driver::kSetGcmInternalsRecording,
-      base::Bind(&GcmInternalsUIMessageHandler::SetRecording,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&GcmInternalsUIMessageHandler::SetRecording,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 }  // namespace

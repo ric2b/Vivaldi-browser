@@ -7,7 +7,6 @@
 
 #include "base/base_export.h"
 #include "base/callback.h"
-#include "base/debug/task_annotator.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/pending_task.h"
@@ -17,8 +16,7 @@
 
 namespace base {
 
-class MessageLoop;
-class PostTaskTest;
+class BasicPostTaskPerfTest;
 
 namespace internal {
 
@@ -28,6 +26,25 @@ namespace internal {
 class BASE_EXPORT IncomingTaskQueue
     : public RefCountedThreadSafe<IncomingTaskQueue> {
  public:
+  // TODO(gab): Move this to SequencedTaskSource::Observer in
+  // https://chromium-review.googlesource.com/c/chromium/src/+/1088762.
+  class Observer {
+   public:
+    virtual ~Observer() = default;
+
+    // Notifies this Observer that it is about to enqueue |task|. The Observer
+    // may alter |task| as a result (e.g. add metadata to the PendingTask
+    // struct). This may be called while holding a lock and shouldn't perform
+    // logic requiring synchronization (override DidQueueTask() for that).
+    virtual void WillQueueTask(PendingTask* task) = 0;
+
+    // Notifies this Observer that a task was queued in the IncomingTaskQueue it
+    // observes. |was_empty| is true if the task source was empty (i.e.
+    // |!HasTasks()|) before this task was posted. DidQueueTask() can be invoked
+    // from any thread.
+    virtual void DidQueueTask(bool was_empty) = 0;
+  };
+
   // Provides a read and remove only view into a task queue.
   class ReadAndRemoveOnlyQueue {
    public:
@@ -63,7 +80,13 @@ class BASE_EXPORT IncomingTaskQueue
     DISALLOW_COPY_AND_ASSIGN(Queue);
   };
 
-  explicit IncomingTaskQueue(MessageLoop* message_loop);
+  // Constructs an IncomingTaskQueue which will invoke |task_queue_observer|
+  // when tasks are queued. |task_queue_observer| will be bound to this
+  // IncomingTaskQueue's lifetime. Ownership is required as opposed to a raw
+  // pointer since IncomingTaskQueue is ref-counted. For the same reasons,
+  // |task_queue_observer| needs to support being invoked racily during
+  // shutdown).
+  explicit IncomingTaskQueue(std::unique_ptr<Observer> task_queue_observer);
 
   // Appends a task to the incoming queue. Posting of all tasks is routed though
   // AddToIncomingQueue() or TryAddToIncomingQueue() to make sure that posting
@@ -77,15 +100,11 @@ class BASE_EXPORT IncomingTaskQueue
                           TimeDelta delay,
                           Nestable nestable);
 
-  // Disconnects |this| from the parent message loop.
-  void WillDestroyCurrentMessageLoop();
-
-  // This should be called when the message loop becomes ready for
-  // scheduling work.
-  void StartScheduling();
-
-  // Runs |pending_task|.
-  void RunTask(PendingTask* pending_task);
+  // Instructs this IncomingTaskQueue to stop accepting tasks, this cannot be
+  // undone. Note that the registered IncomingTaskQueue::Observer may still
+  // racily receive a few DidQueueTask() calls while the Shutdown() signal
+  // propagates to other threads and it needs to support that.
+  void Shutdown();
 
   ReadAndRemoveOnlyQueue& triage_tasks() { return triage_tasks_; }
 
@@ -93,13 +112,17 @@ class BASE_EXPORT IncomingTaskQueue
 
   Queue& deferred_tasks() { return deferred_tasks_; }
 
-  bool HasPendingHighResolutionTasks() {
+  bool HasPendingHighResolutionTasks() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return pending_high_res_tasks_ > 0;
+    return delayed_tasks_.HasPendingHighResolutionTasks();
   }
 
+  // Reports UMA metrics about its queues before the MessageLoop goes to sleep
+  // per being idle.
+  void ReportMetricsOnIdle() const;
+
  private:
-  friend class base::PostTaskTest;
+  friend class base::BasicPostTaskPerfTest;
   friend class RefCountedThreadSafe<IncomingTaskQueue>;
 
   // These queues below support the previous MessageLoop behavior of
@@ -129,9 +152,9 @@ class BASE_EXPORT IncomingTaskQueue
     ~TriageQueue() override;
 
     // ReadAndRemoveOnlyQueue:
-    // In general, the methods below will attempt to reload from the incoming
-    // queue if the queue itself is empty except for Clear(). See Clear() for
-    // why it doesn't reload.
+    // The methods below will attempt to reload from the incoming queue if the
+    // queue itself is empty (Clear() has special logic to reload only once
+    // should destructors post more tasks).
     const PendingTask& Peek() override;
     PendingTask Pop() override;
     // Whether this queue has tasks after reloading from the incoming queue.
@@ -149,7 +172,7 @@ class BASE_EXPORT IncomingTaskQueue
 
   class DelayedQueue : public Queue {
    public:
-    DelayedQueue(IncomingTaskQueue* outer);
+    DelayedQueue();
     ~DelayedQueue() override;
 
     // Queue:
@@ -160,16 +183,25 @@ class BASE_EXPORT IncomingTaskQueue
     void Clear() override;
     void Push(PendingTask pending_task) override;
 
+    size_t Size() const;
+    bool HasPendingHighResolutionTasks() const {
+      return pending_high_res_tasks_ > 0;
+    }
+
    private:
-    IncomingTaskQueue* const outer_;
     DelayedTaskQueue queue_;
+
+    // Number of high resolution tasks in |queue_|.
+    int pending_high_res_tasks_ = 0;
+
+    SEQUENCE_CHECKER(sequence_checker_);
 
     DISALLOW_COPY_AND_ASSIGN(DelayedQueue);
   };
 
   class DeferredQueue : public Queue {
    public:
-    DeferredQueue(IncomingTaskQueue* outer);
+    DeferredQueue();
     ~DeferredQueue() override;
 
     // Queue:
@@ -180,8 +212,9 @@ class BASE_EXPORT IncomingTaskQueue
     void Push(PendingTask pending_task) override;
 
    private:
-    IncomingTaskQueue* const outer_;
     TaskQueue queue_;
+
+    SEQUENCE_CHECKER(sequence_checker_);
 
     DISALLOW_COPY_AND_ASSIGN(DeferredQueue);
   };
@@ -194,23 +227,18 @@ class BASE_EXPORT IncomingTaskQueue
   // does not retain |pending_task->task| beyond this function call.
   bool PostPendingTask(PendingTask* pending_task);
 
-  // Does the real work of posting a pending task. Returns true if the caller
-  // should call ScheduleWork() on the message loop.
+  // Does the real work of posting a pending task. Returns true if
+  // |incoming_queue_| was empty before |pending_task| was posted.
   bool PostPendingTaskLockRequired(PendingTask* pending_task);
 
   // Loads tasks from the |incoming_queue_| into |*work_queue|. Must be called
-  // from the sequence processing the tasks. Returns the number of tasks that
-  // require high resolution timers in |work_queue|.
-  int ReloadWorkQueue(TaskQueue* work_queue);
+  // from the sequence processing the tasks.
+  void ReloadWorkQueue(TaskQueue* work_queue);
 
   // Checks calls made only on the MessageLoop thread.
   SEQUENCE_CHECKER(sequence_checker_);
 
-  debug::TaskAnnotator task_annotator_;
-
-  // True if we always need to call ScheduleWork when receiving a new task, even
-  // if the incoming queue was not empty.
-  const bool always_schedule_work_;
+  const std::unique_ptr<Observer> task_queue_observer_;
 
   // Queue for initial triaging of tasks on the |sequence_checker_| sequence.
   TriageQueue triage_tasks_;
@@ -221,22 +249,8 @@ class BASE_EXPORT IncomingTaskQueue
   // Queue for non-nestable deferred tasks on the |sequence_checker_| sequence.
   DeferredQueue deferred_tasks_;
 
-  // Number of high resolution tasks in the sequence affine queues above.
-  int pending_high_res_tasks_ = 0;
-
-  // Lock that serializes |message_loop_->ScheduleWork()| calls as well as
-  // prevents |message_loop_| from being made nullptr during such a call.
-  base::Lock message_loop_lock_;
-
-  // Points to the message loop that owns |this|.
-  MessageLoop* message_loop_;
-
   // Synchronizes access to all members below this line.
   base::Lock incoming_queue_lock_;
-
-  // Number of tasks that require high resolution timing. This value is kept
-  // so that ReloadWorkQueue() completes in constant time.
-  int high_res_task_count_ = 0;
 
   // An incoming queue of tasks that are acquired under a mutex for processing
   // on this instance's thread. These tasks have not yet been been pushed to
@@ -249,12 +263,12 @@ class BASE_EXPORT IncomingTaskQueue
   // The next sequence number to use for delayed tasks.
   int next_sequence_num_ = 0;
 
-  // True if our message loop has already been scheduled and does not need to be
-  // scheduled again until an empty reload occurs.
-  bool message_loop_scheduled_ = false;
-
-  // False until StartScheduling() is called.
-  bool is_ready_for_scheduling_ = false;
+  // True if the outgoing queue (|triage_tasks_|) is empty. Toggled under
+  // |incoming_queue_lock_| in ReloadWorkQueue() so that
+  // PostPendingTaskLockRequired() can tell, without accessing the thread unsafe
+  // |triage_tasks_|, if the IncomingTaskQueue has been made non-empty by a
+  // PostTask() (and needs to inform its Observer).
+  bool triage_queue_empty_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(IncomingTaskQueue);
 };

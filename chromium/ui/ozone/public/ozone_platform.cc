@@ -20,6 +20,10 @@ bool g_platform_initialized_gpu = false;
 base::LazyInstance<base::OnceCallback<void(OzonePlatform*)>>::Leaky
     instance_callback = LAZY_INSTANCE_INITIALIZER;
 
+constexpr OzonePlatform::PlatformProperties kDefaultPlatformProperties = {
+    /*needs_view_owner_request=*/false,
+};
+
 base::Lock& GetOzoneInstanceLock() {
   static base::Lock lock;
   return lock;
@@ -117,12 +121,17 @@ IPC::MessageFilter* OzonePlatform::GetGpuMessageFilter() {
   return nullptr;
 }
 
+const OzonePlatform::PlatformProperties&
+OzonePlatform::GetPlatformProperties() {
+  return kDefaultPlatformProperties;
+}
+
 base::MessageLoop::Type OzonePlatform::GetMessageLoopTypeForGpu() {
   return base::MessageLoop::TYPE_DEFAULT;
 }
 
-void OzonePlatform::AddInterfaces(
-    service_manager::BinderRegistryWithArgs<
-        const service_manager::BindSourceInfo&>* registry) {}
+void OzonePlatform::AddInterfaces(service_manager::BinderRegistry* registry) {}
+
+void OzonePlatform::AfterSandboxEntry() {}
 
 }  // namespace ui

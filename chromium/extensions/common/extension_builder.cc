@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension.h"
@@ -19,7 +18,8 @@ struct ExtensionBuilder::ManifestData {
   std::string name;
   std::vector<std::string> permissions;
   base::Optional<ActionType> action;
-  std::unique_ptr<base::DictionaryValue> extra;
+  base::Optional<BackgroundPage> background_page;
+  base::Optional<base::Value> extra;
 
   std::unique_ptr<base::DictionaryValue> GetValue() const {
     DictionaryBuilder manifest;
@@ -61,11 +61,36 @@ struct ExtensionBuilder::ManifestData {
       manifest.Set(action_key, std::make_unique<base::DictionaryValue>());
     }
 
+    if (background_page) {
+      DictionaryBuilder background;
+      background.Set("page", "background_page.html");
+      bool persistent = false;
+      switch (*background_page) {
+        case BackgroundPage::PERSISTENT:
+          persistent = true;
+          break;
+        case BackgroundPage::EVENT:
+          persistent = false;
+          break;
+      }
+      background.Set("persistent", persistent);
+      manifest.Set("background", background.Build());
+    }
+
     std::unique_ptr<base::DictionaryValue> result = manifest.Build();
-    if (extra)
-      result->MergeDictionary(extra.get());
+    if (extra) {
+      const base::DictionaryValue* extra_dict = nullptr;
+      extra->GetAsDictionary(&extra_dict);
+      result->MergeDictionary(extra_dict);
+    }
 
     return result;
+  }
+
+  base::Value* get_extra() {
+    if (!extra)
+      extra.emplace(base::Value::Type::DICTIONARY);
+    return &extra.value();
   }
 };
 
@@ -124,6 +149,13 @@ ExtensionBuilder& ExtensionBuilder::SetAction(ActionType action) {
   return *this;
 }
 
+ExtensionBuilder& ExtensionBuilder::SetBackgroundPage(
+    BackgroundPage background_page) {
+  CHECK(manifest_data_);
+  manifest_data_->background_page = background_page;
+  return *this;
+}
+
 ExtensionBuilder& ExtensionBuilder::SetPath(const base::FilePath& path) {
   path_ = path;
   return *this;
@@ -144,9 +176,9 @@ ExtensionBuilder& ExtensionBuilder::SetManifest(
 ExtensionBuilder& ExtensionBuilder::MergeManifest(
     std::unique_ptr<base::DictionaryValue> manifest) {
   if (manifest_data_) {
-    if (!manifest_data_->extra)
-      manifest_data_->extra = std::make_unique<base::DictionaryValue>();
-    manifest_data_->extra->MergeDictionary(manifest.get());
+    base::DictionaryValue* extra_dict = nullptr;
+    manifest_data_->get_extra()->GetAsDictionary(&extra_dict);
+    extra_dict->MergeDictionary(manifest.get());
   } else {
     manifest_value_->MergeDictionary(manifest.get());
   }
@@ -161,6 +193,19 @@ ExtensionBuilder& ExtensionBuilder::AddFlags(int init_from_value_flags) {
 ExtensionBuilder& ExtensionBuilder::SetID(const std::string& id) {
   id_ = id;
   return *this;
+}
+
+void ExtensionBuilder::SetManifestKeyImpl(base::StringPiece key,
+                                          base::Value value) {
+  CHECK(manifest_data_);
+  manifest_data_->get_extra()->SetKey(key, std::move(value));
+}
+
+void ExtensionBuilder::SetManifestPathImpl(
+    std::initializer_list<base::StringPiece> path,
+    base::Value value) {
+  CHECK(manifest_data_);
+  manifest_data_->get_extra()->SetPath(path, std::move(value));
 }
 
 }  // namespace extensions

@@ -24,7 +24,7 @@ rootWebArea
 ++++++inlineTextBox name=' '
 ++++staticText name='dog' textStyle=7
 ++++++inlineTextBox name='dog'
-++genericContainer multiline
+++genericContainer multiline value='Normal bold italic underline line-through subscript superscript'
 ++++staticText name='Normal'
 ++++++inlineTextBox name='Normal'
 ++++staticText name=' '
@@ -43,3 +43,11 @@ rootWebArea
 ++++++inlineTextBox name=' '
 ++++staticText name='line-through' textStyle=8
 ++++++inlineTextBox name='line-through'
+++++staticText name=' '
+++++++inlineTextBox name=' '
+++++staticText name='subscript' textPosition=subscript
+++++++inlineTextBox name='subscript'
+++++staticText name=' '
+++++++inlineTextBox name=' '
+++++staticText name='superscript' textPosition=superscript
+++++++inlineTextBox name='superscript'

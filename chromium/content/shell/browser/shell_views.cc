@@ -175,6 +175,7 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
       toolbar_column_set->AddPaddingColumn(0, 2);
       // URL entry
       url_entry_ = new views::Textfield();
+      url_entry_->SetAccessibleName(base::ASCIIToUTF16("Enter URL"));
       url_entry_->set_controller(this);
       url_entry_->SetTextInputType(ui::TextInputType::TEXT_INPUT_TYPE_URL);
       toolbar_column_set->AddColumn(views::GridLayout::FILL,
@@ -344,10 +345,8 @@ void Shell::PlatformInitialize(const gfx::Size& default_window_size) {
       ServiceManagerConnection::GetForProcess()->GetConnector(),
       ui_context_factory);
 #else
-#if defined(USE_AURA)
   wm_state_ = new wm::WMState;
-#endif
-  display::Screen::SetScreenInstance(views::CreateDesktopScreen());
+  views::InstallDesktopScreenIfNecessary();
 #endif
   views_delegate_ = new views::DesktopTestViewsDelegate();
 }
@@ -427,11 +426,9 @@ void Shell::PlatformCreateWindow(int width, int height) {
 
   content_size_ = gfx::Size(width, height);
 
+  // |window_widget_| is made visible in PlatformSetContents(), so that the
+  // platform-window size does not need to change due to layout again.
   window_ = window_widget_->GetNativeWindow();
-  // Call ShowRootWindow on RootWindow created by WMTestHelper without
-  // which XWindow owned by RootWindow doesn't get mapped.
-  window_->GetHost()->Show();
-  window_widget_->Show();
 }
 
 void Shell::PlatformSetContents() {
@@ -441,6 +438,9 @@ void Shell::PlatformSetContents() {
     aura::Window* parent = platform_->host()->window();
     if (!parent->Contains(content)) {
       parent->AddChild(content);
+      // Move the cursor to a fixed position before tests run to avoid getting
+      // an unpredictable result from mouse events.
+      content->MoveCursorTo(gfx::Point());
       content->Show();
     }
     content->SetBounds(gfx::Rect(content_size_));
@@ -452,6 +452,8 @@ void Shell::PlatformSetContents() {
     ShellWindowDelegateView* delegate_view =
         static_cast<ShellWindowDelegateView*>(widget_delegate);
     delegate_view->SetWebContents(web_contents_.get(), content_size_);
+    window_->GetHost()->Show();
+    window_widget_->Show();
   }
 }
 

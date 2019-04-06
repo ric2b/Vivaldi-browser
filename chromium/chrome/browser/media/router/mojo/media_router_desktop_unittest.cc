@@ -43,9 +43,7 @@ class NullMessageObserver : public RouteMessageObserver {
       : RouteMessageObserver(router, route_id) {}
   ~NullMessageObserver() final {}
 
-  void OnMessagesReceived(
-      const std::vector<content::PresentationConnectionMessage>& messages)
-      final {}
+  void OnMessagesReceived(const std::vector<mojom::RouteMessagePtr>) final {}
 };
 
 }  // namespace
@@ -69,8 +67,7 @@ class MediaRouterDesktopTestBase : public MediaRouterMojoTest {
     std::unique_ptr<MockCastMediaSinkService> cast_media_sink_service;
     if (enable_cast_discovery) {
       feature_list_.InitWithFeatures({kEnableCastDiscovery}, {});
-      cast_media_sink_service = std::make_unique<MockCastMediaSinkService>(
-          profile()->GetRequestContext());
+      cast_media_sink_service = std::make_unique<MockCastMediaSinkService>();
       cast_media_sink_service_ = cast_media_sink_service.get();
     } else {
       feature_list_.InitWithFeatures({}, {kEnableCastDiscovery});
@@ -78,8 +75,7 @@ class MediaRouterDesktopTestBase : public MediaRouterMojoTest {
 
     media_sink_service_ = std::unique_ptr<DualMediaSinkService>(
         new DualMediaSinkService(std::move(cast_media_sink_service),
-                                 std::make_unique<MockDialMediaSinkService>(
-                                     profile()->GetRequestContext())));
+                                 std::make_unique<MockDialMediaSinkService>()));
     return std::unique_ptr<MediaRouterDesktop>(
         new MediaRouterDesktop(profile(), media_sink_service_.get()));
   }
@@ -201,6 +197,24 @@ TEST_F(MediaRouterDesktopTest, ProvideSinks) {
 TEST_F(MediaRouterDesktopTest, SendCastJoinRequestsToExtension) {
   TestJoinRoute(kAutoJoinPresentationId);
   TestJoinRoute(kCastPresentationIdPrefix + std::string("123"));
+}
+
+TEST_F(MediaRouterDesktopTest, ExtensionMrpRecoversFromConnectionError) {
+  MediaRouterDesktop* media_router_desktop =
+      static_cast<MediaRouterDesktop*>(router());
+  auto* extension_mrp_proxy =
+      media_router_desktop->extension_provider_proxy_.get();
+  // |media_router_desktop| detects connection error and reconnects with
+  // |extension_mrp_proxy|.
+  for (int i = 0; i < MediaRouterDesktop::kMaxMediaRouteProviderErrorCount;
+       i++) {
+    extension_mrp_proxy->binding_.Unbind();
+    base::RunLoop().RunUntilIdle();
+    EXPECT_TRUE(extension_mrp_proxy->binding_.is_bound());
+  }
+  extension_mrp_proxy->binding_.Unbind();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(extension_mrp_proxy->binding_.is_bound());
 }
 
 }  // namespace media_router

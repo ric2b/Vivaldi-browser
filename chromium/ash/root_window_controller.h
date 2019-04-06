@@ -37,7 +37,6 @@ class WindowTreeHost;
 
 namespace views {
 class MenuRunner;
-class Widget;
 }
 
 namespace wm {
@@ -46,8 +45,6 @@ class ScopedCaptureClient;
 
 namespace ash {
 class AlwaysOnTopController;
-class AnimatingWallpaperWidgetController;
-class AshTouchExplorationManager;
 class AshWindowTreeHost;
 class LockScreenActionBackgroundController;
 enum class LoginStatus;
@@ -60,6 +57,7 @@ class StatusAreaWidget;
 class SystemModalContainerLayoutManager;
 class SystemTray;
 class SystemWallpaperController;
+class TouchExplorationManager;
 class TouchHudDebug;
 class TouchHudProjection;
 class WallpaperWidgetController;
@@ -171,6 +169,9 @@ class ASH_EXPORT RootWindowController {
   // lead to a crash.
   SystemTray* GetSystemTray();
 
+  // Returns if system tray and its widget is visible.
+  bool IsSystemTrayVisible();
+
   // True if the window can receive events on this root window.
   bool CanWindowReceiveEvents(aura::Window* window);
 
@@ -191,24 +192,11 @@ class ASH_EXPORT RootWindowController {
   WallpaperWidgetController* wallpaper_widget_controller() {
     return wallpaper_widget_controller_.get();
   }
-  void SetWallpaperWidgetController(WallpaperWidgetController* controller);
-
-  AnimatingWallpaperWidgetController* animating_wallpaper_widget_controller() {
-    return animating_wallpaper_widget_controller_.get();
-  }
-  void SetAnimatingWallpaperWidgetController(
-      AnimatingWallpaperWidgetController* controller);
 
   LockScreenActionBackgroundController*
   lock_screen_action_background_controller() {
     return lock_screen_action_background_controller_.get();
   }
-
-  // Called when the wallpaper animation is finished. Updates
-  // |system_wallpaper_| to be black and drops |boot_splash_screen_| and moves
-  // the wallpaper controller into the root window controller. |widget| holds
-  // the wallpaper image, or NULL if the wallpaper is a solid color.
-  void OnWallpaperAnimationFinished(views::Widget* widget);
 
   // Deletes associated objects and clears the state, but doesn't delete
   // the root window yet. This is used to delete a secondary displays'
@@ -245,11 +233,16 @@ class ASH_EXPORT RootWindowController {
   // Shows a context menu at the |location_in_screen|.
   void ShowContextMenu(const gfx::Point& location_in_screen,
                        ui::MenuSourceType source_type);
+  void HideContextMenu();
+  bool IsContextMenuShown() const;
 
   // Called when the login status changes after login (such as lock/unlock).
   void UpdateAfterLoginStatusChange(LoginStatus status);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(RootWindowControllerTest,
+                           ContextMenuDisappearsInTabletMode);
+
   // TODO(sky): remove this. Temporary during ash-mus unification.
   // http://crbug.com/671246.
   friend class WindowManager;
@@ -285,6 +278,10 @@ class ASH_EXPORT RootWindowController {
   // Callback for MenuRunner.
   void OnMenuClosed(const base::TimeTicks desktop_context_menu_show_time);
 
+  // Passed as callback to |wallpaper_widget_controller_| - run when the
+  // wallpaper widget is first set.
+  void OnFirstWallpaperWidgetSet();
+
   std::unique_ptr<AshWindowTreeHost> ash_host_;
   std::unique_ptr<aura::WindowTreeHost> mus_window_tree_host_;
   // This comes from |ash_host_| or |mus_window_tree_host_|.
@@ -295,8 +292,6 @@ class ASH_EXPORT RootWindowController {
   wm::RootWindowLayoutManager* root_window_layout_manager_ = nullptr;
 
   std::unique_ptr<WallpaperWidgetController> wallpaper_widget_controller_;
-  std::unique_ptr<AnimatingWallpaperWidgetController>
-      animating_wallpaper_widget_controller_;
   std::unique_ptr<WorkspaceController> workspace_controller_;
 
   std::unique_ptr<AlwaysOnTopController> always_on_top_controller_;
@@ -321,7 +316,7 @@ class ASH_EXPORT RootWindowController {
 
   // Responsible for initializing TouchExplorationController when spoken
   // feedback is on.
-  std::unique_ptr<AshTouchExplorationManager> touch_exploration_manager_;
+  std::unique_ptr<TouchExplorationManager> touch_exploration_manager_;
 
   // Heads-up displays for touch events. These HUDs are not owned by the root
   // window controller and manage their own lifetimes.
@@ -335,6 +330,10 @@ class ASH_EXPORT RootWindowController {
 
   std::unique_ptr<LockScreenActionBackgroundController>
       lock_screen_action_background_controller_;
+
+  // Whether child windows have been closed during shutdown. Exists to avoid
+  // calling related cleanup code more than once.
+  bool did_close_child_windows_ = false;
 
   static std::vector<RootWindowController*>* root_window_controllers_;
 

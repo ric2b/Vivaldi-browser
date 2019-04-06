@@ -29,7 +29,8 @@ NavigationHandle::CreateNavigationHandleForTesting(
     net::Error error,
     bool is_same_document,
     bool is_post,
-    ui::PageTransition transition) {
+    ui::PageTransition transition,
+    bool is_form_submission) {
   RenderFrameHostImpl* rfhi =
       static_cast<RenderFrameHostImpl*>(render_frame_host);
   scoped_refptr<network::ResourceRequestBody> resource_request_body;
@@ -48,9 +49,9 @@ NavigationHandle::CreateNavigationHandleForTesting(
           is_same_document, base::TimeTicks::Now(), 0,
           false,                  // started_from_context_menu
           CSPDisposition::CHECK,  // should_check_main_world_csp
-          false,                  // is_form_submission
-          base::nullopt,          // suggested_filename
-          method, resource_request_body, Referrer(),
+          is_form_submission,     // is_form_submission
+          nullptr,                // navigation_ui_data
+          method, net::HttpRequestHeaders(), resource_request_body, Referrer(),
           false,  // has_user_gesture
           transition);
   handle_impl->set_render_frame_host(rfhi);

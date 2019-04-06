@@ -21,17 +21,8 @@ class Category;
 @class CollectionViewItem;
 @class ContentSuggestionsCategoryWrapper;
 @class ContentSuggestionsItem;
+@class ContentSuggestionsMostVisitedActionItem;
 @class ContentSuggestionsMostVisitedItem;
-
-// TODO(crbug.com/701275): Once base::BindBlock supports the move semantics,
-// remove this wrapper.
-// Wraps a callback taking a const ref to a callback taking an object.
-void BindWrapper(
-    base::Callback<void(ntp_snippets::Status status_code,
-                        const std::vector<ntp_snippets::ContentSuggestion>&
-                            suggestions)> callback,
-    ntp_snippets::Status status_code,
-    std::vector<ntp_snippets::ContentSuggestion> suggestions);
 
 // Returns the section ID for this |category|.
 ContentSuggestionsSectionID SectionIDForCategory(
@@ -44,10 +35,11 @@ ContentSuggestionsItem* ConvertSuggestion(
     ntp_snippets::Category category);
 
 // Returns a SectionInformation for a |category|, filled with the
-// |categoryInfo|.
+// |categoryInfo| and |expanded|.
 ContentSuggestionsSectionInformation* SectionInformationFromCategoryInfo(
     const base::Optional<ntp_snippets::CategoryInfo>& categoryInfo,
-    const ntp_snippets::Category& category);
+    const ntp_snippets::Category& category,
+    const BOOL expanded);
 
 // Returns a ntp_snippets::ID based on a Objective-C Category and the ID in the
 // category.
@@ -75,5 +67,17 @@ ContentSuggestionsMostVisitedItem* ConvertNTPTile(
     ContentSuggestionsSectionInformation* sectionInfo);
 
 content_suggestions::StatusCode ConvertStatusCode(ntp_snippets::Status status);
+
+// Creates and returns a Bookmarks action item.
+ContentSuggestionsMostVisitedActionItem* BookmarkActionItem();
+
+// Creates and returns a Reading List action item.
+ContentSuggestionsMostVisitedActionItem* ReadingListActionItem();
+
+// Creates and returns a Recent Tabs action item.
+ContentSuggestionsMostVisitedActionItem* RecentTabsActionItem();
+
+// Creates and returns a Histry action item.
+ContentSuggestionsMostVisitedActionItem* HistoryActionItem();
 
 #endif  // IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_MEDIATOR_UTIL_H_

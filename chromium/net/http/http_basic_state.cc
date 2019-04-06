@@ -32,20 +32,19 @@ HttpBasicState::HttpBasicState(std::unique_ptr<ClientSocketHandle> connection,
 
 HttpBasicState::~HttpBasicState() = default;
 
-int HttpBasicState::Initialize(const HttpRequestInfo* request_info,
-                               bool can_send_early,
-                               RequestPriority priority,
-                               const NetLogWithSource& net_log,
-                               const CompletionCallback& callback) {
+void HttpBasicState::Initialize(const HttpRequestInfo* request_info,
+                                bool can_send_early,
+                                RequestPriority priority,
+                                const NetLogWithSource& net_log) {
   DCHECK(!parser_.get());
   url_ = request_info->url;
+  traffic_annotation_ = request_info->traffic_annotation;
   request_method_ = request_info->method;
   parser_.reset(new HttpStreamParser(
       connection_.get(), request_info, read_buf_.get(), net_log));
   parser_->set_http_09_on_non_default_ports_enabled(
       http_09_on_non_default_ports_enabled_);
   can_send_early_ = can_send_early;
-  return OK;
 }
 
 std::unique_ptr<ClientSocketHandle> HttpBasicState::ReleaseConnection() {

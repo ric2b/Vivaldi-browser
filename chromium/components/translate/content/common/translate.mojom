@@ -4,8 +4,9 @@
 
 module translate.mojom;
 
-import "mojo/common/time.mojom";
-import "url/mojo/url.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "url/mojom/url.mojom";
 
 enum TranslateError {
   NONE,
@@ -23,7 +24,7 @@ enum TranslateError {
 };
 
 struct LanguageDetectionDetails {
-  mojo.common.mojom.Time time;
+  mojo_base.mojom.Time time;
   url.mojom.Url url;
   string content_language;
   string cld_language;
@@ -31,7 +32,7 @@ struct LanguageDetectionDetails {
   bool has_notranslate;
   string html_root_language;
   string adopted_language;
-  string contents;
+  mojo_base.mojom.String16 contents;
 };
 
 interface Page {

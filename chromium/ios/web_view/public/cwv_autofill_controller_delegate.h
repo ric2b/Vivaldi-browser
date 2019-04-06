@@ -13,6 +13,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CWVAutofillController;
 @class CWVAutofillFormSuggestion;
+@class CWVCreditCard;
+@class CWVCreditCardVerifier;
+
+// Storage policies for autofill data.
+typedef NS_ENUM(NSInteger, CWVStoragePolicy) {
+  CWVStoragePolicyReject = 0,  // Do not store.
+  CWVStoragePolicyAllow,       // Allow storage.
+};
 
 CWV_EXPORT
 // Protocol to receive callbacks related to autofill.
@@ -30,18 +38,21 @@ CWV_EXPORT
 // Called when a form field element receives a "focus" event.
 - (void)autofillController:(CWVAutofillController*)autofillController
     didFocusOnFieldWithName:(NSString*)fieldName
+            fieldIdentifier:(NSString*)fieldIdentifier
                    formName:(NSString*)formName
                       value:(NSString*)value;
 
 // Called when a form field element receives an "input" event.
 - (void)autofillController:(CWVAutofillController*)autofillController
     didInputInFieldWithName:(NSString*)fieldName
+            fieldIdentifier:(NSString*)fieldIdentifier
                    formName:(NSString*)formName
                       value:(NSString*)value;
 
 // Called when a form field element receives a "blur" (un-focused) event.
 - (void)autofillController:(CWVAutofillController*)autofillController
     didBlurOnFieldWithName:(NSString*)fieldName
+           fieldIdentifier:(NSString*)fieldIdentifier
                   formName:(NSString*)formName
                      value:(NSString*)value;
 
@@ -51,6 +62,20 @@ CWV_EXPORT
      didSubmitFormWithName:(NSString*)formName
              userInitiated:(BOOL)userInitiated
                isMainFrame:(BOOL)isMainFrame;
+
+// Called when user needs to decide on whether or not to save the card locally.
+// This can happen if user is signed out or sync is disabled.
+// Pass final decision to |decisionHandler|. Must only be called once.
+// If not implemented, assumes CWVStoragePolicyReject.
+- (void)autofillController:(CWVAutofillController*)autofillController
+    decidePolicyForLocalStorageOfCreditCard:(CWVCreditCard*)creditCard
+                            decisionHandler:(void (^)(CWVStoragePolicy policy))
+                                                decisionHandler;
+
+// Called when the user needs to use |verifier| to verify a credit card.
+// Lifetime of |verifier| should be managed by the delegate.
+- (void)autofillController:(CWVAutofillController*)autofillController
+    verifyCreditCardWithVerifier:(CWVCreditCardVerifier*)verifier;
 
 @end
 

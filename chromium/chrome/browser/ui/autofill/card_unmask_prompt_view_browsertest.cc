@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/card_unmask_prompt_view_tester.h"
@@ -25,6 +26,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_utils.h"
+#include "ui/base/ui_base_features.h"
 
 namespace autofill {
 
@@ -86,9 +88,10 @@ class TestCardUnmaskPromptController : public CardUnmaskPromptControllerImpl {
     // success is shown.
     base::string16 verification_message;
     if (expected_failure_temporary_) {
-      verification_message = base::ASCIIToUTF16("This is a temporary error.");
+      verification_message = base::ASCIIToUTF16("Check your CVC and try again");
     } else if (expected_failure_permanent_) {
-      verification_message = base::ASCIIToUTF16("This is a permanent error.");
+      verification_message =
+          base::ASCIIToUTF16("This card can't be verified right now.");
     }
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
@@ -99,9 +102,18 @@ class TestCardUnmaskPromptController : public CardUnmaskPromptControllerImpl {
   }
 
   base::TimeDelta GetSuccessMessageDuration() const override {
-    // Change this to ~4000 if you're in --interactive mode and would like to
-    // see the progress/success overlay.
+    // Change this to ~4000 if you're in --test-launcher-interactive mode and
+    // would like to see the progress/success overlay.
     return base::TimeDelta::FromMilliseconds(10);
+  }
+
+  AutofillClient::PaymentsRpcResult GetVerificationResult() const override {
+    if (expected_failure_temporary_)
+      return AutofillClient::TRY_AGAIN_FAILURE;
+    if (expected_failure_permanent_)
+      return AutofillClient::PERMANENT_FAILURE;
+
+    return AutofillClient::SUCCESS;
   }
 
   void set_expected_verification_failure(bool allow_retry) {
@@ -136,6 +148,11 @@ class CardUnmaskPromptViewBrowserTest : public DialogBrowserTest {
   CardUnmaskPromptViewBrowserTest() {}
 
   ~CardUnmaskPromptViewBrowserTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    DialogBrowserTest::SetUpCommandLine(command_line);
+    scoped_feature_list_.InitAndEnableFeature(features::kExperimentalUi);
+  }
 
   // DialogBrowserTest:
   void SetUpOnMainThread() override {
@@ -179,6 +196,8 @@ class CardUnmaskPromptViewBrowserTest : public DialogBrowserTest {
   content::WebContents* contents_;
   std::unique_ptr<TestCardUnmaskPromptController> controller_;
   std::unique_ptr<TestCardUnmaskDelegate> delegate_;
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(CardUnmaskPromptViewBrowserTest);
 };

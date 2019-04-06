@@ -67,10 +67,7 @@ static constexpr char const* kFragmentShader = SHADER(
 
 }  // namespace
 
-Stars::Stars() {
-  set_hit_testable(false);
-}
-
+Stars::Stars() = default;
 Stars::~Stars() = default;
 
 void Stars::Render(UiElementRenderer* renderer,
@@ -119,9 +116,6 @@ void Stars::Renderer::Draw(float t, const gfx::Transform& view_proj_matrix) {
   glVertexAttribPointer(phase_handle_, 1, GL_FLOAT, false, kDataStride,
                         VOID_OFFSET(kPhaseDataOffset));
   glEnableVertexAttribArray(phase_handle_);
-
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);

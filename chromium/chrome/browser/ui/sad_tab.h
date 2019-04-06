@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/process/kill.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/sad_tab_types.h"
 
 namespace content {
@@ -24,17 +25,28 @@ class SadTab {
 
   // Factory function to create the platform specific implementations.
   static SadTab* Create(content::WebContents* web_contents, SadTabKind kind);
+#if defined(OS_MACOSX)
+  // Temporary shim for Polychrome. See bottom of first comment in
+  // https://crbug.com/80495 for details.
+  static SadTab* CreateCocoa(content::WebContents* web_contents,
+                             SadTabKind kind);
+#endif
 
   // Returns true if the sad tab should be shown.
   static bool ShouldShow(base::TerminationStatus status);
 
   virtual ~SadTab() {}
 
+  // Called when the sad tab needs to be reinstalled in its window,
+  // for example because an inactive tab was activated, or because a tab was
+  // dragged to a new browser window.
+  virtual void ReinstallInWebView() {}
+
   // These functions return resource string IDs for UI text. They may be
   // different for each sad tab. (Right now, the first sad tab in a session
   // suggests reloading and subsequent ones suggest sending feedback.)
   int GetTitle();
-  int GetMessage();
+  int GetInfoMessage();
   int GetButtonTitle();
   int GetHelpLinkTitle();
 
@@ -52,6 +64,8 @@ class SadTab {
 
  protected:
   SadTab(content::WebContents* web_contents, SadTabKind kind);
+
+  content::WebContents* web_contents() const { return web_contents_; }
 
  private:
   content::WebContents* web_contents_;

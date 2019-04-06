@@ -8,7 +8,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
-#include "device/vr/vr_service.mojom.h"
+#include "device/vr/public/mojom/vr_service.mojom.h"
+#include "device/vr/vr_device.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "third_party/libovr/src/Include/OVR_CAPI.h"
@@ -20,38 +21,75 @@
 
 namespace device {
 
+const int kMaxOculusRenderLoopInputId = (ovrControllerType_Remote + 1);
+
 class OculusRenderLoop : public base::Thread, mojom::VRPresentationProvider {
  public:
-  OculusRenderLoop(ovrSession session);
+  using RequestSessionCallback =
+      base::OnceCallback<void(bool result,
+                              mojom::VRSubmitFrameClientRequest,
+                              mojom::VRPresentationProviderPtrInfo,
+                              mojom::VRDisplayFrameTransportOptionsPtr)>;
+
+  OculusRenderLoop(
+      base::RepeatingCallback<void()> on_presentation_ended,
+      base::RepeatingCallback<
+          void(ovrInputState, ovrInputState, ovrTrackingState, bool, bool)>
+          on_controller_updated);
   ~OculusRenderLoop() override;
 
-  void RequestPresent(mojom::VRSubmitFrameClientPtrInfo submit_client_info,
-                      mojom::VRPresentationProviderRequest request,
-                      base::OnceCallback<void(bool)> callback);
+  void RequestSession(mojom::XRDeviceRuntimeSessionOptionsPtr options,
+                      RequestSessionCallback callback);
   void ExitPresent();
   base::WeakPtr<OculusRenderLoop> GetWeakPtr();
 
   // VRPresentationProvider overrides:
+  void SubmitFrameMissing(int16_t frame_index, const gpu::SyncToken&) override;
   void SubmitFrame(int16_t frame_index,
                    const gpu::MailboxHolder& mailbox,
                    base::TimeDelta time_waited) override;
+  void SubmitFrameDrawnIntoTexture(int16_t frame_index,
+                                   const gpu::SyncToken&,
+                                   base::TimeDelta time_waited) override;
   void SubmitFrameWithTextureHandle(int16_t frame_index,
                                     mojo::ScopedHandle texture_handle) override;
   void UpdateLayerBounds(int16_t frame_id,
                          const gfx::RectF& left_bounds,
                          const gfx::RectF& right_bounds,
                          const gfx::Size& source_size) override;
-  void GetVSync(GetVSyncCallback callback) override;
+  void GetFrameData(
+      mojom::VRPresentationProvider::GetFrameDataCallback callback) override;
 
  private:
   // base::Thread overrides:
   void Init() override;
+  void CleanUp() override;
+
+  void ClearPendingFrame();
+  void StartOvrSession();
+  void StopOvrSession();
+  void CreateOvrSwapChain();
+  void DestroyOvrSwapChain();
+
+  void UpdateControllerState();
 
   mojom::VRPosePtr GetPose();
+
+  std::vector<mojom::XRInputSourceStatePtr> GetInputState(
+      const ovrTrackingState& tracking_state);
+
+  device::mojom::XRInputSourceStatePtr GetTouchData(
+      ovrControllerType type,
+      const ovrPoseStatef& pose,
+      const ovrInputState& input_state,
+      ovrHandType hand);
 
 #if defined(OS_WIN)
   D3D11TextureHelper texture_helper_;
 #endif
+
+  base::OnceCallback<void()> delayed_get_frame_data_callback_;
+  bool has_outstanding_frame_ = false;
 
   long long ovr_frame_index_ = 0;
   int16_t next_frame_id_ = 0;
@@ -61,11 +99,18 @@ class OculusRenderLoop : public base::Thread, mojom::VRPresentationProvider {
   gfx::Size source_size_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   mojom::VRSubmitFrameClientPtr submit_client_;
-  ovrSession session_;
+  ovrSession session_ = nullptr;
+  ovrGraphicsLuid luid_ = {};
   ovrPosef last_render_pose_;
   ovrTextureSwapChain texture_swap_chain_ = 0;
   double sensor_time_;
   mojo::Binding<mojom::VRPresentationProvider> binding_;
+  bool primary_input_pressed[kMaxOculusRenderLoopInputId];
+  base::RepeatingCallback<void()> on_presentation_ended_;
+  base::RepeatingCallback<
+      void(ovrInputState, ovrInputState, ovrTrackingState, bool, bool)>
+      on_controller_updated_;
+
   base::WeakPtrFactory<OculusRenderLoop> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(OculusRenderLoop);

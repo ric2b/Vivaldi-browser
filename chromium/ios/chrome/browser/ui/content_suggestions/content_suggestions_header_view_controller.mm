@@ -4,25 +4,30 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller.h"
 
+#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/UIView+SizeClassSupport.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#include "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_view.h"
+#import "ios/chrome/browser/ui/toolbar/adaptive/primary_toolbar_view.h"
+#import "ios/chrome/browser/ui/toolbar/adaptive/primary_toolbar_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/browser/ui/util/named_guide.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/ui/logo_vendor.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -35,7 +40,6 @@ using base::UserMetricsAction;
 
 namespace {
 const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
-const CGFloat kHintLabelSidePadding = 12;
 }  // namespace
 
 @interface ContentSuggestionsHeaderViewController ()
@@ -60,8 +64,9 @@ const CGFloat kHintLabelSidePadding = 12;
 // The number of tabs to show in the google landing fake toolbar.
 @property(nonatomic, assign) int tabCount;
 
-@property(nonatomic, strong) NewTabPageHeaderView* headerView;
+@property(nonatomic, strong) UIView<NTPHeaderViewAdapter>* headerView;
 @property(nonatomic, strong) UIButton* fakeOmnibox;
+@property(nonatomic, strong) UILabel* searchHintLabel;
 @property(nonatomic, strong) NSLayoutConstraint* hintLabelLeadingConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* voiceTapTrailingConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* doodleHeightConstraint;
@@ -78,9 +83,10 @@ const CGFloat kHintLabelSidePadding = 12;
 @synthesize dispatcher = _dispatcher;
 @synthesize delegate = _delegate;
 @synthesize commandHandler = _commandHandler;
+@synthesize searchHintLabel = _searchHintLabel;
 @synthesize collectionSynchronizer = _collectionSynchronizer;
 @synthesize readingListModel = _readingListModel;
-
+@synthesize toolbarDelegate = _toolbarDelegate;
 @synthesize logoVendor = _logoVendor;
 @synthesize promoCanShow = _promoCanShow;
 @synthesize canGoForward = _canGoForward;
@@ -116,6 +122,26 @@ const CGFloat kHintLabelSidePadding = 12;
   return self.headerView.toolBarView;
 }
 
+- (void)willTransitionToTraitCollection:(UITraitCollection*)newCollection
+              withTransitionCoordinator:
+                  (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super willTransitionToTraitCollection:newCollection
+               withTransitionCoordinator:coordinator];
+  if (!IsUIRefreshPhase1Enabled())
+    return;
+
+  void (^transition)(id<UIViewControllerTransitionCoordinatorContext>) =
+      ^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        // Ensure omnibox is reset when not a regular tablet.
+        if (IsSplitToolbarMode()) {
+          [self.toolbarDelegate setScrollProgressForTabletOmnibox:1];
+        }
+        [self updateConstraints];
+      };
+
+  [coordinator animateAlongsideTransition:transition completion:nil];
+}
+
 #pragma mark - Property
 
 - (void)setIsShowing:(BOOL)isShowing {
@@ -129,12 +155,27 @@ const CGFloat kHintLabelSidePadding = 12;
 - (void)updateFakeOmniboxForOffset:(CGFloat)offset
                        screenWidth:(CGFloat)screenWidth
                     safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
+  if (self.isShowing && IsUIRefreshPhase1Enabled()) {
+    CGFloat progress =
+        self.logoIsShowing
+            ? [self.headerView searchFieldProgressForOffset:offset
+                                             safeAreaInsets:safeAreaInsets]
+            : 1;
+    if (!IsSplitToolbarMode()) {
+      [self.toolbarDelegate setScrollProgressForTabletOmnibox:progress];
+    } else {
+      // Ensure omnibox is reset when not a regular tablet.
+      [self.toolbarDelegate setScrollProgressForTabletOmnibox:1];
+    }
+  }
+
   NSArray* constraints =
       @[ self.hintLabelLeadingConstraint, self.voiceTapTrailingConstraint ];
 
   [self.headerView updateSearchFieldWidth:self.fakeOmniboxWidthConstraint
                                    height:self.fakeOmniboxHeightConstraint
                                 topMargin:self.fakeOmniboxTopMarginConstraint
+                                hintLabel:self.searchHintLabel
                        subviewConstraints:constraints
                                 forOffset:offset
                               screenWidth:screenWidth
@@ -158,13 +199,29 @@ const CGFloat kHintLabelSidePadding = 12;
   [self.headerView layoutIfNeeded];
 }
 
+// Update the doodle top margin to the new -doodleTopMargin value.
+- (void)updateConstraints {
+  self.doodleTopMarginConstraint.constant =
+      content_suggestions::doodleTopMargin(YES);
+}
+
 - (CGFloat)pinnedOffsetY {
   CGFloat headerHeight = content_suggestions::heightForLogoHeader(
       self.logoIsShowing, self.promoCanShow, YES);
+
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
-  if (!IsIPadIdiom())
-    offsetY -= ntp_header::kToolbarHeight;
+  if (!content_suggestions::IsRegularXRegularSizeClass(self.view)) {
+    CGFloat top = 0;
+    if (@available(iOS 11, *)) {
+      top = self.parentViewController.view.safeAreaInsets.top;
+    } else if (IsUIRefreshPhase1Enabled()) {
+      // TODO(crbug.com/826369) Replace this when the NTP is contained by the
+      // BVC with |self.parentViewController.topLayoutGuide.length|.
+      top = StatusBarHeight();
+    }
+    offsetY -= ntp_header::ToolbarHeight() + top;
+  }
 
   return offsetY;
 }
@@ -178,7 +235,12 @@ const CGFloat kHintLabelSidePadding = 12;
 
 - (UIView*)headerForWidth:(CGFloat)width {
   if (!self.headerView) {
-    self.headerView = [[NewTabPageHeaderView alloc] init];
+    if (IsUIRefreshPhase1Enabled()) {
+      self.headerView = [[ContentSuggestionsHeaderView alloc] init];
+      [self addFakeTapView];
+    } else {
+      self.headerView = [[NewTabPageHeaderView alloc] init];
+    }
     [self addFakeOmnibox];
 
     [self.headerView addSubview:self.logoVendor.view];
@@ -207,9 +269,9 @@ const CGFloat kHintLabelSidePadding = 12;
                         fakeOmnibox:self.fakeOmnibox
                       andHeaderView:self.headerView];
 
-    if (!IsIPadIdiom()) {
-      // iPhone header also contains a toolbar since the normal toolbar is
-      // hidden.
+    // iPhone header also contains a toolbar since the normal toolbar is
+    // hidden.
+    if (!IsUIRefreshPhase1Enabled() && !IsIPadIdiom()) {
       [_headerView addToolbarWithReadingListModel:self.readingListModel
                                        dispatcher:self.dispatcher];
       [_headerView setToolbarTabCount:self.tabCount];
@@ -228,7 +290,7 @@ const CGFloat kHintLabelSidePadding = 12;
 // Initialize and add a search field tap target and a voice search button.
 - (void)addFakeOmnibox {
   self.fakeOmnibox = [[UIButton alloc] init];
-  if (IsIPadIdiom()) {
+  if (IsIPadIdiom() && !IsUIRefreshPhase1Enabled()) {
     UIImage* searchBoxImage = [[UIImage imageNamed:@"ntp_google_search_box"]
         resizableImageWithCapInsets:kSearchBoxStretchInsets];
     [self.fakeOmnibox setBackgroundImage:searchBoxImage
@@ -242,20 +304,26 @@ const CGFloat kHintLabelSidePadding = 12;
       ntp_home::FakeOmniboxAccessibilityID();
 
   // Set up fakebox hint label.
-  UILabel* searchHintLabel = [[UILabel alloc] init];
-  content_suggestions::configureSearchHintLabel(searchHintLabel,
+  self.searchHintLabel = [[UILabel alloc] init];
+  content_suggestions::configureSearchHintLabel(self.searchHintLabel,
                                                 self.fakeOmnibox);
 
-  self.hintLabelLeadingConstraint = [searchHintLabel.leadingAnchor
-      constraintEqualToAnchor:[self.fakeOmnibox leadingAnchor]
-                     constant:kHintLabelSidePadding];
-  [_hintLabelLeadingConstraint setActive:YES];
+  if (IsUIRefreshPhase1Enabled()) {
+    self.hintLabelLeadingConstraint = [self.searchHintLabel.leadingAnchor
+        constraintGreaterThanOrEqualToAnchor:[self.fakeOmnibox leadingAnchor]
+                                    constant:ntp_header::kHintLabelSidePadding];
+  } else {
+    self.hintLabelLeadingConstraint = [self.searchHintLabel.leadingAnchor
+        constraintEqualToAnchor:[self.fakeOmnibox leadingAnchor]
+                       constant:ntp_header::kHintLabelSidePaddingLegacy];
+  }
+  self.hintLabelLeadingConstraint.active = YES;
 
   // Set a button the same size as the fake omnibox as the accessibility
   // element. If the hint is the only accessible element, when the fake omnibox
   // is taking the full width, there are few points that are not accessible and
   // allow to select the content below it.
-  searchHintLabel.isAccessibilityElement = NO;
+  self.searchHintLabel.isAccessibilityElement = NO;
   UIButton* accessibilityButton = [[UIButton alloc] init];
   [accessibilityButton addTarget:self
                           action:@selector(fakeOmniboxTapped:)
@@ -275,8 +343,8 @@ const CGFloat kHintLabelSidePadding = 12;
   self.voiceTapTrailingConstraint = [voiceTapTarget.trailingAnchor
       constraintEqualToAnchor:[self.fakeOmnibox trailingAnchor]];
   [NSLayoutConstraint activateConstraints:@[
-    [searchHintLabel.trailingAnchor
-        constraintEqualToAnchor:voiceTapTarget.leadingAnchor],
+    [self.searchHintLabel.trailingAnchor
+        constraintLessThanOrEqualToAnchor:voiceTapTarget.leadingAnchor],
     _voiceTapTrailingConstraint
   ]];
 
@@ -292,15 +360,38 @@ const CGFloat kHintLabelSidePadding = 12;
   }
 }
 
+- (void)addFakeTapView {
+  UIButton* fakeTapButton = [[UIButton alloc] init];
+  fakeTapButton.translatesAutoresizingMaskIntoConstraints = NO;
+  fakeTapButton.accessibilityLabel =
+      l10n_util::GetNSString(IDS_ACCNAME_LOCATION);
+  [self.headerView addToolbarView:fakeTapButton];
+  [fakeTapButton addTarget:self
+                    action:@selector(fakeOmniboxTapped:)
+          forControlEvents:UIControlEventTouchUpInside];
+}
+
 - (void)loadVoiceSearch:(id)sender {
   [self.commandHandler dismissModals];
 
   DCHECK(self.voiceSearchIsEnabled);
   base::RecordAction(UserMetricsAction("MobileNTPMostVisitedVoiceSearch"));
-  UIView* view = base::mac::ObjCCastStrict<UIView>(sender);
-  StartVoiceSearchCommand* command =
-      [[StartVoiceSearchCommand alloc] initWithOriginView:view];
-  [self.dispatcher startVoiceSearch:command];
+  UIView* voiceSearchButton = base::mac::ObjCCastStrict<UIView>(sender);
+  if (base::ios::IsRunningOnIOS12OrLater()) {
+    [NamedGuide guideWithName:kVoiceSearchButtonGuide view:voiceSearchButton]
+        .constrainedView = voiceSearchButton;
+  } else {
+    // On iOS 11 and below, constraining the layout guide to a view instead of
+    // using frame freeze the app. The root cause wasn't found. See
+    // https://crbug.com/874017.
+    NamedGuide* voiceSearchGuide =
+        [NamedGuide guideWithName:kVoiceSearchButtonGuide
+                             view:voiceSearchButton];
+    voiceSearchGuide.constrainedFrame =
+        [voiceSearchGuide.owningView convertRect:voiceSearchButton.bounds
+                                        fromView:voiceSearchButton];
+  }
+  [self.dispatcher startVoiceSearch];
 }
 
 - (void)preloadVoiceSearch:(id)sender {
@@ -312,7 +403,11 @@ const CGFloat kHintLabelSidePadding = 12;
 }
 
 - (void)fakeOmniboxTapped:(id)sender {
-  [self.dispatcher focusFakebox];
+  if (IsUIRefreshPhase1Enabled()) {
+    [self shiftTilesUp];
+  } else {
+    [self.dispatcher focusFakebox];
+  }
 }
 
 // If Google is not the default search engine, hide the logo, doodle and
@@ -322,7 +417,7 @@ const CGFloat kHintLabelSidePadding = 12;
     self.logoVendor.showingLogo = self.logoIsShowing;
     [self.doodleHeightConstraint
         setConstant:content_suggestions::doodleHeight(self.logoIsShowing)];
-    if (IsIPadIdiom())
+    if (content_suggestions::IsRegularXRegularSizeClass(self.view))
       [self.fakeOmnibox setHidden:!self.logoIsShowing];
     [self.collectionSynchronizer invalidateLayout];
   }
@@ -358,10 +453,12 @@ const CGFloat kHintLabelSidePadding = 12;
 }
 
 - (void)shiftTilesDown {
-  if (!IsIPadIdiom()) {
-    self.fakeOmnibox.hidden = NO;
+  if ((IsUIRefreshPhase1Enabled() && IsSplitToolbarMode()) ||
+      (!IsUIRefreshPhase1Enabled() &&
+       !content_suggestions::IsRegularXRegularSizeClass(self.view))) {
     [self.dispatcher onFakeboxBlur];
   }
+  self.fakeOmnibox.hidden = NO;
 
   [self.collectionSynchronizer shiftTilesDown];
 
@@ -370,7 +467,12 @@ const CGFloat kHintLabelSidePadding = 12;
 
 - (void)shiftTilesUp {
   void (^completionBlock)() = ^{
-    if (!IsIPadIdiom()) {
+    if (IsUIRefreshPhase1Enabled()) {
+      [self.dispatcher focusFakebox];
+    }
+    if ((IsUIRefreshPhase1Enabled() && IsSplitToolbarMode()) ||
+        (!IsUIRefreshPhase1Enabled() &&
+         !content_suggestions::IsRegularXRegularSizeClass(self.view))) {
       [self.dispatcher onFakeboxAnimationComplete];
       [self.headerView fadeOutShadow];
       [self.fakeOmnibox setHidden:YES];
@@ -395,7 +497,7 @@ const CGFloat kHintLabelSidePadding = 12;
   return [self.logoVendor logoAnimationControllerOwner];
 }
 
-#pragma mark - GoogleLandingConsumer
+#pragma mark - NTPHomeConsumer
 
 - (void)setLogoIsShowing:(BOOL)logoIsShowing {
   _logoIsShowing = logoIsShowing;
@@ -422,6 +524,7 @@ const CGFloat kHintLabelSidePadding = 12;
     return;
 
   self.omniboxFocused = YES;
+
   [self shiftTilesUp];
 }
 

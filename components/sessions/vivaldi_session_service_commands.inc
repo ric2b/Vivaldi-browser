@@ -20,7 +20,7 @@ bool VivaldiReadExtdata(const SessionCommand* command,
                         IdToSessionWindow* windows) {
   switch (command->id()) {
     case kCommandSetExtData: {
-      SessionID::id_type tab_id;
+      SessionID tab_id = SessionID::InvalidValue();
       std::string ext_data;
       if (!vivaldi::RestoreSetExtDataCommand(*command, &tab_id, &ext_data)) {
         return false;
@@ -31,7 +31,7 @@ bool VivaldiReadExtdata(const SessionCommand* command,
     }
 
     case kCommandSetWindowExtData: {
-      SessionID::id_type window_id;
+      SessionID window_id = SessionID::InvalidValue();
       std::string ext_data;
       if (!vivaldi::RestoreSetWindowExtDataCommand(*command, &window_id,
                                                    &ext_data))

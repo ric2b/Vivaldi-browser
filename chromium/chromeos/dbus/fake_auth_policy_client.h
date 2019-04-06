@@ -14,6 +14,8 @@
 
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 
 class AccountId;
 
@@ -63,10 +65,21 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
       dbus::ObjectProxy::SignalCallback signal_callback,
       dbus::ObjectProxy::OnConnectedCallback on_connected_callback) override;
 
+  void WaitForServiceToBeAvailable(
+      dbus::ObjectProxy::WaitForServiceToBeAvailableCallback callback) override;
+
+  // Runs |user_kerberos_files_changed_callback_| if callback is set and files
+  // changed.
+  void SetUserKerberosFiles(const std::string& kerberos_creds,
+                            const std::string& kerberos_conf);
+  const std::string& user_kerberos_conf() { return user_kerberos_conf_; }
+  const std::string& user_kerberos_creds() { return user_kerberos_creds_; }
+
   // Mark service as started. It's getting started by the
   // UpstartClient::StartAuthPolicyService on the Active Directory managed
-  // devices.
-  void set_started(bool started) { started_ = started; }
+  // devices. If |started| is true, it triggers calling
+  // |wait_for_service_to_be_available_callbacks_|.
+  void SetStarted(bool started);
 
   bool started() const { return started_; }
 
@@ -96,6 +109,11 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
     on_get_status_closure_ = std::move(on_get_status_closure);
   }
 
+  void set_device_policy(
+      const enterprise_management::ChromeDeviceSettingsProto& device_policy) {
+    device_policy_ = device_policy;
+  }
+
   void DisableOperationDelayForTesting() {
     dbus_operation_delay_ = disk_operation_delay_ =
         base::TimeDelta::FromSeconds(0);
@@ -115,6 +133,10 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
   std::string display_name_;
   std::string given_name_;
   std::string machine_name_;
+  std::string dm_token_;
+  std::string user_kerberos_creds_;
+  std::string user_kerberos_conf_;
+  dbus::ObjectProxy::SignalCallback user_kerberos_files_changed_callback_;
   authpolicy::ActiveDirectoryUserStatus::PasswordStatus password_status_ =
       authpolicy::ActiveDirectoryUserStatus::PASSWORD_VALID;
   authpolicy::ActiveDirectoryUserStatus::TgtStatus tgt_status_ =
@@ -123,6 +145,10 @@ class CHROMEOS_EXPORT FakeAuthPolicyClient : public AuthPolicyClient {
   base::TimeDelta dbus_operation_delay_ = base::TimeDelta::FromSeconds(3);
   base::TimeDelta disk_operation_delay_ =
       base::TimeDelta::FromMilliseconds(100);
+  enterprise_management::ChromeDeviceSettingsProto device_policy_;
+
+  std::vector<WaitForServiceToBeAvailableCallback>
+      wait_for_service_to_be_available_callbacks_;
 
   base::WeakPtrFactory<FakeAuthPolicyClient> weak_factory_{this};
 

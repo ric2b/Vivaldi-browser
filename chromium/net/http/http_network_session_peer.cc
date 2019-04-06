@@ -4,9 +4,8 @@
 
 #include "net/http/http_network_session_peer.h"
 
-#include "net/base/network_throttle_manager.h"
 #include "net/http/http_proxy_client_socket_pool.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/socks_client_socket_pool.h"
 #include "net/socket/ssl_client_socket_pool.h"
@@ -27,11 +26,6 @@ void HttpNetworkSessionPeer::SetClientSocketPoolManager(
 void HttpNetworkSessionPeer::SetHttpStreamFactory(
     std::unique_ptr<HttpStreamFactory> http_stream_factory) {
   session_->http_stream_factory_.swap(http_stream_factory);
-}
-
-void HttpNetworkSessionPeer::SetNetworkStreamThrottler(
-    std::unique_ptr<NetworkThrottleManager> network_throttle_manager) {
-  session_->network_stream_throttler_.swap(network_throttle_manager);
 }
 
 HttpNetworkSession::Params* HttpNetworkSessionPeer::params() {

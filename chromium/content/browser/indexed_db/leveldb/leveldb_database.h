@@ -14,9 +14,11 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
+#include "base/time/clock.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "content/common/content_export.h"
 #include "third_party/leveldatabase/src/include/leveldb/comparator.h"
+#include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 
 namespace leveldb {
@@ -84,16 +86,25 @@ class CONTENT_EXPORT LevelDBDatabase
                               bool* found,
                               const LevelDBSnapshot* = 0);
   leveldb::Status Write(const LevelDBWriteBatch& write_batch);
-  std::unique_ptr<LevelDBIterator> CreateIterator(const LevelDBSnapshot* = 0);
+  // Note: Use DefaultReadOptions() and then adjust any values afterwards.
+  std::unique_ptr<LevelDBIterator> CreateIterator(
+      const leveldb::ReadOptions& options);
   const LevelDBComparator* Comparator() const;
   void Compact(const base::StringPiece& start, const base::StringPiece& stop);
   void CompactAll();
+
+  leveldb::ReadOptions DefaultReadOptions();
+  leveldb::ReadOptions DefaultReadOptions(const LevelDBSnapshot* snapshot);
 
   // base::trace_event::MemoryDumpProvider implementation.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
   leveldb::DB* db() { return db_.get(); }
+  leveldb::Env* env() { return env_.get(); }
+  base::Time LastModified() const { return last_modified_; }
+
+  void SetClockForTesting(std::unique_ptr<base::Clock> clock);
 
  protected:
   explicit LevelDBDatabase(size_t max_open_iterators);
@@ -119,6 +130,8 @@ class CONTENT_EXPORT LevelDBDatabase
   std::unique_ptr<leveldb::DB> db_;
   std::unique_ptr<const leveldb::FilterPolicy> filter_policy_;
   const LevelDBComparator* comparator_;
+  base::Time last_modified_;
+  std::unique_ptr<base::Clock> clock_;
 
   struct DetachIteratorOnDestruct {
     DetachIteratorOnDestruct() {}

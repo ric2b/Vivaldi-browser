@@ -9,7 +9,7 @@ executable("update_notifier") {
       "//chrome/app/version_assembly:chrome_exe_manifest",
       "//chrome/common:constants",
       "//chrome/installer/util:with_no_strings",
-      "//components/prefs",
+      "//components/language/core/browser",
       "//ui/base",
       "//vivaldi/app:resources",
       "//vivaldi/app:vivaldi_icon",

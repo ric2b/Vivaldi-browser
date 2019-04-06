@@ -11,13 +11,12 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -61,14 +60,14 @@ CrxComponent::~CrxComponent() {
 // the UpdateClient instance exceeds the life time of its inner members,
 // including any thread objects that might execute callbacks bound to it.
 UpdateClientImpl::UpdateClientImpl(
-    const scoped_refptr<Configurator>& config,
-    std::unique_ptr<PingManager> ping_manager,
+    scoped_refptr<Configurator> config,
+    scoped_refptr<PingManager> ping_manager,
     UpdateChecker::Factory update_checker_factory,
     CrxDownloader::Factory crx_downloader_factory)
     : is_stopped_(false),
       config_(config),
-      ping_manager_(std::move(ping_manager)),
-      update_engine_(std::make_unique<UpdateEngine>(
+      ping_manager_(ping_manager),
+      update_engine_(base::MakeRefCounted<UpdateEngine>(
           config,
           update_checker_factory,
           crx_downloader_factory,
@@ -97,43 +96,44 @@ void UpdateClientImpl::Install(const std::string& id,
 
   std::vector<std::string> ids = {id};
 
-  // Partially applies |callback| to OnTaskComplete, so this argument is
-  // available when the task completes, along with the task itself.
-  // Install tasks are run concurrently and never queued up.
-  RunTask(std::make_unique<TaskUpdate>(
-      update_engine_.get(), true, ids, std::move(crx_data_callback),
+  // Install tasks are run concurrently and never queued up. They are always
+  // considered foreground tasks.
+  constexpr bool kIsForeground = true;
+  RunTask(base::MakeRefCounted<TaskUpdate>(
+      update_engine_.get(), kIsForeground, ids, std::move(crx_data_callback),
       base::BindOnce(&UpdateClientImpl::OnTaskComplete, this,
                      std::move(callback))));
 }
 
 void UpdateClientImpl::Update(const std::vector<std::string>& ids,
                               CrxDataCallback crx_data_callback,
+                              bool is_foreground,
                               Callback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  auto task = std::make_unique<TaskUpdate>(
-      update_engine_.get(), false, ids, std::move(crx_data_callback),
+  auto task = base::MakeRefCounted<TaskUpdate>(
+      update_engine_.get(), is_foreground, ids, std::move(crx_data_callback),
       base::BindOnce(&UpdateClientImpl::OnTaskComplete, this,
                      std::move(callback)));
 
   // If no other tasks are running at the moment, run this update task.
   // Otherwise, queue the task up.
   if (tasks_.empty()) {
-    RunTask(std::move(task));
+    RunTask(task);
   } else {
-    task_queue_.push_back(task.release());
+    task_queue_.push_back(task);
   }
 }
 
-void UpdateClientImpl::RunTask(std::unique_ptr<Task> task) {
+void UpdateClientImpl::RunTask(scoped_refptr<Task> task) {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&Task::Run, base::Unretained(task.get())));
-  tasks_.insert(task.release());
+  tasks_.insert(task);
 }
 
 void UpdateClientImpl::OnTaskComplete(Callback callback,
-                                      Task* task,
+                                      scoped_refptr<Task> task,
                                       Error error) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(task);
@@ -145,18 +145,15 @@ void UpdateClientImpl::OnTaskComplete(Callback callback,
   // the update engine can be in this data structure.
   tasks_.erase(task);
 
-  // Delete the completed task. A task can be completed because the update
-  // engine has run it or because it has been canceled but never run.
-  delete task;
-
   if (is_stopped_)
     return;
 
   // Pick up a task from the queue if the queue has pending tasks and no other
   // task is running.
   if (tasks_.empty() && !task_queue_.empty()) {
-    RunTask(std::unique_ptr<Task>(task_queue_.front()));
+    auto task = task_queue_.front();
     task_queue_.pop_front();
+    RunTask(task);
   }
 }
 
@@ -185,16 +182,16 @@ bool UpdateClientImpl::GetCrxUpdateState(const std::string& id,
 bool UpdateClientImpl::IsUpdating(const std::string& id) const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  for (const auto* task : tasks_) {
-    const auto ids(task->GetIds());
-    if (std::find(ids.begin(), ids.end(), id) != ids.end()) {
+  for (const auto task : tasks_) {
+    const auto ids = task->GetIds();
+    if (base::ContainsValue(ids, id)) {
       return true;
     }
   }
 
-  for (const auto* task : task_queue_) {
-    const auto ids(task->GetIds());
-    if (std::find(ids.begin(), ids.end(), id) != ids.end()) {
+  for (const auto task : task_queue_) {
+    const auto ids = task->GetIds();
+    if (base::ContainsValue(ids, id)) {
       return true;
     }
   }
@@ -221,7 +218,7 @@ void UpdateClientImpl::Stop() {
   // they have not picked up by the update engine, and not shared with any
   // task runner yet.
   while (!task_queue_.empty()) {
-    auto* task(task_queue_.front());
+    auto task = task_queue_.front();
     task_queue_.pop_front();
     task->Cancel();
   }
@@ -233,20 +230,27 @@ void UpdateClientImpl::SendUninstallPing(const std::string& id,
                                          Callback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  RunTask(std::make_unique<TaskSendUninstallPing>(
+  RunTask(base::MakeRefCounted<TaskSendUninstallPing>(
       update_engine_.get(), id, version, reason,
       base::BindOnce(&UpdateClientImpl::OnTaskComplete, base::Unretained(this),
                      std::move(callback))));
 }
 
 scoped_refptr<UpdateClient> UpdateClientFactory(
-    const scoped_refptr<Configurator>& config) {
+    scoped_refptr<Configurator> config) {
   return base::MakeRefCounted<UpdateClientImpl>(
-      config, std::make_unique<PingManager>(config), &UpdateChecker::Create,
+      config, base::MakeRefCounted<PingManager>(config), &UpdateChecker::Create,
       &CrxDownloader::Create);
 }
 
 void RegisterPrefs(PrefRegistrySimple* registry) {
+  PersistedData::RegisterPrefs(registry);
+}
+
+// This function has the exact same implementation as RegisterPrefs. We have
+// this implementation here to make the intention more clear that is local user
+// profile access is needed.
+void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   PersistedData::RegisterPrefs(registry);
 }
 

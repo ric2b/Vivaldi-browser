@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_dir_util.h"
@@ -71,7 +70,7 @@ void DownloadDirPolicyHandler::ApplyPolicySettingsWithParameters(
         DownloadPrefs::GetDefaultDownloadDirectory().value());
   }
   prefs->SetValue(prefs::kDownloadDefaultDirectory,
-                  base::MakeUnique<base::Value>(expanded_value));
+                  std::make_unique<base::Value>(expanded_value));
 
   // If the policy is mandatory, prompt for download should be disabled.
   // Otherwise, it would enable a user to bypass the mandatory policy.

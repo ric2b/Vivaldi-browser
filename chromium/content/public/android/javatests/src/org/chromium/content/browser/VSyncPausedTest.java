@@ -18,6 +18,7 @@ import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.content_shell_apk.ContentShellActivity;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
@@ -47,13 +48,14 @@ public class VSyncPausedTest {
         mActivity = mActivityTestRule.launchContentShellWithUrl(
                 UrlUtils.getIsolatedTestFileUrl(VSYNC_HTML));
         mActivityTestRule.waitForActiveShellToBeDoneLoading();
-        mObserver = new WebContentsObserver(mActivity.getActiveWebContents()) {
+        final WebContents webContents = mActivity.getActiveWebContents();
+        mObserver = ThreadUtils.runOnUiThreadBlocking(() -> new WebContentsObserver(webContents) {
             @Override
             public void titleWasSet(String title) {
                 mTitle = title;
                 mOnTitleUpdatedHelper.notifyCalled();
             }
-        };
+        });
         mOnTitleUpdatedHelper = new CallbackHelper();
     }
 
@@ -73,8 +75,10 @@ public class VSyncPausedTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mActivity.getActiveShell().getContentViewCore().getWindowAndroid().setVSyncPaused(
-                        true);
+                mActivity.getActiveShell()
+                        .getWebContents()
+                        .getTopLevelNativeWindow()
+                        .setVSyncPaused(true);
             }
         });
         callCount = mOnTitleUpdatedHelper.getCallCount();
@@ -104,8 +108,10 @@ public class VSyncPausedTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mActivity.getActiveShell().getContentViewCore().getWindowAndroid().setVSyncPaused(
-                        false);
+                mActivity.getActiveShell()
+                        .getWebContents()
+                        .getTopLevelNativeWindow()
+                        .setVSyncPaused(false);
             }
         });
         mOnTitleUpdatedHelper.waitForCallback(callCount);

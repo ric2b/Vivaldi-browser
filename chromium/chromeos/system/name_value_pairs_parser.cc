@@ -11,7 +11,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/process/launch.h"
-#include "base/stl_util.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -46,13 +45,53 @@ NameValuePairsParser::NameValuePairsParser(NameValueMap* map)
     : map_(map) {
 }
 
+bool NameValuePairsParser::GetNameValuePairsFromFile(
+    const base::FilePath& file_path,
+    const std::string& eq,
+    const std::string& delim) {
+  std::string contents;
+  if (base::ReadFileToString(file_path, &contents)) {
+    return ParseNameValuePairs(contents, eq, delim);
+  } else {
+    if (base::SysInfo::IsRunningOnChromeOS())
+      VLOG(1) << "Statistics file not present: " << file_path.value();
+    return false;
+  }
+}
+
+bool NameValuePairsParser::ParseNameValuePairsFromTool(
+    int argc,
+    const char* argv[],
+    const std::string& eq,
+    const std::string& delim,
+    const std::string& comment_delim) {
+  std::string output_string;
+  if (!GetToolOutput(argc, argv, &output_string))
+    return false;
+
+  return ParseNameValuePairsWithComments(output_string, eq, delim,
+                                         comment_delim);
+}
+
+void NameValuePairsParser::DeletePairsWithValue(const std::string& value) {
+  auto it = map_->begin();
+  while (it != map_->end()) {
+    if (it->second == value) {
+      it = map_->erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
 void NameValuePairsParser::AddNameValuePair(const std::string& key,
                                             const std::string& value) {
-  if (!base::ContainsKey(*map_, key)) {
+  const auto it = map_->find(key);
+  if (it == map_->end()) {
     (*map_)[key] = value;
     VLOG(1) << "name: " << key << ", value: " << value;
-  } else {
-    LOG(WARNING) << "Key " << key << " already has value " << (*map_)[key]
+  } else if (it->second != value) {
+    LOG(WARNING) << "Key " << key << " already has value " << it->second
                  << ", ignoring new value: " << value;
   }
 }
@@ -105,46 +144,6 @@ bool NameValuePairsParser::ParseNameValuePairsWithComments(
     all_valid = false;
   }
   return all_valid;
-}
-
-bool NameValuePairsParser::GetSingleValueFromTool(int argc,
-                                                  const char* argv[],
-                                                  const std::string& key) {
-  std::string output_string;
-  if (!GetToolOutput(argc, argv, &output_string))
-    return false;
-
-  base::TrimWhitespaceASCII(output_string, base::TRIM_ALL, &output_string);
-  AddNameValuePair(key, output_string);
-  return true;
-}
-
-bool NameValuePairsParser::GetNameValuePairsFromFile(
-    const base::FilePath& file_path,
-    const std::string& eq,
-    const std::string& delim) {
-  std::string contents;
-  if (base::ReadFileToString(file_path, &contents)) {
-    return ParseNameValuePairs(contents, eq, delim);
-  } else {
-    if (base::SysInfo::IsRunningOnChromeOS())
-      VLOG(1) << "Statistics file not present: " << file_path.value();
-    return false;
-  }
-}
-
-bool NameValuePairsParser::ParseNameValuePairsFromTool(
-    int argc,
-    const char* argv[],
-    const std::string& eq,
-    const std::string& delim,
-    const std::string& comment_delim) {
-  std::string output_string;
-  if (!GetToolOutput(argc, argv, &output_string))
-    return false;
-
-  return ParseNameValuePairsWithComments(
-      output_string, eq, delim, comment_delim);
 }
 
 }  // namespace system

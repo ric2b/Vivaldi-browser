@@ -28,14 +28,6 @@ TEST_F(ModelTypeTest, ModelTypeToValue) {
   base::ExpectStringValue("Unspecified", *ModelTypeToValue(UNSPECIFIED));
 }
 
-TEST_F(ModelTypeTest, ModelTypeFromValue) {
-  for (int i = FIRST_REAL_MODEL_TYPE; i < MODEL_TYPE_COUNT; ++i) {
-    ModelType model_type = ModelTypeFromInt(i);
-    std::unique_ptr<base::Value> value(ModelTypeToValue(model_type));
-    EXPECT_EQ(model_type, ModelTypeFromValue(*value));
-  }
-}
-
 TEST_F(ModelTypeTest, ModelTypeSetToValue) {
   const ModelTypeSet model_types(BOOKMARKS, APPS);
 
@@ -46,19 +38,6 @@ TEST_F(ModelTypeTest, ModelTypeSetToValue) {
   EXPECT_TRUE(value->GetString(1, &types[1]));
   EXPECT_EQ("Bookmarks", types[0]);
   EXPECT_EQ("Apps", types[1]);
-}
-
-TEST_F(ModelTypeTest, ModelTypeSetFromValue) {
-  // Try empty set first.
-  ModelTypeSet model_types;
-  std::unique_ptr<base::ListValue> value(ModelTypeSetToValue(model_types));
-  EXPECT_EQ(model_types, ModelTypeSetFromValue(*value));
-
-  // Now try with a few random types.
-  model_types.Put(BOOKMARKS);
-  model_types.Put(APPS);
-  value = ModelTypeSetToValue(model_types);
-  EXPECT_EQ(model_types, ModelTypeSetFromValue(*value));
 }
 
 TEST_F(ModelTypeTest, IsRealDataType) {
@@ -113,6 +92,24 @@ TEST_F(ModelTypeTest, ModelTypeHistogramMapping) {
 
     EXPECT_LT(histogram_value, MODEL_TYPE_COUNT);
   }
+}
+
+TEST_F(ModelTypeTest, ModelTypeToStableIdentifier) {
+  std::set<int> identifiers;
+  ModelTypeSet all_types = ModelTypeSet::All();
+  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
+    SCOPED_TRACE(ModelTypeToString(it.Get()));
+    int stable_identifier = ModelTypeToStableIdentifier(it.Get());
+    EXPECT_GT(stable_identifier, 0);
+    EXPECT_TRUE(identifiers.insert(stable_identifier).second)
+        << "Expected identifier values to be unique";
+  }
+
+  // Hard code a few example model_types to make it harder to break that the
+  // identifiers are stable.
+  EXPECT_EQ(3, ModelTypeToStableIdentifier(BOOKMARKS));
+  EXPECT_EQ(7, ModelTypeToStableIdentifier(AUTOFILL));
+  EXPECT_EQ(9, ModelTypeToStableIdentifier(TYPED_URLS));
 }
 
 TEST_F(ModelTypeTest, ModelTypeSetFromString) {

@@ -41,11 +41,15 @@ void SoundContentSettingObserver::DidFinishNavigation(
   }
 }
 
+void SoundContentSettingObserver::OnAudioStateChanged(bool audible) {
+  CheckSoundBlocked(audible);
+}
+
 void SoundContentSettingObserver::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
-    std::string resource_identifier) {
+    const std::string& resource_identifier) {
   if (content_type == CONTENT_SETTINGS_TYPE_SOUND) {
     MuteOrUnmuteIfNecessary();
     CheckSoundBlocked(web_contents()->IsCurrentlyAudible());
@@ -94,10 +98,6 @@ ContentSetting SoundContentSettingObserver::GetCurrentContentSetting() {
   GURL url = web_contents()->GetLastCommittedURL();
   return host_content_settings_map_->GetContentSetting(
       url, url, CONTENT_SETTINGS_TYPE_SOUND, std::string());
-}
-
-void SoundContentSettingObserver::OnAudioStateChanged(bool is_audible) {
-  CheckSoundBlocked(is_audible);
 }
 
 void SoundContentSettingObserver::CheckSoundBlocked(bool is_audible) {

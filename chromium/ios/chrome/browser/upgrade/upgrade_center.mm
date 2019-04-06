@@ -17,7 +17,7 @@
 #include "components/infobars/core/infobar_manager.h"
 #include "components/version_info/version_info.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/open_url_command.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/url_scheme_util.h"
@@ -94,10 +94,6 @@ class UpgradeInfoBarDelegate : public ConfirmInfoBarDelegate {
       icon_ = gfx::Image([UIImage imageNamed:@"infobar_update"]);
     }
     return icon_;
-  }
-
-  InfoBarDelegate::Type GetInfoBarType() const override {
-    return PAGE_ACTION_TYPE;
   }
 
   base::string16 GetMessageText() const override {
@@ -259,7 +255,7 @@ class UpgradeInfoBarDismissObserver
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   NSString* nextVersion = [defaults stringForKey:kNextVersionKey];
   if (nextVersion) {
-    base::Version current_version(version_info::GetVersionNumber());
+    const base::Version& current_version = version_info::GetVersion();
     const std::string upgrade = base::SysNSStringToUTF8(nextVersion);
     return current_version < base::Version(upgrade);
   }
@@ -360,8 +356,8 @@ class UpgradeInfoBarDismissObserver
 
     if (web::UrlHasWebScheme(URL)) {
       // This URL can be opened in the application, just open in a new tab.
-      OpenUrlCommand* command =
-          [[OpenUrlCommand alloc] initWithURLFromChrome:URL];
+      OpenNewTabCommand* command =
+          [OpenNewTabCommand commandWithURLFromChrome:URL];
       [self.dispatcher openURL:command];
     } else {
       // This URL scheme is not understood, ask the system to open it.

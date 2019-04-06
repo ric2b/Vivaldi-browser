@@ -13,11 +13,10 @@
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
 #include "ios/chrome/browser/payments/ios_payment_instrument.h"
 #include "ios/chrome/browser/payments/payment_request.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -48,10 +47,10 @@ static const char kRelatedApplicationsUrl[] = "url";
 namespace payments {
 
 IOSPaymentInstrumentFinder::IOSPaymentInstrumentFinder(
-    net::URLRequestContextGetter* context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     id<PaymentRequestUIDelegate> payment_request_ui_delegate)
-    : downloader_(context_getter),
-      image_fetcher_(context_getter),
+    : downloader_(url_loader_factory),
+      image_fetcher_(url_loader_factory),
       payment_request_ui_delegate_(payment_request_ui_delegate),
       num_instruments_to_find_(0),
       weak_factory_(this) {}
@@ -336,7 +335,7 @@ void IOSPaymentInstrumentFinder::CreateIOSPaymentInstrument(
   std::string local_app_name(app_name);
   GURL local_universal_link(universal_link);
 
-  image_fetcher::IOSImageDataFetcherCallback callback =
+  image_fetcher::ImageDataFetcherBlock callback =
       ^(NSData* data, const image_fetcher::RequestMetadata& metadata) {
         if (data) {
           UIImage* icon =

@@ -169,12 +169,17 @@ NSString* NormalizeRegionName(NSString* region, NSArray<RegionData*>* regions) {
   return NO;
 }
 
-- (void)formatValueForEditorField:(EditorField*)field {
-  if (field.autofillUIType == AutofillUITypeProfileHomePhoneWholeNumber) {
-    field.value = base::SysUTF8ToNSString(autofill::i18n::FormatPhoneForDisplay(
-        base::SysNSStringToUTF8(field.value),
+- (BOOL)shouldFormatValueForAutofillUIType:(AutofillUIType)type {
+  return (type == AutofillUITypeProfileHomePhoneWholeNumber);
+}
+
+- (NSString*)formatValue:(NSString*)value autofillUIType:(AutofillUIType)type {
+  if (type == AutofillUITypeProfileHomePhoneWholeNumber) {
+    return base::SysUTF8ToNSString(autofill::i18n::FormatPhoneForDisplay(
+        base::SysNSStringToUTF8(value),
         base::SysNSStringToUTF8(self.selectedCountryCode)));
   }
+  return nil;
 }
 
 - (UIImage*)iconIdentifyingEditorField:(EditorField*)field {
@@ -203,7 +208,7 @@ NSString* NormalizeRegionName(NSString* region, NSArray<RegionData*>* regions) {
     }
   } else if (field.isRequired) {
     return l10n_util::GetNSString(
-        IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE);
+        IDS_PREF_EDIT_DIALOG_FIELD_REQUIRED_VALIDATION_MESSAGE);
   }
   return nil;
 }

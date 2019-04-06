@@ -6,14 +6,17 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/events/x/events_x_utils.h"
 #include "ui/gfx/x/x11.h"
+
+#if defined(OS_CHROMEOS)
+#include "ui/events/ozone/chromeos/cursor_controller.h"
+#endif
 
 namespace ui {
 
@@ -177,6 +180,12 @@ void X11EventSourceLibevent::RemoveXEventDispatcher(
 void X11EventSourceLibevent::ProcessXEvent(XEvent* xevent) {
   std::unique_ptr<ui::Event> translated_event = TranslateXEventToEvent(*xevent);
   if (translated_event) {
+#if defined(OS_CHROMEOS)
+    if (translated_event->IsLocatedEvent()) {
+      ui::CursorController::GetInstance()->SetCursorLocation(
+          translated_event->AsLocatedEvent()->location_f());
+    }
+#endif
     DispatchPlatformEvent(translated_event.get(), xevent);
   } else {
     // Only if we can't translate XEvent into ui::Event, try to dispatch XEvent
@@ -188,11 +197,11 @@ void X11EventSourceLibevent::ProcessXEvent(XEvent* xevent) {
 void X11EventSourceLibevent::AddEventWatcher() {
   if (initialized_)
     return;
-  if (!base::MessageLoop::current())
+  if (!base::MessageLoopCurrent::Get())
     return;
 
   int fd = ConnectionNumber(event_source_.display());
-  base::MessageLoopForUI::current()->WatchFileDescriptor(
+  base::MessageLoopCurrentForUI::Get()->WatchFileDescriptor(
       fd, true, base::MessagePumpLibevent::WATCH_READ, &watcher_controller_,
       this);
   initialized_ = true;

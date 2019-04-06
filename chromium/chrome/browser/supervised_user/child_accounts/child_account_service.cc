@@ -4,10 +4,11 @@
 
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -33,13 +34,11 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_pref_names.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#endif
-
-#if !defined(OS_ANDROID)
-const char kChildAccountDetectionFieldTrialName[] = "ChildAccountDetection";
 #endif
 
 const char kGaiaCookieManagerSource[] = "child_account_service";
@@ -49,37 +48,36 @@ const int kUpdateIntervalSeconds = 60 * 60 * 24;
 
 // In case of an error while getting the family info, retry with exponential
 // backoff.
-const net::BackoffEntry::Policy kBackoffPolicy = {
-  // Number of initial errors (in sequence) to ignore before applying
-  // exponential back-off rules.
-  0,
+const net::BackoffEntry::Policy kFamilyFetchBackoffPolicy = {
+    // Number of initial errors (in sequence) to ignore before applying
+    // exponential back-off rules.
+    0,
 
-  // Initial delay for exponential backoff in ms.
-  2000,
+    // Initial delay for exponential backoff in ms.
+    2000,
 
-  // Factor by which the waiting time will be multiplied.
-  2,
+    // Factor by which the waiting time will be multiplied.
+    2,
 
-  // Fuzzing percentage. ex: 10% will spread requests randomly
-  // between 90%-100% of the calculated time.
-  0.2, // 20%
+    // Fuzzing percentage. ex: 10% will spread requests randomly
+    // between 90%-100% of the calculated time.
+    0.2,  // 20%
 
-  // Maximum amount of time we are willing to delay our request in ms.
-  1000 * 60 * 60 * 4, // 4 hours.
+    // Maximum amount of time we are willing to delay our request in ms.
+    1000 * 60 * 60 * 4,  // 4 hours.
 
-  // Time to keep an entry from being discarded even when it
-  // has no significant state, -1 to never discard.
-  -1,
+    // Time to keep an entry from being discarded even when it
+    // has no significant state, -1 to never discard.
+    -1,
 
-  // Don't use initial delay unless the last request was an error.
-  false,
+    // Don't use initial delay unless the last request was an error.
+    false,
 };
 
 ChildAccountService::ChildAccountService(Profile* profile)
     : profile_(profile),
       active_(false),
-      family_fetch_backoff_(&kBackoffPolicy),
-      sync_service_observer_(this),
+      family_fetch_backoff_(&kFamilyFetchBackoffPolicy),
       gaia_cookie_manager_(
           GaiaCookieManagerServiceFactory::GetForProfile(profile)),
       weak_ptr_factory_(this) {
@@ -92,15 +90,13 @@ ChildAccountService::~ChildAccountService() {
 
 // static
 bool ChildAccountService::IsChildAccountDetectionEnabled() {
-  // Child account detection is always enabled on Android.
-#if !defined(OS_ANDROID)
-  const std::string group_name =
-      base::FieldTrialList::FindFullName(kChildAccountDetectionFieldTrialName);
-  if (group_name == "Disabled")
-    return false;
-#endif
-
+// Child account detection is always enabled on Android and ChromeOS, and
+// disabled in other platforms.
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
   return true;
+#else
+  return false;
+#endif
 }
 
 void ChildAccountService::RegisterProfilePrefs(
@@ -136,11 +132,11 @@ void ChildAccountService::Shutdown() {
 }
 
 void ChildAccountService::AddChildStatusReceivedCallback(
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   if (IsChildAccountStatusKnown())
-    callback.Run();
+    std::move(callback).Run();
   else
-    status_received_callback_list_.push_back(callback);
+    status_received_callback_list_.push_back(std::move(callback));
 }
 
 ChildAccountService::AuthState ChildAccountService::GetGoogleAuthState() {
@@ -150,8 +146,8 @@ ChildAccountService::AuthState ChildAccountService::GetGoogleAuthState() {
                                           kGaiaCookieManagerSource)) {
     return AuthState::PENDING;
   }
-  return accounts.empty() ? AuthState::NOT_AUTHENTICATED
-                          : AuthState::AUTHENTICATED;
+  return (accounts.empty() || !accounts[0].valid) ? AuthState::NOT_AUTHENTICATED
+                                                  : AuthState::AUTHENTICATED;
 }
 
 std::unique_ptr<base::CallbackList<void()>::Subscription>
@@ -167,35 +163,32 @@ bool ChildAccountService::SetActive(bool active) {
     return true;
   active_ = active;
 
-  browser_sync::ProfileSyncService* sync_service =
-      ProfileSyncServiceFactory::GetForProfile(profile_);
-
   if (active_) {
     SupervisedUserSettingsService* settings_service =
         SupervisedUserSettingsServiceFactory::GetForProfile(profile_);
 
     settings_service->SetLocalSetting(
         supervised_users::kRecordHistoryIncludesSessionSync,
-        base::MakeUnique<base::Value>(false));
+        std::make_unique<base::Value>(false));
 
     // In contrast to legacy SUs, child account SUs must sign in.
     settings_service->SetLocalSetting(supervised_users::kSigninAllowed,
-                                      base::MakeUnique<base::Value>(true));
+                                      std::make_unique<base::Value>(true));
 
     // Always allow cookies, to avoid website compatibility issues.
     settings_service->SetLocalSetting(supervised_users::kCookiesAlwaysAllowed,
-                                      base::MakeUnique<base::Value>(true));
+                                      std::make_unique<base::Value>(true));
 
     // SafeSearch is controlled at the account level, so don't override it
     // client-side.
     settings_service->SetLocalSetting(supervised_users::kForceSafeSearch,
-                                      base::MakeUnique<base::Value>(false));
+                                      std::make_unique<base::Value>(false));
 
 #if defined(OS_CHROMEOS)
     // Mirror account consistency is required for child accounts on Chrome OS.
     settings_service->SetLocalSetting(
         supervised_users::kAccountConsistencyMirrorRequired,
-        base::MakeUnique<base::Value>(true));
+        std::make_unique<base::Value>(true));
 #endif
 
 #if !defined(OS_CHROMEOS)
@@ -217,8 +210,6 @@ bool ChildAccountService::SetActive(bool active) {
       service->SetSafeSearchURLReporter(
           SafeSearchURLReporter::CreateWithProfile(profile_));
     }
-
-    sync_service_observer_.Add(sync_service);
   } else {
     SupervisedUserSettingsService* settings_service =
         SupervisedUserSettingsServiceFactory::GetForProfile(profile_);
@@ -240,12 +231,12 @@ bool ChildAccountService::SetActive(bool active) {
 #endif
 
     CancelFetchingFamilyInfo();
-
-    sync_service_observer_.Remove(sync_service);
   }
 
   // Trigger a sync reconfig to enable/disable the right SU data types.
   // The logic to do this lives in the SupervisedUserSyncDataTypeController.
+  browser_sync::ProfileSyncService* sync_service =
+      ProfileSyncServiceFactory::GetForProfile(profile_);
   if (sync_service->IsFirstSetupComplete())
     sync_service->ReconfigureDatatypeManager();
 
@@ -266,8 +257,8 @@ void ChildAccountService::SetIsChildAccount(bool is_child_account) {
   }
   profile_->GetPrefs()->SetBoolean(prefs::kChildAccountStatusKnown, true);
 
-  for (const auto& callback : status_received_callback_list_)
-    callback.Run();
+  for (auto& callback : status_received_callback_list_)
+    std::move(callback).Run();
   status_received_callback_list_.clear();
 }
 
@@ -328,20 +319,6 @@ void ChildAccountService::OnFailure(FamilyInfoFetcher::ErrorCode error) {
   ScheduleNextFamilyInfoUpdate(family_fetch_backoff_.GetTimeUntilRelease());
 }
 
-void ChildAccountService::OnStateChanged(syncer::SyncService* sync) {
-  if (sync->GetAuthError().state() ==
-      GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS) {
-    // If there was an authentication error in Sync, check whether we are still
-    // signed in to Google. Because Sync is always enabled for supervised users,
-    // an authentication error will eventually be noticed by Sync.
-    // TODO(bauerb): Make SigninErrorController usable on Android and observe
-    // that instead. Also, investigate moving this into AccountReconcilor.
-    GaiaCookieManagerService* gaia_cookie_manager =
-        GaiaCookieManagerServiceFactory::GetForProfile(profile_);
-    gaia_cookie_manager->TriggerListAccounts(kGaiaCookieManagerSource);
-  }
-}
-
 void ChildAccountService::OnGaiaAccountsInCookieUpdated(
     const std::vector<gaia::ListedAccount>& accounts,
     const std::vector<gaia::ListedAccount>& signed_out_accounts,
@@ -355,7 +332,8 @@ void ChildAccountService::StartFetchingFamilyInfo() {
       SigninManagerFactory::GetForProfile(profile_)
           ->GetAuthenticatedAccountId(),
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile_),
-      profile_->GetRequestContext()));
+      content::BrowserContext::GetDefaultStoragePartition(profile_)
+          ->GetURLLoaderFactoryForBrowserProcess()));
   family_fetcher_->StartGetFamilyMembers();
 }
 

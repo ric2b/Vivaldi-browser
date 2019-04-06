@@ -7,7 +7,6 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
-#include "ui/message_center/views/constants.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
@@ -25,12 +24,10 @@ NotificationButton::NotificationButton(views::ButtonListener* listener)
   SetBackground(views::CreateSolidBackground(kNotificationBackgroundColor));
   set_notify_enter_exit_on_child(true);
   SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::kHorizontal,
-      gfx::Insets(kButtonVerticalPadding,
-                  message_center::kButtonHorizontalPadding),
-      message_center::kButtonIconToTitlePadding));
+      views::BoxLayout::kHorizontal, gfx::Insets(0, kButtonHorizontalPadding),
+      kButtonIconToTitlePadding));
   SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      message_center::kFocusBorderColor, gfx::Insets(1, 2, 2, 2)));
+      kFocusBorderColor, gfx::Insets(1, 2, 2, 2)));
 }
 
 NotificationButton::~NotificationButton() {
@@ -43,41 +40,36 @@ void NotificationButton::SetIcon(const gfx::ImageSkia& image) {
     icon_ = NULL;
   } else {
     icon_ = new views::ImageView();
-    icon_->SetImageSize(gfx::Size(message_center::kNotificationButtonIconSize,
-                                  message_center::kNotificationButtonIconSize));
+    icon_->SetImageSize(
+        gfx::Size(kNotificationButtonIconSize, kNotificationButtonIconSize));
     icon_->SetImage(image);
     icon_->SetHorizontalAlignment(views::ImageView::LEADING);
     icon_->SetVerticalAlignment(views::ImageView::LEADING);
-    icon_->SetBorder(views::CreateEmptyBorder(
-        message_center::kButtonIconTopPadding, 0, 0, 0));
+    icon_->SetBorder(views::CreateEmptyBorder(kButtonIconTopPadding, 0, 0, 0));
     AddChildViewAt(icon_, 0);
   }
 }
 
 void NotificationButton::SetTitle(const base::string16& title) {
-  if (title_ != NULL)
+  if (title_)
     delete title_;  // This removes the title from this view's children.
-  if (title.empty()) {
-    title_ = NULL;
-  } else {
+  title_ = nullptr;
+  if (!title.empty()) {
     title_ = new views::Label(title);
     title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    title_->SetEnabledColor(message_center::kRegularTextColor);
-    title_->SetBackgroundColor(kRegularTextBackgroundColor);
-    title_->SetBorder(
-        views::CreateEmptyBorder(kButtonTitleTopPadding, 0, 0, 0));
+    title_->SetEnabledColor(kRegularTextColor);
+    title_->SetAutoColorReadabilityEnabled(false);
     AddChildView(title_);
   }
   SetAccessibleName(title);
 }
 
 gfx::Size NotificationButton::CalculatePreferredSize() const {
-  return gfx::Size(message_center::kNotificationWidth,
-                   message_center::kButtonHeight);
+  return gfx::Size(kNotificationWidth, kButtonHeight);
 }
 
 int NotificationButton::GetHeightForWidth(int width) const {
-  return message_center::kButtonHeight;
+  return kButtonHeight;
 }
 
 void NotificationButton::OnFocus() {
@@ -95,8 +87,7 @@ void NotificationButton::ViewHierarchyChanged(
 
 void NotificationButton::StateChanged(ButtonState old_state) {
   if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
-    SetBackground(views::CreateSolidBackground(
-        message_center::kHoveredButtonBackgroundColor));
+    SetBackground(views::CreateSolidBackground(kHoveredButtonBackgroundColor));
   } else {
     SetBackground(views::CreateSolidBackground(kNotificationBackgroundColor));
   }

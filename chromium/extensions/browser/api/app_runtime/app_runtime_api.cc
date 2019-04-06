@@ -8,7 +8,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -53,6 +52,9 @@ void DispatchOnLaunchedEventImpl(
     BrowserContext* context) {
   UMA_HISTOGRAM_ENUMERATION("Extensions.AppLaunchSource", source,
                             app_runtime::LaunchSource::LAUNCH_SOURCE_LAST + 1);
+
+  launch_data->SetBoolean("isDemoSession",
+                          ExtensionsBrowserClient::Get()->IsInDemoMode());
 
   // "Forced app mode" is true for Chrome OS kiosk mode.
   launch_data->SetBoolean(

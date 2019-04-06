@@ -5,8 +5,8 @@
 #include "extensions/renderer/bindings/api_bindings_system.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -94,11 +94,6 @@ bool AllowAllAPIs(v8::Local<v8::Context> context, const std::string& name) {
   return true;
 }
 
-void DoNothingWithSilentRequest(
-    v8::Local<v8::Context> context,
-    const std::string& call_name,
-    const std::vector<v8::Local<v8::Value>>& arguments) {}
-
 }  // namespace
 
 APIBindingsSystemTest::APIBindingsSystemTest() {}
@@ -117,13 +112,15 @@ void APIBindingsSystemTest::SetUp() {
 
   binding::AddConsoleError add_console_error(base::Bind(
       &APIBindingsSystemTest::AddConsoleError, base::Unretained(this)));
+  auto get_context_owner = [](v8::Local<v8::Context>) { return std::string(); };
   bindings_system_ = std::make_unique<APIBindingsSystem>(
       base::Bind(&APIBindingsSystemTest::GetAPISchema, base::Unretained(this)),
       base::Bind(&AllowAllAPIs),
       base::Bind(&APIBindingsSystemTest::OnAPIRequest, base::Unretained(this)),
       base::Bind(&APIBindingsSystemTest::OnEventListenersChanged,
                  base::Unretained(this)),
-      base::Bind(&DoNothingWithSilentRequest), add_console_error,
+      base::BindRepeating(get_context_owner), base::DoNothing(),
+      add_console_error,
       APILastError(base::Bind(&APIBindingsSystemTest::GetLastErrorParent,
                               base::Unretained(this)),
                    add_console_error));

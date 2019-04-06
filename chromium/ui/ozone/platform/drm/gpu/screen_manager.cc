@@ -9,12 +9,12 @@
 #include <utility>
 
 #include "base/files/platform_file.h"
-#include "base/memory/ptr_util.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_fence.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_console_buffer.h"
@@ -22,6 +22,7 @@
 #include "ui/ozone/platform/drm/gpu/drm_window.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_controller.h"
 #include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
+#include "ui/ozone/platform/drm/gpu/scanout_buffer_generator.h"
 
 namespace ui {
 
@@ -32,9 +33,9 @@ namespace {
 void FillModesetBuffer(const scoped_refptr<DrmDevice>& drm,
                        HardwareDisplayController* controller,
                        ScanoutBuffer* buffer) {
-  DrmConsoleBuffer modeset_buffer(drm, buffer->GetFramebufferId());
+  DrmConsoleBuffer modeset_buffer(drm, buffer->GetOpaqueFramebufferId());
   if (!modeset_buffer.Initialize()) {
-    VLOG(2) << "Failed to grab framebuffer " << buffer->GetFramebufferId();
+    VLOG(2) << "Failed to grab framebuffer " << buffer->GetOpaqueFramebufferId();
     return;
   }
 
@@ -168,7 +169,7 @@ bool ScreenManager::ActualConfigureDisplayController(
       origin == controller->origin()) {
     if (controller->IsDisabled()) {
       HardwareDisplayControllers::iterator mirror =
-          FindActiveDisplayControllerByLocation(modeset_bounds);
+          FindActiveDisplayControllerByLocation(drm, modeset_bounds);
       // If there is an active controller at the same location then start mirror
       // mode.
       if (mirror != controllers_.end())
@@ -191,7 +192,7 @@ bool ScreenManager::ActualConfigureDisplayController(
   }
 
   HardwareDisplayControllers::iterator mirror =
-      FindActiveDisplayControllerByLocation(modeset_bounds);
+      FindActiveDisplayControllerByLocation(drm, modeset_bounds);
   // Handle mirror mode.
   if (mirror != controllers_.end() && it != mirror)
     return HandleMirrorMode(it, mirror, drm, crtc, connector, mode);
@@ -277,6 +278,20 @@ ScreenManager::FindActiveDisplayControllerByLocation(const gfx::Rect& bounds) {
   return controllers_.end();
 }
 
+ScreenManager::HardwareDisplayControllers::iterator
+ScreenManager::FindActiveDisplayControllerByLocation(
+    const scoped_refptr<DrmDevice>& drm,
+    const gfx::Rect& bounds) {
+  for (auto it = controllers_.begin(); it != controllers_.end(); ++it) {
+    gfx::Rect controller_bounds((*it)->origin(), (*it)->GetModeSize());
+    if ((*it)->GetDrmDevice() == drm && controller_bounds == bounds &&
+        !(*it)->IsDisabled())
+      return it;
+  }
+
+  return controllers_.end();
+}
+
 bool ScreenManager::HandleMirrorMode(
     HardwareDisplayControllers::iterator original,
     HardwareDisplayControllers::iterator mirror,
@@ -345,50 +360,51 @@ void ScreenManager::UpdateControllerToWindowMapping() {
   }
 }
 
-OverlayPlane ScreenManager::GetModesetBuffer(
+DrmOverlayPlane ScreenManager::GetModesetBuffer(
     HardwareDisplayController* controller,
     const gfx::Rect& bounds) {
   DrmWindow* window = FindWindowAt(bounds);
 
   gfx::BufferFormat format = display::DisplaySnapshot::PrimaryFormat();
   uint32_t fourcc_format = ui::GetFourCCFormatForOpaqueFramebuffer(format);
-
+  const auto& modifiers =
+      controller->GetFormatModifiersForModesetting(fourcc_format);
   if (window) {
-    const OverlayPlane* primary = window->GetLastModesetBuffer();
-    const DrmDevice* drm = controller->GetAllocationDrmDevice().get();
+    const DrmOverlayPlane* primary = window->GetLastModesetBuffer();
+    const DrmDevice* drm = controller->GetDrmDevice().get();
     if (primary && primary->buffer->GetSize() == bounds.size() &&
-        primary->buffer->GetDrmDevice() == drm) {
+        primary->buffer->GetGbmDeviceLinux() == drm->AsGbmDeviceLinux()) {
       // If the controller doesn't advertise modifiers, wont have a
       // modifier either and we can reuse the buffer. Otherwise, check
       // to see if the controller supports the buffers format
       // modifier.
-      const auto& modifiers = controller->GetFormatModifiers(fourcc_format);
       if (modifiers.empty())
-        return *primary;
+        return primary->Clone();
       for (const uint64_t modifier : modifiers) {
         if (modifier == primary->buffer->GetFormatModifier())
-          return *primary;
+          return primary->Clone();
       }
     }
   }
 
-  scoped_refptr<DrmDevice> drm = controller->GetAllocationDrmDevice();
+  scoped_refptr<DrmDevice> drm = controller->GetDrmDevice();
   scoped_refptr<ScanoutBuffer> buffer =
-      buffer_generator_->Create(drm, fourcc_format, bounds.size());
+      buffer_generator_->Create(drm, fourcc_format, modifiers, bounds.size());
   if (!buffer) {
     LOG(ERROR) << "Failed to create scanout buffer";
-    return OverlayPlane(nullptr, 0, gfx::OVERLAY_TRANSFORM_INVALID, gfx::Rect(),
-                        gfx::RectF(), base::kInvalidPlatformFile);
+    return DrmOverlayPlane(nullptr, 0, gfx::OVERLAY_TRANSFORM_INVALID,
+                           gfx::Rect(), gfx::RectF(), /* enable_blend */ true,
+                           /* gpu_fence */ nullptr);
   }
 
   FillModesetBuffer(drm, controller, buffer.get());
-  return OverlayPlane(buffer, base::kInvalidPlatformFile);
+  return DrmOverlayPlane(buffer, nullptr);
 }
 
 bool ScreenManager::EnableController(HardwareDisplayController* controller) {
   DCHECK(!controller->crtc_controllers().empty());
   gfx::Rect rect(controller->origin(), controller->GetModeSize());
-  OverlayPlane plane = GetModesetBuffer(controller, rect);
+  DrmOverlayPlane plane = GetModesetBuffer(controller, rect);
   if (!plane.buffer || !controller->Enable(plane)) {
     LOG(ERROR) << "Failed to enable controller";
     return false;
@@ -404,7 +420,7 @@ bool ScreenManager::ModesetController(HardwareDisplayController* controller,
   gfx::Rect rect(origin, gfx::Size(mode.hdisplay, mode.vdisplay));
   controller->set_origin(origin);
 
-  OverlayPlane plane = GetModesetBuffer(controller, rect);
+  DrmOverlayPlane plane = GetModesetBuffer(controller, rect);
   if (!plane.buffer || !controller->Modeset(plane, mode)) {
     LOG(ERROR) << "Failed to modeset controller";
     return false;

@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/threading/simple_thread.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -20,7 +19,7 @@
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
-#include "services/service_manager/public/interfaces/service_factory.mojom.h"
+#include "services/service_manager/public/mojom/service_factory.mojom.h"
 #include "services/service_manager/tests/connect/connect_test.mojom.h"
 
 // Tests that multiple services can be packaged in a single service by
@@ -229,7 +228,7 @@ class ConnectTestService : public Service,
 
   void OnConnectionError() {
     if (bindings_.empty() && service_factory_bindings_.empty())
-      context()->RequestQuit();
+      context()->CreateQuitClosure().Run();
   }
 
   std::vector<std::unique_ptr<Service>> delegates_;

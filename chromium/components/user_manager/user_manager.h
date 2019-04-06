@@ -48,9 +48,6 @@ class USER_MANAGER_EXPORT UserManager {
     virtual void OnUserProfileImageUpdated(const User& user,
                                            const gfx::ImageSkia& profile_image);
 
-    // Called when the child status of the given user has changed.
-    virtual void OnChildStatusChanged(const User& user);
-
     // Called when any of the device cros settings which are responsible for
     // user sign in are changed.
     virtual void OnUsersSignInConstraintsChanged();
@@ -392,7 +389,7 @@ class USER_MANAGER_EXPORT UserManager {
   // |on_resolved_callback| as reply callback.
   virtual void ScheduleResolveLocale(
       const std::string& locale,
-      const base::Closure& on_resolved_callback,
+      base::OnceClosure on_resolved_callback,
       std::string* out_resolved_locale) const = 0;
 
   // Returns true if |image_index| is a valid default user image index.

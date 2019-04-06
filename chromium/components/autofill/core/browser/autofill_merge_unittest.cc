@@ -23,6 +23,7 @@
 #include "components/autofill/core/browser/form_data_importer.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/common/form_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -57,7 +58,7 @@ const ServerFieldType kProfileFieldTypes[] = {NAME_FIRST,
 const base::FilePath& GetTestDataDir() {
   CR_DEFINE_STATIC_LOCAL(base::FilePath, dir, ());
   if (dir.empty()) {
-    PathService::Get(base::DIR_SOURCE_ROOT, &dir);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &dir);
     dir = dir.AppendASCII("components");
     dir = dir.AppendASCII("test");
     dir = dir.AppendASCII("data");
@@ -181,6 +182,7 @@ class AutofillMergeTest : public DataDrivenTest,
   // Deserializes |str| into a field type.
   ServerFieldType StringToFieldType(const std::string& str);
 
+  TestAutofillClient autofill_client_;
   PersonalDataManagerMock personal_data_;
   std::unique_ptr<FormDataImporter> form_data_importer_;
 
@@ -204,7 +206,7 @@ AutofillMergeTest::~AutofillMergeTest() {
 void AutofillMergeTest::SetUp() {
   test::DisableSystemServices(nullptr);
   form_data_importer_ = std::make_unique<FormDataImporter>(
-      /*AutofillClient=*/nullptr,
+      &autofill_client_,
       /*payments::PaymentsClient=*/nullptr, &personal_data_, "en");
 }
 
@@ -275,13 +277,11 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
 
       // Import the profile.
       std::unique_ptr<CreditCard> imported_credit_card;
-      bool imported_credit_card_matches_masked_server_credit_card;
-      form_data_importer_->ImportFormData(
-          form_structure,
-          true,   // credit card autofill enabled
-          false,  // should return local card
-          &imported_credit_card,
-          &imported_credit_card_matches_masked_server_credit_card);
+      form_data_importer_->ImportFormData(form_structure,
+                                          true,  // address autofill enabled,
+                                          true,  // credit card autofill enabled
+                                          false,  // should return local card
+                                          &imported_credit_card);
       EXPECT_FALSE(imported_credit_card);
 
       // Clear the |form| to start a new profile.

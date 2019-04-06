@@ -1,4 +1,4 @@
-#!/bin/bash -i
+#!/bin/bash
 # Copyright 2013 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -409,20 +409,12 @@ Options:
       2  Aggressively optimize the size of png files. This may produce
          addtional 1%~5% reduction.  Warning: this is *VERY*
          slow and can take hours to process all files.
-  -r<revision> If this is specified, the script processes only png files
-               changed since this revision. The <dir> options will be used
-               to narrow down the files under specific directories.
   -c<commit>   Same as -r but referencing a git commit. Only files changed
                between this commit and HEAD will be processed.
   -v  Shows optimization process for each file.
   -h  Print this help text."
   exit 1
 }
-
-if [ ! -e ../.gclient ]; then
-  echo "$0 must be run in src directory"
-  exit 1
-fi
 
 if [ "$(expr substr $(uname -s) 1 6)" == "CYGWIN" ]; then
   using_cygwin=true
@@ -445,18 +437,11 @@ fi
 
 OPTIMIZE_LEVEL=1
 # Parse options
-while getopts o:c:r:h:v opts
+while getopts o:c:h:v opts
 do
   case $opts in
     c)
       COMMIT=$OPTARG
-      ;;
-    r)
-      COMMIT=$(git svn find-rev r$OPTARG | tail -1) || exit
-      if [ -z "$COMMIT" ] ; then
-        echo "Revision $OPTARG not found"
-        show_help
-      fi
       ;;
     o)
       if [[ "$OPTARG" != 0 && "$OPTARG" != 1 && "$OPTARG" != 2 ]] ; then
@@ -512,6 +497,12 @@ set ${DIRS:=$ALL_DIRS}
 info "Optimize level=$OPTIMIZE_LEVEL"
 
 if [ -n "$COMMIT" ] ; then
+  # To keep git logic below sane, require it be run from the top dir.
+  if [ ! -e ../.gclient ]; then
+    echo "$0 must be run in src directory"
+    exit 1
+  fi
+
  ALL_FILES=$(git diff --name-only $COMMIT HEAD $DIRS | grep "png$")
  ALL_FILES_LIST=( $ALL_FILES )
  echo "Processing ${#ALL_FILES_LIST[*]} files"

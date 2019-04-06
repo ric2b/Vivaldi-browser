@@ -30,7 +30,6 @@
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
-#include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
@@ -93,7 +92,7 @@ class DisplayRotationDefaultTest
     if (chromeos::LoginDisplayHost::default_host()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&chrome::AttemptExit));
-      content::RunMessageLoop();
+      RunUntilBrowserProcessQuits();
     }
   }
 
@@ -206,7 +205,7 @@ IN_PROC_BROWSER_TEST_P(DisplayRotationDefaultTest, UserInteraction) {
   const display::Display::Rotation user_rotation = display::Display::ROTATE_90;
   GetDisplayManager()->SetDisplayRotation(
       GetDisplayManager()->first_display_id(), user_rotation,
-      display::Display::ROTATION_SOURCE_USER);
+      display::Display::RotationSource::USER);
   EXPECT_EQ(user_rotation, GetRotationOfFirstDisplay())
       << "Rotation of primary display after user change";
   SetPolicy(policy_rotation);
@@ -214,7 +213,7 @@ IN_PROC_BROWSER_TEST_P(DisplayRotationDefaultTest, UserInteraction) {
       << "Rotation of primary display after policy overrode user change";
   GetDisplayManager()->SetDisplayRotation(
       GetDisplayManager()->first_display_id(), user_rotation,
-      display::Display::ROTATION_SOURCE_USER);
+      display::Display::RotationSource::USER);
   EXPECT_EQ(user_rotation, GetRotationOfFirstDisplay())
       << "Rotation of primary display after user overrode policy change";
   SetADifferentPolicy();
@@ -237,7 +236,7 @@ IN_PROC_BROWSER_TEST_P(DisplayRotationDefaultTest,
   SetPolicy(policy_rotation);
   GetDisplayManager()->SetDisplayRotation(
       GetDisplayManager()->first_display_id(), user_rotation,
-      display::Display::ROTATION_SOURCE_USER);
+      display::Display::RotationSource::USER);
   UnsetPolicy();
   EXPECT_EQ(user_rotation, GetRotationOfFirstDisplay())
       << "Rotation of primary display after policy was set to "
@@ -313,7 +312,7 @@ IN_PROC_BROWSER_TEST_P(DisplayRotationBootTest, PRE_Reboot) {
   // Let the user rotate the display to a different orientation, to check that
   // the policy value is restored after reboot.
   display_manager->SetDisplayRotation(first_display_id, user_rotation,
-                                      display::Display::ROTATION_SOURCE_USER);
+                                      display::Display::RotationSource::USER);
   EXPECT_EQ(user_rotation, first_display.rotation());
 }
 

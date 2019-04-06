@@ -34,8 +34,8 @@
 #include "content/public/common/push_messaging_status.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
-#include "third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/modules/budget_service/budget_service.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -59,9 +59,7 @@ using content::WebContents;
 
 namespace {
 void RecordUserVisibleStatus(content::mojom::PushUserVisibleStatus status) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PushMessaging.UserVisibleStatus", status,
-      static_cast<int>(content::mojom::PushUserVisibleStatus::LAST) + 1);
+  UMA_HISTOGRAM_ENUMERATION("PushMessaging.UserVisibleStatus", status);
 }
 
 content::StoragePartition* GetStoragePartition(Profile* profile,
@@ -188,7 +186,7 @@ void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
       platform_notification_service->OnPersistentNotificationClose(
           profile_, notification_database_data.notification_id,
           notification_database_data.origin, false /* by_user */,
-          base::BindOnce(&base::DoNothing));
+          base::DoNothing());
 
       break;
     }
@@ -282,10 +280,14 @@ void PushMessagingNotificationManager::ProcessSilentPush(
       CreateDatabaseData(origin, service_worker_registration_id);
   scoped_refptr<PlatformNotificationContext> notification_context =
       GetStoragePartition(profile_, origin)->GetPlatformNotificationContext();
+  int64_t next_persistent_notification_id =
+      PlatformNotificationServiceImpl::GetInstance()
+          ->ReadNextPersistentNotificationId(profile_);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&PlatformNotificationContext::WriteNotificationData,
-                     notification_context, origin, database_data,
+                     notification_context, next_persistent_notification_id,
+                     origin, database_data,
                      base::Bind(&PushMessagingNotificationManager::
                                     DidWriteNotificationDataIOProxy,
                                 weak_factory_.GetWeakPtr(), origin,

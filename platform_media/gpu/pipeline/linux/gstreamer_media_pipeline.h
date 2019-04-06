@@ -29,8 +29,7 @@ public:
 
   void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;
 
-  void ReadVideoData(const ReadDataCB& read_video_data_cb,
-                     uint32_t texture_id) override;
+  void ReadVideoData(const ReadDataCB& read_video_data_cb) override;
 
   void WillSeek() override;
 

@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "content/browser/renderer_host/input/fling_controller.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
 #include "content/common/input/input_event.h"
 #include "ui/events/blink/did_overscroll_params.h"
@@ -17,7 +18,8 @@ namespace content {
 
 class InputRouter;
 
-class MockInputRouterClient : public InputRouterClient {
+class MockInputRouterClient : public InputRouterClient,
+                              public FlingControllerSchedulerClient {
  public:
   MockInputRouterClient();
   ~MockInputRouterClient() override;
@@ -32,13 +34,15 @@ class MockInputRouterClient : public InputRouterClient {
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void OnSetWhiteListedTouchAction(cc::TouchAction touch_action) override;
   void DidStopFlinging() override;
-  void SetNeedsBeginFrameForFlingProgress() override;
+  void DidStartScrollingViewport() override;
   void ForwardWheelEventWithLatencyInfo(
       const blink::WebMouseWheelEvent& wheel_event,
       const ui::LatencyInfo& latency_info) override;
   void ForwardGestureEventWithLatencyInfo(
       const blink::WebGestureEvent& gesture_event,
       const ui::LatencyInfo& latency_info) override;
+  bool IsWheelScrollInProgress() override;
+  void SetMouseCapture(bool capture) override {}
 
   bool GetAndResetFilterEventCalled();
   ui::DidOverscrollParams GetAndResetOverscroll();
@@ -65,6 +69,12 @@ class MockInputRouterClient : public InputRouterClient {
     return last_filter_event_->web_event.get();
   }
 
+  // FlingControllerSchedulerClient
+  void ScheduleFlingProgress(
+      base::WeakPtr<FlingController> fling_controller) override {}
+  void DidStopFlingingOnBrowser(
+      base::WeakPtr<FlingController> fling_controller) override {}
+
  private:
   InputRouter* input_router_;
   int in_flight_event_count_;
@@ -78,6 +88,8 @@ class MockInputRouterClient : public InputRouterClient {
   ui::DidOverscrollParams overscroll_;
 
   cc::TouchAction white_listed_touch_action_;
+
+  bool is_wheel_scroll_in_progress_ = false;
 };
 
 }  // namespace content

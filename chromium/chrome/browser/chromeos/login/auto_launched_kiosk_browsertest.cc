@@ -23,6 +23,7 @@
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
+#include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -34,7 +35,6 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/shill_manager_client.h"
-#include "components/ownership/mock_owner_key_util.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
@@ -44,6 +44,7 @@
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/result_catcher.h"
 #include "net/dns/mock_host_resolver.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 
@@ -57,26 +58,50 @@ namespace {
 // it again. Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
 //       detail/ggbflgnkafappblpkiflbgpmkfdpnhhe
-const char kTestKioskApp[] = "ggbflgnkafappblpkiflbgpmkfdpnhhe";
+constexpr char kTestKioskApp[] = "ggbflgnkafappblpkiflbgpmkfdpnhhe";
 
 // This is a simple test that only sends an extension message when app launch is
 // requested. Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
 //       detail/mogpelihofihkjnkkfkcchbkchggmcld
-const char kTestNonKioskEnabledApp[] = "mogpelihofihkjnkkfkcchbkchggmcld";
+constexpr char kTestNonKioskEnabledApp[] = "mogpelihofihkjnkkfkcchbkchggmcld";
 
-const char kTestAccountId[] = "enterprise-kiosk-app@localhost";
+// Primary kiosk app that runs tests for chrome.management API.
+// The tests are run on the kiosk app launch event.
+// It has a secondary test kiosk app, which is loaded alongside the app. The
+// secondary app will send a message to run chrome.management API tests in
+// in its context as well.
+// The app's CRX is located under:
+//   chrome/test/data/chromeos/app_mode/webstore/downloads/
+//       faiboenfkkoaedoehhkjmenkhidadgje.crx
+// Source from which the CRX is generated is under path:
+//   chrome/test/data/chromeos/app_mode/management_api/primary_app/
+constexpr char kTestManagementApiKioskApp[] =
+    "faiboenfkkoaedoehhkjmenkhidadgje";
 
-const char kSessionManagerStateCache[] = "test_session_manager_state.json";
+// Secondary kiosk app that runs tests for chrome.management API.
+// The app is loaded alongside |kTestManagementApiKioskApp|. The tests are run
+// in the response to a message sent from |kTestManagementApiKioskApp|.
+// The app's CRX is located under:
+//   chrome/test/data/chromeos/app_mode/webstore/downloads/
+//       lfaidgolgikbpapkmdhoppddflhaocnf.crx
+// Source from which the CRX is generated is under path:
+//   chrome/test/data/chromeos/app_mode/management_api/secondary_app/
+constexpr char kTestManagementApiSecondaryApp[] =
+    "lfaidgolgikbpapkmdhoppddflhaocnf";
+
+constexpr char kTestAccountId[] = "enterprise-kiosk-app@localhost";
+
+constexpr char kSessionManagerStateCache[] = "test_session_manager_state.json";
 
 // Keys for values in dictionary used to preserve session manager state.
-const char kLoginArgsKey[] = "login_args";
-const char kExtraArgsKey[] = "extra_args";
-const char kArgNameKey[] = "name";
-const char kArgValueKey[] = "value";
+constexpr char kLoginArgsKey[] = "login_args";
+constexpr char kExtraArgsKey[] = "extra_args";
+constexpr char kArgNameKey[] = "name";
+constexpr char kArgValueKey[] = "value";
 
 // Default set policy switches.
-const struct {
+constexpr struct {
   const char* name;
   const char* value;
 } kDefaultPolicySwitches[] = {{"test_switch_1", ""},
@@ -257,14 +282,13 @@ class TerminationObserver : public content::NotificationObserver {
 
 }  // namespace
 
-class AutoLaunchedKioskTest : public ExtensionApiTest {
+class AutoLaunchedKioskTest : public extensions::ExtensionApiTest {
  public:
   AutoLaunchedKioskTest()
       : install_attributes_(
             chromeos::ScopedStubInstallAttributes::CreateCloudManaged(
                 "domain.com",
                 "device_id")),
-        owner_key_util_(new ownership::MockOwnerKeyUtil()),
         fake_session_manager_(new PersistentSessionManagerClient()),
         fake_cws_(new FakeCWS) {
     set_chromeos_user_ = false;
@@ -273,25 +297,31 @@ class AutoLaunchedKioskTest : public ExtensionApiTest {
   ~AutoLaunchedKioskTest() override = default;
 
   virtual std::string GetTestAppId() const { return kTestKioskApp; }
+  virtual std::vector<std::string> GetTestSecondaryAppIds() const {
+    return std::vector<std::string>();
+  }
 
   void SetUp() override {
     ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     AppLaunchController::SkipSplashWaitForTesting();
 
-    ExtensionApiTest::SetUp();
+    extensions::ExtensionApiTest::SetUp();
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     fake_cws_->Init(embedded_test_server());
     fake_cws_->SetUpdateCrx(GetTestAppId(), GetTestAppId() + ".crx", "1.0.0");
-    ExtensionApiTest::SetUpCommandLine(command_line);
+    std::vector<std::string> secondary_apps = GetTestSecondaryAppIds();
+    for (const auto& secondary_app : secondary_apps)
+      fake_cws_->SetUpdateCrx(secondary_app, secondary_app + ".crx", "1.0.0");
+    extensions::ExtensionApiTest::SetUpCommandLine(command_line);
   }
 
   bool SetUpUserDataDirectory() override {
     InitDevicePolicy();
 
     base::FilePath user_data_path;
-    if (!PathService::Get(chrome::DIR_USER_DATA, &user_data_path)) {
+    if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_path)) {
       ADD_FAILURE() << "Unable to get used data dir";
       return false;
     }
@@ -312,16 +342,17 @@ class AutoLaunchedKioskTest : public ExtensionApiTest {
   void SetUpInProcessBrowserTestFixture() override {
     host_resolver()->AddRule("*", "127.0.0.1");
 
-    OwnerSettingsServiceChromeOSFactory::GetInstance()
-        ->SetOwnerKeyUtilForTesting(owner_key_util_);
-    owner_key_util_->SetPublicKeyFromPrivateKey(
-        *device_policy_.GetSigningKey());
+    fake_session_manager_->set_device_policy(
+        device_policy_helper_.device_policy()->GetBlob());
+    fake_session_manager_->set_device_local_account_policy(
+        kTestAccountId, device_local_account_policy_.GetBlob());
 
-    fake_session_manager_->set_device_policy(device_policy_.GetBlob());
+    // Arbitrary non-empty state keys.
+    fake_session_manager_->set_server_backed_state_keys({"1"});
     DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
         std::move(fake_session_manager_));
 
-    ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+    extensions::ExtensionApiTest::SetUpInProcessBrowserTestFixture();
   }
 
   void PreRunTestOnMainThread() override {
@@ -334,19 +365,24 @@ class AutoLaunchedKioskTest : public ExtensionApiTest {
 
     embedded_test_server()->StartAcceptingConnections();
 
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
   }
 
   void TearDownOnMainThread() override {
     termination_observer_.reset();
 
-    ExtensionApiTest::TearDownOnMainThread();
+    extensions::ExtensionApiTest::TearDownOnMainThread();
   }
 
   void InitDevicePolicy() {
+    device_policy_helper_.InstallOwnerKey();
+    device_policy_helper_.MarkAsEnterpriseOwned();
+
     // Create device policy, and cache it to local state.
     em::DeviceLocalAccountsProto* const device_local_accounts =
-        device_policy_.payload().mutable_device_local_accounts();
+        device_policy_helper_.device_policy()
+            ->payload()
+            .mutable_device_local_accounts();
 
     em::DeviceLocalAccountInfoProto* const account =
         device_local_accounts->add_account();
@@ -356,12 +392,19 @@ class AutoLaunchedKioskTest : public ExtensionApiTest {
 
     device_local_accounts->set_auto_login_id(kTestAccountId);
 
-    device_policy_.Build();
+    device_policy_helper_.device_policy()->Build();
+
+    device_local_account_policy_.policy_data().set_username(kTestAccountId);
+    device_local_account_policy_.policy_data().set_policy_type(
+        policy::dm_protocol::kChromePublicAccountPolicyType);
+    device_local_account_policy_.policy_data().set_settings_entity_id(
+        kTestAccountId);
+    device_local_account_policy_.Build();
   }
 
   bool CacheDevicePolicyToLocalState(const base::FilePath& user_data_path) {
     em::PolicyData policy_data;
-    if (!device_policy_.payload().SerializeToString(
+    if (!device_policy_helper_.device_policy()->payload().SerializeToString(
             policy_data.mutable_policy_value())) {
       ADD_FAILURE() << "Failed to serialize device policy.";
       return false;
@@ -411,7 +454,7 @@ class AutoLaunchedKioskTest : public ExtensionApiTest {
 
     // Wait until the app terminates if it is still running.
     if (!app_window_registry->GetAppWindowsForApp(app_id).empty())
-      base::RunLoop().Run();
+      RunUntilBrowserProcessQuits();
     return true;
   }
 
@@ -440,8 +483,8 @@ class AutoLaunchedKioskTest : public ExtensionApiTest {
 
  private:
   chromeos::ScopedStubInstallAttributes install_attributes_;
-  policy::DevicePolicyBuilder device_policy_;
-  scoped_refptr<ownership::MockOwnerKeyUtil> owner_key_util_;
+  policy::UserPolicyBuilder device_local_account_policy_;
+  policy::DevicePolicyCrosTestHelper device_policy_helper_;
   std::unique_ptr<PersistentSessionManagerClient> fake_session_manager_;
   std::unique_ptr<FakeCWS> fake_cws_;
 
@@ -523,6 +566,39 @@ IN_PROC_BROWSER_TEST_F(AutoLaunchedNonKioskEnabledAppTest, NotLaunched) {
 
   EXPECT_FALSE(listener.was_satisfied());
   EXPECT_EQ(KioskAppLaunchError::NOT_KIOSK_ENABLED, KioskAppLaunchError::Get());
+}
+
+// Used to test management API availability in kiosk sessions.
+class ManagementApiKioskTest : public AutoLaunchedKioskTest {
+ public:
+  ManagementApiKioskTest() {}
+  ~ManagementApiKioskTest() override = default;
+
+  // AutoLaunchedKioskTest:
+  std::string GetTestAppId() const override {
+    return kTestManagementApiKioskApp;
+  }
+  std::vector<std::string> GetTestSecondaryAppIds() const override {
+    return {kTestManagementApiSecondaryApp};
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ManagementApiKioskTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ManagementApiKioskTest, ManagementApi) {
+  // Set up default network connections, so tests think the device is online.
+  DBusThreadManager::Get()
+      ->GetShillManagerClient()
+      ->GetTestInterface()
+      ->SetupDefaultEnvironment();
+
+  // The tests expects to recieve two test result messages:
+  //  * result for tests run by the secondary kiosk app.
+  //  * result for tests run by the primary kiosk app.
+  extensions::ResultCatcher catcher;
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
 
 }  // namespace chromeos

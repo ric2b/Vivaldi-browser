@@ -18,16 +18,15 @@ MojoResult WriteMessageRaw(MessagePipeHandle message_pipe,
   MojoResult rv = CreateMessage(&message_handle);
   DCHECK_EQ(MOJO_RESULT_OK, rv);
 
+  MojoAppendMessageDataOptions append_options;
+  append_options.struct_size = sizeof(append_options);
+  append_options.flags = MOJO_APPEND_MESSAGE_DATA_FLAG_COMMIT_SIZE;
   void* buffer;
   uint32_t buffer_size;
-  rv = MojoAttachSerializedMessageBuffer(
-      message_handle->value(), base::checked_cast<uint32_t>(num_bytes), handles,
-      base::checked_cast<uint32_t>(num_handles), &buffer, &buffer_size);
-  if (rv != MOJO_RESULT_OK)
-    return MOJO_RESULT_ABORTED;
-  rv = MojoCommitSerializedMessageContents(
-      message_handle->value(), base::checked_cast<uint32_t>(num_bytes), &buffer,
-      &buffer_size);
+  rv = MojoAppendMessageData(message_handle->value(),
+                             base::checked_cast<uint32_t>(num_bytes), handles,
+                             base::checked_cast<uint32_t>(num_handles),
+                             &append_options, &buffer, &buffer_size);
   if (rv != MOJO_RESULT_OK)
     return MOJO_RESULT_ABORTED;
 
@@ -35,8 +34,11 @@ MojoResult WriteMessageRaw(MessagePipeHandle message_pipe,
   DCHECK_GE(buffer_size, base::checked_cast<uint32_t>(num_bytes));
   memcpy(buffer, bytes, num_bytes);
 
+  MojoWriteMessageOptions write_options;
+  write_options.struct_size = sizeof(write_options);
+  write_options.flags = flags;
   return MojoWriteMessage(message_pipe.value(),
-                          message_handle.release().value(), flags);
+                          message_handle.release().value(), &write_options);
 }
 
 MojoResult ReadMessageRaw(MessagePipeHandle message_pipe,
@@ -48,23 +50,21 @@ MojoResult ReadMessageRaw(MessagePipeHandle message_pipe,
   if (rv != MOJO_RESULT_OK)
     return rv;
 
-  rv = MojoSerializeMessage(message_handle->value());
+  rv = MojoSerializeMessage(message_handle->value(), nullptr);
   if (rv != MOJO_RESULT_OK && rv != MOJO_RESULT_FAILED_PRECONDITION)
     return MOJO_RESULT_ABORTED;
 
   void* buffer = nullptr;
   uint32_t num_bytes = 0;
   uint32_t num_handles = 0;
-  rv = MojoGetSerializedMessageContents(
-      message_handle->value(), &buffer, &num_bytes, nullptr, &num_handles,
-      MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+  rv = MojoGetMessageData(message_handle->value(), nullptr, &buffer, &num_bytes,
+                          nullptr, &num_handles);
   if (rv == MOJO_RESULT_RESOURCE_EXHAUSTED) {
     DCHECK(handles);
     handles->resize(num_handles);
-    rv = MojoGetSerializedMessageContents(
-        message_handle->value(), &buffer, &num_bytes,
-        reinterpret_cast<MojoHandle*>(handles->data()), &num_handles,
-        MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+    rv = MojoGetMessageData(
+        message_handle->value(), nullptr, &buffer, &num_bytes,
+        reinterpret_cast<MojoHandle*>(handles->data()), &num_handles);
   }
 
   if (num_bytes) {

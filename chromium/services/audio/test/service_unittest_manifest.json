@@ -5,11 +5,11 @@
     "service_manager:connector": {
       "provides": {
         "service_manager:service_factory": [
-          "service_manager::mojom::ServiceFactory"
+          "service_manager.mojom.ServiceFactory"
         ]
       },
       "requires": {
-        "audio": [ "device" ],
+        "audio": [ "info" ],
         "service_manager": [ "service_manager:service_manager" ]
       }
     }

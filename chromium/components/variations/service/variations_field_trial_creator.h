@@ -2,15 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_VARIATIONS_FIELD_TRIAL_CREATOR_H_
-#define COMPONENTS_VARIATIONS_FIELD_TRIAL_CREATOR_H_
+#ifndef COMPONENTS_VARIATIONS_SERVICE_VARIATIONS_FIELD_TRIAL_CREATOR_H_
+#define COMPONENTS_VARIATIONS_SERVICE_VARIATIONS_FIELD_TRIAL_CREATOR_H_
 
+#include <memory>
+#include <set>
 #include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "components/variations/client_filterable_state.h"
+#include "components/variations/proto/study.pb.h"
+#include "components/variations/seed_response.h"
 #include "components/variations/service/ui_string_overrider.h"
 #include "components/variations/variations_seed_store.h"
 
@@ -28,6 +33,12 @@ class VariationsFieldTrialCreator {
   VariationsFieldTrialCreator(PrefService* local_state,
                               VariationsServiceClient* client,
                               const UIStringOverrider& ui_string_overrider);
+  // |initial_seed| may be null. If not null, then it will be stored in the
+  // contained seed store.
+  VariationsFieldTrialCreator(PrefService* local_state,
+                              VariationsServiceClient* client,
+                              const UIStringOverrider& ui_string_overrider,
+                              std::unique_ptr<SeedResponse> initial_seed);
   virtual ~VariationsFieldTrialCreator();
 
   // Returns what variations will consider to be the latest country. Returns
@@ -42,10 +53,10 @@ class VariationsFieldTrialCreator {
   // feature controlling flags not directly accesible from variations.
   // |unforcable_field_trials| contains the list of trials that can not be
   // overridden.
-  // |low_entropy_provider| allows for field trial randomization.
-  // |feature_list| contains the list of all active features for this client.
   // |variation_ids| allows for forcing ids selected in chrome://flags and/or
   // specified using the command-line flag.
+  // |low_entropy_provider| allows for field trial randomization.
+  // |feature_list| contains the list of all active features for this client.
   // |platform_field_trials| provides the platform specific field trial set up
   // for Chrome.
   // |safe_seed_manager| should be notified of the combined server and client
@@ -55,10 +66,10 @@ class VariationsFieldTrialCreator {
                         const char* kEnableFeatures,
                         const char* kDisableFeatures,
                         const std::set<std::string>& unforceable_field_trials,
+                        const std::vector<std::string>& variation_ids,
                         std::unique_ptr<const base::FieldTrial::EntropyProvider>
                             low_entropy_provider,
                         std::unique_ptr<base::FeatureList> feature_list,
-                        std::vector<std::string>* variation_ids,
                         PlatformFieldTrials* platform_field_trials,
                         SafeSeedManager* safe_seed_manager);
 
@@ -87,6 +98,11 @@ class VariationsFieldTrialCreator {
   // overridden.
   void OverrideVariationsPlatform(Study::Platform platform_override);
 
+  // Returns the short hardware class value used to evaluate variations hardware
+  // class filters. Only implemented on CrOS - returns empty string on other
+  // platforms.
+  static std::string GetShortHardwareClass();
+
  private:
   // Loads the seed from the variations store into |seed|, and records metrics
   // about the loaded seed. Returns true on success, in which case |seed| will
@@ -94,15 +110,13 @@ class VariationsFieldTrialCreator {
   // contain the raw pref values.
   bool LoadSeed(VariationsSeed* seed,
                 std::string* seed_data,
-                std::string* base64_signature);
+                std::string* base64_signature) WARN_UNUSED_RESULT;
 
-  // Loads the seed from the variations store into |seed|. Returns true on
-  // success, in which case |seed| will contain the loaded data, and |seed_data|
-  // and |base64_signature| will contain the raw pref values. Virtual for
-  // testing.
-  virtual bool LoadSeedFromStore(VariationsSeed* seed,
-                                 std::string* seed_data,
-                                 std::string* base64_signature);
+  // Loads the safe seed from the variations store into |seed| and updates any
+  // relevant fields in |client_state|. If the load succeeds, records metrics
+  // about the loaded seed. Returns whether the load succeeded.
+  bool LoadSafeSeed(VariationsSeed* seed,
+                    ClientFilterableState* client_state) WARN_UNUSED_RESULT;
 
   // Creates field trials based on the variations seed loaded from local state.
   // If there is a problem loading the seed data, all trials specified by the
@@ -116,6 +130,12 @@ class VariationsFieldTrialCreator {
           low_entropy_provider,
       base::FeatureList* feature_list,
       SafeSeedManager* safe_seed_manager);
+
+  // Returns the seed store. Virtual for testing.
+  virtual VariationsSeedStore* GetSeedStore();
+
+  // Get the platform we're running on, respecting OverrideVariationsPlatform().
+  Study::Platform GetPlatform();
 
   PrefService* local_state() { return seed_store_.local_state(); }
   const PrefService* local_state() const { return seed_store_.local_state(); }
@@ -145,4 +165,4 @@ class VariationsFieldTrialCreator {
 
 }  // namespace variations
 
-#endif  // COMPONENTS_VARIATIONS_FIELD_TRIAL_CREATOR_H_
+#endif  // COMPONENTS_VARIATIONS_SERVICE_VARIATIONS_FIELD_TRIAL_CREATOR_H_

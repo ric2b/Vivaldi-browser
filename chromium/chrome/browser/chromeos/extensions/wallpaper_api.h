@@ -9,13 +9,8 @@
 
 #include "chrome/browser/chromeos/extensions/wallpaper_function_base.h"
 #include "chrome/common/extensions/api/wallpaper.h"
-#include "components/signin/core/account_id/account_id.h"
-#include "components/wallpaper/wallpaper_files_id.h"
+#include "components/account_id/account_id.h"
 #include "net/url_request/url_request_status.h"
-
-namespace base {
-class RefCountedBytes;
-}
 
 // Implementation of chrome.wallpaper.setWallpaper API.
 // After this API being called, a jpeg encoded wallpaper will be saved to
@@ -35,20 +30,11 @@ class WallpaperSetWallpaperFunction : public WallpaperFunctionBase {
  protected:
   ~WallpaperSetWallpaperFunction() override;
 
-  // AsyncExtensionFunction overrides.
-  bool RunAsync() override;
+  // UIThreadExtensionFunction overrides.
+  ResponseAction Run() override;
 
  private:
   void OnWallpaperDecoded(const gfx::ImageSkia& image) override;
-
-  // Generates thumbnail of custom wallpaper. A simple STRETCH is used for
-  // generating thumbnail.
-  void GenerateThumbnail(const base::FilePath& thumbnail_path,
-                         std::unique_ptr<gfx::ImageSkia> image);
-
-  // Thumbnail is ready. Calls api function javascript callback.
-  void ThumbnailGenerated(base::RefCountedBytes* original_data,
-                          base::RefCountedBytes* thumbnail_data);
 
   // Called by OnURLFetchComplete().
   void OnWallpaperFetched(bool success, const std::string& response);
@@ -62,7 +48,7 @@ class WallpaperSetWallpaperFunction : public WallpaperFunctionBase {
   AccountId account_id_ = EmptyAccountId();
 
   // Id used to identify user wallpaper files on hard drive.
-  wallpaper::WallpaperFilesId wallpaper_files_id_;
+  std::string wallpaper_files_id_;
 };
 
 #endif  // CHROME_BROWSER_CHROMEOS_EXTENSIONS_WALLPAPER_API_H_

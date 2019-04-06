@@ -6,10 +6,15 @@
 
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
+#include "build/build_config.h"
+#include "content/browser/compositor/test/test_image_transport_factory.h"
+#include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/render_widget_targeter.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/mock_render_widget_host_delegate.h"
 #include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
@@ -20,15 +25,36 @@ namespace content {
 
 namespace {
 
+class MockFrameConnectorDelegate : public FrameConnectorDelegate {
+ public:
+  MockFrameConnectorDelegate(bool use_zoom_for_device_scale_factor)
+      : FrameConnectorDelegate(use_zoom_for_device_scale_factor) {}
+  ~MockFrameConnectorDelegate() override {}
+
+  RenderWidgetHostViewBase* GetRootRenderWidgetHostView() override {
+    return root_view_;
+  }
+
+  void set_root_view(RenderWidgetHostViewBase* root_view) {
+    root_view_ = root_view;
+  }
+
+ private:
+  RenderWidgetHostViewBase* root_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockFrameConnectorDelegate);
+};
+
 // Used as a target for the RenderWidgetHostInputEventRouter. We record what
 // events were forwarded to us in order to verify that the events are being
 // routed correctly.
-class MockRenderWidgetHostView : public TestRenderWidgetHostView {
+class TestRenderWidgetHostViewChildFrame
+    : public RenderWidgetHostViewChildFrame {
  public:
-  MockRenderWidgetHostView(RenderWidgetHost* rwh)
-      : TestRenderWidgetHostView(rwh),
+  explicit TestRenderWidgetHostViewChildFrame(RenderWidgetHost* widget)
+      : RenderWidgetHostViewChildFrame(widget),
         last_gesture_seen_(blink::WebInputEvent::kUndefined) {}
-  ~MockRenderWidgetHostView() override {}
+  ~TestRenderWidgetHostViewChildFrame() override = default;
 
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
                            const ui::LatencyInfo&) override {
@@ -53,14 +79,16 @@ class MockRenderWidgetHostView : public TestRenderWidgetHostView {
 // The RenderWidgetHostInputEventRouter uses the root RWHV for hittesting, so
 // here we stub out the hittesting logic so we can control which RWHV will be
 // the result of a hittest by the RWHIER.
-class MockRootRenderWidgetHostView : public MockRenderWidgetHostView {
+class MockRootRenderWidgetHostView : public TestRenderWidgetHostView {
  public:
   MockRootRenderWidgetHostView(
       RenderWidgetHost* rwh,
-      std::map<MockRenderWidgetHostView*, viz::FrameSinkId>& frame_sink_id_map)
-      : MockRenderWidgetHostView(rwh),
+      std::map<RenderWidgetHostViewBase*, viz::FrameSinkId>& frame_sink_id_map)
+      : TestRenderWidgetHostView(rwh),
         frame_sink_id_map_(frame_sink_id_map),
-        force_query_renderer_on_hit_test_(false) {}
+        current_hittest_result_(nullptr),
+        force_query_renderer_on_hit_test_(false),
+        last_gesture_seen_(blink::WebInputEvent::kUndefined) {}
   ~MockRootRenderWidgetHostView() override {}
 
   viz::FrameSinkId FrameSinkIdAtPoint(viz::SurfaceHittestDelegate*,
@@ -69,17 +97,33 @@ class MockRootRenderWidgetHostView : public MockRenderWidgetHostView {
                                       bool* query_renderer) override {
     if (force_query_renderer_on_hit_test_)
       *query_renderer = true;
+    DCHECK(current_hittest_result_)
+        << "Must set a Hittest result before calling this function";
     return frame_sink_id_map_[current_hittest_result_];
   }
 
   bool TransformPointToCoordSpaceForView(
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
-      gfx::PointF* transformed_point) override {
+      gfx::PointF* transformed_point,
+      viz::EventSource source = viz::EventSource::ANY) override {
     return true;
   }
 
-  void SetHittestResult(MockRenderWidgetHostView* view) {
+  void ProcessGestureEvent(const blink::WebGestureEvent& event,
+                           const ui::LatencyInfo&) override {
+    last_gesture_seen_ = event.GetType();
+  }
+
+  void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
+                              InputEventAckState ack_result) override {
+    unique_id_for_last_touch_ack_ = touch.event.unique_touch_event_id;
+  }
+
+  blink::WebInputEvent::Type last_gesture_seen() { return last_gesture_seen_; }
+  uint32_t last_id_for_touch_ack() { return unique_id_for_last_touch_ack_; }
+
+  void SetHittestResult(RenderWidgetHostViewBase* view) {
     current_hittest_result_ = view;
   }
 
@@ -87,24 +131,34 @@ class MockRootRenderWidgetHostView : public MockRenderWidgetHostView {
     force_query_renderer_on_hit_test_ = force;
   }
 
+  void Reset() { last_gesture_seen_ = blink::WebInputEvent::kUndefined; }
+
  private:
-  std::map<MockRenderWidgetHostView*, viz::FrameSinkId>& frame_sink_id_map_;
-  MockRenderWidgetHostView* current_hittest_result_;
+  std::map<RenderWidgetHostViewBase*, viz::FrameSinkId>& frame_sink_id_map_;
+  RenderWidgetHostViewBase* current_hittest_result_;
   bool force_query_renderer_on_hit_test_;
+  blink::WebInputEvent::Type last_gesture_seen_;
+  uint32_t unique_id_for_last_touch_ack_ = 0;
 };
 
 }  // namespace
 
 class RenderWidgetHostInputEventRouterTest : public testing::Test {
  public:
-  RenderWidgetHostInputEventRouterTest()
-      : scoped_task_environment_(
-            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
+  RenderWidgetHostInputEventRouterTest() {}
 
  protected:
   // testing::Test:
   void SetUp() override {
     browser_context_ = std::make_unique<TestBrowserContext>();
+
+// ImageTransportFactory doesn't exist on Android. This is needed to create
+// a RenderWidgetHostViewChildFrame in the test.
+#if !defined(OS_ANDROID)
+    ImageTransportFactory::SetFactory(
+        std::make_unique<TestImageTransportFactory>());
+#endif
+
     process_host1_ =
         std::make_unique<MockRenderProcessHost>(browser_context_.get());
     process_host2_ =
@@ -124,8 +178,14 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
 
     view_root_ = std::make_unique<MockRootRenderWidgetHostView>(
         widget_host1_.get(), frame_sink_id_map_);
-    view_other_ =
-        std::make_unique<MockRenderWidgetHostView>(widget_host2_.get());
+    view_other_ = std::make_unique<TestRenderWidgetHostViewChildFrame>(
+        widget_host2_.get());
+
+    test_frame_connector_ = std::make_unique<MockFrameConnectorDelegate>(
+        false /* use_zoom_for_device_scale_factor */);
+    test_frame_connector_->set_root_view(view_root_.get());
+    test_frame_connector_->SetView(view_other_.get());
+    view_other_->SetFrameConnectorDelegate(test_frame_connector_.get());
 
     // Set up the RWHIER's FrameSinkId to RWHV map so that we can control the
     // result of RWHIER's hittesting.
@@ -137,7 +197,14 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
                                 view_other_.get());
   }
 
-  void TearDown() override { base::RunLoop().RunUntilIdle(); }
+  void TearDown() override {
+    view_root_.reset();
+    view_other_.reset();
+    base::RunLoop().RunUntilIdle();
+#if !defined(OS_ANDROID)
+    ImageTransportFactory::Terminate();
+#endif
+  }
 
   RenderWidgetHostViewBase* touch_target() {
     return rwhier_.touch_target_.target;
@@ -146,8 +213,7 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
     return rwhier_.touchscreen_gesture_target_.target;
   }
 
-  // Needed by RenderWidgetHostImpl constructor.
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  TestBrowserThreadBundle thread_bundle_;
 
   MockRenderWidgetHostDelegate delegate_;
   std::unique_ptr<BrowserContext> browser_context_;
@@ -159,12 +225,12 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
   std::unique_ptr<RenderWidgetHostImpl> widget_host2_;
 
   std::unique_ptr<MockRootRenderWidgetHostView> view_root_;
-  std::unique_ptr<MockRenderWidgetHostView> view_other_;
+  std::unique_ptr<TestRenderWidgetHostViewChildFrame> view_other_;
+  std::unique_ptr<MockFrameConnectorDelegate> test_frame_connector_;
 
-  std::map<MockRenderWidgetHostView*, viz::FrameSinkId> frame_sink_id_map_;
+  std::map<RenderWidgetHostViewBase*, viz::FrameSinkId> frame_sink_id_map_;
 
   RenderWidgetHostInputEventRouter rwhier_;
-  TestBrowserThreadBundle thread_bundle_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostInputEventRouterTest);
@@ -182,9 +248,9 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
   // We start the touch in the area for |view_other_|.
   view_root_->SetHittestResult(view_other_.get());
 
-  blink::WebTouchEvent touch_event(blink::WebInputEvent::kTouchStart,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
+  blink::WebTouchEvent touch_event(
+      blink::WebInputEvent::kTouchStart, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   touch_event.touches_length = 1;
   touch_event.touches[0].state = blink::WebTouchPoint::kStatePressed;
   touch_event.unique_touch_event_id = 1;
@@ -195,8 +261,8 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
 
   blink::WebGestureEvent gesture_event(
       blink::WebInputEvent::kGestureTapDown, blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
-  gesture_event.source_device = blink::kWebGestureDeviceTouchscreen;
+      blink::WebInputEvent::GetStaticTimeStampForTests(),
+      blink::kWebGestureDeviceTouchscreen);
   gesture_event.unique_touch_event_id = touch_event.unique_touch_event_id;
 
   rwhier_.RouteGestureEvent(view_root_.get(), &gesture_event,
@@ -277,7 +343,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest, EnsureDroppedTouchEventsAreAcked) {
   // Send a touch move without a touch start.
   blink::WebTouchEvent touch_move_event(
       blink::WebInputEvent::kTouchMove, blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   touch_move_event.touches_length = 1;
   touch_move_event.touches[0].state = blink::WebTouchPoint::kStatePressed;
   touch_move_event.unique_touch_event_id = 1;
@@ -289,7 +355,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest, EnsureDroppedTouchEventsAreAcked) {
   // Send a touch cancel without a touch start.
   blink::WebTouchEvent touch_cancel_event(
       blink::WebInputEvent::kTouchCancel, blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   touch_cancel_event.touches_length = 1;
   touch_cancel_event.touches[0].state = blink::WebTouchPoint::kStateCancelled;
   touch_cancel_event.unique_touch_event_id = 2;
@@ -315,9 +381,9 @@ TEST_F(RenderWidgetHostInputEventRouterTest, DoNotCoalesceTouchEvents) {
 
   // Send TouchStart, TouchMove, TouchMove, TouchMove, TouchEnd and make sure
   // the targeter doesn't attempt to coalesce.
-  blink::WebTouchEvent touch_event(blink::WebInputEvent::kTouchStart,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
+  blink::WebTouchEvent touch_event(
+      blink::WebInputEvent::kTouchStart, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   touch_event.touches_length = 1;
   touch_event.touches[0].state = blink::WebTouchPoint::kStatePressed;
   touch_event.unique_touch_event_id = 1;
@@ -370,9 +436,9 @@ TEST_F(RenderWidgetHostInputEventRouterTest, DoNotCoalesceGestureEvents) {
   // Send TouchStart, GestureTapDown, TouchEnd, GestureScrollBegin,
   // GestureScrollUpdate (x2), GestureScrollEnd and make sure
   // the targeter doesn't attempt to coalesce.
-  blink::WebTouchEvent touch_event(blink::WebInputEvent::kTouchStart,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
+  blink::WebTouchEvent touch_event(
+      blink::WebInputEvent::kTouchStart, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   touch_event.touches_length = 1;
   touch_event.touches[0].state = blink::WebTouchPoint::kStatePressed;
   touch_event.unique_touch_event_id = 1;
@@ -386,8 +452,8 @@ TEST_F(RenderWidgetHostInputEventRouterTest, DoNotCoalesceGestureEvents) {
 
   blink::WebGestureEvent gesture_event(
       blink::WebInputEvent::kGestureTapDown, blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
-  gesture_event.source_device = blink::kWebGestureDeviceTouchscreen;
+      blink::WebInputEvent::GetStaticTimeStampForTests(),
+      blink::kWebGestureDeviceTouchscreen);
   gesture_event.unique_touch_event_id = touch_event.unique_touch_event_id;
   rwhier_.RouteGestureEvent(view_root_.get(), &gesture_event,
                             ui::LatencyInfo(ui::SourceEventType::TOUCH));

@@ -8,6 +8,7 @@
 #import "ios/chrome/browser/ui/omnibox/clipping_textfield.h"
 
 #include "base/strings/string16.h"
+#import "ios/chrome/browser/ui/commands/omnibox_suggestion_commands.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_delegate.h"
 
 // Enum type specifying the direction of fade animations.
@@ -25,6 +26,14 @@ typedef enum {
                          font:(UIFont*)font
                     textColor:(UIColor*)textColor
                     tintColor:(UIColor*)tintColor NS_DESIGNATED_INITIALIZER;
+
+// Initializer that allows specifying a larger font to use in Regular x Regular
+// size class.
+- (instancetype)initWithFrame:(CGRect)frame
+                         font:(UIFont*)font
+                   largerFont:(UIFont*)largerFont
+                    textColor:(UIColor*)textColor
+                    tintColor:(UIColor*)tintColor;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
@@ -86,6 +95,11 @@ typedef enum {
                 completionAnimator:(UIViewPropertyAnimator*)completionAnimator;
 - (void)addContractOmniboxAnimations:(UIViewPropertyAnimator*)animator;
 
+// Returns an x offset for a given string. If no such string is found, returns
+// some default offset.
+// Used for focus/defocus animation.
+- (CGFloat)offsetForString:(NSString*)string;
+
 // Initial touch on the Omnibox triggers a "pre-edit" state. The current
 // URL is shown without any insertion point. First character typed replaces
 // the URL. A second touch turns on the insertion point. |preEditStaticLabel|
@@ -98,6 +112,10 @@ typedef enum {
 // The delegate for this textfield.  Overridden to use OmniboxTextFieldDelegate
 // instead of UITextFieldDelegate.
 @property(nonatomic, weak) id<OmniboxTextFieldDelegate> delegate;
+
+// The object handling suggestion commands.
+@property(nonatomic, weak) id<OmniboxSuggestionCommands>
+    suggestionCommandsEndpoint;
 
 // Text displayed when in pre-edit state.
 @property(nonatomic, strong) NSString* preEditText;

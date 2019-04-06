@@ -7,19 +7,17 @@
 
 #include "base/macros.h"
 #include "chrome/browser/engagement/site_engagement_details.mojom.h"
-#include "chrome/browser/ui/webui/mojo_web_ui_controller.h"
+#include "ui/webui/mojo_web_ui_controller.h"
 
 // The UI for chrome://site-engagement/.
-class SiteEngagementUI
-    : public MojoWebUIController<mojom::SiteEngagementDetailsProvider> {
+class SiteEngagementUI : public ui::MojoWebUIController {
  public:
   explicit SiteEngagementUI(content::WebUI* web_ui);
   ~SiteEngagementUI() override;
 
  private:
-  // MojoWebUIController overrides:
-  void BindUIHandler(
-      mojom::SiteEngagementDetailsProviderRequest request) override;
+  void BindSiteEngagementDetailsProvider(
+      mojom::SiteEngagementDetailsProviderRequest request);
 
   std::unique_ptr<mojom::SiteEngagementDetailsProvider> ui_handler_;
 

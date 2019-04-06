@@ -13,14 +13,16 @@ declare_args() {
 
 cast_source_set("pipeline") {
   sources = [
-    "audio_decoder_software_wrapper.cc",
-    "audio_decoder_software_wrapper.h",
     "audio_pipeline_impl.cc",
     "audio_pipeline_impl.h",
     "av_pipeline_client.cc",
     "av_pipeline_client.h",
     "av_pipeline_impl.cc",
     "av_pipeline_impl.h",
+    "backend_decryptor.cc",
+    "backend_decryptor.h",
+    "cdm_decryptor.cc",
+    "cdm_decryptor.h",
     "decrypt_util.cc",
     "decrypt_util.h",
     "load_type.h",
@@ -30,6 +32,7 @@ cast_source_set("pipeline") {
     "media_pipeline_impl.h",
     "media_pipeline_observer.cc",
     "media_pipeline_observer.h",
+    "stream_decryptor.h",
     "video_pipeline_client.cc",
     "video_pipeline_client.h",
     "video_pipeline_impl.cc",
@@ -42,14 +45,14 @@ cast_source_set("pipeline") {
   ]
 
   deps = [
-    ":cma_pipeline_features",
+    ":cma_pipeline_buildflags",
     "//base",
+    "//chromecast/base",
     "//chromecast/base/metrics:metrics",
     "//chromecast/media/base",
     "//chromecast/media/cdm",
     "//chromecast/media/cma/backend",
     "//chromecast/media/cma/base",
-    "//chromecast/media/cma/decoder",
     "//crypto",
     "//crypto:platform",
     "//media",
@@ -57,8 +60,8 @@ cast_source_set("pipeline") {
   ]
 }
 
-buildflag_header("cma_pipeline_features") {
-  header = "cma_pipeline_features.h"
+buildflag_header("cma_pipeline_buildflags") {
+  header = "cma_pipeline_buildflags.h"
 
   flags = [ "CMA_USE_ACCURATE_MEDIA_TIME=$cma_use_accurate_media_time" ]
 }

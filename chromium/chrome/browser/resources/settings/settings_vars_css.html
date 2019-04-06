@@ -1,14 +1,14 @@
-<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/default-theme.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 
 <!-- Common css variables for Material Design settings. -->
+<custom-style>
 <style is="custom-style">
   /* We keep our vars in sort order, though some vars must be defined prior to
    * others. The --settings-* vars are defined explicitly prior to the --paper-*
    * and --iron-* vars.
    */
-  :root {
+  html {
     /* Some colors use non-MD colors.  These custom colors are specified by
      * UX design (bettes@). */
 
@@ -19,7 +19,7 @@
     --settings-indent-width: var(--cr-section-indent-width);
     --settings-card-max-width: 680px;
     --settings-disabled-opacity: .65;
-    --settings-error-color: var(--paper-red-700);
+    --settings-error-color: var(--google-red-700);
 
     --settings-list-frame-padding: {
       -webkit-padding-end: var(--settings-box-row-padding);
@@ -28,7 +28,7 @@
       padding-top: 0;
     }
 
-    --settings-nav-grey: rgb(90, 90, 90);
+    --settings-nav-grey: var(--google-grey-refresh-700);
 
     --settings-page-vertical-margin: 21px;
 
@@ -36,12 +36,6 @@
     --settings-row-two-line-min-height: var(--cr-section-two-line-min-height);
     --settings-row-three-line-min-height:
         var(--cr-section-three-line-min-height);
-
-    --settings-text-elide: {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    };
 
     --settings-separator-height: var(--cr-separator-height);
     --settings-separator-line: var(--cr-separator-line);
@@ -55,15 +49,13 @@
     /* Spacing between policy (controlledBy) indicator and control. */
     --settings-controlled-by-spacing: var(--cr-controlled-by-spacing);
 
-    --iron-icon-fill-color: var(--paper-grey-600);
+    --settings-input-max-width: 264px;
+
+    --iron-icon-fill-color: var(--google-grey-refresh-700);
     --iron-icon-height: var(--cr-icon-size);
     --iron-icon-width: var(--cr-icon-size);
 
-    --paper-radio-button-ink-size: 40px;
-    --paper-radio-button-label-color: inherit;
-    --paper-radio-button-size: 16px;
     --paper-radio-group-item-padding: 0;
-
-    --paper-tabs-selection-bar-color: var(--paper-blue-500);
   }
 </style>
+</custom-style>

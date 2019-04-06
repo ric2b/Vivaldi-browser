@@ -34,18 +34,21 @@
         <span>[[engine.displayName]]</span>
       </div>
       <div class="keyword-column">[[engine.keyword]]</div>
-      <button is="paper-icon-button-light" class="icon-more-vert"
-          on-tap="onDotsTap_" title="$i18n{moreActions}" focus-row-control
-          focus-type="menu">
-      </button>
-      <dialog is="cr-action-menu">
-        <button class="dropdown-item" on-tap="onManageTap_" id="manage">
+      <paper-icon-button-light class="icon-more-vert">
+        <button on-click="onDotsTap_" title="$i18n{moreActions}"
+            focus-row-control focus-type="menu">
+        </button>
+      </paper-icon-button-light>
+      <cr-action-menu>
+        <button slot="item" class="dropdown-item" on-click="onManageTap_"
+            id="manage">
           $i18n{searchEnginesManageExtension}
         </button>
-        <button class="dropdown-item" on-tap="onDisableTap_" id="disable">
+        <button slot="item" class="dropdown-item" on-click="onDisableTap_"
+            id="disable">
           $i18n{disable}
         </button>
-      </dialog>
+      </cr-action-menu>
     </div>
   </template>
   <script src="omnibox_extension_entry.js"></script>

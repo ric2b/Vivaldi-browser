@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "components/cookie_config/cookie_store_util.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/json_pref_store.h"
@@ -221,7 +220,7 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
   main_context->set_http_auth_handler_factory(
       io_thread_globals->http_auth_handler_factory.get());
 
-  main_context->set_proxy_service(proxy_service());
+  main_context->set_proxy_resolution_service(proxy_resolution_service());
 
   net::ChannelIDService* channel_id_service = NULL;
 

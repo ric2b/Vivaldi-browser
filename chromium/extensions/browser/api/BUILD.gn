@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//extensions/common/api/schema.gni")
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//tools/json_schema_compiler/json_schema_api.gni")
 
 assert(enable_extensions,
@@ -98,7 +98,7 @@ source_set("api") {
     "//extensions/common/api",
     "//extensions/strings",
     "//services/device/public/cpp/hid",
-    "//services/device/public/interfaces",
+    "//services/device/public/mojom",
   ]
 
   # TODO(michaelpg): Move these deps to the individual APIs that require them.
@@ -131,9 +131,11 @@ source_set("api") {
     ]
 
     public_deps += [
+      "//extensions/browser/api/cec_private",
       "//extensions/browser/api/clipboard",
       "//extensions/browser/api/diagnostics",
       "//extensions/browser/api/networking_config",
+      "//extensions/browser/api/system_power_source",
       "//extensions/browser/api/virtual_keyboard",
       "//extensions/browser/api/vpn_provider",
       "//extensions/browser/api/webcam_private",
@@ -142,6 +144,7 @@ source_set("api") {
     deps += [
       "//chromeos",
       "//chromeos:media_perception_proto",
+      "//chromeos/services/media_perception/public/mojom",
     ]
   }
 }

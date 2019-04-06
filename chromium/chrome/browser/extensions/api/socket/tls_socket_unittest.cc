@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
@@ -40,6 +41,25 @@ namespace extensions {
 class MockSSLClientSocket : public net::SSLClientSocket {
  public:
   MockSSLClientSocket() {}
+  int Read(net::IOBuffer* buffer,
+           int bytes,
+           net::CompletionOnceCallback callback) override {
+    return Read(buffer, bytes,
+                base::AdaptCallbackForRepeating(std::move(callback)));
+  }
+
+  int Write(net::IOBuffer* buffer,
+            int bytes,
+            net::CompletionOnceCallback callback,
+            const net::NetworkTrafficAnnotationTag& tag) override {
+    return Write(buffer, bytes,
+                 base::AdaptCallbackForRepeating(std::move(callback)), tag);
+  }
+
+  int Connect(net::CompletionOnceCallback callback) override {
+    return Connect(base::AdaptCallbackForRepeating(std::move(callback)));
+  }
+
   MOCK_METHOD0(Disconnect, void());
   MOCK_METHOD3(Read,
                int(net::IOBuffer* buf,
@@ -57,8 +77,6 @@ class MockSSLClientSocket : public net::SSLClientSocket {
   MOCK_CONST_METHOD1(GetPeerAddress, int(net::IPEndPoint*));
   MOCK_CONST_METHOD1(GetLocalAddress, int(net::IPEndPoint*));
   MOCK_CONST_METHOD0(NetLog, const net::NetLogWithSource&());
-  MOCK_METHOD0(SetSubresourceSpeculation, void());
-  MOCK_METHOD0(SetOmniboxSpeculation, void());
   MOCK_CONST_METHOD0(WasEverUsed, bool());
   MOCK_CONST_METHOD0(UsingTCPFastOpen, bool());
   MOCK_CONST_METHOD0(WasAlpnNegotiated, bool());
@@ -75,7 +93,7 @@ class MockSSLClientSocket : public net::SSLClientSocket {
                    const StringPiece&,
                    unsigned char*,
                    unsigned int));
-  MOCK_METHOD1(GetSSLCertRequestInfo, void(net::SSLCertRequestInfo*));
+  MOCK_CONST_METHOD1(GetSSLCertRequestInfo, void(net::SSLCertRequestInfo*));
   MOCK_CONST_METHOD0(GetUnverifiedServerCertificateChain,
                      scoped_refptr<net::X509Certificate>());
   MOCK_CONST_METHOD0(GetChannelIDService, net::ChannelIDService*());
@@ -94,6 +112,21 @@ class MockTCPSocket : public net::TCPClientSocket {
  public:
   explicit MockTCPSocket(const net::AddressList& address_list)
       : net::TCPClientSocket(address_list, NULL, NULL, net::NetLogSource()) {}
+
+  int Read(net::IOBuffer* buffer,
+           int bytes,
+           net::CompletionOnceCallback callback) override {
+    return Read(buffer, bytes,
+                base::AdaptCallbackForRepeating(std::move(callback)));
+  }
+
+  int Write(net::IOBuffer* buffer,
+            int bytes,
+            net::CompletionOnceCallback callback,
+            const net::NetworkTrafficAnnotationTag& tag) override {
+    return Write(buffer, bytes,
+                 base::AdaptCallbackForRepeating(std::move(callback)), tag);
+  }
 
   MOCK_METHOD3(Read,
                int(net::IOBuffer* buf,

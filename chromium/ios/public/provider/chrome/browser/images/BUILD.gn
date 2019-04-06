@@ -5,13 +5,15 @@
 source_set("images") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "branded_image_icon_types.h",
     "branded_image_provider.h",
     "branded_image_provider.mm",
-    "whats_new_icon.h",
   ]
   deps = [
     "//base",
+    "//components/search_engines",
   ]
+  libs = [ "UIKit.framework" ]
 }
 
 source_set("test_support") {

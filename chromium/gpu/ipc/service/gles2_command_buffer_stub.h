@@ -5,6 +5,7 @@
 #ifndef GPU_IPC_SERVICE_GLES2_COMMAND_BUFFER_STUB_H_
 #define GPU_IPC_SERVICE_GLES2_COMMAND_BUFFER_STUB_H_
 
+#include "base/containers/circular_deque.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "gpu/ipc/service/command_buffer_stub.h"
@@ -32,7 +33,7 @@ class GPU_IPC_SERVICE_EXPORT GLES2CommandBufferStub
   gpu::ContextResult Initialize(
       CommandBufferStub* share_group,
       const GPUCreateCommandBufferConfig& init_params,
-      std::unique_ptr<base::SharedMemory> shared_state_shm) override;
+      base::UnsafeSharedMemoryRegion shared_state_shm) override;
 
 // ImageTransportSurfaceDelegate implementation:
 #if defined(OS_WIN)
@@ -43,26 +44,30 @@ class GPU_IPC_SERVICE_EXPORT GLES2CommandBufferStub
   void DidSwapBuffersComplete(SwapBuffersCompleteParams params) override;
   const gles2::FeatureInfo* GetFeatureInfo() const override;
   const GpuPreferences& GetGpuPreferences() const override;
-  void SetSnapshotRequestedCallback(const base::Closure& callback) override;
-  void UpdateVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval) override;
-  void BufferPresented(uint64_t swap_id,
-                       const gfx::PresentationFeedback& feedback) override;
+  void BufferPresented(const gfx::PresentationFeedback& feedback) override;
 
   void AddFilter(IPC::MessageFilter* message_filter) override;
   int32_t GetRouteID() const override;
 
  private:
+  void OnTakeFrontBuffer(const Mailbox& mailbox) override;
+  void OnReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) override;
+  void OnSwapBuffers(uint64_t swap_id, uint32_t flags) override;
+
   // Keep a more specifically typed reference to the decoder to avoid
   // unnecessary casts. Owned by parent class.
   gles2::GLES2Decoder* gles2_decoder_;
 
-  base::Closure snapshot_requested_callback_;
+  // Params pushed each time we call OnSwapBuffers, and popped when a buffer
+  // is presented or a swap completed.
+  struct SwapBufferParams {
+    uint64_t swap_id;
+    uint32_t flags;
+  };
+  base::circular_deque<SwapBufferParams> pending_presented_params_;
+  base::circular_deque<SwapBufferParams> pending_swap_completed_params_;
 
   base::WeakPtrFactory<GLES2CommandBufferStub> weak_ptr_factory_;
-
-  void OnTakeFrontBuffer(const Mailbox& mailbox) override;
-  void OnReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) override;
 
   DISALLOW_COPY_AND_ASSIGN(GLES2CommandBufferStub);
 };

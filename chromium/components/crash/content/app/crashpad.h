@@ -23,6 +23,7 @@
 
 namespace crashpad {
 class CrashpadClient;
+class CrashReportDatabase;
 }
 
 namespace crash_reporter {
@@ -53,20 +54,21 @@ namespace crash_reporter {
 // supported when initial_client is true and process_type is "relauncher".
 //
 // On Windows, use InitializeCrashpadWithEmbeddedHandler() when crashpad_handler
-// is embedded into this binary and can be started by launching the current
-// process with --type=crashpad-handler. Otherwise, this function should be used
-// and will launch an external crashpad_handler.exe which is generally used for
-// test situations.
+// is embedded into a binary that can be launched with --type=crashpad-handler.
+// Otherwise, this function should be used and will launch an external
+// crashpad_handler.exe which is generally used for test situations.
 void InitializeCrashpad(bool initial_client, const std::string& process_type);
 
 #if defined(OS_WIN)
 // This is the same as InitializeCrashpad(), but rather than launching a
-// crashpad_handler executable, relaunches the current executable with a command
-// line argument of --type=crashpad-handler. If user_data_dir is non-empty, it
-// is added to the handler's command line for use by Chrome Crashpad extensions.
+// crashpad_handler executable, relaunches the executable at |exe_path| or the
+// current executable if |exe_path| is empty with a command line argument of
+// --type=crashpad-handler. If |user_data_dir| is non-empty, it is added to the
+// handler's command line for use by Chrome Crashpad extensions.
 void InitializeCrashpadWithEmbeddedHandler(bool initial_client,
                                            const std::string& process_type,
-                                           const std::string& user_data_dir);
+                                           const std::string& user_data_dir,
+                                           const base::FilePath& exe_path);
 #endif  // OS_WIN
 
 // Returns the CrashpadClient for this process. This will lazily create it if
@@ -114,11 +116,23 @@ void RequestSingleCrashUpload(const std::string& local_id);
 
 void DumpWithoutCrashing();
 
+// Returns the Crashpad database path, only valid in the browser.
+base::FilePath GetCrashpadDatabasePath();
+
 // The implementation function for GetReports.
 void GetReportsImpl(std::vector<Report>* reports);
 
 // The implementation function for RequestSingleCrashUpload.
 void RequestSingleCrashUploadImpl(const std::string& local_id);
+
+// The implementation function for GetCrashpadDatabasePath.
+base::FilePath::StringType::const_pointer GetCrashpadDatabasePathImpl();
+
+#if defined(OS_MACOSX)
+// Captures a minidump for the process named by its |task_port| and stores it
+// in the current crash report database.
+void DumpProcessWithoutCrashing(task_t task_port);
+#endif
 
 namespace internal {
 
@@ -140,14 +154,31 @@ void UnregisterNonABICompliantCodeRangeImpl(void* start);
 
 #endif  // defined(OS_WIN)
 
-// The platform-specific portion of InitializeCrashpad(). On windows, if
-// user_data_dir is non-empty, the user data directory will be passed to the
-// handler process for use by Chrome Crashpad extensions.
-// Returns the database path, if initializing in the browser process.
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+// Sets parameters to appropriate values to launch Crashpad's handler process.
+// Returns true on success, otherwise false.
+bool BuildHandlerArgs(base::FilePath* handler_path,
+                      base::FilePath* database_path,
+                      base::FilePath* metrics_path,
+                      std::string* url,
+                      std::map<std::string, std::string>* process_annotations,
+                      std::vector<std::string>* arguments);
+#endif  // OS_LINUX || OS_ANDROID
+
+// The platform-specific portion of InitializeCrashpad(). On Windows, if
+// |user_data_dir| is non-empty, the user data directory will be passed to the
+// handler process for use by Chrome Crashpad extensions; if |exe_path| is
+// non-empty, it specifies the path to the executable holding the embedded
+// handler. Returns the database path, if initializing in the browser process.
 base::FilePath PlatformCrashpadInitialization(bool initial_client,
                                               bool browser_process,
                                               bool embedded_handler,
-                                              const std::string& user_data_dir);
+                                              const std::string& user_data_dir,
+                                              const base::FilePath& exe_path);
+
+// Returns the current crash report database object, or null if it has not
+// been initialized yet.
+crashpad::CrashReportDatabase* GetCrashReportDatabase();
 
 }  // namespace internal
 

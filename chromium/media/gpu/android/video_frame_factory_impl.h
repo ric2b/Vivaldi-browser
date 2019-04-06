@@ -6,6 +6,8 @@
 #define MEDIA_GPU_ANDROID_VIDEO_FRAME_FACTORY_IMPL_
 
 #include "base/optional.h"
+#include "base/single_thread_task_runner.h"
+#include "gpu/command_buffer/service/abstract_texture.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/ipc/service/command_buffer_stub.h"
@@ -21,6 +23,7 @@
 namespace media {
 class CodecImageGroup;
 class GpuVideoFrameFactory;
+class TexturePool;
 
 // VideoFrameFactoryImpl creates CodecOutputBuffer backed VideoFrames and tries
 // to eagerly render them to their surface to release the buffers back to the
@@ -52,8 +55,8 @@ class MEDIA_GPU_EXPORT VideoFrameFactoryImpl : public VideoFrameFactory {
   scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner_;
   GetStubCb get_stub_cb_;
 
-  // The surface texture that video frames should use, or nullptr.
-  scoped_refptr<SurfaceTextureGLOwner> surface_texture_;
+  // The texture owner that video frames should use, or nullptr.
+  scoped_refptr<TextureOwner> texture_owner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
   DISALLOW_COPY_AND_ASSIGN(VideoFrameFactoryImpl);
@@ -67,14 +70,14 @@ class GpuVideoFrameFactory
   GpuVideoFrameFactory();
   ~GpuVideoFrameFactory() override;
 
-  scoped_refptr<SurfaceTextureGLOwner> Initialize(
+  scoped_refptr<TextureOwner> Initialize(
       bool wants_promotion_hint,
       VideoFrameFactory::GetStubCb get_stub_cb);
 
   // Creates and returns a VideoFrame with its ReleaseMailboxCB.
   void CreateVideoFrame(
       std::unique_ptr<CodecOutputBuffer> output_buffer,
-      scoped_refptr<SurfaceTextureGLOwner> surface_texture,
+      scoped_refptr<TextureOwner> texture_owner,
       base::TimeDelta timestamp,
       gfx::Size natural_size,
       PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
@@ -86,25 +89,18 @@ class GpuVideoFrameFactory
   void SetImageGroup(scoped_refptr<CodecImageGroup> image_group);
 
  private:
-  // Creates a TextureRef and VideoFrame.
+  // Creates an AbstractTexture and VideoFrame.
   void CreateVideoFrameInternal(
       std::unique_ptr<CodecOutputBuffer> output_buffer,
-      scoped_refptr<SurfaceTextureGLOwner> surface_texture,
+      scoped_refptr<TextureOwner> texture_owner,
       base::TimeDelta timestamp,
       gfx::Size natural_size,
       PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
       scoped_refptr<VideoFrame>* video_frame_out,
-      scoped_refptr<gpu::gles2::TextureRef>* texture_ref_out);
+      std::unique_ptr<gpu::gles2::AbstractTexture>* texture_out,
+      CodecImage** codec_image_out);
 
-  void OnWillDestroyStub() override;
-
-  // Clears |texture_refs_|. Makes the gl context current.
-  void ClearTextureRefs();
-
-  // Removes |ref| from texture_refs_. Makes the gl context current.
-  // |token| is ignored because MojoVideoDecoderService guarantees that it has
-  // already passed by the time we get the callback.
-  void DropTextureRef(gpu::gles2::TextureRef* ref, const gpu::SyncToken& token);
+  void OnWillDestroyStub(bool have_context) override;
 
   // Removes |image| from |images_|.
   void OnImageDestructed(CodecImage* image);
@@ -112,11 +108,6 @@ class GpuVideoFrameFactory
   // Outstanding images that should be considered for early rendering.
   std::vector<CodecImage*> images_;
 
-  // Outstanding TextureRefs that are still referenced by a mailbox VideoFrame.
-  // They're kept alive until their mailboxes are released (or |this| is
-  // destructed).
-  std::map<gpu::gles2::TextureRef*, scoped_refptr<gpu::gles2::TextureRef>>
-      texture_refs_;
   gpu::CommandBufferStub* stub_;
 
   // Callback to notify us that an image has been destroyed.
@@ -131,6 +122,9 @@ class GpuVideoFrameFactory
   // Current image group to which new images (frames) will be added.  We'll
   // replace this when SetImageGroup() is called.
   scoped_refptr<CodecImageGroup> image_group_;
+
+  // Pool which owns all the textures that we create.
+  scoped_refptr<TexturePool> texture_pool_;
 
   THREAD_CHECKER(thread_checker_);
   base::WeakPtrFactory<GpuVideoFrameFactory> weak_factory_;
@@ -175,8 +169,8 @@ void MEDIA_GPU_EXPORT MaybeRenderEarly(std::vector<Image*>* image_vector_ptr) {
   // Try to render the image following the front buffer to the back buffer.
   size_t back_buffer_index = *front_buffer_index + 1;
   if (back_buffer_index < images.size() &&
-      images[back_buffer_index]->is_surface_texture_backed()) {
-    images[back_buffer_index]->RenderToSurfaceTextureBackBuffer();
+      images[back_buffer_index]->is_texture_owner_backed()) {
+    images[back_buffer_index]->RenderToTextureOwnerBackBuffer();
   }
 }
 

@@ -247,7 +247,7 @@ void InMemoryURLIndexTest::SetUp() {
   // Execute the contents of a golden file to populate the [urls] and [visits]
   // tables.
   base::FilePath golden_path;
-  PathService::Get(base::DIR_SOURCE_ROOT, &golden_path);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &golden_path);
   golden_path = golden_path.AppendASCII("components/test/data/omnibox");
   golden_path = golden_path.Append(TestDBName());
   ASSERT_TRUE(base::PathExists(golden_path));
@@ -1016,8 +1016,8 @@ TEST_F(InMemoryURLIndexTest, ExpireRow) {
   // delete notification, then ensure that the row has been deleted.
   history::URLRows deleted_rows;
   deleted_rows.push_back(matches[0].url_info);
-  url_index_->OnURLsDeleted(nullptr, false, false, deleted_rows,
-                            std::set<GURL>());
+  url_index_->OnURLsDeleted(
+      nullptr, history::DeletionInfo::ForUrls(deleted_rows, std::set<GURL>()));
   EXPECT_TRUE(url_index_->HistoryItemsForTerms(ASCIIToUTF16("DrudgeReport"),
                                                base::string16::npos,
                                                kMaxMatches).empty());
@@ -1215,7 +1215,7 @@ TEST_F(InMemoryURLIndexTest, CacheSaveRestore) {
   EXPECT_EQ(rebuild_time, new_data.last_time_rebuilt_from_history_);
 
   // Compare the captured and restored for equality.
-  ExpectPrivateDataEqual(*old_data.get(), new_data);
+  ExpectPrivateDataEqual(*old_data, new_data);
 }
 
 TEST_F(InMemoryURLIndexTest, RebuildFromHistoryIfCacheOld) {
@@ -1292,7 +1292,7 @@ TEST_F(InMemoryURLIndexTest, RebuildFromHistoryIfCacheOld) {
   EXPECT_NE(fake_rebuild_time, new_data.last_time_rebuilt_from_history_);
 
   // Compare the captured and restored for equality.
-  ExpectPrivateDataEqual(*old_data.get(), new_data);
+  ExpectPrivateDataEqual(*old_data, new_data);
 }
 
 TEST_F(InMemoryURLIndexTest, CalculateWordStartsOffsets) {

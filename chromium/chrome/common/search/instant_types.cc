@@ -11,6 +11,9 @@ RGBAColor::RGBAColor()
       a(0) {
 }
 
+RGBAColor::RGBAColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+    : r(r), g(g), b(b), a(a) {}
+
 RGBAColor::~RGBAColor() {
 }
 
@@ -23,6 +26,10 @@ bool RGBAColor::operator==(const RGBAColor& rhs) const {
 
 ThemeBackgroundInfo::ThemeBackgroundInfo()
     : using_default_theme(true),
+      custom_background_url(std::string()),
+      custom_background_attribution_line_1(std::string()),
+      custom_background_attribution_line_2(std::string()),
+      custom_background_attribution_action_url(std::string()),
       background_color(),
       text_color(),
       link_color(),
@@ -32,29 +39,32 @@ ThemeBackgroundInfo::ThemeBackgroundInfo()
       image_horizontal_alignment(THEME_BKGRND_IMAGE_ALIGN_CENTER),
       image_vertical_alignment(THEME_BKGRND_IMAGE_ALIGN_CENTER),
       image_tiling(THEME_BKGRND_IMAGE_NO_REPEAT),
-      image_height(0),
       has_attribution(false),
-      logo_alternate(false) {
-}
+      logo_alternate(false) {}
 
 ThemeBackgroundInfo::~ThemeBackgroundInfo() {
 }
 
 bool ThemeBackgroundInfo::operator==(const ThemeBackgroundInfo& rhs) const {
   return using_default_theme == rhs.using_default_theme &&
-      background_color == rhs.background_color &&
-      text_color == rhs.text_color &&
-      link_color == rhs.link_color &&
-      text_color_light == rhs.text_color_light &&
-      header_color == rhs.header_color &&
-      section_border_color == rhs.section_border_color &&
-      theme_id == rhs.theme_id &&
-      image_horizontal_alignment == rhs.image_horizontal_alignment &&
-      image_vertical_alignment == rhs.image_vertical_alignment &&
-      image_tiling == rhs.image_tiling &&
-      image_height == rhs.image_height &&
-      has_attribution == rhs.has_attribution &&
-      logo_alternate == rhs.logo_alternate;
+         custom_background_url == rhs.custom_background_url &&
+         custom_background_attribution_line_1 ==
+             rhs.custom_background_attribution_line_1 &&
+         custom_background_attribution_line_2 ==
+             rhs.custom_background_attribution_line_2 &&
+         custom_background_attribution_action_url ==
+             rhs.custom_background_attribution_action_url &&
+         background_color == rhs.background_color &&
+         text_color == rhs.text_color && link_color == rhs.link_color &&
+         text_color_light == rhs.text_color_light &&
+         header_color == rhs.header_color &&
+         section_border_color == rhs.section_border_color &&
+         theme_id == rhs.theme_id &&
+         image_horizontal_alignment == rhs.image_horizontal_alignment &&
+         image_vertical_alignment == rhs.image_vertical_alignment &&
+         image_tiling == rhs.image_tiling &&
+         has_attribution == rhs.has_attribution &&
+         logo_alternate == rhs.logo_alternate;
 }
 
 InstantMostVisitedItem::InstantMostVisitedItem()

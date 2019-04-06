@@ -15,10 +15,11 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_samples.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
+#include "base/time/default_clock.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
@@ -30,7 +31,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "net/proxy/proxy_server.h"
+#include "net/base/proxy_server.h"
 #include "net/socket/socket_test_util.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -65,7 +66,8 @@ class DataReductionProxySettingsTest
 TEST_F(DataReductionProxySettingsTest, TestIsProxyEnabledOrManaged) {
   InitPrefMembers();
   NetworkPropertiesManager network_properties_manager(
-      test_context_->pref_service(), test_context_->task_runner());
+      base::DefaultClock::GetInstance(), test_context_->pref_service(),
+      test_context_->task_runner());
   test_context_->config()->SetNetworkPropertiesManagerForTesting(
       &network_properties_manager);
 
@@ -89,7 +91,8 @@ TEST_F(DataReductionProxySettingsTest, TestIsProxyEnabledOrManaged) {
 TEST_F(DataReductionProxySettingsTest, TestCanUseDataReductionProxy) {
   InitPrefMembers();
   NetworkPropertiesManager network_properties_manager(
-      test_context_->pref_service(), test_context_->task_runner());
+      base::DefaultClock::GetInstance(), test_context_->pref_service(),
+      test_context_->task_runner());
   test_context_->config()->SetNetworkPropertiesManagerForTesting(
       &network_properties_manager);
 
@@ -233,7 +236,7 @@ TEST(DataReductionProxySettingsStandaloneTest, TestEndToEndSecureProxyCheck) {
         net::MockRead(net::SYNCHRONOUS, test_case.net_error_code),
     };
     net::StaticSocketDataProvider socket_data_provider(
-        mock_reads, arraysize(mock_reads), nullptr, 0);
+        mock_reads, base::span<net::MockWrite>());
     mock_socket_factory.AddSocketDataProvider(&socket_data_provider);
 
     // Toggle the pref to trigger the secure proxy check.
@@ -260,7 +263,8 @@ TEST(DataReductionProxySettingsStandaloneTest, TestOnProxyEnabledPrefChange) {
           .Build();
 
   NetworkPropertiesManager network_properties_manager(
-      drp_test_context->pref_service(), drp_test_context->task_runner());
+      base::DefaultClock::GetInstance(), drp_test_context->pref_service(),
+      drp_test_context->task_runner());
   drp_test_context->config()->SetNetworkPropertiesManagerForTesting(
       &network_properties_manager);
 
@@ -286,7 +290,8 @@ TEST_F(DataReductionProxySettingsTest, TestMaybeActivateDataReductionProxy) {
   // so it won't trigger MaybeActivateDataReductionProxy when the pref value
   // is set.
   NetworkPropertiesManager network_properties_manager(
-      test_context_->pref_service(), test_context_->task_runner());
+      base::DefaultClock::GetInstance(), test_context_->pref_service(),
+      test_context_->task_runner());
   test_context_->config()->SetNetworkPropertiesManagerForTesting(
       &network_properties_manager);
 

@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -28,12 +27,12 @@
 
 // The state machine representing how a CRX component changes during an update.
 //
-//     +------------------------> kNew <---------------------+--------+
-//     |                            |                        |        |
-//     |                            V                        |        |
-//     |                        kChecking                    |        |
-//     |                            |                        |        |
-//     |                error       V     no           no    |        |
+//     +------------------------- kNew
+//     |                            |
+//     |                            V
+//     |                        kChecking
+//     |                            |
+//     V                error       V     no           no
 //  kUpdateError <------------- [update?] -> [action?] -> kUpToDate  kUpdated
 //     ^                            |           |            ^        ^
 //     |                        yes |           | yes        |        |
@@ -63,28 +62,25 @@ namespace update_client {
 namespace {
 
 using InstallOnBlockingTaskRunnerCompleteCallback = base::OnceCallback<
-    void(int error_category, int error_code, int extra_code1)>;
+    void(ErrorCategory error_category, int error_code, int extra_code1)>;
 
 void InstallComplete(
-    const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     InstallOnBlockingTaskRunnerCompleteCallback callback,
     const base::FilePath& unpack_path,
     const CrxInstaller::Result& result) {
   base::PostTaskWithTraits(
       FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
       base::BindOnce(
-          [](const scoped_refptr<base::SingleThreadTaskRunner>&
-                 main_task_runner,
+          [](scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
              InstallOnBlockingTaskRunnerCompleteCallback callback,
              const base::FilePath& unpack_path,
              const CrxInstaller::Result& result) {
             base::DeleteFile(unpack_path, true);
             const ErrorCategory error_category =
-                result.error ? ErrorCategory::kInstallError
-                             : ErrorCategory::kErrorNone;
+                result.error ? ErrorCategory::kInstall : ErrorCategory::kNone;
             main_task_runner->PostTask(
-                FROM_HERE, base::BindOnce(std::move(callback),
-                                          static_cast<int>(error_category),
+                FROM_HERE, base::BindOnce(std::move(callback), error_category,
                                           static_cast<int>(result.error),
                                           result.extended_error));
           },
@@ -92,11 +88,11 @@ void InstallComplete(
 }
 
 void InstallOnBlockingTaskRunner(
-    const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     const base::FilePath& unpack_path,
     const std::string& public_key,
     const std::string& fingerprint,
-    const scoped_refptr<CrxInstaller>& installer,
+    scoped_refptr<CrxInstaller> installer,
     InstallOnBlockingTaskRunnerCompleteCallback callback) {
   DCHECK(base::DirectoryExists(unpack_path));
 
@@ -111,8 +107,7 @@ void InstallOnBlockingTaskRunner(
     const CrxInstaller::Result result(InstallError::FINGERPRINT_WRITE_FAILED);
     main_task_runner->PostTask(
         FROM_HERE,
-        base::BindOnce(std::move(callback),
-                       static_cast<int>(ErrorCategory::kInstallError),
+        base::BindOnce(std::move(callback), ErrorCategory::kInstall,
                        static_cast<int>(result.error), result.extended_error));
     return;
   }
@@ -124,10 +119,10 @@ void InstallOnBlockingTaskRunner(
 }
 
 void UnpackCompleteOnBlockingTaskRunner(
-    const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     const base::FilePath& crx_path,
     const std::string& fingerprint,
-    const scoped_refptr<CrxInstaller>& installer,
+    scoped_refptr<CrxInstaller> installer,
     InstallOnBlockingTaskRunnerCompleteCallback callback,
     const ComponentUnpacker::Result& result) {
   update_client::DeleteFileAndEmptyParentDirectory(crx_path);
@@ -135,8 +130,7 @@ void UnpackCompleteOnBlockingTaskRunner(
   if (result.error != UnpackerError::kNone) {
     main_task_runner->PostTask(
         FROM_HERE,
-        base::BindOnce(std::move(callback),
-                       static_cast<int>(ErrorCategory::kUnpackError),
+        base::BindOnce(std::move(callback), ErrorCategory::kUnpack,
                        static_cast<int>(result.error), result.extended_error));
     return;
   }
@@ -149,11 +143,11 @@ void UnpackCompleteOnBlockingTaskRunner(
 }
 
 void StartInstallOnBlockingTaskRunner(
-    const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     const std::vector<uint8_t>& pk_hash,
     const base::FilePath& crx_path,
     const std::string& fingerprint,
-    const scoped_refptr<CrxInstaller>& installer,
+    scoped_refptr<CrxInstaller> installer,
     std::unique_ptr<service_manager::Connector> connector,
     InstallOnBlockingTaskRunnerCompleteCallback callback) {
   auto unpacker = base::MakeRefCounted<ComponentUnpacker>(
@@ -177,11 +171,19 @@ scoped_refptr<Configurator> Component::config() const {
   return update_context_.config;
 }
 
-void Component::Handle(CallbackHandleComplete callback) {
+std::string Component::session_id() const {
+  return update_context_.session_id;
+}
+
+bool Component::is_foreground() const {
+  return update_context_.is_foreground;
+}
+
+void Component::Handle(CallbackHandleComplete callback_handle_complete) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(state_);
 
-  callback_handle_complete_ = std::move(callback);
+  callback_handle_complete_ = std::move(callback_handle_complete);
 
   state_->Handle(
       base::BindOnce(&Component::ChangeState, base::Unretained(this)));
@@ -193,6 +195,8 @@ void Component::ChangeState(std::unique_ptr<State> next_state) {
   previous_state_ = state();
   if (next_state)
     state_ = std::move(next_state);
+  else
+    is_handled_ = true;
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, std::move(callback_handle_complete_));
@@ -204,10 +208,14 @@ CrxUpdateItem Component::GetCrxUpdateItem() const {
   CrxUpdateItem crx_update_item;
   crx_update_item.state = state_->state();
   crx_update_item.id = id_;
-  crx_update_item.component = crx_component_;
+  if (crx_component_)
+    crx_update_item.component = *crx_component_;
   crx_update_item.last_check = last_check_;
   crx_update_item.next_version = next_version_;
   crx_update_item.next_fp = next_fp_;
+  crx_update_item.error_category = error_category_;
+  crx_update_item.error_code = error_code_;
+  crx_update_item.extra_code1 = extra_code1_;
 
   return crx_update_item;
 }
@@ -248,6 +256,9 @@ void Component::Uninstall(const base::Version& version, int reason) {
 
   DCHECK_EQ(ComponentState::kNew, state());
 
+  crx_component_ = std::make_unique<CrxComponent>();
+  crx_component_->version = version;
+
   previous_version_ = version;
   next_version_ = base::Version("0");
   extra_code1_ = reason;
@@ -255,18 +266,26 @@ void Component::Uninstall(const base::Version& version, int reason) {
   state_ = std::make_unique<StateUninstalled>(this);
 }
 
-void Component::UpdateCheckComplete() {
+void Component::SetUpdateCheckResult(
+    const base::Optional<ProtocolParser::Result>& result,
+    ErrorCategory error_category,
+    int error) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
   DCHECK_EQ(ComponentState::kChecking, state());
+
+  error_category_ = error_category;
+  error_code_ = error;
+  if (result)
+    SetParseResult(result.value());
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, std::move(update_check_complete_));
 }
 
 bool Component::CanDoBackgroundDownload() const {
-  // On demand component updates are always downloaded in foreground.
-  return !on_demand_ && crx_component_.allows_background_download &&
+  // Foreground component updates are always downloaded in foreground.
+  return !is_foreground() &&
+         (crx_component() && crx_component()->allows_background_download) &&
          update_context_.config->EnabledBackgroundDownloader();
 }
 
@@ -297,22 +316,28 @@ Component::State::State(Component* component, ComponentState state)
 
 Component::State::~State() {}
 
-void Component::State::Handle(CallbackNextState callback) {
+void Component::State::Handle(CallbackNextState callback_next_state) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  callback_ = std::move(callback);
+  callback_next_state_ = std::move(callback_next_state);
 
-  DCHECK(!is_final_);
   DoHandle();
 }
 
 void Component::State::TransitionState(std::unique_ptr<State> next_state) {
-  if (!next_state)
-    is_final_ = true;
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(next_state);
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::BindOnce(std::move(callback_), base::Passed(&next_state)));
+      base::BindOnce(std::move(callback_next_state_), std::move(next_state)));
+}
+
+void Component::State::EndState() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback_next_state_), nullptr));
 }
 
 Component::StateNew::StateNew(Component* component)
@@ -326,8 +351,13 @@ void Component::StateNew::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   auto& component = State::component();
-
-  TransitionState(std::make_unique<StateChecking>(&component));
+  if (component.crx_component()) {
+    TransitionState(std::make_unique<StateChecking>(&component));
+  } else {
+    component.error_code_ = static_cast<int>(Error::CRX_NOT_FOUND);
+    component.error_category_ = ErrorCategory::kService;
+    TransitionState(std::make_unique<StateUpdateError>(&component));
+  }
 }
 
 Component::StateChecking::StateChecking(Component* component)
@@ -347,6 +377,7 @@ void Component::StateChecking::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   auto& component = State::component();
+  DCHECK(component.crx_component());
 
   component.last_check_ = base::TimeTicks::Now();
   component.update_check_complete_ = base::BindOnce(
@@ -358,7 +389,7 @@ void Component::StateChecking::DoHandle() {
 void Component::StateChecking::UpdateCheckComplete() {
   DCHECK(thread_checker_.CalledOnValidThread());
   auto& component = State::component();
-  if (!component.update_check_error_) {
+  if (!component.error_code_) {
     if (component.status_ == "ok") {
       TransitionState(std::make_unique<StateCanUpdate>(&component));
       return;
@@ -388,12 +419,15 @@ void Component::StateUpdateError::DoHandle() {
 
   auto& component = State::component();
 
+  DCHECK_NE(ErrorCategory::kNone, component.error_category_);
+  DCHECK_NE(0, component.error_code_);
+
   // Create an event only when the server response included an update.
   if (component.IsUpdateAvailable())
     component.AppendEvent(BuildUpdateCompleteEventElement(component));
 
-  TransitionState(nullptr);
-  component.NotifyObservers(Events::COMPONENT_NOT_UPDATED);
+  EndState();
+  component.NotifyObservers(Events::COMPONENT_UPDATE_ERROR);
 }
 
 Component::StateCanUpdate::StateCanUpdate(Component* component)
@@ -407,13 +441,15 @@ void Component::StateCanUpdate::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   auto& component = State::component();
+  DCHECK(component.crx_component());
 
   component.is_update_available_ = true;
   component.NotifyObservers(Events::COMPONENT_UPDATE_FOUND);
 
-  if (component.crx_component_.supports_group_policy_enable_component_updates &&
+  if (component.crx_component()
+          ->supports_group_policy_enable_component_updates &&
       !component.update_context_.enabled_component_updates) {
-    component.error_category_ = static_cast<int>(ErrorCategory::kServiceError);
+    component.error_category_ = ErrorCategory::kService;
     component.error_code_ = static_cast<int>(ServiceError::UPDATE_DISABLED);
     component.extra_code1_ = 0;
     TransitionState(std::make_unique<StateUpdateError>(&component));
@@ -448,9 +484,10 @@ void Component::StateUpToDate::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   auto& component = State::component();
+  DCHECK(component.crx_component());
 
   component.NotifyObservers(Events::COMPONENT_NOT_UPDATED);
-  TransitionState(nullptr);
+  EndState();
 }
 
 Component::StateDownloadingDiff::StateDownloadingDiff(Component* component)
@@ -465,6 +502,8 @@ void Component::StateDownloadingDiff::DoHandle() {
 
   const auto& component = Component::State::component();
   const auto& update_context = component.update_context_;
+
+  DCHECK(component.crx_component());
 
   crx_downloader_ = update_context.crx_downloader_factory(
       component.CanDoBackgroundDownload(),
@@ -508,8 +547,7 @@ void Component::StateDownloadingDiff::DownloadComplete(
 
   if (download_result.error) {
     DCHECK(download_result.response.empty());
-    component.diff_error_category_ =
-        static_cast<int>(ErrorCategory::kNetworkError);
+    component.diff_error_category_ = ErrorCategory::kDownload;
     component.diff_error_code_ = download_result.error;
 
     TransitionState(std::make_unique<StateDownloading>(&component));
@@ -533,6 +571,8 @@ void Component::StateDownloading::DoHandle() {
 
   const auto& component = Component::State::component();
   const auto& update_context = component.update_context_;
+
+  DCHECK(component.crx_component());
 
   crx_downloader_ = update_context.crx_downloader_factory(
       component.CanDoBackgroundDownload(),
@@ -576,7 +616,7 @@ void Component::StateDownloading::DownloadComplete(
 
   if (download_result.error) {
     DCHECK(download_result.response.empty());
-    component.error_category_ = static_cast<int>(ErrorCategory::kNetworkError);
+    component.error_category_ = ErrorCategory::kDownload;
     component.error_code_ = download_result.error;
 
     TransitionState(std::make_unique<StateUpdateError>(&component));
@@ -601,6 +641,8 @@ void Component::StateUpdatingDiff::DoHandle() {
   const auto& component = Component::State::component();
   const auto& update_context = component.update_context_;
 
+  DCHECK(component.crx_component());
+
   component.NotifyObservers(Events::COMPONENT_UPDATE_READY);
 
   // Create a fresh connector that can be used on the other task runner.
@@ -613,14 +655,14 @@ void Component::StateUpdatingDiff::DoHandle() {
           base::BindOnce(
               &update_client::StartInstallOnBlockingTaskRunner,
               base::ThreadTaskRunnerHandle::Get(),
-              component.crx_component_.pk_hash, component.crx_path_,
-              component.next_fp_, component.crx_component_.installer,
-              base::Passed(&connector),
+              component.crx_component()->pk_hash, component.crx_path_,
+              component.next_fp_, component.crx_component()->installer,
+              std::move(connector),
               base::BindOnce(&Component::StateUpdatingDiff::InstallComplete,
                              base::Unretained(this))));
 }
 
-void Component::StateUpdatingDiff::InstallComplete(int error_category,
+void Component::StateUpdatingDiff::InstallComplete(ErrorCategory error_category,
                                                    int error_code,
                                                    int extra_code1) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -636,13 +678,11 @@ void Component::StateUpdatingDiff::InstallComplete(int error_category,
     return;
   }
 
-  DCHECK_EQ(static_cast<int>(ErrorCategory::kErrorNone),
-            component.diff_error_category_);
+  DCHECK_EQ(ErrorCategory::kNone, component.diff_error_category_);
   DCHECK_EQ(0, component.diff_error_code_);
   DCHECK_EQ(0, component.diff_extra_code1_);
 
-  DCHECK_EQ(static_cast<int>(ErrorCategory::kErrorNone),
-            component.error_category_);
+  DCHECK_EQ(ErrorCategory::kNone, component.error_category_);
   DCHECK_EQ(0, component.error_code_);
   DCHECK_EQ(0, component.extra_code1_);
 
@@ -665,6 +705,8 @@ void Component::StateUpdating::DoHandle() {
   const auto& component = Component::State::component();
   const auto& update_context = component.update_context_;
 
+  DCHECK(component.crx_component());
+
   component.NotifyObservers(Events::COMPONENT_UPDATE_READY);
 
   // Create a fresh connector that can be used on the other task runner.
@@ -676,14 +718,14 @@ void Component::StateUpdating::DoHandle() {
                  base::BindOnce(
                      &update_client::StartInstallOnBlockingTaskRunner,
                      base::ThreadTaskRunnerHandle::Get(),
-                     component.crx_component_.pk_hash, component.crx_path_,
-                     component.next_fp_, component.crx_component_.installer,
-                     base::Passed(&connector),
+                     component.crx_component()->pk_hash, component.crx_path_,
+                     component.next_fp_, component.crx_component()->installer,
+                     std::move(connector),
                      base::BindOnce(&Component::StateUpdating::InstallComplete,
                                     base::Unretained(this))));
 }
 
-void Component::StateUpdating::InstallComplete(int error_category,
+void Component::StateUpdating::InstallComplete(ErrorCategory error_category,
                                                int error_code,
                                                int extra_code1) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -699,8 +741,7 @@ void Component::StateUpdating::InstallComplete(int error_category,
     return;
   }
 
-  DCHECK_EQ(static_cast<int>(ErrorCategory::kErrorNone),
-            component.error_category_);
+  DCHECK_EQ(ErrorCategory::kNone, component.error_category_);
   DCHECK_EQ(0, component.error_code_);
   DCHECK_EQ(0, component.extra_code1_);
 
@@ -723,13 +764,15 @@ void Component::StateUpdated::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   auto& component = State::component();
-  component.crx_component_.version = component.next_version_;
-  component.crx_component_.fingerprint = component.next_fp_;
+  DCHECK(component.crx_component());
+
+  component.crx_component_->version = component.next_version_;
+  component.crx_component_->fingerprint = component.next_fp_;
 
   component.AppendEvent(BuildUpdateCompleteEventElement(component));
 
   component.NotifyObservers(Events::COMPONENT_UPDATED);
-  TransitionState(nullptr);
+  EndState();
 }
 
 Component::StateUninstalled::StateUninstalled(Component* component)
@@ -745,9 +788,11 @@ void Component::StateUninstalled::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   auto& component = State::component();
+  DCHECK(component.crx_component());
+
   component.AppendEvent(BuildUninstalledEventElement(component));
 
-  TransitionState(nullptr);
+  EndState();
 }
 
 Component::StateRun::StateRun(Component* component)
@@ -761,6 +806,8 @@ void Component::StateRun::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   const auto& component = State::component();
+  DCHECK(component.crx_component());
+
   action_runner_ = std::make_unique<ActionRunner>(component);
   action_runner_->Run(
       base::BindOnce(&StateRun::ActionRunComplete, base::Unretained(this)));

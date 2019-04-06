@@ -46,10 +46,9 @@ CastMessage CreateNonKeepAliveMessage(const std::string& message_type) {
 
 // Extends MockTimer with a mockable method ResetTriggered() which permits
 // test code to set GMock expectations for Timer::Reset().
-class MockTimerWithMonitoredReset : public base::MockTimer {
+class MockTimerWithMonitoredReset : public base::MockRetainingOneShotTimer {
  public:
-  MockTimerWithMonitoredReset(bool retain_user_task, bool is_repeating)
-      : base::MockTimer(retain_user_task, is_repeating) {}
+  MockTimerWithMonitoredReset() {}
   ~MockTimerWithMonitoredReset() override {}
 
   // Instrumentation point for determining how many times Reset() was called.
@@ -59,12 +58,12 @@ class MockTimerWithMonitoredReset : public base::MockTimer {
   // Passes through the Reset call to the base MockTimer and visits the mock
   // ResetTriggered method.
   void Reset() override {
-    base::MockTimer::Reset();
+    base::MockRetainingOneShotTimer::Reset();
     ResetTriggered();
   }
 
   void Stop() override {
-    base::MockTimer::Stop();
+    base::MockRetainingOneShotTimer::Stop();
     StopTriggered();
   }
 };
@@ -84,8 +83,8 @@ class KeepAliveDelegateTest : public testing::Test {
         &socket_, logger_, base::WrapUnique(inner_delegate_),
         base::TimeDelta::FromMilliseconds(kTestPingTimeoutMillis),
         base::TimeDelta::FromMilliseconds(kTestLivenessTimeoutMillis)));
-    liveness_timer_ = new MockTimerWithMonitoredReset(true, false);
-    ping_timer_ = new MockTimerWithMonitoredReset(true, false);
+    liveness_timer_ = new MockTimerWithMonitoredReset;
+    ping_timer_ = new MockTimerWithMonitoredReset;
     EXPECT_CALL(*liveness_timer_, StopTriggered()).Times(0);
     EXPECT_CALL(*ping_timer_, StopTriggered()).Times(0);
     keep_alive_->SetTimersForTest(base::WrapUnique(ping_timer_),
@@ -232,13 +231,10 @@ TEST_F(KeepAliveDelegateTest, TestPassthroughMessagesAfterError) {
 TEST_F(KeepAliveDelegateTest, TestLivenessTimerResetAfterSendingMessage) {
   scoped_refptr<base::TestMockTimeTaskRunner> mock_time_task_runner(
       new base::TestMockTimeTaskRunner());
-  std::unique_ptr<base::TickClock> tick_clock =
-      mock_time_task_runner->GetMockTickClock();
-
-  std::unique_ptr<base::Timer> liveness_timer =
-      base::MakeUnique<base::Timer>(true, false, tick_clock.get());
-  std::unique_ptr<base::Timer> ping_timer =
-      base::MakeUnique<base::Timer>(true, false, tick_clock.get());
+  auto liveness_timer = std::make_unique<base::RetainingOneShotTimer>(
+      mock_time_task_runner->GetMockTickClock());
+  auto ping_timer = std::make_unique<base::RetainingOneShotTimer>(
+      mock_time_task_runner->GetMockTickClock());
   ping_timer->SetTaskRunner(mock_time_task_runner);
   liveness_timer->SetTaskRunner(mock_time_task_runner);
   keep_alive_->SetTimersForTest(std::move(ping_timer),

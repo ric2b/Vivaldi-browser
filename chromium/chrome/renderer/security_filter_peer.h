@@ -38,7 +38,8 @@ class SecurityFilterPeer final : public content::RequestPeer {
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
                           const network::ResourceResponseInfo& info) override;
   void OnReceivedResponse(const network::ResourceResponseInfo& info) override;
-  void OnDownloadedData(int len, int encoded_data_length) override;
+  void OnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body) override;
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override;
   void OnTransferSizeUpdated(int transfer_size_diff) override;
   void OnCompletedRequest(

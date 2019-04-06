@@ -71,7 +71,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   void InitAsChild(gfx::NativeView parent_view) override {}
   void SetSize(const gfx::Size& size) override {}
   void SetBounds(const gfx::Rect& rect) override {}
-  gfx::Vector2dF GetLastScrollOffset() const override;
   gfx::NativeView GetNativeView() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   ui::TextInputClient* GetTextInputClient() override;
@@ -82,15 +81,10 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   void WasUnOccluded() override;
   void WasOccluded() override;
   gfx::Rect GetViewBounds() const override;
-  void SetBackgroundColor(SkColor color) override;
-  SkColor background_color() const override;
 #if defined(OS_MACOSX)
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override {}
-  bool SupportsSpeech() const override;
   void SpeakSelection() override;
-  bool IsSpeaking() const override;
-  void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
   void DidCreateNewRendererCompositorFrameSink(
       viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
@@ -98,10 +92,12 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
-      viz::mojom::HitTestRegionListPtr hit_test_region_list) override;
+      base::Optional<viz::HitTestRegionList> hit_test_region_list) override;
   void ClearCompositorFrame() override {}
   void SetNeedsBeginFrames(bool needs_begin_frames) override {}
   void SetWantsAnimateOnlyBeginFrames() override {}
+  void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
+  void EnsureSurfaceSynchronizedForLayoutTest() override {}
 
   // RenderWidgetHostViewBase:
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -114,12 +110,11 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
                          int error_code) override;
   void Destroy() override;
   void SetTooltipText(const base::string16& tooltip_text) override {}
-  bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   gfx::Rect GetBoundsInRootWindow() override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  RenderWidgetHostImpl* GetRenderWidgetHostImpl() const override;
-  viz::FrameSinkId GetFrameSinkId() override;
+  const viz::FrameSinkId& GetFrameSinkId() const override;
+  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
   viz::SurfaceId GetCurrentSurfaceId() const override;
 
   bool is_showing() const { return is_showing_; }
@@ -142,7 +137,9 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   void OnFrameTokenChanged(uint32_t frame_token) override;
 
  protected:
-  RenderWidgetHostImpl* rwh_;
+  // RenderWidgetHostViewBase:
+  void UpdateBackgroundColor() override;
+
   viz::FrameSinkId frame_sink_id_;
 
  private:
@@ -150,7 +147,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   bool is_occluded_;
   bool did_swap_compositor_frame_;
   bool did_change_compositor_frame_sink_ = false;
-  SkColor background_color_;
   ui::DummyTextInputClient text_input_client_;
 
 #if defined(USE_AURA)
@@ -206,6 +202,7 @@ class TestRenderViewHost
   TestRenderViewHost(SiteInstance* instance,
                      std::unique_ptr<RenderWidgetHostImpl> widget,
                      RenderViewHostDelegate* delegate,
+                     int32_t routing_id,
                      int32_t main_frame_routing_id,
                      bool swapped_out);
   ~TestRenderViewHost() override;

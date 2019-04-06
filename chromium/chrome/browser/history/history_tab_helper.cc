@@ -90,7 +90,11 @@ HistoryTabHelper::CreateHistoryAddPageArgs(
       navigation_handle->GetReferrer().url,
       navigation_handle->GetRedirectChain(),
       navigation_handle->GetPageTransition(), hidden, history::SOURCE_BROWSED,
-      navigation_handle->DidReplaceEntry(), consider_for_ntp_most_visited);
+      navigation_handle->DidReplaceEntry(), consider_for_ntp_most_visited,
+      navigation_handle->IsSameDocument()
+          ? base::Optional<base::string16>(
+                navigation_handle->GetWebContents()->GetTitle())
+          : base::nullopt);
   if (ui::PageTransitionIsMainFrame(navigation_handle->GetPageTransition()) &&
       virtual_url != navigation_handle->GetURL()) {
     // Hack on the "virtual" URL so that it will appear in history. For some
@@ -113,6 +117,7 @@ void HistoryTabHelper::DidFinishNavigation(
 
   if (navigation_handle->IsInMainFrame()) {
     is_loading_ = true;
+    num_title_changes_ = 0;
   } else if (!navigation_handle->HasSubframeNavigationEntryCommitted()) {
     // Filter out unwanted URLs. We don't add auto-subframe URLs that don't
     // change which NavigationEntry is current. They are a large part of history
@@ -182,6 +187,10 @@ void HistoryTabHelper::TitleWasSet(NavigationEntry* entry) {
   if (!entry)
     return;
 
+  // Protect against pages changing their title too often.
+  if (num_title_changes_ >= history::kMaxTitleChanges)
+    return;
+
   // Only store page titles into history if they were set while the page was
   // loading or during a brief span after load is complete. This fixes the case
   // where a page uses a title change to alert a user of a situation but that
@@ -189,8 +198,10 @@ void HistoryTabHelper::TitleWasSet(NavigationEntry* entry) {
   if (is_loading_ || (base::TimeTicks::Now() - last_load_completion_ <
                       history::GetTitleSettingWindow())) {
     history::HistoryService* hs = GetHistoryService();
-    if (hs)
+    if (hs) {
       hs->SetPageTitle(entry->GetVirtualURL(), entry->GetTitleForDisplay());
+      ++num_title_changes_;
+    }
   }
 }
 

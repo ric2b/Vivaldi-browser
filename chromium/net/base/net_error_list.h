@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 // This file intentionally does not have header guards, it's included
-// inside a macro to generate enum values.
+// inside a macro to generate enum values. The following line silences a
+// presubmit warning that would otherwise be triggered by this:
+// no-include-guard-because-multiply-included
 
 // This file contains the list of network errors.
 
@@ -409,7 +411,22 @@ NET_ERROR(NO_BUFFER_SPACE, -176)
 
 // There were no common signature algorithms between our client certificate
 // private key and the server's preferences.
-NET_ERROR(SSL_CLIENT_AUTH_NO_COMMON_ALGORITHMS, -1478)
+NET_ERROR(SSL_CLIENT_AUTH_NO_COMMON_ALGORITHMS, -177)
+
+// TLS 1.3 early data was rejected by the server. This will be received before
+// any data is returned from the socket. The request should be retried with
+// early data disabled.
+NET_ERROR(EARLY_DATA_REJECTED, -178)
+
+// TLS 1.3 early data was offered, but the server responded with TLS 1.2 or
+// earlier. This is an internal error code to account for a
+// backwards-compatibility issue with early data and TLS 1.2. It will be
+// received before any data is returned from the socket. The request should be
+// retried with early data disabled.
+//
+// See https://tools.ietf.org/html/draft-ietf-tls-tls13-28#appendix-D.3 for
+// details.
+NET_ERROR(WRONG_VERSION_ON_EARLY_DATA, -179)
 
 // Certificate error codes
 //
@@ -518,13 +535,17 @@ NET_ERROR(CERT_VALIDITY_TOO_LONG, -213)
 // did not provide CT information that complied with the policy.
 NET_ERROR(CERTIFICATE_TRANSPARENCY_REQUIRED, -214)
 
+// The certificate chained to a legacy Symantec root that is no longer trusted.
+// https://g.co/chrome/symantecpkicerts
+NET_ERROR(CERT_SYMANTEC_LEGACY, -215)
+
 // Add new certificate error codes here.
 //
 // Update the value of CERT_END whenever you add a new certificate error
 // code.
 
 // The value immediately past the last certificate error code.
-NET_ERROR(CERT_END, -215)
+NET_ERROR(CERT_END, -216)
 
 // The URL is invalid.
 NET_ERROR(INVALID_URL, -300)
@@ -736,6 +757,22 @@ NET_ERROR(SPDY_PUSHED_STREAM_NOT_AVAILABLE, -373)
 // the request should be retried.
 NET_ERROR(SPDY_CLAIMED_PUSHED_STREAM_RESET_BY_SERVER, -374)
 
+// An HTTP transaction was retried too many times due for authentication or
+// invalid certificates. This may be due to a bug in the net stack that would
+// otherwise infinite loop, or if the server or proxy continually requests fresh
+// credentials or presents a fresh invalid certificate.
+NET_ERROR(TOO_MANY_RETRIES, -375)
+
+// Received an HTTP/2 frame on a closed stream.
+NET_ERROR(SPDY_STREAM_CLOSED, -376)
+
+// Client is refusing an HTTP/2 stream.
+NET_ERROR(SPDY_CLIENT_REFUSED_STREAM, -377)
+
+// A pushed HTTP/2 stream was claimed by a request based on matching URL and
+// request headers, but the pushed response headers do not match the request.
+NET_ERROR(SPDY_PUSHED_RESPONSE_DOES_NOT_MATCH, -378)
+
 // The cache does not have the requested entry.
 NET_ERROR(CACHE_MISS, -400)
 
@@ -792,6 +829,9 @@ NET_ERROR(NO_PRIVATE_KEY_FOR_CERT, -502)
 
 // An error adding a certificate to the OS certificate database.
 NET_ERROR(ADD_USER_CERT_FAILED, -503)
+
+// An error occurred while handling a signed exchange.
+NET_ERROR(INVALID_SIGNED_EXCHANGE, -504)
 
 // *** Code -600 is reserved (was FTP_PASV_COMMAND_FAILED). ***
 
@@ -901,3 +941,6 @@ NET_ERROR(DNS_SEARCH_EMPTY, -805)
 
 // Failed to sort addresses according to RFC3484.
 NET_ERROR(DNS_SORT_ERROR, -806)
+
+// Failed to resolve over HTTP, fallback to legacy
+NET_ERROR(DNS_HTTP_FAILED, -807)

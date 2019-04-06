@@ -1,11 +1,20 @@
 
-update_target("//base:base") {
+update_template_instance("//base:base") {
   if (!defined(sources)) {
     sources = []
   }
   sources += [
     "//vivaldi/base/vivaldi_running.cpp",
   ]
+
+  if (is_android) {
+    if (!defined(jumbo_excluded_sources)) {
+      jumbo_excluded_sources = []
+    }
+    jumbo_excluded_sources += [
+      "android/android_image_reader_compat.cc",
+    ]
+  }
 }
 
 update_target("//base:base_static") {
@@ -13,6 +22,11 @@ update_target("//base:base_static") {
     "//vivaldi/base/vivaldi_switches.cpp",
     "//vivaldi/base/vivaldi_switches.h",
   ]
+  if (is_linux) {
+    configs += [
+      "//base:base_implementation",
+    ]
+  }
 }
 
 update_target("//base/test:test_support") {

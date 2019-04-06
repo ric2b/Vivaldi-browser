@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SYNC_TEST_INTEGRATION_SYNC_TEST_H_
 #define CHROME_BROWSER_SYNC_TEST_INTEGRATION_SYNC_TEST_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,10 +13,11 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/process/process.h"
-#include "base/test/scoped_feature_list.h"
+#include "build/buildflag.h"
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/configuration_refresher.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/protocol/sync_protocol_error.h"
@@ -23,6 +25,11 @@
 #include "components/sync/test/local_sync_test_server.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/url_request_status.h"
+#include "services/network/test/test_url_loader_factory.h"
+
+#if BUILDFLAG(ENABLE_APP_LIST)
+#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
+#endif  // BUILDFLAG(ENABLE_APP_LIST)
 
 // The E2E tests are designed to run against real backend servers. To identify
 // those tests we use *E2ETest* test name filter and run disabled tests.
@@ -67,6 +74,10 @@ class FakeURLFetcherFactory;
 class URLFetcherImplFactory;
 }  // namespace net
 
+namespace network {
+class WeakWrapperSharedURLLoaderFactory;
+}  // namespace network
+
 // This is the base class for integration tests for all sync data types. Derived
 // classes must be defined for each sync data type. Individual tests are defined
 // using the IN_PROC_BROWSER_TEST_F macro.
@@ -102,9 +113,6 @@ class SyncTest : public InProcessBrowserTest {
     SERVER_TYPE_UNDECIDED,
     LOCAL_PYTHON_SERVER,   // The mock python server that runs locally and is
                            // part of the Chromium checkout.
-    LOCAL_LIVE_SERVER,     // Some other server (maybe the real binary used by
-                           // Google's sync service) that can be started on
-                           // a per-test basis by running a command
     EXTERNAL_LIVE_SERVER,  // A remote server that the test code has no control
                            // over whatsoever; cross your fingers that the
                            // account state is initially clean.
@@ -241,19 +249,17 @@ class SyncTest : public InProcessBrowserTest {
   // only if ServerSupportsErrorTriggering() returned true.
   void TriggerMigrationDoneError(syncer::ModelTypeSet model_types);
 
-  // Triggers an XMPP auth error on the server.  Note the server will
-  // stay in this state until shut down.
-  void TriggerXmppAuthError();
-
-  // Triggers the creation the Synced Bookmarks folder on the server.
-  void TriggerCreateSyncedBookmarks();
-
   // Returns the FakeServer being used for the test or null if FakeServer is
   // not being used.
   fake_server::FakeServer* GetFakeServer() const;
 
   // Triggers a sync for the given |model_types| for the Profile at |index|.
   void TriggerSyncForModelTypes(int index, syncer::ModelTypeSet model_types);
+
+  // The configuration refresher is triggering refreshes after the configuration
+  // phase is done (during start-up). Call this function before SetupSync() to
+  // avoid its effects.
+  void StopConfigurationRefresher();
 
   arc::SyncArcPackageHelper* sync_arc_helper();
 
@@ -274,13 +280,22 @@ class SyncTest : public InProcessBrowserTest {
   void DisableNotificationsImpl();
   void EnableNotificationsImpl();
 
-  // If non-empty, |contents| will be written to a profile's Preferences file
-  // before the Profile object is created.
-  void SetPreexistingPreferencesFileContents(const std::string& contents);
+  // If non-empty, |contents| will be written to the Preferences file of the
+  // profile at |index| before that Profile object is created.
+  void SetPreexistingPreferencesFileContents(int index,
+                                             const std::string& contents);
 
   // Helper to ProfileManager::CreateProfileAsync that creates a new profile
   // used for UI Signin. Blocks until profile is created.
   static Profile* MakeProfileForUISignin(base::FilePath profile_path);
+
+  // Stops notificatinos being sent to a client.
+  void DisableNotificationsForClient(int index);
+
+  // Sets up fake responses for kClientLoginUrl, kIssueAuthTokenUrl,
+  // kGetUserInfoUrl and kSearchDomainCheckUrl in order to mock out calls to
+  // GAIA servers.
+  void SetupMockGaiaResponsesForProfile(Profile* profile);
 
   base::test::ScopedFeatureList feature_list_;
 
@@ -307,8 +322,9 @@ class SyncTest : public InProcessBrowserTest {
                                     Profile* profile,
                                     Profile::CreateStatus status);
 
-  // Helper to Profile::CreateProfile that handles path creation. It creates
-  // a profile then registers it as a testing profile.
+  // Helper to Profile::CreateProfile that handles path creation, setting up
+  // preexisting pref files, and registering the created profile  as a testing
+  // profile.
   Profile* MakeTestProfile(base::FilePath profile_path, int index);
 
   // Helper method used to create a Gaia account at runtime.
@@ -333,14 +349,9 @@ class SyncTest : public InProcessBrowserTest {
   // Helper method that starts up a sync test server if required.
   void SetUpTestServerIfRequired();
 
-  // Helper method used to start up a local python test server. Note: We set up
-  // an XMPP-only python server if |server_type_| is LOCAL_LIVE_SERVER and mock
-  // gaia credentials are in use. Returns true if successful.
-  bool SetUpLocalPythonTestServer();
-
-  // Helper method used to start up a local sync test server. Returns true if
+  // Helper method used to start up a local python test server. Returns true if
   // successful.
-  bool SetUpLocalTestServer();
+  bool SetUpLocalPythonTestServer();
 
   // Helper method used to destroy the local python sync test server if one was
   // created. Returns true if successful.
@@ -396,6 +407,11 @@ class SyncTest : public InProcessBrowserTest {
   // Tells us what kind of server we're using (some tests run only on certain
   // server types).
   ServerType server_type_;
+
+  // The default profile, created before our actual testing |profiles_|. This is
+  // needed in a workaround for https://crbug.com/801569, see comments in the
+  // .cc file.
+  Profile* previous_profile_;
 
   // Number of sync clients that will be created by a test.
   int num_clients_;
@@ -459,6 +475,13 @@ class SyncTest : public InProcessBrowserTest {
   // Used to start and stop the local test server.
   base::Process test_server_;
 
+  // The factory used to mock out GAIA signin.
+  network::TestURLLoaderFactory test_url_loader_factory_;
+
+  // The shared URLLoaderFactory backed by |test_url_loader_factory_|.
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+      test_shared_url_loader_factory_;
+
   // Fake URLFetcher factory used to mock out GAIA signin.
   std::unique_ptr<net::FakeURLFetcherFactory> fake_factory_;
 
@@ -467,10 +490,19 @@ class SyncTest : public InProcessBrowserTest {
 
   // The contents to be written to a profile's Preferences file before the
   // Profile object is created. If empty, no preexisting file will be written.
-  std::string preexisting_preferences_file_contents_;
+  // The map key corresponds to the profile's index.
+  std::map<int, std::string> preexisting_preferences_file_contents_;
 
   // Disable extension install verification.
   extensions::ScopedInstallVerifierBypassForTest ignore_install_verification_;
+
+#if BUILDFLAG(ENABLE_APP_LIST)
+  // A factory-like callback to create a model updater for testing, which will
+  // take the place of the real updater in AppListSyncableService for testing.
+  std::unique_ptr<
+      app_list::AppListSyncableService::ScopedModelUpdaterFactoryForTest>
+      model_updater_factory_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(SyncTest);
 };

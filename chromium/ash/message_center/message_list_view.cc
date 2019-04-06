@@ -6,7 +6,6 @@
 
 #include "ash/message_center/message_center_style.h"
 #include "ash/message_center/message_center_view.h"
-#include "ash/public/cpp/ash_switches.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -14,9 +13,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/message_center/notification.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
-#include "ui/message_center/public/cpp/message_center_switches.h"
+#include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -30,13 +28,6 @@ namespace ash {
 
 namespace {
 const int kAnimateClearingNextNotificationDelayMS = 40;
-
-int GetMarginBetweenItems() {
-  return switches::IsSidebarEnabled()
-             ? 0
-             : message_center::kMarginBetweenItemsInList;
-}
-
 }  // namespace
 
 MessageListView::MessageListView()
@@ -44,6 +35,8 @@ MessageListView::MessageListView()
       fixed_height_(0),
       has_deferred_task_(false),
       clear_all_started_(false),
+      use_fixed_height_(true),
+      has_border_padding_(false),
       animator_(this),
       weak_ptr_factory_(this) {
   auto layout = std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical,
@@ -51,12 +44,6 @@ MessageListView::MessageListView()
   layout->SetDefaultFlex(1);
   SetLayoutManager(std::move(layout));
 
-  if (!switches::IsSidebarEnabled()) {
-    SetBackground(
-        views::CreateSolidBackground(MessageCenterView::kBackgroundColor));
-    SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(message_center::kMarginBetweenItemsInList)));
-  }
   animator_.AddObserver(this);
 }
 
@@ -95,6 +82,9 @@ void MessageListView::AddNotificationAt(MessageView* view, int index) {
     }
     ++real_index;
   }
+
+  if (real_index == 0)
+    ExpandSpecifiedNotificationAndCollapseOthers(view);
 
   AddChildViewAt(view, real_index);
   if (GetContentsBounds().IsEmpty())
@@ -136,6 +126,10 @@ void MessageListView::RemoveNotification(MessageView* view) {
     }
     DoUpdateIfPossible();
   }
+
+  int index = GetIndexOf(view);
+  if (index == 0)
+    ExpandTopNotificationAndCollapseOthers();
 }
 
 void MessageListView::UpdateNotification(MessageView* view,
@@ -146,6 +140,9 @@ void MessageListView::UpdateNotification(MessageView* view,
 
   int index = GetIndexOf(view);
   DCHECK_LE(0, index);  // GetIndexOf is negative if not a child.
+
+  if (index == 0)
+    ExpandSpecifiedNotificationAndCollapseOthers(view);
 
   animator_.StopAnimatingView(view);
   if (deleting_views_.find(view) != deleting_views_.end())
@@ -196,7 +193,7 @@ gfx::Size MessageListView::CalculatePreferredSize() const {
 }
 
 int MessageListView::GetHeightForWidth(int width) const {
-  if (fixed_height_ > 0)
+  if (use_fixed_height_ && fixed_height_ > 0)
     return fixed_height_;
 
   width -= GetInsets().width();
@@ -296,7 +293,7 @@ void MessageListView::ClearAllClosableNotifications(
       continue;
     if (gfx::IntersectRects(child->bounds(), visible_scroll_rect).IsEmpty())
       continue;
-    if (child->GetPinned())
+    if (child->GetMode() != MessageView::Mode::NORMAL)
       continue;
     if (deleting_views_.find(child) != deleting_views_.end() ||
         deleted_when_done_.find(child) != deleted_when_done_.end()) {
@@ -323,6 +320,12 @@ void MessageListView::AddObserver(MessageListView::Observer* observer) {
 
 void MessageListView::RemoveObserver(MessageListView::Observer* observer) {
   observers_.RemoveObserver(observer);
+}
+
+void MessageListView::SetBorderPadding() {
+  has_border_padding_ = true;
+  SetBorder(views::CreateEmptyBorder(
+      gfx::Insets(message_center::kMarginBetweenItemsInList)));
 }
 
 void MessageListView::OnBoundsAnimatorProgressed(
@@ -380,6 +383,10 @@ void MessageListView::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
     GetWidget()->SynthesizeMouseMoveEvent();
 }
 
+int MessageListView::GetMarginBetweenItems() const {
+  return has_border_padding_ ? message_center::kMarginBetweenItemsInList : 0;
+}
+
 bool MessageListView::IsValidChild(const views::View* child) const {
   return child->visible() &&
          deleting_views_.find(const_cast<views::View*>(child)) ==
@@ -425,6 +432,44 @@ void MessageListView::DoUpdateIfPossible() {
 
   if (!animator_.IsAnimating() && GetWidget())
     GetWidget()->SynthesizeMouseMoveEvent();
+}
+
+void MessageListView::ExpandSpecifiedNotificationAndCollapseOthers(
+    message_center::MessageView* target_view) {
+  if (!target_view->IsManuallyExpandedOrCollapsed() &&
+      target_view->IsAutoExpandingAllowed()) {
+    target_view->SetExpanded(true);
+  }
+
+  for (int i = 0; i < child_count(); ++i) {
+    MessageView* view = static_cast<MessageView*>(child_at(i));
+    // Target view is already processed above.
+    if (target_view == view)
+      continue;
+    // Skip if the view is invalid.
+    if (!IsValidChild(view))
+      continue;
+    // We don't touch if the view has been manually expanded or collapsed.
+    if (view->IsManuallyExpandedOrCollapsed())
+      continue;
+
+    // Otherwise, collapse the notification.
+    view->SetExpanded(false);
+  }
+}
+
+void MessageListView::ExpandTopNotificationAndCollapseOthers() {
+  MessageView* top_notification = nullptr;
+  for (int i = 0; i < child_count(); ++i) {
+    MessageView* view = static_cast<MessageView*>(child_at(i));
+    if (!IsValidChild(view))
+      continue;
+    top_notification = view;
+    break;
+  }
+
+  if (top_notification != nullptr)
+    ExpandSpecifiedNotificationAndCollapseOthers(top_notification);
 }
 
 std::vector<int> MessageListView::ComputeRepositionOffsets(
@@ -584,10 +629,6 @@ void MessageListView::AnimateClearingOneNotification() {
         base::TimeDelta::FromMilliseconds(
             kAnimateClearingNextNotificationDelayMS));
   }
-}
-
-void MessageListView::SetRepositionTargetForTest(const gfx::Rect& target_rect) {
-  SetRepositionTarget(target_rect);
 }
 
 }  // namespace ash

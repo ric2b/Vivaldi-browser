@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/containers/queue.h"
+#include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -27,6 +28,10 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/url_constants.h"
 #include "ui/gfx/text_elider.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/content_uri_utils.h"
+#endif
 
 using base::UTF16ToUTF8;
 
@@ -67,7 +72,8 @@ void RecursivelyGenerateFrameEntries(
       nullptr, GURL(state.url_string.value_or(base::string16())),
       Referrer(GURL(state.referrer.value_or(base::string16())),
                state.referrer_policy),
-      std::vector<GURL>(), PageState::CreateFromEncodedData(data), "GET", -1);
+      std::vector<GURL>(), PageState::CreateFromEncodedData(data), "GET", -1,
+      nullptr /* blob_url_loader_factory */);
 
   // Don't pass the file list to subframes, since that would result in multiple
   // copies of it ending up in the combined list in GetPageState (via
@@ -234,9 +240,13 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::FromNavigationEntry(
 }
 
 NavigationEntryImpl::NavigationEntryImpl()
-    : NavigationEntryImpl(nullptr, GURL(), Referrer(), base::string16(),
-                          ui::PAGE_TRANSITION_LINK, false) {
-}
+    : NavigationEntryImpl(nullptr,
+                          GURL(),
+                          Referrer(),
+                          base::string16(),
+                          ui::PAGE_TRANSITION_LINK,
+                          false,
+                          nullptr) {}
 
 NavigationEntryImpl::NavigationEntryImpl(
     scoped_refptr<SiteInstanceImpl> instance,
@@ -244,19 +254,22 @@ NavigationEntryImpl::NavigationEntryImpl(
     const Referrer& referrer,
     const base::string16& title,
     ui::PageTransition transition_type,
-    bool is_renderer_initiated)
-    : frame_tree_(new TreeNode(nullptr,
-                               new FrameNavigationEntry("",
-                                                        -1,
-                                                        -1,
-                                                        std::move(instance),
-                                                        nullptr,
-                                                        url,
-                                                        referrer,
-                                                        std::vector<GURL>(),
-                                                        PageState(),
-                                                        "GET",
-                                                        -1))),
+    bool is_renderer_initiated,
+    scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory)
+    : frame_tree_(new TreeNode(
+          nullptr,
+          new FrameNavigationEntry("",
+                                   -1,
+                                   -1,
+                                   std::move(instance),
+                                   nullptr,
+                                   url,
+                                   referrer,
+                                   std::vector<GURL>(),
+                                   PageState(),
+                                   "GET",
+                                   -1,
+                                   std::move(blob_url_loader_factory)))),
       unique_id_(CreateUniqueEntryID()),
       bindings_(kInvalidBindings),
       page_type_(PAGE_TYPE_NORMAL),
@@ -271,13 +284,10 @@ NavigationEntryImpl::NavigationEntryImpl(
       should_clear_history_list_(false),
       can_load_local_resources_(false),
       frame_tree_node_id_(-1),
+      has_user_gesture_(false),
       reload_type_(ReloadType::NONE),
       started_from_context_menu_(false),
-      ssl_error_(false) {
-#if defined(OS_ANDROID)
-  has_user_gesture_ = false;
-#endif
-}
+      ssl_error_(false) {}
 
 NavigationEntryImpl::~NavigationEntryImpl() {
 }
@@ -451,6 +461,16 @@ const base::string16& NavigationEntryImpl::GetTitleForDisplay() const {
     // embedding".)
     base::i18n::WrapStringWithLTRFormatting(&title);
   }
+
+#if defined(OS_ANDROID)
+  if (GetURL().SchemeIs(url::kContentScheme)) {
+    base::string16 file_display_name;
+    if (base::MaybeGetFileDisplayName(base::FilePath(GetURL().spec()),
+                                      &file_display_name)) {
+      title = file_display_name;
+    }
+  }
+#endif
 
   gfx::ElideString(title, kMaxTitleChars, &cached_display_title_);
   return cached_display_title_;
@@ -648,18 +668,13 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
 #endif
   // ResetForCommit: is_renderer_initiated_
   copy->cached_display_title_ = cached_display_title_;
-  // ResetForCommit: transferred_global_request_id_
   // ResetForCommit: should_replace_entry_
   // ResetForCommit: should_clear_history_list_
   // ResetForCommit: frame_tree_node_id_
-  // ResetForCommit: intent_received_timestamp_
-#if defined(OS_ANDROID)
   copy->has_user_gesture_ = has_user_gesture_;
-#endif
   // ResetForCommit: reload_type_
   copy->extra_data_ = extra_data_;
   copy->replaced_entry_data_ = replaced_entry_data_;
-  // ResetForCommit: suggested_filename_
 
   return copy;
 }
@@ -672,35 +687,16 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
     FrameMsg_Navigate_Type::Value navigation_type,
     PreviewsState previews_state,
     const base::TimeTicks& navigation_start) const {
-  FrameMsg_UILoadMetricsReportType::Value report_type =
-      FrameMsg_UILoadMetricsReportType::NO_REPORT;
-  base::TimeTicks ui_timestamp = base::TimeTicks();
-  bool user_gesture = false;
-
-#if defined(OS_ANDROID)
-  if (!intent_received_timestamp().is_null())
-    report_type = FrameMsg_UILoadMetricsReportType::REPORT_INTENT;
-  ui_timestamp = intent_received_timestamp();
-  user_gesture = has_user_gesture();
-#endif
-
-  std::string method;
-
-  // TODO(clamy): Consult the FrameNavigationEntry in all modes that use
-  // subframe navigation entries.
-  if (IsBrowserSideNavigationEnabled())
-    method = frame_entry.method();
-  else
-    method = (post_body.get() || GetHasPostData()) ? "POST" : "GET";
-
   return CommonNavigationParams(
       dest_url, dest_referrer, GetTransitionType(), navigation_type,
-      !IsViewSourceMode(), should_replace_entry(), ui_timestamp, report_type,
-      GetBaseURLForDataURL(), GetHistoryURLForDataURL(), previews_state,
-      navigation_start, method, post_body ? post_body : post_data_,
+      !IsViewSourceMode(), should_replace_entry(), GetBaseURLForDataURL(),
+      GetHistoryURLForDataURL(), previews_state, navigation_start,
+      frame_entry.method(), post_body ? post_body : post_data_,
       base::Optional<SourceLocation>(),
       CSPDisposition::CHECK /* should_check_main_world_csp */,
-      has_started_from_context_menu(), user_gesture);
+      has_started_from_context_menu(), has_user_gesture(),
+      std::vector<ContentSecurityPolicy>() /* initiator_csp */,
+      CSPSource() /* initiator_self_source */);
 }
 
 RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
@@ -763,22 +759,16 @@ void NavigationEntryImpl::ResetForCommit(FrameNavigationEntry* frame_entry) {
   // PlzNavigate is enabled.
   SetPostData(nullptr);
   set_is_renderer_initiated(false);
-  set_transferred_global_request_id(GlobalRequestID());
   set_should_replace_entry(false);
 
   set_should_clear_history_list(false);
   set_frame_tree_node_id(-1);
   set_reload_type(ReloadType::NONE);
 
-  if (frame_entry)
+  if (frame_entry) {
     frame_entry->set_source_site_instance(nullptr);
-
-#if defined(OS_ANDROID)
-  // Reset the time stamp so that the metrics are not reported if this entry is
-  // loaded again in the future.
-  set_intent_received_timestamp(base::TimeTicks());
-#endif
-  suggested_filename_.reset();
+    frame_entry->set_blob_url_loader_factory(nullptr);
+  }
 }
 
 NavigationEntryImpl::TreeNode* NavigationEntryImpl::GetTreeNode(
@@ -810,7 +800,8 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
     const std::vector<GURL>& redirect_chain,
     const PageState& page_state,
     const std::string& method,
-    int64_t post_id) {
+    int64_t post_id,
+    scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory) {
   // If this is called for the main frame, the FrameNavigationEntry is
   // guaranteed to exist, so just update it directly and return.
   if (frame_tree_node->IsMainFrame()) {
@@ -824,7 +815,7 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
         frame_tree_node->unique_name(), item_sequence_number,
         document_sequence_number, site_instance,
         std::move(source_site_instance), url, referrer, redirect_chain,
-        page_state, method, post_id);
+        page_state, method, post_id, std::move(blob_url_loader_factory));
     return;
   }
 
@@ -852,7 +843,8 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
       child->frame_entry->UpdateEntry(
           unique_name, item_sequence_number, document_sequence_number,
           site_instance, std::move(source_site_instance), url, referrer,
-          redirect_chain, page_state, method, post_id);
+          redirect_chain, page_state, method, post_id,
+          std::move(blob_url_loader_factory));
       return;
     }
   }
@@ -863,7 +855,8 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
   FrameNavigationEntry* frame_entry = new FrameNavigationEntry(
       unique_name, item_sequence_number, document_sequence_number,
       site_instance, std::move(source_site_instance), url, referrer,
-      redirect_chain, page_state, method, post_id);
+      redirect_chain, page_state, method, post_id,
+      std::move(blob_url_loader_factory));
   parent_node->children.push_back(
       std::make_unique<NavigationEntryImpl::TreeNode>(parent_node,
                                                       frame_entry));

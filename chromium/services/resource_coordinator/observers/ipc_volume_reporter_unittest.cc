@@ -4,7 +4,7 @@
 
 #include "services/resource_coordinator/observers/ipc_volume_reporter.h"
 
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/timer/mock_timer.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_test_harness.h"
 #include "services/resource_coordinator/coordination_unit/frame_coordination_unit_impl.h"
@@ -17,10 +17,10 @@ namespace resource_coordinator {
 class TestIPCVolumeReporter : public IPCVolumeReporter {
  public:
   TestIPCVolumeReporter()
-      : IPCVolumeReporter(std::make_unique<base::MockTimer>(false, false)) {}
+      : IPCVolumeReporter(std::make_unique<base::MockOneShotTimer>()) {}
 
-  base::MockTimer* mock_timer() const {
-    return reinterpret_cast<base::MockTimer*>(timer());
+  base::MockOneShotTimer* mock_timer() const {
+    return static_cast<base::MockOneShotTimer*>(timer());
   }
 };
 
@@ -30,7 +30,7 @@ class IPCVolumeReporterTest : public CoordinationUnitTestHarness {
 
   void SetUp() override {
     reporter_ = new TestIPCVolumeReporter();
-    coordination_unit_manager().RegisterObserver(base::WrapUnique(reporter_));
+    coordination_unit_graph()->RegisterObserver(base::WrapUnique(reporter_));
   }
 
  protected:
@@ -43,10 +43,8 @@ class IPCVolumeReporterTest : public CoordinationUnitTestHarness {
 
 TEST_F(IPCVolumeReporterTest, Basic) {
   EXPECT_TRUE(reporter_->mock_timer()->IsRunning());
-  MockSinglePageInSingleProcessCoordinationUnitGraph cu_graph;
-  coordination_unit_manager().OnCoordinationUnitCreated(cu_graph.process.get());
-  coordination_unit_manager().OnCoordinationUnitCreated(cu_graph.page.get());
-  coordination_unit_manager().OnCoordinationUnitCreated(cu_graph.frame.get());
+  MockSinglePageInSingleProcessCoordinationUnitGraph cu_graph(
+      coordination_unit_graph());
 
   cu_graph.frame->SetAudibility(true);
   cu_graph.frame->SetNetworkAlmostIdle(true);
@@ -57,14 +55,13 @@ TEST_F(IPCVolumeReporterTest, Basic) {
   cu_graph.page->SetUKMSourceId(1);
   cu_graph.page->OnFaviconUpdated();
   cu_graph.page->OnTitleUpdated();
-  cu_graph.page->OnMainFrameNavigationCommitted();
+  cu_graph.page->OnMainFrameNavigationCommitted(1u, "http://example.org");
 
   cu_graph.process->SetCPUUsage(1.0);
   cu_graph.process->SetExpectedTaskQueueingDuration(
       base::TimeDelta::FromMilliseconds(1));
   cu_graph.process->SetLaunchTime(base::Time());
   cu_graph.process->SetMainThreadTaskLoadIsLow(true);
-  cu_graph.process->SetPID(1);
 
   reporter_->mock_timer()->Fire();
 

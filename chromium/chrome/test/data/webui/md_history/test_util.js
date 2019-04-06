@@ -27,10 +27,10 @@ function replaceBody(element) {
  */
 function replaceApp() {
   const app = document.createElement('history-app');
+  replaceBody(app);
   app.id = 'history-app';
   // Disable querying for tests by default.
   app.queryState_.queryingDisabled = true;
-  replaceBody(app);
   Polymer.dom.flush();
   return app;
 }
@@ -87,19 +87,16 @@ function createSearchEntry(timestamp, urlStr) {
  * @return {!HistoryInfo}
  */
 function createHistoryInfo(searchTerm) {
-  return {
-    finished: true,
-    term: searchTerm || ''
-  };
+  return {finished: true, term: searchTerm || ''};
 }
 
 /**
  * @param {Element} element
  * @param {string} selector
- * @return {Element}
+ * @return {!NodeList<!Element>}
  */
 function polymerSelectAll(element, selector) {
-  return Polymer.dom(element.root).querySelectorAll(selector);
+  return element.shadowRoot.querySelectorAll(selector);
 }
 
 /**
@@ -112,7 +109,9 @@ function polymerSelectAll(element, selector) {
  */
 function waitForEvent(element, eventName, predicate) {
   if (!predicate)
-    predicate = function() { return true; };
+    predicate = function() {
+      return true;
+    };
 
   return new Promise(function(resolve) {
     const listener = function(e) {
@@ -188,9 +187,5 @@ function createWindow(tabUrls) {
     return {sessionId: 456, timestamp: 0, title: tabUrl, url: tabUrl};
   });
 
-  return {
-    tabs: tabs,
-    sessionId: '123',
-    userVisibleTimestamp: "A while ago"
-  };
+  return {tabs: tabs, sessionId: '123'};
 }

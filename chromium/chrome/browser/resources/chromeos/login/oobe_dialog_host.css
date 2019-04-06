@@ -5,16 +5,23 @@
 /* Some elements may be used both as dialogs or not as dialogs.
  * |not-a-dialog| attribute is used to switch element "oobe-dialog-like" look.
  */
+:host(:not([not-a-dialog]):not([hidden])) {
+  display: flex;
+}
 
 :host(:not([not-a-dialog])) {
   background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 24px 24px rgba(0, 0, 0, .24), 0 0 24px rgba(0, 0, 0, .12);
-  display: flex;
+  border-radius: unset;
+  box-shadow: unset;
   flex-direction: column;
   min-height: 640px;
   min-width: 768px;
   position: relative;
+}
+
+:host(:not([not-a-dialog]):not([full-screen-dialog])) {
+  border-radius: 4px;
+  box-shadow: 0 24px 24px rgba(0, 0, 0, .24), 0 0 24px rgba(0, 0, 0, .12);
 }
 
 :host(:not([not-a-dialog])[android]) {

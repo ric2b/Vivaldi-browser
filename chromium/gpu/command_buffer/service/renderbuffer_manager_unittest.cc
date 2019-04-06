@@ -66,19 +66,20 @@ class RenderbufferManagerMemoryTrackerTest
     : public RenderbufferManagerTestBase {
  protected:
   void SetUp() override {
-    mock_memory_tracker_ = new StrictMock<MockMemoryTracker>();
     bool depth24_supported = false;
     bool use_gles = false;
-    SetUpBase(mock_memory_tracker_.get(), depth24_supported, use_gles);
+    SetUpBase(&mock_memory_tracker_, depth24_supported, use_gles);
   }
 
-  scoped_refptr<MockMemoryTracker> mock_memory_tracker_;
+  StrictMock<MockMemoryTracker> mock_memory_tracker_;
 };
 
-#define EXPECT_MEMORY_ALLOCATION_CHANGE(old_size, new_size)   \
-  EXPECT_CALL(*mock_memory_tracker_.get(),                    \
-              TrackMemoryAllocatedChange(old_size, new_size)) \
-      .Times(1).RetiresOnSaturation()
+#define EXPECT_MEMORY_ALLOCATION_CHANGE(old_size, new_size)                \
+  EXPECT_CALL(mock_memory_tracker_,                                        \
+              TrackMemoryAllocatedChange(static_cast<uint64_t>(new_size) - \
+                                         static_cast<uint64_t>(old_size))) \
+      .Times(1)                                                            \
+      .RetiresOnSaturation()
 
 // GCC requires these declarations, but MSVC requires they not be present
 #ifndef COMPILER_MSVC
@@ -185,7 +186,6 @@ TEST_F(RenderbufferManagerTest, Renderbuffer) {
 TEST_F(RenderbufferManagerMemoryTrackerTest, Basic) {
   const GLuint kClient1Id = 1;
   const GLuint kService1Id = 11;
-  EXPECT_MEMORY_ALLOCATION_CHANGE(0, 0);
   manager_->CreateRenderbuffer(kClient1Id, kService1Id);
   Renderbuffer* renderbuffer1 =
       manager_->GetRenderbuffer(kClient1Id);

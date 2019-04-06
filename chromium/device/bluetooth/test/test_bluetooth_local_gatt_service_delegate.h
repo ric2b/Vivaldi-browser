@@ -36,6 +36,14 @@ class TestBluetoothLocalGattServiceDelegate
       int offset,
       const base::Closure& callback,
       const ErrorCallback& error_callback) override;
+  void OnCharacteristicPrepareWriteRequest(
+      const BluetoothDevice* device,
+      const BluetoothLocalGattCharacteristic* characteristic,
+      const std::vector<uint8_t>& value,
+      int offset,
+      bool has_subsequent_request,
+      const base::Closure& callback,
+      const ErrorCallback& error_callback) override;
   void OnDescriptorReadRequest(const BluetoothDevice* device,
                                const BluetoothLocalGattDescriptor* descriptor,
                                int offset,
@@ -50,6 +58,7 @@ class TestBluetoothLocalGattServiceDelegate
                                 const ErrorCallback& error_callback) override;
   void OnNotificationsStart(
       const BluetoothDevice* device,
+      device::BluetoothGattCharacteristic::NotificationType notification_type,
       const BluetoothLocalGattCharacteristic* characteristic) override;
   void OnNotificationsStop(
       const BluetoothDevice* device,

@@ -4,6 +4,9 @@
 
 #include "printing/printing_context_linux.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
@@ -12,20 +15,19 @@
 #include "printing/print_job_constants.h"
 #include "printing/units.h"
 
+namespace printing {
+
 namespace {
 
 // Function pointer for creating print dialogs. |callback| is only used when
 // |show_dialog| is true.
-printing::PrintDialogGtkInterface* (*create_dialog_func_)(
-    printing::PrintingContextLinux* context) = NULL;
+PrintDialogGtkInterface* (*create_dialog_func_)(PrintingContextLinux* context) =
+    nullptr;
 
 // Function pointer for determining paper size.
-gfx::Size (*get_pdf_paper_size_)(
-    printing::PrintingContextLinux* context) = NULL;
+gfx::Size (*get_pdf_paper_size_)(PrintingContextLinux* context) = nullptr;
 
 }  // namespace
-
-namespace printing {
 
 // static
 std::unique_ptr<PrintingContext> PrintingContext::Create(Delegate* delegate) {
@@ -33,8 +35,7 @@ std::unique_ptr<PrintingContext> PrintingContext::Create(Delegate* delegate) {
 }
 
 PrintingContextLinux::PrintingContextLinux(Delegate* delegate)
-    : PrintingContext(delegate), print_dialog_(NULL) {
-}
+    : PrintingContext(delegate), print_dialog_(nullptr) {}
 
 PrintingContextLinux::~PrintingContextLinux() {
   ReleaseContext();
@@ -65,21 +66,20 @@ void PrintingContextLinux::PrintDocument(const MetafilePlayer& metafile) {
   print_dialog_->PrintDocument(metafile, document_name_);
 }
 
-void PrintingContextLinux::AskUserForSettings(
-    int max_pages,
-    bool has_selection,
-    bool is_scripted,
-    const PrintSettingsCallback& callback) {
+void PrintingContextLinux::AskUserForSettings(int max_pages,
+                                              bool has_selection,
+                                              bool is_scripted,
+                                              PrintSettingsCallback callback) {
   if (!print_dialog_) {
     // Can only get here if the renderer is sending bad messages.
     // http://crbug.com/341777
     NOTREACHED();
-    callback.Run(FAILED);
+    std::move(callback).Run(FAILED);
     return;
   }
 
-  print_dialog_->ShowDialog(
-      delegate_->GetParentView(), has_selection, callback);
+  print_dialog_->ShowDialog(delegate_->GetParentView(), has_selection,
+                            std::move(callback));
 }
 
 PrintingContext::Result PrintingContextLinux::UseDefaultSettings() {
@@ -122,9 +122,7 @@ PrintingContext::Result PrintingContextLinux::UpdatePrinterSettings(
     print_dialog_->AddRefToDialog();
   }
 
-  if (!print_dialog_->UpdateSettings(&settings_))
-    return OnError();
-
+  print_dialog_->UpdateSettings(&settings_);
   return OK;
 }
 
@@ -184,7 +182,7 @@ void PrintingContextLinux::ReleaseContext() {
 
 printing::NativeDrawingContext PrintingContextLinux::context() const {
   // Intentional No-op.
-  return NULL;
+  return nullptr;
 }
 
 }  // namespace printing

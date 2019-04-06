@@ -8,13 +8,18 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/upgrade_observer.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "ui/base/idle/idle.h"
 #include "ui/gfx/image/image.h"
 
 class PrefRegistrySimple;
 class UpgradeObserver;
+namespace base {
+class TickClock;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // UpgradeDetector
@@ -29,15 +34,15 @@ class UpgradeObserver;
 class UpgradeDetector {
  public:
   // The Homeland Security Upgrade Advisory System.
-  // These values are logged in a histogram and shouldn't be renumbered or
-  // removed.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
   enum UpgradeNotificationAnnoyanceLevel {
-    UPGRADE_ANNOYANCE_NONE = 0,  // What? Me worry?
-    UPGRADE_ANNOYANCE_LOW,       // Green.
-    UPGRADE_ANNOYANCE_ELEVATED,  // Yellow.
-    UPGRADE_ANNOYANCE_HIGH,      // Red.
-    UPGRADE_ANNOYANCE_SEVERE,    // Orange.
-    UPGRADE_ANNOYANCE_CRITICAL,  // Red exclamation mark.
+    UPGRADE_ANNOYANCE_NONE = 0,      // What? Me worry?
+    UPGRADE_ANNOYANCE_LOW = 1,       // Green.
+    UPGRADE_ANNOYANCE_ELEVATED = 2,  // Yellow.
+    UPGRADE_ANNOYANCE_HIGH = 3,      // Red.
+    // UPGRADE_ANNOYANCE_SEVERE = 4,  // Removed in 2018-03 for lack of use.
+    UPGRADE_ANNOYANCE_CRITICAL = 5,  // Red exclamation mark.
     UPGRADE_ANNOYANCE_LAST = UPGRADE_ANNOYANCE_CRITICAL  // The last value
   };
 
@@ -50,7 +55,16 @@ class UpgradeDetector {
 
   virtual ~UpgradeDetector();
 
+  // Returns the default delta from upgrade detection until high annoyance is
+  // reached.
+  static base::TimeDelta GetDefaultHighAnnoyanceThreshold();
+
   static void RegisterPrefs(PrefRegistrySimple* registry);
+
+  // Returns the time at which an available upgrade was detected.
+  base::TimeTicks upgrade_detected_time() const {
+    return upgrade_detected_time_;
+  }
 
   // Whether the user should be notified about an upgrade.
   bool notify_upgrade() const { return notify_upgrade_; }
@@ -66,8 +80,8 @@ class UpgradeDetector {
     return upgrade_available_ == UPGRADE_NEEDED_OUTDATED_INSTALL_NO_AU;
   }
 
-  // Notifify this object that the user has acknowledged the critical update
-  // so we don't need to complain about it for now.
+  // Notify this object that the user has acknowledged the critical update so we
+  // don't need to complain about it for now.
   void acknowledge_critical_update() {
     critical_update_acknowledged_ = true;
   }
@@ -79,6 +93,10 @@ class UpgradeDetector {
 
   bool is_factory_reset_required() const { return is_factory_reset_required_; }
 
+#if defined(OS_CHROMEOS)
+  bool is_rollback() const { return is_rollback_; }
+#endif  // defined(OS_CHROMEOS)
+
   // Retrieves the right icon based on the degree of severity (see
   // UpgradeNotificationAnnoyanceLevel, each level has an an accompanying icon
   // to go with it) to display within the app menu.
@@ -87,6 +105,13 @@ class UpgradeDetector {
   UpgradeNotificationAnnoyanceLevel upgrade_notification_stage() const {
     return upgrade_notification_stage_;
   }
+
+  // Returns the delta between "elevated" and "high" annoyance levels.
+  virtual base::TimeDelta GetHighAnnoyanceLevelDelta() = 0;
+
+  // Returns the tick count at which "high" annoyance level will be (or was)
+  // reached, or a null tick count if an upgrade has not yet been detected.
+  virtual base::TimeTicks GetHighAnnoyanceDeadline() = 0;
 
   void AddObserver(UpgradeObserver* observer);
 
@@ -116,7 +141,14 @@ class UpgradeDetector {
     UPGRADE_NEEDED_OUTDATED_INSTALL_NO_AU,
   };
 
-  UpgradeDetector();
+  explicit UpgradeDetector(const base::TickClock* tick_clock);
+
+  // Returns the notification period specified via the
+  // RelaunchNotificationPeriod policy setting, or a zero delta if unset or out
+  // of range.
+  static base::TimeDelta GetRelaunchNotificationPeriod();
+
+  const base::TickClock* tick_clock() { return tick_clock_; }
 
   // Notifies that update is recommended and triggers different actions based
   // on the update availability.
@@ -147,6 +179,10 @@ class UpgradeDetector {
     upgrade_available_ = available;
   }
 
+  void set_upgrade_detected_time(base::TimeTicks upgrade_detected_time) {
+    upgrade_detected_time_ = upgrade_detected_time;
+  }
+
   void set_best_effort_experiment_updates_available(bool available) {
     best_effort_experiment_updates_available_ = available;
   }
@@ -170,10 +206,19 @@ class UpgradeDetector {
     is_factory_reset_required_ = is_factory_reset_required;
   }
 
+#if defined(OS_CHROMEOS)
+  void set_is_rollback(bool is_rollback) { is_rollback_ = is_rollback; }
+#endif  // defined(OS_CHROMEOS)
+
  private:
   FRIEND_TEST_ALL_PREFIXES(AppMenuModelTest, Basics);
   FRIEND_TEST_ALL_PREFIXES(SystemTrayClientTest, UpdateTrayIcon);
   friend class UpgradeMetricsProviderTest;
+
+  // Handles a change to the browser.relaunch_notification_period Local State
+  // preference. Subclasses should call NotifyUpgrade if observers are to be
+  // notified of the change (generally speaking, if an upgrade is available).
+  virtual void OnRelaunchNotificationPeriodPrefChanged() = 0;
 
   // Initiates an Idle check. See IdleCallback below.
   void CheckIdle();
@@ -182,9 +227,19 @@ class UpgradeDetector {
   // input events since the specified time.
   void IdleCallback(ui::IdleState state);
 
+  // A provider of TimeTicks to the detector and its timers.
+  const base::TickClock* const tick_clock_;
+
+  // Observes changes to the browser.relaunch_notification_period Local State
+  // preference.
+  PrefChangeRegistrar pref_change_registrar_;
+
   // Whether any software updates are available (experiment updates are tracked
   // separately via additional member variables below).
   UpgradeAvailable upgrade_available_;
+
+  // The time at which an available upgrade was detected.
+  base::TimeTicks upgrade_detected_time_;
 
   // Whether "best effort" experiment updates are available.
   bool best_effort_experiment_updates_available_;
@@ -197,6 +252,13 @@ class UpgradeDetector {
 
   // Whether a factory reset is needed to complete an update.
   bool is_factory_reset_required_;
+
+#if defined(OS_CHROMEOS)
+  // Whether the update is actually an admin-initiated rollback of the device
+  // to an earlier version of Chrome OS, which results in the device being
+  // wiped when it's rebooted.
+  bool is_rollback_ = false;
+#endif  // defined(OS_CHROMEOS)
 
   // A timer to check to see if we've been idle for long enough to show the
   // critical warning. Should only be set if |upgrade_available_| is

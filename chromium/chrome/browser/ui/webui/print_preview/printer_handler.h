@@ -11,12 +11,12 @@
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 
 namespace base {
 class DictionaryValue;
 class ListValue;
-class RefCountedBytes;
+class RefCountedMemory;
 class Value;
 }
 
@@ -59,6 +59,10 @@ class PrinterHandler {
   using PrintCallback = base::OnceCallback<void(const base::Value& error)>;
   using GetPrinterInfoCallback =
       base::OnceCallback<void(const base::DictionaryValue& printer_info)>;
+
+  // Creates an instance of a PrinterHandler for cloud printers.
+  // Note: Implementation currently empty, see https://crbug.com/829414
+  static std::unique_ptr<PrinterHandler> CreateForCloudPrinters();
 
   // Creates an instance of a PrinterHandler for extension printers.
   static std::unique_ptr<PrinterHandler> CreateForExtensionPrinters(
@@ -120,14 +124,13 @@ class PrinterHandler {
   // |page_size|: The document page size.
   // |print_data|: The document bytes to print.
   // |callback| should be called in the response to the request.
-  // TODO(tbarzic): Page size should be extracted from print data.
   virtual void StartPrint(
       const std::string& destination_id,
       const std::string& capability,
       const base::string16& job_title,
       const std::string& ticket_json,
       const gfx::Size& page_size,
-      const scoped_refptr<base::RefCountedBytes>& print_data,
+      const scoped_refptr<base::RefCountedMemory>& print_data,
       PrintCallback callback) = 0;
 };
 

@@ -4,7 +4,9 @@
 
 #include "ui/message_center/views/message_view.h"
 
+#include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -14,8 +16,10 @@
 #include "ui/gfx/shadow_util.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/public/cpp/features.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
-#include "ui/message_center/public/cpp/message_center_switches.h"
+#include "ui/message_center/views/notification_background_painter.h"
+#include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -23,8 +27,9 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/focus/focus_manager.h"
-#include "ui/views/painter.h"
 #include "ui/views/widget/widget.h"
+
+namespace message_center {
 
 namespace {
 
@@ -32,13 +37,9 @@ const SkColor kBorderColor = SkColorSetARGB(0x1F, 0x0, 0x0, 0x0);
 const int kShadowCornerRadius = 0;
 const int kShadowElevation = 2;
 
-// The global flag of Sidebar enability.
-bool sidebar_enabled = false;
-
 // Creates a text for spoken feedback from the data contained in the
 // notification.
-base::string16 CreateAccessibleName(
-    const message_center::Notification& notification) {
+base::string16 CreateAccessibleName(const Notification& notification) {
   if (!notification.accessible_name().empty())
     return notification.accessible_name();
 
@@ -46,10 +47,8 @@ base::string16 CreateAccessibleName(
   std::vector<base::string16> accessible_lines = {
       notification.title(), notification.message(),
       notification.context_message()};
-  std::vector<message_center::NotificationItem> items = notification.items();
-  for (size_t i = 0;
-       i < items.size() && i < message_center::kNotificationMaximumItems;
-       ++i) {
+  std::vector<NotificationItem> items = notification.items();
+  for (size_t i = 0; i < items.size() && i < kNotificationMaximumItems; ++i) {
     accessible_lines.push_back(items[i].title + base::ASCIIToUTF16(" ") +
                                items[i].message);
   }
@@ -57,24 +56,13 @@ base::string16 CreateAccessibleName(
 }
 
 bool ShouldRoundMessageViewCorners() {
-#if defined(OS_CHROMEOS)
-  return true;
-#else
-  return message_center::IsNewStyleNotificationEnabled();
-#endif
+  return base::FeatureList::IsEnabled(message_center::kNewStyleNotifications);
 }
 
 }  // namespace
 
-namespace message_center {
-
 // static
 const char MessageView::kViewClassName[] = "MessageView";
-
-// static
-void MessageView::SetSidebarEnabled() {
-  sidebar_enabled = true;
-}
 
 MessageView::MessageView(const Notification& notification)
     : notification_id_(notification.id()), slide_out_controller_(this, this) {
@@ -86,8 +74,7 @@ MessageView::MessageView(const Notification& notification)
 
   // Create the opaque background that's above the view's shadow.
   background_view_ = new views::View();
-  background_view_->SetBackground(
-      views::CreateSolidBackground(kNotificationBackgroundColor));
+  UpdateCornerRadius(0, 0);
   AddChildView(background_view_);
 
   focus_painter_ = views::Painter::CreateSolidFocusPainter(
@@ -96,39 +83,54 @@ MessageView::MessageView(const Notification& notification)
   UpdateWithNotification(notification);
 }
 
-MessageView::~MessageView() {
-}
+MessageView::~MessageView() {}
 
 void MessageView::UpdateWithNotification(const Notification& notification) {
   pinned_ = notification.pinned();
-  accessible_name_ = CreateAccessibleName(notification);
-  slide_out_controller_.set_enabled(!GetPinned());
+  base::string16 new_accessible_name = CreateAccessibleName(notification);
+  if (new_accessible_name != accessible_name_) {
+    accessible_name_ = new_accessible_name;
+    NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
+  }
+  slide_out_controller_.set_slide_mode(CalculateSlideMode());
 }
 
 void MessageView::SetIsNested() {
-  is_nested_ = true;
+  DCHECK(!is_nested_) << "MessageView::SetIsNested() is called twice wrongly.";
 
-  if (sidebar_enabled) {
-    DCHECK(ShouldRoundMessageViewCorners());
-    SetBorder(views::CreateRoundedRectBorder(0, kNotificationCornerRadius,
-                                             kBorderColor));
+  is_nested_ = true;
+  // Update enability since it might be changed by "is_nested" flag.
+  slide_out_controller_.set_slide_mode(CalculateSlideMode());
+
+  if (ShouldRoundMessageViewCorners()) {
+    SetBorder(views::CreateRoundedRectBorder(
+        kNotificationBorderThickness, kNotificationCornerRadius, kBorderColor));
   } else {
-    if (ShouldRoundMessageViewCorners()) {
-      SetBorder(views::CreateRoundedRectBorder(kNotificationBorderThickness,
-                                               kNotificationCornerRadius,
-                                               kBorderColor));
-    } else {
-      const auto& shadow =
-          gfx::ShadowDetails::Get(kShadowElevation, kShadowCornerRadius);
-      gfx::Insets ninebox_insets =
-          gfx::ShadowValue::GetBlurRegion(shadow.values) +
-          gfx::Insets(kShadowCornerRadius);
-      SetBorder(views::CreateBorderPainter(
-          std::unique_ptr<views::Painter>(views::Painter::CreateImagePainter(
-              shadow.ninebox_image, ninebox_insets)),
-          -gfx::ShadowValue::GetMargin(shadow.values)));
-    }
+    const auto& shadow =
+        gfx::ShadowDetails::Get(kShadowElevation, kShadowCornerRadius);
+    gfx::Insets ninebox_insets =
+        gfx::ShadowValue::GetBlurRegion(shadow.values) +
+        gfx::Insets(kShadowCornerRadius);
+    SetBorder(views::CreateBorderPainter(
+        views::Painter::CreateImagePainter(shadow.ninebox_image,
+                                           ninebox_insets),
+        -gfx::ShadowValue::GetMargin(shadow.values)));
   }
+}
+
+bool MessageView::IsCloseButtonFocused() const {
+  auto* control_buttons_view = GetControlButtonsView();
+  return control_buttons_view ? control_buttons_view->IsCloseButtonFocused()
+                              : false;
+}
+
+void MessageView::RequestFocusOnCloseButton() {
+  auto* control_buttons_view = GetControlButtonsView();
+  if (!control_buttons_view)
+    return;
+
+  control_buttons_view->RequestFocusOnCloseButton();
+  UpdateControlButtonsVisibility();
 }
 
 void MessageView::SetExpanded(bool expanded) {
@@ -140,6 +142,27 @@ bool MessageView::IsExpanded() const {
   return false;
 }
 
+bool MessageView::IsAutoExpandingAllowed() const {
+  // Allowed by default.
+  return true;
+}
+
+bool MessageView::IsManuallyExpandedOrCollapsed() const {
+  // Not implemented by default.
+  return false;
+}
+
+void MessageView::SetManuallyExpandedOrCollapsed(bool value) {
+  // Not implemented by default.
+}
+
+void MessageView::UpdateCornerRadius(int top_radius, int bottom_radius) {
+  background_view_->SetBackground(views::CreateBackgroundFromPainter(
+      std::make_unique<NotificationBackgroundPainter>(top_radius,
+                                                      bottom_radius)));
+  SchedulePaint();
+}
+
 void MessageView::OnContainerAnimationStarted() {
   // Not implemented by default.
 }
@@ -149,20 +172,27 @@ void MessageView::OnContainerAnimationEnded() {
 }
 
 void MessageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->role = ax::mojom::Role::kButton;
   node_data->AddStringAttribute(
-      ui::AX_ATTR_ROLE_DESCRIPTION,
+      ax::mojom::StringAttribute::kRoleDescription,
       l10n_util::GetStringUTF8(
           IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
   node_data->SetName(accessible_name_);
 }
 
 bool MessageView::OnMousePressed(const ui::MouseEvent& event) {
+  return true;
+}
+
+bool MessageView::OnMouseDragged(const ui::MouseEvent& event) {
+  return true;
+}
+
+void MessageView::OnMouseReleased(const ui::MouseEvent& event) {
   if (!event.IsOnlyLeftMouseButton())
-    return false;
+    return;
 
   MessageCenter::Get()->ClickOnNotification(notification_id_);
-  return true;
 }
 
 bool MessageView::OnKeyPressed(const ui::KeyEvent& event) {
@@ -269,12 +299,48 @@ ui::Layer* MessageView::GetSlideOutLayer() {
 void MessageView::OnSlideChanged() {}
 
 void MessageView::OnSlideOut() {
-  MessageCenter::Get()->RemoveNotification(notification_id_,
-                                           true /* by_user */);
+  // As a workaround for a MessagePopupCollection bug https://crbug.com/805208,
+  // pass false to by_user although it is triggered by user.
+  // TODO(tetsui): Rewrite MessagePopupCollection and remove this hack.
+  if (pinned_) {
+    // Also a workaround to not break notification pinning.
+    MessageCenter::Get()->MarkSinglePopupAsShown(
+        notification_id_, true /* mark_notification_as_read */);
+  } else {
+    MessageCenter::Get()->RemoveNotification(notification_id_,
+                                             true /* by_user */);
+  }
 }
 
-bool MessageView::GetPinned() const {
-  return pinned_ && !force_disable_pinned_;
+SlideOutController::SlideMode MessageView::CalculateSlideMode() const {
+  switch (GetMode()) {
+    case Mode::SETTING:
+      return SlideOutController::SlideMode::NO_SLIDE;
+    case Mode::PINNED:
+      return SlideOutController::SlideMode::PARTIALLY;
+    case Mode::NORMAL:
+      return SlideOutController::SlideMode::FULL;
+  }
+
+  NOTREACHED();
+  return SlideOutController::SlideMode::FULL;
+}
+
+MessageView::Mode MessageView::GetMode() const {
+  if (setting_mode_)
+    return Mode::SETTING;
+
+  // Only nested notifications can be pinned. Standalones (i.e. popups) can't
+  // be.
+  if (pinned_ && is_nested_)
+    return Mode::PINNED;
+
+  return Mode::NORMAL;
+}
+
+void MessageView::SetSettingMode(bool setting_mode) {
+  setting_mode_ = setting_mode;
+  slide_out_controller_.set_slide_mode(CalculateSlideMode());
 }
 
 void MessageView::OnCloseButtonPressed() {
@@ -282,14 +348,17 @@ void MessageView::OnCloseButtonPressed() {
                                            true /* by_user */);
 }
 
-void MessageView::OnSettingsButtonPressed() {
+void MessageView::OnSettingsButtonPressed(const ui::Event& event) {
   MessageCenter::Get()->ClickOnSettingsButton(notification_id_);
 }
 
+void MessageView::OnSnoozeButtonPressed(const ui::Event& event) {
+  // No default implementation for snooze.
+}
+
 void MessageView::SetDrawBackgroundAsActive(bool active) {
-  background_view_->background()->
-      SetNativeControlColor(active ? kHoveredButtonBackgroundColor :
-                                     kNotificationBackgroundColor);
+  background_view_->background()->SetNativeControlColor(
+      active ? kHoveredButtonBackgroundColor : kNotificationBackgroundColor);
   SchedulePaint();
 }
 

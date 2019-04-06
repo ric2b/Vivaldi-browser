@@ -8,10 +8,13 @@
   "systemInfo_cpu": "system_cpu",
   "systemInfo_memory": "system_memory",
   "index": ".",
+  "optionsV2": "/extensions/options",
   "cloudMessaging": "https://developers.google.com/cloud-messaging/chrome/client",
   "cloudMessagingV1": "https://developers.google.com/cloud-messaging/chrome/client",
   "pushMessaging": "https://developers.google.com/cloud-messaging/chrome/client",
   "gcm_tos": "https://developers.google.com/terms/",
   "gcm_server": "https://developers.google.com/cloud-messaging/server",
-  "autoupdate": "hosting"
+  "autoupdate": "hosting",
+  "packaging": "hosting",
+  "crx": "hosting"
 }

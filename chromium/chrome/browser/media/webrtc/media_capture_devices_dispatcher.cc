@@ -30,8 +30,8 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/media_stream_request.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
-#include "extensions/features/features.h"
 #include "media/base/media_switches.h"
 
 #if defined(OS_CHROMEOS)
@@ -170,7 +170,7 @@ MediaCaptureDevicesDispatcher::GetVideoCaptureDevices() {
 void MediaCaptureDevicesDispatcher::ProcessMediaAccessRequest(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback,
+    content::MediaResponseCallback callback,
     const extensions::Extension* extension) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -179,33 +179,36 @@ void MediaCaptureDevicesDispatcher::ProcessMediaAccessRequest(
                                     extension) ||
         handler->SupportsStreamType(web_contents, request.audio_type,
                                     extension)) {
-      handler->HandleRequest(web_contents, request, callback, extension);
+      handler->HandleRequest(web_contents, request, std::move(callback),
+                             extension);
       return;
     }
   }
-  callback.Run(content::MediaStreamDevices(),
-               content::MEDIA_DEVICE_NOT_SUPPORTED, nullptr);
+  std::move(callback).Run(content::MediaStreamDevices(),
+                          content::MEDIA_DEVICE_NOT_SUPPORTED, nullptr);
 }
 
 bool MediaCaptureDevicesDispatcher::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return CheckMediaAccessPermission(web_contents, security_origin, type,
+  return CheckMediaAccessPermission(render_frame_host, security_origin, type,
                                     nullptr);
 }
 
 bool MediaCaptureDevicesDispatcher::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type,
     const extensions::Extension* extension) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (const auto& handler : media_access_handlers_) {
-    if (handler->SupportsStreamType(web_contents, type, extension)) {
-      return handler->CheckMediaAccessPermission(web_contents, security_origin,
-                                                 type, extension);
+    if (handler->SupportsStreamType(
+            content::WebContents::FromRenderFrameHost(render_frame_host), type,
+            extension)) {
+      return handler->CheckMediaAccessPermission(
+          render_frame_host, security_origin, type, extension);
     }
   }
   return false;
@@ -346,6 +349,16 @@ void MediaCaptureDevicesDispatcher::OnMediaRequestStateChanged(
 void MediaCaptureDevicesDispatcher::OnCreatingAudioStream(
     int render_process_id,
     int render_frame_id) {
+  // TODO(https://crbug.com/837606): Figure out how to simplify threading here.
+  // Currently, this will either always be called on the UI thread, or always
+  // on the IO thread, depending on how far along the work to migrate to the
+  // audio service has progressed. The rest of the methods of the
+  // content::MediaObserver are always called on the IO thread.
+  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
+    OnCreatingAudioStreamOnUIThread(render_process_id, render_frame_id);
+    return;
+  }
+
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,

@@ -1,4 +1,6 @@
-source_set("extraparts") {
+import("//build/config/jumbo.gni")
+
+jumbo_source_set("extraparts") {
   sources = [
     "vivaldi_browser_main_extra_parts.cc",
     "vivaldi_browser_main_extra_parts.h",
@@ -13,6 +15,8 @@ source_set("extraparts") {
     sources += [
       "vivaldi_browser_main_extra_parts_mac.h",
       "vivaldi_browser_main_extra_parts_mac.mm",
+      "maybe_setup_vivaldi_keychain.h",
+      "maybe_setup_vivaldi_keychain.mm",
     ]
   }
   if (is_win) {
@@ -32,7 +36,7 @@ source_set("extraparts") {
     #"//chrome/browser",
     "//chrome/common:constants",
     "//skia",
-    "//third_party/WebKit/public:blink_headers",
+    "//third_party/blink/public:blink_headers",
     "//vivaldi/extensions/schema:api",
     "//vivaldi/calendar",
     "//vivaldi/contact",

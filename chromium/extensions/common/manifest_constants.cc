@@ -20,9 +20,10 @@ const char kAppThemeColor[] = "app.theme_color";
 const char kAutomation[] = "automation";
 const char kBackgroundAllowJsAccess[] = "background.allow_js_access";
 const char kBackgroundPage[] = "background.page";
-const char kBackgroundPageLegacy[] = "background_page";
 const char kBackgroundPersistent[] = "background.persistent";
 const char kBackgroundScripts[] = "background.scripts";
+const char kBackgroundServiceWorkerScript[] =
+    "background.service_worker_script";
 const char kBluetooth[] = "bluetooth";
 const char kBookmarkUI[] = "bookmarks_ui";
 const char kBrowserAction[] = "browser_action";
@@ -119,10 +120,7 @@ const char kPageAction[] = "page_action";
 const char kPageActionDefaultIcon[] = "default_icon";
 const char kPageActionDefaultPopup[] = "default_popup";
 const char kPageActionDefaultTitle[] = "default_title";
-const char kPageActionIcons[] = "icons";
 const char kPageActionId[] = "id";
-const char kPageActionPopup[] = "popup";
-const char kPageActionPopupPath[] = "path";
 const char kPermissions[] = "permissions";
 const char kPlatformAppBackground[] = "app.background";
 const char kPlatformAppBackgroundPage[] = "app.background.page";
@@ -137,6 +135,8 @@ const char kSandboxedPagesCSP[] = "sandbox.content_security_policy";
 const char kSettingsOverride[] = "chrome_settings_overrides";
 const char kSettingsOverrideAlternateUrls[] =
     "chrome_settings_overrides.search_provider.alternate_urls";
+const char kSharedModuleAllowlist[] = "allowlist";
+const char kSharedModuleLegacyAllowlist[] = "whitelist";
 const char kShiftKey[] = "shiftKey";
 const char kShortcutKey[] = "shortcutKey";
 const char kShortName[] = "short_name";
@@ -185,7 +185,6 @@ const char kWebview[] = "webview";
 const char kWebviewAccessibleResources[] = "accessible_resources";
 const char kWebviewName[] = "name";
 const char kWebviewPartitions[] = "partitions";
-const char kWhitelist[] = "whitelist";
 #if defined(OS_CHROMEOS)
 const char kActionHandlers[] = "action_handlers";
 const char kActionHandlerActionKey[] = "action";
@@ -298,8 +297,8 @@ const char kChromeVersionTooLow[] =
     "This extension requires * version * or greater.";
 const char kDeclarativeNetRequestPermissionNeeded[] =
     "The extension requires '*' permission for the '*' manifest key.";
-const char kDeclarativeNetRequestListNotPassed[] =
-    "Declarative Net Request: Ruleset must be a list.";
+const char kDeclarativeNetRequestJSONRulesFileReadError[] =
+    "Declarative Net Request: Error in reading JSON rules file.";
 const char kDefaultStateShouldNotBeSet[] =
     "The default_state key cannot be set for browser_action or page_action "
     "keys.";
@@ -325,6 +324,8 @@ const char kInvalidBackgroundScript[] =
     "Invalid value for 'background.scripts[*]'.";
 const char kInvalidBackgroundScripts[] =
     "Invalid value for 'background.scripts'.";
+const char kInvalidBackgroundServiceWorkerScript[] =
+    "Invalid value for 'background.service_worker_script'.";
 const char kInvalidBackgroundInHostedApp[] =
     "Invalid value for 'background_page'. Hosted apps must specify an "
     "absolute HTTPS URL for the background page.";
@@ -388,10 +389,9 @@ const char kInvalidExport[] =
     "Invalid value for 'export'.";
 const char kInvalidExportPermissions[] =
     "Permissions are not allowed for extensions that export resources.";
-const char kInvalidExportWhitelist[] =
-    "Invalid value for 'export.whitelist'.";
-const char kInvalidExportWhitelistString[] =
-    "Invalid value for 'export.whitelist[*]'.";
+const char kInvalidExportAllowlist[] = "Invalid value for 'export.allowlist'.";
+const char kInvalidExportAllowlistString[] =
+    "Invalid value for 'export.allowlist[*]'.";
 const char kInvalidFileAccessList[] =
     "Invalid value for 'file_access'.";
 const char kInvalidFileAccessValue[] =
@@ -502,9 +502,11 @@ const char kInvalidKioskRequiredPlatformVersion[] =
 const char kInvalidKioskSecondaryApps[] =
     "Invalid value for 'kiosk_secondary_apps'";
 const char kInvalidKioskSecondaryAppsBadAppEntry[] =
-    "Invalid app id item for 'kiosk_secondary_apps'";
-const char kInvalidKioskSecondaryAppsBadAppId[] =
-    "Invalid app id value for 'kiosk_secondary_apps'";
+    "Invalid app item for 'kiosk_secondary_apps'";
+const char kInvalidKioskSecondaryAppsDuplicateApp[] =
+    "Duplicate app id in 'kiosk_secondary_apps': '*'.";
+const char kInvalidKioskSecondaryAppsPropertyUnavailable[] =
+    "Property '*' not allowed for 'kiosk_secondary_apps' item '*'.";
 const char kInvalidLaunchContainer[] =
     "Invalid value for 'app.launch.container'.";
 const char kInvalidLaunchValue[] =
@@ -519,8 +521,7 @@ const char kInvalidLinkedAppIconURL[] =
     "Invalid 'url' for linked app icon. Must be a string that is a valid URL";
 const char kInvalidLinkedAppIcons[] =
     "Invalid 'app.linked_icons'. Must be an array";
-const char kInvalidManifest[] =
-    "Manifest file is invalid.";
+const char kInvalidManifest[] = "Manifest file is invalid";
 const char kInvalidManifestVersion[] =
     "Invalid value for 'manifest_version'. Must be an integer greater than "
     "zero.";
@@ -578,11 +579,6 @@ const char kInvalidPageActionIconPath[] =
     "Invalid value for 'page_action.default_icon'.";
 const char kInvalidPageActionId[] =
     "Required value 'id' is missing or invalid.";
-const char kInvalidPageActionName[] =
-    "Invalid value for 'page_action.name'.";
-const char kInvalidPageActionOldAndNewKeys[] =
-    "Key \"*\" is deprecated.  Key \"*\" has the same meaning.  You can not "
-    "use both.";
 const char kInvalidPageActionPopup[] =
     "Invalid type for page action popup.";
 const char kInvalidPageActionPopupPath[] =
@@ -715,8 +711,7 @@ const char kLocalesTreeMissing[] =
     "Default locale was specified, but _locales subtree is missing.";
 const char kManifestParseError[] =
     "Manifest is not valid JSON.";
-const char kManifestUnreadable[] =
-    "Manifest file is missing or unreadable.";
+const char kManifestUnreadable[] = "Manifest file is missing or unreadable";
 const char kMissingFile[] =
     "At least one js or css file is required for 'content_scripts[*]'.";
 const char kMultipleOverrides[] =

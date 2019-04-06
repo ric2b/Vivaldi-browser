@@ -61,13 +61,6 @@ BrowserFrame::BrowserFrame(BrowserView* browser_view)
 BrowserFrame::~BrowserFrame() {
 }
 
-// static
-const gfx::FontList& BrowserFrame::GetTitleFontList() {
-  static const gfx::FontList* title_font_list = new gfx::FontList();
-  ANNOTATE_LEAKING_OBJECT_PTR(title_font_list);
-  return *title_font_list;
-}
-
 void BrowserFrame::InitBrowserFrame() {
   native_browser_frame_ =
       NativeBrowserFrameFactory::CreateNativeBrowserFrame(this, browser_view_);
@@ -112,8 +105,8 @@ gfx::Rect BrowserFrame::GetBoundsForTabStrip(views::View* tabstrip) const {
       browser_frame_view_->GetBoundsForTabStrip(tabstrip) : gfx::Rect();
 }
 
-int BrowserFrame::GetTopInset(bool restored) const {
-  return browser_frame_view_->GetTopInset(restored);
+int BrowserFrame::GetTopInset() const {
+  return browser_frame_view_->GetTopInset(false);
 }
 
 int BrowserFrame::GetThemeBackgroundXInset() const {
@@ -141,7 +134,7 @@ void BrowserFrame::GetWindowPlacement(gfx::Rect* bounds,
   return native_browser_frame_->GetWindowPlacement(bounds, show_state);
 }
 
-bool BrowserFrame::PreHandleKeyboardEvent(
+content::KeyboardEventProcessingResult BrowserFrame::PreHandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   return native_browser_frame_->PreHandleKeyboardEvent(event);
 }
@@ -180,7 +173,7 @@ const ui::ThemeProvider* BrowserFrame::GetThemeProvider() const {
 }
 
 const ui::NativeTheme* BrowserFrame::GetNativeTheme() const {
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
   if (browser_view_->browser()->profile()->GetProfileType() ==
           Profile::INCOGNITO_PROFILE &&
       ThemeServiceFactory::GetForProfile(browser_view_->browser()->profile())
@@ -262,8 +255,10 @@ ui::MenuModel* BrowserFrame::GetSystemMenuModel() {
   return menu_model_builder_->menu_model();
 }
 
-views::View* BrowserFrame::GetNewAvatarMenuButton() {
-  return browser_frame_view_->GetProfileSwitcherView();
+views::Button* BrowserFrame::GetNewAvatarMenuButton() {
+  // Note: This profile switcher is being replaced with a toolbar menu button.
+  // See ToolbarView.
+  return browser_frame_view_->GetProfileSwitcherButton();
 }
 
 void BrowserFrame::OnMenuClosed() {

@@ -4,6 +4,7 @@
 
 #include "ash/shelf/shelf_context_menu_model.h"
 
+#include "ash/public/cpp/app_menu_constants.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/session/test_session_controller_client.h"
@@ -57,6 +58,8 @@ class TestWallpaperControllerClient : public mojom::WallpaperControllerClient {
 
   // mojom::WallpaperControllerClient:
   void OpenWallpaperPicker() override { open_count_++; }
+  void OnReadyToSetWallpaper() override {}
+  void OnFirstWallpaperAnimationFinished() override {}
 
  private:
   size_t open_count_ = 0;
@@ -314,6 +317,15 @@ TEST_F(ShelfContextMenuModelTest, ShelfContextMenuOptions) {
   // existing enums.
   ShelfContextMenuModel menu(MenuItemList(), nullptr, GetPrimaryDisplay().id());
   EXPECT_EQ(3, menu.GetItemCount());
+}
+
+TEST_F(ShelfContextMenuModelTest, NotificationContainerEnabled) {
+  // Tests that NOTIFICATION_CONTAINER is enabled. This ensures that the
+  // container is able to handle gesture events.
+  ShelfContextMenuModel menu(MenuItemList(), nullptr, GetPrimaryDisplay().id());
+  menu.AddItem(NOTIFICATION_CONTAINER, base::string16());
+
+  EXPECT_TRUE(menu.IsCommandIdEnabled(NOTIFICATION_CONTAINER));
 }
 
 }  // namespace

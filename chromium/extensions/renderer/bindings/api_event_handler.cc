@@ -10,12 +10,11 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/supports_user_data.h"
 #include "base/values.h"
 #include "content/public/renderer/v8_value_converter.h"
-#include "extensions/renderer/bindings/api_event_listeners.h"
 #include "extensions/renderer/bindings/event_emitter.h"
 #include "extensions/renderer/bindings/get_per_context_data.h"
 #include "extensions/renderer/bindings/js_runner.h"
@@ -25,11 +24,6 @@
 namespace extensions {
 
 namespace {
-
-void DoNothingOnListenersChanged(binding::EventListenersChanged change,
-                                 const base::DictionaryValue* filter,
-                                 bool update_lazy_listeners,
-                                 v8::Local<v8::Context> context) {}
 
 struct APIEventPerContextData : public base::SupportsUserData::Data {
   static constexpr char kPerContextDataKey[] = "extension_api_events";
@@ -99,9 +93,11 @@ void DispatchEvent(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }  // namespace
 
 APIEventHandler::APIEventHandler(
-    const EventListenersChangedMethod& listeners_changed,
+    const APIEventListeners::ListenersUpdated& listeners_changed,
+    const ContextOwnerIdGetter& context_owner_id_getter,
     ExceptionHandler* exception_handler)
     : listeners_changed_(listeners_changed),
+      context_owner_id_getter_(context_owner_id_getter),
       exception_handler_(exception_handler) {}
 APIEventHandler::~APIEventHandler() {}
 
@@ -118,21 +114,23 @@ v8::Local<v8::Object> APIEventHandler::CreateEventInstance(
   // context directly.
   v8::Context::Scope context_scope(context);
 
+  std::string context_owner = context_owner_id_getter_.Run(context);
+
   APIEventPerContextData* data =
       APIEventPerContextData::GetFrom(context, kCreateIfMissing);
   DCHECK(data->emitters.find(event_name) == data->emitters.end());
 
   APIEventListeners::ListenersUpdated updated =
-      notify_on_change ? base::Bind(listeners_changed_, event_name)
-                       : base::Bind(&DoNothingOnListenersChanged);
+      notify_on_change ? listeners_changed_ : base::DoNothing();
   std::unique_ptr<APIEventListeners> listeners;
   if (supports_filters) {
     listeners = std::make_unique<FilteredEventListeners>(
-        updated, event_name, max_listeners, supports_lazy_listeners,
-        &event_filter_);
+        updated, event_name, context_owner, max_listeners,
+        supports_lazy_listeners, &listener_tracker_);
   } else {
     listeners = std::make_unique<UnfilteredEventListeners>(
-        updated, max_listeners, supports_lazy_listeners);
+        updated, event_name, context_owner, max_listeners,
+        supports_lazy_listeners, &listener_tracker_);
   }
 
   gin::Handle<EventEmitter> emitter_handle =
@@ -156,10 +154,16 @@ v8::Local<v8::Object> APIEventHandler::CreateAnonymousEventInstance(
   APIEventPerContextData* data =
       APIEventPerContextData::GetFrom(context, kCreateIfMissing);
   bool supports_filters = false;
+
+  // Anonymous events are not tracked, and thus don't need a name or a context
+  // owner.
+  std::string empty_context_owner;
+  std::string empty_event_name;
+  ListenerTracker* anonymous_listener_tracker = nullptr;
   std::unique_ptr<APIEventListeners> listeners =
       std::make_unique<UnfilteredEventListeners>(
-          base::Bind(&DoNothingOnListenersChanged), binding::kNoListenerMax,
-          false);
+          base::DoNothing(), empty_context_owner, empty_event_name,
+          binding::kNoListenerMax, false, anonymous_listener_tracker);
   gin::Handle<EventEmitter> emitter_handle =
       gin::CreateHandle(context->GetIsolate(),
                         new EventEmitter(supports_filters, std::move(listeners),
@@ -176,8 +180,15 @@ void APIEventHandler::InvalidateCustomEvent(v8::Local<v8::Context> context,
   EventEmitter* emitter = nullptr;
   APIEventPerContextData* data =
       APIEventPerContextData::GetFrom(context, kDontCreateIfMissing);
-  if (!data || !gin::Converter<EventEmitter*>::FromV8(context->GetIsolate(),
-                                                      event, &emitter)) {
+  // This could happen if a port (or JS) invalidates an event following
+  // context destruction.
+  // TODO(devlin): Is it better to fail gracefully here, or track all these
+  // down for determinism?
+  if (!data)
+    return;
+
+  if (!gin::Converter<EventEmitter*>::FromV8(context->GetIsolate(), event,
+                                             &emitter)) {
     NOTREACHED();
     return;
   }

@@ -104,14 +104,16 @@ source_set("net") {
     "net/rtp/rtp_sender.h",
     "net/udp_packet_pipe.cc",
     "net/udp_packet_pipe.h",
-    "net/udp_transport.cc",
-    "net/udp_transport.h",
+    "net/udp_transport_impl.cc",
+    "net/udp_transport_impl.h",
+    "net/udp_transport_interface.h",
   ]
 
   deps = [
     ":common",
     "//base",
     "//media/mojo/common",
+    "//mojo/public/cpp/system",
     "//net",
   ]
 
@@ -225,6 +227,8 @@ static_library("test_support") {
     "test/fake_receiver_time_offset_estimator.h",
     "test/loopback_transport.cc",
     "test/loopback_transport.h",
+    "test/mock_cast_transport.cc",
+    "test/mock_cast_transport.h",
     "test/skewed_single_thread_task_runner.cc",
     "test/skewed_single_thread_task_runner.h",
     "test/skewed_tick_clock.cc",
@@ -258,9 +262,9 @@ static_library("test_support") {
     "//base/test:test_support",
     "//media",
     "//net",
+    "//testing/gmock",
     "//testing/gtest",
     "//third_party/libyuv",
-    "//third_party/mt19937ar",
     "//ui/gfx:test_support",
   ]
 
@@ -289,8 +293,6 @@ test("cast_unittests") {
     "logging/simple_event_subscriber_unittest.cc",
     "logging/stats_event_subscriber_unittest.cc",
     "net/cast_transport_impl_unittest.cc",
-    "net/mock_cast_transport.cc",
-    "net/mock_cast_transport.h",
     "net/pacing/mock_paced_packet_sender.cc",
     "net/pacing/mock_paced_packet_sender.h",
     "net/pacing/paced_sender_unittest.cc",
@@ -340,9 +342,11 @@ test("cast_unittests") {
     ":sender",
     ":test_support",
     "//base",
+    "//base:cfi_buildflags",
     "//base/test:test_support",
     "//media:test_support",
     "//media/test:run_all_unittests",
+    "//mojo/public/cpp/bindings",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
@@ -407,7 +411,6 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
       ":receiver",
       ":test_support",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//media:test_support",
       "//net",
@@ -438,7 +441,6 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
       ":sender",
       ":test_support",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//media",
     ]
@@ -465,7 +467,6 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
       ":test_support",
       "//base",
       "//base/test:test_support",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//media:test_support",
     ]
@@ -479,7 +480,6 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
     deps = [
       ":test_support",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//media",
     ]
@@ -493,7 +493,6 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
     deps = [
       ":test_support",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//media",
     ]
@@ -507,7 +506,6 @@ if (is_win || is_mac || (is_linux && !is_chromeos)) {
     deps = [
       ":test_support",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//net",
     ]
@@ -539,6 +537,7 @@ if (is_linux && !is_chromeos) {
 
 static_library("cast_sender") {
   complete_static_lib = true
+  configs -= [ "//build/config/compiler:thin_archive" ]
   deps = [
     ":sender",
   ]
@@ -546,6 +545,7 @@ static_library("cast_sender") {
 
 static_library("cast_receiver") {
   complete_static_lib = true
+  configs -= [ "//build/config/compiler:thin_archive" ]
   deps = [
     ":receiver",
   ]

@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/logging.h"
-#include "base/metrics/field_trial.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
@@ -38,7 +37,7 @@ void AddTabToDistantSession(const sessions::SessionTab& session_tab,
         std::make_unique<synced_sessions::DistantTab>());
     synced_sessions::DistantTab& distant_tab = *distant_session->tabs.back();
     distant_tab.session_tag = session_tag;
-    distant_tab.tab_id = session_tab.tab_id.id();
+    distant_tab.tab_id = session_tab.tab_id;
     int index = session_tab.current_navigation_index;
     if (index < 0)
       index = 0;
@@ -59,7 +58,7 @@ void AddTabToDistantSession(const sessions::SessionTab& session_tab,
 
 namespace synced_sessions {
 
-DistantTab::DistantTab() {}
+DistantTab::DistantTab() : tab_id(SessionID::InvalidValue()) {}
 
 size_t DistantTab::hashOfUserVisibleProperties() {
   std::stringstream ss;
@@ -95,22 +94,10 @@ void DistantSession::InitWithSyncedSession(
   modified_time = synced_session->modified_time;
   device_type = synced_session->device_type;
 
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("TabSyncByRecency");
-  if (group_name == "Enabled") {
-    // Order tabs by recency.
-    std::vector<const sessions::SessionTab*> session_tabs;
-    open_tabs->GetForeignSessionTabs(synced_session->session_tag,
-                                     &session_tabs);
-    for (const auto* session_tab : session_tabs) {
+  // Order tabs by their visual position within window.
+  for (const auto& kv : synced_session->windows) {
+    for (const auto& session_tab : kv.second->wrapped_window.tabs) {
       AddTabToDistantSession(*session_tab, synced_session->session_tag, this);
-    }
-  } else {
-    // Order tabs by their visual position within window.
-    for (const auto& kv : synced_session->windows) {
-      for (const auto& session_tab : kv.second->wrapped_window.tabs) {
-        AddTabToDistantSession(*session_tab, synced_session->session_tag, this);
-      }
     }
   }
 }

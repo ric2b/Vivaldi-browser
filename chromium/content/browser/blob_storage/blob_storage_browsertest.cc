@@ -4,7 +4,6 @@
 
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -28,6 +27,14 @@ const uint64_t kTestBlobStorageMaxDiskSpace = 3000;
 const uint64_t kTestBlobStorageMinFileSizeBytes = 20;
 const uint64_t kTestBlobStorageMaxFileSizeBytes = 50;
 
+void SetBlobLimitsOnIO(scoped_refptr<ChromeBlobStorageContext> context,
+                       const storage::BlobStorageLimits& limits) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  CHECK(context);
+  CHECK(context->context());
+  context->context()->set_limits_for_testing(limits);
+}
+
 }  // namespace
 
 // This browser test is aimed towards exercising the blob storage transportation
@@ -49,21 +56,10 @@ class BlobStorageBrowserTest : public ContentBrowserTest {
         shell()->web_contents()->GetBrowserContext());
   }
 
-  void SetBlobLimitsOnIO(scoped_refptr<ChromeBlobStorageContext> context,
-                         const storage::BlobStorageLimits& limits) {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    CHECK(context);
-    CHECK(context->context());
-    context->context()->mutable_memory_controller()->set_limits_for_testing(
-        limits);
-  }
-
   void SetBlobLimits() {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&BlobStorageBrowserTest::SetBlobLimitsOnIO,
-                       base::Unretained(this), GetBlobContext(),
-                       base::ConstRef(limits_)));
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::BindOnce(&SetBlobLimitsOnIO, GetBlobContext(),
+                                           base::ConstRef(limits_)));
   }
 
   void SimpleTest(const GURL& test_url, bool incognito = false) {

@@ -18,8 +18,8 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "extensions/features/features.h"
-#include "ui/message_center/notifier_id.h"
+#include "extensions/buildflags/buildflags.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/common/extensions/api/notifications.h"
@@ -161,6 +161,13 @@ void NotifierStateTracker::OnExtensionUninstalled(
 void NotifierStateTracker::FirePermissionLevelChangedEvent(
     const NotifierId& notifier_id, bool enabled) {
   DCHECK_EQ(NotifierId::APPLICATION, notifier_id.type);
+  extensions::EventRouter* event_router =
+      extensions::EventRouter::Get(profile_);
+  if (!event_router) {
+    // The |event_router| can be a nullptr in tests.
+    return;
+  }
+
   extensions::api::notifications::PermissionLevel permission =
       enabled ? extensions::api::notifications::PERMISSION_LEVEL_GRANTED
               : extensions::api::notifications::PERMISSION_LEVEL_DENIED;
@@ -170,8 +177,8 @@ void NotifierStateTracker::FirePermissionLevelChangedEvent(
       extensions::events::NOTIFICATIONS_ON_PERMISSION_LEVEL_CHANGED,
       extensions::api::notifications::OnPermissionLevelChanged::kEventName,
       std::move(args)));
-  extensions::EventRouter::Get(profile_)
-      ->DispatchEventToExtension(notifier_id.id, std::move(event));
+
+  event_router->DispatchEventToExtension(notifier_id.id, std::move(event));
 
   // Tell the IO thread that this extension's permission for notifications
   // has changed.

@@ -15,6 +15,7 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/tools/cert_verify_tool/cert_verify_tool_util.h"
@@ -60,8 +61,7 @@ std::string SubjectFromX509Certificate(const net::X509Certificate* cert) {
 // Returns a textual representation of the Subject of |cert_handle|.
 std::string SubjectFromCryptoBuffer(CRYPTO_BUFFER* cert_handle) {
   scoped_refptr<net::X509Certificate> cert =
-      net::X509Certificate::CreateFromBuffer(
-          net::x509_util::DupCryptoBuffer(cert_handle), {});
+      net::X509Certificate::CreateFromBuffer(bssl::UpRef(cert_handle), {});
   if (!cert)
     return std::string();
   return SubjectFromX509Certificate(cert.get());
@@ -92,8 +92,6 @@ void PrintCertVerifyResult(const net::CertVerifyResult& result) {
     std::cout << "is_issued_by_known_root\n";
   if (result.is_issued_by_additional_trust_anchor)
     std::cout << "is_issued_by_additional_trust_anchor\n";
-  if (result.common_name_fallback_used)
-    std::cout << "common_name_fallback_used\n";
 
   if (result.verified_cert) {
     std::cout << "chain:\n "
@@ -116,7 +114,8 @@ bool VerifyUsingCertVerifyProc(
     const std::string& hostname,
     const std::vector<CertInput>& intermediate_der_certs,
     const std::vector<CertInput>& root_der_certs,
-    const base::FilePath& dump_prefix_path) {
+    net::CRLSet* crl_set,
+    const base::FilePath& dump_path) {
   std::cout
       << "NOTE: CertVerifyProc always uses OS trust settings (--roots are in "
          "addition).\n";
@@ -151,27 +150,38 @@ bool VerifyUsingCertVerifyProc(
   }
 
   // TODO(mattm): add command line flags to configure VerifyFlags.
-  int flags = net::CertVerifier::VERIFY_EV_CERT |
-              net::CertVerifier::VERIFY_CERT_IO_ENABLED;
+  int flags = 0;
+
+  // Not all platforms support providing additional trust anchors to the
+  // verifier. To workaround this, use TestRootCerts to modify the
+  // system trust store globally.
+  net::TestRootCerts* test_root_certs = net::TestRootCerts::GetInstance();
+  CHECK(test_root_certs->IsEmpty());
 
   if (!x509_additional_trust_anchors.empty() &&
       !cert_verify_proc->SupportsAdditionalTrustAnchors()) {
-    std::cerr << "WARNING: Additional trust anchors not supported on this "
-                 "platform.\n";
+    std::cerr << "NOTE: Additional trust anchors not supported on this "
+                 "platform. Using TestRootCerts instead.\n";
+
+    for (const auto& trust_anchor : x509_additional_trust_anchors)
+      test_root_certs->Add(trust_anchor.get());
+
+    x509_additional_trust_anchors.clear();
   }
+
   net::CertVerifyResult result;
-  // TODO(mattm): add CRLSet handling.
-  int rv = cert_verify_proc->Verify(x509_target_and_intermediates.get(),
-                                    hostname, std::string() /* ocsp_response */,
-                                    flags, nullptr /* crl_set */,
-                                    x509_additional_trust_anchors, &result);
+  int rv =
+      cert_verify_proc->Verify(x509_target_and_intermediates.get(), hostname,
+                               std::string() /* ocsp_response */, flags,
+                               crl_set, x509_additional_trust_anchors, &result);
+
+  // Remove any temporary trust anchors.
+  test_root_certs->Clear();
 
   std::cout << "CertVerifyProc result: " << net::ErrorToShortString(rv) << "\n";
   PrintCertVerifyResult(result);
-  if (!dump_prefix_path.empty() && result.verified_cert) {
-    if (!DumpX509CertificateChain(dump_prefix_path.AddExtension(
-                                      FILE_PATH_LITERAL(".CertVerifyProc.pem")),
-                                  result.verified_cert.get())) {
+  if (!dump_path.empty() && result.verified_cert) {
+    if (!DumpX509CertificateChain(dump_path, result.verified_cert.get())) {
       return false;
     }
   }

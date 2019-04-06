@@ -1,11 +1,12 @@
 include_rules = [
-  # This code is checked into the chromium repo so it's fine to depend on this.
   "+base",
   "+build",
+  "+mojo/public",
   "+testing",
 
-  "+ipc/ipc_param_traits.h",
+  "-mojo",
+  "+mojo/public",
 
-  # internal includes.
-  "+mojo",
+  # Temporary until mojom [Native] is gone.
+  "+ipc/ipc_param_traits.h",
 ]

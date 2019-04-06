@@ -11,8 +11,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 #include "url/gurl.h"
 
 class SkBitmap;
@@ -30,8 +30,8 @@ class AssociatedResourceFetcher;
 // an image. Useful for favicons.
 class MultiResolutionImageResourceFetcher {
  public:
-  typedef base::Callback<void(MultiResolutionImageResourceFetcher*,
-                              const std::vector<SkBitmap>&)> Callback;
+  using Callback = base::OnceCallback<void(MultiResolutionImageResourceFetcher*,
+                                           const std::vector<SkBitmap>&)>;
 
   MultiResolutionImageResourceFetcher(
       const GURL& image_url,
@@ -39,7 +39,7 @@ class MultiResolutionImageResourceFetcher {
       int id,
       blink::WebURLRequest::RequestContext request_context,
       blink::mojom::FetchCacheMode cache_mode,
-      const Callback& callback);
+      Callback callback);
 
   virtual ~MultiResolutionImageResourceFetcher();
 

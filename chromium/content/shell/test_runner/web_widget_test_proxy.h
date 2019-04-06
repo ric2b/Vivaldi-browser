@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "content/shell/test_runner/test_runner_export.h"
 #include "content/shell/test_runner/web_widget_test_client.h"
-#include "third_party/WebKit/public/web/WebWidgetClient.h"
+#include "third_party/blink/public/web/web_widget_client.h"
 
 namespace blink {
 class WebLocalFrame;
@@ -89,12 +89,17 @@ class TEST_RUNNER_EXPORT WebWidgetTestProxyBase {
 //    override RenderViewImpl's getter and call a getter from
 //    WebWidgetTestProxyBase instead. In addition, WebWidgetTestProxyBase will
 //    have a public setter that could be called from the TestRunner.
-template <class Base, typename... Args>
+template <class Base>
 class WebWidgetTestProxy : public Base, public WebWidgetTestProxyBase {
  public:
-  explicit WebWidgetTestProxy(Args... args) : Base(args...) {}
+  template <typename... Args>
+  explicit WebWidgetTestProxy(Args&&... args)
+      : Base(std::forward<Args>(args)...) {}
 
   // WebWidgetClient implementation.
+  blink::WebLayerTreeView* InitializeLayerTreeView() override {
+    return Base::InitializeLayerTreeView();
+  }
   blink::WebScreenInfo GetScreenInfo() override {
     blink::WebScreenInfo info = Base::GetScreenInfo();
     blink::WebScreenInfo test_info = widget_test_client()->GetScreenInfo();
@@ -125,9 +130,10 @@ class WebWidgetTestProxy : public Base, public WebWidgetTestProxyBase {
   void StartDragging(blink::WebReferrerPolicy policy,
                      const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
-                     const blink::WebImage& image,
-                     const blink::WebPoint& point) override {
-    widget_test_client()->StartDragging(policy, data, mask, image, point);
+                     const SkBitmap& drag_image,
+                     const blink::WebPoint& image_offset) override {
+    widget_test_client()->StartDragging(policy, data, mask, drag_image,
+                                        image_offset);
     // Don't forward this call to Base because we don't want to do a real
     // drag-and-drop.
   }

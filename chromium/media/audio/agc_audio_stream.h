@@ -5,9 +5,10 @@
 #ifndef MEDIA_AUDIO_AGC_AUDIO_STREAM_H_
 #define MEDIA_AUDIO_AGC_AUDIO_STREAM_H_
 
+#include <atomic>
+
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "media/audio/audio_io.h"
@@ -59,9 +60,8 @@
 // as well to ensure that thread safety is maintained. It will also guarantee
 // that the periodic timer runs on the audio manager thread.
 // |normalized_volume_|, which is updated by QueryAndStoreNewMicrophoneVolume()
-// and read in GetAgcVolume(), is protected by a lock to ensure that it can
-// be accessed from any real-time audio thread that needs it to update the its
-// AGC volume.
+// and read in GetAgcVolume(), is atomic to ensure that it can be accessed from
+// any real-time audio thread that needs it to update the its AGC volume.
 
 namespace media {
 
@@ -88,6 +88,13 @@ class MEDIA_EXPORT AgcAudioStream : public AudioInterface {
     DCHECK(thread_checker_.CalledOnValidThread());
     if (!agc_is_enabled_ || timer_.IsRunning())
       return;
+
+    max_volume_ = static_cast<AudioInterface*>(this)->GetMaxVolume();
+    if (max_volume_ <= 0) {
+      DLOG(WARNING) << "Failed to get max volume from hardware. Won't provide "
+                    << "normalized volume.";
+      return;
+    }
 
     // Query and cache the volume to avoid sending 0 as volume to AGC at the
     // beginning of the audio stream, otherwise AGC will try to raise the
@@ -128,8 +135,7 @@ class MEDIA_EXPORT AgcAudioStream : public AudioInterface {
   // Called at each capture callback on a real-time capture thread (platform
   // dependent).
   void GetAgcVolume(double* normalized_volume) {
-    base::AutoLock lock(lock_);
-    *normalized_volume = normalized_volume_;
+    *normalized_volume = normalized_volume_.load(std::memory_order_relaxed);
   }
 
   // Gets the current automatic gain control state.
@@ -160,19 +166,13 @@ class MEDIA_EXPORT AgcAudioStream : public AudioInterface {
   // thread and it leads to a more stable capture performance.
   void QueryAndStoreNewMicrophoneVolume() {
     DCHECK(thread_checker_.CalledOnValidThread());
-
-    // Cach the maximum volume if this is the first time we ask for it.
-    if (max_volume_ == 0.0)
-      max_volume_ = static_cast<AudioInterface*>(this)->GetMaxVolume();
+    DCHECK_GT(max_volume_, 0.0);
 
     // Retrieve the current volume level by asking the audio hardware.
     // Range is normalized to [0.0,1.0] or [0.0, 1.5] on Linux.
-    if (max_volume_ != 0.0) {
-      double normalized_volume =
-          static_cast<AudioInterface*>(this)->GetVolume() / max_volume_;
-      base::AutoLock auto_lock(lock_);
-      normalized_volume_ = normalized_volume;
-    }
+    double normalized_volume =
+        static_cast<AudioInterface*>(this)->GetVolume() / max_volume_;
+    normalized_volume_.store(normalized_volume, std::memory_order_relaxed);
   }
 
   // Ensures that this class is created and destroyed on the same thread.
@@ -190,12 +190,9 @@ class MEDIA_EXPORT AgcAudioStream : public AudioInterface {
   double max_volume_;
 
   // Contains last result of internal call to GetVolume(). We save resources
-  // by not querying the capture volume for each callback. Guarded by |lock_|.
-  // The range is normalized to [0.0, 1.0].
-  double normalized_volume_;
-
-  // Protects |normalized_volume_| .
-  base::Lock lock_;
+  // by not querying the capture volume for each callback. The range is
+  // normalized to [0.0, 1.0].
+  std::atomic<double> normalized_volume_;
 
   DISALLOW_COPY_AND_ASSIGN(AgcAudioStream<AudioInterface>);
 };

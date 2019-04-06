@@ -18,7 +18,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/resource_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "url/gurl.h"
 
 namespace page_load_metrics {
@@ -40,7 +40,7 @@ class TestPageLoadMetricsEmbedderInterface
     test_->RegisterObservers(tracker);
   }
 
-  std::unique_ptr<base::Timer> CreateTimer() override {
+  std::unique_ptr<base::OneShotTimer> CreateTimer() override {
     auto timer = std::make_unique<test::WeakMockTimer>();
     test_->SetMockTimer(timer->AsWeakPtr());
     return std::move(timer);
@@ -88,11 +88,11 @@ void PageLoadMetricsObserverTester::SimulatePageLoadTimingUpdate(
     const mojom::PageLoadMetadata& metadata,
     const mojom::PageLoadFeatures& new_features) {
   observer_->OnTimingUpdated(web_contents()->GetMainFrame(), timing, metadata,
-                             new_features);
+                             new_features, mojom::PageLoadDataUse());
   // If sending the timing update caused the PageLoadMetricsUpdateDispatcher to
   // schedule a buffering timer, then fire it now so metrics are dispatched to
   // observers.
-  base::MockTimer* mock_timer = GetMockTimer();
+  base::MockOneShotTimer* mock_timer = GetMockTimer();
   if (mock_timer && mock_timer->IsRunning())
     mock_timer->Fire();
 }
@@ -144,8 +144,9 @@ void PageLoadMetricsObserverTester::SimulateMediaPlayed() {
   content::WebContentsObserver::MediaPlayerInfo video_type(
       true /* has_video*/, true /* has_audio */);
   content::RenderFrameHost* render_frame_host = web_contents()->GetMainFrame();
-  observer_->MediaStartedPlaying(video_type,
-                                 std::make_pair(render_frame_host, 0));
+  observer_->MediaStartedPlaying(
+      video_type,
+      content::WebContentsObserver::MediaPlayerId(render_frame_host, 0));
 }
 
 MetricsWebContentsObserver* PageLoadMetricsObserverTester::observer() const {

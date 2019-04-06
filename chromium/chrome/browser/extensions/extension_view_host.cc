@@ -8,6 +8,7 @@
 #include "base/strings/string_piece.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/extension_view.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/file_select_helper.h"
@@ -25,7 +26,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/runtime_data.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -114,7 +115,7 @@ void ExtensionViewHost::UnhandledKeyboardEvent(
 // ExtensionHost overrides:
 
 void ExtensionViewHost::OnDidStopFirstLoad() {
-  view_->DidStopLoading();
+  view_->OnLoaded();
 }
 
 void ExtensionViewHost::LoadInitialURL() {
@@ -159,10 +160,10 @@ WebContents* ExtensionViewHost::OpenURLFromTab(
       // Only allow these from hosts that are bound to a browser (e.g. popups).
       // Otherwise they are not driven by a user gesture.
       Browser* browser = view_->GetBrowser();
-      return browser ? browser->OpenURL(params) : NULL;
+      return browser ? browser->OpenURL(params) : nullptr;
     }
     default:
-      return NULL;
+      return nullptr;
   }
 }
 

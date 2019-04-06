@@ -79,9 +79,6 @@ ASH_EXPORT bool MoveWindowToDisplay(aura::Window* window, int64_t display_id);
 ASH_EXPORT bool MoveWindowToEventRoot(aura::Window* window,
                                       const ui::Event& event);
 
-// Snap the window's layer to physical pixel boundary.
-ASH_EXPORT void SnapWindowToPixelBoundary(aura::Window* window);
-
 // Mark the container window so that InstallSnapLayoutManagerToContainers
 // installs the SnapToPixelLayoutManager.
 ASH_EXPORT void SetSnapsChildrenToPhysicalPixelBoundary(
@@ -118,6 +115,9 @@ ASH_EXPORT void RemoveLimitedPreTargetHandlerForWindow(
 ASH_EXPORT void InstallResizeHandleWindowTargeterForWindow(
     aura::Window* window,
     ImmersiveFullscreenController* immersive_fullscreen_controller);
+
+// Returns true if |window| is currently in tab-dragging process.
+ASH_EXPORT bool IsDraggingTabs(const aura::Window* window);
 
 }  // namespace wm
 }  // namespace ash

@@ -34,13 +34,13 @@ class TestingPrefetchNetworkRequestFactory
   void MakeGeneratePageBundleRequest(
       const std::vector<std::string>& prefetch_urls,
       const std::string& gcm_registration_id,
-      const PrefetchRequestFinishedCallback& callback) override {}
+      PrefetchRequestFinishedCallback callback) override {}
   std::unique_ptr<std::set<std::string>> GetAllUrlsRequested() const override {
     return std::unique_ptr<std::set<std::string>>();
   }
   void MakeGetOperationRequest(
       const std::string& operation_name,
-      const PrefetchRequestFinishedCallback& callback) override {}
+      PrefetchRequestFinishedCallback callback) override {}
   GetOperationRequest* FindGetOperationRequestByName(
       const std::string& operation_name) const override {
     return nullptr;
@@ -69,9 +69,7 @@ TEST_F(SentGetOperationCleanupTaskTest, StoreFailure) {
   store_util()->SimulateInitializationError();
 
   SentGetOperationCleanupTask task(store(), prefetch_request_factory());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
 }
 
 TEST_F(SentGetOperationCleanupTaskTest, Retry) {
@@ -82,9 +80,7 @@ TEST_F(SentGetOperationCleanupTaskTest, Retry) {
   ASSERT_TRUE(store_util()->InsertPrefetchItem(item));
 
   SentGetOperationCleanupTask task(store(), prefetch_request_factory());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
 
   std::unique_ptr<PrefetchItem> store_item =
       store_util()->GetPrefetchItem(item.offline_id);
@@ -105,9 +101,7 @@ TEST_F(SentGetOperationCleanupTaskTest, NoRetryForOngoingRequest) {
   request_factory->AddOngoingOperation(item.operation_name);
 
   SentGetOperationCleanupTask task(store(), request_factory.get());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
 
   std::unique_ptr<PrefetchItem> store_item =
       store_util()->GetPrefetchItem(item.offline_id);
@@ -123,9 +117,7 @@ TEST_F(SentGetOperationCleanupTaskTest, ErrorOnMaxAttempts) {
   ASSERT_TRUE(store_util()->InsertPrefetchItem(item));
 
   SentGetOperationCleanupTask task(store(), prefetch_request_factory());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
 
   std::unique_ptr<PrefetchItem> store_item =
       store_util()->GetPrefetchItem(item.offline_id);
@@ -148,9 +140,7 @@ TEST_F(SentGetOperationCleanupTaskTest, SkipForOngoingRequestWithMaxAttempts) {
   request_factory->AddOngoingOperation(item.operation_name);
 
   SentGetOperationCleanupTask task(store(), request_factory.get());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
 
   std::unique_ptr<PrefetchItem> store_item =
       store_util()->GetPrefetchItem(item.offline_id);
@@ -161,8 +151,7 @@ TEST_F(SentGetOperationCleanupTaskTest, SkipForOngoingRequestWithMaxAttempts) {
 TEST_F(SentGetOperationCleanupTaskTest, NoUpdateForOtherStates) {
   std::set<PrefetchItem> items;
   std::vector<PrefetchItemState> all_other_states =
-      PrefetchTaskTestBase::GetAllStatesExcept(
-          PrefetchItemState::SENT_GET_OPERATION);
+      GetAllStatesExcept({PrefetchItemState::SENT_GET_OPERATION});
   for (const auto& state : all_other_states) {
     PrefetchItem item = item_generator()->CreateItem(state);
     item.get_operation_attempts =
@@ -172,9 +161,7 @@ TEST_F(SentGetOperationCleanupTaskTest, NoUpdateForOtherStates) {
   }
 
   SentGetOperationCleanupTask task(store(), prefetch_request_factory());
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
 
   std::set<PrefetchItem> store_items;
   store_util()->GetAllItems(&store_items);

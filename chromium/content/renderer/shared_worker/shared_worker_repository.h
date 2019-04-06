@@ -14,8 +14,8 @@
 #include "content/renderer/shared_worker/shared_worker_client_impl.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
-#include "third_party/WebKit/public/platform/WebContentSecurityPolicy.h"
-#include "third_party/WebKit/public/web/WebSharedWorkerRepositoryClient.h"
+#include "third_party/blink/public/platform/web_content_security_policy.h"
+#include "third_party/blink/public/web/web_shared_worker_repository_client.h"
 
 namespace blink {
 class MessagePortChannel;
@@ -44,6 +44,7 @@ class SharedWorkerRepository final
       blink::mojom::IPAddressSpace,
       blink::mojom::SharedWorkerCreationContextType,
       blink::MessagePortChannel channel,
+      mojo::ScopedMessagePipeHandle blob_url_token,
       std::unique_ptr<blink::WebSharedWorkerConnectListener> listener) override;
   void DocumentDetached(DocumentID document_id) override;
 

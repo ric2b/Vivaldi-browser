@@ -30,6 +30,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.service.notification.StatusBarNotification;
+import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 import android.util.Pair;
 
@@ -60,7 +61,7 @@ import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
-import org.chromium.content.browser.BrowserStartupController;
+import org.chromium.content_public.browser.BrowserStartupController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -325,7 +326,7 @@ public class DownloadNotificationService extends Service {
         ChromeNotificationBuilder builder =
                 NotificationBuilderFactory
                         .createChromeNotificationBuilder(
-                                true /* preferCompat */, ChannelDefinitions.CHANNEL_ID_DOWNLOADS)
+                                true /* preferCompat */, ChannelDefinitions.ChannelId.DOWNLOADS)
                         .setContentTitle(
                                 context.getString(R.string.download_notification_summary_title))
                         .setSubText(context.getString(R.string.menu_downloads))
@@ -500,6 +501,7 @@ public class DownloadNotificationService extends Service {
     @VisibleForTesting
     @TargetApi(Build.VERSION_CODES.N)
     void stopForegroundInternal(boolean killNotification) {
+        Log.w(TAG, "stopForegroundInternal killNotification: " + killNotification);
         if (!useForegroundService()) return;
         stopForeground(killNotification ? STOP_FOREGROUND_REMOVE : STOP_FOREGROUND_DETACH);
     }
@@ -510,6 +512,7 @@ public class DownloadNotificationService extends Service {
      */
     @VisibleForTesting
     void startForegroundInternal() {
+        Log.w(TAG, "startForegroundInternal");
         if (!useForegroundService()) return;
         Notification notification =
                 buildSummaryNotification(getApplicationContext(), mNotificationManager);
@@ -569,6 +572,7 @@ public class DownloadNotificationService extends Service {
      * @param id The {@link ContentId} of the download that has been started and should be tracked.
      */
     private void startTrackingInProgressDownload(ContentId id) {
+        Log.w(TAG, "startTrackingInProgressDownload");
         if (mDownloadsInProgress.size() == 0) startForegroundInternal();
         if (!mDownloadsInProgress.contains(id)) mDownloadsInProgress.add(id);
     }
@@ -585,6 +589,7 @@ public class DownloadNotificationService extends Service {
      *                            potentially bad state where we cannot dismiss the notification.
      */
     private void stopTrackingInProgressDownload(ContentId id, boolean allowStopForeground) {
+        Log.w(TAG, "stopTrackingInProgressDownload");
         mDownloadsInProgress.remove(id);
         if (allowStopForeground && mDownloadsInProgress.size() == 0) stopForegroundInternal(false);
     }
@@ -629,6 +634,7 @@ public class DownloadNotificationService extends Service {
      */
     @SuppressLint("NewApi") // useForegroundService guards StatusBarNotification.getNotification
     boolean hideSummaryNotificationIfNecessary(int notificationIdToIgnore) {
+        Log.w(TAG, "hideSummaryNotificationIfNecessary id: " + notificationIdToIgnore);
         if (mDownloadsInProgress.size() > 0) return false;
 
         if (useForegroundService()) {
@@ -778,7 +784,7 @@ public class DownloadNotificationService extends Service {
                                       : android.R.drawable.stat_sys_download;
         ChromeNotificationBuilder builder = buildNotification(resId, fileName, contentText);
         builder.setOngoing(true);
-        builder.setPriority(Notification.PRIORITY_HIGH);
+        builder.setPriorityBeforeO(NotificationCompat.PRIORITY_HIGH);
 
         // Avoid animations while the download isn't progressing.
         if (!isDownloadPending) {
@@ -1065,7 +1071,7 @@ public class DownloadNotificationService extends Service {
         ChromeNotificationBuilder builder =
                 NotificationBuilderFactory
                         .createChromeNotificationBuilder(
-                                true /* preferCompat */, ChannelDefinitions.CHANNEL_ID_DOWNLOADS)
+                                true /* preferCompat */, ChannelDefinitions.ChannelId.DOWNLOADS)
                         .setContentTitle(
                                 DownloadUtils.getAbbreviatedFileName(title, MAX_FILE_NAME_LENGTH))
                         .setSmallIcon(iconId)
@@ -1272,7 +1278,8 @@ public class DownloadNotificationService extends Service {
         String referrer = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_REFERRER);
         ContentId contentId = DownloadNotificationService.getContentIdFromIntent(intent);
         DownloadManagerService.openDownloadedContent(context, downloadFilename, isSupportedMimeType,
-                isOffTheRecord, contentId.id, id, originalUrl, referrer);
+                isOffTheRecord, contentId.id, id, originalUrl, referrer,
+                DownloadMetrics.DownloadOpenSource.NOTIFICATION);
     }
 
     /**
@@ -1314,10 +1321,9 @@ public class DownloadNotificationService extends Service {
      * @return delegate for interactions with the entry
      */
     DownloadServiceDelegate getServiceDelegate(ContentId id) {
-        if (LegacyHelpers.isLegacyDownload(id)) {
-            return DownloadManagerService.getDownloadManagerService();
-        }
-        return OfflineContentAggregatorNotificationBridgeUiFactory.instance();
+        return LegacyHelpers.isLegacyDownload(id)
+                ? DownloadManagerService.getDownloadManagerService()
+                : OfflineContentAggregatorNotificationBridgeUiFactory.instance();
     }
 
     @VisibleForTesting
@@ -1348,9 +1354,10 @@ public class DownloadNotificationService extends Service {
         // we had built one for this download before.
         if (mDownloadSharedPreferenceHelper.hasEntry(id)) return;
         NotificationUmaTracker.getInstance().onNotificationShown(
-                LegacyHelpers.isLegacyOfflinePage(id) ? NotificationUmaTracker.DOWNLOAD_PAGES
-                                                      : NotificationUmaTracker.DOWNLOAD_FILES,
-                ChannelDefinitions.CHANNEL_ID_DOWNLOADS);
+                LegacyHelpers.isLegacyOfflinePage(id)
+                        ? NotificationUmaTracker.SystemNotificationType.DOWNLOAD_PAGES
+                        : NotificationUmaTracker.SystemNotificationType.DOWNLOAD_FILES,
+                ChannelDefinitions.ChannelId.DOWNLOADS);
 
         // Record number of other notifications when there's a new notification.
         DownloadNotificationUmaHelper.recordExistingNotificationsCountHistogram(

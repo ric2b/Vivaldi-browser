@@ -7,9 +7,12 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/optional.h"
+#include "base/time/time.h"
+#include "cc/input/overscroll_behavior.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/events/blink/did_overscroll_params.h"
 
 namespace content {
@@ -96,8 +99,7 @@ class CONTENT_EXPORT OverscrollController {
 
   // Returns true if the event indicates that the in-progress overscroll gesture
   // can now be completed.
-  bool DispatchEventCompletesAction(
-      const blink::WebInputEvent& event) const;
+  bool DispatchEventCompletesAction(const blink::WebInputEvent& event) const;
 
   // Returns true to indicate that dispatching the event should reset the
   // overscroll gesture status.
@@ -111,7 +113,10 @@ class CONTENT_EXPORT OverscrollController {
   // and the over scroll amount (i.e. |overscroll_mode_|, |overscroll_delta_x_|
   // and |overscroll_delta_y_|). Returns true if overscroll was handled by the
   // delegate.
-  bool ProcessOverscroll(float delta_x, float delta_y, bool is_touchpad);
+  bool ProcessOverscroll(float delta_x,
+                         float delta_y,
+                         bool is_touchpad,
+                         bool is_inertial);
 
   // Completes the desired action from the current gesture.
   void CompleteAction();
@@ -122,11 +127,18 @@ class CONTENT_EXPORT OverscrollController {
   // triggered the overscroll gesture.
   void SetOverscrollMode(OverscrollMode new_mode, OverscrollSource source);
 
+  // Whether this inertial event should be filtered out by the controller.
+  bool ShouldIgnoreInertialEvent(const blink::WebInputEvent& event) const;
+
   // Whether this event should be processed or not handled by the controller.
   bool ShouldProcessEvent(const blink::WebInputEvent& event);
 
   // Helper function to reset |scroll_state_| and |locked_mode_|.
   void ResetScrollState();
+
+  // Current value of overscroll-behavior CSS property for the root element of
+  // the page.
+  cc::OverscrollBehavior behavior_;
 
   // The current state of overscroll gesture.
   OverscrollMode overscroll_mode_ = OVERSCROLL_NONE;
@@ -151,7 +163,30 @@ class CONTENT_EXPORT OverscrollController {
   // owned by this controller.
   OverscrollControllerDelegate* delegate_ = nullptr;
 
-  bool wheel_scroll_latching_enabled_;
+  // A inertial scroll (fling) event may complete an overscroll gesture and
+  // navigate to a new page or cancel the overscroll animation. In both cases
+  // inertial scroll can continue to generate scroll-update events. These events
+  // need to be ignored.
+  bool ignore_following_inertial_events_ = false;
+
+  // Specifies whether last overscroll was ignored, either due to a command line
+  // flag or because cool off period had not passed.
+  bool overscroll_ignored_ = false;
+
+  // Timestamp for the end of the last ignored scroll sequence.
+  base::TimeTicks last_ignored_scroll_time_;
+
+  // Time between the end of the last ignored scroll sequence and the beginning
+  // of the current one.
+  base::TimeDelta time_since_last_ignored_scroll_;
+
+  // On Windows, we don't generate the inertial events (fling) but receive them
+  // from Win API. In some cases, we get a long tail of inertial events for a
+  // couple of seconds. The overscroll animation feels like stuck in these
+  // cases. So we only process 0.3 second inertial events then cancel the
+  // overscroll if it is not completed yet.
+  // Timestamp for the first inertial event (fling) in current stream.
+  base::Optional<base::TimeTicks> first_inertial_event_time_;
 
   DISALLOW_COPY_AND_ASSIGN(OverscrollController);
 };

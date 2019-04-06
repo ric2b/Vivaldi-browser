@@ -10,25 +10,27 @@
 #include "base/bind.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/task_scheduler/post_task.h"
+#include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
+#include "ui/ozone/platform/drm/gpu/hardware_display_plane.h"
+#include "ui/ozone/platform/drm/gpu/page_flip_request.h"
 #include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
 
 namespace ui {
 
 namespace {
 
-const int kInfiniteSyncWaitTimeout = -1;
-
 // We currently wait for the fences serially, but it's possible
 // that merging the fences and waiting on the merged fence fd
 // is more efficient. We should revisit once we have more info.
-void WaitForPlaneFences(const ui::OverlayPlaneList& planes) {
+ui::DrmOverlayPlaneList WaitForPlaneFences(ui::DrmOverlayPlaneList planes) {
   for (const auto& plane : planes) {
-    if (plane.fence_fd >= 0)
-      sync_wait(plane.fence_fd, kInfiniteSyncWaitTimeout);
+    if (plane.gpu_fence)
+      plane.gpu_fence->Wait();
   }
+  return planes;
 }
 
 }  // namespace
@@ -41,7 +43,9 @@ HardwareDisplayPlaneManagerLegacy::~HardwareDisplayPlaneManagerLegacy() {
 
 bool HardwareDisplayPlaneManagerLegacy::Commit(
     HardwareDisplayPlaneList* plane_list,
-    bool test_only) {
+    scoped_refptr<PageFlipRequest> page_flip_request,
+    std::unique_ptr<gfx::GpuFence>* out_fence) {
+  bool test_only = !page_flip_request;
   if (test_only) {
     for (HardwareDisplayPlane* plane : plane_list->plane_list) {
       plane->set_in_use(false);
@@ -68,14 +72,10 @@ bool HardwareDisplayPlaneManagerLegacy::Commit(
         PLOG(ERROR) << "Cannot display plane on overlay: crtc=" << flip.crtc
                     << " plane=" << plane.plane;
         ret = false;
-        flip.crtc->SignalPageFlipRequest(gfx::SwapResult::SWAP_FAILED,
-                                         gfx::PresentationFeedback());
         break;
       }
     }
-    if (!drm_->PageFlip(flip.crtc_id, flip.framebuffer,
-                        base::Bind(&CrtcController::OnPageFlipEvent,
-                                   flip.crtc->AsWeakPtr()))) {
+    if (!drm_->PageFlip(flip.crtc_id, flip.framebuffer, page_flip_request)) {
       // 1) Permission Denied is a legitimate error.
       // 2) Device or resource busy is possible if we're page flipping a
       // disconnected CRTC. Pretend we're fine since a hotplug event is supposed
@@ -89,9 +89,6 @@ bool HardwareDisplayPlaneManagerLegacy::Commit(
                     << " framebuffer=" << flip.framebuffer;
         ret = false;
       }
-      flip.crtc->SignalPageFlipRequest(
-          ret ? gfx::SwapResult::SWAP_ACK : gfx::SwapResult::SWAP_FAILED,
-          gfx::PresentationFeedback());
     }
   }
   // For each element in |old_plane_list|, if it hasn't been reclaimed (by
@@ -100,9 +97,9 @@ bool HardwareDisplayPlaneManagerLegacy::Commit(
     if (!plane->in_use() && (plane->type() != HardwareDisplayPlane::kDummy)) {
       // This plane is being released, so we need to zero it.
       if (!drm_->PageFlipOverlay(plane->owning_crtc(), 0, gfx::Rect(),
-                                 gfx::Rect(), plane->plane_id())) {
+                                 gfx::Rect(), plane->id())) {
         PLOG(ERROR) << "Cannot free overlay: crtc=" << plane->owning_crtc()
-                    << " plane=" << plane->plane_id();
+                    << " plane=" << plane->id();
         ret = false;
         break;
       }
@@ -131,8 +128,16 @@ bool HardwareDisplayPlaneManagerLegacy::DisableOverlayPlanes(
   return true;
 }
 
+bool HardwareDisplayPlaneManagerLegacy::SetColorCorrectionOnAllCrtcPlanes(
+    uint32_t crtc_id,
+    ScopedDrmColorCtmPtr ctm_blob_data) {
+  NOTREACHED()
+      << "HardwareDisplayPlaneManagerLegacy doesn't support per plane CTM";
+  return false;
+}
+
 bool HardwareDisplayPlaneManagerLegacy::ValidatePrimarySize(
-    const OverlayPlane& primary,
+    const DrmOverlayPlane& primary,
     const drmModeModeInfo& mode) {
   DCHECK(primary.buffer.get());
 
@@ -140,18 +145,19 @@ bool HardwareDisplayPlaneManagerLegacy::ValidatePrimarySize(
 }
 
 void HardwareDisplayPlaneManagerLegacy::RequestPlanesReadyCallback(
-    const OverlayPlaneList& planes,
-    base::OnceClosure callback) {
-  base::PostTaskWithTraitsAndReply(
+    DrmOverlayPlaneList planes,
+    base::OnceCallback<void(DrmOverlayPlaneList planes)> callback) {
+  base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&WaitForPlaneFences, planes), std::move(callback));
+      base::BindOnce(&WaitForPlaneFences, base::Passed(&planes)),
+      std::move(callback));
 }
 
 bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
     HardwareDisplayPlaneList* plane_list,
     HardwareDisplayPlane* hw_plane,
-    const OverlayPlane& overlay,
+    const DrmOverlayPlane& overlay,
     uint32_t crtc_id,
     const gfx::Rect& src_rect,
     CrtcController* crtc) {
@@ -167,9 +173,58 @@ bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
   } else {
     plane_list->legacy_page_flips.back().planes.push_back(
         HardwareDisplayPlaneList::PageFlipInfo::Plane(
-            hw_plane->plane_id(), overlay.buffer->GetFramebufferId(),
+            hw_plane->id(), overlay.buffer->GetOpaqueFramebufferId(),
             overlay.display_bounds, src_rect));
   }
+  return true;
+}
+
+bool HardwareDisplayPlaneManagerLegacy::IsCompatible(
+    HardwareDisplayPlane* plane,
+    const DrmOverlayPlane& overlay,
+    uint32_t crtc_index) const {
+  if (plane->type() == HardwareDisplayPlane::kCursor ||
+      !plane->CanUseForCrtc(crtc_index))
+    return false;
+
+  // When using legacy kms we always scanout only one plane (the primary),
+  // and we always use the opaque fb. Refer to SetPlaneData above.
+  const uint32_t format = overlay.buffer->GetOpaqueFramebufferPixelFormat();
+  return plane->IsSupportedFormat(format);
+}
+
+bool HardwareDisplayPlaneManagerLegacy::CommitColorMatrix(
+    const CrtcProperties& crtc_props) {
+  return drm_->SetObjectProperty(crtc_props.id, DRM_MODE_OBJECT_CRTC,
+                                 crtc_props.ctm.id, crtc_props.ctm.value);
+}
+
+bool HardwareDisplayPlaneManagerLegacy::CommitGammaCorrection(
+    const CrtcProperties& crtc_props) {
+  DCHECK(crtc_props.degamma_lut.id || crtc_props.gamma_lut.id);
+
+  if (crtc_props.degamma_lut.id) {
+    int ret = drm_->SetObjectProperty(crtc_props.id, DRM_MODE_OBJECT_CRTC,
+                                      crtc_props.degamma_lut.id,
+                                      crtc_props.degamma_lut.value);
+    if (ret < 0) {
+      LOG(ERROR) << "Failed to set DEGAMMA_LUT property for crtc="
+                 << crtc_props.id;
+      return false;
+    }
+  }
+
+  if (crtc_props.gamma_lut.id) {
+    int ret = drm_->SetObjectProperty(crtc_props.id, DRM_MODE_OBJECT_CRTC,
+                                      crtc_props.gamma_lut.id,
+                                      crtc_props.gamma_lut.value);
+    if (ret < 0) {
+      LOG(ERROR) << "Failed to set GAMMA_LUT property for crtc="
+                 << crtc_props.id;
+      return false;
+    }
+  }
+
   return true;
 }
 

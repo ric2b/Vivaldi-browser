@@ -6,27 +6,26 @@
 #define CONTENT_RENDERER_DOM_STORAGE_WEBSTORAGENAMESPACE_IMPL_H_
 
 #include <stdint.h>
+#include <string>
 
-#include "third_party/WebKit/public/platform/WebStorageNamespace.h"
+#include "third_party/blink/public/platform/web_storage_namespace.h"
 
 namespace content {
 
 class WebStorageNamespaceImpl : public blink::WebStorageNamespace {
  public:
-  // The default constructor creates a local storage namespace, the second
-  // constructor should be used for session storage namepaces.
-  WebStorageNamespaceImpl();
-  explicit WebStorageNamespaceImpl(int64_t namespace_id);
+  explicit WebStorageNamespaceImpl(const std::string& namespace_id);
   ~WebStorageNamespaceImpl() override;
 
   // See WebStorageNamespace.h for documentation on these functions.
   blink::WebStorageArea* CreateStorageArea(
       const blink::WebSecurityOrigin& origin) override;
   virtual blink::WebStorageNamespace* copy();
+  blink::WebString GetNamespaceId() const override;
   bool IsSameNamespace(const WebStorageNamespace&) const override;
 
  private:
-  int64_t namespace_id_;
+  std::string namespace_id_;
 };
 
 }  // namespace content

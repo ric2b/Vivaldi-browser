@@ -37,17 +37,13 @@ BluetoothPowerController::~BluetoothPowerController() {
   Shell::Get()->session_controller()->RemoveObserver(this);
 }
 
-void BluetoothPowerController::ToggleBluetoothEnabled() {
+void BluetoothPowerController::SetBluetoothEnabled(bool enabled) {
   if (active_user_pref_service_) {
-    active_user_pref_service_->SetBoolean(
-        prefs::kUserBluetoothAdapterEnabled,
-        !active_user_pref_service_->GetBoolean(
-            prefs::kUserBluetoothAdapterEnabled));
+    active_user_pref_service_->SetBoolean(prefs::kUserBluetoothAdapterEnabled,
+                                          enabled);
   } else if (local_state_pref_service_) {
-    local_state_pref_service_->SetBoolean(
-        prefs::kSystemBluetoothAdapterEnabled,
-        !local_state_pref_service_->GetBoolean(
-            prefs::kSystemBluetoothAdapterEnabled));
+    local_state_pref_service_->SetBoolean(prefs::kSystemBluetoothAdapterEnabled,
+                                          enabled);
   } else {
     DLOG(ERROR)
         << "active user and local state pref service cannot both be null";
@@ -75,7 +71,7 @@ void BluetoothPowerController::StartWatchingActiveUserPrefsChanges() {
   active_user_pref_change_registrar_->Init(active_user_pref_service_);
   active_user_pref_change_registrar_->Add(
       prefs::kUserBluetoothAdapterEnabled,
-      base::Bind(
+      base::BindRepeating(
           &BluetoothPowerController::OnBluetoothPowerActiveUserPrefChanged,
           base::Unretained(this)));
 }
@@ -239,12 +235,22 @@ void BluetoothPowerController::ApplyBluetoothLocalStatePref() {
 }
 
 void BluetoothPowerController::SetBluetoothPower(bool enabled) {
+  if (pending_bluetooth_power_target_.has_value()) {
+    // There is already a pending bluetooth power change request, so don't
+    // enqueue a new SetPowered operation but rather change the target power.
+    pending_bluetooth_power_target_ = enabled;
+    return;
+  }
+  pending_bluetooth_power_target_ = enabled;
   RunBluetoothTaskWhenAdapterReady(
       base::BindOnce(&BluetoothPowerController::SetBluetoothPowerOnAdapterReady,
-                     weak_ptr_factory_.GetWeakPtr(), enabled));
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
-void BluetoothPowerController::SetBluetoothPowerOnAdapterReady(bool enabled) {
+void BluetoothPowerController::SetBluetoothPowerOnAdapterReady() {
+  DCHECK(pending_bluetooth_power_target_.has_value());
+  bool enabled = pending_bluetooth_power_target_.value();
+  pending_bluetooth_power_target_.reset();
   // Always run the next pending task after SetPowered completes regardless
   // the error.
   bluetooth_adapter_->SetPowered(

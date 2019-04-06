@@ -5,7 +5,7 @@
 #include "components/download/content/public/all_download_item_notifier.h"
 
 #include "base/macros.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -20,20 +20,16 @@ namespace {
 class MockNotifierObserver : public AllDownloadItemNotifier::Observer {
  public:
   MockNotifierObserver() {}
-  virtual ~MockNotifierObserver() {}
+  ~MockNotifierObserver() override {}
 
   MOCK_METHOD2(OnDownloadCreated,
-               void(content::DownloadManager* manager,
-                    content::DownloadItem* item));
+               void(content::DownloadManager* manager, DownloadItem* item));
   MOCK_METHOD2(OnDownloadUpdated,
-               void(content::DownloadManager* manager,
-                    content::DownloadItem* item));
+               void(content::DownloadManager* manager, DownloadItem* item));
   MOCK_METHOD2(OnDownloadOpened,
-               void(content::DownloadManager* manager,
-                    content::DownloadItem* item));
+               void(content::DownloadManager* manager, DownloadItem* item));
   MOCK_METHOD2(OnDownloadRemoved,
-               void(content::DownloadManager* manager,
-                    content::DownloadItem* item));
+               void(content::DownloadManager* manager, DownloadItem* item));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockNotifierObserver);
@@ -44,13 +40,13 @@ class AllDownloadItemNotifierTest : public testing::Test {
   AllDownloadItemNotifierTest()
       : download_manager_(new content::MockDownloadManager) {}
 
-  virtual ~AllDownloadItemNotifierTest() {}
+  ~AllDownloadItemNotifierTest() override {}
 
-  content::MockDownloadManager& manager() { return *download_manager_.get(); }
+  content::MockDownloadManager& manager() { return *download_manager_; }
 
-  content::MockDownloadItem& item() { return item_; }
+  download::MockDownloadItem& item() { return item_; }
 
-  content::DownloadItem::Observer* NotifierAsItemObserver() const {
+  DownloadItem::Observer* NotifierAsItemObserver() const {
     return notifier_.get();
   }
 
@@ -61,7 +57,7 @@ class AllDownloadItemNotifierTest : public testing::Test {
   MockNotifierObserver& observer() { return observer_; }
 
   void SetNotifier() {
-    EXPECT_CALL(*download_manager_.get(), AddObserver(_));
+    EXPECT_CALL(*download_manager_, AddObserver(_));
     notifier_.reset(
         new AllDownloadItemNotifier(download_manager_.get(), &observer_));
   }
@@ -69,7 +65,7 @@ class AllDownloadItemNotifierTest : public testing::Test {
   void ClearNotifier() { notifier_.reset(); }
 
  private:
-  NiceMock<content::MockDownloadItem> item_;
+  NiceMock<download::MockDownloadItem> item_;
   std::unique_ptr<content::MockDownloadManager> download_manager_;
   std::unique_ptr<AllDownloadItemNotifier> notifier_;
   NiceMock<MockNotifierObserver> observer_;

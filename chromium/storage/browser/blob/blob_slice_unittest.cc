@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/files/file_path.h"
-#include "services/network/public/cpp/data_element.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_item.h"
 #include "storage/browser/blob/blob_entry.h"
@@ -18,81 +17,58 @@ namespace storage {
 namespace {
 const char kType[] = "type";
 const char kDisposition[] = "";
+const char kId[] = "uuid";
 }  // namespace
 
+// Historically BlobSlice was a separate class. All that functionality
+// was merged into BlobDataBuilder though, so now this test just tests that
+// subset of the BlobDataBuilder functionality.
 class BlobSliceTest : public testing::Test {
  protected:
-  using BlobSlice = BlobStorageContext::BlobSlice;
-
   BlobSliceTest() = default;
   ~BlobSliceTest() override = default;
 
   scoped_refptr<ShareableBlobDataItem> CreateDataItem(size_t size) {
-    std::unique_ptr<network::DataElement> element(new network::DataElement());
-    element->SetToAllocatedBytes(size);
-    for (size_t i = 0; i < size; i++) {
-      *(element->mutable_bytes() + i) = i;
-    }
-    return scoped_refptr<ShareableBlobDataItem>(
-        new ShareableBlobDataItem(new BlobDataItem(std::move(element)),
-                                  ShareableBlobDataItem::QUOTA_NEEDED));
+    std::vector<char> bytes(size);
+    for (size_t i = 0; i < size; ++i)
+      bytes[i] = i;
+    return scoped_refptr<ShareableBlobDataItem>(new ShareableBlobDataItem(
+        BlobDataItem::CreateBytes(bytes), ShareableBlobDataItem::QUOTA_NEEDED));
   };
 
   scoped_refptr<ShareableBlobDataItem> CreateFileItem(size_t offset,
                                                       size_t size) {
-    std::unique_ptr<network::DataElement> element(new network::DataElement());
-    element->SetToFilePathRange(base::FilePath(FILE_PATH_LITERAL("kFakePath")),
-                                offset, size, base::Time::Max());
     return scoped_refptr<ShareableBlobDataItem>(new ShareableBlobDataItem(
-        new BlobDataItem(std::move(element)),
+        BlobDataItem::CreateFile(base::FilePath(FILE_PATH_LITERAL("kFakePath")),
+                                 offset, size, base::Time::Max()),
         ShareableBlobDataItem::POPULATED_WITHOUT_QUOTA));
   };
 
   scoped_refptr<ShareableBlobDataItem> CreateTempFileItem(size_t offset,
                                                           size_t size) {
-    std::unique_ptr<network::DataElement> element(new network::DataElement());
-    element->SetToFilePathRange(BlobDataBuilder::GetFutureFileItemPath(0),
-                                offset, size, base::Time());
-    return scoped_refptr<ShareableBlobDataItem>(
-        new ShareableBlobDataItem(new BlobDataItem(std::move(element)),
-                                  ShareableBlobDataItem::QUOTA_NEEDED));
+    return scoped_refptr<ShareableBlobDataItem>(new ShareableBlobDataItem(
+        BlobDataItem::CreateFutureFile(offset, size, 0),
+        ShareableBlobDataItem::QUOTA_NEEDED));
   };
 
-  void ExpectFirstSlice(const BlobSlice& slice,
-                        scoped_refptr<ShareableBlobDataItem> source_item,
-                        size_t first_item_slice_offset,
-                        size_t size) {
-    EXPECT_TRUE(slice.first_source_item);
-    EXPECT_EQ(first_item_slice_offset, slice.first_item_slice_offset);
-
-    ASSERT_LE(1u, slice.dest_items.size());
-
-    scoped_refptr<ShareableBlobDataItem> item = slice.dest_items[0];
-    EXPECT_EQ(ShareableBlobDataItem::QUOTA_NEEDED, item->state());
-    const network::DataElement& dest_element = item->item()->data_element();
-
-    EXPECT_EQ(network::DataElement::TYPE_BYTES_DESCRIPTION,
-              dest_element.type());
-    EXPECT_EQ(static_cast<uint64_t>(size), dest_element.length());
-
-    EXPECT_EQ(*source_item, *slice.first_source_item);
+  void Slice(BlobDataBuilder& builder,
+             BlobEntry* source,
+             uint64_t slice_offset,
+             uint64_t slice_size) {
+    builder.SliceBlob(source, slice_offset, slice_size);
   }
 
-  void ExpectLastSlice(const BlobSlice& slice,
-                       scoped_refptr<ShareableBlobDataItem> source_item,
-                       size_t size) {
-    EXPECT_TRUE(slice.last_source_item);
-
-    ASSERT_LE(2u, slice.dest_items.size());
-    scoped_refptr<ShareableBlobDataItem> item = slice.dest_items.back();
-    EXPECT_EQ(ShareableBlobDataItem::QUOTA_NEEDED, item->state());
-    const network::DataElement& dest_element = item->item()->data_element();
-
-    EXPECT_EQ(network::DataElement::TYPE_BYTES_DESCRIPTION,
-              dest_element.type());
-    EXPECT_EQ(static_cast<uint64_t>(size), dest_element.length());
-
-    EXPECT_EQ(*source_item, *slice.last_source_item);
+  void ExpectSlice(scoped_refptr<ShareableBlobDataItem> dest_item,
+                   const BlobEntry::ItemCopyEntry& copy,
+                   scoped_refptr<ShareableBlobDataItem> source_item,
+                   size_t slice_offset,
+                   size_t size) {
+    EXPECT_EQ(source_item, copy.source_item);
+    EXPECT_EQ(slice_offset, copy.source_item_offset);
+    EXPECT_EQ(dest_item, copy.dest_item);
+    EXPECT_EQ(size, dest_item->item()->length());
+    EXPECT_EQ(ShareableBlobDataItem::QUOTA_NEEDED, dest_item->state());
+    EXPECT_EQ(BlobDataItem::Type::kBytesDescription, dest_item->item()->type());
   }
 };
 
@@ -103,14 +79,11 @@ TEST_F(BlobSliceTest, FullItem) {
   scoped_refptr<ShareableBlobDataItem> item = CreateDataItem(kSize);
   data.AppendSharedBlobItem(item);
 
-  BlobSlice slice(data, 0, 5);
-  EXPECT_EQ(0u, slice.copying_memory_size.ValueOrDie());
-  EXPECT_FALSE(slice.first_source_item);
-  EXPECT_FALSE(slice.last_source_item);
-  EXPECT_FALSE(slice.first_source_item);
-  EXPECT_FALSE(slice.last_source_item);
-  ASSERT_EQ(1u, slice.dest_items.size());
-  EXPECT_EQ(item, slice.dest_items[0]);
+  BlobDataBuilder builder(kId);
+  Slice(builder, &data, 0, 5);
+  EXPECT_TRUE(builder.copies().empty());
+  ASSERT_EQ(1u, builder.items().size());
+  EXPECT_EQ(item, builder.items()[0]);
 }
 
 TEST_F(BlobSliceTest, SliceSingleItem) {
@@ -120,11 +93,12 @@ TEST_F(BlobSliceTest, SliceSingleItem) {
   scoped_refptr<ShareableBlobDataItem> item = CreateDataItem(kSize);
   data.AppendSharedBlobItem(item);
 
-  BlobSlice slice(data, 1, 3);
-  EXPECT_EQ(3u, slice.copying_memory_size.ValueOrDie());
-  EXPECT_FALSE(slice.last_source_item);
-  ExpectFirstSlice(slice, item, 1, 3);
-  ASSERT_EQ(1u, slice.dest_items.size());
+  BlobDataBuilder builder(kId);
+  Slice(builder, &data, 1, 3);
+  ASSERT_EQ(1u, builder.copies().size());
+  ASSERT_EQ(1u, builder.items().size());
+
+  ExpectSlice(builder.items()[0], builder.copies()[0], item, 1, 3);
 }
 
 TEST_F(BlobSliceTest, SliceSingleLastItem) {
@@ -137,10 +111,12 @@ TEST_F(BlobSliceTest, SliceSingleLastItem) {
   data.AppendSharedBlobItem(item1);
   data.AppendSharedBlobItem(item2);
 
-  BlobSlice slice(data, 6, 2);
-  EXPECT_EQ(2u, slice.copying_memory_size.ValueOrDie());
-  ExpectFirstSlice(slice, item2, 1, 2);
-  ASSERT_EQ(1u, slice.dest_items.size());
+  BlobDataBuilder builder(kId);
+  Slice(builder, &data, 6, 2);
+  ASSERT_EQ(1u, builder.copies().size());
+  ASSERT_EQ(1u, builder.items().size());
+
+  ExpectSlice(builder.items()[0], builder.copies()[0], item2, 1, 2);
 }
 
 TEST_F(BlobSliceTest, SliceAcrossTwoItems) {
@@ -153,11 +129,13 @@ TEST_F(BlobSliceTest, SliceAcrossTwoItems) {
   data.AppendSharedBlobItem(item1);
   data.AppendSharedBlobItem(item2);
 
-  BlobSlice slice(data, 4, 10);
-  EXPECT_EQ(10u, slice.copying_memory_size.ValueOrDie());
-  ExpectFirstSlice(slice, item1, 4, 1);
-  ExpectLastSlice(slice, item2, 9);
-  ASSERT_EQ(2u, slice.dest_items.size());
+  BlobDataBuilder builder(kId);
+  Slice(builder, &data, 4, 10);
+  ASSERT_EQ(2u, builder.copies().size());
+  ASSERT_EQ(2u, builder.items().size());
+
+  ExpectSlice(builder.items()[0], builder.copies()[0], item1, 4, 1);
+  ExpectSlice(builder.items()[1], builder.copies()[1], item2, 0, 9);
 }
 
 TEST_F(BlobSliceTest, SliceFileAndLastItem) {
@@ -170,13 +148,13 @@ TEST_F(BlobSliceTest, SliceFileAndLastItem) {
   data.AppendSharedBlobItem(item1);
   data.AppendSharedBlobItem(item2);
 
-  BlobSlice slice(data, 4, 2);
-  EXPECT_EQ(1u, slice.copying_memory_size.ValueOrDie());
-  EXPECT_FALSE(slice.first_source_item);
-  ExpectLastSlice(slice, item2, 1);
-  ASSERT_EQ(2u, slice.dest_items.size());
+  BlobDataBuilder builder(kId);
+  Slice(builder, &data, 4, 2);
+  ASSERT_EQ(1u, builder.copies().size());
+  ASSERT_EQ(2u, builder.items().size());
 
-  EXPECT_EQ(*CreateFileItem(4u, 1u)->item(), *slice.dest_items[0]->item());
+  EXPECT_EQ(*CreateFileItem(4u, 1u)->item(), *builder.items()[0]->item());
+  ExpectSlice(builder.items()[1], builder.copies()[0], item2, 0, 1);
 }
 
 TEST_F(BlobSliceTest, SliceAcrossLargeItem) {
@@ -192,32 +170,32 @@ TEST_F(BlobSliceTest, SliceAcrossLargeItem) {
   data.AppendSharedBlobItem(item2);
   data.AppendSharedBlobItem(item3);
 
-  BlobSlice slice(data, 2, 20);
-  EXPECT_EQ(3u + 7u, slice.copying_memory_size.ValueOrDie());
-  ExpectFirstSlice(slice, item1, 2, 3);
-  ExpectLastSlice(slice, item3, 7);
-  ASSERT_EQ(3u, slice.dest_items.size());
+  BlobDataBuilder builder(kId);
+  Slice(builder, &data, 2, 20);
+  ASSERT_EQ(2u, builder.copies().size());
+  ASSERT_EQ(3u, builder.items().size());
 
-  EXPECT_EQ(*item2, *slice.dest_items[1]);
+  ExpectSlice(builder.items()[0], builder.copies()[0], item1, 2, 3);
+  EXPECT_EQ(item2, builder.items()[1]);
+  ExpectSlice(builder.items()[2], builder.copies()[1], item3, 0, 7);
 }
 
 TEST_F(BlobSliceTest, SliceTempFileItem) {
   BlobEntry data(kType, kDisposition);
   scoped_refptr<ShareableBlobDataItem> item1 = CreateTempFileItem(1u, 10u);
   data.AppendSharedBlobItem(item1);
-  BlobSlice slice(data, 2, 5);
-  EXPECT_EQ(0u, slice.copying_memory_size.ValueOrDie());
-  EXPECT_TRUE(slice.first_source_item);
-  EXPECT_EQ(2u, slice.first_item_slice_offset);
-  ASSERT_LE(1u, slice.dest_items.size());
-  scoped_refptr<ShareableBlobDataItem> item = slice.dest_items[0];
-  EXPECT_EQ(ShareableBlobDataItem::POPULATED_WITHOUT_QUOTA, item->state());
 
-  const network::DataElement& dest_element = item->item()->data_element();
-  EXPECT_EQ(network::DataElement::TYPE_FILE, dest_element.type());
-  EXPECT_EQ(static_cast<uint64_t>(5), dest_element.length());
-  EXPECT_EQ(*item1, *slice.first_source_item);
-  ASSERT_EQ(1u, slice.dest_items.size());
+  BlobDataBuilder builder(kId);
+  Slice(builder, &data, 2, 5);
+  ASSERT_EQ(1u, builder.copies().size());
+  ASSERT_EQ(1u, builder.items().size());
+  auto dest_item = builder.items()[0];
+  EXPECT_EQ(item1, builder.copies()[0].source_item);
+  EXPECT_EQ(2u, builder.copies()[0].source_item_offset);
+  EXPECT_EQ(dest_item, builder.copies()[0].dest_item);
+  EXPECT_EQ(5u, dest_item->item()->length());
+  EXPECT_EQ(ShareableBlobDataItem::POPULATED_WITHOUT_QUOTA, dest_item->state());
+  EXPECT_EQ(BlobDataItem::Type::kFile, dest_item->item()->type());
 }
 
 }  // namespace storage

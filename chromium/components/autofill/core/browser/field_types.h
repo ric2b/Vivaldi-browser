@@ -155,9 +155,7 @@ enum ServerFieldType {
 
   PHONE_HOME_EXTENSION = 93,
 
-  // The first password field in a form that looks like account creation form
-  // for local heuristics.
-  PROBABLY_ACCOUNT_CREATION_PASSWORD = 94,
+  // PROBABLY_ACCOUNT_CREATION_PASSWORD value 94 is deprecated.
 
   // The confirmation password field in account creation or change password
   // forms.
@@ -168,9 +166,12 @@ enum ServerFieldType {
   // only, it is not a predicted nor uploaded type.
   AMBIGUOUS_TYPE = 96,
 
+  // Search term fields are detected, but not filled.
+  SEARCH_TERM = 97,
+
   // No new types can be added without a corresponding change to the Autofill
   // server.
-  MAX_VALID_FIELD_TYPE = 97,
+  MAX_VALID_FIELD_TYPE = 98,
 };
 
 // The list of all HTML autocomplete field type hints supported by Chrome.
@@ -268,6 +269,7 @@ enum FieldTypeGroup {
   PASSWORD_FIELD,
   TRANSACTION,
   USERNAME_FIELD,
+  UNFILLABLE,
 };
 
 typedef std::set<ServerFieldType> ServerFieldTypeSet;

@@ -23,12 +23,14 @@ class VIEWS_EXPORT ImageButton : public Button {
  public:
   static const char kViewClassName[];
 
+  // An enum describing the horizontal alignment of images on Buttons.
   enum HorizontalAlignment {
     ALIGN_LEFT = 0,
     ALIGN_CENTER,
     ALIGN_RIGHT
   };
 
+  // An enum describing the vertical alignment of images on Buttons.
   enum VerticalAlignment {
     ALIGN_TOP = 0,
     ALIGN_MIDDLE,
@@ -57,6 +59,10 @@ class VIEWS_EXPORT ImageButton : public Button {
   // Sets how the image is laid out within the button's bounds.
   void SetImageAlignment(HorizontalAlignment h_align,
                          VerticalAlignment v_align);
+
+  // Sets how the background is laid out within the button's bounds.
+  void SetBackgroundImageAlignment(HorizontalAlignment h_align,
+                                   VerticalAlignment v_align);
 
   // The minimum size of the contents (not including the border). The contents
   // will be at least this size, but may be larger if the image itself is
@@ -95,16 +101,24 @@ class VIEWS_EXPORT ImageButton : public Button {
   FRIEND_TEST_ALL_PREFIXES(ImageButtonTest, ImagePositionWithBorder);
   FRIEND_TEST_ALL_PREFIXES(ImageButtonTest, LeftAlignedMirrored);
   FRIEND_TEST_ALL_PREFIXES(ImageButtonTest, RightAlignedMirrored);
+  FRIEND_TEST_ALL_PREFIXES(ImageButtonTest, ImagePositionWithBackground);
 
   FRIEND_TEST_ALL_PREFIXES(ImageButtonFactoryTest, CreateVectorImageButton);
 
   // Returns the correct position of the image for painting.
-  gfx::Point ComputeImagePaintPosition(const gfx::ImageSkia& image);
+  const gfx::Point ComputeImagePaintPosition(const gfx::ImageSkia& image,
+                                             HorizontalAlignment h_alignment,
+                                             VerticalAlignment v_alignment);
 
   // Image alignment.
   HorizontalAlignment h_alignment_;
   VerticalAlignment v_alignment_;
   gfx::Size minimum_image_size_;
+
+  // Background alignment. If these are not set, the background image uses the
+  // image alignment.
+  base::Optional<HorizontalAlignment> h_background_alignment_;
+  base::Optional<VerticalAlignment> v_background_alignment_;
 
   // Whether we draw our resources horizontally flipped. This can happen in the
   // linux titlebar, where image resources were designed to be flipped so a
@@ -146,6 +160,8 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+
+  bool toggled_for_testing() const;
 
  private:
   // The parent class's images_ member is used for the current images,

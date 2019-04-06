@@ -7,7 +7,6 @@
 #include "base/auto_reset.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/loader/null_resource_controller.h"
@@ -28,6 +27,14 @@ class InterceptingResourceHandler::Controller : public ResourceController {
   void Resume() override {
     MarkAsUsed();
     intercepting_handler_->ResumeInternal();
+  }
+
+  void ResumeForRedirect(const base::Optional<net::HttpRequestHeaders>&
+                             modified_request_headers) override {
+    DCHECK(!modified_request_headers.has_value())
+        << "Redirect with modified headers was not supported yet. "
+           "crbug.com/845683";
+    Resume();
   }
 
   void Cancel() override {
@@ -64,14 +71,6 @@ InterceptingResourceHandler::InterceptingResourceHandler(
 }
 
 InterceptingResourceHandler::~InterceptingResourceHandler() {}
-
-void InterceptingResourceHandler::OnResponseStarted(
-    network::ResourceResponse* response,
-    std::unique_ptr<ResourceController> controller,
-    bool open_when_done,
-    bool ask_for_target) {
-  OnResponseStarted(response, std::move(controller));
-}
 
 void InterceptingResourceHandler::OnResponseStarted(
     network::ResourceResponse* response,

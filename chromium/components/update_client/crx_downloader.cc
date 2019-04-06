@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -22,6 +21,7 @@
 #include "components/update_client/update_client_errors.h"
 #include "components/update_client/url_fetcher_downloader.h"
 #include "components/update_client/utils.h"
+#include "net/url_request/url_request_context_getter.h"
 
 namespace update_client {
 
@@ -41,7 +41,7 @@ CrxDownloader::DownloadMetrics::DownloadMetrics()
 // which uses the BITS service.
 std::unique_ptr<CrxDownloader> CrxDownloader::Create(
     bool is_background_download,
-    net::URLRequestContextGetter* context_getter) {
+    scoped_refptr<net::URLRequestContextGetter> context_getter) {
   std::unique_ptr<CrxDownloader> url_fetcher_downloader =
       std::make_unique<UrlFetcherDownloader>(nullptr, context_getter);
 

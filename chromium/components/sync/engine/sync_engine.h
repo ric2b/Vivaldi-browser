@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/weak_handle.h"
@@ -23,7 +24,7 @@
 #include "components/sync/engine/model_type_configurer.h"
 #include "components/sync/engine/shutdown_reason.h"
 #include "components/sync/engine/sync_backend_registrar.h"
-#include "components/sync/engine/sync_manager.h"
+#include "components/sync/engine/sync_credentials.h"
 #include "components/sync/engine/sync_manager_factory.h"
 
 class GURL;
@@ -35,7 +36,6 @@ class HttpPostProviderFactory;
 class SyncEngineHost;
 class SyncManagerFactory;
 class UnrecoverableErrorHandler;
-class ObjectIdInvalidationMap;
 
 // The interface into the sync engine, which is the part of sync that performs
 // communication between model types and the sync server. In prod the engine
@@ -77,6 +77,10 @@ class SyncEngine : public ModelTypeConfigurer {
     std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state;
     std::map<ModelType, int64_t> invalidation_versions;
 
+    // Define the polling intervals. Must not be zero.
+    base::TimeDelta short_poll_interval;
+    base::TimeDelta long_poll_interval;
+
    private:
     DISALLOW_COPY_AND_ASSIGN(InitParams);
   };
@@ -94,8 +98,13 @@ class SyncEngine : public ModelTypeConfigurer {
   // Inform the engine to trigger a sync cycle for |types|.
   virtual void TriggerRefresh(const ModelTypeSet& types) = 0;
 
-  // Updates the engine's SyncCredentials.
+  // Updates the engine's SyncCredentials. The credentials must be fully
+  // specified (account ID, sync token and scope). To invalidate the credentials
+  // use InvalisateCredentials() instead.
   virtual void UpdateCredentials(const SyncCredentials& credentials) = 0;
+
+  // Invalidates the SyncCredentials.
+  virtual void InvalidateCredentials() = 0;
 
   // Switches sync engine into configuration mode. In this mode only initial
   // data for newly enabled types is downloaded from server. No local changes
@@ -149,7 +158,8 @@ class SyncEngine : public ModelTypeConfigurer {
   // Determines if the underlying sync engine has made any local changes to
   // items that have not yet been synced with the server.
   // ONLY CALL THIS IF OnInitializationComplete was called!
-  virtual bool HasUnsyncedItems() const = 0;
+  virtual void HasUnsyncedItemsForTest(
+      base::OnceCallback<void(bool)> cb) const = 0;
 
   // True if the cryptographer has any keys available to attempt decryption.
   // Could mean we've downloaded and loaded Nigori objects, or we bootstrapped
@@ -186,10 +196,6 @@ class SyncEngine : public ModelTypeConfigurer {
   virtual void OnCookieJarChanged(bool account_mismatch,
                                   bool empty_jar,
                                   const base::Closure& callback) = 0;
-
-  // Forwards an invalidation to the sync manager.
-  virtual void DoOnIncomingInvalidation(
-    const syncer::ObjectIdInvalidationMap& invalidation_map) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SyncEngine);

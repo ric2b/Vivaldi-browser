@@ -19,18 +19,44 @@ running background fetches.
 key: "bgfetch_active_registration_unique_id_<developer_id>"
 value: "<unique_id>"
 ```
+
 ```
 key: "bgfetch_registration_<unique_id>"
-value: "<serialized content::proto::BackgroundFetchRegistration>"
+value: "<serialized content::proto::BackgroundFetchMetadata>"
 ```
+
 ```
-key: "bgfetch_request_<unique_id>_<request_index>"
-value: "<TODO: FetchAPIRequest serialized as a string>"
+key: "bgfetch_title_<unique_id>"
+value: "<ui_title>"
 ```
+
 ```
-key: "bgfetch_pending_request_<creation_time>_<unique_id>_<request_index>"
-value: ""
+key: "bgfetch_pending_request_<unique_id>_<request_index>"
+value: "<serialized content::proto::BackgroundFetchPendingRequest>"
 ```
+
+```
+key: "bgfetch_active_request_<unique_id>_<request_index>"
+value: "<serialized content::proto::BackgroundFetchActiveRequest>"
+```
+
+```
+key: "bgfetch_completed_request_<unique_id>_<request_index>"
+value: "<serialized content::proto::BackgroundFetchCompletedRequest>"
+```
+
+## Cache Storage UserData schema
+
+The downloaded responses of every fetch will be stored in their own private cache.
+
+### Cache identifiers
+* `origin`: `<origin>`
+* `owner`: `CacheStorageOwner::kBackgroundFetch`
+* `cache_name`: `<unique_id>`
+
+The cache will contain all the Request/Response key/value pairs of the fetch.
+Note that the Request value stored isn't comprehensive, and only the url value is
+used to as a key to find the matching Response.
 
 ### Expansions
 * `<unique_id>` is a GUID (v4) that identifies a background fetch registration.
@@ -42,9 +68,6 @@ introduce ambiguity.
 * `<request_index>` is an `int` containing the index of a request within a
 multi-part fetch. These must be padded with zeros to ensure that the ordering
 is maintain when reading back from the database, e.g. `0000000000`.
-* `<creation_time>` is the registration creation time expressed as the number
-of microseconds since the unix epoch (internally stored as an `int64_t`).
-Without padding with zeros, this may introduce an ordering inversion in
-November 2286 and again in the year 5138, but the impact would only be on the
-relative ordering with which two different fetches were scheduled.
+* `<ui_title>` is the notification title provided by the developer. It can also
+be updated by calling `BackgroundFetchUpdateEvent.updateUI`.
 

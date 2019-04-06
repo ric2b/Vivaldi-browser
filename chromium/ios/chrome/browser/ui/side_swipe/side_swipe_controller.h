@@ -15,6 +15,7 @@
 @class CardSideSwipeView;
 @class SideSwipeGestureRecognizer;
 @protocol SideSwipeToolbarInteracting;
+@protocol SideSwipeToolbarSnapshotProviding;
 @protocol TabStripHighlighting;
 
 // Notification sent when the user starts a side swipe (on tablet).
@@ -60,6 +61,10 @@ extern NSString* const kSideSwipeDidStopNotification;
 // Returns |YES| if side swipe should be blocked from initiating, such as when
 // voice search is up, or if the tools menu is enabled.
 - (BOOL)preventSideSwipe;
+// Returns whether a swipe on the toolbar can start.
+- (BOOL)canBeginToolbarSwipe;
+// Returns the top toolbar's view.
+- (UIView*)topToolbarView;
 @end
 
 // Controls how an edge gesture is processed, either as tab change or a page
@@ -74,6 +79,14 @@ extern NSString* const kSideSwipeDidStopNotification;
 @property(nonatomic, weak) id<SideSwipeControllerDelegate> swipeDelegate;
 @property(nonatomic, weak) id<SideSwipeToolbarInteracting>
     toolbarInteractionHandler;
+// Handler for the interaction with the primary toolbar, including providing
+// snapshot.
+@property(nonatomic, weak) id<SideSwipeToolbarSnapshotProviding>
+    primaryToolbarSnapshotProvider;
+// Provider for the bottom toolbar's snapshot.
+@property(nonatomic, weak) id<SideSwipeToolbarSnapshotProviding>
+    secondaryToolbarSnapshotProvider;
+
 @property(nonatomic, weak) id<SnapshotGeneratorDelegate> snapshotDelegate;
 @property(nonatomic, weak) id<TabStripHighlighting> tabStripDelegate;
 

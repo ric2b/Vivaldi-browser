@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/syslog_logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -32,6 +33,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/core/common/schema.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_service.h"
 
@@ -113,7 +115,52 @@ const char* const kKnownSettings[] = {
     kUnaffiliatedArcAllowed,
     kUpdateDisabled,
     kVariationsRestrictParameter,
+    kVirtualMachinesAllowed,
+    kSamlLoginAuthenticationType,
+    kDeviceAutoUpdateTimeRestrictions,
 };
+
+// Decodes a JSON string to a base::Value, and drops unknown properties
+// according to a policy schema. |policy_name| is the name of a policy schema
+// defined in policy_templates.json. Returns null in case the input is not a
+// valid JSON string.
+std::unique_ptr<base::Value> DecodeJsonStringAndDropUnknownBySchema(
+    const std::string& json_string,
+    const std::string& policy_name) {
+  std::string error;
+  std::unique_ptr<base::Value> root = base::JSONReader::ReadAndReturnError(
+      json_string, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
+
+  if (!root) {
+    LOG(WARNING) << "Invalid JSON string: " << error << ", ignoring.";
+    return nullptr;
+  }
+
+  const policy::Schema& schema = g_browser_process->browser_policy_connector()
+                                     ->GetChromeSchema()
+                                     .GetKnownProperty(policy_name);
+
+  if (!schema.valid()) {
+    LOG(WARNING) << "Unknown or invalid policy schema for " << policy_name
+                 << ".";
+    return nullptr;
+  }
+
+  std::string error_path;
+  bool changed = false;
+  if (!schema.Normalize(root.get(), policy::SCHEMA_ALLOW_UNKNOWN, &error_path,
+                        &error, &changed)) {
+    LOG(WARNING) << "Invalid policy value for " << policy_name << ": " << error
+                 << " at " << error_path << ".";
+    return nullptr;
+  }
+  if (changed) {
+    LOG(WARNING) << "Some properties in " << policy_name
+                 << " were dropped: " << error << " at " << error_path << ".";
+  }
+
+  return root;
+}
 
 void DecodeLoginPolicies(
     const em::ChromeDeviceSettingsProto& policy,
@@ -349,6 +396,14 @@ void DecodeLoginPolicies(
     new_values_cache->SetValue(kDeviceLoginScreenInputMethods,
                                std::move(input_methods));
   }
+
+  if (policy.has_saml_login_authentication_type() &&
+      policy.saml_login_authentication_type()
+          .has_saml_login_authentication_type()) {
+    new_values_cache->SetInteger(kSamlLoginAuthenticationType,
+                                 policy.saml_login_authentication_type()
+                                     .saml_login_authentication_type());
+  }
 }
 
 void DecodeNetworkPolicies(
@@ -388,6 +443,17 @@ void DecodeAutoUpdatePolicies(
     if (!list->empty()) {
       new_values_cache->SetValue(kAllowedConnectionTypesForUpdate,
                                  std::move(list));
+    }
+
+    if (au_settings_proto.has_disallowed_time_intervals()) {
+      std::unique_ptr<base::Value> decoded_intervals =
+          DecodeJsonStringAndDropUnknownBySchema(
+              au_settings_proto.disallowed_time_intervals(),
+              "DeviceAutoUpdateTimeRestrictions");
+      if (decoded_intervals) {
+        new_values_cache->SetValue(kDeviceAutoUpdateTimeRestrictions,
+                                   std::move(decoded_intervals));
+      }
     }
   }
 }
@@ -515,7 +581,8 @@ void DecodeGenericPolicies(
     }
   }
 
-  if (policy.has_allow_redeem_offers()) {
+  if (policy.has_allow_redeem_offers() &&
+      policy.allow_redeem_offers().has_allow_redeem_offers()) {
     new_values_cache->SetBoolean(
         kAllowRedeemChromeOsRegistrationOffers,
         policy.allow_redeem_offers().allow_redeem_offers());
@@ -575,10 +642,16 @@ void DecodeGenericPolicies(
 
   if (policy.has_device_wallpaper_image() &&
       policy.device_wallpaper_image().has_device_wallpaper_image()) {
+    const std::string& wallpaper_policy(
+        policy.device_wallpaper_image().device_wallpaper_image());
     std::unique_ptr<base::DictionaryValue> dict_val =
-        base::DictionaryValue::From(base::JSONReader::Read(
-            policy.device_wallpaper_image().device_wallpaper_image()));
-    new_values_cache->SetValue(kDeviceWallpaperImage, std::move(dict_val));
+        base::DictionaryValue::From(base::JSONReader::Read(wallpaper_policy));
+    if (dict_val) {
+      new_values_cache->SetValue(kDeviceWallpaperImage, std::move(dict_val));
+    } else {
+      SYSLOG(ERROR) << "Value of wallpaper policy has invalid format: "
+                    << wallpaper_policy;
+    }
   }
 
   if (policy.has_device_off_hours()) {
@@ -626,6 +699,20 @@ void DecodeGenericPolicies(
         !container.device_hostname_template().empty()) {
       new_values_cache->SetString(kDeviceHostnameTemplate,
                                   container.device_hostname_template());
+    }
+  }
+
+  if (policy.virtual_machines_allowed().has_virtual_machines_allowed()) {
+    new_values_cache->SetBoolean(
+        kVirtualMachinesAllowed,
+        policy.virtual_machines_allowed().virtual_machines_allowed());
+  } else {
+    // If the policy is missing, default to false on enterprise-enrolled
+    // devices.
+    policy::BrowserPolicyConnectorChromeOS* connector =
+        g_browser_process->platform_part()->browser_policy_connector_chromeos();
+    if (connector->IsEnterpriseManaged()) {
+      new_values_cache->SetBoolean(kVirtualMachinesAllowed, false);
     }
   }
 }
@@ -958,7 +1045,7 @@ bool DeviceSettingsProvider::UpdateFromService() {
     case DeviceSettingsService::STORE_NO_POLICY:
       if (MitigateMissingPolicy())
         break;
-      // fall through.
+      FALLTHROUGH;
     case DeviceSettingsService::STORE_KEY_UNAVAILABLE:
       VLOG(1) << "No policies present yet, will use the temp storage.";
       trusted_status_ = PERMANENTLY_UNTRUSTED;

@@ -4,7 +4,6 @@
 
 #include "chrome/browser/chromeos/certificate_provider/pin_dialog_manager.h"
 
-#include "ash/shell.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -103,10 +102,9 @@ PinDialogManager::RequestPinResponse PinDialogManager::ShowPinDialog(
                                           attempts_left, callback, this);
 
   gfx::NativeWindow parent = GetBrowserParentWindow();
-  gfx::NativeWindow context =
-      parent ? nullptr : ash::Shell::GetPrimaryRootWindow();
-  active_window_ = views::DialogDelegate::CreateDialogWidget(active_pin_dialog_,
-                                                             context, parent);
+  // If there is no parent, falls back to the root window for new windows.
+  active_window_ = views::DialogDelegate::CreateDialogWidget(
+      active_pin_dialog_, /*context=*/ nullptr, parent);
   active_window_->Show();
 
   return SUCCESS;

@@ -11,7 +11,7 @@
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/test/mock_quota_manager.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
 using storage::QuotaManagerProxy;
@@ -28,27 +28,26 @@ class MockQuotaManagerProxy : public QuotaManagerProxy {
 
   void RegisterClient(QuotaClient* client) override;
 
-  void SimulateQuotaManagerDestroyed();
+  virtual void SimulateQuotaManagerDestroyed();
 
   // We don't mock them.
-  void NotifyOriginInUse(const GURL& origin) override {}
-  void NotifyOriginNoLongerInUse(const GURL& origin) override {}
+  void NotifyOriginInUse(const url::Origin& origin) override {}
+  void NotifyOriginNoLongerInUse(const url::Origin& origin) override {}
   void SetUsageCacheEnabled(QuotaClient::ID client_id,
-                            const GURL& origin,
+                            const url::Origin& origin,
                             blink::mojom::StorageType type,
                             bool enabled) override {}
-  void GetUsageAndQuota(
-      base::SequencedTaskRunner* original_task_runner,
-      const GURL& origin,
-      blink::mojom::StorageType type,
-      const QuotaManager::UsageAndQuotaCallback& callback) override;
+  void GetUsageAndQuota(base::SequencedTaskRunner* original_task_runner,
+                        const url::Origin& origin,
+                        blink::mojom::StorageType type,
+                        QuotaManager::UsageAndQuotaCallback callback) override;
 
   // Validates the |client_id| and updates the internal access count
   // which can be accessed via notify_storage_accessed_count().
   // The also records the |origin| and |type| in last_notified_origin_ and
   // last_notified_type_.
   void NotifyStorageAccessed(QuotaClient::ID client_id,
-                             const GURL& origin,
+                             const url::Origin& origin,
                              blink::mojom::StorageType type) override;
 
   // Records the |origin|, |type| and |delta| as last_notified_origin_,
@@ -56,13 +55,13 @@ class MockQuotaManagerProxy : public QuotaManagerProxy {
   // If non-null MockQuotaManager is given to the constructor this also
   // updates the manager's internal usage information.
   void NotifyStorageModified(QuotaClient::ID client_id,
-                             const GURL& origin,
+                             const url::Origin& origin,
                              blink::mojom::StorageType type,
                              int64_t delta) override;
 
   int notify_storage_accessed_count() const { return storage_accessed_count_; }
   int notify_storage_modified_count() const { return storage_modified_count_; }
-  GURL last_notified_origin() const { return last_notified_origin_; }
+  url::Origin last_notified_origin() const { return last_notified_origin_; }
   blink::mojom::StorageType last_notified_type() const {
     return last_notified_type_;
   }
@@ -78,7 +77,7 @@ class MockQuotaManagerProxy : public QuotaManagerProxy {
 
   int storage_accessed_count_;
   int storage_modified_count_;
-  GURL last_notified_origin_;
+  url::Origin last_notified_origin_;
   blink::mojom::StorageType last_notified_type_;
   int64_t last_notified_delta_;
 

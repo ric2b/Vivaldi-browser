@@ -186,7 +186,6 @@
       <part file="autofill_strings.grdp" />
       <part file="bookmark_bar_strings.grdp" />
       <part file="bookmark_component_strings.grdp" />
-      <part file="browser_sync_strings.grdp" />
       <part file="browsing_data_strings.grdp" />
       <part file="components_settings_strings.grdp" />
       <part file="crash_strings.grdp" />
@@ -197,14 +196,16 @@
       <part file="history_strings.grdp" />
       <part file="login_dialog_strings.grdp" />
       <part file="new_or_sad_tab_strings.grdp" />
+      <part file="nux_google_apps_strings.grdp" />
       <part file="ntp_snippets_strings.grdp" />
       <part file="omnibox_strings.grdp" />
       <part file="page_info_strings.grdp" />
       <part file="password_manager_strings.grdp" />
       <part file="payments_strings.grdp" />
       <part file="pdf_strings.grdp" />
-      <part file="physical_web_ui_strings.grdp" />
       <part file="policy_strings.grdp" />
+      <part file="printing_component_strings.grdp" />
+      <part file="reset_password_strings.grdp" />
       <part file="safe_browsing_strings.grdp" />
       <part file="security_interstitials_strings.grdp" />
       <part file="security_state_strings.grdp" />
@@ -237,9 +238,16 @@
       <message name="IDS_SAVE" desc="Used on a button to save information you are editing.">
         Save
       </message>
-      <message name="IDS_NO_THANKS" desc="Used to dismiss various prompts.">
-        No thanks
-      </message>
+      <if expr="not use_titlecase">
+        <message name="IDS_NO_THANKS" desc="Used to dismiss various prompts.">
+          No thanks
+        </message>
+      </if>
+      <if expr="use_titlecase">
+        <message name="IDS_NO_THANKS" desc="In Title Case: Used to dismiss various prompts.">
+          No Thanks
+        </message>
+      </if>
       <if expr="not use_titlecase">
         <message name="IDS_NOT_NOW" desc="Used on a button that avoids taking a suggested action.  The action will likely be suggested again or automatically taken later.">
           Not now
@@ -296,8 +304,14 @@
       <message name="IDS_ACCNAME_DONE" desc="The accessible name for the DONE button.">
         Done
       </message>
+      <message name="IDS_ACCNAME_SAVE" desc="The accessible name for the SAVE button.">
+        Save
+      </message>
       <message name="IDS_ACCNAME_CLOSE" desc="The accessible name for the Close button.">
         Close
+      </message>
+      <message name="IDS_ACCNAME_OPEN" desc="The accessible name for the Open button.">
+        Open
       </message>
       <message name="IDS_ACCNAME_PREVIOUS" desc="The accessible name for the previous button.">
         Previous

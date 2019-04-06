@@ -10,6 +10,10 @@ bool NavigatorDelegate::CanOverscrollContent() const {
   return false;
 }
 
+bool NavigatorDelegate::ShouldOverrideUserAgentInNewTabs() {
+  return false;
+}
+
 bool NavigatorDelegate::ShouldTransferNavigation(
     bool is_main_frame_navigation) {
   return true;
@@ -29,8 +33,5 @@ std::unique_ptr<NavigationUIData> NavigatorDelegate::GetNavigationUIData(
     NavigationHandle* navigation_handle) {
   return nullptr;
 }
-
-void NavigatorDelegate::AdjustPreviewsStateForNavigation(
-    PreviewsState* previews_state) {}
 
 }  // namespace content

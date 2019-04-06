@@ -32,15 +32,46 @@ void delete_seat(wl_seat* seat) {
     wl_seat_destroy(seat);
 }
 
+void delete_touch(wl_touch* touch) {
+  if (wl_touch_get_version(touch) >= WL_TOUCH_RELEASE_SINCE_VERSION)
+    wl_touch_release(touch);
+  else
+    wl_touch_destroy(touch);
+}
+
 }  // namespace
 
 const wl_interface* ObjectTraits<wl_buffer>::interface = &wl_buffer_interface;
 void (*ObjectTraits<wl_buffer>::deleter)(wl_buffer*) = &wl_buffer_destroy;
 
+const wl_interface* ObjectTraits<wl_callback>::interface =
+    &wl_callback_interface;
+void (*ObjectTraits<wl_callback>::deleter)(wl_callback*) = &wl_callback_destroy;
+
 const wl_interface* ObjectTraits<wl_compositor>::interface =
     &wl_compositor_interface;
 void (*ObjectTraits<wl_compositor>::deleter)(wl_compositor*) =
     &wl_compositor_destroy;
+
+const wl_interface* ObjectTraits<wl_data_device_manager>::interface =
+    &wl_data_device_manager_interface;
+void (*ObjectTraits<wl_data_device_manager>::deleter)(wl_data_device_manager*) =
+    &wl_data_device_manager_destroy;
+
+const wl_interface* ObjectTraits<wl_data_device>::interface =
+    &wl_data_device_interface;
+void (*ObjectTraits<wl_data_device>::deleter)(wl_data_device*) =
+    &wl_data_device_destroy;
+
+const wl_interface* ObjectTraits<wl_data_offer>::interface =
+    &wl_data_offer_interface;
+void (*ObjectTraits<wl_data_offer>::deleter)(wl_data_offer*) =
+    &wl_data_offer_destroy;
+
+const wl_interface* ObjectTraits<wl_data_source>::interface =
+    &wl_data_source_interface;
+void (*ObjectTraits<wl_data_source>::deleter)(wl_data_source*) =
+    &wl_data_source_destroy;
 
 const wl_interface* ObjectTraits<wl_display>::interface = &wl_display_interface;
 void (*ObjectTraits<wl_display>::deleter)(wl_display*) = &wl_display_disconnect;
@@ -72,12 +103,28 @@ void (*ObjectTraits<wl_shm_pool>::deleter)(wl_shm_pool*) = &wl_shm_pool_destroy;
 const wl_interface* ObjectTraits<wl_surface>::interface = &wl_surface_interface;
 void (*ObjectTraits<wl_surface>::deleter)(wl_surface*) = &wl_surface_destroy;
 
+const wl_interface* ObjectTraits<wl_subcompositor>::interface =
+    &wl_subcompositor_interface;
+void (*ObjectTraits<wl_subcompositor>::deleter)(wl_subcompositor*) =
+    &wl_subcompositor_destroy;
+
+const wl_interface* ObjectTraits<wl_subsurface>::interface =
+    &wl_subsurface_interface;
+void (*ObjectTraits<wl_subsurface>::deleter)(wl_subsurface*) =
+    &wl_subsurface_destroy;
+
+const wl_interface* ObjectTraits<wl_touch>::interface = &wl_touch_interface;
+void (*ObjectTraits<wl_touch>::deleter)(wl_touch*) = &delete_touch;
+
 const wl_interface* ObjectTraits<xdg_shell>::interface = &xdg_shell_interface;
 void (*ObjectTraits<xdg_shell>::deleter)(xdg_shell*) = &xdg_shell_destroy;
 
 const wl_interface* ObjectTraits<xdg_surface>::interface =
     &xdg_surface_interface;
 void (*ObjectTraits<xdg_surface>::deleter)(xdg_surface*) = &xdg_surface_destroy;
+
+const wl_interface* ObjectTraits<xdg_popup>::interface = &xdg_popup_interface;
+void (*ObjectTraits<xdg_popup>::deleter)(xdg_popup*) = &xdg_popup_destroy;
 
 const wl_interface* ObjectTraits<zxdg_shell_v6>::interface =
     &zxdg_shell_v6_interface;
@@ -93,5 +140,15 @@ const wl_interface* ObjectTraits<zxdg_toplevel_v6>::interface =
     &zxdg_toplevel_v6_interface;
 void (*ObjectTraits<zxdg_toplevel_v6>::deleter)(zxdg_toplevel_v6*) =
     &zxdg_toplevel_v6_destroy;
+
+const wl_interface* ObjectTraits<zxdg_popup_v6>::interface =
+    &zxdg_popup_v6_interface;
+void (*ObjectTraits<zxdg_popup_v6>::deleter)(zxdg_popup_v6*) =
+    &zxdg_popup_v6_destroy;
+
+const wl_interface* ObjectTraits<zxdg_positioner_v6>::interface =
+    &zxdg_positioner_v6_interface;
+void (*ObjectTraits<zxdg_positioner_v6>::deleter)(zxdg_positioner_v6*) =
+    &zxdg_positioner_v6_destroy;
 
 }  // namespace wl

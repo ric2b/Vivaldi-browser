@@ -6,19 +6,14 @@ import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/sysroot.gni")
 import("//chrome/common/features.gni")
-import("//extensions/features/features.gni")
-import("//printing/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
+import("//printing/buildflags/buildflags.gni")
 import("//services/service_manager/public/service_manifest.gni")
 
 static_library("utility") {
   sources = [
     "chrome_content_utility_client.cc",
     "chrome_content_utility_client.h",
-    "cloud_print/bitmap_image.cc",
-    "cloud_print/bitmap_image.h",
-    "cloud_print/pwg_encoder.cc",
-    "cloud_print/pwg_encoder.h",
-    "utility_message_handler.h",
   ]
 
   defines = []
@@ -34,21 +29,22 @@ static_library("utility") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
-    "//chrome/common/profiling",
-    "//chrome/profiling",
-    "//components/patch_service:lib",
     "//components/search_engines",
+    "//components/services/heap_profiling",
+    "//components/services/heap_profiling/public/cpp",
+    "//components/services/patch:lib",
+    "//components/services/unzip:lib",
     "//components/strings",
     "//components/url_formatter",
     "//content/public/child",
     "//content/public/common",
-    "//content/public/network",
     "//content/public/utility",
-    "//extensions/features",
+    "//extensions/buildflags",
     "//ipc",
     "//media",
     "//net:net_with_v8",
-    "//printing/features",
+    "//printing/buildflags",
+    "//services/network:network_service",
     "//services/service_manager/public/cpp",
     "//skia",
     "//sql",
@@ -103,8 +99,6 @@ static_library("utility") {
 
   if (enable_extensions) {
     sources += [
-      "extensions/extensions_handler.cc",
-      "extensions/extensions_handler.h",
       "image_writer/disk_unmounter_mac.cc",
       "image_writer/disk_unmounter_mac.h",
       "image_writer/error_messages.cc",
@@ -118,9 +112,7 @@ static_library("utility") {
     ]
     deps += [
       "//chrome/common/extensions/api",
-      "//chrome/services/media_gallery_util:lib",
       "//chrome/services/removable_storage_writer:lib",
-      "//extensions/utility",
     ]
 
     public_deps += [ "//chrome/common/extensions/api" ]
@@ -153,13 +145,14 @@ static_library("utility") {
     ]
     deps += [
       "//ash",
-      "//ash/autoclick/mus:lib",
-      "//ash/touch_hud/mus:lib",
+      "//ash/components/autoclick:lib",
+      "//ash/components/quick_launch:lib",
+      "//ash/components/quick_launch/public/mojom",
+      "//ash/components/shortcut_viewer:lib",
+      "//ash/components/shortcut_viewer/public/mojom",
+      "//ash/components/tap_visualizer:lib",
+      "//ash/components/tap_visualizer/public/mojom",
       "//chrome/services/file_util:lib",
-      "//components/font_service:lib",
-      "//components/font_service/public/interfaces",
-      "//mash/quick_launch:lib",
-      "//mash/quick_launch/public/interfaces",
       "//services/ui:lib",
       "//services/ui/public/interfaces",
     ]
@@ -176,22 +169,29 @@ static_library("utility") {
     ]
   }
 
+  if (enable_basic_printing) {
+    deps += [
+      "//components/services/pdf_compositor/public/cpp:factory",
+      "//components/services/pdf_compositor/public/interfaces",
+    ]
+
+    if (is_chromeos) {
+      deps += [
+        "//chrome/services/cups_ipp_validator:lib",
+        "//chrome/services/cups_ipp_validator/public/mojom:mojom",
+      ]
+    }
+  }
+
   if (enable_print_preview) {
     deps += [ "//chrome/services/printing:lib" ]
-  }
 
-  if (enable_print_preview || (enable_basic_printing && is_win)) {
-    sources += [
-      "printing_handler.cc",
-      "printing_handler.h",
-    ]
-  }
-
-  if (enable_basic_printing || enable_print_preview) {
-    deps += [
-      "//components/printing/service/public/cpp:factory",
-      "//components/printing/service/public/interfaces",
-    ]
+    if (is_win) {
+      sources += [
+        "printing_handler.cc",
+        "printing_handler.h",
+      ]
+    }
   }
 
   if (safe_browsing_mode == 1) {
@@ -199,6 +199,17 @@ static_library("utility") {
     if (is_mac) {
       deps += [ "//chrome/utility/safe_browsing/mac" ]
     }
+  }
+
+  if (is_android || enable_extensions) {
+    deps += [ "//chrome/services/media_gallery_util:lib" ]
+  }
+
+  if (enable_simple_browser_service) {
+    deps += [
+      "//services/content/simple_browser",
+      "//services/content/simple_browser/public/mojom",
+    ]
   }
 }
 

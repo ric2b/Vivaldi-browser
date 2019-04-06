@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.tab.Tab;
@@ -75,11 +74,6 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
-    protected ToolbarSwipeHandler createToolbarSwipeHandler(LayoutProvider provider) {
-        return new TabletToolbarSwipeHandler(provider);
-    }
-
-    @Override
     public void tabSelected(int tabId, int prevId, boolean incognito) {
         if (getActiveLayout() == mStaticLayout || getActiveLayout() == mOverviewListLayout) {
             super.tabSelected(tabId, prevId, incognito);
@@ -89,16 +83,14 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             // internal tab to show and not start hiding until we're done calling finalizeShowing().
             // This prevents a flicker because we properly build and set the internal
             // {@link LayoutTab} before actually showing the {@link TabView}.
-            if (getActiveLayout() != null) {
-                getActiveLayout().onTabSelected(time(), tabId, prevId, incognito);
-            }
+            super.tabSelected(tabId, prevId, incognito);
             if (getActiveLayout() != null) getActiveLayout().onTabSelecting(time(), tabId);
         }
     }
 
     @Override
-    protected void tabCreated(int id, int sourceId, TabLaunchType launchType, boolean incognito,
-            boolean willBeSelected, float originX, float originY) {
+    protected void tabCreated(int id, int sourceId, @TabLaunchType int launchType,
+            boolean incognito, boolean willBeSelected, float originX, float originY) {
         if (getFullscreenManager() != null) {
             getFullscreenManager().getBrowserVisibilityDelegate().showControlsTransient();
         }
@@ -158,7 +150,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     protected LayoutManagerTabModelObserver createTabModelObserver() {
         return new LayoutManagerTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, TabLaunchType launchType) {
+            public void didAddTab(Tab tab, @TabLaunchType int launchType) {
                 super.didAddTab(tab, launchType);
                 updateTitle(getTabById(tab.getId()));
             }
@@ -176,22 +168,5 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             getActiveLayout().tabTitleChanged(tab.getId(), title);
         }
         requestUpdate();
-    }
-
-    private class TabletToolbarSwipeHandler extends ToolbarSwipeHandler {
-        public TabletToolbarSwipeHandler(LayoutProvider provider) {
-            super(provider);
-        }
-
-        @Override
-        public boolean isSwipeEnabled(ScrollDirection direction) {
-            if ((direction == ScrollDirection.LEFT || direction == ScrollDirection.RIGHT)
-                    && (getTabModelSelector() == null
-                               || getTabModelSelector().getCurrentModel().getCount() <= 1)) {
-                return false;
-            }
-
-            return super.isSwipeEnabled(direction);
-        }
     }
 }

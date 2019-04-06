@@ -12,7 +12,7 @@
 <dom-module id="easy-unlock-turn-off-dialog">
   <template>
     <style include="settings-shared"></style>
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}">
+    <cr-dialog id="dialog" close-text="$i18n{close}">
       <div slot="title">[[getTitleText_(status_)]]</div>
       <div slot="body">
         [[getDescriptionText_(status_)]]
@@ -21,16 +21,17 @@
           hidden="[[isButtonBarHidden_(status_)]]">
         <paper-spinner-lite active="[[isSpinnerActive_(status_)]]">
         </paper-spinner-lite>
-        <paper-button class="cancel-button" on-tap="onCancelTap_"
+        <paper-button class="cancel-button" on-click="onCancelTap_"
             hidden="[[isCancelButtonHidden_(status_)]]">
           $i18n{cancel}
         </paper-button>
-        <paper-button id="turnOff" class="action-button" on-tap="onTurnOffTap_"
+        <paper-button id="turnOff" class="action-button"
+            on-click="onTurnOffTap_"
             disabled="[[!isTurnOffButtonEnabled_(status_)]]">
           [[getTurnOffButtonText_(status_)]]
         </paper-button>
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
   <script src="easy_unlock_turn_off_dialog.js"></script>
 </dom-module>

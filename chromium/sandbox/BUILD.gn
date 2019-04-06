@@ -14,6 +14,12 @@ source_set("sandbox_export") {
   ]
 }
 
+source_set("common") {
+  sources = [
+    "constants.h",
+  ]
+}
+
 # Meta-target that forwards to the proper platform one.
 group("sandbox") {
   if (is_win) {
@@ -33,13 +39,16 @@ group("sandbox") {
   }
 }
 
-buildflag_header("sandbox_features") {
-  header = "sandbox_features.h"
+buildflag_header("sandbox_buildflags") {
+  header = "sandbox_buildflags.h"
   flags = [ "USE_SECCOMP_BPF=$use_seccomp_bpf" ]
 }
 
 # This target must be here and not in win/ otherwise it would require a full
 # parse of win/BUILD.gn which fails on non-Windows platforms.
+#
+# Although the code is Windows-based, the fuzzer is designed to work on Linux,
+# so do not disable this fuzzer on non-Windows platforms.
 fuzzer_test("sandbox_ipc_fuzzer") {
   set_sources_assignment_filter([])
   sources = [

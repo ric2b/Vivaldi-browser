@@ -5,15 +5,17 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
 import("//build/config/features.gni")
 import("//build/config/linux/gtk/gtk.gni")
-import("//device/vr/features/features.gni")
-import("//extensions/features/features.gni")
+import("//device/vr/buildflags/buildflags.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//media/media_options.gni")
 import("//net/features.gni")
-import("//ppapi/features/features.gni")
-import("//printing/features/features.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//printing/buildflags/buildflags.gni")
 import("//ui/base/ui_features.gni")
+import("//ui/webui/webui_features.gni")
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
@@ -52,6 +54,11 @@ declare_args() {
   # Android stores them separately on the Java side.
   enable_session_service = !is_android && !is_chromecast
 
+  # Enables embedding of the simple_browser service, a lightweight browser
+  # application which consumes the Content Service. Useful primarily for
+  # developer testing.
+  enable_simple_browser_service = is_chromeos && (is_debug || dcheck_always_on)
+
   enable_supervised_users = !is_chromecast
 
   # Indicates if Wayland display server support is enabled.
@@ -61,21 +68,16 @@ declare_args() {
   pgo_build = chrome_pgo_phase > 0
 
   # optimize_webui was moved to ui/base/ui_features.gni
-
-  # Enable donwloadable language PAK files to reduce the size of the main
-  # Chrome APK. TODO(digit): Restrict this to official builds.
-  enable_downloadable_strings = is_android
 }
 
 # Use brlapi from brltty for braille display support.
 use_brlapi = is_chromeos
 
-_enable_printing = enable_basic_printing || enable_print_preview
-
 # Every grit target in //chrome should apply these defines so that the
 # proper build flags can be set.
 chrome_grit_defines = [
   "enable_app_list=$enable_app_list",
+  "enable_arcore=$enable_arcore",
   "enable_background_mode=$enable_background_mode",
   "enable_background_contents=$enable_background_contents",
   "enable_extensions=$enable_extensions",
@@ -83,9 +85,8 @@ chrome_grit_defines = [
   "enable_hangout_services_extension=$enable_hangout_services_extension",
   "enable_plugins=$enable_plugins",
   "enable_print_preview=$enable_print_preview",
-  "enable_printing=$_enable_printing",
+  "enable_printing=$enable_basic_printing",
   "enable_service_discovery=$enable_service_discovery",
-  "enable_webrtc=$enable_webrtc",
   "enable_vr=$enable_vr",
   "mac_views_browser=$mac_views_browser",
   "safe_browsing_mode=$safe_browsing_mode",

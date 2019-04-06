@@ -52,7 +52,7 @@ class ModelTypeRegistry : public ModelTypeConnector,
   // Expects that the proxy's ModelType is not currently enabled.
   void ConnectNonBlockingType(
       ModelType type,
-      std::unique_ptr<ActivationContext> activation_context) override;
+      std::unique_ptr<DataTypeActivationResponse> activation_response) override;
 
   // Disables the syncing of an off-thread type.
   //
@@ -94,6 +94,9 @@ class ModelTypeRegistry : public ModelTypeConnector,
   // Returns the set of non-blocking types with initial sync done.
   ModelTypeSet GetInitialSyncDoneNonBlockingTypes() const;
 
+  // Returns the update handler for |type|.
+  const UpdateHandler* GetUpdateHandler(ModelType type) const;
+
   // Simple getters.
   UpdateHandlerMap* update_handler_map();
   CommitContributorMap* commit_contributor_map();
@@ -104,6 +107,8 @@ class ModelTypeRegistry : public ModelTypeConnector,
   bool HasDirectoryTypeDebugInfoObserver(
       const TypeDebugInfoObserver* observer) const;
   void RequestEmitDebugInfo();
+
+  bool HasUnsyncedItems() const;
 
   base::WeakPtr<ModelTypeConnector> AsWeakPtr();
 

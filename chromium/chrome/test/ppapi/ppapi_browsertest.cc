@@ -21,8 +21,9 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/nacl/nacl_browsertest_util.h"
 #include "chrome/test/ppapi/ppapi_test.h"
+#include "chrome/test/ppapi/ppapi_test_select_file_dialog_factory.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
@@ -32,7 +33,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "ppapi/shared_impl/test_utils.h"
-#include "rlz/features/features.h"
+#include "rlz/buildflags/buildflags.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
@@ -419,6 +420,7 @@ TEST_PPAPI_NACL(HostResolverPrivate_ResolveIPv4)
   RunTestViaHTTP( \
       LIST_TEST(URLLoader_UntrustedSameOriginRestriction) \
       LIST_TEST(URLLoader_UntrustedCrossOriginRequest) \
+      LIST_TEST(URLLoader_UntrustedCorbEligibleRequest) \
       LIST_TEST(URLLoader_UntrustedJavascriptURLRestriction) \
       LIST_TEST(DISABLED_URLLoader_TrustedJavascriptURLRestriction) \
   )
@@ -427,6 +429,7 @@ TEST_PPAPI_NACL(HostResolverPrivate_ResolveIPv4)
   RunTestViaHTTP( \
       LIST_TEST(URLLoader_UntrustedSameOriginRestriction) \
       LIST_TEST(URLLoader_UntrustedCrossOriginRequest) \
+      LIST_TEST(URLLoader_UntrustedCorbEligibleRequest) \
       LIST_TEST(URLLoader_UntrustedJavascriptURLRestriction) \
       LIST_TEST(DISABLED_URLLoader_TrustedJavascriptURLRestriction) \
   )
@@ -448,6 +451,7 @@ TEST_PPAPI_NACL(HostResolverPrivate_ResolveIPv4)
   RunTestViaHTTP( \
       LIST_TEST(URLLoader_TrustedSameOriginRestriction) \
       LIST_TEST(URLLoader_TrustedCrossOriginRequest) \
+      LIST_TEST(URLLoader_TrustedCorbEligibleRequest) \
       LIST_TEST(URLLoader_TrustedHttpRequests) \
       LIST_TEST(URLLoader_XRequestedWithHeader) \
   )
@@ -674,8 +678,25 @@ IN_PROC_BROWSER_TEST_F(PPAPIPrivateNaClPNaClNonSfiTest,
   RUN_FILEIO_PRIVATE_SUBTESTS;
 }
 
+#define SETUP_FOR_FILEREF_TESTS                                              \
+  const char kContents[] = "Hello from browser";                             \
+  base::ScopedAllowBlockingForTesting allow_blocking;                        \
+  base::ScopedTempDir temp_dir;                                              \
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());                               \
+  base::FilePath existing_filename = temp_dir.GetPath().AppendASCII("foo");  \
+  ASSERT_EQ(                                                                 \
+      static_cast<int>(sizeof(kContents) - 1),                               \
+      base::WriteFile(existing_filename, kContents, sizeof(kContents) - 1)); \
+  PPAPITestSelectFileDialogFactory::SelectedFileInfoList file_info_list;     \
+  file_info_list.push_back(                                                  \
+      ui::SelectedFileInfo(existing_filename, existing_filename));           \
+  PPAPITestSelectFileDialogFactory test_dialog_factory(                      \
+      PPAPITestSelectFileDialogFactory::RESPOND_WITH_FILE_LIST,              \
+      file_info_list);
+
 // FileRef tests.
 #define RUN_FILEREF_SUBTESTS_1 \
+  SETUP_FOR_FILEREF_TESTS \
   RunTestViaHTTP( \
       LIST_TEST(FileRef_Create) \
       LIST_TEST(FileRef_GetFileSystemType) \
@@ -686,6 +707,7 @@ IN_PROC_BROWSER_TEST_F(PPAPIPrivateNaClPNaClNonSfiTest,
   )
 
 #define RUN_FILEREF_SUBTESTS_2 \
+  SETUP_FOR_FILEREF_TESTS \
   RunTestViaHTTP( \
       LIST_TEST(FileRef_QueryAndTouchFile) \
       LIST_TEST(FileRef_DeleteFileAndDirectory) \
@@ -1222,7 +1244,7 @@ TEST_PPAPI_OUT_OF_PROCESS(Flash_GetProxyForURL)
 TEST_PPAPI_OUT_OF_PROCESS(Flash_GetSetting)
 TEST_PPAPI_OUT_OF_PROCESS(Flash_SetCrashData)
 // http://crbug.com/176822
-#if !defined(OS_WIN)
+#if !defined(OS_WIN) && !defined(OS_MACOSX)
 TEST_PPAPI_OUT_OF_PROCESS(FlashClipboard)
 #endif
 TEST_PPAPI_OUT_OF_PROCESS(FlashFile)
@@ -1239,16 +1261,6 @@ TEST_PPAPI_OUT_OF_PROCESS(MAYBE_FlashFullscreen)
 
 TEST_PPAPI_OUT_OF_PROCESS(PDF)
 
-IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, PlatformVerificationPrivate) {
-  RunTest(
-#if defined(OS_CHROMEOS)
-// TODO(dalecurtis): Renable once the platform verification infobar has
-// been implemented; see http://crbug.com/270908
-// LIST_TEST(PlatformVerificationPrivate_ChallengePlatform)
-#endif
-      LIST_TEST(PlatformVerificationPrivate_StorageId));
-}
-
 IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, FlashDRM) {
   RunTest(
 #if (defined(OS_WIN) && BUILDFLAG(ENABLE_RLZ)) || defined(OS_CHROMEOS)
@@ -1259,12 +1271,8 @@ IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, FlashDRM) {
           LIST_TEST(FlashDRM_GetVoucherFile));
 }
 
-#if defined(OS_CHROMEOS)
-TEST_PPAPI_OUT_OF_PROCESS(OutputProtectionPrivate)
-#endif
-
 #if BUILDFLAG(ENABLE_NACL)
-class PackagedAppTest : public ExtensionBrowserTest {
+class PackagedAppTest : public extensions::ExtensionBrowserTest {
  public:
   explicit PackagedAppTest(const std::string& toolchain)
       : toolchain_(toolchain) { }
@@ -1273,7 +1281,7 @@ class PackagedAppTest : public ExtensionBrowserTest {
     base::FilePath data_dir;
     {
       base::ScopedAllowBlockingForTesting allow_blocking;
-      ASSERT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &data_dir));
+      ASSERT_TRUE(base::PathService::Get(chrome::DIR_GEN_TEST_DATA, &data_dir));
     }
     base::FilePath app_dir = data_dir.AppendASCII("ppapi")
                                      .AppendASCII("tests")
@@ -1318,7 +1326,7 @@ class NonSfiPackagedAppTest : public PackagedAppTest {
 
 // Load a packaged app, and wait for it to successfully post a "hello" message
 // back.
-#if defined(OS_WIN) || !defined(NDEBUG)
+#if defined(OS_WIN) || !defined(NDEBUG) || defined(OS_MACOSX)
 // flaky: crbug.com/707068
 // flaky on debug builds: crbug.com/709447
 IN_PROC_BROWSER_TEST_F(NewlibPackagedAppTest, DISABLED_SuccessfulLoad) {

@@ -4,7 +4,7 @@
 
 #include "net/cookies/canonical_cookie.h"
 
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_options.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -148,21 +148,25 @@ TEST(CanonicalCookieTest, Create) {
   EXPECT_EQ(CookieSameSite::NO_RESTRICTION, cookie->SameSite());
 }
 
-TEST(CanonicalCookieTest, CreateInvalidSameSite) {
+TEST(CanonicalCookieTest, CreateNonStandardSameSite) {
   GURL url("http://www.example.com/test/foo.html");
   base::Time now = base::Time::Now();
   std::unique_ptr<CanonicalCookie> cookie;
   CookieOptions options;
 
-  // Invalid 'SameSite' attribute values.
   options.set_same_site_cookie_mode(
       CookieOptions::SameSiteCookieMode::INCLUDE_STRICT_AND_LAX);
 
-  cookie = CanonicalCookie::Create(url, "A=2; SameSite=Invalid", now, options);
-  EXPECT_EQ(nullptr, cookie.get());
+  // Non-standard value for the SameSite attribute.
+  cookie =
+      CanonicalCookie::Create(url, "A=2; SameSite=NonStandard", now, options);
+  EXPECT_TRUE(cookie.get());
+  EXPECT_EQ(CookieSameSite::NO_RESTRICTION, cookie->SameSite());
 
+  // Omit value for the SameSite attribute.
   cookie = CanonicalCookie::Create(url, "A=2; SameSite", now, options);
-  EXPECT_EQ(nullptr, cookie.get());
+  EXPECT_TRUE(cookie.get());
+  EXPECT_EQ(CookieSameSite::NO_RESTRICTION, cookie->SameSite());
 }
 
 TEST(CanonicalCookieTest, CreateInvalidHttpOnly) {

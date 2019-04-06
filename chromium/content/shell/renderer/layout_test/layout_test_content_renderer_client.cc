@@ -4,10 +4,12 @@
 
 #include "content/shell/renderer/layout_test/layout_test_content_renderer_client.h"
 
+#include <string>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/public/common/content_constants.h"
@@ -23,36 +25,34 @@
 #include "content/shell/renderer/layout_test/layout_test_render_frame_observer.h"
 #include "content/shell/renderer/layout_test/layout_test_render_thread_observer.h"
 #include "content/shell/renderer/layout_test/test_media_stream_renderer_factory.h"
+#include "content/shell/renderer/layout_test/test_websocket_handshake_throttle_provider.h"
 #include "content/shell/renderer/shell_render_view_observer.h"
 #include "content/shell/test_runner/web_frame_test_proxy.h"
 #include "content/shell/test_runner/web_test_interfaces.h"
 #include "content/shell/test_runner/web_test_runner.h"
 #include "content/shell/test_runner/web_view_test_proxy.h"
-#include "content/test/mock_webclipboard_impl.h"
 #include "media/base/audio_latency.h"
 #include "media/base/mime_util.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/platform/WebAudioLatencyHint.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
-#include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessor.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebPluginParams.h"
-#include "third_party/WebKit/public/web/WebTestingSupport.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "media/media_buildflags.h"
+#include "third_party/blink/public/platform/modules/webmidi/web_midi_accessor.h"
+#include "third_party/blink/public/platform/web_audio_latency_hint.h"
+#include "third_party/blink/public/platform/web_media_stream_center.h"
+#include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_plugin_params.h"
+#include "third_party/blink/public/web/web_testing_support.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/gfx/icc_profile.h"
 #include "v8/include/v8.h"
 
 using blink::WebAudioDevice;
-using blink::WebClipboard;
 using blink::WebFrame;
 using blink::WebLocalFrame;
 using blink::WebMIDIAccessor;
 using blink::WebMIDIAccessorClient;
 using blink::WebMediaStreamCenter;
-using blink::WebMediaStreamCenterClient;
 using blink::WebPlugin;
 using blink::WebPluginParams;
 using blink::WebRTCPeerConnectionHandler;
@@ -79,16 +79,21 @@ void WebViewTestProxyCreated(RenderView* render_view,
     interfaces->SetDelegate(test_runner);
   }
 
+  auto* test_interfaces =
+      LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
+
   proxy->set_delegate(test_runner);
-  proxy->set_view_test_client(LayoutTestRenderThreadObserver::GetInstance()
-                                  ->test_interfaces()
-                                  ->CreateWebViewTestClient(proxy));
+
+  std::unique_ptr<test_runner::WebViewTestClient> view_test_client =
+      test_interfaces->CreateWebViewTestClient(proxy, nullptr);
+  proxy->set_view_test_client(std::move(view_test_client));
   std::unique_ptr<test_runner::WebWidgetTestClient> widget_test_client =
-      LayoutTestRenderThreadObserver::GetInstance()
-          ->test_interfaces()
-          ->CreateWebWidgetTestClient(proxy);
-  proxy->set_widget_test_client(std::move(widget_test_client));
+      test_interfaces->CreateWebWidgetTestClient(
+          proxy->web_widget_test_proxy_base());
+  proxy->web_widget_test_proxy_base()->set_widget_test_client(
+      std::move(widget_test_client));
   proxy->SetInterfaces(interfaces);
+  proxy->SetUpWidgetClient();
 }
 
 void WebWidgetTestProxyCreated(blink::WebWidget* web_widget,
@@ -125,19 +130,13 @@ LayoutTestContentRendererClient::LayoutTestContentRendererClient() {
   EnableWebTestProxyCreation(base::Bind(&WebViewTestProxyCreated),
                              base::Bind(&WebWidgetTestProxyCreated),
                              base::Bind(&WebFrameTestProxyCreated));
+  SetWorkerRewriteURLFunction(RewriteLayoutTestsURL);
 }
 
 LayoutTestContentRendererClient::~LayoutTestContentRendererClient() {
 }
 
 void LayoutTestContentRendererClient::RenderThreadStarted() {
-// Unless/until WebM files are added to the media layout tests, we need to
-// avoid removing MP4/H264/AAC so that layout tests can run on Android.
-// TODO(chcunningham): We should fix the tests to always use non-proprietary
-// codecs and just delete this code. http://crbug.com/787575
-#if !defined(OS_ANDROID)
-  media::RemoveProprietaryMediaTypesAndCodecsForTests();
-#endif
   ShellContentRendererClient::RenderThreadStarted();
   shell_observer_.reset(new LayoutTestRenderThreadObserver());
 }
@@ -160,7 +159,8 @@ void LayoutTestContentRendererClient::RenderViewCreated(
   // TODO(lfg): We should fix the TestProxy to track the WebWidgets on every
   // local root in WebFrameTestProxy instead of having only the WebWidget for
   // the main frame in WebViewTestProxy.
-  proxy->set_web_widget(render_view->GetWebView()->GetWidget());
+  proxy->web_widget_test_proxy_base()->set_web_widget(
+      render_view->GetWebView()->GetWidget());
   proxy->Reset();
 
   BlinkTestRunner* test_runner = BlinkTestRunner::Get(render_view);
@@ -175,45 +175,6 @@ LayoutTestContentRendererClient::OverrideCreateMIDIAccessor(
   return interfaces->CreateMIDIAccessor(client);
 }
 
-std::unique_ptr<WebAudioDevice>
-LayoutTestContentRendererClient::OverrideCreateAudioDevice(
-    const blink::WebAudioLatencyHint& latency_hint) {
-  const double hw_buffer_size = 128;
-  const double hw_sample_rate = 44100;
-  double buffer_size = 0;
-  switch (latency_hint.Category()) {
-    case blink::WebAudioLatencyHint::kCategoryInteractive:
-      buffer_size =
-          media::AudioLatency::GetInteractiveBufferSize(hw_buffer_size);
-      break;
-    case blink::WebAudioLatencyHint::kCategoryBalanced:
-      buffer_size =
-          media::AudioLatency::GetRtcBufferSize(hw_sample_rate, hw_buffer_size);
-      break;
-    case blink::WebAudioLatencyHint::kCategoryPlayback:
-      buffer_size = media::AudioLatency::GetHighLatencyBufferSize(
-          hw_sample_rate, hw_buffer_size);
-      break;
-    case blink::WebAudioLatencyHint::kCategoryExact:
-      buffer_size = media::AudioLatency::GetExactBufferSize(
-          base::TimeDelta::FromSecondsD(latency_hint.Seconds()), hw_sample_rate,
-          hw_buffer_size);
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
-  test_runner::WebTestInterfaces* interfaces =
-      LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
-  return interfaces->CreateAudioDevice(hw_sample_rate, buffer_size);
-}
-
-WebClipboard* LayoutTestContentRendererClient::OverrideWebClipboard() {
-  if (!clipboard_)
-    clipboard_.reset(new MockWebClipboardImpl);
-  return clipboard_.get();
-}
-
 WebThemeEngine* LayoutTestContentRendererClient::OverrideThemeEngine() {
   return LayoutTestRenderThreadObserver::GetInstance()
       ->test_interfaces()
@@ -222,12 +183,13 @@ WebThemeEngine* LayoutTestContentRendererClient::OverrideThemeEngine() {
 
 std::unique_ptr<MediaStreamRendererFactory>
 LayoutTestContentRendererClient::CreateMediaStreamRendererFactory() {
-#if BUILDFLAG(ENABLE_WEBRTC)
   return std::unique_ptr<MediaStreamRendererFactory>(
       new TestMediaStreamRendererFactory());
-#else
-  return nullptr;
-#endif
+}
+
+std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+LayoutTestContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
+  return std::make_unique<TestWebSocketHandshakeThrottleProvider>();
 }
 
 void LayoutTestContentRendererClient::DidInitializeWorkerContextOnWorkerThread(
@@ -248,6 +210,12 @@ void LayoutTestContentRendererClient::
           switches::kEnableFontAntialiasing)) {
     blink::SetFontAntialiasingEnabledForTest(true);
   }
+}
+
+bool LayoutTestContentRendererClient::AllowIdleMediaSuspend() {
+  // Disable idle media suspend to avoid layout tests getting into accidentally
+  // bad states if they take too long to run.
+  return false;
 }
 
 }  // namespace content

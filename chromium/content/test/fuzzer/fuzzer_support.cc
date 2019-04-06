@@ -8,11 +8,22 @@
 
 #include "base/feature_list.h"
 #include "base/i18n/icu_util.h"
-#include "base/memory/ptr_util.h"
 #include "gin/v8_initializer.h"
-#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
 
 namespace content {
+
+namespace {
+#if defined(V8_USE_EXTERNAL_STARTUP_DATA)
+#if defined(USE_V8_CONTEXT_SNAPSHOT)
+constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
+    gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
+#else
+constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
+    gin::V8Initializer::V8SnapshotFileType::kDefault;
+#endif
+#endif
+}
 
 void RenderViewTestAdapter::SetUp() {
   RenderViewTest::SetUp();
@@ -27,7 +38,7 @@ Env::Env() {
   blink::WebRuntimeFeatures::EnableTestOnlyFeatures(true);
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
-  gin::V8Initializer::LoadV8Snapshot();
+  gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
   gin::V8Initializer::LoadV8Natives();
 #endif
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,

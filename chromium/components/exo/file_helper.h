@@ -33,11 +33,19 @@ class FileHelper {
                               const base::FilePath& path,
                               GURL* out) = 0;
 
-  // Converts filesystem:// URL to something that applications can understand.
-  // e.g. content:// URI for Android apps.
-  virtual bool GetUrlFromFileSystemUrl(const std::string& app_id,
-                                       const GURL& file_system_url,
-                                       GURL* out) = 0;
+  // Takes in |pickle| constructed by the web contents view and returns true if
+  // it contains any valid filesystem URLs.
+  virtual bool HasUrlsInPickle(const base::Pickle& pickle) = 0;
+
+  using UrlsFromPickleCallback =
+      base::OnceCallback<void(const std::vector<GURL>& urls)>;
+
+  // Takes in |pickle| constructed by the web contents view, reads filesystem
+  // URLs from it and converts the URLs to something that applications can
+  // understand.  e.g. content:// URI for Android apps.
+  virtual void GetUrlsFromPickle(const std::string& app_id,
+                                 const base::Pickle& pickle,
+                                 UrlsFromPickleCallback callback) = 0;
 };
 
 }  // namespace exo

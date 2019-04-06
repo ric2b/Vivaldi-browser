@@ -6,6 +6,7 @@
 #define CONTENT_COMMON_POSSIBLY_ASSOCIATED_INTERFACE_PTR_H_
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "content/common/possibly_associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
@@ -19,6 +20,9 @@ namespace content {
 template <typename T>
 class PossiblyAssociatedInterfacePtr final {
  public:
+  using InterfaceType = T;
+  using PtrInfoType = PossiblyAssociatedInterfacePtrInfo<T>;
+
   PossiblyAssociatedInterfacePtr() {}
   PossiblyAssociatedInterfacePtr(std::nullptr_t) {}
   PossiblyAssociatedInterfacePtr(mojo::InterfacePtr<T> independent_ptr)

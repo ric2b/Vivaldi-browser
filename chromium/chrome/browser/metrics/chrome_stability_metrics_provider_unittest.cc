@@ -5,7 +5,7 @@
 #include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
 
 #include "base/macros.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -13,8 +13,10 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/variations/hashing.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_data.h"
+#include "content/public/browser/child_process_termination_info.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
@@ -23,7 +25,7 @@
 #include "content/public/common/process_type.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 
@@ -32,6 +34,9 @@
 #endif
 
 namespace {
+
+const char kTestGpuProcessName[] = "content_gpu";
+const char kTestUtilityProcessName[] = "test_utility_process";
 
 class ChromeStabilityMetricsProviderTest : public testing::Test {
  protected:
@@ -50,12 +55,20 @@ class ChromeStabilityMetricsProviderTest : public testing::Test {
 
 }  // namespace
 
-TEST_F(ChromeStabilityMetricsProviderTest, BrowserChildProcessObserver) {
+TEST_F(ChromeStabilityMetricsProviderTest, BrowserChildProcessObserverGpu) {
+  base::HistogramTester histogram_tester;
   ChromeStabilityMetricsProvider provider(prefs());
 
-  content::ChildProcessData child_process_data(content::PROCESS_TYPE_RENDERER);
-  provider.BrowserChildProcessCrashed(child_process_data, 1);
-  provider.BrowserChildProcessCrashed(child_process_data, 1);
+  content::ChildProcessData child_process_data(content::PROCESS_TYPE_GPU);
+  child_process_data.metrics_name = kTestGpuProcessName;
+
+  provider.BrowserChildProcessLaunchedAndConnected(child_process_data);
+  content::ChildProcessTerminationInfo abnormal_termination_info{
+      base::TERMINATION_STATUS_ABNORMAL_TERMINATION, 1};
+  provider.BrowserChildProcessCrashed(child_process_data,
+                                      abnormal_termination_info);
+  provider.BrowserChildProcessCrashed(child_process_data,
+                                      abnormal_termination_info);
 
   // Call ProvideStabilityMetrics to check that it will force pending tasks to
   // be executed immediately.
@@ -68,6 +81,45 @@ TEST_F(ChromeStabilityMetricsProviderTest, BrowserChildProcessObserver) {
       system_profile.stability();
 
   EXPECT_EQ(2, stability.child_process_crash_count());
+  EXPECT_TRUE(
+      histogram_tester.GetTotalCountsForPrefix("ChildProcess.").empty());
+}
+
+TEST_F(ChromeStabilityMetricsProviderTest, BrowserChildProcessObserverUtility) {
+  base::HistogramTester histogram_tester;
+  ChromeStabilityMetricsProvider provider(prefs());
+
+  content::ChildProcessData child_process_data(content::PROCESS_TYPE_UTILITY);
+  child_process_data.metrics_name = kTestUtilityProcessName;
+
+  provider.BrowserChildProcessLaunchedAndConnected(child_process_data);
+  content::ChildProcessTerminationInfo abnormal_termination_info{
+      base::TERMINATION_STATUS_ABNORMAL_TERMINATION, 1};
+  provider.BrowserChildProcessCrashed(child_process_data,
+                                      abnormal_termination_info);
+  provider.BrowserChildProcessCrashed(child_process_data,
+                                      abnormal_termination_info);
+
+  // Call ProvideStabilityMetrics to check that it will force pending tasks to
+  // be executed immediately.
+  metrics::SystemProfileProto system_profile;
+
+  provider.ProvideStabilityMetrics(&system_profile);
+
+  // Check current number of instances created.
+  const metrics::SystemProfileProto_Stability& stability =
+      system_profile.stability();
+
+  EXPECT_EQ(2, stability.child_process_crash_count());
+
+  // Utility processes also log an entries for the hashed name of the process
+  // for launches and crashes.
+  histogram_tester.ExpectUniqueSample(
+      "ChildProcess.Launched.UtilityProcessHash",
+      variations::HashName(kTestUtilityProcessName), 1);
+  histogram_tester.ExpectUniqueSample(
+      "ChildProcess.Crashed.UtilityProcessHash",
+      variations::HashName(kTestUtilityProcessName), 2);
 }
 
 TEST_F(ChromeStabilityMetricsProviderTest, NotificationObserver) {
@@ -91,39 +143,35 @@ TEST_F(ChromeStabilityMetricsProviderTest, NotificationObserver) {
       rph_factory->CreateRenderProcessHost(profile, site_instance.get()));
 
   // Crash and abnormal termination should increment renderer crash count.
-  content::RenderProcessHost::RendererClosedDetails crash_details(
-      base::TERMINATION_STATUS_PROCESS_CRASHED, 1);
+  content::ChildProcessTerminationInfo crash_details{
+      base::TERMINATION_STATUS_PROCESS_CRASHED, 1};
   provider.Observe(
       content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
       content::Source<content::RenderProcessHost>(host),
-      content::Details<content::RenderProcessHost::RendererClosedDetails>(
-          &crash_details));
+      content::Details<content::ChildProcessTerminationInfo>(&crash_details));
 
-  content::RenderProcessHost::RendererClosedDetails term_details(
-      base::TERMINATION_STATUS_ABNORMAL_TERMINATION, 1);
+  content::ChildProcessTerminationInfo term_details{
+      base::TERMINATION_STATUS_ABNORMAL_TERMINATION, 1};
   provider.Observe(
       content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
       content::Source<content::RenderProcessHost>(host),
-      content::Details<content::RenderProcessHost::RendererClosedDetails>(
-          &term_details));
+      content::Details<content::ChildProcessTerminationInfo>(&term_details));
 
   // Kill does not increment renderer crash count.
-  content::RenderProcessHost::RendererClosedDetails kill_details(
-      base::TERMINATION_STATUS_PROCESS_WAS_KILLED, 1);
+  content::ChildProcessTerminationInfo kill_details{
+      base::TERMINATION_STATUS_PROCESS_WAS_KILLED, 1};
   provider.Observe(
       content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
       content::Source<content::RenderProcessHost>(host),
-      content::Details<content::RenderProcessHost::RendererClosedDetails>(
-          &kill_details));
+      content::Details<content::ChildProcessTerminationInfo>(&kill_details));
 
   // Failed launch increments failed launch count.
-  content::RenderProcessHost::RendererClosedDetails failed_launch_details(
-      base::TERMINATION_STATUS_LAUNCH_FAILED, 1);
-  provider.Observe(
-      content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
-      content::Source<content::RenderProcessHost>(host),
-      content::Details<content::RenderProcessHost::RendererClosedDetails>(
-          &failed_launch_details));
+  content::ChildProcessTerminationInfo failed_launch_details{
+      base::TERMINATION_STATUS_LAUNCH_FAILED, 1};
+  provider.Observe(content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                   content::Source<content::RenderProcessHost>(host),
+                   content::Details<content::ChildProcessTerminationInfo>(
+                       &failed_launch_details));
 
   metrics::SystemProfileProto system_profile;
 
@@ -156,15 +204,13 @@ TEST_F(ChromeStabilityMetricsProviderTest, NotificationObserver) {
   provider.Observe(
       content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
       content::Source<content::RenderProcessHost>(extension_host),
-      content::Details<content::RenderProcessHost::RendererClosedDetails>(
-          &crash_details));
+      content::Details<content::ChildProcessTerminationInfo>(&crash_details));
 
   // Failed launch increments failed launch count.
-  provider.Observe(
-      content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
-      content::Source<content::RenderProcessHost>(extension_host),
-      content::Details<content::RenderProcessHost::RendererClosedDetails>(
-          &failed_launch_details));
+  provider.Observe(content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                   content::Source<content::RenderProcessHost>(extension_host),
+                   content::Details<content::ChildProcessTerminationInfo>(
+                       &failed_launch_details));
 
   system_profile.Clear();
   provider.ProvideStabilityMetrics(&system_profile);

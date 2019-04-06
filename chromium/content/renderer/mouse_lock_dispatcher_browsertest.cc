@@ -10,7 +10,7 @@
 #include "content/renderer/render_view_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
 
 using ::testing::_;
 
@@ -45,7 +45,9 @@ class MouseLockDispatcherTest : public RenderViewTest {
  protected:
   RenderViewImpl* view() { return static_cast<RenderViewImpl*>(view_); }
   RenderWidget* widget() { return view()->GetWidget(); }
-  MouseLockDispatcher* dispatcher() { return view()->mouse_lock_dispatcher(); }
+  MouseLockDispatcher* dispatcher() {
+    return widget()->mouse_lock_dispatcher();
+  }
   int route_id_;
   MockLockTarget* target_;
   MockLockTarget* alternate_target_;

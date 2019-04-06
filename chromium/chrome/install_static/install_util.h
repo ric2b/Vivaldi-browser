@@ -82,6 +82,9 @@ const wchar_t* GetAppGuid();
 // the Windows OS.
 const CLSID& GetToastActivatorClsid();
 
+// The CLSID of the COM server that provides silent elevation functionality.
+const CLSID& GetElevatorClsid();
+
 // Returns the unsuffixed application name of this program. This is the base of
 // the name registered with Default Programs. IMPORTANT: This must only be
 // called by the installer.
@@ -126,6 +129,9 @@ bool SupportsRetentionExperiments();
 
 // Returns the index of the icon resource in the main executable for the mode.
 int GetIconResourceIndex();
+
+// Get sandbox id of current install mode.
+const wchar_t* GetSandboxSidPrefix();
 
 // Returns true if usage stats collecting is enabled for this user for the
 // current executable.

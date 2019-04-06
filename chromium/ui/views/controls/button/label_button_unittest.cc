@@ -24,6 +24,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/test/ink_drop_host_view_test_api.h"
 #include "ui/views/animation/test/test_ink_drop.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/widget_test.h"
@@ -134,8 +135,9 @@ TEST_F(LabelButtonTest, Init) {
 
   ui::AXNodeData accessible_node_data;
   button.GetAccessibleNodeData(&accessible_node_data);
-  EXPECT_EQ(ui::AX_ROLE_BUTTON, accessible_node_data.role);
-  EXPECT_EQ(text, accessible_node_data.GetString16Attribute(ui::AX_ATTR_NAME));
+  EXPECT_EQ(ax::mojom::Role::kButton, accessible_node_data.role);
+  EXPECT_EQ(text, accessible_node_data.GetString16Attribute(
+                      ax::mojom::StringAttribute::kName));
 
   EXPECT_FALSE(button.is_default());
   EXPECT_EQ(button.style(), Button::STYLE_TEXTBUTTON);
@@ -184,25 +186,25 @@ TEST_F(LabelButtonTest, AccessibleState) {
   ui::AXNodeData accessible_node_data;
 
   button_->GetAccessibleNodeData(&accessible_node_data);
-  EXPECT_EQ(ui::AX_ROLE_BUTTON, accessible_node_data.role);
-  EXPECT_EQ(base::string16(),
-            accessible_node_data.GetString16Attribute(ui::AX_ATTR_NAME));
+  EXPECT_EQ(ax::mojom::Role::kButton, accessible_node_data.role);
+  EXPECT_EQ(base::string16(), accessible_node_data.GetString16Attribute(
+                                  ax::mojom::StringAttribute::kName));
 
   // Without a label (e.g. image-only), the accessible name should automatically
   // be set from the tooltip.
   const base::string16 tooltip_text = ASCIIToUTF16("abc");
   button_->SetTooltipText(tooltip_text);
   button_->GetAccessibleNodeData(&accessible_node_data);
-  EXPECT_EQ(tooltip_text,
-            accessible_node_data.GetString16Attribute(ui::AX_ATTR_NAME));
+  EXPECT_EQ(tooltip_text, accessible_node_data.GetString16Attribute(
+                              ax::mojom::StringAttribute::kName));
   EXPECT_EQ(base::string16(), button_->GetText());
 
   // Setting a label overrides the tooltip text.
   const base::string16 label_text = ASCIIToUTF16("def");
   button_->SetText(label_text);
   button_->GetAccessibleNodeData(&accessible_node_data);
-  EXPECT_EQ(label_text,
-            accessible_node_data.GetString16Attribute(ui::AX_ATTR_NAME));
+  EXPECT_EQ(label_text, accessible_node_data.GetString16Attribute(
+                            ax::mojom::StringAttribute::kName));
   EXPECT_EQ(label_text, button_->GetText());
 
   base::string16 tooltip;
@@ -302,6 +304,42 @@ TEST_F(LabelButtonTest, LabelAndImage) {
   button_->SetMinSize(gfx::Size());
   button_->SetMaxSize(gfx::Size(1, 1));
   EXPECT_EQ(button_->GetPreferredSize(), gfx::Size(1, 1));
+}
+
+TEST_F(LabelButtonTest, LabelWrapAndImageAlignment) {
+  LayoutProvider* provider = LayoutProvider::Get();
+  const gfx::FontList font_list = button_->label()->font_list();
+  const base::string16 text(ASCIIToUTF16("abcdefghijklm abcdefghijklm"));
+  const int text_wrap_width = gfx::GetStringWidth(text, font_list) / 2;
+  const int image_spacing =
+      provider->GetDistanceMetric(DISTANCE_RELATED_LABEL_HORIZONTAL);
+
+  button_->SetText(text);
+  button_->label()->SetMultiLine(true);
+
+  const int image_size = font_list.GetHeight();
+  const gfx::ImageSkia image = CreateTestImage(image_size, image_size);
+  ASSERT_EQ(font_list.GetHeight(), image.width());
+
+  button_->SetImage(Button::STATE_NORMAL, image);
+  button_->SetMaxSize(
+      gfx::Size(image.width() + image_spacing + text_wrap_width, 0));
+
+  gfx::Insets button_insets = button_->GetInsets();
+  gfx::Size preferred_size = button_->GetPreferredSize();
+  preferred_size.set_height(button_->GetHeightForWidth(preferred_size.width()));
+  button_->SetSize(preferred_size);
+  button_->Layout();
+
+  EXPECT_EQ(preferred_size.width(),
+            image.width() + image_spacing + text_wrap_width);
+  EXPECT_EQ(preferred_size.height(),
+            font_list.GetHeight() * 2 + button_insets.height());
+
+  // The image should be centered on the first line of the multi-line label.
+  EXPECT_EQ(button_->image()->y(),
+            (font_list.GetHeight() - button_->image()->height()) / 2 +
+                button_insets.top());
 }
 
 // This test was added because GetHeightForWidth and GetPreferredSize were

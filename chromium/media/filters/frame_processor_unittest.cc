@@ -328,7 +328,7 @@ class FrameProcessorTest
 
  private:
   void StoreStatusAndBuffer(DemuxerStream::Status status,
-                            const scoped_refptr<DecoderBuffer>& buffer) {
+                            scoped_refptr<DecoderBuffer> buffer) {
     if (status == DemuxerStream::kOk && buffer.get()) {
       DVLOG(3) << __func__ << "status: " << status
                << " ts: " << buffer->timestamp().InSecondsF();
@@ -352,15 +352,16 @@ class FrameProcessorTest
                                           CHANNEL_LAYOUT_STEREO, 1000,
                                           EmptyExtraData(), Unencrypted());
         frame_processor_->OnPossibleAudioConfigUpdate(decoder_config);
-        ASSERT_TRUE(audio_->UpdateAudioConfig(decoder_config, &media_log_));
+        ASSERT_TRUE(
+            audio_->UpdateAudioConfig(decoder_config, false, &media_log_));
         break;
       }
       case DemuxerStream::VIDEO: {
         ASSERT_FALSE(video_);
         video_.reset(
             new ChunkDemuxerStream(DemuxerStream::VIDEO, "2", range_api_));
-        ASSERT_TRUE(
-            video_->UpdateVideoConfig(TestVideoConfig::Normal(), &media_log_));
+        ASSERT_TRUE(video_->UpdateVideoConfig(TestVideoConfig::Normal(), false,
+                                              &media_log_));
         break;
       }
       // TODO(wolenetz): Test text coded frame processing.
@@ -830,6 +831,8 @@ TEST_P(FrameProcessorTest,
     frame_processor_->SetSequenceMode(true);
 
   SetTimestampOffset(Milliseconds(-20));
+  EXPECT_MEDIA_LOG(DroppedFrame("audio", -20000));
+  EXPECT_MEDIA_LOG(DroppedFrame("audio", -10000));
   EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(10)));
   EXPECT_TRUE(ProcessFrames("0K 10K 20K", ""));
   EXPECT_TRUE(in_coded_frame_group());
@@ -844,6 +847,8 @@ TEST_P(FrameProcessorTest, AppendWindowFilterWithInexactPreroll) {
   if (use_sequence_mode_)
     frame_processor_->SetSequenceMode(true);
   SetTimestampOffset(Milliseconds(-10));
+  EXPECT_MEDIA_LOG(DroppedFrame("audio", -10000));
+  EXPECT_MEDIA_LOG(TruncatedFrame(-250, 9750, "start", 0));
   EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(20)));
   EXPECT_TRUE(ProcessFrames("0K 9.75K 20K", ""));
   CheckExpectedRangesByTimestamp(audio_.get(), "{ [0,20) }");
@@ -857,6 +862,7 @@ TEST_P(FrameProcessorTest, AppendWindowFilterWithInexactPreroll_2) {
     frame_processor_->SetSequenceMode(true);
   SetTimestampOffset(Milliseconds(-10));
 
+  EXPECT_MEDIA_LOG(DroppedFrame("audio", -10000));
   // When buffering ByDts, splice trimming checks are done only on every audio
   // frame following either a discontinuity or the beginning of ProcessFrames().
   // When buffering ByPts, splice trimming checks are also done on audio frames
@@ -888,6 +894,7 @@ TEST_P(FrameProcessorTest, AllowNegativeFramePTSAndDTSBeforeOffsetAdjustment) {
     frame_processor_->SetSequenceMode(true);
     EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(30)));
   } else {
+    EXPECT_MEDIA_LOG(TruncatedFrame(-5000, 5000, "start", 0));
     EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(25)));
   }
 
@@ -907,13 +914,15 @@ TEST_P(FrameProcessorTest, AllowNegativeFramePTSAndDTSBeforeOffsetAdjustment) {
 TEST_P(FrameProcessorTest, PartialAppendWindowFilterNoDiscontinuity) {
   // Tests that spurious discontinuity is not introduced by a partially
   // trimmed frame.
+  append_window_start_ = Milliseconds(7);
+
   InSequence s;
   AddTestTracks(HAS_AUDIO);
   if (use_sequence_mode_)
     frame_processor_->SetSequenceMode(true);
+  EXPECT_MEDIA_LOG(TruncatedFrame(0, 10000, "start", 7000));
   EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(29)));
 
-  append_window_start_ = Milliseconds(7);
   EXPECT_TRUE(ProcessFrames("0K 19K", ""));
 
   EXPECT_EQ(Milliseconds(0), timestamp_offset_);
@@ -928,11 +937,14 @@ TEST_P(FrameProcessorTest,
   InSequence s;
   AddTestTracks(HAS_AUDIO);
 
-  EXPECT_MEDIA_LOG(ParsedDTSGreaterThanPTS()).Times(2);
   if (use_sequence_mode_) {
+    EXPECT_MEDIA_LOG(ParsedDTSGreaterThanPTS()).Times(2);
     frame_processor_->SetSequenceMode(true);
     EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(20)));
   } else {
+    EXPECT_MEDIA_LOG(ParsedDTSGreaterThanPTS());
+    EXPECT_MEDIA_LOG(TruncatedFrame(-7000, 3000, "start", 0));
+    EXPECT_MEDIA_LOG(ParsedDTSGreaterThanPTS());
     EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(13)));
   }
 
@@ -1003,6 +1015,7 @@ TEST_P(FrameProcessorTest, PartialAppendWindowFilterNoNewMediaSegment) {
   }
   EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(10)));
   EXPECT_TRUE(ProcessFrames("", "0K"));
+  EXPECT_MEDIA_LOG(TruncatedFrame(-5000, 5000, "start", 0));
   EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(10)));
   EXPECT_TRUE(ProcessFrames("-5K", ""));
   EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(20)));
@@ -1044,6 +1057,7 @@ TEST_P(FrameProcessorTest, PartialAppendWindowZeroDurationPreroll) {
 
   append_window_start_ = Milliseconds(5);
 
+  EXPECT_MEDIA_LOG(DroppedFrame("audio", use_sequence_mode_ ? 0 : 4000));
   // Append a 0 duration frame that falls just before the append window.
   frame_duration_ = Milliseconds(0);
   EXPECT_FALSE(in_coded_frame_group());
@@ -1060,6 +1074,11 @@ TEST_P(FrameProcessorTest, PartialAppendWindowZeroDurationPreroll) {
   // looks as we expect.
   SeekStream(audio_.get(), Milliseconds(0));
 
+  if (use_sequence_mode_) {
+    EXPECT_MEDIA_LOG(TruncatedFrame(0, 10000, "start", 5000));
+  } else {
+    EXPECT_MEDIA_LOG(TruncatedFrame(4000, 14000, "start", 5000));
+  }
   // Append a frame with 10ms duration, with 9ms falling after the window start.
   EXPECT_CALL(callbacks_, PossibleDurationIncrease(
                               Milliseconds(use_sequence_mode_ ? 10 : 14)));
@@ -1306,41 +1325,6 @@ TEST_P(FrameProcessorTest, LargeTimestampOffsetJumpForward) {
       CheckReadsThenReadStalls(audio_.get(), "10000:5000");
     }
   }
-}
-
-TEST_P(FrameProcessorTest,
-       SegmentsMode_BufferingByPts_InitialZeroDurationBuffers) {
-  // When buffering ByPts in segments append mode, verifies that initial
-  // zero-duration keyframes that are not adjacent in PTS, but may be adjacent
-  // if the default fudge room is large enough, doesn't result in inconsistent
-  // range adjacency determination on a subsequent overlapping append of a
-  // non-zero duration keyframe with a duration smaller than half the default
-  // initial fudge room.
-  if (range_api_ == ChunkDemuxerStream::RangeApi::kLegacyByDts ||
-      use_sequence_mode_) {
-    DVLOG(1) << "Skipping kLegacyByDts and sequence mode versions of this test";
-    return;
-  }
-
-  InSequence s;
-  AddTestTracks(HAS_AUDIO);
-  frame_processor_->SetSequenceMode(use_sequence_mode_);
-
-  frame_duration_ = Milliseconds(0);
-  EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(10)));
-  EXPECT_TRUE(ProcessFrames("0K 10|1K", ""));
-
-  EXPECT_CALL(callbacks_, PossibleDurationIncrease(Milliseconds(3)));
-  EXPECT_TRUE(ProcessFrames("3|2K", ""));
-
-  EXPECT_CALL(callbacks_, PossibleDurationIncrease(
-                              base::TimeDelta::FromMicroseconds(6001)));
-  frame_duration_ = base::TimeDelta::FromMicroseconds(1);
-  EXPECT_TRUE(ProcessFrames("6|3K", ""));
-
-  // Note the following includes a truncated 6001 microseconds end time for the
-  // third range.
-  CheckExpectedRangesByTimestamp(audio_.get(), "{ [0,1) [3,4) [6,6) [10,11) }");
 }
 
 TEST_P(FrameProcessorTest,

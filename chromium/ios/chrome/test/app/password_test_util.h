@@ -9,6 +9,9 @@
 
 @interface MockReauthenticationModule : NSObject<ReauthenticationProtocol>
 
+// Localized string containing the reason why reauthentication is requested.
+@property(nonatomic, copy) NSString* localizedReasonForAuthentication;
+
 // Indicates whether the device is capable of reauthenticating the user.
 @property(nonatomic, assign) BOOL canAttempt;
 
@@ -24,6 +27,11 @@ namespace chrome_test_util {
 // PasswordDetailsCollectionViewController with a fake one to avoid being
 // blocked with a reauth prompt, and return the fake reauthentication module.
 MockReauthenticationModule* SetUpAndReturnMockReauthenticationModule();
+
+// Replace the reauthentication module in
+// PasswordExporter with a fake one to avoid being
+// blocked with a reauth prompt, and return the fake reauthentication module.
+MockReauthenticationModule* SetUpAndReturnMockReauthenticationModuleForExport();
 
 }  // namespace chrome_test_util
 

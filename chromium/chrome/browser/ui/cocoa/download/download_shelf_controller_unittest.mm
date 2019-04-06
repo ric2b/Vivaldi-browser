@@ -15,7 +15,7 @@
 #import "chrome/browser/ui/cocoa/download/download_item_controller.h"
 #include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
 #import "chrome/browser/ui/cocoa/view_resizer_pong.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -25,31 +25,32 @@
 using ::testing::Return;
 using ::testing::AnyNumber;
 
-// Wraps a content::MockDownloadItem so it can be retained by the mock
+// Wraps a download::MockDownloadItem so it can be retained by the mock
 // DownloadItemController.
 @interface WrappedMockDownloadItem : NSObject {
  @private
-  std::unique_ptr<content::MockDownloadItem> download_;
+  std::unique_ptr<download::MockDownloadItem> download_;
 }
-- (id)initWithMockDownload:(std::unique_ptr<content::MockDownloadItem>)download;
-- (content::DownloadItem*)download;
-- (content::MockDownloadItem*)mockDownload;
+- (id)initWithMockDownload:
+    (std::unique_ptr<download::MockDownloadItem>)download;
+- (download::DownloadItem*)download;
+- (download::MockDownloadItem*)mockDownload;
 @end
 
 @implementation WrappedMockDownloadItem
 - (id)initWithMockDownload:
-    (std::unique_ptr<content::MockDownloadItem>)download {
+    (std::unique_ptr<download::MockDownloadItem>)download {
   if ((self = [super init])) {
     download_ = std::move(download);
   }
   return self;
 }
 
-- (content::DownloadItem*)download {
+- (download::DownloadItem*)download {
   return download_.get();
 }
 
-- (content::MockDownloadItem*)mockDownload {
+- (download::MockDownloadItem*)mockDownload {
   return download_.get();
 }
 @end
@@ -139,12 +140,12 @@ class DownloadShelfControllerTest : public CocoaProfileTest {
 };
 
 id DownloadShelfControllerTest::CreateItemController() {
-  std::unique_ptr<content::MockDownloadItem> download(
-      new ::testing::NiceMock<content::MockDownloadItem>);
+  std::unique_ptr<download::MockDownloadItem> download(
+      new ::testing::NiceMock<download::MockDownloadItem>);
   ON_CALL(*download.get(), GetOpened())
       .WillByDefault(Return(false));
   ON_CALL(*download.get(), GetState())
-      .WillByDefault(Return(content::DownloadItem::IN_PROGRESS));
+      .WillByDefault(Return(download::DownloadItem::IN_PROGRESS));
 
   base::scoped_nsobject<WrappedMockDownloadItem> wrappedMockDownload(
       [[WrappedMockDownloadItem alloc]
@@ -167,9 +168,10 @@ id DownloadShelfControllerTest::CreateItemController() {
 
 TEST_VIEW(DownloadShelfControllerTest, [shelf_ view]);
 
+// TODO(crbug.com/849477) Disabled for flakiness.
 // Removing the last download from the shelf should cause it to close
 // immediately.
-TEST_F(DownloadShelfControllerTest, AddAndRemoveDownload) {
+TEST_F(DownloadShelfControllerTest, DISABLED_AddAndRemoveDownload) {
   base::scoped_nsobject<DownloadItemController> item(CreateItemController());
   [shelf_ showDownloadShelf:YES isUserAction:NO animate:YES];
   EXPECT_TRUE([shelf_ isVisible]);
@@ -184,7 +186,9 @@ TEST_F(DownloadShelfControllerTest, AddAndRemoveDownload) {
 
 // Test that the shelf doesn't close automatically after a removal if there are
 // active download items still on the shelf.
-TEST_F(DownloadShelfControllerTest, AddAndRemoveWithActiveItem) {
+// Disabled due to flakiness. https://crbug.com/832389
+#define MAYBE_AddAndRemoveWithActiveItem DISABLED_AddAndRemoveWithActiveItem
+TEST_F(DownloadShelfControllerTest, MAYBE_AddAndRemoveWithActiveItem) {
   base::scoped_nsobject<DownloadItemController> item1(CreateItemController());
   base::scoped_nsobject<DownloadItemController> item2(CreateItemController());
   [shelf_ showDownloadShelf:YES isUserAction:NO animate:YES];
@@ -200,7 +204,7 @@ TEST_F(DownloadShelfControllerTest, AddAndRemoveWithActiveItem) {
 
 // DownloadShelf::Unhide() should cause the shelf to be displayed if there are
 // active downloads on it.
-TEST_F(DownloadShelfControllerTest, HideAndUnhide) {
+TEST_F(DownloadShelfControllerTest, DISABLED_HideAndUnhide) {
   base::scoped_nsobject<DownloadItemController> item(CreateItemController());
   [shelf_ showDownloadShelf:YES isUserAction:NO animate:YES];
   EXPECT_TRUE([shelf_ isVisible]);
@@ -228,9 +232,11 @@ TEST_F(DownloadShelfControllerTest, HideAutocloseUnhide) {
   EXPECT_FALSE([shelf_ isVisible]);
 }
 
+// TODO(crbug.com/849477) Disabled for flakiness.
 // Test of autoclosing behavior after opening a download item. The mouse is on
 // the download shelf at the time the autoclose is scheduled.
-TEST_F(DownloadShelfControllerTest, AutoCloseAfterOpenWithMouseInShelf) {
+TEST_F(DownloadShelfControllerTest,
+       DISABLED_AutoCloseAfterOpenWithMouseInShelf) {
   base::scoped_nsobject<DownloadItemController> item(CreateItemController());
   [shelf_ showDownloadShelf:YES isUserAction:NO animate:YES];
   EXPECT_TRUE([shelf_ isVisible]);
@@ -282,9 +288,10 @@ TEST_F(DownloadShelfControllerTest, AutoCloseAfterOpenWithMouseOffShelf) {
   EXPECT_FALSE([shelf_ isVisible]);
 }
 
+// TODO(crbug.com/849477) Disabled for flakiness.
 // Test that if the shelf is closed while an autoClose is pending, the pending
 // autoClose is cancelled.
-TEST_F(DownloadShelfControllerTest, CloseWithPendingAutoClose) {
+TEST_F(DownloadShelfControllerTest, DISABLED_CloseWithPendingAutoClose) {
   base::scoped_nsobject<DownloadItemController> item(CreateItemController());
   [shelf_ showDownloadShelf:YES isUserAction:NO animate:YES];
   EXPECT_TRUE([shelf_ isVisible]);

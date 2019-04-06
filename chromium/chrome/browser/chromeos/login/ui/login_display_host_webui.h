@@ -16,7 +16,7 @@
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/signin_screen_controller.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_common.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
@@ -29,9 +29,6 @@
 #include "ui/events/devices/input_device_event_observer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget_removals_observer.h"
-#include "ui/wm/public/scoped_drag_drop_disabler.h"
-
-class ScopedKeepAlive;
 
 namespace ash {
 class FocusRingController;
@@ -44,8 +41,7 @@ class WebUILoginView;
 
 // An implementation class for OOBE/login WebUI screen host.
 // It encapsulates controllers, wallpaper integration and flow.
-class LoginDisplayHostWebUI : public LoginDisplayHost,
-                              public content::NotificationObserver,
+class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
                               public content::WebContentsObserver,
                               public chromeos::SessionManagerClient::Observer,
                               public chromeos::CrasAudioHandler::AudioObserver,
@@ -54,20 +50,21 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
                               public views::WidgetRemovalsObserver,
                               public MultiUserWindowManager::Observer {
  public:
-  explicit LoginDisplayHostWebUI(const gfx::Rect& wallpaper_bounds);
+  LoginDisplayHostWebUI();
   ~LoginDisplayHostWebUI() override;
 
-  // LoginDisplayHost implementation:
-  LoginDisplay* CreateLoginDisplay(LoginDisplay::Delegate* delegate) override;
+  // LoginDisplayHost:
+  LoginDisplay* GetLoginDisplay() override;
+  ExistingUserController* GetExistingUserController() override;
   gfx::NativeWindow GetNativeWindow() const override;
   OobeUI* GetOobeUI() const override;
+  content::WebContents* GetOobeWebContents() const override;
   WebUILoginView* GetWebUILoginView() const override;
-  void BeforeSessionStart() override;
-  void Finalize(base::OnceClosure completion_callback) override;
+  void OnFinalize() override;
   void SetStatusAreaVisible(bool visible) override;
   void StartWizard(OobeScreen first_screen) override;
   WizardController* GetWizardController() override;
-  void StartUserAdding(base::OnceClosure completion_callback) override;
+  void OnStartUserAdding() override;
   void CancelUserAdding() override;
   void OnStartSignInScreen(const LoginScreenContext& context) override;
   void OnPreferencesChanged() override;
@@ -75,14 +72,19 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
   void OnStartArcKiosk() override;
   bool IsVoiceInteractionOobe() override;
   void StartVoiceInteractionOobe() override;
+  void OnBrowserCreated() override;
+  void ShowGaiaDialog(
+      bool can_close,
+      const base::Optional<AccountId>& prefilled_account) override;
+  void HideOobeDialog() override;
+  void UpdateOobeDialogSize(int width, int height) override;
+  const user_manager::UserList GetUsers() override;
+  void ShowFeedback() override;
+  void ShowDialogForCaptivePortal() override;
+  void HideDialogForCaptivePortal() override;
+  void UpdateAddUserButtonStatus() override;
 
-  // Creates WizardController instance.
-  WizardController* CreateWizardController();
-
-  // Called when the first browser window is created, but before it's shown.
-  void OnBrowserCreated();
-
-  const gfx::Rect& wallpaper_bounds() const { return wallpaper_bounds_; }
+  void OnCancelPasswordChangedFlow() override;
 
   // Trace id for ShowLoginWebUI event (since there exists at most one login
   // WebUI at a time).
@@ -96,32 +98,32 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
  protected:
   class KeyboardDrivenOobeKeyHandler;
 
-  // content::NotificationObserver implementation:
+  // LoginDisplayHost:
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // Overridden from content::WebContentsObserver:
+  // content::WebContentsObserver:
   void RenderProcessGone(base::TerminationStatus status) override;
 
-  // Overridden from chromeos::SessionManagerClient::Observer:
+  // chromeos::SessionManagerClient::Observer:
   void EmitLoginPromptVisibleCalled() override;
 
-  // Overridden from chromeos::CrasAudioHandler::AudioObserver:
+  // chromeos::CrasAudioHandler::AudioObserver:
   void OnActiveOutputNodeChanged() override;
 
-  // Overridden from display::DisplayObserver:
+  // display::DisplayObserver:
   void OnDisplayAdded(const display::Display& new_display) override;
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
 
-  // Overridden from ui::InputDeviceEventObserver
+  // ui::InputDeviceEventObserver
   void OnTouchscreenDeviceConfigurationChanged() override;
 
-  // Overridden from views::WidgetRemovalsObserver:
+  // views::WidgetRemovalsObserver:
   void OnWillRemoveView(views::Widget* widget, views::View* view) override;
 
-  // Overridden from chrome::MultiUserWindowManager::Observer:
+  // chrome::MultiUserWindowManager::Observer:
   void OnUserSwitchAnimationFinished() override;
 
  private:
@@ -144,9 +146,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
     ANIMATION_ADD_USER,   // Use UserSwitchAnimatorChromeOS animation when
                           // adding a user into multi-profile session.
   };
-
-  // Marks display host for deletion.
-  void ShutdownDisplayHost();
 
   // Schedules workspace transition animation.
   void ScheduleWorkspaceAnimation();
@@ -181,10 +180,11 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
   // Called when login-prompt-visible signal is caught.
   void OnLoginPromptVisible();
 
-  // Used to calculate position of the screens and wallpaper.
-  gfx::Rect wallpaper_bounds_;
+  // Creates or recreates |existing_user_controller_|.
+  void CreateExistingUserController();
 
-  content::NotificationRegistrar registrar_;
+  // Plays startup sound if needed and audio device is ready.
+  void PlayStartupSoundIfPossible();
 
   // Sign in screen controller.
   std::unique_ptr<ExistingUserController> existing_user_controller_;
@@ -194,19 +194,8 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
 
   std::unique_ptr<SignInScreenController> signin_screen_controller_;
 
-  // Make sure chrome won't exit while we are at login/oobe screen.
-  std::unique_ptr<ScopedKeepAlive> keep_alive_;
-
-  // Has ShutdownDisplayHost() already been called?  Used to avoid posting our
-  // own deletion to the message loop twice if the user logs out while we're
-  // still in the process of cleaning up after login (http://crbug.com/134463).
-  bool shutting_down_ = false;
-
   // Whether progress bar is shown on the OOBE page.
   bool oobe_progress_bar_visible_ = false;
-
-  // True if session start is in progress.
-  bool session_starting_ = false;
 
   // Container of the screen we are displaying.
   views::Widget* login_window_ = nullptr;
@@ -218,7 +207,7 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
   WebUILoginView* login_view_ = nullptr;
 
   // Login display we are using.
-  LoginDisplayWebUI* login_display_ = nullptr;
+  std::unique_ptr<LoginDisplayWebUI> login_display_;
 
   // True if the login display is the current screen.
   bool is_showing_login_ = false;
@@ -250,9 +239,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
   // Stored parameters for StartWizard, required to restore in case of crash.
   OobeScreen first_screen_;
 
-  // Called after host deletion.
-  std::vector<base::OnceClosure> completion_callbacks_;
-
   // A focus ring controller to draw focus ring around view for keyboard
   // driven oobe.
   std::unique_ptr<ash::FocusRingController> focus_ring_controller_;
@@ -272,13 +258,12 @@ class LoginDisplayHostWebUI : public LoginDisplayHost,
   // After OOBE is completed, this is always initialized with true.
   bool oobe_startup_sound_played_ = false;
 
-  // Keeps a copy of the old Drag'n'Drop client, so that it would be disabled
-  // during a login session and restored afterwards.
-  std::unique_ptr<wm::ScopedDragDropDisabler> scoped_drag_drop_disabler_;
-
   bool is_voice_interaction_oobe_ = false;
 
-  base::WeakPtrFactory<LoginDisplayHostWebUI> animation_weak_ptr_factory_;
+  // True if we need to play startup sound when audio device becomes available.
+  bool need_to_play_startup_sound_ = false;
+
+  base::WeakPtrFactory<LoginDisplayHostWebUI> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(LoginDisplayHostWebUI);
 };

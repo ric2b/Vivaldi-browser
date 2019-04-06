@@ -6,36 +6,37 @@
 
 #include <vector>
 
-#include "ash/shell.h"
-#include "ash/wallpaper/wallpaper_controller.h"
-#include "ash/wallpaper/wallpaper_controller_observer.h"
+#include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/customization/customization_wallpaper_downloader.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager_test_utils.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/chromeos_switches.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/codec/jpeg_codec.h"
 
 namespace chromeos {
 
 namespace {
 
-const char kOEMWallpaperURL[] = "http://somedomain.com/image.png";
+constexpr char kOEMWallpaperRelativeURL[] = "/image.png";
 
-const char kServicesManifest[] =
+constexpr char kServicesManifest[] =
     "{"
     "  \"version\": \"1.0\","
-    "  \"default_wallpaper\": \"http://somedomain.com/image.png\",\n"
+    "  \"default_wallpaper\": \"\%s\",\n"
     "  \"default_apps\": [\n"
     "    \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n"
     "    \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n"
@@ -54,56 +55,146 @@ const char kServicesManifest[] =
     "}";
 
 // Expected minimal wallpaper download retry interval in milliseconds.
-const int kDownloadRetryIntervalMS = 100;
+constexpr int kDownloadRetryIntervalMS = 100;
 
-class TestWallpaperObserver : public ash::WallpaperControllerObserver {
+// Dimension used for width and height of default wallpaper images. A small
+// value is used to minimize the amount of time spent compressing and writing
+// images.
+constexpr int kWallpaperSize = 2;
+
+constexpr SkColor kCustomizedDefaultWallpaperColor = SK_ColorDKGRAY;
+
+std::string ManifestForURL(const std::string& url) {
+  return base::StringPrintf(kServicesManifest, url.c_str());
+}
+
+// Returns true if the color at the center of |image| is close to
+// |expected_color|. (The center is used so small wallpaper images can be
+// used.)
+bool ImageIsNearColor(gfx::ImageSkia image, SkColor expected_color) {
+  if (image.size().IsEmpty()) {
+    LOG(ERROR) << "Image is empty";
+    return false;
+  }
+
+  const SkBitmap* bitmap = image.bitmap();
+  if (!bitmap) {
+    LOG(ERROR) << "Unable to get bitmap from image";
+    return false;
+  }
+
+  gfx::Point center = gfx::Rect(image.size()).CenterPoint();
+  SkColor image_color = bitmap->getColor(center.x(), center.y());
+
+  const int kDiff = 3;
+  if (std::abs(static_cast<int>(SkColorGetA(image_color)) -
+               static_cast<int>(SkColorGetA(expected_color))) > kDiff ||
+      std::abs(static_cast<int>(SkColorGetR(image_color)) -
+               static_cast<int>(SkColorGetR(expected_color))) > kDiff ||
+      std::abs(static_cast<int>(SkColorGetG(image_color)) -
+               static_cast<int>(SkColorGetG(expected_color))) > kDiff ||
+      std::abs(static_cast<int>(SkColorGetB(image_color)) -
+               static_cast<int>(SkColorGetB(expected_color))) > kDiff) {
+    LOG(ERROR) << "Expected color near 0x" << std::hex << expected_color
+               << " but got 0x" << image_color;
+    return false;
+  }
+
+  return true;
+}
+
+// Creates compressed JPEG image of solid color. Result bytes are written to
+// |output|. Returns true on success.
+bool CreateJPEGImage(int width,
+                     int height,
+                     SkColor color,
+                     std::vector<unsigned char>* output) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(width, height);
+  bitmap.eraseColor(color);
+  if (!gfx::JPEGCodec::Encode(bitmap, 80 /*quality=*/, output)) {
+    LOG(ERROR) << "Unable to encode " << width << "x" << height << " bitmap";
+    return false;
+  }
+  return true;
+}
+
+class TestWallpaperObserver : public ash::mojom::WallpaperObserver {
  public:
-  explicit TestWallpaperObserver(ash::WallpaperController* wallpaper_controller)
-      : finished_(false), wallpaper_controller_(wallpaper_controller) {
-    wallpaper_controller_->AddObserver(this);
+  TestWallpaperObserver() : finished_(false), observer_binding_(this) {
+    ash::mojom::WallpaperObserverAssociatedPtrInfo ptr_info;
+    observer_binding_.Bind(mojo::MakeRequest(&ptr_info));
+    WallpaperControllerClient::Get()->AddObserver(std::move(ptr_info));
   }
 
-  ~TestWallpaperObserver() override {
-    wallpaper_controller_->RemoveObserver(this);
-  }
+  ~TestWallpaperObserver() override = default;
 
-  void OnWallpaperDataChanged() override {
+  // ash::mojom::WallpaperObserver:
+  void OnWallpaperChanged(uint32_t image_id) override {
     finished_ = true;
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
-  void WaitForWallpaperDataChanged() {
+  void OnWallpaperColorsChanged(
+      const std::vector<SkColor>& prominent_colors) override {}
+
+  void OnWallpaperBlurChanged(bool blurred) override {}
+
+  // Wait until the wallpaper update is completed.
+  void WaitForWallpaperChanged() {
     while (!finished_)
       base::RunLoop().Run();
   }
 
+  void Reset() { finished_ = false; }
+
  private:
   bool finished_;
-  ash::WallpaperController* wallpaper_controller_;
+
+  // The binding this instance uses to implement ash::mojom::WallpaperObserver.
+  mojo::AssociatedBinding<ash::mojom::WallpaperObserver> observer_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWallpaperObserver);
 };
 
 }  // namespace
 
-// This is helper class for net::FakeURLFetcherFactory.
-class TestWallpaperImageURLFetcherCallback {
+class CustomizationWallpaperDownloaderBrowserTest
+    : public InProcessBrowserTest {
  public:
-  TestWallpaperImageURLFetcherCallback(
-      const GURL& url,
-      const size_t require_retries,
-      const std::vector<unsigned char>& jpeg_data_raw)
-      : url_(url), require_retries_(require_retries), factory_(nullptr) {
-    jpeg_data_.resize(jpeg_data_raw.size());
-    std::copy(jpeg_data_raw.begin(), jpeg_data_raw.end(), jpeg_data_.begin());
+  CustomizationWallpaperDownloaderBrowserTest() {}
+  ~CustomizationWallpaperDownloaderBrowserTest() override {}
+
+  // InProcessBrowserTest overrides:
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+
+    std::vector<unsigned char> oem_wallpaper;
+    ASSERT_TRUE(CreateJPEGImage(kWallpaperSize, kWallpaperSize,
+                                kCustomizedDefaultWallpaperColor,
+                                &oem_wallpaper));
+    jpeg_data_.resize(oem_wallpaper.size());
+    std::copy(oem_wallpaper.begin(), oem_wallpaper.end(), jpeg_data_.begin());
+
+    // Set up the test server.
+    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+        &CustomizationWallpaperDownloaderBrowserTest::HandleRequest,
+        base::Unretained(this)));
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
-  std::unique_ptr<net::FakeURLFetcher> CreateURLFetcher(
-      const GURL& url,
-      net::URLFetcherDelegate* delegate,
-      const std::string& response_data,
-      net::HttpStatusCode response_code,
-      net::URLRequestStatus::Status status) {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(chromeos::switches::kLoginManager);
+    command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile, "user");
+  }
+
+  void SetRequiredRetries(size_t retries) { required_retries_ = retries; }
+
+  size_t num_attempts() const { return attempts_.size(); }
+
+ private:
+  std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
+      const net::test_server::HttpRequest& request) {
     chromeos::ServicesCustomizationDocument* customization =
         chromeos::ServicesCustomizationDocument::GetInstance();
     customization->wallpaper_downloader_for_testing()
@@ -125,160 +216,91 @@ class TestWallpaperImageURLFetcherCallback {
           << " * (retry=" << retry
           << " * retry)= " << base_interval * retry * retry << " seconds.";
     }
-    if (attempts_.size() > require_retries_) {
-      response_code = net::HTTP_OK;
-      status = net::URLRequestStatus::SUCCESS;
-      factory_->SetFakeResponse(url, response_data, response_code, status);
+    if (attempts_.size() > required_retries_) {
+      std::unique_ptr<net::test_server::BasicHttpResponse> response =
+          std::make_unique<net::test_server::BasicHttpResponse>();
+      response->set_content_type("image/jpeg");
+      response->set_code(net::HTTP_OK);
+      response->set_content(jpeg_data_);
+      return std::move(response);
     }
-    std::unique_ptr<net::FakeURLFetcher> fetcher(new net::FakeURLFetcher(
-        url, delegate, response_data, response_code, status));
-    scoped_refptr<net::HttpResponseHeaders> download_headers =
-        new net::HttpResponseHeaders(std::string());
-    download_headers->AddHeader("Content-Type: image/jpeg");
-    fetcher->set_response_headers(download_headers);
-    return fetcher;
+    return nullptr;
   }
 
-  void Initialize(net::FakeURLFetcherFactory* factory) {
-    factory_ = factory;
-    factory_->SetFakeResponse(url_,
-                              jpeg_data_,
-                              net::HTTP_INTERNAL_SERVER_ERROR,
-                              net::URLRequestStatus::FAILED);
-  }
-
-  size_t num_attempts() const { return attempts_.size(); }
-
- private:
-  const GURL url_;
-  // Respond with OK on required retry attempt.
-  const size_t require_retries_;
-  net::FakeURLFetcherFactory* factory_;
-  std::vector<base::TimeTicks> attempts_;
+  // Sample Wallpaper content.
   std::string jpeg_data_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestWallpaperImageURLFetcherCallback);
-};
+  // Number of loads performed.
+  std::vector<base::TimeTicks> attempts_;
 
-// This implements fake remote source for wallpaper image.
-// JPEG image is created here and served to CustomizationWallpaperDownloader
-// via net::FakeURLFetcher.
-class WallpaperImageFetcherFactory {
- public:
-  WallpaperImageFetcherFactory(const GURL& url,
-                               int width,
-                               int height,
-                               SkColor color,
-                               const size_t require_retries) {
-    // ASSERT_TRUE() cannot be directly used in constructor.
-    Initialize(url, width, height, color, require_retries);
-  }
+  // Number of retries required.
+  size_t required_retries_ = 0;
 
-  ~WallpaperImageFetcherFactory() {
-    fetcher_factory_.reset();
-    net::URLFetcherImpl::set_factory(fallback_fetcher_factory_.get());
-    fallback_fetcher_factory_.reset();
-  }
-
-  size_t num_attempts() const { return url_callback_->num_attempts(); }
-
- private:
-  void Initialize(const GURL& url,
-                  int width,
-                  int height,
-                  SkColor color,
-                  const size_t require_retries) {
-    std::vector<unsigned char> oem_wallpaper_;
-    ASSERT_TRUE(ash::WallpaperController::CreateJPEGImageForTesting(
-        width, height, color, &oem_wallpaper_));
-
-    url_callback_.reset(new TestWallpaperImageURLFetcherCallback(
-        url, require_retries, oem_wallpaper_));
-    fallback_fetcher_factory_.reset(new net::TestURLFetcherFactory);
-    net::URLFetcherImpl::set_factory(nullptr);
-    fetcher_factory_.reset(new net::FakeURLFetcherFactory(
-        fallback_fetcher_factory_.get(),
-        base::Bind(&TestWallpaperImageURLFetcherCallback::CreateURLFetcher,
-                   base::Unretained(url_callback_.get()))));
-    url_callback_->Initialize(fetcher_factory_.get());
-  }
-
-  std::unique_ptr<TestWallpaperImageURLFetcherCallback> url_callback_;
-
-  // Use a test factory as a fallback so we don't have to deal with other
-  // requests.
-  std::unique_ptr<net::TestURLFetcherFactory> fallback_fetcher_factory_;
-  std::unique_ptr<net::FakeURLFetcherFactory> fetcher_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(WallpaperImageFetcherFactory);
-};
-
-class CustomizationWallpaperDownloaderBrowserTest
-    : public InProcessBrowserTest {
- public:
-  CustomizationWallpaperDownloaderBrowserTest() {}
-  ~CustomizationWallpaperDownloaderBrowserTest() override {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(chromeos::switches::kLoginManager);
-    command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile, "user");
-  }
-
- private:
   DISALLOW_COPY_AND_ASSIGN(CustomizationWallpaperDownloaderBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(CustomizationWallpaperDownloaderBrowserTest,
                        OEMWallpaperIsPresent) {
-  ash::WallpaperController* wallpaper_controller =
-      ash::Shell::Get()->wallpaper_controller();
-  wallpaper_controller->ShowDefaultWallpaperForTesting();
+  TestWallpaperObserver observer;
+  // Show a built-in default wallpaper first.
+  WallpaperControllerClient::Get()->ShowSigninWallpaper();
+  observer.WaitForWallpaperChanged();
+  observer.Reset();
 
-  WallpaperImageFetcherFactory url_factory(
-      GURL(kOEMWallpaperURL), wallpaper_manager_test_utils::kWallpaperSize,
-      wallpaper_manager_test_utils::kWallpaperSize,
-      wallpaper_manager_test_utils::kLargeCustomWallpaperColor,
-      0 /* require_retries */);
+  // Set the number of required retries.
+  SetRequiredRetries(0);
 
-  TestWallpaperObserver observer(wallpaper_controller);
+  // Start fetching the customized default wallpaper.
+  GURL url = embedded_test_server()->GetURL(kOEMWallpaperRelativeURL);
   chromeos::ServicesCustomizationDocument* customization =
       chromeos::ServicesCustomizationDocument::GetInstance();
   EXPECT_TRUE(
-      customization->LoadManifestFromString(std::string(kServicesManifest)));
+      customization->LoadManifestFromString(ManifestForURL(url.spec())));
+  observer.WaitForWallpaperChanged();
+  observer.Reset();
 
-  observer.WaitForWallpaperDataChanged();
-
-  EXPECT_TRUE(wallpaper_manager_test_utils::ImageIsNearColor(
-      wallpaper_controller->GetWallpaper(),
-      wallpaper_manager_test_utils::kLargeCustomWallpaperColor));
-  EXPECT_EQ(1U, url_factory.num_attempts());
+  // Verify the customized default wallpaper has replaced the built-in default
+  // wallpaper.
+  base::RunLoop run_loop;
+  WallpaperControllerClient::Get()->GetWallpaperImage(
+      base::BindLambdaForTesting([&run_loop](const gfx::ImageSkia& image) {
+        run_loop.Quit();
+        EXPECT_TRUE(ImageIsNearColor(image, kCustomizedDefaultWallpaperColor));
+      }));
+  run_loop.Run();
+  EXPECT_EQ(1U, num_attempts());
 }
 
 IN_PROC_BROWSER_TEST_F(CustomizationWallpaperDownloaderBrowserTest,
                        OEMWallpaperRetryFetch) {
-  ash::WallpaperController* wallpaper_controller =
-      ash::Shell::Get()->wallpaper_controller();
-  wallpaper_controller->ShowDefaultWallpaperForTesting();
+  TestWallpaperObserver observer;
+  // Show a built-in default wallpaper.
+  WallpaperControllerClient::Get()->ShowSigninWallpaper();
+  observer.WaitForWallpaperChanged();
+  observer.Reset();
 
-  WallpaperImageFetcherFactory url_factory(
-      GURL(kOEMWallpaperURL), wallpaper_manager_test_utils::kWallpaperSize,
-      wallpaper_manager_test_utils::kWallpaperSize,
-      wallpaper_manager_test_utils::kLargeCustomWallpaperColor,
-      1 /* require_retries */);
+  // Set the number of required retries.
+  SetRequiredRetries(1);
 
-  TestWallpaperObserver observer(wallpaper_controller);
+  // Start fetching the customized default wallpaper.
+  GURL url = embedded_test_server()->GetURL(kOEMWallpaperRelativeURL);
   chromeos::ServicesCustomizationDocument* customization =
       chromeos::ServicesCustomizationDocument::GetInstance();
   EXPECT_TRUE(
-      customization->LoadManifestFromString(std::string(kServicesManifest)));
+      customization->LoadManifestFromString(ManifestForURL(url.spec())));
+  observer.WaitForWallpaperChanged();
+  observer.Reset();
 
-  observer.WaitForWallpaperDataChanged();
-
-  EXPECT_TRUE(wallpaper_manager_test_utils::ImageIsNearColor(
-      wallpaper_controller->GetWallpaper(),
-      wallpaper_manager_test_utils::kLargeCustomWallpaperColor));
-
-  EXPECT_EQ(2U, url_factory.num_attempts());
+  // Verify the customized default wallpaper has replaced the built-in default
+  // wallpaper.
+  base::RunLoop run_loop;
+  WallpaperControllerClient::Get()->GetWallpaperImage(
+      base::BindLambdaForTesting([&run_loop](const gfx::ImageSkia& image) {
+        run_loop.Quit();
+        EXPECT_TRUE(ImageIsNearColor(image, kCustomizedDefaultWallpaperColor));
+      }));
+  run_loop.Run();
+  EXPECT_EQ(2U, num_attempts());
 }
 
 }  // namespace chromeos

@@ -208,13 +208,15 @@ void NetworkMetricsProvider::ProvideSystemProfileMetrics(
   // window, since OnConnectionTypeChanged() ignores transitions to the "none"
   // state.
   connection_type_ = net::NetworkChangeNotifier::GetConnectionType();
+  if (connection_type_ != net::NetworkChangeNotifier::CONNECTION_UNKNOWN)
+    network_change_notifier_initialized_ = true;
   // Reset the "ambiguous" flags, since a new metrics log session has started.
   connection_type_is_ambiguous_ = false;
   wifi_phy_layer_protocol_is_ambiguous_ = false;
   min_effective_connection_type_ = effective_connection_type_;
   max_effective_connection_type_ = effective_connection_type_;
 
-  if (!wifi_access_point_info_provider_.get()) {
+  if (!wifi_access_point_info_provider_) {
 #if defined(OS_CHROMEOS)
     wifi_access_point_info_provider_.reset(
         new WifiAccessPointInfoProviderChromeos());
@@ -404,17 +406,18 @@ void NetworkMetricsProvider::WriteWifiAccessPointProto(
   for (const base::StringPiece& oui_str : base::SplitStringPiece(
            info.oui_list, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
     uint32_t oui;
-    if (base::HexStringToUInt(oui_str, &oui))
+    if (base::HexStringToUInt(oui_str, &oui)) {
       vendor->add_element_identifier(oui);
-    else
-      NOTREACHED();
+    } else {
+      DLOG(WARNING) << "Error when parsing OUI list of the WiFi access point";
+    }
   }
 }
 
 void NetworkMetricsProvider::LogAggregatedMetrics() {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::HistogramBase* error_codes = base::SparseHistogram::FactoryGet(
-      "Net.ErrorCodesForMainFrame3",
+      "Net.ErrorCodesForMainFrame4",
       base::HistogramBase::kUmaTargetedHistogramFlag);
   std::unique_ptr<base::HistogramSamples> samples =
       error_codes->SnapshotSamples();

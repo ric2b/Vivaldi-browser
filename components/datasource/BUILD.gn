@@ -1,4 +1,6 @@
-source_set("datasource") {
+import("//build/config/jumbo.gni")
+
+jumbo_source_set("datasource") {
   sources = [
     "desktop_data_source_win.cc",
     "desktop_data_source_win.h",

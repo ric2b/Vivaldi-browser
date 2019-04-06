@@ -11,48 +11,14 @@
 
 namespace content {
 
-MockRenderWidgetHostDelegate::MockRenderWidgetHostDelegate() = default;
+MockRenderWidgetHostDelegate::MockRenderWidgetHostDelegate()
+    : text_input_manager_(false /* should_do_learning */) {}
+
 MockRenderWidgetHostDelegate::~MockRenderWidgetHostDelegate() = default;
 
 void MockRenderWidgetHostDelegate::ResizeDueToAutoResize(
     RenderWidgetHostImpl* render_widget_host,
-    const gfx::Size& new_size,
-    uint64_t sequence_number) {
-  RenderWidgetHostViewBase* rwhv = rwh_->GetView();
-  if (rwhv)
-    rwhv->ResizeDueToAutoResize(new_size, sequence_number);
-}
-
-void MockRenderWidgetHostDelegate::ScreenInfoChanged() {
-  display::Screen* screen = display::Screen::GetScreen();
-  const display::Display display = screen->GetPrimaryDisplay();
-  last_device_scale_factor_ = display.device_scale_factor();
-}
-
-void MockRenderWidgetHostDelegate::GetScreenInfo(ScreenInfo* result) {
-  display::Screen* screen = display::Screen::GetScreen();
-  const display::Display display = screen->GetPrimaryDisplay();
-  result->rect = display.bounds();
-  result->available_rect = display.work_area();
-  result->depth = display.color_depth();
-  result->depth_per_component = display.depth_per_component();
-  result->is_monochrome = display.is_monochrome();
-  result->device_scale_factor = display.device_scale_factor();
-  result->color_space = display.color_space();
-
-  // The Display rotation and the ScreenInfo orientation are not the same
-  // angle. The former is the physical display rotation while the later is the
-  // rotation required by the content to be shown properly on the screen, in
-  // other words, relative to the physical display.
-  result->orientation_angle = display.RotationAsDegree();
-  if (result->orientation_angle == 90)
-    result->orientation_angle = 270;
-  else if (result->orientation_angle == 270)
-    result->orientation_angle = 90;
-
-  result->orientation_type =
-      RenderWidgetHostViewBase::GetOrientationTypeForDesktop(display);
-}
+    const gfx::Size& new_size) {}
 
 KeyboardEventProcessingResult
 MockRenderWidgetHostDelegate::PreHandleKeyboardEvent(

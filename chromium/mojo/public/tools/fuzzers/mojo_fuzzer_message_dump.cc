@@ -5,11 +5,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/containers/flat_map.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/task_scheduler.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/core/embedder/embedder.h"
 #include "mojo/public/tools/fuzzers/fuzz.mojom.h"
 #include "mojo/public/tools/fuzzers/fuzz_impl.h"
 
@@ -20,7 +21,7 @@ struct Environment {
   Environment() : message_loop() {
     base::TaskScheduler::CreateAndStartWithDefaultParams(
         "MojoFuzzerMessageDumpProcess");
-    mojo::edk::Init();
+    mojo::core::Init();
   }
 
   /* Message loop to send messages on. */
@@ -77,7 +78,7 @@ auto GetBoolFuzzUnion() {
  * FuzzDummyStructPtr to use within the fuzz_struct_map value. */
 auto GetStructMapFuzzUnion(fuzz::mojom::FuzzDummyStructPtr in) {
   fuzz::mojom::FuzzUnionPtr union_struct_map = fuzz::mojom::FuzzUnion::New();
-  std::unordered_map<std::string, fuzz::mojom::FuzzDummyStructPtr> struct_map;
+  base::flat_map<std::string, fuzz::mojom::FuzzDummyStructPtr> struct_map;
   struct_map["fuzz"] = std::move(in);
   union_struct_map->set_fuzz_struct_map(std::move(struct_map));
   return union_struct_map;

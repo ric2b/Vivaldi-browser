@@ -6,10 +6,14 @@
 
 #include "chrome/services/media_gallery_util/ipc_data_source.h"
 #include "chrome/services/media_gallery_util/media_metadata_parser.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
+#include "third_party/libyuv/include/libyuv.h"
 
 #if BUILDFLAG(ENABLE_FFMPEG)
 #include "media/filters/media_file_checker.h"
+extern "C" {
+#include <libavutil/cpu.h>
+}
 #endif
 
 namespace {
@@ -17,9 +21,9 @@ namespace {
 void ParseMediaMetadataDone(
     MediaParser::ParseMediaMetadataCallback callback,
     MediaMetadataParser* /* parser */,
-    const extensions::api::media_galleries::MediaMetadata& metadata,
+    chrome::mojom::MediaMetadataPtr metadata,
     const std::vector<metadata::AttachedImage>& attached_images) {
-  std::move(callback).Run(true, metadata.ToValue(), attached_images);
+  std::move(callback).Run(true, std::move(metadata), attached_images);
 }
 
 }  // namespace
@@ -53,4 +57,12 @@ void MediaParser::CheckMediaFile(base::TimeDelta decode_time,
 #else
   std::move(callback).Run(false);
 #endif
+}
+
+void MediaParser::GetCpuInfo(GetCpuInfoCallback callback) {
+  int64_t ffmpeg_cpu_flags = 0;
+#if BUILDFLAG(ENABLE_FFMPEG)
+  ffmpeg_cpu_flags = av_get_cpu_flags();
+#endif
+  std::move(callback).Run(libyuv::InitCpuFlags(), ffmpeg_cpu_flags);
 }

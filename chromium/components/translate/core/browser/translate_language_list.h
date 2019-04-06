@@ -26,8 +26,6 @@ class TranslateURLFetcher;
 // supporting language list.
 class TranslateLanguageList {
  public:
-  static const int kFetcherId = 1;
-
   TranslateLanguageList();
   virtual ~TranslateLanguageList();
 
@@ -66,6 +64,10 @@ class TranslateLanguageList {
   std::unique_ptr<EventCallbackList::Subscription> RegisterEventCallback(
       const EventCallback& callback);
 
+  // Helper methods used by specific unit tests.
+  GURL LanguageFetchURLForTesting();
+  bool HasOngoingLanguageListLoadingForTesting();
+
   // Disables the language list updater. This is used only for testing now.
   static void DisableUpdate();
 
@@ -80,9 +82,7 @@ class TranslateLanguageList {
                            GetSupportedLanguagesFetch);
 
   // Callback function called when TranslateURLFetcher::Request() is finished.
-  void OnLanguageListFetchComplete(int id,
-                                   bool success,
-                                   const std::string& data);
+  void OnLanguageListFetchComplete(bool success, const std::string& data);
 
   // Notifies the callback list of a translate event.
   void NotifyEvent(int line, const std::string& message);

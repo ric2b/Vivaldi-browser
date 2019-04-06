@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/extensions/file_manager/device_event_router.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -32,7 +33,7 @@ class DeviceEventRouterImpl : public DeviceEventRouter {
   DeviceEventRouterImpl()
       : DeviceEventRouter(base::TimeDelta::FromSeconds(0)),
         external_storage_disabled(false) {}
-  ~DeviceEventRouterImpl() override {}
+  ~DeviceEventRouterImpl() override = default;
 
   // DeviceEventRouter overrides.
   void OnDeviceEvent(file_manager_private::DeviceEventType type,
@@ -63,7 +64,7 @@ class DeviceEventRouterImpl : public DeviceEventRouter {
 class DeviceEventRouterTest : public testing::Test {
  protected:
   void SetUp() override {
-    device_event_router.reset(new DeviceEventRouterImpl());
+    device_event_router = std::make_unique<DeviceEventRouterImpl>();
   }
 
   // Creates a disk instance with |device_path| and |mount_path| for testing.

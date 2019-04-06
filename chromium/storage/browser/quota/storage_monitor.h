@@ -15,7 +15,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "storage/browser/quota/storage_observer.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace content {
 class StorageMonitorTestBase;
@@ -60,11 +60,11 @@ class STORAGE_EXPORT StorageObserverList {
 
     ObserverState();
   };
-  typedef std::map<StorageObserver*, ObserverState> StorageObserverStateMap;
+  using StorageObserverStateMap = std::map<StorageObserver*, ObserverState>;
 
   void DispatchPendingEvent();
 
-  StorageObserverStateMap observers_;
+  StorageObserverStateMap observer_state_map_;
   base::OneShotTimer notification_timer_;
   StorageObserver::Event pending_event_;
 

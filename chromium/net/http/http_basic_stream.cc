@@ -11,7 +11,6 @@
 #include "net/http/http_response_body_drainer.h"
 #include "net/http/http_stream_parser.h"
 #include "net/socket/client_socket_handle.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
@@ -28,14 +27,15 @@ int HttpBasicStream::InitializeStream(const HttpRequestInfo* request_info,
                                       bool can_send_early,
                                       RequestPriority priority,
                                       const NetLogWithSource& net_log,
-                                      const CompletionCallback& callback) {
-  state_.Initialize(request_info, can_send_early, priority, net_log, callback);
+                                      CompletionOnceCallback callback) {
+  DCHECK(request_info->traffic_annotation.is_valid());
+  state_.Initialize(request_info, can_send_early, priority, net_log);
   return OK;
 }
 
 int HttpBasicStream::SendRequest(const HttpRequestHeaders& headers,
                                  HttpResponseInfo* response,
-                                 const CompletionCallback& callback) {
+                                 CompletionOnceCallback callback) {
   DCHECK(parser());
   if (request_headers_callback_) {
     HttpRawRequestHeaders raw_headers;
@@ -44,26 +44,25 @@ int HttpBasicStream::SendRequest(const HttpRequestHeaders& headers,
       raw_headers.Add(it.name(), it.value());
     request_headers_callback_.Run(std::move(raw_headers));
   }
-  // TODO(crbug.com/656607): Add propoer annotation.
-  return parser()->SendRequest(state_.GenerateRequestLine(), headers,
-                               NO_TRAFFIC_ANNOTATION_BUG_656607, response,
-                               callback);
+  return parser()->SendRequest(
+      state_.GenerateRequestLine(), headers,
+      NetworkTrafficAnnotationTag(state_.traffic_annotation()), response,
+      std::move(callback));
 }
 
-int HttpBasicStream::ReadResponseHeaders(const CompletionCallback& callback) {
-  return parser()->ReadResponseHeaders(callback);
+int HttpBasicStream::ReadResponseHeaders(CompletionOnceCallback callback) {
+  return parser()->ReadResponseHeaders(std::move(callback));
 }
 
 int HttpBasicStream::ReadResponseBody(IOBuffer* buf,
                                       int buf_len,
-                                      const CompletionCallback& callback) {
-  return parser()->ReadResponseBody(buf, buf_len, callback);
+                                      CompletionOnceCallback callback) {
+  return parser()->ReadResponseBody(buf, buf_len, std::move(callback));
 }
 
 void HttpBasicStream::Close(bool not_reusable) {
-  // parser() is null if |this| is created by an orphaned
-  // HttpStreamFactoryImpl::Job in which case InitializeStream() will not have
-  // been called.
+  // parser() is null if |this| is created by an orphaned HttpStreamFactory::Job
+  // in which case InitializeStream() will not have been called.
   if (parser())
     parser()->Close(not_reusable);
 }

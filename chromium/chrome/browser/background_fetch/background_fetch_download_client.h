@@ -10,7 +10,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/download/public/client.h"
+#include "components/download/public/background_service/client.h"
 
 class BackgroundFetchDelegateImpl;
 
@@ -43,6 +43,8 @@ class BackgroundFetchDownloadClient : public download::Client {
                            const download::CompletionInfo& info) override;
   bool CanServiceRemoveDownloadedFile(const std::string& guid,
                                       bool force_delete) override;
+  void GetUploadData(const std::string& guid,
+                     download::GetUploadDataCallback callback) override;
 
   content::BrowserContext* browser_context_;
   base::WeakPtr<BackgroundFetchDelegateImpl> delegate_;

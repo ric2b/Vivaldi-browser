@@ -18,7 +18,9 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.content_public.browser.ScreenOrientationProvider;
 import org.chromium.content_public.common.ScreenOrientationValues;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 import org.chromium.ui.display.DisplayAndroid;
@@ -69,7 +71,7 @@ public class ScreenOrientationListenerTest {
             @Override
             public void run() {
                 mDisplayAndroid =
-                        mActivityTestRule.getContentViewCore().getWindowAndroid().getDisplay();
+                        mActivityTestRule.getWebContents().getTopLevelNativeWindow().getDisplay();
                 mDisplayAndroid.addObserver(mCallbackHelper);
                 DisplayAndroid.startAccurateListening();
             }
@@ -175,6 +177,7 @@ public class ScreenOrientationListenerTest {
     @Test
     @MediumTest
     @Feature({"ScreenOrientation"})
+    @DisabledTest
     public void testOrientationChanges() throws Exception {
         int rotation = lockOrientationAndWait(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         Assert.assertEquals(
@@ -244,7 +247,7 @@ public class ScreenOrientationListenerTest {
             @Override
             public void run() {
                 ScreenOrientationProvider.lockOrientation(
-                        mActivityTestRule.getContentViewCore().getWindowAndroid(),
+                        mActivityTestRule.getWebContents().getTopLevelNativeWindow(),
                         (byte) orientationValue);
             }
         });
@@ -255,6 +258,7 @@ public class ScreenOrientationListenerTest {
     @Test
     @MediumTest
     @Feature({"ScreenOrientation"})
+    @DisabledTest(message = "crbug.com/807356")
     public void testBasicValues() throws Exception {
         int rotation = lockOrientationValueAndWait(ScreenOrientationValues.LANDSCAPE_PRIMARY);
         Assert.assertEquals(

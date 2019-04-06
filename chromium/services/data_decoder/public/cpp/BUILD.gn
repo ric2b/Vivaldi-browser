@@ -20,7 +20,7 @@ source_set("cpp") {
   ]
 
   public_deps = [
-    "//services/data_decoder/public/interfaces",
+    "//services/data_decoder/public/mojom",
     "//services/service_manager/public/cpp",
   ]
 
@@ -32,8 +32,8 @@ source_set("cpp") {
       "safe_json_parser_android.h",
     ]
     deps = [
-      "android:safe_json_java($default_toolchain)",
       "android:safe_json_jni_headers",
+      "//base",
     ]
   }
 }

@@ -46,6 +46,7 @@ class TestOptions(object):
     self.javap = 'javap'
     self.native_exports_optional = True
     self.enable_profiling = False
+    self.enable_tracing = False
 
 class TestGenerator(unittest.TestCase):
   def assertObjEquals(self, first, second):
@@ -288,10 +289,12 @@ class TestGenerator(unittest.TestCase):
                                               natives, [], [], jni_params,
                                               TestOptions())
     self.assertGoldenTextEquals(h1.GetContent())
-    content = {}
     h2 = jni_registration_generator.HeaderGenerator(
-        '', 'org/chromium/TestJni', natives, jni_params, content, True)
-    h2.AddContent()
+        '', 'org/chromium/TestJni', natives, jni_params, True)
+    content = h2.Generate()
+    for k in jni_registration_generator.MERGEABLE_KEYS:
+      content[k] = content.get(k, '')
+
     self.assertGoldenTextEquals(
         jni_registration_generator.CreateFromDict(content),
         suffix='Registrations')
@@ -375,10 +378,12 @@ class TestGenerator(unittest.TestCase):
                                              TestOptions())
     self.assertGoldenTextEquals(h.GetContent())
 
-    content = {}
     h2 = jni_registration_generator.HeaderGenerator(
-        '', 'org/chromium/TestJni', natives, jni_params, content, True)
-    h2.AddContent()
+        '', 'org/chromium/TestJni', natives, jni_params, True)
+    content = h2.Generate()
+    for k in jni_registration_generator.MERGEABLE_KEYS:
+      content[k] = content.get(k, '')
+
     self.assertGoldenTextEquals(
         jni_registration_generator.CreateFromDict(content),
         suffix='Registrations')
@@ -393,7 +398,9 @@ class TestGenerator(unittest.TestCase):
     class InnerClass {}
 
     @CalledByNative
-    InnerClass showConfirmInfoBar(int nativeInfoBar,
+    @SomeOtherA
+    @SomeOtherB
+    public InnerClass showConfirmInfoBar(int nativeInfoBar,
             String buttonOk, String buttonCancel, String title, Bitmap icon) {
         InfoBar infobar = new ConfirmInfoBar(nativeInfoBar, mContext,
                                              buttonOk, buttonCancel,
@@ -767,12 +774,14 @@ import org.chromium.base.BuildInfo;
 public abstract class java.util.HashSet<T> extends java.util.AbstractSet<E>
       implements java.util.Set<E>, java.lang.Cloneable, java.io.Serializable {
     public void dummy();
-  Signature: ()V
+      Signature: ()V
+    public java.lang.Class<?> getClass();
+      Signature: ()Ljava/lang/Class<*>;
 }
 """
     jni_from_javap = jni_generator.JNIFromJavaP(contents.split('\n'),
                                                 TestOptions())
-    self.assertEquals(1, len(jni_from_javap.called_by_natives))
+    self.assertEquals(2, len(jni_from_javap.called_by_natives))
     self.assertGoldenTextEquals(jni_from_javap.GetContent())
 
   def testSnippnetJavap6_7_8(self):
@@ -1008,16 +1017,22 @@ class Foo {
          public class Test implements Testable<java.io.Serializable> {
       """,
       '@MainDex public class Test implements Testable<java.io.Serializable> {',
-      '@MainDex public class Test extends Testable<java.io.Serializable> {',
+      '@a.B @MainDex @C public class Test extends Testable<Serializable> {',
+      """public class Test extends Testable<java.io.Serializable> {
+         @MainDex void func() {}
+      """,
     ]
     for entry in mainDexEntries:
-      self.assertEquals(True, IsMainDexJavaClass(entry))
+      self.assertEquals(True, IsMainDexJavaClass(entry), entry)
 
   def testNoMainDexAnnotation(self):
     noMainDexEntries = [
       'public class Test {',
       '@NotMainDex public class Test {',
+      '// @MainDex public class Test {',
+      '/* @MainDex */ public class Test {',
       'public class Test implements java.io.Serializable {',
+      '@MainDexNot public class Test {',
       'public class Test extends BaseTest {'
     ]
     for entry in noMainDexEntries:
@@ -1116,6 +1131,31 @@ class Foo {
                                                     TestOptions())
     self.assertGoldenTextEquals(jni_from_java.GetContent())
 
+  def testTracing(self):
+    test_data = """
+    package org.chromium.foo;
+
+    @JNINamespace("org::chromium_foo")
+    class Foo {
+
+    @CalledByNative
+    Foo();
+
+    @CalledByNative
+    void callbackFromNative();
+
+    native void nativeInstanceMethod(long nativeInstance);
+
+    static native void nativeStaticMethod();
+    }
+    """
+    options_with_tracing = TestOptions()
+    options_with_tracing.enable_tracing = True
+    jni_from_java = jni_generator.JNIFromJavaSource(test_data,
+                                                    'org/chromium/foo/Foo',
+                                                    options_with_tracing)
+    self.assertGoldenTextEquals(jni_from_java.GetContent())
+
 
 def TouchStamp(stamp_path):
   dir_name = os.path.dirname(stamp_path)
@@ -1129,9 +1169,14 @@ def TouchStamp(stamp_path):
 def main(argv):
   parser = optparse.OptionParser()
   parser.add_option('--stamp', help='Path to touch on success.')
+  parser.add_option('--verbose', action="store_true",
+                    help='Whether to output details.')
   options, _ = parser.parse_args(argv[1:])
 
-  test_result = unittest.main(argv=argv[0:1], exit=False)
+  test_result = unittest.main(
+      argv=argv[0:1],
+      exit=False,
+      verbosity=(2 if options.verbose else 1))
 
   if test_result.result.wasSuccessful() and options.stamp:
     TouchStamp(options.stamp)

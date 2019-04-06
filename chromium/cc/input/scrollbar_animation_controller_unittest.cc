@@ -35,7 +35,7 @@ class MockScrollbarAnimationControllerClient
  public:
   explicit MockScrollbarAnimationControllerClient(LayerTreeHostImpl* host_impl)
       : host_impl_(host_impl) {}
-  virtual ~MockScrollbarAnimationControllerClient() = default;
+  ~MockScrollbarAnimationControllerClient() override = default;
 
   void PostDelayedScrollbarAnimationTask(const base::Closure& start_fade,
                                          base::TimeDelta delay) override {
@@ -1316,6 +1316,54 @@ TEST_F(ScrollbarAnimationControllerAuraOverlayTest,
   // Should not have delay fade animation.
   EXPECT_TRUE(client_.start_fade().is_null() ||
               client_.start_fade().IsCancelled());
+}
+
+// Ensure Aura Overlay Scrollbars shows and did not fade out when tickmarks show
+// and fade out when tickmarks hide.
+TEST_F(ScrollbarAnimationControllerAuraOverlayTest, TickmakrsShowHide) {
+  base::TimeTicks time;
+  time += base::TimeDelta::FromSeconds(1);
+
+  // Overlay Scrollbar hidden at beginnging.
+  EXPECT_TRUE(scrollbar_controller_->ScrollbarsHidden());
+  EXPECT_TRUE(client_.start_fade().is_null() ||
+              client_.start_fade().IsCancelled());
+
+  // Scrollbars show when tickmarks show.
+  scrollbar_controller_->UpdateTickmarksVisibility(true);
+  EXPECT_FALSE(scrollbar_controller_->ScrollbarsHidden());
+  EXPECT_TRUE(client_.start_fade().is_null() ||
+              client_.start_fade().IsCancelled());
+
+  // Scroll update, no delay fade animation.
+  scrollbar_controller_->DidScrollUpdate();
+  EXPECT_TRUE(client_.start_fade().is_null() ||
+              client_.start_fade().IsCancelled());
+
+  // Scroll update with phase, no delay fade animation.
+  scrollbar_controller_->DidScrollBegin();
+  scrollbar_controller_->DidScrollUpdate();
+  EXPECT_TRUE(client_.start_fade().is_null() ||
+              client_.start_fade().IsCancelled());
+  scrollbar_controller_->DidScrollEnd();
+  EXPECT_TRUE(client_.start_fade().is_null() ||
+              client_.start_fade().IsCancelled());
+
+  // Move mouse, no delay fade animation.
+  scrollbar_controller_->DidMouseMove(NearVerticalScrollbarBegin(0, 0));
+  EXPECT_TRUE(client_.start_fade().is_null() ||
+              client_.start_fade().IsCancelled());
+
+  // Mouse leave, no delay fade animation.
+  scrollbar_controller_->DidMouseLeave();
+  EXPECT_TRUE(client_.start_fade().is_null() ||
+              client_.start_fade().IsCancelled());
+
+  // Scrollbars fade out animation has enqueued when tickmarks hide.
+  scrollbar_controller_->UpdateTickmarksVisibility(false);
+  EXPECT_FALSE(client_.start_fade().is_null());
+  EXPECT_FALSE(client_.start_fade().IsCancelled());
+  EXPECT_EQ(kFadeDelay, client_.delay());
 }
 
 class ScrollbarAnimationControllerAndroidTest

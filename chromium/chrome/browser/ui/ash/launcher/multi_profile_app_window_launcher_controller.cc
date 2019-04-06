@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "ui/aura/window.h"
@@ -44,13 +44,8 @@ void MultiProfileAppWindowLauncherController::ActiveUserChanged(
     Profile* profile =
         Profile::FromBrowserContext(app_window->browser_context());
     if (!multi_user_util::IsProfileFromActiveUser(profile)) {
-      if (IsRegisteredApp(app_window->GetNativeWindow())) {
+      if (IsRegisteredApp(app_window->GetNativeWindow()))
         UnregisterApp(app_window->GetNativeWindow());
-      } else if (app_window->window_type_is_panel()) {
-        // Panels are not registered; hide by clearing the shelf item type.
-        app_window->GetNativeWindow()->SetProperty<int>(ash::kShelfItemTypeKey,
-                                                        ash::TYPE_UNDEFINED);
-      }
     }
   }
   for (extensions::AppWindow* app_window : app_window_list_) {
@@ -60,11 +55,6 @@ void MultiProfileAppWindowLauncherController::ActiveUserChanged(
         !IsRegisteredApp(app_window->GetNativeWindow()) &&
         (app_window->GetBaseWindow()->IsMinimized() ||
          app_window->GetNativeWindow()->IsVisible())) {
-      if (app_window->window_type_is_panel()) {
-        // Panels are not registered; show by restoring the shelf item type.
-        app_window->GetNativeWindow()->SetProperty<int>(ash::kShelfItemTypeKey,
-                                                        ash::TYPE_APP_PANEL);
-      }
       RegisterApp(app_window);
     }
   }
@@ -109,16 +99,6 @@ void MultiProfileAppWindowLauncherController::OnAppWindowShown(
       !IsRegisteredApp(app_window->GetNativeWindow())) {
     RegisterApp(app_window);
     return;
-  }
-
-  // The panel layout manager only manages windows which are anchored.
-  // Since this window did never had an anchor, it would stay hidden. We
-  // therefore make it visible now.
-  if (UserHasAppOnActiveDesktop(app_window) &&
-      app_window->GetNativeWindow()->type() ==
-          aura::client::WINDOW_TYPE_PANEL &&
-      !app_window->GetNativeWindow()->layer()->GetTargetOpacity()) {
-    app_window->GetNativeWindow()->layer()->SetOpacity(1.0f);
   }
 }
 

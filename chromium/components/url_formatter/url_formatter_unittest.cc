@@ -423,6 +423,12 @@ const IDNTestCase idn_cases[] = {
     {"xn--l1acpzs.com", L"\x0449\x043c\x043d\x0442\x044c.com", false},
     // шмнтв.com
     {"xn--b1atdu1a.com", L"\x0448\x043c\x043d\x0442\x0432.com", false},
+    // шмԋтв.com
+    {"xn--b1atsw09g.com", L"\x0448\x043c\x050b\x0442\x0432.com", false},
+    // шмԧтв.com
+    {"xn--b1atsw03i.com", L"\x0448\x043c\x0527\x0442\x0432.com", false},
+    // шмԋԏв.com
+    {"xn--b1at9a12dua.com", L"\x0448\x043c\x050b\x050f\x0432.com", false},
     // ഠട345.com
     {"xn--345-jtke.com",
      L"\x0d20\x0d1f"
@@ -443,7 +449,10 @@ const IDNTestCase idn_cases[] = {
     // phĸtb.com
     {"xn--phtb-m0a.com", L"ph\x0138tb.com", false},
     // phkŧb.com
-    {"xn--phkb-d7a.com", L"phk\x0167" L"b.com", false},
+    {"xn--phkb-d7a.com",
+     L"phk\x0167"
+     L"b.com",
+     false},
     // phktƅ.com
     {"xn--phkt-ocb.com", L"phkt\x0185.com", false},
     // ҏнкть.com
@@ -478,6 +487,10 @@ const IDNTestCase idn_cases[] = {
     {"xn--m1a4ne5jry.com", L"\x048f\x043d\x051f\x04ad\x048d.com", false},
     // ҏнԟҭв.com
     {"xn--b1av9v8dry.com", L"\x048f\x043d\x051f\x04ad\x0432.com", false},
+    // ҏӊԟҭв.com
+    {"xn--b1a9p8c1e8r.com", L"\x048f\x04ca\x051f\x04ad\x0432.com", false},
+    // wmŋr.com
+    {"xn--wmr-jxa.com", L"wm\x014br.com", false},
     // шмпґ.com
     {"xn--l1agz80a.com", L"\x0448\x043c\x043f\x0491.com", false},
     // щмпґ.com
@@ -486,6 +499,8 @@ const IDNTestCase idn_cases[] = {
     {"xn--o1at1tsi.com", L"\x0449\x04ce\x043f\x0491.com", false},
     // ґғ.com
     {"xn--03ae.com", L"\x0491\x0493.com", false},
+    // ґӻ.com
+    {"xn--03a6s.com", L"\x0491\x04fb.com", false},
     // ҫұҳҽ.com
     {"xn--r4amg4b.com", L"\x04ab\x04b1\x04b3\x04bd.com", false},
     // ҫұӽҽ.com
@@ -494,8 +509,119 @@ const IDNTestCase idn_cases[] = {
     {"xn--r4am0b3s.com", L"\x04ab\x04b1\x04ff\x04bd.com", false},
     // ҫұӿҿ.com
     {"xn--r4am6b4p.com", L"\x04ab\x04b1\x04ff\x04bf.com", false},
+    // ҫұӿє.com
+    {"xn--91a7osa62a.com", L"\x04ab\x04b1\x04ff\x0454.com", false},
     // ӏԃԍ.com
     {"xn--s5a8h4a.com", L"\x04cf\x0503\x050d.com", false},
+
+    // U+04CF(ӏ) is mapped to multiple characters, lowercase L(l) and
+    // lowercase I(i). Lowercase L is also regarded as similar to digit 1.
+    // The test domain list has {ig, ld, 1gd}.com for Cyrillic.
+    // ӏԍ.com
+    {"xn--s5a8j.com", L"\x04cf\x050d.com", false},
+    // ӏԃ.com
+    {"xn--s5a8h.com", L"\x04cf\x0503.com", false},
+    // ӏԍԃ.com
+    {"xn--s5a8h3a.com", L"\x04cf\x050d\x0503.com", false},
+
+    // ꓲ2345б7890.com
+    {"xn--23457890-e7g93622b.com",
+     L"\xa4f2"
+     L"2345\x0431"
+     L"7890.com",
+     false},
+    // 1ᒿ345б7890.com
+    {"xn--13457890-e7g0943b.com",
+     L"1\x14bf"
+     L"345\x0431"
+     L"7890.com",
+     false},
+    // 12з4567890.com
+    {"xn--124567890-10h.com",
+     L"12\x0437"
+     L"4567890.com",
+     false},
+    // 12ҙ4567890.com
+    {"xn--124567890-1ti.com",
+     L"12\x0499"
+     L"4567890.com",
+     false},
+    // 12ӡ4567890.com
+    {"xn--124567890-mfj.com",
+     L"12\x04e1"
+     L"4567890.com",
+     false},
+    // 12ვ4567890.com
+    {"xn--124567890-we8a.com",
+     L"12\x10D5"
+     L"4567890.com",
+     false},
+    // 12ဒ4567890.com
+    {"xn--124567890-6s6a.com",
+     L"12\x1012"
+     L"4567890.com",
+     false},
+    // 123Ꮞ567890.com
+    {"xn--123567890-dm4b.com",
+     L"123\x13ce"
+     L"567890.com",
+     false},
+    // 12345б7890.com
+    {"xn--123457890-fzh.com",
+     L"12345\x0431"
+     L"7890.com",
+     false},
+    // 1234567ȣ90.com
+    {"xn--123456790-6od.com",
+     L"1234567\x0223"
+     L"90.com",
+     false},
+    // 12345678୨0.com
+    {"xn--123456780-71w.com",
+     L"12345678\x0b68"
+     L"0.com",
+     false},
+    // 123456789ꓳ.com
+    {"xn--123456789-tx75a.com", L"123456789\xa4f3.com", false},
+
+    // aeœ.com
+    {"xn--ae-fsa.com", L"ae\x0153.com", false},
+    // æce.com
+    {"xn--ce-0ia.com",
+     L"\x00e6"
+     L"ce.com",
+     false},
+    // æœ.com
+    {"xn--6ca2t.com", L"\x00e6\x0153.com", false},
+    // ӕԥ.com
+    {"xn--y5a4n.com", L"\x04d5\x0525.com", false},
+
+    // ငၔဌ၂ဝ.com (entirely made of Myanmar characters)
+    {"xn--ridq5c9hnd.com",
+     L"\x1004\x1054\x100c"
+     L"\x1042\x101d.com",
+     false},
+
+    // ฟรฟร.com (made of two Thai characters. similar to wsws.com in
+    // some fonts)
+    {"xn--w3calb.com", L"\x0e1f\x0e23\x0e1f\x0e23.com", false},
+    // พรบ.com
+    {"xn--r3chp.com", L"\x0e1e\x0e23\x0e1a.com", false},
+    // ฟรบ.com
+    {"xn--r3cjm.com", L"\x0e1f\x0e23\x0e1a.com", false},
+
+    // Lao characters that look like w, s, o, and u.
+    // ພຣບ.com
+    {"xn--f7chp.com", L"\x0e9e\x0ea3\x0e9a.com", false},
+    // ຟຣບ.com
+    {"xn--f7cjm.com", L"\x0e9f\x0ea3\x0e9a.com", false},
+    // ຟຮບ.com
+    {"xn--f7cj9b.com", L"\x0e9f\x0eae\x0e9a.com", false},
+    // ຟຮ໐ບ.com
+    {"xn--f7cj9b5h.com",
+     L"\x0e9f\x0eae"
+     L"\x0ed0\x0e9a.com",
+     false},
 
     // At one point the skeleton of 'w' was 'vv', ensure that
     // that it's treated as 'w'.
@@ -867,14 +993,18 @@ void CheckAdjustedOffsets(const std::string& url_string,
 }
 
 namespace test {
-#include "components/url_formatter/top_domains/test_skeletons-inc.cc"
+#include "components/url_formatter/top_domains/test_domains-trie-inc.cc"
 }
 
 }  // namespace
 
 TEST(UrlFormatterTest, IDNToUnicode) {
-  IDNSpoofChecker::SetTopDomainGraph(base::StringPiece(
-      reinterpret_cast<const char*>(test::kDafsa), sizeof(test::kDafsa)));
+  IDNSpoofChecker::HuffmanTrieParams trie_params{
+      test::kTopDomainsHuffmanTree, sizeof(test::kTopDomainsHuffmanTree),
+      test::kTopDomainsTrie, test::kTopDomainsTrieBits,
+      test::kTopDomainsRootPosition};
+  IDNSpoofChecker::SetTrieParamsForTesting(trie_params);
+
   for (size_t i = 0; i < arraysize(idn_cases); i++) {
     base::string16 output(IDNToUnicode(idn_cases[i].input));
     base::string16 expected(idn_cases[i].unicode_allowed
@@ -883,7 +1013,7 @@ TEST(UrlFormatterTest, IDNToUnicode) {
     EXPECT_EQ(expected, output) << "input # " << i << ": \""
                                 << idn_cases[i].input << "\"";
   }
-  IDNSpoofChecker::RestoreTopDomainGraphToDefault();
+  IDNSpoofChecker::RestoreTrieParamsForTesting();
 }
 
 TEST(UrlFormatterTest, FormatUrl) {
@@ -1138,6 +1268,53 @@ TEST(UrlFormatterTest, FormatUrl) {
       {"omit trivial subdomains but leave registry and domain alone - co.uk",
        "http://m.co.uk/", kFormatUrlOmitTrivialSubdomains,
        net::UnescapeRule::NORMAL, L"http://m.co.uk/", 7},
+
+      {"omit trivial subdomains but leave intranet hostnames alone",
+       "http://router/", kFormatUrlOmitTrivialSubdomains,
+       net::UnescapeRule::NORMAL, L"http://router/", 7},
+      {"omit trivial subdomains but leave alone if host itself is a registry",
+       "http://co.uk/", kFormatUrlOmitTrivialSubdomains,
+       net::UnescapeRule::NORMAL, L"http://co.uk/", 7},
+
+      // -------- trim after host --------
+      {"omit the trailing slash when ommitting the path", "http://google.com/",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit the simple file path when ommitting the path",
+       "http://google.com/foo",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit the file and folder path when ommitting the path",
+       "http://google.com/ab/cd",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with query only",
+       "http://google.com/?foo=bar",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with ref only", "http://google.com/#foobar",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with path and query only",
+       "http://google.com/foo?a=b",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with path and ref only",
+       "http://google.com/foo#c",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with query and ref only",
+       "http://google.com/?a=b#c",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with path, query and ref",
+       "http://google.com/foo?a=b#c",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
+      {"omit everything after host with repeated delimiters (sanity check)",
+       "http://google.com////???####",
+       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+       net::UnescapeRule::NORMAL, L"google.com", 0},
   };
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
@@ -1513,6 +1690,28 @@ TEST(UrlFormatterTest, FormatUrlWithOffsets) {
       "http://foo.com//??###",
       kFormatUrlOmitDefaults | kFormatUrlExperimentalElideAfterHost,
       net::UnescapeRule::NORMAL, elide_after_host_offsets);
+
+  const size_t trim_after_host_offsets[] = {
+      0, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 0,     1,     2,     3, 4,
+      5, 6,     7,     kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 9};
+  CheckAdjustedOffsets("http://foo.com/abcdefg",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/abc/def",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/abc?a=b",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/abc#def",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com/a?a=b#f",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
+  CheckAdjustedOffsets("http://foo.com//??###",
+                       kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
+                       net::UnescapeRule::NORMAL, trim_after_host_offsets);
 
   const size_t omit_https_offsets[] = {
       0, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 0,  1,  2, 3,

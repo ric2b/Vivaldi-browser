@@ -4,7 +4,7 @@
 
 #include "crazy_linker_system.h"
 
-#include <minitest/minitest.h>
+#include <gtest/gtest.h>
 #include <stdlib.h>
 #include "crazy_linker_system_mock.h"
 
@@ -25,6 +25,64 @@ TEST(System, SingleFile) {
   EXPECT_EQ(kStringLen, fd.Read(buff2, sizeof(buff2)));
   buff2[kStringLen] = '\0';
   EXPECT_STREQ(kString, buff2);
+}
+
+TEST(System, MakeDirectoryPath) {
+  static const struct {
+    const char* input;
+    const char* expected;
+  } kData[] = {
+      {"", "./"},       {".", "./"},       {"..", "../"},
+      {"./", "./"},     {"../", "../"},    {"foo", "foo/"},
+      {"foo/", "foo/"}, {"/foo", "/foo/"}, {"foo/bar", "foo/bar/"},
+  };
+  for (const auto& data : kData) {
+    EXPECT_STREQ(data.expected, MakeDirectoryPath(data.input).c_str())
+        << "For [" << data.input << "]";
+  }
+}
+
+TEST(System, MakeAbsolutePathFrom) {
+  SystemMock sys;
+
+  static const struct {
+    const char* input;
+    const char* expected;
+  } kData[] = {
+      {"/foo", "/foo"},
+      {"/foo/bar/", "/foo/bar/"},
+      {"foo", "/home/foo"},
+      {"foo/bar", "/home/foo/bar"},
+      {"./foo", "/home/./foo"},
+      {"../foo", "/home/../foo"},
+      {"../../foo", "/home/../../foo"},
+  };
+
+  sys.SetCurrentDir("/home");
+
+  for (const auto& data : kData) {
+    EXPECT_STREQ(data.expected, MakeAbsolutePathFrom(data.input).c_str())
+        << "For [" << data.input << "]";
+  }
+
+  for (const auto& data : kData) {
+    EXPECT_STREQ(data.expected,
+                 MakeAbsolutePathFrom(data.input, strlen(data.input)).c_str())
+        << "For [" << data.input << "]";
+  }
+
+  sys.SetCurrentDir("/home/");
+
+  for (const auto& data : kData) {
+    EXPECT_STREQ(data.expected, MakeAbsolutePathFrom(data.input).c_str())
+        << "For [" << data.input << "]";
+  }
+
+  for (const auto& data : kData) {
+    EXPECT_STREQ(data.expected,
+                 MakeAbsolutePathFrom(data.input, strlen(data.input)).c_str())
+        << "For [" << data.input << "]";
+  }
 }
 
 TEST(System, PathExists) {

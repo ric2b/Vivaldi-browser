@@ -80,3 +80,7 @@ Status StubDevToolsClient::HandleEventsUntil(
 Status StubDevToolsClient::HandleReceivedEvents() {
   return Status(kOk);
 }
+
+void StubDevToolsClient::SetDetached() {}
+
+void StubDevToolsClient::SetOwner(WebViewImpl* owner) {}

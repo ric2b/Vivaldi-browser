@@ -26,7 +26,7 @@
 #include "net/url_request/url_request_status.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -39,17 +39,17 @@ const int64_t kImportedScriptResourceId = 11;
 const int64_t kNonExistentResourceId = 12;
 const int64_t kResourceSize = 100;
 
-void DidStoreRegistration(ServiceWorkerStatusCode* status_out,
+void DidStoreRegistration(blink::ServiceWorkerStatusCode* status_out,
                           const base::Closure& quit_closure,
-                          ServiceWorkerStatusCode status) {
+                          blink::ServiceWorkerStatusCode status) {
   *status_out = status;
   quit_closure.Run();
 }
 
 void DidFindRegistration(
-    ServiceWorkerStatusCode* status_out,
+    blink::ServiceWorkerStatusCode* status_out,
     const base::Closure& quit_closure,
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     scoped_refptr<ServiceWorkerRegistration> registration) {
   *status_out = status;
   quit_closure.Run();
@@ -103,7 +103,7 @@ class ServiceWorkerReadFromCacheJobTest : public testing::Test {
     version_->script_cache_map()->SetResources(resources);
     version_->set_fetch_handler_existence(
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
-    ASSERT_EQ(SERVICE_WORKER_OK, StoreRegistration());
+    ASSERT_EQ(blink::ServiceWorkerStatusCode::kOk, StoreRegistration());
     ASSERT_TRUE(WriteResource(main_script_.resource_id));
     ASSERT_TRUE(WriteResource(imported_script_.resource_id));
   }
@@ -142,22 +142,24 @@ class ServiceWorkerReadFromCacheJobTest : public testing::Test {
     return true;
   }
 
-  ServiceWorkerStatusCode StoreRegistration() {
+  blink::ServiceWorkerStatusCode StoreRegistration() {
     base::RunLoop run_loop;
-    ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
+    blink::ServiceWorkerStatusCode status =
+        blink::ServiceWorkerStatusCode::kErrorFailed;
     context()->storage()->StoreRegistration(
         registration_.get(), version_.get(),
-        base::Bind(&DidStoreRegistration, &status, run_loop.QuitClosure()));
+        base::BindOnce(&DidStoreRegistration, &status, run_loop.QuitClosure()));
     run_loop.Run();
     return status;
   }
 
-  ServiceWorkerStatusCode FindRegistration() {
+  blink::ServiceWorkerStatusCode FindRegistration() {
     base::RunLoop run_loop;
-    ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
+    blink::ServiceWorkerStatusCode status =
+        blink::ServiceWorkerStatusCode::kErrorFailed;
     context()->storage()->FindRegistrationForId(
         registration_->id(), registration_->pattern().GetOrigin(),
-        base::Bind(&DidFindRegistration, &status, run_loop.QuitClosure()));
+        base::BindOnce(&DidFindRegistration, &status, run_loop.QuitClosure()));
     run_loop.Run();
     return status;
   }
@@ -168,8 +170,8 @@ class ServiceWorkerReadFromCacheJobTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  ServiceWorkerStatusCode DeduceStartWorkerFailureReason(
-      ServiceWorkerStatusCode default_code) {
+  blink::ServiceWorkerStatusCode DeduceStartWorkerFailureReason(
+      blink::ServiceWorkerStatusCode default_code) {
     return version_->DeduceStartWorkerFailureReason(default_code);
   }
 
@@ -207,8 +209,9 @@ TEST_F(ServiceWorkerReadFromCacheJobTest, ReadMainScript) {
 
   EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
   EXPECT_EQ(0, request->status().error());
-  EXPECT_EQ(SERVICE_WORKER_OK,
-            DeduceStartWorkerFailureReason(SERVICE_WORKER_OK));
+  EXPECT_EQ(
+      blink::ServiceWorkerStatusCode::kOk,
+      DeduceStartWorkerFailureReason(blink::ServiceWorkerStatusCode::kOk));
 }
 
 TEST_F(ServiceWorkerReadFromCacheJobTest, ReadImportedScript) {
@@ -225,12 +228,13 @@ TEST_F(ServiceWorkerReadFromCacheJobTest, ReadImportedScript) {
 
   EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
   EXPECT_EQ(0, request->status().error());
-  EXPECT_EQ(SERVICE_WORKER_OK,
-            DeduceStartWorkerFailureReason(SERVICE_WORKER_OK));
+  EXPECT_EQ(
+      blink::ServiceWorkerStatusCode::kOk,
+      DeduceStartWorkerFailureReason(blink::ServiceWorkerStatusCode::kOk));
 }
 
 TEST_F(ServiceWorkerReadFromCacheJobTest, ResourceNotFound) {
-  ASSERT_EQ(SERVICE_WORKER_OK, FindRegistration());
+  ASSERT_EQ(blink::ServiceWorkerStatusCode::kOk, FindRegistration());
 
   // Populate the script cache map with a nonexistent resource.
   ServiceWorkerScriptCacheMap* script_cache_map = version_->script_cache_map();
@@ -257,12 +261,13 @@ TEST_F(ServiceWorkerReadFromCacheJobTest, ResourceNotFound) {
 
   EXPECT_EQ(net::URLRequestStatus::FAILED, request->status().status());
   EXPECT_EQ(net::ERR_CACHE_MISS, request->status().error());
-  EXPECT_EQ(SERVICE_WORKER_ERROR_DISK_CACHE,
-            DeduceStartWorkerFailureReason(SERVICE_WORKER_OK));
+  EXPECT_EQ(
+      blink::ServiceWorkerStatusCode::kErrorDiskCache,
+      DeduceStartWorkerFailureReason(blink::ServiceWorkerStatusCode::kOk));
 
   // The version should be doomed by the job.
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version_->status());
-  EXPECT_EQ(SERVICE_WORKER_ERROR_NOT_FOUND, FindRegistration());
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kErrorNotFound, FindRegistration());
 }
 
 }  // namespace content

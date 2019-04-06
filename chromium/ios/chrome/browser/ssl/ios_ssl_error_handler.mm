@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
-#include "base/mac/bind_objc_block.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/captive_portal/captive_portal_detector.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
@@ -41,7 +40,7 @@ void IOSSSLErrorHandler::HandleSSLError(
     const net::SSLInfo& info,
     const GURL& request_url,
     bool overridable,
-    const base::Callback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
   DCHECK(!web_state->IsShowingWebInterstitial());
   DCHECK(web_state);
   DCHECK(!FromWebState(web_state));
@@ -49,27 +48,26 @@ void IOSSSLErrorHandler::HandleSSLError(
   // check if the cert is from a known captive portal.
 
   web_state->SetUserData(
-      UserDataKey(),
-      base::WrapUnique(new IOSSSLErrorHandler(
-          web_state, cert_error, info, request_url, overridable, callback)));
+      UserDataKey(), base::WrapUnique(new IOSSSLErrorHandler(
+                         web_state, cert_error, info, request_url, overridable,
+                         std::move(callback))));
   FromWebState(web_state)->StartHandlingError();
 }
 
 IOSSSLErrorHandler::~IOSSSLErrorHandler() = default;
 
-IOSSSLErrorHandler::IOSSSLErrorHandler(
-    web::WebState* web_state,
-    int cert_error,
-    const net::SSLInfo& info,
-    const GURL& request_url,
-    bool overridable,
-    const base::Callback<void(bool)>& callback)
+IOSSSLErrorHandler::IOSSSLErrorHandler(web::WebState* web_state,
+                                       int cert_error,
+                                       const net::SSLInfo& info,
+                                       const GURL& request_url,
+                                       bool overridable,
+                                       base::OnceCallback<void(bool)> callback)
     : web_state_(web_state),
       cert_error_(cert_error),
       ssl_info_(info),
       request_url_(request_url),
       overridable_(overridable),
-      callback_(callback),
+      callback_(std::move(callback)),
       weak_factory_(this) {}
 
 void IOSSSLErrorHandler::StartHandlingError() {
@@ -91,8 +89,9 @@ void IOSSSLErrorHandler::StartHandlingError() {
 
     tab_helper->detector()->DetectCaptivePortal(
         GURL(CaptivePortalDetector::kDefaultURL),
-        base::Bind(&IOSSSLErrorHandler::HandleCaptivePortalDetectionResult,
-                   weak_error_handler),
+        base::BindRepeating(
+            &IOSSSLErrorHandler::HandleCaptivePortalDetectionResult,
+            weak_error_handler),
         NO_TRAFFIC_ANNOTATION_YET);
   }
 
@@ -134,7 +133,7 @@ void IOSSSLErrorHandler::ShowSSLInterstitial() {
   // SSLBlockingPage deletes itself when it's dismissed.
   IOSSSLBlockingPage* page = new IOSSSLBlockingPage(
       web_state_, cert_error_, ssl_info_, request_url_, options_mask,
-      base::Time::NowFromSystemTime(), callback_);
+      base::Time::NowFromSystemTime(), std::move(callback_));
   page->Show();
   // Once an interstitial is displayed, no need to keep the handler around.
   // This is the equivalent of "delete this".
@@ -145,7 +144,7 @@ void IOSSSLErrorHandler::ShowCaptivePortalInterstitial(
     const GURL& landing_url) {
   // IOSCaptivePortalBlockingPage deletes itself when it's dismissed.
   IOSCaptivePortalBlockingPage* page = new IOSCaptivePortalBlockingPage(
-      web_state_, request_url_, landing_url, callback_);
+      web_state_, request_url_, landing_url, std::move(callback_));
   page->Show();
   // Once an interstitial is displayed, no need to keep the handler around.
   // This is the equivalent of "delete this".
@@ -164,7 +163,7 @@ void IOSSSLErrorHandler::RecordCaptivePortalState(web::WebState* web_state) {
   }
   tab_helper->detector()->DetectCaptivePortal(
       GURL(CaptivePortalDetector::kDefaultURL),
-      base::BindBlockArc(^(const CaptivePortalDetector::Results& results) {
+      base::BindRepeating(^(const CaptivePortalDetector::Results& results) {
         IOSSSLErrorHandler::LogCaptivePortalResult(results.result);
       }),
       NO_TRAFFIC_ANNOTATION_YET);

@@ -41,7 +41,13 @@ const base::TimeDelta FreshnessPeriodForState(PrefetchItemState state) {
     case PrefetchItemState::DOWNLOADING:
     case PrefetchItemState::IMPORTING:
       return kPrefetchDownloadLifetime;
-    default:
+    // The following states do not expire based on per bucket freshness so they
+    // are not expected to be passed into this function.
+    case PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE:
+    case PrefetchItemState::SENT_GET_OPERATION:
+    case PrefetchItemState::DOWNLOADED:
+    case PrefetchItemState::FINISHED:
+    case PrefetchItemState::ZOMBIE:
       NOTREACHED();
   }
   return base::TimeDelta::FromDays(1);
@@ -49,6 +55,7 @@ const base::TimeDelta FreshnessPeriodForState(PrefetchItemState state) {
 
 PrefetchItemErrorCode ErrorCodeForState(PrefetchItemState state) {
   switch (state) {
+    // Valid values.
     case PrefetchItemState::NEW_REQUEST:
       return PrefetchItemErrorCode::STALE_AT_NEW_REQUEST;
     case PrefetchItemState::AWAITING_GCM:
@@ -61,7 +68,13 @@ PrefetchItemErrorCode ErrorCodeForState(PrefetchItemState state) {
       return PrefetchItemErrorCode::STALE_AT_DOWNLOADING;
     case PrefetchItemState::IMPORTING:
       return PrefetchItemErrorCode::STALE_AT_IMPORTING;
-    default:
+    // The following states do not expire based on per bucket freshness so they
+    // are not expected to be passed into this function.
+    case PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE:
+    case PrefetchItemState::SENT_GET_OPERATION:
+    case PrefetchItemState::DOWNLOADED:
+    case PrefetchItemState::FINISHED:
+    case PrefetchItemState::ZOMBIE:
       NOTREACHED();
   }
   return PrefetchItemErrorCode::STALE_AT_UNKNOWN;
@@ -122,31 +135,51 @@ bool FinalizeFutureItems(PrefetchItemState state,
 }
 
 // If there is a bug in our code, an item might be stuck in the queue waiting
-// on an event that didn't happen.  If so, report that item.
-void ReportStuckItems(base::Time now, sql::Connection* db) {
-  static constexpr char kSql[] =
-      "SELECT state FROM prefetch_items"
-      " WHERE creation_time < ?";
+// on an event that didn't happen.  If so, finalize that item and report it.
+void ReportAndFinalizeStuckItems(base::Time now, sql::Connection* db) {
   const int64_t earliest_valid_creation_time = store_utils::ToDatabaseTime(
       now - base::TimeDelta::FromDays(kStuckTimeLimitInDays));
-  sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
-  statement.BindInt64(0, earliest_valid_creation_time);
+  // Report.
+  {
+    static constexpr char kSql[] =
+        "SELECT state FROM prefetch_items"
+        " WHERE creation_time < ?"
+        " AND state NOT IN (?, ?)";  // (ZOMBIE, FINISHED);
+    sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
+    statement.BindInt64(0, earliest_valid_creation_time);
+    statement.BindInt64(1, static_cast<int>(PrefetchItemState::FINISHED));
+    statement.BindInt64(2, static_cast<int>(PrefetchItemState::ZOMBIE));
 
-  while (statement.Step()) {
-    base::UmaHistogramSparse("OfflinePages.Prefetching.StuckItemState",
-                             statement.ColumnInt(0));
+    while (statement.Step()) {
+      base::UmaHistogramSparse("OfflinePages.Prefetching.StuckItemState",
+                               statement.ColumnInt(0));
+    }
+  }
+  // Finalize.
+  {
+    static constexpr char kSql[] =
+        "UPDATE prefetch_items SET state = ?, error_code = ?"
+        " WHERE creation_time < ?"
+        " AND state NOT IN (?, ?)";  // (ZOMBIE, FINISHED)
+    sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
+    statement.BindInt64(0, static_cast<int>(PrefetchItemState::FINISHED));
+    statement.BindInt64(1, static_cast<int>(PrefetchItemErrorCode::STUCK));
+    statement.BindInt64(2, earliest_valid_creation_time);
+    statement.BindInt64(3, static_cast<int>(PrefetchItemState::FINISHED));
+    statement.BindInt64(4, static_cast<int>(PrefetchItemState::ZOMBIE));
+
+    statement.Run();
   }
 }
 
 Result FinalizeStaleEntriesSync(StaleEntryFinalizerTask::NowGetter now_getter,
                                 sql::Connection* db) {
-  if (!db)
-    return Result::NO_MORE_WORK;
-
   sql::Transaction transaction(db);
   if (!transaction.Begin())
     return Result::NO_MORE_WORK;
 
+  // Only the following states are supposed to expire based on per bucket
+  // freshness.
   static constexpr std::array<PrefetchItemState, 6> expirable_states = {{
       // Bucket 1.
       PrefetchItemState::NEW_REQUEST,
@@ -167,7 +200,7 @@ Result FinalizeStaleEntriesSync(StaleEntryFinalizerTask::NowGetter now_getter,
 
   // Items could also be stuck in a non-expirable state due to a bug, report
   // them.
-  ReportStuckItems(now, db);
+  ReportAndFinalizeStuckItems(now, db);
 
   Result result = Result::MORE_WORK_NEEDED;
   if (!MoreWorkInQueue(db))
@@ -196,7 +229,8 @@ void StaleEntryFinalizerTask::Run() {
   prefetch_store_->Execute(
       base::BindOnce(&FinalizeStaleEntriesSync, now_getter_),
       base::BindOnce(&StaleEntryFinalizerTask::OnFinished,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr()),
+      Result::NO_MORE_WORK);
 }
 
 void StaleEntryFinalizerTask::SetNowGetterForTesting(NowGetter now_getter) {

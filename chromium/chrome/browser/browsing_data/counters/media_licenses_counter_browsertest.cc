@@ -4,7 +4,6 @@
 
 #include "chrome/browser/browsing_data/counters/media_licenses_counter.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -119,7 +118,7 @@ class MediaLicensesCounterTest : public InProcessBrowserTest {
     storage::AsyncFileUtil* file_util = filesystem_context->GetAsyncFileUtil(
         storage::kFileSystemTypePluginPrivate);
     std::unique_ptr<storage::FileSystemOperationContext> operation_context =
-        base::MakeUnique<storage::FileSystemOperationContext>(
+        std::make_unique<storage::FileSystemOperationContext>(
             filesystem_context);
     operation_context->set_allowed_bytes_growth(
         storage::QuotaManager::kNoLimit);

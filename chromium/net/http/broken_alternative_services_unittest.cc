@@ -23,7 +23,7 @@ class BrokenAlternativeServicesTest
       : test_task_runner_(new base::TestMockTimeTaskRunner()),
         test_task_runner_context_(test_task_runner_),
         broken_services_clock_(test_task_runner_->GetMockTickClock()),
-        broken_services_(this, broken_services_clock_.get()) {}
+        broken_services_(this, broken_services_clock_) {}
 
   // BrokenAlternativeServices::Delegate implementation
   void OnExpireBrokenAlternativeService(
@@ -37,7 +37,7 @@ class BrokenAlternativeServicesTest
   scoped_refptr<base::TestMockTimeTaskRunner> test_task_runner_;
   base::TestMockTimeTaskRunner::ScopedContext test_task_runner_context_;
 
-  std::unique_ptr<base::TickClock> broken_services_clock_;
+  const base::TickClock* broken_services_clock_;
   BrokenAlternativeServices broken_services_;
 
   std::vector<AlternativeService> expired_alt_svcs_;
@@ -135,6 +135,46 @@ TEST_F(BrokenAlternativeServicesTest, ExpireBrokenAlternateProtocolMappings) {
   EXPECT_EQ(alternative_service, expired_alt_svcs_[0]);
   EXPECT_TRUE(broken_services_.WasAlternativeServiceRecentlyBroken(
       alternative_service));
+}
+
+TEST_F(BrokenAlternativeServicesTest, IsAlternativeServiceBroken) {
+  // Tests the IsAlternativeServiceBroken() methods.
+  AlternativeService alternative_service(kProtoQUIC, "foo", 443);
+  base::TimeTicks brokenness_expiration;
+
+  EXPECT_FALSE(
+      broken_services_.IsAlternativeServiceBroken(alternative_service));
+  EXPECT_FALSE(broken_services_.IsAlternativeServiceBroken(
+      alternative_service, &brokenness_expiration));
+
+  broken_services_.MarkAlternativeServiceBroken(alternative_service);
+  EXPECT_TRUE(broken_services_.IsAlternativeServiceBroken(alternative_service));
+  EXPECT_TRUE(broken_services_.IsAlternativeServiceBroken(
+      alternative_service, &brokenness_expiration));
+  EXPECT_EQ(
+      broken_services_clock_->NowTicks() + base::TimeDelta::FromMinutes(5),
+      brokenness_expiration);
+
+  // Fast forward time until |alternative_service|'s brokenness expires.
+  test_task_runner_->FastForwardBy(base::TimeDelta::FromMinutes(5));
+  EXPECT_FALSE(
+      broken_services_.IsAlternativeServiceBroken(alternative_service));
+  EXPECT_FALSE(broken_services_.IsAlternativeServiceBroken(
+      alternative_service, &brokenness_expiration));
+
+  broken_services_.MarkAlternativeServiceBroken(alternative_service);
+  EXPECT_TRUE(broken_services_.IsAlternativeServiceBroken(alternative_service));
+  EXPECT_TRUE(broken_services_.IsAlternativeServiceBroken(
+      alternative_service, &brokenness_expiration));
+  EXPECT_EQ(
+      broken_services_clock_->NowTicks() + base::TimeDelta::FromMinutes(10),
+      brokenness_expiration);
+
+  broken_services_.ConfirmAlternativeService(alternative_service);
+  EXPECT_FALSE(
+      broken_services_.IsAlternativeServiceBroken(alternative_service));
+  EXPECT_FALSE(broken_services_.IsAlternativeServiceBroken(
+      alternative_service, &brokenness_expiration));
 }
 
 TEST_F(BrokenAlternativeServicesTest, ExponentialBackoff) {

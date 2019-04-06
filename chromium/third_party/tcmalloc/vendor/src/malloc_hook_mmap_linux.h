@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -51,7 +52,11 @@
 
 // I test for 64-bit first so I don't have to do things like
 // '#if (defined(__mips__) && !defined(__MIPS64__))' as a mips32 check.
-#if defined(__x86_64__) || defined(__PPC64__) || (defined(_MIPS_SIM) && _MIPS_SIM == _ABI64)
+#if defined(__x86_64__) \
+    || defined(__PPC64__) \
+    || defined(__aarch64__) \
+    || (defined(_MIPS_SIM) && (_MIPS_SIM == _ABI64 || _MIPS_SIM == _ABIN32)) \
+    || defined(__s390__)
 
 static inline void* do_mmap64(void *start, size_t length,
                               int prot, int flags,
@@ -104,7 +109,7 @@ static inline void* do_mmap64(void *start, size_t length,
     // Fall back to old 32-bit offset mmap() call
     // Old syscall interface cannot handle six args, so pass in an array
     int32 args[6] = { (int32) start, (int32) length, prot, flags, fd,
-                      (off_t) offset };
+                      (int32)(off_t) offset };
     result = (void *)syscall(SYS_mmap, args);
   }
 #else
@@ -147,7 +152,7 @@ extern "C" {
   void* mremap(void* old_addr, size_t old_size, size_t new_size,
                int flags, ...) __THROW
     ATTRIBUTE_SECTION(malloc_hook);
-  void* sbrk(ptrdiff_t increment) __THROW
+  void* sbrk(intptr_t increment) __THROW
     ATTRIBUTE_SECTION(malloc_hook);
 }
 
@@ -201,15 +206,18 @@ extern "C" void* mremap(void* old_addr, size_t old_size, size_t new_size,
   return result;
 }
 
+#ifndef __UCLIBC__
 // libc's version:
-extern "C" void* __sbrk(ptrdiff_t increment);
+extern "C" void* __sbrk(intptr_t increment);
 
-extern "C" void* sbrk(ptrdiff_t increment) __THROW {
+extern "C" void* sbrk(intptr_t increment) __THROW {
   MallocHook::InvokePreSbrkHook(increment);
   void *result = __sbrk(increment);
   MallocHook::InvokeSbrkHook(result, increment);
   return result;
 }
+
+#endif
 
 /*static*/void* MallocHook::UnhookedMMap(void *start, size_t length, int prot,
                                          int flags, int fd, off_t offset) {

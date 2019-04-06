@@ -34,21 +34,18 @@ constexpr char kPdfToPwgRasterMonoTestFile[] =
 #endif
 
 void ResultCallbackImpl(bool* called,
-                        bool* success_out,
-                        base::FilePath* temp_file_out,
+                        base::ReadOnlySharedMemoryRegion* pwg_region_out,
                         base::Closure quit_closure,
-                        bool success_in,
-                        const base::FilePath& temp_file_in) {
+                        base::ReadOnlySharedMemoryRegion pwg_region_in) {
   *called = true;
-  *success_out = success_in;
-  *temp_file_out = temp_file_in;
+  *pwg_region_out = std::move(pwg_region_in);
   quit_closure.Run();
 }
 
 void GetPdfData(const char* file_name,
                 base::FilePath* test_data_dir,
                 scoped_refptr<base::RefCountedString>* pdf_data) {
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, test_data_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, test_data_dir));
   *test_data_dir = test_data_dir->AppendASCII("printing");
   base::FilePath pdf_file = test_data_dir->AppendASCII(file_name);
   std::string pdf_data_str;
@@ -57,19 +54,24 @@ void GetPdfData(const char* file_name,
   *pdf_data = base::RefCountedString::TakeString(&pdf_data_str);
 }
 
-std::string HashFile(const std::string& file_data) {
-  std::string sha1 = base::SHA1HashString(file_data);
-  return base::HexEncode(sha1.c_str(), sha1.length());
+std::string HashData(const char* data, size_t len) {
+  char hash[base::kSHA1Length];
+  base::SHA1HashBytes(reinterpret_cast<const unsigned char*>(data), len,
+                      reinterpret_cast<unsigned char*>(hash));
+  return base::HexEncode(hash, base::kSHA1Length);
 }
 
-void ComparePwgFiles(const base::FilePath& expected,
-                     const base::FilePath& actual) {
+void ComparePwgOutput(const base::FilePath& expected_file,
+                      base::ReadOnlySharedMemoryRegion pwg_region) {
   std::string pwg_expected_data_str;
-  ASSERT_TRUE(base::ReadFileToString(expected, &pwg_expected_data_str));
-  std::string pwg_actual_data_str;
-  ASSERT_TRUE(base::ReadFileToString(actual, &pwg_actual_data_str));
-  EXPECT_EQ(pwg_expected_data_str.length(), pwg_actual_data_str.length());
-  EXPECT_EQ(HashFile(pwg_expected_data_str), HashFile(pwg_actual_data_str));
+  ASSERT_TRUE(base::ReadFileToString(expected_file, &pwg_expected_data_str));
+
+  base::ReadOnlySharedMemoryMapping pwg_mapping = pwg_region.Map();
+  ASSERT_TRUE(pwg_mapping.IsValid());
+  size_t size = pwg_mapping.size();
+  ASSERT_EQ(pwg_expected_data_str.length(), size);
+  EXPECT_EQ(HashData(pwg_expected_data_str.c_str(), size),
+            HashData(static_cast<const char*>(pwg_mapping.memory()), size));
 }
 
 class PdfToPwgRasterBrowserTest : public InProcessBrowserTest {
@@ -78,20 +80,19 @@ class PdfToPwgRasterBrowserTest : public InProcessBrowserTest {
       : converter_(PwgRasterConverter::CreateDefault()) {}
   ~PdfToPwgRasterBrowserTest() override {}
 
-  void Convert(base::RefCountedMemory* pdf_data,
+  void Convert(const base::RefCountedMemory* pdf_data,
                const PdfRenderSettings& conversion_settings,
                const PwgRasterSettings& bitmap_settings,
                bool expect_success,
-               base::FilePath* temp_file) {
+               base::ReadOnlySharedMemoryRegion* pwg_region) {
     bool called = false;
-    bool success = false;
     base::RunLoop run_loop;
     converter_->Start(pdf_data, conversion_settings, bitmap_settings,
-                      base::Bind(&ResultCallbackImpl, &called, &success,
-                                 temp_file, run_loop.QuitClosure()));
+                      base::BindOnce(&ResultCallbackImpl, &called, pwg_region,
+                                     run_loop.QuitClosure()));
     run_loop.Run();
     ASSERT_TRUE(called);
-    EXPECT_EQ(success, expect_success);
+    EXPECT_EQ(expect_success, pwg_region->IsValid());
   }
 
  private:
@@ -103,9 +104,9 @@ class PdfToPwgRasterBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(PdfToPwgRasterBrowserTest, TestFailure) {
   scoped_refptr<base::RefCountedStaticMemory> bad_pdf_data =
       base::MakeRefCounted<base::RefCountedStaticMemory>("0123456789", 10);
-  base::FilePath temp_file;
+  base::ReadOnlySharedMemoryRegion pwg_region;
   Convert(bad_pdf_data.get(), PdfRenderSettings(), PwgRasterSettings(),
-          /*expect_success=*/false, &temp_file);
+          /*expect_success=*/false, &pwg_region);
 }
 
 IN_PROC_BROWSER_TEST_F(PdfToPwgRasterBrowserTest, TestSuccessColor) {
@@ -116,7 +117,9 @@ IN_PROC_BROWSER_TEST_F(PdfToPwgRasterBrowserTest, TestSuccessColor) {
   GetPdfData("pdf_to_pwg_raster_test.pdf", &test_data_dir, &pdf_data);
 
   PdfRenderSettings pdf_settings(gfx::Rect(0, 0, 500, 500), gfx::Point(0, 0),
-                                 /*dpi=*/1000, /*autorotate=*/false,
+                                 /*dpi=*/gfx::Size(1000, 1000),
+                                 /*autorotate=*/false,
+                                 /*use_color=*/true,
                                  PdfRenderSettings::Mode::NORMAL);
   PwgRasterSettings pwg_settings;
   pwg_settings.odd_page_transform = PwgRasterTransformType::TRANSFORM_NORMAL;
@@ -124,14 +127,13 @@ IN_PROC_BROWSER_TEST_F(PdfToPwgRasterBrowserTest, TestSuccessColor) {
   pwg_settings.reverse_page_order = false;
   pwg_settings.use_color = true;
 
-  base::FilePath temp_file;
+  base::ReadOnlySharedMemoryRegion pwg_region;
   Convert(pdf_data.get(), pdf_settings, pwg_settings,
-          /*expect_success=*/true, &temp_file);
-  ASSERT_FALSE(temp_file.empty());
+          /*expect_success=*/true, &pwg_region);
 
-  base::FilePath pwg_file =
+  base::FilePath expected_pwg_file =
       test_data_dir.AppendASCII(kPdfToPwgRasterColorTestFile);
-  ComparePwgFiles(pwg_file, temp_file);
+  ComparePwgOutput(expected_pwg_file, std::move(pwg_region));
 }
 
 IN_PROC_BROWSER_TEST_F(PdfToPwgRasterBrowserTest, TestSuccessMono) {
@@ -142,7 +144,9 @@ IN_PROC_BROWSER_TEST_F(PdfToPwgRasterBrowserTest, TestSuccessMono) {
   GetPdfData("pdf_to_pwg_raster_test.pdf", &test_data_dir, &pdf_data);
 
   PdfRenderSettings pdf_settings(gfx::Rect(0, 0, 500, 500), gfx::Point(0, 0),
-                                 /*dpi=*/1000, /*autorotate=*/false,
+                                 /*dpi=*/gfx::Size(1000, 1000),
+                                 /*autorotate=*/false,
+                                 /*use_color=*/false,
                                  PdfRenderSettings::Mode::NORMAL);
   PwgRasterSettings pwg_settings;
   pwg_settings.odd_page_transform = PwgRasterTransformType::TRANSFORM_NORMAL;
@@ -150,14 +154,13 @@ IN_PROC_BROWSER_TEST_F(PdfToPwgRasterBrowserTest, TestSuccessMono) {
   pwg_settings.reverse_page_order = false;
   pwg_settings.use_color = false;
 
-  base::FilePath temp_file;
+  base::ReadOnlySharedMemoryRegion pwg_region;
   Convert(pdf_data.get(), pdf_settings, pwg_settings,
-          /*expect_success=*/true, &temp_file);
-  ASSERT_FALSE(temp_file.empty());
+          /*expect_success=*/true, &pwg_region);
 
-  base::FilePath pwg_file =
+  base::FilePath expected_pwg_file =
       test_data_dir.AppendASCII(kPdfToPwgRasterMonoTestFile);
-  ComparePwgFiles(pwg_file, temp_file);
+  ComparePwgOutput(expected_pwg_file, std::move(pwg_region));
 }
 
 }  // namespace printing

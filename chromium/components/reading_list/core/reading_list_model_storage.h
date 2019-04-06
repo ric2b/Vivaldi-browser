@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_READING_LIST_CORE_READING_LIST_MODEL_STORAGE_H_
 #define COMPONENTS_READING_LIST_CORE_READING_LIST_MODEL_STORAGE_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -20,7 +21,7 @@ class Clock;
 }
 
 namespace syncer {
-class ModelTypeSyncBridge;
+class ModelTypeChangeProcessor;
 }
 
 // Interface for a persistence layer for reading list.
@@ -30,14 +31,13 @@ class ReadingListModelStorage : public syncer::ModelTypeSyncBridge {
   class ScopedBatchUpdate;
 
   ReadingListModelStorage(
-      const ChangeProcessorFactory& change_processor_factory,
-      syncer::ModelType type);
+      std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor);
   ~ReadingListModelStorage() override;
 
   // Sets the model the Storage is backing.
   // This will trigger store initalization and load persistent entries.
   // Pass the |clock| from the |model| to ensure synchroization when loading
-  // entries.
+  // entries. Must be called no more than once.
   virtual void SetReadingListModel(ReadingListModel* model,
                                    ReadingListStoreDelegate* delegate,
                                    base::Clock* clock) = 0;

@@ -105,9 +105,6 @@ void TaskManagerTester::ToggleColumnVisibility(ColumnSpecifier column) {
     case ColumnSpecifier::MEMORY_FOOTPRINT:
       column_id = IDS_TASK_MANAGER_MEM_FOOTPRINT_COLUMN;
       break;
-    case ColumnSpecifier::PHYSICAL_MEMORY:
-      column_id = IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN;
-      break;
     case ColumnSpecifier::SQLITE_MEMORY_USED:
       column_id = IDS_TASK_MANAGER_SQLITE_MEMORY_USED_COLUMN;
       break;
@@ -143,10 +140,6 @@ int64_t TaskManagerTester::GetColumnValue(ColumnSpecifier column, int row) {
       value = task_manager()->GetMemoryFootprintUsage(task_id);
       success = true;
       break;
-    case ColumnSpecifier::PHYSICAL_MEMORY:
-      value = task_manager()->GetPhysicalMemoryUsage(task_id);
-      success = true;
-      break;
     case ColumnSpecifier::PROCESS_ID:
       value = static_cast<int64_t>(task_manager()->GetProcessId(task_id));
       success = true;
@@ -168,6 +161,7 @@ int64_t TaskManagerTester::GetColumnValue(ColumnSpecifier column, int row) {
     case ColumnSpecifier::NETWORK_USE:
       value = task_manager()->GetNetworkUsage(task_id);
       success = true;
+      break;
     case ColumnSpecifier::TOTAL_NETWORK_USE:
       value = task_manager()->GetCumulativeNetworkUsage(task_id);
       success = true;
@@ -178,7 +172,7 @@ int64_t TaskManagerTester::GetColumnValue(ColumnSpecifier column, int row) {
   return value;
 }
 
-int32_t TaskManagerTester::GetTabId(int row) {
+SessionID TaskManagerTester::GetTabId(int row) {
   TaskId task_id = model_->tasks_[row];
   return task_manager()->GetTabId(task_id);
 }

@@ -44,11 +44,11 @@ class MockDeviceManagementServiceConfiguration
 class MockDeviceManagementService : public DeviceManagementService {
  public:
   MockDeviceManagementService();
-  virtual ~MockDeviceManagementService();
+  ~MockDeviceManagementService() override;
 
   typedef DeviceManagementRequestJob* CreateJobFunction(
       DeviceManagementRequestJob::JobType,
-      const scoped_refptr<net::URLRequestContextGetter>&);
+      scoped_refptr<network::SharedURLLoaderFactory>);
 
   MOCK_METHOD2(CreateJob, CreateJobFunction);
   MOCK_METHOD6(

@@ -11,12 +11,16 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
-#include "net/url_request/url_fetcher_delegate.h"
+#include "components/sessions/core/session_id.h"
 #include "url/gurl.h"
 
 namespace content {
 class WebContents;
 }  // namespace content
+
+namespace network {
+class SimpleURLLoader;
+}
 
 class Profile;
 
@@ -39,7 +43,7 @@ class PPAPIDownloadRequest;
 //
 // PPAPIDownloadRequest objects are owned by the DownloadProtectionService
 // indicated by |service|.
-class PPAPIDownloadRequest : public net::URLFetcherDelegate {
+class PPAPIDownloadRequest {
  public:
   // The outcome of the request. These values are used for UMA. New values
   // should only be added at the end.
@@ -66,7 +70,7 @@ class PPAPIDownloadRequest : public net::URLFetcherDelegate {
       DownloadProtectionService* service,
       scoped_refptr<SafeBrowsingDatabaseManager> database_manager);
 
-  ~PPAPIDownloadRequest() override;
+  ~PPAPIDownloadRequest();
 
   // Start the process of checking the download request. The callback passed as
   // the |callback| parameter to the constructor will be invoked with the result
@@ -100,8 +104,7 @@ class PPAPIDownloadRequest : public net::URLFetcherDelegate {
 
   void SendRequest();
 
-  // net::URLFetcherDelegate
-  void OnURLFetchComplete(const net::URLFetcher* source) override;
+  void OnURLLoaderComplete(std::unique_ptr<std::string> response_body);
 
   void OnRequestTimedOut();
 
@@ -118,7 +121,7 @@ class PPAPIDownloadRequest : public net::URLFetcherDelegate {
       const base::FilePath& default_file_path,
       const std::vector<base::FilePath::StringType>& alternate_extensions);
 
-  std::unique_ptr<net::URLFetcher> fetcher_;
+  std::unique_ptr<network::SimpleURLLoader> loader_;
   std::string client_download_request_data_;
 
   // URL of document that requested the PPAPI download.
@@ -132,7 +135,7 @@ class PPAPIDownloadRequest : public net::URLFetcherDelegate {
 
   // Tab id that associated with the PPAPI plugin, computed by
   // SessionTabHelper::IdForTab().
-  int tab_id_;
+  SessionID tab_id_;
 
   // If the user interacted with this PPAPI plugin to trigger the download.
   bool has_user_gesture_;

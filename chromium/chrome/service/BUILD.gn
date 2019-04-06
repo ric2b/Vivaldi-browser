@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//printing/features/features.gni")
+import("//printing/buildflags/buildflags.gni")
 import("//services/catalog/public/tools/catalog.gni")
 
 assert(!is_chromeos)
@@ -59,13 +59,15 @@ static_library("service") {
     "//base",
     "//chrome:strings",
     "//chrome/common",
-    "//chrome/services/printing/public/interfaces",
+    "//chrome/services/printing/public/mojom",
     "//components/cloud_devices/common",
     "//components/data_use_measurement/core",
     "//components/network_session_configurator/browser",
+    "//components/printing/common",
     "//google_apis",
     "//jingle:notifier",
-    "//mojo/edk/system",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
     "//net",
     "//printing",
     "//skia",

@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -37,6 +38,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -78,6 +80,17 @@ void WaitForRenderWidgetHostCount(size_t target_count) {
     run_loop.Run();
   }
 }
+
+// Used to disable a few problematic tests for MacViews:
+// https://crbug.com/850594
+bool IsMacViewsBrowser() {
+#if defined(OS_MACOSX)
+  return !views_mode_controller::IsViewsBrowserCocoa();
+#else
+  return false;
+#endif
+}
+
 }  // namespace
 
 class SitePerProcessInteractiveBrowserTest : public InProcessBrowserTest {
@@ -224,7 +237,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   // take time to propagate to the renderer's main thread.
   content::DOMMessageQueue msg_queue;
   std::string reply;
-  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('f'),
+  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('F'),
                    ui::DomCode::US_F, ui::VKEY_F, false, false, false, false);
   EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
   EXPECT_EQ("\"F\"", reply);
@@ -347,8 +360,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   ASSERT_NE(nullptr, child2);
 
   // Needed to avoid flakiness with --enable-browser-side-navigation.
-  content::WaitForChildFrameSurfaceReady(child1);
-  content::WaitForChildFrameSurfaceReady(child2);
+  content::WaitForHitTestDataOrChildSurfaceReady(child1);
+  content::WaitForHitTestDataOrChildSurfaceReady(child2);
 
   // Assign a name to each frame.  This will be sent along in test messages
   // from focus events.
@@ -470,11 +483,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   EXPECT_EQ("\"root-focused-input1\"",
             click_element_and_wait_for_message(main_frame_input_coords[0]));
   EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
-  auto frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
+  auto frame_focused = std::make_unique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input1\"",
             click_element_and_wait_for_message(child1_input_coords[0]));
   frame_focused->Wait();
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(main_frame);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(main_frame);
   EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(true));
   frame_focused->Wait();
 
@@ -482,37 +495,37 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   EXPECT_EQ("\"root-focused-input2\"",
             click_element_and_wait_for_message(main_frame_input_coords[1]));
   EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input2\"",
             click_element_and_wait_for_message(child2_input_coords[1]));
   frame_focused->Wait();
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(main_frame);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(main_frame);
   EXPECT_EQ("\"root-focused-input2\"", press_tab_and_wait_for_message(false));
   frame_focused->Wait();
 
   // Tab forward from child1 to child2.
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input1\"",
             click_element_and_wait_for_message(child2_input_coords[0]));
   frame_focused->Wait();
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input2\"",
             click_element_and_wait_for_message(child1_input_coords[1]));
   frame_focused->Wait();
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input1\"", press_tab_and_wait_for_message(false));
   frame_focused->Wait();
 
   // Tab backward from child2 to child1.
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input2\"",
             click_element_and_wait_for_message(child1_input_coords[1]));
   frame_focused->Wait();
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child2);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(child2);
   EXPECT_EQ("\"child2-focused-input1\"",
             click_element_and_wait_for_message(child2_input_coords[0]));
   frame_focused->Wait();
-  frame_focused = base::MakeUnique<content::FrameFocusedObserver>(child1);
+  frame_focused = std::make_unique<content::FrameFocusedObserver>(child1);
   EXPECT_EQ("\"child1-focused-input2\"", press_tab_and_wait_for_message(true));
   // EXPECT_EQ(child1, web_contents->GetFocusedFrame());
   frame_focused->Wait();
@@ -644,6 +657,8 @@ void WaitForMultipleFullscreenEvents(
 //
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
                        FullscreenElementInSubframe) {
+  if (IsMacViewsBrowser())
+    return;
   // Start on a page with one subframe (id "child-0") that has
   // "allowfullscreen" enabled.
   GURL main_url(embedded_test_server()->GetURL(
@@ -834,13 +849,27 @@ void SitePerProcessInteractiveBrowserTest::FullscreenElementInABA(
   EXPECT_EQ("none", GetFullscreenElementId(grandchild));
 }
 
+// This is flaky on Linux (crbug.com/854294)
+#if defined(OS_LINUX)
+#define MAYBE_FullscreenElementInABAAndExitViaEscapeKey \
+  DISABLED_FullscreenElementInABAAndExitViaEscapeKey
+#else
+#define MAYBE_FullscreenElementInABAAndExitViaEscapeKey \
+  FullscreenElementInABAAndExitViaEscapeKey
+#endif
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
-                       FullscreenElementInABAAndExitViaEscapeKey) {
+                       MAYBE_FullscreenElementInABAAndExitViaEscapeKey) {
+  if (IsMacViewsBrowser())
+    return;
   FullscreenElementInABA(FullscreenExitMethod::ESC_PRESS);
 }
 
+// This test is flaky on Linux (crbug.com/851236) and also not working
+// on Mac (crbug.com/850594).
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
-                       FullscreenElementInABAAndExitViaJS) {
+                       DISABLED_FullscreenElementInABAAndExitViaJS) {
+  if (IsMacViewsBrowser())
+    return;
   FullscreenElementInABA(FullscreenExitMethod::JS_CALL);
 }
 
@@ -1132,7 +1161,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractivePDFTest,
   content::RenderWidgetHostView* child_view =
       ChildFrameAt(active_web_contents->GetMainFrame(), 0)->GetView();
 
-  ContextMenuWaiter menu_waiter(content::NotificationService::AllSources());
+  ContextMenuWaiter menu_waiter;
 
   // Declaring a lambda to send a right-button mouse event to the embedder
   // frame.
@@ -1163,15 +1192,6 @@ class SitePerProcessAutofillTest : public SitePerProcessInteractiveBrowserTest {
   SitePerProcessAutofillTest() : SitePerProcessInteractiveBrowserTest() {}
   ~SitePerProcessAutofillTest() override {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SitePerProcessInteractiveBrowserTest::SetUpCommandLine(command_line);
-    // We need to set the feature state before the render process is created,
-    // in order for it to inherit the feature state from the browser process.
-    // SetUp() runs too early, and SetUpOnMainThread() runs too late.
-    scoped_feature_list_.InitAndEnableFeature(
-        security_state::kHttpFormWarningFeature);
-  }
-
  protected:
   class TestAutofillClient : public autofill::TestAutofillClient {
    public:
@@ -1189,6 +1209,7 @@ class SitePerProcessAutofillTest : public SitePerProcessInteractiveBrowserTest {
         const gfx::RectF& element_bounds,
         base::i18n::TextDirection text_direction,
         const std::vector<autofill::Suggestion>& suggestions,
+        bool autoselect_first_suggestion,
         base::WeakPtr<autofill::AutofillPopupDelegate> delegate) override {
       element_bounds_ = element_bounds;
       popup_shown_ = true;
@@ -1212,21 +1233,25 @@ class SitePerProcessAutofillTest : public SitePerProcessInteractiveBrowserTest {
   void SetupMainTab() {
     // Add a fresh new WebContents for which we add our own version of the
     // ChromePasswordManagerClient that uses a custom TestAutofillClient.
-    content::WebContents* new_contents = content::WebContents::Create(
-        content::WebContents::CreateParams(browser()
-                                               ->tab_strip_model()
-                                               ->GetActiveWebContents()
-                                               ->GetBrowserContext()));
+    std::unique_ptr<content::WebContents> new_contents =
+        content::WebContents::Create(
+            content::WebContents::CreateParams(browser()
+                                                   ->tab_strip_model()
+                                                   ->GetActiveWebContents()
+                                                   ->GetBrowserContext()));
     ASSERT_TRUE(new_contents);
-    ASSERT_FALSE(ChromePasswordManagerClient::FromWebContents(new_contents));
+    ASSERT_FALSE(
+        ChromePasswordManagerClient::FromWebContents(new_contents.get()));
 
     // Create ChromePasswordManagerClient and verify it exists for the new
     // WebContents.
     ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
-        new_contents, &test_autofill_client_);
-    ASSERT_TRUE(ChromePasswordManagerClient::FromWebContents(new_contents));
+        new_contents.get(), &test_autofill_client_);
+    ASSERT_TRUE(
+        ChromePasswordManagerClient::FromWebContents(new_contents.get()));
 
-    browser()->tab_strip_model()->AppendWebContents(new_contents, true);
+    browser()->tab_strip_model()->AppendWebContents(std::move(new_contents),
+                                                    true);
   }
 
   TestAutofillClient& autofill_client() { return test_autofill_client_; }
@@ -1302,81 +1327,6 @@ void WaitForFramePositionUpdated(content::RenderFrameHost* render_frame_host,
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
   }
-}
-// This test verifies that displacements (margin, etc) in the position of an
-// OOPIF is considered when showing an AutofillClient warning pop-up for
-// unsecure web sites.
-IN_PROC_BROWSER_TEST_F(SitePerProcessAutofillTest,
-                       PasswordAutofillPopupPositionInsideOOPIF) {
-  SetupMainTab();
-  ASSERT_TRUE(
-      base::FeatureList::IsEnabled(security_state::kHttpFormWarningFeature));
-
-  GURL main_url(embedded_test_server()->GetURL("a.com", "/iframe.html"));
-  ui_test_utils::NavigateToURL(browser(), main_url);
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  // Add some displacement for <iframe>.
-  ASSERT_TRUE(content::ExecuteScript(
-      active_web_contents,
-      base::StringPrintf("var iframe = document.querySelector('iframe');"
-                         "iframe.style.position = 'fixed';"
-                         "iframe.style.border = 'none';"
-                         "iframe.style.top = '%dpx';"
-                         "iframe.style.left = '%dpx';",
-                         kIframeTopDisplacement, kIframeLeftDisplacement)));
-
-  // Navigate the <iframe> to a simple page.
-  GURL frame_url = embedded_test_server()->GetURL("b.com", "/title1.html");
-  EXPECT_TRUE(NavigateIframeToURL(active_web_contents, "test", frame_url));
-  content::RenderFrameHost* child_frame = content::FrameMatchingPredicate(
-      active_web_contents, base::Bind(&content::FrameIsChildOfMainFrame));
-
-  WaitForFramePositionUpdated(
-      child_frame, gfx::Point(),
-      gfx::Point(kIframeLeftDisplacement, kIframeTopDisplacement), 1.4143f);
-
-  // We will need to listen to focus changes to find out about the container
-  // bounds of any focused <input> elements on the page.
-  FocusedEditableNodeChangedObserver focus_observer;
-
-  // Focus the child frame, add an <input> with type "password", and focus it.
-  ASSERT_TRUE(ExecuteScript(child_frame,
-                            "window.focus();"
-                            "var input = document.createElement('input');"
-                            "input.type = 'password';"
-                            "document.body.appendChild(input);"
-                            "input.focus();"));
-  focus_observer.WaitForFocusChangeInPage();
-
-  // The user gesture (input) should lead to a security warning.
-  content::SimulateKeyPress(active_web_contents, ui::DomKey::FromCharacter('A'),
-                            ui::DomCode::US_A, ui::VKEY_A, false, false, false,
-                            false);
-  autofill_client().WaitForNextPopup();
-
-  gfx::Point bounds_origin(
-      static_cast<int>(autofill_client().last_element_bounds().origin().x()),
-      static_cast<int>(autofill_client().last_element_bounds().origin().y()));
-
-  // Convert the bounds to screen coordinates (to then compare against the ones
-  // reported by focus change observer).
-  bounds_origin += active_web_contents->GetRenderWidgetHostView()
-                       ->GetViewBounds()
-                       .OffsetFromOrigin();
-
-  gfx::Vector2d error =
-      bounds_origin - focus_observer.focused_node_bounds_in_screen();
-
-  // Ideally, the length of the error vector should be 0.0f. But due to
-  // potential rounding errors, we assume a larger limit (which is slightly
-  // larger than square root of 2).
-  EXPECT_LT(error.Length(), 1.4143f)
-      << "Origin of bounds from focused node changed event is '"
-      << focus_observer.focused_node_bounds_in_screen().ToString()
-      << "' but AutofillClient is reporting '" << bounds_origin.ToString()
-      << "'";
 }
 
 // This test verifies that when clicking outside the bounds of a date picker

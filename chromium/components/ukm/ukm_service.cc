@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -60,8 +59,10 @@ int32_t LoadSessionId(PrefService* pref_service) {
 }  // namespace
 
 UkmService::UkmService(PrefService* pref_service,
-                       metrics::MetricsServiceClient* client)
+                       metrics::MetricsServiceClient* client,
+                       bool restrict_to_whitelist_entries)
     : pref_service_(pref_service),
+      restrict_to_whitelist_entries_(restrict_to_whitelist_entries),
       client_id_(0),
       session_id_(0),
       report_count_(0),
@@ -86,8 +87,6 @@ UkmService::UkmService(PrefService* pref_service,
   scheduler_.reset(new ukm::UkmRotationScheduler(rotate_callback,
                                                  get_upload_interval_callback));
 
-  metrics_providers_.Init();
-
   StoreWhitelistedEntries();
 
   DelegatingUkmRecorder::Get()->AddDelegate(self_ptr_factory_.GetWeakPtr());
@@ -103,6 +102,11 @@ void UkmService::Initialize() {
   DCHECK(!initialize_started_);
   DVLOG(1) << "UkmService::Initialize";
   initialize_started_ = true;
+
+  DCHECK_EQ(0, report_count_);
+  client_id_ = LoadOrGenerateClientId(pref_service_);
+  session_id_ = LoadSessionId(pref_service_);
+  metrics_providers_.Init();
 
   StartInitTask();
 }
@@ -200,10 +204,6 @@ void UkmService::RegisterPrefs(PrefRegistrySimple* registry) {
 void UkmService::StartInitTask() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::StartInitTask";
-  client_id_ = LoadOrGenerateClientId(pref_service_);
-  session_id_ = LoadSessionId(pref_service_);
-  report_count_ = 0;
-
   metrics_providers_.AsyncInit(base::Bind(&UkmService::FinishedInitTask,
                                           self_ptr_factory_.GetWeakPtr()));
 }
@@ -249,6 +249,10 @@ void UkmService::BuildAndStoreLog() {
   std::string serialized_log;
   report.SerializeToString(&serialized_log);
   reporting_service_.ukm_log_store()->StoreLog(serialized_log);
+}
+
+bool UkmService::ShouldRestrictToWhitelistedEntries() const {
+  return restrict_to_whitelist_entries_;
 }
 
 }  // namespace ukm

@@ -10,9 +10,10 @@
 #include <memory>
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/toolbar/toolbar_model.h"
-#include "ios/chrome/browser/ui/omnibox/omnibox_popup_provider.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_popup_view_suggestions_delegate.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_left_image_consumer.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
+#include "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_provider.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_view_suggestions_delegate.h"
 
 struct AutocompleteMatch;
 class AutocompleteResult;
@@ -21,17 +22,11 @@ class GURL;
 @class OmniboxTextFieldIOS;
 @class OmniboxTextFieldPasteDelegate;
 class WebOmniboxEditController;
+@class OmniboxClearButtonBridge;
 
 namespace ios {
 class ChromeBrowserState;
 }
-
-// Allows setting left images.
-class LeftImageProvider {
- public:
-  // Sets the left image.
-  virtual void SetLeftImage(int imageId) = 0;
-};
 
 // iOS implementation of OmniBoxView.  Wraps a UITextField and
 // interfaces with the rest of the autocomplete system.
@@ -41,7 +36,7 @@ class OmniboxViewIOS : public OmniboxView,
   // Retains |field|.
   OmniboxViewIOS(OmniboxTextFieldIOS* field,
                  WebOmniboxEditController* controller,
-                 LeftImageProvider* left_image_provider,
+                 id<OmniboxLeftImageConsumer> left_image_consumer,
                  ios::ChromeBrowserState* browser_state);
   ~OmniboxViewIOS() override;
 
@@ -84,7 +79,6 @@ class OmniboxViewIOS : public OmniboxView,
   void Update() override {}
   void EnterKeywordModeForDefaultSearchProvider() override {}
   bool IsSelectAll() const override;
-  bool DeleteAtEndPressed() override;
   void GetSelectionBounds(base::string16::size_type* start,
                           base::string16::size_type* end) const override;
   void SelectAll(bool reversed) override {}
@@ -110,7 +104,8 @@ class OmniboxViewIOS : public OmniboxView,
 
   // OmniboxPopupViewSuggestionsDelegate methods
 
-  void OnTopmostSuggestionImageChanged(int imageId) override;
+  void OnTopmostSuggestionImageChanged(
+      AutocompleteMatchType::Type type) override;
   void OnResultsChanged(const AutocompleteResult& result) override;
   void OnPopupDidScroll() override;
   void OnSelectedMatchForAppending(const base::string16& str) override;
@@ -127,9 +122,6 @@ class OmniboxViewIOS : public OmniboxView,
 
   // Clears the text from the omnibox.
   void ClearText();
-
-  // Set first result image.
-  void SetLeftImage(const int imageId);
 
   // Hide keyboard and call OnDidEndEditing.  This dismisses the keyboard and
   // also finalizes the editing state of the omnibox.
@@ -157,6 +149,13 @@ class OmniboxViewIOS : public OmniboxView,
   void EmphasizeURLComponents() override;
 
  private:
+  // Creates the clear text UIButton to be used as a right view of |field_|.
+  void CreateClearTextIcon(bool is_incognito);
+
+  // Updates the view to show the appropriate button (e.g. clear text or voice
+  // search) on the right side of |field_|.
+  void UpdateRightDecorations();
+
   // Calculates text attributes according to |display_text| and
   // returns them in an autoreleased object.
   NSAttributedString* ApplyTextAttributes(const base::string16& text);
@@ -178,9 +177,13 @@ class OmniboxViewIOS : public OmniboxView,
   ios::ChromeBrowserState* browser_state_;
 
   OmniboxTextFieldIOS* field_;
+  __strong UIButton* clear_text_button_;
+
+  __strong OmniboxClearButtonBridge* clear_button_bridge_;
+
   OmniboxTextFieldPasteDelegate* paste_delegate_;
   WebOmniboxEditController* controller_;  // weak, owns us
-  LeftImageProvider* left_image_provider_;  // weak
+  __weak id<OmniboxLeftImageConsumer> left_image_consumer_;
 
   State state_before_change_;
   NSString* marked_text_before_change_;
@@ -205,6 +208,11 @@ class OmniboxViewIOS : public OmniboxView,
   NSMutableAttributedString* attributing_display_string_;
 
   OmniboxPopupProvider* popup_provider_;  // weak
+
+  // A flag that is set whenever any input or copy/paste event happened in the
+  // omnibox while it was focused. Used to count event "user focuses the omnibox
+  // to view the complete URL and immediately defocuses it".
+  BOOL omnibox_interacted_while_focused_;
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_VIEW_IOS_H_

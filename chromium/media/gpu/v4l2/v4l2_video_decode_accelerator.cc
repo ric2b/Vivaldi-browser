@@ -16,7 +16,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/single_thread_task_runner.h"
@@ -24,7 +23,9 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/base/media_switches.h"
-#include "media/gpu/shared_memory_region.h"
+#include "media/base/scopedfd_helper.h"
+#include "media/base/unaligned_shared_memory.h"
+#include "media/gpu/v4l2/v4l2_image_processor.h"
 #include "media/video/h264_parser.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gl/gl_context.h"
@@ -72,12 +73,13 @@ struct V4L2VideoDecodeAccelerator::BitstreamBufferRef {
   BitstreamBufferRef(
       base::WeakPtr<Client>& client,
       scoped_refptr<base::SingleThreadTaskRunner>& client_task_runner,
-      std::unique_ptr<SharedMemoryRegion> shm,
+      const BitstreamBuffer* buffer,
       int32_t input_id);
   ~BitstreamBufferRef();
   const base::WeakPtr<Client> client;
   const scoped_refptr<base::SingleThreadTaskRunner> client_task_runner;
-  const std::unique_ptr<SharedMemoryRegion> shm;
+  const std::unique_ptr<UnalignedSharedMemory> shm;
+  off_t offset;
   size_t bytes_used;
   const int32_t input_id;
 };
@@ -92,11 +94,15 @@ struct V4L2VideoDecodeAccelerator::EGLSyncKHRRef {
 V4L2VideoDecodeAccelerator::BitstreamBufferRef::BitstreamBufferRef(
     base::WeakPtr<Client>& client,
     scoped_refptr<base::SingleThreadTaskRunner>& client_task_runner,
-    std::unique_ptr<SharedMemoryRegion> shm,
+    const BitstreamBuffer* buffer,
     int32_t input_id)
     : client(client),
       client_task_runner(client_task_runner),
-      shm(std::move(shm)),
+      shm(buffer ? std::make_unique<UnalignedSharedMemory>(buffer->handle(),
+                                                           buffer->size(),
+                                                           true)
+                 : nullptr),
+      offset(buffer ? buffer->offset() : 0),
       bytes_used(0),
       input_id(input_id) {}
 
@@ -132,6 +138,9 @@ V4L2VideoDecodeAccelerator::OutputRecord::OutputRecord()
       picture_id(-1),
       texture_id(0),
       cleared(false) {}
+
+V4L2VideoDecodeAccelerator::OutputRecord::OutputRecord(OutputRecord&&) =
+    default;
 
 V4L2VideoDecodeAccelerator::OutputRecord::~OutputRecord() {}
 
@@ -222,13 +231,13 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
 
   video_profile_ = config.profile;
 
-  if (egl_display_ == EGL_NO_DISPLAY) {
-    VLOGF(1) << "could not get EGLDisplay";
-    return false;
-  }
-
   // We need the context to be initialized to query extensions.
   if (!make_context_current_cb_.is_null()) {
+    if (egl_display_ == EGL_NO_DISPLAY) {
+      VLOGF(1) << "could not get EGLDisplay";
+      return false;
+    }
+
     if (!make_context_current_cb_.Run()) {
       VLOGF(1) << "could not make context current";
       return false;
@@ -264,6 +273,7 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
     return false;
   }
 
+  output_mode_ = config.output_mode;
   if (!SetupFormats())
     return false;
 
@@ -277,7 +287,6 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   }
 
   decoder_state_ = kInitialized;
-  output_mode_ = config.output_mode;
 
   // InitializeTask will NOTIFY_ERROR on failure.
   decoder_thread_.task_runner()->PostTask(
@@ -362,7 +371,11 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffersTask(
   memset(&reqbufs, 0, sizeof(reqbufs));
   reqbufs.count = buffers.size();
   reqbufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-  reqbufs.memory = V4L2_MEMORY_MMAP;
+  if (!image_processor_device_ && output_mode_ == Config::OutputMode::IMPORT) {
+    reqbufs.memory = V4L2_MEMORY_DMABUF;
+  } else {
+    reqbufs.memory = V4L2_MEMORY_MMAP;
+  }
   IOCTL_OR_ERROR_RETURN(VIDIOC_REQBUFS, &reqbufs);
 
   if (reqbufs.count != buffers.size()) {
@@ -431,13 +444,6 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffersTask(
   }
 
   if (output_mode_ == Config::OutputMode::ALLOCATE) {
-    DCHECK_EQ(kAwaitingPictureBuffers, decoder_state_);
-    DVLOGF(3) << "Change state to kDecoding";
-    decoder_state_ = kDecoding;
-    if (reset_pending_) {
-      FinishReset();
-      return;
-    }
     ScheduleDecodeBufferTaskIfNeeded();
   }
 }
@@ -517,6 +523,10 @@ void V4L2VideoDecodeAccelerator::AssignEGLImage(
                        buffer_index),
             0);
   output_record.egl_image = egl_image;
+  if (output_mode_ == Config::OutputMode::IMPORT) {
+    DCHECK(output_record.output_fds.empty());
+    output_record.output_fds.swap(dmabuf_fds);
+  }
   free_output_buffers_.push_back(buffer_index);
   if (decoder_state_ != kChangingResolution) {
     Enqueue();
@@ -607,8 +617,11 @@ void V4L2VideoDecodeAccelerator::ImportBufferForPictureTask(
     NOTIFY_ERROR(INVALID_ARGUMENT);
     return;
   }
-  int adjusted_coded_width = stride * 8 / plane_horiz_bits_per_pixel;
+  if (reset_pending_) {
+    FinishReset();
+  }
 
+  int adjusted_coded_width = stride * 8 / plane_horiz_bits_per_pixel;
   if (image_processor_device_ && !image_processor_) {
     // This is the first buffer import. Create the image processor and change
     // the decoder state. The client may adjust the coded width. We don't have
@@ -621,13 +634,12 @@ void V4L2VideoDecodeAccelerator::ImportBufferForPictureTask(
     if (!CreateImageProcessor())
       return;
     DCHECK_EQ(kAwaitingPictureBuffers, decoder_state_);
-    DVLOGF(3) << "Change state to kDecoding";
+  }
+  DCHECK_EQ(egl_image_size_.width(), adjusted_coded_width);
+
+  if (decoder_state_ == kAwaitingPictureBuffers) {
     decoder_state_ = kDecoding;
-    if (reset_pending_) {
-      FinishReset();
-    }
-  } else {
-    DCHECK_EQ(egl_image_size_.width(), adjusted_coded_width);
+    DVLOGF(3) << "Change state to kDecoding";
   }
 
   size_t index = iter - output_buffer_map_.begin();
@@ -652,7 +664,7 @@ void V4L2VideoDecodeAccelerator::ImportBufferForPictureTask(
   } else {
     // No need for an EGLImage, start using this buffer now.
     DCHECK_EQ(egl_image_planes_count_, dmabuf_fds.size());
-    iter->processor_output_fds.swap(dmabuf_fds);
+    iter->output_fds.swap(dmabuf_fds);
     free_output_buffers_.push_back(index);
     if (decoder_state_ != kChangingResolution) {
       Enqueue();
@@ -760,20 +772,19 @@ void V4L2VideoDecodeAccelerator::DecodeTask(
   DVLOGF(4) << "input_id=" << bitstream_buffer.id();
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK_NE(decoder_state_, kUninitialized);
-  TRACE_EVENT1("Video Decoder", "V4L2VDA::DecodeTask", "input_id",
+  TRACE_EVENT1("media,gpu", "V4L2VDA::DecodeTask", "input_id",
                bitstream_buffer.id());
 
-  std::unique_ptr<BitstreamBufferRef> bitstream_record(new BitstreamBufferRef(
-      decode_client_, decode_task_runner_,
-      std::unique_ptr<SharedMemoryRegion>(
-          new SharedMemoryRegion(bitstream_buffer, true)),
-      bitstream_buffer.id()));
+  std::unique_ptr<BitstreamBufferRef> bitstream_record(
+      new BitstreamBufferRef(decode_client_, decode_task_runner_,
+                             &bitstream_buffer, bitstream_buffer.id()));
 
   // Skip empty buffer.
   if (bitstream_buffer.size() == 0)
     return;
 
-  if (!bitstream_record->shm->Map()) {
+  if (!bitstream_record->shm->MapAt(bitstream_record->offset,
+                                    bitstream_record->shm->size())) {
     VLOGF(1) << "could not map bitstream_buffer";
     NOTIFY_ERROR(UNREADABLE_INPUT);
     return;
@@ -793,8 +804,7 @@ void V4L2VideoDecodeAccelerator::DecodeTask(
     return;
   }
 
-  decoder_input_queue_.push(
-      linked_ptr<BitstreamBufferRef>(bitstream_record.release()));
+  decoder_input_queue_.push(std::move(bitstream_record));
   decoder_decode_buffer_tasks_scheduled_++;
   DecodeBufferTask();
 }
@@ -803,7 +813,7 @@ void V4L2VideoDecodeAccelerator::DecodeBufferTask() {
   DVLOGF(4);
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK_NE(decoder_state_, kUninitialized);
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::DecodeBufferTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::DecodeBufferTask");
 
   decoder_decode_buffer_tasks_scheduled_--;
 
@@ -817,14 +827,14 @@ void V4L2VideoDecodeAccelerator::DecodeBufferTask() {
       // We're waiting for a new buffer -- exit without scheduling a new task.
       return;
     }
-    linked_ptr<BitstreamBufferRef>& buffer_ref = decoder_input_queue_.front();
-    if (decoder_delay_bitstream_buffer_id_ == buffer_ref->input_id) {
+    if (decoder_delay_bitstream_buffer_id_ ==
+        decoder_input_queue_.front()->input_id) {
       // We're asked to delay decoding on this and subsequent buffers.
       return;
     }
 
     // Setup to use the next buffer.
-    decoder_current_bitstream_buffer_.reset(buffer_ref.release());
+    decoder_current_bitstream_buffer_ = std::move(decoder_input_queue_.front());
     decoder_input_queue_.pop();
     const auto& shm = decoder_current_bitstream_buffer_->shm;
     if (shm) {
@@ -1168,7 +1178,7 @@ void V4L2VideoDecodeAccelerator::ServiceDeviceTask(bool event_pending) {
   DVLOGF(4);
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK_NE(decoder_state_, kUninitialized);
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::ServiceDeviceTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::ServiceDeviceTask");
 
   if (decoder_state_ == kResetting) {
     DVLOGF(3) << "early out: kResetting state";
@@ -1251,7 +1261,7 @@ void V4L2VideoDecodeAccelerator::Enqueue() {
   DVLOGF(4);
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK_NE(decoder_state_, kUninitialized);
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::Enqueue");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::Enqueue");
 
   // Drain the pipe of completed decode buffers.
   const int old_inputs_queued = input_buffer_queued_count_;
@@ -1273,11 +1283,13 @@ void V4L2VideoDecodeAccelerator::Enqueue() {
         input_ready_queue_.pop();
         free_input_buffers_.push_back(buffer);
         input_record.input_id = -1;
-        if (coded_size_.IsEmpty()) {
-          // If coded_size_.IsEmpty(), no output buffer could have been
+        if (coded_size_.IsEmpty() || !input_streamon_) {
+          // (1) If coded_size_.IsEmpty(), no output buffer could have been
           // allocated and there is nothing to flush. We can NotifyFlushDone()
           // immediately, without requesting flush to the driver via
           // SendDecoderCmdStop().
+          // (2) If input stream is off, we will never get the output buffer
+          // with V4L2_BUF_FLAG_LAST. We should NotifyFlushDone().
           NotifyFlushDoneIfNeeded();
         } else if (!SendDecoderCmdStop()) {
           return;
@@ -1352,7 +1364,7 @@ void V4L2VideoDecodeAccelerator::Dequeue() {
   DVLOGF(4);
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK_NE(decoder_state_, kUninitialized);
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::Dequeue");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::Dequeue");
 
   while (input_buffer_queued_count_ > 0) {
     if (!DequeueInputBuffer())
@@ -1511,7 +1523,7 @@ bool V4L2VideoDecodeAccelerator::EnqueueOutputRecord() {
   DCHECK_EQ(output_record.state, kFree);
   DCHECK_NE(output_record.picture_id, -1);
   if (output_record.egl_sync != EGL_NO_SYNC_KHR) {
-    TRACE_EVENT0("Video Decoder",
+    TRACE_EVENT0("media,gpu",
                  "V4L2VDA::EnqueueOutputRecord: eglClientWaitSyncKHR");
     // If we have to wait for completion, wait.  Note that
     // free_output_buffers_ is a FIFO queue, so we always wait on the
@@ -1536,7 +1548,15 @@ bool V4L2VideoDecodeAccelerator::EnqueueOutputRecord() {
          sizeof(struct v4l2_plane) * output_planes_count_);
   qbuf.index = buffer;
   qbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-  qbuf.memory = V4L2_MEMORY_MMAP;
+  if (!image_processor_device_ && output_mode_ == Config::OutputMode::IMPORT) {
+    DCHECK_EQ(output_planes_count_, output_record.output_fds.size());
+    for (size_t i = 0; i < output_planes_count_; ++i) {
+      qbuf_planes[i].m.fd = output_record.output_fds[i].get();
+    }
+    qbuf.memory = V4L2_MEMORY_DMABUF;
+  } else {
+    qbuf.memory = V4L2_MEMORY_MMAP;
+  }
   qbuf.m.planes = qbuf_planes.get();
   qbuf.length = output_planes_count_;
   DVLOGF(4) << "qbuf.index=" << qbuf.index;
@@ -1552,7 +1572,7 @@ void V4L2VideoDecodeAccelerator::ReusePictureBufferTask(
     std::unique_ptr<EGLSyncKHRRef> egl_sync_ref) {
   DVLOGF(4) << "picture_buffer_id=" << picture_buffer_id;
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::ReusePictureBufferTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::ReusePictureBufferTask");
 
   // We run ReusePictureBufferTask even if we're in kResetting.
   if (decoder_state_ == kError) {
@@ -1604,7 +1624,7 @@ void V4L2VideoDecodeAccelerator::ReusePictureBufferTask(
 void V4L2VideoDecodeAccelerator::FlushTask() {
   VLOGF(2);
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::FlushTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::FlushTask");
 
   if (decoder_state_ == kError) {
     VLOGF(2) << "early out: kError state";
@@ -1615,9 +1635,8 @@ void V4L2VideoDecodeAccelerator::FlushTask() {
   DCHECK(!decoder_flushing_);
 
   // Queue up an empty buffer -- this triggers the flush.
-  decoder_input_queue_.push(
-      linked_ptr<BitstreamBufferRef>(new BitstreamBufferRef(
-          decode_client_, decode_task_runner_, nullptr, kFlushBufferId)));
+  decoder_input_queue_.push(std::make_unique<BitstreamBufferRef>(
+      decode_client_, decode_task_runner_, nullptr, kFlushBufferId));
   decoder_flushing_ = true;
   SendPictureReady();  // Send all pending PictureReady.
 
@@ -1716,7 +1735,7 @@ bool V4L2VideoDecodeAccelerator::SendDecoderCmdStop() {
 void V4L2VideoDecodeAccelerator::ResetTask() {
   VLOGF(2);
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::ResetTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::ResetTask");
 
   if (decoder_state_ == kError) {
     VLOGF(2) << "early out: kError state";
@@ -1787,7 +1806,7 @@ void V4L2VideoDecodeAccelerator::FinishReset() {
 void V4L2VideoDecodeAccelerator::ResetDoneTask() {
   VLOGF(2);
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::ResetDoneTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::ResetDoneTask");
 
   if (decoder_state_ == kError) {
     VLOGF(2) << "early out: kError state";
@@ -1820,7 +1839,7 @@ void V4L2VideoDecodeAccelerator::ResetDoneTask() {
 
 void V4L2VideoDecodeAccelerator::DestroyTask() {
   VLOGF(2);
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::DestroyTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::DestroyTask");
 
   // DestroyTask() should run regardless of decoder_state_.
 
@@ -1836,8 +1855,7 @@ void V4L2VideoDecodeAccelerator::DestroyTask() {
     decoder_input_queue_.pop();
   decoder_flushing_ = false;
 
-  if (image_processor_)
-    image_processor_.release()->Destroy();
+  image_processor_ = nullptr;
 
   // Set our state to kError.  Just in case.
   decoder_state_ = kError;
@@ -1958,8 +1976,7 @@ void V4L2VideoDecodeAccelerator::StartResolutionChange() {
     return;
   }
 
-  if (image_processor_)
-    image_processor_.release()->Destroy();
+  image_processor_ = nullptr;
 
   if (!DestroyOutputBuffers()) {
     VLOGF(1) << "Failed destroying output buffers.";
@@ -2003,7 +2020,7 @@ void V4L2VideoDecodeAccelerator::FinishResolutionChange() {
 void V4L2VideoDecodeAccelerator::DevicePollTask(bool poll_device) {
   DVLOGF(4);
   DCHECK(device_poll_thread_.task_runner()->BelongsToCurrentThread());
-  TRACE_EVENT0("Video Decoder", "V4L2VDA::DevicePollTask");
+  TRACE_EVENT0("media,gpu", "V4L2VDA::DevicePollTask");
 
   bool event_pending = false;
 
@@ -2289,11 +2306,6 @@ bool V4L2VideoDecodeAccelerator::SetupFormats() {
     }
     egl_image_device_ = image_processor_device_;
   } else {
-    if (output_mode_ == Config::OutputMode::IMPORT) {
-      VLOGF(1) << "Import mode without image processor is not implemented "
-               << "yet.";
-      return false;
-    }
     egl_image_format_fourcc_ = output_format_fourcc_;
     egl_image_device_ = device_;
   }
@@ -2335,10 +2347,10 @@ uint32_t V4L2VideoDecodeAccelerator::FindImageProcessorOutputFormat() {
   static const uint32_t kPreferredFormats[] = {V4L2_PIX_FMT_YVU420,
                                                V4L2_PIX_FMT_NV12};
   auto preferred_formats_first = [](uint32_t a, uint32_t b) -> bool {
-    auto iter_a = std::find(std::begin(kPreferredFormats),
-                            std::end(kPreferredFormats), a);
-    auto iter_b = std::find(std::begin(kPreferredFormats),
-                            std::end(kPreferredFormats), b);
+    auto* iter_a = std::find(std::begin(kPreferredFormats),
+                             std::end(kPreferredFormats), a);
+    auto* iter_b = std::find(std::begin(kPreferredFormats),
+                             std::end(kPreferredFormats), b);
     return iter_a < iter_b;
   };
 
@@ -2381,17 +2393,18 @@ bool V4L2VideoDecodeAccelerator::ResetImageProcessor() {
 bool V4L2VideoDecodeAccelerator::CreateImageProcessor() {
   VLOGF(2);
   DCHECK(!image_processor_);
-  image_processor_.reset(new V4L2ImageProcessor(image_processor_device_));
   v4l2_memory output_memory_type =
       (output_mode_ == Config::OutputMode::ALLOCATE ? V4L2_MEMORY_MMAP
                                                     : V4L2_MEMORY_DMABUF);
+  image_processor_.reset(new V4L2ImageProcessor(
+      image_processor_device_, V4L2_MEMORY_DMABUF, output_memory_type));
   // Unretained is safe because |this| owns image processor and there will be
   // no callbacks after processor destroys.
   if (!image_processor_->Initialize(
           V4L2Device::V4L2PixFmtToVideoPixelFormat(output_format_fourcc_),
           V4L2Device::V4L2PixFmtToVideoPixelFormat(egl_image_format_fourcc_),
-          V4L2_MEMORY_DMABUF, output_memory_type, visible_size_, coded_size_,
-          visible_size_, egl_image_size_, output_buffer_map_.size(),
+          visible_size_, coded_size_, visible_size_, egl_image_size_,
+          output_buffer_map_.size(),
           base::Bind(&V4L2VideoDecodeAccelerator::ImageProcessorError,
                      base::Unretained(this)))) {
     VLOGF(1) << "Initialize image processor failed";
@@ -2421,32 +2434,30 @@ bool V4L2VideoDecodeAccelerator::ProcessFrame(int32_t bitstream_buffer_id,
   DCHECK_EQ(output_record.state, kAtDevice);
   output_record.state = kAtProcessor;
   image_processor_bitstream_buffer_ids_.push(bitstream_buffer_id);
-  std::vector<int> processor_input_fds;
-  for (auto& fd : output_record.processor_input_fds) {
-    processor_input_fds.push_back(fd.get());
-  }
+
   scoped_refptr<VideoFrame> input_frame = VideoFrame::WrapExternalDmabufs(
       V4L2Device::V4L2PixFmtToVideoPixelFormat(output_format_fourcc_),
-      coded_size_, gfx::Rect(visible_size_), visible_size_, processor_input_fds,
-      base::TimeDelta());
+      coded_size_, gfx::Rect(visible_size_), visible_size_,
+      DuplicateFDs(output_record.processor_input_fds), base::TimeDelta());
 
-  std::vector<base::ScopedFD> processor_output_fds;
+  if (!input_frame) {
+    VLOGF(1) << "Failed wrapping input frame!";
+    return false;
+  }
+
+  std::vector<base::ScopedFD> output_fds;
   if (output_mode_ == Config::OutputMode::IMPORT) {
-    for (auto& fd : output_record.processor_output_fds) {
-      processor_output_fds.push_back(
-          base::ScopedFD(HANDLE_EINTR(dup(fd.get()))));
-      if (!processor_output_fds.back().is_valid()) {
-        VPLOGF(1) << "Failed duplicating a dmabuf fd";
-        return false;
-      }
-    }
+    output_fds = DuplicateFDs(output_record.output_fds);
+    if (output_fds.empty())
+      return false;
   }
   // Unretained is safe because |this| owns image processor and there will
   // be no callbacks after processor destroys.
   image_processor_->Process(
-      input_frame, output_buffer_index, std::move(processor_output_fds),
-      base::Bind(&V4L2VideoDecodeAccelerator::FrameProcessed,
-                 base::Unretained(this), bitstream_buffer_id));
+      input_frame, output_buffer_index, std::move(output_fds),
+      base::BindOnce(&V4L2VideoDecodeAccelerator::FrameProcessed,
+                     base::Unretained(this), bitstream_buffer_id,
+                     output_buffer_index));
   return true;
 }
 
@@ -2562,7 +2573,11 @@ bool V4L2VideoDecodeAccelerator::DestroyOutputBuffers() {
   memset(&reqbufs, 0, sizeof(reqbufs));
   reqbufs.count = 0;
   reqbufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-  reqbufs.memory = V4L2_MEMORY_MMAP;
+  if (!image_processor_device_ && output_mode_ == Config::OutputMode::IMPORT) {
+    reqbufs.memory = V4L2_MEMORY_DMABUF;
+  } else {
+    reqbufs.memory = V4L2_MEMORY_MMAP;
+  }
   if (device_->Ioctl(VIDIOC_REQBUFS, &reqbufs) != 0) {
     VPLOGF(1) << "ioctl() failed: VIDIOC_REQBUFS";
     NOTIFY_ERROR(PLATFORM_FAILURE);
@@ -2631,8 +2646,10 @@ void V4L2VideoDecodeAccelerator::PictureCleared() {
   SendPictureReady();
 }
 
-void V4L2VideoDecodeAccelerator::FrameProcessed(int32_t bitstream_buffer_id,
-                                                int output_buffer_index) {
+void V4L2VideoDecodeAccelerator::FrameProcessed(
+    int32_t bitstream_buffer_id,
+    int output_buffer_index,
+    scoped_refptr<VideoFrame> frame) {
   DVLOGF(4) << "output_buffer_index=" << output_buffer_index
             << ", bitstream_buffer_id=" << bitstream_buffer_id;
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());

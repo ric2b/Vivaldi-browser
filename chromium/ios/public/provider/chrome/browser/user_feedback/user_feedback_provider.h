@@ -29,7 +29,7 @@
 - (UIImage*)currentPageScreenshot;
 
 // Returns the username of the account being synced.
-// Returns nil if sync is not enabled.
+// Returns nil if sync is not enabled or user is in incognito mode.
 - (NSString*)currentPageSyncedUserName;
 
 @end
@@ -44,8 +44,7 @@ class UserFeedbackProvider {
   virtual bool IsUserFeedbackEnabled();
   // Returns view controller to present to the user to collect their feedback.
   virtual UIViewController* CreateViewController(
-      id<UserFeedbackDataSource> dataSource,
-      id<ApplicationCommands> dispatcher);
+      id<UserFeedbackDataSource> data_source);
   // Uploads collected feedback reports.
   virtual void Synchronize();
 

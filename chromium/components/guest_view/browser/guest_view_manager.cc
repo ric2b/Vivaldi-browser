@@ -59,7 +59,7 @@ class GuestViewManager::EmbedderRenderProcessHostObserver
   }
 
   void RenderProcessHostDestroyed(RenderProcessHost* host) override {
-    if (guest_view_manager_.get())
+    if (guest_view_manager_)
       guest_view_manager_->EmbedderProcessDestroyed(id_);
     delete this;
   }
@@ -176,13 +176,13 @@ int GuestViewManager::GetNextInstanceID() {
 void GuestViewManager::CreateGuest(const std::string& view_type,
                                    content::WebContents* owner_web_contents,
                                    const base::DictionaryValue& create_params,
-                                   const WebContentsCreatedCallback& callback) {
+                                   WebContentsCreatedCallback callback) {
   GuestViewBase* guest = CreateGuestInternal(owner_web_contents, view_type);
   if (!guest) {
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
-  guest->Init(create_params, callback);
+  guest->Init(create_params, std::move(callback));
 }
 
 content::WebContents* GuestViewManager::CreateGuestWithWebContentsParams(
@@ -194,9 +194,13 @@ content::WebContents* GuestViewManager::CreateGuestWithWebContentsParams(
     return nullptr;
   content::WebContents::CreateParams guest_create_params(create_params);
   guest_create_params.guest_delegate = guest;
-  auto* guest_web_contents = WebContents::Create(guest_create_params);
-  guest->InitWithWebContents(base::DictionaryValue(), guest_web_contents);
-  return guest_web_contents;
+
+  // TODO(erikchen): Fix ownership semantics for this class.
+  // https://crbug.com/832879.
+  std::unique_ptr<content::WebContents> guest_web_contents =
+      WebContents::Create(guest_create_params);
+  guest->InitWithWebContents(base::DictionaryValue(), guest_web_contents.get());
+  return guest_web_contents.release();
 }
 
 content::WebContents* GuestViewManager::GetGuestByInstanceID(

@@ -7,8 +7,8 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/callback.h"
@@ -111,19 +111,20 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceClient : public BluezDBusClient {
 
     // Manufacturer specific advertisement data. Keys are 16 bits Manufacturer
     // ID followed by its byte array value. Read-only.
-    dbus::Property<std::unordered_map<uint16_t, std::vector<uint8_t>>>
-        manufacturer_data;
+    dbus::Property<std::map<uint16_t, std::vector<uint8_t>>> manufacturer_data;
 
     // Service advertisement data. Keys are the UUIDs in string format followed
     // by its byte array value. Read-only.
-    dbus::Property<std::unordered_map<std::string, std::vector<uint8_t>>>
-        service_data;
+    dbus::Property<std::map<std::string, std::vector<uint8_t>>> service_data;
 
     // Indicate whether or not service discovery has been resolved. Read-only.
     dbus::Property<bool> services_resolved;
 
     // The Advertising Data Flags of the remote device. Read-only.
     dbus::Property<std::vector<uint8_t>> advertising_data_flags;
+
+    // The MTU used in ATT communication with the remote device. Read-only.
+    dbus::Property<uint16_t> mtu;
 
     Properties(dbus::ObjectProxy* object_proxy,
                const std::string& interface_name,
@@ -240,6 +241,16 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceClient : public BluezDBusClient {
   virtual void GetServiceRecords(const dbus::ObjectPath& object_path,
                                  const ServiceRecordsCallback& callback,
                                  const ErrorCallback& error_callback) = 0;
+
+  // Executes all the privous prepare writes in a reliable write session.
+  virtual void ExecuteWrite(const dbus::ObjectPath& object_path,
+                            const base::Closure& callback,
+                            const ErrorCallback& error_callback) = 0;
+
+  // Aborts all the privous prepare writes in a reliable write session.
+  virtual void AbortWrite(const dbus::ObjectPath& object_path,
+                          const base::Closure& callback,
+                          const ErrorCallback& error_callback) = 0;
 
   // Creates the instance.
   static BluetoothDeviceClient* Create();

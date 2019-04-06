@@ -23,7 +23,15 @@ namespace chromeos {
 // returns them unmodified.
 class FakeSessionManagerClient : public SessionManagerClient {
  public:
+  enum class PolicyStorageType {
+    kOnDisk,    // Store policy in regular files on disk. Usually used for
+                // fake D-Bus client implementation, see
+                // SessionManagerClient::Create().
+    kInMemory,  // Store policy in memory only. Usually used for tests.
+  };
+
   FakeSessionManagerClient();
+  explicit FakeSessionManagerClient(PolicyStorageType policy_storage);
   ~FakeSessionManagerClient() override;
 
   // SessionManagerClient overrides
@@ -34,9 +42,11 @@ class FakeSessionManagerClient : public SessionManagerClient {
   bool HasObserver(const Observer* observer) const override;
   bool IsScreenLocked() const override;
   void EmitLoginPromptVisible() override;
+  void EmitAshInitialized() override;
   void RestartJob(int socket_fd,
                   const std::vector<std::string>& argv,
                   VoidDBusMethodCallback callback) override;
+  void SaveLoginPassword(const std::string& password) override;
   void StartSession(const cryptohome::Identification& cryptohome_id) override;
   void StopSession() override;
   void NotifySupervisedUserCreationStarted() override;
@@ -64,6 +74,11 @@ class FakeSessionManagerClient : public SessionManagerClient {
   RetrievePolicyResponseType BlockingRetrieveDeviceLocalAccountPolicy(
       const std::string& account_id,
       std::string* policy_out) override;
+  void RetrievePolicy(const login_manager::PolicyDescriptor& descriptor,
+                      RetrievePolicyCallback callback) override;
+  RetrievePolicyResponseType BlockingRetrievePolicy(
+      const login_manager::PolicyDescriptor& descriptor,
+      std::string* policy_out) override;
   void StoreDevicePolicy(const std::string& policy_blob,
                          VoidDBusMethodCallback callback) override;
   void StorePolicyForUser(const cryptohome::Identification& cryptohome_id,
@@ -72,13 +87,21 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void StoreDeviceLocalAccountPolicy(const std::string& account_id,
                                      const std::string& policy_blob,
                                      VoidDBusMethodCallback callback) override;
+  void StorePolicy(const login_manager::PolicyDescriptor& descriptor,
+                   const std::string& policy_blob,
+                   VoidDBusMethodCallback callback) override;
   bool SupportsRestartToApplyUserFlags() const override;
   void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override;
   void GetServerBackedStateKeys(StateKeysCallback callback) override;
 
-  void StartArcInstance(const login_manager::StartArcInstanceRequest& request,
-                        StartArcInstanceCallback callback) override;
+  void StartArcMiniContainer(
+      const login_manager::StartArcMiniContainerRequest& request,
+      StartArcMiniContainerCallback callback) override;
+  void UpgradeArcContainer(
+      const login_manager::UpgradeArcContainerRequest& request,
+      UpgradeArcContainerCallback success_callback,
+      UpgradeErrorCallback error_callback) override;
   void StopArcInstance(VoidDBusMethodCallback callback) override;
   void SetArcCpuRestriction(
       login_manager::ContainerCpuRestrictionState restriction_state,
@@ -90,15 +113,33 @@ class FakeSessionManagerClient : public SessionManagerClient {
                      VoidDBusMethodCallback callback) override;
 
   // Notifies observers as if ArcInstanceStopped signal is received.
-  void NotifyArcInstanceStopped(bool clean,
+  void NotifyArcInstanceStopped(login_manager::ArcContainerStopReason,
                                 const std::string& conainer_instance_id);
 
-  void set_store_device_policy_success(bool success) {
-    store_device_policy_success_ = success;
+  // Returns true if flags for |cryptohome_id| have been set. If the return
+  // value is |true|, |*out_flags_for_user| is filled with the flags passed to
+  // |SetFlagsForUser|.
+  bool GetFlagsForUser(const cryptohome::Identification& cryptohome_id,
+                       std::vector<std::string>* out_flags_for_user) const;
+
+  // Sets whether FakeSessionManagerClient should advertise (through
+  // |SupportsRestartToApplyUserFlags|) that it supports restarting chrome to
+  // apply user-session flags. The default is |false|.
+  void set_supports_restart_to_apply_user_flags(
+      bool supports_restart_to_apply_user_flags) {
+    supports_restart_to_apply_user_flags_ =
+        supports_restart_to_apply_user_flags;
   }
+
+  void set_store_policy_success(bool success) {
+    store_policy_success_ = success;
+  }
+  // Accessors for device policy. Only available for
+  // PolicyStorageType::kInMemory.
   const std::string& device_policy() const;
   void set_device_policy(const std::string& policy_blob);
 
+  // Accessors for user policy. Only available for PolicyStorageType::kInMemory.
   const std::string& user_policy(
       const cryptohome::Identification& cryptohome_id) const;
   void set_user_policy(const cryptohome::Identification& cryptohome_id,
@@ -107,26 +148,27 @@ class FakeSessionManagerClient : public SessionManagerClient {
       const cryptohome::Identification& cryptohome_id,
       const std::string& policy_blob);
 
-  void set_store_user_policy_success(bool success) {
-    store_user_policy_success_ = success;
-  }
-
+  // Accessors for device local account policy. Only available for
+  // PolicyStorageType::kInMemory.
   const std::string& device_local_account_policy(
       const std::string& account_id) const;
   void set_device_local_account_policy(const std::string& account_id,
                                        const std::string& policy_blob);
 
-  const login_manager::StartArcInstanceRequest& last_start_arc_request() const {
-    return last_start_arc_request_;
+  const login_manager::UpgradeArcContainerRequest& last_upgrade_arc_request()
+      const {
+    return last_upgrade_arc_request_;
   }
 
   // Notify observers about a property change completion.
   void OnPropertyChangeComplete(bool success);
 
   // Configures the list of state keys used to satisfy
-  // GetServerBackedStateKeys() requests.
+  // GetServerBackedStateKeys() requests. Only available for
+  // PolicyStorageType::kInMemory.
   void set_server_backed_state_keys(
       const std::vector<std::string>& state_keys) {
+    DCHECK(policy_storage_ == PolicyStorageType::kInMemory);
     server_backed_state_keys_ = state_keys;
   }
 
@@ -159,24 +201,25 @@ class FakeSessionManagerClient : public SessionManagerClient {
   }
 
  private:
-  bool store_device_policy_success_ = true;
-  std::string device_policy_;
-  std::map<cryptohome::Identification, std::string> user_policies_;
-  std::map<cryptohome::Identification, std::string>
-      user_policies_without_session_;
+  bool supports_restart_to_apply_user_flags_ = false;
 
-  // Controls whether StorePolicyForUser() should report success or not.
-  bool store_user_policy_success_ = true;
-
-  std::map<std::string, std::string> device_local_account_policy_;
   base::ObserverList<Observer> observers_;
   SessionManagerClient::ActiveSessionsMap user_sessions_;
   std::vector<std::string> server_backed_state_keys_;
+
+  // Policy is stored in |policy_| if |policy_storage_| type is
+  // PolicyStorageType::kInMemory. Uses the relative stub file path as key.
+  const PolicyStorageType policy_storage_;
+  std::map<std::string, std::string> policy_;
+
+  // If set to false, StorePolicy() always fails.
+  bool store_policy_success_ = true;
 
   int start_device_wipe_call_count_;
   int request_lock_screen_call_count_;
   int notify_lock_screen_shown_call_count_;
   int notify_lock_screen_dismissed_call_count_;
+  bool screen_is_locked_;
 
   bool arc_available_;
   base::TimeTicks arc_start_time_;
@@ -186,7 +229,13 @@ class FakeSessionManagerClient : public SessionManagerClient {
   std::string container_instance_id_;
 
   // Contains last requst passed to StartArcInstance
-  login_manager::StartArcInstanceRequest last_start_arc_request_;
+  login_manager::UpgradeArcContainerRequest last_upgrade_arc_request_;
+
+  StubDelegate* delegate_;
+
+  // The last-set flags for user set through |SetFlagsForUser|.
+  std::map<cryptohome::Identification, std::vector<std::string>>
+      flags_for_user_;
 
   base::WeakPtrFactory<FakeSessionManagerClient> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(FakeSessionManagerClient);

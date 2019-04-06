@@ -9,8 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
-#include "build/build_config.h"
-#include "third_party/skia/include/core/SkRefCnt.h"
+#include "services/service_manager/public/cpp/identity.h"
 #include "ui/aura/env.h"
 #include "ui/views/mus/mus_export.h"
 
@@ -22,13 +21,8 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
-namespace font_service {
-class FontLoader;
-}
-
 namespace service_manager {
 class Connector;
-class Identity;
 }
 
 namespace views {
@@ -39,34 +33,44 @@ class ViewsDelegate;
 // |resource_file| is the path to the apk file containing the resources.
 class VIEWS_MUS_EXPORT AuraInit {
  public:
+  // TODO(sky): remove Mode. https://crbug.com/842365.
   enum class Mode {
-    // Indicates AuraInit should target using aura with mus.
+    // Indicates AuraInit should target using aura with mus. This is deprecated.
     AURA_MUS,
 
     // Indicates AuraInit should target using aura with mus, for a Window
-    // Manager client.
+    // Manager client. This is deprecated.
     AURA_MUS_WINDOW_MANAGER,
 
-    // Indicates AuraInit should target using ui::Window.
-    UI
+    // Targets ws2. Mode will eventually be removed entirely and this will be
+    // the default.
+    AURA_MUS2,
   };
 
   ~AuraInit();
 
+  struct VIEWS_MUS_EXPORT InitParams {
+    InitParams();
+    ~InitParams();
+    service_manager::Connector* connector = nullptr;
+    service_manager::Identity identity;
+    // File for strings and 1x icons. Defaults to views_mus_resources.pak.
+    std::string resource_file;
+    // File for 2x icons. Can be empty.
+    std::string resource_file_200;
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr;
+    Mode mode = Mode::AURA_MUS;
+    bool register_path_provider = true;
+    // When true the client application will connect to the accessibility host
+    // in the browser to supply AX node trees and handle AX actions (e.g. to
+    // support ChromeVox).
+    bool use_accessibility_host = false;
+  };
+
   // Returns an AuraInit if initialization can be completed successfully,
   // otherwise a nullptr is returned. If initialization fails then Aura is in an
   // unusable state, and calling services should shutdown.
-  // |resource_file| is the file to load strings and 1x icons from.
-  // |resource_file_200| can be an empty string, otherwise it is the file to
-  // load 2x icons from.
-  static std::unique_ptr<AuraInit> Create(
-      service_manager::Connector* connector,
-      const service_manager::Identity& identity,
-      const std::string& resource_file,
-      const std::string& resource_file_200 = std::string(),
-      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr,
-      Mode mode = Mode::UI,
-      bool register_path_provider = true);
+  static std::unique_ptr<AuraInit> Create(const InitParams& params);
 
   // Only valid if Mode::AURA_MUS was passed to constructor.
   MusClient* mus_client() { return mus_client_.get(); }
@@ -77,22 +81,10 @@ class VIEWS_MUS_EXPORT AuraInit {
   // Returns true if AuraInit was able to successfully complete initialization.
   // If this returns false, then Aura is in an unusable state, and calling
   // services should shutdown.
-  bool Init(service_manager::Connector* connector,
-            const service_manager::Identity& identity,
-            const std::string& resource_file,
-            const std::string& resource_file_200,
-            scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-            Mode mode,
-            bool register_path_provider);
+  bool Init(const InitParams& params);
 
-  bool InitializeResources(service_manager::Connector* connector,
-                           const std::string& resource_file,
-                           const std::string& resource_file_200,
-                           bool register_path_provider);
-
-#if defined(OS_LINUX)
-  sk_sp<font_service::FontLoader> font_loader_;
-#endif
+  // Returns true on success.
+  bool InitializeResources(const InitParams& params);
 
   std::unique_ptr<aura::Env> env_;
   std::unique_ptr<MusClient> mus_client_;

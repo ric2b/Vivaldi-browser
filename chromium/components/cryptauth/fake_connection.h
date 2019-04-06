@@ -6,6 +6,7 @@
 #define COMPONENTS_CRYPTAUTH_FAKE_CONNECTION_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "components/cryptauth/connection.h"
 
 namespace cryptauth {
@@ -15,15 +16,22 @@ class ConnectionObserver;
 // A fake implementation of Connection to use in tests.
 class FakeConnection : public Connection {
  public:
-  FakeConnection(const RemoteDevice& remote_device);
-  FakeConnection(const RemoteDevice& remote_device, bool should_auto_connect);
+  FakeConnection(RemoteDeviceRef remote_device);
+  FakeConnection(RemoteDeviceRef remote_device, bool should_auto_connect);
   ~FakeConnection() override;
+
+  void set_rssi_to_return(const base::Optional<int32_t>& rssi_to_return) {
+    rssi_to_return_ = rssi_to_return;
+  }
 
   // Connection:
   void Connect() override;
   void Disconnect() override;
+  std::string GetDeviceAddress() override;
   void AddObserver(ConnectionObserver* observer) override;
   void RemoveObserver(ConnectionObserver* observer) override;
+  void GetConnectionRssi(
+      base::OnceCallback<void(base::Optional<int32_t>)> callback) override;
 
   // Completes a connection attempt which was originally started via a call to
   // |Connect()|. If |success| is true, the connection's status shifts to
@@ -37,9 +45,6 @@ class FakeConnection : public Connection {
   // Simulates receiving a wire message with the given |payload|, bypassing the
   // container WireMessage format.
   void ReceiveMessage(const std::string& feature, const std::string& payload);
-
-  // Notifies observers that GATT characteristics are unavailable.
-  void NotifyGattCharacteristicsNotAvailable();
 
   // Returns the current message in progress of being sent.
   WireMessage* current_message() { return current_message_.get(); }
@@ -67,6 +72,7 @@ class FakeConnection : public Connection {
 
   std::vector<ConnectionObserver*> observers_;
 
+  base::Optional<int32_t> rssi_to_return_;
   const bool should_auto_connect_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeConnection);

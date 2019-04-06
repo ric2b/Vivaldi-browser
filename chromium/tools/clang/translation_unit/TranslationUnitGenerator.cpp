@@ -29,11 +29,15 @@
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/Refactoring.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
 using clang::HeaderSearchOptions;
 using clang::tooling::CommonOptionsParser;
+using llvm::sys::fs::real_path;
+using llvm::SmallVector;
 using std::set;
 using std::stack;
 using std::string;
@@ -60,7 +64,9 @@ class IncludeFinderPPCallbacks : public clang::PPCallbacks {
                           const clang::FileEntry* file,
                           llvm::StringRef search_path,
                           llvm::StringRef relative_path,
-                          const clang::Module* imported) override;
+                          const clang::Module* imported,
+                          clang::SrcMgr::CharacteristicKind /*file_type*/
+                          ) override;
   void EndOfMainFile() override;
 
  private:
@@ -143,7 +149,9 @@ void IncludeFinderPPCallbacks::InclusionDirective(
     const clang::FileEntry* file,
     llvm::StringRef search_path,
     llvm::StringRef relative_path,
-    const clang::Module* imported) {
+    const clang::Module* imported,
+    clang::SrcMgr::CharacteristicKind /*file_type*/
+    ) {
   if (!file)
     return;
 
@@ -199,7 +207,13 @@ string IncludeFinderPPCallbacks::DoubleSlashSystemHeaders(
 void IncludeFinderPPCallbacks::EndOfMainFile() {
   const clang::FileEntry* main_file =
       source_manager_->getFileEntryForID(source_manager_->getMainFileID());
-  assert(*main_source_file_ == main_file->getName());
+
+  SmallVector<char, 100> main_source_file_real_path;
+  SmallVector<char, 100> main_file_name_real_path;
+  assert(!real_path(*main_source_file_, main_source_file_real_path));
+  assert(!real_path(main_file->getName(), main_file_name_real_path));
+  assert(main_source_file_real_path == main_file_name_real_path);
+
   AddFile(main_file->getName());
 }
 

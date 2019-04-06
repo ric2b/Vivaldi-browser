@@ -13,7 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
 #include "chrome/browser/supervised_user/supervised_user_site_list.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -584,6 +584,16 @@ TEST_F(SupervisedUserURLFilterTest, ChromeWebstoreDownloadsAreAlwaysAllowed) {
             filter_.GetFilteringBehaviorForURL(crx_download_url3));
 }
 #endif
+
+TEST_F(SupervisedUserURLFilterTest, GoogleFamiliesAlwaysAllowed) {
+  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  EXPECT_TRUE(IsURLWhitelisted("https://families.google.com/"));
+  EXPECT_TRUE(IsURLWhitelisted("https://families.google.com"));
+  EXPECT_TRUE(IsURLWhitelisted("https://families.google.com/something"));
+  EXPECT_TRUE(IsURLWhitelisted("http://families.google.com/"));
+  EXPECT_FALSE(IsURLWhitelisted("https://families.google.com:8080/"));
+  EXPECT_FALSE(IsURLWhitelisted("https://subdomain.families.google.com/"));
+}
 
 TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLAmpCache) {
   // Base case.

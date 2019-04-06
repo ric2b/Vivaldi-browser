@@ -8,21 +8,9 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/strings/sys_string_conversions.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/shape_detection/barcode_detection_impl.h"
 #include "services/shape_detection/detection_utils_mac.h"
 
 namespace shape_detection {
-
-// static
-void BarcodeDetectionImpl::Create(
-    shape_detection::mojom::BarcodeDetectionRequest request) {
-  // Barcode detection needs at least MAC OS X 10.10.
-  if (@available(macOS 10.10, *)) {
-    mojo::MakeStrongBinding(std::make_unique<BarcodeDetectionImplMac>(),
-                            std::move(request));
-  }
-}
 
 BarcodeDetectionImplMac::BarcodeDetectionImplMac() {
   NSDictionary* const options = @{CIDetectorAccuracy : CIDetectorAccuracyHigh};
@@ -48,13 +36,7 @@ void BarcodeDetectionImplMac::Detect(const SkBitmap& bitmap,
   for (CIQRCodeFeature* const f in features) {
     shape_detection::mojom::BarcodeDetectionResultPtr result =
         shape_detection::mojom::BarcodeDetectionResult::New();
-    // In the default Core Graphics coordinate space, the origin is located
-    // in the lower-left corner, and thus |ci_image| is flipped vertically.
-    // We need to adjust |y| coordinate of bounding box before sending it.
-    gfx::RectF boundingbox(f.bounds.origin.x,
-                           height - f.bounds.origin.y - f.bounds.size.height,
-                           f.bounds.size.width, f.bounds.size.height);
-    result->bounding_box = std::move(boundingbox);
+    result->bounding_box = ConvertCGToGfxCoordinates(f.bounds, height);
 
     // Enumerate corner points starting from top-left in clockwise fashion:
     // https://wicg.github.io/shape-detection-api/#dom-detectedbarcode-cornerpoints

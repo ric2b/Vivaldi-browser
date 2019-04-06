@@ -6,7 +6,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/core/embedder/embedder.h"
 #include "ui/aura/env.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
@@ -18,7 +18,7 @@ namespace {
 
 class MojoInitializer {
  public:
-  MojoInitializer() { mojo::edk::Init(); }
+  MojoInitializer() { mojo::core::Init(); }
 };
 
 base::LazyInstance<MojoInitializer>::Leaky mojo_initializer;
@@ -43,7 +43,7 @@ void AshInteractiveUITestBase::SetUp() {
   ui::ResourceBundle::InitSharedInstanceWithLocale(
       "en-US", NULL, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
   base::FilePath resources_pack_path;
-  PathService::Get(base::DIR_MODULE, &resources_pack_path);
+  base::PathService::Get(base::DIR_MODULE, &resources_pack_path);
   resources_pack_path =
       resources_pack_path.Append(FILE_PATH_LITERAL("resources.pak"));
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(

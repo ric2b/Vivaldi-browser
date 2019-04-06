@@ -48,11 +48,12 @@ class AppDelegate {
       content::BrowserContext* context,
       content::WebContents* source,
       const content::OpenURLParams& params) = 0;
-  virtual void AddNewContents(content::BrowserContext* context,
-                              content::WebContents* new_contents,
-                              WindowOpenDisposition disposition,
-                              const gfx::Rect& initial_rect,
-                              bool user_gesture) = 0;
+  virtual void AddNewContents(
+      content::BrowserContext* context,
+      std::unique_ptr<content::WebContents> new_contents,
+      WindowOpenDisposition disposition,
+      const gfx::Rect& initial_rect,
+      bool user_gesture) = 0;
 
   // Feature support.
   virtual content::ColorChooser* ShowColorChooser(
@@ -63,12 +64,13 @@ class AppDelegate {
   virtual void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback,
+      content::MediaResponseCallback callback,
       const Extension* extension) = 0;
-  virtual bool CheckMediaAccessPermission(content::WebContents* web_contents,
-                                          const GURL& security_origin,
-                                          content::MediaStreamType type,
-                                          const Extension* extension) = 0;
+  virtual bool CheckMediaAccessPermission(
+      content::RenderFrameHost* render_frame_host,
+      const GURL& security_origin,
+      content::MediaStreamType type,
+      const Extension* extension) = 0;
   virtual int PreferredIconSize() const = 0;
 
   // Web contents modal dialog support.

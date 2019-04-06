@@ -99,11 +99,6 @@ NSString* const kWebUIJSURL = @"chrome://resources/js/ios/web_ui.js";
 
 #pragma mark - Public Methods
 
-- (instancetype)init {
-  NOTREACHED();
-  return self;
-}
-
 - (instancetype)initWithDelegate:(id<CRWWebUIPageBuilderDelegate>)delegate {
   if (self = [super init]) {
     _delegate = delegate;
@@ -226,7 +221,7 @@ NSString* const kWebUIJSURL = @"chrome://resources/js/ios/web_ui.js";
                            options:NSRegularExpressionCaseInsensitive
                              error:&error];
   if (error) {
-    DLOG(WARNING) << "Error: " << error.description.UTF8String;
+    DLOG(WARNING) << "Error: " << base::SysNSStringToUTF8(error.description);
     return URLStrings;
   }
   NSArray* matches =

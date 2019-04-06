@@ -66,6 +66,7 @@ class SimpleWM : public service_manager::Service,
   void OnLostConnection(aura::WindowTreeClient* client) override;
   void OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
+                              int64_t display_id,
                               aura::Window* target) override;
   aura::PropertyConverter* GetPropertyConverter() override;
 
@@ -88,7 +89,7 @@ class SimpleWM : public service_manager::Service,
   void OnWmClientJankinessChanged(const std::set<aura::Window*>& client_windows,
                                   bool janky) override;
   void OnWmBuildDragImage(const gfx::Point& screen_location,
-                          const SkBitmap& drag_image,
+                          const gfx::ImageSkia& drag_image,
                           const gfx::Vector2d& drag_image_offset,
                           ui::mojom::PointerKind source) override;
   void OnWmMoveDragImage(const gfx::Point& screen_location) override;

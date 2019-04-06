@@ -67,6 +67,15 @@ class CONTENT_EXPORT ResourceHandler {
     // cancellation.
     virtual void OutOfBandCancel(int error_code, bool tell_renderer) = 0;
 
+    // Pauses/resumes reading response body if the resource is fetched from
+    // network. They could be no-ops if the resource is not fetched from
+    // network.
+    //
+    // It is allowed to call these methods before response body is available, or
+    // while the request is deferred.
+    virtual void PauseReadingBodyFromNet();
+    virtual void ResumeReadingBodyFromNet();
+
     DISALLOW_COPY_AND_ASSIGN(Delegate);
   };
 
@@ -90,12 +99,7 @@ class CONTENT_EXPORT ResourceHandler {
   // to it.
   virtual void OnResponseStarted(
       network::ResourceResponse* response,
-      std::unique_ptr<ResourceController> controller,
-      bool open_when_done,
-      bool ask_for_target = false);
-  virtual void OnResponseStarted(
-      network::ResourceResponse* response,
-      std::unique_ptr<ResourceController> controller);
+      std::unique_ptr<ResourceController> controller) = 0;
 
   // Called before the net::URLRequest (whose url is |url|) is to be started.
   // The request will not continue until one of |controller|'s resume or
@@ -134,11 +138,7 @@ class CONTENT_EXPORT ResourceHandler {
       const net::URLRequestStatus& status,
       std::unique_ptr<ResourceController> controller) = 0;
 
-  // This notification is synthesized by the RedirectToFileResourceHandler
-  // to indicate progress of 'download_to_file' requests. OnReadCompleted
-  // calls are consumed by the RedirectToFileResourceHandler and replaced
-  // with OnDataDownloaded calls.
-  virtual void OnDataDownloaded(int bytes_downloaded) = 0;
+  virtual void SetOpenFlags(bool open_when_done, bool ask_for_target) {};
 
  protected:
   explicit ResourceHandler(net::URLRequest* request);
@@ -161,12 +161,16 @@ class CONTENT_EXPORT ResourceHandler {
   // These call the corresponding methods on the ResourceController previously
   // passed to HoldController and then destroy it.
   void Resume();
+  void ResumeForRedirect(
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers);
   void Cancel();
   void CancelWithError(int error_code);
 
   // Cancels the request when the class does not currently have ownership of the
   // ResourceController.
   void OutOfBandCancel(int error_code, bool tell_renderer);
+  void PauseReadingBodyFromNet();
+  void ResumeReadingBodyFromNet();
 
   net::URLRequest* request() const { return request_; }
 

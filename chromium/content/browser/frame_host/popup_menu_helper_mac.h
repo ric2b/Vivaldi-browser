@@ -5,14 +5,15 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_POPUP_MENU_HELPER_MAC_H_
 #define CONTENT_BROWSER_FRAME_HOST_POPUP_MENU_HELPER_MAC_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observer.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/render_widget_host_observer.h"
 #include "ui/gfx/geometry/rect.h"
 
 #ifdef __OBJC__
@@ -21,6 +22,10 @@
 class WebMenuRunner;
 #endif
 
+namespace base {
+class ScopedPumpMessagesInPrivateModes;
+}
+
 namespace content {
 
 class RenderFrameHost;
@@ -28,7 +33,7 @@ class RenderFrameHostImpl;
 class RenderWidgetHostViewMac;
 struct MenuItem;
 
-class PopupMenuHelper : public NotificationObserver {
+class PopupMenuHelper : public RenderWidgetHostObserver {
  public:
   class Delegate {
    public:
@@ -59,17 +64,20 @@ class PopupMenuHelper : public NotificationObserver {
   virtual RenderWidgetHostViewMac* GetRenderWidgetHostView() const;
 
  private:
-  // NotificationObserver implementation:
-  void Observe(int type,
-               const NotificationSource& source,
-               const NotificationDetails& details) override;
+  // RenderWidgetHostObserver implementation:
+  void RenderWidgetHostVisibilityChanged(RenderWidgetHost* widget_host,
+                                         bool became_visible) override;
+  void RenderWidgetHostDestroyed(RenderWidgetHost* widget_host) override;
 
   Delegate* delegate_;  // Weak. Owns |this|.
 
-  NotificationRegistrar notification_registrar_;
+  ScopedObserver<RenderWidgetHost, RenderWidgetHostObserver> observer_;
   RenderFrameHostImpl* render_frame_host_;
   WebMenuRunner* menu_runner_;
   bool popup_was_hidden_;
+
+  // Controls whether messages can be pumped during the menu fade.
+  std::unique_ptr<base::ScopedPumpMessagesInPrivateModes> pump_in_fade_;
 
   base::WeakPtrFactory<PopupMenuHelper> weak_ptr_factory_;
 

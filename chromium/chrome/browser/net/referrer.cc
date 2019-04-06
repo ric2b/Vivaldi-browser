@@ -12,8 +12,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "chrome/browser/net/predictor.h"
 
@@ -134,7 +132,7 @@ void Referrer::Deserialize(const base::Value& value) {
 }
 
 std::unique_ptr<base::ListValue> Referrer::Serialize() const {
-  auto subresource_list = base::MakeUnique<base::ListValue>();
+  auto subresource_list = std::make_unique<base::ListValue>();
   for (const_iterator it = begin(); it != end(); ++it) {
     subresource_list->AppendString(it->first.spec());
     subresource_list->AppendDouble(it->second.subresource_use_rate());

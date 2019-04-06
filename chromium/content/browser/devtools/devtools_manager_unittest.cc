@@ -4,12 +4,14 @@
 
 #include "content/browser/devtools/devtools_manager.h"
 
+#include <map>
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -85,7 +87,10 @@ class TestWebContentsDelegate : public WebContentsDelegate {
   TestWebContentsDelegate() : renderer_unresponsive_received_(false) {}
 
   // Notification that the contents is hung.
-  void RendererUnresponsive(WebContents* source) override {
+  void RendererUnresponsive(
+      WebContents* source,
+      RenderWidgetHost* render_widget_host,
+      base::RepeatingClosure hang_monitor_restarter) override {
     renderer_unresponsive_received_ = true;
   }
 
@@ -141,25 +146,32 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   client_host.InspectAgentHost(agent_host.get());
 
   // Start with a short timeout.
-  inspected_rvh->GetWidget()->StartHangMonitorTimeout(
+  inspected_rvh->GetWidget()->StartInputEventAckTimeout(
       TimeDelta::FromMilliseconds(10));
-  // Wait long enough for first timeout and see if it fired.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
-      TimeDelta::FromMilliseconds(10));
-  base::RunLoop().Run();
+  {
+    base::RunLoop run_loop;
+    // Wait long enough for first timeout and see if it fired. We use quit-when-
+    // idle so that all tasks due after the timeout get a chance to run.
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitWhenIdleClosure(),
+        TimeDelta::FromMilliseconds(10));
+    run_loop.Run();
+  }
   EXPECT_FALSE(delegate.renderer_unresponsive_received());
 
   // Now close devtools and check that the notification is delivered.
   client_host.Close();
   // Start with a short timeout.
-  inspected_rvh->GetWidget()->StartHangMonitorTimeout(
+  inspected_rvh->GetWidget()->StartInputEventAckTimeout(
       TimeDelta::FromMilliseconds(10));
-  // Wait long enough for first timeout and see if it fired.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
-      TimeDelta::FromMilliseconds(10));
-  base::RunLoop().Run();
+  {
+    base::RunLoop run_loop;
+    // Wait long enough for first timeout and see if it fired.
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitWhenIdleClosure(),
+        TimeDelta::FromMilliseconds(10));
+    run_loop.Run();
+  }
   EXPECT_TRUE(delegate.renderer_unresponsive_received());
 
   contents()->SetDelegate(nullptr);
@@ -178,7 +190,7 @@ class TestExternalAgentDelegate: public DevToolsExternalAgentProxyDelegate {
   }
 
  private:
-  std::map<std::string,int> event_counter_;
+  std::map<std::string, int> event_counter_;
 
   void recordEvent(const std::string& name) {
     if (event_counter_.find(name) == event_counter_.end())
@@ -213,7 +225,6 @@ class TestExternalAgentDelegate: public DevToolsExternalAgentProxyDelegate {
                             const std::string& message) override {
     recordEvent(std::string("SendMessageToBackend.") + message);
   };
-
 };
 
 TEST_F(DevToolsManagerTest, TestExternalProxy) {

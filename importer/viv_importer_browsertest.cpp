@@ -24,6 +24,8 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 
+using base::PathService;
+
 namespace {
 const size_t kMaxPathLen = 5;
 
@@ -260,20 +262,19 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
     import_profile.importer_type = importer::TYPE_OPERA;
     import_profile.source_path = profile_dir;
     import_profile.locale = "en-US";
-
-    importer::ImportConfig import_config;
-    import_config.imported_items =
-        importer::PASSWORDS | importer::NOTES | importer::FAVORITES;
     if (use_master_password) {
-      import_config.arguments.push_back(base::WideToUTF16(kTestMasterPassword));
+      import_profile.master_password = base::WideToUTF8(kTestMasterPassword);
     }
+
+    uint16_t imported_items =
+        importer::PASSWORDS | importer::NOTES | importer::FAVORITES;
 
     // Deletes itself
     ExternalProcessImporterHost* host = new ExternalProcessImporterHost;
 
     host->set_observer(observer);
     host->StartImportSettings(import_profile, browser()->profile(),
-                              import_config,
+                              imported_items,
                               base::WrapRefCounted<ProfileWriter>(writer).get());
     base::RunLoop().Run();
   }

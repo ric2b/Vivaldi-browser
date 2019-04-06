@@ -24,6 +24,7 @@ static_library("common") {
     "autofill_switches.h",
     "autofill_util.cc",
     "autofill_util.h",
+    "filling_status.h",
     "form_data.cc",
     "form_data.h",
     "form_data_predictions.cc",
@@ -52,6 +53,8 @@ static_library("common") {
     "//base",
     "//base:i18n",
     "//components/variations",
+    "//ui/base",
+    "//ui/gfx/geometry",
     "//url",
   ]
 

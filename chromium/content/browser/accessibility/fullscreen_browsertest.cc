@@ -22,7 +22,7 @@ class AccessibilityFullscreenBrowserTest : public ContentBrowserTest {
 
  protected:
   BrowserAccessibility* FindButton(BrowserAccessibility* node) {
-    if (node->GetRole() == ui::AX_ROLE_BUTTON)
+    if (node->GetRole() == ax::mojom::Role::kButton)
       return node;
     for (unsigned i = 0; i < node->PlatformChildCount(); i++) {
       if (BrowserAccessibility* button = FindButton(node->PlatformGetChild(i)))
@@ -32,7 +32,7 @@ class AccessibilityFullscreenBrowserTest : public ContentBrowserTest {
   }
 
   int CountLinks(BrowserAccessibility* node) {
-    if (node->GetRole() == ui::AX_ROLE_LINK)
+    if (node->GetRole() == ax::mojom::Role::kLink)
       return 1;
     int links_in_children = 0;
     for (unsigned i = 0; i < node->PlatformChildCount(); i++) {
@@ -51,7 +51,9 @@ class FakeFullscreenDelegate : public WebContentsDelegate {
   FakeFullscreenDelegate() = default;
   ~FakeFullscreenDelegate() override = default;
 
-  void EnterFullscreenModeForTab(WebContents*, const GURL&) override {
+  void EnterFullscreenModeForTab(WebContents*,
+                                 const GURL&,
+                                 const blink::WebFullscreenOptions&) override {
     is_fullscreen_ = true;
   }
 
@@ -77,8 +79,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityFullscreenBrowserTest,
   FakeFullscreenDelegate delegate;
   shell()->web_contents()->SetDelegate(&delegate);
 
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_LOAD_COMPLETE);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
   GURL url(
       embedded_test_server()->GetURL("/accessibility/fullscreen/links.html"));
   NavigateToURL(shell(), url);
@@ -105,14 +108,17 @@ IN_PROC_BROWSER_TEST_F(AccessibilityFullscreenBrowserTest,
   EXPECT_EQ(1, CountLinks(manager->GetRoot()));
 }
 
-IN_PROC_BROWSER_TEST_F(AccessibilityFullscreenBrowserTest, InsideIFrame) {
+// Fails flakily on all platforms: crbug.com/825735
+IN_PROC_BROWSER_TEST_F(AccessibilityFullscreenBrowserTest,
+                       DISABLED_InsideIFrame) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   FakeFullscreenDelegate delegate;
   shell()->web_contents()->SetDelegate(&delegate);
 
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ui::AX_EVENT_LOAD_COMPLETE);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
   GURL url(
       embedded_test_server()->GetURL("/accessibility/fullscreen/iframe.html"));
   NavigateToURL(shell(), url);

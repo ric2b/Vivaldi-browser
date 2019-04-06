@@ -11,7 +11,7 @@
 
 class JSONSchemaValidatorCPPTest : public JSONSchemaValidatorTestBase {
  public:
-  JSONSchemaValidatorCPPTest() : JSONSchemaValidatorTestBase() {}
+  JSONSchemaValidatorCPPTest() {}
 
  protected:
   void ExpectValid(const std::string& test_source,
@@ -156,4 +156,22 @@ TEST(JSONSchemaValidator, IsValidSchema) {
       "  \"type\": \"object\","
       "  \"unknown attribute\": \"that will cause a failure\""
       "}", 0, &error)) << error;
+
+  EXPECT_FALSE(JSONSchemaValidator::IsValidSchema(R"(
+      {
+        "type": "object",
+        "properties": {"foo": {"type": "number"}},
+        "required": 123
+      })",
+                                                  0, &error))
+      << error;
+
+  EXPECT_FALSE(JSONSchemaValidator::IsValidSchema(R"(
+      {
+        "type": "object",
+        "properties": {"foo": {"type": "number"}},
+        "required": [ 123 ]
+      })",
+                                                  0, &error))
+      << error;
 }

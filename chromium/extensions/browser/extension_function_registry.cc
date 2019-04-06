@@ -4,13 +4,14 @@
 
 #include "extensions/browser/extension_function_registry.h"
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extensions_browser_client.h"
 
 // static
-ExtensionFunctionRegistry* ExtensionFunctionRegistry::GetInstance() {
-  return base::Singleton<ExtensionFunctionRegistry>::get();
+ExtensionFunctionRegistry& ExtensionFunctionRegistry::GetInstance() {
+  static base::NoDestructor<ExtensionFunctionRegistry> instance;
+  return *instance;
 }
 
 ExtensionFunctionRegistry::ExtensionFunctionRegistry() {
@@ -21,18 +22,16 @@ ExtensionFunctionRegistry::ExtensionFunctionRegistry() {
   }
 }
 
-ExtensionFunctionRegistry::~ExtensionFunctionRegistry() {}
+ExtensionFunctionRegistry::~ExtensionFunctionRegistry() = default;
 
 bool ExtensionFunctionRegistry::OverrideFunctionForTesting(
     const std::string& name,
     ExtensionFunctionFactory factory) {
   FactoryMap::iterator iter = factories_.find(name);
-  if (iter == factories_.end()) {
+  if (iter == factories_.end())
     return false;
-  } else {
-    iter->second.factory_ = factory;
-    return true;
-  }
+  iter->second.factory_ = factory;
+  return true;
 }
 
 ExtensionFunction* ExtensionFunctionRegistry::NewFunction(
@@ -51,8 +50,4 @@ void ExtensionFunctionRegistry::Register(const FactoryEntry& entry) {
   factories_[entry.function_name_] = entry;
 }
 
-ExtensionFunctionRegistry::FactoryEntry::FactoryEntry()
-    : factory_(0),
-      function_name_(nullptr),
-      histogram_value_(extensions::functions::UNKNOWN) {
-}
+ExtensionFunctionRegistry::FactoryEntry::FactoryEntry() = default;

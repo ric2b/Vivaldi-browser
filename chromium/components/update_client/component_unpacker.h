@@ -83,7 +83,7 @@ class ComponentUnpacker : public base::RefCountedThreadSafe<ComponentUnpacker> {
   // location of the CRX.
   ComponentUnpacker(const std::vector<uint8_t>& pk_hash,
                     const base::FilePath& path,
-                    const scoped_refptr<CrxInstaller>& installer,
+                    scoped_refptr<CrxInstaller> installer,
                     std::unique_ptr<service_manager::Connector> connector);
 
   // Begins the actual unpacking of the files. May invoke a patcher and the
@@ -96,16 +96,15 @@ class ComponentUnpacker : public base::RefCountedThreadSafe<ComponentUnpacker> {
 
   virtual ~ComponentUnpacker();
 
-  bool UnpackInternal();
-
   // The first step of unpacking is to verify the file. Returns false if an
   // error is encountered, the file is malformed, or the file is incorrectly
   // signed.
   bool Verify();
 
-  // The second step of unpacking is to unzip. Returns false if an error
-  // occurs as part of unzipping.
-  bool Unzip();
+  // The second step of unpacking is to unzip. Returns false if an early error
+  // is encountered.
+  bool BeginUnzipping();
+  void EndUnzipping(bool error);
 
   // The third step is to optionally patch files - this is a no-op for full
   // (non-differential) updates. This step is asynchronous. Returns false if an

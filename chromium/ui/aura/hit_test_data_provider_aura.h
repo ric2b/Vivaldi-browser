@@ -22,7 +22,8 @@ class AURA_EXPORT HitTestDataProviderAura : public viz::HitTestDataProvider {
   ~HitTestDataProviderAura() override;
 
   // HitTestDataProvider:
-  viz::mojom::HitTestRegionListPtr GetHitTestData() const override;
+  base::Optional<viz::HitTestRegionList> GetHitTestData(
+      const viz::CompositorFrame& compositor_frame) const override;
 
  private:
   // Recursively walks the children of |window| and uses |window|'s
@@ -30,7 +31,7 @@ class AURA_EXPORT HitTestDataProviderAura : public viz::HitTestDataProvider {
   // Populates |hit_test_region_list|.
   void GetHitTestDataRecursively(
       aura::Window* window,
-      viz::mojom::HitTestRegionList* hit_test_region_list) const;
+      viz::HitTestRegionList* hit_test_region_list) const;
 
   aura::Window* const window_ = nullptr;
 

@@ -89,7 +89,7 @@ void TransformerHelper::SetRootWindowTransformer(
   // update the root window size immediately.
   if (!window->layer()->GetAnimator()->IsAnimatingProperty(
           ui::LayerAnimationElement::TRANSFORM)) {
-    host->UpdateRootWindowSizeInPixels(host->GetBoundsInPixels().size());
+    host->UpdateRootWindowSizeInPixels();
   }
 }
 
@@ -110,9 +110,9 @@ gfx::Transform TransformerHelper::GetInverseTransform() const {
   return transformer_->GetInverseTransform() * transform;
 }
 
-void TransformerHelper::UpdateWindowSize(const gfx::Size& host_size) {
-  ash_host_->AsWindowTreeHost()->window()->SetBounds(
-      transformer_->GetRootWindowBounds(host_size));
+gfx::Rect TransformerHelper::GetTransformedWindowBounds(
+    const gfx::Size& host_size) const {
+  return transformer_->GetRootWindowBounds(host_size);
 }
 
 }  // namespace ash

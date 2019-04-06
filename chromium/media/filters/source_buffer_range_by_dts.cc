@@ -108,17 +108,36 @@ void SourceBufferRangeByDts::AppendBuffersToEnd(
   }
 }
 
+bool SourceBufferRangeByDts::AllowableAppendAfterEstimatedDuration(
+    const BufferQueue& buffers,
+    DecodeTimestamp new_buffers_group_start_timestamp) const {
+  if (buffers_.empty() || !buffers_.back()->is_duration_estimated() ||
+      buffers.empty() || !buffers.front()->is_key_frame()) {
+    return false;
+  }
+
+  if (new_buffers_group_start_timestamp == kNoDecodeTimestamp()) {
+    return GetBufferedEndTimestamp() == buffers.front()->GetDecodeTimestamp();
+  }
+
+  return GetBufferedEndTimestamp() == new_buffers_group_start_timestamp;
+}
+
 bool SourceBufferRangeByDts::CanAppendBuffersToEnd(
     const BufferQueue& buffers,
     DecodeTimestamp new_buffers_group_start_timestamp) const {
   DCHECK(!buffers_.empty());
   if (new_buffers_group_start_timestamp == kNoDecodeTimestamp()) {
-    return IsNextInDecodeSequence(buffers.front()->GetDecodeTimestamp());
+    return IsNextInDecodeSequence(buffers.front()->GetDecodeTimestamp()) ||
+           AllowableAppendAfterEstimatedDuration(
+               buffers, new_buffers_group_start_timestamp);
   }
   DCHECK(new_buffers_group_start_timestamp >= GetEndTimestamp());
   DCHECK(buffers.front()->GetDecodeTimestamp() >=
          new_buffers_group_start_timestamp);
-  return IsNextInDecodeSequence(new_buffers_group_start_timestamp);
+  return IsNextInDecodeSequence(new_buffers_group_start_timestamp) ||
+         AllowableAppendAfterEstimatedDuration(
+             buffers, new_buffers_group_start_timestamp);
 }
 
 void SourceBufferRangeByDts::Seek(DecodeTimestamp timestamp) {
@@ -432,8 +451,16 @@ DecodeTimestamp SourceBufferRangeByDts::GetEndTimestamp() const {
 DecodeTimestamp SourceBufferRangeByDts::GetBufferedEndTimestamp() const {
   DCHECK(!buffers_.empty());
   base::TimeDelta duration = buffers_.back()->duration();
-  if (duration == kNoTimestamp || duration.is_zero())
-    duration = GetApproximateDuration();
+
+  // FrameProcessor should protect against unknown buffer durations.
+  DCHECK_NE(duration, kNoTimestamp);
+
+  // Because media::Ranges<base::TimeDelta>::Add() ignores 0 duration ranges,
+  // report 1 microsecond for the last buffer's duration if it is a 0 duration
+  // buffer.
+  if (duration.is_zero())
+    duration = base::TimeDelta::FromMicroseconds(1);
+
   return GetEndTimestamp() + duration;
 }
 
@@ -540,7 +567,7 @@ bool SourceBufferRangeByDts::GetBuffersInRange(DecodeTimestamp start,
   const size_t previous_size = buffers->size();
   for (BufferQueue::const_iterator it = GetBufferItrAt(first_timestamp, false);
        it != buffers_.end(); ++it) {
-    const scoped_refptr<StreamParserBuffer>& buffer = *it;
+    scoped_refptr<StreamParserBuffer> buffer = *it;
     // Buffers without duration are not supported, so bail if we encounter any.
     if (buffer->duration() == kNoTimestamp ||
         buffer->duration() <= base::TimeDelta()) {
@@ -551,7 +578,7 @@ bool SourceBufferRangeByDts::GetBuffersInRange(DecodeTimestamp start,
 
     if (buffer->timestamp() + buffer->duration() <= start.ToPresentationTime())
       continue;
-    buffers->push_back(buffer);
+    buffers->emplace_back(std::move(buffer));
   }
   return previous_size < buffers->size();
 }

@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -36,8 +37,6 @@ using extensions::api::cookies::CookieStore;
 namespace GetAll = extensions::api::cookies::GetAll;
 
 namespace extensions {
-
-namespace keys = cookies_api_constants;
 
 namespace cookies_helpers {
 
@@ -96,8 +95,12 @@ Cookie CreateCookie(const net::CanonicalCookie& canonical_cookie,
 
   cookie.session = !canonical_cookie.IsPersistent();
   if (canonical_cookie.IsPersistent()) {
-    cookie.expiration_date.reset(
-        new double(canonical_cookie.ExpiryDate().ToDoubleT()));
+    double expiration_date = canonical_cookie.ExpiryDate().ToDoubleT();
+    if (canonical_cookie.ExpiryDate().is_max() ||
+        !std::isfinite(expiration_date)) {
+      expiration_date = std::numeric_limits<double>::max();
+    }
+    cookie.expiration_date = std::make_unique<double>(expiration_date);
   }
   cookie.store_id = store_id;
 
@@ -109,8 +112,8 @@ CookieStore CreateCookieStore(Profile* profile,
   DCHECK(profile);
   DCHECK(tab_ids);
   base::DictionaryValue dict;
-  dict.SetString(keys::kIdKey, GetStoreIdFromProfile(profile));
-  dict.Set(keys::kTabIdsKey, std::move(tab_ids));
+  dict.SetString(cookies_api_constants::kIdKey, GetStoreIdFromProfile(profile));
+  dict.Set(cookies_api_constants::kTabIdsKey, std::move(tab_ids));
 
   CookieStore cookie_store;
   bool rv = CookieStore::Populate(dict, &cookie_store);

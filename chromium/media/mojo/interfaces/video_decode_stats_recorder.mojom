@@ -6,20 +6,17 @@ module media.mojom;
 
 import "media/mojo/interfaces/media_types.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
-import "url/mojo/origin.mojom";
+import "url/mojom/origin.mojom";
 
 // Interface for media players in the renderer to send decode stats to the
 // browser process. Each player will have its own recorder instance.
 interface VideoDecodeStatsRecorder {
   // Will finalize any ongoing record and begin a new record with the given
   // properties.
-  StartNewRecord(VideoCodecProfile profile, gfx.mojom.Size video_size,
-                 int32 frames_per_sec);
+  StartNewRecord(PredictionFeatures features);
 
   // Update stats values for the current record. Each update overrides the
   // previous values. Values should only be considered final when a new
   // record is started or upon IPC disconnect.
-  UpdateRecord(uint32 frames_decoded,
-               uint32 frames_dropped,
-               uint32 frames_decoded_power_efficient);
+  UpdateRecord(PredictionTargets targets);
 };

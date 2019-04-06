@@ -16,6 +16,7 @@ import com.google.android.gms.common.GoogleApiAvailability;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.skia.mojom.ColorType;
+import org.chromium.skia.mojom.ImageInfo;
 
 import java.nio.ByteBuffer;
 
@@ -38,10 +39,12 @@ public class TestUtils {
         bitmap.copyPixelsToBuffer(buffer);
 
         org.chromium.skia.mojom.Bitmap mojoBitmap = new org.chromium.skia.mojom.Bitmap();
-        mojoBitmap.width = bitmap.getWidth();
-        mojoBitmap.height = bitmap.getHeight();
-        mojoBitmap.pixelData = buffer.array();
-        mojoBitmap.colorType = ColorType.RGBA_8888;
+        mojoBitmap.imageInfo = new ImageInfo();
+        mojoBitmap.imageInfo.width = bitmap.getWidth();
+        mojoBitmap.imageInfo.height = bitmap.getHeight();
+        mojoBitmap.imageInfo.colorType = ColorType.RGBA_8888;
+        mojoBitmap.pixelData = new org.chromium.mojo_base.mojom.BigBuffer();
+        mojoBitmap.pixelData.setBytes(buffer.array());
         return mojoBitmap;
     }
 

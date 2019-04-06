@@ -51,6 +51,8 @@ gbm_device* CreateGbmDevice() {
 
 uint32_t GetDrmFormat(gfx::BufferFormat gfx_format) {
   switch (gfx_format) {
+    case gfx::BufferFormat::R_8:
+      return DRM_FORMAT_R8;
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       return DRM_FORMAT_NV12;
     // Add more formats when needed.
@@ -148,7 +150,9 @@ class GpuMemoryBufferImplGbm : public gfx::GpuMemoryBuffer {
 
   gfx::GpuMemoryBufferId GetId() const override { return handle_.id; }
 
-  gfx::GpuMemoryBufferHandle GetHandle() const override { return handle_; }
+  gfx::GpuMemoryBufferHandle GetHandle() const override {
+    return gfx::CloneHandleForIPC(handle_);
+  }
 
   ClientBuffer AsClientBuffer() override {
     return reinterpret_cast<ClientBuffer>(this);
@@ -186,7 +190,8 @@ LocalGpuMemoryBufferManager::CreateGpuMemoryBuffer(
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     gpu::SurfaceHandle surface_handle) {
-  if (usage != gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE) {
+  if (usage != gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE &&
+      usage != gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE) {
     LOG(ERROR) << "Unsupported gfx::BufferUsage" << static_cast<int>(usage);
     return std::unique_ptr<gfx::GpuMemoryBuffer>();
   }

@@ -12,7 +12,7 @@
 #include "ash/message_center/message_center_controller.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
@@ -40,7 +40,7 @@ class ASH_EXPORT NotifierSettingsView
   void SetQuietModeState(bool is_quiet_mode);
 
   // NotifierSettingsListener:
-  void SetNotifierList(
+  void OnNotifierListUpdated(
       const std::vector<mojom::NotifierUiDataPtr>& ui_data) override;
   void UpdateNotifierIcon(const message_center::NotifierId& notifier_id,
                           const gfx::ImageSkia& icon) override;

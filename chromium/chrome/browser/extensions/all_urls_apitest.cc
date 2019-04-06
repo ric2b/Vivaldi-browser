@@ -9,6 +9,8 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/search/local_ntp_test_utils.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/browser/extension_registry.h"
@@ -45,8 +47,15 @@ class AllUrlsApiTest : public ExtensionApiTest {
   }
 
   void NavigateAndWait(const std::string& url) {
-    ExtensionTestMessageListener listener_a("content script: " + url, false);
-    ExtensionTestMessageListener listener_b("execute: " + url, false);
+    std::string expected_url = url;
+    if (url == chrome::kChromeUINewTabURL) {
+      expected_url =
+          local_ntp_test_utils::GetFinalNtpUrl(browser()->profile()).spec();
+    }
+    ExtensionTestMessageListener listener_a("content script: " + expected_url,
+                                            false);
+    ExtensionTestMessageListener listener_b("execute: " + expected_url, false);
+
     ui_test_utils::NavigateToURL(browser(), GURL(url));
     ASSERT_TRUE(listener_a.WaitUntilSatisfied());
     ASSERT_TRUE(listener_b.WaitUntilSatisfied());
@@ -78,13 +87,9 @@ IN_PROC_BROWSER_TEST_F(AllUrlsApiTest, WhitelistedExtension) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Now verify that we run content scripts on different URLs, including
-  // internal pages, data URLs, regular HTTP pages, and resource URLs from
-  // extensions.
+  // data URLs, regular HTTP pages, and resource URLs from extensions.
   const std::string test_urls[] = {
-    "chrome://newtab/",
     "data:text/html;charset=utf-8,<html>asdf</html>",
-    "chrome://version/",
-    "about:blank",
     embedded_test_server()->GetURL(kAllUrlsTarget).spec(),
     bystander->GetResourceURL("page.html").spec()
   };

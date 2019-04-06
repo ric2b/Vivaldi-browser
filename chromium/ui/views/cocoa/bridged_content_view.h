@@ -33,6 +33,11 @@ class View;
   // hierarchy rooted at |hostedView_|. Owned by the focused View.
   ui::TextInputClient* textInputClient_;
 
+  // The TextInputClient about to be set. Requests for a new -inputContext will
+  // use this, but while the input is changing, |self| still needs to service
+  // IME requests using the old |textInputClient_|.
+  ui::TextInputClient* pendingTextInputClient_;
+
   // A tracking area installed to enable mouseMoved events.
   ui::ScopedCrTrackingArea cursorTrackingArea_;
 
@@ -44,26 +49,11 @@ class View;
 
   // The last tooltip text, used to limit updates.
   base::string16 lastTooltipText_;
-
-  // Whether to draw an almost-transparent background with rounded corners so
-  // that OSX correctly blurs the background showing through.
-  BOOL drawMenuBackgroundForBlur_;
-
-  // Whether dragging on the view moves the window.
-  BOOL mouseDownCanMoveWindow_;
-
-  // The cached window mask. Only used for non-rectangular windows on 10.9.
-  base::scoped_nsobject<NSBezierPath> windowMask_;
 }
 
 @property(readonly, nonatomic) views::View* hostedView;
 @property(assign, nonatomic) ui::TextInputClient* textInputClient;
 @property(assign, nonatomic) BOOL drawMenuBackgroundForBlur;
-
-// Extends an atomic, readonly property on NSView to make it assignable.
-// This usually returns YES if the view is transparent. We want to control it
-// so that BridgedNativeWidget can dynamically enable dragging of the window.
-@property(assign) BOOL mouseDownCanMoveWindow;
 
 // Initialize the NSView -> views::View bridge. |viewToHost| must be non-NULL.
 - (id)initWithView:(views::View*)viewToHost;
@@ -79,9 +69,6 @@ class View;
 // |locationInContent| is the position from the top left of the window's
 // contentRect (also this NSView's frame), as given by a ui::LocatedEvent.
 - (void)updateTooltipIfRequiredAt:(const gfx::Point&)locationInContent;
-
-// Update windowMask_ depending on the current view bounds.
-- (void)updateWindowMask;
 
 // Notifies the associated FocusManager whether full keyboard access is enabled
 // or not.

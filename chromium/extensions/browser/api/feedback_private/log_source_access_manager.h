@@ -47,8 +47,8 @@ class LogSourceAccessManager {
   static void SetRateLimitingTimeoutForTesting(const base::TimeDelta* timeout);
 
   // Override the default base::Time clock with a custom clock for testing.
-  void SetTickClockForTesting(std::unique_ptr<base::TickClock> clock) {
-    tick_clock_ = std::move(clock);
+  void SetTickClockForTesting(const base::TickClock* clock) {
+    tick_clock_ = clock;
   }
 
   // Initiates a fetch from a log source, as specified in |params|. See
@@ -153,7 +153,7 @@ class LogSourceAccessManager {
 
   // Provides a timer clock implementation for keeping track of access times.
   // Can override the default clock for testing.
-  std::unique_ptr<base::TickClock> tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // For removing PII from log strings from log sources.
   scoped_refptr<base::SequencedTaskRunner> task_runner_for_anonymizer_;

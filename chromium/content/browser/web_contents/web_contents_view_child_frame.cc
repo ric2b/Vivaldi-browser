@@ -6,16 +6,24 @@
 
 #include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
+#include "content/browser/renderer_host/display_util.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
+#include "app/vivaldi_apptools.h"
+
 using blink::WebDragOperation;
 using blink::WebDragOperationsMask;
 
 namespace content {
+
+// located here because of no webcontentsview.h
+bool WebContentsView::IsWebContentsViewChildFrame() const {
+  return false;
+}
 
 WebContentsViewChildFrame::WebContentsViewChildFrame(
     WebContentsImpl* web_contents,
@@ -48,7 +56,7 @@ RenderViewHostDelegateView* WebContentsViewChildFrame::GetOuterDelegateView() {
 }
 
 gfx::NativeView WebContentsViewChildFrame::GetNativeView() const {
-  return GetOuterView()->GetNativeView();
+  return GetOuterView() ? GetOuterView()->GetNativeView() : nullptr;
 }
 
 gfx::NativeView WebContentsViewChildFrame::GetContentNativeView() const {
@@ -57,19 +65,6 @@ gfx::NativeView WebContentsViewChildFrame::GetContentNativeView() const {
 
 gfx::NativeWindow WebContentsViewChildFrame::GetTopLevelNativeWindow() const {
   return GetOuterView()->GetTopLevelNativeWindow();
-}
-
-void WebContentsViewChildFrame::GetScreenInfo(ScreenInfo* screen_info) const {
-  // TODO(wjmaclean): falling back to the default screen info is not what used
-  // to happen in RenderWidgetHostViewChildFrame, but it seems like the right
-  // thing to do. We should keep an eye on this in case the else-clause below
-  // causes problems.
-  RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
-  if (!rwhv) {
-    WebContentsView::GetDefaultScreenInfo(screen_info);
-    return;
-  }
-  rwhv->GetScreenInfo(screen_info);
 }
 
 void WebContentsViewChildFrame::GetContainerBounds(gfx::Rect* out) const {
@@ -85,7 +80,10 @@ void WebContentsViewChildFrame::SizeContents(const gfx::Size& size) {
 }
 
 void WebContentsViewChildFrame::SetInitialFocus() {
+  // Expected in Vivaldi as all webviews are ChildFrames.
+  if (!vivaldi::IsVivaldiRunning()) {
   NOTREACHED();
+  }
 }
 
 gfx::Rect WebContentsViewChildFrame::GetViewBounds() const {
@@ -115,7 +113,11 @@ void WebContentsViewChildFrame::SetPageTitle(const base::string16& title) {
 
 void WebContentsViewChildFrame::RenderViewCreated(RenderViewHost* host) {}
 
-void WebContentsViewChildFrame::RenderViewSwappedIn(RenderViewHost* host) {}
+void WebContentsViewChildFrame::RenderViewReady() {}
+
+void WebContentsViewChildFrame::RenderViewHostChanged(
+    RenderViewHost* old_host,
+    RenderViewHost* new_host) {}
 
 void WebContentsViewChildFrame::SetOverscrollControllerEnabled(bool enabled) {
   // This is managed by the outer view.
@@ -157,8 +159,20 @@ void WebContentsViewChildFrame::FocusThroughTabTraversal(bool reverse) {
 }
 
 DropData* WebContentsViewChildFrame::GetDropData() const {
+  // NOTE(andre@vivaldi.com) : Use the embedder drophandler to get WebUIs
+  // handle drops.
+  if (vivaldi::IsVivaldiRunning()) {
+    WebContentsImpl* embedder_web_contents =
+      web_contents_->GetOuterWebContents();
+    return embedder_web_contents ? embedder_web_contents->GetDropData()
+      : nullptr;
+  }
   NOTREACHED();
   return nullptr;
+}
+
+bool WebContentsViewChildFrame::IsWebContentsViewChildFrame() const {
+  return true;
 }
 
 void WebContentsViewChildFrame::UpdateDragCursor(WebDragOperation operation) {

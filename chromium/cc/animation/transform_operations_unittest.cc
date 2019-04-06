@@ -9,7 +9,6 @@
 #include <limits>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "cc/test/geometry_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/animation/tween.h"
@@ -855,6 +854,32 @@ TEST(TransformOperationTest, ExtrapolateMatrixBlending) {
   expected.Translate3d(4, 4, 4);
   EXPECT_TRANSFORMATION_MATRIX_EQ(expected,
                                   operations1.Blend(operations2, -0.5).Apply());
+}
+
+TEST(TransformOperationTest, NonDecomposableBlend) {
+  TransformOperations non_decomposible_transform;
+  gfx::Transform non_decomposible_matrix(0, 0, 0, 0, 0, 0);
+  non_decomposible_transform.AppendMatrix(non_decomposible_matrix);
+
+  TransformOperations identity_transform;
+  gfx::Transform identity_matrix;
+  identity_transform.AppendMatrix(identity_matrix);
+
+  // Before the half-way point, we should return the 'from' matrix.
+  EXPECT_TRANSFORMATION_MATRIX_EQ(
+      non_decomposible_matrix,
+      identity_transform.Blend(non_decomposible_transform, 0.0f).Apply());
+  EXPECT_TRANSFORMATION_MATRIX_EQ(
+      non_decomposible_matrix,
+      identity_transform.Blend(non_decomposible_transform, 0.49f).Apply());
+
+  // After the half-way point, we should return the 'to' matrix.
+  EXPECT_TRANSFORMATION_MATRIX_EQ(
+      identity_matrix,
+      identity_transform.Blend(non_decomposible_transform, 0.5f).Apply());
+  EXPECT_TRANSFORMATION_MATRIX_EQ(
+      identity_matrix,
+      identity_transform.Blend(non_decomposible_transform, 1.0f).Apply());
 }
 
 TEST(TransformOperationTest, BlendedBoundsWhenTypesDoNotMatch) {

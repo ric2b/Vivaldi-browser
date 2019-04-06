@@ -5,16 +5,13 @@
 package org.chromium.android_webview;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.view.View;
-import android.view.ViewGroup;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.components.autofill.AutofillDelegate;
 import org.chromium.components.autofill.AutofillPopup;
 import org.chromium.components.autofill.AutofillSuggestion;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.ui.DropdownItem;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -27,8 +24,7 @@ public class AwAutofillClient {
 
     private final long mNativeAwAutofillClient;
     private AutofillPopup mAutofillPopup;
-    private ViewGroup mContainerView;
-    private ContentViewCore mContentViewCore;
+    private Context mContext;
 
     @CalledByNative
     public static AwAutofillClient create(long nativeClient) {
@@ -39,25 +35,21 @@ public class AwAutofillClient {
         mNativeAwAutofillClient = nativeAwAutofillClient;
     }
 
-    public void init(ContentViewCore contentViewCore) {
-        mContentViewCore = contentViewCore;
-        mContainerView = contentViewCore.getContainerView();
+    public void init(Context context) {
+        mContext = context;
     }
 
     @CalledByNative
     private void showAutofillPopup(View anchorView, boolean isRtl,
             AutofillSuggestion[] suggestions) {
 
-        if (mContentViewCore == null) return;
-
         if (mAutofillPopup == null) {
-            Context context = mContentViewCore.getContext();
-            if (WindowAndroid.activityFromContext(context) == null) {
+            if (WindowAndroid.activityFromContext(mContext) == null) {
                 nativeDismissed(mNativeAwAutofillClient);
                 return;
             }
             try {
-                mAutofillPopup = new AutofillPopup(context, anchorView, new AutofillDelegate() {
+                mAutofillPopup = new AutofillPopup(mContext, anchorView, new AutofillDelegate() {
                     @Override
                     public void dismissed() {
                         nativeDismissed(mNativeAwAutofillClient);
@@ -79,8 +71,7 @@ public class AwAutofillClient {
                 return;
             }
         }
-        mAutofillPopup.filterAndShow(suggestions, isRtl, Color.TRANSPARENT /* backgroundColor */,
-                Color.TRANSPARENT /* dividerColor */, 0 /* dropdownItemHeight */, 0 /* margin */);
+        mAutofillPopup.filterAndShow(suggestions, isRtl);
     }
 
     @CalledByNative

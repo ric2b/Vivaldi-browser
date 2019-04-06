@@ -25,6 +25,7 @@ button {
 .main-frame-blocked button,
 .neterror button,
 .offline button,
+.pdf button,
 .ssl button {
   background: rgb(66, 133, 244);
 }
@@ -187,6 +188,18 @@ input[type=checkbox]:checked ~ .checkbox::before {
   opacity: 1;
 }
 
+#recurrent-error-message {
+  background: #ededed;
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  margin-bottom: 16px;
+}
+
+.showing-recurrent-error-message #extended-reporting-opt-in {
+  margin-top: 16px;
+}
+
 @media (max-width: 700px) {
   .interstitial-wrapper {
     padding: 0 10%;
@@ -267,9 +280,9 @@ input[type=checkbox]:checked ~ .checkbox::before {
        (min-width: 421px) and (min-height: 240px) and
        (max-height: 560px) {
   body .nav-wrapper {
-    background: #f7f7f7;
+    background: #fff;
     bottom: 0;
-    box-shadow: 0 -22px 40px rgb(247, 247, 247);
+    box-shadow: 0 -22px 40px #fff;
     left: 0;
     margin: 0 auto;
     max-width: 736px;

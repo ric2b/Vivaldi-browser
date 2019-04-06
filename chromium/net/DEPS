@@ -54,10 +54,14 @@ specific_include_rules = {
   ],
 
   "run_all_unittests\.cc": [
-    "+mojo/edk",
+    "+mojo/core/embedder",
   ],
 
   "brotli_source_stream\.cc": [
+    "+third_party/brotli",
+  ],
+
+  "ssl_client_socket_impl\.cc": [
     "+third_party/brotli",
   ],
 

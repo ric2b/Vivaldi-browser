@@ -17,13 +17,40 @@
         .catch(failedCallback);
   }
 
+  function startVideoCaptureFromDeviceNamedVirtualDeviceAndVerifySize() {
+    console.log('Trying to find device named "Virtual Device".');
+    navigator.mediaDevices.enumerateDevices()
+        .then(function(devices) {
+            var target_device;
+            devices.forEach(function(device) {
+              if (device.kind == 'videoinput') {
+                console.log('Found videoinput device with label '
+                    + device.label);
+                if (device.label == 'Virtual Device') {
+                  target_device = device;
+                }
+              }
+            });
+            if (target_device == null) {
+              failTest('No video input device was found with label = Virtual ' +
+                       'Device');
+              return;
+            }
+            var device_specific_constraints = { video: { width: { exact :
+                WIDTH }, deviceId: { exact : target_device.deviceId } } };
+            navigator.mediaDevices.getUserMedia(device_specific_constraints)
+                .then(gotStreamCallback)
+                .catch(failedCallback);
+          });
+  }
+
   function failedCallback(error) {
     failTest('GetUserMedia call failed with code ' + error.code);
   }
 
   function gotStreamCallback(stream) {
     var localView = $('local-view');
-    localView.src = URL.createObjectURL(stream);
+    localView.srcObject = stream;
 
     var videoTracks = stream.getVideoTracks();
     if (videoTracks.length == 0) {

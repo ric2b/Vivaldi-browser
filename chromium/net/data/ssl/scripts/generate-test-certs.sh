@@ -334,6 +334,19 @@ CA_NAME="req_ca_dn" \
     -in out/61_months_after_2012_07.req \
     -out ../certificates/61_months_after_2012_07.pem \
     -config ca.cnf
+# 39 months, based on a CA calculating one month as 'last day of Month 0' to
+# last day of 'Month 1'.
+openssl req -config ../scripts/ee.cnf \
+  -newkey rsa:2048 -text -out out/39_months_based_on_last_day.req
+CA_NAME="req_ca_dn" \
+  openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 170228000000Z \
+    -enddate   200530000000Z \
+    -in out/39_months_based_on_last_day.req \
+    -out ../certificates/39_months_based_on_last_day.pem \
+    -config ca.cnf
 # start date after expiry date
 openssl req -config ../scripts/ee.cnf \
   -newkey rsa:2048 -text -out out/start_after_expiry.req
@@ -388,6 +401,42 @@ CA_NAME="req_ca_dn" \
     -in out/pre_br_validity_bad_2020.req \
     -out ../certificates/pre_br_validity_bad_2020.pem \
     -config ca.cnf
+# Issued after 2018-03-01, lifetime == 826 days (bad)
+openssl req -config ../scripts/ee.cnf \
+  -newkey rsa:2048 -text -out out/826_days_after_2018_03_01.req
+CA_NAME="req_ca_dn" \
+  openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 180302000000Z \
+    -enddate   200605000000Z \
+    -in out/826_days_after_2018_03_01.req \
+    -out ../certificates/826_days_after_2018_03_01.pem \
+    -config ca.cnf
+# Issued after 2018-03-01, lifetime == 825 days (good)
+openssl req -config ../scripts/ee.cnf \
+  -newkey rsa:2048 -text -out out/825_days_after_2018_03_01.req
+CA_NAME="req_ca_dn" \
+  openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 180302000000Z \
+    -enddate   200604000000Z \
+    -in out/825_days_after_2018_03_01.req \
+    -out ../certificates/825_days_after_2018_03_01.pem \
+    -config ca.cnf
+# Issued after 2018-03-01, lifetime == 825 days and one second (bad)
+openssl req -config ../scripts/ee.cnf \
+  -newkey rsa:2048 -text -out out/825_days_1_second_after_2018_03_01.req
+CA_NAME="req_ca_dn" \
+  openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 180302000000Z \
+    -enddate   200604000001Z \
+    -in out/825_days_1_second_after_2018_03_01.req \
+    -out ../certificates/825_days_1_second_after_2018_03_01.pem \
+    -config ca.cnf
 
 # Issued prior to 1 June 2016 (Symantec CT Enforcement Date)
 openssl req -config ../scripts/ee.cnf \
@@ -421,6 +470,14 @@ openssl req -x509 -newkey rsa:2048 \
   -out ../certificates/tls_feature_extension.pem \
   -days 365 \
   -extensions req_extensions_with_tls_feature \
+  -nodes -config ee.cnf
+
+# Includes the canSignHttpExchangesDraft extension
+openssl req -x509 -newkey rsa:2048 \
+  -keyout out/can_sign_http_exchanges_draft_extension.key \
+  -out ../certificates/can_sign_http_exchanges_draft_extension.pem \
+  -days 365 \
+  -extensions req_extensions_with_can_sign_http_exchanges_draft \
   -nodes -config ee.cnf
 
 # SHA-1 certificate issued by locally trusted CA
@@ -477,6 +534,22 @@ CA_NAME="req_ca_dn" \
     -enddate   201220000000Z \
     -in out/dec_2017.req \
     -out ../certificates/dec_2017.pem \
+    -config ca.cnf
+
+# Issued on 1 May 2018 (after the 30 Apr 2018 CT Requirement date)
+openssl req \
+  -config ../scripts/ee.cnf \
+  -newkey rsa:2048 \
+  -text \
+  -out out/may_2018.req
+CA_NAME="req_ca_dn" \
+  openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 180501000000Z \
+    -enddate   200803000000Z \
+    -in out/may_2018.req \
+    -out ../certificates/may_2018.pem \
     -config ca.cnf
 
 # Regenerate CRLSets

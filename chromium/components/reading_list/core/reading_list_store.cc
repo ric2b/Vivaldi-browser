@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/time/clock.h"
 #include "components/reading_list/core/proto/reading_list.pb.h"
 #include "components/reading_list/core/reading_list_model_impl.h"
@@ -18,15 +17,15 @@
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
-#include "components/sync/model_impl/accumulating_metadata_change_list.h"
 #include "components/sync/protocol/model_type_state.pb.h"
 
 ReadingListStore::ReadingListStore(
-    StoreFactoryFunction create_store_callback,
-    const ChangeProcessorFactory& change_processor_factory)
-    : ReadingListModelStorage(change_processor_factory, syncer::READING_LIST),
-      create_store_callback_(create_store_callback),
-      pending_transaction_count_(0) {}
+    syncer::OnceModelTypeStoreFactory create_store_callback,
+    std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor)
+    : ReadingListModelStorage(std::move(change_processor)),
+      create_store_callback_(std::move(create_store_callback)),
+      pending_transaction_count_(0),
+      weak_ptr_factory_(this) {}
 
 ReadingListStore::~ReadingListStore() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -40,15 +39,15 @@ void ReadingListStore::SetReadingListModel(ReadingListModel* model,
   model_ = model;
   delegate_ = delegate;
   clock_ = clock;
-  create_store_callback_.Run(
-      syncer::READING_LIST,
-      base::Bind(&ReadingListStore::OnStoreCreated, base::AsWeakPtr(this)));
+  std::move(create_store_callback_)
+      .Run(syncer::READING_LIST,
+           base::BindOnce(&ReadingListStore::OnStoreCreated,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 std::unique_ptr<ReadingListModelStorage::ScopedBatchUpdate>
 ReadingListStore::EnsureBatchCreated() {
-  return base::WrapUnique<ReadingListModelStorage::ScopedBatchUpdate>(
-      new ScopedBatchUpdate(this));
+  return std::make_unique<ScopedBatchUpdate>(this);
 }
 
 ReadingListStore::ScopedBatchUpdate::ScopedBatchUpdate(ReadingListStore* store)
@@ -72,9 +71,9 @@ void ReadingListStore::CommitTransaction() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   pending_transaction_count_--;
   if (pending_transaction_count_ == 0) {
-    store_->CommitWriteBatch(
-        std::move(batch_),
-        base::Bind(&ReadingListStore::OnDatabaseSave, base::AsWeakPtr(this)));
+    store_->CommitWriteBatch(std::move(batch_),
+                             base::Bind(&ReadingListStore::OnDatabaseSave,
+                                        weak_ptr_factory_.GetWeakPtr()));
     batch_.reset();
   }
 }
@@ -94,16 +93,12 @@ void ReadingListStore::SaveEntry(const ReadingListEntry& entry) {
   std::unique_ptr<sync_pb::ReadingListSpecifics> pb_entry_sync =
       entry.AsReadingListSpecifics();
 
-  std::unique_ptr<syncer::MetadataChangeList> metadata_change_list =
-      CreateMetadataChangeList();
-
   std::unique_ptr<syncer::EntityData> entity_data(new syncer::EntityData());
   *entity_data->specifics.mutable_reading_list() = *pb_entry_sync;
   entity_data->non_unique_name = pb_entry_sync->entry_id();
 
   change_processor()->Put(entry.URL().spec(), std::move(entity_data),
-                          metadata_change_list.get());
-  batch_->TransferMetadataChanges(std::move(metadata_change_list));
+                          batch_->GetMetadataChangeList());
 }
 
 void ReadingListStore::RemoveEntry(const ReadingListEntry& entry) {
@@ -114,26 +109,22 @@ void ReadingListStore::RemoveEntry(const ReadingListEntry& entry) {
   if (!change_processor()->IsTrackingMetadata()) {
     return;
   }
-  std::unique_ptr<syncer::MetadataChangeList> metadata_change_list =
-      CreateMetadataChangeList();
-
-  change_processor()->Delete(entry.URL().spec(), metadata_change_list.get());
-  batch_->TransferMetadataChanges(std::move(metadata_change_list));
+  change_processor()->Delete(entry.URL().spec(),
+                             batch_->GetMetadataChangeList());
 }
 
 void ReadingListStore::OnDatabaseLoad(
-    syncer::ModelTypeStore::Result result,
+    const base::Optional<syncer::ModelError>& error,
     std::unique_ptr<syncer::ModelTypeStore::RecordList> entries) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (result != syncer::ModelTypeStore::Result::SUCCESS) {
-    change_processor()->ReportError(FROM_HERE,
-                                    "Cannot load Reading List Database.");
+  if (error) {
+    change_processor()->ReportError(*error);
     return;
   }
   auto loaded_entries =
       std::make_unique<ReadingListStoreDelegate::ReadingListEntries>();
 
-  for (const syncer::ModelTypeStore::Record& r : *entries.get()) {
+  for (const syncer::ModelTypeStore::Record& r : *entries) {
     reading_list::ReadingListLocal proto;
     if (!proto.ParseFromString(r.value)) {
       continue;
@@ -153,36 +144,37 @@ void ReadingListStore::OnDatabaseLoad(
 
   delegate_->StoreLoaded(std::move(loaded_entries));
 
-  store_->ReadAllMetadata(
-      base::Bind(&ReadingListStore::OnReadAllMetadata, base::AsWeakPtr(this)));
+  store_->ReadAllMetadata(base::Bind(&ReadingListStore::OnReadAllMetadata,
+                                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ReadingListStore::OnReadAllMetadata(
-    base::Optional<syncer::ModelError> error,
+    const base::Optional<syncer::ModelError>& error,
     std::unique_ptr<syncer::MetadataBatch> metadata_batch) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (error) {
-    change_processor()->ReportError(FROM_HERE, "Failed to read metadata.");
+    change_processor()->ReportError({FROM_HERE, "Failed to read metadata."});
   } else {
     change_processor()->ModelReadyToSync(std::move(metadata_batch));
   }
 }
 
-void ReadingListStore::OnDatabaseSave(syncer::ModelTypeStore::Result result) {
+void ReadingListStore::OnDatabaseSave(
+    const base::Optional<syncer::ModelError>& error) {
   return;
 }
 
 void ReadingListStore::OnStoreCreated(
-    syncer::ModelTypeStore::Result result,
+    const base::Optional<syncer::ModelError>& error,
     std::unique_ptr<syncer::ModelTypeStore> store) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (result != syncer::ModelTypeStore::Result::SUCCESS) {
+  if (error) {
     // TODO(crbug.com/664926): handle store creation error.
     return;
   }
   store_ = std::move(store);
-  store_->ReadAllData(
-      base::Bind(&ReadingListStore::OnDatabaseLoad, base::AsWeakPtr(this)));
+  store_->ReadAllData(base::Bind(&ReadingListStore::OnDatabaseLoad,
+                                 weak_ptr_factory_.GetWeakPtr()));
   return;
 }
 
@@ -281,7 +273,7 @@ base::Optional<syncer::ModelError> ReadingListStore::MergeSyncData(
     change_processor()->Put(entry_pb->entry_id(), std::move(entity_data),
                             metadata_change_list.get());
   }
-  batch_->TransferMetadataChanges(std::move(metadata_change_list));
+  batch_->TakeMetadataChangesFrom(std::move(metadata_change_list));
 
   return {};
 }
@@ -351,7 +343,7 @@ base::Optional<syncer::ModelError> ReadingListStore::ApplySyncChanges(
     }
   }
 
-  batch_->TransferMetadataChanges(std::move(metadata_change_list));
+  batch_->TakeMetadataChangesFrom(std::move(metadata_change_list));
   return {};
 }
 
@@ -366,10 +358,10 @@ void ReadingListStore::GetData(StorageKeyList storage_keys,
     }
   }
 
-  callback.Run(std::move(batch));
+  std::move(callback).Run(std::move(batch));
 }
 
-void ReadingListStore::GetAllData(DataCallback callback) {
+void ReadingListStore::GetAllDataForDebugging(DataCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto batch = std::make_unique<syncer::MutableDataBatch>();
 
@@ -378,7 +370,7 @@ void ReadingListStore::GetAllData(DataCallback callback) {
     AddEntryToBatch(batch.get(), *entry);
   }
 
-  callback.Run(std::move(batch));
+  std::move(callback).Run(std::move(batch));
 }
 
 void ReadingListStore::AddEntryToBatch(syncer::MutableDataBatch* batch,

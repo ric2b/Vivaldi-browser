@@ -23,7 +23,6 @@
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/service/command_buffer_stub.h"
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
-#include "gpu/ipc/service/gpu_memory_manager.h"
 #include "ipc/ipc_sender.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/message_router.h"
@@ -118,6 +117,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
   }
 
   base::ProcessId GetClientPID() const;
+  bool IsConnected() const;
 
   int client_id() const { return client_id_; }
 
@@ -161,7 +161,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
 
   void CacheShader(const std::string& key, const std::string& shader);
 
-  uint64_t GetMemoryUsage();
+  uint64_t GetMemoryUsage() const;
 
   scoped_refptr<gl::GLImage> CreateImageForGpuMemoryBuffer(
       const gfx::GpuMemoryBufferHandle& handle,
@@ -191,7 +191,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
   // Message handlers for control messages.
   void OnCreateCommandBuffer(const GPUCreateCommandBufferConfig& init_params,
                              int32_t route_id,
-                             base::SharedMemoryHandle shared_state_shm,
+                             base::UnsafeSharedMemoryRegion shared_state_shm,
                              gpu::ContextResult* result,
                              gpu::Capabilities* capabilities);
   void OnDestroyCommandBuffer(int32_t route_id);

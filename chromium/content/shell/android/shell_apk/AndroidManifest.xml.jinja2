@@ -33,17 +33,22 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
         </activity>
         <!-- The following service entries exist in order to allow us to
              start more than one sandboxed process. -->
 
         <!-- NOTE: If you change the values of "android:process" for any of the below services,
              you also need to update kHelperProcessExecutableName in chrome_constants.cc. -->
-        {% set num_sandboxed_services = 20 %}
+        {% set num_sandboxed_services = 40 %}
         <meta-data android:name="org.chromium.content.browser.NUM_SANDBOXED_SERVICES"
                    android:value="{{ num_sandboxed_services }}"/>
-        <meta-data android:name="org.chromium.content.browser.SANDBOXED_SERVICES_NAME"
-                   android:value="org.chromium.content.app.SandboxedProcessService"/>
         {% for i in range(num_sandboxed_services) %}
         <service android:name="org.chromium.content.app.SandboxedProcessService{{ i }}"
                  android:process=":sandboxed_process{{ i }}"
@@ -54,8 +59,6 @@
         {% set num_privileged_services = 3 %}
         <meta-data android:name="org.chromium.content.browser.NUM_PRIVILEGED_SERVICES"
                    android:value="{{ num_privileged_services }}"/>
-        <meta-data android:name="org.chromium.content.browser.PRIVILEGED_SERVICES_NAME"
-                   android:value="org.chromium.content.app.PrivilegedProcessService"/>
         {% for i in range(num_privileged_services) %}
         <service android:name="org.chromium.content.app.PrivilegedProcessService{{ i }}"
                  android:process=":privileged_process{{ i }}"
@@ -73,8 +76,6 @@
         {% set num_test_services = 2 %}
         <meta-data android:name="org.chromium.content.browser.NUM_TEST_SERVICES"
                    android:value="{{ num_test_services }}"/>
-        <meta-data android:name="org.chromium.content.browser.TEST_SERVICES_NAME"
-                   android:value="org.chromium.content_shell_apk.TestChildProcessService"/>
         {% for i in range(num_test_services) %}
         <service android:name="org.chromium.content_shell_apk.TestChildProcessService{{ i }}"
                  android:process=":test_child_service_process{{ i }}"

@@ -4,22 +4,45 @@
 
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 
-#include "ash/shell.h"
-#include "ash/wm/window_positioner.h"
-#include "ash/wm/window_state.h"
-#include "chrome/browser/ui/ash/ash_util.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/common/pref_names.h"
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
+namespace {
+
+// When the screen is this width or narrower, the initial browser launched on
+// first run will be maximized.
+constexpr int kForceMaximizeWidthLimit = 1366;
+
+bool ShouldForceMaximizeOnFirstRun() {
+  const user_manager::User* const user =
+      user_manager::UserManager::Get()->GetActiveUser();
+  if (user) {
+    return chromeos::ProfileHelper::Get()
+        ->GetProfileByUser(user)
+        ->GetPrefs()
+        ->GetBoolean(prefs::kForceMaximizeOnFirstRun);
+  }
+  return false;
+}
+
+}  // namespace
+
 bool WindowSizer::GetBrowserBoundsAsh(gfx::Rect* bounds,
                                       ui::WindowShowState* show_state) const {
-  // TODO(crbug.com/764009): Mash support.
-  if (ash_util::IsRunningInMash() || !browser_)
+  if (!browser_)
     return false;
+
+  // This should not be called on a Browser that already has a window.
+  DCHECK(!browser_->window());
 
   bool determined = false;
   if (bounds->IsEmpty()) {
@@ -30,29 +53,20 @@ bool WindowSizer::GetBrowserBoundsAsh(gfx::Rect* bounds,
       // For trusted popups (v1 apps and system windows), do not use the last
       // active window bounds, only use saved or default bounds.
       if (!GetSavedWindowBounds(bounds, show_state))
-        *bounds = GetDefaultWindowBoundsAsh(GetTargetDisplay(gfx::Rect()));
+        *bounds = GetDefaultWindowBoundsAsh(GetDisplayForNewWindow());
       determined = true;
-    } else {
+    } else if (state_provider_) {
       // In Ash, prioritize the last saved |show_state|. If you have questions
       // or comments about this behavior please contact oshima@chromium.org.
-      if (state_provider_) {
-        gfx::Rect ignored_bounds, ignored_work_area;
-        state_provider_->GetPersistentState(&ignored_bounds,
-                                            &ignored_work_area,
-                                            show_state);
-      }
+      gfx::Rect ignored_bounds, ignored_work_area;
+      state_provider_->GetPersistentState(&ignored_bounds, &ignored_work_area,
+                                          show_state);
     }
-  } else if (browser_->is_type_popup() && bounds->origin().IsOrigin()) {
-    // In case of a popup with an 'unspecified' location in ash, we are
-    // looking for a good screen location. We are interpreting (0,0) as an
-    // unspecified location.
-    *bounds = ash::Shell::Get()->window_positioner()->GetPopupPosition(
-        bounds->size());
-    determined = true;
   }
 
   if (browser_->is_type_tabbed() && *show_state == ui::SHOW_STATE_DEFAULT) {
-    display::Display display = screen_->GetDisplayMatching(*bounds);
+    display::Display display =
+        display::Screen::GetScreen()->GetDisplayMatching(*bounds);
     gfx::Rect work_area = display.work_area();
     bounds->AdjustToFit(work_area);
     if (*bounds == work_area) {
@@ -76,43 +90,39 @@ void WindowSizer::GetTabbedBrowserBoundsAsh(
   DCHECK(browser_->is_type_tabbed());
   DCHECK(bounds_in_screen->IsEmpty());
 
-  ui::WindowShowState passed_show_state = *show_state;
+  const ui::WindowShowState passed_show_state = *show_state;
 
   bool is_saved_bounds = GetSavedWindowBounds(bounds_in_screen, show_state);
-  display::Display display;
-  if (is_saved_bounds) {
-    display = screen_->GetDisplayMatching(*bounds_in_screen);
-  } else {
-    // If there is no saved bounds (hence bounds_in_screen is empty), use the
-    // target display.
-    display = target_display_provider_->GetTargetDisplay(screen_,
-                                                         *bounds_in_screen);
+  display::Display display = GetDisplayForNewWindow(*bounds_in_screen);
+  if (!is_saved_bounds)
     *bounds_in_screen = GetDefaultWindowBoundsAsh(display);
-  }
 
   if (browser_->is_session_restore()) {
-    // This is a fall-through case when there is no bounds recorded
-    // for restored window, and should not be used except for the case
-    // above.  The regular path is handled in
-    // |WindowSizer::DetermineWindowBoundsAndShowState|.
-
-    // Note: How restore bounds/show state data are passed.
-    // The restore bounds is passed via |Browser::override_bounds()| in
-    // |chrome::GetBrowserWindowBoundsAndShowState()|.
-    // The restore state is passed via |Browser::initial_state()| in
-    // |WindowSizer::GetWindowDefaultShowState|.
-    bounds_in_screen->AdjustToFit(display.work_area());
-    return;
+    // Respect display for saved bounds during session restore.
+    display =
+        display::Screen::GetScreen()->GetDisplayMatching(*bounds_in_screen);
+  } else if (BrowserList::GetInstance()->empty() && !is_saved_bounds &&
+             (ShouldForceMaximizeOnFirstRun() ||
+              display.work_area().width() <= kForceMaximizeWidthLimit)) {
+    // No browsers, no saved bounds: assume first run. Maximize if set by policy
+    // or if the screen is narrower than a predetermined size.
+    *show_state = ui::SHOW_STATE_MAXIMIZED;
+  } else {
+    // Take the show state from the last active window and copy its restored
+    // bounds only if we don't have saved bounds.
+    gfx::Rect bounds_copy = *bounds_in_screen;
+    ui::WindowShowState show_state_copy = passed_show_state;
+    if (state_provider() && state_provider()->GetLastActiveWindowState(
+                                &bounds_copy, &show_state_copy)) {
+      *show_state = show_state_copy;
+      if (!is_saved_bounds) {
+        *bounds_in_screen = bounds_copy;
+        bounds_in_screen->Offset(kWindowTilePixels, kWindowTilePixels);
+      }
+    }
   }
 
-  // The |browser_window| is non NULL when this is called after
-  // browser's aura window is created.
-  aura::Window* browser_window =
-      browser_->window() ? browser_->window()->GetNativeWindow() : NULL;
-
-  ash::WindowPositioner::GetBoundsAndShowStateForNewWindow(
-      browser_window, is_saved_bounds, passed_show_state, bounds_in_screen,
-      show_state);
+  bounds_in_screen->AdjustToFit(display.work_area());
 }
 
 gfx::Rect WindowSizer::GetDefaultWindowBoundsAsh(

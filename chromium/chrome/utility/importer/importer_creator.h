@@ -11,10 +11,9 @@
 class Importer;
 
 namespace importer {
-struct ImportConfig;
 
 // Creates an Importer of the specified |type|.
-scoped_refptr<Importer> CreateImporterByType(ImporterType type, const ImportConfig &import_config);
+scoped_refptr<Importer> CreateImporterByType(ImporterType type);
 
 }  // namespace importer
 

@@ -50,8 +50,9 @@ volumeManagerUtil.validateError = function(error) {
 };
 
 /**
- * Builds the VolumeInfo data from VolumeMetadata.
- * @param {VolumeMetadata} volumeMetadata Metadata instance for the volume.
+ * Builds the VolumeInfo data from chrome.fileManagerPrivate.VolumeMetadata.
+ * @param {chrome.fileManagerPrivate.VolumeMetadata} volumeMetadata Metadata
+ * instance for the volume.
  * @return {!Promise<!VolumeInfo>} Promise settled with the VolumeInfo instance.
  */
 volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
@@ -76,6 +77,12 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
           localizedLabel = str('MEDIA_VIEW_AUDIO_ROOT_LABEL');
           break;
       }
+      break;
+    case VolumeManagerCommon.VolumeType.CROSTINI:
+      localizedLabel = str('LINUX_FILES_ROOT_LABEL');
+      break;
+    case VolumeManagerCommon.VolumeType.ANDROID_FILES:
+      localizedLabel = str('ANDROID_FILES_ROOT_LABEL');
       break;
     default:
       // TODO(mtomasz): Calculate volumeLabel for all types of volumes in the
@@ -195,7 +202,7 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
  * Note that errorType and volumeType must be an element of fixed set of strings
  * to avoid sending dynamic strings to analytics.
  *
- * @param {VolumeMetadata} volumeMetadata
+ * @param {chrome.fileManagerPrivate.VolumeMetadata} volumeMetadata
  * @param {*} error
  */
 volumeManagerUtil.reportMountError = function(volumeMetadata, error) {

@@ -20,6 +20,7 @@
 #include "net/base/ip_endpoint.h"  // win requires size of IPEndPoint
 #include "net/base/net_export.h"
 #include "net/dns/dns_hosts.h"
+#include "url/gurl.h"
 
 namespace base {
 class Value;
@@ -31,7 +32,7 @@ namespace net {
 const int64_t kDnsDefaultTimeoutMs = 1000;
 
 // DnsConfig stores configuration of the system resolver.
-struct NET_EXPORT_PRIVATE DnsConfig {
+struct NET_EXPORT DnsConfig {
   DnsConfig();
   DnsConfig(const DnsConfig& other);
   ~DnsConfig();
@@ -49,6 +50,13 @@ struct NET_EXPORT_PRIVATE DnsConfig {
   bool IsValid() const {
     return !nameservers.empty();
   }
+
+  struct NET_EXPORT DnsOverHttpsServerConfig {
+    DnsOverHttpsServerConfig(const GURL& server, bool use_post);
+
+    GURL server;
+    bool use_post;
+  };
 
   // List of name server addresses.
   std::vector<IPEndPoint> nameservers;
@@ -80,13 +88,15 @@ struct NET_EXPORT_PRIVATE DnsConfig {
   int attempts;
   // Round robin entries in |nameservers| for subsequent requests.
   bool rotate;
-  // Enable EDNS0 extensions.
-  bool edns0;
 
   // Indicates system configuration uses local IPv6 connectivity, e.g.,
   // DirectAccess. This is exposed for HostResolver to skip IPv6 probes,
   // as it may cause them to return incorrect results.
   bool use_local_ipv6;
+
+  // List of servers to query over HTTPS, queried in order
+  // (https://tools.ietf.org/id/draft-ietf-doh-dns-over-https-02.txt).
+  std::vector<DnsOverHttpsServerConfig> dns_over_https_servers;
 };
 
 // Service for reading system DNS settings, on demand or when signalled by

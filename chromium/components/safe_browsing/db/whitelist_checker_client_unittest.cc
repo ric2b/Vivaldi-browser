@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -55,7 +56,7 @@ class WhitelistCheckerClientTest : public testing::Test {
                                                     base::TimeTicks::Now());
     message_loop_.reset(new base::MessageLoop);
     io_thread_ = std::make_unique<content::TestBrowserThread>(
-        content::BrowserThread::IO, base::MessageLoop::current());
+        content::BrowserThread::IO, base::MessageLoopCurrent::Get());
     message_loop_->SetTaskRunner(task_runner_);
   }
 
@@ -81,7 +82,7 @@ class WhitelistCheckerClientTest : public testing::Test {
 };
 
 TEST_F(WhitelistCheckerClientTest, TestMatch) {
-  EXPECT_CALL(*database_manager_.get(), CheckCsdWhitelistUrl(target_url_, _))
+  EXPECT_CALL(*database_manager_, CheckCsdWhitelistUrl(target_url_, _))
       .WillOnce(Return(AsyncMatch::MATCH));
 
   MockBoolCallback callback;
@@ -91,7 +92,7 @@ TEST_F(WhitelistCheckerClientTest, TestMatch) {
 }
 
 TEST_F(WhitelistCheckerClientTest, TestNoMatch) {
-  EXPECT_CALL(*database_manager_.get(), CheckCsdWhitelistUrl(target_url_, _))
+  EXPECT_CALL(*database_manager_, CheckCsdWhitelistUrl(target_url_, _))
       .WillOnce(Return(AsyncMatch::NO_MATCH));
 
   MockBoolCallback callback;
@@ -102,7 +103,7 @@ TEST_F(WhitelistCheckerClientTest, TestNoMatch) {
 
 TEST_F(WhitelistCheckerClientTest, TestAsyncNoMatch) {
   SafeBrowsingDatabaseManager::Client* client;
-  EXPECT_CALL(*database_manager_.get(), CheckCsdWhitelistUrl(target_url_, _))
+  EXPECT_CALL(*database_manager_, CheckCsdWhitelistUrl(target_url_, _))
       .WillOnce(DoAll(SaveArg<1>(&client), Return(AsyncMatch::ASYNC)));
 
   MockBoolCallback callback;
@@ -117,9 +118,9 @@ TEST_F(WhitelistCheckerClientTest, TestAsyncNoMatch) {
 
 TEST_F(WhitelistCheckerClientTest, TestAsyncTimeout) {
   SafeBrowsingDatabaseManager::Client* client;
-  EXPECT_CALL(*database_manager_.get(), CheckCsdWhitelistUrl(target_url_, _))
+  EXPECT_CALL(*database_manager_, CheckCsdWhitelistUrl(target_url_, _))
       .WillOnce(DoAll(SaveArg<1>(&client), Return(AsyncMatch::ASYNC)));
-  EXPECT_CALL(*database_manager_.get(), CancelCheck(_)).Times(1);
+  EXPECT_CALL(*database_manager_, CancelCheck(_)).Times(1);
 
   MockBoolCallback callback;
   WhitelistCheckerClient::StartCheckCsdWhitelist(database_manager_, target_url_,

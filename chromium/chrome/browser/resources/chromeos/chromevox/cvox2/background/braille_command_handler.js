@@ -8,87 +8,138 @@
 
 goog.provide('BrailleCommandHandler');
 
+goog.require('EventSourceState');
 goog.require('BackgroundKeyboardHandler');
+goog.require('DesktopAutomationHandler');
 
 goog.scope(function() {
+var RoleType = chrome.automation.RoleType;
 var StateType = chrome.automation.StateType;
 
 /**
- * Maps a dot pattern to a command.
- * @type {!Object<number, string>}
+ * Global setting for the enabled state of this handler.
+ * @param {boolean} state
  */
-BrailleCommandHandler.DOT_PATTERN_TO_COMMAND = {};
-
-/**
- * Makes a dot pattern given a list of dots numbered from 1 to 8 arranged in a
- * braille cell (a 2 x 4 dot grid).
- * @param {Array<number>} dots The dots to be set in the returned pattern.
- * @return {number}
- */
-BrailleCommandHandler.makeDotPattern = function(dots) {
-  return dots.reduce(function(p, c) {
-    return p | (1 << c - 1);
-  }, 0);
+BrailleCommandHandler.setEnabled = function(state) {
+  BrailleCommandHandler.enabled_ = state;
 };
 
 /**
- * Gets a braille command based on a dot pattern from a chord.
- * @param {number} dots
- * @return {string?}
+ * Handles a braille command.
+ * @param {!cvox.BrailleKeyEvent} evt
+ * @param {!cvox.NavBraille} content
+ * @return {boolean} True if evt was processed.
  */
-BrailleCommandHandler.getCommand = function(dots) {
-  var command = BrailleCommandHandler.DOT_PATTERN_TO_COMMAND[dots];
-  return command;
-};
+BrailleCommandHandler.onBrailleKeyEvent = function(evt, content) {
+  if (!BrailleCommandHandler.enabled_)
+    return true;
 
-/**
- * Gets a dot shortcut for a command.
- * @param {string} command
- * @param {boolean=} opt_chord True if the pattern comes from a chord.
- * @return {string} The shortcut.
- */
-BrailleCommandHandler.getDotShortcut = function(command, opt_chord) {
-  var commandDots = BrailleCommandHandler.getDots(command);
-  return BrailleCommandHandler.makeShortcutText(commandDots, opt_chord);
-};
+  EventSourceState.set(EventSourceType.BRAILLE_KEYBOARD);
 
-/**
- * @param {number} pattern
- * @param {boolean=} opt_chord
- * @return {string}
- */
-BrailleCommandHandler.makeShortcutText = function(pattern, opt_chord) {
-  var dots = [];
-  for (var shifter = 0; shifter <= 7; shifter++) {
-    if ((1 << shifter) & pattern)
-      dots.push(shifter + 1);
+  // Note: panning within content occurs earlier in event dispatch.
+  Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
+  switch (evt.command) {
+    case cvox.BrailleKeyCommand.PAN_LEFT:
+      CommandHandler.onCommand('previousObject');
+      break;
+    case cvox.BrailleKeyCommand.PAN_RIGHT:
+      CommandHandler.onCommand('nextObject');
+      break;
+    case cvox.BrailleKeyCommand.LINE_UP:
+      CommandHandler.onCommand('previousLine');
+      break;
+    case cvox.BrailleKeyCommand.LINE_DOWN:
+      CommandHandler.onCommand('nextLine');
+      break;
+    case cvox.BrailleKeyCommand.TOP:
+      CommandHandler.onCommand('jumpToTop');
+      break;
+    case cvox.BrailleKeyCommand.BOTTOM:
+      CommandHandler.onCommand('jumpToBottom');
+      break;
+    case cvox.BrailleKeyCommand.ROUTING:
+      BrailleCommandHandler.onRoutingCommand_(
+          content.text,
+          // Cast ok since displayPosition is always defined in this case.
+          /** @type {number} */ (evt.displayPosition));
+      break;
+    case cvox.BrailleKeyCommand.CHORD:
+      if (!evt.brailleDots)
+        return false;
+
+      var command = BrailleCommandData.getCommand(evt.brailleDots);
+      if (command) {
+        if (BrailleCommandHandler.onEditCommand_(command))
+          CommandHandler.onCommand(command);
+      }
+      break;
+    default:
+      return false;
   }
-  var msgid;
-  if (dots.length > 1)
-    msgid = 'braille_dots';
-  else if (dots.length == 1)
-    msgid = 'braille_dot';
-
-  if (msgid) {
-    var dotText = Msgs.getMsg(msgid, [dots.join('-')]);
-    if (opt_chord)
-      dotText = Msgs.getMsg('braille_chord', [dotText]);
-    return dotText;
-  }
-  return '';
+  return true;
 };
 
 /**
- * @param {string} command
- * @return {number} The dot pattern for |command|.
+ * @param {!Spannable} text
+ * @param {number} position
+ * @private
  */
-BrailleCommandHandler.getDots = function(command) {
-  for (var key in BrailleCommandHandler.DOT_PATTERN_TO_COMMAND) {
-    key = parseInt(key, 10);
-    if (command == BrailleCommandHandler.DOT_PATTERN_TO_COMMAND[key])
-      return key;
+BrailleCommandHandler.onRoutingCommand_ = function(text, position) {
+  var actionNodeSpan = null;
+  var selectionSpan = null;
+  var selSpans = text.getSpansInstanceOf(Output.SelectionSpan);
+  var nodeSpans = text.getSpansInstanceOf(Output.NodeSpan);
+  for (var i = 0, selSpan; selSpan = selSpans[i]; i++) {
+    if (text.getSpanStart(selSpan) <= position &&
+        position < text.getSpanEnd(selSpan)) {
+      selectionSpan = selSpan;
+      break;
+    }
   }
-  return 0;
+
+  var interval;
+  for (var j = 0, nodeSpan; nodeSpan = nodeSpans[j]; j++) {
+    var intervals = text.getSpanIntervals(nodeSpan);
+    var tempInterval = intervals.find(function(innerInterval) {
+      return innerInterval.start <= position && position <= innerInterval.end;
+    });
+    if (tempInterval) {
+      actionNodeSpan = nodeSpan;
+      interval = tempInterval;
+    }
+  }
+
+  if (!actionNodeSpan)
+    return;
+
+  var actionNode = actionNodeSpan.node;
+  var offset = actionNodeSpan.offset;
+  if (actionNode.role === RoleType.INLINE_TEXT_BOX)
+    actionNode = actionNode.parent;
+  actionNode.doDefault();
+
+  if (actionNode.role != RoleType.STATIC_TEXT &&
+      actionNode.role != RoleType.TEXT_FIELD &&
+      !actionNode.state[StateType.RICHLY_EDITABLE])
+    return;
+
+  if (!selectionSpan)
+    selectionSpan = actionNodeSpan;
+
+  if (actionNode.state.richlyEditable) {
+    var start = interval ? interval.start : text.getSpanStart(selectionSpan);
+    var targetPosition = position - start + offset;
+    chrome.automation.setDocumentSelection({
+      anchorObject: actionNode,
+      anchorOffset: targetPosition,
+      focusObject: actionNode,
+      focusOffset: targetPosition
+    });
+  } else {
+    var start = text.getSpanStart(selectionSpan);
+    var targetPosition = position - start + offset;
+    actionNode.setSelection(targetPosition, targetPosition);
+  }
 };
 
 /**
@@ -96,15 +147,23 @@ BrailleCommandHandler.getDots = function(command) {
  * editable text.
  * @param {string} command
  * @return {boolean} True if the command should propagate.
+ * @private
  */
-BrailleCommandHandler.onEditCommand = function(command) {
+BrailleCommandHandler.onEditCommand_ = function(command) {
   var current = ChromeVoxState.instance.currentRange;
   if (cvox.ChromeVox.isStickyModeOn() || !current || !current.start ||
       !current.start.node || !current.start.node.state[StateType.EDITABLE])
     return true;
 
+  var textEditHandler = DesktopAutomationHandler.instance.textEditHandler;
+  if (!textEditHandler)
+    return true;
+
   var isMultiline = AutomationPredicate.multiline(current.start.node);
   switch (command) {
+    case 'forceClickOnCurrentItem':
+      BackgroundKeyboardHandler.sendKeyPress(13);
+      break;
     case 'previousCharacter':
       BackgroundKeyboardHandler.sendKeyPress(37);
       break;
@@ -119,7 +178,7 @@ BrailleCommandHandler.onEditCommand = function(command) {
       break;
     case 'previousObject':
     case 'previousLine':
-      if (!isMultiline)
+      if (!isMultiline || textEditHandler.isSelectionOnFirstLine())
         return true;
       BackgroundKeyboardHandler.sendKeyPress(38);
       break;
@@ -127,6 +186,12 @@ BrailleCommandHandler.onEditCommand = function(command) {
     case 'nextLine':
       if (!isMultiline)
         return true;
+
+      if (textEditHandler.isSelectionOnLastLine()) {
+        textEditHandler.moveToAfterEditText();
+        return false;
+      }
+
       BackgroundKeyboardHandler.sendKeyPress(40);
       break;
     case 'previousGroup':
@@ -141,65 +206,7 @@ BrailleCommandHandler.onEditCommand = function(command) {
   return false;
 };
 
-/**
- * @private
- */
-BrailleCommandHandler.init_ = function() {
-  var map = function(dots, command) {
-    BrailleCommandHandler
-        .DOT_PATTERN_TO_COMMAND[BrailleCommandHandler.makeDotPattern(dots)] =
-        command;
-  };
-
-  map([2, 3], 'previousGroup');
-  map([5, 6], 'nextGroup');
-  map([1], 'previousObject');
-  map([4], 'nextObject');
-  map([2], 'previousWord');
-  map([5], 'nextWord');
-  map([3], 'previousCharacter');
-  map([6], 'nextCharacter');
-  map([1, 2, 3], 'jumpToTop');
-  map([4, 5, 6], 'jumpToBottom');
-
-  map([1, 4], 'fullyDescribe');
-  map([1, 3, 4], 'contextMenu');
-  map([1, 2, 3, 5], 'readFromHere');
-  map([2, 3, 4], 'toggleSelection');
-
-  // Forward jump.
-  map([1, 2], 'nextButton');
-  map([1, 5], 'nextEditText');
-  map([1, 2, 4], 'nextFormField');
-  map([1, 2, 5], 'nextHeading');
-  map([4, 5], 'nextLink');
-  map([2, 3, 4, 5], 'nextTable');
-
-  // Backward jump.
-  map([1, 2, 7], 'previousButton');
-  map([1, 5, 7], 'previousEditText');
-  map([1, 2, 4, 7], 'previousFormField');
-  map([1, 2, 5, 7], 'previousHeading');
-  map([4, 5, 7], 'previousLink');
-  map([2, 3, 4, 5, 7], 'previousTable');
-
-  map([8], 'forceClickOnCurrentItem');
-  map([3, 4], 'toggleSearchWidget');
-
-  // Question.
-  map([1, 4, 5, 6], 'toggleKeyboardHelp');
-
-  // All cells (with 7 as mod).
-  map([1, 2, 3, 4, 5, 6, 7], 'darkenScreen');
-  map([1, 2, 3, 4, 5, 6], 'undarkenScreen');
-
-  // s.
-  map([2, 3, 4], 'toggleSpeechOnOrOff');
-
-  // g.
-  map([1, 2, 4, 5], 'toggleBrailleTable');
-};
-
-BrailleCommandHandler.init_();
+/** @private {boolean} */
+BrailleCommandHandler.enabled_ = true;
 
 });  //  goog.scope

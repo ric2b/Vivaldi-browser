@@ -13,12 +13,9 @@
 
 #include "base/callback_forward.h"
 #include "content/common/content_export.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 
 class GURL;
-
-namespace net {
-class CanonicalCookie;
-}
 
 namespace url {
 class Origin;
@@ -69,15 +66,17 @@ class CONTENT_EXPORT BrowsingDataFilterBuilder {
   virtual base::RepeatingCallback<bool(const GURL&)>
       BuildGeneralFilter() const = 0;
 
-  // Builds a filter that matches cookies whose sources are in the whitelist,
-  // or aren't in the blacklist.
-  virtual base::RepeatingCallback<bool(const net::CanonicalCookie& pattern)>
-      BuildCookieFilter() const = 0;
+  // Builds a filter that can be used with the network service. This uses a Mojo
+  // struct rather than a predicate function (as used by the rest of the filters
+  // built by this class) because we need to be able to pass the filter to the
+  // network service via IPC.
+  virtual network::mojom::ClearDataFilterPtr BuildNetworkServiceFilter()
+      const = 0;
 
-  // Builds a filter that matches channel IDs whose server identifiers are in
-  // the whitelist, or aren't in the blacklist.
-  virtual base::RepeatingCallback<bool(const std::string& server_id)>
-      BuildChannelIDFilter() const = 0;
+  // Builds a CookieDeletionInfo object that matches cookies whose sources are
+  // in the whitelist, or aren't in the blacklist.
+  virtual network::mojom::CookieDeletionFilterPtr BuildCookieDeletionFilter()
+      const = 0;
 
   // Builds a filter that matches the |site| of a plugin.
   virtual base::RepeatingCallback<bool(const std::string& site)>

@@ -11,10 +11,10 @@
 #include "build/build_config.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -23,7 +23,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "content/public/browser/web_contents.h"
 
 namespace {
@@ -177,12 +177,15 @@ void BrowserCloseManager::CloseBrowsers() {
       // DestroyBrowser to make sure the browser is deleted and cleanup can
       // happen.
       while (browser->tab_strip_model()->count())
-        delete browser->tab_strip_model()->GetWebContentsAt(0);
+        browser->tab_strip_model()->DetachWebContentsAt(0);
       browser->window()->DestroyBrowser();
       // Destroying the browser should have removed it from the browser list.
       DCHECK(!base::ContainsValue(*BrowserList::GetInstance(), browser));
     }
   }
 
-  g_browser_process->notification_ui_manager()->CancelAll();
+  NotificationUIManager* notification_manager =
+      g_browser_process->notification_ui_manager();
+  if (notification_manager)
+    notification_manager->CancelAll();
 }

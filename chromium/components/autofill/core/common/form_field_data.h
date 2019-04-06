@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <limits>
 #include <vector>
 
 #include "base/i18n/rtl.h"
@@ -23,10 +24,23 @@ namespace autofill {
 enum FieldPropertiesFlags {
   NO_FLAGS = 0u,
   USER_TYPED = 1u << 0,
-  AUTOFILLED = 1u << 1,
+  // AUTOFILLED means that at least one character of the field value comes from
+  // being autofilled. This is different from
+  // WebFormControlElement::IsAutofilled(). It is meant to be used for password
+  // fields, to determine whether viewing the value needs user reauthentication.
+  AUTOFILLED_ON_USER_TRIGGER = 1u << 1,
+  // The field received focus at any moment.
   HAD_FOCUS = 1u << 2,
   // Use this flag, if some error occurred in flags processing.
-  ERROR_OCCURRED = 1u << 3
+  ERROR_OCCURRED = 1u << 3,
+  // On submission, the value of the field was recognised as a value which is
+  // already stored.
+  KNOWN_VALUE = 1u << 4,
+  // A value was autofilled on pageload. This means that at least one character
+  // of the field value comes from being autofilled.
+  AUTOFILLED_ON_PAGELOAD = 1u << 5,
+  // A value was autofilled on any of the triggers.
+  AUTOFILLED = AUTOFILLED_ON_USER_TRIGGER | AUTOFILLED_ON_PAGELOAD,
 };
 
 // FieldPropertiesMask is used to contain combinations of FieldPropertiesFlags
@@ -49,6 +63,24 @@ struct FormFieldData {
     CHECKED,
   };
 
+  // From which source the label is inferred.
+  enum LabelSource {
+    UNKNOWN,  // The source is unknown.
+    LABEL_TAG,
+    P_TAG,
+    DIV_TABLE,
+    TD_TAG,
+    DD_TAG,
+    LI_TAG,
+    PLACE_HOLDER,
+    ARIA_LABEL,
+    COMBINED,  // Combined with various elements.
+    VALUE,     // label is the value of element.
+  };
+
+  static constexpr uint32_t kNotSetFormControlRendererId =
+      std::numeric_limits<uint32_t>::max();
+
   FormFieldData();
   FormFieldData(const FormFieldData& other);
   ~FormFieldData();
@@ -62,6 +94,20 @@ struct FormFieldData {
   // they are similar enough to be considered as same field if form's
   // other information isn't changed.
   bool SimilarFieldAs(const FormFieldData& field) const;
+
+  // If |field| is the same as this from the POV of dynamic refills.
+  bool DynamicallySameFieldAs(const FormFieldData& field) const;
+
+  // Returns true for all of textfield-looking types such as text, password,
+  // search, email, url, and number. It must work the same way as Blink function
+  // WebInputElement::IsTextField(), and it returns false if |*this| represents
+  // a textarea.
+  bool IsTextInputElement() const;
+
+  // Returns true if the field is visible to the user.
+  bool IsVisible() const {
+    return is_focusable && role != ROLE_ATTRIBUTE_PRESENTATION;
+  };
 
   // Note: operator==() performs a full-field-comparison(byte by byte), this is
   // different from SameFieldAs(), which ignores comparison for those "values"
@@ -82,6 +128,16 @@ struct FormFieldData {
   std::string autocomplete_attribute;
   base::string16 placeholder;
   base::string16 css_classes;
+  // Unique renderer id which is returned by function
+  // WebFormControlElement::UniqueRendererFormControlId(). It is not persistant
+  // between page loads, so it is not saved and not used in comparison in
+  // SameFieldAs().
+  uint32_t unique_renderer_id = kNotSetFormControlRendererId;
+
+  // The unique identifier of the section (e.g. billing vs. shipping address)
+  // of this field.
+  std::string section;
+
   // Note: we use uint64_t instead of size_t because this struct is sent over
   // IPC which could span 32 & 64 bit processes. We chose uint64_t instead of
   // uint32_t to maintain compatibility with old code which used size_t
@@ -95,10 +151,21 @@ struct FormFieldData {
   base::i18n::TextDirection text_direction;
   FieldPropertiesMask properties_mask;
 
+  // Data members from the next block are used for parsing only, they are not
+  // serialised for storage.
+  bool is_enabled;
+  bool is_readonly;
+  bool is_default;
+  base::string16 typed_value;
+
   // For the HTML snippet |<option value="US">United States</option>|, the
   // value is "US" and the contents are "United States".
   std::vector<base::string16> option_values;
   std::vector<base::string16> option_contents;
+
+  // Password Manager doesn't use labels nor client side nor server side, so
+  // label_source isn't in serialize methods.
+  LabelSource label_source;
 };
 
 // Serialize and deserialize FormFieldData. These are used when FormData objects
@@ -124,6 +191,7 @@ std::ostream& operator<<(std::ostream& os, const FormFieldData& field);
     EXPECT_EQ(expected.max_length, actual.max_length);                         \
     EXPECT_EQ(expected.css_classes, actual.css_classes);                       \
     EXPECT_EQ(expected.is_autofilled, actual.is_autofilled);                   \
+    EXPECT_EQ(expected.section, actual.section);                               \
     EXPECT_EQ(expected.check_status, actual.check_status);                     \
     EXPECT_EQ(expected.properties_mask, actual.properties_mask);               \
     EXPECT_EQ(expected.id, actual.id);                                         \

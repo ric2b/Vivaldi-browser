@@ -5,13 +5,11 @@
 #include "components/component_updater/timer.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/location.h"
 
 namespace component_updater {
 
-Timer::Timer() : timer_(false, false) {
-}
+Timer::Timer() {}
 
 Timer::~Timer() {
   DCHECK(thread_checker_.CalledOnValidThread());

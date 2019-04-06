@@ -164,11 +164,17 @@ class MEDIA_EXPORT SourceBufferStream {
 
   // Notifies this object that the audio config has changed and buffers in
   // future Append() calls should be associated with this new config.
-  bool UpdateAudioConfig(const AudioDecoderConfig& config);
+  // If the codec is allowed to change, the caller should set
+  // |allow_codec_change| to true.
+  bool UpdateAudioConfig(const AudioDecoderConfig& config,
+                         bool allow_codec_change);
 
   // Notifies this object that the video config has changed and buffers in
   // future Append() calls should be associated with this new config.
-  bool UpdateVideoConfig(const VideoDecoderConfig& config);
+  // If the codec is allowed to change, the caller should set
+  // |allow_codec_change| to true.
+  bool UpdateVideoConfig(const VideoDecoderConfig& config,
+                         bool allow_codec_change);
 
   // Returns the largest distance between two adjacent buffers in this stream,
   // or an estimate if no two adjacent buffers have been appended to the stream
@@ -227,7 +233,7 @@ class MEDIA_EXPORT SourceBufferStream {
   // Checks to see if |range_with_new_buffers_itr| can be merged with the range
   // next to it, and merges them if so while preserving correctness of
   // |range_for_next_append_| and |selected_range_|.
-  void MergeWithAdjacentRangeIfNecessary(
+  void MergeWithNextRangeIfNecessary(
       const typename RangeList::iterator& range_with_new_buffers_itr);
 
   // Merges any adjacent ranges while preserving correctness of
@@ -391,7 +397,7 @@ class MEDIA_EXPORT SourceBufferStream {
   // delay. Apps can avoid this behavior by not overlap-appending buffers near
   // current playback position.
   void WarnIfTrackBufferExhaustionSkipsForward(
-      const scoped_refptr<StreamParserBuffer>& next_buffer);
+      scoped_refptr<StreamParserBuffer> next_buffer);
 
   // If |out_buffer| has preroll, sets |pending_buffer_| to feed out preroll and
   // returns true.  Otherwise returns false.
@@ -404,8 +410,7 @@ class MEDIA_EXPORT SourceBufferStream {
   // type (DTS for ByDts, PTS for ByPts) defined in RangeClass to reduce the
   // need for some of these helpers. See https://crbug.com/718641.
   static constexpr bool BufferingByPts();
-  DecodeTimestamp BufferGetTimestamp(
-      const scoped_refptr<StreamParserBuffer>& buffer);
+  DecodeTimestamp BufferGetTimestamp(scoped_refptr<StreamParserBuffer> buffer);
   void RangeAppendBuffersToEnd(RangeClass* range,
                                const BufferQueue& buffers,
                                DecodeTimestamp group_start_time);

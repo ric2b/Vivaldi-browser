@@ -58,15 +58,17 @@ static void sqlite3TreeViewLine(TreeView *p, const char *zFormat, ...){
   sqlite3StrAccumInit(&acc, 0, zBuf, sizeof(zBuf), 0);
   if( p ){
     for(i=0; i<p->iLevel && i<sizeof(p->bLine)-1; i++){
-      sqlite3StrAccumAppend(&acc, p->bLine[i] ? "|   " : "    ", 4);
+      sqlite3_str_append(&acc, p->bLine[i] ? "|   " : "    ", 4);
     }
-    sqlite3StrAccumAppend(&acc, p->bLine[i] ? "|-- " : "'-- ", 4);
+    sqlite3_str_append(&acc, p->bLine[i] ? "|-- " : "'-- ", 4);
   }
-  va_start(ap, zFormat);
-  sqlite3VXPrintf(&acc, zFormat, ap);
-  va_end(ap);
-  assert( acc.nChar>0 );
-  if( zBuf[acc.nChar-1]!='\n' ) sqlite3StrAccumAppend(&acc, "\n", 1);
+  if( zFormat!=0 ){
+    va_start(ap, zFormat);
+    sqlite3_str_vappendf(&acc, zFormat, ap);
+    va_end(ap);
+    assert( acc.nChar>0 );
+    sqlite3_str_append(&acc, "\n", 1);
+  }
   sqlite3StrAccumFinish(&acc);
   fprintf(stdout,"%s", zBuf);
   fflush(stdout);
@@ -99,17 +101,17 @@ void sqlite3TreeViewWith(TreeView *pView, const With *pWith, u8 moreToFollow){
       char zLine[1000];
       const struct Cte *pCte = &pWith->a[i];
       sqlite3StrAccumInit(&x, 0, zLine, sizeof(zLine), 0);
-      sqlite3XPrintf(&x, "%s", pCte->zName);
+      sqlite3_str_appendf(&x, "%s", pCte->zName);
       if( pCte->pCols && pCte->pCols->nExpr>0 ){
         char cSep = '(';
         int j;
         for(j=0; j<pCte->pCols->nExpr; j++){
-          sqlite3XPrintf(&x, "%c%s", cSep, pCte->pCols->a[j].zName);
+          sqlite3_str_appendf(&x, "%c%s", cSep, pCte->pCols->a[j].zName);
           cSep = ',';
         }
-        sqlite3XPrintf(&x, ")");
+        sqlite3_str_appendf(&x, ")");
       }
-      sqlite3XPrintf(&x, " AS");
+      sqlite3_str_appendf(&x, " AS");
       sqlite3StrAccumFinish(&x);
       sqlite3TreeViewItem(pView, zLine, i<pWith->nCte-1);
       sqlite3TreeViewSelect(pView, pCte->pSelect, 0);
@@ -137,11 +139,21 @@ void sqlite3TreeViewSelect(TreeView *pView, const Select *p, u8 moreToFollow){
     sqlite3TreeViewPush(pView, 1);
   }
   do{
+#if SELECTTRACE_ENABLED
+    sqlite3TreeViewLine(pView,
+      "SELECT%s%s (%s/%p) selFlags=0x%x nSelectRow=%d",
+      ((p->selFlags & SF_Distinct) ? " DISTINCT" : ""),
+      ((p->selFlags & SF_Aggregate) ? " agg_flag" : ""),
+      p->zSelName, p, p->selFlags,
+      (int)p->nSelectRow
+    );
+#else
     sqlite3TreeViewLine(pView, "SELECT%s%s (0x%p) selFlags=0x%x nSelectRow=%d",
       ((p->selFlags & SF_Distinct) ? " DISTINCT" : ""),
       ((p->selFlags & SF_Aggregate) ? " agg_flag" : ""), p, p->selFlags,
       (int)p->nSelectRow
     );
+#endif
     if( cnt++ ) sqlite3TreeViewPop(pView);
     if( p->pPrior ){
       n = 1000;
@@ -153,7 +165,6 @@ void sqlite3TreeViewSelect(TreeView *pView, const Select *p, u8 moreToFollow){
       if( p->pHaving ) n++;
       if( p->pOrderBy ) n++;
       if( p->pLimit ) n++;
-      if( p->pOffset ) n++;
     }
     sqlite3TreeViewExprList(pView, p->pEList, (n--)>0, "result-set");
     if( p->pSrc && p->pSrc->nSrc ){
@@ -165,20 +176,20 @@ void sqlite3TreeViewSelect(TreeView *pView, const Select *p, u8 moreToFollow){
         StrAccum x;
         char zLine[100];
         sqlite3StrAccumInit(&x, 0, zLine, sizeof(zLine), 0);
-        sqlite3XPrintf(&x, "{%d,*}", pItem->iCursor);
+        sqlite3_str_appendf(&x, "{%d,*}", pItem->iCursor);
         if( pItem->zDatabase ){
-          sqlite3XPrintf(&x, " %s.%s", pItem->zDatabase, pItem->zName);
+          sqlite3_str_appendf(&x, " %s.%s", pItem->zDatabase, pItem->zName);
         }else if( pItem->zName ){
-          sqlite3XPrintf(&x, " %s", pItem->zName);
+          sqlite3_str_appendf(&x, " %s", pItem->zName);
         }
         if( pItem->pTab ){
-          sqlite3XPrintf(&x, " tabname=%Q", pItem->pTab->zName);
+          sqlite3_str_appendf(&x, " tabname=%Q", pItem->pTab->zName);
         }
         if( pItem->zAlias ){
-          sqlite3XPrintf(&x, " (AS %s)", pItem->zAlias);
+          sqlite3_str_appendf(&x, " (AS %s)", pItem->zAlias);
         }
         if( pItem->fg.jointype & JT_LEFT ){
-          sqlite3XPrintf(&x, " LEFT-JOIN");
+          sqlite3_str_appendf(&x, " LEFT-JOIN");
         }
         sqlite3StrAccumFinish(&x);
         sqlite3TreeViewItem(pView, zLine, i<p->pSrc->nSrc-1);
@@ -210,12 +221,12 @@ void sqlite3TreeViewSelect(TreeView *pView, const Select *p, u8 moreToFollow){
     }
     if( p->pLimit ){
       sqlite3TreeViewItem(pView, "LIMIT", (n--)>0);
-      sqlite3TreeViewExpr(pView, p->pLimit, 0);
-      sqlite3TreeViewPop(pView);
-    }
-    if( p->pOffset ){
-      sqlite3TreeViewItem(pView, "OFFSET", (n--)>0);
-      sqlite3TreeViewExpr(pView, p->pOffset, 0);
+      sqlite3TreeViewExpr(pView, p->pLimit->pLeft, p->pLimit->pRight!=0);
+      if( p->pLimit->pRight ){
+        sqlite3TreeViewItem(pView, "OFFSET", (n--)>0);
+        sqlite3TreeViewExpr(pView, p->pLimit->pRight, 0);
+        sqlite3TreeViewPop(pView);
+      }
       sqlite3TreeViewPop(pView);
     }
     if( p->pPrior ){
@@ -293,6 +304,11 @@ void sqlite3TreeViewExpr(TreeView *pView, const Expr *pExpr, u8 moreToFollow){
       sqlite3TreeViewLine(pView,"NULL");
       break;
     }
+    case TK_TRUEFALSE: {
+      sqlite3TreeViewLine(pView,
+         sqlite3ExprTruthValue(pExpr) ? "TRUE" : "FALSE");
+      break;
+    }
 #ifndef SQLITE_OMIT_BLOB_LITERAL
     case TK_BLOB: {
       sqlite3TreeViewLine(pView,"%s", pExpr->u.zToken);
@@ -348,6 +364,19 @@ void sqlite3TreeViewExpr(TreeView *pView, const Expr *pExpr, u8 moreToFollow){
     case TK_NOT:     zUniOp = "NOT";    break;
     case TK_ISNULL:  zUniOp = "ISNULL"; break;
     case TK_NOTNULL: zUniOp = "NOTNULL"; break;
+
+    case TK_TRUTH: {
+      int x;
+      const char *azOp[] = {
+         "IS-FALSE", "IS-TRUE", "IS-NOT-FALSE", "IS-NOT-TRUE"
+      };
+      assert( pExpr->op2==TK_IS || pExpr->op2==TK_ISNOT );
+      assert( pExpr->pRight );
+      assert( pExpr->pRight->op==TK_TRUEFALSE );
+      x = (pExpr->op2==TK_ISNOT)*2 + sqlite3ExprTruthValue(pExpr->pRight);
+      zUniOp = azOp[x];
+      break;
+    }
 
     case TK_SPAN: {
       sqlite3TreeViewLine(pView, "SPAN %Q", pExpr->u.zToken);
@@ -508,12 +537,25 @@ void sqlite3TreeViewBareExprList(
     sqlite3TreeViewLine(pView, "%s", zLabel);
     for(i=0; i<pList->nExpr; i++){
       int j = pList->a[i].u.x.iOrderByCol;
-      if( j ){
-        sqlite3TreeViewPush(pView, 0);
-        sqlite3TreeViewLine(pView, "iOrderByCol=%d", j);
+      char *zName = pList->a[i].zName;
+      int moreToFollow = i<pList->nExpr - 1;
+      if( j || zName ){
+        sqlite3TreeViewPush(pView, moreToFollow);
+        moreToFollow = 0;
+        sqlite3TreeViewLine(pView, 0);
+        if( zName ){
+          fprintf(stdout, "AS %s ", zName);
+        }
+        if( j ){
+          fprintf(stdout, "iOrderByCol=%d", j);
+        }
+        fprintf(stdout, "\n");
+        fflush(stdout);
       }
-      sqlite3TreeViewExpr(pView, pList->a[i].pExpr, i<pList->nExpr-1);
-      if( j ) sqlite3TreeViewPop(pView);
+      sqlite3TreeViewExpr(pView, pList->a[i].pExpr, moreToFollow);
+      if( j || zName ){
+        sqlite3TreeViewPop(pView);
+      }
     }
   }
 }

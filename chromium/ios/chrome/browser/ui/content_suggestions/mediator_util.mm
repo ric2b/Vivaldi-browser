@@ -4,10 +4,12 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/mediator_util.h"
 
+#include "base/callback.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/ntp_snippets/category.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_category_wrapper.h"
@@ -32,17 +34,6 @@ ContentSuggestionsSectionInformation* EmptySectionInfo(
   return sectionInfo;
 }
 }  // namespace
-
-void BindWrapper(
-    base::Callback<void(ntp_snippets::Status status_code,
-                        const std::vector<ntp_snippets::ContentSuggestion>&
-                            suggestions)> callback,
-    ntp_snippets::Status status_code,
-    std::vector<ntp_snippets::ContentSuggestion> suggestions) {
-  if (callback) {
-    callback.Run(status_code, suggestions);
-  }
-}
 
 ContentSuggestionsSectionID SectionIDForCategory(
     ntp_snippets::Category category) {
@@ -90,7 +81,8 @@ ContentSuggestionsItem* ConvertSuggestion(
 
 ContentSuggestionsSectionInformation* SectionInformationFromCategoryInfo(
     const base::Optional<ntp_snippets::CategoryInfo>& categoryInfo,
-    const ntp_snippets::Category& category) {
+    const ntp_snippets::Category& category,
+    const BOOL expanded) {
   ContentSuggestionsSectionInformation* sectionInfo =
       [[ContentSuggestionsSectionInformation alloc]
           initWithSectionID:SectionIDForCategory(category)];
@@ -105,6 +97,7 @@ ContentSuggestionsSectionInformation* SectionInformationFromCategoryInfo(
           l10n_util::GetNSString(IDS_IOS_CONTENT_SUGGESTIONS_FOOTER_TITLE);
     }
     sectionInfo.title = base::SysUTF16ToNSString(categoryInfo->title());
+    sectionInfo.expanded = expanded;
   }
   return sectionInfo;
 }
@@ -172,4 +165,24 @@ content_suggestions::StatusCode ConvertStatusCode(ntp_snippets::Status status) {
       NOTREACHED();
       return content_suggestions::StatusCodeError;
   }
+}
+
+ContentSuggestionsMostVisitedActionItem* BookmarkActionItem() {
+  return [[ContentSuggestionsMostVisitedActionItem alloc]
+      initWithAction:ContentSuggestionsMostVisitedActionBookmark];
+}
+
+ContentSuggestionsMostVisitedActionItem* ReadingListActionItem() {
+  return [[ContentSuggestionsMostVisitedActionItem alloc]
+      initWithAction:ContentSuggestionsMostVisitedActionReadingList];
+}
+
+ContentSuggestionsMostVisitedActionItem* RecentTabsActionItem() {
+  return [[ContentSuggestionsMostVisitedActionItem alloc]
+      initWithAction:ContentSuggestionsMostVisitedActionRecentTabs];
+}
+
+ContentSuggestionsMostVisitedActionItem* HistoryActionItem() {
+  return [[ContentSuggestionsMostVisitedActionItem alloc]
+      initWithAction:ContentSuggestionsMostVisitedActionHistory];
 }

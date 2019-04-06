@@ -4,13 +4,21 @@
 
 #include "services/shape_detection/face_detection_impl_mac.h"
 
+#include <dlfcn.h>
+#include <memory>
+#include <utility>
+
 #include "base/base64.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
+#include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "services/shape_detection/face_detection_impl_mac_vision.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -28,33 +36,97 @@ ACTION_P(RunClosure, closure) {
   closure.Run();
 }
 
-const int kJpegImageWidth = 120;
-const int kJpegImageHeight = 120;
-const char kJpegImagePath[] = "services/test/data/mona_lisa.jpg";
+std::unique_ptr<mojom::FaceDetection> CreateFaceDetectorImplMac(
+    shape_detection::mojom::FaceDetectorOptionsPtr options) {
+  return std::make_unique<FaceDetectionImplMac>(
+      mojom::FaceDetectorOptions::New());
+}
+
+std::unique_ptr<mojom::FaceDetection> CreateFaceDetectorImplMacVision(
+    shape_detection::mojom::FaceDetectorOptionsPtr options) {
+  if (@available(macOS 10.13, *)) {
+    return std::make_unique<FaceDetectionImplMacVision>();
+  } else {
+    return nullptr;
+  }
+}
+
+using FaceDetectorFactory =
+    base::Callback<std::unique_ptr<mojom::FaceDetection>(
+        shape_detection::mojom::FaceDetectorOptionsPtr)>;
 
 }  // anonymous namespace
 
-class FaceDetectionImplMacTest : public TestWithParam<bool> {
+struct TestParams {
+  bool fast_mode;
+  int image_width;
+  int image_height;
+  const char* image_path;
+  size_t num_faces;
+  size_t num_landmarks;
+  size_t num_mouth_points;
+  FaceDetectorFactory factory;
+} kTestParams[] = {
+    {false, 120, 120, "services/test/data/mona_lisa.jpg", 1, 3, 1,
+     base::Bind(&CreateFaceDetectorImplMac)},
+    {true, 120, 120, "services/test/data/mona_lisa.jpg", 1, 3, 1,
+     base::Bind(&CreateFaceDetectorImplMac)},
+    {false, 120, 120, "services/test/data/mona_lisa.jpg", 1, 4, 10,
+     base::Bind(&CreateFaceDetectorImplMacVision)},
+    {false, 240, 240, "services/test/data/the_beatles.jpg", 3, 3, 1,
+     base::Bind(&CreateFaceDetectorImplMac)},
+    {true, 240, 240, "services/test/data/the_beatles.jpg", 3, 3, 1,
+     base::Bind(&CreateFaceDetectorImplMac)},
+    {false, 240, 240, "services/test/data/the_beatles.jpg", 4, 4, 10,
+     base::Bind(&CreateFaceDetectorImplMacVision)},
+};
+
+class FaceDetectionImplMacTest : public TestWithParam<struct TestParams> {
  public:
   ~FaceDetectionImplMacTest() override {}
 
-  void DetectCallback(std::vector<mojom::FaceDetectionResultPtr> results) {
-    ASSERT_EQ(1u, results.size());
-    ASSERT_EQ(3u, results[0]->landmarks.size());
-    EXPECT_EQ(mojom::LandmarkType::EYE, results[0]->landmarks[0]->type);
-    EXPECT_EQ(mojom::LandmarkType::EYE, results[0]->landmarks[1]->type);
-    EXPECT_EQ(mojom::LandmarkType::MOUTH, results[0]->landmarks[2]->type);
+  void SetUp() override {
+    if (@available(macOS 10.13, *)) {
+      vision_framework_ = dlopen(
+          "/System/Library/Frameworks/Vision.framework/Vision", RTLD_LAZY);
+    }
+  }
+
+  void TearDown() override {
+    if (@available(macOS 10.13, *)) {
+      if (vision_framework_)
+        dlclose(vision_framework_);
+    }
+  }
+
+  void DetectCallback(size_t num_faces,
+                      size_t num_landmarks,
+                      size_t num_mouth_points,
+                      std::vector<mojom::FaceDetectionResultPtr> results) {
+    EXPECT_EQ(num_faces, results.size());
+    for (const auto& face : results) {
+      EXPECT_EQ(num_landmarks, face->landmarks.size());
+      EXPECT_EQ(mojom::LandmarkType::EYE, face->landmarks[0]->type);
+      EXPECT_EQ(mojom::LandmarkType::EYE, face->landmarks[1]->type);
+      EXPECT_EQ(mojom::LandmarkType::MOUTH, face->landmarks[2]->type);
+      EXPECT_EQ(num_mouth_points, face->landmarks[2]->locations.size());
+    }
     Detection();
   }
   MOCK_METHOD0(Detection, void(void));
 
-  std::unique_ptr<FaceDetectionImplMac> impl_;
+  std::unique_ptr<mojom::FaceDetection> impl_;
   const base::MessageLoop message_loop_;
+  void* vision_framework_;
 };
 
-TEST_F(FaceDetectionImplMacTest, CreateAndDestroy) {
-  impl_ = std::make_unique<FaceDetectionImplMac>(
-      shape_detection::mojom::FaceDetectorOptions::New());
+TEST_P(FaceDetectionImplMacTest, CreateAndDestroy) {
+  impl_ = GetParam().factory.Run(mojom::FaceDetectorOptions::New());
+  if (!impl_ && base::mac::IsAtMostOS10_12()) {
+    LOG(WARNING) << "FaceDetectionImplMacVision is not available before Mac "
+                    "OSX 10.13. Skipping test.";
+    return;
+  }
 }
 
 TEST_P(FaceDetectionImplMacTest, ScanOneFace) {
@@ -65,13 +137,18 @@ TEST_P(FaceDetectionImplMacTest, ScanOneFace) {
   }
 
   auto options = shape_detection::mojom::FaceDetectorOptions::New();
-  options->fast_mode = GetParam();
-  impl_ = std::make_unique<FaceDetectionImplMac>(std::move(options));
+  options->fast_mode = GetParam().fast_mode;
+  impl_ = GetParam().factory.Run(std::move(options));
+  if (!impl_ && base::mac::IsAtMostOS10_12()) {
+    LOG(WARNING) << "FaceDetectionImplMacVision is not available before Mac "
+                    "OSX 10.13. Skipping test.";
+    return;
+  }
 
   // Load image data from test directory.
   base::FilePath image_path;
-  ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &image_path));
-  image_path = image_path.AppendASCII(kJpegImagePath);
+  ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &image_path));
+  image_path = image_path.AppendASCII(GetParam().image_path);
   ASSERT_TRUE(base::PathExists(image_path));
   std::string image_data;
   ASSERT_TRUE(base::ReadFileToString(image_path, &image_data));
@@ -79,8 +156,8 @@ TEST_P(FaceDetectionImplMacTest, ScanOneFace) {
   std::unique_ptr<SkBitmap> image = gfx::JPEGCodec::Decode(
       reinterpret_cast<const uint8_t*>(image_data.data()), image_data.size());
   ASSERT_TRUE(image);
-  ASSERT_EQ(kJpegImageWidth, image->width());
-  ASSERT_EQ(kJpegImageHeight, image->height());
+  ASSERT_EQ(GetParam().image_width, image->width());
+  ASSERT_EQ(GetParam().image_height, image->height());
 
   const gfx::Size size(image->width(), image->height());
   const size_t num_bytes = size.GetArea() * 4 /* bytes per pixel */;
@@ -91,12 +168,15 @@ TEST_P(FaceDetectionImplMacTest, ScanOneFace) {
   base::Closure quit_closure = run_loop.QuitClosure();
   // Send the image to Detect() and expect the response in callback.
   EXPECT_CALL(*this, Detection()).WillOnce(RunClosure(quit_closure));
-  impl_->Detect(*image, base::Bind(&FaceDetectionImplMacTest::DetectCallback,
-                                   base::Unretained(this)));
+  impl_->Detect(
+      *image,
+      base::BindOnce(&FaceDetectionImplMacTest::DetectCallback,
+                     base::Unretained(this), GetParam().num_faces,
+                     GetParam().num_landmarks, GetParam().num_mouth_points));
 
   run_loop.Run();
 }
 
-INSTANTIATE_TEST_CASE_P(, FaceDetectionImplMacTest, ValuesIn({true, false}));
+INSTANTIATE_TEST_CASE_P(, FaceDetectionImplMacTest, ValuesIn(kTestParams));
 
 }  // shape_detection namespace

@@ -7,13 +7,14 @@ var fail = chrome.test.callbackFail;
 
 var tabId;
 var debuggee;
-var protocolVersion = "1.2";
-var protocolPreviousVersion = "1.1";
+var protocolVersion = "1.3";
+var protocolPreviousVersion = "1.2";
 var unsupportedMinorProtocolVersion = "1.5";
 var unsupportedMajorProtocolVersion = "100.0";
 
 var SILENT_FLAG_REQUIRED = "Cannot attach to this target unless " +
     "'silent-debugger-extension-api' flag is enabled.";
+var DETACHED_WHILE_HANDLING = "Detached while handling command.";
 
 chrome.test.runTests([
 
@@ -117,6 +118,63 @@ chrome.test.runTests([
     });
   },
 
+  function navigateToWebUI() {
+    chrome.tabs.create({url:"inspected.html"}, function(tab) {
+      var debuggee = {tabId: tab.id};
+      chrome.debugger.attach(debuggee, protocolVersion, function() {
+        var responded = false;
+
+        function onResponse() {
+          chrome.test.assertLastError(DETACHED_WHILE_HANDLING);
+          responded = true;
+        }
+
+        function onDetach(from, reason) {
+          chrome.debugger.onDetach.removeListener(onDetach);
+          chrome.test.assertTrue(responded);
+          chrome.test.assertEq(debuggee.tabId, from.tabId);
+          chrome.test.assertEq("target_closed", reason);
+          chrome.tabs.remove(tab.id, function() {
+            chrome.test.assertNoLastError();
+            chrome.test.succeed();
+          });
+        }
+
+        chrome.test.assertNoLastError();
+        chrome.debugger.onDetach.addListener(onDetach);
+        chrome.debugger.sendCommand(
+          debuggee, "Page.navigate", {url: "chrome://version"}, onResponse);
+      });
+    });
+  },
+
+  function detachDuringCommand() {
+    chrome.tabs.create({url:"inspected.html"}, function(tab) {
+      var debuggee = {tabId: tab.id};
+      chrome.debugger.attach(debuggee, protocolVersion, function() {
+        var responded = false;
+
+        function onResponse() {
+          chrome.test.assertLastError(DETACHED_WHILE_HANDLING);
+          responded = true;
+        }
+
+        function onDetach() {
+          chrome.debugger.onDetach.removeListener(onDetach);
+          chrome.test.assertTrue(responded);
+          chrome.tabs.remove(tab.id, function() {
+            chrome.test.assertNoLastError();
+            chrome.test.succeed();
+          });
+        }
+
+        chrome.test.assertNoLastError();
+        chrome.debugger.sendCommand(debuggee, "command", null, onResponse);
+        chrome.debugger.detach(debuggee, onDetach);
+      });
+    });
+  },
+
   function attachToMissing() {
     var missingDebuggee = {tabId: -1};
     chrome.debugger.attach(missingDebuggee, protocolVersion,
@@ -213,6 +271,27 @@ chrome.test.runTests([
         chrome.debugger.sendCommand(debuggee, "Page.enable");
         chrome.debugger.sendCommand(
             debuggee, "Page.navigate", {url:"about:blank"}, onNavigateDone);
+      }
+
+      chrome.debugger.attach(debuggee, protocolVersion, onAttach);
+    });
+  },
+
+  function sendCommandToDataUri() {
+    chrome.tabs.create({url:"data:text/html,<h1>hi</h1>"}, function(tab) {
+      var debuggee = {tabId: tab.id};
+
+      function checkError() {
+        if (chrome.runtime.lastError) {
+          chrome.test.fail(chrome.runtime.lastError.message);
+        } else {
+          chrome.tabs.remove(tab.id);
+          chrome.test.succeed();
+        }
+      }
+
+      function onAttach() {
+        chrome.debugger.sendCommand(debuggee, "Page.enable", null, checkError);
       }
 
       chrome.debugger.attach(debuggee, protocolVersion, onAttach);

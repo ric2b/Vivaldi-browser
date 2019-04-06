@@ -18,7 +18,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_pump_for_io.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
@@ -31,8 +31,8 @@ namespace internal {
 
 // Keeps track of network interface addresses using rtnetlink. Used by
 // NetworkChangeNotifier to provide signals to registered IPAddressObservers.
-class NET_EXPORT_PRIVATE AddressTrackerLinux :
-    public base::MessageLoopForIO::Watcher {
+class NET_EXPORT_PRIVATE AddressTrackerLinux
+    : public base::MessagePumpForIO::FdWatcher {
  public:
   typedef std::map<IPAddress, struct ifaddrmsg> AddressMap;
 
@@ -82,6 +82,9 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux :
   // with exclusively talking to the kernel and not the C library.
   static char* GetInterfaceName(int interface_index, char* buf);
 
+  // Does |name| refer to a tunnel interface?
+  static bool IsTunnelInterfaceName(const char* name);
+
  private:
   friend class AddressTrackerLinuxTest;
 
@@ -125,7 +128,7 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux :
   // Call when some part of initialization failed; forces online and unblocks.
   void AbortAndForceOnline();
 
-  // MessageLoopForIO::Watcher:
+  // MessagePumpForIO::FdWatcher:
   void OnFileCanReadWithoutBlocking(int fd) override;
   void OnFileCanWriteWithoutBlocking(int /* fd */) override;
 
@@ -155,7 +158,7 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux :
   base::Closure tunnel_callback_;
 
   int netlink_fd_;
-  base::MessageLoopForIO::FileDescriptorWatcher watcher_;
+  base::MessagePumpForIO::FdWatchController watcher_;
 
   mutable base::Lock address_map_lock_;
   AddressMap address_map_;

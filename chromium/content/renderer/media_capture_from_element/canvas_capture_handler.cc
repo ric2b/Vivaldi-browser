@@ -13,18 +13,19 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/viz/common/gl_helper.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/renderer/media/media_stream_video_capturer_source.h"
-#include "content/renderer/media/media_stream_video_source.h"
-#include "content/renderer/media/media_stream_video_track.h"
-#include "content/renderer/media/webrtc_uma_histograms.h"
+#include "content/renderer/media/stream/media_stream_constraints_util.h"
+#include "content/renderer/media/stream/media_stream_video_capturer_source.h"
+#include "content/renderer/media/stream/media_stream_video_source.h"
+#include "content/renderer/media/stream/media_stream_video_track.h"
+#include "content/renderer/media/webrtc/webrtc_uma_histograms.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/limits.h"
-#include "skia/ext/texture_handle.h"
-#include "third_party/WebKit/public/platform/WebGraphicsContext3DProvider.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
+#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/gpu/GrBackendSurface.h"
 
 using media::VideoFrame;
 
@@ -61,12 +62,15 @@ class VideoCapturerSource : public media::VideoCapturerSource {
                     const VideoCaptureDeliverFrameCB& frame_callback,
                     const RunningCallback& running_callback) override {
     DCHECK(main_render_thread_checker_.CalledOnValidThread());
-    canvas_handler_->StartVideoCapture(params, frame_callback,
-                                       running_callback);
+    if (canvas_handler_.get()) {
+      canvas_handler_->StartVideoCapture(params, frame_callback,
+                                         running_callback);
+    }
   }
   void RequestRefreshFrame() override {
     DCHECK(main_render_thread_checker_.CalledOnValidThread());
-    canvas_handler_->RequestRefreshFrame();
+    if (canvas_handler_.get())
+      canvas_handler_->RequestRefreshFrame();
   }
   void StopCapture() override {
     DCHECK(main_render_thread_checker_.CalledOnValidThread());
@@ -79,8 +83,10 @@ class VideoCapturerSource : public media::VideoCapturerSource {
   const float frame_rate_;
   // Bound to Main Render thread.
   base::ThreadChecker main_render_thread_checker_;
-  // CanvasCaptureHandler is owned by CanvasDrawListener in blink and might be
-  // destroyed before StopCapture() call.
+  // CanvasCaptureHandler is owned by CanvasDrawListener in blink. It is
+  // guaranteed to be destroyed on Main Render thread and it would happen
+  // independently of this class. Therefore, WeakPtr should always be checked
+  // before use.
   base::WeakPtr<CanvasCaptureHandler> canvas_handler_;
 };
 
@@ -144,7 +150,7 @@ CanvasCaptureHandler::CreateCanvasCaptureHandler(
     blink::WebMediaStreamTrack* track) {
   // Save histogram data so we can see how much CanvasCapture is used.
   // The histogram counts the number of calls to the JS API.
-  UpdateWebRTCMethodCount(WEBKIT_CANVAS_CAPTURE_STREAM);
+  UpdateWebRTCMethodCount(blink::WebRTCAPIName::kCanvasCaptureStream);
 
   return std::unique_ptr<CanvasCaptureHandler>(new CanvasCaptureHandler(
       size, frame_rate, std::move(io_task_runner), track));
@@ -165,7 +171,7 @@ void CanvasCaptureHandler::SendNewFrame(
       (pixmap.alphaType() == kUnpremul_SkAlphaType || image->isOpaque())) {
     const base::TimeTicks timestamp = base::TimeTicks::Now();
     SendFrame(ConvertToYUVFrame(image->isOpaque(), false,
-                                static_cast<const uint8*>(pixmap.addr(0, 0)),
+                                static_cast<const uint8_t*>(pixmap.addr(0, 0)),
                                 gfx::Size(pixmap.width(), pixmap.height()),
                                 pixmap.rowBytes(), pixmap.colorType()),
               timestamp);
@@ -279,17 +285,19 @@ void CanvasCaptureHandler::ReadARGBPixelsAsync(
     return;
   }
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
-  const GrGLTextureInfo* texture_info = skia::GrBackendObjectToGrGLTextureInfo(
-      image->getTextureHandle(true, &surface_origin));
-  DCHECK(texture_info);
+  GrBackendTexture backend_texture =
+      image->getBackendTexture(true, &surface_origin);
+  DCHECK(backend_texture.isValid());
+  GrGLTextureInfo texture_info;
+  const bool result = backend_texture.getGLTextureInfo(&texture_info);
+  DCHECK(result);
   DCHECK(context_provider->GetGLHelper());
   context_provider->GetGLHelper()->ReadbackTextureAsync(
-      texture_info->fID, image_size,
+      texture_info.fID, image_size,
       temp_argb_frame->visible_data(VideoFrame::kARGBPlane), kN32_SkColorType,
       base::Bind(&CanvasCaptureHandler::OnARGBPixelsReadAsync,
                  weak_ptr_factory_.GetWeakPtr(), image, temp_argb_frame,
                  timestamp, surface_origin != kTopLeft_GrSurfaceOrigin));
-  context_provider->InvalidateGrContext(kTextureBinding_GrGLBackendState);
 }
 
 void CanvasCaptureHandler::ReadYUVPixelsAsync(
@@ -308,14 +316,17 @@ void CanvasCaptureHandler::ReadYUVPixelsAsync(
   }
 
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
-  const GrGLTextureInfo* texture_info = skia::GrBackendObjectToGrGLTextureInfo(
-      image->getTextureHandle(true, &surface_origin));
-  DCHECK(texture_info);
+  GrBackendTexture backend_texture =
+      image->getBackendTexture(true, &surface_origin);
+  DCHECK(backend_texture.isValid());
+  GrGLTextureInfo texture_info;
+  const bool result = backend_texture.getGLTextureInfo(&texture_info);
+  DCHECK(result);
   DCHECK(context_provider->GetGLHelper());
   const gpu::MailboxHolder& mailbox_holder =
       context_provider->GetGLHelper()->ProduceMailboxHolderFromTexture(
-          texture_info->fID);
-  DCHECK_EQ(static_cast<int>(texture_info->fTarget), GL_TEXTURE_2D);
+          texture_info.fID);
+  DCHECK_EQ(static_cast<int>(texture_info.fTarget), GL_TEXTURE_2D);
   viz::ReadbackYUVInterface* const yuv_reader =
       context_provider->GetGLHelper()->GetReadbackPipelineYUV(
           surface_origin != kTopLeft_GrSurfaceOrigin);
@@ -330,8 +341,6 @@ void CanvasCaptureHandler::ReadYUVPixelsAsync(
       base::Bind(&CanvasCaptureHandler::OnYUVPixelsReadAsync,
                  weak_ptr_factory_.GetWeakPtr(), image, output_frame,
                  timestamp));
-  context_provider->InvalidateGrContext(
-      viz::ReadbackYUVInterface::GetGrGLBackendStateChanges());
 }
 
 void CanvasCaptureHandler::OnARGBPixelsReadAsync(
@@ -393,10 +402,10 @@ scoped_refptr<media::VideoFrame> CanvasCaptureHandler::ConvertToYUVFrame(
     return nullptr;
   }
 
-  int (*ConvertToI420)(const uint8* src_argb, int src_stride_argb, uint8* dst_y,
-                       int dst_stride_y, uint8* dst_u, int dst_stride_u,
-                       uint8* dst_v, int dst_stride_v, int width, int height) =
-      nullptr;
+  int (*ConvertToI420)(const uint8_t* src_argb, int src_stride_argb,
+                       uint8_t* dst_y, int dst_stride_y, uint8_t* dst_u,
+                       int dst_stride_u, uint8_t* dst_v, int dst_stride_v,
+                       int width, int height) = nullptr;
   switch (source_color_type) {
     case kRGBA_8888_SkColorType:
       ConvertToI420 = libyuv::ABGRToI420;
@@ -461,13 +470,18 @@ void CanvasCaptureHandler::AddVideoCapturerSourceToVideoTrack(
   std::string str_track_id;
   base::Base64Encode(base::RandBytesAsString(64), &str_track_id);
   const blink::WebString track_id = blink::WebString::FromASCII(str_track_id);
-  blink::WebMediaStreamSource webkit_source;
+  media::VideoCaptureFormats preferred_formats = source->GetPreferredFormats();
   std::unique_ptr<MediaStreamVideoSource> media_stream_source(
       new MediaStreamVideoCapturerSource(
           MediaStreamSource::SourceStoppedCallback(), std::move(source)));
+  blink::WebMediaStreamSource webkit_source;
   webkit_source.Initialize(track_id, blink::WebMediaStreamSource::kTypeVideo,
                            track_id, false);
   webkit_source.SetExtraData(media_stream_source.get());
+  webkit_source.SetCapabilities(ComputeCapabilitiesForVideoSource(
+      track_id, preferred_formats,
+      media::VideoFacingMode::MEDIA_VIDEO_FACING_NONE,
+      false /* is_device_capture */));
 
   web_track->Initialize(webkit_source);
   web_track->SetTrackData(new MediaStreamVideoTrack(

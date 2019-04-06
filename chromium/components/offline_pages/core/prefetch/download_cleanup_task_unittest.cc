@@ -39,11 +39,8 @@ class DownloadCleanupTaskTest : public PrefetchTaskTestBase {
                                 std::make_pair(kTestFilePath, kTestFileSize));
     }
 
-    DownloadCleanupTask task(&dispatcher_, store(), outstanding_download_ids,
-                             success_downloads);
-    ExpectTaskCompletes(&task);
-    task.Run();
-    RunUntilIdle();
+    RunTask(std::make_unique<DownloadCleanupTask>(
+        &dispatcher_, store(), outstanding_download_ids, success_downloads));
   }
 
  private:
@@ -124,7 +121,7 @@ TEST_F(DownloadCleanupTaskTest, SkipForOngoingDownloadWithMaxAttempts) {
 TEST_F(DownloadCleanupTaskTest, NoUpdateForOtherStates) {
   std::set<PrefetchItem> items;
   std::vector<PrefetchItemState> all_other_states =
-      PrefetchTaskTestBase::GetAllStatesExcept(PrefetchItemState::DOWNLOADING);
+      GetAllStatesExcept({PrefetchItemState::DOWNLOADING});
   for (const auto& state : all_other_states) {
     PrefetchItem item = item_generator()->CreateItem(state);
     item.download_initiation_attempts =

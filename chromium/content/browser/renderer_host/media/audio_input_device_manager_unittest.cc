@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -36,7 +37,7 @@ class MockAudioInputDeviceManagerListener
     : public MediaStreamProviderListener {
  public:
   MockAudioInputDeviceManagerListener() {}
-  virtual ~MockAudioInputDeviceManagerListener() {}
+  ~MockAudioInputDeviceManagerListener() override {}
 
   MOCK_METHOD2(Opened, void(MediaStreamType, const int));
   MOCK_METHOD2(Closed, void(MediaStreamType, const int));
@@ -99,7 +100,7 @@ class MAYBE_AudioInputDeviceManagerTest : public testing::Test {
   void WaitForOpenCompletion() {
     media::WaitableMessageLoopEvent event;
     audio_manager_->GetTaskRunner()->PostTaskAndReply(
-        FROM_HERE, base::BindOnce(&base::DoNothing), event.GetClosure());
+        FROM_HERE, base::DoNothing(), event.GetClosure());
     // Runs the loop and waits for the audio thread to call event's
     // closure.
     event.RunAndWait();

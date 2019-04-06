@@ -7,6 +7,46 @@ import("//tools/grit/grit_rule.gni")
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
+if (closure_compile) {
+  group("closure_compile") {
+    deps = [
+      "cryptotoken:closure_compile",
+      "engagement:closure_compile",
+    ]
+    if (is_linux || is_win || is_mac) {
+      deps += [
+        "md_bookmarks:closure_compile",
+        "md_downloads:closure_compile",
+        "md_history:closure_compile",
+        "media_router:closure_compile",
+        "ntp4:closure_compile",
+        "pdf:closure_compile",
+        "print_preview:closure_compile",
+        "settings:closure_compile",
+      ]
+    }
+    if (is_chromeos) {
+      deps += [
+        "chromeos:closure_compile",
+        "md_user_manager:closure_compile",
+        "signin/dice_sync_confirmation:closure_compile",
+        "welcome/dice_welcome:closure_compile",
+      ]
+    }
+    if (enable_extensions) {
+      deps += [ "md_extensions:closure_compile" ]
+    }
+    if (is_android) {
+      deps += [
+        "eoc_internals:closure_compile",
+        "offline_pages:closure_compile",
+        "snippets_internals:closure_compile",
+        "webapks:closure_compile",
+      ]
+    }
+  }
+}
+
 grit("invalidations_resources") {
   source = "invalidations_resources.grd"
   defines = chrome_grit_defines
@@ -155,25 +195,29 @@ if (enable_extensions) {
 
 if (enable_print_preview) {
   grit("print_preview_resources") {
-    source = "print_preview/print_preview_resources.grd"
+    if (optimize_webui) {
+      source = "print_preview/print_preview_resources_vulcanized.grd"
+
+      # The .grd contains references to generated files.
+      source_is_generated = true
+
+      deps = [
+        "//chrome/browser/resources/print_preview:build",
+      ]
+      grit_flags = [
+        "-E",
+        "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+      ]
+    } else {
+      source = "print_preview/print_preview_resources.grd"
+    }
+
     defines = chrome_grit_defines
     outputs = [
       "grit/print_preview_resources.h",
       "grit/print_preview_resources_map.cc",
       "grit/print_preview_resources_map.h",
       "print_preview_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-}
-
-if (enable_vr) {
-  grit("vr_shell_resources") {
-    source = "vr_shell_resources.grd"
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/vr_shell_resources.h",
-      "vr_shell_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }

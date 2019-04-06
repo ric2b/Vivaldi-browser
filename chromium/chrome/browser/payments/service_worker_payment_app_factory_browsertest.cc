@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -56,12 +57,20 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
+  PermissionRequestManager* GetPermissionRequestManager() {
+    return PermissionRequestManager::FromWebContents(
+        browser()->tab_strip_model()->GetActiveWebContents());
+  }
+
   // Starts the test severs and opens a test page on alicepay.com.
   void SetUpOnMainThread() override {
     ASSERT_TRUE(StartTestServer("alicepay.com", &alicepay_));
     ASSERT_TRUE(StartTestServer("bobpay.com", &bobpay_));
     ASSERT_TRUE(StartTestServer("frankpay.com", &frankpay_));
     ASSERT_TRUE(StartTestServer("georgepay.com", &georgepay_));
+
+    GetPermissionRequestManager()->set_auto_response_for_test(
+        PermissionRequestManager::ACCEPT_ALL);
   }
 
   // Invokes the JavaScript function install(|method_name|) in
@@ -101,7 +110,7 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
     content::BrowserContext* context = web_contents->GetBrowserContext();
     auto downloader = std::make_unique<TestDownloader>(
         content::BrowserContext::GetDefaultStoragePartition(context)
-            ->GetURLRequestContext());
+            ->GetURLLoaderFactoryForBrowserProcess());
     downloader->AddTestServerURL("https://alicepay.com/",
                                  alicepay_.GetURL("alicepay.com", "/"));
     downloader->AddTestServerURL("https://bobpay.com/",
@@ -114,8 +123,10 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
         ->SetDownloaderAndIgnorePortInAppScopeForTesting(std::move(downloader));
 
     std::vector<mojom::PaymentMethodDataPtr> method_data;
-    method_data.emplace_back(mojom::PaymentMethodData::New());
-    method_data.back()->supported_methods = payment_method_identifiers;
+    for (const auto& identifier : payment_method_identifiers) {
+      method_data.emplace_back(mojom::PaymentMethodData::New());
+      method_data.back()->supported_method = identifier;
+    }
 
     base::RunLoop run_loop;
     ServiceWorkerPaymentAppFactory::GetInstance()->GetAllPaymentApps(
@@ -124,6 +135,7 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
             Profile::FromBrowserContext(context),
             ServiceAccessType::EXPLICIT_ACCESS),
         method_data,
+        /*may_crawl_for_installable_payment_apps=*/true,
         base::BindOnce(
             &ServiceWorkerPaymentAppFactoryBrowserTest::OnGotAllPaymentApps,
             base::Unretained(this)),
@@ -151,9 +163,7 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
       }
     }
     ASSERT_NE(nullptr, app) << "No app found in scope " << scope;
-    EXPECT_NE(app->enabled_methods.end(),
-              std::find(app->enabled_methods.begin(),
-                        app->enabled_methods.end(), expected_method))
+    EXPECT_TRUE(base::ContainsValue(app->enabled_methods, expected_method))
         << "Unable to find payment method " << expected_method
         << " in the list of enabled methods for the app installed from "
         << app->scope;
@@ -162,7 +172,9 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
  private:
   // Called by the factory upon completed app lookup. These |apps| have only
   // valid payment methods.
-  void OnGotAllPaymentApps(content::PaymentAppProvider::PaymentApps apps) {
+  void OnGotAllPaymentApps(
+      content::PaymentAppProvider::PaymentApps apps,
+      ServiceWorkerPaymentAppFactory::InstallablePaymentApps installable_apps) {
     apps_ = std::move(apps);
   }
 

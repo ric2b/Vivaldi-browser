@@ -11,21 +11,19 @@ namespace chromeos {
 
 namespace tether {
 
-FakeBleConnectionManager::StatusAndRegisteredMessageTypes::
-    StatusAndRegisteredMessageTypes()
+FakeBleConnectionManager::StatusAndRegisteredConnectionRequestIds::
+    StatusAndRegisteredConnectionRequestIds()
     : status(cryptauth::SecureChannel::Status::DISCONNECTED) {}
 
-FakeBleConnectionManager::StatusAndRegisteredMessageTypes::
-    StatusAndRegisteredMessageTypes(
-        const StatusAndRegisteredMessageTypes& other) = default;
+FakeBleConnectionManager::StatusAndRegisteredConnectionRequestIds::
+    StatusAndRegisteredConnectionRequestIds(
+        const StatusAndRegisteredConnectionRequestIds& other) = default;
 
-FakeBleConnectionManager::StatusAndRegisteredMessageTypes::
-    ~StatusAndRegisteredMessageTypes() = default;
+FakeBleConnectionManager::StatusAndRegisteredConnectionRequestIds::
+    ~StatusAndRegisteredConnectionRequestIds() = default;
 
 FakeBleConnectionManager::FakeBleConnectionManager()
     : BleConnectionManager(nullptr,
-                           nullptr,
-                           nullptr,
                            nullptr,
                            nullptr,
                            nullptr) {}
@@ -95,17 +93,18 @@ bool FakeBleConnectionManager::IsRegistered(const std::string& device_id) {
 
 void FakeBleConnectionManager::RegisterRemoteDevice(
     const std::string& device_id,
-    const MessageType& connection_reason) {
-  StatusAndRegisteredMessageTypes& value = device_id_map_[device_id];
-  value.registered_message_types.insert(connection_reason);
+    const base::UnguessableToken& request_id,
+    secure_channel::ConnectionPriority connection_priority) {
+  StatusAndRegisteredConnectionRequestIds& value = device_id_map_[device_id];
+  value.registered_request_ids.insert(request_id);
 }
 
 void FakeBleConnectionManager::UnregisterRemoteDevice(
     const std::string& device_id,
-    const MessageType& connection_reason) {
-  StatusAndRegisteredMessageTypes& value = device_id_map_[device_id];
-  value.registered_message_types.erase(connection_reason);
-  if (value.registered_message_types.empty())
+    const base::UnguessableToken& request_id) {
+  StatusAndRegisteredConnectionRequestIds& value = device_id_map_[device_id];
+  value.registered_request_ids.erase(request_id);
+  if (value.registered_request_ids.empty())
     device_id_map_.erase(device_id);
 }
 

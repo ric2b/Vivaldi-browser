@@ -7,13 +7,18 @@
 #include "base/guid.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sessions_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
+#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
+#include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
 
 using sessions_helper::CheckInitialState;
 using sessions_helper::DeleteForeignSession;
@@ -27,7 +32,23 @@ using sessions_helper::SessionWindowMap;
 using sessions_helper::SyncedSessionVector;
 using sessions_helper::WindowsMatch;
 
-class TwoClientSessionsSyncTest : public SyncTest {
+// Class that enables or disables USS based on test parameter. Must be the first
+// base class of the test fixture.
+class UssSwitchToggler : public testing::WithParamInterface<bool> {
+ public:
+  UssSwitchToggler() {
+    if (GetParam()) {
+      override_features_.InitAndEnableFeature(switches::kSyncUSSSessions);
+    } else {
+      override_features_.InitAndDisableFeature(switches::kSyncUSSSessions);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList override_features_;
+};
+
+class TwoClientSessionsSyncTest : public UssSwitchToggler, public SyncTest {
  public:
   TwoClientSessionsSyncTest() : SyncTest(TWO_CLIENT) {}
   ~TwoClientSessionsSyncTest() override {}
@@ -59,8 +80,7 @@ static const char* kURLTemplate =
 // (as well as multi-window). We're currently only checking basic single-window/
 // single-tab functionality.
 
-
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest,
                        E2E_ENABLED(SingleClientChanged)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
@@ -73,8 +93,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
   WaitForForeignSessionsToSync(0, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
-                       E2E_ENABLED(AllChanged)) {
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest, E2E_ENABLED(AllChanged)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   // Open tabs on all clients and retain window information.
@@ -95,7 +114,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest,
                        SingleClientEnabledEncryption) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
@@ -108,11 +127,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
   ASSERT_TRUE(IsEncryptionComplete(1));
 }
 
-// This test is flaky on several platforms:
-//    http://crbug.com/420979
-//    http://crbug.com/421167
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
-                       DISABLED_SingleClientEnabledEncryptionAndChanged) {
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest,
+                       SingleClientEnabledEncryptionAndChanged) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -123,7 +139,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
   WaitForForeignSessionsToSync(0, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest,
                        BothClientsEnabledEncryption) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
@@ -137,7 +153,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
   ASSERT_TRUE(IsEncryptionComplete(1));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest, BothChanged) {
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest, BothChanged) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -154,7 +170,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest, BothChanged) {
   WaitForForeignSessionsToSync(0, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest, DeleteIdleSession) {
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest, DeleteIdleSession) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -170,13 +186,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest, DeleteIdleSession) {
 
   // Client 1 now deletes client 0's tabs. This frees the memory of sessions1.
   DeleteForeignSession(1, sessions1[0]->session_tag);
+  ASSERT_TRUE(GetClient(1)->HasUnsyncedItems());
   ASSERT_TRUE(GetClient(1)->AwaitMutualSyncCycleCompletion(GetClient(0)));
-  ASSERT_FALSE(GetSessionData(1, &sessions1));
+  EXPECT_FALSE(GetSessionData(1, &sessions1));
 }
 
-// Fails all release trybots. crbug.com/263369.
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
-                       DeleteActiveSession) {
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest, DeleteActiveSession) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -192,15 +207,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest,
 
   // Client 1 now deletes client 0's tabs. This frees the memory of sessions1.
   DeleteForeignSession(1, sessions1[0]->session_tag);
+  ASSERT_TRUE(GetClient(1)->HasUnsyncedItems());
   ASSERT_TRUE(GetClient(1)->AwaitMutualSyncCycleCompletion(GetClient(0)));
   ASSERT_FALSE(GetSessionData(1, &sessions1));
 
   // Client 0 becomes active again with a new tab.
   ASSERT_TRUE(OpenTab(0, GURL(kURL2)));
   WaitForForeignSessionsToSync(0, 1);
+  EXPECT_TRUE(GetSessionData(1, &sessions1));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest, MultipleWindowsMultipleTabs) {
+IN_PROC_BROWSER_TEST_P(TwoClientSessionsSyncTest, MultipleWindowsMultipleTabs) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   ASSERT_TRUE(CheckInitialState(0));
@@ -216,3 +233,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientSessionsSyncTest, MultipleWindowsMultipleTabs) {
 
   WaitForForeignSessionsToSync(0, 1);
 }
+
+INSTANTIATE_TEST_CASE_P(USS,
+                        TwoClientSessionsSyncTest,
+                        ::testing::Values(false, true));
+
+}  // namespace

@@ -4,10 +4,8 @@
 
 #include "ui/views/accessibility/ax_view_obj_wrapper.h"
 
-#include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/events/event_utils.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/view.h"
@@ -22,6 +20,10 @@ AXViewObjWrapper::AXViewObjWrapper(View* view)  : view_(view) {
 
 AXViewObjWrapper::~AXViewObjWrapper() {}
 
+bool AXViewObjWrapper::IsIgnored() {
+  return view_->GetViewAccessibility().is_ignored();
+}
+
 AXAuraObjWrapper* AXViewObjWrapper::GetParent() {
   AXAuraObjCache* cache = AXAuraObjCache::GetInstance();
   if (view_->parent())
@@ -30,11 +32,14 @@ AXAuraObjWrapper* AXViewObjWrapper::GetParent() {
   if (view_->GetWidget())
     return cache->GetOrCreate(view_->GetWidget());
 
-  return NULL;
+  return nullptr;
 }
 
 void AXViewObjWrapper::GetChildren(
     std::vector<AXAuraObjWrapper*>* out_children) {
+  if (view_->GetViewAccessibility().IsLeaf())
+    return;
+
   // TODO(dtseng): Need to handle |Widget| child of |View|.
   for (int i = 0; i < view_->child_count(); ++i) {
     if (!view_->child_at(i)->visible())

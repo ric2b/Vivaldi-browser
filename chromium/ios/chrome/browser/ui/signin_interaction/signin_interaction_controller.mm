@@ -4,9 +4,11 @@
 
 #import "ios/chrome/browser/ui/signin_interaction/signin_interaction_controller.h"
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -17,6 +19,7 @@
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/chrome_signin_view_controller.h"
 #import "ios/chrome/browser/ui/signin_interaction/signin_interaction_presenting.h"
+#include "ios/chrome/browser/unified_consent/feature.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_interaction_manager.h"
@@ -56,11 +59,6 @@ using signin_ui::CompletionCallback;
 
 @synthesize dispatcher = dispatcher_;
 @synthesize presenter = presenter_;
-
-- (id)init {
-  NOTREACHED();
-  return nil;
-}
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                 presentationProvider:(id<SigninInteractionPresenting>)presenter
@@ -109,7 +107,9 @@ using signin_ui::CompletionCallback;
   completionCallback_ = [completion copy];
   ios::ChromeIdentityService* identityService =
       ios::GetChromeBrowserProvider()->GetChromeIdentityService();
-  if (identity) {
+  if (IsUnifiedConsentEnabled()) {
+    [self showSigninViewControllerWithIdentity:identity identityAdded:NO];
+  } else if (identity) {
     DCHECK(identityService->IsValidIdentity(identity));
     DCHECK(!signinViewController_);
     [self showSigninViewControllerWithIdentity:identity identityAdded:NO];

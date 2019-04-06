@@ -662,7 +662,7 @@ GL_FUNCTIONS = [
   'arguments':
       'GLenum target, GLenum pname, GLsizei bufSize, GLsizei* length, '
       'void** params', },
-{ 'return_type': 'void',
+{ 'return_type': 'GLuint',
   'versions': [{ 'name': 'glGetDebugMessageLog' },
                { 'name': 'glGetDebugMessageLogKHR',
                  'extensions': ['GL_KHR_debug'] }],
@@ -1834,7 +1834,10 @@ OSMESA_FUNCTIONS = [
   'arguments': 'GLint pname, GLint* value', },
 { 'return_type': 'OSMESAproc',
   'names': ['OSMesaGetProcAddress'],
-  'arguments': 'const char* funcName', },
+  'arguments': 'const char* funcName',
+  'logging_code': """
+  GL_SERVICE_LOG("GL_RESULT: " << reinterpret_cast<void*>(result));
+""", },
 { 'return_type': 'GLboolean',
   'names': ['OSMesaMakeCurrent'],
   'arguments': 'OSMesaContext ctx, void* buffer, GLenum type, GLsizei width, '
@@ -1911,6 +1914,11 @@ EGL_FUNCTIONS = [
   'names': ['eglCreateWindowSurface'],
   'arguments': 'EGLDisplay dpy, EGLConfig config, EGLNativeWindowType win, '
                'const EGLint* attrib_list', },
+{ 'return_type': 'EGLint',
+  'known_as': 'eglDebugMessageControlKHR',
+  'versions': [{ 'name': 'eglDebugMessageControlKHR',
+                 'client_extensions': ['EGL_KHR_debug'], }],
+  'arguments': 'EGLDEBUGPROCKHR callback, const EGLAttrib* attrib_list', },
 { 'return_type': 'EGLBoolean',
   'names': ['eglDestroyContext'],
   'arguments': 'EGLDisplay dpy, EGLContext ctx', },
@@ -2019,7 +2027,10 @@ EGL_FUNCTIONS = [
                'const EGLint* attrib_list', },
 { 'return_type': '__eglMustCastToProperFunctionPointerType',
   'names': ['eglGetProcAddress'],
-  'arguments': 'const char* procname', },
+  'arguments': 'const char* procname',
+  'logging_code': """
+  GL_SERVICE_LOG("GL_RESULT: " << reinterpret_cast<void*>(result));
+""", },
 { 'return_type': 'EGLBoolean',
   'versions': [{ 'name': 'eglGetSyncAttribKHR',
                  'extensions': [
@@ -2042,6 +2053,12 @@ EGL_FUNCTIONS = [
 { 'return_type': 'EGLBoolean',
   'names': ['eglInitialize'],
   'arguments': 'EGLDisplay dpy, EGLint* major, EGLint* minor', },
+{ 'return_type': 'EGLint',
+  'known_as': 'eglLabelObjectKHR',
+  'versions': [{ 'name': 'eglLabelObjectKHR',
+                 'client_extensions': ['EGL_KHR_debug'], }],
+  'arguments': 'EGLDisplay display, EGLenum objectType, EGLObjectKHR object, '
+    'EGLLabelKHR label', },
 { 'return_type': 'EGLBoolean',
   'names': ['eglMakeCurrent'],
   'arguments':
@@ -2075,6 +2092,11 @@ EGL_FUNCTIONS = [
   'names': ['eglQueryContext'],
   'arguments':
       'EGLDisplay dpy, EGLContext ctx, EGLint attribute, EGLint* value', },
+{ 'return_type': 'EGLBoolean',
+  'known_as': 'eglQueryDebugKHR',
+  'versions': [{ 'name': 'eglQueryDebugKHR',
+                 'client_extensions': ['EGL_KHR_debug'], }],
+  'arguments': 'EGLint attribute, EGLAttrib* value', },
 { 'return_type': 'EGLBoolean',
   'versions': [{ 'name': 'eglQueryStreamKHR',
                  'extensions': ['EGL_KHR_stream'] }],
@@ -2783,13 +2805,13 @@ namespace gl {
   if set_name == 'gl':
     file.write("""\
 void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
-                                         const ExtensionSet& extensions) {
+                                         const gfx::ExtensionSet& extensions) {
 """)
   elif set_name == 'egl':
     file.write("""\
 void DriverEGL::InitializeClientExtensionBindings() {
   std::string client_extensions(GetClientExtensions());
-  ExtensionSet extensions(MakeExtensionSet(client_extensions));
+  gfx::ExtensionSet extensions(gfx::MakeExtensionSet(client_extensions));
   ALLOW_UNUSED_LOCAL(extensions);
 
 """)
@@ -2797,7 +2819,7 @@ void DriverEGL::InitializeClientExtensionBindings() {
     file.write("""\
 void Driver%s::InitializeExtensionBindings() {
   std::string platform_extensions(GetPlatformExtensions());
-  ExtensionSet extensions(MakeExtensionSet(platform_extensions));
+  gfx::ExtensionSet extensions(gfx::MakeExtensionSet(platform_extensions));
   ALLOW_UNUSED_LOCAL(extensions);
 
 """ % (set_name.upper(),))
@@ -2806,7 +2828,7 @@ void Driver%s::InitializeExtensionBindings() {
     # Extra space at the end of the extension name is intentional,
     # it is used as a separator
     for extension in extensions:
-      file.write('  ext.b_%s = HasExtension(%s, "%s");\n' %
+      file.write('  ext.b_%s = gfx::HasExtension(%s, "%s");\n' %
                  (extension, extension_var, extension))
 
     for func in extension_funcs:
@@ -2825,7 +2847,7 @@ void Driver%s::InitializeExtensionBindings() {
 
 void DriverEGL::InitializeExtensionBindings() {
   std::string platform_extensions(GetPlatformExtensions());
-  ExtensionSet extensions(MakeExtensionSet(platform_extensions));
+  gfx::ExtensionSet extensions(gfx::MakeExtensionSet(platform_extensions));
   ALLOW_UNUSED_LOCAL(extensions);
 
 """)
@@ -2895,35 +2917,52 @@ void DriverEGL::InitializeExtensionBindings() {
     file.write('\n')
     file.write('%s Debug%sApi::%sFn(%s) {\n' %
         (return_type, set_name.upper(), func['known_as'], arguments))
+    # Strip pointer types.
     argument_names = re.sub(
         r'(const )?[a-zA-Z0-9_]+\** ([a-zA-Z0-9_]+)', r'\2', arguments)
     argument_names = re.sub(
         r'(const )?[a-zA-Z0-9_]+\** ([a-zA-Z0-9_]+)', r'\2', argument_names)
+    # Replace certain `Type varname` combinations with TYPE_varname.
     log_argument_names = re.sub(
         r'const char\* ([a-zA-Z0-9_]+)', r'CONSTCHAR_\1', arguments)
     log_argument_names = re.sub(
         r'(const )?[a-zA-Z0-9_]+\* ([a-zA-Z0-9_]+)',
         r'CONSTVOID_\2', log_argument_names)
     log_argument_names = re.sub(
-        r'(?<!E)GLenum ([a-zA-Z0-9_]+)', r'GLenum_\1', log_argument_names)
-    log_argument_names = re.sub(
         r'(?<!E)GLboolean ([a-zA-Z0-9_]+)', r'GLboolean_\1', log_argument_names)
     log_argument_names = re.sub(
-        r'(const )?[a-zA-Z0-9_]+\** ([a-zA-Z0-9_]+)', r'\2',
-        log_argument_names)
+        r'GLDEBUGPROC ([a-zA-Z0-9_]+)',
+        r'GLDEBUGPROC_\1', log_argument_names)
+    log_argument_names = re.sub(
+        r'EGLDEBUGPROCKHR ([a-zA-Z0-9_]+)',
+        r'EGLDEBUGPROCKHR_\1', log_argument_names)
+    log_argument_names = re.sub(
+        r'(?<!E)GLenum ([a-zA-Z0-9_]+)', r'GLenum_\1', log_argument_names)
+    # Strip remaining types.
     log_argument_names = re.sub(
         r'(const )?[a-zA-Z0-9_]+\** ([a-zA-Z0-9_]+)', r'\2',
         log_argument_names)
+    # One more round of stripping to remove both type parts in `unsigned long`.
+    log_argument_names = re.sub(
+        r'(const )?[a-zA-Z0-9_]+\** ([a-zA-Z0-9_]+)', r'\2',
+        log_argument_names)
+    # Convert TYPE_varname log arguments to the corresponding log expression.
     log_argument_names = re.sub(
         r'CONSTVOID_([a-zA-Z0-9_]+)',
         r'static_cast<const void*>(\1)', log_argument_names)
     log_argument_names = re.sub(
         r'CONSTCHAR_([a-zA-Z0-9_]+)', r'\1', log_argument_names)
     log_argument_names = re.sub(
-        r'GLenum_([a-zA-Z0-9_]+)', r'GLEnums::GetStringEnum(\1)',
+        r'GLboolean_([a-zA-Z0-9_]+)', r'GLEnums::GetStringBool(\1)',
         log_argument_names)
     log_argument_names = re.sub(
-        r'GLboolean_([a-zA-Z0-9_]+)', r'GLEnums::GetStringBool(\1)',
+        r'GLDEBUGPROC_([a-zA-Z0-9_]+)',
+        r'reinterpret_cast<void*>(\1)', log_argument_names)
+    log_argument_names = re.sub(
+        r'EGLDEBUGPROCKHR_([a-zA-Z0-9_]+)',
+        r'reinterpret_cast<void*>(\1)', log_argument_names)
+    log_argument_names = re.sub(
+        r'GLenum_([a-zA-Z0-9_]+)', r'GLEnums::GetStringEnum(\1)',
         log_argument_names)
     log_argument_names = log_argument_names.replace(',', ' << ", " <<')
     if argument_names == 'void' or argument_names == '':

@@ -19,13 +19,12 @@ cr.define('extension_test_util', function() {
      *     expected to be called with.
      * @param {*=} opt_returnValue The value to return from the function call.
      */
-    testClickingCalls: function(element, callName, opt_expectedArgs,
-                                opt_returnValue) {
-      var mock = new MockController();
-      var mockMethod = mock.createFunctionMock(this, callName);
+    testClickingCalls: function(
+        element, callName, opt_expectedArgs, opt_returnValue) {
+      const mock = new MockController();
+      const mockMethod = mock.createFunctionMock(this, callName);
       mockMethod.returnValue = opt_returnValue;
-      MockMethod.prototype.addExpectation.apply(
-          mockMethod, opt_expectedArgs);
+      MockMethod.prototype.addExpectation.apply(mockMethod, opt_expectedArgs);
       MockInteractions.tap(element);
       mock.verifyMocks();
     },
@@ -55,7 +54,7 @@ cr.define('extension_test_util', function() {
         // listener, etc, but there's no need right now.
         return;
       }
-      var expected = this.listeners_[eventName].args || {};
+      const expected = this.listeners_[eventName].args || {};
       expectDeepEquals(e.detail, expected);
       this.listeners_[eventName].satisfied = true;
     },
@@ -69,15 +68,17 @@ cr.define('extension_test_util', function() {
      */
     addListener: function(target, eventName, opt_eventArgs) {
       assert(!this.listeners_.hasOwnProperty(eventName));
-      this.listeners_[eventName] =
-          {args: opt_eventArgs || {}, satisfied: false};
+      this.listeners_[eventName] = {
+        args: opt_eventArgs || {},
+        satisfied: false
+      };
       target.addEventListener(eventName, this.onEvent_.bind(this, eventName));
     },
 
     /** Verifies the expectations set. */
     verify: function() {
-      var missingEvents = [];
-      for (var key in this.listeners_) {
+      const missingEvents = [];
+      for (const key in this.listeners_) {
         if (!this.listeners_[key].satisfied)
           missingEvents.push(key);
       }
@@ -112,7 +113,7 @@ cr.define('extension_test_util', function() {
     setItemAllowedOnFileUrls: function(id, enabled) {},
 
     /** @override */
-    setItemAllowedOnAllSites: function(id, enabled) {},
+    setItemHostAccess: function(id, hostAccess) {},
 
     /** @override */
     setItemCollectsErrors: function(id, enabled) {},
@@ -143,8 +144,8 @@ cr.define('extension_test_util', function() {
    * @return {boolean} whether or not the element passed in is visible
    */
   function isElementVisible(element) {
-    var rect = element.getBoundingClientRect();
-    return rect.width * rect.height > 0; // Width and height is never negative.
+    const rect = element.getBoundingClientRect();
+    return rect.width * rect.height > 0;  // Width and height is never negative.
   }
 
   /**
@@ -158,9 +159,9 @@ cr.define('extension_test_util', function() {
    * @return {boolean}
    */
   function isVisible(parentEl, selector, checkLightDom) {
-    var element = (checkLightDom ? parentEl.querySelector : parentEl.$$).call(
-                      parentEl, selector);
-    var rect = element ? element.getBoundingClientRect() : null;
+    const element = (checkLightDom ? parentEl.querySelector : parentEl.$$)
+                        .call(parentEl, selector);
+    const rect = element ? element.getBoundingClientRect() : null;
     return !!rect && rect.width * rect.height > 0;
   }
 
@@ -174,10 +175,10 @@ cr.define('extension_test_util', function() {
    * @param {string=} opt_expectedText The expected textContent value.
    */
   function testVisible(parentEl, selector, expectedVisible, opt_expectedText) {
-    var visible = isVisible(parentEl, selector);
+    const visible = isVisible(parentEl, selector);
     expectEquals(expectedVisible, visible, selector);
     if (expectedVisible && visible && opt_expectedText) {
-      var element = parentEl.$$(selector);
+      const element = parentEl.$$(selector);
       expectEquals(opt_expectedText, element.textContent.trim(), selector);
     }
   }
@@ -189,9 +190,10 @@ cr.define('extension_test_util', function() {
    * @return {chrome.developerPrivate.ExtensionInfo}
    */
   function createExtensionInfo(opt_properties) {
-    var id = opt_properties && opt_properties.hasOwnProperty('id') ?
-        opt_properties[id] : 'a'.repeat(32);
-    var baseUrl = 'chrome-extension://' + id + '/';
+    const id = opt_properties && opt_properties.hasOwnProperty('id') ?
+        opt_properties['id'] :
+        'a'.repeat(32);
+    const baseUrl = 'chrome-extension://' + id + '/';
     return Object.assign(
         {
           commands: [],
@@ -211,7 +213,7 @@ cr.define('extension_test_util', function() {
           name: 'Wonderful Extension',
           runtimeErrors: [],
           runtimeWarnings: [],
-          permissions: [],
+          permissions: {simplePermissions: []},
           state: 'ENABLED',
           type: 'EXTENSION',
           userMayModify: true,
@@ -229,14 +231,15 @@ cr.define('extension_test_util', function() {
    */
   function testIcons(e) {
     e.querySelectorAll('* /deep/ iron-icon').forEach(function(icon) {
-      if(isElementVisible(icon)) {
-        var svg = icon.$$('svg');
-        expectTrue(!!svg && svg.innerHTML != '',
-                   'icon "' + icon.icon + '" is not present');
+      if (isElementVisible(icon)) {
+        const svg = icon.$$('svg');
+        expectTrue(
+            !!svg && svg.innerHTML != '',
+            'icon "' + icon.icon + '" is not present');
       }
     });
 
-    e.querySelectorAll('* /deep/ [is=paper-icon-button-light]')
+    e.querySelectorAll('* /deep/ paper-icon-button-light')
         .forEach(function(button) {
           if (isElementVisible(button)) {
             expectTrue(
@@ -245,6 +248,35 @@ cr.define('extension_test_util', function() {
           }
         });
   }
+
+  /**
+   * Finds all nodes matching |query| under |root|, within self and children's
+   * Shadow DOM.
+   * @param {!Node} root
+   * @param {string} query The CSS query
+   * @return {!Array<!HTMLElement>}
+   */
+  function findMatches(root, query) {
+    let elements = new Set();
+    function doSearch(node) {
+      if (node.nodeType == Node.ELEMENT_NODE) {
+        const matches = node.querySelectorAll(query);
+        for (let match of matches)
+          elements.add(match);
+      }
+      let child = node.firstChild;
+      while (child !== null) {
+        doSearch(child);
+        child = child.nextSibling;
+      }
+      const shadowRoot = node.shadowRoot;
+      if (shadowRoot)
+        doSearch(shadowRoot);
+    }
+    doSearch(root);
+    return Array.from(elements);
+  }
+
 
   return {
     ClickMock: ClickMock,
@@ -255,5 +287,6 @@ cr.define('extension_test_util', function() {
     testVisible: testVisible,
     createExtensionInfo: createExtensionInfo,
     testIcons: testIcons,
+    findMatches: findMatches,
   };
 });

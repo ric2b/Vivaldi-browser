@@ -16,8 +16,8 @@ namespace content {
 class DownloadManager;
 }
 
-namespace net {
-class URLRequestContextGetter;
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace prefs {
@@ -80,9 +80,9 @@ class ServicesDelegate {
   // Initializes internal state using the ServicesCreator.
   virtual void Initialize(bool v4_enabled = false) = 0;
 
-  // Creates the CSD service for the given |context_getter|.
+  // Creates the CSD service for the given |url_loader_factory|.
   virtual void InitializeCsdService(
-      net::URLRequestContextGetter* context_getter) = 0;
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) = 0;
 
   // Shuts down the download service.
   virtual void ShutdownServices() = 0;
@@ -104,8 +104,8 @@ class ServicesDelegate {
   virtual DownloadProtectionService* GetDownloadService() = 0;
 
   virtual void StartOnIOThread(
-    net::URLRequestContextGetter* url_request_context_getter,
-    const V4ProtocolConfig& v4_config) = 0;
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      const V4ProtocolConfig& v4_config) = 0;
   virtual void StopOnIOThread(bool shutdown) = 0;
 
   virtual void CreatePasswordProtectionService(Profile* profile) = 0;

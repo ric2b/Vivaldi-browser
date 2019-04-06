@@ -7,7 +7,7 @@
 
 #include "content/common/content_security_policy/content_security_policy.h"
 #include "content/common/content_security_policy/csp_context.h"
-#include "third_party/WebKit/public/platform/WebContentSecurityPolicyStruct.h"
+#include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 
 namespace content {
 
@@ -16,6 +16,13 @@ namespace content {
 // in blink.
 ContentSecurityPolicy BuildContentSecurityPolicy(
     const blink::WebContentSecurityPolicy&);
+
+// Convert a WebContentSecurityPolicyList into a list of ContentSecurityPolicy.
+std::vector<ContentSecurityPolicy> BuildContentSecurityPolicyList(
+    const blink::WebContentSecurityPolicyList&);
+
+CSPSource BuildCSPSource(
+    const blink::WebContentSecurityPolicySourceExpression&);
 
 // Convert a CSPViolationParams into a WebContentSecurityPolicyViolation. These
 // two classes represent the exact same thing, but one is in content, the other

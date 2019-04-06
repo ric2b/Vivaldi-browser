@@ -8,13 +8,15 @@
 #include <memory>
 #include <set>
 
+#include "base/files/scoped_file.h"
 #include "base/memory/singleton.h"
 #include "base/threading/thread.h"
 #include "media/capture/capture_export.h"
-#include "media/capture/video/chromeos/mojo/arc_camera3_service.mojom.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
+#include "media/capture/video/chromeos/mojo/cros_camera_service.mojom.h"
+#include "media/capture/video/video_capture_device_factory.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
+#include "mojo/public/cpp/platform/platform_channel_server_endpoint.h"
 
 namespace base {
 
@@ -28,7 +30,7 @@ namespace media {
 class CAPTURE_EXPORT CameraClientObserver {
  public:
   virtual ~CameraClientObserver();
-  virtual void OnChannelCreated(arc::mojom::CameraModulePtr camera_module) = 0;
+  virtual void OnChannelCreated(cros::mojom::CameraModulePtr camera_module) = 0;
 };
 
 // The CameraHalDispatcherImpl hosts and waits on the unix domain socket
@@ -40,21 +42,26 @@ class CAPTURE_EXPORT CameraClientObserver {
 // CameraHalClients.
 //
 // For general documentation about the CameraHalDispater Mojo interface see the
-// comments in mojo/arc_camera3_service.mojom.
+// comments in mojo/cros_camera_service.mojom.
 class CAPTURE_EXPORT CameraHalDispatcherImpl final
-    : public arc::mojom::CameraHalDispatcher {
+    : public cros::mojom::CameraHalDispatcher {
  public:
   static CameraHalDispatcherImpl* GetInstance();
 
-  bool Start();
+  bool Start(MojoJpegDecodeAcceleratorFactoryCB jda_factory,
+             MojoJpegEncodeAcceleratorFactoryCB jea_factory);
 
   void AddClientObserver(std::unique_ptr<CameraClientObserver> observer);
 
   bool IsStarted();
 
   // CameraHalDispatcher implementations.
-  void RegisterServer(arc::mojom::CameraHalServerPtr server) final;
-  void RegisterClient(arc::mojom::CameraHalClientPtr client) final;
+  void RegisterServer(cros::mojom::CameraHalServerPtr server) final;
+  void RegisterClient(cros::mojom::CameraHalClientPtr client) final;
+  void GetJpegDecodeAccelerator(
+      media::mojom::JpegDecodeAcceleratorRequest jda_request) final;
+  void GetJpegEncodeAccelerator(
+      media::mojom::JpegEncodeAcceleratorRequest jea_request) final;
 
  private:
   friend struct base::DefaultSingletonTraits<CameraHalDispatcherImpl>;
@@ -72,8 +79,7 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
 
   // Waits for incoming connections (from HAL process or from client processes).
   // Runs on |blocking_io_thread_|.
-  void StartServiceLoop(mojo::edk::ScopedPlatformHandle socket_fd,
-                        base::WaitableEvent* started);
+  void StartServiceLoop(base::ScopedFD socket_fd, base::WaitableEvent* started);
 
   void AddClientObserverOnProxyThread(
       std::unique_ptr<CameraClientObserver> observer);
@@ -89,7 +95,7 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
 
   void StopOnProxyThread();
 
-  mojo::edk::ScopedPlatformHandle proxy_fd_;
+  base::ScopedFD proxy_fd_;
   base::ScopedFD cancel_pipe_;
 
   base::Thread proxy_thread_;
@@ -97,15 +103,19 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   scoped_refptr<base::SingleThreadTaskRunner> proxy_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> blocking_io_task_runner_;
 
-  mojo::BindingSet<arc::mojom::CameraHalDispatcher> binding_set_;
+  mojo::BindingSet<cros::mojom::CameraHalDispatcher> binding_set_;
 
-  arc::mojom::CameraHalServerPtr camera_hal_server_;
+  cros::mojom::CameraHalServerPtr camera_hal_server_;
 
   std::set<std::unique_ptr<CameraClientObserver>> client_observers_;
+
+  MojoJpegDecodeAcceleratorFactoryCB jda_factory_;
+
+  MojoJpegEncodeAcceleratorFactoryCB jea_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CameraHalDispatcherImpl);
 };
 
 }  // namespace media
 
-#endif  // MEDIA_CAPTURE_VIDEO_CHROMEOS_ARC_CAMERA3_SERVICE_H_
+#endif  // MEDIA_CAPTURE_VIDEO_CHROMEOS_CAMERA_HAL_DISPATCHER_IMPL_H_

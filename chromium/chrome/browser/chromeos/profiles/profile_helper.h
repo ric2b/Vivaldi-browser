@@ -27,6 +27,10 @@ namespace base {
 class FilePath;
 }
 
+namespace chromeos {
+class QuickUnlockPrivateUnitTest;
+}
+
 namespace extensions {
 class ExtensionGarbageCollectorChromeOSUnitTest;
 }
@@ -132,7 +136,7 @@ class ProfileHelper
 
   // Initialize a bunch of services that are tied to a browser profile.
   // TODO(dzhioev): Investigate whether or not this method is needed.
-  void ProfileStartup(Profile* profile, bool process_startup);
+  void ProfileStartup(Profile* profile);
 
   // Returns active user profile dir in a format [u-$hash].
   base::FilePath GetActiveUserProfileDir();
@@ -143,6 +147,10 @@ class ProfileHelper
   // Clears site data (cookies, history, etc) for signin profile.
   // Callback can be empty. Not thread-safe.
   void ClearSigninProfile(const base::Closure& on_clear_callback);
+
+  // Returns profile of the user associated with |account_id| if it is created
+  // and fully initialized. Otherwise, returns NULL.
+  Profile* GetProfileByAccountId(const AccountId& account_id);
 
   // Returns profile of the |user| if it is created and fully initialized.
   // Otherwise, returns NULL.
@@ -189,6 +197,7 @@ class ProfileHelper
   friend class arc::ArcSessionManagerTest;
   friend class arc::ArcAuthServiceTest;
   friend class arc::ArcCertStoreBridgeTest;
+  friend class chromeos::QuickUnlockPrivateUnitTest;
   friend class ::ArcAppTest;
   friend class ::SessionControllerClientTest;
   friend class ::test::BrowserFinderChromeOSTest;

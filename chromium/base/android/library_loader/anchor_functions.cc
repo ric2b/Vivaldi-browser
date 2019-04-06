@@ -4,20 +4,14 @@
 
 #include "base/android/library_loader/anchor_functions.h"
 
-#include "base/android/library_loader/anchor_functions_flags.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 
-// asm() macros below don't compile on x86, and haven't been validated outside
-// ARM.
-#if defined(ARCH_CPU_ARMEL)
-// These functions are here to, respectively:
-// 1. Check that functions are ordered
-// 2. Delimit the start of .text
-// 3. Delimit the end of .text
-//
-// (2) and (3) require a suitably constructed orderfile, with these
-// functions at the beginning and end. (1) doesn't need to be in it.
+#if BUILDFLAG(SUPPORTS_CODE_ORDERING)
+
+// These functions are here to delimit the start and end of the ordered part of
+// .text. They require a suitably constructed orderfile, with these functions at
+// the beginning and end.
 //
 // These functions are weird: this is due to ICF (Identical Code Folding).
 // The linker merges functions that have the same code, which would be the case
@@ -32,31 +26,22 @@
 // functions are not aliased, in case the toolchain becomes really clever.
 extern "C" {
 
-void dummy_function_to_check_ordering() {
-  asm(".word 0xe19c683d");
-  asm(".word 0xb3d2b56");
+// These functions have a well-defined ordering in this file, see the comment
+// in |IsOrderingSane()|.
+void dummy_function_end_of_ordered_text() {
+  asm(".word 0x21bad44d");
+  asm(".word 0xb815c5b0");
 }
 
-void dummy_function_to_anchor_text() {
-  asm(".word 0xe1f8940b");
-  asm(".word 0xd5190cda");
+void dummy_function_start_of_ordered_text() {
+  asm(".word 0xe4a07375");
+  asm(".word 0x66dda6dc");
 }
 
-#if BUILDFLAG(USE_LLD)
-// LLD doesn't support wildcards in the symbol ordering file, meaning that
-// using the --symbol-ordering-file doesn't work, as the ordering would have
-// to be  exhaustive (cannot be, as the ordering is generated offline).
-//
-// However, LLD will place custom sections after the main .text section, meaning
-// that the code below will be in the same segment as .text, only after it. In
-// this case, lld will also provide a __start_[section name], but the section
-// must not be empty, so we can use the same function.
-__attribute__((section("sentinel_section_after_text")))
-#endif
-void dummy_function_at_the_end_of_text() {
-  asm(".word 0x133b9613");
-  asm(".word 0xdcd8c46a");
-}
+// These two symbols are defined by anchor_functions.lds and delimit the start
+// and end of .text.
+void linker_script_start_of_text();
+void linker_script_end_of_text();
 
 }  // extern "C"
 
@@ -64,24 +49,31 @@ namespace base {
 namespace android {
 
 const size_t kStartOfText =
-    reinterpret_cast<size_t>(dummy_function_to_anchor_text);
-const size_t kEndOfText =
-    reinterpret_cast<size_t>(dummy_function_at_the_end_of_text);
+    reinterpret_cast<size_t>(linker_script_start_of_text);
+const size_t kEndOfText = reinterpret_cast<size_t>(linker_script_end_of_text);
+const size_t kStartOfOrderedText =
+    reinterpret_cast<size_t>(dummy_function_start_of_ordered_text);
+const size_t kEndOfOrderedText =
+    reinterpret_cast<size_t>(dummy_function_end_of_ordered_text);
 
-void CheckOrderingSanity() {
-  // The linker usually keeps the input file ordering for symbols.
-  // dummy_function_to_anchor_text() should then be after
-  // dummy_function_to_check_ordering() without ordering.
-  // This check is thus intended to catch the lack of ordering.
-  CHECK_LT(kStartOfText,
-           reinterpret_cast<size_t>(&dummy_function_to_check_ordering));
-  CHECK_LT(kStartOfText, kEndOfText);
-  CHECK_LT(kStartOfText,
-           reinterpret_cast<size_t>(&dummy_function_to_check_ordering));
-  CHECK_LT(kStartOfText, reinterpret_cast<size_t>(&CheckOrderingSanity));
-  CHECK_GT(kEndOfText, reinterpret_cast<size_t>(&CheckOrderingSanity));
+bool IsOrderingSane() {
+  size_t here = reinterpret_cast<size_t>(&IsOrderingSane);
+  // The symbols linker_script_start_of_text and linker_script_end_of_text
+  // should cover all of .text, and dummy_function_start_of_ordered_text and
+  // dummy_function_end_of_ordered_text should cover the ordered part of it.
+  // This check is intended to catch the lack of ordering.
+  //
+  // Ordered text can start at the start of text, but should not cover the
+  // entire range. Most addresses are distinct nonetheless as the symbols are
+  // different, but linker-defined symbols have zero size and therefore the
+  // start address could be the same as the address of
+  // dummy_function_start_of_ordered_text.
+  return kStartOfText < here && here < kEndOfText &&
+         kStartOfOrderedText < kEndOfOrderedText &&
+         kStartOfText <= kStartOfOrderedText && kEndOfOrderedText < kEndOfText;
 }
 
 }  // namespace android
 }  // namespace base
-#endif  // defined(ARCH_CPU_ARMEL)
+
+#endif  // BUILDFLAG(SUPPORTS_CODE_ORDERING)

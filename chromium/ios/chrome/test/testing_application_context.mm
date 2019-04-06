@@ -11,6 +11,9 @@
 #include "components/network_time/network_time_tracker.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -20,12 +23,18 @@ TestingApplicationContext::TestingApplicationContext()
     : application_locale_("en"),
       local_state_(nullptr),
       chrome_browser_state_manager_(nullptr),
-      was_last_shutdown_clean_(false) {
+      was_last_shutdown_clean_(false),
+      test_url_loader_factory_(
+          std::make_unique<network::TestURLLoaderFactory>()),
+      system_shared_url_loader_factory_(
+          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+              test_url_loader_factory_.get())) {
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 }
 
 TestingApplicationContext::~TestingApplicationContext() {
+  system_shared_url_loader_factory_->Detach();
   DCHECK_EQ(this, GetApplicationContext());
   DCHECK(!local_state_);
   SetApplicationContext(nullptr);
@@ -86,6 +95,19 @@ TestingApplicationContext::GetSystemURLRequestContext() {
   return nullptr;
 }
 
+scoped_refptr<network::SharedURLLoaderFactory>
+TestingApplicationContext::GetSharedURLLoaderFactory() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return system_shared_url_loader_factory_;
+}
+
+network::mojom::NetworkContext*
+TestingApplicationContext::GetSystemNetworkContext() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  NOTREACHED();
+  return nullptr;
+}
+
 const std::string& TestingApplicationContext::GetApplicationLocale() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!application_locale_.empty());
@@ -137,8 +159,7 @@ TestingApplicationContext::GetNetworkTimeTracker() {
     DCHECK(local_state_);
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
         base::WrapUnique(new base::DefaultClock),
-        base::WrapUnique(new base::DefaultTickClock), local_state_,
-        GetSystemURLRequestContext()));
+        base::WrapUnique(new base::DefaultTickClock), local_state_, nullptr));
   }
   return network_time_tracker_.get();
 }

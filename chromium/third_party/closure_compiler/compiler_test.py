@@ -19,6 +19,8 @@ _ASSERT_JS = os.path.join(_RESOURCES_DIR, "assert.js")
 _CR_JS = os.path.join(_RESOURCES_DIR, "cr.js")
 _CR_UI_JS = os.path.join(_RESOURCES_DIR, "cr", "ui.js")
 _PROMISE_RESOLVER_JS = os.path.join(_RESOURCES_DIR, "promise_resolver.js")
+_CHROME_EXTERNS = os.path.join(_SRC_DIR, "third_party", "closure_compiler",
+                               "externs", "chrome.js")
 _CHROME_SEND_EXTERNS = os.path.join(_SRC_DIR, "third_party", "closure_compiler",
                                     "externs", "chrome_send.js")
 _CLOSURE_ARGS_GYPI = os.path.join(_SCRIPT_DIR, "closure_args.gypi")
@@ -46,37 +48,35 @@ class CompilerTest(unittest.TestCase):
   def _runChecker(self, source_code, needs_output, closure_args=None):
     file_path = "/script.js"
     FileCache._cache[file_path] = source_code
-    out_file, out_map = self._createOutFiles()
+    out_file = self._createOutFiles()
     args = _COMMON_CLOSURE_ARGS + (closure_args or [])
     if needs_output:
       args.remove("checks_only")
 
-    sources = [file_path, _CHROME_SEND_EXTERNS]
+    sources = [file_path, _CHROME_EXTERNS, _CHROME_SEND_EXTERNS]
     found_errors, stderr = self._checker.check(sources,
                                                out_file=out_file,
                                                closure_args=args)
-    return found_errors, stderr, out_file, out_map
+    return found_errors, stderr, out_file
 
   def _runCheckerTestExpectError(self, source_code, expected_error,
                                  closure_args=None):
-    _, stderr, out_file, out_map = self._runChecker(
+    _, stderr, out_file = self._runChecker(
         source_code, needs_output=False, closure_args=closure_args)
 
     self.assertTrue(expected_error in stderr,
         msg="Expected chunk: \n%s\n\nOutput:\n%s\n" % (
             expected_error, stderr))
     self.assertFalse(os.path.exists(out_file))
-    self.assertFalse(os.path.exists(out_map))
 
   def _runCheckerTestExpectSuccess(self, source_code, expected_output=None,
                                    closure_args=None):
-    found_errors, stderr, out_file, out_map = self._runChecker(
+    found_errors, stderr, out_file = self._runChecker(
         source_code, needs_output=True, closure_args=closure_args)
 
     self.assertFalse(found_errors,
         msg="Expected success, but got failure\n\nOutput:\n%s\n" % stderr)
 
-    self.assertTrue(os.path.exists(out_map))
     self.assertTrue(os.path.exists(out_file))
     if expected_output:
       with open(out_file, "r") as file:
@@ -84,11 +84,9 @@ class CompilerTest(unittest.TestCase):
 
   def _createOutFiles(self):
     out_file = tempfile.NamedTemporaryFile(delete=False)
-    out_map = "%s.map" % out_file.name
 
     self._tmp_files.append(out_file.name)
-    self._tmp_files.append(out_map)
-    return out_file.name, out_map
+    return out_file.name
 
   def testGetInstance(self):
     self._runCheckerTestExpectError("""
@@ -317,7 +315,7 @@ testScript();
 """)
     self._tmp_files.append(source_file2.name)
 
-    out_file, out_map = self._createOutFiles()
+    out_file = self._createOutFiles()
     sources = [source_file1.name, source_file2.name]
     closure_args = [a for a in _COMMON_CLOSURE_ARGS if a != "checks_only"]
     found_errors, stderr = self._checker.check(sources, out_file=out_file,
@@ -327,7 +325,6 @@ testScript();
         msg="Expected success, but got failure\n\nOutput:\n%s\n" % stderr)
 
     expected_output = "'use strict';var testScript=function(){};testScript();\n"
-    self.assertTrue(os.path.exists(out_map))
     self.assertTrue(os.path.exists(out_file))
     with open(out_file, "r") as file:
       self.assertEquals(file.read(), expected_output)

@@ -51,6 +51,23 @@ id<GREYMatcher> PrintButton() {
   return chrome_test_util::ButtonWithAccessibilityLabel(@"Print");
 }
 
+// Returns a button with a copy label.
+id<GREYMatcher> CopyButton() {
+  return chrome_test_util::ButtonWithAccessibilityLabel(@"Copy");
+}
+
+// Returns the collection view for the activity services menu. Since this is a
+// system widget, it does not have an a11y id.  Instead, search for a
+// UICollectionView that is the superview of the "Copy" menu item.  There are
+// two nested UICollectionViews in the activity services menu, so choose the
+// innermost one.
+id<GREYMatcher> ShareMenuCollectionView() {
+  return grey_allOf(
+      grey_kindOfClass([UICollectionView class]), grey_descendant(CopyButton()),
+      // Looking for a nested UICollectionView.
+      grey_descendant(grey_kindOfClass([UICollectionView class])), nil);
+}
+
 }  // namespace
 
 // Earl grey integration tests for Activity Service Controller.
@@ -67,6 +84,9 @@ id<GREYMatcher> PrintButton() {
 #if !TARGET_IPHONE_SIMULATOR
   EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
 #endif
+
+  // TODO(crbug.com/864597): Reenable this test.
+  EARL_GREY_TEST_DISABLED(@"Test disabled due to changes in error pages.");
 
   // TODO(crbug.com/747622): re-enable this test on iOS 11 once earl grey can
   // interact with the share menu.
@@ -90,7 +110,9 @@ id<GREYMatcher> PrintButton() {
   [ChromeEarlGrey waitForErrorPage];
 
   // Execute the Print action.
-  [[EarlGrey selectElementWithMatcher:PrintButton()] performAction:grey_tap()];
+  [[[EarlGrey selectElementWithMatcher:PrintButton()]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionRight, 100)
+      onElementWithMatcher:ShareMenuCollectionView()] performAction:grey_tap()];
 
   // Verify that a toast notification appears.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
@@ -108,6 +130,9 @@ id<GREYMatcher> PrintButton() {
     EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
   }
 
+  // TODO(crbug.com/864597): Reenable this test.
+  EARL_GREY_TEST_DISABLED(@"Test disabled due to changes in error pages.");
+
   std::unique_ptr<web::DataResponseProvider> provider(
       new ErrorPageResponseProvider());
   web::test::SetUpHttpServer(std::move(provider));
@@ -118,8 +143,20 @@ id<GREYMatcher> PrintButton() {
   // Verify that you can share, but that the Print action is not available.
   [ChromeEarlGreyUI openShareMenu];
   AssertActivityServiceVisible();
-  [[EarlGrey selectElementWithMatcher:PrintButton()]
-      assertWithMatcher:grey_nil()];
+
+  // To verify that the Print action is missing, scroll through the entire
+  // collection view using grey_scrollInDirection(), then make sure the
+  // operation failed with kGREYInteractionElementNotFoundErrorCode.
+  NSError* error;
+  [[[EarlGrey selectElementWithMatcher:PrintButton()]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionRight, 100)
+      onElementWithMatcher:ShareMenuCollectionView()]
+      assertWithMatcher:grey_notNil()
+                  error:&error];
+
+  GREYAssert([error.domain isEqual:kGREYInteractionErrorDomain] &&
+                 error.code == kGREYInteractionElementNotFoundErrorCode,
+             @"Print action was unexpectedly present");
 }
 
 - (void)testActivityServiceControllerIsDisabled {
@@ -127,7 +164,7 @@ id<GREYMatcher> PrintButton() {
   GURL kURL("chrome://version");
   [ChromeEarlGrey loadURL:kURL];
   // Verify that the share button is disabled.
-  if (IsCompact()) {
+  if (IsCompactWidth() && !IsUIRefreshPhase1Enabled()) {
     [ChromeEarlGreyUI openToolsMenu];
   }
   id<GREYMatcher> share_button = chrome_test_util::ShareButton();
@@ -153,15 +190,13 @@ id<GREYMatcher> PrintButton() {
   [ChromeEarlGrey loadURL:url];
   [ChromeEarlGreyUI openShareMenu];
 
-  // Verify that the share menu is up and contains a Print action.
+  // Verify that the share menu is up and contains a Copy action.
   AssertActivityServiceVisible();
-  [[EarlGrey selectElementWithMatcher:PrintButton()]
+  [[EarlGrey selectElementWithMatcher:CopyButton()]
       assertWithMatcher:grey_interactable()];
 
   // Start the Copy action and verify that the share menu gets dismissed.
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
-                                   @"Copy")] performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:CopyButton()] performAction:grey_tap()];
   AssertActivityServiceNotVisible();
 }
 

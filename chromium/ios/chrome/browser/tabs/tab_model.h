@@ -105,9 +105,6 @@ NSUInteger const kTabPositionAutomatically = NSNotFound;
 - (Tab*)tabAtIndex:(NSUInteger)index;
 - (NSUInteger)indexOfTab:(Tab*)tab;
 
-// Returns the tab which opened this tab, or nil if it's not a child.
-- (Tab*)openerOfTab:(Tab*)tab;
-
 // Add/modify tabs.
 
 // Opens a tab at the specified URL. For certain transition types, will consult
@@ -131,6 +128,10 @@ NSUInteger const kTabPositionAutomatically = NSNotFound;
                     openedByDOM:(BOOL)openedByDOM
                         atIndex:(NSUInteger)index
                    inBackground:(BOOL)inBackground;
+
+// Opens a new blank tab in response to DOM window opening action. Creates a web
+// state with empty navigation manager.
+- (Tab*)insertOpenByDOMTabWithOpener:(Tab*)parentTab;
 
 // Moves |tab| to the given |index|. |index| must be valid for this tab model
 // (must be less than the current number of tabs). |tab| must already be in this

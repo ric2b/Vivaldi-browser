@@ -8,10 +8,10 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -24,33 +24,24 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/test/history_service_test_util.h"
-#include "components/subresource_filter/core/browser/subresource_filter_features.h"
-#include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace {
 
-using subresource_filter::testing::ScopedSubresourceFilterFeatureToggle;
-const char kActionsHistogram[] = "SubresourceFilter.Actions";
-
 class SubresourceFilterContentSettingsManagerTest : public testing::Test {
  public:
   SubresourceFilterContentSettingsManagerTest() {}
 
   void SetUp() override {
-    scoped_feature_toggle().ResetSubresourceFilterState(
-        base::FeatureList::OVERRIDE_ENABLE_FEATURE,
-        "SubresourceFilterExperimentalUI" /* additional_features */);
     settings_manager_ =
         SubresourceFilterProfileContextFactory::GetForProfile(&testing_profile_)
             ->settings_manager();
     settings_manager_->set_should_use_smart_ui_for_testing(true);
-    auto test_clock = base::MakeUnique<base::SimpleTestClock>();
+    auto test_clock = std::make_unique<base::SimpleTestClock>();
     test_clock_ = test_clock.get();
     settings_manager_->set_clock_for_testing(std::move(test_clock));
-    histogram_tester().ExpectTotalCount(kActionsHistogram, 0);
   }
 
   HostContentSettingsMap* GetSettingsMap() {
@@ -61,10 +52,6 @@ class SubresourceFilterContentSettingsManagerTest : public testing::Test {
 
   SubresourceFilterContentSettingsManager* settings_manager() {
     return settings_manager_;
-  }
-
-  ScopedSubresourceFilterFeatureToggle& scoped_feature_toggle() {
-    return scoped_feature_toggle_;
   }
 
   TestingProfile* profile() { return &testing_profile_; }
@@ -89,7 +76,6 @@ class SubresourceFilterContentSettingsManagerTest : public testing::Test {
   base::ScopedTempDir scoped_dir_;
 
   content::TestBrowserThreadBundle thread_bundle_;
-  ScopedSubresourceFilterFeatureToggle scoped_feature_toggle_;
   base::HistogramTester histogram_tester_;
   TestingProfile testing_profile_;
 
@@ -121,64 +107,21 @@ TEST_F(SubresourceFilterContentSettingsManagerTest, LogDefaultSetting) {
   histogram_tester().ExpectTotalCount(kDefaultContentSetting, 1);
 }
 
-TEST_F(SubresourceFilterContentSettingsManagerTest, IrrelevantSetting) {
-  GetSettingsMap()->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_POPUPS,
-                                             CONTENT_SETTING_BLOCK);
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 0);
-}
+TEST_F(SubresourceFilterContentSettingsManagerTest,
+       ResetSiteMetadataBasedOnActivation) {
+  GURL url("https://example.test/");
+  EXPECT_FALSE(settings_manager()->GetSiteMetadata(url));
+  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
 
-TEST_F(SubresourceFilterContentSettingsManagerTest, DefaultSetting) {
-  // Setting to an existing value should not log any metrics.
-  GetSettingsMap()->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_ADS,
-                                             CONTENT_SETTING_BLOCK);
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 0);
+  settings_manager()->ResetSiteMetadataBasedOnActivation(
+      url, true /* is_activated */);
+  EXPECT_TRUE(settings_manager()->GetSiteMetadata(url));
+  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
 
-  GetSettingsMap()->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_ADS,
-                                             CONTENT_SETTING_ALLOW);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowedGlobal, 1);
-
-  GetSettingsMap()->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_ADS,
-                                             CONTENT_SETTING_BLOCK);
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 2);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsBlockedGlobal, 1);
-}
-
-TEST_F(SubresourceFilterContentSettingsManagerTest, UrlSetting) {
-  GURL url("https://www.example.test/");
-
-  GetSettingsMap()->SetContentSettingDefaultScope(
-      url, url, CONTENT_SETTINGS_TYPE_ADS, std::string(),
-      CONTENT_SETTING_ALLOW);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowed, 1);
-
-  GetSettingsMap()->SetContentSettingDefaultScope(
-      url, url, CONTENT_SETTINGS_TYPE_ADS, std::string(),
-      CONTENT_SETTING_BLOCK);
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 2);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsBlocked, 1);
-}
-
-TEST_F(SubresourceFilterContentSettingsManagerTest, WildcardUpdate) {
-  ContentSettingsPattern primary_pattern =
-      ContentSettingsPattern::FromString("[*.]example.test");
-  ContentSettingsPattern secondary_pattern = ContentSettingsPattern::Wildcard();
-
-  GetSettingsMap()->SetContentSettingCustomScope(
-      primary_pattern, secondary_pattern, CONTENT_SETTINGS_TYPE_ADS,
-      std::string(), CONTENT_SETTING_ALLOW);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsWildcardUpdate, 1);
-
-  GetSettingsMap()->SetContentSettingCustomScope(
-      primary_pattern, secondary_pattern, CONTENT_SETTINGS_TYPE_ADS,
-      std::string(), CONTENT_SETTING_BLOCK);
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 2);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsWildcardUpdate, 2);
+  settings_manager()->ResetSiteMetadataBasedOnActivation(
+      url, false /* is_activated */);
+  EXPECT_FALSE(settings_manager()->GetSiteMetadata(url));
+  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
 }
 
 TEST_F(SubresourceFilterContentSettingsManagerTest, SmartUI) {
@@ -194,10 +137,6 @@ TEST_F(SubresourceFilterContentSettingsManagerTest, SmartUI) {
   // Subsequent same-origin navigations should not show UI.
   EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url));
   EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url2));
-
-  // Showing the UI should trigger a forced content setting update, but no
-  // metrics should be recorded.
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 0);
 
   // Fast forward the clock.
   test_clock()->Advance(
@@ -217,95 +156,6 @@ TEST_F(SubresourceFilterContentSettingsManagerTest, NoSmartUI) {
   settings_manager()->OnDidShowUI(url);
 
   EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
-}
-
-// If the user manually sets a content setting to block the feature, the smart
-// UI should be reset.
-TEST_F(SubresourceFilterContentSettingsManagerTest,
-       SmartUIWithOverride_Resets) {
-  GURL url("https://example.test/");
-  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
-
-  settings_manager()->OnDidShowUI(url);
-
-  // Subsequent navigations to same-domains should not show UI.
-  EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url));
-
-  // The user changed their mind, make sure the feature is showing up in the
-  // settings UI. i.e. the setting should be non-default.
-  EXPECT_EQ(CONTENT_SETTING_BLOCK, settings_manager()->GetSitePermission(url));
-  GetSettingsMap()->SetContentSettingDefaultScope(
-      url, GURL(), CONTENT_SETTINGS_TYPE_ADS, std::string(),
-      CONTENT_SETTING_ALLOW);
-
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowed, 1);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowedFromUI, 0);
-  histogram_tester().ExpectBucketCount(
-      kActionsHistogram, kActionContentSettingsAllowedWhileUISuppressed, 1);
-}
-
-TEST_F(SubresourceFilterContentSettingsManagerTest,
-       DistinguishMetricsFromUIAndSettingsPage) {
-  GURL url("https://example.test/");
-  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
-
-  settings_manager()->OnDidShowUI(url);
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 0);
-
-  // Simulate changing the setting via the infobar UI.
-  settings_manager()->WhitelistSite(url);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowedFromUI, 1);
-
-  // The standard "Block" histograms are only triggered when blocking from the
-  // settings UI, not our standard UI.
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowed, 0);
-  histogram_tester().ExpectBucketCount(
-      kActionsHistogram, kActionContentSettingsAllowedWhileUISuppressed, 0);
-
-  GURL url2("https://example.test2/");
-  GetSettingsMap()->SetContentSettingDefaultScope(
-      url2, GURL(), CONTENT_SETTINGS_TYPE_ADS, std::string(),
-      CONTENT_SETTING_ALLOW);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowed, 1);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowedFromUI, 1);
-}
-
-TEST_F(SubresourceFilterContentSettingsManagerTest,
-       IgnoreDuplicateGlobalSettings) {
-  histogram_tester().ExpectTotalCount(kActionsHistogram, 0);
-
-  GetSettingsMap()->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_ADS,
-                                             CONTENT_SETTING_ALLOW);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsAllowedGlobal, 1);
-
-  GetSettingsMap()->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_ADS,
-                                             CONTENT_SETTING_BLOCK);
-  histogram_tester().ExpectBucketCount(kActionsHistogram,
-                                       kActionContentSettingsBlockedGlobal, 1);
-}
-
-TEST_F(SubresourceFilterContentSettingsManagerTest,
-       NoExperimentalUI_NoWebsiteSetting) {
-  GURL url("https://example.test/");
-
-  // Do not explicitly allow the experimental UI.
-  scoped_feature_toggle().ResetSubresourceFilterState(
-      base::FeatureList::OVERRIDE_ENABLE_FEATURE);
-  settings_manager()->OnDidShowUI(url);
-  EXPECT_FALSE(settings_manager()->GetSiteMetadata(url));
-
-  scoped_feature_toggle().ResetSubresourceFilterState(
-      base::FeatureList::OVERRIDE_ENABLE_FEATURE,
-      "SubresourceFilterExperimentalUI" /* additional_features */);
-  settings_manager()->OnDidShowUI(url);
-  EXPECT_TRUE(settings_manager()->GetSiteMetadata(url));
 }
 
 TEST_F(SubresourceFilterContentSettingsManagerTest,
@@ -331,22 +181,35 @@ TEST_F(SubresourceFilterContentSettingsManagerHistoryTest,
                            base::Time::Now(), history::SOURCE_BROWSED);
 
   // Ensure the website setting is set.
-  GURL url("https://example.test");
-  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
-  settings_manager()->OnDidShowUI(url);
+  GURL url1("https://example.test/1");
+  GURL url2("https://example.test/2");
+  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url1));
+  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url2));
+  settings_manager()->OnDidShowUI(url1);
 
-  // Simulate adding the page to the history.
-  history_service->AddPage(url, base::Time::Now(), history::SOURCE_BROWSED);
+  // Simulate adding two page to the history for example.test.
+  history_service->AddPage(url1, base::Time::Now(), history::SOURCE_BROWSED);
+  history_service->AddPage(url2, base::Time::Now(), history::SOURCE_BROWSED);
   history::BlockUntilHistoryProcessesPendingRequests(history_service);
 
-  EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url));
+  EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url1));
+  EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url2));
 
-  // Deleting the URL from history should clear the setting for this URL. Note
-  // that since there is another URL in the history this won't clear all items.
-  history_service->DeleteURL(url);
+  // Deleting a URL from history while there are still other urls for the
+  // same origin should not delete the setting.
+  history_service->DeleteURL(url1);
+  history::BlockUntilHistoryProcessesPendingRequests(history_service);
+  EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url1));
+  EXPECT_FALSE(settings_manager()->ShouldShowUIForSite(url2));
+
+  // Deleting all URLs of an origin from history should clear the setting for
+  // this URL. Note that since there is another URL in the history this won't
+  // clear all items.
+  history_service->DeleteURL(url2);
   history::BlockUntilHistoryProcessesPendingRequests(history_service);
 
-  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url));
+  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url1));
+  EXPECT_TRUE(settings_manager()->ShouldShowUIForSite(url2));
 }
 
 TEST_F(SubresourceFilterContentSettingsManagerHistoryTest,

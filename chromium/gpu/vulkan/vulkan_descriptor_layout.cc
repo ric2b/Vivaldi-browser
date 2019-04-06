@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "gpu/vulkan/vulkan_descriptor_pool.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
 
 namespace gpu {
 
@@ -40,8 +41,8 @@ bool VulkanDescriptorLayout::Initialize(
 
 void VulkanDescriptorLayout::Destroy() {
   if (VK_NULL_HANDLE != handle_) {
-    vkDestroyDescriptorSetLayout(
-        device_queue_->GetVulkanDevice(), handle_, nullptr);
+    vkDestroyDescriptorSetLayout(device_queue_->GetVulkanDevice(), handle_,
+                                 nullptr);
     handle_ = VK_NULL_HANDLE;
   }
 }

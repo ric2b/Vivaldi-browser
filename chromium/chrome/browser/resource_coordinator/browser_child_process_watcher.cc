@@ -28,7 +28,7 @@ void BrowserChildProcessWatcher::BrowserChildProcessLaunchedAndConnected(
 
   if (data.process_type == content::PROCESS_TYPE_GPU) {
     gpu_process_resource_coordinator_ =
-        base::MakeUnique<resource_coordinator::ProcessResourceCoordinator>(
+        std::make_unique<resource_coordinator::ProcessResourceCoordinator>(
             content::ServiceManagerConnection::GetForProcess()->GetConnector());
 
     gpu_process_resource_coordinator_->SetLaunchTime(base::Time::Now());
@@ -44,14 +44,14 @@ void BrowserChildProcessWatcher::BrowserChildProcessHostDisconnected(
 
 void BrowserChildProcessWatcher::BrowserChildProcessCrashed(
     const content::ChildProcessData& data,
-    int exit_code) {
+    const content::ChildProcessTerminationInfo& info) {
   if (data.process_type == content::PROCESS_TYPE_GPU)
     GPUProcessStopped();
 }
 
 void BrowserChildProcessWatcher::BrowserChildProcessKilled(
     const content::ChildProcessData& data,
-    int exit_code) {
+    const content::ChildProcessTerminationInfo& info) {
   if (data.process_type == content::PROCESS_TYPE_GPU)
     GPUProcessStopped();
 }

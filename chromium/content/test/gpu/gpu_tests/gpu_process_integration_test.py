@@ -79,10 +79,12 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
              ('GpuProcess_gpu_info_complete', 'gpu/functional_3d_css.html'),
              ('GpuProcess_driver_bug_workarounds_in_gpu_process', 'chrome:gpu'),
              ('GpuProcess_readback_webgl_gpu_process', 'chrome:gpu'),
+             ('GpuProcess_feature_status_under_swiftshader', 'chrome:gpu'),
              ('GpuProcess_only_one_workaround', 'chrome:gpu'),
              ('GpuProcess_disable_gpu', 'gpu/functional_webgl.html'),
              ('GpuProcess_disable_gpu_and_swiftshader',
               'gpu/functional_webgl.html'),
+             ('GpuProcess_disable_swiftshader', 'gpu/functional_webgl.html'),
              ('GpuProcess_disabling_workarounds_works', 'chrome:gpu'),
              ('GpuProcess_swiftshader_for_webgl', 'gpu/functional_webgl.html'),
              ('GpuProcess_webgl_disabled_extension',
@@ -160,8 +162,8 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     return options.browser_type.startswith('android')
 
   def _SupportsSwiftShader(self):
-    # Currently we only enables SwiftShader on Windows and Linux.
-    return (sys.platform in ('cygwin', 'win32') or
+    # Currently we enable SwiftShader on Windows, Linux and MacOS.
+    return (sys.platform in ('cygwin', 'win32', 'darwin') or
             (sys.platform.startswith('linux') and
              not self._RunningOnAndroid()))
 
@@ -185,7 +187,7 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
                 'workarounds are not equal: %s != %s, diff: %s' %
                 (browser_list, gpu_list, list(diff)))
 
-    basic_infos = tab.EvaluateJavaScript('browserBridge.gpuInfo.basic_info')
+    basic_infos = tab.EvaluateJavaScript('browserBridge.gpuInfo.basicInfo')
     disabled_gl_extensions = None
     for info in basic_infos:
       if info['description'].startswith('Disabled Extensions'):
@@ -222,9 +224,9 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     self.RestartBrowserIfNecessaryWithArgs([])
     self._NavigateAndWait(test_path)
     tab = self.tab
-    if not tab.browser.supports_system_info:
-      self.fail('Browser must support system info')
     system_info = tab.browser.GetSystemInfo()
+    if not system_info:
+      self.fail('Browser must support system info')
     if not system_info.gpu:
       self.fail('Target machine must have a GPU')
     if not system_info.gpu.aux_attributes:
@@ -260,6 +262,40 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         pass
     if not result:
       self.fail('WebGL readback setup failed: %s' % feature_status_list)
+
+  def _GpuProcess_feature_status_under_swiftshader(self, test_path):
+    if not self._SupportsSwiftShader():
+      return
+    # Hit test group 2 with entry 153 from kSoftwareRenderingListEntries.
+    self.RestartBrowserIfNecessaryWithArgs([
+      '--gpu-blacklist-test-group=2'])
+    self._Navigate(test_path)
+    feature_status_list = self.tab.EvaluateJavaScript(
+        'browserBridge.gpuInfo.featureStatus.featureStatus')
+    for name, status in feature_status_list.items():
+      if name == 'webgl':
+        if status != 'unavailable_software':
+          self.fail('WebGL status for SwiftShader failed: %s' % status)
+          return
+      elif name == '2d_canvas':
+        if status != 'unavailable_software':
+          self.fail('2D Canvas status for SwiftShader failed: %s' % status)
+          return
+      else:
+        pass
+    feature_status_for_hardware_gpu_list = self.tab.EvaluateJavaScript(
+        'browserBridge.gpuInfo.featureStatusForHardwareGpu.featureStatus')
+    for name, status in feature_status_for_hardware_gpu_list.items():
+      if name == 'webgl':
+        if status != 'unavailable_off':
+          self.fail('WebGL status for hardware GPU failed: %s' % status)
+          return
+      elif name == '2d_canvas':
+        if status != 'enabled':
+          self.fail('2D Canvas status for hardware GPU failed: %s' % status)
+          return
+      else:
+        pass
 
   def _GpuProcess_only_one_workaround(self, test_path):
     # Start this test by launching the browser with no command line
@@ -309,12 +345,10 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       # Chrome on Android doesn't support software fallback, skip it.
       # TODO(zmo): If this test runs on ChromeOS, we also need to skip it.
       return
-    self.RestartBrowserIfNecessaryWithArgs([
-      '--disable-gpu',
-      '--skip-gpu-data-loading'])
+    self.RestartBrowserIfNecessaryWithArgs(['--disable-gpu'])
     self._NavigateAndWait(test_path)
-    # On Windows or Linux, SwiftShader is enabled, so GPU process will still
-    # launch with SwiftShader.
+    # On Windows, Linux or MacOS, SwiftShader is enabled, so GPU process
+    # will still launch with SwiftShader.
     supports_swiftshader = self._SupportsSwiftShader()
     has_gpu_process = self.tab.EvaluateJavaScript(
         'chrome.gpuBenchmarking.hasGpuProcess()')
@@ -331,11 +365,18 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       return
     self.RestartBrowserIfNecessaryWithArgs([
       '--disable-gpu',
-      '--skip-gpu-data-loading',
       '--disable-software-rasterizer'])
     self._NavigateAndWait(test_path)
     if self.tab.EvaluateJavaScript('chrome.gpuBenchmarking.hasGpuProcess()'):
       self.fail('GPU process detected')
+
+  def _GpuProcess_disable_swiftshader(self, test_path):
+    # Disable SwiftShader, GPU process should be able to launch.
+    self.RestartBrowserIfNecessaryWithArgs(['--disable-software-rasterizer'])
+    self._NavigateAndWait(test_path)
+    if not self.tab.EvaluateJavaScript(
+        'chrome.gpuBenchmarking.hasGpuProcess()'):
+      self.fail('GPU process not detected')
 
   def _GpuProcess_disabling_workarounds_works(self, test_path):
     # Hit exception from id 215 from kGpuDriverBugListEntries.
@@ -369,9 +410,10 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       if 'SwiftShader' not in renderer:
         self.fail('Expected SwiftShader renderer; instead got ' + renderer)
       # Validate GPU info.
-      if not self.browser.supports_system_info:
+      system_info = self.browser.GetSystemInfo()
+      if not system_info:
         self.fail("Browser doesn't support GetSystemInfo")
-      gpu = self.browser.GetSystemInfo().gpu
+      gpu = system_info.gpu
       if not gpu:
         self.fail('Target machine must have a GPU')
       if not gpu.aux_attributes:

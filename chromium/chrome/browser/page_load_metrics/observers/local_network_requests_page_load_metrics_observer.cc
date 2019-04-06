@@ -12,7 +12,7 @@
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
-#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
 
@@ -173,17 +173,6 @@ const std::map<uint16_t, internal::PortType>& GetLocalhostPortCategories() {
 
 namespace internal {
 
-// UKM event names
-const char kUkmPageDomainEventName[] = "PageDomainInfo";
-const char kUkmLocalNetworkRequestsEventName[] = "LocalNetworkRequests";
-
-// UKM metric names
-const char kUkmDomainTypeName[] = "DomainType";
-const char kUkmResourceTypeName[] = "ResourceType";
-const char kUkmPortTypeName[] = "PortType";
-const char kUkmSuccessfulCountName[] = "Count.Successful";
-const char kUkmFailedCountName[] = "Count.Failed";
-
 // Definitions of getters for the histogram names maps.
 const std::map<internal::DomainType,
                std::map<internal::ResourceType, std::map<bool, std::string>>>&
@@ -335,7 +324,7 @@ LocalNetworkRequestsPageLoadMetricsObserver::OnCommit(
   if (net::HostStringIsLocalhost(address.host()) ||
       page_ip_address_ == net::IPAddress::IPv6Localhost()) {
     page_domain_type_ = internal::DOMAIN_TYPE_LOCALHOST;
-  } else if (page_ip_address_.IsReserved()) {
+  } else if (!page_ip_address_.IsPubliclyRoutable()) {
     page_domain_type_ = internal::DOMAIN_TYPE_PRIVATE;
     // Maps from first byte of an IPv4 address to the number of bits in the
     // reserved prefix. This table contains the subset of prefixes defined in
@@ -400,10 +389,9 @@ void LocalNetworkRequestsPageLoadMetricsObserver::OnLoadedResource(
     } else {
       localhost_request_counts_[resource_port].first++;
     }
-  }
   // We only track public resource requests for private pages.
-  else if (resource_ip.IsReserved() ||
-           page_domain_type_ == internal::DOMAIN_TYPE_PRIVATE) {
+  } else if (!resource_ip.IsPubliclyRoutable() ||
+             page_domain_type_ == internal::DOMAIN_TYPE_PRIVATE) {
     if (extra_request_info.net_error != net::OK) {
       resource_request_counts_[resource_ip].second++;
     } else {
@@ -486,13 +474,13 @@ internal::ResourceType
 LocalNetworkRequestsPageLoadMetricsObserver::DetermineResourceType(
     net::IPAddress resource_ip) {
   if (page_domain_type_ == internal::DOMAIN_TYPE_PUBLIC) {
-    DCHECK(resource_ip.IsReserved());
+    DCHECK(!resource_ip.IsPubliclyRoutable());
     return IsLikelyRouterIP(resource_ip) ? internal::RESOURCE_TYPE_ROUTER
                                          : internal::RESOURCE_TYPE_PRIVATE;
   }
 
   DCHECK_EQ(internal::DOMAIN_TYPE_PRIVATE, page_domain_type_);
-  if (resource_ip.IsReserved()) {  // PRIVATE
+  if (!resource_ip.IsPubliclyRoutable()) {  // PRIVATE
     const bool is_same_subnet =
         net::CommonPrefixLength(page_ip_address_, resource_ip) >=
         page_ip_prefix_length_;
@@ -537,41 +525,28 @@ void LocalNetworkRequestsPageLoadMetricsObserver::RecordUkmMetrics(
 
   // Log an entry for each non-localhost resource (one per IP address).
   for (const auto& entry : resource_request_counts_) {
-    ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
-    std::unique_ptr<ukm::UkmEntryBuilder> builder =
-        ukm_recorder->GetEntryBuilder(
-            source_id, internal::kUkmLocalNetworkRequestsEventName);
-    builder->AddMetric(
-        internal::kUkmResourceTypeName,
-        static_cast<int>(requested_resource_types_->at(entry.first)));
-    builder->AddMetric(internal::kUkmSuccessfulCountName, entry.second.first);
-    builder->AddMetric(internal::kUkmFailedCountName, entry.second.second);
+    ukm::builders::LocalNetworkRequests(source_id)
+        .SetResourceType(
+            static_cast<int>(requested_resource_types_->at(entry.first)))
+        .SetCount_Successful(entry.second.first)
+        .SetCount_Failed(entry.second.second)
+        .Record(ukm::UkmRecorder::Get());
   }
 
   // Log an entry for each localhost resource (one per port).
   for (const auto& entry : localhost_request_counts_) {
-    ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
-    std::unique_ptr<ukm::UkmEntryBuilder> builder =
-        ukm_recorder->GetEntryBuilder(
-            source_id, internal::kUkmLocalNetworkRequestsEventName);
-    builder->AddMetric(internal::kUkmResourceTypeName,
-                       static_cast<int>(internal::RESOURCE_TYPE_LOCALHOST));
-    builder->AddMetric(internal::kUkmPortTypeName,
-                       static_cast<int>(DeterminePortType(entry.first)));
-    builder->AddMetric(internal::kUkmSuccessfulCountName, entry.second.first);
-    builder->AddMetric(internal::kUkmFailedCountName, entry.second.second);
+    ukm::builders::LocalNetworkRequests(source_id)
+        .SetResourceType(static_cast<int>(internal::RESOURCE_TYPE_LOCALHOST))
+        .SetPortType(static_cast<int>(DeterminePortType(entry.first)))
+        .SetCount_Successful(entry.second.first)
+        .SetCount_Failed(entry.second.second)
+        .Record(ukm::UkmRecorder::Get());
   }
 }
 
 void LocalNetworkRequestsPageLoadMetricsObserver::RecordUkmDomainType(
     ukm::SourceId source_id) {
-  ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
-  if (!ukm_recorder) {
-    return;
-  }
-
-  std::unique_ptr<ukm::UkmEntryBuilder> builder = ukm_recorder->GetEntryBuilder(
-      source_id, internal::kUkmPageDomainEventName);
-  builder->AddMetric(internal::kUkmDomainTypeName,
-                     static_cast<int>(page_domain_type_));
+  ukm::builders::PageDomainInfo(source_id)
+      .SetDomainType(static_cast<int>(page_domain_type_))
+      .Record(ukm::UkmRecorder::Get());
 }

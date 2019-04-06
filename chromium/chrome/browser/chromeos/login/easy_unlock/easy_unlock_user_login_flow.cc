@@ -4,11 +4,13 @@
 
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_user_login_flow.h"
 
+#include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/signin/easy_unlock_service.h"
+
+namespace chromeos {
 
 EasyUnlockUserLoginFlow::EasyUnlockUserLoginFlow(const AccountId& account_id)
-    : chromeos::ExtendedUserFlow(account_id) {}
+    : ExtendedUserFlow(account_id) {}
 
 EasyUnlockUserLoginFlow::~EasyUnlockUserLoginFlow() {}
 
@@ -28,9 +30,8 @@ bool EasyUnlockUserLoginFlow::ShouldSkipPostLoginScreens() {
   return false;
 }
 
-bool EasyUnlockUserLoginFlow::HandleLoginFailure(
-    const chromeos::AuthFailure& failure) {
-  Profile* profile = chromeos::ProfileHelper::GetSigninProfile();
+bool EasyUnlockUserLoginFlow::HandleLoginFailure(const AuthFailure& failure) {
+  Profile* profile = ProfileHelper::GetSigninProfile();
   EasyUnlockService* service = EasyUnlockService::Get(profile);
   if (!service)
     return false;
@@ -40,9 +41,8 @@ bool EasyUnlockUserLoginFlow::HandleLoginFailure(
   return true;
 }
 
-void EasyUnlockUserLoginFlow::HandleLoginSuccess(
-    const chromeos::UserContext& context) {
-  Profile* profile = chromeos::ProfileHelper::GetSigninProfile();
+void EasyUnlockUserLoginFlow::HandleLoginSuccess(const UserContext& context) {
+  Profile* profile = ProfileHelper::GetSigninProfile();
   EasyUnlockService* service = EasyUnlockService::Get(profile);
   if (!service)
     return;
@@ -61,3 +61,5 @@ void EasyUnlockUserLoginFlow::LaunchExtraSteps(Profile* profile) {}
 bool EasyUnlockUserLoginFlow::SupportsEarlyRestartToApplyFlags() {
   return true;
 }
+
+}  // namespace chromeos

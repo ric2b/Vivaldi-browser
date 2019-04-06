@@ -13,7 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "content/browser/payments/payment_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_app.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -36,6 +36,9 @@ class PaymentAppContentUnitTestBase : public testing::Test {
   void ResetPaymentAppInvoked() const;
   int64_t last_sw_registration_id() const;
   const GURL& last_sw_scope_url() const;
+
+  void SetNoPaymentRequestResponseImmediately();
+  void RespondPendingPaymentRequest();
 
  private:
   class PaymentAppForWorkerTestHelper;

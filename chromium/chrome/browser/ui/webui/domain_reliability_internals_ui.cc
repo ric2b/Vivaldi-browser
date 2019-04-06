@@ -22,6 +22,8 @@ DomainReliabilityInternalsUI::DomainReliabilityInternalsUI(
     : content::WebUIController(web_ui) {
   content::WebUIDataSource* html_source = content::WebUIDataSource::Create(
       chrome::kChromeUIDomainReliabilityInternalsHost);
+  html_source->OverrideContentSecurityPolicyScriptSrc(
+      "script-src chrome://resources 'self' 'unsafe-eval';");
   html_source->AddResourcePath("domain_reliability_internals.css",
       IDR_DOMAIN_RELIABILITY_INTERNALS_CSS);
   html_source->AddResourcePath("domain_reliability_internals.js",
@@ -29,9 +31,10 @@ DomainReliabilityInternalsUI::DomainReliabilityInternalsUI(
   html_source->SetDefaultResource(IDR_DOMAIN_RELIABILITY_INTERNALS_HTML);
   html_source->UseGzip();
 
-  web_ui->RegisterMessageCallback("updateData",
-      base::Bind(&DomainReliabilityInternalsUI::UpdateData,
-                 base::Unretained(this)));
+  web_ui->RegisterMessageCallback(
+      "updateData",
+      base::BindRepeating(&DomainReliabilityInternalsUI::UpdateData,
+                          base::Unretained(this)));
 
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource::Add(profile, html_source);

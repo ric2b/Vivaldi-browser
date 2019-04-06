@@ -4,59 +4,59 @@
 
 #include "content/browser/geolocation/geolocation_service_impl.h"
 
-#include "content/public/browser/permission_manager.h"
+#include "content/browser/permissions/permission_controller_impl.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/content_features.h"
-#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
 namespace content {
 
 GeolocationServiceImplContext::GeolocationServiceImplContext(
-    PermissionManager* permission_manager)
-    : permission_manager_(permission_manager),
-      request_id_(PermissionManager::kNoPendingOperation) {}
+    PermissionControllerImpl* permission_controller)
+    : permission_controller_(permission_controller),
+      request_id_(PermissionController::kNoPendingOperation),
+      weak_factory_(this) {}
 
 GeolocationServiceImplContext::~GeolocationServiceImplContext() {
-  permission_manager_->CancelPermissionRequest(request_id_);
 }
 
 void GeolocationServiceImplContext::RequestPermission(
     RenderFrameHost* render_frame_host,
     bool user_gesture,
     const base::Callback<void(blink::mojom::PermissionStatus)>& callback) {
-  if (request_id_ != PermissionManager::kNoPendingOperation) {
+  if (request_id_ != PermissionController::kNoPendingOperation) {
     mojo::ReportBadMessage(
         "GeolocationService client may only create one Geolocation at a "
         "time.");
     return;
   }
 
-  request_id_ = permission_manager_->RequestPermission(
+  request_id_ = permission_controller_->RequestPermission(
       PermissionType::GEOLOCATION, render_frame_host,
       render_frame_host->GetLastCommittedOrigin().GetURL(), user_gesture,
       // NOTE: The permission request is canceled in the destructor, so it is
       // safe to pass |this| as Unretained.
       base::Bind(&GeolocationServiceImplContext::HandlePermissionStatus,
-                 base::Unretained(this), std::move(callback)));
+                 weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void GeolocationServiceImplContext::HandlePermissionStatus(
     const base::Callback<void(blink::mojom::PermissionStatus)>& callback,
     blink::mojom::PermissionStatus permission_status) {
-  request_id_ = PermissionManager::kNoPendingOperation;
+  request_id_ = PermissionController::kNoPendingOperation;
   callback.Run(permission_status);
 }
 
 GeolocationServiceImpl::GeolocationServiceImpl(
     device::mojom::GeolocationContext* geolocation_context,
-    PermissionManager* permission_manager,
+    PermissionControllerImpl* permission_controller,
     RenderFrameHost* render_frame_host)
     : geolocation_context_(geolocation_context),
-      permission_manager_(permission_manager),
+      permission_controller_(permission_controller),
       render_frame_host_(render_frame_host) {
   DCHECK(geolocation_context);
-  DCHECK(permission_manager);
+  DCHECK(permission_controller);
   DCHECK(render_frame_host);
 }
 
@@ -66,23 +66,22 @@ void GeolocationServiceImpl::Bind(
     blink::mojom::GeolocationServiceRequest request) {
   binding_set_.AddBinding(
       this, std::move(request),
-      std::make_unique<GeolocationServiceImplContext>(permission_manager_));
+      std::make_unique<GeolocationServiceImplContext>(permission_controller_));
 }
 
 void GeolocationServiceImpl::CreateGeolocation(
     mojo::InterfaceRequest<device::mojom::Geolocation> request,
     bool user_gesture) {
-  if (base::FeatureList::IsEnabled(features::kFeaturePolicy) &&
-      base::FeatureList::IsEnabled(features::kUseFeaturePolicyForPermissions) &&
+  if (base::FeatureList::IsEnabled(features::kUseFeaturePolicyForPermissions) &&
       !render_frame_host_->IsFeatureEnabled(
-          blink::FeaturePolicyFeature::kGeolocation)) {
+          blink::mojom::FeaturePolicyFeature::kGeolocation)) {
     return;
   }
 
   binding_set_.dispatch_context()->RequestPermission(
       render_frame_host_, user_gesture,
-      // NOTE: The request is canceled by the destructor of the
-      // dispatch_context, so it is safe to bind |this| as Unretained.
+      // There is an assumption here that the GeolocationServiceImplContext will
+      // outlive the GeolocationServiceImpl.
       base::Bind(&GeolocationServiceImpl::CreateGeolocationWithPermissionStatus,
                  base::Unretained(this), base::Passed(&request)));
 }

@@ -10,21 +10,25 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "ui/display/display.h"
 #include "ui/display/types/native_display_observer.h"
 
 namespace display {
+class DisplayMode;
 class DisplaySnapshot;
 class NativeDisplayDelegate;
+struct GammaRampRGBEntry;
 }  // namespace display
 
 namespace gfx {
-class Rect;
+class Point;
 }  // namespace gfx
 
 namespace chromecast {
 class CastScreen;
 
 namespace shell {
+class CastTouchDeviceManager;
 
 // The CastDisplayConfigurator class ensures native displays are initialized and
 // configured properly on platforms that need that (e.g. GBM/DRM graphics via
@@ -41,12 +45,29 @@ class CastDisplayConfigurator : public display::NativeDisplayObserver {
   void OnConfigurationChanged() override;
   void OnDisplaySnapshotsInvalidated() override {}
 
+  void ConfigureDisplayFromCommandLine();
+  void SetColorMatrix(const std::vector<float>& color_matrix);
+  void SetGammaCorrection(
+      const std::vector<display::GammaRampRGBEntry>& degamma_lut,
+      const std::vector<display::GammaRampRGBEntry>& gamma_lut);
+
  private:
+  void ForceInitialConfigure();
   void OnDisplaysAcquired(
+      bool force_initial_configure,
       const std::vector<display::DisplaySnapshot*>& displays);
-  void OnDisplayConfigured(const gfx::Rect& bounds, bool success);
+  void OnDisplayConfigured(display::DisplaySnapshot* display,
+                           const display::DisplayMode* mode,
+                           const gfx::Point& origin,
+                           bool success);
+  void UpdateScreen(int64_t display_id,
+                    const gfx::Rect& bounds,
+                    float device_scale_factor,
+                    display::Display::Rotation rotation);
 
   std::unique_ptr<display::NativeDisplayDelegate> delegate_;
+  std::unique_ptr<CastTouchDeviceManager> touch_device_manager_;
+  display::DisplaySnapshot* display_;
   CastScreen* const cast_screen_;
 
   base::WeakPtrFactory<CastDisplayConfigurator> weak_factory_;

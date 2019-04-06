@@ -4,7 +4,9 @@
 
 #include "ui/base/test/ui_controls_internal_win.h"
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -38,7 +40,7 @@ class InputDispatcher : public base::RefCounted<InputDispatcher> {
   // reference when the message is received.
   static scoped_refptr<InputDispatcher> CreateForMessage(
       WPARAM message_type,
-      const base::Closure& callback);
+      base::OnceClosure callback);
 
   // Constructs a dispatcher that will invoke |callback| when a mouse move
   // message has been received. Upon receipt, an error message is logged if the
@@ -51,7 +53,7 @@ class InputDispatcher : public base::RefCounted<InputDispatcher> {
   // instance will release this reference when the message is received.
   static scoped_refptr<InputDispatcher> CreateForMouseMove(
       const gfx::Point& screen_point,
-      const base::Closure& callback);
+      base::OnceClosure callback);
 
  private:
   template <typename T, typename... Args>
@@ -60,7 +62,7 @@ class InputDispatcher : public base::RefCounted<InputDispatcher> {
 
   InputDispatcher(WPARAM message_waiting_for,
                   const gfx::Point& screen_point,
-                  const base::Closure& callback);
+                  base::OnceClosure callback);
   ~InputDispatcher();
 
   // Installs the dispatcher as the current hook.
@@ -75,9 +77,11 @@ class InputDispatcher : public base::RefCounted<InputDispatcher> {
   // Callback from hook when a key message is received.
   static LRESULT CALLBACK KeyHook(int n_code, WPARAM w_param, LPARAM l_param);
 
-  // Invoked from the hook. If mouse_message matches message_waiting_for_
-  // MatchingMessageFound is invoked.
-  void DispatchedMessage(WPARAM mouse_message);
+  // Invoked from the hook. If |message_id| matches message_waiting_for_
+  // MatchingMessageFound is invoked. |mouse_hook_struct| contains extra
+  // information about the mouse event.
+  void DispatchedMessage(UINT message_id,
+                         const MOUSEHOOKSTRUCT* mouse_hook_struct);
 
   // Invoked when a matching event is found. Uninstalls the hook and schedules
   // an event that runs the callback.
@@ -97,7 +101,7 @@ class InputDispatcher : public base::RefCounted<InputDispatcher> {
   THREAD_CHECKER(thread_checker_);
 
   // The callback to run when the desired message is received.
-  base::Closure callback_;
+  base::OnceClosure callback_;
 
   // The message on which the instance is waiting -- unsed for WM_KEYUP
   // messages.
@@ -120,24 +124,24 @@ HHOOK InputDispatcher::next_hook_ = nullptr;
 // static
 scoped_refptr<InputDispatcher> InputDispatcher::CreateForMessage(
     WPARAM message_type,
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   DCHECK_NE(message_type, static_cast<WPARAM>(WM_MOUSEMOVE));
   return base::MakeRefCounted<InputDispatcher>(message_type, gfx::Point(0, 0),
-                                               callback);
+                                               std::move(callback));
 }
 
 // static
 scoped_refptr<InputDispatcher> InputDispatcher::CreateForMouseMove(
     const gfx::Point& screen_point,
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   return base::MakeRefCounted<InputDispatcher>(WM_MOUSEMOVE, screen_point,
-                                               callback);
+                                               std::move(callback));
 }
 
 InputDispatcher::InputDispatcher(WPARAM message_waiting_for,
                                  const gfx::Point& screen_point,
-                                 const base::Closure& callback)
-    : callback_(callback),
+                                 base::OnceClosure callback)
+    : callback_(std::move(callback)),
       message_waiting_for_(message_waiting_for),
       expected_mouse_location_(screen_point),
       weak_factory_(this) {
@@ -169,7 +173,8 @@ void InputDispatcher::InstallHook() {
       // too long.
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
-          base::Bind(&InputDispatcher::OnTimeout, weak_factory_.GetWeakPtr()),
+          base::BindOnce(&InputDispatcher::OnTimeout,
+                         weak_factory_.GetWeakPtr()),
           TestTimeouts::action_timeout());
     }
   }
@@ -195,7 +200,8 @@ LRESULT CALLBACK InputDispatcher::MouseHook(int n_code,
   HHOOK next_hook = next_hook_;
   if (n_code == HC_ACTION) {
     DCHECK(current_dispatcher_);
-    current_dispatcher_->DispatchedMessage(w_param);
+    current_dispatcher_->DispatchedMessage(
+        w_param, reinterpret_cast<MOUSEHOOKSTRUCT*>(l_param));
   }
   return CallNextHookEx(next_hook, n_code, w_param, l_param);
 }
@@ -215,19 +221,32 @@ LRESULT CALLBACK InputDispatcher::KeyHook(int n_code,
   return CallNextHookEx(next_hook, n_code, w_param, l_param);
 }
 
-void InputDispatcher::DispatchedMessage(WPARAM mouse_message) {
+void InputDispatcher::DispatchedMessage(
+    UINT message_id,
+    const MOUSEHOOKSTRUCT* mouse_hook_struct) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (mouse_message == message_waiting_for_) {
-    if (mouse_message == WM_MOUSEMOVE) {
+  if (message_id == message_waiting_for_) {
+    if (message_id == WM_MOUSEMOVE) {
       // Verify that the mouse ended up at the desired location.
-      POINT current_pos;
-      ::GetCursorPos(&current_pos);
-      LOG_IF(ERROR, expected_mouse_location_ != gfx::Point(current_pos))
-          << "Mouse moved to (" << current_pos.x << ", " << current_pos.y
-          << ") rather than (" << expected_mouse_location_.x() << ", "
+      LOG_IF(ERROR,
+             expected_mouse_location_ != gfx::Point(mouse_hook_struct->pt))
+          << "Mouse moved to (" << mouse_hook_struct->pt.x << ", "
+          << mouse_hook_struct->pt.y << ") rather than ("
+          << expected_mouse_location_.x() << ", "
           << expected_mouse_location_.y()
           << "); check the math in SendMouseMoveImpl.";
     }
+    MatchingMessageFound();
+  } else if ((message_waiting_for_ == WM_LBUTTONDOWN &&
+              message_id == WM_LBUTTONDBLCLK) ||
+             (message_waiting_for_ == WM_MBUTTONDOWN &&
+              message_id == WM_MBUTTONDBLCLK) ||
+             (message_waiting_for_ == WM_RBUTTONDOWN &&
+              message_id == WM_RBUTTONDBLCLK)) {
+    LOG(WARNING) << "Double click event being treated as single-click. "
+                 << "This may result in different event processing behavior. "
+                 << "If you need a single click try moving the mouse between "
+                 << "down events.";
     MatchingMessageFound();
   }
 }
@@ -271,6 +290,7 @@ UINT MapVirtualKeyToScanCode(UINT code) {
     case VK_DOWN:
     case VK_NUMLOCK:
       ret_code |= KF_EXTENDED;
+      break;
     default:
       break;
   }
@@ -291,24 +311,49 @@ bool ShouldSendThroughScanCode(ui::KeyboardCode key) {
   return native_code == MapVirtualKey(scan_code, MAPVK_VSC_TO_VK);
 }
 
-// Populate the INPUT structure with the appropriate keyboard event
+// Append an INPUT structure with the appropriate keyboard event
 // parameters required by SendInput
-bool FillKeyboardInput(ui::KeyboardCode key, INPUT* input, bool key_up) {
-  memset(input, 0, sizeof(INPUT));
-  input->type = INPUT_KEYBOARD;
-  input->ki.wVk = ui::WindowsKeyCodeForKeyboardCode(key);
+void AppendKeyboardInput(ui::KeyboardCode key,
+                         bool key_up,
+                         std::vector<INPUT>* input) {
+  INPUT key_input = {};
+  key_input.type = INPUT_KEYBOARD;
+  key_input.ki.wVk = ui::WindowsKeyCodeForKeyboardCode(key);
   if (ShouldSendThroughScanCode(key)) {
-    input->ki.wScan = MapVirtualKeyToScanCode(input->ki.wVk);
+    key_input.ki.wScan = MapVirtualKeyToScanCode(key_input.ki.wVk);
     // When KEYEVENTF_SCANCODE is used, ki.wVk is ignored, so we do not need to
     // clear it.
-    input->ki.dwFlags = KEYEVENTF_SCANCODE;
-    if ((input->ki.wScan & 0xFF00) != 0)
-      input->ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+    key_input.ki.dwFlags = KEYEVENTF_SCANCODE;
+    if ((key_input.ki.wScan & 0xFF00) != 0)
+      key_input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
   }
   if (key_up)
-    input->ki.dwFlags |= KEYEVENTF_KEYUP;
+    key_input.ki.dwFlags |= KEYEVENTF_KEYUP;
+  input->push_back(key_input);
+}
 
-  return true;
+// Append an INPUT structure with a simple mouse up or down event to be used
+// by SendInput.
+void AppendMouseInput(DWORD flags, std::vector<INPUT>* input) {
+  INPUT mouse_input = {};
+  mouse_input.type = INPUT_MOUSE;
+  mouse_input.mi.dwFlags = flags;
+  input->push_back(mouse_input);
+}
+
+// Append an INPUT array with optional accelerator keys that may be pressed
+// with a keyboard or mouse event. This array will be sent by SendInput.
+void AppendAcceleratorInputs(bool control,
+                             bool shift,
+                             bool alt,
+                             bool key_up,
+                             std::vector<INPUT>* input) {
+  if (control)
+    AppendKeyboardInput(ui::VKEY_CONTROL, key_up, input);
+  if (alt)
+    AppendKeyboardInput(ui::VKEY_LMENU, key_up, input);
+  if (shift)
+    AppendKeyboardInput(ui::VKEY_SHIFT, key_up, input);
 }
 
 }  // namespace
@@ -321,7 +366,7 @@ bool SendKeyPressImpl(HWND window,
                       bool control,
                       bool shift,
                       bool alt,
-                      const base::Closure& task) {
+                      base::OnceClosure task) {
   // SendInput only works as we expect it if one of our windows is the
   // foreground window already.
   HWND target_window = (::GetActiveWindow() &&
@@ -333,7 +378,7 @@ bool SendKeyPressImpl(HWND window,
 
   scoped_refptr<InputDispatcher> dispatcher;
   if (task)
-    dispatcher = InputDispatcher::CreateForMessage(WM_KEYUP, task);
+    dispatcher = InputDispatcher::CreateForMessage(WM_KEYUP, std::move(task));
 
   // If a pop-up menu is open, it won't receive events sent using SendInput.
   // Check for a pop-up menu using its window class (#32768) and if one
@@ -350,54 +395,14 @@ bool SendKeyPressImpl(HWND window,
     return true;
   }
 
-  INPUT input[8] = {};  // 8, assuming all the modifiers are activated.
+  std::vector<INPUT> input;
+  AppendAcceleratorInputs(control, shift, alt, false, &input);
+  AppendKeyboardInput(key, false, &input);
 
-  UINT i = 0;
-  if (control) {
-    if (!FillKeyboardInput(ui::VKEY_CONTROL, &input[i], false))
-      return false;
-    i++;
-  }
+  AppendKeyboardInput(key, true, &input);
+  AppendAcceleratorInputs(control, shift, alt, true, &input);
 
-  if (shift) {
-    if (!FillKeyboardInput(ui::VKEY_SHIFT, &input[i], false))
-      return false;
-    i++;
-  }
-
-  if (alt) {
-    if (!FillKeyboardInput(ui::VKEY_LMENU, &input[i], false))
-      return false;
-    i++;
-  }
-
-  if (!FillKeyboardInput(key, &input[i], false))
-    return false;
-  i++;
-
-  if (!FillKeyboardInput(key, &input[i], true))
-    return false;
-  i++;
-
-  if (alt) {
-    if (!FillKeyboardInput(ui::VKEY_LMENU, &input[i], true))
-      return false;
-    i++;
-  }
-
-  if (shift) {
-    if (!FillKeyboardInput(ui::VKEY_SHIFT, &input[i], true))
-      return false;
-    i++;
-  }
-
-  if (control) {
-    if (!FillKeyboardInput(ui::VKEY_CONTROL, &input[i], true))
-      return false;
-    i++;
-  }
-
-  if (::SendInput(i, input, sizeof(INPUT)) != i)
+  if (::SendInput(input.size(), input.data(), sizeof(INPUT)) != input.size())
     return false;
 
   if (dispatcher)
@@ -406,9 +411,7 @@ bool SendKeyPressImpl(HWND window,
   return true;
 }
 
-bool SendMouseMoveImpl(long screen_x,
-                       long screen_y,
-                       const base::Closure& task) {
+bool SendMouseMoveImpl(long screen_x, long screen_y, base::OnceClosure task) {
   gfx::Point screen_point =
       display::win::ScreenWin::DIPToScreenPoint({screen_x, screen_y});
   screen_x = screen_point.x();
@@ -434,20 +437,24 @@ bool SendMouseMoveImpl(long screen_x,
   ::GetCursorPos(&current_pos);
   if (screen_x == current_pos.x && screen_y == current_pos.y) {
     if (task)
-      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, task);
+      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(task));
     return true;
   }
 
-  // Form the input data containing the normalized absolute coordinates.
+  // Form the input data containing the normalized absolute coordinates. As of
+  // Windows 10 Fall Creators Update, moving to an absolute position of zero
+  // does not work. It seems that moving to 1,1 does, though.
   INPUT input = {INPUT_MOUSE};
-  input.mi.dx = static_cast<LONG>(std::ceil(screen_x * (65535.0 / max_x)));
-  input.mi.dy = static_cast<LONG>(std::ceil(screen_y * (65535.0 / max_y)));
+  input.mi.dx =
+      static_cast<LONG>(std::max(1.0, std::ceil(screen_x * (65535.0 / max_x))));
+  input.mi.dy =
+      static_cast<LONG>(std::max(1.0, std::ceil(screen_y * (65535.0 / max_y))));
   input.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
 
   scoped_refptr<InputDispatcher> dispatcher;
   if (task) {
-    dispatcher =
-        InputDispatcher::CreateForMouseMove({screen_x, screen_y}, task);
+    dispatcher = InputDispatcher::CreateForMouseMove({screen_x, screen_y},
+                                                     std::move(task));
   }
 
   if (!::SendInput(1, &input, sizeof(input)))
@@ -459,8 +466,10 @@ bool SendMouseMoveImpl(long screen_x,
   return true;
 }
 
-bool SendMouseEventsImpl(MouseButton type, int state,
-                         const base::Closure& task) {
+bool SendMouseEventsImpl(MouseButton type,
+                         int button_state,
+                         base::OnceClosure task,
+                         int accelerator_state) {
   DWORD down_flags = MOUSEEVENTF_ABSOLUTE;
   DWORD up_flags = MOUSEEVENTF_ABSOLUTE;
   UINT last_event;
@@ -469,19 +478,19 @@ bool SendMouseEventsImpl(MouseButton type, int state,
     case LEFT:
       down_flags |= MOUSEEVENTF_LEFTDOWN;
       up_flags |= MOUSEEVENTF_LEFTUP;
-      last_event = (state & UP) ? WM_LBUTTONUP : WM_LBUTTONDOWN;
+      last_event = (button_state & UP) ? WM_LBUTTONUP : WM_LBUTTONDOWN;
       break;
 
     case MIDDLE:
       down_flags |= MOUSEEVENTF_MIDDLEDOWN;
       up_flags |= MOUSEEVENTF_MIDDLEUP;
-      last_event = (state & UP) ? WM_MBUTTONUP : WM_MBUTTONDOWN;
+      last_event = (button_state & UP) ? WM_MBUTTONUP : WM_MBUTTONDOWN;
       break;
 
     case RIGHT:
       down_flags |= MOUSEEVENTF_RIGHTDOWN;
       up_flags |= MOUSEEVENTF_RIGHTUP;
-      last_event = (state & UP) ? WM_RBUTTONUP : WM_RBUTTONDOWN;
+      last_event = (button_state & UP) ? WM_RBUTTONUP : WM_RBUTTONDOWN;
       break;
 
     default:
@@ -491,16 +500,24 @@ bool SendMouseEventsImpl(MouseButton type, int state,
 
   scoped_refptr<InputDispatcher> dispatcher;
   if (task)
-    dispatcher = InputDispatcher::CreateForMessage(last_event, task);
+    dispatcher = InputDispatcher::CreateForMessage(last_event, std::move(task));
 
-  INPUT input = { 0 };
-  input.type = INPUT_MOUSE;
-  input.mi.dwFlags = down_flags;
-  if ((state & DOWN) && !::SendInput(1, &input, sizeof(INPUT)))
-    return false;
+  std::vector<INPUT> input;
+  if (button_state & DOWN) {
+    AppendAcceleratorInputs(accelerator_state & kControl,
+                            accelerator_state & kShift,
+                            accelerator_state & kAlt, false, &input);
+    AppendMouseInput(down_flags, &input);
+  }
 
-  input.mi.dwFlags = up_flags;
-  if ((state & UP) && !::SendInput(1, &input, sizeof(INPUT)))
+  if (button_state & UP) {
+    AppendMouseInput(up_flags, &input);
+    AppendAcceleratorInputs(accelerator_state & kControl,
+                            accelerator_state & kShift,
+                            accelerator_state & kAlt, true, &input);
+  }
+
+  if (::SendInput(input.size(), input.data(), sizeof(INPUT)) != input.size())
     return false;
 
   if (dispatcher)

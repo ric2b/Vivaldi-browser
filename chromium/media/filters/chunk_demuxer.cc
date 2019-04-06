@@ -52,6 +52,37 @@ using base::TimeDelta;
     }                                                                   \
   }
 
+namespace {
+
+// Helper to attempt construction of a StreamParser specific to |content_type|
+// and |codecs|.
+// TODO(wolenetz): Consider relocating this to StreamParserFactory in
+// conjunction with updating StreamParserFactory's isTypeSupported() to also
+// parse codecs, rather than require preparsed vector.
+std::unique_ptr<media::StreamParser> CreateParserForTypeAndCodecs(
+    const std::string& content_type,
+    const std::string& codecs,
+    media::MediaLog* media_log) {
+  std::vector<std::string> parsed_codec_ids;
+  media::SplitCodecsToVector(codecs, &parsed_codec_ids, false);
+  return media::StreamParserFactory::Create(content_type, parsed_codec_ids,
+                                            media_log);
+}
+
+// Helper to calculate the expected codecs parsed from initialization segments
+// for a few mime types that have an implicit codec.
+std::string ExpectedCodecs(const std::string& content_type,
+                           const std::string& codecs) {
+  if (codecs == "" && content_type == "audio/aac")
+    return "aac";
+  if (codecs == "" &&
+      (content_type == "audio/mpeg" || content_type == "audio/mp3"))
+    return "mp3";
+  return codecs;
+}
+
+}  // namespace
+
 namespace media {
 
 ChunkDemuxerStream::ChunkDemuxerStream(Type type,
@@ -228,18 +259,13 @@ void ChunkDemuxerStream::OnStartOfCodedFrameGroup(DecodeTimestamp start_dts,
 }
 
 bool ChunkDemuxerStream::UpdateAudioConfig(const AudioDecoderConfig& config,
+                                           bool allow_codec_change,
                                            MediaLog* media_log) {
   DCHECK(config.IsValidConfig());
   DCHECK_EQ(type_, AUDIO);
   base::AutoLock auto_lock(lock_);
   if (!SBSTREAM_IS_SET) {
     DCHECK_EQ(state_, UNINITIALIZED);
-
-    // FLAC in MSE here is only supported if in ISOBMFF, which has feature flag.
-    // Though the MP4StreamParser shouldn't produce FLAC decoder configs if the
-    // feature is disabled, double-check feature support here in debug builds.
-    DCHECK(config.codec() != kCodecFLAC ||
-           base::FeatureList::IsEnabled(kMseFlacInIsobmff));
 
     // Enable partial append window support for most audio codecs (notably: not
     // opus).
@@ -251,10 +277,11 @@ bool ChunkDemuxerStream::UpdateAudioConfig(const AudioDecoderConfig& config,
     return true;
   }
 
-  return SBSTREAM_OP(UpdateAudioConfig(config));
+  return SBSTREAM_OP(UpdateAudioConfig(config, allow_codec_change));
 }
 
 bool ChunkDemuxerStream::UpdateVideoConfig(const VideoDecoderConfig& config,
+                                           bool allow_codec_change,
                                            MediaLog* media_log) {
   DCHECK(config.IsValidConfig());
   DCHECK_EQ(type_, VIDEO);
@@ -266,7 +293,7 @@ bool ChunkDemuxerStream::UpdateVideoConfig(const VideoDecoderConfig& config,
     return true;
   }
 
-  return SBSTREAM_OP(UpdateVideoConfig(config));
+  return SBSTREAM_OP(UpdateVideoConfig(config, allow_codec_change));
 }
 
 void ChunkDemuxerStream::UpdateTextConfig(const TextTrackConfig& config,
@@ -351,14 +378,6 @@ void ChunkDemuxerStream::SetEnabled(bool enabled, base::TimeDelta timestamp) {
     base::ResetAndReturn(&read_cb_).Run(kOk,
                                         StreamParserBuffer::CreateEOSBuffer());
   }
-  if (!stream_status_change_cb_.is_null())
-    stream_status_change_cb_.Run(this, is_enabled_, timestamp);
-}
-
-void ChunkDemuxerStream::SetStreamStatusChangeCB(
-    const StreamStatusChangeCB& cb) {
-  DCHECK(!cb.is_null());
-  stream_status_change_cb_ = BindToCurrentLoop(cb);
 }
 
 TextTrackConfig ChunkDemuxerStream::text_track_config() {
@@ -454,7 +473,6 @@ ChunkDemuxer::ChunkDemuxer(
       open_cb_(open_cb),
       progress_cb_(progress_cb),
       encrypted_media_init_data_cb_(encrypted_media_init_data_cb),
-      enable_text_(false),
       media_log_(media_log),
       duration_(kNoTimestamp),
       user_specified_duration_(-1),
@@ -475,8 +493,7 @@ std::string ChunkDemuxer::GetDisplayName() const {
 }
 
 void ChunkDemuxer::Initialize(DemuxerHost* host,
-                              const PipelineStatusCB& init_cb,
-                              bool enable_text_tracks) {
+                              const PipelineStatusCB& init_cb) {
   DVLOG(1) << "Init(), buffering_by_pts_=" << buffering_by_pts_;
 
   base::AutoLock auto_lock(lock_);
@@ -494,7 +511,6 @@ void ChunkDemuxer::Initialize(DemuxerHost* host,
   // has a chance to run. This is because ChunkDemuxer::ReportError_Locked
   // directly calls DemuxerHost::OnDemuxerError: crbug.com/633016.
   init_cb_ = init_cb;
-  enable_text_ = enable_text_tracks;
 
   ChangeState_Locked(INITIALIZING);
 
@@ -567,15 +583,6 @@ std::vector<DemuxerStream*> ChunkDemuxer::GetAllStreams() {
   return result;
 }
 
-void ChunkDemuxer::SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) {
-  base::AutoLock auto_lock(lock_);
-  DCHECK(!cb.is_null());
-  for (const auto& stream : audio_streams_)
-    stream->SetStreamStatusChangeCB(cb);
-  for (const auto& stream : video_streams_)
-    stream->SetStreamStatusChangeCB(cb);
-}
-
 TimeDelta ChunkDemuxer::GetStartTime() const {
   return TimeDelta();
 }
@@ -640,23 +647,23 @@ void ChunkDemuxer::CancelPendingSeek(TimeDelta seek_time) {
 }
 
 ChunkDemuxer::Status ChunkDemuxer::AddId(const std::string& id,
-                                         const std::string& type,
+                                         const std::string& content_type,
                                          const std::string& codecs) {
-  DVLOG(1) << __func__ << " id=" << id << " mime_type=" << type
+  DVLOG(1) << __func__ << " id=" << id << " content_type=" << content_type
            << " codecs=" << codecs;
   base::AutoLock auto_lock(lock_);
 
   if ((state_ != WAITING_FOR_INIT && state_ != INITIALIZING) || IsValidId(id))
     return kReachedIdLimit;
 
-  std::vector<std::string> parsed_codec_ids;
-  media::SplitCodecsToVector(codecs, &parsed_codec_ids, false);
+  // TODO(wolenetz): Change to DCHECK once less verification in release build is
+  // needed. See https://crbug.com/786975.
+  CHECK(!init_cb_.is_null());
 
   std::unique_ptr<media::StreamParser> stream_parser(
-      StreamParserFactory::Create(type, parsed_codec_ids, media_log_));
-
+      CreateParserForTypeAndCodecs(content_type, codecs, media_log_));
   if (!stream_parser) {
-    DVLOG(1) << __func__ << " failed: unsupported mime_type=" << type
+    DVLOG(1) << __func__ << " failed: unsupported content_type=" << content_type
              << " codecs=" << codecs;
     return ChunkDemuxer::kNotSupported;
   }
@@ -676,24 +683,25 @@ ChunkDemuxer::Status ChunkDemuxer::AddId(const std::string& id,
 
   SourceBufferState::NewTextTrackCB new_text_track_cb;
 
-  if (enable_text_) {
-    new_text_track_cb = base::Bind(&ChunkDemuxer::OnNewTextTrack,
-                                   base::Unretained(this));
-  }
+  // TODO(wolenetz): Change these to DCHECKs or switch to returning
+  // kReachedIdLimit once less verification in release build is needed. See
+  // https://crbug.com/786975.
+  CHECK(pending_source_init_ids_.find(id) == pending_source_init_ids_.end());
+  auto insert_result = pending_source_init_ids_.insert(id);
+  CHECK(insert_result.first != pending_source_init_ids_.end());
+  CHECK(*insert_result.first == id);
+  CHECK(insert_result.second);  // Only true if insertion succeeded.
 
-  pending_source_init_ids_.insert(id);
+  source_state->Init(base::BindOnce(&ChunkDemuxer::OnSourceInitDone,
+                                    base::Unretained(this), id),
+                     ExpectedCodecs(content_type, codecs),
+                     encrypted_media_init_data_cb_, new_text_track_cb);
 
-  std::string expected_sbs_codecs = codecs;
-  if (codecs == "" && type == "audio/aac")
-    expected_sbs_codecs = "aac";
-  if (codecs == "" && (type == "audio/mpeg" || type == "audio/mp3"))
-    expected_sbs_codecs = "mp3";
-
-  source_state->Init(
-      base::Bind(&ChunkDemuxer::OnSourceInitDone, base::Unretained(this), id),
-      expected_sbs_codecs, encrypted_media_init_data_cb_, new_text_track_cb);
-
+  // TODO(wolenetz): Change to DCHECKs once less verification in release build
+  // is needed. See https://crbug.com/786975.
+  CHECK(!IsValidId(id));
   source_state_map_[id] = std::move(source_state);
+  CHECK(IsValidId(id));
   return kOk;
 }
 
@@ -767,68 +775,59 @@ base::TimeDelta ChunkDemuxer::GetHighestPresentationTimestamp(
   return itr->second->GetHighestPresentationTimestamp();
 }
 
-void ChunkDemuxer::OnEnabledAudioTracksChanged(
+void ChunkDemuxer::FindAndEnableProperTracks(
     const std::vector<MediaTrack::Id>& track_ids,
-    base::TimeDelta curr_time) {
+    base::TimeDelta curr_time,
+    DemuxerStream::Type track_type,
+    TrackChangeCB change_completed_cb) {
   base::AutoLock auto_lock(lock_);
+
   std::set<ChunkDemuxerStream*> enabled_streams;
   for (const auto& id : track_ids) {
     auto it = track_id_to_demux_stream_map_.find(id);
     if (it == track_id_to_demux_stream_map_.end())
       continue;
     ChunkDemuxerStream* stream = it->second;
-    DCHECK_EQ(DemuxerStream::AUDIO, stream->type());
+    DCHECK(stream);
+    DCHECK_EQ(track_type, stream->type());
     // TODO(servolk): Remove after multiple enabled audio tracks are supported
     // by the media::RendererImpl.
     if (!enabled_streams.empty()) {
       MEDIA_LOG(INFO, media_log_)
-          << "Only one enabled audio track is supported, ignoring track " << id;
+          << "Only one enabled track is supported, ignoring track " << id;
       continue;
     }
     enabled_streams.insert(stream);
+    stream->SetEnabled(true, curr_time);
   }
 
-  // First disable all streams that need to be disabled and then enable streams
-  // that are enabled.
-  for (const auto& stream : audio_streams_) {
-    if (enabled_streams.find(stream.get()) == enabled_streams.end()) {
+  bool is_audio = track_type == DemuxerStream::AUDIO;
+  for (const auto& stream : is_audio ? audio_streams_ : video_streams_) {
+    if (stream && enabled_streams.find(stream.get()) == enabled_streams.end()) {
       DVLOG(1) << __func__ << ": disabling stream " << stream.get();
       stream->SetEnabled(false, curr_time);
     }
   }
-  for (auto* stream : enabled_streams) {
-    DVLOG(1) << __func__ << ": enabling stream " << stream;
-    stream->SetEnabled(true, curr_time);
-  }
+
+  std::vector<DemuxerStream*> streams(enabled_streams.begin(),
+                                      enabled_streams.end());
+  std::move(change_completed_cb).Run(track_type, streams);
+}
+
+void ChunkDemuxer::OnEnabledAudioTracksChanged(
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta curr_time,
+    TrackChangeCB change_completed_cb) {
+  FindAndEnableProperTracks(track_ids, curr_time, DemuxerStream::AUDIO,
+                            std::move(change_completed_cb));
 }
 
 void ChunkDemuxer::OnSelectedVideoTrackChanged(
-    base::Optional<MediaTrack::Id> track_id,
-    base::TimeDelta curr_time) {
-  base::AutoLock auto_lock(lock_);
-  ChunkDemuxerStream* selected_stream = nullptr;
-  if (track_id) {
-    auto it = track_id_to_demux_stream_map_.find(*track_id);
-    if (it != track_id_to_demux_stream_map_.end()) {
-      selected_stream = it->second;
-      DCHECK(selected_stream);
-      DCHECK_EQ(DemuxerStream::VIDEO, selected_stream->type());
-    }
-  }
-
-  // First disable all streams that need to be disabled and then enable the
-  // stream that needs to be enabled (if any).
-  for (const auto& stream : video_streams_) {
-    if (stream.get() != selected_stream) {
-      DVLOG(1) << __func__ << ": disabling stream " << stream.get();
-      DCHECK_EQ(DemuxerStream::VIDEO, stream->type());
-      stream->SetEnabled(false, curr_time);
-    }
-  }
-  if (selected_stream) {
-    DVLOG(1) << __func__ << ": enabling stream " << selected_stream;
-    selected_stream->SetEnabled(true, curr_time);
-  }
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta curr_time,
+    TrackChangeCB change_completed_cb) {
+  FindAndEnableProperTracks(track_ids, curr_time, DemuxerStream::VIDEO,
+                            std::move(change_completed_cb));
 }
 
 void ChunkDemuxer::OnMemoryPressure(
@@ -964,6 +963,51 @@ void ChunkDemuxer::Remove(const std::string& id, TimeDelta start,
   host_->OnBufferedTimeRangesChanged(GetBufferedRanges_Locked());
 }
 
+bool ChunkDemuxer::CanChangeType(const std::string& id,
+                                 const std::string& content_type,
+                                 const std::string& codecs) {
+  // Note, Chromium currently will not compare content_type and codecs, if any,
+  // with previous content_type and codecs of the SourceBuffer.
+  // TODO(wolenetz): Consider returning false if the codecs parameters are ever
+  // made to be precise such that they signal that the number of tracks of
+  // various media types differ from the first initialization segment (if
+  // received already).  Switching to an audio-only container, when the first
+  // initialization segment only contained non-audio tracks, is one example we
+  // could enforce earlier here.
+
+  DVLOG(1) << __func__ << " id=" << id << " content_type=" << content_type
+           << " codecs=" << codecs;
+  base::AutoLock auto_lock(lock_);
+
+  DCHECK(IsValidId(id));
+
+  // CanChangeType() doesn't care if there has or hasn't been received a first
+  // initialization segment for the source buffer corresponding to |id|.
+
+  std::unique_ptr<media::StreamParser> stream_parser(
+      CreateParserForTypeAndCodecs(content_type, codecs, media_log_));
+  return !!stream_parser;
+}
+
+void ChunkDemuxer::ChangeType(const std::string& id,
+                              const std::string& content_type,
+                              const std::string& codecs) {
+  DVLOG(1) << __func__ << " id=" << id << " content_type=" << content_type
+           << " codecs=" << codecs;
+
+  base::AutoLock auto_lock(lock_);
+
+  DCHECK(state_ == INITIALIZING || state_ == INITIALIZED) << state_;
+  DCHECK(IsValidId(id));
+
+  std::unique_ptr<media::StreamParser> stream_parser(
+      CreateParserForTypeAndCodecs(content_type, codecs, media_log_));
+  // Caller should query CanChangeType() first to protect from failing this.
+  DCHECK(stream_parser);
+  source_state_map_[id]->ChangeType(std::move(stream_parser),
+                                    ExpectedCodecs(content_type, codecs));
+}
+
 double ChunkDemuxer::GetDuration() {
   base::AutoLock auto_lock(lock_);
   return GetDuration_Locked();
@@ -1035,6 +1079,14 @@ bool ChunkDemuxer::IsParsingMediaSegment(const std::string& id) {
   return source_state_map_[id]->parsing_media_segment();
 }
 
+bool ChunkDemuxer::GetGenerateTimestampsFlag(const std::string& id) {
+  base::AutoLock auto_lock(lock_);
+  DVLOG(1) << "GetGenerateTimestampsFlag(" << id << ")";
+  CHECK(IsValidId(id));
+
+  return source_state_map_[id]->generate_timestamps_flag();
+}
+
 void ChunkDemuxer::SetSequenceMode(const std::string& id,
                                    bool sequence_mode) {
   base::AutoLock auto_lock(lock_);
@@ -1101,7 +1153,14 @@ void ChunkDemuxer::MarkEndOfStream(PipelineStatus status) {
 void ChunkDemuxer::UnmarkEndOfStream() {
   DVLOG(1) << "UnmarkEndOfStream()";
   base::AutoLock auto_lock(lock_);
-  DCHECK_EQ(state_, ENDED);
+  DCHECK(state_ == ENDED || state_ == SHUTDOWN || state_ == PARSE_ERROR)
+      << state_;
+
+  // At least ReportError_Locked()'s error reporting to Blink hops threads, so
+  // SourceBuffer may not be aware of media element error on another operation
+  // that might race to this point.
+  if (state_ == PARSE_ERROR || state_ == SHUTDOWN)
+    return;
 
   ChangeState_Locked(INITIALIZED);
 
@@ -1138,6 +1197,12 @@ void ChunkDemuxer::ChangeState_Locked(State new_state) {
   lock_.AssertAcquired();
   DVLOG(1) << "ChunkDemuxer::ChangeState_Locked() : "
            << state_ << " -> " << new_state;
+
+  // TODO(wolenetz): Change to DCHECK once less verification in release build is
+  // needed. See https://crbug.com/786975.
+  // Disallow changes from at or beyond PARSE_ERROR to below PARSE_ERROR.
+  CHECK(!(state_ >= PARSE_ERROR && new_state < PARSE_ERROR));
+
   state_ = new_state;
 }
 
@@ -1192,10 +1257,15 @@ void ChunkDemuxer::OnSourceInitDone(
 
   // TODO(wolenetz): Change these to DCHECKs once less verification in release
   // build is needed. See https://crbug.com/786975.
-  CHECK_EQ(state_, INITIALIZING);
-  CHECK(!init_cb_.is_null());
-  CHECK(pending_source_init_ids_.find(source_id) !=
-        pending_source_init_ids_.end());
+  bool is_initializing = state_ == INITIALIZING;
+  bool init_cb_is_set = !init_cb_.is_null();
+  bool id_is_pending = pending_source_init_ids_.find(source_id) !=
+                       pending_source_init_ids_.end();
+  CHECK(!pending_source_init_ids_.empty());
+  CHECK(IsValidId(source_id));
+  CHECK(id_is_pending);
+  CHECK(init_cb_is_set);
+  CHECK(is_initializing);
   if (audio_streams_.empty() && video_streams_.empty()) {
     ReportError_Locked(DEMUXER_ERROR_COULD_NOT_OPEN);
     return;
@@ -1309,13 +1379,6 @@ ChunkDemuxerStream* ChunkDemuxer::CreateDemuxerStream(
   stream->SetEnabled(owning_vector->empty(), base::TimeDelta());
   owning_vector->push_back(std::move(stream));
   return owning_vector->back().get();
-}
-
-void ChunkDemuxer::OnNewTextTrack(ChunkDemuxerStream* text_stream,
-                                  const TextTrackConfig& config) {
-  lock_.AssertAcquired();
-  DCHECK_NE(state_, SHUTDOWN);
-  host_->AddTextStream(text_stream, config);
 }
 
 bool ChunkDemuxer::IsValidId(const std::string& source_id) const {

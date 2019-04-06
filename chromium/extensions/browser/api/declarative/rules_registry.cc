@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -38,12 +37,12 @@ const char kDuplicateRuleId[] = "Duplicate rule ID: %s";
 const char kErrorCannotRemoveManifestRules[] =
     "Rules declared in the 'event_rules' manifest field cannot be removed";
 
-std::unique_ptr<base::Value> RulesToValue(
+base::Value RulesToValue(
     const std::vector<linked_ptr<api::events::Rule>>& rules) {
-  std::unique_ptr<base::ListValue> list(new base::ListValue());
+  base::Value value(base::Value::Type::LIST);
   for (size_t i = 0; i < rules.size(); ++i)
-    list->Append(rules[i]->ToValue());
-  return std::move(list);
+    value.GetList().push_back(std::move(*rules[i]->ToValue()));
+  return value;
 }
 
 std::vector<linked_ptr<api::events::Rule>> RulesFromValue(
@@ -88,7 +87,7 @@ RulesRegistry::RulesRegistry(content::BrowserContext* browser_context,
       ready_(/*signaled=*/!cache_delegate),  // Immediately ready if no cache
                                              // delegate to wait for.
       last_generated_rule_identifier_id_(0),
-      weak_ptr_factory_(browser_context_ ? this : NULL) {
+      weak_ptr_factory_(this) {
   if (cache_delegate) {
     cache_delegate_ = cache_delegate->GetWeakPtr();
     cache_delegate->Init(this);
@@ -339,8 +338,8 @@ void RulesRegistry::ProcessChangedRules(const std::string& extension_id) {
   GetRules(extension_id, rules_, &new_rules);
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&RulesCacheDelegate::WriteToStorage, cache_delegate_,
-                 extension_id, base::Passed(RulesToValue(new_rules))));
+      base::BindOnce(&RulesCacheDelegate::UpdateRules, cache_delegate_,
+                     extension_id, RulesToValue(new_rules)));
 }
 
 void RulesRegistry::MaybeProcessChangedRules(const std::string& extension_id) {

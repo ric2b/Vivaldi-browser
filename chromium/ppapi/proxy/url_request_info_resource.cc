@@ -146,9 +146,6 @@ bool URLRequestInfoResource::SetBooleanProperty(
   // without also adding them to PPB_URLRequestInfo_Impl::ValidateData. See
   // SetProperty() above for why.
   switch (property) {
-    case PP_URLREQUESTPROPERTY_STREAMTOFILE:
-      data_.stream_to_file = value;
-      return true;
     case PP_URLREQUESTPROPERTY_FOLLOWREDIRECTS:
       data_.follow_redirects = value;
       return true;

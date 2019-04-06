@@ -14,6 +14,7 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
@@ -31,9 +32,12 @@
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
+#include "gpu/ipc/in_process_command_buffer.h"
+#include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -206,7 +210,9 @@ GpuFeatureInfo GLManager::g_gpu_feature_info;
 
 GLManager::Options::Options() = default;
 
-GLManager::GLManager() {
+GLManager::GLManager()
+    : gpu_memory_buffer_factory_(
+          gpu::GpuMemoryBufferFactory::CreateNativeType()) {
   SetupBaseContext();
 }
 
@@ -214,8 +220,8 @@ GLManager::~GLManager() {
   --use_count_;
   if (!use_count_) {
     if (base_share_group_) {
-      delete base_context_;
-      base_context_ = NULL;
+      delete base_share_group_;
+      base_share_group_ = NULL;
     }
     if (base_surface_) {
       delete base_surface_;
@@ -238,7 +244,7 @@ std::unique_ptr<gfx::GpuMemoryBuffer> GLManager::CreateGpuMemoryBuffer(
   }
 #endif  // defined(OS_MACOSX)
   std::vector<uint8_t> data(gfx::BufferSizeForBufferFormat(size, format), 0);
-  scoped_refptr<base::RefCountedBytes> bytes(new base::RefCountedBytes(data));
+  auto bytes = base::RefCountedBytes::TakeVector(&data);
   return base::WrapUnique<gfx::GpuMemoryBuffer>(
       new GpuMemoryBufferImpl(bytes.get(), size, format));
 }
@@ -320,15 +326,16 @@ void GLManager::InitializeWithWorkaroundsImpl(
       std::make_unique<gles2::ShaderTranslatorCache>(gpu_preferences_);
 
   if (!context_group) {
+    GpuFeatureInfo gpu_feature_info;
     scoped_refptr<gles2::FeatureInfo> feature_info =
-        new gles2::FeatureInfo(workarounds);
+        new gles2::FeatureInfo(workarounds, gpu_feature_info);
     // Always mark the passthrough command decoder as supported so that tests do
     // not unexpectedly use the wrong command decoder
     context_group = new gles2::ContextGroup(
         gpu_preferences_, true, mailbox_manager_, nullptr /* memory_tracker */,
         translator_cache_.get(), &completeness_cache_, feature_info,
         options.bind_generates_resource, &image_manager_, options.image_factory,
-        nullptr /* progress_reporter */, GpuFeatureInfo(),
+        nullptr /* progress_reporter */, gpu_feature_info,
         &discardable_manager_);
   }
 
@@ -460,6 +467,7 @@ void GLManager::Destroy() {
     decoder_->Destroy(have_context);
     decoder_.reset();
   }
+  context_ = nullptr;
 }
 
 const GpuDriverBugWorkarounds& GLManager::workarounds() const {
@@ -495,6 +503,25 @@ int32_t GLManager::CreateImage(ClientBuffer buffer,
     gl_image = image;
   }
 #endif  // defined(OS_MACOSX)
+
+  if (use_native_pixmap_memory_buffers_) {
+    gfx::GpuMemoryBuffer* gpu_memory_buffer =
+        reinterpret_cast<gfx::GpuMemoryBuffer*>(buffer);
+    DCHECK(gpu_memory_buffer);
+    if (gpu_memory_buffer->GetHandle().type == gfx::NATIVE_PIXMAP) {
+      gfx::GpuMemoryBufferHandle handle =
+          gfx::CloneHandleForIPC(gpu_memory_buffer->GetHandle());
+      gfx::BufferFormat format = gpu_memory_buffer->GetFormat();
+      gl_image = gpu_memory_buffer_factory_->AsImageFactory()
+                     ->CreateImageForGpuMemoryBuffer(
+                         handle, size, format, internalformat,
+                         gpu::InProcessCommandBuffer::kGpuClientId,
+                         gpu::kNullSurfaceHandle);
+      if (!gl_image)
+        return -1;
+    }
+  }
+
   if (!gl_image) {
     GpuMemoryBufferImpl* gpu_memory_buffer =
         GpuMemoryBufferImpl::FromClientBuffer(buffer);
@@ -518,7 +545,7 @@ void GLManager::DestroyImage(int32_t id) {
   image_manager_.RemoveImage(id);
 }
 
-void GLManager::SignalQuery(uint32_t query, const base::Closure& callback) {
+void GLManager::SignalQuery(uint32_t query, base::OnceClosure callback) {
   NOTIMPLEMENTED();
 }
 
@@ -561,8 +588,9 @@ bool GLManager::IsFenceSyncReleased(uint64_t release) {
 }
 
 void GLManager::SignalSyncToken(const gpu::SyncToken& sync_token,
-                                const base::Closure& callback) {
-  command_buffer_->SignalSyncToken(sync_token, callback);
+                                base::OnceClosure callback) {
+  command_buffer_->SignalSyncToken(
+      sync_token, base::AdaptCallbackForRepeating(std::move(callback)));
 }
 
 void GLManager::WaitSyncTokenHint(const gpu::SyncToken& sync_token) {}
@@ -571,9 +599,12 @@ bool GLManager::CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) {
   return false;
 }
 
-void GLManager::SetSnapshotRequested() {}
-
 ContextType GLManager::GetContextType() const {
   return context_type_;
+}
+
+void GLManager::Reset() {
+  Destroy();
+  SetupBaseContext();
 }
 }  // namespace gpu

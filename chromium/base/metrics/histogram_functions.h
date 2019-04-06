@@ -54,9 +54,23 @@ void UmaHistogramEnumeration(const std::string& name, T sample, T enum_size) {
   static_assert(std::is_enum<T>::value,
                 "Non enum passed to UmaHistogramEnumeration");
   DCHECK_LE(static_cast<uintmax_t>(enum_size), static_cast<uintmax_t>(INT_MAX));
-  DCHECK_LE(static_cast<uintmax_t>(sample), static_cast<uintmax_t>(enum_size));
+  DCHECK_LT(static_cast<uintmax_t>(sample), static_cast<uintmax_t>(enum_size));
   return UmaHistogramExactLinear(name, static_cast<int>(sample),
                                  static_cast<int>(enum_size));
+}
+
+// Same as above, but uses T::kMaxValue as the inclusive maximum value of the
+// enum.
+template <typename T>
+void UmaHistogramEnumeration(const std::string& name, T sample) {
+  static_assert(std::is_enum<T>::value,
+                "Non enum passed to UmaHistogramEnumeration");
+  DCHECK_LE(static_cast<uintmax_t>(T::kMaxValue),
+            static_cast<uintmax_t>(INT_MAX) - 1);
+  DCHECK_LE(static_cast<uintmax_t>(sample),
+            static_cast<uintmax_t>(T::kMaxValue));
+  return UmaHistogramExactLinear(name, static_cast<int>(sample),
+                                 static_cast<int>(T::kMaxValue) + 1);
 }
 
 // For adding boolean sample to histogram.

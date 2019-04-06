@@ -6,7 +6,6 @@
 
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -48,10 +47,7 @@ class BackendDelegate : public HistoryBackend::Delegate {
                         const RedirectList& redirects,
                         base::Time visit_time) override {}
   void NotifyURLsModified(const URLRows& changed_urls) override {}
-  void NotifyURLsDeleted(bool all_history,
-                         bool expired,
-                         const URLRows& deleted_rows,
-                         const std::set<GURL>& favicon_urls) override {}
+  void NotifyURLsDeleted(DeletionInfo deletion_info) override {}
   void NotifyKeywordSearchTermUpdated(const URLRow& row,
                                       KeywordID keyword_id,
                                       const base::string16& term) override {}
@@ -82,9 +78,7 @@ void HistoryBackendDBBaseTest::TearDown() {
 
   // Make sure we don't have any event pending that could disrupt the next
   // test.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
-  base::RunLoop().Run();
+  base::RunLoop().RunUntilIdle();
 }
 
 void HistoryBackendDBBaseTest::CreateBackendAndDatabase() {
@@ -115,7 +109,7 @@ void HistoryBackendDBBaseTest::CreateDBVersion(int version) {
 }
 
 void HistoryBackendDBBaseTest::DeleteBackend() {
-  if (backend_.get()) {
+  if (backend_) {
     backend_->Closing();
     backend_ = nullptr;
   }

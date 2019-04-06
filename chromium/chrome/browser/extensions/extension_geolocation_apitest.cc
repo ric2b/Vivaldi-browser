@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "device/geolocation/public/cpp/scoped_geolocation_overrider.h"
+#include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
 
-class GeolocationApiTest : public ExtensionApiTest {
+class GeolocationApiTest : public extensions::ExtensionApiTest {
  public:
   GeolocationApiTest() {
   }

@@ -12,7 +12,10 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/guest_view/browser/guest_view_message_filter.h"
+#include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/browser/browser_thread.h"
+#include "extensions/common/mojo/guest_view.mojom.h"
 
 namespace content {
 class BrowserContext;
@@ -33,7 +36,9 @@ namespace extensions {
 // from thw renderer process. It is created on the UI thread. Messages may be
 // handled on the IO thread or the UI thread.
 class ExtensionsGuestViewMessageFilter
-    : public guest_view::GuestViewMessageFilter {
+    : public guest_view::GuestViewMessageFilter,
+      public content::BrowserAssociatedInterface<mojom::GuestView>,
+      public mojom::GuestView {
  public:
   ExtensionsGuestViewMessageFilter(int render_process_id,
                                    content::BrowserContext* context);
@@ -62,12 +67,37 @@ class ExtensionsGuestViewMessageFilter
                      int element_instance_id,
                      const gfx::Size& new_size);
 
+  // mojom::GuestView implementation.
+  void CreateEmbeddedMimeHandlerViewGuest(
+      int32_t render_frame_id,
+      int32_t tab_id,
+      const GURL& original_url,
+      int32_t element_instance_id,
+      const gfx::Size& element_size,
+      content::mojom::TransferrableURLLoaderPtr transferrable_url_loader)
+      override;
+  void CreateMimeHandlerViewGuest(
+      int32_t render_frame_id,
+      const std::string& view_id,
+      int32_t element_instance_id,
+      const gfx::Size& element_size,
+      mime_handler::BeforeUnloadControlPtr before_unload_control) override;
+
+  void CreateMimeHandlerViewGuestOnUIThread(
+      int32_t render_frame_id,
+      const std::string& view_id,
+      int32_t element_instance_id,
+      const gfx::Size& element_size,
+      mime_handler::BeforeUnloadControlPtrInfo before_unload_control);
+
   // Runs on UI thread.
-  void MimeHandlerViewGuestCreatedCallback(int element_instance_id,
-                                           int embedder_render_process_id,
-                                           int embedder_render_frame_id,
-                                           const gfx::Size& element_size,
-                                           content::WebContents* web_contents);
+  void MimeHandlerViewGuestCreatedCallback(
+      int element_instance_id,
+      int embedder_render_process_id,
+      int embedder_render_frame_id,
+      const gfx::Size& element_size,
+      mime_handler::BeforeUnloadControlPtrInfo before_unload_control,
+      content::WebContents* web_contents);
 
   static const uint32_t kFilteredMessageClasses[];
 

@@ -7,16 +7,32 @@
 
 #include "services/viz/public/interfaces/compositing/frame_deadline.mojom.h"
 
+#include "components/viz/common/quads/frame_deadline.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
+
 namespace mojo {
 
 template <>
-struct StructTraits<viz::mojom::FrameDeadlineDataView, uint32_t> {
-  static uint32_t value(const uint32_t& input) { return input; }
-
-  static bool Read(viz::mojom::FrameDeadlineDataView data, uint32_t* out) {
-    *out = data.value();
-    return true;
+struct StructTraits<viz::mojom::FrameDeadlineDataView, viz::FrameDeadline> {
+  static base::TimeTicks frame_start_time(const viz::FrameDeadline& input) {
+    return input.frame_start_time();
   }
+
+  static uint32_t deadline_in_frames(const viz::FrameDeadline& input) {
+    return input.deadline_in_frames();
+  }
+
+  static base::TimeDelta frame_interval(const viz::FrameDeadline& input) {
+    return input.frame_interval();
+  }
+
+  static bool use_default_lower_bound_deadline(
+      const viz::FrameDeadline& input) {
+    return input.use_default_lower_bound_deadline();
+  }
+
+  static bool Read(viz::mojom::FrameDeadlineDataView data,
+                   viz::FrameDeadline* out);
 };
 
 }  // namespace mojo

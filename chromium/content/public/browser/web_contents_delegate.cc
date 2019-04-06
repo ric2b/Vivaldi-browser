@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/security_style_explanations.h"
@@ -18,19 +19,7 @@
 #include "content/public/common/url_constants.h"
 #include "ui/gfx/geometry/rect.h"
 
-#include "base/bind.h"
-
 namespace content {
-
-namespace {
-
-void ProxyCanDownloadCallback(
-    const base::Callback<void(const content::DownloadItemAction&)>& callback,
-    bool allow) {
-  callback.Run(content::DownloadItemAction(allow, false, false));
-}
-
-}  // namespace
 
 WebContentsDelegate::WebContentsDelegate() {
 }
@@ -43,10 +32,6 @@ WebContents* WebContentsDelegate::OpenURLFromTab(WebContents* source,
 bool WebContentsDelegate::ShouldTransferNavigation(
     bool is_main_frame_navigation) {
   return true;
-}
-
-bool WebContentsDelegate::IsPopupOrPanel(const WebContents* source) const {
-  return false;
 }
 
 bool WebContentsDelegate::CanOverscrollContent() const { return false; }
@@ -91,19 +76,10 @@ bool WebContentsDelegate::TakeFocus(WebContents* source, bool reverse) {
 }
 
 void WebContentsDelegate::CanDownload(
-      const GURL& url,
-      const std::string& request_method,
-      const base::Callback<void(bool)>& callback) {
-  callback.Run(true);
-}
-
-void WebContentsDelegate::CanDownload(
     const GURL& url,
     const std::string& request_method,
-    const DownloadInformation& info,
-    const base::Callback<void(const content::DownloadItemAction&)>& callback) {
-  CanDownload(url,request_method,
-      base::Bind(ProxyCanDownloadCallback, callback));
+    const base::Callback<void(bool)>& callback) {
+  callback.Run(true);
 }
 
 bool WebContentsDelegate::HandleContextMenu(
@@ -185,15 +161,15 @@ content::ColorChooser* WebContentsDelegate::OpenColorChooser(
 void WebContentsDelegate::RequestMediaAccessPermission(
     WebContents* web_contents,
     const MediaStreamRequest& request,
-    const MediaResponseCallback& callback) {
+    MediaResponseCallback callback) {
   LOG(ERROR) << "WebContentsDelegate::RequestMediaAccessPermission: "
              << "Not supported.";
-  callback.Run(MediaStreamDevices(), MEDIA_DEVICE_NOT_SUPPORTED,
-               std::unique_ptr<MediaStreamUI>());
+  std::move(callback).Run(MediaStreamDevices(), MEDIA_DEVICE_NOT_SUPPORTED,
+                          std::unique_ptr<MediaStreamUI>());
 }
 
 bool WebContentsDelegate::CheckMediaAccessPermission(
-    WebContents* web_contents,
+    RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     MediaStreamType type) {
   LOG(ERROR) << "WebContentsDelegate::CheckMediaAccessPermission: "
@@ -208,11 +184,6 @@ std::string WebContentsDelegate::GetDefaultMediaDeviceID(
 }
 
 #if defined(OS_ANDROID)
-base::android::ScopedJavaLocalRef<jobject>
-WebContentsDelegate::GetContentVideoViewEmbedder() {
-  return base::android::ScopedJavaLocalRef<jobject>();
-}
-
 bool WebContentsDelegate::ShouldBlockMediaRequest(const GURL& url) {
   return false;
 }
@@ -265,26 +236,6 @@ blink::WebSecurityStyle WebContentsDelegate::GetSecurityStyle(
   return blink::kWebSecurityStyleUnknown;
 }
 
-DownloadInformation::DownloadInformation(
-    const int64_t size,
-    const std::string& mimetype,
-    const base::string16& suggested_filename)
-    : size(size),
-      mime_type (mimetype),
-      suggested_filename(suggested_filename) {
-}
-
-DownloadInformation::~DownloadInformation() {
-}
-
-DownloadItemAction::DownloadItemAction(
-  bool allow, bool open, bool ask)
-  : allow(allow), open_when_done(open), ask_for_target(ask) {
-}
-
-DownloadItemAction::~DownloadItemAction() {
-}
-
 void WebContentsDelegate::RequestAppBannerFromDevTools(
     content::WebContents* web_contents) {
 }
@@ -308,5 +259,12 @@ int WebContentsDelegate::GetBottomControlsHeight() const {
 bool WebContentsDelegate::DoBrowserControlsShrinkBlinkSize() const {
   return false;
 }
+
+gfx::Size WebContentsDelegate::EnterPictureInPicture(const viz::SurfaceId&,
+                                                     const gfx::Size&) {
+  return gfx::Size();
+}
+
+void WebContentsDelegate::ExitPictureInPicture() {}
 
 }  // namespace content

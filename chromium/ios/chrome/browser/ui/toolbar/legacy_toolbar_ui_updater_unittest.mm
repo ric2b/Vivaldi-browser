@@ -20,18 +20,19 @@
 #error "This file requires ARC support."
 #endif
 
-@interface TestToolbarOwner : NSObject<ToolbarOwner>
-// Define writable property with same name as |-toolbarHeight| getter defined in
-// ToolbarOwner.
-@property(nonatomic, assign) CGFloat toolbarHeight;
+@interface TestToolbarOwner : NSObject<ToolbarHeightProviderForFullscreen>
+// Define writable property with same name as |-collapsedTopToolbarHeight| and
+// |-expandedTopToolbarHeight| getters defined in
+// ToolbarHeightProviderForFullscreen.
+@property(nonatomic, assign) CGFloat collapsedTopToolbarHeight;
+@property(nonatomic, assign) CGFloat expandedTopToolbarHeight;
+@property(nonatomic, assign) CGFloat bottomToolbarHeight;
 @end
 
 @implementation TestToolbarOwner
-@synthesize toolbarHeight = _toolbarHeight;
-@synthesize toolbarSnapshotProvider = _toolbarSnapshotProvider;
-- (CGRect)toolbarFrame {
-  return CGRectZero;
-}
+@synthesize collapsedTopToolbarHeight = _collapsedTopToolbarHeight;
+@synthesize expandedTopToolbarHeight = _expandedTopToolbarHeight;
+@synthesize bottomToolbarHeight = _bottomToolbarHeight;
 @end
 
 class LegacyToolbarUIUpdaterTest : public PlatformTest {
@@ -50,7 +51,9 @@ class LegacyToolbarUIUpdaterTest : public PlatformTest {
   // Getters.
   WebStateList* web_state_list() { return &web_state_list_; }
   TestToolbarOwner* toolbar_owner() { return toolbar_owner_; }
-  CGFloat toolbar_height() { return toolbar_ui_.toolbarHeight; }
+  CGFloat collapsed_toolbar_height() { return toolbar_ui_.collapsedHeight; }
+  CGFloat expanded_toolbar_height() { return toolbar_ui_.expandedHeight; }
+  CGFloat bottom_toolbar_height() { return toolbar_ui_.bottomToolbarHeight; }
 
   // Start or stop updating the state.
   void StartUpdating() {
@@ -89,11 +92,17 @@ class LegacyToolbarUIUpdaterTest : public PlatformTest {
 
 // Tests that |-startUpdating| resets the state's height when starting.
 TEST_F(LegacyToolbarUIUpdaterTest, StartUpdating) {
-  EXPECT_EQ(toolbar_height(), 0.0);
-  const CGFloat kHeight = 150.0;
-  toolbar_owner().toolbarHeight = kHeight;
+  EXPECT_EQ(expanded_toolbar_height(), 0.0);
+  const CGFloat kCollapsedHeight = 140.0;
+  const CGFloat kExpandedHeight = 150.0;
+  const CGFloat kBottomHeight = 160.0;
+  toolbar_owner().collapsedTopToolbarHeight = kCollapsedHeight;
+  toolbar_owner().expandedTopToolbarHeight = kExpandedHeight;
+  toolbar_owner().bottomToolbarHeight = kBottomHeight;
   StartUpdating();
-  EXPECT_EQ(toolbar_height(), kHeight);
+  EXPECT_EQ(collapsed_toolbar_height(), kCollapsedHeight);
+  EXPECT_EQ(expanded_toolbar_height(), kExpandedHeight);
+  EXPECT_EQ(bottom_toolbar_height(), kBottomHeight);
 }
 
 // Tests that the state is not updated after calling |-stopUpdating|.
@@ -101,26 +110,34 @@ TEST_F(LegacyToolbarUIUpdaterTest, StopUpdating) {
   web::TestWebState* web_state = InsertActiveWebState();
   StartUpdating();
   const CGFloat kHeight = 150.0;
-  toolbar_owner().toolbarHeight = kHeight;
+  toolbar_owner().expandedTopToolbarHeight = kHeight;
   web::FakeNavigationContext context;
   web_state->OnNavigationFinished(&context);
-  EXPECT_EQ(toolbar_height(), kHeight);
+  EXPECT_EQ(expanded_toolbar_height(), kHeight);
   const CGFloat kNonUpdatedHeight = 500.0;
   StopUpdating();
-  toolbar_owner().toolbarHeight = kNonUpdatedHeight;
+  toolbar_owner().expandedTopToolbarHeight = kNonUpdatedHeight;
   web_state->OnNavigationFinished(&context);
-  EXPECT_EQ(toolbar_height(), kHeight);
+  EXPECT_EQ(expanded_toolbar_height(), kHeight);
 }
 
 // Tests that the updater polls for the new height when the active WebState
 // changes.
 TEST_F(LegacyToolbarUIUpdaterTest, UpdateActiveWebState) {
   StartUpdating();
-  const CGFloat kHeight = 150.0;
-  toolbar_owner().toolbarHeight = kHeight;
-  EXPECT_EQ(toolbar_height(), 0.0);
+  const CGFloat kCollapsedHeight = 140.0;
+  const CGFloat kExpandedHeight = 150.0;
+  const CGFloat kBottomHeight = 160.0;
+  toolbar_owner().collapsedTopToolbarHeight = kCollapsedHeight;
+  toolbar_owner().expandedTopToolbarHeight = kExpandedHeight;
+  toolbar_owner().bottomToolbarHeight = kBottomHeight;
+  EXPECT_EQ(collapsed_toolbar_height(), 0.0);
+  EXPECT_EQ(expanded_toolbar_height(), 0.0);
+  EXPECT_EQ(bottom_toolbar_height(), 0.0);
   InsertActiveWebState();
-  EXPECT_EQ(toolbar_height(), kHeight);
+  EXPECT_EQ(collapsed_toolbar_height(), kCollapsedHeight);
+  EXPECT_EQ(expanded_toolbar_height(), kExpandedHeight);
+  EXPECT_EQ(bottom_toolbar_height(), kBottomHeight);
 }
 
 // Tests that the updater polls for the new height when the active WebState
@@ -128,13 +145,21 @@ TEST_F(LegacyToolbarUIUpdaterTest, UpdateActiveWebState) {
 TEST_F(LegacyToolbarUIUpdaterTest, UserInitiatedNavigation) {
   web::TestWebState* web_state = InsertActiveWebState();
   StartUpdating();
-  const CGFloat kHeight = 150.0;
-  toolbar_owner().toolbarHeight = kHeight;
-  EXPECT_EQ(toolbar_height(), 0.0);
+  const CGFloat kCollapsedHeight = 140.0;
+  const CGFloat kExpandedHeight = 150.0;
+  const CGFloat kBottomHeight = 160.0;
+  toolbar_owner().collapsedTopToolbarHeight = kCollapsedHeight;
+  toolbar_owner().expandedTopToolbarHeight = kExpandedHeight;
+  toolbar_owner().bottomToolbarHeight = kBottomHeight;
+  EXPECT_EQ(collapsed_toolbar_height(), 0.0);
+  EXPECT_EQ(expanded_toolbar_height(), 0.0);
+  EXPECT_EQ(bottom_toolbar_height(), 0.0);
   web::FakeNavigationContext context;
   context.SetIsRendererInitiated(false);
   web_state->OnNavigationStarted(&context);
-  EXPECT_EQ(toolbar_height(), kHeight);
+  EXPECT_EQ(collapsed_toolbar_height(), kCollapsedHeight);
+  EXPECT_EQ(expanded_toolbar_height(), kExpandedHeight);
+  EXPECT_EQ(bottom_toolbar_height(), kBottomHeight);
 }
 
 // Tests that the updater waits until a render-initiated navigation is committed
@@ -142,13 +167,23 @@ TEST_F(LegacyToolbarUIUpdaterTest, UserInitiatedNavigation) {
 TEST_F(LegacyToolbarUIUpdaterTest, RendererInitiatedNavigation) {
   web::TestWebState* web_state = InsertActiveWebState();
   StartUpdating();
-  const CGFloat kHeight = 150.0;
-  toolbar_owner().toolbarHeight = kHeight;
-  EXPECT_EQ(toolbar_height(), 0.0);
+  const CGFloat kCollapsedHeight = 140.0;
+  const CGFloat kExpandedHeight = 150.0;
+  const CGFloat kBottomHeight = 160.0;
+  toolbar_owner().collapsedTopToolbarHeight = kCollapsedHeight;
+  toolbar_owner().expandedTopToolbarHeight = kExpandedHeight;
+  toolbar_owner().bottomToolbarHeight = kBottomHeight;
+  EXPECT_EQ(collapsed_toolbar_height(), 0.0);
+  EXPECT_EQ(expanded_toolbar_height(), 0.0);
+  EXPECT_EQ(bottom_toolbar_height(), 0.0);
   web::FakeNavigationContext context;
   context.SetIsRendererInitiated(true);
   web_state->OnNavigationStarted(&context);
-  EXPECT_EQ(toolbar_height(), 0.0);
+  EXPECT_EQ(collapsed_toolbar_height(), 0.0);
+  EXPECT_EQ(expanded_toolbar_height(), 0.0);
+  EXPECT_EQ(bottom_toolbar_height(), 0.0);
   web_state->OnNavigationFinished(&context);
-  EXPECT_EQ(toolbar_height(), kHeight);
+  EXPECT_EQ(collapsed_toolbar_height(), kCollapsedHeight);
+  EXPECT_EQ(expanded_toolbar_height(), kExpandedHeight);
+  EXPECT_EQ(bottom_toolbar_height(), kBottomHeight);
 }

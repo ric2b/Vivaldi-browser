@@ -4,9 +4,10 @@
 
 #include "ash/system/tray_tracing.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/system_tray_test_api.h"
 #include "ash/test/ash_test_base.h"
 
@@ -17,6 +18,11 @@ using TrayTracingTest = AshTestBase;
 
 // Tests that the icon becomes visible when the tray controller toggles it.
 TEST_F(TrayTracingTest, Visibility) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   SystemTray* tray = GetPrimarySystemTray();
   TrayTracing* tray_tracing = SystemTrayTestApi(tray).tray_tracing();
 
@@ -24,12 +30,12 @@ TEST_F(TrayTracingTest, Visibility) {
   EXPECT_FALSE(tray_tracing->tray_view()->visible());
 
   // Simulate turning on tracing.
-  SystemTrayController* controller = Shell::Get()->system_tray_controller();
-  controller->SetPerformanceTracingIconVisible(true);
+  SystemTrayModel* model = Shell::Get()->system_tray_model();
+  model->SetPerformanceTracingIconVisible(true);
   EXPECT_TRUE(tray_tracing->tray_view()->visible());
 
   // Simulate turning off tracing.
-  controller->SetPerformanceTracingIconVisible(false);
+  model->SetPerformanceTracingIconVisible(false);
   EXPECT_FALSE(tray_tracing->tray_view()->visible());
 }
 

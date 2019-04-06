@@ -6,10 +6,6 @@
 
 # TODO(michaelpg): Dedupe common functionality with the Chrome installer.
 
-# TODO(mmoss) This currently only works with official builds, since non-official
-# builds don't add the "${BUILDDIR}/app_shell_installer/" files needed for
-# packaging.
-
 set -e
 set -o pipefail
 if [ "$VERBOSE" ]; then
@@ -45,7 +41,6 @@ gen_control() {
 prep_staging_debian() {
   prep_staging_common
   install -m 755 -d "${STAGEDIR}/DEBIAN" \
-    "${STAGEDIR}/etc/cron.daily" \
     "${STAGEDIR}/usr/share/doc/${USR_BIN_SYMLINK_NAME}"
 }
 
@@ -63,29 +58,14 @@ stage_install_debian() {
   fi
   prep_staging_debian
   stage_install_common
-  echo "Staging Debian install files in '${STAGEDIR}'..."
-  install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/cron"
-  process_template "${BUILDDIR}/app_shell_installer/common/repo.cron" \
-      "${STAGEDIR}/${INSTALLDIR}/cron/${PACKAGE}"
-  chmod 755 "${STAGEDIR}/${INSTALLDIR}/cron/${PACKAGE}"
-  pushd "${STAGEDIR}/etc/cron.daily/"
-  ln -snf "${INSTALLDIR}/cron/${PACKAGE}" "${PACKAGE}"
-  popd
-  process_template "${BUILDDIR}/app_shell_installer/debian/postinst" \
-    "${STAGEDIR}/DEBIAN/postinst"
-  chmod 755 "${STAGEDIR}/DEBIAN/postinst"
-  process_template "${BUILDDIR}/app_shell_installer/debian/postrm" \
-    "${STAGEDIR}/DEBIAN/postrm"
-  chmod 755 "${STAGEDIR}/DEBIAN/postrm"
 }
 
 # Actually generate the package file.
 do_package() {
-  echo "Packaging ${ARCHITECTURE}..."
+  log_cmd echo "Packaging ${ARCHITECTURE}..."
   PREDEPENDS="$COMMON_PREDEPS"
   DEPENDS="${COMMON_DEPS}"
-  REPLACES=""
-  CONFLICTS=""
+  RECOMMENDS="${COMMON_RECOMMENDS}"
   PROVIDES=""
   gen_changelog
   process_template "${SCRIPTDIR}/control.template" "${DEB_CONTROL}"
@@ -98,7 +78,7 @@ do_package() {
   else
     local COMPRESSION_OPTS="-Znone"
   fi
-  fakeroot dpkg-deb ${COMPRESSION_OPTS} -b "${STAGEDIR}" .
+  log_cmd fakeroot dpkg-deb ${COMPRESSION_OPTS} -b "${STAGEDIR}" .
 }
 
 verify_package() {
@@ -119,7 +99,7 @@ verify_package() {
 
 # Remove temporary files and unwanted packaging output.
 cleanup() {
-  echo "Cleaning..."
+  log_cmd echo "Cleaning..."
   rm -rf "${STAGEDIR}"
   rm -rf "${TMPFILEDIR}"
 }
@@ -275,7 +255,7 @@ else
 fi
 SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/usr/lib"
 DPKG_SHLIB_DEPS=$(cd ${SYSROOT} && dpkg-shlibdeps ${SHLIB_ARGS:-} -O \
-                  -e"$BUILDDIR/app_shell" | sed 's/^shlibs:Depends=//')
+  -e"$BUILDDIR/app_shell" 2>/dev/null | sed 's/^shlibs:Depends=//')
 if [ -n "$SAVE_LDLP" ]; then
   LD_LIBRARY_PATH=$SAVE_LDLP
 fi
@@ -303,6 +283,7 @@ DPKG_SHLIB_DEPS=$(sed 's/\(libnss3 ([^)]*)\), //g' <<< $DPKG_SHLIB_DEPS)
 
 COMMON_DEPS="${DPKG_SHLIB_DEPS}, ${ADDITIONAL_DEPS}"
 COMMON_PREDEPS="dpkg (>= 1.14.0)"
+COMMON_RECOMMENDS="libu2f-udev"
 
 
 # Make everything happen in the OUTPUTDIR.
@@ -322,15 +303,6 @@ case "$TARGETARCH" in
     exit 1
     ;;
 esac
-# TODO(michaelpg): Get a working repo URL.
-BASEREPOCONFIG="dl.google.com/linux/app-shell/deb/ stable main"
-# Only use the default REPOCONFIG if it's unset (e.g. verify_channel might have
-# set it to an empty string)
-REPOCONFIG="${REPOCONFIG-deb [arch=${ARCHITECTURE}] http://${BASEREPOCONFIG}}"
-# Allowed configs include optional HTTPS support and explicit multiarch
-# platforms.
-REPOCONFIGREGEX="deb (\\\\[arch=[^]]*\\\\b${ARCHITECTURE}\\\\b[^]]*\\\\]"
-REPOCONFIGREGEX+="[[:space:]]*) https?://${BASEREPOCONFIG}"
 stage_install_debian
 
 do_package

@@ -14,7 +14,7 @@
 #include "device/base/mock_device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
-#include "device/usb/public/interfaces/device_manager.mojom.h"
+#include "device/usb/public/mojom/device_manager.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -33,7 +33,7 @@ class MockUsbChooserView : public ChooserController::View {
   void OnOptionsInitialized() override {}
   void OnOptionUpdated(size_t index) override {}
   void OnAdapterEnabledChanged(bool enabled) override {}
-  void OnRefreshStateChanged(bool enabled) {}
+  void OnRefreshStateChanged(bool enabled) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockUsbChooserView);

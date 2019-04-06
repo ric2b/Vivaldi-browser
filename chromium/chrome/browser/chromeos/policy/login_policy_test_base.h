@@ -33,16 +33,22 @@ class LoginPolicyTestBase : public chromeos::OobeBaseTest {
 
   virtual void GetMandatoryPoliciesValue(base::DictionaryValue* policy) const;
   virtual void GetRecommendedPoliciesValue(base::DictionaryValue* policy) const;
+  virtual std::string GetAccount() const;
+  virtual std::string GetIdToken() const;
 
   UserPolicyTestHelper* user_policy_helper() {
     return user_policy_helper_.get();
   }
 
   void SkipToLoginScreen();
-  void LogIn(const std::string& user_id, const std::string& password);
+  // Should match ShowSigninScreenForTest method in SigninScreenHandler.
+  void LogIn(const std::string& user_id,
+             const std::string& password,
+             const std::string& services);
 
   static const char kAccountPassword[];
   static const char kAccountId[];
+  static const char kEmptyServices[];
 
  private:
   void SetUpGaiaServerWithAccessTokens();

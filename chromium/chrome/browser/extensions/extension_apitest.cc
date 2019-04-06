@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/base_switches.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
@@ -21,15 +22,16 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/api/test/test_api.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extension_paths.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/feature_switch.h"
 #include "extensions/common/switches.h"
 #include "extensions/test/result_catcher.h"
 #include "net/base/escape.h"
@@ -39,6 +41,8 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 
+namespace extensions {
+
 namespace {
 
 const char kTestCustomArg[] = "customArg";
@@ -46,7 +50,7 @@ const char kTestDataDirectory[] = "testDataDirectory";
 const char kTestWebSocketPort[] = "testWebSocketPort";
 const char kFtpServerPort[] = "ftpServer.port";
 const char kEmbeddedTestServerPort[] = "testServer.port";
-const char kBrowserSideNavigationEnabled[] = "browserSideNavigationEnabled";
+const char kNativeCrxBindingsEnabled[] = "nativeCrxBindingsEnabled";
 
 std::unique_ptr<net::test_server::HttpResponse> HandleServerRedirectRequest(
     const net::test_server::HttpRequest& request) {
@@ -160,21 +164,21 @@ void ExtensionApiTest::SetUpOnMainThread() {
   test_config_.reset(new base::DictionaryValue());
   test_config_->SetString(kTestDataDirectory,
                           net::FilePathToFileURL(test_data_dir_).spec());
-  test_config_->SetBoolean(kBrowserSideNavigationEnabled,
-                           content::IsBrowserSideNavigationEnabled());
   if (embedded_test_server()->Started()) {
     // InitializeEmbeddedTestServer was called before |test_config_| was set.
     // Set the missing port key.
     test_config_->SetInteger(kEmbeddedTestServerPort,
                              embedded_test_server()->port());
   }
-  extensions::TestGetConfigFunction::set_test_config_state(
-      test_config_.get());
+  test_config_->SetBoolean(
+      kNativeCrxBindingsEnabled,
+      base::FeatureList::IsEnabled(features::kNativeCrxBindings));
+  TestGetConfigFunction::set_test_config_state(test_config_.get());
 }
 
 void ExtensionApiTest::TearDownOnMainThread() {
   ExtensionBrowserTest::TearDownOnMainThread();
-  extensions::TestGetConfigFunction::set_test_config_state(NULL);
+  TestGetConfigFunction::set_test_config_state(NULL);
   test_config_.reset(NULL);
 }
 
@@ -238,28 +242,34 @@ bool ExtensionApiTest::RunExtensionTestIncognitoNoFileAccess(
       extension_name, std::string(), NULL, kFlagEnableIncognito);
 }
 
-bool ExtensionApiTest::ExtensionSubtestsAreSkipped() {
-  // See http://crbug.com/177163 for details.
-#if defined(OS_WIN) && !defined(NDEBUG)
-  LOG(WARNING) << "Workaround for 177163, prematurely returning";
-  return true;
-#else
-  return false;
-#endif
-}
-
 bool ExtensionApiTest::RunExtensionSubtest(const std::string& extension_name,
                                            const std::string& page_url) {
-  return RunExtensionSubtest(extension_name, page_url, kFlagEnableFileAccess);
+  return RunExtensionSubtestWithArgAndFlags(extension_name, page_url, nullptr,
+                                            kFlagEnableFileAccess);
 }
 
 bool ExtensionApiTest::RunExtensionSubtest(const std::string& extension_name,
                                            const std::string& page_url,
                                            int flags) {
+  return RunExtensionSubtestWithArgAndFlags(extension_name, page_url, nullptr,
+                                            flags);
+}
+
+bool ExtensionApiTest::RunExtensionSubtestWithArg(
+    const std::string& extension_name,
+    const std::string& page_url,
+    const char* custom_arg) {
+  return RunExtensionSubtestWithArgAndFlags(extension_name, page_url,
+                                            custom_arg, kFlagEnableFileAccess);
+}
+
+bool ExtensionApiTest::RunExtensionSubtestWithArgAndFlags(
+    const std::string& extension_name,
+    const std::string& page_url,
+    const char* custom_arg,
+    int flags) {
   DCHECK(!page_url.empty()) << "Argument page_url is required.";
-  if (ExtensionSubtestsAreSkipped())
-    return true;
-  return RunExtensionTestImpl(extension_name, page_url, NULL, flags);
+  return RunExtensionTestImpl(extension_name, page_url, custom_arg, flags);
 }
 
 bool ExtensionApiTest::RunPageTest(const std::string& page_url) {
@@ -308,13 +318,13 @@ bool ExtensionApiTest::RunExtensionTestImpl(const std::string& extension_name,
   bool use_root_extensions_dir = (flags & kFlagUseRootExtensionsDir) != 0;
 
   if (custom_arg && custom_arg[0])
-    test_config_->SetString(kTestCustomArg, custom_arg);
+    SetCustomArg(custom_arg);
 
-  extensions::ResultCatcher catcher;
+  ResultCatcher catcher;
   DCHECK(!extension_name.empty() || !page_url.empty()) <<
       "extension_name and page_url cannot both be empty";
 
-  const extensions::Extension* extension = NULL;
+  const Extension* extension = NULL;
   if (!extension_name.empty()) {
     const base::FilePath& root_path =
         use_root_extensions_dir ? shared_test_data_dir_ : test_data_dir_;
@@ -360,9 +370,9 @@ bool ExtensionApiTest::RunExtensionTestImpl(const std::string& extension_name,
     else
       ui_test_utils::NavigateToURL(browser(), url);
   } else if (launch_platform_app) {
-    AppLaunchParams params(
-        browser()->profile(), extension, extensions::LAUNCH_CONTAINER_NONE,
-        WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST);
+    AppLaunchParams params(browser()->profile(), extension,
+                           LAUNCH_CONTAINER_NONE,
+                           WindowOpenDisposition::NEW_WINDOW, SOURCE_TEST);
     params.command_line = *base::CommandLine::ForCurrentProcess();
     OpenApplication(params);
   }
@@ -376,16 +386,15 @@ bool ExtensionApiTest::RunExtensionTestImpl(const std::string& extension_name,
 }
 
 // Test that exactly one extension is loaded, and return it.
-const extensions::Extension* ExtensionApiTest::GetSingleLoadedExtension() {
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(browser()->profile());
+const Extension* ExtensionApiTest::GetSingleLoadedExtension() {
+  ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
 
-  const extensions::Extension* result = NULL;
-  for (const scoped_refptr<const extensions::Extension>& extension :
+  const Extension* result = NULL;
+  for (const scoped_refptr<const Extension>& extension :
        registry->enabled_extensions()) {
     // Ignore any component extensions. They are automatically loaded into all
     // profiles and aren't the extension we're looking for here.
-    if (extension->location() == extensions::Manifest::COMPONENT)
+    if (extension->location() == Manifest::COMPONENT)
       continue;
 
     if (result != NULL) {
@@ -464,17 +473,23 @@ bool ExtensionApiTest::StartFTPServer(const base::FilePath& root_directory) {
   return true;
 }
 
+void ExtensionApiTest::SetCustomArg(base::StringPiece custom_arg) {
+  test_config_->SetKey(kTestCustomArg, base::Value(custom_arg));
+}
+
 void ExtensionApiTest::SetUpCommandLine(base::CommandLine* command_line) {
   ExtensionBrowserTest::SetUpCommandLine(command_line);
 
   test_data_dir_ = test_data_dir_.AppendASCII("api_test");
 
-  extensions::RegisterPathProvider();
-  PathService::Get(extensions::DIR_TEST_DATA, &shared_test_data_dir_);
+  RegisterPathProvider();
+  base::PathService::Get(DIR_TEST_DATA, &shared_test_data_dir_);
   shared_test_data_dir_ = shared_test_data_dir_.AppendASCII("api_test");
 
   // Backgrounded renderer processes run at a lower priority, causing the
   // tests to take more time to complete. Disable backgrounding so that the
   // tests don't time out.
-  command_line->AppendSwitch(switches::kDisableRendererBackgrounding);
+  command_line->AppendSwitch(::switches::kDisableRendererBackgrounding);
 }
+
+}  // namespace extensions

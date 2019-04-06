@@ -18,12 +18,12 @@
 #include "base/sequence_checker.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "build/build_config.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
-#include "extensions/features/features.h"
 #include "ui/base/theme_provider.h"
 
 class BrowserThemePack;
@@ -171,6 +171,10 @@ class ThemeService : public content::NotificationObserver, public KeyedService {
   virtual bool ShouldUseNativeFrame() const;
   bool HasCustomImage(int id) const;
 
+  // If there is an inconsistency in preferences, change preferences to a
+  // consistent state.
+  virtual void FixInconsistentPreferencesIfNeeded();
+
   Profile* profile() const { return profile_; }
 
   void set_ready() { ready_ = true; }
@@ -199,12 +203,12 @@ class ThemeService : public content::NotificationObserver, public KeyedService {
     int GetDisplayProperty(int id) const override;
     bool ShouldUseNativeFrame() const override;
     bool HasCustomImage(int id) const override;
+    bool HasCustomColor(int id) const override;
     base::RefCountedMemory* GetRawData(int id, ui::ScaleFactor scale_factor)
         const override;
 #if defined(OS_MACOSX)
     bool UsingSystemTheme() const override;
     bool InIncognitoMode() const override;
-    bool HasCustomColor(int id) const override;
     NSImage* GetNSImageNamed(int id) const override;
     NSColor* GetNSImageColorNamed(int id) const override;
     NSColor* GetNSColor(int id) const override;
@@ -243,14 +247,15 @@ class ThemeService : public content::NotificationObserver, public KeyedService {
   // These methods provide the implementation for ui::ThemeProvider (exposed
   // via BrowserThemeProvider).
   gfx::ImageSkia* GetImageSkiaNamed(int id, bool incognito) const;
-  SkColor GetColor(int id, bool incognito) const;
+  SkColor GetColor(int id,
+                   bool incognito,
+                   bool* has_custom_color = nullptr) const;
   int GetDisplayProperty(int id) const;
   base::RefCountedMemory* GetRawData(int id,
                                      ui::ScaleFactor scale_factor) const;
 #if defined(OS_MACOSX)
   NSImage* GetNSImageNamed(int id, bool incognito) const;
   NSColor* GetNSImageColorNamed(int id, bool incognito) const;
-  bool HasCustomColor(int id) const;
   NSColor* GetNSColor(int id, bool incognito) const;
   NSColor* GetNSColorTint(int id) const;
   NSGradient* GetNSGradient(int id) const;

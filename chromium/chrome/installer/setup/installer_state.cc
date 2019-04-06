@@ -25,6 +25,8 @@
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 namespace installer {
 
 InstallerState::InstallerState()
@@ -34,12 +36,7 @@ InstallerState::InstallerState()
       msi_(false),
       background_mode_(false),
       verbose_logging_(false),
-      is_migrating_to_single_(false),
-      is_vivaldi_(false),
-      is_standalone_(false),
-      register_standalone_(false),
-      is_uninstall_(false),
-      install_dir_supplied_(false) {}
+      is_migrating_to_single_(false) {}
 
 InstallerState::InstallerState(Level level)
     : operation_(UNINITIALIZED),
@@ -48,12 +45,7 @@ InstallerState::InstallerState(Level level)
       msi_(false),
       background_mode_(false),
       verbose_logging_(false),
-      is_migrating_to_single_(false),
-      is_vivaldi_(false),
-      is_standalone_(false),
-      register_standalone_(false),
-      is_uninstall_(false),
-      install_dir_supplied_(false) {
+      is_migrating_to_single_(false) {
   // Use set_level() so that root_key_ is updated properly.
   set_level(level);
 }
@@ -77,12 +69,15 @@ void InstallerState::Initialize(const base::CommandLine& command_line,
   if (!prefs.GetBool(master_preferences::kMsi, &msi_))
     msi_ = false;
 
-  is_vivaldi_ = command_line.HasSwitch(switches::kVivaldi);
-  is_vivaldi_update_ = command_line.HasSwitch(switches::kVivaldiUpdate);
-  is_standalone_ = command_line.HasSwitch(switches::kVivaldiStandalone);
+  is_vivaldi_ = command_line.HasSwitch(vivaldi::constants::kVivaldi);
+  is_vivaldi_update_ =
+      command_line.HasSwitch(vivaldi::constants::kVivaldiUpdate);
+  is_standalone_ =
+      command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
   register_standalone_ =
-      command_line.HasSwitch(switches::kVivaldiRegisterStandalone);
-  install_dir_supplied_ = command_line.HasSwitch(switches::kVivaldiInstallDir);
+      command_line.HasSwitch(vivaldi::constants::kVivaldiRegisterStandalone);
+  install_dir_supplied_ =
+      command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir);
 
   is_uninstall_ = command_line.HasSwitch(switches::kUninstall);
 
@@ -181,7 +176,7 @@ Product* InstallerState::AddProductFromPreferences(
 
   if (is_vivaldi() && !install_dir_supplied()) {
     base::win::RegKey key;
-    LONG result = key.Open(root_key_, kVivaldiKey,
+    LONG result = key.Open(root_key_, vivaldi::constants::kVivaldiKey,
         KEY_QUERY_VALUE | KEY_WOW64_32KEY);
     if (result == ERROR_SUCCESS) {
       if (is_uninstall()) {
@@ -197,7 +192,9 @@ Product* InstallerState::AddProductFromPreferences(
         // If there is no vivaldi-install-dir supplied on the command line,
         // use the registry destination folder.
         std::wstring folder_str;
-        result = key.ReadValue(kVivaldiInstallerDestinationFolder, &folder_str);
+        result = key.ReadValue(
+            vivaldi::constants::kVivaldiInstallerDestinationFolder,
+            &folder_str);
         if ((result == ERROR_SUCCESS) && !folder_str.empty()) {
           prod_dir = base::FilePath(folder_str).Append(kInstallBinaryDir);
         }

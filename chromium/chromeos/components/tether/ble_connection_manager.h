@@ -8,23 +8,20 @@
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "base/time/clock.h"
 #include "base/timer/timer.h"
+#include "base/unguessable_token.h"
 #include "chromeos/components/tether/ble_advertisement_device_queue.h"
 #include "chromeos/components/tether/ble_advertiser.h"
 #include "chromeos/components/tether/ble_scanner.h"
-#include "chromeos/components/tether/connection_priority.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
+#include "chromeos/services/secure_channel/public/cpp/shared/connection_priority.h"
 #include "components/cryptauth/secure_channel.h"
-
-namespace cryptauth {
-class CryptAuthService;
-}  // namespace cryptauth
 
 namespace device {
 class BluetoothAdapter;
@@ -35,7 +32,6 @@ namespace chromeos {
 
 namespace tether {
 
-class AdHocBleAdvertiser;
 class TimerFactory;
 
 // Manages connections to remote devices. When a device is registered,
@@ -56,14 +52,12 @@ class TimerFactory;
 // messages. To send a message, call SendMessage(), and to listen for received
 // messages, implement the OnMessageReceived() callback.
 //
-// Note that a single device can be registered for multiple connection reasons.
-// If a device is registered for more than one reason, its connections (and
-// connection attempts) will remain active until all connection reasons have
+// Note that a single device can be registered for multiple connection requests.
+// If a device is registered for more than one request, its connections (and
+// connection attempts) will remain active until all connection requests have
 // been unregistered for the device.
 class BleConnectionManager : public BleScanner::Observer {
  public:
-  static std::string MessageTypeToString(const MessageType& reason);
-
   // Extra data about a state change which is passed to observers in
   // OnSecureChannelStatusChanged(). If no extra data applies to the state
   // change, STATE_CHANGE_DETAIL_NONE is used.
@@ -91,26 +85,41 @@ class BleConnectionManager : public BleScanner::Observer {
     virtual void OnMessageSent(int sequence_number) = 0;
   };
 
+  // Observes events that are relevant to metrics reporting.
+  class MetricsObserver {
+   public:
+    virtual void OnConnectionAttemptStarted(const std::string& device_id) {}
+    virtual void OnAdvertisementReceived(const std::string& device_id,
+                                         bool is_background_advertisement) {}
+    virtual void OnConnection(const std::string& device_id,
+                              bool is_background_advertisement) {}
+    virtual void OnSecureChannelCreated(const std::string& device_id,
+                                        bool is_background_advertisement) {}
+    virtual void OnDeviceDisconnected(const std::string& device_id,
+                                      StateChangeDetail state_change_detail,
+                                      bool is_background_advertisement) {}
+  };
+
   BleConnectionManager(
-      cryptauth::CryptAuthService* cryptauth_service,
       scoped_refptr<device::BluetoothAdapter> adapter,
       BleAdvertisementDeviceQueue* ble_advertisement_device_queue,
       BleAdvertiser* ble_advertiser,
-      BleScanner* ble_scanner,
-      AdHocBleAdvertiser* ad_hoc_ble_advertisement);
+      BleScanner* ble_scanner);
   virtual ~BleConnectionManager();
 
-  // Registers |device_id| for |connection_reason|. Once registered, this
+  // Registers |device_id| for |request_id|. Once registered, this
   // instance will continue to attempt to connect and authenticate to that
   // device until the device is unregistered.
-  virtual void RegisterRemoteDevice(const std::string& device_id,
-                                    const MessageType& connection_reason);
+  virtual void RegisterRemoteDevice(
+      const std::string& device_id,
+      const base::UnguessableToken& request_id,
+      secure_channel::ConnectionPriority connection_priority);
 
-  // Unregisters |device_id| for |connection_reason|. Once registered, a device
-  // will continue trying to connect until *ALL* of its MessageTypes have been
-  // unregistered.
+  // Unregisters |device_id| for |request_id|. Once registered, a device
+  // will continue trying to connect until *ALL* of its connection reasons have
+  // been unregistered.
   virtual void UnregisterRemoteDevice(const std::string& device_id,
-                                      const MessageType& connection_reason);
+                                      const base::UnguessableToken& request_id);
 
   // Sends |message| to the device with ID |device_id|. This function can only
   // be called if the given device is authenticated. This function returns a
@@ -130,12 +139,18 @@ class BleConnectionManager : public BleScanner::Observer {
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
+  void AddMetricsObserver(MetricsObserver* observer);
+  void RemoveMetricsObserver(MetricsObserver* observer);
+
   // BleScanner::Observer:
   void OnReceivedAdvertisementFromDevice(
-      const cryptauth::RemoteDevice& remote_device,
-      device::BluetoothDevice* bluetooth_device) override;
+      cryptauth::RemoteDeviceRef remote_device,
+      device::BluetoothDevice* bluetooth_device,
+      bool is_background_advertisement) override;
 
  protected:
+  void NotifyAdvertisementReceived(const std::string& device_id,
+                                   bool is_background_advertisement);
   void NotifyMessageReceived(std::string device_id, std::string payload);
   void NotifySecureChannelStatusChanged(
       std::string device_id,
@@ -158,14 +173,16 @@ class BleConnectionManager : public BleScanner::Observer {
   class ConnectionMetadata final : public cryptauth::SecureChannel::Observer {
    public:
     ConnectionMetadata(const std::string& device_id,
-                       std::unique_ptr<base::Timer> timer,
+                       std::unique_ptr<base::OneShotTimer> timer,
                        base::WeakPtr<BleConnectionManager> manager);
     ~ConnectionMetadata();
 
-    void RegisterConnectionReason(const MessageType& connection_reason);
-    void UnregisterConnectionReason(const MessageType& connection_reason);
-    ConnectionPriority GetConnectionPriority();
-    bool HasReasonForConnection() const;
+    void RegisterConnectionRequest(
+        const base::UnguessableToken& request_id,
+        secure_channel::ConnectionPriority connection_priority);
+    void UnregisterConnectionRequest(const base::UnguessableToken& request_id);
+    secure_channel::ConnectionPriority GetConnectionPriority();
+    bool HasPendingConnectionRequests() const;
 
     bool HasEstablishedConnection() const;
     cryptauth::SecureChannel::Status GetStatus() const;
@@ -176,6 +193,7 @@ class BleConnectionManager : public BleScanner::Observer {
     void SetSecureChannel(
         std::unique_ptr<cryptauth::SecureChannel> secure_channel);
     int SendMessage(const std::string& payload);
+    void Disconnect();
 
     // cryptauth::SecureChannel::Observer:
     void OnSecureChannelStatusChanged(
@@ -187,7 +205,6 @@ class BleConnectionManager : public BleScanner::Observer {
                            const std::string& payload) override;
     void OnMessageSent(cryptauth::SecureChannel* secure_channel,
                        int sequence_number) override;
-    void OnGattCharacteristicsNotAvailable() override;
 
    private:
     friend class BleConnectionManagerTest;
@@ -195,9 +212,12 @@ class BleConnectionManager : public BleScanner::Observer {
     void OnConnectionAttemptTimeout();
 
     std::string device_id_;
-    std::set<MessageType> active_connection_reasons_;
+    std::unordered_map<base::UnguessableToken,
+                       secure_channel::ConnectionPriority,
+                       base::UnguessableTokenHash>
+        request_id_to_priority_map_;
     std::unique_ptr<cryptauth::SecureChannel> secure_channel_;
-    std::unique_ptr<base::Timer> connection_attempt_timeout_timer_;
+    std::unique_ptr<base::OneShotTimer> connection_attempt_timeout_timer_;
     base::WeakPtr<BleConnectionManager> manager_;
 
     base::WeakPtrFactory<ConnectionMetadata> weak_ptr_factory_;
@@ -220,35 +240,32 @@ class BleConnectionManager : public BleScanner::Observer {
       const cryptauth::SecureChannel::Status& old_status,
       const cryptauth::SecureChannel::Status& new_status,
       StateChangeDetail state_change_detail);
-  void OnGattCharacteristicsNotAvailable(const std::string& device_id);
 
-  void SetTestDoubles(std::unique_ptr<base::Clock> test_clock,
-                      std::unique_ptr<TimerFactory> test_timer_factory);
+  void SetTestTimerFactoryForTesting(
+      std::unique_ptr<TimerFactory> test_timer_factory);
 
   // Record various operation durations. These need to be separate methods
   // because internally they use a macro which maintains a static state that
   // does not tolerate different histogram names being passed to it.
-  void RecordAdvertisementToConnectionDuration(const std::string device_id);
+  void RecordStartScanToConnectionDuration(const std::string device_id);
   void RecordConnectionToAuthenticationDuration(const std::string device_id);
 
-  cryptauth::CryptAuthService* cryptauth_service_;
   scoped_refptr<device::BluetoothAdapter> adapter_;
   BleAdvertisementDeviceQueue* ble_advertisement_device_queue_;
   BleAdvertiser* ble_advertiser_;
   BleScanner* ble_scanner_;
-  AdHocBleAdvertiser* ad_hoc_ble_advertisement_;
 
   std::unique_ptr<TimerFactory> timer_factory_;
-  std::unique_ptr<base::Clock> clock_;
 
   bool has_registered_observer_;
   std::map<std::string, std::unique_ptr<ConnectionMetadata>>
       device_id_to_metadata_map_;
 
-  std::map<std::string, base::Time> device_id_to_advertising_start_time_map_;
-  std::map<std::string, base::Time> device_id_to_status_connected_time_map_;
+  // Records if the advertisement from a device was a background advertisement.
+  std::map<std::string, bool> device_id_to_is_background_advertisement_map_;
 
   base::ObserverList<Observer> observer_list_;
+  base::ObserverList<MetricsObserver> metrics_observer_list_;
   base::WeakPtrFactory<BleConnectionManager> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BleConnectionManager);

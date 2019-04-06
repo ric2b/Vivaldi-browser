@@ -24,9 +24,6 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.components.autofill.AutofillPopup;
-import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.input.ChromiumBaseInputConnection;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
@@ -34,6 +31,7 @@ import org.chromium.content.browser.test.util.TestInputMethodManagerWrapper;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.DropdownPopupWindowInterface;
 import org.chromium.ui.R;
 
 import java.util.ArrayList;
@@ -144,21 +142,18 @@ public class AutofillPopupTest {
         );
     }
 
-    private void loadAndFillForm(
-            final String formDataUrl, final String inputText)
+    private void loadAndFillForm(final String formDataUrl, final String inputText)
             throws InterruptedException, ExecutionException, TimeoutException {
         mActivityTestRule.startMainActivityWithURL(formDataUrl);
         mHelper = new AutofillTestHelper();
 
         // The TestInputMethodManagerWrapper intercepts showSoftInput so that a keyboard is never
         // brought up.
-        final ContentViewCore viewCore =
-                mActivityTestRule.getActivity().getCurrentContentViewCore();
-        final WebContents webContents = viewCore.getWebContents();
-        final ViewGroup view = viewCore.getContainerView();
+        final WebContents webContents = mActivityTestRule.getActivity().getCurrentWebContents();
+        final ViewGroup view = webContents.getViewAndroidDelegate().getContainerView();
         final ImeAdapter imeAdapter = ImeAdapter.fromWebContents(webContents);
         TestInputMethodManagerWrapper immw = TestInputMethodManagerWrapper.create(imeAdapter);
-        imeAdapter.setInputMethodManagerWrapperForTest(immw);
+        imeAdapter.setInputMethodManagerWrapper(immw);
 
         // Add an Autofill profile.
         AutofillProfile profile = new AutofillProfile(
@@ -172,19 +167,18 @@ public class AutofillPopupTest {
 
         // Click the input field for the first name.
         DOMUtils.waitForNonZeroNodeBounds(webContents, "fn");
-        DOMUtils.clickNode(viewCore, "fn");
+        DOMUtils.clickNode(webContents, "fn");
 
         waitForKeyboardShowRequest(immw, 1);
 
-        final ChromiumBaseInputConnection inputConnection =
-                (ChromiumBaseInputConnection) imeAdapter.getInputConnectionForTest();
-        inputConnection.getHandler().post(() -> inputConnection.setComposingText(inputText, 1));
+        imeAdapter.setComposingTextForTest(inputText, 1);
 
         waitForAnchorViewAdd(view);
         View anchorView = view.findViewById(R.id.dropdown_popup_window);
 
-        Assert.assertTrue(anchorView.getTag() instanceof AutofillPopup);
-        final AutofillPopup popup = (AutofillPopup) anchorView.getTag();
+        Assert.assertTrue(anchorView.getTag() instanceof DropdownPopupWindowInterface);
+        final DropdownPopupWindowInterface popup =
+                (DropdownPopupWindowInterface) anchorView.getTag();
 
         waitForAutofillPopopShow(popup);
 
@@ -203,9 +197,7 @@ public class AutofillPopupTest {
     public void testClickAutofillPopupSuggestion()
             throws InterruptedException, ExecutionException, TimeoutException {
         loadAndFillForm(BASIC_PAGE_DATA, "J");
-        final ContentViewCore viewCore =
-                mActivityTestRule.getActivity().getCurrentContentViewCore();
-        final WebContents webContents = viewCore.getWebContents();
+        final WebContents webContents = mActivityTestRule.getActivity().getCurrentWebContents();
 
         Assert.assertEquals(
                 "First name did not match", FIRST_NAME, DOMUtils.getNodeValue(webContents, "fn"));
@@ -319,7 +311,7 @@ public class AutofillPopupTest {
         });
     }
 
-    private void waitForAutofillPopopShow(final AutofillPopup popup) {
+    private void waitForAutofillPopopShow(final DropdownPopupWindowInterface popup) {
         CriteriaHelper.pollUiThread(
                 new Criteria("Autofill Popup anchor view was never added.") {
                     @Override

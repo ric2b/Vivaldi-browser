@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -33,15 +34,14 @@ PartialData::PartialData()
     : current_range_start_(0),
       current_range_end_(0),
       cached_start_(0),
-      resource_size_(0),
       cached_min_len_(0),
+      resource_size_(0),
       range_present_(false),
       final_range_(false),
       sparse_entry_(true),
       truncated_(false),
       initial_validation_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 PartialData::~PartialData() = default;
 
@@ -181,7 +181,8 @@ bool PartialData::IsLastRange() const {
 
 bool PartialData::UpdateFromStoredHeaders(const HttpResponseHeaders* headers,
                                           disk_cache::Entry* entry,
-                                          bool truncated) {
+                                          bool truncated,
+                                          bool writing_in_progress) {
   resource_size_ = 0;
   if (truncated) {
     DCHECK_EQ(headers->response_code(), 200);
@@ -199,6 +200,19 @@ bool PartialData::UpdateFromStoredHeaders(const HttpResponseHeaders* headers,
     if (total_length <= 0)
       return false;
 
+    // In case we see a truncated entry, we first send a network request for
+    // 1 byte range with If-Range: to probe server support for resumption.
+    // The setting of |current_range_start_| and |cached_start_| below (with any
+    // positive value of |cached_min_len_|) results in that.
+    //
+    // Setting |initial_validation_| to true is how this communicates to
+    // HttpCache::Transaction that we're doing that (and that it's not the user
+    // asking for one byte), so if it sees a 206 with that flag set it will call
+    // SetRangeToStartDownload(), and then restart the process looking for the
+    // entire file (which is what the user wanted), with the cache handling
+    // the previous portion, and then a second network request for the entire
+    // rest of the range. A 200 in response to the probe request can be simply
+    // returned directly to the user.
     truncated_ = true;
     initial_validation_ = true;
     sparse_entry_ = false;
@@ -211,25 +225,39 @@ bool PartialData::UpdateFromStoredHeaders(const HttpResponseHeaders* headers,
     return true;
   }
 
-  if (headers->response_code() != 206) {
-    DCHECK(byte_range_.IsValid());
-    sparse_entry_ = false;
+  sparse_entry_ = (headers->response_code() == 206);
+
+  if (writing_in_progress || sparse_entry_) {
+    // |writing_in_progress| means another Transaction is still fetching the
+    // body, so the only way we can see the length is if the server sent it
+    // in Content-Length -- GetDataSize would just return what got written
+    // thus far.
+    //
+    // |sparse_entry_| means a 206, and for those FixContentLength arranges it
+    // so that Content-Length written to the cache has the full length (on wire
+    // it's for a particular range only); while GetDataSize would be unusable
+    // since the data is stored using WriteSparseData, and not in the usual data
+    // stream.
+    resource_size_ = headers->GetContentLength();
+    if (resource_size_ <= 0)
+      return false;
+  } else {
+    // If we can safely use GetDataSize, it's preferrable since it's usable for
+    // things w/o Content-Length, such as chunked content.
     resource_size_ = entry->GetDataSize(kDataStream);
-    DVLOG(2) << "UpdateFromStoredHeaders size: " << resource_size_;
-    return true;
   }
 
-  if (!headers->HasStrongValidators())
-    return false;
+  DVLOG(2) << "UpdateFromStoredHeaders size: " << resource_size_;
 
-  int64_t length_value = headers->GetContentLength();
-  if (length_value <= 0)
-    return false;  // We must have stored the resource length.
-
-  resource_size_ = length_value;
-
-  // Make sure that this is really a sparse entry.
-  return entry->CouldBeSparse();
+  if (sparse_entry_) {
+    // If our previous is a 206, we need strong validators as we may be
+    // stiching the cached data and network data together.
+    if (!headers->HasStrongValidators())
+      return false;
+    // Make sure that this is really a sparse entry.
+    return entry->CouldBeSparse();
+  }
+  return true;
 }
 
 void PartialData::SetRangeToStartDownload() {
@@ -435,9 +463,7 @@ void PartialData::GetAvailableRangeCompleted(int64_t* start, int result) {
   if (result >= 0)
     result = 1;  // Return success, go ahead and validate the entry.
 
-  CompletionCallback cb = callback_;
-  callback_.Reset();
-  cb.Run(result);
+  base::ResetAndReturn(&callback_).Run(result);
 }
 
 }  // namespace net

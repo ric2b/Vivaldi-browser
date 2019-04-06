@@ -208,6 +208,7 @@ BluetoothDeviceClient::Properties::Properties(
                    &services_resolved);
   RegisterProperty(bluetooth_device::kAdvertisingDataFlagsProperty,
                    &advertising_data_flags);
+  RegisterProperty(bluetooth_device::kMTUProperty, &mtu);
 }
 
 BluetoothDeviceClient::Properties::~Properties() = default;
@@ -286,10 +287,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
     // Connect may take an arbitrary length of time, so use no timeout.
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_INFINITE,
-        base::Bind(&BluetoothDeviceClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   // BluetoothDeviceClient override.
@@ -308,10 +309,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
 
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothDeviceClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   // BluetoothDeviceClient override.
@@ -335,10 +336,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
     // Connect may take an arbitrary length of time, so use no timeout.
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_INFINITE,
-        base::Bind(&BluetoothDeviceClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   // BluetoothDeviceClient override.
@@ -361,10 +362,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
 
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothDeviceClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   // BluetoothDeviceClient override.
@@ -384,10 +385,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
     // Pairing may take an arbitrary length of time, so use no timeout.
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_INFINITE,
-        base::Bind(&BluetoothDeviceClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   // BluetoothDeviceClient override.
@@ -405,10 +406,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
     }
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothDeviceClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   // BluetoothDeviceClient override.
@@ -427,10 +428,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
     }
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothDeviceClientImpl::OnGetConnInfoSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnGetConnInfoSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   void SetLEConnectionParameters(const dbus::ObjectPath& object_path,
@@ -476,10 +477,10 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
 
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothDeviceClientImpl::OnSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   void GetServiceRecords(const dbus::ObjectPath& object_path,
@@ -496,16 +497,63 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
     }
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&BluetoothDeviceClientImpl::OnGetServiceRecordsSuccess,
-                   weak_ptr_factory_.GetWeakPtr(), callback),
-        base::Bind(&BluetoothDeviceClientImpl::OnError,
-                   weak_ptr_factory_.GetWeakPtr(), error_callback));
+        base::BindOnce(&BluetoothDeviceClientImpl::OnGetServiceRecordsSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
+  }
+
+  void ExecuteWrite(const dbus::ObjectPath& object_path,
+                    const base::Closure& callback,
+                    const ErrorCallback& error_callback) override {
+    dbus::MethodCall method_call(bluetooth_device::kBluetoothDeviceInterface,
+                                 bluetooth_device::kExecuteWrite);
+
+    dbus::ObjectProxy* object_proxy =
+        object_manager_->GetObjectProxy(object_path);
+    if (!object_proxy) {
+      error_callback.Run(kUnknownDeviceError, "");
+      return;
+    }
+
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(true);
+    object_proxy->CallMethodWithErrorCallback(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
+  }
+
+  void AbortWrite(const dbus::ObjectPath& object_path,
+                  const base::Closure& callback,
+                  const ErrorCallback& error_callback) override {
+    dbus::MethodCall method_call(bluetooth_device::kBluetoothDeviceInterface,
+                                 bluetooth_device::kExecuteWrite);
+
+    dbus::ObjectProxy* object_proxy =
+        object_manager_->GetObjectProxy(object_path);
+    if (!object_proxy) {
+      error_callback.Run(kUnknownDeviceError, "");
+      return;
+    }
+
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(false);
+    object_proxy->CallMethodWithErrorCallback(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&BluetoothDeviceClientImpl::OnSuccess,
+                       weak_ptr_factory_.GetWeakPtr(), callback),
+        base::BindOnce(&BluetoothDeviceClientImpl::OnError,
+                       weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
  protected:
-  void Init(dbus::Bus* bus) override {
+  void Init(dbus::Bus* bus,
+            const std::string& bluetooth_service_name) override {
     object_manager_ = bus->GetObjectManager(
-        bluetooth_object_manager::kBluetoothObjectManagerServiceName,
+        bluetooth_service_name,
         dbus::ObjectPath(
             bluetooth_object_manager::kBluetoothObjectManagerServicePath));
     object_manager_->RegisterInterface(

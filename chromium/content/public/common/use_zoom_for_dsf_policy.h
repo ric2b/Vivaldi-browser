@@ -9,10 +9,14 @@
 
 // A centralized file for base helper methods and policy decisions about use
 // zoom for DSF (i.e., Device Scale Factor).
+//
+// In the renderer, the decision to UseZoomForDSF should come from the
+// CompositorDependencies, not from this global method, so that it can be
+// controlled and injected in tests.
 
 namespace content {
 
-CONTENT_EXPORT bool UseZoomForDSFEnabled();
+CONTENT_EXPORT bool IsUseZoomForDSFEnabled();
 
 }  // namespace content
 

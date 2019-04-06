@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/omnibox/clipping_textfield_container.h"
 
+#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
@@ -12,6 +13,17 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+
+// Clipping of long URLs is disabled on iOS 12 due to a bug with UITextField
+// not being rendered when the backing layer is large (approx. 915
+// characters with current font). This is used as the max number of characters
+// to clip.
+// TODO(crbug.com/860790) : reenable clipping on iOS 12.
+const CGFloat kMaxCharsToClipOnIOS12 = 800;
+
+}  // namespace
 
 @interface ClippingTextFieldContainer ()
 
@@ -68,6 +80,15 @@
 }
 
 - (void)startClipping {
+  // TODO(crbug.com/860790) : reenable clipping on iOS 12.
+  if (base::ios::IsRunningOnIOS12OrLater() &&
+      self.textField.text.length > kMaxCharsToClipOnIOS12) {
+    // Clipping of long URLs is disabled on iOS 12 due to a bug with UITextField
+    // not being rendered when the backing layer is large (approx. 915
+    // characters with current font).
+    return;
+  }
+
   self.clipping = YES;
   [self applyClipping];
   [self setNeedsLayout];
@@ -75,6 +96,16 @@
 }
 
 - (void)applyClipping {
+  // TODO(crbug.com/860790) : reenable clipping on iOS 12.
+  if (base::ios::IsRunningOnIOS12OrLater() &&
+      self.textField.text.length > kMaxCharsToClipOnIOS12) {
+    // Clipping of long URLs is disabled on iOS 12 due to a bug with UITextField
+    // not being rendered when the backing layer is large (approx. 915
+    // characters with current font).
+    [self stopClipping];
+    return;
+  }
+
   CGFloat suffixWidth = 0;
   CGFloat prefixWidth =
       -[self leftConstantWithAttributedText:self.textField.attributedText

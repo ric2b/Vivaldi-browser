@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -262,7 +261,7 @@ class TestView : public View {
 
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
 
-  void OnAccessibilityEvent(ui::AXEvent event_type) override;
+  void OnAccessibilityEvent(ax::mojom::Event event_type) override;
 
   // OnBoundsChanged.
   bool did_change_bounds_;
@@ -292,7 +291,7 @@ class TestView : public View {
   bool can_process_events_within_subtree_;
 
   // Accessibility events
-  ui::AXEvent last_a11y_event_;
+  ax::mojom::Event last_a11y_event_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -324,11 +323,28 @@ TEST_F(ViewTest, LayoutCalledInvalidateAndOriginChanges) {
   EXPECT_TRUE(child->did_layout_);
 }
 
+// Tests that SizeToPreferredSize will trigger a Layout if the size has changed
+// or if layout is marked invalid.
+TEST_F(ViewTest, SizeToPreferredSizeInducesLayout) {
+  TestView example_view;
+  example_view.SetPreferredSize(gfx::Size(101, 102));
+  example_view.SizeToPreferredSize();
+  EXPECT_TRUE(example_view.did_layout_);
+
+  example_view.Reset();
+  example_view.SizeToPreferredSize();
+  EXPECT_FALSE(example_view.did_layout_);
+
+  example_view.InvalidateLayout();
+  example_view.SizeToPreferredSize();
+  EXPECT_TRUE(example_view.did_layout_);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // OnBoundsChanged
 ////////////////////////////////////////////////////////////////////////////////
 
-void TestView::OnAccessibilityEvent(ui::AXEvent event_type) {
+void TestView::OnAccessibilityEvent(ax::mojom::Event event_type) {
   last_a11y_event_ = event_type;
 }
 
@@ -340,17 +356,17 @@ TEST_F(ViewTest, OnBoundsChangedFiresA11yEvent) {
   gfx::Rect scaled(0, 0, 250, 250);
   gfx::Rect moved(100, 100, 250, 250);
 
-  v.last_a11y_event_ = ui::AX_EVENT_NONE;
+  v.last_a11y_event_ = ax::mojom::Event::kNone;
   v.SetBoundsRect(initial);
-  EXPECT_EQ(v.last_a11y_event_, ui::AX_EVENT_LOCATION_CHANGED);
+  EXPECT_EQ(v.last_a11y_event_, ax::mojom::Event::kLocationChanged);
 
-  v.last_a11y_event_ = ui::AX_EVENT_NONE;
+  v.last_a11y_event_ = ax::mojom::Event::kNone;
   v.SetBoundsRect(scaled);
-  EXPECT_EQ(v.last_a11y_event_, ui::AX_EVENT_LOCATION_CHANGED);
+  EXPECT_EQ(v.last_a11y_event_, ax::mojom::Event::kLocationChanged);
 
-  v.last_a11y_event_ = ui::AX_EVENT_NONE;
+  v.last_a11y_event_ = ax::mojom::Event::kNone;
   v.SetBoundsRect(moved);
-  EXPECT_EQ(v.last_a11y_event_, ui::AX_EVENT_LOCATION_CHANGED);
+  EXPECT_EQ(v.last_a11y_event_, ax::mojom::Event::kLocationChanged);
 }
 
 void TestView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -4516,7 +4532,7 @@ class PaintLayerView : public View {
   PaintLayerView() = default;
 
   void PaintChildren(const PaintInfo& info) override {
-    last_paint_info_ = base::MakeUnique<PaintInfo>(info);
+    last_paint_info_ = std::make_unique<PaintInfo>(info);
     View::PaintChildren(info);
   }
 

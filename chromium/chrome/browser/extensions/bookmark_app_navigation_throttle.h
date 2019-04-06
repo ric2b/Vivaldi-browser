@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,7 @@
 
 #include <memory>
 
-#include "base/memory/ref_counted.h"
-#include "base/memory/weak_ptr.h"
 #include "content/public/browser/navigation_throttle.h"
-#include "url/gurl.h"
 
 namespace content {
 class NavigationHandle;
@@ -18,39 +15,16 @@ class NavigationHandle;
 
 namespace extensions {
 
-class Extension;
-
-// This class creates navigation throttles that redirect URLs to Bookmark Apps
-// if the URLs are in scope of the Bookmark App.
+// This class creates navigation throttles that bounce off navigations that
+// are out-of-scope of the current PWA window into a new foreground tab.
+//
+// BookmarkAppExperimentalNavigationThrottle is a superset of this throttle;
+// besides handling out-of-scope navigations in PWA windows, the experimental
+// throttle also handles in-scope navigations in non PWA contexts i.e.
+// implements link capturing.
+// TODO(crbug.com/819475): Consolidate overlapping behavior in a base class.
 class BookmarkAppNavigationThrottle : public content::NavigationThrottle {
  public:
-  // Used to record the result of a navigation.
-  enum class ProcessNavigationResult {
-    kProceedStartedFromContextMenu,
-    kProceedTransitionTyped,
-    kProceedTransitionAutoBookmark,
-    kProceedTransitionAutoSubframe,
-    kProceedTransitionManualSubframe,
-    kProceedTransitionGenerated,
-    kProceedTransitionAutoToplevel,
-    kProceedTransitionReload,
-    kProceedTransitionKeyword,
-    kProceedTransitionKeywordGenerated,
-    kProceedTransitionForwardBack,
-    kProceedTransitionFromAddressBar,
-    kOpenInChromeProceedOutOfScopeLaunch,
-    kProceedInAppSameScope,
-    kProceedInBrowserFormSubmission,
-    kProceedInBrowserSameScope,
-    kCancelPrerenderContents,
-    kDeferOpenAppCloseEmptyWebContents,
-    kCancelOpenedApp,
-    kDeferOpenNewTabInAppOutOfScope,
-    // Add ProcessNavigation results immediately above this line. Also
-    // update the enum list in tools/metrics/enums.xml accordingly.
-    kCount,
-  };
-
   static std::unique_ptr<content::NavigationThrottle> MaybeCreateThrottleFor(
       content::NavigationHandle* navigation_handle);
 
@@ -59,37 +33,16 @@ class BookmarkAppNavigationThrottle : public content::NavigationThrottle {
   ~BookmarkAppNavigationThrottle() override;
 
   // content::NavigationThrottle:
+  const char* GetNameForLogging() override;
   content::NavigationThrottle::ThrottleCheckResult WillStartRequest() override;
   content::NavigationThrottle::ThrottleCheckResult WillRedirectRequest()
       override;
-  const char* GetNameForLogging() override;
 
  private:
-  // Decides if the navigation should be opened in a new tab, in a new App
-  // Window, or if the navigation should continue normally.
-  content::NavigationThrottle::ThrottleCheckResult ProcessNavigation(
-      bool is_redirect);
-
-  // Opens the current target url in an App window. May post a task to do so if
-  // opening the app synchronously could result in the app opening in the
-  // background. Also closes the current tab if this is the first navigation.
+  // Opens a new foreground tab with the target URL if the navigation is out of
+  // scope of the current PWA window.
   content::NavigationThrottle::ThrottleCheckResult
-  OpenInAppWindowAndCloseTabIfNecessary(
-      scoped_refptr<const Extension> target_app);
-
-  void OpenBookmarkApp(scoped_refptr<const Extension> bookmark_app);
-  void CloseWebContents();
-  void OpenInNewTab();
-
-  // Retrieves the Bookmark App corresponding to the current window only
-  // if the app is for an installable website.
-  scoped_refptr<const Extension> GetAppForWindow();
-  // Retrieves the target Bookmark App for the current target URL.
-  scoped_refptr<const Extension> GetTargetApp();
-  // Retrieves the Bookmark App that has the current URL in its scope.
-  scoped_refptr<const Extension> GetAppForCurrentURL();
-
-  base::WeakPtrFactory<BookmarkAppNavigationThrottle> weak_ptr_factory_;
+  OpenForegroundTabIfOutOfScope(bool is_redirect);
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkAppNavigationThrottle);
 };

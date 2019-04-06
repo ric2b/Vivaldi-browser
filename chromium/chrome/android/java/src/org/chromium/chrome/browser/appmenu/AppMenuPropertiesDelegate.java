@@ -20,11 +20,9 @@ import android.view.View.OnClickListener;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.UrlConstants;
@@ -33,12 +31,10 @@ import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.webapk.lib.client.WebApkValidator;
@@ -49,32 +45,11 @@ import java.util.concurrent.TimeUnit;
  * App Menu helper that handles hiding and showing menu items based on activity state.
  */
 public class AppMenuPropertiesDelegate {
-    /**
-     * The param name for the "ChromeHomeMenuItemsExpandSheet" experiment. This specifies the number
-     * of times a menu item can be tapped before being hidden.
-     */
-    private static final String CHROME_HOME_MENU_ITEM_TAP_PARAM_NAME = "max_taps";
-
-    /**
-     * The number of times that bookmarks, downloads, and history can be triggered from the overflow
-     * menu in Chrome Home before they are hidden.
-     */
-    private static final int CHROME_HOME_MENU_ITEM_TAP_MAX = 10;
-
-    /**
-     * Whether or not the Chrome Home menu items should be hidden because they have been tapped the
-     * maximum number of times.
-     */
-    private static boolean sHideChromeHomeMenuItems;
-
     protected MenuItem mReloadMenuItem;
 
     protected final ChromeActivity mActivity;
 
     protected BookmarkBridge mBookmarkBridge;
-
-    @Nullable
-    private AppMenuIconRowFooter mAppMenuIconRowFooter;
 
     public AppMenuPropertiesDelegate(ChromeActivity activity) {
         mActivity = activity;
@@ -97,9 +72,7 @@ public class AppMenuPropertiesDelegate {
             boolean hasTabs = mActivity.getCurrentTabModel().getCount() != 0;
             return hasTabs && !isOverview;
         } else {
-            boolean isBottomSheetNtpMenu = mActivity.getBottomSheet() != null
-                    && mActivity.getBottomSheet().isShowingNewTab();
-            return !isBottomSheetNtpMenu && !isOverview && mActivity.getActivityTab() != null;
+            return !isOverview && mActivity.getActivityTab() != null;
         }
     }
 
@@ -114,8 +87,6 @@ public class AppMenuPropertiesDelegate {
         boolean isPageMenu = shouldShowPageMenu();
         boolean isOverviewMenu;
         boolean isTabletEmptyModeMenu;
-        boolean isBottomSheetNtpMenu =
-                mActivity.getBottomSheet() != null && mActivity.getBottomSheet().isShowingNewTab();
 
         boolean isOverview = mActivity.isInOverviewMode();
         boolean isIncognito = mActivity.getCurrentTabModel().isIncognito();
@@ -127,16 +98,15 @@ public class AppMenuPropertiesDelegate {
             isOverviewMenu = hasTabs && isOverview;
             isTabletEmptyModeMenu = !hasTabs;
         } else {
-            isOverviewMenu = !isBottomSheetNtpMenu && isOverview;
+            isOverviewMenu = isOverview;
             isTabletEmptyModeMenu = false;
         }
-        int visibleMenus = (isPageMenu ? 1 : 0) + (isOverviewMenu ? 1 : 0)
-                + (isTabletEmptyModeMenu ? 1 : 0) + (isBottomSheetNtpMenu ? 1 : 0);
+        int visibleMenus =
+                (isPageMenu ? 1 : 0) + (isOverviewMenu ? 1 : 0) + (isTabletEmptyModeMenu ? 1 : 0);
         assert visibleMenus == 1;
 
         menu.setGroupVisible(R.id.PAGE_MENU, isPageMenu);
         menu.setGroupVisible(R.id.OVERVIEW_MODE_MENU, isOverviewMenu);
-        menu.setGroupVisible(R.id.BOTTOM_SHEET_NTP_MENU, isBottomSheetNtpMenu);
         menu.setGroupVisible(R.id.TABLET_EMPTY_MODE_MENU, isTabletEmptyModeMenu);
 
         if (isPageMenu && currentTab != null) {
@@ -145,13 +115,14 @@ public class AppMenuPropertiesDelegate {
                     || url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX);
             boolean isFileScheme = url.startsWith(UrlConstants.FILE_URL_PREFIX);
             boolean isContentScheme = url.startsWith(UrlConstants.CONTENT_URL_PREFIX);
+            boolean shouldShowIconRow = !mActivity.isTablet()
+                    || mActivity.getWindow().getDecorView().getWidth()
+                            < DeviceFormFactor.getMinimumTabletWidthPx(
+                                      mActivity.getWindowAndroid().getDisplay());
 
-            // If the BottomSheet is not null, the icon row will be displayed using
-            // AppMenuIconRowFooter as a prompt view.
-            boolean shouldShowIconRow = mActivity.getBottomSheet() == null
-                    && (!mActivity.isTablet()
-                               || mActivity.getWindow().getDecorView().getWidth()
-                                       < DeviceFormFactor.getMinimumTabletWidthPx(mActivity));
+            boolean bottomToolbarEnabled = mActivity.getToolbarManager() != null
+                    && mActivity.getToolbarManager().getBottomToolbarCoordinator() != null;
+            shouldShowIconRow &= !bottomToolbarEnabled;
 
             // Update the icon row items (shown in narrow form factors).
             menu.findItem(R.id.icon_row_menu_id).setVisible(shouldShowIconRow);
@@ -175,7 +146,7 @@ public class AppMenuPropertiesDelegate {
                     Drawable drawable = offlineMenuItem.getIcon();
                     if (drawable != null) {
                         int iconTint = ApiCompatibilityUtils.getColor(
-                                mActivity.getResources(), R.color.light_normal_color);
+                                mActivity.getResources(), R.color.default_icon_color);
                         drawable.mutate();
                         drawable.setColorFilter(iconTint, PorterDuff.Mode.SRC_ATOP);
                     }
@@ -232,13 +203,6 @@ public class AppMenuPropertiesDelegate {
             // Only display the Enter VR button if VR Shell Dev environment is enabled.
             menu.findItem(R.id.enter_vr_id).setVisible(
                     CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_VR_SHELL_DEV));
-
-            if (!shouldShowNavMenuItems()) {
-                // History, downloads, and bookmarks are shown in the Chrome Home bottom sheet.
-                menu.findItem(R.id.open_history_menu_id).setVisible(false);
-                menu.findItem(R.id.downloads_menu_id).setVisible(false);
-                menu.findItem(R.id.all_bookmarks_menu_id).setVisible(false);
-            }
         }
 
         if (isOverviewMenu) {
@@ -256,35 +220,14 @@ public class AppMenuPropertiesDelegate {
             }
         }
 
-        if (isBottomSheetNtpMenu) {
-            disableEnableMenuItem(menu, R.id.recent_tabs_menu_id, !isIncognito, true, false);
-            disableEnableMenuItem(menu, R.id.new_tab_menu_id, isIncognito, true, false);
-        }
-
-        boolean incognitoMenuItemVisible = !isBottomSheetNtpMenu || !isIncognito;
         // Disable new incognito tab when it is blocked (e.g. by a policy).
         // findItem(...).setEnabled(...)" is not enough here, because of the inflated
         // main_menu.xml contains multiple items with the same id in different groups
         // e.g.: new_incognito_tab_menu_id.
-        disableEnableMenuItem(menu, R.id.new_incognito_tab_menu_id, incognitoMenuItemVisible,
+        disableEnableMenuItem(menu, R.id.new_incognito_tab_menu_id, true,
                 PrefServiceBridge.getInstance().isIncognitoModeEnabled(),
                 PrefServiceBridge.getInstance().isIncognitoModeManaged());
         mActivity.prepareMenu(menu);
-    }
-
-    /**
-     * Called after the menu has been shown to finish initializing views.
-     * @param menu The {@link AppMenu} that was shown.
-     */
-    public void onShow(final AppMenu menu) {
-        View footerView = menu.getFooterView();
-        if (!(footerView instanceof AppMenuIconRowFooter)) {
-            mAppMenuIconRowFooter = null;
-            return;
-        }
-
-        mAppMenuIconRowFooter = (AppMenuIconRowFooter) footerView;
-        mAppMenuIconRowFooter.initialize(mActivity, menu, mBookmarkBridge);
     }
 
     /**
@@ -339,8 +282,6 @@ public class AppMenuPropertiesDelegate {
                             : resources.getInteger(R.integer.reload_button_level_reload));
             mReloadMenuItem.setTitle(isLoading
                     ? R.string.accessibility_btn_stop_loading : R.string.accessibility_btn_refresh);
-        } else if (mAppMenuIconRowFooter != null) {
-            mAppMenuIconRowFooter.loadingStateChanged(isLoading);
         }
     }
 
@@ -349,7 +290,6 @@ public class AppMenuPropertiesDelegate {
      */
     public void onMenuDismissed() {
         mReloadMenuItem = null;
-        mAppMenuIconRowFooter = null;
     }
 
     // Set enabled to be |enable| for all MenuItems with |id| in |menu|.
@@ -380,12 +320,12 @@ public class AppMenuPropertiesDelegate {
     }
 
     /**
-     * @return The View to use as the app menu header if there should be one. null otherwise. The
-     *         header will be displayed as the first item in the app menu. It will be scrolled off
-     *         as the menu scrolls.
+     * @return The resource ID for a layout the be used as the app menu header if there should be
+     *         one. 0 otherwise. The header will be displayed as the first item in the app menu. It
+     *         will be scrolled off as the menu scrolls.
      */
-    public View getHeaderView() {
-        return null;
+    public int getHeaderResourceId() {
+        return 0;
     }
 
     /**
@@ -478,30 +418,16 @@ public class AppMenuPropertiesDelegate {
     }
 
     /**
-     * @return Whether bookmarks, downloads, and history should be shown in the menu.
+     * A notification that the header view has finished inflating.
+     * @param view The view that was inflated.
+     * @param appMenu The menu the view is inside of.
      */
-    public static boolean shouldShowNavMenuItems() {
-        if (!FeatureUtilities.isChromeHomeEnabled()) return true;
+    public void onHeaderViewInflated(AppMenu appMenu, View view) {}
 
-        try (StrictModeContext unused = StrictModeContext.allowDiskReads()) {
-            int maxTapCount = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
-                    ChromeFeatureList.CHROME_HOME_MENU_ITEMS_EXPAND_SHEET,
-                    CHROME_HOME_MENU_ITEM_TAP_PARAM_NAME, CHROME_HOME_MENU_ITEM_TAP_MAX);
-
-            sHideChromeHomeMenuItems = sHideChromeHomeMenuItems
-                    || ChromePreferenceManager.getInstance().getChromeHomeMenuItemClickCount()
-                            >= maxTapCount;
-        }
-
-        boolean chromeHomeMenuItemFlagEnabled = ChromeFeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(
-                           ChromeFeatureList.CHROME_HOME_MENU_ITEMS_EXPAND_SHEET);
-
-        // If Chrome Home or the menu item feature is disabled, clear the menu tap preference.
-        if (!chromeHomeMenuItemFlagEnabled) {
-            ChromePreferenceManager.getInstance().clearChromeHomeMenuItemClickCount();
-        }
-
-        return chromeHomeMenuItemFlagEnabled && !sHideChromeHomeMenuItems;
-    }
+    /**
+     * A notification that the footer view has finished inflating.
+     * @param view The view that was inflated.
+     * @param appMenu The menu the view is inside of.
+     */
+    public void onFooterViewInflated(AppMenu appMenu, View view) {}
 }

@@ -6,11 +6,11 @@
 #define CHROME_BROWSER_SESSIONS_SESSION_TAB_HELPER_H_
 
 #include "base/macros.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "components/sessions/core/session_id.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 // This class keeps the extension API's windowID up to date with the current
 // window of the tab and observes navigation events.
@@ -29,9 +29,10 @@ class SessionTabHelper : public content::WebContentsObserver,
   // If the specified WebContents has a SessionTabHelper (probably because it
   // was used as the contents of a tab), returns a tab id. This value is
   // immutable for a given tab. It will be unique across Chrome within the
-  // current session, but may be re-used across sessions. Returns -1
-  // for a NULL WebContents or if the WebContents has no SessionTabHelper.
-  static SessionID::id_type IdForTab(const content::WebContents* tab);
+  // current session, but may be re-used across sessions. Returns
+  // SessionID::InvalidValue() for a NULL WebContents or if the WebContents has
+  // no SessionTabHelper.
+  static SessionID IdForTab(const content::WebContents* tab);
 
   // If the specified WebContents has a SessionTabHelper (probably because it
   // was used as the contents of a tab), and has ever been attached to a Browser
@@ -39,10 +40,9 @@ class SessionTabHelper : public content::WebContentsObserver,
   // being dragged between Browser windows, returns the old window's id value.
   // If the WebContents has a SessionTabHelper but has never been attached to a
   // Browser window, returns an id value that is different from that of any
-  // Browser. Returns -1 for a NULL WebContents or if the WebContents has no
-  // SessionTabHelper.
-  static SessionID::id_type IdForWindowContainingTab(
-      const content::WebContents* tab);
+  // Browser. Returns SessionID::InvalidValue() for a NULL WebContents or if the
+  // WebContents has no SessionTabHelper.
+  static SessionID IdForWindowContainingTab(const content::WebContents* tab);
 
   // content::WebContentsObserver:
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -51,6 +51,7 @@ class SessionTabHelper : public content::WebContentsObserver,
       const content::LoadCommittedDetails& load_details) override;
   void NavigationListPruned(
       const content::PrunedDetails& pruned_details) override;
+  void NavigationEntriesDeleted() override;
   void NavigationEntryChanged(
       const content::EntryChangedDetails& change_details) override;
 #endif

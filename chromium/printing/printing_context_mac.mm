@@ -5,6 +5,7 @@
 #include "printing/printing_context_mac.h"
 
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 
 #import <iomanip>
 #import <numeric>
@@ -81,11 +82,10 @@ PrintingContextMac::~PrintingContextMac() {
   ReleaseContext();
 }
 
-void PrintingContextMac::AskUserForSettings(
-    int max_pages,
-    bool has_selection,
-    bool is_scripted,
-    const PrintSettingsCallback& callback) {
+void PrintingContextMac::AskUserForSettings(int max_pages,
+                                            bool has_selection,
+                                            bool is_scripted,
+                                            PrintSettingsCallback callback) {
   // Exceptions can also happen when the NSPrintPanel is being
   // deallocated, so it must be autoreleased within this scope.
   base::mac::ScopedNSAutoreleasePool pool;
@@ -122,15 +122,23 @@ void PrintingContextMac::AskUserForSettings(
 
   // TODO(stuartmorgan): We really want a tab sheet here, not a modal window.
   // Will require restructuring the PrintingContext API to use a callback.
-  NSInteger selection = [panel runModalWithPrintInfo:printInfo];
-  if (selection == NSOKButton) {
-    print_info_.reset([[panel printInfo] retain]);
-    settings_.set_ranges(GetPageRangesFromPrintInfo());
-    InitPrintSettingsFromPrintInfo();
-    callback.Run(OK);
-  } else {
-    callback.Run(CANCEL);
-  }
+
+  // This function may be called in the middle of a CATransaction, where
+  // running a modal panel is forbidden. That situation isn't ideal, but from
+  // this code's POV the right answer is to defer running the panel until after
+  // the current transaction. See https://crbug.com/849538.
+  __block auto block_callback = std::move(callback);
+  [CATransaction setCompletionBlock:^{
+    NSInteger selection = [panel runModalWithPrintInfo:printInfo];
+    if (selection == NSOKButton) {
+      print_info_.reset([[panel printInfo] retain]);
+      settings_.set_ranges(GetPageRangesFromPrintInfo());
+      InitPrintSettingsFromPrintInfo();
+      std::move(block_callback).Run(OK);
+    } else {
+      std::move(block_callback).Run(CANCEL);
+    }
+  }];
 }
 
 gfx::Size PrintingContextMac::GetPdfPaperSizeDeviceUnits() {
@@ -282,7 +290,8 @@ bool PrintingContextMac::UpdatePageFormatWithPaperInfo() {
     PMPaperGetMargins(default_paper, &margins);
     paper_name.reset(tmp_paper_name, base::scoped_policy::RETAIN);
   } else {
-    const double kMutiplier = kPointsPerInch / (10.0f * kHundrethsMMPerInch);
+    const double kMutiplier =
+        kPointsPerInch / static_cast<float>(kMicronsPerInch);
     page_width = media.size_microns.width() * kMutiplier;
     page_height = media.size_microns.height() * kMutiplier;
     paper_name.reset(base::SysUTF8ToCFStringRef(media.vendor_id));

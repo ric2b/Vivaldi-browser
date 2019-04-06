@@ -17,7 +17,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/views_export.h"
@@ -25,12 +25,6 @@
 
 namespace base {
 class TimeDelta;
-}
-
-namespace content {
-class WebContents;
-class BrowserContext;
-class SiteInstance;
 }
 
 namespace gfx {
@@ -135,7 +129,8 @@ class VIEWS_EXPORT ViewsDelegate {
                                        gfx::Rect* bounds,
                                        ui::WindowShowState* show_state) const;
 
-  virtual void NotifyAccessibilityEvent(View* view, ui::AXEvent event_type);
+  virtual void NotifyAccessibilityEvent(View* view,
+                                        ax::mojom::Event event_type);
 
   // For accessibility, notify the delegate that a menu item was focused
   // so that alternate feedback (speech / magnified text) can be provided.
@@ -156,7 +151,7 @@ class VIEWS_EXPORT ViewsDelegate {
   // Retrieves the default window icon to use for windows if none is specified.
   virtual HICON GetDefaultWindowIcon() const;
   // Retrieves the small window icon to use for windows if none is specified.
-  virtual HICON GetSmallWindowIcon() const = 0;
+  virtual HICON GetSmallWindowIcon() const;
   // Returns true if the window passed in is in the Windows 8 metro
   // environment.
   virtual bool IsWindowInMetro(gfx::NativeWindow window) const;
@@ -174,14 +169,9 @@ class VIEWS_EXPORT ViewsDelegate {
   virtual void AddRef();
   virtual void ReleaseRef();
 
-  // Creates a web contents. This will return NULL unless overriden.
-  virtual content::WebContents* CreateWebContents(
-      content::BrowserContext* browser_context,
-      content::SiteInstance* site_instance);
-
   // Gives the platform a chance to modify the properties of a Widget.
   virtual void OnBeforeWidgetInit(Widget::InitParams* params,
-                                  internal::NativeWidgetDelegate* delegate) = 0;
+                                  internal::NativeWidgetDelegate* delegate);
 
   // Returns the password reveal duration for Textfield.
   virtual base::TimeDelta GetTextfieldPasswordRevealDuration();

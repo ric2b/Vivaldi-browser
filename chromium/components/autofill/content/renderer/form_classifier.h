@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/WebKit/public/web/WebFormElement.h"
+#ifndef COMPONENTS_AUTOFILL_CONTENT_RENDERER_FORM_CLASSIFIER_H_
+#define COMPONENTS_AUTOFILL_CONTENT_RENDERER_FORM_CLASSIFIER_H_
+
+#include "third_party/blink/public/web/web_form_element.h"
 
 namespace autofill {
 
@@ -12,3 +15,5 @@ namespace autofill {
 bool ClassifyFormAndFindGenerationField(const blink::WebFormElement& form,
                                         base::string16* generation_field);
 }
+
+#endif  // COMPONENTS_AUTOFILL_CONTENT_RENDERER_FORM_CLASSIFIER_H_

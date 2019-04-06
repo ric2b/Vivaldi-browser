@@ -10,9 +10,12 @@ source_set("download") {
     "browser_download_service_factory.mm",
     "download_directory_util.cc",
     "download_directory_util.h",
+    "download_manager_metric_names.h",
     "download_manager_tab_helper.h",
     "download_manager_tab_helper.mm",
     "download_manager_tab_helper_delegate.h",
+    "google_drive_app_util.h",
+    "google_drive_app_util.mm",
     "pass_kit_mime_type.cc",
     "pass_kit_mime_type.h",
     "pass_kit_tab_helper.h",
@@ -25,11 +28,15 @@ source_set("download") {
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/ui:network_activity_indicator_manager",
     "//ios/web/public",
     "//ios/web/public/download",
   ]
 
-  libs = [ "PassKit.framework" ]
+  libs = [
+    "UIKit.framework",
+    "PassKit.framework",
+  ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 }
@@ -42,6 +49,7 @@ source_set("unit_tests") {
     "browser_download_service_unittest.mm",
     "download_directory_util_unittest.mm",
     "download_manager_tab_helper_unittest.mm",
+    "google_drive_app_util_unittest.mm",
     "pass_kit_tab_helper_unittest.mm",
   ]
   deps = [
@@ -49,14 +57,15 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/download",
+    "//ios/chrome/browser/ui:network_activity_indicator_manager",
     "//ios/chrome/test/fakes",
-    "//ios/testing:ios_test_support",
     "//ios/web/public",
     "//ios/web/public/download",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
     "//net",
     "//testing/gtest",
+    "//third_party/ocmock",
   ]
 }
 

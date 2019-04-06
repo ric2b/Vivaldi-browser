@@ -1,10 +1,12 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_toast/cr_toast.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_toggle/cr_toggle.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_tooltip_icon.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/util.html">
@@ -12,15 +14,16 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-announcer/iron-a11y-announcer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="icons.html">
+<link rel="import" href="pack_dialog.html">
 
 <dom-module id="extensions-toolbar">
   <template>
     <style include="cr-hidden-style paper-button-style">
       :host {
         /* The constant is the height of the tallest control. */
-        --button-row-height: calc(var(--margin-bottom) + 36px);
+        --button-row-height: calc(2 * var(--padding-top-bottom) + 36px);
         --drawer-transition: 0.3s cubic-bezier(.25, .1, .25, 1);
-        --margin-bottom: 4px;
+        --padding-top-bottom: 8px;
         --toolbar-color: var(--md-toolbar-color);
       }
 
@@ -30,9 +33,10 @@
 
       /* This toggle needs special styling because it's on blue background. */
       cr-toolbar cr-toggle {
-        --cr-toggle-checked-bar-color: white;
+        --cr-toggle-checked-bar-color: var(--google-grey-refresh-100);
         --cr-toggle-checked-button-color: white;
         --cr-toggle-checked-ink-color: white;
+        --cr-toggle-unchecked-bar-color: var(--google-grey-600);
         --cr-toggle-unchecked-ink-color: white;
       }
 
@@ -40,11 +44,14 @@
         -webkit-margin-end: 20px;
       }
 
-      #devDrawer[expanded] #button-strip {
+      #devDrawer[expanded] #buttonStrip {
         top: 0;
       }
 
       #devDrawer {
+        background: white;
+        border-bottom: 1px solid var(--google-grey-300);
+        box-sizing: border-box;
         height: 0;
         overflow: hidden;
         position: relative;
@@ -55,13 +62,11 @@
         height: var(--button-row-height);
       }
 
-      #button-strip {
+      #buttonStrip {
         -webkit-margin-end: auto;
-        -webkit-margin-start: auto;
-        background: var(--toolbar-color);
-        margin-bottom: var(--margin-bottom);
+        -webkit-margin-start: 24px;
+        padding: var(--padding-top-bottom) 0;
         position: absolute;
-        text-align: center;
         top: calc(var(--button-row-height) * -1);
         transition: top var(--drawer-transition);
         /* Prevent selection of the blank space between buttons. */
@@ -69,13 +74,8 @@
         width: 100%;
       }
 
-      #button-strip paper-button {
+      #buttonStrip paper-button {
         -webkit-margin-end: 16px;
-        color: white;
-        /* Increase contrast compared to default values. */
-        --paper-button-flat-keyboard-focus: {
-          background: rgba(0, 0, 0, .3);
-        };
       }
 
       .more-actions {
@@ -87,48 +87,62 @@
       .more-actions span {
         -webkit-margin-end: 16px;
       }
+
+      cr-toast > div {
+        color: #fff;
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     </style>
-    <cr-toolbar page-name="$i18n{toolbarTitle}"
-        search-prompt="$i18n{search}"
-        clear-label="$i18n{clearSearch}"
-        menu-label="$i18n{mainMenu}"
-        show-menu="[[!isGuest]]" show-search="[[!isGuest]]"
+    <cr-toolbar page-name="$i18n{toolbarTitle}" search-prompt="$i18n{search}"
+        clear-label="$i18n{clearSearch}" menu-label="$i18n{mainMenu}" show-menu
         narrow-threshold="1000">
-      <div class="more-actions" hidden$="[[isGuest]]">
+      <div class="more-actions">
         <span id="devModeLabel">$i18n{toolbarDevMode}</span>
         <cr-tooltip-icon hidden$="[[!devModeControlledByPolicy]]"
             tooltip-text="$i18n{controlledSettingPolicy}"
             icon-class="cr20:domain"
             icon-aria-label="$i18n{controlledSettingPolicy}">
         </cr-tooltip-icon>
-        <cr-toggle id="dev-mode" on-change="onDevModeToggleChange_"
+        <cr-toggle id="devMode" on-change="onDevModeToggleChange_"
             disabled="[[shouldDisableDevMode_(
                 devModeControlledByPolicy, isSupervised)]]"
             checked="[[inDevMode]]" aria-labelledby="devModeLabel">
         </cr-toggle>
       </div>
     </cr-toolbar>
+    <template is="dom-if" if="[[showPackDialog_]]" restamp>
+      <extensions-pack-dialog delegate="[[delegate]]"
+          on-close="onPackDialogClose_">
+      </extensions-pack-dialog>
+    </template>
     <div id="devDrawer" expanded$="[[expanded_]]">
-      <div id="button-strip">
-        <paper-button hidden$="[[!canLoadUnpacked]]" id="load-unpacked"
-            on-tap="onLoadUnpackedTap_">
+      <div id="buttonStrip">
+        <paper-button hidden$="[[!canLoadUnpacked]]" id="loadUnpacked"
+            on-click="onLoadUnpackedTap_">
           $i18n{toolbarLoadUnpacked}
         </paper-button>
-        <paper-button id="pack-extensions" on-tap="onPackTap_">
+        <paper-button id="packExtensions" on-click="onPackTap_">
           $i18n{toolbarPack}
         </paper-button>
-        <paper-button id="update-now" on-tap="onUpdateNowTap_"
+        <paper-button id="updateNow" on-click="onUpdateNowTap_"
             title="$i18n{toolbarUpdateNowTooltip}">
           $i18n{toolbarUpdateNow}
         </paper-button>
 <if expr="chromeos">
-        <paper-button id="kiosk-extensions" on-tap="onKioskTap_"
+        <paper-button id="kioskExtensions" on-click="onKioskTap_"
             hidden$="[[!kioskEnabled]]">
           $i18n{manageKioskApp}
         </paper-button>
 </if>
       </div>
     </div>
+    <cr-toast>
+      <div>[[toastLabel_]]</div>
+    </cr-toast>
   </template>
   <script src="toolbar.js"></script>
 </dom-module>

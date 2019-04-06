@@ -13,14 +13,13 @@
 #include "content/public/common/page_zoom.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/system/core.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
 
 namespace base {
 class FilePath;
 }
 
 namespace blink {
-struct WebMediaPlayerAction;
 struct WebPluginAction;
 }
 
@@ -56,7 +55,7 @@ struct WebPreferences;
 // WebContents (if it's page specific).
 //
 // For context, please see https://crbug.com/467770 and
-// http://www.chromium.org/developers/design-documents/site-isolation.
+// https://www.chromium.org/developers/design-documents/site-isolation.
 class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
  public:
   // Returns the RenderViewHost given its ID and the ID of its render process.
@@ -97,22 +96,8 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // threshold.
   virtual void DisableScrollbarsForThreshold(const gfx::Size& size) = 0;
 
-  // Instructs the RenderView to automatically resize and send back updates
-  // for the new size.
-  virtual void EnableAutoResize(const gfx::Size& min_size,
-                                const gfx::Size& max_size) = 0;
-
-  // Turns off auto-resize and gives a new size that the view should be.
-  virtual void DisableAutoResize(const gfx::Size& new_size) = 0;
-
   // Instructs the RenderView to send back updates to the preferred size.
   virtual void EnablePreferredSizeMode() = 0;
-
-  // Tells the renderer to perform the given action on the media player
-  // located at the given point.
-  virtual void ExecuteMediaPlayerActionAtLocation(
-      const gfx::Point& location,
-      const blink::WebMediaPlayerAction& action) = 0;
 
   // Tells the renderer to perform the given action on the plugin located at
   // the given point.

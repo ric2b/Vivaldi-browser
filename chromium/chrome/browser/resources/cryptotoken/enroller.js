@@ -144,7 +144,7 @@ async function makeCertAndKey(original) {
         b.addASN1(Tag.SET, (b) => {
           b.addASN1(Tag.SEQUENCE, (b) => {
             b.addASN1ObjectIdentifier(commonName);
-            b.addASN1PrintableString('U2F');
+            b.addASN1PrintableString('U2F Issuer');
           });
         });
       });
@@ -160,7 +160,7 @@ async function makeCertAndKey(original) {
         b.addASN1(Tag.SET, (b) => {
           b.addASN1(Tag.SEQUENCE, (b) => {
             b.addASN1ObjectIdentifier(commonName);
-            b.addASN1PrintableString('U2F');
+            b.addASN1PrintableString('U2F Device');
           });
         });
       });
@@ -192,7 +192,21 @@ async function makeCertAndKey(original) {
       b.addASN1ObjectIdentifier(ecdsaWithSHA256);
     });
     b.addASN1(Tag.BITSTRING, (b) => {  // Signature
-      b.addBytesFromString('\x00');    // (not valid, obviously.)
+      // This signature is obviously not correct since it's constant and the
+      // rest of the certificate is not. However, since the issuer certificate
+      // doesn't exist, there's no way for anyone to check the signature on this
+      // certificate and thus this sufficies. However, at least fastmail.com
+      // expects to be able to parse out a valid ECDSA signature and so one is
+      // provided.
+      b.addBytes(new Uint8Array([
+        0x00, 0x30, 0x45, 0x02, 0x21, 0x00, 0xc1, 0xa3, 0xa6, 0x8e, 0x2f,
+        0x16, 0xa7, 0x21, 0x46, 0x27, 0x05, 0x7f, 0x62, 0xbb, 0x72, 0x8c,
+        0x9e, 0x03, 0xe7, 0xa1, 0xba, 0x62, 0xd0, 0x46, 0x52, 0x4e, 0x45,
+        0x6d, 0x2c, 0x2f, 0x3f, 0x73, 0x02, 0x20, 0x0b, 0x5f, 0x78, 0xe5,
+        0x11, 0xaa, 0x18, 0x12, 0x9f, 0x6f, 0x23, 0x6d, 0x92, 0x13, 0x22,
+        0x7d, 0x92, 0xb4, 0xe6, 0x7e, 0xdf, 0x53, 0xe8, 0x16, 0xdf, 0xb0,
+        0x5d, 0x9d, 0xc8, 0xb9, 0x0f, 0xde
+      ]));
     });
   });
   return {privateKey: keypair.privateKey, certDER: certBuilder.data};
@@ -207,11 +221,13 @@ const Registration = class {
    * @param {string} registrationData the registration response message,
    *     base64-encoded.
    * @param {string} appId the application identifier.
-   * @param {string=} opt_clientData the client data, base64-encoded.  This
-   *     field is not really optional; it is an error if it is empty or missing.
+   * @param {string} challenge the server-generated challenge parameter. This
+   *     is only used if opt_clientData is null and, in that case, is expected
+   *     to be a webSafeBase64-encoded, 32-byte value.
+   * @param {string=} opt_clientData the client data, base64-encoded.
    * @throws {Error}
    */
-  constructor(registrationData, appId, opt_clientData) {
+  constructor(registrationData, appId, challenge, opt_clientData) {
     var data = new ByteString(decodeWebSafeBase64ToArray(registrationData));
     var magic = data.getBytes(1);
     if (magic[0] != 5) {
@@ -231,12 +247,21 @@ const Registration = class {
       throw Error('extra trailing bytes');
     }
 
+    var challengeHash;
     if (!opt_clientData) {
-      throw Error('missing client data');
+      // U2F_V1 - deprecated
+      challengeHash = decodeWebSafeBase64ToArray(challenge);
+      if (challengeHash.length != 32) {
+        throw Error('bad challenge length for U2F_V1');
+      }
+    } else {
+      // U2F_V2
+      challengeHash =
+          sha256HashOfString(atob(webSafeBase64ToNormal(opt_clientData)));
     }
+
     /** @private {string} */
-    this.clientData_ = atob(webSafeBase64ToNormal(opt_clientData));
-    JSON.parse(this.clientData_);  // Just checking.
+    this.challengeHash_ = challengeHash;
 
     /** @private {string} */
     this.appId_ = appId;
@@ -262,7 +287,7 @@ const Registration = class {
     var tbs = new ByteBuilder();
     tbs.addBytesFromString('\0');
     tbs.addBytes(sha256HashOfString(this.appId_));
-    tbs.addBytes(sha256HashOfString(this.clientData_));
+    tbs.addBytes(this.challengeHash_);
     tbs.addBytes(this.keyHandle_);
     tbs.addBytes(this.publicKey_);
     return tbs.data;
@@ -338,10 +363,11 @@ var ConveyancePreference = {
  */
 function conveyancePreference(enrollChallenge) {
   if (enrollChallenge.hasOwnProperty('attestation') &&
-      enrollChallenge['attestation'] == 'none') {
-    return ConveyancePreference.NONE;
+      (enrollChallenge['attestation'] == 'direct' ||
+       enrollChallenge['attestation'] == 'indirect')) {
+    return ConveyancePreference.DIRECT;
   }
-  return ConveyancePreference.DIRECT;
+  return ConveyancePreference.NONE;
 }
 
 /**
@@ -379,7 +405,8 @@ function handleU2fEnrollRequest(messageSender, request, sendResponse) {
       return registrationData;
     }
 
-    const reg = new Registration(registrationData, appId, opt_clientData);
+    const reg = new Registration(
+        registrationData, appId, enrollChallenge['challenge'], opt_clientData);
     const keypair = await makeCertAndKey(reg.certificate);
     const signature = await reg.sign(keypair.privateKey);
     return reg.withReplacement(keypair.certDER, signature);
@@ -538,7 +565,7 @@ function isValidEnrollChallengeArray(enrollChallenges, appIdRequired) {
 }
 
 /**
- * Finds the enroll challenge of the given version in the enroll challlenge
+ * Finds the enroll challenge of the given version in the enroll challenge
  * array.
  * @param {Array<EnrollChallenge>} enrollChallenges The enroll challenges to
  *     search.

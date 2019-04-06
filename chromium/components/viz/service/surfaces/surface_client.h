@@ -10,14 +10,10 @@
 #include "base/macros.h"
 #include "components/viz/service/viz_service_export.h"
 
-namespace cc {
-struct ReturnedResource;
-struct TransferableResource;
-}  // namespace cc
-
 namespace viz {
-
+struct ReturnedResource;
 class Surface;
+struct TransferableResource;
 
 class VIZ_SERVICE_EXPORT SurfaceClient {
  public:
@@ -27,6 +23,9 @@ class VIZ_SERVICE_EXPORT SurfaceClient {
 
   // Called when |surface| has a new CompositorFrame available for display.
   virtual void OnSurfaceActivated(Surface* surface) = 0;
+
+  // Called when |surface| is about to be destroyed.
+  virtual void OnSurfaceDiscarded(Surface* surface) = 0;
 
   // Increments the reference count on resources specified by |resources|.
   virtual void RefResources(
@@ -45,6 +44,27 @@ class VIZ_SERVICE_EXPORT SurfaceClient {
   // compositor.
   virtual void ReceiveFromChild(
       const std::vector<TransferableResource>& resources) = 0;
+
+  // Takes all the CopyOutputRequests made at the client level that happened for
+  // a LocalSurfaceId preceeding the given one.
+  virtual std::vector<std::unique_ptr<CopyOutputRequest>>
+  TakeCopyOutputRequests(const LocalSurfaceId& latest_surface_id) = 0;
+
+  // Notifies the client that a frame with |token| has been activated.
+  virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
+
+  // Notifies the client that the submitted CompositorFrame has been processed
+  // (where processed may mean the frame has been displayed, or discarded).
+  virtual void OnSurfaceProcessed(Surface* surface) = 0;
+
+  // This is called when |surface| or one of its descendents is determined to be
+  // damaged at aggregation time.
+  virtual void OnSurfaceAggregatedDamage(
+      Surface* surface,
+      const LocalSurfaceId& local_surface_id,
+      const CompositorFrame& frame,
+      const gfx::Rect& damage_rect,
+      base::TimeTicks expected_display_time) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SurfaceClient);

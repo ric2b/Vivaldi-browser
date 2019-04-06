@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "chrome/browser/printing/print_view_manager_base.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 
 namespace content {
 class RenderFrameHost;
@@ -23,7 +23,6 @@ class PrintViewManager : public PrintViewManagerBase,
  public:
   ~PrintViewManager() override;
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Same as PrintNow(), but for the case where a user prints with the system
   // dialog from print preview.
   // |dialog_shown_callback| is called when the print dialog is shown.
@@ -33,7 +32,6 @@ class PrintViewManager : public PrintViewManagerBase,
   // show the native system dialog. This can happen from both initiator and
   // preview dialog.
   bool BasicPrint(content::RenderFrameHost* rfh);
-#endif  // ENABLE_BASIC_PRINTING
 
   // Initiate print preview of the current document by first notifying the
   // renderer. Since this happens asynchronous, the print preview dialog
@@ -57,8 +55,10 @@ class PrintViewManager : public PrintViewManagerBase,
 
   content::RenderFrameHost* print_preview_rfh() { return print_preview_rfh_; }
 
- private:
+ protected:
   explicit PrintViewManager(content::WebContents* web_contents);
+
+ private:
   friend class content::WebContentsUserData<PrintViewManager>;
 
   enum PrintPreviewState {

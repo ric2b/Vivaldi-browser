@@ -4,8 +4,6 @@
 
 #include "components/password_manager/core/common/password_manager_features.h"
 
-#include "build/build_config.h"
-
 namespace password_manager {
 
 namespace features {
@@ -16,45 +14,33 @@ namespace features {
 const base::Feature kAffiliationBasedMatching = {
     "AffiliationBasedMatching", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables links to the setting pages from the Chrome profile menu for Passwords
+// and Autofill.
+const base::Feature kAutofillHome = {"AutofillHome",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Use HTML based username detector.
-const base::Feature kEnableHtmlBasedUsernameDetector = {
-    "EnableHtmlBaseUsernameDetector", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enable additional elements in the form popup UI, which will allow the user to
-// view all saved passwords.
-const base::Feature kEnableManualFallbacksGeneration = {
-    "EnableManualFallbacksGeneration", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enable additional elements in the form popup UI, which will allow the user to
-// trigger generation or view all saved passwords.
-const base::Feature kEnableManualFallbacksFilling = {
-    "EnableManualFallbacksFilling", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enable a standalone popup UI, which will allow the user to view all saved
-// passwords.
-const base::Feature kEnableManualFallbacksFillingStandalone = {
-    "EnableManualFallbacksFillingStandalone",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enable that an omnibox icon is shown when the user types into a password
-// field. When the user clicks on the icon, a password save/update bubble is
-// shown.
-const base::Feature kEnableManualSaving = {"EnableManualSaving",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kHtmlBasedUsernameDetector = {
+    "HtmlBaseUsernameDetector", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable a context menu item in the password field that allows the user
 // to manually enforce saving of their password.
 const base::Feature kPasswordForceSaving = {
     "PasswordForceSaving", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable the user to trigger password generation manually.
-const base::Feature kEnableManualPasswordGeneration = {
-    "enable-manual-password-generation", base::FEATURE_ENABLED_BY_DEFAULT};
+// Controls the ability to generate passwords that fit sites' requirements.
+const base::Feature kPasswordGenerationRequirements = {
+    "PasswordGenerationRequirements", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether password requirements can be overridden for domains
+// (as opposed to only relying on the autofill server).
+const base::Feature kPasswordGenerationRequirementsDomainOverrides = {
+    "PasswordGenerationRequirementsDomainOverrides",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the "Show all saved passwords" option in Context Menu.
-const base::Feature kEnableShowAllSavedPasswordsContextMenu{
-    "kEnableShowAllSavedPasswordsContextMenu",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kShowAllSavedPasswordsContextMenu{
+    "ShowAllSavedPasswordsContextMenu", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Disallow autofilling of the sync credential.
 const base::Feature kProtectSyncCredential = {
@@ -67,22 +53,48 @@ const base::Feature kProtectSyncCredentialOnReauth = {
 
 // Controls the ability to export passwords from Chrome's settings page.
 const base::Feature kPasswordExport = {"PasswordExport",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls the ability to import passwords from Chrome's settings page.
 const base::Feature kPasswordImport = {"PasswordImport",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Control whether users can view and copy passwords. This is only used for
-// mobile, the desktop version of Chrome always allows users to view
-// passwords.
-const base::Feature kViewPasswords = {"ViewPasswords",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
+// Allows searching for saved passwords in the settings page on mobile devices.
+const base::Feature kPasswordSearchMobile = {"PasswordSearchMobile",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Adds password-related features to the keyboard accessory on mobile devices.
+const base::Feature kPasswordsKeyboardAccessory = {
+    "PasswordsKeyboardAccessory", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the experiment for the password manager to only fill on account
 // selection, rather than autofilling on page load, with highlighting of fields.
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables new password form parsing mechanism, details in
+// go/new-cpm-design-refactoring.
+const base::Feature kNewPasswordFormParsing = {
+    "new-password-form-parsing", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Field trial identifier for password generation requirements.
+const char* kGenerationRequirementsFieldTrial =
+    "PasswordGenerationRequirements";
+
+// The file version number of password requirements files. If the prefix length
+// changes, this version number needs to be updated.
+// Default to 0 in order to get an empty requirements file.
+const char* kGenerationRequirementsVersion = "version";
+
+// Length of a hash prefix of domain names. This is used to shard domains
+// across multiple files.
+// Default to 0 in order to put all domain names into the same shard.
+const char* kGenerationRequirementsPrefixLength = "prefix_length";
+
+// Timeout (in milliseconds) for password requirements lookups. As this is a
+// network request in the background that does not block the UI, the impact of
+// high values is not strong.
+// Default to 5000 ms.
+const char* kGenerationRequirementsTimeout = "timeout";
 
 }  // namespace features
 

@@ -49,7 +49,7 @@ struct TestCase {
         success(success),
         selected_path(selected_path) {
   }
-  ~TestCase() {}
+  ~TestCase() = default;
 
   // Path that we expect to be suggested to the file selector.
   base::FilePath suggested_name;
@@ -65,7 +65,7 @@ struct TestCase {
 
 bool OverrideFunction(const std::string& name,
                       extensions::ExtensionFunctionFactory factory) {
-  return ExtensionFunctionRegistry::GetInstance()->OverrideFunctionForTesting(
+  return ExtensionFunctionRegistry::GetInstance().OverrideFunctionForTesting(
       name, factory);
 }
 
@@ -84,7 +84,7 @@ class MockFileSelector : public file_manager::FileSelector {
         success_(success),
         selected_path_(selected_path) {
   }
-  ~MockFileSelector() override {}
+  ~MockFileSelector() override = default;
 
   // file_manager::FileSelector implementation.
   // |browser| is not used.
@@ -139,7 +139,7 @@ class MockFileSelectorFactory : public file_manager::FileSelectorFactory {
         success_(test_case.success),
         selected_path_(test_case.selected_path) {
   }
-  ~MockFileSelectorFactory() override {}
+  ~MockFileSelectorFactory() override = default;
 
   // file_manager::FileSelectorFactory implementation.
   file_manager::FileSelector* CreateFileSelector() const override {
@@ -163,7 +163,7 @@ class MockFileSelectorFactory : public file_manager::FileSelectorFactory {
 };
 
 // Extension api test for the fileBrowserHandler extension API.
-class FileBrowserHandlerExtensionTest : public ExtensionApiTest {
+class FileBrowserHandlerExtensionTest : public extensions::ExtensionApiTest {
  protected:
   void SetUp() override {
     // Create mount point directory that will be used in the test.
@@ -173,7 +173,7 @@ class FileBrowserHandlerExtensionTest : public ExtensionApiTest {
     tmp_mount_point_ = scoped_tmp_dir_.GetPath().Append("tmp");
     base::CreateDirectory(tmp_mount_point_);
 
-    ExtensionApiTest::SetUp();
+    extensions::ExtensionApiTest::SetUp();
   }
 
   // Creates new, test mount point.
@@ -232,7 +232,7 @@ class FileBrowserHandlerExtensionTest : public ExtensionApiTest {
 };
 
 const std::vector<TestCase>* FileBrowserHandlerExtensionTest::test_cases_ =
-    NULL;
+    nullptr;
 size_t FileBrowserHandlerExtensionTest::current_test_case_ = 0;
 
 // End to end test that verifies that fileBrowserHandler.selectFile works as
@@ -249,20 +249,14 @@ IN_PROC_BROWSER_TEST_F(FileBrowserHandlerExtensionTest, EndToEnd) {
       GetFullPathOnTmpMountPoint(base::FilePath("test_file.txt"));
 
   std::vector<std::string> allowed_extensions;
-  allowed_extensions.push_back("txt");
-  allowed_extensions.push_back("html");
+  allowed_extensions.emplace_back("txt");
+  allowed_extensions.emplace_back("html");
 
   std::vector<TestCase> test_cases;
-  test_cases.push_back(
-      TestCase(base::FilePath("some_file_name.txt"),
-               allowed_extensions,
-               true,
-               selected_path));
-  test_cases.push_back(
-      TestCase(base::FilePath("fail"),
-               std::vector<std::string>(),
-               false,
-               base::FilePath()));
+  test_cases.emplace_back(base::FilePath("some_file_name.txt"),
+                          allowed_extensions, true, selected_path);
+  test_cases.emplace_back(base::FilePath("fail"), std::vector<std::string>(),
+                          false, base::FilePath());
 
   SetTestCases(&test_cases);
 
@@ -303,7 +297,7 @@ IN_PROC_BROWSER_TEST_F(FileBrowserHandlerExtensionTest, EndToEnd) {
   run_loop.Run();
   EXPECT_EQ(kExpectedContents, contents);
 
-  SetTestCases(NULL);
+  SetTestCases(nullptr);
 }
 
 // Tests that verifies the fileBrowserHandlerInternal.selectFile function fails

@@ -4,10 +4,14 @@
 
 #include "components/cryptauth/connection.h"
 
+#include "base/bind.h"
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "components/cryptauth/connection_observer.h"
-#include "components/cryptauth/remote_device.h"
+#include "components/cryptauth/remote_device_ref.h"
+#include "components/cryptauth/remote_device_test_util.h"
 #include "components/cryptauth/wire_message.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -24,12 +28,13 @@ namespace {
 
 class MockConnection : public Connection {
  public:
-  MockConnection() : Connection(RemoteDevice()) {}
+  MockConnection() : Connection(cryptauth::CreateRemoteDeviceRefForTest()) {}
   ~MockConnection() {}
 
   MOCK_METHOD1(SetPaused, void(bool paused));
   MOCK_METHOD0(Connect, void());
   MOCK_METHOD0(Disconnect, void());
+  MOCK_METHOD0(GetDeviceAddress, std::string());
   MOCK_METHOD0(CancelConnectionAttempt, void());
   MOCK_METHOD1(SendMessageImplProxy, void(WireMessage* message));
   MOCK_METHOD1(DeserializeWireMessageProxy,
@@ -79,7 +84,7 @@ class MockConnectionObserver : public ConnectionObserver {
 class TestWireMessage : public WireMessage {
  public:
   TestWireMessage() : WireMessage("payload", "feature") {}
-  ~TestWireMessage() override {}
+  ~TestWireMessage() override = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestWireMessage);
@@ -89,57 +94,72 @@ class TestWireMessage : public WireMessage {
 
 class CryptAuthConnectionTest : public testing::Test {
  protected:
-  CryptAuthConnectionTest() {}
-  ~CryptAuthConnectionTest() override {}
+  CryptAuthConnectionTest() = default;
+  ~CryptAuthConnectionTest() override = default;
+
+  base::Optional<int32_t> GetRssi(Connection* connection) {
+    connection->GetConnectionRssi(base::Bind(
+        &CryptAuthConnectionTest::OnConnectionRssi, base::Unretained(this)));
+
+    base::Optional<int32_t> rssi = rssi_;
+    rssi_.reset();
+
+    return rssi;
+  }
 
  private:
+  void OnConnectionRssi(base::Optional<int32_t> rssi) { rssi_ = rssi; }
+
+  base::Optional<int32_t> rssi_;
+
   DISALLOW_COPY_AND_ASSIGN(CryptAuthConnectionTest);
 };
 
-TEST(CryptAuthConnectionTest, IsConnected) {
+TEST_F(CryptAuthConnectionTest, IsConnected) {
   StrictMock<MockConnection> connection;
   EXPECT_FALSE(connection.IsConnected());
 
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
   EXPECT_TRUE(connection.IsConnected());
 
-  connection.SetStatus(Connection::DISCONNECTED);
+  connection.SetStatus(Connection::Status::DISCONNECTED);
   EXPECT_FALSE(connection.IsConnected());
 
-  connection.SetStatus(Connection::IN_PROGRESS);
+  connection.SetStatus(Connection::Status::IN_PROGRESS);
   EXPECT_FALSE(connection.IsConnected());
 }
 
-TEST(CryptAuthConnectionTest, SendMessage_FailsWhenNotConnected) {
+TEST_F(CryptAuthConnectionTest, SendMessage_FailsWhenNotConnected) {
   StrictMock<MockConnection> connection;
-  connection.SetStatus(Connection::IN_PROGRESS);
+  connection.SetStatus(Connection::Status::IN_PROGRESS);
 
+  EXPECT_CALL(connection, GetDeviceAddress()).Times(1);
   EXPECT_CALL(connection, SendMessageImplProxy(_)).Times(0);
   connection.SendMessage(std::unique_ptr<WireMessage>());
 }
 
-TEST(CryptAuthConnectionTest,
-     SendMessage_FailsWhenAnotherMessageSendIsInProgress) {
+TEST_F(CryptAuthConnectionTest,
+       SendMessage_FailsWhenAnotherMessageSendIsInProgress) {
   NiceMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
   connection.SendMessage(std::unique_ptr<WireMessage>());
 
   EXPECT_CALL(connection, SendMessageImplProxy(_)).Times(0);
   connection.SendMessage(std::unique_ptr<WireMessage>());
 }
 
-TEST(CryptAuthConnectionTest, SendMessage_SucceedsWhenConnected) {
+TEST_F(CryptAuthConnectionTest, SendMessage_SucceedsWhenConnected) {
   StrictMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
 
   EXPECT_CALL(connection, SendMessageImplProxy(_));
   connection.SendMessage(std::unique_ptr<WireMessage>());
 }
 
-TEST(CryptAuthConnectionTest,
-     SendMessage_SucceedsAfterPreviousMessageSendCompletes) {
+TEST_F(CryptAuthConnectionTest,
+       SendMessage_SucceedsAfterPreviousMessageSendCompletes) {
   NiceMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
   connection.SendMessage(std::unique_ptr<WireMessage>());
   connection.OnDidSendMessage(TestWireMessage(), true /* success */);
 
@@ -147,35 +167,35 @@ TEST(CryptAuthConnectionTest,
   connection.SendMessage(std::unique_ptr<WireMessage>());
 }
 
-TEST(CryptAuthConnectionTest, SetStatus_NotifiesObserversOfStatusChange) {
+TEST_F(CryptAuthConnectionTest, SetStatus_NotifiesObserversOfStatusChange) {
   StrictMock<MockConnection> connection;
-  EXPECT_EQ(Connection::DISCONNECTED, connection.status());
+  EXPECT_EQ(Connection::Status::DISCONNECTED, connection.status());
 
   StrictMock<MockConnectionObserver> observer;
   connection.AddObserver(&observer);
 
-  EXPECT_CALL(observer,
-              OnConnectionStatusChanged(&connection, Connection::DISCONNECTED,
-                                        Connection::CONNECTED));
-  connection.SetStatus(Connection::CONNECTED);
+  EXPECT_CALL(observer, OnConnectionStatusChanged(
+                            &connection, Connection::Status::DISCONNECTED,
+                            Connection::Status::CONNECTED));
+  connection.SetStatus(Connection::Status::CONNECTED);
 }
 
-TEST(CryptAuthConnectionTest,
-     SetStatus_DoesntNotifyObserversIfStatusUnchanged) {
+TEST_F(CryptAuthConnectionTest,
+       SetStatus_DoesntNotifyObserversIfStatusUnchanged) {
   StrictMock<MockConnection> connection;
-  EXPECT_EQ(Connection::DISCONNECTED, connection.status());
+  EXPECT_EQ(Connection::Status::DISCONNECTED, connection.status());
 
   StrictMock<MockConnectionObserver> observer;
   connection.AddObserver(&observer);
 
   EXPECT_CALL(observer, OnConnectionStatusChanged(_, _, _)).Times(0);
-  connection.SetStatus(Connection::DISCONNECTED);
+  connection.SetStatus(Connection::Status::DISCONNECTED);
 }
 
-TEST(CryptAuthConnectionTest,
-     OnDidSendMessage_NotifiesObserversIfMessageSendInProgress) {
+TEST_F(CryptAuthConnectionTest,
+       OnDidSendMessage_NotifiesObserversIfMessageSendInProgress) {
   NiceMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
   connection.SendMessage(std::unique_ptr<WireMessage>());
 
   StrictMock<MockConnectionObserver> observer;
@@ -185,10 +205,10 @@ TEST(CryptAuthConnectionTest,
   connection.OnDidSendMessage(TestWireMessage(), true /* success */);
 }
 
-TEST(CryptAuthConnectionTest,
-     OnDidSendMessage_DoesntNotifyObserversIfNoMessageSendInProgress) {
+TEST_F(CryptAuthConnectionTest,
+       OnDidSendMessage_DoesntNotifyObserversIfNoMessageSendInProgress) {
   NiceMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
 
   StrictMock<MockConnectionObserver> observer;
   connection.AddObserver(&observer);
@@ -197,10 +217,10 @@ TEST(CryptAuthConnectionTest,
   connection.OnDidSendMessage(TestWireMessage(), true /* success */);
 }
 
-TEST(CryptAuthConnectionTest,
-     OnBytesReceived_NotifiesObserversOnValidMessage) {
+TEST_F(CryptAuthConnectionTest,
+       OnBytesReceived_NotifiesObserversOnValidMessage) {
   NiceMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
 
   StrictMock<MockConnectionObserver> observer;
   connection.AddObserver(&observer);
@@ -212,22 +232,23 @@ TEST(CryptAuthConnectionTest,
   connection.OnBytesReceived(std::string());
 }
 
-TEST(CryptAuthConnectionTest,
-     OnBytesReceived_DoesntNotifyObserversIfNotConnected) {
+TEST_F(CryptAuthConnectionTest,
+       OnBytesReceived_DoesntNotifyObserversIfNotConnected) {
   StrictMock<MockConnection> connection;
-  connection.SetStatus(Connection::IN_PROGRESS);
+  connection.SetStatus(Connection::Status::IN_PROGRESS);
 
   StrictMock<MockConnectionObserver> observer;
   connection.AddObserver(&observer);
 
+  EXPECT_CALL(connection, GetDeviceAddress()).Times(1);
   EXPECT_CALL(observer, OnMessageReceived(_, _)).Times(0);
   connection.OnBytesReceived(std::string());
 }
 
-TEST(CryptAuthConnectionTest,
-     OnBytesReceived_DoesntNotifyObserversIfMessageIsIncomplete) {
+TEST_F(CryptAuthConnectionTest,
+       OnBytesReceived_DoesntNotifyObserversIfMessageIsIncomplete) {
   NiceMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
 
   StrictMock<MockConnectionObserver> observer;
   connection.AddObserver(&observer);
@@ -238,10 +259,10 @@ TEST(CryptAuthConnectionTest,
   connection.OnBytesReceived(std::string());
 }
 
-TEST(CryptAuthConnectionTest,
-     OnBytesReceived_DoesntNotifyObserversIfMessageIsInvalid) {
+TEST_F(CryptAuthConnectionTest,
+       OnBytesReceived_DoesntNotifyObserversIfMessageIsInvalid) {
   NiceMock<MockConnection> connection;
-  connection.SetStatus(Connection::CONNECTED);
+  connection.SetStatus(Connection::Status::CONNECTED);
 
   StrictMock<MockConnectionObserver> observer;
   connection.AddObserver(&observer);
@@ -250,6 +271,12 @@ TEST(CryptAuthConnectionTest,
       .WillByDefault(DoAll(SetArgPointee<0>(false), Return(nullptr)));
   EXPECT_CALL(observer, OnMessageReceived(_, _)).Times(0);
   connection.OnBytesReceived(std::string());
+}
+
+TEST_F(CryptAuthConnectionTest, GetConnectionRssi) {
+  NiceMock<MockConnection> connection;
+  connection.SetStatus(Connection::Status::CONNECTED);
+  EXPECT_EQ(base::nullopt, GetRssi(&connection));
 }
 
 }  // namespace cryptauth

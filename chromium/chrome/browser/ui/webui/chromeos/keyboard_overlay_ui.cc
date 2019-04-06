@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -25,6 +24,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -76,7 +76,7 @@ struct I18nContentToMessage {
      IDS_KEYBOARD_OVERLAY_SYSTEM_MENU_KEY_LABEL},
     {"keyboardOverlayLauncherKeyLabel",
      IDS_KEYBOARD_OVERLAY_LAUNCHER_KEY_LABEL},
-    {"keyboardOverlayLearnMore", IDS_KEYBOARD_OVERLAY_LEARN_MORE},
+    {"keyboardOverlayLearnMore", IDS_LEARN_MORE},
     {"keyboardOverlayTitle", IDS_KEYBOARD_OVERLAY_TITLE},
     {"keyboardOverlayEscKeyLabel", IDS_KEYBOARD_OVERLAY_ESC_KEY_LABEL},
     {"keyboardOverlayBackKeyLabel", IDS_KEYBOARD_OVERLAY_BACK_KEY_LABEL},
@@ -212,14 +212,8 @@ struct I18nContentToMessage {
     {"keyboardOverlayMirrorMonitors", IDS_KEYBOARD_OVERLAY_MIRROR_MONITORS},
     // TODO(warx): keyboard overlay name for move window between displays
     // shortcuts need to be updated when new keyboard shortcuts helper is there.
-    {"keyboardOverlayMoveWindowToAboveDisplay",
-     IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_ABOVE_DISPLAY},
-    {"keyboardOverlayMoveWindowToBelowDisplay",
-     IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_BELOW_DISPLAY},
-    {"keyboardOverlayMoveWindowToLeftDisplay",
-     IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_LEFT_DISPLAY},
-    {"keyboardOverlayMoveWindowToRightDisplay",
-     IDS_KEYBOARD_OVERLAY_MOVE_WINDOW_TO_RIGHT_DISPLAY},
+    {"keyboardOverlayMoveActiveWindowBetweenDisplays",
+     IDS_KEYBOARD_OVERLAY_MOVE_ACTIVE_WINDOW_BETWEEN_DISPLAYS},
     {"keyboardOverlayNewIncognitoWindow",
      IDS_KEYBOARD_OVERLAY_NEW_INCOGNITO_WINDOW},
     {"keyboardOverlayNewTab", IDS_KEYBOARD_OVERLAY_NEW_TAB},
@@ -279,6 +273,11 @@ struct I18nContentToMessage {
     {"keyboardOverlayDisableCapsLock", IDS_KEYBOARD_OVERLAY_DISABLE_CAPS_LOCK},
     {"keyboardOverlayToggleChromevoxSpokenFeedback",
      IDS_KEYBOARD_OVERLAY_TOGGLE_CHROMEVOX_SPOKEN_FEEDBACK},
+    {"keyboardOverlayToggleDictation", IDS_KEYBOARD_OVERLAY_TOGGLE_DICTATION},
+    {"keyboardOverlayToggleDockedMagnifier",
+     IDS_KEYBOARD_OVERLAY_TOGGLE_DOCKED_MAGNIFIER},
+    {"keyboardOverlayToggleFullscreenMagnifier",
+     IDS_KEYBOARD_OVERLAY_TOGGLE_FULLSCREEN_MAGNIFIER},
     {"keyboardOverlayToggleHighContrastMode",
      IDS_KEYBOARD_OVERLAY_TOGGLE_HIGH_CONTRAST_MODE},
     {"keyboardOverlayToggleProjectionTouchHud",
@@ -341,8 +340,6 @@ content::WebUIDataSource* CreateKeyboardOverlayUIHTMLSource(Profile* profile) {
                      TopRowKeysAreFunctionKeys(profile));
   source->AddBoolean("voiceInteractionEnabled",
                      chromeos::switches::IsVoiceInteractionEnabled());
-  source->AddBoolean("displayMoveWindowAccelsEnabled",
-                     ash::switches::IsDisplayMoveWindowAccelsEnabled());
   source->AddBoolean("keyboardOverlayUsesLayout2",
                      ui::DeviceUsesKeyboardLayout2());
   ash::Shell* shell = ash::Shell::Get();
@@ -398,15 +395,17 @@ KeyboardOverlayHandler::~KeyboardOverlayHandler() {
 }
 
 void KeyboardOverlayHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("getInputMethodId",
-      base::Bind(&KeyboardOverlayHandler::GetInputMethodId,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("getLabelMap",
-      base::Bind(&KeyboardOverlayHandler::GetLabelMap,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("openLearnMorePage",
-      base::Bind(&KeyboardOverlayHandler::OpenLearnMorePage,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getInputMethodId",
+      base::BindRepeating(&KeyboardOverlayHandler::GetInputMethodId,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getLabelMap", base::BindRepeating(&KeyboardOverlayHandler::GetLabelMap,
+                                         base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "openLearnMorePage",
+      base::BindRepeating(&KeyboardOverlayHandler::OpenLearnMorePage,
+                          base::Unretained(this)));
 }
 
 void KeyboardOverlayHandler::GetInputMethodId(const base::ListValue* args) {

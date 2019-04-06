@@ -30,6 +30,7 @@
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -59,6 +60,7 @@ using content::GpuDataManager;
 using content::PluginService;
 using content::WebContents;
 using content::WebUIMessageHandler;
+using webui::webui_util::AddPair;
 
 namespace {
 
@@ -67,6 +69,8 @@ const char kFlashPlugin[] = "Flash plugin";
 content::WebUIDataSource* CreateFlashUIHTMLSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIFlashHost);
+  source->OverrideContentSecurityPolicyScriptSrc(
+      "script-src chrome://resources 'self' 'unsafe-eval';");
 
   source->AddLocalizedString("loadingMessage", IDS_FLASH_LOADING_MESSAGE);
   source->AddLocalizedString("flashLongTitle", IDS_FLASH_TITLE_MESSAGE);
@@ -176,9 +180,10 @@ FlashDOMHandler::~FlashDOMHandler() {
 }
 
 void FlashDOMHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("requestFlashInfo",
-      base::Bind(&FlashDOMHandler::HandleRequestFlashInfo,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "requestFlashInfo",
+      base::BindRepeating(&FlashDOMHandler::HandleRequestFlashInfo,
+                          base::Unretained(this)));
 }
 
 void FlashDOMHandler::OnUploadListAvailable() {
@@ -244,9 +249,9 @@ void FlashDOMHandler::MaybeRespondToPage() {
   auto list = std::make_unique<base::ListValue>();
 
   // Chrome version information.
-  AddPair(list.get(), l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-          version_info::GetVersionNumber() + " (" + chrome::GetChannelString() +
-              ")");
+  AddPair(
+      list.get(), l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
+      version_info::GetVersionNumber() + " (" + chrome::GetChannelName() + ")");
 
   // OS version information.
   std::string os_label = version_info::GetOSType();
@@ -321,7 +326,8 @@ void FlashDOMHandler::MaybeRespondToPage() {
 
   // GPU information.
   AddPair(list.get(), base::string16(), "--- GPU information ---");
-  gpu::GPUInfo gpu_info = GpuDataManager::GetInstance()->GetGPUInfo();
+  const gpu::GPUInfo gpu_info = GpuDataManager::GetInstance()->GetGPUInfo();
+  const gpu::GPUInfo::GPUDevice& active_gpu = gpu_info.active_gpu();
 
   std::string reason;
   if (!GpuDataManager::GetInstance()->GpuAccessAllowed(&reason)) {
@@ -354,12 +360,13 @@ void FlashDOMHandler::MaybeRespondToPage() {
 
   AddPair(list.get(), base::string16(), "--- GPU driver, more information ---");
   AddPair(list.get(), ASCIIToUTF16("Vendor Id"),
-          base::StringPrintf("0x%04x", gpu_info.gpu.vendor_id));
+          base::StringPrintf("0x%04x", active_gpu.vendor_id));
   AddPair(list.get(), ASCIIToUTF16("Device Id"),
-          base::StringPrintf("0x%04x", gpu_info.gpu.device_id));
-  AddPair(list.get(), ASCIIToUTF16("Driver vendor"), gpu_info.driver_vendor);
-  AddPair(list.get(), ASCIIToUTF16("Driver version"), gpu_info.driver_version);
-  AddPair(list.get(), ASCIIToUTF16("Driver date"), gpu_info.driver_date);
+          base::StringPrintf("0x%04x", active_gpu.device_id));
+  AddPair(list.get(), ASCIIToUTF16("Driver vendor"), active_gpu.driver_vendor);
+  AddPair(list.get(), ASCIIToUTF16("Driver version"),
+          active_gpu.driver_version);
+  AddPair(list.get(), ASCIIToUTF16("Driver date"), active_gpu.driver_date);
   AddPair(list.get(), ASCIIToUTF16("Pixel shader version"),
           gpu_info.pixel_shader_version);
   AddPair(list.get(), ASCIIToUTF16("Vertex shader version"),

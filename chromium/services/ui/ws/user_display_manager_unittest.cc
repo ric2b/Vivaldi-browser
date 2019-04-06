@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
@@ -22,7 +21,7 @@
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/test_utils.h"
 #include "services/ui/ws/window_manager_state.h"
-#include "services/ui/ws/window_manager_window_tree_factory_set.h"
+#include "services/ui/ws/window_manager_window_tree_factory.h"
 #include "services/ui/ws/window_server.h"
 #include "services/ui/ws/window_server_delegate.h"
 #include "services/ui/ws/window_tree.h"
@@ -33,8 +32,6 @@ namespace ui {
 namespace ws {
 namespace test {
 namespace {
-
-const char kUserId1[] = "123";
 
 mojom::FrameDecorationValuesPtr CreateDefaultFrameDecorationValues() {
   return mojom::FrameDecorationValues::New();
@@ -71,72 +68,65 @@ class UserDisplayManagerTest : public TaskRunnerTestBase {
 TEST_F(UserDisplayManagerTest, OnlyNotifyWhenFrameDecorationsSet) {
   screen_manager().AddDisplay();
 
-  TestDisplayManagerObserver display_manager_observer1;
+  TestScreenProviderObserver screen_provider_observer;
   DisplayManager* display_manager = window_server()->display_manager();
-  AddWindowManager(window_server(), kUserId1);
-  UserDisplayManager* user_display_manager1 =
-      display_manager->GetUserDisplayManager(kUserId1);
-  ASSERT_TRUE(user_display_manager1);
-  user_display_manager1->AddObserver(display_manager_observer1.GetPtr());
+  AddWindowManager(window_server());
+  UserDisplayManager* user_display_manager =
+      display_manager->GetUserDisplayManager();
+  ASSERT_TRUE(user_display_manager);
+  user_display_manager->AddObserver(screen_provider_observer.GetPtr());
   RunUntilIdle();
 
   // Observer should not have been notified yet.
-  EXPECT_EQ(std::string(),
-            display_manager_observer1.GetAndClearObserverCalls());
+  EXPECT_EQ(std::string(), screen_provider_observer.GetAndClearObserverCalls());
 
   // Set the frame decoration values, which should trigger sending immediately.
   ASSERT_EQ(1u, display_manager->displays().size());
-  window_server()
-      ->window_manager_window_tree_factory_set()
-      ->GetWindowManagerStateForUser(kUserId1)
-      ->SetFrameDecorationValues(CreateDefaultFrameDecorationValues());
+  window_server()->GetWindowManagerState()->SetFrameDecorationValues(
+      CreateDefaultFrameDecorationValues());
   RunUntilIdle();
 
   EXPECT_EQ("OnDisplaysChanged 1 -1",
-            display_manager_observer1.GetAndClearObserverCalls());
+            screen_provider_observer.GetAndClearObserverCalls());
 }
 
 TEST_F(UserDisplayManagerTest, AddObserverAfterFrameDecorationsSet) {
   screen_manager().AddDisplay();
 
-  TestDisplayManagerObserver display_manager_observer1;
+  TestScreenProviderObserver screen_provider_observer;
   DisplayManager* display_manager = window_server()->display_manager();
-  AddWindowManager(window_server(), kUserId1);
-  UserDisplayManager* user_display_manager1 =
-      display_manager->GetUserDisplayManager(kUserId1);
-  ASSERT_TRUE(user_display_manager1);
+  AddWindowManager(window_server());
+  UserDisplayManager* user_display_manager =
+      display_manager->GetUserDisplayManager();
+  ASSERT_TRUE(user_display_manager);
   ASSERT_EQ(1u, display_manager->displays().size());
-  window_server()
-      ->window_manager_window_tree_factory_set()
-      ->GetWindowManagerStateForUser(kUserId1)
-      ->SetFrameDecorationValues(CreateDefaultFrameDecorationValues());
+  window_server()->GetWindowManagerState()->SetFrameDecorationValues(
+      CreateDefaultFrameDecorationValues());
 
-  user_display_manager1->AddObserver(display_manager_observer1.GetPtr());
+  user_display_manager->AddObserver(screen_provider_observer.GetPtr());
   RunUntilIdle();
 
   EXPECT_EQ("OnDisplaysChanged 1 -1",
-            display_manager_observer1.GetAndClearObserverCalls());
+            screen_provider_observer.GetAndClearObserverCalls());
 }
 
 TEST_F(UserDisplayManagerTest, AddRemoveDisplay) {
   screen_manager().AddDisplay();
 
-  TestDisplayManagerObserver display_manager_observer1;
+  TestScreenProviderObserver screen_provider_observer;
   DisplayManager* display_manager = window_server()->display_manager();
-  AddWindowManager(window_server(), kUserId1);
-  UserDisplayManager* user_display_manager1 =
-      display_manager->GetUserDisplayManager(kUserId1);
-  ASSERT_TRUE(user_display_manager1);
+  AddWindowManager(window_server());
+  UserDisplayManager* user_display_manager =
+      display_manager->GetUserDisplayManager();
+  ASSERT_TRUE(user_display_manager);
   ASSERT_EQ(1u, display_manager->displays().size());
-  window_server()
-      ->window_manager_window_tree_factory_set()
-      ->GetWindowManagerStateForUser(kUserId1)
-      ->SetFrameDecorationValues(CreateDefaultFrameDecorationValues());
-  user_display_manager1->AddObserver(display_manager_observer1.GetPtr());
+  window_server()->GetWindowManagerState()->SetFrameDecorationValues(
+      CreateDefaultFrameDecorationValues());
+  user_display_manager->AddObserver(screen_provider_observer.GetPtr());
   RunUntilIdle();
 
   EXPECT_EQ("OnDisplaysChanged 1 -1",
-            display_manager_observer1.GetAndClearObserverCalls());
+            screen_provider_observer.GetAndClearObserverCalls());
 
   // Add another display.
   const int64_t second_display_id = screen_manager().AddDisplay();
@@ -144,14 +134,14 @@ TEST_F(UserDisplayManagerTest, AddRemoveDisplay) {
 
   // Observer should be notified immediately as frame decorations were set.
   EXPECT_EQ("OnDisplaysChanged 1 2 -1",
-            display_manager_observer1.GetAndClearObserverCalls());
+            screen_provider_observer.GetAndClearObserverCalls());
 
   // Remove the display and verify observer is notified.
   screen_manager().RemoveDisplay(second_display_id);
   RunUntilIdle();
 
   EXPECT_EQ("OnDisplaysChanged 1 -1",
-            display_manager_observer1.GetAndClearObserverCalls());
+            screen_provider_observer.GetAndClearObserverCalls());
 }
 
 }  // namespace test

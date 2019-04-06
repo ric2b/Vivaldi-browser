@@ -6,16 +6,23 @@ package org.chromium.base;
 
 import android.app.Activity;
 import android.content.ComponentCallbacks2;
-import android.content.res.Configuration;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.MainDex;
-
+import org.chromium.base.memory.MemoryPressureCallback;
 
 /**
- * This is an internal implementation of the C++ counterpart.
- * It registers a ComponentCallbacks2 with the system, and dispatches into
- * native for levels that are considered actionable.
+ * This class is Java equivalent of base::MemoryPressureListener: it distributes pressure
+ * signals to callbacks.
+ *
+ * The class also serves as an entry point to the native side - once native code is ready,
+ * it adds native callback.
+ *
+ * notifyMemoryPressure() is called exclusively by MemoryPressureMonitor, which
+ * monitors and throttles pressure signals.
+ *
+ * NOTE: this class should only be used on UiThread as defined by ThreadUtils (which is
+ *       Android main thread for Chrome, but can be some other thread for WebView).
  */
 @MainDex
 public class MemoryPressureListener {
@@ -45,24 +52,41 @@ public class MemoryPressureListener {
     private static final String ACTION_TRIM_MEMORY_MODERATE =
             "org.chromium.base.ACTION_TRIM_MEMORY_MODERATE";
 
+    private static final ObserverList<MemoryPressureCallback> sCallbacks = new ObserverList<>();
+
+    /**
+     * Called by the native side to add native callback.
+     */
     @CalledByNative
-    private static void registerSystemCallback() {
-        ContextUtils.getApplicationContext().registerComponentCallbacks(
-                new ComponentCallbacks2() {
-                    @Override
-                    public void onTrimMemory(int level) {
-                        maybeNotifyMemoryPresure(level);
-                    }
+    private static void addNativeCallback() {
+        addCallback(MemoryPressureListener::nativeOnMemoryPressure);
+    }
 
-                    @Override
-                    public void onLowMemory() {
-                        nativeOnMemoryPressure(MemoryPressureLevel.CRITICAL);
-                    }
+    /**
+     * Adds a memory pressure callback.
+     * Callback is only added once, regardless of the number of addCallback() calls.
+     * This method should be called only on ThreadUtils.UiThread.
+     */
+    public static void addCallback(MemoryPressureCallback callback) {
+        sCallbacks.addObserver(callback);
+    }
 
-                    @Override
-                    public void onConfigurationChanged(Configuration configuration) {
-                    }
-                });
+    /**
+     * Removes previously added memory pressure callback.
+     * This method should be called only on ThreadUtils.UiThread.
+     */
+    public static void removeCallback(MemoryPressureCallback callback) {
+        sCallbacks.removeObserver(callback);
+    }
+
+    /**
+     * Distributes |pressure| to all callbacks.
+     * This method should be called only on ThreadUtils.UiThread.
+     */
+    public static void notifyMemoryPressure(@MemoryPressureLevel int pressure) {
+        for (MemoryPressureCallback callback : sCallbacks) {
+            callback.onPressure(pressure);
+        }
     }
 
     /**
@@ -86,17 +110,6 @@ public class MemoryPressureListener {
         return true;
     }
 
-    public static void maybeNotifyMemoryPresure(int level) {
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
-            nativeOnMemoryPressure(MemoryPressureLevel.CRITICAL);
-        } else if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
-                || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
-            // Don't notifiy on TRIM_MEMORY_UI_HIDDEN, since this class only
-            // dispatches actionable memory pressure signals to native.
-            nativeOnMemoryPressure(MemoryPressureLevel.MODERATE);
-        }
-    }
-
     private static void simulateLowMemoryPressureSignal(Activity activity) {
         // The Application and the Activity each have a list of callbacks they notify when this
         // method is called.  Notifying these will simulate the event at the App/Activity level
@@ -113,5 +126,5 @@ public class MemoryPressureListener {
         activity.onTrimMemory(level);
     }
 
-    private static native void nativeOnMemoryPressure(int memoryPressureType);
+    private static native void nativeOnMemoryPressure(@MemoryPressureLevel int pressure);
 }

@@ -8,10 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/synchronization/waitable_event.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 #include "components/network_session_configurator/common/network_switches.h"
@@ -32,246 +29,34 @@
 #include "net/dns/mock_host_resolver.h"
 #include "services/device/public/cpp/generic_sensor/platform_sensor_configuration.h"
 #include "services/device/public/cpp/generic_sensor/sensor_reading.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/sensor.mojom.h"
-#include "services/device/public/interfaces/sensor_provider.mojom.h"
+#include "services/device/public/cpp/test/fake_sensor_and_provider.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/sensor.mojom.h"
+#include "services/device/public/mojom/sensor_provider.mojom.h"
 #include "services/service_manager/public/cpp/service_context.h"
 
 namespace content {
 
 namespace {
 
-class FakeSensor : public device::mojom::Sensor {
- public:
-  FakeSensor(device::mojom::SensorType sensor_type)
-      : sensor_type_(sensor_type) {
-    shared_buffer_handle_ = mojo::SharedBufferHandle::Create(
-        sizeof(device::SensorReadingSharedBuffer) *
-        static_cast<uint64_t>(device::mojom::SensorType::LAST));
-
-    if (!shared_buffer_handle_.is_valid())
-      return;
-
-    // Create read/write mapping now, to ensure it is kept writable
-    // after the region is sealed read-only on Android.
-    shared_buffer_mapping_ = shared_buffer_handle_->MapAtOffset(
-        device::mojom::SensorInitParams::kReadBufferSizeForTests,
-        GetBufferOffset());
-  }
-
-  ~FakeSensor() override = default;
-
-  // device::mojom::Sensor:
-  void AddConfiguration(
-      const device::PlatformSensorConfiguration& configuration,
-      AddConfigurationCallback callback) override {
-    std::move(callback).Run(true);
-    SensorReadingChanged();
-  }
-
-  // device::mojom::Sensor:
-  void GetDefaultConfiguration(
-      GetDefaultConfigurationCallback callback) override {
-    std::move(callback).Run(GetDefaultConfiguration());
-  }
-
-  // device::mojom::Sensor:
-  void RemoveConfiguration(
-      const device::PlatformSensorConfiguration& configuration) override {}
-
-  // device::mojom::Sensor:
-  void Suspend() override {}
-  void Resume() override {}
-  void ConfigureReadingChangeNotifications(bool enabled) override {
-    reading_notification_enabled_ = enabled;
-  }
-
-  device::PlatformSensorConfiguration GetDefaultConfiguration() {
-    return device::PlatformSensorConfiguration(60 /* frequency */);
-  }
-
-  device::mojom::ReportingMode GetReportingMode() {
-    return device::mojom::ReportingMode::ON_CHANGE;
-  }
-
-  double GetMaximumSupportedFrequency() { return 60.0; }
-  double GetMinimumSupportedFrequency() { return 1.0; }
-
-  device::mojom::SensorClientRequest GetClient() {
-    return mojo::MakeRequest(&client_);
-  }
-
-  mojo::ScopedSharedBufferHandle GetSharedBufferHandle() {
-    return shared_buffer_handle_->Clone(
-        mojo::SharedBufferHandle::AccessMode::READ_ONLY);
-  }
-
-  uint64_t GetBufferOffset() {
-    return device::SensorReadingSharedBuffer::GetOffset(sensor_type_);
-  }
-
-  void set_reading(device::SensorReading reading) { reading_ = reading; }
-
-  void SensorReadingChanged() {
-    if (!shared_buffer_mapping_.get())
-      return;
-
-    device::SensorReadingSharedBuffer* buffer =
-        static_cast<device::SensorReadingSharedBuffer*>(
-            shared_buffer_mapping_.get());
-
-    auto& seqlock = buffer->seqlock.value();
-    seqlock.WriteBegin();
-    buffer->reading = reading_;
-    seqlock.WriteEnd();
-
-    if (client_ && reading_notification_enabled_)
-      client_->SensorReadingChanged();
-  }
-
- private:
-  device::mojom::SensorType sensor_type_;
-  bool reading_notification_enabled_ = true;
-  mojo::ScopedSharedBufferHandle shared_buffer_handle_;
-  mojo::ScopedSharedBufferMapping shared_buffer_mapping_;
-  device::mojom::SensorClientPtr client_;
-  device::SensorReading reading_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeSensor);
-};
-
-class FakeSensorProvider : public device::mojom::SensorProvider {
- public:
-  FakeSensorProvider() : binding_(this) {}
-  ~FakeSensorProvider() override = default;
-
-  void Bind(const std::string& interface_name,
-            mojo::ScopedMessagePipeHandle handle,
-            const service_manager::BindSourceInfo& source_info) {
-    DCHECK(!binding_.is_bound());
-    binding_.Bind(device::mojom::SensorProviderRequest(std::move(handle)));
-  }
-
-  void set_accelerometer_is_available(bool accelerometer_is_available) {
-    accelerometer_is_available_ = accelerometer_is_available;
-  }
-
-  void set_linear_acceleration_sensor_is_available(
-      bool linear_acceleration_sensor_is_available) {
-    linear_acceleration_sensor_is_available_ =
-        linear_acceleration_sensor_is_available;
-  }
-
-  void set_gyroscope_is_available(bool gyroscope_is_available) {
-    gyroscope_is_available_ = gyroscope_is_available;
-  }
-
-  void set_relative_orientation_sensor_is_available(
-      bool relative_orientation_sensor_is_available) {
-    relative_orientation_sensor_is_available_ =
-        relative_orientation_sensor_is_available;
-  }
-
-  void set_absolute_orientation_sensor_is_available(
-      bool absolute_orientation_sensor_is_available) {
-    absolute_orientation_sensor_is_available_ =
-        absolute_orientation_sensor_is_available;
-  }
-
-  // device::mojom::sensorProvider:
-  void GetSensor(device::mojom::SensorType type,
-                 GetSensorCallback callback) override {
-    std::unique_ptr<FakeSensor> sensor;
-    device::SensorReading reading;
-    reading.raw.timestamp =
-        (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
-
-    switch (type) {
-      case device::mojom::SensorType::ACCELEROMETER:
-        if (accelerometer_is_available_) {
-          sensor = std::make_unique<FakeSensor>(
-              device::mojom::SensorType::ACCELEROMETER);
-          reading.accel.x = 4;
-          reading.accel.y = 5;
-          reading.accel.z = 6;
-        }
-        break;
-      case device::mojom::SensorType::LINEAR_ACCELERATION:
-        if (linear_acceleration_sensor_is_available_) {
-          sensor = std::make_unique<FakeSensor>(
-              device::mojom::SensorType::LINEAR_ACCELERATION);
-          reading.accel.x = 1;
-          reading.accel.y = 2;
-          reading.accel.z = 3;
-        }
-        break;
-      case device::mojom::SensorType::GYROSCOPE:
-        if (gyroscope_is_available_) {
-          sensor = std::make_unique<FakeSensor>(
-              device::mojom::SensorType::GYROSCOPE);
-          reading.gyro.x = 7;
-          reading.gyro.y = 8;
-          reading.gyro.z = 9;
-        }
-        break;
-      case device::mojom::SensorType::RELATIVE_ORIENTATION_EULER_ANGLES:
-        if (relative_orientation_sensor_is_available_) {
-          sensor = std::make_unique<FakeSensor>(
-              device::mojom::SensorType::RELATIVE_ORIENTATION_EULER_ANGLES);
-          reading.orientation_euler.x = 2;  // beta
-          reading.orientation_euler.y = 3;  // gamma
-          reading.orientation_euler.z = 1;  // alpha
-        }
-        break;
-      case device::mojom::SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES:
-        if (absolute_orientation_sensor_is_available_) {
-          sensor = std::make_unique<FakeSensor>(
-              device::mojom::SensorType::ABSOLUTE_ORIENTATION_EULER_ANGLES);
-          reading.orientation_euler.x = 5;  // beta
-          reading.orientation_euler.y = 6;  // gamma
-          reading.orientation_euler.z = 4;  // alpha
-        }
-        break;
-      default:
-        NOTIMPLEMENTED();
-    }
-
-    if (sensor) {
-      sensor->set_reading(reading);
-
-      auto init_params = device::mojom::SensorInitParams::New();
-      init_params->client_request = sensor->GetClient();
-      init_params->memory = sensor->GetSharedBufferHandle();
-      init_params->buffer_offset = sensor->GetBufferOffset();
-      init_params->default_configuration = sensor->GetDefaultConfiguration();
-      init_params->maximum_frequency = sensor->GetMaximumSupportedFrequency();
-      init_params->minimum_frequency = sensor->GetMinimumSupportedFrequency();
-
-      mojo::MakeStrongBinding(std::move(sensor),
-                              mojo::MakeRequest(&init_params->sensor));
-      std::move(callback).Run(std::move(init_params));
-    } else {
-      std::move(callback).Run(nullptr);
-    }
-  }
-
- private:
-  mojo::Binding<device::mojom::SensorProvider> binding_;
-  bool accelerometer_is_available_ = true;
-  bool linear_acceleration_sensor_is_available_ = true;
-  bool gyroscope_is_available_ = true;
-  bool relative_orientation_sensor_is_available_ = true;
-  bool absolute_orientation_sensor_is_available_ = true;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeSensorProvider);
-};
+using device::FakeSensorProvider;
 
 class DeviceSensorBrowserTest : public ContentBrowserTest {
  public:
-  DeviceSensorBrowserTest()
-      : io_loop_finished_event_(
-            base::WaitableEvent::ResetPolicy::AUTOMATIC,
-            base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+  DeviceSensorBrowserTest() {
+    // Because Device Service also runs in this process (browser process), here
+    // we can directly set our binder to intercept interface requests against
+    // it.
+    service_manager::ServiceContext::SetGlobalBinderForTesting(
+        device::mojom::kServiceName, device::mojom::SensorProvider::Name_,
+        base::BindRepeating(&DeviceSensorBrowserTest::Bind,
+                            base::Unretained(this)));
+  }
+
+  ~DeviceSensorBrowserTest() override {
+    service_manager::ServiceContext::ClearGlobalBindersForTesting(
+        device::mojom::kServiceName);
+  }
 
   void SetUpOnMainThread() override {
     https_embedded_test_server_.reset(
@@ -285,29 +70,17 @@ class DeviceSensorBrowserTest : public ContentBrowserTest {
     https_embedded_test_server_->StartAcceptingConnections();
 
     sensor_provider_ = std::make_unique<FakeSensorProvider>();
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&DeviceSensorBrowserTest::SetUpOnIOThread,
-                       base::Unretained(this)));
-    io_loop_finished_event_.Wait();
+    sensor_provider_->SetAccelerometerData(4, 5, 6);
+    sensor_provider_->SetLinearAccelerationSensorData(1, 2, 3);
+    sensor_provider_->SetGyroscopeData(7, 8, 9);
+    sensor_provider_->SetRelativeOrientationSensorData(1, 2, 3);
+    sensor_provider_->SetAbsoluteOrientationSensorData(4, 5, 6);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // HTTPS server only serves a valid cert for localhost, so this is needed
     // to load pages from other hosts without an error.
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
-  }
-
-  void SetUpOnIOThread() {
-    // Because Device Service also runs in this process(browser process), here
-    // we can directly set our binder to intercept interface requests against
-    // it.
-    service_manager::ServiceContext::SetGlobalBinderForTesting(
-        device::mojom::kServiceName, device::mojom::SensorProvider::Name_,
-        base::Bind(&FakeSensorProvider::Bind,
-                   base::Unretained(sensor_provider_.get())));
-
-    io_loop_finished_event_.Signal();
   }
 
   void DelayAndQuit(base::TimeDelta delay) {
@@ -331,7 +104,12 @@ class DeviceSensorBrowserTest : public ContentBrowserTest {
   std::unique_ptr<net::EmbeddedTestServer> https_embedded_test_server_;
 
  private:
-  base::WaitableEvent io_loop_finished_event_;
+  void Bind(const std::string& interface_name,
+            mojo::ScopedMessagePipeHandle handle,
+            const service_manager::BindSourceInfo& source_info) {
+    sensor_provider_->Bind(
+        device::mojom::SensorProviderRequest(std::move(handle)));
+  }
 };
 
 IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest, OrientationTest) {
@@ -466,7 +244,30 @@ IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest, NullTestWithAlert) {
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
-                       DeviceMotionCrossOriginIframeTest) {
+                       DeviceMotionCrossOriginIframeForbiddenTest) {
+  // Main frame is on a.com, iframe is on b.com.
+  GURL main_frame_url =
+      https_embedded_test_server_->GetURL("a.com", "/cross_origin_iframe.html");
+  GURL iframe_url = https_embedded_test_server_->GetURL(
+      "b.com", "/device_motion_test.html?failure_timeout=100");
+
+  // Wait for the main frame, subframe, and the #pass/#fail commits.
+  TestNavigationObserver navigation_observer(shell()->web_contents(), 3);
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
+  EXPECT_TRUE(NavigateIframeToURL(shell()->web_contents(),
+                                  "cross_origin_iframe", iframe_url));
+
+  navigation_observer.Wait();
+
+  content::RenderFrameHost* iframe =
+      ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
+  ASSERT_TRUE(iframe);
+  EXPECT_EQ("fail", iframe->GetLastCommittedURL().ref());
+}
+
+IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
+                       DeviceMotionCrossOriginIframeAllowedTest) {
   // Main frame is on a.com, iframe is on b.com.
   GURL main_frame_url =
       https_embedded_test_server_->GetURL("a.com", "/cross_origin_iframe.html");
@@ -477,6 +278,10 @@ IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
   TestNavigationObserver navigation_observer(shell()->web_contents(), 3);
 
   EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
+  // Now allow 'accelerometer' and 'gyroscope' policy features.
+  EXPECT_TRUE(ExecuteScript(shell(),
+                            "document.getElementById('cross_origin_iframe')."
+                            "allow='accelerometer; gyroscope'"));
   EXPECT_TRUE(NavigateIframeToURL(shell()->web_contents(),
                                   "cross_origin_iframe", iframe_url));
 
@@ -489,12 +294,12 @@ IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
-                       DeviceOrientationCrossOriginIframeTest) {
+                       DeviceOrientationCrossOriginIframeForbiddenTest) {
   // Main frame is on a.com, iframe is on b.com.
   GURL main_frame_url =
       https_embedded_test_server_->GetURL("a.com", "/cross_origin_iframe.html");
   GURL iframe_url = https_embedded_test_server_->GetURL(
-      "b.com", "/device_orientation_test.html");
+      "b.com", "/device_orientation_test.html?failure_timeout=100");
 
   // Wait for the main frame, subframe, and the #pass/#fail commits.
   TestNavigationObserver navigation_observer(shell()->web_contents(), 3);
@@ -508,7 +313,60 @@ IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
   content::RenderFrameHost* iframe =
       ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
   ASSERT_TRUE(iframe);
+  EXPECT_EQ("fail", iframe->GetLastCommittedURL().ref());
+}
+
+IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
+                       DeviceOrientationCrossOriginIframeAllowedTest) {
+  // Main frame is on a.com, iframe is on b.com.
+  GURL main_frame_url =
+      https_embedded_test_server_->GetURL("a.com", "/cross_origin_iframe.html");
+  GURL iframe_url = https_embedded_test_server_->GetURL(
+      "b.com", "/device_orientation_test.html");
+
+  // Wait for the main frame, subframe, and the #pass/#fail commits.
+  TestNavigationObserver navigation_observer(shell()->web_contents(), 3);
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
+  // Now allow 'accelerometer' and 'gyroscope' policy features.
+  EXPECT_TRUE(ExecuteScript(shell(),
+                            "document.getElementById('cross_origin_iframe')."
+                            "allow='accelerometer; gyroscope'"));
+  EXPECT_TRUE(NavigateIframeToURL(shell()->web_contents(),
+                                  "cross_origin_iframe", iframe_url));
+
+  navigation_observer.Wait();
+
+  content::RenderFrameHost* iframe =
+      ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
+  ASSERT_TRUE(iframe);
   EXPECT_EQ("pass", iframe->GetLastCommittedURL().ref());
+}
+
+IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
+                       DeviceOrientationFeaturePolicyWarning) {
+  // Main frame is on a.com, iframe is on b.com.
+  GURL main_frame_url =
+      https_embedded_test_server_->GetURL("a.com", "/cross_origin_iframe.html");
+  GURL iframe_url = https_embedded_test_server_->GetURL(
+      "b.com", "/device_orientation_absolute_test.html");
+
+  const char kWarningMessage[] =
+      "The deviceorientationabsolute events are blocked by "
+      "feature policy. See "
+      "https://github.com/WICG/feature-policy/blob/"
+      "master/features.md#sensor-features";
+
+  auto console_delegate = std::make_unique<ConsoleObserverDelegate>(
+      shell()->web_contents(), kWarningMessage);
+  shell()->web_contents()->SetDelegate(console_delegate.get());
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
+  EXPECT_TRUE(NavigateIframeToURL(shell()->web_contents(),
+                                  "cross_origin_iframe", iframe_url));
+
+  console_delegate->Wait();
+  EXPECT_EQ(kWarningMessage, console_delegate->message());
 }
 
 }  //  namespace

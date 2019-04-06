@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/download/public/logger.h"
+#include "components/download/public/background_service/logger.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 namespace download {
@@ -38,6 +38,9 @@ class DownloadInternalsUIMessageHandler : public content::WebUIMessageHandler,
   // Get the current DownloadService and sub component statuses.
   void HandleGetServiceStatus(const base::ListValue* args);
   void HandleGetServiceDownloads(const base::ListValue* args);
+
+  // Starts a background download.
+  void HandleStartDownload(const base::ListValue* args);
 
   download::DownloadService* download_service_;
 

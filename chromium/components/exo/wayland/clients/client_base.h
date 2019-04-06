@@ -68,6 +68,7 @@ class ClientBase {
     std::unique_ptr<wl_seat> seat;
     std::unique_ptr<wl_subcompositor> subcompositor;
     std::unique_ptr<zaura_shell> aura_shell;
+    std::unique_ptr<zwp_input_timestamps_manager_v1> input_timestamps_manager;
   };
 
   struct Buffer {
@@ -115,6 +116,7 @@ class ClientBase {
   bool transparent_background_ = false;
 
   std::unique_ptr<wl_display> display_;
+  std::unique_ptr<wl_registry> registry_;
   std::unique_ptr<wl_surface> surface_;
   std::unique_ptr<wl_shell_surface> shell_surface_;
   Globals globals_;

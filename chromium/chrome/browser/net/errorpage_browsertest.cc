@@ -55,10 +55,10 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/url_loader_interceptor.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
@@ -73,11 +73,10 @@
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_filter.h"
-#include "net/url_request/url_request_interceptor.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/features.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
@@ -198,58 +197,6 @@ void ExpectDisplayingNavigationCorrections(const std::string& url,
 std::string GetShowSavedButtonLabel() {
   return l10n_util::GetStringUTF8(IDS_ERRORPAGES_BUTTON_SHOW_SAVED_COPY);
 }
-
-void AddInterceptorForURL(const GURL& url,
-                          std::unique_ptr<net::URLRequestInterceptor> handler) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  net::URLRequestFilter::GetInstance()->AddUrlInterceptor(url,
-                                                          std::move(handler));
-}
-
-// TODO(dougt): FailFirstNRequestsInterceptor can be removed as soon as the
-// Network Service is the only code path.
-
-// An interceptor that fails a configurable number of requests, then succeeds
-// all requests after that, keeping count of failures and successes.
-class FailFirstNRequestsInterceptor : public net::URLRequestInterceptor {
- public:
-  explicit FailFirstNRequestsInterceptor(int32_t requests_to_fail,
-                                         int32_t* requests,
-                                         int32_t* failures)
-      : requests_(requests),
-        failures_(failures),
-        requests_to_fail_(requests_to_fail) {}
-  ~FailFirstNRequestsInterceptor() override {}
-
-  // net::URLRequestInterceptor implementation
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    (*requests_)++;
-    if (*failures_ < requests_to_fail_) {
-      (*failures_)++;
-      // Note: net::ERR_CONNECTION_RESET does not summon the Link Doctor; see
-      // NetErrorHelperCore::GetErrorPageURL.
-      return new URLRequestFailedJob(request,
-                                     network_delegate,
-                                     net::ERR_CONNECTION_RESET);
-    } else {
-      return new URLRequestTestJob(request, network_delegate,
-                                   URLRequestTestJob::test_headers(),
-                                   URLRequestTestJob::test_data_1(),
-                                   true);
-    }
-  }
-
- private:
-  int32_t* requests_;
-  int32_t* failures_;
-  int32_t requests_to_fail_;
-
-  DISALLOW_COPY_AND_ASSIGN(FailFirstNRequestsInterceptor);
-};
-
 
 class ErrorPageTest : public InProcessBrowserTest {
  public:
@@ -418,48 +365,11 @@ class TestFailProvisionalLoadObserver : public content::WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(TestFailProvisionalLoadObserver);
 };
 
-void InterceptNetworkTransactions(net::URLRequestContextGetter* getter,
-                                  net::Error error) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  net::HttpCache* cache(
-      getter->GetURLRequestContext()->http_transaction_factory()->GetCache());
-  DCHECK(cache);
-  std::unique_ptr<net::HttpTransactionFactory> factory(
-      new net::FailingHttpTransactionFactory(cache->GetSession(), error));
-  // Throw away old version; since this is a a browser test, we don't
-  // need to restore the old state.
-  cache->SetHttpNetworkTransactionFactoryForTesting(std::move(factory));
-}
-
-// An interceptor that serves LinkDoctor responses.  It also notifies the
-// provided owner every time there is a new request.
-class LinkDoctorInterceptor : public net::URLRequestInterceptor {
- public:
-  explicit LinkDoctorInterceptor(class DNSErrorPageTest* owner);
-  ~LinkDoctorInterceptor() override = default;
-
-  // net::URLRequestInterceptor implementation
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override;
-
- private:
-  DNSErrorPageTest* owner_;
-  GURL link_doctor_url;
-
-  DISALLOW_COPY_AND_ASSIGN(LinkDoctorInterceptor);
-};
-
 class DNSErrorPageTest : public ErrorPageTest {
  public:
-  friend LinkDoctorInterceptor;
-
   DNSErrorPageTest() {
-    if (!base::FeatureList::IsEnabled(features::kNetworkService))
-      return;
-
-    url_loader_interceptor_ = std::make_unique<content::URLLoaderInterceptor>(
-        base::BindRepeating(
+    url_loader_interceptor_ =
+        std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
             [](DNSErrorPageTest* owner,
                content::URLLoaderInterceptor::RequestParams* params) {
               // Add an interceptor that serves LinkDoctor responses
@@ -470,41 +380,25 @@ class DNSErrorPageTest : public ErrorPageTest {
                     BrowserThread::UI, FROM_HERE,
                     base::BindOnce(&DNSErrorPageTest::RequestCreated,
                                    base::Unretained(owner)));
-                return WriteFileToURLLoader(owner, params,
-                                            "mock-link-doctor.json");
+                return chrome_browser_net::WriteFileToURLLoader(
+                    owner->embedded_test_server(), params,
+                    "mock-link-doctor.json");
               }
 
               // Add an interceptor for the search engine the error page will
               // use.
               if (params->url_request.url.host() ==
                   owner->search_term_url_.host()) {
-                return WriteFileToURLLoader(owner, params, "title3.html");
+                return chrome_browser_net::WriteFileToURLLoader(
+                    owner->embedded_test_server(), params, "title3.html");
               }
 
               return false;
             },
-            this),
-        true, true);
+            this));
   }
 
   ~DNSErrorPageTest() override = default;
-
-  static void InstallMockInterceptors(
-      const GURL& search_url,
-      std::unique_ptr<net::URLRequestInterceptor> link_doctor_interceptor) {
-    chrome_browser_net::SetUrlRequestMocksEnabled(true);
-
-    AddInterceptorForURL(google_util::LinkDoctorBaseURL(),
-                         std::move(link_doctor_interceptor));
-
-    // Add a mock for the search engine the error page will use.
-    base::FilePath root_http;
-    PathService::Get(chrome::DIR_TEST_DATA, &root_http);
-    net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
-        search_url.scheme(), search_url.host(),
-        net::URLRequestMockHTTPJob::CreateInterceptorForSingleFile(
-            root_http.AppendASCII("title3.html")));
-  }
 
   // When it sees a request for |path|, returns a 500 response with a body that
   // will be sniffed as binary/octet-stream.
@@ -520,40 +414,6 @@ class DNSErrorPageTest : public ErrorPageTest {
 
   void TearDownOnMainThread() override { url_loader_interceptor_.reset(); }
 
-  static bool WriteFileToURLLoader(
-      DNSErrorPageTest* owner,
-      content::URLLoaderInterceptor::RequestParams* params,
-      std::string path) {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-
-    if (path[0] == '/')
-      path.erase(0, 1);
-
-    if (path == "favicon.ico")
-      return false;
-
-    base::FilePath file_path;
-    PathService::Get(chrome::DIR_TEST_DATA, &file_path);
-    file_path = file_path.AppendASCII(path);
-
-    std::string contents;
-    const bool result = base::ReadFileToString(file_path, &contents);
-    EXPECT_TRUE(result);
-
-    if (path == "mock-link-doctor.json") {
-      GURL url =
-          owner->embedded_test_server()->GetURL("mock.http", "/title2.html");
-
-      std::string placeholder = "http://mock.http/title2.html";
-      contents.replace(contents.find(placeholder), placeholder.length(),
-                       url.spec());
-    }
-
-    content::URLLoaderInterceptor::WriteResponse(
-        net::URLRequestTestJob::test_headers(), contents, params->client.get());
-    return true;
-  }
-
   void SetUpOnMainThread() override {
     // All mock.http requests get served by the embedded test server.
     host_resolver()->AddRule("mock.http", "127.0.0.1");
@@ -562,16 +422,6 @@ class DNSErrorPageTest : public ErrorPageTest {
 
     UIThreadSearchTermsData search_terms_data(browser()->profile());
     search_term_url_ = GURL(search_terms_data.GoogleBaseURLValue());
-
-    if (!base::FeatureList::IsEnabled(features::kNetworkService)) {
-      std::unique_ptr<net::URLRequestInterceptor> owned_interceptor(
-          new LinkDoctorInterceptor(this));
-
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::BindOnce(&InstallMockInterceptors, search_term_url_,
-                         base::Passed(&owned_interceptor)));
-    }
   }
 
   void WaitForRequests(int32_t requests_to_wait_for) {
@@ -1096,13 +946,14 @@ IN_PROC_BROWSER_TEST_F(DNSErrorPageTest, StaleCacheStatus) {
 
   // Reload same URL after forcing an error from the the network layer;
   // confirm that the error page is told the cached copy exists.
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter =
-      browser()->profile()->GetRequestContext();
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&InterceptNetworkTransactions,
-                     base::RetainedRef(url_request_context_getter),
-                     net::ERR_FAILED));
+  {
+    mojo::ScopedAllowSyncCallForTesting allow_sync_call;
+    content::StoragePartition* partition =
+        content::BrowserContext::GetDefaultStoragePartition(
+            browser()->profile());
+    partition->GetNetworkContext()->SetFailingHttpTransactionForTesting(
+        net::ERR_FAILED);
+  }
 
   // With no navigation corrections to load, there's only one navigation.
   ui_test_utils::NavigateToURL(browser(), test_url);
@@ -1165,38 +1016,6 @@ IN_PROC_BROWSER_TEST_F(DNSErrorPageTest, CheckEasterEggIsNotDisabled) {
   EXPECT_EQ(1, result);
 }
 
-LinkDoctorInterceptor::LinkDoctorInterceptor(DNSErrorPageTest* owner)
-    : owner_(owner) {
-  link_doctor_url =
-      owner->embedded_test_server()->GetURL("mock.http", "/title2.html");
-}
-
-net::URLRequestJob* LinkDoctorInterceptor::MaybeInterceptRequest(
-    net::URLRequest* request,
-    net::NetworkDelegate* network_delegate) const {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  base::ScopedAllowBlockingForTesting allow_blocking;
-
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(&DNSErrorPageTest::RequestCreated,
-                                         base::Unretained(owner_)));
-
-  base::FilePath file_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &file_path);
-  file_path = file_path.AppendASCII("mock-link-doctor.json");
-
-  std::string contents;
-  const bool result = base::ReadFileToString(file_path, &contents);
-  EXPECT_TRUE(result);
-
-  std::string placeholder = "http://mock.http/title2.html";
-  contents.replace(contents.find(placeholder), placeholder.length(),
-                   link_doctor_url.spec());
-
-  return new net::URLRequestMockDataJob(request, network_delegate, contents, 1,
-                                        false);
-}
-
 class ErrorPageAutoReloadTest : public InProcessBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -1208,43 +1027,33 @@ class ErrorPageAutoReloadTest : public InProcessBrowserTest {
   void InstallInterceptor(const GURL& url, int32_t requests_to_fail) {
     requests_ = failures_ = 0;
 
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      url_loader_interceptor_ =
-          std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
-              [](int32_t requests_to_fail, int32_t* requests, int32_t* failures,
-                 content::URLLoaderInterceptor::RequestParams* params) {
-                (*requests)++;
-                if (*failures < requests_to_fail) {
-                  (*failures)++;
-                  network::URLLoaderCompletionStatus status;
-                  status.error_code = net::ERR_CONNECTION_RESET;
-                  params->client->OnComplete(status);
-                  return true;
-                }
-
-                std::string body = URLRequestTestJob::test_data_1();
-                content::URLLoaderInterceptor::WriteResponse(
-                    URLRequestTestJob::test_headers(), body,
-                    params->client.get());
+    url_loader_interceptor_ =
+        std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
+            [](int32_t requests_to_fail, int32_t* requests, int32_t* failures,
+               content::URLLoaderInterceptor::RequestParams* params) {
+              if (params->url_request.url.path() == "/searchdomaincheck")
+                return false;
+              if (params->url_request.url.path() == "/favicon.ico")
+                return false;
+              if (params->url_request.url.GetOrigin() ==
+                  GaiaUrls::GetInstance()->gaia_url())
+                return false;
+              (*requests)++;
+              if (*failures < requests_to_fail) {
+                (*failures)++;
+                network::URLLoaderCompletionStatus status;
+                status.error_code = net::ERR_CONNECTION_RESET;
+                params->client->OnComplete(status);
                 return true;
-              },
-              requests_to_fail, &requests_, &failures_));
-    } else {
-      std::unique_ptr<net::URLRequestInterceptor> owned_interceptor(
-          new FailFirstNRequestsInterceptor(requests_to_fail, &requests_,
-                                            &failures_));
+              }
 
-      // Tests don't need to wait for this task to complete before using the
-      // filter; any requests that might be affected by it will end up in the IO
-      // thread's message loop after this posted task anyway.
-      //
-      // Ownership of the interceptor is passed to an object the IO thread, but
-      // a pointer is kept in the test fixture.  As soon as anything calls
-      // URLRequestFilter::ClearHandlers(), |interceptor_| can become invalid.
-      BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                              base::BindOnce(&AddInterceptorForURL, url,
-                                             base::Passed(&owned_interceptor)));
-    }
+              std::string body = URLRequestTestJob::test_data_1();
+              content::URLLoaderInterceptor::WriteResponse(
+                  URLRequestTestJob::test_headers(), body,
+                  params->client.get());
+              return true;
+            },
+            requests_to_fail, &requests_, &failures_));
   }
 
   void NavigateToURLAndWaitForTitle(const GURL& url,
@@ -1348,27 +1157,6 @@ IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, IgnoresSameDocumentNavigation) {
   EXPECT_EQ(3, interceptor_requests());
 }
 
-// TODO(dougt): AddressUnreachableInterceptor can be removed as soon as the
-// Network Service is the only code path.
-
-// Interceptor that fails all requests with net::ERR_ADDRESS_UNREACHABLE.
-class AddressUnreachableInterceptor : public net::URLRequestInterceptor {
- public:
-  AddressUnreachableInterceptor() {}
-  ~AddressUnreachableInterceptor() override {}
-
-  // net::URLRequestInterceptor:
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    return new URLRequestFailedJob(request, network_delegate,
-                                   net::ERR_ADDRESS_UNREACHABLE);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AddressUnreachableInterceptor);
-};
-
 // A test fixture that returns ERR_ADDRESS_UNREACHABLE for all navigation
 // correction requests.  ERR_NAME_NOT_RESOLVED is more typical, but need to use
 // a different error for the correction service and the original page to
@@ -1377,54 +1165,20 @@ class ErrorPageNavigationCorrectionsFailTest : public ErrorPageTest {
  public:
   // InProcessBrowserTest:
   void SetUpOnMainThread() override {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      url_loader_interceptor_ =
-          std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
-              [](content::URLLoaderInterceptor::RequestParams* params) {
-                if (params->url_request.url != google_util::LinkDoctorBaseURL())
-                  return false;
+    url_loader_interceptor_ =
+        std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
+            [](content::URLLoaderInterceptor::RequestParams* params) {
+              if (params->url_request.url != google_util::LinkDoctorBaseURL())
+                return false;
 
-                network::URLLoaderCompletionStatus status;
-                status.error_code = net::ERR_ADDRESS_UNREACHABLE;
-                params->client->OnComplete(status);
-                return true;
-              }));
-    } else {
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::BindOnce(&ErrorPageNavigationCorrectionsFailTest::AddFilters));
-    }
+              network::URLLoaderCompletionStatus status;
+              status.error_code = net::ERR_ADDRESS_UNREACHABLE;
+              params->client->OnComplete(status);
+              return true;
+            }));
   }
 
-  void TearDownOnMainThread() override {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      url_loader_interceptor_.reset();
-    } else {
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::BindOnce(
-              &ErrorPageNavigationCorrectionsFailTest::RemoveFilters));
-    }
-  }
-
-  // Adds a filter that causes all correction service requests to fail with
-  // ERR_ADDRESS_UNREACHABLE.
-  //
-  // Also adds the net::URLRequestFailedJob filter.
-  static void AddFilters() {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    URLRequestFailedJob::AddUrlHandler();
-
-    net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-        google_util::LinkDoctorBaseURL(),
-        std::unique_ptr<net::URLRequestInterceptor>(
-            new AddressUnreachableInterceptor()));
-  }
-
-  static void RemoveFilters() {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    net::URLRequestFilter::GetInstance()->ClearHandlers();
-  }
+  void TearDownOnMainThread() override { url_loader_interceptor_.reset(); }
 
   // Returns true if the platform has support for a diagnostics tool, which
   // can be launched from the error page.
@@ -1475,13 +1229,14 @@ IN_PROC_BROWSER_TEST_F(ErrorPageNavigationCorrectionsFailTest,
 
   // Reload same URL after forcing an error from the the network layer;
   // confirm that the error page is told the cached copy exists.
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter =
-      browser()->profile()->GetRequestContext();
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&InterceptNetworkTransactions,
-                     base::RetainedRef(url_request_context_getter),
-                     net::ERR_CONNECTION_FAILED));
+  {
+    mojo::ScopedAllowSyncCallForTesting allow_sync_call;
+    content::StoragePartition* partition =
+        content::BrowserContext::GetDefaultStoragePartition(
+            browser()->profile());
+    partition->GetNetworkContext()->SetFailingHttpTransactionForTesting(
+        net::ERR_CONNECTION_FAILED);
+  }
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(), test_url, 2);
@@ -1510,14 +1265,7 @@ IN_PROC_BROWSER_TEST_F(ErrorPageNavigationCorrectionsFailTest,
 }
 
 class ErrorPageOfflineTest : public ErrorPageTest {
-  static void InstallMockInterceptors() {
-    chrome_browser_net::SetUrlRequestMocksEnabled(true);
-  }
-
   void SetUpOnMainThread() override {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&ErrorPageOfflineTest::InstallMockInterceptors));
     url_loader_interceptor_ =
         std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
             [](content::URLLoaderInterceptor::RequestParams* params) {
@@ -1533,7 +1281,7 @@ class ErrorPageOfflineTest : public ErrorPageTest {
     if (enroll_) {
       // Set up fake install attributes.
       std::unique_ptr<chromeos::StubInstallAttributes> attributes =
-          base::MakeUnique<chromeos::StubInstallAttributes>();
+          std::make_unique<chromeos::StubInstallAttributes>();
       attributes->SetCloudManaged("example.com", "fake-id");
       policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
           attributes.release());
@@ -1553,7 +1301,7 @@ class ErrorPageOfflineTest : public ErrorPageTest {
       policy_map.Set(
           policy::key::kAllowDinosaurEasterEgg, policy::POLICY_LEVEL_MANDATORY,
           policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-          base::MakeUnique<base::Value>(value_of_allow_dinosaur_easter_egg_),
+          std::make_unique<base::Value>(value_of_allow_dinosaur_easter_egg_),
           nullptr);
     }
     policy_provider_.UpdateChromePolicy(policy_map);
@@ -1691,25 +1439,6 @@ class ErrorPageForIDNTest : public InProcessBrowserTest {
     // Clear AcceptLanguages to force punycode decoding.
     browser()->profile()->GetPrefs()->SetString(prefs::kAcceptLanguages,
                                                 std::string());
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::BindOnce(&ErrorPageForIDNTest::AddFilters));
-  }
-
-  void TearDownOnMainThread() override {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&ErrorPageForIDNTest::RemoveFilters));
-  }
-
- private:
-  static void AddFilters() {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    URLRequestFailedJob::AddUrlHandlerForHostname(kHostname);
-  }
-
-  static void RemoveFilters() {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    net::URLRequestFilter::GetInstance()->ClearHandlers();
   }
 };
 

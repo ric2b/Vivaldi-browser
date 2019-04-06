@@ -8,6 +8,7 @@
 
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -16,12 +17,15 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
@@ -89,8 +93,10 @@ class VolumeButton : public ButtonListenerActionableView {
             : (level == 1.0 ? volume_levels
                             : std::max(1, static_cast<int>(std::ceil(
                                               level * (volume_levels - 1)))));
-    gfx::ImageSkia image_skia =
-        gfx::CreateVectorIcon(*kVolumeLevelIcons[image_index], kMenuIconColor);
+    gfx::ImageSkia image_skia = gfx::CreateVectorIcon(
+        *kVolumeLevelIcons[image_index], features::IsSystemTrayUnifiedEnabled()
+                                             ? kUnifiedMenuIconColor
+                                             : kMenuIconColor);
     image_->SetImage(&image_skia);
     image_index_ = image_index;
   }
@@ -100,11 +106,10 @@ class VolumeButton : public ButtonListenerActionableView {
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     node_data->SetName(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VOLUME_MUTE));
-    node_data->role = ui::AX_ROLE_TOGGLE_BUTTON;
+    node_data->role = ax::mojom::Role::kToggleButton;
     const bool is_pressed = CrasAudioHandler::Get()->IsOutputMuted();
-    node_data->AddIntAttribute(
-        ui::AX_ATTR_CHECKED_STATE,
-        is_pressed ? ui::AX_CHECKED_STATE_TRUE : ui::AX_CHECKED_STATE_FALSE);
+    node_data->SetCheckedState(is_pressed ? ax::mojom::CheckedState::kTrue
+                                          : ax::mojom::CheckedState::kFalse);
   }
 
   views::ImageView* image_;
@@ -130,12 +135,14 @@ VolumeView::VolumeView(SystemTrayItem* owner,
 
   slider_ = TrayPopupUtils::CreateSlider(this);
   slider_->SetValue(CrasAudioHandler::Get()->GetOutputVolumePercent() / 100.0f);
-  slider_->SetAccessibleName(
+  slider_->GetViewAccessibility().OverrideName(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VOLUME));
   tri_view_->AddView(TriView::Container::CENTER, slider_);
 
-  SetBackground(views::CreateThemedSolidBackground(
-      this, ui::NativeTheme::kColorId_BubbleBackground));
+  SetBackground(features::IsSystemTrayUnifiedEnabled()
+                    ? views::CreateSolidBackground(kUnifiedMenuBackgroundColor)
+                    : views::CreateThemedSolidBackground(
+                          this, ui::NativeTheme::kColorId_BubbleBackground));
 
   Update();
 }
@@ -216,7 +223,10 @@ void VolumeView::UpdateDeviceTypeAndMore() {
   tri_view_->SetContainerVisible(TriView::Container::END, true);
   tri_view_->InvalidateLayout();
   if (device_icon_visibility)
-    device_type_->SetImage(gfx::CreateVectorIcon(device_icon, kMenuIconColor));
+    device_type_->SetImage(gfx::CreateVectorIcon(
+        device_icon, features::IsSystemTrayUnifiedEnabled()
+                         ? kUnifiedMenuIconColor
+                         : kMenuIconColor));
   if (device_type_->visible() != device_icon_visibility) {
     device_type_->SetVisible(device_icon_visibility);
     device_type_->InvalidateLayout();
@@ -248,6 +258,12 @@ void VolumeView::ButtonPressed(views::Button* sender, const ui::Event& event) {
   if (sender == icon_) {
     CrasAudioHandler* audio_handler = CrasAudioHandler::Get();
     bool mute_on = !audio_handler->IsOutputMuted();
+
+    if (mute_on)
+      base::RecordAction(base::UserMetricsAction("StatusArea_Audio_Muted"));
+    else
+      base::RecordAction(base::UserMetricsAction("StatusArea_Audio_Unmuted"));
+
     audio_handler->SetOutputMute(mute_on);
     if (!mute_on)
       audio_handler->AdjustOutputVolumeToAudibleLevel();

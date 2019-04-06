@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -64,7 +63,7 @@ class GLES2DecoderTestWithExtensionsOnGLES2 : public GLES2DecoderTest {
   void Init(const char* extensions) {
     InitState init;
     init.extensions = extensions;
-    init.gl_version = "opengl es 2.0";
+    init.gl_version = "OpenGL ES 2.0";
     init.has_alpha = true;
     init.has_depth = true;
     init.request_alpha = true;
@@ -1079,11 +1078,6 @@ TEST_P(GLES2DecoderRGBBackbufferTest, ReadPixelsNoAlphaBackbuffer) {
   const GLsizei kHeight = 3;
   const GLint kBytesPerPixel = 4;
   const GLint kPackAlignment = 4;
-  static const uint8_t kExpectedPixels[kWidth * kHeight * kBytesPerPixel] = {
-      12, 13, 14, 255, 19, 18, 19, 255, 13, 14, 18, 255,
-      29, 28, 23, 255, 21, 22, 21, 255, 28, 23, 22, 255,
-      31, 34, 39, 255, 32, 37, 32, 255, 34, 39, 37, 255,
-  };
   static const uint8_t kSrcPixels[kWidth * kHeight * kBytesPerPixel] = {
       12, 13, 14, 18, 19, 18, 19, 12, 13, 14, 18, 19, 29, 28, 23, 22, 21, 22,
       21, 29, 28, 23, 22, 21, 31, 34, 39, 37, 32, 37, 32, 31, 34, 39, 37, 32,
@@ -1091,12 +1085,8 @@ TEST_P(GLES2DecoderRGBBackbufferTest, ReadPixelsNoAlphaBackbuffer) {
 
   surface_->SetSize(gfx::Size(INT_MAX, INT_MAX));
 
-  ReadPixelsEmulator emu(kWidth,
-                         kHeight,
-                         kBytesPerPixel,
-                         kSrcPixels,
-                         kExpectedPixels,
-                         kPackAlignment);
+  ReadPixelsEmulator emu(kWidth, kHeight, kBytesPerPixel, kSrcPixels,
+                         kSrcPixels, kPackAlignment);
   typedef ReadPixels::Result Result;
   Result* result = GetSharedMemoryAs<Result*>();
   uint32_t result_shm_id = shared_memory_id_;
@@ -1269,7 +1259,7 @@ TEST_P(GLES2DecoderTest, ReadPixelsInvalidArgs) {
 TEST_P(GLES2DecoderManualInitTest, ReadPixelsAsyncError) {
   InitState init;
   init.extensions = "GL_ARB_sync";
-  init.gl_version = "opengl es 3.0";
+  init.gl_version = "OpenGL ES 3.0";
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
@@ -1324,7 +1314,7 @@ class GLES2ReadPixelsAsyncTest : public GLES2DecoderManualInitTest {
   void SetUp() override {
     InitState init;
     init.extensions = "GL_ARB_sync";
-    init.gl_version = "opengl es 3.0";
+    init.gl_version = "OpenGL ES 3.0";
     init.has_alpha = true;
     init.request_alpha = true;
     init.bind_generates_resource = true;
@@ -1789,7 +1779,7 @@ TEST_P(GLES2DecoderManualInitTest, ActualStencilDoesNotMatchRequestedStencil) {
 TEST_P(GLES2DecoderManualInitTest, PackedDepthStencilReportsCorrectValues) {
   InitState init;
   init.extensions = "GL_OES_packed_depth_stencil";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.has_depth = true;
   init.has_stencil = true;
   init.request_depth = true;
@@ -1831,7 +1821,7 @@ TEST_P(GLES2DecoderManualInitTest, PackedDepthStencilReportsCorrectValues) {
 TEST_P(GLES2DecoderManualInitTest, PackedDepthStencilNoRequestedStencil) {
   InitState init;
   init.extensions = "GL_OES_packed_depth_stencil";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.has_depth = true;
   init.has_stencil = true;
   init.request_depth = true;
@@ -1872,7 +1862,7 @@ TEST_P(GLES2DecoderManualInitTest, PackedDepthStencilNoRequestedStencil) {
 TEST_P(GLES2DecoderManualInitTest, PackedDepthStencilRenderbufferDepth) {
   InitState init;
   init.extensions = "GL_OES_packed_depth_stencil";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.bind_generates_resource = true;
   InitDecoder(init);
   DoBindRenderbuffer(
@@ -1942,7 +1932,7 @@ TEST_P(GLES2DecoderManualInitTest, PackedDepthStencilRenderbufferDepth) {
 TEST_P(GLES2DecoderManualInitTest, PackedDepthStencilRenderbufferStencil) {
   InitState init;
   init.extensions = "GL_OES_packed_depth_stencil";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.bind_generates_resource = true;
   InitDecoder(init);
   DoBindRenderbuffer(
@@ -3305,7 +3295,7 @@ TEST_P(GLES2DecoderTest, DrawBuffersEXTMainFramebuffer) {
 
 TEST_P(GLES2DecoderManualInitTest, InvalidateFramebufferBinding) {
   InitState init;
-  init.gl_version = "opengl es 3.0";
+  init.gl_version = "OpenGL ES 3.0";
   InitDecoder(init);
 
   // EXPECT_EQ can't be used to compare function pointers
@@ -3324,7 +3314,7 @@ TEST_P(GLES2DecoderTest, ClearBackbufferBitsOnFlipSwap) {
   EXPECT_EQ(0u, GetAndClearBackbufferClearBitsForTest());
 
   SwapBuffers& cmd = *GetImmediateAs<SwapBuffers>();
-  cmd.Init();
+  cmd.Init(1, 0);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
   EXPECT_EQ(static_cast<uint32_t>(GL_COLOR_BUFFER_BIT),
@@ -3342,7 +3332,7 @@ TEST_P(GLES2DecoderTest, ClearBackbufferBitsOnFlipSwap) {
   EXPECT_EQ(static_cast<uint32_t>(GL_COLOR_BUFFER_BIT),
             GetAndClearBackbufferClearBitsForTest());
 
-  cmd.Init();
+  cmd.Init(1, 0);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
   EXPECT_EQ(static_cast<uint32_t>(GL_COLOR_BUFFER_BIT),
@@ -3356,7 +3346,7 @@ TEST_P(GLES2DecoderTest, ClearBackbufferBitsOnFlipSwap) {
 TEST_P(GLES2DecoderManualInitTest, DiscardFramebufferEXT) {
   InitState init;
   init.extensions = "GL_EXT_discard_framebuffer";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   InitDecoder(init);
 
   // EXPECT_EQ can't be used to compare function pointers
@@ -3399,7 +3389,7 @@ TEST_P(GLES2DecoderManualInitTest, DiscardFramebufferEXT) {
 TEST_P(GLES2DecoderManualInitTest, ClearBackbufferBitsOnDiscardFramebufferEXT) {
   InitState init;
   init.extensions = "GL_EXT_discard_framebuffer";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   InitDecoder(init);
 
   // EXPECT_EQ can't be used to compare function pointers.
@@ -3560,7 +3550,7 @@ TEST_P(GLES2DecoderManualInitTest,
        DiscardedAttachmentsEXTMarksFramebufferIncomplete) {
   InitState init;
   init.extensions = "GL_EXT_discard_framebuffer";
-  init.gl_version = "opengl es 2.0";
+  init.gl_version = "OpenGL ES 2.0";
   init.has_alpha = true;
   init.bind_generates_resource = true;
   InitDecoder(init);

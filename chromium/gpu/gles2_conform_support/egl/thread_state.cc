@@ -15,6 +15,7 @@
 #include "gpu/command_buffer/common/thread_local.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_info_collector.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_util.h"
 #include "gpu/gles2_conform_support/egl/context.h"
 #include "gpu/gles2_conform_support/egl/display.h"
@@ -78,20 +79,16 @@ egl::ThreadState* ThreadState::Get() {
       // Need to call both Init and InitFromArgv, since Windows does not use
       // argc, argv in CommandLine::Init(argc, argv).
       command_line->InitFromArgv(argv);
+      gl::init::InitializeGLNoExtensionsOneOff();
       gpu::GpuFeatureInfo gpu_feature_info;
       if (!command_line->HasSwitch(switches::kDisableGpuDriverBugWorkarounds)) {
         gpu::GPUInfo gpu_info;
-        gpu::CollectBasicGraphicsInfo(&gpu_info);
+        gpu::CollectGraphicsInfoForTesting(&gpu_info);
         gpu_feature_info = gpu::ComputeGpuFeatureInfo(
-            gpu_info,
-            false,  // ignore_gpu_blacklist
-            false,  // disable_gpu_driver_bug_workarounds
-            false,  // log_gpu_control_list_decisions
-            command_line);
+            gpu_info, gpu::GpuPreferences(), command_line, nullptr);
         Context::SetPlatformGpuFeatureInfo(gpu_feature_info);
       }
 
-      gl::init::InitializeGLNoExtensionsOneOff();
       gl::init::SetDisabledExtensionsPlatform(
           gpu_feature_info.disabled_extensions);
       gl::init::InitializeExtensionSettingsOneOffPlatform();

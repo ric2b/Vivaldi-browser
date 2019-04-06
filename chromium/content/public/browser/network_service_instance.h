@@ -8,13 +8,13 @@
 #include "content/common/content_export.h"
 
 namespace network {
+class NetworkService;
 namespace mojom {
 class NetworkService;
 }
 }  // namespace network
 
 namespace content {
-class NetworkService;
 
 // Returns a pointer to the NetworkService, creating / re-creating it as needed.
 // NetworkService will be running in-process if
@@ -28,11 +28,10 @@ CONTENT_EXPORT network::mojom::NetworkService* GetNetworkService();
 // pointer which is used to ease transition to network service.
 // Must only be called on the IO thread.  Must not be called if the network
 // service is enabled.
-CONTENT_EXPORT NetworkService* GetNetworkServiceImpl();
+CONTENT_EXPORT network::NetworkService* GetNetworkServiceImpl();
 
 // Call |FlushForTesting()| on cached |NetworkServicePtr|. For testing only.
-// Must only be called on the UI thread. Must not be called if the network
-// service is disabled.
+// Must only be called on the UI thread.
 CONTENT_EXPORT void FlushNetworkServiceInstanceForTesting();
 
 }  // namespace content

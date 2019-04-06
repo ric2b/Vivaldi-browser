@@ -36,9 +36,8 @@ nacl64.exe: %(VersionDir)s\
 nacl_irt_x86_32.nexe: %(VersionDir)s\
 nacl_irt_x86_64.nexe: %(VersionDir)s\
 natives_blob.bin: %(VersionDir)s\
+notification_helper.exe: %(VersionDir)s\
 resources.pak: %(VersionDir)s\
-snapshot_blob.bin: %(VersionDir)s\
-syzyasan_rtl.dll: %(VersionDir)s\
 v8_context_snapshot.bin: %(VersionDir)s\
 WinSparkle.dll: %(VersionDir)s\
 #
@@ -61,12 +60,20 @@ resources\vivaldi\: %(VersionDir)s\resources\vivaldi\
 # %(VersionDir)\VisualElements.
 Logo.png: %(VersionDir)s\VisualElements\
 LogoBeta.png: %(VersionDir)s\VisualElements\
+LogoBetaLight.png: %(VersionDir)s\VisualElements\
 LogoCanary.png: %(VersionDir)s\VisualElements\
+LogoCanaryLight.png: %(VersionDir)s\VisualElements\
 LogoDev.png: %(VersionDir)s\VisualElements\
+LogoDevLight.png: %(VersionDir)s\VisualElements\
+LogoLight.png: %(VersionDir)s\VisualElements\
 SmallLogo.png: %(VersionDir)s\VisualElements\
 SmallLogoBeta.png: %(VersionDir)s\VisualElements\
+SmallLogoBetaLight.png: %(VersionDir)s\VisualElements\
 SmallLogoCanary.png: %(VersionDir)s\VisualElements\
+SmallLogoCanaryLight.png: %(VersionDir)s\VisualElements\
 SmallLogoDev.png: %(VersionDir)s\VisualElements\
+SmallLogoDevLight.png: %(VersionDir)s\VisualElements\
+SmallLogoLight.png: %(VersionDir)s\VisualElements\
 
 #
 # SwiftShader sub-dir
@@ -87,10 +94,8 @@ SecondaryTile.png: %(VersionDir)s\
 WidevineCdm\manifest.json: %(VersionDir)s\WidevineCdm\
 WidevineCdm\_platform_specific\win_x86\widevinecdm.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x86\
 WidevineCdm\_platform_specific\win_x86\widevinecdm.dll.sig: %(VersionDir)s\WidevineCdm\_platform_specific\win_x86\
-WidevineCdm\_platform_specific\win_x86\widevinecdmadapter.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x86\
 WidevineCdm\_platform_specific\win_x64\widevinecdm.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x64\
 WidevineCdm\_platform_specific\win_x64\widevinecdm.dll.sig: %(VersionDir)s\WidevineCdm\_platform_specific\win_x64\
-WidevineCdm\_platform_specific\win_x64\widevinecdmadapter.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x64\
 
 #
 # MEI Preload sub dir

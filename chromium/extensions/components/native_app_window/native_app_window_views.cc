@@ -4,7 +4,6 @@
 
 #include "extensions/components/native_app_window/native_app_window_views.h"
 
-#include "base/threading/sequenced_worker_pool.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -21,10 +20,6 @@
 #include "ui/aura/window.h"
 #endif
 
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "ui/events/base_event_utils.h"
-#include "ui/vivaldi_ui_utils.h"
-
 using extensions::AppWindow;
 
 namespace native_app_window {
@@ -34,9 +29,7 @@ NativeAppWindowViews::NativeAppWindowViews()
       web_view_(NULL),
       widget_(NULL),
       frameless_(false),
-      resizable_(false),
-      thumbnail_window_(false),
-      shown_(false) {
+      resizable_(false) {
 }
 
 void NativeAppWindowViews::Init(AppWindow* app_window,
@@ -120,22 +113,11 @@ gfx::Rect NativeAppWindowViews::GetBounds() const {
 void NativeAppWindowViews::Show() {
   if (thumbnail_window_)
     return;
-
-  // In maximized state IsVisible is true and activate does not show a
-  // hidden window.
-  ui::WindowShowState current_state = GetRestoredState();
-  if (widget_->IsVisible() && current_state != ui::SHOW_STATE_MAXIMIZED) {
+  if (widget_->IsVisible()) {
     widget_->Activate();
-    widget_->SetSavedShowState(current_state);
     return;
   }
-
-  if (shown_) {
-    // Shown previously so we can change the saved state.
-    widget_->SetSavedShowState(current_state);
-  }
   widget_->Show();
-  shown_ = true;
 }
 
 void NativeAppWindowViews::ShowInactive() {
@@ -150,6 +132,10 @@ void NativeAppWindowViews::ShowInactive() {
 
 void NativeAppWindowViews::Hide() {
   widget_->Hide();
+}
+
+bool NativeAppWindowViews::IsVisible() const {
+  return widget_->IsVisible();
 }
 
 void NativeAppWindowViews::Close() {
@@ -238,7 +224,7 @@ bool NativeAppWindowViews::CanResize() const {
 
 bool NativeAppWindowViews::CanMaximize() const {
   return resizable_ && !size_constraints_.HasMaximumSize() &&
-         !app_window_->window_type_is_panel() && !WidgetHasHitTestMask();
+         !WidgetHasHitTestMask();
 }
 
 bool NativeAppWindowViews::CanMinimize() const {
@@ -285,36 +271,6 @@ bool NativeAppWindowViews::ShouldDescendIntoChildForEventHandling(
 #endif
 
   return true;
-}
-
-bool NativeAppWindowViews::ExecuteWindowsCommand(int command_id) {
-#if defined(OS_WIN)
- // Note: All these commands are context relative to active webview.
-  switch(command_id) {
-    case APPCOMMAND_BROWSER_BACKWARD:
-      HandleKeyboardCode(ui::VKEY_BROWSER_BACK);
-      return true;
-    case APPCOMMAND_BROWSER_FORWARD:
-      HandleKeyboardCode(ui::VKEY_BROWSER_FORWARD);
-      return true;
-    default:
-      break;
-  }
-#endif //OS_WIN
-  return false;
-}
-
-void NativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
-  extensions::WebViewGuest *current_webviewguest =
-      vivaldi::ui_tools::GetActiveWebViewGuest(this);
-  if (current_webviewguest) {
-    content::NativeWebKeyboardEvent synth_event(
-        blink::WebInputEvent::kRawKeyDown, blink::WebInputEvent::kNoModifiers,
-        ui::EventTimeForNow());
-    synth_event.windows_key_code = code;
-    current_webviewguest->web_contents()->GetDelegate()
-        ->HandleKeyboardEvent(web_view_->GetWebContents(), synth_event);
-  }
 }
 
 // WidgetObserver implementation.

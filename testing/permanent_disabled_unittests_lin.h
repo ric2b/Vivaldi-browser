@@ -7,39 +7,30 @@
 //    DISABLE(foo,baz)
 
 // Disabled in Google Chrome official builds
-DISABLE(FirstRunMasterPrefsImportBookmarksFile, ImportBookmarksFile)
+//DISABLE(FirstRunMasterPrefsImportBookmarksFile, ImportBookmarksFile)
 
 // Disabled in Google Chrome official builds
-DISABLE(FirstRunMasterPrefsImportDefault, ImportDefault)
+//DISABLE(FirstRunMasterPrefsImportDefault, ImportDefault)
 
 // Disabled in Google Chrome official builds
-DISABLE(FirstRunMasterPrefsImportNothing, ImportNothingAndShowNewTabPage)
-
-// Disabled in Google Chrome official builds
-DISABLE_MULTI(FirstRunMasterPrefsWithTrackedPreferences,
-              TrackedPreferencesSurviveFirstRun)
-
-// In Vivaldi this will always break since the relevant code has been modified
-DISABLE(HelpPageWebUITest, testUpdateState)
-DISABLE(HelpPageWebUITest, testUpdateStateIcon)
+//DISABLE_MULTI(FirstRunMasterPrefsWithTrackedPreferences,
+//              TrackedPreferencesSurviveFirstRun)
 
 // Disabled because the Widevine lib is not included in the package build,
 // as it crashes vivaldi
 DISABLE(PepperContentSettingsSpecialCasesPluginsBlockedTest, WidevineCdm)
 
 // Does not work for vivaldi
-DISABLE(ProfileSigninConfirmationHelperBrowserTest, HasNotBeenShutdown)
-DISABLE(ProfileSigninConfirmationHelperBrowserTest, HasNoSyncedExtensions)
+//DISABLE(ProfileSigninConfirmationHelperBrowserTest, HasNoSyncedExtensions)
 
 // Does not work for vivaldi
-DISABLE(StartupBrowserCreatorFirstRunTest,
-        FirstRunTabsContainNTPSyncPromoAllowed)
-DISABLE(StartupBrowserCreatorFirstRunTest,
-        FirstRunTabsContainNTPSyncPromoForbidden)
-DISABLE(StartupBrowserCreatorFirstRunTest, FirstRunTabsContainSyncPromo)
-DISABLE(StartupBrowserCreatorFirstRunTest, FirstRunTabsPromoAllowed)
-DISABLE(StartupBrowserCreatorFirstRunTest, FirstRunTabsSyncPromoForbidden)
-DISABLE(StartupBrowserCreatorFirstRunTest, RestoreOnStartupURLsPolicySpecified)
-DISABLE(StartupBrowserCreatorFirstRunTest, SyncPromoAllowed)
-DISABLE(StartupBrowserCreatorFirstRunTest, SyncPromoForbidden)
+//DISABLE(StartupBrowserCreatorFirstRunTest,
+//        FirstRunTabsContainNTPSyncPromoAllowed)
+//DISABLE(StartupBrowserCreatorFirstRunTest,
+//        FirstRunTabsContainNTPSyncPromoForbidden)
+//DISABLE(StartupBrowserCreatorFirstRunTest, FirstRunTabsContainSyncPromo)
+//DISABLE(StartupBrowserCreatorFirstRunTest, FirstRunTabsPromoAllowed)
+//DISABLE(StartupBrowserCreatorFirstRunTest, FirstRunTabsSyncPromoForbidden)
+//DISABLE(StartupBrowserCreatorFirstRunTest, SyncPromoAllowed)
+//DISABLE(StartupBrowserCreatorFirstRunTest, SyncPromoForbidden)
 

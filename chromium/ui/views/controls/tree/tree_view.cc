@@ -7,8 +7,6 @@
 #include <algorithm>
 
 #include "base/i18n/rtl.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -263,8 +261,13 @@ void TreeView::SetSelectedNode(TreeModelNode* model_node) {
     SchedulePaintForNode(selected_node_);
   }
 
-  if (selected_node_)
-    ScrollRectToVisible(GetForegroundBoundsForNode(selected_node_));
+  if (selected_node_) {
+    // GetForegroundBoundsForNode() returns RTL-flipped coordinates for paint.
+    // Un-flip before passing to ScrollRectToVisible(), which uses layout
+    // coordinates.
+    ScrollRectToVisible(
+        GetMirroredRect(GetForegroundBoundsForNode(selected_node_)));
+  }
 
   // Notify controller if the old selection was empty to handle the case of
   // remove explicitly resetting selected_node_ before invoking this.
@@ -272,8 +275,8 @@ void TreeView::SetSelectedNode(TreeModelNode* model_node) {
     controller_->OnTreeViewSelectionChanged(this);
 
   if (changed) {
-    NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
-    NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
+    NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
+    NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   }
 }
 
@@ -425,14 +428,21 @@ void TreeView::ShowContextMenu(const gfx::Point& p,
 }
 
 void TreeView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_TREE;
-  node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
-                             ui::AX_RESTRICTION_READ_ONLY);
-  if (!selected_node_)
+  node_data->role = ax::mojom::Role::kTree;
+  node_data->SetRestriction(ax::mojom::Restriction::kReadOnly);
+  // TODO(aleventhal): The tree view accessibility implementation is misusing
+  // the name field. It should really be using selection events for the
+  // currently selected item. The name field should be for for the label
+  // if there is one, otherwise something that would work in place of a label.
+  // See http://crbug.com/811277.
+
+  if (!selected_node_) {
+    node_data->SetNameExplicitlyEmpty();
     return;
+  }
 
   // Get selected item info.
-  node_data->role = ui::AX_ROLE_TREE_ITEM;
+  node_data->role = ax::mojom::Role::kTreeItem;
   node_data->SetName(selected_node_->model_node()->GetTitle());
 }
 
@@ -733,6 +743,9 @@ void TreeView::LayoutEditor() {
   DCHECK(selected_node_);
   // Position the editor so that its text aligns with the text we drew.
   gfx::Rect row_bounds = GetForegroundBoundsForNode(selected_node_);
+
+  // GetForegroundBoundsForNode() returns a "flipped" x for painting. First, un-
+  // flip it for the following calculations and ScrollRectToVisible().
   row_bounds.set_x(
       GetMirroredXWithWidthInView(row_bounds.x(), row_bounds.width()));
   row_bounds.set_x(row_bounds.x() + text_offset_);

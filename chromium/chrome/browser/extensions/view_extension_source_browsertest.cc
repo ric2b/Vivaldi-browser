@@ -19,7 +19,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 
-typedef ExtensionBrowserTest ViewExtensionSourceTest;
+typedef extensions::ExtensionBrowserTest ViewExtensionSourceTest;
 
 // Verify that restoring a view-source tab for a Chrome extension works
 // properly.  See https://crbug.com/699428.
@@ -47,8 +47,6 @@ IN_PROC_BROWSER_TEST_F(ViewExtensionSourceTest, ViewSourceTabRestore) {
   content::WebContents* view_source_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(view_source_url, view_source_tab->GetVisibleURL());
-  EXPECT_EQ(view_source_url,
-            view_source_tab->GetController().GetActiveEntry()->GetVirtualURL());
   EXPECT_EQ(bookmarks_extension_url,
             view_source_tab->GetMainFrame()->GetLastCommittedURL());
   EXPECT_FALSE(chrome::CanViewSource(browser()));
@@ -72,8 +70,6 @@ IN_PROC_BROWSER_TEST_F(ViewExtensionSourceTest, ViewSourceTabRestore) {
   // but with view-source, we should still see it as
   // view-source:chrome-extension://.../.
   EXPECT_EQ(view_source_url, view_source_tab->GetVisibleURL());
-  EXPECT_EQ(view_source_url,
-            view_source_tab->GetController().GetActiveEntry()->GetVirtualURL());
   EXPECT_EQ(bookmarks_extension_url,
             view_source_tab->GetMainFrame()->GetLastCommittedURL());
   EXPECT_FALSE(chrome::CanViewSource(browser()));

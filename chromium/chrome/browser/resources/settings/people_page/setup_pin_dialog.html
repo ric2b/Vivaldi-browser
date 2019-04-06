@@ -1,12 +1,14 @@
+<link rel="import" href="chrome://resources/cr_components/chromeos/quick_unlock/pin_keyboard.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="../i18n_setup.html">
 <link rel="import" href="lock_screen_constants.html">
-<link rel="import" href="pin_keyboard.html">
 <link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-setup-pin-dialog">
@@ -21,11 +23,18 @@
       }
 
       .warning {
-        color: var(--paper-grey-700);
+        color: var(--cr-secondary-text-color);
       }
 
       .warning > iron-icon {
-        --iron-icon-fill-color: var(--paper-grey-700);
+        --iron-icon-fill-color: var(--google-grey-refresh-700);
+      }
+
+      pin-keyboard {
+        --pin-keyboard-digit-button: {
+          font-size: 18px;
+          padding: 15px 21px;
+        };
       }
 
       #pinKeyboardDiv {
@@ -43,18 +52,18 @@
       }
     </style>
 
-    <dialog is="cr-dialog" id="dialog" on-close="close"
+    <cr-dialog id="dialog" on-close="close"
         close-text="$i18n{close}">
       <div slot="title">[[getTitleMessage_(isConfirmStep_)]]</div>
       <div slot="body">
-        <!-- Pin keyboard -->
+        <!-- PIN keyboard -->
         <div id="pinKeyboardDiv" class="settings-box continuation">
           <pin-keyboard id="pinKeyboard" on-pin-change="onPinChange_"
               on-submit="onPinSubmit_" value="{{pinKeyboardValue_}}"
-              has-error$="[[hasError_(problemMessage_, problemClass_)]]">
+              has-error="[[hasError_(problemMessage_, problemClass_)]]">
             <!-- Warning/error; only shown if title is hidden. -->
             <div id="problemDiv" class$="[[problemClass_]]"
-                hidden="[[!problemMessage_]]" problem>
+                invisible$="[[!problemMessage_]]" problem>
               <iron-icon icon="cr:error-outline"></iron-icon>
               <span id="problemMessage">[[problemMessage_]]</span>
             </div>
@@ -62,16 +71,15 @@
         </div>
       </div>
       <div slot="button-container">
-        <paper-button class="cancel-button" on-tap="onCancelTap_">
+        <paper-button class="cancel-button" on-click="onCancelTap_">
           $i18n{cancel}
         </paper-button>
-
-        <paper-button class="action-button" on-tap="onPinSubmit_"
+        <paper-button class="action-button" on-click="onPinSubmit_"
             disabled$="[[!enableSubmit_]]">
           <span>[[getContinueMessage_(isConfirmStep_)]]</span>
         </paper-button>
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
 
   <script src="setup_pin_dialog.js"></script>

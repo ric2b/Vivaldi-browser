@@ -16,11 +16,12 @@
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
 #include "media/capture/video/chromeos/camera_device_context.h"
 #include "media/capture/video/chromeos/camera_device_delegate.h"
-#include "media/capture/video/chromeos/mock_gpu_memory_buffer_manager.h"
 #include "media/capture/video/chromeos/mock_video_capture_client.h"
+#include "media/capture/video/mock_gpu_memory_buffer_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#include "media/capture/video/blob_utils.h"
 using testing::_;
 using testing::A;
 using testing::AtLeast;
@@ -35,9 +36,9 @@ namespace {
 class MockStreamCaptureInterface : public StreamCaptureInterface {
  public:
   void RegisterBuffer(uint64_t buffer_id,
-                      arc::mojom::Camera3DeviceOps::BufferType type,
+                      cros::mojom::Camera3DeviceOps::BufferType type,
                       uint32_t drm_format,
-                      arc::mojom::HalPixelFormat hal_pixel_format,
+                      cros::mojom::HalPixelFormat hal_pixel_format,
                       uint32_t width,
                       uint32_t height,
                       std::vector<StreamCaptureInterface::Plane> planes,
@@ -47,20 +48,20 @@ class MockStreamCaptureInterface : public StreamCaptureInterface {
   }
   MOCK_METHOD8(DoRegisterBuffer,
                void(uint64_t buffer_id,
-                    arc::mojom::Camera3DeviceOps::BufferType type,
+                    cros::mojom::Camera3DeviceOps::BufferType type,
                     uint32_t drm_format,
-                    arc::mojom::HalPixelFormat hal_pixel_format,
+                    cros::mojom::HalPixelFormat hal_pixel_format,
                     uint32_t width,
                     uint32_t height,
                     const std::vector<StreamCaptureInterface::Plane>& planes,
                     base::OnceCallback<void(int32_t)>& callback));
 
-  void ProcessCaptureRequest(arc::mojom::Camera3CaptureRequestPtr request,
+  void ProcessCaptureRequest(cros::mojom::Camera3CaptureRequestPtr request,
                              base::OnceCallback<void(int32_t)> callback) {
     DoProcessCaptureRequest(request, callback);
   }
   MOCK_METHOD2(DoProcessCaptureRequest,
-               void(arc::mojom::Camera3CaptureRequestPtr& request,
+               void(cros::mojom::Camera3CaptureRequestPtr& request,
                     base::OnceCallback<void(int32_t)>& callback));
 };
 
@@ -68,45 +69,31 @@ const VideoCaptureFormat kDefaultCaptureFormat(gfx::Size(1280, 720),
                                                30.0,
                                                PIXEL_FORMAT_NV12);
 
-class MockCameraBufferFactory : public CameraBufferFactory {
+class FakeCameraBufferFactory : public CameraBufferFactory {
  public:
-  MOCK_METHOD2(CreateGpuMemoryBuffer,
-               std::unique_ptr<gfx::GpuMemoryBuffer>(const gfx::Size& size,
-                                                     gfx::BufferFormat format));
+  FakeCameraBufferFactory() {
+    gpu_memory_buffer_manager_ =
+        std::make_unique<unittest_internal::MockGpuMemoryBufferManager>();
+  }
+  std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBuffer(
+      const gfx::Size& size,
+      gfx::BufferFormat format) override {
+    return unittest_internal::MockGpuMemoryBufferManager::
+        CreateFakeGpuMemoryBuffer(size, format,
+                                  gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
+                                  gpu::kNullSurfaceHandle);
+  }
 
-  MOCK_METHOD1(ResolveStreamBufferFormat,
-               ChromiumPixelFormat(arc::mojom::HalPixelFormat hal_format));
+  ChromiumPixelFormat ResolveStreamBufferFormat(
+      cros::mojom::HalPixelFormat hal_format) override {
+    return ChromiumPixelFormat{PIXEL_FORMAT_NV12,
+                               gfx::BufferFormat::YUV_420_BIPLANAR};
+  }
+
+ private:
+  std::unique_ptr<unittest_internal::MockGpuMemoryBufferManager>
+      gpu_memory_buffer_manager_;
 };
-
-std::unique_ptr<gfx::GpuMemoryBuffer> CreateMockGpuMemoryBuffer(
-    const gfx::Size& size,
-    gfx::BufferFormat format) {
-  auto mock_buffer = std::make_unique<unittest_internal::MockGpuMemoryBuffer>();
-  gfx::GpuMemoryBufferHandle fake_handle;
-  fake_handle.native_pixmap_handle.fds.push_back(
-      base::FileDescriptor(0, false));
-  fake_handle.native_pixmap_handle.planes.push_back(
-      gfx::NativePixmapPlane(1280, 0, 1280 * 720));
-  fake_handle.native_pixmap_handle.planes.push_back(
-      gfx::NativePixmapPlane(1280, 0, 1280 * 720 / 2));
-  void* fake_mapped_address = reinterpret_cast<void*>(0xdeadbeef);
-
-  EXPECT_CALL(*mock_buffer, Map()).WillRepeatedly(Return(true));
-  EXPECT_CALL(*mock_buffer, memory(0))
-      .WillRepeatedly(Return(fake_mapped_address));
-  EXPECT_CALL(*mock_buffer, GetHandle()).WillRepeatedly(Return(fake_handle));
-  return mock_buffer;
-}
-
-std::unique_ptr<CameraBufferFactory> CreateMockCameraBufferFactory() {
-  auto buffer_factory = std::make_unique<MockCameraBufferFactory>();
-  EXPECT_CALL(*buffer_factory, CreateGpuMemoryBuffer(_, _))
-      .WillRepeatedly(Invoke(CreateMockGpuMemoryBuffer));
-  EXPECT_CALL(*buffer_factory, ResolveStreamBufferFormat(_))
-      .WillRepeatedly(Return(ChromiumPixelFormat{
-          PIXEL_FORMAT_NV12, gfx::BufferFormat::YUV_420_BIPLANAR}));
-  return buffer_factory;
-}
 
 }  // namespace
 
@@ -114,7 +101,7 @@ class StreamBufferManagerTest : public ::testing::Test {
  public:
   void SetUp() override {
     quit_ = false;
-    arc::mojom::Camera3CallbackOpsRequest callback_ops_request =
+    cros::mojom::Camera3CallbackOpsRequest callback_ops_request =
         mojo::MakeRequest(&mock_callback_ops_);
     device_context_ = std::make_unique<CameraDeviceContext>(
         std::make_unique<unittest_internal::MockVideoCaptureClient>());
@@ -122,7 +109,12 @@ class StreamBufferManagerTest : public ::testing::Test {
     stream_buffer_manager_ = std::make_unique<StreamBufferManager>(
         std::move(callback_ops_request),
         std::make_unique<MockStreamCaptureInterface>(), device_context_.get(),
-        CreateMockCameraBufferFactory(), base::ThreadTaskRunnerHandle::Get());
+        std::make_unique<FakeCameraBufferFactory>(),
+        base::BindRepeating(
+            [](const uint8_t* buffer, const uint32_t bytesused,
+               const VideoCaptureFormat& capture_format,
+               const int rotation) { return mojom::Blob::New(); }),
+        base::ThreadTaskRunnerHandle::Get());
   }
 
   void TearDown() override { stream_buffer_manager_.reset(); }
@@ -139,10 +131,43 @@ class StreamBufferManagerTest : public ::testing::Test {
     }
   }
 
+  cros::mojom::CameraMetadataPtr GetFakeStaticMetadata(
+      int32_t partial_result_count) {
+    cros::mojom::CameraMetadataPtr static_metadata =
+        cros::mojom::CameraMetadata::New();
+    static_metadata->entry_count = 2;
+    static_metadata->entry_capacity = 2;
+    static_metadata->entries =
+        std::vector<cros::mojom::CameraMetadataEntryPtr>();
+
+    cros::mojom::CameraMetadataEntryPtr entry =
+        cros::mojom::CameraMetadataEntry::New();
+    entry->index = 0;
+    entry->tag =
+        cros::mojom::CameraMetadataTag::ANDROID_REQUEST_PARTIAL_RESULT_COUNT;
+    entry->type = cros::mojom::EntryType::TYPE_INT32;
+    entry->count = 1;
+    uint8_t* as_int8 = reinterpret_cast<uint8_t*>(&partial_result_count);
+    entry->data.assign(as_int8, as_int8 + entry->count * sizeof(int32_t));
+    static_metadata->entries->push_back(std::move(entry));
+
+    entry = cros::mojom::CameraMetadataEntry::New();
+    entry->index = 1;
+    entry->tag = cros::mojom::CameraMetadataTag::ANDROID_JPEG_MAX_SIZE;
+    entry->type = cros::mojom::EntryType::TYPE_INT32;
+    entry->count = 1;
+    int32_t jpeg_max_size = 65535;
+    as_int8 = reinterpret_cast<uint8_t*>(&jpeg_max_size);
+    entry->data.assign(as_int8, as_int8 + entry->count * sizeof(int32_t));
+    static_metadata->entries->push_back(std::move(entry));
+
+    return static_metadata;
+  }
+
   void RegisterBuffer(uint64_t buffer_id,
-                      arc::mojom::Camera3DeviceOps::BufferType type,
+                      cros::mojom::Camera3DeviceOps::BufferType type,
                       uint32_t drm_format,
-                      arc::mojom::HalPixelFormat hal_pixel_format,
+                      cros::mojom::HalPixelFormat hal_pixel_format,
                       uint32_t width,
                       uint32_t height,
                       const std::vector<StreamCaptureInterface::Plane>& planes,
@@ -153,7 +178,7 @@ class StreamBufferManagerTest : public ::testing::Test {
     std::move(callback).Run(0);
   }
 
-  void ProcessCaptureRequest(arc::mojom::Camera3CaptureRequestPtr& request,
+  void ProcessCaptureRequest(cros::mojom::Camera3CaptureRequestPtr& request,
                              base::OnceCallback<void(int32_t)>& callback) {
     if (quit_) {
       return;
@@ -162,7 +187,7 @@ class StreamBufferManagerTest : public ::testing::Test {
     mock_callback_ops_->Notify(PrepareShutterNotifyMessage(
         request->frame_number, base::TimeTicks::Now().ToInternalValue()));
     mock_callback_ops_->ProcessCaptureResult(PrepareCapturedResult(
-        request->frame_number, arc::mojom::CameraMetadata::New(), 1,
+        request->frame_number, cros::mojom::CameraMetadata::New(), 1,
         std::move(request->output_buffers)));
   }
 
@@ -178,60 +203,82 @@ class StreamBufferManagerTest : public ::testing::Test {
         device_context_->client_.get());
   }
 
-  std::map<uint32_t, StreamBufferManager::CaptureResult>& GetPartialResults() {
+  std::map<uint32_t, StreamBufferManager::CaptureResult>& GetPendingResults() {
     EXPECT_NE(nullptr, stream_buffer_manager_.get());
-    return stream_buffer_manager_->partial_results_;
+    return stream_buffer_manager_->pending_results_;
   }
 
-  arc::mojom::Camera3StreamPtr PrepareCaptureStream(uint32_t max_buffers) {
-    auto stream = arc::mojom::Camera3Stream::New();
-    stream->id = 0;
-    stream->stream_type = arc::mojom::Camera3StreamType::CAMERA3_STREAM_OUTPUT;
-    stream->width = kDefaultCaptureFormat.frame_size.width();
-    stream->height = kDefaultCaptureFormat.frame_size.height();
-    stream->format = arc::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_YCbCr_420_888;
-    stream->usage = 0;
-    stream->max_buffers = max_buffers;
-    stream->data_space = 0;
-    stream->rotation =
-        arc::mojom::Camera3StreamRotation::CAMERA3_STREAM_ROTATION_0;
-    return stream;
+  std::vector<cros::mojom::Camera3StreamPtr> PrepareCaptureStream(
+      uint32_t max_buffers) {
+    std::vector<cros::mojom::Camera3StreamPtr> streams;
+
+    auto preview_stream = cros::mojom::Camera3Stream::New();
+    preview_stream->id = static_cast<uint64_t>(StreamType::kPreview);
+    preview_stream->stream_type =
+        cros::mojom::Camera3StreamType::CAMERA3_STREAM_OUTPUT;
+    preview_stream->width = kDefaultCaptureFormat.frame_size.width();
+    preview_stream->height = kDefaultCaptureFormat.frame_size.height();
+    preview_stream->format =
+        cros::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_YCbCr_420_888;
+    preview_stream->usage = 0;
+    preview_stream->max_buffers = max_buffers;
+    preview_stream->data_space = 0;
+    preview_stream->rotation =
+        cros::mojom::Camera3StreamRotation::CAMERA3_STREAM_ROTATION_0;
+    streams.push_back(std::move(preview_stream));
+
+    auto still_capture_stream = cros::mojom::Camera3Stream::New();
+    still_capture_stream->id = static_cast<uint64_t>(StreamType::kStillCapture);
+    still_capture_stream->stream_type =
+        cros::mojom::Camera3StreamType::CAMERA3_STREAM_OUTPUT;
+    still_capture_stream->width = kDefaultCaptureFormat.frame_size.width();
+    still_capture_stream->height = kDefaultCaptureFormat.frame_size.height();
+    still_capture_stream->format =
+        cros::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_BLOB;
+    still_capture_stream->usage = 0;
+    still_capture_stream->max_buffers = max_buffers;
+    still_capture_stream->data_space = 0;
+    still_capture_stream->rotation =
+        cros::mojom::Camera3StreamRotation::CAMERA3_STREAM_ROTATION_0;
+    streams.push_back(std::move(still_capture_stream));
+
+    return streams;
   }
 
-  arc::mojom::Camera3NotifyMsgPtr PrepareErrorNotifyMessage(
+  cros::mojom::Camera3NotifyMsgPtr PrepareErrorNotifyMessage(
       uint32_t frame_number,
-      arc::mojom::Camera3ErrorMsgCode error_code) {
-    auto error_msg = arc::mojom::Camera3ErrorMsg::New();
+      cros::mojom::Camera3ErrorMsgCode error_code) {
+    auto error_msg = cros::mojom::Camera3ErrorMsg::New();
     error_msg->frame_number = frame_number;
     // There is only the preview stream.
-    error_msg->error_stream_id = 1;
+    error_msg->error_stream_id = static_cast<uint64_t>(StreamType::kPreview);
     error_msg->error_code = error_code;
-    auto notify_msg = arc::mojom::Camera3NotifyMsg::New();
-    notify_msg->message = arc::mojom::Camera3NotifyMsgMessage::New();
-    notify_msg->type = arc::mojom::Camera3MsgType::CAMERA3_MSG_ERROR;
+    auto notify_msg = cros::mojom::Camera3NotifyMsg::New();
+    notify_msg->message = cros::mojom::Camera3NotifyMsgMessage::New();
+    notify_msg->type = cros::mojom::Camera3MsgType::CAMERA3_MSG_ERROR;
     notify_msg->message->set_error(std::move(error_msg));
     return notify_msg;
   }
 
-  arc::mojom::Camera3NotifyMsgPtr PrepareShutterNotifyMessage(
+  cros::mojom::Camera3NotifyMsgPtr PrepareShutterNotifyMessage(
       uint32_t frame_number,
       uint64_t timestamp) {
-    auto shutter_msg = arc::mojom::Camera3ShutterMsg::New();
+    auto shutter_msg = cros::mojom::Camera3ShutterMsg::New();
     shutter_msg->frame_number = frame_number;
     shutter_msg->timestamp = timestamp;
-    auto notify_msg = arc::mojom::Camera3NotifyMsg::New();
-    notify_msg->message = arc::mojom::Camera3NotifyMsgMessage::New();
-    notify_msg->type = arc::mojom::Camera3MsgType::CAMERA3_MSG_SHUTTER;
+    auto notify_msg = cros::mojom::Camera3NotifyMsg::New();
+    notify_msg->message = cros::mojom::Camera3NotifyMsgMessage::New();
+    notify_msg->type = cros::mojom::Camera3MsgType::CAMERA3_MSG_SHUTTER;
     notify_msg->message->set_shutter(std::move(shutter_msg));
     return notify_msg;
   }
 
-  arc::mojom::Camera3CaptureResultPtr PrepareCapturedResult(
+  cros::mojom::Camera3CaptureResultPtr PrepareCapturedResult(
       uint32_t frame_number,
-      arc::mojom::CameraMetadataPtr result_metadata,
+      cros::mojom::CameraMetadataPtr result_metadata,
       uint32_t partial_result,
-      std::vector<arc::mojom::Camera3StreamBufferPtr> output_buffers) {
-    auto result = arc::mojom::Camera3CaptureResult::New();
+      std::vector<cros::mojom::Camera3StreamBufferPtr> output_buffers) {
+    auto result = cros::mojom::Camera3CaptureResult::New();
     result->frame_number = frame_number;
     result->result = std::move(result_metadata);
     if (output_buffers.size()) {
@@ -243,9 +290,9 @@ class StreamBufferManagerTest : public ::testing::Test {
 
  protected:
   std::unique_ptr<StreamBufferManager> stream_buffer_manager_;
-  arc::mojom::Camera3CallbackOpsPtr mock_callback_ops_;
+  cros::mojom::Camera3CallbackOpsPtr mock_callback_ops_;
   std::unique_ptr<CameraDeviceContext> device_context_;
-  arc::mojom::Camera3StreamPtr stream;
+  cros::mojom::Camera3StreamPtr stream;
 
  private:
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -259,18 +306,20 @@ TEST_F(StreamBufferManagerTest, SimpleCaptureTest) {
       &StreamBufferManagerTest::QuitCaptureLoop, base::Unretained(this)));
   EXPECT_CALL(
       *GetMockCaptureInterface(),
-      DoRegisterBuffer(0, arc::mojom::Camera3DeviceOps::BufferType::GRALLOC, _,
-                       _, _, _, _, _))
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kPreview, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
       .Times(AtLeast(1))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
   EXPECT_CALL(*GetMockCaptureInterface(), DoProcessCaptureRequest(_, _))
       .Times(1)
       .WillOnce(Invoke(this, &StreamBufferManagerTest::ProcessCaptureRequest));
 
-  stream_buffer_manager_->SetUpStreamAndBuffers(
-      kDefaultCaptureFormat, /* partial_result_count */ 1,
+  stream_buffer_manager_->SetUpStreamsAndBuffers(
+      kDefaultCaptureFormat,
+      GetFakeStaticMetadata(/* partial_result_count */ 1),
       PrepareCaptureStream(/* max_buffers */ 1));
-  stream_buffer_manager_->StartCapture(arc::mojom::CameraMetadata::New());
+  stream_buffer_manager_->StartPreview(cros::mojom::CameraMetadata::New());
 
   // Wait until a captured frame is received by MockVideoCaptureClient.
   DoLoop();
@@ -281,44 +330,44 @@ TEST_F(StreamBufferManagerTest, SimpleCaptureTest) {
 TEST_F(StreamBufferManagerTest, PartialResultTest) {
   GetMockVideoCaptureClient()->SetFrameCb(base::BindOnce(
       [](StreamBufferManagerTest* test) {
-        EXPECT_EQ(1u, test->GetPartialResults().size());
+        EXPECT_EQ(1u, test->GetPendingResults().size());
         // Make sure all the three partial metadata are received before the
         // captured result is submitted.
         EXPECT_EQ(
-            3u, test->GetPartialResults()[0].partial_metadata_received.size());
+            3u, test->GetPendingResults()[0].partial_metadata_received.size());
         test->QuitCaptureLoop();
       },
       base::Unretained(this)));
   EXPECT_CALL(
       *GetMockCaptureInterface(),
-      DoRegisterBuffer(0, arc::mojom::Camera3DeviceOps::BufferType::GRALLOC, _,
-                       _, _, _, _, _))
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kPreview, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
       .Times(AtLeast(1))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
   EXPECT_CALL(*GetMockCaptureInterface(), DoProcessCaptureRequest(_, _))
       .Times(1)
-      .WillOnce(Invoke([this](arc::mojom::Camera3CaptureRequestPtr& request,
+      .WillOnce(Invoke([this](cros::mojom::Camera3CaptureRequestPtr& request,
                               base::OnceCallback<void(int32_t)>& callback) {
         std::move(callback).Run(0);
         mock_callback_ops_->Notify(PrepareShutterNotifyMessage(
             request->frame_number, base::TimeTicks::Now().ToInternalValue()));
         mock_callback_ops_->ProcessCaptureResult(PrepareCapturedResult(
-            request->frame_number, arc::mojom::CameraMetadata::New(), 1,
+            request->frame_number, cros::mojom::CameraMetadata::New(), 1,
             std::move(request->output_buffers)));
-
         mock_callback_ops_->ProcessCaptureResult(PrepareCapturedResult(
-            request->frame_number, arc::mojom::CameraMetadata::New(), 2,
-            std::vector<arc::mojom::Camera3StreamBufferPtr>()));
-
+            request->frame_number, cros::mojom::CameraMetadata::New(), 2,
+            std::vector<cros::mojom::Camera3StreamBufferPtr>()));
         mock_callback_ops_->ProcessCaptureResult(PrepareCapturedResult(
-            request->frame_number, arc::mojom::CameraMetadata::New(), 3,
-            std::vector<arc::mojom::Camera3StreamBufferPtr>()));
+            request->frame_number, cros::mojom::CameraMetadata::New(), 3,
+            std::vector<cros::mojom::Camera3StreamBufferPtr>()));
       }));
 
-  stream_buffer_manager_->SetUpStreamAndBuffers(
-      kDefaultCaptureFormat, /* partial_result_count */ 3,
+  stream_buffer_manager_->SetUpStreamsAndBuffers(
+      kDefaultCaptureFormat,
+      GetFakeStaticMetadata(/* partial_result_count */ 3),
       PrepareCaptureStream(/* max_buffers */ 1));
-  stream_buffer_manager_->StartCapture(arc::mojom::CameraMetadata::New());
+  stream_buffer_manager_->StartPreview(cros::mojom::CameraMetadata::New());
 
   // Wait until a captured frame is received by MockVideoCaptureClient.
   DoLoop();
@@ -339,24 +388,26 @@ TEST_F(StreamBufferManagerTest, DeviceErrorTest) {
           InvokeWithoutArgs(this, &StreamBufferManagerTest::QuitCaptureLoop));
   EXPECT_CALL(
       *GetMockCaptureInterface(),
-      DoRegisterBuffer(0, arc::mojom::Camera3DeviceOps::BufferType::GRALLOC, _,
-                       _, _, _, _, _))
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kPreview, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
       .Times(1)
       .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
   EXPECT_CALL(*GetMockCaptureInterface(), DoProcessCaptureRequest(_, _))
       .Times(1)
-      .WillOnce(Invoke([this](arc::mojom::Camera3CaptureRequestPtr& request,
+      .WillOnce(Invoke([this](cros::mojom::Camera3CaptureRequestPtr& request,
                               base::OnceCallback<void(int32_t)>& callback) {
         std::move(callback).Run(0);
         mock_callback_ops_->Notify(PrepareErrorNotifyMessage(
             request->frame_number,
-            arc::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_DEVICE));
+            cros::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_DEVICE));
       }));
 
-  stream_buffer_manager_->SetUpStreamAndBuffers(
-      kDefaultCaptureFormat, /* partial_result_count */ 1,
+  stream_buffer_manager_->SetUpStreamsAndBuffers(
+      kDefaultCaptureFormat,
+      GetFakeStaticMetadata(/* partial_result_count */ 1),
       PrepareCaptureStream(/* max_buffers */ 1));
-  stream_buffer_manager_->StartCapture(arc::mojom::CameraMetadata::New());
+  stream_buffer_manager_->StartPreview(cros::mojom::CameraMetadata::New());
 
   // Wait until the MockVideoCaptureClient is deleted.
   DoLoop();
@@ -369,40 +420,42 @@ TEST_F(StreamBufferManagerTest, RequestErrorTest) {
       [](StreamBufferManagerTest* test) {
         // Frame 0 should be dropped, and the frame callback should be called
         // with frame 1.
-        EXPECT_EQ(test->GetPartialResults().end(),
-                  test->GetPartialResults().find(0));
-        EXPECT_NE(test->GetPartialResults().end(),
-                  test->GetPartialResults().find(1));
+        EXPECT_EQ(test->GetPendingResults().end(),
+                  test->GetPendingResults().find(0));
+        EXPECT_NE(test->GetPendingResults().end(),
+                  test->GetPendingResults().find(1));
         test->QuitCaptureLoop();
       },
       base::Unretained(this)));
   EXPECT_CALL(
       *GetMockCaptureInterface(),
-      DoRegisterBuffer(0, arc::mojom::Camera3DeviceOps::BufferType::GRALLOC, _,
-                       _, _, _, _, _))
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kPreview, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
       .Times(AtLeast(2))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
   EXPECT_CALL(*GetMockCaptureInterface(), DoProcessCaptureRequest(_, _))
       .Times(2)
-      .WillOnce(Invoke([this](arc::mojom::Camera3CaptureRequestPtr& request,
+      .WillOnce(Invoke([this](cros::mojom::Camera3CaptureRequestPtr& request,
                               base::OnceCallback<void(int32_t)>& callback) {
         std::move(callback).Run(0);
         mock_callback_ops_->Notify(PrepareErrorNotifyMessage(
             request->frame_number,
-            arc::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_REQUEST));
+            cros::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_REQUEST));
         request->output_buffers[0]->status =
-            arc::mojom::Camera3BufferStatus::CAMERA3_BUFFER_STATUS_ERROR;
+            cros::mojom::Camera3BufferStatus::CAMERA3_BUFFER_STATUS_ERROR;
         mock_callback_ops_->ProcessCaptureResult(PrepareCapturedResult(
-            request->frame_number, arc::mojom::CameraMetadata::New(), 1,
+            request->frame_number, cros::mojom::CameraMetadata::New(), 1,
             std::move(request->output_buffers)));
       }))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::ProcessCaptureRequest));
 
-  stream_buffer_manager_->SetUpStreamAndBuffers(
-      kDefaultCaptureFormat, /* partial_result_count */ 1,
+  stream_buffer_manager_->SetUpStreamsAndBuffers(
+      kDefaultCaptureFormat,
+      GetFakeStaticMetadata(/* partial_result_count */ 1),
       PrepareCaptureStream(/* max_buffers */ 1));
-  stream_buffer_manager_->StartCapture(arc::mojom::CameraMetadata::New());
+  stream_buffer_manager_->StartPreview(cros::mojom::CameraMetadata::New());
 
   // Wait until the MockVideoCaptureClient is deleted.
   DoLoop();
@@ -414,40 +467,42 @@ TEST_F(StreamBufferManagerTest, ResultErrorTest) {
   GetMockVideoCaptureClient()->SetFrameCb(base::BindOnce(
       [](StreamBufferManagerTest* test) {
         // Frame 0 should be submitted.
-        EXPECT_NE(test->GetPartialResults().end(),
-                  test->GetPartialResults().find(0));
+        EXPECT_NE(test->GetPendingResults().end(),
+                  test->GetPendingResults().find(0));
         test->QuitCaptureLoop();
       },
       base::Unretained(this)));
   EXPECT_CALL(
       *GetMockCaptureInterface(),
-      DoRegisterBuffer(0, arc::mojom::Camera3DeviceOps::BufferType::GRALLOC, _,
-                       _, _, _, _, _))
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kPreview, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
       .Times(AtLeast(1))
-      .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
+      .WillRepeatedly(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
   EXPECT_CALL(*GetMockCaptureInterface(), DoProcessCaptureRequest(_, _))
-      .Times(1)
-      .WillOnce(Invoke([this](arc::mojom::Camera3CaptureRequestPtr& request,
+      .Times(AtLeast(1))
+      .WillOnce(Invoke([this](cros::mojom::Camera3CaptureRequestPtr& request,
                               base::OnceCallback<void(int32_t)>& callback) {
         std::move(callback).Run(0);
         mock_callback_ops_->Notify(PrepareShutterNotifyMessage(
             request->frame_number, base::TimeTicks::Now().ToInternalValue()));
         mock_callback_ops_->ProcessCaptureResult(PrepareCapturedResult(
-            request->frame_number, arc::mojom::CameraMetadata::New(), 1,
+            request->frame_number, cros::mojom::CameraMetadata::New(), 1,
             std::move(request->output_buffers)));
         // Send a result error notify without sending the second partial result.
         // StreamBufferManager should submit the buffer when it receives the
         // result error.
         mock_callback_ops_->Notify(PrepareErrorNotifyMessage(
             request->frame_number,
-            arc::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_RESULT));
+            cros::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_RESULT));
       }))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::ProcessCaptureRequest));
 
-  stream_buffer_manager_->SetUpStreamAndBuffers(
-      kDefaultCaptureFormat, /* partial_result_count */ 2,
+  stream_buffer_manager_->SetUpStreamsAndBuffers(
+      kDefaultCaptureFormat,
+      GetFakeStaticMetadata(/* partial_result_count */ 2),
       PrepareCaptureStream(/* max_buffers */ 1));
-  stream_buffer_manager_->StartCapture(arc::mojom::CameraMetadata::New());
+  stream_buffer_manager_->StartPreview(cros::mojom::CameraMetadata::New());
 
   // Wait until the MockVideoCaptureClient is deleted.
   DoLoop();
@@ -460,44 +515,82 @@ TEST_F(StreamBufferManagerTest, BufferErrorTest) {
       [](StreamBufferManagerTest* test) {
         // Frame 0 should be dropped, and the frame callback should be called
         // with frame 1.
-        EXPECT_EQ(test->GetPartialResults().end(),
-                  test->GetPartialResults().find(0));
-        EXPECT_NE(test->GetPartialResults().end(),
-                  test->GetPartialResults().find(1));
+        EXPECT_EQ(test->GetPendingResults().end(),
+                  test->GetPendingResults().find(0));
+        EXPECT_NE(test->GetPendingResults().end(),
+                  test->GetPendingResults().find(1));
         test->QuitCaptureLoop();
       },
       base::Unretained(this)));
   EXPECT_CALL(
       *GetMockCaptureInterface(),
-      DoRegisterBuffer(0, arc::mojom::Camera3DeviceOps::BufferType::GRALLOC, _,
-                       _, _, _, _, _))
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kPreview, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
       .Times(AtLeast(2))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
   EXPECT_CALL(*GetMockCaptureInterface(), DoProcessCaptureRequest(_, _))
       .Times(2)
-      .WillOnce(Invoke([this](arc::mojom::Camera3CaptureRequestPtr& request,
+      .WillOnce(Invoke([this](cros::mojom::Camera3CaptureRequestPtr& request,
                               base::OnceCallback<void(int32_t)>& callback) {
         std::move(callback).Run(0);
         mock_callback_ops_->Notify(PrepareShutterNotifyMessage(
             request->frame_number, base::TimeTicks::Now().ToInternalValue()));
         mock_callback_ops_->Notify(PrepareErrorNotifyMessage(
             request->frame_number,
-            arc::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_BUFFER));
+            cros::mojom::Camera3ErrorMsgCode::CAMERA3_MSG_ERROR_BUFFER));
         request->output_buffers[0]->status =
-            arc::mojom::Camera3BufferStatus::CAMERA3_BUFFER_STATUS_ERROR;
+            cros::mojom::Camera3BufferStatus::CAMERA3_BUFFER_STATUS_ERROR;
         mock_callback_ops_->ProcessCaptureResult(PrepareCapturedResult(
-            request->frame_number, arc::mojom::CameraMetadata::New(), 1,
+            request->frame_number, cros::mojom::CameraMetadata::New(), 1,
             std::move(request->output_buffers)));
       }))
       .WillOnce(Invoke(this, &StreamBufferManagerTest::ProcessCaptureRequest));
 
-  stream_buffer_manager_->SetUpStreamAndBuffers(
-      kDefaultCaptureFormat, /* partial_result_count */ 1,
+  stream_buffer_manager_->SetUpStreamsAndBuffers(
+      kDefaultCaptureFormat,
+      GetFakeStaticMetadata(/* partial_result_count */ 1),
       PrepareCaptureStream(/* max_buffers */ 1));
-  stream_buffer_manager_->StartCapture(arc::mojom::CameraMetadata::New());
+  stream_buffer_manager_->StartPreview(cros::mojom::CameraMetadata::New());
 
   // Wait until the MockVideoCaptureClient is deleted.
+  DoLoop();
+}
+
+// Test that preview and still capture buffers can be correctly submitted.
+TEST_F(StreamBufferManagerTest, TakePhotoTest) {
+  EXPECT_CALL(
+      *GetMockCaptureInterface(),
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kPreview, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
+      .Times(AtLeast(1))
+      .WillRepeatedly(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
+  EXPECT_CALL(
+      *GetMockCaptureInterface(),
+      DoRegisterBuffer(
+          StreamBufferManager::GetBufferIpcId(StreamType::kStillCapture, 0),
+          cros::mojom::Camera3DeviceOps::BufferType::GRALLOC, _, _, _, _, _, _))
+      .Times(1)
+      .WillOnce(Invoke(this, &StreamBufferManagerTest::RegisterBuffer));
+  EXPECT_CALL(*GetMockCaptureInterface(), DoProcessCaptureRequest(_, _))
+      .Times(AtLeast(1))
+      .WillRepeatedly(
+          Invoke(this, &StreamBufferManagerTest::ProcessCaptureRequest));
+
+  stream_buffer_manager_->SetUpStreamsAndBuffers(
+      kDefaultCaptureFormat,
+      GetFakeStaticMetadata(/* partial_result_count */ 1),
+      PrepareCaptureStream(/* max_buffers */ 1));
+  stream_buffer_manager_->StartPreview(cros::mojom::CameraMetadata::New());
+  stream_buffer_manager_->TakePhoto(
+      GetFakeStaticMetadata(/* partial_result_count */ 1),
+      base::BindOnce([](StreamBufferManagerTest* test,
+                        mojom::BlobPtr blob) { test->QuitCaptureLoop(); },
+                     base::Unretained(this)));
+
+  // Wait until a captured frame is received by MockVideoCaptureClient.
   DoLoop();
 }
 

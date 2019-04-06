@@ -14,7 +14,6 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 #include "chrome/browser/media_galleries/gallery_watch_manager.h"
@@ -168,7 +167,7 @@ void RPHReferenceManager::ReferenceFromWebContents(
     content::WebContents* contents) {
   RenderProcessHost* rph = contents->GetMainFrame()->GetProcess();
   if (!base::ContainsKey(observer_map_, rph)) {
-    observer_map_[rph] = base::MakeUnique<RPHObserver>(this, rph);
+    observer_map_[rph] = std::make_unique<RPHObserver>(this, rph);
   }
   observer_map_[rph]->AddWebContentsObserver(contents);
 }
@@ -211,7 +210,7 @@ void RPHReferenceManager::RPHObserver::AddWebContentsObserver(
     return;
 
   observed_web_contentses_[web_contents] =
-      base::MakeUnique<RPHWebContentsObserver>(manager_, web_contents);
+      std::make_unique<RPHWebContentsObserver>(manager_, web_contents);
 }
 
 void RPHReferenceManager::RPHObserver::RemoveWebContentsObserver(

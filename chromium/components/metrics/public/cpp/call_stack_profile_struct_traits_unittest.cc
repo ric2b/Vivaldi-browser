@@ -151,20 +151,20 @@ TEST_F(CallStackProfileStructTraitsTest, Frame) {
   using Frame = base::StackSamplingProfiler::Frame;
 
   const Frame serialize_cases[] = {
-    // Null instruction pointer.
-    Frame(0x0, 10),
-    // Non-null instruction pointer.
-    Frame(0x10, 10),
-    // Instruction pointer with a bit set beyond 32 bits, when built for x64.
-    Frame(1ULL << (sizeof(uintptr_t) * 8) * 3 / 4, 10),
-    // Zero module index.
-    Frame(0xabcd, 0),
-    // Non-zero module index.
-    Frame(0xabcd, 1),
-    // Non-zero module index.
-    Frame(0xabcd, 10),
-    // Unknown module index.
-    Frame(0xabcd, Frame::kUnknownModuleIndex),
+      // Null instruction pointer.
+      Frame(0x0, 10),
+      // Non-null instruction pointer.
+      Frame(0x10, 10),
+      // Instruction pointer with a bit set beyond 32 bits, when built for x64.
+      Frame(1ULL << (sizeof(uintptr_t) * 8) * 3 / 4, 10),
+      // Zero module index.
+      Frame(0xabcd, 0),
+      // Non-zero module index.
+      Frame(0xabcd, 1),
+      // Non-zero module index.
+      Frame(0xabcd, 10),
+      // Unknown module index.
+      Frame(0xabcd, base::kUnknownModuleIndex),
   };
 
   for (const Frame& input : serialize_cases) {
@@ -179,10 +179,11 @@ TEST_F(CallStackProfileStructTraitsTest, Frame) {
 // Checks serialization/deserialization of Profile fields, including validation
 // of the Frame module_index field.
 TEST_F(CallStackProfileStructTraitsTest, Profile) {
-  using Module = base::StackSamplingProfiler::Module;
-  using Frame = base::StackSamplingProfiler::Frame;
-  using Sample = base::StackSamplingProfiler::Sample;
-  using Profile = base::StackSamplingProfiler::CallStackProfile;
+  using base::StackSamplingProfiler;
+  using Module = StackSamplingProfiler::Module;
+  using Frame = StackSamplingProfiler::Frame;
+  using Sample = StackSamplingProfiler::Sample;
+  using Profile = StackSamplingProfiler::CallStackProfile;
 
   struct SerializeCase {
     Profile profile;
@@ -190,60 +191,49 @@ TEST_F(CallStackProfileStructTraitsTest, Profile) {
   };
 
   const SerializeCase serialize_cases[] = {
-    // Empty modules and samples.
-    {
-      CreateProfile(std::vector<Module>(), std::vector<Sample>(),
-                    base::TimeDelta::FromSeconds(1),
-                    base::TimeDelta::FromSeconds(2)),
-      true
-    },
-    // Non-empty modules and empty samples.
-    {
-      CreateProfile({ Module(0x4000, "a", base::FilePath()) },
-                    std::vector<Sample>(),
-                    base::TimeDelta::FromSeconds(1),
-                    base::TimeDelta::FromSeconds(2)),
-      true
-    },
-    // Valid values for modules and samples.
-    {
-      CreateProfile({
-                      Module(0x4000, "a", base::FilePath()),
-                      Module(0x4100, "b", base::FilePath()),
-                    },
-                    {
-                      Sample({
-                          Frame(0x4010, 0),
-                          Frame(0x4110, 1),
-                          Frame(0x4110, Frame::kUnknownModuleIndex),
-                      }),
-                    },
-                    base::TimeDelta::FromSeconds(1),
-                    base::TimeDelta::FromSeconds(2)),
-      true
-    },
-    // Valid values for modules, but an out of range module index in the second
-    // sample.
-    {
-      CreateProfile({
-                      Module(0x4000, "a", base::FilePath()),
-                      Module(0x4100, "b", base::FilePath()),
-                    },
-                    {
-                      Sample({
-                          Frame(0x4010, 0),
-                          Frame(0x4110, 1),
-                          Frame(0x4110, Frame::kUnknownModuleIndex),
-                      }),
-                      Sample({
-                          Frame(0x4010, 0),
-                          Frame(0x4110, 2),
-                      }),
-                    },
-                    base::TimeDelta::FromSeconds(1),
-                    base::TimeDelta::FromSeconds(2)),
-      false
-    },
+      // Empty modules and samples.
+      {CreateProfile(std::vector<Module>(), std::vector<Sample>(),
+                     base::TimeDelta::FromSeconds(1),
+                     base::TimeDelta::FromSeconds(2)),
+       true},
+      // Non-empty modules and empty samples.
+      {CreateProfile({Module(0x4000, "a", base::FilePath())},
+                     std::vector<Sample>(), base::TimeDelta::FromSeconds(1),
+                     base::TimeDelta::FromSeconds(2)),
+       true},
+      // Valid values for modules and samples.
+      {CreateProfile(
+           {
+               Module(0x4000, "a", base::FilePath()),
+               Module(0x4100, "b", base::FilePath()),
+           },
+           {
+               Sample({
+                   Frame(0x4010, 0), Frame(0x4110, 1),
+                   Frame(0x4110, base::kUnknownModuleIndex),
+               }),
+           },
+           base::TimeDelta::FromSeconds(1), base::TimeDelta::FromSeconds(2)),
+       true},
+      // Valid values for modules, but an out of range module index in the
+      // second
+      // sample.
+      {CreateProfile(
+           {
+               Module(0x4000, "a", base::FilePath()),
+               Module(0x4100, "b", base::FilePath()),
+           },
+           {
+               Sample({
+                   Frame(0x4010, 0), Frame(0x4110, 1),
+                   Frame(0x4110, base::kUnknownModuleIndex),
+               }),
+               Sample({
+                   Frame(0x4010, 0), Frame(0x4110, 2),
+               }),
+           },
+           base::TimeDelta::FromSeconds(1), base::TimeDelta::FromSeconds(2)),
+       false},
   };
 
   for (const SerializeCase& input : serialize_cases) {
@@ -303,35 +293,14 @@ TEST_F(CallStackProfileStructTraitsTest, Thread) {
 
   Thread out;
 
-  EXPECT_TRUE(proxy_->BounceThread(Thread::UI_THREAD, &out));
-  EXPECT_EQ(Thread::UI_THREAD, out);
-
-  EXPECT_TRUE(proxy_->BounceThread(Thread::FILE_THREAD, &out));
-  EXPECT_EQ(Thread::FILE_THREAD, out);
-
-  EXPECT_TRUE(proxy_->BounceThread(Thread::FILE_USER_BLOCKING_THREAD, &out));
-  EXPECT_EQ(Thread::FILE_USER_BLOCKING_THREAD, out);
-
-  EXPECT_TRUE(proxy_->BounceThread(Thread::PROCESS_LAUNCHER_THREAD, &out));
-  EXPECT_EQ(Thread::PROCESS_LAUNCHER_THREAD, out);
-
-  EXPECT_TRUE(proxy_->BounceThread(Thread::CACHE_THREAD, &out));
-  EXPECT_EQ(Thread::CACHE_THREAD, out);
+  EXPECT_TRUE(proxy_->BounceThread(Thread::MAIN_THREAD, &out));
+  EXPECT_EQ(Thread::MAIN_THREAD, out);
 
   EXPECT_TRUE(proxy_->BounceThread(Thread::IO_THREAD, &out));
   EXPECT_EQ(Thread::IO_THREAD, out);
 
-  EXPECT_TRUE(proxy_->BounceThread(Thread::DB_THREAD, &out));
-  EXPECT_EQ(Thread::DB_THREAD, out);
-
-  EXPECT_TRUE(proxy_->BounceThread(Thread::GPU_MAIN_THREAD, &out));
-  EXPECT_EQ(Thread::GPU_MAIN_THREAD, out);
-
-  EXPECT_TRUE(proxy_->BounceThread(Thread::RENDER_THREAD, &out));
-  EXPECT_EQ(Thread::RENDER_THREAD, out);
-
-  EXPECT_TRUE(proxy_->BounceThread(Thread::UTILITY_THREAD, &out));
-  EXPECT_EQ(Thread::UTILITY_THREAD, out);
+  EXPECT_TRUE(proxy_->BounceThread(Thread::COMPOSITOR_THREAD, &out));
+  EXPECT_EQ(Thread::COMPOSITOR_THREAD, out);
 }
 
 // Checks serialization/deserialization of the trigger, including validation.
@@ -376,13 +345,13 @@ TEST_F(CallStackProfileStructTraitsTest, CallStackProfileParams) {
 
   EXPECT_TRUE(proxy_->BounceCallStackProfileParams(
       CallStackProfileParams(CallStackProfileParams::BROWSER_PROCESS,
-                             CallStackProfileParams::UI_THREAD,
+                             CallStackProfileParams::MAIN_THREAD,
                              CallStackProfileParams::PROCESS_STARTUP,
                              CallStackProfileParams::PRESERVE_ORDER),
       &out));
 
   EXPECT_EQ(CallStackProfileParams::BROWSER_PROCESS, out.process);
-  EXPECT_EQ(CallStackProfileParams::UI_THREAD, out.thread);
+  EXPECT_EQ(CallStackProfileParams::MAIN_THREAD, out.thread);
   EXPECT_EQ(CallStackProfileParams::PROCESS_STARTUP, out.trigger);
   EXPECT_EQ(CallStackProfileParams::PRESERVE_ORDER, out.ordering_spec);
 }

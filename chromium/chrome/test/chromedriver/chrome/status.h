@@ -29,7 +29,7 @@ enum StatusCode {
   kNoSuchWindow = 23,
   kInvalidCookieDomain = 24,
   kUnexpectedAlertOpen = 26,
-  kNoAlertOpen = 27,
+  kNoSuchAlert = 27,
   kScriptTimeout = 28,
   kInvalidSelector = 32,
   kSessionNotCreatedException = 33,
@@ -40,6 +40,7 @@ enum StatusCode {
   kForbidden = 103,
   kTabCrashed,
   kNoSuchCookie,
+  kTargetDetached,
 };
 
 // Represents a WebDriver status, which may be an error or ok.

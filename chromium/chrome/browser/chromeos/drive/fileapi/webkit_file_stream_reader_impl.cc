@@ -36,8 +36,7 @@ WebkitFileStreamReaderImpl::WebkitFileStreamReaderImpl(
   DCHECK_GE(offset, 0);
 }
 
-WebkitFileStreamReaderImpl::~WebkitFileStreamReaderImpl() {
-}
+WebkitFileStreamReaderImpl::~WebkitFileStreamReaderImpl() = default;
 
 int WebkitFileStreamReaderImpl::Read(net::IOBuffer* buffer,
                                      int buffer_length,
@@ -45,7 +44,7 @@ int WebkitFileStreamReaderImpl::Read(net::IOBuffer* buffer,
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(stream_reader_);
   DCHECK(buffer);
-  DCHECK(!callback.is_null());
+  DCHECK(callback);
 
   if (stream_reader_->IsInitialized())
     return stream_reader_->Read(buffer, buffer_length, callback);
@@ -68,7 +67,7 @@ int64_t WebkitFileStreamReaderImpl::GetLength(
     const net::Int64CompletionCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(stream_reader_);
-  DCHECK(!callback.is_null());
+  DCHECK(callback);
 
   if (stream_reader_->IsInitialized()) {
     // Returns file_size regardless of |offset_|.
@@ -95,7 +94,7 @@ void WebkitFileStreamReaderImpl::OnStreamReaderInitialized(
     std::unique_ptr<ResourceEntry> entry) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(stream_reader_);
-  DCHECK(!callback.is_null());
+  DCHECK(callback);
 
   // TODO(hashimoto): Report ERR_UPLOAD_FILE_CHANGED when modification time
   // doesn't match. crbug.com/346625
@@ -117,7 +116,7 @@ void WebkitFileStreamReaderImpl::ReadAfterStreamReaderInitialized(
     const net::CompletionCallback& callback,
     int initialization_result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(!callback.is_null());
+  DCHECK(callback);
 
   if (initialization_result != net::OK) {
     callback.Run(initialization_result);
@@ -134,7 +133,7 @@ void WebkitFileStreamReaderImpl::GetLengthAfterStreamReaderInitialized(
     const net::Int64CompletionCallback& callback,
     int initialization_result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(!callback.is_null());
+  DCHECK(callback);
 
   if (initialization_result != net::OK) {
     callback.Run(initialization_result);

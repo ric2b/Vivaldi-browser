@@ -15,10 +15,10 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
-#include "content/browser/accessibility/accessibility_flags.h"
+#include "content/browser/accessibility/accessibility_buildflags.h"
 #include "content/browser/accessibility/browser_accessibility_position.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/web/WebAXEnums.h"
+#include "third_party/blink/public/web/web_ax_enums.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_range.h"
@@ -73,7 +73,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // caller.
   static BrowserAccessibility* Create();
 
-  virtual ~BrowserAccessibility();
+  ~BrowserAccessibility() override;
 
   // Called only once, immediately after construction. The constructor doesn't
   // take any arguments because in the Windows subclass we use a special
@@ -116,11 +116,11 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   // Returns the number of children of this object, or 0 if PlatformIsLeaf()
   // returns true.
-  uint32_t PlatformChildCount() const;
+  virtual uint32_t PlatformChildCount() const;
 
   // Return a pointer to the child at the given index, or NULL for an
   // invalid index. Returns NULL if PlatformIsLeaf() returns true.
-  BrowserAccessibility* PlatformGetChild(uint32_t child_index) const;
+  virtual BrowserAccessibility* PlatformGetChild(uint32_t child_index) const;
 
   // Returns true if an ancestor of this node (not including itself) is a
   // leaf node, meaning that this node is not actually exposed to the
@@ -224,7 +224,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   int32_t GetId() const;
   gfx::RectF GetLocation() const;
-  ui::AXRole GetRole() const;
+  ax::mojom::Role GetRole() const;
   int32_t GetState() const;
 
   typedef base::StringPairs HtmlAttributes;
@@ -250,44 +250,39 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // attribute is not present. In addition, strings can be returned as
   // either std::string or base::string16, for convenience.
 
-  bool HasBoolAttribute(ui::AXBoolAttribute attr) const;
-  bool GetBoolAttribute(ui::AXBoolAttribute attr) const;
-  bool GetBoolAttribute(ui::AXBoolAttribute attr, bool* value) const;
+  bool HasBoolAttribute(ax::mojom::BoolAttribute attr) const;
+  bool GetBoolAttribute(ax::mojom::BoolAttribute attr) const;
+  bool GetBoolAttribute(ax::mojom::BoolAttribute attr, bool* value) const;
 
-  bool HasFloatAttribute(ui::AXFloatAttribute attr) const;
-  float GetFloatAttribute(ui::AXFloatAttribute attr) const;
-  bool GetFloatAttribute(ui::AXFloatAttribute attr, float* value) const;
+  bool HasFloatAttribute(ax::mojom::FloatAttribute attr) const;
+  float GetFloatAttribute(ax::mojom::FloatAttribute attr) const;
+  bool GetFloatAttribute(ax::mojom::FloatAttribute attr, float* value) const;
 
-  bool HasInheritedStringAttribute(ui::AXStringAttribute attribute) const;
+  bool HasInheritedStringAttribute(ax::mojom::StringAttribute attribute) const;
   const std::string& GetInheritedStringAttribute(
-      ui::AXStringAttribute attribute) const;
-  bool GetInheritedStringAttribute(ui::AXStringAttribute attribute,
-                                   std::string* value) const;
-
+      ax::mojom::StringAttribute attribute) const;
   base::string16 GetInheritedString16Attribute(
-      ui::AXStringAttribute attribute) const;
-  bool GetInheritedString16Attribute(ui::AXStringAttribute attribute,
-                                     base::string16* value) const;
+      ax::mojom::StringAttribute attribute) const;
 
-  bool HasIntAttribute(ui::AXIntAttribute attribute) const;
-  int GetIntAttribute(ui::AXIntAttribute attribute) const;
-  bool GetIntAttribute(ui::AXIntAttribute attribute, int* value) const;
+  bool HasIntAttribute(ax::mojom::IntAttribute attribute) const;
+  int GetIntAttribute(ax::mojom::IntAttribute attribute) const;
+  bool GetIntAttribute(ax::mojom::IntAttribute attribute, int* value) const;
 
-  bool HasStringAttribute(
-      ui::AXStringAttribute attribute) const;
-  const std::string& GetStringAttribute(ui::AXStringAttribute attribute) const;
-  bool GetStringAttribute(ui::AXStringAttribute attribute,
+  bool HasStringAttribute(ax::mojom::StringAttribute attribute) const;
+  const std::string& GetStringAttribute(
+      ax::mojom::StringAttribute attribute) const;
+  bool GetStringAttribute(ax::mojom::StringAttribute attribute,
                           std::string* value) const;
 
   base::string16 GetString16Attribute(
-      ui::AXStringAttribute attribute) const;
-  bool GetString16Attribute(ui::AXStringAttribute attribute,
+      ax::mojom::StringAttribute attribute) const;
+  bool GetString16Attribute(ax::mojom::StringAttribute attribute,
                             base::string16* value) const;
 
-  bool HasIntListAttribute(ui::AXIntListAttribute attribute) const;
+  bool HasIntListAttribute(ax::mojom::IntListAttribute attribute) const;
   const std::vector<int32_t>& GetIntListAttribute(
-      ui::AXIntListAttribute attribute) const;
-  bool GetIntListAttribute(ui::AXIntListAttribute attribute,
+      ax::mojom::IntListAttribute attribute) const;
+  bool GetIntListAttribute(ax::mojom::IntListAttribute attribute,
                            std::vector<int32_t>* value) const;
 
   // Retrieve the value of a html attribute from the attribute map and
@@ -301,8 +296,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   virtual base::string16 GetText() const;
 
   // Returns true if the bit corresponding to the given enum is 1.
-  bool HasState(ui::AXState state_enum) const;
-  bool HasAction(ui::AXAction action_enum) const;
+  bool HasState(ax::mojom::State state_enum) const;
+  bool HasAction(ax::mojom::Action action_enum) const;
 
   // Returns true if the caret is active on this object.
   bool HasCaret() const;
@@ -324,7 +319,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // Creates a text position rooted at this object.
   BrowserAccessibilityPosition::AXPositionInstance CreatePositionAt(
       int offset,
-      ui::AXTextAffinity affinity = ui::AX_TEXT_AFFINITY_DOWNSTREAM) const;
+      ax::mojom::TextAffinity affinity =
+          ax::mojom::TextAffinity::kDownstream) const;
 
   // Gets the text offsets where new lines start.
   std::vector<int> GetLineStartOffsets() const;
@@ -338,18 +334,28 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   gfx::NativeViewAccessible GetParent() override;
   int GetChildCount() override;
   gfx::NativeViewAccessible ChildAtIndex(int index) override;
-  gfx::Rect GetScreenBoundsRect() const override;
+  gfx::Rect GetClippedScreenBoundsRect() const override;
+  gfx::Rect GetUnclippedScreenBoundsRect() const override;
   gfx::NativeViewAccessible HitTestSync(int x, int y) override;
   gfx::NativeViewAccessible GetFocus() override;
   ui::AXPlatformNode* GetFromNodeID(int32_t id) override;
   int GetIndexInParent() const override;
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
+  int GetTableRowCount() const override;
+  int GetTableColCount() const override;
+  std::vector<int32_t> GetColHeaderNodeIds() const override;
+  std::vector<int32_t> GetColHeaderNodeIds(int32_t col_index) const override;
+  std::vector<int32_t> GetRowHeaderNodeIds() const override;
+  std::vector<int32_t> GetRowHeaderNodeIds(int32_t row_index) const override;
+  int32_t GetCellId(int32_t row_index, int32_t col_index) const override;
+  int32_t CellIdToIndex(int32_t cell_id) const override;
+  int32_t CellIndexToId(int32_t cell_index) const override;
   bool AccessibilityPerformAction(const ui::AXActionData& data) override;
   bool ShouldIgnoreHoveredStateForTesting() override;
   bool IsOffscreen() const override;
-  std::set<int32_t> GetReverseRelations(ui::AXIntAttribute attr,
+  std::set<int32_t> GetReverseRelations(ax::mojom::IntAttribute attr,
                                         int32_t dst_id) override;
-  std::set<int32_t> GetReverseRelations(ui::AXIntListAttribute attr,
+  std::set<int32_t> GetReverseRelations(ax::mojom::IntListAttribute attr,
                                         int32_t dst_id) override;
 
  protected:

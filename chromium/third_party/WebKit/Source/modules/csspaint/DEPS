@@ -1,6 +1,0 @@
-include_rules = [
-    "-modules",
-    "+modules/ModulesExport.h",
-    "+modules/canvas/canvas2d/BaseRenderingContext2D.h",
-    "+modules/csspaint",
-]

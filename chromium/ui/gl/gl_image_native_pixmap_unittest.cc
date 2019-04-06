@@ -4,6 +4,7 @@
 
 #include "ui/gl/gl_image_native_pixmap.h"
 
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/test/gl_image_test_template.h"
 
 namespace gl {
@@ -23,8 +24,8 @@ class GLImageNativePixmapTestDelegate : public GLImageTestDelegateBase {
   bool SkipTest() const override {
     const std::string dmabuf_import_ext = "EGL_MESA_image_dma_buf_export";
     std::string platform_extensions(DriverEGL::GetPlatformExtensions());
-    ExtensionSet extensions(MakeExtensionSet(platform_extensions));
-    if (!HasExtension(extensions, dmabuf_import_ext)) {
+    gfx::ExtensionSet extensions(gfx::MakeExtensionSet(platform_extensions));
+    if (!gfx::HasExtension(extensions, dmabuf_import_ext)) {
       LOG(WARNING) << "Skip test, missing extension " << dmabuf_import_ext;
       return true;
     }

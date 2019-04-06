@@ -26,15 +26,15 @@
 #import "chrome/browser/ui/cocoa/nsview_additions.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/download/public/common/download_item.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
-#include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
-using content::DownloadItem;
+using download::DownloadItem;
 
 // Download shelf autoclose behavior:
 //
@@ -156,9 +156,9 @@ const CGFloat kMDCloseButtonSize = 24;
 
 - (void)loadView {
   if (base::FeatureList::IsEnabled(features::kMacMaterialDesignDownloadShelf)) {
-    base::scoped_nsobject<NSView> scopedView([[DownloadShelfView alloc]
+    base::scoped_nsobject<NSView> scopedView([[DownloadShelfViewCocoa alloc]
         initWithFrame:NSMakeRect(0, 0, kMDShelfInitialWidth,
-                                 [DownloadShelfView shelfHeight])]);
+                                 [DownloadShelfViewCocoa shelfHeight])]);
     NSView* view = scopedView.get();
     view.autoresizingMask = [NSView
         cr_localizedAutoresizingMask:NSViewWidthSizable | NSViewMaxYMargin];
@@ -173,7 +173,7 @@ const CGFloat kMDCloseButtonSize = 24;
     MDDownloadShelfCloseButton* closeButton = scopedCloseButton;
     closeButton.autoresizingMask =
         [NSView cr_localizedAutoresizingMask:NSViewMinXMargin];
-    closeButton.icon = &vector_icons::kClose16Icon;
+    closeButton.icon = &vector_icons::kCloseRoundedIcon;
     [closeButton
         cr_setAccessibilityLabel:l10n_util::GetNSString(IDS_HIDE_DOWNLOADS)];
     closeButton.target = self;
@@ -381,7 +381,7 @@ const CGFloat kMDCloseButtonSize = 24;
 
 - (float)height {
   if (base::FeatureList::IsEnabled(features::kMacMaterialDesignDownloadShelf)) {
-    return [DownloadShelfView shelfHeight] + [self.view cr_lineWidth];
+    return [DownloadShelfViewCocoa shelfHeight] + [self.view cr_lineWidth];
   } else {
     return maxShelfHeight_;
   }
@@ -652,8 +652,8 @@ const CGFloat kMDCloseButtonSize = 24;
   }
 
   // Set the tracking off to create a new tracking area for the control.
-  // When changing the bounds/frame on a HoverButton, the tracking isn't updated
-  // correctly, it needs to be turned off and back on.
+  // When changing the bounds/frame on a HoverButtonCocoa, the tracking isn't
+  // updated correctly, it needs to be turned off and back on.
   [hoverCloseButton_ setTrackingEnabled:NO];
   [hoverCloseButton_ setFrame:bounds];
   [hoverCloseButton_ setTrackingEnabled:YES];

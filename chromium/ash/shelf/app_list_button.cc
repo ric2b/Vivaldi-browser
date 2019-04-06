@@ -8,6 +8,10 @@
 #include <memory>
 #include <utility>
 
+#include "ash/app_list/app_list_controller_impl.h"
+#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/assistant_ui_controller.h"
+#include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/assistant_overlay.h"
@@ -25,9 +29,8 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/timer/timer.h"
 #include "chromeos/chromeos_switches.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/app_list/presenter/app_list.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/scoped_canvas.h"
@@ -42,11 +45,15 @@ namespace {
 
 constexpr int kVoiceInteractionAnimationDelayMs = 200;
 constexpr int kVoiceInteractionAnimationHideDelayMs = 500;
-
-}  // namespace
-
 constexpr uint8_t kVoiceInteractionRunningAlpha = 255;     // 100% alpha
 constexpr uint8_t kVoiceInteractionNotRunningAlpha = 138;  // 54% alpha
+
+bool IsAssistantEnabled() {
+  return chromeos::switches::IsVoiceInteractionEnabled() ||
+         chromeos::switches::IsAssistantEnabled();
+}
+
+}  // namespace
 
 AppListButton::AppListButton(InkDropButtonListener* listener,
                              ShelfView* shelf_view,
@@ -54,13 +61,17 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
     : views::ImageButton(nullptr),
       listener_(listener),
       shelf_view_(shelf_view),
-      shelf_(shelf) {
+      shelf_(shelf),
+      voice_interaction_binding_(this) {
   DCHECK(listener_);
   DCHECK(shelf_view_);
   DCHECK(shelf_);
   Shell::Get()->AddShellObserver(this);
   Shell::Get()->session_controller()->AddObserver(this);
-  Shell::Get()->voice_interaction_controller()->AddObserver(this);
+
+  mojom::VoiceInteractionObserverPtr ptr;
+  voice_interaction_binding_.Bind(mojo::MakeRequest(&ptr));
+  Shell::Get()->voice_interaction_controller()->AddObserver(std::move(ptr));
   SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
   set_ink_drop_base_color(kShelfInkDropBaseColor);
   set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
@@ -74,13 +85,12 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
   // session has already started. This could happen when an external monitor
   // is plugged in.
   if (Shell::Get()->session_controller()->IsActiveUserSessionStarted() &&
-      chromeos::switches::IsVoiceInteractionEnabled()) {
+      IsAssistantEnabled()) {
     InitializeVoiceInteractionOverlay();
   }
 }
 
 AppListButton::~AppListButton() {
-  Shell::Get()->voice_interaction_controller()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
   Shell::Get()->session_controller()->RemoveObserver(this);
 }
@@ -121,7 +131,7 @@ void AppListButton::OnGestureEvent(ui::GestureEvent* event) {
             base::Bind(&AppListButton::StartVoiceInteractionAnimation,
                        base::Unretained(this)));
       }
-      if (!Shell::Get()->app_list()->IsVisible())
+      if (!Shell::Get()->app_list_controller()->IsVisible())
         AnimateInkDrop(views::InkDropState::ACTION_PENDING, event);
       ImageButton::OnGestureEvent(event);
       return;
@@ -129,9 +139,14 @@ void AppListButton::OnGestureEvent(ui::GestureEvent* event) {
       if (UseVoiceInteractionStyle()) {
         base::RecordAction(base::UserMetricsAction(
             "VoiceInteraction.Started.AppListButtonLongPress"));
-        Shell::Get()->app_list()->StartVoiceInteractionSession();
         assistant_overlay_->BurstAnimation();
         event->SetHandled();
+        if (chromeos::switches::IsAssistantEnabled()) {
+          Shell::Get()->assistant_controller()->ui_controller()->ShowUi(
+              AssistantSource::kLongPressLauncher);
+        } else {
+          Shell::Get()->app_list_controller()->StartVoiceInteractionSession();
+        }
       } else {
         ImageButton::OnGestureEvent(event);
       }
@@ -176,7 +191,7 @@ bool AppListButton::OnMouseDragged(const ui::MouseEvent& event) {
 }
 
 void AppListButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->role = ax::mojom::Role::kButton;
   node_data->SetName(shelf_view_->GetTitleForView(this));
 }
 
@@ -201,7 +216,7 @@ void AppListButton::NotifyClick(const ui::Event& event) {
 bool AppListButton::ShouldEnterPushedState(const ui::Event& event) {
   if (!shelf_view_->ShouldEventActivateButton(this, event))
     return false;
-  if (Shell::Get()->app_list()->IsVisible())
+  if (Shell::Get()->app_list_controller()->IsVisible())
     return false;
   return views::ImageButton::ShouldEnterPushedState(event);
 }
@@ -348,7 +363,7 @@ void AppListButton::OnActiveUserSessionChanged(const AccountId& account_id) {
   // Initialize voice interaction overlay when primary user session becomes
   // active.
   if (Shell::Get()->session_controller()->IsUserPrimary() &&
-      !assistant_overlay_ && chromeos::switches::IsVoiceInteractionEnabled()) {
+      !assistant_overlay_ && IsAssistantEnabled()) {
     InitializeVoiceInteractionOverlay();
   }
 }
@@ -364,7 +379,8 @@ void AppListButton::StartVoiceInteractionAnimation() {
       (alignment == SHELF_ALIGNMENT_BOTTOM ||
        alignment == SHELF_ALIGNMENT_BOTTOM_LOCKED) &&
       state == mojom::VoiceInteractionState::STOPPED &&
-      Shell::Get()->voice_interaction_controller()->setup_completed();
+      Shell::Get()->voice_interaction_controller()->setup_completed() &&
+      chromeos::switches::IsVoiceInteractionEnabled();
   assistant_overlay_->StartAnimation(show_icon);
 }
 

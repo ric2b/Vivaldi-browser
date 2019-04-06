@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include <memory>
+#include <numeric>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -15,7 +16,6 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/task_manager/sampling/shared_sampler_win_defines.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
@@ -41,8 +41,6 @@ class SharedSamplerTest : public testing::Test {
   ~SharedSamplerTest() override {}
 
  protected:
-  int64_t physical_bytes() const { return physical_bytes_; }
-
   base::Time start_time() const { return start_time_; }
 
   base::TimeDelta cpu_time() const { return cpu_time_; }
@@ -77,14 +75,12 @@ class SharedSamplerTest : public testing::Test {
   void OnSamplerRefreshDone(
       base::Optional<SharedSampler::SamplingResult> results) {
     if (results) {
-      physical_bytes_ = results->physical_bytes;
       idle_wakeups_per_second_ = results->idle_wakeups_per_second;
       start_time_ = results->start_time;
       cpu_time_ = results->cpu_time;
     }
     OnRefreshTypeFinished(expected_refresh_type_ &
-                          (REFRESH_TYPE_PHYSICAL_MEMORY |
-                           REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_START_TIME |
+                          (REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_START_TIME |
                            REFRESH_TYPE_CPU_TIME));
   }
 
@@ -92,7 +88,6 @@ class SharedSamplerTest : public testing::Test {
   int64_t finished_refresh_type_ = 0;
   base::Closure quit_closure_;
 
-  int64_t physical_bytes_ = 0;
   int idle_wakeups_per_second_ = -1;
   base::Time start_time_;
   base::TimeDelta cpu_time_;
@@ -124,25 +119,6 @@ TEST_F(SharedSamplerTest, IdleWakeups) {
 
   // Should get a greater than zero rate now.
   EXPECT_GT(idle_wakeups_per_second(), 0);
-}
-
-// Verifies that Memory (Private WS) value can be obtained from Shared Sampler.
-TEST_F(SharedSamplerTest, PhysicalMemory) {
-  StartRefresh(REFRESH_TYPE_PHYSICAL_MEMORY);
-  WaitUntilRefreshDone();
-  EXPECT_EQ(REFRESH_TYPE_PHYSICAL_MEMORY, finished_refresh_type());
-
-  int64_t initial_value = physical_bytes();
-
-  // Allocate a large continuos block of memory.
-  const int allocated_size = 4 * 1024 * 1024;
-  std::vector<uint8_t> memory_block(allocated_size);
-
-  StartRefresh(REFRESH_TYPE_PHYSICAL_MEMORY);
-  WaitUntilRefreshDone();
-
-  // Verify that physical bytes has increased accordingly.
-  EXPECT_GE(physical_bytes(), initial_value + allocated_size);
 }
 
 // Tests that process start time can be obtained from SharedSampler.
@@ -181,11 +157,11 @@ TEST_F(SharedSamplerTest, CpuTime) {
 
 // Verifies that multiple refresh types can be refreshed at the same time.
 TEST_F(SharedSamplerTest, MultipleRefreshTypes) {
-  StartRefresh(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_PHYSICAL_MEMORY |
-               REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME);
+  StartRefresh(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_START_TIME |
+               REFRESH_TYPE_CPU_TIME);
   WaitUntilRefreshDone();
-  EXPECT_EQ(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_PHYSICAL_MEMORY |
-                REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME,
+  EXPECT_EQ(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_START_TIME |
+                REFRESH_TYPE_CPU_TIME,
             finished_refresh_type());
 }
 
@@ -193,7 +169,7 @@ static int ReturnZeroThreadProcessInformation(unsigned char* buffer,
                                               int buffer_size) {
   // Calculate the number of bytes required for the structure, and ImageName.
   base::FilePath current_exe;
-  CHECK(PathService::Get(base::FILE_EXE, &current_exe));
+  CHECK(base::PathService::Get(base::FILE_EXE, &current_exe));
   base::string16 image_name = current_exe.BaseName().value();
 
   const int kImageNameBytes = image_name.length() * sizeof(base::char16);
@@ -228,14 +204,12 @@ TEST_F(SharedSamplerTest, ZeroThreadProcess) {
   SharedSampler::SetQuerySystemInformationForTest(
       ReturnZeroThreadProcessInformation);
 
-  StartRefresh(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_PHYSICAL_MEMORY |
-               REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME);
+  StartRefresh(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_START_TIME |
+               REFRESH_TYPE_CPU_TIME);
   WaitUntilRefreshDone();
-  EXPECT_EQ(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_PHYSICAL_MEMORY |
-                REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME,
+  EXPECT_EQ(REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_START_TIME |
+                REFRESH_TYPE_CPU_TIME,
             finished_refresh_type());
-
-  EXPECT_EQ(1024ll, physical_bytes());
 
   SharedSampler::SetQuerySystemInformationForTest(nullptr);
 }

@@ -20,7 +20,9 @@
 #include "net/http/http_server_properties_impl.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "net/test/url_request/url_request_hanging_read_job.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_util.h"
@@ -44,18 +46,20 @@ class RequestContext : public URLRequestContext {
  public:
   RequestContext() : storage_(this) {
     ProxyConfig no_proxy;
-    storage_.set_host_resolver(
-        std::unique_ptr<HostResolver>(new MockHostResolver));
+    storage_.set_host_resolver(std::make_unique<MockHostResolver>());
     storage_.set_cert_verifier(std::make_unique<MockCertVerifier>());
     storage_.set_transport_security_state(
         std::make_unique<TransportSecurityState>());
     storage_.set_cert_transparency_verifier(
         std::make_unique<MultiLogCTVerifier>());
-    storage_.set_ct_policy_enforcer(std::make_unique<CTPolicyEnforcer>());
-    storage_.set_proxy_service(ProxyService::CreateFixed(no_proxy));
-    storage_.set_ssl_config_service(new SSLConfigServiceDefaults);
+    storage_.set_ct_policy_enforcer(
+        std::make_unique<DefaultCTPolicyEnforcer>());
+    storage_.set_proxy_resolution_service(ProxyResolutionService::CreateFixed(
+        ProxyConfigWithAnnotation(no_proxy, TRAFFIC_ANNOTATION_FOR_TESTS)));
+    storage_.set_ssl_config_service(
+        std::make_unique<SSLConfigServiceDefaults>());
     storage_.set_http_server_properties(
-        std::unique_ptr<HttpServerProperties>(new HttpServerPropertiesImpl()));
+        std::make_unique<HttpServerPropertiesImpl>());
 
     HttpNetworkSession::Context session_context;
     session_context.host_resolver = host_resolver();
@@ -63,7 +67,7 @@ class RequestContext : public URLRequestContext {
     session_context.transport_security_state = transport_security_state();
     session_context.cert_transparency_verifier = cert_transparency_verifier();
     session_context.ct_policy_enforcer = ct_policy_enforcer();
-    session_context.proxy_service = proxy_service();
+    session_context.proxy_resolution_service = proxy_resolution_service();
     session_context.ssl_config_service = ssl_config_service();
     session_context.http_server_properties = http_server_properties();
     storage_.set_http_network_session(std::make_unique<HttpNetworkSession>(
@@ -224,7 +228,8 @@ class CertNetFetcherImplTest : public PlatformTest {
 
 // Installs URLRequestHangingReadJob handlers and clears them on teardown.
 class CertNetFetcherImplTestWithHangingReadHandler
-    : public CertNetFetcherImplTest {
+    : public CertNetFetcherImplTest,
+      public WithScopedTaskEnvironment {
  protected:
   void SetUp() override { URLRequestHangingReadJob::AddUrlHandler(); }
 
@@ -577,17 +582,18 @@ TEST_F(CertNetFetcherImplTest, CancelAll) {
   ASSERT_TRUE(test_server_.Start());
 
   CreateFetcher();
-  std::unique_ptr<CertNetFetcher::Request> request[3];
+  std::unique_ptr<CertNetFetcher::Request> requests[3];
 
   GURL url = test_server_.GetURL("/cert.crt");
 
-  for (size_t i = 0; i < arraysize(request); ++i) {
-    request[i] = StartRequest(fetcher(), url);
+  for (auto& request : requests) {
+    request = StartRequest(fetcher(), url);
   }
 
   // Cancel all the requests.
-  for (size_t i = 0; i < arraysize(request); ++i)
-    request[i].reset();
+  for (auto& request : requests) {
+    request.reset();
+  }
 
   EXPECT_EQ(1, NumCreatedRequests());
 }

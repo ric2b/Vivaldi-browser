@@ -32,17 +32,20 @@
 #include "chrome/browser/guest_view/mime_handler_view/chrome_mime_handler_view_guest_delegate.h"
 #include "chrome/browser/guest_view/web_view/chrome_web_view_guest_delegate.h"
 #include "chrome/browser/guest_view/web_view/chrome_web_view_permission_helper_delegate.h"
+#include "chrome/browser/search/instant_io_context.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
 #include "chrome/browser/ui/webui/devtools_ui.h"
+#include "chrome/common/webui_url_constants.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
+#include "extensions/browser/api/web_request/web_request_info.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -105,8 +108,28 @@ bool ChromeExtensionsAPIClient::ShouldHideResponseHeader(
 }
 
 bool ChromeExtensionsAPIClient::ShouldHideBrowserNetworkRequest(
-    const GURL& url) const {
-  return DevToolsUI::IsFrontendResourceURL(url);
+    const WebRequestInfo& request) const {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  // Exclude main frame navigation requests.
+  bool is_browser_request = request.render_process_id == -1 &&
+                            request.type != content::RESOURCE_TYPE_MAIN_FRAME;
+
+  // Hide requests made by the Devtools frontend.
+  bool is_sensitive_request =
+      is_browser_request && DevToolsUI::IsFrontendResourceURL(request.url);
+
+  // Hide requests made by the browser on behalf of the NTP.
+  is_sensitive_request |=
+      (is_browser_request &&
+       request.initiator ==
+           url::Origin::Create(GURL(chrome::kChromeUINewTabURL)));
+
+  // Hide requests made by the NTP Instant renderer.
+  is_sensitive_request |= InstantIOContext::IsInstantProcess(
+      request.resource_context, request.render_process_id);
+
+  return is_sensitive_request;
 }
 
 AppViewGuestDelegate* ChromeExtensionsAPIClient::CreateAppViewGuestDelegate()

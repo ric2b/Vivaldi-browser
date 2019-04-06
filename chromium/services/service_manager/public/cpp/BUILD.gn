@@ -21,6 +21,8 @@ component("cpp") {
     "service_context.h",
     "service_context_ref.cc",
     "service_context_ref.h",
+    "service_keepalive.cc",
+    "service_keepalive.h",
     "service_runner.cc",
     "service_runner.h",
   ]
@@ -30,8 +32,8 @@ component("cpp") {
     "//base",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
-    "//services/service_manager/public/interfaces",
-    "//services/service_manager/public/interfaces:constants",
+    "//services/service_manager/public/mojom",
+    "//services/service_manager/public/mojom:constants",
     "//url",
   ]
 
@@ -55,7 +57,7 @@ component("cpp_types") {
   ]
 
   deps = [
-    "//services/service_manager/public/interfaces:constants",
+    "//services/service_manager/public/mojom:constants",
   ]
 
   defines = [ "SERVICE_MANAGER_PUBLIC_CPP_TYPES_IMPL" ]
@@ -76,11 +78,11 @@ static_library("service_test_support") {
   deps = [
     "//base",
     "//base/test:test_support",
-    "//mojo/edk/system",
+    "//mojo/core/embedder",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//services/service_manager/background:lib",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
   ]
 
   data_deps = []

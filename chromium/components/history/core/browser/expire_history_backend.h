@@ -20,7 +20,6 @@ class GURL;
 class TestingProfile;
 
 namespace base {
-struct Feature;
 class SequencedTaskRunner;
 }
 
@@ -44,9 +43,6 @@ class ExpiringVisitsReader {
 typedef std::vector<const ExpiringVisitsReader*> ExpiringVisitsReaders;
 
 namespace internal {
-// Feature that enables clearing old on-demand favicons.
-extern const base::Feature kClearOldOnDemandFavicons;
-
 // The minimum number of days since last use for an icon to be considered old.
 extern const int kOnDemandFaviconIsOldAfterDays;
 }  // namespace internal
@@ -96,8 +92,8 @@ class ExpireHistoryBackend {
   void ExpireVisits(const VisitVector& visits);
 
   // Expires all visits before and including the given time, updating the URLs
-  // accordingly. Currently only used for testing.
-  void ExpireHistoryBefore(base::Time end_time);
+  // accordingly.
+  void ExpireHistoryBeforeForTesting(base::Time end_time);
 
   // Returns the current cut-off time before which we will start expiring stuff.
   // Note that this as an absolute time rather than a delta, so the caller
@@ -201,6 +197,10 @@ class ExpireHistoryBackend {
   // any now-unused favicons.
   void ExpireURLsForVisits(const VisitVector& visits, DeleteEffects* effects);
 
+  void ExpireVisitsInternal(const VisitVector& visits,
+                            const DeletionTimeRange& time_range,
+                            const std::set<GURL>& restrict_urls);
+
   // Deletes the favicons listed in |effects->affected_favicons| if they are
   // unsued. Fails silently (we don't care about favicons so much, so don't want
   // to stop everything if it fails). Fills |expired_favicons| with the set of
@@ -218,7 +218,10 @@ class ExpireHistoryBackend {
   };
 
   // Broadcasts URL modified and deleted notifications.
-  void BroadcastNotifications(DeleteEffects* effects, DeletionType type);
+  void BroadcastNotifications(DeleteEffects* effects,
+                              DeletionType type,
+                              const DeletionTimeRange& time_range,
+                              base::Optional<std::set<GURL>> restrict_urls);
 
   // Schedules a call to DoExpireIteration.
   void ScheduleExpire();
@@ -266,6 +269,9 @@ class ExpireHistoryBackend {
 
   // The threshold for "old" history where we will automatically delete it.
   base::TimeDelta expiration_threshold_;
+
+  // The time at which we expect the expiration code to run.
+  base::Time expected_expiration_time_;
 
   // The lastly used threshold for "old" on-demand favicons.
   base::Time last_on_demand_expiration_threshold_;

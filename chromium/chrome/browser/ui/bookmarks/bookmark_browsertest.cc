@@ -22,6 +22,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/browser/url_and_title.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_service.h"
@@ -30,18 +31,17 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 using bookmarks::BookmarkModel;
+using bookmarks::UrlAndTitle;
 
 namespace {
 const char kPersistBookmarkURL[] = "http://www.cnn.com/";
 const char kPersistBookmarkTitle[] = "CNN";
 } // namespace
 
-class TestBookmarkTabHelperDelegate : public BookmarkTabHelperDelegate {
+class TestBookmarkTabHelperObserver : public BookmarkTabHelperObserver {
  public:
-  TestBookmarkTabHelperDelegate()
-      : starred_(false) {
-  }
-  ~TestBookmarkTabHelperDelegate() override {}
+  TestBookmarkTabHelperObserver() : starred_(false) {}
+  ~TestBookmarkTabHelperObserver() override {}
 
   void URLStarredChanged(content::WebContents*, bool starred) override {
     starred_ = starred;
@@ -51,7 +51,7 @@ class TestBookmarkTabHelperDelegate : public BookmarkTabHelperDelegate {
  private:
   bool starred_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestBookmarkTabHelperDelegate);
+  DISALLOW_COPY_AND_ASSIGN(TestBookmarkTabHelperObserver);
 };
 
 class BookmarkBrowsertest : public InProcessBrowserTest {
@@ -72,7 +72,7 @@ class BookmarkBrowsertest : public InProcessBrowserTest {
     scoped_refptr<content::MessageLoopRunner> runner =
         new content::MessageLoopRunner;
 
-    base::Timer timer(false, true);
+    base::RepeatingTimer timer;
     timer.Start(
         FROM_HERE,
         base::TimeDelta::FromMilliseconds(15),
@@ -114,9 +114,10 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, PRE_Persist) {
                                 base::ASCIIToUTF16(kPersistBookmarkTitle));
 }
 
-#if defined(THREAD_SANITIZER)
+#if defined(THREAD_SANITIZER) || defined(OS_WIN)
 // BookmarkBrowsertest.Persist fails under ThreadSanitizer on Linux, see
 // http://crbug.com/340223.
+// Also flaky under Windows. See crbug.com/813759.
 #define MAYBE_Persist DISABLED_Persist
 #else
 #define MAYBE_Persist Persist
@@ -124,7 +125,7 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, PRE_Persist) {
 IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, MAYBE_Persist) {
   BookmarkModel* bookmark_model = WaitForBookmarkModel(browser()->profile());
 
-  std::vector<BookmarkModel::URLAndTitle> urls;
+  std::vector<UrlAndTitle> urls;
   bookmark_model->GetBookmarks(&urls);
 
   ASSERT_EQ(1u, urls.size());
@@ -152,7 +153,7 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, DISABLED_MultiProfile) {
   bookmarks::AddIfNotBookmarked(bookmark_model1,
                                 GURL(kPersistBookmarkURL),
                                 base::ASCIIToUTF16(kPersistBookmarkTitle));
-  std::vector<BookmarkModel::URLAndTitle> urls1, urls2;
+  std::vector<UrlAndTitle> urls1, urls2;
   bookmark_model1->GetBookmarks(&urls1);
   bookmark_model2->GetBookmarks(&urls2);
   ASSERT_EQ(1u, urls1.size());
@@ -184,17 +185,17 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest,
                                 bookmark_url,
                                 base::ASCIIToUTF16("Bookmark"));
 
-  TestBookmarkTabHelperDelegate bookmark_delegate;
+  TestBookmarkTabHelperObserver bookmark_observer;
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   BookmarkTabHelper* tab_helper =
       BookmarkTabHelper::FromWebContents(web_contents);
-  tab_helper->set_delegate(&bookmark_delegate);
+  tab_helper->AddObserver(&bookmark_observer);
 
   // Go to a bookmarked url. Bookmark star should show.
   ui_test_utils::NavigateToURL(browser(), bookmark_url);
   EXPECT_FALSE(web_contents->ShowingInterstitialPage());
-  EXPECT_TRUE(bookmark_delegate.is_starred());
+  EXPECT_TRUE(bookmark_observer.is_starred());
 
   // Now go to a non-bookmarked url which triggers an SSL warning. Bookmark
   // star should disappear.
@@ -203,8 +204,7 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest,
   web_contents = browser()->tab_strip_model()->GetActiveWebContents();
   content::WaitForInterstitialAttach(web_contents);
   EXPECT_TRUE(web_contents->ShowingInterstitialPage());
-  EXPECT_FALSE(bookmark_delegate.is_starred());
+  EXPECT_FALSE(bookmark_observer.is_starred());
 
-  // The delegate is required to outlive the tab helper.
-  tab_helper->set_delegate(nullptr);
+  tab_helper->RemoveObserver(&bookmark_observer);
 }

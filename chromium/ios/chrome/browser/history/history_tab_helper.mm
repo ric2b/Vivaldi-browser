@@ -25,6 +25,20 @@
 
 DEFINE_WEB_STATE_USER_DATA_KEY(HistoryTabHelper);
 
+namespace {
+
+base::Optional<base::string16> GetPageTitle(const web::NavigationItem& item) {
+  const base::string16& title = item.GetTitleForDisplay();
+  if (title.empty() ||
+      title == l10n_util::GetStringUTF16(IDS_DEFAULT_TAB_TITLE)) {
+    return base::nullopt;
+  }
+
+  return base::Optional<base::string16>(title);
+}
+
+}  // namespace
+
 HistoryTabHelper::~HistoryTabHelper() {
   DCHECK(!web_state_);
 }
@@ -32,16 +46,15 @@ HistoryTabHelper::~HistoryTabHelper() {
 void HistoryTabHelper::UpdateHistoryPageTitle(const web::NavigationItem& item) {
   DCHECK(!delay_notification_);
 
-  const base::string16& title = item.GetTitleForDisplay();
+  const base::Optional<base::string16> title = GetPageTitle(item);
   // Don't update the history if current entry has no title.
-  if (title.empty() ||
-      title == l10n_util::GetStringUTF16(IDS_DEFAULT_TAB_TITLE)) {
+  if (!title) {
     return;
   }
 
   history::HistoryService* history_service = GetHistoryService();
   if (history_service) {
-    history_service->SetPageTitle(item.GetVirtualURL(), title);
+    history_service->SetPageTitle(item.GetVirtualURL(), title.value());
   }
 }
 
@@ -93,6 +106,16 @@ void HistoryTabHelper::DidFinishNavigation(
     return;
   }
 
+  if (navigation_context->IsDownload()) {
+    return;
+  }
+
+  if (!navigation_context->HasCommitted() &&
+      !navigation_context->IsSameDocument()) {
+    // Navigation was replaced.
+    return;
+  }
+
   DCHECK(web_state->GetNavigationManager()->GetVisibleItem());
   web::NavigationItem* visible_item =
       web_state_->GetNavigationManager()->GetVisibleItem();
@@ -116,6 +139,8 @@ void HistoryTabHelper::DidFinishNavigation(
     return;
   }
 #endif
+
+  num_title_changes_ = 0;
 
   history::RedirectList redirects;
   const GURL& original_url = visible_item->GetOriginalRequestURL();
@@ -154,7 +179,9 @@ void HistoryTabHelper::DidFinishNavigation(
   history::HistoryAddPageArgs add_page_args(
       url, visible_item->GetTimestamp(), this, visible_item->GetUniqueID(),
       referrer_url, redirects, transition, hidden, history::SOURCE_BROWSED,
-      /*did_replace_entry=*/false, consider_for_ntp_most_visited);
+      /*did_replace_entry=*/false, consider_for_ntp_most_visited,
+      navigation_context->IsSameDocument() ? GetPageTitle(*visible_item)
+                                           : base::nullopt);
 
   if (delay_notification_) {
     recorded_navigations_.push_back(std::move(add_page_args));
@@ -181,6 +208,10 @@ void HistoryTabHelper::TitleWasSet(web::WebState* web_state) {
     return;
   }
 
+  // Protect against pages changing their title too often during page load.
+  if (num_title_changes_ >= history::kMaxTitleChanges)
+    return;
+
   // Only store page titles into history if they were set while the page was
   // loading or during a brief span after load is complete. This fixes the case
   // where a page uses a title change to alert a user of a situation but that
@@ -190,8 +221,10 @@ void HistoryTabHelper::TitleWasSet(web::WebState* web_state) {
        history::GetTitleSettingWindow())) {
     web::NavigationItem* last_committed_item =
         web_state_->GetNavigationManager()->GetLastCommittedItem();
-    if (last_committed_item)
+    if (last_committed_item) {
       UpdateHistoryPageTitle(*last_committed_item);
+      ++num_title_changes_;
+    }
   }
 }
 

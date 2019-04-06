@@ -12,7 +12,10 @@
 
 #import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #import "ui/accelerated_widget_mac/accelerated_widget_mac.h"
+#include "ui/accelerated_widget_mac/ca_transaction_observer.h"
+#include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/compositor/layer_owner.h"
 #import "ui/views/cocoa/bridged_native_widget_owner.h"
@@ -28,6 +31,7 @@
 
 namespace ui {
 class InputMethod;
+class RecyclableCompositorMac;
 }
 
 namespace views {
@@ -45,7 +49,8 @@ class View;
 // DesktopNativeWidgetMac. Serves as a helper class to bridge requests from the
 // NativeWidgetMac to the Cocoa window. Behaves a bit like an aura::Window.
 class VIEWS_EXPORT BridgedNativeWidget
-    : public ui::LayerDelegate,
+    : public ui::CATransactionCoordinator::PreCommitObserver,
+      public ui::LayerDelegate,
       public ui::LayerOwner,
       public ui::internal::InputMethodDelegate,
       public CocoaMouseCaptureDelegate,
@@ -69,10 +74,6 @@ class VIEWS_EXPORT BridgedNativeWidget
   // based on its current style mask.
   static gfx::Size GetWindowSizeForClientSize(NSWindow* window,
                                               const gfx::Size& size);
-
-  // Whether an event monitor should be used to intercept window drag events.
-  // Evalutes to |true| on macOS 10.10 and older.
-  static bool ShouldUseDragEventMonitor();
 
   // Creates one side of the bridge. |parent| must not be NULL.
   explicit BridgedNativeWidget(NativeWidgetMac* parent);
@@ -138,7 +139,7 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   // Transition the window into or out of fullscreen. This will immediately
   // invert the value of target_fullscreen_state().
-  void ToggleDesiredFullscreenState();
+  void ToggleDesiredFullscreenState(bool async = false);
 
   // Called by the NSWindowDelegate when the size of the window changes.
   void OnSizeChanged();
@@ -160,17 +161,6 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   // Called by the NSWindowDelegate when the window becomes or resigns key.
   void OnWindowKeyStatusChangedTo(bool is_key);
-
-  // Returns true if the |event| should initiate a window drag.
-  bool ShouldDragWindow(NSEvent* event);
-
-  // Called when the application receives a mouse-down, but before the event is
-  // processed by NSWindow. Returning true here will cause the event to be
-  // cancelled and reposted at the CGSessionEventTap level. This is used to
-  // determine whether a mouse-down should drag the window. Only called when
-  // ShouldUseDragEventMonitor() returns true.
-  // Virtual for testing.
-  virtual bool ShouldRepostPendingLeftMouseDown(NSEvent* event);
 
   // Called by NativeWidgetMac when the window size constraints change.
   void OnSizeConstraintsChanged();
@@ -221,9 +211,25 @@ class VIEWS_EXPORT BridgedNativeWidget
   bool target_fullscreen_state() const { return target_fullscreen_state_; }
   bool window_visible() const { return window_visible_; }
   bool wants_to_be_visible() const { return wants_to_be_visible_; }
+  bool in_fullscreen_transition() const { return in_fullscreen_transition_; }
 
-  bool animate() const { return animate_; }
-  void set_animate(bool animate) { animate_ = animate; }
+  // Enables or disables all window animations.
+  void SetAnimationEnabled(bool animate);
+
+  // Sets which transitions will animate. Currently this only affects non-native
+  // animations. TODO(tapted): Use scoping to disable native animations at
+  // appropriate times as well.
+  void set_transitions_to_animate(int transitions) {
+    transitions_to_animate_ = transitions;
+  }
+
+  // Whether to run a custom animation for the provided |transition|.
+  bool ShouldRunCustomAnimationFor(
+      Widget::VisibilityTransition transition) const;
+
+  // ui::CATransactionCoordinator::PreCommitObserver implementation
+  bool ShouldWaitInPreCommit() override;
+  base::TimeDelta PreCommitTimeout() override;
 
   // Overridden from ui::internal::InputMethodDelegate:
   ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* key) override;
@@ -247,8 +253,7 @@ class VIEWS_EXPORT BridgedNativeWidget
   void InitCompositor();
   void DestroyCompositor();
 
-  // Installs the NSView for hosting the composited layer. It is later provided
-  // to |compositor_widget_| via AcceleratedWidgetGetNSView().
+  // Installs the NSView for hosting the composited layer.
   void AddCompositorSuperview();
 
   // Size the layer to match the client area bounds, taking into account display
@@ -262,13 +267,6 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   // Show the window using -[NSApp beginSheet:..], modal for the parent window.
   void ShowAsModalSheet();
-
-  // Sets mouseDownCanMoveWindow on |bridged_view_| and triggers the NSWindow to
-  // update its draggable region.
-  void SetDraggable(bool draggable);
-
-  // Called by |mouse_down_monitor_| to close a bubble.
-  void OnRightMouseDownWithBubble(NSEvent* event);
 
   // Overridden from CocoaMouseCaptureDelegate:
   void PostCapturedEvent(NSEvent* event) override;
@@ -291,10 +289,7 @@ class VIEWS_EXPORT BridgedNativeWidget
                                   float new_device_scale_factor) override;
 
   // Overridden from ui::AcceleratedWidgetMac:
-  NSView* AcceleratedWidgetGetNSView() const override;
-  void AcceleratedWidgetGetVSyncParameters(
-      base::TimeTicks* timebase, base::TimeDelta* interval) const override;
-  void AcceleratedWidgetSwapCompleted() override;
+  void AcceleratedWidgetCALayerParamsUpdated() override;
 
   // Overridden from BridgedNativeWidgetOwner:
   NSWindow* GetNSWindow() override;
@@ -304,6 +299,11 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   // DialogObserver:
   void OnDialogModelChanged() override;
+
+  // Set |layer()| to be visible or not visible based on |window_visible_|. If
+  // the layer is not visible, then lock the compositor, so we don't draw any
+  // new frames.
+  void UpdateLayerVisibility();
 
   views::NativeWidgetMac* native_widget_mac_;  // Weak. Owns this.
   base::scoped_nsobject<NSWindow> window_;
@@ -322,13 +322,24 @@ class VIEWS_EXPORT BridgedNativeWidget
   std::vector<BridgedNativeWidget*> child_windows_;
 
   base::scoped_nsobject<NSView> compositor_superview_;
-  std::unique_ptr<ui::AcceleratedWidgetMac> compositor_widget_;
-  std::unique_ptr<ui::Compositor> compositor_;
+  std::unique_ptr<ui::DisplayCALayerTree> display_ca_layer_tree_;
+  std::unique_ptr<ui::RecyclableCompositorMac> compositor_;
 
   // Tracks the bounds when the window last started entering fullscreen. Used to
   // provide an answer for GetRestoredBounds(), but not ever sent to Cocoa (it
   // has its own copy, but doesn't provide access to it).
   gfx::Rect bounds_before_fullscreen_;
+
+  // Tracks the origin of the window (from the top-left of the screen) when it
+  // was last reported to toolkit-views. Needed to trigger move notifications
+  // associated with a window resize since AppKit won't send move notifications
+  // when the top-left point of the window moves vertically. The origin of the
+  // window in AppKit coordinates is not actually changing in this case.
+  gfx::Point last_window_frame_origin_;
+
+  // The transition types to animate when not relying on native NSWindow
+  // animation behaviors. Bitmask of Widget::VisibilityTransition.
+  int transitions_to_animate_ = Widget::ANIMATE_BOTH;
 
   // Whether this window wants to be fullscreen. If a fullscreen animation is in
   // progress then it might not be actually fullscreen.
@@ -346,20 +357,13 @@ class VIEWS_EXPORT BridgedNativeWidget
   // currently hidden due to having a hidden parent.
   bool wants_to_be_visible_;
 
-  // Whether to animate the window (when it is appropriate to do so).
-  bool animate_ = true;
+  // If true, then ignore interactions with CATransactionCoordinator until the
+  // first frame arrives.
+  bool ca_transaction_sync_suppressed_ = false;
 
   // If true, the window has been made visible or changed shape and the window
   // shadow needs to be invalidated when a frame is received for the new shape.
   bool invalidate_shadow_on_frame_swap_ = false;
-
-  // Whether the window's visibility is suppressed currently. For opaque non-
-  // modal windows, the window's alpha value is set to 0, till the frame from
-  // the compositor arrives to avoid "blinking".
-  bool initial_visibility_suppressed_ = false;
-
-  // Right mouse down monitor for bubble widget.
-  id mouse_down_monitor_;
 
   AssociatedViews associated_views_;
 

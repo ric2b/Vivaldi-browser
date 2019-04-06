@@ -12,6 +12,7 @@
 #include "ui/ozone/platform/wayland/wayland_test.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
 #include "ui/ozone/test/mock_platform_window_delegate.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 using ::testing::SaveArg;
 using ::testing::_;
@@ -25,17 +26,17 @@ class WaylandPointerTest : public WaylandTest {
   void SetUp() override {
     WaylandTest::SetUp();
 
-    wl_seat_send_capabilities(server.seat()->resource(),
+    wl_seat_send_capabilities(server_.seat()->resource(),
                               WL_SEAT_CAPABILITY_POINTER);
 
     Sync();
 
-    pointer = server.seat()->pointer.get();
-    ASSERT_TRUE(pointer);
+    pointer_ = server_.seat()->pointer();
+    ASSERT_TRUE(pointer_);
   }
 
  protected:
-  wl::MockPointer* pointer;
+  wl::MockPointer* pointer_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WaylandPointerTest);
@@ -43,27 +44,29 @@ class WaylandPointerTest : public WaylandTest {
 
 TEST_P(WaylandPointerTest, Leave) {
   MockPlatformWindowDelegate other_delegate;
-  WaylandWindow other_window(&other_delegate, connection.get(),
-                             gfx::Rect(0, 0, 10, 10));
+  WaylandWindow other_window(&other_delegate, connection_.get());
   gfx::AcceleratedWidget other_widget = gfx::kNullAcceleratedWidget;
   EXPECT_CALL(other_delegate, OnAcceleratedWidgetAvailable(_, _))
       .WillOnce(SaveArg<0>(&other_widget));
-  ASSERT_TRUE(other_window.Initialize());
+  PlatformWindowInitProperties properties;
+  properties.bounds = gfx::Rect(0, 0, 10, 10);
+  properties.type = PlatformWindowType::kWindow;
+  ASSERT_TRUE(other_window.Initialize(std::move(properties)));
   ASSERT_NE(other_widget, gfx::kNullAcceleratedWidget);
 
   Sync();
 
   wl::MockSurface* other_surface =
-      server.GetObject<wl::MockSurface>(other_widget);
+      server_.GetObject<wl::MockSurface>(other_widget);
   ASSERT_TRUE(other_surface);
 
-  wl_pointer_send_enter(pointer->resource(), 1, surface->resource(), 0, 0);
-  wl_pointer_send_leave(pointer->resource(), 2, surface->resource());
-  wl_pointer_send_enter(pointer->resource(), 3, other_surface->resource(), 0,
+  wl_pointer_send_enter(pointer_->resource(), 1, surface_->resource(), 0, 0);
+  wl_pointer_send_leave(pointer_->resource(), 2, surface_->resource());
+  wl_pointer_send_enter(pointer_->resource(), 3, other_surface->resource(), 0,
                         0);
-  wl_pointer_send_button(pointer->resource(), 4, 1004, BTN_LEFT,
+  wl_pointer_send_button(pointer_->resource(), 4, 1004, BTN_LEFT,
                          WL_POINTER_BUTTON_STATE_PRESSED);
-  EXPECT_CALL(delegate, DispatchEvent(_)).Times(1);
+  EXPECT_CALL(delegate_, DispatchEvent(_)).Times(1);
 
   // Do an extra Sync() here so that we process the second enter event before we
   // destroy |other_window|.
@@ -74,13 +77,19 @@ ACTION_P(CloneEvent, ptr) {
   *ptr = Event::Clone(*arg0);
 }
 
+ACTION_P3(CloneEventAndCheckCapture, window, result, ptr) {
+  ASSERT_TRUE(window->HasCapture() == result);
+  *ptr = Event::Clone(*arg0);
+}
+
 TEST_P(WaylandPointerTest, Motion) {
-  wl_pointer_send_enter(pointer->resource(), 1, surface->resource(), 0, 0);
-  wl_pointer_send_motion(pointer->resource(), 1002, wl_fixed_from_double(10.75),
+  wl_pointer_send_enter(pointer_->resource(), 1, surface_->resource(), 0, 0);
+  wl_pointer_send_motion(pointer_->resource(), 1002,
+                         wl_fixed_from_double(10.75),
                          wl_fixed_from_double(20.375));
 
   std::unique_ptr<Event> event;
-  EXPECT_CALL(delegate, DispatchEvent(_)).WillOnce(CloneEvent(&event));
+  EXPECT_CALL(delegate_, DispatchEvent(_)).WillOnce(CloneEvent(&event));
 
   Sync();
 
@@ -95,15 +104,15 @@ TEST_P(WaylandPointerTest, Motion) {
 }
 
 TEST_P(WaylandPointerTest, MotionDragged) {
-  wl_pointer_send_enter(pointer->resource(), 1, surface->resource(), 0, 0);
-  wl_pointer_send_button(pointer->resource(), 2, 1002, BTN_MIDDLE,
+  wl_pointer_send_enter(pointer_->resource(), 1, surface_->resource(), 0, 0);
+  wl_pointer_send_button(pointer_->resource(), 2, 1002, BTN_MIDDLE,
                          WL_POINTER_BUTTON_STATE_PRESSED);
 
   Sync();
 
   std::unique_ptr<Event> event;
-  EXPECT_CALL(delegate, DispatchEvent(_)).WillOnce(CloneEvent(&event));
-  wl_pointer_send_motion(pointer->resource(), 1003, wl_fixed_from_int(400),
+  EXPECT_CALL(delegate_, DispatchEvent(_)).WillOnce(CloneEvent(&event));
+  wl_pointer_send_motion(pointer_->resource(), 1003, wl_fixed_from_int(400),
                          wl_fixed_from_int(500));
 
   Sync();
@@ -118,45 +127,71 @@ TEST_P(WaylandPointerTest, MotionDragged) {
   EXPECT_EQ(gfx::PointF(400, 500), mouse_event->root_location_f());
 }
 
-TEST_P(WaylandPointerTest, ButtonPress) {
-  wl_pointer_send_enter(pointer->resource(), 1, surface->resource(),
+TEST_P(WaylandPointerTest, ButtonPressAndCheckCapture) {
+  wl_pointer_send_enter(pointer_->resource(), 1, surface_->resource(),
                         wl_fixed_from_int(200), wl_fixed_from_int(150));
-  wl_pointer_send_button(pointer->resource(), 2, 1002, BTN_RIGHT,
+  Sync();
+
+  wl_pointer_send_button(pointer_->resource(), 2, 1002, BTN_RIGHT,
+                         WL_POINTER_BUTTON_STATE_PRESSED);
+  std::unique_ptr<Event> right_press_event;
+  // By the time ET_MOUSE_PRESSED event comes, WaylandWindow must have capture
+  // set.
+  EXPECT_CALL(delegate_, DispatchEvent(_))
+      .WillOnce(
+          CloneEventAndCheckCapture(window_.get(), true, &right_press_event));
+
+  Sync();
+  ASSERT_TRUE(right_press_event);
+  ASSERT_TRUE(right_press_event->IsMouseEvent());
+  auto* right_press_mouse_event = right_press_event->AsMouseEvent();
+  EXPECT_EQ(ET_MOUSE_PRESSED, right_press_mouse_event->type());
+  EXPECT_EQ(EF_RIGHT_MOUSE_BUTTON, right_press_mouse_event->button_flags());
+  EXPECT_EQ(EF_RIGHT_MOUSE_BUTTON,
+            right_press_mouse_event->changed_button_flags());
+
+  std::unique_ptr<Event> left_press_event;
+  // Ensure capture is still set before DispatchEvent returns.
+  EXPECT_CALL(delegate_, DispatchEvent(_))
+      .WillOnce(
+          CloneEventAndCheckCapture(window_.get(), true, &left_press_event));
+  wl_pointer_send_button(pointer_->resource(), 3, 1003, BTN_LEFT,
                          WL_POINTER_BUTTON_STATE_PRESSED);
 
   Sync();
 
-  std::unique_ptr<Event> event;
-  EXPECT_CALL(delegate, DispatchEvent(_)).WillOnce(CloneEvent(&event));
-  wl_pointer_send_button(pointer->resource(), 3, 1003, BTN_LEFT,
-                         WL_POINTER_BUTTON_STATE_PRESSED);
+  // Ensure capture is still set after DispatchEvent returns.
+  ASSERT_TRUE(window_->HasCapture());
 
-  Sync();
-
-  ASSERT_TRUE(event);
-  ASSERT_TRUE(event->IsMouseEvent());
-  auto* mouse_event = event->AsMouseEvent();
-  EXPECT_EQ(ET_MOUSE_PRESSED, mouse_event->type());
+  ASSERT_TRUE(left_press_event);
+  ASSERT_TRUE(left_press_event->IsMouseEvent());
+  auto* left_press_mouse_event = left_press_event->AsMouseEvent();
+  EXPECT_EQ(ET_MOUSE_PRESSED, left_press_mouse_event->type());
   EXPECT_EQ(EF_LEFT_MOUSE_BUTTON | EF_RIGHT_MOUSE_BUTTON,
-            mouse_event->button_flags());
-  EXPECT_EQ(EF_LEFT_MOUSE_BUTTON, mouse_event->changed_button_flags());
-  EXPECT_EQ(gfx::PointF(200, 150), mouse_event->location_f());
-  EXPECT_EQ(gfx::PointF(200, 150), mouse_event->root_location_f());
+            left_press_mouse_event->button_flags());
+  EXPECT_EQ(EF_LEFT_MOUSE_BUTTON,
+            left_press_mouse_event->changed_button_flags());
+  EXPECT_EQ(EF_LEFT_MOUSE_BUTTON,
+            left_press_mouse_event->changed_button_flags());
+  EXPECT_EQ(gfx::PointF(200, 150), left_press_mouse_event->location_f());
+  EXPECT_EQ(gfx::PointF(200, 150), left_press_mouse_event->root_location_f());
 }
 
-TEST_P(WaylandPointerTest, ButtonRelease) {
-  wl_pointer_send_enter(pointer->resource(), 1, surface->resource(),
+TEST_P(WaylandPointerTest, ButtonReleaseAndCheckCapture) {
+  wl_pointer_send_enter(pointer_->resource(), 1, surface_->resource(),
                         wl_fixed_from_int(50), wl_fixed_from_int(50));
-  wl_pointer_send_button(pointer->resource(), 2, 1002, BTN_BACK,
+  wl_pointer_send_button(pointer_->resource(), 2, 1002, BTN_BACK,
                          WL_POINTER_BUTTON_STATE_PRESSED);
-  wl_pointer_send_button(pointer->resource(), 3, 1003, BTN_LEFT,
+  wl_pointer_send_button(pointer_->resource(), 3, 1003, BTN_LEFT,
                          WL_POINTER_BUTTON_STATE_PRESSED);
 
   Sync();
 
   std::unique_ptr<Event> event;
-  EXPECT_CALL(delegate, DispatchEvent(_)).WillOnce(CloneEvent(&event));
-  wl_pointer_send_button(pointer->resource(), 4, 1004, BTN_LEFT,
+  // Ensure capture is set before DispatchEvent returns.
+  EXPECT_CALL(delegate_, DispatchEvent(_))
+      .WillOnce(CloneEventAndCheckCapture(window_.get(), true, &event));
+  wl_pointer_send_button(pointer_->resource(), 4, 1004, BTN_LEFT,
                          WL_POINTER_BUTTON_STATE_RELEASED);
 
   Sync();
@@ -170,20 +205,48 @@ TEST_P(WaylandPointerTest, ButtonRelease) {
   EXPECT_EQ(EF_LEFT_MOUSE_BUTTON, mouse_event->changed_button_flags());
   EXPECT_EQ(gfx::PointF(50, 50), mouse_event->location_f());
   EXPECT_EQ(gfx::PointF(50, 50), mouse_event->root_location_f());
+
+  // Ensure capture is still set after DispatchEvent returns.
+  ASSERT_TRUE(window_->HasCapture());
+
+  mouse_event = nullptr;
+  event.reset();
+  // Ensure capture has not been reset before DispatchEvent returns, otherwise
+  // the code on top of Ozone (aura and etc), might get a wrong result, when
+  // calling HasCapture. If it is false, it can lead to mouse pressed handlers
+  // to be never released.
+  EXPECT_CALL(delegate_, DispatchEvent(_))
+      .WillOnce(CloneEventAndCheckCapture(window_.get(), true, &event));
+  wl_pointer_send_button(pointer_->resource(), 5, 1005, BTN_BACK,
+                         WL_POINTER_BUTTON_STATE_RELEASED);
+
+  Sync();
+
+  ASSERT_TRUE(event);
+  ASSERT_TRUE(event->IsMouseEvent());
+  mouse_event = event->AsMouseEvent();
+  EXPECT_EQ(ET_MOUSE_RELEASED, mouse_event->type());
+  EXPECT_EQ(EF_BACK_MOUSE_BUTTON, mouse_event->button_flags());
+  EXPECT_EQ(EF_BACK_MOUSE_BUTTON, mouse_event->changed_button_flags());
+  EXPECT_EQ(gfx::PointF(50, 50), mouse_event->location_f());
+  EXPECT_EQ(gfx::PointF(50, 50), mouse_event->root_location_f());
+
+  // It is safe to release capture now.
+  ASSERT_TRUE(!window_->HasCapture());
 }
 
 TEST_P(WaylandPointerTest, AxisVertical) {
-  wl_pointer_send_enter(pointer->resource(), 1, surface->resource(),
+  wl_pointer_send_enter(pointer_->resource(), 1, surface_->resource(),
                         wl_fixed_from_int(0), wl_fixed_from_int(0));
-  wl_pointer_send_button(pointer->resource(), 2, 1002, BTN_RIGHT,
+  wl_pointer_send_button(pointer_->resource(), 2, 1002, BTN_RIGHT,
                          WL_POINTER_BUTTON_STATE_PRESSED);
 
   Sync();
 
   std::unique_ptr<Event> event;
-  EXPECT_CALL(delegate, DispatchEvent(_)).WillOnce(CloneEvent(&event));
+  EXPECT_CALL(delegate_, DispatchEvent(_)).WillOnce(CloneEvent(&event));
   // Wayland servers typically send a value of 10 per mouse wheel click.
-  wl_pointer_send_axis(pointer->resource(), 1003,
+  wl_pointer_send_axis(pointer_->resource(), 1003,
                        WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_int(20));
 
   Sync();
@@ -200,17 +263,17 @@ TEST_P(WaylandPointerTest, AxisVertical) {
 }
 
 TEST_P(WaylandPointerTest, AxisHorizontal) {
-  wl_pointer_send_enter(pointer->resource(), 1, surface->resource(),
+  wl_pointer_send_enter(pointer_->resource(), 1, surface_->resource(),
                         wl_fixed_from_int(50), wl_fixed_from_int(75));
-  wl_pointer_send_button(pointer->resource(), 2, 1002, BTN_LEFT,
+  wl_pointer_send_button(pointer_->resource(), 2, 1002, BTN_LEFT,
                          WL_POINTER_BUTTON_STATE_PRESSED);
 
   Sync();
 
   std::unique_ptr<Event> event;
-  EXPECT_CALL(delegate, DispatchEvent(_)).WillOnce(CloneEvent(&event));
+  EXPECT_CALL(delegate_, DispatchEvent(_)).WillOnce(CloneEvent(&event));
   // Wayland servers typically send a value of 10 per mouse wheel click.
-  wl_pointer_send_axis(pointer->resource(), 1003,
+  wl_pointer_send_axis(pointer_->resource(), 1003,
                        WL_POINTER_AXIS_HORIZONTAL_SCROLL,
                        wl_fixed_from_int(10));
 

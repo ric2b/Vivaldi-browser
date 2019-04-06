@@ -4,10 +4,10 @@
 
 #import "ios/chrome/browser/ui/open_in_controller.h"
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/task_scheduler/post_task.h"
 
 #include "base/sequenced_task_runner.h"
@@ -18,6 +18,7 @@
 #import "ios/chrome/browser/ui/open_in_controller_testing.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
@@ -107,7 +108,7 @@ const CGFloat kOverlayedViewLabelBottomMargin = 60;
 - (void)showDownloadOverlayView;
 // Returns a toolbar with an "Open in..." button to be overlayed on a document
 // on tap.
-- (UIToolbar*)openInToolbar;
+- (OpenInToolbar*)openInToolbar;
 @end
 
 // Bridge to deliver method calls from C++ to the |OpenInController| class.
@@ -206,6 +207,8 @@ class OpenInControllerBridge
   scoped_refptr<base::SequencedTaskRunner> sequencedTaskRunner_;
 }
 
+@synthesize baseView = _baseView;
+
 - (id)initWithRequestContext:(net::URLRequestContextGetter*)requestContext
                webController:(CRWWebController*)webController {
   self = [super init];
@@ -229,7 +232,8 @@ class OpenInControllerBridge
   suggestedFilename_ = suggestedFilename;
   [webController_ addGestureRecognizerToWebView:tapRecognizer_];
   [self openInToolbar].alpha = 0.0f;
-  [webController_ addToolbarViewToWebView:[self openInToolbar]];
+  [self.baseView addSubview:[self openInToolbar]];
+
   [self showOpenInToolbar];
 }
 
@@ -240,7 +244,7 @@ class OpenInControllerBridge
     bridge_->OnOwnerDisabled();
   bridge_ = nil;
   [webController_ removeGestureRecognizerFromWebView:tapRecognizer_];
-  [webController_ removeToolbarViewFromWebView:[self openInToolbar]];
+  [[self openInToolbar] removeFromSuperview];
   [documentController_ dismissMenuAnimated:NO];
   [documentController_ setDelegate:nil];
   documentURL_ = GURL();
@@ -280,7 +284,8 @@ class OpenInControllerBridge
                                        selector:@selector(hideOpenInToolbar)
                                        userInfo:nil
                                         repeats:NO];
-    UIView* openInToolbar = [self openInToolbar];
+    OpenInToolbar* openInToolbar = [self openInToolbar];
+    openInToolbar.bottomMarginConstraint.active = YES;
     [UIView animateWithDuration:kOpenInToolbarAnimationDuration
                      animations:^{
                        [openInToolbar setAlpha:1.0];
@@ -492,7 +497,7 @@ class OpenInControllerBridge
                    }];
 }
 
-- (UIView*)openInToolbar {
+- (OpenInToolbar*)openInToolbar {
   if (!openInToolbar_) {
     openInToolbar_ = [[OpenInToolbar alloc]
         initWithTarget:self
@@ -578,7 +583,7 @@ class OpenInControllerBridge
     NSURL* fileURL =
         [NSURL fileURLWithPath:base::SysUTF8ToNSString(filePath.value())];
     if (downloadCanceled_) {
-      sequencedTaskRunner_->PostTask(FROM_HERE, base::BindBlockArc(^{
+      sequencedTaskRunner_->PostTask(FROM_HERE, base::BindOnce(^{
                                        [self
                                            removeDocumentAtPath:[fileURL path]];
                                      }));
@@ -599,7 +604,7 @@ class OpenInControllerBridge
 
 - (void)documentInteractionController:(UIDocumentInteractionController*)contr
            didEndSendingToApplication:(NSString*)application {
-  sequencedTaskRunner_->PostTask(FROM_HERE, base::BindBlockArc(^{
+  sequencedTaskRunner_->PostTask(FROM_HERE, base::BindOnce(^{
                                    [self
                                        removeDocumentAtPath:[[contr URL] path]];
                                  }));

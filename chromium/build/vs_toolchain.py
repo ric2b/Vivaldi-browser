@@ -13,6 +13,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from gn_helpers import ToGNString
 
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -37,7 +38,7 @@ def SetEnvironmentAndGetRuntimeDllDirs():
   """
   vs_runtime_dll_dirs = None
   depot_tools_win_toolchain = \
-      bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '0')))
+      bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1')))
   # When running on a non-Windows host, only do this if the SDK has explicitly
   # been downloaded before (in which case json_data_file will exist).
   if ((sys.platform in ('win32', 'cygwin') or os.path.exists(json_data_file))
@@ -63,20 +64,6 @@ def SetEnvironmentAndGetRuntimeDllDirs():
     os.environ['GYP_MSVS_OVERRIDE_PATH'] = toolchain
     os.environ['GYP_MSVS_VERSION'] = version
 
-    # Limit the scope of the gyp import to only where it is used. This
-    # potentially lets build configs that never execute this block to drop
-    # their GYP checkout.
-    import gyp
-
-    # We need to make sure windows_sdk_path is set to the automated
-    # toolchain values in GYP_DEFINES, but don't want to override any
-    # otheroptions.express
-    # values there.
-    gyp_defines_dict = gyp.NameValueListToDict(gyp.ShlexEnv('GYP_DEFINES'))
-    gyp_defines_dict['windows_sdk_path'] = win_sdk
-    os.environ['GYP_DEFINES'] = ' '.join('%s=%s' % (k, pipes.quote(str(v)))
-        for k, v in gyp_defines_dict.iteritems())
-
     os.environ['WINDOWSSDKDIR'] = win_sdk
     os.environ['WDK_DIR'] = wdk
     # Include the VS runtime in the PATH in case it's not machine-installed.
@@ -95,8 +82,8 @@ def SetEnvironmentAndGetRuntimeDllDirs():
     bitness = platform.architecture()[0]
     # When running 64-bit python the x64 DLLs will be in System32
     x64_path = 'System32' if bitness == '64bit' else 'Sysnative'
-    x64_path = os.path.join(r'C:\Windows', x64_path)
-    vs_runtime_dll_dirs = [x64_path, r'C:\Windows\SysWOW64']
+    x64_path = os.path.join(os.path.expandvars('%windir%'), x64_path)
+    vs_runtime_dll_dirs = [x64_path, os.path.expandvars('%windir%/SysWOW64')]
 
   return vs_runtime_dll_dirs
 
@@ -156,9 +143,12 @@ def DetectVisualStudioPath():
     # For now we use a hardcoded default with an environment variable override.
     for path in (
         os.environ.get('vs2017_install'),
-        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise',
-        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional',
-        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Community'):
+        os.path.expandvars('%ProgramFiles(x86)%'
+                           '/Microsoft Visual Studio/2017/Enterprise'),
+        os.path.expandvars('%ProgramFiles(x86)%'
+                           '/Microsoft Visual Studio/2017/Professional'),
+        os.path.expandvars('%ProgramFiles(x86)%'
+                           '/Microsoft Visual Studio/2017/Community')):
       if path and os.path.exists(path):
         return path
 
@@ -203,7 +193,8 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, dll_pattern, suffix):
   # DEPOT_TOOLS_WIN_TOOLCHAIN=0 and vcvarsall.bat has not been run.
   win_sdk_dir = os.path.normpath(
       os.environ.get('WINDOWSSDKDIR',
-                     'C:\\Program Files (x86)\\Windows Kits\\10'))
+                     os.path.expandvars('%ProgramFiles(x86)%'
+                                        '\\Windows Kits\\10')))
   ucrt_dll_dirs = os.path.join(win_sdk_dir, 'Redist', 'ucrt', 'DLLs',
                                target_cpu)
   ucrt_files = glob.glob(os.path.join(ucrt_dll_dirs, 'api-ms-win-*.dll'))
@@ -330,9 +321,11 @@ def _CopyDebugger(target_dir, target_cpu):
       if is_optional:
         continue
       else:
+        # TODO(crbug.com/773476): remove version requirement.
         raise Exception('%s not found in "%s"\r\nYou must install the '
                         '"Debugging Tools for Windows" feature from the Windows'
-                        ' 10 SDK.' % (debug_file, full_path))
+                        ' 10 SDK. You must use v10.0.17134.0. of the SDK'
+                        % (debug_file, full_path))
     target_path = os.path.join(target_dir, debug_file)
     _CopyRuntimeImpl(target_path, full_path)
 
@@ -342,9 +335,13 @@ def _GetDesiredVsToolchainHashes():
   to build with."""
   env_version = GetVisualStudioVersion()
   if env_version == '2017':
-    # VS 2017 Update 3.2 with 10.0.15063.468 SDK, patched setenv.cmd, and
-    # 10.0.16299.15 debuggers.
-    return ['1180cb75833ea365097e279efb2d5d7a42dee4b0']
+    # VS 2017 Update 7.1 (15.7.1) with 10.0.17134.12 SDK, rebuilt with
+    # dbghelp.dll fix.
+    toolchain_hash = '3bc0ec615cf20ee342f3bc29bc991b5ad66d8d2c'
+    # Third parties that do not have access to the canonical toolchain can map
+    # canonical toolchain version to their own toolchain versions.
+    toolchain_hash_mapping_key = 'GYP_MSVS_HASH_%s' % toolchain_hash
+    return [os.environ.get(toolchain_hash_mapping_key, toolchain_hash)]
   raise Exception('Unsupported VS version %s' % env_version)
 
 
@@ -384,18 +381,14 @@ def Update(force=False):
     # exist, set up a ciopfs fuse mount to put the SDK in a case-insensitive
     # part of the file system.
     toolchain_dir = os.path.join(depot_tools_path, 'win_toolchain', 'vs_files')
+    # For testing this block, unmount existing mounts with
+    # fusermount -u third_party/depot_tools/win_toolchain/vs_files
     if sys.platform.startswith('linux') and not os.path.ismount(toolchain_dir):
       import distutils.spawn
       ciopfs = distutils.spawn.find_executable('ciopfs')
       if not ciopfs:
-        # TODO(thakis): Offer to auto-install this?  Or have a
-        # build/install-build-deps-win.sh script and point to that? (Or run
-        # that?)
-        print >>sys.stderr, \
-            "\n\tCouldn't set up case-insensitive mount for Windows SDK."
-        print >>sys.stderr, \
-            "\tPlease run `sudo apt-get install ciopfs` and try again.\n"
-        return 1
+        # ciopfs not found in PATH; try the one downloaded from the DEPS hook.
+        ciopfs = os.path.join(script_dir, 'ciopfs')
       if not os.path.isdir(toolchain_dir):
         os.mkdir(toolchain_dir)
       if not os.path.isdir(toolchain_dir + '.ciopfs'):
@@ -437,7 +430,8 @@ def SetEnvironmentAndGetSDKDir():
 
   # If WINDOWSSDKDIR is not set, search the default SDK path and set it.
   if not 'WINDOWSSDKDIR' in os.environ:
-    default_sdk_path = 'C:\\Program Files (x86)\\Windows Kits\\10'
+    default_sdk_path = os.path.expandvars('%ProgramFiles(x86)%'
+                                          '\\Windows Kits\\10')
     if os.path.isdir(default_sdk_path):
       os.environ['WINDOWSSDKDIR'] = default_sdk_path
 
@@ -450,17 +444,17 @@ def GetToolchainDir():
   runtime_dll_dirs = SetEnvironmentAndGetRuntimeDllDirs()
   win_sdk_dir = SetEnvironmentAndGetSDKDir()
 
-  print '''vs_path = "%s"
-sdk_path = "%s"
-vs_version = "%s"
-wdk_dir = "%s"
-runtime_dirs = "%s"
+  print '''vs_path = %s
+sdk_path = %s
+vs_version = %s
+wdk_dir = %s
+runtime_dirs = %s
 ''' % (
-      NormalizePath(os.environ['GYP_MSVS_OVERRIDE_PATH']),
-      win_sdk_dir,
-      GetVisualStudioVersion(),
-      NormalizePath(os.environ.get('WDK_DIR', '')),
-      os.path.pathsep.join(runtime_dll_dirs or ['None']))
+      ToGNString(NormalizePath(os.environ['GYP_MSVS_OVERRIDE_PATH'])),
+      ToGNString(win_sdk_dir),
+      ToGNString(GetVisualStudioVersion()),
+      ToGNString(NormalizePath(os.environ.get('WDK_DIR', ''))),
+      ToGNString(os.path.pathsep.join(runtime_dll_dirs or ['None'])))
 
 
 def main():

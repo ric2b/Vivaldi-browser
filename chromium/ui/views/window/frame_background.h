@@ -43,6 +43,9 @@ class VIEWS_EXPORT FrameBackground {
   // Memory is owned by the caller.
   void set_theme_image(const gfx::ImageSkia& image) { theme_image_ = image; }
 
+  // Sets an inset into the theme image to begin painting at.
+  void set_theme_image_y_inset(int y_inset) { theme_image_y_inset_ = y_inset; }
+
   // Sets an image that overlays the top window image.  Usually used to add
   // edge highlighting to provide the illusion of depth.  May be null (empty).
   // Memory is owned by the caller.
@@ -81,17 +84,15 @@ class VIEWS_EXPORT FrameBackground {
   void PaintMaximized(gfx::Canvas* canvas, const View* view) const;
 
  private:
-  // Fills the frame area with the frame color.
-  void PaintFrameColor(gfx::Canvas* canvas, const View* view) const;
-
-  // Paints the background of the tab strip.
-  void PaintFrameTopArea(gfx::Canvas* canvas, const View* view) const;
+  // Fills the frame side and bottom borders with the frame color.
+  void FillFrameBorders(gfx::Canvas* canvas, const View* view) const;
 
   SkColor frame_color_;
   bool use_custom_frame_;
   bool is_active_;
   bool incognito_;
   gfx::ImageSkia theme_image_;
+  int theme_image_y_inset_;
   gfx::ImageSkia theme_overlay_image_;
   int top_area_height_;
 

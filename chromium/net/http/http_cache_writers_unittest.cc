@@ -4,8 +4,10 @@
 
 #include "net/http/http_cache_writers.h"
 
+#include <limits>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/run_loop.h"
@@ -17,6 +19,7 @@
 #include "net/http/mock_http_cache.h"
 #include "net/http/partial_data.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -32,9 +35,8 @@ class TestHttpCacheTransaction : public HttpCache::Transaction {
 
  public:
   TestHttpCacheTransaction(RequestPriority priority, HttpCache* cache)
-      : HttpCache::Transaction(priority, cache){};
+      : HttpCache::Transaction(priority, cache) {}
   ~TestHttpCacheTransaction() override = default;
-  ;
 
   Transaction::Mode mode() const override { return Transaction::READ_WRITE; }
 };
@@ -49,25 +51,38 @@ class TestHttpCache : public HttpCache {
   void WritersDoneWritingToEntry(ActiveEntry* entry,
                                  bool success,
                                  bool should_keep_entry,
-                                 TransactionSet) override {}
+                                 TransactionSet make_readers) override {
+    done_writing_to_entry_count_ += 1;
+    make_readers_size_ = make_readers.size();
+  }
 
   void WritersDoomEntryRestartTransactions(ActiveEntry* entry) override {}
+
+  int WritersDoneWritingToEntryCount() const {
+    return done_writing_to_entry_count_;
+  }
+
+  size_t MakeReadersSize() const { return make_readers_size_; }
+
+ private:
+  int done_writing_to_entry_count_ = 0;
+  size_t make_readers_size_ = 0u;
 };
 
-class WritersTest : public testing::Test {
+class WritersTest : public TestWithScopedTaskEnvironment {
  public:
   enum class DeleteTransactionType { NONE, ACTIVE, WAITING, IDLE };
   WritersTest()
-      : disk_entry_(nullptr),
-        test_cache_(base::MakeUnique<MockNetworkLayer>(),
-                    base::MakeUnique<MockBackendFactory>()),
+      : scoped_transaction_(kSimpleGET_Transaction),
+        disk_entry_(nullptr),
+        test_cache_(std::make_unique<MockNetworkLayer>(),
+                    std::make_unique<MockBackendFactory>()),
         request_(kSimpleGET_Transaction) {
-    ScopedMockTransaction transaction(kSimpleGET_Transaction);
-    transaction.response_headers =
+    scoped_transaction_.response_headers =
         "Last-Modified: Wed, 28 Nov 2007 00:40:09 GMT\n"
         "Content-Length: 22\n"
         "Etag: \"foopy\"\n";
-    request_ = MockHttpRequest(transaction);
+    request_ = MockHttpRequest(scoped_transaction_);
   }
 
   ~WritersTest() override {
@@ -92,7 +107,8 @@ class WritersTest : public testing::Test {
 
   void CreateWritersAddTransaction(
       HttpCache::ParallelWritingPattern parallel_writing_pattern_ =
-          HttpCache::PARALLEL_WRITING_JOIN) {
+          HttpCache::PARALLEL_WRITING_JOIN,
+      bool content_encoding_present = false) {
     TestCompletionCallback callback;
 
     // Create and Start a mock network transaction.
@@ -102,6 +118,8 @@ class WritersTest : public testing::Test {
                                NetLogWithSource());
     base::RunLoop().RunUntilIdle();
     response_info_ = *(network_transaction->GetResponseInfo());
+    if (content_encoding_present)
+      response_info_.headers->AddHeader("Content-Encoding: gzip");
 
     // Create a mock cache transaction.
     std::unique_ptr<TestHttpCacheTransaction> transaction =
@@ -110,11 +128,9 @@ class WritersTest : public testing::Test {
 
     CreateWriters(kSimpleGET_Transaction.url);
     EXPECT_TRUE(writers_->IsEmpty());
-    HttpCache::Writers::TransactionInfo info(transaction->partial(),
-                                             transaction->is_truncated(),
-                                             *(transaction->GetResponseInfo()));
+    HttpCache::Writers::TransactionInfo info(
+        transaction->partial(), transaction->is_truncated(), response_info_);
 
-    info.response_info = response_info_;
     writers_->AddTransaction(transaction.get(), parallel_writing_pattern_,
                              transaction->priority(), info);
     writers_->SetNetworkTransaction(transaction.get(),
@@ -176,6 +192,28 @@ class WritersTest : public testing::Test {
     return OK;
   }
 
+  int ReadFewBytes(std::string* result) {
+    EXPECT_TRUE(transactions_.size() >= (size_t)1);
+    TestHttpCacheTransaction* transaction = transactions_.begin()->get();
+    TestCompletionCallback callback;
+
+    std::string content;
+    int rv = 0;
+    scoped_refptr<IOBuffer> buf(new IOBuffer(5));
+    rv = writers_->Read(buf.get(), 5, callback.callback(), transaction);
+    if (rv == ERR_IO_PENDING) {
+      rv = callback.WaitForResult();
+      base::RunLoop().RunUntilIdle();
+    }
+
+    if (rv > 0)
+      result->append(buf->data(), rv);
+    else if (rv < 0)
+      return rv;
+
+    return OK;
+  }
+
   void ReadVerifyTwoDifferentBufferLengths(
       const std::vector<int>& buffer_lengths) {
     EXPECT_EQ(2u, buffer_lengths.size());
@@ -226,7 +264,7 @@ class WritersTest : public testing::Test {
   // Each transaction invokes Read simultaneously. If |deleteType| is not NONE,
   // then it deletes the transaction of given type during the read process.
   void ReadAllDeleteTransaction(DeleteTransactionType deleteType) {
-    EXPECT_TRUE(transactions_.size() >= 3u);
+    EXPECT_LE(3u, transactions_.size());
 
     unsigned int delete_index = std::numeric_limits<unsigned int>::max();
     switch (deleteType) {
@@ -312,8 +350,12 @@ class WritersTest : public testing::Test {
     EXPECT_EQ(OK, rv);
   }
 
-  void MidReadDeleteActiveTransaction() {
-    EXPECT_TRUE(transactions_.size() == 1u);
+  // Creates a transaction and performs two reads. Returns after the second read
+  // has begun but before its callback has run.
+  void StopMidRead() {
+    CreateWritersAddTransaction();
+    EXPECT_FALSE(writers_->IsEmpty());
+    EXPECT_EQ(1u, transactions_.size());
     TestHttpCacheTransaction* transaction = transactions_[0].get();
 
     // Read a few bytes so that truncation is possible.
@@ -321,35 +363,13 @@ class WritersTest : public testing::Test {
     scoped_refptr<IOBuffer> buf = new IOBuffer(5);
     int rv = writers_->Read(buf.get(), 5, callback.callback(), transaction);
     EXPECT_EQ(ERR_IO_PENDING, rv);  // Since the default is asynchronous.
+    EXPECT_EQ(5, callback.GetResult(rv));
 
-    writers_->RemoveTransaction(transaction, false /* success */);
-
-    EXPECT_TRUE(writers_->IsEmpty());
-
-    // Cannot add more writers while we are in truncation pending state.
-    EXPECT_FALSE(CanAddWriters());
-
-    // Complete the Read and the entry should be truncated.
-    base::RunLoop().RunUntilIdle();
-  }
-
-  void MidReadStopCaching() {
-    EXPECT_TRUE(transactions_.size() == 1u);
-    TestHttpCacheTransaction* transaction = transactions_[0].get();
-
-    // Read a few bytes so that truncation is possible.
-    TestCompletionCallback callback;
-    scoped_refptr<IOBuffer> buf = new IOBuffer(5);
-    int rv = writers_->Read(buf.get(), 5, callback.callback(), transaction);
-    EXPECT_EQ(ERR_IO_PENDING, rv);  // Since the default is asynchronous.
-
-    writers_->StopCaching(false /* keep_entry */);
-
-    // Cannot add more writers while we are in network read only state.
-    EXPECT_FALSE(CanAddWriters());
-
-    // Complete the Read and the entry should be truncated.
-    base::RunLoop().RunUntilIdle();
+    // Start reading a few more bytes and return.
+    buf = new IOBuffer(5);
+    rv = writers_->Read(buf.get(), 5, base::BindRepeating([](int rv) {}),
+                        transaction);
+    EXPECT_EQ(ERR_IO_PENDING, rv);
   }
 
   void ReadAll() { ReadAllDeleteTransaction(DeleteTransactionType::NONE); }
@@ -384,7 +404,7 @@ class WritersTest : public testing::Test {
         // Only active transaction should succeed.
         if (i == 0) {
           active_transaction_rv = callbacks[i].WaitForResult();
-          EXPECT_TRUE(active_transaction_rv >= 0);
+          EXPECT_LE(0, active_transaction_rv);
           results->at(0).append(bufs[i]->data(), active_transaction_rv);
         } else if (first_iter) {
           rv = callbacks[i].WaitForResult();
@@ -436,18 +456,34 @@ class WritersTest : public testing::Test {
     EXPECT_EQ(priority, writers_->priority_);
   }
 
-  bool ShouldKeepEntry() { return writers_->should_keep_entry_; }
+  bool ShouldKeepEntry() const { return writers_->should_keep_entry_; }
 
-  void TruncateEntryNoStrongValidators() {
-    writers_->InitiateTruncateEntry();
-    EXPECT_FALSE(ShouldKeepEntry());
+  bool Truncated() const {
+    const int kResponseInfoIndex = 0;  // Keep updated with HttpCache.
+    TestCompletionCallback callback;
+    int io_buf_len = entry_->disk_entry->GetDataSize(kResponseInfoIndex);
+    if (io_buf_len == 0)
+      return false;
+
+    scoped_refptr<IOBuffer> read_buffer = new IOBuffer(io_buf_len);
+    int rv = disk_entry_->ReadData(kResponseInfoIndex, 0, read_buffer.get(),
+                                   io_buf_len, callback.callback());
+    rv = callback.GetResult(rv);
+    HttpResponseInfo response_info;
+    bool truncated;
+    HttpCache::ParseResponseInfo(read_buffer->data(), io_buf_len,
+                                 &response_info, &truncated);
+    return truncated;
   }
+
+  bool ShouldTruncate() { return writers_->ShouldTruncate(); }
 
   bool CanAddWriters() {
     HttpCache::ParallelWritingPattern parallel_writing_pattern_;
     return writers_->CanAddWriters(&parallel_writing_pattern_);
   }
 
+  ScopedMockTransaction scoped_transaction_;
   MockHttpCache cache_;
   std::unique_ptr<HttpCache::Writers> writers_;
   disk_cache::Entry* disk_entry_;
@@ -513,11 +549,58 @@ TEST_F(WritersTest, StopCaching) {
   EXPECT_FALSE(CanAddWriters());
 }
 
-// Tests StopCaching should be successful when invoked mid-read.
-TEST_F(WritersTest, StopCachingMidRead) {
+// Tests that when the writers object completes, it passes any non-pending
+// transactions to WritersDoneWritingToEntry.
+TEST_F(WritersTest, MakeReaders) {
   CreateWritersAddTransaction();
-  EXPECT_FALSE(writers_->IsEmpty());
-  MidReadStopCaching();
+  AddTransactionToExistingWriters();
+  AddTransactionToExistingWriters();
+
+  std::string remaining_content;
+  Read(&remaining_content);
+
+  EXPECT_EQ(1, test_cache_.WritersDoneWritingToEntryCount());
+  EXPECT_FALSE(Truncated());
+  EXPECT_EQ(2u, test_cache_.MakeReadersSize());
+}
+
+// Tests StopCaching should be successful when invoked mid-read.
+TEST_F(WritersTest, StopCachingMidReadKeepEntry) {
+  StopMidRead();
+
+  // Stop caching and keep the entry after the transaction finishes.
+  writers_->StopCaching(true /* keep_entry */);
+
+  // Cannot add more writers while we are in network read-only state.
+  EXPECT_FALSE(CanAddWriters());
+
+  // Complete the pending read;
+  base::RunLoop().RunUntilIdle();
+
+  // Read the rest of the content and the cache entry should have truncated.
+  std::string remaining_content;
+  Read(&remaining_content);
+  EXPECT_EQ(1, test_cache_.WritersDoneWritingToEntryCount());
+  EXPECT_TRUE(Truncated());
+}
+
+// Tests StopCaching should be successful when invoked mid-read.
+TEST_F(WritersTest, StopCachingMidReadDropEntry) {
+  StopMidRead();
+
+  writers_->StopCaching(false /* keep_entry */);
+
+  // Cannot add more writers while we are in network read only state.
+  EXPECT_FALSE(CanAddWriters());
+
+  // Complete the pending read.
+  base::RunLoop().RunUntilIdle();
+
+  // Read the rest of the content and the cache entry shouldn't have truncated.
+  std::string remaining_content;
+  Read(&remaining_content);
+  EXPECT_EQ(1, test_cache_.WritersDoneWritingToEntryCount());
+  EXPECT_FALSE(Truncated());
 }
 
 // Tests removing of an idle transaction and change in priority.
@@ -560,6 +643,8 @@ TEST_F(WritersTest, ReadMultiple) {
   AddTransactionToExistingWriters();
 
   ReadAll();
+
+  EXPECT_EQ(1, test_cache_.WritersDoneWritingToEntryCount());
 }
 
 // Tests that multiple transactions can read the same data simultaneously.
@@ -598,16 +683,21 @@ TEST_F(WritersTest, ReadMultipleDeleteActiveTransaction) {
   AddTransactionToExistingWriters();
 
   ReadAllDeleteTransaction(DeleteTransactionType::ACTIVE);
+  EXPECT_EQ(1, test_cache_.WritersDoneWritingToEntryCount());
 }
 
-// Tests that ongoing Read completes even when active transaction is deleted
+// Tests that ongoing Read is ignored when an active transaction is deleted
 // mid-read and there are no more transactions. It should also successfully
 // initiate truncation of the entry.
 TEST_F(WritersTest, MidReadDeleteActiveTransaction) {
-  CreateWritersAddTransaction();
-  EXPECT_FALSE(writers_->IsEmpty());
-  EXPECT_TRUE(CanAddWriters());
-  MidReadDeleteActiveTransaction();
+  StopMidRead();
+
+  // Removed the transaction while the read is pending.
+  RemoveFirstTransaction();
+
+  EXPECT_EQ(1, test_cache_.WritersDoneWritingToEntryCount());
+  EXPECT_TRUE(Truncated());
+  EXPECT_TRUE(writers_->IsEmpty());
 }
 
 // Tests that removing a waiting for read transaction does not impact other
@@ -694,9 +784,9 @@ TEST_F(WritersTest, TruncateEntryFail) {
 
   RemoveFirstTransaction();
 
-  // Should return false since the entry does not have strong validators and
-  // thus cannot be resumed.
-  TruncateEntryNoStrongValidators();
+  // Should return false since no content was written to the entry.
+  EXPECT_FALSE(ShouldTruncate());
+  EXPECT_FALSE(ShouldKeepEntry());
 }
 
 // Set network read only.
@@ -715,6 +805,19 @@ TEST_F(WritersTest, StopCachingWithNotKeepEntry) {
 
   writers_->StopCaching(false /* keep_entry */);
   EXPECT_TRUE(writers_->network_read_only());
+  EXPECT_FALSE(ShouldKeepEntry());
+}
+
+// Tests that if content-encoding is set, the entry should not be marked as
+// truncated, since we should not be creating range requests for compressed
+// entries.
+TEST_F(WritersTest, ContentEncodingShouldNotTruncate) {
+  CreateWritersAddTransaction(HttpCache::PARALLEL_WRITING_JOIN,
+                              true /* content_encoding_present */);
+  std::string result;
+  ReadFewBytes(&result);
+
+  EXPECT_FALSE(ShouldTruncate());
   EXPECT_FALSE(ShouldKeepEntry());
 }
 

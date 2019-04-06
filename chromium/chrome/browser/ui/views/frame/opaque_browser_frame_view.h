@@ -55,7 +55,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   int GetThemeBackgroundXInset() const override;
   void UpdateThrobber(bool running) override;
   gfx::Size GetMinimumSize() const override;
-  views::View* GetProfileSwitcherView() const override;
+  int GetTabStripLeftInset() const override;
 
   // views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -68,6 +68,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   void UpdateWindowTitle() override;
   void SizeConstraintsChanged() override;
   void ActivationChanged(bool active) override;
+  bool HasClientEdge() const override;
 
   // views::View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
@@ -101,8 +102,10 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   int GetTabStripHeight() const override;
   bool IsToolbarVisible() const override;
   gfx::Size GetTabstripPreferredSize() const override;
+  gfx::Size GetNewTabButtonPreferredSize() const override;
   int GetTopAreaHeight() const override;
   bool UseCustomFrame() const override;
+  bool EverHasVisibleBackgroundTabShapes() const override;
 
  protected:
   views::ImageButton* minimize_button() const { return minimize_button_; }
@@ -115,16 +118,13 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
 
   // BrowserNonClientFrameView:
   bool ShouldPaintAsThemed() const override;
-  void UpdateProfileIcons() override;
+  AvatarButtonStyle GetAvatarButtonStyle() const override;
 
   OpaqueBrowserFrameViewLayout* layout() { return layout_; }
 
   // If native window frame buttons are enabled, redraws the image resources
   // associated with |{minimize,maximize,restore,close}_button_|.
   virtual void MaybeRedrawFrameButtons();
-
-  // Wrapper around the in-frame avatar switcher.
-  AvatarButtonManager profile_switcher_;
 
  private:
   // Creates, adds and returns a new image button with |this| as its listener.
@@ -141,6 +141,11 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   // calculated as if the window was restored, regardless of its current
   // node_data.
   int FrameBorderThickness(bool restored) const;
+
+  // Returns the thickness of the border that makes up the window frame edge
+  // along the top of the frame. If |restored| is true, this acts as if the
+  // window is restored regardless of the actual mode.
+  int FrameTopBorderThickness(bool restored) const;
 
   // Returns true if the specified point is within the avatar menu buttons.
   bool IsWithinAvatarMenuButtons(const gfx::Point& point) const;

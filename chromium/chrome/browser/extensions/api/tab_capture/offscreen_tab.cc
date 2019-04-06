@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
 #include "chrome/browser/media/router/presentation/presentation_navigation_policy.h"
@@ -23,7 +22,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
-#include "third_party/WebKit/public/web/WebPresentationReceiverFlags.h"
+#include "third_party/blink/public/web/web_presentation_receiver_flags.h"
 
 using content::WebContents;
 
@@ -95,7 +94,6 @@ OffscreenTab::OffscreenTab(OffscreenTabsOwner* owner)
                       owner->extension_web_contents()->GetBrowserContext()),
                   base::BindOnce(&OffscreenTab::DieIfOriginalProfileDestroyed,
                                  base::Unretained(this)))),
-      capture_poll_timer_(false, false),
       content_capture_was_detected_(false),
       navigation_policy_(
           std::make_unique<media_router::DefaultNavigationPolicy>()) {
@@ -119,7 +117,7 @@ void OffscreenTab::Start(const GURL& start_url,
   if (!optional_presentation_id.empty())
     params.starting_sandbox_flags = blink::kPresentationReceiverSandboxFlags;
 
-  offscreen_tab_web_contents_.reset(WebContents::Create(params));
+  offscreen_tab_web_contents_ = WebContents::Create(params);
   offscreen_tab_web_contents_->SetDelegate(this);
   WebContentsObserver::Observe(offscreen_tab_web_contents_.get());
 
@@ -263,8 +261,10 @@ bool OffscreenTab::EmbedsFullscreenWidget() const {
   return true;
 }
 
-void OffscreenTab::EnterFullscreenModeForTab(WebContents* contents,
-                                             const GURL& origin) {
+void OffscreenTab::EnterFullscreenModeForTab(
+    WebContents* contents,
+    const GURL& origin,
+    const blink::WebFullscreenOptions& options) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(), contents);
 
   if (in_fullscreen_mode())
@@ -300,9 +300,9 @@ blink::WebDisplayMode OffscreenTab::GetDisplayMode(
 }
 
 void OffscreenTab::RequestMediaAccessPermission(
-      WebContents* contents,
-      const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) {
+    WebContents* contents,
+    const content::MediaStreamRequest& request,
+    content::MediaResponseCallback callback) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(), contents);
 
   // This method is being called to check whether an extension is permitted to
@@ -341,16 +341,18 @@ void OffscreenTab::RequestMediaAccessPermission(
   DVLOG(2) << "Allowing " << devices.size()
            << " capture devices for OffscreenTab content.";
 
-  callback.Run(devices, devices.empty() ? content::MEDIA_DEVICE_INVALID_STATE
-                                        : content::MEDIA_DEVICE_OK,
-               std::unique_ptr<content::MediaStreamUI>(nullptr));
+  std::move(callback).Run(devices,
+                          devices.empty() ? content::MEDIA_DEVICE_INVALID_STATE
+                                          : content::MEDIA_DEVICE_OK,
+                          std::unique_ptr<content::MediaStreamUI>(nullptr));
 }
 
 bool OffscreenTab::CheckMediaAccessPermission(
-    WebContents* contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type) {
-  DCHECK_EQ(offscreen_tab_web_contents_.get(), contents);
+  DCHECK_EQ(offscreen_tab_web_contents_.get(),
+            content::WebContents::FromRenderFrameHost(render_frame_host));
   return type == content::MEDIA_TAB_AUDIO_CAPTURE ||
       type == content::MEDIA_TAB_VIDEO_CAPTURE;
 }

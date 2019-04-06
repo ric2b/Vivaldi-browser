@@ -12,8 +12,6 @@
 
 namespace content {
 
-void RenderWidgetHostDelegate::GetScreenInfo(ScreenInfo*) {}
-
 KeyboardEventProcessingResult RenderWidgetHostDelegate::PreHandleKeyboardEvent(
     const NativeWebKeyboardEvent& event) {
   return KeyboardEventProcessingResult::NOT_HANDLED;
@@ -27,6 +25,10 @@ bool RenderWidgetHostDelegate::HandleWheelEvent(
 bool RenderWidgetHostDelegate::PreHandleGestureEvent(
     const blink::WebGestureEvent& event) {
   return false;
+}
+
+double RenderWidgetHostDelegate::GetPendingPageZoomLevel() const {
+  return 0.0;
 }
 
 BrowserAccessibilityManager*
@@ -76,6 +78,15 @@ RenderWidgetHostImpl* RenderWidgetHostDelegate::GetMouseLockWidget() {
   return nullptr;
 }
 
+bool RenderWidgetHostDelegate::RequestKeyboardLock(RenderWidgetHostImpl* host,
+                                                   bool esc_key_locked) {
+  return false;
+}
+
+RenderWidgetHostImpl* RenderWidgetHostDelegate::GetKeyboardLockWidget() {
+  return nullptr;
+}
+
 TextInputManager* RenderWidgetHostDelegate::GetTextInputManager() {
   return nullptr;
 }
@@ -107,9 +118,10 @@ bool RenderWidgetHostDelegate::AddDomainInfoToRapporSample(
   return false;
 }
 
-void RenderWidgetHostDelegate::UpdateUrlForUkmSource(
-    ukm::UkmRecorder* service,
-    ukm::SourceId ukm_source_id) {}
+ukm::SourceId RenderWidgetHostDelegate::GetUkmSourceIdForLastCommittedSource()
+    const {
+  return ukm::kInvalidSourceId;
+}
 
 gfx::Size RenderWidgetHostDelegate::GetAutoResizeSize() {
   return gfx::Size();
@@ -120,10 +132,6 @@ WebContents* RenderWidgetHostDelegate::GetAsWebContents() {
 }
 
 bool RenderWidgetHostDelegate::IsShowingContextMenuOnPage() const {
-  return false;
-}
-
-bool RenderWidgetHostDelegate::HasFocusedGuests() {
   return false;
 }
 

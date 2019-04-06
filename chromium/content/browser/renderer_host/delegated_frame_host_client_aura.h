@@ -6,7 +6,6 @@
 #define CONTENT_BROWSER_RENDERER_HOST_DELEGATED_FRAME_HOST_CLIENT_AURA_H_
 
 #include "base/macros.h"
-#include "content/browser/renderer_host/compositor_resize_lock.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/common/content_export.h"
 
@@ -16,8 +15,7 @@ class RenderWidgetHostViewAura;
 
 // DelegatedFrameHostClient implementation for aura, not used in mus.
 class CONTENT_EXPORT DelegatedFrameHostClientAura
-    : public DelegatedFrameHostClient,
-      public CompositorResizeLockClient {
+    : public DelegatedFrameHostClient {
  public:
   explicit DelegatedFrameHostClientAura(
       RenderWidgetHostViewAura* render_widget_host_view);
@@ -32,19 +30,10 @@ class CONTENT_EXPORT DelegatedFrameHostClientAura
   ui::Layer* DelegatedFrameHostGetLayer() const override;
   bool DelegatedFrameHostIsVisible() const override;
   SkColor DelegatedFrameHostGetGutterColor() const override;
-  gfx::Size DelegatedFrameHostDesiredSizeInDIP() const override;
-  bool DelegatedFrameCanCreateResizeLock() const override;
-  std::unique_ptr<CompositorResizeLock> DelegatedFrameHostCreateResizeLock()
-      override;
-  viz::LocalSurfaceId GetLocalSurfaceId() const override;
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
   void OnBeginFrame(base::TimeTicks frame_time) override;
-  bool IsAutoResizeEnabled() const override;
   void OnFrameTokenChanged(uint32_t frame_token) override;
-
-  // CompositorResizeLockClient implementation.
-  std::unique_ptr<ui::CompositorLock> GetCompositorLock(
-      ui::CompositorLockClient* client) override;
-  void CompositorResizeLockEnded() override;
+  void DidReceiveFirstFrameAfterNavigation() override;
 
  private:
   RenderWidgetHostViewAura* render_widget_host_view_;

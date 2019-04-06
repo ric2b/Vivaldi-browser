@@ -9,11 +9,11 @@
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 namespace chromecast {
 namespace test {
-
-using CastFocusClientAuraTest = aura::test::AuraTestBase;
+namespace {
 
 class TestWindow {
  public:
@@ -32,9 +32,14 @@ class TestWindow {
   DISALLOW_COPY_AND_ASSIGN(TestWindow);
 };
 
+}  // namespace
+
+using CastFocusClientAuraTest = aura::test::AuraTestBase;
+
 TEST_F(CastFocusClientAuraTest, FocusableWindows) {
-  std::unique_ptr<aura::WindowTreeHost> window_tree_host(
-      aura::WindowTreeHost::Create(gfx::Rect(0, 0, 1280, 720)));
+  std::unique_ptr<aura::WindowTreeHost> window_tree_host =
+      aura::WindowTreeHost::Create(
+          ui::PlatformWindowInitProperties{gfx::Rect(0, 0, 1280, 720)});
   window_tree_host->InitHost();
   window_tree_host->Show();
 
@@ -67,8 +72,9 @@ TEST_F(CastFocusClientAuraTest, FocusableWindows) {
 }
 
 TEST_F(CastFocusClientAuraTest, ChildFocus) {
-  std::unique_ptr<aura::WindowTreeHost> window_tree_host(
-      aura::WindowTreeHost::Create(gfx::Rect(0, 0, 1280, 720)));
+  std::unique_ptr<aura::WindowTreeHost> window_tree_host =
+      aura::WindowTreeHost::Create(
+          ui::PlatformWindowInitProperties{gfx::Rect(0, 0, 1280, 720)});
   window_tree_host->InitHost();
   window_tree_host->Show();
 
@@ -103,8 +109,9 @@ TEST_F(CastFocusClientAuraTest, ChildFocus) {
 }
 
 TEST_F(CastFocusClientAuraTest, ZOrder) {
-  std::unique_ptr<aura::WindowTreeHost> window_tree_host(
-      aura::WindowTreeHost::Create(gfx::Rect(0, 0, 1280, 720)));
+  std::unique_ptr<aura::WindowTreeHost> window_tree_host =
+      aura::WindowTreeHost::Create(
+          ui::PlatformWindowInitProperties{gfx::Rect(0, 0, 1280, 720)});
   window_tree_host->InitHost();
   window_tree_host->Show();
 
@@ -156,8 +163,9 @@ TEST_F(CastFocusClientAuraTest, ZOrder) {
 }
 
 TEST_F(CastFocusClientAuraTest, ZOrderWithChildWindows) {
-  std::unique_ptr<aura::WindowTreeHost> window_tree_host(
-      aura::WindowTreeHost::Create(gfx::Rect(0, 0, 1280, 720)));
+  std::unique_ptr<aura::WindowTreeHost> window_tree_host =
+      aura::WindowTreeHost::Create(
+          ui::PlatformWindowInitProperties{gfx::Rect(0, 0, 1280, 720)});
   window_tree_host->InitHost();
   window_tree_host->Show();
 

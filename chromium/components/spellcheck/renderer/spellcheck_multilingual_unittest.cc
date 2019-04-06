@@ -14,14 +14,16 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/spellcheck/common/spellcheck_common.h"
 #include "components/spellcheck/common/spellcheck_result.h"
+#include "components/spellcheck/renderer/empty_local_interface_provider.h"
 #include "components/spellcheck/renderer/spellcheck.h"
 #include "components/spellcheck/renderer/spellcheck_provider_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebTextCheckingResult.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_text_checking_result.h"
 
 namespace {
 
@@ -35,7 +37,7 @@ struct SpellcheckTestCase {
 
 base::FilePath GetHunspellDirectory() {
   base::FilePath hunspell_directory;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &hunspell_directory))
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &hunspell_directory))
     return base::FilePath();
 
   hunspell_directory = hunspell_directory.AppendASCII("third_party");
@@ -50,8 +52,9 @@ class MultilingualSpellCheckTest : public testing::Test {
   MultilingualSpellCheckTest() {}
 
   void ReinitializeSpellCheck(const std::string& unsplit_languages) {
-    spellcheck_ = new SpellCheck(nullptr);
-    provider_.reset(new TestingSpellCheckProvider(spellcheck_));
+    spellcheck_ = new SpellCheck(nullptr, &embedder_provider_);
+    provider_.reset(
+        new TestingSpellCheckProvider(spellcheck_, &embedder_provider_));
     InitializeSpellCheck(unsplit_languages);
   }
 
@@ -111,6 +114,9 @@ class MultilingualSpellCheckTest : public testing::Test {
   }
 
  private:
+  base::test::ScopedTaskEnvironment task_environment_;
+  spellcheck::EmptyLocalInterfaceProvider embedder_provider_;
+
   // Owned by |provider_|.
   SpellCheck* spellcheck_;
   std::unique_ptr<TestingSpellCheckProvider> provider_;

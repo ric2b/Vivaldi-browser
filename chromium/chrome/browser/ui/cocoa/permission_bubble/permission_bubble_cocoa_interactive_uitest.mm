@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "ui/base/test/ui_controls.h"
 #import "ui/base/test/windowed_nsnotification_observer.h"
 #include "ui/base/ui_base_features.h"
@@ -131,6 +132,8 @@ class PermissionBubbleInteractiveUITest
   base::test::ScopedFeatureList scoped_feature_list_;
 
  private:
+  test::ScopedMacViewsBrowserMode cocoa_browser_mode_{false};
+
   DISALLOW_COPY_AND_ASSIGN(PermissionBubbleInteractiveUITest);
 };
 
@@ -153,7 +156,9 @@ IN_PROC_BROWSER_TEST_P(PermissionBubbleInteractiveUITest, CmdWClosesWindow) {
 
 // Add a tab, ensure we can switch away and back using Cmd+Alt+Left/Right and
 // curly braces.
-IN_PROC_BROWSER_TEST_P(PermissionBubbleInteractiveUITest, SwitchTabs) {
+// Disabled. See https://crbug.com/845389 - this regressed somewhere between
+// r545258 and r559030, but it may be obsolete soon.
+IN_PROC_BROWSER_TEST_P(PermissionBubbleInteractiveUITest, DISABLED_SwitchTabs) {
   NSWindow* browser_window = browser()->window()->GetNativeWindow();
 
   EXPECT_EQ(0, browser()->tab_strip_model()->active_index());

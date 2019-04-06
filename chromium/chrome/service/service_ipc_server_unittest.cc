@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -22,9 +21,7 @@
 namespace {
 
 void PumpCurrentLoop() {
-  base::MessageLoop::ScopedNestableTaskAllower nestable_task_allower(
-      base::MessageLoop::current());
-  base::RunLoop().RunUntilIdle();
+  base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).RunUntilIdle();
 }
 
 class FakeServiceIPCServerClient : public ServiceIPCServer::Client {
@@ -131,7 +128,7 @@ void ServiceIPCServerTest::ConnectClientChannel() {
       std::move(service_process_client_.interface_provider_));
 
   remote_interfaces_.GetInterface(&service_process_);
-  service_process_->Hello(base::BindOnce(&base::DoNothing));
+  service_process_->Hello(base::DoNothing());
   PumpLoops();
 }
 

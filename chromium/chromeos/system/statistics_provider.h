@@ -19,6 +19,15 @@ CHROMEOS_EXPORT extern const char kActivateDateKey[];
 // The key that will be present in VPD if the device ever was enrolled.
 CHROMEOS_EXPORT extern const char kCheckEnrollmentKey[];
 
+// The key and values present in VPD to indicate if RLZ ping should be sent.
+CHROMEOS_EXPORT extern const char kShouldSendRlzPingKey[];
+CHROMEOS_EXPORT extern const char kShouldSendRlzPingValueFalse[];
+CHROMEOS_EXPORT extern const char kShouldSendRlzPingValueTrue[];
+
+// The key present in VPD that indicates the date after which the RLZ ping is
+// allowed to be sent. It is in the format of "yyyy-mm-dd".
+CHROMEOS_EXPORT extern const char kRlzEmbargoEndDateKey[];
+
 // Customization ID key.
 CHROMEOS_EXPORT extern const char kCustomizationIdKey[];
 
@@ -75,9 +84,10 @@ CHROMEOS_EXPORT extern const char kInitialLocaleKey[];
 CHROMEOS_EXPORT extern const char kInitialTimezoneKey[];
 CHROMEOS_EXPORT extern const char kKeyboardLayoutKey[];
 
-// Serial number key (only VPD v2+ devices). Use GetEnterpriseMachineID() to
-// cover legacy devices.
-CHROMEOS_EXPORT extern const char kSerialNumberKey[];
+// Serial number key (VPD v2+ devices, Samsung: caroline and later) for use in
+// tests. Outside of tests GetEnterpriseMachineID() is the backward-compatible
+// way to obtain the serial number.
+CHROMEOS_EXPORT extern const char kSerialNumberKeyForTest[];
 
 // This interface provides access to Chrome OS statistics.
 class CHROMEOS_EXPORT StatisticsProvider {
@@ -85,13 +95,21 @@ class CHROMEOS_EXPORT StatisticsProvider {
   // Starts loading the machine statistics.
   virtual void StartLoadingMachineStatistics(bool load_oem_manifest) = 0;
 
+  // Schedules |callback| on the current sequence when machine statistics are
+  // loaded. That can be immediately if machine statistics are already loaded.
+  virtual void ScheduleOnMachineStatisticsLoaded(
+      base::OnceClosure callback) = 0;
+
+  // GetMachineStatistic(), GetMachineFlag() and GetEnterpriseMachineId() will
+  // block if called before statistics have been loaded. To avoid this, call
+  // from a callback passed to ScheduleOnMachineStatisticsLoaded(). These
+  // methods are safe to call on any sequence. StartLoadingMachineStatistics()
+  // must be called before these methods.
+
   // Returns true if the named machine statistic (e.g. "hardware_class") is
   // found and stores it in |result| (if provided). Probing for the existence of
   // a statistic by setting |result| to nullptr supresses the usual warning in
-  // case the statistic is not found. Safe to call from any thread except the
-  // task runner passed to Initialize() (e.g. FILE). This may block if called
-  // early before the statistics are loaded from disk.
-  // StartLoadingMachineStatistics() must be called before this.
+  // case the statistic is not found.
   virtual bool GetMachineStatistic(const std::string& name,
                                    std::string* result) = 0;
 
@@ -99,12 +117,11 @@ class CHROMEOS_EXPORT StatisticsProvider {
   virtual bool GetMachineFlag(const std::string& name, bool* result) = 0;
 
   // Returns the machine serial number after examining a set of well-known
-  // keys. In case no serial is found (possibly due to the device having already
-  // been enrolled or claimed by a local user), an empty string is returned.
-  // Caveat: For lumpy, the last letter is ommitted from the serial number for
-  // historical reasons.
-  // TODO(tnagel): Drop "Enterprise" from the method name and remove lumpy
-  // special casing after lumpy EOL.
+  // keys. In case no serial is found an empty string is returned.
+  // Caveat: On older Samsung devices, the last letter is omitted from the
+  // serial number for historical reasons. This is fine.
+  // TODO(tnagel): Drop "Enterprise" from the method name and remove Samsung
+  // special casing after kevin EOL.
   std::string GetEnterpriseMachineID();
 
   // Cancels any pending file operations.

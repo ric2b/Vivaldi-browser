@@ -13,16 +13,16 @@
 #include "ash/shell/example_factory.h"
 #include "ash/shell/panel_window.h"
 #include "ash/shell/toplevel_window.h"
+#include "ash/system/message_center/notification_tray.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/system/web_notification/web_notification_tray.h"
-#include "ash/test/child_modal_window.h"
+#include "ash/wm/test_child_modal_parent.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -40,7 +40,10 @@ namespace shell {
 
 namespace {
 
-SkColor g_colors[] = {SK_ColorRED, SK_ColorYELLOW, SK_ColorBLUE, SK_ColorGREEN};
+constexpr int kWindowShadowElevation = 8;
+constexpr const SkColor kColors[] = {SK_ColorRED, SK_ColorYELLOW, SK_ColorBLUE,
+                                     SK_ColorGREEN};
+
 int g_color_index = 0;
 
 class ModalWindow : public views::WidgetDelegateView,
@@ -48,9 +51,9 @@ class ModalWindow : public views::WidgetDelegateView,
  public:
   explicit ModalWindow(ui::ModalType modal_type)
       : modal_type_(modal_type),
-        color_(g_colors[g_color_index]),
+        color_(kColors[g_color_index]),
         open_button_(MdTextButton::Create(this, base::ASCIIToUTF16("Moar!"))) {
-    ++g_color_index %= arraysize(g_colors);
+    ++g_color_index %= arraysize(kColors);
     AddChildView(open_button_);
   }
   ~ModalWindow() override = default;
@@ -99,8 +102,8 @@ class ModalWindow : public views::WidgetDelegateView,
 
 class NonModalTransient : public views::WidgetDelegateView {
  public:
-  NonModalTransient() : color_(g_colors[g_color_index]) {
-    ++g_color_index %= arraysize(g_colors);
+  NonModalTransient() : color_(kColors[g_color_index]) {
+    ++g_color_index %= arraysize(kColors);
   }
   ~NonModalTransient() override = default;
 
@@ -167,8 +170,7 @@ void InitWindowTypeLauncher(const base::Closure& show_views_examples_callback) {
       new WindowTypeLauncher(show_views_examples_callback),
       Shell::GetPrimaryRootWindow(), gfx::Rect(120, 150, 300, 410));
   widget->GetNativeView()->SetName("WindowTypeLauncher");
-  ::wm::SetShadowElevation(widget->GetNativeView(),
-                           ::wm::ShadowElevation::MEDIUM);
+  ::wm::SetShadowElevation(widget->GetNativeView(), kWindowShadowElevation);
   widget->Show();
 }
 
@@ -283,7 +285,7 @@ void WindowTypeLauncher::ButtonPressed(views::Button* sender,
     ModalWindow::OpenModalWindow(GetWidget()->GetNativeView(),
                                  ui::MODAL_TYPE_WINDOW);
   } else if (sender == child_modal_button_) {
-    test::CreateChildModalParent(GetWidget()->GetNativeView()->GetRootWindow());
+    TestChildModalParent::Show(GetWidget()->GetNativeView()->GetRootWindow());
   } else if (sender == transient_button_) {
     NonModalTransient::OpenNonModalTransient(GetWidget()->GetNativeView());
   } else if (sender == show_hide_window_button_) {
@@ -301,7 +303,7 @@ void WindowTypeLauncher::ButtonPressed(views::Button* sender,
 
     Shell::GetPrimaryRootWindowController()
         ->GetStatusAreaWidget()
-        ->web_notification_tray()
+        ->notification_tray()
         ->message_center()
         ->AddNotification(std::move(notification));
   } else if (sender == examples_button_) {

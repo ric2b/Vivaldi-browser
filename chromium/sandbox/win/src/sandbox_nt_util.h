@@ -100,8 +100,6 @@ enum RequiredAccess { READ, WRITE };
 // Performs basic user mode buffer validation. In any case, buffers access must
 // be protected by SEH. intent specifies if the buffer should be tested for read
 // or write.
-// Note that write intent implies destruction of the buffer content (we actually
-// write)
 bool ValidParameter(void* buffer, size_t size, RequiredAccess intent);
 
 // Copies data from a user buffer to our buffer. Returns the operation status.
@@ -143,6 +141,12 @@ enum MappedModuleFlags {
 // InsertYourLogicHere(name);
 // operator delete(name, NT_ALLOC);
 UNICODE_STRING* GetImageInfoFromModule(HMODULE module, uint32_t* flags);
+
+// Returns the name and characteristics for a given PE module. The return
+// value is the name as defined by the export table.
+//
+// The returned buffer is within the PE module and must not be freed.
+const char* GetAnsiImageInfoFromModule(HMODULE module);
 
 // Returns the full path and filename for a given dll.
 // May return nullptr if the provided address is not backed by a named section,

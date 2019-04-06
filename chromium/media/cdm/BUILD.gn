@@ -26,8 +26,16 @@ source_set("cdm") {
   ]
 
   sources = [
+    "aes_cbc_crypto.cc",
+    "aes_cbc_crypto.h",
     "aes_decryptor.cc",
     "aes_decryptor.h",
+    "cbcs_decryptor.cc",
+    "cbcs_decryptor.h",
+    "cdm_context_ref_impl.cc",
+    "cdm_context_ref_impl.h",
+    "cenc_decryptor.cc",
+    "cenc_decryptor.h",
 
     # TODO(crbug.com/676224): Move this to |enable_library_cdms| block below
     # when EnabledIf attribute is supported in mojom.
@@ -50,6 +58,7 @@ source_set("cdm") {
     "//crypto",
     "//media/base",
     "//media/formats",
+    "//third_party/boringssl",
     "//ui/gfx/geometry",
     "//url",
   ]
@@ -88,12 +97,6 @@ source_set("cdm") {
         "cdm_host_file.h",
         "cdm_host_files.cc",
         "cdm_host_files.h",
-      ]
-      deps += [
-        # Needed for finding CDM path from CDM adapter path.
-        # TODO(xhwang): Remove this dependency when CDM adapter is deprecated.
-        # See http://crbug.com/403462
-        "//third_party/widevine/cdm:headers",
       ]
     }
   }
@@ -137,15 +140,20 @@ static_library("cdm_paths") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "aes_cbc_crypto_unittest.cc",
     "aes_decryptor_unittest.cc",
+    "cbcs_decryptor_unittest.cc",
+    "cenc_decryptor_unittest.cc",
     "json_web_key_unittest.cc",
   ]
 
   deps = [
     "//base/test:test_support",
+    "//crypto",
     "//media:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/boringssl",
     "//ui/gfx:test_support",
     "//url",
   ]
@@ -158,7 +166,6 @@ source_set("unit_tests") {
 
   data_deps = []
 
-  # If ExternalClearKey is built, we can test CdmAdapter.
   if (enable_library_cdms) {
     sources += [
       "cdm_adapter_unittest.cc",
@@ -172,11 +179,13 @@ source_set("unit_tests") {
       "simple_cdm_buffer.cc",
       "simple_cdm_buffer.h",
     ]
-    data_deps += [ "//media/cdm/ppapi/clear_key_cdm" ]
+    data_deps += [ "//media/cdm/library_cdm/clear_key_cdm" ]
 
     deps += [
       ":cdm_api",
       ":cdm_paths",
+      "//media/cdm/library_cdm:cdm_host_proxy",
+      "//media/cdm/library_cdm:test_support",
     ]
   }
 

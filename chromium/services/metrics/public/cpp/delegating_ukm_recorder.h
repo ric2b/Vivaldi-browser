@@ -12,9 +12,14 @@
 #include "base/synchronization/lock.h"
 #include "services/metrics/public/cpp/metrics_export.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
-#include "services/metrics/public/interfaces/ukm_interface.mojom.h"
+#include "services/metrics/public/mojom/ukm_interface.mojom.h"
 
 namespace ukm {
+
+namespace internal {
+class SourceUrlRecorderWebContentsObserver;
+class SourceUrlRecorderWebStateObserver;
+}  // namespace internal
 
 /**
  * This is UkmRecorder which forwards its calls to some number of other
@@ -38,9 +43,21 @@ class METRICS_EXPORT DelegatingUkmRecorder : public UkmRecorder {
   void RemoveDelegate(UkmRecorder* delegate);
 
  private:
+  friend class AppSourceUrlRecorder;
+  friend class internal::SourceUrlRecorderWebContentsObserver;
+  friend class internal::SourceUrlRecorderWebStateObserver;
+
   // UkmRecorder:
   void UpdateSourceURL(SourceId source_id, const GURL& url) override;
+  void UpdateAppURL(SourceId source_id, const GURL& url) override;
   void AddEntry(mojom::UkmEntryPtr entry) override;
+
+  void UpdateSourceURLImpl(SourceId source_id, const GURL& url);
+
+  // UpdateNavigationURL provides a variation of the UpdateSourceURL API for
+  // recording NAVIGATION_ID sources. This method should only be called by
+  // SourceUrlRecorderWebContentsObserver.
+  void UpdateNavigationURL(SourceId source_id, const GURL& url);
 
   class Delegate final {
    public:
@@ -50,6 +67,7 @@ class METRICS_EXPORT DelegatingUkmRecorder : public UkmRecorder {
     ~Delegate();
 
     void UpdateSourceURL(SourceId source_id, const GURL& url);
+    void UpdateAppURL(SourceId source_id, const GURL& url);
     void AddEntry(mojom::UkmEntryPtr entry);
 
    private:

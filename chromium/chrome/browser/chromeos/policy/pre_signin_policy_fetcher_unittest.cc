@@ -63,8 +63,8 @@ class PreSigninPolicyFetcherTestBase : public testing::Test {
     // are shared between session_manager and chrome through files) and set it
     // into PathService, so PreSigninPolicyFetcher will use it.
     ASSERT_TRUE(tmp_dir_.CreateUniqueTempDir());
-    PathService::Override(chromeos::DIR_USER_POLICY_KEYS,
-                          user_policy_keys_dir());
+    base::PathService::Override(chromeos::DIR_USER_POLICY_KEYS,
+                                user_policy_keys_dir());
 
     auto cloud_policy_client = std::make_unique<MockCloudPolicyClient>();
     cloud_policy_client_ = cloud_policy_client.get();
@@ -121,7 +121,9 @@ class PreSigninPolicyFetcherTestBase : public testing::Test {
   // fetch call sequence.
   void ExpectFreshPolicyFetchOnClient(const std::string& dm_token,
                                       const std::string& client_id) {
-    EXPECT_CALL(*cloud_policy_client_, SetupRegistration(dm_token, client_id));
+    EXPECT_CALL(*cloud_policy_client_,
+                SetupRegistration(dm_token, client_id,
+                                  PolicyBuilder::GetUserAffiliationIds()));
     EXPECT_CALL(*cloud_policy_client_, FetchPolicy());
 
     expecting_fresh_policy_fetch_ = true;
@@ -171,9 +173,9 @@ class PreSigninPolicyFetcherTestBase : public testing::Test {
   UserPolicyBuilder cached_policy_;
   UserPolicyBuilder fresh_policy_;
   const cryptohome::KeyDefinition cryptohome_key_ =
-      cryptohome::KeyDefinition("secret",
-                                std::string() /* label */,
-                                cryptohome::PRIV_DEFAULT);
+      cryptohome::KeyDefinition::CreateForPassword("secret",
+                                                   std::string() /* label */,
+                                                   cryptohome::PRIV_DEFAULT);
 
   MockCloudPolicyClient* cloud_policy_client_ = nullptr;
   std::unique_ptr<PreSigninPolicyFetcher> pre_signin_policy_fetcher_;

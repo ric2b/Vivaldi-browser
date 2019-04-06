@@ -12,10 +12,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/browser_list_observer.h"
 #include "components/history/core/browser/history_service.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
@@ -263,9 +260,6 @@ class BrowserAddedObserver {
   DISALLOW_COPY_AND_ASSIGN(BrowserAddedObserver);
 };
 
-// Configures the geolocation provider to always return the given position.
-void OverrideGeolocation(double latitude, double longitude);
-
 // Enumerates all history contents on the backend thread. Returns them in
 // descending order by time.
 class HistoryEnumerator {
@@ -285,31 +279,6 @@ class HistoryEnumerator {
   base::CancelableTaskTracker tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(HistoryEnumerator);
-};
-
-// Use in browser interactive uitests to wait until a browser is set to active.
-// To use create and call WaitForActivation().
-// TODO(warx): check if code base exists the requirement for deactivation sync,
-// this class can be modified to support that.
-class BrowserActivationWaiter : public BrowserListObserver {
- public:
-  explicit BrowserActivationWaiter(const Browser* browser);
-  ~BrowserActivationWaiter() override;
-
-  // Returns when the |browser_| which is supplied by the constructor becomes
-  // activated. If it is not activated, a message loop is used until the
-  // |browser_| is activated, otherwise this returns immediately.
-  void WaitForActivation();
-
- private:
-  // BrowserListObserver override:
-  void OnBrowserSetLastActive(Browser* browser) override;
-
-  const Browser* const browser_;
-  bool observed_;
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserActivationWaiter);
 };
 
 }  // namespace ui_test_utils

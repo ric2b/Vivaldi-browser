@@ -8,7 +8,7 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/renderer/media_stream_audio_sink.h"
-#include "content/renderer/media/media_stream_audio_track.h"
+#include "content/renderer/media/stream/media_stream_audio_track.h"
 #include "media/audio/null_audio_sink.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/fake_audio_render_callback.h"
@@ -16,9 +16,9 @@
 #include "media/blink/webaudiosourceprovider_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/WebKit/public/web/WebHeap.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_heap.h"
 
 using ::testing::_;
 using ::testing::AllOf;
@@ -44,7 +44,7 @@ ACTION_P(RunClosure, closure) {
 class MockMediaStreamAudioSink final : public MediaStreamAudioSink {
  public:
   MockMediaStreamAudioSink() : MediaStreamAudioSink() {}
-  ~MockMediaStreamAudioSink() = default;
+  ~MockMediaStreamAudioSink() override = default;
 
   MOCK_METHOD1(OnSetFormat, void(const media::AudioParameters& params));
   MOCK_METHOD2(OnData,
@@ -102,7 +102,7 @@ class HTMLAudioElementCapturerSourceTest : public testing::Test {
     const media::AudioParameters params(
         media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
         media::GuessChannelLayout(kNumChannelsForTest),
-        kAudioTrackSampleRate /* sample_rate */, 16 /* bits_per_sample */,
+        kAudioTrackSampleRate /* sample_rate */,
         kAudioTrackSamplesPerBuffer /* frames_per_buffer */);
     audio_source_->Initialize(params, &fake_callback_);
 
@@ -151,7 +151,7 @@ TEST_F(HTMLAudioElementCapturerSourceTest, CaptureAudio) {
                             kAudioTrackSamplesPerBuffer)),
              _))
       .Times(1)
-      .WillOnce(RunClosure(quit_closure));
+      .WillOnce(RunClosure(std::move(quit_closure)));
 
   std::unique_ptr<media::AudioBus> bus = media::AudioBus::Create(
       kNumChannelsForTest, kAudioTrackSamplesPerBuffer);

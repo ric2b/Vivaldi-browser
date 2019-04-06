@@ -5,31 +5,33 @@
 /** @fileoverview Suite of tests for extensions-detail-view. */
 cr.define('extension_detail_view_tests', function() {
   /** @enum {string} */
-  var TestNames = {
+  const TestNames = {
     Layout: 'layout',
     LayoutSource: 'layout of source section',
     ClickableElements: 'clickable elements',
     Indicator: 'indicator',
     Warnings: 'warnings',
+    RuntimeHostPermissionsDisplay: 'runtime host permissions display',
+    RuntimeHostPermissionsSelection: 'runtime host permissions selection',
   };
 
-  var suiteName = 'ExtensionDetailViewTest';
+  const suiteName = 'ExtensionDetailViewTest';
 
   suite(suiteName, function() {
     /**
      * Extension item created before each test.
      * @type {extensions.Item}
      */
-    var item;
+    let item;
 
     /**
      * Backing extension data for the item.
      * @type {chrome.developerPrivate.ExtensionInfo}
      */
-    var extensionData;
+    let extensionData;
 
     /** @type {extension_test_util.MockItemDelegate} */
-    var mockDelegate;
+    let mockDelegate;
 
     // Initialize an extension item before each test.
     setup(function() {
@@ -37,7 +39,6 @@ cr.define('extension_detail_view_tests', function() {
       extensionData = extension_test_util.createExtensionInfo({
         incognitoAccess: {isEnabled: true, isActive: false},
         fileAccess: {isEnabled: true, isActive: false},
-        runOnAllUrls: {isEnabled: true, isActive: false},
         errorCollection: {isEnabled: true, isActive: false},
       });
       mockDelegate = new extension_test_util.MockItemDelegate();
@@ -54,8 +55,8 @@ cr.define('extension_detail_view_tests', function() {
 
       extension_test_util.testIcons(item);
 
-      var testIsVisible = extension_test_util.isVisible.bind(null, item);
-      expectTrue(testIsVisible('#close-button'));
+      const testIsVisible = extension_test_util.isVisible.bind(null, item);
+      expectTrue(testIsVisible('#closeButton'));
       expectTrue(testIsVisible('#icon'));
       expectTrue(testIsVisible('#enable-toggle'));
       expectFalse(testIsVisible('#extensions-options'));
@@ -66,13 +67,12 @@ cr.define('extension_detail_view_tests', function() {
       // Check the checkboxes visibility and state. They should be visible
       // only if the associated option is enabled, and checked if the
       // associated option is active.
-      var accessOptions = [
+      const accessOptions = [
         {key: 'incognitoAccess', id: '#allow-incognito'},
         {key: 'fileAccess', id: '#allow-on-file-urls'},
-        {key: 'runOnAllUrls', id: '#allow-on-all-sites'},
         {key: 'errorCollection', id: '#collect-errors'},
       ];
-      var isChecked = id => item.$$(id).checked;
+      const isChecked = id => item.$$(id).checked;
       for (let option of accessOptions) {
         expectTrue(extension_test_util.isVisible(item, option.id));
         expectFalse(isChecked(option.id), option.id);
@@ -97,15 +97,22 @@ cr.define('extension_detail_view_tests', function() {
           item.$$('#dependent-extensions-list').querySelectorAll('li').length);
 
       expectFalse(testIsVisible('#permissions-list'));
+      expectFalse(testIsVisible('#host-access'));
+      expectFalse(testIsVisible('#runtime-hosts'));
+
       expectTrue(testIsVisible('#no-permissions'));
-      item.set('data.permissions', ['Permission 1', 'Permission 2']);
+      item.set(
+          'data.permissions',
+          {simplePermissions: ['Permission 1', 'Permission 2']});
       Polymer.dom.flush();
       expectTrue(testIsVisible('#permissions-list'));
       expectEquals(
           2, item.$$('#permissions-list').querySelectorAll('li').length);
       expectFalse(testIsVisible('#no-permissions'));
+      expectFalse(testIsVisible('#host-access'));
+      expectFalse(testIsVisible('#runtime-hosts'));
 
-      var optionsUrl =
+      const optionsUrl =
           'chrome-extension://' + extensionData.id + '/options.html';
       item.set('data.optionsPage', {openInTab: true, url: optionsUrl});
       expectTrue(testIsVisible('#extensions-options'));
@@ -143,11 +150,16 @@ cr.define('extension_detail_view_tests', function() {
 
       // Ensure that the "Extension options" button is disabled when the item
       // itself is disabled.
-      var extensionOptions = item.$$('#extensions-options');
+      const extensionOptions = item.$$('#extensions-options');
       assertFalse(extensionOptions.disabled);
       item.set('data.state', chrome.developerPrivate.ExtensionState.DISABLED);
       Polymer.dom.flush();
       assertTrue(extensionOptions.disabled);
+
+      expectFalse(testIsVisible('.warning-icon'));
+      item.set('data.runtimeWarnings', ['Dummy warning']);
+      Polymer.dom.flush();
+      expectTrue(testIsVisible('.warning-icon'));
     });
 
     test(assert(TestNames.LayoutSource), function() {
@@ -178,7 +190,7 @@ cr.define('extension_detail_view_tests', function() {
     });
 
     test(assert(TestNames.ClickableElements), function() {
-      var optionsUrl =
+      const optionsUrl =
           'chrome-extension://' + extensionData.id + '/options.html';
       item.set('data.optionsPage', {openInTab: true, url: optionsUrl});
       item.set('data.prettifiedPath', 'foo/bar/baz/');
@@ -191,9 +203,6 @@ cr.define('extension_detail_view_tests', function() {
           item.$$('#allow-on-file-urls').getLabel(), 'setItemAllowedOnFileUrls',
           [extensionData.id, true]);
       mockDelegate.testClickingCalls(
-          item.$$('#allow-on-all-sites').getLabel(), 'setItemAllowedOnAllSites',
-          [extensionData.id, true]);
-      mockDelegate.testClickingCalls(
           item.$$('#collect-errors').getLabel(), 'setItemCollectsErrors',
           [extensionData.id, true]);
       mockDelegate.testClickingCalls(
@@ -202,12 +211,15 @@ cr.define('extension_detail_view_tests', function() {
       mockDelegate.testClickingCalls(
           item.$$('#remove-extension'), 'deleteItem', [extensionData.id]);
       mockDelegate.testClickingCalls(
-          item.$$('#load-path > a[is=\'action-link\']'),
-          'showInFolder', [extensionData.id]);
+          item.$$('#load-path > a[is=\'action-link\']'), 'showInFolder',
+          [extensionData.id]);
+      mockDelegate.testClickingCalls(
+          item.$$('#reload-button'), 'reloadItem', [extensionData.id],
+          Promise.resolve());
     });
 
     test(assert(TestNames.Indicator), function() {
-      var indicator = item.$$('cr-tooltip-icon');
+      const indicator = item.$$('cr-tooltip-icon');
       expectTrue(indicator.hidden);
       item.set('data.controlledInfo', {type: 'POLICY', text: 'policy'});
       Polymer.dom.flush();
@@ -215,11 +227,20 @@ cr.define('extension_detail_view_tests', function() {
     });
 
     test(assert(TestNames.Warnings), function() {
-      var testWarningVisible = function(id, isVisible) {
-        var f = isVisible ? expectTrue : expectFalse;
+      const testWarningVisible = function(id, isVisible) {
+        const f = isVisible ? expectTrue : expectFalse;
         f(extension_test_util.isVisible(item, id));
       };
 
+      testWarningVisible('#runtime-warnings', false);
+      testWarningVisible('#corrupted-warning', false);
+      testWarningVisible('#suspicious-warning', false);
+      testWarningVisible('#blacklisted-warning', false);
+      testWarningVisible('#update-required-warning', false);
+
+      item.set('data.runtimeWarnings', ['Dummy warning']);
+      Polymer.dom.flush();
+      testWarningVisible('#runtime-warnings', true);
       testWarningVisible('#corrupted-warning', false);
       testWarningVisible('#suspicious-warning', false);
       testWarningVisible('#blacklisted-warning', false);
@@ -227,6 +248,7 @@ cr.define('extension_detail_view_tests', function() {
 
       item.set('data.disableReasons.corruptInstall', true);
       Polymer.dom.flush();
+      testWarningVisible('#runtime-warnings', true);
       testWarningVisible('#corrupted-warning', true);
       testWarningVisible('#suspicious-warning', false);
       testWarningVisible('#blacklisted-warning', false);
@@ -234,6 +256,7 @@ cr.define('extension_detail_view_tests', function() {
 
       item.set('data.disableReasons.suspiciousInstall', true);
       Polymer.dom.flush();
+      testWarningVisible('#runtime-warnings', true);
       testWarningVisible('#corrupted-warning', true);
       testWarningVisible('#suspicious-warning', true);
       testWarningVisible('#blacklisted-warning', false);
@@ -241,13 +264,15 @@ cr.define('extension_detail_view_tests', function() {
 
       item.set('data.blacklistText', 'This item is blacklisted');
       Polymer.dom.flush();
+      testWarningVisible('#runtime-warnings', true);
       testWarningVisible('#corrupted-warning', true);
       testWarningVisible('#suspicious-warning', true);
       testWarningVisible('#blacklisted-warning', true);
       testWarningVisible('#update-required-warning', false);
 
-      item.set('data.blacklistText', undefined);
+      item.set('data.blacklistText', null);
       Polymer.dom.flush();
+      testWarningVisible('#runtime-warnings', true);
       testWarningVisible('#corrupted-warning', true);
       testWarningVisible('#suspicious-warning', true);
       testWarningVisible('#blacklisted-warning', false);
@@ -255,19 +280,97 @@ cr.define('extension_detail_view_tests', function() {
 
       item.set('data.disableReasons.updateRequired', true);
       Polymer.dom.flush();
+      testWarningVisible('#runtime-warnings', true);
       testWarningVisible('#corrupted-warning', true);
       testWarningVisible('#suspicious-warning', true);
       testWarningVisible('#blacklisted-warning', false);
       testWarningVisible('#update-required-warning', true);
 
+      item.set('data.runtimeWarnings', []);
       item.set('data.disableReasons.corruptInstall', false);
       item.set('data.disableReasons.suspiciousInstall', false);
       item.set('data.disableReasons.updateRequired', false);
       Polymer.dom.flush();
+      testWarningVisible('#runtime-warnings', false);
       testWarningVisible('#corrupted-warning', false);
       testWarningVisible('#suspicious-warning', false);
       testWarningVisible('#blacklisted-warning', false);
       testWarningVisible('#update-required-warning', false);
+    });
+
+    test(assert(TestNames.RuntimeHostPermissionsDisplay), function() {
+      const HostAccess = chrome.developerPrivate.HostAccess;
+
+      const permissions = {
+        simplePermissions: ['permission 1', 'permission 2'],
+        hostAccess: HostAccess.ON_CLICK,
+        runtimeHostPermissions: [],
+      };
+
+      item.set('data.permissions', permissions);
+      Polymer.dom.flush();
+
+      const testIsVisible = extension_test_util.isVisible.bind(null, item);
+      expectTrue(testIsVisible('#host-access'));
+
+      // The host-access menu should be visible, since the data includes
+      // host access information.
+      const selectHostAccess = item.$$('#host-access');
+      expectEquals(HostAccess.ON_CLICK, selectHostAccess.value);
+      // For on-click mode, there should be no runtime hosts listed.
+      expectFalse(testIsVisible('#runtime-hosts'));
+
+      // Changing the data's access should change the UI appropriately.
+      item.set('data.permissions.hostAccess', HostAccess.ON_ALL_SITES);
+      Polymer.dom.flush();
+      expectEquals(HostAccess.ON_ALL_SITES, selectHostAccess.value);
+      expectFalse(testIsVisible('#runtime-hosts'));
+
+      // Setting the mode to on specific sites should display the runtime hosts
+      // list.
+      item.set('data.permissions.hostAccess', HostAccess.ON_SPECIFIC_SITES);
+      item.set(
+          'data.permissions.runtimeHostPermissions',
+          ['https://example.com', 'https://chromium.org']);
+      Polymer.dom.flush();
+      expectEquals(HostAccess.ON_SPECIFIC_SITES, selectHostAccess.value);
+      expectTrue(testIsVisible('#runtime-hosts'));
+      expectEquals(
+          2, item.$$('#runtime-hosts').getElementsByTagName('li').length);
+    });
+
+    test(assert(TestNames.RuntimeHostPermissionsSelection), function() {
+      const HostAccess = chrome.developerPrivate.HostAccess;
+
+      const permissions = {
+        simplePermissions: ['permission 1', 'permission 2'],
+        hostAccess: HostAccess.ON_CLICK,
+        runtimeHostPermissions: [],
+      };
+
+      item.set('data.permissions', permissions);
+      Polymer.dom.flush();
+
+      const selectHostAccess = item.$$('#host-access');
+
+      // Changes the value of the selectHostAccess menu and fires the change
+      // event, then verifies that the delegate was called with the correct
+      // value.
+      function expectDelegateCallOnAccessChange(newValue) {
+        const mock = new MockController();
+        const mockMethod =
+            mock.createFunctionMock(mockDelegate, 'setItemHostAccess');
+        mockMethod.addExpectation(extensionData.id, newValue);
+        selectHostAccess.value = newValue;
+        selectHostAccess.dispatchEvent(
+            new CustomEvent('change', {target: selectHostAccess}));
+        mock.verifyMocks();
+      }
+
+      // Check that selecting different values correctly notifies the delegate.
+      expectDelegateCallOnAccessChange(HostAccess.ON_SPECIFIC_SITES);
+      expectDelegateCallOnAccessChange(HostAccess.ON_ALL_SITES);
+      expectDelegateCallOnAccessChange(HostAccess.ON_CLICK);
     });
   });
 

@@ -220,6 +220,12 @@ void AutofillWebDataService::ClearAllServerData() {
            autofill_backend_));
 }
 
+void AutofillWebDataService::ClearAllLocalData() {
+  wdbs_->ScheduleDBTask(
+      FROM_HERE,
+      Bind(&AutofillWebDataBackendImpl::ClearAllLocalData, autofill_backend_));
+}
+
 void AutofillWebDataService::UpdateServerCardMetadata(
     const CreditCard& credit_card) {
   wdbs_->ScheduleDBTask(
@@ -261,14 +267,14 @@ void AutofillWebDataService::RemoveOrphanAutofillTableRows() {
 void AutofillWebDataService::AddObserver(
     AutofillWebDataServiceObserverOnDBSequence* observer) {
   DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
-  if (autofill_backend_.get())
+  if (autofill_backend_)
     autofill_backend_->AddObserver(observer);
 }
 
 void AutofillWebDataService::RemoveObserver(
     AutofillWebDataServiceObserverOnDBSequence* observer) {
   DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
-  if (autofill_backend_.get())
+  if (autofill_backend_)
     autofill_backend_->RemoveObserver(observer);
 }
 

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/logging.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
@@ -90,6 +91,8 @@ WebContentsModalDialogManager::WebContentsModalDialogManager(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       delegate_(nullptr),
+      web_contents_is_hidden_(web_contents->GetVisibility() ==
+                              content::Visibility::HIDDEN),
       closing_all_dialogs_(false) {}
 
 WebContentsModalDialogManager::DialogState::DialogState(
@@ -150,14 +153,21 @@ void WebContentsModalDialogManager::DidGetIgnoredUIEvent() {
   }
 }
 
-void WebContentsModalDialogManager::WasShown() {
-  if (!child_dialogs_.empty())
-    child_dialogs_.front().manager->Show();
-}
+void WebContentsModalDialogManager::OnVisibilityChanged(
+    content::Visibility visibility) {
+  const bool web_contents_was_hidden = web_contents_is_hidden_;
+  web_contents_is_hidden_ = visibility == content::Visibility::HIDDEN;
 
-void WebContentsModalDialogManager::WasHidden() {
-  if (!child_dialogs_.empty())
+  // Avoid reshowing on transitions between VISIBLE and OCCLUDED.
+  if (child_dialogs_.empty() ||
+      web_contents_is_hidden_ == web_contents_was_hidden) {
+    return;
+  }
+
+  if (web_contents_is_hidden_)
     child_dialogs_.front().manager->Hide();
+  else
+    child_dialogs_.front().manager->Show();
 }
 
 void WebContentsModalDialogManager::WebContentsDestroyed() {

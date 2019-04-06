@@ -3,21 +3,14 @@
 // found in the LICENSE file.
 
 #include "components/autofill/core/browser/test_autofill_client.h"
-#if !defined(OS_ANDROID)
-#include "components/autofill/core/browser/ui/mock_save_card_bubble_controller.h"
-#endif
 
+#include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 
 namespace autofill {
 
 TestAutofillClient::TestAutofillClient()
-    : token_service_(new FakeOAuth2TokenService()),
-      identity_provider_(new FakeIdentityProvider(token_service_.get())),
-#if !defined(OS_ANDROID)
-      save_card_bubble_controller_(new MockSaveCardBubbleController()),
-#endif
-      form_origin_(GURL("https://example.test")) {}
+    : form_origin_(GURL("https://example.test")), source_id_(-1) {}
 
 TestAutofillClient::~TestAutofillClient() {
 }
@@ -35,28 +28,36 @@ PrefService* TestAutofillClient::GetPrefs() {
 }
 
 syncer::SyncService* TestAutofillClient::GetSyncService() {
-  return nullptr;
+  return test_sync_service_;
 }
 
-IdentityProvider* TestAutofillClient::GetIdentityProvider() {
-  return identity_provider_.get();
+identity::IdentityManager* TestAutofillClient::GetIdentityManager() {
+  return identity_test_env_.identity_manager();
 }
 
 ukm::UkmRecorder* TestAutofillClient::GetUkmRecorder() {
   return ukm::UkmRecorder::Get();
 }
 
-AddressNormalizer* TestAutofillClient::GetAddressNormalizer() {
-  // TODO(crbug.com/788432): Should use a TestAddressNormalizer.
-  return nullptr;
+ukm::SourceId TestAutofillClient::GetUkmSourceId() {
+  if (source_id_ == -1) {
+    source_id_ = ukm::UkmRecorder::GetNewSourceID();
+    UpdateSourceURL(GetUkmRecorder(), source_id_, form_origin_);
+  }
+  return source_id_;
 }
 
-SaveCardBubbleController* TestAutofillClient::GetSaveCardBubbleController() {
-#if defined(OS_ANDROID)
-  return nullptr;
-#else
-  return save_card_bubble_controller_.get();
-#endif
+void TestAutofillClient::InitializeUKMSources() {
+  UpdateSourceURL(GetUkmRecorder(), source_id_, form_origin_);
+}
+
+AddressNormalizer* TestAutofillClient::GetAddressNormalizer() {
+  return &test_address_normalizer_;
+}
+
+security_state::SecurityLevel
+TestAutofillClient::GetSecurityLevelForUmaHistograms() {
+  return security_level_;
 }
 
 void TestAutofillClient::ShowAutofillSettings() {
@@ -71,6 +72,19 @@ void TestAutofillClient::ShowUnmaskPrompt(
 void TestAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {
 }
 
+void TestAutofillClient::ShowLocalCardMigrationPrompt(
+    base::OnceClosure closure) {
+  std::move(closure).Run();
+}
+
+void TestAutofillClient::ConfirmSaveAutofillProfile(
+    const AutofillProfile& profile,
+    base::OnceClosure callback) {
+  // Since there is no confirmation needed to save an Autofill Profile,
+  // running |callback| will proceed with saving |profile|.
+  std::move(callback).Run();
+}
+
 void TestAutofillClient::ConfirmSaveCreditCardLocally(
     const CreditCard& card,
     const base::Closure& callback) {
@@ -79,9 +93,9 @@ void TestAutofillClient::ConfirmSaveCreditCardLocally(
 void TestAutofillClient::ConfirmSaveCreditCardToCloud(
     const CreditCard& card,
     std::unique_ptr<base::DictionaryValue> legal_message,
-    bool should_cvc_be_requested,
-    const base::Closure& callback) {
-  callback.Run();
+    bool should_request_name_from_user,
+    base::OnceCallback<void(const base::string16&)> callback) {
+  std::move(callback).Run(base::string16());
 }
 
 void TestAutofillClient::ConfirmCreditCardFillAssist(
@@ -107,8 +121,8 @@ void TestAutofillClient::ShowAutofillPopup(
     const gfx::RectF& element_bounds,
     base::i18n::TextDirection text_direction,
     const std::vector<Suggestion>& suggestions,
-    base::WeakPtr<AutofillPopupDelegate> delegate) {
-}
+    bool autoselect_first_suggestion,
+    base::WeakPtr<AutofillPopupDelegate> delegate) {}
 
 void TestAutofillClient::UpdateAutofillPopupDataListValues(
     const std::vector<base::string16>& values,
@@ -147,6 +161,26 @@ void TestAutofillClient::ExecuteCommand(int id) {}
 
 bool TestAutofillClient::IsAutofillSupported() {
   return true;
+}
+
+bool TestAutofillClient::AreServerCardsSupported() {
+  return true;
+}
+
+void TestAutofillClient::set_form_origin(const GURL& url) {
+  form_origin_ = url;
+  // Also reset source_id_.
+  source_id_ = ukm::UkmRecorder::GetNewSourceID();
+  UpdateSourceURL(GetUkmRecorder(), source_id_, form_origin_);
+}
+
+// static
+void TestAutofillClient::UpdateSourceURL(ukm::UkmRecorder* ukm_recorder,
+                                         ukm::SourceId source_id,
+                                         GURL url) {
+  if (ukm_recorder) {
+    ukm_recorder->UpdateSourceURL(source_id, url);
+  }
 }
 
 }  // namespace autofill

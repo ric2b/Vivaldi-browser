@@ -97,10 +97,6 @@ void DataReductionProxyService::ReadPersistedClientConfig() {
       !last_config_retrieval_time.is_null() &&
       time_since_last_config_retrieval > base::TimeDelta::FromHours(24);
 
-  UMA_HISTOGRAM_BOOLEAN(
-      "DataReductionProxy.ConfigService.PersistedConfigIsExpired",
-      persisted_config_is_expired);
-
   if (persisted_config_is_expired)
     return;
 
@@ -136,12 +132,15 @@ void DataReductionProxyService::UpdateContentLengths(
     int64_t original_size,
     bool data_reduction_proxy_enabled,
     DataReductionProxyRequestType request_type,
-    const std::string& mime_type) {
+    const std::string& mime_type,
+    bool is_user_traffic,
+    data_use_measurement::DataUseUserData::DataUseContentType content_type,
+    int32_t service_hash_code) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (compression_stats_) {
-    compression_stats_->RecordDataUseWithMimeType(data_used, original_size,
-                                                  data_reduction_proxy_enabled,
-                                                  request_type, mime_type);
+    compression_stats_->RecordDataUseWithMimeType(
+        data_used, original_size, data_reduction_proxy_enabled, request_type,
+        mime_type, is_user_traffic, content_type, service_hash_code);
   }
 }
 
@@ -205,16 +204,25 @@ void DataReductionProxyService::SetPingbackReportingFraction(
   pingback_client_->SetPingbackReportingFraction(pingback_reporting_fraction);
 }
 
+void DataReductionProxyService::OnCacheCleared(const base::Time start,
+                                               const base::Time end) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  io_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&DataReductionProxyIOData::OnCacheCleared,
+                                io_data_, start, end));
+}
+
 void DataReductionProxyService::LoadHistoricalDataUsage(
     const HistoricalDataUsageCallback& load_data_usage_callback) {
   std::unique_ptr<std::vector<DataUsageBucket>> data_usage(
       new std::vector<DataUsageBucket>());
   std::vector<DataUsageBucket>* data_usage_ptr = data_usage.get();
   db_task_runner_->PostTaskAndReply(
-      FROM_HERE, base::Bind(&DBDataOwner::LoadHistoricalDataUsage,
-                            db_data_owner_->GetWeakPtr(),
-                            base::Unretained(data_usage_ptr)),
-      base::Bind(load_data_usage_callback, base::Passed(&data_usage)));
+      FROM_HERE,
+      base::BindOnce(&DBDataOwner::LoadHistoricalDataUsage,
+                     db_data_owner_->GetWeakPtr(),
+                     base::Unretained(data_usage_ptr)),
+      base::BindOnce(load_data_usage_callback, std::move(data_usage)));
 }
 
 void DataReductionProxyService::LoadCurrentDataUsageBucket(
@@ -223,17 +231,18 @@ void DataReductionProxyService::LoadCurrentDataUsageBucket(
   DataUsageBucket* bucket_ptr = bucket.get();
   db_task_runner_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(&DBDataOwner::LoadCurrentDataUsageBucket,
-                 db_data_owner_->GetWeakPtr(), base::Unretained(bucket_ptr)),
-      base::Bind(load_current_data_usage_callback, base::Passed(&bucket)));
+      base::BindOnce(&DBDataOwner::LoadCurrentDataUsageBucket,
+                     db_data_owner_->GetWeakPtr(),
+                     base::Unretained(bucket_ptr)),
+      base::BindOnce(load_current_data_usage_callback, std::move(bucket)));
 }
 
 void DataReductionProxyService::StoreCurrentDataUsageBucket(
     std::unique_ptr<DataUsageBucket> current) {
   db_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&DBDataOwner::StoreCurrentDataUsageBucket,
-                 db_data_owner_->GetWeakPtr(), base::Passed(&current)));
+      base::BindOnce(&DBDataOwner::StoreCurrentDataUsageBucket,
+                     db_data_owner_->GetWeakPtr(), std::move(current)));
 }
 
 void DataReductionProxyService::DeleteHistoricalDataUsage() {

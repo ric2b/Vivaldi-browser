@@ -5,8 +5,8 @@
 #include "net/socket/websocket_transport_client_socket_pool.h"
 
 #include <algorithm>
-#include <utility>
 
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -35,11 +35,12 @@ WebSocketTransportConnectJob::WebSocketTransportConnectJob(
     ClientSocketPool::RespectLimits respect_limits,
     const scoped_refptr<TransportSocketParams>& params,
     base::TimeDelta timeout_duration,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     ClientSocketFactory* client_socket_factory,
     HostResolver* host_resolver,
     ClientSocketHandle* handle,
     Delegate* delegate,
+    WebSocketEndpointLockManager* websocket_endpoint_lock_manager,
     NetLog* pool_net_log,
     const NetLogWithSource& request_net_log)
     : ConnectJob(group_name,
@@ -57,7 +58,8 @@ WebSocketTransportConnectJob::WebSocketTransportConnectJob(
       next_state_(STATE_NONE),
       race_result_(TransportConnectJob::RACE_UNKNOWN),
       handle_(handle),
-      callback_(callback),
+      websocket_endpoint_lock_manager_(websocket_endpoint_lock_manager),
+      callback_(std::move(callback)),
       request_net_log_(request_net_log),
       had_ipv4_(false),
       had_ipv6_(false) {}
@@ -173,13 +175,13 @@ int WebSocketTransportConnectJob::DoTransportConnect() {
   if (!ipv4_addresses.empty()) {
     had_ipv4_ = true;
     ipv4_job_.reset(new WebSocketTransportConnectSubJob(
-        ipv4_addresses, this, SUB_JOB_IPV4));
+        ipv4_addresses, this, SUB_JOB_IPV4, websocket_endpoint_lock_manager_));
   }
 
   if (!ipv6_addresses.empty()) {
     had_ipv6_ = true;
     ipv6_job_.reset(new WebSocketTransportConnectSubJob(
-        ipv6_addresses, this, SUB_JOB_IPV6));
+        ipv6_addresses, this, SUB_JOB_IPV6, websocket_endpoint_lock_manager_));
     result = ipv6_job_->Start();
     switch (result) {
       case OK:
@@ -286,6 +288,7 @@ WebSocketTransportClientSocketPool::WebSocketTransportClientSocketPool(
     int max_sockets_per_group,
     HostResolver* host_resolver,
     ClientSocketFactory* client_socket_factory,
+    WebSocketEndpointLockManager* websocket_endpoint_lock_manager,
     NetLog* net_log)
     : TransportClientSocketPool(max_sockets,
                                 max_sockets_per_group,
@@ -297,6 +300,7 @@ WebSocketTransportClientSocketPool::WebSocketTransportClientSocketPool(
       pool_net_log_(net_log),
       client_socket_factory_(client_socket_factory),
       host_resolver_(host_resolver),
+      websocket_endpoint_lock_manager_(websocket_endpoint_lock_manager),
       max_sockets_(max_sockets),
       handed_out_socket_count_(0),
       flushing_(false),
@@ -313,12 +317,13 @@ WebSocketTransportClientSocketPool::~WebSocketTransportClientSocketPool() {
 
 // static
 void WebSocketTransportClientSocketPool::UnlockEndpoint(
-    ClientSocketHandle* handle) {
+    ClientSocketHandle* handle,
+    WebSocketEndpointLockManager* websocket_endpoint_lock_manager) {
   DCHECK(handle->is_initialized());
   DCHECK(handle->socket());
   IPEndPoint address;
   if (handle->socket()->GetPeerAddress(&address) == OK)
-    WebSocketEndpointLockManager::GetInstance()->UnlockEndpoint(address);
+    websocket_endpoint_lock_manager->UnlockEndpoint(address);
 }
 
 int WebSocketTransportClientSocketPool::RequestSocket(
@@ -328,7 +333,7 @@ int WebSocketTransportClientSocketPool::RequestSocket(
     const SocketTag& socket_tag,
     RespectLimits respect_limits,
     ClientSocketHandle* handle,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const NetLogWithSource& request_net_log) {
   DCHECK(params);
   const scoped_refptr<TransportSocketParams>& casted_params =
@@ -347,7 +352,7 @@ int WebSocketTransportClientSocketPool::RequestSocket(
       respect_limits == ClientSocketPool::RespectLimits::ENABLED) {
     request_net_log.AddEvent(NetLogEventType::SOCKET_POOL_STALLED_MAX_SOCKETS);
     stalled_request_queue_.emplace_back(casted_params, priority, handle,
-                                        callback, request_net_log);
+                                        std::move(callback), request_net_log);
     StalledRequestQueue::iterator iterator = stalled_request_queue_.end();
     --iterator;
     DCHECK_EQ(handle, iterator->handle);
@@ -364,8 +369,9 @@ int WebSocketTransportClientSocketPool::RequestSocket(
   std::unique_ptr<WebSocketTransportConnectJob> connect_job(
       new WebSocketTransportConnectJob(
           group_name, priority, respect_limits, casted_params,
-          ConnectionTimeout(), callback, client_socket_factory_, host_resolver_,
-          handle, &connect_job_delegate_, pool_net_log_, request_net_log));
+          ConnectionTimeout(), std::move(callback), client_socket_factory_,
+          host_resolver_, handle, &connect_job_delegate_,
+          websocket_endpoint_lock_manager_, pool_net_log_, request_net_log));
 
   int result = connect_job->Connect();
 
@@ -390,8 +396,7 @@ void WebSocketTransportClientSocketPool::RequestSockets(
     const std::string& group_name,
     const void* params,
     int num_sockets,
-    const NetLogWithSource& net_log,
-    HttpRequestInfo::RequestMotivation motivation) {
+    const NetLogWithSource& net_log) {
   NOTIMPLEMENTED();
 }
 
@@ -427,7 +432,7 @@ void WebSocketTransportClientSocketPool::ReleaseSocket(
     const std::string& group_name,
     std::unique_ptr<StreamSocket> socket,
     int id) {
-  WebSocketEndpointLockManager::GetInstance()->UnlockSocket(socket.get());
+  websocket_endpoint_lock_manager_->UnlockSocket(socket.get());
   CHECK_GT(handed_out_socket_count_, 0);
   --handed_out_socket_count_;
 
@@ -447,15 +452,15 @@ void WebSocketTransportClientSocketPool::FlushWithError(int error) {
   for (PendingConnectsMap::iterator it = pending_connects_.begin();
        it != pending_connects_.end();
        ++it) {
-    InvokeUserCallbackLater(
-        it->second->handle(), it->second->callback(), error);
+    InvokeUserCallbackLater(it->second->handle(),
+                            it->second->release_callback(), error);
     delete it->second, it->second = nullptr;
   }
   pending_connects_.clear();
   for (StalledRequestQueue::iterator it = stalled_request_queue_.begin();
        it != stalled_request_queue_.end();
        ++it) {
-    InvokeUserCallbackLater(it->handle, it->callback, error);
+    InvokeUserCallbackLater(it->handle, std::move(it->callback), error);
   }
   stalled_request_map_.clear();
   stalled_request_queue_.clear();
@@ -562,13 +567,13 @@ void WebSocketTransportClientSocketPool::OnConnectJobComplete(
   // See comment in FlushWithError.
   if (flushing_) {
     std::unique_ptr<StreamSocket> socket = job->PassSocket();
-    WebSocketEndpointLockManager::GetInstance()->UnlockSocket(socket.get());
+    websocket_endpoint_lock_manager_->UnlockSocket(socket.get());
     return;
   }
 
   bool handed_out_socket = TryHandOutSocket(result, job);
 
-  CompletionCallback callback = job->callback();
+  CompletionOnceCallback callback = job->release_callback();
 
   ClientSocketHandle* const handle = job->handle();
 
@@ -580,27 +585,28 @@ void WebSocketTransportClientSocketPool::OnConnectJobComplete(
   if (!handed_out_socket)
     ActivateStalledRequest();
 
-  InvokeUserCallbackLater(handle, callback, result);
+  InvokeUserCallbackLater(handle, std::move(callback), result);
 }
 
 void WebSocketTransportClientSocketPool::InvokeUserCallbackLater(
     ClientSocketHandle* handle,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     int rv) {
   DCHECK(!pending_callbacks_.count(handle));
   pending_callbacks_.insert(handle);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&WebSocketTransportClientSocketPool::InvokeUserCallback,
-                 weak_factory_.GetWeakPtr(), handle, callback, rv));
+      base::BindOnce(&WebSocketTransportClientSocketPool::InvokeUserCallback,
+                     weak_factory_.GetWeakPtr(), handle, std::move(callback),
+                     rv));
 }
 
 void WebSocketTransportClientSocketPool::InvokeUserCallback(
     ClientSocketHandle* handle,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     int rv) {
   if (pending_callbacks_.erase(handle))
-    callback.Run(rv);
+    std::move(callback).Run(rv);
 }
 
 bool WebSocketTransportClientSocketPool::ReachedMaxSocketsLimit() const {
@@ -666,21 +672,27 @@ void WebSocketTransportClientSocketPool::ActivateStalledRequest() {
   // however if all the connects fail synchronously for some reason, we may be
   // able to clear the whole queue at once.
   while (!stalled_request_queue_.empty() && !ReachedMaxSocketsLimit()) {
-    StalledRequest request(stalled_request_queue_.front());
+    StalledRequest request = std::move(stalled_request_queue_.front());
     stalled_request_queue_.pop_front();
     stalled_request_map_.erase(request.handle);
+
+    // Wrap request.callback into a copyable (repeating) callback so that it can
+    // be passed to RequestSocket() and yet called if RequestSocket() returns
+    // synchronously.
+    auto copyable_callback =
+        base::AdaptCallbackForRepeating(std::move(request.callback));
 
     int rv =
         RequestSocket("ignored", &request.params, request.priority, SocketTag(),
                       // Stalled requests can't have |respect_limits|
                       // DISABLED.
-                      RespectLimits::ENABLED, request.handle, request.callback,
+                      RespectLimits::ENABLED, request.handle, copyable_callback,
                       request.net_log);
 
     // ActivateStalledRequest() never returns synchronously, so it is never
     // called re-entrantly.
     if (rv != ERR_IO_PENDING)
-      InvokeUserCallbackLater(request.handle, request.callback, rv);
+      InvokeUserCallbackLater(request.handle, copyable_callback, rv);
   }
 }
 
@@ -713,16 +725,16 @@ WebSocketTransportClientSocketPool::StalledRequest::StalledRequest(
     const scoped_refptr<TransportSocketParams>& params,
     RequestPriority priority,
     ClientSocketHandle* handle,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const NetLogWithSource& net_log)
     : params(params),
       priority(priority),
       handle(handle),
-      callback(callback),
+      callback(std::move(callback)),
       net_log(net_log) {}
 
 WebSocketTransportClientSocketPool::StalledRequest::StalledRequest(
-    const StalledRequest& other) = default;
+    StalledRequest&& other) = default;
 
 WebSocketTransportClientSocketPool::StalledRequest::~StalledRequest() = default;
 

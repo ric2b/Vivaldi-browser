@@ -10,10 +10,17 @@ if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
   import("//build/config/sanitizers/sanitizers.gni")
+  import("//build/config/android/extract_unwind_tables.gni")
 }
 
 if (is_fuchsia) {
+  import("//build/config/chromecast_build.gni")
   import("//build/config/fuchsia/rules.gni")
+  import("//build/config/fuchsia/package.gni")
+}
+
+if (is_chromeos) {
+  import("//build/config/chromeos/rules.gni")
 }
 
 # Define a test as an executable (or apk on Android) with the "testonly" flag
@@ -98,6 +105,21 @@ template("test") {
         "write_asset_list",
         "use_native_activity",
       ]
+
+      # Adds the unwind tables from unstripped binary as an asset file in the
+      # apk, if |add_unwind_tables_in_apk| is specified by the test.
+      if (defined(invoker.add_unwind_tables_in_apk) &&
+          invoker.add_unwind_tables_in_apk) {
+        _unwind_table_asset_name = "${target_name}_unwind_assets"
+        unwind_table_asset(_unwind_table_asset_name) {
+          testonly = true
+          library_target = _library_target
+          deps = [
+            ":$_library_target",
+          ]
+        }
+      }
+
       shared_library(_library_target) {
         # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
         configs = []  # Prevent list overwriting warning.
@@ -126,6 +148,10 @@ template("test") {
 
         # Add the Java classes so that each target does not have to do it.
         deps += [ "//base/test:test_support_java" ]
+
+        if (defined(_unwind_table_asset_name)) {
+          deps += [ ":${_unwind_table_asset_name}" ]
+        }
 
         # TODO(agrieve): Remove this data_dep once bots don't build the _apk
         #     target (post-GYP).
@@ -226,28 +252,28 @@ template("test") {
     }
   } else if (is_fuchsia) {
     _output_name = invoker.target_name
-    _test_runner_target = "${_output_name}__test_runner_script"
+    _pkg_target = "${_output_name}_pkg"
+    _exec_target = "${_output_name}__exec"
 
-    test_runner_script(_test_runner_target) {
-      forward_variables_from(invoker,
-                             [
-                               "data",
-                               "data_deps",
-                               "deps",
-                               "public_deps",
-                               "use_test_server",
-                             ])
-      test_name = _output_name
+    fuchsia_package_runner(target_name) {
+      testonly = true
+      forward_variables_from(invoker, [ "use_test_server" ])
+      runner_script = "//build/fuchsia/test_runner.py"
+      package = ":$_pkg_target"
+      package_name_override = _output_name
     }
 
-    executable(target_name) {
-      testonly = true
+    executable(_exec_target) {
       forward_variables_from(invoker, "*")
-      if (!defined(data_deps)) {
-        data_deps = []
-      }
-      data_deps += [ ":$_test_runner_target" ]
-      deps += [ "//build/config:exe_and_shlib_deps" ]
+      testonly = true
+      output_name = _exec_target
+    }
+
+    fuchsia_package(_pkg_target) {
+      testonly = true
+      sandbox_policy = "//build/config/fuchsia/testing_sandbox_policy"
+      binary = ":$_exec_target"
+      package_name_override = _output_name
     }
   } else if (is_ios) {
     import("//build/config/ios/ios_sdk.gni")
@@ -288,30 +314,51 @@ template("test") {
       }
       extra_substitutions += [ "GTEST_BUNDLE_ID_SUFFIX=$_bundle_id_suffix" ]
 
-      if (!defined(deps)) {
-        deps = []
-      }
-      deps += [
-        # All shared libraries must have the sanitizer deps to properly link in
-        # asan mode (this target will be empty in other cases).
-        "//build/config:exe_and_shlib_deps",
-      ]
       if (!defined(bundle_deps)) {
         bundle_deps = []
       }
       bundle_deps += [ ":$_resources_bundle_data" ]
     }
+  } else if (is_chromeos && cros_board != "") {
+    # When the arg cros_board is set, assume we're in the cros chrome-sdk
+    # building simplechrome.
+
+    _gen_runner_target = "${target_name}__runner"
+    _runtime_deps_file =
+        "$root_out_dir/gen.runtime/" + get_label_info(target_name, "dir") +
+        "/" + get_label_info(target_name, "name") + ".runtime_deps"
+
+    generate_vm_runner_script(_gen_runner_target) {
+      testonly = true
+      generated_script = "$root_build_dir/bin/run_" + invoker.target_name
+      test_exe = "$root_out_dir/" + get_label_info(invoker.target_name, "name")
+      runtime_deps_file = _runtime_deps_file
+    }
+
+    executable(target_name) {
+      forward_variables_from(invoker, "*")
+      if (!defined(deps)) {
+        deps = []
+      }
+      if (!defined(data)) {
+        data = []
+      }
+
+      testonly = true
+      output_name = target_name
+      write_runtime_deps = _runtime_deps_file
+      data += [ _runtime_deps_file ]
+      deps += [ ":$_gen_runner_target" ]
+    }
   } else {
     executable(target_name) {
-      deps = []
       forward_variables_from(invoker, "*")
+      if (!defined(deps)) {
+        deps = []
+      }
 
       testonly = true
       deps += [
-        # All shared libraries must have the sanitizer deps to properly link in
-        # asan mode (this target will be empty in other cases).
-        "//build/config:exe_and_shlib_deps",
-
         # Give tests the default manifest on Windows (a no-op elsewhere).
         "//build/win:default_exe_manifest",
       ]

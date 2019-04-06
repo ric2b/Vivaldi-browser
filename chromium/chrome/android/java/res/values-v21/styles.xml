@@ -14,6 +14,7 @@
         <item name="floatLabelPaddingLeft">@dimen/pref_autofill_field_horizontal_padding</item>
         <item name="floatLabelPaddingRight">@dimen/pref_autofill_field_horizontal_padding</item>
         <item name="floatLabelPaddingTop">@dimen/pref_autofill_field_top_margin</item>
+        <item name="actionBarStyle">@style/PreferenceActionBarModern</item>
     </style>
     <style name="PreferencesDialogTheme" parent="@android:style/Theme.Material.Light.Dialog.Alert">
         <item name="android:colorAccent">@color/pref_accent_color</item>
@@ -44,22 +45,6 @@
         <item name="android:paddingEnd">?android:attr/listPreferredItemPaddingEnd</item>
     </style>
     <style name="PreferenceLayout" parent="PreferenceLayoutBase" />
-
-    <!-- Cast and media playback notifications -->
-    <style name="MediaNotificationTitle"
-        parent="@android:style/TextAppearance.Material.Notification.Title">
-    </style>
-    <style name="MediaNotificationText"
-        parent="@android:style/TextAppearance.Material.Notification"/>
-    <style name="RemoteNotificationTitle"
-        parent="@android:style/TextAppearance.Material.Notification.Title">
-        <item name="android:layout_marginBottom">4dp</item>
-    </style>
-    <style name="RemoteNotificationText"
-        parent="@android:style/TextAppearance.Material.Notification.Line2"/>
-    <style name="RemoteNotificationProgressBar" parent="@android:style/Widget.ProgressBar.Horizontal">
-        <item name="android:minHeight">5dp</item>
-    </style>
 
     <!-- Web Notifications -->
     <style name="WebNotificationTitle"
@@ -113,9 +98,6 @@
         drawable from Android support library, where it's used to simulate
         material design on earlier Android versions.
     -->
-    <style name="PopupWindow.LowEnd" parent="android:Widget.Material.Light.PopupWindow">
-        <item name="android:popupBackground">@drawable/popup_background_shadow</item>
-    </style>
     <style name="ListPopupWindow.LowEnd" parent="android:Widget.Material.Light.ListPopupWindow">
         <item name="android:popupBackground">@drawable/popup_background_shadow</item>
     </style>
@@ -134,5 +116,13 @@
         <!-- Without HW acceleration the default text cursor looks weird (top
              half is way brighter than the bottom), so we use our own. -->
         <item name="android:textCursorDrawable">@drawable/text_cursor_lowend</item>
+    </style>
+
+    <!-- Explore sites section -->
+    <style name="ExploreSitesAction" parent="ButtonCompatBorderless">
+        <item name="android:textAppearance">@style/BlueLink2</item>
+        <item name="android:background">@drawable/explore_sites_button_background</item>
+        <!-- API 21 introduces state list animation. This will remove the auto-shadow -->
+        <item name="android:stateListAnimator">@null</item>
     </style>
 </resources>

@@ -44,8 +44,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/web_preferences.h"
-#include "extensions/features/features.h"
-#include "media/media_features.h"
+#include "extensions/buildflags/buildflags.h"
+#include "media/media_buildflags.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -331,8 +331,6 @@ class PrefWatcher : public KeyedService {
     pref_change_registrar_.Add(prefs::kEnableDoNotTrack, renderer_callback);
     pref_change_registrar_.Add(prefs::kEnableReferrers, renderer_callback);
     pref_change_registrar_.Add(prefs::kEnableEncryptedMedia, renderer_callback);
-
-#if BUILDFLAG(ENABLE_WEBRTC)
     pref_change_registrar_.Add(prefs::kWebRTCMultipleRoutesEnabled,
                                renderer_callback);
     pref_change_registrar_.Add(prefs::kWebRTCNonProxiedUdpEnabled,
@@ -340,7 +338,6 @@ class PrefWatcher : public KeyedService {
     pref_change_registrar_.Add(prefs::kWebRTCIPHandlingPolicy,
                                renderer_callback);
     pref_change_registrar_.Add(prefs::kWebRTCUDPPortRange, renderer_callback);
-#endif
 
 #if !defined(OS_MACOSX)
     pref_change_registrar_.Add(prefs::kFullscreenAllowed, renderer_callback);
@@ -455,20 +452,13 @@ PrefsTabHelper::PrefsTabHelper(WebContents* contents)
 
   content::RendererPreferences* render_prefs =
       web_contents_->GetMutableRendererPrefs();
-  renderer_preferences_util::UpdateFromSystemSettings(render_prefs,
-                                                      profile_,
-                                                      web_contents_);
+  renderer_preferences_util::UpdateFromSystemSettings(render_prefs, profile_);
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
   registrar_.Add(this,
                  chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
                  content::Source<ThemeService>(
                      ThemeServiceFactory::GetForProfile(profile_)));
-#endif
-#if defined(USE_AURA)
-  registrar_.Add(this,
-                 chrome::NOTIFICATION_BROWSER_FLING_CURVE_PARAMETERS_CHANGED,
-                 content::NotificationService::AllSources());
 #endif
 }
 
@@ -492,6 +482,8 @@ void PrefsTabHelper::RegisterProfilePrefs(
                                 pref_defaults.dom_paste_enabled);
   registry->RegisterBooleanPref(prefs::kWebKitTextAreasAreResizable,
                                 pref_defaults.text_areas_are_resizable);
+  registry->RegisterBooleanPref(prefs::kWebKitJavascriptCanAccessClipboard,
+                                pref_defaults.javascript_can_access_clipboard);
   registry->RegisterBooleanPref(prefs::kWebkitTabsToLinks,
                                 pref_defaults.tabs_to_links);
   registry->RegisterBooleanPref(prefs::kWebKitAllowRunningInsecureContent,
@@ -579,13 +571,6 @@ void PrefsTabHelper::Observe(int type,
   }
 #endif
 
-#if defined(USE_AURA)
-  if (type == chrome::NOTIFICATION_BROWSER_FLING_CURVE_PARAMETERS_CHANGED) {
-    UpdateRendererPreferences();
-    return;
-  }
-#endif  // defined(USE_AURA)
-
   NOTREACHED();
 }
 
@@ -597,8 +582,7 @@ void PrefsTabHelper::UpdateWebPreferences() {
 void PrefsTabHelper::UpdateRendererPreferences() {
   content::RendererPreferences* prefs =
       web_contents_->GetMutableRendererPrefs();
-  renderer_preferences_util::UpdateFromSystemSettings(
-      prefs, profile_, web_contents_);
+  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile_);
   web_contents_->GetRenderViewHost()->SyncRendererPrefs();
 }
 

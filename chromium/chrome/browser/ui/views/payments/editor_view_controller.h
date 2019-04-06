@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
@@ -94,7 +93,8 @@ class EditorViewController : public PaymentRequestSheetController,
   EditorViewController(PaymentRequestSpec* spec,
                        PaymentRequestState* state,
                        PaymentRequestDialogView* dialog,
-                       BackNavigationType back_navigation_type);
+                       BackNavigationType back_navigation_type,
+                       bool is_incognito);
   ~EditorViewController() override;
 
   // Will display |error_message| alongside the input field represented by
@@ -172,6 +172,8 @@ class EditorViewController : public PaymentRequestSheetController,
       const EditorField& field,
       base::string16* error_message);
 
+  bool is_incognito() const { return is_incognito_; }
+
  private:
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
@@ -212,6 +214,8 @@ class EditorViewController : public PaymentRequestSheetController,
 
   // Identifies where to go back when the editing completes successfully.
   BackNavigationType back_navigation_type_;
+
+  bool is_incognito_;
 
   DISALLOW_COPY_AND_ASSIGN(EditorViewController);
 };

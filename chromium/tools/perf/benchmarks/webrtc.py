@@ -10,9 +10,10 @@ from telemetry.timeline import chrome_trace_category_filter
 from telemetry.web_perf import timeline_based_measurement
 
 
-@benchmark.Owner(emails=['qiangchen@chromium.org', # For smoothness metrics
+@benchmark.Info(emails=['qiangchen@chromium.org', # For smoothness metrics
                          'ehmaldonado@chromium.org',
-                         'phoglund@chromium.org'])
+                         'phoglund@chromium.org'],
+                documentation_url='http://bit.ly/webrtc-benchmark')
 class WebrtcPerfBenchmark(perf_benchmark.PerfBenchmark):
   """Base class for WebRTC metrics for real-time communications tests."""
   page_set = page_sets.WebrtcPageSet
@@ -27,7 +28,7 @@ class WebrtcPerfBenchmark(perf_benchmark.PerfBenchmark):
         '-*',
         'toplevel',
         # WebRTC
-        'webmediaplayerms',
+        'media',
     ]
 
     category_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter(

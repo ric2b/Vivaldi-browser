@@ -162,10 +162,10 @@ class WebState : public base::SupportsUserData {
   // execution has failed due to an error.
   // NOTE: Integer values will be returned as Type::DOUBLE because of underlying
   // library limitation.
-  typedef base::Callback<void(const base::Value*)> JavaScriptResultCallback;
+  typedef base::OnceCallback<void(const base::Value*)> JavaScriptResultCallback;
   virtual void ExecuteJavaScript(const base::string16& javascript) = 0;
   virtual void ExecuteJavaScript(const base::string16& javascript,
-                                 const JavaScriptResultCallback& callback) = 0;
+                                 JavaScriptResultCallback callback) = 0;
 
   // Asynchronously executes |javaScript| in the main frame's context,
   // registering user interaction.
@@ -241,9 +241,11 @@ class WebState : public base::SupportsUserData {
   // In particular the callback must return false if the command is unexpected
   // or ill-formatted.
   // The first parameter is the content of the command, the second parameter is
-  // the URL of the page, and the third parameter is a bool indicating if the
-  // user is currently interacting with the page.
-  typedef base::Callback<bool(const base::DictionaryValue&, const GURL&, bool)>
+  // the URL of the page, the third parameter is a bool indicating if the
+  // user is currently interacting with the page, the fourth parameter indicates
+  // if the message was sent from the main frame.
+  typedef base::RepeatingCallback<
+      bool(const base::DictionaryValue&, const GURL&, bool, bool)>
       ScriptCommandCallback;
 
   // Registers a callback that will be called when a command matching
@@ -294,11 +296,11 @@ class WebState : public base::SupportsUserData {
   virtual void SetHasOpener(bool has_opener) = 0;
 
   // Callback used to handle snapshots. The parameter is the snapshot image.
-  typedef base::Callback<void(const gfx::Image&)> SnapshotCallback;
+  typedef base::OnceCallback<void(gfx::Image)> SnapshotCallback;
 
   // Takes a snapshot of this WebState with |target_size|. |callback| is
   // asynchronously invoked after performing the snapshot.
-  virtual void TakeSnapshot(const SnapshotCallback& callback,
+  virtual void TakeSnapshot(SnapshotCallback callback,
                             CGSize target_size) const = 0;
 
   // Adds and removes observers for page navigation notifications. The order in

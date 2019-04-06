@@ -186,11 +186,6 @@ class URLDatabase {
 
   // History search ------------------------------------------------------------
 
-  bool GetMatchesWStatement(const char* sql_statement,
-                            const std::string& search_string,
-                            int max_hits,
-                            URLRows* results);
-
   // Performs a brute force search over the database to find any URLs or titles
   // which match the |query| string, using the default text matching algorithm.
   // Returns any matches in |results|.
@@ -243,7 +238,7 @@ class URLDatabase {
   // the favicon couldn't be updated.
   bool MigrateFromVersion11ToVersion12();
 
-#include "components/history/url_database.h.inc"
+#include "components/history/vivaldi_url_database.h.inc"
  protected:
   friend class VisitDatabase;
 

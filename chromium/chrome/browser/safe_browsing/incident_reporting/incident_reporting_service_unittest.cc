@@ -38,7 +38,6 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/quota_service.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -77,7 +76,6 @@ class IncidentReportingServiceTest : public testing::Test {
         const CreateDownloadFinderCallback& create_download_finder_callback,
         const StartUploadCallback& start_upload_callback)
         : IncidentReportingService(nullptr,
-                                   nullptr,
                                    base::TimeDelta::FromMilliseconds(5),
                                    task_runner),
           pre_profile_add_callback_(pre_profile_add_callback),
@@ -124,8 +122,6 @@ class IncidentReportingServiceTest : public testing::Test {
 
     std::unique_ptr<safe_browsing::IncidentReportUploader> StartReportUpload(
         const safe_browsing::IncidentReportUploader::OnResultCallback& callback,
-        const scoped_refptr<net::URLRequestContextGetter>&
-            request_context_getter,
         const safe_browsing::ClientIncidentReport& report) override {
       return start_upload_callback_.Run(callback, report);
     }
@@ -403,8 +399,8 @@ class IncidentReportingServiceTest : public testing::Test {
             callback) {
       // Post a task to run the callback.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::BindOnce(callback, base::Passed(&binary_download),
-                                    base::Passed(&non_binary_download)));
+          FROM_HERE, base::BindOnce(callback, std::move(binary_download),
+                                    std::move(non_binary_download)));
       return std::unique_ptr<safe_browsing::LastDownloadFinder>(
           new FakeDownloadFinder(on_deleted));
     }

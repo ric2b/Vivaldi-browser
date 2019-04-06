@@ -9,16 +9,16 @@
 
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "extensions/browser/install/crx_install_error.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
-#include "extensions/features/features.h"
 
 #if !BUILDFLAG(ENABLE_EXTENSIONS)
 #error "Extensions must be enabled"
 #endif
-
-class ExtensionService;
 
 namespace content {
 class BrowserContext;
@@ -29,6 +29,7 @@ namespace extensions {
 class AppSorting;
 class ContentVerifier;
 class Extension;
+class ExtensionService;
 class ExtensionSet;
 class InfoMap;
 class ManagementPolicy;
@@ -47,7 +48,8 @@ class ValueStoreFactory;
 class ExtensionSystem : public KeyedService {
  public:
   // A callback to be executed when InstallUpdate finishes.
-  using InstallUpdateCallback = base::OnceCallback<void(bool success)>;
+  using InstallUpdateCallback =
+      base::OnceCallback<void(const base::Optional<CrxInstallError>& result)>;
 
   ExtensionSystem();
   ~ExtensionSystem() override;
@@ -132,13 +134,23 @@ class ExtensionSystem : public KeyedService {
       const Extension* extension) = 0;
 
   // Install an updated version of |extension_id| with the version given in
-  // |unpacked_dir|. Ownership of |unpacked_dir| in the filesystem is
-  // transferred and implementors of this function are responsible for cleaning
-  // it up on errors, etc.
+  // |unpacked_dir|. If |install_immediately| is true, the system will install
+  // the given extension immediately instead of waiting until idle. Ownership
+  // of |unpacked_dir| in the filesystem is transferred and implementors of
+  // this function are responsible for cleaning it up on errors, etc.
   virtual void InstallUpdate(const std::string& extension_id,
                              const std::string& public_key,
                              const base::FilePath& unpacked_dir,
+                             bool install_immediately,
                              InstallUpdateCallback install_update_callback) = 0;
+
+  // Attempts finishing installation of an update for an extension with the
+  // specified id, when installation of that extension was previously delayed.
+  // |install_immediately| - Install the extension should be installed if it is
+  // currently in use.
+  // Returns whether the extension installation was finished.
+  virtual bool FinishDelayedInstallationIfReady(const std::string& extension_id,
+                                                bool install_immediately) = 0;
 };
 
 }  // namespace extensions

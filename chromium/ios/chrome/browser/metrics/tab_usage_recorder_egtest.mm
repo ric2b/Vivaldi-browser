@@ -4,8 +4,7 @@
 
 #include <memory>
 
-#include "base/ios/ios_util.h"
-#include "base/mac/bind_objc_block.h"
+#include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -15,7 +14,8 @@
 #import "ios/chrome/browser/metrics/tab_usage_recorder_test_util.h"
 #import "ios/chrome/browser/ui/settings/privacy_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_constants.h"
+#import "ios/chrome/browser/ui/toolbar/legacy/toolbar_controller_constants.h"
 #include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -23,14 +23,14 @@
 #import "ios/chrome/test/app/histogram_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
-#include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
+#include "ios/web/public/test/element_selector.h"
 #include "ios/web/public/test/http_server/delayed_response_provider.h"
 #include "ios/web/public/test/http_server/html_response_provider.h"
 #import "ios/web/public/test/http_server/http_server.h"
@@ -42,12 +42,13 @@
 #error "This file requires ARC support."
 #endif
 
-using chrome_test_util::NavigationBarDoneButton;
 using chrome_test_util::OpenLinkInNewTabButton;
+using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SettingsMenuButton;
 using chrome_test_util::SettingsMenuPrivacyButton;
 using tab_usage_recorder_test_util::OpenNewIncognitoTabUsingUIAndEvictMainTabs;
 using tab_usage_recorder_test_util::SwitchToNormalMode;
+using web::test::ElementSelector;
 
 namespace {
 
@@ -78,15 +79,9 @@ void Wait(id<GREYMatcher> matcher, NSString* name) {
                                                              error:&error];
     return error == nil;
   };
-  GREYAssert(
-      testing::WaitUntilConditionOrTimeout(kWaitElementTimeout, condition),
-      @"Waiting for matcher %@ failed.", name);
-}
-
-// Wait until |matcher| is accessible (not nil) and tap on it.
-void WaitAndTap(id<GREYMatcher> matcher, NSString* name) {
-  Wait(matcher, name);
-  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(kWaitElementTimeout,
+                                                          condition),
+             @"Waiting for matcher %@ failed.", name);
 }
 
 // Creates a new main tab and load |url|. Wait until |word| is visible on the
@@ -112,19 +107,6 @@ void OpenTwoTabs() {
   NewMainTabWithURL(url2, kURL2FirstWord);
 }
 
-// Opens a new main tab using the UI. This method is using ad-hoc
-// synchronization.
-void OpenNewMainTabUsingUIUnsynced() {
-  int nb_main_tab = chrome_test_util::GetMainTabCount();
-  id<GREYMatcher> tool_menu_matcher =
-      grey_accessibilityID(kToolbarToolsMenuButtonIdentifier);
-  WaitAndTap(tool_menu_matcher, @"Tool menu");
-  id<GREYMatcher> new_main_tab_button_matcher =
-      grey_accessibilityID(kToolsMenuNewTabId);
-  WaitAndTap(new_main_tab_button_matcher, @"New tab button");
-  [ChromeEarlGrey waitForMainTabCount:(nb_main_tab + 1)];
-}
-
 // Closes a tab in the current tab model. Synchronize on tab number afterwards.
 void CloseTabAtIndexAndSync(NSUInteger i) {
   NSUInteger nb_main_tab = chrome_test_util::GetMainTabCount();
@@ -132,9 +114,9 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
   ConditionBlock condition = ^{
     return chrome_test_util::GetMainTabCount() == (nb_main_tab - 1);
   };
-  GREYAssert(
-      testing::WaitUntilConditionOrTimeout(kWaitElementTimeout, condition),
-      @"Waiting for tab to close");
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(kWaitElementTimeout,
+                                                          condition),
+             @"Waiting for tab to close");
 }
 }  // namespace
 
@@ -226,14 +208,14 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
     __block bool finished = false;
     chrome_test_util::GetCurrentWebState()->ExecuteJavaScript(
         base::UTF8ToUTF16(kClearPageScript),
-        base::BindBlockArc(^(const base::Value*) {
+        base::BindOnce(^(const base::Value*) {
           finished = true;
         }));
 
-    GREYAssert(testing::WaitUntilConditionOrTimeout(1.0,
-                                                    ^{
-                                                      return finished;
-                                                    }),
+    GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(1.0,
+                                                            ^{
+                                                              return finished;
+                                                            }),
                @"JavaScript to reload each tab did not finish");
     [ChromeEarlGreyUI reload];
     [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
@@ -458,6 +440,9 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
 
   SwitchToNormalMode();
 
+  // Letting page load start.
+  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.5));
+
   // TODO(crbug.com/640977): EarlGrey synchronize on some animations when a
   // page is loading. Need to handle synchronization manually for this test.
   [[GREYConfiguration sharedInstance]
@@ -465,12 +450,11 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
       forConfigKey:kGREYConfigKeySynchronizationEnabled];
   // Make sure the button is here and displayed before tapping it.
   id<GREYMatcher> toolMenuMatcher =
-      grey_accessibilityID(kToolbarToolsMenuButtonIdentifier);
+      grey_allOf(grey_accessibilityID(kToolbarToolsMenuButtonIdentifier),
+                 grey_sufficientlyVisible(), nil);
   Wait(toolMenuMatcher, @"Tool Menu");
-  // Letting page load start.
-  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.5));
 
-  OpenNewMainTabUsingUIUnsynced();
+  chrome_test_util::OpenNewTab();
   [[GREYConfiguration sharedInstance]
           setValue:@(YES)
       forConfigKey:kGREYConfigKeySynchronizationEnabled];
@@ -500,7 +484,7 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
   SwitchToNormalMode();
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsMenuPrivacyButton()];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
   [ChromeEarlGrey waitForWebViewContainingText:responses[slowURL]];
 
@@ -531,16 +515,18 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
       std::make_unique<HtmlResponseProvider>(responses), kSlowURLDelay));
   SwitchToNormalMode();
 
+  // Letting page load start.
+  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.5));
+
   // TODO(crbug.com/640977): EarlGrey synchronize on some animations when a
   // page is loading. Need to handle synchronization manually for this test.
   [[GREYConfiguration sharedInstance]
           setValue:@(NO)
       forConfigKey:kGREYConfigKeySynchronizationEnabled];
   id<GREYMatcher> toolMenuMatcher =
-      grey_accessibilityID(kToolbarToolsMenuButtonIdentifier);
+      grey_allOf(grey_accessibilityID(kToolbarToolsMenuButtonIdentifier),
+                 grey_sufficientlyVisible(), nil);
   Wait(toolMenuMatcher, @"Tool Menu");
-  // Letting page load start.
-  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.5));
 
   GREYAssertTrue(chrome_test_util::SimulateTabsBackgrounding(),
                  @"Failed to simulate tab backgrounding.");
@@ -649,7 +635,8 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
   // Open a tab with a link to click.
   NewMainTabWithURL(initialURL, "link");
   // Click the link.
-  chrome_test_util::TapWebViewElementWithId("link");
+  GREYAssert(chrome_test_util::TapWebViewElementWithId("link"),
+             @"Failed to tap \"link\"");
 
   [ChromeEarlGrey waitForWebViewContainingText:"Whee"];
   NSUInteger tabIndex = chrome_test_util::GetMainTabCount() - 1;
@@ -705,7 +692,8 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
       web::WebViewInWebState(chrome_test_util::GetCurrentWebState());
   [[EarlGrey selectElementWithMatcher:webViewMatcher]
       performAction:chrome_test_util::LongPressElementForContextMenu(
-                        "link", true /* menu should appear */)];
+                        ElementSelector::ElementSelectorId("link"),
+                        true /* menu should appear */)];
 
   [[EarlGrey selectElementWithMatcher:OpenLinkInNewTabButton()]
       performAction:grey_tap()];

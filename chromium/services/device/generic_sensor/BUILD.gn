@@ -58,6 +58,8 @@ source_set("generic_sensor") {
     "platform_sensor_win.h",
     "relative_orientation_euler_angles_fusion_algorithm_using_accelerometer.cc",
     "relative_orientation_euler_angles_fusion_algorithm_using_accelerometer.h",
+    "relative_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_gyroscope.cc",
+    "relative_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_gyroscope.h",
     "sensor_impl.cc",
     "sensor_impl.h",
     "sensor_provider_impl.cc",
@@ -80,10 +82,7 @@ source_set("generic_sensor") {
   }
 
   if (is_mac) {
-    deps += [
-      "//device/sensors/public/cpp:full",
-      "//third_party/sudden_motion_sensor",
-    ]
+    deps += [ "//third_party/sudden_motion_sensor" ]
     libs = [
       "CoreFoundation.framework",
       "IOKit.framework",
@@ -134,7 +133,7 @@ if (is_android) {
     java_files = device_sensors_jni_sources
     deps = [
       "//base:base_java",
-      "//services/device/public/interfaces:generic_sensor_java",
+      "//services/device/public/mojom:generic_sensor_java",
     ]
   }
 }

@@ -48,6 +48,7 @@ const SkColor kTrackColor = SkColorSetRGB(0xF1, 0xF1, 0xF1);
 ////////////////////////////////////////////////////////////////////////////////
 // NativeTheme:
 
+#if !defined(OS_MACOSX)
 // static
 NativeTheme* NativeTheme::GetInstanceForWeb() {
   return NativeThemeAura::web_instance();
@@ -58,7 +59,8 @@ NativeTheme* NativeTheme::GetInstanceForWeb() {
 NativeTheme* NativeTheme::GetInstanceForNativeUi() {
   return NativeThemeAura::instance();
 }
-#endif
+#endif  // OS_WIN
+#endif  // !OS_MACOSX
 
 ////////////////////////////////////////////////////////////////////////////////
 // NativeThemeAura:
@@ -148,7 +150,7 @@ void NativeThemeAura::PaintArrowButton(cc::PaintCanvas* canvas,
       break;
     case kHovered:
       bg_color = SkColorSetRGB(0xD2, 0xD2, 0xD2);
-    // Fall through.
+      FALLTHROUGH;
     case kNormal:
       arrow_color = SkColorSetRGB(0x50, 0x50, 0x50);
       break;

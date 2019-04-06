@@ -17,6 +17,8 @@
 #include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "components/browser_sync/profile_sync_service.h"
+#include "components/sync/base/enum_set.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/base/weak_handle.h"
 #include "components/sync/driver/about_sync_util.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -66,7 +68,7 @@ bool HasSomethingAtIndex(const base::ListValue* list, int index) {
 
 SyncInternalsMessageHandler::SyncInternalsMessageHandler()
     : SyncInternalsMessageHandler(base::BindRepeating(
-          &syncer::sync_ui_util::ConstructAboutInformation_DEPRECATED)) {}
+          &syncer::sync_ui_util::ConstructAboutInformation)) {}
 
 SyncInternalsMessageHandler::SyncInternalsMessageHandler(
     AboutSyncDataDelegate about_sync_data_delegate)
@@ -91,44 +93,63 @@ void SyncInternalsMessageHandler::RegisterMessages() {
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRegisterForEvents,
-      base::Bind(&SyncInternalsMessageHandler::HandleRegisterForEvents,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleRegisterForEvents,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRegisterForPerTypeCounters,
-      base::Bind(&SyncInternalsMessageHandler::HandleRegisterForPerTypeCounters,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRegisterForPerTypeCounters,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestUpdatedAboutInfo,
-      base::Bind(&SyncInternalsMessageHandler::HandleRequestUpdatedAboutInfo,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestUpdatedAboutInfo,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestListOfTypes,
-      base::Bind(&SyncInternalsMessageHandler::HandleRequestListOfTypes,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestListOfTypes,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kRequestUserEventsVisibility,
-      base::Bind(
+      base::BindRepeating(
           &SyncInternalsMessageHandler::HandleRequestUserEventsVisibility,
           base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kSetIncludeSpecifics,
-      base::Bind(&SyncInternalsMessageHandler::HandleSetIncludeSpecifics,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleSetIncludeSpecifics,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kWriteUserEvent,
-      base::Bind(&SyncInternalsMessageHandler::HandleWriteUserEvent,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleWriteUserEvent,
+                          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      syncer::sync_ui_util::kRequestStart,
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleRequestStart,
+                          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      syncer::sync_ui_util::kRequestStop,
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleRequestStop,
+                          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      syncer::sync_ui_util::kTriggerRefresh,
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleTriggerRefresh,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kGetAllNodes,
-      base::Bind(&SyncInternalsMessageHandler::HandleGetAllNodes,
-                 base::Unretained(this)));
+      base::BindRepeating(&SyncInternalsMessageHandler::HandleGetAllNodes,
+                          base::Unretained(this)));
 }
 
 void SyncInternalsMessageHandler::HandleRegisterForEvents(
@@ -250,6 +271,40 @@ void SyncInternalsMessageHandler::HandleWriteUserEvent(
   }
 
   user_event_service->RecordUserEvent(event_specifics);
+}
+
+void SyncInternalsMessageHandler::HandleRequestStart(
+    const base::ListValue* args) {
+  DCHECK_EQ(0U, args->GetSize());
+
+  SyncService* service = GetSyncService();
+  if (!service)
+    return;
+
+  service->RequestStart();
+}
+
+void SyncInternalsMessageHandler::HandleRequestStop(
+    const base::ListValue* args) {
+  DCHECK_EQ(0U, args->GetSize());
+
+  SyncService* service = GetSyncService();
+  if (!service)
+    return;
+
+  service->RequestStop(SyncService::KEEP_DATA);
+}
+
+void SyncInternalsMessageHandler::HandleTriggerRefresh(
+    const base::ListValue* args) {
+  SyncService* service = GetSyncService();
+  if (!service)
+    return;
+
+  // Only allowed to trigger refresh/schedule nudges for protocol types, things
+  // like PROXY_TABS are not allowed.
+  service->TriggerRefresh(syncer::Intersection(service->GetActiveDataTypes(),
+                                               syncer::ProtocolTypes()));
 }
 
 void SyncInternalsMessageHandler::OnReceivedAllNodes(

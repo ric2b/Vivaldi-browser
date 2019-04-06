@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
@@ -28,18 +27,17 @@ ProfileImportImpl::~ProfileImportImpl() {}
 
 void ProfileImportImpl::StartImport(
     const importer::SourceProfile& source_profile,
-    const importer::ImportConfig& import_config,
-    std::unique_ptr<base::DictionaryValue> localized_strings,
+    uint16_t items,
+    const base::flat_map<uint32_t, std::string>& localized_strings,
     chrome::mojom::ProfileImportObserverPtr observer) {
   content::UtilityThread::Get()->EnsureBlinkInitialized();
-  importer_ = importer::CreateImporterByType(source_profile.importer_type,
-                                             import_config);
+  importer_ = importer::CreateImporterByType(source_profile.importer_type);
   if (!importer_.get()) {
     observer->OnImportFinished(false, "Importer could not be created.");
     return;
   }
 
-  items_to_import_ = import_config.imported_items;
+  items_to_import_ = items;
 
   // Create worker thread in which importer runs.
   import_thread_.reset(new base::Thread("import_thread"));
@@ -51,12 +49,11 @@ void ProfileImportImpl::StartImport(
     ImporterCleanup();
   }
   bridge_ = new ExternalProcessImporterBridge(
-      *localized_strings,
+      localized_strings,
       ThreadSafeProfileImportObserverPtr::Create(std::move(observer)));
   import_thread_->task_runner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&Importer::StartImport, importer_, source_profile,
-                     import_config.imported_items,
+      base::BindOnce(&Importer::StartImport, importer_, source_profile, items,
                      base::RetainedRef(bridge_)));
 }
 

@@ -8,10 +8,14 @@
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "chrome/browser/android/history_report/delta_file_commons.h"
+#include "chrome/browser/android/history_report/usage_report_util.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/comparator.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
@@ -94,20 +98,33 @@ bool DeltaFileBackend::Init() {
   options.create_if_missing = true;
   options.max_open_files = 0;  // Use minimum number of files.
   options.comparator = leveldb_cmp_.get();
+  options.write_buffer_size = 500 * 1024;
   std::string path = path_.value();
   leveldb::Status status = leveldb_env::OpenDB(options, path, &db_);
   if (status.IsCorruption()) {
-    LOG(WARNING) << "Deleting possibly-corrupt database";
-    base::DeleteFile(path_, true);
+    LOG(WARNING) << "Deleting corrupt database";
+    status = leveldb_chrome::DeleteDB(path_, options);
+    if (!status.ok()) {
+      LOG(ERROR) << "Unable to delete corrupt database " << path_
+                 << ", error: " << status.ToString();
+      return false;
+    }
     status = leveldb_env::OpenDB(options, path, &db_);
   }
-  if (status.ok()) {
-    CHECK(db_);
-    return true;
+  if (!status.ok()) {
+    LOG(WARNING) << "Unable to open " << path_.value() << ": "
+                 << status.ToString();
+    return false;
   }
-  LOG(WARNING) << "Unable to open " << path_.value() << ": "
-               << status.ToString();
-  return false;
+  CHECK(db_);
+
+  UMA_HISTOGRAM_COUNTS_1M("Search.HistoryReport.DeltaFile.LevelDBEntries",
+                          usage_report_util::DatabaseEntries(db_.get()));
+
+  UMA_HISTOGRAM_COUNTS_1M("Search.HistoryReport.DeltaFile.LastSeqNo",
+                          GetLastSeqNo(db_.get()));
+
+  return true;
 }
 
 bool DeltaFileBackend::EnsureInitialized() {
@@ -216,7 +233,7 @@ std::unique_ptr<std::vector<DeltaFileEntryWithData>> DeltaFileBackend::Query(
 void DeltaFileBackend::Clear() {
   if (!EnsureInitialized()) return;
   db_.reset();
-  base::DeleteFile(path_, true);
+  leveldb_chrome::DeleteDB(path_, leveldb_env::Options());
   Init();
 }
 
@@ -234,6 +251,29 @@ std::string DeltaFileBackend::Dump() {
   dump.append(base::IntToString(num_entries));
   dump.append("]");
   return dump;
+}
+
+bool DeltaFileBackend::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  if (!db_)
+    return true;
+
+  // leveldb_env::DBTracker already records memory usage. Add ownership edge
+  // to the dump.
+  auto* tracker_dump =
+      leveldb_env::DBTracker::GetOrCreateAllocatorDump(pmd, db_.get());
+  if (!tracker_dump)
+    return true;
+
+  auto* dump = pmd->CreateAllocatorDump(
+      base::StringPrintf("history/delta_file_service/leveldb_0x%" PRIXPTR,
+                         reinterpret_cast<uintptr_t>(db_.get())));
+  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                  tracker_dump->GetSizeInternal());
+  pmd->AddOwnershipEdge(dump->guid(), tracker_dump->guid());
+  return true;
 }
 
 }  // namespace history_report

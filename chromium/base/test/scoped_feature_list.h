@@ -83,6 +83,11 @@ class ScopedFeatureList final {
   // FeatureList and overridden with single disabled feature.
   void InitAndDisableFeature(const Feature& feature);
 
+  // Initializes and registers a FeatureList instance based on present
+  // FeatureList and overriden with a single feature either enabled or
+  // disabled depending on |enabled|.
+  void InitWithFeatureState(const Feature& feature, bool enabled);
+
  private:
   // Initializes and registers a FeatureList instance based on present
   // FeatureList and overridden with the given enabled and disabled features.
@@ -105,6 +110,7 @@ class ScopedFeatureList final {
   void InitAndEnableFeatureWithFieldTrialOverride(const Feature& feature,
                                                   FieldTrial* trial);
 
+  bool init_called_ = false;
   std::unique_ptr<FeatureList> original_feature_list_;
   scoped_refptr<FieldTrial> field_trial_override_;
   std::unique_ptr<base::FieldTrialList> field_trial_list_;

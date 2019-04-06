@@ -4,10 +4,12 @@
 
 #import "ios/chrome/browser/ui/qr_scanner/qr_scanner_legacy_coordinator.h"
 
+#include "base/logging.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/qr_scanner/qr_scanner_view_controller.h"
 #import "ios/chrome/browser/ui/qr_scanner/requirements/qr_scanner_presenting.h"
+#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -22,7 +24,6 @@
 @implementation QRScannerLegacyCoordinator
 
 @synthesize dispatcher = _dispatcher;
-@synthesize loadProvider = _loadProvider;
 @synthesize presentationProvider = _presentationProvider;
 @synthesize viewController = _viewController;
 
@@ -45,9 +46,12 @@
 }
 
 - (void)showQRScanner {
+  DCHECK(self.dispatcher);
+  [static_cast<id<OmniboxFocuser>>(self.dispatcher) cancelOmniboxEdit];
   self.viewController = [[QRScannerViewController alloc]
       initWithPresentationProvider:self.presentationProvider
-                      loadProvider:self.loadProvider];
+                       queryLoader:static_cast<id<LoadQueryCommands>>(
+                                       self.dispatcher)];
   [self.presentationProvider
       presentQRScannerViewController:[self.viewController
                                              getViewControllerToPresent]];

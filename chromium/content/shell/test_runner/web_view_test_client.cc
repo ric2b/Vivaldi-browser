@@ -11,7 +11,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "content/shell/test_runner/event_sender.h"
-#include "content/shell/test_runner/mock_web_speech_recognizer.h"
 #include "content/shell/test_runner/test_common.h"
 #include "content/shell/test_runner/test_interfaces.h"
 #include "content/shell/test_runner/test_runner.h"
@@ -19,19 +18,21 @@
 #include "content/shell/test_runner/web_test_delegate.h"
 #include "content/shell/test_runner/web_view_test_proxy.h"
 #include "content/shell/test_runner/web_widget_test_proxy.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPagePopup.h"
-#include "third_party/WebKit/public/web/WebPrintParams.h"
-#include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/WebKit/public/web/WebWidget.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_page_popup.h"
+#include "third_party/blink/public/web/web_print_params.h"
+#include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/public/web/web_widget.h"
 
 namespace test_runner {
 
 WebViewTestClient::WebViewTestClient(
-    WebViewTestProxyBase* web_view_test_proxy_base)
-    : web_view_test_proxy_base_(web_view_test_proxy_base) {
+    WebViewTestProxyBase* web_view_test_proxy_base,
+    std::unique_ptr<blink::WebWidgetClient> web_widget_client)
+    : web_view_test_proxy_base_(web_view_test_proxy_base),
+      web_widget_client_(std::move(web_widget_client)) {
   DCHECK(web_view_test_proxy_base);
 }
 
@@ -77,10 +78,6 @@ void WebViewTestClient::PrintPage(blink::WebLocalFrame* frame) {
   frame->PrintEnd();
 }
 
-blink::WebSpeechRecognizer* WebViewTestClient::SpeechRecognizer() {
-  return test_runner()->getMockWebSpeechRecognizer();
-}
-
 blink::WebString WebViewTestClient::AcceptLanguages() {
   return blink::WebString::FromUTF8(test_runner()->GetAcceptLanguages());
 }
@@ -103,6 +100,10 @@ bool WebViewTestClient::CanHandleGestureEvent() {
 
 bool WebViewTestClient::CanUpdateLayout() {
   return true;
+}
+
+blink::WebWidgetClient* WebViewTestClient::WidgetClient() {
+  return web_widget_client_.get();
 }
 
 }  // namespace test_runner

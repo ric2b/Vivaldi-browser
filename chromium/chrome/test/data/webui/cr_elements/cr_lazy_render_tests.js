@@ -8,23 +8,29 @@ suite('cr-lazy-render', function() {
 
   suiteSetup(function() {
     return PolymerTest.importHtml(
-        'chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html');
+        'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.html');
   });
 
   setup(function() {
     PolymerTest.clearBody();
-    const template =
-        '<template is="dom-bind" id="bind">' +
-        '  <template is="cr-lazy-render" id="lazy">' +
-        '    <h1>' +
-        '      <paper-checkbox checked="{{checked}}"></paper-checkbox>' +
-        '      {{name}}' +
-        '    </h1>' +
-        '  </template>' +
-        '</template>';
+    const template = `
+        <dom-bind>
+          <template is="dom-bind">
+            <cr-lazy-render id="lazy">
+              <template>
+                <h1>
+                  <cr-checkbox checked="{{checked}}"></cr-checkbox>
+                  {{name}}
+                </h1>
+              </template>
+            </cr-lazy-render>
+          </template>
+        </dom-bind>`;
     document.body.innerHTML = template;
     lazy = document.getElementById('lazy');
-    bind = document.getElementById('bind');
+    // TODO(dpapad): Remove conditional when Polymer 2 migration has completed.
+    bind = document.querySelector(
+        Polymer.DomBind ? 'dom-bind' : 'template[is=\'dom-bind\']');
   });
 
   test('stamps after get()', function() {
@@ -49,7 +55,7 @@ suite('cr-lazy-render', function() {
     bind.checked = true;
 
     const inner = lazy.get();
-    const checkbox = document.querySelector('paper-checkbox');
+    const checkbox = document.querySelector('cr-checkbox');
     assertTrue(checkbox.checked);
     MockInteractions.tap(checkbox);
     assertFalse(checkbox.checked);

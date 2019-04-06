@@ -5,7 +5,7 @@
 #include "ui/content_accelerators/accelerator_util.h"
 
 #include "build/build_config.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -14,12 +14,13 @@ namespace ui {
 
 ui::Accelerator GetAcceleratorFromNativeWebKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
-  ui::Accelerator accelerator(
-      static_cast<ui::KeyboardCode>(event.windows_key_code),
-      WebEventModifiersToEventFlags(event.GetModifiers()));
-  if (event.GetType() == blink::WebInputEvent::kKeyUp)
-    accelerator.set_key_state(Accelerator::KeyState::RELEASED);
-  return accelerator;
+  Accelerator::KeyState key_state =
+      event.GetType() == blink::WebInputEvent::kKeyUp
+          ? Accelerator::KeyState::RELEASED
+          : Accelerator::KeyState::PRESSED;
+  return ui::Accelerator(static_cast<ui::KeyboardCode>(event.windows_key_code),
+                         WebEventModifiersToEventFlags(event.GetModifiers()),
+                         key_state, event.TimeStamp());
 }
 
 }  // namespace ui

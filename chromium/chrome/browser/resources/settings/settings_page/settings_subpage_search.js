@@ -16,7 +16,7 @@ Polymer({
     autofocus: Boolean,
   },
 
-  /** @return {!HTMLInputElement} */
+  /** @return {!CrInputElement} */
   getSearchInput: function() {
     return this.$.searchInput;
   },
@@ -24,5 +24,6 @@ Polymer({
   /** @private */
   onTapClear_: function() {
     this.setValue('');
+    this.$.searchInput.focus();
   },
 });

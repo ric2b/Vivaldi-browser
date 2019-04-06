@@ -13,10 +13,3 @@ update_target("//chrome/common:common") {
     "//vivaldi/importer/profile_vivaldi_import_process_param_traits.h",
   ]
 }
-
-update_target("//chrome/common/importer:importer") {
-  sources += [
-    "//vivaldi/importer/import_config.cc",
-    "//vivaldi/importer/import_config.h",
-  ]
-}

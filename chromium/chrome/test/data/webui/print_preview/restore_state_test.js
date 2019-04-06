@@ -15,20 +15,8 @@ cr.define('restore_state_test', function() {
     let page = null;
     let nativeLayer = null;
 
-    const initialSettings = {
-      isInKioskAutoPrintMode: false,
-      isInAppKioskMode: false,
-      thousandsDelimeter: ',',
-      decimalDelimeter: '.',
-      unitType: 1,
-      previewModifiable: true,
-      documentTitle: 'title',
-      documentHasSelection: true,
-      shouldPrintSelectionOnly: false,
-      printerName: 'FooDevice',
-      serializedAppStateStr: null,
-      serializedDefaultDestinationSelectionRulesStr: null
-    };
+    const initialSettings =
+        print_preview_test_utils.getDefaultInitialSettings();
 
     /** @override */
     setup(function() {
@@ -42,19 +30,29 @@ cr.define('restore_state_test', function() {
      *     to verify.
      */
     function verifyStickySettingsApplied(stickySettings) {
-      assertEquals(stickySettings.dpi.horizontal_dpi,
-                   page.settings.dpi.value.horizontal_dpi);
-      assertEquals(stickySettings.dpi.vertical_dpi,
-                   page.settings.dpi.value.vertical_dpi);
-      assertEquals(stickySettings.mediaSize.name,
-                   page.settings.mediaSize.value.name);
-      assertEquals(stickySettings.mediaSize.height_microns,
-                   page.settings.mediaSize.value.height_microns);
-      assertEquals(stickySettings.mediaSize.width_microns,
-                   page.settings.mediaSize.value.width_microns);
+      assertEquals(
+          stickySettings.dpi.horizontal_dpi,
+          page.settings.dpi.value.horizontal_dpi);
+      assertEquals(
+          stickySettings.dpi.vertical_dpi,
+          page.settings.dpi.value.vertical_dpi);
+      assertEquals(
+          stickySettings.mediaSize.name, page.settings.mediaSize.value.name);
+      assertEquals(
+          stickySettings.mediaSize.height_microns,
+          page.settings.mediaSize.value.height_microns);
+      assertEquals(
+          stickySettings.mediaSize.width_microns,
+          page.settings.mediaSize.value.width_microns);
+      assertEquals(
+          stickySettings.vendorOptions.paperType,
+          page.settings.vendorItems.value.paperType);
+      assertEquals(
+          stickySettings.vendorOptions.printArea,
+          page.settings.vendorItems.value.printArea);
 
-      [['margins', 'marginsType'],
-       ['color', 'isColorEnabled'], ['headerFooter', 'isHeaderFooterEnabled'],
+      [['margins', 'marginsType'], ['color', 'isColorEnabled'],
+       ['headerFooter', 'isHeaderFooterEnabled'],
        ['layout', 'isLandscapeEnabled'], ['collate', 'isCollateEnabled'],
        ['fitToPage', 'isFitToPageEnabled'],
        ['cssBackground', 'isCssBackgroundEnabled'], ['scaling', 'scaling'],
@@ -73,15 +71,23 @@ cr.define('restore_state_test', function() {
 
       nativeLayer.setInitialSettings(initialSettings);
       nativeLayer.setLocalDestinationCapabilities(
-          print_preview_test_utils.getCddTemplate(initialSettings.printerName));
+          print_preview_test_utils.getCddTemplateWithAdvancedSettings(
+              2, initialSettings.printerName));
+      const pluginProxy = new print_preview.PDFPluginStub();
+      print_preview_new.PluginProxy.setInstance(pluginProxy);
 
       page = document.createElement('print-preview-app');
-      const previewArea = page.$$('print-preview-preview-area');
-      previewArea.plugin_ = new print_preview.PDFPluginStub(previewArea);
       document.body.appendChild(page);
-      return nativeLayer.whenCalled('getInitialSettings').then(function() {
-        verifyStickySettingsApplied(stickySettings);
-      });
+      const previewArea = page.$.previewArea;
+      pluginProxy.setLoadCallback(previewArea.onPluginLoad_.bind(previewArea));
+
+      return nativeLayer.whenCalled('getInitialSettings')
+          .then(function() {
+            return nativeLayer.whenCalled('getPrinterCapabilities');
+          })
+          .then(function() {
+            verifyStickySettingsApplied(stickySettings);
+          });
     }
 
     /**
@@ -93,13 +99,18 @@ cr.define('restore_state_test', function() {
         version: 2,
         recentDestinations: [],
         dpi: {horizontal_dpi: 100, vertical_dpi: 100},
-        mediaSize: {name: 'CUSTOM_SQUARE',
-                    width_microns: 215900,
-                    height_microns: 215900,
-                    custom_display_name: 'CUSTOM_SQUARE'},
+        mediaSize: {
+          name: 'CUSTOM_SQUARE',
+          width_microns: 215900,
+          height_microns: 215900,
+          custom_display_name: 'CUSTOM_SQUARE'
+        },
         customMargins: {top: 74, right: 74, bottom: 74, left: 74},
-        vendorOptions: {},
-        marginsType: 3,  /* custom */
+        vendorOptions: {
+          paperType: 1,
+          printArea: 6,
+        },
+        marginsType: 3, /* custom */
         scaling: '90',
         isHeaderFooterEnabled: true,
         isCssBackgroundEnabled: true,
@@ -121,14 +132,19 @@ cr.define('restore_state_test', function() {
         version: 2,
         recentDestinations: [],
         dpi: {horizontal_dpi: 200, vertical_dpi: 200},
-        mediaSize: {name: 'NA_LETTER',
-                    width_microns: 215900,
-                    height_microns: 279400,
-                    is_default: true,
-                    custom_display_name: 'Letter'},
+        mediaSize: {
+          name: 'NA_LETTER',
+          width_microns: 215900,
+          height_microns: 279400,
+          is_default: true,
+          custom_display_name: 'Letter'
+        },
         customMargins: {},
-        vendorOptions: {},
-        marginsType: 0,  /* default */
+        vendorOptions: {
+          paperType: 0,
+          printArea: 4,
+        },
+        marginsType: 0, /* default */
         scaling: '120',
         isHeaderFooterEnabled: false,
         isCssBackgroundEnabled: false,
@@ -214,6 +230,15 @@ cr.define('restore_state_test', function() {
           settingName: 'cssBackground',
           key: 'isCssBackgroundEnabled',
           value: true,
+        },
+        {
+          section: 'print-preview-advanced-options-settings',
+          settingName: 'vendorItems',
+          key: 'vendorOptions',
+          value: {
+            paperType: 1,
+            printArea: 6,
+          },
         }
       ];
 
@@ -223,11 +248,15 @@ cr.define('restore_state_test', function() {
           print_preview_test_utils.getCddTemplate(initialSettings.printerName));
 
       page = document.createElement('print-preview-app');
-      const previewArea = page.$$('print-preview-preview-area');
-      previewArea.plugin_ = new print_preview.PDFPluginStub(previewArea);
       document.body.appendChild(page);
+      const previewArea = page.$$('print-preview-preview-area');
+      previewArea.plugin_ = new print_preview.PDFPluginStub(
+          previewArea.onPluginLoad_.bind(previewArea));
 
       return nativeLayer.whenCalled('getInitialSettings')
+          .then(function() {
+            return nativeLayer.whenCalled('getPrinterCapabilities');
+          })
           .then(function() {
             // Set all the settings sections.
             testData.forEach((testValue, index) => {

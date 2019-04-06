@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/containers/queue.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_media_analytics_client.h"
@@ -19,29 +18,31 @@
 
 namespace media_perception = extensions::api::media_perception_private;
 
-namespace chromeos {
+namespace extensions {
+
 namespace {
 
-class TestUpstartClient : public FakeUpstartClient {
+class TestUpstartClient : public chromeos::FakeUpstartClient {
  public:
-  TestUpstartClient() : enqueue_requests_(false) {}
+  TestUpstartClient() = default;
 
-  ~TestUpstartClient() override {}
+  ~TestUpstartClient() override = default;
 
   // Overrides behavior to queue start requests.
   void StartMediaAnalytics(const std::vector<std::string>& upstart_env,
-                           const UpstartCallback& callback) override {
-    HandleUpstartRequest(callback);
+                           chromeos::VoidDBusMethodCallback callback) override {
+    HandleUpstartRequest(std::move(callback));
   }
 
   // Overrides behavior to queue restart requests.
-  void RestartMediaAnalytics(const UpstartCallback& callback) override {
-    HandleUpstartRequest(callback);
+  void RestartMediaAnalytics(
+      chromeos::VoidDBusMethodCallback callback) override {
+    HandleUpstartRequest(std::move(callback));
   }
 
   // Overrides behavior to queue stop requests.
-  void StopMediaAnalytics(const UpstartCallback& callback) override {
-    HandleUpstartRequest(callback);
+  void StopMediaAnalytics(chromeos::VoidDBusMethodCallback callback) override {
+    HandleUpstartRequest(std::move(callback));
   }
 
   // Triggers the next queue'd start request to succeed or fail.
@@ -49,16 +50,16 @@ class TestUpstartClient : public FakeUpstartClient {
     if (pending_upstart_request_callbacks_.empty())
       return false;
 
-    UpstartCallback callback = pending_upstart_request_callbacks_.front();
+    chromeos::VoidDBusMethodCallback callback =
+        std::move(pending_upstart_request_callbacks_.front());
     pending_upstart_request_callbacks_.pop();
 
     if (!should_succeed) {
-      callback.Run(false);
+      std::move(callback).Run(false);
       return true;
     }
 
-    std::vector<std::string> upstart_env;
-    FakeUpstartClient::StartMediaAnalytics(upstart_env, callback);
+    chromeos::FakeUpstartClient::StartMediaAnalytics({}, std::move(callback));
     return true;
   }
 
@@ -67,26 +68,20 @@ class TestUpstartClient : public FakeUpstartClient {
   }
 
  private:
-  void HandleUpstartRequest(const UpstartCallback& callback) {
-    pending_upstart_request_callbacks_.push(callback);
+  void HandleUpstartRequest(chromeos::VoidDBusMethodCallback callback) {
+    pending_upstart_request_callbacks_.push(std::move(callback));
     if (!enqueue_requests_) {
       HandleNextUpstartRequest(true);
     }
   }
 
-  base::queue<UpstartCallback> pending_upstart_request_callbacks_;
+  base::queue<chromeos::VoidDBusMethodCallback>
+      pending_upstart_request_callbacks_;
 
-  bool enqueue_requests_;
+  bool enqueue_requests_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestUpstartClient);
 };
-
-}  // namespace
-}  // namespace chromeos
-
-namespace extensions {
-
-namespace {
 
 void RecordServiceErrorFromStateAndRunClosure(
     base::Closure quit_run_loop,
@@ -94,6 +89,14 @@ void RecordServiceErrorFromStateAndRunClosure(
     media_perception::State result_state) {
   *service_error = result_state.service_error;
   quit_run_loop.Run();
+}
+
+void RecordServiceErrorFromProcessStateAndRunClosure(
+    base::OnceClosure quit_run_loop,
+    media_perception::ServiceError* service_error,
+    media_perception::ProcessState result_state) {
+  *service_error = result_state.service_error;
+  std::move(quit_run_loop).Run();
 }
 
 void RecordServiceErrorFromDiagnosticsAndRunClosure(
@@ -125,6 +128,19 @@ media_perception::ServiceError GetStateAndWaitForResponse(
   return service_error;
 }
 
+media_perception::ServiceError SetComponentProcessStateAndWaitForResponse(
+    MediaPerceptionAPIManager* manager,
+    const media_perception::ProcessState& process_state) {
+  base::RunLoop run_loop;
+  media_perception::ServiceError service_error;
+  manager->SetComponentProcessState(
+      process_state,
+      base::BindOnce(&RecordServiceErrorFromProcessStateAndRunClosure,
+                     run_loop.QuitClosure(), &service_error));
+  run_loop.Run();
+  return service_error;
+}
+
 media_perception::ServiceError GetDiagnosticsAndWaitForResponse(
     MediaPerceptionAPIManager* manager) {
   base::RunLoop run_loop;
@@ -151,11 +167,12 @@ class MediaPerceptionAPIManagerTest : public testing::Test {
     media_analytics_client_ = media_analytics_client.get();
     dbus_setter->SetMediaAnalyticsClient(std::move(media_analytics_client));
 
-    auto upstart_client = std::make_unique<chromeos::TestUpstartClient>();
+    auto upstart_client = std::make_unique<TestUpstartClient>();
     upstart_client_ = upstart_client.get();
     dbus_setter->SetUpstartClient(std::move(upstart_client));
 
     manager_ = std::make_unique<MediaPerceptionAPIManager>(&browser_context_);
+    manager_->SetMountPointNonEmptyForTesting();
   }
 
   void TearDown() override {
@@ -169,11 +186,11 @@ class MediaPerceptionAPIManagerTest : public testing::Test {
 
   // Ownership of both is passed on to chromeos::DbusThreadManager.
   chromeos::FakeMediaAnalyticsClient* media_analytics_client_;
-  chromeos::TestUpstartClient* upstart_client_;
+  TestUpstartClient* upstart_client_;
 
  private:
-  content::TestBrowserContext browser_context_;
   content::TestBrowserThreadBundle thread_bundle_;
+  content::TestBrowserContext browser_context_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaPerceptionAPIManagerTest);
 };
@@ -198,6 +215,28 @@ TEST_F(MediaPerceptionAPIManagerTest, UpstartFailure) {
             SetStateAndWaitForResponse(manager_.get(), state));
 }
 
+TEST_F(MediaPerceptionAPIManagerTest, ProcessStateUpstartFailure) {
+  upstart_client_->set_enqueue_requests(true);
+  media_perception::ProcessState process_state;
+  process_state.status = media_perception::PROCESS_STATUS_STARTED;
+
+  base::RunLoop run_loop;
+  media_perception::ServiceError service_error;
+  manager_->SetComponentProcessState(
+      process_state,
+      base::BindOnce(&RecordServiceErrorFromProcessStateAndRunClosure,
+                     run_loop.QuitClosure(), &service_error));
+  EXPECT_TRUE(upstart_client_->HandleNextUpstartRequest(false));
+  run_loop.Run();
+  EXPECT_EQ(media_perception::SERVICE_ERROR_SERVICE_NOT_RUNNING, service_error);
+
+  // Check that after a failed request, setState RUNNING will go through.
+  upstart_client_->set_enqueue_requests(false);
+  EXPECT_EQ(media_perception::SERVICE_ERROR_NONE,
+            SetComponentProcessStateAndWaitForResponse(manager_.get(),
+                                                       process_state));
+}
+
 TEST_F(MediaPerceptionAPIManagerTest, UpstartStopFailure) {
   upstart_client_->set_enqueue_requests(true);
   media_perception::State state;
@@ -212,10 +251,32 @@ TEST_F(MediaPerceptionAPIManagerTest, UpstartStopFailure) {
   run_loop.Run();
   EXPECT_EQ(media_perception::SERVICE_ERROR_SERVICE_UNREACHABLE, service_error);
 
-  // Check that after a failed request, setState STOPPED will go through.
+  // Check that after a failed request, STOPPED will go through.
   upstart_client_->set_enqueue_requests(false);
   EXPECT_EQ(media_perception::SERVICE_ERROR_NONE,
             SetStateAndWaitForResponse(manager_.get(), state));
+}
+
+TEST_F(MediaPerceptionAPIManagerTest, ProcessStateUpstartStopFailure) {
+  upstart_client_->set_enqueue_requests(true);
+  media_perception::ProcessState process_state;
+  process_state.status = media_perception::PROCESS_STATUS_STOPPED;
+
+  base::RunLoop run_loop;
+  media_perception::ServiceError service_error;
+  manager_->SetComponentProcessState(
+      process_state,
+      base::BindOnce(&RecordServiceErrorFromProcessStateAndRunClosure,
+                     run_loop.QuitClosure(), &service_error));
+  EXPECT_TRUE(upstart_client_->HandleNextUpstartRequest(false));
+  run_loop.Run();
+  EXPECT_EQ(media_perception::SERVICE_ERROR_SERVICE_UNREACHABLE, service_error);
+
+  // Check that after a failed request, STOPPED will go through.
+  upstart_client_->set_enqueue_requests(false);
+  EXPECT_EQ(media_perception::SERVICE_ERROR_NONE,
+            SetComponentProcessStateAndWaitForResponse(manager_.get(),
+                                                       process_state));
 }
 
 TEST_F(MediaPerceptionAPIManagerTest, UpstartRestartFailure) {
@@ -267,6 +328,32 @@ TEST_F(MediaPerceptionAPIManagerTest, UpstartStall) {
             SetStateAndWaitForResponse(manager_.get(), state));
 }
 
+TEST_F(MediaPerceptionAPIManagerTest, SetComponentProcessStateUpstartStall) {
+  upstart_client_->set_enqueue_requests(true);
+  media_perception::ProcessState process_state;
+  process_state.status = media_perception::PROCESS_STATUS_STARTED;
+
+  base::RunLoop run_loop;
+  media_perception::ServiceError service_error;
+  manager_->SetComponentProcessState(
+      process_state,
+      base::BindOnce(&RecordServiceErrorFromProcessStateAndRunClosure,
+                     run_loop.QuitClosure(), &service_error));
+
+  EXPECT_EQ(media_perception::SERVICE_ERROR_SERVICE_BUSY_LAUNCHING,
+            SetComponentProcessStateAndWaitForResponse(manager_.get(),
+                                                       process_state));
+  EXPECT_TRUE(upstart_client_->HandleNextUpstartRequest(true));
+  run_loop.Run();
+  EXPECT_EQ(media_perception::SERVICE_ERROR_NONE, service_error);
+
+  // Verify that after the slow start, things works as normal.
+  upstart_client_->set_enqueue_requests(false);
+  process_state.status = media_perception::PROCESS_STATUS_STARTED;
+  EXPECT_EQ(media_perception::SERVICE_ERROR_NONE,
+            SetComponentProcessStateAndWaitForResponse(manager_.get(),
+                                                       process_state));
+}
 TEST_F(MediaPerceptionAPIManagerTest, UpstartRestartStall) {
   upstart_client_->set_enqueue_requests(true);
   media_perception::State state;

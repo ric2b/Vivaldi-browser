@@ -8,6 +8,8 @@ source_set("bookmarks") {
     "bookmark_client_impl.h",
     "bookmark_model_factory.cc",
     "bookmark_model_factory.h",
+    "bookmark_sync_service_factory.cc",
+    "bookmark_sync_service_factory.h",
     "startup_task_runner_service_factory.cc",
     "startup_task_runner_service_factory.h",
   ]
@@ -20,6 +22,7 @@ source_set("bookmarks") {
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/prefs",
+    "//components/sync_bookmarks",
     "//components/undo",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
@@ -39,6 +42,8 @@ source_set("bookmarks") {
 
 source_set("bookmarks_utils") {
   sources = [
+    "bookmark_remover_helper.cc",
+    "bookmark_remover_helper.h",
     "bookmarks_utils.cc",
     "bookmarks_utils.h",
   ]
@@ -48,15 +53,5 @@ source_set("bookmarks_utils") {
     "//components/prefs",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
-  ]
-}
-
-source_set("features") {
-  sources = [
-    "bookmark_new_generation_features.cc",
-    "bookmark_new_generation_features.h",
-  ]
-  deps = [
-    "//base",
   ]
 }

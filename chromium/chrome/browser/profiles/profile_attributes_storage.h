@@ -40,8 +40,7 @@ class ProfileAttributesStorage
  public:
   using Observer = ProfileInfoCacheObserver;
 
-  ProfileAttributesStorage(PrefService* prefs,
-                           const base::FilePath& user_data_dir);
+  explicit ProfileAttributesStorage(PrefService* prefs);
   virtual ~ProfileAttributesStorage();
 
   // If the |supervised_user_id| is non-empty, the profile will be marked to be
@@ -54,7 +53,8 @@ class ProfileAttributesStorage
                           const std::string& gaia_id,
                           const base::string16& user_name,
                           size_t icon_index,
-                          const std::string& supervised_user_id) = 0;
+                          const std::string& supervised_user_id,
+                          const AccountId& account_id) = 0;
 
   // Removes the profile matching given |account_id| from this storage.
   // Calculates profile path and calls RemoveProfile() on it.
@@ -139,8 +139,7 @@ class ProfileAttributesStorage
                              const std::string& key,
                              const base::FilePath& image_path);
 
-  PrefService* prefs_;
-  base::FilePath user_data_dir_;
+  PrefService* const prefs_;
   mutable std::unordered_map<base::FilePath::StringType,
                              std::unique_ptr<ProfileAttributesEntry>>
       profile_attributes_entries_;
@@ -166,7 +165,7 @@ class ProfileAttributesStorage
 
   // Determines of the ProfileAvatarDownloader should be created and executed
   // or not. Only set to true for tests.
-  bool disable_avatar_download_for_testing_;
+  bool disable_avatar_download_for_testing_ = false;
 
   // Task runner used for file operation on avatar images.
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;

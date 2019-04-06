@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/shared_memory_handle.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sync_socket.h"
@@ -20,7 +19,7 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "content/renderer/media/mojo_audio_output_ipc.h"
+#include "content/renderer/media/audio/mojo_audio_output_ipc.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/audio/audio_output_controller.h"
 #include "media/audio/audio_output_device.h"
@@ -34,7 +33,6 @@
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "url/origin.h"
 
 namespace content {
 
@@ -52,7 +50,6 @@ const float kWaveFrequency = 440.f;
 const int kChannels = 1;
 const int kBuffers = 1000;
 const int kSampleFrequency = 44100;
-const int kBitsPerSample = 16;
 const int kSamplesPerBuffer = kSampleFrequency / 100;
 
 std::unique_ptr<media::AudioOutputStream::AudioSourceCallback>
@@ -64,7 +61,7 @@ GetTestAudioSource() {
 media::AudioParameters GetTestAudioParameters() {
   return media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
                                 media::CHANNEL_LAYOUT_MONO, kSampleFrequency,
-                                kBitsPerSample, kSamplesPerBuffer);
+                                kSamplesPerBuffer);
 }
 
 void SyncWith(scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
@@ -82,11 +79,7 @@ void SyncWithAllThreads() {
   // New tasks might be posted while we are syncing, but in every iteration at
   // least one task will be run. 20 iterations should be enough for our code.
   for (int i = 0; i < 20; ++i) {
-    {
-      base::MessageLoop::ScopedNestableTaskAllower allower(
-          base::MessageLoop::current());
-      base::RunLoop().RunUntilIdle();
-    }
+    base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).RunUntilIdle();
     SyncWith(BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
     SyncWith(media::AudioManager::Get()->GetWorkerTaskRunner());
   }
@@ -257,16 +250,17 @@ TEST_F(RendererAudioOutputStreamFactoryIntegrationTest, StreamIntegrationTest) {
   // Wait for factory_ptr to be set.
   SyncWith(renderer_ipc_task_runner);
 
-  auto renderer_side_ipc =
-      std::make_unique<MojoAudioOutputIPC>(base::BindRepeating(
+  auto renderer_side_ipc = std::make_unique<MojoAudioOutputIPC>(
+      base::BindRepeating(
           [](mojom::RendererAudioOutputStreamFactory* factory_ptr) {
             return factory_ptr;
           },
-          factory_ptr));
+          factory_ptr),
+      renderer_ipc_task_runner);
 
   auto device = base::MakeRefCounted<media::AudioOutputDevice>(
       std::move(renderer_side_ipc), renderer_ipc_task_runner, kNoSessionId, "",
-      url::Origin(), base::TimeDelta());
+      base::TimeDelta());
 
   StrictMock<TestRenderCallback> source;
 

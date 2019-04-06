@@ -11,10 +11,11 @@
 #include "base/macros.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 class ChromeDownloadManagerDelegate;
 class DownloadHistory;
+class DownloadOfflineContentProvider;
 class DownloadUIController;
 class ExtensionDownloadsEventRouter;
 class Profile;
@@ -66,6 +67,10 @@ class DownloadCoreServiceImpl : public DownloadCoreService {
   // Note on destruction order: download_ui_ depends on download_history_ and
   // should be destroyed before the latter.
   std::unique_ptr<DownloadUIController> download_ui_;
+
+  // The download provider is the responsible for supplying offline items to the
+  // UI.
+  std::unique_ptr<DownloadOfflineContentProvider> download_provider_;
 
 // On Android, GET downloads are not handled by the DownloadManager.
 // Once we have extensions on android, we probably need the EventRouter

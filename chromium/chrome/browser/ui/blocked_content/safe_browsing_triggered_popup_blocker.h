@@ -90,10 +90,9 @@ class SafeBrowsingTriggeredPopupBlocker
       content::NavigationHandle* navigation_handle) override;
 
   // subresource_filter::SubresourceFilterObserver:
-  void OnSafeBrowsingCheckComplete(
+  void OnSafeBrowsingChecksComplete(
       content::NavigationHandle* navigation_handle,
-      safe_browsing::SBThreatType threat_type,
-      const safe_browsing::ThreatMetadata& threat_metadata) override;
+      const SafeBrowsingCheckResults& results) override;
   void OnSubresourceFilterGoingAway() override;
 
   // Enabled state is governed by both a feature flag and a pref (which can be
@@ -135,11 +134,6 @@ class SafeBrowsingTriggeredPopupBlocker
 
   // Should never be nullptr.
   std::unique_ptr<PageData> current_page_data_;
-
-  // Whether to ignore the threat pattern type. Useful for flexibility because
-  // we have to wait until metadata patterns reach Stable before using them
-  // without error. Governed by a variation param.
-  bool ignore_sublists_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingTriggeredPopupBlocker);
 };

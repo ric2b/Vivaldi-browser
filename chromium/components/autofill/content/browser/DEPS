@@ -1,11 +1,10 @@
 include_rules = [
   "+content/public/browser",
   "+crypto/random.h",
-  "+device/geolocation/public",
   "+gpu/config/gpu_info.h",
   "+services/device/public",
-  "+services/service_manager/public/interfaces",
-  "+third_party/WebKit/public/platform/WebRect.h",
+  "+services/service_manager/public/mojom",
+  "+third_party/blink/public/platform/web_rect.h",
 ]
 
 specific_include_rules = {

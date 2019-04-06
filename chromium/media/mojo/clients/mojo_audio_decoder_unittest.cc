@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -65,7 +66,7 @@ class MojoAudioDecoderTest : public ::testing::Test {
         message_loop_.task_runner(), std::move(remote_audio_decoder)));
   }
 
-  virtual ~MojoAudioDecoderTest() {
+  ~MojoAudioDecoderTest() override {
     // Destroy |mojo_audio_decoder_| first so that the service will be
     // destructed. Then stop the service thread. Otherwise we'll leak memory.
     mojo_audio_decoder_.reset();
@@ -107,7 +108,7 @@ class MojoAudioDecoderTest : public ::testing::Test {
         new StrictMock<MockAudioDecoder>());
     mock_audio_decoder_ = mock_audio_decoder.get();
 
-    EXPECT_CALL(*mock_audio_decoder_, Initialize(_, _, _, _))
+    EXPECT_CALL(*mock_audio_decoder_, Initialize(_, _, _, _, _))
         .WillRepeatedly(DoAll(SaveArg<3>(&output_cb_), RunCallback<2>(true)));
     EXPECT_CALL(*mock_audio_decoder_, Decode(_, _))
         .WillRepeatedly(
@@ -136,9 +137,11 @@ class MojoAudioDecoderTest : public ::testing::Test {
                                     Unencrypted());
 
     mojo_audio_decoder_->Initialize(
-        audio_config, nullptr, base::Bind(&MojoAudioDecoderTest::OnInitialized,
-                                          base::Unretained(this)),
-        base::Bind(&MojoAudioDecoderTest::OnOutput, base::Unretained(this)));
+        audio_config, nullptr,
+        base::Bind(&MojoAudioDecoderTest::OnInitialized,
+                   base::Unretained(this)),
+        base::Bind(&MojoAudioDecoderTest::OnOutput, base::Unretained(this)),
+        base::NullCallback());
 
     RunLoop();
   }

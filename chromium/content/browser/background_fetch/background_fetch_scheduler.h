@@ -21,6 +21,7 @@ namespace content {
 
 class BackgroundFetchRegistrationId;
 class BackgroundFetchRequestInfo;
+enum class BackgroundFetchReasonToAbort;
 
 // Maintains a list of Controllers and chooses which ones should launch new
 // downloads.
@@ -29,7 +30,7 @@ class CONTENT_EXPORT BackgroundFetchScheduler
  public:
   using FinishedCallback =
       base::OnceCallback<void(const BackgroundFetchRegistrationId&,
-                              bool /* aborted */)>;
+                              BackgroundFetchReasonToAbort)>;
   using MarkedCompleteCallback = base::OnceCallback<void()>;
 
   // Interface for download job controllers.
@@ -44,7 +45,7 @@ class CONTENT_EXPORT BackgroundFetchScheduler
     virtual void StartRequest(
         scoped_refptr<BackgroundFetchRequestInfo> request) = 0;
 
-    void Finish(bool abort);
+    void Finish(BackgroundFetchReasonToAbort reason_to_abort);
 
     const BackgroundFetchRegistrationId& registration_id() const {
       return registration_id_;
@@ -87,6 +88,13 @@ class CONTENT_EXPORT BackgroundFetchScheduler
   // schedule jobs for |controller|.
   void AddJobController(Controller* controller);
 
+  // Removes a job controller from the scheduler. Abort ongoing fetches on the
+  // controller before calling this.
+  // TODO(crbug.com/850075): Move management of active fetches to
+  // BackgroundFetchScheduler.
+  void RemoveJobController(
+      const BackgroundFetchRegistrationId& registration_id);
+
   void set_max_concurrent_downloads(size_t new_max) {
     max_concurrent_downloads_ = new_max;
   }
@@ -114,6 +122,7 @@ class CONTENT_EXPORT BackgroundFetchScheduler
   base::circular_deque<Controller*> controller_queue_;
   std::map<std::string, Controller*> download_controller_map_;
 
+  bool lock_scheduler_ = false;
   size_t max_concurrent_downloads_ = 1;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundFetchScheduler);

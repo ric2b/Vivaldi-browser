@@ -51,11 +51,11 @@ static_library("renderer") {
     "//content/public/common",
     "//content/public/renderer",
     "//google_apis",
-    "//mojo/common:common_base",
+    "//mojo/public/cpp/system",
     "//net",
     "//services/service_manager/public/cpp",
     "//skia",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
     "//third_party/re2",
     "//ui/base",
   ]
@@ -81,19 +81,22 @@ static_library("test_support") {
     "//components/autofill/content/renderer",
     "//services/service_manager/public/cpp",
     "//skia",
-    "//third_party/WebKit/public:blink",
+    "//third_party/blink/public:blink",
   ]
 }
 
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "form_cache_unittest.cc",
     "renderer_save_password_progress_logger_unittest.cc",
   ]
 
   deps = [
     ":test_support",
+    "//base/test:test_support",
     "//components/autofill/content/common:mojo_interfaces",
+    "//components/autofill/core/common",
     "//testing/gtest",
   ]
 }

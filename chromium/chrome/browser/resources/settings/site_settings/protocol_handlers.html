@@ -24,7 +24,8 @@
       }
     </style>
     <div class="settings-box first two-line">
-      <div id="categoryLabel" class="start">
+      <div id="categoryLabel" class="start" on-click="categoryLabelClicked_"
+          actionable>
         [[computeHandlersDescription_(categoryEnabled)]]
       </div>
       <cr-toggle id="toggle" checked="{{categoryEnabled}}"
@@ -33,7 +34,7 @@
     </div>
 
     <template is="dom-repeat" items="[[protocols]]" as="protocol">
-      <div class="column-header">[[protocol.protocol]]</div>
+      <div class="column-header">[[protocol.protocol_display_name]]</div>
 
       <div class="list-frame menu-content vertical-list">
         <template is="dom-repeat" items="[[protocol.handlers]]">
@@ -42,40 +43,68 @@
             <div class="favicon-image" style$="[[computeSiteIcon(item.host)]]">
             </div>
             <div class="middle" >
-              <div class="protocol-host">[[item.host]]</div>
+              <div class="protocol-host">
+                <span class="url-directionality">[[item.host]]</span>
+              </div>
               <div class="secondary protocol-default"
-                  hidden$="[[!isDefault_(index, protocol.default_handler)]]">
+                  hidden$="[[!item.is_default]]">
                 $i18n{handlerIsDefault}
               </div>
             </div>
 
-            <button is="paper-icon-button-light" on-tap="showMenu_"
-                class="icon-more-vert" title="$i18n{moreActions}">
-            </button>
+            <paper-icon-button-light class="icon-more-vert">
+              <button on-click="showMenu_" title="$i18n{moreActions}"></button>
+            </paper-icon-button-light>
           </div>
-
         </template>
       </div>
     </template>
 
-    <dialog is="cr-action-menu">
-      <button class="dropdown-item" on-tap="onDefaultTap_" id="defaultButton"
-          hidden$="[[isModelDefault_(actionMenuModel_)]]">
+    <cr-action-menu>
+      <button slot="item" class="dropdown-item" on-click="onDefaultClick_"
+          id="defaultButton" hidden$="[[actionMenuModel_.is_default]]">
         $i18n{handlerSetDefault}
       </button>
-      <button class="dropdown-item" on-tap="onRemoveTap_" id="removeButton">
+      <button slot="item" class="dropdown-item" on-click="onRemoveClick_"
+          id="removeButton">
         $i18n{handlerRemove}
       </button>
-    </dialog>
+    </cr-action-menu>
+
+    <template is="dom-if" if="[[ignoredProtocols.length]]">
+      <div class="column-header">$i18n{siteSettingsBlocked}</div>
+      <div class="list-frame menu-content vertical-list">
+        <template is="dom-repeat" items="[[ignoredProtocols]]">
+          <div class="list-item">
+            <div class="favicon-image" style$="[[computeSiteIcon(item.host)]]">
+            </div>
+            <div class="middle" >
+              <div class="protocol-host">
+                <span class="url-directionality">[[item.host]]</span></div>
+              <div class="secondary protocol-protocol">
+                [[item.protocol_display_name]]
+              </div>
+            </div>
+            <paper-icon-button-light class="icon-clear">
+              <button id="removeIgnoredButton" on-click="onRemoveIgnored_"
+                  title="$i18n{handlerRemove}">
+              </button>
+            </paper-icon-button-light>
+          </div>
+        </template>
+      </div>
+    </template>
 
 <if expr="chromeos">
   <template is="dom-if" if="[[settingsAppAvailable_]]">
     <div class="settings-box first"
-        on-tap="onManageAndroidAppsTap_" actionable>
+        on-click="onManageAndroidAppsClick_" actionable>
       <div class="start">
         <div>$i18n{androidAppsManageAppLinks}</div>
       </div>
-      <button class="icon-external" is="paper-icon-button-light"></button>
+      <paper-icon-button-light class="icon-external">
+        <button></button>
+      </paper-icon-button-light>
     </div>
   </template>
 </if>

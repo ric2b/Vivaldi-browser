@@ -20,6 +20,19 @@ namespace content {
 
 typedef std::set<webrtc::ObserverInterface*> ObserverSet;
 
+class MockWebRtcAudioSource : public webrtc::AudioSourceInterface {
+ public:
+  MockWebRtcAudioSource(bool is_remote);
+  void RegisterObserver(webrtc::ObserverInterface* observer) override;
+  void UnregisterObserver(webrtc::ObserverInterface* observer) override;
+
+  SourceState state() const override;
+  bool remote() const override;
+
+ private:
+  const bool is_remote_;
+};
+
 class MockWebRtcAudioTrack : public webrtc::AudioTrackInterface {
  public:
   static scoped_refptr<MockWebRtcAudioTrack> Create(const std::string& id);
@@ -45,7 +58,7 @@ class MockWebRtcAudioTrack : public webrtc::AudioTrackInterface {
 
  private:
   std::string id_;
-  scoped_refptr<webrtc::VideoTrackSourceInterface> source_;
+  scoped_refptr<webrtc::AudioSourceInterface> source_;
   bool enabled_;
   TrackState state_;
   ObserverSet observers_;
@@ -86,13 +99,13 @@ class MockWebRtcVideoTrack : public webrtc::VideoTrackInterface {
 
 class MockMediaStream : public webrtc::MediaStreamInterface {
  public:
-  explicit MockMediaStream(const std::string& label);
+  explicit MockMediaStream(const std::string& id);
 
   bool AddTrack(webrtc::AudioTrackInterface* track) override;
   bool AddTrack(webrtc::VideoTrackInterface* track) override;
   bool RemoveTrack(webrtc::AudioTrackInterface* track) override;
   bool RemoveTrack(webrtc::VideoTrackInterface* track) override;
-  std::string label() const override;
+  std::string id() const override;
   webrtc::AudioTrackVector GetAudioTracks() override;
   webrtc::VideoTrackVector GetVideoTracks() override;
   rtc::scoped_refptr<webrtc::AudioTrackInterface> FindAudioTrack(
@@ -108,7 +121,7 @@ class MockMediaStream : public webrtc::MediaStreamInterface {
  private:
   void NotifyObservers();
 
-  std::string label_;
+  std::string id_;
   webrtc::AudioTrackVector audio_track_vector_;
   webrtc::VideoTrackVector video_track_vector_;
 

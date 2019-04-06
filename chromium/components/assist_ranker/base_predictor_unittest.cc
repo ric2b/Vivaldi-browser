@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "components/assist_ranker/fake_ranker_model_loader.h"
@@ -27,16 +26,19 @@ namespace {
 
 // Predictor config for testing.
 const char kTestModelName[] = "test_model";
-const char kTestLoggingName[] = "TestLoggingName";
+// This name needs to be an entry in ukm.xml
+const char kTestLoggingName[] = "ContextualSearch";
 const char kTestUmaPrefixName[] = "Test.Ranker";
 const char kTestUrlParamName[] = "ranker-model-url";
 const char kTestDefaultModelUrl[] = "https://foo.bar/model.bin";
 
-const char kBoolFeature[] = "bool_feature";
-const char kIntFeature[] = "int_feature";
-const char kFloatFeature[] = "float_feature";
-const char kStringFeature[] = "string_feature";
-const char kStringListFeature[] = "string_list_feature";
+// The whitelisted features must be metrics of kTestLoggingName in ukm.xml,
+// though the types do not need to match.
+const char kBoolFeature[] = "DidOptIn";
+const char kIntFeature[] = "DurationAfterScrollMs";
+const char kFloatFeature[] = "FontSize";
+const char kStringFeature[] = "IsEntity";
+const char kStringListFeature[] = "IsEntityEligible";
 const char kFeatureNotWhitelisted[] = "not_whitelisted";
 
 const char kTestNavigationUrl[] = "https://foo.com";
@@ -83,8 +85,8 @@ RankerModelStatus FakePredictor::ValidateModel(const RankerModel& model) {
 std::unique_ptr<FakePredictor> FakePredictor::Create() {
   std::unique_ptr<FakePredictor> predictor(
       new FakePredictor(kTestPredictorConfig));
-  auto ranker_model = base::MakeUnique<RankerModel>();
-  auto fake_model_loader = base::MakeUnique<FakeRankerModelLoader>(
+  auto ranker_model = std::make_unique<RankerModel>();
+  auto fake_model_loader = std::make_unique<FakeRankerModelLoader>(
       base::BindRepeating(&FakePredictor::ValidateModel),
       base::BindRepeating(&FakePredictor::OnModelAvailable,
                           base::Unretained(predictor.get())),
@@ -98,8 +100,8 @@ std::unique_ptr<FakePredictor> FakePredictor::Create() {
 class BasePredictorTest : public ::testing::Test {
  protected:
   BasePredictorTest() = default;
-  // Disables Query for the test predictor.
-  void DisableQuery();
+
+  void SetUp() override;
 
   ukm::SourceId GetSourceId();
 
@@ -118,14 +120,15 @@ class BasePredictorTest : public ::testing::Test {
   DISALLOW_COPY_AND_ASSIGN(BasePredictorTest);
 };
 
+void BasePredictorTest::SetUp() {
+  ::testing::Test::SetUp();
+  scoped_feature_list_.Init();
+}
+
 ukm::SourceId BasePredictorTest::GetSourceId() {
   ukm::SourceId source_id = ukm::UkmRecorder::GetNewSourceID();
   test_ukm_recorder_.UpdateSourceURL(source_id, GURL(kTestNavigationUrl));
   return source_id;
-}
-
-void BasePredictorTest::DisableQuery() {
-  scoped_feature_list_.InitWithFeatures({}, {kTestRankerQuery});
 }
 
 TEST_F(BasePredictorTest, BaseTest) {
@@ -137,7 +140,8 @@ TEST_F(BasePredictorTest, BaseTest) {
 }
 
 TEST_F(BasePredictorTest, QueryDisabled) {
-  DisableQuery();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kTestRankerQuery);
   auto predictor = FakePredictor::Create();
   EXPECT_EQ(kTestModelName, predictor->GetModelName());
   EXPECT_EQ(kTestDefaultModelUrl, predictor->GetModelUrl());

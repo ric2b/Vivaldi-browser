@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -26,8 +25,12 @@ class HttpResponseHeaders;
 class X509Certificate;
 }
 
+namespace network {
+class ScopedThrottlingToken;
+}
+
 namespace content {
-class ResourceDispatcherHostLoginDelegate;
+class LoginDelegate;
 class ResourceHandler;
 class ResourceLoaderDelegate;
 class ResourceRequestInfoImpl;
@@ -40,17 +43,16 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
                                       public SSLClientAuthHandler::Delegate,
                                       public ResourceHandler::Delegate {
  public:
-  ResourceLoader(std::unique_ptr<net::URLRequest> request,
-                 std::unique_ptr<ResourceHandler> handler,
-                 ResourceLoaderDelegate* delegate);
+  ResourceLoader(
+      std::unique_ptr<net::URLRequest> request,
+      std::unique_ptr<ResourceHandler> handler,
+      ResourceLoaderDelegate* delegate,
+      ResourceContext* resource_context,
+      std::unique_ptr<network::ScopedThrottlingToken> throttling_token);
   ~ResourceLoader() override;
 
   void StartRequest();
   void CancelRequest(bool from_renderer);
-
-  bool is_transferring() const { return is_transferring_; }
-  void MarkAsTransferring(const base::Closure& on_transfer_complete_callback);
-  void CompleteTransfer();
 
   net::URLRequest* request() { return request_.get(); }
   ResourceRequestInfoImpl* GetRequestInfo();
@@ -59,6 +61,8 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
 
   // ResourceHandler::Delegate implementation:
   void OutOfBandCancel(int error_code, bool tell_renderer) override;
+  void PauseReadingBodyFromNet() override;
+  void ResumeReadingBodyFromNet() override;
 
  private:
   // ResourceController implementation for the ResourceLoader.
@@ -94,14 +98,17 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   // |called_from_resource_controller| is true if called directly from a
   // ResourceController, in which case |resource_handler_| must not be invoked
   // or destroyed synchronously to avoid re-entrancy issues, and false
-  // otherwise.
-  void Resume(bool called_from_resource_controller);
+  // otherwise. |modified_request_headers| is used for redirects only.
+  void Resume(
+      bool called_from_resource_controller,
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers);
   void Cancel();
   void CancelWithError(int error_code);
 
   void StartRequestInternal();
   void CancelRequestInternal(int error, bool from_renderer);
-  void FollowDeferredRedirectInternal();
+  void FollowDeferredRedirectInternal(
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers);
   void CompleteResponseStarted();
   // If |handle_result_async| is true, the result of the following read will be
   // handled asynchronously if it completes synchronously, unless it's EOF or an
@@ -114,7 +121,6 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   void CompleteRead(int bytes_read);
   void ResponseCompleted();
   void CallDidFinishLoading();
-  void RecordHistograms();
   void SetRawResponseHeaders(
       scoped_refptr<const net::HttpResponseHeaders> headers);
 
@@ -155,18 +161,10 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   std::unique_ptr<ResourceHandler> handler_;
   ResourceLoaderDelegate* delegate_;
 
-  scoped_refptr<ResourceDispatcherHostLoginDelegate> login_delegate_;
+  scoped_refptr<LoginDelegate> login_delegate_;
   std::unique_ptr<SSLClientAuthHandler> ssl_client_auth_handler_;
 
   base::TimeTicks read_deferral_start_time_;
-
-  // Indicates that we are in a state of being transferred to a new downstream
-  // consumer.  We are waiting for a notification to complete the transfer, at
-  // which point we'll receive a new ResourceHandler.
-  bool is_transferring_;
-
-  // Called when a navigation has finished transfer.
-  base::Closure on_transfer_complete_callback_;
 
   // Instrumentation add to investigate http://crbug.com/503306.
   // TODO(mmenke): Remove once bug is fixed.
@@ -184,6 +182,28 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
 
   net::HttpRawRequestHeaders raw_request_headers_;
   scoped_refptr<const net::HttpResponseHeaders> raw_response_headers_;
+
+  ResourceContext* resource_context_;
+
+  std::unique_ptr<network::ScopedThrottlingToken> throttling_token_;
+
+  bool should_pause_reading_body_ = false;
+  // The request is not deferred (i.e., DEFERRED_NONE) and is ready to read more
+  // response body data. However, reading is paused because of
+  // PauseReadingBodyFromNet().
+  bool read_more_body_supressed_ = false;
+
+  // Whether to update |body_read_before_paused_| after the pending read is
+  // completed (or when this resource loader is destroyed).
+  bool update_body_read_before_paused_ = false;
+  // The number of bytes obtained by the reads initiated before the last
+  // PauseReadingBodyFromNet() call. -1 means the request hasn't been paused.
+  // The body may be read from cache or network. So even if this value is not
+  // -1, we still need to check whether it is from network before reporting it
+  // as BodyReadFromNetBeforePaused.
+  int64_t body_read_before_paused_ = -1;
+
+  bool pending_read_ = false;
 
   base::ThreadChecker thread_checker_;
 

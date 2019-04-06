@@ -4,11 +4,10 @@
 
 #include "android_webview/browser/find_helper.h"
 
-#include "base/message_loop/message_loop.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/stop_find_action.h"
-#include "third_party/WebKit/public/web/WebFindOptions.h"
+#include "third_party/blink/public/web/web_find_options.h"
 
 using content::WebContents;
 using blink::WebFindOptions;

@@ -10,6 +10,26 @@ var NavigationModelItemType = {
   VOLUME: 'volume',
   MENU: 'menu',
   RECENT: 'recent',
+  CROSTINI: 'crostini',
+  ENTRY_LIST: 'entry-list',
+};
+
+/**
+ * Navigation List sections. A section is just a visual grouping of some items.
+ *
+ * Sections:
+ *      - TOP: Recents, Shortcuts.
+ *      - MY_FILES: My Files (which includes Downloads, Crostini and Arc++ as
+ *                  its children).
+ *      - REMOVABLE: Archives, MTPs, Media Views and Removables.
+ *      - CLOUD: Drive and FSPs.
+ * @enum {string}
+ */
+var NavigationSection = {
+  TOP: 'top',
+  MY_FILES: 'my_files',
+  REMOVABLE: 'removable',
+  CLOUD: 'cloud',
 };
 
 /**
@@ -22,11 +42,40 @@ var NavigationModelItemType = {
 function NavigationModelItem(label, type) {
   this.label_ = label;
   this.type_ = type;
+
+  /**
+   * @type {NavigationSection} section which this item belongs to.
+   */
+  this.section_ = NavigationSection.TOP;
+
+  /** @type {number} original order when returned from VolumeManager. */
+  this.originalOrder_ = -1;
 }
 
 NavigationModelItem.prototype = /** @struct */ {
-  get label() { return this.label_; },
-  get type() { return this.type_; }
+  get label() {
+    return this.label_;
+  },
+  get type() {
+    return this.type_;
+  },
+
+  /** @type {NavigationSection} */
+  get section() {
+    return this.section_;
+  },
+  /** @param {NavigationSection} section */
+  set section(section) {
+    this.section_ = section;
+  },
+
+  /** @type {number} */
+  get originalOrder() {
+    return this.originalOrder_;
+  },
+  set originalOrder(order) {
+    this.originalOrder_ = order;
+  },
 };
 
 /**
@@ -110,20 +159,21 @@ NavigationModelMenuItem.prototype = /** @struct */ {
 };
 
 /**
- * Item of NavigationListModel for a Recent view.
+ * Item of NavigationListModel for a fake item such as Recent or Linux Files.
  *
  * @param {string} label Label on the menu button.
- * @param {!FakeEntry} entry Fake entry for the Recent root folder.
+ * @param {NavigationModelItemType} type
+ * @param {!FakeEntry} entry Fake entry for the root folder.
  * @constructor
  * @extends {NavigationModelItem}
  * @struct
  */
-function NavigationModelRecentItem(label, entry) {
-  NavigationModelItem.call(this, label, NavigationModelItemType.RECENT);
+function NavigationModelFakeItem(label, type, entry) {
+  NavigationModelItem.call(this, label, type);
   this.entry_ = entry;
 }
 
-NavigationModelRecentItem.prototype = /** @struct */ {
+NavigationModelFakeItem.prototype = /** @struct */ {
   __proto__: NavigationModelItem.prototype,
   get entry() {
     return this.entry_;
@@ -135,15 +185,17 @@ NavigationModelRecentItem.prototype = /** @struct */ {
  * @param {!VolumeManagerWrapper} volumeManager VolumeManagerWrapper instance.
  * @param {(!cr.ui.ArrayDataModel|!FolderShortcutsDataModel)} shortcutListModel
  *     The list of folder shortcut.
- * @param {NavigationModelMenuItem} menuModelItem Menu button at the end of the
- *     list.
- * @param {NavigationModelRecentItem} recentModelItem Recent folder below the
- *     Downloads volume in the list.
+ * @param {NavigationModelFakeItem} recentModelItem Recent folder.
+ * @param {NavigationModelMenuItem} addNewServicesItem Add new services item.
+ * @param {boolean=} opt_disableMyFilesNavigation true if should use the new
+ *     navigation style, value should come from flag
+ *     disable-my-files-navigation.
  * @constructor
  * @extends {cr.EventTarget}
  */
 function NavigationListModel(
-    volumeManager, shortcutListModel, menuModelItem, recentModelItem) {
+    volumeManager, shortcutListModel, recentModelItem, addNewServicesItem,
+    opt_disableMyFilesNavigation) {
   cr.EventTarget.call(this);
 
   /**
@@ -159,16 +211,37 @@ function NavigationListModel(
   this.shortcutListModel_ = shortcutListModel;
 
   /**
-   * @private {NavigationModelMenuItem}
-   * @const
-   */
-  this.menuModelItem_ = menuModelItem;
-
-  /**
-   * @private {NavigationModelRecentItem}
+   * @private {NavigationModelFakeItem}
    * @const
    */
   this.recentModelItem_ = recentModelItem;
+
+  /**
+   * Root folder for crostini Linux Files.
+   * This field will be set asynchronously after calling
+   * chrome.fileManagerPrivate.isCrostiniEnabled.
+   * @private {NavigationModelFakeItem}
+   */
+  this.linuxFilesItem_ = null;
+
+  /**
+   * @private {NavigationModelMenuItem}
+   * @const
+   */
+  this.addNewServicesItem_ = addNewServicesItem;
+
+  /**
+   * NavigationModel for MyFiles, since DirectoryTree expect it to be always the
+   * same reference we keep the initial reference for reuse.
+   * @private {NavigationModelFakeItem}
+   */
+  this.myFilesModel_ = null;
+
+  /**
+   * All root navigation items in display order.
+   * @private {!Array<!NavigationModelItem>}
+   */
+  this.navigationItems_ = [];
 
   var volumeInfoToModelItem = function(volumeInfo) {
     return new NavigationModelVolumeItem(
@@ -200,12 +273,19 @@ function NavigationListModel(
 
   this.shortcutList_ = [];
   for (var i = 0; i < this.shortcutListModel_.length; i++) {
-    var shortcutEntry = /** @type {Entry} */ (this.shortcutListModel_.item(i));
+    var shortcutEntry = /** @type {!Entry} */ (this.shortcutListModel_.item(i));
     var volumeInfo = this.volumeManager_.getVolumeInfo(shortcutEntry);
     this.shortcutList_.push(entryToModelItem(shortcutEntry));
   }
 
-  // Generates a combined 'permuted' event from an event of either list.
+  // True if the flag disable-my-files-navigation is enabled.
+  this.disableMyFilesNavigation_ = !!opt_disableMyFilesNavigation;
+
+  // Reorder volumes, shortcuts, and optional items for initial display.
+  this.reorderNavigationItems_();
+
+  // Generates a combined 'permuted' event from an event of either volumeList or
+  // shortcutList.
   var permutedHandler = function(listType, event) {
     var permutation;
 
@@ -288,6 +368,9 @@ function NavigationListModel(
       this.shortcutList_ = newList;
     }
 
+    // Reorder items after permutation.
+    this.reorderNavigationItems_();
+
     // Dispatch permuted event.
     var permutedEvent = new Event('permuted');
     permutedEvent.newLength =
@@ -308,12 +391,290 @@ function NavigationListModel(
 }
 
 /**
+ * ZipArchiver mounts zip files as PROVIDED volume type.
+ * This is a special case for zip volumes to be able to split them apart from
+ * PROVIDED.
+ * @const
+ */
+NavigationListModel.ZIP_VOLUME_TYPE = '_ZIP_VOLUME_';
+
+/**
+ * Extension id that can mount zip files.
+ * @const
+ */
+NavigationListModel.ZIP_EXTENSION_IDS = [
+  'dmboannefpncccogfdikhmhpmdnddgoe',  // ZipArchiver
+  'oedeeodfidgoollimchfdnbmhcpnklnd',  // ZipUnpacker
+];
+
+/**
  * NavigationList inherits cr.EventTarget.
  */
 NavigationListModel.prototype = {
   __proto__: cr.EventTarget.prototype,
-  get length() { return this.length_(); },
-  get folderShortcutList() { return this.shortcutList_; }
+  get length() {
+    return this.length_();
+  },
+  get folderShortcutList() {
+    return this.shortcutList_;
+  },
+  /**
+   * Set the crostini Linux Files root and reorder items.
+   * This setter is provided separate to the constructor since
+   * this field is set async after calling fileManagerPrivate.isCrostiniEnabled.
+   * @param {NavigationModelFakeItem} item Linux Files root.
+   */
+  set linuxFilesItem(item) {
+    this.linuxFilesItem_ = item;
+    this.reorderNavigationItems_();
+  },
+  /** @type {boolean} */
+  get disableMyFilesNavigation() {
+    return this.disableMyFilesNavigation_;
+  }
+};
+
+/**
+ * Reorder navigation items when command line flag new-files-app-navigation is
+ * enabled it nests Downloads, Linux and Android files under "My Files"; when
+ * it's disabled it has a flat structure with Linux Files after Recent menu.
+ */
+NavigationListModel.prototype.reorderNavigationItems_ = function() {
+  if (!this.disableMyFilesNavigation_) {
+    return this.orderAndNestItems_();
+  } else {
+    return this.flatNavigationItems_();
+  }
+};
+
+/**
+ * Reorder navigation items in the following order:
+ *  1. Volumes.
+ *  2. If Downloads exists, then immediately after Downloads should be:
+ *  2a. Recent if it exists.
+ *  2b. Linux Files if it exists and is not mounted.
+ *      When mounted, it will be located in Volumes at this position.
+ *  3. Shortcuts.
+ *  4. Add new services if it exists.
+ * @private
+ */
+NavigationListModel.prototype.flatNavigationItems_ = function() {
+  // Check if Linux files already mounted.
+  let linuxFilesMounted = false;
+  for (let i = 0; i < this.volumeList_.length; i++) {
+    if (this.volumeList_[i].volumeInfo.volumeType ===
+        VolumeManagerCommon.VolumeType.CROSTINI) {
+      linuxFilesMounted = true;
+      break;
+    }
+  }
+
+  // Items as per required order.
+  this.navigationItems_ = this.volumeList_.slice();
+  var downloadsVolumeIndex = this.findDownloadsVolumeIndex_();
+  if (this.linuxFilesItem_ && !linuxFilesMounted && downloadsVolumeIndex >= 0)
+    this.navigationItems_.splice(
+        downloadsVolumeIndex + 1, 0, this.linuxFilesItem_);
+  if (this.recentModelItem_ && downloadsVolumeIndex >= 0)
+    this.navigationItems_.splice(
+        downloadsVolumeIndex + 1, 0, this.recentModelItem_);
+  Array.prototype.push.apply(this.navigationItems_, this.shortcutList_);
+  if (this.addNewServicesItem_)
+    this.navigationItems_.push(this.addNewServicesItem_);
+};
+
+/**
+ * Reorder navigation items and nest some within "Downloads"
+ * which will be displayed as "My-Files". Desired order:
+ *  1. Recents.
+ *  2. Media Views (Images, Videos and Audio).
+ *  3. Shortcuts.
+ *  4. "My-Files" (grouping), actually Downloads volume.
+ *    4.1. Downloads
+ *    4.2. Play files (android volume) (if enabled).
+ *    4.3. Linux files (crostini volume or fake item) (if enabled).
+ *  5. Drive volumes.
+ *  6. Other FSP (File System Provider) (when mounted).
+ *  7. Other volumes (MTP, ARCHIVE, REMOVABLE, Zip volumes).
+ *  8. Add new services if (it exists).
+ * @private
+ */
+NavigationListModel.prototype.orderAndNestItems_ = function() {
+  const volumeIndexes = {};
+  const volumeList = this.volumeList_;
+
+  // Find the index of each volumeType from the array volumeList_,
+  // for volumes that can have multiple entries it saves as list
+  // of indexes, otherwise saves the index as int directly.
+  for (let i = 0; i < volumeList.length; i++) {
+    const volumeType = volumeList[i].volumeInfo.volumeType;
+    volumeList[i].originalOrder = i;
+    let providedType;
+    let volumeId;
+    switch (volumeType) {
+      case VolumeManagerCommon.VolumeType.CROSTINI:
+      case VolumeManagerCommon.VolumeType.DOWNLOADS:
+      case VolumeManagerCommon.VolumeType.ANDROID_FILES:
+        volumeIndexes[volumeType] = i;
+        break;
+      case VolumeManagerCommon.VolumeType.PROVIDED:
+        // ZipArchiver mounts zip files as PROVIDED volume type, however we
+        // want to display mounted zip files the same way as archive, so
+        // splitting them apart from PROVIDED.
+        volumeId = volumeList[i].volumeInfo.volumeId;
+        providedType = VolumeManagerCommon.VolumeType.PROVIDED;
+        if (NavigationListModel.ZIP_EXTENSION_IDS.some(
+                extension_id => volumeId.includes(extension_id)))
+          providedType = NavigationListModel.ZIP_VOLUME_TYPE;
+        if (!volumeIndexes[providedType]) {
+          volumeIndexes[providedType] = [i];
+        } else {
+          volumeIndexes[providedType].push(i);
+        }
+        break;
+      case VolumeManagerCommon.VolumeType.REMOVABLE:
+      case VolumeManagerCommon.VolumeType.ARCHIVE:
+      case VolumeManagerCommon.VolumeType.MTP:
+      case VolumeManagerCommon.VolumeType.DRIVE:
+      case VolumeManagerCommon.VolumeType.MEDIA_VIEW:
+        if (!volumeIndexes[volumeType]) {
+          volumeIndexes[volumeType] = [i];
+        } else {
+          volumeIndexes[volumeType].push(i);
+        }
+        break;
+      default:
+        assertNotReached(`No explict order for VolumeType: "${volumeType}"`);
+        break;
+    }
+  }
+
+  /**
+   * @param {!VolumeManagerCommon.VolumeType} volumeType the desired volume type
+   * to be filtered from volumeList.
+   * @return {NavigationModelVolumeItem}
+   */
+  const getSingleVolume = function(volumeType) {
+    return volumeList[volumeIndexes[volumeType]];
+  };
+
+  /**
+   * @param {!VolumeManagerCommon.VolumeType} volumeType the desired volume type
+   * to be filtered from volumeList.
+   * @return Array<!NavigationModelVolumeItem>
+   */
+  const getVolumes = function(volumeType) {
+    const indexes = volumeIndexes[volumeType] || [];
+    return indexes.map(idx => volumeList[idx]);
+  };
+
+  // Items as per required order.
+  this.navigationItems_ = [];
+
+  if (this.recentModelItem_)
+    this.navigationItems_.push(this.recentModelItem_);
+
+  // Media View (Images, Videos and Audio).
+  for (const mediaView of getVolumes(
+           VolumeManagerCommon.VolumeType.MEDIA_VIEW)) {
+    this.navigationItems_.push(mediaView);
+    mediaView.section = NavigationSection.TOP;
+  }
+  // Shortcuts.
+  for (const shortcut of this.shortcutList_)
+    this.navigationItems_.push(shortcut);
+
+  let myFilesEntry, myFilesModel;
+  if (!this.myFilesModel_) {
+    myFilesEntry = new EntryList(
+        str('MY_FILES_ROOT_LABEL'), VolumeManagerCommon.RootType.MY_FILES);
+    myFilesModel = new NavigationModelFakeItem(
+        myFilesEntry.label, NavigationModelItemType.ENTRY_LIST, myFilesEntry);
+    myFilesModel.section = NavigationSection.MY_FILES;
+    this.myFilesModel_ = myFilesModel;
+  } else {
+    myFilesEntry = this.myFilesModel_.entry;
+    myFilesModel = this.myFilesModel_;
+  }
+  this.navigationItems_.push(myFilesModel);
+
+  // Add Downloads to My Files.
+  const downloadsVolume =
+      getSingleVolume(VolumeManagerCommon.VolumeType.DOWNLOADS);
+  if (downloadsVolume) {
+    // Only add volume if MyFiles doesn't have it yet.
+    if (myFilesEntry.findIndexByVolumeInfo(downloadsVolume.volumeInfo) === -1) {
+      myFilesEntry.addEntry(new VolumeEntry(downloadsVolume.volumeInfo));
+    }
+  } else {
+    myFilesEntry.removeByVolumeType(VolumeManagerCommon.VolumeType.DOWNLOADS);
+  }
+
+  // Add Android to My Files.
+  const androidVolume =
+      getSingleVolume(VolumeManagerCommon.VolumeType.ANDROID_FILES);
+  if (androidVolume) {
+    // Only add volume if MyFiles doesn't have it yet.
+    if (myFilesEntry.findIndexByVolumeInfo(androidVolume.volumeInfo) === -1) {
+      myFilesEntry.addEntry(new VolumeEntry(androidVolume.volumeInfo));
+    }
+  } else {
+    myFilesEntry.removeByVolumeType(
+        VolumeManagerCommon.VolumeType.ANDROID_FILES);
+  }
+
+  // Add Linux to My Files.
+  const crostiniVolume =
+      getSingleVolume(VolumeManagerCommon.VolumeType.CROSTINI);
+
+  // Remove Crostini FakeEntry, it's re-added below if needed.
+  myFilesEntry.removeByRootType(VolumeManagerCommon.RootType.CROSTINI);
+  if (crostiniVolume) {
+    // Crostini is mounted so add it if MyFiles doesn't have it yet.
+    if (myFilesEntry.findIndexByVolumeInfo(crostiniVolume.volumeInfo) === -1) {
+      myFilesEntry.addEntry(new VolumeEntry(crostiniVolume.volumeInfo));
+    }
+  } else {
+    myFilesEntry.removeByVolumeType(VolumeManagerCommon.VolumeType.CROSTINI);
+    if (this.linuxFilesItem_) {
+      // Here it's just a fake item, we link the navigation model so
+      // DirectoryTree can choose the correct DirectoryItem for it.
+      this.linuxFilesItem_.entry.navigationModel = this.linuxFilesItem_;
+      myFilesEntry.addEntry(this.linuxFilesItem_.entry);
+    }
+  }
+
+  // Add Drive.
+  for (const driveItem of getVolumes(VolumeManagerCommon.VolumeType.DRIVE)) {
+    this.navigationItems_.push(driveItem);
+    driveItem.section = NavigationSection.CLOUD;
+  }
+
+  // Add FSP.
+  for (const provided of getVolumes(VolumeManagerCommon.VolumeType.PROVIDED)) {
+    this.navigationItems_.push(provided);
+    provided.section = NavigationSection.CLOUD;
+  }
+
+  // Join MTP, ARCHIVE and REMOVABLE. These types belong to same section.
+  const zipIndexes = volumeIndexes[NavigationListModel.ZIP_VOLUME_TYPE] || [];
+  const otherVolumes =
+      [].concat(
+            getVolumes(VolumeManagerCommon.VolumeType.REMOVABLE),
+            getVolumes(VolumeManagerCommon.VolumeType.ARCHIVE),
+            getVolumes(VolumeManagerCommon.VolumeType.MTP),
+            zipIndexes.map(idx => volumeList[idx]))
+          .sort((volume1, volume2) => {
+            return volume1.originalOrder - volume2.originalOrder;
+          });
+
+  for (const volume of otherVolumes) {
+    this.navigationItems_.push(volume);
+    volume.section = NavigationSection.REMOVABLE;
+  }
+
+  if (this.addNewServicesItem_)
+    this.navigationItems_.push(this.addNewServicesItem_);
 };
 
 /**
@@ -322,22 +683,7 @@ NavigationListModel.prototype = {
  * @return {NavigationModelItem|undefined} The item at the given index.
  */
 NavigationListModel.prototype.item = function(index) {
-  // If we should show "Recent" folder, insert it just below Downloads volume.
-  var downloadsVolumeIndex = this.findDownloadsVolumeIndex_();
-  var indexWithoutRecent = index;
-  if (this.recentModelItem_ && downloadsVolumeIndex >= 0) {
-    if (index == downloadsVolumeIndex + 1)
-      return this.recentModelItem_;
-    if (index > downloadsVolumeIndex + 1)
-      indexWithoutRecent--;
-  }
-  if (indexWithoutRecent < this.volumeList_.length)
-    return this.volumeList_[indexWithoutRecent];
-  if (indexWithoutRecent < this.volumeList_.length + this.shortcutList_.length)
-    return this.shortcutList_[indexWithoutRecent - this.volumeList_.length];
-  if (index === this.length_() - 1)
-    return this.menuModelItem_;
-  return undefined;
+  return this.navigationItems_[index];
 };
 
 /**
@@ -346,9 +692,7 @@ NavigationListModel.prototype.item = function(index) {
  * @private
  */
 NavigationListModel.prototype.length_ = function() {
-  return this.volumeList_.length + this.shortcutList_.length +
-      (this.menuModelItem_ ? 1 : 0) +
-      (this.recentModelItem_ && this.findDownloadsVolumeIndex_() >= 0 ? 1 : 0);
+  return this.navigationItems_.length;
 };
 
 /**

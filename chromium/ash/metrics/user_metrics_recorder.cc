@@ -67,7 +67,8 @@ ActiveWindowStateType GetActiveWindowState() {
       case mojom::WindowStateType::MINIMIZED:
       case mojom::WindowStateType::INACTIVE:
       case mojom::WindowStateType::AUTO_POSITIONED:
-        // TODO: We probably want to recorde PINNED state.
+      case mojom::WindowStateType::PIP:
+        // TODO: We probably want to record PIP state.
         active_window_state_type = ACTIVE_WINDOW_STATE_TYPE_OTHER;
         break;
     }
@@ -184,15 +185,26 @@ UserMetricsRecorder::~UserMetricsRecorder() {
 }
 
 // static
-void UserMetricsRecorder::RecordUserClick(
-    LoginMetricsRecorder::LockScreenUserClickTarget target) {
-  DCHECK(Shell::HasInstance());
+void UserMetricsRecorder::RecordUserClickOnTray(
+    LoginMetricsRecorder::TrayClickTarget target) {
   LoginMetricsRecorder* recorder =
       Shell::Get()->metrics()->login_metrics_recorder();
-  if (!LockScreen::IsShown() && !recorder->enabled_for_testing())
-    return;
+  recorder->RecordUserTrayClick(target);
+}
 
-  recorder->RecordUserClickEventOnLockScreen(target);
+// static
+void UserMetricsRecorder::RecordUserClickOnShelfButton(
+    LoginMetricsRecorder::ShelfButtonClickTarget target) {
+  LoginMetricsRecorder* recorder =
+      Shell::Get()->metrics()->login_metrics_recorder();
+  recorder->RecordUserShelfButtonClick(target);
+}
+
+// static
+void UserMetricsRecorder::RecordUserToggleDictation(
+    DictationToggleMethod method) {
+  UMA_HISTOGRAM_ENUMERATION("Accessibility.CrosDictation.ToggleDictationMethod",
+                            method);
 }
 
 void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
@@ -356,6 +368,7 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       break;
     case UMA_STATUS_AREA_NETWORK_SETTINGS_OPENED:
       RecordAction(UserMetricsAction("StatusArea_Network_Settings"));
+      break;
     case UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED:
       RecordAction(UserMetricsAction("StatusArea_OS_Update_Default_Selected"));
       break;

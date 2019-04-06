@@ -4,10 +4,12 @@
 
 module ash.mojom;
 
+import "components/arc/common/notifications.mojom";
 import "ui/gfx/image/mojo/image.mojom";
-import "ui/message_center/mojo/notification.mojom";
-import "ui/message_center/mojo/notifier_id.mojom";
-import "mojo/common/string16.mojom";
+import "ui/message_center/public/mojo/notification.mojom";
+import "ui/message_center/public/mojo/notifier_id.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
 
 // A struct that contains information for presenting a notifier in a settings
 // panel.
@@ -16,7 +18,7 @@ struct NotifierUiData {
   message_center.mojom.NotifierId notifier_id;
 
   // The user-visible name of the notifier (e.g. an extension's name).
-  mojo.common.mojom.String16 name;
+  mojo_base.mojom.String16 name;
 
   // True if notifications from the notifier are presently enabled.
   bool enabled;
@@ -33,13 +35,26 @@ struct NotifierUiData {
 interface AshMessageCenterController {
   SetClient(associated AshMessageCenterClient client);
 
-  ShowClientNotification(message_center.mojom.Notification notification);
+  // Sets the ARC notification instance.
+  SetArcNotificationsInstance(arc.mojom.NotificationsInstance instance);
+
+  // Shows a notification. |display_token| will be used to reference this
+  // notification for AshMessageCenterClient::Close().
+  ShowClientNotification(message_center.mojom.Notification notification,
+                         mojo_base.mojom.UnguessableToken display_token);
+
+  // Closes a notification by the notification ID.
+  CloseClientNotification(string id);
 
   UpdateNotifierIcon(message_center.mojom.NotifierId notifier_id,
                      gfx.mojom.ImageSkia icon);
 
   NotifierEnabledChanged(message_center.mojom.NotifierId notifier_id,
                          bool enabled);
+
+  // Gets a list of all the notifications in the message center.
+  GetActiveNotifications() =>
+      (array<message_center.mojom.Notification> notifications);
 };
 
 // The message center client interface mimics
@@ -48,14 +63,24 @@ interface AshMessageCenterController {
 // the client.
 interface AshMessageCenterClient {
   // Called when a notification previously displayed by the client is closed.
-  HandleNotificationClosed(string id, bool by_user);
+  HandleNotificationClosed(mojo_base.mojom.UnguessableToken display_token,
+                           bool by_user);
 
   // Called when the body of a notification is clicked.
   HandleNotificationClicked(string id);
 
   // Called when a notification that has buttons (e.g., "Learn more") receives a
-  // click on one of the buttons.
-  HandleNotificationButtonClicked(string id, int32 button_index);
+  // click on one of the buttons. |reply| is a user-provided string for cases
+  // where the button had a text input field attached to it.
+  HandleNotificationButtonClicked(string id, int32 button_index,
+                                  mojo_base.mojom.String16? reply);
+
+  // Called when a notification's settings button has been pressed (and the
+  // handler is SettingsButtonHandler::DELEGATE).
+  HandleNotificationSettingsButtonClicked(string id);
+
+  // Called when a notification has been disabled (via inline settings).
+  DisableNotification(string id);
 
   // Called when a user enables or disables notifications from the given
   // notifier.
@@ -64,4 +89,7 @@ interface AshMessageCenterClient {
   // Asks the client for a list of notifiers and associated UI information to be
   // displayed in a settings panel.
   GetNotifierList() => (array<NotifierUiData> notifiers);
+
+  // Gets ARC app id from a given package name.
+  GetArcAppIdByPackageName(string package_name) => (string app_id);
 };

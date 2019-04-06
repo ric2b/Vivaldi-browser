@@ -34,7 +34,7 @@ import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.DisableInTabbedMode;
-import org.chromium.content.browser.InterstitialPageDelegateAndroid;
+import org.chromium.content.browser.test.InterstitialPageDelegateAndroid;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.ui.test.util.UiRestriction;
@@ -85,13 +85,6 @@ public class BrandColorTest {
                         == mToolbar.getBackgroundDrawable().getColor();
             }
         });
-        CriteriaHelper.pollUiThread(
-                Criteria.equals(brandColor, new Callable<Integer>() {
-                    @Override
-                    public Integer call() {
-                        return mToolbar.getOverlayDrawable().getColor();
-                    }
-                }));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                 && !SysUtils.isLowEndDevice()) {
             final int expectedStatusBarColor = brandColor == mDefaultColor
@@ -249,10 +242,7 @@ public class BrandColorTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getActivity()
-                        .getActivityTab()
-                        .getWebContents()
-                        .showInterstitialPage(brandColorUrl, delegate.getNative());
+                delegate.showInterstitialPage(brandColorUrl, mActivityTestRule.getWebContents());
             }
         });
         CriteriaHelper.pollUiThread(new Criteria() {

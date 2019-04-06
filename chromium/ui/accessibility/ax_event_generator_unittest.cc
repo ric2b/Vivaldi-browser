@@ -19,7 +19,7 @@ std::string DumpEvents(AXEventGenerator* generator) {
   std::vector<std::string> event_strs;
   for (auto targeted_event : *generator) {
     const char* event_name;
-    switch (targeted_event.event) {
+    switch (targeted_event.event_params.event) {
       case AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED:
         event_name = "ACTIVE_DESCENDANT_CHANGED";
         break;
@@ -70,6 +70,9 @@ std::string DumpEvents(AXEventGenerator* generator) {
         break;
       case AXEventGenerator::Event::OTHER_ATTRIBUTE_CHANGED:
         event_name = "OTHER_ATTRIBUTE_CHANGED";
+        break;
+      case AXEventGenerator::Event::RELATED_NODE_CHANGED:
+        event_name = "RELATED_NODE_CHANGED";
         break;
       case AXEventGenerator::Event::ROLE_CHANGED:
         event_name = "ROLE_CHANGED";
@@ -183,22 +186,22 @@ TEST(AXEventGeneratorTest, ExpandedAndRowCount) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(4);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_ROOT_WEB_AREA;
+  initial_state.nodes[0].role = ax::mojom::Role::kRootWebArea;
   initial_state.nodes[0].child_ids.push_back(2);
   initial_state.nodes[0].child_ids.push_back(4);
   initial_state.nodes[1].id = 2;
-  initial_state.nodes[1].role = ui::AX_ROLE_TABLE;
+  initial_state.nodes[1].role = ax::mojom::Role::kTable;
   initial_state.nodes[1].child_ids.push_back(3);
   initial_state.nodes[2].id = 3;
-  initial_state.nodes[2].role = ui::AX_ROLE_ROW;
+  initial_state.nodes[2].role = ax::mojom::Role::kRow;
   initial_state.nodes[3].id = 4;
-  initial_state.nodes[3].role = ui::AX_ROLE_POP_UP_BUTTON;
-  initial_state.nodes[3].AddState(ui::AX_STATE_EXPANDED);
+  initial_state.nodes[3].role = ax::mojom::Role::kPopUpButton;
+  initial_state.nodes[3].AddState(ax::mojom::State::kExpanded);
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[2].AddState(ui::AX_STATE_EXPANDED);
+  update.nodes[2].AddState(ax::mojom::State::kExpanded);
   update.nodes[3].state = 0;
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ(
@@ -215,30 +218,33 @@ TEST(AXEventGeneratorTest, SelectedAndSelectedChildren) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(4);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_ROOT_WEB_AREA;
+  initial_state.nodes[0].role = ax::mojom::Role::kRootWebArea;
   initial_state.nodes[0].child_ids.push_back(2);
   initial_state.nodes[0].child_ids.push_back(4);
   initial_state.nodes[1].id = 2;
-  initial_state.nodes[1].role = ui::AX_ROLE_MENU;
+  initial_state.nodes[1].role = ax::mojom::Role::kMenu;
   initial_state.nodes[1].child_ids.push_back(3);
   initial_state.nodes[2].id = 3;
-  initial_state.nodes[2].role = ui::AX_ROLE_MENU_ITEM;
+  initial_state.nodes[2].role = ax::mojom::Role::kMenuItem;
   initial_state.nodes[3].id = 4;
-  initial_state.nodes[3].role = ui::AX_ROLE_LIST_BOX_OPTION;
-  initial_state.nodes[3].AddState(ui::AX_STATE_SELECTED);
+  initial_state.nodes[3].role = ax::mojom::Role::kListBoxOption;
+  initial_state.nodes[3].AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
+                                          true);
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[2].AddState(ui::AX_STATE_SELECTED);
-  update.nodes[3].state = 0;
+  update.nodes[2].AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, true);
+  update.nodes.pop_back();
+  update.nodes.emplace_back();
+  update.nodes[3].id = 4;
+  update.nodes[3].role = ax::mojom::Role::kListBoxOption;
+  update.nodes[3].AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, false);
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ(
       "SELECTED_CHANGED on 3, "
       "SELECTED_CHANGED on 4, "
-      "SELECTED_CHILDREN_CHANGED on 2, "
-      "STATE_CHANGED on 3, "
-      "STATE_CHANGED on 4",
+      "SELECTED_CHILDREN_CHANGED on 2",
       DumpEvents(&event_generator));
 }
 
@@ -247,14 +253,16 @@ TEST(AXEventGeneratorTest, StringValueChanged) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(1);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_TEXT_FIELD;
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_VALUE, "Before");
+  initial_state.nodes[0].role = ax::mojom::Role::kTextField;
+  initial_state.nodes[0].AddStringAttribute(ax::mojom::StringAttribute::kValue,
+                                            "Before");
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
   update.nodes[0].string_attributes.clear();
-  update.nodes[0].AddStringAttribute(ui::AX_ATTR_VALUE, "After");
+  update.nodes[0].AddStringAttribute(ax::mojom::StringAttribute::kValue,
+                                     "After");
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("VALUE_CHANGED on 1", DumpEvents(&event_generator));
 }
@@ -264,14 +272,16 @@ TEST(AXEventGeneratorTest, FloatValueChanged) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(1);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_SLIDER;
-  initial_state.nodes[0].AddFloatAttribute(ui::AX_ATTR_VALUE_FOR_RANGE, 1.0);
+  initial_state.nodes[0].role = ax::mojom::Role::kSlider;
+  initial_state.nodes[0].AddFloatAttribute(
+      ax::mojom::FloatAttribute::kValueForRange, 1.0);
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
   update.nodes[0].float_attributes.clear();
-  update.nodes[0].AddFloatAttribute(ui::AX_ATTR_VALUE_FOR_RANGE, 2.0);
+  update.nodes[0].AddFloatAttribute(ax::mojom::FloatAttribute::kValueForRange,
+                                    2.0);
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("VALUE_CHANGED on 1", DumpEvents(&event_generator));
 }
@@ -281,14 +291,14 @@ TEST(AXEventGeneratorTest, InvalidStatusChanged) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(1);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_TEXT_FIELD;
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_VALUE, "Text");
+  initial_state.nodes[0].role = ax::mojom::Role::kTextField;
+  initial_state.nodes[0].AddStringAttribute(ax::mojom::StringAttribute::kValue,
+                                            "Text");
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[0].AddIntAttribute(ui::AX_ATTR_INVALID_STATE,
-                                  ui::AX_INVALID_STATE_SPELLING);
+  update.nodes[0].SetInvalidState(ax::mojom::InvalidState::kSpelling);
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("INVALID_STATUS_CHANGED on 1", DumpEvents(&event_generator));
 }
@@ -302,7 +312,8 @@ TEST(AXEventGeneratorTest, AddLiveRegionAttribute) {
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[0].AddStringAttribute(ui::AX_ATTR_LIVE_STATUS, "polite");
+  update.nodes[0].AddStringAttribute(ax::mojom::StringAttribute::kLiveStatus,
+                                     "polite");
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("LIVE_REGION_CREATED on 1", DumpEvents(&event_generator));
 }
@@ -312,13 +323,12 @@ TEST(AXEventGeneratorTest, CheckedStateChanged) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(1);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_CHECK_BOX;
+  initial_state.nodes[0].role = ax::mojom::Role::kCheckBox;
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[0].AddIntAttribute(ui::AX_ATTR_CHECKED_STATE,
-                                  ui::AX_CHECKED_STATE_TRUE);
+  update.nodes[0].SetCheckedState(ax::mojom::CheckedState::kTrue);
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("CHECKED_STATE_CHANGED on 1", DumpEvents(&event_generator));
 }
@@ -328,22 +338,27 @@ TEST(AXEventGeneratorTest, ActiveDescendantChanged) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(3);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_LIST_BOX;
+  initial_state.nodes[0].role = ax::mojom::Role::kListBox;
   initial_state.nodes[0].child_ids.push_back(2);
   initial_state.nodes[0].child_ids.push_back(3);
-  initial_state.nodes[0].AddIntAttribute(ui::AX_ATTR_ACTIVEDESCENDANT_ID, 2);
+  initial_state.nodes[0].AddIntAttribute(
+      ax::mojom::IntAttribute::kActivedescendantId, 2);
   initial_state.nodes[1].id = 2;
-  initial_state.nodes[1].role = ui::AX_ROLE_LIST_BOX_OPTION;
+  initial_state.nodes[1].role = ax::mojom::Role::kListBoxOption;
   initial_state.nodes[2].id = 3;
-  initial_state.nodes[2].role = ui::AX_ROLE_LIST_BOX_OPTION;
+  initial_state.nodes[2].role = ax::mojom::Role::kListBoxOption;
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
   update.nodes[0].int_attributes.clear();
-  update.nodes[0].AddIntAttribute(ui::AX_ATTR_ACTIVEDESCENDANT_ID, 3);
+  update.nodes[0].AddIntAttribute(ax::mojom::IntAttribute::kActivedescendantId,
+                                  3);
   EXPECT_TRUE(tree.Unserialize(update));
-  EXPECT_EQ("ACTIVE_DESCENDANT_CHANGED on 1", DumpEvents(&event_generator));
+  EXPECT_EQ(
+      "ACTIVE_DESCENDANT_CHANGED on 1, "
+      "RELATED_NODE_CHANGED on 1",
+      DumpEvents(&event_generator));
 }
 
 TEST(AXEventGeneratorTest, CreateAlertAndLiveRegion) {
@@ -359,10 +374,12 @@ TEST(AXEventGeneratorTest, CreateAlertAndLiveRegion) {
   update.nodes[0].child_ids.push_back(2);
   update.nodes[0].child_ids.push_back(3);
   update.nodes[1].id = 2;
-  update.nodes[1].AddStringAttribute(ui::AX_ATTR_LIVE_STATUS, "polite");
+  update.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kLiveStatus,
+                                     "polite");
   update.nodes[2].id = 3;
-  update.nodes[2].role = ui::AX_ROLE_ALERT;
-  update.nodes[2].AddStringAttribute(ui::AX_ATTR_LIVE_STATUS, "polite");
+  update.nodes[2].role = ax::mojom::Role::kAlert;
+  update.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kLiveStatus,
+                                     "polite");
 
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ(
@@ -377,33 +394,38 @@ TEST(AXEventGeneratorTest, LiveRegionChanged) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(3);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_LIVE_STATUS, "polite");
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
+  initial_state.nodes[0].AddStringAttribute(
+      ax::mojom::StringAttribute::kLiveStatus, "polite");
+  initial_state.nodes[0].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
   initial_state.nodes[0].child_ids.push_back(2);
   initial_state.nodes[0].child_ids.push_back(3);
   initial_state.nodes[1].id = 2;
-  initial_state.nodes[1].role = ui::AX_ROLE_STATIC_TEXT;
-  initial_state.nodes[1].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
-  initial_state.nodes[1].AddStringAttribute(ui::AX_ATTR_NAME, "Before 1");
+  initial_state.nodes[1].role = ax::mojom::Role::kStaticText;
+  initial_state.nodes[1].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  initial_state.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            "Before 1");
   initial_state.nodes[2].id = 3;
-  initial_state.nodes[2].role = ui::AX_ROLE_STATIC_TEXT;
-  initial_state.nodes[2].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
-  initial_state.nodes[2].AddStringAttribute(ui::AX_ATTR_NAME, "Before 2");
+  initial_state.nodes[2].role = ax::mojom::Role::kStaticText;
+  initial_state.nodes[2].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  initial_state.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            "Before 2");
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
   update.nodes[1].string_attributes.clear();
-  update.nodes[1].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                     "polite");
-  update.nodes[1].AddStringAttribute(ui::AX_ATTR_NAME, "After 1");
+  update.nodes[1].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  update.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                     "After 1");
   update.nodes[2].string_attributes.clear();
-  update.nodes[2].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                     "polite");
-  update.nodes[2].AddStringAttribute(ui::AX_ATTR_NAME, "After 2");
+  update.nodes[2].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  update.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                     "After 2");
 
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ(
@@ -420,28 +442,31 @@ TEST(AXEventGeneratorTest, LiveRegionOnlyTextChanges) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(3);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_LIVE_STATUS, "polite");
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
+  initial_state.nodes[0].AddStringAttribute(
+      ax::mojom::StringAttribute::kLiveStatus, "polite");
+  initial_state.nodes[0].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
   initial_state.nodes[0].child_ids.push_back(2);
   initial_state.nodes[0].child_ids.push_back(3);
   initial_state.nodes[1].id = 2;
-  initial_state.nodes[1].role = ui::AX_ROLE_STATIC_TEXT;
-  initial_state.nodes[1].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
-  initial_state.nodes[1].AddStringAttribute(ui::AX_ATTR_NAME, "Before 1");
+  initial_state.nodes[1].role = ax::mojom::Role::kStaticText;
+  initial_state.nodes[1].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  initial_state.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            "Before 1");
   initial_state.nodes[2].id = 3;
-  initial_state.nodes[2].role = ui::AX_ROLE_STATIC_TEXT;
-  initial_state.nodes[2].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
-  initial_state.nodes[2].AddStringAttribute(ui::AX_ATTR_NAME, "Before 2");
+  initial_state.nodes[2].role = ax::mojom::Role::kStaticText;
+  initial_state.nodes[2].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  initial_state.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            "Before 2");
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[1].AddStringAttribute(ui::AX_ATTR_DESCRIPTION, "Description 1");
-  update.nodes[2].AddIntAttribute(ui::AX_ATTR_CHECKED_STATE,
-                                  ui::AX_CHECKED_STATE_TRUE);
+  update.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kDescription,
+                                     "Description 1");
+  update.nodes[2].SetCheckedState(ax::mojom::CheckedState::kTrue);
 
   // Note that we do NOT expect a LIVE_REGION_CHANGED event here, because
   // the name did not change.
@@ -457,34 +482,40 @@ TEST(AXEventGeneratorTest, BusyLiveRegionChanged) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(3);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_LIVE_STATUS, "polite");
-  initial_state.nodes[0].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
-  initial_state.nodes[0].AddBoolAttribute(ui::AX_ATTR_BUSY, true);
+  initial_state.nodes[0].AddStringAttribute(
+      ax::mojom::StringAttribute::kLiveStatus, "polite");
+  initial_state.nodes[0].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  initial_state.nodes[0].AddBoolAttribute(ax::mojom::BoolAttribute::kBusy,
+                                          true);
   initial_state.nodes[0].child_ids.push_back(2);
   initial_state.nodes[0].child_ids.push_back(3);
   initial_state.nodes[1].id = 2;
-  initial_state.nodes[1].role = ui::AX_ROLE_STATIC_TEXT;
-  initial_state.nodes[1].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
-  initial_state.nodes[1].AddStringAttribute(ui::AX_ATTR_NAME, "Before 1");
+  initial_state.nodes[1].role = ax::mojom::Role::kStaticText;
+  initial_state.nodes[1].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  initial_state.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            "Before 1");
   initial_state.nodes[2].id = 3;
-  initial_state.nodes[2].role = ui::AX_ROLE_STATIC_TEXT;
-  initial_state.nodes[2].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                            "polite");
-  initial_state.nodes[2].AddStringAttribute(ui::AX_ATTR_NAME, "Before 2");
+  initial_state.nodes[2].role = ax::mojom::Role::kStaticText;
+  initial_state.nodes[2].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  initial_state.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            "Before 2");
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
   update.nodes[1].string_attributes.clear();
-  update.nodes[1].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                     "polite");
-  update.nodes[1].AddStringAttribute(ui::AX_ATTR_NAME, "After 1");
+  update.nodes[1].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  update.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                     "After 1");
   update.nodes[2].string_attributes.clear();
-  update.nodes[2].AddStringAttribute(ui::AX_ATTR_CONTAINER_LIVE_STATUS,
-                                     "polite");
-  update.nodes[2].AddStringAttribute(ui::AX_ATTR_NAME, "After 2");
+  update.nodes[2].AddStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveStatus, "polite");
+  update.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                     "After 2");
 
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ(
@@ -563,7 +594,7 @@ TEST(AXEventGeneratorTest, ScrollPositionChanged) {
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[0].AddIntAttribute(ui::AX_ATTR_SCROLL_Y, 10);
+  update.nodes[0].AddIntAttribute(ax::mojom::IntAttribute::kScrollY, 10);
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("SCROLL_POSITION_CHANGED on 1", DumpEvents(&event_generator));
 }
@@ -587,34 +618,42 @@ TEST(AXEventGeneratorTest, OtherAttributeChanged) {
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[1].AddStringAttribute(ui::AX_ATTR_LANGUAGE, "de");
-  update.nodes[2].AddIntAttribute(ui::AX_ATTR_ARIA_CELL_COLUMN_INDEX, 7);
-  update.nodes[3].AddFloatAttribute(ui::AX_ATTR_FONT_SIZE, 12.0f);
-  update.nodes[4].AddBoolAttribute(ui::AX_ATTR_MODAL, true);
+  update.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kLanguage,
+                                     "de");
+  update.nodes[2].AddIntAttribute(ax::mojom::IntAttribute::kAriaCellColumnIndex,
+                                  7);
+  update.nodes[3].AddFloatAttribute(ax::mojom::FloatAttribute::kFontSize,
+                                    12.0f);
+  update.nodes[4].AddBoolAttribute(ax::mojom::BoolAttribute::kModal, true);
   std::vector<int> ids = {2};
-  update.nodes[5].AddIntListAttribute(ui::AX_ATTR_CONTROLS_IDS, ids);
+  update.nodes[5].AddIntListAttribute(ax::mojom::IntListAttribute::kControlsIds,
+                                      ids);
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ(
       "OTHER_ATTRIBUTE_CHANGED on 2, "
       "OTHER_ATTRIBUTE_CHANGED on 3, "
       "OTHER_ATTRIBUTE_CHANGED on 4, "
       "OTHER_ATTRIBUTE_CHANGED on 5, "
-      "OTHER_ATTRIBUTE_CHANGED on 6",
+      "OTHER_ATTRIBUTE_CHANGED on 6, "
+      "RELATED_NODE_CHANGED on 6",
       DumpEvents(&event_generator));
 }
 
 TEST(AXEventGeneratorTest, NameChanged) {
   AXTreeUpdate initial_state;
   initial_state.root_id = 1;
-  initial_state.nodes.resize(1);
+  initial_state.nodes.resize(2);
   initial_state.nodes[0].id = 1;
+  initial_state.nodes[0].child_ids.push_back(2);
+  initial_state.nodes[1].id = 2;
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[0].AddStringAttribute(ui::AX_ATTR_NAME, "Hello");
+  update.nodes[1].AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                     "Hello");
   EXPECT_TRUE(tree.Unserialize(update));
-  EXPECT_EQ("NAME_CHANGED on 1", DumpEvents(&event_generator));
+  EXPECT_EQ("NAME_CHANGED on 2", DumpEvents(&event_generator));
 }
 
 TEST(AXEventGeneratorTest, DescriptionChanged) {
@@ -626,7 +665,8 @@ TEST(AXEventGeneratorTest, DescriptionChanged) {
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[0].AddStringAttribute(ui::AX_ATTR_DESCRIPTION, "Hello");
+  update.nodes[0].AddStringAttribute(ax::mojom::StringAttribute::kDescription,
+                                     "Hello");
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("DESCRIPTION_CHANGED on 1", DumpEvents(&event_generator));
 }
@@ -640,7 +680,7 @@ TEST(AXEventGeneratorTest, RoleChanged) {
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
-  update.nodes[0].role = ui::AX_ROLE_CHECK_BOX;
+  update.nodes[0].role = ax::mojom::Role::kCheckBox;
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ("ROLE_CHANGED on 1", DumpEvents(&event_generator));
 }
@@ -650,24 +690,92 @@ TEST(AXEventGeneratorTest, MenuItemSelected) {
   initial_state.root_id = 1;
   initial_state.nodes.resize(3);
   initial_state.nodes[0].id = 1;
-  initial_state.nodes[0].role = ui::AX_ROLE_MENU;
+  initial_state.nodes[0].role = ax::mojom::Role::kMenu;
   initial_state.nodes[0].child_ids.push_back(2);
   initial_state.nodes[0].child_ids.push_back(3);
-  initial_state.nodes[0].AddIntAttribute(ui::AX_ATTR_ACTIVEDESCENDANT_ID, 2);
+  initial_state.nodes[0].AddIntAttribute(
+      ax::mojom::IntAttribute::kActivedescendantId, 2);
   initial_state.nodes[1].id = 2;
-  initial_state.nodes[1].role = ui::AX_ROLE_MENU_LIST_OPTION;
+  initial_state.nodes[1].role = ax::mojom::Role::kMenuListOption;
   initial_state.nodes[2].id = 3;
-  initial_state.nodes[2].role = ui::AX_ROLE_MENU_LIST_OPTION;
+  initial_state.nodes[2].role = ax::mojom::Role::kMenuListOption;
   AXTree tree(initial_state);
 
   AXEventGenerator event_generator(&tree);
   AXTreeUpdate update = initial_state;
   update.nodes[0].int_attributes.clear();
-  update.nodes[0].AddIntAttribute(ui::AX_ATTR_ACTIVEDESCENDANT_ID, 3);
+  update.nodes[0].AddIntAttribute(ax::mojom::IntAttribute::kActivedescendantId,
+                                  3);
   EXPECT_TRUE(tree.Unserialize(update));
   EXPECT_EQ(
       "ACTIVE_DESCENDANT_CHANGED on 1, "
-      "MENU_ITEM_SELECTED on 3",
+      "MENU_ITEM_SELECTED on 3, "
+      "RELATED_NODE_CHANGED on 1",
+      DumpEvents(&event_generator));
+}
+
+TEST(AXEventGeneratorTest, NodeBecomesIgnored) {
+  AXTreeUpdate initial_state;
+  initial_state.root_id = 1;
+  initial_state.nodes.resize(5);
+  initial_state.nodes[0].id = 1;
+  initial_state.nodes[0].role = ax::mojom::Role::kRootWebArea;
+  initial_state.nodes[0].child_ids.push_back(2);
+  initial_state.nodes[1].id = 2;
+  initial_state.nodes[1].role = ax::mojom::Role::kArticle;
+  initial_state.nodes[1].child_ids.push_back(3);
+  initial_state.nodes[2].id = 3;
+  initial_state.nodes[2].role = ax::mojom::Role::kGroup;
+  initial_state.nodes[2].AddState(ax::mojom::State::kIgnored);
+  initial_state.nodes[2].child_ids.push_back(4);
+  initial_state.nodes[3].id = 4;
+  initial_state.nodes[3].role = ax::mojom::Role::kGroup;
+  initial_state.nodes[3].child_ids.push_back(5);
+  initial_state.nodes[4].id = 5;
+  initial_state.nodes[4].role = ax::mojom::Role::kStaticText;
+
+  AXTree tree(initial_state);
+
+  AXEventGenerator event_generator(&tree);
+  AXTreeUpdate update = initial_state;
+  update.nodes[3].AddState(ax::mojom::State::kIgnored);
+  EXPECT_TRUE(tree.Unserialize(update));
+  EXPECT_EQ(
+      "CHILDREN_CHANGED on 2, "
+      "STATE_CHANGED on 4",
+      DumpEvents(&event_generator));
+}
+
+TEST(AXEventGeneratorTest, NodeBecomesUnignored) {
+  AXTreeUpdate initial_state;
+  initial_state.root_id = 1;
+  initial_state.nodes.resize(5);
+  initial_state.nodes[0].id = 1;
+  initial_state.nodes[0].role = ax::mojom::Role::kRootWebArea;
+  initial_state.nodes[0].child_ids.push_back(2);
+  initial_state.nodes[1].id = 2;
+  initial_state.nodes[1].role = ax::mojom::Role::kArticle;
+  initial_state.nodes[1].child_ids.push_back(3);
+  initial_state.nodes[2].id = 3;
+  initial_state.nodes[2].role = ax::mojom::Role::kGroup;
+  initial_state.nodes[2].AddState(ax::mojom::State::kIgnored);
+  initial_state.nodes[2].child_ids.push_back(4);
+  initial_state.nodes[3].id = 4;
+  initial_state.nodes[3].role = ax::mojom::Role::kGroup;
+  initial_state.nodes[3].AddState(ax::mojom::State::kIgnored);
+  initial_state.nodes[3].child_ids.push_back(5);
+  initial_state.nodes[4].id = 5;
+  initial_state.nodes[4].role = ax::mojom::Role::kStaticText;
+
+  AXTree tree(initial_state);
+
+  AXEventGenerator event_generator(&tree);
+  AXTreeUpdate update = initial_state;
+  update.nodes[3].state = 0;
+  EXPECT_TRUE(tree.Unserialize(update));
+  EXPECT_EQ(
+      "CHILDREN_CHANGED on 2, "
+      "STATE_CHANGED on 4",
       DumpEvents(&event_generator));
 }
 

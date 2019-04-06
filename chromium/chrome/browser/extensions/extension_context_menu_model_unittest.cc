@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
@@ -27,7 +28,6 @@
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/web_contents_tester.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
@@ -36,7 +36,7 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/test_management_policy.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/feature_switch.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
@@ -44,9 +44,13 @@
 #include "extensions/common/value_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/display/test/scoped_screen_override.h"
+#include "ui/display/test/test_screen.h"
 #include "ui/gfx/image/image.h"
 
 namespace extensions {
+
+using display::test::ScopedScreenOverride;
 
 namespace {
 
@@ -190,6 +194,8 @@ class ExtensionContextMenuModelTest : public ExtensionServiceTestBase {
  private:
   std::unique_ptr<TestBrowserWindow> test_window_;
   std::unique_ptr<Browser> browser_;
+  display::test::TestScreen test_screen_;
+  std::unique_ptr<ScopedScreenOverride> scoped_screen_override_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionContextMenuModelTest);
 };
@@ -225,6 +231,7 @@ const Extension* ExtensionContextMenuModelTest::AddExtensionWithHostPermission(
           .Build();
   if (!extension.get())
     ADD_FAILURE();
+  service()->GrantPermissions(extension.get());
   service()->AddExtension(extension.get());
   return extension.get();
 }
@@ -241,13 +248,13 @@ Browser* ExtensionContextMenuModelTest::GetBrowser() {
 
 void ExtensionContextMenuModelTest::SetUp() {
   ExtensionServiceTestBase::SetUp();
-  if (content::IsBrowserSideNavigationEnabled())
-    content::BrowserSideNavigationSetUp();
+  content::BrowserSideNavigationSetUp();
+  scoped_screen_override_ =
+      std::make_unique<ScopedScreenOverride>(&test_screen_);
 }
 
 void ExtensionContextMenuModelTest::TearDown() {
-  if (content::IsBrowserSideNavigationEnabled())
-    content::BrowserSideNavigationTearDown();
+  content::BrowserSideNavigationTearDown();
   ExtensionServiceTestBase::TearDown();
 }
 
@@ -608,15 +615,17 @@ TEST_F(ExtensionContextMenuModelTest, ExtensionContextUninstall) {
 
 TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
   // This test relies on the click-to-script feature.
-  std::unique_ptr<FeatureSwitch::ScopedOverride> enable_scripts_require_action(
-      new FeatureSwitch::ScopedOverride(FeatureSwitch::scripts_require_action(),
-                                        true));
+  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
+  scoped_feature_list->InitAndEnableFeature(features::kRuntimeHostPermissions);
   InitializeEmptyExtensionService();
 
-  // Add an extension with all urls.
+  // Add an extension with all urls, and withhold permission.
   const Extension* extension =
       AddExtensionWithHostPermission("extension", manifest_keys::kBrowserAction,
                                      Manifest::INTERNAL, "*://*/*");
+  ScriptingPermissionsModifier(profile(), extension)
+      .SetWithholdHostPermissions(true);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(extension->id()));
 
   const GURL kActiveUrl("http://www.example.com/");
   const GURL kOtherUrl("http://www.google.com/");
@@ -624,15 +633,16 @@ TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
   // Add a web contents to the browser.
   std::unique_ptr<content::WebContents> contents(
       content::WebContentsTester::CreateTestWebContents(profile(), nullptr));
+  content::WebContents* raw_contents = contents.get();
   Browser* browser = GetBrowser();
-  browser->tab_strip_model()->AppendWebContents(contents.get(), true);
-  EXPECT_EQ(browser->tab_strip_model()->GetActiveWebContents(), contents.get());
+  browser->tab_strip_model()->AppendWebContents(std::move(contents), true);
+  EXPECT_EQ(browser->tab_strip_model()->GetActiveWebContents(), raw_contents);
   content::WebContentsTester* web_contents_tester =
-      content::WebContentsTester::For(contents.get());
+      content::WebContentsTester::For(raw_contents);
   web_contents_tester->NavigateAndCommit(kActiveUrl);
 
   ExtensionActionRunner* action_runner =
-      ExtensionActionRunner::GetForWebContents(contents.get());
+      ExtensionActionRunner::GetForWebContents(raw_contents);
   ASSERT_TRUE(action_runner);
 
   // Pretend the extension wants to run.
@@ -746,25 +756,23 @@ TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
   EXPECT_EQ(2, run_count);
   EXPECT_TRUE(action_runner->WantsToRun(extension));
 
-  // Install an extension requesting only a single host. Since the extension
-  // doesn't request all hosts, it shouldn't have withheld permissions, and
-  // thus shouldn't have the page access submenu.
+  // Install an extension requesting a single host. The page access submenu
+  // should still be present.
   const Extension* single_host_extension = AddExtensionWithHostPermission(
       "single_host_extension", manifest_keys::kBrowserAction,
       Manifest::INTERNAL, "http://www.google.com/*");
   ExtensionContextMenuModel single_host_menu(
       single_host_extension, GetBrowser(), ExtensionContextMenuModel::VISIBLE,
       nullptr);
-  EXPECT_EQ(-1, single_host_menu.GetIndexOfCommandId(
+  EXPECT_NE(-1, single_host_menu.GetIndexOfCommandId(
                     ExtensionContextMenuModel::PAGE_ACCESS_SUBMENU));
 
   // Disable the click-to-script feature, and install a new extension requiring
   // all hosts. Since the feature isn't on, it shouldn't have the page access
   // submenu either.
-  enable_scripts_require_action.reset();
-  enable_scripts_require_action.reset(
-      new FeatureSwitch::ScopedOverride(FeatureSwitch::scripts_require_action(),
-                                        false));
+  scoped_feature_list.reset();  // Need to delete the old list first.
+  scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
+  scoped_feature_list->InitAndDisableFeature(features::kRuntimeHostPermissions);
   const Extension* feature_disabled_extension = AddExtensionWithHostPermission(
       "feature_disabled_extension", manifest_keys::kBrowserAction,
       Manifest::INTERNAL, "http://www.google.com/*");
@@ -773,6 +781,8 @@ TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
       ExtensionContextMenuModel::VISIBLE, nullptr);
   EXPECT_EQ(-1, feature_disabled_menu.GetIndexOfCommandId(
                     ExtensionContextMenuModel::PAGE_ACCESS_SUBMENU));
+  browser->tab_strip_model()->DetachWebContentsAt(
+      browser->tab_strip_model()->GetIndexOfWebContents(raw_contents));
 }
 
 TEST_F(ExtensionContextMenuModelTest, TestInspectPopupPresence) {

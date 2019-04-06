@@ -162,8 +162,9 @@ CreditCardEditorViewController::CreditCardEditorViewController(
     int next_ui_tag,
     base::OnceClosure on_edited,
     base::OnceCallback<void(const autofill::CreditCard&)> on_added,
-    autofill::CreditCard* credit_card)
-    : EditorViewController(spec, state, dialog, back_navigation),
+    autofill::CreditCard* credit_card,
+    bool is_incognito)
+    : EditorViewController(spec, state, dialog, back_navigation, is_incognito),
       on_edited_(std::move(on_edited)),
       on_added_(std::move(on_added)),
       credit_card_to_edit_(credit_card),
@@ -294,15 +295,16 @@ CreditCardEditorViewController::CreateCustomFieldView(
     views::GridLayout* combobox_layout =
         view->SetLayoutManager(std::make_unique<views::GridLayout>(view.get()));
     views::ColumnSet* columns = combobox_layout->AddColumnSet(0);
-    columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 1,
-                       views::GridLayout::USE_PREF, 0, 0);
+    columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
+                       1.0, views::GridLayout::USE_PREF, 0, 0);
     // Space between the two comboboxes.
     constexpr int kHorizontalSpacing = 8;
-    columns->AddPaddingColumn(0, kHorizontalSpacing);
-    columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 1,
-                       views::GridLayout::USE_PREF, 0, 0);
+    columns->AddPaddingColumn(views::GridLayout::kFixedSize,
+                              kHorizontalSpacing);
+    columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
+                       1.0, views::GridLayout::USE_PREF, 0, 0);
 
-    combobox_layout->StartRow(0, 0);
+    combobox_layout->StartRow(views::GridLayout::kFixedSize, 0);
     constexpr int kInputFieldHeight = 28;
     EditorField tmp_month{
         autofill::CREDIT_CARD_EXP_MONTH,
@@ -409,8 +411,10 @@ bool CreditCardEditorViewController::ValidateModelAndSave() {
 
     credit_card_to_edit_->set_billing_address_id(
         model->GetItemIdentifierAt(address_combobox->selected_index()));
-    state()->GetPersonalDataManager()->UpdateServerCardMetadata(
-        *credit_card_to_edit_);
+    if (!is_incognito()) {
+      state()->GetPersonalDataManager()->UpdateServerCardMetadata(
+          *credit_card_to_edit_);
+    }
     return true;
   }
 
@@ -455,8 +459,10 @@ bool CreditCardEditorViewController::ValidateModelAndSave() {
   }
 
   if (!credit_card_to_edit_) {
-    // Add the card (will not add a duplicate).
-    state()->GetPersonalDataManager()->AddCreditCard(credit_card);
+    if (!is_incognito()) {
+      // Add the card (will not add a duplicate).
+      state()->GetPersonalDataManager()->AddCreditCard(credit_card);
+    }
     std::move(on_added_).Run(credit_card);
   } else {
     credit_card_to_edit_->set_billing_address_id(
@@ -481,7 +487,9 @@ bool CreditCardEditorViewController::ValidateModelAndSave() {
                               locale),
           locale);
     }
-    state()->GetPersonalDataManager()->UpdateCreditCard(*credit_card_to_edit_);
+    if (!is_incognito())
+      state()->GetPersonalDataManager()->UpdateCreditCard(
+          *credit_card_to_edit_);
     std::move(on_edited_).Run();
   }
 
@@ -731,7 +739,7 @@ bool CreditCardEditorViewController::CreditCardValidationDelegate::
 
   if (error_message && field_.required) {
     *error_message = l10n_util::GetStringUTF16(
-        IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE);
+        IDS_PREF_EDIT_DIALOG_FIELD_REQUIRED_VALIDATION_MESSAGE);
   }
   return !field_.required;
 }

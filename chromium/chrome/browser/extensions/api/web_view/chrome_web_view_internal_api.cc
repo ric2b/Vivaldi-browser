@@ -14,14 +14,14 @@
 #include "content/public/browser/render_process_host.h"
 #include "extensions/common/error_utils.h"
 
-namespace helpers = extensions::context_menus_api_helpers;
 namespace webview = extensions::api::chrome_web_view_internal;
 
 namespace extensions {
 
 // TODO(lazyboy): Add checks similar to
 // WebViewInternalExtensionFunction::RunAsyncSafe(WebViewGuest*).
-bool ChromeWebViewInternalContextMenusCreateFunction::RunAsync() {
+ExtensionFunction::ResponseAction
+ChromeWebViewInternalContextMenusCreateFunction::Run() {
   std::unique_ptr<webview::ContextMenusCreate::Params> params(
       webview::ContextMenusCreate::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -39,22 +39,19 @@ bool ChromeWebViewInternalContextMenusCreateFunction::RunAsync() {
     // The Generated Id is added by web_view_internal_custom_bindings.js.
     base::DictionaryValue* properties = NULL;
     EXTENSION_FUNCTION_VALIDATE(args_->GetDictionary(1, &properties));
-    EXTENSION_FUNCTION_VALIDATE(
-        properties->GetInteger(helpers::kGeneratedIdKey, &id.uid));
+    EXTENSION_FUNCTION_VALIDATE(properties->GetInteger(
+        extensions::context_menus_api_helpers::kGeneratedIdKey, &id.uid));
   }
 
+  std::string error;
   bool success = extensions::context_menus_api_helpers::CreateMenuItem(
-      params->create_properties,
-      Profile::FromBrowserContext(browser_context()),
-      extension(),
-      id,
-      &error_);
-
-  SendResponse(success);
-  return success;
+      params->create_properties, Profile::FromBrowserContext(browser_context()),
+      extension(), id, &error);
+  return RespondNow(success ? NoArguments() : Error(error));
 }
 
-bool ChromeWebViewInternalContextMenusUpdateFunction::RunAsync() {
+ExtensionFunction::ResponseAction
+ChromeWebViewInternalContextMenusUpdateFunction::Run() {
   std::unique_ptr<webview::ContextMenusUpdate::Params> params(
       webview::ContextMenusUpdate::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -74,13 +71,15 @@ bool ChromeWebViewInternalContextMenusUpdateFunction::RunAsync() {
   else
     NOTREACHED();
 
+  std::string error;
   bool success = extensions::context_menus_api_helpers::UpdateMenuItem(
-      params->update_properties, profile, extension(), item_id, &error_);
-  SendResponse(success);
-  return success;
+      params->update_properties, profile, extension(), item_id, &error);
+
+  return RespondNow(success ? NoArguments() : Error(error));
 }
 
-bool ChromeWebViewInternalContextMenusRemoveFunction::RunAsync() {
+ExtensionFunction::ResponseAction
+ChromeWebViewInternalContextMenusRemoveFunction::Run() {
   std::unique_ptr<webview::ContextMenusRemove::Params> params(
       webview::ContextMenusRemove::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -103,23 +102,21 @@ bool ChromeWebViewInternalContextMenusRemoveFunction::RunAsync() {
     NOTREACHED();
   }
 
-  bool success = true;
   MenuItem* item = menu_manager->GetItemById(id);
   // Ensure one <webview> can't remove another's menu items.
   if (!item || item->id().extension_key != id.extension_key) {
-    error_ = ErrorUtils::FormatErrorMessage(
+    return RespondNow(Error(ErrorUtils::FormatErrorMessage(
         context_menus_api_helpers::kCannotFindItemError,
-        context_menus_api_helpers::GetIDString(id));
-    success = false;
+        context_menus_api_helpers::GetIDString(id))));
   } else if (!menu_manager->RemoveContextMenuItem(id)) {
-    success = false;
+    return RespondNow(Error(kUnknownErrorDoNotUse));
   }
 
-  SendResponse(success);
-  return success;
+  return RespondNow(NoArguments());
 }
 
-bool ChromeWebViewInternalContextMenusRemoveAllFunction::RunAsync() {
+ExtensionFunction::ResponseAction
+ChromeWebViewInternalContextMenusRemoveAllFunction::Run() {
   std::unique_ptr<webview::ContextMenusRemoveAll::Params> params(
       webview::ContextMenusRemoveAll::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -131,8 +128,7 @@ bool ChromeWebViewInternalContextMenusRemoveAllFunction::RunAsync() {
       GetSenderWebContents()->GetMainFrame()->GetProcess()->GetID(),
       params->instance_id));
 
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
 ChromeWebViewInternalShowContextMenuFunction::

@@ -55,11 +55,7 @@ void ShowReauthDialog(const std::string& user_name,
 }
 
 void DeleteProfileCallback(std::unique_ptr<ScopedKeepAlive> keep_alive,
-                           Profile* profile,
-                           Profile::CreateStatus status) {
-  if (status != Profile::CREATE_STATUS_INITIALIZED)
-    return;
-
+                           Profile* profile) {
   OpenNewWindowForProfile(profile);
 }
 
@@ -83,18 +79,15 @@ void OpenNewWindowForProfile(Profile* profile) {
 }
 
 void DeleteProfileAtPath(base::FilePath file_path,
-                         content::WebUI* web_ui,
                          ProfileMetrics::ProfileDelete deletion_source) {
-  DCHECK(web_ui);
-
   if (!profiles::IsMultipleProfilesEnabled())
     return;
   g_browser_process->profile_manager()->MaybeScheduleProfileForDeletion(
       file_path,
-      base::Bind(&DeleteProfileCallback,
-                 base::Passed(std::make_unique<ScopedKeepAlive>(
-                     KeepAliveOrigin::PROFILE_HELPER,
-                     KeepAliveRestartOption::DISABLED))),
+      base::BindOnce(
+          &DeleteProfileCallback,
+          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_HELPER,
+                                            KeepAliveRestartOption::DISABLED)),
       deletion_source);
 }
 

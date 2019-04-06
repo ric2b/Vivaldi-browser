@@ -4,12 +4,18 @@
 
 static_library("security_interstitial_page") {
   sources = [
+    "connection_help_ui.cc",
+    "connection_help_ui.h",
     "security_interstitial_controller_client.cc",
     "security_interstitial_controller_client.h",
     "security_interstitial_page.cc",
     "security_interstitial_page.h",
+    "security_interstitial_tab_helper.cc",
+    "security_interstitial_tab_helper.h",
     "unsafe_resource.cc",
     "unsafe_resource.h",
+    "urls.cc",
+    "urls.h",
   ]
 
   public_deps = [
@@ -24,7 +30,28 @@ static_library("security_interstitial_page") {
     "//components/safe_browsing/db:hit_report",
     "//components/safe_browsing/db:util",
     "//components/security_interstitials/core:core",
+    "//components/strings:components_strings_grit",
     "//content/public/browser",
     "//content/public/common",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "security_interstitial_tab_helper_unittest.cc",
+  ]
+
+  deps = [
+    ":security_interstitial_page",
+    "//base",
+    "//base/test:test_support",
+    "//components/security_interstitials/core:core",
+    "//content/public/browser",
+    "//content/public/common",
+    "//content/test:test_support",
+    "//net:",
+    "//net:test_support",
+    "//testing/gtest",
   ]
 }

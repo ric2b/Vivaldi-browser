@@ -114,7 +114,8 @@ class MyInterceptor : public Wrappable<MyInterceptor>,
     if (!function_template.IsEmpty())
       return function_template;
     function_template = CreateFunctionTemplate(
-        isolate, base::Bind(&MyInterceptor::Call), HolderIsFirstArgument);
+        isolate, base::BindRepeating(&MyInterceptor::Call),
+        InvokerOptions{true, nullptr});
     template_cache_.Set(name, function_template);
     return function_template;
   }
@@ -151,7 +152,7 @@ class InterceptorTest : public V8Test {
     v8::Local<v8::Function> func;
     EXPECT_TRUE(ConvertFromV8(isolate, val, &func));
     v8::Local<v8::Value> argv[] = {
-        ConvertToV8(isolate->GetCurrentContext(), obj.get()).ToLocalChecked(),
+        ConvertToV8(isolate, obj.get()).ToLocalChecked(),
     };
     func->Call(v8::Undefined(isolate), 1, argv);
     EXPECT_FALSE(try_catch.HasCaught());

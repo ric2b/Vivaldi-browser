@@ -1,14 +1,54 @@
-product_extra_default_compiler_configs = [ "//vivaldi/gn/config:features" ]
+# Update default configurations
 
-# end users already contain product_extra_default_compiler_configs
-product_extra_linker_configs = []
+vivaldi_compiler_configs = [ "//vivaldi/gn/config:features" ]
+vivaldi_executable_configs = [ "//vivaldi/gn/config:disable_new_dtags" ]
+
+default_compiler_configs += vivaldi_compiler_configs
+
+# Static libraries and source sets use only the compiler ones.
+
+set_defaults("static_library") {
+  configs = default_compiler_configs
+}
+
+set_defaults("source_set") {
+  configs = default_compiler_configs
+}
 
 # end users already contain product_extra_default_compiler_configs
 # and product_extra_linker_configs
-product_extra_executable_configs = []
+product_extra_executable_configs = [ "//vivaldi/gn/config:disable_new_dtags" ]
 
 # end users already contain product_extra_default_compiler_configs
 # and product_extra_linker_configs
-product_extra_shared_library_configs = []
 
-has_product_extra_configs = true
+default_executable_configs += vivaldi_compiler_configs + vivaldi_executable_configs
+
+set_defaults("executable") {
+  configs = default_executable_configs
+}
+
+default_shared_library_configs += vivaldi_compiler_configs
+set_defaults("shared_library") {
+  configs = default_shared_library_configs
+}
+
+set_defaults("loadable_module") {
+  configs = default_shared_library_configs
+
+  # loadable_modules are generally used by other libs, not just via JNI.
+  if (is_android) {
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  }
+}
+
+set_defaults("component") {
+  if (is_component_build) {
+    configs = default_shared_library_configs
+    if (is_android) {
+      configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    }
+  } else {
+    configs = default_compiler_configs
+  }
+}

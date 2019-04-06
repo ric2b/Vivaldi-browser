@@ -36,9 +36,6 @@ const std::string kHashPageB =
 IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, PageActionCrash25562) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kAllowLegacyExtensionManifests);
-
   // This page action will not show an icon, since it doesn't specify one but
   // is included here to test for a crash (http://crbug.com/25562).
   ASSERT_TRUE(LoadExtension(
@@ -74,8 +71,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, PageAction) {
   ASSERT_TRUE(WaitForPageActionVisibilityChangeTo(0));
 }
 
-// Tests that we don't lose the page action icon on in-page navigations.
-IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, PageActionInPageNavigation) {
+// Tests that we don't lose the page action icon on same-document navigations.
+IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, PageActionSameDocumentNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   base::FilePath extension_path(test_data_dir_.AppendASCII("api_test")
@@ -88,12 +85,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, PageActionInPageNavigation) {
   ui_test_utils::NavigateToURL(browser(), feed_url);
   ASSERT_TRUE(WaitForPageActionVisibilityChangeTo(1));
 
-  // In-page navigation, page action should remain.
+  // Same-document navigation, page action should remain.
   feed_url = embedded_test_server()->GetURL(kHashPageAHash);
   ui_test_utils::NavigateToURL(browser(), feed_url);
   ASSERT_TRUE(WaitForPageActionVisibilityChangeTo(1));
 
-  // Not an in-page navigation, page action should go away.
+  // Not a same-document navigation, page action should go away.
   feed_url = embedded_test_server()->GetURL(kHashPageB);
   ui_test_utils::NavigateToURL(browser(), feed_url);
   ASSERT_TRUE(WaitForPageActionVisibilityChangeTo(0));

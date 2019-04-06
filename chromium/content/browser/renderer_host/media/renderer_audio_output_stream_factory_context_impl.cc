@@ -6,15 +6,13 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
-#include "content/browser/media/capture/audio_mirroring_manager.h"
 #include "content/browser/media/media_internals.h"
 #include "content/browser/renderer_host/media/audio_output_delegate_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
-#include "content/browser/renderer_host/media/render_frame_audio_output_stream_factory.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_features.h"
 #include "media/audio/audio_system.h"
+#include "media/mojo/interfaces/audio_logging.mojom.h"
 
 namespace content {
 
@@ -30,8 +28,6 @@ RendererAudioOutputStreamFactoryContextImpl::
       authorization_handler_(audio_system_,
                              media_stream_manager_,
                              render_process_id),
-      audio_log_(MediaInternals::GetInstance()->CreateAudioLog(
-          media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER)),
       render_process_id_(render_process_id) {}
 
 RendererAudioOutputStreamFactoryContextImpl::
@@ -66,21 +62,16 @@ RendererAudioOutputStreamFactoryContextImpl::CreateDelegate(
   MediaObserver* const media_observer =
       GetContentClient()->browser()->GetMediaObserver();
 
-  audio_log_->OnCreated(stream_id, params, unique_device_id);
-  MediaInternals::GetInstance()->SetWebContentsTitleForAudioLogEntry(
-      stream_id, render_process_id_, render_frame_id, audio_log_.get());
+  media::mojom::AudioLogPtr audio_log_ptr =
+      MediaInternals::GetInstance()->CreateMojoAudioLog(
+          media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER, stream_id,
+          render_process_id_, render_frame_id);
+  audio_log_ptr->OnCreated(params, unique_device_id);
 
   return AudioOutputDelegateImpl::Create(
-      handler, audio_manager_, audio_log_.get(),
-      AudioMirroringManager::GetInstance(), media_observer, stream_id,
-      render_frame_id, render_process_id_, params, std::move(stream_observer),
-      unique_device_id);
-}
-
-// static
-bool RendererAudioOutputStreamFactoryContextImpl::UseMojoFactories() {
-  return base::FeatureList::IsEnabled(
-      features::kUseMojoAudioOutputStreamFactory);
+      handler, audio_manager_, std::move(audio_log_ptr), media_observer,
+      stream_id, render_frame_id, render_process_id_, params,
+      std::move(stream_observer), unique_device_id);
 }
 
 }  // namespace content

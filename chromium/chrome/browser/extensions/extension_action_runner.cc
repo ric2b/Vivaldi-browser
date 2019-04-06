@@ -111,7 +111,7 @@ ExtensionAction::ShowAction ExtensionActionRunner::RunAction(
 
   // Anything that gets here should have a page or browser action.
   DCHECK(extension_action);
-  int tab_id = SessionTabHelper::IdForTab(web_contents());
+  int tab_id = SessionTabHelper::IdForTab(web_contents()).id();
   if (!extension_action->GetIsVisible(tab_id))
     return ExtensionAction::ACTION_NONE;
 
@@ -193,7 +193,7 @@ void ExtensionActionRunner::RunForTesting(const Extension* extension) {
   }
 }
 
-PermissionsData::AccessType
+PermissionsData::PageAccess
 ExtensionActionRunner::RequiresUserConsentForScriptInjection(
     const Extension* extension,
     UserScript::InjectionType type) {
@@ -201,21 +201,20 @@ ExtensionActionRunner::RequiresUserConsentForScriptInjection(
 
   // Allow the extension if it's been explicitly granted permission.
   if (permitted_extensions_.count(extension->id()) > 0)
-    return PermissionsData::ACCESS_ALLOWED;
+    return PermissionsData::PageAccess::kAllowed;
 
   GURL url = web_contents()->GetVisibleURL();
-  int tab_id = SessionTabHelper::IdForTab(web_contents());
+  int tab_id = SessionTabHelper::IdForTab(web_contents()).id();
   switch (type) {
     case UserScript::CONTENT_SCRIPT:
-      return extension->permissions_data()->GetContentScriptAccess(
-          extension, url, tab_id, nullptr);
+      return extension->permissions_data()->GetContentScriptAccess(url, tab_id,
+                                                                   nullptr);
     case UserScript::PROGRAMMATIC_SCRIPT:
-      return extension->permissions_data()->GetPageAccess(extension, url,
-                                                          tab_id, nullptr);
+      return extension->permissions_data()->GetPageAccess(url, tab_id, nullptr);
   }
 
   NOTREACHED();
-  return PermissionsData::ACCESS_DENIED;
+  return PermissionsData::PageAccess::kDenied;
 }
 
 void ExtensionActionRunner::RequestScriptInjection(
@@ -284,10 +283,10 @@ void ExtensionActionRunner::OnRequestScriptInjectionPermission(
   ++num_page_requests_;
 
   switch (RequiresUserConsentForScriptInjection(extension, script_type)) {
-    case PermissionsData::ACCESS_ALLOWED:
+    case PermissionsData::PageAccess::kAllowed:
       PermitScriptInjection(request_id);
       break;
-    case PermissionsData::ACCESS_WITHHELD:
+    case PermissionsData::PageAccess::kWithheld:
       // This base::Unretained() is safe, because the callback is only invoked
       // by this object.
       RequestScriptInjection(
@@ -295,7 +294,7 @@ void ExtensionActionRunner::OnRequestScriptInjectionPermission(
           base::Bind(&ExtensionActionRunner::PermitScriptInjection,
                      base::Unretained(this), request_id));
       break;
-    case PermissionsData::ACCESS_DENIED:
+    case PermissionsData::PageAccess::kDenied:
       // We should usually only get a "deny access" if the page changed (as the
       // renderer wouldn't have requested permission if the answer was always
       // "no"). Just let the request fizzle and die.
@@ -414,6 +413,17 @@ void ExtensionActionRunner::DidFinishNavigation(
   web_request_blocked_.clear();
   was_used_on_page_ = false;
   weak_factory_.InvalidateWeakPtrs();
+
+  // Note: This needs to be called *after* the maps have been updated, so that
+  // when the UI updates, this object returns the proper result for "wants to
+  // run".
+  ExtensionActionAPI::Get(browser_context_)
+      ->ClearAllValuesForTab(web_contents());
+}
+
+void ExtensionActionRunner::WebContentsDestroyed() {
+  ExtensionActionAPI::Get(browser_context_)
+      ->ClearAllValuesForTab(web_contents());
 }
 
 void ExtensionActionRunner::OnExtensionUnloaded(

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_modes.h"
 
@@ -16,7 +15,7 @@ namespace install_static {
 ScopedInstallDetails::ScopedInstallDetails(bool system_level,
                                            int install_mode_index) {
   std::unique_ptr<PrimaryInstallDetails> details(
-      base::MakeUnique<PrimaryInstallDetails>());
+      std::make_unique<PrimaryInstallDetails>());
   const InstallConstants* mode = &kInstallModes[install_mode_index];
   details->set_mode(mode);
   details->set_channel(mode->default_channel_name);

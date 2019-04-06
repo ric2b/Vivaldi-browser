@@ -28,8 +28,9 @@ class SyncConsentScreenView {
   // Hides the contents of the screen.
   virtual void Hide() = 0;
 
-  // Updates view state after user sync preferences are known.
-  virtual void OnUserPrefKnown(bool sync_everything, bool is_managed) = 0;
+  // Controls if the loading throbber is visible. This is used when
+  // SyncScreenBehavior is unknown.
+  virtual void SetThrobberVisible(bool visible) = 0;
 };
 
 }  // namespace chromeos

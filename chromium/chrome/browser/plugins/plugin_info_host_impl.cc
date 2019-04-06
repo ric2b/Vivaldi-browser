@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
@@ -27,9 +26,9 @@
 #include "chrome/browser/plugins/plugins_field_trial.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_otr_state.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/features.h"
 #include "chrome/common/plugin.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "components/component_updater/component_updater_service.h"
@@ -37,19 +36,18 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service_impl.h"
 #include "components/ukm/content/source_url_recorder.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/plugin_service_filter.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/content_constants.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
@@ -432,7 +430,7 @@ void PluginInfoHostImpl::ComponentPluginLookupDone(
       output->status = chrome::mojom::PluginStatus::kRestartRequired;
     }
 #endif
-    plugin_metadata = base::MakeUnique<PluginMetadata>(
+    plugin_metadata = std::make_unique<PluginMetadata>(
         cus_plugin_info->id, cus_plugin_info->name, false, GURL(), GURL(),
         base::ASCIIToUTF16(cus_plugin_info->id), std::string());
   }

@@ -14,40 +14,42 @@
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/sync/driver/sync_token_status.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/url_request_status.h"
 
 using bookmarks_helper::AddURL;
 
-const char kShortLivedOAuth2Token[] =
-    "{"
-    "  \"refresh_token\": \"short_lived_refresh_token\","
-    "  \"access_token\": \"short_lived_access_token\","
-    "  \"expires_in\": 5,"  // 5 seconds.
-    "  \"token_type\": \"Bearer\""
-    "}";
+constexpr char kShortLivedOAuth2Token[] = R"(
+    {
+      "refresh_token": "short_lived_refresh_token",
+      "access_token": "short_lived_access_token",
+      "expires_in": 5,  // 5 seconds.
+      "token_type": "Bearer"
+    })";
 
-const char kValidOAuth2Token[] = "{"
-                                 "  \"refresh_token\": \"new_refresh_token\","
-                                 "  \"access_token\": \"new_access_token\","
-                                 "  \"expires_in\": 3600,"  // 1 hour.
-                                 "  \"token_type\": \"Bearer\""
-                                 "}";
+constexpr char kValidOAuth2Token[] = R"({
+                                   "refresh_token": "new_refresh_token",
+                                   "access_token": "new_access_token",
+                                   "expires_in": 3600,  // 1 hour.
+                                   "token_type": "Bearer"
+                                 })";
 
-const char kInvalidGrantOAuth2Token[] = "{"
-                                        "  \"error\": \"invalid_grant\""
-                                        "}";
+constexpr char kInvalidGrantOAuth2Token[] = R"({
+                                           "error": "invalid_grant"
+                                        })";
 
-const char kInvalidClientOAuth2Token[] = "{"
-                                         "  \"error\": \"invalid_client\""
-                                         "}";
+constexpr char kInvalidClientOAuth2Token[] = R"({
+                                           "error": "invalid_client"
+                                         })";
 
-const char kEmptyOAuth2Token[] = "";
+constexpr char kEmptyOAuth2Token[] = "";
 
-const char kMalformedOAuth2Token[] = "{ \"foo\": ";
+constexpr char kMalformedOAuth2Token[] = R"({ "foo": )";
 
-class TestForAuthError : public SingleClientStatusChangeChecker {
+// Waits until local changes are committed or an auth error is encountered.
+class TestForAuthError : public UpdatedProgressMarkerChecker {
  public:
   explicit TestForAuthError(browser_sync::ProfileSyncService* service);
 
@@ -57,12 +59,12 @@ class TestForAuthError : public SingleClientStatusChangeChecker {
 };
 
 TestForAuthError::TestForAuthError(browser_sync::ProfileSyncService* service)
-    : SingleClientStatusChangeChecker(service) {}
+    : UpdatedProgressMarkerChecker(service) {}
 
 bool TestForAuthError::IsExitConditionSatisfied() {
-  return !service()->HasUnsyncedItems() ||
-      (service()->GetSyncTokenStatus().last_get_token_error.state() !=
-       GoogleServiceAuthError::NONE);
+  return (service()->GetSyncTokenStatus().last_get_token_error.state() !=
+          GoogleServiceAuthError::NONE) ||
+         UpdatedProgressMarkerChecker::IsExitConditionSatisfied();
 }
 
 std::string TestForAuthError::GetDebugMessage() const {
@@ -103,7 +105,6 @@ class SyncAuthTest : public SyncTest {
     ProfileOAuth2TokenServiceFactory::GetForProfile(GetProfile(0))->
         set_max_authorization_token_fetch_retries_for_testing(0);
   }
-
 
  private:
   int GetNextBookmarkIndex() {
@@ -263,7 +264,8 @@ IN_PROC_BROWSER_TEST_F(SyncAuthTest, RetryInitialSetupWithTransientError) {
 }
 
 // Verify that ProfileSyncService fetches a new token when an old token expires.
-IN_PROC_BROWSER_TEST_F(SyncAuthTest, TokenExpiry) {
+// Disabled due to flakiness: https://crbug.com/860200
+IN_PROC_BROWSER_TEST_F(SyncAuthTest, DISABLED_TokenExpiry) {
   // Initial sync succeeds with a short lived OAuth2 Token.
   ASSERT_TRUE(SetupClients());
   GetFakeServer()->SetAuthenticated();

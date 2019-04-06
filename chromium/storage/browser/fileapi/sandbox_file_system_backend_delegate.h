@@ -34,6 +34,10 @@ class SandboxFileSystemBackendDelegateTest;
 class SandboxFileSystemTestHelper;
 }
 
+namespace leveldb {
+class Env;
+}
+
 namespace storage {
 class QuotaManagerProxy;
 class SpecialStoragePolicy;
@@ -60,7 +64,7 @@ class SandboxQuotaObserver;
 class STORAGE_EXPORT SandboxFileSystemBackendDelegate
     : public FileSystemQuotaUtil {
  public:
-  typedef FileSystemBackend::OpenFileSystemCallback OpenFileSystemCallback;
+  using OpenFileSystemCallback = FileSystemBackend::OpenFileSystemCallback;
 
   // The FileSystem directory name.
   static const base::FilePath::CharType kFileSystemDirectory[];
@@ -86,7 +90,8 @@ class STORAGE_EXPORT SandboxFileSystemBackendDelegate
       base::SequencedTaskRunner* file_task_runner,
       const base::FilePath& profile_path,
       storage::SpecialStoragePolicy* special_storage_policy,
-      const FileSystemOptions& file_system_options);
+      const FileSystemOptions& file_system_options,
+      leveldb::Env* env_override);
 
   ~SandboxFileSystemBackendDelegate() override;
 
@@ -248,7 +253,7 @@ class STORAGE_EXPORT SandboxFileSystemBackendDelegate
   // Accessed only on the file thread.
   std::set<GURL> visited_origins_;
 
-  std::set<std::pair<GURL, FileSystemType> > sticky_dirty_origins_;
+  std::set<std::pair<GURL, FileSystemType>> sticky_dirty_origins_;
 
   std::map<FileSystemType, UpdateObserverList> update_observers_;
   std::map<FileSystemType, ChangeObserverList> change_observers_;

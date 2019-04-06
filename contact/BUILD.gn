@@ -1,6 +1,8 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-source_set("contact") {
+import("//build/config/jumbo.gni")
+
+jumbo_source_set("contact") {
   sources = [
     "email_table.cc",
     "email_table.h",

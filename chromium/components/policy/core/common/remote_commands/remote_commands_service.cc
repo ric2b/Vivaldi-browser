@@ -9,6 +9,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
+#include "base/stl_util.h"
 #include "base/syslog_logging.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -76,9 +78,13 @@ bool RemoteCommandsService::FetchRemoteCommands() {
   return true;
 }
 
-void RemoteCommandsService::SetClockForTesting(
-    std::unique_ptr<base::TickClock> clock) {
-  queue_.SetClockForTesting(std::move(clock));
+void RemoteCommandsService::SetClockForTesting(const base::TickClock* clock) {
+  queue_.SetClockForTesting(clock);
+}
+
+void RemoteCommandsService::SetOnCommandAckedCallback(
+    base::OnceClosure callback) {
+  on_command_acked_callback_ = std::move(callback);
 }
 
 void RemoteCommandsService::EnqueueCommand(
@@ -89,15 +95,13 @@ void RemoteCommandsService::EnqueueCommand(
   }
 
   // If the command is already fetched, ignore it.
-  if (std::find(fetched_command_ids_.begin(), fetched_command_ids_.end(),
-                command.command_id()) != fetched_command_ids_.end()) {
+  if (base::ContainsValue(fetched_command_ids_, command.command_id()))
     return;
-  }
 
   fetched_command_ids_.push_back(command.command_id());
 
   std::unique_ptr<RemoteCommandJob> job =
-      factory_->BuildJobForType(command.type());
+      factory_->BuildJobForType(command.type(), this);
 
   if (!job || !job->Init(queue_.GetNowTicks(), command)) {
     SYSLOG(ERROR) << "Initialization of remote command failed.";
@@ -160,6 +164,9 @@ void RemoteCommandsService::OnRemoteCommandsFetched(
   // TODO(hunyadym): Remove after crbug.com/582506 is fixed.
   SYSLOG(INFO) << "Remote commands fetched.";
   command_fetch_in_progress_ = false;
+
+  if (!on_command_acked_callback_.is_null())
+    std::move(on_command_acked_callback_).Run();
 
   // TODO(binjin): Add retrying on errors. See http://crbug.com/466572.
   if (status == DM_STATUS_SUCCESS) {

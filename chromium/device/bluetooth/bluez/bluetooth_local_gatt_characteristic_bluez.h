@@ -23,13 +23,14 @@ class BluetoothLocalGattServiceBlueZ;
 // The BluetoothLocalGattCharacteristicBlueZ class implements
 // BluetoothLocalGattCharacteristic for local GATT characteristics for
 // platforms that use BlueZ.
-class BluetoothLocalGattCharacteristicBlueZ
+class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattCharacteristicBlueZ
     : public BluetoothGattCharacteristicBlueZ,
       public device::BluetoothLocalGattCharacteristic {
  public:
   BluetoothLocalGattCharacteristicBlueZ(
       const device::BluetoothUUID& uuid,
       Properties properties,
+      Permissions permissions,
       BluetoothLocalGattServiceBlueZ* service);
   ~BluetoothLocalGattCharacteristicBlueZ() override;
 
@@ -61,6 +62,9 @@ class BluetoothLocalGattCharacteristicBlueZ
 
   // Properties of this characteristic.
   Properties properties_;
+
+  // Permissions of this characteristic.
+  Permissions permissions_;
 
   // Service that contains this characteristic.
   BluetoothLocalGattServiceBlueZ* service_;

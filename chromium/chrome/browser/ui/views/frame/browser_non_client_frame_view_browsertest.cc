@@ -4,15 +4,20 @@
 
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
 
-using BrowserNonClientFrameViewBrowserTest = ExtensionBrowserTest;
+using BrowserNonClientFrameViewBrowserTest = extensions::ExtensionBrowserTest;
 
 // Test is Flaky on Windows see crbug.com/600201.
 #if defined(OS_WIN)
+#define MAYBE_InactiveSeparatorColor DISABLED_InactiveSeparatorColor
+#elif defined(OS_MACOSX)
+// Widget activation doesn't work on Mac: https://crbug.com/823543
 #define MAYBE_InactiveSeparatorColor DISABLED_InactiveSeparatorColor
 #else
 #define MAYBE_InactiveSeparatorColor InactiveSeparatorColor
@@ -23,6 +28,10 @@ using BrowserNonClientFrameViewBrowserTest = ExtensionBrowserTest;
 // actiavtion state.
 IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest,
                        MAYBE_InactiveSeparatorColor) {
+  // Refresh does not draw the toolbar top separator.
+  if (ui::MaterialDesignController::IsRefreshUi())
+    return;
+
   // In the default theme, the active and inactive separator colors may be the
   // same.  Install a custom theme where they are different.
   InstallExtension(test_data_dir_.AppendASCII("theme"), 1);

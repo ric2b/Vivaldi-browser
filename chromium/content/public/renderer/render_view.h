@@ -38,7 +38,7 @@ struct WebPreferences;
 // New code should be added to RenderFrame instead.
 //
 // For context, please see https://crbug.com/467770 and
-// http://www.chromium.org/developers/design-documents/site-isolation.
+// https://www.chromium.org/developers/design-documents/site-isolation.
 class CONTENT_EXPORT RenderView : public IPC::Sender {
  public:
   // Returns the RenderView containing the given WebView.
@@ -70,7 +70,7 @@ class CONTENT_EXPORT RenderView : public IPC::Sender {
   // Returns the device scale factor of the display the render view is in.
   virtual float GetDeviceScaleFactor() const = 0;
 
-  // Returns the device scale factor of the display the render view is in.
+  // Returns the page's zoom level for the render view.
   virtual float GetZoomLevel() const = 0;
 
   // Gets WebKit related preferences associated with this view.
@@ -94,10 +94,6 @@ class CONTENT_EXPORT RenderView : public IPC::Sender {
   // contents) should be sent to the browser immediately. This is normally
   // false, but set to true by some tests.
   virtual bool GetContentStateImmediately() const = 0;
-
-  // Notifies the renderer that a paint is to be generated for the size
-  // passed in.
-  virtual void Repaint(const gfx::Size& size) = 0;
 
   // Inject edit commands to be used for the next keyboard event.
   // TODO(alexmos): Currently, these are used only by BlinkTestRunner.  They
@@ -125,8 +121,6 @@ class CONTENT_EXPORT RenderView : public IPC::Sender {
   // This function will update the layout if required.
   virtual gfx::RectF ElementBoundsInWindow(const blink::WebElement& element)
       = 0;
-
-  virtual bool HasAddedInputHandler() const = 0;
 
  protected:
   ~RenderView() override {}

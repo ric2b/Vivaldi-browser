@@ -10,32 +10,26 @@
 
 namespace resource_coordinator {
 
-// static
-std::vector<ProcessCoordinationUnitImpl*>
-ProcessCoordinationUnitImpl::GetAllProcessCoordinationUnits() {
-  auto cus = CoordinationUnitBase::GetCoordinationUnitsOfType(
-      CoordinationUnitType::kProcess);
-  std::vector<ProcessCoordinationUnitImpl*> process_cus;
-  for (auto* process_cu : cus) {
-    process_cus.push_back(
-        static_cast<ProcessCoordinationUnitImpl*>(process_cu));
-  }
-  return process_cus;
-}
-
 ProcessCoordinationUnitImpl::ProcessCoordinationUnitImpl(
     const CoordinationUnitID& id,
+    CoordinationUnitGraph* graph,
     std::unique_ptr<service_manager::ServiceContextRef> service_ref)
-    : CoordinationUnitInterface(id, std::move(service_ref)) {}
+    : CoordinationUnitInterface(id, graph, std::move(service_ref)) {}
 
 ProcessCoordinationUnitImpl::~ProcessCoordinationUnitImpl() {
+  // Make as if we're transitioning to the null PID before we die to clear this
+  // instance from the PID map.
+  if (process_id_ != base::kNullProcessId)
+    graph()->BeforeProcessPidChange(this, base::kNullProcessId);
+
   for (auto* child_frame : frame_coordination_units_)
     child_frame->RemoveProcessCoordinationUnit(this);
 }
 
 void ProcessCoordinationUnitImpl::AddFrame(const CoordinationUnitID& cu_id) {
   DCHECK(cu_id.type == CoordinationUnitType::kFrame);
-  auto* frame_cu = FrameCoordinationUnitImpl::GetCoordinationUnitByID(cu_id);
+  auto* frame_cu =
+      FrameCoordinationUnitImpl::GetCoordinationUnitByID(graph_, cu_id);
   if (!frame_cu)
     return;
   if (AddFrame(frame_cu)) {
@@ -46,7 +40,7 @@ void ProcessCoordinationUnitImpl::AddFrame(const CoordinationUnitID& cu_id) {
 void ProcessCoordinationUnitImpl::RemoveFrame(const CoordinationUnitID& cu_id) {
   DCHECK(cu_id != id());
   FrameCoordinationUnitImpl* frame_cu =
-      FrameCoordinationUnitImpl::GetCoordinationUnitByID(cu_id);
+      FrameCoordinationUnitImpl::GetCoordinationUnitByID(graph_, cu_id);
   if (!frame_cu)
     return;
   if (RemoveFrame(frame_cu)) {
@@ -75,10 +69,19 @@ void ProcessCoordinationUnitImpl::SetMainThreadTaskLoadIsLow(
 }
 
 void ProcessCoordinationUnitImpl::SetPID(int64_t pid) {
+  // The PID can only be set once.
+  DCHECK_EQ(process_id_, base::kNullProcessId);
+
+  graph()->BeforeProcessPidChange(this, pid);
+  process_id_ = static_cast<base::ProcessId>(pid);
   SetProperty(mojom::PropertyType::kPID, pid);
 }
 
-std::set<FrameCoordinationUnitImpl*>
+void ProcessCoordinationUnitImpl::OnRendererIsBloated() {
+  SendEvent(mojom::Event::kRendererIsBloated);
+}
+
+const std::set<FrameCoordinationUnitImpl*>&
 ProcessCoordinationUnitImpl::GetFrameCoordinationUnits() const {
   return frame_coordination_units_;
 }
@@ -95,6 +98,11 @@ ProcessCoordinationUnitImpl::GetAssociatedPageCoordinationUnits() const {
       page_cus.insert(page_cu);
   }
   return page_cus;
+}
+
+void ProcessCoordinationUnitImpl::OnEventReceived(mojom::Event event) {
+  for (auto& observer : observers())
+    observer.OnProcessEventReceived(this, event);
 }
 
 void ProcessCoordinationUnitImpl::OnPropertyChanged(

@@ -22,19 +22,6 @@
   perspective: 600px;
 }
 
-.pin-container.pin-enabled {
-  opacity: 1;
-  transition: opacity 200ms ease-in-out 180ms;
-  visibility: visible;
-}
-
-.pin-container.pin-disabled {
-  opacity: 0; /* Opacity is set to 1 after the pin element is loaded. */
-  transition: none;
-  visibility: hidden; /* Needed because pin-keyboard's offsetHeight is
-                         checked to determine if loaded. */
-}
-
 #scroll-container {
   bottom: 0;        /* Allows content overlap with control bar. */
   left: 0;
@@ -72,43 +59,38 @@
   position: absolute;
 }
 
-#oobe[md-mode] #progress-dots {
-  display: none;
-}
-
 /* Screens that have a border and background. */
-#oobe.auto-enrollment-check #inner-container,
-#oobe.autolaunch #inner-container,
-#oobe.confirm-password #inner-container,
-#oobe:not([md-mode]).connect #inner-container,
-#oobe.debugging #inner-container,
-#oobe.enrollment #inner-container,
-#oobe:not([md-mode]).eula #inner-container,
-#oobe.fatal-error #inner-container,
-#oobe.gaia-signin #inner-container,
-#oobe.hid-detection #inner-container,
-#oobe.kiosk-enable #inner-container,
-#oobe.oauth-enrollment #inner-container,
-#oobe.password-changed #inner-container,
-#oobe.ad-password-change #inner-container,
-#oobe:not([md-mode]).reset #inner-container,
-#oobe.supervised-user-creation #inner-container,
-#oobe.supervised-user-creation-dialog #inner-container,
-#oobe.terms-of-service #inner-container,
-#oobe.arc-tos #inner-container,
-#oobe.update #inner-container,
-#oobe.update-required #inner-container,
-#oobe.user-image #inner-container,
-#oobe.wrong-hwid #inner-container,
-#oobe.unrecoverable-cryptohome-error #inner-container {
+html:not([full-screen-dialog]) #oobe.auto-enrollment-check #inner-container,
+html:not([full-screen-dialog]) #oobe.autolaunch #inner-container,
+html:not([full-screen-dialog]) #oobe.confirm-password #inner-container,
+html:not([full-screen-dialog]) #oobe.debugging #inner-container,
+html:not([full-screen-dialog]) #oobe.enrollment #inner-container,
+html:not([full-screen-dialog]) #oobe.fatal-error #inner-container,
+html:not([full-screen-dialog]) #oobe.gaia-signin #inner-container,
+html:not([full-screen-dialog]) #oobe.hid-detection #inner-container,
+html:not([full-screen-dialog]) #oobe.kiosk-enable #inner-container,
+html:not([full-screen-dialog]) #oobe.oauth-enrollment #inner-container,
+html:not([full-screen-dialog]) #oobe.password-changed #inner-container,
+html:not([full-screen-dialog]) #oobe.ad-password-change #inner-container,
+html:not([full-screen-dialog]) #oobe.supervised-user-creation #inner-container,
+html:not([full-screen-dialog]) #oobe.supervised-user-creation-dialog
+    #inner-container,
+html:not([full-screen-dialog]) #oobe.terms-of-service #inner-container,
+html:not([full-screen-dialog]) #oobe.arc-tos #inner-container,
+html:not([full-screen-dialog]) #oobe.update #inner-container,
+html:not([full-screen-dialog]) #oobe.update-required #inner-container,
+html:not([full-screen-dialog]) #oobe.user-image #inner-container,
+html:not([full-screen-dialog]) #oobe.wrong-hwid #inner-container,
+html:not([full-screen-dialog]) #oobe.unrecoverable-cryptohome-error
+    #inner-container {
   background: white;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3),
               0 4px 23px 5px rgba(0, 0, 0, 0.2),
               0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-#oobe.error-message #inner-container,
-#oobe.tpm-error-message #inner-container {
+html:not([full-screen-dialog]) #oobe.error-message #inner-container,
+html:not([full-screen-dialog]) #oobe.tpm-error-message #inner-container {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3),
               0 4px 23px 5px rgba(0, 0, 0, 0.2),
               0 2px 6px rgba(0, 0, 0, 0.15);
@@ -124,43 +106,8 @@
   transform: translateY(50px) rotateX(-2.5deg);
 }
 
-#oobe:not([md-mode]) #step-logo {
-  -webkit-margin-start: 17px;
-  display: flex;
-  position: absolute;
-  top: 15px;
-}
-
-#oobe[md-mode] #step-logo {
+#oobe #step-logo {
   display: none;
-}
-
-#progress-dots {
-  -webkit-box-pack: center;
-  display: -webkit-box;
-  margin-top: 15px;
-  transition: opacity 200ms ease-in-out, visibility 200ms ease-in-out;
-}
-
-#oobe[md-mode] #progress-dots {
-  display: none;
-}
-
-/* Hidden for the duration of initial transition. */
-.oobe-display #progress-dots.down {
-  visibility: hidden;
-}
-
-.progdot {
-  -webkit-margin-end: 12px;
-  background: white;
-  height: 10px;
-  opacity: 0.4;
-  width: 10px;
-}
-
-.progdot-active {
-  opacity: 0.5;
 }
 
 #account-picker-dot,
@@ -205,21 +152,10 @@
   opacity: 1;
 }
 
-#oobe.debugging #progress-dots,
-#oobe.reset #progress-dots,
-#oobe.host-pairing #progress-dots,
-#oobe.controller-pairing #progress-dots {
-  visibility: hidden;
-}
-
 body:not(.oobe-display) #inner-container {
   height: 262px;
   padding: 0;
   width: 1100px;
-}
-
-body:not(.oobe-display) #progress-dots {
-  display: none;
 }
 
 #outer-container.fullscreen,

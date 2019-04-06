@@ -1,6 +1,9 @@
 include_rules = [
+  "+components/account_id",
   "-components/policy/core/browser",
   "+components/crash/core/common/crash_key.h",  # Remove once https://crbug.com/685996 is fixed.
   "+components/data_use_measurement/core",
-  "+extensions/features",
+  "+extensions/buildflags",
+  "+services/network/test",
+  "+third_party/libxml",
 ]

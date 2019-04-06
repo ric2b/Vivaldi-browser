@@ -7,6 +7,7 @@
 #include "base/guid.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/utf_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -14,7 +15,6 @@
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller_test.h"
 #include "ios/chrome/browser/ui/settings/personal_data_manager_data_changed_observer.h"
-#import "ios/testing/wait_util.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -72,8 +72,8 @@ TEST_F(AutofillCollectionViewControllerTest, TestInitialization) {
 
   // Expect one header section.
   EXPECT_EQ(1, NumberOfSections());
-  // Expect header section to contain two rows.
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
+  // Expect header section to contain one row.
+  EXPECT_EQ(1, NumberOfItemsInSection(0));
 }
 
 // Adding a single address results in an address section.
@@ -82,8 +82,8 @@ TEST_F(AutofillCollectionViewControllerTest, TestOneProfile) {
   CreateController();
   // Expect two sections (header and addresses section).
   EXPECT_EQ(2, NumberOfSections());
-  // Expect header section to contain two rows.
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
+  // Expect header section to contain one row.
+  EXPECT_EQ(1, NumberOfItemsInSection(0));
   // Expect address section to contain 1 row (the address itself).
   EXPECT_EQ(1, NumberOfItemsInSection(1));
 }
@@ -101,14 +101,14 @@ TEST_F(AutofillCollectionViewControllerTest, TestOneCreditCard) {
                          base::ASCIIToUTF16("Alan Smithee"));
   credit_card.SetRawInfo(autofill::CREDIT_CARD_NUMBER,
                          base::ASCIIToUTF16("378282246310005"));
-  personal_data_manager->SaveImportedCreditCard(credit_card);
+  personal_data_manager->OnAcceptedLocalCreditCardSave(credit_card);
   observer.Wait();  // Wait for completion of the asynchronous operation.
 
   CreateController();
   // Expect two sections (header and credit card section).
   EXPECT_EQ(2, NumberOfSections());
-  // Expect header section to contain two rows.
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
+  // Expect header section to contain one row.
+  EXPECT_EQ(1, NumberOfItemsInSection(0));
   // Expect credit card section to contain 1 row (the credit card itself).
   EXPECT_EQ(1, NumberOfItemsInSection(1));
 }
@@ -119,8 +119,8 @@ TEST_F(AutofillCollectionViewControllerTest, TestOneProfileItemDeleted) {
   CreateController();
   // Expect two sections (header and addresses section).
   EXPECT_EQ(2, NumberOfSections());
-  // Expect header section to contain two rows.
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
+  // Expect header section to contain one row.
+  EXPECT_EQ(1, NumberOfItemsInSection(0));
   // Expect address section to contain 1 row (the address itself).
   EXPECT_EQ(1, NumberOfItemsInSection(1));
 
@@ -136,8 +136,8 @@ TEST_F(AutofillCollectionViewControllerTest, TestOneProfileItemDeleted) {
     this->DeleteItem(i, j, ^{
       completion_called = YES;
     });
-    EXPECT_TRUE(testing::WaitUntilConditionOrTimeout(
-        testing::kWaitForUIElementTimeout, ^bool() {
+    EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+        base::test::ios::kWaitForUIElementTimeout, ^bool() {
           return completion_called;
         }));
   };
@@ -156,8 +156,10 @@ TEST_F(AutofillCollectionViewControllerTest, TestOneProfileItemDeleted) {
   [view_controller editButtonPressed];
 
   // Verify the resulting UI.
+  // Expect one header section.
   EXPECT_EQ(1, NumberOfSections());
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
+  // Expect header section to contain one row.
+  EXPECT_EQ(1, NumberOfItemsInSection(0));
 }
 
 }  // namespace

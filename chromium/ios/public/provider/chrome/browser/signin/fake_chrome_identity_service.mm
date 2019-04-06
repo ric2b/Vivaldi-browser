@@ -192,7 +192,6 @@ void FakeChromeIdentityService::ForgetIdentity(
 void FakeChromeIdentityService::GetAccessToken(
     ChromeIdentity* identity,
     const std::string& client_id,
-    const std::string& client_secret,
     const std::set<std::string>& scopes,
     ios::AccessTokenCallback callback) {
   ios::AccessTokenCallback safe_callback = [callback copy];
@@ -253,7 +252,9 @@ void FakeChromeIdentityService::AddIdentities(NSArray* identitiesNames) {
 }
 
 void FakeChromeIdentityService::AddIdentity(ChromeIdentity* identity) {
-  [identities_ addObject:identity];
+  if (![identities_ containsObject:identity]) {
+    [identities_ addObject:identity];
+  }
   FireIdentityListChanged();
 }
 

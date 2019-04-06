@@ -10,6 +10,8 @@
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "components/signin/core/browser/profile_management_switches.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "google_apis/gaia/gaia_urls.h"
 
@@ -21,55 +23,81 @@ DiceTabHelper::DiceTabHelper(content::WebContents* web_contents)
 DiceTabHelper::~DiceTabHelper() = default;
 
 void DiceTabHelper::InitializeSigninFlow(
+    const GURL& signin_url,
     signin_metrics::AccessPoint access_point,
-    signin_metrics::Reason reason) {
+    signin_metrics::Reason reason,
+    signin_metrics::PromoAction promo_action) {
+  DCHECK(signin_url.is_valid());
+  DCHECK(signin_url_.is_empty() || signin_url_ == signin_url);
+
+  // The signin page must be loading.
+  DCHECK(web_contents()->GetController().GetPendingEntry());
+  DCHECK_EQ(signin_url,
+            web_contents()->GetController().GetPendingEntry()->GetURL());
+
+  signin_url_ = signin_url;
   signin_access_point_ = access_point;
   signin_reason_ = reason;
-  should_start_sync_after_web_signin_ = true;
-  did_finish_loading_signin_page_ = false;
+  signin_promo_action_ = promo_action;
+  is_chrome_signin_page_ = true;
+  signin_page_load_recorded_ = false;
 
-  if (signin_reason_ == signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT) {
-    signin_metrics::LogSigninAccessPointStarted(access_point);
-    signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
+  if (reason == signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT) {
+    signin_metrics::LogSigninAccessPointStarted(access_point, promo_action);
+    signin_metrics::RecordSigninUserActionForAccessPoint(access_point,
+                                                         promo_action);
     base::RecordAction(base::UserMetricsAction("Signin_SigninPage_Loading"));
   }
 }
 
+bool DiceTabHelper::IsChromeSigninPage() const {
+  return is_chrome_signin_page_;
+}
+
 void DiceTabHelper::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (signin::GetAccountConsistencyMethod() !=
-      signin::AccountConsistencyMethod::kDicePrepareMigration) {
-    // Chrome relies on a Gaia signal to enable Chrome sync for all DICE methods
-    // different than prepare migration.
+  if (!is_chrome_signin_page_)
+    return;
+
+  // Ignore internal navigations.
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsSameDocument()) {
     return;
   }
 
-  if (!should_start_sync_after_web_signin_)
-    return;
-
-  if (!navigation_handle->IsInMainFrame()) {
-    VLOG(1) << "Ignore subframe navigation to " << navigation_handle->GetURL();
-    return;
-  }
-  if (navigation_handle->GetURL().GetOrigin() !=
-      GaiaUrls::GetInstance()->gaia_url()) {
-    VLOG(1) << "Avoid starting sync after a user navigation to "
-            << navigation_handle->GetURL()
-            << " which is outside of Gaia domain ("
-            << GaiaUrls::GetInstance()->gaia_url() << ")";
-    should_start_sync_after_web_signin_ = false;
-    return;
+  if (!IsSigninPageNavigation(navigation_handle)) {
+    // Navigating away from the signin page.
+    is_chrome_signin_page_ = false;
   }
 }
 
-void DiceTabHelper::DidFinishLoad(content::RenderFrameHost* render_frame_host,
-                                  const GURL& validated_url) {
-  if (!should_start_sync_after_web_signin_ || did_finish_loading_signin_page_)
+void DiceTabHelper::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!is_chrome_signin_page_)
     return;
 
-  if (validated_url.GetOrigin() == GaiaUrls::GetInstance()->gaia_url()) {
-    VLOG(1) << "Finished loading sign-in page: " << validated_url.spec();
-    did_finish_loading_signin_page_ = true;
+  // Ignore internal navigations.
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsSameDocument()) {
+    return;
+  }
+
+  if (!IsSigninPageNavigation(navigation_handle)) {
+    // Navigating away from the signin page.
+    is_chrome_signin_page_ = false;
+    return;
+  }
+
+  if (!signin_page_load_recorded_) {
+    signin_page_load_recorded_ = true;
     base::RecordAction(base::UserMetricsAction("Signin_SigninPage_Shown"));
   }
+}
+
+bool DiceTabHelper::IsSigninPageNavigation(
+    content::NavigationHandle* navigation_handle) const {
+  return !navigation_handle->IsErrorPage() &&
+         navigation_handle->GetRedirectChain()[0] == signin_url_ &&
+         navigation_handle->GetURL().GetOrigin() ==
+             GaiaUrls::GetInstance()->gaia_url();
 }

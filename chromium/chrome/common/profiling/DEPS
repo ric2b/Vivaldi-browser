@@ -1,4 +1,0 @@
-include_rules = [
-  "+mojo/edk/embedder",
-  "+services/service_manager/public/cpp",
-]

@@ -26,8 +26,14 @@ namespace wm {
 // A view that mirrors the client area of a single window.
 class WindowMirrorView : public views::View {
  public:
-  WindowMirrorView(aura::Window* window, bool trilinear_filtering);
+  WindowMirrorView(aura::Window* window, bool trilinear_filtering_on_init);
   ~WindowMirrorView() override;
+
+  // Returns the |target_| window.
+  aura::Window* target() { return target_; }
+
+  // Recreates |layer_owner_|.
+  void RecreateMirrorLayers();
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override;

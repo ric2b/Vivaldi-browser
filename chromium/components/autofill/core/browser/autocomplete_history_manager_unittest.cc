@@ -42,7 +42,7 @@ class MockWebDataService : public AutofillWebDataService {
   MOCK_METHOD1(AddFormFields, void(const std::vector<FormFieldData>&));
 
  protected:
-  virtual ~MockWebDataService() {}
+  ~MockWebDataService() override {}
 };
 
 class MockAutofillClient : public TestAutofillClient {
@@ -101,7 +101,7 @@ TEST_F(AutocompleteHistoryManagerTest, CreditCardNumberValue) {
   valid_cc.form_control_type = "text";
   form.fields.push_back(valid_cc);
 
-  EXPECT_CALL(*web_data_service_.get(), AddFormFields(_)).Times(0);
+  EXPECT_CALL(*web_data_service_, AddFormFields(_)).Times(0);
   autocomplete_manager_->OnWillSubmitForm(form);
 }
 
@@ -140,7 +140,7 @@ TEST_F(AutocompleteHistoryManagerTest, SSNValue) {
   ssn.form_control_type = "text";
   form.fields.push_back(ssn);
 
-  EXPECT_CALL(*web_data_service_.get(), AddFormFields(_)).Times(0);
+  EXPECT_CALL(*web_data_service_, AddFormFields(_)).Times(0);
   autocomplete_manager_->OnWillSubmitForm(form);
 }
 
@@ -182,7 +182,49 @@ TEST_F(AutocompleteHistoryManagerTest, FieldWithAutocompleteOff) {
   field.should_autocomplete = false;
   form.fields.push_back(field);
 
-  EXPECT_CALL(*web_data_service_.get(), AddFormFields(_)).Times(0);
+  EXPECT_CALL(*web_data_service_, AddFormFields(_)).Times(0);
+  autocomplete_manager_->OnWillSubmitForm(form);
+}
+
+// Tests that text entered into fields that are not focusable is not sent to the
+// WebDatabase to be saved.
+TEST_F(AutocompleteHistoryManagerTest, NonFocusableField) {
+  FormData form;
+  form.name = ASCIIToUTF16("MyForm");
+  form.origin = GURL("http://myform.com/form.html");
+  form.action = GURL("http://myform.com/submit.html");
+
+  // Unfocusable field.
+  FormFieldData field;
+  field.label = ASCIIToUTF16("Something esoteric");
+  field.name = ASCIIToUTF16("esoterica");
+  field.value = ASCIIToUTF16("a truly esoteric value, I assure you");
+  field.form_control_type = "text";
+  field.is_focusable = false;
+  form.fields.push_back(field);
+
+  EXPECT_CALL(*web_data_service_, AddFormFields(_)).Times(0);
+  autocomplete_manager_->OnWillSubmitForm(form);
+}
+
+// Tests that text entered into presentation fields is not sent to the
+// WebDatabase to be saved.
+TEST_F(AutocompleteHistoryManagerTest, PresentationField) {
+  FormData form;
+  form.name = ASCIIToUTF16("MyForm");
+  form.origin = GURL("http://myform.com/form.html");
+  form.action = GURL("http://myform.com/submit.html");
+
+  // Presentation field.
+  FormFieldData field;
+  field.label = ASCIIToUTF16("Something esoteric");
+  field.name = ASCIIToUTF16("esoterica");
+  field.value = ASCIIToUTF16("a truly esoteric value, I assure you");
+  field.form_control_type = "text";
+  field.role = FormFieldData::ROLE_ATTRIBUTE_PRESENTATION;
+  form.fields.push_back(field);
+
+  EXPECT_CALL(*web_data_service_, AddFormFields(_)).Times(0);
   autocomplete_manager_->OnWillSubmitForm(form);
 }
 
@@ -193,11 +235,12 @@ class MockAutofillExternalDelegate : public AutofillExternalDelegate {
   MockAutofillExternalDelegate(AutofillManager* autofill_manager,
                                AutofillDriver* autofill_driver)
       : AutofillExternalDelegate(autofill_manager, autofill_driver) {}
-  virtual ~MockAutofillExternalDelegate() {}
+  ~MockAutofillExternalDelegate() override {}
 
-  MOCK_METHOD3(OnSuggestionsReturned,
+  MOCK_METHOD4(OnSuggestionsReturned,
                void(int query_id,
                     const std::vector<Suggestion>& suggestions,
+                    bool autoselect_first_suggestion,
                     bool is_all_server_suggestions));
 
  private:
@@ -233,7 +276,7 @@ TEST_F(AutocompleteHistoryManagerTest, ExternalDelegate) {
   autocomplete_history_manager.SetExternalDelegate(&external_delegate);
 
   // Should trigger a call to OnSuggestionsReturned, verified by the mock.
-  EXPECT_CALL(external_delegate, OnSuggestionsReturned(_, _, _));
+  EXPECT_CALL(external_delegate, OnSuggestionsReturned(_, _, _, _));
   autocomplete_history_manager.SendSuggestions(nullptr);
 }
 
@@ -258,9 +301,9 @@ TEST_F(AutocompleteHistoryManagerTest, NoAutocompleteSuggestionsForTextarea) {
   FormFieldData field;
   test::CreateTestFormField("Address", "address", "", "textarea", &field);
 
-  EXPECT_CALL(
-      external_delegate,
-      OnSuggestionsReturned(0, testing::Truly(IsEmptySuggestionVector), _));
+  EXPECT_CALL(external_delegate,
+              OnSuggestionsReturned(0, testing::Truly(IsEmptySuggestionVector),
+                                    false, _));
   autocomplete_history_manager.OnGetAutocompleteSuggestions(
       0,
       field.name,

@@ -26,13 +26,22 @@ class ASH_EXPORT FrameCaptionButton : public views::Button {
  public:
   enum Animate { ANIMATE_YES, ANIMATE_NO };
 
+  enum class ColorMode {
+    kDefault,  // Most windows.
+    kThemed,   // Windows that have been themed by PWA manifest.
+  };
+
   static const char kViewClassName[];
 
   FrameCaptionButton(views::ButtonListener* listener, CaptionButtonIcon icon);
   ~FrameCaptionButton() override;
 
-  // Gets the color to use for a frame caption button.
-  static SkColor GetButtonColor(bool use_light_images);
+  // Gets the color to use for a frame caption button while a theme color is
+  // set.
+  static SkColor GetButtonColor(ColorMode color_mode, SkColor background_color);
+
+  // Gets the alpha ratio for the colors of inactive frame caption buttons.
+  static float GetInactiveButtonColorAlphaRatio();
 
   // Sets the image to use to paint the button. If |animate| is ANIMATE_YES,
   // the button crossfades to the new visuals. If the image matches the one
@@ -54,13 +63,25 @@ class ASH_EXPORT FrameCaptionButton : public views::Button {
   void OnGestureEvent(ui::GestureEvent* event) override;
   views::PaintInfo::ScaleType GetPaintScaleType() const override;
 
+  // views::InkDropHostView:
+  std::unique_ptr<views::InkDrop> CreateInkDrop() override;
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
+
+  void SetBackgroundColor(SkColor background_color);
+  void SetColorMode(ColorMode color_mode);
+
   void set_paint_as_active(bool paint_as_active) {
     paint_as_active_ = paint_as_active;
   }
 
-  void set_use_light_images(bool light) { use_light_images_ = light; }
+  bool paint_as_active() { return paint_as_active_; }
 
   CaptionButtonIcon icon() const { return icon_; }
+
+  const gfx::VectorIcon* icon_definition_for_test() const {
+    return icon_definition_;
+  }
 
  protected:
   // views::Button override:
@@ -71,14 +92,19 @@ class ASH_EXPORT FrameCaptionButton : public views::Button {
   // active state.
   int GetAlphaForIcon(int base_alpha) const;
 
+  void UpdateInkDropBaseColor();
+
   // The button's current icon.
   CaptionButtonIcon icon_;
 
+  // The current background color.
+  SkColor background_color_;
+
+  // The algorithm to determine button colors.
+  ColorMode color_mode_;
+
   // Whether the button should be painted as active.
   bool paint_as_active_;
-
-  // Whether to paint in a lighter color (for use on dark backgrounds).
-  bool use_light_images_;
 
   // Current alpha to use for painting.
   int alpha_;

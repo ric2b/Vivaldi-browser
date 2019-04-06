@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
 #import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/view_resizer_pong.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
@@ -179,9 +180,10 @@ class BookmarkBarFolderControllerTest : public CocoaProfileTest {
     [bar_ loaded:model];
     // Make parent frame for bookmark bar then open it.
     NSRect frame = [[test_window() contentView] frame];
-    frame = NSMakeRect(frame.origin.x,
-                       frame.size.height - chrome::kNTPBookmarkBarHeight,
-                       frame.size.width, chrome::kNTPBookmarkBarHeight);
+    frame = NSMakeRect(
+        frame.origin.x,
+        frame.size.height - GetCocoaLayoutConstant(BOOKMARK_BAR_NTP_HEIGHT),
+        frame.size.width, GetCocoaLayoutConstant(BOOKMARK_BAR_NTP_HEIGHT));
     NSView* fakeToolbarView = [[[NSView alloc] initWithFrame:frame]
                                 autorelease];
     [[test_window() contentView] addSubview:fakeToolbarView];
@@ -1419,6 +1421,34 @@ TEST_F(BookmarkBarFolderControllerMenuTest, ActOnEmptyMenu) {
   [bbfc mouseEnteredButton:button event:nil];
 
   EXPECT_TRUE([bbfc handleInputText:@" "]);
+}
+
+// Tests that sending enter key event to the nested folder opens
+// submenu for it. https://crbug.com/791962
+TEST_F(BookmarkBarFolderControllerMenuTest, ActOnNestedFolder) {
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile());
+  const BookmarkNode* root = model->bookmark_bar_node();
+  const BookmarkNode* folder =
+      model->AddFolder(root, root->child_count(), ASCIIToUTF16("folder"));
+  ASSERT_TRUE(folder);
+
+  const BookmarkNode* nested_folder =
+      model->AddFolder(folder, folder->child_count(), ASCIIToUTF16("nested"));
+  ASSERT_TRUE(nested_folder);
+
+  BookmarkButton* button = [bar_ buttonWithTitleEqualTo:@"folder"];
+  [[button target] performSelector:@selector(openBookmarkFolderFromButton:)
+                        withObject:button];
+
+  BookmarkBarFolderController* bbfc = [bar_ folderController];
+  NSArray* buttons = [bbfc buttons];
+  ASSERT_EQ(1u, [buttons count]);
+
+  button = [buttons objectAtIndex:0];
+  [bbfc mouseEnteredButton:button event:nil];
+
+  // It musn't be closed.
+  EXPECT_FALSE([bbfc handleInputText:@" "]);
 }
 
 // Just like a BookmarkBarFolderController but intercedes when providing

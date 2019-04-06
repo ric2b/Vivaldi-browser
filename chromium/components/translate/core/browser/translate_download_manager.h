@@ -13,12 +13,11 @@
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_script.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace base {
 template <typename T> struct DefaultSingletonTraits;
 }
-
-class PrefService;
 
 namespace translate {
 
@@ -29,15 +28,14 @@ class TranslateDownloadManager {
   // Returns the singleton instance.
   static TranslateDownloadManager* GetInstance();
 
-  // The request context used to download the resources.
+  // The URL loader factory used to download the resources.
   // Should be set before this class can be used.
-  net::URLRequestContextGetter* request_context() {
-    DCHECK(sequence_checker_.CalledOnValidSequence());
-    return request_context_.get();
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory() {
+    return url_loader_factory_;
   }
-  void set_request_context(net::URLRequestContextGetter* context) {
-    DCHECK(sequence_checker_.CalledOnValidSequence());
-    request_context_ = context;
+  void set_url_loader_factory(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+    url_loader_factory_ = std::move(url_loader_factory);
   }
 
   // The application locale.
@@ -62,11 +60,6 @@ class TranslateDownloadManager {
     DCHECK(sequence_checker_.CalledOnValidSequence());
     return script_.get();
   }
-
-  // Let the caller decide if and when we should fetch the language list from
-  // the translate server. This is a NOOP if prefs::kOfferTranslateEnabled is
-  // set to false.
-  static void RequestLanguageList(PrefService* prefs);
 
   // Fills |languages| with the list of languages that the translate server can
   // translate to and from. May cause a language list request unless
@@ -116,7 +109,7 @@ class TranslateDownloadManager {
   std::unique_ptr<TranslateScript> script_;
 
   std::string application_locale_;
-  scoped_refptr<net::URLRequestContextGetter> request_context_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 };
 
 }  // namespace translate

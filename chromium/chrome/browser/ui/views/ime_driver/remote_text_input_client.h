@@ -42,6 +42,7 @@ class RemoteTextInputClient : public ui::TextInputClient,
   bool GetCompositionCharacterBounds(uint32_t index,
                                      gfx::Rect* rect) const override;
   bool HasCompositionText() const override;
+  FocusReason GetFocusReason() const override;
   bool GetTextRange(gfx::Range* range) const override;
   bool GetCompositionTextRange(gfx::Range* range) const override;
   bool GetSelectionRange(gfx::Range* range) const override;
@@ -56,7 +57,8 @@ class RemoteTextInputClient : public ui::TextInputClient,
   void EnsureCaretNotInRect(const gfx::Rect& rect) override;
   bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
   void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
-  const std::string& GetClientSourceInfo() const override;
+  ukm::SourceId GetClientSourceForMetrics() const override;
+  bool ShouldDoLearning() override;
 
   // ui::internal::InputMethodDelegate:
   ui::EventDispatchDetails DispatchKeyEventPostIME(

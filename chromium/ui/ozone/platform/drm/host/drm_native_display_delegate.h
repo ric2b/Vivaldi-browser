@@ -25,26 +25,25 @@ class DrmNativeDisplayDelegate : public display::NativeDisplayDelegate {
 
   // display::NativeDisplayDelegate overrides:
   void Initialize() override;
-  void TakeDisplayControl(
-      const display::DisplayControlCallback& callback) override;
+  void TakeDisplayControl(display::DisplayControlCallback callback) override;
   void RelinquishDisplayControl(
-      const display::DisplayControlCallback& callback) override;
-  void GetDisplays(const display::GetDisplaysCallback& callback) override;
+      display::DisplayControlCallback callback) override;
+  void GetDisplays(display::GetDisplaysCallback callback) override;
   void Configure(const display::DisplaySnapshot& output,
                  const display::DisplayMode* mode,
                  const gfx::Point& origin,
-                 const display::ConfigureCallback& callback) override;
+                 display::ConfigureCallback callback) override;
   void GetHDCPState(const display::DisplaySnapshot& output,
-                    const display::GetHDCPStateCallback& callback) override;
+                    display::GetHDCPStateCallback callback) override;
   void SetHDCPState(const display::DisplaySnapshot& output,
                     display::HDCPState state,
-                    const display::SetHDCPStateCallback& callback) override;
-  bool SetColorCorrection(
-      const display::DisplaySnapshot& output,
+                    display::SetHDCPStateCallback callback) override;
+  bool SetColorMatrix(int64_t display_id,
+                      const std::vector<float>& color_matrix) override;
+  bool SetGammaCorrection(
+      int64_t display_id,
       const std::vector<display::GammaRampRGBEntry>& degamma_lut,
-      const std::vector<display::GammaRampRGBEntry>& gamma_lut,
-      const std::vector<float>& correction_matrix) override;
-
+      const std::vector<display::GammaRampRGBEntry>& gamma_lut) override;
   void AddObserver(display::NativeDisplayObserver* observer) override;
   void RemoveObserver(display::NativeDisplayObserver* observer) override;
   display::FakeDisplayController* GetFakeDisplayController() override;

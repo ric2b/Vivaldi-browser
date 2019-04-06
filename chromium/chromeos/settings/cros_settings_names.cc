@@ -306,4 +306,19 @@ const char kUnaffiliatedArcAllowed[] = "cros.device.unaffiliated_arc_allowed";
 // as per RFC 1035, then no hostname will be used.
 const char kDeviceHostnameTemplate[] = "cros.network.hostname_template";
 
+// A boolean pref that indicates whether running virtual machines on Chrome OS
+// is allowed.
+const char kVirtualMachinesAllowed[] = "cros.device.virtual_machines_allowed";
+
+// An enum specifying the authentication type for newly added users which log in
+// via SAML. See the SamlLoginAuthenticationTypeProto proto message for the list
+// of possible values.
+const char kSamlLoginAuthenticationType[] =
+    "cros.device.saml_login_authentication_type";
+
+// A list of time intervals during which the admin has disallowed automatic
+// update checks.
+const char kDeviceAutoUpdateTimeRestrictions[] =
+    "cros.system.autoUpdateTimeRestrictions";
+
 }  // namespace chromeos

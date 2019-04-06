@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_test_expectations_parser.h"
@@ -146,6 +147,8 @@ bool GPUTestConfig::OverlapsWith(const GPUTestConfig& config) const {
       build_type_ != kBuildTypeUnknown &&
       (build_type_ & config.build_type_) == 0)
     return false;
+  if (config.api() != kAPIUnknown && api_ != kAPIUnknown && api_ != config.api_)
+    return false;
   return true;
 }
 
@@ -244,15 +247,19 @@ bool GPUTestBotConfig::Matches(const std::string& config_data) const {
 
 bool GPUTestBotConfig::LoadCurrentConfig(const GPUInfo* gpu_info) {
   bool rt;
-  if (gpu_info == NULL) {
+  if (!gpu_info) {
+#if defined(OS_ANDROID)
+    // TODO(zmo): Implement this.
+    rt = false;
+#else
     GPUInfo my_gpu_info;
-    CollectInfoResult result = CollectBasicGraphicsInfo(&my_gpu_info);
-    if (result != kCollectInfoSuccess) {
+    if (!CollectBasicGraphicsInfo(&my_gpu_info)) {
       LOG(ERROR) << "Fail to identify GPU";
       rt = false;
     } else {
       rt = SetGPUInfo(my_gpu_info);
     }
+#endif  // OS_ANDROID
   } else {
     rt = SetGPUInfo(*gpu_info);
   }
@@ -296,4 +303,3 @@ bool GPUTestBotConfig::GpuBlacklistedOnBot() {
 }
 
 }  // namespace gpu
-

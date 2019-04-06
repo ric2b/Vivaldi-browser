@@ -51,7 +51,6 @@ using content::BrowserThread;
 namespace extensions {
 class ExtensionRegistry;
 
-namespace storage = api::storage;
 
 namespace {
 
@@ -173,9 +172,8 @@ void ManagedValueStoreCache::ExtensionTracker::LoadSchemas(
   }
 
   GetExtensionFileTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&ExtensionTracker::LoadSchemasOnFileTaskRunner,
-                     base::Passed(&added), weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&ExtensionTracker::LoadSchemasOnFileTaskRunner,
+                                std::move(added), weak_factory_.GetWeakPtr()));
 }
 
 bool ManagedValueStoreCache::ExtensionTracker::UsesManagedStorage(
@@ -327,7 +325,7 @@ void ManagedValueStoreCache::OnPolicyUpdated(const policy::PolicyNamespace& ns,
   GetBackendTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&ManagedValueStoreCache::UpdatePolicyOnBackend,
                                 base::Unretained(this), ns.component_id,
-                                base::Passed(current.DeepCopy())));
+                                current.DeepCopy()));
 }
 
 // static

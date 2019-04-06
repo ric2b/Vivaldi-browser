@@ -6,13 +6,16 @@
 #define UI_GFX_COLOR_SPACE_H_
 
 #include <stdint.h>
+
 #include <ostream>
+#include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/gfx/color_space_export.h"
 
 namespace IPC {
@@ -56,6 +59,9 @@ class COLOR_SPACE_EXPORT ColorSpace {
   enum class TransferID : uint8_t {
     INVALID,
     BT709,
+    // On macOS, BT709 hardware decoded video frames, when displayed as
+    // overlays, will have a transfer function of gamma=1.961.
+    BT709_APPLE,
     GAMMA18,
     GAMMA22,
     GAMMA24,
@@ -123,6 +129,7 @@ class COLOR_SPACE_EXPORT ColorSpace {
              const SkColorSpaceTransferFn& fn,
              MatrixID matrix,
              RangeID full_range);
+  explicit ColorSpace(const SkColorSpace& sk_color_space);
   ColorSpace(const ColorSpace& other);
   ColorSpace(ColorSpace&& other);
   ColorSpace& operator=(const ColorSpace& other);
@@ -147,10 +154,14 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // for all real values.
   static ColorSpace CreateSCRGBLinear();
 
-  // TODO: Remove these, and replace with more generic constructors.
+  // TODO(ccameron): Remove these, and replace with more generic constructors.
   static ColorSpace CreateJpeg();
   static ColorSpace CreateREC601();
   static ColorSpace CreateREC709();
+
+  // Generates a process global unique ID that can be used to key a color space.
+  static int GetNextId();
+  static int kInvalidId;
 
   bool operator==(const ColorSpace& other) const;
   bool operator!=(const ColorSpace& other) const;
@@ -164,13 +175,25 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // Returns true if the encoded values can be outside of the 0.0-1.0 range.
   bool FullRangeEncodedValues() const;
 
+  // Returns true if this color space is parametric (or a sufficiently accurate
+  // approximation of its ICCProfile that we can use it directly).
+  bool IsParametricAccurate() const;
+
   // Return a parametric approximation of this color space (if it is not already
   // parametric).
   ColorSpace GetParametricApproximation() const;
 
+  // Return this color space with any YUV to RGB conversion stripped off.
+  ColorSpace GetAsRGB() const;
+
   // Return this color space with any range adjust or YUV to RGB conversion
   // stripped off.
   ColorSpace GetAsFullRangeRGB() const;
+
+  // Return a color space where all values are bigger/smaller by the given
+  // factor. If you convert colors from SRGB to SRGB.GetScaledColorSpace(2.0)
+  // everything will be half as bright in linear lumens.
+  ColorSpace GetScaledColorSpace(float factor) const;
 
   // If |this| is the final output color space, return the color space that
   // would be appropriate for rasterization.
@@ -183,6 +206,10 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // This will return nullptr for non-RGB spaces, spaces with non-FULL
   // range, and unspecified spaces.
   sk_sp<SkColorSpace> ToSkColorSpace() const;
+
+  // For YUV color spaces, return the closest SkYUVColorSpace.
+  // Returns true if a close match is found.
+  bool ToSkYUVColorSpace(SkYUVColorSpace* out) const;
 
   void GetPrimaryMatrix(SkMatrix44* to_XYZD50) const;
   bool GetTransferFunction(SkColorSpaceTransferFn* fn) const;

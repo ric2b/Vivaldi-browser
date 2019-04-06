@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/surface_aggregator.h"
+#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
@@ -34,18 +37,28 @@ constexpr bool kNeedsSyncPoints = true;
 class SurfaceAggregatorPixelTest : public cc::RendererPixelTest<GLRenderer> {
  public:
   SurfaceAggregatorPixelTest()
-      : support_(std::make_unique<CompositorFrameSinkSupport>(
+      : manager_(&shared_bitmap_manager_),
+        support_(std::make_unique<CompositorFrameSinkSupport>(
             nullptr,
             &manager_,
             kArbitraryRootFrameSinkId,
             kIsRoot,
             kNeedsSyncPoints)) {}
-  ~SurfaceAggregatorPixelTest() override { support_->EvictCurrentSurface(); }
+  ~SurfaceAggregatorPixelTest() override {}
+
+  base::TimeTicks GetNextDisplayTime() {
+    base::TimeTicks display_time = next_display_time_;
+    next_display_time_ += BeginFrameArgs::DefaultInterval();
+    return display_time;
+  }
 
  protected:
+  ServerSharedBitmapManager shared_bitmap_manager_;
   FrameSinkManagerImpl manager_;
   ParentLocalSurfaceIdAllocator allocator_;
   std::unique_ptr<CompositorFrameSinkSupport> support_;
+  base::TimeTicks next_display_time_ =
+      base::TimeTicks() + base::TimeDelta::FromSeconds(1);
 };
 
 SharedQuadState* CreateAndAppendTestSharedQuadState(
@@ -83,13 +96,14 @@ TEST_F(SurfaceAggregatorPixelTest, DrawSimpleFrame) {
   auto root_frame =
       CompositorFrameBuilder().AddRenderPass(std::move(pass)).Build();
 
-  LocalSurfaceId root_local_surface_id = allocator_.GenerateId();
-  SurfaceId root_surface_id(support_->frame_sink_id(), root_local_surface_id);
-  support_->SubmitCompositorFrame(root_local_surface_id, std::move(root_frame));
+  SurfaceId root_surface_id(support_->frame_sink_id(), allocator_.GenerateId());
+  support_->SubmitCompositorFrame(allocator_.GetCurrentLocalSurfaceId(),
+                                  std::move(root_frame));
 
   SurfaceAggregator aggregator(manager_.surface_manager(),
                                resource_provider_.get(), true);
-  CompositorFrame aggregated_frame = aggregator.Aggregate(root_surface_id);
+  CompositorFrame aggregated_frame =
+      aggregator.Aggregate(root_surface_id, GetNextDisplayTime());
 
   bool discard_alpha = false;
   cc::ExactPixelComparator pixel_comparator(discard_alpha);
@@ -161,7 +175,8 @@ TEST_F(SurfaceAggregatorPixelTest, DrawSimpleAggregatedFrame) {
 
   SurfaceAggregator aggregator(manager_.surface_manager(),
                                resource_provider_.get(), true);
-  CompositorFrame aggregated_frame = aggregator.Aggregate(root_surface_id);
+  CompositorFrame aggregated_frame =
+      aggregator.Aggregate(root_surface_id, GetNextDisplayTime());
 
   bool discard_alpha = false;
   cc::ExactPixelComparator pixel_comparator(discard_alpha);
@@ -169,8 +184,6 @@ TEST_F(SurfaceAggregatorPixelTest, DrawSimpleAggregatedFrame) {
   EXPECT_TRUE(RunPixelTest(pass_list,
                            base::FilePath(FILE_PATH_LITERAL("blue_yellow.png")),
                            pixel_comparator));
-
-  child_support->EvictCurrentSurface();
 }
 
 // Tests a surface quad that has a non-identity transform into its pass.
@@ -289,7 +302,8 @@ TEST_F(SurfaceAggregatorPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
 
   SurfaceAggregator aggregator(manager_.surface_manager(),
                                resource_provider_.get(), true);
-  CompositorFrame aggregated_frame = aggregator.Aggregate(root_surface_id);
+  CompositorFrame aggregated_frame =
+      aggregator.Aggregate(root_surface_id, GetNextDisplayTime());
 
   bool discard_alpha = false;
   cc::ExactPixelComparator pixel_comparator(discard_alpha);
@@ -298,9 +312,6 @@ TEST_F(SurfaceAggregatorPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
       pass_list,
       base::FilePath(FILE_PATH_LITERAL("four_blue_green_checkers.png")),
       pixel_comparator));
-
-  left_support->EvictCurrentSurface();
-  right_support->EvictCurrentSurface();
 }
 
 }  // namespace

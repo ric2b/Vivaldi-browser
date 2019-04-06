@@ -6,8 +6,10 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <vector>
 
+#include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,7 +31,6 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_urls.h"
 #include "net/base/url_util.h"
-#include "ui/app_list/app_list_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -51,13 +52,14 @@ WebstoreResult::WebstoreResult(Profile* profile,
       extension_registry_(NULL),
       weak_factory_(this) {
   set_id(GetResultIdFromExtensionId(app_id));
-
+  SetResultType(ash::SearchResultType::kWebStoreSearch);
   SetDefaultDetails();
 
   InitAndStartObserving();
   UpdateActions();
 
-  int icon_dimension = GetPreferredIconDimension(this);
+  int icon_dimension =
+      AppListConfig::instance().GetPreferredIconDimension(display_type());
   icon_ = gfx::ImageSkia(
       std::make_unique<UrlIconSource>(
           base::Bind(&WebstoreResult::OnIconLoaded, weak_factory_.GetWeakPtr()),
@@ -84,9 +86,7 @@ void WebstoreResult::Open(int event_flags) {
       extension_urls::kWebstoreSourceField,
       extension_urls::kLaunchSourceAppListSearch);
 
-  controller_->OpenURL(profile_,
-                       store_url,
-                       ui::PAGE_TRANSITION_LINK,
+  controller_->OpenURL(profile_, store_url, ui::PAGE_TRANSITION_LINK,
                        ui::DispositionFromEventFlags(event_flags));
 }
 
@@ -99,15 +99,6 @@ void WebstoreResult::InvokeAction(int action_index, int event_flags) {
   }
 
   StartInstall();
-}
-
-std::unique_ptr<SearchResult> WebstoreResult::Duplicate() const {
-  std::unique_ptr<SearchResult> copy(new WebstoreResult(
-      profile_, app_id_, icon_url_, is_paid_, item_type_, controller_));
-  copy->set_title(title());
-  copy->set_title_tags(title_tags());
-  copy->set_relevance(relevance());
-  return copy;
 }
 
 void WebstoreResult::InitAndStartObserving() {
@@ -149,10 +140,10 @@ void WebstoreResult::SetDefaultDetails() {
   const base::string16 details =
       l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE);
   Tags details_tags;
-  details_tags.push_back(Tag(SearchResult::Tag::DIM, 0, details.length()));
+  details_tags.push_back(Tag(ash::SearchResultTag::DIM, 0, details.length()));
 
-  set_details(details);
-  set_details_tags(details_tags);
+  SetDetails(details);
+  SetDetailsTags(details_tags);
 }
 
 void WebstoreResult::OnIconLoaded() {
@@ -173,13 +164,9 @@ void WebstoreResult::StartInstall() {
   SetPercentDownloaded(0);
   SetIsInstalling(true);
 
-  scoped_refptr<WebstoreInstaller> installer =
-      new WebstoreInstaller(
-          app_id_,
-          profile_,
-          controller_->GetAppListWindow(),
-          base::Bind(&WebstoreResult::InstallCallback,
-                     weak_factory_.GetWeakPtr()));
+  scoped_refptr<WebstoreInstaller> installer = new WebstoreInstaller(
+      app_id_, profile_,
+      base::Bind(&WebstoreResult::InstallCallback, weak_factory_.GetWeakPtr()));
   installer->BeginInstall();
 }
 

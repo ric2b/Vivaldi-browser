@@ -37,11 +37,12 @@ class ToolbarSceneLayer : public SceneLayer {
       jint toolbar_background_color,
       jint url_bar_resource_id,
       jfloat url_bar_alpha,
+      jint url_bar_color,
       jfloat y_offset,
       jfloat view_height,
       bool visible,
       bool show_shadow,
-      bool browser_controls_at_bottom);
+      bool modern_design_enabled);
 
   // Update the progress bar.
   void UpdateProgressBar(

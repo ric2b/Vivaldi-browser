@@ -5,17 +5,16 @@
 #include "ios/chrome/browser/ui/ntp/ntp_tile_saver.h"
 
 #include "base/bind.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/md5.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/favicon/core/fallback_url_util.h"
 #include "components/ntp_tiles/ntp_tile.h"
-#import "ios/chrome/browser/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/browser/ui/favicon/favicon_attributes_provider.h"
-#import "ios/chrome/browser/ui/ntp/ntp_tile.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
+#import "ios/chrome/common/favicon/favicon_attributes.h"
+#import "ios/chrome/common/ntp_tile/ntp_tile.h"
 #import "net/base/mac/url_conversions.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -27,17 +26,10 @@ namespace ntp_tile_saver {
 // Write the |most_visited_sites| to disk.
 void WriteSavedMostVisited(NSDictionary<NSURL*, NTPTile*>* most_visited_sites);
 
-// Returns the path for the temporary favicon folder.
-NSURL* GetTemporaryFaviconFolderPath();
-
-// Replaces the current saved favicons at |favicons_folder| by the contents of
-// the tmp folder.
-void ReplaceSavedFavicons(NSURL* favicons_folder);
-
 // Checks if every site in |tiles| has had its favicons fetched. If so, writes
-// the info to disk, saving the favicons to |favicons_folder|.
+// the info to disk, saving the favicons to |favicons_directory|.
 void WriteToDiskIfComplete(NSDictionary<NSURL*, NTPTile*>* tiles,
-                           NSURL* favicons_folder);
+                           NSURL* favicons_directory);
 
 // Gets a name for the favicon file.
 NSString* GetFaviconFileName(const GURL& url);
@@ -46,77 +38,47 @@ NSString* GetFaviconFileName(const GURL& url);
 // |tile|.
 void WriteSingleUpdatedTileToDisk(NTPTile* tile);
 
-// Empty the temporary favicon folder.
-void ClearTemporaryFaviconFolder();
-
 // Get the favicons using |favicon_provider| and writes them to disk.
 void GetFaviconsAndSave(const ntp_tiles::NTPTilesVector& most_visited_data,
                         FaviconAttributesProvider* favicon_provider,
-                        NSURL* favicons_folder);
+                        NSURL* favicons_directory);
+
+// Updates the list of tiles that must be displayed in the content suggestion
+// widget.
+void UpdateTileList(const ntp_tiles::NTPTilesVector& most_visited_data);
+
+// Deletes icons contained in |favicons_directory| and corresponding to no URL
+// in |most_visited_data|.
+void ClearOutdatedIcons(const ntp_tiles::NTPTilesVector& most_visited_data,
+                        NSURL* favicons_directory);
 
 }  // namespace ntp_tile_saver
 
 namespace ntp_tile_saver {
 
-NSURL* GetTemporaryFaviconFolderPath() {
-  return [[NSURL fileURLWithPath:NSTemporaryDirectory()]
-      URLByAppendingPathComponent:@"tmpFaviconFolder"];
-}
-
-void ReplaceSavedFavicons(NSURL* favicons_folder) {
-  base::AssertBlockingAllowed();
-  if ([[NSFileManager defaultManager]
-          fileExistsAtPath:[favicons_folder path]]) {
-    [[NSFileManager defaultManager] removeItemAtURL:favicons_folder error:nil];
-  }
-
-  if ([[NSFileManager defaultManager]
-          fileExistsAtPath:[GetTemporaryFaviconFolderPath() path]]) {
-    [[NSFileManager defaultManager]
-               createDirectoryAtURL:favicons_folder
-                                        .URLByDeletingLastPathComponent
-        withIntermediateDirectories:YES
-                         attributes:nil
-                              error:nil];
-
-    [[NSFileManager defaultManager]
-        moveItemAtURL:GetTemporaryFaviconFolderPath()
-                toURL:favicons_folder
-                error:nil];
-  }
-}
-
-void WriteToDiskIfComplete(NSDictionary<NSURL*, NTPTile*>* tiles,
-                           NSURL* favicons_folder) {
-  for (NSURL* siteURL : tiles) {
-    NTPTile* tile = [tiles objectForKey:siteURL];
-    if (!tile.faviconFetched) {
-      return;
+void UpdateTileList(const ntp_tiles::NTPTilesVector& most_visited_data) {
+  NSMutableDictionary<NSURL*, NTPTile*>* tiles =
+      [[NSMutableDictionary alloc] init];
+  NSDictionary<NSURL*, NTPTile*>* old_tiles = ReadSavedMostVisited();
+  for (size_t i = 0; i < most_visited_data.size(); i++) {
+    const ntp_tiles::NTPTile& ntp_tile = most_visited_data[i];
+    NSURL* ns_url = net::NSURLWithGURL(ntp_tile.url);
+    NTPTile* tile =
+        [[NTPTile alloc] initWithTitle:base::SysUTF16ToNSString(ntp_tile.title)
+                                   URL:ns_url
+                              position:i];
+    tile.faviconFileName = GetFaviconFileName(ntp_tile.url);
+    NTPTile* old_tile = [old_tiles objectForKey:ns_url];
+    if (old_tile) {
+      // Keep fallback data.
+      tile.fallbackMonogram = old_tile.fallbackMonogram;
+      tile.fallbackTextColor = old_tile.fallbackTextColor;
+      tile.fallbackIsDefaultColor = old_tile.fallbackIsDefaultColor;
+      tile.fallbackBackgroundColor = old_tile.fallbackBackgroundColor;
     }
-    // Any fetched tile must have a file name or a fallback monogram.
-    DCHECK(tile.faviconFileName || tile.fallbackMonogram);
+    [tiles setObject:tile forKey:tile.URL];
   }
-
-  base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::BindBlockArc(^{
-        ReplaceSavedFavicons(favicons_folder);
-      }),
-      base::BindBlockArc(^{
-        WriteSavedMostVisited(tiles);
-      }));
-}
-
-void ClearTemporaryFaviconFolder() {
-  base::AssertBlockingAllowed();
-  NSURL* tmpFaviconURL = GetTemporaryFaviconFolderPath();
-  if ([[NSFileManager defaultManager] fileExistsAtPath:[tmpFaviconURL path]]) {
-    [[NSFileManager defaultManager] removeItemAtURL:tmpFaviconURL error:nil];
-  }
-  [[NSFileManager defaultManager] createDirectoryAtPath:[tmpFaviconURL path]
-                            withIntermediateDirectories:YES
-                                             attributes:nil
-                                                  error:nil];
+  WriteSavedMostVisited(tiles);
 }
 
 NSString* GetFaviconFileName(const GURL& url) {
@@ -126,101 +88,62 @@ NSString* GetFaviconFileName(const GURL& url) {
 
 void GetFaviconsAndSave(const ntp_tiles::NTPTilesVector& most_visited_data,
                         FaviconAttributesProvider* favicon_provider,
-                        NSURL* favicons_folder) {
-  NSMutableDictionary<NSURL*, NTPTile*>* tiles =
-      [[NSMutableDictionary alloc] init];
-
-  // If there are 0 sites to display, the for loop below will not be entered.
-  // Write the updated empty list of sites to disk before returning.
-  if (most_visited_data.empty()) {
-    WriteToDiskIfComplete(tiles, favicons_folder);
-    return;
+                        NSURL* favicons_directory) {
+  for (size_t i = 0; i < most_visited_data.size(); i++) {
+    const GURL& gurl = most_visited_data[i].url;
+    UpdateSingleFavicon(gurl, favicon_provider, favicons_directory);
   }
+}
 
-  // For each site, get the favicon. If it is returned, write it to the
-  // favicon tmp folder. If a fallback value is returned, update the tile
-  // info. Calls WriteToDiskIfComplete after each callback execution. All the
-  // sites are added first to the list so that the WriteToDiskIfComplete
-  // command is not passed an incomplete list.
+void ClearOutdatedIcons(const ntp_tiles::NTPTilesVector& most_visited_data,
+                        NSURL* favicons_directory) {
+  NSMutableSet<NSString*>* allowed_files_name = [[NSMutableSet alloc] init];
   for (size_t i = 0; i < most_visited_data.size(); i++) {
     const ntp_tiles::NTPTile& ntp_tile = most_visited_data[i];
-    NTPTile* tile =
-        [[NTPTile alloc] initWithTitle:base::SysUTF16ToNSString(ntp_tile.title)
-                                   URL:net::NSURLWithGURL(ntp_tile.url)
-                              position:i];
-    [tiles setObject:tile forKey:tile.URL];
+    NSString* favicon_file_name = GetFaviconFileName(ntp_tile.url);
+    [allowed_files_name addObject:favicon_file_name];
   }
-
-  NSURL* tmpFaviconURL = GetTemporaryFaviconFolderPath();
-  for (NTPTile* tile : [tiles objectEnumerator]) {
-    const GURL& gurl = net::GURLWithNSURL(tile.URL);
-    NSString* faviconFileName = GetFaviconFileName(gurl);
-    NSURL* fileURL =
-        [tmpFaviconURL URLByAppendingPathComponent:faviconFileName];
-
-    void (^faviconAttributesBlock)(FaviconAttributes*) =
-        ^(FaviconAttributes* attributes) {
-          if (attributes.faviconImage) {
-            NSData* imageData =
-                UIImagePNGRepresentation(attributes.faviconImage);
-
-            base::OnceCallback<BOOL()> writeImage = base::BindBlockArc(^BOOL() {
-              return [imageData writeToURL:fileURL atomically:YES];
-            });
-
-            base::OnceCallback<void(BOOL)> updateTile =
-                base::BindBlockArc(^(BOOL imageWriteSuccess) {
-                  if (imageWriteSuccess) {
-                    // If saving the image is not possible, the best thing to do
-                    // is to keep the previous tiles.
-                    tile.faviconFetched = YES;
-                    tile.faviconFileName = faviconFileName;
-                    WriteToDiskIfComplete(tiles, favicons_folder);
-                  }
-                });
-
-            base::PostTaskWithTraitsAndReplyWithResult(
-                FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-                std::move(writeImage), std::move(updateTile));
-          } else {
-            tile.faviconFetched = YES;
-            tile.fallbackTextColor = attributes.textColor;
-            tile.fallbackBackgroundColor = attributes.backgroundColor;
-            tile.fallbackIsDefaultColor = attributes.defaultBackgroundColor;
-            tile.fallbackMonogram = attributes.monogramString;
-            DCHECK(tile.fallbackMonogram && tile.fallbackTextColor &&
-                   tile.fallbackBackgroundColor);
-            WriteToDiskIfComplete(tiles, favicons_folder);
-          }
-        };
-    // The cache is not used here as it is simply a way to have a synchronous
-    // immediate return. In this case it is unnecessary.
-
-    [favicon_provider fetchFaviconAttributesForURL:gurl
-                                        completion:faviconAttributesBlock];
+  [[NSFileManager defaultManager] createDirectoryAtURL:favicons_directory
+                           withIntermediateDirectories:YES
+                                            attributes:nil
+                                                 error:nil];
+  NSArray<NSURL*>* existing_files = [[NSFileManager defaultManager]
+        contentsOfDirectoryAtURL:favicons_directory
+      includingPropertiesForKeys:nil
+                         options:0
+                           error:nil];
+  for (NSURL* file : existing_files) {
+    if (![allowed_files_name containsObject:[file lastPathComponent]]) {
+      [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
+    }
   }
 }
 
 void SaveMostVisitedToDisk(const ntp_tiles::NTPTilesVector& most_visited_data,
                            FaviconAttributesProvider* favicon_provider,
-                           NSURL* favicons_folder) {
-  if (favicons_folder == nil) {
+                           NSURL* favicons_directory) {
+  if (favicons_directory == nil) {
     return;
   }
+  UpdateTileList(most_visited_data);
 
   base::PostTaskWithTraitsAndReply(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::BindOnce(&ClearTemporaryFaviconFolder),
-      base::Bind(base::BindBlockArc(
-                     ^(const ntp_tiles::NTPTilesVector& most_visited_data) {
-                       GetFaviconsAndSave(most_visited_data, favicon_provider,
-                                          favicons_folder);
-                     }),
-                 most_visited_data));
+      base::BindOnce(&ClearOutdatedIcons, most_visited_data,
+                     favicons_directory),
+      base::BindOnce(
+          ^(const ntp_tiles::NTPTilesVector& most_visited_data) {
+            GetFaviconsAndSave(most_visited_data, favicon_provider,
+                               favicons_directory);
+          },
+          most_visited_data));
 }
 
 void WriteSingleUpdatedTileToDisk(NTPTile* tile) {
   NSMutableDictionary* tiles = [ReadSavedMostVisited() mutableCopy];
+  if (![tiles objectForKey:tile.URL]) {
+    return;
+  }
   [tiles setObject:tile forKey:tile.URL];
   WriteSavedMostVisited(tiles);
 }
@@ -244,79 +167,57 @@ NSDictionary* ReadSavedMostVisited() {
 
 void UpdateSingleFavicon(const GURL& site_url,
                          FaviconAttributesProvider* favicon_provider,
-                         NSURL* favicons_folder) {
-  NSDictionary* tiles = ReadSavedMostVisited();
-
+                         NSURL* favicons_directory) {
   NSURL* siteNSURL = net::NSURLWithGURL(site_url);
-  NTPTile* tile = [tiles objectForKey:siteNSURL];
-  if (!tile) {
-    return;
-  }
-  // Remove existing favicon info
-  tile.fallbackTextColor = nil;
-  tile.fallbackBackgroundColor = nil;
-  tile.faviconFetched = NO;
-  NSString* previousFaviconFileName = tile.faviconFileName;
-  tile.faviconFileName = nil;
-
-  // Fetch favicon and update saved defaults.
-  NSString* faviconFileName = GetFaviconFileName(site_url);
-  NSURL* fileURL =
-      [favicons_folder URLByAppendingPathComponent:faviconFileName];
-  NSURL* previousFileURL =
-      previousFaviconFileName
-          ? [favicons_folder
-                URLByAppendingPathComponent:previousFaviconFileName]
-          : nil;
 
   void (^faviconAttributesBlock)(FaviconAttributes*) =
       ^(FaviconAttributes* attributes) {
         if (attributes.faviconImage) {
-          tile.faviconFetched = YES;
+          // Update the available icon.
+          // If we have a fallback icon, do not remove it. The favicon will have
+          // priority, and should anything happen to the image, the fallback
+          // icon will be a nicer fallback.
+          NSString* faviconFileName =
+              GetFaviconFileName(net::GURLWithNSURL(siteNSURL));
+          NSURL* fileURL =
+              [favicons_directory URLByAppendingPathComponent:faviconFileName];
           NSData* imageData = UIImagePNGRepresentation(attributes.faviconImage);
 
-          base::OnceCallback<BOOL()> writeImage = base::BindBlockArc(^BOOL {
+          base::OnceCallback<void()> writeImage = base::BindOnce(^{
             base::AssertBlockingAllowed();
-            [[NSFileManager defaultManager] removeItemAtURL:previousFileURL
-                                                      error:nil];
-            return [imageData writeToURL:fileURL atomically:YES];
+            [imageData writeToURL:fileURL atomically:YES];
           });
 
-          base::OnceCallback<void(BOOL)> updateTile =
-              base::BindBlockArc(^(BOOL imageWriteSuccess) {
-                if (imageWriteSuccess) {
-                  tile.faviconFileName = faviconFileName;
-                }
-                WriteSingleUpdatedTileToDisk(tile);
-
-              });
-
-          base::PostTaskWithTraitsAndReplyWithResult(
+          base::PostTaskWithTraits(
               FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-              std::move(writeImage), std::move(updateTile));
+              std::move(writeImage));
         } else {
-          tile.faviconFetched = YES;
+          NSDictionary* tiles = ReadSavedMostVisited();
+          NTPTile* tile = [tiles objectForKey:siteNSURL];
+          if (!tile) {
+            return;
+          }
           tile.fallbackTextColor = attributes.textColor;
           tile.fallbackBackgroundColor = attributes.backgroundColor;
           tile.fallbackIsDefaultColor = attributes.defaultBackgroundColor;
           tile.fallbackMonogram = attributes.monogramString;
-
-          base::OnceCallback<void()> removeImage = base::BindBlockArc(^{
+          WriteSingleUpdatedTileToDisk(tile);
+          // Favicon is outdated. Delete it.
+          NSString* faviconFileName =
+              GetFaviconFileName(net::GURLWithNSURL(siteNSURL));
+          NSURL* fileURL =
+              [favicons_directory URLByAppendingPathComponent:faviconFileName];
+          base::OnceCallback<void()> removeImage = base::BindOnce(^{
             base::AssertBlockingAllowed();
-            [[NSFileManager defaultManager] removeItemAtURL:previousFileURL
-                                                      error:nil];
+            [[NSFileManager defaultManager] removeItemAtURL:fileURL error:nil];
           });
 
-          base::PostTaskWithTraitsAndReply(
+          base::PostTaskWithTraits(
               FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-              std::move(removeImage), base::BindBlockArc(^{
-                WriteSingleUpdatedTileToDisk(tile);
-              }));
+              std::move(removeImage));
         }
       };
 
-  // The cache is not used here as it is simply a way to have a synchronous
-  // immediate return. In this case it is unnecessary.
   [favicon_provider fetchFaviconAttributesForURL:site_url
                                       completion:faviconAttributesBlock];
 }

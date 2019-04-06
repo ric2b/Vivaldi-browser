@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2008, Google Inc.
 // All rights reserved.
 //
@@ -36,9 +37,7 @@
 #include <stddef.h>                     // for NULL, size_t
 
 #include "common.h"            // for MetaDataAlloc
-#include "free_list.h"          // for FL_Push/FL_Pop
 #include "internal_logging.h"  // for ASSERT
-#include "system-alloc.h"      // for TCMalloc_SystemAddGuard
 
 namespace tcmalloc {
 
@@ -64,7 +63,8 @@ class PageHeapAllocator {
     // Consult free list
     void* result;
     if (free_list_ != NULL) {
-      result = FL_Pop(&free_list_);
+      result = free_list_;
+      free_list_ = *(reinterpret_cast<void**>(result));
     } else {
       if (free_avail_ < sizeof(T)) {
         // Need more room. We assume that MetaDataAlloc returns
@@ -76,21 +76,7 @@ class PageHeapAllocator {
               "tcmalloc data (bytes, object-size)",
               kAllocIncrement, sizeof(T));
         }
-
-        // This guard page protects the metadata from being corrupted by a
-        // buffer overrun. We currently have no mechanism for freeing it, since
-        // we never release the metadata buffer. If that changes we'll need to
-        // add something like TCMalloc_SystemRemoveGuard.
-        size_t guard_size = TCMalloc_SystemAddGuard(free_area_,
-                                                    kAllocIncrement);
-        free_area_ += guard_size;
-        free_avail_ = kAllocIncrement - guard_size;
-        if (free_avail_ < sizeof(T)) {
-          Log(kCrash, __FILE__, __LINE__,
-              "FATAL ERROR: Insufficient memory to guard internal tcmalloc "
-              "data (%d bytes, object-size %d, guard-size %d)\n",
-              kAllocIncrement, static_cast<int>(sizeof(T)), guard_size);
-        }
+        free_avail_ = kAllocIncrement;
       }
       result = free_area_;
       free_area_ += sizeof(T);
@@ -101,7 +87,8 @@ class PageHeapAllocator {
   }
 
   void Delete(T* p) {
-    FL_Push(&free_list_, p);
+    *(reinterpret_cast<void**>(p)) = free_list_;
+    free_list_ = p;
     inuse_--;
   }
 
@@ -121,6 +108,71 @@ class PageHeapAllocator {
   // Number of allocated but unfreed objects
   int inuse_;
 };
+
+// STL-compatible allocator which forwards allocations to a PageHeapAllocator.
+//
+// Like PageHeapAllocator, this requires external synchronization. To avoid multiple
+// separate STLPageHeapAllocator<T> from sharing the same underlying PageHeapAllocator<T>,
+// the |LockingTag| template argument should be used. Template instantiations with
+// different locking tags can safely be used concurrently.
+template <typename T, class LockingTag>
+class STLPageHeapAllocator {
+ public:
+  typedef size_t     size_type;
+  typedef ptrdiff_t  difference_type;
+  typedef T*         pointer;
+  typedef const T*   const_pointer;
+  typedef T&         reference;
+  typedef const T&   const_reference;
+  typedef T          value_type;
+
+  template <class T1> struct rebind {
+    typedef STLPageHeapAllocator<T1, LockingTag> other;
+  };
+
+  STLPageHeapAllocator() { }
+  STLPageHeapAllocator(const STLPageHeapAllocator&) { }
+  template <class T1> STLPageHeapAllocator(const STLPageHeapAllocator<T1, LockingTag>&) { }
+  ~STLPageHeapAllocator() { }
+
+  pointer address(reference x) const { return &x; }
+  const_pointer address(const_reference x) const { return &x; }
+
+  size_type max_size() const { return size_t(-1) / sizeof(T); }
+
+  void construct(pointer p, const T& val) { ::new(p) T(val); }
+  void construct(pointer p) { ::new(p) T(); }
+  void destroy(pointer p) { p->~T(); }
+
+  // There's no state, so these allocators are always equal
+  bool operator==(const STLPageHeapAllocator&) const { return true; }
+  bool operator!=(const STLPageHeapAllocator&) const { return false; }
+
+  pointer allocate(size_type n, const void* = 0) {
+    if (!underlying_.initialized) {
+      underlying_.allocator.Init();
+      underlying_.initialized = true;
+    }
+
+    CHECK_CONDITION(n == 1);
+    return underlying_.allocator.New();
+  }
+  void deallocate(pointer p, size_type n) {
+    CHECK_CONDITION(n == 1);
+    underlying_.allocator.Delete(p);
+  }
+
+ private:
+  struct Storage {
+    explicit Storage(base::LinkerInitialized x) {}
+    PageHeapAllocator<T> allocator;
+    bool initialized;
+  };
+  static Storage underlying_;
+};
+
+template<typename T, class LockingTag>
+typename STLPageHeapAllocator<T, LockingTag>::Storage STLPageHeapAllocator<T, LockingTag>::underlying_(base::LINKER_INITIALIZED);
 
 }  // namespace tcmalloc
 

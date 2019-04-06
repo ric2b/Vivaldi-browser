@@ -7,14 +7,13 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/console_message_level.h"
-#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -60,12 +59,12 @@ void ServiceWorkerContextWatcher::GetStoredRegistrationsOnIOThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (is_stopped_)
     return;
-  context_->GetAllRegistrations(base::Bind(
+  context_->GetAllRegistrations(base::BindOnce(
       &ServiceWorkerContextWatcher::OnStoredRegistrationsOnIOThread, this));
 }
 
 void ServiceWorkerContextWatcher::OnStoredRegistrationsOnIOThread(
-    ServiceWorkerStatusCode status,
+    blink::ServiceWorkerStatusCode status,
     const std::vector<ServiceWorkerRegistrationInfo>& stored_registrations) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (is_stopped_)
@@ -298,8 +297,6 @@ void ServiceWorkerContextWatcher::OnMainScriptHttpResponseInfoSet(
 }
 
 void ServiceWorkerContextWatcher::OnErrorReported(int64_t version_id,
-                                                  int process_id,
-                                                  int thread_id,
                                                   const ErrorInfo& info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
@@ -315,8 +312,6 @@ void ServiceWorkerContextWatcher::OnErrorReported(int64_t version_id,
 
 void ServiceWorkerContextWatcher::OnReportConsoleMessage(
     int64_t version_id,
-    int process_id,
-    int thread_id,
     const ConsoleMessage& message) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (message.message_level != CONSOLE_MESSAGE_LEVEL_ERROR)
@@ -338,17 +333,13 @@ void ServiceWorkerContextWatcher::OnReportConsoleMessage(
 void ServiceWorkerContextWatcher::OnControlleeAdded(
     int64_t version_id,
     const std::string& uuid,
-    int process_id,
-    int route_id,
-    const base::Callback<WebContents*(void)>& web_contents_getter,
-    blink::mojom::ServiceWorkerProviderType type) {
+    const ServiceWorkerClientInfo& info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   auto it = version_info_map_.find(version_id);
   if (it == version_info_map_.end())
     return;
   ServiceWorkerVersionInfo* version = it->second.get();
-  version->clients[uuid] = ServiceWorkerVersionInfo::ClientInfo(
-      process_id, route_id, web_contents_getter, type);
+  version->clients[uuid] = info;
   SendVersionInfo(*version);
 }
 
@@ -363,8 +354,9 @@ void ServiceWorkerContextWatcher::OnControlleeRemoved(int64_t version_id,
   SendVersionInfo(*version);
 }
 
-void ServiceWorkerContextWatcher::OnRegistrationStored(int64_t registration_id,
-                                                       const GURL& pattern) {
+void ServiceWorkerContextWatcher::OnRegistrationCompleted(
+    int64_t registration_id,
+    const GURL& pattern) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   SendRegistrationInfo(registration_id, pattern,
                        ServiceWorkerRegistrationInfo::IS_NOT_DELETED);

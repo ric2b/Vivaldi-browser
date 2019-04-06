@@ -14,7 +14,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "device/serial/test_serial_io_handler.h"
-#include "services/device/public/interfaces/serial.mojom.h"
+#include "services/device/public/mojom/serial.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/battor_agent/battor_protocol_types.h"
 
@@ -31,9 +31,9 @@ namespace battor {
 class TestableBattOrConnection : public BattOrConnectionImpl {
  public:
   TestableBattOrConnection(BattOrConnection::Listener* listener,
-                           std::unique_ptr<base::TickClock> tick_clock)
+                           const base::TickClock* tick_clock)
       : BattOrConnectionImpl("/dev/test", listener, nullptr) {
-    tick_clock_ = std::move(tick_clock);
+    tick_clock_ = tick_clock;
   }
   scoped_refptr<device::SerialIoHandler> CreateIoHandler() override {
     return device::TestSerialIoHandler::Create();
@@ -56,6 +56,10 @@ class BattOrConnectionImplTest : public testing::Test,
   void OnConnectionOpened(bool success) override {
     is_open_complete_ = true;
     open_success_ = success;
+  };
+  void OnConnectionFlushed(bool success) override {
+    is_flush_complete_ = true;
+    flush_success_ = success;
   };
   void OnBytesSent(bool success) override { send_success_ = success; }
   void OnMessageRead(bool success,
@@ -80,6 +84,14 @@ class BattOrConnectionImplTest : public testing::Test,
     task_runner_->RunUntilIdle();
   }
 
+  void FlushConnection() {
+    is_flush_complete_ = false;
+    connection_->Flush();
+    task_runner_->RunUntilIdle();
+  }
+
+  bool IsConnectionOpen() { return connection_->IsOpen(); }
+
   void CloseConnection() { connection_->Close(); }
 
   void ReadMessage(BattOrMessageType type) {
@@ -93,7 +105,7 @@ class BattOrConnectionImplTest : public testing::Test,
     scoped_refptr<net::IOBuffer> buffer(
         new net::IOBuffer((size_t)bytes_to_read));
 
-    connection_->GetIoHandler()->Read(base::MakeUnique<device::ReceiveBuffer>(
+    connection_->GetIoHandler()->Read(std::make_unique<device::ReceiveBuffer>(
         buffer, bytes_to_read, base::BindOnce(&NullReadCallback)));
     task_runner_->RunUntilIdle();
 
@@ -116,7 +128,7 @@ class BattOrConnectionImplTest : public testing::Test,
 
   // Writes the specified bytes directly to the serial connection.
   void SendBytesRaw(const char* data, uint16_t bytes_to_send) {
-    connection_->GetIoHandler()->Write(base::MakeUnique<device::SendBuffer>(
+    connection_->GetIoHandler()->Write(std::make_unique<device::SendBuffer>(
         std::vector<uint8_t>(data, data + bytes_to_send),
         base::BindOnce(&NullWriteCallback)));
     task_runner_->RunUntilIdle();
@@ -127,7 +139,9 @@ class BattOrConnectionImplTest : public testing::Test,
   }
 
   bool GetOpenSuccess() { return open_success_; }
+  bool GetFlushSuccess() { return flush_success_; }
   bool IsOpenComplete() { return is_open_complete_; }
+  bool IsFlushComplete() { return is_flush_complete_; }
   bool GetSendSuccess() { return send_success_; }
   bool IsReadComplete() { return is_read_complete_; }
   bool GetReadSuccess() { return read_success_; }
@@ -135,14 +149,17 @@ class BattOrConnectionImplTest : public testing::Test,
   std::vector<char>* GetReadMessage() { return read_bytes_.get(); }
 
  private:
-  std::unique_ptr<TestableBattOrConnection> connection_;
-
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle thread_task_runner_handle_;
 
+  std::unique_ptr<TestableBattOrConnection> connection_;
+
   // Result from the last connect command.
   bool open_success_;
+  // Results from the last flush command.
+  bool flush_success_;
   bool is_open_complete_;
+  bool is_flush_complete_;
   // Result from the last send command.
   bool send_success_;
   // Results from the last read command.
@@ -152,48 +169,51 @@ class BattOrConnectionImplTest : public testing::Test,
   std::unique_ptr<std::vector<char>> read_bytes_;
 };
 
-TEST_F(BattOrConnectionImplTest, OpenConnectionSucceedsAfterTimeout) {
-  OpenConnection();
-  ASSERT_FALSE(IsOpenComplete());
-
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
-
-  ASSERT_TRUE(IsOpenComplete());
-  ASSERT_TRUE(GetOpenSuccess());
-}
-
-TEST_F(BattOrConnectionImplTest, OpenConnectionSucceedsImmediatelyIfOpen) {
-  OpenConnection();
-  ASSERT_FALSE(IsOpenComplete());
-
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
-
+TEST_F(BattOrConnectionImplTest, OpenConnectionSucceedsImmediately) {
   OpenConnection();
   ASSERT_TRUE(IsOpenComplete());
   ASSERT_TRUE(GetOpenSuccess());
+  ASSERT_TRUE(IsConnectionOpen());
 }
 
-TEST_F(BattOrConnectionImplTest, OpenConnectionFlushesIfAlreadyOpen) {
+TEST_F(BattOrConnectionImplTest, IsOpenFalseAfterClosingConnection) {
   OpenConnection();
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
-
-  SendControlMessage(BATTOR_CONTROL_MESSAGE_TYPE_RESET, 4, 7);
+  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(GetOpenSuccess());
+  ASSERT_TRUE(IsConnectionOpen());
 
   CloseConnection();
-  OpenConnection();
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
 
-  ReadMessage(BATTOR_MESSAGE_TYPE_CONTROL);
-
-  // Opening the connection the second time should have cleared all bytes that
-  // were already on the wire, including the reset control message. This read
-  // will hang until more bytes are sent.
-  ASSERT_FALSE(IsReadComplete());
+  ASSERT_FALSE(IsConnectionOpen());
 }
 
-TEST_F(BattOrConnectionImplTest, OpenConnectionFlushesAlreadyReadBuffer) {
+TEST_F(BattOrConnectionImplTest, FlushConnectionSucceedsOnlyAfterTimeout) {
   OpenConnection();
+  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(GetOpenSuccess());
+
+  FlushConnection();
+  ASSERT_FALSE(IsFlushComplete());
+
   AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
+
+  ASSERT_TRUE(IsFlushComplete());
+  ASSERT_TRUE(GetFlushSuccess());
+}
+
+#if defined(ADDRESS_SANITIZER)
+// https://crbug.com/843729
+#define MAYBE_FlushConnectionFlushesAlreadyReadBuffer \
+  DISABLED_FlushConnectionFlushesAlreadyReadBuffer
+#else
+#define MAYBE_FlushConnectionFlushesAlreadyReadBuffer \
+  FlushConnectionFlushesAlreadyReadBuffer
+#endif
+TEST_F(BattOrConnectionImplTest,
+       MAYBE_FlushConnectionFlushesAlreadyReadBuffer) {
+  OpenConnection();
+  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(GetOpenSuccess());
 
   // Send two data frames and only read one of them. When reading data frames,
   // we try to read a large chunk from the wire due to the large potential size
@@ -220,10 +240,11 @@ TEST_F(BattOrConnectionImplTest, OpenConnectionFlushesAlreadyReadBuffer) {
 
   CloseConnection();
   OpenConnection();
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
-
   ASSERT_TRUE(IsOpenComplete());
   ASSERT_TRUE(GetOpenSuccess());
+
+  FlushConnection();
+  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
 
   ReadMessage(BATTOR_MESSAGE_TYPE_SAMPLES);
 
@@ -232,31 +253,48 @@ TEST_F(BattOrConnectionImplTest, OpenConnectionFlushesAlreadyReadBuffer) {
   ASSERT_FALSE(IsReadComplete());
 }
 
-TEST_F(BattOrConnectionImplTest, OpenConnectionNewBytesRestartQuietPeriod) {
+TEST_F(BattOrConnectionImplTest, FlushConnectionNewBytesRestartQuietPeriod) {
   OpenConnection();
+  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(GetOpenSuccess());
+
+  FlushConnection();
   AdvanceTickClock(base::TimeDelta::FromMilliseconds(49));
   SendControlMessage(BATTOR_CONTROL_MESSAGE_TYPE_RESET, 4, 7);
   AdvanceTickClock(base::TimeDelta::FromMilliseconds(49));
 
   // The connection should not yet be opened because we received new bytes at
   // t=49ms, and at t=98ms the new 50ms quiet period hasn't yet elapsed.
-  ASSERT_FALSE(IsOpenComplete());
+  ASSERT_FALSE(IsFlushComplete());
 
   AdvanceTickClock(base::TimeDelta::FromMilliseconds(1));
 
-  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(IsFlushComplete());
 }
 
+#if defined(ADDRESS_SANITIZER)
+// https://crbug.com/843729
+#define MAYBE_FlushConnectionFlushesBytesReceivedInQuietPeriod \
+  DISABLED_FlushConnectionFlushesBytesReceivedInQuietPeriod
+#else
+#define MAYBE_FlushConnectionFlushesBytesReceivedInQuietPeriod \
+  FlushConnectionFlushesBytesReceivedInQuietPeriod
+#endif
 TEST_F(BattOrConnectionImplTest,
-       OpenConnectionFlushesBytesReceivedInQuietPeriod) {
+       MAYBE_FlushConnectionFlushesBytesReceivedInQuietPeriod) {
   OpenConnection();
-  SendControlMessage(BATTOR_CONTROL_MESSAGE_TYPE_RESET, 4, 7);
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(5));
-  SendControlMessage(BATTOR_CONTROL_MESSAGE_TYPE_RESET, 4, 7);
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
-
   ASSERT_TRUE(IsOpenComplete());
   ASSERT_TRUE(GetOpenSuccess());
+
+  FlushConnection();
+  SendControlMessage(BATTOR_CONTROL_MESSAGE_TYPE_RESET, 4, 7);
+  AdvanceTickClock(base::TimeDelta::FromMilliseconds(5));
+  ASSERT_FALSE(IsFlushComplete());
+
+  SendControlMessage(BATTOR_CONTROL_MESSAGE_TYPE_RESET, 4, 7);
+  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
+  ASSERT_TRUE(IsFlushComplete());
+  ASSERT_TRUE(GetFlushSuccess());
 
   ReadMessage(BATTOR_MESSAGE_TYPE_CONTROL);
 
@@ -265,9 +303,10 @@ TEST_F(BattOrConnectionImplTest,
   ASSERT_FALSE(IsReadComplete());
 }
 
-TEST_F(BattOrConnectionImplTest, OpenConnectionFlushesMultipleReadsOfData) {
+TEST_F(BattOrConnectionImplTest, FlushConnectionFlushesMultipleReadsOfData) {
   OpenConnection();
-  AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
+  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(GetOpenSuccess());
 
   // Send 10 full flush buffers worth of data.
   char data[50000];
@@ -276,12 +315,8 @@ TEST_F(BattOrConnectionImplTest, OpenConnectionFlushesMultipleReadsOfData) {
   for (int i = 0; i < 10; i++)
     SendBytesRaw(data, 50000);
 
-  CloseConnection();
-  OpenConnection();
+  FlushConnection();
   AdvanceTickClock(base::TimeDelta::FromMilliseconds(50));
-
-  ASSERT_TRUE(IsOpenComplete());
-  ASSERT_TRUE(GetOpenSuccess());
 
   SendControlMessage(BATTOR_CONTROL_MESSAGE_TYPE_RESET, 4, 7);
   ReadMessage(BATTOR_MESSAGE_TYPE_CONTROL);
@@ -293,21 +328,32 @@ TEST_F(BattOrConnectionImplTest, OpenConnectionFlushesMultipleReadsOfData) {
   ASSERT_TRUE(GetReadSuccess());
 }
 
-TEST_F(BattOrConnectionImplTest, OpenConnectionIncompleteBeforeTimeout) {
+#if defined(ADDRESS_SANITIZER)
+// https://crbug.com/843729
+#define MAYBE_FlushIncompleteBeforeTimeout DISABLED_FlushIncompleteBeforeTimeout
+#else
+#define MAYBE_FlushIncompleteBeforeTimeout FlushIncompleteBeforeTimeout
+#endif
+TEST_F(BattOrConnectionImplTest, MAYBE_FlushIncompleteBeforeTimeout) {
   OpenConnection();
+  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(GetOpenSuccess());
 
+  FlushConnection();
   AdvanceTickClock(base::TimeDelta::FromMilliseconds(49));
 
-  ASSERT_FALSE(IsOpenComplete());
+  ASSERT_FALSE(IsFlushComplete());
 }
 
 TEST_F(BattOrConnectionImplTest, FlushFailsWithNonTimeoutError) {
   OpenConnection();
+  ASSERT_TRUE(IsOpenComplete());
+  ASSERT_TRUE(GetOpenSuccess());
 
+  FlushConnection();
   ForceReceiveError(device::mojom::SerialReceiveError::DISCONNECTED);
 
-  ASSERT_TRUE(IsOpenComplete());
-  ASSERT_FALSE(GetOpenSuccess());
+  ASSERT_FALSE(GetFlushSuccess());
 }
 
 TEST_F(BattOrConnectionImplTest, ControlSendEscapesStartBytesCorrectly) {

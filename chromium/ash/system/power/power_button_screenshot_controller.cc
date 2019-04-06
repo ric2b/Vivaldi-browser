@@ -6,7 +6,6 @@
 
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/shell.h"
-#include "ash/system/power/convertible_power_button_controller.h"
 #include "ash/system/power/power_button_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/metrics/histogram_macros.h"
@@ -30,16 +29,12 @@ constexpr base::TimeDelta
     PowerButtonScreenshotController::kScreenshotChordDelay;
 
 PowerButtonScreenshotController::PowerButtonScreenshotController(
-    ConvertiblePowerButtonController* convertible_controller,
-    base::TickClock* tick_clock,
-    bool force_clamshell_power_button)
-    : convertible_controller_(convertible_controller),
-      tick_clock_(tick_clock),
-      force_clamshell_power_button_(force_clamshell_power_button) {
+    const base::TickClock* tick_clock)
+    : tick_clock_(tick_clock) {
   DCHECK(tick_clock_);
   // Using prepend to make sure this event handler is put in front of
   // AcceleratorFilter. See Shell::Init().
-  Shell::Get()->PrependPreTargetHandler(this);
+  Shell::Get()->AddPreTargetHandler(this, ui::EventTarget::Priority::kSystem);
 }
 
 PowerButtonScreenshotController::~PowerButtonScreenshotController() {
@@ -60,22 +55,8 @@ bool PowerButtonScreenshotController::OnPowerButtonEvent(
       return true;
   }
 
-  // If forced clamshell power button releases when
-  // |clamshell_power_button_timer_| is still running, stop the timer to
-  // invalidate this delayed power button behavior.
-  if (!down) {
-    clamshell_power_button_timer_.Stop();
+  if (!down)
     return false;
-  }
-
-  // If forced clamshell power button, start a timer waiting volume down key
-  // pressed. When timing out, perform this delayed power button behavior.
-  if (force_clamshell_power_button_ && !volume_down_key_pressed_ && down) {
-    clamshell_power_button_timer_.Start(
-        FROM_HERE, kScreenshotChordDelay, this,
-        &PowerButtonScreenshotController::OnClamshellPowerButtonTimeout);
-    return true;
-  }
 
   // If volume key is pressed, mark power button as consumed. This invalidates
   // other power button's behavior when user tries to operate screenshot.
@@ -89,7 +70,6 @@ void PowerButtonScreenshotController::OnKeyEvent(ui::KeyEvent* event) {
   ui::KeyboardCode key_code = event->key_code();
   if (key_code != ui::VKEY_VOLUME_DOWN && key_code != ui::VKEY_VOLUME_UP)
     return;
-  clamshell_power_button_timer_.Stop();
 
   if (key_code == ui::VKEY_VOLUME_DOWN) {
     if (event->type() == ui::ET_KEY_PRESSED) {
@@ -113,12 +93,9 @@ void PowerButtonScreenshotController::OnKeyEvent(ui::KeyEvent* event) {
   if (key_code == ui::VKEY_VOLUME_UP)
     volume_up_key_pressed_ = event->type() == ui::ET_KEY_PRESSED;
 
-  // When volume key is pressed, cancel the ongoing convertible power button
-  // behavior.
-  if ((volume_down_key_pressed_ || volume_up_key_pressed_) &&
-      convertible_controller_) {
-    convertible_controller_->CancelTabletPowerButton();
-  }
+  // When volume key is pressed, cancel the ongoing power button behavior.
+  if (volume_down_key_pressed_ || volume_up_key_pressed_)
+    Shell::Get()->power_button_controller()->CancelPowerButtonEvent();
 
   // On volume down key pressed while power button not pressed yet state, do not
   // propagate volume down key pressed event for chord delay time. Start the
@@ -165,11 +142,6 @@ bool PowerButtonScreenshotController::InterceptScreenshotChord() {
 
 void PowerButtonScreenshotController::OnVolumeDownTimeout() {
   Shell::Get()->accelerator_controller()->PerformActionIfEnabled(VOLUME_DOWN);
-}
-
-void PowerButtonScreenshotController::OnClamshellPowerButtonTimeout() {
-  Shell::Get()->power_button_controller()->OnPowerButtonEvent(
-      true, tick_clock_->NowTicks());
 }
 
 }  // namespace ash

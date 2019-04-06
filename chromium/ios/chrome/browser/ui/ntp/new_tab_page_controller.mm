@@ -22,15 +22,15 @@
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/incognito_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_bar_item.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view.h"
-#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_coordinator.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
-#include "ios/chrome/browser/ui/toolbar/toolbar_model_ios.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/web/web_state/ui/crw_swipe_recognizer_provider.h"
@@ -43,10 +43,6 @@
 
 using base::UserMetricsAction;
 
-namespace {
-const CGFloat kToolbarHeight = 56;
-}
-
 @interface NewTabPageController () {
   ios::ChromeBrowserState* _browserState;  // weak.
   __weak id<UrlLoader> _loader;
@@ -58,7 +54,7 @@ const CGFloat kToolbarHeight = 56;
   __weak id<OmniboxFocuser> _focuser;
 
   // Delegate to fetch the ToolbarModel and current web state from.
-  __weak id<IncognitoViewControllerDelegate> _toolbarDelegate;
+  __weak id<NewTabPageControllerDelegate> _toolbarDelegate;
 
   TabModel* _tabModel;
 }
@@ -113,7 +109,7 @@ const CGFloat kToolbarHeight = 56;
                   loader:(id<UrlLoader>)loader
                  focuser:(id<OmniboxFocuser>)focuser
             browserState:(ios::ChromeBrowserState*)browserState
-         toolbarDelegate:(id<IncognitoViewControllerDelegate>)toolbarDelegate
+         toolbarDelegate:(id<NewTabPageControllerDelegate>)toolbarDelegate
                 tabModel:(TabModel*)tabModel
     parentViewController:(UIViewController*)parentViewController
               dispatcher:(id<ApplicationCommands,
@@ -202,6 +198,25 @@ const CGFloat kToolbarHeight = 56;
   [self.homePanel setDelegate:nil];
 }
 
+#pragma mark - Properties
+
+- (UIEdgeInsets)contentInset {
+  return self.contentSuggestionsCoordinator.viewController.collectionView
+      .contentInset;
+}
+
+- (void)setContentInset:(UIEdgeInsets)contentInset {
+  // UIKit will adjust the contentOffset sometimes when changing the
+  // contentInset.bottom.  We don't want the NTP to scroll, so store and re-set
+  // the contentOffset after setting the contentInset.
+  CGPoint contentOffset = self.contentSuggestionsCoordinator.viewController
+                              .collectionView.contentOffset;
+  self.contentSuggestionsCoordinator.viewController.collectionView
+      .contentInset = contentInset;
+  self.contentSuggestionsCoordinator.viewController.collectionView
+      .contentOffset = contentOffset;
+}
+
 #pragma mark - CRWNativeContent
 
 - (void)willBeDismissed {
@@ -232,10 +247,6 @@ const CGFloat kToolbarHeight = 56;
   [_currentController wasHidden];
 }
 
-- (BOOL)wantsKeyboardShield {
-  return NO;
-}
-
 - (BOOL)wantsLocationBarHintText {
   // Always show hint text on iPhone.
   if (!IsIPadIdiom())
@@ -259,26 +270,16 @@ const CGFloat kToolbarHeight = 56;
   return NO;
 }
 
-- (void)dismissKeyboard {
-  [_currentController dismissKeyboard];
-}
-
 - (void)dismissModals {
   [_currentController dismissModals];
 }
 
 - (void)willUpdateSnapshot {
-  if ([_currentController respondsToSelector:@selector(willUpdateSnapshot)]) {
-    [_currentController willUpdateSnapshot];
-  }
+  [_currentController willUpdateSnapshot];
 }
 
 - (CGPoint)scrollOffset {
-  if (_currentController == self.homePanel &&
-      [self.homePanel respondsToSelector:@selector(scrollOffset)]) {
-    return [self.homePanel scrollOffset];
-  }
-  return CGPointZero;
+  return [_currentController scrollOffset];
 }
 
 #pragma mark -
@@ -300,12 +301,15 @@ const CGFloat kToolbarHeight = 56;
     base::RecordAction(UserMetricsAction("MobileNTPSwitchToMostVisited"));
   } else if (selectedItem.identifier == ntp_home::RECENT_TABS_PANEL) {
     base::RecordAction(UserMetricsAction("MobileNTPSwitchToOpenTabs"));
+  } else if (selectedItem.identifier == ntp_home::BOOKMARKS_PANEL) {
+    base::RecordAction(UserMetricsAction("MobileNTPSwitchToBookmarks"));
   }
 }
 
 - (BOOL)loadPanel:(NewTabPageBarItem*)item {
   DCHECK(self.parentViewController);
   UIViewController* panelController = nil;
+  UICollectionView* collectionView = nil;
   // Only load the controllers once.
   if (item.identifier == ntp_home::HOME_PANEL) {
     if (!self.contentSuggestionsCoordinator) {
@@ -316,11 +320,14 @@ const CGFloat kToolbarHeight = 56;
       self.contentSuggestionsCoordinator.dispatcher = self.dispatcher;
       self.contentSuggestionsCoordinator.webStateList =
           [_tabModel webStateList];
+      self.contentSuggestionsCoordinator.toolbarDelegate = _toolbarDelegate;
       [self.contentSuggestionsCoordinator start];
       self.headerController =
           self.contentSuggestionsCoordinator.headerController;
     }
     panelController = [self.contentSuggestionsCoordinator viewController];
+    collectionView =
+        self.contentSuggestionsCoordinator.viewController.collectionView;
     self.homePanel = self.contentSuggestionsCoordinator;
     [self.homePanel setDelegate:self];
   } else if (item.identifier == ntp_home::INCOGNITO_PANEL) {
@@ -356,6 +363,7 @@ const CGFloat kToolbarHeight = 56;
     [self.parentViewController addChildViewController:panelController];
     [self.view insertSubview:view belowSubview:self.view.tabBar];
     self.view.contentView = view;
+    self.view.contentCollectionView = collectionView;
     [panelController didMoveToParentViewController:self.parentViewController];
   }
   return created;
@@ -380,9 +388,13 @@ const CGFloat kToolbarHeight = 56;
 }
 
 - (CGFloat)toolbarHeight {
+  BOOL isRegularXRegular =
+      content_suggestions::IsRegularXRegularSizeClass(self.view);
   // If the google landing controller is nil, there is no toolbar visible in the
   // native content view, finally there is no toolbar on iPad.
-  return self.headerController && !IsIPadIdiom() ? kToolbarHeight : 0.0;
+  return self.headerController && !isRegularXRegular
+             ? ntp_header::ToolbarHeight()
+             : 0.0;
 }
 
 #pragma mark - NewTabPagePanelControllerDelegate

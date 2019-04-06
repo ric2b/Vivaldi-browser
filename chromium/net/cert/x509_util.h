@@ -11,10 +11,14 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
+#include "crypto/signature_verifier.h"
+#include "net/base/hash_value.h"
 #include "net/base/net_export.h"
+#include "third_party/boringssl/src/include/openssl/base.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 
 namespace crypto {
@@ -66,7 +70,7 @@ NET_EXPORT bool CreateKeyAndSelfSignedCert(
 
 // Creates a self-signed certificate from a provided key, using the specified
 // hash algorithm.
-NET_EXPORT bool CreateSelfSignedCert(crypto::RSAPrivateKey* key,
+NET_EXPORT bool CreateSelfSignedCert(EVP_PKEY* key,
                                      DigestAlgorithm alg,
                                      const std::string& subject,
                                      uint32_t serial_number,
@@ -91,11 +95,6 @@ NET_EXPORT bssl::UniquePtr<CRYPTO_BUFFER> CreateCryptoBuffer(
 NET_EXPORT bssl::UniquePtr<CRYPTO_BUFFER> CreateCryptoBuffer(
     const char* invalid_data);
 
-// Increments the reference count of |buffer| and returns a UniquePtr owning
-// that reference.
-NET_EXPORT bssl::UniquePtr<CRYPTO_BUFFER> DupCryptoBuffer(
-    CRYPTO_BUFFER* buffer);
-
 // Compares two CRYPTO_BUFFERs and returns true if they have the same contents.
 NET_EXPORT bool CryptoBufferEqual(const CRYPTO_BUFFER* a,
                                   const CRYPTO_BUFFER* b);
@@ -107,10 +106,25 @@ NET_EXPORT base::StringPiece CryptoBufferAsStringPiece(
 // Creates a new X509Certificate from the chain in |buffers|, which must have at
 // least one element.
 scoped_refptr<X509Certificate> CreateX509CertificateFromBuffers(
-    STACK_OF(CRYPTO_BUFFER) * buffers);
+    const STACK_OF(CRYPTO_BUFFER) * buffers);
 
 // Returns the default ParseCertificateOptions for the net stack.
-ParseCertificateOptions DefaultParseCertificateOptions();
+NET_EXPORT ParseCertificateOptions DefaultParseCertificateOptions();
+
+// On success, returns true and updates |hash| to be the SHA-256 hash of the
+// subjectPublicKeyInfo of the certificate in |buffer|. If |buffer| is not a
+// valid certificate, returns false and |hash| is in an undefined state.
+NET_EXPORT bool CalculateSha256SpkiHash(const CRYPTO_BUFFER* buffer,
+                                        HashValue* hash) WARN_UNUSED_RESULT;
+
+// Calls |verifier->VerifyInit|, using the public key from |certificate|,
+// checking if the digitalSignature key usage bit is present, and returns true
+// on success or false on error.
+NET_EXPORT bool SignatureVerifierInitWithCertificate(
+    crypto::SignatureVerifier* verifier,
+    crypto::SignatureVerifier::SignatureAlgorithm signature_algorithm,
+    base::span<const uint8_t> signature,
+    const CRYPTO_BUFFER* certificate);
 
 } // namespace x509_util
 

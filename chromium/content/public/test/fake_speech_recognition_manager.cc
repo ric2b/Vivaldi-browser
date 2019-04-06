@@ -9,11 +9,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/speech_recognition_event_listener.h"
 #include "content/public/browser/speech_recognition_manager_delegate.h"
-#include "content/public/common/speech_recognition_result.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/speech/speech_recognition_result.mojom.h"
 
 namespace {
 const char kTestResult[] = "Pictures of the moon";
@@ -63,7 +64,7 @@ int FakeSpeechRecognitionManager::CreateSession(
   EXPECT_EQ(nullptr, listener_);
   listener_ = config.event_listener.get();
   if (config.grammars.size() > 0)
-    grammar_ = config.grammars[0].url;
+    grammar_ = config.grammars[0].url.spec();
   session_ctx_ = config.initial_context;
   session_config_ = config;
   session_id_ = 1;
@@ -111,25 +112,14 @@ void FakeSpeechRecognitionManager::StopAudioCaptureForSession(int session_id) {
   // Nothing to do here since we aren't really recording.
 }
 
-void FakeSpeechRecognitionManager::AbortAllSessionsForRenderProcess(
-    int render_process_id) {
+void FakeSpeechRecognitionManager::AbortAllSessionsForRenderFrame(
+    int render_process_id,
+    int render_frame_id) {
   VLOG(1) << "CancelAllRequestsWithDelegate invoked.";
   EXPECT_TRUE(should_send_fake_response_ ||
-              session_ctx_.render_process_id == render_process_id);
+              (session_ctx_.render_process_id == render_process_id &&
+               session_ctx_.render_frame_id == render_frame_id));
   did_cancel_all_ = true;
-}
-
-void FakeSpeechRecognitionManager::AbortAllSessionsForRenderView(
-    int render_process_id, int render_view_id) {
-  DCHECK(delegate_);  // We only expect this to be called via |delegate_|.
-}
-
-int FakeSpeechRecognitionManager::GetSession(int render_process_id,
-                                             int render_view_id,
-                                             int request_id) const {
-  return session_ctx_.render_process_id == render_process_id &&
-         session_ctx_.render_view_id == render_view_id &&
-         session_ctx_.request_id == request_id;
 }
 
 const SpeechRecognitionSessionConfig&
@@ -150,11 +140,12 @@ void FakeSpeechRecognitionManager::SetFakeRecognitionResult() {
 
   VLOG(1) << "Setting fake recognition result.";
   listener_->OnAudioEnd(session_id_);
-  SpeechRecognitionResult result;
-  result.hypotheses.push_back(SpeechRecognitionHypothesis(
+  blink::mojom::SpeechRecognitionResultPtr result =
+      blink::mojom::SpeechRecognitionResult::New();
+  result->hypotheses.push_back(blink::mojom::SpeechRecognitionHypothesis::New(
       base::ASCIIToUTF16(kTestResult), 1.0));
-  SpeechRecognitionResults results;
-  results.push_back(result);
+  std::vector<blink::mojom::SpeechRecognitionResultPtr> results;
+  results.push_back(std::move(result));
   listener_->OnRecognitionResults(session_id_, results);
   listener_->OnRecognitionEnd(session_id_);
   session_id_ = 0;

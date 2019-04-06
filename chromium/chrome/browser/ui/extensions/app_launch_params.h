@@ -19,6 +19,10 @@
 
 class Profile;
 
+namespace content {
+class RenderFrameHost;
+}
+
 namespace extensions {
 class Extension;
 }
@@ -59,6 +63,9 @@ struct AppLaunchParams {
   // position and dimensions.
   gfx::Rect override_bounds;
 
+  // If non-empty, use override_app_name in place of generating one normally.
+  std::string override_app_name;
+
   // If non-empty, information from the command line may be passed on to the
   // application.
   base::CommandLine command_line;
@@ -78,6 +85,10 @@ struct AppLaunchParams {
   // display::kInvalidDisplayId means that the display does not exist or is not
   // set.
   int64_t display_id;
+
+  // The frame that initiated the open. May be null. If set, the new app will
+  // have |opener| as its window.opener.
+  content::RenderFrameHost* opener;
 };
 
 // Helper to create AppLaunchParams using extensions::GetLaunchContainer with

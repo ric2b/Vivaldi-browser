@@ -23,7 +23,7 @@
 #include "build/build_config.h"
 
 namespace gin {
-class V8BackgroundTaskRunner;
+class V8Platform;
 }
 
 namespace content {
@@ -36,6 +36,7 @@ namespace base {
 
 class HistogramBase;
 class Location;
+class SchedulerWorkerObserver;
 
 // Interface for a task scheduler and static methods to manage the instance used
 // by the post_task.h API.
@@ -84,8 +85,16 @@ class BASE_EXPORT TaskScheduler {
   virtual ~TaskScheduler() = default;
 
   // Allows the task scheduler to create threads and run tasks following the
-  // |init_params| specification. CHECKs on failure.
-  virtual void Start(const InitParams& init_params) = 0;
+  // |init_params| specification.
+  //
+  // If specified, |scheduler_worker_observer| will be notified when a worker
+  // enters and exits its main function. It must not be destroyed before
+  // JoinForTesting() has returned (must never be destroyed in production).
+  //
+  // CHECKs on failure.
+  virtual void Start(
+      const InitParams& init_params,
+      SchedulerWorkerObserver* scheduler_worker_observer = nullptr) = 0;
 
   // Posts |task| with a |delay| and specific |traits|. |delay| can be zero.
   // For one off tasks that don't require a TaskRunner.
@@ -147,6 +156,13 @@ class BASE_EXPORT TaskScheduler {
   // Does not wait for delayed tasks. Waits for undelayed tasks posted from
   // other threads during the call. Returns immediately when shutdown completes.
   virtual void FlushForTesting() = 0;
+
+  // Returns and calls |flush_callback| when there are no incomplete undelayed
+  // tasks. |flush_callback| may be called back on any thread and should not
+  // perform a lot of work. May be used when additional work on the current
+  // thread needs to be performed during a flush. Only one
+  // FlushAsyncForTesting() may be pending at any given time.
+  virtual void FlushAsyncForTesting(OnceClosure flush_callback) = 0;
 
   // Joins all threads. Tasks that are already running are allowed to complete
   // their execution. This can only be called once. Using this task scheduler
@@ -210,11 +226,12 @@ class BASE_EXPORT TaskScheduler {
   static TaskScheduler* GetInstance();
 
  private:
-  friend class gin::V8BackgroundTaskRunner;
+  friend class gin::V8Platform;
   friend class content::BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
 
   // Returns the maximum number of non-single-threaded non-blocked tasks posted
-  // with |traits| that can run concurrently in this TaskScheduler.
+  // with |traits| that can run concurrently in this TaskScheduler. |traits|
+  // can't contain TaskPriority::BACKGROUND.
   //
   // Do not use this method. To process n items, post n tasks that each process
   // 1 item rather than GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated()

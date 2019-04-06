@@ -6,11 +6,11 @@
 
 #import <WebKit/WebKit.h>
 
-#import "base/mac/bind_objc_block.h"
+#include "base/bind.h"
+#import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "ios/net/cookies/cookie_store_ios_test_util.h"
 #include "ios/net/cookies/system_cookie_store.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/net/cookies/wk_cookie_util.h"
 #include "ios/web/public/features.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
@@ -22,8 +22,8 @@
 #error "This file requires ARC support."
 #endif
 
-using testing::WaitUntilConditionOrTimeout;
-using testing::kWaitForCookiesTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForCookiesTimeout;
 
 namespace web {
 
@@ -75,7 +75,7 @@ bool IsCookieSetInNSHTTPCookieStore(NSHTTPCookie* system_cookie,
 bool SetCookieInCookieStore(NSHTTPCookie* cookie,
                             net::SystemCookieStore* store) {
   __block bool cookie_was_set = false;
-  store->SetCookieAsync(cookie, nullptr, base::BindBlockArc(^{
+  store->SetCookieAsync(cookie, nullptr, base::BindOnce(^{
                           cookie_was_set = true;
                         }));
   return WaitUntilConditionOrTimeout(kWaitForCookiesTimeout, ^bool {
@@ -131,7 +131,7 @@ TEST_F(SystemCookieStoreUtilTest, CreateSystemCookieStore) {
   }
   // Clear cookies that was set in the test.
   __block bool cookies_cleared = false;
-  system_cookie_store->ClearStoreAsync(base::BindBlockArc(^{
+  system_cookie_store->ClearStoreAsync(base::BindOnce(^{
     cookies_cleared = true;
   }));
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForCookiesTimeout, ^bool {

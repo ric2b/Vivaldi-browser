@@ -65,21 +65,39 @@ class GaiaAuthConsumer {
     bool is_child_account;
   };
 
+  // Possible server responses to a token revocation request.
+  // Used in UMA, do not delete or reorder values.
+  enum class TokenRevocationStatus {
+    // Token revocation succeeded.
+    kSuccess = 0,
+    // Network connection was canceled, no response was received.
+    kConnectionCanceled = 1,
+    // Network connection failed, no response was received.
+    kConnectionFailed = 2,
+    // Network connection timed out, no response was received.
+    kConnectionTimeout = 3,
+    // The token is unknown or invalid.
+    kInvalidToken = 4,
+    // The request was malformed.
+    kInvalidRequest = 5,
+    // Internal server error.
+    kServerError = 6,
+    // Other error.
+    kUnknownError = 7,
+
+    kMaxValue = kUnknownError
+  };
+
   virtual ~GaiaAuthConsumer() {}
 
   virtual void OnClientLoginSuccess(const ClientLoginResult& result) {}
   virtual void OnClientLoginFailure(const GoogleServiceAuthError& error) {}
 
-  virtual void OnIssueAuthTokenSuccess(const std::string& service,
-                                       const std::string& auth_token) {}
-  virtual void OnIssueAuthTokenFailure(const std::string& service,
-                                       const GoogleServiceAuthError& error) {}
-
   virtual void OnClientOAuthCode(const std::string& auth_code) {}
   virtual void OnClientOAuthSuccess(const ClientOAuthResult& result) {}
   virtual void OnClientOAuthFailure(const GoogleServiceAuthError& error) {}
 
-  virtual void OnOAuth2RevokeTokenCompleted() {}
+  virtual void OnOAuth2RevokeTokenCompleted(TokenRevocationStatus status) {}
 
   virtual void OnGetUserInfoSuccess(const UserInfoMap& data) {}
   virtual void OnGetUserInfoFailure(const GoogleServiceAuthError& error) {}

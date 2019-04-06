@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef DEVICE_HID_INPUT_SERVICE_LINUX_H_
-#define DEVICE_HID_INPUT_SERVICE_LINUX_H_
+#ifndef SERVICES_DEVICE_HID_INPUT_SERVICE_LINUX_H_
+#define SERVICES_DEVICE_HID_INPUT_SERVICE_LINUX_H_
 
 #include <map>
 #include <memory>
@@ -15,7 +15,7 @@
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
-#include "services/device/public/interfaces/input_service.mojom.h"
+#include "services/device/public/mojom/input_service.mojom.h"
 
 namespace device {
 
@@ -72,4 +72,4 @@ class InputServiceLinux : public mojom::InputDeviceManager {
 
 }  // namespace device
 
-#endif  // DEVICE_HID_INPUT_SERVICE_LINUX_H_
+#endif  // SERVICES_DEVICE_HID_INPUT_SERVICE_LINUX_H_

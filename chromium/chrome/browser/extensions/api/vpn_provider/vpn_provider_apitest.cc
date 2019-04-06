@@ -16,7 +16,6 @@
 #include "chromeos/dbus/fake_shill_service_client.h"
 #include "chromeos/dbus/fake_shill_third_party_vpn_driver_client.h"
 #include "chromeos/network/network_configuration_handler.h"
-#include "chromeos/network/network_configuration_observer.h"
 #include "chromeos/network/network_profile_handler.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/test_utils.h"
@@ -114,25 +113,13 @@ class TestShillThirdPartyVpnDriverClient
   std::vector<char> ip_packet_;
 };
 
-class VpnProviderApiTest : public ExtensionApiTest,
-                           public NetworkConfigurationObserver {
+class VpnProviderApiTest : public extensions::ExtensionApiTest {
  public:
   VpnProviderApiTest() {}
   ~VpnProviderApiTest() override {}
 
-  void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
-    NetworkHandler::Get()->network_configuration_handler()->AddObserver(this);
-  }
-
-  void TearDownOnMainThread() override {
-    ExtensionApiTest::TearDownOnMainThread();
-    NetworkHandler::Get()->network_configuration_handler()->RemoveObserver(
-        this);
-  }
-
   void SetUpInProcessBrowserTestFixture() override {
-    ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+    extensions::ExtensionApiTest::SetUpInProcessBrowserTestFixture();
     test_client_ = new TestShillThirdPartyVpnDriverClient();
     DBusThreadManager::GetSetterForTesting()->SetShillThirdPartyVpnDriverClient(
         base::WrapUnique(test_client_));
@@ -172,8 +159,9 @@ class VpnProviderApiTest : public ExtensionApiTest,
   }
 
   std::string GetSingleServicePath() {
-    EXPECT_FALSE(service_path_.empty());
-    return service_path_;
+    std::string service_path = service_->GetSingleServicepathForTesting();
+    EXPECT_FALSE(service_path.empty());
+    return service_path;
   }
 
   bool CreateConfigForTest(const std::string& name) {
@@ -196,31 +184,9 @@ class VpnProviderApiTest : public ExtensionApiTest,
 
   void TriggerInternalRemove() {
     NetworkHandler::Get()->network_configuration_handler()->RemoveConfiguration(
-        GetSingleServicePath(),
-        NetworkConfigurationObserver::SOURCE_USER_ACTION,
-        base::Bind(base::DoNothing), base::Bind(DoNothingFailureCallback));
+        GetSingleServicePath(), base::DoNothing(),
+        base::Bind(DoNothingFailureCallback));
   }
-
-  // NetworkConfigurationObserver:
-  void OnConfigurationCreated(const std::string& service_path,
-                              const std::string& profile_path,
-                              const base::DictionaryValue& properties,
-                              Source source) override {
-    service_path_ = service_path;
-  }
-
-  void OnConfigurationRemoved(const std::string& service_path,
-                              const std::string& guid,
-                              Source source) override {}
-
-  void OnPropertiesSet(const std::string& service_path,
-                       const std::string& guid,
-                       const base::DictionaryValue& set_properties,
-                       Source source) override {}
-
-  void OnConfigurationProfileChanged(const std::string& service_path,
-                                     const std::string& profile_path,
-                                     Source source) override {}
 
  protected:
   TestShillThirdPartyVpnDriverClient* test_client_ = nullptr;
@@ -400,10 +366,9 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, ConfigPersistence) {
   properties.SetKey(shill::kProfileProperty, base::Value(kNetworkProfilePath));
   NetworkHandler::Get()
       ->network_configuration_handler()
-      ->CreateShillConfiguration(
-          properties, NetworkConfigurationObserver::SOURCE_EXTENSION_INSTALL,
-          base::Bind(DoNothingSuccessCallback),
-          base::Bind(DoNothingFailureCallback));
+      ->CreateShillConfiguration(properties,
+                                 base::Bind(DoNothingSuccessCallback),
+                                 base::Bind(DoNothingFailureCallback));
   content::RunAllPendingInMessageLoop();
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
 }
@@ -445,7 +410,7 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateDisable) {
                   ->GetTestInterface()
                   ->GetService(service_path, &profile_path, &properties));
 
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile())->extension_service();
   extension_service->DisableExtension(
       extension_id_, extensions::disable_reason::DISABLE_USER_ACTION);
@@ -471,7 +436,7 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateBlacklist) {
                   ->GetTestInterface()
                   ->GetService(service_path, &profile_path, &properties));
 
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile())->extension_service();
   extension_service->BlacklistExtensionForTest(extension_id_);
   content::RunAllPendingInMessageLoop();

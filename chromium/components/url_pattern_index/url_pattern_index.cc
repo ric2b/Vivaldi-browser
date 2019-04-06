@@ -18,6 +18,7 @@
 #include "components/url_pattern_index/url_pattern.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/url_constants.h"
 
 namespace url_pattern_index {
 
@@ -229,7 +230,7 @@ class UrlRuleFlatBufferConverter {
     switch (rule_.source_type()) {
       case proto::SOURCE_TYPE_ANY:
         options_ |= flat::OptionFlag_APPLIES_TO_THIRD_PARTY;
-      // Note: fall through here intentionally.
+        FALLTHROUGH;
       case proto::SOURCE_TYPE_FIRST_PARTY:
         options_ |= flat::OptionFlag_APPLIES_TO_FIRST_PARTY;
         break;
@@ -250,6 +251,17 @@ class UrlRuleFlatBufferConverter {
   bool InitializeElementTypes() {
     static_assert(flat::ElementType_ANY <= std::numeric_limits<uint16_t>::max(),
                   "Element types can not be stored in uint16_t.");
+
+    // Handle the default case. Note this means we end up adding
+    // flat::ElementType_CSP_REPORT as an element type when there is no
+    // corresponding proto::ElementType for it. However this should not matter
+    // in practice since subresource_filter does not do matching on CSP reports
+    // currently. If subresource_filter started to do so, add support for CSP
+    // reports in proto::ElementType.
+    if (rule_.element_types() == kDefaultProtoElementTypesMask) {
+      element_types_ = kDefaultFlatElementTypesMask;
+      return true;
+    }
 
     const ElementTypeMap& element_type_map = GetElementTypeMap();
     // Ensure all proto::ElementType(s) are mapped in |element_type_map|.
@@ -714,8 +726,13 @@ const flat::UrlRule* UrlPatternIndexMatcher::FindMatch(
     bool is_third_party,
     bool disable_generic_rules,
     FindRuleStrategy strategy) const {
-  if (!flat_index_ || !url.is_valid())
+  // Ignore URLs that are greater than the max URL length. Since those will be
+  // disallowed elsewhere in the loading stack, we can save compute time by
+  // avoiding matching here.
+  if (!flat_index_ || !url.is_valid() ||
+      url.spec().length() > url::kMaxURLChars) {
     return nullptr;
+  }
   if ((element_type == flat::ElementType_NONE) ==
       (activation_type == flat::ActivationType_NONE)) {
     return nullptr;

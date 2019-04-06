@@ -68,7 +68,7 @@ base::string16 GetAppName(BrowserDistribution* dist,
                           const base::string16& install_path) {
   base::string16 app_name(dist->GetDisplayName());
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(installer::switches::kVivaldiStandalone)) {
+  if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
     // extract the install folder name for the standalone install
     base::string16::size_type pos = install_path.rfind(L"\\Application");
     if (pos != base::string16::npos) {

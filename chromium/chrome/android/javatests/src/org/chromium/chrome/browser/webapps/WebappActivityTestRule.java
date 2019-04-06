@@ -25,6 +25,8 @@ import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content.browser.test.util.DOMUtils;
+import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.EmbeddedTestServerRule;
 
@@ -78,6 +80,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         super(WebappActivity0.class);
     }
 
+    @Override
     public EmbeddedTestServer getTestServer() {
         return mTestServerRule.getServer();
     }
@@ -165,6 +168,35 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
     public final void startWebappActivity(Intent intent) throws Exception {
         launchActivity(intent);
         waitUntilIdle();
+    }
+
+    public static void assertToolbarShowState(
+            final ChromeActivity activity, final boolean showState) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                Assert.assertEquals(showState, activity.getActivityTab().canShowBrowserControls());
+            }
+        });
+    }
+
+    /**
+     * Executing window.open() through a click on a link, as it needs user gesture to avoid Chrome
+     * blocking it as a popup.
+     */
+    static public void jsWindowOpen(ChromeActivity activity, String url) throws Exception {
+        String injectedHtml = String.format("var aTag = document.createElement('testId');"
+                        + "aTag.id = 'testId';"
+                        + "aTag.innerHTML = 'Click Me!';"
+                        + "aTag.onclick = function() {"
+                        + "  window.open('%s');"
+                        + "  return false;"
+                        + "};"
+                        + "document.body.insertAdjacentElement('afterbegin', aTag);",
+                url);
+        JavaScriptUtils.executeJavaScriptAndWaitForResult(
+                activity.getActivityTab().getWebContents(), injectedHtml);
+        DOMUtils.clickNode(activity.getActivityTab().getWebContents(), "testId");
     }
 
     /**

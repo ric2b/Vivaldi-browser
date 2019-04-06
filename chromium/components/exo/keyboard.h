@@ -9,6 +9,7 @@
 
 #include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/exo/keyboard_observer.h"
@@ -19,6 +20,7 @@
 #include "ui/events/event_handler.h"
 
 namespace ui {
+enum class DomCode;
 class KeyEvent;
 }
 
@@ -38,6 +40,8 @@ class Keyboard : public ui::EventHandler,
  public:
   Keyboard(KeyboardDelegate* delegate, Seat* seat);
   ~Keyboard() override;
+
+  KeyboardDelegate* delegate() const { return delegate_; }
 
   bool HasDeviceConfigurationDelegate() const;
   void SetDeviceConfigurationDelegate(
@@ -107,6 +111,11 @@ class Keyboard : public ui::EventHandler,
   // The current focus surface for the keyboard.
   Surface* focus_ = nullptr;
 
+  // Set of currently pressed keys. First value is a platform code and second
+  // value is the code that was delivered to client. See Seat.h for more
+  // details.
+  base::flat_map<ui::DomCode, ui::DomCode> pressed_keys_;
+
   // Current set of modifier flags.
   int modifier_flags_ = 0;
 
@@ -119,6 +128,11 @@ class Keyboard : public ui::EventHandler,
 
   // Delay until a key state change expected to be acknowledged is expired.
   const base::TimeDelta expiration_delay_for_pending_key_acks_;
+
+  // True when the ARC app window is focused.
+  // TODO(yhanada, https://crbug.com/847500): Remove this when we find a way to
+  // fix https://crbug.com/847500 without breaking ARC++ apps.
+  bool focus_belongs_to_arc_app_ = false;
 
   base::ObserverList<KeyboardObserver> observer_list_;
 

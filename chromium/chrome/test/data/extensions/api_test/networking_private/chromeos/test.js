@@ -180,7 +180,7 @@ var availableTests = [
     chrome.networkingPrivate.createNetwork(
       false,  // shared
       { Type: NetworkType.WI_FI,
-        GUID: 'ignored_guid',
+        GUID: 'some_guid',
         WiFi: {
           SSID: 'wifi_created',
           Security: 'WEP-PSK'
@@ -188,7 +188,7 @@ var availableTests = [
       },
       callbackPass(function(guid) {
         assertFalse(guid == '');
-        assertFalse(guid == 'ignored_guid');
+        assertEq('some_guid', guid);
         chrome.networkingPrivate.getProperties(
             guid, callbackPass(function(properties) {
               assertEq(NetworkType.WI_FI, properties.Type);
@@ -592,7 +592,8 @@ var availableTests = [
             ModelID:"test_model_id",
             NetworkTechnology: 'GSM',
             RoamingState: 'Home',
-            SIMLockStatus: {LockEnabled: true, LockType: '', RetriesLeft: 3}
+            SIMLockStatus: {LockEnabled: true, LockType: '', RetriesLeft: 3},
+            Scanning: false,
           },
           ConnectionState: ConnectionStateType.NOT_CONNECTED,
           GUID: kCellularGuid,
@@ -624,6 +625,7 @@ var availableTests = [
             MIN: "test_min",
             ModelID:"test_model_id",
             SIMLockStatus: {LockEnabled: true, LockType: '', RetriesLeft: 3},
+            Scanning: false,
             SignalStrength: 0,
           },
           Connectable: false,

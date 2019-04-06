@@ -23,11 +23,12 @@ extern const base::Feature kSyncClearDataOnPassphraseEncryption;
 extern const base::Feature kSyncUserEvents;
 extern const base::Feature kSyncUserFieldTrialEvents;
 extern const base::Feature kSyncUserConsentEvents;
+extern const base::Feature kSyncUserConsentSeparateType;
 extern const base::Feature kSyncUserLanguageDetectionEvents;
 extern const base::Feature kSyncUserTranslationEvents;
-extern const base::Feature kSyncUSSAutocomplete;
 extern const base::Feature kSyncUSSBookmarks;
-extern const base::Feature kSyncUSSTypedURL;
+extern const base::Feature kSyncUSSSessions;
+extern const base::Feature kSyncUSSAutofillProfile;
 
 }  // namespace switches
 

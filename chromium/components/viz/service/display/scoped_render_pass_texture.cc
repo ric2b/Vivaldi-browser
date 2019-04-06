@@ -4,6 +4,8 @@
 
 #include "components/viz/service/display/scoped_render_pass_texture.h"
 
+#include <algorithm>
+
 #include "base/bits.h"
 #include "base/logging.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -50,6 +52,7 @@ ScopedRenderPassTexture::ScopedRenderPassTexture(
     gl->TexStorage2DEXT(GL_TEXTURE_2D, levels, TextureStorageFormat(format),
                         size_.width(), size_.height());
   } else {
+    DCHECK(GLSupportsFormat(format));
     gl->TexImage2D(GL_TEXTURE_2D, 0, GLInternalFormat(format), size_.width(),
                    size_.height(), 0, GLDataFormat(format), GLDataType(format),
                    nullptr);
@@ -67,6 +70,7 @@ ScopedRenderPassTexture::ScopedRenderPassTexture(
   mipmap_ = other.mipmap_;
   color_space_ = other.color_space_;
   gl_id_ = other.gl_id_;
+  mipmap_state_ = other.mipmap_state_;
 
   // When being moved, other will no longer hold this gl_id_.
   other.gl_id_ = 0;
@@ -81,6 +85,7 @@ ScopedRenderPassTexture& ScopedRenderPassTexture::operator=(
     mipmap_ = other.mipmap_;
     color_space_ = other.color_space_;
     gl_id_ = other.gl_id_;
+    mipmap_state_ = other.mipmap_state_;
 
     // When being moved, other will no longer hold this gl_id_.
     other.gl_id_ = 0;
@@ -94,6 +99,26 @@ void ScopedRenderPassTexture::Free() {
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
   gl->DeleteTextures(1, &gl_id_);
   gl_id_ = 0;
+}
+
+void ScopedRenderPassTexture::BindForSampling() {
+  gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
+  gl->BindTexture(GL_TEXTURE_2D, gl_id_);
+  switch (mipmap_state_) {
+    case INVALID:
+      break;
+    case GENERATE:
+      // TODO(crbug.com/803286): npot texture always return false on ubuntu
+      // desktop. The npot texture check is probably failing on desktop GL.
+      DCHECK(context_provider_->ContextCapabilities().texture_npot);
+      gl->GenerateMipmap(GL_TEXTURE_2D);
+      mipmap_state_ = VALID;
+      FALLTHROUGH;
+    case VALID:
+      gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        GL_LINEAR_MIPMAP_LINEAR);
+      break;
+  }
 }
 
 }  // namespace viz

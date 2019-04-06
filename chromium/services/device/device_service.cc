@@ -7,25 +7,24 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "device/geolocation/geolocation_config.h"
-#include "device/geolocation/geolocation_context.h"
-#include "device/geolocation/geolocation_provider_impl.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/device/fingerprint/fingerprint.h"
 #include "services/device/generic_sensor/sensor_provider_impl.h"
+#include "services/device/geolocation/geolocation_config.h"
+#include "services/device/geolocation/geolocation_context.h"
 #include "services/device/geolocation/public_ip_address_geolocator.h"
 #include "services/device/geolocation/public_ip_address_location_notifier.h"
 #include "services/device/power_monitor/power_monitor_message_broadcaster.h"
-#include "services/device/public/interfaces/battery_monitor.mojom.h"
+#include "services/device/public/mojom/battery_monitor.mojom.h"
 #include "services/device/serial/serial_device_enumerator_impl.h"
 #include "services/device/serial/serial_io_handler_impl.h"
 #include "services/device/time_zone_monitor/time_zone_monitor.h"
 #include "services/device/wake_lock/wake_lock_provider.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
@@ -49,32 +48,33 @@ namespace device {
 std::unique_ptr<service_manager::Service> CreateDeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    const GeolocationProvider::RequestContextProducer
-        geolocation_request_context_producer,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const std::string& geolocation_api_key,
+    bool use_gms_core_location_provider,
     const WakeLockContextCallback& wake_lock_context_callback,
     const CustomLocationProviderCallback& custom_location_provider_callback,
     const base::android::JavaRef<jobject>& java_nfc_delegate) {
-  GeolocationProviderImpl::SetCustomLocationProviderCallback(
-      custom_location_provider_callback);
+  GeolocationProviderImpl::SetGeolocationConfiguration(
+      url_loader_factory, geolocation_api_key,
+      custom_location_provider_callback, use_gms_core_location_provider);
   return std::make_unique<DeviceService>(
       std::move(file_task_runner), std::move(io_task_runner),
-      std::move(geolocation_request_context_producer), geolocation_api_key,
+      std::move(url_loader_factory), geolocation_api_key,
       wake_lock_context_callback, java_nfc_delegate);
 }
 #else
 std::unique_ptr<service_manager::Service> CreateDeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    const GeolocationProvider::RequestContextProducer
-        geolocation_request_context_producer,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const std::string& geolocation_api_key,
     const CustomLocationProviderCallback& custom_location_provider_callback) {
-  GeolocationProviderImpl::SetCustomLocationProviderCallback(
+  GeolocationProviderImpl::SetGeolocationConfiguration(
+      url_loader_factory, geolocation_api_key,
       custom_location_provider_callback);
   return std::make_unique<DeviceService>(
       std::move(file_task_runner), std::move(io_task_runner),
-      std::move(geolocation_request_context_producer), geolocation_api_key);
+      std::move(url_loader_factory), geolocation_api_key);
 }
 #endif
 
@@ -82,15 +82,13 @@ std::unique_ptr<service_manager::Service> CreateDeviceService(
 DeviceService::DeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    const GeolocationProvider::RequestContextProducer
-        geolocation_request_context_producer,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const std::string& geolocation_api_key,
     const WakeLockContextCallback& wake_lock_context_callback,
     const base::android::JavaRef<jobject>& java_nfc_delegate)
     : file_task_runner_(std::move(file_task_runner)),
       io_task_runner_(std::move(io_task_runner)),
-      geolocation_request_context_producer_(
-          geolocation_request_context_producer),
+      url_loader_factory_(std::move(url_loader_factory)),
       geolocation_api_key_(geolocation_api_key),
       wake_lock_context_callback_(wake_lock_context_callback),
       java_interface_provider_initialized_(false) {
@@ -100,13 +98,11 @@ DeviceService::DeviceService(
 DeviceService::DeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    const GeolocationProvider::RequestContextProducer
-        geolocation_request_context_producer,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const std::string& geolocation_api_key)
     : file_task_runner_(std::move(file_task_runner)),
       io_task_runner_(std::move(io_task_runner)),
-      geolocation_request_context_producer_(
-          geolocation_request_context_producer),
+      url_loader_factory_(std::move(url_loader_factory)),
       geolocation_api_key_(geolocation_api_key) {}
 #endif
 
@@ -170,6 +166,11 @@ void DeviceService::OnStart() {
       &DeviceService::BindVibrationManagerRequest, base::Unretained(this)));
 #endif
 
+#if defined(OS_CHROMEOS)
+  registry_.AddInterface<mojom::MtpManager>(base::BindRepeating(
+      &DeviceService::BindMtpManagerRequest, base::Unretained(this)));
+#endif
+
 #if defined(OS_LINUX) && defined(USE_UDEV)
   registry_.AddInterface<mojom::InputDeviceManager>(base::Bind(
       &DeviceService::BindInputDeviceManagerRequest, base::Unretained(this)));
@@ -203,6 +204,14 @@ void DeviceService::BindNFCProviderRequest(mojom::NFCProviderRequest request) {
 void DeviceService::BindVibrationManagerRequest(
     mojom::VibrationManagerRequest request) {
   VibrationManagerImpl::Create(std::move(request));
+}
+#endif
+
+#if defined(OS_CHROMEOS)
+void DeviceService::BindMtpManagerRequest(mojom::MtpManagerRequest request) {
+  if (!mtp_device_manager_)
+    mtp_device_manager_ = MtpDeviceManager::Initialize();
+  mtp_device_manager_->AddBinding(std::move(request));
 }
 #endif
 
@@ -253,7 +262,7 @@ void DeviceService::BindPublicIpAddressGeolocationProviderRequest(
   if (!public_ip_address_geolocation_provider_) {
     public_ip_address_geolocation_provider_ =
         std::make_unique<PublicIpAddressGeolocationProvider>(
-            geolocation_request_context_producer_, geolocation_api_key_);
+            url_loader_factory_, geolocation_api_key_);
   }
 
   public_ip_address_geolocation_provider_->Bind(std::move(request));

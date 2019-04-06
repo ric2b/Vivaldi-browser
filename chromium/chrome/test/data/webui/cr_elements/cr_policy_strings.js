@@ -10,4 +10,6 @@ var CrPolicyStrings = CrPolicyStrings || {
   controlledSettingRecommendedDiffers: 'differs',
   controlledSettingShared: 'shared: $1',
   controlledSettingOwner: 'owner: $1',
+  controlledSettingExtension: 'extension: $1',
+  controlledSettingExtensionWithoutName: 'extension',
 };

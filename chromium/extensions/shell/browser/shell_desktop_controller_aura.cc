@@ -8,8 +8,10 @@
 #include <string>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
+#include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/shell/browser/shell_app_window_client.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/window.h"
@@ -40,7 +42,7 @@
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/native_display_delegate.h"
-#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/ozone_platform.h"  // nogncheck
 #else
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
 #endif  // defined(OS_CHROMEOS)
@@ -161,10 +163,15 @@ ShellDesktopControllerAura::~ShellDesktopControllerAura() {
 }
 
 void ShellDesktopControllerAura::Run() {
+  KeepAliveRegistry::GetInstance()->AddObserver(this);
+
   base::RunLoop run_loop;
   run_loop_ = &run_loop;
   run_loop.Run();
   run_loop_ = nullptr;
+
+  KeepAliveRegistry::GetInstance()->SetIsShuttingDown(true);
+  KeepAliveRegistry::GetInstance()->RemoveObserver(this);
 }
 
 void ShellDesktopControllerAura::AddAppWindow(AppWindow* app_window,
@@ -198,9 +205,7 @@ void ShellDesktopControllerAura::CloseRootWindowController(
   TearDownRootWindowController(it->second.get());
   root_window_controllers_.erase(it);
 
-  // run_loop_ may be null in tests.
-  if (run_loop_ && root_window_controllers_.empty())
-    run_loop_->QuitWhenIdle();
+  MaybeQuit();
 }
 
 #if defined(OS_CHROMEOS)
@@ -229,10 +234,32 @@ void ShellDesktopControllerAura::OnDisplayModeChanged(
 
 ui::EventDispatchDetails ShellDesktopControllerAura::DispatchKeyEventPostIME(
     ui::KeyEvent* key_event) {
-  // TODO(michaelpg): With multiple windows, determine which root window
-  // triggered the event. See ash::WindowTreeHostManager for example.
+  if (key_event->target()) {
+    aura::WindowTreeHost* host = static_cast<aura::Window*>(key_event->target())
+                                     ->GetRootWindow()
+                                     ->GetHost();
+    return host->DispatchKeyEventPostIME(key_event);
+  }
+
+  // Send the key event to the focused window.
+  aura::Window* active_window =
+      const_cast<aura::Window*>(focus_controller_->GetActiveWindow());
+  if (active_window) {
+    return active_window->GetRootWindow()->GetHost()->DispatchKeyEventPostIME(
+        key_event);
+  }
+
   return GetPrimaryHost()->DispatchKeyEventPostIME(key_event);
 }
+
+void ShellDesktopControllerAura::OnKeepAliveStateChanged(
+    bool is_keeping_alive) {
+  if (!is_keeping_alive)
+    MaybeQuit();
+}
+
+void ShellDesktopControllerAura::OnKeepAliveRestartStateChanged(
+    bool can_restart) {}
 
 aura::WindowTreeHost* ShellDesktopControllerAura::GetPrimaryHost() {
   if (root_window_controllers_.empty())
@@ -252,6 +279,36 @@ aura::Window::Windows ShellDesktopControllerAura::GetAllRootWindows() {
   for (auto& pair : root_window_controllers_)
     windows.push_back(pair.second->host()->window());
   return windows;
+}
+
+void ShellDesktopControllerAura::SetWindowBoundsInScreen(
+    AppWindow* app_window,
+    const gfx::Rect& bounds) {
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayMatching(bounds);
+
+  // Create a RootWindowController for the display if necessary.
+  if (root_window_controllers_.count(display.id()) == 0) {
+    root_window_controllers_[display.id()] =
+        CreateRootWindowControllerForDisplay(display);
+  }
+
+  // Check if the window is parented to a different RootWindowController.
+  if (app_window->GetNativeWindow()->GetRootWindow() !=
+      root_window_controllers_[display.id()]->host()->window()) {
+    // Move the window to the appropriate RootWindowController for the display.
+    for (const auto& it : root_window_controllers_) {
+      if (it.second->host()->window() ==
+          app_window->GetNativeWindow()->GetRootWindow()) {
+        it.second->RemoveAppWindow(app_window);
+        break;
+      }
+    }
+    root_window_controllers_[display.id()]->AddAppWindow(
+        app_window, app_window->GetNativeWindow());
+  }
+
+  app_window->GetNativeWindow()->SetBoundsInScreen(bounds, display);
 }
 
 void ShellDesktopControllerAura::InitWindowManager() {
@@ -335,6 +392,19 @@ void ShellDesktopControllerAura::TearDownRootWindowController(
   root->host()->window()->RemovePreTargetHandler(
       root_window_event_filter_.get());
   root->host()->window()->RemovePreTargetHandler(focus_controller_.get());
+}
+
+void ShellDesktopControllerAura::MaybeQuit() {
+  // run_loop_ may be null in tests.
+  if (!run_loop_)
+    return;
+
+  // Quit if there are no app windows open and no keep-alives waiting for apps
+  // to relaunch.
+  if (root_window_controllers_.empty() &&
+      !KeepAliveRegistry::GetInstance()->IsKeepingAlive()) {
+    run_loop_->QuitWhenIdle();
+  }
 }
 
 #if defined(OS_CHROMEOS)

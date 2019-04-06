@@ -10,7 +10,7 @@
 #include "base/time/time.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 
 class Profile;
 class NetworkState;
@@ -46,9 +46,9 @@ class HatsNotificationController : public message_center::NotificationDelegate,
 
   // NotificationDelegate overrides:
   void Initialize(bool is_new_device);
-  void ButtonClick(int button_index) override;
   void Close(bool by_user) override;
-  void Click() override;
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override;
 
   // NetworkPortalDetector::Observer override:
   void OnPortalDetectionCompleted(

@@ -97,6 +97,8 @@ struct URLRequestContextConfig {
       bool load_disable_cache,
       // Storage path for http cache and cookie storage.
       const std::string& storage_path,
+      // Accept-Language request header field.
+      const std::string& accept_language,
       // User-Agent request header field.
       const std::string& user_agent,
       // JSON encoded experimental options.
@@ -106,9 +108,7 @@ struct URLRequestContextConfig {
       // Enable network quality estimator.
       bool enable_network_quality_estimator,
       // Enable bypassing of public key pinning for local trust anchors
-      bool bypass_public_key_pinning_for_local_trust_anchors,
-      // Certificate verifier cache data.
-      const std::string& cert_verifier_data);
+      bool bypass_public_key_pinning_for_local_trust_anchors);
   ~URLRequestContextConfig();
 
   // Configures |context_builder| based on |this|.
@@ -133,6 +133,8 @@ struct URLRequestContextConfig {
   const bool load_disable_cache;
   // Storage path for http cache and cookie storage.
   const std::string storage_path;
+  // Accept-Language request header field.
+  const std::string accept_language;
   // User-Agent request header field.
   const std::string user_agent;
 
@@ -144,9 +146,6 @@ struct URLRequestContextConfig {
 
   // Enable public key pinning bypass for local trust anchors.
   const bool bypass_public_key_pinning_for_local_trust_anchors;
-
-  // Data to populte CertVerifierCache.
-  const std::string cert_verifier_data;
 
   // App-provided list of servers that support QUIC.
   std::vector<std::unique_ptr<QuicHint>> quic_hints;
@@ -220,6 +219,8 @@ struct URLRequestContextConfigBuilder {
   bool load_disable_cache = false;
   // Storage path for http cache and cookie storage.
   std::string storage_path = "";
+  // Accept-Language request header field.
+  std::string accept_language = "";
   // User-Agent request header field.
   std::string user_agent = "";
   // Experimental options encoded as a string in a JSON format containing
@@ -238,9 +239,6 @@ struct URLRequestContextConfigBuilder {
 
   // Enable public key pinning bypass for local trust anchors.
   bool bypass_public_key_pinning_for_local_trust_anchors = true;
-
-  // Data to populate CertVerifierCache.
-  std::string cert_verifier_data = "";
 
  private:
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextConfigBuilder);

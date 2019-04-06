@@ -9,7 +9,8 @@ namespace resource_coordinator {
 FrameResourceCoordinator::FrameResourceCoordinator(
     service_manager::Connector* connector)
     : ResourceCoordinatorInterface(), weak_ptr_factory_(this) {
-  CoordinationUnitID new_cu_id(CoordinationUnitType::kFrame, std::string());
+  CoordinationUnitID new_cu_id(CoordinationUnitType::kFrame,
+                               CoordinationUnitID::RANDOM_ID);
   ResourceCoordinatorInterface::ConnectToService(connector, new_cu_id);
 }
 
@@ -35,8 +36,8 @@ void FrameResourceCoordinator::AddChildFrame(
   // We could keep the ID around ourselves, but this hop ensures that the child
   // has been created on the service-side.
   child.service()->GetID(
-      base::Bind(&FrameResourceCoordinator::AddChildFrameByID,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&FrameResourceCoordinator::AddChildFrameByID,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FrameResourceCoordinator::RemoveChildFrame(
@@ -45,8 +46,8 @@ void FrameResourceCoordinator::RemoveChildFrame(
   if (!service_)
     return;
   child.service()->GetID(
-      base::Bind(&FrameResourceCoordinator::RemoveChildFrameByID,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&FrameResourceCoordinator::RemoveChildFrameByID,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FrameResourceCoordinator::ConnectToService(

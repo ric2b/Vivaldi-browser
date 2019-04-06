@@ -6,9 +6,13 @@
 
 #include <vector>
 
+#include "base/files/scoped_file.h"
+#include "build/build_config.h"
 #include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/gpu_fence.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_enums.h"
 #include "ui/gl/gl_surface_egl.h"
 
 #define FOURCC(a, b, c, d)                                        \
@@ -23,7 +27,7 @@
 #define DRM_FORMAT_ABGR8888 FOURCC('A', 'B', '2', '4')
 #define DRM_FORMAT_XRGB8888 FOURCC('X', 'R', '2', '4')
 #define DRM_FORMAT_XBGR8888 FOURCC('X', 'B', '2', '4')
-#define DRM_FORMAT_XRGB2101010 FOURCC('X', 'R', '3', '0')
+#define DRM_FORMAT_ABGR2101010 FOURCC('A', 'B', '3', '0')
 #define DRM_FORMAT_YVU420 FOURCC('Y', 'V', '1', '2')
 #define DRM_FORMAT_NV12 FOURCC('N', 'V', '1', '2')
 
@@ -35,16 +39,19 @@ bool ValidInternalFormat(unsigned internalformat, gfx::BufferFormat format) {
     case GL_RGB:
       return format == gfx::BufferFormat::BGR_565 ||
              format == gfx::BufferFormat::RGBX_8888 ||
-             format == gfx::BufferFormat::BGRX_8888 ||
-             format == gfx::BufferFormat::BGRX_1010102;
+             format == gfx::BufferFormat::BGRX_8888;
+    case GL_RGB10_A2_EXT:
+      return format == gfx::BufferFormat::RGBX_1010102;
     case GL_RGB_YCRCB_420_CHROMIUM:
       return format == gfx::BufferFormat::YVU_420;
     case GL_RGB_YCBCR_420V_CHROMIUM:
       return format == gfx::BufferFormat::YUV_420_BIPLANAR;
     case GL_RGBA:
-      return format == gfx::BufferFormat::RGBA_8888;
+      return format == gfx::BufferFormat::RGBA_8888 ||
+             format == gfx::BufferFormat::RGBX_1010102;
     case GL_BGRA_EXT:
-      return format == gfx::BufferFormat::BGRA_8888;
+      return format == gfx::BufferFormat::BGRA_8888 ||
+             format == gfx::BufferFormat::BGRX_1010102;
     case GL_RED_EXT:
       return format == gfx::BufferFormat::R_8;
     case GL_R16_EXT:
@@ -54,35 +61,6 @@ bool ValidInternalFormat(unsigned internalformat, gfx::BufferFormat format) {
     default:
       return false;
   }
-}
-
-bool ValidFormat(gfx::BufferFormat format) {
-  switch (format) {
-    case gfx::BufferFormat::R_8:
-    case gfx::BufferFormat::R_16:
-    case gfx::BufferFormat::RG_88:
-    case gfx::BufferFormat::BGR_565:
-    case gfx::BufferFormat::RGBA_8888:
-    case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::BGRA_8888:
-    case gfx::BufferFormat::BGRX_8888:
-    case gfx::BufferFormat::BGRX_1010102:
-    case gfx::BufferFormat::YVU_420:
-    case gfx::BufferFormat::YUV_420_BIPLANAR:
-      return true;
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
-    case gfx::BufferFormat::RGBA_4444:
-    case gfx::BufferFormat::RGBA_F16:
-    case gfx::BufferFormat::UYVY_422:
-      return false;
-  }
-
-  NOTREACHED();
-  return false;
 }
 
 EGLint FourCC(gfx::BufferFormat format) {
@@ -103,8 +81,10 @@ EGLint FourCC(gfx::BufferFormat format) {
       return DRM_FORMAT_ARGB8888;
     case gfx::BufferFormat::BGRX_8888:
       return DRM_FORMAT_XRGB8888;
-    case gfx::BufferFormat::BGRX_1010102:
-      return DRM_FORMAT_XRGB2101010;
+    case gfx::BufferFormat::RGBX_1010102:
+      // We should use here DRM_FORMAT_XBGR2101010 format, but EGL on Intel
+      // doesn't support it for scanout, see https://crbug.com/776093#c14.
+      return DRM_FORMAT_ABGR2101010;
     case gfx::BufferFormat::YVU_420:
       return DRM_FORMAT_YVU420;
     case gfx::BufferFormat::YUV_420_BIPLANAR:
@@ -115,6 +95,7 @@ EGLint FourCC(gfx::BufferFormat format) {
     case gfx::BufferFormat::DXT5:
     case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::RGBA_4444:
+    case gfx::BufferFormat::BGRX_1010102:
     case gfx::BufferFormat::RGBA_F16:
     case gfx::BufferFormat::UYVY_422:
       NOTREACHED();
@@ -139,8 +120,10 @@ gfx::BufferFormat GetBufferFormatFromFourCCFormat(int format) {
       return gfx::BufferFormat::BGRA_8888;
     case DRM_FORMAT_XRGB8888:
       return gfx::BufferFormat::BGRX_8888;
-    case DRM_FORMAT_XRGB2101010:
-      return gfx::BufferFormat::BGRX_1010102;
+    case DRM_FORMAT_ABGR2101010:
+      // We should support DRM_FORMAT_XBGR2101010 format instead, but EGL on
+      // Intel doesn't support it for scanout, see https://crbug.com/776093#c14.
+      return gfx::BufferFormat::RGBX_1010102;
     case DRM_FORMAT_RGB565:
       return gfx::BufferFormat::BGR_565;
     case DRM_FORMAT_NV12:
@@ -169,20 +152,15 @@ GLImageNativePixmap::~GLImageNativePixmap() {}
 bool GLImageNativePixmap::Initialize(gfx::NativePixmap* pixmap,
                                      gfx::BufferFormat format) {
   DCHECK(!pixmap_);
-  if (pixmap->GetEGLClientBuffer()) {
-    EGLint attrs[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
-    if (!GLImageEGL::Initialize(EGL_NO_CONTEXT, EGL_NATIVE_PIXMAP_KHR,
-                                pixmap->GetEGLClientBuffer(), attrs)) {
-      return false;
-    }
-  } else if (pixmap->AreDmaBufFdsValid()) {
+  if (pixmap->AreDmaBufFdsValid()) {
     if (!ValidFormat(format)) {
       LOG(ERROR) << "Invalid format: " << gfx::BufferFormatToString(format);
       return false;
     }
 
     if (!ValidInternalFormat(internalformat_, format)) {
-      LOG(ERROR) << "Invalid internalformat: " << internalformat_
+      LOG(ERROR) << "Invalid internalformat: "
+                 << GLEnums::GetStringEnum(internalformat_)
                  << " for format: " << gfx::BufferFormatToString(format);
       return false;
     }
@@ -291,7 +269,7 @@ gfx::NativePixmapHandle GLImageNativePixmap::ExportHandle() {
   if (num_planes > 0 && static_cast<size_t>(num_planes) !=
                             gfx::NumberOfPlanesForBufferFormat(format)) {
     LOG(ERROR) << "Invalid number of planes: " << num_planes
-               << " for format: " << static_cast<int>(format);
+               << " for format: " << gfx::BufferFormatToString(format);
     return gfx::NativePixmapHandle();
   }
 
@@ -300,12 +278,18 @@ gfx::NativePixmapHandle GLImageNativePixmap::ExportHandle() {
     // This can happen if RGBX is implemented using RGBA. Otherwise there is
     // a real mistake from the user and we have to fail.
     if (internalformat_ == GL_RGB && format != gfx::BufferFormat::RGBA_8888) {
-      LOG(ERROR) << "Invalid internalformat: 0x" << std::hex << internalformat_
-                 << " for format: " << static_cast<int>(format);
+      LOG(ERROR) << "Invalid internalformat: "
+                 << GLEnums::GetStringEnum(internalformat_)
+                 << " for format: " << gfx::BufferFormatToString(format);
       return gfx::NativePixmapHandle();
     }
   }
 
+#if defined(OS_FUCHSIA)
+  // TODO(crbug.com/852011): Implement image handle export on Fuchsia.
+  NOTIMPLEMENTED();
+  return gfx::NativePixmapHandle();
+#else   // defined(OS_FUCHSIA)
   std::vector<int> fds(num_planes);
   std::vector<EGLint> strides(num_planes);
   std::vector<EGLint> offsets(num_planes);
@@ -341,6 +325,7 @@ gfx::NativePixmapHandle GLImageNativePixmap::ExportHandle() {
   }
 
   return handle;
+#endif  // !defined(OS_FUCHSIA)
 }
 
 unsigned GLImageNativePixmap::GetInternalFormat() {
@@ -365,14 +350,18 @@ bool GLImageNativePixmap::CopyTexSubImage(unsigned target,
   return false;
 }
 
-bool GLImageNativePixmap::ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
-                                               int z_order,
-                                               gfx::OverlayTransform transform,
-                                               const gfx::Rect& bounds_rect,
-                                               const gfx::RectF& crop_rect) {
+bool GLImageNativePixmap::ScheduleOverlayPlane(
+    gfx::AcceleratedWidget widget,
+    int z_order,
+    gfx::OverlayTransform transform,
+    const gfx::Rect& bounds_rect,
+    const gfx::RectF& crop_rect,
+    bool enable_blend,
+    std::unique_ptr<gfx::GpuFence> gpu_fence) {
   DCHECK(pixmap_);
   return pixmap_->ScheduleOverlayPlane(widget, z_order, transform, bounds_rect,
-                                       crop_rect);
+                                       crop_rect, enable_blend,
+                                       std::move(gpu_fence));
 }
 
 void GLImageNativePixmap::Flush() {
@@ -412,10 +401,11 @@ unsigned GLImageNativePixmap::GetInternalFormatForTesting(
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::BGRX_8888:
-    case gfx::BufferFormat::BGRX_1010102:
       return GL_RGB;
     case gfx::BufferFormat::RGBA_8888:
       return GL_RGBA;
+    case gfx::BufferFormat::RGBX_1010102:
+      return GL_RGB10_A2_EXT;
     case gfx::BufferFormat::BGRA_8888:
       return GL_BGRA_EXT;
     case gfx::BufferFormat::YVU_420:
@@ -428,6 +418,7 @@ unsigned GLImageNativePixmap::GetInternalFormatForTesting(
     case gfx::BufferFormat::DXT5:
     case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::RGBA_4444:
+    case gfx::BufferFormat::BGRX_1010102:
     case gfx::BufferFormat::RGBA_F16:
     case gfx::BufferFormat::UYVY_422:
       NOTREACHED();
@@ -436,6 +427,37 @@ unsigned GLImageNativePixmap::GetInternalFormatForTesting(
 
   NOTREACHED();
   return GL_NONE;
+}
+
+// static
+bool GLImageNativePixmap::ValidFormat(gfx::BufferFormat format) {
+  switch (format) {
+    case gfx::BufferFormat::R_8:
+    case gfx::BufferFormat::R_16:
+    case gfx::BufferFormat::RG_88:
+    case gfx::BufferFormat::BGR_565:
+    case gfx::BufferFormat::RGBA_8888:
+    case gfx::BufferFormat::RGBX_8888:
+    case gfx::BufferFormat::BGRA_8888:
+    case gfx::BufferFormat::BGRX_8888:
+    case gfx::BufferFormat::RGBX_1010102:
+    case gfx::BufferFormat::YVU_420:
+    case gfx::BufferFormat::YUV_420_BIPLANAR:
+      return true;
+    case gfx::BufferFormat::ATC:
+    case gfx::BufferFormat::ATCIA:
+    case gfx::BufferFormat::DXT1:
+    case gfx::BufferFormat::DXT5:
+    case gfx::BufferFormat::ETC1:
+    case gfx::BufferFormat::RGBA_4444:
+    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::RGBA_F16:
+    case gfx::BufferFormat::UYVY_422:
+      return false;
+  }
+
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace gl

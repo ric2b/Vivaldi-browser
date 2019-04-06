@@ -534,7 +534,7 @@ bool CheckCertIDMatchesCertificate(
 // TODO(eroman): Revisit how certificate parsing is used by this file. Ideally
 // would either pass in the parsed bits, or have a better abstraction for lazily
 // parsing.
-scoped_refptr<ParsedCertificate> ParseCertificate(base::StringPiece der) {
+scoped_refptr<ParsedCertificate> OCSPParseCertificate(base::StringPiece der) {
   ParseCertificateOptions parse_options;
   parse_options.allow_invalid_serial_numbers = true;
 
@@ -640,7 +640,7 @@ WARN_UNUSED_RESULT bool VerifyOCSPResponseSignature(
   //  (3) Has signed the OCSP response using its public key.
   for (const auto& responder_cert_tlv : response.certs) {
     scoped_refptr<ParsedCertificate> cur_responder_certificate =
-        ParseCertificate(responder_cert_tlv.AsStringPiece());
+        OCSPParseCertificate(responder_cert_tlv.AsStringPiece());
 
     // If failed parsing the certificate, keep looking.
     if (!cur_responder_certificate)
@@ -678,11 +678,8 @@ OCSPRevocationStatus GetRevocationStatusForCert(
     const ParsedCertificate* cert,
     const ParsedCertificate* issuer_certificate,
     const base::Time& verify_time,
+    const base::TimeDelta& max_age,
     OCSPVerifyResult::ResponseStatus* response_details) {
-  // The maximum age for an OCSP response, implemented as time since the
-  // |this_update| field in OCSPSingleResponse. Responses older than |max_age|
-  // will be considered invalid.
-  base::TimeDelta max_age = base::TimeDelta::FromDays(7);
   OCSPRevocationStatus result = OCSPRevocationStatus::UNKNOWN;
   *response_details = OCSPVerifyResult::NO_MATCHING_RESPONSE;
 
@@ -734,6 +731,7 @@ OCSPRevocationStatus CheckOCSP(
     base::StringPiece certificate_der,
     base::StringPiece issuer_certificate_der,
     const base::Time& verify_time,
+    const base::TimeDelta& max_age,
     OCSPVerifyResult::ResponseStatus* response_details) {
   *response_details = OCSPVerifyResult::NOT_CHECKED;
 
@@ -780,9 +778,9 @@ OCSPRevocationStatus CheckOCSP(
   }
 
   scoped_refptr<ParsedCertificate> certificate =
-      ParseCertificate(certificate_der);
+      OCSPParseCertificate(certificate_der);
   scoped_refptr<ParsedCertificate> issuer_certificate =
-      ParseCertificate(issuer_certificate_der);
+      OCSPParseCertificate(issuer_certificate_der);
 
   if (!certificate || !issuer_certificate) {
     *response_details = OCSPVerifyResult::NOT_CHECKED;
@@ -801,7 +799,7 @@ OCSPRevocationStatus CheckOCSP(
   // and time).
   OCSPRevocationStatus status = GetRevocationStatusForCert(
       response_data, certificate.get(), issuer_certificate.get(), verify_time,
-      response_details);
+      max_age, response_details);
 
   // TODO(eroman): Process the OCSP extensions. In particular, must reject if
   // there are any critical extensions that are not understood.
@@ -901,7 +899,7 @@ bool CreateOCSPRequest(const ParsedCertificate* cert,
   if (!EVP_marshal_digest_algorithm(&req_cert, md))
     return false;
 
-  AppendHashAsOctetString(md, &req_cert, issuer->tbs().issuer_tlv);
+  AppendHashAsOctetString(md, &req_cert, issuer->tbs().subject_tlv);
 
   der::Input key_tlv;
   if (!GetSubjectPublicKeyBytes(issuer->tbs().spki_tlv, &key_tlv))

@@ -88,22 +88,35 @@ bool GpuChannelHost::Send(IPC::Message* msg) {
 uint32_t GpuChannelHost::OrderingBarrier(
     int32_t route_id,
     int32_t put_offset,
-    bool snapshot_requested,
     std::vector<SyncToken> sync_token_fences) {
   AutoLock lock(context_lock_);
 
-  if (flush_list_.empty() || flush_list_.back().route_id != route_id)
+  if (flush_list_.empty() || flush_list_.back().route_id != route_id ||
+      flush_list_.back().transfer_buffer_id_to_destroy)
     flush_list_.push_back(FlushParams());
 
   FlushParams& flush_params = flush_list_.back();
   flush_params.flush_id = next_flush_id_++;
   flush_params.route_id = route_id;
   flush_params.put_offset = put_offset;
-  flush_params.snapshot_requested = snapshot_requested;
   flush_params.sync_token_fences.insert(
       flush_params.sync_token_fences.end(),
       std::make_move_iterator(sync_token_fences.begin()),
       std::make_move_iterator(sync_token_fences.end()));
+  flush_params.transfer_buffer_id_to_destroy = 0;
+  return flush_params.flush_id;
+}
+
+uint32_t GpuChannelHost::DestroyTransferBuffer(int32_t route_id,
+                                               int32_t id_to_destroy) {
+  AutoLock lock(context_lock_);
+
+  flush_list_.push_back(FlushParams());
+  FlushParams& flush_params = flush_list_.back();
+  flush_params.flush_id = next_flush_id_++;
+  flush_params.route_id = route_id;
+  flush_params.put_offset = -1;
+  flush_params.transfer_buffer_id_to_destroy = id_to_destroy;
   return flush_params.flush_id;
 }
 
@@ -172,9 +185,20 @@ base::SharedMemoryHandle GpuChannelHost::ShareToGpuProcess(
   return base::SharedMemory::DuplicateHandle(source_handle);
 }
 
+base::UnsafeSharedMemoryRegion GpuChannelHost::ShareToGpuProcess(
+    const base::UnsafeSharedMemoryRegion& source_region) {
+  if (IsLost())
+    return base::UnsafeSharedMemoryRegion();
+
+  return source_region.Duplicate();
+}
+
 int32_t GpuChannelHost::ReserveTransferBufferId() {
   // 0 is a reserved value.
-  return g_next_transfer_buffer_id.GetNext() + 1;
+  int32_t id = g_next_transfer_buffer_id.GetNext();
+  if (id)
+    return id;
+  return g_next_transfer_buffer_id.GetNext();
 }
 
 int32_t GpuChannelHost::ReserveImageId() {

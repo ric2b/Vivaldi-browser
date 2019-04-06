@@ -2,10 +2,12 @@ include_rules = [
   "+components/autofill/android/java/src/org/chromium/components/autofill",
   "+components/background_task_scheduler/android/java",
   "+components/bookmarks/common/android/java/src/org/chromium/components/bookmarks",
+  "+components/embedder_support/android",
   "+components/feature_engagement/public/android/java/src/org/chromium/components/feature_engagement",
   "+components/dom_distiller/core/android/java/src/org/chromium/components/dom_distiller/core",
   "+components/gcm_driver/android/java/src/org/chromium/components/gcm_driver",
   "+components/gcm_driver/instance_id/android/javatests/src/org/chromium/components/gcm_driver/instance_id",
+  "+components/heap_profiling",
   "+components/location/android/java",
   "+components/minidump_uploader",
   "+components/navigation_interception",
@@ -20,28 +22,24 @@ include_rules = [
 
   "-content/public/android/java",
   "+content/public/android/java/src/org/chromium/content_public",
-  "!content/public/android/java/src/org/chromium/content/browser/BindingManager.java",
-  "!content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelper.java",
-  "!content/public/android/java/src/org/chromium/content/browser/ContentViewCore.java",
-  "!content/public/android/java/src/org/chromium/content/browser/ContentView.java",
-  "!content/public/android/java/src/org/chromium/content/browser/InterstitialPageDelegateAndroid.java",
-  "!content/public/android/java/src/org/chromium/content/browser/input/ChromiumBaseInputConnection.java",
-  "!content/public/android/java/src/org/chromium/content/common/ContentSwitches.java",
 
   "-content/public/android/javatests",
   "+content/public/test/android/javatests",
 
-  "+device/geolocation/android/java",
-  "+device/geolocation/android/javatests",
-
-  "+services/service_manager/public/java",
+  "+services/device/public/java",
 ]
 
 specific_include_rules = {
   "WebappNavigationTest\.java": [
-    "+content/public/android/java/src/org/chromium/content/common/ContentSwitches.java",
+    "+content/public/android/java/src/org/chromium/content_public/common/ContentSwitches.java",
   ],
   "WebApkIntegrationTest\.java": [
-    "+content/public/android/java/src/org/chromium/content/common/ContentSwitches.java",
+    "+content/public/android/java/src/org/chromium/content_public/common/ContentSwitches.java",
+  ],
+  "AuthenticatorTest\.java": [
+    "+content/public/android/java/src/org/chromium/content_public/common/ContentSwitches.java",
+  ],
+  "PageInfoPopupTest\.java": [
+    "+content/public/android/java/src/org/chromium/content_public/common/ContentSwitches.java",
   ],
 }

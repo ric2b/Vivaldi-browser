@@ -20,9 +20,9 @@
 #include "ipc/ipc_test_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_registry.h"
-#include "third_party/WebKit/public/web/WebFrameContentDumper.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#include "third_party/blink/public/web/web_frame_content_dumper.h"
+#include "third_party/blink/public/web/web_view.h"
 
 using testing::_;
 using testing::DeleteArg;
@@ -136,10 +136,9 @@ TEST_F(ContentSettingsObserverBrowserTest, DidBlockContentType) {
 }
 
 // Tests that multiple invokations of AllowDOMStorage result in a single IPC.
-// Fails due to http://crbug.com/104300
-TEST_F(ContentSettingsObserverBrowserTest, DISABLED_AllowDOMStorage) {
+TEST_F(ContentSettingsObserverBrowserTest, AllowDOMStorage) {
   // Load some HTML, so we have a valid security origin.
-  LoadHTML("<html></html>");
+  LoadHTMLWithUrlOverride("<html></html>", "https://example.com/");
   MockContentSettingsObserver observer(view_->GetMainRenderFrame(),
                                        registry_.get());
   ON_CALL(observer,
@@ -174,7 +173,8 @@ TEST_F(ContentSettingsObserverBrowserTest, JSBlockSentAfterPageLoad) {
       content_setting_rules.script_rules;
   script_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
   ContentSettingsObserver* observer = ContentSettingsObserver::Get(
       view_->GetMainRenderFrame());
@@ -252,7 +252,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ImagesBlockedByDefault) {
       content_setting_rules.image_rules;
   image_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
 
   ContentSettingsObserver* observer = ContentSettingsObserver::Get(
@@ -269,7 +270,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ImagesBlockedByDefault) {
       ContentSettingPatternSource(
           ContentSettingsPattern::Wildcard(),
           ContentSettingsPattern::FromString(mock_observer.image_origin()),
-          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+          base::Value::FromUniquePtrValue(
+              content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
           std::string(), false));
 
   EXPECT_CALL(mock_observer, OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES,
@@ -291,7 +293,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ImagesAllowedByDefault) {
       content_setting_rules.image_rules;
   image_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
       std::string(), false));
 
   ContentSettingsObserver* observer =
@@ -308,7 +311,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ImagesAllowedByDefault) {
       ContentSettingPatternSource(
           ContentSettingsPattern::Wildcard(),
           ContentSettingsPattern::FromString(mock_observer.image_origin()),
-          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+          base::Value::FromUniquePtrValue(
+              content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
           std::string(), false));
   EXPECT_CALL(mock_observer,
               OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES, base::string16()));
@@ -323,7 +327,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsBlockScripts) {
       content_setting_rules.script_rules;
   script_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
 
   ContentSettingsObserver* observer =
@@ -345,7 +350,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsAllowScripts) {
       content_setting_rules.script_rules;
   script_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
       std::string(), false));
 
   ContentSettingsObserver* observer =
@@ -370,7 +376,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsNoscriptTag) {
       content_setting_rules.script_rules;
   script_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
 
   ContentSettingsObserver* observer =
@@ -402,7 +409,8 @@ TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsNoscriptTag) {
   script_setting_rules.clear();
   script_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
       std::string(), false));
   observer->SetContentSettingRules(&content_setting_rules);
 
@@ -444,7 +452,8 @@ TEST_F(ContentSettingsObserverBrowserTest,
       content_setting_rules.script_rules;
   script_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
 
   ContentSettingsObserver* observer =
@@ -466,14 +475,16 @@ TEST_F(ContentSettingsObserverBrowserTest, ContentSettingsInterstitialPages) {
       content_setting_rules.script_rules;
   script_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
   // Block images.
   ContentSettingsForOneType& image_setting_rules =
       content_setting_rules.image_rules;
   image_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
 
   ContentSettingsObserver* observer =
@@ -508,7 +519,8 @@ TEST_F(ContentSettingsObserverBrowserTest, AutoplayContentSettings) {
       content_setting_rules.autoplay_rules;
   autoplay_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
       std::string(), false));
 
   ContentSettingsObserver* observer =
@@ -524,7 +536,8 @@ TEST_F(ContentSettingsObserverBrowserTest, AutoplayContentSettings) {
       ContentSettingPatternSource(
           ContentSettingsPattern::Wildcard(),
           ContentSettingsPattern::Wildcard(),
-          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
+          base::Value::FromUniquePtrValue(
+              content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
           std::string(), false));
 
   EXPECT_FALSE(observer->AllowAutoplay(true));

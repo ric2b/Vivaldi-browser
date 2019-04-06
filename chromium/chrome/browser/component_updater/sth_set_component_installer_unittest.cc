@@ -17,17 +17,20 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "chrome/browser/after_startup_task_utils.h"
+#include "components/certificate_transparency/sth_observer.h"
+#include "components/certificate_transparency/sth_reporter.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/cert/signed_tree_head.h"
-#include "net/cert/sth_observer.h"
 #include "net/test/ct_test_util.h"
 #include "services/data_decoder/public/cpp/testing_json_parser.h"
+#include "services/network/network_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
 namespace component_updater {
 
-class StoringSTHObserver : public net::ct::STHObserver {
+class StoringSTHObserver : public certificate_transparency::STHObserver {
  public:
   void NewSTHObserved(const net::ct::SignedTreeHead& sth) override {
     sths[sth.log_id] = sth;
@@ -38,14 +41,23 @@ class StoringSTHObserver : public net::ct::STHObserver {
 
 class STHSetComponentInstallerTest : public PlatformTest {
  public:
-  STHSetComponentInstallerTest() {}
+  STHSetComponentInstallerTest() : network_service_(nullptr) {
+    AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
+
+    network_service_.sth_reporter()->RegisterObserver(&observer_);
+  }
+
+  ~STHSetComponentInstallerTest() override {
+    network_service_.sth_reporter()->UnregisterObserver(&observer_);
+  }
+
   void SetUp() override {
     PlatformTest::SetUp();
 
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
-    observer_.reset(new StoringSTHObserver());
-    policy_.reset(new STHSetComponentInstallerPolicy(observer_.get()));
+    policy_ = std::make_unique<STHSetComponentInstallerPolicy>();
+    policy_->SetNetworkServiceForTesting(&network_service_);
   }
 
   void WriteSTHToFile(const std::string& sth_json,
@@ -72,18 +84,18 @@ class STHSetComponentInstallerTest : public PlatformTest {
     ASSERT_TRUE(policy_->VerifyInstallation(manifest, temp_dir_.GetPath()));
 
     const base::Version v("1.0");
-    policy_->LoadSTHsFromDisk(sths_dir, v);
+    policy_->ComponentReady(v, temp_dir_.GetPath(), manifest.CreateDeepCopy());
     // Drain the RunLoop created by the TestBrowserThreadBundle
-    base::RunLoop().RunUntilIdle();
+    thread_bundle_.RunUntilIdle();
   }
 
  protected:
   content::TestBrowserThreadBundle thread_bundle_;
 
+  network::NetworkService network_service_;
+  StoringSTHObserver observer_;
+
   base::ScopedTempDir temp_dir_;
-  std::unique_ptr<StoringSTHObserver> observer_;
-  // |policy_| should be destroyed before the |observer_| as it holds a pointer
-  // to it.
   std::unique_ptr<STHSetComponentInstallerPolicy> policy_;
   data_decoder::TestingJsonParser::ScopedFactoryOverride factory_override_;
 
@@ -108,15 +120,15 @@ TEST_F(STHSetComponentInstallerTest, CanLoadAllSTHs) {
 
   LoadSTHs(manifest, sths_dir);
 
-  EXPECT_EQ(2u, observer_->sths.size());
+  EXPECT_EQ(2u, observer_.sths.size());
 
   const std::string first_log_id("abc");
-  ASSERT_TRUE(observer_->sths.find(first_log_id) != observer_->sths.end());
-  const net::ct::SignedTreeHead& first_sth(observer_->sths[first_log_id]);
+  ASSERT_TRUE(observer_.sths.find(first_log_id) != observer_.sths.end());
+  const net::ct::SignedTreeHead& first_sth(observer_.sths[first_log_id]);
   EXPECT_EQ(21u, first_sth.tree_size);
 
   const std::string second_log_id("a\00d", 3);
-  ASSERT_TRUE(observer_->sths.find(second_log_id) != observer_->sths.end());
+  ASSERT_TRUE(observer_.sths.find(second_log_id) != observer_.sths.end());
 }
 
 // Does not notify of invalid STH JSON.
@@ -130,7 +142,7 @@ TEST_F(STHSetComponentInstallerTest, DoesNotLoadInvalidJSON) {
   WriteSTHToFile(std::string("{invalid json}"), invalid_sth);
 
   LoadSTHs(manifest, sths_dir);
-  EXPECT_EQ(0u, observer_->sths.size());
+  EXPECT_EQ(0u, observer_.sths.size());
 }
 
 // Does not notify of valid JSON but in a file not hex-encoded log id.
@@ -145,7 +157,7 @@ TEST_F(STHSetComponentInstallerTest,
   WriteSTHToFile(net::ct::GetSampleSTHAsJson(), not_hex_sth_file);
 
   LoadSTHs(manifest, sths_dir);
-  EXPECT_EQ(0u, observer_->sths.size());
+  EXPECT_EQ(0u, observer_.sths.size());
 }
 
 }  // namespace component_updater

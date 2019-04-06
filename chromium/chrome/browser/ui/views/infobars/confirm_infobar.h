@@ -8,9 +8,9 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/views/infobars/infobar_view.h"
+#include "components/infobars/core/confirm_infobar_delegate.h"
 #include "ui/views/controls/link_listener.h"
 
-class ConfirmInfoBarDelegate;
 class ElevationIconSetter;
 
 namespace views {
@@ -31,8 +31,6 @@ class ConfirmInfoBar : public InfoBarView,
  private:
   // InfoBarView:
   void Layout() override;
-  void ViewHierarchyChanged(
-      const ViewHierarchyChangedDetails& details) override;
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
   int ContentMinimumWidth() const override;
 
@@ -41,14 +39,17 @@ class ConfirmInfoBar : public InfoBarView,
 
   ConfirmInfoBarDelegate* GetDelegate();
 
+  // Creates a button suitable for use as either OK or Cancel.
+  views::MdTextButton* CreateButton(ConfirmInfoBarDelegate::InfoBarButton type);
+
   // Returns the width of all content other than the label and link.  Layout()
   // uses this to determine how much space the label and link can take.
   int NonLabelWidth() const;
 
-  views::Label* label_;
-  views::MdTextButton* ok_button_;
-  views::MdTextButton* cancel_button_;
-  views::Link* link_;
+  views::Label* label_ = nullptr;
+  views::MdTextButton* ok_button_ = nullptr;
+  views::MdTextButton* cancel_button_ = nullptr;
+  views::Link* link_ = nullptr;
   std::unique_ptr<ElevationIconSetter> elevation_icon_setter_;
 
   DISALLOW_COPY_AND_ASSIGN(ConfirmInfoBar);

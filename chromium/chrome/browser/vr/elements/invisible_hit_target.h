@@ -19,8 +19,15 @@ class InvisibleHitTarget : public UiElement {
   void Render(UiElementRenderer* renderer,
               const CameraModel& model) const final;
 
+  void OnHoverEnter(const gfx::PointF& position,
+                    base::TimeTicks timestamp) override;
+  void OnHoverLeave(base::TimeTicks timestamp) override;
+
+  bool hovered() const { return hovered_; }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(InvisibleHitTarget);
+  bool hovered_ = false;
 };
 
 }  // namespace vr

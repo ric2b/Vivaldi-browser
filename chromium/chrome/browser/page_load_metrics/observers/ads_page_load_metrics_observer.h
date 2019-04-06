@@ -33,6 +33,16 @@ class AdsPageLoadMetricsObserver
     AD_TYPE_MAX = AD_TYPE_ALL
   };
 
+  // The origin of the ad relative to the main frame's origin.
+  // Note: Logged to UMA, keep in sync with CrossOriginAdStatus in enums.xml.
+  //   Add new entries to the end, and do not renumber.
+  enum class AdOriginStatus {
+    kUnknown = 0,
+    kSame = 1,
+    kCross = 2,
+    kMaxValue = kCross,
+  };
+
   using AdTypes = std::bitset<AD_TYPE_MAX>;
 
   // Returns a new AdsPageLoadMetricObserver. If the feature is disabled it
@@ -60,17 +70,21 @@ class AdsPageLoadMetricsObserver
 
  private:
   struct AdFrameData {
-    AdFrameData(FrameTreeNodeId frame_tree_node_id, AdTypes ad_types);
+    AdFrameData(FrameTreeNodeId frame_tree_node_id,
+                AdTypes ad_types,
+                AdOriginStatus origin_status);
     size_t frame_bytes;
     size_t frame_bytes_uncached;
     const FrameTreeNodeId frame_tree_node_id;
     AdTypes ad_types;
+    AdOriginStatus origin_status;
   };
 
   // subresource_filter::SubresourceFilterObserver:
   void OnSubframeNavigationEvaluated(
       content::NavigationHandle* navigation_handle,
-      subresource_filter::LoadPolicy load_policy) override;
+      subresource_filter::LoadPolicy load_policy,
+      bool is_ad_subframe) override;
   void OnSubresourceFilterGoingAway() override;
 
   // Determines if the URL of a frame matches the SubresourceFilter block

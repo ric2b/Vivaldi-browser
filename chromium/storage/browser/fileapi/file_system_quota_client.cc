@@ -18,7 +18,7 @@
 #include "storage/browser/fileapi/file_system_usage_cache.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "storage/common/fileapi/file_system_util.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
 using blink::mojom::StorageType;
@@ -27,48 +27,52 @@ namespace storage {
 
 namespace {
 
-void GetOriginsForTypeOnFileTaskRunner(
-    FileSystemContext* context,
-    StorageType storage_type,
-    std::set<GURL>* origins_ptr) {
+void GetOriginsForTypeOnFileTaskRunner(FileSystemContext* context,
+                                       StorageType storage_type,
+                                       std::set<url::Origin>* origins_ptr) {
   FileSystemType type = QuotaStorageTypeToFileSystemType(storage_type);
   DCHECK(type != kFileSystemTypeUnknown);
 
   FileSystemQuotaUtil* quota_util = context->GetQuotaUtil(type);
   if (!quota_util)
     return;
-  quota_util->GetOriginsForTypeOnFileTaskRunner(type, origins_ptr);
+  std::set<GURL> origins;
+  quota_util->GetOriginsForTypeOnFileTaskRunner(type, &origins);
+  for (auto origin : origins)
+    origins_ptr->insert(url::Origin::Create(origin));
 }
 
-void GetOriginsForHostOnFileTaskRunner(
-    FileSystemContext* context,
-    StorageType storage_type,
-    const std::string& host,
-    std::set<GURL>* origins_ptr) {
+void GetOriginsForHostOnFileTaskRunner(FileSystemContext* context,
+                                       StorageType storage_type,
+                                       const std::string& host,
+                                       std::set<url::Origin>* origins_ptr) {
   FileSystemType type = QuotaStorageTypeToFileSystemType(storage_type);
   DCHECK(type != kFileSystemTypeUnknown);
 
   FileSystemQuotaUtil* quota_util = context->GetQuotaUtil(type);
   if (!quota_util)
     return;
-  quota_util->GetOriginsForHostOnFileTaskRunner(type, host, origins_ptr);
+  std::set<GURL> origins;
+  quota_util->GetOriginsForHostOnFileTaskRunner(type, host, &origins);
+  for (auto origin : origins)
+    origins_ptr->insert(url::Origin::Create(origin));
 }
 
-void DidGetOrigins(const storage::QuotaClient::GetOriginsCallback& callback,
-                   std::set<GURL>* origins_ptr) {
-  callback.Run(*origins_ptr);
+void DidGetOrigins(storage::QuotaClient::GetOriginsCallback callback,
+                   std::set<url::Origin>* origins_ptr) {
+  std::move(callback).Run(*origins_ptr);
 }
 
 blink::mojom::QuotaStatusCode DeleteOriginOnFileTaskRunner(
     FileSystemContext* context,
-    const GURL& origin,
+    const url::Origin& origin,
     FileSystemType type) {
   FileSystemBackend* provider = context->GetFileSystemBackend(type);
   if (!provider || !provider->GetQuotaUtil())
     return blink::mojom::QuotaStatusCode::kErrorNotSupported;
   base::File::Error result =
       provider->GetQuotaUtil()->DeleteOriginDataOnFileTaskRunner(
-          context, context->quota_manager_proxy(), origin, type);
+          context, context->quota_manager_proxy(), origin.GetURL(), type);
   if (result == base::File::FILE_OK)
     return blink::mojom::QuotaStatusCode::kOk;
   return blink::mojom::QuotaStatusCode::kErrorInvalidModification;
@@ -93,15 +97,14 @@ void FileSystemQuotaClient::OnQuotaManagerDestroyed() {
   delete this;
 }
 
-void FileSystemQuotaClient::GetOriginUsage(
-    const GURL& origin_url,
-    StorageType storage_type,
-    const GetUsageCallback& callback) {
+void FileSystemQuotaClient::GetOriginUsage(const url::Origin& origin,
+                                           StorageType storage_type,
+                                           GetUsageCallback callback) {
   DCHECK(!callback.is_null());
 
   if (is_incognito_) {
     // We don't support FileSystem in incognito mode yet.
-    callback.Run(0);
+    std::move(callback).Run(0);
     return;
   }
 
@@ -110,72 +113,74 @@ void FileSystemQuotaClient::GetOriginUsage(
 
   FileSystemQuotaUtil* quota_util = file_system_context_->GetQuotaUtil(type);
   if (!quota_util) {
-    callback.Run(0);
+    std::move(callback).Run(0);
     return;
   }
 
   base::PostTaskAndReplyWithResult(
       file_task_runner(), FROM_HERE,
       // It is safe to pass Unretained(quota_util) since context owns it.
-      base::Bind(&FileSystemQuotaUtil::GetOriginUsageOnFileTaskRunner,
-                 base::Unretained(quota_util),
-                 base::RetainedRef(file_system_context_), origin_url, type),
-      callback);
+      base::BindOnce(&FileSystemQuotaUtil::GetOriginUsageOnFileTaskRunner,
+                     base::Unretained(quota_util),
+                     base::RetainedRef(file_system_context_), origin.GetURL(),
+                     type),
+      std::move(callback));
 }
 
-void FileSystemQuotaClient::GetOriginsForType(
-    StorageType storage_type,
-    const GetOriginsCallback& callback) {
+void FileSystemQuotaClient::GetOriginsForType(StorageType storage_type,
+                                              GetOriginsCallback callback) {
   DCHECK(!callback.is_null());
 
   if (is_incognito_) {
     // We don't support FileSystem in incognito mode yet.
-    std::set<GURL> origins;
-    callback.Run(origins);
+    std::set<url::Origin> origins;
+    std::move(callback).Run(origins);
     return;
   }
 
-  std::set<GURL>* origins_ptr = new std::set<GURL>();
+  std::set<url::Origin>* origins_ptr = new std::set<url::Origin>();
   file_task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&GetOriginsForTypeOnFileTaskRunner,
-                            base::RetainedRef(file_system_context_),
-                            storage_type, base::Unretained(origins_ptr)),
-      base::Bind(&DidGetOrigins, callback, base::Owned(origins_ptr)));
+      FROM_HERE,
+      base::BindOnce(&GetOriginsForTypeOnFileTaskRunner,
+                     base::RetainedRef(file_system_context_), storage_type,
+                     base::Unretained(origins_ptr)),
+      base::BindOnce(&DidGetOrigins, std::move(callback),
+                     base::Owned(origins_ptr)));
 }
 
-void FileSystemQuotaClient::GetOriginsForHost(
-    StorageType storage_type,
-    const std::string& host,
-    const GetOriginsCallback& callback) {
+void FileSystemQuotaClient::GetOriginsForHost(StorageType storage_type,
+                                              const std::string& host,
+                                              GetOriginsCallback callback) {
   DCHECK(!callback.is_null());
 
   if (is_incognito_) {
     // We don't support FileSystem in incognito mode yet.
-    std::set<GURL> origins;
-    callback.Run(origins);
+    std::set<url::Origin> origins;
+    std::move(callback).Run(origins);
     return;
   }
 
-  std::set<GURL>* origins_ptr = new std::set<GURL>();
+  std::set<url::Origin>* origins_ptr = new std::set<url::Origin>();
   file_task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&GetOriginsForHostOnFileTaskRunner,
-                            base::RetainedRef(file_system_context_),
-                            storage_type, host, base::Unretained(origins_ptr)),
-      base::Bind(&DidGetOrigins, callback, base::Owned(origins_ptr)));
+      FROM_HERE,
+      base::BindOnce(&GetOriginsForHostOnFileTaskRunner,
+                     base::RetainedRef(file_system_context_), storage_type,
+                     host, base::Unretained(origins_ptr)),
+      base::BindOnce(&DidGetOrigins, std::move(callback),
+                     base::Owned(origins_ptr)));
 }
 
-void FileSystemQuotaClient::DeleteOriginData(
-    const GURL& origin,
-    StorageType type,
-    const DeletionCallback& callback) {
+void FileSystemQuotaClient::DeleteOriginData(const url::Origin& origin,
+                                             StorageType type,
+                                             DeletionCallback callback) {
   FileSystemType fs_type = QuotaStorageTypeToFileSystemType(type);
   DCHECK(fs_type != kFileSystemTypeUnknown);
 
   base::PostTaskAndReplyWithResult(
       file_task_runner(), FROM_HERE,
-      base::Bind(&DeleteOriginOnFileTaskRunner,
-                 base::RetainedRef(file_system_context_), origin, fs_type),
-      callback);
+      base::BindOnce(&DeleteOriginOnFileTaskRunner,
+                     base::RetainedRef(file_system_context_), origin, fs_type),
+      std::move(callback));
 }
 
 bool FileSystemQuotaClient::DoesSupport(StorageType storage_type) const {

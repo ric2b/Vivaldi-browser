@@ -27,7 +27,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "net/base/filename_util.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -197,7 +197,7 @@ TEST_F(RenderViewHostTest, DragEnteredFileURLsStillBlocked) {
 
 TEST_F(RenderViewHostTest, MessageWithBadHistoryItemFiles) {
   base::FilePath file_path;
-  EXPECT_TRUE(PathService::Get(base::DIR_TEMP, &file_path));
+  EXPECT_TRUE(base::PathService::Get(base::DIR_TEMP, &file_path));
   file_path = file_path.AppendASCII("foo");
   EXPECT_EQ(0, process()->bad_msg_count());
   test_rvh()->TestOnUpdateStateWithFile(file_path);
@@ -221,7 +221,7 @@ void SetBadFilePath(const GURL& url,
 TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   GURL url("http://www.google.com");
   base::FilePath file_path;
-  EXPECT_TRUE(PathService::Get(base::DIR_TEMP, &file_path));
+  EXPECT_TRUE(base::PathService::Get(base::DIR_TEMP, &file_path));
   file_path = file_path.AppendASCII("bar");
   auto set_bad_file_path_callback = base::Bind(SetBadFilePath, url, file_path);
 
@@ -237,7 +237,7 @@ TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   main_test_rfh()->SendRendererInitiatedNavigationRequest(url, false);
   main_test_rfh()->PrepareForCommit();
   contents()->GetMainFrame()->SendNavigateWithModificationCallback(
-      2, true, url, set_bad_file_path_callback);
+      2, true, url, std::move(set_bad_file_path_callback));
   EXPECT_EQ(1, process()->bad_msg_count());
 }
 
@@ -256,8 +256,7 @@ class TestSaveImageFromDataURL : public RenderFrameMessageFilter {
             0,
             nullptr,
             context,
-            BrowserContext::GetDefaultStoragePartition(context)
-                ->GetURLRequestContext(),
+            BrowserContext::GetDefaultStoragePartition(context),
             nullptr) {
     Reset();
   }
@@ -281,13 +280,16 @@ class TestSaveImageFromDataURL : public RenderFrameMessageFilter {
 
  protected:
   ~TestSaveImageFromDataURL() override {}
-  void DownloadUrl(int render_view_id,
-                   int render_frame_id,
-                   const GURL& url,
-                   const Referrer& referrer,
-                   const url::Origin& initiator,
-                   const base::string16& suggested_name,
-                   const bool use_prompt) const override {
+  void DownloadUrl(
+      int render_view_id,
+      int render_frame_id,
+      const GURL& url,
+      const Referrer& referrer,
+      const url::Origin& initiator,
+      const base::string16& suggested_name,
+      const bool use_prompt,
+      const bool follow_cross_origin_redirects,
+      blink::mojom::BlobURLTokenPtrInfo blob_url_token) const override {
     url_string_ = url.spec();
     is_downloaded_ = true;
   }

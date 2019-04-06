@@ -31,7 +31,7 @@ static_assert(File::FROM_BEGIN == SEEK_SET && File::FROM_CURRENT == SEEK_CUR &&
 namespace {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_ANDROID) && __ANDROID_API__ < 21
+  defined(OS_FUCHSIA) || (defined(OS_ANDROID) && __ANDROID_API__ < 21)
 int CallFstat(int fd, stat_wrapper_t *sb) {
   AssertBlockingAllowed();
   return fstat(fd, sb);
@@ -275,8 +275,17 @@ int File::Write(int64_t offset, const char* data, int size) {
   int bytes_written = 0;
   int rv;
   do {
+#if defined(OS_ANDROID)
+    // In case __USE_FILE_OFFSET64 is not used, we need to call pwrite64()
+    // instead of pwrite().
+    static_assert(sizeof(int64_t) == sizeof(off64_t),
+                  "off64_t must be 64 bits");
+    rv = HANDLE_EINTR(pwrite64(file_.get(), data + bytes_written,
+                               size - bytes_written, offset + bytes_written));
+#else
     rv = HANDLE_EINTR(pwrite(file_.get(), data + bytes_written,
                              size - bytes_written, offset + bytes_written));
+#endif
     if (rv <= 0)
       break;
 
@@ -386,10 +395,7 @@ File File::Duplicate() const {
   if (other_fd == -1)
     return File(File::GetLastFileError());
 
-  File other(other_fd);
-  if (async())
-    other.async_ = true;
-  return other;
+  return File(other_fd, async());
 }
 
 // Static.

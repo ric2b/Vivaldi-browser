@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "chromeos/login/auth/auth_status_consumer.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 
 namespace chromeos {
 
@@ -62,13 +62,6 @@ void FakeExtendedAuthenticator::AuthenticateToCheck(
 
   OnAuthFailure(FAILED_MOUNT,
                 AuthFailure(AuthFailure::UNLOCK_FAILED));
-}
-
-void FakeExtendedAuthenticator::CreateMount(
-    const AccountId& account_id,
-    const std::vector<cryptohome::KeyDefinition>& keys,
-    const ResultCallback& success_callback) {
-  NOTREACHED();
 }
 
 void FakeExtendedAuthenticator::AddKey(const UserContext& context,

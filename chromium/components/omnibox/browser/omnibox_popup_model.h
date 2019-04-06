@@ -6,6 +6,7 @@
 #define COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_POPUP_MODEL_H_
 
 #include <stddef.h>
+#include <map>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -30,7 +31,8 @@ class OmniboxPopupModel {
   // See selected_line_state_ for details.
   enum LineState {
     NORMAL = 0,
-    KEYWORD
+    KEYWORD,
+    TAB_SWITCH
   };
 
   OmniboxPopupModel(OmniboxPopupView* popup_view, OmniboxEditModel* edit_model);
@@ -128,15 +130,20 @@ class OmniboxPopupModel {
   void AddObserver(OmniboxPopupModelObserver* observer);
   void RemoveObserver(OmniboxPopupModelObserver* observer);
 
+  // Lookup the bitmap for |result_index|. Returns nullptr if not found.
+  const SkBitmap* RichSuggestionBitmapAt(int result_index) const;
   // Stores the image in a local data member and schedules a repaint.
-  void SetAnswerBitmap(const SkBitmap& bitmap);
-  const SkBitmap& answer_bitmap() const { return answer_bitmap_; }
+  void SetRichSuggestionBitmap(int result_index, const SkBitmap& bitmap);
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   // Gets the icon for the match index.
   gfx::Image GetMatchIcon(const AutocompleteMatch& match,
                           SkColor vector_icon_color);
 #endif
+
+  // Helper function to see if current selection has button and can accept
+  // the tab key.
+  bool SelectedLineHasTabMatch();
 
   // The token value for selected_line_ and functions dealing with a "line
   // number" that indicates "no line".
@@ -145,7 +152,7 @@ class OmniboxPopupModel {
  private:
   void OnFaviconFetched(const GURL& page_url, const gfx::Image& icon);
 
-  SkBitmap answer_bitmap_;
+  std::map<int, SkBitmap> rich_suggestion_bitmaps_;
 
   OmniboxPopupView* view_;
 
@@ -157,8 +164,15 @@ class OmniboxPopupModel {
 
   // If the selected line has both a normal match and a keyword match, this
   // determines whether the normal match (if NORMAL) or the keyword match
-  // (if KEYWORD) is selected.
+  // (if KEYWORD) is selected. Likewise, if the selected line has a normal
+  // match and a tab switch match, this determines whether the tab switch match
+  // (if TAB_SWITCH) is selected.
   LineState selected_line_state_;
+
+  // When a result changes, this informs of the URL in the previously selected
+  // suggestion whose tab switch button was focused, so that we may compare
+  // if equal.
+  GURL old_focused_url_;
 
   // The user has manually selected a match.
   bool has_selected_match_;

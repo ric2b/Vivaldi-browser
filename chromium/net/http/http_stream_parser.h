@@ -16,7 +16,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "crypto/ec_private_key.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
+#include "net/base/completion_repeating_callback.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 #include "net/log/net_log_with_source.h"
@@ -64,12 +65,13 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
                   const HttpRequestHeaders& headers,
                   const NetworkTrafficAnnotationTag& traffic_annotation,
                   HttpResponseInfo* response,
-                  const CompletionCallback& callback);
+                  CompletionOnceCallback callback);
 
-  int ReadResponseHeaders(const CompletionCallback& callback);
+  int ReadResponseHeaders(CompletionOnceCallback callback);
 
-  int ReadResponseBody(IOBuffer* buf, int buf_len,
-                       const CompletionCallback& callback);
+  int ReadResponseBody(IOBuffer* buf,
+                       int buf_len,
+                       CompletionOnceCallback callback);
 
   void Close(bool not_reusable);
 
@@ -187,7 +189,11 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
   // found, parse them with DoParseResponseHeaders().  Return the offset for
   // the end of the headers, or -1 if the complete headers were not found, or
   // with a net::Error if we encountered an error during parsing.
-  int FindAndParseResponseHeaders();
+  //
+  // |new_bytes| is the number of new bytes that have been appended to the end
+  // of |read_buf_| since the last call to this method (which must have returned
+  // -1).
+  int FindAndParseResponseHeaders(int new_bytes);
 
   // Parse the headers into response_.  Returns OK on success or a net::Error on
   // failure.
@@ -260,13 +266,7 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
 
   // The callback to notify a user that their request or response is
   // complete or there was an error
-  CompletionCallback callback_;
-
-  // In the client callback, the client can do anything, including
-  // destroying this class, so any pending callback must be issued
-  // after everything else is done.  When it is time to issue the client
-  // callback, move it from |callback_| to |scheduled_callback_|.
-  CompletionCallback scheduled_callback_;
+  CompletionOnceCallback callback_;
 
   // The underlying socket.
   ClientSocketHandle* const connection_;
@@ -274,7 +274,7 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
   NetLogWithSource net_log_;
 
   // Callback to be used when doing IO.
-  CompletionCallback io_callback_;
+  CompletionRepeatingCallback io_callback_;
 
   // Buffer used to read the request body from UploadDataStream.
   scoped_refptr<SeekableIOBuffer> request_body_read_buf_;

@@ -4,30 +4,29 @@
 
 #include "extensions/shell/browser/shell_extension_system.h"
 
+#include <memory>
 #include <string>
 
+#include "apps/launcher.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/api/app_runtime/app_runtime_api.h"
-#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/null_app_sorting.h"
 #include "extensions/browser/quota_service.h"
-#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/service_worker_manager.h"
 #include "extensions/browser/value_store/value_store_factory_impl.h"
-#include "extensions/common/api/app_runtime.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/file_util.h"
+#include "extensions/shell/browser/shell_extension_loader.h"
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -39,54 +38,11 @@ ShellExtensionSystem::ShellExtensionSystem(BrowserContext* browser_context)
       store_factory_(new ValueStoreFactoryImpl(browser_context->GetPath())),
       weak_factory_(this) {}
 
-ShellExtensionSystem::~ShellExtensionSystem() {
-}
+ShellExtensionSystem::~ShellExtensionSystem() = default;
 
 const Extension* ShellExtensionSystem::LoadExtension(
     const base::FilePath& extension_dir) {
-  // app_shell only supports unpacked extensions.
-  // NOTE: If you add packed extension support consider removing the flag
-  // FOLLOW_SYMLINKS_ANYWHERE below. Packed extensions should not have symlinks.
-  CHECK(base::DirectoryExists(extension_dir)) << extension_dir.AsUTF8Unsafe();
-  int load_flags = Extension::FOLLOW_SYMLINKS_ANYWHERE;
-  std::string load_error;
-  scoped_refptr<Extension> extension = file_util::LoadExtension(
-      extension_dir, Manifest::COMMAND_LINE, load_flags, &load_error);
-  if (!extension.get()) {
-    LOG(ERROR) << "Loading extension at " << extension_dir.value()
-               << " failed with: " << load_error;
-    return nullptr;
-  }
-
-  // Log warnings.
-  if (extension->install_warnings().size()) {
-    LOG(WARNING) << "Warnings loading extension at " << extension_dir.value()
-                 << ":";
-    for (const auto& warning : extension->install_warnings())
-      LOG(WARNING) << warning.message;
-  }
-
-  // TODO(jamescook): We may want to do some of these things here:
-  // * Create a PermissionsUpdater.
-  // * Call PermissionsUpdater::GrantActivePermissions().
-  // * Call ExtensionService::SatisfyImports().
-  // * Call ExtensionPrefs::OnExtensionInstalled().
-  // * Call ExtensionRegistryObserver::OnExtensionWillbeInstalled().
-
-  ExtensionRegistry::Get(browser_context_)->AddEnabled(extension.get());
-
-  RegisterExtensionWithRequestContexts(
-      extension.get(),
-      base::Bind(
-          &ShellExtensionSystem::OnExtensionRegisteredWithRequestContexts,
-          weak_factory_.GetWeakPtr(), extension));
-
-  RendererStartupHelperFactory::GetForBrowserContext(browser_context_)
-      ->OnExtensionLoaded(*extension);
-
-  ExtensionRegistry::Get(browser_context_)->TriggerOnLoaded(extension.get());
-
-  return extension.get();
+  return extension_loader_->LoadExtension(extension_dir);
 }
 
 const Extension* ShellExtensionSystem::LoadApp(const base::FilePath& app_dir) {
@@ -110,19 +66,25 @@ void ShellExtensionSystem::LaunchApp(const ExtensionId& extension_id) {
   const Extension* extension = ExtensionRegistry::Get(browser_context_)
                                    ->enabled_extensions()
                                    .GetByID(extension_id);
-  AppRuntimeEventRouter::DispatchOnLaunchedEvent(browser_context_, extension,
-                                                 SOURCE_UNTRACKED, nullptr);
+  apps::LaunchPlatformApp(browser_context_, extension, SOURCE_UNTRACKED);
+}
+
+void ShellExtensionSystem::ReloadExtension(const ExtensionId& extension_id) {
+  extension_loader_->ReloadExtension(extension_id);
 }
 
 void ShellExtensionSystem::Shutdown() {
+  extension_loader_.reset();
 }
 
 void ShellExtensionSystem::InitForRegularProfile(bool extensions_enabled) {
-  service_worker_manager_.reset(new ServiceWorkerManager(browser_context_));
-  runtime_data_.reset(
-      new RuntimeData(ExtensionRegistry::Get(browser_context_)));
-  quota_service_.reset(new QuotaService);
-  app_sorting_.reset(new NullAppSorting);
+  service_worker_manager_ =
+      std::make_unique<ServiceWorkerManager>(browser_context_);
+  runtime_data_ =
+      std::make_unique<RuntimeData>(ExtensionRegistry::Get(browser_context_));
+  quota_service_ = std::make_unique<QuotaService>();
+  app_sorting_ = std::make_unique<NullAppSorting>();
+  extension_loader_ = std::make_unique<ShellExtensionLoader>(browser_context_);
 }
 
 void ShellExtensionSystem::InitForIncognitoProfile() {
@@ -206,9 +168,17 @@ void ShellExtensionSystem::InstallUpdate(
     const std::string& extension_id,
     const std::string& public_key,
     const base::FilePath& temp_dir,
+    bool install_immediately,
     InstallUpdateCallback install_update_callback) {
   NOTREACHED();
   base::DeleteFile(temp_dir, true /* recursive */);
+}
+
+bool ShellExtensionSystem::FinishDelayedInstallationIfReady(
+    const std::string& extension_id,
+    bool install_immediately) {
+  NOTREACHED();
+  return false;
 }
 
 void ShellExtensionSystem::OnExtensionRegisteredWithRequestContexts(

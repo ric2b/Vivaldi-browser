@@ -7,13 +7,11 @@
 #include <memory>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "content/public/browser/gpu_data_manager.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extensions_test.h"
 #include "extensions/browser/preload_check.h"
@@ -49,8 +47,7 @@ const char kFeatureCSS3d[] = "css3d";
 
 class RequirementsCheckerTest : public ExtensionsTest {
  public:
-  RequirementsCheckerTest()
-      : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {
+  RequirementsCheckerTest() {
     manifest_dict_ = std::make_unique<base::DictionaryValue>();
   }
 
@@ -59,6 +56,7 @@ class RequirementsCheckerTest : public ExtensionsTest {
   void CreateExtension() {
     manifest_dict_->SetString("name", "dummy name");
     manifest_dict_->SetString("version", "1");
+    manifest_dict_->SetInteger("manifest_version", 2);
 
     std::string error;
     extension_ =

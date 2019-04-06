@@ -13,7 +13,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -50,11 +49,6 @@
 namespace content {
 
 namespace {
-
-#if defined(OS_ANDROID)
-const char kFrontEndURL[] =
-    "http://chrome-devtools-frontend.appspot.com/serve_rev/%s/inspector.html";
-#endif
 
 const int kBackLog = 10;
 
@@ -164,12 +158,8 @@ int ShellDevToolsManagerDelegate::GetHttpHandlerPort() {
 void ShellDevToolsManagerDelegate::StartHttpHandler(
     BrowserContext* browser_context) {
   std::string frontend_url;
-#if defined(OS_ANDROID)
-  frontend_url = base::StringPrintf(kFrontEndURL, GetWebKitRevision().c_str());
-#endif
   DevToolsAgentHost::StartRemoteDebuggingServer(
-      CreateSocketFactory(), frontend_url, browser_context->GetPath(),
-      base::FilePath());
+      CreateSocketFactory(), browser_context->GetPath(), base::FilePath());
 
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -196,7 +186,7 @@ ShellDevToolsManagerDelegate::CreateNewTarget(const GURL& url) {
                                         url,
                                         nullptr,
                                         gfx::Size());
-  if (switches::IsRunLayoutTestSwitchPresent())
+  if (switches::IsRunWebTestsSwitchPresent())
     SecondaryTestWindowObserver::CreateForWebContents(shell->web_contents());
   return DevToolsAgentHost::GetOrCreateFor(shell->web_contents());
 }
@@ -211,13 +201,11 @@ std::string ShellDevToolsManagerDelegate::GetDiscoveryPageHTML() {
 #endif
 }
 
-std::string ShellDevToolsManagerDelegate::GetFrontendResource(
-    const std::string& path) {
+bool ShellDevToolsManagerDelegate::HasBundledFrontendResources() {
 #if defined(OS_ANDROID)
-  return std::string();
-#else
-  return content::DevToolsFrontendHost::GetFrontendResource(path).as_string();
+  return false;
 #endif
+  return true;
 }
 
 }  // namespace content

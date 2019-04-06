@@ -4,7 +4,8 @@
 
 #include "chrome/browser/permissions/permission_prompt_android.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/permissions/grouped_permission_infobar_delegate_android.h"
@@ -39,10 +40,6 @@ PermissionPromptAndroid::PermissionPromptAndroid(
 }
 
 PermissionPromptAndroid::~PermissionPromptAndroid() {}
-
-bool PermissionPromptAndroid::CanAcceptRequestUpdate() {
-  return false;
-}
 
 void PermissionPromptAndroid::UpdateAnchorPosition() {
   NOTREACHED() << "UpdateAnchorPosition is not implemented";
@@ -115,5 +112,5 @@ base::string16 PermissionPromptAndroid::GetMessageText() const {
 std::unique_ptr<PermissionPrompt> PermissionPrompt::Create(
     content::WebContents* web_contents,
     Delegate* delegate) {
-  return base::MakeUnique<PermissionPromptAndroid>(web_contents, delegate);
+  return std::make_unique<PermissionPromptAndroid>(web_contents, delegate);
 }

@@ -1477,6 +1477,10 @@ function testNestedCrossOriginSubframes() {
     window.console.log('guest.consolemessage ' + e.message);
   };
   webview.onloadstop = function() {
+    // Only consider the first load stop, not the following one due to the
+    // iframe navigation.
+    webview.onloadstop = undefined;
+
     window.onmessage = function(e) {
       if (e.data == 'frames-loaded') {
         embedder.test.succeed();
@@ -1501,6 +1505,10 @@ function testNestedSubframes() {
     window.console.log('guest.consolemessage ' + e.message);
   };
   webview.onloadstop = function() {
+    // Only consider the first load stop, not the following one due to the
+    // iframe navigation.
+    webview.onloadstop = undefined;
+
     window.onmessage = function(e) {
       if (e.data == 'frames-loaded') {
         embedder.test.succeed();
@@ -2872,15 +2880,40 @@ function testPerViewZoomMode() {
   webview2.addEventListener('loadstop', function(e) {
     // Set |webview2| to 'per-view' mode and zoom it. Make sure that the
     // zoom did not affect |webview1|.
-    webview2.setZoomMode('per-view', function() {
-      webview2.getZoomMode(function(zoomMode) {
-        embedder.test.assertEq(zoomMode, 'per-view');
-        webview2.setZoom(0.45, function() {
-          webview1.getZoom(function(zoom) {
-            embedder.test.assertFalse(zoom == 0.45);
-            webview2.getZoom(function(zoom) {
-              embedder.test.assertEq(zoom, 0.45);
-              embedder.test.succeed();
+    // We need to verify that the page actually is zooming by comparing
+    // |window.innerWidth| before and after the zoom to prevent regressions like
+    // https://crbug.com/860511.
+    webview1.executeScript({code: 'window.innerWidth'}, function(result) {
+      var webview1_original_width = result[0];
+      webview2.executeScript({code: 'window.innerWidth'}, function(result) {
+        var webview2_original_width = result[0];
+        webview2.setZoomMode('per-view', function() {
+          webview2.getZoomMode(function(zoomMode) {
+            embedder.test.assertEq(zoomMode, 'per-view');
+            webview2.setZoom(0.45, function() {
+              webview1.getZoom(function(zoom) {
+                embedder.test.assertFalse(zoom == 0.45);
+                webview1.executeScript(
+                    {code: 'window.innerWidth'}, function(result) {
+                      var webview1_new_width = result[0];
+                      // Verify that inner width has not been changed for
+                      // for this WebView.
+                      embedder.test.assertEq(
+                          webview1_new_width, webview1_original_width);
+                      webview2.getZoom(function(zoom) {
+                        embedder.test.assertEq(zoom, 0.45);
+                        webview2.executeScript(
+                            {code: 'window.innerWidth'}, function(result) {
+                              var webview2_new_width = result[0];
+                              // Verify that inner width has been updated for
+                              // the second WebView.
+                              embedder.test.assertTrue(
+                                  webview2_original_width < webview2_new_width);
+                              embedder.test.succeed();
+                            });
+                      });
+                    });
+              });
             });
           });
         });

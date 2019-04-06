@@ -7,11 +7,12 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/allocator/allocator_extension.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/thread_checker.h"
@@ -26,6 +27,7 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/gpu/content_gpu_client.h"
 #include "gpu/command_buffer/common/activity_flags.h"
+#include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_init.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "ipc/ipc_sync_message_filter.h"
@@ -33,6 +35,7 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
+#include "third_party/skia/include/core/SkGraphics.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
@@ -86,6 +89,12 @@ class QueueingConnectionFilter : public ConnectionFilter {
                                  weak_factory_.GetWeakPtr()));
   }
 
+  void AddInterfaces() {
+#if defined(USE_OZONE)
+    ui::OzonePlatform::GetInstance()->AddInterfaces(registry_.get());
+#endif
+  }
+
  private:
   struct PendingRequest {
     std::string interface_name;
@@ -98,6 +107,7 @@ class QueueingConnectionFilter : public ConnectionFilter {
                        mojo::ScopedMessagePipeHandle* interface_pipe,
                        service_manager::Connector* connector) override {
     DCHECK(io_thread_checker_.CalledOnValidThread());
+
     if (registry_->CanBindInterface(interface_name)) {
       if (released_) {
         registry_->BindInterface(interface_name, std::move(*interface_pipe));
@@ -177,7 +187,9 @@ GpuChildThread::GpuChildThread(const ChildThreadImpl::Options& options,
   }
 }
 
-GpuChildThread::~GpuChildThread() {}
+GpuChildThread::~GpuChildThread() {
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
+}
 
 void GpuChildThread::Init(const base::Time& process_start_time) {
   viz_main_.gpu_service()->set_start_time(process_start_time);
@@ -207,9 +219,16 @@ void GpuChildThread::Init(const base::Time& process_start_time) {
       std::make_unique<QueueingConnectionFilter>(GetIOTaskRunner(),
                                                  std::move(registry));
   release_pending_requests_closure_ = filter->GetReleaseCallback();
+
+  filter->AddInterfaces();
   GetServiceManagerConnection()->AddConnectionFilter(std::move(filter));
 
   StartServiceManagerConnection();
+
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
+  memory_pressure_listener_ =
+      std::make_unique<base::MemoryPressureListener>(base::BindRepeating(
+          &GpuChildThread::OnMemoryPressure, base::Unretained(this)));
 }
 
 void GpuChildThread::CreateVizMainService(
@@ -254,8 +273,9 @@ void GpuChildThread::OnGpuServiceConnection(viz::GpuServiceImpl* gpu_service) {
   // Only set once per process instance.
   service_factory_.reset(new GpuServiceFactory(
       gpu_service->gpu_preferences(),
+      gpu_service->gpu_channel_manager()->gpu_driver_bug_workarounds(),
       gpu_service->media_gpu_channel_manager()->AsWeakPtr(),
-      overlay_factory_cb));
+      std::move(overlay_factory_cb)));
 
   if (GetContentClient()->gpu()) {  // NULL in tests.
     GetContentClient()->gpu()->GpuServiceInitialized(
@@ -265,12 +285,36 @@ void GpuChildThread::OnGpuServiceConnection(viz::GpuServiceImpl* gpu_service) {
   release_pending_requests_closure_.Run();
 }
 
+void GpuChildThread::PostCompositorThreadCreated(
+    base::SingleThreadTaskRunner* task_runner) {
+  auto* gpu_client = GetContentClient()->gpu();
+  if (gpu_client)
+    gpu_client->PostCompositorThreadCreated(task_runner);
+}
+
 void GpuChildThread::BindServiceFactoryRequest(
     service_manager::mojom::ServiceFactoryRequest request) {
   DVLOG(1) << "GPU: Binding service_manager::mojom::ServiceFactoryRequest";
   DCHECK(service_factory_);
   service_factory_bindings_.AddBinding(service_factory_.get(),
                                        std::move(request));
+}
+
+void GpuChildThread::OnTrimMemoryImmediately() {
+  OnPurgeMemory();
+}
+
+void GpuChildThread::OnMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel level) {
+  if (level == base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL)
+    OnPurgeMemory();
+}
+
+void GpuChildThread::OnPurgeMemory() {
+  base::allocator::ReleaseFreeMemory();
+  if (viz_main_.discardable_shared_memory_manager())
+    viz_main_.discardable_shared_memory_manager()->ReleaseFreeMemory();
+  SkGraphics::PurgeAllCaches();
 }
 
 #if defined(OS_ANDROID)

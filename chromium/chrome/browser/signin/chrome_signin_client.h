@@ -7,17 +7,19 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
 #include "google_apis/gaia/oauth2_token_service.h"
-#include "services/network/public/interfaces/network_change_manager.mojom.h"
+#include "net/cookies/cookie_change_dispatcher.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/network_change_manager.mojom.h"
 
 #if !defined(OS_CHROMEOS)
-#include "content/public/common/network_connection_tracker.h"
+#include "content/public/browser/network_connection_tracker.h"
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
@@ -37,6 +39,7 @@ class ChromeSigninClient
   explicit ChromeSigninClient(
       Profile* profile, SigninErrorController* signin_error_controller);
   ~ChromeSigninClient() override;
+
   void DoFinalInit() override;
 
   // Utility method.
@@ -49,7 +52,7 @@ class ChromeSigninClient
   std::string GetSigninScopedDeviceId() override;
   void OnSignedOut() override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
-  bool ShouldMergeSigninCredentialsIntoCookieJar() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool IsFirstRun() const override;
   base::Time GetInstallDate() override;
   bool AreSigninCookiesAllowed() override;
@@ -61,16 +64,17 @@ class ChromeSigninClient
   std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
       const std::string& source,
-      net::URLRequestContextGetter* getter) override;
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+      override;
 
   // Returns a string describing the chrome version environment. Version format:
   // <Build Info> <OS> <Version number> (<Last change>)<channel or "-devel">
   // If version information is unavailable, returns "invalid."
   std::string GetProductVersion() override;
-  std::unique_ptr<CookieChangedSubscription> AddCookieChangedCallback(
+  std::unique_ptr<CookieChangeSubscription> AddCookieChangeCallback(
       const GURL& url,
       const std::string& name,
-      const net::CookieStore::CookieChangedCallback& callback) override;
+      net::CookieChangeCallback callback) override;
   void OnSignedIn(const std::string& account_id,
                   const std::string& gaia_id,
                   const std::string& username,
@@ -107,6 +111,11 @@ class ChromeSigninClient
   void AfterCredentialsCopied() override;
   void SetReadyForDiceMigration(bool is_ready) override;
 
+  // Used in tests to override the URLLoaderFactory returned by
+  // GetURLLoaderFactory().
+  void SetURLLoaderFactoryForTest(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+
  protected:
   virtual void ShowUserManager(const base::FilePath& profile_path);
   virtual void LockForceSigninProfile(const base::FilePath& profile_path);
@@ -134,7 +143,9 @@ class ChromeSigninClient
 
   std::unique_ptr<gaia::GaiaOAuthClient> oauth_client_;
   std::unique_ptr<OAuth2TokenService::Request> oauth_request_;
-  AccountConsistencyModeManager account_consistency_mode_manager_;
+
+  scoped_refptr<network::SharedURLLoaderFactory>
+      url_loader_factory_for_testing_;
 
   base::WeakPtrFactory<ChromeSigninClient> weak_ptr_factory_;
 

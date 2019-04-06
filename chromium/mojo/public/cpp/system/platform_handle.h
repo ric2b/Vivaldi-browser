@@ -17,9 +17,14 @@
 #include "base/files/file.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_handle.h"
+#include "base/memory/unsafe_shared_memory_region.h"
+#include "base/memory/writable_shared_memory_region.h"
 #include "base/process/process_handle.h"
+#include "build/build_config.h"
 #include "mojo/public/c/system/platform_handle.h"
+#include "mojo/public/cpp/platform/platform_handle.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/handle.h"
 #include "mojo/public/cpp/system/system_export.h"
@@ -30,28 +35,32 @@
 
 namespace mojo {
 
-#if defined(OS_POSIX)
+#if defined(OS_WIN)
+const MojoPlatformHandleType kPlatformFileHandleType =
+    MOJO_PLATFORM_HANDLE_TYPE_WINDOWS_HANDLE;
+
+const MojoPlatformHandleType kPlatformSharedBufferHandleType =
+    MOJO_PLATFORM_HANDLE_TYPE_WINDOWS_HANDLE;
+
+#elif defined(OS_FUCHSIA)
+const MojoPlatformHandleType kPlatformFileHandleType =
+    MOJO_PLATFORM_HANDLE_TYPE_FILE_DESCRIPTOR;
+const MojoPlatformHandleType kPlatformSharedBufferHandleType =
+    MOJO_PLATFORM_HANDLE_TYPE_FUCHSIA_HANDLE;
+
+#elif defined(OS_POSIX)
 const MojoPlatformHandleType kPlatformFileHandleType =
     MOJO_PLATFORM_HANDLE_TYPE_FILE_DESCRIPTOR;
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 const MojoPlatformHandleType kPlatformSharedBufferHandleType =
     MOJO_PLATFORM_HANDLE_TYPE_MACH_PORT;
-#elif defined(OS_FUCHSIA)
-const MojoPlatformHandleType kPlatformSharedBufferHandleType =
-    MOJO_PLATFORM_HANDLE_TYPE_FUCHSIA_HANDLE;
 #else
 const MojoPlatformHandleType kPlatformSharedBufferHandleType =
     MOJO_PLATFORM_HANDLE_TYPE_FILE_DESCRIPTOR;
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
-#elif defined(OS_WIN)
-const MojoPlatformHandleType kPlatformFileHandleType =
-    MOJO_PLATFORM_HANDLE_TYPE_WINDOWS_HANDLE;
-
-const MojoPlatformHandleType kPlatformSharedBufferHandleType =
-    MOJO_PLATFORM_HANDLE_TYPE_WINDOWS_HANDLE;
-#endif  // defined(OS_POSIX)
+#endif  // defined(OS_WIN)
 
 // Used to specify the protection status of a base::SharedMemoryHandle memory
 // handle wrapped or unwrapped by mojo::WrapSharedMemoryHandle or
@@ -67,7 +76,16 @@ enum class UnwrappedSharedMemoryHandleProtection {
   kReadOnly,
 };
 
+// Wraps a PlatformHandle from the C++ platform support library as a Mojo
+// handle.
+MOJO_CPP_SYSTEM_EXPORT ScopedHandle WrapPlatformHandle(PlatformHandle handle);
+
+// Unwraps a Mojo handle to a PlatformHandle object from the C++ platform
+// support library.
+MOJO_CPP_SYSTEM_EXPORT PlatformHandle UnwrapPlatformHandle(ScopedHandle handle);
+
 // Wraps a PlatformFile as a Mojo handle. Takes ownership of the file object.
+// If |platform_file| is valid, this will return a valid handle.
 MOJO_CPP_SYSTEM_EXPORT
 ScopedHandle WrapPlatformFile(base::PlatformFile platform_file);
 
@@ -75,6 +93,11 @@ ScopedHandle WrapPlatformFile(base::PlatformFile platform_file);
 MOJO_CPP_SYSTEM_EXPORT
 MojoResult UnwrapPlatformFile(ScopedHandle handle, base::PlatformFile* file);
 
+// DEPRECATED: Don't introduce new uses of base::SharedMemoryHandle, and please
+// attempt to avoid using this function. Use the new base shared memory APIs
+// (base::ReadOnlySharedMemoryRegion et al) and the corresponding wrap/unwrap
+// calls defined below instead.
+//
 // Wraps a base::SharedMemoryHandle as a Mojo handle. Takes ownership of the
 // SharedMemoryHandle. |size| indicates the size of the underlying
 // base::SharedMemory object, and |current_protection| indicates whether or
@@ -103,6 +126,11 @@ ScopedSharedBufferHandle WrapSharedMemoryHandle(
     size_t size,
     UnwrappedSharedMemoryHandleProtection current_protection);
 
+// DEPRECATED: Don't introduce new uses of base::SharedMemoryHandle, and please
+// attempt to avoid using this function. Use the new base shared memory APIs
+// (base::ReadOnlySharedMemoryRegion et al) and the corresponding wrap/unwrap
+// calls defined below instead.
+//
 // Unwraps a base::SharedMemoryHandle from a Mojo handle. The caller assumes
 // responsibility for the lifetime of the SharedMemoryHandle. On success,
 // |*memory_handle| is set to a valid handle, |*size| is is set to the size of
@@ -119,6 +147,28 @@ UnwrapSharedMemoryHandle(ScopedSharedBufferHandle handle,
                          base::SharedMemoryHandle* memory_handle,
                          size_t* size,
                          UnwrappedSharedMemoryHandleProtection* protection);
+
+// Helpers for wrapping and unwrapping new base shared memory API primitives.
+// If the input |region| is valid for the Wrap* functions, they will always
+// succeed and return a valid Mojo shared buffer handle.
+
+MOJO_CPP_SYSTEM_EXPORT ScopedSharedBufferHandle
+WrapReadOnlySharedMemoryRegion(base::ReadOnlySharedMemoryRegion region);
+
+MOJO_CPP_SYSTEM_EXPORT ScopedSharedBufferHandle
+WrapUnsafeSharedMemoryRegion(base::UnsafeSharedMemoryRegion region);
+
+MOJO_CPP_SYSTEM_EXPORT ScopedSharedBufferHandle
+WrapWritableSharedMemoryRegion(base::WritableSharedMemoryRegion region);
+
+MOJO_CPP_SYSTEM_EXPORT base::ReadOnlySharedMemoryRegion
+UnwrapReadOnlySharedMemoryRegion(ScopedSharedBufferHandle handle);
+
+MOJO_CPP_SYSTEM_EXPORT base::UnsafeSharedMemoryRegion
+UnwrapUnsafeSharedMemoryRegion(ScopedSharedBufferHandle handle);
+
+MOJO_CPP_SYSTEM_EXPORT base::WritableSharedMemoryRegion
+UnwrapWritableSharedMemoryRegion(ScopedSharedBufferHandle handle);
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 // Wraps a mach_port_t as a Mojo handle. This takes a reference to the

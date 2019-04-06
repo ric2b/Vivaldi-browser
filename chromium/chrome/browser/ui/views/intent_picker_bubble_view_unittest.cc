@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/macros.h"
+#include "chrome/browser/chromeos/apps/intent_helper/apps_navigation_types.h"
 #include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
@@ -22,7 +23,7 @@
 #include "ui/views/resources/grit/views_resources.h"
 #include "url/gurl.h"
 
-using AppInfo = arc::ArcNavigationThrottle::AppInfo;
+using AppInfo = chromeos::IntentPickerAppInfo;
 using content::WebContents;
 using content::OpenURLParams;
 using content::Referrer;
@@ -41,12 +42,15 @@ class IntentPickerBubbleViewTest : public BrowserWithTestWindowTest {
  protected:
   void CreateBubbleView(bool use_icons, bool disable_stay_in_chrome) {
     // Pushing a couple of fake apps just to check they are created on the UI.
-    app_info_.emplace_back(gfx::Image(), "package_1", "dank app 1");
-    app_info_.emplace_back(gfx::Image(), "package_2", "dank_app_2");
+    app_info_.emplace_back(apps::mojom::AppType::kArc, gfx::Image(),
+                           "package_1", "dank app 1");
+    app_info_.emplace_back(apps::mojom::AppType::kArc, gfx::Image(),
+                           "package_2", "dank_app_2");
     // Also adding the corresponding Chrome's package name on ARC, even if this
     // is given to the picker UI as input it should be ignored.
     app_info_.emplace_back(
-        gfx::Image(), arc::ArcIntentHelperBridge::kArcIntentHelperPackageName,
+        apps::mojom::AppType::kArc, gfx::Image(),
+        arc::ArcIntentHelperBridge::kArcIntentHelperPackageName,
         "legit_chrome");
 
     if (use_icons)
@@ -59,8 +63,17 @@ class IntentPickerBubbleViewTest : public BrowserWithTestWindowTest {
         OpenURLParams(url, Referrer(), WindowOpenDisposition::CURRENT_TAB,
                       ui::PAGE_TRANSITION_TYPED, false));
 
+    std::vector<AppInfo> app_info;
+
+    // AppInfo is move only. Manually create a new app_info array to pass into
+    // the bubble constructor.
+    for (const auto& app : app_info_) {
+      app_info.emplace_back(app.type, app.icon, app.launch_name,
+                            app.display_name);
+    }
+
     bubble_ = IntentPickerBubbleView::CreateBubbleView(
-        app_info_, disable_stay_in_chrome,
+        std::move(app_info), disable_stay_in_chrome,
         base::Bind(&IntentPickerBubbleViewTest::OnBubbleClosed,
                    base::Unretained(this)),
         web_contents);
@@ -75,7 +88,9 @@ class IntentPickerBubbleViewTest : public BrowserWithTestWindowTest {
 
   // Dummy method to be called upon bubble closing.
   void OnBubbleClosed(const std::string& selected_app_package,
-                      arc::ArcNavigationThrottle::CloseReason close_reason) {}
+                      apps::mojom::AppType app_type,
+                      chromeos::IntentPickerCloseReason close_reason,
+                      bool should_persist) {}
 
   std::unique_ptr<IntentPickerBubbleView> bubble_;
   std::vector<AppInfo> app_info_;
@@ -112,9 +127,8 @@ TEST_F(IntentPickerBubbleViewTest, LabelsPtrVectorSize) {
   CreateBubbleView(true, false);
   size_t size = app_info_.size();
   size_t chrome_package_repetitions = 0;
-  for (AppInfo app_info : app_info_) {
-    if (arc::ArcIntentHelperBridge::IsIntentHelperPackage(
-            app_info.package_name))
+  for (const AppInfo& app_info : app_info_) {
+    if (arc::ArcIntentHelperBridge::IsIntentHelperPackage(app_info.launch_name))
       ++chrome_package_repetitions;
   }
 
@@ -169,7 +183,7 @@ TEST_F(IntentPickerBubbleViewTest, ChromeNotInCandidates) {
   size_t size = bubble_->GetScrollViewSize();
   for (size_t i = 0; i < size; ++i) {
     EXPECT_FALSE(arc::ArcIntentHelperBridge::IsIntentHelperPackage(
-        bubble_->app_info_[i].package_name));
+        bubble_->GetAppInfoForTesting()[i].launch_name));
   }
 }
 

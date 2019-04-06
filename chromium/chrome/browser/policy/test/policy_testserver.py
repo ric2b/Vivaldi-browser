@@ -191,6 +191,8 @@ LICENSE_TYPES = {
   'kiosk': dm.LicenseType.KIOSK,
 }
 
+INVALID_ENROLLMENT_TOKEN = 'invalid_enrollment_token'
+
 class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   """Decodes and handles device management requests from clients.
 
@@ -330,6 +332,15 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       response = self.ProcessCheckAndroidManagementRequest(
           rmsg.check_android_management_request,
           str(self.GetUniqueParam('oauth_token')))
+    elif request_type == 'register_browser':
+      response = self.ProcessRegisterBrowserRequest(
+          rmsg.register_browser_request)
+    elif request_type == 'chrome_desktop_report':
+      response = self.ProcessChromeDesktopReportUploadRequest(
+          rmsg.chrome_desktop_report_request)
+    elif request_type == 'app_install_report':
+      response = self.ProcessAppInstallReportRequest(
+          rmsg.app_install_report_request)
     else:
       return (400, 'Invalid request parameter')
 
@@ -724,6 +735,62 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       return (200, response)
     else:
       return (403, response)
+
+  def ProcessAppInstallReportRequest(self, app_install_report):
+    """Handles a push-installed app report upload request.
+
+    Returns:
+      A tuple of HTTP status code and response data to send to the client.
+    """
+    app_install_report_response = dm.AppInstallReportResponse()
+    response = dm.DeviceManagementResponse()
+    response.app_install_report_response.CopyFrom(app_install_report_response)
+
+    return (200, response)
+
+  def ProcessRegisterBrowserRequest(self, msg):
+    """Handles a browser registration request.
+
+    Returns:
+      A tuple of HTTP status code and response data to send to the client.
+    """
+    enrollment_token = None
+    match = re.match('GoogleEnrollmentToken token=(\\w+)',
+                     self.headers.getheader('Authorization', ''))
+    if match:
+      enrollment_token = match.group(1)
+    if not enrollment_token:
+      return (401, 'Missing enrollment token.')
+
+    device_id = self.GetUniqueParam('deviceid')
+    if not device_id:
+      return (400, 'Parameter deviceid is missing.')
+
+    if not msg.machine_name:
+      return (400, 'Invalid machine name: ')
+
+    if enrollment_token == INVALID_ENROLLMENT_TOKEN:
+      return (401, 'Invalid enrollment token')
+
+    response = dm.DeviceManagementResponse()
+    response.register_response.device_management_token = (
+        'fake_device_management_token')
+    return (200, response)
+
+  def ProcessChromeDesktopReportUploadRequest(self, chrome_desktop_report):
+    """Handles a chrome desktop report upload request.
+
+    Returns:
+      A tuple of HTTP status code and response data to send to the client.
+    """
+    # Empty responses indicate a successful upload.
+    chrome_desktop_report_response = dm.ChromeDesktopReportResponse()
+
+    response = dm.DeviceManagementResponse()
+    response.chrome_desktop_report_response.CopyFrom(
+        chrome_desktop_report_response)
+
+    return (200, response)
 
   def SetProtoRepeatedField(self, group_message, field, field_value):
     assert type(field_value) == list

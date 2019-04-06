@@ -8,12 +8,15 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "chromecast/browser/cast_content_window.h"
 #include "chromecast/browser/cast_web_view.h"
 #include "chromecast/service/cast_service.h"
 #include "url/gurl.h"
 
 namespace chromecast {
+
 class CastWebContentsManager;
+class CastWebViewFactory;
 class CastWindowManager;
 
 namespace shell {
@@ -35,13 +38,23 @@ class CastServiceSimple : public CastService, public CastWebView::Delegate {
   // CastWebView::Delegate implementation:
   void OnPageStopped(int error_code) override;
   void OnLoadingStateChanged(bool loading) override;
+  bool OnAddMessageToConsoleReceived(content::WebContents* source,
+                                     int32_t level,
+                                     const base::string16& message,
+                                     int32_t line_no,
+                                     const base::string16& source_id) override;
 
   // CastContentWindow::Delegate implementation:
   void OnWindowDestroyed() override;
   void OnKeyEvent(const ui::KeyEvent& key_event) override;
+  bool CanHandleGesture(GestureType gesture_type) override;
+  bool ConsumeGesture(GestureType gesture_type) override;
+  void OnVisibilityChange(VisibilityType visibility_type) override;
+  std::string GetId() override;
 
  private:
   CastWindowManager* const window_manager_;
+  const std::unique_ptr<CastWebViewFactory> web_view_factory_;
   const std::unique_ptr<CastWebContentsManager> web_contents_manager_;
   std::unique_ptr<CastWebView> cast_web_view_;
   GURL startup_url_;

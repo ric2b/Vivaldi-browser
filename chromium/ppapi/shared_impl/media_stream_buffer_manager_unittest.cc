@@ -87,8 +87,6 @@ TEST(MediaStreamBufferManager, General) {
     EXPECT_EQ(NULL, manager.GetBufferPointer(-1));
     EXPECT_EQ(NULL, manager.GetBufferPointer(kNumberOfBuffers));
 
-    // Disabling death test for Official Vivaldi builds, since the test fails for some reason
-#if !(defined(OFFICIAL_BUILD) && defined(VIVALDI_BUILD))
     // Test crash for passing invalid index to EnqueueBuffer().
     // String arguments aren't passed to CHECK() in official builds.
 #if defined(OFFICIAL_BUILD) && defined(NDEBUG)
@@ -98,7 +96,6 @@ TEST(MediaStreamBufferManager, General) {
     EXPECT_DEATH(manager.EnqueueBuffer(-1), ".*Check failed: index >= 0.*");
     EXPECT_DEATH(manager.EnqueueBuffer(kNumberOfBuffers),
                  ".*Check failed: index < number_of_buffers_.*");
-#endif
 #endif
   }
 

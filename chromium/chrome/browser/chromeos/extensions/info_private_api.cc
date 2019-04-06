@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/stylus_utils.h"
 #include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
 #include "base/values.h"
@@ -108,6 +109,9 @@ const char kPropertySwitchAccessEnabled[] = "a11ySwitchAccessEnabled";
 // Key which corresponds to the send-function-keys property in JS.
 const char kPropertySendFunctionsKeys[] = "sendFunctionKeys";
 
+// Key which corresponds to the camera-media-consolidated property in JS.
+const char kPropertyCameraMediaConsolidated[] = "cameraMediaConsolidated";
+
 // Property not found error message.
 const char kPropertyNotFound[] = "Property '*' does not exist.";
 
@@ -166,6 +170,17 @@ const char kDeviceTypeChromebox[] = "chromebox";
 // Value to which deviceType property is set when the specific type is unknown.
 const char kDeviceTypeChromedevice[] = "chromedevice";
 
+// Key which corresponds to the stylusStatus property in JS.
+const char kPropertyStylusStatus[] = "stylusStatus";
+
+// Value to which stylusStatus property is set when the device does not support
+// stylus input.
+const char kStylusStatusUnsupported[] = "unsupported";
+
+// Value to which stylusStatus property is set when the device supports stylus
+// input.
+const char kStylusStatusSupported[] = "supported";
+
 const struct {
   const char* api_name;
   const char* preference_name;
@@ -191,7 +206,8 @@ const struct {
      ash::prefs::kAccessibilitySelectToSpeakEnabled},
     {kPropertySwitchAccessEnabled,
      ash::prefs::kAccessibilitySwitchAccessEnabled},
-    {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys}};
+    {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys},
+    {kPropertyCameraMediaConsolidated, prefs::kCameraMediaConsolidated}};
 
 const char* GetBoolPrefNameForApiProperty(const char* api_name) {
   for (size_t i = 0;
@@ -227,10 +243,10 @@ ChromeosInfoPrivateGetFunction::ChromeosInfoPrivateGetFunction() {
 ChromeosInfoPrivateGetFunction::~ChromeosInfoPrivateGetFunction() {
 }
 
-bool ChromeosInfoPrivateGetFunction::RunAsync() {
-  base::ListValue* list = NULL;
+ExtensionFunction::ResponseAction ChromeosInfoPrivateGetFunction::Run() {
+  base::ListValue* list = nullptr;
   EXTENSION_FUNCTION_VALIDATE(args_->GetList(0, &list));
-  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
+  auto result = std::make_unique<base::DictionaryValue>();
   for (size_t i = 0; i < list->GetSize(); ++i) {
     std::string property_name;
     EXTENSION_FUNCTION_VALIDATE(list->GetString(i, &property_name));
@@ -238,9 +254,7 @@ bool ChromeosInfoPrivateGetFunction::RunAsync() {
     if (value)
       result->Set(property_name, std::move(value));
   }
-  SetResult(std::move(result));
-  SendResponse(true);
-  return true;
+  return RespondNow(OneArgument(std::move(result)));
 }
 
 std::unique_ptr<base::Value> ChromeosInfoPrivateGetFunction::GetValue(
@@ -331,6 +345,15 @@ std::unique_ptr<base::Value> ChromeosInfoPrivateGetFunction::GetValue(
       default:
         return std::make_unique<base::Value>(kDeviceTypeChromedevice);
     }
+  }
+
+  if (property_name == kPropertyStylusStatus) {
+    if (!ash::stylus_utils::HasStylusInput()) {
+      return std::make_unique<base::Value>(kStylusStatusUnsupported);
+    }
+
+    // TODO(michaelpg): Return "seen" if stylus has been used.
+    return std::make_unique<base::Value>(kStylusStatusSupported);
   }
 
   if (property_name == kPropertyClientId) {

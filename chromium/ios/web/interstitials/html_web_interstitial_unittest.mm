@@ -7,9 +7,9 @@
 #include <memory>
 
 #import "ios/web/navigation/navigation_manager_impl.h"
-#import "ios/web/public/interstitials/web_interstitial_delegate.h"
 #include "ios/web/public/test/fakes/test_web_state_observer.h"
 #include "ios/web/public/test/web_test.h"
+#import "ios/web/test/fakes/mock_interstitial_delegate.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -22,17 +22,6 @@ namespace web {
 namespace {
 
 const char kTestHostName[] = "https://chromium.test/";
-
-// A mock html web interstitial delegate.
-class MockInterstitialDelegate : public HtmlWebInterstitialDelegate {
- public:
-  ~MockInterstitialDelegate() override = default;
-
-  // HtmlWebMockInterstitialDelegate overrides
-  MOCK_METHOD0(OnProceed, void());
-  MOCK_METHOD0(OnDontProceed, void());
-  std::string GetHtmlContents() const override { return ""; }
-};
 
 }  // namespace
 
@@ -49,7 +38,7 @@ class HtmlWebInterstitialImplTest : public WebTest {
     web_state_->GetNavigationManagerImpl().AddPendingItem(
         GURL(kTestHostName), Referrer(),
         ui::PageTransition::PAGE_TRANSITION_TYPED,
-        NavigationInitiationType::USER_INITIATED,
+        NavigationInitiationType::BROWSER_INITIATED,
         NavigationManager::UserAgentOverrideOption::INHERIT);
   }
 

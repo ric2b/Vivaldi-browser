@@ -8,11 +8,12 @@
 #include <string>
 
 #include "ash/public/cpp/app_types.h"
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
@@ -197,7 +198,7 @@ TEST_F(ArcUtilTest, IsArcAllowedForUser) {
       {user_manager::USER_TYPE_PUBLIC_ACCOUNT, true},
       {user_manager::USER_TYPE_SUPERVISED, false},
       {user_manager::USER_TYPE_KIOSK_APP, false},
-      {user_manager::USER_TYPE_CHILD, false},
+      {user_manager::USER_TYPE_CHILD, true},
       {user_manager::USER_TYPE_ARC_KIOSK_APP, true},
       {user_manager::USER_TYPE_ACTIVE_DIRECTORY, true},
   };
@@ -220,6 +221,18 @@ TEST_F(ArcUtilTest, IsArcAllowedForUser) {
 
   // Ephemeral user is also allowed for ARC.
   EXPECT_TRUE(IsArcAllowedForUser(ephemeral_user));
+}
+
+TEST_F(ArcUtilTest, IsArcAllowedForChildUserWithExperiment) {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->InitFromArgv(
+      {"", "--enable-features=ArcAvailableForChildAccount"});
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitFromCommandLine(
+      command_line->GetSwitchValueASCII(switches::kEnableFeatures),
+      command_line->GetSwitchValueASCII(switches::kDisableFeatures));
+  const FakeUser user(user_manager::USER_TYPE_CHILD);
+  EXPECT_TRUE(IsArcAllowedForUser(&user));
 }
 
 TEST_F(ArcUtilTest, ArcStartModeDefault) {

@@ -120,7 +120,8 @@ WebViewActionRequest.prototype.WARNING_MSG_REQUEST_BLOCKED = undefined;
 
 // Represents a dialog box request (e.g. alert()).
 function Dialog(webViewImpl, event, webViewEvent) {
-  WebViewActionRequest.call(this, webViewImpl, event, webViewEvent, 'dialog');
+  $Function.call(
+      WebViewActionRequest, this, webViewImpl, event, webViewEvent, 'dialog');
 
   this.handleActionRequestEvent();
 }
@@ -146,9 +147,11 @@ Dialog.prototype.getInterfaceObject = function() {
 Dialog.prototype.showWarningMessage = function() {
   var VOWELS = ['a', 'e', 'i', 'o', 'u'];
   var dialogType = this.event.messageType;
-  var article = (VOWELS.indexOf(dialogType.charAt(0)) >= 0) ? 'An' : 'A';
-  this.WARNING_MSG_REQUEST_BLOCKED = this.WARNING_MSG_REQUEST_BLOCKED.
-      replace('%1', article).replace('%2', dialogType);
+  var article =
+      ($Array.indexOf(VOWELS, dialogType.charAt(0)) >= 0) ? 'An' : 'A';
+  this.WARNING_MSG_REQUEST_BLOCKED = $String.replace(
+      $String.replace(this.WARNING_MSG_REQUEST_BLOCKED, '%1', article), '%2',
+      dialogType);
   window.console.warn(this.WARNING_MSG_REQUEST_BLOCKED);
 };
 
@@ -162,7 +165,8 @@ Dialog.prototype.WARNING_MSG_REQUEST_BLOCKED =
 
 // Represents a new window request.
 function NewWindow(webViewImpl, event, webViewEvent) {
-  WebViewActionRequest.call(this, webViewImpl, event, webViewEvent, 'window');
+  $Function.call(
+      WebViewActionRequest, this, webViewImpl, event, webViewEvent, 'window');
 
   this.handleActionRequestEvent();
 }
@@ -228,7 +232,8 @@ NewWindow.prototype.WARNING_MSG_REQUEST_BLOCKED =
 
 // Represents a permission request (e.g. to access the filesystem).
 function PermissionRequest(webViewImpl, event, webViewEvent) {
-  WebViewActionRequest.call(this, webViewImpl, event, webViewEvent, 'request');
+  $Function.call(
+      WebViewActionRequest, this, webViewImpl, event, webViewEvent, 'request');
 
   if (!this.validPermissionCheck()) {
     return;
@@ -265,13 +270,13 @@ PermissionRequest.prototype.getInterfaceObject = function() {
 };
 
 PermissionRequest.prototype.showWarningMessage = function() {
-  window.console.warn(
-      this.WARNING_MSG_REQUEST_BLOCKED.replace('%1', this.event.permission));
+  window.console.warn($String.replace(
+      this.WARNING_MSG_REQUEST_BLOCKED, '%1', this.event.permission));
 };
 
 // Checks that the requested permission is valid. Returns true if valid.
 PermissionRequest.prototype.validPermissionCheck = function() {
-  if (PERMISSION_TYPES.indexOf(this.event.permission) < 0) {
+  if ($Array.indexOf(PERMISSION_TYPES, this.event.permission) < 0) {
     // The permission type is not allowed. Trigger the default response.
     this.defaultAction();
     return false;
@@ -290,13 +295,13 @@ PermissionRequest.prototype.WARNING_MSG_REQUEST_BLOCKED =
 
 // Represents a fullscreen permission request.
 function FullscreenPermissionRequest(webViewImpl, event, webViewEvent) {
-  PermissionRequest.call(this, webViewImpl, event, webViewEvent);
+  $Function.call(PermissionRequest, this, webViewImpl, event, webViewEvent);
 }
 
 FullscreenPermissionRequest.prototype.__proto__ = PermissionRequest.prototype;
 
 FullscreenPermissionRequest.prototype.allow = function() {
-  PermissionRequest.prototype.allow.call(this);
+  $Function.call(PermissionRequest.prototype.allow, this);
   // Now make the <webview> element go fullscreen.
   this.webViewImpl.makeElementFullscreen();
 };

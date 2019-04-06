@@ -9,7 +9,8 @@
 
 #include "base/logging.h"
 #include "media/mojo/common/mojo_shared_buffer_video_frame.h"
-#include "mojo/common/time_struct_traits.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
+#include "mojo/public/cpp/base/values_mojom_traits.h"
 
 namespace mojo {
 
@@ -140,10 +141,14 @@ bool StructTraits<media::mojom::VideoFrameDataView,
     return false;
   }
 
-  std::unique_ptr<base::DictionaryValue> metadata;
+  if (!frame)
+    return false;
+
+  base::Value metadata;
   if (!input.ReadMetadata(&metadata))
     return false;
-  frame->metadata()->MergeInternalValuesFrom(*metadata);
+
+  frame->metadata()->MergeInternalValuesFrom(metadata);
 
   *output = std::move(frame);
   return true;

@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/accessibility/platform/test_ax_node_wrapper.h"
 #include "base/containers/hash_tables.h"
 #include "ui/accessibility/ax_action_data.h"
-#include "ui/accessibility/platform/test_ax_node_wrapper.h"
+#include "ui/accessibility/ax_table_info.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace ui {
@@ -80,10 +81,6 @@ const AXTreeData& TestAXNodeWrapper::GetTreeData() const {
   return tree_->data();
 }
 
-gfx::NativeWindow TestAXNodeWrapper::GetTopLevelWidget() {
-  return nullptr;
-}
-
 gfx::NativeViewAccessible TestAXNodeWrapper::GetParent() {
   TestAXNodeWrapper* parent_wrapper = GetOrCreate(tree_, node_->parent());
   return parent_wrapper ?
@@ -105,7 +102,14 @@ gfx::NativeViewAccessible TestAXNodeWrapper::ChildAtIndex(int index) {
       nullptr;
 }
 
-gfx::Rect TestAXNodeWrapper::GetScreenBoundsRect() const {
+gfx::Rect TestAXNodeWrapper::GetClippedScreenBoundsRect() const {
+  // We could add clipping here if needed.
+  gfx::RectF bounds = GetData().location;
+  bounds.Offset(g_offset);
+  return gfx::ToEnclosingRect(bounds);
+}
+
+gfx::Rect TestAXNodeWrapper::GetUnclippedScreenBoundsRect() const {
   gfx::RectF bounds = GetData().location;
   bounds.Offset(g_offset);
   return gfx::ToEnclosingRect(bounds);
@@ -115,7 +119,7 @@ TestAXNodeWrapper* TestAXNodeWrapper::HitTestSyncInternal(int x, int y) {
   // Here we find the deepest child whose bounding box contains the given point.
   // The assuptions are that there are no overlapping bounding rects and that
   // all children have smaller bounding rects than their parents.
-  if (!GetScreenBoundsRect().Contains(gfx::Rect(x, y)))
+  if (!GetClippedScreenBoundsRect().Contains(gfx::Rect(x, y)))
     return nullptr;
 
   for (int i = 0; i < GetChildCount(); i++) {
@@ -135,10 +139,6 @@ gfx::NativeViewAccessible TestAXNodeWrapper::HitTestSync(int x, int y) {
   TestAXNodeWrapper* wrapper = HitTestSyncInternal(x, y);
   return wrapper ? wrapper->ax_platform_node()->GetNativeViewAccessible()
                  : nullptr;
-}
-
-gfx::NativeViewAccessible TestAXNodeWrapper::GetFocus() {
-  return nullptr;
 }
 
 // Walk the AXTree and ensure that all wrappers are created
@@ -170,13 +170,8 @@ int TestAXNodeWrapper::GetIndexInParent() const {
   return node_ ? node_->index_in_parent() : -1;
 }
 
-gfx::AcceleratedWidget
-TestAXNodeWrapper::GetTargetForNativeAccessibilityEvent() {
-  return gfx::kNullAcceleratedWidget;
-}
-
 void TestAXNodeWrapper::ReplaceIntAttribute(int32_t node_id,
-                                            AXIntAttribute attribute,
+                                            ax::mojom::IntAttribute attribute,
                                             int32_t value) {
   if (!tree_)
     return;
@@ -186,7 +181,7 @@ void TestAXNodeWrapper::ReplaceIntAttribute(int32_t node_id,
     return;
 
   AXNodeData new_data = node->data();
-  std::vector<std::pair<AXIntAttribute, int32_t>>& attributes =
+  std::vector<std::pair<ax::mojom::IntAttribute, int32_t>>& attributes =
       new_data.int_attributes;
 
   auto deleted = std::remove_if(
@@ -198,23 +193,130 @@ void TestAXNodeWrapper::ReplaceIntAttribute(int32_t node_id,
   node->SetData(new_data);
 }
 
+int TestAXNodeWrapper::GetTableRowCount() const {
+  AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return 0;
+
+  return table_info->row_count;
+}
+
+int TestAXNodeWrapper::GetTableColCount() const {
+  AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return 0;
+
+  return table_info->col_count;
+}
+
+std::vector<int32_t> TestAXNodeWrapper::GetColHeaderNodeIds() const {
+  ui::AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return std::vector<int32_t>();
+
+  std::vector<std::vector<int32_t>> headers = table_info->col_headers;
+  std::vector<int32_t> all_ids;
+  for (const auto col_ids : headers) {
+    all_ids.insert(all_ids.end(), col_ids.begin(), col_ids.end());
+  }
+
+  return all_ids;
+}
+
+std::vector<int32_t> TestAXNodeWrapper::GetColHeaderNodeIds(
+    int32_t col_index) const {
+  AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return std::vector<int32_t>();
+
+  if (col_index < 0 || col_index >= table_info->col_count)
+    return std::vector<int32_t>();
+
+  return table_info->col_headers[col_index];
+}
+
+std::vector<int32_t> TestAXNodeWrapper::GetRowHeaderNodeIds() const {
+  ui::AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return std::vector<int32_t>();
+
+  std::vector<std::vector<int32_t>> headers = table_info->row_headers;
+  std::vector<int32_t> all_ids;
+  for (const auto col_ids : headers) {
+    all_ids.insert(all_ids.end(), col_ids.begin(), col_ids.end());
+  }
+
+  return all_ids;
+}
+
+std::vector<int32_t> TestAXNodeWrapper::GetRowHeaderNodeIds(
+    int32_t row_index) const {
+  AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return std::vector<int32_t>();
+
+  if (row_index < 0 || row_index >= table_info->row_count)
+    return std::vector<int32_t>();
+
+  return table_info->row_headers[row_index];
+}
+
+int32_t TestAXNodeWrapper::GetCellId(int32_t row_index,
+                                     int32_t col_index) const {
+  AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return -1;
+
+  if (row_index < 0 || row_index >= table_info->row_count || col_index < 0 ||
+      col_index >= table_info->col_count)
+    return -1;
+
+  return table_info->cell_ids[row_index][col_index];
+}
+
+int32_t TestAXNodeWrapper::CellIdToIndex(int32_t cell_id) const {
+  AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return 0;
+
+  const auto& iter = table_info->cell_id_to_index.find(cell_id);
+  if (iter != table_info->cell_id_to_index.end())
+    return iter->second;
+
+  return -1;
+}
+
+int32_t TestAXNodeWrapper::CellIndexToId(int32_t cell_index) const {
+  AXTableInfo* table_info = tree_->GetTableInfo(node_);
+  if (!table_info)
+    return -1;
+
+  if (cell_index < 0 ||
+      cell_index >= static_cast<int32_t>(table_info->unique_cell_ids.size()))
+    return -1;
+
+  return table_info->unique_cell_ids[cell_index];
+}
+
 bool TestAXNodeWrapper::AccessibilityPerformAction(
     const ui::AXActionData& data) {
-  if (data.action == ui::AX_ACTION_SCROLL_TO_POINT) {
+  if (data.action == ax::mojom::Action::kScrollToPoint) {
     g_offset = gfx::Vector2d(data.target_point.x(), data.target_point.y());
     return true;
   }
 
-  if (data.action == ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE) {
+  if (data.action == ax::mojom::Action::kScrollToMakeVisible) {
     auto offset = node_->data().location.OffsetFromOrigin();
     g_offset = gfx::Vector2d(-offset.x(), -offset.y());
     return true;
   }
 
-  if (data.action == ui::AX_ACTION_SET_SELECTION) {
-    ReplaceIntAttribute(data.anchor_node_id, AX_ATTR_TEXT_SEL_START,
+  if (data.action == ax::mojom::Action::kSetSelection) {
+    ReplaceIntAttribute(data.anchor_node_id,
+                        ax::mojom::IntAttribute::kTextSelStart,
                         data.anchor_offset);
-    ReplaceIntAttribute(data.anchor_node_id, AX_ATTR_TEXT_SEL_END,
+    ReplaceIntAttribute(data.anchor_node_id,
+                        ax::mojom::IntAttribute::kTextSelEnd,
                         data.focus_offset);
     return true;
   }
@@ -226,17 +328,14 @@ bool TestAXNodeWrapper::ShouldIgnoreHoveredStateForTesting() {
   return true;
 }
 
-bool TestAXNodeWrapper::IsOffscreen() const {
-  return false;
-}
-
-std::set<int32_t> TestAXNodeWrapper::GetReverseRelations(AXIntAttribute attr,
-                                                         int32_t dst_id) {
+std::set<int32_t> TestAXNodeWrapper::GetReverseRelations(
+    ax::mojom::IntAttribute attr,
+    int32_t dst_id) {
   return tree_->GetReverseRelations(attr, dst_id);
 }
 
 std::set<int32_t> TestAXNodeWrapper::GetReverseRelations(
-    AXIntListAttribute attr,
+    ax::mojom::IntListAttribute attr,
     int32_t dst_id) {
   return tree_->GetReverseRelations(attr, dst_id);
 }

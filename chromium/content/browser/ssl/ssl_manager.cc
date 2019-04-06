@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
@@ -345,7 +344,8 @@ void SSLManager::OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
   GetContentClient()->browser()->AllowCertificateError(
       web_contents, cert_error, ssl_info, request_url, resource_type, fatal,
       expired_previous_decision,
-      base::Bind(&OnAllowCertificateWithRecordDecision, true, callback));
+      base::Bind(&OnAllowCertificateWithRecordDecision, true,
+                 std::move(callback)));
 }
 
 bool SSLManager::UpdateEntry(NavigationEntryImpl* entry,

@@ -12,6 +12,7 @@
 namespace content {
 
 class RenderProcessHost;
+struct ChildProcessTerminationInfo;
 
 // An observer API implemented by classes which are interested
 // in RenderProcessHost lifecycle events.
@@ -19,19 +20,12 @@ class CONTENT_EXPORT RenderProcessHostObserver {
  public:
   // This method is invoked when the process was launched and the channel was
   // connected. This is the earliest time it is safe to call Shutdown on the
-  // RenderProcessHost and get RenderProcessExited notifications.
+  // RenderProcessHost.
   virtual void RenderProcessReady(RenderProcessHost* host) {}
 
   // This method is invoked when the process when the process could shut down
   // but may or may not be allowed.
   virtual void RenderProcessShutdownRequested(RenderProcessHost* host) {}
-
-  // This method is invoked when the process is going to exit and should not be
-  // used for further navigations. Note that this is a COURTESY callback, not
-  // guaranteed to be called for any particular process. Because this is the
-  // first step in an orderly shutdown of a render process, do not expect that
-  // a new render process will be hosted with this RenderProcessHost.
-  virtual void RenderProcessWillExit(RenderProcessHost* host) {}
 
   // This method is invoked when the process of the observed RenderProcessHost
   // exits (either normally or with a crash). To determine if the process closed
@@ -46,13 +40,8 @@ class CONTENT_EXPORT RenderProcessHostObserver {
   // active renderer process for the top-level frame; for code that needs to be
   // a WebContentsObserver anyway, consider whether that API might be a better
   // choice.
-  //
-  // If |status| is TERMINATION_STATUS_LAUNCH_FAILED then |exit_code| will
-  // contain a platform specific launch failure error code. Otherwise, it will
-  // contain the exit code for the process.
   virtual void RenderProcessExited(RenderProcessHost* host,
-                                   base::TerminationStatus status,
-                                   int exit_code) {}
+                                   const ChildProcessTerminationInfo& info) {}
 
   // This method is invoked when the observed RenderProcessHost itself is
   // destroyed. This is guaranteed to be the last call made to the observer, so

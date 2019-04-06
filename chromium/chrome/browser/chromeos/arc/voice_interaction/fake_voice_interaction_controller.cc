@@ -31,6 +31,10 @@ void FakeVoiceInteractionController::NotifyContextEnabled(bool enabled) {
   voice_interaction_context_enabled_ = enabled;
 }
 
+void FakeVoiceInteractionController::NotifyHotwordEnabled(bool enabled) {
+  voice_interaction_hotword_enabled_ = enabled;
+}
+
 void FakeVoiceInteractionController::NotifySetupCompleted(bool completed) {
   voice_interaction_setup_completed_ = completed;
 }
@@ -38,6 +42,21 @@ void FakeVoiceInteractionController::NotifySetupCompleted(bool completed) {
 void FakeVoiceInteractionController::NotifyFeatureAllowed(
     ash::mojom::AssistantAllowedState state) {
   assistant_allowed_state_ = state;
+}
+
+void FakeVoiceInteractionController::IsSettingEnabled(
+    IsSettingEnabledCallback callback) {
+  std::move(callback).Run(voice_interaction_settings_enabled_);
+}
+
+void FakeVoiceInteractionController::IsSetupCompleted(
+    IsSetupCompletedCallback callback) {
+  std::move(callback).Run(voice_interaction_setup_completed_);
+}
+
+void FakeVoiceInteractionController::IsHotwordEnabled(
+    IsHotwordEnabledCallback callback) {
+  std::move(callback).Run(voice_interaction_hotword_enabled_);
 }
 
 }  // namespace arc

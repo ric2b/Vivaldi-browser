@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
@@ -29,6 +30,10 @@ const char kSetDraggableAreaFailed[] =
 const char kUnknownError[] = "Unknown error.";
 
 namespace keyboard = api::virtual_keyboard_private;
+
+gfx::Rect KeyboardBoundsToRect(const keyboard::Bounds& bounds) {
+  return {bounds.left, bounds.top, bounds.width, bounds.height};
+}
 
 }  // namespace
 
@@ -126,13 +131,27 @@ VirtualKeyboardPrivateOpenSettingsFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-ExtensionFunction::ResponseAction VirtualKeyboardPrivateSetModeFunction::Run() {
-  std::unique_ptr<keyboard::SetMode::Params> params =
-      keyboard::SetMode::Params::Create(*args_);
+ExtensionFunction::ResponseAction
+VirtualKeyboardPrivateSetContainerBehaviorFunction::Run() {
+  std::unique_ptr<keyboard::SetContainerBehavior::Params> params =
+      keyboard::SetContainerBehavior::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
-  if (!delegate()->SetVirtualKeyboardMode(params->mode))
+  base::Optional<gfx::Rect> target_bounds(base::nullopt);
+  if (params->options.bounds)
+    target_bounds = KeyboardBoundsToRect(*params->options.bounds);
+
+  if (!delegate()->SetVirtualKeyboardMode(
+          params->options.mode, std::move(target_bounds),
+          base::BindOnce(&VirtualKeyboardPrivateSetContainerBehaviorFunction::
+                             OnSetContainerBehavior,
+                         this)))
     return RespondNow(Error(kVirtualKeyboardNotEnabled));
-  return RespondNow(NoArguments());
+  return RespondLater();
+}
+
+void VirtualKeyboardPrivateSetContainerBehaviorFunction::OnSetContainerBehavior(
+    bool success) {
+  Respond(OneArgument(std::make_unique<base::Value>(success)));
 }
 
 ExtensionFunction::ResponseAction
@@ -151,6 +170,38 @@ VirtualKeyboardPrivateSetKeyboardStateFunction::Run() {
       keyboard::SetKeyboardState::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
   if (!delegate()->SetRequestedKeyboardState(params->state))
+    return RespondNow(Error(kVirtualKeyboardNotEnabled));
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+VirtualKeyboardPrivateSetOccludedBoundsFunction::Run() {
+  std::unique_ptr<keyboard::SetOccludedBounds::Params> params =
+      keyboard::SetOccludedBounds::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  std::vector<gfx::Rect> occluded_bounds;
+  occluded_bounds.reserve(params->bounds_list.size());
+  for (const auto& bounds : params->bounds_list)
+    occluded_bounds.push_back(KeyboardBoundsToRect(bounds));
+
+  if (!delegate()->SetOccludedBounds(occluded_bounds))
+    return RespondNow(Error(kVirtualKeyboardNotEnabled));
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+VirtualKeyboardPrivateSetHitTestBoundsFunction::Run() {
+  std::unique_ptr<keyboard::SetHitTestBounds::Params> params =
+      keyboard::SetHitTestBounds::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  std::vector<gfx::Rect> hit_test_bounds;
+  hit_test_bounds.reserve(params->bounds_list.size());
+  for (const auto& bounds : params->bounds_list)
+    hit_test_bounds.push_back(KeyboardBoundsToRect(bounds));
+
+  if (!delegate()->SetHitTestBounds(hit_test_bounds))
     return RespondNow(Error(kVirtualKeyboardNotEnabled));
   return RespondNow(NoArguments());
 }

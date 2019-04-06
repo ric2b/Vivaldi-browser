@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_coordinator.h"
+#import "ios/chrome/browser/ui/ntp/recent_tabs/legacy_recent_tabs_table_coordinator.h"
 
 #import <UIKit/UIKit.h>
 
@@ -14,13 +14,12 @@
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_test_util.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service_mock.h"
-#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_coordinator.h"
-#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/recent_tabs/legacy_recent_tabs_table_view_controller.h"
 #include "ios/chrome/test/block_cleanup_test.h"
 #include "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
@@ -43,8 +42,7 @@ std::unique_ptr<KeyedService> CreateSyncSetupService(
   ios::ChromeBrowserState* chrome_browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
   syncer::SyncService* sync_service =
-      IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-          chrome_browser_state);
+      ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state);
   return std::make_unique<SyncSetupServiceMock>(
       sync_service, chrome_browser_state->GetPrefs());
 }
@@ -81,7 +79,7 @@ class OpenTabsUIDelegateMock : public sync_sessions::OpenTabsUIDelegate {
       bool(std::vector<const sync_sessions::SyncedSession*>* sessions));
   MOCK_METHOD3(GetForeignTab,
                bool(const std::string& tag,
-                    const SessionID::id_type tab_id,
+                    const SessionID tab_id,
                     const sessions::SessionTab** tab));
   MOCK_METHOD1(DeleteForeignSession, void(const std::string& tag));
   MOCK_METHOD2(GetForeignSession,
@@ -106,13 +104,13 @@ class RecentTabsTableCoordinatorTest : public BlockCleanupTest {
     test_cbs_builder.AddTestingFactory(SyncSetupServiceFactory::GetInstance(),
                                        &CreateSyncSetupService);
     test_cbs_builder.AddTestingFactory(
-        IOSChromeProfileSyncServiceFactory::GetInstance(),
+        ProfileSyncServiceFactory::GetInstance(),
         &BuildMockProfileSyncServiceForRecentTabsTableCoordinator);
     chrome_browser_state_ = test_cbs_builder.Build();
 
     ProfileSyncServiceMockForRecentTabsTableCoordinator* sync_service =
         static_cast<ProfileSyncServiceMockForRecentTabsTableCoordinator*>(
-            IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+            ProfileSyncServiceFactory::GetForBrowserState(
                 chrome_browser_state_.get()));
     EXPECT_CALL(*sync_service, GetAuthError())
         .WillRepeatedly(::testing::ReturnRef(no_error_));
@@ -124,8 +122,8 @@ class RecentTabsTableCoordinatorTest : public BlockCleanupTest {
     EXPECT_CALL(*sync_service, GetOpenTabsUIDelegate())
         .WillRepeatedly(Return(nullptr));
 
-    mock_table_view_controller_ =
-        [OCMockObject niceMockForClass:[RecentTabsTableViewController class]];
+    mock_table_view_controller_ = [OCMockObject
+        niceMockForClass:[LegacyRecentTabsTableViewController class]];
   }
 
   void TearDown() override {
@@ -159,7 +157,7 @@ class RecentTabsTableCoordinatorTest : public BlockCleanupTest {
     if (syncEnabled) {
       ProfileSyncServiceMockForRecentTabsTableCoordinator* sync_service =
           static_cast<ProfileSyncServiceMockForRecentTabsTableCoordinator*>(
-              IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+              ProfileSyncServiceFactory::GetForBrowserState(
                   chrome_browser_state_.get()));
       open_tabs_ui_delegate_.reset(new OpenTabsUIDelegateMock());
       EXPECT_CALL(*sync_service, GetOpenTabsUIDelegate())
@@ -175,12 +173,12 @@ class RecentTabsTableCoordinatorTest : public BlockCleanupTest {
     // ProfileSyncService changes and removed when it is destroyed.
     browser_sync::ProfileSyncServiceMock* sync_service =
         static_cast<browser_sync::ProfileSyncServiceMock*>(
-            IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+            ProfileSyncServiceFactory::GetForBrowserState(
                 chrome_browser_state_.get()));
     EXPECT_CALL(*sync_service, AddObserver(_)).Times(AtLeast(1));
     EXPECT_CALL(*sync_service, RemoveObserver(_)).Times(AtLeast(1));
-    controller_ = [[RecentTabsTableCoordinator alloc]
-        initWithController:(RecentTabsTableViewController*)
+    controller_ = [[LegacyRecentTabsTableCoordinator alloc]
+        initWithController:(LegacyRecentTabsTableViewController*)
                                mock_table_view_controller_
               browserState:chrome_browser_state_.get()];
     [controller_ start];
@@ -196,7 +194,7 @@ class RecentTabsTableCoordinatorTest : public BlockCleanupTest {
 
   // Must be declared *after* |chrome_browser_state_| so it can outlive it.
   OCMockObject* mock_table_view_controller_;
-  RecentTabsTableCoordinator* controller_;
+  LegacyRecentTabsTableCoordinator* controller_;
 };
 
 TEST_F(RecentTabsTableCoordinatorTest, TestConstructorDestructor) {

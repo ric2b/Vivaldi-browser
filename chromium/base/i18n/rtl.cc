@@ -25,6 +25,7 @@
 #include "third_party/icu/source/i18n/unicode/coll.h"
 
 #if defined(OS_IOS)
+#include "base/debug/crash_logging.h"
 #include "base/ios/ios_util.h"
 #endif
 
@@ -83,30 +84,6 @@ base::i18n::TextDirection GetCharacterDirection(UChar32 character) {
   return base::i18n::UNKNOWN_DIRECTION;
 }
 
-// Gets the explicitly forced text direction for debugging. If no forcing is
-// applied, returns UNKNOWN_DIRECTION.
-base::i18n::TextDirection GetForcedTextDirection() {
-  // On iOS, check for RTL forcing.
-#if defined(OS_IOS)
-  if (base::ios::IsInForcedRTL())
-    return base::i18n::RIGHT_TO_LEFT;
-#endif
-
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kForceUIDirection)) {
-    std::string force_flag =
-        command_line->GetSwitchValueASCII(switches::kForceUIDirection);
-
-    if (force_flag == switches::kForceDirectionLTR)
-      return base::i18n::LEFT_TO_RIGHT;
-
-    if (force_flag == switches::kForceDirectionRTL)
-      return base::i18n::RIGHT_TO_LEFT;
-  }
-
-  return base::i18n::UNKNOWN_DIRECTION;
-}
-
 }  // namespace
 
 namespace base {
@@ -154,6 +131,12 @@ std::string ICULocaleName(const std::string& locale_string) {
 }
 
 void SetICUDefaultLocale(const std::string& locale_string) {
+#if defined(OS_IOS)
+  static base::debug::CrashKeyString* crash_key_locale =
+      base::debug::AllocateCrashKeyString("icu_locale_input",
+                                          base::debug::CrashKeySize::Size256);
+  base::debug::SetCrashKeyString(crash_key_locale, locale_string);
+#endif
   icu::Locale locale(ICULocaleName(locale_string).c_str());
   UErrorCode error_code = U_ZERO_ERROR;
   const char* lang = locale.getLanguage();
@@ -171,12 +154,39 @@ bool IsRTL() {
   return ICUIsRTL();
 }
 
+void SetRTLForTesting(bool rtl) {
+  SetICUDefaultLocale(rtl ? "he" : "en");
+  DCHECK_EQ(rtl, IsRTL());
+}
+
 bool ICUIsRTL() {
   if (g_icu_text_direction == UNKNOWN_DIRECTION) {
     const icu::Locale& locale = icu::Locale::getDefault();
     g_icu_text_direction = GetTextDirectionForLocaleInStartUp(locale.getName());
   }
   return g_icu_text_direction == RIGHT_TO_LEFT;
+}
+
+TextDirection GetForcedTextDirection() {
+// On iOS, check for RTL forcing.
+#if defined(OS_IOS)
+  if (base::ios::IsInForcedRTL())
+    return base::i18n::RIGHT_TO_LEFT;
+#endif
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kForceUIDirection)) {
+    std::string force_flag =
+        command_line->GetSwitchValueASCII(switches::kForceUIDirection);
+
+    if (force_flag == switches::kForceDirectionLTR)
+      return base::i18n::LEFT_TO_RIGHT;
+
+    if (force_flag == switches::kForceDirectionRTL)
+      return base::i18n::RIGHT_TO_LEFT;
+  }
+
+  return base::i18n::UNKNOWN_DIRECTION;
 }
 
 TextDirection GetTextDirectionForLocaleInStartUp(const char* locale_name) {
@@ -372,6 +382,25 @@ bool UnadjustStringForLocaleDirection(string16* text) {
 }
 
 #endif  // !OS_WIN
+
+void EnsureTerminatedDirectionalFormatting(string16* text) {
+  int count = 0;
+  for (auto c : *text) {
+    if (c == kLeftToRightEmbeddingMark || c == kRightToLeftEmbeddingMark ||
+        c == kLeftToRightOverride || c == kRightToLeftOverride) {
+      ++count;
+    } else if (c == kPopDirectionalFormatting && count > 0) {
+      --count;
+    }
+  }
+  for (int j = 0; j < count; j++)
+    text->push_back(kPopDirectionalFormatting);
+}
+
+void SanitizeUserSuppliedString(string16* text) {
+  EnsureTerminatedDirectionalFormatting(text);
+  AdjustStringForLocaleDirection(text);
+}
 
 bool StringContainsStrongRTLChars(const string16& text) {
   const UChar* string = text.c_str();

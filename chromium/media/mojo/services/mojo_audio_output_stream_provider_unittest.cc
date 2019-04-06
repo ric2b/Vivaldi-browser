@@ -12,7 +12,7 @@
 #include "build/build_config.h"
 #include "media/audio/audio_output_delegate.h"
 #include "media/base/audio_parameters.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/core/embedder/embedder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -30,8 +30,6 @@ using testing::StrictMock;
 
 using MockDeleter = base::MockCallback<
     base::OnceCallback<void(mojom::AudioOutputStreamProvider*)>>;
-
-void FakeAcquireCallback(mojo::ScopedSharedBufferHandle, mojo::ScopedHandle) {}
 
 class FakeObserver : public mojom::AudioOutputStreamObserver {
  public:
@@ -70,7 +68,7 @@ std::unique_ptr<AudioOutputDelegate> CreateFakeDelegate(
 TEST(MojoAudioOutputStreamProviderTest, AcquireTwice_BadMessage) {
   base::MessageLoop loop;
   bool got_bad_message = false;
-  mojo::edk::SetDefaultProcessErrorCallback(
+  mojo::core::SetDefaultProcessErrorCallback(
       base::BindRepeating([](bool* got_bad_message,
                              const std::string& s) { *got_bad_message = true; },
                           &got_bad_message));
@@ -83,33 +81,30 @@ TEST(MojoAudioOutputStreamProviderTest, AcquireTwice_BadMessage) {
       mojo::MakeRequest(&provider_ptr), base::BindOnce(&CreateFakeDelegate),
       deleter.Get(), std::make_unique<FakeObserver>());
 
-  mojom::AudioOutputStreamPtr stream_1;
-  mojom::AudioOutputStreamClientPtr client_1;
-  mojom::AudioOutputStreamClientRequest client_request_1 =
-      mojo::MakeRequest(&client_1);
+  mojom::AudioOutputStreamProviderClientPtr client_1;
+  mojo::MakeRequest(&client_1);
+  provider_ptr->Acquire(media::AudioParameters::UnavailableDeviceParams(),
+                        std::move(client_1));
 
-  mojom::AudioOutputStreamPtr stream_2;
-  mojom::AudioOutputStreamClientPtr client_2;
-  mojom::AudioOutputStreamClientRequest client_request_2 =
-      mojo::MakeRequest(&client_2);
-  provider_ptr->Acquire(mojo::MakeRequest(&stream_1), std::move(client_1),
-                        media::AudioParameters::UnavailableDeviceParams(),
-                        base::BindOnce(&FakeAcquireCallback));
-  provider_ptr->Acquire(mojo::MakeRequest(&stream_2), std::move(client_2),
-                        media::AudioParameters::UnavailableDeviceParams(),
-                        base::BindOnce(&FakeAcquireCallback));
+  mojom::AudioOutputStreamProviderClientPtr client_2;
+  mojo::MakeRequest(&client_2);
+  provider_ptr->Acquire(media::AudioParameters::UnavailableDeviceParams(),
+                        std::move(client_2));
 
   EXPECT_CALL(deleter, Run(provider)).WillOnce(DeleteArg<0>());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(got_bad_message);
   Mock::VerifyAndClear(&deleter);
+
+  mojo::core::SetDefaultProcessErrorCallback(
+      mojo::core::ProcessErrorCallback());
 }
 
 TEST(MojoAudioOutputStreamProviderTest,
      Bitstream_BadMessageOnNonAndoirdPlatforms) {
   base::MessageLoop loop;
   bool got_bad_message = false;
-  mojo::edk::SetDefaultProcessErrorCallback(
+  mojo::core::SetDefaultProcessErrorCallback(
       base::BindRepeating([](bool* got_bad_message,
                              const std::string& s) { *got_bad_message = true; },
                           &got_bad_message));
@@ -124,12 +119,9 @@ TEST(MojoAudioOutputStreamProviderTest,
       mojo::MakeRequest(&provider_ptr), base::BindOnce(&CreateFakeDelegate),
       deleter.Get(), std::make_unique<FakeObserver>());
 
-  mojom::AudioOutputStreamPtr stream;
-  mojom::AudioOutputStreamClientPtr client;
-  mojom::AudioOutputStreamClientRequest client_request =
-      mojo::MakeRequest(&client);
-  provider_ptr->Acquire(mojo::MakeRequest(&stream), std::move(client), params,
-                        base::BindOnce(&FakeAcquireCallback));
+  mojom::AudioOutputStreamProviderClientPtr client;
+  mojo::MakeRequest(&client);
+  provider_ptr->Acquire(params, std::move(client));
 
 #if defined(OS_ANDROID)
   base::RunLoop().RunUntilIdle();
@@ -144,6 +136,8 @@ TEST(MojoAudioOutputStreamProviderTest,
   EXPECT_TRUE(got_bad_message);
   Mock::VerifyAndClear(&deleter);
 #endif
+  mojo::core::SetDefaultProcessErrorCallback(
+      mojo::core::ProcessErrorCallback());
 }
 
 }  // namespace media

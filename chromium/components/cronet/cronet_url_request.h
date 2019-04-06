@@ -75,7 +75,8 @@ class CronetURLRequest {
                                    const net::HttpResponseHeaders* headers,
                                    bool was_cached,
                                    const std::string& negotiated_protocol,
-                                   const std::string& proxy_server) = 0;
+                                   const std::string& proxy_server,
+                                   int64_t received_byte_count) = 0;
 
     // Invoked whenever part of the response body has been read. Only part of
     // the buffer may be populated, even if the entire response body has not yet
@@ -144,7 +145,11 @@ class CronetURLRequest {
                    net::RequestPriority priority,
                    bool disable_cache,
                    bool disable_connection_migration,
-                   bool enable_metrics);
+                   bool enable_metrics,
+                   bool traffic_stats_tag_set,
+                   int32_t traffic_stats_tag,
+                   bool traffic_stats_uid_set,
+                   int32_t traffic_stats_uid);
 
   // Methods called prior to Start are never called on network thread.
 
@@ -190,7 +195,11 @@ class CronetURLRequest {
                  const GURL& url,
                  net::RequestPriority priority,
                  int load_flags,
-                 bool enable_metrics);
+                 bool enable_metrics,
+                 bool traffic_stats_tag_set,
+                 int32_t traffic_stats_tag,
+                 bool traffic_stats_uid_set,
+                 int32_t traffic_stats_uid);
 
     // Invoked on the network thread.
     ~NetworkTasks() override;
@@ -244,11 +253,22 @@ class CronetURLRequest {
     const GURL initial_url_;
     const net::RequestPriority initial_priority_;
     const int initial_load_flags_;
+    // Count of bytes received during redirect is added to received byte count.
+    int64_t received_byte_count_from_redirects_;
 
     // Whether detailed metrics should be collected and reported.
     const bool enable_metrics_;
     // Whether metrics have been reported.
     bool metrics_reported_;
+
+    // Whether |traffic_stats_tag_| should be applied.
+    const bool traffic_stats_tag_set_;
+    // TrafficStats tag to apply to URLRequest.
+    const int32_t traffic_stats_tag_;
+    // Whether |traffic_stats_uid_| should be applied.
+    const bool traffic_stats_uid_set_;
+    // UID to be applied to URLRequest.
+    const int32_t traffic_stats_uid_;
 
     scoped_refptr<net::IOBuffer> read_buffer_;
     std::unique_ptr<net::URLRequest> url_request_;

@@ -12,11 +12,11 @@ ChangeRequestsStateTask::ChangeRequestsStateTask(
     RequestQueueStore* store,
     const std::vector<int64_t>& request_ids,
     const SavePageRequest::RequestState new_state,
-    const RequestQueueStore::UpdateCallback& callback)
+    RequestQueueStore::UpdateCallback callback)
     : store_(store),
       request_ids_(request_ids.begin(), request_ids.end()),
       new_state_(new_state),
-      callback_(callback),
+      callback_(std::move(callback)),
       weak_ptr_factory_(this) {}
 
 ChangeRequestsStateTask::~ChangeRequestsStateTask() {}
@@ -27,9 +27,9 @@ void ChangeRequestsStateTask::Run() {
 
 void ChangeRequestsStateTask::ReadRequests() {
   std::vector<int64_t> request_ids(request_ids_.begin(), request_ids_.end());
-  store_->GetRequestsByIds(request_ids,
-                           base::Bind(&ChangeRequestsStateTask::UpdateRequests,
-                                      weak_ptr_factory_.GetWeakPtr()));
+  store_->GetRequestsByIds(
+      request_ids, base::BindOnce(&ChangeRequestsStateTask::UpdateRequests,
+                                  weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ChangeRequestsStateTask::UpdateRequests(
@@ -44,13 +44,19 @@ void ChangeRequestsStateTask::UpdateRequests(
   // of the missing items will be added at the end.
   std::vector<SavePageRequest> items_to_update;
   for (auto request : read_result->updated_items) {
+    // Decrease the started_attempt_count_ for offlining requests paused by the
+    // user (https://crbug.com/701037).
+    if (request.request_state() == SavePageRequest::RequestState::OFFLINING &&
+        new_state_ == SavePageRequest::RequestState::PAUSED) {
+      request.set_started_attempt_count(request.started_attempt_count() - 1);
+    }
     request.set_request_state(new_state_);
     items_to_update.push_back(request);
   }
 
-  store_->UpdateRequests(items_to_update,
-                         base::Bind(&ChangeRequestsStateTask::UpdateCompleted,
-                                    weak_ptr_factory_.GetWeakPtr()));
+  store_->UpdateRequests(
+      items_to_update, base::BindOnce(&ChangeRequestsStateTask::UpdateCompleted,
+                                      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ChangeRequestsStateTask::UpdateCompleted(
@@ -70,7 +76,7 @@ void ChangeRequestsStateTask::UpdateCompleted(
         std::make_pair(request_id, ItemActionStatus::NOT_FOUND));
   }
 
-  callback_.Run(std::move(update_result));
+  std::move(callback_).Run(std::move(update_result));
   TaskComplete();
 }
 

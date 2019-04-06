@@ -6,7 +6,6 @@
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
 <link rel="import" href="item_behavior.html">
 <link rel="import" href="shortcut_input.html">
 
@@ -19,9 +18,9 @@
 
       .shortcut-card {
         @apply --cr-primary-text;
-        @apply --shadow-elevation-2dp;
+        @apply --cr-card-elevation;
         background-color: white;
-        border-radius: 2px;
+        border-radius: var(--cr-card-border-radius);
         margin: 0 auto 16px auto;
         padding-bottom: 8px;
         width: var(--cr-toolbar-field-width);
@@ -39,28 +38,24 @@
       }
 
       .command-entry {
-        align-items: center;
+        align-items: start;
         display: flex;
-        height: var(--cr-section-min-height);
+        /* Makes top/bottom spacing of each row more even, while leaving
+           space for cr-input error message in between rows. */
+        margin-bottom: -8px;
+        padding-top: 16px;
       }
 
       .command-name {
+        /* Align with cr-input by matching the field's top padding. */
         flex: 1;
+        margin-top: 6px;
       }
 
-      .command-entry .md-select-wrapper {
-        -webkit-margin-start: var(--cr-section-padding);
-      }
-
-      /* Vertically align with paper-input. */
       .command-entry .md-select {
-        /* TODO(scottchen): line-height needs adjustment to fix large fonts,
-         * same for paper-input. */
+        /* TODO(scottchen): line-height needs adjustment to fix large fonts. */
+        -webkit-margin-start: var(--cr-section-padding);
         line-height: 22px;
-        /* Below rules help align md-select and paper-input underline. */
-        margin-top: 3px;
-        padding-bottom: 0;
-        padding-top: 0;
       }
 
       .card-title {
@@ -74,15 +69,15 @@
 
       .icon {
         -webkit-margin-end: 20px;
-        height: 16px;
-        width: 16px;
+        height: 20px;
+        width: 20px;
       }
 
       .card-controls {
         /* We line up the controls with the name, which is after the
-           20px left padding + 16px icon + 20px margin on the icon. */
+           20px left padding + 20px icon + 20px margin on the icon. */
         -webkit-margin-end: 20px;
-        -webkit-margin-start: 56px;
+        -webkit-margin-start: 60px;
       }
     </style>
     <div id="container">
@@ -104,22 +99,19 @@
                     item="[[item.id]]" shortcut="[[command.keybinding]]"
                     command-name="[[command.name]]">
                 </extensions-shortcut-input>
-                <div class="md-select-wrapper">
-                  <!-- Binding "value" to triggerScopeChange_ to trigger update
-                      only after CommandScope_ becomes available. -->
-                  <select class="md-select" on-change="onScopeChanged_"
-                      disabled$="[[computeScopeDisabled_(command)]]"
-                      value="[[
-                          triggerScopeChange_(command.scope, CommandScope_)]]">
-                    <option value$="[[CommandScope_.CHROME]]">
-                      $i18n{shortcutScopeInChrome}
-                    </option>
-                    <option value$="[[CommandScope_.GLOBAL]]">
-                      $i18n{shortcutScopeGlobal}
-                    </option>
-                  </select>
-                  <span class="md-select-underline"></span>
-                </div>
+                <!-- Binding "value" to triggerScopeChange_ to trigger update
+                    only after CommandScope_ becomes available. -->
+                <select class="md-select" on-change="onScopeChanged_"
+                    disabled$="[[computeScopeDisabled_(command)]]"
+                    value="[[
+                        triggerScopeChange_(command.scope, CommandScope_)]]">
+                  <option value$="[[CommandScope_.CHROME]]">
+                    $i18n{shortcutScopeInChrome}
+                  </option>
+                  <option value$="[[CommandScope_.GLOBAL]]">
+                    $i18n{shortcutScopeGlobal}
+                  </option>
+                </select>
               </div>
             </template>
           </div>

@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2008, Google Inc.
 // All rights reserved.
 //
@@ -33,8 +34,8 @@
 #include "config.h"
 #include <algorithm>
 #include "central_freelist.h"
-#include "free_list.h"         // for FL_Next, FL_Push, etc
 #include "internal_logging.h"  // for ASSERT, MESSAGE
+#include "linked_list.h"       // for SLL_Next, SLL_Push, etc
 #include "page_heap.h"         // for PageHeap
 #include "static_vars.h"       // for Static
 
@@ -80,7 +81,7 @@ void CentralFreeList::Init(size_t cl) {
 
 void CentralFreeList::ReleaseListToSpans(void* start) {
   while (start) {
-    void *next = FL_Next(start);
+    void *next = SLL_Next(start);
     ReleaseToSpans(start);
     start = next;
   }
@@ -116,7 +117,7 @@ void CentralFreeList::ReleaseToSpans(void* object) {
   if (false) {
     // Check that object does not occur in list
     int got = 0;
-    for (void* p = span->objects; p != NULL; p = FL_Next(p)){
+    for (void* p = span->objects; p != NULL; p = *((void**) p)) {
       ASSERT(p != object);
       got++;
     }
@@ -142,7 +143,8 @@ void CentralFreeList::ReleaseToSpans(void* object) {
     }
     lock_.Lock();
   } else {
-    FL_Push(&(span->objects), object);
+    *(reinterpret_cast<void**>(object)) = span->objects;
+    span->objects = object;
   }
 }
 
@@ -150,14 +152,14 @@ bool CentralFreeList::EvictRandomSizeClass(
     int locked_size_class, bool force) {
   static int race_counter = 0;
   int t = race_counter++;  // Updated without a lock, but who cares.
-  if (t >= kNumClasses) {
-    while (t >= kNumClasses) {
-      t -= kNumClasses;
+  if (t >= Static::num_size_classes()) {
+    while (t >= Static::num_size_classes()) {
+      t -= Static::num_size_classes();
     }
     race_counter = t;
   }
   ASSERT(t >= 0);
-  ASSERT(t < kNumClasses);
+  ASSERT(t < Static::num_size_classes());
   if (t == locked_size_class) return false;
   return Static::central_cache()[t].ShrinkCache(locked_size_class, force);
 }
@@ -256,50 +258,62 @@ int CentralFreeList::RemoveRange(void **start, void **end, int N) {
   }
 
   int result = 0;
-  void* head = NULL;
-  void* tail = NULL;
+  *start = NULL;
+  *end = NULL;
   // TODO: Prefetch multiple TCEntries?
-  tail = FetchFromSpansSafe();
-  if (tail != NULL) {
-    FL_Push(&head, tail);
-    result = 1;
+  result = FetchFromOneSpansSafe(N, start, end);
+  if (result != 0) {
     while (result < N) {
-      void *t = FetchFromSpans();
-      if (!t) break;
-      FL_Push(&head, t);
-      result++;
+      int n;
+      void* head = NULL;
+      void* tail = NULL;
+      n = FetchFromOneSpans(N - result, &head, &tail);
+      if (!n) break;
+      result += n;
+      SLL_PushRange(start, head, tail);
     }
   }
   lock_.Unlock();
-  *start = head;
-  *end = tail;
   return result;
 }
 
 
-void* CentralFreeList::FetchFromSpansSafe() {
-  void *t = FetchFromSpans();
-  if (!t) {
+int CentralFreeList::FetchFromOneSpansSafe(int N, void **start, void **end) {
+  int result = FetchFromOneSpans(N, start, end);
+  if (!result) {
     Populate();
-    t = FetchFromSpans();
+    result = FetchFromOneSpans(N, start, end);
   }
-  return t;
+  return result;
 }
 
-void* CentralFreeList::FetchFromSpans() {
-  if (tcmalloc::DLL_IsEmpty(&nonempty_)) return NULL;
+int CentralFreeList::FetchFromOneSpans(int N, void **start, void **end) {
+  if (tcmalloc::DLL_IsEmpty(&nonempty_)) return 0;
   Span* span = nonempty_.next;
 
   ASSERT(span->objects != NULL);
-  span->refcount++;
-  void *result = FL_Pop(&(span->objects));
-  if (span->objects == NULL) {
+
+  int result = 0;
+  void *prev, *curr;
+  curr = span->objects;
+  do {
+    prev = curr;
+    curr = *(reinterpret_cast<void**>(curr));
+  } while (++result < N && curr != NULL);
+
+  if (curr == NULL) {
     // Move to empty list
     tcmalloc::DLL_Remove(span);
     tcmalloc::DLL_Prepend(&empty_, span);
     Event(span, 'E', 0);
   }
-  counter_--;
+
+  *start = span->objects;
+  *end = prev;
+  span->objects = curr;
+  SLL_SetNext(*end, NULL);
+  span->refcount += result;
+  counter_ -= result;
   return result;
 }
 
@@ -326,23 +340,24 @@ void CentralFreeList::Populate() {
   // (Instead of being eager, we could just replace any stale info
   // about this span, but that seems to be no better in practice.)
   for (int i = 0; i < npages; i++) {
-    Static::pageheap()->CacheSizeClass(span->start + i, size_class_);
+    Static::pageheap()->SetCachedSizeClass(span->start + i, size_class_);
   }
 
   // Split the block into pieces and add to the free-list
   // TODO: coloring of objects to avoid cache conflicts?
-  void* list = NULL;
+  void** tail = &span->objects;
   char* ptr = reinterpret_cast<char*>(span->start << kPageShift);
   char* limit = ptr + (npages << kPageShift);
   const size_t size = Static::sizemap()->ByteSizeForClass(size_class_);
   int num = 0;
   while (ptr + size <= limit) {
-    FL_Push(&list, ptr);
+    *tail = ptr;
+    tail = reinterpret_cast<void**>(ptr);
     ptr += size;
     num++;
   }
   ASSERT(ptr <= limit);
-  span->objects = list;
+  *tail = NULL;
   span->refcount = 0; // No sub-object in use yet
 
   // Add span to list of non-empty spans

@@ -5,9 +5,12 @@
 source_set("infobars") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "infobar_view.h",
-    "infobar_view.mm",
-    "infobar_view_delegate.h",
+    "confirm_infobar_view.h",
+    "confirm_infobar_view.mm",
+    "infobar_constants.h",
+    "infobar_constants.mm",
+    "infobar_view_sizing.h",
+    "infobar_view_sizing_delegate.h",
   ]
   deps = [
     "resources:infobar_close",
@@ -18,6 +21,8 @@ source_set("infobars") {
     "//base",
     "//base:i18n",
     "//components/strings",
+    "//ios/chrome/app/theme:theme",
+    "//ios/chrome/app/theme:theme_grit",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/fancy_ui",
@@ -39,11 +44,24 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "infobar_view_unittest.mm",
+    "confirm_infobar_view_unittest.mm",
   ]
   deps = [
     ":infobars",
     "//testing/gtest",
+  ]
+}
+
+source_set("test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "test_infobar_delegate.h",
+    "test_infobar_delegate.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/infobars/core",
   ]
 }
 
@@ -54,6 +72,7 @@ source_set("eg_tests") {
     "infobar_egtest.mm",
   ]
   deps = [
+    ":test_support",
     "//base",
     "//components/infobars/core",
     "//ios/chrome/app:app_internal",

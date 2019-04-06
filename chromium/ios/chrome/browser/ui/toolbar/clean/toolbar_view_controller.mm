@@ -4,34 +4,28 @@
 
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_view_controller.h"
 
-#include "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/history_popup_commands.h"
-#import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_foreground_animator.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_end_animator.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_to_top_animator.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_button.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_button_factory.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_component_options.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_constants.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_button_updater.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_component_options.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_configuration.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_constants.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_view.h"
+#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
-#import "ios/chrome/browser/ui/toolbar/public/web_toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
+#import "ios/chrome/browser/ui/util/named_guide_util.h"
 #import "ios/chrome/common/material_timing.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/third_party/material_components_ios/src/components/ProgressView/src/MaterialProgressView.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
@@ -39,6 +33,12 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+// Fullscreen constants.
+const CGFloat kIPadToolbarY = 53;
+const CGFloat kScrollFadeDistance = 30;
+}
 
 @interface ToolbarViewController ()<ToolbarViewFullscreenDelegate>
 @property(nonatomic, strong) ToolbarButtonFactory* buttonFactory;
@@ -231,7 +231,7 @@
   self.expanded = NO;
 }
 
-- (void)updateForSideSwipeSnapshotOnNTP:(BOOL)onNTP {
+- (void)updateForSnapshotOnNTP:(BOOL)onNTP {
   self.view.progressBar.hidden = YES;
   if (onNTP) {
     self.view.backgroundView.alpha = 1;
@@ -242,7 +242,7 @@
   }
 }
 
-- (void)resetAfterSideSwipeSnapshot {
+- (void)resetAfterSnapshot {
   self.view.backgroundView.alpha = 0;
   self.view.locationBarContainer.hidden = NO;
   self.view.backButton.hiddenInCurrentState = NO;
@@ -324,6 +324,10 @@
 
 - (ToolbarToolsMenuButton*)toolsMenuButton {
   return self.view.toolsMenuButton;
+}
+
+- (UIColor*)backgroundColorNTP {
+  return self.view.backgroundView.backgroundColor;
 }
 
 #pragma mark - Components Setup
@@ -424,14 +428,16 @@
 }
 
 - (void)didMoveToParentViewController:(UIViewController*)parent {
-  ConstrainNamedGuideToView(kOmniboxGuide, self.view.locationBarContainer);
-  ConstrainNamedGuideToView(kBackButtonGuide, self.view.backButton.imageView);
-  ConstrainNamedGuideToView(kForwardButtonGuide,
-                            self.view.forwardButton.imageView);
-  ConstrainNamedGuideToView(kToolsMenuGuide, self.view.toolsMenuButton);
+  SetNamedGuideConstrainedViews(@{
+    kOmniboxGuide : self.view.locationBarContainer,
+    kBackButtonGuide : self.view.backButton.imageView,
+    kForwardButtonGuide : self.view.forwardButton.imageView,
+    kToolsMenuGuide : self.view.toolsMenuButton,
+  });
   if (!IsIPadIdiom()) {
-    ConstrainNamedGuideToView(kTabSwitcherGuide,
-                              self.view.tabSwitchStripButton.imageView);
+    UIView* tabSwitcherButton = self.view.tabSwitchStripButton.imageView;
+    [NamedGuide guideWithName:kTabSwitcherGuide view:tabSwitcherButton]
+        .constrainedView = tabSwitcherButton;
   }
 }
 
@@ -462,6 +468,10 @@
   _loading = loading;
   self.view.reloadButton.hiddenInCurrentState = loading;
   self.view.stopButton.hiddenInCurrentState = !loading;
+
+  if (IsIPadIdiom())
+    return;
+
   if (!loading) {
     [self stopProgressBar];
   } else if (self.view.progressBar.hidden) {
@@ -473,11 +483,15 @@
   }
 }
 
+- (void)setIsNTP:(BOOL)isNTP {
+  // This boolean is unused in the clean toolbar.
+}
+
 - (void)setLoadingProgressFraction:(double)progress {
   [self.view.progressBar setProgress:progress animated:YES completion:nil];
 }
 
-- (void)setTabCount:(int)tabCount {
+- (void)setTabCount:(int)tabCount addedInBackground:(BOOL)inBackground {
   // Return if tabSwitchStripButton wasn't initialized.
   if (!self.view.tabSwitchStripButton)
     return;
@@ -574,18 +588,15 @@
     [self updateForFullscreenProgress:1.0];
 }
 
-- (void)finishFullscreenScrollWithAnimator:
-    (FullscreenScrollEndAnimator*)animator {
+- (void)finishFullscreenScrollWithAnimator:(FullscreenAnimator*)animator {
   [self addFullscreenAnimationsToAnimator:animator];
 }
 
-- (void)scrollFullscreenToTopWithAnimator:
-    (FullscreenScrollToTopAnimator*)animator {
+- (void)scrollFullscreenToTopWithAnimator:(FullscreenAnimator*)animator {
   [self addFullscreenAnimationsToAnimator:animator];
 }
 
-- (void)showToolbarForForgroundWithAnimator:
-    (FullscreenForegroundAnimator*)animator {
+- (void)showToolbarWithAnimator:(FullscreenAnimator*)animator {
   [self addFullscreenAnimationsToAnimator:animator];
 }
 
@@ -593,7 +604,7 @@
 
 - (void)addFullscreenAnimationsToAnimator:(FullscreenAnimator*)animator {
   CGFloat finalProgress = animator.finalProgress;
-  [animator addAnimations:^() {
+  [animator addAnimations:^{
     [self updateForFullscreenProgress:finalProgress];
   }];
 }
@@ -633,9 +644,9 @@
 // Target of the voice search button.
 - (void)startVoiceSearch:(id)sender {
   UIView* view = base::mac::ObjCCastStrict<UIView>(sender);
-  StartVoiceSearchCommand* command =
-      [[StartVoiceSearchCommand alloc] initWithOriginView:view];
-  [self.dispatcher startVoiceSearch:command];
+  [NamedGuide guideWithName:kVoiceSearchButtonGuide view:view].constrainedView =
+      view;
+  [self.dispatcher startVoiceSearch];
 }
 
 // Sets all Toolbar Buttons opacity to |alpha|.

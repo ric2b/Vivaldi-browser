@@ -8,11 +8,14 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <set>
 
 #include "base/callback.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/synchronization/lock.h"
+#include "url/gurl.h"
 
 namespace content {
 class NavigationHandle;
@@ -24,9 +27,9 @@ namespace extensions {
 
 class ExtensionApiFrameIdMapHelper {
  public:
-  virtual void GetTabAndWindowId(content::RenderFrameHost* rfh,
-                                 int* tab_id_out,
-                                 int* window_id_out) = 0;
+  virtual void PopulateTabData(content::RenderFrameHost* rfh,
+                               int* tab_id_out,
+                               int* window_id_out) = 0;
   virtual ~ExtensionApiFrameIdMapHelper() {}
 };
 
@@ -58,7 +61,15 @@ class ExtensionApiFrameIdMap {
   // The data for a RenderFrame. Every RenderFrameIdKey maps to a FrameData.
   struct FrameData {
     FrameData();
-    FrameData(int frame_id, int parent_frame_id, int tab_id, int window_id);
+    FrameData(int frame_id,
+              int parent_frame_id,
+              int tab_id,
+              int window_id,
+              GURL last_committed_main_frame_url);
+    ~FrameData();
+
+    FrameData(const FrameData&);
+    FrameData& operator=(const FrameData&);
 
     // The extension API frame ID of the frame.
     int frame_id;
@@ -73,6 +84,15 @@ class ExtensionApiFrameIdMap {
     // The id of the window that the frame is in, or -1 if the frame isn't in a
     // window.
     int window_id;
+
+    // The last committed url of the main frame to which this frame belongs.
+    // This ignores any same-document navigations.
+    GURL last_committed_main_frame_url;
+
+    // The pending main frame url. This is only non-empty for main frame data
+    // when the main frame is ready to commit navigation but hasn't fully
+    // completed the navigation yet. This ignores any same-document navigations.
+    base::Optional<GURL> pending_main_frame_url;
   };
 
   using FrameDataCallback = base::Callback<void(const FrameData&)>;
@@ -124,21 +144,32 @@ class ExtensionApiFrameIdMap {
   // If |rfh| is nullptr, then the map is not modified.
   FrameData GetFrameData(content::RenderFrameHost* rfh) WARN_UNUSED_RESULT;
 
-  // Looks up the FrameData and stores it in the map. This method should be
-  // called as early as possible, e.g. in a
-  // WebContentsObserver::RenderFrameCreated notification.
-  void CacheFrameData(content::RenderFrameHost* rfh);
+  // Initializes the FrameData for the given |rfh|.
+  void InitializeRenderFrameData(content::RenderFrameHost* rfh);
 
-  // Removes the FrameData mapping for a given frame. This method can be called
-  // at any time, but it is typically called when a frame is destroyed.
-  // If this method is not called, the cached mapping for the frame is retained
-  // forever.
-  void RemoveFrameData(content::RenderFrameHost* rfh);
+  // Called when a render frame is deleted. Removes the FrameData mapping for
+  // the given render frame.
+  void OnRenderFrameDeleted(content::RenderFrameHost* rfh);
 
-  // Updates the tab and window id for the given RenderFrameHost, if any exists.
+  // Updates the tab and window id for the given RenderFrameHost if necessary.
   void UpdateTabAndWindowId(int tab_id,
                             int window_id,
                             content::RenderFrameHost* rfh);
+
+  // Called when WebContentsObserver::ReadyToCommitNavigation is dispatched for
+  // a main frame.
+  void OnMainFrameReadyToCommitNavigation(
+      content::NavigationHandle* navigation_handle);
+
+  // Called when WebContentsObserver::DidFinishNavigation is dispatched for a
+  // main frame.
+  void OnMainFrameDidFinishNavigation(
+      content::NavigationHandle* navigation_handle);
+
+  // Returns whether frame data for |rfh| is cached.
+  bool HasCachedFrameDataForTesting(content::RenderFrameHost* rfh) const;
+
+  size_t GetFrameDataCountForTesting() const;
 
  protected:
   friend struct base::LazyInstanceTraitsBase<ExtensionApiFrameIdMap>;
@@ -178,8 +209,9 @@ class ExtensionApiFrameIdMap {
   virtual ~ExtensionApiFrameIdMap();
 
   // Determines the value to be stored in |frame_data_map_| for a given key.
-  // This method is only called when |key| is not in |frame_data_map_|.
-  // virtual for testing.
+  // Returns empty FrameData when the corresponding RenderFrameHost is not
+  // alive. This method is only called when |key| is not in |frame_data_map_|.
+  // Virtual for testing.
   virtual FrameData KeyToValue(const RenderFrameIdKey& key) const;
 
   // Looks up the data for the given |key| and adds it to the |frame_data_map_|.
@@ -207,8 +239,15 @@ class ExtensionApiFrameIdMap {
   FrameDataMap frame_data_map_;
 
   // This lock protects |frame_data_map_| from being concurrently written on the
-  // UI thread and read on the IO thread.
+  // UI thread and read on the IO thread. Acquire during a read on the IO thread
+  // and during a write on the UI thread.
   base::Lock frame_data_map_lock_;
+
+  // The set of pending main frame navigations for which ReadyToCommitNavigation
+  // has been fired. Only used on the UI thread. This is needed to clear state
+  // set up in OnMainFrameReadyToCommitNavigation for navigations which
+  // eventually do not commit.
+  std::set<content::NavigationHandle*> ready_to_commit_document_navigations_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionApiFrameIdMap);
 };

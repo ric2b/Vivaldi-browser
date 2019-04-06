@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/extensions/echo_private_api.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -18,6 +19,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/ui/echo_dialog_view.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/extensions/api/echo_private.h"
@@ -28,6 +30,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_file_task_runner.h"
+#include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension.h"
 
 namespace echo_api = extensions::api::echo_private;
@@ -240,12 +243,39 @@ void EchoPrivateGetUserConsentFunction::OnRedeemOffersAllowedChecked(
     return;
   }
 
-  content::WebContents* web_contents = GetAssociatedWebContents();
-  if (!web_contents) {
-    error_ = "No web contents.";
-    SendResponse(false);
-    return;
+  content::WebContents* web_contents = nullptr;
+  if (!params->consent_requester.tab_id) {
+    web_contents = GetSenderWebContents();
+
+    if (!web_contents || extensions::GetViewType(web_contents) !=
+                             extensions::VIEW_TYPE_APP_WINDOW) {
+      error_ = "Not called from an app window - the tabId is required.";
+      SendResponse(false);
+      return;
+    }
+  } else {
+    TabStripModel* tab_strip = nullptr;
+    int tab_index = -1;
+    if (!extensions::ExtensionTabUtil::GetTabById(
+            *params->consent_requester.tab_id, browser_context(),
+            false /*incognito_enabled*/, nullptr /*browser*/, &tab_strip,
+            &web_contents, &tab_index)) {
+      error_ = "Tab not found.";
+      SendResponse(false);
+      return;
+    }
+
+    // Bail out if the requested tab is not active - the dialog is modal to the
+    // window, so showing it for a request from an inactive tab could be
+    // misleading/confusing to the user.
+    if (tab_index != tab_strip->active_index()) {
+      error_ = "Consent requested from an inactive tab.";
+      SendResponse(false);
+      return;
+    }
   }
+
+  DCHECK(web_contents);
 
   // Add ref to ensure the function stays around until the dialog listener is
   // called. The reference is release in |Finalize|.

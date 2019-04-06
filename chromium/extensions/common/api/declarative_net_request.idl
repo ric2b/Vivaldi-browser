@@ -7,7 +7,7 @@
 namespace declarativeNetRequest {
   // This describes the resource type of the network request.
   enum ResourceType {
-    // TODO(crbug.com/696822): add main_frame, csp.
+    main_frame,
     sub_frame,
     stylesheet,
     script,
@@ -16,6 +16,7 @@ namespace declarativeNetRequest {
     object,
     xmlhttprequest,
     ping,
+    csp_report,
     media,
     websocket,
     other
@@ -34,12 +35,12 @@ namespace declarativeNetRequest {
   // Describes the kind of action to take if a given RuleCondition matches.
   enum RuleActionType {
     // Block the network request.
-    blacklist,
+    block,
     // Redirect the network request.
     redirect,
-    // Whitelist the network request. The request won't be blocked even if there
+    // Allow the network request. The request won't be blocked even if there
     // is a blocking rule which matches it.
-    whitelist
+    allow
   };
 
   dictionary RuleCondition {
@@ -74,13 +75,14 @@ namespace declarativeNetRequest {
     // Note: sub-domains like "a.example.com" are also allowed.
     DOMString[]? excludedDomains;
 
-    // List of resource types which the rule can match. If the list is omitted,
-    // the rule is applied to all resource types. An empty list is not allowed.
+    // List of resource types which the rule can match. An empty list is not
+    // allowed.
     ResourceType[]? resourceTypes;
 
-    // List of resource types which the rule won't match. If the list is empty
-    // or omitted, no resource types are excluded. This takes precedence over
-    // |resourceTypes|.
+    // List of resource types which the rule won't match. Only one of
+    // |resourceTypes| and |excludedResourceTypes| should be specified. If
+    // neither of them are specified, all resource types except "main_frame"
+    // are blocked.
     ResourceType[]? excludedResourceTypes;
 
     // Specifies whether the network request is firstParty or thirdParty to the
@@ -108,5 +110,40 @@ namespace declarativeNetRequest {
 
     // The action to take if this rule is matched.
     RuleAction action;
+  };
+
+  callback EmptyCallback = void();
+  callback GetAllowedPagesCallback = void(DOMString[] result);
+
+  interface Functions {
+    // Adds |page_patterns| to the set of allowed pages. Requests from these
+    // pages are not intercepted by the extension. These are persisted across
+    // browser sessions.
+    // Note: MAX_NUMBER_OF_ALLOWED_PAGES is the maximum number of
+    // allowed page an extension can add. Also, adding page patterns is
+    // atomic. In case of an error, no page pattern is added.
+    // |page_patterns| : Array of match patterns which are to be allowed.
+    // |callback|: Called after the |page_patterns| have been added.
+    // chrome.runtime.lastError will be set in case of an error, for example if
+    // an invalid page pattern is specified or the extension exceeded the
+    // maximum page patterns limit.
+    static void addAllowedPages(DOMString[] page_patterns, optional EmptyCallback callback);
+
+    // Removes |page_patterns| from the set of allowed pages.
+    // Note: Removing page patterns is atomic. In case of an error, no page
+    // pattern is removed.
+    // |page_patterns| : Array of match patterns which are to removed.
+    // |callback|: Called after the |page_patterns| have been removed.
+    // chrome.runtime.lastError will be set in case of an error.
+    static void removeAllowedPages(DOMString[] page_patterns, optional EmptyCallback callback);
+
+    // Returns the current set of allowed pages.
+    // |callback|: Called with the set of currently allowed pages.
+    static void getAllowedPages(GetAllowedPagesCallback callback);
+  };
+
+  interface Properties {
+    // The maximum number of allowed pages that an extension can add.
+    [value=100] static long MAX_NUMBER_OF_ALLOWED_PAGES();
   };
 };

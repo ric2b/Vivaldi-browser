@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser_dialogs.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_types.h"
@@ -30,8 +30,8 @@
 #include "ui/views/window/non_client_view.h"
 
 #if BUILDFLAG(ENABLE_APP_LIST)
+#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "third_party/skia/include/core/SkPaint.h"
-#include "ui/app_list/app_list_constants.h"  // nogncheck
 #include "ui/views/background.h"
 #endif
 
@@ -132,9 +132,8 @@ class BaseDialogContainer : public views::DialogDelegateView {
 class AppListDialogContainer : public BaseDialogContainer,
                                public views::ButtonListener {
  public:
-  AppListDialogContainer(views::View* dialog_body,
-                         const base::Closure& close_callback)
-      : BaseDialogContainer(dialog_body, close_callback) {
+  explicit AppListDialogContainer(views::View* dialog_body)
+      : BaseDialogContainer(dialog_body, base::RepeatingClosure()) {
     SetBackground(std::make_unique<AppListOverlayBackground>());
     close_button_ = views::BubbleFrameView::CreateCloseButton(this);
     AddChildView(close_button_);
@@ -244,10 +243,8 @@ class NativeDialogContainer : public BaseDialogContainer {
 }  // namespace
 
 #if BUILDFLAG(ENABLE_APP_LIST)
-views::DialogDelegateView* CreateAppListContainerForView(
-    views::View* view,
-    const base::Closure& close_callback) {
-  return new AppListDialogContainer(view, close_callback);
+views::DialogDelegateView* CreateAppListContainerForView(views::View* view) {
+  return new AppListDialogContainer(view);
 }
 #endif  // ENABLE_APP_LIST
 

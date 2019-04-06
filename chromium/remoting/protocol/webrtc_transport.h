@@ -118,6 +118,8 @@ class WebrtcTransport : public Transport {
   void OnIceGatheringChange(
       webrtc::PeerConnectionInterface::IceGatheringState new_state);
   void OnIceCandidate(const webrtc::IceCandidateInterface* candidate);
+  void OnStatsDelivered(
+      const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report);
 
   void RequestNegotiation();
   void SendOffer();
@@ -140,6 +142,8 @@ class WebrtcTransport : public Transport {
   bool negotiation_pending_ = false;
 
   bool connected_ = false;
+
+  bool want_ice_restart_ = false;
 
   std::unique_ptr<buzz::XmlElement> pending_transport_info_message_;
   base::OneShotTimer transport_info_timer_;

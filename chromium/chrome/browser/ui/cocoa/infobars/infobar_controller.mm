@@ -11,10 +11,10 @@
 #import "chrome/browser/ui/cocoa/animatable_view.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/image_button_cell.h"
+#import "chrome/browser/ui/cocoa/infobars/infobar_background_view.h"
 #include "chrome/browser/ui/cocoa/infobars/infobar_cocoa.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_cocoa.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
-#import "chrome/browser/ui/cocoa/infobars/infobar_gradient_view.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #include "chrome/grit/theme_resources.h"
@@ -30,8 +30,6 @@
 @end
 
 @implementation InfoBarController
-
-@synthesize containerController = containerController_;
 
 - (id)initWithInfoBar:(InfoBarCocoa*)infobar {
   if ((self = [super initWithNibName:@"InfoBar"
@@ -73,20 +71,14 @@
 
   [self addAdditionalControls];
 
-  // Infobars are drawn a little taller, so have to move its controls to keep
-  // them centered.
-  // TODO(ellyjones): Remove this constant.
-  CGFloat heightDelta = 2;
-  for (NSView* nextSubview in [infoBarView_ subviews]) {
-    NSRect frame = [nextSubview frame];
-    frame.origin.y += heightDelta / 2;
-    [nextSubview setFrame:frame];
-  }
-
-  [infoBarView_ setInfobarType:[self delegate]->GetInfoBarType()];
   [infoBarView_ setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
   cocoa_l10n_util::FlipAllSubviewsIfNecessary(
       base::mac::ObjCCast<NSView>(infoBarView_));
+
+  // TODO(ellyjones): InfoBar height should be computed from child heights +
+  // appropriate (Harmony) margins, and children repositioned accordingly.
+  constexpr int kDefaultBarTargetHeight = 40;
+  infobar_->SetTargetHeight(kDefaultBarTargetHeight);
 }
 
 - (void)dealloc {
@@ -156,17 +148,6 @@
   [cancelButton_ removeFromSuperview];
   cancelButton_ = nil;
   [label_.get() setFrame:labelFrame];
-}
-
-- (void)layoutArrow {
-  [infoBarView_ setArrowHeight:infobar_->arrow_height()];
-  [infoBarView_ setArrowHalfWidth:infobar_->arrow_half_width()];
-  [infoBarView_ setHasTip:![containerController_ shouldSuppressTopInfoBarTip]];
-
-  // Convert from window to view coordinates.
-  NSPoint point = NSMakePoint([containerController_ infobarArrowX], 0);
-  point = [infoBarView_ convertPoint:point fromView:nil];
-  [infoBarView_ setArrowX:point.x];
 }
 
 - (void)disablePopUpMenu:(NSMenu*)menu {

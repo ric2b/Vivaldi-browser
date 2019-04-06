@@ -45,7 +45,6 @@ class CompositorTimingHistory::UMAReporter {
   virtual void AddActivateDuration(base::TimeDelta duration) = 0;
   virtual void AddDrawDuration(base::TimeDelta duration) = 0;
   virtual void AddSubmitToAckLatency(base::TimeDelta duration) = 0;
-  virtual void AddSubmitAckWasFast(bool was_fast) = 0;
 
   // crbug.com/758439: the following 3 functions are used to report timing in
   // certain conditions targeting blink / compositor animations.
@@ -53,8 +52,6 @@ class CompositorTimingHistory::UMAReporter {
   virtual void AddDrawIntervalWithCompositedAnimations(
       base::TimeDelta duration) = 0;
   virtual void AddDrawIntervalWithMainThreadAnimations(
-      base::TimeDelta duration) = 0;
-  virtual void AddDrawIntervalWithMainThreadCompositableAnimations(
       base::TimeDelta duration) = 0;
 
   // Synchronization measurements
@@ -198,13 +195,6 @@ class RendererUMAReporter : public CompositorTimingHistory::UMAReporter {
         "Scheduling.Renderer.DrawIntervalWithMainThreadAnimations", interval);
   }
 
-  void AddDrawIntervalWithMainThreadCompositableAnimations(
-      base::TimeDelta interval) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Renderer.DrawIntervalWithMainThreadCompositableAnimations",
-        interval);
-  }
-
   void AddBeginImplFrameLatency(base::TimeDelta delta) override {
     UMA_HISTOGRAM_CUSTOM_TIMES_DURATION(
         "Scheduling.Renderer.BeginImplFrameLatency", delta);
@@ -277,10 +267,6 @@ class RendererUMAReporter : public CompositorTimingHistory::UMAReporter {
                                         duration);
   }
 
-  void AddSubmitAckWasFast(bool was_fast) override {
-    UMA_HISTOGRAM_BOOLEAN("Scheduling.Renderer.SwapAckWasFast", was_fast);
-  }
-
   void AddMainAndImplFrameTimeDelta(base::TimeDelta delta) override {
     UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
         "Scheduling.Renderer.MainAndImplFrameTimeDelta", delta);
@@ -291,48 +277,26 @@ class BrowserUMAReporter : public CompositorTimingHistory::UMAReporter {
  public:
   ~BrowserUMAReporter() override = default;
 
-  void AddBeginMainFrameIntervalCritical(base::TimeDelta interval) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Browser.BeginMainFrameIntervalCritical", interval);
-  }
+  // BeginMainFrameIntervalCritical is not meaningful to measure on browser
+  // side because browser rendering fps is not at 60.
+  void AddBeginMainFrameIntervalCritical(base::TimeDelta interval) override {}
 
   void AddBeginMainFrameIntervalNotCritical(base::TimeDelta interval) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Browser.BeginMainFrameIntervalNotCritical", interval);
   }
 
-  void AddCommitInterval(base::TimeDelta interval) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Browser.CommitInterval", interval);
-  }
+  // CommitInterval is not meaningful to measure on browser side because
+  // browser rendering fps is not at 60.
+  void AddCommitInterval(base::TimeDelta interval) override {}
 
-  void AddDrawInterval(base::TimeDelta interval) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED("Scheduling.Browser.DrawInterval",
-                                             interval);
-  }
+  // DrawInterval is not meaningful to measure on browser side because
+  // browser rendering fps is not at 60.
+  void AddDrawInterval(base::TimeDelta interval) override {}
 
   void AddDrawIntervalWithCompositedAnimations(
-      base::TimeDelta interval) override {
-    // Still report, but the data is not meaningful.
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Browser.DrawIntervalWithCompositedAnimations", interval);
-  }
+      base::TimeDelta interval) override {}
 
   void AddDrawIntervalWithMainThreadAnimations(
-      base::TimeDelta interval) override {
-    // Still report, but the data is not meaningful.
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Browser.DrawIntervalWithMainThreadAnimations", interval);
-  }
-
-  void AddDrawIntervalWithMainThreadCompositableAnimations(
-      base::TimeDelta interval) override {
-    // Still report, but the data is not meaningful.
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Browser."
-        "DrawIntervalWithMainThreadCompositableAnimations",
-        interval);
-  }
+      base::TimeDelta interval) override {}
 
   void AddBeginImplFrameLatency(base::TimeDelta delta) override {
     UMA_HISTOGRAM_CUSTOM_TIMES_DURATION(
@@ -346,10 +310,7 @@ class BrowserUMAReporter : public CompositorTimingHistory::UMAReporter {
   }
 
   void AddBeginMainFrameQueueDurationNotCriticalDuration(
-      base::TimeDelta duration) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_DURATION(
-        "Scheduling.Browser.BeginMainFrameQueueDurationNotCritical", duration);
-  }
+      base::TimeDelta duration) override {}
 
   void AddBeginMainFrameStartToCommitDuration(
       base::TimeDelta duration) override {
@@ -375,15 +336,9 @@ class BrowserUMAReporter : public CompositorTimingHistory::UMAReporter {
   void AddReadyToActivateToWillActivateDuration(
       base::TimeDelta duration,
       bool pending_tree_is_impl_side) override {
-    if (pending_tree_is_impl_side) {
-      UMA_HISTOGRAM_CUSTOM_TIMES_DURATION_SUFFIX(
-          "Scheduling.Browser.ReadyToActivateToActivationDuration", ".Impl",
-          duration);
-    } else {
-      UMA_HISTOGRAM_CUSTOM_TIMES_DURATION_SUFFIX(
-          "Scheduling.Browser.ReadyToActivateToActivationDuration", ".Main",
-          duration);
-    }
+    UMA_HISTOGRAM_CUSTOM_TIMES_DURATION_SUFFIX(
+        "Scheduling.Browser.ReadyToActivateToActivationDuration", ".Main",
+        duration);
   }
 
   void AddPrepareTilesDuration(base::TimeDelta duration) override {
@@ -406,10 +361,6 @@ class BrowserUMAReporter : public CompositorTimingHistory::UMAReporter {
                                         duration);
   }
 
-  void AddSubmitAckWasFast(bool was_fast) override {
-    UMA_HISTOGRAM_BOOLEAN("Scheduling.Browser.SwapAckWasFast", was_fast);
-  }
-
   void AddMainAndImplFrameTimeDelta(base::TimeDelta delta) override {
     UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
         "Scheduling.Browser.MainAndImplFrameTimeDelta", delta);
@@ -428,8 +379,6 @@ class NullUMAReporter : public CompositorTimingHistory::UMAReporter {
       base::TimeDelta inverval) override {}
   void AddDrawIntervalWithMainThreadAnimations(
       base::TimeDelta inverval) override {}
-  void AddDrawIntervalWithMainThreadCompositableAnimations(
-      base::TimeDelta interval) override {}
   void AddBeginImplFrameLatency(base::TimeDelta delta) override {}
   void AddBeginMainFrameQueueDurationCriticalDuration(
       base::TimeDelta duration) override {}
@@ -449,7 +398,6 @@ class NullUMAReporter : public CompositorTimingHistory::UMAReporter {
   void AddActivateDuration(base::TimeDelta duration) override {}
   void AddDrawDuration(base::TimeDelta duration) override {}
   void AddSubmitToAckLatency(base::TimeDelta duration) override {}
-  void AddSubmitAckWasFast(bool was_fast) override {}
   void AddMainAndImplFrameTimeDelta(base::TimeDelta delta) override {}
 };
 
@@ -634,7 +582,6 @@ void CompositorTimingHistory::WillBeginImplFrame(
   if (submit_ack_watchdog_enabled_) {
     base::TimeDelta submit_not_acked_time_ = now - submit_start_time_;
     if (submit_not_acked_time_ >= kSubmitAckWatchdogTimeout) {
-      uma_reporter_->AddSubmitAckWasFast(false);
       // Only record this UMA once per submitted CompositorFrame.
       submit_ack_watchdog_enabled_ = false;
     }
@@ -883,7 +830,8 @@ void CompositorTimingHistory::DidDraw(
     base::TimeTicks impl_frame_time,
     size_t composited_animations_count,
     size_t main_thread_animations_count,
-    size_t main_thread_compositable_animations_count) {
+    bool current_frame_had_raf,
+    bool next_frame_has_pending_raf) {
   DCHECK_NE(base::TimeTicks(), draw_start_time_);
   base::TimeTicks draw_end_time = Now();
   base::TimeDelta draw_duration = draw_end_time - draw_start_time_;
@@ -924,23 +872,26 @@ void CompositorTimingHistory::DidDraw(
     uma_reporter_->AddMainAndImplFrameTimeDelta(main_and_impl_delta);
     active_tree_main_frame_time_ = base::TimeTicks();
 
-    if (main_thread_animations_count > 0 &&
-        previous_frame_had_main_thread_animations_) {
+    bool current_main_frame_had_visual_update =
+        main_thread_animations_count > 0 || current_frame_had_raf;
+    bool previous_main_frame_had_visual_update =
+        previous_frame_had_main_thread_animations_ || previous_frame_had_raf_;
+    if (current_main_frame_had_visual_update &&
+        previous_main_frame_had_visual_update) {
       base::TimeDelta draw_interval =
           draw_end_time - new_active_tree_draw_end_time_prev_;
       uma_reporter_->AddDrawIntervalWithMainThreadAnimations(draw_interval);
     }
-    if (main_thread_compositable_animations_count > 0 &&
-        previous_frame_had_main_thread_compositable_animations_) {
-      base::TimeDelta draw_interval =
-          draw_end_time - new_active_tree_draw_end_time_prev_;
-      uma_reporter_->AddDrawIntervalWithMainThreadCompositableAnimations(
-          draw_interval);
-    }
     previous_frame_had_main_thread_animations_ =
         main_thread_animations_count > 0;
-    previous_frame_had_main_thread_compositable_animations_ =
-        main_thread_compositable_animations_count > 0;
+    // It's possible that two consecutive main frames both run a rAF but are
+    // separated by idle time (for example: calling requestAnimationFrame from a
+    // setInterval function, with nothing else producing a main frame
+    // in-between). To avoid incorrectly counting those cases as long draw
+    // intervals, we only update previous_frame_had_raf_ if the current frame
+    // also already has a future raf scheduled.
+    previous_frame_had_raf_ =
+        current_frame_had_raf && next_frame_has_pending_raf;
 
     new_active_tree_draw_end_time_prev_ = draw_end_time;
 
@@ -969,11 +920,8 @@ void CompositorTimingHistory::DidReceiveCompositorFrameAck() {
   DCHECK_NE(base::TimeTicks(), submit_start_time_);
   base::TimeDelta submit_to_ack_duration = Now() - submit_start_time_;
   uma_reporter_->AddSubmitToAckLatency(submit_to_ack_duration);
-  if (submit_ack_watchdog_enabled_) {
-    bool was_fast = submit_to_ack_duration < kSubmitAckWatchdogTimeout;
-    uma_reporter_->AddSubmitAckWasFast(was_fast);
+  if (submit_ack_watchdog_enabled_)
     submit_ack_watchdog_enabled_ = false;
-  }
   submit_start_time_ = base::TimeTicks();
 }
 
@@ -981,7 +929,9 @@ void CompositorTimingHistory::SetTreePriority(TreePriority priority) {
   tree_priority_ = priority;
 }
 
-void CompositorTimingHistory::ClearHistoryOnNavigation() {
+void CompositorTimingHistory::ClearHistory() {
+  TRACE_EVENT0("cc,benchmark", "CompositorTimingHistory::ClearHistory");
+
   begin_main_frame_queue_duration_history_.Clear();
   begin_main_frame_queue_duration_critical_history_.Clear();
   begin_main_frame_queue_duration_not_critical_history_.Clear();

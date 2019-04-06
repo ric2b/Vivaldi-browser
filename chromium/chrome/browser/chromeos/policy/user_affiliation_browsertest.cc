@@ -20,8 +20,8 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -148,11 +148,17 @@ class UserAffiliationBrowserTest
       user_affiliation_ids.insert(kAnotherAffiliationID);
     }
     affiliation_test_helper::SetUserAffiliationIDs(
-        &user_policy, fake_session_manager_client, account_id_.GetUserEmail(),
+        &user_policy, fake_session_manager_client, account_id_,
         user_affiliation_ids);
 
     // Set retry delay to prevent timeouts.
     policy::DeviceManagementService::SetRetryDelayForTesting(0);
+  }
+
+  void TearDownOnMainThread() override {
+    InProcessBrowserTest::TearDownOnMainThread();
+
+    TearDownTestSystemSlot();
   }
 
   const AccountId account_id_;
@@ -177,6 +183,21 @@ class UserAffiliationBrowserTest
     *out_system_slot_constructed_successfully =
         test_system_slot_->ConstructedSuccessfully();
   }
+
+  void TearDownTestSystemSlot() {
+    if (!test_system_slot_)
+      return;
+
+    base::RunLoop loop;
+    content::BrowserThread::PostTaskAndReply(
+        content::BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&UserAffiliationBrowserTest::TearDownTestSystemSlotOnIO,
+                       base::Unretained(this)),
+        loop.QuitClosure());
+    loop.Run();
+  }
+
+  void TearDownTestSystemSlotOnIO() { test_system_slot_.reset(); }
 
   std::unique_ptr<crypto::ScopedTestSystemNSSKeySlot> test_system_slot_;
 

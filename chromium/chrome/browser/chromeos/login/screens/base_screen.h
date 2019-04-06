@@ -68,6 +68,8 @@ class BaseScreen {
 
   void set_model_view_channel(ModelViewChannel* channel) { channel_ = channel; }
 
+  virtual void SetConfiguration(base::Value* configuration, bool notify);
+
  protected:
   // Scoped context editor, which automatically commits all pending
   // context changes on destruction.
@@ -114,6 +116,21 @@ class BaseScreen {
   // current BaseScreen instance.
   ContextEditor GetContextEditor();
 
+  // Global configuration for OOBE screens, that can be used to automate some
+  // screens.
+  // Screens can use values in Configuration to fill in UI values or
+  // automatically finish.
+  // Configuration is guaranteed to exist between pair of OnShow/OnHide calls,
+  // no external changes will be made to configuration during that time.
+  // Outside that time the configuration is set to nullptr to prevent any logic
+  // triggering while the screen is not displayed.
+  // Do not confuse it with Context, which is a way to communicate with
+  // JS-based UI part of the screen.
+  base::Value* GetConfiguration() { return configuration_; }
+
+  // This is called when configuration is changed while screen is displayed.
+  virtual void OnConfigurationChanged();
+
   BaseScreenDelegate* get_base_screen_delegate() const {
     return base_screen_delegate_;
   }
@@ -128,11 +145,11 @@ class BaseScreen {
                            TestCancel);
   FRIEND_TEST_ALL_PREFIXES(MultiAuthEnrollmentScreenTest, TestCancel);
   FRIEND_TEST_ALL_PREFIXES(ProvisionedEnrollmentScreenTest, TestBackButton);
-  FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, RequiresNoInput);
-  FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, ContinueClickedOnlyOnce);
+  FRIEND_TEST_ALL_PREFIXES(HandsOffWelcomeScreenTest, RequiresNoInput);
+  FRIEND_TEST_ALL_PREFIXES(HandsOffWelcomeScreenTest, ContinueClickedOnlyOnce);
 
   friend class BaseWebUIHandler;
-  friend class NetworkScreenTest;
+  friend class WelcomeScreenTest;
   friend class ScreenEditor;
   friend class ScreenManager;
   friend class UpdateScreenTest;
@@ -141,6 +158,11 @@ class BaseScreen {
   // changed. Notification about this event comes from the JS
   // counterpart.
   void OnContextChanged(const base::DictionaryValue& diff);
+
+  // Screen configuration, unowned.
+  // Configuration itself is owned by WizardController and is accessible
+  // to screen only between OnShow / OnHide calls.
+  base::Value* configuration_ = nullptr;
 
   ModelViewChannel* channel_ = nullptr;
 

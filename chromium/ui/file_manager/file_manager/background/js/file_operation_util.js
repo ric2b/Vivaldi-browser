@@ -486,9 +486,7 @@ fileOperationUtil.copyTo = function(
 fileOperationUtil.zipSelection = function(
     sources, parent, newName, successCallback, errorCallback) {
   chrome.fileManagerPrivate.zipSelection(
-      parent,
-      sources,
-      newName, function(success) {
+      sources, parent, newName, function(success) {
         if (!success) {
           // Failed to create a zip archive.
           errorCallback(
@@ -1213,6 +1211,18 @@ fileOperationUtil.ZipTask.prototype.run = function(
       }.bind(this),
       errorCallback);
 };
+
+/**
+ * @typedef {{
+ *  entries: Array<Entry>,
+ *  taskId: string,
+ *  entrySize: Object,
+ *  totalBytes: number,
+ *  processedBytes: number,
+ *  cancelRequested: boolean
+ * }}
+ */
+fileOperationUtil.DeleteTask;
 
 /**
  * Error class used to report problems with a copy operation.

@@ -84,13 +84,18 @@ class NET_EXPORT HttpRequestHeaders {
   static const char kProxyConnection[];
   static const char kRange[];
   static const char kReferer[];
+  static const char kSecOriginPolicy[];
   static const char kTransferEncoding[];
   static const char kTokenBinding[];
   static const char kUserAgent[];
 
   HttpRequestHeaders();
   HttpRequestHeaders(const HttpRequestHeaders& other);
+  HttpRequestHeaders(HttpRequestHeaders&& other);
   ~HttpRequestHeaders();
+
+  HttpRequestHeaders& operator=(const HttpRequestHeaders& other);
+  HttpRequestHeaders& operator=(HttpRequestHeaders&& other);
 
   bool IsEmpty() const { return headers_.empty(); }
 

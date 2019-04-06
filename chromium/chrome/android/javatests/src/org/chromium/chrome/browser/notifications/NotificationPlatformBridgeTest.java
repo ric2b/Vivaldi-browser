@@ -85,11 +85,13 @@ public class NotificationPlatformBridgeTest {
                 mNotificationTestRule.getTestServer().getURL(NOTIFICATION_TEST_PAGE));
     }
 
+    @SuppressWarnings("MissingFail")
     private void waitForTitle(String expectedTitle) throws InterruptedException {
         Tab tab = mNotificationTestRule.getActivity().getActivityTab();
         TabTitleObserver titleObserver = new TabTitleObserver(tab, expectedTitle);
         try {
             titleObserver.waitForTitleUpdate(TITLE_UPDATE_TIMEOUT_SECONDS);
+
         } catch (TimeoutException e) {
             // The title is not as expected, this assertion neatly logs what the difference is.
             Assert.assertEquals(expectedTitle, tab.getTitle());
@@ -253,8 +255,8 @@ public class NotificationPlatformBridgeTest {
 
         Notification notification =
                 mNotificationTestRule.showAndGetNotification("MyNotification", "{ body: 'Hello' }");
-        String expectedOrigin = UrlFormatter.formatUrlForSecurityDisplay(
-                mNotificationTestRule.getOrigin(), false /* showScheme */);
+        String expectedOrigin = UrlFormatter.formatUrlForSecurityDisplayOmitScheme(
+                mNotificationTestRule.getOrigin());
 
         // Validate the contents of the notification.
         Assert.assertEquals("MyNotification", NotificationTestUtil.getExtraTitle(notification));
@@ -727,6 +729,9 @@ public class NotificationPlatformBridgeTest {
         assertThat(actionTester.toString(), getNotificationActions(actionTester),
                 Matchers.contains(
                         "Notifications.Persistent.Shown", "Notifications.Persistent.Clicked"));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Notifications.AppNotificationStatus"));
     }
 
     /**

@@ -37,7 +37,6 @@
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_error_factory_mock.h"
-#include "components/sync_sessions/fake_sync_sessions_client.h"
 #include "components/sync_sessions/sessions_sync_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -76,14 +75,6 @@ class MockAppMenuModel : public AppMenuModel {
   MockAppMenuModel() : AppMenuModel(nullptr, nullptr) {}
   ~MockAppMenuModel() {}
   MOCK_METHOD2(ExecuteCommand, void(int command_id, int event_flags));
-};
-
-class DummyRouter : public sync_sessions::LocalSessionEventRouter {
- public:
-  ~DummyRouter() override {}
-  void StartRoutingTo(
-      sync_sessions::LocalSessionEventHandler* handler) override {}
-  void Stop() override {}
 };
 
 class BrowserRemovedObserver : public BrowserListObserver {
@@ -133,8 +124,7 @@ class AppMenuControllerTest : public CocoaProfileTest {
         ProfileSyncServiceFactory::GetForProfile(profile())
             ->GetSyncClient()
             ->GetSyncSessionsClient(),
-        sync_prefs_.get(), local_device_.get(), &dummy_router_, base::Closure(),
-        base::Closure());
+        sync_prefs_.get(), local_device_.get(), base::Closure());
 
     manager_->MergeDataAndStartSyncing(
         syncer::SESSIONS, syncer::SyncDataList(),
@@ -169,8 +159,8 @@ class AppMenuControllerTest : public CocoaProfileTest {
   }
 
   void EnableSync() {
-    EXPECT_CALL(*mock_sync_service_, IsSyncActive())
-        .WillRepeatedly(Return(true));
+    EXPECT_CALL(*mock_sync_service_, GetState())
+        .WillRepeatedly(Return(syncer::SyncService::State::ACTIVE));
     EXPECT_CALL(*mock_sync_service_,
                 IsDataTypeControllerRunning(syncer::SESSIONS))
         .WillRepeatedly(Return(true));
@@ -178,7 +168,7 @@ class AppMenuControllerTest : public CocoaProfileTest {
                 IsDataTypeControllerRunning(syncer::PROXY_TABS))
         .WillRepeatedly(Return(true));
     EXPECT_CALL(*mock_sync_service_, GetOpenTabsUIDelegateMock())
-        .WillRepeatedly(Return(manager_.get()));
+        .WillRepeatedly(Return(manager_->GetOpenTabsUIDelegate()));
   }
 
   AppMenuController* controller() {
@@ -191,7 +181,6 @@ class AppMenuControllerTest : public CocoaProfileTest {
 
  private:
   std::unique_ptr<syncer::LocalDeviceInfoProviderMock> local_device_;
-  DummyRouter dummy_router_;
   std::unique_ptr<syncer::SyncPrefs> sync_prefs_;
   browser_sync::ProfileSyncServiceMock* mock_sync_service_ = nullptr;
   std::unique_ptr<sync_sessions::SessionsSyncManager> manager_;
@@ -223,7 +212,8 @@ TEST_F(AppMenuControllerTest, RecentTabsFavIcon) {
   recent_tabs_builder.AddTab(0, 0);
   RegisterRecentTabs(&recent_tabs_builder);
 
-  RecentTabsSubMenuModel recent_tabs_sub_menu_model(nullptr, browser());
+  RecentTabsSubMenuModel recent_tabs_sub_menu_model(
+      [controller_ acceleratorProvider], browser());
   fake_model_->AddSubMenuWithStringId(
       IDC_RECENT_TABS_MENU, IDS_RECENT_TABS_MENU,
       &recent_tabs_sub_menu_model);
@@ -265,7 +255,8 @@ TEST_F(AppMenuControllerTest, RecentTabsElideTitle) {
       base::Time::Now() - base::TimeDelta::FromMinutes(10), tab2_long_title);
   RegisterRecentTabs(&recent_tabs_builder);
 
-  RecentTabsSubMenuModel recent_tabs_sub_menu_model(nullptr, browser());
+  RecentTabsSubMenuModel recent_tabs_sub_menu_model(
+      [controller_ acceleratorProvider], browser());
   fake_model_->AddSubMenuWithStringId(
       IDC_RECENT_TABS_MENU, IDS_RECENT_TABS_MENU,
       &recent_tabs_sub_menu_model);

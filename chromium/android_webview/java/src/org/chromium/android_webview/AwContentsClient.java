@@ -66,7 +66,10 @@ public abstract class AwContentsClient {
 
     // Alllow injection of the callback thread, for testing.
     public AwContentsClient(Looper looper) {
-        mCallbackHelper = new AwContentsClientCallbackHelper(looper, this);
+        try (ScopedSysTraceEvent e =
+                        ScopedSysTraceEvent.scoped("AwContentsClient.constructorOneArg")) {
+            mCallbackHelper = new AwContentsClientCallbackHelper(looper, this);
+        }
     }
 
     final AwContentsClientCallbackHelper getCallbackHelper() {
@@ -161,6 +164,10 @@ public abstract class AwContentsClient {
 
     public final boolean shouldIgnoreNavigation(Context context, String url, boolean isMainFrame,
             boolean hasUserGesture, boolean isRedirect) {
+        AwContentsClientCallbackHelper.CancelCallbackPoller poller =
+                mCallbackHelper.getCancelCallbackPoller();
+        if (poller != null && poller.shouldCancelAllCallbacks()) return false;
+
         if (hasWebViewClient()) {
             AwWebResourceRequest request = new AwWebResourceRequest();
             request.url = url;

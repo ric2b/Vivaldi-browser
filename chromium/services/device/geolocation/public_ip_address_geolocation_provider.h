@@ -8,13 +8,13 @@
 #include <string>
 
 #include "base/macros.h"
-#include "device/geolocation/public/interfaces/geolocation.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/device/geolocation/public_ip_address_geolocator.h"
 #include "services/device/geolocation/public_ip_address_location_notifier.h"
-#include "services/device/public/interfaces/public_ip_address_geolocation_provider.mojom.h"
+#include "services/device/public/mojom/geolocation.mojom.h"
+#include "services/device/public/mojom/public_ip_address_geolocation_provider.mojom.h"
 
 namespace device {
 
@@ -29,10 +29,9 @@ class PublicIpAddressGeolocationProvider
     : public mojom::PublicIpAddressGeolocationProvider {
  public:
   // Initialize PublicIpAddressGeolocationProvider using the specified Google
-  // |api_key| and a URL request context produced by |request_context_producer|
-  // for network location requests.
+  // |api_key| and |url_loader_factory| for network location requests.
   PublicIpAddressGeolocationProvider(
-      GeolocationProvider::RequestContextProducer request_context_producer,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const std::string& api_key);
   ~PublicIpAddressGeolocationProvider() override;
 

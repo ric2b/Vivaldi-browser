@@ -8,12 +8,11 @@
 
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/PaymentManifestDownloader_jni.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
 namespace payments {
@@ -60,8 +59,8 @@ class DownloadCallback {
 }  // namespace
 
 PaymentManifestDownloaderAndroid::PaymentManifestDownloaderAndroid(
-    const scoped_refptr<net::URLRequestContextGetter>& context)
-    : downloader_(context) {}
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+    : downloader_(std::move(url_loader_factory)) {}
 
 PaymentManifestDownloaderAndroid::~PaymentManifestDownloaderAndroid() {}
 
@@ -109,7 +108,7 @@ static jlong JNI_PaymentManifestDownloader_Init(
   return reinterpret_cast<jlong>(new PaymentManifestDownloaderAndroid(
       content::BrowserContext::GetDefaultStoragePartition(
           web_contents->GetBrowserContext())
-          ->GetURLRequestContext()));
+          ->GetURLLoaderFactoryForBrowserProcess()));
 }
 
 }  // namespace payments

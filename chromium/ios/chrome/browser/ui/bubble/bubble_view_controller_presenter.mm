@@ -9,6 +9,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -17,10 +18,14 @@
 namespace {
 
 // How long, in seconds, the bubble is visible on the screen.
-const NSTimeInterval kBubbleVisibilityDuration = 4.0;
+const NSTimeInterval kBubbleVisibilityDurationLegacy = 4.0;
+const NSTimeInterval kBubbleVisibilityDuration = 5.0;
 // How long, in seconds, the user should be considered engaged with the bubble
 // after the bubble first becomes visible.
 const NSTimeInterval kBubbleEngagementDuration = 30.0;
+
+// Delay before posting the VoiceOver notification.
+const CGFloat kVoiceOverAnnouncementDelay = 1;
 
 // The name for the histogram that tracks why a bubble was dismissed.
 const char kBubbleDismissalHistogramName[] = "IOS.IPHBubbleDismissalReason";
@@ -63,6 +68,8 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
 // For example, tapping on a button both dismisses the bubble and triggers the
 // button's action.
 @property(nonatomic, strong) UITapGestureRecognizer* outsideBubbleTapRecognizer;
+// The swipe gesture recognizer to dismiss the bubble on swipes.
+@property(nonatomic, strong) UISwipeGestureRecognizer* swipeRecognizer;
 // The timer used to dismiss the bubble after a certain length of time. The
 // bubble is dismissed automatically if the user does not dismiss it manually.
 // If the user dismisses it manually, this timer is invalidated. The timer
@@ -92,6 +99,7 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
 @synthesize bubbleViewController = _bubbleViewController;
 @synthesize insideBubbleTapRecognizer = _insideBubbleTapRecognizer;
 @synthesize outsideBubbleTapRecognizer = _outsideBubbleTapRecognizer;
+@synthesize swipeRecognizer = _swipeRecognizer;
 @synthesize bubbleDismissalTimer = _bubbleDismissalTimer;
 @synthesize engagementTimer = _engagementTimer;
 @synthesize userEngaged = _userEngaged;
@@ -99,6 +107,7 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
 @synthesize arrowDirection = _arrowDirection;
 @synthesize alignment = _alignment;
 @synthesize dismissalCallback = _dismissalCallback;
+@synthesize voiceOverAnnouncement = _voiceOverAnnouncement;
 
 - (instancetype)initWithText:(NSString*)text
               arrowDirection:(BubbleArrowDirection)arrowDirection
@@ -120,6 +129,11 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
                 action:@selector(tapInsideBubbleRecognized:)];
     _insideBubbleTapRecognizer.delegate = self;
     _insideBubbleTapRecognizer.cancelsTouchesInView = NO;
+    _swipeRecognizer = [[UISwipeGestureRecognizer alloc]
+        initWithTarget:self
+                action:@selector(tapOutsideBubbleRecognized:)];
+    _swipeRecognizer.direction = UISwipeGestureRecognizerDirectionUp;
+    _swipeRecognizer.delegate = self;
     _userEngaged = NO;
     _triggerFollowUpAction = NO;
     _arrowDirection = arrowDirection;
@@ -149,9 +163,14 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
   [self.bubbleViewController.view
       addGestureRecognizer:self.insideBubbleTapRecognizer];
   [parentView addGestureRecognizer:self.outsideBubbleTapRecognizer];
+  [parentView addGestureRecognizer:self.swipeRecognizer];
+
+  CGFloat duration = IsUIRefreshPhase1Enabled()
+                         ? kBubbleVisibilityDuration
+                         : kBubbleVisibilityDurationLegacy;
 
   self.bubbleDismissalTimer = [NSTimer
-      scheduledTimerWithTimeInterval:kBubbleVisibilityDuration
+      scheduledTimerWithTimeInterval:duration
                               target:self
                             selector:@selector(bubbleDismissalTimerFired:)
                             userInfo:nil
@@ -165,6 +184,24 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
                                      selector:@selector(engagementTimerFired:)
                                      userInfo:nil
                                       repeats:NO];
+
+  if (self.voiceOverAnnouncement) {
+    // The VoiceOverAnnouncement should be dispatched after a delay to account
+    // the fact that it can be presented right after a screen change (for
+    // example when the application or a new tab is opened). This screen change
+    // is changing the VoiceOver focus to focus a newly visible element. If this
+    // announcement is currently being read, it is cancelled. The added delay
+    // allows the announcement to be posted after the element is focused, so it
+    // is not cancelled.
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW,
+                      (int64_t)(kVoiceOverAnnouncementDelay * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+          UIAccessibilityPostNotification(
+              UIAccessibilityAnnouncementNotification,
+              self.voiceOverAnnouncement);
+        });
+  }
 }
 
 - (void)dismissAnimated:(BOOL)animated {
@@ -181,6 +218,7 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
       removeGestureRecognizer:self.insideBubbleTapRecognizer];
   [self.outsideBubbleTapRecognizer.view
       removeGestureRecognizer:self.outsideBubbleTapRecognizer];
+  [self.swipeRecognizer.view removeGestureRecognizer:self.swipeRecognizer];
   [self.bubbleViewController dismissAnimated:animated];
   [self.bubbleViewController willMoveToParentViewController:nil];
   [self.bubbleViewController removeFromParentViewController];
@@ -199,6 +237,7 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
       removeGestureRecognizer:self.insideBubbleTapRecognizer];
   [self.outsideBubbleTapRecognizer.view
       removeGestureRecognizer:self.outsideBubbleTapRecognizer];
+  [self.swipeRecognizer.view removeGestureRecognizer:self.swipeRecognizer];
 }
 
 #pragma mark - UIGestureRecognizerDelegate
@@ -206,6 +245,10 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
 - (BOOL)gestureRecognizer:(UIGestureRecognizer*)gestureRecognizer
     shouldRecognizeSimultaneouslyWithGestureRecognizer:
         (UIGestureRecognizer*)otherGestureRecognizer {
+  // Allow the swipeRecognizer to be triggered at the same time as other gesture
+  // recognizers.
+  if (gestureRecognizer == self.swipeRecognizer)
+    return YES;
   // Because the outside tap recognizer is potentially in the responder chain,
   // this prevents both the inside and outside gesture recognizers from
   // triggering at once when tapping inside the bubble.

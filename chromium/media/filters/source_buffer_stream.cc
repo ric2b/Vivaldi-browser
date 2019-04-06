@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/demuxer_memory_limit.h"
 #include "media/base/media_switches.h"
@@ -145,7 +146,9 @@ std::string BufferQueueBuffersToLogString(
   result << "Buffers:\n";
   for (const auto& buf : buffers) {
     result << "\tdts=" << buf->GetDecodeTimestamp().InMicroseconds() << " "
-           << buf->AsHumanReadableString() << "\n";
+           << buf->AsHumanReadableString()
+           << ", is_duration_estimated=" << buf->is_duration_estimated()
+           << "\n";
   }
 
   return result.str();
@@ -195,7 +198,7 @@ SourceBufferStream<RangeClass>::SourceBufferStream(
       highest_output_buffer_timestamp_(kNoDecodeTimestamp()),
       max_interbuffer_distance_(
           base::TimeDelta::FromMilliseconds(kMinimumInterbufferDistanceInMs)),
-      memory_limit_(kDemuxerStreamAudioMemoryLimit) {
+      memory_limit_(GetDemuxerStreamAudioMemoryLimit()) {
   DCHECK(audio_config.IsValidConfig());
   audio_configs_.push_back(audio_config);
 }
@@ -211,7 +214,7 @@ SourceBufferStream<RangeClass>::SourceBufferStream(
       highest_output_buffer_timestamp_(kNoDecodeTimestamp()),
       max_interbuffer_distance_(
           base::TimeDelta::FromMilliseconds(kMinimumInterbufferDistanceInMs)),
-      memory_limit_(kDemuxerStreamVideoMemoryLimit) {
+      memory_limit_(GetDemuxerStreamVideoMemoryLimit()) {
   DCHECK(video_config.IsValidConfig());
   video_configs_.push_back(video_config);
 }
@@ -228,7 +231,7 @@ SourceBufferStream<RangeClass>::SourceBufferStream(
       highest_output_buffer_timestamp_(kNoDecodeTimestamp()),
       max_interbuffer_distance_(
           base::TimeDelta::FromMilliseconds(kMinimumInterbufferDistanceInMs)),
-      memory_limit_(kDemuxerStreamAudioMemoryLimit) {}
+      memory_limit_(GetDemuxerStreamAudioMemoryLimit()) {}
 
 template <typename RangeClass>
 SourceBufferStream<RangeClass>::~SourceBufferStream() = default;
@@ -452,7 +455,7 @@ bool SourceBufferStream<RangeClass>::Append(const BufferQueue& buffers) {
 
   new_coded_frame_group_ = false;
 
-  MergeWithAdjacentRangeIfNecessary(range_for_next_append_);
+  MergeWithNextRangeIfNecessary(range_for_next_append_);
 
   // Some SAP-Type-2 append sequences, when buffering ByPts, require that we
   // coalesce |range_for_next_append_| with the range that is *before* it.
@@ -461,7 +464,7 @@ bool SourceBufferStream<RangeClass>::Append(const BufferQueue& buffers) {
   if (range_for_next_append_ != ranges_.begin()) {
     auto prior_range = range_for_next_append_;
     prior_range--;
-    MergeWithAdjacentRangeIfNecessary(prior_range);
+    MergeWithNextRangeIfNecessary(prior_range);
   }
 
   // Seek to try to fulfill a previous call to Seek().
@@ -549,12 +552,12 @@ template <typename RangeClass>
 DecodeTimestamp SourceBufferStream<RangeClass>::PotentialNextAppendTimestamp()
     const {
   // The next potential append will either be just at or after (if buffering
-  // ByDts), or in a GOP adjacent if ByPts, to |last_appended_buffer_timestamp_|
-  // (if known), or if unknown and we are still at the beginning of a new coded
-  // frame group, then will be into the range (if any) to which
-  // |coded_frame_group_start_time_| belongs.
-  if (last_appended_buffer_timestamp_ != kNoDecodeTimestamp())
-    return last_appended_buffer_timestamp_;
+  // ByDts), or in a GOP adjacent if ByPts, to
+  // |highest_timestamp_in_append_sequence_| (if known), or if unknown and we
+  // are still at the beginning of a new coded frame group, then will be into
+  // the range (if any) to which |coded_frame_group_start_time_| belongs.
+  if (highest_timestamp_in_append_sequence_ != kNoDecodeTimestamp())
+    return highest_timestamp_in_append_sequence_;
 
   if (new_coded_frame_group_)
     return coded_frame_group_start_time_;
@@ -1198,9 +1201,9 @@ size_t SourceBufferStream<RangeClass>::FreeBuffers(size_t total_bytes_to_free,
     if (range_for_next_append_ != ranges_.begin()) {
       typename RangeList::iterator range_before_next = range_for_next_append_;
       --range_before_next;
-      MergeWithAdjacentRangeIfNecessary(range_before_next);
+      MergeWithNextRangeIfNecessary(range_before_next);
     }
-    MergeWithAdjacentRangeIfNecessary(range_for_next_append_);
+    MergeWithNextRangeIfNecessary(range_for_next_append_);
   }
   return bytes_freed;
 }
@@ -1225,7 +1228,7 @@ void SourceBufferStream<RangeClass>::TrimSpliceOverlap(
   // Search for overlapped buffer needs exclusive end value. Choosing smallest
   // possible value.
   const DecodeTimestamp end_dts =
-      splice_dts + base::TimeDelta::FromInternalValue(1);
+      splice_dts + base::TimeDelta::FromMicroseconds(1);
 
   // Find if new buffer's start would overlap an existing buffer.
   BufferQueue overlapped_buffers;
@@ -1247,7 +1250,7 @@ void SourceBufferStream<RangeClass>::TrimSpliceOverlap(
                 " (bad content) at time "
              << splice_timestamp.InMicroseconds();
 
-    MEDIA_LOG(ERROR, media_log_)
+    MEDIA_LOG(WARNING, media_log_)
         << "Media is badly muxed. Detected " << overlapped_buffers.size()
         << " overlapping audio buffers at time "
         << splice_timestamp.InMicroseconds();
@@ -1261,6 +1264,16 @@ void SourceBufferStream<RangeClass>::TrimSpliceOverlap(
     DVLOG(3) << __func__ << " No splice trimming at time "
              << splice_timestamp.InMicroseconds()
              << ". Overlapped buffer will be completely removed.";
+    return;
+  }
+
+  // Trimming a buffer with estimated duration is too risky. Estimates are rough
+  // and what appears to be overlap may really just be a bad estimate. Imprecise
+  // trimming may lead to loss of AV sync.
+  if (overlapped_buffer->is_duration_estimated()) {
+    DVLOG(3) << __func__ << " Skipping audio splice trimming at PTS="
+             << splice_timestamp.InMicroseconds() << ". Overlapped buffer has "
+             << "estimated duration.";
     return;
   }
 
@@ -1432,13 +1445,17 @@ void SourceBufferStream<SourceBufferRangeByDts>::GetTimestampInterval(
   // estimated, use 1 microsecond instead to ensure frames are not accidentally
   // removed due to over-estimation.
   base::TimeDelta duration = buffers.back()->duration();
-  if (duration != kNoTimestamp && duration > base::TimeDelta() &&
+
+  // FrameProcessor should protect against unknown buffer durations.
+  DCHECK_NE(duration, kNoTimestamp);
+
+  if (duration > base::TimeDelta() &&
       !buffers.back()->is_duration_estimated()) {
     *end += duration;
   } else {
     // TODO(chcunningham): Emit warning when 0ms durations are not expected.
     // http://crbug.com/312836
-    *end += base::TimeDelta::FromInternalValue(1);
+    *end += base::TimeDelta::FromMicroseconds(1);
   }
 }
 
@@ -1455,13 +1472,16 @@ void SourceBufferStream<SourceBufferRangeByPts>::GetTimestampInterval(
     base::TimeDelta timestamp = buffer->timestamp();
     start_pts = std::min(timestamp, start_pts);
     base::TimeDelta duration = buffer->duration();
-    if (duration != kNoTimestamp && duration > base::TimeDelta() &&
-        !buffer->is_duration_estimated()) {
+
+    // FrameProcessor should protect against unknown buffer durations.
+    DCHECK_NE(duration, kNoTimestamp);
+
+    if (duration > base::TimeDelta() && !buffer->is_duration_estimated()) {
       timestamp += duration;
     } else {
       // TODO(chcunningham): Emit warning when 0ms durations are not expected.
       // http://crbug.com/312836
-      timestamp += base::TimeDelta::FromInternalValue(1);
+      timestamp += base::TimeDelta::FromMicroseconds(1);
     }
     end_pts = std::max(timestamp, end_pts);
   }
@@ -1511,7 +1531,7 @@ void SourceBufferStream<RangeClass>::PruneTrackBuffer(
 }
 
 template <typename RangeClass>
-void SourceBufferStream<RangeClass>::MergeWithAdjacentRangeIfNecessary(
+void SourceBufferStream<RangeClass>::MergeWithNextRangeIfNecessary(
     const typename RangeList::iterator& range_with_new_buffers_itr) {
   DCHECK(range_with_new_buffers_itr != ranges_.end());
 
@@ -1549,8 +1569,12 @@ void SourceBufferStream<RangeClass>::MergeAllAdjacentRanges() {
   typename RangeList::iterator range_itr = ranges_.begin();
 
   while (range_itr != ranges_.end()) {
-    MergeWithAdjacentRangeIfNecessary(range_itr);
-    range_itr++;
+    const size_t old_ranges_size = ranges_.size();
+    MergeWithNextRangeIfNecessary(range_itr);
+
+    // Only proceed to the next range if the current range didn't merge with it.
+    if (old_ranges_size == ranges_.size())
+      range_itr++;
   }
 
   DVLOG(1) << __func__ << " " << GetStreamTypeName()
@@ -1586,9 +1610,15 @@ void SourceBufferStream<RangeClass>::Seek(base::TimeDelta timestamp) {
     return;
 
   if (!audio_configs_.empty()) {
+    // Adjust |seek_dts| for an Opus stream backward up to the config's seek
+    // preroll, but not further than the range start time, and not at all if
+    // there is a config change in the middle of that preroll interval. If
+    // |seek_dts| is already before the range start time, as can happen due to
+    // fudge room, do not adjust it.
     const auto& config =
         audio_configs_[RangeGetConfigIdAtTime(itr->get(), seek_dts)];
-    if (config.codec() == kCodecOpus) {
+    if (config.codec() == kCodecOpus &&
+        seek_dts > RangeGetStartTimestamp(itr->get())) {
       DecodeTimestamp preroll_dts = std::max(
           seek_dts - config.seek_preroll(), RangeGetStartTimestamp(itr->get()));
       if (RangeCanSeekTo(itr->get(), preroll_dts) &&
@@ -1671,8 +1701,7 @@ SourceBufferStream<RangeClass>::HandleNextBufferWithPreroll(
   }
 
   // Preroll complete, hand out the final buffer.
-  *out_buffer = pending_buffer_;
-  pending_buffer_ = NULL;
+  *out_buffer = std::move(pending_buffer_);
   return SourceBufferStreamStatus::kSuccess;
 }
 
@@ -1683,18 +1712,15 @@ SourceBufferStreamStatus SourceBufferStream<RangeClass>::GetNextBufferInternal(
 
   if (!track_buffer_.empty()) {
     DCHECK(!selected_range_);
-    scoped_refptr<StreamParserBuffer>& next_buffer = track_buffer_.front();
 
-    // If the next buffer is an audio splice frame, the next effective config id
-    // comes from the first splice buffer.
-    if (next_buffer->GetConfigId() != current_config_index_) {
+    if (track_buffer_.front()->GetConfigId() != current_config_index_) {
       config_change_pending_ = true;
       DVLOG(1) << "Config change (track buffer config ID does not match).";
       return SourceBufferStreamStatus::kConfigChange;
     }
 
     DVLOG(3) << __func__ << " Next buffer coming from track_buffer_";
-    *out_buffer = next_buffer;
+    *out_buffer = std::move(track_buffer_.front());
     track_buffer_.pop_front();
     WarnIfTrackBufferExhaustionSkipsForward(*out_buffer);
     highest_output_buffer_timestamp_ = std::max(
@@ -1737,7 +1763,7 @@ SourceBufferStreamStatus SourceBufferStream<RangeClass>::GetNextBufferInternal(
 
 template <typename RangeClass>
 void SourceBufferStream<RangeClass>::WarnIfTrackBufferExhaustionSkipsForward(
-    const scoped_refptr<StreamParserBuffer>& next_buffer) {
+    scoped_refptr<StreamParserBuffer> next_buffer) {
   if (!just_exhausted_track_buffer_)
     return;
 
@@ -1950,13 +1976,21 @@ base::TimeDelta SourceBufferStream<RangeClass>::GetMaxInterbufferDistance()
 
 template <typename RangeClass>
 bool SourceBufferStream<RangeClass>::UpdateAudioConfig(
-    const AudioDecoderConfig& config) {
+    const AudioDecoderConfig& config,
+    bool allow_codec_change) {
   DCHECK(!audio_configs_.empty());
   DCHECK(video_configs_.empty());
   DVLOG(3) << "UpdateAudioConfig.";
 
-  if (audio_configs_[0].codec() != config.codec()) {
-    MEDIA_LOG(ERROR, media_log_) << "Audio codec changes not allowed.";
+  if (!allow_codec_change &&
+      audio_configs_[append_config_index_].codec() != config.codec()) {
+    // TODO(wolenetz): When we relax addSourceBuffer() and changeType() codec
+    // strictness, codec changes should be allowed even without changing the
+    // bytestream.
+    // TODO(wolenetz): Remove "experimental" from this error message when
+    // changeType() ships without needing experimental blink flag.
+    MEDIA_LOG(ERROR, media_log_) << "Audio codec changes not allowed unless "
+                                    "using experimental changeType().";
     return false;
   }
 
@@ -1978,13 +2012,21 @@ bool SourceBufferStream<RangeClass>::UpdateAudioConfig(
 
 template <typename RangeClass>
 bool SourceBufferStream<RangeClass>::UpdateVideoConfig(
-    const VideoDecoderConfig& config) {
+    const VideoDecoderConfig& config,
+    bool allow_codec_change) {
   DCHECK(!video_configs_.empty());
   DCHECK(audio_configs_.empty());
   DVLOG(3) << "UpdateVideoConfig.";
 
-  if (video_configs_[0].codec() != config.codec()) {
-    MEDIA_LOG(ERROR, media_log_) << "Video codec changes not allowed.";
+  if (!allow_codec_change &&
+      video_configs_[append_config_index_].codec() != config.codec()) {
+    // TODO(wolenetz): When we relax addSourceBuffer() and changeType() codec
+    // strictness, codec changes should be allowed even without changing the
+    // bytestream.
+    // TODO(wolenetz): Remove "experimental" from this error message when
+    // changeType() ships without needing experimental blink flag.
+    MEDIA_LOG(ERROR, media_log_) << "Video codec changes not allowed unless "
+                                    "using experimental changeType()";
     return false;
   }
 
@@ -2044,8 +2086,8 @@ void SourceBufferStream<RangeClass>::SetSelectedRangeIfNeeded(
       return;
     }
 
-    start_timestamp = highest_output_buffer_timestamp_ +
-                      base::TimeDelta::FromInternalValue(1);
+    start_timestamp =
+        highest_output_buffer_timestamp_ + base::TimeDelta::FromMicroseconds(1);
   }
 
   DecodeTimestamp seek_timestamp =
@@ -2190,13 +2232,13 @@ constexpr bool SourceBufferStream<SourceBufferRangeByPts>::BufferingByPts() {
 
 template <>
 DecodeTimestamp SourceBufferStream<SourceBufferRangeByDts>::BufferGetTimestamp(
-    const scoped_refptr<StreamParserBuffer>& buffer) {
+    scoped_refptr<StreamParserBuffer> buffer) {
   return buffer->GetDecodeTimestamp();
 }
 
 template <>
 DecodeTimestamp SourceBufferStream<SourceBufferRangeByPts>::BufferGetTimestamp(
-    const scoped_refptr<StreamParserBuffer>& buffer) {
+    scoped_refptr<StreamParserBuffer> buffer) {
   return DecodeTimestamp::FromPresentationTime(buffer->timestamp());
 }
 

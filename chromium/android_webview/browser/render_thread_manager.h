@@ -55,7 +55,6 @@ class RenderThreadManager : public CompositorFrameConsumer {
       ReturnedResourcesMap* returned_resource_map) override;
   bool ReturnedResourcesEmptyOnUI() const override;
   ChildFrameQueue PassUncommittedFrameOnUI() override;
-  bool HasFrameOnUI() const override;
   void DeleteHardwareRendererOnUI() override;
 
   // Render thread methods.
@@ -118,7 +117,7 @@ class RenderThreadManager : public CompositorFrameConsumer {
   bool inside_hardware_release_;
   ParentCompositorDrawConstraints parent_draw_constraints_;
   ReturnedResourcesMap returned_resources_map_;
-  base::Closure request_draw_gl_closure_;
+  base::RepeatingClosure request_draw_gl_closure_;
 
   base::WeakPtrFactory<RenderThreadManager> weak_factory_on_ui_thread_;
 

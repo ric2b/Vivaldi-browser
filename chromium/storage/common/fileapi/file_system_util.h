@@ -13,9 +13,9 @@
 #include "storage/common/fileapi/file_system_info.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/storage_common_export.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
-#include "third_party/WebKit/public/platform/WebFileError.h"
-#include "third_party/WebKit/public/platform/WebFileSystemType.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/platform/web_file_error.h"
+#include "third_party/blink/public/platform/web_file_system_type.h"
 
 class GURL;
 
@@ -46,12 +46,11 @@ class STORAGE_COMMON_EXPORT VirtualPath {
   // operating on virtual paths.
   // Note that this assumes very clean input, with no leading slash, and
   // it will not evaluate '..' components.
-  static void GetComponents(
-      const base::FilePath& path,
-      std::vector<base::FilePath::StringType>* components);
+  static std::vector<base::FilePath::StringType> GetComponents(
+      const base::FilePath& path);
 
-  static void GetComponentsUTF8Unsafe(
-      const base::FilePath& path, std::vector<std::string>* components);
+  static std::vector<std::string> GetComponentsUTF8Unsafe(
+      const base::FilePath& path);
 
   // Returns a path name ensuring that it begins with kRoot and all path
   // separators are forward slashes /.
@@ -127,9 +126,6 @@ STORAGE_COMMON_EXPORT bool GetFileSystemPublicType(
 //  - StringToFilePath(FilePathToString(path)) == path
 //  - StringToFilePath(FilePathToString(path) + "/" + "SubDirectory") ==
 //    path.AppendASCII("SubDirectory");
-//
-// TODO(tzik): Replace CreateFilePath and FilePathToString in
-// third_party/leveldatabase/env_chromium.cc with them.
 STORAGE_COMMON_EXPORT std::string FilePathToString(
     const base::FilePath& file_path);
 

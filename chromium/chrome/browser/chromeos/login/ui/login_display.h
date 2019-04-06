@@ -36,17 +36,6 @@ class LoginDisplay {
 
   class Delegate {
    public:
-    // Cancels current password changed flow.
-    virtual void CancelPasswordChangedFlow() = 0;
-
-    // Ignore password change, remove existing cryptohome and
-    // force full sync of user data.
-    virtual void ResyncUserData() = 0;
-
-    // Decrypt cryptohome using user provided |old_password|
-    // and migrate to new password.
-    virtual void MigrateUserData(const std::string& old_password) = 0;
-
     // Sign in using |username| and |password| specified.
     // Used for known users only.
     virtual void Login(const UserContext& user_context,
@@ -59,15 +48,8 @@ class LoginDisplay {
     // Used when the lock screen is being displayed.
     virtual void Signout() = 0;
 
-    // Complete sign process with specified |user_context|.
-    // Used for new users authenticated through an extension.
-    virtual void CompleteLogin(const UserContext& user_context) = 0;
-
     // Notify the delegate when the sign-in UI is finished loading.
     virtual void OnSigninScreenReady() = 0;
-
-    // Notify the delegate when the GAIA UI is finished loading.
-    virtual void OnGaiaScreenReady() = 0;
 
     // Called when the user requests enterprise enrollment.
     virtual void OnStartEnterpriseEnrollment() = 0;
@@ -87,29 +69,17 @@ class LoginDisplay {
     // Shows wrong HWID screen.
     virtual void ShowWrongHWIDScreen() = 0;
 
-    // Sets the displayed email for the next login attempt with |CompleteLogin|.
-    // If it succeeds, user's displayed email value will be updated to |email|.
-    virtual void SetDisplayEmail(const std::string& email) = 0;
-    // Sets the displayed name and given name for the next login attempt with
-    // |CompleteLogin|. If it succeeds, user's displayed name and give name
-    // values will be updated to |display_name| and |given_name|.
-    virtual void SetDisplayAndGivenName(const std::string& display_name,
-                                        const std::string& given_name) = 0;
-
     // Returns name of the currently connected network, for error message,
     virtual base::string16 GetConnectedNetworkName() = 0;
 
     // Restarts the auto-login timer if it is running.
     virtual void ResetAutoLoginTimer() = 0;
 
-    // Returns true if user is allowed to log in by domain policy.
-    virtual bool IsUserWhitelisted(const AccountId& account_id) = 0;
-
    protected:
     virtual ~Delegate();
   };
 
-  explicit LoginDisplay(Delegate* delegate);
+  LoginDisplay();
   virtual ~LoginDisplay();
 
   // Clears and enables fields on user pod or GAIA frame.
@@ -165,7 +135,7 @@ class LoginDisplay {
 
  protected:
   // Login UI delegate (controller).
-  Delegate* delegate_;
+  Delegate* delegate_ = nullptr;
 
   // Parent window, might be used to create dialog windows.
   gfx::NativeWindow parent_window_ = nullptr;

@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "apps/switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
@@ -20,12 +19,11 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/pdf/pdf_extension_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/md_bookmarks/md_bookmarks_ui.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/common/features.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -40,8 +38,8 @@
 #include "extensions/common/extension_l10n_util.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_constants.h"
-#include "ppapi/features/features.h"
-#include "printing/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -65,6 +63,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_resources.h"
+#include "apps/switches.h"
 #include "extensions/browser/extension_prefs.h"
 
 using content::BrowserThread;
@@ -125,7 +124,7 @@ ComponentLoader::ComponentExtensionInfo::ComponentExtensionInfo(
     const base::FilePath& directory)
     : manifest(std::move(manifest_param)), root_directory(directory) {
   if (!root_directory.IsAbsolute()) {
-    CHECK(PathService::Get(chrome::DIR_RESOURCES, &root_directory));
+    CHECK(base::PathService::Get(chrome::DIR_RESOURCES, &root_directory));
     root_directory = root_directory.Append(directory);
   }
   extension_id = GenerateId(manifest.get(), root_directory);
@@ -331,7 +330,7 @@ void ComponentLoader::AddZipArchiverExtension() {
   base::FilePath resources_path;
   if ((chromeos::switches::IsZipArchiverPackerEnabled() ||
        chromeos::switches::IsZipArchiverUnpackerEnabled()) &&
-      PathService::Get(chrome::DIR_RESOURCES, &resources_path)) {
+      base::PathService::Get(chrome::DIR_RESOURCES, &resources_path)) {
     AddWithNameAndDescriptionFromDir(
         resources_path.Append(extension_misc::kZipArchiverExtensionPath),
         extension_misc::kZipArchiverExtensionId,
@@ -464,10 +463,9 @@ void ComponentLoader::AddDefaultComponentExtensions(
   bool is_vivaldi =
       vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
 
-  if (is_vivaldi &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          apps::kLoadAndLaunchApp)) {
-      AddVivaldiApp();
+  if (is_vivaldi && !base::CommandLine::ForCurrentProcess()->HasSwitch(
+                        apps::kLoadAndLaunchApp)) {
+    AddVivaldiApp();
   }
 
   // Do not add component extensions that have background pages here -- add them
@@ -485,30 +483,16 @@ void ComponentLoader::AddDefaultComponentExtensions(
 
   // Skip all other extensions that require user session presence.
   if (!skip_session_components) {
-    const base::CommandLine* command_line =
-        base::CommandLine::ForCurrentProcess();
-    if (!command_line->HasSwitch(chromeos::switches::kGuestSession) &&
-        !MdBookmarksUI::IsEnabled()) {
-      Add(IDR_BOOKMARKS_MANIFEST,
-          base::FilePath(FILE_PATH_LITERAL("bookmark_manager")));
-    }
-
     Add(IDR_CROSH_BUILTIN_MANIFEST, base::FilePath(FILE_PATH_LITERAL(
         "/usr/share/chromeos-assets/crosh_builtin")));
   }
 #else  // defined(OS_CHROMEOS)
   DCHECK(!skip_session_components);
-  if (!is_vivaldi) {
-  if (!MdBookmarksUI::IsEnabled()) {
-    Add(IDR_BOOKMARKS_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("bookmark_manager")));
-  }
 #if BUILDFLAG(ENABLE_PRINTING)
   // Cloud Print component app. Not required on Chrome OS.
   Add(IDR_CLOUDPRINT_MANIFEST,
       base::FilePath(FILE_PATH_LITERAL("cloud_print")));
 #endif  // BUILDFLAG(ENABLE_PRINTING)
-  }
 #endif  // defined(OS_CHROMEOS)
 
   if (!skip_session_components) {
@@ -555,17 +539,13 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     bool skip_session_components) {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-#if defined(ENABLE_SETTINGS_APP)
-  bool is_vivaldi = vivaldi::IsVivaldiRunning() &&
-                   !vivaldi::IsDebuggingVivaldi();
-#endif
 
   // Component extensions with background pages are not enabled during tests
   // because they generate a lot of background behavior that can interfere.
   if (!enable_background_extensions_during_testing &&
-      (command_line->HasSwitch(switches::kTestType) ||
-          command_line->HasSwitch(
-              switches::kDisableComponentExtensionsWithBackgroundPages))) {
+      (command_line->HasSwitch(::switches::kTestType) ||
+       command_line->HasSwitch(
+           ::switches::kDisableComponentExtensionsWithBackgroundPages))) {
     return;
   }
 
@@ -650,9 +630,9 @@ void ComponentLoader::
   // Component extensions with background pages are not enabled during tests
   // because they generate a lot of background behavior that can interfere.
   if (!enable_background_extensions_during_testing &&
-      (command_line->HasSwitch(switches::kTestType) ||
+      (command_line->HasSwitch(::switches::kTestType) ||
        command_line->HasSwitch(
-           switches::kDisableComponentExtensionsWithBackgroundPages))) {
+           ::switches::kDisableComponentExtensionsWithBackgroundPages))) {
     return;
   }
 

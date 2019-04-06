@@ -229,6 +229,9 @@ below:
         Week
       </message>
 
+      <message name="IDS_AX_CALENDAR_SHOW_DATE_PICKER" desc="Accessible description of a button to show a calendar from a date input field.">
+        Show date picker
+      </message>
       <message name="IDS_AX_CALENDAR_SHOW_MONTH_SELECTOR" desc="Accessible description of a button to show month selection panel in a calendar picker.">
         Show month selection panel
       </message>
@@ -251,6 +254,12 @@ below:
       <message name="IDS_AX_ROLE_COMPLEMENTARY" desc="Accessibility role description for complementary">
         complementary
       </message>
+      <message name="IDS_AX_ROLE_CONTENT_DELETION" desc="Accessibility role description for content deletion, meaning content that is has been or is suggested to be removed from a document, such as in a revision review">
+        deletion
+      </message>
+      <message name="IDS_AX_ROLE_CONTENT_INSERTION" desc="Accessibility role description for content insertion, meaning content that has been marked or is suggested to be inserte nto a document, such as in a revision review">
+        insertion
+      </message>
       <message name="IDS_AX_ROLE_CHECK_BOX" desc="Accessibility role description for a check box">
         checkbox
       </message>
@@ -269,6 +278,123 @@ below:
       <message name="IDS_AX_ROLE_DISCLOSURE_TRIANGLE" desc="Accessibility role description for a disclosure triangle, a control shaped like a triangle that expands or collapses to show or hide extra content">
         disclosure triangle
       </message>
+      <message name="IDS_AX_ROLE_DOC_ABSTRACT" desc="Accessibility role description for abstract, meaning the summary of the contents of an article or book">
+        abstract
+      </message>
+      <message name="IDS_AX_ROLE_DOC_ACKNOWLEDGMENTS" desc="Accessibility role description for acknowledgments">
+        acknowledgments
+      </message>
+      <message name="IDS_AX_ROLE_DOC_AFTERWORD" desc="Accessibility role description for afterword">
+        afterword
+      </message>
+      <message name="IDS_AX_ROLE_DOC_APPENDIX" desc="Accessibility role description for appendix, meaning the summary of the contents of an article or book">
+        appendix
+      </message>
+      <message name="IDS_AX_ROLE_DOC_BACKLINK" desc="Accessibility role description for back link">
+        back link
+      </message>
+      <message name="IDS_AX_ROLE_DOC_BIBLIO_ENTRY" desc="Accessibility role description for bibliography entry">
+        bibliography entry
+      </message>
+      <message name="IDS_AX_ROLE_DOC_BIBLIOGRAPHY" desc="Accessibility role description for bibliography">
+        bibliography
+      </message>
+      <message name="IDS_AX_ROLE_DOC_BIBLIO_REF" desc="Accessibility role description for bibliography reference">
+        bibliography reference
+      </message>
+      <message name="IDS_AX_ROLE_DOC_CHAPTER" desc="Accessibility role description for chapter">
+        chapter
+      </message>
+      <message name="IDS_AX_ROLE_DOC_COLOPHON" desc="Accessibility role description for colophon">
+        colophon
+      </message>
+      <message name="IDS_AX_ROLE_DOC_CONCLUSION" desc="Accessibility role description for conclusion">
+        conclusion
+      </message>
+      <message name="IDS_AX_ROLE_DOC_COVER" desc="Accessibility role description for cover">
+        cover
+      </message>
+      <message name="IDS_AX_ROLE_DOC_CREDIT" desc="Accessibility role description for credit, a public acknowledgement of someone who was responsible for helping with something">
+        credit
+      </message>
+      <message name="IDS_AX_ROLE_DOC_CREDITS" desc="Accessibility role description for credits">
+        credits
+      </message>
+      <message name="IDS_AX_ROLE_DOC_DEDICATION" desc="Accessibility role description for dedication">
+        dedication
+      </message>
+      <message name="IDS_AX_ROLE_DOC_ENDNOTE" desc="Accessibility role description for endnote">
+        endnote
+      </message>
+      <message name="IDS_AX_ROLE_DOC_ENDNOTES" desc="Accessibility role description for endnotes">
+        endnotes
+      </message>
+      <message name="IDS_AX_ROLE_DOC_EPIGRAPH" desc="Accessibility role description for epigraph">
+        epigraph
+      </message>
+      <message name="IDS_AX_ROLE_DOC_EPILOGUE" desc="Accessibility role description for epilogue">
+        epilogue
+      </message>
+      <message name="IDS_AX_ROLE_DOC_ERRATA" desc="Accessibility role description for errata">
+        errata
+      </message>
+      <message name="IDS_AX_ROLE_DOC_EXAMPLE" desc="Accessibility role description for example">
+        example
+      </message>
+      <message name="IDS_AX_ROLE_DOC_FOOTNOTE" desc="Accessibility role description for footnote">
+        footnote
+      </message>
+      <message name="IDS_AX_ROLE_DOC_FOREWORD" desc="Accessibility role description for foreword">
+        foreword
+      </message>
+      <message name="IDS_AX_ROLE_DOC_GLOSSARY" desc="Accessibility role description for glossary">
+        glossary
+      </message>
+      <message name="IDS_AX_ROLE_DOC_GLOSS_REF" desc="Accessibility role description for glossary reference">
+        glossary reference
+      </message>
+      <message name="IDS_AX_ROLE_DOC_INDEX" desc="Accessibility role description for index">
+        index
+      </message>
+      <message name="IDS_AX_ROLE_DOC_INTRODUCTION" desc="Accessibility role description for introduction">
+        introduction
+      </message>
+      <message name="IDS_AX_ROLE_DOC_NOTE_REF" desc="Accessibility role description for note reference">
+        note reference
+      </message>
+      <message name="IDS_AX_ROLE_DOC_NOTICE" desc="Accessibility role description for notice">
+        notice
+      </message>
+      <message name="IDS_AX_ROLE_DOC_PAGE_BREAK" desc="Accessibility role description for page break">
+        page break
+      </message>
+      <message name="IDS_AX_ROLE_DOC_PAGE_LIST" desc="Accessibility role description for page list">
+        page list
+      </message>
+      <message name="IDS_AX_ROLE_DOC_PART" desc="Accessibility role description for part, as in a part of a book">
+        part
+      </message>
+      <message name="IDS_AX_ROLE_DOC_PREFACE" desc="Accessibility role description for preface">
+        preface
+      </message>
+      <message name="IDS_AX_ROLE_DOC_PROLOGUE" desc="Accessibility role description for prologue">
+        prologue
+      </message>
+      <message name="IDS_AX_ROLE_DOC_PULLQUOTE" desc="Accessibility role description for pullquote">
+        pullquote
+      </message>
+      <message name="IDS_AX_ROLE_DOC_QNA" desc="Accessibility role description for Q+A (questions and answers)">
+        Q&amp;A
+      </message>
+      <message name="IDS_AX_ROLE_DOC_SUBTITLE" desc="Accessibility role description for subtitle">
+        subtitle
+      </message>
+      <message name="IDS_AX_ROLE_DOC_TIP" desc="Accessibility role description for tip, as in a suggestion or idea">
+        tip
+      </message>
+      <message name="IDS_AX_ROLE_DOC_TOC" desc="Accessibility role description for table of contents">
+        table of contents
+      </message>
       <message name="IDS_AX_ROLE_FEED" desc="Accessibility role description for a scrollable list of articles.">
         feed
       </message>
@@ -280,6 +406,15 @@ below:
       </message>
       <message name="IDS_AX_ROLE_FOOTER" desc="Accessibility role description for footers">
         footer
+      </message>
+      <message name="IDS_AX_ROLE_GRAPHICS_DOCUMENT" desc="Accessibility role description for graphics document">
+        graphics document
+      </message>
+      <message name="IDS_AX_ROLE_GRAPHICS_OBJECT" desc="Accessibility role description for graphics object">
+        graphics object
+      </message>
+      <message name="IDS_AX_ROLE_GRAPHICS_SYMBOL" desc="Accessibility role description for graphics symbol">
+        graphics symbol
       </message>
       <message name="IDS_AX_AUTOFILL_POPUP_ACCESSIBLE_NODE_DATA" desc="The accessibility text to speak when we display an autofill popup">
         Autofill
@@ -340,12 +475,6 @@ below:
         </message>
         <message name="IDS_AX_ROLE_BUTTON" desc="Accessibility role description for a button">
           button
-        </message>
-        <message name="IDS_AX_ROLE_BUTTON_DROP_DOWN" desc="Accessibility role description for a button that drops down">
-          drop down button
-        </message>
-        <message name="IDS_AX_ROLE_CELL" desc="Accessibility role description for a cell, like in a table or grid">
-          cell
         </message>
         <message name="IDS_AX_ROLE_COLOR_WELL" desc="Accessibility role description for a color picker">
           color picker
@@ -531,6 +660,14 @@ below:
         exit full screen
       </message>
 
+      <message name="IDS_AX_MEDIA_ENTER_PICTURE_IN_PICTURE_BUTTON" desc="Accessibility role description for enter Picture-in-Picture button">
+        enter picture-in-picture
+      </message>
+
+      <message name="IDS_AX_MEDIA_EXIT_PICTURE_IN_PICTURE_BUTTON" desc="Accessibility role description for exit Picture-in-Picture button">
+        exit picture-in-picture
+      </message>
+
       <message name="IDS_AX_MEDIA_SHOW_CLOSED_CAPTIONS_BUTTON" desc="Accessibility role description for show closed captions button">
         show closed captions
       </message>
@@ -601,6 +738,14 @@ below:
 
       <message name="IDS_AX_MEDIA_EXIT_FULL_SCREEN_BUTTON_HELP" desc="Accessibility help description for exit fullscreen button">
         exit full screen
+      </message>
+
+      <message name="IDS_AX_MEDIA_ENTER_PICTURE_IN_PICTURE_BUTTON_HELP" desc="Accessibility help description for enter Picture-in-Picture button">
+        play video in picture-in-picture mode
+      </message>
+
+      <message name="IDS_AX_MEDIA_EXIT_PICTURE_IN_PICTURE_BUTTON_HELP" desc="Accessibility help description for exit Picture-in-Picture button">
+        exit picture-in-picture
       </message>
 
       <message name="IDS_AX_MEDIA_SHOW_CLOSED_CAPTIONS_BUTTON_HELP" desc="Accessibility help description for show closed captions button">
@@ -809,8 +954,21 @@ below:
       <message name="IDS_MEDIA_OVERFLOW_MENU_DOWNLOAD" desc="Media controls overflow menu item label for a download button.">
        Download
       </message>
-      <message name="IDS_MEDIA_OVERFLOW_MENU_PICTURE_IN_PICTURE" desc="Media controls overflow menu item label for a picture in picture button.">
-        Picture in Picture
+      <if expr="is_macosx">
+        <message name="IDS_MEDIA_OVERFLOW_MENU_ENTER_PICTURE_IN_PICTURE" desc="Media contr  ls overflow menu item label for a button to enter Picture-in-Picture.">
+          Picture in Picture
+        </message>
+      </if>
+      <if expr="not is_macosx">
+        <message name="IDS_MEDIA_OVERFLOW_MENU_ENTER_PICTURE_IN_PICTURE" desc="Media controls overflow menu item label for a button to enter Picture-in-Picture.">
+          Picture in picture
+        </message>
+      </if>
+      <message name="IDS_MEDIA_OVERFLOW_MENU_EXIT_PICTURE_IN_PICTURE" desc="Media controls overflow menu item label for a button to exit Picture-in-Picture.">
+          Exit picture-in-picture mode
+      </message>
+      <message name="IDS_MEDIA_PICTURE_IN_PICTURE_INTERSTITIAL_TEXT" desc="Text message shown to user when in picture in picture mode. When a video is in picture in picture mode, an interstitial with this text appears where the video player is positioned. The video continues to play back in another window that gives the experience that the video is 'popped out'.">
+        This video is playing in picture-in-picture mode
       </message>
       <message name="IDS_MEDIA_REMOTING_CAST_TEXT" desc="Text message shown to the user when casting a video to a known remote device.">
        Now casting to <ph name="DEVICE_FRIENDLY_NAME">$1<ex>Living Room TV</ex></ph>
@@ -826,6 +984,9 @@ below:
       </message>
       <message name = "IDS_MEDIA_REMOTING_STOP_BY_ERROR_TEXT" desc="The transient text shown on top of the video when switching from media remoting to mirroring due to errors.">
         Video playback error
+      </message>
+      <message name="IDS_MEDIA_SCRUBBING_MESSAGE_TEXT" desc="Message informing the user that they can double tap to skip ten seconds. This should be no longer than twice the length of the English version.">
+        Double tap left or right to skip 10s
       </message>
       <message name="IDS_MEDIA_TRACKS_NO_LABEL" desc="Menu item label for a text track that has no name specified. The number represents the track number in the list of tracks.">
         Track <ph name="NUMBER">$1<ex>1</ex></ph>

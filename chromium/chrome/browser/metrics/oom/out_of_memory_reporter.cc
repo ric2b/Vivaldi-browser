@@ -36,7 +36,7 @@ OutOfMemoryReporter::OutOfMemoryReporter(content::WebContents* web_contents)
   // This adds N async observers for N WebContents, which isn't great but
   // probably won't be a big problem on Android, where many multiple tabs are
   // rarer.
-  auto* crash_manager = breakpad::CrashDumpManager::GetInstance();
+  auto* crash_manager = crash_reporter::CrashMetricsReporter::GetInstance();
   DCHECK(crash_manager);
   scoped_observer_.Add(crash_manager);
 #else
@@ -58,7 +58,7 @@ void OutOfMemoryReporter::OnForegroundOOMDetected(const GURL& url,
 }
 
 void OutOfMemoryReporter::SetTickClockForTest(
-    std::unique_ptr<base::TickClock> tick_clock) {
+    std::unique_ptr<const base::TickClock> tick_clock) {
   DCHECK(tick_clock_);
   tick_clock_ = std::move(tick_clock);
 }
@@ -82,7 +82,7 @@ void OutOfMemoryReporter::DidFinishNavigation(
 void OutOfMemoryReporter::RenderProcessGone(base::TerminationStatus status) {
   if (!last_committed_source_id_.has_value())
     return;
-  if (!web_contents()->IsVisible())
+  if (web_contents()->GetVisibility() != content::Visibility::VISIBLE)
     return;
 
   crashed_render_process_id_ =
@@ -109,14 +109,18 @@ void OutOfMemoryReporter::RenderProcessGone(base::TerminationStatus status) {
 // response to RenderProcessHost::ProcessDied, while RenderProcessGone is called
 // synchronously from the call to ProcessDied.
 void OutOfMemoryReporter::OnCrashDumpProcessed(
-    const breakpad::CrashDumpManager::CrashDumpDetails& details) {
+    int rph_id,
+    const crash_reporter::CrashMetricsReporter::ReportedCrashTypeSet&
+        reported_counts) {
   if (!last_committed_source_id_.has_value())
     return;
   // Make sure the crash happened in the correct RPH.
-  if (details.process_host_id != crashed_render_process_id_)
+  if (rph_id != crashed_render_process_id_)
     return;
 
-  if (breakpad::CrashDumpManager::IsForegroundOom(details)) {
+  if (reported_counts.count(
+          crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
+              kRendererForegroundVisibleOom)) {
     OnForegroundOOMDetected(web_contents()->GetLastCommittedURL(),
                             *last_committed_source_id_);
   }

@@ -44,15 +44,8 @@ class GPU_IPC_SERVICE_EXPORT ImageTransportSurfaceDelegate {
 
   virtual const GpuPreferences& GetGpuPreferences() const = 0;
 
-  virtual void SetSnapshotRequestedCallback(const base::Closure& callback) = 0;
-
-  // Informs the delegate about updated vsync parameters.
-  virtual void UpdateVSyncParameters(base::TimeTicks timebase,
-                                     base::TimeDelta interval) = 0;
-
   // Tells the delegate a buffer has been presented.
-  virtual void BufferPresented(uint64_t swap_id,
-                               const gfx::PresentationFeedback& feedback) = 0;
+  virtual void BufferPresented(const gfx::PresentationFeedback& feedback) = 0;
   // Add IPC message filter.
   virtual void AddFilter(IPC::MessageFilter* message_filter) = 0;
   // Gets route ID for sending / receiving IPC messages.

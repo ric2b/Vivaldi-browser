@@ -21,6 +21,10 @@ class ProcessMemoryDump;
 }
 }
 
+namespace url {
+class Origin;
+}
+
 namespace content {
 
 class DOMStorageArea;
@@ -39,40 +43,30 @@ class CONTENT_EXPORT DOMStorageNamespace
     unsigned inactive_area_count;  // areas with open count 0.
   };
 
-  // Constructor for a LocalStorage namespace with id of 0
-  // and an optional backing directory on disk.
-  DOMStorageNamespace(const base::FilePath& directory,  // may be empty
-                      DOMStorageTaskRunner* task_runner);
-
-  // Constructor for a SessionStorage namespace with a non-zero id and an
-  // optional backing on disk via |session_storage_database| (may be NULL).
-  DOMStorageNamespace(int64_t namespace_id,
-                      const std::string& persistent_namespace_id,
+  // Constructor for a SessionStorage namespace with the given namespace id and
+  // an optional backing on disk via |session_storage_database| (may be NULL).
+  DOMStorageNamespace(const std::string& namespace_id,
                       SessionStorageDatabase* session_storage_database,
                       DOMStorageTaskRunner* task_runner);
 
-  int64_t namespace_id() const { return namespace_id_; }
-  const std::string& persistent_namespace_id() const {
-    return persistent_namespace_id_;
-  }
+  const std::string& namespace_id() const { return namespace_id_; }
 
   // Returns the storage area for the given origin,
   // creating instance if needed. Each call to open
   // must be balanced with a call to CloseStorageArea.
-  DOMStorageArea* OpenStorageArea(const GURL& origin);
+  DOMStorageArea* OpenStorageArea(const url::Origin& origin);
   void CloseStorageArea(DOMStorageArea* area);
 
   // Returns the area for |origin| if it's open, otherwise NULL.
-  DOMStorageArea* GetOpenStorageArea(const GURL& origin);
+  DOMStorageArea* GetOpenStorageArea(const url::Origin& origin);
 
   // Creates a clone of |this| namespace including
   // shallow copies of all contained areas.
   // Should only be called for session storage namespaces.
-  DOMStorageNamespace* Clone(int64_t clone_namespace_id,
-                             const std::string& clone_persistent_namespace_id);
+  scoped_refptr<DOMStorageNamespace> Clone(
+      const std::string& clone_namespace_id);
 
-  void DeleteLocalStorageOrigin(const GURL& origin);
-  void DeleteSessionStorageOrigin(const GURL& origin);
+  void DeleteSessionStorageOrigin(const url::Origin& origin);
   void PurgeMemory(bool aggressively);
   void Shutdown();
   void Flush();
@@ -83,9 +77,9 @@ class CONTENT_EXPORT DOMStorageNamespace
   // Adds memory statistics to |pmd| for chrome://tracing.
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd);
 
-  void GetOriginsWithAreas(std::vector<GURL>* origins) const;
+  void GetOriginsWithAreas(std::vector<url::Origin>* origins) const;
 
-  int GetAreaOpenCount(const GURL& origin) const;
+  int GetAreaOpenCount(const url::Origin& origin) const;
 
  private:
   friend class base::RefCountedThreadSafe<DOMStorageNamespace>;
@@ -102,18 +96,16 @@ class CONTENT_EXPORT DOMStorageNamespace
     ~AreaHolder();
     DISALLOW_COPY_AND_ASSIGN(AreaHolder);
   };
-  typedef std::map<GURL, AreaHolder> AreaMap;
+  typedef std::map<url::Origin, AreaHolder> AreaMap;
 
   ~DOMStorageNamespace();
 
   // Returns a pointer to the area holder in our map or NULL.
-  AreaHolder* GetAreaHolder(const GURL& origin);
+  AreaHolder* GetAreaHolder(const url::Origin& origin);
 
   void OnCloneStorageDone();
 
-  int64_t namespace_id_;
-  const std::string persistent_namespace_id_;
-  base::FilePath directory_;
+  const std::string namespace_id_;
   AreaMap areas_;
   const scoped_refptr<DOMStorageTaskRunner> task_runner_;
   const scoped_refptr<SessionStorageDatabase> session_storage_database_;

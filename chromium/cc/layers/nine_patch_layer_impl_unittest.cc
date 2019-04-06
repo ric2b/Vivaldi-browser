@@ -50,7 +50,7 @@ void NinePatchLayerLayoutTest(const gfx::Size& bitmap_size,
   FakeUIResourceLayerTreeHostImpl host_impl(&task_runner_provider,
                                             &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
 
   std::unique_ptr<NinePatchLayerImpl> layer =
       NinePatchLayerImpl::Create(host_impl.active_tree(), 1);
@@ -115,6 +115,8 @@ void NinePatchLayerLayoutTest(const gfx::Size& bitmap_size,
   } else {
     EXPECT_TRUE(layer_remaining.bounds().IsEmpty());
   }
+
+  host_impl.DeleteUIResource(uid);
 }
 
 void NinePatchLayerLayoutTestWithOcclusion(const gfx::Size& bitmap_size,
@@ -161,7 +163,7 @@ void NinePatchLayerLayoutTestWithOcclusion(const gfx::Size& bitmap_size,
   FakeUIResourceLayerTreeHostImpl host_impl(&task_runner_provider,
                                             &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
 
   std::unique_ptr<NinePatchLayerImpl> layer =
       NinePatchLayerImpl::Create(host_impl.active_tree(), 1);
@@ -218,6 +220,8 @@ void NinePatchLayerLayoutTestWithOcclusion(const gfx::Size& bitmap_size,
   EXPECT_EQ(expected_tex_remaining, tex_remaining.bounds());
   Region aperture_region(expected_tex_remaining);
   EXPECT_EQ(aperture_region, tex_remaining);
+
+  host_impl.DeleteUIResource(uid);
 }
 
 TEST(NinePatchLayerImplTest, VerifyDrawQuads) {

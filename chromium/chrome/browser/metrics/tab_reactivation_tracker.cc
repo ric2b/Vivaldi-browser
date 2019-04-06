@@ -4,7 +4,6 @@
 
 #include "chrome/browser/metrics/tab_reactivation_tracker.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -112,7 +111,7 @@ TabReactivationTracker::WebContentsHelper* TabReactivationTracker::GetHelper(
   // Make sure it exists.
   if (!base::ContainsKey(helper_map_, contents)) {
     helper_map_.insert(std::make_pair(
-        contents, base::MakeUnique<WebContentsHelper>(this, contents)));
+        contents, std::make_unique<WebContentsHelper>(this, contents)));
   }
 
   return helper_map_[contents].get();

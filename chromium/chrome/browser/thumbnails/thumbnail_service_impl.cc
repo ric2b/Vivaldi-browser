@@ -22,9 +22,7 @@ void AddForcedURLOnUIThread(scoped_refptr<history::TopSites> top_sites,
                             const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  // gisli@vivaldi.com:  Added check that  top sites must be
-  // loaded before we add stuff.
-  if (top_sites != NULL && top_sites->loaded())
+  if (top_sites)
     top_sites->AddForcedURL(url, base::Time::Now());
 }
 
@@ -92,19 +90,15 @@ bool ThumbnailServiceImpl::ShouldAcquirePageThumbnail(
     if (local_ptr->IsNonForcedFull())
       return false;
 
-    if (base::FeatureList::IsEnabled(
-            features::kCaptureThumbnailDependingOnTransitionType)) {
-      // Skip if the transition type is not interesting:
-      // Only new segments (roughly "initial navigations", e.g. not clicks on a
-      // link) can end up in TopSites (see HistoryBackend::UpdateSegments).
-      // Note that for pages that are already in TopSites, we don't care about
-      // the transition type, since for those we know we'll need the thumbnail.
-      if (!ui::PageTransitionCoreTypeIs(transition,
-                                        ui::PAGE_TRANSITION_TYPED) &&
-          !ui::PageTransitionCoreTypeIs(transition,
-                                        ui::PAGE_TRANSITION_AUTO_BOOKMARK)) {
-        return false;
-      }
+    // Skip if the transition type is not interesting:
+    // Only new segments (roughly "initial navigations", e.g. not clicks on a
+    // link) can end up in TopSites (see HistoryBackend::UpdateSegments).
+    // Note that for pages that are already in TopSites, we don't care about
+    // the transition type, since for those we know we'll need the thumbnail.
+    if (!ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED) &&
+        !ui::PageTransitionCoreTypeIs(transition,
+                                      ui::PAGE_TRANSITION_AUTO_BOOKMARK)) {
+      return false;
     }
   }
 
@@ -130,18 +124,6 @@ void ThumbnailServiceImpl::ShutdownOnUIThread() {
   // here by assigning null. If another call is completed, it added its own
   // reference.
   top_sites_ = NULL;
-}
-
-bool ThumbnailServiceImpl::HasPageThumbnail(const GURL& url) {
-  scoped_refptr<history::TopSites> local_ptr(top_sites_);
-
-  if (!local_ptr)
-    return false;
-
-  if (!local_ptr->IsKnownURL(url))
-    return false;
-
-  return local_ptr->HasPageThumbnail(url);
 }
 
 }  // namespace thumbnails

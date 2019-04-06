@@ -14,7 +14,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -29,7 +28,7 @@
 #include "net/http/http_status_code.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_util.h"
-#include "net/spdy/core/spdy_header_block.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
 #include "net/ssl/ssl_info.h"
 #include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/url_request_context.h"
@@ -39,15 +38,15 @@ namespace {
 
 class HeadersArray : public bidirectional_stream_header_array {
  public:
-  HeadersArray(const net::SpdyHeaderBlock& header_block);
+  explicit HeadersArray(const spdy::SpdyHeaderBlock& header_block);
   ~HeadersArray();
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(HeadersArray);
   base::StringPairs headers_strings_;
+  DISALLOW_COPY_AND_ASSIGN(HeadersArray);
 };
 
-HeadersArray::HeadersArray(const net::SpdyHeaderBlock& header_block)
+HeadersArray::HeadersArray(const spdy::SpdyHeaderBlock& header_block)
     : headers_strings_(header_block.size()) {
   // Count and headers are inherited from parent structure.
   count = capacity = header_block.size();
@@ -79,14 +78,14 @@ class BidirectionalStreamAdapter
 
   void OnStreamReady() override;
 
-  void OnHeadersReceived(const net::SpdyHeaderBlock& headers_block,
+  void OnHeadersReceived(const spdy::SpdyHeaderBlock& headers_block,
                          const char* negotiated_protocol) override;
 
   void OnDataRead(char* data, int size) override;
 
   void OnDataSent(const char* data) override;
 
-  void OnTrailersReceived(const net::SpdyHeaderBlock& trailers_block) override;
+  void OnTrailersReceived(const spdy::SpdyHeaderBlock& trailers_block) override;
 
   void OnSucceeded() override;
 
@@ -118,7 +117,7 @@ BidirectionalStreamAdapter::BidirectionalStreamAdapter(
     bidirectional_stream_callback* callback)
     : request_context_getter_(
           reinterpret_cast<net::URLRequestContextGetter*>(engine->obj)),
-      c_stream_(base::MakeUnique<bidirectional_stream>()),
+      c_stream_(std::make_unique<bidirectional_stream>()),
       c_callback_(callback) {
   DCHECK(request_context_getter_);
   bidirectional_stream_ =
@@ -135,7 +134,7 @@ void BidirectionalStreamAdapter::OnStreamReady() {
 }
 
 void BidirectionalStreamAdapter::OnHeadersReceived(
-    const net::SpdyHeaderBlock& headers_block,
+    const spdy::SpdyHeaderBlock& headers_block,
     const char* negotiated_protocol) {
   DCHECK(c_callback_->on_response_headers_received);
   HeadersArray response_headers(headers_block);
@@ -154,7 +153,7 @@ void BidirectionalStreamAdapter::OnDataSent(const char* data) {
 }
 
 void BidirectionalStreamAdapter::OnTrailersReceived(
-    const net::SpdyHeaderBlock& trailers_block) {
+    const spdy::SpdyHeaderBlock& trailers_block) {
   DCHECK(c_callback_->on_response_trailers_received);
   HeadersArray response_trailers(trailers_block);
   c_callback_->on_response_trailers_received(c_stream(), &response_trailers);
@@ -196,8 +195,9 @@ void BidirectionalStreamAdapter::DestroyAdapterForStream(
   // is valid until calling task is complete.
   adapter->bidirectional_stream_->Destroy();
   adapter->request_context_getter_->GetNetworkTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&BidirectionalStreamAdapter::DestroyOnNetworkThread,
-                            base::Unretained(adapter)));
+      FROM_HERE,
+      base::BindOnce(&BidirectionalStreamAdapter::DestroyOnNetworkThread,
+                     base::Unretained(adapter)));
 }
 
 void BidirectionalStreamAdapter::DestroyOnNetworkThread() {

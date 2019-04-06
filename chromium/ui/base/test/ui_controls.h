@@ -60,7 +60,7 @@ bool SendKeyPressNotifyWhenDone(gfx::NativeWindow window,
                                 bool shift,
                                 bool alt,
                                 bool command,
-                                const base::Closure& task);
+                                base::OnceClosure task);
 
 // Simulate a mouse move.
 bool SendMouseMove(long screen_x, long screen_y);
@@ -69,7 +69,7 @@ bool SendMouseMove(long screen_x, long screen_y);
 // belonging to the current process.
 bool SendMouseMoveNotifyWhenDone(long screen_x,
                                  long screen_y,
-                                 const base::Closure& task);
+                                 base::OnceClosure task);
 
 enum MouseButton {
   LEFT = 0,
@@ -83,15 +83,29 @@ enum MouseButtonState {
   DOWN = 2
 };
 
+// The keys that may be held down while generating a mouse event.
+enum AcceleratorState {
+  kNoAccelerator = 0,
+  kShift = 1 << 0,
+  kControl = 1 << 1,
+  kAlt = 1 << 2,
+  kCommand = 1 << 3,
+};
+
 enum TouchType { PRESS = 1 << 0, RELEASE = 1 << 1, MOVE = 1 << 2 };
 
-// Sends a mouse down and/or up message. The click will be sent to wherever
-// the cursor currently is, so be sure to move the cursor before calling this
+// Sends a mouse down and/or up message with optional one or multiple
+// accelerator keys. The click will be sent to wherever the cursor
+// currently is, so be sure to move the cursor before calling this
 // (and be sure the cursor has arrived!).
-bool SendMouseEvents(MouseButton type, int state);
+// |accelerator_state| is a bitmask of AcceleratorState.
+bool SendMouseEvents(MouseButton type,
+                     int button_state,
+                     int accelerator_state = kNoAccelerator);
 bool SendMouseEventsNotifyWhenDone(MouseButton type,
-                                   int state,
-                                   const base::Closure& task);
+                                   int button_state,
+                                   base::OnceClosure task,
+                                   int accelerator_state = kNoAccelerator);
 
 // Same as SendMouseEvents with UP | DOWN.
 bool SendMouseClick(MouseButton type);
@@ -104,11 +118,6 @@ bool SendMouseClick(MouseButton type);
 // pointers, |screen_x| and |screen_y| are the screen coordinates of a touch
 // pointer.
 bool SendTouchEvents(int action, int num, int screen_x, int screen_y);
-#endif
-
-#if defined(TOOLKIT_VIEWS)
-// Runs |closure| after processing all pending ui events.
-void RunClosureAfterAllPendingUIEvents(const base::Closure& closure);
 #endif
 
 #if defined(USE_AURA)

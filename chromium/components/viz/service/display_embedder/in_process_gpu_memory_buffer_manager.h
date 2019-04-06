@@ -6,15 +6,18 @@
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_IN_PROCESS_GPU_MEMORY_BUFFER_MANAGER_H_
 
 #include "base/memory/weak_ptr.h"
+#include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 
 namespace gpu {
 class GpuChannelManager;
+class GpuMemoryBufferSupport;
 }
 
 namespace viz {
 
-class InProcessGpuMemoryBufferManager : public gpu::GpuMemoryBufferManager {
+class VIZ_SERVICE_EXPORT InProcessGpuMemoryBufferManager
+    : public gpu::GpuMemoryBufferManager {
  public:
   explicit InProcessGpuMemoryBufferManager(
       gpu::GpuChannelManager* channel_manager);
@@ -34,6 +37,7 @@ class InProcessGpuMemoryBufferManager : public gpu::GpuMemoryBufferManager {
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                               int client_id,
                               const gpu::SyncToken& sync_token);
+  std::unique_ptr<gpu::GpuMemoryBufferSupport> gpu_memory_buffer_support_;
   const int client_id_;
   int next_gpu_memory_id_ = 1;
   gpu::GpuChannelManager* channel_manager_;

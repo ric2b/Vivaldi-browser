@@ -26,7 +26,7 @@ class RasterizeAndRecordBenchmarkImpl : public MicroBenchmarkImpl {
   explicit RasterizeAndRecordBenchmarkImpl(
       scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner,
       base::Value* value,
-      const MicroBenchmarkImpl::DoneCallback& callback);
+      MicroBenchmarkImpl::DoneCallback callback);
   ~RasterizeAndRecordBenchmarkImpl() override;
 
   // Implements MicroBenchmark interface.
@@ -42,7 +42,6 @@ class RasterizeAndRecordBenchmarkImpl : public MicroBenchmarkImpl {
     int pixels_rasterized_with_non_solid_color;
     int pixels_rasterized_as_opaque;
     base::TimeDelta total_best_time;
-    size_t total_memory_usage;
     int total_layers;
     int total_picture_layers;
     int total_picture_layers_with_no_content;

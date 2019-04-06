@@ -7,8 +7,8 @@
 #include <memory>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/json/string_escape.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
@@ -65,11 +65,6 @@ const char kScriptCommandPrefix[] = "webui";
   web::WebStateImpl* _webState;
 }
 
-- (instancetype)init {
-  NOTREACHED();
-  return self;
-}
-
 - (instancetype)initWithWebState:(web::WebStateImpl*)webState {
   if (self = [super init]) {
     DCHECK(webState);
@@ -80,10 +75,14 @@ const char kScriptCommandPrefix[] = "webui";
 
     __weak CRWWebUIManager* weakSelf = self;
     _webState->AddScriptCommandCallback(
-        base::BindBlockArc(
-            ^bool(const base::DictionaryValue& message, const GURL&, bool) {
-              return [weakSelf handleWebUIJSMessage:message];
-            }),
+        base::BindRepeating(^bool(const base::DictionaryValue& message,
+                                  const GURL&, bool, bool isMainFrame) {
+          if (!isMainFrame) {
+            // WebUI only supports main frame.
+            return false;
+          }
+          return [weakSelf handleWebUIJSMessage:message];
+        }),
         kScriptCommandPrefix);
   }
   return self;

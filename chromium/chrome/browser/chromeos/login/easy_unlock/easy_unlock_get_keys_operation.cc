@@ -11,10 +11,11 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_manager.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "components/proximity_auth/logging/logging.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
 namespace chromeos {
@@ -54,19 +55,21 @@ void EasyUnlockGetKeysOperation::GetKeyData() {
   cryptohome::GetKeyDataRequest request;
   request.mutable_key()->mutable_data()->set_label(
       EasyUnlockKeyManager::GetKeyLabel(key_index_));
-  cryptohome::HomedirMethods::GetInstance()->GetKeyDataEx(
+  DBusThreadManager::Get()->GetCryptohomeClient()->GetKeyDataEx(
       id, cryptohome::AuthorizationRequest(), request,
-      base::Bind(&EasyUnlockGetKeysOperation::OnGetKeyData,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&EasyUnlockGetKeysOperation::OnGetKeyData,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void EasyUnlockGetKeysOperation::OnGetKeyData(
-    bool success,
-    cryptohome::MountError return_code,
-    const std::vector<cryptohome::KeyDefinition>& key_definitions) {
-  if (!success || key_definitions.empty()) {
-    // MOUNT_ERROR_KEY_FAILURE is considered as success. Other error codes are
-    // treated as failures.
+    base::Optional<cryptohome::BaseReply> reply) {
+  cryptohome::MountError return_code =
+      cryptohome::GetKeyDataReplyToMountError(reply);
+  std::vector<cryptohome::KeyDefinition> key_definitions =
+      cryptohome::GetKeyDataReplyToKeyDefinitions(reply);
+  if (return_code != cryptohome::MOUNT_ERROR_NONE || key_definitions.empty()) {
+    // MOUNT_ERROR_KEY_FAILURE is considered as success.
+    // Other error codes are treated as failures.
     if (return_code == cryptohome::MOUNT_ERROR_NONE ||
         return_code == cryptohome::MOUNT_ERROR_KEY_FAILURE) {
       callback_.Run(true, devices_);
@@ -130,6 +133,17 @@ void EasyUnlockGetKeysOperation::OnGetKeyData(
         device.serialized_beacon_seeds = *entry.bytes;
       else
         NOTREACHED();
+    } else if (entry.name == kEasyUnlockKeyMetaNameUnlockKey) {
+      // ProviderData only has the std::string |bytes| and int64_t |number|
+      // fields for persistence -- the number field is used to store this
+      // boolean. The boolean was stored as either a 1 or 0 in as an int64_t.
+      // Cast it back to bool here.
+      if (entry.number) {
+        DCHECK(*entry.number == 0 || *entry.number == 1);
+        device.unlock_key = static_cast<bool>(*entry.number);
+      } else {
+        NOTREACHED();
+      }
     } else {
       PA_LOG(WARNING) << "Unknown EasyUnlock key data entry, name="
                       << entry.name;

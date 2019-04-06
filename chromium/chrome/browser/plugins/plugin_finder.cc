@@ -8,8 +8,6 @@
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
@@ -103,7 +101,7 @@ std::unique_ptr<PluginMetadata> CreatePluginMetadata(
   std::string language_str;
   plugin_dict->GetString("lang", &language_str);
 
-  std::unique_ptr<PluginMetadata> plugin = base::MakeUnique<PluginMetadata>(
+  std::unique_ptr<PluginMetadata> plugin = std::make_unique<PluginMetadata>(
       identifier, name, display_url, GURL(url), GURL(help_url),
       group_name_matcher, language_str);
   const base::ListValue* versions = NULL;
@@ -269,7 +267,7 @@ void PluginFinder::ReinitializePlugins(
       identifier_plugin_[identifier] = CreatePluginMetadata(identifier, plugin);
 
       if (installers_.find(identifier) == installers_.end())
-        installers_[identifier] = base::MakeUnique<PluginInstaller>();
+        installers_[identifier] = std::make_unique<PluginInstaller>();
     }
   }
 }
@@ -287,7 +285,7 @@ std::unique_ptr<PluginMetadata> PluginFinder::GetPluginMetadata(
   // The plugin metadata was not found, create a dummy one holding
   // the name, identifier and group name only.
   std::string identifier = GetIdentifier(plugin);
-  std::unique_ptr<PluginMetadata> metadata = base::MakeUnique<PluginMetadata>(
+  std::unique_ptr<PluginMetadata> metadata = std::make_unique<PluginMetadata>(
       identifier, GetGroupName(plugin), false, GURL(), GURL(), plugin.name,
       std::string());
   for (size_t i = 0; i < plugin.mime_types.size(); ++i)

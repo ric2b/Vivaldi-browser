@@ -17,7 +17,6 @@
 #include "base/observer_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_order_controller.h"
-#include "chrome/browser/ui/tabs/web_contents_closer.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/page_transition_types.h"
 
@@ -56,7 +55,7 @@ class WebContents;
 // its bookkeeping when such events happen.
 //
 ////////////////////////////////////////////////////////////////////////////////
-class TabStripModel : public WebContentsCloseDelegate {
+class TabStripModel {
  public:
   // Used to specify what should happen when the tab is closed.
   enum CloseTypes {
@@ -122,7 +121,7 @@ class TabStripModel : public WebContentsCloseDelegate {
   // Construct a TabStripModel with a delegate to help it do certain things
   // (see the TabStripModelDelegate documentation). |delegate| cannot be NULL.
   explicit TabStripModel(TabStripModelDelegate* delegate, Profile* profile);
-  ~TabStripModel() override;
+  ~TabStripModel();
 
   // Retrieves the TabStripModelDelegate associated with this TabStripModel.
   TabStripModelDelegate* delegate() const { return delegate_; }
@@ -156,7 +155,8 @@ class TabStripModel : public WebContentsCloseDelegate {
 
   // Adds the specified WebContents in the default location. Tabs opened
   // in the foreground inherit the group of the previously active tab.
-  void AppendWebContents(content::WebContents* contents, bool foreground);
+  void AppendWebContents(std::unique_ptr<content::WebContents> contents,
+                         bool foreground);
 
   // Adds the specified WebContents at the specified location.
   // |add_types| is a bitmask of AddTabTypes; see it for details.
@@ -169,7 +169,7 @@ class TabStripModel : public WebContentsCloseDelegate {
   // constraint that all pinned tabs occur before non-pinned tabs.
   // See also AddWebContents.
   void InsertWebContentsAt(int index,
-                           content::WebContents* contents,
+                           std::unique_ptr<content::WebContents> contents,
                            int add_types);
 
   // Closes the WebContents at the specified index. This causes the
@@ -183,15 +183,15 @@ class TabStripModel : public WebContentsCloseDelegate {
   // Replaces the WebContents at |index| with |new_contents|. The
   // WebContents that was at |index| is returned and its ownership returns
   // to the caller.
-  content::WebContents* ReplaceWebContentsAt(
+  std::unique_ptr<content::WebContents> ReplaceWebContentsAt(
       int index,
-      content::WebContents* new_contents);
+      std::unique_ptr<content::WebContents> new_contents);
 
   // Detaches the WebContents at the specified index from this strip. The
   // WebContents is not destroyed, just removed from display. The caller
   // is responsible for doing something with it (e.g. stuffing it into another
   // strip). Returns the detached WebContents.
-  content::WebContents* DetachWebContentsAt(int index);
+  std::unique_ptr<content::WebContents> DetachWebContentsAt(int index);
 
   // Makes the tab at the specified index the active tab. |user_gesture| is true
   // if the user actually clicked on the tab or navigated to it using a keyboard
@@ -321,7 +321,7 @@ class TabStripModel : public WebContentsCloseDelegate {
   // AddTabTypes; see it for details. This method ends up calling into
   // InsertWebContentsAt to do the actual insertion. Pass kNoTab for |index| to
   // append the contents to the end of the tab strip.
-  void AddWebContents(content::WebContents* contents,
+  void AddWebContents(std::unique_ptr<content::WebContents> contents,
                       int index,
                       ui::PageTransition transition,
                       int add_types);
@@ -431,6 +431,8 @@ class TabStripModel : public WebContentsCloseDelegate {
 
  private:
   class WebContentsData;
+  struct DetachedWebContents;
+  struct DetachNotifications;
 
   // Used when making selection notifications.
   enum class Notify {
@@ -440,13 +442,30 @@ class TabStripModel : public WebContentsCloseDelegate {
     kUserGesture,
   };
 
-  // WebContentsCloseDelegate:
-  bool ContainsWebContents(content::WebContents* contents) override;
-  void OnWillDeleteWebContents(content::WebContents* contents,
-                               uint32_t close_types) override;
-  bool RunUnloadListenerBeforeClosing(content::WebContents* contents) override;
-  bool ShouldRunUnloadListenerBeforeClosing(
-      content::WebContents* contents) override;
+  // Performs all the work to detach a WebContents instance but avoids sending
+  // most notifications. TabClosingAt() and TabDetachedAt() are sent because
+  // observers are reliant on the selection model being accurate at the time
+  // that TabDetachedAt() is called.
+  std::unique_ptr<content::WebContents> DetachWebContentsImpl(
+      int index,
+      bool create_historical_tab,
+      bool will_delete);
+
+  // We batch send notifications. This has two benefits:
+  //   1) This allows us to send the minimal number of necessary notifications.
+  //   This is important because some notifications cause the main thread to
+  //   synchronously communicate with the GPU process and cause jank.
+  //   https://crbug.com/826287.
+  //   2) This allows us to avoid some problems caused by re-entrancy [e.g.
+  //   using destroyed WebContents instances]. Ideally, this second check
+  //   wouldn't be necessary because we would enforce that there is no
+  //   re-entrancy in the TabStripModel, but that condition is currently
+  //   violated in tests [and possibly in the wild as well].
+  void SendDetachWebContentsNotifications(DetachNotifications* notifications);
+
+  bool ContainsWebContents(content::WebContents* contents);
+  bool RunUnloadListenerBeforeClosing(content::WebContents* contents);
+  bool ShouldRunUnloadListenerBeforeClosing(content::WebContents* contents);
 
   int ConstrainInsertionIndex(int index, bool pinned_tab);
 
@@ -485,6 +504,17 @@ class TabStripModel : public WebContentsCloseDelegate {
   bool InternalCloseTabs(base::span<content::WebContents* const> items,
                          uint32_t close_types);
 
+  // |close_types| is a bitmask of the types in CloseTypes.
+  // Returns true if all the tabs have been deleted. A return value of false
+  // means some portion (potentially none) of the WebContents were deleted.
+  // WebContents not deleted by this function are processing unload handlers
+  // which may eventually be deleted based on the results of the unload handler.
+  // Additionally processing the unload handlers may result in needing to show
+  // UI for the WebContents. See UnloadController for details on how unload
+  // handlers are processed.
+  bool CloseWebContentses(base::span<content::WebContents* const> items,
+                          uint32_t close_types);
+
   // Gets the WebContents at an index. Does no bounds checking.
   content::WebContents* GetWebContentsAtImpl(int index) const;
 
@@ -492,9 +522,6 @@ class TabStripModel : public WebContentsCloseDelegate {
   // of the indices, it is assumed they are valid.
   std::vector<content::WebContents*> GetWebContentsesByIndices(
       const std::vector<int>& indices);
-
-  // Notifies the observers if the active tab is being deactivated.
-  void NotifyIfTabDeactivated(content::WebContents* contents);
 
   // Notifies the observers if the active tab has changed.
   void NotifyIfActiveTabChanged(content::WebContents* old_contents,
@@ -539,7 +566,8 @@ class TabStripModel : public WebContentsCloseDelegate {
   // tab's group/opener respectively.
   void FixOpenersAndGroupsReferencing(int index);
 
-  // The WebContents data currently hosted within this TabStripModel.
+  // The WebContents data currently hosted within this TabStripModel. This must
+  // be kept in sync with |selection_model_|.
   std::vector<std::unique_ptr<WebContentsData>> contents_data_;
 
   TabStripModelDelegate* delegate_;
@@ -555,11 +583,12 @@ class TabStripModel : public WebContentsCloseDelegate {
   // selection should move when a Tab is closed.
   std::unique_ptr<TabStripModelOrderController> order_controller_;
 
+  // This must be kept in sync with |contents_data_|.
   ui::ListSelectionModel selection_model_;
 
-  // Indicates if observers are currently being notified to catch reentrancy
-  // bugs. See for example http://crbug.com/529407
-  bool in_notify_ = false;
+  // TabStripModel is not re-entrancy safe. This member is used to guard public
+  // methods that mutate state of |selection_model_| or |contents_data_|.
+  bool reentrancy_guard_ = false;
 
   base::WeakPtrFactory<TabStripModel> weak_factory_;
 

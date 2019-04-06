@@ -28,7 +28,7 @@ public class PaymentRequestDataUrlTest implements MainActivityStartCallback {
             "data:text/html,<html><head>"
                     + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, "
                     + "maximum-scale=1\"></head><body><button id=\"buy\" onclick=\"try { "
-                    + "(new PaymentRequest([{supportedMethods: ['basic-card']}], "
+                    + "(new PaymentRequest([{supportedMethods: 'basic-card'}], "
                     + "{total: {label: 'Total', "
                     + " amount: {currency: 'USD', value: '1.00'}}})).show(); "
                     + "} catch(e) { "
@@ -46,7 +46,6 @@ public class PaymentRequestDataUrlTest implements MainActivityStartCallback {
     public void test() throws InterruptedException, ExecutionException, TimeoutException {
         mPaymentRequestTestRule.openPageAndClickNode("buy");
         mPaymentRequestTestRule.expectResultContains(
-                new String[] {"SecurityError: Failed to construct 'PaymentRequest': "
-                        + "Must be in a secure context"});
+                new String[] {"PaymentRequest is not defined"});
     }
 }

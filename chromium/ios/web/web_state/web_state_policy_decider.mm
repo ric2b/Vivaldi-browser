@@ -25,8 +25,9 @@ WebStatePolicyDecider::~WebStatePolicyDecider() {
   }
 }
 
-bool WebStatePolicyDecider::ShouldAllowRequest(NSURLRequest* request,
-                                               ui::PageTransition transition) {
+bool WebStatePolicyDecider::ShouldAllowRequest(
+    NSURLRequest* request,
+    const WebStatePolicyDecider::RequestInfo& request_info) {
   return true;
 }
 

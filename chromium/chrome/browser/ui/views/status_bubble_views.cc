@@ -35,6 +35,7 @@
 #include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/scrollbar/scroll_bar_views.h"
+#include "ui/views/style/typography.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -81,6 +82,11 @@ constexpr auto kMinExpansionStepDuration =
     base::TimeDelta::FromMilliseconds(20);
 constexpr auto kMaxExpansionStepDuration =
     base::TimeDelta::FromMilliseconds(150);
+
+const gfx::FontList& GetFont() {
+  return views::style::GetFont(views::style::CONTEXT_LABEL,
+                               views::style::STYLE_PRIMARY);
+}
 
 }  // namespace
 
@@ -153,10 +159,10 @@ class StatusBubbleViews::StatusView : public views::View {
   void SetStyle(BubbleStyle style);
 
   // Show the bubble instantly.
-  void Show();
+  void ShowInstantly();
 
   // Hide the bubble instantly.
-  void Hide();
+  void HideInstantly();
 
   // Resets any timers we have. Typically called when the user moves a
   // mouse.
@@ -245,20 +251,32 @@ void StatusBubbleViews::StatusView::SetText(const base::string16& text,
   }
 }
 
-void StatusBubbleViews::StatusView::Show() {
+void StatusBubbleViews::StatusView::ShowInstantly() {
   animation_->Stop();
   CancelTimer();
   SetOpacity(1.0);
+#if defined(OS_MACOSX)
+  // Don't order an already-visible window on Mac, since that may trigger a
+  // space switch. The window stacking is guaranteed by its child window status.
+  if (!popup_->IsVisible())
+    popup_->ShowInactive();
+#else
   popup_->ShowInactive();
+#endif
   state_ = BUBBLE_SHOWN;
 }
 
-void StatusBubbleViews::StatusView::Hide() {
+void StatusBubbleViews::StatusView::HideInstantly() {
   animation_->Stop();
   CancelTimer();
   SetOpacity(0.0);
   text_.clear();
+#if !defined(OS_MACOSX)
+  // Don't orderOut: the window on macOS. Doing so for a child window requires
+  // it to be detached/reattached, which may trigger a space switch. Instead,
+  // just leave the window fully transparent and unclickable.
   popup_->Hide();
+#endif
   state_ = BUBBLE_HIDDEN;
 }
 
@@ -316,9 +334,8 @@ void StatusBubbleViews::StatusView::StartHiding() {
     state_ = BUBBLE_HIDING_TIMER;
     StartTimer(base::TimeDelta::FromMilliseconds(kHideDelay));
   } else if (state_ == BUBBLE_SHOWING_TIMER) {
-    state_ = BUBBLE_HIDDEN;
-    popup_->Hide();
-    CancelTimer();
+    HideInstantly();
+    DCHECK_EQ(BUBBLE_HIDDEN, state_);
   } else if (state_ == BUBBLE_SHOWING_FADE) {
     state_ = BUBBLE_HIDING_FADE;
     // Figure out where we are in the current fade.
@@ -366,8 +383,8 @@ void StatusBubbleViews::StatusView::SetStyle(BubbleStyle style) {
 
 void StatusBubbleViews::StatusView::OnAnimationEnded() {
   if (state_ == BUBBLE_HIDING_FADE) {
-    state_ = BUBBLE_HIDDEN;
-    popup_->Hide();
+    HideInstantly();
+    DCHECK_EQ(BUBBLE_HIDDEN, state_);
   } else if (state_ == BUBBLE_SHOWING_FADE) {
     state_ = BUBBLE_SHOWN;
   }
@@ -490,8 +507,9 @@ void StatusBubbleViews::StatusView::OnPaint(gfx::Canvas* canvas) {
   SkColor blended_text_color = color_utils::AlphaBlend(
       theme_provider_->GetColor(ThemeProperties::COLOR_TAB_TEXT), bubble_color,
       0x99);
+
   canvas->DrawStringRect(
-      text_, gfx::FontList(),
+      text_, GetFont(),
       color_utils::GetReadableColor(blended_text_color, bubble_color),
       text_rect);
 }
@@ -700,7 +718,7 @@ void StatusBubbleViews::RepositionPopup() {
 }
 
 int StatusBubbleViews::GetPreferredHeight() {
-  return gfx::FontList().GetHeight() + kTotalVerticalPadding;
+  return GetFont().GetHeight() + kTotalVerticalPadding;
 }
 
 void StatusBubbleViews::SetBounds(int x, int y, int w, int h) {
@@ -726,7 +744,7 @@ void StatusBubbleViews::SetStatus(const base::string16& status_text) {
   status_text_ = status_text;
   if (!status_text_.empty()) {
     view_->SetText(status_text, true);
-    view_->Show();
+    view_->ShowInstantly();
   } else if (!url_text_.empty()) {
     view_->SetText(url_text_, true);
   } else {
@@ -759,8 +777,7 @@ void StatusBubbleViews::SetURL(const GURL& url) {
   // Set Elided Text corresponding to the GURL object.
   int text_width = static_cast<int>(size_.width() - (kShadowThickness * 2) -
                                     kTextPositionX - kTextHorizPadding - 1);
-  url_text_ =
-      url_formatter::ElideUrl(url, gfx::FontList(), text_width);
+  url_text_ = url_formatter::ElideUrl(url, GetFont(), text_width);
 
   // An URL is always treated as a left-to-right string. On right-to-left UIs
   // we need to explicitly mark the URL as LTR to make sure it is displayed
@@ -791,7 +808,7 @@ void StatusBubbleViews::Hide() {
   status_text_ = base::string16();
   url_text_ = base::string16();
   if (view_)
-    view_->Hide();
+    view_->HideInstantly();
 }
 
 void StatusBubbleViews::MouseMoved(bool left_content) {

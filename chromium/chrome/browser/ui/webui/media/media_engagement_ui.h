@@ -7,20 +7,17 @@
 
 #include "base/macros.h"
 #include "chrome/browser/media/media_engagement_score_details.mojom.h"
-#include "chrome/browser/ui/webui/mojo_web_ui_controller.h"
+#include "ui/webui/mojo_web_ui_controller.h"
 
 // The UI for chrome://media-engagement/.
-class MediaEngagementUI
-    : public MojoWebUIController<
-          media::mojom::MediaEngagementScoreDetailsProvider> {
+class MediaEngagementUI : public ui::MojoWebUIController {
  public:
   explicit MediaEngagementUI(content::WebUI* web_ui);
   ~MediaEngagementUI() override;
 
  private:
-  // MojoWebUIController overrides:
-  void BindUIHandler(media::mojom::MediaEngagementScoreDetailsProviderRequest
-                         request) override;
+  void BindMediaEngagementScoreDetailsProvider(
+      media::mojom::MediaEngagementScoreDetailsProviderRequest request);
 
   std::unique_ptr<media::mojom::MediaEngagementScoreDetailsProvider>
       ui_handler_;

@@ -6,15 +6,17 @@
 #define CHROME_BROWSER_UI_ASH_CHROME_SCREENSHOT_GRABBER_H_
 
 #include <memory>
+#include <string>
 
 #include "ash/screenshot_delegate.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "build/build_config.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/drive/drive.pb.h"
 #include "ui/gfx/image/image.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 #include "ui/snapshot/screenshot_grabber.h"
 
 class Profile;
@@ -23,10 +25,28 @@ namespace ash {
 class ChromeScreenshotGrabberTest;
 }  // namespace ash
 
-class ChromeScreenshotGrabber : public ash::ScreenshotDelegate,
-                                public ui::ScreenshotGrabberDelegate,
-                                public ui::ScreenshotGrabberObserver {
+namespace policy {
+class PolicyTest;
+}  // namespace policy
+
+class ChromeScreenshotGrabberBrowserTest;
+class ChromeScreenshotGrabberTestObserver;
+
+// Result of asynchronous file operations.
+enum class ScreenshotFileResult {
+  SUCCESS,
+  CHECK_DIR_FAILED,
+  CREATE_DIR_FAILED,
+  CREATE_FAILED
+};
+
+class ChromeScreenshotGrabber : public ash::ScreenshotDelegate {
  public:
+  // Callback called with the |result| of trying to create a local writable
+  // |path| for the possibly remote path.
+  using FileCallback = base::Callback<void(ScreenshotFileResult result,
+                                           const base::FilePath& path)>;
+
   ChromeScreenshotGrabber();
   ~ChromeScreenshotGrabber() override;
 
@@ -43,17 +63,30 @@ class ChromeScreenshotGrabber : public ash::ScreenshotDelegate,
   void HandleTakeWindowScreenshot(aura::Window* window) override;
   bool CanTakeScreenshot() override;
 
-  // ui::ScreenshotGrabberDelegate:
-  void PrepareFileAndRunOnBlockingPool(
-      const base::FilePath& path,
-      const FileCallback& callback_on_blocking_pool) override;
+  // TODO(erg): This is the endpoint for a new interface which will be added in
+  // a future patch. It is intended to be both mojo proxyable, and usable as a
+  // callback from ScreenshotGrabber.
+  void OnTookScreenshot(const base::Time& screenshot_time,
+                        const base::Optional<int>& display_num,
+                        ui::ScreenshotResult result,
+                        scoped_refptr<base::RefCountedMemory> png_data);
 
-  // ui::ScreenshotGrabberObserver:
-  void OnScreenshotCompleted(ui::ScreenshotGrabberObserver::Result result,
-                             const base::FilePath& screenshot_path) override;
+  void set_screenshots_allowed(bool value) { screenshots_allowed_ = value; }
 
  private:
   friend class ash::ChromeScreenshotGrabberTest;
+  friend class ChromeScreenshotGrabberBrowserTest;
+  friend class policy::PolicyTest;
+
+  // Prepares a writable file for |path|. If |path| is a non-local path (i.e.
+  // Google drive) and it is supported this will create a local cached copy of
+  // the remote file and call the callback with the local path.
+  void PrepareFileAndRunOnBlockingPool(const base::FilePath& path,
+                                       const FileCallback& callback);
+
+  // Called once all file writing is completed, or on error.
+  void OnScreenshotCompleted(ui::ScreenshotResult result,
+                             const base::FilePath& screenshot_path);
 
   // Callback method of FileSystemInterface::GetFile().
   // Runs ReadScreenshotFileForPreviewLocal if successful. Otherwise, runs
@@ -107,13 +140,21 @@ class ChromeScreenshotGrabber : public ash::ScreenshotDelegate,
   // notification is clicked.
   // |image| is a preview image attached to the notification. It can be empty.
   void OnReadScreenshotFileForPreviewCompleted(
-      ui::ScreenshotGrabberObserver::Result result,
+      ui::ScreenshotResult result,
       const base::FilePath& screenshot_path,
       gfx::Image image);
 
   Profile* GetProfile();
 
+  bool ScreenshotsAllowed() const;
+
   std::unique_ptr<ui::ScreenshotGrabber> screenshot_grabber_;
+
+  // Forwards OnScreenshotCompleted() events to a test.
+  ChromeScreenshotGrabberTestObserver* test_observer_ = nullptr;
+
+  // Flag used to disallow screenshots, set in some special modes.
+  bool screenshots_allowed_ = true;
 
   base::WeakPtrFactory<ChromeScreenshotGrabber> weak_factory_;
 

@@ -33,7 +33,6 @@
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -63,6 +62,10 @@
 
 #if defined(OS_IOS)
 #include "base/test/test_support_ios.h"
+#endif
+
+#if defined(OS_LINUX)
+#include "base/test/fontconfig_util_linux.h"
 #endif
 
 namespace base {
@@ -244,7 +247,9 @@ void TestSuite::AddTestLauncherResultPrinter() {
   }
 
   printer_ = new XmlUnitTestResultPrinter;
-  CHECK(printer_->Initialize(output_path));
+  CHECK(printer_->Initialize(output_path))
+      << "Output path is " << output_path.AsUTF8Unsafe()
+      << " and PathExists(output_path) is " << PathExists(output_path);
   testing::TestEventListeners& listeners =
       testing::UnitTest::GetInstance()->listeners();
   listeners.Append(printer_);
@@ -463,10 +468,11 @@ void TestSuite::Initialize() {
   i18n::SetICUDefaultLocale("en_US");
 #endif
 
-  // Enable SequencedWorkerPool in tests.
-  // TODO(fdoray): Remove this once the SequencedWorkerPool to TaskScheduler
-  // redirection experiment concludes https://crbug.com/622400.
-  SequencedWorkerPool::EnableForProcess();
+#if defined(OS_LINUX)
+  // TODO(thomasanderson): Call TearDownFontconfig() in Shutdown().  It would
+  // currently crash because of leaked FcFontSet's in font_fallback_linux.cc.
+  SetUpFontconfig();
+#endif
 
   CatchMaybeTests();
   ResetCommandLine();

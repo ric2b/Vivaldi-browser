@@ -15,15 +15,13 @@ declare_args() {
   # Turn this on to generate order files. See
   # https://chromium.googlesource.com/chromium/src/+/master/docs/win_order_files.md
   generate_order_files = false
-
-  is_vivaldi = false
 }
 
 # Refers to the subdirectory for branding in various places including
 # chrome/app/theme.
 if (is_chrome_branded) {
   branding_path_component = "google_chrome"
-} else if (is_vivaldi) {
+} else if (defined(is_vivaldi) && is_vivaldi) {
   branding_path_component = "vivaldi"
 } else {
   branding_path_component = "chromium"

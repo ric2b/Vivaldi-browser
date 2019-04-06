@@ -19,26 +19,15 @@ class TestShellDelegate : public ShellDelegate {
 
   // Overridden from ShellDelegate:
   ::service_manager::Connector* GetShellConnector() const override;
-  bool IsRunningInForcedAppMode() const override;
   bool CanShowWindowForUser(aura::Window* window) const override;
-  bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
-  void PreShutdown() override;
   std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() override;
-  void OpenUrlFromArc(const GURL& url) override;
   NetworkingConfigDelegate* GetNetworkingConfigDelegate() override;
   std::unique_ptr<ScreenshotDelegate> CreateScreenshotDelegate() override;
-  std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
 
-  void SetForceMaximizeOnFirstRun(bool maximize) {
-    force_maximize_on_first_run_ = maximize;
-  }
-
  private:
-  bool force_maximize_on_first_run_ = false;
-
   DISALLOW_COPY_AND_ASSIGN(TestShellDelegate);
 };
 

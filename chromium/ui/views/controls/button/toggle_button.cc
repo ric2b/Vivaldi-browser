@@ -23,13 +23,13 @@ namespace views {
 namespace {
 
 // Constants are measured in dip.
-const int kTrackHeight = 12;
-const int kTrackWidth = 28;
+constexpr int kTrackHeight = 12;
+constexpr int kTrackWidth = 28;
 // Margins from edge of track to edge of view.
-const int kTrackVerticalMargin = 5;
-const int kTrackHorizontalMargin = 6;
+constexpr int kTrackVerticalMargin = 5;
+constexpr int kTrackHorizontalMargin = 6;
 // Inset from the rounded edge of the thumb to the rounded edge of the track.
-const int kThumbInset = 2;
+constexpr int kThumbInset = 2;
 
 }  // namespace
 
@@ -60,9 +60,9 @@ class ToggleButton::ThumbView : public InkDropHostView {
   }
 
  private:
-  static const int kShadowOffsetX = 0;
-  static const int kShadowOffsetY = 1;
-  static const int kShadowBlur = 2;
+  static constexpr int kShadowOffsetX = 0;
+  static constexpr int kShadowOffsetY = 1;
+  static constexpr int kShadowBlur = 2;
 
   // views::View:
   const char* GetClassName() const override {
@@ -197,10 +197,9 @@ void ToggleButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 void ToggleButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Button::GetAccessibleNodeData(node_data);
 
-  node_data->role = ui::AX_ROLE_SWITCH;
-  const ui::AXCheckedState checked_state =
-      is_on_ ? ui::AX_CHECKED_STATE_TRUE : ui::AX_CHECKED_STATE_FALSE;
-  node_data->AddIntAttribute(ui::AX_ATTR_CHECKED_STATE, checked_state);
+  node_data->role = ax::mojom::Role::kSwitch;
+  node_data->SetCheckedState(is_on_ ? ax::mojom::CheckedState::kTrue
+                                    : ax::mojom::CheckedState::kFalse);
 }
 
 void ToggleButton::OnFocus() {

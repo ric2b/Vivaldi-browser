@@ -1,11 +1,12 @@
 include_rules = [
+  "+services/network/loader_util.h",
+  "+services/network/network_service.h",
   "+services/network/public/cpp",
 ]
 
 specific_include_rules = {
   ".*\.cc": [
     "+content/common",
-    "+third_party/WebKit/common",
   ],
   "simple_url_loader\.cc": [
     "-content/",

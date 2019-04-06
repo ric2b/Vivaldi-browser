@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/strings/string16.h"
+#include "ios/web/navigation/error_retry_state_machine.h"
 #include "ios/web/public/favicon_status.h"
 #import "ios/web/public/navigation_item.h"
 #include "ios/web/public/referrer.h"
@@ -109,6 +110,10 @@ class NavigationItemImpl : public web::NavigationItem {
   // non-persisted state, as documented on the members below.
   void ResetForCommit();
 
+  // Returns the state machine that manages the displaying and retrying of load
+  // error for this item.
+  ErrorRetryStateMachine& error_retry_state_machine();
+
   // Returns the title string to be used for a page with |url| if that page
   // doesn't specify a title.
   static base::string16 GetDisplayTitleForURL(const GURL& url);
@@ -143,6 +148,7 @@ class NavigationItemImpl : public web::NavigationItem {
   bool is_created_from_hash_change_;
   bool should_skip_repost_form_confirmation_;
   NSData* post_data_;
+  ErrorRetryStateMachine error_retry_state_machine_;
 
   // The navigation initiation type of the item.  This decides whether the URL
   // should be displayed before the navigation commits.  It is cleared in

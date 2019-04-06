@@ -177,6 +177,18 @@ void UnitTests::RunTestInProcess(SandboxTestRunner* test_runner,
     struct rlimit no_core = {0};
     setrlimit(RLIMIT_CORE, &no_core);
 
+#if defined(OS_ANDROID)
+    // On Android Oreo and higher, the system applies a seccomp filter to all
+    // processes. It has its own SIGSYS handler that is un-hooked here in the
+    // test child process, so that the Chromium handler can be used. This
+    // is performed by SeccompStarterAndroid in normal builds.
+    signal(SIGSYS, SIG_DFL);
+    // In addition, libsigchain will install a SEGV handler that is normally
+    // used for JVM fault handling. Reset it so that the test SEGV failures
+    // are interpreted correctly.
+    signal(SIGSEGV, SIG_DFL);
+#endif
+
     test_runner->Run();
     if (test_runner->ShouldCheckForLeaks()) {
 #if defined(LEAK_SANITIZER)
@@ -240,8 +252,11 @@ void UnitTests::DeathSuccess(int status, const std::string& msg, const void*) {
   ASSERT_TRUE(subprocess_terminated_normally) << details;
   int subprocess_exit_status = WEXITSTATUS(status);
   ASSERT_EQ(kExpectedValue, subprocess_exit_status) << details;
+#if !defined(LEAK_SANITIZER)
+  // LSan may print warnings to stdout, breaking this expectation.
   bool subprocess_exited_but_printed_messages = !msg.empty();
   EXPECT_FALSE(subprocess_exited_but_printed_messages) << details;
+#endif
 }
 
 void UnitTests::DeathSuccessAllowNoise(int status,

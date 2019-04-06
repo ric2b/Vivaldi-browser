@@ -27,16 +27,12 @@ source_set("lib") {
 
   deps = [
     "//base",
-    "//device/geolocation",
-    "//device/geolocation/public/interfaces",
-    "//device/sensors",
-    "//device/sensors/public/interfaces",
     "//services/device/fingerprint",
     "//services/device/generic_sensor",
     "//services/device/geolocation",
     "//services/device/power_monitor",
     "//services/device/public/cpp:device_features",
-    "//services/device/public/interfaces",
+    "//services/device/public/mojom",
     "//services/device/screen_orientation",
     "//services/device/time_zone_monitor",
     "//services/device/wake_lock",
@@ -52,6 +48,10 @@ source_set("lib") {
       "//services/device/hid",
       "//services/device/vibration",
     ]
+  }
+
+  if (is_chromeos && use_dbus) {
+    deps += [ "//services/device/media_transfer_protocol" ]
   }
 
   if (is_serial_enabled_platform) {
@@ -81,9 +81,18 @@ source_set("tests") {
     "generic_sensor/platform_sensor_and_provider_unittest_win.cc",
     "generic_sensor/platform_sensor_fusion_unittest.cc",
     "generic_sensor/platform_sensor_provider_unittest_android.cc",
+    "generic_sensor/relative_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_gyroscope_unittest.cc",
     "generic_sensor/relative_orientation_euler_angles_fusion_algorithm_using_accelerometer_unittest.cc",
+    "geolocation/geolocation_provider_impl_unittest.cc",
+    "geolocation/geolocation_service_unittest.cc",
+    "geolocation/location_arbitrator_unittest.cc",
+    "geolocation/network_location_provider_unittest.cc",
     "geolocation/public_ip_address_geolocator_unittest.cc",
     "geolocation/public_ip_address_location_notifier_unittest.cc",
+    "geolocation/wifi_data_provider_chromeos_unittest.cc",
+    "geolocation/wifi_data_provider_common_unittest.cc",
+    "geolocation/wifi_data_provider_win_unittest.cc",
+    "geolocation/wifi_polling_policy_unittest.cc",
     "power_monitor/power_monitor_message_broadcaster_unittest.cc",
     "public/cpp/power_monitor/power_monitor_broadcast_source_unittest.cc",
     "vibration/vibration_manager_impl_unittest.cc",
@@ -94,19 +103,21 @@ source_set("tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//base/third_party/dynamic_annotations",
     "//device/base/synchronization",
-    "//device/geolocation/public/cpp",
-    "//device/geolocation/public/interfaces",
-    "//mojo/edk/embedder:headers",
+    "//mojo/core/embedder",
     "//mojo/public/cpp/bindings",
     "//net",
     "//net:test_support",
     "//services/device/generic_sensor",
     "//services/device/geolocation",
+    "//services/device/geolocation:test_support",
     "//services/device/power_monitor",
     "//services/device/public/cpp:device_features",
     "//services/device/public/cpp/power_monitor",
+    "//services/device/public/mojom",
     "//services/device/wake_lock",
+    "//services/network:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -117,7 +128,10 @@ source_set("tests") {
   }
 
   if (is_linux && !is_chromeos && use_dbus) {
-    sources += [ "battery/battery_status_manager_linux_unittest.cc" ]
+    sources += [
+      "battery/battery_status_manager_linux_unittest.cc",
+      "geolocation/wifi_data_provider_linux_unittest.cc",
+    ]
     deps += [ "//dbus:test_support" ]
   }
 
@@ -132,9 +146,14 @@ source_set("tests") {
   }
 
   if (is_android) {
-    sources -= [ "battery/battery_status_service_unittest.cc" ]
+    sources -= [
+      "battery/battery_status_service_unittest.cc",
+      "geolocation/network_location_provider_unittest.cc",
+      "geolocation/wifi_data_provider_common_unittest.cc",
+    ]
     deps += [
       ":device_service_jni_headers",
+      "//services/device/public/java:geolocation_java_test_support",
       "//services/device/vibration/android:vibration_jni_headers",
     ]
   } else {
@@ -214,11 +233,12 @@ source_set("test_support") {
     ":lib",
     "//base",
     "//base/test:test_support",
-    "//device/geolocation/public/cpp",
     "//mojo/public/cpp/bindings",
     "//net",
     "//net:test_support",
-    "//services/device/public/interfaces:constants",
+    "//services/device/public/cpp/geolocation",
+    "//services/device/public/mojom:constants",
+    "//services/network:test_support",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
   ]
@@ -244,23 +264,26 @@ if (is_android) {
       "//content/public/android:*",
       "//services:*",
     ]
-    java_files = [ "android/java/src/org/chromium/services/device/InterfaceRegistrar.java" ]
+    java_files = [
+      "android/java/src/org/chromium/services/device/InterfaceRegistrar.java",
+    ]
     deps = [
       "//base:base_java",
-      "//mojo/android:system_java",
       "//mojo/public/java:bindings_java",
       "//mojo/public/java:system_java",
+      "//mojo/public/java/system:system_impl_java",
       "//services/device/battery/android:battery_monitor_java",
       "//services/device/generic_sensor:java",
+      "//services/device/geolocation:geolocation_java",
       "//services/device/nfc/android:java",
-      "//services/device/public/interfaces:interfaces_java",
       "//services/device/public/java:nfc_java",
+      "//services/device/public/mojom:mojom_java",
       "//services/device/screen_orientation:java",
       "//services/device/time_zone_monitor:java",
       "//services/device/vibration/android:vibration_manager_java",
       "//services/device/wake_lock/power_save_blocker:java",
-      "//services/service_manager/public/interfaces:interfaces_java",
       "//services/service_manager/public/java:service_manager_java",
+      "//services/service_manager/public/mojom:mojom_java",
     ]
   }
 }

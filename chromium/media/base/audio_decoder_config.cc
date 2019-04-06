@@ -10,18 +10,7 @@
 
 namespace media {
 
-AudioDecoderConfig::AudioDecoderConfig()
-    : codec_(kUnknownAudioCodec),
-      sample_format_(kUnknownSampleFormat),
-      bytes_per_channel_(0),
-      channel_layout_(CHANNEL_LAYOUT_UNSUPPORTED),
-      samples_per_second_(0),
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
-      input_samples_per_second_(0),
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
-      bytes_per_frame_(0),
-      codec_delay_(0),
-      should_discard_decoder_delay_(true) {}
+AudioDecoderConfig::AudioDecoderConfig() {}
 
 AudioDecoderConfig::AudioDecoderConfig(
     AudioCodec codec,
@@ -48,9 +37,6 @@ void AudioDecoderConfig::Initialize(AudioCodec codec,
   codec_ = codec;
   channel_layout_ = channel_layout;
   samples_per_second_ = samples_per_second;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
-  input_samples_per_second_ = 0;
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
   sample_format_ = sample_format;
   bytes_per_channel_ = SampleFormatToBytesPerChannel(sample_format);
   extra_data_ = extra_data;
@@ -75,10 +61,6 @@ bool AudioDecoderConfig::IsValidConfig() const {
          bytes_per_channel_ <= limits::kMaxBytesPerSample &&
          samples_per_second_ > 0 &&
          samples_per_second_ <= limits::kMaxSampleRate &&
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
-         input_samples_per_second_ >= 0 &&
-         input_samples_per_second_ <= limits::kMaxSampleRate &&
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
          sample_format_ != kUnknownSampleFormat &&
          seek_preroll_ >= base::TimeDelta() && codec_delay_ >= 0;
 }
@@ -107,8 +89,9 @@ std::string AudioDecoderConfig::AsHumanReadableString() const {
     << " bytes_per_frame: " << bytes_per_frame()
     << " seek_preroll: " << seek_preroll().InMilliseconds() << "ms"
     << " codec_delay: " << codec_delay() << " has extra data? "
-    << (extra_data().empty() ? "false" : "true") << " encrypted? "
-    << (is_encrypted() ? "true" : "false") << " discard decoder delay? "
+    << (extra_data().empty() ? "false" : "true")
+    << " encryption scheme: " << encryption_scheme()
+    << " discard decoder delay? "
     << (should_discard_decoder_delay() ? "true" : "false");
   return s.str();
 }

@@ -72,11 +72,11 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient,
   void SetVisible(bool visible);
 
   using LayerTreeFrameSinkCallback =
-      base::Callback<void(std::unique_ptr<cc::LayerTreeFrameSink>)>;
+      base::OnceCallback<void(std::unique_ptr<cc::LayerTreeFrameSink>)>;
   void RequestLayerTreeFrameSink(
       scoped_refptr<viz::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const LayerTreeFrameSinkCallback& callback);
+      LayerTreeFrameSinkCallback callback);
 
   // Creates a new MusEmbeddedFrame. |token| is an UnguessableToken that was
   // registered for an embedding with mus (specifically ui::mojom::WindowTree).
@@ -93,7 +93,7 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient,
   void RequestLayerTreeFrameSinkInternal(
       scoped_refptr<viz::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const LayerTreeFrameSinkCallback& callback);
+      LayerTreeFrameSinkCallback callback);
 
   // Called from ~MusEmbeddedFrame to cleanup up internall mapping.
   void OnEmbeddedFrameDestroyed(MusEmbeddedFrame* frame);
@@ -117,6 +117,11 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient,
       ui::Id focused_window_id,
       bool drawn,
       const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
+  void OnEmbedFromToken(
+      const base::UnguessableToken& token,
+      ui::mojom::WindowDataPtr root,
+      int64_t display_id,
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
   void OnEmbeddedAppDisconnected(ui::Id window_id) override;
   void OnUnembed(ui::Id window_id) override;
   void OnCaptureChanged(ui::Id new_capture_window_id,
@@ -138,13 +143,13 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient,
                                 const gfx::Transform& old_transform,
                                 const gfx::Transform& new_transform) override;
   void OnClientAreaChanged(
-      uint32_t window_id,
+      ui::Id window_id,
       const gfx::Insets& new_client_area,
       const std::vector<gfx::Rect>& new_additional_client_areas) override;
-  void OnTransientWindowAdded(uint32_t window_id,
-                              uint32_t transient_window_id) override;
-  void OnTransientWindowRemoved(uint32_t window_id,
-                                uint32_t transient_window_id) override;
+  void OnTransientWindowAdded(ui::Id window_id,
+                              ui::Id transient_window_id) override;
+  void OnTransientWindowRemoved(ui::Id window_id,
+                                ui::Id transient_window_id) override;
   void OnWindowHierarchyChanged(
       ui::Id window_id,
       ui::Id old_parent_id,
@@ -172,40 +177,41 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient,
       std::unique_ptr<ui::Event> event,
       bool matches_pointer_watcher) override;
   void OnPointerEventObserved(std::unique_ptr<ui::Event> event,
-                              uint32_t window_id,
+                              ui::Id window_id,
                               int64_t display_id) override;
   void OnWindowFocused(ui::Id focused_window_id) override;
   void OnWindowCursorChanged(ui::Id window_id, ui::CursorData cursor) override;
   void OnWindowSurfaceChanged(ui::Id window_id,
                               const viz::SurfaceInfo& surface_info) override;
-  void OnDragDropStart(
-      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
-      override;
+  void OnDragDropStart(const base::flat_map<std::string, std::vector<uint8_t>>&
+                           mime_data) override;
   void OnDragEnter(ui::Id window_id,
                    uint32_t event_flags,
                    const gfx::Point& position,
                    uint32_t effect_bitmask,
-                   const OnDragEnterCallback& callback) override;
+                   OnDragEnterCallback callback) override;
   void OnDragOver(ui::Id window_id,
                   uint32_t event_flags,
                   const gfx::Point& position,
                   uint32_t effect_bitmask,
-                  const OnDragOverCallback& callback) override;
+                  OnDragOverCallback callback) override;
   void OnDragLeave(ui::Id window_id) override;
   void OnCompleteDrop(ui::Id window_id,
                       uint32_t event_flags,
                       const gfx::Point& position,
                       uint32_t effect_bitmask,
-                      const OnCompleteDropCallback& callback) override;
-  void OnPerformDragDropCompleted(uint32_t window,
+                      OnCompleteDropCallback callback) override;
+  void OnPerformDragDropCompleted(uint32_t change_id,
                                   bool success,
                                   uint32_t action_taken) override;
   void OnDragDropDone() override;
   void OnChangeCompleted(uint32_t change_id, bool success) override;
-  void RequestClose(uint32_t window_id) override;
+  void RequestClose(ui::Id window_id) override;
   void GetWindowManager(
       mojo::AssociatedInterfaceRequest<ui::mojom::WindowManager> internal)
       override;
+  void GetScreenProviderObserver(
+      ui::mojom::ScreenProviderObserverAssociatedRequest observer) override;
 
   const int routing_id_;
   ui::Id root_window_id_ = 0u;

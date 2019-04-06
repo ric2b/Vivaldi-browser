@@ -5,6 +5,8 @@
 #ifndef MEDIA_BASE_GMOCK_CALLBACK_SUPPORT_H_
 #define MEDIA_BASE_GMOCK_CALLBACK_SUPPORT_H_
 
+#include <tuple>
+
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace media {
@@ -25,7 +27,7 @@ MATCHER(IsNotNullCallback, "a non-null callback") {
 ACTION_TEMPLATE(RunClosure,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_0_VALUE_PARAMS()) {
-  ::std::tr1::get<k>(args).Run();
+  std::get<k>(args).Run();
 }
 
 ACTION_P(RunClosure, closure) {
@@ -61,49 +63,105 @@ ACTION_P(RunClosure, closure) {
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_0_VALUE_PARAMS()) {
-  return ::std::tr1::get<k>(args).Run();
+  return std::get<k>(args).Run();
 }
 
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_1_VALUE_PARAMS(p0)) {
-  return ::std::tr1::get<k>(args).Run(p0);
+  return std::get<k>(args).Run(p0);
 }
 
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_2_VALUE_PARAMS(p0, p1)) {
-  return ::std::tr1::get<k>(args).Run(p0, p1);
+  return std::get<k>(args).Run(p0, p1);
 }
 
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_3_VALUE_PARAMS(p0, p1, p2)) {
-  return ::std::tr1::get<k>(args).Run(p0, p1, p2);
+  return std::get<k>(args).Run(p0, p1, p2);
 }
 
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_4_VALUE_PARAMS(p0, p1, p2, p3)) {
-  return ::std::tr1::get<k>(args).Run(p0, p1, p2, p3);
+  return std::get<k>(args).Run(p0, p1, p2, p3);
 }
 
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_5_VALUE_PARAMS(p0, p1, p2, p3, p4)) {
-  return ::std::tr1::get<k>(args).Run(p0, p1, p2, p3, p4);
+  return std::get<k>(args).Run(p0, p1, p2, p3, p4);
 }
 
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_6_VALUE_PARAMS(p0, p1, p2, p3, p4, p5)) {
-  return ::std::tr1::get<k>(args).Run(p0, p1, p2, p3, p4, p5);
+  return std::get<k>(args).Run(p0, p1, p2, p3, p4, p5);
 }
 
 ACTION_TEMPLATE(RunCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_7_VALUE_PARAMS(p0, p1, p2, p3, p4, p5, p6)) {
-  return ::std::tr1::get<k>(args).Run(p0, p1, p2, p3, p4, p5, p6);
+  return std::get<k>(args).Run(p0, p1, p2, p3, p4, p5, p6);
+}
+
+// Various overloads for RunOnceClosure and RunOnceCallback<N>(). These are
+// mostly the same as RunClosure and RunCallback<N>() above except that they
+// support the move-only base::OnceCallback types.
+
+ACTION_TEMPLATE(RunOnceClosure,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_0_VALUE_PARAMS()) {
+  std::move(std::get<k>(args)).Run();
+}
+
+ACTION_P(RunOnceClosure, closure) {
+  std::move(closure).Run();
+}
+
+ACTION_TEMPLATE(RunOnceCallback,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_1_VALUE_PARAMS(p0)) {
+  return std::move(std::get<k>(args)).Run(p0);
+}
+
+ACTION_TEMPLATE(RunOnceCallback,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_2_VALUE_PARAMS(p0, p1)) {
+  return std::move(std::get<k>(args)).Run(p0, p1);
+}
+
+ACTION_TEMPLATE(RunOnceCallback,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_3_VALUE_PARAMS(p0, p1, p2)) {
+  return std::move(std::get<k>(args)).Run(p0, p1, p2);
+}
+
+ACTION_TEMPLATE(RunOnceCallback,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_4_VALUE_PARAMS(p0, p1, p2, p3)) {
+  return std::move(std::get<k>(args)).Run(p0, p1, p2, p3);
+}
+
+ACTION_TEMPLATE(RunOnceCallback,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_5_VALUE_PARAMS(p0, p1, p2, p3, p4)) {
+  return std::move(std::get<k>(args)).Run(p0, p1, p2, p3, p4);
+}
+
+ACTION_TEMPLATE(RunOnceCallback,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_6_VALUE_PARAMS(p0, p1, p2, p3, p4, p5)) {
+  return std::move(std::get<k>(args)).Run(p0, p1, p2, p3, p4, p5);
+}
+
+ACTION_TEMPLATE(RunOnceCallback,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_7_VALUE_PARAMS(p0, p1, p2, p3, p4, p5, p6)) {
+  return std::move(std::get<k>(args)).Run(p0, p1, p2, p3, p4, p5, p6);
 }
 
 }  // namespace media

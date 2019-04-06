@@ -48,10 +48,11 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/skia_util.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/features.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 #include "url/gurl.h"
 
 using message_center::NotifierId;
@@ -352,14 +353,15 @@ bool NotificationsApiFunction::CreateNotification(
   if (has_list_items) {
     using api::notifications::NotificationItem;
     for (const NotificationItem& api_item : *options->items) {
-      optional_fields.items.push_back(message_center::NotificationItem(
-          base::UTF8ToUTF16(api_item.title),
-          base::UTF8ToUTF16(api_item.message)));
+      optional_fields.items.push_back({base::UTF8ToUTF16(api_item.title),
+                                       base::UTF8ToUTF16(api_item.message)});
     }
   }
 
-  if (options->is_clickable.get())
-    optional_fields.clickable = *options->is_clickable;
+  optional_fields.settings_button_handler =
+      base::FeatureList::IsEnabled(message_center::kNewStyleNotifications)
+          ? message_center::SettingsButtonHandler::INLINE
+          : message_center::SettingsButtonHandler::NONE;
 
   // TODO(crbug.com/772004): Remove the manual limitation in favor of an IDL
   // annotation once supported.
@@ -510,16 +512,11 @@ bool NotificationsApiFunction::UpdateNotification(
     std::vector<message_center::NotificationItem> items;
     using api::notifications::NotificationItem;
     for (const NotificationItem& api_item : *options->items) {
-      items.push_back(message_center::NotificationItem(
-          base::UTF8ToUTF16(api_item.title),
-          base::UTF8ToUTF16(api_item.message)));
+      items.push_back({base::UTF8ToUTF16(api_item.title),
+                       base::UTF8ToUTF16(api_item.message)});
     }
     notification->set_items(items);
   }
-
-  // Then override if it's already set.
-  if (options->is_clickable.get())
-    notification->set_clickable(*options->is_clickable);
 
   // It's safe to follow the regular path for adding a new notification as it's
   // already been verified that there is a notification that can be updated.

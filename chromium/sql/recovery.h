@@ -66,20 +66,11 @@ class SQL_EXPORT Recovery {
  public:
   ~Recovery();
 
-  // This module is intended to be used in concert with a virtual
-  // table module (see third_party/sqlite/src/src/recover.c).  If the
-  // build defines USE_SYSTEM_SQLITE, this module will not be present.
-  // TODO(shess): I am still debating how to handle this - perhaps it
-  // will just imply Unrecoverable().  This is exposed to allow tests
-  // to adapt to the cases, please do not rely on it in production
-  // code.
-  static bool FullRecoverySupported();
-
   // Begin the recovery process by opening a temporary database handle
   // and attach the existing database to it at "corrupt".  To prevent
   // deadlock, all transactions on |connection| are rolled back.
   //
-  // Returns NULL in case of failure, with no cleanup done on the
+  // Returns nullptr in case of failure, with no cleanup done on the
   // original connection (except for breaking the transactions).  The
   // caller should Raze() or otherwise cleanup as appropriate.
   //
@@ -132,7 +123,7 @@ class SQL_EXPORT Recovery {
   //
   // NOTE(shess): Due to a flaw in the recovery virtual table, at this
   // time this code injects the DEFAULT value of the target table in
-  // locations where the recovery table returns NULL.  This is not
+  // locations where the recovery table returns nullptr.  This is not
   // entirely correct, because it happens both when there is a short
   // row (correct) but also where there is an actual NULL value
   // (incorrect).

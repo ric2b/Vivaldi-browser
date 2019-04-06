@@ -34,8 +34,8 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.AndroidPermissionDelegate;
+import org.chromium.ui.base.PermissionCallback;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.base.WindowAndroid.PermissionCallback;
 import org.chromium.ui.widget.TextViewWithClickableSpans;
 
 /**
@@ -202,8 +202,8 @@ public class BluetoothChooserDialogTest {
             }
         });
 
-        Assert.assertEquals(BluetoothChooserDialog.DIALOG_FINISHED_CANCELLED,
-                mChooserDialog.mFinishedEventType);
+        Assert.assertEquals(
+                BluetoothChooserDialog.DialogFinished.CANCELLED, mChooserDialog.mFinishedEventType);
         Assert.assertEquals("", mChooserDialog.mFinishedDeviceId);
     }
 
@@ -261,7 +261,7 @@ public class BluetoothChooserDialogTest {
         selectItem(mChooserDialog, 2);
 
         Assert.assertEquals(
-                BluetoothChooserDialog.DIALOG_FINISHED_SELECTED, mChooserDialog.mFinishedEventType);
+                BluetoothChooserDialog.DialogFinished.SELECTED, mChooserDialog.mFinishedEventType);
         Assert.assertEquals("id-2", mChooserDialog.mFinishedDeviceId);
     }
 
@@ -284,8 +284,10 @@ public class BluetoothChooserDialogTest {
                 new TestAndroidPermissionDelegate(dialog);
         mWindowAndroid.setAndroidPermissionDelegate(permissionDelegate);
 
-        ThreadUtils.runOnUiThreadBlocking(() -> mChooserDialog.notifyDiscoveryState(
-                BluetoothChooserDialog.DISCOVERY_FAILED_TO_START));
+        ThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> mChooserDialog.notifyDiscoveryState(
+                                BluetoothChooserDialog.DiscoveryMode.DISCOVERY_FAILED_TO_START));
 
         Assert.assertEquals(removeLinkTags(mActivityTestRule.getActivity().getString(
                                     R.string.bluetooth_need_location_permission)),
@@ -342,8 +344,10 @@ public class BluetoothChooserDialogTest {
         mLocationUtils.mLocationGranted = true;
         mLocationUtils.mSystemLocationSettingsEnabled = false;
 
-        ThreadUtils.runOnUiThreadBlocking(() -> mChooserDialog.notifyDiscoveryState(
-                BluetoothChooserDialog.DISCOVERY_FAILED_TO_START));
+        ThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> mChooserDialog.notifyDiscoveryState(
+                                BluetoothChooserDialog.DiscoveryMode.DISCOVERY_FAILED_TO_START));
 
         Assert.assertEquals(removeLinkTags(mActivityTestRule.getActivity().getString(
                                     R.string.bluetooth_need_location_services_on)),
@@ -445,6 +449,12 @@ public class BluetoothChooserDialogTest {
                     && permissions[0].equals(Manifest.permission.ACCESS_COARSE_LOCATION)) {
                 mCallback = callback;
             }
+        }
+
+        @Override
+        public boolean handlePermissionResult(
+                int requestCode, String[] permissions, int[] grantResults) {
+            return false;
         }
     }
 

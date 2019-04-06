@@ -9,6 +9,7 @@
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view_observer.h"
@@ -16,6 +17,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/invalidate_type.h"
@@ -38,7 +40,7 @@ class BrowserViewTest : public InProcessBrowserTest {
   }
 
   views::WebView* contents_web_view() {
-    return browser_view()->GetContentsWebViewForTest();
+    return browser_view()->contents_web_view();
   }
 
   void OpenDevToolsWindow(bool docked) {
@@ -57,6 +59,8 @@ class BrowserViewTest : public InProcessBrowserTest {
   DevToolsWindow* devtools_;
 
  private:
+  test::ScopedMacViewsBrowserMode views_mode_{true};
+
   DISALLOW_COPY_AND_ASSIGN(BrowserViewTest);
 };
 
@@ -191,14 +195,51 @@ class BookmarkBarViewObserverImpl : public BookmarkBarViewObserver {
   int change_count() const { return change_count_; }
   void clear_change_count() { change_count_ = 0; }
 
+  int end_count() const { return end_count_; }
+  void clear_end_count() { end_count_ = 0; }
+
   // BookmarkBarViewObserver:
   void OnBookmarkBarVisibilityChanged() override { change_count_++; }
+  void OnBookmarkBarAnimationEnded() override { end_count_++; }
 
  private:
-  int change_count_;
+  int change_count_ = 0;
+  int end_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkBarViewObserverImpl);
 };
+
+// Verifies we notify the BookmarkBarViewObserver when an animation ends.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, VerifyAnimationEndObserved) {
+  BookmarkBarView::DisableAnimationsForTesting(true);
+  // No bookmark bar.
+  browser()->profile()->GetPrefs()->SetBoolean(
+      bookmarks::prefs::kShowBookmarkBar, false);
+
+  // Add observer and confirm bookmark bar not visible.
+  ASSERT_TRUE(browser_view()->bookmark_bar());
+  BookmarkBarViewObserverImpl observer;
+  BookmarkBarView* bookmark_bar = browser_view()->bookmark_bar();
+  bookmark_bar->AddObserver(&observer);
+  EXPECT_FALSE(bookmark_bar->visible());
+  EXPECT_EQ(0, observer.end_count());
+
+  // Show the bookmark bar.
+  browser()->profile()->GetPrefs()->SetBoolean(
+      bookmarks::prefs::kShowBookmarkBar, true);
+
+  EXPECT_TRUE(bookmark_bar->visible());
+  EXPECT_EQ(1, observer.end_count());
+  observer.clear_end_count();
+
+  // Hide the bookmark bar.
+  browser()->profile()->GetPrefs()->SetBoolean(
+      bookmarks::prefs::kShowBookmarkBar, false);
+
+  EXPECT_FALSE(bookmark_bar->visible());
+  EXPECT_EQ(1, observer.end_count());
+  BookmarkBarView::DisableAnimationsForTesting(false);
+}
 
 // Verifies we don't unnecessarily change the visibility of the BookmarkBarView.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, AvoidUnnecessaryVisibilityChanges) {
@@ -221,12 +262,14 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, AvoidUnnecessaryVisibilityChanges) {
   EXPECT_FALSE(bookmark_bar->visible());
   EXPECT_EQ(1, observer.change_count());
   observer.clear_change_count();
+  EXPECT_EQ(0, observer.end_count());
 
   // Go to ntp tab. Bookmark bar should show.
   browser()->tab_strip_model()->ActivateTabAt(1, true);
   EXPECT_TRUE(bookmark_bar->visible());
   EXPECT_EQ(1, observer.change_count());
   observer.clear_change_count();
+  EXPECT_EQ(0, observer.end_count());
 
   // Repeat with the bookmark bar always visible.
   browser()->profile()->GetPrefs()->SetBoolean(
@@ -234,16 +277,19 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, AvoidUnnecessaryVisibilityChanges) {
   browser()->tab_strip_model()->ActivateTabAt(1, true);
   EXPECT_TRUE(bookmark_bar->visible());
   observer.clear_change_count();
+  EXPECT_EQ(0, observer.end_count());
 
   browser()->tab_strip_model()->ActivateTabAt(0, true);
   EXPECT_TRUE(bookmark_bar->visible());
   EXPECT_EQ(0, observer.change_count());
   observer.clear_change_count();
+  EXPECT_EQ(0, observer.end_count());
 
   browser()->tab_strip_model()->ActivateTabAt(1, true);
   EXPECT_TRUE(bookmark_bar->visible());
   EXPECT_EQ(0, observer.change_count());
   observer.clear_change_count();
+  EXPECT_EQ(0, observer.end_count());
 
   browser_view()->bookmark_bar()->RemoveObserver(&observer);
 }
@@ -279,4 +325,17 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, TitleAndLoadState) {
   navigation_watcher.Wait();
   EXPECT_FALSE(browser()->tab_strip_model()->TabsAreLoading());
   EXPECT_EQ(TabNetworkState::kNone, tab_strip->tab_at(0)->data().network_state);
+}
+
+// Verifies a tab should show its favicon.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, ShowFaviconInTab) {
+  // Opens "chrome://version/" page, which uses default favicon.
+  GURL version_url(chrome::kChromeUIVersionURL);
+  ui_test_utils::NavigateToURL(browser(), version_url);
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  auto* helper = TabUIHelper::FromWebContents(contents);
+  ASSERT_TRUE(helper);
+
+  auto favicon = helper->GetFavicon();
+  ASSERT_FALSE(favicon.IsEmpty());
 }

@@ -54,7 +54,7 @@ class MEDIA_EXPORT IPCAudioDecoder {
                      const PlatformVideoConfig& video_config);
   void ReadInternal();
   void DataReady(DemuxerStream::Status status,
-                 const scoped_refptr<DecoderBuffer>& buffer);
+                 scoped_refptr<DecoderBuffer> buffer);
 
   void RunCreatorOnMainThread(
       DataSource* data_source,

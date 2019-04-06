@@ -14,7 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chromeos/attestation/attestation_constants.h"
+#include "chromeos/dbus/attestation_constants.h"
 #include "url/gurl.h"
 
 class AccountId;
@@ -199,7 +199,7 @@ class PlatformVerificationFlow
   // not invoked.
   void OnCertificateReady(const ChallengeContext& context,
                           const AccountId& account_id,
-                          std::unique_ptr<base::Timer> timer,
+                          std::unique_ptr<base::OneShotTimer> timer,
                           AttestationStatus operation_status,
                           const std::string& certificate_chain);
 

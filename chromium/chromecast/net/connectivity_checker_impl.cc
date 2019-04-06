@@ -12,7 +12,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "chromecast/net/net_switches.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_network_session.h"
@@ -32,10 +32,8 @@ namespace {
 // How often connectivity checks are performed in seconds while not connected.
 const unsigned int kConnectivityPeriodSeconds = 1;
 
-#if BUILDFLAG(IS_CAST_AUDIO_ONLY)
 // How often connectivity checks are performed in seconds while connected.
 const unsigned int kConnectivitySuccessPeriodSeconds = 60;
-#endif
 
 // Number of consecutive connectivity check errors before status is changed
 // to offline.
@@ -70,8 +68,8 @@ ConnectivityCheckerImpl::ConnectivityCheckerImpl(
   DCHECK(task_runner_.get());
 
   task_runner->PostTask(
-      FROM_HERE, base::Bind(&ConnectivityCheckerImpl::Initialize, this,
-                            base::RetainedRef(url_request_context_getter)));
+      FROM_HERE, base::BindOnce(&ConnectivityCheckerImpl::Initialize, this,
+                                base::RetainedRef(url_request_context_getter)));
 }
 
 void ConnectivityCheckerImpl::Initialize(
@@ -87,7 +85,7 @@ void ConnectivityCheckerImpl::Initialize(
 
   net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&ConnectivityCheckerImpl::Check, this));
+                         base::BindOnce(&ConnectivityCheckerImpl::Check, this));
 }
 
 ConnectivityCheckerImpl::~ConnectivityCheckerImpl() {
@@ -114,8 +112,8 @@ void ConnectivityCheckerImpl::SetConnected(bool connected) {
 }
 
 void ConnectivityCheckerImpl::Check() {
-  task_runner_->PostTask(FROM_HERE,
-      base::Bind(&ConnectivityCheckerImpl::CheckInternal, this));
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&ConnectivityCheckerImpl::CheckInternal, this));
 }
 
 void ConnectivityCheckerImpl::CheckInternal() {
@@ -157,7 +155,7 @@ void ConnectivityCheckerImpl::OnNetworkChanged(
   network_changed_pending_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&ConnectivityCheckerImpl::OnNetworkChangedInternal, this),
+      base::BindOnce(&ConnectivityCheckerImpl::OnNetworkChangedInternal, this),
       base::TimeDelta::FromSeconds(kNetworkChangedDelayInSeconds));
 }
 
@@ -190,14 +188,11 @@ void ConnectivityCheckerImpl::OnResponseStarted(net::URLRequest* request,
     VLOG(1) << "Connectivity check succeeded";
     check_errors_ = 0;
     SetConnected(true);
-#if BUILDFLAG(IS_CAST_AUDIO_ONLY)
-    // Audio products do not have an idle screen that makes periodic network
-    // requests. Schedule another check for audio devices to make sure
-    // connectivity hasn't dropped.
+    // Some products don't have an idle screen that makes periodic network
+    // requests. Schedule another check to ensure connectivity hasn't dropped.
     task_runner_->PostDelayedTask(
         FROM_HERE, base::Bind(&ConnectivityCheckerImpl::CheckInternal, this),
         base::TimeDelta::FromSeconds(kConnectivitySuccessPeriodSeconds));
-#endif
     timeout_.Cancel();
     return;
   }
@@ -247,7 +242,7 @@ void ConnectivityCheckerImpl::OnUrlRequestError(ErrorType type) {
   url_request_.reset(nullptr);
   // Check again.
   task_runner_->PostDelayedTask(
-      FROM_HERE, base::Bind(&ConnectivityCheckerImpl::Check, this),
+      FROM_HERE, base::BindOnce(&ConnectivityCheckerImpl::Check, this),
       base::TimeDelta::FromSeconds(kConnectivityPeriodSeconds));
 }
 

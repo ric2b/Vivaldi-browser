@@ -5,6 +5,7 @@
 #include "cc/paint/paint_filter.h"
 
 #include "cc/paint/filter_operations.h"
+#include "cc/paint/paint_image_builder.h"
 #include "cc/paint/paint_op_writer.h"
 #include "cc/paint/paint_record.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
@@ -26,14 +27,43 @@
 
 namespace cc {
 namespace {
+const bool kHasNoDiscardableImages = false;
+
 bool AreFiltersEqual(const PaintFilter* one, const PaintFilter* two) {
   if (!one || !two)
     return !one && !two;
   return *one == *two;
 }
+
+bool AreScalarsEqual(SkScalar one, SkScalar two) {
+  return PaintOp::AreEqualEvenIfNaN(one, two);
+}
+
+bool HasDiscardableImages(const sk_sp<PaintFilter>& filter) {
+  return filter ? filter->has_discardable_images() : false;
+}
+
+bool HasDiscardableImages(const sk_sp<PaintFilter>* const filters, int count) {
+  for (int i = 0; i < count; ++i) {
+    if (filters[i] && filters[i]->has_discardable_images())
+      return true;
+  }
+  return false;
+}
+
+sk_sp<PaintFilter> Snapshot(const sk_sp<PaintFilter>& filter,
+                            ImageProvider* image_provider) {
+  if (!filter)
+    return nullptr;
+  return filter->SnapshotWithImages(image_provider);
+}
+
 }  // namespace
 
-PaintFilter::PaintFilter(Type type, const CropRect* crop_rect) : type_(type) {
+PaintFilter::PaintFilter(Type type,
+                         const CropRect* crop_rect,
+                         bool has_discardable_images)
+    : type_(type), has_discardable_images_(has_discardable_images) {
   if (crop_rect)
     crop_rect_.emplace(*crop_rect);
 }
@@ -113,6 +143,13 @@ size_t PaintFilter::BaseSerializedSize() const {
     total_size += sizeof(crop_rect_->rect());
   }
   return total_size;
+}
+
+sk_sp<PaintFilter> PaintFilter::SnapshotWithImages(
+    ImageProvider* image_provider) const {
+  if (!has_discardable_images_)
+    return sk_ref_sp<PaintFilter>(this);
+  return SnapshotWithImagesInternal(image_provider);
 }
 
 bool PaintFilter::operator==(const PaintFilter& other) const {
@@ -206,7 +243,7 @@ ColorFilterPaintFilter::ColorFilterPaintFilter(
     sk_sp<SkColorFilter> color_filter,
     sk_sp<PaintFilter> input,
     const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       color_filter_(std::move(color_filter)),
       input_(std::move(input)) {
   DCHECK(color_filter_);
@@ -224,6 +261,12 @@ size_t ColorFilterPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> ColorFilterPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<ColorFilterPaintFilter>(
+      color_filter_, Snapshot(input_, image_provider), crop_rect());
+}
+
 bool ColorFilterPaintFilter::operator==(
     const ColorFilterPaintFilter& other) const {
   return PaintOp::AreSkFlattenablesEqual(color_filter_.get(),
@@ -236,7 +279,7 @@ BlurPaintFilter::BlurPaintFilter(SkScalar sigma_x,
                                  TileMode tile_mode,
                                  sk_sp<PaintFilter> input,
                                  const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       sigma_x_(sigma_x),
       sigma_y_(sigma_y),
       tile_mode_(tile_mode),
@@ -255,6 +298,13 @@ size_t BlurPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> BlurPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<BlurPaintFilter>(sigma_x_, sigma_y_, tile_mode_,
+                                     Snapshot(input_, image_provider),
+                                     crop_rect());
+}
+
 bool BlurPaintFilter::operator==(const BlurPaintFilter& other) const {
   return PaintOp::AreEqualEvenIfNaN(sigma_x_, other.sigma_x_) &&
          PaintOp::AreEqualEvenIfNaN(sigma_y_, other.sigma_y_) &&
@@ -270,7 +320,7 @@ DropShadowPaintFilter::DropShadowPaintFilter(SkScalar dx,
                                              ShadowMode shadow_mode,
                                              sk_sp<PaintFilter> input,
                                              const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       dx_(dx),
       dy_(dy),
       sigma_x_(sigma_x),
@@ -293,6 +343,13 @@ size_t DropShadowPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> DropShadowPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<DropShadowPaintFilter>(
+      dx_, dy_, sigma_x_, sigma_y_, color_, shadow_mode_,
+      Snapshot(input_, image_provider), crop_rect());
+}
+
 bool DropShadowPaintFilter::operator==(
     const DropShadowPaintFilter& other) const {
   return PaintOp::AreEqualEvenIfNaN(dx_, other.dx_) &&
@@ -307,7 +364,7 @@ MagnifierPaintFilter::MagnifierPaintFilter(const SkRect& src_rect,
                                            SkScalar inset,
                                            sk_sp<PaintFilter> input,
                                            const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       src_rect_(src_rect),
       inset_(inset),
       input_(std::move(input)) {
@@ -324,6 +381,12 @@ size_t MagnifierPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> MagnifierPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<MagnifierPaintFilter>(
+      src_rect_, inset_, Snapshot(input_, image_provider), crop_rect());
+}
+
 bool MagnifierPaintFilter::operator==(const MagnifierPaintFilter& other) const {
   return PaintOp::AreSkRectsEqual(src_rect_, other.src_rect_) &&
          PaintOp::AreEqualEvenIfNaN(inset_, other.inset_) &&
@@ -332,7 +395,9 @@ bool MagnifierPaintFilter::operator==(const MagnifierPaintFilter& other) const {
 
 ComposePaintFilter::ComposePaintFilter(sk_sp<PaintFilter> outer,
                                        sk_sp<PaintFilter> inner)
-    : PaintFilter(Type::kCompose, nullptr),
+    : PaintFilter(Type::kCompose,
+                  nullptr,
+                  HasDiscardableImages(outer) || HasDiscardableImages(inner)),
       outer_(std::move(outer)),
       inner_(std::move(inner)) {
   cached_sk_filter_ = SkComposeImageFilter::Make(GetSkFilter(outer_.get()),
@@ -348,6 +413,12 @@ size_t ComposePaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> ComposePaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<ComposePaintFilter>(Snapshot(outer_, image_provider),
+                                        Snapshot(inner_, image_provider));
+}
+
 bool ComposePaintFilter::operator==(const ComposePaintFilter& other) const {
   return AreFiltersEqual(outer_.get(), other.outer_.get()) &&
          AreFiltersEqual(inner_.get(), other.inner_.get());
@@ -358,7 +429,7 @@ AlphaThresholdPaintFilter::AlphaThresholdPaintFilter(const SkRegion& region,
                                                      SkScalar outer_max,
                                                      sk_sp<PaintFilter> input,
                                                      const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       region_(region),
       inner_min_(inner_min),
       outer_max_(outer_max),
@@ -378,6 +449,13 @@ size_t AlphaThresholdPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> AlphaThresholdPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<AlphaThresholdPaintFilter>(region_, inner_min_, outer_max_,
+                                               Snapshot(input_, image_provider),
+                                               crop_rect());
+}
+
 bool AlphaThresholdPaintFilter::operator==(
     const AlphaThresholdPaintFilter& other) const {
   return region_ == other.region_ &&
@@ -390,7 +468,10 @@ XfermodePaintFilter::XfermodePaintFilter(SkBlendMode blend_mode,
                                          sk_sp<PaintFilter> background,
                                          sk_sp<PaintFilter> foreground,
                                          const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(
+          kType,
+          crop_rect,
+          HasDiscardableImages(background) || HasDiscardableImages(foreground)),
       blend_mode_(blend_mode),
       background_(std::move(background)),
       foreground_(std::move(foreground)) {
@@ -409,6 +490,13 @@ size_t XfermodePaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> XfermodePaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<XfermodePaintFilter>(
+      blend_mode_, Snapshot(background_, image_provider),
+      Snapshot(foreground_, image_provider), crop_rect());
+}
+
 bool XfermodePaintFilter::operator==(const XfermodePaintFilter& other) const {
   return blend_mode_ == other.blend_mode_ &&
          AreFiltersEqual(background_.get(), other.background_.get()) &&
@@ -423,7 +511,10 @@ ArithmeticPaintFilter::ArithmeticPaintFilter(float k1,
                                              sk_sp<PaintFilter> background,
                                              sk_sp<PaintFilter> foreground,
                                              const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(
+          kType,
+          crop_rect,
+          HasDiscardableImages(background) || HasDiscardableImages(foreground)),
       k1_(k1),
       k2_(k2),
       k3_(k3),
@@ -447,6 +538,14 @@ size_t ArithmeticPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> ArithmeticPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<ArithmeticPaintFilter>(
+      k1_, k2_, k3_, k4_, enforce_pm_color_,
+      Snapshot(background_, image_provider),
+      Snapshot(foreground_, image_provider), crop_rect());
+}
+
 bool ArithmeticPaintFilter::operator==(
     const ArithmeticPaintFilter& other) const {
   return PaintOp::AreEqualEvenIfNaN(k1_, other.k1_) &&
@@ -468,7 +567,7 @@ MatrixConvolutionPaintFilter::MatrixConvolutionPaintFilter(
     bool convolve_alpha,
     sk_sp<PaintFilter> input,
     const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       kernel_size_(kernel_size),
       gain_(gain),
       bias_(bias),
@@ -498,10 +597,18 @@ size_t MatrixConvolutionPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> MatrixConvolutionPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<MatrixConvolutionPaintFilter>(
+      kernel_size_, &kernel_[0], gain_, bias_, kernel_offset_, tile_mode_,
+      convolve_alpha_, Snapshot(input_, image_provider), crop_rect());
+}
+
 bool MatrixConvolutionPaintFilter::operator==(
     const MatrixConvolutionPaintFilter& other) const {
   return kernel_size_ == other.kernel_size_ &&
-         kernel_.container() == other.kernel_.container() &&
+         std::equal(kernel_.container().begin(), kernel_.container().end(),
+                    other.kernel_.container().begin(), AreScalarsEqual) &&
          PaintOp::AreEqualEvenIfNaN(gain_, other.gain_) &&
          PaintOp::AreEqualEvenIfNaN(bias_, other.bias_) &&
          kernel_offset_ == other.kernel_offset_ &&
@@ -517,7 +624,10 @@ DisplacementMapEffectPaintFilter::DisplacementMapEffectPaintFilter(
     sk_sp<PaintFilter> displacement,
     sk_sp<PaintFilter> color,
     const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(
+          kType,
+          crop_rect,
+          HasDiscardableImages(displacement) || HasDiscardableImages(color)),
       channel_x_(channel_x),
       channel_y_(channel_y),
       scale_(scale),
@@ -539,6 +649,13 @@ size_t DisplacementMapEffectPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> DisplacementMapEffectPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<DisplacementMapEffectPaintFilter>(
+      channel_x_, channel_y_, scale_, Snapshot(displacement_, image_provider),
+      Snapshot(color_, image_provider), crop_rect());
+}
+
 bool DisplacementMapEffectPaintFilter::operator==(
     const DisplacementMapEffectPaintFilter& other) const {
   return channel_x_ == other.channel_x_ && channel_y_ == other.channel_y_ &&
@@ -551,7 +668,7 @@ ImagePaintFilter::ImagePaintFilter(PaintImage image,
                                    const SkRect& src_rect,
                                    const SkRect& dst_rect,
                                    SkFilterQuality filter_quality)
-    : PaintFilter(kType, nullptr),
+    : PaintFilter(kType, nullptr, image.IsLazyGenerated()),
       image_(std::move(image)),
       src_rect_(src_rect),
       dst_rect_(dst_rect),
@@ -570,6 +687,26 @@ size_t ImagePaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> ImagePaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  DrawImage draw_image(image_, SkIRect::MakeWH(image_.width(), image_.height()),
+                       filter_quality_, SkMatrix::I());
+  auto scoped_decoded_image = image_provider->GetDecodedDrawImage(draw_image);
+  if (!scoped_decoded_image)
+    return nullptr;
+
+  auto decoded_sk_image = sk_ref_sp<SkImage>(
+      const_cast<SkImage*>(scoped_decoded_image.decoded_image().image().get()));
+  PaintImage decoded_paint_image =
+      PaintImageBuilder::WithDefault()
+          .set_id(image_.stable_id())
+          .set_image(decoded_sk_image, PaintImage::GetNextContentId())
+          .TakePaintImage();
+
+  return sk_make_sp<ImagePaintFilter>(std::move(decoded_paint_image), src_rect_,
+                                      dst_rect_, filter_quality_);
+}
+
 bool ImagePaintFilter::operator==(const ImagePaintFilter& other) const {
   return !!image_ == !!other.image_ &&
          PaintOp::AreSkRectsEqual(src_rect_, other.src_rect_) &&
@@ -579,11 +716,16 @@ bool ImagePaintFilter::operator==(const ImagePaintFilter& other) const {
 
 RecordPaintFilter::RecordPaintFilter(sk_sp<PaintRecord> record,
                                      const SkRect& record_bounds)
-    : PaintFilter(kType, nullptr),
+    : RecordPaintFilter(std::move(record), record_bounds, nullptr) {}
+
+RecordPaintFilter::RecordPaintFilter(sk_sp<PaintRecord> record,
+                                     const SkRect& record_bounds,
+                                     ImageProvider* image_provider)
+    : PaintFilter(kType, nullptr, record->HasDiscardableImages()),
       record_(std::move(record)),
       record_bounds_(record_bounds) {
-  cached_sk_filter_ =
-      SkPictureImageFilter::Make(ToSkPicture(record_, record_bounds_));
+  cached_sk_filter_ = SkPictureImageFilter::Make(
+      ToSkPicture(record_, record_bounds_, image_provider));
 }
 
 RecordPaintFilter::~RecordPaintFilter() = default;
@@ -595,21 +737,35 @@ size_t RecordPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> RecordPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_sp<RecordPaintFilter>(
+      new RecordPaintFilter(record_, record_bounds_, image_provider));
+}
+
 bool RecordPaintFilter::operator==(const RecordPaintFilter& other) const {
   return !!record_ == !!other.record_ &&
          PaintOp::AreSkRectsEqual(record_bounds_, other.record_bounds_);
 }
 
-MergePaintFilter::MergePaintFilter(sk_sp<PaintFilter>* const filters,
+MergePaintFilter::MergePaintFilter(const sk_sp<PaintFilter>* const filters,
                                    int count,
                                    const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect) {
+    : MergePaintFilter(filters, count, crop_rect, nullptr) {}
+
+MergePaintFilter::MergePaintFilter(const sk_sp<PaintFilter>* const filters,
+                                   int count,
+                                   const CropRect* crop_rect,
+                                   ImageProvider* image_provider)
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(filters, count)) {
   std::vector<sk_sp<SkImageFilter>> sk_filters;
   sk_filters.reserve(count);
 
   for (int i = 0; i < count; ++i) {
-    inputs_->push_back(filters[i]);
-    sk_filters.push_back(GetSkFilter(filters[i].get()));
+    auto filter =
+        image_provider ? Snapshot(filters[i], image_provider) : filters[i];
+    inputs_->push_back(std::move(filter));
+    sk_filters.push_back(GetSkFilter(inputs_->back().get()));
   }
 
   cached_sk_filter_ = SkMergeImageFilter::Make(
@@ -627,6 +783,12 @@ size_t MergePaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> MergePaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_sp<MergePaintFilter>(new MergePaintFilter(
+      &inputs_[0], inputs_->size(), crop_rect(), image_provider));
+}
+
 bool MergePaintFilter::operator==(const MergePaintFilter& other) const {
   if (inputs_->size() != other.inputs_->size())
     return false;
@@ -642,7 +804,7 @@ MorphologyPaintFilter::MorphologyPaintFilter(MorphType morph_type,
                                              int radius_y,
                                              sk_sp<PaintFilter> input,
                                              const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       morph_type_(morph_type),
       radius_x_(radius_x),
       radius_y_(radius_y),
@@ -669,6 +831,13 @@ size_t MorphologyPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> MorphologyPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<MorphologyPaintFilter>(morph_type_, radius_x_, radius_y_,
+                                           Snapshot(input_, image_provider),
+                                           crop_rect());
+}
+
 bool MorphologyPaintFilter::operator==(
     const MorphologyPaintFilter& other) const {
   return morph_type_ == other.morph_type_ && radius_x_ == other.radius_x_ &&
@@ -680,7 +849,7 @@ OffsetPaintFilter::OffsetPaintFilter(SkScalar dx,
                                      SkScalar dy,
                                      sk_sp<PaintFilter> input,
                                      const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       dx_(dx),
       dy_(dy),
       input_(std::move(input)) {
@@ -697,6 +866,12 @@ size_t OffsetPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> OffsetPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<OffsetPaintFilter>(
+      dx_, dy_, Snapshot(input_, image_provider), crop_rect());
+}
+
 bool OffsetPaintFilter::operator==(const OffsetPaintFilter& other) const {
   return PaintOp::AreEqualEvenIfNaN(dx_, other.dx_) &&
          PaintOp::AreEqualEvenIfNaN(dy_, other.dy_) &&
@@ -706,7 +881,7 @@ bool OffsetPaintFilter::operator==(const OffsetPaintFilter& other) const {
 TilePaintFilter::TilePaintFilter(const SkRect& src,
                                  const SkRect& dst,
                                  sk_sp<PaintFilter> input)
-    : PaintFilter(kType, nullptr),
+    : PaintFilter(kType, nullptr, HasDiscardableImages(input)),
       src_(src),
       dst_(dst),
       input_(std::move(input)) {
@@ -723,6 +898,12 @@ size_t TilePaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> TilePaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<TilePaintFilter>(src_, dst_,
+                                     Snapshot(input_, image_provider));
+}
+
 bool TilePaintFilter::operator==(const TilePaintFilter& other) const {
   return PaintOp::AreSkRectsEqual(src_, other.src_) &&
          PaintOp::AreSkRectsEqual(dst_, other.dst_) &&
@@ -736,7 +917,7 @@ TurbulencePaintFilter::TurbulencePaintFilter(TurbulenceType turbulence_type,
                                              SkScalar seed,
                                              const SkISize* tile_size,
                                              const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, kHasNoDiscardableImages),
       turbulence_type_(turbulence_type),
       base_frequency_x_(base_frequency_x),
       base_frequency_y_(base_frequency_y),
@@ -770,6 +951,13 @@ size_t TurbulencePaintFilter::SerializedSize() const {
          sizeof(num_octaves_) + sizeof(seed_) + sizeof(tile_size_);
 }
 
+sk_sp<PaintFilter> TurbulencePaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<TurbulencePaintFilter>(turbulence_type_, base_frequency_x_,
+                                           base_frequency_y_, num_octaves_,
+                                           seed_, &tile_size_, crop_rect());
+}
+
 bool TurbulencePaintFilter::operator==(
     const TurbulencePaintFilter& other) const {
   return turbulence_type_ == other.turbulence_type_ &&
@@ -784,8 +972,19 @@ bool TurbulencePaintFilter::operator==(
 
 PaintFlagsPaintFilter::PaintFlagsPaintFilter(PaintFlags flags,
                                              const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect), flags_(std::move(flags)) {
-  cached_sk_filter_ = SkPaintImageFilter::Make(flags_.ToSkPaint(), crop_rect);
+    : PaintFlagsPaintFilter(std::move(flags), nullptr, crop_rect) {}
+
+PaintFlagsPaintFilter::PaintFlagsPaintFilter(PaintFlags flags,
+                                             ImageProvider* image_provider,
+                                             const CropRect* crop_rect)
+    : PaintFilter(kType, crop_rect, flags.HasDiscardableImages()),
+      flags_(std::move(flags)) {
+  if (image_provider) {
+    raster_flags_.emplace(&flags_, image_provider, SkMatrix::I(), 255u);
+  }
+  cached_sk_filter_ = SkPaintImageFilter::Make(
+      raster_flags_ ? raster_flags_->flags()->ToSkPaint() : flags_.ToSkPaint(),
+      crop_rect);
 }
 
 PaintFlagsPaintFilter::~PaintFlagsPaintFilter() = default;
@@ -796,6 +995,12 @@ size_t PaintFlagsPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> PaintFlagsPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_sp<PaintFilter>(
+      new PaintFlagsPaintFilter(flags_, image_provider, crop_rect()));
+}
+
 bool PaintFlagsPaintFilter::operator==(
     const PaintFlagsPaintFilter& other) const {
   return flags_ == other.flags_;
@@ -804,7 +1009,7 @@ bool PaintFlagsPaintFilter::operator==(
 MatrixPaintFilter::MatrixPaintFilter(const SkMatrix& matrix,
                                      SkFilterQuality filter_quality,
                                      sk_sp<PaintFilter> input)
-    : PaintFilter(Type::kMatrix, nullptr),
+    : PaintFilter(Type::kMatrix, nullptr, HasDiscardableImages(input)),
       matrix_(matrix),
       filter_quality_(filter_quality),
       input_(std::move(input)) {
@@ -819,6 +1024,12 @@ size_t MatrixPaintFilter::SerializedSize() const {
       BaseSerializedSize() + sizeof(matrix_) + sizeof(filter_quality_);
   total_size += GetFilterSize(input_.get());
   return total_size.ValueOrDefault(0u);
+}
+
+sk_sp<PaintFilter> MatrixPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<MatrixPaintFilter>(matrix_, filter_quality_,
+                                       Snapshot(input_, image_provider));
 }
 
 bool MatrixPaintFilter::operator==(const MatrixPaintFilter& other) const {
@@ -836,7 +1047,7 @@ LightingDistantPaintFilter::LightingDistantPaintFilter(
     SkScalar shininess,
     sk_sp<PaintFilter> input,
     const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       lighting_type_(lighting_type),
       direction_(direction),
       light_color_(light_color),
@@ -869,6 +1080,13 @@ size_t LightingDistantPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> LightingDistantPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<LightingDistantPaintFilter>(
+      lighting_type_, direction_, light_color_, surface_scale_, kconstant_,
+      shininess_, Snapshot(input_, image_provider), crop_rect());
+}
+
 bool LightingDistantPaintFilter::operator==(
     const LightingDistantPaintFilter& other) const {
   return lighting_type_ == other.lighting_type_ &&
@@ -888,7 +1106,7 @@ LightingPointPaintFilter::LightingPointPaintFilter(LightingType lighting_type,
                                                    SkScalar shininess,
                                                    sk_sp<PaintFilter> input,
                                                    const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       lighting_type_(lighting_type),
       location_(location),
       light_color_(light_color),
@@ -921,6 +1139,13 @@ size_t LightingPointPaintFilter::SerializedSize() const {
   return total_size.ValueOrDefault(0u);
 }
 
+sk_sp<PaintFilter> LightingPointPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<LightingPointPaintFilter>(
+      lighting_type_, location_, light_color_, surface_scale_, kconstant_,
+      shininess_, Snapshot(input_, image_provider), crop_rect());
+}
+
 bool LightingPointPaintFilter::operator==(
     const LightingPointPaintFilter& other) const {
   return lighting_type_ == other.lighting_type_ &&
@@ -943,7 +1168,7 @@ LightingSpotPaintFilter::LightingSpotPaintFilter(LightingType lighting_type,
                                                  SkScalar shininess,
                                                  sk_sp<PaintFilter> input,
                                                  const CropRect* crop_rect)
-    : PaintFilter(kType, crop_rect),
+    : PaintFilter(kType, crop_rect, HasDiscardableImages(input)),
       lighting_type_(lighting_type),
       location_(location),
       target_(target),
@@ -979,6 +1204,14 @@ size_t LightingSpotPaintFilter::SerializedSize() const {
       sizeof(shininess_);
   total_size += GetFilterSize(input_.get());
   return total_size.ValueOrDefault(0u);
+}
+
+sk_sp<PaintFilter> LightingSpotPaintFilter::SnapshotWithImagesInternal(
+    ImageProvider* image_provider) const {
+  return sk_make_sp<LightingSpotPaintFilter>(
+      lighting_type_, location_, target_, specular_exponent_, cutoff_angle_,
+      light_color_, surface_scale_, kconstant_, shininess_,
+      Snapshot(input_, image_provider), crop_rect());
 }
 
 bool LightingSpotPaintFilter::operator==(

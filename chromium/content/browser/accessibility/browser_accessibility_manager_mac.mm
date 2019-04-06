@@ -125,6 +125,7 @@ BrowserAccessibilityManagerMac::BrowserAccessibilityManagerMac(
     BrowserAccessibilityFactory* factory)
     : BrowserAccessibilityManager(delegate, factory) {
   Initialize(initial_tree);
+  tree_->SetEnableExtraMacNodes(true);
 }
 
 BrowserAccessibilityManagerMac::~BrowserAccessibilityManagerMac() {}
@@ -134,7 +135,7 @@ ui::AXTreeUpdate
     BrowserAccessibilityManagerMac::GetEmptyDocument() {
   ui::AXNodeData empty_document;
   empty_document.id = 0;
-  empty_document.role = ui::AX_ROLE_ROOT_WEB_AREA;
+  empty_document.role = ax::mojom::Role::kRootWebArea;
   ui::AXTreeUpdate update;
   update.root_id = empty_document.id;
   update.nodes.push_back(empty_document);
@@ -144,14 +145,10 @@ ui::AXTreeUpdate
 BrowserAccessibility* BrowserAccessibilityManagerMac::GetFocus() {
   BrowserAccessibility* focus = BrowserAccessibilityManager::GetFocus();
 
-  // On Mac, list boxes should always get focus on the whole list, otherwise
-  // information about the number of selected items will never be reported.
   // For editable combo boxes, focus should stay on the combo box so the user
   // will not be taken out of the combo box while typing.
-  if (focus && (focus->GetRole() == ui::AX_ROLE_LIST_BOX ||
-                (focus->GetRole() == ui::AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX))) {
+  if (focus && focus->GetRole() == ax::mojom::Role::kTextFieldWithComboBox)
     return focus;
-  }
 
   // For other roles, follow the active descendant.
   return GetActiveDescendant(focus);
@@ -165,15 +162,15 @@ void BrowserAccessibilityManagerMac::FireFocusEvent(
 }
 
 void BrowserAccessibilityManagerMac::FireBlinkEvent(
-    ui::AXEvent event_type,
+    ax::mojom::Event event_type,
     BrowserAccessibility* node) {
   BrowserAccessibilityManager::FireBlinkEvent(event_type, node);
   NSString* mac_notification = nullptr;
   switch (event_type) {
-    case ui::AX_EVENT_AUTOCORRECTION_OCCURED:
+    case ax::mojom::Event::kAutocorrectionOccured:
       mac_notification = NSAccessibilityAutocorrectionOccurredNotification;
       break;
-    case ui::AX_EVENT_LAYOUT_COMPLETE:
+    case ax::mojom::Event::kLayoutComplete:
       mac_notification = NSAccessibilityLayoutCompleteNotification;
       break;
     default:
@@ -197,9 +194,9 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
   NSString* mac_notification = nullptr;
   switch (event_type) {
     case Event::ACTIVE_DESCENDANT_CHANGED:
-      if (node->GetRole() == ui::AX_ROLE_TREE) {
+      if (node->GetRole() == ax::mojom::Role::kTree) {
         mac_notification = NSAccessibilitySelectedRowsChangedNotification;
-      } else if (node->GetRole() == ui::AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX) {
+      } else if (node->GetRole() == ax::mojom::Role::kTextFieldWithComboBox) {
         // Even though the selected item in the combo box has changed, we don't
         // want to post a focus change because this will take the focus out of
         // the combo box where the user might be typing.
@@ -213,8 +210,8 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
       break;
     case Event::LOAD_COMPLETE:
       // This notification should only be fired on the top document.
-      // Iframes should use |AX_EVENT_LAYOUT_COMPLETE| to signify that they have
-      // finished loading.
+      // Iframes should use |ax::mojom::Event::kLayoutComplete| to signify that
+      // they have finished loading.
       if (IsRootTree()) {
         mac_notification = NSAccessibilityLoadCompleteNotification;
       } else {
@@ -335,16 +332,16 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
       mac_notification = NSAccessibilityRowCountChangedNotification;
       break;
     case Event::EXPANDED:
-      if (node->GetRole() == ui::AX_ROLE_ROW ||
-          node->GetRole() == ui::AX_ROLE_TREE_ITEM) {
+      if (node->GetRole() == ax::mojom::Role::kRow ||
+          node->GetRole() == ax::mojom::Role::kTreeItem) {
         mac_notification = NSAccessibilityRowExpandedNotification;
       } else {
         mac_notification = NSAccessibilityExpandedChanged;
       }
       break;
     case Event::COLLAPSED:
-      if (node->GetRole() == ui::AX_ROLE_ROW ||
-          node->GetRole() == ui::AX_ROLE_TREE_ITEM) {
+      if (node->GetRole() == ax::mojom::Role::kRow ||
+          node->GetRole() == ax::mojom::Role::kTreeItem) {
         mac_notification = NSAccessibilityRowCollapsedNotification;
       } else {
         mac_notification = NSAccessibilityExpandedChanged;
@@ -359,6 +356,7 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
     case Event::LIVE_REGION_NODE_CHANGED:
     case Event::NAME_CHANGED:
     case Event::OTHER_ATTRIBUTE_CHANGED:
+    case Event::RELATED_NODE_CHANGED:
     case Event::ROLE_CHANGED:
     case Event::SCROLL_POSITION_CHANGED:
     case Event::SELECTED_CHANGED:
@@ -384,7 +382,7 @@ void BrowserAccessibilityManagerMac::FireNativeMacNotification(
 }
 
 void BrowserAccessibilityManagerMac::OnAccessibilityEvents(
-    const std::vector<AXEventNotificationDetails>& details) {
+    const AXEventNotificationDetails& details) {
   text_edits_.clear();
   // Call the base method last as it might delete the tree if it receives an
   // invalid message.
@@ -401,7 +399,7 @@ void BrowserAccessibilityManagerMac::OnAtomicUpdateFinished(
   std::set<const BrowserAccessibilityCocoa*> changed_editable_roots;
   for (const auto& change : changes) {
     const BrowserAccessibility* obj = GetFromAXNode(change.node);
-    if (obj && obj->IsNative() && obj->HasState(ui::AX_STATE_EDITABLE)) {
+    if (obj && obj->IsNative() && obj->HasState(ax::mojom::State::kEditable)) {
       const BrowserAccessibilityCocoa* editable_root =
           [ToBrowserAccessibilityCocoa(obj) editableAncestor];
       if (editable_root && [editable_root instanceActive])
@@ -413,7 +411,7 @@ void BrowserAccessibilityManagerMac::OnAtomicUpdateFinished(
     DCHECK(obj);
     const AXTextEdit text_edit = [obj computeTextEdit];
     if (!text_edit.IsEmpty())
-      text_edits_[[obj browserAccessibility]->GetId()] = text_edit;
+      text_edits_[[obj owner]->GetId()] = text_edit;
   }
 }
 
@@ -487,10 +485,7 @@ BrowserAccessibilityManagerMac::GetUserInfoForValueChangedNotification(
 }
 
 NSView* BrowserAccessibilityManagerMac::GetParentView() {
-  gfx::AcceleratedWidget accelerated_widget =
-      delegate() ? delegate()->AccessibilityGetAcceleratedWidget()
-                 : gfx::kNullAcceleratedWidget;
-  return ui::AcceleratedWidgetMac::GetNSView(accelerated_widget);
+  return delegate()->AccessibilityGetNativeViewAccessible();
 }
 
 }  // namespace content

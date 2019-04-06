@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/timer/mock_timer.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/fake_active_host.h"
@@ -40,11 +41,10 @@ class FakePersistentHostScanCache : public FakeHostScanCache,
 };
 
 // MockTimer which invokes a callback in its destructor.
-class ExtendedMockTimer : public base::MockTimer {
+class ExtendedMockTimer : public base::MockOneShotTimer {
  public:
   explicit ExtendedMockTimer(const base::Closure& destructor_callback)
-      : base::MockTimer(true /* retain_user_task */, false /* is_repeating */),
-        destructor_callback_(destructor_callback) {}
+      : destructor_callback_(destructor_callback) {}
 
   ~ExtendedMockTimer() override { destructor_callback_.Run(); }
 
@@ -69,7 +69,7 @@ class TestTimerFactory : public TimerFactory {
   }
 
   // TimerFactory:
-  std::unique_ptr<base::Timer> CreateOneShotTimer() override {
+  std::unique_ptr<base::OneShotTimer> CreateOneShotTimer() override {
     EXPECT_TRUE(!tether_network_guids_for_upcoming_timers_.empty());
 
     // Pop the first GUID off the list of upcoming GUIDs.

@@ -159,8 +159,10 @@ class OffscreenTab : protected content::WebContentsDelegate,
       const std::string& partition_id,
       content::SessionStorageNamespace* session_storage_namespace) final;
   bool EmbedsFullscreenWidget() const final;
-  void EnterFullscreenModeForTab(content::WebContents* contents,
-                                 const GURL& origin) final;
+  void EnterFullscreenModeForTab(
+      content::WebContents* contents,
+      const GURL& origin,
+      const blink::WebFullscreenOptions& options) final;
   void ExitFullscreenModeForTab(content::WebContents* contents) final;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* contents) const final;
@@ -169,8 +171,8 @@ class OffscreenTab : protected content::WebContentsDelegate,
   void RequestMediaAccessPermission(
       content::WebContents* contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) final;
-  bool CheckMediaAccessPermission(content::WebContents* contents,
+      content::MediaResponseCallback callback) final;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) final;
 
@@ -217,7 +219,7 @@ class OffscreenTab : protected content::WebContentsDelegate,
   // TODO(miu): Add a method to WebContentsObserver to report capturer count
   // changes and get rid of this polling-based approach.
   // http://crbug.com/540965
-  base::Timer capture_poll_timer_;
+  base::OneShotTimer capture_poll_timer_;
 
   // This is false until after the Start() method is called, and capture of the
   // |offscreen_tab_web_contents_| is first detected.

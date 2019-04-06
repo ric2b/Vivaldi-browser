@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -45,7 +44,7 @@ class MockLanguageModel : public language::LanguageModel {
 
 class TranslateUIDelegateTest : public ::testing::Test {
  public:
-  TranslateUIDelegateTest() : ::testing::Test() {}
+  TranslateUIDelegateTest() {}
 
   void SetUp() override {
     pref_service_.reset(new sync_preferences::TestingPrefServiceSyncable());
@@ -165,6 +164,30 @@ TEST_F(TranslateUIDelegateTest, ShouldAlwaysTranslateBeCheckedByDefaultNever) {
     EXPECT_FALSE(delegate_->ShouldAlwaysTranslateBeCheckedByDefault());
     prefs->IncrementTranslationAcceptedCount("ar");
   }
+}
+
+TEST_F(TranslateUIDelegateTest, ShouldShowAlwaysTranslateShortcut) {
+  std::unique_ptr<TranslatePrefs> prefs = client_->GetTranslatePrefs();
+  for (int i = 0; i < kAlwaysTranslateShortcutMinimumAccepts; i++) {
+    EXPECT_FALSE(delegate_->ShouldShowAlwaysTranslateShortcut())
+        << " at iteration #" << i;
+    prefs->IncrementTranslationAcceptedCount("ar");
+  }
+  EXPECT_TRUE(delegate_->ShouldShowAlwaysTranslateShortcut());
+  driver_.set_incognito();
+  EXPECT_FALSE(delegate_->ShouldShowAlwaysTranslateShortcut());
+}
+
+TEST_F(TranslateUIDelegateTest, ShouldShowNeverTranslateShortcut) {
+  std::unique_ptr<TranslatePrefs> prefs = client_->GetTranslatePrefs();
+  for (int i = 0; i < kNeverTranslateShortcutMinimumDenials; i++) {
+    EXPECT_FALSE(delegate_->ShouldShowNeverTranslateShortcut())
+        << " at iteration #" << i;
+    prefs->IncrementTranslationDeniedCount("ar");
+  }
+  EXPECT_TRUE(delegate_->ShouldShowNeverTranslateShortcut());
+  driver_.set_incognito();
+  EXPECT_FALSE(delegate_->ShouldShowNeverTranslateShortcut());
 }
 
 TEST_F(TranslateUIDelegateTest, LanguageCodes) {

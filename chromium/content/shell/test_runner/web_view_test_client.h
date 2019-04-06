@@ -6,7 +6,7 @@
 #define CONTENT_SHELL_TEST_RUNNER_WEB_VIEW_TEST_CLIENT_H_
 
 #include "base/macros.h"
-#include "third_party/WebKit/public/web/WebViewClient.h"
+#include "third_party/blink/public/web/web_view_client.h"
 
 namespace blink {
 class WebView;
@@ -25,7 +25,8 @@ class WebViewTestProxyBase;
 class WebViewTestClient : public blink::WebViewClient {
  public:
   // Caller has to ensure |web_view_test_proxy_base| lives longer than |this|.
-  WebViewTestClient(WebViewTestProxyBase* web_view_test_proxy_base);
+  WebViewTestClient(WebViewTestProxyBase* web_view_test_proxy_base,
+                    std::unique_ptr<blink::WebWidgetClient> web_widget_client);
 
   ~WebViewTestClient() override;
 
@@ -38,11 +39,11 @@ class WebViewTestClient : public blink::WebViewClient {
                              bool suppress_opener,
                              blink::WebSandboxFlags) override;
   void PrintPage(blink::WebLocalFrame* frame) override;
-  blink::WebSpeechRecognizer* SpeechRecognizer() override;
   blink::WebString AcceptLanguages() override;
   void DidFocus(blink::WebLocalFrame* calling_frame) override;
   bool CanHandleGestureEvent() override;
   bool CanUpdateLayout() override;
+  blink::WebWidgetClient* WidgetClient() override;
 
  private:
   WebTestDelegate* delegate();
@@ -50,6 +51,7 @@ class WebViewTestClient : public blink::WebViewClient {
 
   // Borrowed pointer to WebViewTestProxyBase.
   WebViewTestProxyBase* web_view_test_proxy_base_;
+  std::unique_ptr<blink::WebWidgetClient> web_widget_client_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewTestClient);
 };

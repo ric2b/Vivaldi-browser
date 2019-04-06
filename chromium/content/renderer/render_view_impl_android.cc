@@ -5,57 +5,37 @@
 #include "content/renderer/render_view_impl.h"
 
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "cc/trees/layer_tree_host.h"
 #include "content/common/view_messages.h"
-#include "content/renderer/gpu/render_widget_compositor.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "content/renderer/gpu/layer_tree_view.h"
+#include "third_party/blink/public/web/web_view.h"
 
 namespace content {
 
-// Check content::BrowserControlsState, and
-// blink::WebWidget::BrowserControlsState
+// Check content::BrowserControlsState, and cc::BrowserControlsState
 // are kept in sync.
 static_assert(int(BROWSER_CONTROLS_STATE_SHOWN) ==
-                  int(blink::kWebBrowserControlsShown),
+                  int(cc::BrowserControlsState::kShown),
               "mismatching enums: SHOWN");
 static_assert(int(BROWSER_CONTROLS_STATE_HIDDEN) ==
-                  int(blink::kWebBrowserControlsHidden),
+                  int(cc::BrowserControlsState::kHidden),
               "mismatching enums: HIDDEN");
 static_assert(int(BROWSER_CONTROLS_STATE_BOTH) ==
-                  int(blink::kWebBrowserControlsBoth),
+                  int(cc::BrowserControlsState::kBoth),
               "mismatching enums: BOTH");
 
-blink::WebBrowserControlsState ContentToBlink(BrowserControlsState state) {
-  return static_cast<blink::WebBrowserControlsState>(state);
-}
-
-
-// TODO(mvanouwerkerk): Stop calling this code path and delete it.
-void RenderViewImpl::OnUpdateBrowserControlsState(bool enable_hiding,
-                                                  bool enable_showing,
-                                                  bool animate) {
-  // TODO(tedchoc): Investigate why messages are getting here before the
-  //                compositor has been initialized.
-  LOG_IF(WARNING, !compositor_)
-      << "OnUpdateBrowserControlsState was unhandled.";
-  BrowserControlsState constraints = BROWSER_CONTROLS_STATE_BOTH;
-  if (!enable_showing)
-    constraints = BROWSER_CONTROLS_STATE_HIDDEN;
-  if (!enable_hiding)
-    constraints = BROWSER_CONTROLS_STATE_SHOWN;
-  BrowserControlsState current = BROWSER_CONTROLS_STATE_BOTH;
-
-  UpdateBrowserControlsState(constraints, current, animate);
+cc::BrowserControlsState ContentToCc(BrowserControlsState state) {
+  return static_cast<cc::BrowserControlsState>(state);
 }
 
 void RenderViewImpl::UpdateBrowserControlsState(
     BrowserControlsState constraints,
     BrowserControlsState current,
     bool animate) {
-  if (GetWebWidget())
-    GetWebWidget()->UpdateBrowserControlsState(
-        ContentToBlink(constraints), ContentToBlink(current), animate);
+  if (GetWebWidget()) {
+    GetWebWidget()->UpdateBrowserControlsState(ContentToCc(constraints),
+                                               ContentToCc(current), animate);
+  }
 
   top_controls_constraints_ = constraints;
 }

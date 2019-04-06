@@ -4,14 +4,13 @@
 
 Polymer({
   is: 'cr-drawer',
-  extends: 'dialog',
 
   properties: {
     heading: String,
 
-    /** Enables notifications for |Dialog.open|. */
     open: {
       type: Boolean,
+      // Enables 'open-changed' events.
       notify: true,
     },
 
@@ -23,15 +22,9 @@ Polymer({
     },
   },
 
-  listeners: {
-    'cancel': 'onDialogCancel_',
-    'tap': 'onDialogTap_',
-    'transitionend': 'onDialogTransitionEnd_',
-  },
-
   /** Toggles the drawer open and close. */
   toggle: function() {
-    if (this.open)
+    if (this.$.dialog.open)
       this.closeDrawer();
     else
       this.openDrawer();
@@ -39,15 +32,16 @@ Polymer({
 
   /** Shows drawer and slides it into view. */
   openDrawer: function() {
-    if (!this.open) {
-      this.showModal();
+    if (!this.$.dialog.open) {
+      this.$.dialog.showModal();
+      this.open = true;
       this.classList.add('opening');
     }
   },
 
   /** Slides the drawer away, then closes it after the transition has ended. */
   closeDrawer: function() {
-    if (this.open) {
+    if (this.$.dialog.open) {
       this.classList.remove('opening');
       this.classList.add('closing');
     }
@@ -82,13 +76,30 @@ Polymer({
   },
 
   /**
+   * @param {!Event} event
+   * @private
+   */
+  onDialogClose_: function(event) {
+    // TODO(dpapad): This is necessary to make the code work both for Polymer 1
+    // and Polymer 2. Remove once migration to Polymer 2 is completed.
+    event.stopPropagation();
+
+    // Catch and re-fire the 'close' event such that it bubbles across Shadow
+    // DOM v1.
+    this.fire('close');
+  },
+
+  /**
    * Closes the dialog when the closing animation is over.
    * @private
    */
   onDialogTransitionEnd_: function() {
     if (this.classList.contains('closing')) {
       this.classList.remove('closing');
-      this.close();
+      this.$.dialog.close();
+      this.open = false;
+    } else if (this.classList.contains('opening')) {
+      this.fire('cr-drawer-opened');
     }
   },
 });

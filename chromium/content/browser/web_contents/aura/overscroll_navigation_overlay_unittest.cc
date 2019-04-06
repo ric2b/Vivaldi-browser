@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/test/histogram_tester.h"
-#include "base/test/user_action_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/web_contents/aura/types.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -71,16 +71,25 @@ class ImmediateLoadObserver : WebContentsObserver {
 // A subclass of TestWebContents that offers a fake content window.
 class OverscrollTestWebContents : public TestWebContents {
  public:
+  explicit OverscrollTestWebContents(
+      BrowserContext* browser_context,
+      std::unique_ptr<aura::Window> fake_native_view,
+      std::unique_ptr<aura::Window> fake_contents_window)
+      : TestWebContents(browser_context),
+        fake_native_view_(std::move(fake_native_view)),
+        fake_contents_window_(std::move(fake_contents_window)),
+        is_being_destroyed_(false) {}
   ~OverscrollTestWebContents() override {}
 
-  static OverscrollTestWebContents* Create(
+  static std::unique_ptr<OverscrollTestWebContents> Create(
       BrowserContext* browser_context,
       scoped_refptr<SiteInstance> instance,
       std::unique_ptr<aura::Window> fake_native_view,
       std::unique_ptr<aura::Window> fake_contents_window) {
-    OverscrollTestWebContents* web_contents = new OverscrollTestWebContents(
-        browser_context, std::move(fake_native_view),
-        std::move(fake_contents_window));
+    std::unique_ptr<OverscrollTestWebContents> web_contents =
+        std::make_unique<OverscrollTestWebContents>(
+            browser_context, std::move(fake_native_view),
+            std::move(fake_contents_window));
     web_contents->Init(
         WebContents::CreateParams(browser_context, std::move(instance)));
     return web_contents;
@@ -99,16 +108,6 @@ class OverscrollTestWebContents : public TestWebContents {
   }
 
   bool IsBeingDestroyed() const override { return is_being_destroyed_; }
-
- protected:
-  explicit OverscrollTestWebContents(
-      BrowserContext* browser_context,
-      std::unique_ptr<aura::Window> fake_native_view,
-      std::unique_ptr<aura::Window> fake_contents_window)
-      : TestWebContents(browser_context),
-        fake_native_view_(std::move(fake_native_view)),
-        fake_contents_window_(std::move(fake_contents_window)),
-        is_being_destroyed_(false) {}
 
  private:
   std::unique_ptr<aura::Window> fake_native_view_;
@@ -179,10 +178,7 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
       histogram_tester()->ExpectTotalCount(kUmaStarted, 0);
     }
     GetOverlay()->owa_->SetOverscrollSourceForTesting(OverscrollSource::NONE);
-    if (IsBrowserSideNavigationEnabled())
-      main_test_rfh()->PrepareForCommit();
-    else
-      contents()->GetPendingMainFrame()->PrepareForCommit();
+    main_test_rfh()->PrepareForCommit();
     if (window_created)
       EXPECT_TRUE(contents()->CrossProcessNavigationPending());
     else
@@ -250,14 +246,15 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
 
     // Receive a paint update. This is necessary to make sure the size is set
     // correctly in RenderWidgetHostImpl.
-    ViewHostMsg_ResizeOrRepaint_ACK_Params params;
-    memset(&params, 0, sizeof(params));
-    params.view_size = gfx::Size(10, 10);
-    ViewHostMsg_ResizeOrRepaint_ACK rect(test_rvh()->GetRoutingID(), params);
-    RenderViewHostTester::TestOnMessageReceived(test_rvh(), rect);
+    viz::LocalSurfaceId local_surface_id(10, 10,
+                                         base::UnguessableToken::Create());
+    cc::RenderFrameMetadata metadata;
+    metadata.viewport_size_in_pixels = gfx::Size(10, 10);
+    metadata.local_surface_id = local_surface_id;
+    test_rvh()->GetWidget()->DidUpdateVisualProperties(metadata);
 
     // Reset pending flags for size/paint.
-    test_rvh()->GetWidget()->ResetSizeAndRepaintPendingFlags();
+    test_rvh()->GetWidget()->ResetSentVisualProperties();
 
     // Create the overlay, and set the contents of the overlay window.
     overlay_.reset(new OverscrollNavigationOverlay(contents(), root_window()));
@@ -448,7 +445,8 @@ TEST_F(OverscrollNavigationOverlayTest, CloseDuringAnimation) {
   ui::ScopedAnimationDurationScaleMode normal_duration_(
       ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
   GetOverlay()->owa_->OnOverscrollModeChange(OVERSCROLL_NONE, OVERSCROLL_EAST,
-                                             OverscrollSource::TOUCHSCREEN);
+                                             OverscrollSource::TOUCHSCREEN,
+                                             cc::OverscrollBehavior());
   GetOverlay()->owa_->OnOverscrollComplete(OVERSCROLL_EAST);
   EXPECT_EQ(GetOverlay()->direction_, NavigationDirection::BACK);
   OverscrollTestWebContents* test_web_contents =
@@ -467,7 +465,8 @@ TEST_F(OverscrollNavigationOverlayTest, ImmediateLoadOnNavigate) {
   // navigation starts.
   ImmediateLoadObserver immediate_nav(contents());
   GetOverlay()->owa_->OnOverscrollModeChange(OVERSCROLL_NONE, OVERSCROLL_EAST,
-                                             OverscrollSource::TOUCHPAD);
+                                             OverscrollSource::TOUCHPAD,
+                                             cc::OverscrollBehavior());
   // This will start and immediately complete the navigation.
   GetOverlay()->owa_->OnOverscrollComplete(OVERSCROLL_EAST);
   EXPECT_FALSE(GetOverlay()->window_.get());
@@ -495,8 +494,8 @@ TEST_F(OverscrollNavigationOverlayTest, OverlayWindowSwap) {
 
   int overscroll_complete_distance =
       root_window()->bounds().size().width() *
-          content::GetOverscrollConfig(
-              content::OverscrollConfig::THRESHOLD_COMPLETE_TOUCHSCREEN) +
+          OverscrollConfig::GetThreshold(
+              OverscrollConfig::Threshold::kCompleteTouchscreen) +
       ui::GestureConfiguration::GetInstance()
           ->max_touch_move_in_pixels_for_click() +
       1;

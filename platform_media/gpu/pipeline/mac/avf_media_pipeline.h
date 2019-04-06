@@ -31,8 +31,7 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   void Initialize(const std::string& mime_type,
                   const InitializeCB& initialize_cb) override;
   void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;
-  void ReadVideoData(const ReadDataCB& read_video_data_cb,
-                     uint32_t /* texture_id */) override;
+  void ReadVideoData(const ReadDataCB& read_video_data_cb) override;
   void WillSeek() override {}
   void Seek(base::TimeDelta time, const SeekCB& seek_cb) override;
 

@@ -8,6 +8,7 @@
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/web_contents_accessibility_android.h"
 #include "content/common/accessibility_messages.h"
+#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "ui/accessibility/ax_role_properties.h"
 
 namespace content {
@@ -43,9 +44,8 @@ BrowserAccessibilityManagerAndroid::~BrowserAccessibilityManagerAndroid() {
 ui::AXTreeUpdate BrowserAccessibilityManagerAndroid::GetEmptyDocument() {
   ui::AXNodeData empty_document;
   empty_document.id = 0;
-  empty_document.role = ui::AX_ROLE_ROOT_WEB_AREA;
-  empty_document.AddIntAttribute(ui::AX_ATTR_RESTRICTION,
-                                 ui::AX_RESTRICTION_READ_ONLY);
+  empty_document.role = ax::mojom::Role::kRootWebArea;
+  empty_document.SetRestriction(ax::mojom::Restriction::kReadOnly);
 
   ui::AXTreeUpdate update;
   update.root_id = empty_document.id;
@@ -95,7 +95,7 @@ void BrowserAccessibilityManagerAndroid::FireLocationChanged(
 }
 
 void BrowserAccessibilityManagerAndroid::FireBlinkEvent(
-    ui::AXEvent event_type,
+    ax::mojom::Event event_type,
     BrowserAccessibility* node) {
   BrowserAccessibilityManager::FireBlinkEvent(event_type, node);
   WebContentsAccessibilityAndroid* wcax = GetWebContentsAXFromRootManager();
@@ -110,13 +110,13 @@ void BrowserAccessibilityManagerAndroid::FireBlinkEvent(
       static_cast<BrowserAccessibilityAndroid*>(node);
 
   switch (event_type) {
-    case ui::AX_EVENT_HOVER:
+    case ax::mojom::Event::kHover:
       HandleHoverEvent(node);
       break;
-    case ui::AX_EVENT_SCROLLED_TO_ANCHOR:
+    case ax::mojom::Event::kScrolledToAnchor:
       wcax->HandleScrolledToAnchor(android_node->unique_id());
       break;
-    case ui::AX_EVENT_CLICKED:
+    case ax::mojom::Event::kClicked:
       wcax->HandleClicked(android_node->unique_id());
       break;
     default:
@@ -208,6 +208,7 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case Event::MENU_ITEM_SELECTED:
     case Event::NAME_CHANGED:
     case Event::OTHER_ATTRIBUTE_CHANGED:
+    case Event::RELATED_NODE_CHANGED:
     case Event::ROLE_CHANGED:
     case Event::ROW_COUNT_CHANGED:
     case Event::SELECTED_CHANGED:
@@ -360,6 +361,19 @@ void BrowserAccessibilityManagerAndroid::HandleHoverEvent(
 
   if (android_node)
     wcax->HandleHover(android_node->unique_id());
+}
+
+gfx::Rect BrowserAccessibilityManagerAndroid::GetViewBounds() {
+  // We have to take the device scale factor into account on Android.
+  BrowserAccessibilityDelegate* delegate = GetDelegateFromRootManager();
+  if (delegate) {
+    gfx::Rect bounds = delegate->AccessibilityGetViewBounds();
+    if (IsUseZoomForDSFEnabled() && device_scale_factor() > 0.0 &&
+        device_scale_factor() != 1.0)
+      bounds = ScaleToEnclosingRect(bounds, device_scale_factor());
+    return bounds;
+  }
+  return gfx::Rect();
 }
 
 void BrowserAccessibilityManagerAndroid::OnAtomicUpdateFinished(

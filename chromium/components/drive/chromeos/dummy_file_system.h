@@ -14,7 +14,7 @@ namespace drive {
 // Dummy implementation of FileSystemInterface. All functions do nothing.
 class DummyFileSystem : public FileSystemInterface {
  public:
-  ~DummyFileSystem() override {}
+  ~DummyFileSystem() override = default;
   void AddObserver(FileSystemObserver* observer) override {}
   void RemoveObserver(FileSystemObserver* observer) override {}
   void CheckForUpdates() override {}
@@ -90,6 +90,8 @@ class DummyFileSystem : public FileSystemInterface {
   void MarkCacheFileAsUnmounted(
       const base::FilePath& cache_file_path,
       const FileOperationCallback& callback) override {}
+  void IsCacheFileMarkedAsMounted(const base::FilePath& drive_file_path,
+                                  const IsMountedCallback& callback) override {}
   void AddPermission(const base::FilePath& drive_file_path,
                      const std::string& email,
                      google_apis::drive::PermissionRole role,

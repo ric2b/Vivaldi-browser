@@ -15,7 +15,8 @@ android_resources("chrome_tabs_client_example_apk_resources") {
 
 android_resources("custom_tabs_support_resources") {
   resource_dirs = [ "src/customtabs/res" ]
-  custom_package = "android.support.customtabs.browseractions"
+  android_manifest = "src/customtabs/AndroidManifest.xml"
+  custom_package = "android.support.customtabs"
 }
 
 android_apk("custom_tabs_client_example_apk") {
@@ -60,6 +61,11 @@ android_library("custom_tabs_support_java") {
     "src/customtabs/src/android/support/customtabs/browseractions/BrowserActionsFallbackMenuUi.java",
     "src/customtabs/src/android/support/customtabs/browseractions/BrowserActionsFallbackMenuView.java",
     "src/customtabs/src/android/support/customtabs/browseractions/BrowserActionsIntent.java",
+    "src/customtabs/src/android/support/customtabs/browseractions/BrowserServiceFileProvider.java",
+    "src/customtabs/src/android/support/customtabs/browseractions/BrowserServiceImageReadTask.java",
+    "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityService.java",
+    "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityServiceWrapper.java",
+    "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityServiceConnectionManager.java",
     "src/customtabs/src/android/support/customtabs/CustomTabsCallback.java",
     "src/customtabs/src/android/support/customtabs/CustomTabsClient.java",
     "src/customtabs/src/android/support/customtabs/CustomTabsIntent.java",
@@ -78,6 +84,7 @@ android_library("custom_tabs_support_java") {
     "//third_party/android_tools:android_support_v7_appcompat_java",
   ]
   srcjar_deps = [ ":chrome_custom_tabs_service_aidl" ]
+  android_manifest_for_lint = "src/customtabs/AndroidManifest.xml"
   chromium_code = true
 }
 
@@ -89,5 +96,6 @@ android_aidl("chrome_custom_tabs_service_aidl") {
     "$java_in_dir/ICustomTabsCallback.aidl",
     "$java_in_dir/ICustomTabsService.aidl",
     "$java_in_dir/IPostMessageService.aidl",
+    "$java_in_dir/trusted/ITrustedWebActivityService.aidl",
   ]
 }

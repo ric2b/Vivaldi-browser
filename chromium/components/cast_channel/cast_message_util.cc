@@ -10,6 +10,8 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/cast_channel/cast_auth_util.h"
 #include "components/cast_channel/proto/cast_channel.pb.h"
 
@@ -18,17 +20,15 @@ using base::Value;
 namespace cast_channel {
 
 namespace {
-// Message namespaces.
+// Reserved message namespaces for internal messages.
+constexpr char kCastInternalNamespacePrefix[] = "urn:x-cast:com.google.cast.";
 constexpr char kAuthNamespace[] = "urn:x-cast:com.google.cast.tp.deviceauth";
 constexpr char kHeartbeatNamespace[] =
     "urn:x-cast:com.google.cast.tp.heartbeat";
 constexpr char kConnectionNamespace[] =
     "urn:x-cast:com.google.cast.tp.connection";
 constexpr char kReceiverNamespace[] = "urn:x-cast:com.google.cast.receiver";
-
-// Sender and receiver IDs to use for platform messages.
-constexpr char kPlatformSenderId[] = "sender-0";
-constexpr char kPlatformReceiverId[] = "receiver-0";
+constexpr char kBroadcastNamespace[] = "urn:x-cast:com.google.cast.broadcast";
 
 // Text payload keys.
 constexpr char kTypeNodeId[] = "type";
@@ -39,6 +39,18 @@ constexpr char kKeepAlivePingType[] = "PING";
 constexpr char kKeepAlivePongType[] = "PONG";
 constexpr char kGetAppAvailabilityRequestType[] = "GET_APP_AVAILABILITY";
 constexpr char kConnectionRequestType[] = "CONNECT";
+constexpr char kBroadcastRequestType[] = "APPLICATION_BROADCAST";
+constexpr char kLaunchRequestType[] = "LAUNCH";
+constexpr char kReceiverStatusType[] = "RECEIVER_STATUS";
+constexpr char kLaunchErrorType[] = "LAUNCH_ERROR";
+
+// The value used for "sdkType" in a virtual connect request. Historically, this
+// value is used in the Media Router extension, but here it is reused in Chrome.
+constexpr int kVirtualConnectSdkType = 2;
+
+// The value used for "connectionType" in a virtual connect request. This value
+// stands for CONNECTION_TYPE_LOCAL, which is the only type used in Chrome.
+constexpr int kVirtualConnectTypeLocal = 1;
 
 void FillCommonCastMessageFields(CastMessage* message,
                                  const std::string& source_id,
@@ -51,21 +63,35 @@ void FillCommonCastMessageFields(CastMessage* message,
 }
 
 CastMessage CreateKeepAliveMessage(const char* keep_alive_type) {
-  CastMessage output;
-  FillCommonCastMessageFields(&output, kPlatformSenderId, kPlatformReceiverId,
-                              kHeartbeatNamespace);
-  output.set_payload_type(
-      CastMessage::PayloadType::CastMessage_PayloadType_STRING);
-
   base::DictionaryValue type_dict;
   type_dict.SetString(kTypeNodeId, keep_alive_type);
-  CHECK(base::JSONWriter::Write(type_dict, output.mutable_payload_utf8()));
-  return output;
+  return CreateCastMessage(kHeartbeatNamespace, type_dict, kPlatformSenderId,
+                           kPlatformReceiverId);
+}
+
+// Returns the value to be set as the "platform" value in a virtual connect
+// request. The value is platform-dependent and is taken from the Platform enum
+// defined in third_party/metrics_proto/cast_logs.proto.
+int GetVirtualConnectPlatformValue() {
+#if defined(OS_WIN)
+  return 3;
+#elif defined(OS_MACOSX)
+  return 4;
+#elif defined(OS_CHROMEOS)
+  return 5;
+#elif defined(OS_LINUX)
+  return 6;
+#else
+  return 0;
+#endif
 }
 
 }  // namespace
 
 bool IsCastMessageValid(const CastMessage& message_proto) {
+  if (!message_proto.IsInitialized())
+    return false;
+
   if (message_proto.namespace_().empty() || message_proto.source_id().empty() ||
       message_proto.destination_id().empty()) {
     return false;
@@ -76,37 +102,34 @@ bool IsCastMessageValid(const CastMessage& message_proto) {
           message_proto.has_payload_binary());
 }
 
-std::unique_ptr<Value> GetDictionaryFromCastMessage(
+std::unique_ptr<base::DictionaryValue> GetDictionaryFromCastMessage(
     const CastMessage& message) {
   if (!message.has_payload_utf8())
     return nullptr;
 
-  std::unique_ptr<Value> parsed_payload(
+  return base::DictionaryValue::From(
       base::JSONReader::Read(message.payload_utf8()));
-  if (!parsed_payload || !parsed_payload->is_dict())
-    return nullptr;
+}
 
-  return parsed_payload;
+bool IsCastInternalNamespace(const std::string& message_namespace) {
+  // Note: any namespace with the prefix is assumed to be reserved for internal
+  // messages.
+  return base::StartsWith(message_namespace, kCastInternalNamespacePrefix,
+                          base::CompareCase::SENSITIVE);
 }
 
 CastMessageType ParseMessageType(const CastMessage& message) {
-  std::unique_ptr<Value> dictionary = GetDictionaryFromCastMessage(message);
-  if (!dictionary)
-    return CastMessageType::kOther;
+  std::unique_ptr<base::DictionaryValue> dictionary =
+      GetDictionaryFromCastMessage(message);
+  return dictionary ? ParseMessageTypeFromPayload(*dictionary)
+                    : CastMessageType::kOther;
+}
 
-  const base::Value* type_string =
-      dictionary->FindKeyOfType(kTypeNodeId, base::Value::Type::STRING);
-  if (!type_string)
-    return CastMessageType::kOther;
-
-  const std::string& type = type_string->GetString();
-  if (type == kKeepAlivePingType)
-    return CastMessageType::kPing;
-  if (type == kKeepAlivePongType)
-    return CastMessageType::kPong;
-
-  DVLOG(1) << "Unknown message type: " << type;
-  return CastMessageType::kOther;
+CastMessageType ParseMessageTypeFromPayload(const base::Value& payload) {
+  const Value* type_string =
+      payload.FindKeyOfType(kTypeNodeId, Value::Type::STRING);
+  return type_string ? CastMessageTypeFromString(type_string->GetString())
+                     : CastMessageType::kOther;
 }
 
 const char* CastMessageTypeToString(CastMessageType message_type) {
@@ -115,11 +138,45 @@ const char* CastMessageTypeToString(CastMessageType message_type) {
       return kKeepAlivePingType;
     case CastMessageType::kPong:
       return kKeepAlivePongType;
+    case CastMessageType::kGetAppAvailability:
+      return kGetAppAvailabilityRequestType;
+    case CastMessageType::kConnect:
+      return kConnectionRequestType;
+    case CastMessageType::kBroadcast:
+      return kBroadcastRequestType;
+    case CastMessageType::kLaunch:
+      return kLaunchRequestType;
+    case CastMessageType::kReceiverStatus:
+      return kReceiverStatusType;
+    case CastMessageType::kLaunchError:
+      return kLaunchErrorType;
     case CastMessageType::kOther:
-      return "unknown";
+      return "";
   }
   NOTREACHED();
   return "";
+}
+
+CastMessageType CastMessageTypeFromString(const std::string& type) {
+  if (type == kKeepAlivePingType)
+    return CastMessageType::kPing;
+  if (type == kKeepAlivePongType)
+    return CastMessageType::kPong;
+  if (type == kGetAppAvailabilityRequestType)
+    return CastMessageType::kGetAppAvailability;
+  if (type == kConnectionRequestType)
+    return CastMessageType::kConnect;
+  if (type == kBroadcastRequestType)
+    return CastMessageType::kBroadcast;
+  if (type == kLaunchRequestType)
+    return CastMessageType::kLaunch;
+  if (type == kReceiverStatusType)
+    return CastMessageType::kReceiverStatus;
+  if (type == kLaunchErrorType)
+    return CastMessageType::kLaunchError;
+
+  DVLOG(1) << "Unknown message type: " << type;
+  return CastMessageType::kOther;
 }
 
 std::string CastMessageToString(const CastMessage& message_proto) {
@@ -193,38 +250,125 @@ CastMessage CreateKeepAlivePongMessage() {
   return CreateKeepAliveMessage(kKeepAlivePongType);
 }
 
-CastMessage CreateVirtualConnectionRequest(const std::string& source_id,
-                                           const std::string& destination_id) {
-  CastMessage output;
-  FillCommonCastMessageFields(&output, source_id, destination_id,
-                              kConnectionNamespace);
-  output.set_payload_type(
-      CastMessage::PayloadType::CastMessage_PayloadType_STRING);
+CastMessage CreateVirtualConnectionRequest(
+    const std::string& source_id,
+    const std::string& destination_id,
+    VirtualConnectionType connection_type,
+    const std::string& user_agent,
+    const std::string& browser_version) {
+  DCHECK(destination_id != kPlatformReceiverId || connection_type == kStrong);
+
+  // Parse system_version from user agent string. It contains platform, OS and
+  // CPU info and is contained in the first set of parentheses of the user
+  // agent string (e.g., X11; Linux x86_64).
+  std::string system_version;
+  size_t start_index = user_agent.find('(');
+  if (start_index != std::string::npos) {
+    size_t end_index = user_agent.find(')', start_index + 1);
+    if (end_index != std::string::npos) {
+      system_version =
+          user_agent.substr(start_index + 1, end_index - start_index - 1);
+    }
+  }
 
   Value dict(Value::Type::DICTIONARY);
   dict.SetKey(kTypeNodeId, Value(kConnectionRequestType));
-  // TODO(crbug.com/698940): Populate other optional fields.
-  CHECK(base::JSONWriter::Write(dict, output.mutable_payload_utf8()));
-  return output;
+  dict.SetKey("userAgent", Value(user_agent));
+  dict.SetKey("connType", Value(connection_type));
+  dict.SetKey("origin", Value(Value::Type::DICTIONARY));
+
+  Value sender_info(Value::Type::DICTIONARY);
+  sender_info.SetKey("sdkType", Value(kVirtualConnectSdkType));
+  sender_info.SetKey("version", Value(browser_version));
+  sender_info.SetKey("browserVersion", Value(browser_version));
+  sender_info.SetKey("platform", Value(GetVirtualConnectPlatformValue()));
+  sender_info.SetKey("connectionType", Value(kVirtualConnectTypeLocal));
+  if (!system_version.empty())
+    sender_info.SetKey("systemVersion", Value(system_version));
+
+  dict.SetKey("senderInfo", std::move(sender_info));
+
+  return CreateCastMessage(kConnectionNamespace, dict, source_id,
+                           destination_id);
 }
 
 CastMessage CreateGetAppAvailabilityRequest(const std::string& source_id,
                                             int request_id,
                                             const std::string& app_id) {
-  CastMessage output;
-  FillCommonCastMessageFields(&output, source_id, kPlatformReceiverId,
-                              kReceiverNamespace);
-  output.set_payload_type(
-      CastMessage::PayloadType::CastMessage_PayloadType_STRING);
-
   Value dict(Value::Type::DICTIONARY);
   dict.SetKey(kTypeNodeId, Value(kGetAppAvailabilityRequestType));
   Value app_id_value(Value::Type::LIST);
   app_id_value.GetList().push_back(Value(app_id));
   dict.SetKey("appId", std::move(app_id_value));
   dict.SetKey(kRequestIdNodeId, Value(request_id));
-  CHECK(base::JSONWriter::Write(dict, output.mutable_payload_utf8()));
+
+  return CreateCastMessage(kReceiverNamespace, dict, source_id,
+                           kPlatformReceiverId);
+}
+
+BroadcastRequest::BroadcastRequest(const std::string& broadcast_namespace,
+                                   const std::string& message)
+    : broadcast_namespace(broadcast_namespace), message(message) {}
+BroadcastRequest::~BroadcastRequest() = default;
+
+bool BroadcastRequest::operator==(const BroadcastRequest& other) const {
+  return broadcast_namespace == other.broadcast_namespace &&
+         message == other.message;
+}
+
+CastMessage CreateBroadcastRequest(const std::string& source_id,
+                                   int request_id,
+                                   const std::vector<std::string>& app_ids,
+                                   const BroadcastRequest& request) {
+  Value dict(Value::Type::DICTIONARY);
+  dict.SetKey(kTypeNodeId, Value(kBroadcastRequestType));
+  std::vector<Value> app_ids_value;
+  for (const std::string& app_id : app_ids)
+    app_ids_value.push_back(Value(app_id));
+
+  dict.SetKey("appIds", Value(std::move(app_ids_value)));
+  dict.SetKey("namespace", Value(request.broadcast_namespace));
+  dict.SetKey("message", Value(request.message));
+  return CreateCastMessage(kBroadcastNamespace, dict, source_id,
+                           kPlatformReceiverId);
+}
+
+CastMessage CreateLaunchRequest(const std::string& source_id,
+                                int request_id,
+                                const std::string& app_id,
+                                const std::string& locale) {
+  Value dict(Value::Type::DICTIONARY);
+  dict.SetKey(kTypeNodeId, Value(kLaunchRequestType));
+  dict.SetKey(kRequestIdNodeId, Value(request_id));
+  dict.SetKey("appId", Value(app_id));
+  dict.SetKey("language", Value(locale));
+
+  return CreateCastMessage(kReceiverNamespace, dict, source_id,
+                           kPlatformReceiverId);
+}
+
+CastMessage CreateCastMessage(const std::string& message_namespace,
+                              const base::Value& message,
+                              const std::string& source_id,
+                              const std::string& destination_id) {
+  CastMessage output;
+  FillCommonCastMessageFields(&output, source_id, destination_id,
+                              message_namespace);
+  output.set_payload_type(
+      CastMessage::PayloadType::CastMessage_PayloadType_STRING);
+  CHECK(base::JSONWriter::Write(message, output.mutable_payload_utf8()));
   return output;
+}
+
+const char* GetAppAvailabilityResultToString(GetAppAvailabilityResult result) {
+  switch (result) {
+    case GetAppAvailabilityResult::kAvailable:
+      return "available";
+    case GetAppAvailabilityResult::kUnavailable:
+      return "unavailable";
+    case GetAppAvailabilityResult::kUnknown:
+      return "unknown";
+  }
 }
 
 bool GetRequestIdFromResponse(const Value& payload, int* request_id) {
@@ -255,6 +399,38 @@ GetAppAvailabilityResult GetAppAvailabilityResultFromResponse(
     return GetAppAvailabilityResult::kUnavailable;
 
   return GetAppAvailabilityResult::kUnknown;
+}
+
+LaunchSessionResponse::LaunchSessionResponse() {}
+LaunchSessionResponse::LaunchSessionResponse(LaunchSessionResponse&& other) =
+    default;
+LaunchSessionResponse::~LaunchSessionResponse() = default;
+
+LaunchSessionResponse GetLaunchSessionResponse(
+    const base::DictionaryValue& payload) {
+  const Value* type_value =
+      payload.FindKeyOfType(kTypeNodeId, Value::Type::STRING);
+  if (!type_value)
+    return LaunchSessionResponse();
+
+  if (type_value->GetString() != kReceiverStatusType &&
+      type_value->GetString() != kLaunchErrorType)
+    return LaunchSessionResponse();
+
+  LaunchSessionResponse response;
+  if (type_value->GetString() == kLaunchErrorType) {
+    response.result = LaunchSessionResponse::Result::kError;
+    return response;
+  }
+
+  const Value* receiver_status =
+      payload.FindKeyOfType("status", Value::Type::DICTIONARY);
+  if (!receiver_status)
+    return LaunchSessionResponse();
+
+  response.result = LaunchSessionResponse::Result::kOk;
+  response.receiver_status = receiver_status->Clone();
+  return response;
 }
 
 }  // namespace cast_channel

@@ -17,18 +17,6 @@ cr.exportPath('settings');
 settings.SearchResult;
 
 cr.define('settings', function() {
-  /** @type {string} */
-  const WRAPPER_CSS_CLASS = 'search-highlight-wrapper';
-
-  /** @type {string} */
-  const ORIGINAL_CONTENT_CSS_CLASS = 'search-highlight-original-content';
-
-  /** @type {string} */
-  const HIT_CSS_CLASS = 'search-highlight-hit';
-
-  /** @type {string} */
-  const SEARCH_BUBBLE_CSS_CLASS = 'search-bubble';
-
   /**
    * A CSS attribute indicating that a node should be ignored during searching.
    * @type {string}
@@ -43,82 +31,21 @@ cr.define('settings', function() {
    */
   const IGNORED_ELEMENTS = new Set([
     'CONTENT',
-    'CR-EVENTS',
+    'CR-ACTION-MENU',
+    'CR-DIALOG',
     'DIALOG',
     'IMG',
     'IRON-ICON',
     'IRON-LIST',
     'PAPER-ICON-BUTTON',
+    'PAPER-ICON-BUTTON-LIGHT',
     'PAPER-RIPPLE',
     'PAPER-SLIDER',
     'PAPER-SPINNER-LITE',
+    'SLOT',
     'STYLE',
     'TEMPLATE',
   ]);
-
-  /**
-   * Finds all previous highlighted nodes under |node| (both within self and
-   * children's Shadow DOM) and replaces the highlights (yellow rectangle and
-   * search bubbles) with the original text node.
-   * TODO(dpapad): Consider making this a private method of TopLevelSearchTask.
-   * @param {!Node} node
-   * @private
-   */
-  function findAndRemoveHighlights_(node) {
-    const wrappers = node.querySelectorAll('* /deep/ .' + WRAPPER_CSS_CLASS);
-
-    for (let i = 0; i < wrappers.length; i++) {
-      const wrapper = wrappers[i];
-      const originalNode =
-          wrapper.querySelector('.' + ORIGINAL_CONTENT_CSS_CLASS);
-      wrapper.parentElement.replaceChild(originalNode.firstChild, wrapper);
-    }
-
-    const searchBubbles =
-        node.querySelectorAll('* /deep/ .' + SEARCH_BUBBLE_CSS_CLASS);
-    for (let j = 0; j < searchBubbles.length; j++)
-      searchBubbles[j].remove();
-  }
-
-  /**
-   * Applies the highlight UI (yellow rectangle) around all matches in |node|.
-   * @param {!Node} node The text node to be highlighted. |node| ends up
-   *     being removed from the DOM tree.
-   * @param {!Array<string>} tokens The string tokens after splitting on the
-   *     relevant regExp. Even indices hold text that doesn't need highlighting,
-   *     odd indices hold the text to be highlighted. For example:
-   *     const r = new RegExp('(foo)', 'i');
-   *     'barfoobar foo bar'.split(r) => ['bar', 'foo', 'bar ', 'foo', ' bar']
-   * @private
-   */
-  function highlight_(node, tokens) {
-    const wrapper = document.createElement('span');
-    wrapper.classList.add(WRAPPER_CSS_CLASS);
-    // Use existing node as placeholder to determine where to insert the
-    // replacement content.
-    node.parentNode.replaceChild(wrapper, node);
-
-    // Keep the existing node around for when the highlights are removed. The
-    // existing text node might be involved in data-binding and therefore should
-    // not be discarded.
-    const span = document.createElement('span');
-    span.classList.add(ORIGINAL_CONTENT_CSS_CLASS);
-    span.style.display = 'none';
-    span.appendChild(node);
-    wrapper.appendChild(span);
-
-    for (let i = 0; i < tokens.length; ++i) {
-      if (i % 2 == 0) {
-        wrapper.appendChild(document.createTextNode(tokens[i]));
-      } else {
-        const hitSpan = document.createElement('span');
-        hitSpan.classList.add(HIT_CSS_CLASS);
-        hitSpan.style.backgroundColor = '#ffeb3b';  // --var(--paper-yellow-500)
-        hitSpan.textContent = tokens[i];
-        wrapper.appendChild(hitSpan);
-      }
-    }
-  }
 
   /**
    * Traverses the entire DOM (including Shadow DOM), finds text nodes that
@@ -132,9 +59,25 @@ cr.define('settings', function() {
    */
   function findAndHighlightMatches_(request, root) {
     let foundMatches = false;
+    let highlights = [];
+    let bubbles = [];
+
+    const domIfTag = Polymer.DomIf ? 'DOM-IF' : 'TEMPLATE';
+
     function doSearch(node) {
-      if (node.nodeName == 'TEMPLATE' && node.hasAttribute('route-path') &&
-          !node.if && !node.hasAttribute(SKIP_SEARCH_CSS_ATTRIBUTE)) {
+      // NOTE: For subpage wrappers <template route-path="..."> when |no-search|
+      // participates in a data binding:
+      //
+      //  - Always use noSearch Polymer property, for example
+      //    no-search="[[foo]]"
+      //  - *Don't* use a no-search CSS attribute like no-search$="[[foo]]"
+      //
+      // The latter throws an error during the automatic Polymer 2 conversion to
+      // <dom-if><template...></dom-if> syntax.
+      // TODO(dpapad):Clean this up once Polymer 2 migration has finished.
+      if (node.nodeName == domIfTag && node.hasAttribute('route-path') &&
+          !node.if && !node['noSearch'] &&
+          !node.hasAttribute(SKIP_SEARCH_CSS_ATTRIBUTE)) {
         request.queue_.addRenderTask(new RenderTask(request, node));
         return;
       }
@@ -157,14 +100,19 @@ cr.define('settings', function() {
 
         if (request.regExp.test(textContent)) {
           foundMatches = true;
-          revealParentSection_(node, request.rawQuery_);
+          let bubble = revealParentSection_(node, request.rawQuery_);
+          if (bubble)
+            bubbles.push(bubble);
 
           // Don't highlight <select> nodes, yellow rectangles can't be
           // displayed within an <option>.
           // TODO(dpapad): highlight <select> controls with a search bubble
           // instead.
-          if (node.parentNode.nodeName != 'OPTION')
-            highlight_(node, textContent.split(request.regExp));
+          if (node.parentNode.nodeName != 'OPTION') {
+            request.addTextObserver(node);
+            highlights.push(cr.search_highlight_utils.highlight(
+                node, textContent.split(request.regExp)));
+          }
         }
         // Returning early since TEXT_NODE nodes never have children.
         return;
@@ -185,51 +133,16 @@ cr.define('settings', function() {
     }
 
     doSearch(root);
+    request.addHighlightsAndBubbles(highlights, bubbles);
     return foundMatches;
-  }
-
-  /**
-   * Highlights the HTML control that triggers a subpage, by displaying a search
-   * bubble.
-   * @param {!HTMLElement} element The element to be highlighted.
-   * @param {string} rawQuery The search query.
-   * @private
-   */
-  function highlightAssociatedControl_(element, rawQuery) {
-    let searchBubble = element.querySelector('.' + SEARCH_BUBBLE_CSS_CLASS);
-    // If the associated control has already been highlighted due to another
-    // match on the same subpage, there is no need to do anything.
-    if (searchBubble)
-      return;
-
-    searchBubble = document.createElement('div');
-    searchBubble.classList.add(SEARCH_BUBBLE_CSS_CLASS);
-    const innards = document.createElement('div');
-    innards.classList.add('search-bubble-innards', 'text-elide');
-    innards.textContent = rawQuery;
-    searchBubble.appendChild(innards);
-    element.appendChild(searchBubble);
-
-    // Dynamically position the bubble at the edge the associated control
-    // element.
-    const updatePosition = function() {
-      searchBubble.style.top = element.offsetTop +
-          (innards.classList.contains('above') ? -searchBubble.offsetHeight :
-                                                 element.offsetHeight) +
-          'px';
-    };
-    updatePosition();
-
-    searchBubble.addEventListener('mouseover', function() {
-      innards.classList.toggle('above');
-      updatePosition();
-    });
   }
 
   /**
    * Finds and makes visible the <settings-section> parent of |node|.
    * @param {!Node} node
    * @param {string} rawQuery
+   * @return {?Node} The search bubble created while revealing the section, if
+   *     any.
    * @private
    */
   function revealParentSection_(node, rawQuery) {
@@ -253,8 +166,11 @@ cr.define('settings', function() {
 
     // Need to add the search bubble after the parent SETTINGS-SECTION has
     // become visible, otherwise |offsetWidth| returns zero.
-    if (associatedControl)
-      highlightAssociatedControl_(associatedControl, rawQuery);
+    if (associatedControl) {
+      return cr.search_highlight_utils.highlightControlWithBubble(
+          associatedControl, rawQuery);
+    }
+    return null;
   }
 
   /** @abstract */
@@ -295,8 +211,11 @@ cr.define('settings', function() {
     /** @override */
     exec() {
       const routePath = this.node.getAttribute('route-path');
-      const subpageTemplate =
-          this.node['_content'].querySelector('settings-subpage');
+
+      const content = Polymer.DomIf ?
+          Polymer.DomIf._contentForTemplate(this.node.firstElementChild) :
+          /** @type {{_content: DocumentFragment}} */ (this.node)._content;
+      const subpageTemplate = content.querySelector('settings-subpage');
       subpageTemplate.setAttribute('route-path', routePath);
       assert(!this.node.if);
       this.node.if = true;
@@ -344,8 +263,6 @@ cr.define('settings', function() {
 
     /** @override */
     exec() {
-      findAndRemoveHighlights_(this.node);
-
       const shouldSearch = this.request.regExp !== null;
       this.setSectionsVisibility_(!shouldSearch);
       if (shouldSearch) {
@@ -493,6 +410,56 @@ cr.define('settings', function() {
       this.queue_.onEmpty(() => {
         this.resolver.resolve(this);
       });
+
+      /** @private {!Set<!MutationObserver>} */
+      this.textObservers_ = new Set();
+
+      /** @private {!Array<!Node>} */
+      this.highlights_ = [];
+
+      /** @private {!Array<!Node>} */
+      this.bubbles_ = [];
+    }
+
+    /**
+     * @param {!Array<!Node>} highlights The highlight wrappers to add
+     * @param {!Array<!Node>} bubbles The search bubbles to add.
+     */
+    addHighlightsAndBubbles(highlights, bubbles) {
+      this.highlights_.push.apply(this.highlights_, highlights);
+      this.bubbles_.push.apply(this.bubbles_, bubbles);
+    }
+
+    removeAllTextObservers() {
+      this.textObservers_.forEach(observer => {
+        observer.disconnect();
+      });
+      this.textObservers_.clear();
+    }
+
+    removeAllHighlightsAndBubbles() {
+      cr.search_highlight_utils.removeHighlights(this.highlights_);
+      for (let bubble of this.bubbles_)
+        bubble.remove();
+      this.highlights_ = [];
+      this.bubbles_ = [];
+    }
+
+    /** @param {!Node} textNode */
+    addTextObserver(textNode) {
+      const originalParentNode = /** @type {!Node} */ (textNode.parentNode);
+      const observer = new MutationObserver(mutations => {
+        const oldValue = mutations[0].oldValue.trim();
+        const newValue = textNode.nodeValue.trim();
+        if (oldValue != newValue) {
+          observer.disconnect();
+          this.textObservers_.delete(observer);
+          cr.search_highlight_utils.findAndRemoveHighlights(originalParentNode);
+        }
+      });
+      observer.observe(
+          textNode, {characterData: true, characterDataOldValue: true});
+      this.textObservers_.add(observer);
     }
 
     /**
@@ -562,6 +529,9 @@ cr.define('settings', function() {
       /** @private {!Set<!settings.SearchRequest>} */
       this.activeRequests_ = new Set();
 
+      /** @private {!Set<!settings.SearchRequest>} */
+      this.completedRequests_ = new Set();
+
       /** @private {?string} */
       this.lastSearchedText_ = null;
     }
@@ -572,10 +542,17 @@ cr.define('settings', function() {
       // submitted.
       if (text != this.lastSearchedText_) {
         this.activeRequests_.forEach(function(request) {
+          request.removeAllTextObservers();
+          request.removeAllHighlightsAndBubbles();
           request.canceled = true;
           request.resolver.resolve(request);
         });
         this.activeRequests_.clear();
+        this.completedRequests_.forEach(request => {
+          request.removeAllTextObservers();
+          request.removeAllHighlightsAndBubbles();
+        });
+        this.completedRequests_.clear();
       }
 
       this.lastSearchedText_ = text;
@@ -583,8 +560,8 @@ cr.define('settings', function() {
       this.activeRequests_.add(request);
       request.start();
       return request.resolver.promise.then(() => {
-        // Stop tracking requests that finished.
         this.activeRequests_.delete(request);
+        this.completedRequests_.add(request);
         return request;
       });
     }

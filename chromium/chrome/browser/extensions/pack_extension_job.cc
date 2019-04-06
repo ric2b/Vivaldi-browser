@@ -7,13 +7,12 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "chrome/browser/extensions/extension_creator.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/browser/extension_creator.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/common/constants.h"
 #include "ui/base/l10n/l10n_util.h"

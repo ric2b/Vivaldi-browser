@@ -14,6 +14,7 @@
 #include "base/threading/thread_checker.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/cookie_settings_base.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 
@@ -28,7 +29,8 @@ const char kDummyExtensionScheme[] = ":no-extension-scheme:";
 // A frontend to the cookie settings of |HostContentSettingsMap|. Handles
 // cookie-specific logic such as blocking third-party cookies. Written on the UI
 // thread and read on any thread.
-class CookieSettings : public RefcountedKeyedService {
+class CookieSettings : public CookieSettingsBase,
+                       public RefcountedKeyedService {
  public:
   // Creates a new CookieSettings instance.
   // The caller is responsible for ensuring that |extension_scheme| is valid for
@@ -44,26 +46,6 @@ class CookieSettings : public RefcountedKeyedService {
   //
   // This may be called on any thread.
   ContentSetting GetDefaultCookieSetting(std::string* provider_id) const;
-
-  // Returns true if the page identified by (|url|, |first_party_url|) is
-  // allowed to access (i.e., read or write) cookies.
-  //
-  // This may be called on any thread.
-  bool IsCookieAccessAllowed(const GURL& url,
-                             const GURL& first_party_url) const;
-
-  // Returns true if the cookie set by a page identified by |url| should be
-  // session only. Querying this only makes sense if |IsCookieAccessAllowed|
-  // has returned true.
-  //
-  // This may be called on any thread.
-  bool IsCookieSessionOnly(const GURL& url) const;
-
-  // Returns true if the cookie set by a page identified by |url| should be
-  // session only or blocked.
-  //
-  // This may be called on any thread.
-  bool IsCookieSessionOnlyOrBlocked(const GURL& url) const;
 
   // Returns all patterns with a non-default cookie setting, mapped to their
   // actual settings, in the precedence order of the setting rules. |settings|
@@ -95,11 +77,11 @@ class CookieSettings : public RefcountedKeyedService {
   // called.
   void ShutdownOnUIThread() override;
 
-  // A helper for applying third party cookie blocking rules.
+  // content_settings::CookieSettingsBase:
   void GetCookieSetting(const GURL& url,
                         const GURL& first_party_url,
                         content_settings::SettingSource* source,
-                        ContentSetting* cookie_setting) const;
+                        ContentSetting* cookie_setting) const override;
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 

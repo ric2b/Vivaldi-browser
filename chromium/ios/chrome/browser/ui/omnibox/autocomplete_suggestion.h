@@ -19,11 +19,15 @@ class GURL;
 // Some suggestions represent a URL, for example the ones from history.
 - (BOOL)isURL;
 // Some suggestions can be appended to omnibox text in order to refine the
-// query.
+// query or URL.
 - (BOOL)isAppendable;
 // The leading image for this suggestion type (loupe, globe, etc). Values are
 // described in AutocompleteMatchType enum.
 - (int)imageID;
+// The leading image for this suggestion type (loupe, globe, etc). The returned
+// image is in template rendering mode, it is expected to be tinted by the image
+// view.
+- (UIImage*)suggestionTypeIcon;
 
 // Text of the suggestion.
 - (NSAttributedString*)text;

@@ -33,6 +33,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
@@ -196,6 +197,20 @@ net::URLRequestContextGetter* GetSigninContext() {
   return signin_partition->GetURLRequestContext();
 }
 
+scoped_refptr<network::SharedURLLoaderFactory> GetSigninURLLoaderFactory() {
+  content::StoragePartition* signin_partition = GetSigninPartition();
+
+  // Special case for unit tests. There's no LoginDisplayHost thus no
+  // webview instance. See http://crbug.com/477402
+  if (!signin_partition && !LoginDisplayHost::default_host())
+    return ProfileHelper::GetSigninProfile()->GetURLLoaderFactory();
+
+  if (!signin_partition)
+    return nullptr;
+
+  return signin_partition->GetURLLoaderFactoryForBrowserProcess();
+}
+
 void SaveSyncPasswordDataToProfile(const UserContext& user_context,
                                    Profile* profile) {
   DCHECK(user_context.GetSyncPasswordData().has_value());
@@ -204,7 +219,9 @@ void SaveSyncPasswordDataToProfile(const UserContext& user_context,
                                           ServiceAccessType::EXPLICIT_ACCESS);
   if (password_store) {
     password_store->SaveSyncPasswordHash(
-        user_context.GetSyncPasswordData().value());
+        user_context.GetSyncPasswordData().value(),
+        password_manager::metrics_util::SyncPasswordHashChange::
+            SAVED_ON_CHROME_SIGNIN);
   }
 }
 

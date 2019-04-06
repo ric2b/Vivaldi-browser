@@ -21,7 +21,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_number_conversions.h"
@@ -76,10 +75,10 @@ base::TimeDelta ReadTimeDeltaFromFile(const base::FilePath& path) {
 
 AutomaticRebootManager::SystemEventTimes GetSystemEventTimes() {
   base::FilePath uptime_file;
-  CHECK(PathService::Get(chromeos::FILE_UPTIME, &uptime_file));
+  CHECK(base::PathService::Get(chromeos::FILE_UPTIME, &uptime_file));
   base::FilePath update_reboot_needed_uptime_file;
-  CHECK(PathService::Get(chromeos::FILE_UPDATE_REBOOT_NEEDED_UPTIME,
-                         &update_reboot_needed_uptime_file));
+  CHECK(base::PathService::Get(chromeos::FILE_UPDATE_REBOOT_NEEDED_UPTIME,
+                               &update_reboot_needed_uptime_file));
   return AutomaticRebootManager::SystemEventTimes(
       ReadTimeDeltaFromFile(uptime_file),
       ReadTimeDeltaFromFile(update_reboot_needed_uptime_file));
@@ -90,15 +89,15 @@ void SaveUpdateRebootNeededUptime() {
   const base::TimeDelta kZeroTimeDelta;
 
   base::FilePath update_reboot_needed_uptime_file;
-  CHECK(PathService::Get(chromeos::FILE_UPDATE_REBOOT_NEEDED_UPTIME,
-                         &update_reboot_needed_uptime_file));
+  CHECK(base::PathService::Get(chromeos::FILE_UPDATE_REBOOT_NEEDED_UPTIME,
+                               &update_reboot_needed_uptime_file));
   const base::TimeDelta last_update_reboot_needed_uptime =
       ReadTimeDeltaFromFile(update_reboot_needed_uptime_file);
   if (last_update_reboot_needed_uptime != kZeroTimeDelta)
     return;
 
   base::FilePath uptime_file;
-  CHECK(PathService::Get(chromeos::FILE_UPTIME, &uptime_file));
+  CHECK(base::PathService::Get(chromeos::FILE_UPTIME, &uptime_file));
   const base::TimeDelta uptime = ReadTimeDeltaFromFile(uptime_file);
   if (uptime == kZeroTimeDelta)
     return;
@@ -141,11 +140,10 @@ AutomaticRebootManager::SystemEventTimes::SystemEventTimes(
   has_update_reboot_needed_time = true;
 }
 
-AutomaticRebootManager::AutomaticRebootManager(
-    std::unique_ptr<base::TickClock> clock)
+AutomaticRebootManager::AutomaticRebootManager(const base::TickClock* clock)
     : initialized_(base::WaitableEvent::ResetPolicy::MANUAL,
                    base::WaitableEvent::InitialState::NOT_SIGNALED),
-      clock_(std::move(clock)),
+      clock_(clock),
       have_boot_time_(false),
       have_update_reboot_needed_time_(false),
       reboot_reason_(AutomaticRebootManagerObserver::REBOOT_REASON_UNKNOWN),

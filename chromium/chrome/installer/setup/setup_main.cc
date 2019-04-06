@@ -5,7 +5,9 @@
 #include "chrome/installer/setup/setup_main.h"
 
 #include <windows.h>
+
 #include <msi.h>
+#include <psapi.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <stddef.h>
@@ -13,8 +15,6 @@
 
 #include <memory>
 #include <string>
-
-#include <vector>
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
@@ -24,12 +24,12 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/persistent_histogram_storage.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/memory.h"
 #include "base/process/process.h"
-#include "base/process/process_metrics.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -49,11 +49,11 @@
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/setup/archive_patch_helper.h"
+#include "chrome/installer/setup/buildflags.h"
 #include "chrome/installer/setup/install.h"
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_crash_reporting.h"
 #include "chrome/installer/setup/installer_state.h"
-#include "chrome/installer/setup/persistent_histogram_storage.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_install_details.h"
 #include "chrome/installer/setup/setup_singleton.h"
@@ -83,6 +83,8 @@
 #include "components/crash/content/app/crash_switches.h"
 #include "components/crash/content/app/run_as_crashpad_handler_win.h"
 #include "content/public/common/content_switches.h"
+
+#include <vector>
 
 #include "chrome/installer/util/util_constants.h"
 
@@ -144,8 +146,8 @@ LONG OverwriteDisplayVersions(const base::string16& product,
   // registry entry.  It is held under a "squashed guid" key.
   base::string16 reg_path = base::StringPrintf(
       L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\"
-      L"%ls\\Products\\%ls\\InstallProperties", kSystemPrincipalSid,
-      installer::GuidToSquid(product).c_str());
+      L"%ls\\Products\\%ls\\InstallProperties",
+      kSystemPrincipalSid, InstallUtil::GuidToSquid(product).c_str());
   LONG result1 = OverwriteDisplayVersion(reg_path, value, KEY_WOW64_64KEY);
 
   // The display version also exists under the Unininstall registry key with
@@ -252,12 +254,13 @@ base::string16 FindMsiProductId(const InstallerState& installer_state,
 }
 
 void VivaldiUpdateDeltaPatchStatus(bool successful) {
-  std::wstring key_name(installer::kVivaldiKey);
+  std::wstring key_name(vivaldi::constants::kVivaldiKey);
   key_name.append(L"\\");
-  key_name.append(installer::kVivaldiAutoUpdate);
+  key_name.append(vivaldi::constants::kVivaldiAutoUpdate);
   base::win::RegKey key(HKEY_CURRENT_USER, key_name.c_str(), KEY_ALL_ACCESS);
   if (key.Valid())
-    key.WriteValue(installer::kVivaldiDeltaPatchFailed, (successful) ? L"0" : L"1");
+    key.WriteValue(vivaldi::constants::kVivaldiDeltaPatchFailed,
+                   (successful) ? L"0" : L"1");
 }
 
 // Workhorse for producing an uncompressed archive (chrome.7z) given a
@@ -333,19 +336,16 @@ bool UncompressAndPatchChromeArchive(
   }
   archive_helper->set_patch_source(patch_source);
 
-  // Try courgette first. Failing that, try bspatch.
   // Patch application sometimes takes a very long time, so use 100 buckets for
   // up to an hour.
   start_time = base::TimeTicks::Now();
   installer_state.SetStage(installer::PATCHING);
-  if (!archive_helper->CourgetteEnsemblePatch()) {
-    if (!archive_helper->BinaryPatch()) {
-      *install_status = installer::APPLY_DIFF_PATCH_FAILED;
-      installer_state.WriteInstallerResult(
-          *install_status, IDS_INSTALL_UNCOMPRESSION_FAILED_BASE, NULL);
-      VivaldiUpdateDeltaPatchStatus(false);
-      return false;
-    }
+  if (!archive_helper->ApplyPatch()) {
+    *install_status = installer::APPLY_DIFF_PATCH_FAILED;
+    installer_state.WriteInstallerResult(
+        *install_status, IDS_INSTALL_UNCOMPRESSION_FAILED_BASE, NULL);
+    VivaldiUpdateDeltaPatchStatus(false);
+    return false;
   }
 
   // Record patch time only if it was successful.
@@ -1033,6 +1033,11 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
       *exit_code = installer::BsdiffPatchFiles(input_file,
                                                patch_file,
                                                output_file);
+#if BUILDFLAG(ZUCCHINI)
+    } else if (patch_type_str == installer::kZucchini) {
+      *exit_code =
+          installer::ZucchiniPatchFiles(input_file, patch_file, output_file);
+#endif  // BUILDFLAG(ZUCCHINI)
     } else {
       *exit_code = installer::PATCH_INVALID_ARGUMENTS;
     }
@@ -1050,6 +1055,20 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
         cmd_line.GetSwitchValueNative(
             installer::switches::kSetDisplayVersionValue));
     *exit_code = OverwriteDisplayVersions(registry_product, registry_value);
+#if defined(GOOGLE_CHROME_BUILD)
+  } else if (cmd_line.HasSwitch(installer::switches::kStoreDMToken)) {
+    // Write the specified token to the registry, overwriting any already
+    // existing value.
+    base::string16 token_switch_value =
+        cmd_line.GetSwitchValueNative(installer::switches::kStoreDMToken);
+    base::Optional<std::string> token;
+    if (!(token = installer::DecodeDMTokenSwitchValue(token_switch_value)) ||
+        !installer::StoreDMToken(*token)) {
+      *exit_code = installer::STORE_DMTOKEN_FAILED;
+    } else {
+      *exit_code = installer::STORE_DMTOKEN_SUCCESS;
+    }
+#endif
   } else {
     handled = false;
   }
@@ -1363,7 +1382,7 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
 
       bool force_launch_vivaldi_on_successful_install =
         base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kVivaldiForceLaunch);
+            vivaldi::constants::kVivaldiForceLaunch);
       if (force_launch_vivaldi_on_successful_install &&
           (install_status == FIRST_INSTALL_SUCCESS ||
           install_status == INSTALL_REPAIRED ||
@@ -1483,8 +1502,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   if (!installer::IsProcessorSupported())
     return installer::CPU_NOT_SUPPORTED;
 
-  // Persist histograms so they can be uploaded later.
-  installer::PersistentHistogramStorage persistent_histogram_storage;
+  // Persist histograms so they can be uploaded later. The storage directory is
+  // created during installation when the main WorkItemList is evaluated so
+  // disable storage directory creation in PersistentHistogramStorage.
+  base::PersistentHistogramStorage persistent_histogram_storage(
+      installer::kSetupHistogramAllocatorName,
+      base::PersistentHistogramStorage::StorageDirManagement::kUseExisting);
 
   // The exit manager is in charge of calling the dtors of singletons.
   base::AtExitManager exit_manager;
@@ -1495,6 +1518,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
           switches::kProcessType);
 
   if (process_type == crash_reporter::switches::kCrashpadHandler) {
+    // Histogram storage is enabled at the very top of this wWinMain. Disable it
+    // when this process is decicated to crashpad as there is no directory in
+    // which to write them nor a browser to subsequently upload them.
+    persistent_histogram_storage.Disable();
     return crash_reporter::RunAsCrashpadHandler(
         *base::CommandLine::ForCurrentProcess(), base::FilePath(),
         switches::kProcessType, switches::kUserDataDir);
@@ -1512,19 +1539,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   InitializeInstallDetails(cmd_line, prefs);
 
   base::FilePath vivaldi_target_path(cmd_line.GetSwitchValuePath(
-      installer::switches::kVivaldiInstallDir));
+      vivaldi::constants::kVivaldiInstallDir));
 
   // if true, the vivaldi target path was provided on the cmd line
   const bool is_vivaldi_target_path_provided = !vivaldi_target_path.empty();
 
-  const bool is_vivaldi = cmd_line.HasSwitch(installer::switches::kVivaldi);
+  const bool is_vivaldi = cmd_line.HasSwitch(vivaldi::constants::kVivaldi);
   const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
   const bool is_vivaldi_update = cmd_line.HasSwitch(
-      installer::switches::kVivaldiUpdate);
+      vivaldi::constants::kVivaldiUpdate);
   const bool is_standalone = cmd_line.HasSwitch(
-      installer::switches::kVivaldiStandalone);
+      vivaldi::constants::kVivaldiStandalone);
   const bool is_silent =
-      cmd_line.HasSwitch(installer::switches::kVivaldiSilent);
+      cmd_line.HasSwitch(vivaldi::constants::kVivaldiSilent);
 #if defined(VIVALDI_BUILD)
   // NOTE(jarle@vivaldi.com): From Chr-50, XP/Vista is unsupported.
   if (!InstallUtil::IsOSSupported()) {
@@ -1555,7 +1582,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     wchar_t szPath[MAX_PATH];
     if (csidl && SUCCEEDED(::SHGetFolderPath(NULL, csidl, NULL, 0, szPath))) {
       vivaldi_target_path = base::FilePath(szPath).Append(L"Vivaldi");
-      cmd_line.AppendSwitchPath(installer::switches::kVivaldiInstallDir, vivaldi_target_path);
+      cmd_line.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
+                                vivaldi_target_path);
     } else {
       LOG(ERROR) << "Vivaldi silent install failed: Install path empty.";
       return installer::INSTALL_FAILED;
@@ -1588,7 +1616,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     }
 
     base::FilePath path(dlg.GetDestinationFolder());
-    cmd_line.AppendSwitchPath(installer::switches::kVivaldiInstallDir, path);
+    cmd_line.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir, path);
 
     vivaldi_target_path = path;
 
@@ -1604,7 +1632,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
       VLOG(1) << "Vivaldi: install for all users (system install).";
       break;
     case installer::VivaldiInstallDialog::INSTALL_STANDALONE:
-      cmd_line.AppendSwitch(installer::switches::kVivaldiStandalone);
+      cmd_line.AppendSwitch(vivaldi::constants::kVivaldiStandalone);
       VLOG(1) << "Vivaldi: standalone install - install dir=" << path.value();
       break;
     default:
@@ -1612,7 +1640,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     }
 
     if (dlg.GetRegisterBrowser()) {
-      cmd_line.AppendSwitch(installer::switches::kVivaldiRegisterStandalone);
+      cmd_line.AppendSwitch(vivaldi::constants::kVivaldiRegisterStandalone);
       VLOG(1) << "Vivaldi: register standalone browser.";
     }
   }
@@ -1646,15 +1674,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     }
 
     std::vector<base::win::ScopedHandle> vivaldi_processes(
-        installer::GetRunningProcessesForPath(vivaldi_exe_path));
+        vivaldi::GetRunningProcessesForPath(vivaldi_exe_path));
     if (!vivaldi_processes.empty()) {
-      installer::KillProcesses(vivaldi_processes);
+      vivaldi::KillProcesses(vivaldi_processes);
 
       const int MAX_WAIT_SECS = 10;
       for (int wait = MAX_WAIT_SECS * 10; wait > 0; --wait) {
         Sleep(100);
         vivaldi_processes =
-            installer::GetRunningProcessesForPath(vivaldi_exe_path);
+            vivaldi::GetRunningProcessesForPath(vivaldi_exe_path);
         if (vivaldi_processes.empty())
           break;
       }
@@ -1667,7 +1695,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
             L"Please close all Vivaldi windows before continuing install.",
             L"Vivaldi Installer", MB_RETRYCANCEL | MB_ICONEXCLAMATION);
         vivaldi_processes =
-            installer::GetRunningProcessesForPath(vivaldi_exe_path);
+            vivaldi::GetRunningProcessesForPath(vivaldi_exe_path);
       }
       if (choice == IDCANCEL) {
         VLOG(1) << "Vivaldi: install cancelled due to running instances.";
@@ -1676,9 +1704,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     }
 
     // enable auto-update
-    std::wstring update_key(installer::kVivaldiKey);
+    std::wstring update_key(vivaldi::constants::kVivaldiKey);
     update_key.append(L"\\");
-    update_key.append(installer::kVivaldiAutoUpdate);
+    update_key.append(vivaldi::constants::kVivaldiAutoUpdate);
     base::win::RegKey key(HKEY_CURRENT_USER,
         update_key.c_str(), KEY_ALL_ACCESS);
     if (key.Valid())
@@ -1713,9 +1741,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   VLOG(1) << "is_migrating_to_single is "
           << installer_state.is_migrating_to_single();
 
-  persistent_histogram_storage.set_storage_dir(
-      installer::PersistentHistogramStorage::GetReportedStorageDir(
-          installer_state.target_path()));
+  persistent_histogram_storage.set_storage_base_dir(
+      installer_state.target_path());
 
   if (!is_vivaldi) {
   installer::ConfigureCrashReporting(installer_state);
@@ -1782,7 +1809,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   // extension), in which case CommandLineToArgv will not yield an argv with the
   // true path to the program at position 0.
   base::FilePath setup_exe;
-  PathService::Get(base::FILE_EXE, &setup_exe);
+  base::PathService::Get(base::FILE_EXE, &setup_exe);
 
   int exit_code = 0;
   if (HandleNonInstallCmdLineOptions(setup_exe, cmd_line, &original_state,
@@ -1805,12 +1832,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
       // Do not show the Vivaldi installer UI twice.
       // Add the --vivaldi-update flag for the elevated process.
-      if (new_cmd.HasSwitch(installer::switches::kVivaldi) &&
-         !new_cmd.HasSwitch(installer::switches::kVivaldiUpdate)) {
-        new_cmd.AppendSwitch(installer::switches::kVivaldiUpdate);
+      if (new_cmd.HasSwitch(vivaldi::constants::kVivaldi) &&
+         !new_cmd.HasSwitch(vivaldi::constants::kVivaldiUpdate)) {
+        new_cmd.AppendSwitch(vivaldi::constants::kVivaldiUpdate);
       }
 
-      if (new_cmd.HasSwitch(installer::switches::kVivaldi) && !is_silent) {
+      if (new_cmd.HasSwitch(vivaldi::constants::kVivaldi) && !is_silent) {
         // Kill off the progress dialog here, since we are being relaunched.
         progress_dlg.FinishProgress(0);
       }
@@ -1867,15 +1894,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
                             installer::MAX_INSTALL_STATUS);
 
   // Dump peak memory usage.
-  std::unique_ptr<base::ProcessMetrics> process_metrics(
-      base::ProcessMetrics::CreateProcessMetrics(
-          base::GetCurrentProcessHandle()));
-  UMA_HISTOGRAM_MEMORY_KB("Setup.Install.PeakPagefileUsage",
-      base::saturated_cast<base::HistogramBase::Sample>(
-          process_metrics->GetPeakPagefileUsage() / 1024));
-  UMA_HISTOGRAM_MEMORY_KB("Setup.Install.PeakWorkingSetSize",
-      base::saturated_cast<base::HistogramBase::Sample>(
-          process_metrics->GetPeakWorkingSetSize() / 1024));
+  PROCESS_MEMORY_COUNTERS pmc;
+  if (::GetProcessMemoryInfo(::GetCurrentProcess(), &pmc, sizeof(pmc))) {
+    UMA_HISTOGRAM_MEMORY_KB("Setup.Install.PeakPagefileUsage",
+                            base::saturated_cast<base::HistogramBase::Sample>(
+                                pmc.PeakPagefileUsage / 1024));
+    UMA_HISTOGRAM_MEMORY_KB("Setup.Install.PeakWorkingSetSize",
+                            base::saturated_cast<base::HistogramBase::Sample>(
+                                pmc.PeakWorkingSetSize / 1024));
+  }
 
   int return_code = 0;
   // MSI demands that custom actions always return 0 (ERROR_SUCCESS) or it will

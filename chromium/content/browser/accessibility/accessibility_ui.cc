@@ -26,6 +26,7 @@
 #include "content/browser/webui/web_ui_data_source_impl.h"
 #include "content/common/view_message_enums.h"
 #include "content/grit/content_resources.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
@@ -38,6 +39,7 @@
 #include "content/public/common/url_constants.h"
 #include "net/base/escape.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/base/webui/web_ui_util.h"
 
 static const char kTargetsDataFile[] = "targets-data.json";
 
@@ -104,8 +106,13 @@ std::unique_ptr<base::DictionaryValue> BuildTargetDescriptor(
     title = base::UTF16ToUTF8(web_contents->GetTitle());
     NavigationController& controller = web_contents->GetController();
     NavigationEntry* entry = controller.GetVisibleEntry();
-    if (entry != nullptr && entry->GetURL().is_valid())
-      favicon_url = entry->GetFavicon().url;
+    if (entry != nullptr && entry->GetURL().is_valid()) {
+      gfx::Image favicon_image = entry->GetFavicon().image;
+      if (!favicon_image.IsEmpty()) {
+        const SkBitmap* favicon_bitmap = favicon_image.ToSkBitmap();
+        favicon_url = GURL(webui::GetBitmapDataUrl(*favicon_bitmap));
+      }
+    }
     accessibility_mode = web_contents->GetAccessibilityMode();
   }
 
@@ -130,7 +137,7 @@ bool HandleAccessibilityRequestCallback(
 
   while (RenderWidgetHost* widget = widgets->GetNextHost()) {
     // Ignore processes that don't have a connection, such as crashed tabs.
-    if (!widget->GetProcess()->HasConnection())
+    if (!widget->GetProcess()->IsInitializedAndNotDead())
       continue;
     RenderViewHost* rvh = RenderViewHost::From(widget);
     if (!rvh)
@@ -228,19 +235,21 @@ void AccessibilityUIMessageHandler::RegisterMessages() {
 
   web_ui()->RegisterMessageCallback(
       "toggleAccessibility",
-      base::Bind(&AccessibilityUIMessageHandler::ToggleAccessibility,
-                 base::Unretained(this)));
+      base::BindRepeating(&AccessibilityUIMessageHandler::ToggleAccessibility,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "setGlobalFlag", base::Bind(&AccessibilityUIMessageHandler::SetGlobalFlag,
-                                  base::Unretained(this)));
+      "setGlobalFlag",
+      base::BindRepeating(&AccessibilityUIMessageHandler::SetGlobalFlag,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "requestWebContentsTree",
-      base::Bind(&AccessibilityUIMessageHandler::RequestWebContentsTree,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &AccessibilityUIMessageHandler::RequestWebContentsTree,
+          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "requestNativeUITree",
-      base::Bind(&AccessibilityUIMessageHandler::RequestNativeUITree,
-                 base::Unretained(this)));
+      base::BindRepeating(&AccessibilityUIMessageHandler::RequestNativeUITree,
+                          base::Unretained(this)));
 }
 
 void AccessibilityUIMessageHandler::ToggleAccessibility(

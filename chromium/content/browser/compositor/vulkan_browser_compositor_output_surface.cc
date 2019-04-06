@@ -7,6 +7,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/viz/service/display/output_surface_client.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_surface.h"
 
 namespace content {
@@ -25,8 +26,9 @@ VulkanBrowserCompositorOutputSurface::~VulkanBrowserCompositorOutputSurface() {
 bool VulkanBrowserCompositorOutputSurface::Initialize(
     gfx::AcceleratedWidget widget) {
   DCHECK(!surface_);
-  std::unique_ptr<gpu::VulkanSurface> surface(
-      gpu::VulkanSurface::CreateViewSurface(widget));
+  std::unique_ptr<gpu::VulkanSurface> surface =
+      vulkan_context_provider()->GetVulkanImplementation()->CreateViewSurface(
+          widget);
   if (!surface->Initialize(vulkan_context_provider()->GetDeviceQueue(),
                            gpu::VulkanSurface::DEFAULT_SURFACE_FORMAT)) {
     return false;
@@ -78,11 +80,6 @@ gfx::BufferFormat VulkanBrowserCompositorOutputSurface::GetOverlayBufferFormat()
   return gfx::BufferFormat::RGBX_8888;
 }
 
-bool VulkanBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle() const {
-  NOTIMPLEMENTED();
-  return false;
-}
-
 void VulkanBrowserCompositorOutputSurface::Reshape(
     const gfx::Size& size,
     float device_scale_factor,
@@ -97,6 +94,10 @@ void VulkanBrowserCompositorOutputSurface::SetDrawRectangle(
   NOTREACHED();
 }
 
+unsigned VulkanBrowserCompositorOutputSurface::UpdateGpuFence() {
+  return 0;
+}
+
 uint32_t
 VulkanBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
   NOTIMPLEMENTED();
@@ -106,17 +107,15 @@ VulkanBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
 void VulkanBrowserCompositorOutputSurface::SwapBuffers(
     viz::OutputSurfaceFrame frame) {
   surface_->SwapBuffers();
-  ++swap_id_;
-
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&VulkanBrowserCompositorOutputSurface::SwapBuffersAck,
-                 weak_ptr_factory_.GetWeakPtr(), swap_id_));
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
-void VulkanBrowserCompositorOutputSurface::SwapBuffersAck(uint64_t swap_id) {
+void VulkanBrowserCompositorOutputSurface::SwapBuffersAck() {
   DCHECK(client_);
-  client_->DidReceiveSwapBuffersAck(swap_id);
+  client_->DidReceiveSwapBuffersAck();
 }
 
 gpu::VulkanSurface* VulkanBrowserCompositorOutputSurface::GetVulkanSurface() {

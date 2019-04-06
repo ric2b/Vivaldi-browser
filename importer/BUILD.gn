@@ -1,4 +1,6 @@
-static_library("importer") {
+import("//build/config/jumbo.gni")
+
+jumbo_static_library("importer") {
   if (!is_android) {
     sources = [
       "chrome_bookmark_reader.cpp",
@@ -7,8 +9,8 @@ static_library("importer") {
       "chrome_importer_utils.h",
       "chromium_importer.cpp",
       "chromium_importer.h",
-      "chromium_profile_importer.cpp",
-      "chromium_profile_importer.h",
+      #"chromium_profile_importer.cpp",
+      #"chromium_profile_importer.h",
       "viv_importer_bookmark.cpp",
       "viv_importer_notes.cpp",
       "viv_importer_wand.cpp",
@@ -34,17 +36,11 @@ static_library("importer") {
   }
 }
 
-static_library("browser") {
+jumbo_static_library("browser") {
   if (!is_android) {
     sources = [
-      "chrome_importer_util_win.cc",
-      "chromium_importer_util_linux.cc",
-      "chromium_importer_util_mac.mm",
       "chromium_profile_importer.cpp",
       "chromium_profile_importer.h",
-      "chromium_profile_lock_posix.cc",
-      "chromium_profile_lock_mac.mm",
-      "chromium_profile_lock_win.cc",
       "chromium_profile_lock.cpp",
       "chromium_profile_lock.h",
       "imported_notes_entry.cpp",
@@ -53,10 +49,28 @@ static_library("browser") {
       "imported_speeddial_entry.h",
       "viv_detect_opera.cc",
       "viv_importer.h",
-      "viv_importer_util_linux.cc",
-      "viv_importer_util_mac.mm",
-      "viv_importer_util_win.cc",
     ]
+    if (is_win) {
+      sources += [
+        "chrome_importer_util_win.cc",
+        "chromium_profile_lock_win.cc",
+        "viv_importer_util_win.cc",
+      ]
+    }
+    if (is_posix && !is_mac) {
+      sources += [
+        "chromium_importer_util_linux.cc",
+        "chromium_profile_lock_posix.cc",
+        "viv_importer_util_linux.cc",
+      ]
+    }
+    if (is_mac) {
+      sources += [
+        "chromium_profile_lock_mac.mm",
+        "chromium_importer_util_mac.mm",
+        "viv_importer_util_mac.mm",
+      ]
+    }
 
     deps = [
       "//base:base",

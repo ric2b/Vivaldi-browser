@@ -4,7 +4,9 @@
 
 #include "ash/display/resolution_notification_controller.h"
 
+#include "ash/public/interfaces/session_controller.mojom.h"
 #include "ash/screen_util.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/screen_layout_observer.h"
@@ -15,8 +17,8 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
 #include "ui/message_center/notification_list.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace ash {
 
@@ -66,8 +68,8 @@ class ResolutionNotificationControllerTest : public AshTestBase {
 
     EXPECT_TRUE(controller()->PrepareNotificationAndSetDisplayMode(
         display.id(), old_mode, new_mode,
-        base::Bind(&ResolutionNotificationControllerTest::OnAccepted,
-                   base::Unretained(this))));
+        base::BindOnce(&ResolutionNotificationControllerTest::OnAccepted,
+                       base::Unretained(this))));
 
     // OnConfigurationChanged event won't be emitted in the test environment,
     // so invoke UpdateDisplay() to emit that event explicitly.
@@ -388,6 +390,27 @@ TEST_F(ResolutionNotificationControllerTest, Fallback) {
   EXPECT_TRUE(display_manager()->GetSelectedModeForDisplayId(id2, &mode));
   EXPECT_EQ("250x250", mode.size().ToString());
   EXPECT_EQ(58.0f, mode.refresh_rate());
+}
+
+TEST_F(ResolutionNotificationControllerTest, NoTimeoutInKioskMode) {
+  // Login in as kiosk app.
+  mojom::UserSessionPtr session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->avatar = mojom::UserAvatar::New();
+  session->user_info->type = user_manager::USER_TYPE_KIOSK_APP;
+  session->user_info->account_id = AccountId::FromUserEmail("user1@test.com");
+  session->user_info->display_name = "User 1";
+  session->user_info->display_email = "user1@test.com";
+  Shell::Get()->session_controller()->UpdateUserSession(std::move(session));
+  EXPECT_EQ(LoginStatus::KIOSK_APP,
+            Shell::Get()->session_controller()->login_status());
+
+  UpdateDisplay("300x300#300x300%59|200x200%60");
+  const display::Display& display =
+      display::Screen::GetScreen()->GetPrimaryDisplay();
+  SetDisplayResolutionAndNotify(display, gfx::Size(200, 200));
+  EXPECT_FALSE(controller()->DoesNotificationTimeout());
 }
 
 }  // namespace ash

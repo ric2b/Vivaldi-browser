@@ -15,6 +15,7 @@ import android.support.annotation.IntDef;
 import android.util.Log;
 import android.webkit.WebSettings;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
@@ -52,14 +53,6 @@ public class AwSettings {
     public static final int LAYOUT_ALGORITHM_NARROW_COLUMNS = 2;
     public static final int LAYOUT_ALGORITHM_TEXT_AUTOSIZING = 3;
 
-    /* See {@link android.webkit.WebSettings}. */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({PLUGIN_STATE_ON, PLUGIN_STATE_ON_DEMAND, PLUGIN_STATE_OFF})
-    public @interface PluginState {}
-    public static final int PLUGIN_STATE_ON = 0;
-    public static final int PLUGIN_STATE_ON_DEMAND = 1;
-    public static final int PLUGIN_STATE_OFF = 2;
-
     // This class must be created on the UI thread. Afterwards, it can be
     // used from any thread. Internally, the class uses a message queue
     // to call native code on the UI thread only.
@@ -95,7 +88,6 @@ public class AwSettings {
     private boolean mAllowFileAccessFromFileURLs;
     private boolean mJavaScriptCanOpenWindowsAutomatically;
     private boolean mSupportMultipleWindows;
-    private @PluginState int mPluginState = PLUGIN_STATE_OFF;
     private boolean mAppCacheEnabled;
     private boolean mDomStorageEnabled;
     private boolean mDatabaseEnabled;
@@ -118,7 +110,7 @@ public class AwSettings {
     // Although this bit is stored on AwSettings it is actually controlled via the CookieManager.
     private boolean mAcceptThirdPartyCookies;
 
-    // if null, default to AwContentsStatics.getSafeBrowsingEnabledByManifest()
+    // if null, default to AwSafeBrowsingConfigHelper.getSafeBrowsingEnabledByManifest()
     private Boolean mSafeBrowsingEnabled;
 
     private final boolean mSupportLegacyQuirks;
@@ -386,7 +378,7 @@ public class AwSettings {
             if (userOptIn != null && !userOptIn) return false;
 
             if (mSafeBrowsingEnabled == null) {
-                return AwContentsStatics.getSafeBrowsingEnabledByManifest();
+                return AwSafeBrowsingConfigHelper.getSafeBrowsingEnabledByManifest();
             }
             return mSafeBrowsingEnabled;
         }
@@ -602,6 +594,12 @@ public class AwSettings {
      */
     public static String getDefaultUserAgent() {
         return LazyDefaultUserAgent.sInstance;
+    }
+
+    @CalledByNative
+    private static boolean getAllowSniffingFileUrls() {
+        // Don't allow sniffing file:// URLs for MIME type if the application targets P or later.
+        return !BuildInfo.targetsAtLeastP();
     }
 
     /**
@@ -1125,57 +1123,6 @@ public class AwSettings {
         assert Thread.holdsLock(mAwSettingsLock);
         return mAllowFileAccessFromFileURLs;
     }
-
-    /**
-     * See {@link android.webkit.WebSettings#setPluginsEnabled}.
-     */
-    public void setPluginsEnabled(boolean flag) {
-        if (TRACE) Log.i(LOGTAG, "setPluginsEnabled=" + flag);
-        setPluginState(flag ? PLUGIN_STATE_ON : PLUGIN_STATE_OFF);
-    }
-
-    /**
-     * See {@link android.webkit.WebSettings#setPluginState}.
-     */
-    public void setPluginState(@PluginState int state) {
-        if (TRACE) Log.i(LOGTAG, "setPluginState=" + state);
-        synchronized (mAwSettingsLock) {
-            if (mPluginState != state) {
-                mPluginState = state;
-                mEventHandler.updateWebkitPreferencesLocked();
-            }
-        }
-    }
-
-    /**
-     * See {@link android.webkit.WebSettings#getPluginsEnabled}.
-     */
-    public boolean getPluginsEnabled() {
-        synchronized (mAwSettingsLock) {
-            return mPluginState == PLUGIN_STATE_ON;
-        }
-    }
-
-    /**
-     * Return true if plugins are disabled.
-     * @return True if plugins are disabled.
-     */
-    @CalledByNative
-    private boolean getPluginsDisabledLocked() {
-        assert Thread.holdsLock(mAwSettingsLock);
-        return mPluginState == PLUGIN_STATE_OFF;
-    }
-
-    /**
-     * See {@link android.webkit.WebSettings#getPluginState}.
-     */
-    @PluginState
-    public int getPluginState() {
-        synchronized (mAwSettingsLock) {
-            return mPluginState;
-        }
-    }
-
 
     /**
      * See {@link android.webkit.WebSettings#setJavaScriptCanOpenWindowsAutomatically}.

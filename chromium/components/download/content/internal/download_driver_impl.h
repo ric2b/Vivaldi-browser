@@ -12,8 +12,8 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "components/download/content/public/all_download_item_notifier.h"
-#include "components/download/internal/download_driver.h"
-#include "components/download/public/download_params.h"
+#include "components/download/internal/background_service/download_driver.h"
+#include "components/download/public/background_service/download_params.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_manager.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -28,7 +28,7 @@ class DownloadDriverImpl : public DownloadDriver,
                            public AllDownloadItemNotifier::Observer {
  public:
   // Creates a driver entry based on a download item.
-  static DriverEntry CreateDriverEntry(const content::DownloadItem* item);
+  static DriverEntry CreateDriverEntry(const download::DownloadItem* item);
 
   // Create the driver.
   DownloadDriverImpl(content::DownloadManager* manager);
@@ -42,6 +42,7 @@ class DownloadDriverImpl : public DownloadDriver,
       const RequestParams& request_params,
       const std::string& guid,
       const base::FilePath& file_path,
+      scoped_refptr<network::ResourceRequestBody> post_body,
       const net::NetworkTrafficAnnotationTag& traffic_annotation) override;
   void Remove(const std::string& guid) override;
   void Pause(const std::string& guid) override;
@@ -55,11 +56,11 @@ class DownloadDriverImpl : public DownloadDriver,
   void OnManagerInitialized(content::DownloadManager* manager) override;
   void OnManagerGoingDown(content::DownloadManager* manager) override;
   void OnDownloadCreated(content::DownloadManager* manager,
-                         content::DownloadItem* item) override;
+                         download::DownloadItem* item) override;
   void OnDownloadUpdated(content::DownloadManager* manager,
-                         content::DownloadItem* item) override;
+                         download::DownloadItem* item) override;
   void OnDownloadRemoved(content::DownloadManager* manager,
-                         content::DownloadItem* item) override;
+                         download::DownloadItem* item) override;
 
   void OnHardRecoverComplete(bool success);
 

@@ -9,7 +9,6 @@ import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.HAVE_I
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.IMMEDIATE_RESPONSE;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NO_INSTRUMENTS;
 
-import android.content.DialogInterface;
 import android.support.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -25,6 +24,7 @@ import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
@@ -165,13 +165,17 @@ public class PaymentRequestPaymentAppAndCardsTest implements MainActivityStartCa
             Assert.assertEquals(
                     "https://bobpay.com", mPaymentRequestTestRule.getPaymentInstrumentLabel(i++));
         }
-        // \u0020\...\u2006 is four dots ellipsis.
-        Assert.assertEquals(
-                "Visa\u0020\u0020\u2022\u2006\u2022\u2006\u2022\u2006\u2022\u20061111\nJon Doe",
+        // \u0020\...\u2006 is four dots ellipsis, \u202A is the Left-To-Right Embedding (LTE) mark,
+        // \u202C is the Pop Directional Formatting (PDF) mark. Expected string with form
+        // 'Visa  <LRE>****1111<PDF>\nJoe Doe'.
+        Assert.assertEquals("Visa\u0020\u0020\u202A\u2022\u2006\u2022\u2006\u2022\u2006\u2022\u2006"
+                        + "1111\u202C\nJon Doe",
                 mPaymentRequestTestRule.getPaymentInstrumentLabel(i++));
+        // Expected string with form
+        // 'Visa  <LRE>****5454<PDF>\nJoe Doe\nBilling address required'.
         Assert.assertEquals(
-                "Mastercard\u0020\u0020\u2022\u2006\u2022\u2006\u2022\u2006\u2022\u20065454\n"
-                        + "Jon Doe\nBilling address required",
+                "Mastercard\u0020\u0020\u202A\u2022\u2006\u2022\u2006\u2022\u2006\u2022\u2006"
+                        + "5454\u202C\nJon Doe\nBilling address required",
                 mPaymentRequestTestRule.getPaymentInstrumentLabel(i++));
 
         // Check the output of the selected instrument.
@@ -186,9 +190,9 @@ public class PaymentRequestPaymentAppAndCardsTest implements MainActivityStartCa
             mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                     R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
             mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                    DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
-            mPaymentRequestTestRule.expectResultContains(
-                    new String[] {"Jon Doe", "4111111111111111", "12", "2050", "visa", "123"});
+                    ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+            mPaymentRequestTestRule.expectResultContains(new String[] {
+                    "Jon Doe", "4111111111111111", "12", "2050", "basic-card", "123"});
         }
     }
 }

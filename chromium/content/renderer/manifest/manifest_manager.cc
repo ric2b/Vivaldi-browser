@@ -12,11 +12,11 @@
 #include "content/renderer/fetchers/manifest_fetcher.h"
 #include "content/renderer/manifest/manifest_parser.h"
 #include "content/renderer/manifest/manifest_uma_util.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace content {
 
@@ -47,7 +47,7 @@ ManifestManager::~ManifestManager() {
 void ManifestManager::RequestManifest(RequestManifestCallback callback) {
   RequestManifestImpl(base::BindOnce(
       [](RequestManifestCallback callback, const GURL& manifest_url,
-         const Manifest& manifest,
+         const blink::Manifest& manifest,
          const blink::mojom::ManifestDebugInfo* debug_info) {
         std::move(callback).Run(manifest_url, manifest);
       },
@@ -58,7 +58,7 @@ void ManifestManager::RequestManifestDebugInfo(
     RequestManifestDebugInfoCallback callback) {
   RequestManifestImpl(base::BindOnce(
       [](RequestManifestDebugInfoCallback callback, const GURL& manifest_url,
-         const Manifest& manifest,
+         const blink::Manifest& manifest,
          const blink::mojom::ManifestDebugInfo* debug_info) {
         std::move(callback).Run(manifest_url,
                                 debug_info ? debug_info->Clone() : nullptr);
@@ -69,7 +69,7 @@ void ManifestManager::RequestManifestDebugInfo(
 void ManifestManager::RequestManifestImpl(
     InternalRequestManifestCallback callback) {
   if (!may_have_manifest_) {
-    std::move(callback).Run(GURL(), Manifest(), nullptr);
+    std::move(callback).Run(GURL(), blink::Manifest(), nullptr);
     return;
   }
 
@@ -190,7 +190,7 @@ void ManifestManager::ResolveCallbacks(ResolveState state) {
   // |manifest_url| will be reset on navigation or if we receive a didchange
   // event.
   if (state == ResolveStateFailure)
-    manifest_ = Manifest();
+    manifest_ = blink::Manifest();
 
   manifest_dirty_ = state != ResolveStateSuccess;
 

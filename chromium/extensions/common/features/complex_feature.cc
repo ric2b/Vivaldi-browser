@@ -95,21 +95,21 @@ Feature::Availability ComplexFeature::IsAvailableToEnvironment() const {
   return first_availability;
 }
 
-bool ComplexFeature::IsIdInBlacklist(const HashedExtensionId& hashed_id) const {
+bool ComplexFeature::IsIdInBlocklist(const HashedExtensionId& hashed_id) const {
   for (FeatureList::const_iterator it = features_.begin();
        it != features_.end();
        ++it) {
-    if ((*it)->IsIdInBlacklist(hashed_id))
+    if ((*it)->IsIdInBlocklist(hashed_id))
       return true;
   }
   return false;
 }
 
-bool ComplexFeature::IsIdInWhitelist(const HashedExtensionId& hashed_id) const {
+bool ComplexFeature::IsIdInAllowlist(const HashedExtensionId& hashed_id) const {
   for (FeatureList::const_iterator it = features_.begin();
        it != features_.end();
        ++it) {
-    if ((*it)->IsIdInWhitelist(hashed_id))
+    if ((*it)->IsIdInAllowlist(hashed_id))
       return true;
   }
   return false;
@@ -119,14 +119,6 @@ bool ComplexFeature::IsInternal() const {
   // Constructor verifies that composed features are consistent, thus we can
   // return just the first feature's value.
   return features_[0]->IsInternal();
-}
-
-bool ComplexFeature::IsVivaldiFeature() const {
-  return features_[0]->IsVivaldiFeature();
-}
-
-void ComplexFeature::set_vivaldi(bool flag) {
-  features_[0]->set_vivaldi(flag);
 }
 
 }  // namespace extensions

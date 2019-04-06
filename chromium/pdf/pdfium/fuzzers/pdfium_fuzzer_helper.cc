@@ -29,10 +29,11 @@
 #include <utility>
 
 #include "base/memory/free_deleter.h"
-#include "third_party/pdfium/public/cpp/fpdf_deleters.h"
+#include "third_party/pdfium/public/cpp/fpdf_scopers.h"
 #include "third_party/pdfium/public/fpdf_dataavail.h"
 #include "third_party/pdfium/public/fpdf_text.h"
 #include "third_party/pdfium/testing/test_support.h"
+#include "v8/include/v8-platform.h"
 
 namespace {
 
@@ -149,12 +150,11 @@ void PDFiumFuzzerHelper::RenderPdf(const char* pBuf, size_t len) {
   hints.version = 1;
   hints.AddSegment = Add_Segment;
 
-  std::unique_ptr<void, FPDFAvailDeleter> pdf_avail(
-      FPDFAvail_Create(&file_avail, &file_access));
+  ScopedFPDFAvail pdf_avail(FPDFAvail_Create(&file_avail, &file_access));
 
   int nRet = PDF_DATA_NOTAVAIL;
   bool bIsLinearized = false;
-  std::unique_ptr<void, FPDFDocumentDeleter> doc;
+  ScopedFPDFDocument doc;
   if (FPDFAvail_IsLinearized(pdf_avail.get()) == PDF_LINEARIZED) {
     doc.reset(FPDFAvail_GetDocument(pdf_avail.get(), nullptr));
     if (doc) {
@@ -179,7 +179,7 @@ void PDFiumFuzzerHelper::RenderPdf(const char* pBuf, size_t len) {
 
   (void)FPDF_GetDocPermissions(doc.get());
 
-  std::unique_ptr<void, FPDFFormHandleDeleter> form(
+  ScopedFPDFFormHandle form(
       FPDFDOC_InitFormFillEnvironment(doc.get(), &form_callbacks));
   if (!OnFormFillEnvLoaded(doc.get()))
     return;
@@ -207,20 +207,18 @@ void PDFiumFuzzerHelper::RenderPdf(const char* pBuf, size_t len) {
 bool PDFiumFuzzerHelper::RenderPage(FPDF_DOCUMENT doc,
                                     FPDF_FORMHANDLE form,
                                     const int page_index) {
-  std::unique_ptr<void, FPDFPageDeleter> page(FPDF_LoadPage(doc, page_index));
+  ScopedFPDFPage page(FPDF_LoadPage(doc, page_index));
   if (!page)
     return false;
 
-  std::unique_ptr<void, FPDFTextPageDeleter> text_page(
-      FPDFText_LoadPage(page.get()));
+  ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
   FORM_OnAfterLoadPage(page.get(), form);
   FORM_DoPageAAction(page.get(), form, FPDFPAGE_AACTION_OPEN);
 
   const double scale = 1.0;
   int width = static_cast<int>(FPDF_GetPageWidth(page.get()) * scale);
   int height = static_cast<int>(FPDF_GetPageHeight(page.get()) * scale);
-  std::unique_ptr<void, FPDFBitmapDeleter> bitmap(
-      FPDFBitmap_Create(width, height, 0));
+  ScopedFPDFBitmap bitmap(FPDFBitmap_Create(width, height, 0));
   if (bitmap) {
     FPDFBitmap_FillRect(bitmap.get(), 0, 0, width, height, 0xFFFFFFFF);
     FPDF_RenderPageBitmap(bitmap.get(), page.get(), 0, 0, width, height, 0, 0);
@@ -235,10 +233,10 @@ bool PDFiumFuzzerHelper::RenderPage(FPDF_DOCUMENT doc,
 struct TestCase {
   TestCase() {
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
-    InitializeV8ForPDFium(ProgramPath(), "", &natives_blob, &snapshot_blob,
-                          &platform);
+    platform = InitializeV8ForPDFiumWithStartupData(
+        ProgramPath(), "", &natives_blob, &snapshot_blob);
 #else
-    InitializeV8ForPDFium(ProgramPath(), &platform);
+    platform = InitializeV8ForPDFium(ProgramPath());
 #endif
 
     memset(&config, '\0', sizeof(config));
@@ -254,10 +252,11 @@ struct TestCase {
     FSDK_SetUnSpObjProcessHandler(&unsupport_info);
   }
 
-  v8::Platform* platform;
+  std::unique_ptr<v8::Platform> platform;
   v8::StartupData natives_blob;
   v8::StartupData snapshot_blob;
   FPDF_LIBRARY_CONFIG config;
   UNSUPPORT_INFO unsupport_info;
 };
-static TestCase* testCase = new TestCase();
+
+static TestCase* test_case = new TestCase();

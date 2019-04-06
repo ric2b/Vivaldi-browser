@@ -7,9 +7,9 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
-#include "chrome/browser/gcm/fake_gcm_profile_service.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/gcm_driver/fake_gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -70,7 +70,7 @@ class PrefetchInstanceIDProxyTest : public testing::Test {
 
 void PrefetchInstanceIDProxyTest::SetUp() {
   scoped_feature_list_.InitAndEnableFeature(kPrefetchingOfflinePagesFeature);
-  proxy_ = base::MakeUnique<PrefetchInstanceIDProxy>(kAppIdForTest, &profile_);
+  proxy_ = std::make_unique<PrefetchInstanceIDProxy>(kAppIdForTest, &profile_);
   gcm_profile_service_ = static_cast<gcm::FakeGCMProfileService*>(
       gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactoryAndUse(
           &profile_, &gcm::FakeGCMProfileService::Build));

@@ -84,7 +84,7 @@ IPC_STRUCT_END()
 IPC_SYNC_MESSAGE_CONTROL3_2(GpuChannelMsg_CreateCommandBuffer,
                             GPUCreateCommandBufferConfig /* init_params */,
                             int32_t /* route_id */,
-                            base::SharedMemoryHandle /* shared_state */,
+                            base::UnsafeSharedMemoryRegion /* shared_state */,
                             gpu::ContextResult,
                             gpu::Capabilities /* capabilities */)
 
@@ -158,10 +158,9 @@ IPC_SYNC_MESSAGE_ROUTED3_1(GpuCommandBufferMsg_WaitForGetOffsetInRange,
 // TODO(sunnyps): This is an internal implementation detail of the gpu service
 // and is not sent by the client. Remove this once the non-scheduler code path
 // is removed.
-IPC_MESSAGE_ROUTED3(GpuCommandBufferMsg_AsyncFlush,
+IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_AsyncFlush,
                     int32_t /* put_offset */,
-                    uint32_t /* flush_id */,
-                    bool /* snapshot_requested */)
+                    uint32_t /* flush_id */)
 
 // Sent by the GPU process to display messages in the console.
 IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_ConsoleMsg,
@@ -169,10 +168,9 @@ IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_ConsoleMsg,
 
 // Register an existing shared memory transfer buffer. The id that can be
 // used to identify the transfer buffer from a command buffer.
-IPC_MESSAGE_ROUTED3(GpuCommandBufferMsg_RegisterTransferBuffer,
+IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_RegisterTransferBuffer,
                     int32_t /* id */,
-                    base::SharedMemoryHandle /* transfer_buffer */,
-                    uint32_t /* size */)
+                    base::UnsafeSharedMemoryRegion /* transfer_buffer */)
 
 // Destroy a previously created transfer buffer.
 IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_DestroyTransferBuffer, int32_t /* id */)
@@ -186,11 +184,6 @@ IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_Destroyed,
 // Tells the browser that SwapBuffers returned.
 IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_SwapBuffersCompleted,
                     gpu::SwapBuffersCompleteParams /* params */)
-
-// Tells the browser about updated parameters for vsync alignment.
-IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_UpdateVSyncParameters,
-                    base::TimeTicks /* timebase */,
-                    base::TimeDelta /* interval */)
 
 // Tells the browser a buffer has been presented on screen.
 IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_BufferPresented,
@@ -232,9 +225,6 @@ IPC_SYNC_MESSAGE_ROUTED2_1(GpuCommandBufferMsg_CreateStreamTexture,
                            uint32_t, /* client_texture_id */
                            int32_t,  /* stream_id */
                            bool /* succeeded */)
-
-// Start or stop VSync sygnal production on GPU side (Windows only).
-IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_SetNeedsVSync, bool /* needs_vsync */)
 
 // Send a GPU fence handle and store it for the specified gpu fence ID.
 IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_CreateGpuFenceFromHandle,

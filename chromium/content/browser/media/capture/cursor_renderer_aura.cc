@@ -4,7 +4,6 @@
 
 #include "content/browser/media/capture/cursor_renderer_aura.h"
 
-#include "base/memory/ptr_util.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -113,9 +112,8 @@ SkBitmap CursorRendererAura::GetLastKnownCursorImage(gfx::Point* hot_point) {
   }
 
   gfx::NativeCursor cursor = window_->GetHost()->last_cursor();
-  SkBitmap cursor_bitmap;
-  ui::GetCursorBitmap(cursor, &cursor_bitmap, hot_point);
-  return cursor_bitmap;
+  *hot_point = cursor.GetHotspot();
+  return cursor.GetBitmap();
 }
 
 void CursorRendererAura::OnMouseEvent(ui::MouseEvent* event) {

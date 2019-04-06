@@ -7,7 +7,7 @@
 #include <stddef.h>
 
 #include "base/logging.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
 
 using blink::WebInputEvent;
 using blink::WebTouchEvent;
@@ -50,7 +50,7 @@ bool WebTouchEventTraits::IsTouchSequenceEnd(const WebTouchEvent& event) {
 }
 
 void WebTouchEventTraits::ResetType(WebInputEvent::Type type,
-                                    double timestamp_sec,
+                                    base::TimeTicks timestamp,
                                     WebTouchEvent* event) {
   DCHECK(WebInputEvent::IsTouchEventType(type));
   DCHECK(type != WebInputEvent::kTouchScrollStarted);
@@ -59,13 +59,13 @@ void WebTouchEventTraits::ResetType(WebInputEvent::Type type,
   event->dispatch_type = type == WebInputEvent::kTouchCancel
                              ? WebInputEvent::kEventNonBlocking
                              : WebInputEvent::kBlocking;
-  event->SetTimeStampSeconds(timestamp_sec);
+  event->SetTimeStamp(timestamp);
 }
 
 void WebTouchEventTraits::ResetTypeAndTouchStates(WebInputEvent::Type type,
-                                                  double timestamp_sec,
+                                                  base::TimeTicks timestamp,
                                                   WebTouchEvent* event) {
-  ResetType(type, timestamp_sec, event);
+  ResetType(type, timestamp, event);
 
   WebTouchPoint::State newState = WebTouchPoint::kStateUndefined;
   switch (event->GetType()) {

@@ -4,17 +4,20 @@
 
 #import "chrome/browser/ui/views/frame/browser_frame_mac.h"
 
+#import "base/mac/foundation_util.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #import "chrome/browser/ui/cocoa/browser_window_command_handler.h"
 #import "chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.h"
+#import "chrome/browser/ui/cocoa/touchbar/browser_window_touch_bar_controller.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
+#import "chrome/browser/ui/views/frame/browser_native_widget_window_mac.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#import "chrome/browser/ui/views/frame/native_widget_mac_frameless_nswindow.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #import "ui/base/cocoa/window_size_constants.h"
+#import "ui/views/cocoa/window_touch_bar_delegate.h"
 
 namespace {
 
@@ -35,25 +38,40 @@ bool ShouldHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event) {
   return [event.os_event type] == NSKeyDown;
 }
 
-// Returns true if |event| was handled.
-bool HandleExtraKeyboardShortcut(NSEvent* event,
-                                 Browser* browser,
-                                 ChromeCommandDispatcherDelegate* delegate) {
-  // Send the event to the menu before sending it to the browser/window
-  // shortcut handling, so that if a user configures cmd-left to mean
-  // "previous tab", it takes precedence over the built-in "history back"
-  // binding.
-  if ([[NSApp mainMenu] performKeyEquivalent:event])
-    return true;
+}  // namespace
 
-  // Invoke ChromeCommandDispatcherDelegate for Mac-specific shortcuts that
-  // can't be handled by accelerator_table.cc.
-  return [delegate
-      handleExtraKeyboardShortcut:event
-                           window:browser->window()->GetNativeWindow()];
+// Bridge Obj-C class for WindowTouchBarDelegate and
+// BrowserWindowTouchBarController.
+@interface BrowserWindowTouchBarControllerViewsDelegate
+    : NSObject<WindowTouchBarDelegate> {
+  Browser* browser_;  // Weak.
+  NSWindow* window_;  // Weak.
+  base::scoped_nsobject<BrowserWindowTouchBarController> touchBarController_;
 }
 
-}  // namespace
+@end
+
+@implementation BrowserWindowTouchBarControllerViewsDelegate
+
+- (instancetype)initWithBrowser:(Browser*)browser window:(NSWindow*)window {
+  if ((self = [super init])) {
+    browser_ = browser;
+    window_ = window;
+  }
+
+  return self;
+}
+
+- (NSTouchBar*)makeTouchBar API_AVAILABLE(macos(10.12.2)) {
+  if (!touchBarController_) {
+    touchBarController_.reset([[BrowserWindowTouchBarController alloc]
+        initWithBrowser:browser_
+                 window:window_]);
+  }
+  return [touchBarController_ makeTouchBar];
+}
+
+@end
 
 BrowserFrameMac::BrowserFrameMac(BrowserFrame* browser_frame,
                                  BrowserView* browser_view)
@@ -79,36 +97,63 @@ int BrowserFrameMac::SheetPositionY() {
   return host_view_y - dialog_host->GetDialogPosition(gfx::Size()).y();
 }
 
+void BrowserFrameMac::OnWindowFullscreenStateChange() {
+  browser_view_->FullscreenStateChanged();
+}
+
 void BrowserFrameMac::InitNativeWidget(
     const views::Widget::InitParams& params) {
   views::NativeWidgetMac::InitNativeWidget(params);
 
-  // Our content view draws on top of the titlebar area, but we want the window
-  // control buttons to draw on top of the content view.
-  // We do this by setting the content view's z-order below the buttons, and
-  // by giving the root view a layer so that the buttons get their own layers.
-  NSView* content_view = [GetNativeWindow() contentView];
-  NSView* root_view = [content_view superview];
-  [content_view removeFromSuperview];
-  [root_view setWantsLayer:YES];
-  [root_view addSubview:content_view positioned:NSWindowBelow relativeTo:nil];
+  [[GetNativeWindow() contentView] setWantsLayer:YES];
 }
 
 NativeWidgetMacNSWindow* BrowserFrameMac::CreateNSWindow(
     const views::Widget::InitParams& params) {
   NSUInteger style_mask = NSTitledWindowMask | NSClosableWindowMask |
-                          NSMiniaturizableWindowMask | NSResizableWindowMask |
-                          NSTexturedBackgroundWindowMask;
-  base::scoped_nsobject<NativeWidgetMacFramelessNSWindow> ns_window(
-      [[NativeWidgetMacFramelessNSWindow alloc]
-          initWithContentRect:ui::kWindowSizeDeterminedLater
-                    styleMask:style_mask
-                      backing:NSBackingStoreBuffered
-                        defer:NO]);
+                          NSMiniaturizableWindowMask | NSResizableWindowMask;
+
+  base::scoped_nsobject<NativeWidgetMacNSWindow> ns_window;
+  if (browser_view_->IsBrowserTypeNormal()) {
+    if (@available(macOS 10.10, *))
+      style_mask |= NSFullSizeContentViewWindowMask;
+    ns_window.reset([[BrowserNativeWidgetWindow alloc]
+        initWithContentRect:ui::kWindowSizeDeterminedLater
+                  styleMask:style_mask
+                    backing:NSBackingStoreBuffered
+                      defer:NO]);
+    // Ensure tabstrip/profile button are visible.
+    if (@available(macOS 10.10, *))
+      [ns_window setTitlebarAppearsTransparent:YES];
+  } else {
+    ns_window.reset([[NativeWidgetMacNSWindow alloc]
+        initWithContentRect:ui::kWindowSizeDeterminedLater
+                  styleMask:style_mask
+                    backing:NSBackingStoreBuffered
+                      defer:NO]);
+  }
+  [ns_window setAnimationBehavior:NSWindowAnimationBehaviorDocumentWindow];
   [ns_window setCommandDispatcherDelegate:command_dispatcher_delegate_];
   [ns_window setCommandHandler:[[[BrowserWindowCommandHandler alloc] init]
                                    autorelease]];
+
+  touch_bar_delegate_.reset(
+      [[BrowserWindowTouchBarControllerViewsDelegate alloc]
+          initWithBrowser:browser_view_->browser()
+                   window:ns_window]);
+  [ns_window setWindowTouchBarDelegate:touch_bar_delegate_.get()];
+
   return ns_window.autorelease();
+}
+
+void BrowserFrameMac::OnWindowDestroying(NSWindow* window) {
+  // Clear delegates set in CreateNSWindow() to prevent objects with a reference
+  // to |window| attempting to validate commands by looking for a Browser*.
+  NativeWidgetMacNSWindow* ns_window =
+      base::mac::ObjCCastStrict<NativeWidgetMacNSWindow>(window);
+  [ns_window setCommandHandler:nil];
+  [ns_window setCommandDispatcherDelegate:nil];
+  [ns_window setWindowTouchBarDelegate:nil];
 }
 
 int BrowserFrameMac::GetMinimizeButtonOffset() const {
@@ -143,30 +188,21 @@ void BrowserFrameMac::GetWindowPlacement(
   return NativeWidgetMac::GetWindowPlacement(bounds, show_state);
 }
 
-// Mac is special because the user could override the menu shortcuts (see
-// comment in HandleExtraKeyboardShortcut), and there's a set of additional
-// accelerator tables (handled by ChromeCommandDispatcherDelegate) that couldn't
-// be ported to accelerator_table.cc: see global_keyboard_shortcuts_views_mac.mm
-bool BrowserFrameMac::PreHandleKeyboardEvent(
+content::KeyboardEventProcessingResult BrowserFrameMac::PreHandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
-  if (!ShouldHandleKeyboardEvent(event))
-    return false;
+  // On macOS, all keyEquivalents that use modifier keys are handled by
+  // -[CommandDispatcher performKeyEquivalent:]. If this logic is being hit,
+  // it means that the event was not handled, so we must return either
+  // NOT_HANDLED or NOT_HANDLED_IS_SHORTCUT.
+  if (EventUsesPerformKeyEquivalent(event.os_event)) {
+    int command_id = CommandForKeyEvent(event.os_event).chrome_command;
+    if (command_id == -1)
+      command_id = DelayedWebContentsCommandForKeyEvent(event.os_event);
+    if (command_id != -1)
+      return content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT;
+  }
 
-  // CommandForKeyEvent consults the [NSApp mainMenu] and Mac-specific
-  // accelerator tables internally.
-  int command_id = CommandForKeyEvent(event.os_event);
-  if (command_id == -1)
-    return false;
-
-  // Only handle a small list of reserved commands that we don't want to be
-  // handled by the renderer.
-  Browser* browser = browser_view_->browser();
-  if (!browser->command_controller()->IsReservedCommandOrKey(
-          command_id, event))
-    return false;
-
-  return HandleExtraKeyboardShortcut(event.os_event, browser,
-                                     command_dispatcher_delegate_);
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool BrowserFrameMac::HandleKeyboardEvent(
@@ -174,6 +210,12 @@ bool BrowserFrameMac::HandleKeyboardEvent(
   if (!ShouldHandleKeyboardEvent(event))
     return false;
 
-  return HandleExtraKeyboardShortcut(event.os_event, browser_view_->browser(),
-                                     command_dispatcher_delegate_);
+  // Redispatch the event. If it's a keyEquivalent:, this gives
+  // CommandDispatcher the opportunity to finish passing the event to consumers.
+  NSWindow* window = GetNativeWindow();
+  DCHECK([window.class conformsToProtocol:@protocol(CommandDispatchingWindow)]);
+  NSObject<CommandDispatchingWindow>* command_dispatching_window =
+      base::mac::ObjCCastStrict<NSObject<CommandDispatchingWindow>>(window);
+  return [[command_dispatching_window commandDispatcher]
+      redispatchKeyEvent:event.os_event];
 }

@@ -346,13 +346,17 @@ template("gcc_toolchain") {
       # POSIX-like toolchains such as NaCl on Windows).
       ar_wrapper =
           rebase_path("//build/toolchain/gcc_ar_wrapper.py", root_build_dir)
+
       if (current_os == "aix") {
         # We use slightly different arflags for AIX.
-        extra_arflags = "rcsT"
+        extra_arflags = "-r -c -s"
       } else {
-        extra_arflags = "rcsD"
+        extra_arflags = "-r -c -s -D"
       }
-      command = "$python_path \"$ar_wrapper\"$whitelist_flag --output={{output}} --ar=\"$ar\" {{arflags}} $extra_arflags @\"$rspfile\""
+
+      # Almost all targets build with //build/config/compiler:thin_archive which
+      # adds -T to arflags.
+      command = "$python_path \"$ar_wrapper\"$whitelist_flag --output={{output}} --ar=\"$ar\" \"{{arflags}} $extra_arflags\" @\"$rspfile\""
       description = "AR {{output}}"
       rspfile_content = "{{inputs}}"
       outputs = [
@@ -589,6 +593,10 @@ template("gcc_toolchain") {
       description = copy_description
     }
 
+    tool("action") {
+      pool = "//build/toolchain:action_pool($default_toolchain)"
+    }
+
     forward_variables_from(invoker, [ "deps" ])
   }
 }
@@ -621,6 +629,7 @@ template("clang_toolchain") {
                              "strip",
                              "is_clang_analysis_supported",
                              "enable_linker_map",
+                             "use_unstripped_as_runtime_outputs",
                            ])
 
     toolchain_args = {

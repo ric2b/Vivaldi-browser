@@ -1142,6 +1142,19 @@ void BluetoothLowEnergyEventRouter::OnCharacteristicWriteRequest(
           request, characteristic->GetIdentifier()));
 }
 
+void BluetoothLowEnergyEventRouter::OnCharacteristicPrepareWriteRequest(
+    const device::BluetoothDevice* device,
+    const device::BluetoothLocalGattCharacteristic* characteristic,
+    const std::vector<uint8_t>& value,
+    int offset,
+    bool has_subsequent_request,
+    const base::Closure& callback,
+    const Delegate::ErrorCallback& error_callback) {
+  // TODO(crbug/856869): Support reliable write.
+  OnCharacteristicWriteRequest(device, characteristic, value, offset, callback,
+                               error_callback);
+}
+
 void BluetoothLowEnergyEventRouter::OnDescriptorReadRequest(
     const device::BluetoothDevice* device,
     const device::BluetoothLocalGattDescriptor* descriptor,
@@ -1207,6 +1220,7 @@ void BluetoothLowEnergyEventRouter::OnDescriptorWriteRequest(
 
 void BluetoothLowEnergyEventRouter::OnNotificationsStart(
     const device::BluetoothDevice* device,
+    device::BluetoothGattCharacteristic::NotificationType notification_type,
     const device::BluetoothLocalGattCharacteristic* characteristic) {}
 
 void BluetoothLowEnergyEventRouter::OnNotificationsStop(

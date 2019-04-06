@@ -8,9 +8,9 @@
 #include <memory>
 #include <unordered_map>
 
-#include "cc/animation/animation.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_host.h"
+#include "cc/animation/keyframe_model.h"
 #include "cc/trees/mutator_host_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/scroll_offset.h"
@@ -18,8 +18,8 @@
 
 namespace cc {
 
-class AnimationPlayer;
-class AnimationTicker;
+class KeyframeEffect;
+class SingleKeyframeEffectAnimation;
 
 class TestLayer {
  public:
@@ -236,12 +236,12 @@ class AnimationTimelinesTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
-  void GetImplTimelineAndPlayerByID();
+  void GetImplTimelineAndAnimationByID();
 
   void CreateTestLayer(bool needs_active_value_observations,
                        bool needs_pending_value_observations);
-  void AttachTimelinePlayerLayer();
-  virtual void CreateImplTimelineAndPlayer();
+  void AttachTimelineAnimationLayer();
+  virtual void CreateImplTimelineAndAnimation();
 
   void CreateTestMainLayer();
   void DestroyTestMainLayer();
@@ -252,12 +252,13 @@ class AnimationTimelinesTest : public testing::Test {
   void TickAnimationsTransferEvents(base::TimeTicks time,
                                     unsigned expect_events);
 
-  AnimationTicker* GetTickerForElementId(ElementId element_id);
-  AnimationTicker* GetImplTickerForLayerId(ElementId element_id);
+  KeyframeEffect* GetKeyframeEffectForElementId(ElementId element_id);
+  KeyframeEffect* GetImplKeyframeEffectForLayerId(ElementId element_id);
 
   int NextTestLayerId();
 
-  bool CheckTickerTimelineNeedsPushProperties(bool needs_push_properties) const;
+  bool CheckKeyframeEffectTimelineNeedsPushProperties(
+      bool needs_push_properties) const;
 
   void PushProperties();
 
@@ -268,17 +269,17 @@ class AnimationTimelinesTest : public testing::Test {
   AnimationHost* host_impl_;
 
   const int timeline_id_;
-  const int player_id_;
+  const int animation_id_;
   ElementId element_id_;
 
   int next_test_layer_id_;
 
   scoped_refptr<AnimationTimeline> timeline_;
-  scoped_refptr<AnimationPlayer> player_;
+  scoped_refptr<SingleKeyframeEffectAnimation> animation_;
   scoped_refptr<ElementAnimations> element_animations_;
 
   scoped_refptr<AnimationTimeline> timeline_impl_;
-  scoped_refptr<AnimationPlayer> player_impl_;
+  scoped_refptr<SingleKeyframeEffectAnimation> animation_impl_;
   scoped_refptr<ElementAnimations> element_animations_impl_;
 };
 

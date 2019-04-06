@@ -14,7 +14,7 @@
 
 #include "base/callback_forward.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
 
 class GURL;
 
@@ -23,7 +23,6 @@ namespace content {
 class BrowserContext;
 struct NotificationResources;
 struct PlatformNotificationData;
-class ResourceContext;
 
 // The service using which notifications can be presented to the user. There
 // should be a unique instance of the PlatformNotificationService depending
@@ -35,23 +34,6 @@ class CONTENT_EXPORT PlatformNotificationService {
   using DisplayedNotificationsCallback =
       base::Callback<void(std::unique_ptr<std::set<std::string>>,
                           bool /* supports synchronization */)>;
-
-  // Checks if |origin| has permission to display Web Notifications.
-  // This method must only be called on the UI thread.
-  virtual blink::mojom::PermissionStatus CheckPermissionOnUIThread(
-      BrowserContext* browser_context,
-      const GURL& origin,
-      int render_process_id) = 0;
-
-  // Checks if |origin| has permission to display Web Notifications. This method
-  // exists to serve the synchronous IPC required by the Notification.permission
-  // JavaScript getter, and should not be used for other purposes. See
-  // https://crbug.com/446497 for the plan to deprecate this method.
-  // This method must only be called on the IO thread.
-  virtual blink::mojom::PermissionStatus CheckPermissionOnIOThread(
-      ResourceContext* resource_context,
-      const GURL& origin,
-      int render_process_id) = 0;
 
   // Displays the notification described in |notification_data| to the user.
   // This method must be called on the UI thread.
@@ -88,6 +70,11 @@ class CONTENT_EXPORT PlatformNotificationService {
   virtual void GetDisplayedNotifications(
       BrowserContext* browser_context,
       const DisplayedNotificationsCallback& callback) = 0;
+
+  // Reads the value of the next persistent notification ID from the profile and
+  // increments the value, as it is called once per notification write.
+  virtual int64_t ReadNextPersistentNotificationId(
+      BrowserContext* browser_context) = 0;
 };
 
 }  // namespace content

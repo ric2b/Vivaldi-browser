@@ -127,19 +127,19 @@ URLID URLDatabase::AddURLInternal(const URLRow& info, bool is_temporary) {
       " (url, title, visit_count, typed_count, "\
       "last_visit_time, hidden) "\
       "VALUES (?,?,?,?,?,?)"
-  const char* statement_name;
+  size_t statement_line;
   const char* statement_sql;
   if (is_temporary) {
-    statement_name = "AddURLTemporary";
+    statement_line = __LINE__;
     statement_sql = "INSERT INTO temp_urls" ADDURL_COMMON_SUFFIX;
   } else {
-    statement_name = "AddURL";
+    statement_line = __LINE__;
     statement_sql = "INSERT INTO urls" ADDURL_COMMON_SUFFIX;
   }
   #undef ADDURL_COMMON_SUFFIX
 
   sql::Statement statement(GetDB().GetCachedStatement(
-      sql::StatementID(statement_name), statement_sql));
+      sql::StatementID(__FILE__, statement_line), statement_sql));
   statement.BindString(0, GURLToDatabaseURL(info.url()));
   statement.BindString16(1, info.title());
   statement.BindInt(2, info.visit_count());
@@ -255,8 +255,9 @@ bool URLDatabase::InitURLEnumeratorForSignificant(URLEnumerator* enumerator) {
   DCHECK(!enumerator->initialized_);
   std::string sql("SELECT ");
   sql.append(kURLRowFields);
-  sql.append(" FROM urls WHERE last_visit_time >= ? OR visit_count >= ? OR "
-             "typed_count >= ?");
+  sql.append(
+      " FROM urls WHERE hidden = 0 AND "
+      "(last_visit_time >= ? OR visit_count >= ? OR typed_count >= ?)");
   sql.append(
       " ORDER BY typed_count DESC, last_visit_time DESC, visit_count "
       "DESC");
@@ -277,8 +278,9 @@ bool URLDatabase::AutocompleteForPrefix(const std::string& prefix,
   // as bookmarks is no longer part of the db we no longer include the order
   // by clause.
   results->clear();
+
   const char* sql;
-  int line;
+  size_t line;
   if (typed_only) {
     sql = "SELECT" HISTORY_URL_ROW_FIELDS "FROM urls "
         "WHERE url >= ? AND url < ? AND hidden = 0 AND typed_count > 0 "
@@ -365,27 +367,6 @@ bool URLDatabase::FindShortestURLFromBase(const std::string& base,
   DCHECK(info);
   FillURLRow(statement, info);
   return true;
-}
-
-bool URLDatabase::GetMatchesWStatement(const char* sql_statement,
-                                       const std::string& search_string,
-                                       int max_hits,
-                                       URLRows* results) {
-  results->clear();
-  sql::Statement statement(
-      GetDB().GetCachedStatement(SQL_FROM_HERE, sql_statement));
-
-  statement.BindString(0, search_string);
-  statement.BindString(1, search_string);
-  statement.BindInt(2, max_hits);
-
-  while (statement.Step()) {
-    URLResult info;
-    FillURLRow(statement, &info);
-    if (info.url().is_valid())
-      results->push_back(info);
-  }
-  return !results->empty();
 }
 
 bool URLDatabase::GetTextMatches(const base::string16& query,
@@ -698,7 +679,5 @@ bool RowQualifiesAsSignificant(const URLRow& row,
          (row.visit_count() >= kLowQualityMatchVisitLimit) ||
          (row.last_visit() >= real_threshold);
 }
-
-#include "components/history/url_database.cc.inc"
 
 }  // namespace history

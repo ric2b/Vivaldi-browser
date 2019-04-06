@@ -4,10 +4,8 @@
 
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
 
-#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "media/capture/video/chromeos/camera_hal_dispatcher_impl.h"
-#include "media/capture/video/linux/video_capture_device_factory_linux.h"
 
 namespace media {
 
@@ -18,18 +16,14 @@ gpu::GpuMemoryBufferManager* g_gpu_buffer_manager = nullptr;
 }  // namespace
 
 VideoCaptureDeviceFactoryChromeOS::VideoCaptureDeviceFactoryChromeOS(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_screen_observer,
-    gpu::GpuMemoryBufferManager* gpu_buffer_manager)
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_screen_observer)
     : task_runner_for_screen_observer_(task_runner_for_screen_observer),
       camera_hal_ipc_thread_("CameraHalIpcThread"),
-      initialized_(Init()) {
-  g_gpu_buffer_manager = gpu_buffer_manager;
-}
+      initialized_(Init()) {}
 
 VideoCaptureDeviceFactoryChromeOS::~VideoCaptureDeviceFactoryChromeOS() {
   camera_hal_delegate_->Reset();
   camera_hal_ipc_thread_.Stop();
-  g_gpu_buffer_manager = nullptr;
 }
 
 std::unique_ptr<VideoCaptureDevice>
@@ -47,9 +41,6 @@ void VideoCaptureDeviceFactoryChromeOS::GetSupportedFormats(
     const VideoCaptureDeviceDescriptor& device_descriptor,
     VideoCaptureFormats* supported_formats) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (!initialized_) {
-    return;
-  }
   camera_hal_delegate_->GetSupportedFormats(device_descriptor,
                                             supported_formats);
 }
@@ -64,22 +55,13 @@ void VideoCaptureDeviceFactoryChromeOS::GetDeviceDescriptors(
 }
 
 // static
-bool VideoCaptureDeviceFactoryChromeOS::ShouldEnable() {
-  // Checks whether the Chrome OS binary which provides the HAL v3 camera
-  // service is installed on the device.  If the binary exists we assume the
-  // device is using the new camera HAL v3 stack.
-  const base::FilePath kArcCamera3Service("/usr/bin/arc_camera3_service");
-  return base::PathExists(kArcCamera3Service);
-}
-
-// static
 gpu::GpuMemoryBufferManager*
 VideoCaptureDeviceFactoryChromeOS::GetBufferManager() {
   return g_gpu_buffer_manager;
 }
 
 // static
-void VideoCaptureDeviceFactoryChromeOS::SetBufferManagerForTesting(
+void VideoCaptureDeviceFactoryChromeOS::SetGpuBufferManager(
     gpu::GpuMemoryBufferManager* buffer_manager) {
   g_gpu_buffer_manager = buffer_manager;
 }
@@ -90,9 +72,8 @@ bool VideoCaptureDeviceFactoryChromeOS::Init() {
     return false;
   }
 
-  if (!CameraHalDispatcherImpl::GetInstance()->IsStarted() &&
-      !CameraHalDispatcherImpl::GetInstance()->Start()) {
-    LOG(ERROR) << "Failed to start CameraHalDispatcherImpl";
+  if (!CameraHalDispatcherImpl::GetInstance()->IsStarted()) {
+    LOG(ERROR) << "CameraHalDispatcherImpl is not started";
     return false;
   }
 
@@ -101,29 +82,5 @@ bool VideoCaptureDeviceFactoryChromeOS::Init() {
   camera_hal_delegate_->RegisterCameraClient();
   return true;
 }
-
-#if defined(OS_CHROMEOS)
-// static
-VideoCaptureDeviceFactory*
-VideoCaptureDeviceFactory::CreateVideoCaptureDeviceFactory(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_screen_observer,
-    gpu::GpuMemoryBufferManager* gpu_buffer_manager) {
-  // On Chrome OS we have to support two use cases:
-  //
-  // 1. For devices that have the camera HAL v3 service running on Chrome OS,
-  //    we use the HAL v3 capture device which VideoCaptureDeviceFactoryChromeOS
-  //    provides.
-  // 2. Existing devices that use UVC cameras need to use the V4L2 capture
-  //    device which VideoCaptureDeviceFacotoryLinux provides; there are also
-  //    some special devices that may never be able to implement a camera HAL
-  //    v3.
-  if (VideoCaptureDeviceFactoryChromeOS::ShouldEnable()) {
-    return new VideoCaptureDeviceFactoryChromeOS(
-        task_runner_for_screen_observer, gpu_buffer_manager);
-  } else {
-    return new VideoCaptureDeviceFactoryLinux(task_runner_for_screen_observer);
-  }
-}
-#endif
 
 }  // namespace media

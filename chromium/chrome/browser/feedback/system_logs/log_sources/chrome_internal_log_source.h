@@ -9,6 +9,10 @@
 #include "build/build_config.h"
 #include "components/feedback/system_logs/system_logs_source.h"
 
+#if defined(OS_CHROMEOS)
+#include "ash/public/interfaces/cros_display_config.mojom.h"
+#endif
+
 namespace system_logs {
 
 // Fetches internal Chrome logs.
@@ -34,6 +38,10 @@ class ChromeInternalLogSource : public SystemLogsSource {
   void PopulateUsbKeyboardDetected(SystemLogsResponse* response);
   void PopulateEnrolledToDomain(SystemLogsResponse* response);
   void PopulateInstallerBrandCode(SystemLogsResponse* response);
+#endif
+
+#if defined(OS_CHROMEOS)
+  ash::mojom::CrosDisplayConfigControllerPtr cros_display_config_ptr_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ChromeInternalLogSource);

@@ -8,6 +8,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/macros.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -17,6 +18,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/ui_base_features.h"
 
 namespace autofill {
 
@@ -24,11 +26,23 @@ class SaveCardBubbleControllerImplTest : public DialogBrowserTest {
  public:
   SaveCardBubbleControllerImplTest() {}
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    DialogBrowserTest::SetUpCommandLine(command_line);
+    scoped_feature_list_.InitAndEnableFeature(features::kExperimentalUi);
+  }
+
   std::unique_ptr<base::DictionaryValue> GetTestLegalMessage() {
     std::unique_ptr<base::Value> value(base::JSONReader::Read(
         "{"
         "  \"line\" : [ {"
-        "     \"template\": \"This is the entire message.\""
+        "     \"template\": \"The legal documents are: {0} and {1}.\","
+        "     \"template_parameter\" : [ {"
+        "        \"display_text\" : \"Terms of Service\","
+        "        \"url\": \"http://www.example.com/tos\""
+        "     }, {"
+        "        \"display_text\" : \"Privacy Policy\","
+        "        \"url\": \"http://www.example.com/pp\""
+        "     } ]"
         "  } ]"
         "}"));
     base::DictionaryValue* dictionary;
@@ -51,12 +65,13 @@ class SaveCardBubbleControllerImplTest : public DialogBrowserTest {
     // do).
     if (name == "Local") {
       controller_->ShowBubbleForLocalSave(test::GetCreditCard(),
-                                          base::Bind(&base::DoNothing));
+                                          base::DoNothing());
     } else {
-      bool should_cvc_be_requested = name == "Server_WithCvcStep";
+      bool should_request_name_from_user =
+          name == "Server_WithCardholderNameTextfield";
       controller_->ShowBubbleForUpload(
           test::GetMaskedServerCard(), GetTestLegalMessage(),
-          should_cvc_be_requested, base::Bind(&base::DoNothing));
+          should_request_name_from_user, base::DoNothing());
     }
   }
 
@@ -64,6 +79,7 @@ class SaveCardBubbleControllerImplTest : public DialogBrowserTest {
 
  private:
   SaveCardBubbleControllerImpl* controller_ = nullptr;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(SaveCardBubbleControllerImplTest);
 };
@@ -80,9 +96,9 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleControllerImplTest, InvokeUi_Server) {
 }
 
 // Invokes a bubble asking the user if they want to save a credit card to the
-// server, with an added CVC step.
+// server, with an added textfield for entering/confirming cardholder name.
 IN_PROC_BROWSER_TEST_F(SaveCardBubbleControllerImplTest,
-                       InvokeUi_Server_WithCvcStep) {
+                       InvokeUi_Server_WithCardholderNameTextfield) {
   ShowAndVerifyUi();
 }
 

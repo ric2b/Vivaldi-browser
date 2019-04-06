@@ -38,6 +38,26 @@ bool SearchIPCRouterPolicyImpl::ShouldProcessUndoAllMostVisitedDeletions() {
   return !is_incognito_ && search::IsInstantNTP(web_contents_);
 }
 
+bool SearchIPCRouterPolicyImpl::ShouldProcessAddCustomLink() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
+bool SearchIPCRouterPolicyImpl::ShouldProcessUpdateCustomLink() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
+bool SearchIPCRouterPolicyImpl::ShouldProcessDeleteCustomLink() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
+bool SearchIPCRouterPolicyImpl::ShouldProcessUndoCustomLinkAction() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
+bool SearchIPCRouterPolicyImpl::ShouldProcessResetCustomLinks() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
 bool SearchIPCRouterPolicyImpl::ShouldProcessLogEvent() {
   return !is_incognito_ && search::IsInstantNTP(web_contents_);
 }
@@ -69,5 +89,18 @@ bool SearchIPCRouterPolicyImpl::ShouldSendMostVisitedItems() {
 }
 
 bool SearchIPCRouterPolicyImpl::ShouldSendThemeBackgroundInfo() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
+bool SearchIPCRouterPolicyImpl::ShouldProcessSelectLocalBackgroundImage() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
+bool SearchIPCRouterPolicyImpl::ShouldProcessSetCustomBackgroundURL() {
+  return !is_incognito_ && search::IsInstantNTP(web_contents_);
+}
+
+bool SearchIPCRouterPolicyImpl::
+    ShouldProcessSetCustomBackgroundURLWithAttributions() {
   return !is_incognito_ && search::IsInstantNTP(web_contents_);
 }

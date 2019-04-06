@@ -41,7 +41,11 @@ class TestServiceImpl : public mojom::TestService {
   }
 
   void DoTerminateProcess(DoTerminateProcessCallback callback) override {
-    base::Process::Current().Terminate(0, false);
+    base::Process::TerminateCurrentProcessImmediately(0);
+  }
+
+  void DoCrashImmediately(DoCrashImmediatelyCallback callback) override {
+    IMMEDIATE_CRASH();
   }
 
   void CreateFolder(CreateFolderCallback callback) override {
@@ -80,10 +84,13 @@ std::unique_ptr<service_manager::Service> CreateTestService() {
 
 }  // namespace
 
-ShellContentUtilityClient::ShellContentUtilityClient() {
-  if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kProcessType) == switches::kUtilityProcess)
+ShellContentUtilityClient::ShellContentUtilityClient(bool is_browsertest) {
+  if (is_browsertest &&
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kProcessType) == switches::kUtilityProcess) {
     network_service_test_helper_ = std::make_unique<NetworkServiceTestHelper>();
+    audio_service_test_helper_ = std::make_unique<AudioServiceTestHelper>();
+  }
 }
 
 ShellContentUtilityClient::~ShellContentUtilityClient() {
@@ -121,6 +128,11 @@ void ShellContentUtilityClient::RegisterServices(StaticServiceMap* services) {
 void ShellContentUtilityClient::RegisterNetworkBinders(
     service_manager::BinderRegistry* registry) {
   network_service_test_helper_->RegisterNetworkBinders(registry);
+}
+
+void ShellContentUtilityClient::RegisterAudioBinders(
+    service_manager::BinderRegistry* registry) {
+  audio_service_test_helper_->RegisterAudioBinders(registry);
 }
 
 }  // namespace content

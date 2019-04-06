@@ -7,13 +7,16 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "device/bluetooth/bluetooth_export.h"
@@ -25,7 +28,6 @@ namespace device {
 
 class BluetoothGattNotifySession;
 class BluetoothRemoteGattDescriptor;
-class BluetoothRemoteGattService;
 
 // BluetoothRemoteGattCharacteristic represents a remote GATT characteristic.
 // This class is used to represent GATT characteristics that belong to a service
@@ -49,6 +51,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
   typedef base::Callback<void(std::unique_ptr<BluetoothGattNotifySession>)>
       NotifySessionCallback;
 
+  ~BluetoothRemoteGattCharacteristic() override;
+
   // Returns the value of the characteristic. For remote characteristics, this
   // is the most recently cached value. For local characteristics, this is the
   // most recently updated value or the value retrieved from the delegate.
@@ -59,18 +63,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
 
   // Returns the list of GATT characteristic descriptors that provide more
   // information about this characteristic.
-  virtual std::vector<BluetoothRemoteGattDescriptor*> GetDescriptors()
-      const = 0;
+  virtual std::vector<BluetoothRemoteGattDescriptor*> GetDescriptors() const;
 
   // Returns the GATT characteristic descriptor with identifier |identifier| if
   // it belongs to this GATT characteristic.
   virtual BluetoothRemoteGattDescriptor* GetDescriptor(
-      const std::string& identifier) const = 0;
+      const std::string& identifier) const;
 
   // Returns the GATT characteristic descriptors that match |uuid|. There may be
   // multiple, as illustrated by Core Bluetooth Specification [V4.2 Vol 3 Part G
   // 3.3.3.5 Characteristic Presentation Format].
-  std::vector<BluetoothRemoteGattDescriptor*> GetDescriptorsByUUID(
+  virtual std::vector<BluetoothRemoteGattDescriptor*> GetDescriptorsByUUID(
       const BluetoothUUID& uuid) const;
 
   // Get a weak pointer to the characteristic.
@@ -115,6 +118,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
   // BluetoothGattNotifySession object that you received in |callback|.
   virtual void StartNotifySession(const NotifySessionCallback& callback,
                                   const ErrorCallback& error_callback);
+#if defined(OS_CHROMEOS)
+  // TODO(https://crbug.com/849359): This method should also be implemented on
+  // Android and Windows.
+  // macOS does not support specifying a notification type. According to macOS
+  // documentation if the characteristic supports both notify and indicate, only
+  // notifications will be enabled.
+  // https://developer.apple.com/documentation/corebluetooth/cbperipheral/1518949-setnotifyvalue?language=objc#discussion
+  virtual void StartNotifySession(NotificationType notification_type,
+                                  const NotifySessionCallback& callback,
+                                  const ErrorCallback& error_callback);
+#endif
 
   // Sends a read request to a remote characteristic to read its value.
   // |callback| is called to return the read value on success and
@@ -132,18 +146,51 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
       const base::Closure& callback,
       const ErrorCallback& error_callback) = 0;
 
+#if defined(OS_CHROMEOS)
+  // Sends a prepare write request to a remote characteristic with the value
+  // |value|. |callback| is called to signal success and |error_callback| for
+  // failures. This method only applies to remote characteristics and will fail
+  // for those that are locally hosted.
+  // Callers should use BluetoothDevice::ExecuteWrite() to commit or
+  // BluetoothDevice::AbortWrite() to abort the change.
+  virtual void PrepareWriteRemoteCharacteristic(
+      const std::vector<uint8_t>& value,
+      const base::Closure& callback,
+      const ErrorCallback& error_callback) = 0;
+#endif
+
+  // Sends a write request to a remote characteristic with the value |value|
+  // without waiting for a response. This method returns false to signal
+  // failures. When attempting to write the remote characteristic true is
+  // returned without a guarantee of success. This method only applies to remote
+  // characteristics and will fail for those that are locally hosted.
+  // This method is currently implemented only on macOS.
+  // TODO(https://crbug.com/831524): Implement it on other platforms as well.
+  virtual bool WriteWithoutResponse(base::span<const uint8_t> value);
+
  protected:
   BluetoothRemoteGattCharacteristic();
-  ~BluetoothRemoteGattCharacteristic() override;
 
   // Writes to the Client Characteristic Configuration descriptor to enable
   // notifications/indications. This method is meant to be called from
   // StartNotifySession and should contain only the code necessary to start
   // listening to characteristic notifications on a particular platform.
+#if defined(OS_CHROMEOS)
+  // |notification_type| specifies the type of notifications that will be
+  // enabled: notifications or indications.
+  // TODO(https://crbug.com/849359): This method should also be implemented on
+  // Android and Windows.
+  virtual void SubscribeToNotifications(
+      BluetoothRemoteGattDescriptor* ccc_descriptor,
+      NotificationType notification_type,
+      const base::Closure& callback,
+      const ErrorCallback& error_callback) = 0;
+#else
   virtual void SubscribeToNotifications(
       BluetoothRemoteGattDescriptor* ccc_descriptor,
       const base::Closure& callback,
       const ErrorCallback& error_callback) = 0;
+#endif
 
   // Writes to the Client Characteristic Configuration descriptor to disable
   // notifications/indications. This method is meant to be called from
@@ -153,6 +200,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
       BluetoothRemoteGattDescriptor* ccc_descriptor,
       const base::Closure& callback,
       const ErrorCallback& error_callback) = 0;
+
+  // Utility function to add a |descriptor| to the map of |descriptors_|.
+  bool AddDescriptor(std::unique_ptr<BluetoothRemoteGattDescriptor> descriptor);
+
+  // Descriptors owned by the chracteristic. The descriptors' identifiers serve
+  // as keys.
+  base::flat_map<std::string, std::unique_ptr<BluetoothRemoteGattDescriptor>>
+      descriptors_;
 
  private:
   friend class BluetoothGattNotifySession;
@@ -197,7 +252,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
     void Cancel();
   };
 
+  void StartNotifySessionInternal(
+      const base::Optional<NotificationType>& notification_type,
+      const NotifySessionCallback& callback,
+      const ErrorCallback& error_callback);
   void ExecuteStartNotifySession(
+      const base::Optional<NotificationType>& notification_type,
       NotifySessionCallback callback,
       ErrorCallback error_callback,
       NotifySessionCommand::Type previous_command_type,
@@ -222,6 +282,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
       BluetoothGattNotifySession* session,
       base::Closure callback,
       BluetoothRemoteGattService::GattErrorCode error);
+  bool IsNotificationTypeSupported(
+      const base::Optional<NotificationType>& notification_type);
 
   // Pending StartNotifySession / StopNotifySession calls.
   base::queue<std::unique_ptr<NotifySessionCommand>> pending_notify_commands_;

@@ -19,7 +19,7 @@ namespace offline_pages {
 namespace {
 
 int64_t GetPageCountSync(sql::Connection* db) {
-  const char kSql[] = "SELECT count(*) FROM offlinepages_v1";
+  static const char kSql[] = "SELECT count(*) FROM offlinepages_v1";
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
   if (statement.Step()) {
     return statement.ColumnInt64(0);
@@ -42,12 +42,12 @@ void OfflinePageMetadataStoreTestUtil::BuildStore() {
   }
 
   store_.reset(
-      new OfflinePageMetadataStoreSQL(task_runner_, temp_directory_.GetPath()));
+      new OfflinePageMetadataStore(task_runner_, temp_directory_.GetPath()));
   store_ptr_ = store_.get();
 }
 
 void OfflinePageMetadataStoreTestUtil::BuildStoreInMemory() {
-  store_.reset(new OfflinePageMetadataStoreSQL(task_runner_));
+  store_.reset(new OfflinePageMetadataStore(task_runner_));
   store_ptr_ = store_.get();
 }
 
@@ -57,7 +57,7 @@ void OfflinePageMetadataStoreTestUtil::DeleteStore() {
   task_runner_->FastForwardUntilNoTasksRemain();
 }
 
-std::unique_ptr<OfflinePageMetadataStoreSQL>
+std::unique_ptr<OfflinePageMetadataStore>
 OfflinePageMetadataStoreTestUtil::ReleaseStore() {
   return std::move(store_);
 }
@@ -66,9 +66,9 @@ void OfflinePageMetadataStoreTestUtil::InsertItem(const OfflinePageItem& page) {
   AddPageResult result;
   auto task = std::make_unique<AddPageTask>(
       store(), page,
-      base::Bind([](AddPageResult* out_result,
-                    AddPageResult cb_result) { *out_result = cb_result; },
-                 &result));
+      base::BindOnce([](AddPageResult* out_result,
+                        AddPageResult cb_result) { *out_result = cb_result; },
+                     &result));
   task->Run();
   task_runner_->RunUntilIdle();
   EXPECT_EQ(AddPageResult::SUCCESS, result);
@@ -90,7 +90,7 @@ OfflinePageMetadataStoreTestUtil::GetPageByOfflineId(int64_t offline_id) {
   OfflinePageItem* page = nullptr;
   auto task = GetPagesTask::CreateTaskMatchingOfflineId(
       store(),
-      base::Bind(
+      base::BindOnce(
           [](OfflinePageItem** out_page, const OfflinePageItem* cb_page) {
             if (cb_page)
               *out_page = new OfflinePageItem(*cb_page);

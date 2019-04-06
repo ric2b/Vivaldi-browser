@@ -10,12 +10,12 @@
 #include "base/macros.h"
 #include "cc/cc_export.h"
 #include "cc/layers/layer_impl.h"
-#include "cc/resources/video_resource_updater.h"
 #include "components/viz/common/resources/release_callback.h"
 #include "media/base/video_rotation.h"
 
 namespace media {
 class VideoFrame;
+class VideoResourceUpdater;
 }
 
 namespace cc {
@@ -36,10 +36,10 @@ class CC_EXPORT VideoLayerImpl : public LayerImpl {
   // LayerImpl implementation.
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
   bool WillDraw(DrawMode draw_mode,
-                LayerTreeResourceProvider* resource_provider) override;
+                viz::ClientResourceProvider* resource_provider) override;
   void AppendQuads(viz::RenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
-  void DidDraw(LayerTreeResourceProvider* resource_provider) override;
+  void DidDraw(viz::ClientResourceProvider* resource_provider) override;
   SimpleEnclosedRegion VisibleOpaqueRegion() const override;
   void DidBecomeActive() override;
   void ReleaseResources() override;
@@ -62,7 +62,7 @@ class CC_EXPORT VideoLayerImpl : public LayerImpl {
 
   media::VideoRotation video_rotation_;
 
-  std::unique_ptr<VideoResourceUpdater> updater_;
+  std::unique_ptr<media::VideoResourceUpdater> updater_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoLayerImpl);
 };

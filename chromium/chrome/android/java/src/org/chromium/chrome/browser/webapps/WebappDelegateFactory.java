@@ -14,7 +14,6 @@ import org.chromium.chrome.browser.contextmenu.ChromeContextMenuPopulator;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
 import org.chromium.chrome.browser.fullscreen.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.BrowserControlsVisibilityDelegate;
-import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabContextMenuItemDelegate;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
@@ -71,8 +70,8 @@ public class WebappDelegateFactory extends TabDelegateFactory {
 
     @Override
     public ContextMenuPopulator createContextMenuPopulator(Tab tab) {
-        return new ChromeContextMenuPopulator(
-                new TabContextMenuItemDelegate(tab), ChromeContextMenuPopulator.WEB_APP_MODE);
+        return new ChromeContextMenuPopulator(new TabContextMenuItemDelegate(tab),
+                ChromeContextMenuPopulator.ContextMenuMode.WEB_APP);
     }
 
     @Override
@@ -86,11 +85,6 @@ public class WebappDelegateFactory extends TabDelegateFactory {
                 new WebappBrowserControlsDelegate(mActivity, tab),
                 // Ensures browser controls hiding is delayed after activity start.
                 mActivity.getFullscreenManager().getBrowserVisibilityDelegate());
-    }
-
-    @Override
-    public InterceptNavigationDelegateImpl createInterceptNavigationDelegate(Tab tab) {
-        return new WebappInterceptNavigationDelegate(mActivity, tab);
     }
 
     @Override

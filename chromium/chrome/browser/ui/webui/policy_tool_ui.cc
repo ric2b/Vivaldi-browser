@@ -26,13 +26,19 @@ content::WebUIDataSource* CreatePolicyToolUIHtmlSource() {
   source->AddLocalizedString("noPoliciesSet", IDS_POLICY_NO_POLICIES_SET);
   source->AddLocalizedString("showExpandedValue",
                              IDS_POLICY_SHOW_EXPANDED_VALUE);
+  source->AddLocalizedString("exportLinux", IDS_EXPORT_POLICIES_LINUX);
+  source->AddLocalizedString("exportMac", IDS_EXPORT_POLICIES_MAC);
   source->AddLocalizedString("hideExpandedValue",
                              IDS_POLICY_HIDE_EXPANDED_VALUE);
   source->AddLocalizedString("loadSession", IDS_POLICY_TOOL_LOAD_SESSION);
+  source->AddLocalizedString("removeSession", IDS_POLICY_TOOL_REMOVE_SESSION);
+  source->AddLocalizedString("renameSession", IDS_POLICY_TOOL_RENAME_SESSION);
   source->AddLocalizedString("sessionNamePlaceholder",
                              IDS_POLICY_TOOL_SESSION_NAME_PLACEHOLDER);
   source->AddLocalizedString("filterPlaceholder",
                              IDS_POLICY_FILTER_PLACEHOLDER);
+  source->AddLocalizedString("cancelRename", IDS_POLICY_TOOL_CANCEL_RENAME);
+  source->AddLocalizedString("confirmRename", IDS_POLICY_TOOL_CONFIRM_RENAME);
   source->AddLocalizedString("edit", IDS_POLICY_TOOL_EDIT);
   source->AddLocalizedString("save", IDS_POLICY_TOOL_SAVE);
   source->AddLocalizedString("errorSavingDisabled",
@@ -42,6 +48,13 @@ content::WebUIDataSource* CreatePolicyToolUIHtmlSource() {
   source->AddLocalizedString("errorFileCorrupted",
                              IDS_POLICY_TOOL_CORRUPTED_FILE);
   source->AddLocalizedString("enableEditing", IDS_POLICY_TOOL_ENABLE_EDITING);
+  source->AddLocalizedString("errorInvalidType", IDS_POLICY_TOOL_INVALID_TYPE);
+  source->AddLocalizedString("errorRenameFailed",
+                             IDS_POLICY_TOOL_RENAME_FAILED);
+  source->AddLocalizedString("errorSessionExist",
+                             IDS_POLICY_TOOL_SESSION_EXIST);
+  source->AddLocalizedString("errorSessionNotExist",
+                             IDS_POLICY_TOOL_SESSION_NOT_EXIST);
   source->AddLocalizedString("errorDeleteFailed",
                              IDS_POLICY_TOOL_DELETE_FAILED);
   // Overwrite the title value added by PolicyUIHandler.

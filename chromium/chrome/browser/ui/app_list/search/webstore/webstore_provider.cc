@@ -89,7 +89,7 @@ void WebstoreProvider::Start(const base::string16& query) {
     webstore_search_.reset(new JSONResponseFetcher(
         base::Bind(&WebstoreProvider::OnWebstoreSearchFetched,
                    base::Unretained(this)),
-        profile_->GetRequestContext()));
+        profile_));
   }
 
   query_pending_ = true;
@@ -139,7 +139,7 @@ void WebstoreProvider::ProcessWebstoreSearchResults(
     if (!it->GetAsDictionary(&dict))
       continue;
 
-    std::unique_ptr<SearchResult> result(CreateResult(query, *dict));
+    std::unique_ptr<ChromeSearchResult> result(CreateResult(query, *dict));
     if (!result)
       continue;
 
@@ -153,7 +153,7 @@ void WebstoreProvider::ProcessWebstoreSearchResults(
   }
 }
 
-std::unique_ptr<SearchResult> WebstoreProvider::CreateResult(
+std::unique_ptr<ChromeSearchResult> WebstoreProvider::CreateResult(
     const TokenizedString& query,
     const base::DictionaryValue& dict) {
   std::string app_id;
@@ -164,16 +164,16 @@ std::unique_ptr<SearchResult> WebstoreProvider::CreateResult(
       !dict.GetString(kKeyLocalizedName, &localized_name) ||
       !dict.GetString(kKeyIconUrl, &icon_url_string) ||
       !dict.GetBoolean(kKeyIsPaid, &is_paid)) {
-    return std::unique_ptr<SearchResult>();
+    return nullptr;
   }
 
   // If an app is already installed, don't show it in results.
   if (controller_->IsExtensionInstalled(profile_, app_id))
-    return std::unique_ptr<SearchResult>();
+    return nullptr;
 
   GURL icon_url(icon_url_string);
   if (!icon_url.is_valid())
-    return std::unique_ptr<SearchResult>();
+    return nullptr;
 
   std::string item_type_string;
   dict.GetString(kKeyItemType, &item_type_string);
@@ -186,9 +186,9 @@ std::unique_ptr<SearchResult> WebstoreProvider::CreateResult(
   TokenizedString title(base::UTF8ToUTF16(localized_name));
   TokenizedStringMatch match;
   if (!match.Calculate(query, title))
-    return std::unique_ptr<SearchResult>();
+    return nullptr;
 
-  std::unique_ptr<SearchResult> result = std::make_unique<WebstoreResult>(
+  std::unique_ptr<ChromeSearchResult> result = std::make_unique<WebstoreResult>(
       profile_, app_id, icon_url, is_paid, item_type, controller_);
   result->UpdateFromMatch(title, match);
   return result;

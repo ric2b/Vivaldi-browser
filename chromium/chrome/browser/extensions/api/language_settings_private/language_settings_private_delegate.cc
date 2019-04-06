@@ -21,6 +21,7 @@
 #include "components/spellcheck/browser/pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/storage_partition.h"
 
 namespace extensions {
 
@@ -226,6 +227,17 @@ void LanguageSettingsPrivateDelegate::
   }
 
   listening_spellcheck_ = should_listen;
+}
+
+void LanguageSettingsPrivateDelegate::RetryDownloadHunspellDictionary(
+    const std::string& language) {
+  for (const base::WeakPtr<SpellcheckHunspellDictionary> dictionary :
+       GetHunspellDictionaries()) {
+    if (dictionary && dictionary->GetLanguage() == language) {
+      dictionary->RetryDownloadDictionary(context_);
+      return;
+    }
+  }
 }
 
 void LanguageSettingsPrivateDelegate::OnSpellcheckDictionariesChanged() {

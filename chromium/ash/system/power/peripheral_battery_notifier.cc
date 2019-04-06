@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -27,7 +26,7 @@
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/gfx/image/image.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace ash {
 

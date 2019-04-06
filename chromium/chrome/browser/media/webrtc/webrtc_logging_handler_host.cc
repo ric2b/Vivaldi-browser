@@ -14,10 +14,11 @@
 #include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/bad_message.h"
-#include "chrome/browser/media/webrtc/webrtc_log_list.h"
+#include "chrome/browser/media/webrtc/webrtc_event_log_manager.h"
 #include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
 #include "chrome/browser/media/webrtc/webrtc_rtp_dump_handler.h"
 #include "chrome/common/media/webrtc_logging_messages.h"
+#include "components/webrtc_logging/browser/log_list.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -40,13 +41,13 @@ WebRtcLoggingHandlerHost::WebRtcLoggingHandlerHost(
     WebRtcLogUploader* log_uploader)
     : BrowserMessageFilter(WebRtcLoggingMsgStart),
       render_process_id_(render_process_id),
-      browser_context_(browser_context),
+      browser_context_directory_path_(browser_context->GetPath()),
       upload_log_on_render_close_(false),
       text_log_handler_(new WebRtcTextLogHandler(render_process_id)),
       rtp_dump_handler_(),
       stop_rtp_dump_callback_(),
       log_uploader_(log_uploader) {
-  DCHECK(browser_context_);
+  DCHECK(!browser_context_directory_path_.empty());
   DCHECK(log_uploader_);
 }
 
@@ -249,6 +250,15 @@ void WebRtcLoggingHandlerHost::StopRtpDump(
   rtp_dump_handler_->StopDump(type, callback);
 }
 
+void WebRtcLoggingHandlerHost::StartEventLogging(
+    const std::string& peer_connection_id,
+    size_t max_log_size_bytes,
+    const StartEventLoggingCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  WebRtcEventLogManager::GetInstance()->StartRemoteLogging(
+      render_process_id_, peer_connection_id, max_log_size_bytes, callback);
+}
+
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
 void WebRtcLoggingHandlerHost::GetLogsDirectory(
     const LogsDirectoryCallback& callback,
@@ -307,7 +317,7 @@ void WebRtcLoggingHandlerHost::OnRtpPacket(
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&WebRtcLoggingHandlerHost::DumpRtpPacketOnIOThread, this,
-                     base::Passed(&packet_header), header_length, packet_length,
+                     std::move(packet_header), header_length, packet_length,
                      incoming));
 }
 
@@ -401,9 +411,14 @@ void WebRtcLoggingHandlerHost::OnLoggingStoppedInRenderer() {
 
 base::FilePath WebRtcLoggingHandlerHost::GetLogDirectoryAndEnsureExists() {
   DCHECK(log_uploader_->background_task_runner()->RunsTasksInCurrentSequence());
+
+  // Since we can be alive after the RenderProcessHost and the BrowserContext
+  // (profile) have gone away, we could create the log directory here after a
+  // profile has been deleted and removed from disk. If that happens it will be
+  // cleaned up (at a higher level) the next browser restart.
   base::FilePath log_dir_path =
-      WebRtcLogList::GetWebRtcLogDirectoryForBrowserContextPath(
-          browser_context_->GetPath());
+      webrtc_logging::LogList::GetWebRtcLogDirectoryForBrowserContextPath(
+          browser_context_directory_path_);
   base::File::Error error;
   if (!base::CreateDirectoryAndGetError(log_dir_path, &error)) {
     DLOG(ERROR) << "Could not create WebRTC log directory, error: " << error;
@@ -448,8 +463,8 @@ void WebRtcLoggingHandlerHost::StoreLogInDirectory(
   log_uploader_->background_task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&WebRtcLogUploader::LoggingStoppedDoStore,
                                 base::Unretained(log_uploader_), *log_paths,
-                                log_id, base::Passed(&log_buffer),
-                                base::Passed(&meta_data), done_callback));
+                                log_id, std::move(log_buffer),
+                                std::move(meta_data), done_callback));
 }
 
 void WebRtcLoggingHandlerHost::DoUploadLogAndRtpDumps(
@@ -479,8 +494,8 @@ void WebRtcLoggingHandlerHost::DoUploadLogAndRtpDumps(
   log_uploader_->background_task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&WebRtcLogUploader::LoggingStoppedDoUpload,
-                     base::Unretained(log_uploader_), base::Passed(&log_buffer),
-                     base::Passed(&meta_data), upload_done_data));
+                     base::Unretained(log_uploader_), std::move(log_buffer),
+                     std::move(meta_data), upload_done_data));
 }
 
 void WebRtcLoggingHandlerHost::CreateRtpDumpHandlerAndStart(

@@ -19,6 +19,7 @@
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/crash/core/common/crash_keys.h"
 #include "content/public/common/content_switches.h"
+#include "services/service_manager/embedder/switches.h"
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
 #include "components/upload_list/crash_upload_list.h"
@@ -85,9 +86,9 @@ bool ChromeCrashReporterClient::GetCrashDumpLocation(
   if (env->GetVar("BREAKPAD_DUMP_LOCATION", &alternate_crash_dump_location)) {
     base::FilePath crash_dumps_dir_path =
         base::FilePath::FromUTF8Unsafe(alternate_crash_dump_location);
-    PathService::Override(chrome::DIR_CRASH_DUMPS, crash_dumps_dir_path);
+    base::PathService::Override(chrome::DIR_CRASH_DUMPS, crash_dumps_dir_path);
   }
-  return PathService::Get(chrome::DIR_CRASH_DUMPS, crash_dir);
+  return base::PathService::Get(chrome::DIR_CRASH_DUMPS, crash_dir);
 }
 
 bool ChromeCrashReporterClient::IsRunningUnattended() {
@@ -133,7 +134,7 @@ bool ChromeCrashReporterClient::EnableBreakpadForProcess(
     const std::string& process_type) {
   return process_type == switches::kRendererProcess ||
          process_type == switches::kPpapiPluginProcess ||
-         process_type == switches::kZygoteProcess ||
+         process_type == service_manager::switches::kZygoteProcess ||
          process_type == switches::kGpuProcess ||
          process_type == switches::kUtilityProcess;
 }

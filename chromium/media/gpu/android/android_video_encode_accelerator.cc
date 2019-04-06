@@ -19,7 +19,7 @@
 #include "media/base/android/media_codec_util.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/limits.h"
-#include "media/gpu/shared_memory_region.h"
+#include "media/base/unaligned_shared_memory.h"
 #include "media/video/picture.h"
 #include "third_party/libyuv/include/libyuv/convert_from.h"
 #include "ui/gl/android/scoped_java_surface.h"
@@ -429,12 +429,16 @@ void AndroidVideoEncodeAccelerator::DequeueOutput() {
 
   BitstreamBuffer bitstream_buffer = available_bitstream_buffers_.back();
   available_bitstream_buffers_.pop_back();
-  std::unique_ptr<SharedMemoryRegion> shm(
-      new SharedMemoryRegion(bitstream_buffer, false));
-  RETURN_ON_FAILURE(shm->Map(), "Failed to map SHM", kPlatformFailureError);
-  RETURN_ON_FAILURE(size <= shm->size(),
-                    "Encoded buffer too large: " << size << ">" << shm->size(),
-                    kPlatformFailureError);
+  auto shm = std::make_unique<WritableUnalignedMapping>(
+      bitstream_buffer.handle(), bitstream_buffer.size(),
+      bitstream_buffer.offset());
+  // The handle is no longer needed and should be closed.
+  bitstream_buffer.handle().Close();
+  RETURN_ON_FAILURE(shm->IsValid(), "Failed to map SHM", kPlatformFailureError);
+  RETURN_ON_FAILURE(
+      size <= bitstream_buffer.size(),
+      "Encoded buffer too large: " << size << ">" << bitstream_buffer.size(),
+      kPlatformFailureError);
 
   status = media_codec_->CopyFromOutputBuffer(buf_index, offset, shm->memory(),
                                               size);
@@ -446,8 +450,8 @@ void AndroidVideoEncodeAccelerator::DequeueOutput() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&VideoEncodeAccelerator::Client::BitstreamBufferReady,
-                 client_ptr_factory_->GetWeakPtr(), bitstream_buffer.id(), size,
-                 key_frame, frame_timestamp));
+                 client_ptr_factory_->GetWeakPtr(), bitstream_buffer.id(),
+                 BitstreamBufferMetadata(size, key_frame, frame_timestamp)));
 }
 
 }  // namespace media

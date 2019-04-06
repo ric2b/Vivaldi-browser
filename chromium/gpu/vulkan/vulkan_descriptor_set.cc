@@ -8,6 +8,7 @@
 #include "gpu/vulkan/vulkan_descriptor_layout.h"
 #include "gpu/vulkan/vulkan_descriptor_pool.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
 
 namespace gpu {
 

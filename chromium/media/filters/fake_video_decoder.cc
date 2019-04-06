@@ -52,11 +52,13 @@ std::string FakeVideoDecoder::GetDisplayName() const {
   return decoder_name_;
 }
 
-void FakeVideoDecoder::Initialize(const VideoDecoderConfig& config,
-                                  bool low_delay,
-                                  CdmContext* cdm_context,
-                                  const InitCB& init_cb,
-                                  const OutputCB& output_cb) {
+void FakeVideoDecoder::Initialize(
+    const VideoDecoderConfig& config,
+    bool low_delay,
+    CdmContext* cdm_context,
+    const InitCB& init_cb,
+    const OutputCB& output_cb,
+    const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
   DVLOG(1) << decoder_name_ << ": " << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(config.IsValidConfig());
@@ -78,7 +80,9 @@ void FakeVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   if (config.is_encrypted() && (!supports_encrypted_config_ || !cdm_context)) {
     DVLOG(1) << "Encrypted config not supported.";
-    fail_to_initialize_ = true;
+    state_ = STATE_NORMAL;
+    init_cb_.RunOrHold(false);
+    return;
   }
 
   if (fail_to_initialize_) {
@@ -92,7 +96,7 @@ void FakeVideoDecoder::Initialize(const VideoDecoderConfig& config,
   }
 }
 
-void FakeVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void FakeVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                               const DecodeCB& decode_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(reset_cb_.IsNull());
@@ -116,7 +120,7 @@ void FakeVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   if (buffer->end_of_stream()) {
     state_ = STATE_END_OF_STREAM;
   } else {
-    DCHECK(VerifyFakeVideoBufferForTest(buffer, current_config_));
+    DCHECK(VerifyFakeVideoBufferForTest(*buffer, current_config_));
     scoped_refptr<VideoFrame> video_frame = VideoFrame::CreateColorFrame(
         current_config_.coded_size(), 0, 0, 0, buffer->timestamp());
     decoded_frames_.push_back(video_frame);

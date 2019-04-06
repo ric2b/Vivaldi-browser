@@ -10,7 +10,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "media/base/container_names.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_data_util.h"
@@ -31,6 +31,7 @@ namespace media {
 class MockProtocol : public FFmpegURLProtocol {
  public:
   MockProtocol() = default;
+  virtual ~MockProtocol() = default;
 
   MOCK_METHOD2(Read, int(int size, uint8_t* data));
   MOCK_METHOD1(GetPosition, bool(int64_t* position_out));
@@ -298,15 +299,15 @@ TEST_F(FFmpegGlueContainerTest, WAV) {
   ExpectContainer(container_names::CONTAINER_WAV);
 }
 
+TEST_F(FFmpegGlueContainerTest, MP3) {
+  InitializeAndOpen("sfx.mp3");
+  ExpectContainer(container_names::CONTAINER_MP3);
+}
+
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 TEST_F(FFmpegGlueContainerTest, MOV) {
   InitializeAndOpen("sfx.m4a");
   ExpectContainer(container_names::CONTAINER_MOV);
-}
-
-TEST_F(FFmpegGlueContainerTest, MP3) {
-  InitializeAndOpen("sfx.mp3");
-  ExpectContainer(container_names::CONTAINER_MP3);
 }
 
 TEST_F(FFmpegGlueContainerTest, AAC) {

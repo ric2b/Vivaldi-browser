@@ -24,11 +24,20 @@ declare_args() {
   # Compile the 'headless' platform.
   ozone_platform_headless = false
 
+  # Compile the 'scenic' platform.
+  ozone_platform_scenic = false
+
   # Compile the 'x11' platform.
   ozone_platform_x11 = false
 
   # Compile the 'wayland' platform.
   ozone_platform_wayland = false
+
+  # Compile the 'windows' platform.
+  ozone_platform_windows = false
+
+  # Compile the 'magma' platform.
+  ozone_platform_magma = false
 
   if (ozone_auto_platforms) {
     # Use headless as the default platform unless modified below.
@@ -59,11 +68,19 @@ declare_args() {
       ozone_platform = "x11"
       ozone_platform_wayland = true
       ozone_platform_x11 = true
+    } else if (is_win) {
+      ozone_platform = "windows"
+      ozone_platform_windows = true
+    } else if (is_fuchsia) {
+      ozone_platform = "scenic"
+      ozone_platform_scenic = true
+      ozone_platform_magma = true
     }
   }
 }
 
 assert(use_ozone || !(ozone_platform_cast || ozone_platform_gbm ||
                           ozone_platform_headless || ozone_platform_x11 ||
-                          ozone_platform_wayland),
+                          ozone_platform_wayland || ozone_platform_windows ||
+                          ozone_platform_magma || ozone_platform_scenic),
        "Must set use_ozone to select ozone platforms")

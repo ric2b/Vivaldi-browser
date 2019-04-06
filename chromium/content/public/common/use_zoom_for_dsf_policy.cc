@@ -20,7 +20,7 @@ const base::Feature kUseZoomForDsfEnabledByDefault{
 #endif
 
 bool IsUseZoomForDSFEnabledByDefault() {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_FUCHSIA)
   return true;
 #elif defined(OS_WIN)
   return base::FeatureList::IsEnabled(kUseZoomForDsfEnabledByDefault);
@@ -33,7 +33,7 @@ bool IsUseZoomForDSFEnabledByDefault() {
 
 namespace content {
 
-bool UseZoomForDSFEnabled() {
+bool IsUseZoomForDSFEnabled() {
   static bool use_zoom_for_dsf_enabled_by_default =
       IsUseZoomForDSFEnabledByDefault();
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();

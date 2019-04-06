@@ -17,6 +17,7 @@ Commands:
 
 import argparse
 import cgi
+import json
 import os
 import shutil
 import re
@@ -30,7 +31,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__),
 import licenses_vivaldi
 
 # TODO(agrieve): Move build_utils.WriteDepFile into a non-android directory.
-_REPOSITORY_ROOT = os.path.dirname(os.path.dirname(__file__))
+_REPOSITORY_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.append(os.path.join(_REPOSITORY_ROOT, 'build/android/gyp/util'))
 import build_utils
 
@@ -94,6 +95,9 @@ PRUNE_PATHS = set([
     # For testing only, presents on some bots.
     os.path.join('isolate_deps_dir'),
 
+    # Mock test data.
+    os.path.join('tools', 'binary_size', 'libsupersize', 'testdata'),
+
     # Overrides some WebRTC files, same license. Skip this one.
     os.path.join('third_party', 'webrtc_overrides'),
 ])
@@ -103,6 +107,11 @@ VCS_METADATA_DIRS = ('.svn', '.git')
 PRUNE_DIRS = (VCS_METADATA_DIRS +
               ('out', 'Debug', 'Release',  # build files
                'layout_tests'))            # lots of subdirs
+
+# A third_party directory can define this file, containing a list of
+# subdirectories to process instead of itself. Intended for directories that
+# contain multiple others as transitive dependencies.
+ADDITIONAL_PATHS_FILENAME = 'additional_readme_paths.json'
 
 ADDITIONAL_PATHS = (
     os.path.join('chrome', 'common', 'extensions', 'docs', 'examples'),
@@ -274,6 +283,7 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'apple_apsl'),
     os.path.join('third_party', 'apple_sample_code'),
     os.path.join('third_party', 'ashmem'),
+    os.path.join('third_party', 'blink'),
     os.path.join('third_party', 'bspatch'),
     os.path.join('third_party', 'cacheinvalidation'),
     os.path.join('third_party', 'cld'),
@@ -359,7 +369,7 @@ def ParseDir(path, root, require_license_file=True, optional_keys=None):
         readme_path = os.path.join(root, path, 'README.chromium')
         if not os.path.exists(readme_path):
             raise LicenseError("missing README.chromium or licenses.py "
-                               "SPECIAL_CASES entry in %s" % path)
+                               "SPECIAL_CASES entry in %s\n" % path)
 
         for line in open(readme_path):
             line = line.strip()
@@ -396,7 +406,7 @@ def ParseDir(path, root, require_license_file=True, optional_keys=None):
         metadata["License File"] = license_path
 
     if errors:
-        raise LicenseError(";\n".join(errors))
+        raise LicenseError("Errors in %s:\n %s\n" % (path, ";\n ".join(errors)))
     return metadata
 
 
@@ -439,7 +449,14 @@ def FindThirdPartyDirs(prune_paths, root):
             # Add all subdirectories that are not marked for skipping.
             for dir in dirs:
                 dirpath = os.path.join(path, dir)
-                if dirpath not in prune_paths:
+                additional_paths_file = os.path.join(
+                        dirpath, ADDITIONAL_PATHS_FILENAME)
+                if os.path.exists(additional_paths_file):
+                    with open(additional_paths_file) as paths_file:
+                        extra_paths = json.load(paths_file)
+                        third_party_dirs.update([
+                                os.path.join(dirpath, p) for p in extra_paths])
+                elif dirpath not in prune_paths:
                     third_party_dirs.add(dirpath)
 
             # Don't recurse into any subdirs from here.
@@ -485,12 +502,17 @@ def GetThirdPartyDepsFromGNDepsOutput(gn_deps):
     Note that it always returns the direct sub-directory of third_party
     where README.chromium and LICENSE files are, so that it can be passed to
     ParseDir(). e.g.:
-        .../third_party/cld_3/src/src/BUILD.gn -> .../third_party/cld_3
+        third_party/cld_3/src/src/BUILD.gn -> third_party/cld_3
+
+    It returns relative paths from _REPOSITORY_ROOT, not absolute paths.
     """
     third_party_deps = set()
-    for build_dep in gn_deps.split():
-        m = re.search(r'^(.+/third_party/[^/]+)/(.+/)?BUILD\.gn$', build_dep)
-        if m and not os.path.join('build', 'secondary') in build_dep:
+    for absolute_build_dep in gn_deps.split():
+        relative_build_dep = os.path.relpath(
+            absolute_build_dep, _REPOSITORY_ROOT)
+        m = re.search(
+            r'^((.+/)?third_party/[^/]+)/(.+/)?BUILD\.gn$', relative_build_dep)
+        if m and not os.path.join('build', 'secondary') in relative_build_dep:
             third_party_deps.add(m.group(1))
     return third_party_deps
 

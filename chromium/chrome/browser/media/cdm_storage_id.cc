@@ -11,8 +11,8 @@
 #include "chrome/browser/media/media_storage_id_salt.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
-#include "media/media_features.h"
-#include "rlz/features/features.h"
+#include "media/media_buildflags.h"
+#include "rlz/buildflags/buildflags.h"
 #include "url/origin.h"
 
 #if defined(OS_CHROMEOS)

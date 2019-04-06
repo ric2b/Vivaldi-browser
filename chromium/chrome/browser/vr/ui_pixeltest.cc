@@ -29,13 +29,11 @@ static const gfx::Transform kIdentity;
 TEST_F(UiPixelTest, MAYBE(DrawVrBrowsingMode)) {
   // Set up scene.
   UiInitialState ui_initial_state;
-  ui_initial_state.in_cct = false;
   ui_initial_state.in_web_vr = false;
   ui_initial_state.web_vr_autopresentation_expected = false;
   MakeUi(ui_initial_state,
          ToolbarState(GURL("https://example.com"), security_state::SECURE,
-                      &toolbar::kHttpsValidIcon, base::UTF8ToUTF16("Secure"),
-                      true, false));
+                      &toolbar::kHttpsValidIcon, true, false));
 
   // Draw UI.
   DrawUi(gfx::Vector3dF(0.0f, 0.0f, -1.0f), gfx::Point3F(0.5f, -0.5f, 0.0f),

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
@@ -27,6 +28,8 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/NotificationSettingsBridge_jni.h"
 #include "url/gurl.h"
@@ -34,6 +37,7 @@
 #include "url/url_constants.h"
 
 using base::android::AttachCurrentThread;
+using base::android::BuildInfo;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ScopedJavaLocalRef;
 
@@ -46,8 +50,8 @@ class NotificationChannelsBridgeImpl
   ~NotificationChannelsBridgeImpl() override = default;
 
   bool ShouldUseChannelSettings() override {
-    return Java_NotificationSettingsBridge_shouldUseChannelSettings(
-        AttachCurrentThread());
+    return BuildInfo::GetInstance()->sdk_int() >=
+           base::android::SDK_VERSION_OREO;
   }
 
   NotificationChannel CreateChannel(const std::string& origin,
@@ -142,11 +146,33 @@ class ChannelsRuleIterator : public content_settings::RuleIterator {
   DISALLOW_COPY_AND_ASSIGN(ChannelsRuleIterator);
 };
 
+// This copies the logic of
+// SearchPermissionsService::IsPermissionControlledByDSE, which cannot be
+// called from this class as it would introduce a circular dependency between
+// the HostContentSettingsMap and the SearchPermissionsService factories.
+bool OriginMatchesDefaultSearchEngine(TemplateURLService* template_url_service,
+                                      const std::string& origin) {
+  if (!template_url_service)
+    return false;
+
+  const TemplateURL* default_search_engine =
+      template_url_service->GetDefaultSearchProvider();
+
+  if (!default_search_engine)
+    return false;
+
+  GURL default_search_engine_url = default_search_engine->GenerateSearchURL(
+      template_url_service->search_terms_data());
+
+  return url::IsSameOriginWith(GURL(origin), default_search_engine_url);
+}
 }  // anonymous namespace
 
 // static
 void NotificationChannelsProviderAndroid::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(prefs::kClearedBlockedSiteNotificationChannels,
+                                false /* default_value */);
   registry->RegisterBooleanPref(prefs::kMigratedToSiteNotificationChannels,
                                 false);
 }
@@ -213,29 +239,30 @@ void NotificationChannelsProviderAndroid::MigrateToChannelsIfNecessary(
   prefs->SetBoolean(prefs::kMigratedToSiteNotificationChannels, true);
 }
 
-void NotificationChannelsProviderAndroid::UnmigrateChannelsIfNecessary(
+void NotificationChannelsProviderAndroid::ClearBlockedChannelsIfNecessary(
     PrefService* prefs,
-    content_settings::ProviderInterface* pref_provider) {
+    TemplateURLService* template_url_service) {
   if (!platform_supports_channels_ ||
-      !prefs->GetBoolean(prefs::kMigratedToSiteNotificationChannels)) {
+      prefs->GetBoolean(prefs::kClearedBlockedSiteNotificationChannels)) {
     return;
   }
-  std::unique_ptr<content_settings::RuleIterator> it(
-      GetRuleIterator(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string(),
-                      false /* incognito */));
-  while (it && it->HasNext()) {
-    const content_settings::Rule& rule = it->Next();
-    pref_provider->SetWebsiteSetting(rule.primary_pattern,
-                                     rule.secondary_pattern,
-                                     CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-                                     content_settings::ResourceIdentifier(),
-                                     new base::Value(rule.value->Clone()));
-  }
-  for (auto& channel : bridge_->GetChannels())
-    bridge_->DeleteChannel(channel.id);
-  cached_channels_.clear();
 
-  prefs->SetBoolean(prefs::kMigratedToSiteNotificationChannels, false);
+  for (const NotificationChannel& channel : bridge_->GetChannels()) {
+    if (channel.status != NotificationChannelStatus::BLOCKED)
+      continue;
+    if (OriginMatchesDefaultSearchEngine(template_url_service,
+                                         channel.origin)) {
+      // Do not clear the DSE permission, as it should always be ALLOW or BLOCK.
+      continue;
+    }
+    bridge_->DeleteChannel(channel.id);
+  }
+
+  // Reset the cache.
+  cached_channels_.clear();
+  initialized_cached_channels_ = false;
+
+  prefs->SetBoolean(prefs::kClearedBlockedSiteNotificationChannels, true);
 }
 
 std::unique_ptr<content_settings::RuleIterator>

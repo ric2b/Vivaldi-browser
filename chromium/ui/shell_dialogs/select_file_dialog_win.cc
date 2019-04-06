@@ -289,6 +289,7 @@ class SelectFileDialogImpl : public ui::SelectFileDialog,
   // semantics for input paramaters as RunOpenFileDialog.
   bool RunOpenMultiFileDialog(const std::wstring& title,
                               const std::wstring& filter,
+                              const base::FilePath& initial_path,
                               HWND owner,
                               std::vector<base::FilePath>* paths);
 
@@ -344,8 +345,8 @@ void SelectFileDialogImpl::SelectFileImpl(
                                      default_extension, BeginRun(owner),
                                      owner, params);
   execute_params.run_state.dialog_thread->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&SelectFileDialogImpl::ExecuteSelectFile, this,
-                            execute_params));
+      FROM_HERE, base::BindOnce(&SelectFileDialogImpl::ExecuteSelectFile, this,
+                                execute_params));
 }
 
 bool SelectFileDialogImpl::HasMultipleFileTypeChoicesImpl() {
@@ -372,7 +373,8 @@ void SelectFileDialogImpl::ExecuteSelectFile(
   base::FilePath path = params.default_path;
   bool success = false;
   unsigned filter_index = params.file_type_index;
-  if (params.type == SELECT_FOLDER || params.type == SELECT_UPLOAD_FOLDER) {
+  if (params.type == SELECT_FOLDER || params.type == SELECT_UPLOAD_FOLDER ||
+      params.type == SELECT_EXISTING_FOLDER) {
     success = RunSelectFolderDialog(params, &path);
   } else if (params.type == SELECT_SAVEAS_FILE) {
     std::wstring path_as_wstring = path.value();
@@ -387,23 +389,25 @@ void SelectFileDialogImpl::ExecuteSelectFile(
                                 params.run_state.owner, &path);
   } else if (params.type == SELECT_OPEN_MULTI_FILE) {
     std::vector<base::FilePath> paths;
-    if (RunOpenMultiFileDialog(params.title, filter,
+    if (RunOpenMultiFileDialog(params.title, filter, path,
                                params.run_state.owner, &paths)) {
       params.ui_task_runner->PostTask(
-          FROM_HERE, base::Bind(&SelectFileDialogImpl::MultiFilesSelected, this,
-                                paths, params.params, params.run_state));
+          FROM_HERE,
+          base::BindOnce(&SelectFileDialogImpl::MultiFilesSelected, this, paths,
+                         params.params, params.run_state));
       return;
     }
   }
 
   if (success) {
     params.ui_task_runner->PostTask(
-        FROM_HERE, base::Bind(&SelectFileDialogImpl::FileSelected, this, path,
-                              filter_index, params.params, params.run_state));
+        FROM_HERE,
+        base::BindOnce(&SelectFileDialogImpl::FileSelected, this, path,
+                       filter_index, params.params, params.run_state));
   } else {
     params.ui_task_runner->PostTask(
-        FROM_HERE, base::Bind(&SelectFileDialogImpl::FileNotSelected, this,
-                              params.params, params.run_state));
+        FROM_HERE, base::BindOnce(&SelectFileDialogImpl::FileNotSelected, this,
+                                  params.params, params.run_state));
   }
 }
 
@@ -558,8 +562,10 @@ bool SelectFileDialogImpl::RunSelectFolderDialog(
     dialog_options.default_path = path->value().c_str();
   if (params.type == SELECT_UPLOAD_FOLDER) {
     dialog_options.is_upload = true;
-    browse_info.ulFlags |= BIF_NONEWFOLDERBUTTON;
   }
+  if (params.type == SELECT_UPLOAD_FOLDER ||
+      params.type == SELECT_EXISTING_FOLDER)
+    browse_info.ulFlags |= BIF_NONEWFOLDERBUTTON;
   if (dialog_options.is_upload || dialog_options.default_path) {
     browse_info.lParam = reinterpret_cast<LPARAM>(&dialog_options);
     browse_info.lpfn = &BrowseCallbackProc;
@@ -597,13 +603,12 @@ bool SelectFileDialogImpl::RunSelectFolderDialog(
   return result;
 }
 
-bool SelectFileDialogImpl::RunOpenFileDialog(
-    const std::wstring& title,
-    const std::wstring& filter,
-    HWND owner,
-    base::FilePath* path) {
-  // We use OFN_NOCHANGEDIR so that the user can rename or delete the directory
-  // without having to close Chrome first.
+bool SelectFileDialogImpl::RunOpenFileDialog(const std::wstring& title,
+                                             const std::wstring& filter,
+                                             HWND owner,
+                                             base::FilePath* path) {
+  // We use OFN_NOCHANGEDIR so that the user can rename or delete the
+  // directory without having to close Chrome first.
   ui::win::OpenFileName ofn(owner, OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR);
   if (!path->empty()) {
     if (IsDirectory(*path))
@@ -629,6 +634,7 @@ bool SelectFileDialogImpl::RunOpenFileDialog(
 bool SelectFileDialogImpl::RunOpenMultiFileDialog(
     const std::wstring& title,
     const std::wstring& filter,
+    const base::FilePath& initial_path,
     HWND owner,
     std::vector<base::FilePath>* paths) {
   // We use OFN_NOCHANGEDIR so that the user can rename or delete the directory
@@ -637,7 +643,12 @@ bool SelectFileDialogImpl::RunOpenMultiFileDialog(
                             OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST |
                                 OFN_EXPLORER | OFN_HIDEREADONLY |
                                 OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR);
-
+  if (!initial_path.empty()) {
+    if (IsDirectory(initial_path))
+      ofn.SetInitialSelection(initial_path, base::FilePath());
+    else
+      ofn.SetInitialSelection(initial_path.DirName(), base::FilePath());
+  }
   if (!filter.empty())
     ofn.GetOPENFILENAME()->lpstrFilter = filter.c_str();
 

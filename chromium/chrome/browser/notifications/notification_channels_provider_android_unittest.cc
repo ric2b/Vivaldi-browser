@@ -26,6 +26,8 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/test/content_settings_mock_provider.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -110,17 +112,18 @@ class FakeNotificationChannelsBridge
 class NotificationChannelsProviderAndroidTest : public testing::Test {
  public:
   NotificationChannelsProviderAndroidTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kSiteNotificationChannels);
     profile_ = std::make_unique<TestingProfile>();
     // Creating a test profile creates an (inaccessible) NCPA and migrates
     // (zero) channels, setting the 'migrated' pref to true in the process, so
     // we must first reset it to false before we reuse prefs for the instance
     // under test, in the MigrateToChannels* tests.
+    // The same goes for the 'cleared blocked' pref and the ClearBlocked* tests.
     // TODO(crbug.com/700377): This shouldn't be necessary once NCPA is split
     // into a BrowserKeyedService and a class just containing the logic.
     profile_->GetPrefs()->SetBoolean(prefs::kMigratedToSiteNotificationChannels,
                                      false);
+    profile_->GetPrefs()->SetBoolean(
+        prefs::kClearedBlockedSiteNotificationChannels, false);
   }
   ~NotificationChannelsProviderAndroidTest() override {
     channels_provider_->ShutdownOnUIThread();
@@ -635,54 +638,93 @@ TEST_F(NotificationChannelsProviderAndroidTest,
 }
 
 TEST_F(NotificationChannelsProviderAndroidTest,
-       UnmigrateChannels_DeletesChannelsAndUpdatesPrefProvider) {
+       ClearBlockedChannels_ZeroBlockedChannels) {
   InitChannelsProvider(true /* should_use_channels */);
-  auto mock_pref_provider = std::make_unique<content_settings::MockProvider>();
-  profile_->GetPrefs()->SetBoolean(prefs::kMigratedToSiteNotificationChannels,
-                                   true);
+  fake_bridge_->CreateChannel("https://example.com", base::Time::Now(),
+                              true /* enabled */);
 
-  // Give the channels provider some notification settings to provide.
-  ContentSettingsPattern blocked_pattern =
-      ContentSettingsPattern::FromURLNoWildcard(GURL("https://blocked.com"));
-  ContentSettingsPattern allowed_pattern =
-      ContentSettingsPattern::FromURLNoWildcard(GURL("https://allowed.com"));
-  channels_provider_->SetWebsiteSetting(
-      blocked_pattern, ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string(),
-      new base::Value(CONTENT_SETTING_BLOCK));
-  channels_provider_->SetWebsiteSetting(
-      allowed_pattern, ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string(),
-      new base::Value(CONTENT_SETTING_ALLOW));
+  ASSERT_FALSE(profile_->GetPrefs()->GetBoolean(
+      prefs::kClearedBlockedSiteNotificationChannels));
+  ASSERT_EQ(fake_bridge_->GetChannels().size(), 1u);
+
+  channels_provider_->ClearBlockedChannelsIfNecessary(
+      profile_->GetPrefs(), nullptr /* template_url_service */);
+
+  EXPECT_EQ(fake_bridge_->GetChannels().size(), 1u);
+
+  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(
+      prefs::kClearedBlockedSiteNotificationChannels));
+}
+
+TEST_F(NotificationChannelsProviderAndroidTest,
+       ClearBlockedChannels_MultipleBlockedChannels) {
+  InitChannelsProvider(true /* should_use_channels */);
+
+  fake_bridge_->CreateChannel("https://example.com", base::Time::Now(),
+                              false /* enabled */);
+  fake_bridge_->CreateChannel("https://chromium.org", base::Time::Now(),
+                              false /* enabled */);
+  fake_bridge_->CreateChannel("https://foo.com", base::Time::Now(),
+                              true /* enabled */);
+
+  ASSERT_FALSE(profile_->GetPrefs()->GetBoolean(
+      prefs::kClearedBlockedSiteNotificationChannels));
+  ASSERT_EQ(fake_bridge_->GetChannels().size(), 3u);
+
+  channels_provider_->ClearBlockedChannelsIfNecessary(
+      profile_->GetPrefs(), nullptr /* template_url_service */);
+
+  EXPECT_EQ(fake_bridge_->GetChannels().size(), 1u);
+  EXPECT_EQ(fake_bridge_->GetChannels()[0].origin, "https://foo.com");
+
+  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(
+      prefs::kClearedBlockedSiteNotificationChannels));
+
+  // Create another blocked channel and check ClearBlocked is now a no-op.
+
+  fake_bridge_->CreateChannel("https://example.com", base::Time::Now(),
+                              false /* enabled */);
+
   ASSERT_EQ(fake_bridge_->GetChannels().size(), 2u);
 
-  channels_provider_->UnmigrateChannelsIfNecessary(profile_->GetPrefs(),
-                                                   mock_pref_provider.get());
-  EXPECT_EQ(fake_bridge_->GetChannels().size(), 0u);
+  channels_provider_->ClearBlockedChannelsIfNecessary(
+      profile_->GetPrefs(), nullptr /* template_url_service */);
 
-  std::unique_ptr<content_settings::RuleIterator> it =
-      mock_pref_provider->GetRuleIterator(
-          CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-          content_settings::ResourceIdentifier(), false /* incognito */);
-  bool checked_allowed = false;
-  bool checked_blocked = false;
-  for (size_t i = 0; i < 2; ++i) {
-    ASSERT_TRUE(it->HasNext());
-    const content_settings::Rule& rule = it->Next();
-    if (rule.primary_pattern == allowed_pattern) {
-      ASSERT_FALSE(checked_allowed);
-      EXPECT_EQ(CONTENT_SETTING_ALLOW,
-                content_settings::ValueToContentSetting(rule.value.get()));
-      checked_allowed = true;
-    } else {
-      ASSERT_FALSE(checked_blocked);
-      ASSERT_EQ(rule.primary_pattern, blocked_pattern);
-      EXPECT_EQ(CONTENT_SETTING_BLOCK,
-                content_settings::ValueToContentSetting(rule.value.get()));
-      checked_blocked = true;
-    }
-  }
-  EXPECT_FALSE(it->HasNext());
-  EXPECT_FALSE(profile_->GetPrefs()->GetBoolean(
-      prefs::kMigratedToSiteNotificationChannels));
+  EXPECT_EQ(fake_bridge_->GetChannels().size(), 2u);
+}
+
+TEST_F(NotificationChannelsProviderAndroidTest,
+       ClearBlockedChannels_DefaultSearchEngineIsNotCleared) {
+  InitChannelsProvider(true /* should_use_channels */);
+
+  // Set up TemplateURLService with a default search engine.
+  TemplateURLService* template_url_service = new TemplateURLService(NULL, 0);
+  TemplateURLData data;
+  data.SetURL("https://default-search-engine.com/url?bar={searchTerms}");
+  TemplateURL* template_url =
+      template_url_service->Add(std::make_unique<TemplateURL>(data));
+  template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
+
+  // Block the DSE and another channel.
+  fake_bridge_->CreateChannel("https://default-search-engine.com",
+                              base::Time::Now(), false /* enabled */);
+  fake_bridge_->CreateChannel("https://example.com", base::Time::Now(),
+                              false /* enabled */);
+
+  ASSERT_FALSE(profile_->GetPrefs()->GetBoolean(
+      prefs::kClearedBlockedSiteNotificationChannels));
+  ASSERT_EQ(fake_bridge_->GetChannels().size(), 2u);
+
+  channels_provider_->ClearBlockedChannelsIfNecessary(profile_->GetPrefs(),
+                                                      template_url_service);
+
+  // DSE channel should still exist and be blocked..
+  EXPECT_EQ(fake_bridge_->GetChannels().size(), 1u);
+  EXPECT_EQ(fake_bridge_->GetChannels()[0].origin,
+            "https://default-search-engine.com");
+  EXPECT_EQ(fake_bridge_->GetChannels()[0].status,
+            NotificationChannelStatus::BLOCKED);
+
+  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(
+      prefs::kClearedBlockedSiteNotificationChannels));
 }

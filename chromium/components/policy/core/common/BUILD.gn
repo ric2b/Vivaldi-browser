@@ -46,6 +46,8 @@ source_set("internal") {
     "cloud/cloud_policy_service.h",
     "cloud/cloud_policy_store.cc",
     "cloud/cloud_policy_store.h",
+    "cloud/cloud_policy_util.cc",
+    "cloud/cloud_policy_util.h",
     "cloud/cloud_policy_validator.cc",
     "cloud/cloud_policy_validator.h",
     "cloud/component_cloud_policy_service.cc",
@@ -62,8 +64,11 @@ source_set("internal") {
     "cloud/external_policy_data_fetcher.h",
     "cloud/external_policy_data_updater.cc",
     "cloud/external_policy_data_updater.h",
-    "cloud/policy_header_io_helper.cc",
-    "cloud/policy_header_io_helper.h",
+    "cloud/machine_level_user_cloud_policy_manager.cc",
+    "cloud/machine_level_user_cloud_policy_manager.h",
+    "cloud/machine_level_user_cloud_policy_metrics.h",
+    "cloud/machine_level_user_cloud_policy_store.cc",
+    "cloud/machine_level_user_cloud_policy_store.h",
     "cloud/policy_header_service.cc",
     "cloud/policy_header_service.h",
     "cloud/resource_cache.cc",
@@ -84,6 +89,8 @@ source_set("internal") {
     "external_data_fetcher.cc",
     "external_data_fetcher.h",
     "external_data_manager.h",
+    "plist_writer.cc",
+    "plist_writer.h",
     "policy_bundle.cc",
     "policy_bundle.h",
     "policy_details.h",
@@ -101,6 +108,8 @@ source_set("internal") {
     "policy_namespace.h",
     "policy_pref_names.cc",
     "policy_pref_names.h",
+    "policy_proto_decoders.cc",
+    "policy_proto_decoders.h",
     "policy_service.cc",
     "policy_service.h",
     "policy_service_impl.cc",
@@ -140,13 +149,17 @@ source_set("internal") {
   deps = [
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//components/account_id",
     "//components/crash/core/common:crash_key",  # Remove once https://crbug.com/685996 is fixed.
     "//components/data_use_measurement/core",
     "//components/json_schema",
     "//components/prefs",
-    "//extensions/features",
+    "//components/version_info",
+    "//extensions/buildflags",
     "//google_apis",
     "//net",
+    "//services/network/public/cpp",
+    "//third_party/libxml",
     "//third_party/re2",
     "//url",
   ]
@@ -200,6 +213,11 @@ source_set("internal") {
     sources -= [
       "cloud/cloud_policy_client_registration_helper.cc",
       "cloud/cloud_policy_client_registration_helper.h",
+      "cloud/machine_level_user_cloud_policy_manager.cc",
+      "cloud/machine_level_user_cloud_policy_manager.h",
+      "cloud/machine_level_user_cloud_policy_metrics.h",
+      "cloud/machine_level_user_cloud_policy_store.cc",
+      "cloud/machine_level_user_cloud_policy_store.h",
       "cloud/user_cloud_policy_manager.cc",
       "cloud/user_cloud_policy_manager.h",
       "cloud/user_cloud_policy_store.cc",
@@ -267,10 +285,12 @@ static_library("test_support") {
     # Explicitly link in the generated policy target into the test support
     # so it will be linked to dependent targets. Otherwise in component
     # build, it will be hidden inside the policy component.
+    "//components/account_id",
     "//components/policy:generated",
     "//components/policy/proto",
     "//crypto",
     "//net",
+    "//services/network/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -279,7 +299,7 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "//extensions/features",
+    "//extensions/buildflags",
     "cloud/cloud_policy_client_unittest.cc",
     "cloud/cloud_policy_core_unittest.cc",
     "cloud/cloud_policy_manager_unittest.cc",
@@ -287,10 +307,10 @@ source_set("unit_tests") {
     "cloud/cloud_policy_service_unittest.cc",
     "cloud/cloud_policy_validator_unittest.cc",
     "cloud/device_management_service_unittest.cc",
-    "cloud/policy_header_io_helper_unittest.cc",
     "cloud/policy_header_service_unittest.cc",
     "cloud/user_info_fetcher_unittest.cc",
     "generate_policy_source_unittest.cc",
+    "plist_writer_unittest.cc",
     "policy_bundle_unittest.cc",
     "policy_loader_ios_unittest.mm",
     "policy_loader_mac_unittest.cc",
@@ -318,6 +338,8 @@ source_set("unit_tests") {
     ]
   } else {
     sources += [
+      "cloud/machine_level_user_cloud_policy_manager_unittest.cc",
+      "cloud/machine_level_user_cloud_policy_store_unittest.cc",
       "cloud/user_cloud_policy_manager_unittest.cc",
       "cloud/user_cloud_policy_store_unittest.cc",
     ]
@@ -350,13 +372,16 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//components/account_id",
     "//components/policy:generated",
     "//components/prefs:test_support",
-    "//extensions/features",
+    "//extensions/buildflags",
     "//google_apis",
     "//net:test_support",
+    "//services/network:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/libxml",
   ]
 }
 

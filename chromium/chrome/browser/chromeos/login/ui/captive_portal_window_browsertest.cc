@@ -9,7 +9,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -74,11 +73,12 @@ class CaptivePortalWindowTest : public InProcessBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(chromeos::switches::kForceLoginManagerInTests);
     command_line->AppendSwitch(chromeos::switches::kLoginManager);
+    command_line->AppendSwitch(chromeos::switches::kDisableHIDDetectionOnOOBE);
   }
 
   void SetUpOnMainThread() override {
     content::WebContents* web_contents =
-        LoginDisplayHost::default_host()->GetWebUILoginView()->GetWebContents();
+        LoginDisplayHost::default_host()->GetOobeWebContents();
     captive_portal_window_proxy_.reset(
         new CaptivePortalWindowProxy(&delegate_, web_contents));
   }

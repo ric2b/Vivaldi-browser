@@ -61,14 +61,16 @@ source_set("auditor_sources") {
   ]
   data = [
     "safe_list.txt",
+    "traffic_annotation_extractor_switches.txt",
   ]
 
   public_deps = [
     ":traffic_annotation",
     "//base",
-    "//net:traffic_annotation",
+    "//net/traffic_annotation",
     "//third_party/libxml",
     "//third_party/protobuf:protobuf_full",
+    "//third_party/re2",
   ]
 }
 
@@ -86,6 +88,7 @@ test("traffic_annotation_auditor_unittests") {
     "traffic_annotation_auditor_unittest.cc",
   ]
   data = [
+    "../summary/annotations.xml",
     "tests/annotations_diff12.txt",
     "tests/annotations_diff13.txt",
     "tests/annotations_diff23.txt",

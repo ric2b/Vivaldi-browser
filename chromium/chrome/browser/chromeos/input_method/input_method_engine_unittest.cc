@@ -11,7 +11,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
 #include "chrome/browser/chromeos/input_method/mock_input_method_manager_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -24,6 +24,7 @@
 #include "ui/base/ime/mock_ime_input_context_handler.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/keyboard/keyboard_controller.h"
 
 using input_method::InputMethodEngineBase;
 
@@ -95,7 +96,7 @@ class TestObserver : public InputMethodEngineBase::Observer {
   void OnKeyEvent(
       const std::string& engine_id,
       const InputMethodEngineBase::KeyboardEvent& event,
-      ui::IMEEngineHandlerInterface::KeyEventDoneCallback& key_data) override {}
+      ui::IMEEngineHandlerInterface::KeyEventDoneCallback key_data) override {}
   void OnInputContextUpdate(
       const ui::IMEEngineHandlerInterface::InputContext& context) override {}
   void OnCandidateClicked(
@@ -109,7 +110,6 @@ class TestObserver : public InputMethodEngineBase::Observer {
                                 int cursor_pos,
                                 int anchor_pos,
                                 int offset) override {}
-  void OnRequestEngineSwitch() override {}
   void OnCompositionBoundsChanged(
       const std::vector<gfx::Rect>& bounds) override {
     calls_bitmap_ |= ONCOMPOSITIONBOUNDSCHANGED;
@@ -167,7 +167,9 @@ class InputMethodEngineTest : public testing::Test {
 
   void FocusIn(ui::TextInputType input_type) {
     ui::IMEEngineHandlerInterface::InputContext input_context(
-        input_type, ui::TEXT_INPUT_MODE_DEFAULT, ui::TEXT_INPUT_FLAG_NONE);
+        input_type, ui::TEXT_INPUT_MODE_DEFAULT, ui::TEXT_INPUT_FLAG_NONE,
+        ui::TextInputClient::FOCUS_REASON_OTHER,
+        false /* should_do_learning */);
     engine_->FocusIn(input_context);
     ui::IMEBridge::Get()->SetCurrentInputContext(input_context);
   }
@@ -182,6 +184,9 @@ class InputMethodEngineTest : public testing::Test {
 
   std::unique_ptr<ui::MockIMEInputContextHandler>
       mock_ime_input_context_handler_;
+
+  // Used by InputMethodEngine::EnableInputView().
+  keyboard::KeyboardController keyboard_controller_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InputMethodEngineTest);

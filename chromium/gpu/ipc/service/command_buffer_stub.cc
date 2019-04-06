@@ -42,8 +42,6 @@
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
-#include "gpu/ipc/service/gpu_memory_manager.h"
-#include "gpu/ipc/service/gpu_memory_tracking.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "ui/gfx/gpu_fence.h"
@@ -70,10 +68,11 @@
 // into the same call-site).
 #define GPU_COMMAND_BUFFER_MEMORY_BLOCK(category)                          \
   do {                                                                     \
-    uint64_t mb_used = tracking_group_->GetSize() / (1024 * 1024);         \
+    size_t mb_used = size_ / (1024 * 1024);                                \
     switch (context_type_) {                                               \
       case CONTEXT_TYPE_WEBGL1:                                            \
       case CONTEXT_TYPE_WEBGL2:                                            \
+      case CONTEXT_TYPE_WEBGL2_COMPUTE:                                    \
         UMA_HISTOGRAM_MEMORY_LARGE_MB("GPU.ContextMemory.WebGL." category, \
                                       mb_used);                            \
         break;                                                             \
@@ -97,8 +96,6 @@ struct WaitForCommandState {
 
 namespace {
 
-// The GpuCommandBufferMemoryTracker class provides a bridge between the
-// ContextGroup's memory type managers and the GpuMemoryManager class.
 class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
  public:
   explicit GpuCommandBufferMemoryTracker(
@@ -106,11 +103,7 @@ class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
       uint64_t share_group_tracing_guid,
       ContextType context_type,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-      : tracking_group_(
-            channel->gpu_channel_manager()
-                ->gpu_memory_manager()
-                ->CreateTrackingGroup(channel->GetClientPID(), this)),
-        client_tracing_id_(channel->client_tracing_id()),
+      : client_tracing_id_(channel->client_tracing_id()),
         client_id_(channel->client_id()),
         share_group_tracing_guid_(share_group_tracing_guid),
         context_type_(context_type),
@@ -124,14 +117,11 @@ class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
         FROM_HERE, base::TimeDelta::FromSeconds(30), this,
         &GpuCommandBufferMemoryTracker::LogMemoryStatsPeriodic);
   }
+  ~GpuCommandBufferMemoryTracker() override { LogMemoryStatsShutdown(); }
 
-  void TrackMemoryAllocatedChange(size_t old_size, size_t new_size) override {
-    tracking_group_->TrackMemoryAllocatedChange(old_size, new_size);
-  }
+  void TrackMemoryAllocatedChange(uint64_t delta) override { size_ += delta; }
 
-  bool EnsureGPUMemoryAvailable(size_t size_needed) override {
-    return tracking_group_->EnsureGPUMemoryAvailable(size_needed);
-  }
+  uint64_t GetSize() const override { return size_; }
 
   uint64_t ClientTracingId() const override { return client_tracing_id_; }
   int ClientId() const override { return client_id_; }
@@ -140,8 +130,6 @@ class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
   }
 
  private:
-  ~GpuCommandBufferMemoryTracker() override { LogMemoryStatsShutdown(); }
-
   void LogMemoryStatsPeriodic() { GPU_COMMAND_BUFFER_MEMORY_BLOCK("Periodic"); }
   void LogMemoryStatsShutdown() { GPU_COMMAND_BUFFER_MEMORY_BLOCK("Shutdown"); }
   void LogMemoryStatsPressure(
@@ -153,7 +141,7 @@ class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
     }
   }
 
-  std::unique_ptr<GpuMemoryTrackingGroup> tracking_group_;
+  uint64_t size_ = 0;
   const uint64_t client_tracing_id_;
   const int client_id_;
   const uint64_t share_group_tracing_guid_;
@@ -249,10 +237,6 @@ CommandBufferStub::CommandBufferStub(
 
 CommandBufferStub::~CommandBufferStub() {
   Destroy();
-}
-
-GpuMemoryManager* CommandBufferStub::GetMemoryManager() const {
-  return channel()->gpu_channel_manager()->gpu_memory_manager();
 }
 
 bool CommandBufferStub::OnMessageReceived(const IPC::Message& message) {
@@ -485,7 +469,7 @@ void CommandBufferStub::Destroy() {
         decoder_context_->GetGLContext()->MakeCurrent(surface_.get());
   }
   for (auto& observer : destruction_observers_)
-    observer.OnWillDestroyStub();
+    observer.OnWillDestroyStub(have_context);
 
   share_group_ = nullptr;
 
@@ -614,9 +598,7 @@ void CommandBufferStub::CheckCompleteWaits() {
   }
 }
 
-void CommandBufferStub::OnAsyncFlush(int32_t put_offset,
-                                     uint32_t flush_id,
-                                     bool snapshot_requested) {
+void CommandBufferStub::OnAsyncFlush(int32_t put_offset, uint32_t flush_id) {
   TRACE_EVENT1("gpu", "CommandBufferStub::OnAsyncFlush", "put_offset",
                put_offset);
   DCHECK(command_buffer_);
@@ -624,9 +606,6 @@ void CommandBufferStub::OnAsyncFlush(int32_t put_offset,
   // to catch regressions. Ignore the message.
   DVLOG_IF(0, flush_id - last_flush_id_ >= 0x8000000U)
       << "Received a Flush message out-of-order";
-
-  if (snapshot_requested && snapshot_requested_callback_)
-    snapshot_requested_callback_.Run();
 
   last_flush_id_ = flush_id;
   CommandBuffer::State pre_state = command_buffer_->GetState();
@@ -645,22 +624,20 @@ void CommandBufferStub::OnAsyncFlush(int32_t put_offset,
 
 void CommandBufferStub::OnRegisterTransferBuffer(
     int32_t id,
-    base::SharedMemoryHandle transfer_buffer,
-    uint32_t size) {
+    base::UnsafeSharedMemoryRegion transfer_buffer) {
   TRACE_EVENT0("gpu", "CommandBufferStub::OnRegisterTransferBuffer");
 
-  // Take ownership of the memory and map it into this process.
-  // This validates the size.
-  std::unique_ptr<base::SharedMemory> shared_memory(
-      new base::SharedMemory(transfer_buffer, false));
-  if (!shared_memory->Map(size)) {
+  // Map the shared memory into this process.
+  base::WritableSharedMemoryMapping mapping = transfer_buffer.Map();
+  if (!mapping.IsValid()) {
     DVLOG(0) << "Failed to map shared memory.";
     return;
   }
 
   if (command_buffer_) {
     command_buffer_->RegisterTransferBuffer(
-        id, MakeBackingFromSharedMemory(std::move(shared_memory), size));
+        id, MakeBackingFromSharedMemory(std::move(transfer_buffer),
+                                        std::move(mapping)));
   }
 }
 
@@ -692,18 +669,15 @@ void CommandBufferStub::OnSignalAck(uint32_t id) {
 
 void CommandBufferStub::OnSignalQuery(uint32_t query_id, uint32_t id) {
   if (decoder_context_) {
-    gles2::QueryManager* query_manager = decoder_context_->GetQueryManager();
-    if (query_manager) {
-      gles2::QueryManager::Query* query = query_manager->GetQuery(query_id);
-      if (query) {
-        query->AddCallback(
-            base::Bind(&CommandBufferStub::OnSignalAck, this->AsWeakPtr(), id));
-        return;
-      }
-    }
+    decoder_context_->SetQueryCallback(
+        query_id,
+        base::BindOnce(&CommandBufferStub::OnSignalAck, this->AsWeakPtr(), id));
+  } else {
+    // Something went wrong, run callback immediately.
+    VLOG(1) << "CommandBufferStub::OnSignalQueryk: No decoder to set query "
+               "callback on. Running the callback immediately.";
+    OnSignalAck(id);
   }
-  // Something went wrong, run callback immediately.
-  OnSignalAck(id);
 }
 
 void CommandBufferStub::OnCreateGpuFenceFromHandle(
@@ -773,6 +747,10 @@ void CommandBufferStub::OnRescheduleAfterFinished() {
 
   command_buffer_->SetScheduled(true);
   channel_->OnCommandBufferScheduled(this);
+}
+
+void CommandBufferStub::ScheduleGrContextCleanup() {
+  channel_->gpu_channel_manager()->ScheduleGrContextCleanup();
 }
 
 bool CommandBufferStub::OnWaitSyncToken(const SyncToken& sync_token) {
@@ -892,9 +870,9 @@ void CommandBufferStub::RemoveDestructionObserver(
   destruction_observers_.RemoveObserver(observer);
 }
 
-gles2::MemoryTracker* CommandBufferStub::CreateMemoryTracker(
+std::unique_ptr<gles2::MemoryTracker> CommandBufferStub::CreateMemoryTracker(
     const GPUCreateCommandBufferConfig init_params) const {
-  return new GpuCommandBufferMemoryTracker(
+  return std::make_unique<GpuCommandBufferMemoryTracker>(
       channel_, command_buffer_id_.GetUnsafeValue(),
       init_params.attribs.context_type, channel_->task_runner());
 }

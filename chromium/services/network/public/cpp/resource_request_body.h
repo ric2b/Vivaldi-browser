@@ -10,18 +10,18 @@
 #include <string>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "build/build_config.h"
 #include "services/network/public/cpp/data_element.h"
 #include "url/gurl.h"
 
 namespace network {
 
 // ResourceRequestBody represents body (i.e. upload data) of a HTTP request.
-class ResourceRequestBody
+class COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequestBody
     : public base::RefCountedThreadSafe<ResourceRequestBody> {
  public:
   ResourceRequestBody();
@@ -30,6 +30,7 @@ class ResourceRequestBody
   static scoped_refptr<ResourceRequestBody> CreateFromBytes(const char* bytes,
                                                             size_t length);
 
+  void AppendBytes(std::vector<char> bytes);
   void AppendBytes(const char* bytes, int bytes_len);
   void AppendFileRange(const base::FilePath& file_path,
                        uint64_t offset,
@@ -43,12 +44,33 @@ class ResourceRequestBody
                           uint64_t length,
                           const base::Time& expected_modification_time);
 
+  // Appends a blob. If the 2-parameter version is used, the resulting body can
+  // be read by Blink, which is needed when the body is sent to Blink, e.g., for
+  // service worker interception. The length must be size of the entire blob,
+  // not a subrange of it. If the length is unknown, use the 1-parameter
+  // version, but this means the body/blob won't be readable by Blink (that's OK
+  // if this ResourceRequestBody will only be sent to the browser process and
+  // won't be sent to Blink).
+  //
+  // TODO(crbug.com/846167): Remove these functions when NetworkService is
+  // enabled, as blobs are passed via AppendDataPipe in that case.
   void AppendBlob(const std::string& uuid);
-  void AppendFileSystemFileRange(const GURL& url,
-                                 uint64_t offset,
-                                 uint64_t length,
-                                 const base::Time& expected_modification_time);
+  void AppendBlob(const std::string& uuid, uint64_t length);
+
   void AppendDataPipe(mojom::DataPipeGetterPtr data_pipe_getter);
+
+  // |chunked_data_pipe_getter| will provide the upload body for a chunked
+  // upload. Unlike the other methods, which support concatenating data of
+  // various types, when this is called, |chunked_data_pipe_getter| will provide
+  // the entire response body, and other types of data may not added when
+  // sending chunked data.
+  //
+  // It's unclear how widespread support for chunked uploads is, since there are
+  // no web APIs that send uploads with unknown request body sizes, so this
+  // method should only be used when talking to servers that are are known to
+  // support chunked uploads.
+  void SetToChunkedDataPipe(
+      mojom::ChunkedDataPipeGetterPtr chunked_data_pipe_getter);
 
   const std::vector<DataElement>* elements() const { return &elements_; }
   std::vector<DataElement>* elements_mutable() { return &elements_; }

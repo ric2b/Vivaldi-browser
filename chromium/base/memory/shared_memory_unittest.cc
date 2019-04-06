@@ -30,6 +30,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 
+#if defined(OS_ANDROID)
+#include "base/callback.h"
+#endif
+
 #if defined(OS_POSIX)
 #include <errno.h>
 #include <fcntl.h>
@@ -48,9 +52,8 @@
 #endif
 
 #if defined(OS_FUCHSIA)
-#include <zircon/process.h>
-#include <zircon/syscalls.h>
-#include "base/fuchsia/scoped_zx_handle.h"
+#include <lib/zx/vmar.h>
+#include <lib/zx/vmo.h>
 #endif
 
 namespace base {
@@ -414,17 +417,18 @@ TEST_P(SharedMemoryTest, GetReadOnlyHandle) {
   (void)handle;
 #elif defined(OS_FUCHSIA)
   uintptr_t addr;
-  EXPECT_NE(ZX_OK, zx_vmar_map(zx_vmar_root_self(), 0, handle.GetHandle(), 0,
-                               contents.size(), ZX_VM_FLAG_PERM_WRITE, &addr))
+  EXPECT_NE(ZX_OK, zx::vmar::root_self()->map(
+                       0, *zx::unowned_vmo(handle.GetHandle()), 0,
+                       contents.size(), ZX_VM_FLAG_PERM_WRITE, &addr))
       << "Shouldn't be able to map as writable.";
 
-  ScopedZxHandle duped_handle;
-  EXPECT_NE(ZX_OK, zx_handle_duplicate(handle.GetHandle(), ZX_RIGHT_WRITE,
-                                       duped_handle.receive()))
+  zx::vmo duped_handle;
+  EXPECT_NE(ZX_OK, zx::unowned_vmo(handle.GetHandle())
+                       ->duplicate(ZX_RIGHT_WRITE, &duped_handle))
       << "Shouldn't be able to duplicate the handle into a writable one.";
 
-  EXPECT_EQ(ZX_OK, zx_handle_duplicate(handle.GetHandle(), ZX_RIGHT_READ,
-                                       duped_handle.receive()))
+  EXPECT_EQ(ZX_OK, zx::unowned_vmo(handle.GetHandle())
+                       ->duplicate(ZX_RIGHT_READ, &duped_handle))
       << "Should be able to duplicate the handle into a readable one.";
 #elif defined(OS_POSIX)
   int handle_fd = SharedMemory::GetFdFromSharedMemoryHandle(handle);
@@ -584,6 +588,15 @@ TEST_P(SharedMemoryTest, MapTwice) {
 #if !defined(OS_IOS)
 // Create a shared memory object, mmap it, and mprotect it to PROT_EXEC.
 TEST_P(SharedMemoryTest, AnonymousExecutable) {
+#if defined(OS_LINUX)
+  // On Chromecast both /dev/shm and /tmp are mounted with 'noexec' option,
+  // which makes this test fail. But Chromecast doesn't use NaCL so we don't
+  // need this.
+  if (!IsPathExecutable(FilePath("/dev/shm")) &&
+      !IsPathExecutable(FilePath("/tmp"))) {
+    return;
+  }
+#endif  // OS_LINUX
   const uint32_t kTestSize = 1 << 16;
 
   SharedMemory shared_memory;

@@ -19,7 +19,19 @@
 
 namespace remoting {
 
+static_assert(static_cast<int>(net::URLFetcher::RESPONSE_CODE_INVALID) !=
+                  static_cast<int>(
+                      HostListFetcher::ResponseCode::RESPONSE_CODE_CANCELLED),
+              "RESPONSE_CODE_INVALID collided with RESPONSE_CODE_CANCELLED.");
+
 namespace {
+
+// Used by the HostlistFetcher to make HTTP requests and also by the
+// unittests for this class to set fake response data for these URLs.
+// TODO(nicholss): Consider moving this to an extern and conditionally include
+// prod or test environment urls based on config. A test env app would be nice.
+const char kHostListProdRequestUrl[] =
+    "https://www.googleapis.com/chromoting/v1/@me/hosts";
 
 // Returns true if |h1| should sort before |h2|.
 bool compareHost(const HostInfo& h1, const HostInfo& h2) {
@@ -50,14 +62,14 @@ HostListFetcher::~HostListFetcher() {}
 // TODO(nicholss): This was written assuming only one request at a time. Fix
 // that. For the moment it will work to make progress in the app.
 void HostListFetcher::RetrieveHostlist(const std::string& access_token,
-                                       const HostlistCallback& callback) {
+                                       HostlistCallback callback) {
   // TODO(nicholss): There is a bug here if two host list fetches are happening
   // at the same time there will be a dcheck thrown. Fix this for release.
   DCHECK(!access_token.empty());
   DCHECK(callback);
   DCHECK(!hostlist_callback_);
 
-  hostlist_callback_ = callback;
+  hostlist_callback_ = std::move(callback);
 
   request_ = net::URLFetcher::Create(GURL(kHostListProdRequestUrl),
                                      net::URLFetcher::GET, this);
@@ -71,7 +83,7 @@ void HostListFetcher::RetrieveHostlist(const std::string& access_token,
 void HostListFetcher::CancelFetch() {
   request_.reset();
   if (hostlist_callback_) {
-    base::ResetAndReturn(&hostlist_callback_).Run(RESPONSE_CODE_CANCELLED, {});
+    std::move(hostlist_callback_).Run(RESPONSE_CODE_CANCELLED, {});
   }
 }
 
@@ -134,8 +146,7 @@ void HostListFetcher::OnURLFetchComplete(const net::URLFetcher* source) {
     hostlist.clear();
   }
   std::sort(hostlist.begin(), hostlist.end(), &compareHost);
-  base::ResetAndReturn(&hostlist_callback_)
-      .Run(request_->GetResponseCode(), hostlist);
+  std::move(hostlist_callback_).Run(request_->GetResponseCode(), hostlist);
 }
 
 }  // namespace remoting

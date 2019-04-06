@@ -9,11 +9,15 @@
 #include <vector>
 
 #include "base/optional.h"
+#include "base/stl_util.h"
+#include "cc/paint/image_analysis_state.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_image.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkScalar.h"
 #include "third_party/skia/include/core/SkShader.h"
+#include "ui/gfx/color_space.h"
+#include "ui/gfx/geometry/size_f.h"
 
 namespace cc {
 class ImageProvider;
@@ -32,6 +36,9 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
     kPaintRecord,
     kShaderCount
   };
+
+  using RecordShaderId = uint32_t;
+  static const RecordShaderId kInvalidRecordShaderId;
 
   // Scaling behavior dictates how a PaintRecord shader will behave. Use
   // RasterAtScale to create a picture shader. Use FixedScale to create an image
@@ -104,6 +111,17 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
 
   ~PaintShader() override;
 
+  void set_has_animated_images(bool has_animated_images) {
+    image_analysis_state_ = has_animated_images
+                                ? ImageAnalysisState::kAnimatedImages
+                                : ImageAnalysisState::kNoAnimatedImages;
+  }
+  ImageAnalysisState image_analysis_state() const {
+    return image_analysis_state_;
+  }
+
+  bool has_discardable_images() const;
+
   SkMatrix GetLocalMatrix() const {
     return local_matrix_ ? *local_matrix_ : SkMatrix::I();
   }
@@ -113,6 +131,9 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
     return image_;
   }
 
+  const gfx::SizeF* tile_scale() const {
+    return base::OptionalOrNullptr(tile_scale_);
+  }
   const sk_sp<PaintRecord>& paint_record() const { return record_; }
   bool GetRasterizationTileRect(const SkMatrix& ctm, SkRect* tile_rect) const;
 
@@ -131,24 +152,49 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   bool operator==(const PaintShader& other) const;
   bool operator!=(const PaintShader& other) const { return !(*this == other); }
 
+  RecordShaderId paint_record_shader_id() const {
+    DCHECK(id_ == kInvalidRecordShaderId || shader_type_ == Type::kPaintRecord);
+    return id_;
+  }
+
  private:
   friend class PaintFlags;
+  friend class PaintOpHelper;
   friend class PaintOpReader;
   friend class PaintOpSerializationTestUtils;
   friend class PaintOpWriter;
   friend class ScopedRasterFlags;
   FRIEND_TEST_ALL_PREFIXES(PaintShaderTest, DecodePaintRecord);
   FRIEND_TEST_ALL_PREFIXES(PaintOpBufferTest, PaintRecordShaderSerialization);
+  FRIEND_TEST_ALL_PREFIXES(PaintOpBufferTest, RecordShadersCached);
 
   explicit PaintShader(Type type);
 
   sk_sp<SkShader> GetSkShader() const;
-  void CreateSkShader(ImageProvider* = nullptr,
-                      const SkMatrix* raster_matrix = nullptr);
+  void CreateSkShader(const gfx::SizeF* raster_scale = nullptr,
+                      ImageProvider* image_provider = nullptr);
 
-  sk_sp<PaintShader> CreateDecodedPaintRecord(
-      const SkMatrix& ctm,
-      ImageProvider* image_provider) const;
+  // Creates a PaintShader to be rasterized at the given ctm. |raster_scale| is
+  // set to the scale at which the record should be rasterized when the shader
+  // is used.
+  // Note that this does not create a skia backing for the shader.
+  // Valid only for PaintRecord backed shaders.
+  sk_sp<PaintShader> CreateScaledPaintRecord(const SkMatrix& ctm,
+                                             gfx::SizeF* raster_scale) const;
+
+  // Creates a PaintShader with images from |image_provider| to be rasterized
+  // at the given ctm.
+  // |transfer_cache_entry_id| is set to the transfer cache id for the image, if
+  // the decode is backed by the transfer cache.
+  // |raster_quality| is set to the filter quality the shader should be
+  // rasterized with.
+  // Valid only for PaintImage backed shaders.
+  sk_sp<PaintShader> CreateDecodedImage(const SkMatrix& ctm,
+                                        SkFilterQuality requested_quality,
+                                        ImageProvider* image_provider,
+                                        uint32_t* transfer_cache_entry_id,
+                                        SkFilterQuality* raster_quality,
+                                        bool* needs_mips) const;
 
   void SetColorsAndPositions(const SkColor* colors,
                              const SkScalar* positions,
@@ -180,6 +226,11 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
 
   PaintImage image_;
   sk_sp<PaintRecord> record_;
+  RecordShaderId id_ = kInvalidRecordShaderId;
+
+  // For decoded PaintRecord shaders, specifies the scale at which the record
+  // will be rasterized.
+  base::Optional<gfx::SizeF> tile_scale_;
 
   std::vector<SkColor> colors_;
   std::vector<SkScalar> positions_;
@@ -188,6 +239,8 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   // the PaintShader but we always construct it at creation time to ensure that
   // accesses to it are thread-safe.
   sk_sp<SkShader> cached_shader_;
+
+  ImageAnalysisState image_analysis_state_ = ImageAnalysisState::kNoAnalysis;
 
   DISALLOW_COPY_AND_ASSIGN(PaintShader);
 };

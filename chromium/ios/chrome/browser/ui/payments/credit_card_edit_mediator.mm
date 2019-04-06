@@ -199,12 +199,17 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
   return !_creditCard || autofill::IsCreditCardLocal(*_creditCard);
 }
 
-- (void)formatValueForEditorField:(EditorField*)field {
-  if (field.autofillUIType == AutofillUITypeCreditCardNumber) {
-    field.value = base::SysUTF16ToNSString(
+- (BOOL)shouldFormatValueForAutofillUIType:(AutofillUIType)type {
+  return (type == AutofillUITypeCreditCardNumber);
+}
+
+- (NSString*)formatValue:(NSString*)value autofillUIType:(AutofillUIType)type {
+  if (type == AutofillUITypeCreditCardNumber) {
+    return base::SysUTF16ToNSString(
         payments::data_util::FormatCardNumberForDisplay(
-            base::SysNSStringToUTF16(field.value)));
+            base::SysNSStringToUTF16(value)));
   }
+  return nil;
 }
 
 - (UIImage*)iconIdentifyingEditorField:(EditorField*)field {
@@ -254,7 +259,7 @@ bool IsValidCreditCardNumber(const base::string16& card_number,
     return !errorMessage.empty() ? base::SysUTF16ToNSString(errorMessage) : nil;
   } else if (field.isRequired) {
     return l10n_util::GetNSString(
-        IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE);
+        IDS_PREF_EDIT_DIALOG_FIELD_REQUIRED_VALIDATION_MESSAGE);
   }
   return nil;
 }

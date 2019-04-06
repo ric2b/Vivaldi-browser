@@ -24,6 +24,9 @@ class ASH_EXPORT SessionObserver {
   // Called when a user session gets added to the existing session.
   virtual void OnUserSessionAdded(const AccountId& account_id) {}
 
+  // Called once the first time a user session starts.
+  virtual void OnFirstSessionStarted() {}
+
   // Called when a user session is updated, such as avatar change.
   virtual void OnUserSessionUpdated(const AccountId& account_id) {}
 
@@ -57,6 +60,9 @@ class ASH_EXPORT SessionObserver {
 };
 
 // A class to attach / detach an object as a session state observer.
+//
+// NOTE: Both ash::Shell and ash::SessionController must outlive your object.
+// You may find it clearer to manually add and remove your observer.
 class ASH_EXPORT ScopedSessionObserver {
  public:
   explicit ScopedSessionObserver(SessionObserver* observer);

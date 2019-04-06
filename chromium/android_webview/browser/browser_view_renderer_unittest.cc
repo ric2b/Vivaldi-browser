@@ -186,9 +186,9 @@ class TestAnimateInAndOutOfScreen : public RenderingTest {
   bool WillDrawOnRT(AwDrawGLInfo* draw_info) override {
     if (draw_gl_count_on_rt_ == 1) {
       draw_gl_count_on_rt_++;
-      ui_task_runner_->PostTask(
-          FROM_HERE,
-          base::Bind(&RenderingTest::PostInvalidate, base::Unretained(this)));
+      ui_task_runner_->PostTask(FROM_HERE,
+                                base::BindOnce(&RenderingTest::PostInvalidate,
+                                               base::Unretained(this)));
       return false;
     }
 
@@ -269,17 +269,13 @@ class CompositorNoFrameTest : public RenderingTest {
   }
 
   void DidOnDraw(bool success) override {
+    // OnDraw should succeed even when there are no frames from compositor.
+    EXPECT_TRUE(success);
     if (0 == on_draw_count_) {
-      // Should fail as there has been no frames from compositor.
-      EXPECT_FALSE(success);
       browser_view_renderer_->PostInvalidate(ActiveCompositor());
     } else if (1 == on_draw_count_) {
-      // Should succeed with frame from compositor.
-      EXPECT_TRUE(success);
       browser_view_renderer_->PostInvalidate(ActiveCompositor());
     } else if (2 == on_draw_count_) {
-      // Should still succeed with last frame, even if no frame from compositor.
-      EXPECT_TRUE(success);
       EndTest();
     }
     on_draw_count_++;
@@ -363,9 +359,9 @@ class ResourceRenderingTest : public RenderingTest {
   void DidOnDraw(bool success) override {
     EXPECT_EQ(next_frame_ != nullptr, success);
     if (!AdvanceFrame()) {
-      ui_task_runner_->PostTask(FROM_HERE,
-                                base::Bind(&ResourceRenderingTest::CheckResults,
-                                           base::Unretained(this)));
+      ui_task_runner_->PostTask(
+          FROM_HERE, base::BindOnce(&ResourceRenderingTest::CheckResults,
+                                    base::Unretained(this)));
     }
   }
 

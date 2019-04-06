@@ -2,24 +2,23 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chrome/common/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 source_set("common") {
   sources = [
     "safebrowsing_constants.cc",
     "safebrowsing_constants.h",
-    "safebrowsing_message_generator.cc",
-    "safebrowsing_message_generator.h",
-    "safebrowsing_messages.h",
     "safebrowsing_switches.cc",
     "safebrowsing_switches.h",
-    "safebrowsing_types.h",
     "utils.cc",
     "utils.h",
   ]
 
   deps = [
     "//base",
+    "//components/policy/core/browser:browser",
+    "//components/safe_browsing:csd_proto",
     "//crypto:crypto",
     "//ipc",
     "//url/ipc:url_ipc",
@@ -35,10 +34,14 @@ static_library("safe_browsing_prefs") {
     "safe_browsing_prefs.cc",
     "safe_browsing_prefs.h",
   ]
+
   deps = [
     "//base:base",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
+    "//components/safe_browsing:features",
+    "//content/public/browser:browser",
+    "//net:net",
   ]
 }
 
@@ -52,7 +55,10 @@ source_set("unit_tests") {
     "//base:base",
     "//base/test:test_support",
     "//components/prefs:test_support",
+    "//components/safe_browsing:features",
+    "//content/test:test_support",
     "//testing/gtest",
+    "//url:url",
   ]
 }
 
@@ -63,7 +69,12 @@ mojom("interfaces") {
 
   public_deps = [
     "//content/public/common:resource_type_bindings",
-    "//services/network/public/interfaces",
-    "//url/mojo:url_mojom_gurl",
+    "//services/network/public/mojom",
+    "//url/mojom:url_mojom_gurl",
   ]
+
+  enabled_features = []
+  if (safe_browsing_mode == 1) {
+    enabled_features += [ "full_safe_browsing" ]
+  }
 }

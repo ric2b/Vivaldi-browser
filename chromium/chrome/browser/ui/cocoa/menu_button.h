@@ -24,13 +24,12 @@
 // so that custom actions can be hooked up in Interface Builder.
 // The click-hold behavior can be disabled entirely through the
 // |openMenuOnClickHold| property.
-@interface MenuButton : ToolbarButton {
+@interface MenuButton : ToolbarButtonCocoa {
  @private
   base::scoped_nsobject<NSMenu> attachedMenu_;
   BOOL openMenuOnClick_;
   BOOL openMenuOnRightClick_;
   BOOL openMenuOnClickHold_;
-  base::scoped_nsobject<NSPopUpButtonCell> popUpCell_;
 }
 
 // The menu to display. Note that it should have no (i.e., a blank) title and

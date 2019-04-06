@@ -23,8 +23,8 @@
 #include "components/webcrypto/generate_key_result.h"
 #include "components/webcrypto/jwk.h"
 #include "components/webcrypto/status.h"
-#include "third_party/WebKit/public/platform/WebCryptoAlgorithmParams.h"
-#include "third_party/WebKit/public/platform/WebCryptoKeyAlgorithm.h"
+#include "third_party/blink/public/platform/web_crypto_algorithm_params.h"
+#include "third_party/blink/public/platform/web_crypto_key_algorithm.h"
 #include "third_party/re2/src/re2/re2.h"
 
 namespace webcrypto {
@@ -142,7 +142,7 @@ std::vector<uint8_t> MakeJsonVector(const base::DictionaryValue& dict) {
     const char* test_file_name,
     std::unique_ptr<base::Value>* value) {
   base::FilePath test_data_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir))
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir))
     return ::testing::AssertionFailure() << "Couldn't retrieve test dir";
 
   base::FilePath file_path = test_data_dir.AppendASCII("components")
@@ -163,7 +163,7 @@ std::vector<uint8_t> MakeJsonVector(const base::DictionaryValue& dict) {
 
   // Parse the JSON to a dictionary.
   *value = base::JSONReader::Read(file_contents);
-  if (!value->get()) {
+  if (!*value) {
     return ::testing::AssertionFailure()
            << "Couldn't parse test file JSON: " << file_path.value();
   }
@@ -453,7 +453,7 @@ std::unique_ptr<base::DictionaryValue> GetJwkDictionary(
     const std::string& k_expected_hex,
     blink::WebCryptoKeyUsageMask use_mask_expected) {
   std::unique_ptr<base::DictionaryValue> dict = GetJwkDictionary(json);
-  if (!dict.get() || dict->empty())
+  if (!dict || dict->empty())
     return ::testing::AssertionFailure() << "JSON parsing failed";
 
   // ---- k
@@ -480,7 +480,7 @@ std::unique_ptr<base::DictionaryValue> GetJwkDictionary(
     const std::string& e_expected_hex,
     blink::WebCryptoKeyUsageMask use_mask_expected) {
   std::unique_ptr<base::DictionaryValue> dict = GetJwkDictionary(json);
-  if (!dict.get() || dict->empty())
+  if (!dict || dict->empty())
     return ::testing::AssertionFailure() << "JSON parsing failed";
 
   // ---- n

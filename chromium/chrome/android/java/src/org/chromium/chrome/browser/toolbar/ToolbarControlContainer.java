@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.ViewStub;
 import android.widget.FrameLayout;
 
+import org.chromium.base.TraceEvent;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
 import org.chromium.chrome.browser.compositor.resources.ResourceFactory;
@@ -35,7 +36,6 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
 
     private Toolbar mToolbar;
     private ToolbarViewResourceFrameLayout mToolbarContainer;
-    private View mMenuBtn;
 
     private final SwipeRecognizer mSwipeRecognizer;
     private EdgeSwipeHandler mSwipeHandler;
@@ -84,24 +84,28 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
 
     @Override
     public void initWithToolbar(int toolbarLayoutId) {
-        ViewStub toolbarStub = (ViewStub) findViewById(R.id.toolbar_stub);
-        toolbarStub.setLayoutResource(toolbarLayoutId);
-        toolbarStub.inflate();
+        try (TraceEvent te = TraceEvent.scoped("ToolbarControlContainer.initWithToolbar")) {
+            ViewStub toolbarStub = (ViewStub) findViewById(R.id.toolbar_stub);
+            toolbarStub.setLayoutResource(toolbarLayoutId);
+            toolbarStub.inflate();
 
-        mToolbar = (Toolbar) findViewById(R.id.toolbar);
-        mToolbarContainer = (ToolbarViewResourceFrameLayout) findViewById(R.id.toolbar_container);
-        mToolbarContainer.setToolbar(mToolbar);
-        mMenuBtn = findViewById(R.id.menu_button);
+            mToolbar = (Toolbar) findViewById(R.id.toolbar);
+            mToolbarContainer =
+                    (ToolbarViewResourceFrameLayout) findViewById(R.id.toolbar_container);
+            mToolbarContainer.setToolbar(mToolbar);
 
-        if (mToolbar instanceof ToolbarTablet) {
-            // On tablet, draw a fake tab strip and toolbar until the compositor is ready to draw
-            // the real tab strip. (On phone, the toolbar is made entirely of Android views, which
-            // are already initialized.)
-            setBackgroundResource(R.drawable.toolbar_background);
+            if (mToolbar instanceof ToolbarTablet) {
+                // On tablet, draw a fake tab strip and toolbar until the compositor is ready to
+                // draw
+
+                // the real tab strip. (On phone, the toolbar is made entirely of Android views,
+                // which
+                // are already initialized.)
+                setBackgroundResource(R.drawable.toolbar_background);
+            }
+
+            assert mToolbar != null;
         }
-
-        assert mToolbar != null;
-        assert mMenuBtn != null;
     }
 
     @Override
@@ -242,6 +246,9 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
         // Don't eat the event if we don't have a handler.
         if (mSwipeHandler == null) return false;
 
+        // Don't react on touch events if the toolbar container is not fully visible.
+        if (!isFullyVisible()) return true;
+
         // If we have ACTION_DOWN in this context, that means either no child consumed the event or
         // this class is the top UI at the event position. Then, we don't need to feed the event to
         // mGestureDetector here because the event is already once fed in onInterceptTouchEvent().
@@ -256,6 +263,7 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
+        if (!isFullyVisible()) return true;
         if (mSwipeHandler == null || isOnTabStrip(event)) return false;
 
         return mSwipeRecognizer.onTouchEvent(event);
@@ -263,6 +271,13 @@ public class ToolbarControlContainer extends FrameLayout implements ControlConta
 
     private boolean isOnTabStrip(MotionEvent e) {
         return e.getY() <= mTabStripHeight;
+    }
+
+    /**
+     * @return Whether or not the control container is fully visible on screen.
+     */
+    private boolean isFullyVisible() {
+        return Float.compare(0f, getTranslationY()) == 0;
     }
 
     private class SwipeRecognizerImpl extends SwipeRecognizer {

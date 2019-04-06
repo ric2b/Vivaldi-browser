@@ -8,15 +8,16 @@
 #include "base/i18n/number_formatting.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/apps/app_window_registry_util.h"
+#include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/notifications/notification_ui_manager.h"
+#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
@@ -24,6 +25,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -33,13 +35,23 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 using extensions::ExtensionRegistry;
+
+namespace {
 
 const char kQuitWithAppsOriginUrl[] = "chrome://quit-with-apps";
 const int kQuitAllAppsButtonIndex = 0;
 const int kDontShowAgainButtonIndex = 1;
+
+void CloseNotification(Profile* profile) {
+  NotificationDisplayService::GetForProfile(profile)->Close(
+      NotificationHandler::Type::TRANSIENT,
+      QuitWithAppsController::kQuitWithAppsNotificationID);
+}
+
+}  // namespace
 
 const char QuitWithAppsController::kQuitWithAppsNotificationID[] =
     "quit-with-apps";
@@ -80,18 +92,15 @@ void QuitWithAppsController::Close(bool by_user) {
     suppress_for_session_ = !hosted_app_quit_notification_;
 }
 
-void QuitWithAppsController::Click() {
-  g_browser_process->notification_ui_manager()->CancelById(
-      kQuitWithAppsNotificationID,
-      NotificationUIManager::GetProfileID(notification_profile_));
-}
+void QuitWithAppsController::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
+  CloseNotification(notification_profile_);
 
-void QuitWithAppsController::ButtonClick(int button_index) {
-  g_browser_process->notification_ui_manager()->CancelById(
-      kQuitWithAppsNotificationID,
-      NotificationUIManager::GetProfileID(notification_profile_));
+  if (!button_index)
+    return;
 
-  if (button_index == kQuitAllAppsButtonIndex) {
+  if (*button_index == kQuitAllAppsButtonIndex) {
     if (hosted_app_quit_notification_) {
       content::NotificationService::current()->Notify(
           chrome::NOTIFICATION_CLOSE_ALL_BROWSERS_REQUEST,
@@ -100,7 +109,7 @@ void QuitWithAppsController::ButtonClick(int button_index) {
       chrome::CloseAllBrowsers();
     }
     AppWindowRegistryUtil::CloseAllAppWindows();
-  } else if (button_index == kDontShowAgainButtonIndex &&
+  } else if (*button_index == kDontShowAgainButtonIndex &&
              !hosted_app_quit_notification_) {
     g_browser_process->local_state()->SetBoolean(
         prefs::kNotifyWhenAppsKeepChromeAlive, false);
@@ -173,14 +182,11 @@ bool QuitWithAppsController::ShouldQuit() {
   // Delete any existing notification to ensure this one is shown. If
   // notification_profile_ is NULL then it must be that no notification has been
   // added by this class yet.
-  if (notification_profile_) {
-    g_browser_process->notification_ui_manager()->CancelById(
-        kQuitWithAppsNotificationID,
-        NotificationUIManager::GetProfileID(notification_profile_));
-  }
+  if (notification_profile_)
+    CloseNotification(notification_profile_);
   notification_profile_ = profiles[0];
-  g_browser_process->notification_ui_manager()->Add(*notification_,
-                                                    notification_profile_);
+  NotificationDisplayService::GetForProfile(notification_profile_)
+      ->Display(NotificationHandler::Type::TRANSIENT, *notification_);
 
   // Always return false, the notification UI can be used to quit all apps which
   // will cause Chrome to quit.

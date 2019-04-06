@@ -23,7 +23,7 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/latency/latency_info.h"
 
 using blink::WebInputEvent;
@@ -47,7 +47,7 @@ const char kTouchEventDataURL[] =
     "<body onload='setup();'>"
     "<div id='first'></div><div id='second'></div><div id='third'></div>"
     "<style>"
-    "  #first {"
+    "  %23first {"
     "    position: absolute;"
     "    width: 100px;"
     "    height: 100px;"
@@ -56,7 +56,7 @@ const char kTouchEventDataURL[] =
     "    background-color: green;"
     "    -webkit-transform: translate3d(0, 0, 0);"
     "  }"
-    "  #second {"
+    "  %23second {"
     "    position: absolute;"
     "    width: 100px;"
     "    height: 100px;"
@@ -65,7 +65,7 @@ const char kTouchEventDataURL[] =
     "    background-color: blue;"
     "    -webkit-transform: translate3d(0, 0, 0);"
     "  }"
-    "  #third {"
+    "  %23third {"
     "    position: absolute;"
     "    width: 100px;"
     "    height: 100px;"
@@ -116,7 +116,7 @@ class TouchInputBrowserTest : public ContentBrowserTest {
     host->GetView()->SetSize(gfx::Size(400, 400));
 
     // The page is loaded in the renderer, wait for a new frame to arrive.
-    while (!host->ScheduleComposite())
+    while (!host->RequestRepaintForTesting())
       GiveItSomeTime();
   }
 

@@ -6,19 +6,23 @@
 
 #include <utility>
 
+#include "components/sync/model/conflict_resolution.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
 
 namespace syncer {
 
 ModelTypeSyncBridge::ModelTypeSyncBridge(
-    const ChangeProcessorFactory& change_processor_factory,
-    ModelType type)
-    : type_(type),
-      change_processor_factory_(change_processor_factory),
-      change_processor_(change_processor_factory_.Run(type_, this)) {}
+    std::unique_ptr<ModelTypeChangeProcessor> change_processor)
+    : change_processor_(std::move(change_processor)) {
+  DCHECK(change_processor_);
+  change_processor_->OnModelStarting(this);
+}
 
 ModelTypeSyncBridge::~ModelTypeSyncBridge() {}
+
+void ModelTypeSyncBridge::OnSyncStarting(
+    const DataTypeActivationRequest& request) {}
 
 bool ModelTypeSyncBridge::SupportsGetStorageKey() const {
   return true;
@@ -34,24 +38,17 @@ ConflictResolution ModelTypeSyncBridge::ResolveConflict(
   return ConflictResolution::UseRemote();
 }
 
-void ModelTypeSyncBridge::OnSyncStarting(
-    const ModelErrorHandler& error_handler,
-    const ModelTypeChangeProcessor::StartCallback& start_callback) {
-  change_processor_->OnSyncStarting(std::move(error_handler), start_callback);
+ModelTypeSyncBridge::StopSyncResponse ModelTypeSyncBridge::ApplyStopSyncChanges(
+    std::unique_ptr<MetadataChangeList> delete_metadata_change_list) {
+  if (delete_metadata_change_list) {
+    // Nothing to do if this fails, so just ignore the error it might return.
+    ApplySyncChanges(std::move(delete_metadata_change_list),
+                     EntityChangeList());
+  }
+  return StopSyncResponse::kModelStillReadyToSync;
 }
 
-void ModelTypeSyncBridge::DisableSync() {
-  DCHECK(change_processor_);
-  change_processor_->DisableSync();
-  change_processor_ = change_processor_factory_.Run(type_, this);
-  // DisableSync() should delete all metadata, so it'll be safe to tell the new
-  // processor that there is no metadata. DisableSync() should never be called
-  // while the models are loading, aka before the service has finished loading
-  // the initial metadata.
-  change_processor_->ModelReadyToSync(std::make_unique<MetadataBatch>());
-}
-
-ModelTypeChangeProcessor* ModelTypeSyncBridge::change_processor() const {
+ModelTypeChangeProcessor* ModelTypeSyncBridge::change_processor() {
   return change_processor_.get();
 }
 

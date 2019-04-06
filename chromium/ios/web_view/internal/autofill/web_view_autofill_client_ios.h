@@ -15,11 +15,10 @@
 #include "components/autofill/core/browser/card_unmask_delegate.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#import "components/autofill/ios/browser/autofill_client_ios_bridge.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_service.h"
-#include "google_apis/gaia/identity_provider.h"
 #import "ios/web/public/web_state/web_state.h"
+#import "ios/web_view/internal/autofill/cwv_autofill_client_ios_bridge.h"
 
 namespace autofill {
 
@@ -30,8 +29,8 @@ class WebViewAutofillClientIOS : public AutofillClient {
       PrefService* pref_service,
       PersonalDataManager* personal_data_manager,
       web::WebState* web_state,
-      id<AutofillClientIOSBridge> bridge,
-      std::unique_ptr<IdentityProvider> identity_provider,
+      id<CWVAutofillClientIOSBridge> bridge,
+      identity::IdentityManager* identity_manager,
       scoped_refptr<AutofillWebDataService> autofill_web_data_service);
   ~WebViewAutofillClientIOS() override;
 
@@ -39,22 +38,26 @@ class WebViewAutofillClientIOS : public AutofillClient {
   PersonalDataManager* GetPersonalDataManager() override;
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
-  IdentityProvider* GetIdentityProvider() override;
+  identity::IdentityManager* GetIdentityManager() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
+  ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
-  SaveCardBubbleController* GetSaveCardBubbleController() override;
+  security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
                         base::WeakPtr<CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
+  void ShowLocalCardMigrationPrompt(base::OnceClosure closure) override;
+  void ConfirmSaveAutofillProfile(const AutofillProfile& profile,
+                                  base::OnceClosure callback) override;
   void ConfirmSaveCreditCardLocally(const CreditCard& card,
                                     const base::Closure& callback) override;
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
-      bool should_cvc_be_requested,
-      const base::Closure& callback) override;
+      bool should_request_name_from_user,
+      base::OnceCallback<void(const base::string16&)> callback) override;
   void ConfirmCreditCardFillAssist(const CreditCard& card,
                                    const base::Closure& callback) override;
   void LoadRiskData(
@@ -65,6 +68,7 @@ class WebViewAutofillClientIOS : public AutofillClient {
       const gfx::RectF& element_bounds,
       base::i18n::TextDirection text_direction,
       const std::vector<Suggestion>& suggestions,
+      bool /*unused_autoselect_first_suggestion*/,
       base::WeakPtr<AutofillPopupDelegate> delegate) override;
   void HideAutofillPopup() override;
   bool IsAutocompleteEnabled() override;
@@ -81,14 +85,15 @@ class WebViewAutofillClientIOS : public AutofillClient {
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
   bool IsAutofillSupported() override;
+  bool AreServerCardsSupported() override;
   void ExecuteCommand(int id) override;
 
  private:
   PrefService* pref_service_;
   PersonalDataManager* personal_data_manager_;
   web::WebState* web_state_;
-  __weak id<AutofillClientIOSBridge> bridge_;
-  std::unique_ptr<IdentityProvider> identity_provider_;
+  __weak id<CWVAutofillClientIOSBridge> bridge_;
+  identity::IdentityManager* identity_manager_;
   scoped_refptr<AutofillWebDataService> autofill_web_data_service_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewAutofillClientIOS);

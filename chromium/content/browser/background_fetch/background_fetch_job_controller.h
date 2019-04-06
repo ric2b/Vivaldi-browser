@@ -20,6 +20,7 @@
 #include "content/common/background_fetch/background_fetch_types.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
 
@@ -40,7 +41,7 @@ class CONTENT_EXPORT BackgroundFetchJobController final
  public:
   using FinishedCallback =
       base::OnceCallback<void(const BackgroundFetchRegistrationId&,
-                              bool /* aborted */)>;
+                              BackgroundFetchReasonToAbort)>;
   using ProgressCallback =
       base::RepeatingCallback<void(const std::string& /* unique_id */,
                                    uint64_t /* download_total */,
@@ -49,18 +50,21 @@ class CONTENT_EXPORT BackgroundFetchJobController final
       BackgroundFetchDelegateProxy* delegate_proxy,
       const BackgroundFetchRegistrationId& registration_id,
       const BackgroundFetchOptions& options,
-      const BackgroundFetchRegistration& registration,
+      const SkBitmap& icon,
+      uint64_t bytes_downloaded,
       BackgroundFetchRequestManager* request_manager,
       ProgressCallback progress_callback,
       BackgroundFetchScheduler::FinishedCallback finished_callback);
   ~BackgroundFetchJobController() override;
 
   // Initializes the job controller with the status of the active and completed
-  // downloads. Only called when this has been loaded from the database.
+  // downloads, as well as the title to use.
+  // Only called when this has been loaded from the database.
   void InitializeRequestStatus(
       int completed_downloads,
       int total_downloads,
-      const std::vector<std::string>& outstanding_guids);
+      const std::vector<std::string>& outstanding_guids,
+      const std::string& ui_title);
 
   // Gets the number of bytes downloaded for jobs that are currently running.
   uint64_t GetInProgressDownloadedBytes();
@@ -68,9 +72,6 @@ class CONTENT_EXPORT BackgroundFetchJobController final
   // Updates the UI (currently only job title) that's shown to the user as part
   // of a notification for instance.
   void UpdateUI(const std::string& title);
-
-  // Aborts the job including cancelling any ongoing downloads.
-  void Abort();
 
   // Returns the options with which this job is fetching data.
   const BackgroundFetchOptions& options() const { return options_; }
@@ -87,20 +88,19 @@ class CONTENT_EXPORT BackgroundFetchJobController final
       uint64_t bytes_downloaded) override;
   void DidCompleteRequest(
       const scoped_refptr<BackgroundFetchRequestInfo>& request) override;
-  void AbortFromUser() override;
 
   // BackgroundFetchScheduler::Controller implementation:
   bool HasMoreRequests() override;
   void StartRequest(scoped_refptr<BackgroundFetchRequestInfo> request) override;
+  void Abort(BackgroundFetchReasonToAbort reason_to_abort) override;
 
  private:
-  // Aborts a job updating the registration with the new state. If
-  // |cancel_download| is true, the ongoing download is also cancelled
-  // (otherwise it assumes that has already happened).
-  void Abort(bool cancel_download);
 
   // Options for the represented background fetch registration.
   BackgroundFetchOptions options_;
+
+  // Icon for the represented background fetch registration.
+  SkBitmap icon_;
 
   // Map from in-progress |download_guid|s to number of bytes downloaded.
   base::flat_map<std::string, uint64_t> active_request_download_bytes_;

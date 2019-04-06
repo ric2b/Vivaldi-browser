@@ -11,11 +11,13 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/flat_set.h"
 #include "base/containers/queue.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
@@ -24,6 +26,7 @@
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -31,11 +34,11 @@
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/page_type.h"
 #include "ipc/message_filter.h"
-#include "services/network/public/interfaces/network_service.mojom.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 #include "storage/common/fileapi/file_system_types.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -52,6 +55,7 @@ class Point;
 }
 
 namespace net {
+class CanonicalCookie;
 namespace test_server {
 class EmbeddedTestServer;
 }
@@ -70,13 +74,12 @@ using test_server::EmbeddedTestServer;
 namespace content {
 
 class BrowserContext;
+struct FrameVisualProperties;
+class FrameTreeNode;
 class InterstitialPage;
-class MessageLoopRunner;
 class NavigationHandle;
-class RenderViewHost;
 class RenderWidgetHost;
 class RenderWidgetHostView;
-class UtilityProcessHost;
 class WebContents;
 
 // Navigate a frame with ID |iframe_id| to |url|, blocking until the navigation
@@ -129,6 +132,14 @@ void OverrideLastCommittedOrigin(RenderFrameHost* render_frame_host,
 // Causes the specified web_contents to crash. Blocks until it is crashed.
 void CrashTab(WebContents* web_contents);
 
+// Sets up a commit interceptor to alter commits for |target_url| to change
+// their commit URL to |new_url| and origin to |new_origin|. This will happen
+// for all commits in |web_contents|.
+void PwnCommitIPC(WebContents* web_contents,
+                  const GURL& target_url,
+                  const GURL& new_url,
+                  const url::Origin& new_origin);
+
 // Causes the specified web_contents to issue an OnUnresponsiveRenderer event
 // to its observers.
 void SimulateUnresponsiveRenderer(WebContents* web_contents,
@@ -158,6 +169,12 @@ void SimulateRoutedMouseClickAt(WebContents* web_contents,
 void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         const gfx::Point& point);
+
+// Same as SimulateMouseEvent() except it forces the mouse event to go through
+// RenderWidgetHostInputEventRouter.
+void SimulateRoutedMouseEvent(WebContents* web_contents,
+                              blink::WebInputEvent::Type type,
+                              const gfx::Point& point);
 
 // Simulate a mouse wheel event.
 void SimulateMouseWheelEvent(WebContents* web_contents,
@@ -192,14 +209,20 @@ void SimulateGestureEvent(WebContents* web_contents,
                           const blink::WebGestureEvent& gesture_event,
                           const ui::LatencyInfo& latency);
 
-// Taps the screen at |point|.
+// Taps the screen at |point|, using gesture Tap or TapDown.
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point);
+void SimulateTapDownAt(WebContents* web_contents, const gfx::Point& point);
+
+// A helper function for SimulateTap(Down)At.
+void SimulateTouchGestureAt(WebContents* web_contents,
+                            const gfx::Point& point,
+                            blink::WebInputEvent::Type type);
 
 #if defined(USE_AURA)
 // Generates a TouchStart at |point|.
 void SimulateTouchPressAt(WebContents* web_contents, const gfx::Point& point);
 
-void SimulateLongPressAt(WebContents* web_contents, const gfx::Point& point);
+void SimulateLongTapAt(WebContents* web_contents, const gfx::Point& point);
 #endif
 
 // Taps the screen with modifires at |point|.
@@ -293,7 +316,6 @@ class ToRenderFrameHost {
   RenderFrameHost* render_frame_host_;
 };
 
-RenderFrameHost* ConvertToRenderFrameHost(RenderViewHost* render_view_host);
 RenderFrameHost* ConvertToRenderFrameHost(RenderFrameHost* render_view_host);
 RenderFrameHost* ConvertToRenderFrameHost(WebContents* web_contents);
 
@@ -398,8 +420,13 @@ RenderFrameHost* ChildFrameAt(RenderFrameHost* frame, size_t index);
 bool ExecuteWebUIResourceTest(WebContents* web_contents,
                               const std::vector<int>& js_resource_ids);
 
-// Returns the cookies for the given url.
+// Returns the serialized cookie string for the given url.
 std::string GetCookies(BrowserContext* browser_context, const GURL& url);
+
+// Returns the canonical cookies for the given url.
+std::vector<net::CanonicalCookie> GetCanonicalCookies(
+    BrowserContext* browser_context,
+    const GURL& url);
 
 // Sets a cookie for the given url. Returns true on success.
 bool SetCookie(BrowserContext* browser_context,
@@ -476,6 +503,18 @@ bool IsWebContentsBrowserPluginFocused(content::WebContents* web_contents);
 // Returns the RenderWidgetHost that holds the mouse lock.
 RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents);
 
+// Returns the RenderWidgetHost that holds the keyboard lock.
+RenderWidgetHost* GetKeyboardLockWidget(WebContents* web_contents);
+
+// Allows tests to drive keyboard lock functionality without requiring access
+// to the RenderWidgetHostImpl header or setting up an HTTP test server.
+// |codes| represents the set of keys to lock.  If |codes| has no value, then
+// all keys will be considered locked.  If |codes| has a value, then at least
+// one key must be specified.
+bool RequestKeyboardLock(WebContents* web_contents,
+                         base::Optional<base::flat_set<ui::DomCode>> codes);
+void CancelKeyboardLock(WebContents* web_contents);
+
 // Returns true if inner |interstitial_page| is connected to an outer
 // WebContents.
 bool IsInnerInterstitialPageConnected(InterstitialPage* interstitial_page);
@@ -509,19 +548,7 @@ void SendRoutedTouchTapSequence(content::WebContents* web_contents,
 // RenderWidgetHostViewAura.
 void SendRoutedGestureTapSequence(content::WebContents* web_contents,
                                   gfx::Point point);
-//
-// Waits until the cc::Surface associated with a guest/cross-process-iframe
-// has been drawn for the first time. Once this method returns it should be
-// safe to assume that events sent to the top-level RenderWidgetHostView can
-// be expected to properly hit-test to this surface, if appropriate.
-void WaitForGuestSurfaceReady(content::WebContents* web_contents);
 #endif  // defined(USE_AURA)
-
-// Waits until the cc::Surface associated with a cross-process child frame
-// has been drawn for the first time. Once this method returns it should be
-// safe to assume that events sent to the top-level RenderWidgetHostView can
-// be expected to properly hit-test to this surface, if appropriate.
-void WaitForChildFrameSurfaceReady(content::RenderFrameHost* child_frame);
 
 // Watches title changes on a WebContents, blocking until an expected title is
 // set.
@@ -583,15 +610,15 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
  private:
   // Overridden RenderProcessHost::LifecycleObserver methods.
   void RenderProcessExited(RenderProcessHost* host,
-                           base::TerminationStatus status,
-                           int exit_code) override;
+                           const ChildProcessTerminationInfo& info) override;
   void RenderProcessHostDestroyed(RenderProcessHost* host) override;
 
   RenderProcessHost* render_process_host_;
   WatchType type_;
   bool did_exit_normally_;
 
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+  base::RunLoop run_loop_;
+  base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderProcessHostWatcher);
 };
@@ -634,7 +661,7 @@ class DOMMessageQueue : public NotificationObserver,
  private:
   NotificationRegistrar registrar_;
   base::queue<std::string> message_queue_;
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+  base::OnceClosure quit_closure_;
   bool renderer_crashed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(DOMMessageQueue);
@@ -664,7 +691,7 @@ class WebContentsAddedObserver {
 
   WebContents* web_contents_;
   std::unique_ptr<RenderViewCreatedObserver> child_observer_;
-  scoped_refptr<MessageLoopRunner> runner_;
+  base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsAddedObserver);
 };
@@ -688,37 +715,74 @@ class WebContentsDestroyedObserver : public WebContentsObserver {
 // Request a new frame be drawn, returns false if request fails.
 bool RequestFrame(WebContents* web_contents);
 
-// Watches compositor frame changes, blocking until a frame has been
-// composited. This class must run on the UI thread.
-class FrameWatcher : public WebContentsObserver {
+// This class is intended to synchronize upon the submission of compositor
+// frames from the renderer to the display compositor.
+//
+// This class enables observation of the provided
+// RenderFrameMetadataProvider. Which notifies this of every
+// subsequent frame submission. Observation ends upon the destruction of this
+// class.
+//
+// Calling Wait will block the browser ui thread until the next time the
+// renderer submits a frame.
+//
+// Tests interested in the associated RenderFrameMetadata will find it cached
+// in the RenderFrameMetadataProvider.
+class RenderFrameSubmissionObserver
+    : public RenderFrameMetadataProvider::Observer {
  public:
-  // Don't observe any WebContents at construction. Observe() must be called
-  // later on.
-  FrameWatcher();
+  explicit RenderFrameSubmissionObserver(
+      RenderFrameMetadataProvider* render_frame_metadata_provider);
+  explicit RenderFrameSubmissionObserver(FrameTreeNode* node);
+  explicit RenderFrameSubmissionObserver(WebContents* web_contents);
+  ~RenderFrameSubmissionObserver() override;
 
-  // Listen for new frames from the |web_contents| renderer process. The
-  // WebContents that we observe can be changed by calling Observe().
-  explicit FrameWatcher(WebContents* web_contents);
+  // Resets the current |render_frame_count|;
+  void ResetCounter() { render_frame_count_ = 0; }
 
-  ~FrameWatcher() override;
+  // Blocks the browser ui thread until the next OnRenderFrameSubmission.
+  void WaitForAnyFrameSubmission();
 
-  // Wait for |frames_to_wait| swap mesages from the compositor.
-  void WaitFrames(int frames_to_wait);
+  // Blocks the browser ui thread until the next
+  // OnRenderFrameMetadataChangedAfterActivation.
+  void WaitForMetadataChange();
 
-  // Return the last received CompositorFrame's metadata.
-  const viz::CompositorFrameMetadata& LastMetadata();
+  // Blocks the browser ui thread until RenderFrameMetadata arrives where its
+  // scroll offset matches |expected_offset|.
+  void WaitForScrollOffset(const gfx::Vector2dF& expected_offset);
 
-  // Call this method to start observing a WebContents for CompositorFrames.
-  using WebContentsObserver::Observe;
+  // Blocks the browser ui thread until RenderFrameMetadata arrives where its
+  // scroll offset at top matches |expected_scroll_offset_at_top|.
+  void WaitForScrollOffsetAtTop(bool expected_scroll_offset_at_top);
+
+  const cc::RenderFrameMetadata& LastRenderFrameMetadata() const;
+
+  // Returns the number of frames submitted since the observer's creation.
+  int render_frame_count() const { return render_frame_count_; }
 
  private:
-  // WebContentsObserver implementation.
-  void DidReceiveCompositorFrame() override;
+  // Exits |run_loop_| unblocking the UI thread. Execution will resume in Wait.
+  void Quit();
 
-  int frames_to_wait_ = 0;
-  base::Closure quit_;
+  // Blocks the browser ui thread.
+  void Wait();
 
-  DISALLOW_COPY_AND_ASSIGN(FrameWatcher);
+  // RenderFrameMetadataProvider::Observer
+  void OnRenderFrameMetadataChangedBeforeActivation(
+      const cc::RenderFrameMetadata& metadata) override;
+  void OnRenderFrameMetadataChangedAfterActivation() override;
+  void OnRenderFrameSubmission() override;
+  void OnLocalSurfaceIdChanged(
+      const cc::RenderFrameMetadata& metadata) override;
+
+  // If true then the next OnRenderFrameSubmission will cancel the blocking
+  // |run_loop_| otherwise the blocking will continue until the next
+  // OnRenderFrameMetadataChangedAfterActivation.
+  bool break_on_any_frame_ = false;
+
+  RenderFrameMetadataProvider* render_frame_metadata_provider_ = nullptr;
+  base::OnceClosure quit_closure_;
+  int render_frame_count_ = 0;
 };
 
 // This class is intended to synchronize the renderer main thread, renderer impl
@@ -749,7 +813,7 @@ class MainThreadFrameObserver : public IPC::Listener {
   void Quit();
 
   RenderWidgetHost* render_widget_host_;
-  std::unique_ptr<base::RunLoop> run_loop_;
+  base::OnceClosure quit_closure_;
   int routing_id_;
 
   DISALLOW_COPY_AND_ASSIGN(MainThreadFrameObserver);
@@ -784,7 +848,7 @@ class InputMsgWatcher : public RenderWidgetHost::InputEventObserver {
   blink::WebInputEvent::Type wait_for_type_;
   InputEventAckState ack_result_;
   InputEventAckSource ack_source_;
-  base::Closure quit_;
+  base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMsgWatcher);
 };
@@ -819,7 +883,7 @@ class InputEventAckWaiter : public RenderWidgetHost::InputEventObserver {
   RenderWidgetHost* render_widget_host_;
   InputEventAckPredicate predicate_;
   bool event_received_;
-  base::Closure quit_;
+  base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(InputEventAckWaiter);
 };
@@ -850,9 +914,6 @@ class BrowserTestClipboardScope {
 
 // This observer is used to wait for its owner Frame to become focused.
 class FrameFocusedObserver {
-  // Private impl struct which hides non public types including FrameTreeNode.
-  class FrameTreeNodeObserverImpl;
-
  public:
   explicit FrameFocusedObserver(RenderFrameHost* owner_host);
   ~FrameFocusedObserver();
@@ -860,10 +921,31 @@ class FrameFocusedObserver {
   void Wait();
 
  private:
+  // Private impl struct which hides non public types including FrameTreeNode.
+  class FrameTreeNodeObserverImpl;
+
   // FrameTreeNode::Observer
   std::unique_ptr<FrameTreeNodeObserverImpl> impl_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameFocusedObserver);
+};
+
+// This observer is used to wait for its owner FrameTreeNode to become deleted.
+class FrameDeletedObserver {
+ public:
+  explicit FrameDeletedObserver(RenderFrameHost* owner_host);
+  ~FrameDeletedObserver();
+
+  void Wait();
+
+ private:
+  // Private impl struct which hides non public types including FrameTreeNode.
+  class FrameTreeNodeObserverImpl;
+
+  // FrameTreeNode::Observer
+  std::unique_ptr<FrameTreeNodeObserverImpl> impl_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameDeletedObserver);
 };
 
 // This class can be used to pause and resume navigations, based on a URL
@@ -900,6 +982,9 @@ class TestNavigationManager : public WebContentsObserver {
   // Returns the NavigationHandle associated with the navigation. It is non-null
   // only in between DidStartNavigation(...) and DidFinishNavigation(...).
   NavigationHandle* GetNavigationHandle();
+
+  // Whether the navigation successfully committed.
+  bool was_successful() const { return was_successful_; }
 
  protected:
   // Derived classes can override if they want to filter out navigations. This
@@ -940,7 +1025,8 @@ class TestNavigationManager : public WebContentsObserver {
   bool navigation_paused_;
   NavigationState current_state_;
   NavigationState desired_state_;
-  scoped_refptr<MessageLoopRunner> loop_runner_;
+  bool was_successful_ = false;
+  base::OnceClosure quit_closure_;
 
   base::WeakPtrFactory<TestNavigationManager> weak_factory_;
 
@@ -990,8 +1076,7 @@ class ConsoleObserverDelegate : public WebContentsDelegate {
   std::string filter_;
   std::string message_;
 
-  // The MessageLoopRunner used to spin the message loop.
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+  base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(ConsoleObserverDelegate);
 };
@@ -1068,9 +1153,9 @@ class ContextMenuFilter : public content::BrowserMessageFilter {
 
   void OnContextMenu(const content::ContextMenuParams& params);
 
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+  base::OnceClosure quit_closure_;
   content::ContextMenuParams last_params_;
-  bool handled_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextMenuFilter);
 };
@@ -1081,18 +1166,84 @@ WebContents* GetEmbedderForGuest(content::WebContents* guest);
 // browser process.
 bool IsNetworkServiceRunningInProcess();
 
-// Crash the Network Service process. Should only be called when out-of-process
-// Network Service is enabled.
-void SimulateNetworkServiceCrash();
-
 // Load the given |url| with |network_context| and return the |net::Error| code.
 int LoadBasicRequest(network::mojom::NetworkContext* network_context,
                      const GURL& url,
                      int process_id = 0,
                      int render_frame_id = 0);
 
-std::map<std::string, base::WeakPtr<UtilityProcessHost>>*
-GetServiceManagerProcessGroups();
+// Ensures that all StoragePartitions for the given BrowserContext have their
+// cookies flushed to disk.
+void EnsureCookiesFlushed(BrowserContext* browser_context);
+
+// Returns true if there is a valid process for |process_group_name|. Must be
+// called on the IO thread.
+bool HasValidProcessForProcessGroup(const std::string& process_group_name);
+
+// Performs a simple auto-resize flow and ensures that the embedder gets a
+// single response messages back from the guest, with the expected values.
+bool TestChildOrGuestAutoresize(bool is_guest,
+                                RenderProcessHost* embedder_rph,
+                                RenderWidgetHost* guest_rwh);
+
+// Class to sniff incoming IPCs for either
+// FrameHostMsg_SynchronizeVisualProperties or
+// BrowserPluginHostMsg_SynchronizeVisualProperties messages. This allows the
+// message to continue to the target child so that processing can be verified by
+// tests.
+class SynchronizeVisualPropertiesMessageFilter
+    : public content::BrowserMessageFilter {
+ public:
+  SynchronizeVisualPropertiesMessageFilter();
+
+  gfx::Rect last_rect() const { return last_rect_; }
+
+  void WaitForRect();
+  void ResetRectRunLoop();
+
+  // Returns the new viz::FrameSinkId immediately if the IPC has been received.
+  // Otherwise this will block the UI thread until it has been received, then it
+  // will return the new viz::FrameSinkId.
+  viz::FrameSinkId GetOrWaitForId();
+
+  // Waits for the next viz::LocalSurfaceId be received and returns it.
+  viz::LocalSurfaceId WaitForSurfaceId();
+
+ protected:
+  ~SynchronizeVisualPropertiesMessageFilter() override;
+
+ private:
+  void OnSynchronizeFrameHostVisualProperties(
+      const viz::SurfaceId& surface_id,
+      const FrameVisualProperties& visual_properties);
+  void OnSynchronizeBrowserPluginVisualProperties(
+      int browser_plugin_guest_instance_id,
+      viz::LocalSurfaceId surface_id,
+      FrameVisualProperties visual_properties);
+  void OnSynchronizeVisualProperties(
+      const viz::LocalSurfaceId& surface_id,
+      const viz::FrameSinkId& frame_sink_id,
+      const FrameVisualProperties& visual_properties);
+  // |rect| is in DIPs.
+  void OnUpdatedFrameRectOnUI(const gfx::Rect& rect);
+  void OnUpdatedFrameSinkIdOnUI();
+  void OnUpdatedSurfaceIdOnUI(viz::LocalSurfaceId surface_id);
+
+  bool OnMessageReceived(const IPC::Message& message) override;
+
+  static const uint32_t kMessageClassesToFilter[2];
+  viz::FrameSinkId frame_sink_id_;
+  base::RunLoop frame_sink_id_run_loop_;
+
+  std::unique_ptr<base::RunLoop> screen_space_rect_run_loop_;
+  bool screen_space_rect_received_;
+  gfx::Rect last_rect_;
+
+  viz::LocalSurfaceId last_surface_id_;
+  std::unique_ptr<base::RunLoop> surface_id_run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(SynchronizeVisualPropertiesMessageFilter);
+};
 
 }  // namespace content
 

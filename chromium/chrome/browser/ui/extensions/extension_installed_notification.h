@@ -9,7 +9,7 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "extensions/common/extension.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 
 class ExtensionInstalledNotification
     : public message_center::NotificationDelegate {
@@ -20,7 +20,8 @@ class ExtensionInstalledNotification
                                  Profile* profile);
 
   // NotificationDelegate override:
-  void Click() override;
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override;
 
  protected:
   // This class is ref-counted.

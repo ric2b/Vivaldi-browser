@@ -310,12 +310,18 @@ TEST(DOMStorageDatabaseTest, TestSimpleRemoveOneValue) {
 
 TEST(DOMStorageDatabaseTest, TestCanOpenAndReadWebCoreDatabase) {
   base::FilePath dir_test_data;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &dir_test_data));
-  base::FilePath webcore_database = dir_test_data.AppendASCII("dom_storage");
-  webcore_database =
-      webcore_database.AppendASCII("webcore_test_database.localstorage");
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &dir_test_data));
+  base::FilePath test_data = dir_test_data.AppendASCII("dom_storage");
+  test_data = test_data.AppendASCII("webcore_test_database.localstorage");
+  ASSERT_TRUE(base::PathExists(test_data));
 
-  ASSERT_TRUE(base::PathExists(webcore_database));
+  // Create a temporary copy of the WebCore test database, in case DIR_TEST_DATA
+  // is read-only.
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath webcore_database =
+      temp_dir.GetPath().AppendASCII("dom_storage");
+  ASSERT_TRUE(base::CopyFile(test_data, webcore_database));
 
   DOMStorageDatabase db(webcore_database);
   DOMStorageValuesMap values;
@@ -348,15 +354,7 @@ TEST(DOMStorageDatabaseTest, TestCanOpenFileThatIsNotADatabase) {
 
   {
     sql::test::ScopedErrorExpecter expecter;
-
-    // Earlier versions of Chromium compiled against SQLite 3.6.7.3, which
-    // returned SQLITE_IOERR_SHORT_READ in this case.  Some platforms may still
-    // compile against an earlier SQLite via USE_SYSTEM_SQLITE.
-    if (expecter.SQLiteLibVersionNumber() < 3008005) {
-      expecter.ExpectError(SQLITE_IOERR_SHORT_READ);
-    } else {
-      expecter.ExpectError(SQLITE_NOTADB);
-    }
+    expecter.ExpectError(SQLITE_NOTADB);
 
     // Try and open the file. As it's not a database, we should end up deleting
     // it and creating a new, valid file, so everything should actually

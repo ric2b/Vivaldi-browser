@@ -1,0 +1,122 @@
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
+[
+  {
+    "namespace": "infobars",
+    "compiler_options": {
+      "implemented_in": "extensions/api/infobars/infobars_api.h"
+    },
+    "description": "Use the <code>vivaldi.infobars</code> API to interact with infobars.",
+    "types": [
+      {
+        "id": "ButtonAction",
+        "type": "string",
+        "enum": [ "accept", "cancel", "link", "dismiss" ]
+      },
+      {
+        "id": "InfobarButton",
+        "type": "object",
+        "description": "Button to be shown in the infobar.",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to be shown in the button."
+          },
+          "action": {
+            "$ref": "ButtonAction",
+            "description": "The action to be performed when clicking this button."
+          },
+          "prominent": {
+            "type": "boolean",
+            "description": "This is the prominent button and should receive styling accordingly."
+          },
+          "triggersUACPrompt": {
+            "type": "boolean",
+            "description": "Will this trigger a UAC prompt on Windows."
+          }
+        }
+      },
+      {
+        "id": "Infobar",
+        "type": "object",
+        "description": "Object passed to the onInfobarCreated event.",
+        "properties": {
+          "tabId": {
+            "type": "integer",
+            "description": "The tabId this infobar is associated with."
+          },
+          "identifier": {
+            "type": "integer",
+            "description": "The identifier used to identify this infobar. It is only unique in combination with |tabId|."
+          },
+          "messageText": {
+            "type": "string",
+            "description": "The message text to be shown in the infobar."
+          },
+          "buttons": {
+            "type": "array",
+            "items": { "$ref": "InfobarButton" }
+          },
+          "linkText": {
+            "type": "string",
+            "description": "The text associated with a link to be shown in the infobar."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "sendButtonAction",
+        "type": "function",
+        "description": "Send the action defined on the clicked button.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "description": "The tabId this infobar is associated with."
+          },
+          {
+            "name": "identifier",
+            "type": "integer",
+            "description": "The identifier used to identify this infobar. It is only unique in combination with |tabId|."
+          },
+          {
+            "name": "action",
+            "type": "string",
+            "description": "The click action for this button. This must be the same as defined in the |InfoBarButton| type for this button."
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onInfobarCreated",
+        "type": "function",
+        "description": "Fired when a infobar has been created and should be shown.",
+        "parameters": [
+          {
+            "name": "params",
+            "description": "Information about the infobar.",
+            "$ref": "Infobar"
+          }
+        ]
+      },
+      {
+        "name": "onInfobarRemoved",
+        "type": "function",
+        "description": "Fired when a infobar has been removed and should no longer be visible.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "description": "The tabId this infobar is associated with."
+          },
+          {
+            "name": "identifier",
+            "type": "integer",
+            "description": "The identifier used to identify this infobar. It is only unique in combination with |tabId|."
+          }
+        ]
+      }
+    ]
+  }
+]

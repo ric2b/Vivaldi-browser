@@ -36,7 +36,6 @@
 #include "components/prefs/pref_member.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/signin_internals_util.h"
-#include "components/signin/core/browser/signin_metrics.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
 class AccountTrackerService;
@@ -154,11 +153,6 @@ class SigninManagerBase : public KeyedService {
 
   // Returns true if there's a signin in progress.
   virtual bool AuthInProgress() const;
-
-  // Sign a user out, removing the preference, erasing all keys
-  // associated with the user, and canceling all auth in progress.
-  virtual void SignOut(signin_metrics::ProfileSignout signout_source_metric,
-                       signin_metrics::SignoutDelete signout_delete_metric);
 
   // KeyedService implementation.
   void Shutdown() override;

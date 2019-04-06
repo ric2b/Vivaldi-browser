@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "media/base/video_rotation.h"
 #include "media/gpu/android/android_video_surface_chooser.h"
 #include "media/gpu/android/promotion_hint_aggregator.h"
 #include "media/gpu/media_gpu_export.h"
@@ -34,16 +35,16 @@ class MEDIA_GPU_EXPORT SurfaceChooserHelper {
       bool promote_aggressively,
       std::unique_ptr<PromotionHintAggregator> promotion_hint_aggregator =
           nullptr,
-      std::unique_ptr<base::TickClock> tick_clock = nullptr);
+      const base::TickClock* tick_clock = nullptr);
   ~SurfaceChooserHelper();
 
   enum class SecureSurfaceMode {
     // The surface should not be secure.  This allows both overlays and
-    // SurfaceTexture surfaces.
+    // TextureOwner surfaces.
     kInsecure,
 
     // It is preferable to have a secure surface, but insecure
-    // (SurfaceTexture) is better than failing.
+    // (TextureOwner) is better than failing.
     kRequested,
 
     // The surface must be a secure surface, and should fail otherwise.
@@ -53,8 +54,8 @@ class MEDIA_GPU_EXPORT SurfaceChooserHelper {
   // Must match AVDAFrameInformation UMA enum.  Please do not remove or re-order
   // values, only append new ones.
   enum class FrameInformation {
-    SURFACETEXTURE_INSECURE = 0,
-    SURFACETEXTURE_L3 = 1,
+    NON_OVERLAY_INSECURE = 0,
+    NON_OVERLAY_L3 = 1,
     OVERLAY_L3 = 2,
     OVERLAY_L1 = 3,
     OVERLAY_INSECURE_PLAYER_ELEMENT_FULLSCREEN = 4,
@@ -73,6 +74,9 @@ class MEDIA_GPU_EXPORT SurfaceChooserHelper {
 
   // Notify us about the fullscreen state.  Does not update the chooser state.
   void SetIsFullscreen(bool is_fullscreen);
+
+  // Notify us about the default rotation for the video.
+  void SetVideoRotation(VideoRotation video_rotation);
 
   // Update the chooser state using the given factory.
   void UpdateChooserState(base::Optional<AndroidOverlayFactoryCB> new_factory);
@@ -105,7 +109,7 @@ class MEDIA_GPU_EXPORT SurfaceChooserHelper {
   // Time since we last updated the chooser state.
   base::TimeTicks most_recent_chooser_retry_;
 
-  std::unique_ptr<base::TickClock> tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // Number of promotion hints that we need to receive before clearing the
   // "delay overlay promotion" flag in |surface_chooser_state_|.  We do this so

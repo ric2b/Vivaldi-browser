@@ -4,8 +4,6 @@
 
 source_set("cpp") {
   sources = [
-    "constants.cc",
-    "constants.h",
     "device_to_feedback_observer_adapter.cc",
     "device_to_feedback_observer_adapter.h",
     "receiver_media_to_mojo_adapter.cc",
@@ -17,7 +15,7 @@ source_set("cpp") {
     "//media",
     "//media/capture:capture",
     "//services/service_manager/public/cpp",
-    "//services/video_capture/public/interfaces",
+    "//services/video_capture/public/mojom",
   ]
 
   deps = [

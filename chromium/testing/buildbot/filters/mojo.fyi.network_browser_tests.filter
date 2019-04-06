@@ -1,32 +1,174 @@
+# NOTE: if adding an exclusion for an existing failure (e.g. additional test for
+# feature X that is already not working), please add it beside the existing
+# failures. Otherwise please reach out to network-service-dev@.
+
 # These tests currently fail when run with --enable-features=NetworkService
 # See https://crbug.com/769401
 
 # Uncategorized timeouts or test failures.
--ActivityLogApiTest.TriggerEvent
+-ExtensionDisabledGlobalErrorTest.HigherPermissionsFromSync
+-ExtensionDisabledGlobalErrorTest.RemoteInstall
+-ExtensionStorageMonitorTest.HostedAppTemporaryFilesystem
+-ExtensionUnloadBrowserTest.UnloadWithContentScripts
+-ProcessManagerBrowserTest.NestedURLNavigationsToExtensionAllowed
+-ProxySettingsApiTest.ProxyEventsInvalidProxy
+-RegisterProtocolHandlerBrowserTest.CustomHandler
+-SSLUITest.TestBadHTTPSDownload/0
+-SSLUITest.TestBadHTTPSDownload/1
+-SubresourceFilterBrowserTest.FailedProvisionalLoadInMainframe
+-WebstoreInstallerBrowserTest.SimultaneousInstall
+-WebViewTest.WebViewInBackgroundPage
+
+# A large number of Cloud Print files use URLFetchers.
+# A few of the bugs:
+# https://crbug.com/844950
+# https://crbug.com/844951
+# https://crbug.com/844952
+-ComponentCloudPolicyTest.FetchExtensionPolicy
+-ComponentCloudPolicyTest.InstallNewExtension
+-ComponentCloudPolicyTest.SignOutAndBackIn
+-ComponentCloudPolicyTest.UpdateExtensionPolicy
+-KeyRotationComponentCloudPolicyTest.Basic
+
+# These tests uses net::URLRequestFilter (through TestRequestInterceptor) to
+# mock out network responses. Unclear if the code being tested uses
+# SimpleURLLoader or URLFetcher.
+-ComponentUpdaterPolicyTest.EnabledComponentUpdates
+-PolicyTest.ExtensionInstallBlacklistSharedModules
+-PolicyTest.ExtensionInstallForcelist
+-PolicyTest.ExtensionInstallForcelist_DefaultedUpdateUrl
+-PolicyTest.ExtensionMinimumVersionForceInstalled
+-PolicyTest.ExtensionMinimumVersionRequired
+-PolicyTest.ExtensionMinimumVersionRequiredAlt
+-PolicyTest.ExtensionRecommendedInstallationMode
+-PolicyUpdateServiceTest.Backoff
+-PolicyUpdateServiceTest.FailedUpdateRetries
+-PolicyUpdateServiceTest.PolicyCorruptedOnStartup
+
+# Domain Reliability has yet to be hookup to the NetworkService.
+# https://crbug.com/853251
+-DomainReliabilityBrowserTest.Upload
+
+# extensions/browser/updater/extension_downloader.cc still uses URLFetcher.
+# https://crbug.com/844928
+-ExtensionManagementTest.AutoUpdate
+-ExtensionManagementTest.AutoUpdateDisabledExtensions
+-ExtensionManagementTest.ExternalPolicyRefresh
+-ExtensionManagementTest.ExternalUrlUpdate
+-ExtensionManagementTest.PolicyOverridesUserInstall
+
+# This test fails flakily. Only enable it once
+# SocketExtensionWithDnsLookupFunction::StartDnsLookup uses the Mojo
+# HostResolver API.
+-SocketApiTest.SocketUDPExtension
+
+# These tests use URLFetchers directly.
+# https://crbug.com/853798
+-ProfileBrowserTest.SeparateMediaCache
+-ProfileBrowserTest.URLFetcherUsingMainContextDuringIncognitoTeardown
+-ProfileBrowserTest.URLFetcherUsingMainContextDuringShutdown
+-ProfileBrowserTest.URLFetcherUsingMediaContextDuringShutdown
+-ProfileWithoutMediaCacheBrowserTest.NoSeparateMediaCache
+
+# components/update_client/ still uses URLFetcher.
+# After bug 844973 was fixed, these two still fail/crash:
+-UpdateServiceTest.PolicyCorrupted
+-UpdateServiceTest.SuccessfulUpdate
+
+# about:net-internals should be largely removed before shipping the network
+# service.
+# https://crbug.com/678391
+-NetInternalsTest.netInternalsChromeOSViewStoreDebugLogs
+-NetInternalsTest.netInternalsDnsViewAddTwoTwice
+-NetInternalsTest.netInternalsDnsViewExpired
+-NetInternalsTest.netInternalsDnsViewFail
+-NetInternalsTest.netInternalsDnsViewIncognitoClears
+-NetInternalsTest.netInternalsDnsViewNetworkChanged
+-NetInternalsTest.netInternalsDnsViewSuccess
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewAddDelete
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewAddError
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewAddFail
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewAddOverwrite
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewAddTwice
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewDeleteError
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewDeleteNotFound
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTAddDelete
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTAddError
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTAddFail
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTAddOverwrite
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTAddTwice
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTQueryError
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTQueryNotFound
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewExpectCTTestReport
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewQueryError
+-NetInternalsTest.netInternalsDomainSecurityPolicyViewQueryNotFound
+-NetInternalsTest.netInternalsEventsViewFilter
+-NetInternalsTest.netInternalsLogUtilExportImport
+-NetInternalsTest.netInternalsLogUtilImportNetLogFile
+-NetInternalsTest.netInternalsLogUtilImportNetLogFileTruncated
+-NetInternalsTest.netInternalsLogUtilStopCapturing
+-NetInternalsTest.netInternalsLogViewPainterPrintAsText
+-NetInternalsTest.netInternalsPrerenderViewFail
+-NetInternalsTest.netInternalsPrerenderViewSucceed
+-NetInternalsTest.netInternalsSessionBandwidthSucceed
+-NetInternalsTest.netInternalsTimelineViewDegenerate
+-NetInternalsTest.netInternalsTimelineViewLoadLog
+-NetInternalsTest.netInternalsTimelineViewNoEvents
+-NetInternalsTest.netInternalsTimelineViewRange
+-NetInternalsTest.netInternalsTimelineViewScrollbar
+-NetInternalsTest.netInternalsTimelineViewZoomIn
+-NetInternalsTest.netInternalsTimelineViewZoomOut
+-NetInternalsTest.netInternalsTourTabs
+
+# https://crbug.com/721398
+-WebViewTest.ClearDataCache
+
+# Need a test interface API that allows us to check on the CT status.
+# Then in ssl_browsertest.cc we can use that instead of the direct
+# call to the transport_security_state()
+-SSLUITest.CertificateTransparencyEnforcementDisabledForUrls/0
+-SSLUITest.CertificateTransparencyEnforcementDisabledForUrls/1
+
+# Redirects to chrome-extension:// should be blocked unless the resource is
+# webaccessible.  https://crbug.com/821586
+-ProcessManagerBrowserTest.ServerRedirectToNonWebAccessibleResource
+-ProcessManagerBrowserTest.CrossExtensionEmbeddingOfWebAccessibleResources
+
+# https://crbug.com/853256
+-ClientHintsBrowserTest.ClientHintsLifetimeNotAttachedCookiesBlocked/0
+-ClientHintsBrowserTest.ClientHintsLifetimeNotAttachedCookiesBlocked/1
+-ClientHintsBrowserTest.ClientHintsNoLifetimeCookiesNotAllowed/0
+-ClientHintsBrowserTest.ClientHintsNoLifetimeCookiesNotAllowed/1
+
+# http://crbug.com/816684 Track Page Load Metrics.
+-AdsPageLoadMetricsObserverBrowserTest.OriginStatusMetricEmbedded
+-AdsPageLoadMetricsObserverBrowserTest.OriginStatusMetricEmbeddedEmpty
+-AdsPageLoadMetricsObserverBrowserTest.OriginStatusMetricSame
+-AdsPageLoadMetricsObserverBrowserTest.OriginStatusMetricCross
 -AdsPageLoadMetricsObserverBrowserTest.DocOverwritesNavigation
 -AdsPageLoadMetricsObserverBrowserTest.SubresourceFilter
--AppBackgroundPageNaClTest.BackgroundKeepaliveActive
--BackgroundXhrTest.HttpAuth
--BackgroundXhrTest.TlsClientAuth
--BrowserTest.InterstitialCancelsGuestViewDialogs
--BrowsingDataRemoverBrowserTest.Cache
--BrowsingDataRemoverBrowserTest.CookieDeletion
--ChromeSecurityExploitBrowserTest.CreateFilesystemURLInExtensionOrigin
--ChromeSitePerProcessTest.LaunchExternalProtocolFromSubframe
--ContentFaviconDriverTest.ReloadBypassingCache
--CredentialManagerBrowserTest.CreatePublicKeyCredentialAlgorithmNotSupported
--CredentialManagerBrowserTest.CreatePublicKeyCredentialInvalidRp
--CredentialManagerBrowserTest.MojoConnectionRecreatedAfterNavigation
--CredentialManagerBrowserTest.StoreInUnloadHandler_CrossSite_OnDemandMojoPipe
--CredentialManagerBrowserTest.StoreInUnloadHandler_CrossSite_PreestablishedPipe
--CredentialManagerBrowserTest.StoreInUnloadHandler_SameSite_OnDemandMojoPipe
--CredentialManagerBrowserTest.StoreInUnloadHandler_SameSite_PreestablishedPipe
--CredentialManagerBrowserTest.StoreSavesPSLMatchedCredential
--CredentialManagerBrowserTest.UpdatingPSLMatchedCredentialCreatesSecondEntry
-# DeclarativeContentApiTest.EnabledForSplitIncognito is flaky.
--DeclarativeContentApiTest.EnabledForSplitIncognito
--DeclarativeContentApiTest.UninstallWhileActivePageAction
--DevToolsSanityTest.TestRawHeadersWithRedirectAndHSTS
+-PageLoadMetricsBrowserTest.LoadingMetrics
+-PageLoadMetricsBrowserTest.LoadingMetricsFailed
+-PageLoadMetricsBrowserTest.PayloadSize
+-PageLoadMetricsBrowserTest.PayloadSizeChildFrame
+
+# https://crbug.com/810329 DnsProbe browsertests that rely on delaying requests:
+-DnsProbeBrowserTest.NxdomainProbeResultWithWorkingSlowCorrections
+# Addendum to the above: These three were previously marked as flaky. After
+# resolving https://crbug.com/810329, they will need to be monitored to see
+# if flake is still an issue.
+-DnsProbeBrowserTest.CorrectionsLoadStoppedSlowProbe
+-DnsProbeBrowserTest.CorrectionsLoadStopped
+-DnsProbeBrowserTest.NoInternetProbeResultWithSlowBrokenCorrections
+
+# crbug.com/776589 Intercepting requests with net::URLRequestFilter.
+-DownloadExtensionTest.DownloadExtensionTest_Download_FileSystemURL
+-PolicyTest.CertificateTransparencyEnforcementDisabledForUrls/0
+-PolicyTest.CertificateTransparencyEnforcementDisabledForUrls/1
+-PolicyTest.ExtensionInstallSources
+-PolicyTest.ForceGoogleSafeSearch
+
+# https://bugs.chromium.org/p/chromium/issues/detail?id=789670
 -DiceBrowserTest.Reauth
 -DiceBrowserTest.Signin
 -DiceBrowserTest.SignoutAllAccounts
@@ -34,179 +176,10 @@
 -DiceBrowserTest.SignoutSecondaryAccount
 -DiceFixAuthErrorsBrowserTest.ReauthFixAuthError
 -DiceFixAuthErrorsBrowserTest.SigninAccountMismatch
--DicePrepareMigrationBrowserTest.Signin
+-DicePrepareMigrationBrowserTest.EnableSyncAfterToken
+-DicePrepareMigrationBrowserTest.EnableSyncBeforeToken
 -DicePrepareMigrationBrowserTest.Signout
--DicePrepareMigrationChromeSynEndpointBrowserTest.EnableSyncAfterToken
--DicePrepareMigrationChromeSynEndpointBrowserTest.EnableSyncBeforeToken
--DisabledSignInIsolationBrowserTest.SyntheticTrial
-# DnsProbeBrowserTests that are flaky.
--DnsProbeBrowserTest.CorrectionsLoadStopped
--DnsProbeBrowserTest.CorrectionsLoadStoppedSlowProbe
--DnsProbeBrowserTest.NoInternetProbeResultWithSlowBrokenCorrections
--DomainReliabilityBrowserTest.Upload
--DoNotTrackTest.Redirect
--DoNotTrackTest.Simple
--EnabledSignInIsolationBrowserTest.SyntheticTrial
--ExpectCTBrowserTest.TestDynamicExpectCTHeaderProcessing
--ExpectCTBrowserTest.TestDynamicExpectCTReporting
--ExperimentalAppWindowApiTest.SetIcon
--ExtensionApiTabTest.TabsOnUpdated
--ExtensionApiTest.ContentSecurityPolicy
--ExtensionApiTest.Cookies
--ExtensionApiTest.Debugger
--ExtensionApiTest.DefaultContentSecurityPolicy
--ExtensionApiTest.SandboxedPages
--ExtensionApiTest.SandboxedPagesCSP
--ExtensionApiTestWithManagementPolicy.InitiatorProtectedByPolicy
--ExtensionApiTestWithManagementPolicy.UrlProtectedByPolicy
--ExtensionApiTestWithSwitch.ExtensionDebugger
--ExtensionBrowserTest.OnlyComponentExtensionsCanAccessChromeThemeUrls
--ExtensionFetchTest.HostCanFetchWebAccessibleExtensionResource
--ExtensionIconSourceTest.IconsLoaded
--ExtensionIconSourceTest.IconsLoadedIncognito
--ExtensionModuleTest.TestModulesAvailable
--ExtensionResourceRequestPolicyTest.WebAccessibleResources
--ExtensionUnloadBrowserTest.UnloadWithContentScripts
--FeedbackTest.AnonymousUser
--FeedbackTest.ExtraDiagnostics
--FeedbackTest.ShowFeedback
--FeedbackTest.ShowLoginFeedback
--InstantThemeTest.ThemeBackgroundAccess
--IsolatedAppTest.CookieIsolation
--IsolatedAppTest.SubresourceCookieIsolation
--LaunchWebAuthFlowFunctionTest.InteractionRequired
--LaunchWebAuthFlowFunctionTest.InteractiveFirstNavigationSuccess
--LaunchWebAuthFlowFunctionTest.LoadFailed
--LaunchWebAuthFlowFunctionTest.NonInteractiveSuccess
--LaunchWebAuthFlowFunctionTest.UserCloseWindow
--LazyBackgroundPageApiTest.NaClInBackgroundPage
--LazyBackgroundPageApiTest.NaClInView
--LocalNTPJavascriptTest.SimpleJavascriptTests
--LocalNTPVoiceJavascriptTest.MicrophoneTests
--LocalNTPVoiceJavascriptTest.SpeechTests
--LocalNTPVoiceJavascriptTest.TextTests
--LocalNTPVoiceJavascriptTest.ViewTests
--MediaGalleriesPlatformAppBrowserTest.ToURL
--MediaGalleriesPlatformAppPpapiTest.SendFilesystem
--MediaStreamDevicesControllerTest.ExtensionRequestMicCam
--NaClBrowserTestGLibcVcacheExtension.ValidationCacheOfMainNexe
--NaClBrowserTestNewlibVcacheExtension.ValidationCacheOfMainNexe
--NetInternalsTest.netInternalsSessionBandwidthSucceed
--NewlibPackagedAppTest.MulticastPermissions
--NewlibPackagedAppTest.NoSocketPermissions
--NewlibPackagedAppTest.SocketPermissions
--NewlibPackagedAppTest.SuccessfulLoad
--PageLoadMetricsBrowserTest.ChromeErrorPage
--PageLoadMetricsBrowserTest.LoadingMetrics
--PageLoadMetricsBrowserTest.LoadingMetricsFailed
--PageLoadMetricsBrowserTest.PayloadSize
--PageLoadMetricsBrowserTest.PayloadSizeChildFrame
--PermissionsApiTest.FaviconPermission
--PKPModelClientTest.PKPBypass
--PKPModelClientTest.PKPEnforced
--PlatformAppBrowserTest.AppWindowAdjustBoundsToBeVisibleOnScreen
--PlatformAppBrowserTest.CreateAndCloseAppWindow
--PlatformAppBrowserTest.Isolation
--PlatformAppDevToolsBrowserTest.ReOpenedWithID
--PlatformAppDevToolsBrowserTest.ReOpenedWithURL
--PolicyTest.DefaultCookiesSetting
--PrefetchBrowserTestPredictionDisabled.ExperimentDisabled
--PreviewsOptimizationGuideBrowserTest.NoScriptPreviewsEnabledByWhitelist
--ProcessManagerBrowserTest.ExtensionProcessReuse
--ProcessManagerBrowserTest.NestedURLNavigationsToExtensionAllowed
--ProfileWindowBrowserTest.GuestClearsCookies
--ProxySettingsApiTest.ProxyEventsInvalidProxy
--RegisterProtocolHandlerBrowserTest.CustomHandler
--ResourcePrefetchPredictorPrefetchingBrowserTest.Redirect
--ResourcePrefetchPredictorPrefetchingBrowserTest.Simple
--SafeBrowsingServiceTest.Prefetch
--SafeBrowsingTriggeredPopupBlockerBrowserTest.NoFeature_AllowCreatingNewWindows
--SafeBrowsingTriggeredPopupBlockerBrowserTest.NoFeature_NoMessages
--SecurityStateTabHelperTest.PasswordSecurityLevelDowngradedOnFilesystemUrl
--SiteDetailsBrowserTest.PlatformAppsNotIsolated
--SSLUICaptivePortalListResourceBundleTest.Enabled/0
--SSLUICaptivePortalListResourceBundleTest.Enabled/1
--SSLUICaptivePortalListResourceBundleTest.Enabled_AuthorityInvalid/0
--SSLUICaptivePortalListResourceBundleTest.Enabled_AuthorityInvalid/1
--SSLUICaptivePortalListResourceBundleTest.Enabled_DynamicUpdate/0
--SSLUICaptivePortalListResourceBundleTest.Enabled_DynamicUpdate/1
--SSLUICaptivePortalListResourceBundleTest.Enabled_NameMismatchAndWeakKey/0
--SSLUICaptivePortalListResourceBundleTest.Enabled_NameMismatchAndWeakKey/1
--SSLUITest.SHA1IsDefaultDisabled/0
--SSLUITest.SHA1IsDefaultDisabled/1
--SSLUITest.CommonNameIsDefaultDisabled/0
--SSLUITest.CommonNameIsDefaultDisabled/1
--SSLUITest.TestBadHTTPSDownload/0
--SSLUITest.TestBadHTTPSDownload/1
--SSLUITest.TestHTTPSOCSPOk/0
--SSLUITest.TestHTTPSOCSPOk/1
--SSLUITest.TestHTTPSOCSPRevoked/0
--SSLUITest.TestHTTPSOCSPRevoked/1
--SubresourceFilterBrowserTest.FailedProvisionalLoadInMainframe
--TabManagerTest.DiscardTabsWithMinimizedAndOccludedWindows
--TaskManagerBrowserTest.SentDataObserved
--TaskManagerBrowserTest.TotalSentDataObserved
--TaskManagerUtilityProcessBrowserTest.UtilityJSHeapMemory
--TtsApiTest.NetworkSpeechEngine
--V4SafeBrowsingServiceTest.Prefetch
--WebRtcFromWebAccessibleResourceTest.GetUserMediaInWebAccessibleResourceSuccess
-# This test is flaky.
--WebRtcRtpBrowserTest.TrackAddedToSecondStream
--WebRtcRtpBrowserTest.TrackSwitchingStream
--WebSocketBrowserTest.WebSocketAppliesHSTS
--WebSocketBrowserTest.WebSocketBasicAuthInHTTPSURL
--WebSocketBrowserTest.WebSocketBasicAuthInHTTPURL
--WebstoreInstallerBrowserTest.SimultaneousInstall
--WebViewTests/WebViewPluginTest.TestLoadPluginInternalResource/0
--WebViewTests/WebViewPluginTest.TestLoadPluginInternalResource/1
--WebViewTests/WebViewTest.ClearData/0
--WebViewTests/WebViewTest.ClearData/1
--WebViewTests/WebViewTest.ClearDataCache/0
--WebViewTests/WebViewTest.ClearDataCache/1
--WebViewTests/WebViewTest.ClearPersistentCookies/0
--WebViewTests/WebViewTest.ClearPersistentCookies/1
--WebViewTests/WebViewTest.ClearSessionCookies/0
--WebViewTests/WebViewTest.ClearSessionCookies/1
--WebViewTests/WebViewTest.CookieIsolation/0
--WebViewTests/WebViewTest.CookieIsolation/1
--WebViewTests/WebViewTest.DownloadCookieIsolation/0
--WebViewTests/WebViewTest.DownloadCookieIsolation/1
--WebViewTests/WebViewTest.DownloadCookieIsolation_CrossSession/0
--WebViewTests/WebViewTest.DownloadCookieIsolation_CrossSession/1
--WebViewTests/WebViewTest.Shim_TestNavigationToExternalProtocol/0
--WebViewTests/WebViewTest.Shim_TestNavigationToExternalProtocol/1
--WebViewTests/WebViewTest.StoragePersistence/0
--WebViewTests/WebViewTest.StoragePersistence/1
--WebViewTests/WebViewTest.WebViewInBackgroundPage/0
--WebViewTests/WebViewTest.WebViewInBackgroundPage/1
-
-# crbug.com/776589 Intercepting requests with net::URLRequestFilter.
--ClientHintsBrowserTest.ClientHintsLifetimeNotAttachedCookiesBlocked
--ContentSettingsTest.AllowCookiesForASessionUsingExceptions
--ContentSettingsTest.BasicCookies
--ContentSettingsTest.BasicCookiesHttps
--ContentSettingsTest.RedirectCrossOrigin
--ContentSettingsTest.RedirectLoopCookies
--ContinueWhereILeftOffTest.CookiesClearedOnExit
--DevToolsSanityTest.TestNetworkPushTime
--DnsProbeBrowserTest.NxdomainProbeResultWithWorkingCorrections
--DnsProbeBrowserTest.NxdomainProbeResultWithWorkingSlowCorrections
--DnsProbeBrowserTest.OtherErrorWithCorrectionsFailure
--DnsProbeBrowserTest.OtherErrorWithCorrectionsSuccess
--DownloadExtensionTest.DownloadExtensionTest_Download_FileSystemURL
--LoadImageBrowserTest.LoadImage
--MimeHandlerViewTests/MimeHandlerViewTest.SingleRequest/0
-# Test flakes, don't renable without debugging.
--SessionRestoreTest.RestoreForeignTab
--PolicyTest.CertificateTransparencyEnforcementDisabledForUrls
--PolicyTest.ExtensionInstallSources
--PolicyTest.ForceGoogleSafeSearch
--ProfileBrowserTest.SendHPKPReport
--ProfileBrowserTest.SendHPKPReportServerHangs
-
-# Need to add SetRequireCTDelegateForTesting to NetworkContext.
--SymantecMessageSSLUITest.ManySubresources
--SymantecMessageSSLUITest.PostJune2016
+-ChromeResourceDispatcherHostDelegateMirrorBrowserTest.MirrorRequestHeader
 
 # crbug.com/778793
 # Started failing in r514649.
@@ -214,56 +187,14 @@
 # Added in r519342.
 -PreviewsNoScriptBrowserTest.NoScriptPreviewsEnabledHttpRedirectToHttps
 -PreviewsNoScriptBrowserTest.NoScriptPreviewsEnabledButNoTransformDirective
-
-# crbug.com/778814 Null NavigationData is given to NavigationURLLoaderDelegate::OnResponseStarted() as parameter.
--ChromeResourceDispatcherHostDelegateBrowserTest.NavigationDataProcessed
-
-# crbug.com/778846 DCHECK() failed at URLDataManagerBackend::CheckURLIsValid().
-# Note: these may flake pass, but don't enable them.
--CrSettingsPeoplePageTest.All
+-ResourceLoadingHintsBrowserTest.ResourceLoadingHintsHttpsWhitelisted
+-ResourceLoadingHintsBrowserTest.ResourceLoadingHintsHttpsWhitelistedRedirectToHttps
+-ResourceLoadingHintsBrowserTest.ResourceLoadingHintsHttpsWhitelistedNoTransform
+-ResourceLoadingHintsBrowserTest.ResourceLoadingHintsHttp
+-ResourceLoadingHintsBrowserTest.ResourceLoadingHintsHttpsNoWhitelisted
 
 # crbug.com/778860 SecurityStyleExplanations::info_explanations is empty.
 -BrowserTestNonsecureURLRequest.DidChangeVisibleSecurityStateObserverObsoleteTLSSettings
-
-# crbug.com/779210 NOTREACHED() reached at SaveFileManager::OnSaveURL().
--SavePageBrowserTest.SavePageBrowserTest_NonMHTML
--SavePageBrowserTest.SaveUnauthorizedResource
-
-# crbug.com/779217 The NetworkContext is not created when the network service is enabled.
--SpellingMenuObserverTest.SuggestionsForceTopSeparator
-
-# http://crbug.com/783990
-# Add support for http auth.
--LoginPromptBrowserTest.AllowCrossdomainPromptForSubframes
--LoginPromptBrowserTest.BlockCrossdomainPromptForSubresources
--LoginPromptBrowserTest.CancelLoginInterstitialOnRedirect
--LoginPromptBrowserTest.CancelRedundantAuths
--LoginPromptBrowserTest.IncorrectConfirmation
--LoginPromptBrowserTest.LoginPromptForXHRWithoutCredentials
--LoginPromptBrowserTest.LoginPromptForXHRWithoutCredentialsCancelled
--LoginPromptBrowserTest.MultipleRealmCancellation
--LoginPromptBrowserTest.MultipleRealmConfirmation
--LoginPromptBrowserTest.NoLoginPromptForFavicon
--LoginPromptBrowserTest.ShouldNotProceedExistingInterstitial
--LoginPromptBrowserTest.ShouldReplaceExistingInterstitialWhenNavigated
--LoginPromptBrowserTest.ShowCorrectUrlForCrossOriginMainFrameRedirects
--LoginPromptBrowserTest.ShowCorrectUrlForCrossOriginMainFrameRequests
--LoginPromptBrowserTest.SupplyRedundantAuths
--LoginPromptBrowserTest.SupplyRedundantAuthsMultiProfile
--LoginPromptBrowserTest.TestBasicAuth
--LoginPromptBrowserTest.TestCancelAuth_Manual
--LoginPromptBrowserTest.TestCancelAuth_OnBack
--LoginPromptBrowserTest.TestCancelAuth_OnForward
--LoginPromptBrowserTest.TestCancelAuth_OnNavigation
--LoginPromptBrowserTest.TestDigestAuth
--LoginPromptBrowserTest.TestTwoAuths
--PasswordManagerBrowserTestBase.BasicAuthSeparateRealms
--PasswordManagerBrowserTestBase.CorrectEntryForHttpAuth
--PasswordManagerBrowserTestBase.NoLastLoadGoodLastLoad
--PrerenderBrowserTest.PrerenderHttpAuthentication
--ProxyBrowserTest.BasicAuthWSConnect
--RepostFormWarningTest.TestLoginAfterRepost
--WebSocketBrowserTest.ReuseMainPageBasicAuthCredentialsForWebSocket
 
 # These rely on proxy configuration and PAC execution being configured on the
 # legacy in-process URLRequestContext. They should be removed or updated to
@@ -272,193 +203,28 @@
 -IOThreadBrowserTestWithHangingPacRequest.Shutdown
 -ProxySettingsApiTest.ProxyEventsParseError
 
-# http://crbug.com/783996
-# Add support for TLS client auth.
--PrerenderBrowserTest.PrerenderSSLClientCertIframe
--PrerenderBrowserTest.PrerenderSSLClientCertSubresource
--PrerenderBrowserTest.PrerenderSSLClientCertTopLevel
--SSLUITestWithClientCert.TestWSSClientCert
-
 # http://crbug.com/721414
 # TODO(rockot): add support for webRequest API.
--DeclarativeApiTest.ExtensionLifetimeRulesHandling
--DeclarativeApiTest.NoTracesAfterUninstalling
--DeclarativeApiTest.PersistRules
--DeclarativeNetRequestBrowserTest.BlockAndRedirect/0
--DeclarativeNetRequestBrowserTest.BlockAndRedirect/1
--DeclarativeNetRequestBrowserTest.BlockRequests_Domains/0
--DeclarativeNetRequestBrowserTest.BlockRequests_Domains/1
--DeclarativeNetRequestBrowserTest.BlockRequests_DomainType/0
--DeclarativeNetRequestBrowserTest.BlockRequests_DomainType/1
--DeclarativeNetRequestBrowserTest.BlockRequests_Incognito/0
--DeclarativeNetRequestBrowserTest.BlockRequests_Incognito/1
--DeclarativeNetRequestBrowserTest.BlockRequests_MultipleExtensions/0
--DeclarativeNetRequestBrowserTest.BlockRequests_MultipleExtensions/1
--DeclarativeNetRequestBrowserTest.BlockRequests_Separator/0
--DeclarativeNetRequestBrowserTest.BlockRequests_Separator/1
--DeclarativeNetRequestBrowserTest.BlockRequests_UrlFilter/0
--DeclarativeNetRequestBrowserTest.BlockRequests_UrlFilter/1
--DeclarativeNetRequestBrowserTest.Enable_Disable_Reload_Uninstall/0
--DeclarativeNetRequestBrowserTest.Enable_Disable_Reload_Uninstall/1
--DeclarativeNetRequestBrowserTest.RedirectPriority/0
--DeclarativeNetRequestBrowserTest.RedirectPriority/1
--DeclarativeNetRequestBrowserTest.RedirectRequests_MultipleExtensions/0
--DeclarativeNetRequestBrowserTest.RedirectRequests_MultipleExtensions/1
--DeclarativeNetRequestBrowserTest.RendererCacheCleared/0
--DeclarativeNetRequestBrowserTest.RendererCacheCleared/1
--DeclarativeNetRequestBrowserTest.Whitelist/0
--DeclarativeNetRequestBrowserTest.Whitelist/1
--DeclarativeNetRequestBrowserTest_Packed.BrowserRestart/0
--DeclarativeNetRequestResourceTypeBrowserTest.Test1/0
--DeclarativeNetRequestResourceTypeBrowserTest.Test1/1
--DeclarativeNetRequestResourceTypeBrowserTest.Test2/1
--DeclarativeNetRequestResourceTypeBrowserTest.Test2/0
--DevToolsFrontendInWebRequestApiTest.HiddenRequests
--ExtensionWebRequestApiTest.DeclarativeSendMessage
--ExtensionWebRequestApiTest.ExtensionRequests
--ExtensionWebRequestApiTest.HostedAppRequest
--ExtensionWebRequestApiTest.MinimumAccessInitiator
--ExtensionWebRequestApiTest.PostData1
--ExtensionWebRequestApiTest.PostData2
 -ExtensionWebRequestApiTest.WebRequestBlocking
--ExtensionWebRequestApiTest.WebRequestClientsGoogleComProtection
--ExtensionWebRequestApiTest.WebRequestComplex
--ExtensionWebRequestApiTest.WebRequestDeclarative1
 -ExtensionWebRequestApiTest.WebRequestDeclarative2
--ExtensionWebRequestApiTest.WebRequestDeclarativePermissionSpanning1
--ExtensionWebRequestApiTest.WebRequestDeclarativePermissionSpanning2
--ExtensionWebRequestApiTest.WebRequestDeclarativePermissionSplit1
--ExtensionWebRequestApiTest.WebRequestDeclarativePermissionSplit2
 -ExtensionWebRequestApiTest.WebRequestDiceHeaderProtection
--ExtensionWebRequestApiTest.WebRequestNewTab
--ExtensionWebRequestApiTest.WebRequestPacRequestProtection
--ExtensionWebRequestApiTest.WebRequestSimple
 -ExtensionWebRequestApiTest.WebRequestTypes
+# Note WebRequestUnloadImmediately is disabled on Linux
 -ExtensionWebRequestApiTest.WebRequestUnloadImmediately
--ExtensionWebRequestApiTest.WebRequestURLFetcherInterception
--ExtensionWebRequestApiTest.WebRequestWithWithheldPermissions
--NativeBindingsApiTest.WebRequest
--WebViewTests/WebViewTest.Shim_TestDeclarativeWebRequestAPI/0
--WebViewTests/WebViewTest.Shim_TestDeclarativeWebRequestAPI/1
--WebViewTests/WebViewTest.Shim_TestDeclarativeWebRequestAPISendMessage/0
--WebViewTests/WebViewTest.Shim_TestDeclarativeWebRequestAPISendMessage/1
--WebViewTests/WebViewTest.Shim_TestDeclarativeWebRequestAPISendMessageSecondWebView/0
--WebViewTests/WebViewTest.Shim_TestDeclarativeWebRequestAPISendMessageSecondWebView/1
--WebViewTests/WebViewTest.Shim_TestWebRequestAPI/0
--WebViewTests/WebViewTest.Shim_TestWebRequestAPI/1
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIErrorOccurred/0
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIErrorOccurred/1
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIGoogleProperty/0
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIGoogleProperty/1
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIOnlyForInstance/0
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIOnlyForInstance/1
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIWithHeaders/0
--WebViewTests/WebViewTest.Shim_TestWebRequestAPIWithHeaders/1
--WebViewTests/WebViewTest.Shim_TestWebRequestListenerSurvivesReparenting/0
--WebViewTests/WebViewTest.Shim_TestWebRequestListenerSurvivesReparenting/1
+
+# WebRequest implementation needs to handle extension
+# installation/uninstallation events.
+# http://crbug.com/857577
+-BackgroundXhrTest.HttpAuth
+-BackgroundXhrTest.TlsClientAuth
+
+# http://crbug.com/853733
+-DeclarativeNetRequestBrowserTest.PageAllowingAPI_BrowserRequests/0
 
 # http://crbug.com/705114
 # Remove streams concept from code and replace with data pipe passing.
--ChromeAcceptHeaderTest.Check
--ChromeFindRequestManagerTest.FindInPDF
--ChromeNavigationBrowserTest.CrossSiteRedirectionToPDF
--ChromeSitePerProcessPDFTest.EmbeddedPDFInsideCrossOriginFrame
--ExecuteScriptApiTest/DestructiveScriptTest.DOMNodeInserted1/0
--ExecuteScriptApiTest/DestructiveScriptTest.DOMNodeInserted2/0
--ExecuteScriptApiTest/DestructiveScriptTest.DOMNodeInserted3/0
--ExecuteScriptApiTest/DestructiveScriptTest.DOMSubtreeModified1/0
--ExecuteScriptApiTest/DestructiveScriptTest.DOMSubtreeModified2/0
--ExecuteScriptApiTest/DestructiveScriptTest.DOMSubtreeModified3/0
--ExecuteScriptApiTest/DestructiveScriptTest.MacrotaskRemoval/0
--ExecuteScriptApiTest/DestructiveScriptTest.MicrotaskRemoval/0
--ExecuteScriptApiTest/DestructiveScriptTest.SynchronousRemoval/0
--ExtensionApiTest.TemporaryAddressSpoof
 -MimeHandlerViewTests/MimeHandlerViewTest.Abort/0
 -MimeHandlerViewTests/MimeHandlerViewTest.Abort/1
--MimeHandlerViewTests/MimeHandlerViewTest.Basic/0
--MimeHandlerViewTests/MimeHandlerViewTest.Basic/1
--MimeHandlerViewTests/MimeHandlerViewTest.DataUrl/0
--MimeHandlerViewTests/MimeHandlerViewTest.DataUrl/1
--MimeHandlerViewTests/MimeHandlerViewTest.Embedded/0
--MimeHandlerViewTests/MimeHandlerViewTest.Embedded/1
--MimeHandlerViewTests/MimeHandlerViewTest.EmbeddedDataUrlEmbed/0
--MimeHandlerViewTests/MimeHandlerViewTest.EmbeddedDataUrlEmbed/1
--MimeHandlerViewTests/MimeHandlerViewTest.EmbeddedDataUrlLong/0
--MimeHandlerViewTests/MimeHandlerViewTest.EmbeddedDataUrlLong/1
--MimeHandlerViewTests/MimeHandlerViewTest.EmbeddedDataUrlObject/0
--MimeHandlerViewTests/MimeHandlerViewTest.EmbeddedDataUrlObject/1
--MimeHandlerViewTests/MimeHandlerViewTest.Iframe/0
--MimeHandlerViewTests/MimeHandlerViewTest.Iframe/1
--MimeHandlerViewTests/MimeHandlerViewTest.NonAsciiHeaders/0
--MimeHandlerViewTests/MimeHandlerViewTest.NonAsciiHeaders/1
--MimeHandlerViewTests/MimeHandlerViewTest.PostMessage/0
--MimeHandlerViewTests/MimeHandlerViewTest.PostMessage/1
--MimeHandlerViewTests/MimeHandlerViewTest.ResizeBeforeAttach/0
--MimeHandlerViewTests/MimeHandlerViewTest.ResizeBeforeAttach/1
--MimeHandlerViewTests/MimeHandlerViewTest.SingleRequest/1
--PDFExtensionClipboardTest.CombinedShiftArrowPresses
--PDFExtensionClipboardTest.CombinedShiftRightArrowPresses
--PDFExtensionClipboardTest.IndividualShiftLeftArrowPresses
--PDFExtensionClipboardTest.IndividualShiftRightArrowPresses
--PDFExtensionLinkClickTest.CtrlLeft
--PDFExtensionLinkClickTest.CtrlShiftLeft
--PDFExtensionLinkClickTest.Middle
--PDFExtensionLinkClickTest.OpenPDFWithReplaceState
--PDFExtensionLinkClickTest.ShiftLeft
--PDFExtensionLinkClickTest.ShiftMiddle
--PDFExtensionTest.Basic
--PDFExtensionTest.BasicPlugin
--PDFExtensionTest.BlockDirectAccess
--PDFExtensionTest.Bookmark
--PDFExtensionTest.ContextMenuCoordinates
--PDFExtensionTest.CtrlWheelInvokesCustomZoom
--PDFExtensionTest.Elements
--PDFExtensionTest.EnsureCrossOriginRepliesBlocked
--PDFExtensionTest.EnsurePDFFromLocalFileLoads
--PDFExtensionTest.EnsureSameOriginRepliesAllowed
--PDFExtensionTest.GestureDetector
--PDFExtensionTest.LinkPermissions
--PDFExtensionTest.Metrics
--PDFExtensionTest.NavigationOnCorrectTab
--PDFExtensionTest.Navigator
--PDFExtensionTest.OpenFromFTP
--PDFExtensionTest.PageChange
--PDFExtensionTest.ParamsParser
--PDFExtensionTest.PdfAccessibility
--PDFExtensionTest.PdfAccessibilityEnableLater
--PDFExtensionTest.PdfAccessibilityInIframe
--PDFExtensionTest.PdfAccessibilityInOOPIF
--PDFExtensionTest.PdfZoomWithoutBubble
--PDFExtensionTest.PostMessageForZeroSizedEmbed
--PDFExtensionTest.RedirectsFailInPlugin
--PDFExtensionTest.TabTitleWithEmbeddedPdf
--PDFExtensionTest.TabTitleWithNoTitle
--PDFExtensionTest.TabTitleWithTitle
--PDFExtensionTest.Title
--PDFExtensionTest.ToolbarManager
--PDFExtensionTest.TouchHandling
--PDFExtensionTest.Viewport
--PDFExtensionTest.WhitespaceTitle
--PDFExtensionTest.ZoomManager
--PdfPluginContextMenuBrowserTest.FullPagePdfHasPageItems
--PdfPluginContextMenuBrowserTest.IframedPdfHasNoPageItems
--PDFTestFiles/PDFExtensionTest.Load/0
--PDFTestFiles/PDFExtensionTest.Load/1
--PDFTestFiles/PDFExtensionTest.Load/3
--PDFTestFiles/PDFExtensionTest.Load/5
--PDFTestFiles/PDFExtensionTest.Load/8
--PrerenderBrowserTestWithExtensions.StreamsTest
--PrintPreviewDialogControllerBrowserTest.PrintPreviewPdfAccessibility
--SaveType/SavePageOriginalVsSavedComparisonTest.ObjectElementsViaFile/0
--SaveType/SavePageOriginalVsSavedComparisonTest.ObjectElementsViaHttp/0
--StreamsPrivateApiTest.Abort
--StreamsPrivateApiTest.FileURL
--StreamsPrivateApiTest.Headers
--StreamsPrivateApiTest.Navigate
--StreamsPrivateApiTest.NavigateCrossSite
--WebViewTests/WebViewTest.ContextMenuNavigationInMimeHandlerView/0
--WebViewTests/WebViewTest.ContextMenuNavigationInMimeHandlerView/1
--WebViewTests/WebViewTest.NestedGuestContainerBounds/0
 
 # http://crbug.com/784576
 # Convert ExtensionRequestLimitingThrottle into a URLLoaderThrottle.
@@ -470,32 +236,13 @@
 -ExtensionRequestLimitingThrottleBrowserTest.ThrottleRequest_RedirectCached
 -ExtensionRequestLimitingThrottleCommandLineBrowserTest.ThrottleRequestDisabled
 
-# Redirect responses using NavigationThrottle or by hooking
-# NavigationURLLoaderNetworkService::URLLoaderRequestController
-# instead of net::URLRequestInterceptor.
--NewTabPageInterceptorTest.204Interception
--NewTabPageInterceptorTest.404Interception
--NewTabPageInterceptorTest.FailedRequestInterception
-
-# This requires that InterceptNetworkTransactions works
--ErrorPageNavigationCorrectionsFailTest.StaleCacheStatusFailedCorrections
-
 # Switch test from using a custom net::URLRequestFileJob to using a test
 # URLLoaderFactory via SetNetworkFactoryForTesting.
 -ErrorPageSniffTest.SniffSmallHttpErrorResponseAsDownload
--DNSErrorPageTest.StaleCacheStatus
 
-# Switch test from using a net::URLRequestFileJob that adds load timing to
-# to using a test URLLoaderFactory via SetNetworkFactoryForTesting.
--LoadTimingBrowserTest.Basic
--LoadTimingBrowserTest.EverythingAtOnce
--LoadTimingBrowserTest.Preconnect
--LoadTimingBrowserTest.PreconnectProxySsl
--LoadTimingBrowserTest.ReuseSocket
--LoadTimingBrowserTest.Ssl
-
-# Switch test from using a net::URLRequestInterceptor to using a test
-# URLLoaderFactory via SetNetworkFactoryForTesting.
+# http://crbug.com/809583
+# Switch Predictor from using ResourceThrottle and ResourceDispatcherHost to
+# using WebContentsObserver and NavigationHandle.
 -PredictorBrowserTest.CrossSiteNoReferrerNoPredictionAfterOneNavigation
 -PredictorBrowserTest.CrossSiteRedirectNoPredictionWithPath
 -PredictorBrowserTest.CrossSiteRedirectPredictionWithNoPath
@@ -518,190 +265,38 @@
 -PredictorBrowserTest.SubframeInitiatesPreconnects
 -PredictorBrowserTest.SubframeLearning
 
-# This feature currently hooks in using ChromeResourceDispatcherHostDelegate and
-# ResourceThrottles. Need to convert PredictorResourceThrottle and
-# LoadingDataCollector to gather their data from WebContentsObserver navigation
-# callbacks instead.
--ResourcePrefetchPredictorBrowserTest.AlwaysRevalidate
--ResourcePrefetchPredictorBrowserTest.CrossSiteNavigation
--ResourcePrefetchPredictorBrowserTest.HttpToHttpsRedirect
--ResourcePrefetchPredictorBrowserTest.IframeShouldBeIgnored
--ResourcePrefetchPredictorBrowserTest.JavascriptAppendChild
--ResourcePrefetchPredictorBrowserTest.JavascriptDocumentWrite
--ResourcePrefetchPredictorBrowserTest.JavascriptInnerHtml
--ResourcePrefetchPredictorBrowserTest.JavascriptRedirectsAreNotHandled
--ResourcePrefetchPredictorBrowserTest.JavascriptXHR
--ResourcePrefetchPredictorBrowserTest.Redirect
--ResourcePrefetchPredictorBrowserTest.RedirectChain
--ResourcePrefetchPredictorBrowserTest.Simple
--ResourcePrefetchPredictorBrowserTest.SubresourceFcpOrder
--ResourcePrefetchPredictorBrowserTest.TabIdBehavingAsExpected
+# Variations appending not working when network service is enabled.
+# http://crbug.com/857165
+-VariationsHttpHeadersBrowserTest.TestStrippingHeadersFromSubresourceRequest
 
-# Finish ServiceWorker networking glue rewrite.
-# http://crbug.com/715640
--ServiceWorkerAppTest.RegisterAndPostMessage
--ServiceWorkerBackgroundSyncTestWithJSBindings/ServiceWorkerBackgroundSyncTest.Sync/0
--ServiceWorkerBackgroundSyncTestWithNativeBindings/ServiceWorkerBackgroundSyncTest.Sync/0
--ServiceWorkerLazyBackgroundTestWithJSBindings/ServiceWorkerLazyBackgroundTest.EventsAfterRestart/0
--ServiceWorkerLazyBackgroundTestWithJSBindings/ServiceWorkerLazyBackgroundTest.EventsToStoppedExtension/0
--ServiceWorkerLazyBackgroundTestWithJSBindings/ServiceWorkerLazyBackgroundTest.FilteredEventsAfterRestart/0
--ServiceWorkerLazyBackgroundTestWithNativeBindings/ServiceWorkerLazyBackgroundTest.EventsAfterRestart/0
--ServiceWorkerLazyBackgroundTestWithNativeBindings/ServiceWorkerLazyBackgroundTest.EventsToStoppedExtension/0
--ServiceWorkerLazyBackgroundTestWithNativeBindings/ServiceWorkerLazyBackgroundTest.FilteredEventsAfterRestart/0
--ServiceWorkerPushMessagingTestWithJSBindings/ServiceWorkerPushMessagingTest.OnPush/0
--ServiceWorkerPushMessagingTestWithNativeBindings/ServiceWorkerPushMessagingTest.OnPush/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.BackgroundPageIsWokenIfAsleep/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.BackgroundPagePostsMessageToServiceWorker/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.Events/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.EventsToStoppedWorker/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.FetchArbitraryPaths/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.FilteredEvents/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.MimeHandlerView/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.GetBackgroundClientFailsWithNoBackgroundPage/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.LoadingBackgroundPageBypassesServiceWorker/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.NotificationAPI/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.RegisterSucceeds/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.ServiceWorkerPostsMessageToBackgroundClient/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.ServiceWorkerSuspensionOnExtensionUnload/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.SWServedBackgroundPageReceivesEvent/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.TabsCreate/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.UpdateRefreshesServiceWorker/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.WebAccessibleResourcesFetch/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.WebAccessibleResourcesIframeSrc/0
--ServiceWorkerTestWithJSBindings/ServiceWorkerTest.WorkerRefCount/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.BackgroundPageIsWokenIfAsleep/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.BackgroundPagePostsMessageToServiceWorker/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.Events/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.EventsToStoppedWorker/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.FetchArbitraryPaths/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.FilteredEvents/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.MimeHandlerView/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.GetBackgroundClientFailsWithNoBackgroundPage/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.LoadingBackgroundPageBypassesServiceWorker/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.NotificationAPI/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.RegisterSucceeds/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.ServiceWorkerPostsMessageToBackgroundClient/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.ServiceWorkerSuspensionOnExtensionUnload/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.SWServedBackgroundPageReceivesEvent/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.TabsCreate/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.UpdateRefreshesServiceWorker/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.WebAccessibleResourcesFetch/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.WebAccessibleResourcesIframeSrc/0
--ServiceWorkerTestWithNativeBindings/ServiceWorkerTest.WorkerRefCount/0
-
-# http://crbug.com/787614
--ChromeResourceDispatcherHostDelegateBrowserTest.PolicyHeader
--ChromeResourceDispatcherHostDelegateBrowserTest.PolicyHeaderForRedirect
--ChromeResourceDispatcherHostDelegateBrowserTest.ThrottlesAddedExactlyOnceToADownloads
--ChromeResourceDispatcherHostDelegateBrowserTest.ThrottlesAddedExactlyOnceToLargeSniffedDownloads
--ChromeResourceDispatcherHostDelegateBrowserTest.ThrottlesAddedExactlyOnceToTinySniffedDownloads
--ChromeResourceDispatcherHostDelegateBrowserTest.MirrorRequestHeader
-
-# Failing NoStatePrefetch tests
-# https://crbug.com/792776
-#
-# Crashing.
--NoStatePrefetchBrowserTest/NoStatePrefetchBrowserTest.PrefetchCookie/1
--NoStatePrefetchBrowserTest/NoStatePrefetchBrowserTest.PrefetchCookie/0
--NoStatePrefetchBrowserTest/NoStatePrefetchBrowserTest.PrefetchCookieCrossDomain/0
--NoStatePrefetchBrowserTest/NoStatePrefetchBrowserTest.PrefetchCookieCrossDomain/1
-
-# Depends on captive portal component making requests through URLLoader instead of
-# URLLoaderFetcher, which is blocked on moving content/network to services/network
-# so that it can be used on ios. https://crbug.com/753658
-# TODO(jam): started converting to use interceptor but then blocked on above, see
-# https://chromium-review.googlesource.com/c/chromium/src/+/823222
--CaptivePortalBrowserTest.AbortLoad
--CaptivePortalBrowserTest.CloseLoginTab
--CaptivePortalBrowserTest.Disabled
--CaptivePortalBrowserTest.GoBack
--CaptivePortalBrowserTest.GoBackToTimeout
--CaptivePortalBrowserTest.HstsLogin
--CaptivePortalBrowserTest.HttpsToHttpRedirect
--CaptivePortalBrowserTest.HttpTimeout
--CaptivePortalBrowserTest.HttpToHttpsRedirectLogin
--CaptivePortalBrowserTest.InternetConnected
--CaptivePortalBrowserTest.InterstitialTimerCertErrorAfterSlowLoad
--CaptivePortalBrowserTest.Login
--CaptivePortalBrowserTest.LoginExtraNavigations
--CaptivePortalBrowserTest.LoginFastTimeout
--CaptivePortalBrowserTest.LoginIncognito
--CaptivePortalBrowserTest.LoginSlow
--CaptivePortalBrowserTest.NavigateBrokenTab
--CaptivePortalBrowserTest.NavigateLoadingTabToTimeoutSingleSite
--CaptivePortalBrowserTest.NavigateLoadingTabToTimeoutThreeSites
--CaptivePortalBrowserTest.NavigateLoadingTabToTimeoutTwoSites
--CaptivePortalBrowserTest.RedirectSSLCertError
--CaptivePortalBrowserTest.ReloadTimeout
--CaptivePortalBrowserTest.RequestFails
--CaptivePortalBrowserTest.Status511
--CaptivePortalBrowserTest.TwoBrokenTabs
--CaptivePortalBrowserTest.RequestFailsFastTimout
--CaptivePortalBrowserTest.SSLCertErrorLogin
--CaptivePortalBrowserTest.ShowCaptivePortalInterstitialOnCertError
--CaptivePortalBrowserTest.InterstitialTimerNavigateAwayWhileLoading
--CaptivePortalBrowserTest.InterstitialTimerNavigateWhileLoading_EndWithCaptivePortalInterstitial
-
-# Add support of download_to_file for URLLoader.
-# http://crbug.com/791702
--OutOfProcessPPAPITest.FileRef1
--OutOfProcessPPAPITest.FileRef2
--OutOfProcessPPAPITest.URLLoader1
--PPAPINaClNewlibTest.FileRef1
--PPAPINaClNewlibTest.FileRef2
--PPAPINaClNewlibTest.URLLoader1
-# Note: the next 3 tests pass locally but fail on bot.
--PPAPINaClPNaClNonSfiTest.FileRef1
--PPAPINaClPNaClNonSfiTest.FileRef2
--PPAPINaClPNaClNonSfiTest.URLLoader1
-
-# Session cookies tests are flaky.
-# https://crbug.com/795417
--ContinueWhereILeftOffTest.SessionCookies
--RestartTest.SessionCookies
-
-
-# Requires a replacement for ChromeNetworkDelegate.
--VariationsHttpHeadersBrowserTest.TestStrippingHeadersFromResourceRequest
+# https://crbug.com/773295
+# Remove this test when there are no more clients left that use URLFetcher.
+-VariationsHttpHeadersBrowserTest.TestStrippingHeadersFromInternalRequest
 
 # Fails because of missing support to navigate to filesystem: URLs.
 # https://crbug.com/797292
--SBNavigationObserverBrowserTest.DownloadViaHTML5FileApi
--ProcessManagerBrowserTest.NestedURLNavigationsToExtensionBlocked
+-ProcessManagerBrowserTest.NestedURLDownloadsToExtensionAllowed
 
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65822%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FNoSessionRestoreTest.PRE_CookiesClearedOnExit%2F0
--NoSessionRestoreTest.CookiesClearedOnExit
+# Tests check state of NQE in the browser process, but need to be updated to
+# watch NQE in the renderer process.
+# https://crbug.com/819244
+-IOThreadEctCommandLineBrowserTest.ForceECTFromCommandLine
+-IOThreadEctFieldTrialAndCommandLineBrowserTest.ECTFromCommandLineOverridesFieldTrial
+-IOThreadEctFieldTrialBrowserTest.ForceECTUsingFieldTrial
 
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65817%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FRestartTest.CookiesClearedOnExit%2F0
--RestartTest.CookiesClearedOnExit
 
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests__dbg__1_%2F69105%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FPopupsOnlyUiDelegateTest.ManyPopupNotifications%2F0
--PopupsOnlyUiDelegateTest.ManyPopupNotifications
+# Channel ID is not hooked up to the network service yet.
+# https://crbug.com/840412
+-JavaScriptBindings/ExternallyConnectableMessagingTest.WebConnectableWithNonEmptyTlsChannelId/0
+-JavaScriptBindings/MessagingApiTest.DifferentStoragePartitionTLSChannelID/0
+-NativeBindings/ExternallyConnectableMessagingTest.WebConnectableWithNonEmptyTlsChannelId/0
+-NativeBindings/MessagingApiTest.DifferentStoragePartitionTLSChannelID/0
 
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65814%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FDeclarativeContentApiTest.NotBookmarkedRulesEvaluatedOnBookmarkEvents%2F0
--DeclarativeContentApiTest.NotBookmarkedRulesEvaluatedOnBookmarkEvents
+# https://crbug.com/845559
+# Reporting needs to check BACKGROUND_SYNC permission before uploading reports
+# about an origin.
+-ReportingBrowserTest.TestReportingHeadersProcessed
 
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65815%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FDeclarativeContentApiTest.RulesAddedFromManifest%2F0
--DeclarativeContentApiTest.RulesAddedFromManifest
-
-#Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65829%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FDeclarativeContentApiTest.RulesPersistence%2F0
--DeclarativeContentApiTest.RulesPersistence
-
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65817%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FDeclarativeContentApiTest.IsBookmarkedRulesEvaluatedOnBookmarkEvents%2F0
--DeclarativeContentApiTest.IsBookmarkedRulesEvaluatedOnBookmarkEvents
-
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65816%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FPushMessagingBrowserTest.PushEventWithoutPayload%2F0
--PushMessagingBrowserTest.PushEventWithoutPayload
-
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65816%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FNoStatePrefetchBrowserTest__x2f_NoStatePrefetchBrowserTest.ServiceWorkerIntercept__x2f_0%2F0
--NoStatePrefetchBrowserTest/NoStatePrefetchBrowserTest.ServiceWorkerIntercept/*
-
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests%2F65816%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_browser_tests%2F0%2Flogs%2FDeclarativeContentApiTest.IsBookmarkedRulesEvaluatedOnBookmarkEvents%2F0
--DeclarativeContentApiTest.IsBookmarkedRulesEvaluatedOnBookmarkEvents
-
-# Flakes due to ExtensionBrowserTest::NavigateInRenderer(), crbug.com/798969
--DeclarativeContentApiTest.DisabledForSpanningIncognito
--DeclarativeContentApiTest.DisabledForSplitIncognito
--DeclarativeContentApiTest.EnabledForSpanningIncognito
--DeclarativeContentApiTest.EnabledForSpanningIncognito
--SetIconAPITest.Overview
+# NOTE: if adding an exclusion for an existing failure (e.g. additional test for
+# feature X that is already not working), please add it beside the existing
+# failures. Otherwise please reach out to network-service-dev@.

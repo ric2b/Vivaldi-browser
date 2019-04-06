@@ -4,9 +4,8 @@
 
 #import <EarlGrey/EarlGrey.h>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#import "ios/testing/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/service_manager_connection.h"
 #import "ios/web/shell/test/app/web_shell_test_util.h"
@@ -14,8 +13,8 @@
 #import "ios/web/shell/test/earl_grey/web_shell_test_case.h"
 #import "ios/web/shell/web_usage_controller.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/test/echo/public/interfaces/echo.mojom.h"
-#include "services/test/user_id/public/interfaces/user_id.mojom.h"
+#include "services/test/echo/public/mojom/echo.mojom.h"
+#include "services/test/user_id/public/mojom/user_id.mojom.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -73,8 +72,9 @@ void WaitForCallback(const std::string& callback_name,
                                  block:^BOOL {
                                    return *callback_called_flag;
                                  }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed waiting for %s callback", callback_name.c_str());
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for %s callback", callback_name.c_str());
 }
 }
 

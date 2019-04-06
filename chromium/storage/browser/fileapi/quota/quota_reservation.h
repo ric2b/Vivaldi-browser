@@ -18,7 +18,9 @@
 #include "storage/browser/storage_browser_export.h"
 #include "storage/common/fileapi/file_system_types.h"
 
-class GURL;
+namespace url {
+class Origin;
+}
 
 namespace storage {
 
@@ -29,7 +31,7 @@ class OpenFileHandle;
 class STORAGE_EXPORT QuotaReservation
     : public base::RefCounted<QuotaReservation> {
  public:
-  typedef base::Callback<void(base::File::Error error)> StatusCallback;
+  using StatusCallback = base::Callback<void(base::File::Error error)>;
 
   // Reclaims unused quota and reserves another |size| of quota.  So that the
   // resulting new |remaining_quota_| will be same as |size| as far as available
@@ -59,7 +61,7 @@ class STORAGE_EXPORT QuotaReservation
   int64_t remaining_quota() const { return remaining_quota_; }
 
   QuotaReservationManager* reservation_manager();
-  const GURL& origin() const;
+  const url::Origin& origin() const;
   FileSystemType type() const;
 
  private:

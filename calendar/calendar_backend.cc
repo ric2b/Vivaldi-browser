@@ -132,6 +132,7 @@ void CalendarBackend::InitImpl(
       // and to not continue. If the error callback scheduled killing the
       // database, the task it posted has not executed yet. Try killing the
       // database now before we close it.
+      FALLTHROUGH;
     }  // Falls through.
     case sql::INIT_TOO_NEW: {
       LOG(ERROR) << "INIT_TOO_NEW";

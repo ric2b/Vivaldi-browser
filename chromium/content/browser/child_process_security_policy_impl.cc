@@ -13,7 +13,6 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -21,12 +20,12 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/isolated_origin_util.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/site_isolation_policy.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/url_constants.h"
@@ -120,13 +119,30 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
                          file_permissions_.size());
   }
 
-  // Grant permission to request URLs with the specified origin.
-  void GrantOrigin(const url::Origin& origin) {
-    origin_set_.insert(origin);
+  // Grant permission to request and commit URLs with the specified origin.
+  void GrantCommitOrigin(const url::Origin& origin) {
+    if (origin.unique())
+      return;
+    origin_map_[origin] = CommitRequestPolicy::kCommitAndRequest;
   }
 
-  // Grant permission to request URLs with the specified scheme.
-  void GrantScheme(const std::string& scheme) { scheme_policy_.insert(scheme); }
+  void GrantRequestOrigin(const url::Origin& origin) {
+    if (origin.unique())
+      return;
+    // Anything already in |origin_map_| must have at least request permission
+    // already. In that case, the emplace() below will be a no-op.
+    origin_map_.emplace(origin, CommitRequestPolicy::kRequestOnly);
+  }
+
+  void GrantCommitScheme(const std::string& scheme) {
+    scheme_map_[scheme] = CommitRequestPolicy::kCommitAndRequest;
+  }
+
+  void GrantRequestScheme(const std::string& scheme) {
+    // Anything already in |scheme_map_| must have at least request permission
+    // already. In that case, the emplace() below will be a no-op.
+    scheme_map_.emplace(scheme, CommitRequestPolicy::kRequestOnly);
+  }
 
   // Grant certain permissions to a file.
   void GrantPermissionsForFile(const base::FilePath& file, int permissions) {
@@ -197,26 +213,25 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     can_send_midi_sysex_ = true;
   }
 
-  bool CanCommitOrigin(const url::Origin& origin) {
-    return base::ContainsKey(origin_set_, origin);
-  }
-
   // Determine whether permission has been granted to commit |url|.
   bool CanCommitURL(const GURL& url) {
     DCHECK(!url.SchemeIsBlob() && !url.SchemeIsFileSystem())
         << "inner_url extraction should be done already.";
     // Having permission to a scheme implies permission to all of its URLs.
-    SchemeSet::const_iterator scheme_judgment(
-        scheme_policy_.find(url.scheme()));
-    if (scheme_judgment != scheme_policy_.end())
+    auto scheme_judgment = scheme_map_.find(url.scheme());
+    if (scheme_judgment != scheme_map_.end() &&
+        scheme_judgment->second == CommitRequestPolicy::kCommitAndRequest) {
       return true;
+    }
 
-    // Otherwise, check for permission for specific origin.
+    // Check for permission for specific origin.
     if (CanCommitOrigin(url::Origin::Create(url)))
       return true;
 
-    // file:// URLs are more granular.  The child may have been given
-    // permission to a specific file but not the file:// scheme in general.
+    // file:// URLs may sometimes be more granular, e.g. dragging and dropping a
+    // file from the local filesystem. The child itself may not have been
+    // granted access to the entire file:// scheme, but it should still be
+    // allowed to request the dragged and dropped file.
     if (url.SchemeIs(url::kFileScheme)) {
       base::FilePath path;
       if (net::FileURLToFilePath(url, &path))
@@ -224,6 +239,22 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     }
 
     return false;  // Unmentioned schemes are disallowed.
+  }
+
+  bool CanRequestURL(const GURL& url) {
+    DCHECK(!url.SchemeIsBlob() && !url.SchemeIsFileSystem())
+        << "inner_url extraction should be done already.";
+    // Having permission to a scheme implies permission to all of its URLs.
+    auto scheme_judgment = scheme_map_.find(url.scheme());
+    if (scheme_judgment != scheme_map_.end())
+      return true;
+
+    if (CanRequestOrigin(url::Origin::Create(url)))
+      return true;
+
+    // Otherwise, delegate to CanCommitURL. Unmentioned schemes are disallowed.
+    // TODO(dcheng): It would be nice to avoid constructing the origin twice.
+    return CanCommitURL(url);
   }
 
   // Determine if the certain permissions have been granted to a file.
@@ -283,7 +314,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   }
 
   bool has_web_ui_bindings() const {
-    return enabled_bindings_ & BINDINGS_POLICY_WEB_UI;
+    return enabled_bindings_ & kWebUIBindingsPolicyMask;
   }
 
   bool can_read_raw_cookies() const {
@@ -295,22 +326,39 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   }
 
  private:
-  typedef std::set<std::string> SchemeSet;
-  typedef std::set<url::Origin> OriginSet;
+  enum class CommitRequestPolicy {
+    kRequestOnly,
+    kCommitAndRequest,
+  };
+
+  bool CanCommitOrigin(const url::Origin& origin) {
+    auto it = origin_map_.find(origin);
+    if (it == origin_map_.end())
+      return false;
+    return it->second == CommitRequestPolicy::kCommitAndRequest;
+  }
+
+  bool CanRequestOrigin(const url::Origin& origin) {
+    // Anything already in |origin_map_| must have at least request permissions
+    // already.
+    return origin_map_.find(origin) != origin_map_.end();
+  }
+
+  typedef std::map<std::string, CommitRequestPolicy> SchemeMap;
+  typedef std::map<url::Origin, CommitRequestPolicy> OriginMap;
 
   typedef int FilePermissionFlags;  // bit-set of base::File::Flags
   typedef std::map<base::FilePath, FilePermissionFlags> FileMap;
   typedef std::map<std::string, FilePermissionFlags> FileSystemMap;
   typedef std::set<base::FilePath> FileSet;
 
-  // Maps URL schemes to whether permission has been granted, containment means
-  // that the scheme has been granted, otherwise, it has never been granted.
-  // There is no provision for revoking.
-  SchemeSet scheme_policy_;
+  // Maps URL schemes to commit/request policies the child process has been
+  // granted. There is no provision for revoking.
+  SchemeMap scheme_map_;
 
-  // The set of URL origins to which the child process has been granted
-  // permission.
-  OriginSet origin_set_;
+  // The map of URL origins to commit/request policies the child process has
+  // been granted. There is no provision for revoking.
+  OriginMap origin_map_;
 
   // The set of files the child process is permited to upload to the web.
   FileMap file_permissions_;
@@ -356,8 +404,6 @@ ChildProcessSecurityPolicyImpl::ChildProcessSecurityPolicyImpl() {
   RegisterPseudoScheme(url::kAboutScheme);
   RegisterPseudoScheme(url::kJavaScriptScheme);
   RegisterPseudoScheme(kViewSourceScheme);
-  RegisterPseudoScheme(url::kHttpSuboriginScheme);
-  RegisterPseudoScheme(url::kHttpsSuboriginScheme);
 }
 
 ChildProcessSecurityPolicyImpl::~ChildProcessSecurityPolicyImpl() {
@@ -442,34 +488,57 @@ bool ChildProcessSecurityPolicyImpl::IsPseudoScheme(
   return base::ContainsKey(pseudo_schemes_, scheme);
 }
 
-void ChildProcessSecurityPolicyImpl::GrantRequestURL(
-    int child_id, const GURL& url) {
-
+void ChildProcessSecurityPolicyImpl::GrantCommitURL(int child_id,
+                                                    const GURL& url) {
+  // Can't grant the capability to commit invalid URLs.
   if (!url.is_valid())
-    return;  // Can't grant the capability to request invalid URLs.
+    return;
 
-  const std::string& scheme = url.scheme();
+  // Can't grant the capability to commit pseudo schemes.
+  if (IsPseudoScheme(url.scheme()))
+    return;
 
-  if (IsWebSafeScheme(scheme))
-    return;  // The scheme has already been whitelisted for every child process.
+  url::Origin origin = url::Origin::Create(url);
 
-  if (IsPseudoScheme(scheme)) {
-    return;  // Can't grant the capability to request pseudo schemes.
-  }
-
+  // Blob and filesystem URLs require special treatment; grant access to the
+  // inner origin they embed instead.
+  // TODO(dcheng): Can this logic be simplified to just derive an origin up
+  // front and use that? That probably requires fixing GURL canonicalization of
+  // blob URLs though. For now, be consistent with how CanRequestURL and
+  // CanCommitURL normalize.
   if (url.SchemeIsBlob() || url.SchemeIsFileSystem()) {
-    return;  // Don't grant blanket access to blob: or filesystem: schemes.
-  }
-
-  {
-    base::AutoLock lock(lock_);
-    SecurityStateMap::iterator state = security_state_.find(child_id);
-    if (state == security_state_.end())
+    if (IsMalformedBlobUrl(url))
       return;
 
-    // When the child process has been commanded to request this scheme,
-    // we grant it the capability to request all URLs of that scheme.
-    state->second->GrantScheme(scheme);
+    GrantCommitURL(child_id, GURL(origin.Serialize()));
+  }
+
+  // TODO(dcheng): In the future, URLs with opaque origins would ideally carry
+  // around an origin with them, so we wouldn't need to grant commit access to
+  // the entire scheme.
+  if (!origin.unique())
+    GrantCommitOrigin(child_id, origin);
+
+  // The scheme has already been whitelisted for every child process, so no need
+  // to do anything else.
+  if (IsWebSafeScheme(url.scheme()))
+    return;
+
+  base::AutoLock lock(lock_);
+
+  auto state = security_state_.find(child_id);
+  if (state == security_state_.end())
+    return;
+
+  if (origin.unique()) {
+    // If it's impossible to grant commit rights to just the origin (among other
+    // things, URLs with non-standard schemes will be treated as opaque
+    // origins), then grant access to commit all URLs of that scheme.
+    state->second->GrantCommitScheme(url.scheme());
+  } else {
+    // When the child process has been commanded to request this scheme, grant
+    // it the capability to request all URLs of that scheme.
+    state->second->GrantRequestScheme(url.scheme());
   }
 }
 
@@ -576,42 +645,61 @@ void ChildProcessSecurityPolicyImpl::GrantSendMidiSysExMessage(int child_id) {
   state->second->GrantPermissionForMidiSysEx();
 }
 
-void ChildProcessSecurityPolicyImpl::GrantOrigin(int child_id,
-                                                 const url::Origin& origin) {
+void ChildProcessSecurityPolicyImpl::GrantCommitOrigin(
+    int child_id,
+    const url::Origin& origin) {
   base::AutoLock lock(lock_);
 
   SecurityStateMap::iterator state = security_state_.find(child_id);
   if (state == security_state_.end())
     return;
 
-  state->second->GrantOrigin(origin);
+  state->second->GrantCommitOrigin(origin);
 }
 
-void ChildProcessSecurityPolicyImpl::GrantScheme(int child_id,
-                                                 const std::string& scheme) {
+void ChildProcessSecurityPolicyImpl::GrantRequestOrigin(
+    int child_id,
+    const url::Origin& origin) {
   base::AutoLock lock(lock_);
 
   SecurityStateMap::iterator state = security_state_.find(child_id);
   if (state == security_state_.end())
     return;
 
-  state->second->GrantScheme(scheme);
+  state->second->GrantRequestOrigin(origin);
 }
 
-void ChildProcessSecurityPolicyImpl::GrantWebUIBindings(int child_id) {
+void ChildProcessSecurityPolicyImpl::GrantRequestScheme(
+    int child_id,
+    const std::string& scheme) {
+  base::AutoLock lock(lock_);
+
+  auto state = security_state_.find(child_id);
+  if (state == security_state_.end())
+    return;
+
+  state->second->GrantRequestScheme(scheme);
+}
+
+void ChildProcessSecurityPolicyImpl::GrantWebUIBindings(int child_id,
+                                                        int bindings) {
+  // Only WebUI bindings should come through here.
+  CHECK(bindings & kWebUIBindingsPolicyMask);
+  CHECK_EQ(0, bindings & ~kWebUIBindingsPolicyMask);
+
   base::AutoLock lock(lock_);
 
   SecurityStateMap::iterator state = security_state_.find(child_id);
   if (state == security_state_.end())
     return;
 
-  state->second->GrantBindings(BINDINGS_POLICY_WEB_UI);
+  state->second->GrantBindings(bindings);
 
   // Web UI bindings need the ability to request chrome: URLs.
-  state->second->GrantScheme(kChromeUIScheme);
+  state->second->GrantRequestScheme(kChromeUIScheme);
 
   // Web UI pages can contain links to file:// URLs.
-  state->second->GrantScheme(url::kFileScheme);
+  state->second->GrantRequestScheme(url::kFileScheme);
 }
 
 void ChildProcessSecurityPolicyImpl::GrantReadRawCookies(int child_id) {
@@ -641,35 +729,43 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
 
   const std::string& scheme = url.scheme();
 
-  if (IsPseudoScheme(scheme)) {
-    // Every child process can request <about:blank>, <about:blank?foo>,
-    // <about:blank/#foo> and <about:srcdoc>.
-    if (url.IsAboutBlank() || url == kAboutSrcDocURL)
-      return true;
-    // URLs like <about:version>, <about:crash>, <view-source:...> shouldn't be
-    // requestable by any child process.  Also, this case covers
-    // <javascript:...>, which should be handled internally by the process and
-    // not kicked up to the browser.
-    return false;
-  }
+  // Every child process can request <about:blank>, <about:blank?foo>,
+  // <about:blank/#foo> and <about:srcdoc>.
+  //
+  // URLs like <about:version>, <about:crash>, <view-source:...> shouldn't be
+  // requestable by any child process.  Also, this case covers
+  // <javascript:...>, which should be handled internally by the process and
+  // not kicked up to the browser.
+  // TODO(dcheng): Figure out why this check is different from CanCommitURL,
+  // which checks for direct equality with kAboutBlankURL.
+  if (IsPseudoScheme(scheme))
+    return url.IsAboutBlank() || url == kAboutSrcDocURL;
 
-  // Blob and filesystem URLs require special treatment, since they embed an
-  // inner origin.
+  // Blob and filesystem URLs require special treatment; validate the inner
+  // origin they embed.
   if (url.SchemeIsBlob() || url.SchemeIsFileSystem()) {
     if (IsMalformedBlobUrl(url))
       return false;
 
     url::Origin origin = url::Origin::Create(url);
-    return origin.unique() || IsWebSafeScheme(origin.scheme()) ||
-           CanCommitURL(child_id, GURL(origin.Serialize()));
+    return origin.unique() || CanRequestURL(child_id, GURL(origin.Serialize()));
   }
 
   if (IsWebSafeScheme(scheme))
     return true;
 
-  // If the process can commit the URL, it can request it.
-  if (CanCommitURL(child_id, url))
-    return true;
+  {
+    base::AutoLock lock(lock_);
+
+    SecurityStateMap::iterator state = security_state_.find(child_id);
+    if (state == security_state_.end())
+      return false;
+
+    // Otherwise, we consult the child process's security state to see if it is
+    // allowed to request the URL.
+    if (state->second->CanRequestURL(url))
+      return true;
+  }
 
   // Also allow URLs destined for ShellExecute and not the browser itself.
   return !GetContentClient()->browser()->IsHandledURL(url) &&
@@ -694,12 +790,12 @@ bool ChildProcessSecurityPolicyImpl::CanRedirectToURL(const GURL& url) {
 
   // Note about redirects and special URLs:
   // * data-url: Blocked by net::DataProtocolHandler::IsSafeRedirectTarget().
+  // * filesystem-url: Blocked by
+  // storage::FilesystemProtocolHandler::IsSafeRedirectTarget().
   // Depending on their inner origins and if the request is browser-initiated or
-  // renderer-initiated, blob-urls and filesystem-urls might get blocked by
-  // CanCommitURL or in DocumentLoader::RedirectReceived.
-  // * blob-url: If not blocked, a 'file not found' response will be
-  //             generated in net::BlobURLRequestJob::DidStart().
-  // * filesystem-url: If not blocked, the response is displayed.
+  // renderer-initiated, blob-urls might get blocked by CanCommitURL or in
+  // DocumentLoader::RedirectReceived. If not blocked, a 'file not found'
+  // response will be generated in net::BlobURLRequestJob::DidStart().
 
   return true;
 }
@@ -758,15 +854,6 @@ bool ChildProcessSecurityPolicyImpl::CanSetAsOriginHeader(int child_id,
   if (!url.is_valid())
     return false;  // Can't set invalid URLs as origin headers.
 
-  const std::string& scheme = url.scheme();
-
-  // Suborigin URLs are a special case and are allowed to be an origin header.
-  if (scheme == url::kHttpSuboriginScheme ||
-      scheme == url::kHttpsSuboriginScheme) {
-    DCHECK(IsPseudoScheme(scheme));
-    return true;
-  }
-
   // about:srcdoc cannot be used as an origin
   if (url == kAboutSrcDocURL)
     return false;
@@ -781,8 +868,10 @@ bool ChildProcessSecurityPolicyImpl::CanSetAsOriginHeader(int child_id,
   // document origin.
   {
     base::AutoLock lock(lock_);
-    if (base::ContainsKey(schemes_okay_to_appear_as_origin_headers_, scheme))
+    if (base::ContainsKey(schemes_okay_to_appear_as_origin_headers_,
+                          url.scheme())) {
       return true;
+    }
   }
   return false;
 }
@@ -815,26 +904,17 @@ bool ChildProcessSecurityPolicyImpl::CanReadRequestBody(
           return false;
         break;
 
-      case network::DataElement::TYPE_FILE_FILESYSTEM:
-        if (!CanReadFileSystemFile(child_id, file_system_context->CrackURL(
-                                                 element.filesystem_url())))
-          return false;
-        break;
-
-      case network::DataElement::TYPE_DISK_CACHE_ENTRY:
-        // TYPE_DISK_CACHE_ENTRY can't be sent via IPC according to
-        // content/common/resource_messages.cc
-        NOTREACHED();
-        return false;
-
       case network::DataElement::TYPE_BYTES:
-      case network::DataElement::TYPE_BYTES_DESCRIPTION:
         // Data is self-contained within |body| - no need to check access.
         break;
 
       case network::DataElement::TYPE_BLOB:
         // No need to validate - the unguessability of the uuid of the blob is a
         // sufficient defense against access from an unrelated renderer.
+        break;
+
+      case network::DataElement::TYPE_DATA_PIPE:
+        // Data is self-contained within |body| - no need to check access.
         break;
 
       case network::DataElement::TYPE_UNKNOWN:
@@ -1074,18 +1154,12 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
   return can_access;
 }
 
-bool ChildProcessSecurityPolicyImpl::HasSpecificPermissionForOrigin(
-    int child_id,
-    const url::Origin& origin) {
-  base::AutoLock lock(lock_);
-  SecurityStateMap::iterator state = security_state_.find(child_id);
-  if (state == security_state_.end())
-    return false;
-  return state->second->CanCommitOrigin(origin);
-}
-
 void ChildProcessSecurityPolicyImpl::LockToOrigin(int child_id,
                                                   const GURL& gurl) {
+  // LockToOrigin should only be called on the UI thread (OTOH, it is okay to
+  // call GetOriginLock or CheckOriginLock from any thread).
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   // "gurl" can be currently empty in some cases, such as file://blah.
   DCHECK(SiteInstanceImpl::GetSiteForURL(nullptr, gurl) == gurl);
   base::AutoLock lock(lock_);

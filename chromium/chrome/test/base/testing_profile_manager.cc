@@ -15,6 +15,7 @@
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -45,8 +46,7 @@ TestingProfileManager::TestingProfileManager(TestingBrowserProcess* process)
     : called_set_up_(false),
       browser_process_(process),
       local_state_(process),
-      profile_manager_(NULL) {
-}
+      profile_manager_(nullptr) {}
 
 TestingProfileManager::~TestingProfileManager() {
   // Destroying this class also destroys the LocalState, so make sure the
@@ -54,8 +54,8 @@ TestingProfileManager::~TestingProfileManager() {
   browser_process_->SetProfileManager(NULL);
 }
 
-bool TestingProfileManager::SetUp() {
-  SetUpInternal();
+bool TestingProfileManager::SetUp(const base::FilePath& profiles_path) {
+  SetUpInternal(profiles_path);
   return called_set_up_;
 }
 
@@ -69,7 +69,7 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
   DCHECK(called_set_up_);
 
   // Create a path for the profile based on the name.
-  base::FilePath profile_path(profiles_dir_.GetPath());
+  base::FilePath profile_path(profiles_path_);
 #if defined(OS_CHROMEOS)
   if (profile_name != chrome::kInitialProfile &&
       profile_name != chromeos::ProfileHelper::GetLockScreenAppProfileName()) {
@@ -226,7 +226,7 @@ void TestingProfileManager::UpdateLastUser(Profile* last_active) {
 
 const base::FilePath& TestingProfileManager::profiles_dir() {
   DCHECK(called_set_up_);
-  return profiles_dir_.GetPath();
+  return profiles_path_;
 }
 
 ProfileManager* TestingProfileManager::profile_manager() {
@@ -243,14 +243,21 @@ ProfileAttributesStorage* TestingProfileManager::profile_attributes_storage() {
   return profile_info_cache();
 }
 
-void TestingProfileManager::SetUpInternal() {
+void TestingProfileManager::SetUpInternal(const base::FilePath& profiles_path) {
   ASSERT_FALSE(browser_process_->profile_manager())
       << "ProfileManager already exists";
 
   // Set up the directory for profiles.
-  ASSERT_TRUE(profiles_dir_.CreateUniqueTempDir());
+  if (profiles_path.empty()) {
+    ASSERT_TRUE(profiles_dir_.CreateUniqueTempDir());
+    profiles_path_ = profiles_dir_.GetPath();
+  } else {
+    profiles_path_ = profiles_path;
+  }
+  user_data_dir_override_ = std::make_unique<base::ScopedPathOverride>(
+      chrome::DIR_USER_DATA, profiles_path_);
 
-  profile_manager_ = new testing::ProfileManager(profiles_dir_.GetPath());
+  profile_manager_ = new testing::ProfileManager(profiles_path_);
   browser_process_->SetProfileManager(profile_manager_);  // Takes ownership.
 
   profile_manager_->GetProfileInfoCache().

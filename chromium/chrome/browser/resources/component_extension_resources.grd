@@ -12,7 +12,6 @@
   </outputs>
   <release seq="1">
     <structures>
-      <structure name="IDR_BOOKMARK_MANAGER_MAIN" file="bookmark_manager/main.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
       <if expr="chromeos">
         <structure name="IDR_WALLPAPER_MANAGER_MAIN" file="chromeos/wallpaper_manager/main.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
         <if expr="not _google_chrome">
@@ -31,13 +30,6 @@
         <include name="IDR_BRAILLE_IME_MAIN_JS" file="chromeos/braille_ime/main.js" type="BINDATA" />
       </if>
 
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_MANAGER_SEARCH" file="bookmark_manager/images/bookmark_manager_search.png" type="BINDATA" />
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_MANAGER_SEARCH_RTL" file="bookmark_manager/images/bookmark_manager_search_rtl.png" type="BINDATA" />
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_MAIN_JS" file="bookmark_manager/js/main.js" type="BINDATA" />
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_BMM_LIST_JS" file="bookmark_manager/js/bmm/bookmark_list.js" type="BINDATA" />
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_BMM_TREE_JS" file="bookmark_manager/js/bmm/bookmark_tree.js" type="BINDATA" />
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_DND_JS" file="bookmark_manager/js/dnd.js" type="BINDATA" />
-      <include name="IDR_BOOKMARK_MANAGER_BOOKMARK_BMM_JS" file="bookmark_manager/js/bmm.js" type="BINDATA" />
       <!-- Material Design Bookmarks -->
       <include name="IDR_COMPONENT_MD_BOOKMARKS_BOOKMARKS_HTML" file="md_bookmarks/bookmarks.html" type="BINDATA" />
       <!-- Gaia auth extension -->
@@ -48,6 +40,7 @@
         <include name="IDR_HANGOUT_SERVICES_THUNK_JS" file="hangout_services/thunk.js" type="BINDATA" />
       </if>
       <if expr="not is_android">
+        <include name="IDR_FEEDBACK_BLUETOOTHLOGSINFO_HTML" file="feedback/html/bluetooth_logs_info.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_DEFAULT_HTML" file="feedback/html/default.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_SYSINFO_HTML" file="feedback/html/sys_info.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_FEEDBACK_FEEDBACK_DATA_JS" file="feedback/js/data.js" flattenhtml="true" type="BINDATA" />
@@ -68,13 +61,7 @@
       <if expr="chromeos">
         <include name="IDR_WALLPAPER_MANAGER_CONSTANTS_JS" file="chromeos/wallpaper_manager/js/constants.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_WALLPAPER_MANAGER_EVENT_JS" file="chromeos/wallpaper_manager/js/event_page.js" flattenhtml="true" type="BINDATA" />
-        <include name="IDR_WALLPAPER_MANAGER_ICON_16" file="chromeos/wallpaper_manager/images/icon16.png" type="BINDATA" />
-        <include name="IDR_WALLPAPER_MANAGER_ICON_32" file="chromeos/wallpaper_manager/images/icon32.png" type="BINDATA" />
-        <include name="IDR_WALLPAPER_MANAGER_ICON_48" file="chromeos/wallpaper_manager/images/icon48.png" type="BINDATA" />
-        <include name="IDR_WALLPAPER_MANAGER_ICON_64" file="chromeos/wallpaper_manager/images/icon64.png" type="BINDATA" />
-        <include name="IDR_WALLPAPER_MANAGER_ICON_96" file="chromeos/wallpaper_manager/images/icon96.png" type="BINDATA" />
-        <include name="IDR_WALLPAPER_MANAGER_ICON_128" file="chromeos/wallpaper_manager/images/icon128.png" type="BINDATA" />
-        <include name="IDR_WALLPAPER_MANAGER_ICON_256" file="chromeos/wallpaper_manager/images/icon256.png" type="BINDATA" />
+        <include name="IDR_WALLPAPER_MANAGER_ICON_192" file="chromeos/wallpaper_manager/images/icon192.png" type="BINDATA" />
         <include name="IDR_WALLPAPER_MANAGER_MAIN_JS" file="chromeos/wallpaper_manager/js/main_scripts.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_WALLPAPER_MANAGER_UTIL_JS" file="chromeos/wallpaper_manager/js/util.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_FIRST_RUN_DIALOG_BACKGROUND_JS" file="chromeos/first_run/app/background.js" flattenhtml="true" type="BINDATA" />
@@ -88,6 +75,7 @@
         <include name="IDR_FIRST_RUN_DIALOG_ICON_256" file="chromeos/first_run/app/icon/256.png" type="BINDATA" />
         <include name="IDR_ARC_SUPPORT_BACKGROUND_JS" file="chromeos/arc_support/background.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_ARC_SUPPORT_MAIN_CSS" file="chromeos/arc_support/main.css" type="BINDATA" />
+        <include name="IDR_ARC_SUPPORT_OVERLAY_CSS" file="chromeos/arc_support/overlay.css" type="BINDATA" />
         <include name="IDR_ARC_SUPPORT_PLAYSTORE_CSS" file="chromeos/arc_support/playstore.css" type="BINDATA" />
         <include name="IDR_ARC_SUPPORT_PLAYSTORE_JS" file="chromeos/arc_support/playstore.js" type="BINDATA" />
         <include name="IDR_ARC_SUPPORT_PLAYSTORE_LOGO" file="chromeos/arc_support/icon/playstore.svg" type="BINDATA" />
@@ -99,10 +87,15 @@
         <include name="IDR_ARC_SUPPORT_ICON_96" file="chromeos/arc_support/icon/96.png" type="BINDATA" />
         <include name="IDR_ARC_SUPPORT_ICON_ERROER_IMAGE" file="chromeos/arc_support/images/error_image.png" type="BINDATA" />
         <include name="IDR_ARC_SUPPORT_ICON_HEADER" file="chromeos/arc_support/images/header.png" type="BINDATA" />
+        <include name="IDR_ARC_SUPPORT_RECOMMEND_APP_LIST_VIEW_JS" file="chromeos/arc_support/recommend_app_list_view.js" type="BINDATA" />
+        <include name="IDR_ARC_SUPPORT_RECOMMEND_APP_LIST_VIEW_HTML" file="chromeos/arc_support/recommend_app_list_view.html" type="chrome_html" flattenhtml="true" />
       </if>
       <if expr="enable_plugins">
-        <include name="IDR_PDF_INDEX_CSS" file="pdf/index.css" allowexternalscript="true" type="BINDATA" />
+        <!-- Note that resources included here also must be included in
+             print_preview_ui.cc such these resources will be exposed to
+             PDF in print preview. -->
         <include name="IDR_PDF_INDEX_HTML" file="pdf/index.html" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_PDF_INDEX_CSS" file="pdf/index.css" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_PDF_MAIN_JS" file="pdf/main.js" type="BINDATA" />
         <include name="IDR_PDF_PDF_JS" file="pdf/pdf.js" type="BINDATA" />
         <include name="IDR_PDF_UI_MANAGER_JS" file="pdf/toolbar_manager.js" type="BINDATA" />
@@ -115,7 +108,6 @@
         <include name="IDR_PDF_ZOOM_MANAGER_JS" file="pdf/zoom_manager.js" type="BINDATA" />
         <include name="IDR_PDF_GESTURE_DETECTOR_JS" file="pdf/gesture_detector.js" type="BINDATA" />
         <include name="IDR_PDF_BROWSER_API_JS" file="pdf/browser_api.js" type="BINDATA" />
-        <include name="IDR_PDF_CONTENT_SCRIPT_JS" file="pdf/content_script.js" type="BINDATA" />
         <include name="IDR_PDF_METRICS_JS" file="pdf/metrics.js" type="BINDATA" />
         <include name="IDR_PDF_COORDS_TRANSFORMER_JS" file="pdf/coords_transformer.js" type="BINDATA" />
 

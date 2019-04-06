@@ -7,7 +7,6 @@
 #include <sstream>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "media/capture/video/fake_video_capture_device.h"
@@ -20,10 +19,10 @@ namespace {
 
 // Translates a set of device infos reported by a VideoCaptureSystem to a set
 // of device infos that the video capture service exposes to its client.
-// The Video Capture Service instances of VideoCaptureDeviceClient to
-// convert the formats provided by the VideoCaptureDevice instances. Here, we
-// translate the set of supported formats as reported by the |device_factory_|
-// to what will be output by the VideoCaptureDeviceClient we connect to it.
+// A translation is needed, because the actual video frames, on their way
+// from the VideoCaptureSystem to clients of the Video Capture Service, will
+// pass through an instance of VideoCaptureDeviceClient, which performs certain
+// format conversions.
 // TODO(chfremer): A cleaner design would be to have this translation
 // happen in VideoCaptureDeviceClient, and talk only to VideoCaptureDeviceClient
 // instead of VideoCaptureSystem.
@@ -42,14 +41,13 @@ static void TranslateDeviceInfos(
               : media::PIXEL_FORMAT_I420;
       translated_format.frame_size = format.frame_size;
       translated_format.frame_rate = format.frame_rate;
-      translated_format.pixel_storage = media::VideoPixelStorage::CPU;
       if (base::ContainsValue(translated_device_info.supported_formats,
                               translated_format))
         continue;
       translated_device_info.supported_formats.push_back(translated_format);
     }
-    if (translated_device_info.supported_formats.empty())
-      continue;
+    // We explicitly need to include device infos for which there are zero
+    // supported formats reported until https://crbug.com/792260 is resolved.
     translated_device_infos.push_back(translated_device_info);
   }
   std::move(callback).Run(translated_device_infos);
@@ -81,11 +79,12 @@ DeviceFactoryMediaToMojoAdapter::ActiveDeviceEntry::operator=(
 DeviceFactoryMediaToMojoAdapter::DeviceFactoryMediaToMojoAdapter(
     std::unique_ptr<service_manager::ServiceContextRef> service_ref,
     std::unique_ptr<media::VideoCaptureSystem> capture_system,
-    const media::VideoCaptureJpegDecoderFactoryCB&
-        jpeg_decoder_factory_callback)
+    media::MojoJpegDecodeAcceleratorFactoryCB jpeg_decoder_factory_callback,
+    scoped_refptr<base::SequencedTaskRunner> jpeg_decoder_task_runner)
     : service_ref_(std::move(service_ref)),
       capture_system_(std::move(capture_system)),
-      jpeg_decoder_factory_callback_(jpeg_decoder_factory_callback),
+      jpeg_decoder_factory_callback_(std::move(jpeg_decoder_factory_callback)),
+      jpeg_decoder_task_runner_(std::move(jpeg_decoder_task_runner)),
       has_called_get_device_infos_(false),
       weak_factory_(this) {}
 
@@ -132,10 +131,17 @@ void DeviceFactoryMediaToMojoAdapter::CreateDevice(
                  base::Passed(&create_and_add_new_device_cb)));
 }
 
-void DeviceFactoryMediaToMojoAdapter::AddVirtualDevice(
+void DeviceFactoryMediaToMojoAdapter::AddSharedMemoryVirtualDevice(
     const media::VideoCaptureDeviceInfo& device_info,
     mojom::ProducerPtr producer,
-    mojom::VirtualDeviceRequest virtual_device_request) {
+    bool send_buffer_handles_to_producer_as_raw_file_descriptors,
+    mojom::SharedMemoryVirtualDeviceRequest virtual_device_request) {
+  NOTIMPLEMENTED();
+}
+
+void DeviceFactoryMediaToMojoAdapter::AddTextureVirtualDevice(
+    const media::VideoCaptureDeviceInfo& device_info,
+    mojom::TextureVirtualDeviceRequest virtual_device_request) {
   NOTIMPLEMENTED();
 }
 
@@ -155,7 +161,7 @@ void DeviceFactoryMediaToMojoAdapter::CreateAndAddNewDevice(
   ActiveDeviceEntry device_entry;
   device_entry.device = std::make_unique<DeviceMediaToMojoAdapter>(
       service_ref_->Clone(), std::move(media_device),
-      jpeg_decoder_factory_callback_);
+      jpeg_decoder_factory_callback_, jpeg_decoder_task_runner_);
   device_entry.binding = std::make_unique<mojo::Binding<mojom::Device>>(
       device_entry.device.get(), std::move(device_request));
   device_entry.binding->set_connection_error_handler(base::Bind(

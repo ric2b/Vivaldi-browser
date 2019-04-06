@@ -10,7 +10,7 @@
 Polymer({
   is: 'internet-detail-dialog',
 
-  behaviors: [I18nBehavior],
+  behaviors: [CrPolicyNetworkBehavior, I18nBehavior],
 
   properties: {
     /** The network GUID to display details for. */
@@ -48,12 +48,21 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.guid = chrome.getVariableValue('dialogArguments');
-    // For debugging
-    if (!this.guid) {
+    var dialogArgs = chrome.getVariableValue('dialogArguments');
+    var type, name;
+    if (dialogArgs) {
+      var args = JSON.parse(dialogArgs);
+      this.guid = args.guid || '';
+      type = args.type || 'WiFi';
+      name = args.name || type;
+    } else {
+      // For debugging
       var params = new URLSearchParams(document.location.search.substring(1));
       this.guid = params.get('guid') || '';
+      type = params.get('type') || 'WiFi';
+      name = params.get('name') || type;
     }
+
     if (!this.guid) {
       console.error('Invalid guid');
       this.close_();
@@ -68,9 +77,9 @@ Polymer({
     // Set basic networkProperties until they are loaded.
     this.networkProperties = {
       GUID: this.guid,
-      Type: CrOnc.Type.WI_FI,
+      Type: type,
       ConnectionState: CrOnc.ConnectionState.NOT_CONNECTED,
-      Name: {Active: CrOnc.Type.WI_FI},
+      Name: {Active: name},
     };
     this.networkPropertiesReceived_ = false;
     this.getNetworkDetails_();
@@ -266,6 +275,18 @@ Polymer({
     return networkProperties.Type != CrOnc.Type.ETHERNET &&
         networkProperties.ConnectionState !=
         CrOnc.ConnectionState.NOT_CONNECTED;
+  },
+
+  /**
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
+   * @private
+   */
+  shouldShowProxyPolicyIndicator_: function(networkProperties) {
+    var property = this.get('ProxySettings.Type', networkProperties);
+    return !!property &&
+        this.isNetworkPolicyEnforced(
+            /** @type {!CrOnc.ManagedProperty} */ (property));
   },
 
   /**

@@ -22,6 +22,8 @@
 #include "components/sync/syncable/syncable_proto_util.h"
 #include "components/sync/syncable/syncable_util.h"
 
+#include "sync/vivaldi_syncer_util.h"
+
 namespace syncer {
 
 using syncable::GET_BY_ID;

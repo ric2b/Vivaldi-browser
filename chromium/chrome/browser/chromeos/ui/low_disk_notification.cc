@@ -6,13 +6,13 @@
 
 #include <stdint.h>
 
+#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/grit/generated_resources.h"
@@ -22,9 +22,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 namespace {
 
@@ -68,8 +68,8 @@ void LowDiskNotification::LowDiskSpace(uint64_t free_disk_bytes) {
   if (severity != last_notification_severity_ ||
       (severity == HIGH &&
        now - last_notification_time_ > notification_interval_)) {
-    NotificationDisplayService::GetForSystemNotifications()->Display(
-        NotificationHandler::Type::TRANSIENT, *CreateNotification(severity));
+    SystemNotificationHelper::GetInstance()->Display(
+        *CreateNotification(severity));
     last_notification_time_ = now;
     last_notification_severity_ = severity;
   }
@@ -113,7 +113,7 @@ LowDiskNotification::CreateNotification(Severity severity) {
           message_center::NOTIFICATION_TYPE_SIMPLE, kLowDiskId, title, message,
           gfx::Image(), base::string16(), GURL(), notifier_id, optional_fields,
           new message_center::HandleNotificationClickDelegate(on_click),
-          kNotificationStorageFullIcon, warning_level);
+          ash::kNotificationStorageFullIcon, warning_level);
 
   return notification;
 }

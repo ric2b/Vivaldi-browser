@@ -16,7 +16,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/cocoa/confirm_quit.h"
+#include "chrome/browser/ui/confirm_quit.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -25,33 +25,9 @@
 
 // Constants ///////////////////////////////////////////////////////////////////
 
-// How long the user must hold down Cmd+Q to confirm the quit.
-const NSTimeInterval kTimeToConfirmQuit = 1.5;
-
 // Leeway between the |targetDate| and the current time that will confirm a
 // quit.
 const NSTimeInterval kTimeDeltaFuzzFactor = 1.0;
-
-// Duration of the window fade out animation.
-const NSTimeInterval kWindowFadeAnimationDuration = 0.2;
-
-// For metrics recording only: How long the user must hold the keys to
-// differentitate kDoubleTap from kTapHold.
-const NSTimeInterval kDoubleTapTimeDelta = 0.32;
-
-// Functions ///////////////////////////////////////////////////////////////////
-
-namespace confirm_quit {
-
-void RecordHistogram(ConfirmQuitMetric sample) {
-  UMA_HISTOGRAM_ENUMERATION("OSX.ConfirmToQuit", sample, kSampleCount);
-}
-
-void RegisterLocalState(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kConfirmToQuitEnabled, false);
-}
-
-}  // namespace confirm_quit
 
 // Custom Content View /////////////////////////////////////////////////////////
 
@@ -176,7 +152,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
 - (void)hideAllWindowsForApplication:(NSApplication*)app
                         withDuration:(NSTimeInterval)duration;
 // Returns the Accelerator for the Quit menu item.
-+ (std::unique_ptr<ui::PlatformAcceleratorCocoa>)quitAccelerator;
++ (NSMenuItem*)quitAccelerator;
 @end
 
 ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
@@ -224,12 +200,11 @@ ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
 + (BOOL)eventTriggersFeature:(NSEvent*)event {
   if ([event type] != NSKeyDown)
     return NO;
-  ui::PlatformAcceleratorCocoa eventAccelerator(
-      [event charactersIgnoringModifiers],
-      [event modifierFlags] & NSDeviceIndependentModifierFlagsMask);
-  std::unique_ptr<ui::PlatformAcceleratorCocoa> quitAccelerator(
-      [self quitAccelerator]);
-  return quitAccelerator->Equals(eventAccelerator);
+  NSMenuItem* item = [self quitAccelerator];
+  return item.keyEquivalentModifierMask ==
+             ([event modifierFlags] & NSDeviceIndependentModifierFlagsMask) &&
+         [item.keyEquivalent
+             isEqualToString:[event charactersIgnoringModifiers]];
 }
 
 - (NSApplicationTerminateReply)runModalLoopForApplication:(NSApplication*)app {
@@ -256,7 +231,8 @@ ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
     [app discardEventsMatchingMask:NSAnyEventMask beforeEvent:nextEvent];
 
     // Based on how long the user held the keys, record the metric.
-    if ([[NSDate date] timeIntervalSinceDate:timeNow] < kDoubleTapTimeDelta)
+    if ([[NSDate date] timeIntervalSinceDate:timeNow] <
+        confirm_quit::kDoubleTapTimeDelta.InSecondsF())
       confirm_quit::RecordHistogram(confirm_quit::kDoubleTap);
     else
       confirm_quit::RecordHistogram(confirm_quit::kTapHold);
@@ -271,15 +247,17 @@ ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
 
   // Spin a nested run loop until the |targetDate| is reached or a KeyUp event
   // is sent.
-  NSDate* targetDate = [NSDate dateWithTimeIntervalSinceNow:kTimeToConfirmQuit];
+  NSDate* targetDate = [NSDate
+      dateWithTimeIntervalSinceNow:confirm_quit::kShowDuration.InSecondsF()];
   BOOL willQuit = NO;
   NSEvent* nextEvent = nil;
   do {
     // Dequeue events until a key up is received. To avoid busy waiting, figure
     // out the amount of time that the thread can sleep before taking further
     // action.
-    NSDate* waitDate = [NSDate dateWithTimeIntervalSinceNow:
-        kTimeToConfirmQuit - kTimeDeltaFuzzFactor];
+    NSDate* waitDate = [NSDate
+        dateWithTimeIntervalSinceNow:confirm_quit::kShowDuration.InSecondsF() -
+                                     kTimeDeltaFuzzFactor];
     nextEvent = [self pumpEventQueueForKeyUp:app untilDate:waitDate];
 
     // Wait for the time expiry to happen. Once past the hold threshold,
@@ -294,7 +272,8 @@ ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
         // fade out to convince the user to release the key combo to finalize
         // the quit.
         [self hideAllWindowsForApplication:app
-                              withDuration:kWindowFadeAnimationDuration];
+                              withDuration:confirm_quit::kWindowFadeOutDuration
+                                               .InSecondsF()];
       }
     }
   } while (!nextEvent);
@@ -368,9 +347,7 @@ ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
 // key combination for quit. It then gets the modifiers and builds a string
 // to display them.
 + (NSString*)keyCommandString {
-  std::unique_ptr<ui::PlatformAcceleratorCocoa> accelerator(
-      [self quitAccelerator]);
-  return [[self class] keyCombinationForAccelerator:*accelerator];
+  return [[self class] keyCombinationForAccelerator:[self quitAccelerator]];
 }
 
 // Runs a nested loop that pumps the event queue until the next KeyUp event.
@@ -394,27 +371,28 @@ ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
 // This looks at the Main Menu and determines what the user has set as the
 // key combination for quit. It then gets the modifiers and builds an object
 // to hold the data.
-+ (std::unique_ptr<ui::PlatformAcceleratorCocoa>)quitAccelerator {
++ (NSMenuItem*)quitAccelerator {
   NSMenu* mainMenu = [NSApp mainMenu];
   // Get the application menu (i.e. Chromium).
   NSMenu* appMenu = [[mainMenu itemAtIndex:0] submenu];
   for (NSMenuItem* item in [appMenu itemArray]) {
     // Find the Quit item.
     if ([item action] == @selector(terminate:)) {
-      return std::unique_ptr<ui::PlatformAcceleratorCocoa>(
-          new ui::PlatformAcceleratorCocoa([item keyEquivalent],
-                                           [item keyEquivalentModifierMask]));
+      return item;
     }
   }
+
   // Default to Cmd+Q.
-  return std::unique_ptr<ui::PlatformAcceleratorCocoa>(
-      new ui::PlatformAcceleratorCocoa(@"q", NSCommandKeyMask));
+  NSMenuItem* item = [[[NSMenuItem alloc] initWithTitle:@""
+                                                 action:@selector(terminate:)
+                                          keyEquivalent:@"q"] autorelease];
+  item.keyEquivalentModifierMask = NSCommandKeyMask;
+  return item;
 }
 
-+ (NSString*)keyCombinationForAccelerator:
-    (const ui::PlatformAcceleratorCocoa&)item {
++ (NSString*)keyCombinationForAccelerator:(NSMenuItem*)item {
   NSMutableString* string = [NSMutableString string];
-  NSUInteger modifiers = item.modifier_mask();
+  NSUInteger modifiers = item.keyEquivalentModifierMask;
 
   if (modifiers & NSCommandKeyMask)
     [string appendString:@"\u2318"];
@@ -425,7 +403,7 @@ ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
   if (modifiers & NSShiftKeyMask)
     [string appendString:@"\u21E7"];
 
-  [string appendString:[item.characters() uppercaseString]];
+  [string appendString:[item.keyEquivalent uppercaseString]];
   return string;
 }
 

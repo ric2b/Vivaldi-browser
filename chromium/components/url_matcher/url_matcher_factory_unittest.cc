@@ -11,7 +11,6 @@
 
 #include "base/format_macros.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/url_matcher/url_matcher_constants.h"
@@ -35,7 +34,7 @@ TEST(URLMatcherFactoryTest, CreateFromURLFilterDictionary) {
   // Invalid value type: {"hostSuffix": []}
   base::DictionaryValue invalid_condition2;
   invalid_condition2.Set(keys::kHostSuffixKey,
-                         base::MakeUnique<base::ListValue>());
+                         std::make_unique<base::ListValue>());
 
   // Invalid regex value: {"urlMatches": "*"}
   base::DictionaryValue invalid_condition3;
@@ -54,14 +53,14 @@ TEST(URLMatcherFactoryTest, CreateFromURLFilterDictionary) {
   // }
 
   // Port range: Allow 80;1000-1010.
-  auto port_range = base::MakeUnique<base::ListValue>();
+  auto port_range = std::make_unique<base::ListValue>();
   port_range->AppendInteger(1000);
   port_range->AppendInteger(1010);
-  auto port_ranges = base::MakeUnique<base::ListValue>();
+  auto port_ranges = std::make_unique<base::ListValue>();
   port_ranges->AppendInteger(80);
   port_ranges->Append(std::move(port_range));
 
-  auto scheme_list = base::MakeUnique<base::ListValue>();
+  auto scheme_list = std::make_unique<base::ListValue>();
   scheme_list->AppendString("http");
 
   base::DictionaryValue valid_condition;
@@ -75,27 +74,27 @@ TEST(URLMatcherFactoryTest, CreateFromURLFilterDictionary) {
   result = URLMatcherFactory::CreateFromURLFilterDictionary(
       matcher.condition_factory(), &invalid_condition, 1, &error);
   EXPECT_FALSE(error.empty());
-  EXPECT_FALSE(result.get());
+  EXPECT_FALSE(result);
 
   // Test wrong datatype in hostSuffix.
   error.clear();
   result = URLMatcherFactory::CreateFromURLFilterDictionary(
       matcher.condition_factory(), &invalid_condition2, 2, &error);
   EXPECT_FALSE(error.empty());
-  EXPECT_FALSE(result.get());
+  EXPECT_FALSE(result);
 
   // Test invalid regex in urlMatches.
   error.clear();
   result = URLMatcherFactory::CreateFromURLFilterDictionary(
       matcher.condition_factory(), &invalid_condition3, 3, &error);
   EXPECT_FALSE(error.empty());
-  EXPECT_FALSE(result.get());
+  EXPECT_FALSE(result);
 
   error.clear();
   result = URLMatcherFactory::CreateFromURLFilterDictionary(
       matcher.condition_factory(), &invalid_condition4, 4, &error);
   EXPECT_FALSE(error.empty());
-  EXPECT_FALSE(result.get());
+  EXPECT_FALSE(result);
 
   // Test success.
   error.clear();
@@ -143,7 +142,7 @@ TEST(URLMatcherFactoryTest, UpperCase) {
   invalid_condition4.SetString(keys::kHostEqualsKey, "WWW.example.Com");
 
   // {"scheme": ["HTTP"]}
-  auto scheme_list = base::MakeUnique<base::ListValue>();
+  auto scheme_list = std::make_unique<base::ListValue>();
   scheme_list->AppendString("HTTP");
   base::DictionaryValue invalid_condition5;
   invalid_condition5.Set(keys::kSchemesKey, std::move(scheme_list));
@@ -161,7 +160,7 @@ TEST(URLMatcherFactoryTest, UpperCase) {
     result = URLMatcherFactory::CreateFromURLFilterDictionary(
         matcher.condition_factory(), invalid_conditions[i], 1, &error);
     EXPECT_FALSE(error.empty()) << "in iteration " << i;
-    EXPECT_FALSE(result.get()) << "in iteration " << i;
+    EXPECT_FALSE(result) << "in iteration " << i;
   }
 }
 
@@ -236,7 +235,7 @@ void UrlConditionCaseTest::CheckCondition(
     UrlConditionCaseTest::ResultType expected_result) const {
   base::DictionaryValue condition;
   if (use_list_of_strings_) {
-    auto list = base::MakeUnique<base::ListValue>();
+    auto list = std::make_unique<base::ListValue>();
     list->AppendString(value);
     condition.SetWithoutPathExpansion(condition_key_, std::move(list));
   } else {
@@ -251,7 +250,7 @@ void UrlConditionCaseTest::CheckCondition(
       matcher.condition_factory(), &condition, 1, &error);
   if (expected_result == CREATE_FAILURE) {
     EXPECT_FALSE(error.empty());
-    EXPECT_FALSE(result.get());
+    EXPECT_FALSE(result);
     return;
   }
   EXPECT_EQ("", error);

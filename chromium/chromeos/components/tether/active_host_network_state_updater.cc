@@ -5,10 +5,10 @@
 #include "chromeos/components/tether/active_host_network_state_updater.h"
 
 #include "base/memory/ptr_util.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "chromeos/components/tether/active_host.h"
 #include "chromeos/network/network_state_handler.h"
-#include "components/cryptauth/remote_device.h"
-#include "components/proximity_auth/logging/logging.h"
+#include "components/cryptauth/remote_device_ref.h"
 
 namespace chromeos {
 
@@ -34,7 +34,7 @@ void ActiveHostNetworkStateUpdater::OnActiveHostChanged(
       DCHECK(!change_info.old_wifi_network_guid.empty());
 
       PA_LOG(INFO) << "Active host: Disconnected from active host with ID "
-                   << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(
+                   << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
                           change_info.old_active_host_id)
                    << ". Old tether network GUID: "
                    << change_info.old_tether_network_guid

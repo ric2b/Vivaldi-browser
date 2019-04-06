@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef MEDIA_GPU_ANDROID_FAKE_CODEC_ALLOCATOR_H_
+#define MEDIA_GPU_ANDROID_FAKE_CODEC_ALLOCATOR_H_
+
 #include <memory>
 
+#include "base/sequenced_task_runner.h"
 #include "media/base/android/mock_media_codec_bridge.h"
 #include "media/gpu/android/avda_codec_allocator.h"
 #include "media/gpu/android/avda_surface_bundle.h"
@@ -26,18 +30,14 @@ class FakeCodecAllocator : public testing::NiceMock<AVDACodecAllocator> {
   // These are called with some parameters of the codec config by our
   // implementation of their respective functions.  This allows tests to set
   // expectations on them.
-  MOCK_METHOD2(MockCreateMediaCodecSync,
-               void(AndroidOverlay*, SurfaceTextureGLOwner*));
-  MOCK_METHOD2(MockCreateMediaCodecAsync,
-               void(AndroidOverlay*, SurfaceTextureGLOwner*));
+  MOCK_METHOD2(MockCreateMediaCodecSync, void(AndroidOverlay*, TextureOwner*));
+  MOCK_METHOD2(MockCreateMediaCodecAsync, void(AndroidOverlay*, TextureOwner*));
 
   // Note that this doesn't exactly match the signature, since unique_ptr
   // doesn't work.  plus, we expand |surface_bundle| a bit to make it more
   // convenient to set expectations.
   MOCK_METHOD3(MockReleaseMediaCodec,
-               void(MediaCodecBridge*,
-                    AndroidOverlay*,
-                    SurfaceTextureGLOwner*));
+               void(MediaCodecBridge*, AndroidOverlay*, TextureOwner*));
 
   std::unique_ptr<MediaCodecBridge> CreateMediaCodecSync(
       scoped_refptr<CodecConfig> config) override;
@@ -66,8 +66,8 @@ class FakeCodecAllocator : public testing::NiceMock<AVDACodecAllocator> {
   // The most recent overlay provided during codec allocation.
   AndroidOverlay* most_recent_overlay = nullptr;
 
-  // The most recent surface texture provided during codec allocation.
-  SurfaceTextureGLOwner* most_recent_surface_texture = nullptr;
+  // The most recent texture owner provided during codec allocation.
+  TextureOwner* most_recent_texture_owner = nullptr;
 
   // Whether CreateMediaCodecSync() is allowed to succeed.
   bool allow_sync_creation = true;
@@ -91,3 +91,5 @@ class FakeCodecAllocator : public testing::NiceMock<AVDACodecAllocator> {
 };
 
 }  // namespace media
+
+#endif  // MEDIA_GPU_ANDROID_FAKE_CODEC_ALLOCATOR_H_

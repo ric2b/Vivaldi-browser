@@ -12,15 +12,13 @@
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "chrome/browser/media/router/discovery/dial/dial_url_fetcher.h"
 #include "chrome/browser/media/router/discovery/dial/parsed_dial_app_info.h"
 #include "chrome/browser/media/router/discovery/dial/safe_dial_app_info_parser.h"
 #include "chrome/common/media_router/discovery/media_sink_internal.h"
 #include "url/gurl.h"
-
-namespace net {
-class URLRequestContextGetter;
-}
 
 namespace service_manager {
 class Connector;
@@ -28,105 +26,121 @@ class Connector;
 
 namespace media_router {
 
-class DialAppInfoFetcher;
-class SafeDialAppInfoParser;
-
 // Represents DIAL app status on receiver device.
-enum SinkAppStatus { kAvailable, kUnavailable, kUnknown };
+enum class DialAppInfoResultCode {
+  kOk = 0,
+  kNotFound,
+  kNetworkError,
+  kParsingError
+};
+
+struct DialAppInfoResult {
+  DialAppInfoResult(std::unique_ptr<ParsedDialAppInfo> app_info,
+                    DialAppInfoResultCode result_code);
+  DialAppInfoResult(DialAppInfoResult&& other);
+  ~DialAppInfoResult();
+
+  // Parsed app info on the device for the given app, or nullptr if unable to
+  // fetch/parse app info.
+  std::unique_ptr<ParsedDialAppInfo> app_info;
+  // |kOk| on success, a failure code otherwise.
+  DialAppInfoResultCode result_code;
+};
 
 // This class provides an API to fetch DIAL app info XML from an app URL and
 // parse the XML into a DialAppInfo object. Actual parsing happens in a
 // separate utility process via SafeDialAppInfoParser instead of in this class.
 // During shutdown, this class aborts all pending requests and no callbacks get
 // invoked.
-// This class may be created on any thread. All methods, unless otherwise noted,
-// must be invoked on the SequencedTaskRunner given by
-// |DialMediaSinkServiceImpl::task_runner()|.
+// This class is not sequence safe.
 class DialAppDiscoveryService {
  public:
-  // Called if parsing app info XML in utility process finishes.
   // |sink_id|: MediaSink ID of the receiver that responded to the GET request.
   // |app_name|: DIAL app name whose status is being checked on |sink_id|.
-  // |app_status|: app status indicating if |app_name| is available on MediaSink
-  // with ID |sink_id|.
-  using DialAppInfoParseCompletedCallback =
-      base::RepeatingCallback<void(const std::string& sink_id,
-                                   const std::string& app_name,
-                                   SinkAppStatus app_status)>;
+  // |result|: Result of the app info fetching/parsing.
+  using DialAppInfoCallback =
+      base::OnceCallback<void(const MediaSink::Id& sink_id,
+                              const std::string& app_name,
+                              DialAppInfoResult result)>;
 
-  DialAppDiscoveryService(
-      service_manager::Connector* connector,
-      const DialAppInfoParseCompletedCallback& parse_completed_cb);
+  explicit DialAppDiscoveryService(service_manager::Connector* connector);
 
   virtual ~DialAppDiscoveryService();
 
   // Queries |app_name|'s availability on |sink| by issuing a HTTP GET request.
-  // No-op if there is already a pending request.
   // App URL is used to issue HTTP GET request. E.g.
   // http://127.0.0.1/apps/YouTube. "http://127.0.0.1/apps/" is the base part
   // which comes from |sink|; "YouTube" suffix is the app name part which comes
   // from |app_name|.
-  // |request_context|: Used by the background URLFetchers.
   virtual void FetchDialAppInfo(const MediaSinkInternal& sink,
                                 const std::string& app_name,
-                                net::URLRequestContextGetter* request_context);
+                                DialAppInfoCallback app_info_cb);
 
  private:
   friend class DialAppDiscoveryServiceTest;
-  FRIEND_TEST_ALL_PREFIXES(DialAppDiscoveryServiceTest,
-                           TestFechDialAppInfoFromCache);
-  FRIEND_TEST_ALL_PREFIXES(DialAppDiscoveryServiceTest,
-                           TestFechDialAppInfoFromCacheExpiredEntry);
-  FRIEND_TEST_ALL_PREFIXES(DialAppDiscoveryServiceTest,
-                           TestSafeParserProperlyCreated);
-  FRIEND_TEST_ALL_PREFIXES(DialAppDiscoveryServiceTest,
-                           TestGetAvailabilityFromAppInfoAvailable);
-  FRIEND_TEST_ALL_PREFIXES(DialAppDiscoveryServiceTest,
-                           TestGetAvailabilityFromAppInfoUnavailable);
+
+  class PendingRequest {
+   public:
+    PendingRequest(const MediaSinkInternal& sink,
+                   const std::string& app_name,
+                   DialAppInfoCallback app_info_cb,
+                   DialAppDiscoveryService* const service);
+    ~PendingRequest();
+
+    // Starts fetching the app info on |app_url_|.
+    void Start();
+
+   private:
+    friend class DialAppDiscoveryServiceTest;
+
+    // Invoked when HTTP GET request finishes.
+    // |app_info_xml|: Response XML from HTTP request.
+    void OnDialAppInfoFetchComplete(const std::string& app_info_xml);
+
+    // Invoked when HTTP GET request fails.
+    // |response_code|: The HTTP response code received.
+    // |error_message|: Error message from HTTP request.
+    void OnDialAppInfoFetchError(int response_code,
+                                 const std::string& error_message);
+
+    // Invoked when SafeDialAppInfoParser finishes parsing app info XML.
+    // |app_info|: Parsed app info from utility process, or nullptr if parsing
+    // failed.
+    // |parsing_result|: Result of DIAL app info XML parsing.
+    void OnDialAppInfoParsed(
+        std::unique_ptr<ParsedDialAppInfo> app_info,
+        SafeDialAppInfoParser::ParsingResult parsing_result);
+
+    MediaSink::Id sink_id_;
+    std::string app_name_;
+    GURL app_url_;
+    DialURLFetcher fetcher_;
+    DialAppInfoCallback app_info_cb_;
+
+    // Raw pointer to DialAppDiscoveryService that owns |this|.
+    DialAppDiscoveryService* const service_;
+
+    SEQUENCE_CHECKER(sequence_checker_);
+    base::WeakPtrFactory<PendingRequest> weak_ptr_factory_;
+    DISALLOW_COPY_AND_ASSIGN(PendingRequest);
+  };
+
+  friend class PendingRequest;
 
   // Used by unit test.
   void SetParserForTest(std::unique_ptr<SafeDialAppInfoParser> parser);
 
-  // Invoked when HTTP GET request finishes.
-  // |sink_id|: MediaSink ID of the receiver that responded to the GET request.
-  // |app_name|: app name passed in when initiating the HTTP GET request.
-  // |app_info_xml|: Response XML from HTTP request.
-  void OnDialAppInfoFetchComplete(const std::string& sink_id,
-                                  const std::string& app_name,
-                                  const std::string& app_info_xml);
+  // Called by PendingRequest to delete itself.
+  void RemovePendingRequest(PendingRequest* request);
 
-  // Invoked when HTTP GET request fails.
-  // |sink_id|: MediaSink ID of the receiver that responded to the GET request.
-  // |app_name|: app name passed in when initiating the HTTP GET request.
-  // |response_code|: The HTTP response code received.
-  // |error_message|: Error message from HTTP request.
-  void OnDialAppInfoFetchError(const std::string& sink_id,
-                               const std::string& app_name,
-                               int response_code,
-                               const std::string& error_message);
-
-  // Invoked when SafeDialAppInfoParser finishes parsing app info XML.
-  // |sink_id|: MediaSink ID of the receiver that responded to the GET request.
-  // |app_name|: app name passed in when initiating the HTTP GET request.
-  // |app_info|: Parsed app info from utility process, or nullptr if parsing
-  // failed.
-  // |parsing_result|: Result of DIAL app info XML parsing.
-  void OnDialAppInfoParsed(const std::string& sink_id,
-                           const std::string& app_name,
-                           std::unique_ptr<ParsedDialAppInfo> app_info,
-                           SafeDialAppInfoParser::ParsingResult parsing_result);
-
-  // Map of pending app info fetchers, keyed by request id.
-  base::flat_map<std::string, std::unique_ptr<DialAppInfoFetcher>>
-      pending_fetcher_map_;
-
-  // See comments for DialAppInfoParseCompletedCallback.
-  DialAppInfoParseCompletedCallback parse_completed_cb_;
+  // Pending app info requests.
+  std::vector<std::unique_ptr<PendingRequest>> pending_requests_;
 
   // Safe DIAL parser. Does the parsing in a utility process.
   std::unique_ptr<SafeDialAppInfoParser> parser_;
 
   SEQUENCE_CHECKER(sequence_checker_);
+  DISALLOW_COPY_AND_ASSIGN(DialAppDiscoveryService);
 };
 
 }  // namespace media_router

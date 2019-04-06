@@ -47,10 +47,16 @@ namespace webrtcLoggingPrivate {
     boolean didManualStop;
   };
 
+  dictionary StartEventLoggingResult {
+    // The log ID. Non-empty if and only if StartEventLogging() was successful.
+    DOMString logId;
+  };
+
   callback GenericDoneCallback = void ();
   callback RecordingDoneCallback = void (RecordingInfo info);
   callback UploadDoneCallback = void (UploadResult result);
   callback GetLogsDirectoryCallback = void ([instanceOf = DirectoryEntry] object entry);
+  callback StartEventLoggingCallback = void (StartEventLoggingResult result);
 
   interface Functions {
     // For all functions, |request| determines which render process to apply
@@ -152,6 +158,15 @@ namespace webrtcLoggingPrivate {
     static void stopAudioDebugRecordings(RequestInfo request,
                                          DOMString securityOrigin,
                                          RecordingDoneCallback callback);
+
+    // Start remote-bound event logging for a specific peer connection,
+    // indicated by its ID, for which remote-bound event logging was not active.
+    // If successful, the callback will carry the ID of the log.
+    static void startEventLogging(RequestInfo request,
+                                  DOMString securityOrigin,
+                                  DOMString peerConnectionId,
+                                  long maxLogSizeBytes,
+                                  StartEventLoggingCallback callback);
 
     // Returns the directory entry for the "WebRTC Logs" directory. If the
     // directory doesn't exist yet, this will create it. If the directory

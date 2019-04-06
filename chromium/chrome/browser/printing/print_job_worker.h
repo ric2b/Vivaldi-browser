@@ -25,9 +25,9 @@ class DictionaryValue;
 namespace printing {
 
 class PrintJob;
-class PrintJobWorkerOwner;
 class PrintedDocument;
 class PrintedPage;
+class PrinterQuery;
 
 // Worker thread code. It manages the PrintingContext, which can be blocking
 // and/or run a message loop. This is the object that generates most
@@ -38,10 +38,12 @@ class PrintJobWorker {
  public:
   PrintJobWorker(int render_process_id,
                  int render_frame_id,
-                 PrintJobWorkerOwner* owner);
+                 PrinterQuery* query);
   virtual ~PrintJobWorker();
 
-  void SetNewOwner(PrintJobWorkerOwner* new_owner);
+  void SetPrintJob(PrintJob* print_job);
+
+  /* The following functions may only be called before calling SetPrintJob(). */
 
   // Initializes the print settings. If |ask_user_for_settings| is true, a
   // Print... dialog box will be shown to ask the user their preference.
@@ -54,8 +56,16 @@ class PrintJobWorker {
                    bool is_scripted,
                    bool is_modifiable);
 
-  // Set the new print settings.
+  // Set the new print settings from a dictionary value.
   void SetSettings(std::unique_ptr<base::DictionaryValue> new_settings);
+
+#if defined(OS_CHROMEOS)
+  // Set the new print settings from a POD type.
+  void SetSettingsFromPOD(
+      std::unique_ptr<printing::PrintSettings> new_settings);
+#endif
+
+  /* The following functions may only be called after calling SetPrintJob(). */
 
   // Starts the printing loop. Every pages are printed as soon as the data is
   // available. Makes sure the new_document is the right one.
@@ -69,14 +79,16 @@ class PrintJobWorker {
   // the next page can be printed.
   void OnNewPage();
 
-  // This is the only function that can be called in a thread.
+  /* The following functions may be called before or after SetPrintJob(). */
+
+  // Cancels the job.
   void Cancel();
 
   // Returns true if the thread has been started, and not yet stopped.
   bool IsRunning() const;
 
   // Posts the given task to be run.
-  bool PostTask(const base::Location& from_here, const base::Closure& task);
+  bool PostTask(const base::Location& from_here, base::OnceClosure task);
 
   // Signals the thread to exit in the near future.
   void StopSoon();
@@ -129,7 +141,13 @@ class PrintJobWorker {
   // Called on the UI thread to update the print settings.
   void UpdatePrintSettings(std::unique_ptr<base::DictionaryValue> new_settings);
 
-  // Reports settings back to owner_.
+#if defined(OS_CHROMEOS)
+  // Called on the UI thread to update the print settings.
+  void UpdatePrintSettingsFromPOD(
+      std::unique_ptr<printing::PrintSettings> new_settings);
+#endif
+
+  // Reports settings back to |query_|.
   void GetSettingsDone(PrintingContext::Result result);
 
   // Use the default settings. When using GTK+ or Mac, this can still end up
@@ -146,9 +164,13 @@ class PrintJobWorker {
   // The printed document. Only has read-only access.
   scoped_refptr<PrintedDocument> document_;
 
+  // The printer query that owns this worker thread at creation. It will own
+  // the object until DetachWorker() is called.
+  PrinterQuery* query_ = nullptr;
+
   // The print job owning this worker thread. It is guaranteed to outlive this
-  // object.
-  PrintJobWorkerOwner* owner_;
+  // object and should be set with SetPrintJob().
+  PrintJob* print_job_ = nullptr;
 
   // Current page number to print.
   PageNumber page_number_;

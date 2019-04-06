@@ -16,7 +16,6 @@
 #include "components/infobars/core/infobar.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
-#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -35,13 +34,8 @@ base::string16 AdsBlockedInfobarDelegate::GetExplanationText() const {
   return l10n_util::GetStringUTF16(IDS_BLOCKED_ADS_PROMPT_EXPLANATION);
 }
 
-// The experimental UI includes the permission and its associated UI. Without it
-// we can't say "Always". Allowing ads will only be scoped to the tab.
 base::string16 AdsBlockedInfobarDelegate::GetToggleText() const {
-  return base::FeatureList::IsEnabled(
-             subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI)
-             ? l10n_util::GetStringUTF16(IDS_ALWAYS_ALLOW_ADS)
-             : l10n_util::GetStringUTF16(IDS_ALLOW_ADS);
+  return l10n_util::GetStringUTF16(IDS_ALWAYS_ALLOW_ADS);
 }
 
 infobars::InfoBarDelegate::InfoBarIdentifier
@@ -50,7 +44,7 @@ AdsBlockedInfobarDelegate::GetIdentifier() const {
 }
 
 int AdsBlockedInfobarDelegate::GetIconId() const {
-  return IDR_ANDROID_INFOBAR_SUBRESOURCE_FILTERING;
+  return IDR_ANDROID_INFOBAR_BLOCKED_POPUPS;
 }
 
 base::string16 AdsBlockedInfobarDelegate::GetMessageText() const {
@@ -86,9 +80,11 @@ bool AdsBlockedInfobarDelegate::LinkClicked(WindowOpenDisposition disposition) {
     DCHECK_EQ(disposition, WindowOpenDisposition::NEW_FOREGROUND_TAB);
     infobar()->owner()->OpenURL(GetLinkURL(),
                                 WindowOpenDisposition::NEW_FOREGROUND_TAB);
-    ChromeSubresourceFilterClient::LogAction(kActionClickedLearnMore);
+    ChromeSubresourceFilterClient::LogAction(
+        SubresourceFilterAction::kClickedLearnMore);
   } else {
-    ChromeSubresourceFilterClient::LogAction(kActionDetailsShown);
+    ChromeSubresourceFilterClient::LogAction(
+        SubresourceFilterAction::kDetailsShown);
     infobar_expanded_ = true;
   }
   // Returning false keeps the infobar up, which is the behavior we want in all

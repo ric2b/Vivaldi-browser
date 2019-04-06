@@ -1,8 +1,11 @@
 include_rules = [
   "+components/autofill/core/browser",
+  "+components/favicon/core",
   "+components/keyed_service/core",
   "+components/pref_registry",
   "+components/security_state",
+  "+components/safe_browsing/common/safe_browsing_prefs.h",
+  "+components/safe_browsing/features.h",
   "+components/sync/base",
   "+components/sync/driver",
   "+components/url_formatter",
@@ -13,6 +16,8 @@ include_rules = [
   "+grit",
   "+net",
   "+services/metrics/public/cpp",
+  "+services/network/public/cpp",
+  "+services/network/test",
 ]
 
 specific_include_rules = {
@@ -26,6 +31,9 @@ specific_include_rules = {
     "+components/ukm",
   ],
   "password_manager_metrics_recorder_unittest\.cc": [
+    "+components/ukm",
+  ],
+  "password_manager_unittest\.cc": [
     "+components/ukm",
   ],
 }

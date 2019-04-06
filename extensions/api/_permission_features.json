@@ -63,6 +63,7 @@
     ]
   },
   "extensionActionUtils": {
+    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
@@ -78,6 +79,22 @@
     ]
   },
   "importData": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "infobars": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "mailPrivate": {
     "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],

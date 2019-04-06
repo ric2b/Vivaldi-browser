@@ -8,7 +8,7 @@ cr.define('settings_subpage', function() {
       PolymerTest.clearBody();
     });
 
-    test('clear search', function() {
+    test('clear search (event)', function() {
       const subpage = document.createElement('settings-subpage');
       // Having a searchLabel will create the settings-subpage-search.
       subpage.searchLabel = 'test';
@@ -22,6 +22,22 @@ cr.define('settings_subpage', function() {
       assertEquals('', search.getValue());
     });
 
+    test('clear search (click)', function() {
+      const subpage = document.createElement('settings-subpage');
+      // Having a searchLabel will create the settings-subpage-search.
+      subpage.searchLabel = 'test';
+      document.body.appendChild(subpage);
+      Polymer.dom.flush();
+      const search = subpage.$$('settings-subpage-search');
+      assertTrue(!!search);
+      search.setValue('Hello');
+      assertEquals(null, search.root.activeElement);
+      search.$.clearSearch.click();
+      Polymer.dom.flush();
+      assertEquals('', search.getValue());
+      assertEquals(search.$.searchInput, search.root.activeElement);
+    });
+
     test('navigates to parent when there is no history', function() {
       // Pretend that we initially started on the CERTIFICATES route.
       window.history.replaceState(
@@ -32,7 +48,7 @@ cr.define('settings_subpage', function() {
       const subpage = document.createElement('settings-subpage');
       document.body.appendChild(subpage);
 
-      MockInteractions.tap(subpage.$$('button'));
+      subpage.$$('button').click();
       assertEquals(settings.routes.PRIVACY, settings.getCurrentRoute());
     });
 
@@ -44,7 +60,7 @@ cr.define('settings_subpage', function() {
       const subpage = document.createElement('settings-subpage');
       document.body.appendChild(subpage);
 
-      MockInteractions.tap(subpage.$$('button'));
+      subpage.$$('button').click();
 
       window.addEventListener('popstate', function(event) {
         assertEquals(settings.routes.BASIC, settings.getCurrentRoute());
@@ -54,16 +70,16 @@ cr.define('settings_subpage', function() {
   });
 
   suite('SettingsSubpageSearch', function() {
-    test('host autofocus propagates to <input>', function() {
+    test('host autofocus propagates to <cr-input>', function() {
       PolymerTest.clearBody();
       const element = document.createElement('settings-subpage-search');
       element.setAttribute('autofocus', true);
       document.body.appendChild(element);
 
-      assertTrue(element.$$('input').hasAttribute('autofocus'));
+      assertTrue(element.$$('cr-input').hasAttribute('autofocus'));
 
       element.removeAttribute('autofocus');
-      assertFalse(element.$$('input').hasAttribute('autofocus'));
+      assertFalse(element.$$('cr-input').hasAttribute('autofocus'));
     });
   });
 });

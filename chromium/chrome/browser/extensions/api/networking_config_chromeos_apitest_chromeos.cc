@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 
 #include "base/location.h"
@@ -12,10 +13,10 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
-#include "chrome/browser/chromeos/net/network_portal_notification_controller.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/ui/ash/network/network_portal_notification_controller.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_device_client.h"
 #include "chromeos/dbus/shill_profile_client.h"
@@ -25,8 +26,8 @@
 #include "extensions/test/result_catcher.h"
 #include "net/base/net_errors.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 
 using chromeos::DBusThreadManager;
 using chromeos::NetworkPortalDetector;
@@ -45,11 +46,14 @@ const char kWifi1ServiceGUID[] = "wifi1_guid";
 }  // namespace
 
 class NetworkingConfigTest
-    : public ExtensionApiTest,
+    : public extensions::ExtensionApiTest,
       public captive_portal::CaptivePortalDetectorTestBase {
  public:
+  NetworkingConfigTest() : network_portal_detector_(nullptr) {}
+  ~NetworkingConfigTest() override = default;
+
   void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
     content::RunAllPendingInMessageLoop();
 
     display_service_ = std::make_unique<NotificationDisplayServiceTester>(
@@ -81,13 +85,20 @@ class NetworkingConfigTest
 
     content::RunAllPendingInMessageLoop();
 
-    network_portal_detector_ = new NetworkPortalDetectorImpl(
-        g_browser_process->system_request_context(),
-        true /* create_notification_controller */);
+    network_portal_detector_ =
+        new NetworkPortalDetectorImpl(test_loader_factory());
+    // Takes ownership of |network_portal_detector_|:
     chromeos::network_portal_detector::InitializeForTesting(
         network_portal_detector_);
     network_portal_detector_->Enable(false /* start_detection */);
     set_detector(network_portal_detector_->captive_portal_detector_.get());
+    network_portal_notification_controller_ =
+        std::make_unique<NetworkPortalNotificationController>(
+            network_portal_detector_);
+  }
+
+  void TearDownOnMainThread() override {
+    network_portal_notification_controller_.reset();
   }
 
   void LoadTestExtension() {
@@ -119,7 +130,9 @@ class NetworkingConfigTest
   }
 
  protected:
-  NetworkPortalDetectorImpl* network_portal_detector_ = nullptr;
+  NetworkPortalDetectorImpl* network_portal_detector_;
+  std::unique_ptr<NetworkPortalNotificationController>
+      network_portal_notification_controller_;
   const extensions::Extension* extension_ = nullptr;
   std::unique_ptr<NotificationDisplayServiceTester> display_service_;
 };
@@ -151,8 +164,9 @@ IN_PROC_BROWSER_TEST_F(NetworkingConfigTest, FullTest) {
   ASSERT_TRUE(notification);
 
   // Simulate the user click which leads to the extension being notified.
-  notification->delegate()->ButtonClick(
-      NetworkPortalNotificationController::kUseExtensionButtonIndex);
+  notification->delegate()->Click(
+      NetworkPortalNotificationController::kUseExtensionButtonIndex,
+      base::nullopt);
 
   extensions::ResultCatcher catcher;
   EXPECT_TRUE(catcher.GetNextResult());

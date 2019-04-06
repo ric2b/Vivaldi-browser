@@ -11,13 +11,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 
+#include "components/sync/base/sync_stop_metadata_fate.h"
 #include "components/sync/base/weak_handle.h"
+#include "components/sync/driver/data_type_controller.h"
 #include "components/sync/driver/data_type_manager.h"
 #include "components/sync/engine/data_type_association_stats.h"
 
 namespace syncer {
-
-class DataTypeController;
 
 // |ModelAssociationManager| does the heavy lifting for doing the actual model
 // association. It instructs DataTypeControllers to load models, start
@@ -83,11 +83,15 @@ class ModelAssociationManager {
   // of Initialize is only allowed if the ModelAssociationManager has invoked
   // |OnModelAssociationDone| on the |ModelAssociationManagerDelegate|. After
   // this call, there should be several calls to StartAssociationAsync()
-  // to associate subset of |desired_types|.
-  void Initialize(ModelTypeSet desired_types);
+  // to associate subset of |desired_types| which must be a subset of
+  // |preferred_types|.
+  // |preferred_types| contains types selected by user.
+  void Initialize(ModelTypeSet desired_types, ModelTypeSet preferred_types);
 
   // Can be called at any time. Synchronously stops all datatypes.
-  void Stop();
+  // If |metadata_fate| equals  CLEAR_METADATA controllers should clear sync
+  // metadata.
+  void Stop(SyncStopMetadataFate metadata_fate);
 
   // Should only be called after Initialize to start the actual association.
   // |types_to_associate| should be subset of |desired_types| in Initialize().
@@ -106,9 +110,6 @@ class ModelAssociationManager {
   // Called at the end of association to reset state to prepare for next
   // round of association.
   void ResetForNextAssociation();
-
-  // Called by Initialize() to stop types that are not in |desired_types_|.
-  void StopDisabledTypes();
 
   // Start loading non-running types that are in |desired_types_|.
   void LoadEnabledTypes();
@@ -131,7 +132,10 @@ class ModelAssociationManager {
   void ModelAssociationDone(State new_state);
 
   // A helper to stop an individual datatype.
-  void StopDatatype(const SyncError& error, DataTypeController* dtc);
+  void StopDatatype(const SyncError& error,
+                    SyncStopMetadataFate metadata_fate,
+                    DataTypeController* dtc,
+                    DataTypeController::StopCallback callback);
 
   // Calls delegate's OnAllDataTypesReadyForConfigure when all datatypes from
   // desired_types_ are ready for configure. Ensures that for every call to

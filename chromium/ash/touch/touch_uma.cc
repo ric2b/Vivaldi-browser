@@ -4,19 +4,12 @@
 
 #include "ash/touch/touch_uma.h"
 
-#include "ash/shell.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/optional.h"
-#include "base/strings/stringprintf.h"
-#include "ui/aura/env.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/class_property.h"
 #include "ui/events/event.h"
-#include "ui/events/event_utils.h"
-#include "ui/gfx/geometry/point_conversions.h"
-#include "ui/views/widget/widget.h"
 
 namespace {
 
@@ -69,45 +62,11 @@ void TouchUMA::RecordGestureAction(GestureActionType action) {
 
 void TouchUMA::RecordTouchEvent(aura::Window* target,
                                 const ui::TouchEvent& event) {
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "Ash.TouchRadius",
-      static_cast<int>(std::max(event.pointer_details().radius_x,
-                                event.pointer_details().radius_y)),
-      1, 500, 100);
-
   WindowTouchDetails* details = target->GetProperty(kWindowTouchDetails);
   if (!details) {
     details = new WindowTouchDetails;
     target->SetProperty(kWindowTouchDetails, details);
   }
-
-  // Record the location of the touch points.
-  const int kBucketCountForLocation = 100;
-  const gfx::Rect bounds = target->GetRootWindow()->bounds();
-  const int bucket_size_x =
-      std::max(1, bounds.width() / kBucketCountForLocation);
-  const int bucket_size_y =
-      std::max(1, bounds.height() / kBucketCountForLocation);
-
-  gfx::Point position = event.root_location();
-
-  // Prefer raw event location (when available) over calibrated location.
-  if (event.HasNativeEvent()) {
-    position =
-        gfx::ToFlooredPoint(ui::EventLocationFromNative(event.native_event()));
-    position = gfx::ScaleToFlooredPoint(
-        position, 1.f / target->layer()->device_scale_factor());
-  }
-
-  position.set_x(std::min(bounds.width() - 1, std::max(0, position.x())));
-  position.set_y(std::min(bounds.height() - 1, std::max(0, position.y())));
-
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "Ash.TouchPositionX", position.x() / bucket_size_x, 1,
-      kBucketCountForLocation, kBucketCountForLocation + 1);
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "Ash.TouchPositionY", position.y() / bucket_size_y, 1,
-      kBucketCountForLocation, kBucketCountForLocation + 1);
 
   if (event.type() == ui::ET_TOUCH_PRESSED) {
     base::RecordAction(base::UserMetricsAction("Touchscreen_Down"));
@@ -164,46 +123,6 @@ GestureActionType TouchUMA::FindGestureActionType(
       return GESTURE_WEBPAGE_SCROLL;
     if (event.type() == ui::ET_GESTURE_TAP)
       return GESTURE_WEBPAGE_TAP;
-    return GESTURE_UNKNOWN;
-  }
-
-  views::Widget* widget = views::Widget::GetWidgetForNativeView(window);
-  if (!widget)
-    return GESTURE_UNKNOWN;
-
-  // |widget| may be in the process of destroying if it has ownership
-  // views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET and |event| was
-  // dispatched as part of gesture state cleanup. In this case the RootView
-  // of |widget| may no longer exist, so check before calling into any
-  // RootView methods.
-  if (!widget->GetRootView())
-    return GESTURE_UNKNOWN;
-
-  views::View* view =
-      widget->GetRootView()->GetEventHandlerForPoint(event.location());
-  if (!view)
-    return GESTURE_UNKNOWN;
-
-  name = view->GetClassName();
-
-  const char kTabStrip[] = "TabStrip";
-  const char kTab[] = "BrowserTab";
-  if (name == kTabStrip || name == kTab) {
-    if (event.type() == ui::ET_GESTURE_SCROLL_BEGIN)
-      return GESTURE_TABSTRIP_SCROLL;
-    if (event.type() == ui::ET_GESTURE_PINCH_BEGIN)
-      return GESTURE_TABSTRIP_PINCH;
-    if (event.type() == ui::ET_GESTURE_TAP)
-      return GESTURE_TABSTRIP_TAP;
-    return GESTURE_UNKNOWN;
-  }
-
-  const char kOmnibox[] = "BrowserOmniboxViewViews";
-  if (name == kOmnibox) {
-    if (event.type() == ui::ET_GESTURE_SCROLL_BEGIN)
-      return GESTURE_OMNIBOX_SCROLL;
-    if (event.type() == ui::ET_GESTURE_PINCH_BEGIN)
-      return GESTURE_OMNIBOX_PINCH;
     return GESTURE_UNKNOWN;
   }
 

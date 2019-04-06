@@ -9,7 +9,8 @@ namespace resource_coordinator {
 ProcessResourceCoordinator::ProcessResourceCoordinator(
     service_manager::Connector* connector)
     : ResourceCoordinatorInterface(), weak_ptr_factory_(this) {
-  CoordinationUnitID new_cu_id(CoordinationUnitType::kProcess, std::string());
+  CoordinationUnitID new_cu_id(CoordinationUnitType::kProcess,
+                               CoordinationUnitID::RANDOM_ID);
   ResourceCoordinatorInterface::ConnectToService(connector, new_cu_id);
 }
 
@@ -40,8 +41,9 @@ void ProcessResourceCoordinator::AddFrame(
     return;
   // We could keep the ID around ourselves, but this hop ensures that the child
   // has been created on the service-side.
-  frame.service()->GetID(base::Bind(&ProcessResourceCoordinator::AddFrameByID,
-                                    weak_ptr_factory_.GetWeakPtr()));
+  frame.service()->GetID(
+      base::BindOnce(&ProcessResourceCoordinator::AddFrameByID,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ProcessResourceCoordinator::RemoveFrame(
@@ -50,8 +52,8 @@ void ProcessResourceCoordinator::RemoveFrame(
   if (!service_)
     return;
   frame.service()->GetID(
-      base::Bind(&ProcessResourceCoordinator::RemoveFrameByID,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&ProcessResourceCoordinator::RemoveFrameByID,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ProcessResourceCoordinator::ConnectToService(

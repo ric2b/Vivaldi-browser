@@ -5,10 +5,10 @@
 #include "extensions/renderer/bindings/api_bindings_system.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "extensions/renderer/bindings/api_binding_hooks.h"
 #include "extensions/renderer/bindings/api_binding_util.h"
+#include "extensions/renderer/bindings/api_response_validator.h"
 
 namespace extensions {
 
@@ -16,7 +16,8 @@ APIBindingsSystem::APIBindingsSystem(
     const GetAPISchemaMethod& get_api_schema,
     const BindingAccessChecker::AvailabilityCallback& is_available,
     const APIRequestHandler::SendRequestMethod& send_request,
-    const APIEventHandler::EventListenersChangedMethod& event_listeners_changed,
+    const APIEventListeners::ListenersUpdated& event_listeners_changed,
+    const APIEventHandler::ContextOwnerIdGetter& context_owner_getter,
     const APIBinding::OnSilentRequest& on_silent_request,
     const binding::AddConsoleError& add_console_error,
     APILastError last_error)
@@ -26,10 +27,17 @@ APIBindingsSystem::APIBindingsSystem(
       request_handler_(send_request,
                        std::move(last_error),
                        &exception_handler_),
-      event_handler_(event_listeners_changed, &exception_handler_),
+      event_handler_(event_listeners_changed,
+                     context_owner_getter,
+                     &exception_handler_),
       access_checker_(is_available),
       get_api_schema_(get_api_schema),
-      on_silent_request_(on_silent_request) {}
+      on_silent_request_(on_silent_request) {
+  if (binding::IsResponseValidationEnabled()) {
+    request_handler_.SetResponseValidator(
+        std::make_unique<APIResponseValidator>(&type_reference_map_));
+  }
+}
 
 APIBindingsSystem::~APIBindingsSystem() {}
 

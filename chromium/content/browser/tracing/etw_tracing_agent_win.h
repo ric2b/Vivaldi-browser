@@ -15,8 +15,8 @@
 #include "base/values.h"
 #include "base/win/event_trace_consumer.h"
 #include "base/win/event_trace_controller.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "services/resource_coordinator/public/interfaces/tracing/tracing.mojom.h"
+#include "services/tracing/public/cpp/base_agent.h"
+#include "services/tracing/public/mojom/tracing.mojom.h"
 
 namespace service_manager {
 class Connector;
@@ -25,7 +25,7 @@ class Connector;
 namespace content {
 
 class EtwTracingAgent : public base::win::EtwTraceConsumerBase<EtwTracingAgent>,
-                        public tracing::mojom::Agent {
+                        public tracing::BaseAgent {
  public:
   explicit EtwTracingAgent(service_manager::Connector* connector);
 
@@ -43,14 +43,8 @@ class EtwTracingAgent : public base::win::EtwTraceConsumerBase<EtwTracingAgent>,
   // tracing::mojom::Agent. Called by Mojo internals on the UI thread.
   void StartTracing(const std::string& config,
                     base::TimeTicks coordinator_time,
-                    const Agent::StartTracingCallback& callback) override;
+                    Agent::StartTracingCallback callback) override;
   void StopAndFlush(tracing::mojom::RecorderPtr recorder) override;
-  void RequestClockSyncMarker(
-      const std::string& sync_id,
-      const Agent::RequestClockSyncMarkerCallback& callback) override;
-  void GetCategories(const Agent::GetCategoriesCallback& callback) override;
-  void RequestBufferStatus(
-      const Agent::RequestBufferStatusCallback& callback) override;
 
   // Static override of EtwTraceConsumerBase::ProcessEvent.
   // @param event the raw ETW event to process.
@@ -70,7 +64,6 @@ class EtwTracingAgent : public base::win::EtwTraceConsumerBase<EtwTracingAgent>,
   void TraceAndConsumeOnThread();
   void FlushOnThread();
 
-  mojo::Binding<tracing::mojom::Agent> binding_;
   std::unique_ptr<base::ListValue> events_;
   base::Thread thread_;
   TRACEHANDLE session_handle_;

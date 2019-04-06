@@ -15,15 +15,15 @@
 #include "base/time/time.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/test/base/testing_profile.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_ui.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using content::DownloadItem;
-using content::MockDownloadItem;
+using download::DownloadItem;
+using download::MockDownloadItem;
 using DownloadVector = std::vector<DownloadItem*>;
 using testing::_;
 using testing::Return;
@@ -82,7 +82,7 @@ class TestDownloadsListTracker : public DownloadsListTracker {
 
  protected:
   std::unique_ptr<base::DictionaryValue> CreateDownloadItemValue(
-      content::DownloadItem* item) const override {
+      download::DownloadItem* item) const override {
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
     CHECK_LE(item->GetId(), static_cast<uint64_t>(INT_MAX));
     dict->SetInteger("id", item->GetId());

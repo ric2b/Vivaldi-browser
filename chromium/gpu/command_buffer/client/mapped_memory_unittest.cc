@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "gpu/command_buffer/client/cmd_buffer_helper.h"
@@ -76,9 +75,12 @@ class MemoryChunkTest : public MappedMemoryTestBase {
   static const int32_t kShmId = 123;
   void SetUp() override {
     MappedMemoryTestBase::SetUp();
-    std::unique_ptr<base::SharedMemory> shared_memory(new base::SharedMemory());
-    shared_memory->CreateAndMapAnonymous(kBufferSize);
-    buffer_ = MakeBufferFromSharedMemory(std::move(shared_memory), kBufferSize);
+    base::UnsafeSharedMemoryRegion shared_memory_region =
+        base::UnsafeSharedMemoryRegion::Create(kBufferSize);
+    base::WritableSharedMemoryMapping shared_memory_mapping =
+        shared_memory_region.Map();
+    buffer_ = MakeBufferFromSharedMemory(std::move(shared_memory_region),
+                                         std::move(shared_memory_mapping));
     chunk_.reset(new MemoryChunk(kShmId, buffer_, helper_.get()));
   }
 

@@ -5,7 +5,9 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_FRAME_CONNECTOR_DELEGATE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_FRAME_CONNECTOR_DELEGATE_H_
 
+#include "cc/input/touch_action.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/host/hit_test/hit_test_query.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/public/common/input_event_ack_state.h"
@@ -18,18 +20,23 @@
 
 namespace blink {
 class WebGestureEvent;
+struct WebIntrinsicSizingInfo;
+}
+
+namespace cc {
+class RenderFrameMetadata;
 }
 
 namespace viz {
 class SurfaceId;
 class SurfaceInfo;
-struct SurfaceSequence;
 }  // namespace viz
 
 namespace content {
 class RenderWidgetHostViewBase;
 class RenderWidgetHostViewChildFrame;
 class WebCursor;
+struct FrameVisualProperties;
 
 //
 // FrameConnectorDelegate
@@ -64,38 +71,42 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   // Provide the SurfaceInfo to the embedder, which becomes a reference to the
   // current view's Surface that is included in higher-level compositor
   // frames.
-  virtual void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
-                                    const viz::SurfaceSequence& sequence) {}
+  virtual void FirstSurfaceActivation(const viz::SurfaceInfo& surface_info) {}
+
+  // Sends the given intrinsic sizing information from a sub-frame to
+  // its corresponding remote frame in the parent frame's renderer.
+  virtual void SendIntrinsicSizingInfoToParent(
+      const blink::WebIntrinsicSizingInfo&) {}
 
   // Sends new resize parameters to the sub-frame's renderer.
-  void UpdateResizeParams(const gfx::Rect& screen_space_rect,
-                          const gfx::Size& local_frame_size,
-                          const ScreenInfo& screen_info,
-                          uint64_t sequence_number,
-                          const viz::SurfaceId& surface_id);
+  void SynchronizeVisualProperties(const viz::SurfaceId& surface_id,
+                                   const FrameVisualProperties& resize_params);
 
   // Return the size of the CompositorFrame to use in the child renderer.
-  const gfx::Size& local_frame_size_in_pixels() {
+  const gfx::Size& local_frame_size_in_pixels() const {
     return local_frame_size_in_pixels_;
   }
 
   // Return the size of the CompositorFrame to use in the child renderer in DIP.
   // This is used to set the layout size of the child renderer.
-  const gfx::Size& local_frame_size_in_dip() {
+  const gfx::Size& local_frame_size_in_dip() const {
     return local_frame_size_in_dip_;
   }
 
   // Return the rect in DIP that the RenderWidgetHostViewChildFrame's content
   // will render into.
-  const gfx::Rect& screen_space_rect_in_dip() {
+  const gfx::Rect& screen_space_rect_in_dip() const {
     return screen_space_rect_in_dip_;
   }
 
   // Return the rect in pixels that the RenderWidgetHostViewChildFrame's content
   // will render into.
-  const gfx::Rect& screen_space_rect_in_pixels() {
+  const gfx::Rect& screen_space_rect_in_pixels() const {
     return screen_space_rect_in_pixels_;
   }
+
+  // Return the latest capture sequence number of this delegate.
+  uint32_t capture_sequence_number() const { return capture_sequence_number_; }
 
   // Request that the platform change the mouse cursor when the mouse is
   // positioned over this view's content.
@@ -111,12 +122,12 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   // Given a point in the coordinate space of a different Surface, transform
   // it into the coordinate space for this view (corresponding to
   // local_surface_id).
-  // TransformPointToLocalCoordSpace() can only transform points between
+  // TransformPointToLocalCoordSpaceLegacy() can only transform points between
   // surfaces where one is embedded (not necessarily directly) within the
   // other, and will return false if this is not the case. For points that can
   // be in sibling surfaces, they must first be converted to the root
   // surface's coordinate space.
-  virtual bool TransformPointToLocalCoordSpace(
+  virtual bool TransformPointToLocalCoordSpaceLegacy(
       const gfx::PointF& point,
       const viz::SurfaceId& original_surface,
       const viz::SurfaceId& local_surface_id,
@@ -130,11 +141,17 @@ class CONTENT_EXPORT FrameConnectorDelegate {
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
       const viz::SurfaceId& local_surface_id,
-      gfx::PointF* transformed_point);
+      gfx::PointF* transformed_point,
+      viz::EventSource source = viz::EventSource::ANY);
 
   // Pass acked touch events to the root view for gesture processing.
   virtual void ForwardProcessAckedTouchEvent(
       const TouchEventWithLatencyInfo& touch,
+      InputEventAckState ack_result) {}
+
+  // Pass acked touchpad pinch gesture events to the root view for processing.
+  virtual void ForwardAckedTouchpadPinchGestureEvent(
+      const blink::WebGestureEvent& event,
       InputEventAckState ack_result) {}
 
   // Gesture events with unused scroll deltas must be bubbled to ancestors
@@ -156,8 +173,14 @@ class CONTENT_EXPORT FrameConnectorDelegate {
 
   // Returns a rect that represents the intersection of the current view's
   // content bounds with the top-level browser viewport.
-  const gfx::Rect& ViewportIntersection() const {
+  const gfx::Rect& viewport_intersection_rect() const {
     return viewport_intersection_rect_;
+  }
+
+  // Returns a rect in physical pixels that indicates the area of the current
+  // view's content bounds that should be rastered by the compositor.
+  const gfx::Rect& compositor_visible_rect() const {
+    return compositor_visible_rect_;
   }
 
   // Returns the viz::LocalSurfaceId propagated from the parent to be used by
@@ -174,10 +197,22 @@ class CONTENT_EXPORT FrameConnectorDelegate {
     screen_info_ = screen_info;
   }
 
+  // Informs the parent the child will enter auto-resize mode, automatically
+  // resizing itself to the provided |min_size| and |max_size| constraints.
+  virtual void EnableAutoResize(const gfx::Size& min_size,
+                                const gfx::Size& max_size);
+
+  // Turns off auto-resize mode.
+  virtual void DisableAutoResize();
+
   // Determines whether the current view's content is inert, either because
   // an HTMLDialogElement is being modally displayed in a higher-level frame,
   // or because the inert attribute has been specified.
   virtual bool IsInert() const;
+
+  // Returns the inherited effective touch action property that should be
+  // applied to any nested child RWHVCFs inside the caller RWHVCF.
+  virtual cc::TouchAction InheritedEffectiveTouchAction() const;
 
   // Determines whether the RenderWidgetHostViewChildFrame is hidden due to
   // a higher-level embedder being hidden. This is distinct from the
@@ -210,10 +245,12 @@ class CONTENT_EXPORT FrameConnectorDelegate {
       ui::mojom::WindowTreeClientPtr window_tree_client) {}
 #endif
 
-  // Called by RenderWidgetHostViewChildFrame when the child frame has resized
-  // to |new_size| because auto-resize is enabled.
-  virtual void ResizeDueToAutoResize(const gfx::Size& new_size,
-                                     uint64_t sequence_number) {}
+  // Called by RenderWidgetHostViewChildFrame when the child frame has updated
+  // its visual properties and its viz::LocalSurfaceId has changed.
+  virtual void DidUpdateVisualProperties(
+      const cc::RenderFrameMetadata& metadata) {}
+
+  bool has_size() const { return has_size_; }
 
  protected:
   explicit FrameConnectorDelegate(bool use_zoom_for_device_scale_factor);
@@ -227,14 +264,23 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   // ViewportIntersection() can return a reference.
   gfx::Rect viewport_intersection_rect_;
 
+  gfx::Rect compositor_visible_rect_;
+
   ScreenInfo screen_info_;
   gfx::Size local_frame_size_in_dip_;
   gfx::Size local_frame_size_in_pixels_;
   gfx::Rect screen_space_rect_in_dip_;
   gfx::Rect screen_space_rect_in_pixels_;
+
   viz::LocalSurfaceId local_surface_id_;
 
+  bool has_size_ = false;
   const bool use_zoom_for_device_scale_factor_;
+
+  uint32_t capture_sequence_number_ = 0u;
+
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewChildFrameZoomForDSFTest,
+                           CompositorViewportPixelSize);
 };
 
 }  // namespace content

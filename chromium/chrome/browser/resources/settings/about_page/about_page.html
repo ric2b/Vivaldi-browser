@@ -4,6 +4,7 @@
 <link rel="import" href="../i18n_setup.html">
 <link rel="import" href="../icons.html">
 <link rel="import" href="../lifetime_browser_proxy.html">
+<link rel="import" href="../prefs/prefs.html">
 <link rel="import" href="../route.html">
 <link rel="import" href="../settings_page/main_page_behavior.html">
 <link rel="import" href="../settings_page/settings_animated_pages.html">
@@ -64,12 +65,16 @@
         fill: var(--google-blue-500);
       }
 
-      iron-icon[icon='settings:error'] {
+      iron-icon[icon='cr:error'] {
         fill: var(--google-red-700);
       }
 
       .settings-box .start {
         overflow-x: auto;
+      }
+
+      paper-button {
+        white-space: nowrap;
       }
 
       #regulatoryInfo img {
@@ -78,7 +83,7 @@
 
 <if expr="_google_chrome and is_macosx">
       #promoteUpdater[disabled] {
-        @apply(--cr-secondary-text);
+        @apply --cr-secondary-text;
       }
 </if>
     </style>
@@ -88,7 +93,7 @@
             focus-config="[[focusConfig_]]">
           <neon-animatable route-path="default">
             <div class="settings-box two-line">
-              <img id="product-logo" on-tap="onProductLogoTap_"
+              <img id="product-logo" on-click="onProductLogoTap_"
                   srcset="chrome://theme/current-channel-logo@1x 1x,
                           chrome://theme/current-channel-logo@2x 2x"
                   alt="$i18n{aboutProductLogoAlt}">
@@ -153,18 +158,18 @@
               <div class="separator" hidden="[[!showButtonContainer_]]"></div>
               <span id="buttonContainer" hidden="[[!showButtonContainer_]]">
                 <paper-button id="relaunch" class="secondary-button"
-                    hidden="[[!showRelaunch_]]" on-tap="onRelaunchTap_">
+                    hidden="[[!showRelaunch_]]" on-click="onRelaunchTap_">
                   $i18n{aboutRelaunch}
                 </paper-button>
 <if expr="chromeos">
                 <paper-button id="relaunchAndPowerwash" class="secondary-button"
                     hidden="[[!showRelaunchAndPowerwash_]]"
-                    on-tap="onRelaunchAndPowerwashTap_">
+                    on-click="onRelaunchAndPowerwashTap_">
                   $i18n{aboutRelaunchAndPowerwash}
                 </paper-button>
                 <paper-button id="checkForUpdates" class="secondary-button"
                     hidden="[[!showCheckUpdates_]]"
-                    on-tap="onCheckUpdatesTap_">
+                    on-click="onCheckUpdatesTap_">
                   $i18n{aboutCheckForUpdates}
                 </paper-button>
 </if>
@@ -173,20 +178,20 @@
 <if expr="chromeos">
             <div id="aboutTPMFirmwareUpdate" class="settings-box two-line"
                 hidden$="[[!showTPMFirmwareUpdateLineItem_]]"
-                on-tap="onTPMFirmwareUpdateTap_" actionable>
+                on-click="onTPMFirmwareUpdateTap_" actionable>
               <div class="start">
                 <div>$i18n{aboutTPMFirmwareUpdateTitle}</div>
                 <div class="secondary">
                   $i18n{aboutTPMFirmwareUpdateDescription}
                   <a href="$i18n{aboutTPMFirmwareUpdateLearnMoreURL}"
-                      target="_blank" on-tap="onLearnMoreTap_">
+                      target="_blank" on-click="onLearnMoreTap_">
                     $i18n{learnMore}
                   </a>
                 </div>
               </div>
-              <button class="subpage-arrow" is="paper-icon-button-light"
-                  aria-labelledby="aboutTPMFirmwareUpdate">
-              </button>
+              <paper-icon-button-light class="subpage-arrow">
+                <button aria-labelledby="aboutTPMFirmwareUpdate"></button>
+              </paper-icon-button-light>
             </div>
 </if>
 <if expr="_google_chrome and is_macosx">
@@ -194,44 +199,49 @@
               <div id="promoteUpdater" class="settings-box"
                   disabled$="[[promoteUpdaterStatus_.disabled]]"
                   actionable$="[[promoteUpdaterStatus_.actionable]]"
-                  on-tap="onPromoteUpdaterTap_">
+                  on-click="onPromoteUpdaterTap_">
                 <div class="start">
                   [[promoteUpdaterStatus_.text]]
                   <a href="https://support.google.com/chrome/answer/95414"
                       target="_blank" id="updaterLearnMore"
-                      on-tap="onLearnMoreTap_">
+                      on-click="onLearnMoreTap_">
                     $i18n{learnMore}
                   </a>
                 </div>
-                <button class="subpage-arrow" is="paper-icon-button-light"
-                    disabled="[[promoteUpdaterStatus_.disabled]]"
-                    hidden="[[!promoteUpdaterStatus_.actionable]]"
-                    aria-label$="[[promoteUpdaterStatus_.text]]">
-                </button>
+                <paper-icon-button-light class="subpage-arrow"
+                    hidden="[[!promoteUpdaterStatus_.actionable]]">
+                  <button disabled="[[promoteUpdaterStatus_.disabled]]"
+                      aria-label$="[[promoteUpdaterStatus_.text]]">
+                  </button>
+                </paper-icon-button-light>
               </div>
             </template>
 </if>
-            <div id="help" class="settings-box" on-tap="onHelpTap_" actionable>
+            <div id="help" class="settings-box" on-click="onHelpTap_"
+                actionable>
               <div class="start">$i18n{aboutGetHelpUsingChrome}</div>
-              <button class="icon-external" is="paper-icon-button-light"
-                  aria-labelledby="help"></button>
+              <paper-icon-button-light class="icon-external">
+                <button aria-labelledby="help"></button>
+              </paper-icon-button-light>
             </div>
 <if expr="_google_chrome">
             <div id="reportIssue" class="settings-box" actionable
-                on-tap="onReportIssueTap_">
+                on-click="onReportIssueTap_">
               <div class="start">$i18n{aboutReportAnIssue}</div>
-              <button class="subpage-arrow" is="paper-icon-button-light"
-                  aria-labelledby="reportIssue"></button>
+              <paper-icon-button-light class="subpage-arrow">
+                <button aria-labelledby="reportIssue"></button>
+              </paper-icon-button-light>
             </div>
 </if>
 <if expr="chromeos">
-            <div class="settings-box" on-tap="onDetailedBuildInfoTap_"
+            <div class="settings-box" on-click="onDetailedBuildInfoTap_"
                 actionable>
               <div class="start">$i18n{aboutDetailedBuildInfo}</div>
-              <button id="detailed-build-info-trigger" class="subpage-arrow"
-                  is="paper-icon-button-light"
-                  aria-label="$i18n{aboutDetailedBuildInfo}">
-              </button>
+              <paper-icon-button-light class="subpage-arrow">
+                <button id="detailed-build-info-trigger"
+                    aria-label="$i18n{aboutDetailedBuildInfo}">
+                </button>
+              </paper-icon-button-light>
             </div>
 </if>
           </neon-animatable>
@@ -255,7 +265,10 @@
           <div class="info-section">
             <div class="secondary">$i18nRaw{aboutProductLicense}</div>
 <if expr="chromeos">
-            <div class="secondary">$i18nRaw{aboutProductOsLicense}</div>
+            <div class="secondary"
+                inner-h-t-m-l="[[getAboutProductOsLicense_(
+                    showCrostiniLicense_)]]">
+            </div>
 </if>
           </div>
 <if expr="_google_chrome">

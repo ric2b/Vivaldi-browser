@@ -10,7 +10,6 @@ import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 import static org.chromium.chrome.browser.suggestions.SuggestionsSheetVisibilityChangeObserverTest.TestVisibilityChangeObserver.Event.Hidden;
 import static org.chromium.chrome.browser.suggestions.SuggestionsSheetVisibilityChangeObserverTest.TestVisibilityChangeObserver.Event.InitialReveal;
 import static org.chromium.chrome.browser.suggestions.SuggestionsSheetVisibilityChangeObserverTest.TestVisibilityChangeObserver.Event.StateChange;
-import static org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContentController.TYPE_SUGGESTIONS;
 
 import android.support.test.InstrumentationRegistry;
 import android.support.test.espresso.Espresso;
@@ -24,10 +23,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ntp.NtpUiCaptureTestData;
@@ -43,6 +41,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * Instrumentation tests for {@link SuggestionsSheetVisibilityChangeObserver}.
  */
+@DisabledTest(message = "https://crbug.com/805160")
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
 public class SuggestionsSheetVisibilityChangeObserverTest {
@@ -62,7 +61,7 @@ public class SuggestionsSheetVisibilityChangeObserverTest {
 
     @Before
     public void setUp() throws InterruptedException {
-        mActivityRule.startMainActivityOnBottomSheet(BottomSheet.SHEET_STATE_PEEK);
+        mActivityRule.startMainActivityOnBottomSheet(BottomSheet.SheetState.PEEK);
         // The home sheet should not be initialised.
         mEventReporter.surfaceOpenedHelper.verifyCallCount();
 
@@ -75,12 +74,12 @@ public class SuggestionsSheetVisibilityChangeObserverTest {
     @MediumTest
     public void testHomeSheetVisibilityOnWebPage() {
         // Pull sheet to half. We use the animated variants to be closer to user triggered events.
-        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_HALF, true);
+        mActivityRule.setSheetState(BottomSheet.SheetState.HALF, true);
         mObserver.expectEvents(InitialReveal, StateChange);
         mEventReporter.surfaceOpenedHelper.waitForCallback();
 
         // Pull sheet to full.
-        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_FULL, true);
+        mActivityRule.setSheetState(BottomSheet.SheetState.FULL, true);
         mObserver.expectEvents(StateChange);
 
         // close
@@ -96,14 +95,14 @@ public class SuggestionsSheetVisibilityChangeObserverTest {
         waitForWindowUpdates();
 
         mObserver.expectEvents();
-        assertEquals(BottomSheet.SHEET_STATE_FULL, mActivityRule.getBottomSheet().getSheetState());
+        assertEquals(BottomSheet.SheetState.FULL, mActivityRule.getBottomSheet().getSheetState());
 
         // Back closes the bottom sheet.
         Espresso.pressBack();
         waitForWindowUpdates();
 
         mObserver.expectEvents();
-        assertEquals(BottomSheet.SHEET_STATE_PEEK, mActivityRule.getBottomSheet().getSheetState());
+        assertEquals(BottomSheet.SheetState.PEEK, mActivityRule.getBottomSheet().getSheetState());
 
         mEventReporter.surfaceOpenedHelper.verifyCallCount();
     }
@@ -116,54 +115,17 @@ public class SuggestionsSheetVisibilityChangeObserverTest {
         waitForWindowUpdates();
 
         mObserver.expectEvents();
-        assertEquals(BottomSheet.SHEET_STATE_FULL, mActivityRule.getBottomSheet().getSheetState());
+        assertEquals(BottomSheet.SheetState.FULL, mActivityRule.getBottomSheet().getSheetState());
 
         // Changing the state of the sheet closes the omnibox suggestions and shows the home sheet.
-        mActivityRule.setSheetState(BottomSheet.SHEET_STATE_HALF, true);
+        mActivityRule.setSheetState(BottomSheet.SheetState.HALF, true);
         mObserver.expectEvents(InitialReveal, StateChange);
         mEventReporter.surfaceOpenedHelper.waitForCallback();
 
         // Back closes the bottom sheet.
         Espresso.pressBack();
         mObserver.expectEvents(Hidden, StateChange, StateChange);
-        assertEquals(BottomSheet.SHEET_STATE_PEEK, mActivityRule.getBottomSheet().getSheetState());
-
-        mEventReporter.surfaceOpenedHelper.verifyCallCount();
-    }
-
-    @Test
-    @MediumTest
-    @RetryOnFailure
-    public void testHomeSheetVisibilityOnNewTab() {
-        // Show the new tab view
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> mActivityRule.getBottomSheet().getNewTabController().displayNewTabUi(false));
-        mObserver.expectEvents(InitialReveal, StateChange);
-        mEventReporter.surfaceOpenedHelper.waitForCallback();
-        assertEquals(BottomSheet.SHEET_STATE_FULL, mActivityRule.getBottomSheet().getSheetState());
-
-        // Tap the omnibox. The bottom sheet should still be full, with the keyboard coming up.
-        Espresso.onView(ViewMatchers.withId(R.id.url_bar)).perform(ViewActions.click());
-        assertEquals(BottomSheet.SHEET_STATE_FULL, mActivityRule.getBottomSheet().getSheetState());
-
-        // Type in the omnibox, the omnibox suggestion list should come hide the home sheet.
-        Espresso.onView(ViewMatchers.withId(R.id.url_bar)).perform(ViewActions.typeText("g"));
-        mObserver.expectEvents(Hidden, StateChange);
-        assertEquals(BottomSheet.SHEET_STATE_FULL, mActivityRule.getBottomSheet().getSheetState());
-
-        // Back hides the omnibox suggestions.
-        Espresso.pressBack();
-        waitForWindowUpdates();
-
-        mObserver.expectEvents(InitialReveal, StateChange);
-        assertEquals(BottomSheet.SHEET_STATE_FULL, mActivityRule.getBottomSheet().getSheetState());
-        mEventReporter.surfaceOpenedHelper.waitForCallback();
-        mEventReporter.surfaceOpenedHelper.verifyCallCount();
-
-        // Back again closes the bottom sheet
-        Espresso.pressBack();
-        mObserver.expectEvents(Hidden, StateChange, StateChange);
-        assertEquals(BottomSheet.SHEET_STATE_PEEK, mActivityRule.getBottomSheet().getSheetState());
+        assertEquals(BottomSheet.SheetState.PEEK, mActivityRule.getBottomSheet().getSheetState());
 
         mEventReporter.surfaceOpenedHelper.verifyCallCount();
     }
@@ -236,7 +198,7 @@ public class SuggestionsSheetVisibilityChangeObserverTest {
         protected boolean isObservedContentCurrent() {
             BottomSheet.BottomSheetContent currentSheet =
                     mActivity.getBottomSheet().getCurrentSheetContent();
-            return currentSheet != null && currentSheet.getType() == TYPE_SUGGESTIONS;
+            return currentSheet != null;
         }
     }
 

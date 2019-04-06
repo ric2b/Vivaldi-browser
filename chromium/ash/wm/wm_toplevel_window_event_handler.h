@@ -50,7 +50,7 @@ class ASH_EXPORT WmToplevelWindowEventHandler
     // The underlying window was destroyed while the drag is in process.
     WINDOW_DESTROYED
   };
-  using EndClosure = base::Callback<void(DragResult)>;
+  using EndClosure = base::OnceCallback<void(DragResult)>;
 
   WmToplevelWindowEventHandler();
   ~WmToplevelWindowEventHandler() override;
@@ -60,13 +60,13 @@ class ASH_EXPORT WmToplevelWindowEventHandler
   void OnGestureEvent(ui::GestureEvent* event, aura::Window* target);
 
   // Attempts to start a drag if one is not already in progress. Returns true if
-  // successful. |end_closure| is run when the drag completes. |end_closure| is
-  // not run if the drag does not start.
+  // successful. |end_closure| is run when the drag completes, including if the
+  // drag is not started.
   bool AttemptToStartDrag(aura::Window* window,
                           const gfx::Point& point_in_parent,
                           int window_component,
                           ::wm::WindowMoveSource source,
-                          const EndClosure& end_closure);
+                          EndClosure end_closure);
 
   // If there is a drag in progress it is reverted, otherwise does nothing.
   void RevertDrag();
@@ -74,11 +74,23 @@ class ASH_EXPORT WmToplevelWindowEventHandler
   // Returns true if there is a drag in progress.
   bool is_drag_in_progress() const { return window_resizer_.get() != nullptr; }
 
-  // Returns the window that is currently handling gesture events.
+  // Returns the window that is currently handling gesture events and its
+  // location.
   aura::Window* gesture_target() { return gesture_target_; }
+  const gfx::Point& event_location_in_gesture_target() {
+    return event_location_in_gesture_target_;
+  }
 
  private:
   class ScopedWindowResizer;
+
+  // Called from AttemptToStartDrag() to create the WindowResizer. This returns
+  // true on success, false if there is something preventing the resize from
+  // starting.
+  bool PrepareForDrag(aura::Window* window,
+                      const gfx::Point& point_in_parent,
+                      int window_component,
+                      ::wm::WindowMoveSource source);
 
   // Completes or reverts the drag if one is in progress. Returns true if a
   // drag was completed or reverted.
@@ -113,8 +125,9 @@ class ASH_EXPORT WmToplevelWindowEventHandler
   // aura::WindowObserver:
   void OnWindowDestroying(aura::Window* window) override;
 
-  // Update the gesture target.
-  void UpdateGestureTarget(aura::Window* window);
+  // Update the gesture target and event location.
+  void UpdateGestureTarget(aura::Window* window,
+                           const gfx::Point& location = gfx::Point());
 
   // The hittest result for the first finger at the time that it initially
   // touched the screen. |first_finger_hittest_| is one of ui/base/hit_test.h
@@ -133,6 +146,7 @@ class ASH_EXPORT WmToplevelWindowEventHandler
   bool in_gesture_drag_ = false;
 
   aura::Window* gesture_target_ = nullptr;
+  gfx::Point event_location_in_gesture_target_;
 
   std::unique_ptr<ScopedWindowResizer> window_resizer_;
 

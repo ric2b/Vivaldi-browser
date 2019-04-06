@@ -8,7 +8,6 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.ParcelFileDescriptor;
 import android.support.test.filters.LargeTest;
 
@@ -18,6 +17,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -121,7 +121,7 @@ public class ShareIntentTest {
     @Test
     @LargeTest
     @RetryOnFailure
-    public void testShareIntent() throws ExecutionException {
+    public void testShareIntent() throws ExecutionException, InterruptedException {
         MockChromeActivity mockActivity = ThreadUtils.runOnUiThreadBlocking(() -> {
             // Sets a test component as last shared and "shareDirectly" option is set so that
             // the share selector menu is not opened. The start activity is overriden, so the
@@ -136,11 +136,7 @@ public class ShareIntentTest {
         ThreadUtils.runOnUiThreadBlocking(() -> mockActivity.onShareMenuItemSelected(
                     true /* shareDirectly */, false /* isIncognito */));
 
-        try {
-            mockActivity.waitForFileCheck();
-        } catch (InterruptedException e) {
-            assert false : "Test thread was interrupted while trying to wait.";
-        }
+        mockActivity.waitForFileCheck();
 
         ShareHelper.setLastShareComponentName(new ComponentName("", ""), null);
     }

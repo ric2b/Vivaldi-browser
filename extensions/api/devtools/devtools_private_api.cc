@@ -13,6 +13,7 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/url_util.h"
 #include "ui/devtools/devtools_connector.h"
+#include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 
 namespace extensions {
@@ -74,7 +75,7 @@ bool DevtoolsPrivateCloseDevtoolsFunction::RunAsync() {
             window->ForceCloseWindow();
             std::unique_ptr<base::ListValue> args =
                 vivaldi::devtools_private::OnClosed::Create(
-                    SessionTabHelper::IdForTab(contents));
+                    SessionTabHelper::IdForTab(contents).id());
 
             DevtoolsConnectorAPI::BroadcastEvent(
               vivaldi::devtools_private::OnClosed::kEventName, std::move(args),
@@ -128,7 +129,9 @@ bool DevtoolsPrivateToggleDevtoolsFunction::RunAsync() {
     // inspect element to get into the code path that leads to a
     // separate window.
     if (::vivaldi::IsVivaldiApp(host)) {
-      DevToolsWindow::InspectElement(current_tab->GetMainFrame(), 0, 0);
+      DevToolsWindow::InspectElement(
+          static_cast<VivaldiBrowserWindow*>(browser->window())
+          ->web_contents()->GetMainFrame(), 0, 0);
     } else {
       DevToolsWindow::OpenDevToolsWindow(current_tab,
                                          DevToolsToggleAction::Show());

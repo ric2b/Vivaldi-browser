@@ -5,6 +5,7 @@
 #include "extensions/renderer/native_extension_bindings_system_test_base.h"
 
 #include "base/strings/stringprintf.h"
+#include "base/test/bind_test_util.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_builder.h"
@@ -14,6 +15,7 @@
 #include "extensions/common/value_builder.h"
 #include "extensions/renderer/bindings/api_binding_test_util.h"
 #include "extensions/renderer/bindings/api_invocation_errors.h"
+#include "extensions/renderer/bindings/api_response_validator.h"
 #include "extensions/renderer/bindings/test_js_runner.h"
 #include "extensions/renderer/message_target.h"
 #include "extensions/renderer/native_extension_bindings_system.h"
@@ -88,10 +90,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, Basic) {
             api_errors::InvocationError(
                 "idle.queryState",
                 "integer detectionIntervalInSeconds, function callback",
-                api_errors::ArgumentError(
-                    "detectionIntervalInSeconds",
-                    api_errors::InvalidType(api_errors::kTypeInteger,
-                                            api_errors::kTypeString))));
+                api_errors::NoMatchingSignature()));
   }
 
   {
@@ -217,7 +216,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, APIObjectsAreEqual) {
 }
 
 // Tests that referencing APIs after the context data is disposed is safe (and
-// returns undefined).
+// returns undefined if not yet instantiated).
 TEST_F(NativeExtensionBindingsSystemUnittest,
        ReferencingAPIAfterDisposingContext) {
   scoped_refptr<Extension> extension =
@@ -240,17 +239,20 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
   EXPECT_TRUE(first_idle_object->IsObject());
 
   DisposeContext(context);
+  {
+    // Despite disposal, the context has been kept alive via the Local above.
+    v8::Context::Scope context_scope(context);
 
-  // Check an API that was instantiated....
-  v8::Local<v8::Value> second_idle_object =
-      V8ValueFromScriptSource(context, "chrome.idle");
-  ASSERT_FALSE(second_idle_object.IsEmpty());
-  EXPECT_TRUE(second_idle_object->IsUndefined());
-  // ... and also one that wasn't.
-  v8::Local<v8::Value> power_object =
-      V8ValueFromScriptSource(context, "chrome.power");
-  ASSERT_FALSE(power_object.IsEmpty());
-  EXPECT_TRUE(power_object->IsUndefined());
+    // Check an API that was instantiated....
+    v8::Local<v8::Value> second_idle_object =
+        V8ValueFromScriptSource(context, "chrome.idle");
+    EXPECT_EQ(first_idle_object, second_idle_object);
+    // ... and also one that wasn't.
+    v8::Local<v8::Value> power_object =
+        V8ValueFromScriptSource(context, "chrome.power");
+    ASSERT_FALSE(power_object.IsEmpty());
+    EXPECT_TRUE(power_object->IsUndefined());
+  }
 }
 
 // Tests that traditional custom bindings can be used with the native bindings
@@ -1064,5 +1066,160 @@ TEST_F(NativeExtensionBindingsSystemUnittest, CanDeleteAPIs) {
       V8ValueFromScriptSource(context, "chrome.runtime");
   EXPECT_TRUE(property->IsUndefined());
 }
+
+// Test that API initialization happens in the owning context.
+TEST_F(NativeExtensionBindingsSystemUnittest, APIIsInitializedByOwningContext) {
+  // Attach custom JS hooks.
+  const char kCustomBinding[] =
+      R"(this.apiBridge = apiBridge;
+         apiBridge.registerCustomHook(() => {});)";
+  source_map()->RegisterModule("idle", kCustomBinding);
+
+  scoped_refptr<Extension> extension =
+      ExtensionBuilder("foo").AddPermission("idle").Build();
+  RegisterExtension(extension);
+
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+
+  ScriptContext* script_context = CreateScriptContext(
+      context, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
+  script_context->set_url(extension->url());
+
+  bindings_system()->UpdateBindingsForContext(script_context);
+
+  {
+    // Create a second, uninitialized context, which will trigger the
+    // construction of chrome.idle in the first context.
+    set_allow_unregistered_contexts(true);
+    v8::Local<v8::Context> second_context = AddContext();
+
+    v8::Local<v8::Function> get_idle = FunctionFromString(
+        second_context, "(function(chrome) { chrome.idle; })");
+    v8::Local<v8::Value> chrome =
+        context->Global()
+            ->Get(context, gin::StringToV8(isolate(), "chrome"))
+            .ToLocalChecked();
+    ASSERT_TRUE(chrome->IsObject());
+
+    v8::Context::Scope context_scope(second_context);
+    v8::Local<v8::Value> args[] = {chrome};
+    RunFunction(get_idle, second_context, arraysize(args), args);
+  }
+
+  // The apiBridge should have been created in the owning (original) context,
+  // even though the initialization was triggered by the second context.
+  v8::Local<v8::Value> api_bridge =
+      context->Global()
+          ->Get(context, gin::StringToV8(isolate(), "apiBridge"))
+          .ToLocalChecked();
+  ASSERT_TRUE(api_bridge->IsObject());
+  EXPECT_EQ(context, api_bridge.As<v8::Object>()->CreationContext());
+}
+
+class ResponseValidationNativeExtensionBindingsSystemUnittest
+    : public NativeExtensionBindingsSystemUnittest,
+      public testing::WithParamInterface<bool> {
+ public:
+  ResponseValidationNativeExtensionBindingsSystemUnittest() = default;
+  ~ResponseValidationNativeExtensionBindingsSystemUnittest() override = default;
+
+  void SetUp() override {
+    response_validation_override_ =
+        binding::SetResponseValidationEnabledForTesting(GetParam());
+    NativeExtensionBindingsSystemUnittest::SetUp();
+  }
+
+  void TearDown() override {
+    NativeExtensionBindingsSystemUnittest::TearDown();
+    response_validation_override_.reset();
+  }
+
+ private:
+  std::unique_ptr<base::AutoReset<bool>> response_validation_override_;
+
+  DISALLOW_COPY_AND_ASSIGN(
+      ResponseValidationNativeExtensionBindingsSystemUnittest);
+};
+
+TEST_P(ResponseValidationNativeExtensionBindingsSystemUnittest,
+       ResponseValidation) {
+  // The APIResponseValidator should only be used if response validation is
+  // enabled. Otherwise, it should be null.
+  EXPECT_EQ(GetParam(), bindings_system()
+                            ->api_system()
+                            ->request_handler()
+                            ->has_response_validator_for_testing());
+
+  base::Optional<std::string> validation_failure_method_name;
+  base::Optional<std::string> validation_failure_error;
+
+  auto on_validation_failure =
+      [&validation_failure_method_name, &validation_failure_error](
+          const std::string& method_name, const std::string& error) {
+        validation_failure_method_name = method_name;
+        validation_failure_error = error;
+      };
+  APIResponseValidator::TestHandler test_validation_failure_handler(
+      base::BindLambdaForTesting(on_validation_failure));
+
+  scoped_refptr<Extension> extension =
+      ExtensionBuilder("foo")
+          .AddPermissions({"idle", "power", "webRequest"})
+          .Build();
+  RegisterExtension(extension);
+
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+
+  ScriptContext* script_context = CreateScriptContext(
+      context, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
+  script_context->set_url(extension->url());
+
+  bindings_system()->UpdateBindingsForContext(script_context);
+
+  const char kCallIdleQueryState[] =
+      "(function() { chrome.idle.queryState(30, function() {}); })";
+
+  v8::Local<v8::Function> call_idle_query_state =
+      FunctionFromString(context, kCallIdleQueryState);
+  RunFunctionOnGlobal(call_idle_query_state, context, 0, nullptr);
+
+  EXPECT_FALSE(validation_failure_method_name);
+  EXPECT_FALSE(validation_failure_error);
+
+  // Respond with a valid value. Validation should not fail.
+  ASSERT_TRUE(has_last_params());
+  bindings_system()->HandleResponse(last_params().request_id, true,
+                                    *ListValueFromString("['active']"),
+                                    std::string());
+
+  EXPECT_FALSE(validation_failure_method_name);
+  EXPECT_FALSE(validation_failure_error);
+
+  // Run the function again, and response with an invalid value.
+  RunFunctionOnGlobal(call_idle_query_state, context, 0, nullptr);
+  ASSERT_TRUE(has_last_params());
+  bindings_system()->HandleResponse(last_params().request_id, true,
+                                    *ListValueFromString("['bad enum']"),
+                                    std::string());
+
+  // Validation should fail iff response validation is enabled.
+  if (GetParam()) {
+    EXPECT_EQ("idle.queryState",
+              validation_failure_method_name.value_or("no value"));
+    EXPECT_EQ(api_errors::ArgumentError(
+                  "newState",
+                  api_errors::InvalidEnumValue({"active", "idle", "locked"})),
+              validation_failure_error.value_or("no value"));
+  } else {
+    EXPECT_FALSE(validation_failure_method_name);
+    EXPECT_FALSE(validation_failure_error);
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(,
+                        ResponseValidationNativeExtensionBindingsSystemUnittest,
+                        testing::Bool());
 
 }  // namespace extensions

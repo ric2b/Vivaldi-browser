@@ -8,7 +8,8 @@
 
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/shape_detection/public/interfaces/constants.mojom.h"
+#include "build/build_config.h"
+#include "services/shape_detection/public/mojom/constants.mojom.h"
 #include "services/shape_detection/shape_detection_service.h"
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
@@ -23,10 +24,12 @@ namespace content {
 
 GpuServiceFactory::GpuServiceFactory(
     const gpu::GpuPreferences& gpu_preferences,
+    const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
     base::WeakPtr<media::MediaGpuChannelManager> media_gpu_channel_manager,
     media::AndroidOverlayMojoFactoryCB android_overlay_factory_cb) {
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
   gpu_preferences_ = gpu_preferences;
+  gpu_workarounds_ = gpu_workarounds;
   task_runner_ = base::ThreadTaskRunnerHandle::Get();
   media_gpu_channel_manager_ = std::move(media_gpu_channel_manager);
   android_overlay_factory_cb_ = std::move(android_overlay_factory_cb);
@@ -45,16 +48,21 @@ void GpuServiceFactory::RegisterServices(ServiceMap* services) {
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
   service_manager::EmbeddedServiceInfo info;
-  info.factory =
-      base::BindRepeating(&media::CreateGpuMediaService, gpu_preferences_,
-                          task_runner_, media_gpu_channel_manager_,
-                          android_overlay_factory_cb_, cdm_proxy_factory_cb);
+  info.factory = base::BindRepeating(
+      &media::CreateGpuMediaService, gpu_preferences_, gpu_workarounds_,
+      task_runner_, media_gpu_channel_manager_, android_overlay_factory_cb_,
+      std::move(cdm_proxy_factory_cb));
   // This service will host audio/video decoders, and if these decoding
   // operations are blocked, user may hear audio glitch or see video freezing,
   // hence "user blocking".
+#if defined(OS_WIN)
+  // Run everything on the gpu main thread, since that's where the CDM runs.
+  info.task_runner = task_runner_;
+#else
   // TODO(crbug.com/786169): Check whether this needs to be single threaded.
   info.task_runner = base::CreateSingleThreadTaskRunnerWithTraits(
       {base::TaskPriority::USER_BLOCKING});
+#endif  // defined(OS_WIN)
   services->insert(std::make_pair("media", info));
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
 

@@ -1,3 +1,0 @@
-include_rules = [
-    "+cc/paint/image_animation_count.h",
-]

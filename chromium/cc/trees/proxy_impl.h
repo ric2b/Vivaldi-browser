@@ -18,6 +18,7 @@
 namespace cc {
 class LayerTreeHost;
 class ProxyMain;
+class RenderFrameMetadataObserver;
 
 // This class aggregates all the interactions that the main side of the
 // compositor needs to have with the impl side.
@@ -37,7 +38,6 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
       LayerTreeFrameSink* layer_tree_frame_sink,
       base::WeakPtr<ProxyMain> proxy_main_frame_sink_bound_weak_ptr);
   void InitializeMutatorOnImpl(std::unique_ptr<LayerTreeMutator> mutator);
-  void MainThreadHasStoppedFlingingOnImpl();
   void SetInputThrottledUntilCommitOnImpl(bool is_throttled);
   void SetDeferCommitsOnImpl(bool defer_commits) const;
   void SetNeedsRedrawOnImpl(const gfx::Rect& damage_rect);
@@ -54,14 +54,14 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
                                  base::TimeTicks main_thread_start_time,
                                  bool hold_commit_for_activation);
   void SetURLForUkm(const GURL& url);
-  void ClearHistoryOnNavigation();
+  void ClearHistory();
+  void SetRenderFrameObserver(
+      std::unique_ptr<RenderFrameMetadataObserver> observer);
 
   void MainFrameWillHappenOnImplForTesting(CompletionEvent* completion,
                                            bool* main_frame_will_happen);
 
   void RequestBeginMainFrameNotExpected(bool new_state) override;
-
-  NOINLINE void DumpForBeginMainFrameHang();
 
  private:
   // The members of this struct should be accessed on the impl thread only when
@@ -96,17 +96,17 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   void WillPrepareTiles() override;
   void DidPrepareTiles() override;
   void DidCompletePageScaleAnimationOnImplThread() override;
-  void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw) override;
+  void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw,
+                                   bool skip_draw) override;
   void NeedsImplSideInvalidation(bool needs_first_draw_on_activation) override;
   void NotifyImageDecodeRequestFinished() override;
   void DidPresentCompositorFrameOnImplThread(
-      const std::vector<int>& source_frames,
-      base::TimeTicks time,
-      base::TimeDelta refresh,
-      uint32_t flags) override;
+      uint32_t frame_token,
+      std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
+      const gfx::PresentationFeedback& feedback) override;
 
   // SchedulerClient implementation
-  void WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
+  bool WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
   void DidFinishImplFrame() override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ScheduledActionSendBeginMainFrame(
@@ -117,14 +117,15 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   void ScheduledActionActivateSyncTree() override;
   void ScheduledActionBeginLayerTreeFrameSinkCreation() override;
   void ScheduledActionPrepareTiles() override;
-  void ScheduledActionInvalidateLayerTreeFrameSink() override;
+  void ScheduledActionInvalidateLayerTreeFrameSink(bool needs_redraw) override;
   void ScheduledActionPerformImplSideInvalidation() override;
   void SendBeginMainFrameNotExpectedSoon() override;
   void ScheduledActionBeginMainFrameNotExpectedUntil(
       base::TimeTicks time) override;
   size_t CompositedAnimationsCount() const override;
   size_t MainThreadAnimationsCount() const override;
-  size_t MainThreadCompositableAnimationsCount() const override;
+  bool CurrentFrameHadRAF() const override;
+  bool NextFrameHasPendingRAF() const override;
 
   DrawResult DrawInternal(bool forced_draw);
 

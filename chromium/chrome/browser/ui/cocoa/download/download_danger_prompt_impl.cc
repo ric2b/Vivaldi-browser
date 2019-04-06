@@ -7,21 +7,20 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/download/download_stats.h"
-#include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/download/public/common/download_danger_type.h"
+#include "components/download/public/common/download_item.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/download_danger_type.h"
-#include "content/public/browser/download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-using extensions::ExperienceSamplingEvent;
 using safe_browsing::ClientSafeBrowsingReportRequest;
 
 namespace {
@@ -32,10 +31,10 @@ namespace {
 
 // Implements DownloadDangerPrompt using a TabModalConfirmDialog.
 class DownloadDangerPromptImpl : public DownloadDangerPrompt,
-                                 public content::DownloadItem::Observer,
+                                 public download::DownloadItem::Observer,
                                  public TabModalConfirmDialogDelegate {
  public:
-  DownloadDangerPromptImpl(content::DownloadItem* item,
+  DownloadDangerPromptImpl(download::DownloadItem* item,
                            content::WebContents* web_contents,
                            bool show_context,
                            const OnDone& done);
@@ -45,8 +44,8 @@ class DownloadDangerPromptImpl : public DownloadDangerPrompt,
   void InvokeActionForTesting(Action action) override;
 
  private:
-  // content::DownloadItem::Observer:
-  void OnDownloadUpdated(content::DownloadItem* download) override;
+  // download::DownloadItem::Observer:
+  void OnDownloadUpdated(download::DownloadItem* download) override;
 
   // TabModalConfirmDialogDelegate:
   base::string16 GetTitle() override;
@@ -59,20 +58,18 @@ class DownloadDangerPromptImpl : public DownloadDangerPrompt,
 
   void RunDone(Action action);
 
-  content::DownloadItem* download_;
+  download::DownloadItem* download_;
   // If show_context_ is true, this is a download confirmation dialog by
   // download API, otherwise it is download recovery dialog from a regular
   // download.
   bool show_context_;
   OnDone done_;
 
-  std::unique_ptr<ExperienceSamplingEvent> sampling_event_;
-
   DISALLOW_COPY_AND_ASSIGN(DownloadDangerPromptImpl);
 };
 
 DownloadDangerPromptImpl::DownloadDangerPromptImpl(
-    content::DownloadItem* download,
+    download::DownloadItem* download,
     content::WebContents* web_contents,
     bool show_context,
     const OnDone& done)
@@ -82,12 +79,6 @@ DownloadDangerPromptImpl::DownloadDangerPromptImpl(
       done_(done) {
   download_->AddObserver(this);
   RecordOpenedDangerousConfirmDialog(download_->GetDangerType());
-
-  // ExperienceSampling: A malicious download warning is being shown to the
-  // user, so we start a new SamplingEvent and track it.
-  sampling_event_.reset(new ExperienceSamplingEvent(
-      ExperienceSamplingEvent::kDownloadDangerPrompt, download->GetURL(),
-      download->GetReferrerUrl(), download->GetBrowserContext()));
 }
 
 DownloadDangerPromptImpl::~DownloadDangerPromptImpl() {
@@ -112,7 +103,7 @@ void DownloadDangerPromptImpl::InvokeActionForTesting(Action action) {
 }
 
 void DownloadDangerPromptImpl::OnDownloadUpdated(
-    content::DownloadItem* download) {
+    download::DownloadItem* download) {
   // If the download is nolonger dangerous (accepted externally) or the download
   // is in a terminal state, then the download danger prompt is no longer
   // necessary.
@@ -126,12 +117,12 @@ base::string16 DownloadDangerPromptImpl::GetTitle() {
   if (show_context_)
     return l10n_util::GetStringUTF16(IDS_CONFIRM_KEEP_DANGEROUS_DOWNLOAD_TITLE);
   switch (download_->GetDangerType()) {
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
-    case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
       return l10n_util::GetStringUTF16(IDS_KEEP_DANGEROUS_DOWNLOAD_TITLE);
-    case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
       return l10n_util::GetStringUTF16(IDS_KEEP_UNCOMMON_DOWNLOAD_TITLE);
     default: {
       return l10n_util::GetStringUTF16(
@@ -143,42 +134,43 @@ base::string16 DownloadDangerPromptImpl::GetTitle() {
 base::string16 DownloadDangerPromptImpl::GetDialogMessage() {
   if (show_context_) {
     switch (download_->GetDangerType()) {
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE: {
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE: {
         return l10n_util::GetStringFUTF16(
             IDS_PROMPT_DANGEROUS_DOWNLOAD,
             download_->GetFileNameToReportUser().LossyDisplayName());
       }
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:  // Fall through
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST: {
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:  // Fall through
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST: {
         return l10n_util::GetStringFUTF16(
             IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT,
             download_->GetFileNameToReportUser().LossyDisplayName());
       }
-      case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
+      case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
         return l10n_util::GetStringFUTF16(
             IDS_PROMPT_UNCOMMON_DOWNLOAD_CONTENT,
             download_->GetFileNameToReportUser().LossyDisplayName());
       }
-      case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED: {
+      case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED: {
         return l10n_util::GetStringFUTF16(
             IDS_PROMPT_DOWNLOAD_CHANGES_SETTINGS,
             download_->GetFileNameToReportUser().LossyDisplayName());
       }
-      case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
-      case content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
-      case content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-      case content::DOWNLOAD_DANGER_TYPE_MAX: {
+      case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+      case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+      case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+      case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
+      case download::DOWNLOAD_DANGER_TYPE_MAX: {
         break;
       }
     }
   } else {
     switch (download_->GetDangerType()) {
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-      case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
-      case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
-      case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+      case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+      case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
         return l10n_util::GetStringUTF16(
                    IDS_PROMPT_CONFIRM_KEEP_MALICIOUS_DOWNLOAD_BODY);
       }
@@ -203,20 +195,14 @@ base::string16 DownloadDangerPromptImpl::GetCancelButtonTitle() {
 }
 
 void DownloadDangerPromptImpl::OnAccepted() {
-  // ExperienceSampling: User proceeded through the warning.
-  sampling_event_->CreateUserDecisionEvent(ExperienceSamplingEvent::kProceed);
   RunDone(ACCEPT);
 }
 
 void DownloadDangerPromptImpl::OnCanceled() {
-  // ExperienceSampling: User canceled the warning.
-  sampling_event_->CreateUserDecisionEvent(ExperienceSamplingEvent::kDeny);
   RunDone(CANCEL);
 }
 
 void DownloadDangerPromptImpl::OnClosed() {
-  // ExperienceSampling: User canceled the warning.
-  sampling_event_->CreateUserDecisionEvent(ExperienceSamplingEvent::kDeny);
   RunDone(DISMISS);
 }
 
@@ -233,7 +219,8 @@ void DownloadDangerPromptImpl::RunDone(Action action) {
       const bool accept = action == DownloadDangerPrompt::ACCEPT;
       RecordDownloadDangerPrompt(accept, *download_);
       if (!download_->GetURL().is_empty() &&
-          !download_->GetBrowserContext()->IsOffTheRecord()) {
+          !content::DownloadItemUtils::GetBrowserContext(download_)
+               ->IsOffTheRecord()) {
         ClientSafeBrowsingReportRequest::ReportType report_type
             = show_context_ ?
                 ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_BY_API :
@@ -252,7 +239,7 @@ void DownloadDangerPromptImpl::RunDone(Action action) {
 
 // static
 DownloadDangerPrompt* DownloadDangerPrompt::Create(
-    content::DownloadItem* item,
+    download::DownloadItem* item,
     content::WebContents* web_contents,
     bool show_context,
     const OnDone& done) {

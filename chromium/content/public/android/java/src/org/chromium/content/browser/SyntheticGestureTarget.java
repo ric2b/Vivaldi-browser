@@ -14,7 +14,7 @@ import org.chromium.base.annotations.JNINamespace;
  */
 @JNINamespace("content")
 public class SyntheticGestureTarget {
-    private final MotionEventSynthesizer mMotionEventSynthesizer;
+    private final MotionEventSynthesizerImpl mMotionEventSynthesizer;
 
     @CalledByNative
     private static SyntheticGestureTarget create(View target) {
@@ -22,12 +22,12 @@ public class SyntheticGestureTarget {
     }
 
     private SyntheticGestureTarget(View target) {
-        mMotionEventSynthesizer = new MotionEventSynthesizer(target);
+        mMotionEventSynthesizer = MotionEventSynthesizerImpl.create(target);
     }
 
     @CalledByNative
     private void inject(int action, int pointerCount, long timeInMs) {
-        mMotionEventSynthesizer.inject(action, pointerCount, timeInMs);
+        mMotionEventSynthesizer.inject(action, pointerCount, timeInMs, 0 /* source */);
     }
 
     @CalledByNative

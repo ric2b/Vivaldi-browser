@@ -3,10 +3,11 @@
 # found in the LICENSE file.
 
 import("//build/config/fuchsia/config.gni")
+import("//build/config/fuchsia/rules.gni")
 import("//build/config/sysroot.gni")
 
 assert(is_fuchsia)
-assert(is_posix)
+assert(!is_posix)
 
 config("compiler") {
   sdk_version_file = rebase_path("$fuchsia_sdk/.hash")
@@ -33,11 +34,11 @@ config("compiler") {
     # patches, we might want to make tools/clang/scripts/update.py build it
     # and bundle it with the clang package instead of using the library from
     # the SDK, https://crbug.com/724204
-    # Note: Intentionally 6.0.0 instead of $clang_version because the clang
+    # Note: Intentionally 7.0.0 instead of $clang_version because the clang
     # version of the toolchain_libs directory in the Fuchsia SDK can be
     # different from the version of Chromium's clang.
     "-resource-dir",
-    rebase_path(fuchsia_sdk, root_build_dir) + "/toolchain_libs/clang/6.0.0",
+    rebase_path(fuchsia_sdk, root_build_dir) + "/toolchain_libs/clang/7.0.0",
 
     # The stack defaults to 256k on Fuchsia (see
     # https://fuchsia.googlesource.com/zircon/+/master/system/private/zircon/stack.h#9),
@@ -55,5 +56,80 @@ config("compiler") {
     "-Wl,--as-needed",
   ]
 
+  # Add SDK lib dir for -lfdio above.
+  lib_dirs = [ rebase_path("${fuchsia_sdk}/arch/${current_cpu}/lib") ]
+
+  # TODO(crbug.com/821951): Clang enables SafeStack by default when targeting
+  # Fuchsia, but it breaks some tests, notably in V8.
+  cflags += [ "-fno-sanitize=safe-stack" ]
+
   libs = [ "zircon" ]
+}
+
+# Writes an extended version of fvm.blk to fvm.extended.blk.
+blobstore_extended_path = "$root_out_dir/fvm.extended.blk"
+action("blobstore_extended_fvm") {
+  # The file is grown by 1GB, which should be large enough to hold packaged
+  # binaries and assets. The value should be increased if the size becomes a
+  # limitation in the future.
+  _extend_size = "1073741824"  # 1GB
+
+  _target_dir = "//third_party/fuchsia-sdk/sdk/target/${current_cpu}"
+
+  script = "//build/config/fuchsia/extend_fvm.py"
+
+  inputs = [
+    "${_target_dir}/fvm.blk",
+    "${_target_dir}/bootdata-blob.bin",
+    "${_target_dir}/zircon.bin",
+  ]
+  outputs = [
+    blobstore_extended_path,
+  ]
+
+  args = [
+    rebase_path("${fuchsia_sdk}/tools/fvm"),
+    rebase_path("${_target_dir}/fvm.blk"),
+    rebase_path(blobstore_extended_path),
+    _extend_size,
+  ]
+}
+
+#  _________________________________________
+# / Create a compressed copy-on-write (COW) \
+# \ image based on fvm.blk.                 /
+#  -----------------------------------------
+#         \   ^__^
+#          \  (oo)\_______
+#             (__)\       )\/\
+#                 ||----w |
+#                 ||     ||
+action("blobstore_extended_qcow2") {
+  script = "//build/gn_run_binary.py"
+
+  deps = [
+    ":blobstore_extended_fvm",
+  ]
+  inputs = [
+    blobstore_extended_path,
+  ]
+  outputs = [
+    blobstore_qcow_path,
+  ]
+  data = [
+    blobstore_qcow_path,
+  ]
+
+  args = [
+    rebase_path("//third_party/fuchsia-sdk/sdk/qemu/bin/qemu-img",
+                root_build_dir),
+    "convert",
+    "-f",
+    "raw",
+    "-O",
+    "qcow2",
+    "-c",
+    rebase_path(blobstore_extended_path),
+    rebase_path(blobstore_qcow_path),
+  ]
 }

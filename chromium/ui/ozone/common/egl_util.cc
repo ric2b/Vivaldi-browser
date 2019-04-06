@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_features.h"
@@ -14,13 +15,31 @@
 namespace ui {
 namespace {
 
-const char kDefaultEglSoname[] = "libEGL.so.1";
-const char kDefaultGlesSoname[] = "libGLESv2.so.2";
-
+#if defined(OS_WIN)
+const base::FilePath::CharType kDefaultEglSoname[] =
+    FILE_PATH_LITERAL("libEGL.dll");
+const base::FilePath::CharType kDefaultGlesSoname[] =
+    FILE_PATH_LITERAL("libGLESv2.dll");
 #if BUILDFLAG(ENABLE_SWIFTSHADER)
-const char kGLESv2SwiftShaderLibraryName[] = "libGLESv2.so";
-const char kEGLSwiftShaderLibraryName[] = "libEGL.so";
-#endif
+const base::FilePath::CharType kGLESv2SwiftShaderLibraryName[] =
+    FILE_PATH_LITERAL("libGLESv2.dll");
+const base::FilePath::CharType kEGLSwiftShaderLibraryName[] =
+    FILE_PATH_LITERAL("libEGL.dll");
+#endif  // BUILDFLAG(ENABLE_SWIFTSHADER)
+
+#else
+const base::FilePath::CharType kDefaultEglSoname[] =
+    FILE_PATH_LITERAL("libEGL.so.1");
+const base::FilePath::CharType kDefaultGlesSoname[] =
+    FILE_PATH_LITERAL("libGLESv2.so.2");
+#if BUILDFLAG(ENABLE_SWIFTSHADER)
+const base::FilePath::CharType kGLESv2SwiftShaderLibraryName[] =
+    FILE_PATH_LITERAL("libGLESv2.so");
+const base::FilePath::CharType kEGLSwiftShaderLibraryName[] =
+    FILE_PATH_LITERAL("libEGL.so");
+#endif  // BUILDFLAG(ENABLE_SWIFTSHADER)
+
+#endif  // defined(OS_WIN)
 
 bool LoadEGLGLES2Bindings(const base::FilePath& egl_library_path,
                           const base::FilePath& gles_library_path) {
@@ -67,9 +86,9 @@ bool LoadDefaultEGLGLES2Bindings(gl::GLImplementation implementation) {
   if (implementation == gl::kGLImplementationSwiftShaderGL) {
 #if BUILDFLAG(ENABLE_SWIFTSHADER)
     base::FilePath module_path;
-    if (!PathService::Get(base::DIR_MODULE, &module_path))
+    if (!base::PathService::Get(base::DIR_MODULE, &module_path))
       return false;
-    module_path = module_path.Append("swiftshader/");
+    module_path = module_path.Append(FILE_PATH_LITERAL("swiftshader/"));
 
     glesv2_path = module_path.Append(kGLESv2SwiftShaderLibraryName);
     egl_path = module_path.Append(kEGLSwiftShaderLibraryName);

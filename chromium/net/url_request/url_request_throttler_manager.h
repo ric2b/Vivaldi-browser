@@ -32,7 +32,7 @@ class NetLogWithSource;
 // are registered, and does garbage collection from time to time in order to
 // clean out outdated entries. URL ID consists of lowercased scheme, host, port
 // and path. All URLs converted to the same ID will share the same entry.
-class NET_EXPORT URLRequestThrottlerManager
+class NET_EXPORT_PRIVATE URLRequestThrottlerManager
     : public NetworkChangeNotifier::IPAddressObserver,
       public NetworkChangeNotifier::ConnectionTypeObserver {
  public:
@@ -56,12 +56,6 @@ class NET_EXPORT URLRequestThrottlerManager
   // thus won't be garbage collected.
   // It is only used by unit tests.
   void EraseEntryForTests(const GURL& url);
-
-  // Turns threading model verification on or off.  Any code that correctly
-  // uses the network stack should preferably call this function to enable
-  // verification of correct adherence to the network stack threading model.
-  void set_enable_thread_checks(bool enable);
-  bool enable_thread_checks() const;
 
   // Whether throttling is enabled or not.
   void set_enforce_throttling(bool enforce);

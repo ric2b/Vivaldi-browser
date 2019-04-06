@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 
 namespace ash {
 
@@ -30,20 +31,33 @@ class TestAccessibilityControllerClient
   void TriggerAccessibilityAlert(mojom::AccessibilityAlert alert) override;
   void PlayEarcon(int32_t sound_key) override;
   void PlayShutdownSound(PlayShutdownSoundCallback callback) override;
-  void HandleAccessibilityGesture(const std::string& gesture) override;
-  void ToggleDictation() override;
+  void HandleAccessibilityGesture(ax::mojom::Gesture gesture) override;
+  void ToggleDictation(ToggleDictationCallback callback) override;
+  void SilenceSpokenFeedback() override;
+  void OnTwoFingerTouchStart() override;
+  void OnTwoFingerTouchStop() override;
+  void ShouldToggleSpokenFeedbackViaTouch(
+      ShouldToggleSpokenFeedbackViaTouchCallback callback) override;
+  void PlaySpokenFeedbackToggleCountdown(int tick_count) override;
+  void RequestSelectToSpeakStateChange() override;
 
   int32_t GetPlayedEarconAndReset();
 
   mojom::AccessibilityAlert last_a11y_alert() const { return last_a11y_alert_; }
-  std::string last_a11y_gesture() const { return last_a11y_gesture_; }
+  ax::mojom::Gesture last_a11y_gesture() const { return last_a11y_gesture_; }
+  int select_to_speak_change_change_requests() const {
+    return select_to_speak_state_change_requests_;
+  }
 
  private:
   mojom::AccessibilityAlert last_a11y_alert_ = mojom::AccessibilityAlert::NONE;
 
   int32_t sound_key_ = -1;
+  bool is_dictation_active_ = false;
 
-  std::string last_a11y_gesture_;
+  ax::mojom::Gesture last_a11y_gesture_ = ax::mojom::Gesture::kNone;
+
+  int select_to_speak_state_change_requests_ = 0;
 
   mojo::Binding<mojom::AccessibilityControllerClient> binding_;
 

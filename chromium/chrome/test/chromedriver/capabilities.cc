@@ -63,6 +63,18 @@ Status ParseInterval(int* to_set,
   return Status(kOk);
 }
 
+Status ParseTimeDelta(base::TimeDelta* to_set,
+                      const base::Value& option,
+                      Capabilities* capabilities) {
+  int milliseconds = 0;
+  if (!option.GetAsInteger(&milliseconds))
+    return Status(kUnknownError, "must be an integer");
+  if (milliseconds < 0)
+    return Status(kUnknownError, "must be positive or zero");
+  *to_set = base::TimeDelta::FromMilliseconds(milliseconds);
+  return Status(kOk);
+}
+
 Status ParseFilePath(base::FilePath* to_set,
                      const base::Value& option,
                      Capabilities* capabilities) {
@@ -463,6 +475,10 @@ Status ParseChromeOptions(
         base::Bind(&ParseString, &capabilities->android_package);
     parser_map["androidProcess"] =
         base::Bind(&ParseString, &capabilities->android_process);
+    parser_map["androidExecName"] =
+        base::BindRepeating(&ParseString, &capabilities->android_exec_name);
+    parser_map["androidDeviceSocket"] =
+        base::BindRepeating(&ParseString, &capabilities->android_device_socket);
     parser_map["androidUseRunningApp"] =
         base::Bind(&ParseBoolean, &capabilities->android_use_running_app);
     parser_map["args"] = base::Bind(&ParseSwitches);
@@ -476,6 +492,8 @@ Status ParseChromeOptions(
     parser_map["detach"] = base::Bind(&ParseBoolean, &capabilities->detach);
     parser_map["excludeSwitches"] = base::Bind(&ParseExcludeSwitches);
     parser_map["extensions"] = base::Bind(&ParseExtensions);
+    parser_map["extensionLoadTimeout"] =
+        base::Bind(&ParseTimeDelta, &capabilities->extension_load_timeout);
     parser_map["forceDevToolsScreenshot"] = base::Bind(
         &ParseBoolean, &capabilities->force_devtools_screenshot);
     parser_map["loadAsync"] = base::Bind(&IgnoreDeprecatedOption, "loadAsync");
@@ -625,6 +643,7 @@ PerfLoggingPrefs::~PerfLoggingPrefs() {}
 Capabilities::Capabilities()
     : android_use_running_app(false),
       detach(false),
+      extension_load_timeout(base::TimeDelta::FromSeconds(10)),
       force_devtools_screenshot(true),
       page_load_strategy(PageLoadStrategy::kNormal),
       network_emulation_enabled(false),

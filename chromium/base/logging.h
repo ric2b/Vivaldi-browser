@@ -148,7 +148,7 @@ namespace logging {
 // TODO(avi): do we want to do a unification of character types here?
 #if defined(OS_WIN)
 typedef wchar_t PathChar;
-#else
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 typedef char PathChar;
 #endif
 
@@ -166,7 +166,7 @@ enum LoggingDestination {
   // stderr.
 #if defined(OS_WIN)
   LOG_DEFAULT = LOG_TO_FILE,
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   LOG_DEFAULT = LOG_TO_SYSTEM_DEBUG_LOG,
 #endif
 };
@@ -436,7 +436,7 @@ const LogSeverity LOG_0 = LOG_ERROR;
 #define VPLOG_STREAM(verbose_level) \
   ::logging::Win32ErrorLogMessage(__FILE__, __LINE__, -verbose_level, \
     ::logging::GetLastSystemErrorCode()).stream()
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #define VPLOG_STREAM(verbose_level) \
   ::logging::ErrnoLogMessage(__FILE__, __LINE__, -verbose_level, \
     ::logging::GetLastSystemErrorCode()).stream()
@@ -459,7 +459,7 @@ const LogSeverity LOG_0 = LOG_ERROR;
 #define PLOG_STREAM(severity) \
   COMPACT_GOOGLE_LOG_EX_ ## severity(Win32ErrorLogMessage, \
       ::logging::GetLastSystemErrorCode()).stream()
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #define PLOG_STREAM(severity) \
   COMPACT_GOOGLE_LOG_EX_ ## severity(ErrnoLogMessage, \
       ::logging::GetLastSystemErrorCode()).stream()
@@ -552,9 +552,26 @@ class CheckOpResult {
 #define TRAP_SEQUENCE() __builtin_trap()
 #endif  // ARCH_CPU_*
 
+// CHECK() and the trap sequence can be invoked from a constexpr function.
+// This could make compilation fail on GCC, as it forbids directly using inline
+// asm inside a constexpr function. However, it allows calling a lambda
+// expression including the same asm.
+// The side effect is that the top of the stacktrace will not point to the
+// calling function, but to this anonymous lambda. This is still useful as the
+// full name of the lambda will typically include the name of the function that
+// calls CHECK() and the debugger will still break at the right line of code.
+#if !defined(__clang__)
+#define WRAPPED_TRAP_SEQUENCE() \
+  do {                          \
+    [] { TRAP_SEQUENCE(); }();  \
+  } while (false)
+#else
+#define WRAPPED_TRAP_SEQUENCE() TRAP_SEQUENCE()
+#endif
+
 #define IMMEDIATE_CRASH()    \
   ({                         \
-    TRAP_SEQUENCE();         \
+    WRAPPED_TRAP_SEQUENCE(); \
     __builtin_unreachable(); \
   })
 
@@ -573,7 +590,11 @@ class CheckOpResult {
 // TODO(scottmg): Reinvestigate a short sequence that will work on both
 // compilers once clang supports more intrinsics. See https://crbug.com/693713.
 #if defined(__clang__)
-#define IMMEDIATE_CRASH() ({__asm int 3 __asm ud2 __asm push __COUNTER__})
+#define IMMEDIATE_CRASH()                           \
+  ({                                                \
+    {__asm int 3 __asm ud2 __asm push __COUNTER__}; \
+    __builtin_unreachable();                        \
+  })
 #else
 #define IMMEDIATE_CRASH() __debugbreak()
 #endif  // __clang__
@@ -815,7 +836,7 @@ DEFINE_CHECK_OP_IMPL(GT, > )
 
 #if DCHECK_IS_ON()
 
-#if defined(SYZYASAN)
+#if DCHECK_IS_CONFIGURABLE
 BASE_EXPORT extern LogSeverity LOG_DCHECK;
 #else
 const LogSeverity LOG_DCHECK = LOG_FATAL;
@@ -882,9 +903,8 @@ const LogSeverity LOG_DCHECK = LOG_FATAL;
 #define DCHECK_OP(name, op, val1, val2)                                \
   switch (0) case 0: default:                                          \
   if (::logging::CheckOpResult true_if_passed =                        \
-      DCHECK_IS_ON() ?                                                 \
       ::logging::Check##name##Impl((val1), (val2),                     \
-                                   #val1 " " #op " " #val2) : nullptr) \
+                                   #val1 " " #op " " #val2))           \
    ;                                                                   \
   else                                                                 \
     ::logging::LogMessage(__FILE__, __LINE__, ::logging::LOG_DCHECK,   \
@@ -1029,7 +1049,7 @@ class LogMessageVoidify {
 
 #if defined(OS_WIN)
 typedef unsigned long SystemErrorCode;
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 typedef int SystemErrorCode;
 #endif
 
@@ -1058,7 +1078,7 @@ class BASE_EXPORT Win32ErrorLogMessage {
 
   DISALLOW_COPY_AND_ASSIGN(Win32ErrorLogMessage);
 };
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 // Appends a formatted system message of the errno type
 class BASE_EXPORT ErrnoLogMessage {
  public:

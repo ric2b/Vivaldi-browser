@@ -33,9 +33,9 @@
 #include "chrome/browser/gcm/gcm_product_util.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
@@ -49,15 +49,18 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_CHROMEOS)
@@ -208,13 +211,13 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
             {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
     return std::make_unique<gcm::GCMProfileService>(
         profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
+        content::BrowserContext::GetDefaultStoragePartition(profile)
+            ->GetURLLoaderFactoryForBrowserProcess(),
         chrome::GetChannel(),
         gcm::GetProductCategoryForSubtypes(profile->GetPrefs()),
-        std::unique_ptr<ProfileIdentityProvider>(new ProfileIdentityProvider(
-            SigninManagerFactory::GetForProfile(profile),
-            ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
-            LoginUIServiceFactory::GetShowLoginPopupCallbackForProfile(
-                profile))),
+        IdentityManagerFactory::GetForProfile(profile),
+        SigninManagerFactory::GetForProfile(profile),
+        ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
         base::WrapUnique(new gcm::FakeGCMClientFactory(ui_thread, io_thread)),
         ui_thread, io_thread, blocking_task_runner);
   }
@@ -272,22 +275,20 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
 
     waiter_.PumpUILoop();
     gcm_app_handler_->Shutdown();
+    auto* partition =
+        content::BrowserContext::GetDefaultStoragePartition(profile());
+    if (partition)
+      partition->WaitForDeletionTasksForTesting();
   }
 
   // Returns a barebones test extension.
   scoped_refptr<Extension> CreateExtension() {
-    base::DictionaryValue manifest;
-    manifest.SetString(manifest_keys::kVersion, "1.0.0.0");
-    manifest.SetString(manifest_keys::kName, kTestExtensionName);
-    auto permission_list = std::make_unique<base::ListValue>();
-    permission_list->AppendString("gcm");
-    manifest.Set(manifest_keys::kPermissions, std::move(permission_list));
-
-    std::string error;
-    scoped_refptr<Extension> extension = Extension::Create(
-        temp_dir_.GetPath(), Manifest::UNPACKED, manifest, Extension::NO_FLAGS,
-        "ldnnhddmnhbkjipkidpdiheffobcpfmf", &error);
-    EXPECT_TRUE(extension.get()) << error;
+    scoped_refptr<Extension> extension =
+        ExtensionBuilder(kTestExtensionName)
+            .AddPermission("gcm")
+            .SetPath(temp_dir_.GetPath())
+            .SetID("ldnnhddmnhbkjipkidpdiheffobcpfmf")
+            .Build();
     EXPECT_TRUE(
         extension->permissions_data()->HasAPIPermission(APIPermission::kGcm));
 
@@ -308,7 +309,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
   void UpdateExtension(const Extension* extension,
                        const std::string& update_crx) {
     base::FilePath data_dir;
-    if (!PathService::Get(chrome::DIR_TEST_DATA, &data_dir)) {
+    if (!base::PathService::Get(chrome::DIR_TEST_DATA, &data_dir)) {
       ADD_FAILURE();
       return;
     }

@@ -28,10 +28,9 @@
 #include "chrome/browser/upgrade_detector.h"
 #include "chrome/common/service_process_util.h"
 #include "content/public/browser/browser_thread.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/named_platform_handle.h"
-#include "mojo/edk/embedder/named_platform_handle_utils.h"
-#include "mojo/edk/embedder/peer_connection.h"
+#include "content/public/browser/child_process_launcher_utils.h"
+#include "mojo/public/cpp/platform/named_platform_channel.h"
+#include "mojo/public/cpp/system/isolated_connection.h"
 
 using content::BrowserThread;
 
@@ -47,15 +46,15 @@ constexpr base::TimeDelta kInitialConnectionRetryDelay =
 
 void ConnectAsyncWithBackoff(
     service_manager::mojom::InterfaceProviderRequest interface_provider_request,
-    mojo::edk::NamedPlatformHandle os_pipe,
+    mojo::NamedPlatformChannel::ServerName server_name,
     size_t num_retries_left,
     base::TimeDelta retry_delay,
     scoped_refptr<base::TaskRunner> response_task_runner,
-    base::OnceCallback<void(std::unique_ptr<mojo::edk::PeerConnection>)>
+    base::OnceCallback<void(std::unique_ptr<mojo::IsolatedConnection>)>
         response_callback) {
-  mojo::edk::ScopedPlatformHandle os_pipe_handle =
-      mojo::edk::CreateClientHandle(os_pipe);
-  if (!os_pipe_handle.is_valid()) {
+  mojo::PlatformChannelEndpoint endpoint =
+      mojo::NamedPlatformChannel::ConnectToServer(server_name);
+  if (!endpoint.is_valid()) {
     if (num_retries_left == 0) {
       response_task_runner->PostTask(
           FROM_HERE, base::BindOnce(std::move(response_callback), nullptr));
@@ -64,19 +63,17 @@ void ConnectAsyncWithBackoff(
           FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
           base::BindOnce(
               &ConnectAsyncWithBackoff, std::move(interface_provider_request),
-              std::move(os_pipe), num_retries_left - 1, retry_delay * 2,
+              server_name, num_retries_left - 1, retry_delay * 2,
               std::move(response_task_runner), std::move(response_callback)),
           retry_delay);
     }
   } else {
-    auto peer_connection = base::MakeUnique<mojo::edk::PeerConnection>();
-    mojo::FuseMessagePipes(
-        peer_connection->Connect(mojo::edk::ConnectionParams(
-            mojo::edk::TransportProtocol::kLegacy, std::move(os_pipe_handle))),
-        interface_provider_request.PassMessagePipe());
+    auto mojo_connection = std::make_unique<mojo::IsolatedConnection>();
+    mojo::FuseMessagePipes(mojo_connection->Connect(std::move(endpoint)),
+                           interface_provider_request.PassMessagePipe());
     response_task_runner->PostTask(FROM_HERE,
                                    base::BindOnce(std::move(response_callback),
-                                                  std::move(peer_connection)));
+                                                  std::move(mojo_connection)));
   }
 }
 
@@ -110,16 +107,16 @@ void ServiceProcessControl::ConnectInternal() {
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
       base::BindOnce(
           &ConnectAsyncWithBackoff, std::move(interface_provider_request),
-          GetServiceProcessChannel(), kMaxConnectionAttempts,
+          GetServiceProcessServerName(), kMaxConnectionAttempts,
           kInitialConnectionRetryDelay, base::ThreadTaskRunnerHandle::Get(),
           base::BindOnce(&ServiceProcessControl::OnPeerConnectionComplete,
                          weak_factory_.GetWeakPtr())));
 }
 
 void ServiceProcessControl::OnPeerConnectionComplete(
-    std::unique_ptr<mojo::edk::PeerConnection> peer_connection) {
+    std::unique_ptr<mojo::IsolatedConnection> connection) {
   // Hold onto the connection object so the connection is kept alive.
-  peer_connection_ = std::move(peer_connection);
+  mojo_connection_ = std::move(connection);
 }
 
 void ServiceProcessControl::SetMojoHandle(
@@ -158,7 +155,7 @@ void ServiceProcessControl::RunConnectDoneTasks() {
 void ServiceProcessControl::RunAllTasksHelper(TaskList* task_list) {
   TaskList::iterator index = task_list->begin();
   while (index != task_list->end()) {
-    (*index).Run();
+    std::move(*index).Run();
     index = task_list->erase(index);
   }
 }
@@ -167,16 +164,15 @@ bool ServiceProcessControl::IsConnected() const {
   return !!service_process_;
 }
 
-void ServiceProcessControl::Launch(const base::Closure& success_task,
-                                   const base::Closure& failure_task) {
+void ServiceProcessControl::Launch(base::OnceClosure success_task,
+                                   base::OnceClosure failure_task) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  base::Closure failure = failure_task;
-  if (!success_task.is_null())
-    connect_success_tasks_.push_back(success_task);
+  if (success_task)
+    connect_success_tasks_.emplace_back(std::move(success_task));
 
-  if (!failure.is_null())
-    connect_failure_tasks_.push_back(failure);
+  if (failure_task)
+    connect_failure_tasks_.emplace_back(std::move(failure_task));
 
   // If we already in the process of launching, then we are done.
   if (launcher_.get())
@@ -201,7 +197,7 @@ void ServiceProcessControl::Launch(const base::Closure& success_task,
 
 void ServiceProcessControl::Disconnect() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  peer_connection_.reset();
+  mojo_connection_.reset();
   remote_interfaces_.Close();
   service_process_.reset();
 }
@@ -338,8 +334,8 @@ ServiceProcessControl::Launcher::Launcher(
 void ServiceProcessControl::Launcher::Run(const base::Closure& task) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   notify_task_ = task;
-  BrowserThread::PostTask(BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
-                          base::Bind(&Launcher::DoRun, this));
+  content::GetProcessLauncherTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&Launcher::DoRun, this));
 }
 
 ServiceProcessControl::Launcher::~Launcher() {

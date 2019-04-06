@@ -4,7 +4,6 @@
 
 #include "chrome/browser/memory/swap_thrashing_monitor_delegate_win.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/timer/mock_timer.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -65,7 +64,7 @@ class MockHardFaultDeltasWindow
 
 void TestSwapThrashingMonitorDelegateWin::SetMockWindow() {
   std::unique_ptr<MockHardFaultDeltasWindow> mock_window =
-      base::MakeUnique<MockHardFaultDeltasWindow>();
+      std::make_unique<MockHardFaultDeltasWindow>();
   mock_window_ = mock_window.get();
   hard_fault_deltas_window_.reset(mock_window.release());
 }

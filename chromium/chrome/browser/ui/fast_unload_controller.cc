@@ -16,13 +16,12 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
-#include "chrome/browser/ui/unload_controller_web_contents_delegate.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/extension_registry.h"
@@ -36,14 +35,13 @@ FastUnloadController::FastUnloadController(Browser* browser)
     : browser_(browser),
       tab_needing_before_unload_ack_(NULL),
       is_attempting_to_close_browser_(false),
-      detached_delegate_(
-          std::make_unique<UnloadControllerWebContentsDelegate>()),
       weak_factory_(this) {
   browser_->tab_strip_model()->AddObserver(this);
 }
 
 FastUnloadController::~FastUnloadController() {
   browser_->tab_strip_model()->RemoveObserver(this);
+  web_contents_waiting_for_deletion_.clear();
 }
 
 bool FastUnloadController::CanCloseContents(content::WebContents* contents) {
@@ -104,8 +102,9 @@ bool FastUnloadController::RunUnloadEventsHelper(
   return false;
 }
 
-bool FastUnloadController::BeforeUnloadFired(content::WebContents* contents,
-                                             bool proceed) {
+bool FastUnloadController::BeforeUnloadFiredForContents(
+    content::WebContents* contents,
+    bool proceed) {
   if (!proceed)
     DevToolsWindow::OnPageCloseCanceled(contents);
 
@@ -275,6 +274,19 @@ void FastUnloadController::CancelWindowClose() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// FastUnloadController, content::WebContentsDelegate implementation:
+
+bool FastUnloadController::ShouldSuppressDialogs(content::WebContents* source) {
+  return true;
+}
+
+void FastUnloadController::CloseContents(content::WebContents* source) {
+  auto it = web_contents_waiting_for_deletion_.find(source);
+  DCHECK(it != web_contents_waiting_for_deletion_.end());
+  web_contents_waiting_for_deletion_.erase(it);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // FastUnloadController, content::NotificationObserver implementation:
 
 void FastUnloadController::Observe(
@@ -299,7 +311,8 @@ void FastUnloadController::TabInsertedAt(TabStripModel* tab_strip_model,
 }
 
 void FastUnloadController::TabDetachedAt(content::WebContents* contents,
-                                         int index) {
+                                         int index,
+                                         bool was_active) {
   TabDetachedImpl(contents);
 }
 
@@ -358,8 +371,9 @@ bool FastUnloadController::DetachWebContents(content::WebContents* contents) {
   if (index != TabStripModel::kNoTab &&
       contents->NeedToFireBeforeUnload()) {
     tabs_needing_unload_ack_.insert(contents);
-    browser_->tab_strip_model()->DetachWebContentsAt(index);
-    contents->SetDelegate(detached_delegate_.get());
+    web_contents_waiting_for_deletion_[contents] =
+        browser_->tab_strip_model()->DetachWebContentsAt(index);
+    contents->SetDelegate(this);
     CoreTabHelper* core_tab_helper = CoreTabHelper::FromWebContents(contents);
     if (core_tab_helper) {
     core_tab_helper->OnUnloadDetachedStarted();
@@ -383,7 +397,7 @@ void FastUnloadController::ProcessPendingTabs(bool skip_beforeunload) {
       tabs_needing_before_unload_.insert(tab_needing_before_unload_ack_);
       CancelTabNeedingBeforeUnloadAck();
     } else {
-      // Wait for |BeforeUnloadFired| before proceeding.
+      // Wait for |BeforeUnloadFiredForContents| before proceeding.
       return;
     }
   }
@@ -423,8 +437,14 @@ void FastUnloadController::ProcessPendingTabs(bool skip_beforeunload) {
   }
 
   if (is_calling_before_unload_handlers()) {
+    base::OnceCallback<void(bool)> on_close_confirmed = on_close_confirmed_;
+    // Reset |on_close_confirmed_| in case the callback tests
+    // |is_calling_before_unload_handlers()|, we want to return that calling
+    // is complete.
+    if (tabs_needing_unload_.empty())
+      on_close_confirmed_.Reset();
     if (!skip_beforeunload)
-      on_close_confirmed_.Run(true);
+      std::move(on_close_confirmed).Run(true);
     return;
   }
 

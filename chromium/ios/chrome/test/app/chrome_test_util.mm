@@ -21,10 +21,13 @@
 #import "ios/chrome/browser/metrics/previous_session_info_private.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
+#import "ios/chrome/browser/ui/main/bvc_container_view_controller.h"
 #import "ios/chrome/browser/ui/main/view_controller_swapping.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher.h"
+#include "ios/chrome/test/app/navigation_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
+#import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/test/native_controller_test_util.h"
 #import "third_party/breakpad/breakpad/src/client/ios/BreakpadController.h"
 
@@ -114,9 +117,30 @@ id<BrowserCommands> BrowserCommandDispatcherForMainBVC() {
 UIViewController* GetActiveViewController() {
   UIWindow* main_window = [[UIApplication sharedApplication] keyWindow];
   DCHECK([main_window isKindOfClass:[ChromeOverlayWindow class]]);
-  id<ViewControllerSwapping> main_view_controller =
-      static_cast<id<ViewControllerSwapping>>([main_window rootViewController]);
-  return main_view_controller.activeViewController;
+  UIViewController* main_view_controller = main_window.rootViewController;
+  if ([main_view_controller
+          conformsToProtocol:@protocol(ViewControllerSwapping)]) {
+    // This is either the stack_view or the iPad tab_switcher, in which case it
+    // is best to call |-activeViewController|.
+    return [static_cast<id<ViewControllerSwapping>>(main_view_controller)
+        activeViewController];
+  }
+
+  // The active view controller is either the TabGridViewController or its
+  // presented BVC. The BVC is itself contained inside of a
+  // BVCContainerViewController.
+  UIViewController* active_view_controller =
+      main_view_controller.presentedViewController
+          ? main_view_controller.presentedViewController
+          : main_view_controller;
+  if ([active_view_controller
+          isKindOfClass:[BVCContainerViewController class]]) {
+    active_view_controller =
+        base::mac::ObjCCastStrict<BVCContainerViewController>(
+            active_view_controller)
+            .currentBVC;
+  }
+  return active_view_controller;
 }
 
 id<ApplicationCommands, BrowserCommands> DispatcherForActiveViewController() {
@@ -125,11 +149,15 @@ id<ApplicationCommands, BrowserCommands> DispatcherForActiveViewController() {
   if (bvc)
     return bvc.dispatcher;
   if ([vc conformsToProtocol:@protocol(TabSwitcher)]) {
-    UIViewController<TabSwitcher>* tabSwitcher =
-        static_cast<UIViewController<TabSwitcher>*>(vc);
+    // In stack_view and the iPad tab switcher, the view controller has a
+    // dispatcher.
+    id<TabSwitcher> tabSwitcher = static_cast<id<TabSwitcher>>(vc);
     return tabSwitcher.dispatcher;
   }
-  return nil;
+  // In tab grid, the TabSwitcher object is not in the view hierarchy so it must
+  // be gotten through the MainController.
+  return static_cast<id<ApplicationCommands, BrowserCommands>>(
+      GetMainController().tabSwitcher.dispatcher);
 }
 
 void RemoveAllInfoBars() {
@@ -215,6 +243,14 @@ void OpenChromeFromExternalApp(const GURL& url) {
 
   [[[UIApplication sharedApplication] delegate]
       applicationDidBecomeActive:[UIApplication sharedApplication]];
+}
+
+bool PurgeCachedWebViewPages() {
+  web::WebState* web_state = chrome_test_util::GetCurrentWebState();
+  web_state->SetWebUsageEnabled(false);
+  web_state->SetWebUsageEnabled(true);
+  web_state->GetNavigationManager()->LoadIfNecessary();
+  return chrome_test_util::WaitForPageToFinishLoading();
 }
 
 }  // namespace chrome_test_util

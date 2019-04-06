@@ -6,7 +6,7 @@
 
 #include "build/build_config.h"
 #include "content/common/cursors/webcursor.h"
-#include "third_party/WebKit/public/platform/WebCursorInfo.h"
+#include "third_party/blink/public/platform/web_cursor_info.h"
 
 using blink::WebCursorInfo;
 
@@ -30,7 +30,7 @@ void InitializeCursorFromWebCursorInfo(WebCursor* cursor,
   cursor_info.type = web_cursor_info.type;
   cursor_info.image_scale_factor = web_cursor_info.image_scale_factor;
   cursor_info.hotspot = web_cursor_info.hot_spot;
-  cursor_info.custom_image = web_cursor_info.custom_image.GetSkBitmap();
+  cursor_info.custom_image = web_cursor_info.custom_image;
   cursor->InitFromCursorInfo(cursor_info);
 }
 

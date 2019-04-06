@@ -8,8 +8,8 @@
 #include <map>
 
 #include "base/synchronization/lock.h"
+#include "components/crash/content/browser/child_exit_observer_android.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
-#include "components/crash/content/browser/crash_dump_observer_android.h"
 
 namespace base {
 class SyncSocket;
@@ -25,28 +25,22 @@ namespace android_webview {
 // processes of the browser, it can't access the exit code. Instead, the browser
 // uses a dedicated pipe in order to receive the information about the renderer
 // crash status.
-class AwBrowserTerminator : public breakpad::CrashDumpObserver::Client {
+class AwBrowserTerminator : public crash_reporter::ChildExitObserver::Client {
  public:
   AwBrowserTerminator(base::FilePath crash_dump_dir);
   ~AwBrowserTerminator() override;
 
-  // breakpad::CrashDumpObserver::Client implementation.
+  // crash_reporter::ChildExitObserver::Client implementation.
   void OnChildStart(int process_host_id,
                     content::PosixFileDescriptorInfo* mappings) override;
-  void OnChildExit(int process_host_id,
-                   base::ProcessHandle pid,
-                   content::ProcessType process_type,
-                   base::TerminationStatus termination_status,
-                   base::android::ApplicationState app_state) override;
+  void OnChildExit(
+      const crash_reporter::ChildExitObserver::TerminationInfo& info) override;
 
  private:
-  static void OnChildExitAsync(int process_host_id,
-                               base::ProcessHandle pid,
-                               content::ProcessType process_type,
-                               base::TerminationStatus termination_status,
-                               base::android::ApplicationState app_state,
-                               base::FilePath crash_dump_dir,
-                               std::unique_ptr<base::SyncSocket> pipe);
+  static void OnChildExitAsync(
+      const crash_reporter::ChildExitObserver::TerminationInfo& info,
+      base::FilePath crash_dump_dir,
+      std::unique_ptr<base::SyncSocket> pipe);
 
   base::FilePath crash_dump_dir_;
 

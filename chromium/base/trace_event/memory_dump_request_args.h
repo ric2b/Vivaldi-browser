@@ -30,7 +30,6 @@ class ProcessMemoryDump;
 enum class MemoryDumpType {
   PERIODIC_INTERVAL,     // Dumping memory at periodic intervals.
   EXPLICITLY_TRIGGERED,  // Non maskable dump request.
-  PEAK_MEMORY_USAGE,     // Dumping memory at detected peak total memory usage.
   SUMMARY_ONLY,          // Calculate just the summary & don't add to the trace.
   LAST = SUMMARY_ONLY
 };
@@ -52,9 +51,6 @@ enum class MemoryDumpLevelOfDetail : uint32_t {
 
   // Few entries, typically a fixed number, per dump.
   LIGHT,
-
-  // Retrieve only memory maps. Used only for the heap profiler.
-  VM_REGIONS_ONLY_FOR_HEAP_PROFILER,
 
   // Unrestricted amount of entries per dump.
   DETAILED,

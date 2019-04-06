@@ -29,25 +29,36 @@
 // Fills a number of fields in the same named form for full-form Autofill.
 // Applies Autofill CSS (i.e. yellow background) to filled elements.
 // Only empty fields will be filled, except that field named
-// |forceFillFieldName| will always be filled even if non-empty.
-// |forceFillFieldName| may be null.
+// |forceFillFieldIdentifier| will always be filled even if non-empty.
+// |forceFillFieldIdentifier| may be null.
 // |completionHandler| is called after the forms are filled. |completionHandler|
 // cannot be nil.
 - (void)fillForm:(NSString*)dataString
-    forceFillFieldName:(NSString*)forceFillFieldName
-     completionHandler:(ProceduralBlock)completionHandler;
+    forceFillFieldIdentifier:(NSString*)forceFillFieldIdentifier
+           completionHandler:(ProceduralBlock)completionHandler;
 
 // Clear autofilled fields of the specified form. Fields that are not currently
 // autofilled are not modified. Field contents are cleared, and Autofill flag
 // and styling are removed. 'change' events are sent for fields whose contents
 // changed.
+// |fieldIdentifier| identifies the field that initiated the clear action.
 // |completionHandler| is called after the forms are filled. |completionHandler|
 // cannot be nil.
-- (void)clearAutofilledFieldsForFormNamed:(NSString*)formName
-                        completionHandler:(ProceduralBlock)completionHandler;
+- (void)clearAutofilledFieldsForFormName:(NSString*)formName
+                         fieldIdentifier:(NSString*)fieldIdentifier
+                       completionHandler:(ProceduralBlock)completionHandler;
 
 // Marks up the form with autofill field prediction data (diagnostic tool).
 - (void)fillPredictionData:(NSString*)dataString;
+
+// Adds a delay between filling the form fields.
+- (void)addJSDelay;
+
+// Toggles tracking form related changes in the page.
+- (void)toggleTrackingFormMutations:(BOOL)state;
+
+// Toggles tracking the source of the input events in the page.
+- (void)toggleTrackingUserEditedFields:(BOOL)state;
 
 // Designated initializer. |receiver| should not be nil.
 - (instancetype)initWithReceiver:(CRWJSInjectionReceiver*)receiver

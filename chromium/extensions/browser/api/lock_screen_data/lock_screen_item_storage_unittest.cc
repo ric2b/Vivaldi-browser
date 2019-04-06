@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -28,7 +27,6 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/test/test_browser_context.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/api/lock_screen_data/data_item.h"
 #include "extensions/browser/api/lock_screen_data/lock_screen_value_store_migrator.h"
 #include "extensions/browser/api/lock_screen_data/operation_result.h"
@@ -452,8 +450,7 @@ class TestLockScreenValueStoreMigrator : public LockScreenValueStoreMigrator {
 
 class LockScreenItemStorageTest : public ExtensionsTest {
  public:
-  LockScreenItemStorageTest()
-      : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {}
+  LockScreenItemStorageTest() = default;
   ~LockScreenItemStorageTest() override = default;
 
   void SetUp() override {
@@ -659,7 +656,7 @@ class LockScreenItemStorageTest : public ExtensionsTest {
     ListBuilder app_handlers_builder;
     app_handlers_builder.Append(DictionaryBuilder()
                                     .Set("action", "new_note")
-                                    .SetBoolean("enabled_on_lock_screen", true)
+                                    .Set("enabled_on_lock_screen", true)
                                     .Build());
     scoped_refptr<const Extension> extension =
         ExtensionBuilder()

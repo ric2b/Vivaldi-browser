@@ -9,6 +9,10 @@ source_set("web") {
   sources = [
     "dom_altering_lock.h",
     "dom_altering_lock.mm",
+    "error_page_util.h",
+    "error_page_util.mm",
+    "font_size_tab_helper.h",
+    "font_size_tab_helper.mm",
     "load_timing_tab_helper.h",
     "load_timing_tab_helper.mm",
     "mailto_handler.h",
@@ -21,8 +25,6 @@ source_set("web") {
     "mailto_handler_manager.mm",
     "mailto_handler_system_mail.h",
     "mailto_handler_system_mail.mm",
-    "navigation_manager_util.h",
-    "navigation_manager_util.mm",
     "network_activity_indicator_tab_helper.h",
     "network_activity_indicator_tab_helper.mm",
     "page_placeholder_tab_helper.h",
@@ -33,8 +35,11 @@ source_set("web") {
     "sad_tab_tab_helper.mm",
   ]
   deps = [
+    ":feature_flags",
     ":tab_helper_delegates",
     "//base",
+    "//components/error_page/common",
+    "//components/resources:components_resources_grit",
     "//components/strings",
     "//ios/chrome/app/strings:ios_strings_grit",
     "//ios/chrome/browser",
@@ -43,8 +48,8 @@ source_set("web") {
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands:commands",
     "//ios/chrome/browser/ui/fullscreen",
-    "//ios/chrome/browser/ui/fullscreen:new_fullscreen",
     "//ios/chrome/browser/ui/util:util",
+    "//ios/net",
     "//ios/web",
     "//ui/base",
     "//url",
@@ -78,13 +83,15 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
+    "error_page_util_unittest.mm",
+    "font_size_js_unittest.mm",
+    "font_size_tab_helper_unittest.mm",
     "load_timing_tab_helper_unittest.mm",
     "mailto_handler_gmail_unittest.mm",
     "mailto_handler_inbox_unittest.mm",
     "mailto_handler_manager_unittest.mm",
     "mailto_handler_system_mail_unittest.mm",
     "mailto_handler_unittest.mm",
-    "navigation_manager_util_unittest.mm",
     "network_activity_indicator_tab_helper_unittest.mm",
     "page_placeholder_tab_helper_unittest.mm",
     "repost_form_tab_helper_unittest.mm",
@@ -92,15 +99,16 @@ source_set("unit_tests") {
     "tab_id_tab_helper_unittest.mm",
   ]
   deps = [
+    ":accessibility",
     ":tab_helper_delegates",
     ":test_support",
     ":web",
     "//base:base",
     "//base/test:test_support",
+    "//components/strings:components_strings_grit",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/snapshots",
     "//ios/chrome/test:test_support",
-    "//ios/testing:ios_test_support",
     "//ios/web",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
@@ -112,11 +120,22 @@ source_set("unit_tests") {
   ]
 }
 
-js_compile_bundle("chrome_bundle") {
-  closure_entry_point = "__crWeb.chromeBundle"
+js_compile_bundle("chrome_bundle_all_frames") {
+  closure_entry_point = "__crWeb.chromeBundleAllFrames"
+  sources = [
+    "//components/autofill/ios/form_util/resources/form.js",
+    "resources/accessibility.js",
+    "resources/chrome_bundle_all_frames.js",
+  ]
+}
+
+js_compile_bundle("chrome_bundle_main_frame") {
+  closure_entry_point = "__crWeb.chromeBundleMainFrame"
   sources = [
     "//components/autofill/ios/browser/resources/autofill_controller.js",
-    "resources/chrome_bundle.js",
+    "//components/autofill/ios/form_util/resources/fill.js",
+    "//ios/chrome/browser/passwords/resources/password_controller.js",
+    "resources/chrome_bundle_main_frame.js",
     "resources/print.js",
   ]
 
@@ -138,9 +157,19 @@ js_compile_checked("credential_manager") {
   ]
 }
 
+js_compile_checked("accessibility") {
+  sources = [
+    "resources/accessibility.js",
+  ]
+}
+
 source_set("web_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "app_launcher_abuse_detector.h",
+    "app_launcher_abuse_detector.mm",
+    "app_launching_state.h",
+    "app_launching_state.mm",
     "blocked_popup_tab_helper.h",
     "blocked_popup_tab_helper.mm",
     "chrome_web_client.h",
@@ -149,31 +178,21 @@ source_set("web_internal") {
     "error_page_content.mm",
     "error_page_generator.h",
     "error_page_generator.mm",
-    "external_app_launcher_tab_helper.h",
-    "external_app_launcher_tab_helper.mm",
-    "external_app_launcher_util.h",
-    "external_app_launcher_util.mm",
-    "external_app_launching_state.h",
-    "external_app_launching_state.mm",
-    "external_apps_launch_policy_decider.h",
-    "external_apps_launch_policy_decider.mm",
-    "passkit_dialog_provider.h",
     "print_tab_helper.h",
     "print_tab_helper.mm",
     "web_state_printer.h",
   ]
   deps = [
-    ":chrome_bundle",
+    ":chrome_bundle_all_frames",
+    ":chrome_bundle_main_frame",
     "//base",
     "//components/content_settings/core/browser",
     "//components/dom_distiller/core",
-    "//components/error_page/common",
     "//components/infobars/core",
     "//components/payments/core",
     "//components/prefs",
     "//components/resources",
     "//components/strings",
-    "//components/task_scheduler_util/browser",
     "//components/version_info",
     "//ios/chrome/app/resources:ios_resources",
     "//ios/chrome/app/strings",
@@ -187,12 +206,11 @@ source_set("web_internal") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui:ui_util",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/external_app",
     "//ios/chrome/browser/ui/static_content",
+    "//ios/chrome/browser/unzip",
     "//ios/chrome/browser/web",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/voice",
-    "//ios/third_party/material_components_ios",
     "//ios/web",
     "//ios/web/public",
     "//net",
@@ -220,8 +238,6 @@ source_set("test_support") {
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/ui:ui_internal",
-    "//ios/chrome/browser/ui/fullscreen",
-    "//ios/chrome/browser/ui/fullscreen:legacy_fullscreen",
     "//ios/chrome/browser/web",
     "//ios/web",
     "//ios/web/public/test",
@@ -232,12 +248,11 @@ source_set("unit_tests_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
+    "app_launcher_abuse_detector_unittest.mm",
+    "app_launching_state_unittest.mm",
     "blocked_popup_tab_helper_unittest.mm",
     "chrome_web_client_unittest.mm",
     "error_page_generator_unittest.mm",
-    "external_app_launcher_util_unittest.mm",
-    "external_app_launching_state_unittest.mm",
-    "external_apps_launch_policy_decider_unittest.mm",
   ]
   deps = [
     ":test_support",
@@ -254,6 +269,7 @@ source_set("unit_tests_internal") {
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/web",
     "//ios/web",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
@@ -272,6 +288,7 @@ source_set("eg_tests") {
     "browsing_prevent_default_egtest.mm",
     "cache_egtest.mm",
     "child_window_open_by_dom_egtest.mm",
+    "error_page_egtest.mm",
     "forms_egtest.mm",
     "http_auth_egtest.mm",
     "js_print_egtest.mm",
@@ -293,10 +310,11 @@ source_set("eg_tests") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/test:test_support",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
-    "//ios/testing:ios_test_support",
+    "//ios/testing:embedded_test_server_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey:earl_grey+link",
     "//ios/third_party/material_components_ios",
@@ -330,4 +348,15 @@ source_set("perf_tests") {
     "//ios/web/public/test",
   ]
   libs = [ "WebKit.framework" ]
+}
+
+source_set("feature_flags") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "features.cc",
+    "features.h",
+  ]
+  deps = [
+    "//base",
+  ]
 }

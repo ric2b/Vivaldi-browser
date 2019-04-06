@@ -33,33 +33,6 @@ class GURL;
               sourceURL:(const GURL&)sourceURL
             linkClicked:(BOOL)linkClicked;
 
-@optional
-
-// Called to ask CRWWebDelegate if |CRWWebController| should open the given URL.
-// CRWWebDelegate can intercept the request by returning NO and processing URL
-// in its own way.
-- (BOOL)webController:(CRWWebController*)webController
-        shouldOpenURL:(const GURL&)url
-      mainDocumentURL:(const GURL&)mainDocumentURL;
-
-// Called to ask if external URL should be opened. External URL is one that
-// cannot be presented by CRWWebController.
-- (BOOL)webController:(CRWWebController*)webController
-    shouldOpenExternalURL:(const GURL&)URL;
-
-// Called to retrieve the height of any header that is overlaying on top of the
-// web view. This can be used to implement, for e.g. a toolbar that changes
-// height dynamically. Returning a non-zero height affects the visible frame
-// shown by the CRWWebController. 0.0 is assumed if not implemented.
-- (CGFloat)headerHeightForWebController:(CRWWebController*)webController;
-
-// Called when a PassKit file is downloaded. |data| should be the data from a
-// PassKit file, but this is not guaranteed, and the delegate is responsible for
-// error handling non PassKit data using -[PKPass initWithData:error:]. If the
-// download does not successfully complete, |data| will be nil.
-- (void)webController:(CRWWebController*)webController
-    didLoadPassKitObject:(NSData*)data;
-
 @end
 
 #endif  // IOS_WEB_PUBLIC_WEB_STATE_UI_CRW_WEB_DELEGATE_H_

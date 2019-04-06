@@ -27,6 +27,7 @@ namespace arc {
 class ArcAndroidManagementChecker;
 class ArcAuthContext;
 class ArcDataRemover;
+class ArcFastAppReinstallStarter;
 class ArcPaiStarter;
 class ArcTermsOfServiceNegotiator;
 enum class ProvisioningResult : int;
@@ -111,7 +112,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
     // Called to notify that ARC begins to start.
     virtual void OnArcStarted() {}
 
-    // Called to notify that ARC has been initialized successfully.
+    // Called to notify that ARC has been successfully provisioned for the first
+    // time after OptIn.
     virtual void OnArcInitialStart() {}
 
     // Called when ARC session is stopped, and is not being restarted
@@ -142,8 +144,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   static ArcSessionManager* Get();
 
-  static void DisableUIForTesting();
-  static void EnableCheckAndroidManagementForTesting();
+  static void SetUiEnabledForTesting(bool enabled);
+  static void EnableCheckAndroidManagementForTesting(bool enable);
 
   // Returns true if ARC is allowed to run for the current session.
   // TODO(hidehiko): The name is very close to IsArcAllowedForProfile(), but
@@ -241,6 +243,12 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // available only on initial start.
   ArcPaiStarter* pai_starter() { return pai_starter_.get(); }
 
+  // Returns Fast App Reinstall starter that is used to start Play Fast App
+  // Reinstall flow. It is available only on initial start.
+  ArcFastAppReinstallStarter* fast_app_resintall_starter() {
+    return fast_app_reinstall_starter_.get();
+  }
+
   // Returns true if the current ARC run has started with skipping user ToS
   // negotiation, because the user had accepted already or policy does not
   // require ToS acceptance. Returns false in other cases, including one when
@@ -282,11 +290,6 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // Otherwise, move to StartAndroidManagementCheck().
   void MaybeStartTermsOfServiceNegotiation();
   void OnTermsOfServiceNegotiated(bool accepted);
-
-  // Returns true if Terms of Service negotiation is needed. Otherwise false.
-  // TODO(crbug.com/698418): Write unittest for this utility after extracting
-  //   ToS related code from ArcSessionManager into a dedicated class.
-  bool IsArcTermsOfServiceNegotiationNeeded() const;
 
   void ShutdownSession();
   void ResetArcState();
@@ -369,10 +372,12 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   bool reenable_arc_ = false;
   bool provisioning_reported_ = false;
   // In case ARC is started from OOBE |oobe_start_|, set to true. This flag is
-  // used to remember |IsArcOobeOptInActive| state when ARC start request was
-  // made.  |IsArcOobeOptInActive| will be changed by the time when
-  // |oobe_start_| is checked to prevent the Play Store auto-launch.
-  bool oobe_start_ = false;
+  // used to remember |IsArcOobeOptInActive| or
+  // |IsArcOptInWizardForAssistantActive| state when ARC start request was made.
+  // |IsArcOobeOptInActive| or |IsArcOptInWizardForAssistantActive| will be
+  // changed by the time when |oobe_or_opa_start_| is checked to prevent the
+  // Play Store auto-launch.
+  bool oobe_or_assistant_wizard_start_ = false;
   bool directly_started_ = false;
   base::OneShotTimer arc_sign_in_timer_;
 
@@ -386,6 +391,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   std::unique_ptr<ScopedOptInFlowTracker> scoped_opt_in_tracker_;
   std::unique_ptr<ArcPaiStarter> pai_starter_;
+  std::unique_ptr<ArcFastAppReinstallStarter> fast_app_reinstall_starter_;
 
   // The time when the sign in process started.
   base::Time sign_in_start_time_;

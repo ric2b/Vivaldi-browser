@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -46,6 +47,8 @@ extern "C" {
 #include <libunwind.h>
 }
 #include "gperftools/stacktrace.h"
+
+#include "base/basictypes.h"
 #include "base/logging.h"
 
 // Sometimes, we can try to get a stack trace from within a stack
@@ -55,7 +58,11 @@ extern "C" {
 // recursive request, we'd end up with infinite recursion or deadlock.
 // Luckily, it's safe to ignore those subsequent traces.  In such
 // cases, we return 0 to indicate the situation.
-static __thread int recursive;
+static __thread int recursive ATTR_INITIAL_EXEC;
+
+#if defined(TCMALLOC_ENABLE_UNWIND_FROM_UCONTEXT) && (defined(__i386__) || defined(__x86_64__)) && defined(__GNU_LIBRARY__)
+#define BASE_STACKTRACE_UNW_CONTEXT_IS_UCONTEXT 1
+#endif
 
 #endif  // BASE_STACKTRACE_LIBINWIND_INL_H_
 
@@ -73,7 +80,7 @@ static __thread int recursive;
 //   int max_depth: the size of the result (and sizes) array(s)
 //   int skip_count: how many stack pointers to skip before storing in result
 //   void* ucp: a ucontext_t* (GetStack{Trace,Frames}WithContext only)
-int GET_STACK_TRACE_OR_FRAMES {
+static int GET_STACK_TRACE_OR_FRAMES {
   void *ip;
   int n = 0;
   unw_cursor_t cursor;
@@ -87,10 +94,27 @@ int GET_STACK_TRACE_OR_FRAMES {
   }
   ++recursive;
 
+#if (IS_WITH_CONTEXT && defined(BASE_STACKTRACE_UNW_CONTEXT_IS_UCONTEXT))
+  if (ucp) {
+    uc = *(static_cast<unw_context_t *>(const_cast<void *>(ucp)));
+    /* this is a bit weird. profiler.cc calls us with signal's ucontext
+     * yet passing us 2 as skip_count and essentially assuming we won't
+     * use ucontext. */
+    /* In order to fix that I'm going to assume that if ucp is
+     * non-null we're asked to ignore skip_count in case we're
+     * able to use ucp */
+    skip_count = 0;
+  } else {
+    unw_getcontext(&uc);
+    skip_count += 2;         // Do not include current and parent frame
+  }
+#else
   unw_getcontext(&uc);
+  skip_count += 2;         // Do not include current and parent frame
+#endif
+
   int ret = unw_init_local(&cursor, &uc);
   assert(ret >= 0);
-  skip_count++;         // Do not include current frame
 
   while (skip_count--) {
     if (unw_step(&cursor) <= 0) {

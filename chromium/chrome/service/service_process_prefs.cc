@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/prefs/pref_filter.h"
@@ -40,7 +39,7 @@ std::string ServiceProcessPrefs::GetString(
 
 void ServiceProcessPrefs::SetString(const std::string& key,
                                     const std::string& value) {
-  prefs_->SetValue(key, base::MakeUnique<base::Value>(value),
+  prefs_->SetValue(key, std::make_unique<base::Value>(value),
                    WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
 }
 
@@ -55,7 +54,7 @@ bool ServiceProcessPrefs::GetBoolean(const std::string& key,
 }
 
 void ServiceProcessPrefs::SetBoolean(const std::string& key, bool value) {
-  prefs_->SetValue(key, base::MakeUnique<base::Value>(value),
+  prefs_->SetValue(key, std::make_unique<base::Value>(value),
                    WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
 }
 
@@ -70,7 +69,7 @@ int ServiceProcessPrefs::GetInt(const std::string& key,
 }
 
 void ServiceProcessPrefs::SetInt(const std::string& key, int value) {
-  prefs_->SetValue(key, base::MakeUnique<base::Value>(value),
+  prefs_->SetValue(key, std::make_unique<base::Value>(value),
                    WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
 }
 

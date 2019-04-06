@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/containers/hash_tables.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
@@ -24,18 +23,20 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/url_and_title.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "third_party/WebKit/public/platform/site_engagement.mojom.h"
+#include "third_party/blink/public/platform/site_engagement.mojom.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
 
 namespace {
 using bookmarks::BookmarkModel;
+using bookmarks::UrlAndTitle;
 using ImportantDomainInfo = ImportantSitesUtil::ImportantDomainInfo;
 using ImportantReason = ImportantSitesUtil::ImportantReason;
 
@@ -292,15 +293,15 @@ void PopulateInfoMapWithBookmarks(
       BookmarkModelFactory::GetForBrowserContextIfExists(profile);
   if (!model)
     return;
-  std::vector<BookmarkModel::URLAndTitle> untrimmed_bookmarks;
+  std::vector<UrlAndTitle> untrimmed_bookmarks;
   model->GetBookmarks(&untrimmed_bookmarks);
 
   // Process the bookmarks and optionally trim them if we have too many.
-  std::vector<BookmarkModel::URLAndTitle> result_bookmarks;
+  std::vector<UrlAndTitle> result_bookmarks;
   if (untrimmed_bookmarks.size() > kMaxBookmarks) {
     std::copy_if(untrimmed_bookmarks.begin(), untrimmed_bookmarks.end(),
                  std::back_inserter(result_bookmarks),
-                 [service](const BookmarkModel::URLAndTitle& entry) {
+                 [service](const UrlAndTitle& entry) {
                    return service->IsEngagementAtLeast(
                        entry.url.GetOrigin(),
                        blink::mojom::EngagementLevel::LOW);
@@ -310,8 +311,7 @@ void PopulateInfoMapWithBookmarks(
     // allow us to remove most of these lookups and merging of signals.
     std::sort(
         result_bookmarks.begin(), result_bookmarks.end(),
-        [&engagement_map](const BookmarkModel::URLAndTitle& a,
-                          const BookmarkModel::URLAndTitle& b) {
+        [&engagement_map](const UrlAndTitle& a, const UrlAndTitle& b) {
           auto a_it = engagement_map.find(a.url.GetOrigin());
           auto b_it = engagement_map.find(b.url.GetOrigin());
           double a_score = a_it == engagement_map.end() ? 0 : a_it->second;
@@ -325,7 +325,7 @@ void PopulateInfoMapWithBookmarks(
   }
 
   std::set<GURL> content_origins;
-  for (const BookmarkModel::URLAndTitle& bookmark : result_bookmarks) {
+  for (const UrlAndTitle& bookmark : result_bookmarks) {
     MaybePopulateImportantInfoForReason(bookmark.url, &content_origins,
                                         ImportantReason::BOOKMARKS, output);
   }
@@ -435,7 +435,7 @@ void ImportantSitesUtil::RecordBlacklistedAndIgnoredImportantSites(
               nullptr));
 
       if (!dict)
-        dict = base::MakeUnique<base::DictionaryValue>();
+        dict = std::make_unique<base::DictionaryValue>();
 
       RecordIgnore(dict.get());
 

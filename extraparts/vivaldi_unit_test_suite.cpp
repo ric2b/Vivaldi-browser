@@ -2,7 +2,7 @@
 
 #include "extraparts/vivaldi_unit_test_suite.h"
 
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/vivaldi_extensions_client.h"

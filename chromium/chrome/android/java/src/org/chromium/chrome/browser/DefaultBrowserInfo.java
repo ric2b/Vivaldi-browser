@@ -10,18 +10,20 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.support.annotation.IntDef;
 import android.text.TextUtils;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
-import org.chromium.content.browser.BrowserStartupController;
+import org.chromium.content_public.browser.BrowserStartupController;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -41,22 +43,18 @@ public final class DefaultBrowserInfo {
      * Additions should be treated as APPEND ONLY to keep the UMA metric semantics the same over
      * time.
      */
-    @IntDef({
-            MobileDefaultBrowserState.NO_DEFAULT,
-            MobileDefaultBrowserState.CHROME_SYSTEM_DEFAULT,
+    @IntDef({MobileDefaultBrowserState.NO_DEFAULT, MobileDefaultBrowserState.CHROME_SYSTEM_DEFAULT,
             MobileDefaultBrowserState.CHROME_INSTALLED_DEFAULT,
             MobileDefaultBrowserState.OTHER_SYSTEM_DEFAULT,
-            MobileDefaultBrowserState.OTHER_INSTALLED_DEFAULT,
-
-            MobileDefaultBrowserState.BOUNDARY,
-    })
+            MobileDefaultBrowserState.OTHER_INSTALLED_DEFAULT})
+    @Retention(RetentionPolicy.SOURCE)
     private @interface MobileDefaultBrowserState {
         int NO_DEFAULT = 0;
         int CHROME_SYSTEM_DEFAULT = 1;
         int CHROME_INSTALLED_DEFAULT = 2;
         int OTHER_SYSTEM_DEFAULT = 3;
         int OTHER_INSTALLED_DEFAULT = 4;
-        int BOUNDARY = 5;
+        int NUM_ENTRIES = 5;
     }
 
     /**
@@ -92,8 +90,8 @@ public final class DefaultBrowserInfo {
                         Context context = ContextUtils.getApplicationContext();
                         ArrayList<String> menuTitles = new ArrayList<String>(2);
                         // Store the package label of current application.
-                        menuTitles.add(
-                                getTitleFromPackageLabel(context, BuildInfo.getPackageLabel()));
+                        menuTitles.add(getTitleFromPackageLabel(
+                                context, BuildInfo.getInstance().hostPackageLabel));
 
                         PackageManager pm = context.getPackageManager();
                         ResolveInfo info = getResolveInfoForViewIntent(pm);
@@ -139,6 +137,15 @@ public final class DefaultBrowserInfo {
         }
     }
 
+    private static List<ResolveInfo> getResolveInfoListForViewIntent(PackageManager pm) {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(SAMPLE_URL));
+        try {
+            return pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
+        } catch (NullPointerException ex) {
+            return null;
+        }
+    }
+
     /**
      * @return Title of the menu item for opening a link in the default browser.
      * @param forceChromeAsDefault Whether the Custom Tab is created by Chrome.
@@ -173,13 +180,10 @@ public final class DefaultBrowserInfo {
 
                     PackageManager pm = context.getPackageManager();
 
-                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                    intent.setData(Uri.parse(SAMPLE_URL));
-
                     DefaultInfo info = new DefaultInfo();
 
                     // Query the default handler first.
-                    ResolveInfo defaultRi = pm.resolveActivity(intent, 0);
+                    ResolveInfo defaultRi = getResolveInfoForViewIntent(pm);
                     if (defaultRi != null && defaultRi.match != 0) {
                         info.hasDefault = true;
                         info.isChromeDefault = isSamePackage(context, defaultRi);
@@ -188,15 +192,16 @@ public final class DefaultBrowserInfo {
 
                     // Query all other intent handlers.
                     Set<String> uniquePackages = new HashSet<>();
-                    List<ResolveInfo> ris =
-                            pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
-                    for (ResolveInfo ri : ris) {
-                        String packageName = ri.activityInfo.applicationInfo.packageName;
-                        if (!uniquePackages.add(packageName)) continue;
+                    List<ResolveInfo> ris = getResolveInfoListForViewIntent(pm);
+                    if (ris != null) {
+                        for (ResolveInfo ri : ris) {
+                            String packageName = ri.activityInfo.applicationInfo.packageName;
+                            if (!uniquePackages.add(packageName)) continue;
 
-                        if (isSystemPackage(ri)) {
-                            if (isSamePackage(context, ri)) info.isChromeSystem = true;
-                            info.systemCount++;
+                            if (isSystemPackage(ri)) {
+                                if (isSamePackage(context, ri)) info.isChromeSystem = true;
+                                info.systemCount++;
+                            }
                         }
                     }
 
@@ -214,7 +219,7 @@ public final class DefaultBrowserInfo {
                     RecordHistogram.recordCount100Histogram(
                             getDefaultBrowserCountUmaName(info), info.browserCount);
                     RecordHistogram.recordEnumeratedHistogram("Mobile.DefaultBrowser.State",
-                            getDefaultBrowserUmaState(info), MobileDefaultBrowserState.BOUNDARY);
+                            getDefaultBrowserUmaState(info), MobileDefaultBrowserState.NUM_ENTRIES);
                 }
             }
                     .executeOnExecutor(

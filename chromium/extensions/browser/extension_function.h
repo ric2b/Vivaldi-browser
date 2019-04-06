@@ -210,8 +210,6 @@ class ExtensionFunction
   // Callers must call Execute() on the return ResponseAction at some point,
   // exactly once.
   //
-  // AsyncExtensionFunctions implement this in terms of
-  // AsyncExtensionFunction::RunAsync, but this is deprecated.
   // ExtensionFunction implementations are encouraged to just implement Run.
   virtual ResponseAction Run() WARN_UNUSED_RESULT = 0;
 
@@ -278,8 +276,12 @@ class ExtensionFunction
   void set_has_callback(bool has_callback) { has_callback_ = has_callback; }
   bool has_callback() { return has_callback_; }
 
-  void set_include_incognito(bool include) { include_incognito_ = include; }
-  bool include_incognito() const { return include_incognito_; }
+  void set_include_incognito_information(bool include) {
+    include_incognito_information_ = include;
+  }
+  bool include_incognito_information() const {
+    return include_incognito_information_;
+  }
 
   // Note: consider using ScopedUserGestureForTests instead of calling
   // set_user_gesture directly.
@@ -471,7 +473,7 @@ class ExtensionFunction
   // even if our profile_ is non-incognito. Note that in the case of a "split"
   // mode extension, this will always be false, and we will limit access to
   // data from within the same profile_ (either incognito or not).
-  bool include_incognito_;
+  bool include_incognito_information_;
 
   // True if the call was made in response of user gesture.
   bool user_gesture_;
@@ -539,12 +541,6 @@ class UIThreadExtensionFunction : public ExtensionFunction {
   void set_service_worker_version_id(int64_t version_id) {
     service_worker_version_id_ = version_id;
   }
-
-  // Gets the "current" web contents if any. If there is no associated web
-  // contents then defaults to the foremost one.
-  // NOTE: "current" can mean different things in different contexts. You
-  // probably want to use GetSenderWebContents().
-  virtual content::WebContents* GetAssociatedWebContents();
 
   // Returns the web contents associated with the sending |render_frame_host_|.
   // This can be null.
@@ -649,57 +645,6 @@ class IOThreadExtensionFunction : public ExtensionFunction {
   scoped_refptr<const extensions::InfoMap> extension_info_map_;
 
   DISALLOW_COPY_AND_ASSIGN(IOThreadExtensionFunction);
-};
-
-// Base class for an extension function that runs asynchronously *relative to
-// the browser's UI thread*.
-class AsyncExtensionFunction : public UIThreadExtensionFunction {
- public:
-  AsyncExtensionFunction();
-
-  void SetError(const std::string& error);
-
-  // ExtensionFunction:
-  const std::string& GetError() const override;
-
- protected:
-  ~AsyncExtensionFunction() override;
-
-  // Sets a single Value as the results of the function.
-  void SetResult(std::unique_ptr<base::Value> result);
-
-  // Sets multiple Values as the results of the function.
-  void SetResultList(std::unique_ptr<base::ListValue> results);
-
-  // Deprecated: Override UIThreadExtensionFunction and implement Run() instead.
-  //
-  // AsyncExtensionFunctions implement this method. Return true to indicate that
-  // nothing has gone wrong yet; SendResponse must be called later. Return false
-  // to respond immediately with an error.
-  virtual bool RunAsync() = 0;
-
-  // ValidationFailure override to match RunAsync().
-  static bool ValidationFailure(AsyncExtensionFunction* function);
-
-  // Responds with success/failure. |results_| or |error_| should be set
-  // accordingly.
-  void SendResponse(bool success);
-
-  // Exposed versions of |results_| and |error_| which are curried into the
-  // ExtensionFunction response.
-  // These need to keep the same name to avoid breaking existing
-  // implementations, but this should be temporary with crbug.com/648275
-  // and crbug.com/634140.
-  std::unique_ptr<base::ListValue> results_;
-  std::string error_;
-
- private:
-  // If you're hitting a compile error here due to "final" - great! You're
-  // doing the right thing, you just need to extend UIThreadExtensionFunction
-  // instead of AsyncExtensionFunction.
-  ResponseAction Run() final;
-
-  DISALLOW_COPY_AND_ASSIGN(AsyncExtensionFunction);
 };
 
 #endif  // EXTENSIONS_BROWSER_EXTENSION_FUNCTION_H_

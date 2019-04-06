@@ -5,6 +5,8 @@
 #ifndef NET_REPORTING_REPORTING_POLICY_H_
 #define NET_REPORTING_REPORTING_POLICY_H_
 
+#include <memory>
+
 #include "base/time/time.h"
 #include "net/base/backoff_entry.h"
 #include "net/base/net_export.h"
@@ -14,6 +16,13 @@ namespace net {
 // Various policy knobs for the Reporting system.
 struct NET_EXPORT ReportingPolicy {
   // Provides a reasonable default for use in a browser embedder.
+  static std::unique_ptr<ReportingPolicy> Create();
+
+  // Lets you override the default policy returned by |Create|.  Use this in
+  // browser tests, where there isn't any other way to pass in a specific test
+  // policy to use.
+  static void UsePolicyForTesting(const ReportingPolicy& policy);
+
   ReportingPolicy();
   ReportingPolicy(const ReportingPolicy& other);
   ~ReportingPolicy();
@@ -51,13 +60,13 @@ struct NET_EXPORT ReportingPolicy {
   // discarded as failed.
   int max_report_attempts;
 
-  // Whether to clear reports when the network changes to avoid leaking browsing
-  // data between networks.
-  bool clear_reports_on_network_changes;
+  // Whether to persist (versus clear) reports when the network changes to avoid
+  // leaking browsing data between networks.
+  bool persist_reports_across_network_changes;
 
-  // Whether to clear clients when the network changes to avoid leaking browsing
-  // data between networks.
-  bool clear_clients_on_network_changes;
+  // Whether to persist (versus clear) clients when the network changes to avoid
+  // leaking browsing data between networks.
+  bool persist_clients_across_network_changes;
 };
 
 }  // namespace net

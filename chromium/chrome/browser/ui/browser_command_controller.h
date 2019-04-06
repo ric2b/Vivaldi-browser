@@ -95,7 +95,9 @@ class BrowserCommandController : public CommandUpdater,
                      content::WebContents* contents,
                      int index,
                      bool foreground) override;
-  void TabDetachedAt(content::WebContents* contents, int index) override;
+  void TabDetachedAt(content::WebContents* contents,
+                     int index,
+                     bool was_active) override;
   void TabReplacedAt(TabStripModel* tab_strip_model,
                      content::WebContents* old_contents,
                      content::WebContents* new_contents,
@@ -146,6 +148,10 @@ class BrowserCommandController : public CommandUpdater,
   // Update commands whose state depends on the type of fullscreen mode the
   // window is in.
   void UpdateCommandsForFullscreenMode();
+
+  // Update commands whose state depends on whether they're available to hosted
+  // app windows.
+  void UpdateCommandsForHostedAppAvailability();
 
 #if defined(OS_CHROMEOS)
   // Update commands whose state depends on whether the window is in locked

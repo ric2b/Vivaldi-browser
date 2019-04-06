@@ -19,7 +19,7 @@
 ** Trace output macros
 */
 #if defined(SQLITE_TEST) || defined(SQLITE_DEBUG)
-/***/ int sqlite3WhereTrace;
+/***/ extern int sqlite3WhereTrace;
 #endif
 #if defined(SQLITE_DEBUG) \
     && (defined(SQLITE_TEST) || defined(SQLITE_ENABLE_WHERETRACE))
@@ -467,12 +467,10 @@ int sqlite3WhereExplainOneScan(
   Parse *pParse,                  /* Parse context */
   SrcList *pTabList,              /* Table list this loop refers to */
   WhereLevel *pLevel,             /* Scan to write OP_Explain opcode for */
-  int iLevel,                     /* Value for "level" column of output */
-  int iFrom,                      /* Value for "from" column of output */
   u16 wctrlFlags                  /* Flags passed to sqlite3WhereBegin() */
 );
 #else
-# define sqlite3WhereExplainOneScan(u,v,w,x,y,z) 0
+# define sqlite3WhereExplainOneScan(u,v,w,x) 0
 #endif /* SQLITE_OMIT_EXPLAIN */
 #ifdef SQLITE_ENABLE_STMT_SCANSTATUS
 void sqlite3WhereAddScanStatus(

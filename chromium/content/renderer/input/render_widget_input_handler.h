@@ -12,14 +12,17 @@
 #include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/renderer/input/main_thread_event_queue.h"
-#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
+#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/blink/did_overscroll_params.h"
 
 namespace blink {
 struct WebFloatPoint;
 struct WebFloatSize;
-struct WebOverscrollBehavior;
+}  // namespace blink
+
+namespace cc {
+struct OverscrollBehavior;
 }
 
 namespace ui {
@@ -58,7 +61,7 @@ class CONTENT_EXPORT RenderWidgetInputHandler {
                               const blink::WebFloatSize& accumulatedOverscroll,
                               const blink::WebFloatPoint& position,
                               const blink::WebFloatSize& velocity,
-                              const blink::WebOverscrollBehavior& behavior);
+                              const cc::OverscrollBehavior& behavior);
 
   bool handling_input_event() const { return handling_input_event_; }
   void set_handling_input_event(bool handling_input_event) {
@@ -70,6 +73,9 @@ class CONTENT_EXPORT RenderWidgetInputHandler {
   bool ProcessTouchAction(cc::TouchAction touch_action);
 
  private:
+  blink::WebInputEventResult HandleTouchEvent(
+      const blink::WebCoalescedInputEvent& coalesced_event);
+
   RenderWidgetInputHandlerDelegate* const delegate_;
 
   RenderWidget* const widget_;

@@ -3,10 +3,13 @@
 # found in the LICENSE file.
 
 import("//third_party/closure_compiler/closure_args.gni")
+import("//ui/webui/webui_features.gni")
 
 script_path = "//third_party/closure_compiler"
 compiler_path = "$script_path/compiler/compiler.jar"
 externs_path = "$script_path/externs"
+interfaces_path = "$script_path/interfaces"
+chrome_externs = "$externs_path/chrome.js"
 polymer_externs = "$externs_path/polymer-1.0.js"
 
 # Defines a target that creates an ordering for .js files to be used by
@@ -23,6 +26,12 @@ polymer_externs = "$externs_path/polymer-1.0.js"
 #   extra_deps:
 #     List of any other rules to depend on. E.g. a rule that generates js source
 #     files
+#
+#   externs_list:
+#     A list of .js files to pass to the compiler as externs
+#
+#   extra_sources:
+#     A list of .js files to pass to the compiler as interfaces
 #
 # Example:
 #   js_library("apple_tree") {
@@ -42,6 +51,7 @@ template("js_library") {
                              "sources",
                              "deps",
                              "externs_list",
+                             "extra_sources",
                              "extra_deps",
                            ])
     output_file = "$target_gen_dir/$target_name.js_library"
@@ -57,6 +67,10 @@ template("js_library") {
     }
 
     args += [ "--sources" ] + rebase_path(sources, root_build_dir)
+    if (defined(extra_sources)) {
+      args += rebase_path(extra_sources, root_build_dir)
+      sources += extra_sources
+    }
 
     if (defined(deps)) {
       args += [ "--deps" ]
@@ -70,6 +84,7 @@ template("js_library") {
     }
     if (defined(externs_list)) {
       args += [ "--externs" ] + rebase_path(externs_list, root_build_dir)
+      sources += externs_list
     }
     if (defined(extra_deps)) {
       if (!defined(deps)) {
@@ -137,6 +152,8 @@ template("js_binary") {
                              "config_files",
                              "closure_flags",
                              "externs_list",
+                             "extra_deps",
+                             "checks_only",
                            ])
     args = [
       "--compiler",
@@ -186,14 +203,40 @@ template("js_binary") {
     if (!defined(closure_flags)) {
       closure_flags = default_closure_args
     }
+    if (defined(checks_only) && checks_only) {
+      args += [ "--checks-only" ]
+    }
     args += [ "--flags" ] + closure_flags
     args += [
       "--externs",
+      rebase_path("$chrome_externs", root_build_dir),
       rebase_path("$polymer_externs", root_build_dir),
     ]
     if (defined(externs_list)) {
       args += rebase_path(externs_list, root_build_dir)
       sources += externs_list
+    }
+
+    if (defined(extra_deps)) {
+      if (!defined(deps)) {
+        deps = []
+      }
+      deps += extra_deps
+    }
+  }
+}
+
+# Defines a target that compiles a group of js_library targets.
+template("js_type_check") {
+  if (closure_compile) {
+    js_binary(target_name) {
+      sources = []
+      checks_only = true
+      forward_variables_from(invoker, [ "deps" ])
+    }
+  } else {
+    not_needed(invoker, "*")
+    group(target_name) {
     }
   }
 }

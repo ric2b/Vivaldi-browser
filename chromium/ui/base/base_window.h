@@ -66,6 +66,9 @@ class UI_BASE_EXPORT BaseWindow {
   // Hides the window.
   virtual void Hide() = 0;
 
+  // Returns whether the window is visible.
+  virtual bool IsVisible() const = 0;
+
   // Show the window, but do not activate it. Does nothing if window
   // is already visible.
   virtual void ShowInactive() = 0;
@@ -100,9 +103,6 @@ class UI_BASE_EXPORT BaseWindow {
   // If set to true, the window will stay on top of other windows which do not
   // have this flag enabled.
   virtual void SetAlwaysOnTop(bool always_on_top) = 0;
-
-  // Update the inset. Used to update when a frameless window goes to maximized.
-  virtual void UpdateEventTargeterWithInset() {};
 };
 
 }  // namespace ui

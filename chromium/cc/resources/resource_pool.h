@@ -14,18 +14,29 @@
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/memory_coordinator_client.h"
-#include "base/memory/ptr_util.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_provider.h"
+#include "base/unguessable_token.h"
 #include "cc/cc_export.h"
-#include "cc/resources/resource.h"
-#include "cc/resources/scoped_resource.h"
 #include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/resources/resource_id.h"
+#include "components/viz/common/resources/shared_bitmap.h"
+#include "gpu/command_buffer/common/sync_token.h"
+#include "third_party/khronos/GLES2/gl2.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 namespace base {
 class SingleThreadTaskRunner;
+}
+
+namespace viz {
+class ClientResourceProvider;
+class ContextProvider;
 }
 
 namespace cc {
@@ -38,6 +49,50 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   // Delay before a resource is considered expired.
   static constexpr base::TimeDelta kDefaultExpirationDelay =
       base::TimeDelta::FromSeconds(5);
+
+  // A base class to hold ownership of gpu backed PoolResources. Allows the
+  // client to define destruction semantics.
+  class GpuBacking {
+   public:
+    virtual ~GpuBacking() = default;
+
+    // Guids for for memory dumps. This guid will be valid once the GpuBacking
+    // has memory allocated. Called on the compositor thread.
+    virtual base::trace_event::MemoryAllocatorDumpGuid MemoryDumpGuid(
+        uint64_t tracing_process_id) = 0;
+    // Some gpu resources can be shared memory-backed, and this guid should be
+    // prefered in that case. But if not then this will be empty. Called on the
+    // compositor thread.
+    virtual base::UnguessableToken SharedMemoryGuid() = 0;
+
+    gpu::Mailbox mailbox;
+    gpu::SyncToken mailbox_sync_token;
+    GLenum texture_target = 0;
+    bool overlay_candidate = false;
+    // For resources that are modified directly on the gpu, outside the command
+    // stream, a fence must be used to know when the backing is not in use and
+    // may be returned to and reused by the pool.
+    bool wait_on_fence_required = false;
+
+    // Set by the ResourcePool when a resource is returned from the display
+    // compositor, or when the resource texture and mailbox are created for the
+    // first time, if the resource is shared with another context. The client of
+    // ResourcePool needs to wait on this token if it exists, before using a
+    // resource handed out by the ResourcePool.
+    gpu::SyncToken returned_sync_token;
+  };
+
+  // A base class to hold ownership of software backed PoolResources. Allows the
+  // client to define destruction semantics.
+  class SoftwareBacking {
+   public:
+    virtual ~SoftwareBacking() = default;
+
+    // Return the guid for this resource, based on the shared memory backing it.
+    virtual base::UnguessableToken SharedMemoryGuid() = 0;
+
+    viz::SharedBitmapId shared_bitmap_id;
+  };
 
   // Scoped move-only object returned when getting a resource from the pool.
   // Ownership must be given back to the pool to release the resource.
@@ -67,23 +122,40 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
 
     const gfx::Size& size() const { return resource_->size(); }
     const viz::ResourceFormat& format() const { return resource_->format(); }
+    const gfx::ColorSpace& color_space() const {
+      return resource_->color_space();
+    }
     // The ResourceId when the backing is given to the ResourceProvider for
     // export to the display compositor.
     const viz::ResourceId& resource_id_for_export() const {
+      // The ResourceId should not be accessed before it is created!
+      DCHECK(resource_->resource_id());
       return resource_->resource_id();
+    }
+
+    // Only valid when the ResourcePool is vending texture-backed resources.
+    GpuBacking* gpu_backing() const {
+      DCHECK(is_gpu_);
+      return resource_->gpu_backing();
+    }
+    void set_gpu_backing(std::unique_ptr<GpuBacking> gpu) const {
+      DCHECK(is_gpu_);
+      return resource_->set_gpu_backing(std::move(gpu));
     }
 
     // Only valid when the ResourcePool is vending software-backed resources.
-    const viz::ResourceId& software_backing_resource_id() const {
+    SoftwareBacking* software_backing() const {
       DCHECK(!is_gpu_);
-      return resource_->resource_id();
+      return resource_->software_backing();
+    }
+    void set_software_backing(std::unique_ptr<SoftwareBacking> software) const {
+      DCHECK(!is_gpu_);
+      resource_->set_software_backing(std::move(software));
     }
 
-    // Only valid when the ResourcePool is vending gpu-backed resources.
-    const viz::ResourceId& gpu_backing_resource_id() const {
-      DCHECK(is_gpu_);
-      return resource_->resource_id();
-    }
+    // Production code should not be built around these ids, but tests use them
+    // to check for identity.
+    size_t unique_id_for_testing() const { return resource_->unique_id(); }
 
    private:
     friend ResourcePool;
@@ -95,22 +167,11 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
     PoolResource* resource_ = nullptr;
   };
 
-  // Constructor for creating Gpu memory buffer resources.
-  ResourcePool(LayerTreeResourceProvider* resource_provider,
-               scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-               gfx::BufferUsage usage,
-               const base::TimeDelta& expiration_delay,
-               bool disallow_non_exact_reuse);
-
-  // Constructor for creating standard Gpu resources.
-  ResourcePool(LayerTreeResourceProvider* resource_provider,
-               scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-               viz::ResourceTextureHint hint,
-               const base::TimeDelta& expiration_delay,
-               bool disallow_non_exact_reuse);
-
-  // Constructor for creating software resources.
-  ResourcePool(LayerTreeResourceProvider* resource_provider,
+  // When holding gpu resources, the |context_provider| should be non-null,
+  // and when holding software resources, it should be null. It is used for
+  // consistency checking as well as for correctness.
+  ResourcePool(viz::ClientResourceProvider* resource_provider,
+               viz::ContextProvider* context_provider,
                scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                const base::TimeDelta& expiration_delay,
                bool disallow_non_exact_reuse);
@@ -131,6 +192,19 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
       uint64_t previous_content_id,
       gfx::Rect* total_invalidated_rect);
 
+  // Gives the InUsePoolResource a |resource_id_for_export()| in order to allow
+  // exporting of the resource to the display compositor. This must be called
+  // with a resource only after it has a backing allocated for it. Initially an
+  // acquired InUsePoolResource will be only metadata, and the backing is given
+  // to it by code which is aware of the expected backing type - currently by
+  // RasterBufferProvider::AcquireBufferForRaster().
+  void PrepareForExport(const InUsePoolResource& resource);
+
+  // Marks any resources in the pool as invalid, preventing their reuse. Call if
+  // previous resources were allocated in one way, but future resources should
+  // be allocated in a different way.
+  void InvalidateResources();
+
   // Called when a resource's content has been fully replaced (and is completely
   // valid). Updates the resource's content ID to its new value.
   void OnContentReplaced(const ResourcePool::InUsePoolResource& in_use_resource,
@@ -142,10 +216,6 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   void ReduceResourceUsage();
   bool ResourceUsageTooHigh();
 
-  // Must be called regularly to move resources from the busy pool to the unused
-  // pool.
-  void CheckBusyResources();
-
   size_t memory_usage_bytes() const { return in_use_memory_usage_bytes_; }
   size_t resource_count() const { return in_use_resources_.size(); }
 
@@ -155,6 +225,12 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
 
   // Overriden from base::MemoryCoordinatorClient.
   void OnPurgeMemory() override;
+  void OnMemoryStateChange(base::MemoryState state) override;
+
+  // TODO(gyuyoung): OnMemoryPressure is deprecated. So this should be removed
+  // when the memory coordinator is enabled by default.
+  void OnMemoryPressure(
+      base::MemoryPressureListener::MemoryPressureLevel level);
 
   size_t GetTotalMemoryUsageForTesting() const {
     return total_memory_usage_bytes_;
@@ -177,15 +253,28 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
     PoolResource(size_t unique_id,
                  const gfx::Size& size,
                  viz::ResourceFormat format,
-                 const gfx::ColorSpace& color_space,
-                 viz::ResourceId resource_id);
+                 const gfx::ColorSpace& color_space);
     ~PoolResource();
 
     size_t unique_id() const { return unique_id_; }
     const gfx::Size& size() const { return size_; }
     const viz::ResourceFormat& format() const { return format_; }
     const gfx::ColorSpace& color_space() const { return color_space_; }
+
     const viz::ResourceId& resource_id() const { return resource_id_; }
+    void set_resource_id(viz::ResourceId id) { resource_id_ = id; }
+
+    GpuBacking* gpu_backing() const { return gpu_backing_.get(); }
+    void set_gpu_backing(std::unique_ptr<GpuBacking> gpu) {
+      gpu_backing_ = std::move(gpu);
+    }
+
+    SoftwareBacking* software_backing() const {
+      return software_backing_.get();
+    }
+    void set_software_backing(std::unique_ptr<SoftwareBacking> software) {
+      software_backing_ = std::move(software);
+    }
 
     uint64_t content_id() const { return content_id_; }
     void set_content_id(uint64_t content_id) { content_id_ = content_id; }
@@ -198,8 +287,12 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
       invalidated_rect_ = invalidated_rect;
     }
 
+    bool avoid_reuse() const { return avoid_reuse_; }
+    void mark_avoid_reuse() { avoid_reuse_ = true; }
+
     void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
-                      const LayerTreeResourceProvider* resource_provider,
+                      int tracing_id,
+                      const viz::ClientResourceProvider* resource_provider,
                       bool is_free) const;
 
    private:
@@ -212,10 +305,29 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
     base::TimeTicks last_usage_;
     gfx::Rect invalidated_rect_;
 
-    viz::ResourceId resource_id_;
-    // TODO(crbug.com/730660): Own a backing for software resources here,
-    // instead of owning it through the |resource_id_|.
+    // Set to true for resources that should be destroyed instead of returned to
+    // the pool for reuse.
+    bool avoid_reuse_ = false;
+
+    // An id used to name the backing for transfer to the display compositor.
+    viz::ResourceId resource_id_ = 0;
+
+    // The backing for gpu resources. Initially null for resources given
+    // out by ResourcePool, to be filled in by the client. Is destroyed on the
+    // compositor thread.
+    std::unique_ptr<GpuBacking> gpu_backing_;
+
+    // The backing for software resources. Initially null for resources given
+    // out by ResourcePool, to be filled in by the client. Is destroyed on the
+    // compositor thread.
+    std::unique_ptr<SoftwareBacking> software_backing_;
   };
+
+  // Callback from the ResourceProvider to notify when an exported PoolResource
+  // is not busy and may be reused.
+  void OnResourceReleased(size_t unique_id,
+                          const gpu::SyncToken& sync_token,
+                          bool lost);
 
   // Tries to reuse a resource. Returns |nullptr| if none are available.
   PoolResource* ReuseResource(const gfx::Size& size,
@@ -241,14 +353,12 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   bool HasEvictableResources() const;
   base::TimeTicks GetUsageTimeForLRUResource() const;
 
-  LayerTreeResourceProvider* const resource_provider_ = nullptr;
-  const bool use_gpu_resources_ = false;
-  const bool use_gpu_memory_buffers_ = false;
-  const gfx::BufferUsage usage_ = gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
-  const viz::ResourceTextureHint hint_ = viz::ResourceTextureHint::kDefault;
+  viz::ClientResourceProvider* const resource_provider_;
+  viz::ContextProvider* const context_provider_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   const base::TimeDelta resource_expiration_delay_;
   const bool disallow_non_exact_reuse_ = false;
+  const int tracing_id_;
 
   size_t next_resource_unique_id_ = 1;
   size_t max_memory_usage_bytes_ = 0;
@@ -257,6 +367,7 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   size_t total_memory_usage_bytes_ = 0;
   size_t total_resource_count_ = 0;
   bool evict_expired_resources_pending_ = false;
+  bool evict_busy_resources_when_unused_ = false;
 
   // Holds most recently used resources at the front of the queue.
   base::circular_deque<std::unique_ptr<PoolResource>> unused_resources_;
@@ -264,6 +375,8 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
 
   // Map from the PoolResource |unique_id| to the PoolResource.
   std::map<size_t, std::unique_ptr<PoolResource>> in_use_resources_;
+
+  std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
   base::WeakPtrFactory<ResourcePool> weak_ptr_factory_;
 

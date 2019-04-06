@@ -16,35 +16,47 @@ suite('ProtocolHandlers', function() {
    */
   const protocols = [
     {
-      default_handler: 0,
       handlers: [{
         host: 'www.google.com',
         protocol: 'mailto',
-        spec: 'http://www.google.com/%s'
+        protocol_name: 'email',
+        spec: 'http://www.google.com/%s',
+        is_default: true
       }],
-      has_policy_recommendations: false,
-      is_default_handler_set_by_user: true,
       protocol: 'mailto'
     },
     {
-      default_handler: 0,
       handlers: [
         {
           host: 'www.google1.com',
           protocol: 'webcal',
-          spec: 'http://www.google1.com/%s'
+          protocol_name: 'web calendar',
+          spec: 'http://www.google1.com/%s',
+          is_default: true
         },
         {
           host: 'www.google2.com',
           protocol: 'webcal',
-          spec: 'http://www.google2.com/%s'
+          protocol_name: 'web calendar',
+          spec: 'http://www.google2.com/%s',
+          is_default: false
         }
       ],
-      has_policy_recommendations: false,
-      is_default_handler_set_by_user: true,
       protocol: 'webcal'
     }
   ];
+
+  /**
+   * A list of IngnoredProtocolEntry fixtures.
+   * @type {!Array<!HandlerEntry}>}
+   */
+  const ignoredProtocols = [{
+    host: 'www.google.com',
+    protocol: 'web+ignored',
+    protocol_name: 'web+ignored',
+    spec: 'https://www.google.com/search?q=ignored+%s',
+    is_default: false
+  }];
 
   /**
    * The mock proxy object to use during test.
@@ -68,8 +80,9 @@ suite('ProtocolHandlers', function() {
     PolymerTest.clearBody();
     testElement = document.createElement('protocol-handlers');
     document.body.appendChild(testElement);
-    return browserProxy.whenCalled('observeProtocolHandlers')
-        .then(Polymer.dom.flush.bind(Polymer.dom));
+    return browserProxy.whenCalled('observeProtocolHandlers').then(function() {
+      Polymer.dom.flush();
+    });
   }
 
   test('empty list', function() {
@@ -92,15 +105,36 @@ suite('ProtocolHandlers', function() {
 
       // Check that item hosts are rendered correctly.
       const hosts = testElement.root.querySelectorAll('.protocol-host');
-      assertEquals('www.google.com', hosts[0].textContent);
-      assertEquals('www.google1.com', hosts[1].textContent);
-      assertEquals('www.google2.com', hosts[2].textContent);
+      assertEquals('www.google.com', hosts[0].textContent.trim());
+      assertEquals('www.google1.com', hosts[1].textContent.trim());
+      assertEquals('www.google2.com', hosts[2].textContent.trim());
 
       // Check that item default subtexts are rendered correctly.
       const defText = testElement.root.querySelectorAll('.protocol-default');
       assertFalse(defText[0].hidden);
       assertFalse(defText[1].hidden);
       assertTrue(defText[2].hidden);
+    });
+  });
+
+  test('non-empty ignored protocols', () => {
+    browserProxy.setIgnoredProtocols(ignoredProtocols);
+
+    return initPage().then(() => {
+      const listFrames = testElement.root.querySelectorAll('.list-frame');
+      const listItems = testElement.root.querySelectorAll('.list-item');
+      // There is a single blocked protocols section
+      assertEquals(1, listFrames.length);
+      // There is one total handlers within the two protocols.
+      assertEquals(1, listItems.length);
+
+      // Check that item hosts are rendered correctly.
+      const hosts = testElement.root.querySelectorAll('.protocol-host');
+      assertEquals('www.google.com', hosts[0].textContent.trim());
+
+      // Check that item default subtexts are rendered correctly.
+      const defText = testElement.root.querySelectorAll('.protocol-protocol');
+      assertFalse(defText[0].hidden);
     });
   });
 
@@ -111,48 +145,33 @@ suite('ProtocolHandlers', function() {
    * @return {!Promise}
    */
   function testButtonFlow(button, browserProxyHandler) {
-    let menuButtons;
-    let functionButton;
-    let dialog;
-
-    return initPage()
-        .then(function() {
-          // Initiating the elements
-          menuButtons =
-              testElement.root.querySelectorAll('button.icon-more-vert');
-          functionButton = testElement.$[button];
-          dialog = testElement.$$('dialog[is=cr-action-menu]');
-          assertEquals(3, menuButtons.length);
-
-          // Test the button for the first protocol handler
-          MockInteractions.tap(menuButtons[0]);
-          assertTrue(dialog.open);
-
-          MockInteractions.tap(functionButton);
-
-          return browserProxy.whenCalled(browserProxyHandler);
-        })
-        .then(function(args) {
-          // BrowserProxy's handler is expected to be called with arguments as
-          // [protocol, url].
-          assertEquals(protocols[0].protocol, args[0]);
-          assertEquals(protocols[0].handlers[0].spec, args[1]);
-
-          const dialog = testElement.$$('dialog[is=cr-action-menu]');
-          assertFalse(dialog.open);
-
-          // Test the button for the second protocol handler
-          browserProxy.reset();
-          MockInteractions.tap(menuButtons[1]);
-          assertTrue(dialog.open);
-          MockInteractions.tap(functionButton);
-
-          return browserProxy.whenCalled(browserProxyHandler);
-        })
-        .then(function(args) {
-          assertEquals(protocols[1].protocol, args[0]);
-          assertEquals(protocols[1].handlers[0].spec, args[1]);
+    return initPage().then(() => {
+      // Initiating the elements
+      const menuButtons = testElement.root.querySelectorAll(
+          'paper-icon-button-light.icon-more-vert');
+      assertEquals(3, menuButtons.length);
+      const dialog = testElement.$$('cr-action-menu');
+      return Promise.all([[0, 0], [1, 0], [1, 1]].map((indices, menuIndex) => {
+        const protocolIndex = indices[0];
+        const handlerIndex = indices[1];
+        // Test the button for the first protocol handler
+        browserProxy.reset();
+        assertFalse(dialog.open);
+        menuButtons[menuIndex].querySelector('button').click();
+        assertTrue(dialog.open);
+        testElement.$[button].click();
+        assertFalse(dialog.open);
+        return browserProxy.whenCalled(browserProxyHandler).then(args => {
+          const protocol = args[0];
+          const url = args[1];
+          // BrowserProxy's handler is expected to be called with
+          // arguments as [protocol, url].
+          assertEquals(protocols[protocolIndex].protocol, protocol);
+          assertEquals(
+              protocols[protocolIndex].handlers[handlerIndex].spec, url);
         });
+      }));
+    });
   }
 
   test('remove button works', function() {
@@ -162,6 +181,35 @@ suite('ProtocolHandlers', function() {
 
   test('default button works', function() {
     browserProxy.setProtocolHandlers(protocols);
-    return testButtonFlow('defaultButton', 'setProtocolDefault');
+    return testButtonFlow('defaultButton', 'setProtocolDefault').then(() => {
+      const menuButtons = testElement.root.querySelectorAll(
+          'paper-icon-button-light.icon-more-vert');
+      const closeMenu = () => testElement.$$('cr-action-menu').close();
+      menuButtons[0].querySelector('button').click();
+      assertTrue(testElement.$.defaultButton.hidden);
+      closeMenu();
+      menuButtons[1].querySelector('button').click();
+      assertTrue(testElement.$.defaultButton.hidden);
+      closeMenu();
+      menuButtons[2].querySelector('button').click();
+      assertFalse(testElement.$.defaultButton.hidden);
+    });
+  });
+
+  test('remove button for ignored works', () => {
+    browserProxy.setIgnoredProtocols(ignoredProtocols);
+    return initPage()
+        .then(() => {
+          testElement.$$('#removeIgnoredButton').click();
+          return browserProxy.whenCalled('removeProtocolHandler');
+        })
+        .then(args => {
+          const protocol = args[0];
+          const url = args[1];
+          // BrowserProxy's handler is expected to be called with arguments as
+          // [protocol, url].
+          assertEquals(ignoredProtocols[0].protocol, protocol);
+          assertEquals(ignoredProtocols[0].spec, url);
+        });
   });
 });

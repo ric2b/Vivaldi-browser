@@ -37,7 +37,7 @@ namespace views {
 using Type = display::DisplayList::Type;
 
 ScreenMus::ScreenMus(ScreenMusDelegate* delegate)
-    : delegate_(delegate), display_manager_observer_binding_(this) {
+    : delegate_(delegate), screen_provider_observer_binding_(this) {
   DCHECK(delegate);
   display::Screen::SetScreenInstance(this);
 }
@@ -47,51 +47,29 @@ ScreenMus::~ScreenMus() {
   display::Screen::SetScreenInstance(nullptr);
 }
 
-void ScreenMus::Init(service_manager::Connector* connector) {
-  connector->BindInterface(ui::mojom::kServiceName, &display_manager_);
+void ScreenMus::InitDeprecated(service_manager::Connector* connector) {
+  connector->BindInterface(ui::mojom::kServiceName, &screen_provider_);
 
-  ui::mojom::DisplayManagerObserverPtr observer;
-  display_manager_observer_binding_.Bind(mojo::MakeRequest(&observer));
-  display_manager_->AddObserver(std::move(observer));
+  ui::mojom::ScreenProviderObserverPtr observer;
+  screen_provider_observer_binding_.Bind(mojo::MakeRequest(&observer));
+  screen_provider_->AddObserver(std::move(observer));
 
   // We need the set of displays before we can continue. Wait for it.
   //
   // TODO(rockot): Do something better here. This should not have to block tasks
   // from running on the calling thread. http://crbug.com/594852.
-  bool success = display_manager_observer_binding_.WaitForIncomingMethodCall();
+  bool success = screen_provider_observer_binding_.WaitForIncomingMethodCall();
 
   // The WaitForIncomingMethodCall() should have supplied the set of Displays,
   // unless mus is going down, in which case encountered_error() is true, or the
   // call to WaitForIncomingMethodCall() failed.
   if (display_list().displays().empty()) {
-    DCHECK(display_manager_.encountered_error() || !success);
+    DCHECK(screen_provider_.encountered_error() || !success);
     // In this case we install a default display and assume the process is
     // going to exit shortly so that the real value doesn't matter.
     display_list().AddDisplay(
         display::Display(0xFFFFFFFF, gfx::Rect(0, 0, 801, 802)), Type::PRIMARY);
   }
-}
-
-display::Display ScreenMus::GetDisplayNearestWindow(
-    gfx::NativeWindow window) const {
-  aura::WindowTreeHostMus* window_tree_host_mus =
-      aura::WindowTreeHostMus::ForWindow(window);
-  if (!window_tree_host_mus)
-    return GetPrimaryDisplay();
-  return window_tree_host_mus->GetDisplay();
-}
-
-gfx::Point ScreenMus::GetCursorScreenPoint() {
-  return aura::Env::GetInstance()->last_mouse_location();
-}
-
-bool ScreenMus::IsWindowUnderCursor(gfx::NativeWindow window) {
-  return window && window->IsVisible() &&
-         window->GetBoundsInScreen().Contains(GetCursorScreenPoint());
-}
-
-aura::Window* ScreenMus::GetWindowAtScreenPoint(const gfx::Point& point) {
-  return delegate_->GetWindowAtScreenPoint(point);
 }
 
 void ScreenMus::OnDisplaysChanged(
@@ -152,6 +130,28 @@ void ScreenMus::OnDisplaysChanged(
       initial_frame_values != WindowManagerFrameValues::instance()) {
     delegate_->OnWindowManagerFrameValuesChanged();
   }
+}
+
+display::Display ScreenMus::GetDisplayNearestWindow(
+    gfx::NativeWindow window) const {
+  aura::WindowTreeHostMus* window_tree_host_mus =
+      aura::WindowTreeHostMus::ForWindow(window);
+  if (!window_tree_host_mus)
+    return GetPrimaryDisplay();
+  return window_tree_host_mus->GetDisplay();
+}
+
+gfx::Point ScreenMus::GetCursorScreenPoint() {
+  return aura::Env::GetInstance()->last_mouse_location();
+}
+
+bool ScreenMus::IsWindowUnderCursor(gfx::NativeWindow window) {
+  return window && window->IsVisible() &&
+         window->GetBoundsInScreen().Contains(GetCursorScreenPoint());
+}
+
+aura::Window* ScreenMus::GetWindowAtScreenPoint(const gfx::Point& point) {
+  return delegate_->GetWindowAtScreenPoint(point);
 }
 
 }  // namespace views

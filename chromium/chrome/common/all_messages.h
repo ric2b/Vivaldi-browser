@@ -11,8 +11,8 @@
 // chrome/tools/ipclist/ipclist.cc.
 
 #include "build/build_config.h"
-#include "components/nacl/common/features.h"
-#include "printing/features/features.h"
+#include "components/nacl/common/buildflags.h"
+#include "printing/buildflags/buildflags.h"
 
 #include "chrome/common/common_message_generator.h"
 

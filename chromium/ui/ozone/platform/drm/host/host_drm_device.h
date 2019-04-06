@@ -14,6 +14,7 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/gpu_thread_adapter.h"
+#include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/interfaces/device_cursor.mojom.h"
 #include "ui/ozone/public/interfaces/drm_device.mojom.h"
 
@@ -21,25 +22,23 @@ namespace display {
 class DisplaySnapshot;
 }
 
-namespace service_manager {
-class Connector;
-}
-
 namespace ui {
 class DrmDisplayHostManager;
 class DrmOverlayManager;
 class GpuThreadObserver;
+class DrmDeviceConnector;
+class HostCursorProxy;
 
 // This is the Viz host-side library for the DRM device service provided by the
 // viz process.
-class HostDrmDevice : public GpuThreadAdapter {
+class HostDrmDevice : public base::RefCountedThreadSafe<HostDrmDevice>,
+                      public GpuThreadAdapter {
  public:
-  HostDrmDevice(DrmCursor* cursor, service_manager::Connector* connector);
-  ~HostDrmDevice() override;
+  explicit HostDrmDevice(DrmCursor* cursor);
 
   // Start the DRM service. Runs the |OnDrmServiceStartedCallback| when the
   // service has launched and initiates the remaining startup.
-  void AsyncStartDrmDevice();
+  void AsyncStartDrmDevice(const DrmDeviceConnector& connector);
 
   // Blocks until the DRM service has come up. Use this entry point only when
   // supporting launch of the service where the ozone UI and GPU
@@ -48,6 +47,16 @@ class HostDrmDevice : public GpuThreadAdapter {
 
   void ProvideManagers(DrmDisplayHostManager* display_manager,
                        DrmOverlayManager* overlay_manager);
+
+  void OnGpuServiceLaunched(ui::ozone::mojom::DrmDevicePtr drm_device_ptr,
+                            ui::ozone::mojom::DeviceCursorPtr cursor_ptr_ui,
+                            ui::ozone::mojom::DeviceCursorPtr cursor_ptr_io);
+
+  void OnGpuServiceLaunchedCompositor(
+      ui::ozone::mojom::DrmDevicePtr drm_device_ptr_compositor);
+
+  // Invoked by DrmDeviceConnector on loss of GPU service.
+  void OnGpuServiceLost();
 
   // GpuThreadAdapter
   void AddGpuThreadObserver(GpuThreadObserver* observer) override;
@@ -80,11 +89,12 @@ class HostDrmDevice : public GpuThreadAdapter {
   bool GpuDisableNativeDisplay(int64_t display_id) override;
   bool GpuGetHDCPState(int64_t display_id) override;
   bool GpuSetHDCPState(int64_t display_id, display::HDCPState state) override;
-  bool GpuSetColorCorrection(
+  bool GpuSetColorMatrix(int64_t display_id,
+                         const std::vector<float>& color_matrix) override;
+  bool GpuSetGammaCorrection(
       int64_t display_id,
       const std::vector<display::GammaRampRGBEntry>& degamma_lut,
-      const std::vector<display::GammaRampRGBEntry>& gamma_lut,
-      const std::vector<float>& correction_matrix) override;
+      const std::vector<display::GammaRampRGBEntry>& gamma_lut) override;
 
   // Services needed by DrmWindowHost
   bool GpuDestroyWindow(gfx::AcceleratedWidget widget) override;
@@ -93,12 +103,28 @@ class HostDrmDevice : public GpuThreadAdapter {
                               const gfx::Rect& bounds) override;
 
  private:
+  friend class base::RefCountedThreadSafe<HostDrmDevice>;
+  ~HostDrmDevice() override;
+
+  void HostOnGpuServiceLaunched();
+
+  // BindInterface arranges for the drm_device_ptr to be wired up.
+  void BindInterfaceDrmDevice(
+      ui::ozone::mojom::DrmDevicePtr* drm_device_ptr) const;
+
+  // BindInterface arranges for the cursor_ptr to be wired up.
+  void BindInterfaceDeviceCursor(
+      ui::ozone::mojom::DeviceCursorPtr* cursor_ptr) const;
+
   void OnDrmServiceStartedCallback(bool success);
+
+  // TODO(rjkroege): Get rid of the need for this method in a subsequent CL.
   void PollForSingleThreadReady(int previous_delay);
+
   void RunObservers();
 
   void GpuCheckOverlayCapabilitiesCallback(
-      const gfx::AcceleratedWidget& widget,
+      gfx::AcceleratedWidget widget,
       const OverlaySurfaceCandidateList& overlays,
       const OverlayStatusList& returns) const;
 
@@ -115,20 +141,31 @@ class HostDrmDevice : public GpuThreadAdapter {
                                display::HDCPState state) const;
   void GpuSetHDCPStateCallback(int64_t display_id, bool success) const;
 
-  // Mojo implementation of the DrmDevice.
+  // Mojo implementation of the DrmDevice. Will be bound on the "main" thread.
   ui::ozone::mojom::DrmDevicePtr drm_device_ptr_;
+
+  // When running under mus, this is the UI thread specific DrmDevice ptr for
+  // use by the compositor.
+  // TODO(rjkroege): When mash is removed, this code can also be removed.
+  ui::ozone::mojom::DrmDevicePtr drm_device_ptr_compositor_;
 
   DrmDisplayHostManager* display_manager_;  // Not owned.
   DrmOverlayManager* overlay_manager_;      // Not owned.
   DrmCursor* cursor_;                       // Not owned.
 
-  service_manager::Connector* connector_;
+  std::unique_ptr<HostCursorProxy> cursor_proxy_;
+
+  THREAD_CHECKER(on_io_thread_);  // Needs to be rebound as is allocated on the
+                                  // window server  thread.
   THREAD_CHECKER(on_window_server_thread_);
+  // When running under mus, some entry points are used from the mus thread
+  // and some are used from the ui thread. In general. In that case, the
+  // on_ui_thread_ and on_window_server_thread_ will differ. In particular,
+  // entry points used by the compositor use the ui thread.
+  THREAD_CHECKER(on_ui_thread_);
 
   bool connected_ = false;
   base::ObserverList<GpuThreadObserver> gpu_thread_observers_;
-
-  base::WeakPtrFactory<HostDrmDevice> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(HostDrmDevice);
 };

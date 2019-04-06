@@ -18,12 +18,10 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/history/core/common/thumbnail_score.h"
-#include "content/public/browser/browser_thread.h"
 #include "sql/connection.h"
 #include "sql/recovery.h"
 #include "sql/statement.h"
 #include "third_party/sqlite/sqlite3.h"
-#include "base/time/time.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -70,7 +68,7 @@ static const int kVersionNumber = 3;
 static const int kDeprecatedVersionNumber = 2;  // and earlier.
 
 bool InitTables(sql::Connection* db) {
-  const char kThumbnailsSql[] =
+  static const char kThumbnailsSql[] =
       "CREATE TABLE IF NOT EXISTS thumbnails ("
       "url LONGVARCHAR PRIMARY KEY,"
       "url_rank INTEGER,"
@@ -157,7 +155,7 @@ void RecordRecoveryEvent(RecoveryEventType recovery_event) {
 // together and yield a row with errors.
 void FixThumbnailsTable(sql::Connection* db) {
   // Enforce invariant separating forced and non-forced thumbnails.
-  const char kFixRankSql[] =
+  static const char kFixRankSql[] =
       "DELETE FROM thumbnails "
       "WHERE (url_rank = -1 AND last_forced = 0) "
       "OR (url_rank <> -1 AND last_forced <> 0)";
@@ -166,7 +164,7 @@ void FixThumbnailsTable(sql::Connection* db) {
     RecordRecoveryEvent(RECOVERY_EVENT_INVARIANT_RANK);
 
   // Enforce invariant that url is in its own redirects.
-  const char kFixRedirectsSql[] =
+  static const char kFixRedirectsSql[] =
       "DELETE FROM thumbnails "
       "WHERE url <> substr(redirects, -length(url), length(url))";
   ignore_result(db->Execute(kFixRedirectsSql));
@@ -178,12 +176,12 @@ void FixThumbnailsTable(sql::Connection* db) {
   // It can be done with a temporary table and a subselect, but doing it
   // manually is easier to follow.  Another option would be to somehow integrate
   // the renumbering into the table recovery code.
-  const char kByRankSql[] =
+  static const char kByRankSql[] =
       "SELECT url_rank, rowid FROM thumbnails WHERE url_rank <> -1 "
       "ORDER BY url_rank";
   sql::Statement select_statement(db->GetUniqueStatement(kByRankSql));
 
-  const char kAdjustRankSql[] =
+  static const char kAdjustRankSql[] =
       "UPDATE thumbnails SET url_rank = ? WHERE rowid = ?";
   sql::Statement update_statement(db->GetUniqueStatement(kAdjustRankSql));
 
@@ -700,68 +698,6 @@ sql::Connection* TopSitesDatabase::CreateDB(const base::FilePath& db_name) {
   if (!db->Open(db_name))
     return nullptr;
   return db.release();
-}
-
-bool TopSitesDatabase::DeleteDataExceptBookmarkThumbnails() {
-  sql::Transaction transaction(db_.get());
-  transaction.Begin();
-
-  // NOTE(pettern@vivaldi.com): We remove all data except bookmark thumbnails.
-  sql::Statement delete_statement(db_->GetCachedStatement(
-    SQL_FROM_HERE,
-    "DELETE FROM thumbnails WHERE thumbnail notnull and url not like "
-    "'%bookmark_thumbnail%'"));
-
-  if (!delete_statement.Run())
-    return false;
-
-  return transaction.Commit();
-}
-
-namespace {
-const int kTopSitesExpireDays = 3;
-}  // namespace
-
-bool TopSitesDatabase::TrimThumbnailData() {
-  sql::Transaction transaction(db_.get());
-  transaction.Begin();
-
-  base::Time expire_before =
-      base::Time::Now() - base::TimeDelta::FromDays(kTopSitesExpireDays);
-  // NOTE(pettern@vivaldi.com): We remove all thumbnails that are not attached
-  // to a bookmark and haven't been updated with the last 7 days.
-  sql::Statement delete_statement(db_->GetCachedStatement(
-      SQL_FROM_HERE,
-      "DELETE FROM thumbnails WHERE thumbnail notnull and url not like "
-      "'%bookmark_thumbnail%' and last_updated < ?"));
-  delete_statement.BindInt64(0, expire_before.ToInternalValue());
-
-  if (!delete_statement.Run())
-    return false;
-
-  return transaction.Commit();
-}
-
-void TopSitesDatabase::Vacuum() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::DB);
-  DCHECK(db_->transaction_nesting() == 0)
-      << "Can not have a transaction when vacuuming.";
-  ignore_result(db_->Execute("VACUUM"));
-}
-
-bool TopSitesDatabase::RemoveThumbnailForUrl(const GURL& url) {
-  sql::Transaction transaction(db_.get());
-  transaction.Begin();
-
-  sql::Statement delete_statement(db_->GetCachedStatement(
-      SQL_FROM_HERE,
-      "DELETE FROM thumbnails WHERE thumbnail notnull and url = ?"));
-  delete_statement.BindString(0, url.spec());
-
-  if (!delete_statement.Run())
-    return false;
-
-  return transaction.Commit();
 }
 
 }  // namespace history

@@ -11,7 +11,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "content/public/renderer/fixed_received_data.h"
 #include "extensions/common/message_bundle.h"
 #include "ipc/ipc_sender.h"
@@ -51,7 +50,7 @@ class MockIpcMessageSender : public IPC::Sender {
         .WillByDefault(DoAll(Invoke(MessageDeleter), Return(true)));
   }
 
-  virtual ~MockIpcMessageSender() {}
+  ~MockIpcMessageSender() override {}
 
   MOCK_METHOD1(Send, bool(IPC::Message* message));
 
@@ -62,7 +61,7 @@ class MockIpcMessageSender : public IPC::Sender {
 class MockRequestPeer : public content::RequestPeer {
  public:
   MockRequestPeer() {}
-  virtual ~MockRequestPeer() {}
+  ~MockRequestPeer() override {}
 
   MOCK_METHOD2(OnUploadProgress, void(uint64_t position, uint64_t size));
   MOCK_METHOD2(OnReceivedRedirect,
@@ -70,6 +69,8 @@ class MockRequestPeer : public content::RequestPeer {
                     const network::ResourceResponseInfo& info));
   MOCK_METHOD1(OnReceivedResponse,
                void(const network::ResourceResponseInfo& info));
+  void OnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body) override {}
   MOCK_METHOD2(OnDownloadedData, void(int len, int encoded_data_length));
   void OnReceivedData(
       std::unique_ptr<RequestPeer::ReceivedData> data) override {
@@ -131,12 +132,12 @@ TEST_F(ExtensionLocalizationPeerTest, OnReceivedData) {
   EXPECT_TRUE(GetData().empty());
 
   const std::string data_chunk("12345");
-  filter_peer_->OnReceivedData(base::MakeUnique<content::FixedReceivedData>(
+  filter_peer_->OnReceivedData(std::make_unique<content::FixedReceivedData>(
       data_chunk.data(), data_chunk.length()));
 
   EXPECT_EQ(data_chunk, GetData());
 
-  filter_peer_->OnReceivedData(base::MakeUnique<content::FixedReceivedData>(
+  filter_peer_->OnReceivedData(std::make_unique<content::FixedReceivedData>(
       data_chunk.data(), data_chunk.length()));
   EXPECT_EQ(data_chunk + data_chunk, GetData());
 }

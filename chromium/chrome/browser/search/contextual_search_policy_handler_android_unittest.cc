@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/search/contextual_search_policy_handler_android.h"
 #include "chrome/common/pref_names.h"
@@ -27,7 +26,7 @@ TEST(ContextualSearchPolicyHandlerAndroidTest, Enabled) {
   PolicyMap policy;
   policy.Set(key::kContextualSearchEnabled, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_PLATFORM,
-             base::MakeUnique<base::Value>(true), nullptr);
+             std::make_unique<base::Value>(true), nullptr);
   PrefValueMap prefs;
   ContextualSearchPolicyHandlerAndroid handler;
   handler.ApplyPolicySettings(policy, &prefs);
@@ -42,7 +41,7 @@ TEST(ContextualSearchPolicyHandlerAndroidTest, Disabled) {
   PolicyMap policy;
   policy.Set(key::kContextualSearchEnabled, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_PLATFORM,
-             base::MakeUnique<base::Value>(false), nullptr);
+             std::make_unique<base::Value>(false), nullptr);
   PrefValueMap prefs;
   ContextualSearchPolicyHandlerAndroid handler;
   handler.ApplyPolicySettings(policy, &prefs);

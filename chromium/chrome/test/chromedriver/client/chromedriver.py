@@ -49,7 +49,7 @@ class NoSuchSession(ChromeDriverException):
   pass
 class UnexpectedAlertOpen(ChromeDriverException):
   pass
-class NoAlertOpen(ChromeDriverException):
+class NoSuchAlert(ChromeDriverException):
   pass
 class NoSuchCookie(ChromeDriverException):
   pass
@@ -79,7 +79,7 @@ def _ExceptionForLegacyResponse(response):
     23: NoSuchWindow,
     24: InvalidCookieDomain,
     26: UnexpectedAlertOpen,
-    27: NoAlertOpen,
+    27: NoSuchAlert,
     28: ScriptTimeout,
     32: InvalidSelector,
     33: SessionNotCreatedException,
@@ -105,7 +105,7 @@ def _ExceptionForStandardResponse(response):
     'no such window': NoSuchWindow,
     'invalid cookie domain': InvalidCookieDomain,
     'unexpected alert open': UnexpectedAlertOpen,
-    'no alert open': NoAlertOpen,
+    'no such alert': NoSuchAlert,
     'asynchronous script timeout': ScriptTimeout,
     'invalid selector': InvalidSelector,
     'session not created exception': SessionNotCreatedException,
@@ -131,7 +131,8 @@ class ChromeDriver(object):
                download_dir=None, network_connection=None,
                send_w3c_capability=None, send_w3c_request=None,
                page_load_strategy=None, unexpected_alert_behaviour=None,
-               devtools_events_to_log=None, accept_insecure_certs=None):
+               devtools_events_to_log=None, accept_insecure_certs=None,
+               test_name=None):
     self._executor = command_executor.CommandExecutor(server_url)
     self.w3c_compliant = False
 
@@ -225,6 +226,9 @@ class ChromeDriver(object):
     if accept_insecure_certs is not None:
       params['acceptInsecureCerts'] = accept_insecure_certs
 
+    if test_name is not None:
+      params['goog:testName'] = test_name
+
     if send_w3c_request:
       params = {'capabilities': {'alwaysMatch': params}}
     else:
@@ -304,7 +308,7 @@ class ChromeDriver(object):
     return self.ExecuteCommand(Command.GET_CURRENT_WINDOW_HANDLE)
 
   def CloseWindow(self):
-    self.ExecuteCommand(Command.CLOSE)
+    return self.ExecuteCommand(Command.CLOSE)
 
   def Load(self, url):
     self.ExecuteCommand(Command.GET, {'url': url})
@@ -352,9 +356,8 @@ class ChromeDriver(object):
     return self.ExecuteCommand(
         Command.FIND_ELEMENTS, {'using': strategy, 'value': target})
 
-  def SetTimeout(self, type, timeout):
-    return self.ExecuteCommand(
-        Command.SET_TIMEOUT, {'type' : type, 'ms': timeout})
+  def SetTimeouts(self, params):
+    return self.ExecuteCommand(Command.SET_TIMEOUTS, params)
 
   def GetCurrentUrl(self):
     return self.ExecuteCommand(Command.GET_CURRENT_URL)
@@ -479,6 +482,9 @@ class ChromeDriver(object):
 
   def MaximizeWindow(self):
     self.ExecuteCommand(Command.MAXIMIZE_WINDOW, {'windowHandle': 'current'})
+
+  def MinimizeWindow(self):
+    return self.ExecuteCommand(Command.MINIMIZE_WINDOW, {'windowHandle': 'current'})
 
   def FullScreenWindow(self):
     self.ExecuteCommand(Command.FULLSCREEN_WINDOW)

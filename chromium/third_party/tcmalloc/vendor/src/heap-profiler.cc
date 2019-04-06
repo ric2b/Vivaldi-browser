@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -51,6 +52,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <sys/types.h>
+#include <signal.h>
 
 #include <algorithm>
 #include <string>
@@ -107,6 +109,10 @@ DEFINE_int64(heap_profile_inuse_interval,
              "If non-zero, dump heap profiling information whenever "
              "the high-water memory usage mark increases by the specified "
              "number of bytes.");
+DEFINE_int64(heap_profile_time_interval,
+             EnvToInt64("HEAP_PROFILE_TIME_INTERVAL", 0),
+             "If non-zero, dump heap profiling information once every "
+             "specified number of seconds since the last dump.");
 DEFINE_bool(mmap_log,
             EnvToBool("HEAP_PROFILE_MMAP_LOG", false),
             "Should mmap/munmap calls be logged?");
@@ -168,6 +174,7 @@ static int   dump_count = 0;          // How many dumps so far
 static int64 last_dump_alloc = 0;     // alloc_size when did we last dump
 static int64 last_dump_free = 0;      // free_size when did we last dump
 static int64 high_water_mark = 0;     // In-use-bytes at last high-water dump
+static int64 last_dump_time = 0;      // The time of the last dump
 
 static HeapProfileTable* heap_profile = NULL;  // the heap profile table
 
@@ -185,13 +192,14 @@ static char* DoGetHeapProfileLocked(char* buf, int buflen) {
   RAW_DCHECK(heap_lock.IsHeld(), "");
   int bytes_written = 0;
   if (is_on) {
-    if (FLAGS_mmap_profile) {
-      heap_profile->RefreshMMapData();
-    }
+    HeapProfileTable::Stats const stats = heap_profile->total();
+    (void)stats;   // avoid an unused-variable warning in non-debug mode.
     bytes_written = heap_profile->FillOrderedProfile(buf, buflen - 1);
-    if (FLAGS_mmap_profile) {
-      heap_profile->ClearMMapData();
-    }
+    // FillOrderedProfile should not reduce the set of active mmap-ed regions,
+    // hence MemoryRegionMap will let us remove everything we've added above:
+    RAW_DCHECK(stats.Equivalent(heap_profile->total()), "");
+    // if this fails, we somehow removed by FillOrderedProfile
+    // more than we have added.
   }
   buf[bytes_written] = '\0';
   RAW_DCHECK(bytes_written == strlen(buf), "");
@@ -264,26 +272,36 @@ static void MaybeDumpProfileLocked() {
     const int64 inuse_bytes = total.alloc_size - total.free_size;
     bool need_to_dump = false;
     char buf[128];
+
     if (FLAGS_heap_profile_allocation_interval > 0 &&
         total.alloc_size >=
         last_dump_alloc + FLAGS_heap_profile_allocation_interval) {
-      snprintf(buf, sizeof(buf), ("%"PRId64" MB allocated cumulatively, "
-                                  "%"PRId64" MB currently in use"),
+      snprintf(buf, sizeof(buf), ("%" PRId64 " MB allocated cumulatively, "
+                                  "%" PRId64 " MB currently in use"),
                total.alloc_size >> 20, inuse_bytes >> 20);
       need_to_dump = true;
     } else if (FLAGS_heap_profile_deallocation_interval > 0 &&
                total.free_size >=
                last_dump_free + FLAGS_heap_profile_deallocation_interval) {
-      snprintf(buf, sizeof(buf), ("%"PRId64" MB freed cumulatively, "
-                                  "%"PRId64" MB currently in use"),
+      snprintf(buf, sizeof(buf), ("%" PRId64 " MB freed cumulatively, "
+                                  "%" PRId64 " MB currently in use"),
                total.free_size >> 20, inuse_bytes >> 20);
       need_to_dump = true;
     } else if (FLAGS_heap_profile_inuse_interval > 0 &&
                inuse_bytes >
                high_water_mark + FLAGS_heap_profile_inuse_interval) {
-      snprintf(buf, sizeof(buf), "%"PRId64" MB currently in use",
+      snprintf(buf, sizeof(buf), "%" PRId64 " MB currently in use",
                inuse_bytes >> 20);
       need_to_dump = true;
+    } else if (FLAGS_heap_profile_time_interval > 0 ) {
+      int64 current_time = time(NULL);
+      if (current_time - last_dump_time >=
+          FLAGS_heap_profile_time_interval) {
+        snprintf(buf, sizeof(buf), "%" PRId64 " sec since the last dump",
+                 current_time - last_dump_time);
+        need_to_dump = true;
+        last_dump_time = current_time;
+      }
     }
     if (need_to_dump) {
       DumpProfileLocked(buf);
@@ -346,8 +364,8 @@ static void MmapHook(const void* result, const void* start, size_t size,
     // in pretty-printing of NULL as "nil".
     // TODO(maxim): instead should use a safe snprintf reimplementation
     RAW_LOG(INFO,
-            "mmap(start=0x%"PRIxPTR", len=%"PRIuS", prot=0x%x, flags=0x%x, "
-            "fd=%d, offset=0x%x) = 0x%"PRIxPTR"",
+            "mmap(start=0x%" PRIxPTR ", len=%" PRIuS ", prot=0x%x, flags=0x%x, "
+            "fd=%d, offset=0x%x) = 0x%" PRIxPTR "",
             (uintptr_t) start, size, prot, flags, fd, (unsigned int) offset,
             (uintptr_t) result);
 #ifdef TODO_REENABLE_STACK_TRACING
@@ -364,9 +382,9 @@ static void MremapHook(const void* result, const void* old_addr,
     // in pretty-printing of NULL as "nil".
     // TODO(maxim): instead should use a safe snprintf reimplementation
     RAW_LOG(INFO,
-            "mremap(old_addr=0x%"PRIxPTR", old_size=%"PRIuS", "
-            "new_size=%"PRIuS", flags=0x%x, new_addr=0x%"PRIxPTR") = "
-            "0x%"PRIxPTR"",
+            "mremap(old_addr=0x%" PRIxPTR ", old_size=%" PRIuS ", "
+            "new_size=%" PRIuS ", flags=0x%x, new_addr=0x%" PRIxPTR ") = "
+            "0x%" PRIxPTR "",
             (uintptr_t) old_addr, old_size, new_size, flags,
             (uintptr_t) new_addr, (uintptr_t) result);
 #ifdef TODO_REENABLE_STACK_TRACING
@@ -380,7 +398,7 @@ static void MunmapHook(const void* ptr, size_t size) {
     // We use PRIxS not just '%p' to avoid deadlocks
     // in pretty-printing of NULL as "nil".
     // TODO(maxim): instead should use a safe snprintf reimplementation
-    RAW_LOG(INFO, "munmap(start=0x%"PRIxPTR", len=%"PRIuS")",
+    RAW_LOG(INFO, "munmap(start=0x%" PRIxPTR ", len=%" PRIuS ")",
                   (uintptr_t) ptr, size);
 #ifdef TODO_REENABLE_STACK_TRACING
     DumpStackTrace(1, RawInfoStackDumper, NULL);
@@ -390,7 +408,7 @@ static void MunmapHook(const void* ptr, size_t size) {
 
 static void SbrkHook(const void* result, ptrdiff_t increment) {
   if (FLAGS_mmap_log) {  // log it
-    RAW_LOG(INFO, "sbrk(inc=%"PRIdS") = 0x%"PRIxPTR"",
+    RAW_LOG(INFO, "sbrk(inc=%" PRIdS ") = 0x%" PRIxPTR "",
                   increment, (uintptr_t) result);
 #ifdef TODO_REENABLE_STACK_TRACING
     DumpStackTrace(1, RawInfoStackDumper, NULL);
@@ -422,7 +440,8 @@ extern "C" void HeapProfilerStart(const char* prefix) {
   if (FLAGS_mmap_profile) {
     // Ask MemoryRegionMap to record all mmap, mremap, and sbrk
     // call stack traces of at least size kMaxStackDepth:
-    MemoryRegionMap::Init(HeapProfileTable::kMaxStackDepth);
+    MemoryRegionMap::Init(HeapProfileTable::kMaxStackDepth,
+                          /* use_buckets */ true);
   }
 
   if (FLAGS_mmap_log) {
@@ -442,11 +461,12 @@ extern "C" void HeapProfilerStart(const char* prefix) {
       reinterpret_cast<char*>(ProfilerMalloc(kProfileBufferSize));
 
   heap_profile = new(ProfilerMalloc(sizeof(HeapProfileTable)))
-                   HeapProfileTable(ProfilerMalloc, ProfilerFree);
+      HeapProfileTable(ProfilerMalloc, ProfilerFree, FLAGS_mmap_profile);
 
   last_dump_alloc = 0;
   last_dump_free = 0;
   high_water_mark = 0;
+  last_dump_time = 0;
 
   // We do not reset dump_count so if the user does a sequence of
   // HeapProfilerStart/HeapProfileStop, we will get a continuous
@@ -519,6 +539,20 @@ extern "C" void HeapProfilerDump(const char *reason) {
   }
 }
 
+// Signal handler that is registered when a user selectable signal
+// number is defined in the environment variable HEAPPROFILESIGNAL.
+static void HeapProfilerDumpSignal(int signal_number) {
+  (void)signal_number;
+  if (!heap_lock.TryLock()) {
+    return;
+  }
+  if (is_on && !dumping) {
+    DumpProfileLocked("signal");
+  }
+  heap_lock.Unlock();
+}
+
+
 //----------------------------------------------------------------------
 // Initialization/finalization code
 //----------------------------------------------------------------------
@@ -539,6 +573,19 @@ static void HeapProfilerInit() {
   }
 #endif
 
+  char *signal_number_str = getenv("HEAPPROFILESIGNAL");
+  if (signal_number_str != NULL) {
+    long int signal_number = strtol(signal_number_str, NULL, 10);
+    intptr_t old_signal_handler = reinterpret_cast<intptr_t>(signal(signal_number, HeapProfilerDumpSignal));
+    if (old_signal_handler == reinterpret_cast<intptr_t>(SIG_ERR)) {
+      RAW_LOG(FATAL, "Failed to set signal. Perhaps signal number %s is invalid\n", signal_number_str);
+    } else if (old_signal_handler == 0) {
+      RAW_LOG(INFO,"Using signal %d as heap profiling switch", signal_number);
+    } else {
+      RAW_LOG(FATAL, "Signal %d already in use\n", signal_number);
+    }
+  }
+
   HeapProfileTable::CleanupOldProfiles(fname);
 
   HeapProfilerStart(fname);
@@ -546,7 +593,27 @@ static void HeapProfilerInit() {
 
 // class used for finalization -- dumps the heap-profile at program exit
 struct HeapProfileEndWriter {
-  ~HeapProfileEndWriter() { HeapProfilerDump("Exiting"); }
+  ~HeapProfileEndWriter() {
+    char buf[128];
+    if (heap_profile) {
+      const HeapProfileTable::Stats& total = heap_profile->total();
+      const int64 inuse_bytes = total.alloc_size - total.free_size;
+
+      if ((inuse_bytes >> 20) > 0) {
+        snprintf(buf, sizeof(buf), ("Exiting, %" PRId64 " MB in use"),
+                 inuse_bytes >> 20);
+      } else if ((inuse_bytes >> 10) > 0) {
+        snprintf(buf, sizeof(buf), ("Exiting, %" PRId64 " kB in use"),
+                 inuse_bytes >> 10);
+      } else {
+        snprintf(buf, sizeof(buf), ("Exiting, %" PRId64 " bytes in use"),
+                 inuse_bytes);
+      }
+    } else {
+      snprintf(buf, sizeof(buf), ("Exiting"));
+    }
+    HeapProfilerDump(buf);
+  }
 };
 
 // We want to make sure tcmalloc is up and running before starting the profiler

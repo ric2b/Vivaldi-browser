@@ -9,23 +9,6 @@
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 
-namespace {
-ui::LatencyComponentType DidNotSwapReasonToLatencyComponentType(
-    cc::SwapPromise::DidNotSwapReason reason) {
-  switch (reason) {
-    case cc::SwapPromise::ACTIVATION_FAILS:
-    case cc::SwapPromise::SWAP_FAILS:
-      return ui::INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT;
-    case cc::SwapPromise::COMMIT_FAILS:
-      return ui::INPUT_EVENT_LATENCY_TERMINATED_COMMIT_FAILED_COMPONENT;
-    case cc::SwapPromise::COMMIT_NO_UPDATE:
-      return ui::INPUT_EVENT_LATENCY_TERMINATED_COMMIT_NO_UPDATE_COMPONENT;
-  }
-  NOTREACHED() << "Unhandled DidNotSwapReason.";
-  return ui::INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT;
-}
-}  // namespace
-
 namespace cc {
 
 LatencyInfoSwapPromise::LatencyInfoSwapPromise(const ui::LatencyInfo& latency)
@@ -33,23 +16,18 @@ LatencyInfoSwapPromise::LatencyInfoSwapPromise(const ui::LatencyInfo& latency)
 
 LatencyInfoSwapPromise::~LatencyInfoSwapPromise() = default;
 
-void LatencyInfoSwapPromise::WillSwap(
-    viz::CompositorFrameMetadata* compositor_frame_metadata,
-    RenderFrameMetadata* render_frame_metadata) {
+void LatencyInfoSwapPromise::WillSwap(viz::CompositorFrameMetadata* metadata) {
   DCHECK(!latency_.terminated());
-  compositor_frame_metadata->latency_info.push_back(latency_);
+  metadata->latency_info.push_back(latency_);
 }
 
 void LatencyInfoSwapPromise::DidSwap() {}
 
-SwapPromise::DidNotSwapAction LatencyInfoSwapPromise::DidNotSwap(
-    DidNotSwapReason reason) {
-  latency_.AddLatencyNumber(DidNotSwapReasonToLatencyComponentType(reason), 0,
-                            0);
+void LatencyInfoSwapPromise::DidNotSwap(DidNotSwapReason reason) {
+  latency_.Terminate();
   // TODO(miletus): Turn this back on once per-event LatencyInfo tracking
   // is enabled in GPU side.
   // DCHECK(latency_.terminated);
-  return DidNotSwapAction::BREAK_PROMISE;
 }
 
 int64_t LatencyInfoSwapPromise::TraceId() const {

@@ -22,7 +22,6 @@
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/policy/core/common/schema_registry_tracking_policy_provider.h"
-#include "google_apis/gaia/gaia_auth_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/browser_process_platform_part.h"
@@ -76,6 +75,19 @@ void ProfilePolicyConnector::Init(
     policy_providers_.push_back(
         connector->GetDeviceActiveDirectoryPolicyManager());
   }
+#else
+  for (auto* provider : connector->GetPolicyProviders()) {
+    // Skip the platform provider since it was already handled above.  The
+    // platform provider should be first in the list so that it always takes
+    // precedence.
+    if (provider == connector->GetPlatformProvider()) {
+      continue;
+    } else {
+      // TODO(zmin): In the future, we may want to have special handling for
+      // the other providers too.
+      policy_providers_.push_back(provider);
+    }
+  }
 #endif
 
   if (configuration_policy_provider)
@@ -104,10 +116,7 @@ void ProfilePolicyConnector::Init(
   }
 #endif
 
-  std::unique_ptr<PolicyServiceImpl> policy_service =
-      std::make_unique<PolicyServiceImpl>();
-  policy_service->SetProviders(policy_providers_);
-  policy_service_ = std::move(policy_service);
+  policy_service_ = std::make_unique<PolicyServiceImpl>(policy_providers_);
 
 #if defined(OS_CHROMEOS)
   if (is_primary_user_) {
@@ -115,13 +124,6 @@ void ProfilePolicyConnector::Init(
       connector->SetUserPolicyDelegate(configuration_policy_provider);
     else if (special_user_policy_provider_)
       connector->SetUserPolicyDelegate(special_user_policy_provider_.get());
-  }
-#endif
-
-#if defined(OS_CHROMEOS)
-  if (user && user->IsActiveDirectoryUser()) {
-    management_realm_ =
-        gaia::ExtractDomainName(user->GetAccountId().GetUserEmail());
   }
 #endif
 }
@@ -156,27 +158,6 @@ bool ProfilePolicyConnector::IsManaged() const {
   if (actual_policy_store)
     return actual_policy_store->is_managed();
   return false;
-}
-
-std::string ProfilePolicyConnector::GetManagementDomain() const {
-  const CloudPolicyStore* actual_policy_store = GetActualPolicyStore();
-  if (!actual_policy_store)
-    return std::string();
-  CHECK(actual_policy_store->is_initialized())
-      << "Cloud policy management domain must be "
-         "requested only after the policy system is fully initialized";
-  if (!actual_policy_store->is_managed())
-    return std::string();
-
-#if defined(OS_CHROMEOS)
-  if (!management_realm_.empty())
-    return management_realm_;
-#endif  // defined(OS_CHROMEOS)
-
-  if (actual_policy_store->policy()->has_username())
-    return gaia::ExtractDomainName(actual_policy_store->policy()->username());
-
-  return std::string();
 }
 
 bool ProfilePolicyConnector::IsProfilePolicy(const char* policy_key) const {

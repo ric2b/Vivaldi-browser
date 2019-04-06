@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "media/filters/source_buffer_parse_warnings.h"
-#include "third_party/WebKit/public/platform/WebSourceBuffer.h"
+#include "third_party/blink/public/platform/web_source_buffer.h"
 
 namespace media {
 class ChunkDemuxer;
@@ -27,6 +27,7 @@ class WebSourceBufferImpl : public blink::WebSourceBuffer {
 
   // blink::WebSourceBuffer implementation.
   void SetClient(blink::WebSourceBufferClient* client) override;
+  bool GetGenerateTimestampsFlag() override;
   bool SetMode(AppendMode mode) override;
   blink::WebTimeRanges Buffered() override;
   double HighestPresentationTimestamp() override;
@@ -37,6 +38,10 @@ class WebSourceBufferImpl : public blink::WebSourceBuffer {
               double* timestamp_offset) override;
   void ResetParserState() override;
   void Remove(double start, double end) override;
+  bool CanChangeType(const blink::WebString& content_type,
+                     const blink::WebString& codecs) override;
+  void ChangeType(const blink::WebString& content_type,
+                  const blink::WebString& codecs) override;
   bool SetTimestampOffset(double offset) override;
   void SetAppendWindowStart(double start) override;
   void SetAppendWindowEnd(double end) override;

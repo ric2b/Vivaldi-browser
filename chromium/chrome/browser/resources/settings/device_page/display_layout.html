@@ -54,7 +54,7 @@
       }
 
       .display.elevate {
-        @apply(--shadow-elevation-2dp);
+        @apply --shadow-elevation-2dp;
       }
     </style>
     <div id="displayArea" on-iron-resize="calculateVisualScale_">
@@ -67,15 +67,11 @@
       </template>
       <template is="dom-repeat" items="[[displays]]">
         <div id="_[[item.id]]" class="display elevate"
-            draggable="[[dragEnabled]]" on-tap="onSelectDisplayTap_"
+            draggable="[[dragEnabled]]" on-click="onSelectDisplayTap_"
             style$="[[getDivStyle_(item.id, item.bounds, visualScale)]]"
             selected$="[[isSelected_(item, selectedDisplay)]]">
-          <div hidden$="[[mirroring]]">
-            [[item.name]]
-          </div>
-          <div hidden$="[[!mirroring]]">
-            $i18n{displayMirrorDisplayName}
-          </div>
+          [[getDisplayName_(mirroring, item.name,
+                            '$i18nPolymer{displayMirrorDisplayName}')]]
         </div>
       </template>
     </div>

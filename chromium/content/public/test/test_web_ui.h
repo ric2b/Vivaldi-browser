@@ -28,14 +28,14 @@ class TestWebUI : public WebUI {
   // WebUI overrides.
   WebContents* GetWebContents() const override;
   WebUIController* GetController() const override;
-  void SetController(WebUIController* controller) override;
+  void SetController(std::unique_ptr<WebUIController> controller) override;
   float GetDeviceScaleFactor() const override;
   const base::string16& GetOverriddenTitle() const override;
   void OverrideTitle(const base::string16& title) override {}
   int GetBindings() const override;
   void SetBindings(int bindings) override {}
   void AddMessageHandler(std::unique_ptr<WebUIMessageHandler> handler) override;
-  void RegisterMessageCallback(const std::string& message,
+  void RegisterMessageCallback(base::StringPiece message,
                                const MessageCallback& callback) override {}
   void ProcessWebUIMessage(const GURL& source_url,
                            const std::string& message,

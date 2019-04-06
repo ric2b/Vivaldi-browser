@@ -18,16 +18,15 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.asynctask.BackgroundShadowAsyncTask;
 import org.chromium.base.test.util.Feature;
 import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.testing.local.BackgroundShadowAsyncTask;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.concurrent.TimeUnit;
 
@@ -35,7 +34,7 @@ import java.util.concurrent.TimeUnit;
  * Tests the WebappDataStorage class by ensuring that it persists data to
  * SharedPreferences as expected.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, shadows = {BackgroundShadowAsyncTask.class})
 public class WebappDataStorageTest {
     @Rule
@@ -60,7 +59,6 @@ public class WebappDataStorageTest {
 
     @Before
     public void setUp() throws Exception {
-        ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
         mSharedPreferences = ContextUtils.getApplicationContext().getSharedPreferences(
                 WebappDataStorage.SHARED_PREFS_FILE_PREFIX + "test", Context.MODE_PRIVATE);
 
@@ -101,7 +99,7 @@ public class WebappDataStorageTest {
     public void testLastUsedRetrieval() throws Exception {
         long lastUsed = 100;
         mSharedPreferences.edit().putLong(WebappDataStorage.KEY_LAST_USED, lastUsed).apply();
-        assertEquals(lastUsed, new WebappDataStorage("test").getLastUsedTime());
+        assertEquals(lastUsed, new WebappDataStorage("test").getLastUsedTimeMs());
     }
 
     @Test

@@ -4,10 +4,16 @@
 
 #import "components/autofill/ios/browser/js_autofill_manager.h"
 
+#include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/sys_string_conversions.h"
+#include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/ios/browser/autofill_switches.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -27,13 +33,37 @@
   return self;
 }
 
+- (void)addJSDelay {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(
+          autofill::switches::kAutofillIOSDelayBetweenFields)) {
+    std::string delayString = command_line->GetSwitchValueASCII(
+        autofill::switches::kAutofillIOSDelayBetweenFields);
+    int commandLineDelay = 0;
+    if (base::StringToInt(delayString, &commandLineDelay)) {
+      NSString* setDelayJS =
+          [NSString stringWithFormat:@"__gCrWeb.autofill.setDelay(%d);",
+                                     commandLineDelay];
+      [_receiver executeJavaScript:setDelayJS completionHandler:nil];
+    }
+  }
+}
+
 - (void)fetchFormsWithMinimumRequiredFieldsCount:(NSUInteger)requiredFieldsCount
                                completionHandler:
                                    (void (^)(NSString*))completionHandler {
   DCHECK(completionHandler);
+
+  NSString* restrictUnownedFieldsToFormlessCheckout =
+      base::FeatureList::IsEnabled(
+          autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout)
+          ? @"true"
+          : @"false";
   NSString* extractFormsJS = [NSString
-      stringWithFormat:@"__gCrWeb.autofill.extractForms(%" PRIuNS ");",
-                       requiredFieldsCount];
+      stringWithFormat:@"__gCrWeb.autofill.extractForms(%" PRIuNS ", %@);",
+                       requiredFieldsCount,
+                       restrictUnownedFieldsToFormlessCheckout];
   [_receiver executeJavaScript:extractFormsJS
              completionHandler:^(id result, NSError*) {
                completionHandler(base::mac::ObjCCastStrict<NSString>(result));
@@ -54,30 +84,50 @@
              }];
 }
 
+- (void)toggleTrackingFormMutations:(BOOL)state {
+  NSString* script =
+      [NSString stringWithFormat:@"__gCrWeb.form.trackFormMutations(%d);",
+                                 state ? 200 : 0];
+  [_receiver executeJavaScript:script completionHandler:nil];
+}
+
+- (void)toggleTrackingUserEditedFields:(BOOL)state {
+  NSString* script = [NSString
+      stringWithFormat:@"__gCrWeb.form.toggleTrackingUserEditedFields(%s);",
+                       state ? "true" : "false"];
+  [_receiver executeJavaScript:script completionHandler:nil];
+}
+
 - (void)fillForm:(NSString*)dataString
-    forceFillFieldName:(NSString*)forceFillFieldName
-     completionHandler:(ProceduralBlock)completionHandler {
+    forceFillFieldIdentifier:(NSString*)forceFillFieldIdentifier
+           completionHandler:(ProceduralBlock)completionHandler {
   DCHECK(completionHandler);
-  std::string fieldName =
-      forceFillFieldName
-          ? base::GetQuotedJSONString([forceFillFieldName UTF8String])
+  std::string fieldIdentifier =
+      forceFillFieldIdentifier
+          ? base::GetQuotedJSONString(
+                base::SysNSStringToUTF8(forceFillFieldIdentifier))
           : "null";
   NSString* fillFormJS =
       [NSString stringWithFormat:@"__gCrWeb.autofill.fillForm(%@, %s);",
-                                 dataString, fieldName.c_str()];
+                                 dataString, fieldIdentifier.c_str()];
   [_receiver executeJavaScript:fillFormJS
              completionHandler:^(id, NSError*) {
                completionHandler();
              }];
 }
 
-- (void)clearAutofilledFieldsForFormNamed:(NSString*)formName
-                        completionHandler:(ProceduralBlock)completionHandler {
+- (void)clearAutofilledFieldsForFormName:(NSString*)formName
+                         fieldIdentifier:(NSString*)fieldIdentifier
+                       completionHandler:(ProceduralBlock)completionHandler {
   DCHECK(completionHandler);
-  NSString* script =
-      [NSString stringWithFormat:
-                    @"__gCrWeb.autofill.clearAutofilledFields(%s);",
-                    base::GetQuotedJSONString([formName UTF8String]).c_str()];
+  NSString* script = [NSString
+      stringWithFormat:@"__gCrWeb.autofill.clearAutofilledFields(%s, %s);",
+                       base::GetQuotedJSONString(
+                           base::SysNSStringToUTF8(formName))
+                           .c_str(),
+                       base::GetQuotedJSONString(
+                           base::SysNSStringToUTF8(fieldIdentifier))
+                           .c_str()];
   [_receiver executeJavaScript:script
              completionHandler:^(id, NSError*) {
                completionHandler();

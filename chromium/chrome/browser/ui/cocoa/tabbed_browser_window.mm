@@ -6,6 +6,7 @@
 
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_layout.h"
+#include "ui/views/widget/util_mac.h"
 
 // Implementer's note: Moving the window controls is tricky. When altering the
 // code, ensure that:
@@ -23,23 +24,18 @@ constexpr CGFloat kWindowGradientHeight = 24.0;
 // window buttons (zoom, close, miniaturize).
 constexpr NSInteger kWindowButtonsOffsetFromBottom = 9;
 constexpr NSInteger kWindowButtonsOffsetFromLeft = 11;
-
-// Offset from the top/right of the window to the Mavericks full screen button.
-constexpr NSInteger kFullScreenButtonOffset = 9;
 }  // namespace
 
 @interface TabbedBrowserWindow ()
 - (CGFloat)fullScreenButtonOriginAdjustment;
 @end
 
-// Weak so that Chrome will launch if a future macOS doesn't have NSThemeFrame.
-WEAK_IMPORT_ATTRIBUTE
-@interface NSThemeFrame : NSView
+@interface NSThemeFrame (PrivateTabbedBrowserWindowAPI)
 - (NSView*)fullScreenButton
     __attribute__((availability(macos, obsoleted = 10.10)));
 @end
 
-@interface NSWindow (PrivateAPI)
+@interface NSWindow (PrivateTabbedBrowserWindowAPI)
 + (Class)frameViewClassForStyleMask:(NSUInteger)windowStyle;
 @end
 
@@ -115,30 +111,6 @@ WEAK_IMPORT_ATTRIBUTE
 
 @end
 
-@interface MavericksTabbedBrowserWindowFrame : FullSizeTabbedBrowserWindowFrame
-@end
-
-@implementation MavericksTabbedBrowserWindowFrame
-
-// 10.10+ has no separate fullscreen button.
-- (NSPoint)_fullScreenButtonOrigin
-    __attribute__((availability(macos, obsoleted = 10.10))) {
-  CGFloat xAdjustment = [static_cast<TabbedBrowserWindow*>(self.window)
-      fullScreenButtonOriginAdjustment];
-  NSSize fullScreenButtonSize = [self fullScreenButton].frame.size;
-  return NSMakePoint(NSMaxX(self.bounds) - fullScreenButtonSize.width -
-                         kFullScreenButtonOffset - xAdjustment,
-                     NSMaxY(self.bounds) - fullScreenButtonSize.height -
-                         kFullScreenButtonOffset);
-}
-
-// 10.10+ adds the content view below the window controls by default.
-- (void)_setContentView:(NSView*)contentView {
-  [self addSubview:contentView positioned:NSWindowBelow relativeTo:nil];
-}
-
-@end
-
 @implementation TabbedBrowserWindow
 
 // FramedBrowserWindow overrides.
@@ -152,18 +124,15 @@ WEAK_IMPORT_ATTRIBUTE
   return styleMask;
 }
 
-// NSWindow (PrivateAPI) overrides.
+// NSWindow (PrivateTabbedBrowserWindowAPI) overrides.
 
 + (Class)frameViewClassForStyleMask:(NSUInteger)windowStyle {
   // Because NSThemeFrame is imported weakly, if it's not present at runtime
   // then it and its subclasses will be nil.
   if ([TabbedBrowserWindowFrame class]) {
-    if (@available(macOS 10.10, *)) {
-      return chrome::ShouldUseFullSizeContentView()
-                 ? [TabbedBrowserWindowFrame class]
-                 : [FullSizeTabbedBrowserWindowFrame class];
-    }
-    return [MavericksTabbedBrowserWindowFrame class];
+    return chrome::ShouldUseFullSizeContentView()
+               ? [TabbedBrowserWindowFrame class]
+               : [FullSizeTabbedBrowserWindowFrame class];
   }
   return [super frameViewClassForStyleMask:windowStyle];
 }
@@ -196,7 +165,8 @@ WEAK_IMPORT_ATTRIBUTE
   // If there is a profile avatar icon present, shift the button over by its
   // width and some padding. The new avatar button is displayed to the right
   // of the fullscreen icon, so it doesn't need to be shifted.
-  auto* bwc = static_cast<BrowserWindowController*>([self windowController]);
+  BrowserWindowController* bwc =
+      [BrowserWindowController browserWindowControllerForWindow:self];
   if ([bwc shouldShowAvatar] && ![bwc shouldUseNewAvatarButton]) {
     NSView* avatarButton = [[bwc avatarButtonController] view];
     return NSWidth([avatarButton frame]) - 3;

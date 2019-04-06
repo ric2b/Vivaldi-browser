@@ -30,10 +30,11 @@ class AnswerCardTestContents : public AnswerCardContents {
 
   // AnswerCardContents overrides:
   void LoadURL(const GURL& url) override { NOTREACHED(); }
-  views::View* GetView() override { return &view_; }
+  const base::UnguessableToken& GetToken() const override { return token_; }
+  gfx::Size GetPreferredSize() const override { return gfx::Size(); }
 
  private:
-  views::View view_;
+  base::UnguessableToken token_;
 
   DISALLOW_COPY_AND_ASSIGN(AnswerCardTestContents);
 };
@@ -59,7 +60,9 @@ class AnswerCardResultTest : public AppListTestBase {
     return app_list_controller_delegate_->last_opened_url();
   }
 
-  views::View* GetView() const { return contents_->GetView(); }
+  const base::UnguessableToken& GetToken() const {
+    return contents_->GetToken();
+  }
 
   // AppListTestBase overrides:
   void SetUp() override {
@@ -84,20 +87,12 @@ TEST_F(AnswerCardResultTest, Basic) {
 
   EXPECT_EQ(kResultUrl, result->id());
   EXPECT_EQ(base::ASCIIToUTF16(kResultTitle), result->title());
-  EXPECT_EQ(SearchResult::DISPLAY_CARD, result->display_type());
+  EXPECT_EQ(ash::SearchResultDisplayType::kCard, result->display_type());
   EXPECT_EQ(1, result->relevance());
-  EXPECT_EQ(GetView(), result->view());
+  EXPECT_EQ(GetToken(), result->answer_card_contents_token());
 
   result->Open(ui::EF_NONE);
   EXPECT_EQ(kResultUrl, GetLastOpenedUrl().spec());
-
-  std::unique_ptr<SearchResult> result1 = result->Duplicate();
-
-  EXPECT_EQ(kResultUrl, result1->id());
-  EXPECT_EQ(base::ASCIIToUTF16(kResultTitle), result1->title());
-  EXPECT_EQ(SearchResult::DISPLAY_CARD, result1->display_type());
-  EXPECT_EQ(1, result1->relevance());
-  EXPECT_EQ(GetView(), result1->view());
 }
 
 TEST_F(AnswerCardResultTest, NullContents) {
@@ -106,7 +101,6 @@ TEST_F(AnswerCardResultTest, NullContents) {
   // Shouldn't crash with null contents.
   std::unique_ptr<AnswerCardResult> result = CreateResult(
       kResultUrl, kResultUrlStripped, base::ASCIIToUTF16(kResultTitle));
-  std::unique_ptr<SearchResult> result1 = result->Duplicate();
 }
 
 TEST_F(AnswerCardResultTest, EarlyDeleteContents) {
@@ -115,8 +109,6 @@ TEST_F(AnswerCardResultTest, EarlyDeleteContents) {
       kResultUrl, kResultUrlStripped, base::ASCIIToUTF16(kResultTitle));
 
   DeleteContents();
-
-  result->Duplicate();
 }
 
 }  // namespace test

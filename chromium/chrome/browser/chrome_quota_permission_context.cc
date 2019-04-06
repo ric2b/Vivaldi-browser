@@ -22,7 +22,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/web_contents.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -183,9 +183,8 @@ void ChromeQuotaPermissionContext::RequestQuotaPermission(
     return;
   }
 
-  if (vr::VrTabHelper::IsInVr(web_contents)) {
-    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kQuotaPermission);
-
+  if (vr::VrTabHelper::IsUiSuppressedInVr(
+          web_contents, vr::UiSuppressedElement::kQuotaPermission)) {
     // Permission request UI cannot currently be rendered binocularly in VR
     // mode, so we suppress the UI and return cancelled to inform the caller
     // that the request will not progress. crbug.com/736568

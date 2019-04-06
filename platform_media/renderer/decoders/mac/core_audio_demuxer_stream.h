@@ -40,7 +40,6 @@ class CoreAudioDemuxerStream : public DemuxerStream {
   bool SupportsConfigChanges() override;
   bool enabled() const;
   void set_enabled(bool enabled, base::TimeDelta timestamp);
-  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb);
 
   void Stop();
   void Abort();
@@ -74,7 +73,6 @@ class CoreAudioDemuxerStream : public DemuxerStream {
 
   ReadCB read_cb_;
   bool is_enabled_;
-  StreamStatusChangeCB stream_status_change_cb_;
 
   bool reading_audio_data_;
   bool is_enqueue_running_;

@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.invalidation;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -16,7 +15,7 @@ import com.google.ipc.invalidation.ticl.android2.channel.AndroidGcmController;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.FieldTrialList;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -295,18 +294,12 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
     public static InvalidationController get(Context context) {
         synchronized (LOCK) {
             if (sInstance == null) {
-                // The PageRevisitInstrumentation trial needs sessions invalidations to be on such
-                // that local session data is current and can be used to perform checks.
-                boolean requireInvalidationsForInstrumentation =
-                        FieldTrialList.findFullName("PageRevisitInstrumentation").equals("Enabled");
                 // If the NTP is trying to suggest foreign tabs, then recieving invalidations is
                 // vital, otherwise data is stale and less useful.
                 boolean requireInvalidationsForSuggestions = ChromeFeatureList.isEnabled(
                         ChromeFeatureList.NTP_FOREIGN_SESSIONS_SUGGESTIONS);
-                boolean canDisableSessionInvalidations = !requireInvalidationsForInstrumentation
-                        && !requireInvalidationsForSuggestions;
-
-                sInstance = new InvalidationController(context, canDisableSessionInvalidations);
+                sInstance =
+                        new InvalidationController(context, !requireInvalidationsForSuggestions);
             }
             return sInstance;
         }
@@ -353,7 +346,7 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
     public void onApplicationStateChange(int newState) {
         // The isSyncEnabled() check is used to check whether the InvalidationController would be
         // started if it did not stop itself when the application is paused.
-        if (AndroidSyncSettings.isSyncEnabled(mContext)) {
+        if (AndroidSyncSettings.isSyncEnabled()) {
             if (newState == ApplicationState.HAS_RUNNING_ACTIVITIES) {
                 start();
             } else if (newState == ApplicationState.HAS_PAUSED_ACTIVITIES) {

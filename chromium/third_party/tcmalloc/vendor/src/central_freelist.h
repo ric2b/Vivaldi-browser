@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2008, Google Inc.
 // All rights reserved.
 //
@@ -79,6 +80,16 @@ class CentralFreeList {
   // page full of 5-byte objects would have 2 bytes memory overhead).
   size_t OverheadBytes();
 
+  // Lock/Unlock the internal SpinLock. Used on the pthread_atfork call
+  // to set the lock in a consistent state before the fork.
+  void Lock() {
+    lock_.Lock();
+  }
+
+  void Unlock() {
+    lock_.Unlock();
+  }
+
  private:
   // TransferCache is used to cache transfers of
   // sizemap.num_objects_to_move(size_class) back and forth between
@@ -103,13 +114,13 @@ class CentralFreeList {
   // REQUIRES: lock_ is held
   // Remove object from cache and return.
   // Return NULL if no free entries in cache.
-  void* FetchFromSpans() EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  int FetchFromOneSpans(int N, void **start, void **end) EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // REQUIRES: lock_ is held
   // Remove object from cache and return.  Fetches
   // from pageheap if cache is empty.  Only returns
   // NULL on allocation failure.
-  void* FetchFromSpansSafe() EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  int FetchFromOneSpansSafe(int N, void **start, void **end) EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // REQUIRES: lock_ is held
   // Release a linked list of objects to spans.

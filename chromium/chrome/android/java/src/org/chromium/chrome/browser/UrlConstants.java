@@ -38,6 +38,7 @@ public class UrlConstants {
 
     public static final String NTP_HOST = "newtab";
     public static final String NTP_URL = "chrome-native://newtab/";
+    public static final String NTP_NON_NATIVE_URL = "chrome://newtab";
 
     public static final String BOOKMARKS_HOST = "bookmarks";
     public static final String BOOKMARKS_URL = "chrome-native://bookmarks/";
@@ -60,9 +61,6 @@ public class UrlConstants {
     public static final String INTERESTS_HOST = "interests";
     public static final String INTERESTS_URL = "chrome-native://interests/";
 
-    public static final String PHYSICAL_WEB_DIAGNOSTICS_HOST = "physical-web-diagnostics";
-    public static final String PHYSICAL_WEB_URL = "chrome://physical-web/";
-
     public static final String GOOGLE_ACCOUNT_ACTIVITY_CONTROLS_URL =
             "https://myaccount.google.com/activitycontrols/search";
 
@@ -74,4 +72,9 @@ public class UrlConstants {
 
     public static final String MY_ACTIVITY_URL_IN_HISTORY =
             "https://myactivity.google.com/myactivity/?utm_source=chrome_h";
+
+    public static final String CHROME_MEMEX_URL = "https://chrome-memex.appspot.com/";
+    public static final String CHROME_MEMEX_DEV_URL = "https://chrome-memex-dev.appspot.com/";
+
+    public static final String CONTENT_SUGGESTIONS_SUFFIX = "#suggestions";
 }

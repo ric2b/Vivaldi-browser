@@ -5,6 +5,7 @@
 #include "ash/message_center/message_center_bubble.h"
 
 #include "ash/message_center/message_center_view.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/macros.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
@@ -17,8 +18,12 @@ using message_center::MessageCenter;
 namespace ash {
 
 namespace {
-const int kDefaultMaxHeight = 400;
-}
+constexpr int kDefaultMaxHeight = 400;
+
+constexpr SkColor kBackgroundColorWithBlur =
+    SkColorSetARGB(0xCC, 0xF0, 0xF0, 0xF2);
+constexpr SkColor kBackgroundColor = SkColorSetARGB(0xF2, 0xF0, 0xF0, 0xF2);
+}  // namespace
 
 // ContentsView ////////////////////////////////////////////////////////////////
 
@@ -44,6 +49,12 @@ class ContentsView : public views::View {
 ContentsView::ContentsView(MessageCenterBubble* bubble, views::View* contents)
     : bubble_(bubble->AsWeakPtr()) {
   SetLayoutManager(std::make_unique<views::FillLayout>());
+
+  SetBackground(views::CreateSolidBackground(
+      app_list::features::IsBackgroundBlurEnabled() ? kBackgroundColorWithBlur
+                                                    : kBackgroundColor));
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
   AddChildView(contents);
 }
 
@@ -64,12 +75,8 @@ void ContentsView::ChildPreferredSizeChanged(View* child) {
 
 // MessageCenterBubble /////////////////////////////////////////////////////////
 
-MessageCenterBubble::MessageCenterBubble(
-    MessageCenter* message_center,
-    message_center::UiController* ui_controller)
-    : message_center_(message_center),
-      ui_controller_(ui_controller),
-      max_height_(kDefaultMaxHeight) {}
+MessageCenterBubble::MessageCenterBubble(MessageCenter* message_center)
+    : message_center_(message_center), max_height_(kDefaultMaxHeight) {}
 
 MessageCenterBubble::~MessageCenterBubble() {
   // Removs this from the widget observers just in case. MessageCenterBubble
@@ -110,9 +117,8 @@ void MessageCenterBubble::InitializeContents(
     views::TrayBubbleView* new_bubble_view) {
   bubble_view_ = new_bubble_view;
   bubble_view_->GetWidget()->AddObserver(this);
-  message_center_view_ =
-      new MessageCenterView(message_center_, ui_controller_, max_height_,
-                            initially_settings_visible_);
+  message_center_view_ = new MessageCenterView(message_center_, max_height_,
+                                               initially_settings_visible_);
   bubble_view_->AddChildView(new ContentsView(this, message_center_view_));
   message_center_view_->SetMaxHeight(max_height_);
   message_center_view_->Init();

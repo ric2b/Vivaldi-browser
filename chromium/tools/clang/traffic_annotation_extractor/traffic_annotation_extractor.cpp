@@ -12,13 +12,7 @@
 // 2) Extracts all calls of the following network request creation functions
 //    and returns their source location and availability of a
 //    net::[Partial]NetworkTrafficAnnotation parameter in them:
-//     - SSLClientSocket::SSLClientSocket
-//     - TCPClientSocket::TCPClientSocket
-//     - UDPClientSocket::UDPClientSocket
 //     - URLFetcher::Create
-//     - ClientSocketFactory::CreateDatagramClientSocket
-//     - ClientSocketFactory::CreateSSLClientSocket
-//     - ClientSocketFactory::CreateTransportClientSocket
 //     - URLRequestContext::CreateRequest
 // 3) Finds all instances of initializing any of the following classes with list
 //    expressions or assignment of a value to |unique_id_hash_code| of the
@@ -42,6 +36,7 @@
 #include "clang/Tooling/Refactoring.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/TargetSelect.h"
 
 using namespace clang::ast_matchers;
 
@@ -163,10 +158,8 @@ class NetworkAnnotationTagCallback : public MatchFinder::MatchCallback {
                            const clang::Expr* expr,
                            Location* location) {
     clang::SourceLocation source_location = expr->getLocStart();
-    if (source_location.isMacroID()) {
-      source_location =
-          result.SourceManager->getImmediateMacroCallerLoc(source_location);
-    }
+    if (source_location.isMacroID())
+      source_location = result.SourceManager->getExpansionLoc(source_location);
     location->file_path = result.SourceManager->getFilename(source_location);
     location->line_number =
         result.SourceManager->getSpellingLineNumber(source_location);
@@ -350,18 +343,11 @@ int RunMatchers(clang::tooling::ClangTool* clang_tool, Collector* collector) {
 
   // Setup patterns to find functions that should be monitored.
   match_finder.addMatcher(
-      callExpr(
-          hasDeclaration(functionDecl(
-              anyOf(hasName("SSLClientSocket::SSLClientSocket"),
-                    hasName("TCPClientSocket::TCPClientSocket"),
-                    hasName("UDPClientSocket::UDPClientSocket"),
-                    hasName("URLFetcher::Create"),
-                    hasName("ClientSocketFactory::CreateDatagramClientSocket"),
-                    hasName("ClientSocketFactory::CreateSSLClientSocket"),
-                    hasName("ClientSocketFactory::CreateTransportClientSocket"),
-                    hasName("URLRequestContext::CreateRequest")),
-              has_annotation_parameter)),
-          bind_function_context_if_present)
+      callExpr(hasDeclaration(functionDecl(
+                   anyOf(hasName("URLFetcher::Create"),
+                         hasName("URLRequestContext::CreateRequest")),
+                   has_annotation_parameter)),
+               bind_function_context_if_present)
           .bind("monitored_function"),
       &callback);
 
@@ -414,6 +400,8 @@ int main(int argc, const char* argv[]) {
                                  options.getSourcePathList());
   Collector collector;
 
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmParser();
   int result = RunMatchers(&tool, &collector);
 
   if (result != 0)

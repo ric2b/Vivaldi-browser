@@ -6,7 +6,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/process/launch.h"
 #include "base/run_loop.h"
 #include "base/test/launcher/unit_test_launcher.h"
@@ -14,7 +14,7 @@
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "components/exo/wayland/clients/test/wayland_client_test.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/core/embedder/embedder.h"
 
 namespace exo {
 namespace {
@@ -71,7 +71,7 @@ class ExoClientPerfTestSuite : public ash::AshTestSuite {
 
       // Set the UI thread message loop to WaylandClientTest, so all tests can
       // post tasks to UI thread.
-      WaylandClientTest::SetUIMessageLoop(base::MessageLoop::current());
+      WaylandClientTest::SetUIMessageLoop(base::MessageLoopCurrent::Get());
     }
   }
 
@@ -107,7 +107,7 @@ class ExoClientPerfTestSuite : public ash::AshTestSuite {
 }  // namespace exo
 
 int main(int argc, char** argv) {
-  mojo::edk::Init();
+  mojo::core::Init();
 
   exo::ExoClientPerfTestSuite test_suite(argc, argv);
 

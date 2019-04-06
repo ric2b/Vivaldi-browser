@@ -58,15 +58,16 @@ enum MediaStreamRequestResult {
   MEDIA_DEVICE_PERMISSION_DISMISSED = 2,
   MEDIA_DEVICE_INVALID_STATE = 3,
   MEDIA_DEVICE_NO_HARDWARE = 4,
-  MEDIA_DEVICE_INVALID_SECURITY_ORIGIN_DEPRECATED = 5,
+  MEDIA_DEVICE_INVALID_SECURITY_ORIGIN = 5,
   MEDIA_DEVICE_TAB_CAPTURE_FAILURE = 6,
   MEDIA_DEVICE_SCREEN_CAPTURE_FAILURE = 7,
   MEDIA_DEVICE_CAPTURE_FAILURE = 8,
   MEDIA_DEVICE_CONSTRAINT_NOT_SATISFIED = 9,
-  MEDIA_DEVICE_TRACK_START_FAILURE = 10,
-  MEDIA_DEVICE_NOT_SUPPORTED = 11,
-  MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN = 12,
-  MEDIA_DEVICE_KILL_SWITCH_ON = 13,
+  MEDIA_DEVICE_TRACK_START_FAILURE_AUDIO = 10,
+  MEDIA_DEVICE_TRACK_START_FAILURE_VIDEO = 11,
+  MEDIA_DEVICE_NOT_SUPPORTED = 12,
+  MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN = 13,
+  MEDIA_DEVICE_KILL_SWITCH_ON = 14,
   NUM_MEDIA_REQUEST_RESULTS
 };
 
@@ -90,10 +91,12 @@ struct CONTENT_EXPORT MediaStreamDevice {
                     const std::string& id,
                     const std::string& name);
 
-  MediaStreamDevice(MediaStreamType type,
-                    const std::string& id,
-                    const std::string& name,
-                    media::VideoFacingMode facing);
+  MediaStreamDevice(
+      MediaStreamType type,
+      const std::string& id,
+      const std::string& name,
+      media::VideoFacingMode facing,
+      const base::Optional<std::string>& group_id = base::nullopt);
 
   MediaStreamDevice(MediaStreamType type,
                     const std::string& id,
@@ -116,6 +119,9 @@ struct CONTENT_EXPORT MediaStreamDevice {
 
   // The facing mode for video capture device.
   media::VideoFacingMode video_facing;
+
+  // The device's group ID.
+  base::Optional<std::string> group_id;
 
   // The device id of a matched output device if any (otherwise empty).
   // Only applicable to audio devices.
@@ -219,9 +225,9 @@ class MediaStreamUI {
 
 // Callback used return results of media access requests.
 using MediaResponseCallback =
-    base::Callback<void(const MediaStreamDevices& devices,
-                        MediaStreamRequestResult result,
-                        std::unique_ptr<MediaStreamUI> ui)>;
+    base::OnceCallback<void(const MediaStreamDevices& devices,
+                            MediaStreamRequestResult result,
+                            std::unique_ptr<MediaStreamUI> ui)>;
 }  // namespace content
 
 #endif  // CONTENT_PUBLIC_COMMON_MEDIA_STREAM_REQUEST_H_

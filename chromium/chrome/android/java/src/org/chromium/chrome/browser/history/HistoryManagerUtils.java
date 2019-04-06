@@ -8,13 +8,11 @@ import android.content.Context;
 import android.content.Intent;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.ui.base.DeviceFormFactor;
 
 /**
  * Utility methods for the browsing history manager.
@@ -28,28 +26,8 @@ public class HistoryManagerUtils {
      *            {@link HistoryManager}.
      */
     public static void showHistoryManager(ChromeActivity activity, Tab tab) {
-        showHistoryManager(activity, tab, false);
-    }
-
-    /**
-     * Opens the browsing history manager.
-     *
-     * @param activity The {@link ChromeActivity} that owns the {@link HistoryManager}.
-     * @param tab The {@link Tab} to used to display the native page version of the
-     *            {@link HistoryManager}.
-     * @param fromMenu Whether history is being triggered from the overflow menu.
-     */
-    public static void showHistoryManager(ChromeActivity activity, Tab tab, boolean fromMenu) {
         Context appContext = ContextUtils.getApplicationContext();
-        if (activity.getBottomSheet() != null) {
-            if (fromMenu) {
-                activity.getBottomSheetContentController().openBottomSheetForMenuItem(
-                        R.id.action_history);
-            } else {
-                activity.getBottomSheetContentController().showContentAndOpenSheet(
-                        R.id.action_history);
-            }
-        } else if (DeviceFormFactor.isTablet()) {
+        if (activity.isTablet()) {
             // History shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.NATIVE_HISTORY_URL);
             tab.loadUrl(params);

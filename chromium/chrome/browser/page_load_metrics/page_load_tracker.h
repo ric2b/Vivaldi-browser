@@ -136,6 +136,11 @@ enum InternalErrorLoadEvent {
   // frequently this case is encountered.
   ERR_SUBFRAME_IPC_WITH_NO_RELEVANT_LOAD,
 
+  // We received browser-process reported metrics when we weren't tracking a
+  // committed load. We expect this error to happen, and track it so we can
+  // understand how frequently this case is encountered.
+  ERR_BROWSER_USAGE_WITH_NO_RELEVANT_LOAD,
+
   // Add values before this final count.
   ERR_LAST_ENTRY,
 };
@@ -169,11 +174,13 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
 
   // PageLoadMetricsUpdateDispatcher::Client implementation:
   void OnTimingChanged() override;
-  void OnSubFrameTimingChanged(const mojom::PageLoadTiming& timing) override;
+  void OnSubFrameTimingChanged(content::RenderFrameHost* rfh,
+                               const mojom::PageLoadTiming& timing) override;
   void OnMainFrameMetadataChanged() override;
   void OnSubframeMetadataChanged() override;
   void UpdateFeaturesUsage(
       const mojom::PageLoadFeatures& new_features) override;
+  void UpdateDataUse(const mojom::PageLoadDataUse& new_datause) override;
 
   void Redirect(content::NavigationHandle* navigation_handle);
   void WillProcessNavigationResponse(
@@ -270,12 +277,6 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
       bool is_in_main_frame);
-
-  // Invoked on navigations where a navigation delay was added by the
-  // DelayNavigationThrottle. This is a temporary method that will be removed
-  // once the experiment is complete.
-  void OnNavigationDelayComplete(base::TimeDelta scheduled_delay,
-                                 base::TimeDelta actual_delay);
 
   // Informs the observers that the event corresponding to |event_key| has
   // occurred.

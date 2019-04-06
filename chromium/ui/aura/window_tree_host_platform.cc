@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -14,6 +15,10 @@
 #include "ui/base/layout.h"
 #include "ui/compositor/compositor.h"
 #include "ui/events/event.h"
+#include "ui/events/keyboard_hook.h"
+#include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/dom_keyboard_layout_map.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 #if defined(OS_ANDROID)
 #include "ui/platform_window/android/platform_window_android.h"
@@ -35,26 +40,16 @@
 namespace aura {
 
 // static
-WindowTreeHost* WindowTreeHost::Create(const gfx::Rect& bounds) {
-  return new WindowTreeHostPlatform(bounds);
+std::unique_ptr<WindowTreeHost> WindowTreeHost::Create(
+    ui::PlatformWindowInitProperties properties) {
+  return std::make_unique<WindowTreeHostPlatform>(std::move(properties));
 }
 
-WindowTreeHostPlatform::WindowTreeHostPlatform(const gfx::Rect& bounds)
-    : WindowTreeHostPlatform() {
-  bounds_ = bounds;
+WindowTreeHostPlatform::WindowTreeHostPlatform(
+    ui::PlatformWindowInitProperties properties) {
+  bounds_ = properties.bounds;
   CreateCompositor();
-#if defined(USE_OZONE)
-  platform_window_ =
-      ui::OzonePlatform::GetInstance()->CreatePlatformWindow(this, bounds);
-#elif defined(OS_WIN)
-  platform_window_.reset(new ui::WinWindow(this, bounds));
-#elif defined(OS_ANDROID)
-  platform_window_.reset(new ui::PlatformWindowAndroid(this));
-#elif defined(USE_X11)
-  platform_window_.reset(new ui::X11Window(this, bounds));
-#else
-  NOTIMPLEMENTED();
-#endif
+  CreateAndSetPlatformWindow(std::move(properties));
 }
 
 WindowTreeHostPlatform::WindowTreeHostPlatform()
@@ -66,6 +61,22 @@ WindowTreeHostPlatform::WindowTreeHostPlatform(
       widget_(gfx::kNullAcceleratedWidget),
       current_cursor_(ui::CursorType::kNull) {}
 
+void WindowTreeHostPlatform::CreateAndSetPlatformWindow(
+    ui::PlatformWindowInitProperties properties) {
+#if defined(USE_OZONE)
+  platform_window_ = ui::OzonePlatform::GetInstance()->CreatePlatformWindow(
+      this, std::move(properties));
+#elif defined(OS_WIN)
+  platform_window_.reset(new ui::WinWindow(this, properties.bounds));
+#elif defined(OS_ANDROID)
+  platform_window_.reset(new ui::PlatformWindowAndroid(this));
+#elif defined(USE_X11)
+  platform_window_.reset(new ui::X11Window(this, properties.bounds));
+#else
+  NOTIMPLEMENTED();
+#endif
+}
+
 void WindowTreeHostPlatform::SetPlatformWindow(
     std::unique_ptr<ui::PlatformWindow> window) {
   platform_window_ = std::move(window);
@@ -74,7 +85,10 @@ void WindowTreeHostPlatform::SetPlatformWindow(
 WindowTreeHostPlatform::~WindowTreeHostPlatform() {
   DestroyCompositor();
   DestroyDispatcher();
-  platform_window_->Close();
+
+  // |platform_window_| might have already been destroyed by this time.
+  if (platform_window_)
+    platform_window_->Close();
 }
 
 ui::EventSource* WindowTreeHostPlatform::GetEventSource() {
@@ -97,7 +111,11 @@ gfx::Rect WindowTreeHostPlatform::GetBoundsInPixels() const {
   return platform_window_ ? platform_window_->GetBounds() : gfx::Rect();
 }
 
-void WindowTreeHostPlatform::SetBoundsInPixels(const gfx::Rect& bounds) {
+void WindowTreeHostPlatform::SetBoundsInPixels(
+    const gfx::Rect& bounds,
+    const viz::LocalSurfaceId& local_surface_id) {
+  pending_size_ = bounds.size();
+  pending_local_surface_id_ = local_surface_id;
   platform_window_->SetBounds(bounds);
 }
 
@@ -111,6 +129,41 @@ void WindowTreeHostPlatform::SetCapture() {
 
 void WindowTreeHostPlatform::ReleaseCapture() {
   platform_window_->ReleaseCapture();
+}
+
+bool WindowTreeHostPlatform::CaptureSystemKeyEventsImpl(
+    base::Optional<base::flat_set<ui::DomCode>> dom_codes) {
+  // Only one KeyboardHook should be active at a time, otherwise there will be
+  // problems with event routing (i.e. which Hook takes precedence) and
+  // destruction ordering.
+  DCHECK(!keyboard_hook_);
+  keyboard_hook_ = ui::KeyboardHook::Create(
+      std::move(dom_codes), GetAcceleratedWidget(),
+      base::BindRepeating(
+          [](ui::PlatformWindowDelegate* delegate, ui::KeyEvent* event) {
+            delegate->DispatchEvent(event);
+          },
+          base::Unretained(this)));
+
+  return keyboard_hook_ != nullptr;
+}
+
+void WindowTreeHostPlatform::ReleaseSystemKeyEventCapture() {
+  keyboard_hook_.reset();
+}
+
+bool WindowTreeHostPlatform::IsKeyLocked(ui::DomCode dom_code) {
+  return keyboard_hook_ && keyboard_hook_->IsKeyLocked(dom_code);
+}
+
+base::flat_map<std::string, std::string>
+WindowTreeHostPlatform::GetKeyboardLayoutMap() {
+#if !defined(X11)
+  return ui::GenerateDomKeyboardLayoutMap();
+#else
+  NOTIMPLEMENTED();
+  return {};
+#endif
 }
 
 void WindowTreeHostPlatform::SetCursorNative(gfx::NativeCursor cursor) {
@@ -140,11 +193,16 @@ void WindowTreeHostPlatform::OnBoundsChanged(const gfx::Rect& new_bounds) {
   float new_scale = ui::GetScaleFactorForNativeView(window());
   gfx::Rect old_bounds = bounds_;
   bounds_ = new_bounds;
-  if (bounds_.origin() != old_bounds.origin()) {
+  if (bounds_.origin() != old_bounds.origin())
     OnHostMovedInPixels(bounds_.origin());
-  }
-  if (bounds_.size() != old_bounds.size() || current_scale != new_scale) {
-    OnHostResizedInPixels(bounds_.size());
+  if (pending_local_surface_id_.is_valid() ||
+      bounds_.size() != old_bounds.size() || current_scale != new_scale) {
+    auto local_surface_id = bounds_.size() == pending_size_
+                                ? pending_local_surface_id_
+                                : viz::LocalSurfaceId();
+    pending_local_surface_id_ = viz::LocalSurfaceId();
+    pending_size_ = gfx::Size();
+    OnHostResizedInPixels(bounds_.size(), local_surface_id);
   }
 }
 
@@ -181,8 +239,12 @@ void WindowTreeHostPlatform::OnAcceleratedWidgetAvailable(
     gfx::AcceleratedWidget widget,
     float device_pixel_ratio) {
   widget_ = widget;
-  WindowTreeHost::OnAcceleratedWidgetAvailable();
+  // This may be called before the Compositor has been created.
+  if (compositor())
+    WindowTreeHost::OnAcceleratedWidgetAvailable();
 }
+
+void WindowTreeHostPlatform::OnAcceleratedWidgetDestroying() {}
 
 void WindowTreeHostPlatform::OnAcceleratedWidgetDestroyed() {
   gfx::AcceleratedWidget widget = compositor()->ReleaseAcceleratedWidget();

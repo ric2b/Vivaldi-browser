@@ -11,14 +11,16 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/engagement/site_engagement_observer.h"
+#include "chrome/browser/installable/installable_ambient_badge_infobar_delegate.h"
 #include "chrome/browser/installable/installable_logging.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "third_party/WebKit/public/platform/WebDisplayMode.h"
-#include "third_party/WebKit/public/platform/modules/app_banner/app_banner.mojom.h"
+#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/platform/modules/app_banner/app_banner.mojom.h"
 
 class InstallableManager;
 class SkBitmap;
@@ -27,7 +29,7 @@ struct WebApplicationInfo;
 namespace content {
 class RenderFrameHost;
 class WebContents;
-}
+}  // namespace content
 
 // This forward declaration exists solely for the DidFinishCreatingBookmarkApp
 // callback, implemented and called on desktop platforms only.
@@ -53,6 +55,7 @@ namespace banners {
 // web app banner (checking manifest validity, service worker, and icon).
 class AppBannerManager : public content::WebContentsObserver,
                          public blink::mojom::AppBannerService,
+                         public InstallableAmbientBadgeInfoBarDelegate::Client,
                          public SiteEngagementObserver {
  public:
   // A StatusReporter handles the reporting of |InstallableStatusCode|s.
@@ -113,6 +116,11 @@ class AppBannerManager : public content::WebContentsObserver,
   // Returns whether the new experimental flow and UI is enabled.
   static bool IsExperimentalAppBannersEnabled();
 
+  // Returns the app name if the current page is installable, otherwise returns
+  // the empty string.
+  static base::string16 GetInstallableAppName(
+      content::WebContents* web_contents);
+
   // Requests an app banner. If |is_debug_mode| is true, any failure in the
   // pipeline will be reported to the devtools console.
   virtual void RequestAppBanner(const GURL& validated_url, bool is_debug_mode);
@@ -127,7 +135,7 @@ class AppBannerManager : public content::WebContentsObserver,
   void SendBannerAccepted();
 
   // Sends a message to the renderer that the user dismissed the banner.
-  void SendBannerDismissed();
+  virtual void SendBannerDismissed();
 
   // Returns a WeakPtr to this object. Exposed so subclasses/infobars may
   // may bind callbacks without needing their own WeakPtrFactory.
@@ -146,8 +154,10 @@ class AppBannerManager : public content::WebContentsObserver,
   // desktop platforms.
   virtual void OnAppIconFetched(const SkBitmap& bitmap) {}
 
-  // Returns the installability status of a site.
-  static Installable GetInstallable(content::WebContents* web_contents);
+  // InstallableAmbientBadgeInfoBarDelegate::Client overrides. Further
+  // overridden on Android.
+  void AddToHomescreenFromBadge() override {}
+  void BadgeDismissed() override {}
 
  protected:
   explicit AppBannerManager(content::WebContents* web_contents);
@@ -158,8 +168,19 @@ class AppBannerManager : public content::WebContentsObserver,
   // GetAppIdentifier() must return a valid value for this method to work.
   bool CheckIfShouldShowBanner();
 
+  // Called when the current site is eligible to show a banner. Returns true if
+  // the banner should not be shown because the site is already installed, and
+  // false if the banner should be shown because the site is not yet installed.
+  // Overridden in platform-specific code to perform actions when it is
+  // guaranteed that a site is banner-eligible, depending on whether the site is
+  // installed (i.e. the ambient badge).
+  virtual bool CheckIfInstalled();
+
   // Return a string identifying this app for metrics.
   virtual std::string GetAppIdentifier();
+
+  // Return the name of the app for this page.
+  virtual base::string16 GetAppName() const;
 
   // Return a string describing what type of banner is being created. Used when
   // alerting websites that a banner is about to be created.
@@ -206,6 +227,9 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Reports |code| via a UMA histogram or logs it to the console.
   void ReportStatus(InstallableStatusCode code);
+
+  // Voids all outstanding service pointers.
+  void ResetBindings();
 
   // Resets all fetched data for the current page.
   virtual void ResetCurrentPageData();
@@ -258,7 +282,7 @@ class AppBannerManager : public content::WebContentsObserver,
   GURL manifest_url_;
 
   // The manifest object.
-  content::Manifest manifest_;
+  blink::Manifest manifest_;
 
   // The URL of the primary icon.
   GURL primary_icon_url_;
@@ -276,8 +300,9 @@ class AppBannerManager : public content::WebContentsObserver,
  private:
   friend class AppBannerManagerTest;
 
-  // Voids all outstanding service pointers.
-  void ResetBindings();
+  // Retrieves the platform specific instance of AppBannerManager from
+  // |web_contents|.
+  static AppBannerManager* FromWebContents(content::WebContents* web_contents);
 
   // Record that the banner could be shown at this point, if the triggering
   // heuristic allowed.
@@ -301,7 +326,7 @@ class AppBannerManager : public content::WebContentsObserver,
   // blink::mojom::AppBannerService overrides.
   // Called when Blink has prevented a banner from being shown, and is now
   // requesting that it be shown later.
-  void DisplayAppBanner(bool user_gesture) override;
+  void DisplayAppBanner() override;
 
   // Returns an InstallableStatusCode indicating whether a banner should be
   // shown.
@@ -309,10 +334,6 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Returns a status code based on the current state, to log when terminating.
   InstallableStatusCode TerminationCode() const;
-
-  // Returns the installability status of the site pertaining to the
-  // AppBannerManager.
-  Installable installable() const;
 
   // Fetches the data required to display a banner for the current page.
   InstallableManager* manager_;

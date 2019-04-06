@@ -9,15 +9,17 @@
 
 #include "base/macros.h"
 #include "chrome/common/prerender_types.h"
+#include "components/offline_pages/buildflags/buildflags.h"
 #include "components/offline_pages/core/request_header/offline_page_navigation_ui_data.h"
-#include "components/offline_pages/features/features.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 namespace content {
 class NavigationHandle;
 }
+
+enum class WindowOpenDisposition;
 
 // PlzNavigate
 // Contains data that is passed from the UI thread to the IO thread at the
@@ -29,6 +31,10 @@ class ChromeNavigationUIData : public content::NavigationUIData {
   ChromeNavigationUIData();
   explicit ChromeNavigationUIData(content::NavigationHandle* navigation_handle);
   ~ChromeNavigationUIData() override;
+
+  static std::unique_ptr<ChromeNavigationUIData> CreateForMainFrameNavigation(
+      content::WebContents* web_contents,
+      WindowOpenDisposition disposition);
 
   // Creates a new ChromeNavigationUIData that is a deep copy of the original.
   // Any changes to the original after the clone is created will not be
@@ -54,7 +60,7 @@ class ChromeNavigationUIData : public content::NavigationUIData {
     return offline_page_data_.get();
   }
 #endif
-
+  WindowOpenDisposition window_open_disposition() const { return disposition_; }
   prerender::PrerenderMode prerender_mode() const { return prerender_mode_; }
   const std::string& prerender_histogram_prefix() {
     return prerender_histogram_prefix_;
@@ -72,6 +78,7 @@ class ChromeNavigationUIData : public content::NavigationUIData {
       offline_page_data_;
 #endif
 
+  WindowOpenDisposition disposition_;
   prerender::PrerenderMode prerender_mode_ = prerender::NO_PRERENDER;
   std::string prerender_histogram_prefix_;
 

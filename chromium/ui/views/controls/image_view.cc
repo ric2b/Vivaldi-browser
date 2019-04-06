@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "cc/paint/paint_flags.h"
+#include "skia/ext/image_operations.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
@@ -29,11 +30,10 @@ void* GetBitmapPixels(const gfx::ImageSkia& img, float image_scale) {
 const char ImageView::kViewClassName[] = "ImageView";
 
 ImageView::ImageView()
-    : image_size_set_(false),
-      horiz_alignment_(CENTER),
-      vert_alignment_(CENTER),
+    : horizontal_alignment_(CENTER),
+      vertical_alignment_(CENTER),
       last_paint_scale_(0.f),
-      last_painted_bitmap_pixels_(NULL) {}
+      last_painted_bitmap_pixels_(nullptr) {}
 
 ImageView::~ImageView() {}
 
@@ -41,9 +41,10 @@ void ImageView::SetImage(const gfx::ImageSkia& img) {
   if (IsImageEqual(img))
     return;
 
-  last_painted_bitmap_pixels_ = NULL;
+  last_painted_bitmap_pixels_ = nullptr;
   gfx::Size pref_size(GetPreferredSize());
   image_ = img;
+  scaled_image_ = gfx::ImageSkia();
   if (pref_size != GetPreferredSize())
     PreferredSizeChanged();
   SchedulePaint();
@@ -63,7 +64,6 @@ const gfx::ImageSkia& ImageView::GetImage() const {
 }
 
 void ImageView::SetImageSize(const gfx::Size& image_size) {
-  image_size_set_ = true;
   image_size_ = image_size;
   PreferredSizeChanged();
 }
@@ -74,7 +74,7 @@ gfx::Rect ImageView::GetImageBounds() const {
 }
 
 void ImageView::ResetImageSize() {
-  image_size_set_ = false;
+  image_size_.reset();
 }
 
 bool ImageView::IsImageEqual(const gfx::ImageSkia& img) const {
@@ -89,33 +89,45 @@ bool ImageView::IsImageEqual(const gfx::ImageSkia& img) const {
 }
 
 gfx::Size ImageView::GetImageSize() const {
-  return image_size_set_ ? image_size_ : image_.size();
+  return image_size_.value_or(image_.size());
 }
 
 gfx::Point ImageView::ComputeImageOrigin(const gfx::Size& image_size) const {
   gfx::Insets insets = GetInsets();
 
-  int x;
+  int x = 0;
   // In order to properly handle alignment of images in RTL locales, we need
   // to flip the meaning of trailing and leading. For example, if the
   // horizontal alignment is set to trailing, then we'll use left alignment for
   // the image instead of right alignment if the UI layout is RTL.
-  Alignment actual_horiz_alignment = horiz_alignment_;
-  if (base::i18n::IsRTL() && (horiz_alignment_ != CENTER))
-    actual_horiz_alignment = (horiz_alignment_ == LEADING) ? TRAILING : LEADING;
-  switch (actual_horiz_alignment) {
-    case LEADING:  x = insets.left();                                 break;
-    case TRAILING: x = width() - insets.right() - image_size.width(); break;
-    case CENTER:   x = (width() - image_size.width()) / 2;            break;
-    default:       NOTREACHED(); x = 0;                               break;
+  Alignment actual_horizontal_alignment = horizontal_alignment_;
+  if (base::i18n::IsRTL() && (horizontal_alignment_ != CENTER)) {
+    actual_horizontal_alignment =
+        (horizontal_alignment_ == LEADING) ? TRAILING : LEADING;
+  }
+  switch (actual_horizontal_alignment) {
+    case LEADING:
+      x = insets.left();
+      break;
+    case TRAILING:
+      x = width() - insets.right() - image_size.width();
+      break;
+    case CENTER:
+      x = (width() - insets.width() - image_size.width()) / 2 + insets.left();
+      break;
   }
 
-  int y;
-  switch (vert_alignment_) {
-    case LEADING:  y = insets.top();                                     break;
-    case TRAILING: y = height() - insets.bottom() - image_size.height(); break;
-    case CENTER:   y = (height() - image_size.height()) / 2;             break;
-    default:       NOTREACHED(); y = 0;                                  break;
+  int y = 0;
+  switch (vertical_alignment_) {
+    case LEADING:
+      y = insets.top();
+      break;
+    case TRAILING:
+      y = height() - insets.bottom() - image_size.height();
+      break;
+    case CENTER:
+      y = (height() - insets.height() - image_size.height()) / 2 + insets.top();
+      break;
   }
 
   return gfx::Point(x, y);
@@ -127,7 +139,7 @@ void ImageView::OnPaint(gfx::Canvas* canvas) {
 }
 
 void ImageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_IMAGE;
+  node_data->role = ax::mojom::Role::kImage;
   node_data->SetName(tooltip_text_);
 }
 
@@ -135,26 +147,26 @@ const char* ImageView::GetClassName() const {
   return kViewClassName;
 }
 
-void ImageView::SetHorizontalAlignment(Alignment ha) {
-  if (ha != horiz_alignment_) {
-    horiz_alignment_ = ha;
+void ImageView::SetHorizontalAlignment(Alignment alignment) {
+  if (alignment != horizontal_alignment_) {
+    horizontal_alignment_ = alignment;
     SchedulePaint();
   }
 }
 
 ImageView::Alignment ImageView::GetHorizontalAlignment() const {
-  return horiz_alignment_;
+  return horizontal_alignment_;
 }
 
-void ImageView::SetVerticalAlignment(Alignment va) {
-  if (va != vert_alignment_) {
-    vert_alignment_ = va;
+void ImageView::SetVerticalAlignment(Alignment alignment) {
+  if (alignment != vertical_alignment_) {
+    vertical_alignment_ = alignment;
     SchedulePaint();
   }
 }
 
 ImageView::Alignment ImageView::GetVerticalAlignment() const {
-  return vert_alignment_;
+  return vertical_alignment_;
 }
 
 void ImageView::SetTooltipText(const base::string16& tooltip) {
@@ -182,7 +194,7 @@ gfx::Size ImageView::CalculatePreferredSize() const {
 
 views::PaintInfo::ScaleType ImageView::GetPaintScaleType() const {
   // ImageView contains an image which is rastered at the device scale factor.
-  // By default, the paint commands are recorded at a scale factor slighlty
+  // By default, the paint commands are recorded at a scale factor slightly
   // different from the device scale factor. Re-rastering the image at this
   // paint recording scale will result in a distorted image. Paint recording
   // scale might also not be uniform along the x & y axis, thus resulting in
@@ -195,27 +207,52 @@ views::PaintInfo::ScaleType ImageView::GetPaintScaleType() const {
 
 void ImageView::OnPaintImage(gfx::Canvas* canvas) {
   last_paint_scale_ = canvas->image_scale();
-  last_painted_bitmap_pixels_ = NULL;
+  last_painted_bitmap_pixels_ = nullptr;
 
-  if (image_.isNull())
+  gfx::ImageSkia image = GetPaintImage(last_paint_scale_);
+  if (image.isNull())
     return;
 
   gfx::Rect image_bounds(GetImageBounds());
   if (image_bounds.IsEmpty())
     return;
 
-  if (image_bounds.size() != gfx::Size(image_.width(), image_.height())) {
+  if (image_bounds.size() != gfx::Size(image.width(), image.height())) {
     // Resize case
     cc::PaintFlags flags;
     flags.setFilterQuality(kLow_SkFilterQuality);
-    canvas->DrawImageInt(image_, 0, 0, image_.width(), image_.height(),
+    canvas->DrawImageInt(image, 0, 0, image.width(), image.height(),
                          image_bounds.x(), image_bounds.y(),
                          image_bounds.width(), image_bounds.height(), true,
                          flags);
   } else {
-    canvas->DrawImageInt(image_, image_bounds.x(), image_bounds.y());
+    canvas->DrawImageInt(image, image_bounds.x(), image_bounds.y());
   }
-  last_painted_bitmap_pixels_ = GetBitmapPixels(image_, last_paint_scale_);
+  last_painted_bitmap_pixels_ = GetBitmapPixels(image, last_paint_scale_);
+}
+
+gfx::ImageSkia ImageView::GetPaintImage(float scale) {
+  if (image_.isNull())
+    return image_;
+
+  const gfx::ImageSkiaRep& rep = image_.GetRepresentation(scale);
+  if (rep.scale() == scale)
+    return image_;
+
+  if (scaled_image_.HasRepresentation(scale))
+    return scaled_image_;
+
+  // Only caches one image rep for the current scale.
+  scaled_image_ = gfx::ImageSkia();
+
+  gfx::Size scaled_size =
+      gfx::ScaleToCeiledSize(rep.pixel_size(), scale / rep.scale());
+  scaled_image_.AddRepresentation(gfx::ImageSkiaRep(
+      skia::ImageOperations::Resize(rep.sk_bitmap(),
+                                    skia::ImageOperations::RESIZE_BEST,
+                                    scaled_size.width(), scaled_size.height()),
+      scale));
+  return scaled_image_;
 }
 
 }  // namespace views

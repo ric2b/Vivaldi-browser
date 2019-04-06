@@ -22,18 +22,18 @@
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
-#include "extensions/features/features.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_registry.h"
-#include "third_party/WebKit/public/platform/URLConversion.h"
-#include "third_party/WebKit/public/platform/WebClientHintsType.h"
-#include "third_party/WebKit/public/platform/WebContentSettingCallbacks.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFrameClient.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "extensions/buildflags/buildflags.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#include "third_party/blink/public/platform/url_conversion.h"
+#include "third_party/blink/public/platform/web_client_hints_type.h"
+#include "third_party/blink/public/platform/web_content_setting_callbacks.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -156,6 +156,11 @@ void ContentSettingsObserver::SetContentSettingRules(
                        content_setting_rules_->client_hints_rules.size());
 }
 
+const RendererContentSettingRules*
+ContentSettingsObserver::GetContentSettingRules() {
+  return content_setting_rules_;
+}
+
 bool ContentSettingsObserver::IsPluginTemporarilyAllowed(
     const std::string& identifier) {
   // If the empty string is in here, it means all plugins are allowed.
@@ -233,7 +238,7 @@ void ContentSettingsObserver::SetAllowRunningInsecureContent() {
   // Reload if we are the main frame.
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   if (!frame->Parent())
-    frame->Reload(blink::WebFrameLoadType::kReload);
+    frame->StartReload(blink::WebFrameLoadType::kReload);
 }
 
 void ContentSettingsObserver::SetAsInterstitial() {
@@ -371,12 +376,6 @@ bool ContentSettingsObserver::AllowStorage(bool local) {
   if (IsUniqueFrame(frame))
     return false;
 
-  int render_frame_id = render_frame()->GetRoutingID();
-  int rid = routing_id();
-
-  if(render_frame_id != rid)
-    DCHECK(false);
-
   StoragePermissionsKey key(
       url::Origin(frame->GetDocument().GetSecurityOrigin()).GetURL(), local);
   const auto permissions = cached_storage_permissions_.find(key);
@@ -385,7 +384,7 @@ bool ContentSettingsObserver::AllowStorage(bool local) {
 
   bool result = false;
   Send(new ChromeViewHostMsg_AllowDOMStorage(
-      render_frame_id, url::Origin(frame->GetSecurityOrigin()).GetURL(),
+      routing_id(), url::Origin(frame->GetSecurityOrigin()).GetURL(),
       url::Origin(frame->Top()->GetSecurityOrigin()).GetURL(), local, &result));
   cached_storage_permissions_[key] = result;
   return result;
@@ -455,6 +454,16 @@ bool ContentSettingsObserver::AllowAutoplay(bool default_value) {
          CONTENT_SETTING_ALLOW;
 }
 
+bool ContentSettingsObserver::AllowPopupsAndRedirects(bool default_value) {
+  if (!content_setting_rules_)
+    return default_value;
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+  return GetContentSettingFromRules(
+             content_setting_rules_->popup_redirect_rules, frame,
+             url::Origin(frame->GetDocument().GetSecurityOrigin()).GetURL()) ==
+         CONTENT_SETTING_ALLOW;
+}
+
 void ContentSettingsObserver::PassiveInsecureContentFound(
     const blink::WebURL& resource_url) {
   // Note: this implementation is a mirror of
@@ -481,7 +490,7 @@ void ContentSettingsObserver::PersistClientHints(
   // this method should not return early if |update_count| is 0.
   std::vector<::blink::mojom::WebClientHintsType> client_hints;
   static constexpr size_t kWebClientHintsCount =
-      static_cast<size_t>(blink::mojom::WebClientHintsType::kLast) + 1;
+      static_cast<size_t>(blink::mojom::WebClientHintsType::kMaxValue) + 1;
   client_hints.reserve(kWebClientHintsCount);
 
   for (size_t i = 0; i < kWebClientHintsCount; ++i) {
@@ -517,7 +526,8 @@ void ContentSettingsObserver::GetAllowedClientHintsFromSource(
     return;
 
   client_hints::GetAllowedClientHintsFromSource(
-      url, content_setting_rules_->client_hints_rules, client_hints);
+      url,
+      content_setting_rules_->client_hints_rules, client_hints);
 }
 
 void ContentSettingsObserver::DidNotAllowPlugins() {

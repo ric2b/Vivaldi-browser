@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/native_library.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_pixmap.h"
@@ -23,6 +24,10 @@
 #include "ui/ozone/ozone_base_export.h"
 #include "ui/ozone/public/gl_ozone.h"
 
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/vulkan/vulkan_implementation.h"
+#endif
+
 namespace gfx {
 class NativePixmap;
 }
@@ -30,6 +35,7 @@ class NativePixmap;
 namespace ui {
 
 class SurfaceOzoneCanvas;
+class OverlaySurface;
 
 // The Ozone interface allows external implementations to hook into Chromium to
 // provide a system specific implementation. The Ozone interface supports two
@@ -68,6 +74,29 @@ class OZONE_BASE_EXPORT SurfaceFactoryOzone {
   // Returns the GLOzone to use for the specified GL implementation, or null if
   // GL implementation doesn't exist.
   virtual GLOzone* GetGLOzone(gl::GLImplementation implementation);
+
+#if BUILDFLAG(ENABLE_VULKAN)
+  // Creates the vulkan implementation. This object should be capable of
+  // creating surfaces that swap to a platform window.
+  virtual std::unique_ptr<gpu::VulkanImplementation>
+  CreateVulkanImplementation();
+
+  // Creates a scanout NativePixmap that can be rendered using Vulkan.
+  // TODO(spang): Remove this once VK_EXT_image_drm_format_modifier is
+  // available.
+  virtual scoped_refptr<gfx::NativePixmap> CreateNativePixmapForVulkan(
+      gfx::AcceleratedWidget widget,
+      gfx::Size size,
+      gfx::BufferFormat format,
+      gfx::BufferUsage usage,
+      VkDevice vk_device,
+      VkDeviceMemory* vk_device_memory,
+      VkImage* vk_image);
+#endif
+
+  // Creates an overlay surface for a platform window.
+  virtual std::unique_ptr<OverlaySurface> CreateOverlaySurface(
+      gfx::AcceleratedWidget window);
 
   // Create SurfaceOzoneCanvas for the specified gfx::AcceleratedWidget.
   //

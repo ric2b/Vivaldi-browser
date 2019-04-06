@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "chromeos/components/tether/ble_scanner.h"
-#include "components/cryptauth/remote_device.h"
+#include "components/cryptauth/remote_device_ref.h"
 
 namespace device {
 class BluetoothDevice;
@@ -42,8 +42,9 @@ class FakeBleScanner : public BleScanner {
   }
 
   void NotifyReceivedAdvertisementFromDevice(
-      const cryptauth::RemoteDevice& remote_device,
-      device::BluetoothDevice* bluetooth_device);
+      cryptauth::RemoteDeviceRef remote_device,
+      device::BluetoothDevice* bluetooth_device,
+      bool is_background_advertisement);
   void NotifyDiscoverySessionStateChanged(bool discovery_session_active);
 
   // BleScanner:

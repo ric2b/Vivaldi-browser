@@ -36,7 +36,7 @@ ContentScanner.prototype.cancel = function() {
 
 /**
  * Scanner of the entries in a directory.
- * @param {DirectoryEntry} entry The directory to be read.
+ * @param {DirectoryEntry|FilesAppDirEntry} entry The directory to be read.
  * @constructor
  * @extends {ContentScanner}
  */
@@ -56,8 +56,9 @@ DirectoryContentScanner.prototype.__proto__ = ContentScanner.prototype;
  */
 DirectoryContentScanner.prototype.scan = function(
     entriesCallback, successCallback, errorCallback) {
-  if (!this.entry_ || util.isFakeEntry(this.entry_)) {
-    // If entry is not specified or a fake, we cannot read it.
+  if (!this.entry_ || !this.entry_.createReader) {
+    // If entry is not specified or if entry doesn't implement createReader, we
+    // cannot read it.
     errorCallback(util.createDOMError(
         util.FileError.INVALID_MODIFICATION_ERR));
     return;
@@ -316,22 +317,129 @@ RecentContentScanner.prototype.scan = function(
 };
 
 /**
+ * Scanner of media-view volumes.
+ * @param {!DirectoryEntry} rootEntry The root entry of the media-view volume.
+ * @constructor
+ * @extends {ContentScanner}
+ */
+function MediaViewContentScanner(rootEntry) {
+  ContentScanner.call(this);
+  this.rootEntry_ = rootEntry;
+}
+
+/**
+ * Extends ContentScanner.
+ */
+MediaViewContentScanner.prototype.__proto__ = ContentScanner.prototype;
+
+/**
+ * This scanner provides flattened view of media providers.
+ *
+ * In FileSystem API level, each media-view root directory has directory
+ * hierarchy. We need to list files under the root directory to provide flatten
+ * view. A file will not be shown in multiple directories in media-view
+ * hierarchy since no folders will be added in media documents provider. We can
+ * list all files without duplication by just retrieveing files in directories
+ * recursively.
+ * @override
+ */
+MediaViewContentScanner.prototype.scan = function(
+    entriesCallback, successCallback, errorCallback) {
+  // To provide flatten view of files, this media-view scanner retrieves files
+  // in directories inside the media's root entry recursively.
+  util.readEntriesRecursively(
+      this.rootEntry_,
+      entries => entriesCallback(entries.filter(entry => !entry.isDirectory)),
+      successCallback, errorCallback, () => false);
+};
+
+/**
+ * Shows an empty list and spinner whilst starting and mounting the
+ * crostini container.
+ *
+ * This function is only called once to start and mount the crostini
+ * container.  When FilesApp starts, the related fake root entry for
+ * crostini is shown which uses this CrostiniMounter as its ContentScanner.
+ *
+ * When the sshfs mount completes, it will show up as a disk volume.
+ * NavigationListModel.reorderNavigationItems_ will detect that crostini
+ * is mounted as a disk volume and hide the fake root item while the
+ * disk volume exists.
+ *
+ * @constructor
+ * @extends {ContentScanner}
+ */
+function CrostiniMounter() {
+  ContentScanner.call(this);
+}
+
+/**
+ * Extends ContentScanner.
+ */
+CrostiniMounter.prototype.__proto__ = ContentScanner.prototype;
+
+/**
+ * @override
+ */
+CrostiniMounter.prototype.scan = function(
+    entriesCallback, successCallback, errorCallback) {
+  metrics.startInterval('MountCrostiniContainer');
+  chrome.fileManagerPrivate.mountCrostiniContainer(() => {
+    if (chrome.runtime.lastError) {
+      console.error(
+          'mountCrostiniContainer error: ', chrome.runtime.lastError.message);
+      errorCallback(util.createDOMError(
+          DirectoryModel.CROSTINI_CONNECT_ERR,
+          chrome.runtime.lastError.message));
+      return;
+    }
+    metrics.recordInterval('MountCrostiniContainer');
+    successCallback();
+  });
+};
+
+/**
  * This class manages filters and determines a file should be shown or not.
  * When filters are changed, a 'changed' event is fired.
  *
- * @param {boolean} showHidden If files starting with '.' or ending with
- *     '.crdownlaod' are shown.
+ * @param {!MetadataModel} metadataModel
  * @constructor
  * @extends {cr.EventTarget}
  */
-function FileFilter(showHidden) {
+function FileFilter(metadataModel) {
   /**
    * @type {Object<Function>}
    * @private
    */
   this.filters_ = {};
-  this.setFilterHidden(!showHidden);
+  this.setHiddenFilesVisible(false);
+  this.setAllAndroidFoldersVisible(false);
+
+  /**
+   * @type {!MetadataModel}
+   * @const
+   * @private
+   */
+  this.metadataModel_ = metadataModel;
+
+  /**
+   * Last value of hosted files disabled.
+   * @type {?boolean}
+   * @private
+   */
+  this.lastHostedFilesDisabled_ = null;
+
+  chrome.fileManagerPrivate.onPreferencesChanged.addListener(
+      this.onPreferencesChanged_.bind(this));
+  this.onPreferencesChanged_();
 }
+
+/**
+ * Top-level Android folders which are visible by default.
+ * @const {!Array<string>}
+ */
+FileFilter.DEFAULT_ANDROID_FOLDERS =
+    ['Documents', 'Movies', 'Music', 'Pictures'];
 
 /*
  * FileFilter extends cr.EventTarget.
@@ -340,7 +448,7 @@ FileFilter.prototype = {__proto__: cr.EventTarget.prototype};
 
 /**
  * @param {string} name Filter identifier.
- * @param {function(Entry)} callback A filter — a function receiving an Entry,
+ * @param {function(Entry)} callback A filter - a function receiving an Entry,
  *     and returning bool.
  */
 FileFilter.prototype.addFilter = function(name, callback) {
@@ -357,28 +465,73 @@ FileFilter.prototype.removeFilter = function(name) {
 };
 
 /**
- * @param {boolean} value If do not show hidden files.
+ * Show/Hide hidden files (i.e. files starting with '.' or ending with
+ * '.crdownload').
+ * @param {boolean} visible True if hidden files should be visible to the user.
  */
-FileFilter.prototype.setFilterHidden = function(value) {
+FileFilter.prototype.setHiddenFilesVisible = function(visible) {
   var regexpCrdownloadExtension = /\.crdownload$/i;
-  if (value) {
-    this.addFilter(
-        'hidden',
-        function(entry) {
-          return entry.name.substr(0, 1) !== '.' &&
-                 !regexpCrdownloadExtension.test(entry.name);
-        }
-    );
+  if (!visible) {
+    this.addFilter('hidden', entry => {
+      return entry.name.substr(0, 1) !== '.' &&
+          !regexpCrdownloadExtension.test(entry.name);
+    });
   } else {
     this.removeFilter('hidden');
   }
 };
 
 /**
- * @return {boolean} If the files with names starting with "." are not shown.
+ * Show/Hide hosted files (e.g. Google Docs docs).
+ * @param {boolean} visible True if hosted files should be visible to the user.
+ * @private
  */
-FileFilter.prototype.isFilterHiddenOn = function() {
-  return 'hidden' in this.filters_;
+FileFilter.prototype.setHostedFilesVisible_ = function(visible) {
+  if (!visible) {
+    this.addFilter('hosted', entry => {
+      var metadata = this.metadataModel_.getCache([entry], ['hosted']);
+      return !metadata[0].hosted;
+    });
+  } else {
+    this.removeFilter('hosted');
+  }
+};
+
+/**
+ * @return {boolean} True if hidden files are visible to the user now.
+ */
+FileFilter.prototype.isHiddenFilesVisible = function() {
+  return !('hidden' in this.filters_);
+};
+
+/**
+ * Show/Hide uncommon Android folders which are not whitelisted.
+ * @param {boolean} visible True if uncommon folders should be visible to the
+ *     user.
+ */
+FileFilter.prototype.setAllAndroidFoldersVisible = function(visible) {
+  if (!visible) {
+    this.addFilter('android_hidden', entry => {
+      if (entry.filesystem && entry.filesystem.name !== 'android_files')
+        return true;
+      // If |entry| is an Android top-level folder which is not whitelisted, it
+      // should be hidden.
+      if (entry.fullPath && entry.fullPath.substr(1) == entry.name &&
+          FileFilter.DEFAULT_ANDROID_FOLDERS.indexOf(entry.name) == -1) {
+        return false;
+      }
+      return true;
+    });
+  } else {
+    this.removeFilter('android_hidden');
+  }
+};
+
+/**
+ * @return {boolean} True if uncommon folders is visible to the user now.
+ */
+FileFilter.prototype.isAllAndroidFoldersVisible = function() {
+  return !('android_hidden' in this.filters_);
 };
 
 /**
@@ -391,6 +544,24 @@ FileFilter.prototype.filter = function(entry) {
       return false;
   }
   return true;
+};
+
+/**
+ * Handles preferences change and updates the filter if needed.
+ * @private
+ */
+FileFilter.prototype.onPreferencesChanged_ = function() {
+  chrome.fileManagerPrivate.getPreferences(prefs => {
+    if (chrome.runtime.lastError) {
+      console.error(chrome.runtime.lastError.name);
+      return;
+    }
+    if (this.lastHostedFilesDisabled_ !== null &&
+        this.lastHostedFilesDisabled_ !== prefs.hostedFilesDisabled) {
+      this.setHostedFilesVisible_(!prefs.hostedFilesDisabled);
+    }
+    this.lastHostedFilesDisabled_ = prefs.hostedFilesDisabled;
+  });
 };
 
 /**
@@ -459,8 +630,8 @@ FileListContext.createPrefetchPropertyNames_ = function() {
  * @param {FileListContext} context The file list context.
  * @param {boolean} isSearch True for search directory contents, otherwise
  *     false.
- * @param {DirectoryEntry|FakeEntry} directoryEntry The entry of the current
- *     directory.
+ * @param {DirectoryEntry|FakeEntry|FilesAppDirEntry} directoryEntry The entry
+ *     of the current directory.
  * @param {function():ContentScanner} scannerFactory The factory to create
  *     ContentScanner instance.
  * @constructor
@@ -598,7 +769,8 @@ DirectoryContents.prototype.isSearch = function() {
 };
 
 /**
- * @return {DirectoryEntry|FakeEntry} A DirectoryEntry for current directory.
+ * @return {DirectoryEntry|FakeEntry|FilesAppDirEntry} A DirectoryEntry for
+ *     current directory.
  *     In case of search -- the top directory from which search is run.
  */
 DirectoryContents.prototype.getDirectoryEntry = function() {
@@ -624,11 +796,12 @@ DirectoryContents.prototype.scan = function(refresh) {
 
   /**
    * Invoked when the scanning is finished but is not completed due to error.
+   * @param {DOMError} error error.
    * @this {DirectoryContents}
    */
-  function errorCallback() {
+  function errorCallback(error) {
     this.onScanFinished_();
-    this.onScanError_();
+    this.onScanError_(error);
   }
 
   // TODO(hidehiko,mtomasz): this scan method must be called at most once.
@@ -743,16 +916,19 @@ DirectoryContents.prototype.onScanCompleted_ = function() {
 
 /**
  * Called in case scan has failed. Should send the event.
+ * @param {DOMError} error error.
  * @private
  */
-DirectoryContents.prototype.onScanError_ = function() {
+DirectoryContents.prototype.onScanError_ = function(error) {
   if (this.scanCancelled_)
     return;
 
   this.processNewEntriesQueue_.run(function(callback) {
     // Call callback first, so isScanning() returns false in the event handlers.
     callback();
-    cr.dispatchSimpleEvent(this, 'scan-failed');
+    var event = new Event('scan-failed');
+    event.error = error;
+    this.dispatchEvent(event);
   }.bind(this));
 };
 
@@ -768,25 +944,26 @@ DirectoryContents.prototype.onNewEntries_ = function(refresh, entries) {
   if (this.scanCancelled_)
     return;
 
-  var entriesFiltered = [].filter.call(
-      entries, this.context_.fileFilter.filter.bind(this.context_.fileFilter));
-
   // Caching URL to reduce a number of calls of toURL in sort.
   // This is a temporary solution. We need to fix a root cause of slow toURL.
   // See crbug.com/370908 for detail.
-  entriesFiltered.forEach(function(entry) {
+  entries.forEach(function(entry) {
     entry['cachedUrl'] = entry.toURL();
   });
 
-  if (entriesFiltered.length === 0)
+  if (entries.length === 0)
     return;
 
   // Enlarge the cache size into the new filelist size.
-  var newListSize = this.fileList_.length + entriesFiltered.length;
+  var newListSize = this.fileList_.length + entries.length;
 
   this.processNewEntriesQueue_.run(function(callbackOuter) {
     var finish = function() {
       if (!this.scanCancelled_) {
+        var entriesFiltered = [].filter.call(
+            entries,
+            this.context_.fileFilter.filter.bind(this.context_.fileFilter));
+
         // Just before inserting entries into the file list, check and avoid
         // duplication.
         var currentURLs = {};
@@ -806,11 +983,11 @@ DirectoryContents.prototype.onNewEntries_ = function(refresh, entries) {
     // TODO(hidehiko,mtomasz): This should be handled in MetadataCache.
     var MAX_CHUNK_SIZE = 25;
     var prefetchMetadataQueue = new AsyncUtil.ConcurrentQueue(4);
-    for (var i = 0; i < entriesFiltered.length; i += MAX_CHUNK_SIZE) {
+    for (var i = 0; i < entries.length; i += MAX_CHUNK_SIZE) {
       if (prefetchMetadataQueue.isCancelled())
         break;
 
-      var chunk = entriesFiltered.slice(i, i + MAX_CHUNK_SIZE);
+      var chunk = entries.slice(i, i + MAX_CHUNK_SIZE);
       prefetchMetadataQueue.run(function(chunk, callbackInner) {
         this.prefetchMetadata(chunk, refresh, function() {
           if (!prefetchMetadataQueue.isCancelled()) {
@@ -851,7 +1028,8 @@ DirectoryContents.prototype.prefetchMetadata =
  * Creates a DirectoryContents instance to show entries in a directory.
  *
  * @param {FileListContext} context File list context.
- * @param {DirectoryEntry} directoryEntry The current directory entry.
+ * @param {DirectoryEntry|FilesAppDirEntry} directoryEntry The current directory
+ *     entry.
  * @return {DirectoryContents} Created DirectoryContents instance.
  */
 DirectoryContents.createForDirectory = function(context, directoryEntry) {
@@ -939,5 +1117,34 @@ DirectoryContents.createForDriveMetadataSearch = function(
 DirectoryContents.createForRecent = function(context, recentRootEntry, query) {
   return new DirectoryContents(context, true, recentRootEntry, function() {
     return new RecentContentScanner(query, recentRootEntry.sourceRestriction);
+  });
+};
+
+/**
+ * Creates a DirectoryContents instance to show the flatten media views.
+ *
+ * @param {FileListContext} context File list context.
+ * @param {!DirectoryEntry} rootEntry Root directory entry representing the
+ *     root of each media view volume.
+ * @return {DirectoryContents} Created DirectoryContents instance.
+ */
+DirectoryContents.createForMediaView = function(context, rootEntry) {
+  return new DirectoryContents(context, true, rootEntry, function() {
+    return new MediaViewContentScanner(rootEntry);
+  });
+};
+
+/**
+ * Creates a DirectoryContents instance to show the sshfs crostini files.
+ *
+ * @param {FileListContext} context File list context.
+ * @param {!FakeEntry} crostiniRootEntry Fake directory entry representing the
+ *     root of recent files.
+ * @return {DirectoryContents} Created DirectoryContents instance.
+ */
+DirectoryContents.createForCrostiniMounter = function(
+    context, crostiniRootEntry) {
+  return new DirectoryContents(context, true, crostiniRootEntry, function() {
+    return new CrostiniMounter();
   });
 };

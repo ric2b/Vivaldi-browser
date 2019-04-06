@@ -20,10 +20,12 @@ namespace web {
 class NavigationContextImpl : public NavigationContext {
  public:
   // Creates navigation context for successful navigation to a different page.
-  // Response headers will ne null.
+  // Response headers will be null, and it will not be marked as committed or
+  // as a download.
   static std::unique_ptr<NavigationContextImpl> CreateNavigationContext(
       WebState* web_state,
       const GURL& url,
+      bool has_user_gesture,
       ui::PageTransition page_transition,
       bool is_renderer_initiated);
 
@@ -34,9 +36,13 @@ class NavigationContextImpl : public NavigationContext {
 
   // NavigationContext overrides:
   WebState* GetWebState() override;
+  int64_t GetNavigationId() const override;
   const GURL& GetUrl() const override;
+  bool HasUserGesture() const override;
   ui::PageTransition GetPageTransition() const override;
   bool IsSameDocument() const override;
+  bool HasCommitted() const override;
+  bool IsDownload() const override;
   bool IsPost() const override;
   NSError* GetError() const override;
   net::HttpResponseHeaders* GetResponseHeaders() const override;
@@ -46,6 +52,8 @@ class NavigationContextImpl : public NavigationContext {
   // Setters for navigation context data members.
   void SetUrl(const GURL& url);
   void SetIsSameDocument(bool is_same_document);
+  void SetHasCommitted(bool has_committed);
+  void SetIsDownload(bool is_download);
   void SetIsPost(bool is_post);
   void SetError(NSError* error);
   void SetResponseHeaders(
@@ -60,22 +68,39 @@ class NavigationContextImpl : public NavigationContext {
   void SetWKNavigationType(WKNavigationType wk_navigation_type);
   WKNavigationType GetWKNavigationType() const;
 
+  // true if this navigation context is a loadHTMLString: navigation used to
+  // load Error page into web view.
+  bool IsLoadingErrorPage() const;
+  void SetLoadingErrorPage(bool is_loading_error_page);
+
+  // true if this navigation context is a placeholder navigation associated with
+  // a native view URL and the native content is already presented.
+  bool IsNativeContentPresented() const;
+  void SetIsNativeContentPresented(bool is_native_content_presented);
+
  private:
   NavigationContextImpl(WebState* web_state,
                         const GURL& url,
+                        bool has_user_gesture,
                         ui::PageTransition page_transition,
                         bool is_renderer_initiated);
 
   WebState* web_state_ = nullptr;
+  int64_t navigation_id_ = 0;
   GURL url_;
+  bool has_user_gesture_ = false;
   const ui::PageTransition page_transition_;
   bool is_same_document_ = false;
+  bool has_committed_ = false;
+  bool is_download_ = false;
   bool is_post_ = false;
   NSError* error_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
   bool is_renderer_initiated_ = false;
   int navigation_item_unique_id_ = -1;
   WKNavigationType wk_navigation_type_ = WKNavigationTypeOther;
+  bool is_loading_error_page_ = false;
+  bool is_native_content_presented_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationContextImpl);
 };

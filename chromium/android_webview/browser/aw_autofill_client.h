@@ -24,7 +24,6 @@ class CardUnmaskDelegate;
 class CreditCard;
 class FormStructure;
 class PersonalDataManager;
-class SaveCardBubbleController;
 }
 
 namespace content {
@@ -64,23 +63,27 @@ class AwAutofillClient : public autofill::AutofillClient,
   scoped_refptr<autofill::AutofillWebDataService> GetDatabase() override;
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
-  IdentityProvider* GetIdentityProvider() override;
+  identity::IdentityManager* GetIdentityManager() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
+  ukm::SourceId GetUkmSourceId() override;
   autofill::AddressNormalizer* GetAddressNormalizer() override;
-  autofill::SaveCardBubbleController* GetSaveCardBubbleController() override;
+  security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(
       const autofill::CreditCard& card,
       UnmaskCardReason reason,
       base::WeakPtr<autofill::CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
+  void ShowLocalCardMigrationPrompt(base::OnceClosure closure) override;
+  void ConfirmSaveAutofillProfile(const autofill::AutofillProfile& profile,
+                                  base::OnceClosure callback) override;
   void ConfirmSaveCreditCardLocally(const autofill::CreditCard& card,
                                     const base::Closure& callback) override;
   void ConfirmSaveCreditCardToCloud(
       const autofill::CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
-      bool should_cvc_be_requested,
-      const base::Closure& callback) override;
+      bool should_request_name_from_user,
+      base::OnceCallback<void(const base::string16&)> callback) override;
   void ConfirmCreditCardFillAssist(const autofill::CreditCard& card,
                                    const base::Closure& callback) override;
   void LoadRiskData(
@@ -91,6 +94,7 @@ class AwAutofillClient : public autofill::AutofillClient,
       const gfx::RectF& element_bounds,
       base::i18n::TextDirection text_direction,
       const std::vector<autofill::Suggestion>& suggestions,
+      bool /*unused_autoselect_first_suggestion*/,
       base::WeakPtr<autofill::AutofillPopupDelegate> delegate) override;
   void UpdateAutofillPopupDataListValues(
       const std::vector<base::string16>& values,
@@ -106,6 +110,7 @@ class AwAutofillClient : public autofill::AutofillClient,
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
   bool IsAutofillSupported() override;
+  bool AreServerCardsSupported() override;
   void ExecuteCommand(int id) override;
 
   void Dismissed(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);

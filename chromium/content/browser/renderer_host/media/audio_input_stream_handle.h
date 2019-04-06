@@ -10,6 +10,7 @@
 #include "base/sequence_checker.h"
 #include "content/common/content_export.h"
 #include "content/common/media/renderer_audio_input_stream_factory.mojom.h"
+#include "media/mojo/interfaces/audio_data_pipe.mojom.h"
 #include "media/mojo/interfaces/audio_input_stream.mojom.h"
 #include "media/mojo/services/mojo_audio_input_stream.h"
 #include "mojo/public/cpp/system/buffer.h"
@@ -32,14 +33,16 @@ class CONTENT_EXPORT AudioInputStreamHandle {
 
   ~AudioInputStreamHandle();
 
+  const base::UnguessableToken& id() const { return stream_id_; }
+  void SetOutputDeviceForAec(const std::string& raw_output_device_id);
+
  private:
-  void OnCreated(mojo::ScopedSharedBufferHandle shared_buffer,
-                 mojo::ScopedHandle socket_descriptor,
-                 bool initially_muted);
+  void OnCreated(media::mojom::ReadOnlyAudioDataPipePtr, bool initially_muted);
 
   void CallDeleter();
 
   SEQUENCE_CHECKER(sequence_checker_);
+  const base::UnguessableToken stream_id_;
   DeleterCallback deleter_callback_;
   mojom::RendererAudioInputStreamFactoryClientPtr client_;
   media::mojom::AudioInputStreamPtr stream_ptr_;

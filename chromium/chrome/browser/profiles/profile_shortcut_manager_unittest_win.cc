@@ -12,7 +12,6 @@
 #include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_path_override.h"
-#include "base/test/scoped_task_environment.h"
 #include "base/test/test_shortcut_win.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -28,6 +27,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/account_id/account_id.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -57,7 +58,7 @@ class ProfileShortcutManagerTest : public testing::Test {
   }
 
   void TearDown() override {
-    RunTasksUntilIdle();
+    thread_bundle_.RunUntilIdle();
 
     // Delete all profiles and ensure their shortcuts got removed.
     const size_t num_profiles =
@@ -68,7 +69,7 @@ class ProfileShortcutManagerTest : public testing::Test {
       const base::FilePath profile_path = entry->GetPath();
       base::string16 profile_name = entry->GetName();
       profile_attributes_storage_->RemoveProfile(profile_path);
-      RunTasksUntilIdle();
+      thread_bundle_.RunUntilIdle();
       ASSERT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_name));
       // The icon file is not deleted until the profile directory is deleted.
       const base::FilePath icon_path =
@@ -91,11 +92,11 @@ class ProfileShortcutManagerTest : public testing::Test {
         << location.ToString();
     profile_attributes_storage_->AddProfile(profile_1_path_, profile_1_name_,
                                             std::string(), base::string16(), 0,
-                                            std::string());
+                                            std::string(), EmptyAccountId());
     // Also create a non-badged shortcut for Chrome, which is conveniently done
     // by |CreateProfileShortcut()| since there is only one profile.
     profile_shortcut_manager_->CreateProfileShortcut(profile_1_path_);
-    RunTasksUntilIdle();
+    thread_bundle_.RunUntilIdle();
     // Verify that there's now a shortcut with no profile information.
     ValidateNonProfileShortcut(location);
   }
@@ -128,7 +129,7 @@ class ProfileShortcutManagerTest : public testing::Test {
     base::CreateCOMSTATaskRunnerWithTraits({})->PostTask(
         location, base::Bind(&base::win::ValidateShortcut, shortcut_path,
                              expected_properties));
-    RunTasksUntilIdle();
+    thread_bundle_.RunUntilIdle();
   }
 
   // Calls base::win::ValidateShortcut() with expected properties for the
@@ -190,9 +191,9 @@ class ProfileShortcutManagerTest : public testing::Test {
         << location.ToString();
     profile_attributes_storage_->AddProfile(profile_path, profile_name,
                                             std::string(), base::string16(), 0,
-                                            std::string());
+                                            std::string(), EmptyAccountId());
     profile_shortcut_manager_->CreateProfileShortcut(profile_path);
-    RunTasksUntilIdle();
+    thread_bundle_.RunUntilIdle();
     ValidateProfileShortcut(location, profile_name, profile_path);
   }
 
@@ -207,7 +208,7 @@ class ProfileShortcutManagerTest : public testing::Test {
                    ShellUtil::SHORTCUT_LOCATION_DESKTOP, GetDistribution(),
                    properties, ShellUtil::SHELL_SHORTCUT_CREATE_ALWAYS),
         base::Bind([](bool succeeded) { EXPECT_TRUE(succeeded); }));
-    RunTasksUntilIdle();
+    thread_bundle_.RunUntilIdle();
   }
 
   // Creates a regular (non-profile) desktop shortcut with the given name and
@@ -252,7 +253,7 @@ class ProfileShortcutManagerTest : public testing::Test {
                     GetProfileAttributesWithPath(profile_path, &entry));
     ASSERT_NE(entry->GetName(), new_profile_name);
     entry->SetName(new_profile_name);
-    RunTasksUntilIdle();
+    thread_bundle_.RunUntilIdle();
   }
 
   BrowserDistribution* GetDistribution() {
@@ -261,7 +262,7 @@ class ProfileShortcutManagerTest : public testing::Test {
 
   base::FilePath GetExePath() {
     base::FilePath exe_path;
-    EXPECT_TRUE(PathService::Get(base::FILE_EXE, &exe_path));
+    EXPECT_TRUE(base::PathService::Get(base::FILE_EXE, &exe_path));
     return exe_path;
   }
 
@@ -283,7 +284,7 @@ class ProfileShortcutManagerTest : public testing::Test {
     return system_shortcuts_directory;
   }
 
-  void RunTasksUntilIdle() { scoped_task_environment_.RunUntilIdle(); }
+  content::TestBrowserThreadBundle thread_bundle_;
 
   std::unique_ptr<TestingProfileManager> profile_manager_;
   std::unique_ptr<ProfileShortcutManager> profile_shortcut_manager_;
@@ -296,9 +297,6 @@ class ProfileShortcutManagerTest : public testing::Test {
   base::FilePath profile_2_path_;
   base::string16 profile_3_name_;
   base::FilePath profile_3_path_;
-
- private:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
 };
 
 TEST_F(ProfileShortcutManagerTest, ShortcutFilename) {
@@ -375,8 +373,8 @@ TEST_F(ProfileShortcutManagerTest, CreateSecondProfileBadgesFirstShortcut) {
   // Create a second profile without a shortcut.
   profile_attributes_storage_->AddProfile(profile_2_path_, profile_2_name_,
                                           std::string(), base::string16(), 0,
-                                          std::string());
-  RunTasksUntilIdle();
+                                          std::string(), EmptyAccountId());
+  thread_bundle_.RunUntilIdle();
 
   // Ensure that the second profile doesn't have a shortcut and that the first
   // profile's shortcut got renamed and badged.
@@ -390,7 +388,7 @@ TEST_F(ProfileShortcutManagerTest, DesktopShortcutsDeleteSecondToLast) {
 
   // Delete one shortcut.
   profile_attributes_storage_->RemoveProfile(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_2_name_));
 
   // Verify that the profile name has been removed from the remaining shortcut.
@@ -415,7 +413,7 @@ TEST_F(ProfileShortcutManagerTest, DeleteSecondToLastProfileWithoutShortcut) {
 
   // Delete the profile that doesn't have a shortcut.
   profile_attributes_storage_->RemoveProfile(profile_1_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   // Verify that the remaining shortcut does not have a profile name.
   ValidateNonProfileShortcut(FROM_HERE);
@@ -439,7 +437,7 @@ TEST_F(ProfileShortcutManagerTest, DeleteSecondToLastProfileWithShortcut) {
 
   // Delete the profile that has a shortcut.
   profile_attributes_storage_->RemoveProfile(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   // Verify that the remaining shortcut does not have a profile name.
   ValidateNonProfileShortcut(FROM_HERE);
@@ -474,7 +472,7 @@ TEST_F(ProfileShortcutManagerTest, DeleteOnlyProfileWithShortcuts) {
   // Delete the third profile and check that its shortcut is gone and no
   // shortcuts have been re-created.
   profile_attributes_storage_->RemoveProfile(profile_3_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   ASSERT_FALSE(base::PathExists(profile_1_shortcut_path));
   ASSERT_FALSE(base::PathExists(profile_2_shortcut_path));
   ASSERT_FALSE(base::PathExists(profile_3_shortcut_path));
@@ -486,7 +484,7 @@ TEST_F(ProfileShortcutManagerTest, DesktopShortcutsCreateSecond) {
 
   // Delete one shortcut.
   profile_attributes_storage_->RemoveProfile(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   // Verify that a default shortcut exists (no profile name/avatar).
   ValidateNonProfileShortcut(FROM_HERE);
@@ -515,7 +513,7 @@ TEST_F(ProfileShortcutManagerTest, RenamedDesktopShortcuts) {
 
   // Ensure that a new shortcut does not get made if the old one was renamed.
   profile_shortcut_manager_->CreateProfileShortcut(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_2_name_));
   ValidateProfileShortcutAtPath(FROM_HERE, profile_2_shortcut_path_2,
                                 profile_2_path_);
@@ -524,7 +522,7 @@ TEST_F(ProfileShortcutManagerTest, RenamedDesktopShortcuts) {
   ASSERT_TRUE(base::DeleteFile(profile_2_shortcut_path_2, false));
   EXPECT_FALSE(base::PathExists(profile_2_shortcut_path_2));
   profile_shortcut_manager_->CreateProfileShortcut(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   ValidateProfileShortcut(FROM_HERE, profile_2_name_, profile_2_path_);
 }
 
@@ -553,7 +551,7 @@ TEST_F(ProfileShortcutManagerTest, RenamedDesktopShortcutsGetDeleted) {
 
   // Delete the profile and ensure both shortcuts were also deleted.
   profile_attributes_storage_->RemoveProfile(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(base::PathExists(profile_2_shortcut_path_1));
   EXPECT_FALSE(base::PathExists(profile_2_shortcut_path_2));
   ValidateNonProfileShortcutAtPath(FROM_HERE,
@@ -651,7 +649,7 @@ TEST_F(ProfileShortcutManagerTest, RemoveProfileShortcuts) {
   // Delete shortcuts for profile 1 and ensure that they got deleted while the
   // shortcuts for profile 2 were kept.
   profile_shortcut_manager_->RemoveProfileShortcuts(profile_1_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(base::PathExists(profile_1_shortcut_path_1));
   EXPECT_FALSE(base::PathExists(profile_1_shortcut_path_2));
   ValidateProfileShortcutAtPath(FROM_HERE, profile_2_shortcut_path_1,
@@ -674,7 +672,7 @@ TEST_F(ProfileShortcutManagerTest, HasProfileShortcuts) {
 
   // Profile 2 should have a shortcut initially.
   profile_shortcut_manager_->HasProfileShortcuts(profile_2_path_, callback);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_TRUE(result.has_shortcuts);
 
   // Delete the shortcut and check that the function returns false.
@@ -683,7 +681,7 @@ TEST_F(ProfileShortcutManagerTest, HasProfileShortcuts) {
   ASSERT_TRUE(base::DeleteFile(profile_2_shortcut_path, false));
   EXPECT_FALSE(base::PathExists(profile_2_shortcut_path));
   profile_shortcut_manager_->HasProfileShortcuts(profile_2_path_, callback);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(result.has_shortcuts);
 }
 
@@ -694,8 +692,8 @@ TEST_F(ProfileShortcutManagerTest, ProfileShortcutsWithSystemLevelShortcut) {
   // Create the initial profile.
   profile_attributes_storage_->AddProfile(profile_1_path_, profile_1_name_,
                                           std::string(), base::string16(), 0,
-                                          std::string());
-  RunTasksUntilIdle();
+                                          std::string(), EmptyAccountId());
+  thread_bundle_.RunUntilIdle();
   ASSERT_EQ(1u, profile_attributes_storage_->GetNumberOfProfiles());
 
   // Ensure system-level continues to exist and user-level was not created.
@@ -713,8 +711,8 @@ TEST_F(ProfileShortcutManagerTest, ProfileShortcutsWithSystemLevelShortcut) {
   // Create a third profile without a shortcut and ensure it doesn't get one.
   profile_attributes_storage_->AddProfile(profile_3_path_, profile_3_name_,
                                           std::string(), base::string16(), 0,
-                                          std::string());
-  RunTasksUntilIdle();
+                                          std::string(), EmptyAccountId());
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_3_name_));
 
   // Ensure that changing the avatar icon and the name does not result in a
@@ -723,12 +721,12 @@ TEST_F(ProfileShortcutManagerTest, ProfileShortcutsWithSystemLevelShortcut) {
   ASSERT_TRUE(profile_attributes_storage_->
                   GetProfileAttributesWithPath(profile_3_path_, &entry_3));
   entry_3->SetAvatarIconIndex(3u);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_3_name_));
 
   const base::string16 new_profile_3_name = L"New Name 3";
   entry_3->SetName(new_profile_3_name);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_3_name_));
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(new_profile_3_name));
 
@@ -738,7 +736,7 @@ TEST_F(ProfileShortcutManagerTest, ProfileShortcutsWithSystemLevelShortcut) {
   ASSERT_TRUE(profile_attributes_storage_->
                   GetProfileAttributesWithPath(profile_2_path_, &entry_2));
   entry_2->SetName(new_profile_2_name);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_2_name_));
   ValidateProfileShortcut(FROM_HERE, new_profile_2_name, profile_2_path_);
 }
@@ -753,7 +751,7 @@ TEST_F(ProfileShortcutManagerTest,
   // Delete a profile and verify that only the system-level shortcut still
   // exists.
   profile_attributes_storage_->RemoveProfile(profile_1_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   EXPECT_TRUE(base::PathExists(system_level_shortcut_path));
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(base::string16()));
@@ -782,7 +780,7 @@ TEST_F(ProfileShortcutManagerTest,
   // shortcut creation path in |DeleteDesktopShortcuts()|, which is
   // not covered by the |DeleteSecondToLastProfileWithSystemLevelShortcut| test.
   profile_attributes_storage_->RemoveProfile(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   // Verify that only the system-level shortcut still exists.
   EXPECT_TRUE(base::PathExists(system_level_shortcut_path));
@@ -803,7 +801,7 @@ TEST_F(ProfileShortcutManagerTest, CreateProfileIcon) {
   EXPECT_FALSE(base::PathExists(icon_path));
 
   profile_shortcut_manager_->CreateOrUpdateProfileIcon(profile_1_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_TRUE(base::PathExists(icon_path));
 }
 
@@ -834,7 +832,7 @@ TEST_F(ProfileShortcutManagerTest, UnbadgeProfileIconOnDeletion) {
   // Deleting the default profile will unbadge the new profile's icon and should
   // result in an icon that is identical to the unbadged default profile icon.
   profile_attributes_storage_->RemoveProfile(profile_1_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   std::string unbadged_icon_2;
   EXPECT_TRUE(base::ReadFileToString(icon_path_2, &unbadged_icon_2));
@@ -861,7 +859,7 @@ TEST_F(ProfileShortcutManagerTest, ProfileIconOnAvatarChange) {
   ASSERT_TRUE(profile_attributes_storage_->
                   GetProfileAttributesWithPath(profile_1_path_, &entry_1));
   entry_1->SetAvatarIconIndex(1u);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   std::string new_badged_icon_1;
   EXPECT_TRUE(base::ReadFileToString(icon_path_1, &new_badged_icon_1));
@@ -869,7 +867,7 @@ TEST_F(ProfileShortcutManagerTest, ProfileIconOnAvatarChange) {
 
   // Ensure the new icon is not the unbadged icon.
   profile_attributes_storage_->RemoveProfile(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   std::string unbadged_icon_1;
   EXPECT_TRUE(base::ReadFileToString(icon_path_1, &unbadged_icon_1));
@@ -877,7 +875,7 @@ TEST_F(ProfileShortcutManagerTest, ProfileIconOnAvatarChange) {
 
   // Ensure the icon doesn't change on avatar change without 2 profiles.
   entry_1->SetAvatarIconIndex(1u);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
 
   std::string unbadged_icon_1_a;
   EXPECT_TRUE(base::ReadFileToString(icon_path_1, &unbadged_icon_1_a));
@@ -1023,7 +1021,7 @@ TEST_F(ProfileShortcutManagerTest, ShortcutsForProfilesWithIdenticalNames) {
 
   // Delete profile1.
   profile_attributes_storage_->RemoveProfile(profile_1_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(new_profile_1_name));
   // Check that nothing is changed for profile2 and profile3.
   ValidateProfileShortcut(FROM_HERE, profile_2_name_, profile_2_path_);
@@ -1036,7 +1034,7 @@ TEST_F(ProfileShortcutManagerTest, ShortcutsForProfilesWithIdenticalNames) {
       GetDefaultShortcutPathForProfile(profile_2_name_)));
   EXPECT_TRUE(base::PathExists(profile_3_shortcut_path));
   profile_attributes_storage_->RemoveProfile(profile_2_path_);
-  RunTasksUntilIdle();
+  thread_bundle_.RunUntilIdle();
   EXPECT_FALSE(base::PathExists(
       GetDefaultShortcutPathForProfile(profile_2_name_)));
   // Only profile3 exists. There should be non-profile shortcut only.

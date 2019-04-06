@@ -23,11 +23,11 @@ namespace ui {
 
 InputMethodAuraLinux::InputMethodAuraLinux(
     internal::InputMethodDelegate* delegate)
-    : text_input_type_(TEXT_INPUT_TYPE_NONE),
+    : InputMethodBase(delegate),
+      text_input_type_(TEXT_INPUT_TYPE_NONE),
       is_sync_mode_(false),
       composition_changed_(false),
       weak_ptr_factory_(this) {
-  SetDelegate(delegate);
   context_ =
       LinuxInputMethodContextFactory::instance()->CreateInputMethodContext(
           this, false);
@@ -45,12 +45,6 @@ LinuxInputMethodContext* InputMethodAuraLinux::GetContextForTesting(
 }
 
 // Overriden from InputMethod.
-
-bool InputMethodAuraLinux::OnUntranslatedIMEMessage(
-    const base::NativeEvent& event,
-    NativeEventResult* result) {
-  return false;
-}
 
 ui::EventDispatchDetails InputMethodAuraLinux::DispatchKeyEvent(
     ui::KeyEvent* event) {
@@ -99,13 +93,14 @@ ui::EventDispatchDetails InputMethodAuraLinux::DispatchKeyEvent(
   if (text_input_type_ != TEXT_INPUT_TYPE_PASSWORD &&
       GetEngine() && GetEngine()->IsInterestedInKeyEvent() &&
       (!filtered || NeedInsertChar())) {
-    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback = base::Bind(
-        &InputMethodAuraLinux::ProcessKeyEventByEngineDone,
-        weak_ptr_factory_.GetWeakPtr(), base::Owned(new ui::KeyEvent(*event)),
-        filtered, composition_changed_,
-        base::Owned(new ui::CompositionText(composition_)),
-        base::Owned(new base::string16(result_text_)));
-    GetEngine()->ProcessKeyEvent(*event, callback);
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback =
+        base::BindOnce(&InputMethodAuraLinux::ProcessKeyEventByEngineDone,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       base::Owned(new ui::KeyEvent(*event)), filtered,
+                       composition_changed_,
+                       base::Owned(new ui::CompositionText(composition_)),
+                       base::Owned(new base::string16(result_text_)));
+    GetEngine()->ProcessKeyEvent(*event, std::move(callback));
     return ui::EventDispatchDetails();
   }
 
@@ -254,7 +249,8 @@ void InputMethodAuraLinux::UpdateContextFocusState() {
     return;
 
   ui::IMEEngineHandlerInterface::InputContext context(
-      GetTextInputType(), GetTextInputMode(), GetTextInputFlags());
+      GetTextInputType(), GetTextInputMode(), GetTextInputFlags(),
+      ui::TextInputClient::FOCUS_REASON_OTHER, GetClientShouldDoLearning());
   ui::IMEBridge::Get()->SetCurrentInputContext(context);
 
   ui::IMEEngineHandlerInterface* engine = GetEngine();

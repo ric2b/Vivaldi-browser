@@ -31,6 +31,21 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
 
 // A test HTML URL.
 const char kHTMLURL[] = "http://test";
+
+// Returns the collection view for the activity services menu. Since this is a
+// system widget, it does not have an a11y id.  Instead, search for a
+// UICollectionView that is the superview of the "Copy" menu item.  There are
+// two nested UICollectionViews in the activity services menu, so choose the
+// innermost one.
+id<GREYMatcher> ShareMenuCollectionView() {
+  id<GREYMatcher> copyButton =
+      chrome_test_util::ButtonWithAccessibilityLabel(@"Copy");
+  return grey_allOf(
+      grey_kindOfClass([UICollectionView class]), grey_descendant(copyButton),
+      // Looking for a nested UICollectionView.
+      grey_descendant(grey_kindOfClass([UICollectionView class])), nil);
+}
+
 }  // namespace
 
 // Print test cases. These are Earl Grey integration tests.
@@ -47,7 +62,14 @@ const char kHTMLURL[] = "http://test";
 
 // Tests that the AirPrint menu successfully loads when a normal web page is
 // loaded.
+// TODO(crbug.com/683280): Does this test serve any purpose on iOS11?
 - (void)testPrintNormalPage {
+  if (base::ios::IsRunningOnIOS11OrLater() && IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Dispatcher-based printing does not work on iOS11 when the "
+        @"UIRefresh flag is enabled.");
+  }
+
   GURL url = web::test::HttpServer::MakeUrl(kHTMLURL);
   std::map<GURL, std::string> responses;
   std::string response = "Test";
@@ -61,7 +83,14 @@ const char kHTMLURL[] = "http://test";
 }
 
 // Tests that the AirPrint menu successfully loads when a PDF is loaded.
+// TODO(crbug.com/683280): Does this test serve any purpose on iOS11?
 - (void)testPrintPDF {
+  if (base::ios::IsRunningOnIOS11OrLater() && IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Dispatcher-based printing does not work on iOS11 when the "
+        @"UIRefresh flag is enabled.");
+  }
+
   web::test::SetUpFileBasedHttpServer();
   GURL url = web::test::HttpServer::MakeUrl(kPDFURL);
   chrome_test_util::LoadUrl(url);
@@ -73,13 +102,16 @@ const char kHTMLURL[] = "http://test";
   // EarlGrey does not have the ability to interact with the share menu in
   // iOS11, so use the dispatcher to trigger the print view controller instead.
   if (base::ios::IsRunningOnIOS11OrLater()) {
+    DCHECK(!IsUIRefreshPhase1Enabled());
     [chrome_test_util::DispatcherForActiveViewController() printTab];
   } else {
     [ChromeEarlGreyUI openShareMenu];
     id<GREYMatcher> printButton =
-        grey_allOf(grey_accessibilityLabel(@"Print"),
-                   grey_accessibilityTrait(UIAccessibilityTraitButton), nil);
-    [[EarlGrey selectElementWithMatcher:printButton] performAction:grey_tap()];
+        chrome_test_util::ButtonWithAccessibilityLabel(@"Print");
+    [[[EarlGrey selectElementWithMatcher:printButton]
+           usingSearchAction:grey_scrollInDirection(kGREYDirectionRight, 100)
+        onElementWithMatcher:ShareMenuCollectionView()]
+        performAction:grey_tap()];
   }
 
   id<GREYMatcher> printerOptionButton = grey_allOf(

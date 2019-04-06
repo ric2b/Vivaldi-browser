@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_preferences.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_encode_accelerator.h"
 
@@ -15,7 +15,7 @@ namespace media {
 
 class MEDIA_GPU_EXPORT GpuVideoEncodeAcceleratorFactory {
  public:
-  // Creates and Initializes an VideoEncodeAccelerator. Returns nullptr
+  // Creates and Initializes a VideoEncodeAccelerator. Returns nullptr
   // if there is no implementation available on the platform or calling
   // VideoEncodeAccelerator::Initialize() returns false.
   static std::unique_ptr<VideoEncodeAccelerator> CreateVEA(

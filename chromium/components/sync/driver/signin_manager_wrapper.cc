@@ -4,26 +4,19 @@
 
 #include "components/sync/driver/signin_manager_wrapper.h"
 
-#include "components/signin/core/browser/signin_manager_base.h"
-#include "google_apis/gaia/gaia_constants.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
-SigninManagerWrapper::SigninManagerWrapper(SigninManagerBase* original)
-    : original_(original) {}
+SigninManagerWrapper::SigninManagerWrapper(
+    identity::IdentityManager* identity_manager,
+    SigninManagerBase* signin_manager)
+    : identity_manager_(identity_manager), signin_manager_(signin_manager) {}
 
 SigninManagerWrapper::~SigninManagerWrapper() {}
 
-SigninManagerBase* SigninManagerWrapper::GetOriginal() {
-  return original_;
+identity::IdentityManager* SigninManagerWrapper::GetIdentityManager() {
+  return identity_manager_;
 }
 
-std::string SigninManagerWrapper::GetEffectiveUsername() const {
-  return original_->GetAuthenticatedAccountInfo().email;
-}
-
-std::string SigninManagerWrapper::GetAccountIdToUse() const {
-  return original_->GetAuthenticatedAccountId();
-}
-
-std::string SigninManagerWrapper::GetSyncScopeToUse() const {
-  return GaiaConstants::kChromeSyncOAuth2Scope;
+SigninManagerBase* SigninManagerWrapper::GetSigninManager() {
+  return signin_manager_;
 }

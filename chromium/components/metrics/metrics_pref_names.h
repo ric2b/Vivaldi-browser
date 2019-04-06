@@ -32,20 +32,21 @@ extern const char kMetricsSessionID[];
 extern const char kMetricsLastSeenPrefix[];
 
 // Preferences for recording stability logs.
-extern const char kStabilityBreakpadRegistrationSuccess[];
 extern const char kStabilityBreakpadRegistrationFail[];
+extern const char kStabilityBreakpadRegistrationSuccess[];
+extern const char kStabilityBrowserLastLiveTimeStamp[];
 extern const char kStabilityChildProcessCrashCount[];
 extern const char kStabilityCrashCount[];
 extern const char kStabilityCrashCountWithoutGmsCoreUpdate[];
-extern const char kStabilityDebuggerPresent[];
 extern const char kStabilityDebuggerNotPresent[];
+extern const char kStabilityDebuggerPresent[];
 extern const char kStabilityDeferredCount[];
 extern const char kStabilityDiscardCount[];
 extern const char kStabilityExecutionPhase[];
+extern const char kStabilityExitedCleanly[];
 extern const char kStabilityExtensionRendererCrashCount[];
 extern const char kStabilityExtensionRendererFailedLaunchCount[];
 extern const char kStabilityExtensionRendererLaunchCount[];
-extern const char kStabilityExitedCleanly[];
 extern const char kStabilityGmsCoreVersion[];
 extern const char kStabilityIncompleteSessionEndCount[];
 extern const char kStabilityLaunchCount[];
@@ -59,6 +60,7 @@ extern const char kStabilitySavedSystemProfileHash[];
 extern const char kStabilitySessionEndCompleted[];
 extern const char kStabilityStatsBuildTime[];
 extern const char kStabilityStatsVersion[];
+extern const char kStabilitySystemCrashCount[];
 extern const char kStabilityVersionMismatchCount[];
 
 // Preferences for generating metrics at uninstall time.

@@ -104,15 +104,10 @@ TEST_F(RuntimeHooksDelegateTest, RuntimeId) {
   v8::Local<v8::Context> context = MainContext();
 
   {
-    DictionaryBuilder connectable;
-    connectable.Set("matches",
-                    ListBuilder().Append("*://example.com/*").Build());
     scoped_refptr<Extension> connectable_extension =
         ExtensionBuilder("connectable")
-            .MergeManifest(
-                DictionaryBuilder()
-                    .Set("externally_connectable", connectable.Build())
-                    .Build())
+            .SetManifestPath({"externally_connectable", "matches"},
+                             ListBuilder().Append("*://example.com/*").Build())
             .Build();
     RegisterExtension(connectable_extension);
   }
@@ -253,6 +248,21 @@ TEST_F(RuntimeHooksDelegateTest, SendMessage) {
   tester.TestSendMessage(base::StringPrintf("'%s', 'string message'", other_id),
                          R"("string message")", other_target, false,
                          SendMessageTester::CLOSED);
+
+  // The sender could omit the ID by passing null or undefined explicitly.
+  // Regression tests for https://crbug.com/828664.
+  tester.TestSendMessage("null, {data: 'hello'}, function() {}",
+                         kStandardMessage, self_target, false,
+                         SendMessageTester::OPEN);
+  tester.TestSendMessage("null, 'test', function() {}",
+                         R"("test")", self_target, false,
+                         SendMessageTester::OPEN);
+  tester.TestSendMessage("null, 'test'",
+                         R"("test")", self_target, false,
+                         SendMessageTester::CLOSED);
+  tester.TestSendMessage("undefined, 'test', function() {}",
+                         R"("test")", self_target, false,
+                         SendMessageTester::OPEN);
 
   // Funny case. The only required argument is `message`, which can be any type.
   // This means that if an extension provides a <string, object> pair for the
@@ -425,11 +435,13 @@ TEST_F(RuntimeHooksDelegateNativeMessagingTest, SendNativeMessage) {
     EXPECT_CALL(
         *ipc_message_sender(),
         SendPostMessageToPort(MSG_ROUTING_NONE, expected_port_id, message));
-    if (expected_port_status == CLOSED) {
-      EXPECT_CALL(
-          *ipc_message_sender(),
-          SendCloseMessagePort(MSG_ROUTING_NONE, expected_port_id, true));
-    }
+    // Note: we don't close native message ports immediately. See comment in
+    // OneTimeMessageSender.
+    // if (expected_port_status == CLOSED) {
+    //   EXPECT_CALL(
+    //       *ipc_message_sender(),
+    //       SendCloseMessagePort(MSG_ROUTING_NONE, expected_port_id, true));
+    // }
     v8::Local<v8::Function> send_message = FunctionFromString(
         context, base::StringPrintf(kSendMessageTemplate, args));
     RunFunction(send_message, context, 0, nullptr);

@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/message_loop/message_loop.h"
 #include "media/base/media_log.h"
 #include "media/base/media_tracks.h"
 #include "media/base/media_util.h"
@@ -63,7 +62,7 @@ MPEGAudioStreamParserBase::MPEGAudioStreamParserBase(uint32_t start_code_mask,
 MPEGAudioStreamParserBase::~MPEGAudioStreamParserBase() = default;
 
 void MPEGAudioStreamParserBase::Init(
-    const InitCB& init_cb,
+    InitCB init_cb,
     const NewConfigCB& config_cb,
     const NewBuffersCB& new_buffers_cb,
     bool ignore_text_tracks,
@@ -73,7 +72,7 @@ void MPEGAudioStreamParserBase::Init(
     MediaLog* media_log) {
   DVLOG(1) << __func__;
   DCHECK_EQ(state_, UNINITIALIZED);
-  init_cb_ = init_cb;
+  init_cb_ = std::move(init_cb);
   config_cb_ = config_cb;
   new_buffers_cb_ = new_buffers_cb;
   new_segment_cb_ = new_segment_cb;
@@ -90,6 +89,10 @@ void MPEGAudioStreamParserBase::Flush() {
   if (timestamp_helper_)
     timestamp_helper_->SetBaseTimestamp(base::TimeDelta());
   in_media_segment_ = false;
+}
+
+bool MPEGAudioStreamParserBase::GetGenerateTimestampsFlag() const {
+  return true;
 }
 
 bool MPEGAudioStreamParserBase::Parse(const uint8_t* buf, int size) {
@@ -230,8 +233,7 @@ int MPEGAudioStreamParserBase::ParseFrame(const uint8_t* data,
     if (!init_cb_.is_null()) {
       InitParameters params(kInfiniteDuration);
       params.detected_audio_track_count = 1;
-      params.auto_update_timestamp_offset = true;
-      base::ResetAndReturn(&init_cb_).Run(params);
+      std::move(init_cb_).Run(params);
     }
   }
 

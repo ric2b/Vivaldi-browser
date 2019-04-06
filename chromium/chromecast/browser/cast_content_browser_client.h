@@ -14,7 +14,7 @@
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/content_browser_client.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -23,6 +23,14 @@ class PrefService;
 
 namespace breakpad {
 class CrashHandlerHostLinux;
+}
+
+namespace device {
+class BluetoothAdapterCast;
+}
+
+namespace media {
+class CdmFactory;
 }
 
 namespace metrics {
@@ -42,7 +50,7 @@ class MemoryPressureControllerImpl;
 
 namespace media {
 class MediaCapsImpl;
-class MediaPipelineBackendFactory;
+class CmaBackendFactory;
 class MediaPipelineBackendManager;
 class MediaResourceTracker;
 class VideoPlaneController;
@@ -51,9 +59,9 @@ class VideoResolutionPolicy;
 }
 
 namespace shell {
-
 class CastBrowserMainParts;
 class CastResourceDispatcherHostDelegate;
+class RendererConfigManager;
 class URLRequestContextFactory;
 
 class CastContentBrowserClient : public content::ContentBrowserClient {
@@ -63,9 +71,6 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   static std::unique_ptr<CastContentBrowserClient> Create();
 
   ~CastContentBrowserClient() override;
-
-  // Appends extra command line arguments before launching a new process.
-  virtual void AppendExtraCommandLineSwitches(base::CommandLine* command_line);
 
   // Creates and returns the CastService instance for the current process.
   // Note: |request_context_getter| might be different than the main request
@@ -86,8 +91,8 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   // Returns the task runner that must be used for media IO.
   scoped_refptr<base::SingleThreadTaskRunner> GetMediaTaskRunner();
 
-  // Creates a MediaPipelineBackendFactory.
-  virtual media::MediaPipelineBackendFactory* GetMediaPipelineBackendFactory();
+  // Creates a CmaBackendFactory.
+  virtual media::CmaBackendFactory* GetCmaBackendFactory();
 
   media::MediaResourceTracker* media_resource_tracker();
 
@@ -95,9 +100,17 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
 
   std::unique_ptr<::media::AudioManager> CreateAudioManager(
       ::media::AudioLogFactory* audio_log_factory) override;
-  std::unique_ptr<::media::CdmFactory> CreateCdmFactory() override;
+  bool OverridesAudioManager() override;
 #endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
   media::MediaCapsImpl* media_caps();
+
+#if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+  // Create a BluetoothAdapter for WebBluetooth support.
+  // TODO(slan): This further couples the browser to the Cast service. Remove
+  // this once the dedicated Bluetooth service has been implemented.
+  // (b/76155468)
+  virtual base::WeakPtr<device::BluetoothAdapterCast> CreateBluetoothAdapter();
+#endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
   // Invoked when the metrics client ID changes.
   virtual void SetMetricsClientId(const std::string& client_id);
@@ -113,17 +126,17 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   // content::ContentBrowserClient implementation:
   content::BrowserMainParts* CreateBrowserMainParts(
       const content::MainFunctionParams& parameters) override;
-  void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
+  void RenderProcessWillLaunch(
+      content::RenderProcessHost* host,
+      service_manager::mojom::ServiceRequest* service_request) override;
   bool IsHandledURL(const GURL& url) override;
+  void SiteInstanceGotProcess(content::SiteInstance* site_instance) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
   void OverrideWebkitPrefs(content::RenderViewHost* render_view_host,
                            content::WebPreferences* prefs) override;
   void ResourceDispatcherHostCreated() override;
   std::string GetApplicationLocale() override;
-  void GetGeolocationRequestContext(
-      base::OnceCallback<void(scoped_refptr<net::URLRequestContextGetter>)>
-          callback) override;
   content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
   void GetQuotaSettings(
       content::BrowserContext* context,
@@ -164,7 +177,9 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void ExposeInterfacesToMediaService(
       service_manager::BinderRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
-  void RegisterInProcessServices(StaticServiceMap* services) override;
+  void RegisterInProcessServices(
+      StaticServiceMap* services,
+      content::ServiceManagerConnection* connection) override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(
       base::StringPiece service_name) override;
   void GetAdditionalMappedFilesForChildProcess(
@@ -176,6 +191,14 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
   std::unique_ptr<content::NavigationUIData> GetNavigationUIData(
       content::NavigationHandle* navigation_handle) override;
+
+  RendererConfigManager* renderer_config_manager() const {
+    return renderer_config_manager_.get();
+  }
+
+#if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+  virtual std::unique_ptr<::media::CdmFactory> CreateCdmFactory();
+#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 
  protected:
   CastContentBrowserClient();
@@ -200,6 +223,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       const base::Callback<void(scoped_refptr<net::X509Certificate>,
                                 scoped_refptr<net::SSLPrivateKey>)>&
           continue_callback);
+
 #if !defined(OS_ANDROID)
   // Returns the crash signal FD corresponding to the current process type.
   int GetCrashSignalFD(const base::CommandLine& command_line);
@@ -221,8 +245,8 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   std::unique_ptr<URLRequestContextFactory> url_request_context_factory_;
   std::unique_ptr<CastResourceDispatcherHostDelegate>
       resource_dispatcher_host_delegate_;
-  std::unique_ptr<media::MediaPipelineBackendFactory>
-      media_pipeline_backend_factory_;
+  std::unique_ptr<media::CmaBackendFactory> cma_backend_factory_;
+  std::unique_ptr<RendererConfigManager> renderer_config_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentBrowserClient);
 };

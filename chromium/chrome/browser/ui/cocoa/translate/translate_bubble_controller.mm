@@ -71,21 +71,22 @@ class TranslateDenialComboboxModel : public ui::ComboboxModel {
   DISALLOW_COPY_AND_ASSIGN(TranslateDenialComboboxModel);
 };
 
-const CGFloat kIconWidth = 30;
-const CGFloat kIconHeight = 30;
-const CGFloat kIconPadding = 12;
+const CGFloat kTranslateBubbleIconWidth = 30;
+const CGFloat kTranslateBubbleIconHeight = 30;
+const CGFloat kTranslateBubbleIconPadding = 12;
 
-const CGFloat kWindowWidth = 320;
+const CGFloat kTranslateBubbleWindowWidth = 320;
 
 // Padding between the window frame and content.
-const CGFloat kFramePadding = 16;
+const CGFloat kTranslateBubbleFramePadding = 16;
 
-const CGFloat kRelatedControlHorizontalSpacing = -2;
+const CGFloat kTranslateBubbleRelatedControlHorizontalSpacing = -2;
 
-const CGFloat kRelatedControlVerticalSpacing = 8;
-const CGFloat kUnrelatedControlVerticalSpacing = 20;
+const CGFloat kTranslateBubbleRelatedControlVerticalSpacing = 8;
+const CGFloat kTranslateBubbleUnrelatedControlVerticalSpacing = 20;
 
-const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
+const CGFloat kTranslateBubbleContentWidth =
+    kTranslateBubbleWindowWidth - 2 * kTranslateBubbleFramePadding;
 
 @interface TranslateBubbleController()
 
@@ -134,7 +135,44 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
           atIndex:(NSUInteger)charIndex;
 @end
 
-@implementation TranslateBubbleController
+@implementation TranslateBubbleController {
+ @private
+  content::WebContents* webContents_;
+  std::unique_ptr<TranslateBubbleModel> model_;
+
+  // The 'Done' or 'Translate' button on the advanced (option) panel.
+  NSButton* advancedDoneButton_;
+
+  // The 'Cancel' button on the advanced (option) panel.
+  NSButton* advancedCancelButton_;
+
+  // The 'Always translate' checkbox on the before panel.
+  // This is nil when the current WebContents is in an incognito window.
+  NSButton* beforeAlwaysTranslateCheckbox_;
+
+  // The 'Always translate' checkbox on the advanced (option) panel.
+  // This is nil when the current WebContents is in an incognito window.
+  NSButton* advancedAlwaysTranslateCheckbox_;
+
+  // The '[x]' close button on the upper right side of the before panel.
+  NSButton* closeButton_;
+
+  // The combobox model which is used to deny translation at the view before
+  // translate.
+  std::unique_ptr<TranslateDenialComboboxModel> translateDenialComboboxModel_;
+
+  // The combobox model for source languages on the advanced (option) panel.
+  std::unique_ptr<LanguageComboboxModel> sourceLanguageComboboxModel_;
+
+  // The combobox model for target languages on the advanced (option) panel.
+  std::unique_ptr<LanguageComboboxModel> targetLanguageComboboxModel_;
+
+  // Whether the translation is actually executed once at least.
+  BOOL translateExecuted_;
+
+  // The state of the 'Always ...' checkboxes.
+  BOOL shouldAlwaysTranslate_;
+}
 
 @synthesize webContents = webContents_;
 
@@ -212,8 +250,9 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 }
 
 - (void)showWindow:(id)sender {
-  LocationBarViewMac* locationBar =
-      [[[self parentWindow] windowController] locationBarBridge];
+  BrowserWindowController* browserWindowController = [BrowserWindowController
+      browserWindowControllerForWindow:self.parentWindow];
+  LocationBarViewMac* locationBar = [browserWindowController locationBarBridge];
   if (locationBar) {
     NSPoint anchorPoint =
         locationBar->GetBubblePointForDecoration([self decorationForBubble]);
@@ -225,8 +264,9 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 }
 
 - (LocationBarDecoration*)decorationForBubble {
-  LocationBarViewMac* locationBar =
-      [[[self parentWindow] windowController] locationBarBridge];
+  BrowserWindowController* browserWindowController = [BrowserWindowController
+      browserWindowControllerForWindow:self.parentWindow];
+  LocationBarViewMac* locationBar = [browserWindowController locationBarBridge];
   return locationBar ? locationBar->translate_decoration() : nullptr;
 }
 
@@ -249,16 +289,21 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   [[window contentView] setSubviews:@[ [self currentView], closeButton_ ]];
 
   CGFloat height = NSHeight([[self currentView] frame]) +
-      2 * kFramePadding + info_bubble::kBubbleArrowHeight;
+                   2 * kTranslateBubbleFramePadding +
+                   info_bubble::kBubbleArrowHeight;
 
   NSRect windowFrame = [window contentRectForFrameRect:[[self window] frame]];
-  NSRect newWindowFrame = [window frameRectForContentRect:NSMakeRect(
-      NSMinX(windowFrame), NSMaxY(windowFrame) - height, kWindowWidth, height)];
+  NSRect newWindowFrame = [window
+      frameRectForContentRect:NSMakeRect(NSMinX(windowFrame),
+                                         NSMaxY(windowFrame) - height,
+                                         kTranslateBubbleWindowWidth, height)];
 
   // Adjust the origin of closeButton.
-  CGFloat closeX = kWindowWidth - chrome_style::kCloseButtonPadding -
+  CGFloat closeX = kTranslateBubbleWindowWidth -
+                   chrome_style::kCloseButtonPadding -
                    chrome_style::GetCloseButtonSize();
-  CGFloat closeY = height - kFramePadding - chrome_style::kCloseButtonPadding -
+  CGFloat closeY = height - kTranslateBubbleFramePadding -
+                   chrome_style::kCloseButtonPadding -
                    info_bubble::kBubbleArrowHeight;
   [closeButton_ setFrameOrigin:NSMakePoint(closeX, closeY)];
 
@@ -268,11 +313,9 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 }
 
 - (NSView*)newBeforeTranslateView {
-  NSRect contentFrame = NSMakeRect(
-      kFramePadding,
-      kFramePadding,
-      kContentWidth,
-      0);
+  NSRect contentFrame =
+      NSMakeRect(kTranslateBubbleFramePadding, kTranslateBubbleFramePadding,
+                 kTranslateBubbleContentWidth, 0);
   NSView* view = [[NSView alloc] initWithFrame:contentFrame];
 
   base::string16 originalLanguageName =
@@ -343,43 +386,49 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   // Layout
   CGFloat yPos = 0;
 
-  [translateButton setFrameOrigin:NSMakePoint(
-      kContentWidth - NSWidth([translateButton frame]), yPos)];
+  [translateButton
+      setFrameOrigin:NSMakePoint(kTranslateBubbleContentWidth -
+                                     NSWidth([translateButton frame]),
+                                 yPos)];
 
   NSRect denyPopUpButtonFrame = [denyPopUpButton frame];
   CGFloat diffY = [[denyPopUpButton cell]
     titleRectForBounds:[denyPopUpButton bounds]].origin.y;
-  [denyPopUpButton setFrameOrigin:NSMakePoint(
-      NSMinX([translateButton frame]) - denyPopUpButtonFrame.size.width
-      - kRelatedControlHorizontalSpacing,
-      yPos + diffY)];
+  [denyPopUpButton
+      setFrameOrigin:NSMakePoint(
+                         NSMinX([translateButton frame]) -
+                             denyPopUpButtonFrame.size.width -
+                             kTranslateBubbleRelatedControlHorizontalSpacing,
+                         yPos + diffY)];
 
   yPos += NSHeight([translateButton frame]) +
-      kUnrelatedControlVerticalSpacing;
+          kTranslateBubbleUnrelatedControlVerticalSpacing;
 
   if (beforeAlwaysTranslateCheckbox_) {
     [beforeAlwaysTranslateCheckbox_
-        setFrameOrigin:NSMakePoint(kIconWidth + kIconPadding, yPos)];
+        setFrameOrigin:NSMakePoint(kTranslateBubbleIconWidth +
+                                       kTranslateBubbleIconPadding,
+                                   yPos)];
 
     yPos += NSHeight([beforeAlwaysTranslateCheckbox_ frame]) +
-            kRelatedControlVerticalSpacing;
+            kTranslateBubbleRelatedControlVerticalSpacing;
   }
 
-  [textLabel setFrameOrigin:NSMakePoint(kIconWidth + kIconPadding, yPos)];
+  [textLabel setFrameOrigin:NSMakePoint(kTranslateBubbleIconWidth +
+                                            kTranslateBubbleIconPadding,
+                                        yPos)];
 
   yPos = NSMaxY([textLabel frame]);
-  [icon setFrameOrigin:NSMakePoint(0, yPos - kIconHeight)];
-  [view setFrameSize:NSMakeSize(kContentWidth, yPos)];
+  [icon setFrameOrigin:NSMakePoint(0, yPos - kTranslateBubbleIconHeight)];
+  [view setFrameSize:NSMakeSize(kTranslateBubbleContentWidth, yPos)];
 
   return view;
 }
 
 - (NSView*)newTranslatingView {
-  NSRect contentFrame = NSMakeRect(
-      kFramePadding,
-      kFramePadding,
-      kContentWidth,
-      0);
+  NSRect contentFrame =
+      NSMakeRect(kTranslateBubbleFramePadding, kTranslateBubbleFramePadding,
+                 kTranslateBubbleContentWidth, 0);
   NSView* view = [[NSView alloc] initWithFrame:contentFrame];
 
   NSString* message =
@@ -399,27 +448,29 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   // TODO(hajimehoshi): Use l10n_util::VerticallyReflowGroup.
   CGFloat yPos = 0;
 
-  [showOriginalButton setFrameOrigin:NSMakePoint(
-      kContentWidth - NSWidth([showOriginalButton frame]), yPos)];
+  [showOriginalButton
+      setFrameOrigin:NSMakePoint(kTranslateBubbleContentWidth -
+                                     NSWidth([showOriginalButton frame]),
+                                 yPos)];
 
   yPos += NSHeight([showOriginalButton frame]) +
-      kUnrelatedControlVerticalSpacing;
+          kTranslateBubbleUnrelatedControlVerticalSpacing;
 
-  [textLabel setFrameOrigin:NSMakePoint(kIconWidth + kIconPadding, yPos)];
+  [textLabel setFrameOrigin:NSMakePoint(kTranslateBubbleIconWidth +
+                                            kTranslateBubbleIconPadding,
+                                        yPos)];
 
   yPos = NSMaxY([textLabel frame]);
-  [icon setFrameOrigin:NSMakePoint(0, yPos - kIconHeight)];
-  [view setFrameSize:NSMakeSize(kContentWidth, yPos)];
+  [icon setFrameOrigin:NSMakePoint(0, yPos - kTranslateBubbleIconHeight)];
+  [view setFrameSize:NSMakeSize(kTranslateBubbleContentWidth, yPos)];
 
   return view;
 }
 
 - (NSView*)newAfterTranslateView {
-  NSRect contentFrame = NSMakeRect(
-      kFramePadding,
-      kFramePadding,
-      kContentWidth,
-      0);
+  NSRect contentFrame =
+      NSMakeRect(kTranslateBubbleFramePadding, kTranslateBubbleFramePadding,
+                 kTranslateBubbleContentWidth, 0);
   NSView* view = [[NSView alloc] initWithFrame:contentFrame];
 
   NSString* message =
@@ -443,29 +494,31 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   // Layout
   CGFloat yPos = 0;
 
-  [showOriginalButton setFrameOrigin:NSMakePoint(
-      kContentWidth - NSWidth([showOriginalButton frame]), yPos)];
+  [showOriginalButton
+      setFrameOrigin:NSMakePoint(kTranslateBubbleContentWidth -
+                                     NSWidth([showOriginalButton frame]),
+                                 yPos)];
 
   yPos += NSHeight([showOriginalButton frame]) +
-      kUnrelatedControlVerticalSpacing;
+          kTranslateBubbleUnrelatedControlVerticalSpacing;
 
-  [textLabel setFrameOrigin:NSMakePoint(kIconWidth + kIconPadding, yPos)];
+  [textLabel setFrameOrigin:NSMakePoint(kTranslateBubbleIconWidth +
+                                            kTranslateBubbleIconPadding,
+                                        yPos)];
   [advancedLinkButton setFrameOrigin:NSMakePoint(
       NSMaxX([textLabel frame]), yPos)];
 
   yPos = NSMaxY([textLabel frame]);
-  [icon setFrameOrigin:NSMakePoint(0, yPos - kIconHeight)];
-  [view setFrameSize:NSMakeSize(kContentWidth, yPos)];
+  [icon setFrameOrigin:NSMakePoint(0, yPos - kTranslateBubbleIconHeight)];
+  [view setFrameSize:NSMakeSize(kTranslateBubbleContentWidth, yPos)];
 
   return view;
 }
 
 - (NSView*)newErrorView {
-  NSRect contentFrame = NSMakeRect(
-      kFramePadding,
-      kFramePadding,
-      kContentWidth,
-      0);
+  NSRect contentFrame =
+      NSMakeRect(kTranslateBubbleFramePadding, kTranslateBubbleFramePadding,
+                 kTranslateBubbleContentWidth, 0);
   NSView* view = [[NSView alloc] initWithFrame:contentFrame];
 
   NSString* message =
@@ -488,29 +541,30 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   CGFloat yPos = 0;
 
   [tryAgainButton_
-      setFrameOrigin:NSMakePoint(
-                         kContentWidth - NSWidth([tryAgainButton_ frame]),
-                         yPos)];
+      setFrameOrigin:NSMakePoint(kTranslateBubbleContentWidth -
+                                     NSWidth([tryAgainButton_ frame]),
+                                 yPos)];
 
-  yPos += NSHeight([tryAgainButton_ frame]) + kUnrelatedControlVerticalSpacing;
+  yPos += NSHeight([tryAgainButton_ frame]) +
+          kTranslateBubbleUnrelatedControlVerticalSpacing;
 
-  [textLabel setFrameOrigin:NSMakePoint(kIconWidth + kIconPadding, yPos)];
+  [textLabel setFrameOrigin:NSMakePoint(kTranslateBubbleIconWidth +
+                                            kTranslateBubbleIconPadding,
+                                        yPos)];
   [advancedLinkButton
       setFrameOrigin:NSMakePoint(NSMaxX([textLabel frame]), yPos)];
 
   yPos = NSMaxY([textLabel frame]);
-  [icon setFrameOrigin:NSMakePoint(0, yPos - kIconHeight)];
-  [view setFrameSize:NSMakeSize(kContentWidth, yPos)];
+  [icon setFrameOrigin:NSMakePoint(0, yPos - kTranslateBubbleIconHeight)];
+  [view setFrameSize:NSMakeSize(kTranslateBubbleContentWidth, yPos)];
 
   return view;
 }
 
 - (NSView*)newAdvancedView {
-  NSRect contentFrame = NSMakeRect(
-      kFramePadding,
-      kFramePadding,
-      kContentWidth,
-      0);
+  NSRect contentFrame =
+      NSMakeRect(kTranslateBubbleFramePadding, kTranslateBubbleFramePadding,
+                 kTranslateBubbleContentWidth, 0);
   NSView* view = [[NSView alloc] initWithFrame:contentFrame];
 
   NSString* title = l10n_util::GetNSStringWithFixup(
@@ -588,14 +642,14 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   [languageSettingsLinkButton setFrameOrigin:NSMakePoint(0, yPos)];
 
   yPos = NSHeight([advancedDoneButton_ frame]) +
-      kUnrelatedControlVerticalSpacing;
+         kTranslateBubbleUnrelatedControlVerticalSpacing;
 
   if (advancedAlwaysTranslateCheckbox_) {
     [advancedAlwaysTranslateCheckbox_
         setFrameOrigin:NSMakePoint(textLabelWidth, yPos)];
 
     yPos += NSHeight([advancedAlwaysTranslateCheckbox_ frame]) +
-            kRelatedControlVerticalSpacing;
+            kTranslateBubbleRelatedControlVerticalSpacing;
   }
 
   CGFloat diffY = [[sourcePopUpButton cell]
@@ -606,11 +660,13 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 
   NSRect frame = [targetPopUpButton frame];
   frame.origin = NSMakePoint(textLabelWidth, yPos);
-  frame.size.width = (kWindowWidth - 2 * kFramePadding) - textLabelWidth;
+  frame.size.width =
+      (kTranslateBubbleWindowWidth - 2 * kTranslateBubbleFramePadding) -
+      textLabelWidth;
   [targetPopUpButton setFrame:frame];
 
   yPos += NSHeight([targetPopUpButton frame]) +
-      kRelatedControlVerticalSpacing;
+          kTranslateBubbleRelatedControlVerticalSpacing;
 
   [sourceLanguageLabel setFrameOrigin:NSMakePoint(
       textLabelWidth - NSWidth([sourceLanguageLabel frame]), yPos + diffY)];
@@ -620,9 +676,9 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   frame.size.width = NSWidth([targetPopUpButton frame]);
   [sourcePopUpButton setFrame:frame];
 
-  [view
-      setFrameSize:NSMakeSize(kContentWidth, NSMaxY([sourcePopUpButton frame]) +
-                                                 kIconPadding)];
+  [view setFrameSize:NSMakeSize(kTranslateBubbleContentWidth,
+                                NSMaxY([sourcePopUpButton frame]) +
+                                    kTranslateBubbleIconPadding)];
 
   [self updateAdvancedView];
 
@@ -639,12 +695,14 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   [advancedDoneButton_ sizeToFit];
 
   NSRect frame = [advancedDoneButton_ frame];
-  frame.origin.x = (kWindowWidth - 2 * kFramePadding) - NSWidth(frame);
+  frame.origin.x =
+      (kTranslateBubbleWindowWidth - 2 * kTranslateBubbleFramePadding) -
+      NSWidth(frame);
   [advancedDoneButton_ setFrameOrigin:frame.origin];
 
   frame = [advancedCancelButton_ frame];
-  frame.origin.x = NSMinX([advancedDoneButton_ frame]) - NSWidth(frame)
-      - kRelatedControlHorizontalSpacing;
+  frame.origin.x = NSMinX([advancedDoneButton_ frame]) - NSWidth(frame) -
+                   kTranslateBubbleRelatedControlHorizontalSpacing;
   [advancedCancelButton_ setFrameOrigin:frame.origin];
 }
 
@@ -655,7 +713,8 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 }
 
 - (NSImageView*)addIcon:(NSView*)view {
-  NSRect imageFrame = NSMakeRect(0, 0, kIconWidth, kIconHeight);
+  NSRect imageFrame =
+      NSMakeRect(0, 0, kTranslateBubbleIconWidth, kTranslateBubbleIconHeight);
   base::scoped_nsobject<NSImageView> image(
       [[NSImageView alloc] initWithFrame:imageFrame]);
   [image setImage:(ui::ResourceBundle::GetSharedInstance()
@@ -670,8 +729,12 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
                       withRanges:(std::vector<NSRange>)ranges
                         delegate:(id<NSTextViewDelegate>)delegate {
   NSRect frame =
-      NSMakeRect(kFramePadding + kIconWidth + kIconPadding, kFramePadding,
-                 kContentWidth - kIconWidth - kIconPadding, 0);
+      NSMakeRect(kTranslateBubbleFramePadding + kTranslateBubbleIconWidth +
+                     kTranslateBubbleIconPadding,
+                 kTranslateBubbleFramePadding,
+                 kTranslateBubbleContentWidth - kTranslateBubbleIconWidth -
+                     kTranslateBubbleIconPadding,
+                 0);
   base::scoped_nsobject<HyperlinkTextView> styledText(
       [[HyperlinkTextView alloc] initWithFrame:frame]);
   [styledText setMessage:message
@@ -801,7 +864,7 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   model_->Translate();
 }
 
-- (IBAction)handleAlwaysTranslateCheckboxPressed:(id)sender {
+- (IBAction)handleAlwaysTranslateCheckboxPressed:(NSButton*)sender {
   shouldAlwaysTranslate_ = [sender state] == NSOnState;
   translate::ReportUiAction(shouldAlwaysTranslate_
                                 ? translate::ALWAYS_TRANSLATE_CHECKED

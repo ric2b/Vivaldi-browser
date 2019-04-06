@@ -7,6 +7,7 @@
 #include "ash/public/interfaces/constants.mojom.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/speech/tts_controller.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/common/service_manager_connection.h"
@@ -68,17 +69,8 @@ void AccessibilityControllerClient::TriggerAccessibilityAlert(
     case ash::mojom::AccessibilityAlert::SCREEN_OFF:
       msg = IDS_A11Y_ALERT_SCREEN_OFF;
       break;
-    case ash::mojom::AccessibilityAlert::WINDOW_MOVED_TO_ABOVE_DISPLAY:
-      msg = IDS_A11Y_ALERT_WINDOW_MOVED_TO_ABOVE_DISPLAY;
-      break;
-    case ash::mojom::AccessibilityAlert::WINDOW_MOVED_TO_BELOW_DISPLAY:
-      msg = IDS_A11Y_ALERT_WINDOW_MOVED_TO_BELOW_DISPLAY;
-      break;
-    case ash::mojom::AccessibilityAlert::WINDOW_MOVED_TO_LEFT_DISPLAY:
-      msg = IDS_A11Y_ALERT_WINDOW_MOVED_TO_LEFT_DISPLAY;
-      break;
-    case ash::mojom::AccessibilityAlert::WINDOW_MOVED_TO_RIGHT_DISPLAY:
-      msg = IDS_A11Y_ALERT_WINDOW_MOVED_TO_RIGHT_DISPLAY;
+    case ash::mojom::AccessibilityAlert::WINDOW_MOVED_TO_ANOTHER_DISPLAY:
+      msg = IDS_A11Y_ALERT_WINDOW_MOVED_TO_ANOTHER_DISPLAY;
       break;
     case ash::mojom::AccessibilityAlert::WINDOW_NEEDED:
       msg = IDS_A11Y_ALERT_WINDOW_NEEDED;
@@ -114,12 +106,43 @@ void AccessibilityControllerClient::PlayShutdownSound(
 }
 
 void AccessibilityControllerClient::HandleAccessibilityGesture(
-    const std::string& gesture) {
+    ax::mojom::Gesture gesture) {
   chromeos::AccessibilityManager::Get()->HandleAccessibilityGesture(gesture);
 }
 
-void AccessibilityControllerClient::ToggleDictation() {
-  chromeos::AccessibilityManager::Get()->ToggleDictation();
+void AccessibilityControllerClient::ToggleDictation(
+    ToggleDictationCallback callback) {
+  bool dictation_active =
+      chromeos::AccessibilityManager::Get()->ToggleDictation();
+  std::move(callback).Run(dictation_active);
+}
+
+void AccessibilityControllerClient::SilenceSpokenFeedback() {
+  TtsController::GetInstance()->Stop();
+}
+
+void AccessibilityControllerClient::OnTwoFingerTouchStart() {
+  chromeos::AccessibilityManager::Get()->OnTwoFingerTouchStart();
+}
+
+void AccessibilityControllerClient::OnTwoFingerTouchStop() {
+  chromeos::AccessibilityManager::Get()->OnTwoFingerTouchStop();
+}
+
+void AccessibilityControllerClient::ShouldToggleSpokenFeedbackViaTouch(
+    ShouldToggleSpokenFeedbackViaTouchCallback callback) {
+  std::move(callback).Run(chromeos::AccessibilityManager::Get()
+                              ->ShouldToggleSpokenFeedbackViaTouch());
+}
+
+void AccessibilityControllerClient::PlaySpokenFeedbackToggleCountdown(
+    int tick_count) {
+  chromeos::AccessibilityManager::Get()->PlaySpokenFeedbackToggleCountdown(
+      tick_count);
+}
+
+void AccessibilityControllerClient::RequestSelectToSpeakStateChange() {
+  chromeos::AccessibilityManager::Get()->RequestSelectToSpeakStateChange();
 }
 
 void AccessibilityControllerClient::FlushForTesting() {

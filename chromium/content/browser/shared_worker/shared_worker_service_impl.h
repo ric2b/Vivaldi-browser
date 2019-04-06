@@ -11,26 +11,32 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/containers/unique_ptr_comparator.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/shared_worker/shared_worker_host.h"
+#include "content/common/service_worker/service_worker_provider.mojom.h"
 #include "content/common/shared_worker/shared_worker_connector.mojom.h"
 #include "content/common/shared_worker/shared_worker_factory.mojom.h"
 #include "content/public/browser/shared_worker_service.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace blink {
 class MessagePortChannel;
 }
 
 namespace content {
-
 class SharedWorkerInstance;
 class SharedWorkerHost;
+class StoragePartition;
 
+// Created per StoragePartition.
 class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
  public:
-  SharedWorkerServiceImpl();
+  SharedWorkerServiceImpl(
+      StoragePartition* storage_partition,
+      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context);
   ~SharedWorkerServiceImpl() override;
 
   // SharedWorkerService implementation.
@@ -47,18 +53,35 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
       mojom::SharedWorkerInfoPtr info,
       mojom::SharedWorkerClientPtr client,
       blink::mojom::SharedWorkerCreationContextType creation_context_type,
-      const blink::MessagePortChannel& port);
+      const blink::MessagePortChannel& port,
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory);
 
   void DestroyHost(SharedWorkerHost* host);
 
+  StoragePartition* storage_partition() { return storage_partition_; }
+
  private:
   friend class SharedWorkerServiceImplTest;
+  friend class SharedWorkerHostTest;
 
-  void CreateWorker(std::unique_ptr<SharedWorkerInstance> instance,
-                    mojom::SharedWorkerClientPtr client,
-                    int process_id,
-                    int frame_id,
-                    const blink::MessagePortChannel& message_port);
+  void CreateWorker(
+      std::unique_ptr<SharedWorkerInstance> instance,
+      mojom::SharedWorkerClientPtr client,
+      int process_id,
+      int frame_id,
+      const blink::MessagePortChannel& message_port,
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory);
+  void StartWorker(std::unique_ptr<SharedWorkerInstance> instance,
+                   base::WeakPtr<SharedWorkerHost> host,
+                   mojom::SharedWorkerClientPtr client,
+                   int process_id,
+                   int frame_id,
+                   const blink::MessagePortChannel& message_port,
+                   mojom::ServiceWorkerProviderInfoForSharedWorkerPtr
+                       service_worker_provider_info,
+                   network::mojom::URLLoaderFactoryAssociatedPtrInfo
+                       script_loader_factory_info,
+                   std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle);
 
   // Returns nullptr if there is no such host.
   SharedWorkerHost* FindSharedWorkerHost(int process_id, int route_id);
@@ -68,6 +91,12 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
   std::set<std::unique_ptr<SharedWorkerHost>, base::UniquePtrComparator>
       worker_hosts_;
   base::OnceClosure terminate_all_workers_callback_;
+
+  // |storage_partition_| owns |this|.
+  StoragePartition* const storage_partition_;
+  scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
+
+  base::WeakPtrFactory<SharedWorkerServiceImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SharedWorkerServiceImpl);
 };

@@ -11,15 +11,15 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/files/scoped_file.h"
 #include "base/threading/thread_checker.h"
 #include "components/arc/common/video_decode_accelerator.mojom.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_preferences.h"
 #include "media/video/video_decode_accelerator.h"
 
 namespace arc {
 
 class ProtectedBufferManager;
-class ProtectedBufferHandle;
 
 // GpuArcVideoDecodeAccelerator is executed in the GPU process.
 // It takes decoding requests from ARC via IPC channels and translates and
@@ -37,7 +37,7 @@ class GpuArcVideoDecodeAccelerator
  public:
   GpuArcVideoDecodeAccelerator(
       const gpu::GpuPreferences& gpu_preferences,
-      ProtectedBufferManager* protected_buffer_manager);
+      scoped_refptr<ProtectedBufferManager> protected_buffer_manager);
   ~GpuArcVideoDecodeAccelerator() override;
 
   // Implementation of media::VideoDecodeAccelerator::Client interface.
@@ -57,10 +57,6 @@ class GpuArcVideoDecodeAccelerator
   void Initialize(mojom::VideoDecodeAcceleratorConfigPtr config,
                   mojom::VideoDecodeClientPtr client,
                   InitializeCallback callback) override;
-  void AllocateProtectedBuffer(
-      mojo::ScopedHandle handle,
-      uint64_t size,
-      AllocateProtectedBufferCallback callback) override;
   void Decode(mojom::BitstreamBufferPtr bitstream_buffer) override;
   void AssignPictureBuffers(uint32_t count) override;
   void ImportBufferForPicture(int32_t picture_buffer_id,
@@ -145,24 +141,12 @@ class GpuArcVideoDecodeAccelerator
   gfx::Size coded_size_;
   gfx::Size pending_coded_size_;
 
-  // Owned by caller.
-  ProtectedBufferManager* const protected_buffer_manager_;
+  scoped_refptr<ProtectedBufferManager> protected_buffer_manager_;
+
+  size_t protected_input_buffer_count_ = 0;
 
   bool secure_mode_ = false;
   size_t output_buffer_count_ = 0;
-
-  // Although the stored data are not used for anything in GAVDA,
-  // storing them in GAVDA is needed to keep the protected buffers and
-  // their mappings valid on behalf of the GAVDA client.
-  // For both of them, it is prohibited to allocate more than the predetermined
-  // number of protected buffers.
-  // The predetermined number is a constant value (kMaxProtectedInputBuffers)
-  // for protected input buffers, and it is |output_buffer_count_| set in
-  // AssignPictureBuffers() for protected output buffers.
-  // |protected_output_handles_| is indexed by |picture_buffer_id| in
-  // ImportBufferForPicture().
-  std::vector<std::unique_ptr<ProtectedBufferHandle>> protected_input_handles_;
-  std::vector<std::unique_ptr<ProtectedBufferHandle>> protected_output_handles_;
 
   THREAD_CHECKER(thread_checker_);
   DISALLOW_COPY_AND_ASSIGN(GpuArcVideoDecodeAccelerator);

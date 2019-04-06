@@ -5,8 +5,10 @@
 package org.chromium.chrome.browser.banners;
 
 import android.app.Activity;
+import android.app.Instrumentation;
 import android.app.Instrumentation.ActivityMonitor;
 import android.app.Instrumentation.ActivityResult;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
@@ -15,7 +17,7 @@ import android.graphics.Bitmap;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
-import android.test.mock.MockPackageManager;
+import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.Button;
@@ -27,6 +29,12 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
+import org.mockito.quality.Strictness;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -34,6 +42,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
@@ -44,8 +53,10 @@ import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.InfoBarContainer.InfoBarAnimationListener;
 import org.chromium.chrome.browser.infobar.InfoBarContainerLayout.Item;
+import org.chromium.chrome.browser.infobar.InstallableAmbientBadgeInfoBar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.webapps.AddToHomescreenDialog;
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -57,8 +68,8 @@ import org.chromium.chrome.test.util.browser.WebappTestPage;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TouchCommon;
+import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
-import org.chromium.ui.base.PageTransition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,8 +88,14 @@ public class AppBannerManagerTest {
     @Rule
     public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
 
-    private static final String NATIVE_APP_PATH =
-            "/chrome/test/data/banners/play_app_test_page.html";
+    @Rule
+    public MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.STRICT_STUBS);
+
+    private static final String NATIVE_APP_MANIFEST_WITH_ID =
+            "/chrome/test/data/banners/play_app_manifest.json";
+
+    private static final String NATIVE_APP_MANIFEST_WITH_URL =
+            "/chrome/test/data/banners/play_app_url_manifest.json";
 
     private static final String NATIVE_ICON_PATH = "/chrome/test/data/banners/launcher-icon-4x.png";
 
@@ -91,14 +108,6 @@ public class AppBannerManagerTest {
     private static final String NATIVE_APP_REFERRER = "chrome_inline&playinline=chrome_inline";
 
     private static final String NATIVE_APP_BLANK_REFERRER = "playinline=chrome_inline";
-
-    private static final String NATIVE_APP_URL_WITH_MANIFEST_PATH =
-            "/chrome/test/data/banners/play_app_url_test_page.html";
-
-    private static final String WEB_APP_PATH = "/chrome/test/data/banners/manifest_test_page.html";
-
-    private static final String WEB_APP_BEFORE_INSTALL_PROMPT_PATH =
-            "/chrome/test/data/banners/prompt_test_page.html";
 
     private static final String WEB_APP_SHORT_TITLE_MANIFEST =
             "/chrome/test/data/banners/manifest_short_name_only.json";
@@ -137,22 +146,6 @@ public class AppBannerManagerTest {
         public void destroy() {}
     }
 
-    private static class TestPackageManager extends MockPackageManager {
-        public boolean isInstalled = false;
-
-        @Override
-        public PackageInfo getPackageInfo(String packageName, int flags)
-                throws NameNotFoundException {
-            if (isInstalled) {
-                PackageInfo info = new PackageInfo();
-                info.packageName = NATIVE_APP_PACKAGE;
-                return info;
-            } else {
-                throw new PackageManager.NameNotFoundException();
-            }
-        }
-    }
-
     private static class TestDataStorageFactory extends WebappDataStorage.Factory {
         public String mSplashImage;
 
@@ -189,15 +182,12 @@ public class AppBannerManagerTest {
     }
 
     private MockAppDetailsDelegate mDetailsDelegate;
-    private String mNativeAppUrl;
-    private TestPackageManager mPackageManager;
+    @Mock
+    private PackageManager mPackageManager;
     private EmbeddedTestServer mTestServer;
-    private String mWebAppUrl;
-    private String mWebAppApiUrl;
 
     @Before
     public void setUp() throws Exception {
-        mPackageManager = new TestPackageManager();
         AppBannerManager.setIsSupported(true);
         InstallerDelegate.setPackageManagerForTesting(mPackageManager);
         ShortcutHelper.setDelegateForTests(new ShortcutHelper.Delegate() {
@@ -215,9 +205,6 @@ public class AppBannerManagerTest {
 
         AppBannerManager.setTotalEngagementForTesting(10);
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
-        mNativeAppUrl = mTestServer.getURL(NATIVE_APP_PATH);
-        mWebAppUrl = mTestServer.getURL(WEB_APP_PATH);
-        mWebAppApiUrl = mTestServer.getURL(WEB_APP_BEFORE_INSTALL_PROMPT_PATH);
     }
 
     @After
@@ -232,13 +219,29 @@ public class AppBannerManagerTest {
         });
     }
 
-    private void waitUntilAppDetailsRetrieved(final int numExpected) {
+    private void waitForBannerManager(Tab tab) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                AppBannerManager manager = mTabbedActivityTestRule.getActivity()
-                                                   .getActivityTab()
-                                                   .getAppBannerManager();
+                return !tab.getAppBannerManager().isRunningForTesting();
+            }
+        });
+    }
+
+    private void navigateToUrlAndWaitForBannerManager(
+            ChromeActivityTestRule<? extends ChromeActivity> rule, String url) throws Exception {
+        Tab tab = rule.getActivity().getActivityTab();
+        new TabLoadObserver(tab).fullyLoadUrl(url);
+        waitForBannerManager(tab);
+    }
+
+    private void waitUntilAppDetailsRetrieved(
+            ChromeActivityTestRule<? extends ChromeActivity> rule, final int numExpected) {
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                AppBannerManager manager =
+                        rule.getActivity().getActivityTab().getAppBannerManager();
                 return mDetailsDelegate.mNumRetrieved == numExpected
                         && !manager.isRunningForTesting();
             }
@@ -262,22 +265,38 @@ public class AppBannerManagerTest {
         });
     }
 
-    private void runFullNativeInstallPathway(String url, String expectedReferrer) throws Exception {
+    private void waitUntilAmbientBadgeInfoBarAppears(
+            ChromeActivityTestRule<? extends ChromeActivity> rule) {
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                List<InfoBar> infobars = rule.getInfoBars();
+                if (infobars.size() != 1) return false;
+                return infobars.get(0) instanceof InstallableAmbientBadgeInfoBar;
+            }
+        });
+    }
+
+    private void runFullNativeInstallPathway(
+            String url, String expectedReferrer, String expectedTitle) throws Exception {
+        // Say that the package isn't installed.
+        Mockito.when(mPackageManager.getPackageInfo(
+                             ArgumentMatchers.anyString(), ArgumentMatchers.anyInt()))
+                .thenThrow(new PackageManager.NameNotFoundException());
+
         // Visit a site that requests a banner.
+        Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
         resetEngagementForUrl(url, 0);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(url, PageTransition.TYPED);
+        new TabLoadObserver(tab).fullyLoadUrl(url);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         // Update engagement, then revisit the page to get the banner to appear.
         resetEngagementForUrl(url, 10);
-        InfoBarContainer container =
-                mTabbedActivityTestRule.getActivity().getActivityTab().getInfoBarContainer();
+        InfoBarContainer container = tab.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(url, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(1);
+        new TabLoadObserver(tab).fullyLoadUrl(url);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 1);
         Assert.assertEquals(mDetailsDelegate.mReferrer, expectedReferrer);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, NATIVE_APP_TITLE);
         CriteriaHelper.pollUiThread(new Criteria() {
@@ -311,8 +330,19 @@ public class AppBannerManagerTest {
             }
         });
 
+        // If we expect an update of the page title via JavaScript, wait until the change happens.
+        if (expectedTitle != null) {
+            new TabTitleObserver(tab, expectedTitle).waitForTitleUpdate(3);
+        }
+
         // Say that the package is installed.  Infobar should say that the app is ready to open.
-        mPackageManager.isInstalled = true;
+        Mockito.reset(mPackageManager);
+        PackageInfo info = new PackageInfo();
+        info.packageName = NATIVE_APP_PACKAGE;
+        Mockito.when(mPackageManager.getPackageInfo(
+                             ArgumentMatchers.anyString(), ArgumentMatchers.anyInt()))
+                .thenReturn(info);
+
         final String openText =
                 InstrumentationRegistry.getTargetContext().getString(R.string.app_banner_open);
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
@@ -323,22 +353,12 @@ public class AppBannerManagerTest {
         });
     }
 
-    public void triggerWebAppBanner(ChromeActivityTestRule<? extends ChromeActivity> rule,
+    private void triggerWebAppBanner(ChromeActivityTestRule<? extends ChromeActivity> rule,
             String url, String expectedTitle, boolean installApp) throws Exception {
         // Visit the site in a new tab.
         resetEngagementForUrl(url, 0);
-        rule.loadUrlInNewTab("about:blank");
-        new TabLoadObserver(rule.getActivity().getActivityTab())
-                .fullyLoadUrl(url, PageTransition.TYPED);
-
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                AppBannerManager manager =
-                        rule.getActivity().getActivityTab().getAppBannerManager();
-                return !manager.isRunningForTesting();
-            }
-        });
+        rule.loadUrlInNewTab(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+        navigateToUrlAndWaitForBannerManager(rule, url);
         InfoBarUtil.waitUntilNoInfoBarsExist(rule.getInfoBars());
 
         // Add the animation listener in.
@@ -348,16 +368,7 @@ public class AppBannerManagerTest {
 
         // Update engagement, then revisit the page to get the banner to appear.
         resetEngagementForUrl(url, 10);
-        new TabLoadObserver(rule.getActivity().getActivityTab())
-                .fullyLoadUrl(url, PageTransition.TYPED);
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                AppBannerManager manager =
-                        rule.getActivity().getActivityTab().getAppBannerManager();
-                return !manager.isRunningForTesting();
-            }
-        });
+        navigateToUrlAndWaitForBannerManager(rule, url);
         waitUntilAppBannerInfoBarAppears(rule, expectedTitle);
 
         if (!installApp) return;
@@ -375,105 +386,457 @@ public class AppBannerManagerTest {
         TouchCommon.singleClickView(button);
     }
 
-    @Test
-    @SmallTest
-    @Feature({"AppBanners"})
-    public void testFullNativeInstallPathwayFromId() throws Exception {
-        runFullNativeInstallPathway(mNativeAppUrl, NATIVE_APP_BLANK_REFERRER);
+    private void blockInfoBarBannerAndResolveUserChoice(
+            ChromeActivityTestRule<? extends ChromeActivity> rule, String url, String expectedTitle)
+            throws Exception {
+        // Update engagement, then visit a page which triggers a banner.
+        Tab tab = rule.getActivity().getActivityTab();
+        resetEngagementForUrl(url, 10);
+        InfoBarContainer container = tab.getInfoBarContainer();
+        final InfobarListener listener = new InfobarListener();
+        container.addAnimationListener(listener);
+        new TabLoadObserver(tab).fullyLoadUrl(url);
+        if (expectedTitle.equals(NATIVE_APP_TITLE)) {
+            waitUntilAppDetailsRetrieved(rule, 1);
+        }
+        waitUntilAppBannerInfoBarAppears(rule, expectedTitle);
+
+        // Explicitly dismiss the banner.
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return listener.mDoneAnimating;
+            }
+        });
+        ArrayList<InfoBar> infobars = container.getInfoBarsForTesting();
+        View close = infobars.get(0).getView().findViewById(R.id.infobar_close_button);
+        TouchCommon.singleClickView(close);
+
+        InfoBarUtil.waitUntilNoInfoBarsExist(rule.getInfoBars());
+
+        // Ensure userChoice is resolved.
+        new TabTitleObserver(tab, "Got userChoice: dismissed").waitForTitleUpdate(3);
+    }
+
+    private void waitUntilNoDialogsShowing(final Tab tab) {
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                AddToHomescreenDialog dialog =
+                        tab.getAppBannerManager().getAddToHomescreenDialogForTesting();
+                return dialog == null || dialog.getAlertDialogForTesting() == null;
+            }
+        });
+    }
+
+    private void tapAndWaitForModalBanner(final Tab tab) throws Exception {
+        TouchCommon.singleClickView(tab.getView());
+
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                AddToHomescreenDialog dialog =
+                        tab.getAppBannerManager().getAddToHomescreenDialogForTesting();
+                if (dialog != null) {
+                    AlertDialog alertDialog = dialog.getAlertDialogForTesting();
+                    return alertDialog != null && alertDialog.isShowing();
+                }
+                return false;
+            }
+        });
+    }
+
+    private void triggerModalWebAppBanner(ChromeActivityTestRule<? extends ChromeActivity> rule,
+            String url, boolean installApp) throws Exception {
+        resetEngagementForUrl(url, 10);
+        rule.loadUrlInNewTab(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+        navigateToUrlAndWaitForBannerManager(rule, url);
+        waitUntilAmbientBadgeInfoBarAppears(rule);
+
+        Tab tab = rule.getActivity().getActivityTab();
+        tapAndWaitForModalBanner(tab);
+
+        if (!installApp) return;
+
+        // Click the button to trigger the adding of the shortcut.
+        clickButton(tab, DialogInterface.BUTTON_POSITIVE);
+    }
+
+    private void triggerModalNativeAppBanner(ChromeActivityTestRule<? extends ChromeActivity> rule,
+            String url, String expectedReferrer, boolean installApp) throws Exception {
+        resetEngagementForUrl(url, 10);
+        rule.loadUrlInNewTab(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+        navigateToUrlAndWaitForBannerManager(rule, url);
+        waitUntilAppDetailsRetrieved(rule, 1);
+        waitUntilAmbientBadgeInfoBarAppears(rule);
+        Assert.assertEquals(mDetailsDelegate.mReferrer, expectedReferrer);
+
+        final Tab tab = rule.getActivity().getActivityTab();
+        tapAndWaitForModalBanner(tab);
+        if (!installApp) return;
+
+        // Click the button to trigger the installation.
+        final ActivityMonitor activityMonitor =
+                new ActivityMonitor(new IntentFilter(INSTALL_ACTION),
+                        new ActivityResult(Activity.RESULT_OK, null), true);
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        instrumentation.addMonitor(activityMonitor);
+
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            Button button = tab.getAppBannerManager()
+                                    .getAddToHomescreenDialogForTesting()
+                                    .getAlertDialogForTesting()
+                                    .getButton(DialogInterface.BUTTON_POSITIVE);
+            Assert.assertEquals(NATIVE_APP_INSTALL_TEXT, button.getText());
+        });
+
+        clickButton(tab, DialogInterface.BUTTON_POSITIVE);
+
+        // Wait until the installation triggers.
+        instrumentation.waitForMonitorWithTimeout(
+                activityMonitor, CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
+    }
+
+    private void triggerModalBannerMultipleTimes(
+            ChromeActivityTestRule<? extends ChromeActivity> rule, String url,
+            boolean isForNativeApp) throws Exception {
+        resetEngagementForUrl(url, 10);
+        rule.loadUrlInNewTab(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+        navigateToUrlAndWaitForBannerManager(rule, url);
+        if (isForNativeApp) {
+            waitUntilAppDetailsRetrieved(rule, 1);
+        }
+
+        waitUntilAmbientBadgeInfoBarAppears(rule);
+        Tab tab = rule.getActivity().getActivityTab();
+        tapAndWaitForModalBanner(tab);
+
+        // Explicitly dismiss the banner. We should be able to show the banner after dismissing.
+        clickButton(tab, DialogInterface.BUTTON_NEGATIVE);
+        waitUntilNoDialogsShowing(tab);
+        tapAndWaitForModalBanner(tab);
+
+        clickButton(tab, DialogInterface.BUTTON_NEGATIVE);
+        waitUntilNoDialogsShowing(tab);
+        tapAndWaitForModalBanner(tab);
+    }
+
+    private void clickButton(final Tab tab, final int button) {
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            tab.getAppBannerManager()
+                    .getAddToHomescreenDialogForTesting()
+                    .getAlertDialogForTesting()
+                    .getButton(button)
+                    .performClick();
+        });
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
-    public void testFullNativeInstallPathwayFromUrl() throws Exception {
-        runFullNativeInstallPathway(
-                mTestServer.getURL(NATIVE_APP_URL_WITH_MANIFEST_PATH), NATIVE_APP_REFERRER);
+    public void testAppInstalledEventModalWebAppBannerBrowserTab() throws Exception {
+        triggerModalWebAppBanner(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(
+                        mTestServer, "call_stashed_prompt_on_click_verify_appinstalled"),
+                true);
+
+        // The appinstalled event should fire (and cause the title to change).
+        new TabTitleObserver(mTabbedActivityTestRule.getActivity().getActivityTab(),
+                "Got appinstalled: listener, attr")
+                .waitForTitleUpdate(3);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    public void testAppInstalledEventModalWebAppBannerCustomTab() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
+                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+        triggerModalWebAppBanner(mCustomTabActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(
+                        mTestServer, "call_stashed_prompt_on_click_verify_appinstalled"),
+                true);
+
+        // The appinstalled event should fire (and cause the title to change).
+        new TabTitleObserver(mCustomTabActivityTestRule.getActivity().getActivityTab(),
+                "Got appinstalled: listener, attr")
+                .waitForTitleUpdate(3);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    public void testAppInstalledModalNativeAppBannerBrowserTab() throws Exception {
+        triggerModalNativeAppBanner(mTabbedActivityTestRule,
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(mTestServer,
+                        NATIVE_APP_MANIFEST_WITH_ID,
+                        "call_stashed_prompt_on_click_verify_appinstalled"),
+                NATIVE_APP_BLANK_REFERRER, true);
+
+        // The appinstalled event should fire (and cause the title to change).
+        new TabTitleObserver(mTabbedActivityTestRule.getActivity().getActivityTab(),
+                "Got appinstalled: listener, attr")
+                .waitForTitleUpdate(3);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    public void testAppInstalledModalNativeAppBannerCustomTab() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
+                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+
+        triggerModalNativeAppBanner(mCustomTabActivityTestRule,
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(mTestServer,
+                        NATIVE_APP_MANIFEST_WITH_ID,
+                        "call_stashed_prompt_on_click_verify_appinstalled"),
+                NATIVE_APP_BLANK_REFERRER, true);
+
+        // The appinstalled event should fire (and cause the title to change).
+        new TabTitleObserver(mCustomTabActivityTestRule.getActivity().getActivityTab(),
+                "Got appinstalled: listener, attr")
+                .waitForTitleUpdate(3);
     }
 
     @Test
     @MediumTest
     @Feature({"AppBanners"})
+    public void testBlockedModalWebAppBannerResolvesUserChoice() throws Exception {
+        triggerModalWebAppBanner(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(
+                        mTestServer, "call_stashed_prompt_on_click"),
+                false);
+
+        // Explicitly dismiss the banner.
+        final Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
+        clickButton(tab, DialogInterface.BUTTON_NEGATIVE);
+
+        // Ensure userChoice is resolved.
+        new TabTitleObserver(tab, "Got userChoice: dismissed").waitForTitleUpdate(3);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    public void testBlockedModalNativeAppBannerResolveUserChoice() throws Exception {
+        triggerModalNativeAppBanner(mTabbedActivityTestRule,
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_ID, "call_stashed_prompt_on_click"),
+                NATIVE_APP_BLANK_REFERRER, false);
+
+        // Explicitly dismiss the banner.
+        final Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
+        clickButton(tab, DialogInterface.BUTTON_NEGATIVE);
+
+        // Ensure userChoice is resolved.
+        new TabTitleObserver(tab, "Got userChoice: dismissed").waitForTitleUpdate(3);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    public void testModalNativeAppBannerCanBeTriggeredMultipleTimesBrowserTab() throws Exception {
+        triggerModalBannerMultipleTimes(mTabbedActivityTestRule,
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_ID, "call_stashed_prompt_on_click"),
+                true);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    public void testModalNativeAppBannerCanBeTriggeredMultipleTimesCustomTab() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
+                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+
+        triggerModalBannerMultipleTimes(mCustomTabActivityTestRule,
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_ID, "call_stashed_prompt_on_click"),
+                true);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    public void testModalWebAppBannerCanBeTriggeredMultipleTimesBrowserTab() throws Exception {
+        triggerModalBannerMultipleTimes(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(
+                        mTestServer, "call_stashed_prompt_on_click"),
+                false);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    public void testModalWebAppBannerCanBeTriggeredMultipleTimesCustomTab() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
+                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+
+        triggerModalBannerMultipleTimes(mCustomTabActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(
+                        mTestServer, "call_stashed_prompt_on_click"),
+                false);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    public void testBlockedAmbientBadgeDoesNotAppearAgainForMonths() throws Exception {
+        // Visit a site that is a PWA. The ambient badge should show.
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+
+        Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
+        waitUntilAmbientBadgeInfoBarAppears(mTabbedActivityTestRule);
+
+        InfoBarContainer container = tab.getInfoBarContainer();
+        final InfobarListener listener = new InfobarListener();
+        container.addAnimationListener(listener);
+
+        // Explicitly dismiss the ambient badge.
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return listener.mDoneAnimating;
+            }
+        });
+
+        ArrayList<InfoBar> infobars = container.getInfoBarsForTesting();
+        View close = infobars.get(0).getView().findViewById(R.id.infobar_close_button);
+        TouchCommon.singleClickView(close);
+        InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
+
+        // Waiting two months shouldn't be long enough.
+        AppBannerManager.setTimeDeltaForTesting(61);
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
+        InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
+
+        AppBannerManager.setTimeDeltaForTesting(62);
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
+        InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
+
+        // Waiting three months should allow the ambient badge to reappear.
+        AppBannerManager.setTimeDeltaForTesting(91);
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
+        waitUntilAmbientBadgeInfoBarAppears(mTabbedActivityTestRule);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testFullNativeInstallPathwayFromId() throws Exception {
+        // Set the prompt handler so that the userChoice promise resolves and updates the title.
+        runFullNativeInstallPathway(
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_ID, "call_prompt_delayed"),
+                NATIVE_APP_BLANK_REFERRER, "Got userChoice: accepted");
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testFullNativeInstallPathwayFromUrl() throws Exception {
+        runFullNativeInstallPathway(
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_URL, "verify_appinstalled"),
+                NATIVE_APP_REFERRER, "Got appinstalled: listener, attr");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBannerAppearsThenDoesNotAppearAgainForWeeks() throws Exception {
         // Visit a site that requests a banner.
-        resetEngagementForUrl(mNativeAppUrl, 0);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
+        Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
+        String nativeBannerUrl = WebappTestPage.getNonServiceWorkerUrlWithManifest(
+                mTestServer, NATIVE_APP_MANIFEST_WITH_ID);
+        resetEngagementForUrl(nativeBannerUrl, 0);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         // Update engagement, then revisit the page.
-        resetEngagementForUrl(mNativeAppUrl, 10);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(1);
+        resetEngagementForUrl(nativeBannerUrl, 10);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 1);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, NATIVE_APP_TITLE);
 
         // Revisit the page to make the banner go away, but don't explicitly dismiss it.
         // This hides the banner for two weeks.
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(2);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 2);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         // Wait a week until revisiting the page.
         AppBannerManager.setTimeDeltaForTesting(7);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(3);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 3);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         AppBannerManager.setTimeDeltaForTesting(8);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(4);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 4);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         // Wait two weeks until revisiting the page, which should pop up the banner.
         AppBannerManager.setTimeDeltaForTesting(15);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(5);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 5);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, NATIVE_APP_TITLE);
     }
 
     @Test
     @MediumTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBannerAppearsThenDoesNotAppearAgainForCustomTime() throws Exception {
         AppBannerManager.setDaysAfterDismissAndIgnoreForTesting(7, 7);
-        triggerWebAppBanner(mTabbedActivityTestRule, mWebAppUrl, WEB_APP_TITLE, false);
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        triggerWebAppBanner(mTabbedActivityTestRule, webBannerUrl, WEB_APP_TITLE, false);
 
         // Revisit the page to make the banner go away, but don't explicitly dismiss it.
         // This hides the banner for two weeks.
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mWebAppUrl, PageTransition.TYPED);
+        Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         // Wait a week until revisiting the page. This should allow the banner.
         AppBannerManager.setTimeDeltaForTesting(7);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mWebAppUrl, PageTransition.TYPED);
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, WEB_APP_TITLE);
     }
 
     @Test
     @MediumTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBlockedBannerDoesNotAppearAgainForMonths() throws Exception {
         // Visit a site that requests a banner.
-        resetEngagementForUrl(mNativeAppUrl, 0);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
+        String nativeBannerUrl = WebappTestPage.getNonServiceWorkerUrlWithManifest(
+                mTestServer, NATIVE_APP_MANIFEST_WITH_ID);
+        resetEngagementForUrl(nativeBannerUrl, 0);
+
+        Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         // Update engagement, then revisit the page.
-        resetEngagementForUrl(mNativeAppUrl, 10);
-        InfoBarContainer container =
-                mTabbedActivityTestRule.getActivity().getActivityTab().getInfoBarContainer();
+        resetEngagementForUrl(nativeBannerUrl, 10);
+        InfoBarContainer container = tab.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(1);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 1);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, NATIVE_APP_TITLE);
 
         // Explicitly dismiss the banner.
@@ -490,39 +853,37 @@ public class AppBannerManagerTest {
 
         // Waiting two months shouldn't be long enough.
         AppBannerManager.setTimeDeltaForTesting(61);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(2);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 2);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         AppBannerManager.setTimeDeltaForTesting(62);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(3);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 3);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
 
         // Waiting three months should allow banners to reappear.
         AppBannerManager.setTimeDeltaForTesting(91);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
-        waitUntilAppDetailsRetrieved(4);
+        new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
+        waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 4);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, NATIVE_APP_TITLE);
     }
 
     @Test
     @MediumTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBlockedBannerDoesNotAppearAgainForCustomTime() throws Exception {
         AppBannerManager.setDaysAfterDismissAndIgnoreForTesting(7, 7);
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
 
         // Update engagement, then visit a page which triggers a banner.
-        resetEngagementForUrl(mWebAppUrl, 10);
-        InfoBarContainer container =
-                mTabbedActivityTestRule.getActivity().getActivityTab().getInfoBarContainer();
+        resetEngagementForUrl(webBannerUrl, 10);
+        InfoBarContainer container = tab.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mWebAppUrl, PageTransition.TYPED);
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, WEB_APP_TITLE);
 
         // Explicitly dismiss the banner.
@@ -539,20 +900,72 @@ public class AppBannerManagerTest {
 
         // Waiting seven days should be long enough.
         AppBannerManager.setTimeDeltaForTesting(7);
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mWebAppUrl, PageTransition.TYPED);
+        new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, WEB_APP_TITLE);
     }
 
     @Test
     @MediumTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testBlockedWebAppBannerBrowserTabResolvesUserChoice() throws Exception {
+        blockInfoBarBannerAndResolveUserChoice(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(mTestServer, "call_prompt_delayed"),
+                WEB_APP_TITLE);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testBlockedNativeAppBannerBrowserTabResolvesUserChoice() throws Exception {
+        blockInfoBarBannerAndResolveUserChoice(mTabbedActivityTestRule,
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_ID, "call_prompt_delayed"),
+                NATIVE_APP_TITLE);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testBlockedWebAppBannerCustomTabResolvesUserChoice() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
+                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+        blockInfoBarBannerAndResolveUserChoice(mCustomTabActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(mTestServer, "call_prompt_delayed"),
+                WEB_APP_TITLE);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testBlockedNativeAppBannerResolvesUserChoice() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
+                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+        blockInfoBarBannerAndResolveUserChoice(mCustomTabActivityTestRule,
+                WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_ID, "call_prompt_delayed"),
+                NATIVE_APP_TITLE);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBitmapFetchersCanOverlapWithoutCrashing() throws Exception {
         // Visit a site that requests a banner rapidly and repeatedly.
-        resetEngagementForUrl(mNativeAppUrl, 10);
+        String nativeBannerUrl = WebappTestPage.getNonServiceWorkerUrlWithManifest(
+                mTestServer, NATIVE_APP_MANIFEST_WITH_ID);
+        resetEngagementForUrl(nativeBannerUrl, 10);
         for (int i = 1; i <= 10; i++) {
             new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                    .fullyLoadUrl(mNativeAppUrl, PageTransition.TYPED);
+                    .fullyLoadUrl(nativeBannerUrl);
 
             final Integer iteration = Integer.valueOf(i);
             CriteriaHelper.pollUiThread(Criteria.equals(iteration, new Callable<Integer>() {
@@ -567,8 +980,10 @@ public class AppBannerManagerTest {
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testWebAppBannerAppears() throws Exception {
-        triggerWebAppBanner(mTabbedActivityTestRule, mWebAppUrl, WEB_APP_TITLE, false);
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        triggerWebAppBanner(mTabbedActivityTestRule, webBannerUrl, WEB_APP_TITLE, false);
 
         // Verify metrics calling in the successful case.
         ThreadUtils.runOnUiThread(() -> {
@@ -589,22 +1004,25 @@ public class AppBannerManagerTest {
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testWebAppBannerDoesNotAppearAfterInstall() throws Exception {
-        triggerWebAppBanner(mTabbedActivityTestRule, mWebAppUrl, WEB_APP_TITLE, true);
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        triggerWebAppBanner(mTabbedActivityTestRule, webBannerUrl, WEB_APP_TITLE, true);
 
         // The banner should not reshow after the site has been installed.
         AppBannerManager.setTimeDeltaForTesting(100);
         new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mWebAppUrl, PageTransition.TYPED);
+                .fullyLoadUrl(webBannerUrl);
         InfoBarUtil.waitUntilNoInfoBarsExist(mTabbedActivityTestRule.getInfoBars());
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBannerFallsBackToShortNameWhenNameNotPresent() throws Exception {
         triggerWebAppBanner(mTabbedActivityTestRule,
-                WebappTestPage.urlOfPageWithServiceWorkerAndManifest(
+                WebappTestPage.getServiceWorkerUrlWithManifest(
                         mTestServer, WEB_APP_SHORT_TITLE_MANIFEST),
                 WEB_APP_SHORT_TITLE, false);
     }
@@ -612,119 +1030,162 @@ public class AppBannerManagerTest {
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBannerFallsBackToShortNameWhenNameIsEmpty() throws Exception {
         triggerWebAppBanner(mTabbedActivityTestRule,
-                WebappTestPage.urlOfPageWithServiceWorkerAndManifest(
+                WebappTestPage.getServiceWorkerUrlWithManifest(
                         mTestServer, WEB_APP_EMPTY_NAME_MANIFEST),
                 WEB_APP_SHORT_TITLE, false);
     }
 
-    private void runWebAppBannerAndCheckInstallEvent(
-            ChromeActivityTestRule<? extends ChromeActivity> rule, String webAppUrl,
-            int expectedBucket) throws Exception {
-        triggerWebAppBanner(rule, webAppUrl, WEB_APP_TITLE, true);
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testAppInstalledEventAutomaticPrompt() throws Exception {
+        triggerWebAppBanner(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(mTestServer, "verify_appinstalled"),
+                WEB_APP_TITLE, true);
 
         // The appinstalled event should fire (and cause the title to change).
-        Tab tab = rule.getActivity().getActivityTab();
-        new TabTitleObserver(tab, "Got appinstalled").waitForTitleUpdate(3);
+        new TabTitleObserver(mTabbedActivityTestRule.getActivity().getActivityTab(),
+                "Got appinstalled: listener, attr")
+                .waitForTitleUpdate(3);
+    }
 
-        // We should have recorded the AUTOMATIC_BROWSER_TAB install source.
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testAppInstalledEventApi() throws Exception {
+        triggerWebAppBanner(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(
+                        mTestServer, "verify_prompt_appinstalled"),
+                WEB_APP_TITLE, true);
+
+        // The appinstalled event should fire (and cause the title to change).
+        new TabTitleObserver(mTabbedActivityTestRule.getActivity().getActivityTab(),
+                "Got appinstalled: listener, attr")
+                .waitForTitleUpdate(3);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
+    public void testPostInstallationAutomaticPromptBrowserTab() throws Exception {
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        triggerWebAppBanner(mTabbedActivityTestRule, webBannerUrl, WEB_APP_TITLE, true);
+
         ThreadUtils.runOnUiThread(() -> {
             Assert.assertEquals(1,
                     RecordHistogram.getHistogramValueCountForTesting(
-                            "Webapp.Install.InstallEvent", expectedBucket));
+                            "Webapp.Install.InstallEvent", 2));
         });
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
-    public void testPostInstallationAutomaticPromptBrowserTab() throws Exception {
-        runWebAppBannerAndCheckInstallEvent(mTabbedActivityTestRule, mWebAppUrl, 2);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testPostInstallationAutomaticPromptCustomTab() throws Exception {
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 CustomTabsTestUtils.createMinimalCustomTabIntent(
-                        InstrumentationRegistry.getTargetContext(), "about:blank"));
-        runWebAppBannerAndCheckInstallEvent(mCustomTabActivityTestRule, mWebAppUrl, 3);
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+        triggerWebAppBanner(mCustomTabActivityTestRule, webBannerUrl, WEB_APP_TITLE, true);
+
+        ThreadUtils.runOnUiThread(() -> {
+            Assert.assertEquals(1,
+                    RecordHistogram.getHistogramValueCountForTesting(
+                            "Webapp.Install.InstallEvent", 3));
+        });
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testPostInstallationApiBrowserTab() throws Exception {
-        runWebAppBannerAndCheckInstallEvent(mTabbedActivityTestRule, mWebAppApiUrl, 4);
+        triggerWebAppBanner(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(mTestServer, "call_prompt_delayed"),
+                WEB_APP_TITLE, true);
+
+        new TabTitleObserver(
+                mTabbedActivityTestRule.getActivity().getActivityTab(), "Got userChoice: accepted")
+                .waitForTitleUpdate(3);
+
+        ThreadUtils.runOnUiThread(() -> {
+            Assert.assertEquals(1,
+                    RecordHistogram.getHistogramValueCountForTesting(
+                            "Webapp.Install.InstallEvent", 4));
+        });
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testPostInstallationApiCustomTab() throws Exception {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 CustomTabsTestUtils.createMinimalCustomTabIntent(
-                        InstrumentationRegistry.getTargetContext(), "about:blank"));
-        runWebAppBannerAndCheckInstallEvent(mCustomTabActivityTestRule, mWebAppApiUrl, 5);
+                        InstrumentationRegistry.getTargetContext(),
+                        ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
+        triggerWebAppBanner(mCustomTabActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithAction(mTestServer, "call_prompt_delayed"),
+                WEB_APP_TITLE, true);
+
+        new TabTitleObserver(mCustomTabActivityTestRule.getActivity().getActivityTab(),
+                "Got userChoice: accepted")
+                .waitForTitleUpdate(3);
+
+        ThreadUtils.runOnUiThread(() -> {
+            Assert.assertEquals(1,
+                    RecordHistogram.getHistogramValueCountForTesting(
+                            "Webapp.Install.InstallEvent", 5));
+        });
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBannerAppearsImmediatelyWithSufficientEngagement() throws Exception {
         // Visit the site in a new tab with sufficient engagement and verify it appears.
-        resetEngagementForUrl(mWebAppUrl, 10);
-        mTabbedActivityTestRule.loadUrlInNewTab("about:blank");
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        resetEngagementForUrl(webBannerUrl, 10);
+        mTabbedActivityTestRule.loadUrlInNewTab(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
 
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mWebAppUrl, PageTransition.TYPED);
-
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                AppBannerManager manager = mTabbedActivityTestRule.getActivity()
-                                                   .getActivityTab()
-                                                   .getAppBannerManager();
-                return !manager.isRunningForTesting();
-            }
-        });
+        navigateToUrlAndWaitForBannerManager(mTabbedActivityTestRule, webBannerUrl);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, WEB_APP_TITLE);
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testBannerDoesNotAppearInIncognito() throws Exception {
         // Visit the site in an incognito tab and verify it doesn't appear.
-        resetEngagementForUrl(mWebAppUrl, 10);
-        mTabbedActivityTestRule.loadUrlInNewTab("about:blank", true);
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        resetEngagementForUrl(webBannerUrl, 10);
+        mTabbedActivityTestRule.loadUrlInNewTab(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL, true);
 
-        new TabLoadObserver(mTabbedActivityTestRule.getActivity().getActivityTab())
-                .fullyLoadUrl(mWebAppUrl, PageTransition.TYPED);
-
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                AppBannerManager manager = mTabbedActivityTestRule.getActivity()
-                                                   .getActivityTab()
-                                                   .getAppBannerManager();
-                return !manager.isRunningForTesting();
-            }
-        });
+        navigateToUrlAndWaitForBannerManager(mTabbedActivityTestRule, webBannerUrl);
         Assert.assertTrue(mTabbedActivityTestRule.getInfoBars().isEmpty());
     }
 
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.EXPERIMENTAL_APP_BANNERS)
     public void testWebAppSplashscreenIsDownloaded() throws Exception {
         // Sets the overriden factory to observer splash screen update.
         final TestDataStorageFactory dataStorageFactory = new TestDataStorageFactory();
         WebappDataStorage.setFactoryForTests(dataStorageFactory);
 
-        triggerWebAppBanner(mTabbedActivityTestRule, mWebAppUrl, WEB_APP_TITLE, true);
+        String webBannerUrl = WebappTestPage.getServiceWorkerUrl(mTestServer);
+        triggerWebAppBanner(mTabbedActivityTestRule, webBannerUrl, WEB_APP_TITLE, true);
 
         // Make sure that the splash screen icon was downloaded.
         CriteriaHelper.pollUiThread(new Criteria() {

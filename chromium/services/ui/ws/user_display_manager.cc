@@ -15,12 +15,9 @@
 namespace ui {
 namespace ws {
 
-UserDisplayManager::UserDisplayManager(UserDisplayManagerDelegate* delegate,
-                                       const UserId& user_id)
+UserDisplayManager::UserDisplayManager(UserDisplayManagerDelegate* delegate)
     : delegate_(delegate),
-      user_id_(user_id),
-      got_valid_frame_decorations_(
-          delegate->GetFrameDecorationsForUser(user_id, nullptr)) {}
+      got_valid_frame_decorations_(delegate->GetFrameDecorations(nullptr)) {}
 
 UserDisplayManager::~UserDisplayManager() {}
 
@@ -30,10 +27,9 @@ void UserDisplayManager::DisableAutomaticNotification() {
 }
 
 void UserDisplayManager::CallOnDisplaysChanged() {
-  display_manager_observers_.ForAllPtrs(
-      [this](mojom::DisplayManagerObserver* observer) {
-        CallOnDisplaysChanged(observer);
-      });
+  observers_.ForAllPtrs([this](mojom::ScreenProviderObserver* observer) {
+    CallOnDisplaysChanged(observer);
+  });
 }
 
 void UserDisplayManager::OnFrameDecorationValuesChanged() {
@@ -42,8 +38,8 @@ void UserDisplayManager::OnFrameDecorationValuesChanged() {
 }
 
 void UserDisplayManager::AddDisplayManagerBinding(
-    mojo::InterfaceRequest<mojom::DisplayManager> request) {
-  display_manager_bindings_.AddBinding(this, std::move(request));
+    mojo::InterfaceRequest<mojom::ScreenProvider> request) {
+  bindings_.AddBinding(this, std::move(request));
 }
 
 void UserDisplayManager::OnDisplayUpdated(const display::Display& display) {
@@ -59,14 +55,14 @@ void UserDisplayManager::OnPrimaryDisplayChanged(int64_t primary_display_id) {
 }
 
 void UserDisplayManager::AddObserver(
-    mojom::DisplayManagerObserverPtr observer) {
-  mojom::DisplayManagerObserver* observer_impl = observer.get();
-  display_manager_observers_.AddPtr(std::move(observer));
+    mojom::ScreenProviderObserverPtr observer) {
+  mojom::ScreenProviderObserver* observer_impl = observer.get();
+  observers_.AddPtr(std::move(observer));
   OnObserverAdded(observer_impl);
 }
 
 void UserDisplayManager::OnObserverAdded(
-    mojom::DisplayManagerObserver* observer) {
+    mojom::ScreenProviderObserver* observer) {
   // Many clients key off the frame decorations to size widgets. Wait for frame
   // decorations before notifying so that we don't have to worry about clients
   // resizing appropriately.
@@ -80,8 +76,7 @@ mojom::WsDisplayPtr UserDisplayManager::ToWsDisplayPtr(
     const display::Display& display) {
   mojom::WsDisplayPtr ws_display = mojom::WsDisplay::New();
   ws_display->display = display;
-  delegate_->GetFrameDecorationsForUser(user_id_,
-                                        &ws_display->frame_decoration_values);
+  delegate_->GetFrameDecorations(&ws_display->frame_decoration_values);
   return ws_display;
 }
 
@@ -113,7 +108,7 @@ void UserDisplayManager::CallOnDisplaysChangedIfNecessary() {
 }
 
 void UserDisplayManager::CallOnDisplaysChanged(
-    mojom::DisplayManagerObserver* observer) {
+    mojom::ScreenProviderObserver* observer) {
   observer->OnDisplaysChanged(GetAllDisplays(),
                               display::ScreenManager::GetInstance()
                                   ->GetScreen()

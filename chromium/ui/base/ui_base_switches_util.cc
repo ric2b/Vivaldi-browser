@@ -13,21 +13,16 @@ namespace switches {
 bool IsTouchDragDropEnabled() {
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableTouchDragDrop);
+      kDisableTouchDragDrop);
 #else
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableTouchDragDrop);
+      kEnableTouchDragDrop);
 #endif
 }
 
-bool IsMusHostingViz() {
-#if defined(USE_AURA)
-  auto* cmd = base::CommandLine::ForCurrentProcess();
-  return cmd->HasSwitch(switches::kMus) &&
-         cmd->HasSwitch(switches::kMusHostingViz);
-#else
-  return false;
-#endif
+bool IsTouchableAppContextMenuEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kEnableTouchableAppContextMenu);
 }
 
 }  // namespace switches

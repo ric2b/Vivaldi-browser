@@ -15,13 +15,10 @@
 
 namespace chromeos {
 
-class WizardController;
-
 // Class that manages creation and ownership of screens.
 class ScreenManager {
  public:
-  // |wizard_controller| is not owned by this class.
-  explicit ScreenManager(WizardController* wizard_controller);
+  ScreenManager();
   ~ScreenManager();
 
   // Getter for screen with lazy initialization.
@@ -36,12 +33,10 @@ class ScreenManager {
   friend class WizardControllerOobeResumeTest;
   friend class WizardInProcessBrowserTest;
   friend class WizardControllerBrokenLocalStateTest;
+  friend class WizardControllerOobeConfigurationTest;
 
   // Created screens.
   std::map<OobeScreen, std::unique_ptr<BaseScreen>> screens_;
-
-  // Used to allocate BaseScreen instances. Unowned.
-  WizardController* wizard_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenManager);
 };

@@ -10,10 +10,12 @@
 #include <vector>
 
 #include "base/strings/stringprintf.h"
+#include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
+#include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/platform_color.h"
 #include "components/viz/common/resources/single_release_callback.h"
 
@@ -24,17 +26,15 @@ TextureLayerImpl::TextureLayerImpl(LayerTreeImpl* tree_impl, int id)
 
 TextureLayerImpl::~TextureLayerImpl() {
   FreeTransferableResource();
-}
 
-void TextureLayerImpl::SetTransferableResource(
-    const viz::TransferableResource& resource,
-    std::unique_ptr<viz::SingleReleaseCallback> release_callback) {
-  DCHECK_EQ(resource.mailbox_holder.mailbox.IsZero(), !release_callback);
-  FreeTransferableResource();
-  transferable_resource_ = resource;
-  release_callback_ = std::move(release_callback);
-  own_resource_ = true;
-  SetNeedsPushProperties();
+  LayerTreeFrameSink* sink = layer_tree_impl()->layer_tree_frame_sink();
+  // The LayerTreeFrameSink may be gone, in which case there's no need to
+  // unregister anything.
+  if (sink) {
+    for (const auto& pair : registered_bitmaps_) {
+      sink->DidDeleteSharedBitmap(pair.first);
+    }
+  }
 }
 
 std::unique_ptr<LayerImpl> TextureLayerImpl::CreateLayerImpl(
@@ -42,7 +42,8 @@ std::unique_ptr<LayerImpl> TextureLayerImpl::CreateLayerImpl(
   return TextureLayerImpl::Create(tree_impl, id());
 }
 
-bool TextureLayerImpl::IsSnapped() {
+bool TextureLayerImpl::IsSnappedToPixelGridInTarget() {
+  // See TextureLayer::IsSnappedToPixelGridInTarget() for explanation of |true|.
   return true;
 }
 
@@ -61,10 +62,17 @@ void TextureLayerImpl::PushPropertiesTo(LayerImpl* layer) {
                                            std::move(release_callback_));
     own_resource_ = false;
   }
+  for (auto& pair : to_register_bitmaps_)
+    texture_layer->RegisterSharedBitmapId(pair.first, std::move(pair.second));
+  to_register_bitmaps_.clear();
+  for (const auto& id : to_unregister_bitmap_ids_)
+    texture_layer->UnregisterSharedBitmapId(id);
+  to_unregister_bitmap_ids_.clear();
 }
 
-bool TextureLayerImpl::WillDraw(DrawMode draw_mode,
-                                LayerTreeResourceProvider* resource_provider) {
+bool TextureLayerImpl::WillDraw(
+    DrawMode draw_mode,
+    viz::ClientResourceProvider* resource_provider) {
   if (draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE)
     return false;
   // These imply some synchronization problem where the compositor is in gpu
@@ -80,6 +88,9 @@ bool TextureLayerImpl::WillDraw(DrawMode draw_mode,
     return false;
   }
 
+  if (!LayerImpl::WillDraw(draw_mode, resource_provider))
+    return false;
+
   if (own_resource_) {
     DCHECK(!resource_id_);
     if (!transferable_resource_.mailbox_holder.mailbox.IsZero()) {
@@ -90,12 +101,31 @@ bool TextureLayerImpl::WillDraw(DrawMode draw_mode,
     own_resource_ = false;
   }
 
-  return resource_id_ && LayerImpl::WillDraw(draw_mode, resource_provider);
+  return resource_id_;
 }
 
 void TextureLayerImpl::AppendQuads(viz::RenderPass* render_pass,
                                    AppendQuadsData* append_quads_data) {
   DCHECK(resource_id_);
+
+  LayerTreeFrameSink* sink = layer_tree_impl()->layer_tree_frame_sink();
+  for (const auto& pair : to_register_bitmaps_) {
+    // Because we may want to notify a display compositor about this
+    // base::SharedMemory more than one time, we need to be able to keep
+    // making handles to share with it, so we can't close the
+    // base::SharedMemory.
+    mojo::ScopedSharedBufferHandle handle =
+        viz::bitmap_allocation::DuplicateWithoutClosingMappedBitmap(
+            pair.second->shared_memory(), pair.second->size(),
+            pair.second->format());
+    sink->DidAllocateSharedBitmap(std::move(handle), pair.first);
+  }
+  // All |to_register_bitmaps_| have been registered above, so we can move them
+  // all to the |registered_bitmaps_|.
+  registered_bitmaps_.insert(
+      std::make_move_iterator(to_register_bitmaps_.begin()),
+      std::make_move_iterator(to_register_bitmaps_.end()));
+  to_register_bitmaps_.clear();
 
   SkColor bg_color =
       blend_background_color_ ? background_color() : SK_ColorTRANSPARENT;
@@ -140,9 +170,31 @@ SimpleEnclosedRegion TextureLayerImpl::VisibleOpaqueRegion() const {
   return SimpleEnclosedRegion();
 }
 
+void TextureLayerImpl::OnPurgeMemory() {
+  // Do nothing here intentionally as the LayerTreeFrameSink isn't lost.
+  // Unregistering SharedBitmapIds with the LayerTreeFrameSink wouldn't free
+  // the shared memory, as the TextureLayer and/or TextureLayerClient will still
+  // have a reference to it.
+}
+
 void TextureLayerImpl::ReleaseResources() {
-  FreeTransferableResource();
-  resource_id_ = 0;
+  // Gpu resources are lost when the LayerTreeFrameSink is lost. But software
+  // resources are still valid, and we can keep them here in that case.
+  if (!transferable_resource_.is_software)
+    FreeTransferableResource();
+
+  // The LayerTreeFrameSink is gone and being replaced, so we will have to
+  // re-register all SharedBitmapIds on the new LayerTreeFrameSink. We don't
+  // need to do that until the SharedBitmapIds will be used, in AppendQuads(),
+  // but we mark them all as to be registered here.
+  to_register_bitmaps_.insert(
+      std::make_move_iterator(registered_bitmaps_.begin()),
+      std::make_move_iterator(registered_bitmaps_.end()));
+  registered_bitmaps_.clear();
+  // The |to_unregister_bitmap_ids_| are kept since the active layer will re-
+  // register its SharedBitmapIds with a new LayerTreeFrameSink in the future,
+  // so we must remember that we want to unregister it (or avoid registering at
+  // all) instead.
 }
 
 void TextureLayerImpl::SetPremultipliedAlpha(bool premultiplied_alpha) {
@@ -186,6 +238,50 @@ void TextureLayerImpl::SetVertexOpacity(const float vertex_opacity[4]) {
   SetNeedsPushProperties();
 }
 
+void TextureLayerImpl::SetTransferableResource(
+    const viz::TransferableResource& resource,
+    std::unique_ptr<viz::SingleReleaseCallback> release_callback) {
+  DCHECK_EQ(resource.mailbox_holder.mailbox.IsZero(), !release_callback);
+  FreeTransferableResource();
+  transferable_resource_ = resource;
+  release_callback_ = std::move(release_callback);
+  own_resource_ = true;
+  SetNeedsPushProperties();
+}
+
+void TextureLayerImpl::RegisterSharedBitmapId(
+    viz::SharedBitmapId id,
+    scoped_refptr<CrossThreadSharedBitmap> bitmap) {
+  // If a TextureLayer leaves and rejoins a tree without the TextureLayerImpl
+  // being destroyed, then it will re-request registration of ids that are still
+  // registered on the impl side, so we can just ignore these requests.
+  if (registered_bitmaps_.find(id) == registered_bitmaps_.end()) {
+    // If this is a pending layer, these will be moved to the active layer when
+    // we PushPropertiesTo(). Otherwise, we don't need to notify these to the
+    // LayerTreeFrameSink until we're going to use them, so defer it until
+    // AppendQuads().
+    to_register_bitmaps_[id] = std::move(bitmap);
+  }
+  base::Erase(to_unregister_bitmap_ids_, id);
+  SetNeedsPushProperties();
+}
+
+void TextureLayerImpl::UnregisterSharedBitmapId(viz::SharedBitmapId id) {
+  if (IsActive()) {
+    LayerTreeFrameSink* sink = layer_tree_impl()->layer_tree_frame_sink();
+    if (sink && registered_bitmaps_.find(id) != registered_bitmaps_.end())
+      sink->DidDeleteSharedBitmap(id);
+    to_register_bitmaps_.erase(id);
+    registered_bitmaps_.erase(id);
+  } else {
+    // The active layer will unregister. We do this because it may be using the
+    // SharedBitmapId, so we should remove the SharedBitmapId only after we've
+    // had a chance to replace it with activation.
+    to_unregister_bitmap_ids_.push_back(id);
+    SetNeedsPushProperties();
+  }
+}
+
 const char* TextureLayerImpl::LayerTypeAsString() const {
   return "cc::TextureLayerImpl";
 }
@@ -194,8 +290,10 @@ void TextureLayerImpl::FreeTransferableResource() {
   if (own_resource_) {
     DCHECK(!resource_id_);
     if (release_callback_) {
-      // We didn't use the resource, so don't need to return a SyncToken.
-      release_callback_->Run(gpu::SyncToken(), false);
+      // We didn't use the resource, but the client might need the SyncToken
+      // before it can use the resource with its own GL context.
+      release_callback_->Run(transferable_resource_.mailbox_holder.sync_token,
+                             false);
     }
     transferable_resource_ = viz::TransferableResource();
     release_callback_ = nullptr;

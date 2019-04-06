@@ -10,7 +10,6 @@
 #include "base/hash.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
@@ -40,15 +39,15 @@ class PpdCacheTest : public ::testing::Test {
   // a (nonexistant) subdirectory of temp_dir_ to the cache to exercise
   // the lazy-creation-of-the-cache-directory code.
   scoped_refptr<PpdCache> CreateTestCache() {
-    return PpdCache::Create(ppd_cache_temp_dir_.GetPath().Append("Cache"));
+    return PpdCache::CreateForTesting(
+        ppd_cache_temp_dir_.GetPath().Append("Cache"),
+        scoped_task_environment_.GetMainThreadTaskRunner());
   }
 
   void CaptureFindResult(const PpdCache::FindResult& result) {
     ++captured_find_results_;
     find_result_ = result;
   }
-
-  void CaptureStoreResult() { ++captured_store_results_; }
 
  protected:
   // Environment for task schedulers.
@@ -60,9 +59,6 @@ class PpdCacheTest : public ::testing::Test {
   // Most recent captured result.
   PpdCache::FindResult find_result_;
 
-  // Number of store callbacks we've seen.
-  int captured_store_results_ = 0;
-
   // Overrider for DIR_CHROMEOS_PPD_CACHE that points it at a temporary
   // directory for the life of the test.
   base::ScopedTempDir ppd_cache_temp_dir_;
@@ -72,8 +68,8 @@ class PpdCacheTest : public ::testing::Test {
 // Test that we miss on an empty cache.
 TEST_F(PpdCacheTest, SimpleMiss) {
   auto cache = CreateTestCache();
-  cache->Find("foo", base::Bind(&PpdCacheTest::CaptureFindResult,
-                                base::Unretained(this)));
+  cache->Find("foo", base::BindOnce(&PpdCacheTest::CaptureFindResult,
+                                    base::Unretained(this)));
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(captured_find_results_, 1);
   EXPECT_FALSE(find_result_.success);
@@ -85,31 +81,45 @@ TEST_F(PpdCacheTest, MissThenHit) {
   const char kTestKey2[] = "A different key";
   const char kTestContents[] = "Like, totally awesome contents";
 
-  cache->Find(kTestKey, base::Bind(&PpdCacheTest::CaptureFindResult,
-                                   base::Unretained(this)));
+  cache->Find(kTestKey, base::BindOnce(&PpdCacheTest::CaptureFindResult,
+                                       base::Unretained(this)));
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(captured_find_results_, 1);
   EXPECT_FALSE(find_result_.success);
 
-  cache->Store(
-      kTestKey, kTestContents,
-      base::Bind(&PpdCacheTest::CaptureStoreResult, base::Unretained(this)));
-  scoped_task_environment_.RunUntilIdle();
-  EXPECT_EQ(captured_store_results_, 1);
+  cache->Store(kTestKey, kTestContents);
 
-  cache->Find(kTestKey, base::Bind(&PpdCacheTest::CaptureFindResult,
-                                   base::Unretained(this)));
+  scoped_task_environment_.RunUntilIdle();
+
+  cache->Find(kTestKey, base::BindOnce(&PpdCacheTest::CaptureFindResult,
+                                       base::Unretained(this)));
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(captured_find_results_, 2);
   EXPECT_TRUE(find_result_.success);
   EXPECT_EQ(find_result_.contents, kTestContents);
   EXPECT_LT(find_result_.age, base::TimeDelta::FromMinutes(5));
 
-  cache->Find(kTestKey2, base::Bind(&PpdCacheTest::CaptureFindResult,
-                                    base::Unretained(this)));
+  cache->Find(kTestKey2, base::BindOnce(&PpdCacheTest::CaptureFindResult,
+                                        base::Unretained(this)));
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(captured_find_results_, 3);
   EXPECT_FALSE(find_result_.success);
+}
+
+// Test that we fill in the age field with something plausible.
+TEST_F(PpdCacheTest, HitAge) {
+  auto cache = CreateTestCache();
+  const char kTestKey[] = "My totally awesome key";
+  const char kTestContents[] = "Like, totally awesome contents";
+  cache->Store(kTestKey, kTestContents);
+  scoped_task_environment_.RunUntilIdle();
+
+  cache->Find(kTestKey, base::BindOnce(&PpdCacheTest::CaptureFindResult,
+                                       base::Unretained(this)));
+  scoped_task_environment_.RunUntilIdle();
+  EXPECT_EQ(captured_find_results_, 1);
+  // The age should be well under a second, but accept anything under an hour.
+  EXPECT_LT(find_result_.age, TimeDelta::FromHours(1));
 }
 
 }  // namespace

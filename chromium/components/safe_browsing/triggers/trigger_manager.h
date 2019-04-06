@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "components/safe_browsing/browser/referrer_chain_provider.h"
 #include "components/safe_browsing/triggers/trigger_throttler.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
@@ -22,8 +23,8 @@ namespace history {
 class HistoryService;
 }
 
-namespace net {
-class URLRequestContextGetter;
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace safe_browsing {
@@ -56,6 +57,25 @@ using DataCollectorsMap =
 using SBErrorOptions =
     security_interstitials::BaseSafeBrowsingErrorUI::SBErrorDisplayOptions;
 
+// The reasons that trigger manager fails to create or finish a report.
+// These values are written to logs. New enum values can be added, but
+// existing enums must never be renumbered or deleted and reused.
+enum class TriggerManagerReason {
+  // Default value, used when there is no failure.
+  NO_REASON = 0,
+  // User preferences do not allow the report to be started or finished.
+  USER_PREFERENCES = 1,
+  // A report is already started on this tab, so no new report is started.
+  REPORT_ALREADY_STARTED = 2,
+  // There is no report to finish on this tab.
+  NO_REPORT_TO_FINISH = 3,
+  // No report is started because the user has exceeded their daily quota.
+  DAILY_QUOTA_EXCEEDED = 4,
+  // New reasons must be added before kMaxValue and the value of kMaxValue
+  // updated.
+  kMaxValue = DAILY_QUOTA_EXCEEDED
+};
+
 // This class manages SafeBrowsing data-reporting triggers. Triggers are
 // activated for users opted-in to Extended Reporting and when security-related
 // data collection is required.
@@ -65,7 +85,9 @@ using SBErrorOptions =
 // tracking how often triggers fire and throttling them when necessary.
 class TriggerManager {
  public:
-  TriggerManager(BaseUIManager* ui_manager);
+  TriggerManager(BaseUIManager* ui_manager,
+                 ReferrerChainProvider* referrer_chain_provider,
+                 PrefService* local_state_prefs);
   virtual ~TriggerManager();
 
   // Returns a SBErrorDisplayOptions struct containing user state that is
@@ -78,22 +100,43 @@ class TriggerManager {
 
   // Returns whether data collection can be started for the |trigger_type| based
   // on the settings specified in |error_display_options| as well as quota.
+  // If false is returned, |out_reason| will be specify the reason.
+  bool CanStartDataCollectionWithReason(
+      const SBErrorOptions& error_display_options,
+      const TriggerType trigger_type,
+      TriggerManagerReason* out_reason);
+
+  // Simplified signature for |CanStartDataCollectionWithReason| for callers
+  // that don't care about the reason.
   bool CanStartDataCollection(const SBErrorOptions& error_display_options,
                               const TriggerType trigger_type);
 
   // Begins collecting a ThreatDetails report on the specified |web_contents|.
   // |resource| is the unsafe resource that cause the collection to occur.
-  // |request_context_getter| is used to retrieve data from the HTTP cache.
+  // |url_loader_factory| is used to retrieve data from the HTTP cache.
   // |history_service| is used to get data about redirects.
   // |error_display_options| contains the current state of relevant user
   // preferences. We use this object for interop with WebView, in Chrome it
   // should be created by TriggerManager::GetSBErrorDisplayOptions().
   // Returns true if the collection began, or false if it didn't.
+  // If false is returned, |out_reason| is set to the reason the report didn't
+  // start.
+  virtual bool StartCollectingThreatDetailsWithReason(
+      TriggerType trigger_type,
+      content::WebContents* web_contents,
+      const security_interstitials::UnsafeResource& resource,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      history::HistoryService* history_service,
+      const SBErrorOptions& error_display_options,
+      TriggerManagerReason* out_reason);
+
+  // Simplified signature for |StartCollectingThreatDetailsWithReason| for
+  // callers that don't care about the reason.
   virtual bool StartCollectingThreatDetails(
       TriggerType trigger_type,
       content::WebContents* web_contents,
       const security_interstitials::UnsafeResource& resource,
-      net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       history::HistoryService* history_service,
       const SBErrorOptions& error_display_options);
 
@@ -132,6 +175,10 @@ class TriggerManager {
   // The UI manager is used to send reports to Google. Not owned.
   // TODO(lpz): we may only need a the PingManager here.
   BaseUIManager* ui_manager_;
+
+  // The Referrer Chain Provider is used to retrieve the referrer chain for
+  // reports that require it. Not owned.
+  ReferrerChainProvider* referrer_chain_provider_;
 
   // Map of the data collectors running on each tabs. New keys are added the
   // first time any trigger tries to collect data on a tab and are removed when

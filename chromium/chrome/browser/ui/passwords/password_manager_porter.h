@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_UI_PASSWORDS_PASSWORD_MANAGER_PORTER_H_
 
 #include <memory>
+#include <string>
 
 #include "components/password_manager/core/browser/import/password_importer.h"
 #include "components/password_manager/core/browser/ui/export_flow.h"
+#include "components/password_manager/core/browser/ui/export_progress_status.h"
 #include "components/password_manager/core/browser/ui/import_flow.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
@@ -29,14 +31,16 @@ class PasswordManagerPorter : public ui::SelectFileDialog::Listener,
                               public password_manager::ExportFlow,
                               public password_manager::ImportFlow {
  public:
-  // This constructor injects PasswordManagerPorter's dependencies directly to
-  // facilitate testing. Primary constructor.
-  explicit PasswordManagerPorter(
-      std::unique_ptr<password_manager::PasswordManagerExporter> exporter);
+  using ProgressCallback =
+      base::RepeatingCallback<void(password_manager::ExportProgressStatus,
+                                   const std::string&)>;
 
-  explicit PasswordManagerPorter(password_manager::CredentialProviderInterface*
-                                     credential_provider_interface);
-
+  // |credential_provider_interface| provides the credentials which can be
+  // exported. |on_export_progress_callback| will be called with updates to
+  // the progress of exporting.
+  PasswordManagerPorter(password_manager::CredentialProviderInterface*
+                            credential_provider_interface,
+                        ProgressCallback on_export_progress_callback);
   ~PasswordManagerPorter() override;
 
   void set_web_contents(content::WebContents* web_contents) {
@@ -44,7 +48,13 @@ class PasswordManagerPorter : public ui::SelectFileDialog::Listener,
   }
 
   // password_manager::ExportFlow
-  void Store() override;
+  bool Store() override;
+  void CancelStore() override;
+  password_manager::ExportProgressStatus GetExportProgressStatus() override;
+
+  // The next export will use |exporter|, instead of creating a new instance.
+  void SetExporterForTesting(
+      std::unique_ptr<password_manager::PasswordManagerExporter> exporter);
 
   // password_manager::ImportFlow
   void Load() override;
@@ -65,6 +75,7 @@ class PasswordManagerPorter : public ui::SelectFileDialog::Listener,
   void FileSelected(const base::FilePath& path,
                     int index,
                     void* params) override;
+  void FileSelectionCanceled(void* params) override;
 
   virtual void ImportPasswordsFromPath(const base::FilePath& path);
 
@@ -73,6 +84,16 @@ class PasswordManagerPorter : public ui::SelectFileDialog::Listener,
   std::unique_ptr<password_manager::PasswordManagerExporter> exporter_;
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
   Profile* profile_ = nullptr;
+
+  // We store |credential_provider_interface_| and
+  // |on_export_progress_callback_| to use them to create a new
+  // PasswordManagerExporter instance for each export.
+  password_manager::CredentialProviderInterface* credential_provider_interface_;
+  ProgressCallback on_export_progress_callback_;
+  // If |exporter_for_testing_| is set, the next export will make it the current
+  // exporter, instead of creating a new instance.
+  std::unique_ptr<password_manager::PasswordManagerExporter>
+      exporter_for_testing_;
 
   // Caching the current WebContents for when PresentFileSelector is called.
   content::WebContents* web_contents_ = nullptr;

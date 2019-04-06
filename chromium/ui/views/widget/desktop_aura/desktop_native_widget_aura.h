@@ -51,6 +51,8 @@ class FocusManagerEventHandler;
 class TooltipManagerAura;
 class WindowReorderer;
 
+// DesktopNativeWidgetAura handles top-level widgets on Windows, Linux, and
+// Chrome OS with mash.
 class VIEWS_EXPORT DesktopNativeWidgetAura
     : public internal::NativeWidgetPrivate,
       public aura::WindowDelegate,
@@ -135,6 +137,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   gfx::Rect GetRestoredBounds() const override;
   std::string GetWorkspace() const override;
   void SetBounds(const gfx::Rect& bounds) override;
+  void SetBoundsConstrained(const gfx::Rect& bounds) override;
   void SetSize(const gfx::Size& size) override;
   void StackAbove(gfx::NativeView native_view) override;
   void StackAtTop() override;
@@ -161,6 +164,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void SetFullscreen(bool fullscreen) override;
   bool IsFullscreen() const override;
   void SetOpacity(float opacity) override;
+  void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
   void FlashFrame(bool flash_frame) override;
   void RunShellDrag(View* view,
                     const ui::OSExchangeData& data,

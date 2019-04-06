@@ -27,8 +27,7 @@
 
 namespace importer {
 
-scoped_refptr<Importer> CreateImporterByType(ImporterType type,
-       const ImportConfig &import_config) {
+scoped_refptr<Importer> CreateImporterByType(ImporterType type) {
   switch (type) {
 #if defined(OS_WIN)
     case TYPE_IE:
@@ -48,9 +47,9 @@ scoped_refptr<Importer> CreateImporterByType(ImporterType type,
       return new SafariImporter(base::mac::GetUserLibraryPath());
 #endif
     case TYPE_OPERA:
-      return new OperaImporter(import_config);
+      return new OperaImporter();
     case TYPE_OPERA_BOOKMARK_FILE:
-      return new OperaImporter(import_config);
+      return new OperaImporter();
     case TYPE_CHROME:
     case TYPE_CHROMIUM:
     case TYPE_YANDEX:
@@ -58,7 +57,7 @@ scoped_refptr<Importer> CreateImporterByType(ImporterType type,
     case TYPE_OPERA_OPIUM_BETA:
     case TYPE_OPERA_OPIUM_DEV:
     case TYPE_VIVALDI:
-      return new ChromiumImporter(import_config);
+      return new ChromiumImporter();
     default:
       NOTREACHED();
       return nullptr;

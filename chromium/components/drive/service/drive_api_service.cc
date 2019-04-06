@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -21,6 +23,7 @@
 #include "google_apis/drive/request_sender.h"
 #include "google_apis/google_api_keys.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 using google_apis::AboutResourceCallback;
 using google_apis::AppList;
@@ -48,6 +51,7 @@ using google_apis::HTTP_SUCCESS;
 using google_apis::InitiateUploadCallback;
 using google_apis::ProgressCallback;
 using google_apis::RequestSender;
+using google_apis::StartPageTokenCallback;
 using google_apis::TeamDriveListCallback;
 using google_apis::UploadRangeResponse;
 using google_apis::drive::AboutGetRequest;
@@ -69,6 +73,7 @@ using google_apis::drive::GetUploadStatusRequest;
 using google_apis::drive::InitiateUploadExistingFileRequest;
 using google_apis::drive::InitiateUploadNewFileRequest;
 using google_apis::drive::ResumeUploadRequest;
+using google_apis::drive::StartPageTokenRequest;
 using google_apis::drive::TeamDriveListRequest;
 using google_apis::drive::UploadRangeCallback;
 
@@ -121,17 +126,18 @@ const char kFileListFields[] =
     "imageMediaMetadata/width,"
     "imageMediaMetadata/height,imageMediaMetadata/rotation,etag,"
     "parents(id,parentLink),alternateLink,"
-    "modifiedDate,lastViewedByMeDate,shared,modifiedByMeDate),nextLink";
+    "modifiedDate,lastViewedByMeDate,shared,modifiedByMeDate,capabilities),"
+    "nextLink";
 const char kChangeListFields[] =
     "kind,items(type,file(kind,id,title,createdDate,sharedWithMeDate,"
     "mimeType,md5Checksum,fileSize,labels/trashed,labels/starred,"
     "imageMediaMetadata/width,"
     "imageMediaMetadata/height,imageMediaMetadata/rotation,etag,"
     "parents(id,parentLink),alternateLink,modifiedDate,"
-    "lastViewedByMeDate,shared,modifiedByMeDate),"
+    "lastViewedByMeDate,shared,modifiedByMeDate,capabilities),"
     "teamDrive(kind,id,name,capabilities),teamDriveId,"
     "deleted,id,fileId,modificationDate),nextLink,"
-    "largestChangeId";
+    "largestChangeId,newStartPageToken";
 const char kTeamDrivesListFields[] =
     "nextPageToken,kind,items(kind,id,name,capabilities)";
 
@@ -262,6 +268,7 @@ void BatchRequestConfigurator::Commit() {
 DriveAPIService::DriveAPIService(
     OAuth2TokenService* oauth2_token_service,
     net::URLRequestContextGetter* url_request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     base::SequencedTaskRunner* blocking_task_runner,
     const GURL& base_url,
     const GURL& base_thumbnail_url,
@@ -269,6 +276,7 @@ DriveAPIService::DriveAPIService(
     const net::NetworkTrafficAnnotationTag& traffic_annotation)
     : oauth2_token_service_(oauth2_token_service),
       url_request_context_getter_(url_request_context_getter),
+      url_loader_factory_(url_loader_factory),
       blocking_task_runner_(blocking_task_runner),
       url_generator_(base_url,
                      base_thumbnail_url,
@@ -278,7 +286,7 @@ DriveAPIService::DriveAPIService(
 
 DriveAPIService::~DriveAPIService() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (sender_.get())
+  if (sender_)
     sender_->auth_service()->RemoveObserver(this);
 }
 
@@ -295,15 +303,15 @@ void DriveAPIService::Initialize(const std::string& account_id) {
   // to GData WAPI for the GetShareUrl.
   scopes.push_back(kDocsListScope);
 
-  sender_.reset(new RequestSender(
+  sender_ = std::make_unique<RequestSender>(
       new google_apis::AuthService(oauth2_token_service_, account_id,
-                                   url_request_context_getter_.get(), scopes),
+                                   url_loader_factory_, scopes),
       url_request_context_getter_.get(), blocking_task_runner_.get(),
-      custom_user_agent_, traffic_annotation_));
+      custom_user_agent_, traffic_annotation_);
   sender_->auth_service()->AddObserver(this);
 
-  files_list_request_runner_.reset(
-      new FilesListRequestRunner(sender_.get(), url_generator_));
+  files_list_request_runner_ =
+      std::make_unique<FilesListRequestRunner>(sender_.get(), url_generator_);
 }
 
 void DriveAPIService::AddObserver(DriveServiceObserver* observer) {
@@ -338,6 +346,7 @@ CancelCallback DriveAPIService::GetAllTeamDriveList(
 }
 
 CancelCallback DriveAPIService::GetAllFileList(
+    const std::string& team_drive_id,
     const FileListCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!callback.is_null());
@@ -348,9 +357,11 @@ CancelCallback DriveAPIService::GetAllFileList(
   request->set_max_results(kMaxNumFilesResourcePerRequest);
   request->set_q("trashed = false");  // Exclude trashed files.
   request->set_fields(kFileListFields);
-  if (google_apis::GetTeamDrivesIntegrationSwitch() ==
-      google_apis::TEAM_DRIVES_INTEGRATION_ENABLED) {
-    request->set_corpora(google_apis::FilesListCorpora::ALL_TEAM_DRIVES);
+  if (team_drive_id.empty()) {
+    request->set_corpora(google_apis::FilesListCorpora::DEFAULT);
+  } else {
+    request->set_team_drive_id(team_drive_id);
+    request->set_corpora(google_apis::FilesListCorpora::TEAM_DRIVE);
   }
   return sender_->StartRequestWithAuthRetry(std::move(request));
 }
@@ -451,6 +462,23 @@ CancelCallback DriveAPIService::GetChangeList(
   return sender_->StartRequestWithAuthRetry(std::move(request));
 }
 
+CancelCallback DriveAPIService::GetChangeListByToken(
+    const std::string& team_drive_id,
+    const std::string& start_page_token,
+    const ChangeListCallback& callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!callback.is_null());
+
+  std::unique_ptr<ChangesListRequest> request =
+      std::make_unique<ChangesListRequest>(sender_.get(), url_generator_,
+                                           callback);
+  request->set_max_results(kMaxNumFilesResourcePerRequest);
+  request->set_page_token(start_page_token);
+  request->set_team_drive_id(team_drive_id);
+  request->set_fields(kChangeListFields);
+  return sender_->StartRequestWithAuthRetry(std::move(request));
+}
+
 CancelCallback DriveAPIService::GetRemainingChangeList(
     const GURL& next_link,
     const ChangeListCallback& callback) {
@@ -476,6 +504,7 @@ CancelCallback DriveAPIService::GetRemainingTeamDriveList(
       std::make_unique<TeamDriveListRequest>(sender_.get(), url_generator_,
                                              callback);
   request->set_page_token(page_token);
+  request->set_max_results(kMaxNumTeamDriveResourcePerRequest);
   request->set_fields(kTeamDrivesListFields);
   return sender_->StartRequestWithAuthRetry(std::move(request));
 }
@@ -537,6 +566,19 @@ CancelCallback DriveAPIService::GetAboutResource(
   std::unique_ptr<AboutGetRequest> request = std::make_unique<AboutGetRequest>(
       sender_.get(), url_generator_, callback);
   request->set_fields(kAboutResourceFields);
+  return sender_->StartRequestWithAuthRetry(std::move(request));
+}
+
+CancelCallback DriveAPIService::GetStartPageToken(
+    const std::string& team_drive_id,
+    const StartPageTokenCallback& callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!callback.is_null());
+
+  std::unique_ptr<StartPageTokenRequest> request =
+      std::make_unique<StartPageTokenRequest>(sender_.get(), url_generator_,
+                                              callback);
+  request->set_team_drive_id(team_drive_id);
   return sender_->StartRequestWithAuthRetry(std::move(request));
 }
 

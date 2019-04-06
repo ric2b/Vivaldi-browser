@@ -22,6 +22,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
 import android.provider.BaseColumns;
+import android.support.annotation.IntDef;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.LongSparseArray;
@@ -32,13 +33,16 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.database.SQLiteCursor;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
-import org.chromium.content.browser.BrowserStartupController;
+import org.chromium.content_public.browser.BrowserStartupController;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -164,6 +168,10 @@ public class ChromeBrowserProvider extends ContentProvider {
         BookmarkColumns.BOOKMARK
     };
 
+    // These must be kept in sync with internal histograms.xml
+    private static final String READ_HISTORY_BOOKMARKS_PERMISSION = "READ_HISTORY_BOOKMARKS";
+    private static final String WRITE_HISTORY_BOOKMARKS_PERMISSION = "WRITE_HISTORY_BOOKMARKS";
+
     private final Object mInitializeUriMatcherLock = new Object();
     private final Object mLoadNativeLock = new Object();
     private UriMatcher mUriMatcher;
@@ -246,13 +254,11 @@ public class ChromeBrowserProvider extends ContentProvider {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ((ChromeApplication) getContext().getApplicationContext()).initCommandLine();
-
                 BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                         .addStartupCompletedObserver(
                                 new BrowserStartupController.StartupCallback() {
                                     @Override
-                                    public void onSuccess(boolean alreadyStarted) {
+                                    public void onSuccess() {
                                         ensureNativeSideInitialized();
                                     }
 
@@ -654,25 +660,29 @@ public class ChromeBrowserProvider extends ContentProvider {
      * @return Whether the caller has read access to history and bookmarks information.
      */
     private boolean hasReadAccess() {
-        return hasPermission("com.android.browser.permission.READ_HISTORY_BOOKMARKS");
+        return hasPermission(READ_HISTORY_BOOKMARKS_PERMISSION);
     }
 
     /**
      * @return Whether the caller has write access to history and bookmarks information.
      */
     private boolean hasWriteAccess() {
-        return hasPermission("com.android.browser.permission.WRITE_HISTORY_BOOKMARKS");
+        return hasPermission(WRITE_HISTORY_BOOKMARKS_PERMISSION);
     }
 
     /**
      * The type of a BookmarkNode.
      */
-    public enum Type {
-        URL,
-        FOLDER,
-        BOOKMARK_BAR,
-        OTHER_NODE,
-        MOBILE
+    @IntDef({Type.URL, Type.FOLDER, Type.BOOKMARK_BAR, Type.OTHER_NODE, Type.MOBILE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Type {
+        // Values should be numerated from 0 and can't have gaps.
+        int URL = 0;
+        int FOLDER = 1;
+        int BOOKMARK_BAR = 2;
+        int OTHER_NODE = 3;
+        int MOBILE = 4;
+        int NUM_ENTRIES = 5;
     }
 
     /**
@@ -682,7 +692,7 @@ public class ChromeBrowserProvider extends ContentProvider {
         private final long mId;
         private final String mName;
         private final String mUrl;
-        private final Type mType;
+        private final @Type int mType;
         private final BookmarkNode mParent;
         private final List<BookmarkNode> mChildren = new ArrayList<BookmarkNode>();
 
@@ -692,7 +702,7 @@ public class ChromeBrowserProvider extends ContentProvider {
 
         /** Used to pass structured data back from the native code. */
         @VisibleForTesting
-        public BookmarkNode(long id, Type type, String name, String url, BookmarkNode parent) {
+        public BookmarkNode(long id, @Type int type, String name, String url, BookmarkNode parent) {
             mId = id;
             mName = name;
             mUrl = url;
@@ -724,7 +734,7 @@ public class ChromeBrowserProvider extends ContentProvider {
         /**
          * @return The type of this bookmark entry.
          */
-        public Type type() {
+        public @Type int type() {
             return mType;
         }
 
@@ -844,7 +854,7 @@ public class ChromeBrowserProvider extends ContentProvider {
             dest.writeLong(mId);
             dest.writeString(mName);
             dest.writeString(mUrl);
-            dest.writeInt(mType.ordinal());
+            dest.writeInt(mType);
             dest.writeByteArray(mFavicon);
             dest.writeByteArray(mThumbnail);
             dest.writeLong(mParent != null ? mParent.mId : INVALID_BOOKMARK_ID);
@@ -886,13 +896,12 @@ public class ChromeBrowserProvider extends ContentProvider {
                 byte[] favicon = source.createByteArray();
                 byte[] thumbnail = source.createByteArray();
                 long parentId = source.readLong();
-                if (type < 0 || type >= Type.values().length) {
+                if (type < 0 || type >= Type.NUM_ENTRIES) {
                     Log.w(TAG, "Invalid node type ordinal value.");
                     return null;
                 }
 
-                BookmarkNode node = new BookmarkNode(id, Type.values()[type], name, url,
-                        getNode(parentId));
+                BookmarkNode node = new BookmarkNode(id, type, name, url, getNode(parentId));
                 node.setFavicon(favicon);
                 node.setThumbnail(thumbnail);
                 return node;
@@ -1194,16 +1203,40 @@ public class ChromeBrowserProvider extends ContentProvider {
         boolean isSystemOrGoogleCaller = ExternalAuthUtils.getInstance().isCallerValid(
                 getContext(), ExternalAuthUtils.FLAG_SHOULD_BE_GOOGLE_SIGNED
                         | ExternalAuthUtils.FLAG_SHOULD_BE_SYSTEM);
-        if (isSystemOrGoogleCaller) return true;
 
+        if (isSystemOrGoogleCaller) {
+            recordPermissionWasGranted("SignaturePassed", permission);
+            return true;
+        }
+
+        boolean hasPermission = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            return getContext().checkCallingOrSelfPermission(
-                    getReadWritePermissionNameForBookmarkFolders())
+            hasPermission = getContext().checkCallingOrSelfPermission(
+                                    getReadWritePermissionNameForBookmarkFolders())
                     == PackageManager.PERMISSION_GRANTED;
         } else {
-            return getContext().checkCallingOrSelfPermission(permission)
+            final String fullyQualifiedPermission = "com.android.browser.permission." + permission;
+            hasPermission = getContext().checkCallingOrSelfPermission(fullyQualifiedPermission)
                     == PackageManager.PERMISSION_GRANTED;
         }
+
+        if (hasPermission) {
+            recordPermissionWasGranted("CallerHasPermission", permission);
+        }
+        return hasPermission;
+    }
+
+    private void recordPermissionWasGranted(String permissionCheckType, String permission) {
+        int callingUid = Binder.getCallingUid();
+        PackageManager pm = getContext().getPackageManager();
+        String[] packages = pm.getPackagesForUid(callingUid);
+        if (packages.length == 0) return;
+
+        @IntentHandler.ExternalAppId
+        int externalId = IntentHandler.mapPackageToExternalAppId(packages[0]);
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.ChromeBrowserProvider." + permissionCheckType + "." + permission,
+                externalId, IntentHandler.ExternalAppId.NUM_ENTRIES);
     }
 
     private native long nativeInit();

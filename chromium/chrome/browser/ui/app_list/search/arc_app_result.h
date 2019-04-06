@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "chrome/browser/ui/app_icon_loader_delegate.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/search/app_result.h"
 
 class AppListControllerDelegate;
@@ -28,10 +29,9 @@ class ArcAppResult : public AppResult,
                bool is_recommendation);
   ~ArcAppResult() override;
 
-  // SearchResult overrides:
+  // ChromeSearchResult overrides:
   void Open(int event_flags) override;
-  std::unique_ptr<SearchResult> Duplicate() const override;
-  ui::MenuModel* GetContextMenuModel() override;
+  void GetContextMenuModel(GetMenuModelCallback callback) override;
 
   // AppContextMenuDelegate overrides:
   void ExecuteLaunchCommand(int event_flags) override;
@@ -41,6 +41,13 @@ class ArcAppResult : public AppResult,
                          const gfx::ImageSkia& image) override;
 
  private:
+  // ChromeSearchResult overrides:
+  AppContextMenu* GetAppContextMenu() override;
+
+  void Launch(int event_flags, arc::UserInteractionType interaction);
+  arc::UserInteractionType GetAppLaunchInteraction();
+  arc::UserInteractionType GetContextMenuAppLaunchInteraction();
+
   std::unique_ptr<ArcAppIconLoader> icon_loader_;
   std::unique_ptr<ArcAppContextMenu> context_menu_;
 

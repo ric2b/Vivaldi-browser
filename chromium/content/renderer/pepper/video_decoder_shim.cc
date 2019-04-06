@@ -31,7 +31,7 @@
 #include "media/base/video_decoder.h"
 #include "media/filters/ffmpeg_video_decoder.h"
 #include "media/filters/vpx_video_decoder.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/pp_errors.h"
@@ -39,11 +39,6 @@
 #include "third_party/skia/include/gpu/GrTypes.h"
 
 namespace content {
-
-static const uint32_t kGrInvalidateState =
-    kRenderTarget_GrGLBackendState | kTextureBinding_GrGLBackendState |
-    kView_GrGLBackendState | kVertex_GrGLBackendState |
-    kProgram_GrGLBackendState | kPixelStore_GrGLBackendState;
 
 namespace {
 
@@ -355,8 +350,6 @@ bool VideoDecoderShim::YUVConverter::Initialize() {
 
   gl_->TraceEndCHROMIUM();
 
-  context_provider_->InvalidateGrContext(kGrInvalidateState);
-
   return (program_ != 0);
 }
 
@@ -372,13 +365,13 @@ void VideoDecoderShim::YUVConverter::Convert(
     // numbers that are used in the transformation from YUV to RGB color values.
     // They are taken from the following webpage:
     // http://www.fourcc.org/fccyvrgb.php
-    const float yuv_to_rgb_rec601[9] = {
+    static const float yuv_to_rgb_rec601[9] = {
         1.164f, 1.164f, 1.164f, 0.0f, -.391f, 2.018f, 1.596f, -.813f, 0.0f,
     };
-    const float yuv_to_rgb_jpeg[9] = {
+    static const float yuv_to_rgb_jpeg[9] = {
         1.f, 1.f, 1.f, 0.0f, -.34414f, 1.772f, 1.402f, -.71414f, 0.0f,
     };
-    const float yuv_to_rgb_rec709[9] = {
+    static const float yuv_to_rgb_rec709[9] = {
         1.164f, 1.164f, 1.164f, 0.0f, -0.213f, 2.112f, 1.793f, -0.533f, 0.0f,
     };
 
@@ -388,11 +381,11 @@ void VideoDecoderShim::YUVConverter::Convert(
     //   Y - 16   : Gives 16 values of head and footroom for overshooting
     //   U - 128  : Turns unsigned U into signed U [-128,127]
     //   V - 128  : Turns unsigned V into signed V [-128,127]
-    const float yuv_adjust_constrained[3] = {
+    static const float yuv_adjust_constrained[3] = {
         -0.0625f, -0.5f, -0.5f,
     };
     // Same as above, but without the head and footroom.
-    const float yuv_adjust_full[3] = {
+    static const float yuv_adjust_full[3] = {
         0.0f, -0.5f, -0.5f,
     };
 
@@ -587,8 +580,6 @@ void VideoDecoderShim::YUVConverter::Convert(
   gl_->PixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
   gl_->TraceEndCHROMIUM();
-
-  context_provider_->InvalidateGrContext(kGrInvalidateState);
 }
 
 struct VideoDecoderShim::PendingDecode {
@@ -713,7 +704,8 @@ void VideoDecoderShim::DecoderImpl::Initialize(
       base::Bind(&VideoDecoderShim::DecoderImpl::OnInitDone,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&VideoDecoderShim::DecoderImpl::OnOutputComplete,
-                 weak_ptr_factory_.GetWeakPtr()));
+                 weak_ptr_factory_.GetWeakPtr()),
+      media::VideoDecoder::WaitingForDecryptionKeyCB());
 #else
   OnInitDone(false);
 #endif  // BUILDFLAG(ENABLE_LIBVPX) || BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
@@ -821,7 +813,7 @@ void VideoDecoderShim::DecoderImpl::OnOutputComplete(
 
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&VideoDecoderShim::OnOutputComplete, shim_,
-                                base::Passed(&pending_frame)));
+                                std::move(pending_frame)));
 }
 
 void VideoDecoderShim::DecoderImpl::OnResetComplete() {
@@ -937,20 +929,20 @@ void VideoDecoderShim::AssignPictureBuffers(
     NOTREACHED();
     return;
   }
-  DCHECK_EQ(buffers.size(), pending_texture_mailboxes_.size());
+  std::vector<gpu::Mailbox> mailboxes = host_->TakeMailboxes();
+  DCHECK_EQ(buffers.size(), mailboxes.size());
   GLuint num_textures = base::checked_cast<GLuint>(buffers.size());
   std::vector<uint32_t> local_texture_ids(num_textures);
   gpu::gles2::GLES2Interface* gles2 = context_provider_->ContextGL();
   for (uint32_t i = 0; i < num_textures; i++) {
     DCHECK_EQ(1u, buffers[i].client_texture_ids().size());
-    local_texture_ids[i] = gles2->CreateAndConsumeTextureCHROMIUM(
-        pending_texture_mailboxes_[i].name);
+    local_texture_ids[i] =
+        gles2->CreateAndConsumeTextureCHROMIUM(mailboxes[i].name);
     // Map the plugin texture id to the local texture id.
     uint32_t plugin_texture_id = buffers[i].client_texture_ids()[0];
     texture_id_map_[plugin_texture_id] = local_texture_ids[i];
     available_textures_.insert(plugin_texture_id);
   }
-  pending_texture_mailboxes_.clear();
   SendPictures();
 }
 
@@ -1034,13 +1026,9 @@ void VideoDecoderShim::OnOutputComplete(std::unique_ptr<PendingFrame> frame) {
       available_textures_.clear();
       FlushCommandBuffer();
 
-      DCHECK(pending_texture_mailboxes_.empty());
-      for (uint32_t i = 0; i < texture_pool_size_; i++)
-        pending_texture_mailboxes_.push_back(gpu::Mailbox::Generate());
-
-      host_->RequestTextures(texture_pool_size_,
-                             frame->video_frame->coded_size(), GL_TEXTURE_2D,
-                             pending_texture_mailboxes_);
+      host_->ProvidePictureBuffers(texture_pool_size_, media::PIXEL_FORMAT_ARGB,
+                                   1, frame->video_frame->coded_size(),
+                                   GL_TEXTURE_2D);
       texture_size_ = frame->video_frame->coded_size();
     }
 

@@ -27,11 +27,11 @@ class MockImageProvider : public ImageProvider {
 
     return ScopedDecodedDrawImage(
         DecodedDrawImage(image, SkSize::MakeEmpty(), SkSize::Make(1.0f, 1.0f),
-                         draw_image.filter_quality()),
+                         draw_image.filter_quality(), true),
         base::BindOnce(&MockImageProvider::UnrefImage, base::Unretained(this)));
   }
 
-  void UnrefImage(DecodedDrawImage decoded_image) {
+  void UnrefImage() {
     ref_count_--;
     CHECK_GE(ref_count_, 0);
   }
@@ -54,6 +54,7 @@ TEST(ScopedRasterFlagsTest, KeepsDecodesAlive) {
   auto record_shader = PaintShader::MakePaintRecord(
       record, SkRect::MakeWH(100, 100), SkShader::TileMode::kClamp_TileMode,
       SkShader::TileMode::kClamp_TileMode, &SkMatrix::I());
+  record_shader->set_has_animated_images(true);
 
   MockImageProvider provider;
   PaintFlags flags;

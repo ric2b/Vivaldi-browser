@@ -8,16 +8,17 @@
 // Relationship of classes.
 //
 //  AudioOutputController                AudioOutputDevice
-//           ^                                ^
-//           |                                |
-//           v               IPC              v
-//    AudioRendererHost  <---------> AudioOutputIPC (AudioMessageFilter)
+//           ^                                  ^
+//           |                                  |
+//           v                 IPC              v
+//  MojoAudioOutputStream  <---------> AudioOutputIPC (MojoAudioOutputIPC)
 //
 // Transportation of audio samples from the render to the browser process
 // is done by using shared memory in combination with a sync socket pair
 // to generate a low latency transport. The AudioOutputDevice user registers an
 // AudioOutputDevice::RenderCallback at construction and will be polled by the
-// AudioOutputDevice for audio to be played out by the underlying audio layers.
+// AudioOutputController for audio to be played out by the underlying audio
+// layers.
 //
 // State sequences.
 //
@@ -51,10 +52,10 @@
 //    The thread within which this class receives all the IPC messages and
 //    IPC communications can only happen in this thread.
 // 4. Audio transport thread (See AudioDeviceThread).
-//    Responsible for calling the AudioThreadCallback implementation that in
-//    turn calls AudioRendererSink::RenderCallback which feeds audio samples to
-//    the audio layer in the browser process using sync sockets and shared
-//    memory.
+//    Responsible for calling the AudioOutputDeviceThreadCallback
+//    implementation that in turn calls AudioRendererSink::RenderCallback
+//    which feeds audio samples to the audio layer in the browser process using
+//    sync sockets and shared memory.
 //
 // Implementation notes:
 // - The user must call Stop() before deleting the class instance.
@@ -67,12 +68,11 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "media/audio/audio_device_thread.h"
 #include "media/audio/audio_output_ipc.h"
-#include "media/audio/scoped_task_runner_observer.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/media_export.h"
@@ -80,13 +80,14 @@
 
 namespace base {
 class OneShotTimer;
+class SingleThreadTaskRunner;
 }
 
 namespace media {
+class AudioOutputDeviceThreadCallback;
 
 class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
-                                       public AudioOutputIPCDelegate,
-                                       public ScopedTaskRunnerObserver {
+                                       public AudioOutputIPCDelegate {
  public:
   // NOTE: Clients must call Initialize() before using.
   AudioOutputDevice(
@@ -94,7 +95,6 @@ class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
       int session_id,
       const std::string& device_id,
-      const url::Origin& security_origin,
       base::TimeDelta authorization_timeout);
 
   // Request authorization to use the device specified in the constructor.
@@ -116,10 +116,11 @@ class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
   // AudioOutputIPCDelegate methods.
   void OnError() override;
   void OnDeviceAuthorized(OutputDeviceStatus device_status,
-                          const media::AudioParameters& output_params,
+                          const AudioParameters& output_params,
                           const std::string& matched_device_id) override;
-  void OnStreamCreated(base::SharedMemoryHandle handle,
-                       base::SyncSocket::Handle socket_handle) override;
+  void OnStreamCreated(base::UnsafeSharedMemoryRegion shared_memory_region,
+                       base::SyncSocket::Handle socket_handle,
+                       bool play_automatically) override;
   void OnIPCClosed() override;
 
  protected:
@@ -129,15 +130,22 @@ class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
   ~AudioOutputDevice() override;
 
  private:
-  // Note: The ordering of members in this enum is critical to correct behavior!
-  enum State {
-    IPC_CLOSED,       // No more IPCs can take place.
-    IDLE,             // Not started.
-    AUTHORIZING,      // Sent device authorization request, waiting for reply.
-    AUTHORIZED,       // Successful device authorization received.
-    CREATING_STREAM,  // Waiting for OnStreamCreated() to be called back.
-    PAUSED,   // Paused.  OnStreamCreated() has been called.  Can Play()/Stop().
-    PLAYING,  // Playing back.  Can Pause()/Stop().
+  enum StartupState {
+    IDLE,                       // Authorization not requested.
+    AUTHORIZATION_REQUESTED,    // Sent (possibly completed) device
+                                // authorization request.
+    STREAM_CREATION_REQUESTED,  // Sent (possibly completed) device creation
+                                // request. Can Play()/Pause()/Stop().
+  };
+
+  // This enum is used for UMA, so the only allowed operation on this definition
+  // is to add new states to the bottom, update kMaxValue, and update the
+  // histogram "Media.Audio.Render.StreamCallbackError2".
+  enum Error {
+    kNoError = 0,
+    kErrorDuringCreation = 1,
+    kErrorDuringRendering = 2,
+    kMaxValue = kErrorDuringRendering
   };
 
   // Methods called on IO thread ----------------------------------------------
@@ -156,52 +164,47 @@ class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
   // Process device authorization result on the IO thread.
   void ProcessDeviceAuthorizationOnIOThread(
       OutputDeviceStatus device_status,
-      const media::AudioParameters& output_params,
+      const AudioParameters& output_params,
       const std::string& matched_device_id,
       bool timed_out);
 
-  // base::MessageLoop::DestructionObserver implementation for the IO loop.
-  // If the IO loop dies before we do, we shut down the audio thread from here.
-  void WillDestroyCurrentMessageLoop() override;
+  void NotifyRenderCallbackOfError();
+
+  const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
   AudioParameters audio_parameters_;
 
   RenderCallback* callback_;
 
   // A pointer to the IPC layer that takes care of sending requests over to
-  // the AudioRendererHost.  Only valid when state_ != IPC_CLOSED and must only
-  // be accessed on the IO thread.
+  // the implementation. May be set to nullptr after errors.
   std::unique_ptr<AudioOutputIPC> ipc_;
 
   // Current state (must only be accessed from the IO thread).  See comments for
   // State enum above.
-  State state_;
+  StartupState state_;
 
-  // State of Start() calls before OnDeviceAuthorized() is called.
-  bool start_on_authorized_;
+  // For UMA stats. May only be accessed on the IO thread.
+  Error had_error_ = kNoError;
 
-  // State of Play() / Pause() calls before OnStreamCreated() is called.
-  bool play_on_start_;
+  // Last set volume.
+  double volume_ = 1.0;
 
   // The media session ID used to identify which input device to be started.
   // Only used by Unified IO.
   int session_id_;
 
-  // ID of hardware output device to be used (provided session_id_ is zero)
+  // ID of hardware output device to be used (provided |session_id_| is zero)
   const std::string device_id_;
-  const url::Origin security_origin_;
 
   // If |device_id_| is empty and |session_id_| is not, |matched_device_id_| is
   // received in OnDeviceAuthorized().
   std::string matched_device_id_;
 
-  // Our audio thread callback class.  See source file for details.
-  class AudioThreadCallback;
-
   // In order to avoid a race between OnStreamCreated and Stop(), we use this
   // guard to control stopping and starting the audio thread.
   base::Lock audio_thread_lock_;
-  std::unique_ptr<AudioOutputDevice::AudioThreadCallback> audio_callback_;
+  std::unique_ptr<AudioOutputDeviceThreadCallback> audio_callback_;
   std::unique_ptr<AudioDeviceThread> audio_thread_;
 
   // Temporary hack to ignore OnStreamCreated() due to the user calling Stop()
@@ -218,9 +221,6 @@ class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
 
   const base::TimeDelta auth_timeout_;
   std::unique_ptr<base::OneShotTimer> auth_timeout_action_;
-
-  // Set when authorization starts, for UMA stats.
-  base::TimeTicks auth_start_time_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioOutputDevice);
 };

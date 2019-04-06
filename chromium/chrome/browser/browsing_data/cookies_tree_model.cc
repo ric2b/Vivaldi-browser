@@ -23,7 +23,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "content/public/common/url_constants.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/url_request/url_request_context.h"
@@ -78,23 +78,11 @@ std::string CanonicalizeHost(const GURL& url) {
   // would become google.com.mail.1, and then a standard string comparison works
   // to order hosts by registry controlled domain first. Leading dots are
   // ignored, ".google.com" is the same as "google.com".
-  //
-  // Suborigins, an experimental web platform feature defined in
-  // https://w3c.github.io/webappsec-suborigins/, are treated as part of the
-  // physical origin they are associated with. From a users perspective, they
-  // are part of and should be visualized as part of that host. For example,
-  // given a a suborigin 'foobar' at 'https://example.com', this is serialized
-  // into the URL as 'https-so://foobar.example.com'. Thus, the host for this
-  // URL is canonicalized as 'example.com' to treat it as being part of that
-  // host, and thus the suborigin is striped from the URL.
   if (url.SchemeIsFile()) {
-    return std::string(url::kFileScheme) +
-           url::kStandardSchemeSeparator;
+    return std::string(url::kFileScheme) + url::kStandardSchemeSeparator;
   }
 
-  // Pass through url::Origin to get the real host, which has the effect of
-  // stripping the suborigin from the URL.
-  std::string host = url::Origin::Create(url).host();
+  std::string host = url.host();
   std::string retval =
       net::registry_controlled_domains::GetDomainAndRegistry(
           host,
@@ -342,12 +330,11 @@ CookieTreeNode::DetailedInfo CookieTreeCookieNode::GetDetailedInfo() const {
 // CookieTreeAppCacheNode, public:
 
 CookieTreeAppCacheNode::CookieTreeAppCacheNode(
-    const GURL& origin_url,
+    const url::Origin& origin,
     std::list<content::AppCacheInfo>::iterator appcache_info)
     : CookieTreeNode(base::UTF8ToUTF16(appcache_info->manifest_url.spec())),
-      origin_url_(origin_url),
-      appcache_info_(appcache_info) {
-}
+      origin_(origin),
+      appcache_info_(appcache_info) {}
 
 CookieTreeAppCacheNode::~CookieTreeAppCacheNode() {
 }
@@ -359,12 +346,12 @@ void CookieTreeAppCacheNode::DeleteStoredObjects() {
     DCHECK(container->appcache_helper_.get());
     container->appcache_helper_
         ->DeleteAppCacheGroup(appcache_info_->manifest_url);
-    container->appcache_info_[origin_url_].erase(appcache_info_);
+    container->appcache_info_[origin_].erase(appcache_info_);
   }
 }
 
 CookieTreeNode::DetailedInfo CookieTreeAppCacheNode::GetDetailedInfo() const {
-  return DetailedInfo().InitAppCache(origin_url_, &*appcache_info_);
+  return DetailedInfo().InitAppCache(origin_.GetURL(), &*appcache_info_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -411,7 +398,7 @@ void CookieTreeLocalStorageNode::DeleteStoredObjects() {
 
   if (container) {
     container->local_storage_helper_->DeleteOrigin(
-        local_storage_info_->origin_url);
+        local_storage_info_->origin_url, base::DoNothing());
     container->local_storage_info_list_.erase(local_storage_info_);
   }
 }
@@ -670,7 +657,7 @@ CookieTreeRootNode::~CookieTreeRootNode() {}
 
 CookieTreeHostNode* CookieTreeRootNode::GetOrCreateHostNode(const GURL& url) {
   std::unique_ptr<CookieTreeHostNode> host_node =
-      base::MakeUnique<CookieTreeHostNode>(url);
+      std::make_unique<CookieTreeHostNode>(url);
 
   // First see if there is an existing match.
   auto host_node_iterator = std::lower_bound(
@@ -1084,14 +1071,14 @@ void CookiesTreeModel::ScopedBatchUpdateNotifier::StartBatchUpdate() {
 ///////////////////////////////////////////////////////////////////////////////
 // CookiesTreeModel, public:
 CookiesTreeModel::CookiesTreeModel(
-    LocalDataContainer* data_container,
+    std::unique_ptr<LocalDataContainer> data_container,
     ExtensionSpecialStoragePolicy* special_storage_policy)
     : ui::TreeNodeModel<CookieTreeNode>(
-          base::MakeUnique<CookieTreeRootNode>(this)),
+          std::make_unique<CookieTreeRootNode>(this)),
 #if BUILDFLAG(ENABLE_EXTENSIONS)
       special_storage_policy_(special_storage_policy),
 #endif
-      data_container_(data_container) {
+      data_container_(std::move(data_container)) {
   data_container_->Init(this);
 }
 
@@ -1322,14 +1309,15 @@ void CookiesTreeModel::PopulateAppCacheInfoWithFilter(
     base::string16 host_node_name = base::UTF8ToUTF16(origin.first.host());
     if (filter.empty() ||
         (host_node_name.find(filter) != base::string16::npos)) {
-      CookieTreeHostNode* host_node = root->GetOrCreateHostNode(origin.first);
+      CookieTreeHostNode* host_node =
+          root->GetOrCreateHostNode(origin.first.GetURL());
       CookieTreeAppCachesNode* appcaches_node =
           host_node->GetOrCreateAppCachesNode();
 
       for (std::list<AppCacheInfo>::iterator info = origin.second.begin();
            info != origin.second.end(); ++info) {
         appcaches_node->AddAppCacheNode(
-            base::MakeUnique<CookieTreeAppCacheNode>(origin.first, info));
+            std::make_unique<CookieTreeAppCacheNode>(origin.first, info));
       }
     }
   }
@@ -1357,7 +1345,7 @@ void CookiesTreeModel::PopulateCookieInfoWithFilter(
       CookieTreeHostNode* host_node = root->GetOrCreateHostNode(source);
       CookieTreeCookiesNode* cookies_node =
           host_node->GetOrCreateCookiesNode();
-      cookies_node->AddCookieNode(base::MakeUnique<CookieTreeCookieNode>(it));
+      cookies_node->AddCookieNode(std::make_unique<CookieTreeCookieNode>(it));
     }
   }
 }
@@ -1384,7 +1372,7 @@ void CookiesTreeModel::PopulateDatabaseInfoWithFilter(
       CookieTreeDatabasesNode* databases_node =
           host_node->GetOrCreateDatabasesNode();
       databases_node->AddDatabaseNode(
-          base::MakeUnique<CookieTreeDatabaseNode>(database_info));
+          std::make_unique<CookieTreeDatabaseNode>(database_info));
     }
   }
 }
@@ -1411,7 +1399,7 @@ void CookiesTreeModel::PopulateLocalStorageInfoWithFilter(
       CookieTreeLocalStoragesNode* local_storages_node =
           host_node->GetOrCreateLocalStoragesNode();
       local_storages_node->AddLocalStorageNode(
-          base::MakeUnique<CookieTreeLocalStorageNode>(local_storage_info));
+          std::make_unique<CookieTreeLocalStorageNode>(local_storage_info));
     }
   }
 }
@@ -1438,7 +1426,7 @@ void CookiesTreeModel::PopulateSessionStorageInfoWithFilter(
       CookieTreeSessionStoragesNode* session_storages_node =
           host_node->GetOrCreateSessionStoragesNode();
       session_storages_node->AddSessionStorageNode(
-          base::MakeUnique<CookieTreeSessionStorageNode>(session_storage_info));
+          std::make_unique<CookieTreeSessionStorageNode>(session_storage_info));
     }
   }
 }
@@ -1465,7 +1453,7 @@ void CookiesTreeModel::PopulateIndexedDBInfoWithFilter(
       CookieTreeIndexedDBsNode* indexed_dbs_node =
           host_node->GetOrCreateIndexedDBsNode();
       indexed_dbs_node->AddIndexedDBNode(
-          base::MakeUnique<CookieTreeIndexedDBNode>(indexed_db_info));
+          std::make_unique<CookieTreeIndexedDBNode>(indexed_db_info));
     }
   }
 }
@@ -1498,7 +1486,7 @@ void CookiesTreeModel::PopulateChannelIDInfoWithFilter(
       CookieTreeChannelIDsNode* channel_ids_node =
           host_node->GetOrCreateChannelIDsNode();
       channel_ids_node->AddChannelIDNode(
-          base::MakeUnique<CookieTreeChannelIDNode>(channel_id_info));
+          std::make_unique<CookieTreeChannelIDNode>(channel_id_info));
     }
   }
 }
@@ -1525,7 +1513,7 @@ void CookiesTreeModel::PopulateServiceWorkerUsageInfoWithFilter(
       CookieTreeServiceWorkersNode* service_workers_node =
           host_node->GetOrCreateServiceWorkersNode();
       service_workers_node->AddServiceWorkerNode(
-          base::MakeUnique<CookieTreeServiceWorkerNode>(service_worker_info));
+          std::make_unique<CookieTreeServiceWorkerNode>(service_worker_info));
     }
   }
 }
@@ -1552,7 +1540,7 @@ void CookiesTreeModel::PopulateSharedWorkerInfoWithFilter(
       CookieTreeSharedWorkersNode* shared_workers_node =
           host_node->GetOrCreateSharedWorkersNode();
       shared_workers_node->AddSharedWorkerNode(
-          base::MakeUnique<CookieTreeSharedWorkerNode>(shared_worker_info));
+          std::make_unique<CookieTreeSharedWorkerNode>(shared_worker_info));
     }
   }
 }
@@ -1579,7 +1567,7 @@ void CookiesTreeModel::PopulateCacheStorageUsageInfoWithFilter(
       CookieTreeCacheStoragesNode* cache_storages_node =
           host_node->GetOrCreateCacheStoragesNode();
       cache_storages_node->AddCacheStorageNode(
-          base::MakeUnique<CookieTreeCacheStorageNode>(cache_storage_info));
+          std::make_unique<CookieTreeCacheStorageNode>(cache_storage_info));
     }
   }
 }
@@ -1606,7 +1594,7 @@ void CookiesTreeModel::PopulateFileSystemInfoWithFilter(
       CookieTreeFileSystemsNode* file_systems_node =
           host_node->GetOrCreateFileSystemsNode();
       file_systems_node->AddFileSystemNode(
-          base::MakeUnique<CookieTreeFileSystemNode>(file_system_info));
+          std::make_unique<CookieTreeFileSystemNode>(file_system_info));
     }
   }
 }
@@ -1678,7 +1666,7 @@ void CookiesTreeModel::PopulateMediaLicenseInfoWithFilter(
       CookieTreeMediaLicensesNode* media_licenses_node =
           host_node->GetOrCreateMediaLicensesNode();
       media_licenses_node->AddMediaLicenseNode(
-          base::MakeUnique<CookieTreeMediaLicenseNode>(media_license_info));
+          std::make_unique<CookieTreeMediaLicenseNode>(media_license_info));
     }
   }
 }

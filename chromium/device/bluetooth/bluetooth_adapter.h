@@ -24,6 +24,10 @@
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_export.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+}  // namespace base
+
 namespace device {
 
 class BluetoothAdvertisement;
@@ -126,6 +130,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
     virtual void DevicePairedChanged(BluetoothAdapter* adapter,
                                      BluetoothDevice* device,
                                      bool new_paired_status) {}
+
+    // This function is implemented for ChromeOS only.
+    // Called when the MTU |mtu| (Bluetooth Spec Vol 3, Part F, 3.4.2) used in
+    // ATT communication with device |device| known to the adapter |adapter|
+    // changed.
+    virtual void DeviceMTUChanged(BluetoothAdapter* adapter,
+                                  BluetoothDevice* device,
+                                  uint16_t mtu) {}
 #endif
 
     // Called when the device |device| is removed from the adapter |adapter|,
@@ -267,7 +279,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
 
   // The InitCallback is used to trigger a callback after asynchronous
   // initialization, if initialization is asynchronous on the platform.
-  using InitCallback = base::Callback<void()>;
+  using InitCallback = base::OnceClosure;
 
   using DiscoverySessionCallback =
       base::Callback<void(std::unique_ptr<BluetoothDiscoverySession>)>;
@@ -290,7 +302,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   // caller is expected to call |AddRef()| on the returned pointer, typically by
   // storing it into a |scoped_refptr|.
   static base::WeakPtr<BluetoothAdapter> CreateAdapter(
-      const InitCallback& init_callback);
+      InitCallback init_callback);
 
   // Returns a weak pointer to an existing adapter for testing purposes only.
   base::WeakPtr<BluetoothAdapter> GetWeakPtrForTesting();
@@ -337,9 +349,22 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   // Requests a change to the adapter radio power. Setting |powered| to true
   // will turn on the radio and false will turn it off. On success, |callback|
   // will be called. On failure, |error_callback| will be called.
+  //
+  // The default implementation is meant for platforms that don't have a
+  // callback based API. It will store pending callbacks in
+  // |set_powered_callbacks_| and invoke SetPoweredImpl(bool) which these
+  // platforms need to implement. Pending callbacks are only run when
+  // DidChangePoweredState() is invoked.
+  //
+  // Platforms that natively support a callback based API (e.g. BlueZ and Win)
+  // should override this method and provide their own implementation instead.
+  //
+  // Due to an issue with non-native APIs on Windows 10, both IsPowered() and
+  // SetPowered() don't work correctly when run from a x86 Chrome on a x64 CPU.
+  // See https://github.com/Microsoft/cppwinrt/issues/47 for more details.
   virtual void SetPowered(bool powered,
                           const base::Closure& callback,
-                          const ErrorCallback& error_callback) = 0;
+                          const ErrorCallback& error_callback);
 
   // Indicates whether the adapter radio is discoverable.
   virtual bool IsDiscoverable() const = 0;
@@ -543,10 +568,31 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   using PairingDelegatePair =
       std::pair<BluetoothDevice::PairingDelegate*, PairingDelegatePriority>;
   using DiscoverySessionErrorCallback =
-      base::Callback<void(UMABluetoothDiscoverySessionOutcome)>;
+      base::OnceCallback<void(UMABluetoothDiscoverySessionOutcome)>;
+
+  // Implementations on Android and macOS need to store pending SetPowered()
+  // callbacks until an appropriate event is received, due to a lack of blocking
+  // or callback supporting platform APIs. Declaring the struct here allows
+  // Android and macOS to share the implementation.
+  struct SetPoweredCallbacks {
+    SetPoweredCallbacks();
+    ~SetPoweredCallbacks();
+
+    bool powered = false;
+    base::OnceClosure callback;
+    ErrorCallback error_callback;
+  };
 
   BluetoothAdapter();
   virtual ~BluetoothAdapter();
+
+  // This method calls into platform specific logic on macOS and Android where
+  // pending SetPowered() callbacks need to be stored explicitly.
+  virtual bool SetPoweredImpl(bool powered) = 0;
+
+  // Called by macOS and Android once the specific powered state events are
+  // received. Clears out pending callbacks.
+  void DidChangePoweredState();
 
   // Internal methods for initiating and terminating device discovery sessions.
   // An implementation of BluetoothAdapter keeps an internal reference count to
@@ -586,18 +632,18 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   virtual void AddDiscoverySession(
       BluetoothDiscoveryFilter* discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) = 0;
+      DiscoverySessionErrorCallback error_callback) = 0;
   virtual void RemoveDiscoverySession(
       BluetoothDiscoveryFilter* discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) = 0;
+      DiscoverySessionErrorCallback error_callback) = 0;
 
   // Used to set and update the discovery filter used by the underlying
   // Bluetooth controller.
   virtual void SetDiscoveryFilter(
       std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
       const base::Closure& callback,
-      const DiscoverySessionErrorCallback& error_callback) = 0;
+      DiscoverySessionErrorCallback error_callback) = 0;
 
   // Called by RemovePairingDelegate() in order to perform any class-specific
   // internal functionality necessary to remove the pairing delegate, such as
@@ -634,6 +680,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   // lost devices.
   void RemoveTimedOutDevices();
 
+  // UI thread task runner.
+  scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
+
   // Observers of BluetoothAdapter, notified from implementation subclasses.
   base::ObserverList<device::BluetoothAdapter::Observer> observers_;
 
@@ -645,6 +694,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
 
   // Default pairing delegates registered with the adapter.
   std::list<PairingDelegatePair> pairing_delegates_;
+
+  // SetPowered() callbacks, only relevant for macOS and Android.
+  std::unique_ptr<SetPoweredCallbacks> set_powered_callbacks_;
 
  private:
   // Histograms the result of StartDiscoverySession.

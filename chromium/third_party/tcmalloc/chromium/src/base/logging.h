@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -45,7 +46,6 @@
 #include <string.h>    // for strlen(), strcmp()
 #include <assert.h>
 #include <errno.h>     // for errno
-#include "base/abort.h"
 #include "base/commandlineflags.h"
 
 // On some systems (like freebsd), we can't call write() at all in a
@@ -56,10 +56,6 @@
 // do logging on a best-effort basis.
 #if defined(_MSC_VER)
 #define WRITE_TO_STDERR(buf, len) WriteToStderr(buf, len);  // in port.cc
-#elif defined(__ANDROID__) || defined(ANDROID)
-#include <android/log.h>
-#define WRITE_TO_STDERR(buf, len) \
-    __android_log_write(ANDROID_LOG_ERROR, "gperftools", buf)
 #elif defined(HAVE_SYS_SYSCALL_H)
 #include <sys/syscall.h>
 #define WRITE_TO_STDERR(buf, len) syscall(SYS_write, STDERR_FILENO, buf, len)
@@ -90,7 +86,7 @@ DECLARE_int32(verbose);
     if (!(condition)) {                                                 \
       WRITE_TO_STDERR("Check failed: " #condition "\n",                 \
                       sizeof("Check failed: " #condition "\n")-1);      \
-      tcmalloc::Abort();                                                \
+      abort();                                                          \
     }                                                                   \
   } while (0)
 
@@ -100,7 +96,7 @@ DECLARE_int32(verbose);
     if (!(condition)) {                                                        \
       WRITE_TO_STDERR("Check failed: " #condition ": " message "\n",           \
                       sizeof("Check failed: " #condition ": " message "\n")-1);\
-      tcmalloc::Abort();                                                       \
+      abort();                                                                 \
     }                                                                          \
   } while (0)
 
@@ -123,7 +119,7 @@ enum { DEBUG_MODE = 1 };
                       sizeof("Check failed: " #condition ": ")-1);      \
       WRITE_TO_STDERR(strerror(err_no), strlen(strerror(err_no)));      \
       WRITE_TO_STDERR("\n", sizeof("\n")-1);                            \
-      tcmalloc::Abort();                                                \
+      abort();                                                          \
     }                                                                   \
   } while (0)
 
@@ -140,7 +136,7 @@ enum { DEBUG_MODE = 1 };
   do {                                                                  \
     if (!((val1) op (val2))) {                                          \
       fprintf(stderr, "Check failed: %s %s %s\n", #val1, #op, #val2);   \
-      tcmalloc::Abort();                                                \
+      abort();                                                          \
     }                                                                   \
   } while (0)
 
@@ -202,44 +198,15 @@ enum LogSeverity {INFO = -1, WARNING = -2, ERROR = -3, FATAL = -4};
 inline void LogPrintf(int severity, const char* pat, va_list ap) {
   // We write directly to the stderr file descriptor and avoid FILE
   // buffering because that may invoke malloc()
-  char buf[1600];
+  char buf[600];
   perftools_vsnprintf(buf, sizeof(buf)-1, pat, ap);
   if (buf[0] != '\0' && buf[strlen(buf)-1] != '\n') {
     assert(strlen(buf)+1 < sizeof(buf));
     strcat(buf, "\n");
   }
-#if defined(__ANDROID__) || defined(ANDROID)
-  android_LogPriority priority = ANDROID_LOG_UNKNOWN;
-  if (severity >= 0) {
-    priority = ANDROID_LOG_VERBOSE;
-  } else {
-    switch (severity) {
-      case INFO: {
-        priority = ANDROID_LOG_INFO;
-        break;
-      }
-      case WARNING: {
-        priority = ANDROID_LOG_WARN;
-        break;
-      }
-      case ERROR: {
-        priority = ANDROID_LOG_ERROR;
-        break;
-      }
-      case FATAL: {
-        priority = ANDROID_LOG_FATAL;
-        break;
-      }
-    }
-  }
-  __android_log_write(priority, "gperftools", buf);
-#else  // defined(__ANDROID__) || defined(ANDROID)
   WRITE_TO_STDERR(buf, strlen(buf));
-#endif  // defined(__ANDROID__) || defined(ANDROID)
-  if ((severity) == FATAL) {
-    // LOG(FATAL) indicates a big problem, so don't run atexit() calls
-    tcmalloc::Abort();
-  }
+  if ((severity) == FATAL)
+    abort(); // LOG(FATAL) indicates a big problem, so don't run atexit() calls
 }
 
 // Note that since the order of global constructors is unspecified,

@@ -27,14 +27,12 @@
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view.h"
-#import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/commands/open_url_command.h"
 #include "ios/chrome/browser/ui/fullscreen/fullscreen_controller_factory.h"
-#include "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #include "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
+#import "ios/chrome/browser/ui/popup_menu/public/popup_menu_long_press_delegate.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_presentation.h"
@@ -45,6 +43,7 @@
 #include "ios/chrome/browser/ui/tabs/target_frame_cache.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/snapshot_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -73,7 +72,11 @@ const NSTimeInterval kDragAndDropLongPressDuration = 0.4;
 const CGFloat kTabOverlap = 26.0;
 const CGFloat kTabOverlapForCompactLayout = 30.0;
 
-const CGFloat kNewTabOverlap = 8.0;
+const CGFloat kNewTabOverlap = 13.0;
+const CGFloat kNewTabOverlapLegacy = 8.0;
+CGFloat NewTabOverlap() {
+  return IsUIRefreshPhase1Enabled() ? kNewTabOverlap : kNewTabOverlapLegacy;
+}
 const CGFloat kMaxTabWidth = 265.0;
 const CGFloat kMaxTabWidthForCompactLayout = 225.0;
 
@@ -81,7 +84,6 @@ const CGFloat kMaxTabWidthForCompactLayout = 225.0;
 const CGFloat kTabSwitcherButtonWidth = 46.0;
 const CGFloat kTabSwitcherButtonBackgroundWidth = 62.0;
 
-const CGFloat kNewTabRightPadding = 4.0;
 const CGFloat kMinTabWidth = 200.0;
 const CGFloat kMinTabWidthForCompactLayout = 160.0;
 
@@ -120,10 +122,53 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 
 // Returns the background color.
 UIColor* BackgroundColor() {
+  if (IsUIRefreshPhase1Enabled())
+    return [UIColor colorWithRed:0.11 green:0.11 blue:0.11 alpha:1.0];
   return [UIColor colorWithRed:0.149 green:0.149 blue:0.164 alpha:1];
 }
 
+// Returns the string to use for a numeric item count.
+NSString* StringForItemCount(long count) {
+  if (count == 0)
+    return @"";
+  if (count > 99)
+    return @":-)";
+  return [NSString stringWithFormat:@"%ld", count];
+}
+
 }  // namespace
+
+// Helper class to display a UIButton with the image and text centered
+// vertically and horizontally.
+@interface TabStripCenteredButton : UIButton {
+}
+@end
+
+@implementation TabStripCenteredButton
+
+- (instancetype)initWithFrame:(CGRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    [self setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+    self.titleLabel.textAlignment = NSTextAlignmentCenter;
+    self.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+    self.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.titleLabel.minimumScaleFactor = 0.1;
+    self.titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+  }
+  return self;
+}
+
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  CGSize size = self.bounds.size;
+  CGPoint center = CGPointMake(size.width / 2, size.height / 2);
+  self.imageView.center = center;
+  self.imageView.frame = AlignRectToPixel(self.imageView.frame);
+  self.titleLabel.frame = self.bounds;
+}
+
+@end
 
 @interface TabStripController ()<DropAndNavigateDelegate,
                                  TabModelObserver,
@@ -344,6 +389,7 @@ UIColor* BackgroundColor() {
 @synthesize tabStripView = _tabStripView;
 @synthesize view = _view;
 @synthesize dispatcher = _dispatcher;
+@synthesize longPressDelegate = _longPressDelegate;
 @synthesize presentationProvider = _presentationProvider;
 @synthesize animationWaitDuration = _animationWaitDuration;
 
@@ -392,14 +438,29 @@ UIColor* BackgroundColor() {
     _buttonNewTab.imageView.contentMode = UIViewContentModeCenter;
     UIImage* buttonNewTabImage = nil;
     UIImage* buttonNewTabPressedImage = nil;
-    if (_style == INCOGNITO) {
-      buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab_incognito"];
-      buttonNewTabPressedImage =
-          [UIImage imageNamed:@"tabstrip_new_tab_incognito_pressed"];
+
+    if (IsUIRefreshPhase1Enabled()) {
+      if (_style == INCOGNITO) {
+        buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab_incognito"];
+        buttonNewTabPressedImage =
+            [UIImage imageNamed:@"tabstrip_new_tab_incognito_pressed"];
+      } else {
+        buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab"];
+        buttonNewTabPressedImage =
+            [UIImage imageNamed:@"tabstrip_new_tab_pressed"];
+      }
+
     } else {
-      buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab"];
-      buttonNewTabPressedImage =
-          [UIImage imageNamed:@"tabstrip_new_tab_pressed"];
+      if (_style == INCOGNITO) {
+        buttonNewTabImage =
+            [UIImage imageNamed:@"tabstrip_new_tab_incognito_legacy"];
+        buttonNewTabPressedImage =
+            [UIImage imageNamed:@"tabstrip_new_tab_incognito_pressed_legacy"];
+      } else {
+        buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab_legacy"];
+        buttonNewTabPressedImage =
+            [UIImage imageNamed:@"tabstrip_new_tab_pressed_legacy"];
+      }
     }
     [_buttonNewTab setImage:buttonNewTabImage forState:UIControlStateNormal];
     [_buttonNewTab setImage:buttonNewTabPressedImage
@@ -454,16 +515,17 @@ UIColor* BackgroundColor() {
   return self;
 }
 
-- (instancetype)init {
-  NOTREACHED();
-  return nil;
-}
-
 - (void)dealloc {
   [_tabStripView setDelegate:nil];
   [_tabStripView setLayoutDelegate:nil];
   [_tabModel removeObserver:self];
 }
+
+- (void)hideTabStrip:(BOOL)hidden {
+  self.view.hidden = hidden;
+}
+
+#pragma mark - Private
 
 - (void)initializeTabArrayFromTabModel {
   DCHECK(_tabModel);
@@ -612,8 +674,7 @@ UIColor* BackgroundColor() {
   CGPoint center = [_buttonNewTab.superview convertPoint:_buttonNewTab.center
                                                   toView:_buttonNewTab.window];
   OpenNewTabCommand* command =
-      [[OpenNewTabCommand alloc] initWithIncognito:_isIncognito
-                                       originPoint:center];
+      [OpenNewTabCommand commandWithIncognito:_isIncognito originPoint:center];
   [self.dispatcher openNewTab:command];
 }
 
@@ -685,15 +746,15 @@ UIColor* BackgroundColor() {
   return [self modelIndexForIndex:[_tabArray indexOfObject:view]];
 }
 
-#pragma mark -
-#pragma mark BubbleViewAnchorPointProvider methods
-
-- (CGPoint)anchorPointForTabSwitcherButton:(BubbleArrowDirection)direction {
-  CGPoint anchorPoint =
-      bubble_util::AnchorPoint(_tabSwitcherButton.imageView.frame, direction);
-  return [_tabSwitcherButton.imageView.superview
-      convertPoint:anchorPoint
-            toView:_tabSwitcherButton.imageView.window];
+// The |tabSwitcherGuide| cannot use constrainedView in the tab strip because
+// here views use CGAffineTransformMakeScale to support RTL, and NamedGuide
+// doesn't honor transforms. Instead we set the tabSwitcherGuide as necessary.
+- (void)updateTabSwitcherGuide {
+  NamedGuide* tabSwitcherGuide =
+      [NamedGuide guideWithName:kTabStripTabSwitcherGuide view:self.view];
+  tabSwitcherGuide.constrainedFrame =
+      [_tabSwitcherButton.superview convertRect:_tabSwitcherButton.frame
+                                         toView:tabSwitcherGuide.owningView];
 }
 
 #pragma mark -
@@ -730,11 +791,9 @@ UIColor* BackgroundColor() {
     [self removeAutoscrollTimer];
 
   // Disable fullscreen during drags.
-  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
-    _fullscreenDisabler = std::make_unique<ScopedFullscreenDisabler>(
-        FullscreenControllerFactory::GetInstance()->GetForBrowserState(
-            _tabModel.browserState));
-  }
+  _fullscreenDisabler = std::make_unique<ScopedFullscreenDisabler>(
+      FullscreenControllerFactory::GetInstance()->GetForBrowserState(
+          _tabModel.browserState));
 }
 
 - (void)continueDrag:(UILongPressGestureRecognizer*)gesture {
@@ -763,8 +822,7 @@ UIColor* BackgroundColor() {
   DCHECK([[gesture view] isKindOfClass:[TabView class]]);
 
   // Stop disabling fullscreen.
-  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen))
-    _fullscreenDisabler = nullptr;
+  _fullscreenDisabler = nullptr;
 
   NSUInteger fromIndex = [self modelIndexForTabView:_draggedTab];
   // TODO(rohitrao): We're seeing crashes where fromIndex is NSNotFound,
@@ -793,8 +851,7 @@ UIColor* BackgroundColor() {
   DCHECK([[gesture view] isKindOfClass:[TabView class]]);
 
   // Stop disabling fullscreen.
-  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen))
-    _fullscreenDisabler = nullptr;
+  _fullscreenDisabler = nullptr;
 
   // Reset drag state and trigger a relayout to moved tabs back into their
   // correct positions.
@@ -915,7 +972,7 @@ UIColor* BackgroundColor() {
 }
 
 #pragma mark -
-#pragma mark TabStripModelObserver methods
+#pragma mark TabModelObserver methods
 
 // Observer method.
 - (void)tabModel:(TabModel*)model
@@ -1040,31 +1097,55 @@ UIColor* BackgroundColor() {
   [self tabModel:model didChangeTab:newTab];
 }
 
+- (void)tabModelDidChangeTabCount:(TabModel*)model {
+  if (IsUIRefreshPhase1Enabled()) {
+    [_tabSwitcherButton setTitle:StringForItemCount(model.count)
+                        forState:UIControlStateNormal];
+  }
+}
+
 #pragma mark -
 #pragma mark Views and Layout
 
 - (CGFloat)tabStripVisibleSpace {
   CGFloat availableSpace = CGRectGetWidth([_tabStripView bounds]) -
                            CGRectGetWidth([_buttonNewTab frame]) +
-                           kNewTabOverlap - kNewTabRightPadding -
-                           kTabSwitcherButtonWidth;
+                           NewTabOverlap();
   return availableSpace;
 }
 
 - (void)installTabSwitcherButton {
   DCHECK(!_tabSwitcherButton);
-  UIImage* tabSwitcherButtonIcon =
-      [UIImage imageNamed:@"tabswitcher_tab_switcher_button"];
-  tabSwitcherButtonIcon = [tabSwitcherButtonIcon
-      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  UIImage* tabSwitcherButtonIcon;
+  UIImage* tabSwitcherButtonIconPressed;
+  if (IsUIRefreshPhase1Enabled()) {
+    tabSwitcherButtonIcon =
+        [UIImage imageNamed:@"tabswitcher_tab_switcher_count_button"];
+    tabSwitcherButtonIconPressed =
+        [UIImage imageNamed:@"tabswitcher_tab_switcher_count_button_pressed"];
+  } else {
+    tabSwitcherButtonIcon =
+        [UIImage imageNamed:@"tabswitcher_tab_switcher_button"];
+    tabSwitcherButtonIcon = [tabSwitcherButtonIcon
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  }
+
   int tabSwitcherButtonIdsAccessibilityLabel =
       IDS_IOS_TAB_STRIP_ENTER_TAB_SWITCHER;
   NSString* tabSwitcherButtonEnglishUiAutomationName = @"Enter Tab Switcher";
   const CGFloat tabStripHeight = _view.frame.size.height;
   CGRect buttonFrame =
-      CGRectMake(CGRectGetMaxX(_view.frame) - kTabSwitcherButtonWidth, 0.0,
+      CGRectMake(CGRectGetMaxX(_view.frame) - kTabSwitcherButtonWidth, 0,
                  kTabSwitcherButtonWidth, tabStripHeight);
-  _tabSwitcherButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  if (IsUIRefreshPhase1Enabled()) {
+    _tabSwitcherButton =
+        [TabStripCenteredButton buttonWithType:UIButtonTypeCustom];
+    if (UseRTLLayout())
+      [_tabSwitcherButton setTransform:CGAffineTransformMakeScale(-1, 1)];
+    [self addTabSwitcherLongPressGesture];
+  } else {
+    _tabSwitcherButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  }
   [_tabSwitcherButton setTintColor:[UIColor whiteColor]];
   [_tabSwitcherButton setFrame:buttonFrame];
   [_tabSwitcherButton setContentMode:UIViewContentModeCenter];
@@ -1073,12 +1154,17 @@ UIColor* BackgroundColor() {
   [_tabSwitcherButton setExclusiveTouch:YES];
   [_tabSwitcherButton setImage:tabSwitcherButtonIcon
                       forState:UIControlStateNormal];
+  if (IsUIRefreshPhase1Enabled()) {
+    [_tabSwitcherButton setImage:tabSwitcherButtonIconPressed
+                        forState:UIControlStateHighlighted];
+  }
   [_tabSwitcherButton addTarget:self.dispatcher
                          action:@selector(displayTabSwitcher)
                forControlEvents:UIControlEventTouchUpInside];
   [_tabSwitcherButton addTarget:self
                          action:@selector(recordUserMetrics:)
                forControlEvents:UIControlEventTouchUpInside];
+  [self tabModelDidChangeTabCount:_tabModel];
 
   SetA11yLabelAndUiAutomationName(_tabSwitcherButton,
                                   tabSwitcherButtonIdsAccessibilityLabel,
@@ -1086,6 +1172,30 @@ UIColor* BackgroundColor() {
   [_view addSubview:_tabSwitcherButton];
   // Shrink the scroll view.
   [self updateScrollViewFrameForTabSwitcherButton];
+}
+
+// Adds a LongPressGesture to the |_tabSwitcherButton|, with target on
+// -|handleTabSwitcherLongPress:|.
+- (void)addTabSwitcherLongPressGesture {
+  UILongPressGestureRecognizer* longPress =
+      [[UILongPressGestureRecognizer alloc]
+          initWithTarget:self
+                  action:@selector(handleTabSwitcherLongPress:)];
+  [_tabSwitcherButton addGestureRecognizer:longPress];
+}
+
+// Handles the long press on the |_tabSwitcherButton|.
+- (void)handleTabSwitcherLongPress:(UILongPressGestureRecognizer*)gesture {
+  if (gesture.state == UIGestureRecognizerStateBegan) {
+    [self.dispatcher showTabStripTabGridButtonPopup];
+    TriggerHapticFeedbackForImpact(UIImpactFeedbackStyleMedium);
+  } else if (gesture.state == UIGestureRecognizerStateEnded) {
+    [self.longPressDelegate
+        longPressEndedAtPoint:[gesture locationOfTouch:0 inView:nil]];
+  } else if (gesture.state == UIGestureRecognizerStateChanged) {
+    [self.longPressDelegate
+        longPressFocusPointChangedTo:[gesture locationOfTouch:0 inView:nil]];
+  }
 }
 
 - (void)shiftTabStripSubviews:(CGPoint)oldContentOffset {
@@ -1115,7 +1225,7 @@ UIColor* BackgroundColor() {
   // desired width, with the standard overlap, plus the new tab button.
   CGSize contentSize = CGSizeMake(
       _currentTabWidth * tabCount - ([self tabOverlap] * (tabCount - 1)) +
-          CGRectGetWidth([_buttonNewTab frame]) - kNewTabOverlap,
+          CGRectGetWidth([_buttonNewTab frame]) - NewTabOverlap(),
       tabHeight);
   if (CGSizeEqualToSize([_tabStripView contentSize], contentSize))
     return;
@@ -1165,7 +1275,9 @@ UIColor* BackgroundColor() {
 }
 
 - (CGFloat)tabOverlap {
-  return IsCompactTablet() ? kTabOverlapForCompactLayout : kTabOverlap;
+  if (!IsCompactTablet())
+    return kTabOverlap;
+  return kTabOverlapForCompactLayout;
 }
 
 - (CGFloat)maxTabWidth {
@@ -1286,6 +1398,7 @@ UIColor* BackgroundColor() {
 // Creates TabViews for each Tab in the TabModel and positions them in the
 // correct location onscreen.
 - (void)layoutTabStripSubviews {
+  [self updateTabSwitcherGuide];
   const NSUInteger tabCount = [_tabArray count] - [_closingTabs count];
   if (!tabCount)
     return;
@@ -1530,7 +1643,7 @@ UIColor* BackgroundColor() {
   CGRect newTabFrame = [_buttonNewTab frame];
   BOOL moveNewTab =
       (newTabFrame.origin.x != virtualMaxX) && !_buttonNewTab.hidden;
-  newTabFrame.origin = CGPointMake(virtualMaxX - kNewTabOverlap, 0);
+  newTabFrame.origin = CGPointMake(virtualMaxX - NewTabOverlap(), 0);
   if (!animate && moveNewTab)
     [_buttonNewTab setFrame:newTabFrame];
 
@@ -1580,11 +1693,12 @@ UIColor* BackgroundColor() {
 
 - (void)URLWasDropped:(GURL const&)url {
   // Called when a URL is dropped on the new tab button.
-  OpenUrlCommand* command = [[OpenUrlCommand alloc] initWithURL:url
-                                                       referrer:web::Referrer()
-                                                    inIncognito:_isIncognito
-                                                   inBackground:NO
-                                                       appendTo:kLastTab];
+  OpenNewTabCommand* command =
+      [[OpenNewTabCommand alloc] initWithURL:url
+                                    referrer:web::Referrer()
+                                 inIncognito:_isIncognito
+                                inBackground:NO
+                                    appendTo:kLastTab];
   [self.dispatcher openURL:command];
 }
 

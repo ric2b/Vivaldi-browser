@@ -16,7 +16,7 @@
 #endif
 
 #if defined(OS_FUCHSIA)
-#include "base/fuchsia/scoped_zx_handle.h"
+#include <lib/zx/process.h>
 #endif
 
 #if defined(OS_MACOSX)
@@ -83,7 +83,7 @@ class BASE_EXPORT Process {
   static bool CanBackgroundProcesses();
 
   // Terminates the current process immediately with |exit_code|.
-  static void TerminateCurrentProcessImmediately(int exit_code);
+  [[noreturn]] static void TerminateCurrentProcessImmediately(int exit_code);
 
   // Returns true if this objects represents a valid process.
   bool IsValid() const;
@@ -188,7 +188,7 @@ class BASE_EXPORT Process {
 #if defined(OS_WIN)
   win::ScopedHandle process_;
 #elif defined(OS_FUCHSIA)
-  ScopedZxHandle process_;
+  zx::process process_;
 #else
   ProcessHandle process_;
 #endif

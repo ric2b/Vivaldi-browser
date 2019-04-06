@@ -15,10 +15,10 @@
 #include "content/public/renderer/render_view.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "skia/ext/image_operations.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 
@@ -43,7 +43,6 @@ bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(VivaldiRenderViewObserver, message)
     IPC_MESSAGE_HANDLER(VivaldiMsg_InsertText, OnInsertText)
-    IPC_MESSAGE_HANDLER(VivaldiMsg_SetPinchZoom, OnPinchZoom)
     IPC_MESSAGE_HANDLER(VivaldiViewMsg_RequestThumbnailForFrame,
                         OnRequestThumbnailForFrame)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -59,35 +58,6 @@ void VivaldiRenderViewObserver::OnInsertText(const base::string16& text) {
   frame->SetMarkedText(blink::WebString::FromUTF16(text), length, length);
   frame->UnmarkText();                         // Or marked text.
 }
-
-void VivaldiRenderViewObserver::OnPinchZoom(float scale, int x, int y) {
-  render_view()->GetWebView()->SetPinchZoom(scale, x, y);
-}
-
-/*
-void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
-  std::string tagname = "";
-  std::string type = "";
-  bool editable = false;
-  std::string role = "";
-
-  if (!node.IsNull() && node.IsElementNode()) {
-    blink::WebElement element =
-        const_cast<blink::WebNode&>(node).To<blink::WebElement>();
-    tagname = element.TagName().Utf8();
-    if (element.HasAttribute("type")) {
-      type = element.GetAttribute("type").Utf8();
-    }
-    editable = element.IsEditable();
-
-    if (element.HasAttribute("role")) {
-      role = element.GetAttribute("role").Utf8();
-    }
-  }
-  Send(new VivaldiMsg_DidUpdateFocusedElementInfo(routing_id(), tagname, type,
-                                                  editable, role));
-}
-*/
 
 namespace {
 

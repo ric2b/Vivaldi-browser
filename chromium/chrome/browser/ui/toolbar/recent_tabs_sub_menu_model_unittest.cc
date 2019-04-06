@@ -113,14 +113,6 @@ class TestRecentTabsMenuModelDelegate : public ui::MenuModelDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestRecentTabsMenuModelDelegate);
 };
 
-class DummyRouter : public sync_sessions::LocalSessionEventRouter {
- public:
-  ~DummyRouter() override {}
-  void StartRoutingTo(
-      sync_sessions::LocalSessionEventHandler* handler) override {}
-  void Stop() override {}
-};
-
 class FakeSyncServiceObserverList {
  public:
   FakeSyncServiceObserverList() {}
@@ -185,10 +177,9 @@ class RecentTabsSubMenuModelTest
 
     manager_ = std::make_unique<sync_sessions::SessionsSyncManager>(
         mock_sync_service_->GetSyncClient()->GetSyncSessionsClient(),
-        sync_prefs_.get(), local_device_.get(), &dummy_router_,
+        sync_prefs_.get(), local_device_.get(),
         base::Bind(&FakeSyncServiceObserverList::NotifyForeignSessionUpdated,
-                   base::Unretained(&fake_sync_service_observer_list_)),
-        base::Closure());
+                   base::Unretained(&fake_sync_service_observer_list_)));
 
     manager_->MergeDataAndStartSyncing(
         syncer::SESSIONS, syncer::SyncDataList(),
@@ -208,8 +199,11 @@ class RecentTabsSubMenuModelTest
   void WaitForLoadFromLastSession() { content::RunAllTasksUntilIdle(); }
 
   void DisableSync() {
-    EXPECT_CALL(*mock_sync_service_, IsSyncActive())
-        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
+        .WillRepeatedly(
+            Return(syncer::SyncService::DISABLE_REASON_USER_CHOICE));
+    EXPECT_CALL(*mock_sync_service_, GetState())
+        .WillRepeatedly(Return(syncer::SyncService::State::DISABLED));
     EXPECT_CALL(*mock_sync_service_, IsDataTypeControllerRunning(_))
         .WillRepeatedly(Return(false));
     EXPECT_CALL(*mock_sync_service_, GetOpenTabsUIDelegateMock())
@@ -217,8 +211,10 @@ class RecentTabsSubMenuModelTest
   }
 
   void EnableSync() {
-    EXPECT_CALL(*mock_sync_service_, IsSyncActive())
-        .WillRepeatedly(Return(true));
+    EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
+        .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_NONE));
+    EXPECT_CALL(*mock_sync_service_, GetState())
+        .WillRepeatedly(Return(syncer::SyncService::State::ACTIVE));
     EXPECT_CALL(*mock_sync_service_,
                 IsDataTypeControllerRunning(syncer::SESSIONS))
         .WillRepeatedly(Return(true));
@@ -226,7 +222,7 @@ class RecentTabsSubMenuModelTest
                 IsDataTypeControllerRunning(syncer::PROXY_TABS))
         .WillRepeatedly(Return(true));
     EXPECT_CALL(*mock_sync_service_, GetOpenTabsUIDelegateMock())
-        .WillRepeatedly(Return(manager_.get()));
+        .WillRepeatedly(Return(manager_->GetOpenTabsUIDelegate()));
   }
 
   void NotifySyncEnabled() {
@@ -257,11 +253,12 @@ class RecentTabsSubMenuModelTest
       will_create_browser_context_services_subscription_;
 
   std::unique_ptr<syncer::LocalDeviceInfoProviderMock> local_device_;
-  DummyRouter dummy_router_;
   std::unique_ptr<syncer::SyncPrefs> sync_prefs_;
   FakeSyncServiceObserverList fake_sync_service_observer_list_;
   browser_sync::ProfileSyncServiceMock* mock_sync_service_ = nullptr;
   std::unique_ptr<sync_sessions::SessionsSyncManager> manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(RecentTabsSubMenuModelTest);
 };
 
 // Test disabled "Recently closed" header with no foreign tabs.
@@ -382,8 +379,8 @@ TEST_F(RecentTabsSubMenuModelTest,
   SessionService* session_service = new SessionService(profile());
   SessionServiceFactory::SetForTestProfile(profile(),
                                            base::WrapUnique(session_service));
-  SessionID tab_id;
-  SessionID window_id;
+  SessionID tab_id = SessionID::FromSerializedValue(1);
+  SessionID window_id = SessionID::FromSerializedValue(2);
   session_service->SetWindowType(window_id,
                                  Browser::TYPE_TABBED,
                                  SessionService::TYPE_NORMAL);

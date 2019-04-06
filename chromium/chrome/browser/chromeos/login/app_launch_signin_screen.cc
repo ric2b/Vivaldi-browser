@@ -13,8 +13,8 @@
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/login/auth/user_context.h"
-#include "components/proximity_auth/screenlock_bridge.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
@@ -67,15 +67,7 @@ user_manager::UserManager* AppLaunchSigninScreen::GetUserManager() {
                             : user_manager::UserManager::Get();
 }
 
-void AppLaunchSigninScreen::CancelPasswordChangedFlow() {
-  NOTREACHED();
-}
-
 void AppLaunchSigninScreen::CancelUserAdding() {
-  NOTREACHED();
-}
-
-void AppLaunchSigninScreen::CompleteLogin(const UserContext& user_context) {
   NOTREACHED();
 }
 
@@ -90,23 +82,9 @@ void AppLaunchSigninScreen::Login(const UserContext& user_context,
                      user_context));
 }
 
-void AppLaunchSigninScreen::MigrateUserData(const std::string& old_password) {
-  NOTREACHED();
-}
-
-void AppLaunchSigninScreen::LoadWallpaper(const AccountId& account_id) {}
-
-void AppLaunchSigninScreen::LoadSigninWallpaper() {}
-
 void AppLaunchSigninScreen::OnSigninScreenReady() {}
 
-void AppLaunchSigninScreen::OnGaiaScreenReady() {}
-
 void AppLaunchSigninScreen::RemoveUser(const AccountId& account_id) {
-  NOTREACHED();
-}
-
-void AppLaunchSigninScreen::ResyncUserData() {
   NOTREACHED();
 }
 
@@ -175,16 +153,6 @@ bool AppLaunchSigninScreen::IsUserSigninCompleted() const {
   return false;
 }
 
-void AppLaunchSigninScreen::SetDisplayEmail(const std::string& email) {
-  return;
-}
-
-void AppLaunchSigninScreen::SetDisplayAndGivenName(
-    const std::string& display_name,
-    const std::string& given_name) {
-  NOTREACHED();
-}
-
 void AppLaunchSigninScreen::Signout() {
   NOTREACHED();
 }
@@ -224,10 +192,5 @@ void AppLaunchSigninScreen::HandleGetUsers() {
 }
 
 void AppLaunchSigninScreen::CheckUserStatus(const AccountId& account_id) {}
-
-bool AppLaunchSigninScreen::IsUserWhitelisted(const AccountId& account_id) {
-  NOTREACHED();
-  return true;
-}
 
 }  // namespace chromeos

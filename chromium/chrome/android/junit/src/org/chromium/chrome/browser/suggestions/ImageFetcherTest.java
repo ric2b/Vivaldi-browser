@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.DiscardableReferencePool;
-import org.chromium.chrome.browser.DisableHistogramsRule;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
@@ -35,15 +35,15 @@ import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.ImageFetcher.DownloadThumbnailRequest;
 import org.chromium.chrome.browser.widget.ThumbnailProvider;
+import org.chromium.chrome.test.support.DisableHistogramsRule;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.net.URI;
 import java.util.HashMap;
 /**
  * Unit tests for {@link ImageFetcher}.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class ImageFetcherTest {
     public static final int IMAGE_SIZE_PX = 100;
@@ -68,7 +68,7 @@ public class ImageFetcherTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        CardsVariationParameters.setTestVariationParams(new HashMap<String, String>());
+        CardsVariationParameters.setTestVariationParams(new HashMap<>());
 
         mSuggestionsDeps.getFactory().largeIconBridge = mLargeIconBridge;
         mSuggestionsDeps.getFactory().thumbnailProvider = mThumbnailProvider;
@@ -76,6 +76,7 @@ public class ImageFetcherTest {
         mSuggestionsDeps.getFactory().suggestionsSource = mSuggestionsSource;
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void testFaviconFetch() {
         ImageFetcher imageFetcher = new ImageFetcher(mSuggestionsSource, mock(Profile.class),
@@ -106,6 +107,7 @@ public class ImageFetcherTest {
         verify(mThumbnailProvider).cancelRetrieval(eq(request));
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void testArticleThumbnailFetch() {
         ImageFetcher imageFetcher = new ImageFetcher(mSuggestionsSource, mock(Profile.class),

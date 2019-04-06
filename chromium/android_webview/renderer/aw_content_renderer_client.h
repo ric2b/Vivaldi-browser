@@ -12,7 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/memory/weak_ptr.h"
 #include "components/safe_browsing/common/safe_browsing.mojom.h"
-#include "components/spellcheck/spellcheck_build_features.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/web_restrictions/interfaces/web_restrictions.mojom.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "services/service_manager/public/cpp/local_interface_provider.h"
@@ -51,6 +51,8 @@ class AwContentRendererClient : public content::ContentRendererClient,
       override;
   std::unique_ptr<blink::WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() override;
+  std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+  CreateWebSocketHandshakeThrottleProvider() override;
   bool HandleNavigation(content::RenderFrame* render_frame,
                         bool is_content_initiated,
                         bool render_view_was_created_by_renderer,

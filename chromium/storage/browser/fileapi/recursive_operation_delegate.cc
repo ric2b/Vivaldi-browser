@@ -118,7 +118,7 @@ void RecursiveOperationDelegate::DidReadDirectory(const FileSystemURL& parent,
         parent.origin(),
         parent.mount_type(),
         parent.virtual_path().Append(entries[i].name));
-    if (entries[i].is_directory)
+    if (entries[i].type == filesystem::mojom::FsFileType::DIRECTORY)
       pending_directory_stack_.top().push(url);
     else
       pending_files_.push(url);
@@ -149,10 +149,10 @@ void RecursiveOperationDelegate::ProcessPendingFiles() {
   if (!pending_files_.empty()) {
     current_task_runner->PostTask(
         FROM_HERE,
-        base::Bind(&RecursiveOperationDelegate::ProcessFile, AsWeakPtr(),
-                   pending_files_.front(),
-                   base::Bind(&RecursiveOperationDelegate::DidProcessFile,
-                              AsWeakPtr(), pending_files_.front())));
+        base::BindOnce(&RecursiveOperationDelegate::ProcessFile, AsWeakPtr(),
+                       pending_files_.front(),
+                       base::Bind(&RecursiveOperationDelegate::DidProcessFile,
+                                  AsWeakPtr(), pending_files_.front())));
     pending_files_.pop();
   }
 }

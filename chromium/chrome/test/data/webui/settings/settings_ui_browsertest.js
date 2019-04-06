@@ -14,6 +14,11 @@ function SettingsUIBrowserTest() {}
 
 SettingsUIBrowserTest.prototype = {
   __proto__: SettingsPageBrowserTest.prototype,
+
+  /** @override */
+  extraLibraries: SettingsPageBrowserTest.prototype.extraLibraries.concat([
+    'test_util.js',
+  ]),
 };
 
 // Times out on debug builders and may time out on memory bots because
@@ -21,12 +26,19 @@ SettingsUIBrowserTest.prototype = {
 // and several times that in a Debug build. See https://crbug.com/558434
 // and http://crbug.com/711256.
 
-TEST_F('SettingsUIBrowserTest', 'DISABLED_All', function() {
+GEN('#if !defined(NDEBUG) || defined(OS_MACOSX)');
+GEN('#define MAYBE_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_All All');
+GEN('#endif');
+
+TEST_F('SettingsUIBrowserTest', 'MAYBE_All', function() {
   suite('settings-ui', function() {
     let toolbar;
     let ui;
 
     suiteSetup(function() {
+      testing.Test.disableAnimationsAndTransitions();
       ui = assert(document.querySelector('settings-ui'));
       ui.$.drawerTemplate.restamp = true;
     });
@@ -41,40 +53,33 @@ TEST_F('SettingsUIBrowserTest', 'DISABLED_All', function() {
       assertTrue(toolbar.showMenu);
     });
 
-    test('app drawer', function(done) {
+    test('app drawer', function() {
       assertEquals(null, ui.$$('settings-menu'));
       const drawer = ui.$.drawer;
       assertFalse(!!drawer.open);
 
+      const whenDone = test_util.eventToPromise('cr-drawer-opened', drawer)
+                           .then(function() {
+                             const whenClosed = test_util.eventToPromise(
+                                 'open-changed', drawer);
+                             drawer.closeDrawer();
+                             return whenClosed;
+                           })
+                           .then(function(e) {
+                             // Drawer is closed, but menu is still stamped so
+                             // its contents remain visible as the drawer slides
+                             // out.
+                             assertFalse(e.detail.value);
+                             assertTrue(!!ui.$$('settings-menu'));
+                           });
       drawer.openDrawer();
-
       Polymer.dom.flush();
+
       // Validate that dialog is open and menu is shown so it will animate.
       assertTrue(drawer.open);
       assertTrue(!!ui.$$('settings-menu'));
 
-      // Close the dialog after it fully opens.
-      drawer.addEventListener('transitionend', function() {
-        if (drawer.classList.contains('opening')) {
-          // Click away from the drawer. MockInteractions don't expose a way to
-          // click at a specific location.
-          const midScreen = MockInteractions.middleOfNode(ui);
-          drawer.dispatchEvent(new MouseEvent('click', {
-            'bubbles': true,
-            'cancelable': true,
-            'clientX': midScreen.x,
-            'clientY': midScreen.y,
-          }));
-        }
-      });
-
-      drawer.addEventListener('close', function() {
-        // Drawer is closed, but menu is still stamped so its contents remain
-        // visible as the drawer slides out.
-        assertFalse(drawer.open);
-        assertTrue(!!ui.$$('settings-menu'));
-        done();
-      });
+      return whenDone;
     });
 
     test('advanced UIs stay in sync', function() {
@@ -99,7 +104,7 @@ TEST_F('SettingsUIBrowserTest', 'DISABLED_All', function() {
       assertTrue(!!menu);
       assertTrue(menu.advancedOpened);
 
-      MockInteractions.tap(menu.$.advancedButton);
+      menu.$.advancedButton.click();
       Polymer.dom.flush();
 
       // Check that all values are updated in unison.
@@ -110,8 +115,8 @@ TEST_F('SettingsUIBrowserTest', 'DISABLED_All', function() {
 
     test('URL initiated search propagates to search box', function() {
       toolbar = /** @type {!CrToolbarElement} */ (ui.$$('cr-toolbar'));
-      const searchField = /** @type {CrToolbarSearchFieldElement} */ (
-          toolbar.getSearchField());
+      const searchField =
+          /** @type {CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
       assertEquals('', searchField.getSearchInput().value);
 
       const query = 'foo';
@@ -121,8 +126,9 @@ TEST_F('SettingsUIBrowserTest', 'DISABLED_All', function() {
     });
 
     test('search box initiated search propagates to URL', function() {
-      const searchField = /** @type {CrToolbarSearchFieldElement} */ (
-          toolbar.getSearchField());
+      toolbar = /** @type {!CrToolbarElement} */ (ui.$$('cr-toolbar'));
+      const searchField =
+          /** @type {CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
 
       settings.navigateTo(
           settings.routes.BASIC, /* dynamicParams */ null,
@@ -140,10 +146,10 @@ TEST_F('SettingsUIBrowserTest', 'DISABLED_All', function() {
       assertEquals(value, settings.getQueryParameters().get('search'));
     });
 
-     test('whitespace only search query is ignored', function() {
+    test('whitespace only search query is ignored', function() {
       toolbar = /** @type {!CrToolbarElement} */ (ui.$$('cr-toolbar'));
-      const searchField = /** @type {CrToolbarSearchFieldElement} */ (
-          toolbar.getSearchField());
+      const searchField =
+          /** @type {CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
       searchField.setValue('    ');
       let urlParams = settings.getQueryParameters();
       assertFalse(urlParams.has('search'));
@@ -159,6 +165,21 @@ TEST_F('SettingsUIBrowserTest', 'DISABLED_All', function() {
       searchField.setValue('   ');
       urlParams = settings.getQueryParameters();
       assertFalse(urlParams.has('search'));
+    });
+
+    test('find shortcut', function() {
+      document.body.focus();
+      assertTrue(ui.canHandleFindShortcut());
+
+      ui.handleFindShortcut();
+      assertTrue(ui.$$('cr-toolbar').getSearchField().isSearchFocused());
+
+      const whenDialogOpen = test_util.eventToPromise('cr-dialog-open', ui);
+      settings.navigateTo(settings.routes.RESET_DIALOG);
+
+      return whenDialogOpen.then(function() {
+        assertFalse(ui.canHandleFindShortcut());
+      });
     });
   });
 

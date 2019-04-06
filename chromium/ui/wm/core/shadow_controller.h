@@ -10,7 +10,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/wm_core_export.h"
 #include "ui/wm/public/activation_change_observer.h"
 
@@ -18,10 +17,14 @@ namespace aura {
 class Window;
 }
 
+namespace ui {
+class Shadow;
+}
+
 namespace wm {
 
 class ActivationClient;
-class Shadow;
+class ShadowControllerDelegate;
 
 // ShadowController observes changes to windows and creates and updates drop
 // shadows as needed. ShadowController itself is light weight and per
@@ -29,14 +32,20 @@ class Shadow;
 // which observes all window creation.
 class WM_CORE_EXPORT ShadowController : public ActivationChangeObserver {
  public:
-  static constexpr ShadowElevation kActiveNormalShadowElevation =
-      ShadowElevation::LARGE;
-
   // Returns the shadow for the |window|, or NULL if no shadow exists.
-  static Shadow* GetShadowForWindow(aura::Window* window);
+  static ui::Shadow* GetShadowForWindow(aura::Window* window);
 
-  explicit ShadowController(ActivationClient* activation_client);
+  ShadowController(ActivationClient* activation_client,
+                   std::unique_ptr<ShadowControllerDelegate> delegate);
   ~ShadowController() override;
+
+  bool IsShadowVisibleForWindow(aura::Window* window);
+
+  // Updates the shadow for |window|. Does nothing if |window| is not observed
+  // by the shadow controller impl. This function should be called if the shadow
+  // needs to be modified outside of normal window changes (eg. window
+  // activation, window property change).
+  void UpdateShadowForWindow(aura::Window* window);
 
   // ActivationChangeObserver overrides:
   void OnWindowActivated(ActivationChangeObserver::ActivationReason reason,

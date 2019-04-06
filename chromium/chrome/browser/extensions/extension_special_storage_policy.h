@@ -11,6 +11,7 @@
 
 #include "base/synchronization/lock.h"
 #include "extensions/common/extension_set.h"
+#include "services/network/session_cleanup_cookie_store.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "url/gurl.h"
 
@@ -39,10 +40,11 @@ class ExtensionSpecialStoragePolicy : public storage::SpecialStoragePolicy {
   bool IsStorageProtected(const GURL& origin) override;
   bool IsStorageUnlimited(const GURL& origin) override;
   bool IsStorageSessionOnly(const GURL& origin) override;
-  bool IsStorageSessionOnlyOrBlocked(const GURL& origin) override;
   bool HasIsolatedStorage(const GURL& origin) override;
   bool HasSessionOnlyOrigins() override;
   bool IsStorageDurable(const GURL& origin) override;
+  network::SessionCleanupCookieStore::DeleteCookiePredicate
+  CreateDeleteCookieOnExitPredicate() override;
 
   // Methods used by the ExtensionService to populate this class.
   void GrantRightsForExtension(const extensions::Extension* extension,

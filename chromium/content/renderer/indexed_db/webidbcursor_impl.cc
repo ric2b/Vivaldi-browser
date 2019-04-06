@@ -9,11 +9,11 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "content/renderer/indexed_db/indexed_db_dispatcher.h"
 #include "content/renderer/indexed_db/indexed_db_key_builders.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
-#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBValue.h"
+#include "third_party/blink/public/platform/modules/indexeddb/web_idb_value.h"
 
 using blink::WebBlobInfo;
 using blink::WebData;
@@ -28,7 +28,8 @@ namespace content {
 
 class WebIDBCursorImpl::IOThreadHelper {
  public:
-  IOThreadHelper();
+  explicit IOThreadHelper(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~IOThreadHelper();
 
   void Bind(CursorAssociatedPtrInfo cursor_info);
@@ -39,15 +40,14 @@ class WebIDBCursorImpl::IOThreadHelper {
                 std::unique_ptr<IndexedDBCallbacksImpl> callbacks);
   void Prefetch(int32_t count,
                 std::unique_ptr<IndexedDBCallbacksImpl> callbacks);
-  void PrefetchReset(int32_t used_prefetches,
-                     int32_t unused_prefetches,
-                     std::vector<std::string> unused_blob_uuids);
+  void PrefetchReset(int32_t used_prefetches, int32_t unused_prefetches);
 
  private:
   CallbacksAssociatedPtrInfo GetCallbacksProxy(
       std::unique_ptr<IndexedDBCallbacksImpl> callbacks);
 
   indexed_db::mojom::CursorAssociatedPtr cursor_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(IOThreadHelper);
 };
@@ -58,7 +58,7 @@ WebIDBCursorImpl::WebIDBCursorImpl(
     scoped_refptr<base::SingleThreadTaskRunner> io_runner,
     scoped_refptr<base::SingleThreadTaskRunner> callback_runner)
     : transaction_id_(transaction_id),
-      helper_(new IOThreadHelper()),
+      helper_(new IOThreadHelper(io_runner)),
       io_runner_(std::move(io_runner)),
       callback_runner_(std::move(callback_runner)),
       continue_count_(0),
@@ -69,7 +69,7 @@ WebIDBCursorImpl::WebIDBCursorImpl(
   IndexedDBDispatcher::ThreadSpecificInstance()->RegisterCursor(this);
   io_runner_->PostTask(FROM_HERE, base::BindOnce(&IOThreadHelper::Bind,
                                                  base::Unretained(helper_),
-                                                 base::Passed(&cursor_info)));
+                                                 std::move(cursor_info)));
 }
 
 WebIDBCursorImpl::~WebIDBCursorImpl() {
@@ -100,7 +100,7 @@ void WebIDBCursorImpl::Advance(unsigned long count,
   io_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&IOThreadHelper::Advance, base::Unretained(helper_), count,
-                     base::Passed(&callbacks_impl)));
+                     std::move(callbacks_impl)));
 }
 
 void WebIDBCursorImpl::Continue(WebIDBKeyView key,
@@ -129,7 +129,7 @@ void WebIDBCursorImpl::Continue(WebIDBKeyView key,
       io_runner_->PostTask(
           FROM_HERE,
           base::BindOnce(&IOThreadHelper::Prefetch, base::Unretained(helper_),
-                         prefetch_amount_, base::Passed(&callbacks_impl)));
+                         prefetch_amount_, std::move(callbacks_impl)));
 
       // Increase prefetch_amount_ exponentially.
       prefetch_amount_ *= 2;
@@ -155,7 +155,7 @@ void WebIDBCursorImpl::Continue(WebIDBKeyView key,
       base::BindOnce(&IOThreadHelper::Continue, base::Unretained(helper_),
                      IndexedDBKeyBuilder::Build(key),
                      IndexedDBKeyBuilder::Build(primary_key),
-                     base::Passed(&callbacks_impl)));
+                     std::move(callbacks_impl)));
 }
 
 void WebIDBCursorImpl::PostSuccessHandlerCallback() {
@@ -238,26 +238,11 @@ void WebIDBCursorImpl::ResetPrefetchCache() {
     return;
   }
 
-  // Ack any unused blobs.
-  //
-  // The extra memory allocations and copying here could be reduced by having an
-  // AppendBlobUuidsTo that takes in a std::vector<std::string> reference.
-  // However, that would be a deviation from the Blink API standards.
-  // TODO(pwnall): Ensure that the code here is deleted when
-  // https://crbug.com/611935 is completed and non-Mojo Blob code paths are
-  // removed from the codebase.
-  std::vector<std::string> uuids;
-  for (const auto& value : prefetch_values_) {
-    blink::WebVector<blink::WebString> web_uuids = value.BlobUuids();
-    for (const blink::WebString& web_uuid : web_uuids)
-      uuids.emplace_back(web_uuid.Latin1());
-  }
-
   // Reset the back-end cursor.
   io_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&IOThreadHelper::PrefetchReset,
-                                base::Unretained(helper_), used_prefetches_,
-                                prefetch_keys_.size(), std::move(uuids)));
+      FROM_HERE,
+      base::BindOnce(&IOThreadHelper::PrefetchReset, base::Unretained(helper_),
+                     used_prefetches_, prefetch_keys_.size()));
 
   // Reset the prefetch cache.
   prefetch_keys_.clear();
@@ -267,13 +252,15 @@ void WebIDBCursorImpl::ResetPrefetchCache() {
   pending_onsuccess_callbacks_ = 0;
 }
 
-WebIDBCursorImpl::IOThreadHelper::IOThreadHelper() {}
+WebIDBCursorImpl::IOThreadHelper::IOThreadHelper(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    : task_runner_(std::move(task_runner)) {}
 
 WebIDBCursorImpl::IOThreadHelper::~IOThreadHelper() {}
 
 void WebIDBCursorImpl::IOThreadHelper::Bind(
     CursorAssociatedPtrInfo cursor_info) {
-  cursor_.Bind(std::move(cursor_info));
+  cursor_.Bind(std::move(cursor_info), task_runner_);
 }
 
 void WebIDBCursorImpl::IOThreadHelper::Advance(
@@ -297,9 +284,8 @@ void WebIDBCursorImpl::IOThreadHelper::Prefetch(
 
 void WebIDBCursorImpl::IOThreadHelper::PrefetchReset(
     int32_t used_prefetches,
-    int32_t unused_prefetches,
-    std::vector<std::string> unused_blob_uuids) {
-  cursor_->PrefetchReset(used_prefetches, unused_prefetches, unused_blob_uuids);
+    int32_t unused_prefetches) {
+  cursor_->PrefetchReset(used_prefetches, unused_prefetches);
 }
 
 CallbacksAssociatedPtrInfo WebIDBCursorImpl::IOThreadHelper::GetCallbacksProxy(

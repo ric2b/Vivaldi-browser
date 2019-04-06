@@ -20,7 +20,6 @@
 @synthesize highlightNewIncognitoTabCell = _highlightNewIncognitoTabCell;
 @synthesize userAgentType = _userAgentType;
 @synthesize requestStartTime = _requestStartTime;
-@synthesize inNewTabPage = _inNewTabPage;
 @synthesize engagementTracker = _engagementTracker;
 @synthesize baseViewController = _baseViewController;
 @synthesize displayView = _displayView;
@@ -37,11 +36,6 @@
     _engagementTracker = nullptr;
   }
   return self;
-}
-
-- (instancetype)init {
-  NOTREACHED();
-  return nil;
 }
 
 - (UIEdgeInsets)toolsButtonInsets {

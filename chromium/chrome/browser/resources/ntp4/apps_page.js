@@ -569,7 +569,7 @@ cr.define('ntp', function() {
   /**
    * Creates a new AppsPage object.
    * @constructor
-   * @extends {TilePage}
+   * @extends {ntp.TilePage}
    */
   function AppsPage() {
     var el = new TilePage(appsPageGridValues);
@@ -627,7 +627,8 @@ cr.define('ntp', function() {
      * @private
      */
     onCardSelected_: function() {
-      var apps = this.querySelectorAll('.app.icon-loading');
+      var apps = /** @type {NodeList<ntp.App>} */ (
+          this.querySelectorAll('.app.icon-loading'));
       for (var i = 0; i < apps.length; i++) {
         apps[i].loadIcon();
       }

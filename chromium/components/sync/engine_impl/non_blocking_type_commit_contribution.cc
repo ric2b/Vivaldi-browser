@@ -9,6 +9,7 @@
 #include "base/guid.h"
 #include "base/values.h"
 #include "components/sync/base/time.h"
+#include "components/sync/base/unique_position.h"
 #include "components/sync/engine/non_blocking_sync_common.h"
 #include "components/sync/engine_impl/model_type_worker.h"
 #include "components/sync/protocol/proto_value_conversions.h"
@@ -43,6 +44,7 @@ void NonBlockingTypeCommitContribution::AddToCommitMessage(
 
   commit_message->mutable_entries()->Reserve(commit_message->entries_size() +
                                              commit_requests_.size());
+  CommitCounters* counters = debug_info_emitter_->GetMutableCommitCounters();
 
   for (const auto& commit_request : commit_requests_) {
     sync_pb::SyncEntity* sync_entity = commit_message->add_entries();
@@ -56,13 +58,19 @@ void NonBlockingTypeCommitContribution::AddToCommitMessage(
       PopulateCommitProto(commit_request, sync_entity);
       AdjustCommitProto(sync_entity);
     }
+
+    // Update the relevant counter based on the type of the commit request.
+    if (commit_request.entity->is_deleted()) {
+      counters->num_deletion_commits_attempted++;
+    } else if (commit_request.base_version <= 0) {
+      counters->num_creation_commits_attempted++;
+    } else {
+      counters->num_update_commits_attempted++;
+    }
   }
 
   if (!context_.context().empty())
     commit_message->add_client_contexts()->CopyFrom(context_);
-
-  CommitCounters* counters = debug_info_emitter_->GetMutableCommitCounters();
-  counters->num_commits_attempted += commit_requests_.size();
 }
 
 SyncerError NonBlockingTypeCommitContribution::ProcessCommitResponse(
@@ -89,17 +97,30 @@ SyncerError NonBlockingTypeCommitContribution::ProcessCommitResponse(
       case sync_pb::CommitResponse::CONFLICT:
         DVLOG(1) << "Server reports conflict for commit message.";
         ++conflicting_commits;
+        status->increment_num_server_conflicts();
         break;
       case sync_pb::CommitResponse::SUCCESS: {
         ++successes;
         CommitResponseData response_data;
         const CommitRequestData& commit_request = commit_requests_[i];
         response_data.id = entry_response.id_string();
+        if (response_data.id != commit_request.entity->id) {
+          // Server has changed the sync id in the request. Write back the
+          // original sync id. This is useful for data types without a notion of
+          // a client tag such as bookmarks.
+          response_data.id_in_request = commit_request.entity->id;
+        }
         response_data.response_version = entry_response.version();
         response_data.client_tag_hash = commit_request.entity->client_tag_hash;
         response_data.sequence_number = commit_request.sequence_number;
         response_data.specifics_hash = commit_request.specifics_hash;
         response_list.push_back(response_data);
+
+        status->increment_num_successful_commits();
+        if (commit_request.entity->specifics.has_bookmark()) {
+          status->increment_num_successful_bookmark_commits();
+        }
+
         break;
       }
       case sync_pb::CommitResponse::OVER_QUOTA:
@@ -140,8 +161,6 @@ void NonBlockingTypeCommitContribution::CleanUp() {
 
   debug_info_emitter_->EmitCommitCountersUpdate();
   debug_info_emitter_->EmitStatusCountersUpdate();
-
-  worker_->CleanupAfterCommit();
 }
 
 size_t NonBlockingTypeCommitContribution::GetNumEntries() const {
@@ -153,18 +172,29 @@ void NonBlockingTypeCommitContribution::PopulateCommitProto(
     const CommitRequestData& commit_entity,
     sync_pb::SyncEntity* commit_proto) {
   const EntityData& entity_data = commit_entity.entity.value();
-
   commit_proto->set_id_string(entity_data.id);
   commit_proto->set_client_defined_unique_tag(entity_data.client_tag_hash);
   commit_proto->set_version(commit_entity.base_version);
   commit_proto->set_deleted(entity_data.is_deleted());
-  commit_proto->set_folder(false);
+  commit_proto->set_folder(entity_data.is_folder);
   commit_proto->set_name(entity_data.non_unique_name);
-  // TODO(stanisc): This doesn't support bookmarks yet.
-  DCHECK(entity_data.parent_id.empty());
-  // TODO(crbug.com/516866): Set parent_id_string for hierarchical types here.
 
   if (!entity_data.is_deleted()) {
+    // Handle bookmarks separately.
+    if (entity_data.specifics.has_bookmark()) {
+      // position_in_parent field is set only for legacy reasons.  See comments
+      // in sync.proto for more information.
+      commit_proto->set_position_in_parent(
+          syncer::UniquePosition::FromProto(entity_data.unique_position)
+              .ToInt64());
+      commit_proto->mutable_unique_position()->CopyFrom(
+          entity_data.unique_position);
+      // TODO(mamir): check if parent_id_string needs to be populated for
+      // non-deletions.
+      if (!entity_data.parent_id.empty()) {
+        commit_proto->set_parent_id_string(entity_data.parent_id);
+      }
+    }
     commit_proto->set_ctime(TimeToProtoTime(entity_data.creation_time));
     commit_proto->set_mtime(TimeToProtoTime(entity_data.modification_time));
     commit_proto->mutable_specifics()->CopyFrom(entity_data.specifics);
@@ -173,20 +203,17 @@ void NonBlockingTypeCommitContribution::PopulateCommitProto(
 
 void NonBlockingTypeCommitContribution::AdjustCommitProto(
     sync_pb::SyncEntity* commit_proto) {
-  // Initial commits need our help to generate a client ID.
   if (commit_proto->version() == kUncommittedVersion) {
-    DCHECK(commit_proto->id_string().empty()) << commit_proto->id_string();
-    // TODO(crbug.com/516866): This is incorrect for bookmarks for two reasons:
-    // 1) Won't be able to match previously committed bookmarks to the ones
-    //    with server ID.
-    // 2) Recommitting an item in a case of failing to receive commit response
-    //    would result in generating a different client ID, which in turn
-    //    would result in a duplication.
-    // We should generate client ID on the frontend side instead.
-    commit_proto->set_id_string(base::GenerateGUID());
     commit_proto->set_version(0);
-  } else {
-    DCHECK(!commit_proto->id_string().empty());
+    // Initial commits need our help to generate a client ID if they don't have
+    // any. Bookmarks create their own IDs on the frontend side to be able to
+    // match them after commits. For other data types we generate one here. And
+    // since bookmarks don't have client tags, their server id should be stable
+    // across restarts in case of recommitting an item, it doesn't result in
+    // creating a duplicate.
+    if (commit_proto->id_string().empty()) {
+      commit_proto->set_id_string(base::GenerateGUID());
+    }
   }
 
   // Encrypt the specifics and hide the title if necessary.

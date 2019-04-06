@@ -8,7 +8,6 @@
 #include <map>
 #include <string>
 
-#include "ash/shell_observer.h"
 #include "ash/system/system_tray_focus_observer.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -42,7 +41,6 @@ class OobeUI;
 // View used to render a WebUI supporting Widget. This widget is used for the
 // WebUI based start up and lock screens. It contains a WebView.
 class WebUILoginView : public views::View,
-                       public ash::ShellObserver,
                        public keyboard::KeyboardControllerObserver,
                        public content::WebContentsDelegate,
                        public content::NotificationObserver,
@@ -147,25 +145,20 @@ class WebUILoginView : public views::View,
   // Map type for the accelerator-to-identifier map.
   typedef std::map<ui::Accelerator, std::string> AccelMap;
 
-  // ash::ShellObserver:
-  void OnVirtualKeyboardStateChanged(bool activated,
-                                     aura::Window* root_window) override;
-
   // keyboard::KeyboardControllerObserver:
-  void OnKeyboardAvailabilityChanging(bool is_available) override;
+  void OnKeyboardVisibilityStateChanged(bool is_visible) override;
 
   // Overridden from content::WebContentsDelegate.
   bool HandleContextMenu(const content::ContextMenuParams& params) override;
   void HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
-  bool IsPopupOrPanel(const content::WebContents* source) const override;
   bool TakeFocus(content::WebContents* source, bool reverse) override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) override;
-  bool CheckMediaAccessPermission(content::WebContents* web_contents,
+      content::MediaResponseCallback callback) override;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) override;
   bool PreHandleGestureEvent(content::WebContents* source,

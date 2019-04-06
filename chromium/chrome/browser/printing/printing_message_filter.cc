@@ -20,11 +20,10 @@
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print_messages.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/child_process_host.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
@@ -269,7 +268,7 @@ void PrintingMessageFilter::OnScriptedPrintReply(
   }
   PrintHostMsg_ScriptedPrint::WriteReplyParams(reply_msg, params);
   Send(reply_msg);
-  if (params.params.dpi && params.params.document_cookie) {
+  if (!params.params.dpi.IsEmpty() && params.params.document_cookie) {
 #if defined(OS_ANDROID)
     int file_descriptor;
     const base::string16& device_name = printer_query->settings().device_name();
@@ -363,12 +362,9 @@ void PrintingMessageFilter::OnUpdatePrintSettingsReply(
 }
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-void PrintingMessageFilter::OnCheckForCancel(int32_t preview_ui_id,
-                                             int preview_request_id,
+void PrintingMessageFilter::OnCheckForCancel(const PrintHostMsg_PreviewIds& ids,
                                              bool* cancel) {
-  PrintPreviewUI::GetCurrentPrintPreviewStatus(preview_ui_id,
-                                               preview_request_id,
-                                               cancel);
+  PrintPreviewUI::GetCurrentPrintPreviewStatus(ids, cancel);
 }
 #endif
 

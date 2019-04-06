@@ -17,14 +17,17 @@
 #include "services/device/public/cpp/generic_sensor/sensor_reading.h"
 #include "services/device/public/cpp/generic_sensor/sensor_reading_shared_buffer_reader.h"
 #include "services/device/public/cpp/generic_sensor/sensor_traits.h"
-#include "services/device/public/interfaces/sensor.mojom.h"
-#include "services/device/public/interfaces/sensor_provider.mojom.h"
+#include "services/device/public/mojom/sensor.mojom.h"
+#include "services/device/public/mojom/sensor_provider.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/display/test/scoped_screen_override.h"
 #include "ui/gfx/geometry/quaternion.h"
 
 namespace device {
+
+using display::test::ScopedScreenOverride;
 
 namespace {
 
@@ -88,7 +91,8 @@ class VROrientationDeviceTest : public testing::Test {
 
     fake_screen_ = std::make_unique<FakeScreen>();
 
-    display::Screen::SetScreenInstance(fake_screen_.get());
+    scoped_screen_override_ =
+        std::make_unique<ScopedScreenOverride>(fake_screen_.get());
 
     scoped_task_environment_.RunUntilIdle();
   }
@@ -96,8 +100,7 @@ class VROrientationDeviceTest : public testing::Test {
   void TearDown() override { shared_buffer_handle_.reset(); }
 
   double GetBufferOffset() {
-    return SensorReadingSharedBuffer::GetOffset(
-        mojom::SensorType::ABSOLUTE_ORIENTATION_QUATERNION);
+    return SensorReadingSharedBuffer::GetOffset(kOrientationSensorType);
   }
 
   void InitializeDevice(mojom::SensorInitParamsPtr params) {
@@ -131,11 +134,11 @@ class VROrientationDeviceTest : public testing::Test {
 
     base::RunLoop loop;
 
-    device_->OnMagicWindowPoseRequest(base::BindOnce(
+    device_->OnMagicWindowFrameDataRequest(base::BindOnce(
         [](base::OnceClosure quit_closure,
            base::OnceCallback<void(mojom::VRPosePtr)> callback,
-           mojom::VRPosePtr ptr) {
-          std::move(callback).Run(std::move(ptr));
+           mojom::XRFrameDataPtr ptr) {
+          std::move(callback).Run(std::move(ptr->pose));
           std::move(quit_closure).Run();
         },
         loop.QuitClosure(), std::move(callback)));
@@ -150,8 +153,7 @@ class VROrientationDeviceTest : public testing::Test {
     auto init_params = mojom::SensorInitParams::New();
     init_params->sensor = std::move(sensor_ptr_);
     init_params->default_configuration = PlatformSensorConfiguration(
-        SensorTraits<mojom::SensorType::ABSOLUTE_ORIENTATION_QUATERNION>::
-            kDefaultFrequency);
+        SensorTraits<kOrientationSensorType>::kDefaultFrequency);
 
     init_params->client_request = mojo::MakeRequest(&sensor_client_ptr_);
 
@@ -198,6 +200,7 @@ class VROrientationDeviceTest : public testing::Test {
   mojom::SensorClientPtr sensor_client_ptr_;
 
   std::unique_ptr<FakeScreen> fake_screen_;
+  std::unique_ptr<ScopedScreenOverride> scoped_screen_override_;
 
   DISALLOW_COPY_AND_ASSIGN(VROrientationDeviceTest);
 };
@@ -230,7 +233,7 @@ TEST_F(VROrientationDeviceTest, SensorIsAvailableTest) {
 }
 
 TEST_F(VROrientationDeviceTest, GetOrientationTest) {
-  // Tests that OnMagicWindowPoseRequest returns a pose ptr without mishap.
+  // Tests that OnMagicWindowFrameDataRequest returns a pose ptr without mishap.
 
   InitializeDevice(FakeInitParams());
 

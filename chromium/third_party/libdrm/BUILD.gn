@@ -22,9 +22,19 @@ if (!use_system_libdrm) {
       "src/include",
       "src/include/drm",
     ]
+
+    # libdrm uses macros defined by <sys/types.h> which are being moved to
+    # <sys/sysmacros.h>.  GLIBC headers give a pragma warning in this case.
+    # Suppress this warning for now.  This may be removed once
+    # https://patchwork.kernel.org/patch/9628231/ lands.
+    cflags = [ "-Wno-#pragma-messages" ]
     if (is_clang) {
-      cflags = [ "-Wno-enum-conversion" ]
+      cflags += [ "-Wno-enum-conversion" ]
     }
+  }
+
+  config("libdrm_exynos_include_config") {
+    include_dirs = [ "//third_party/libdrm/src/exynos" ]
   }
 
   static_library("libdrm") {
@@ -49,6 +59,32 @@ if (!use_system_libdrm) {
     ]
 
     public_configs = [ ":libdrm_config" ]
+  }
+
+  executable("modetest") {
+    sources = [
+      "src/tests/modetest/buffers.c",
+      "src/tests/modetest/buffers.h",
+      "src/tests/modetest/cursor.c",
+      "src/tests/modetest/cursor.h",
+      "src/tests/modetest/modetest.c",
+      "src/tests/util/common.h",
+      "src/tests/util/format.c",
+      "src/tests/util/format.h",
+      "src/tests/util/kms.c",
+      "src/tests/util/kms.h",
+      "src/tests/util/pattern.c",
+      "src/tests/util/pattern.h",
+    ]
+
+    include_dirs = [
+      "src/tests",
+      "src/tests/modetest",
+    ]
+
+    deps = [
+      ":libdrm",
+    ]
   }
 }
 

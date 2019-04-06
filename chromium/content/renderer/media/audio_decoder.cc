@@ -14,8 +14,8 @@
 #include "media/base/limits.h"
 #include "media/filters/audio_file_reader.h"
 #include "media/filters/in_memory_url_protocol.h"
-#include "media/media_features.h"
-#include "third_party/WebKit/public/platform/WebAudioBus.h"
+#include "media/media_buildflags.h"
+#include "third_party/blink/public/platform/web_audio_bus.h"
 
 using media::AudioBus;
 using media::AudioFileReader;

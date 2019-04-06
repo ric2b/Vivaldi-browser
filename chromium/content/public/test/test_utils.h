@@ -39,31 +39,37 @@ namespace content {
 class RenderFrameHost;
 class TestServiceManagerContext;
 
-// Turns on nestable tasks, runs the message loop, then resets nestable tasks
-// to what they were originally. Prefer this over MessageLoop::Run for in
-// process browser tests that need to block until a condition is met.
+// Deprecated: Use RunLoop::Run(). Use RunLoop::Type::kNestableTasksAllowed to
+// force nesting in browser tests.
 void RunMessageLoop();
 
-// Variant of RunMessageLoop that takes RunLoop.
+// Deprecated: Invoke |run_loop->Run()| directly.
 void RunThisRunLoop(base::RunLoop* run_loop);
 
-// Turns on nestable tasks, runs all pending tasks in the message loop,
-// then resets nestable tasks to what they were originally. Prefer this
-// over MessageLoop::RunAllPending for in process browser tests to run
-// all pending tasks. Can only be called from the UI thread.
+// Turns on nestable tasks, runs all pending tasks in the message loop, then
+// resets nestable tasks to what they were originally. Can only be called from
+// the UI thread. Only use this instead of RunLoop::RunUntilIdle() to work
+// around cases where a task keeps reposting itself and prevents the loop from
+// going idle.
+// TODO(gab): Assess whether this API is really needed. If you find yourself
+// needing this, post a comment on https://crbug.com/824431.
 void RunAllPendingInMessageLoop();
 
-// Blocks the current thread until all the pending messages in the loop of the
-// thread |thread_id| have been processed. Can only be called from the UI
-// thread.
+// Deprecated: For BrowserThread::IO use
+// TestBrowserThreadBundle::RunIOThreadUntilIdle. For the main thread use
+// RunLoop. In non-unit-tests use RunLoop::QuitClosure to observe async events
+// rather than flushing entire threads.
 void RunAllPendingInMessageLoop(BrowserThread::ID thread_id);
 
-// Runs until the blocking pool, task scheduler, and the current message loop
-// are all empty (have no more scheduled tasks) and no tasks are running.
+// Runs all tasks on the current thread and TaskScheduler threads until idle.
+// Note: Prefer TestBrowserThreadBundle::RunUntilIdle() in unit tests.
 void RunAllTasksUntilIdle();
 
 // Get task to quit the given RunLoop. It allows a few generations of pending
 // tasks to run as opposed to run_loop->QuitClosure().
+// Prefer RunLoop::RunUntilIdle() to this.
+// TODO(gab): Assess the need for this API (see comment on
+// RunAllPendingInMessageLoop() above).
 base::Closure GetDeferredQuitTaskForRunLoop(base::RunLoop* run_loop);
 
 // Executes the specified JavaScript in the specified frame, and runs a nested
@@ -99,6 +105,15 @@ void DeprecatedEnableFeatureWithParam(const base::Feature& feature,
                                       const std::string& param_value,
                                       base::CommandLine* command_line);
 
+// Creates a WebContents and attaches it as an inner WebContents, replacing
+// |rfh| in the frame tree. |rfh| should not be a main frame (in a browser test,
+// it should be an <iframe>). Delegate interfaces are mocked out.
+//
+// Returns a pointer to the inner WebContents, which is now owned by the outer
+// WebContents. The caller should be careful when retaining the pointer, as the
+// inner WebContents will be deleted if the frame it's attached to goes away.
+WebContents* CreateAndAttachInnerContents(RenderFrameHost* rfh);
+
 // Helper class to Run and Quit the message loop. Run and Quit can only happen
 // once per instance. Make a new instance for each use. Calling Quit after Run
 // has returned is safe and has no effect.
@@ -107,9 +122,8 @@ void DeprecatedEnableFeatureWithParam(const base::Feature& feature,
 //
 // DEPRECATED. Consider using base::RunLoop, in most cases MessageLoopRunner is
 // not needed.  If you need to defer quitting the loop, use
-// GetDeferredQuitTaskForRunLoop directly.
-// If you found a case where base::RunLoop is inconvenient or can not be used at
-// all, please post details in a comment on https://crbug.com/668707.
+// RunLoop::RunUntilIdle() and if you really think you need deferred quit (can't
+// reach idle, please post details in a comment on https://crbug.com/668707).
 class MessageLoopRunner : public base::RefCountedThreadSafe<MessageLoopRunner> {
  public:
   enum class QuitMode {
@@ -316,6 +330,23 @@ class WebContentsDestroyedWatcher : public WebContentsObserver {
   base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsDestroyedWatcher);
+};
+
+// Watches a web contents for page scales.
+class TestPageScaleObserver : public WebContentsObserver {
+ public:
+  explicit TestPageScaleObserver(WebContents* web_contents);
+  ~TestPageScaleObserver() override;
+  float WaitForPageScaleUpdate();
+
+ private:
+  void OnPageScaleFactorChanged(float page_scale_factor) override;
+
+  base::OnceClosure done_callback_;
+  bool seen_page_scale_change_ = false;
+  float last_scale_ = 0.f;
+
+  DISALLOW_COPY_AND_ASSIGN(TestPageScaleObserver);
 };
 
 // A custom ContentBrowserClient that simulates GetEffectiveURL() translation

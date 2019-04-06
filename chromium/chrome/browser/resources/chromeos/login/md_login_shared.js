@@ -109,7 +109,7 @@ cr.define('cr.ui', function() {
           chrome.send('headerBarVisible');
         });
       };
-      // Start asynchronously so the OOBE network screen comes in first.
+      // Start asynchronously so the OOBE welcome screen comes in first.
       window.setTimeout(showHeaderBar, HEADER_BAR_DELAY_MS);
     } else {
       document.body.classList.remove('oobe-display');
@@ -465,6 +465,14 @@ cr.define('cr.ui', function() {
    */
   Oobe.getPrimaryDisplayNameForTesting = function() {
     return cr.sendWithPromise('getPrimaryDisplayNameForTesting');
+  };
+
+  /**
+   * Sets the number of users on the views login screen.
+   * @param {number} userCount The number of users.
+   */
+  Oobe.setLoginUserCount = function(userCount) {
+    Oobe.getInstance().setLoginUserCount(userCount);
   };
 
   // Export

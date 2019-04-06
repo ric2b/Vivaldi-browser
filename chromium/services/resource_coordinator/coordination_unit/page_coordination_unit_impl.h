@@ -23,34 +23,26 @@ class PageCoordinationUnitImpl
 
   PageCoordinationUnitImpl(
       const CoordinationUnitID& id,
+      CoordinationUnitGraph* graph,
       std::unique_ptr<service_manager::ServiceContextRef> service_ref);
   ~PageCoordinationUnitImpl() override;
 
   // mojom::PageCoordinationUnit implementation.
   void AddFrame(const CoordinationUnitID& cu_id) override;
   void RemoveFrame(const CoordinationUnitID& cu_id) override;
+  void SetIsLoading(bool is_loading) override;
   void SetVisibility(bool visible) override;
   void SetUKMSourceId(int64_t ukm_source_id) override;
   void OnFaviconUpdated() override;
   void OnTitleUpdated() override;
-  void OnMainFrameNavigationCommitted() override;
-
-  // Returns true when the page is in almost idle state, and updates
-  // |was_almost_idle_| to true if and only if the page was not in almost idle
-  // state and is now in almost idle state.
-  bool CheckAndUpdateAlmostIdleStateIfNeeded();
+  void OnMainFrameNavigationCommitted(int64_t navigation_id,
+                                      const std::string& url) override;
 
   // There is no direct relationship between processes and pages. However,
   // frames are accessible by both processes and frames, so we find all of the
   // processes that are reachable from the pages's accessible frames.
   std::set<ProcessCoordinationUnitImpl*> GetAssociatedProcessCoordinationUnits()
       const;
-  // In order to not deliver PageAlmostIdle signal multiple times, recording the
-  // previous state is needed. WasAlmostIdle() returns whether the page is
-  // already in almost idle state, almost idle state will be reset when the main
-  // frame navigation of non-same document navigation is committed. And will
-  // only be set to true when CheckAndUpdateAlmostIdleStateIfNeeded() is called.
-  bool WasAlmostIdle() const;
   bool IsVisible() const;
   double GetCPUUsage() const;
 
@@ -66,10 +58,36 @@ class PageCoordinationUnitImpl
   // PageCoordinationUnit.
   base::TimeDelta TimeSinceLastVisibilityChange() const;
 
-  const std::set<FrameCoordinationUnitImpl*>&
-  frame_coordination_units_for_testing() const {
+  const std::set<FrameCoordinationUnitImpl*>& GetFrameCoordinationUnits()
+      const {
     return frame_coordination_units_;
   }
+
+  // Returns the main frame CU or nullptr if this page has no main frame.
+  FrameCoordinationUnitImpl* GetMainFrameCoordinationUnit() const;
+
+  // Accessors.
+  base::TimeTicks usage_estimate_time() const { return usage_estimate_time_; }
+  void set_usage_estimate_time(base::TimeTicks usage_estimate_time) {
+    usage_estimate_time_ = usage_estimate_time;
+  }
+  base::TimeDelta cumulative_cpu_usage_estimate() const {
+    return cumulative_cpu_usage_estimate_;
+  }
+  void set_cumulative_cpu_usage_estimate(
+      base::TimeDelta cumulative_cpu_usage_estimate) {
+    cumulative_cpu_usage_estimate_ = cumulative_cpu_usage_estimate;
+  }
+  uint64_t private_footprint_kb_estimate() const {
+    return private_footprint_kb_estimate_;
+  }
+  void set_private_footprint_kb_estimate(
+      uint64_t private_footprint_kb_estimate) {
+    private_footprint_kb_estimate_ = private_footprint_kb_estimate;
+  }
+
+  const std::string& main_frame_url() const { return main_frame_url_; }
+  int64_t navigation_id() const { return navigation_id_; }
 
  private:
   friend class FrameCoordinationUnitImpl;
@@ -82,19 +100,29 @@ class PageCoordinationUnitImpl
   bool AddFrame(FrameCoordinationUnitImpl* frame_cu);
   bool RemoveFrame(FrameCoordinationUnitImpl* frame_cu);
 
-  // Returns the main frame CU or nullptr if this page has no main frame.
-  FrameCoordinationUnitImpl* GetMainFrameCoordinationUnit();
-
   std::set<FrameCoordinationUnitImpl*> frame_coordination_units_;
 
   base::TimeTicks visibility_change_time_;
   // Main frame navigation committed time.
   base::TimeTicks navigation_committed_time_;
 
-  // |was_almost_idle_| is only reset to false when main frame navigation of
-  // non-same document navigation is committed. And will be set to true when
-  // CheckAndUpdateAlmostIdleStateIfNeeded() is called.
-  bool was_almost_idle_;
+  // The time the most recent resource usage estimate applies to.
+  base::TimeTicks usage_estimate_time_;
+
+  // The most current CPU usage estimate. Note that this estimate is most
+  // generously described as "piecewise linear", as it attributes the CPU
+  // cost incurred since the last measurement was made equally to pages
+  // hosted by a process. If, e.g. a frame has come into existence and vanished
+  // from a given process between measurements, the entire cost to that frame
+  // will be mis-attributed to other frames hosted in that process.
+  base::TimeDelta cumulative_cpu_usage_estimate_;
+  // The most current memory footprint estimate.
+  uint64_t private_footprint_kb_estimate_ = 0;
+
+  // The URL the main frame last committed a navigation to and the unique ID of
+  // the associated navigation handle.
+  std::string main_frame_url_;
+  int64_t navigation_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(PageCoordinationUnitImpl);
 };

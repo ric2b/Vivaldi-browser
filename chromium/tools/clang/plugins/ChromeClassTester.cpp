@@ -9,6 +9,7 @@
 
 #include <algorithm>
 
+#include "Util.h"
 #include "clang/AST/AST.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
@@ -16,7 +17,7 @@
 #ifdef LLVM_ON_UNIX
 #include <sys/param.h>
 #endif
-#if defined(LLVM_ON_WIN32)
+#if defined(_WIN32)
 #include <windows.h>
 #endif
 
@@ -63,17 +64,10 @@ void ChromeClassTester::CheckTag(TagDecl* tag) {
 
     // We ignore all classes that end with "Matcher" because they're probably
     // GMock artifacts.
-    if (ends_with(base_name, "Matcher"))
-        return;
-
-    CheckChromeClass(location_type, location, record);
-  } else if (EnumDecl* enum_decl = dyn_cast<EnumDecl>(tag)) {
-    std::string base_name = enum_decl->getNameAsString();
-    // TODO(dcheng): This should probably consult a separate list.
-    if (IsIgnoredType(base_name))
+    if (!options_.check_gmock_objects && ends_with(base_name, "Matcher"))
       return;
 
-    CheckChromeEnum(location_type, location, enum_decl);
+    CheckChromeClass(location_type, location, record);
   }
 }
 
@@ -95,42 +89,12 @@ ChromeClassTester::LocationType ChromeClassTester::ClassifyLocation(
   if (filename == "<scratch space>")
     return LocationType::kThirdParty;
 
-#if defined(LLVM_ON_UNIX)
-  // Resolve the symlinktastic relative path and make it absolute.
-  char resolvedPath[MAXPATHLEN];
-  if (options_.no_realpath) {
-    // Same reason as windows below.
-    filename.insert(filename.begin(), '/');
-  } else if (realpath(filename.c_str(), resolvedPath)) {
-    filename = resolvedPath;
+  // Ensure that we can search for patterns of the form "/foo/" even
+  // if we have a relative path like "foo/bar.cc".  We don't expect
+  // this transformed path to exist necessarily.
+  if (filename.front() != '/') {
+    filename.insert(0, 1, '/');
   }
-#endif
-
-#if defined(LLVM_ON_WIN32)
-  // Make path absolute.
-  if (options_.no_realpath) {
-    // This turns e.g. "gen/dir/file.cc" to "/gen/dir/file.cc" which lets the
-    // "/gen/" banned_dir work.
-    filename.insert(filename.begin(), '/');
-  } else {
-    // The Windows dance: Convert to UTF-16, call GetFullPathNameW, convert back
-    DWORD size_needed =
-        MultiByteToWideChar(CP_UTF8, 0, filename.data(), -1, nullptr, 0);
-    std::wstring utf16(size_needed, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, filename.data(), -1,
-                        &utf16[0], size_needed);
-
-    size_needed = GetFullPathNameW(utf16.data(), 0, nullptr, nullptr);
-    std::wstring full_utf16(size_needed, L'\0');
-    GetFullPathNameW(utf16.data(), full_utf16.size(), &full_utf16[0], nullptr);
-
-    size_needed = WideCharToMultiByte(CP_UTF8, 0, full_utf16.data(), -1,
-                                      nullptr, 0, nullptr, nullptr);
-    filename.resize(size_needed);
-    WideCharToMultiByte(CP_UTF8, 0, full_utf16.data(), -1, &filename[0],
-                        size_needed, nullptr, nullptr);
-  }
-#endif
 
   // When using distributed cross compilation build tools, file paths can have
   // separators which differ from ones at this platform. Make them consistent.
@@ -140,12 +104,9 @@ ChromeClassTester::LocationType ChromeClassTester::ClassifyLocation(
   if (filename.find("/gen/") != std::string::npos)
     return LocationType::kThirdParty;
 
-  // TODO(dcheng, tkent): The WebKit directory is being renamed to Blink. Clean
-  // this up once the rename is done.
-  if (filename.find("/third_party/WebKit/") != std::string::npos ||
-      (filename.find("/third_party/blink/") != std::string::npos &&
-       // Browser-side code should always use the full range of checks.
-       filename.find("/third_party/blink/browser/") == std::string::npos)) {
+  if (filename.find("/third_party/blink/") != std::string::npos &&
+      // Browser-side code should always use the full range of checks.
+      filename.find("/third_party/blink/browser/") == std::string::npos) {
     return LocationType::kBlink;
   }
 
@@ -160,10 +121,6 @@ ChromeClassTester::LocationType ChromeClassTester::ClassifyLocation(
   }
 
   return LocationType::kChrome;
-}
-
-std::string ChromeClassTester::GetNamespace(const Decl* record) {
-  return GetNamespaceImpl(record->getDeclContext(), std::string());
 }
 
 bool ChromeClassTester::HasIgnoredBases(const CXXRecordDecl* record) {
@@ -197,7 +154,7 @@ bool ChromeClassTester::InImplementationFile(SourceLocation record_location) {
       break;
     }
     record_location =
-        source_manager.getImmediateExpansionRange(record_location).first;
+        source_manager.getImmediateExpansionRange(record_location).getBegin();
   }
 
   return false;
@@ -232,9 +189,6 @@ void ChromeClassTester::BuildBannedLists() {
   // non-pod class member. Probably harmless.
   ignored_record_names_.emplace("MockTransaction");
 
-  // Enum type with _LAST members where _LAST doesn't mean last enum value.
-  ignored_record_names_.emplace("ServerFieldType");
-
   // Used heavily in ui_base_unittests and once in views_unittests. Fixing this
   // isn't worth the overhead of an additional library.
   ignored_record_names_.emplace("TestAnimationDelegate");
@@ -247,35 +201,9 @@ void ChromeClassTester::BuildBannedLists() {
   // https://codereview.chromium.org/11299290/
   ignored_record_names_.emplace("QuadF");
 
-  // Enum type with _LAST members where _LAST doesn't mean last enum value.
-  ignored_record_names_.emplace("ViewID");
-
   // Ignore IPC::NoParams bases, since these structs are generated via
   // macros and it makes it difficult to add explicit ctors.
   ignored_base_classes_.emplace("IPC::NoParams");
-}
-
-std::string ChromeClassTester::GetNamespaceImpl(const DeclContext* context,
-                                                const std::string& candidate) {
-  switch (context->getDeclKind()) {
-    case Decl::TranslationUnit: {
-      return candidate;
-    }
-    case Decl::Namespace: {
-      const NamespaceDecl* decl = dyn_cast<NamespaceDecl>(context);
-      std::string name_str;
-      llvm::raw_string_ostream OS(name_str);
-      if (decl->isAnonymousNamespace())
-        OS << "<anonymous namespace>";
-      else
-        OS << *decl;
-      return GetNamespaceImpl(context->getParent(),
-                              OS.str());
-    }
-    default: {
-      return GetNamespaceImpl(context->getParent(), candidate);
-    }
-  }
 }
 
 bool ChromeClassTester::IsIgnoredType(const std::string& base_name) {

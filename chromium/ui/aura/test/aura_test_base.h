@@ -37,7 +37,9 @@ namespace test {
 
 class AuraTestContextFactory;
 
-enum class BackendType { CLASSIC, MUS, MUS_HOSTING_VIZ };
+// TODO(sky): remove MUS. https://crbug.com/842365.
+// MUS2 targets ws2. See WindowTreeClient::Config::kMus2 for details.
+enum class BackendType { CLASSIC, MUS, MUS2 };
 
 // A base class for aura unit tests.
 // TODO(beng): Instances of this test will create and own a RootWindow.
@@ -109,6 +111,7 @@ class AuraTestBase : public testing::Test,
   void OnEmbedRootDestroyed(WindowTreeHostMus* window_tree_host) override;
   void OnLostConnection(WindowTreeClient* client) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
+                              int64_t display_id,
                               Window* target) override;
 
   // WindowManagerDelegate:
@@ -130,7 +133,7 @@ class AuraTestBase : public testing::Test,
   void OnWmClientJankinessChanged(const std::set<Window*>& client_windows,
                                   bool janky) override;
   void OnWmBuildDragImage(const gfx::Point& cursor_location,
-                          const SkBitmap& drag_image,
+                          const gfx::ImageSkia& drag_image,
                           const gfx::Vector2d& drag_image_offset,
                           ui::mojom::PointerKind source) override {}
   void OnWmMoveDragImage(const gfx::Point& cursor_location) override {}
@@ -143,8 +146,7 @@ class AuraTestBase : public testing::Test,
   ui::mojom::EventResult OnAccelerator(
       uint32_t id,
       const ui::Event& event,
-      std::unordered_map<std::string, std::vector<uint8_t>>* properties)
-      override;
+      base::flat_map<std::string, std::vector<uint8_t>>* properties) override;
   void OnCursorTouchVisibleChanged(bool enabled) override;
   void OnWmPerformMoveLoop(Window* window,
                            ui::mojom::MoveLoopSource source,
@@ -166,7 +168,7 @@ class AuraTestBase : public testing::Test,
   WindowManagerDelegate* window_manager_delegate_;
   WindowTreeClientDelegate* window_tree_client_delegate_;
 
-  bool use_mus_ = false;
+  BackendType backend_type_ = BackendType::CLASSIC;
   bool setup_called_ = false;
   bool teardown_called_ = false;
   PropertyConverter property_converter_;

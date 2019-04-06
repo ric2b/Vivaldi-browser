@@ -18,6 +18,7 @@
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
@@ -28,10 +29,10 @@
 #include "ui/gl/gl_image.h"
 
 namespace gpu {
+class DecoderContext;
 class ServiceDiscardableManager;
 
 namespace gles2 {
-class GLES2Decoder;
 class GLStreamTextureImage;
 struct ContextState;
 struct DecoderFramebufferState;
@@ -45,8 +46,10 @@ class TextureRef;
 
 // A ref-counted version of the TextureBase class that deletes the texture after
 // all references have been released.
-class TexturePassthrough final : public TextureBase,
-                                 public base::RefCounted<TexturePassthrough> {
+class TexturePassthrough final
+    : public TextureBase,
+      public base::RefCounted<TexturePassthrough>,
+      public base::SupportsWeakPtr<TexturePassthrough> {
  public:
   TexturePassthrough(GLuint service_id, GLenum target);
 
@@ -57,6 +60,13 @@ class TexturePassthrough final : public TextureBase,
   void SetLevelImage(GLenum target, GLint level, gl::GLImage* image);
   gl::GLImage* GetLevelImage(GLenum target, GLint level) const;
 
+  // Return true if and only if the decoder should BindTexImage / CopyTexImage
+  // us before sampling.
+  bool is_bind_pending() const { return is_bind_pending_; }
+  void set_is_bind_pending(bool is_bind_pending) {
+    is_bind_pending_ = is_bind_pending;
+  }
+
  protected:
   ~TexturePassthrough() override;
 
@@ -64,6 +74,7 @@ class TexturePassthrough final : public TextureBase,
   friend class base::RefCounted<TexturePassthrough>;
 
   bool have_context_;
+  bool is_bind_pending_ = false;
 
   // Bound images divided into faces and then levels
   std::vector<std::vector<scoped_refptr<gl::GLImage>>> level_images_;
@@ -308,6 +319,9 @@ class GPU_GLES2_EXPORT Texture final : public TextureBase {
                               GLenum internal_format,
                               bool immutable);
 
+  // Marks a particular level as cleared or uncleared.
+  void SetLevelCleared(GLenum target, GLint level, bool cleared);
+
  private:
   friend class MailboxManagerSync;
   friend class MailboxManagerTest;
@@ -413,19 +427,16 @@ class GPU_GLES2_EXPORT Texture final : public TextureBase {
                            GLint level,
                            const gfx::Rect& cleared_rect);
 
-  // Marks a particular level as cleared or uncleared.
-  void SetLevelCleared(GLenum target, GLint level, bool cleared);
-
   // Updates the cleared flag for this texture by inspecting all the mips.
   void UpdateCleared();
 
   // Clears any renderable uncleared levels.
   // Returns false if a GL error was generated.
-  bool ClearRenderableLevels(GLES2Decoder* decoder);
+  bool ClearRenderableLevels(DecoderContext* decoder);
 
   // Clears the level.
   // Returns false if a GL error was generated.
-  bool ClearLevel(GLES2Decoder* decoder, GLenum target, GLint level);
+  bool ClearLevel(DecoderContext* decoder, GLenum target, GLint level);
 
   // Sets a texture parameter.
   // TODO(gman): Expand to SetParameteriv,fv
@@ -692,7 +703,7 @@ struct DecoderTextureState {
 // texture complete checking.
 //
 // NOTE: To support shared resources an instance of this class will need to be
-// shared by multiple GLES2Decoders.
+// shared by multiple DecoderContexts.
 class GPU_GLES2_EXPORT TextureManager
     : public base::trace_event::MemoryDumpProvider {
  public:
@@ -833,8 +844,6 @@ class GPU_GLES2_EXPORT TextureManager
                     GLenum type,
                     const gfx::Rect& cleared_rect);
 
-  Texture* Produce(TextureRef* ref);
-
   // Maps an existing texture into the texture manager, at a given client ID.
   TextureRef* Consume(GLuint client_id, Texture* texture);
 
@@ -862,11 +871,13 @@ class GPU_GLES2_EXPORT TextureManager
   void MarkMipmapsGenerated(TextureRef* ref);
 
   // Clears any uncleared renderable levels.
-  bool ClearRenderableLevels(GLES2Decoder* decoder, TextureRef* ref);
+  bool ClearRenderableLevels(DecoderContext* decoder, TextureRef* ref);
 
   // Clear a specific level.
-  bool ClearTextureLevel(
-      GLES2Decoder* decoder, TextureRef* ref, GLenum target, GLint level);
+  bool ClearTextureLevel(DecoderContext* decoder,
+                         TextureRef* ref,
+                         GLenum target,
+                         GLint level);
 
   // Creates a new texture info.
   TextureRef* CreateTexture(GLuint client_id, GLuint service_id);
@@ -1050,7 +1061,7 @@ class GPU_GLES2_EXPORT TextureManager
       // Presumes the pointer is valid.
       TextureRef** texture_ref);
 
-  void ValidateAndDoTexSubImage(GLES2Decoder* decoder,
+  void ValidateAndDoTexSubImage(DecoderContext* decoder,
                                 DecoderTextureState* texture_state,
                                 ContextState* state,
                                 DecoderFramebufferState* framebuffer_state,
@@ -1091,6 +1102,9 @@ class GPU_GLES2_EXPORT TextureManager
                                         GLenum format);
   static GLenum AdjustTexFormat(const gles2::FeatureInfo* feature_info,
                                 GLenum format);
+
+  static GLenum AdjustTexStorageFormat(const gles2::FeatureInfo* feature_info,
+                                       GLenum format);
 
   void WorkaroundCopyTexImageCubeMap(
       DecoderTextureState* texture_state,

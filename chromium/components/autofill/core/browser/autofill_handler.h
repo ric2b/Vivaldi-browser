@@ -23,6 +23,7 @@ namespace autofill {
 
 struct FormData;
 struct FormFieldData;
+class FormStructure;
 
 // This class defines the interface should be implemented by autofill
 // implementation in browser side to interact with AutofillDriver.
@@ -46,12 +47,18 @@ class AutofillHandler {
                             const FormFieldData& field,
                             const gfx::RectF& bounding_box);
 
+  // Invoked when the value of select is changed.
+  void OnSelectControlDidChange(const FormData& form,
+                                const FormFieldData& field,
+                                const gfx::RectF& bounding_box);
+
   // Invoked when the |form| needs to be autofilled, the |bounding_box| is
   // a window relative value of |field|.
   void OnQueryFormFieldAutofill(int query_id,
                                 const FormData& form,
                                 const FormFieldData& field,
-                                const gfx::RectF& bounding_box);
+                                const gfx::RectF& bounding_box,
+                                bool autoselect_first_suggestion);
 
   // Invoked when |form|'s |field| has focus.
   void OnFocusOnFormField(const FormData& form,
@@ -60,11 +67,15 @@ class AutofillHandler {
 
   // Invoked when |form| has been submitted.
   // Processes the submitted |form|, saving any new Autofill data to the user's
-  // personal profile. Returns false if this form is not relevant for Autofill.
-  bool OnFormSubmitted(const FormData& form,
+  // personal profile.
+  void OnFormSubmitted(const FormData& form,
                        bool known_success,
                        SubmissionSource source,
                        base::TimeTicks timestamp);
+
+  // Invoked when |forms| has been detected.
+  void OnFormsSeen(const std::vector<FormData>& forms,
+                   const base::TimeTicks timestamp);
 
   // Invoked when focus is no longer on form.
   virtual void OnFocusNoLongerOnForm() = 0;
@@ -77,10 +88,6 @@ class AutofillHandler {
   // Invoked when preview autofill value has been shown.
   virtual void OnDidPreviewAutofillFormData() = 0;
 
-  // Invoked when |forms| has been detected.
-  virtual void OnFormsSeen(const std::vector<FormData>& forms,
-                           const base::TimeTicks timestamp) = 0;
-
   // Invoked when textfeild editing ended
   virtual void OnDidEndTextFieldEditing() = 0;
 
@@ -91,18 +98,29 @@ class AutofillHandler {
   virtual void OnSetDataList(const std::vector<base::string16>& values,
                              const std::vector<base::string16>& labels) = 0;
 
+  // Invoked when the options of a select element in the |form| changed.
+  virtual void SelectFieldOptionsDidChange(const FormData& form) = 0;
+
   // Resets cache.
-  virtual void Reset() = 0;
+  virtual void Reset();
 
   // Send the form |data| to renderer for the specified |action|.
   void SendFormDataToRenderer(int query_id,
                               AutofillDriver::RendererFormDataAction action,
                               const FormData& data);
 
+  // Returns the number of forms this Autofill handler is aware of.
+  size_t NumFormsDetected() const { return form_structures_.size(); }
+
+  // Returns the present form structures seen by Autofill handler.
+  const std::vector<std::unique_ptr<FormStructure>>& form_structures() {
+    return form_structures_;
+  }
+
  protected:
   AutofillHandler(AutofillDriver* driver);
 
-  virtual bool OnFormSubmittedImpl(const FormData& form,
+  virtual void OnFormSubmittedImpl(const FormData& form,
                                    bool known_success,
                                    SubmissionSource source,
                                    base::TimeTicks timestamp) = 0;
@@ -116,18 +134,53 @@ class AutofillHandler {
                                         const FormFieldData& field,
                                         const gfx::RectF& bounding_box) = 0;
 
-  virtual void OnQueryFormFieldAutofillImpl(int query_id,
-                                            const FormData& form,
-                                            const FormFieldData& field,
-                                            const gfx::RectF& bounding_box) = 0;
+  virtual void OnQueryFormFieldAutofillImpl(
+      int query_id,
+      const FormData& form,
+      const FormFieldData& field,
+      const gfx::RectF& bounding_box,
+      bool autoselect_first_suggestion) = 0;
 
   virtual void OnFocusOnFormFieldImpl(const FormData& form,
                                       const FormFieldData& field,
                                       const gfx::RectF& bounding_box) = 0;
 
+  virtual void OnSelectControlDidChangeImpl(const FormData& form,
+                                            const FormFieldData& field,
+                                            const gfx::RectF& bounding_box) = 0;
+
+  // Return whether the |forms| from OnFormSeen() should be parsed to
+  // form_structures.
+  virtual bool ShouldParseForms(const std::vector<FormData>& forms,
+                                const base::TimeTicks timestamp) = 0;
+
+  // Invoked when forms from OnFormsSeen() has been parsed to |form_structures|.
+  virtual void OnFormsParsed(const std::vector<FormStructure*>& form_structures,
+                             const base::TimeTicks timestamp) = 0;
+
   AutofillDriver* driver() { return driver_; }
 
+  // Fills |form_structure| cached element corresponding to |form|.
+  // Returns false if the cached element was not found.
+  bool FindCachedForm(const FormData& form,
+                      FormStructure** form_structure) const WARN_UNUSED_RESULT;
+
+  std::vector<std::unique_ptr<FormStructure>>* mutable_form_structures() {
+    return &form_structures_;
+  }
+
+  // Parses the |form| with the server data retrieved from the |cached_form|
+  // (if any), and writes it to the |parse_form_structure|. Adds the
+  // |parse_form_structure| to the |form_structures_|. Returns true if the form
+  // is parsed.
+  bool ParseForm(const FormData& form,
+                 const FormStructure* cached_form,
+                 FormStructure** parsed_form_structure);
+
  private:
+  // Our copy of the form data.
+  std::vector<std::unique_ptr<FormStructure>> form_structures_;
+
   // Provides driver-level context to the shared code of the component. Must
   // outlive this object.
   AutofillDriver* driver_;

@@ -12,6 +12,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
+#include "chrome/browser/interstitials/enterprise_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_controller_client.h"
@@ -25,6 +26,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 
 using content::BrowserThread;
@@ -36,15 +38,7 @@ using security_interstitials::SecurityInterstitialControllerClient;
 namespace safe_browsing {
 
 namespace {
-
-// Constants for the Experience Sampling instrumentation.
-const char kEventNameMalware[] = "safebrowsing_interstitial_";
-const char kEventNameHarmful[] = "harmful_interstitial_";
-const char kEventNamePhishing[] = "phishing_interstitial_";
-const char kEventNameOther[] = "safebrowsing_other_interstitial_";
-
 const char kHelpCenterLink[] = "cpn_safe_browsing";
-
 }  // namespace
 
 // static
@@ -80,7 +74,7 @@ class SafeBrowsingBlockingPageFactoryImpl
         is_extended_reporting_opt_in_allowed,
         web_contents->GetBrowserContext()->IsOffTheRecord(),
         IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
-        is_proceed_anyway_disabled,
+        IsExtendedReportingPolicyManaged(*prefs), is_proceed_anyway_disabled,
         true,  // should_open_links_in_new_tab
         true,  // always_show_back_to_safety
         kHelpCenterLink);
@@ -135,12 +129,15 @@ SafeBrowsingBlockingPage::SafeBrowsingBlockingPage(
       ShouldReportThreatDetails(unsafe_resources[0].threat_type)) {
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+        content::BrowserContext::GetDefaultStoragePartition(profile)
+            ->GetURLLoaderFactoryForBrowserProcess();
     threat_details_in_progress_ =
         g_browser_process->safe_browsing_service()
             ->trigger_manager()
             ->StartCollectingThreatDetails(
                 TriggerType::SECURITY_INTERSTITIAL, web_contents,
-                unsafe_resources[0], profile->GetRequestContext(),
+                unsafe_resources[0], url_loader_factory,
                 HistoryServiceFactory::GetForProfile(
                     profile, ServiceAccessType::EXPLICIT_ACCESS),
                 sb_error_ui()->get_error_display_options());
@@ -154,8 +151,7 @@ void SafeBrowsingBlockingPage::OverrideRendererPrefs(
       content::RendererPreferences* prefs) {
   Profile* profile = Profile::FromBrowserContext(
       web_contents()->GetBrowserContext());
-  renderer_preferences_util::UpdateFromSystemSettings(
-      prefs, profile, web_contents());
+  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile);
 }
 
 void SafeBrowsingBlockingPage::HandleSubresourcesAfterProceed() {
@@ -246,25 +242,14 @@ void SafeBrowsingBlockingPage::ShowBlockingPage(
     // interstitial, showing the new one will automatically hide the old one.
     content::NavigationEntry* entry =
         unsafe_resource.GetNavigationEntryForResource();
-    SafeBrowsingBlockingPage* blocking_page =
-        CreateBlockingPage(ui_manager, web_contents,
-                           entry ? entry->GetURL() : GURL(), unsafe_resource);
+    GURL main_fram_url = entry ? entry->GetURL() : GURL();
+    SafeBrowsingBlockingPage* blocking_page = CreateBlockingPage(
+        ui_manager, web_contents, main_fram_url, unsafe_resource);
     blocking_page->Show();
-  }
-}
-
-// static
-std::string SafeBrowsingBlockingPage::GetSamplingEventName(
-    BaseSafeBrowsingErrorUI::SBInterstitialReason interstitial_reason) {
-  switch (interstitial_reason) {
-    case BaseSafeBrowsingErrorUI::SB_REASON_MALWARE:
-      return kEventNameMalware;
-    case BaseSafeBrowsingErrorUI::SB_REASON_HARMFUL:
-      return kEventNameHarmful;
-    case BaseSafeBrowsingErrorUI::SB_REASON_PHISHING:
-      return kEventNamePhishing;
-    default:
-      return kEventNameOther;
+    MaybeTriggerSecurityInterstitialShownEvent(
+        web_contents, main_fram_url,
+        GetThreatTypeStringForInterstitial(unsafe_resource.threat_type),
+        /*net_error_code=*/0);
   }
 }
 
@@ -279,10 +264,9 @@ SafeBrowsingBlockingPage::CreateControllerClient(
   DCHECK(profile);
 
   std::unique_ptr<ChromeMetricsHelper> metrics_helper =
-      std::make_unique<ChromeMetricsHelper>(
-          web_contents, unsafe_resources[0].url,
-          GetReportingInfo(unsafe_resources),
-          GetSamplingEventName(GetInterstitialReason(unsafe_resources)));
+      std::make_unique<ChromeMetricsHelper>(web_contents,
+                                            unsafe_resources[0].url,
+                                            GetReportingInfo(unsafe_resources));
 
   return std::make_unique<SafeBrowsingControllerClient>(
       web_contents, std::move(metrics_helper), profile->GetPrefs(),

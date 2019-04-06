@@ -8,23 +8,23 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/read_only_shared_memory_region.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/webui/print_preview/printer_handler.h"
 #include "components/prefs/pref_member.h"
 #include "components/printing/browser/print_manager.h"
-#include "components/printing/service/public/interfaces/pdf_compositor.mojom.h"
+#include "components/services/pdf_compositor/public/interfaces/pdf_compositor.mojom.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "mojo/public/cpp/system/platform_handle.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 
 struct PrintHostMsg_DidPrintDocument_Params;
 
 namespace base {
-class RefCountedBytes;
+class RefCountedMemory;
 }
 
 namespace content {
@@ -35,9 +35,7 @@ namespace printing {
 
 class JobEventDetails;
 class PrintJob;
-class PrintJobWorkerOwner;
 class PrintQueriesQueue;
-class PrintedDocument;
 class PrinterQuery;
 
 // Base class for managing the print commands for a WebContents.
@@ -46,12 +44,10 @@ class PrintViewManagerBase : public content::NotificationObserver,
  public:
   ~PrintViewManagerBase() override;
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Prints the current document immediately. Since the rendering is
   // asynchronous, the actual printing will not be completed on the return of
   // this function. Returns false if printing is impossible at the moment.
   virtual bool PrintNow(content::RenderFrameHost* rfh);
-#endif  // ENABLE_BASIC_PRINTING
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Prints the document in |print_data| with settings specified in
@@ -60,7 +56,7 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // frame host for the preview initiator contents respectively.
   void PrintForPrintPreview(
       std::unique_ptr<base::DictionaryValue> job_settings,
-      const scoped_refptr<base::RefCountedBytes>& print_data,
+      const scoped_refptr<base::RefCountedMemory>& print_data,
       content::RenderFrameHost* rfh,
       PrinterHandler::PrintCallback callback);
 #endif
@@ -90,6 +86,15 @@ class PrintViewManagerBase : public content::NotificationObserver,
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
 
+  // Creates a new empty print job. It has no settings loaded. If there is
+  // currently a print job, safely disconnect from it. Returns false if it is
+  // impossible to safely disconnect from the current print job or it is
+  // impossible to create a new print job.
+  virtual bool CreateNewPrintJob(PrinterQuery* query);
+
+  // Manages the low-level talk to the printer.
+  scoped_refptr<PrintJob> print_job_;
+
  private:
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -106,25 +111,26 @@ class PrintViewManagerBase : public content::NotificationObserver,
   void OnDidGetPrintedPagesCount(int cookie, int number_pages) override;
   void OnPrintingFailed(int cookie) override;
   void OnShowInvalidPrinterSettingsError();
-  void OnDidPrintDocument(const PrintHostMsg_DidPrintDocument_Params& params);
+  void OnDidPrintDocument(content::RenderFrameHost* render_frame_host,
+                          const PrintHostMsg_DidPrintDocument_Params& params);
 
   // IPC message handlers for service.
   void OnComposePdfDone(const PrintHostMsg_DidPrintDocument_Params& params,
                         mojom::PdfCompositor::Status status,
-                        mojo::ScopedSharedBufferHandle handle);
+                        base::ReadOnlySharedMemoryRegion region);
 
 // Helpers for PrintForPrintPreview();
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnPrintSettingsDone(
-      const scoped_refptr<base::RefCountedBytes>& print_data,
+      const scoped_refptr<base::RefCountedMemory>& print_data,
       int page_count,
       PrinterHandler::PrintCallback callback,
-      scoped_refptr<printing::PrinterQuery> printer_query);
+      scoped_refptr<PrinterQuery> printer_query);
 
   void StartLocalPrintJob(
-      const scoped_refptr<base::RefCountedBytes>& print_data,
+      const scoped_refptr<base::RefCountedMemory>& print_data,
       int page_count,
-      scoped_refptr<printing::PrinterQuery> printer_query,
+      scoped_refptr<PrinterQuery> printer_query,
       PrinterHandler::PrintCallback callback);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
@@ -136,14 +142,13 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // been requested to the renderer.
   bool RenderAllMissingPagesNow();
 
-  // Checks that synchronization is correct and a print query exists for
-  // |cookie|. If so, returns the document associated with the cookie.
-  PrintedDocument* GetDocument(int cookie);
+  // Checks that synchronization is correct with |print_job_| based on |cookie|.
+  bool PrintJobHasDocument(int cookie);
 
-  // Starts printing |document| with the given |print_data|. This method assumes
-  // |print_data| contains valid data.
-  void PrintDocument(PrintedDocument* document,
-                     const scoped_refptr<base::RefCountedBytes>& print_data,
+  // Starts printing the |document| in |print_job_| with the given |print_data|.
+  // This method assumes PrintJobHasDocument() has been called, and |print_data|
+  // contains valid data.
+  void PrintDocument(const scoped_refptr<base::RefCountedMemory>& print_data,
                      const gfx::Size& page_size,
                      const gfx::Rect& content_area,
                      const gfx::Point& offsets);
@@ -154,12 +159,6 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // notification. The inner message loop is created was created by
   // RenderAllMissingPagesNow().
   void ShouldQuitFromInnerMessageLoop();
-
-  // Creates a new empty print job. It has no settings loaded. If there is
-  // currently a print job, safely disconnect from it. Returns false if it is
-  // impossible to safely disconnect from the current print job or it is
-  // impossible to create a new print job.
-  bool CreateNewPrintJob(PrintJobWorkerOwner* job);
 
   // Makes sure the current print_job_ has all its data before continuing, and
   // disconnect from it.
@@ -196,9 +195,6 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // The current RFH that is printing with a system printing dialog.
   content::RenderFrameHost* printing_rfh_;
 
-  // Manages the low-level talk to the printer.
-  scoped_refptr<PrintJob> print_job_;
-
   // Indication of success of the print job.
   bool printing_succeeded_;
 
@@ -210,7 +206,7 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // Whether printing is enabled.
   BooleanPrefMember printing_enabled_;
 
-  scoped_refptr<printing::PrintQueriesQueue> queue_;
+  scoped_refptr<PrintQueriesQueue> queue_;
 
   base::WeakPtrFactory<PrintViewManagerBase> weak_ptr_factory_;
 

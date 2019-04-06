@@ -33,13 +33,6 @@ enum MediaDataStatus {
   kCount
 };
 
-// Order is important, be careful when adding new values.
-enum class PlatformMediaDecodingMode {
-  SOFTWARE,
-  HARDWARE,
-  COUNT  // Always keep this as the last one.
-};
-
 struct PlatformMediaTimeInfo {
   base::TimeDelta duration;
   base::TimeDelta start_time;
@@ -73,8 +66,7 @@ struct PlatformVideoConfig {
   };
 
   PlatformVideoConfig()
-      : rotation(VideoRotation::VIDEO_ROTATION_0),
-        decoding_mode(PlatformMediaDecodingMode::SOFTWARE) {}
+      : rotation(VideoRotation::VIDEO_ROTATION_0) {}
   PlatformVideoConfig(const PlatformVideoConfig& other) = default;
   ~PlatformVideoConfig() {}
 
@@ -82,8 +74,7 @@ struct PlatformVideoConfig {
     return !coded_size.IsEmpty() && !visible_rect.IsEmpty() &&
            !natural_size.IsEmpty() && planes[VideoFrame::kYPlane].is_valid() &&
            planes[VideoFrame::kVPlane].is_valid() &&
-           planes[VideoFrame::kUPlane].is_valid() &&
-           decoding_mode < PlatformMediaDecodingMode::COUNT;
+           planes[VideoFrame::kUPlane].is_valid();
   }
 
   gfx::Size coded_size;
@@ -91,7 +82,6 @@ struct PlatformVideoConfig {
   gfx::Size natural_size;
   Plane planes[VideoFrame::kMaxPlanes];
   VideoRotation rotation;
-  PlatformMediaDecodingMode decoding_mode;
 };
 
 }  // namespace media

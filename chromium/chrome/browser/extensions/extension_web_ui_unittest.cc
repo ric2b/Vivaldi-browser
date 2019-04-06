@@ -75,6 +75,7 @@ TEST_F(ExtensionWebUITest, ExtensionURLOverride) {
   DictionaryBuilder manifest;
   manifest.Set(manifest_keys::kName, "ext1")
       .Set(manifest_keys::kVersion, "0.1")
+      .Set(manifest_keys::kManifestVersion, 2)
       .Set(std::string(manifest_keys::kChromeURLOverrides),
            DictionaryBuilder().Set("bookmarks", kOverrideResource).Build());
   scoped_refptr<Extension> ext_unpacked(
@@ -110,6 +111,7 @@ TEST_F(ExtensionWebUITest, ExtensionURLOverride) {
   DictionaryBuilder manifest2;
   manifest2.Set(manifest_keys::kName, "ext2")
       .Set(manifest_keys::kVersion, "0.1")
+      .Set(manifest_keys::kManifestVersion, 2)
       .Set(std::string(manifest_keys::kChromeURLOverrides),
            DictionaryBuilder().Set("bookmarks", kOverrideResource2).Build());
   scoped_refptr<Extension> ext_component(
@@ -160,14 +162,9 @@ TEST_F(ExtensionWebUITest, ExtensionURLOverride) {
 TEST_F(ExtensionWebUITest, TestRemovingDuplicateEntriesForHosts) {
   // Test that duplicate entries for a single extension are removed. This could
   // happen because of https://crbug.com/782959.
-  std::unique_ptr<base::DictionaryValue> manifest_overrides =
-      DictionaryBuilder().Set("newtab", "newtab.html").Build();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("extension")
-          .MergeManifest(
-              DictionaryBuilder()
-                  .Set("chrome_url_overrides", std::move(manifest_overrides))
-                  .Build())
+          .SetManifestPath({"chrome_url_overrides", "newtab"}, "newtab.html")
           .Build();
 
   const GURL newtab_url = extension->GetResourceURL("newtab.html");

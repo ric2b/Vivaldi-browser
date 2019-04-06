@@ -116,9 +116,6 @@ class ChromeCleanerController {
   // Returns the global controller object.
   static ChromeCleanerController* GetInstance();
 
-  // Returns whether the Cleanup card in settings should be displayed.
-  virtual bool ShouldShowCleanupInSettingsUI() = 0;
-
   virtual State state() const = 0;
   virtual IdleReason idle_reason() const = 0;
 
@@ -206,6 +203,15 @@ class ChromeCleanerController {
   // Note that there are no guarantees that the reboot will in fact happen even
   // if the system calls to initiate a reboot return success.
   virtual void Reboot() = 0;
+
+  // Returns true if the cleaner is allowed to run by enterprise policy.
+  virtual bool IsAllowedByPolicy() = 0;
+
+  // Returns true if cleaner reporting is allowed to run by enterprise policy.
+  virtual bool IsReportingAllowedByPolicy() = 0;
+
+  // Returns true if cleaner reporting is managed by enterprise policy.
+  virtual bool IsReportingManagedByPolicy() = 0;
 
  protected:
   ChromeCleanerController();

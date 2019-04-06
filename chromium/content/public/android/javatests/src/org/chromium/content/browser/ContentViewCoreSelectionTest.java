@@ -33,6 +33,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.SelectionClient;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 
 import java.util.concurrent.Callable;
@@ -59,7 +60,7 @@ public class ContentViewCoreSelectionTest {
             + "<input id=\"disabled_text\" type=\"text\" disabled value=\"Sample Text\" />"
             + "<div id=\"rich_div\" contentEditable=\"true\" >Rich Editor</div>"
             + "</form></body></html>");
-    private ContentViewCore mContentViewCore;
+    private WebContents mWebContents;
     private SelectionPopupControllerImpl mSelectionPopupController;
 
     private static class TestSelectionClient implements SelectionClient {
@@ -71,9 +72,6 @@ public class ContentViewCoreSelectionTest {
 
         @Override
         public void onSelectionEvent(int eventType, float posXPix, float poxYPix) {}
-
-        @Override
-        public void showUnhandledTapUIIfNeeded(int x, int y) {}
 
         @Override
         public void selectWordAroundCaretAck(boolean didSelect, int startAdjust, int endAdjust) {}
@@ -108,9 +106,9 @@ public class ContentViewCoreSelectionTest {
         mActivityTestRule.launchContentShellWithUrl(DATA_URL);
         mActivityTestRule.waitForActiveShellToBeDoneLoading();
 
-        mContentViewCore = mActivityTestRule.getContentViewCore();
+        mWebContents = mActivityTestRule.getWebContents();
         mSelectionPopupController =
-                SelectionPopupControllerImpl.fromWebContents(mContentViewCore.getWebContents());
+                SelectionPopupControllerImpl.fromWebContents(mActivityTestRule.getWebContents());
         waitForSelectActionBarVisible(false);
         waitForPastePopupStatus(false);
     }
@@ -121,7 +119,7 @@ public class ContentViewCoreSelectionTest {
     public void testSelectionClearedAfterLossOfFocus() throws Throwable {
         requestFocusOnUiThread(true);
 
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
 
         requestFocusOnUiThread(false);
@@ -139,11 +137,11 @@ public class ContentViewCoreSelectionTest {
     public void testSelectionPreservedAfterLossOfFocusIfRequested() throws Throwable {
         requestFocusOnUiThread(true);
 
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
 
-        mContentViewCore.preserveSelectionOnNextLossOfFocus();
+        mSelectionPopupController.setPreserveSelectionOnNextLossOfFocus(true);
         requestFocusOnUiThread(false);
         waitForSelectActionBarVisible(false);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
@@ -162,7 +160,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextSelection"})
     public void testSelectionPreservedAfterReshown() throws Throwable {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
 
@@ -179,7 +177,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextSelection"})
     public void testSelectionPreservedAfterReattached() throws Throwable {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
 
@@ -197,9 +195,9 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextInput"})
     public void testPastePopupNotShownOnLongPressingNonEmptyInput() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
-        DOMUtils.longPressNode(mContentViewCore, "input_text");
+        DOMUtils.longPressNode(mWebContents, "input_text");
         waitForSelectActionBarVisible(true);
         waitForPastePopupStatus(false);
     }
@@ -209,9 +207,9 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextInput"})
     public void testPastePopupClearedOnTappingEmptyInput() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
-        DOMUtils.clickNode(mContentViewCore, "empty_input_text");
+        DOMUtils.clickNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(false);
     }
 
@@ -220,9 +218,9 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextInput"})
     public void testPastePopupClearedOnTappingNonEmptyInput() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
-        DOMUtils.clickNode(mContentViewCore, "input_text");
+        DOMUtils.clickNode(mWebContents, "input_text");
         waitForPastePopupStatus(false);
     }
 
@@ -231,9 +229,9 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextInput"})
     public void testPastePopupClearedOnTappingOutsideInput() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
-        DOMUtils.clickNode(mContentViewCore, "plain_text_2");
+        DOMUtils.clickNode(mWebContents, "plain_text_2");
         waitForPastePopupStatus(false);
     }
 
@@ -242,9 +240,9 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextInput"})
     public void testPastePopupClearedOnLongPressingOutsideInput() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_2");
+        DOMUtils.longPressNode(mWebContents, "plain_text_2");
         waitForPastePopupStatus(false);
     }
 
@@ -253,10 +251,10 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextInput"})
     public void testPastePopupNotShownOnLongPressingDisabledInput() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
         waitForInsertion(true);
-        DOMUtils.longPressNode(mContentViewCore, "disabled_text");
+        DOMUtils.longPressNode(mWebContents, "disabled_text");
         waitForPastePopupStatus(false);
         waitForInsertion(false);
     }
@@ -267,7 +265,7 @@ public class ContentViewCoreSelectionTest {
     public void testPastePopupNoSelectAllEmptyInput() throws Throwable {
         // Clipboard has to be non-empty for this test to work on SDK < M.
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
         waitForInsertion(true);
         Assert.assertFalse(mSelectionPopupController.canSelectAll());
@@ -279,7 +277,7 @@ public class ContentViewCoreSelectionTest {
     public void testPastePopupCanSelectAllNonEmptyInput() throws Throwable {
         // Clipboard has to be non-empty for this test to work on SDK < M.
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "whitespace_input_text");
+        DOMUtils.longPressNode(mWebContents, "whitespace_input_text");
         waitForPastePopupStatus(true);
         waitForInsertion(true);
         Assert.assertTrue(mSelectionPopupController.canSelectAll());
@@ -291,7 +289,7 @@ public class ContentViewCoreSelectionTest {
     @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.O)
     public void testPastePopupPasteAsPlainTextPlainTextRichEditor() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "rich_div");
+        DOMUtils.longPressNode(mWebContents, "rich_div");
         waitForPastePopupStatus(true);
         waitForInsertion(true);
         Assert.assertFalse(mSelectionPopupController.canPasteAsPlainText());
@@ -303,7 +301,7 @@ public class ContentViewCoreSelectionTest {
     @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.O)
     public void testPastePopupPasteAsPlainTextPlainTextNormalEditor() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
         waitForInsertion(true);
         Assert.assertFalse(mSelectionPopupController.canPasteAsPlainText());
@@ -315,7 +313,7 @@ public class ContentViewCoreSelectionTest {
     @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.O)
     public void testPastePopupPasteAsPlainTextHtmlTextRichEditor() throws Throwable {
         copyHtmlToClipboard("SampleTextToCopy", "<span style=\"color: red;\">HTML</span>");
-        DOMUtils.longPressNode(mContentViewCore, "rich_div");
+        DOMUtils.longPressNode(mWebContents, "rich_div");
         waitForPastePopupStatus(true);
         waitForInsertion(true);
         Assert.assertTrue(mSelectionPopupController.canPasteAsPlainText());
@@ -327,7 +325,7 @@ public class ContentViewCoreSelectionTest {
     @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.O)
     public void testPastePopupPasteAsPlainTextHtmlTextNormalEditor() throws Throwable {
         copyHtmlToClipboard("SampleTextToCopy", "<span style=\"color: red;\">HTML</span>");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
         waitForInsertion(true);
         Assert.assertFalse(mSelectionPopupController.canPasteAsPlainText());
@@ -348,7 +346,7 @@ public class ContentViewCoreSelectionTest {
 
         mSelectionPopupController.setSelectionClient(client);
 
-        DOMUtils.longPressNode(mContentViewCore, "smart_selection");
+        DOMUtils.longPressNode(mWebContents, "smart_selection");
         waitForSelectActionBarVisible(true);
 
         Assert.assertEquals(
@@ -375,7 +373,7 @@ public class ContentViewCoreSelectionTest {
 
         mSelectionPopupController.setSelectionClient(client);
 
-        DOMUtils.longPressNode(mContentViewCore, "smart_selection");
+        DOMUtils.longPressNode(mWebContents, "smart_selection");
         waitForSelectActionBarVisible(true);
 
         Assert.assertEquals(
@@ -386,7 +384,7 @@ public class ContentViewCoreSelectionTest {
         Assert.assertEquals(8, returnResult.endAdjust);
         Assert.assertEquals("Maps", returnResult.label);
 
-        DOMUtils.clickNode(mContentViewCore, "smart_selection");
+        DOMUtils.clickNode(mWebContents, "smart_selection");
 
         CriteriaHelper.pollUiThread(Criteria.equals(
                 0, () -> mSelectionPopupController.getClassificationResult().startAdjust));
@@ -399,12 +397,12 @@ public class ContentViewCoreSelectionTest {
     @DisabledTest(message = "https://crbug.com/592428")
     public void testPastePopupDismissedOnDestroy() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "empty_input_text");
+        DOMUtils.longPressNode(mWebContents, "empty_input_text");
         waitForPastePopupStatus(true);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mContentViewCore.destroy();
+                mWebContents.destroy();
             }
         });
         waitForPastePopupStatus(false);
@@ -414,7 +412,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testActionBarConfiguredCorrectlyForInput() throws Throwable {
-        DOMUtils.longPressNode(mContentViewCore, "input_text");
+        DOMUtils.longPressNode(mWebContents, "input_text");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -426,7 +424,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testActionBarConfiguredCorrectlyForPassword() throws Throwable {
-        DOMUtils.longPressNode(mContentViewCore, "password");
+        DOMUtils.longPressNode(mWebContents, "password");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -438,7 +436,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testActionBarConfiguredCorrectlyForPlainText() throws Throwable {
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "plain_text_1");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -450,7 +448,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testActionBarConfiguredCorrectlyForTextArea() throws Throwable {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -462,56 +460,56 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarPlainTextCopy() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "plain_text_1");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarCopy();
-        waitForClipboardContents(mContentViewCore.getContext(), "SamplePlainTextOne");
+        waitForClipboardContents("SamplePlainTextOne");
     }
 
     @Test
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarInputCopy() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "input_text");
+        DOMUtils.longPressNode(mWebContents, "input_text");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarCopy();
-        waitForClipboardContents(mContentViewCore.getContext(), "SampleInputText");
+        waitForClipboardContents("SampleInputText");
     }
 
     @Test
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarPasswordCopy() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "plain_text_1");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarCopy();
-        waitForClipboardContents(mContentViewCore.getContext(), "SamplePlainTextOne");
-        DOMUtils.longPressNode(mContentViewCore, "password");
+        waitForClipboardContents("SamplePlainTextOne");
+        DOMUtils.longPressNode(mWebContents, "password");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarCopy();
         // Copy option won't be there for Password, hence no change in Clipboard
         // Validating with previous Clipboard content
-        waitForClipboardContents(mContentViewCore.getContext(), "SamplePlainTextOne");
+        waitForClipboardContents("SamplePlainTextOne");
     }
 
     @Test
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarTextAreaCopy() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarCopy();
-        waitForClipboardContents(mContentViewCore.getContext(), "SampleTextArea");
+        waitForClipboardContents("SampleTextArea");
     }
 
     @Test
@@ -519,7 +517,7 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextSelection"})
     public void testSelectActionBarPlainTextCut() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "plain_text_1");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "SamplePlainTextOne");
@@ -529,14 +527,14 @@ public class ContentViewCoreSelectionTest {
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         // Cut option won't be available for plain text.
         // Hence validating previous Clipboard content.
-        waitForClipboardContents(mContentViewCore.getContext(), "SampleTextToCopy");
+        waitForClipboardContents("SampleTextToCopy");
     }
 
     @Test
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarInputCut() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "input_text");
+        DOMUtils.longPressNode(mWebContents, "input_text");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "SampleInputText");
@@ -544,7 +542,7 @@ public class ContentViewCoreSelectionTest {
         selectActionBarCut();
         waitForSelectActionBarVisible(false);
         Assert.assertFalse(mSelectionPopupController.hasSelection());
-        waitForClipboardContents(mContentViewCore.getContext(), "SampleInputText");
+        waitForClipboardContents("SampleInputText");
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
     }
 
@@ -553,7 +551,7 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextInput"})
     public void testSelectActionBarPasswordCut() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "password");
+        DOMUtils.longPressNode(mWebContents, "password");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -562,14 +560,14 @@ public class ContentViewCoreSelectionTest {
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         // Cut option won't be there for Password, hence no change in Clipboard
         // Validating with previous Clipboard content
-        waitForClipboardContents(mContentViewCore.getContext(), "SampleTextToCopy");
+        waitForClipboardContents("SampleTextToCopy");
     }
 
     @Test
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarTextAreaCut() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "SampleTextArea");
@@ -577,7 +575,7 @@ public class ContentViewCoreSelectionTest {
         selectActionBarCut();
         waitForSelectActionBarVisible(false);
         Assert.assertFalse(mSelectionPopupController.hasSelection());
-        waitForClipboardContents(mContentViewCore.getContext(), "SampleTextArea");
+        waitForClipboardContents("SampleTextArea");
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
     }
 
@@ -585,7 +583,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextSelection"})
     public void testSelectActionBarPlainTextSelectAll() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "plain_text_1");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -598,7 +596,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarInputSelectAll() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "input_text");
+        DOMUtils.longPressNode(mWebContents, "input_text");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -612,7 +610,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarPasswordSelectAll() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "password");
+        DOMUtils.longPressNode(mWebContents, "password");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -625,7 +623,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarTextAreaSelectAll() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -638,7 +636,7 @@ public class ContentViewCoreSelectionTest {
     private CharSequence getTextBeforeCursor(final int length, final int flags) {
         final ChromiumBaseInputConnection connection =
                 (ChromiumBaseInputConnection) ImeAdapter
-                        .fromWebContents(mContentViewCore.getWebContents())
+                        .fromWebContents(mActivityTestRule.getWebContents())
                         .getInputConnectionForTest();
         return ImeTestUtils.runBlockingOnHandlerNoException(
                 connection.getHandler(), new Callable<CharSequence>() {
@@ -653,7 +651,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextSelection", "TextInput"})
     public void testCursorPositionAfterHidingActionMode() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -674,12 +672,12 @@ public class ContentViewCoreSelectionTest {
     @Feature({"TextSelection"})
     public void testSelectActionBarPlainTextPaste() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "plain_text_1");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarPaste();
-        DOMUtils.longPressNode(mContentViewCore, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "plain_text_1");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         // Paste option won't be available for plain text.
@@ -694,7 +692,7 @@ public class ContentViewCoreSelectionTest {
         copyStringToClipboard("SampleTextToCopy");
 
         // Select the input field.
-        DOMUtils.longPressNode(mContentViewCore, "input_text");
+        DOMUtils.longPressNode(mWebContents, "input_text");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
 
@@ -705,7 +703,7 @@ public class ContentViewCoreSelectionTest {
         Assert.assertFalse(mSelectionPopupController.hasSelection());
 
         // Ensure the new text matches the pasted text.
-        DOMUtils.longPressNode(mContentViewCore, "input_text");
+        DOMUtils.longPressNode(mWebContents, "input_text");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertEquals("SampleTextToCopy", mSelectionPopupController.getSelectedText());
@@ -718,7 +716,7 @@ public class ContentViewCoreSelectionTest {
         copyStringToClipboard("SamplePassword2");
 
         // Select the password field.
-        DOMUtils.longPressNode(mContentViewCore, "password");
+        DOMUtils.longPressNode(mWebContents, "password");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertEquals(
@@ -734,7 +732,7 @@ public class ContentViewCoreSelectionTest {
         // Ensure the new text matches the pasted text. Note that we can't
         // actually compare strings as password field selections only provide
         // a placeholder with the correct length.
-        DOMUtils.longPressNode(mContentViewCore, "password");
+        DOMUtils.longPressNode(mWebContents, "password");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertEquals(
@@ -747,13 +745,13 @@ public class ContentViewCoreSelectionTest {
     @DisabledTest(message = "crbug.com/592428")
     public void testSelectActionBarTextAreaPaste() throws Throwable {
         copyStringToClipboard("SampleTextToCopy");
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarPaste();
-        DOMUtils.clickNode(mContentViewCore, "plain_text_1");
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.clickNode(mWebContents, "plain_text_1");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "SampleTextToCopy");
@@ -763,7 +761,7 @@ public class ContentViewCoreSelectionTest {
     @SmallTest
     @Feature({"TextInput"})
     public void testSelectActionBarSearchAndShareLaunchesNewTask() throws Exception {
-        DOMUtils.longPressNode(mContentViewCore, "textarea");
+        DOMUtils.longPressNode(mWebContents, "textarea");
         waitForSelectActionBarVisible(true);
         Assert.assertTrue(mSelectionPopupController.hasSelection());
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
@@ -840,10 +838,11 @@ public class ContentViewCoreSelectionTest {
         });
     }
 
-    private void waitForClipboardContents(final Context context, final String expectedContents) {
+    private void waitForClipboardContents(final String expectedContents) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
+                Context context = mActivityTestRule.getActivity();
                 ClipboardManager clipboardManager =
                         (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
                 ClipData clip = clipboardManager.getPrimaryClip();
@@ -863,39 +862,41 @@ public class ContentViewCoreSelectionTest {
     }
 
     private void setVisibileOnUiThread(final boolean show) {
-        final ContentViewCore contentViewCore = mContentViewCore;
+        final WebContents webContents = mActivityTestRule.getWebContents();
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
                 if (show) {
-                    contentViewCore.onShow();
+                    webContents.onShow();
                 } else {
-                    contentViewCore.onHide();
+                    webContents.onHide();
                 }
             }
         });
     }
 
     private void setAttachedOnUiThread(final boolean attached) {
-        final ContentViewCore contentViewCore = mContentViewCore;
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
+                ViewEventSinkImpl viewEventSink =
+                        ViewEventSinkImpl.from(mActivityTestRule.getWebContents());
                 if (attached) {
-                    contentViewCore.onAttachedToWindow();
+                    viewEventSink.onAttachedToWindow();
                 } else {
-                    contentViewCore.onDetachedFromWindow();
+                    viewEventSink.onDetachedFromWindow();
                 }
             }
         });
     }
 
     private void requestFocusOnUiThread(final boolean gainFocus) {
-        final ContentViewCore contentViewCore = mContentViewCore;
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                contentViewCore.onFocusChanged(gainFocus, true);
+                ViewEventSinkImpl viewEventSink =
+                        ViewEventSinkImpl.from(mActivityTestRule.getWebContents());
+                viewEventSink.onViewFocusChanged(gainFocus);
             }
         });
     }

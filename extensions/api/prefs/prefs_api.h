@@ -61,7 +61,7 @@ class VivaldiPrefsApiNotification : public KeyedService {
   explicit VivaldiPrefsApiNotification(Profile* profile);
   ~VivaldiPrefsApiNotification() override;
 
-  void RegisterPref(const std::string& path);
+  void RegisterPref(const std::string& path, bool local_pref);
 
   static void BroadcastEvent(const std::string& eventname,
                              std::unique_ptr<base::ListValue> args,
@@ -70,8 +70,12 @@ class VivaldiPrefsApiNotification : public KeyedService {
   void OnChanged(const std::string& path);
 
  private:
+  void RegisterLocalPref(const std::string& path);
+  void RegisterProfilePref(const std::string& path);
+
   Profile* profile_;
   PrefChangeRegistrar prefs_registrar_;
+  PrefChangeRegistrar local_prefs_registrar_;
 
   std::unique_ptr<::vivaldi::NativeSettingsObserver> native_settings_observer_;
   base::WeakPtrFactory<VivaldiPrefsApiNotification> weak_ptr_factory_;

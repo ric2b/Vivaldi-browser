@@ -7,10 +7,12 @@
 
 #include <string>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "extensions/common/extension_id.h"
 
 namespace extensions {
 class TestSendMessageFunction;
@@ -94,10 +96,11 @@ class ExtensionTestMessageListener : public content::NotificationObserver {
   ~ExtensionTestMessageListener() override;
 
   // This returns true immediately if we've already gotten the expected
-  // message, or waits until it arrives.
+  // message, or waits until it arrives. Once this returns true, message() and
+  // extension_id_for_message() accessors can be used.
   // Returns false if the wait is interrupted and we still haven't gotten the
   // message, or if the message was equal to |failure_message_|.
-  bool WaitUntilSatisfied();
+  bool WaitUntilSatisfied() WARN_UNUSED_RESULT;
 
   // Send the given message as a reply. It is only valid to call this after
   // WaitUntilSatisfied has returned true, and if will_reply is true.
@@ -127,6 +130,10 @@ class ExtensionTestMessageListener : public content::NotificationObserver {
 
   const std::string& message() const { return message_; }
 
+  const extensions::ExtensionId& extension_id_for_message() const {
+    return extension_id_for_message_;
+  }
+
  private:
   // Implements the content::NotificationObserver interface.
   void Observe(int type,
@@ -144,9 +151,8 @@ class ExtensionTestMessageListener : public content::NotificationObserver {
   // Whether we've seen expected_message_ yet.
   bool satisfied_;
 
-  // If we're waiting, then we want to post a quit task when the expected
-  // message arrives.
-  bool waiting_;
+  // Holds the quit Closure for the RunLoop during WaitUntilSatisfied().
+  base::OnceClosure quit_wait_closure_;
 
   // Whether or not we will wait for any message, regardless of contents.
   bool wait_for_any_message_;
@@ -166,6 +172,9 @@ class ExtensionTestMessageListener : public content::NotificationObserver {
 
   // If we received a message that was the failure message.
   bool failed_;
+
+  // The extension id from which |message_| was received.
+  extensions::ExtensionId extension_id_for_message_;
 
   // The function we need to reply to.
   scoped_refptr<extensions::TestSendMessageFunction> function_;

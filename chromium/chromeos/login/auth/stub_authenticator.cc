@@ -40,15 +40,17 @@ void StubAuthenticator::AuthenticateToLogin(content::BrowserContext* context,
   // during non-online re-auth |user_context| does not have a gaia id.
   if (expected_user_context_.GetAccountId() == user_context.GetAccountId() &&
       *expected_user_context_.GetKey() == *user_context.GetKey()) {
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(&StubAuthenticator::OnAuthSuccess, this));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&StubAuthenticator::OnAuthSuccess, this));
     return;
   }
-  GoogleServiceAuthError error(
-      GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
+  GoogleServiceAuthError error =
+      GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+          GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+              CREDENTIALS_REJECTED_BY_SERVER);
   task_runner_->PostTask(
-      FROM_HERE, base::Bind(&StubAuthenticator::OnAuthFailure, this,
-                            AuthFailure::FromNetworkAuthFailure(error)));
+      FROM_HERE, base::BindOnce(&StubAuthenticator::OnAuthFailure, this,
+                                AuthFailure::FromNetworkAuthFailure(error)));
 }
 
 void StubAuthenticator::AuthenticateToUnlock(const UserContext& user_context) {
@@ -71,25 +73,33 @@ void StubAuthenticator::LoginAsPublicSession(const UserContext& user_context) {
   logged_in_user_context.SetIsUsingOAuth(false);
   logged_in_user_context.SetUserIDHash(
       logged_in_user_context.GetAccountId().GetUserEmail() + kUserIdHashSuffix);
+  logged_in_user_context.GetKey()->Transform(
+      Key::KEY_TYPE_SALTED_SHA256_TOP_HALF, "some-salt");
   consumer_->OnAuthSuccess(logged_in_user_context);
 }
 
 void StubAuthenticator::LoginAsKioskAccount(
     const AccountId& /* app_account_id */,
     bool use_guest_mount) {
-  UserContext user_context(expected_user_context_.GetAccountId());
+  UserContext user_context(user_manager::UserType::USER_TYPE_KIOSK_APP,
+                           expected_user_context_.GetAccountId());
   user_context.SetIsUsingOAuth(false);
   user_context.SetUserIDHash(
       expected_user_context_.GetAccountId().GetUserEmail() + kUserIdHashSuffix);
+  user_context.GetKey()->Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF,
+                                   "some-salt");
   consumer_->OnAuthSuccess(user_context);
 }
 
 void StubAuthenticator::LoginAsArcKioskAccount(
     const AccountId& /* app_account_id */) {
-  UserContext user_context(expected_user_context_.GetAccountId());
+  UserContext user_context(user_manager::USER_TYPE_ARC_KIOSK_APP,
+                           expected_user_context_.GetAccountId());
   user_context.SetIsUsingOAuth(false);
   user_context.SetUserIDHash(
       expected_user_context_.GetAccountId().GetUserEmail() + kUserIdHashSuffix);
+  user_context.GetKey()->Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF,
+                                   "some-salt");
   consumer_->OnAuthSuccess(user_context);
 }
 
@@ -99,6 +109,8 @@ void StubAuthenticator::OnAuthSuccess() {
   UserContext user_context(expected_user_context_);
   user_context.SetUserIDHash(
       expected_user_context_.GetAccountId().GetUserEmail() + kUserIdHashSuffix);
+  user_context.GetKey()->Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF,
+                                   "some-salt");
   consumer_->OnAuthSuccess(user_context);
 }
 

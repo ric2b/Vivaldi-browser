@@ -9,7 +9,6 @@
 
 #include "base/memory/shared_memory_handle.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
-#include "content/public/browser/readback_types.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/schema/thumbnails.h"
 
@@ -57,13 +56,12 @@ class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
 
  protected:
   ~ThumbnailsCaptureUIFunction() override;
-  bool CaptureAsync(content::WebContents* web_contents,
-                    const gfx::Rect& capture_area,
-                    const content::ReadbackRequestCallback callback);
+  bool CaptureAsync(content::WebContents *web_contents,
+                    const gfx::Rect &capture_area,
+                    base::OnceCallback<void(const SkBitmap &)> callback);
   void OnCaptureSuccess(const SkBitmap& bitmap);
   void OnCaptureFailure(FailureReason reason);
-  void CopyFromBackingStoreComplete(const SkBitmap& bitmap,
-                                    content::ReadbackResponse response);
+  void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
   // ExtensionFunction:
   bool RunAsync() override;
 

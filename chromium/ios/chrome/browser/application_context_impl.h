@@ -12,10 +12,16 @@
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "ios/chrome/browser/application_context.h"
+#include "ios/web/public/network_context_owner.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 
 namespace base {
 class CommandLine;
 class SequencedTaskRunner;
+}
+
+namespace network {
+class WeakWrapperSharedURLLoaderFactory;
 }
 
 class ApplicationContextImpl : public ApplicationContext {
@@ -45,6 +51,9 @@ class ApplicationContextImpl : public ApplicationContext {
   bool WasLastShutdownClean() override;
   PrefService* GetLocalState() override;
   net::URLRequestContextGetter* GetSystemURLRequestContext() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetSharedURLLoaderFactory()
+      override;
+  network::mojom::NetworkContext* GetSystemNetworkContext() override;
   const std::string& GetApplicationLocale() override;
   ios::ChromeBrowserStateManager* GetChromeBrowserStateManager() override;
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
@@ -84,6 +93,14 @@ class ApplicationContextImpl : public ApplicationContext {
 
   // Sequenced task runner for local state related I/O tasks.
   const scoped_refptr<base::SequencedTaskRunner> local_state_task_runner_;
+
+  network::mojom::NetworkContextPtr network_context_;
+  network::mojom::URLLoaderFactoryPtr url_loader_factory_;
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+      shared_url_loader_factory_;
+
+  // Created on the UI thread, destroyed on the IO thread.
+  std::unique_ptr<web::NetworkContextOwner> network_context_owner_;
 
   bool was_last_shutdown_clean_;
 

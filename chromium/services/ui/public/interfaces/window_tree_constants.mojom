@@ -4,19 +4,29 @@
 
 module ui.mojom;
 
+import "ui/display/mojo/display.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
+
+struct FrameDecorationValues {
+  gfx.mojom.Insets normal_client_area_insets;
+  gfx.mojom.Insets maximized_client_area_insets;
+  // Max width needed to display the buttons on the title bar. The buttons are
+  // aligned to the trailing edge of the titlebar.
+  // TODO(sky): this API is very narrow, and assumes a particular config.
+  uint32 max_title_bar_button_width;
+};
 
 // Contains state of a single window.
 struct WindowData {
   // Unique identifier of the parent. If the client can not see the parent an
   // id of 0 is supplied.
-  uint32 parent_id;
+  uint64 parent_id;
 
   // Unique identifier of the window.
-  uint32 window_id;
+  uint64 window_id;
 
   // Id of the transient parent, 0 if there isn't one.
-  uint32 transient_parent_id;
+  uint64 transient_parent_id;
 
   gfx.mojom.Rect bounds;
 
@@ -27,6 +37,11 @@ struct WindowData {
   // True if this window is visible. The window may not be drawn on screen (see
   // OnWindowParentDrawnStateChanged() for details).
   bool visible;
+};
+
+struct WsDisplay {
+  display.mojom.Display display;
+  FrameDecorationValues frame_decoration_values;
 };
 
 // The result of an input event sent to a client app.
@@ -50,6 +65,46 @@ enum EventTargetingPolicy {
   NONE
 };
 
+// Whether a client initiated move loop was started with a mouse event or a
+// touch event.
+enum MoveLoopSource {
+  MOUSE,
+  TOUCH
+};
+
+enum OrderDirection {
+  ABOVE = 1,
+  BELOW,
+};
+
+// TODO(sky): seems like this should not be defined in mus, rather in mash.
+// Only thing mus cares about is minimized and that should be expressed
+// differently.
+enum ShowState {
+  DEFAULT,
+  NORMAL,
+  MINIMIZED,
+  MAXIMIZED,
+  INACTIVE,
+  FULLSCREEN,
+};
+
+enum WindowType {
+  // These constants come from Widget::InitParams. See it for details.
+  // TODO: see if we can reduce this set. For example, why do we need both
+  // BUBBLE and POPUP.
+  WINDOW,
+  PANEL,
+  WINDOW_FRAMELESS,
+  CONTROL,
+  POPUP,
+  MENU,
+  TOOLTIP,
+  BUBBLE,
+  DRAG,
+  UNKNOWN,
+};
+
 // A bitfield of what drag operations are possible.
 const uint32 kDropEffectNone = 0;
 const uint32 kDropEffectMove = 1;
@@ -71,3 +126,8 @@ const uint32 kEmbedFlagEmbedderInterceptsEvents = 0x01;
 // the embedded client can always change the visibility of any windows the
 // embedded client creates.
 const uint32 kEmbedFlagEmbedderControlsVisibility = 0x02;
+
+const int32 kResizeBehaviorNone = 0;
+const int32 kResizeBehaviorCanResize = 1;
+const int32 kResizeBehaviorCanMaximize = 2;
+const int32 kResizeBehaviorCanMinimize = 4;

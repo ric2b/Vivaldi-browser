@@ -11,18 +11,27 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/accelerators/test_accelerator_target.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/accessible_pane_view.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/focus/focus_manager_delegate.h"
 #include "ui/views/focus/focus_manager_factory.h"
 #include "ui/views/focus/widget_focus_manager.h"
 #include "ui/views/test/focus_manager_test.h"
+#include "ui/views/test/native_widget_factory.h"
+#include "ui/views/test/test_platform_native_widget.h"
 #include "ui/views/test/widget_test.h"
+#include "ui/views/view_properties.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(USE_AURA)
+#include "ui/aura/client/focus_client.h"
+#include "ui/views/widget/native_widget_aura.h"
+#endif  // USE_AURA
 
 namespace views {
 
@@ -162,44 +171,13 @@ TEST_F(FocusManagerTest, WidgetFocusChangeListener) {
   EXPECT_EQ(native_view2, widget_listener.focus_changes()[1]);
 }
 
-// Counts accelerator calls.
-class TestAcceleratorTarget : public ui::AcceleratorTarget {
- public:
-  explicit TestAcceleratorTarget(bool process_accelerator)
-      : accelerator_count_(0),
-        process_accelerator_(process_accelerator),
-        can_handle_accelerators_(true) {}
-
-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
-    ++accelerator_count_;
-    return process_accelerator_;
-  }
-
-  bool CanHandleAccelerators() const override {
-    return can_handle_accelerators_;
-  }
-
-  int accelerator_count() const { return accelerator_count_; }
-
-  void set_can_handle_accelerators(bool can_handle_accelerators) {
-    can_handle_accelerators_ = can_handle_accelerators;
-  }
-
- private:
-  int accelerator_count_;  // number of times that the accelerator is activated
-  bool process_accelerator_;      // return value of AcceleratorPressed
-  bool can_handle_accelerators_;  // return value of CanHandleAccelerators
-
-  DISALLOW_COPY_AND_ASSIGN(TestAcceleratorTarget);
-};
-
 TEST_F(FocusManagerTest, CallsNormalAcceleratorTarget) {
   FocusManager* focus_manager = GetFocusManager();
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
   ui::Accelerator escape_accelerator(ui::VKEY_ESCAPE, ui::EF_NONE);
 
-  TestAcceleratorTarget return_target(true);
-  TestAcceleratorTarget escape_target(true);
+  ui::TestAcceleratorTarget return_target(true);
+  ui::TestAcceleratorTarget escape_target(true);
   EXPECT_EQ(return_target.accelerator_count(), 0);
   EXPECT_EQ(escape_target.accelerator_count(), 0);
 
@@ -222,7 +200,7 @@ TEST_F(FocusManagerTest, CallsNormalAcceleratorTarget) {
   EXPECT_EQ(escape_target.accelerator_count(), 1);
 
   // Register another target for the return key.
-  TestAcceleratorTarget return_target2(true);
+  ui::TestAcceleratorTarget return_target2(true);
   EXPECT_EQ(return_target2.accelerator_count(), 0);
   focus_manager->RegisterAccelerator(return_accelerator,
                                      ui::AcceleratorManager::kNormalPriority,
@@ -234,7 +212,7 @@ TEST_F(FocusManagerTest, CallsNormalAcceleratorTarget) {
   EXPECT_EQ(return_target2.accelerator_count(), 1);
 
   // Register a target that does not process the accelerator event.
-  TestAcceleratorTarget return_target3(false);
+  ui::TestAcceleratorTarget return_target3(false);
   EXPECT_EQ(return_target3.accelerator_count(), 0);
   focus_manager->RegisterAccelerator(return_accelerator,
                                      ui::AcceleratorManager::kNormalPriority,
@@ -274,8 +252,8 @@ TEST_F(FocusManagerTest, HighPriorityHandlers) {
   FocusManager* focus_manager = GetFocusManager();
   ui::Accelerator escape_accelerator(ui::VKEY_ESCAPE, ui::EF_NONE);
 
-  TestAcceleratorTarget escape_target_high(true);
-  TestAcceleratorTarget escape_target_normal(true);
+  ui::TestAcceleratorTarget escape_target_high(true);
+  ui::TestAcceleratorTarget escape_target_normal(true);
   EXPECT_EQ(escape_target_high.accelerator_count(), 0);
   EXPECT_EQ(escape_target_normal.accelerator_count(), 0);
   EXPECT_FALSE(focus_manager->HasPriorityHandler(escape_accelerator));
@@ -349,8 +327,8 @@ TEST_F(FocusManagerTest, CallsEnabledAcceleratorTargetsOnly) {
   FocusManager* focus_manager = GetFocusManager();
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
 
-  TestAcceleratorTarget return_target1(true);
-  TestAcceleratorTarget return_target2(true);
+  ui::TestAcceleratorTarget return_target1(true);
+  ui::TestAcceleratorTarget return_target2(true);
 
   focus_manager->RegisterAccelerator(return_accelerator,
                                      ui::AcceleratorManager::kNormalPriority,
@@ -384,28 +362,21 @@ TEST_F(FocusManagerTest, CallsEnabledAcceleratorTargetsOnly) {
 }
 
 // Unregisters itself when its accelerator is invoked.
-class SelfUnregisteringAcceleratorTarget : public ui::AcceleratorTarget {
+class SelfUnregisteringAcceleratorTarget : public ui::TestAcceleratorTarget {
  public:
-  SelfUnregisteringAcceleratorTarget(ui::Accelerator accelerator,
+  SelfUnregisteringAcceleratorTarget(const ui::Accelerator& accelerator,
                                      FocusManager* focus_manager)
-      : accelerator_(accelerator),
-        focus_manager_(focus_manager),
-        accelerator_count_(0) {}
+      : accelerator_(accelerator), focus_manager_(focus_manager) {}
 
+  // ui::TestAcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
-    ++accelerator_count_;
     focus_manager_->UnregisterAccelerator(accelerator, this);
-    return true;
+    return ui::TestAcceleratorTarget::AcceleratorPressed(accelerator);
   }
-
-  bool CanHandleAccelerators() const override { return true; }
-
-  int accelerator_count() const { return accelerator_count_; }
 
  private:
   ui::Accelerator accelerator_;
   FocusManager* focus_manager_;
-  int accelerator_count_;
 
   DISALLOW_COPY_AND_ASSIGN(SelfUnregisteringAcceleratorTarget);
 };
@@ -432,7 +403,7 @@ TEST_F(FocusManagerTest, CallsSelfDeletingAcceleratorTarget) {
 TEST_F(FocusManagerTest, SuspendAccelerators) {
   const ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE);
   ui::Accelerator accelerator(event.key_code(), event.flags());
-  TestAcceleratorTarget target(true);
+  ui::TestAcceleratorTarget target(true);
   FocusManager* focus_manager = GetFocusManager();
   focus_manager->RegisterAccelerator(
       accelerator, ui::AcceleratorManager::kNormalPriority, &target);
@@ -862,6 +833,37 @@ class AdvanceFocusWidgetDelegate : public WidgetDelegate {
   DISALLOW_COPY_AND_ASSIGN(AdvanceFocusWidgetDelegate);
 };
 
+class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
+ public:
+  TestBubbleDialogDelegateView(View* anchor)
+      : BubbleDialogDelegateView(anchor, BubbleBorder::NONE) {}
+  ~TestBubbleDialogDelegateView() override {}
+
+  // If this is called, the bubble will be forced to use a NativeWidgetAura.
+  // If not set, it might get a DesktopNativeWidgetAura depending on the
+  // platform and other factors.
+  void UseNativeWidgetAura() { use_native_widget_aura_ = true; }
+
+  // ui::DialogModel override.
+  int GetDialogButtons() const override { return 0; }
+
+  void OnBeforeBubbleWidgetInit(Widget::InitParams* params,
+                                Widget* widget) const override {
+#if defined(USE_AURA)
+    if (use_native_widget_aura_) {
+      params->native_widget =
+          new test::TestPlatformNativeWidget<NativeWidgetAura>(widget, false,
+                                                               nullptr);
+    }
+#endif  // USE_AURA
+  }
+
+ private:
+  bool use_native_widget_aura_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(TestBubbleDialogDelegateView);
+};
+
 }  // namespace
 
 // Verifies focus wrapping happens in the same widget.
@@ -913,5 +915,191 @@ TEST_F(FocusManagerTest, AdvanceFocusStaysInWidget) {
   GetFocusManager()->AdvanceFocus(true);
   EXPECT_EQ(widget_view, GetFocusManager()->GetFocusedView());
 }
+
+TEST_F(FocusManagerTest, NavigateIntoAnchoredDialog) {
+  // The parent Widget has four focusable views. A child widget dialog has
+  // two focusable views, and it's anchored to the 3rd parent view. Ensure
+  // that focus traverses into the anchored dialog after the 3rd parent
+  // view, and then back to the 4th parent view.
+
+  View* parent1 = new View();
+  View* parent2 = new View();
+  View* parent3 = new View();
+  View* parent4 = new View();
+
+  parent1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  parent2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  parent3->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  parent4->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+
+  GetWidget()->GetRootView()->AddChildView(parent1);
+  GetWidget()->GetRootView()->AddChildView(parent2);
+  GetWidget()->GetRootView()->AddChildView(parent3);
+  GetWidget()->GetRootView()->AddChildView(parent4);
+
+  BubbleDialogDelegateView* bubble_delegate =
+      new TestBubbleDialogDelegateView(parent3);
+  test::WidgetTest::WidgetAutoclosePtr bubble_widget(
+      BubbleDialogDelegateView::CreateBubble(bubble_delegate));
+  bubble_delegate->EnableFocusTraversalFromAnchorView();
+  View* child1 = new View();
+  View* child2 = new View();
+  child1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  child2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  bubble_widget->GetRootView()->AddChildView(child1);
+  bubble_widget->GetRootView()->AddChildView(child2);
+  bubble_delegate->set_close_on_deactivate(false);
+  bubble_widget->Show();
+
+  parent1->RequestFocus();
+
+  // Navigate forwards
+  GetWidget()->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(parent2->HasFocus());
+  GetWidget()->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(parent3->HasFocus());
+  GetWidget()->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(child1->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(child2->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(parent4->HasFocus());
+
+  // Navigate backwards
+  GetWidget()->GetFocusManager()->AdvanceFocus(true);
+  EXPECT_TRUE(child2->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(true);
+  EXPECT_TRUE(child1->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(true);
+  EXPECT_TRUE(parent3->HasFocus());
+}
+
+TEST_F(FocusManagerTest, AnchoredDialogOnContainerView) {
+  // The parent Widget has four focusable views, with the middle two views
+  // inside of a non-focusable grouping View. A child widget dialog has
+  // two focusable views, and it's anchored to the group View. Ensure
+  // that focus traverses into the anchored dialog after the 3rd parent
+  // view, and then back to the 4th parent view.
+
+  View* parent1 = new View();
+  View* parent2 = new View();
+  View* parent3 = new View();
+  View* parent4 = new View();
+  View* parent_group = new View();
+
+  parent1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  parent2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  parent3->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  parent4->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+
+  GetWidget()->GetRootView()->AddChildView(parent1);
+  GetWidget()->GetRootView()->AddChildView(parent_group);
+  parent_group->AddChildView(parent2);
+  parent_group->AddChildView(parent3);
+  GetWidget()->GetRootView()->AddChildView(parent4);
+
+  BubbleDialogDelegateView* bubble_delegate =
+      new TestBubbleDialogDelegateView(parent_group);
+  test::WidgetTest::WidgetAutoclosePtr bubble_widget(
+      BubbleDialogDelegateView::CreateBubble(bubble_delegate));
+  bubble_delegate->EnableFocusTraversalFromAnchorView();
+  View* child1 = new View();
+  View* child2 = new View();
+  child1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  child2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  bubble_widget->GetRootView()->AddChildView(child1);
+  bubble_widget->GetRootView()->AddChildView(child2);
+  bubble_delegate->set_close_on_deactivate(false);
+  bubble_widget->Show();
+
+  parent1->RequestFocus();
+
+  // Navigate forwards
+  GetWidget()->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(parent2->HasFocus());
+  GetWidget()->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(parent3->HasFocus());
+  GetWidget()->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(child1->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(child2->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(parent4->HasFocus());
+
+  // Navigate backwards
+  GetWidget()->GetFocusManager()->AdvanceFocus(true);
+  EXPECT_TRUE(child2->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(true);
+  EXPECT_TRUE(child1->HasFocus());
+  bubble_widget->GetFocusManager()->AdvanceFocus(true);
+  EXPECT_TRUE(parent3->HasFocus());
+}
+
+// Desktop native widget Aura tests are for non Chrome OS platforms.
+// This test is specifically for the permutation where the main
+// widget is a DesktopNativeWidgetAura and the bubble is a
+// NativeWidgetAura. When focus moves back from the bubble to the
+// parent widget, ensure that the DNWA's aura window is focused.
+#if defined(USE_AURA) && !defined(OS_CHROMEOS)
+TEST_F(FocusManagerTest, AnchoredDialogInDesktopNativeWidgetAura) {
+  Widget widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = gfx::Rect(0, 0, 1024, 768);
+  params.native_widget =
+      test::CreatePlatformDesktopNativeWidgetImpl(params, &widget, nullptr);
+  widget.Init(params);
+  widget.Show();
+  widget.Activate();
+
+  View* parent1 = new View();
+  View* parent2 = new View();
+
+  parent1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  parent2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+
+  widget.GetRootView()->AddChildView(parent1);
+  widget.GetRootView()->AddChildView(parent2);
+
+  TestBubbleDialogDelegateView* bubble_delegate =
+      new TestBubbleDialogDelegateView(parent2);
+  bubble_delegate->UseNativeWidgetAura();
+  test::WidgetTest::WidgetAutoclosePtr bubble_widget(
+      BubbleDialogDelegateView::CreateBubble(bubble_delegate));
+  bubble_delegate->EnableFocusTraversalFromAnchorView();
+  View* child = new View();
+  child->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  bubble_widget->GetRootView()->AddChildView(child);
+  bubble_delegate->set_close_on_deactivate(false);
+  bubble_widget->Show();
+
+  widget.Activate();
+  parent1->RequestFocus();
+  base::RunLoop().RunUntilIdle();
+
+  // Initially the outer widget's window is focused.
+  aura::client::FocusClient* focus_client =
+      aura::client::GetFocusClient(widget.GetNativeView());
+  ASSERT_EQ(widget.GetNativeView(), focus_client->GetFocusedWindow());
+
+  // Navigate forwards
+  widget.GetFocusManager()->AdvanceFocus(false);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(parent2->HasFocus());
+  widget.GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(child->HasFocus());
+
+  // Now the bubble widget's window is focused.
+  ASSERT_NE(widget.GetNativeView(), focus_client->GetFocusedWindow());
+  ASSERT_EQ(bubble_widget->GetNativeView(), focus_client->GetFocusedWindow());
+
+  // Navigate backwards
+  bubble_widget->GetFocusManager()->AdvanceFocus(true);
+  EXPECT_TRUE(parent2->HasFocus());
+
+  // Finally, the outer widget's window should be focused again.
+  ASSERT_EQ(widget.GetNativeView(), focus_client->GetFocusedWindow());
+}
+#endif  // defined(USE_AURA) && !defined(OS_CHROMEOS)
 
 }  // namespace views

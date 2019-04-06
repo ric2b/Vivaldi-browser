@@ -16,9 +16,10 @@
 namespace chromeos {
 class ChromeSessionManager;
 class ChromeUserManager;
+class DiscoverManager;
 class ProfileHelper;
 class TimeZoneResolver;
-}
+}  // namespace chromeos
 
 namespace chromeos {
 namespace system {
@@ -27,8 +28,9 @@ class DeviceDisablingManager;
 class DeviceDisablingManagerDefaultDelegate;
 class SystemClock;
 class TimeZoneResolverManager;
-}
-}
+}  // namespace system
+class AccountManagerFactory;
+}  // namespace chromeos
 
 namespace policy {
 class BrowserPolicyConnectorChromeOS;
@@ -103,17 +105,22 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
 
   chromeos::TimeZoneResolver* GetTimezoneResolver();
 
+  chromeos::DiscoverManager* GetDiscoverManager();
+
   // Overridden from BrowserProcessPlatformPartBase:
   void StartTearDown() override;
   std::unique_ptr<policy::ChromeBrowserPolicyConnector>
   CreateBrowserPolicyConnector() override;
   void RegisterInProcessServices(
-      content::ContentBrowserClient::StaticServiceMap* services) override;
+      content::ContentBrowserClient::StaticServiceMap* services,
+      content::ServiceManagerConnection* connection) override;
 
   chromeos::system::SystemClock* GetSystemClock();
   void DestroySystemClock();
 
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient();
+
+  chromeos::AccountManagerFactory* GetAccountManagerFactory();
 
  private:
   void CreateProfileHelper();
@@ -144,10 +151,14 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
   std::unique_ptr<component_updater::CrOSComponentManager>
       cros_component_manager_;
 
+  std::unique_ptr<chromeos::AccountManagerFactory> account_manager_factory_;
+
 #if defined(USE_OZONE)
   std::unique_ptr<ui::InputDeviceControllerClient>
       input_device_controller_client_;
 #endif
+
+  std::unique_ptr<chromeos::DiscoverManager> discover_manager_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

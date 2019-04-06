@@ -7,10 +7,9 @@ import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
 import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
-import("//content/public/common/zygote_features.gni")
 import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
-import("//ppapi/features/features.gni")
+import("//ppapi/buildflags/buildflags.gni")
 import("//third_party/webrtc/webrtc.gni")
 
 # See //content/BUILD.gn for how this works.
@@ -31,6 +30,10 @@ group("common") {
 source_set("result_codes") {
   sources = [
     "result_codes.h",
+  ]
+
+  deps = [
+    "//services/service_manager/embedder:embedder_result_codes",
   ]
 }
 
@@ -70,19 +73,17 @@ config("static_switches_defines") {
 source_set("static_switches") {
   public = [
     "content_switches.h",
-    "mojo_channel_switches.h",
   ]
   sources = [
     "//content/common/content_export.h",
     "content_switches.cc",
-    "mojo_channel_switches.cc",
   ]
 
   public_configs = [ ":static_switches_defines" ]
 
   # Deps required by the above headers.
   deps = [
-    "//media:media_features",
+    "//media:media_buildflags",
   ]
 }
 
@@ -102,6 +103,10 @@ source_set("static_features") {
   ]
 
   public_configs = [ ":static_switches_defines" ]
+
+  if (is_chromeos) {
+    public_deps += [ "//media/capture/video/chromeos/public" ]
+  }
 }
 
 jumbo_source_set("common_sources") {
@@ -117,7 +122,6 @@ jumbo_source_set("common_sources") {
     "browser_side_navigation_policy.h",
     "cdm_info.h",
     "child_process_host.h",
-    "child_process_host_delegate.cc",
     "child_process_host_delegate.h",
     "common_param_traits.cc",
     "common_param_traits.h",
@@ -157,8 +161,6 @@ jumbo_source_set("common_sources") {
     "isolated_world_ids.h",
     "javascript_dialog_type.h",
     "main_function_params.h",
-    "manifest.cc",
-    "manifest.h",
     "manifest_util.cc",
     "manifest_util.h",
     "media_metadata.cc",
@@ -169,14 +171,8 @@ jumbo_source_set("common_sources") {
     "menu_item.h",
     "mhtml_generation_params.cc",
     "mhtml_generation_params.h",
-    "mojo_channel_switches.cc",
-    "mojo_channel_switches.h",
-    "network_connection_tracker.cc",
-    "network_connection_tracker.h",
     "notification_resources.cc",
     "notification_resources.h",
-    "origin_trial_policy.cc",
-    "origin_trial_policy.h",
     "origin_util.h",
     "page_importance_signals.h",
     "page_state.cc",
@@ -190,13 +186,10 @@ jumbo_source_set("common_sources") {
     "platform_notification_data.h",
     "presentation_connection_message.cc",
     "presentation_connection_message.h",
-    "presentation_info.cc",
-    "presentation_info.h",
     "previews_state.h",
     "process_type.h",
     "push_event_payload.h",
     "push_subscription_options.h",
-    "quarantine.h",
     "referrer.cc",
     "referrer.h",
     "renderer_preferences.cc",
@@ -206,6 +199,8 @@ jumbo_source_set("common_sources") {
     "resource_request_body_android.h",
     "resource_type.cc",
     "resource_type.h",
+    "resource_usage_reporter_type_converters.cc",
+    "resource_usage_reporter_type_converters.h",
     "result_codes.h",
     "sandbox_init.h",
     "sandboxed_process_launcher_delegate.cc",
@@ -213,26 +208,15 @@ jumbo_source_set("common_sources") {
     "screen_info.cc",
     "screen_info.h",
     "screen_orientation_values.h",
-    "send_zygote_child_ping_linux.h",
     "service_manager_connection.h",
-    "service_worker_modes.h",
-    "shared_url_loader_factory.cc",
-    "shared_url_loader_factory.h",
     "simple_connection_filter.cc",
     "simple_connection_filter.h",
-    "simple_url_loader.cc",
-    "simple_url_loader.h",
     "socket_permission_request.h",
-    "speech_recognition_error.h",
-    "speech_recognition_grammar.h",
-    "speech_recognition_result.cc",
-    "speech_recognition_result.h",
     "stop_find_action.h",
     "storage_quota_params.h",
     "three_d_api_types.h",
     "url_constants.cc",
     "url_constants.h",
-    "url_fetcher.h",
     "url_loader_throttle.cc",
     "url_loader_throttle.h",
     "url_utils.cc",
@@ -245,7 +229,8 @@ jumbo_source_set("common_sources") {
     "webplugininfo.cc",
     "webplugininfo.h",
     "webplugininfo_param_traits.h",
-    "zygote_fork_delegate_linux.h",
+    "webrtc_ip_handling_policy.cc",
+    "webrtc_ip_handling_policy.h",
   ]
 
   configs += [
@@ -261,36 +246,35 @@ jumbo_source_set("common_sources") {
     "//content/common",
     "//ipc",
     "//media/capture:capture_base",
-    "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
     "//net",
-    "//services/network/public/cpp",
-    "//services/network/public/interfaces",
+    "//services/network:network_service",
+    "//services/network/public/mojom",
     "//services/service_manager/embedder",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/interfaces",
-    "//third_party/WebKit/public:blink_headers",
-    "//third_party/WebKit/public:mojo_bindings",
+    "//services/service_manager/public/mojom",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/public:mojo_bindings",
     "//ui/accessibility",
     "//ui/surface",
     "//url/ipc:url_ipc",
   ]
   deps = [
     ":content_descriptor_keys",
-    ":zygote_features",
 
     # This looks needless as we have //content/common in public_deps, but it's
     # needed because of allow_circular_includes_from.
     "//content/common:mojo_bindings",
     "//media",
-    "//mojo/common",
+    "//ppapi/buildflags",
     "//ppapi/c",
-    "//ppapi/features",
     "//services/network/public/cpp",
+    "//services/service_manager/embedder:embedder_result_codes",
     "//services/service_manager/public/cpp",
+    "//services/service_manager/zygote:zygote_buildflags",
     "//skia",
     "//storage/common",
-    "//third_party/WebKit/common:blink_common",
+    "//third_party/blink/public/common",
     "//third_party/icu",
     "//ui/accessibility",
     "//ui/base",
@@ -309,6 +293,14 @@ jumbo_source_set("common_sources") {
     deps += [ "//content/public/android:jni" ]
   }
 
+  if (is_linux) {
+    deps += [ "//services/service_manager/zygote" ]
+  }
+
+  if (is_chromeos) {
+    public_deps += [ "//media/capture/video/chromeos/public" ]
+  }
+
   # //content/common needs to include public headers.
   allow_circular_includes_from = [
     ":interfaces",
@@ -322,39 +314,23 @@ jumbo_source_set("common_sources") {
       "pepper_plugin_info.h",
     ]
   }
-
-  if (enable_webrtc) {
-    sources += [
-      "webrtc_ip_handling_policy.cc",
-      "webrtc_ip_handling_policy.h",
-    ]
-  }
-
-  if (use_zygote_handle) {
-    sources += [ "zygote_handle.h" ]
-  }
 }
 
-buildflag_header("features") {
-  header = "features.h"
+buildflag_header("buildflags") {
+  header = "buildflags.h"
   flags = [ "RTC_USE_H264=$rtc_use_h264" ]
 }
 
 source_set("feature_h264_with_openh264_ffmpeg") {
   deps = [
-    ":features",
+    ":buildflags",
     "//base",
-    "//media:media_features",
+    "//media:media_buildflags",
   ]
   sources = [
     "feature_h264_with_openh264_ffmpeg.cc",
     "feature_h264_with_openh264_ffmpeg.h",
   ]
-}
-
-buildflag_header("zygote_features") {
-  header = "zygote_features.h"
-  flags = [ "USE_ZYGOTE_HANDLE=$use_zygote_handle" ]
 }
 
 mojom("interfaces") {
@@ -364,13 +340,23 @@ mojom("interfaces") {
     "//content/common/*",
     "//chrome/common:mojo_bindings",
     "//chrome/common:mojo_bindings_blink",
+    "//extensions/common:mojo",
+    "//extensions/common:mojo_blink",
   ]
+
+  # imports vs deps check is disabled for this target to work around
+  # windows multiple definitions linker error caused by having
+  # both a direct and an indirect dependency on the same target
+  skip_deps_check = true
 
   sources = [
     "appcache_info.mojom",
-    "download_stream.mojom",
     "fullscreen_video_element.mojom",
+    "load_timing_info.mojom",
     "push_messaging_status.mojom",
+    "resource_load_info.mojom",
+    "resource_usage_reporter.mojom",
+    "transferrable_url_loader.mojom",
     "webplugininfo.mojom",
     "window_container_type.mojom",
   ]
@@ -381,10 +367,9 @@ mojom("interfaces") {
 
   public_deps = [
     ":resource_type_bindings",
-    "//mojo/common:common_custom_types",
-    "//services/network/public/interfaces",
-    "//url/mojo:url_mojom_gurl",
-    "//url/mojo:url_mojom_origin",
+    "//services/network/public/mojom",
+    "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
   ]
 
   component_output_prefix = "content_public_common_mojo_bindings"

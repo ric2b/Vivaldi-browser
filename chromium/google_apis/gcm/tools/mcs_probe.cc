@@ -39,6 +39,7 @@
 #include "google_apis/gcm/engine/gservices_settings.h"
 #include "google_apis/gcm/engine/mcs_client.h"
 #include "google_apis/gcm/monitoring/fake_gcm_stats_recorder.h"
+#include "mojo/core/embedder/embedder.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/multi_log_ct_verifier.h"
@@ -55,6 +56,11 @@
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/network_context.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -181,7 +187,7 @@ class MyTestCertVerifier : public net::CertVerifier {
   int Verify(const RequestParams& params,
              net::CRLSet* crl_set,
              net::CertVerifyResult* verify_result,
-             const net::CompletionCallback& callback,
+             net::CompletionOnceCallback callback,
              std::unique_ptr<Request>* out_req,
              const net::NetLogWithSource& net_log) override {
     return net::OK;
@@ -193,9 +199,6 @@ class MCSProbeAuthPreferences : public net::HttpAuthPreferences {
   MCSProbeAuthPreferences() {}
   ~MCSProbeAuthPreferences() override {}
 
-  bool IsSupportedScheme(const std::string& scheme) const override {
-    return scheme == std::string(net::kBasicAuthScheme);
-  }
   bool NegotiateDisableCnameLookup() const override { return false; }
   bool NegotiateEnablePort() const override { return false; }
   bool CanUseDefaultCredentials(const GURL& auth_origin) const override {
@@ -219,7 +222,6 @@ class MCSProbe {
  private:
   void CheckIn();
   void InitializeNetworkState();
-  void BuildNetworkSession();
 
   void LoadCallback(std::unique_ptr<GCMStore::LoadResult> load_result);
   void UpdateCallback(bool success);
@@ -253,7 +255,7 @@ class MCSProbe {
   std::unique_ptr<net::HttpAuthHandlerFactory> http_auth_handler_factory_;
   std::unique_ptr<net::HttpServerPropertiesImpl> http_server_properties_;
   std::unique_ptr<net::HttpNetworkSession> network_session_;
-  std::unique_ptr<net::ProxyService> proxy_service_;
+  std::unique_ptr<net::ProxyResolutionService> proxy_resolution_service_;
 
   FakeGCMStatsRecorder recorder_;
   std::unique_ptr<GCMStore> gcm_store_;
@@ -263,6 +265,11 @@ class MCSProbe {
   std::unique_ptr<ConnectionFactoryImpl> connection_factory_;
 
   base::Thread file_thread_;
+
+  std::unique_ptr<network::NetworkContext> network_context_;
+  network::mojom::NetworkContextPtr network_context_pipe_;
+  network::mojom::URLLoaderFactoryPtr url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
 };
@@ -308,14 +315,13 @@ MCSProbe::~MCSProbe() {
 void MCSProbe::Start() {
   file_thread_.Start();
   InitializeNetworkState();
-  BuildNetworkSession();
   std::vector<GURL> endpoints(
       1, GURL("https://" +
               net::HostPortPair(server_host_, server_port_).ToString()));
 
   connection_factory_ = std::make_unique<ConnectionFactoryImpl>(
-      endpoints, kDefaultBackoffPolicy, network_session_.get(), nullptr,
-      &net_log_, &recorder_);
+      endpoints, kDefaultBackoffPolicy,
+      url_request_context_getter_->GetURLRequestContext(), &recorder_);
   gcm_store_ = std::make_unique<GCMStoreImpl>(
       gcm_store_path_, file_thread_.task_runner(),
       std::make_unique<FakeEncryptor>());
@@ -383,35 +389,28 @@ void MCSProbe::InitializeNetworkState() {
 
   transport_security_state_ = std::make_unique<net::TransportSecurityState>();
   cert_transparency_verifier_ = std::make_unique<net::MultiLogCTVerifier>();
-  ct_policy_enforcer_ = std::make_unique<net::CTPolicyEnforcer>();
+  ct_policy_enforcer_ = std::make_unique<net::DefaultCTPolicyEnforcer>();
   http_auth_handler_factory_ = net::HttpAuthHandlerRegistryFactory::Create(
-      &http_auth_preferences_, host_resolver_.get());
+      host_resolver_.get(), &http_auth_preferences_,
+      std::vector<std::string>{net::kBasicAuthScheme});
   http_server_properties_ = std::make_unique<net::HttpServerPropertiesImpl>();
-  proxy_service_ = net::ProxyService::CreateDirectWithNetLog(&net_log_);
-}
+  proxy_resolution_service_ =
+      net::ProxyResolutionService::CreateDirectWithNetLog(&net_log_);
 
-void MCSProbe::BuildNetworkSession() {
-  net::HttpNetworkSession::Params session_params;
-  session_params.ignore_certificate_errors = true;
-  session_params.testing_fixed_http_port = 0;
-  session_params.testing_fixed_https_port = 0;
-
-  net::HttpNetworkSession::Context session_context;
-  session_context.host_resolver = host_resolver_.get();
-  session_context.cert_verifier = cert_verifier_.get();
-  session_context.channel_id_service = system_channel_id_service_.get();
-  session_context.transport_security_state = transport_security_state_.get();
-  session_context.cert_transparency_verifier =
-      cert_transparency_verifier_.get();
-  session_context.ct_policy_enforcer = ct_policy_enforcer_.get();
-  session_context.ssl_config_service = new net::SSLConfigServiceDefaults();
-  session_context.http_auth_handler_factory = http_auth_handler_factory_.get();
-  session_context.http_server_properties = http_server_properties_.get();
-  session_context.net_log = &net_log_;
-  session_context.proxy_service = proxy_service_.get();
-
-  network_session_ = std::make_unique<net::HttpNetworkSession>(session_params,
-                                                               session_context);
+  // Wrap it up with network service APIs.
+  network_context_ = std::make_unique<network::NetworkContext>(
+      nullptr /* network_service */, mojo::MakeRequest(&network_context_pipe_),
+      url_request_context_getter_->GetURLRequestContext());
+  auto url_loader_factory_params =
+      network::mojom::URLLoaderFactoryParams::New();
+  url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
+  url_loader_factory_params->is_corb_enabled = false;
+  network_context_->CreateURLLoaderFactory(
+      mojo::MakeRequest(&url_loader_factory_),
+      std::move(url_loader_factory_params));
+  shared_url_loader_factory_ =
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          url_loader_factory_.get());
 }
 
 void MCSProbe::ErrorCallback() {
@@ -434,7 +433,7 @@ void MCSProbe::CheckIn() {
   checkin_request_ = std::make_unique<CheckinRequest>(
       GServicesSettings().GetCheckinURL(), request_info, kDefaultBackoffPolicy,
       base::Bind(&MCSProbe::OnCheckInCompleted, base::Unretained(this)),
-      url_request_context_getter_.get(), &recorder_);
+      shared_url_loader_factory_, &recorder_);
   checkin_request_->Start();
 }
 
@@ -476,6 +475,8 @@ int MCSProbeMain(int argc, char* argv[]) {
   logging::LoggingSettings settings;
   settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
   logging::InitLogging(settings);
+
+  mojo::core::Init();
 
   base::MessageLoopForIO message_loop;
   base::TaskScheduler::CreateAndStartWithDefaultParams("MCSProbe");

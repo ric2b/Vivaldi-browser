@@ -27,7 +27,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '321529'
+CLANG_REVISION = '337439'
 
 use_head_revision = bool(os.environ.get('LLVM_FORCE_HEAD_REVISION', '0')
                          in ('1', 'YES'))
@@ -35,7 +35,7 @@ if use_head_revision:
   CLANG_REVISION = 'HEAD'
 
 # This is incremented when pushing a new build of Clang at the same revision.
-CLANG_SUB_REVISION=2
+CLANG_SUB_REVISION=1
 
 PACKAGE_VERSION = "%s-%s" % (CLANG_REVISION, CLANG_SUB_REVISION)
 
@@ -68,7 +68,7 @@ LLVM_BUILD_TOOLS_DIR = os.path.abspath(
     os.path.join(LLVM_DIR, '..', 'llvm-build-tools'))
 STAMP_FILE = os.path.normpath(
     os.path.join(LLVM_DIR, '..', 'llvm-build', 'cr_build_revision'))
-VERSION = '6.0.0'
+VERSION = '7.0.0'
 ANDROID_NDK_DIR = os.path.join(
     CHROMIUM_DIR, 'third_party', 'android_ndk')
 
@@ -80,12 +80,6 @@ LLVM_REPO_URL='https://llvm.org/svn/llvm-project'
 if 'LLVM_REPO_URL' in os.environ:
   LLVM_REPO_URL = os.environ['LLVM_REPO_URL']
 
-# Bump after VC updates.
-DIA_DLL = {
-  '2013': 'msdia120.dll',
-  '2015': 'msdia140.dll',
-  '2017': 'msdia140.dll',
-}
 
 
 def DownloadUrl(url, output_file):
@@ -131,7 +125,6 @@ def DownloadUrl(url, output_file):
 
 def EnsureDirExists(path):
   if not os.path.exists(path):
-    print "Creating directory %s" % path
     os.makedirs(path)
 
 
@@ -205,7 +198,8 @@ def RunCommand(command, msvc_arch=None, env=None, fail_hard=True):
      shell with the msvc tools for that architecture."""
 
   if msvc_arch and sys.platform == 'win32':
-    command = GetVSVersion().SetupScript(msvc_arch) + ['&&'] + command
+    command = [os.path.join(GetWinSDKDir(), 'bin', 'SetEnv.cmd'),
+               "/" + msvc_arch, '&&'] + command
 
   # https://docs.python.org/2/library/subprocess.html:
   # "On Unix with shell=True [...] if args is a sequence, the first item
@@ -237,16 +231,12 @@ def CopyFile(src, dst):
   shutil.copy(src, dst)
 
 
-def CopyDirectoryContents(src, dst, filename_filter=None):
-  """Copy the files from directory src to dst
-  with an optional filename filter."""
+def CopyDirectoryContents(src, dst):
+  """Copy the files from directory src to dst."""
   dst = os.path.realpath(dst)  # realpath() in case dst ends in /..
   EnsureDirExists(dst)
-  for root, _, files in os.walk(src):
-    for f in files:
-      if filename_filter and not re.match(filename_filter, f):
-        continue
-      CopyFile(os.path.join(root, f), dst)
+  for f in os.listdir(src):
+    CopyFile(os.path.join(src, f), dst)
 
 
 def Checkout(name, url, dir):
@@ -270,20 +260,6 @@ def CheckoutRepos(args):
     return
 
   Checkout('LLVM', LLVM_REPO_URL + '/llvm/trunk', LLVM_DIR)
-
-  # Back out previous local patches. This needs to be kept around a bit
-  # until all bots have cycled. See https://crbug.com/755777.
-  files = [
-    'lib/Transforms/InstCombine/InstructionCombining.cpp',
-    'test/DebugInfo/X86/formal_parameter.ll',
-    'test/DebugInfo/X86/instcombine-instrinsics.ll',
-    'test/Transforms/InstCombine/debuginfo-skip.ll',
-    'test/Transforms/InstCombine/debuginfo.ll',
-    'test/Transforms/Util/simplify-dbg-declare-load.ll',
-  ]
-  for f in [os.path.join(LLVM_DIR, f) for f in files]:
-    RunCommand(['svn', 'revert', f])
-
   Checkout('Clang', LLVM_REPO_URL + '/cfe/trunk', CLANG_DIR)
   if True:
     Checkout('LLD', LLVM_REPO_URL + '/lld/trunk', LLD_DIR)
@@ -389,31 +365,45 @@ def AddGnuWinToPath():
   os.environ['PATH'] = gnuwin_dir + os.pathsep + os.environ.get('PATH', '')
 
 
-vs_version = None
-def GetVSVersion():
-  global vs_version
-  if vs_version:
-    return vs_version
+win_sdk_dir = None
+dia_dll = None
+def GetWinSDKDir():
+  """Get the location of the current SDK. Sets dia_dll as a side-effect."""
+  global win_sdk_dir
+  global dia_dll
+  if win_sdk_dir:
+    return win_sdk_dir
 
-  # Try using the toolchain in depot_tools.
-  # This sets environment variables used by SelectVisualStudioVersion below.
+  # Bump after VC updates.
+  DIA_DLL = {
+    '2013': 'msdia120.dll',
+    '2015': 'msdia140.dll',
+    '2017': 'msdia140.dll',
+  }
+
+  # Don't let vs_toolchain overwrite our environment.
+  environ_bak = os.environ
+
   sys.path.append(os.path.join(CHROMIUM_DIR, 'build'))
   import vs_toolchain
-  vs_toolchain.SetEnvironmentAndGetRuntimeDllDirs()
+  win_sdk_dir = vs_toolchain.SetEnvironmentAndGetSDKDir()
+  msvs_version = vs_toolchain.GetVisualStudioVersion()
 
-  # Use gyp to find the MSVS installation, either in depot_tools as per above,
-  # or a system-wide installation otherwise.
-  sys.path.append(os.path.join(CHROMIUM_DIR, 'tools', 'gyp', 'pylib'))
-  import gyp.MSVSVersion
-  vs_version = gyp.MSVSVersion.SelectVisualStudioVersion(
-      vs_toolchain.GetVisualStudioVersion())
-  return vs_version
+  if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))):
+    dia_path = os.path.join(win_sdk_dir, '..', 'DIA SDK', 'bin', 'amd64')
+  else:
+    vs_path = vs_toolchain.DetectVisualStudioPath()
+    dia_path = os.path.join(vs_path, 'DIA SDK', 'bin', 'amd64')
+
+  dia_dll = os.path.join(dia_path, DIA_DLL[msvs_version])
+
+  os.environ = environ_bak
+  return win_sdk_dir
 
 
 def CopyDiaDllTo(target_dir):
   # This script always wants to use the 64-bit msdia*.dll.
-  dia_path = os.path.join(GetVSVersion().Path(), 'DIA SDK', 'bin', 'amd64')
-  dia_dll = os.path.join(dia_path, DIA_DLL[GetVSVersion().ShortName()])
+  GetWinSDKDir()
   CopyFile(dia_dll, target_dir)
 
 
@@ -475,20 +465,16 @@ def UpdateClang(args):
   if ReadStampFile() == expected_stamp and not args.force_local_build:
     return 0
 
-  print 'Updating Clang to %s...' % PACKAGE_VERSION
-
   # Reset the stamp file in case the build is unsuccessful.
   WriteStampFile('')
 
   if not args.force_local_build:
-    print 'Downloading prebuilt clang'
     if os.path.exists(LLVM_BUILD_DIR):
       RmTree(LLVM_BUILD_DIR)
 
     DownloadAndUnpackClangPackage(sys.platform)
     if 'win' in target_os:
       DownloadAndUnpackClangPackage('win32', runtimes_only=True)
-    print 'clang %s unpacked' % PACKAGE_VERSION
     if sys.platform == 'win32':
       CopyDiaDllTo(os.path.join(LLVM_BUILD_DIR, 'bin'))
     WriteStampFile(expected_stamp)
@@ -501,6 +487,8 @@ def UpdateClang(args):
     print 'https://www.chromium.org/developers/how-tos/android-build-instructions'
     print 'for how to install the NDK, or pass --without-android.'
     return 1
+
+  print 'Locally building Clang %s...' % PACKAGE_VERSION
 
   DownloadHostGcc(args)
   AddCMakeToPath(args)
@@ -538,6 +526,7 @@ def UpdateClang(args):
   base_cmake_args = ['-GNinja',
                      '-DCMAKE_BUILD_TYPE=Release',
                      '-DLLVM_ENABLE_ASSERTIONS=ON',
+                     '-DLLVM_ENABLE_TERMINFO=OFF',
                      # Statically link MSVCRT to avoid DLL dependencies.
                      '-DLLVM_USE_CRT_RELEASE=MT',
                      ]
@@ -767,9 +756,8 @@ def UpdateClang(args):
   asan_rt_lib_dst_dir = os.path.join(LLVM_BUILD_DIR, 'lib', 'clang',
                                      VERSION, 'lib', platform)
   # Blacklists:
-  CopyDirectoryContents(os.path.join(asan_rt_lib_src_dir, '..', '..'),
-                        os.path.join(asan_rt_lib_dst_dir, '..', '..'),
-                        r'^.*blacklist\.txt$')
+  CopyDirectoryContents(os.path.join(asan_rt_lib_src_dir, '..', '..', 'share'),
+                        os.path.join(asan_rt_lib_dst_dir, '..', '..', 'share'))
   # Headers:
   if sys.platform != 'win32':
     CopyDirectoryContents(
@@ -887,6 +875,8 @@ def main():
   parser.add_argument('--use-system-cmake', action='store_true',
                       help='use the cmake from PATH instead of downloading '
                       'and using prebuilt cmake binaries')
+  parser.add_argument('--verify-version',
+                      help='verify that clang has the passed-in version')
   parser.add_argument('--without-android', action='store_false',
                       help='don\'t build Android ASan runtime (linux only)',
                       dest='with_android',
@@ -905,10 +895,11 @@ def main():
       args.force_local_build):
     AddSvnToPathOnWin()
 
-  if use_head_revision:
-    # TODO(hans): Trunk was updated; remove after the next roll.
-    global VERSION
-    VERSION = '7.0.0'
+  if args.verify_version and args.verify_version != VERSION:
+    print 'VERSION is %s but --verify-version argument was %s, exiting.' % (
+        VERSION, args.verify_version)
+    print 'clang_version in build/toolchain/toolchain.gni is likely outdated.'
+    return 1
 
   global CLANG_REVISION, PACKAGE_VERSION
   if args.print_revision:

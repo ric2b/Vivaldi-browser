@@ -118,39 +118,61 @@ class SimpleSynchronousEntry {
     uint32_t data_crc32;
   };
 
-  struct CRCRequest {
-    CRCRequest()
-        : data_crc32(0),
-          request_verify(false),
-          performed_verify(false),
-          verify_ok(false) {}
-
-    // Initial CRC, to be updated with CRC of block.
-    uint32_t data_crc32;
-
-    // If true, CRC should be verified if at end of stream.
-    bool request_verify;
-
-    // If true, CRC was actually checked.
-    bool performed_verify;
-    bool verify_ok;
-  };
-
-  struct EntryOperationData {
-    EntryOperationData(int index_p, int offset_p, int buf_len_p);
-    EntryOperationData(int index_p,
-                       int offset_p,
-                       int buf_len_p,
-                       bool truncate_p,
-                       bool doomed_p);
-    EntryOperationData(int64_t sparse_offset_p, int buf_len_p);
-
+  struct ReadRequest {
+    // Also sets request_update_crc to false.
+    ReadRequest(int index_p, int offset_p, int buf_len_p);
     int index;
     int offset;
-    int64_t sparse_offset;
     int buf_len;
+
+    // Partial CRC of data immediately preceeding this read. Only relevant if
+    // request_update_crc is set.
+    uint32_t previous_crc32;
+    bool request_update_crc;
+    bool request_verify_crc;  // only relevant if request_update_crc is set
+  };
+
+  struct ReadResult {
+    ReadResult()
+        : crc_updated(false),
+          crc_performed_verify(false),
+          crc_verify_ok(false) {}
+    int result;
+    uint32_t updated_crc32;  // only relevant if crc_updated set
+    bool crc_updated;
+    bool crc_performed_verify;  // only relevant if crc_updated set
+    bool crc_verify_ok;         // only relevant if crc_updated set
+  };
+
+  struct WriteRequest {
+    WriteRequest(int index_p,
+                 int offset_p,
+                 int buf_len_p,
+                 uint32_t previous_crc32_p,
+                 bool truncate_p,
+                 bool doomed_p,
+                 bool request_update_crc_p);
+    int index;
+    int offset;
+    int buf_len;
+    uint32_t previous_crc32;
     bool truncate;
     bool doomed;
+    bool request_update_crc;
+  };
+
+  struct WriteResult {
+    WriteResult() : crc_updated(false) {}
+    int result;
+    uint32_t updated_crc32;  // only relevant if crc_updated set
+    bool crc_updated;
+  };
+
+  struct SparseRequest {
+    SparseRequest(int64_t sparse_offset_p, int buf_len_p);
+
+    int64_t sparse_offset;
+    int buf_len;
   };
 
   // Opens a disk cache entry on disk. The |key| parameter is optional, if empty
@@ -176,57 +198,60 @@ class SimpleSynchronousEntry {
                           SimpleFileTracker* file_tracker,
                           SimpleEntryCreationResults* out_results);
 
-  // Deletes an entry from the file system without affecting the state of the
-  // corresponding instance, if any (allowing operations to continue to be
-  // executed through that instance). Returns a net error code.
-  static int DoomEntry(const base::FilePath& path,
-                       net::CacheType cache_type,
-                       uint64_t entry_hash);
+  // Renames the entry on the file system, making it no longer possible to open
+  // it again, but allowing operations to continue to be executed through that
+  // instance. The renamed file will be removed once the entry is closed.
+  // Returns a net error code.
+  int Doom();
 
-  // Like |DoomEntry()| above, except that it truncates the entry files rather
-  // than deleting them. Used when dooming entries after the backend has
+  // Deletes an entry from the file system.  This variant should only be used
+  // if there is no actual open instance around, as it doesn't account for
+  // possibility of it having been renamed to a non-standard name.
+  static int DeleteEntryFiles(const base::FilePath& path,
+                              net::CacheType cache_type,
+                              uint64_t entry_hash);
+
+  // Like |DeleteEntryFiles()| above, except that it truncates the entry files
+  // rather than deleting them. Used when dooming entries after the backend has
   // shutdown. See implementation of |SimpleEntryImpl::DoomEntryInternal()| for
   // more.
   static int TruncateEntryFiles(const base::FilePath& path,
                                 uint64_t entry_hash);
 
-  // Like |DoomEntry()| above. Deletes all entries corresponding to the
+  // Like |DeleteEntryFiles()| above. Deletes all entries corresponding to the
   // |key_hashes|. Succeeds only when all entries are deleted. Returns a net
   // error code.
-  static int DoomEntrySet(const std::vector<uint64_t>* key_hashes,
-                          const base::FilePath& path);
+  static int DeleteEntrySetFiles(const std::vector<uint64_t>* key_hashes,
+                                 const base::FilePath& path);
 
   // N.B. ReadData(), WriteData(), CheckEOFRecord(), ReadSparseData(),
   // WriteSparseData() and Close() may block on IO.
   //
   // All of these methods will put the //net return value into |*out_result|.
 
-  // |crc_request| can be nullptr here, to denote that no CRC computation is
-  // requested.
-  void ReadData(const EntryOperationData& in_entry_op,
-                CRCRequest* crc_request,
+  void ReadData(const ReadRequest& in_entry_op,
                 SimpleEntryStat* entry_stat,
                 net::IOBuffer* out_buf,
-                int* out_result);
-  void WriteData(const EntryOperationData& in_entry_op,
+                ReadResult* out_result);
+  void WriteData(const WriteRequest& in_entry_op,
                  net::IOBuffer* in_buf,
                  SimpleEntryStat* out_entry_stat,
-                 int* out_result);
+                 WriteResult* out_write_result);
   int CheckEOFRecord(base::File* file,
                      int stream_index,
                      const SimpleEntryStat& entry_stat,
                      uint32_t expected_crc32);
 
-  void ReadSparseData(const EntryOperationData& in_entry_op,
+  void ReadSparseData(const SparseRequest& in_entry_op,
                       net::IOBuffer* out_buf,
                       base::Time* out_last_used,
                       int* out_result);
-  void WriteSparseData(const EntryOperationData& in_entry_op,
+  void WriteSparseData(const SparseRequest& in_entry_op,
                        net::IOBuffer* in_buf,
                        uint64_t max_sparse_data_size,
                        SimpleEntryStat* out_entry_stat,
                        int* out_result);
-  void GetAvailableRange(const EntryOperationData& in_entry_op,
+  void GetAvailableRange(const SparseRequest& in_entry_op,
                          int64_t* out_start,
                          int* out_result);
 
@@ -241,6 +266,9 @@ class SimpleSynchronousEntry {
   const SimpleFileTracker::EntryFileKey& entry_file_key() const {
     return entry_file_key_;
   }
+
+  NET_EXPORT_PRIVATE base::FilePath GetFilenameForSubfile(
+      SimpleFileTracker::SubFile sub_file) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(::DiskCacheBackendTest,
@@ -366,8 +394,6 @@ class SimpleSynchronousEntry {
                            const SimpleFileEOF& eof_record,
                            SimpleStreamPrefetchData* out);
 
-  void Doom() const;
-
   // Opens the sparse data file and scans it if it exists.
   bool OpenSparseFileIfExists(int32_t* out_sparse_data_size);
 
@@ -420,7 +446,7 @@ class SimpleSynchronousEntry {
 
   void RecordSyncCreateResult(CreateEntryResult result, bool had_index);
 
-  base::FilePath GetFilenameFromFileIndex(int file_index);
+  base::FilePath GetFilenameFromFileIndex(int file_index) const;
 
   bool sparse_file_open() const { return sparse_file_open_; }
 
@@ -454,10 +480,6 @@ class SimpleSynchronousEntry {
   // Offset of the end of the sparse file (where the next sparse range will be
   // written).
   int64_t sparse_tail_offset_;
-
-  // True if the entry was created, or false if it was opened. Used to log
-  // SimpleCache.*.EntryCreatedWithStream2Omitted only for created entries.
-  bool files_created_;
 };
 
 }  // namespace disk_cache

@@ -41,11 +41,10 @@ struct ModelTypeInfo {
   // This should be the same as the model type but space separated and the
   // first letter of every word capitalized.
   const char* model_type_string;
-  // SpecificsFieldNumber for Model Type
+  // Field number of the model type specifics in EntitySpecifics.
   int specifics_field_number;
-  // Histogram value should be unique for the Model Type, Existing histogram
-  // values should never be modified without updating "SyncModelTypes" enum in
-  // histograms.xml to maintain backward compatibility.
+  // Model type value from SyncModelTypes enum in enums.xml. Must always be in
+  // sync with the enum.
   int model_type_histogram_val;
 };
 
@@ -117,9 +116,9 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {SUPERVISED_USER_SETTINGS, "MANAGED_USER_SETTING", "managed_user_settings",
      "Managed User Settings",
      sync_pb::EntitySpecifics::kManagedUserSettingFieldNumber, 26},
-    {SUPERVISED_USERS, "MANAGED_USER", "managed_users", "Managed Users",
-     sync_pb::EntitySpecifics::kManagedUserFieldNumber, 27},
-    {SUPERVISED_USER_SHARED_SETTINGS, "MANAGED_USER_SHARED_SETTING",
+    {DEPRECATED_SUPERVISED_USERS, "MANAGED_USER", "managed_users",
+     "Managed Users", sync_pb::EntitySpecifics::kManagedUserFieldNumber, 27},
+    {DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, "MANAGED_USER_SHARED_SETTING",
      "managed_user_shared_settings", "Managed User Shared Settings",
      sync_pb::EntitySpecifics::kManagedUserSharedSettingFieldNumber, 30},
     {ARTICLES, "ARTICLE", "articles", "Articles",
@@ -140,9 +139,15 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      sync_pb::EntitySpecifics::kReadingListFieldNumber, 38},
     {USER_EVENTS, "USER_EVENT", "user_events", "User Events",
      sync_pb::EntitySpecifics::kUserEventFieldNumber, 39},
+    {MOUNTAIN_SHARES, "MOUNTAIN_SHARE", "mountain_shares", "Mountain Shares",
+     sync_pb::EntitySpecifics::kMountainShareFieldNumber, 40},
+    {USER_CONSENTS, "USER_CONSENT", "user_consent", "User Consents",
+     sync_pb::EntitySpecifics::kUserConsentFieldNumber, 41},
     {NOTES, "NOTES", "vivaldi_notes",
       "Notes", sync_pb::EntitySpecifics::kNotesFieldNumber, 300},
+    // ---- Proxy types ----
     {PROXY_TABS, "", "", "Tabs", -1, 25},
+    // ---- Control Types ----
     {NIGORI, "NIGORI", "nigori", "Encryption Keys",
      sync_pb::EntitySpecifics::kNigoriFieldNumber, 17},
     {EXPERIMENTS, "EXPERIMENTS", "experiments", "Experiments",
@@ -151,6 +156,14 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
 
 static_assert(arraysize(kModelTypeInfoMap) == MODEL_TYPE_COUNT,
               "kModelTypeInfoMap should have MODEL_TYPE_COUNT elements");
+
+static_assert(42 + 1 /* notes */ == syncer::MODEL_TYPE_COUNT,
+              "When adding a new type, update enum SyncModelTypes in enums.xml "
+              "and suffix SyncModelType in histograms.xml.");
+
+static_assert(42 + 1 /* notes */ == syncer::MODEL_TYPE_COUNT,
+              "When adding a new type, update kAllocatorDumpNameWhitelist in "
+              "base/trace_event/memory_infra_background_whitelist.cc.");
 
 void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
   switch (type) {
@@ -233,11 +246,12 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case SUPERVISED_USER_SETTINGS:
       specifics->mutable_managed_user_setting();
       break;
-    case SUPERVISED_USERS:
+    case DEPRECATED_SUPERVISED_USERS:
       specifics->mutable_managed_user();
       break;
-    case SUPERVISED_USER_SHARED_SETTINGS:
+    case DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS:
       specifics->mutable_managed_user_shared_setting();
+      break;
     case ARTICLES:
       specifics->mutable_article();
       break;
@@ -261,6 +275,12 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
       break;
     case USER_EVENTS:
       specifics->mutable_user_event();
+      break;
+    case MOUNTAIN_SHARES:
+      specifics->mutable_mountain_share();
+      break;
+    case USER_CONSENTS:
+      specifics->mutable_user_consent();
       break;
     case PROXY_TABS:
       NOTREACHED() << "No default field value for " << ModelTypeToString(type);
@@ -311,10 +331,6 @@ FullModelTypeSet ToFullModelTypeSet(ModelTypeSet in) {
 ModelType GetModelType(const sync_pb::SyncEntity& sync_entity) {
   DCHECK(!IsRoot(sync_entity));  // Root shouldn't ever go over the wire.
 
-  // Backwards compatibility with old (pre-specifics) protocol.
-  if (sync_entity.has_bookmarkdata())
-    return BOOKMARKS;
-
   ModelType specifics_type = GetModelTypeFromSpecifics(sync_entity.specifics());
   if (specifics_type != UNSPECIFIED)
     return specifics_type;
@@ -334,7 +350,7 @@ ModelType GetModelType(const sync_pb::SyncEntity& sync_entity) {
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(40 + 1 /* notes */ == MODEL_TYPE_COUNT,
+  static_assert(42 + 1 /* notes */ == MODEL_TYPE_COUNT,
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -388,9 +404,9 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_managed_user_setting())
     return SUPERVISED_USER_SETTINGS;
   if (specifics.has_managed_user())
-    return SUPERVISED_USERS;
+    return DEPRECATED_SUPERVISED_USERS;
   if (specifics.has_managed_user_shared_setting())
-    return SUPERVISED_USER_SHARED_SETTINGS;
+    return DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS;
   if (specifics.has_article())
     return ARTICLES;
   if (specifics.has_app_list())
@@ -407,6 +423,10 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return READING_LIST;
   if (specifics.has_user_event())
     return USER_EVENTS;
+  if (specifics.has_mountain_share())
+    return MOUNTAIN_SHARES;
+  if (specifics.has_user_consent())
+    return USER_CONSENTS;
   if (specifics.has_nigori())
     return NIGORI;
   if (specifics.has_experiments())
@@ -431,7 +451,7 @@ ModelTypeNameMap GetUserSelectableTypeNameMap() {
 }
 
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(40+1  /*notes*/ == MODEL_TYPE_COUNT,
+  static_assert(42 + 1  /*notes*/ == MODEL_TYPE_COUNT,
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();
@@ -453,15 +473,17 @@ ModelTypeSet EncryptableUserTypes() {
   // Supervised user settings are not encrypted since they are set server-side.
   encryptable_user_types.Remove(SUPERVISED_USER_SETTINGS);
   // Supervised users are not encrypted since they are managed server-side.
-  encryptable_user_types.Remove(SUPERVISED_USERS);
+  encryptable_user_types.Remove(DEPRECATED_SUPERVISED_USERS);
   // Supervised user shared settings are not encrypted since they are managed
   // server-side and shared between manager and supervised user.
-  encryptable_user_types.Remove(SUPERVISED_USER_SHARED_SETTINGS);
+  encryptable_user_types.Remove(DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS);
   // Supervised user whitelists are not encrypted since they are managed
   // server-side.
   encryptable_user_types.Remove(SUPERVISED_USER_WHITELISTS);
-  // User events are not encrypted since they are consumed server-side.
+  // User events and consents are not encrypted since they are consumed
+  // server-side.
   encryptable_user_types.Remove(USER_EVENTS);
+  encryptable_user_types.Remove(USER_CONSENTS);
   // Proxy types have no sync representation and are therefore not encrypted.
   // Note however that proxy types map to one or more protocol types, which
   // may or may not be encrypted themselves.
@@ -483,12 +505,18 @@ const char* ModelTypeToString(ModelType model_type) {
 // the list, and be careful to not reuse integer values that have already been
 // assigned.
 //
-// Don't forget to update the "SyncModelTypes" enum in histograms.xml when you
-// make changes to this list.
+// Don't forget to update the "SyncModelTypes" enum in enums.xml when you make
+// changes to this list.
 int ModelTypeToHistogramInt(ModelType model_type) {
   if (model_type >= UNSPECIFIED && model_type < MODEL_TYPE_COUNT)
     return kModelTypeInfoMap[model_type].model_type_histogram_val;
   return 0;
+}
+
+int ModelTypeToStableIdentifier(ModelType model_type) {
+  DCHECK(model_type >= UNSPECIFIED && model_type < MODEL_TYPE_COUNT);
+  // Make sure the value is stable and positive.
+  return ModelTypeToHistogramInt(model_type) + 1;
 }
 
 std::unique_ptr<base::Value> ModelTypeToValue(ModelType model_type) {
@@ -501,23 +529,6 @@ std::unique_ptr<base::Value> ModelTypeToValue(ModelType model_type) {
   }
   NOTREACHED();
   return std::make_unique<base::Value>(std::string());
-}
-
-ModelType ModelTypeFromValue(const base::Value& value) {
-  if (value.is_string()) {
-    std::string result;
-    bool success = value.GetAsString(&result);
-    DCHECK(success);
-    return ModelTypeFromString(result);
-  } else if (value.is_int()) {
-    int result = 0;
-    bool success = value.GetAsInteger(&result);
-    DCHECK(success);
-    return ModelTypeFromInt(result);
-  } else {
-    NOTREACHED() << "Unsupported value type: " << value.type();
-    return UNSPECIFIED;
-  }
 }
 
 ModelType ModelTypeFromString(const std::string& model_type_string) {
@@ -578,15 +589,6 @@ std::unique_ptr<base::ListValue> ModelTypeSetToValue(ModelTypeSet model_types) {
     value->AppendString(ModelTypeToString(it.Get()));
   }
   return value;
-}
-
-ModelTypeSet ModelTypeSetFromValue(const base::ListValue& value) {
-  ModelTypeSet result;
-  for (base::ListValue::const_iterator i = value.begin(); i != value.end();
-       ++i) {
-    result.Put(ModelTypeFromValue(*i));
-  }
-  return result;
 }
 
 // TODO(zea): remove all hardcoded tags in model associators and have them use

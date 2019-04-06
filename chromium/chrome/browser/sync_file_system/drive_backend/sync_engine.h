@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/sync_file_system/drive_backend/callback_tracker.h"
@@ -20,9 +21,9 @@
 #include "components/drive/drive_notification_observer.h"
 #include "components/drive/service/drive_service_interface.h"
 #include "components/signin/core/browser/signin_manager_base.h"
-#include "net/base/network_change_notifier.h"
+#include "content/public/browser/network_connection_tracker.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
-class ExtensionServiceInterface;
 class OAuth2TokenService;
 
 namespace base {
@@ -35,12 +36,19 @@ class DriveNotificationManager;
 class DriveUploaderInterface;
 }
 
+namespace extensions {
+class ExtensionServiceInterface;
+}
+
 namespace leveldb {
 class Env;
 }
 
 namespace net {
 class URLRequestContextGetter;
+}
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace sync_file_system {
@@ -56,12 +64,13 @@ class RemoteChangeProcessorOnWorker;
 class RemoteChangeProcessorWrapper;
 class SyncWorkerInterface;
 
-class SyncEngine : public RemoteFileSyncService,
-                   public LocalChangeProcessor,
-                   public drive::DriveNotificationObserver,
-                   public drive::DriveServiceObserver,
-                   public net::NetworkChangeNotifier::NetworkChangeObserver,
-                   public SigninManagerBase::Observer {
+class SyncEngine
+    : public RemoteFileSyncService,
+      public LocalChangeProcessor,
+      public drive::DriveNotificationObserver,
+      public drive::DriveServiceObserver,
+      public content::NetworkConnectionTracker::NetworkConnectionObserver,
+      public SigninManagerBase::Observer {
  public:
   typedef RemoteFileSyncService::Observer SyncServiceObserver;
 
@@ -72,6 +81,7 @@ class SyncEngine : public RemoteFileSyncService,
     virtual std::unique_ptr<drive::DriveServiceInterface> CreateDriveService(
         OAuth2TokenService* oauth2_token_service,
         net::URLRequestContextGetter* url_request_context_getter,
+        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
         base::SequencedTaskRunner* blocking_task_runner);
 
    private:
@@ -136,9 +146,8 @@ class SyncEngine : public RemoteFileSyncService,
   void OnReadyToSendRequests() override;
   void OnRefreshTokenInvalid() override;
 
-  // net::NetworkChangeNotifier::NetworkChangeObserver overrides.
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  // content::NetworkConnectionTracker::NetworkConnectionObserver overrides.
+  void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // SigninManagerBase::Observer overrides.
   void GoogleSigninFailed(const GoogleServiceAuthError& error) override;
@@ -160,10 +169,11 @@ class SyncEngine : public RemoteFileSyncService,
              const base::FilePath& sync_file_system_dir,
              TaskLogger* task_logger,
              drive::DriveNotificationManager* notification_manager,
-             ExtensionServiceInterface* extension_service,
+             extensions::ExtensionServiceInterface* extension_service,
              SigninManagerBase* signin_manager,
              OAuth2TokenService* token_service,
              net::URLRequestContextGetter* request_context,
+             scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
              std::unique_ptr<DriveServiceFactory> drive_service_factory,
              leveldb::Env* env_override);
 
@@ -191,11 +201,12 @@ class SyncEngine : public RemoteFileSyncService,
   // I.e. the owner should declare the dependency explicitly by calling
   // KeyedService::DependsOn().
   drive::DriveNotificationManager* notification_manager_;
-  ExtensionServiceInterface* extension_service_;
+  extensions::ExtensionServiceInterface* extension_service_;
   SigninManagerBase* signin_manager_;
   OAuth2TokenService* token_service_;
 
   scoped_refptr<net::URLRequestContextGetter> request_context_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   std::unique_ptr<DriveServiceFactory> drive_service_factory_;
 

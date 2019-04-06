@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "net/quic/core/quic_packets.h"
+#include "net/third_party/quic/core/quic_packets.h"
 
 // N.B. This file and the .cc are separate from util.h/.cc so that they can be
 // independently updated by folks working on QUIC when new errors are added.
@@ -18,7 +18,7 @@ namespace domain_reliability {
 // that should be recorded in a beacon. Returns true and parse the QUIC error
 // code in |beacon_quic_error_out| if it could.
 // Returns false and clear |beacon_quic_error_out| otherwise.
-bool GetDomainReliabilityBeaconQuicError(net::QuicErrorCode quic_error,
+bool GetDomainReliabilityBeaconQuicError(quic::QuicErrorCode quic_error,
                                          std::string* beacon_quic_error_out);
 
 }  // namespace domain_reliability

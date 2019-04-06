@@ -5,6 +5,9 @@
 #include "chrome/browser/chromeos/login/signin/oauth2_token_initializer.h"
 
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/net/system_network_context_manager.h"
+#include "chrome/common/chrome_features.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace chromeos {
 
@@ -18,7 +21,8 @@ void OAuth2TokenInitializer::Start(const UserContext& user_context,
   callback_ = callback;
   user_context_ = user_context;
   oauth2_token_fetcher_.reset(new OAuth2TokenFetcher(
-      this, g_browser_process->system_request_context()));
+      this, g_browser_process->system_network_context_manager()
+                ->GetSharedURLLoaderFactory()));
   if (user_context.GetDeviceId().empty())
     NOTREACHED() << "Device ID is not set";
   oauth2_token_fetcher_->StartExchangeFromAuthCode(user_context.GetAuthCode(),
@@ -31,8 +35,15 @@ void OAuth2TokenInitializer::OnOAuth2TokensAvailable(
   user_context_.SetAuthCode(std::string());
   user_context_.SetRefreshToken(result.refresh_token);
   user_context_.SetAccessToken(result.access_token);
-  if (result.is_child_account) {
-    user_context_.SetUserType(user_manager::USER_TYPE_CHILD);
+
+  const bool support_usm =
+      base::FeatureList::IsEnabled(features::kCrOSEnableUSMUserService);
+  if (result.is_child_account &&
+      user_context_.GetUserType() != user_manager::USER_TYPE_CHILD) {
+    LOG(FATAL) << "Incorrect child user type " << user_context_.GetUserType();
+  } else if (user_context_.GetUserType() == user_manager::USER_TYPE_CHILD &&
+             !result.is_child_account && !support_usm) {
+    LOG(FATAL) << "Incorrect non-child token for the child user.";
   }
   callback_.Run(true, user_context_);
 }

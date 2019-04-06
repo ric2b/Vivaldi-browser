@@ -22,8 +22,8 @@ config("libwebp_config_internal") {
   }
 }
 
-set_opt_level =
-    !is_debug && is_posix && (current_cpu == "arm" || current_cpu == "arm64")
+set_opt_level = !is_debug && (is_posix || is_fuchsia) &&
+                (current_cpu == "arm" || current_cpu == "arm64")
 
 # webp's dsp code can be built for all configurations. Skipping it when both
 # arm_use_neon and arm_optionally_use_neon are false will result in link errors
@@ -110,6 +110,7 @@ static_library("libwebp_mux") {
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [ "//build/config/compiler:no_chromium_code" ]
   deps = [
+    ":libwebp_dec",
     ":libwebp_utils",
     ":libwebp_webp",
   ]
@@ -179,9 +180,6 @@ static_library("libwebp_dsp") {
   ]
   if (is_android) {
     deps += [ "//third_party/android_tools:cpu_features" ]
-
-    configs -= [ "//build/config/android:default_cygprofile_instrumentation" ]
-    configs += [ "//build/config/android:no_cygprofile_instrumentation" ]
   }
   if (current_cpu == "x86" || current_cpu == "x64") {
     defines = [
@@ -194,9 +192,12 @@ static_library("libwebp_dsp") {
 static_library("libwebp_dsp_sse41") {
   sources = [
     "src/dsp/alpha_processing_sse41.c",
+    "src/dsp/common_sse41.h",
     "src/dsp/dec_sse41.c",
     "src/dsp/enc_sse41.c",
     "src/dsp/lossless_enc_sse41.c",
+    "src/dsp/upsampling_sse41.c",
+    "src/dsp/yuv_sse41.c",
   ]
   configs += [ ":libwebp_config_internal" ]
   configs -= [ "//build/config/compiler:chromium_code" ]
@@ -276,11 +277,6 @@ if (use_dsp_neon) {
       # avoid an ICE with gcc-4.9: b/15574841
       cflags = [ "-frename-registers" ]
     }
-
-    if (is_android) {
-      configs -= [ "//build/config/android:default_cygprofile_instrumentation" ]
-      configs += [ "//build/config/android:no_cygprofile_instrumentation" ]
-    }
   }
 }  # use_dsp_neon
 
@@ -294,8 +290,6 @@ static_library("libwebp_enc") {
     "src/enc/config_enc.c",
     "src/enc/cost_enc.c",
     "src/enc/cost_enc.h",
-    "src/enc/delta_palettization_enc.c",
-    "src/enc/delta_palettization_enc.h",
     "src/enc/filter_enc.c",
     "src/enc/frame_enc.c",
     "src/enc/histogram_enc.c",
@@ -380,6 +374,10 @@ static_library("libwebp_utils") {
   all_dependent_configs = [ ":libwebp_config" ]
 
   public_configs = [ ":libwebp_utils_warnings" ]
+
+  deps = [
+    ":libwebp_webp",
+  ]
 }
 
 group("libwebp") {
@@ -414,6 +412,7 @@ if (current_toolchain == host_toolchain) {
     }
 
     deps = [
+      ":imageio_util",
       ":libwebp_webp",
     ]
     configs += [ ":libwebp_config" ]
@@ -470,6 +469,7 @@ if (current_toolchain == host_toolchain) {
     }
 
     deps = [
+      ":imageio_util",
       ":libwebp_webp",
       "//third_party/libpng",
       "//third_party/zlib",
@@ -492,6 +492,7 @@ if (current_toolchain == host_toolchain) {
     }
 
     deps = [
+      ":imageio_util",
       ":libwebp_webp",
     ]
     configs += [ ":libwebp_config" ]
@@ -509,8 +510,8 @@ if (current_toolchain == host_toolchain) {
       ":imagedec",
       ":imageio_util",
       ":libwebp",
+      ":libwebp_webp",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
     ]
     configs += [ ":libwebp_config_internal" ]
@@ -534,8 +535,8 @@ if (current_toolchain == host_toolchain) {
       ":imageenc",
       ":imageio_util",
       ":libwebp",
+      ":libwebp_webp",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
     ]
     configs += [ ":libwebp_config_internal" ]

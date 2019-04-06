@@ -24,7 +24,6 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -39,7 +38,7 @@ class MockWebContentsObserver : public content::WebContentsObserver {
  public:
   explicit MockWebContentsObserver(content::WebContents* web_contents)
       : content::WebContentsObserver(web_contents) {}
-  virtual ~MockWebContentsObserver() {}
+  ~MockWebContentsObserver() override {}
 
   // A hook to verify that the OneClickSigninSyncObserver initiated a redirect
   // to the continue URL. Navigations in unit_tests never complete, but a
@@ -68,24 +67,22 @@ class OneClickTestProfileSyncService
     return first_setup_in_progress_;
   }
 
-  bool IsSyncActive() const override { return sync_active_; }
+  State GetState() const override { return state_; }
 
   void set_first_setup_in_progress(bool in_progress) {
     first_setup_in_progress_ = in_progress;
   }
 
-  void set_sync_active(bool active) {
-    sync_active_ = active;
-  }
+  void set_state(State state) { state_ = state; }
 
  private:
   explicit OneClickTestProfileSyncService(InitParams init_params)
       : browser_sync::TestProfileSyncService(std::move(init_params)),
         first_setup_in_progress_(false),
-        sync_active_(false) {}
+        state_(State::INITIALIZING) {}
 
   bool first_setup_in_progress_;
-  bool sync_active_;
+  State state_;
 
   DISALLOW_COPY_AND_ASSIGN(OneClickTestProfileSyncService);
 };
@@ -179,12 +176,7 @@ TEST_F(OneClickSigninSyncObserverTest, NoSyncService_RedirectsImmediately) {
           profile(), BuildNullService));
 
   // The observer should immediately redirect to the continue URL.
-  if (content::IsBrowserSideNavigationEnabled()) {
-    EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_));
-  } else {
-    EXPECT_CALL(*web_contents_observer_,
-                DidStartNavigationToPendingEntry(_, _));
-  }
+  EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_));
   CreateSyncObserver(kContinueUrl);
   EXPECT_EQ(GURL(kContinueUrl), web_contents()->GetVisibleURL());
 
@@ -196,16 +188,9 @@ TEST_F(OneClickSigninSyncObserverTest, NoSyncService_RedirectsImmediately) {
 // Verify that when the WebContents is destroyed without any Sync notifications
 // firing, the observer cleans up its memory without loading the continue URL.
 TEST_F(OneClickSigninSyncObserverTest, WebContentsDestroyed) {
-  if (content::IsBrowserSideNavigationEnabled()) {
-    EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);;
-    CreateSyncObserver(kContinueUrl);
-    SetContents(NULL);
-  } else {
-    EXPECT_CALL(*web_contents_observer_,
-                DidStartNavigationToPendingEntry(_, _)).Times(0);
-    CreateSyncObserver(kContinueUrl);
-    SetContents(NULL);
-  }
+  EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
+  CreateSyncObserver(kContinueUrl);
+  SetContents(nullptr);
 }
 
 // Verify that when Sync is configured successfully, the observer loads the
@@ -214,14 +199,9 @@ TEST_F(OneClickSigninSyncObserverTest,
        OnSyncStateChanged_SyncConfiguredSuccessfully) {
   CreateSyncObserver(kContinueUrl);
   sync_service_->set_first_setup_in_progress(false);
-  sync_service_->set_sync_active(true);
+  sync_service_->set_state(syncer::SyncService::State::ACTIVE);
 
-  if (content::IsBrowserSideNavigationEnabled()) {
-    EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_));
-  } else {
-    EXPECT_CALL(*web_contents_observer_,
-                DidStartNavigationToPendingEntry(_, _));
-  }
+  EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_));
   sync_service_->NotifyObservers();
   EXPECT_EQ(GURL(kContinueUrl), web_contents()->GetVisibleURL());
 }
@@ -232,16 +212,10 @@ TEST_F(OneClickSigninSyncObserverTest,
        OnSyncStateChanged_SyncConfigurationFailed) {
   CreateSyncObserver(kContinueUrl);
   sync_service_->set_first_setup_in_progress(false);
-  sync_service_->set_sync_active(false);
+  sync_service_->set_state(syncer::SyncService::State::INITIALIZING);
 
-  if (content::IsBrowserSideNavigationEnabled()) {
-    EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
-    sync_service_->NotifyObservers();
-  } else {
-    EXPECT_CALL(*web_contents_observer_,
-                DidStartNavigationToPendingEntry(_, _)).Times(0);
-    sync_service_->NotifyObservers();
-  }
+  EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
+  sync_service_->NotifyObservers();
   EXPECT_NE(GURL(kContinueUrl), web_contents()->GetVisibleURL());
 }
 
@@ -251,20 +225,14 @@ TEST_F(OneClickSigninSyncObserverTest,
        OnSyncStateChanged_SyncConfigurationInProgress) {
   CreateSyncObserver(kContinueUrl);
   sync_service_->set_first_setup_in_progress(true);
-  sync_service_->set_sync_active(false);
+  sync_service_->set_state(syncer::SyncService::State::INITIALIZING);
 
-  if (content::IsBrowserSideNavigationEnabled()) {
-    EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);;
-    sync_service_->NotifyObservers();
-  } else {
-    EXPECT_CALL(*web_contents_observer_,
-                DidStartNavigationToPendingEntry(_, _)).Times(0);;
-    sync_service_->NotifyObservers();
-  }
+  EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
+  sync_service_->NotifyObservers();
   EXPECT_NE(GURL(kContinueUrl), web_contents()->GetVisibleURL());
 
   // Trigger an event to force state to be cleaned up.
-  SetContents(NULL);
+  SetContents(nullptr);
 }
 
 // Verify that if the continue_url is to the settings page, no navigation is
@@ -276,15 +244,9 @@ TEST_F(OneClickSigninSyncObserverTest,
       signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false);
   CreateSyncObserver(continue_url.spec());
   sync_service_->set_first_setup_in_progress(false);
-  sync_service_->set_sync_active(true);
+  sync_service_->set_state(syncer::SyncService::State::ACTIVE);
 
-  if (content::IsBrowserSideNavigationEnabled()) {
-    EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
-    sync_service_->NotifyObservers();
-  } else {
-    EXPECT_CALL(*web_contents_observer_,
-                DidStartNavigationToPendingEntry(_, _)).Times(0);
-    sync_service_->NotifyObservers();
-  }
+  EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
+  sync_service_->NotifyObservers();
   EXPECT_NE(GURL(kContinueUrl), web_contents()->GetVisibleURL());
 }

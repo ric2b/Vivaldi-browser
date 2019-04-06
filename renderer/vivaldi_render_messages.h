@@ -1,6 +1,9 @@
 // Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 // Multiply-included file, no traditional include guard.
 
+#ifndef RENDER_VIVALDI_RENDER_MESSAGES_H_
+#define RENDER_VIVALDI_RENDER_MESSAGES_H_
+
 #include <string>
 
 #include "base/memory/shared_memory_handle.h"
@@ -20,10 +23,6 @@ IPC_STRUCT_BEGIN(VivaldiViewMsg_RequestThumbnailForFrame_Params)
 IPC_STRUCT_END()
 
 IPC_MESSAGE_ROUTED1(VivaldiMsg_InsertText, base::string16)
-IPC_MESSAGE_ROUTED3(VivaldiMsg_SetPinchZoom,
-                    float /* scale */,
-                    int /* x */,
-                    int /* y */)
 
 IPC_MESSAGE_ROUTED4(VivaldiMsg_DidUpdateFocusedElementInfo,
                     std::string,
@@ -47,3 +46,7 @@ IPC_MESSAGE_ROUTED4(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
                     gfx::Size /* original size of the image */,
                     int /* ID of the callback */,
                     bool /* true if success */)
+
+IPC_MESSAGE_ROUTED0(VivaldiFrameHostMsg_ResumeParser)
+
+#endif // RENDER_VIVALDI_RENDER_MESSAGES_H_

@@ -7,7 +7,11 @@
 
 #include <vector>
 
+#include "base/bind_helpers.h"
+#include "base/compiler_specific.h"
+#include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/sys_byteorder.h"
 #include "base/threading/thread.h"
@@ -22,40 +26,66 @@
 #include "media/audio/fake_audio_input_stream.h"
 #include "media/audio/fake_audio_output_stream.h"
 #include "media/audio/mock_audio_manager.h"
-#include "media/audio/test_audio_input_controller_factory.h"
 #include "media/audio/test_audio_thread.h"
 #include "media/base/audio_bus.h"
 #include "media/base/test_helpers.h"
+#include "mojo/public/cpp/system/data_pipe.h"
+#include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/net_errors.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_status.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_util.h"
+#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using media::AudioInputController;
 using media::AudioInputStream;
 using media::AudioOutputStream;
 using media::AudioParameters;
-using media::TestAudioInputController;
-using media::TestAudioInputControllerFactory;
 
 namespace content {
+
+namespace {
+
+class MockCapturerSource : public media::AudioCapturerSource {
+ public:
+  MockCapturerSource() = default;
+  MOCK_METHOD2(Initialize,
+               void(const media::AudioParameters& params,
+                    CaptureCallback* callback));
+  MOCK_METHOD0(Start, void());
+  MOCK_METHOD0(Stop, void());
+  MOCK_METHOD1(SetAutomaticGainControl, void(bool enable));
+  MOCK_METHOD1(SetVolume, void(double volume));
+  MOCK_METHOD1(SetOutputDeviceForAec,
+               void(const std::string& output_device_id));
+
+ protected:
+  ~MockCapturerSource() override = default;
+};
+
+}  // namespace
 
 class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
                                  public testing::Test {
  public:
   SpeechRecognizerImplTest()
-      : recognition_started_(false),
+      : audio_capturer_source_(new testing::NiceMock<MockCapturerSource>()),
+        recognition_started_(false),
         recognition_ended_(false),
         result_received_(false),
         audio_started_(false),
         audio_ended_(false),
         sound_started_(false),
         sound_ended_(false),
-        error_(SPEECH_RECOGNITION_ERROR_NONE),
+        error_(blink::mojom::SpeechRecognitionErrorCode::kNone),
         volume_(-1.0f) {
     // SpeechRecognizer takes ownership of sr_engine.
-    SpeechRecognitionEngine* sr_engine =
-        new SpeechRecognitionEngine(nullptr /* URLRequestContextGetter */);
+    SpeechRecognitionEngine* sr_engine = new SpeechRecognitionEngine(
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+            &url_loader_factory_),
+        nullptr /* URLRequestContextGetter */);
     SpeechRecognitionEngine::Config config;
     config.audio_num_bits_per_sample =
         SpeechRecognizerImpl::kNumBitsPerAudioSample;
@@ -71,9 +101,10 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
         media::AudioParameters::UnavailableDeviceParams());
     audio_system_ =
         std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
+    SpeechRecognizerImpl::SetAudioEnvironmentForTesting(
+        audio_system_.get(), audio_capturer_source_.get());
     recognizer_ = new SpeechRecognizerImpl(
-        this, audio_system_.get(), audio_manager_.get(), kTestingSessionId,
-        false, false, sr_engine);
+        this, audio_system_.get(), kTestingSessionId, false, false, sr_engine);
 
     int audio_packet_length_bytes =
         (SpeechRecognizerImpl::kAudioSampleRate *
@@ -90,7 +121,35 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
     audio_bus_->Zero();
   }
 
-  ~SpeechRecognizerImplTest() override { audio_manager_->Shutdown(); }
+  ~SpeechRecognizerImplTest() override {
+    SpeechRecognizerImpl::SetAudioEnvironmentForTesting(nullptr, nullptr);
+    audio_manager_->Shutdown();
+  }
+
+  bool GetUpstreamRequest(const network::TestURLLoaderFactory::PendingRequest**
+                              pending_request_out) WARN_UNUSED_RESULT {
+    return GetPendingRequest(pending_request_out, "/up");
+  }
+
+  bool GetDownstreamRequest(
+      const network::TestURLLoaderFactory::PendingRequest** pending_request_out)
+      WARN_UNUSED_RESULT {
+    return GetPendingRequest(pending_request_out, "/down");
+  }
+
+  bool GetPendingRequest(
+      const network::TestURLLoaderFactory::PendingRequest** pending_request_out,
+      const char* url_substring) WARN_UNUSED_RESULT {
+    for (const auto& pending_request :
+         *url_loader_factory_.pending_requests()) {
+      if (pending_request.request.url.spec().find(url_substring) !=
+          std::string::npos) {
+        *pending_request_out = &pending_request;
+        return true;
+      }
+    }
+    return false;
+  }
 
   void CheckEventsConsistency() {
     // Note: "!x || y" == "x implies y".
@@ -121,13 +180,16 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
     CheckEventsConsistency();
   }
 
-  void OnRecognitionResults(int session_id,
-                            const SpeechRecognitionResults& results) override {
+  void OnRecognitionResults(
+      int session_id,
+      const std::vector<blink::mojom::SpeechRecognitionResultPtr>& results)
+      override {
     result_received_ = true;
   }
 
-  void OnRecognitionError(int session_id,
-                          const SpeechRecognitionError& error) override {
+  void OnRecognitionError(
+      int session_id,
+      const blink::mojom::SpeechRecognitionError& error) override {
     EXPECT_TRUE(recognition_started_);
     EXPECT_FALSE(recognition_ended_);
     error_ = error.code;
@@ -162,16 +224,6 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
     CheckEventsConsistency();
   }
 
-  // testing::Test methods.
-  void SetUp() override {
-    AudioInputController::set_factory_for_testing(
-        &audio_input_controller_factory_);
-  }
-
-  void TearDown() override {
-    AudioInputController::set_factory_for_testing(nullptr);
-  }
-
   void CopyPacketToAudioBus() {
     // Copy the created signal into an audio bus in a deinterleaved format.
     audio_bus_->FromInterleaved(
@@ -195,16 +247,24 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
     CopyPacketToAudioBus();
   }
 
-  void OnData(media::AudioBus* data) {
-    auto* writer =
-        static_cast<AudioInputController::SyncWriter*>(recognizer_.get());
-    writer->Write(data, 0.0, false, base::TimeTicks::Now());
+  void Capture(media::AudioBus* data) {
+    auto* capture_callback =
+        static_cast<media::AudioCapturerSource::CaptureCallback*>(
+            recognizer_.get());
+    capture_callback->Capture(data, 0, 0.0, false);
+  }
+
+  void OnCaptureError() {
+    auto* capture_callback =
+        static_cast<media::AudioCapturerSource::CaptureCallback*>(
+            recognizer_.get());
+    capture_callback->OnCaptureError("");
   }
 
   void WaitForAudioThreadToPostDeviceInfo() {
     media::WaitableMessageLoopEvent event;
     audio_manager_->GetTaskRunner()->PostTaskAndReply(
-        FROM_HERE, base::BindOnce(&base::DoNothing), event.GetClosure());
+        FROM_HERE, base::DoNothing(), event.GetClosure());
     // Runs the loop and waits for the audio thread to call event's closure,
     // which means AudioSystem reply containing device parameters is already
     // queued on the main thread.
@@ -213,9 +273,11 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
 
  protected:
   TestBrowserThreadBundle thread_bundle_;
+  network::TestURLLoaderFactory url_loader_factory_;
   scoped_refptr<SpeechRecognizerImpl> recognizer_;
   std::unique_ptr<media::MockAudioManager> audio_manager_;
   std::unique_ptr<media::AudioSystem> audio_system_;
+  scoped_refptr<MockCapturerSource> audio_capturer_source_;
   bool recognition_started_;
   bool recognition_ended_;
   bool result_received_;
@@ -223,9 +285,7 @@ class SpeechRecognizerImplTest : public SpeechRecognitionEventListener,
   bool audio_ended_;
   bool sound_started_;
   bool sound_ended_;
-  SpeechRecognitionErrorCode error_;
-  net::TestURLFetcherFactory url_fetcher_factory_;
-  TestAudioInputControllerFactory audio_input_controller_factory_;
+  blink::mojom::SpeechRecognitionErrorCode error_;
   std::vector<uint8_t> audio_packet_;
   std::unique_ptr<media::AudioBus> audio_bus_;
   int bytes_per_sample_;
@@ -244,7 +304,7 @@ TEST_F(SpeechRecognizerImplTest, StartNoInputDevices) {
   EXPECT_TRUE(recognition_started_);
   EXPECT_FALSE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_AUDIO_CAPTURE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kAudioCapture, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -272,7 +332,7 @@ TEST_F(SpeechRecognizerImplTest, StopBeforeDeviceInfoReceived) {
   EXPECT_TRUE(recognition_started_);
   EXPECT_FALSE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -300,7 +360,7 @@ TEST_F(SpeechRecognizerImplTest, CancelBeforeDeviceInfoReceived) {
   EXPECT_TRUE(recognition_started_);
   EXPECT_FALSE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -315,7 +375,7 @@ TEST_F(SpeechRecognizerImplTest, StopNoData) {
   EXPECT_TRUE(recognition_started_);
   EXPECT_FALSE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -331,7 +391,7 @@ TEST_F(SpeechRecognizerImplTest, CancelNoData) {
   EXPECT_TRUE(recognition_started_);
   EXPECT_FALSE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_ABORTED, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kAborted, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -343,21 +403,62 @@ TEST_F(SpeechRecognizerImplTest, StopWithData) {
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
 
   // Try sending 5 chunks of mock audio data and verify that each of them
   // resulted immediately in a packet sent out via the network. This verifies
   // that we are streaming out encoded data as chunks without waiting for the
   // full recording to complete.
   const size_t kNumChunks = 5;
+  network::mojom::ChunkedDataPipeGetterPtr chunked_data_pipe_getter;
+  mojo::DataPipe data_pipe;
   for (size_t i = 0; i < kNumChunks; ++i) {
-    OnData(audio_bus_.get());
-    base::RunLoop().RunUntilIdle();
-    net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-    ASSERT_TRUE(fetcher);
-    EXPECT_EQ(i + 1, fetcher->upload_chunks().size());
+    Capture(audio_bus_.get());
+
+    if (i == 0) {
+      // Set up data channel to read chunked upload data. Must be done after the
+      // first OnData() call.
+      base::RunLoop().RunUntilIdle();
+      const network::TestURLLoaderFactory::PendingRequest* upstream_request;
+      ASSERT_TRUE(GetUpstreamRequest(&upstream_request));
+      ASSERT_TRUE(upstream_request->request.request_body);
+      ASSERT_EQ(1u, upstream_request->request.request_body->elements()->size());
+      ASSERT_EQ(
+          network::DataElement::TYPE_CHUNKED_DATA_PIPE,
+          (*upstream_request->request.request_body->elements())[0].type());
+      network::TestURLLoaderFactory::PendingRequest* mutable_upstream_request =
+          const_cast<network::TestURLLoaderFactory::PendingRequest*>(
+              upstream_request);
+      chunked_data_pipe_getter = (*mutable_upstream_request->request
+                                       .request_body->elements_mutable())[0]
+                                     .ReleaseChunkedDataPipeGetter();
+      chunked_data_pipe_getter->StartReading(
+          std::move(data_pipe.producer_handle));
+    }
+
+    std::string data;
+    while (true) {
+      base::RunLoop().RunUntilIdle();
+
+      const void* buffer;
+      uint32_t num_bytes;
+      MojoResult result = data_pipe.consumer_handle->BeginReadData(
+          &buffer, &num_bytes, MOJO_READ_DATA_FLAG_NONE);
+      if (result == MOJO_RESULT_OK) {
+        data.append(static_cast<const char*>(buffer), num_bytes);
+        data_pipe.consumer_handle->EndReadData(num_bytes);
+        continue;
+      }
+      if (result == MOJO_RESULT_SHOULD_WAIT) {
+        // Some data has already been read, assume there's no more to read.
+        if (!data.empty())
+          break;
+        continue;
+      }
+
+      FAIL() << "Mojo pipe closed unexpectedly";
+    }
+
+    EXPECT_FALSE(data.empty());
   }
 
   recognizer_->StopAudioCapture();
@@ -366,7 +467,7 @@ TEST_F(SpeechRecognizerImplTest, StopWithData) {
   EXPECT_TRUE(audio_ended_);
   EXPECT_FALSE(recognition_ended_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
 
   // Create a response string.
   proto::SpeechRecognitionEvent proto_event;
@@ -384,19 +485,15 @@ TEST_F(SpeechRecognizerImplTest, StopWithData) {
   msg_string.insert(0, reinterpret_cast<char*>(&prefix), sizeof(prefix));
 
   // Issue the network callback to complete the process.
-  net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(
-      SpeechRecognitionEngine::kDownstreamUrlFetcherIdForTesting);
-  ASSERT_TRUE(fetcher);
-  fetcher->set_url(fetcher->GetOriginalURL());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
-  fetcher->SetResponseString(msg_string);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
-
+  const network::TestURLLoaderFactory::PendingRequest* downstream_request;
+  ASSERT_TRUE(GetDownstreamRequest(&downstream_request));
+  url_loader_factory_.AddResponse(downstream_request->request.url.spec(),
+                                  msg_string);
   base::RunLoop().RunUntilIdle();
+
   EXPECT_TRUE(recognition_ended_);
   EXPECT_TRUE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -407,18 +504,16 @@ TEST_F(SpeechRecognizerImplTest, CancelWithData) {
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
-  OnData(audio_bus_.get());
+  Capture(audio_bus_.get());
   base::RunLoop().RunUntilIdle();
   recognizer_->AbortRecognition();
   base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(url_fetcher_factory_.GetFetcherByID(0));
+  // There should be both upstream and downstream pending requests.
+  ASSERT_EQ(2u, url_loader_factory_.pending_requests()->size());
   EXPECT_TRUE(recognition_started_);
   EXPECT_TRUE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_ABORTED, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kAborted, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -430,13 +525,10 @@ TEST_F(SpeechRecognizerImplTest, ConnectionError) {
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
-  OnData(audio_bus_.get());
+  Capture(audio_bus_.get());
   base::RunLoop().RunUntilIdle();
-  net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-  ASSERT_TRUE(fetcher);
+  // There should be both upstream and downstream pending requests.
+  ASSERT_EQ(2u, url_loader_factory_.pending_requests()->size());
 
   recognizer_->StopAudioCapture();
   base::RunLoop().RunUntilIdle();
@@ -444,19 +536,19 @@ TEST_F(SpeechRecognizerImplTest, ConnectionError) {
   EXPECT_TRUE(audio_ended_);
   EXPECT_FALSE(recognition_ended_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
 
   // Issue the network callback to complete the process.
-  fetcher->set_url(fetcher->GetOriginalURL());
-  fetcher->set_status(
-      net::URLRequestStatus::FromError(net::ERR_CONNECTION_REFUSED));
-  fetcher->set_response_code(0);
-  fetcher->SetResponseString(std::string());
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  const network::TestURLLoaderFactory::PendingRequest* pending_request;
+  ASSERT_TRUE(GetUpstreamRequest(&pending_request));
+  url_loader_factory_.AddResponse(
+      pending_request->request.url, network::ResourceResponseHead(), "",
+      network::URLLoaderCompletionStatus(net::ERR_CONNECTION_REFUSED));
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(recognition_ended_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NETWORK, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNetwork, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -468,13 +560,10 @@ TEST_F(SpeechRecognizerImplTest, ServerError) {
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
-  OnData(audio_bus_.get());
+  Capture(audio_bus_.get());
   base::RunLoop().RunUntilIdle();
-  net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-  ASSERT_TRUE(fetcher);
+  // There should be both upstream and downstream pending requests.
+  ASSERT_EQ(2u, url_loader_factory_.pending_requests()->size());
 
   recognizer_->StopAudioCapture();
   base::RunLoop().RunUntilIdle();
@@ -482,59 +571,38 @@ TEST_F(SpeechRecognizerImplTest, ServerError) {
   EXPECT_TRUE(audio_ended_);
   EXPECT_FALSE(recognition_ended_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
 
-  // Issue the network callback to complete the process.
-  fetcher->set_url(fetcher->GetOriginalURL());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(500);
-  fetcher->SetResponseString("Internal Server Error");
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  const network::TestURLLoaderFactory::PendingRequest* pending_request;
+  ASSERT_TRUE(GetUpstreamRequest(&pending_request));
+  network::ResourceResponseHead response;
+  const char kHeaders[] = "HTTP/1.0 500 Internal Server Error";
+  response.headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+      net::HttpUtil::AssembleRawHeaders(kHeaders, base::size(kHeaders)));
+  url_loader_factory_.AddResponse(pending_request->request.url, response, "",
+                                  network::URLLoaderCompletionStatus());
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(recognition_ended_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NETWORK, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNetwork, error_);
   CheckFinalEventsConsistency();
 }
 
-TEST_F(SpeechRecognizerImplTest, AudioControllerErrorNoData) {
+TEST_F(SpeechRecognizerImplTest, OnCaptureError_PropagatesError) {
   // Check if things tear down properly if AudioInputController threw an error.
   recognizer_->StartRecognition(
       media::AudioDeviceDescription::kDefaultDeviceId);
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
-  controller->event_handler()->OnError(AudioInputController::UNKNOWN_ERROR);
+
+  OnCaptureError();
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(recognition_started_);
   EXPECT_FALSE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_AUDIO_CAPTURE, error_);
-  CheckFinalEventsConsistency();
-}
-
-TEST_F(SpeechRecognizerImplTest, AudioControllerErrorWithData) {
-  // Check if things tear down properly if AudioInputController threw an error
-  // after giving some audio data.
-  recognizer_->StartRecognition(
-      media::AudioDeviceDescription::kDefaultDeviceId);
-  base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
-  WaitForAudioThreadToPostDeviceInfo();
-  base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
-  OnData(audio_bus_.get());
-  controller->event_handler()->OnError(AudioInputController::UNKNOWN_ERROR);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(url_fetcher_factory_.GetFetcherByID(0));
-  EXPECT_TRUE(recognition_started_);
-  EXPECT_TRUE(audio_started_);
-  EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_AUDIO_CAPTURE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kAudioCapture, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -546,21 +614,18 @@ TEST_F(SpeechRecognizerImplTest, NoSpeechCallbackIssued) {
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
 
   int num_packets = (SpeechRecognizerImpl::kNoSpeechTimeoutMs) /
                      SpeechRecognitionEngine::kAudioPacketIntervalMs + 1;
   // The vector is already filled with zero value samples on create.
   for (int i = 0; i < num_packets; ++i) {
-    OnData(audio_bus_.get());
+    Capture(audio_bus_.get());
   }
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(recognition_started_);
   EXPECT_TRUE(audio_started_);
   EXPECT_FALSE(result_received_);
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NO_SPEECH, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNoSpeech, error_);
   CheckFinalEventsConsistency();
 }
 
@@ -574,27 +639,22 @@ TEST_F(SpeechRecognizerImplTest, NoSpeechCallbackNotIssued) {
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
-  controller = audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
 
   int num_packets = (SpeechRecognizerImpl::kNoSpeechTimeoutMs) /
                      SpeechRecognitionEngine::kAudioPacketIntervalMs;
 
   // The vector is already filled with zero value samples on create.
   for (int i = 0; i < num_packets / 2; ++i) {
-    OnData(audio_bus_.get());
+    Capture(audio_bus_.get());
   }
 
   FillPacketWithTestWaveform();
   for (int i = 0; i < num_packets / 2; ++i) {
-    OnData(audio_bus_.get());
+    Capture(audio_bus_.get());
   }
 
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
   EXPECT_TRUE(audio_started_);
   EXPECT_FALSE(audio_ended_);
   EXPECT_FALSE(recognition_ended_);
@@ -613,34 +673,29 @@ TEST_F(SpeechRecognizerImplTest, SetInputVolumeCallback) {
   base::RunLoop().RunUntilIdle();  // EVENT_PREPARE processing.
   WaitForAudioThreadToPostDeviceInfo();
   base::RunLoop().RunUntilIdle();  // EVENT_START processing.
-  TestAudioInputController* controller =
-      audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
-  controller = audio_input_controller_factory_.controller();
-  ASSERT_TRUE(controller);
 
   // Feed some samples to begin with for the endpointer to do noise estimation.
   int num_packets = SpeechRecognizerImpl::kEndpointerEstimationTimeMs /
                     SpeechRecognitionEngine::kAudioPacketIntervalMs;
   FillPacketWithNoise();
   for (int i = 0; i < num_packets; ++i) {
-    OnData(audio_bus_.get());
+    Capture(audio_bus_.get());
   }
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(-1.0f, volume_);  // No audio volume set yet.
 
   // The vector is already filled with zero value samples on create.
-  OnData(audio_bus_.get());
+  Capture(audio_bus_.get());
   base::RunLoop().RunUntilIdle();
   EXPECT_FLOAT_EQ(0.74939233f, volume_);
 
   FillPacketWithTestWaveform();
-  OnData(audio_bus_.get());
+  Capture(audio_bus_.get());
   base::RunLoop().RunUntilIdle();
   EXPECT_NEAR(0.89926866f, volume_, 0.00001f);
   EXPECT_FLOAT_EQ(0.75071919f, noise_volume_);
 
-  EXPECT_EQ(SPEECH_RECOGNITION_ERROR_NONE, error_);
+  EXPECT_EQ(blink::mojom::SpeechRecognitionErrorCode::kNone, error_);
   EXPECT_FALSE(audio_ended_);
   EXPECT_FALSE(recognition_ended_);
   recognizer_->AbortRecognition();

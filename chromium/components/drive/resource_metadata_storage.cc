@@ -23,7 +23,9 @@
 #include "base/threading/thread_restrictions.h"
 #include "components/drive/drive.pb.h"
 #include "components/drive/drive_api_util.h"
+#include "components/drive/file_system_core_util.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/leveldb_chrome.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
 
@@ -438,6 +440,75 @@ bool UpgradeOldDBVersion14(leveldb::DB* resource_map) {
   return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
 }
 
+bool UpgradeOldDBVersion15(leveldb::DB* resource_map) {
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums = true;
+  leveldb::WriteBatch batch;
+
+  std::unique_ptr<leveldb::Iterator> it(
+      resource_map->NewIterator(read_options));
+
+  it->SeekToFirst();
+  ResourceMetadataHeader header;
+
+  if (!it->Valid() || it->key() != GetHeaderDBKey()) {
+    DLOG(ERROR) << "Header not detected.";
+    return false;
+  }
+
+  if (!header.ParseFromArray(it->value().data(), it->value().size())) {
+    DLOG(ERROR) << "Could not parse header.";
+    return false;
+  }
+
+  header.set_version(ResourceMetadataStorage::kDBVersion);
+  header.set_start_page_token(drive::util::ConvertChangestampToStartPageToken(
+      header.largest_changestamp()));
+  std::string serialized_header;
+  header.SerializeToString(&serialized_header);
+  batch.Put(GetHeaderDBKey(), serialized_header);
+
+  for (it->Next(); it->Valid(); it->Next()) {
+    if (IsIdEntryKey(it->key()))
+      continue;
+
+    ResourceEntry entry;
+    if (!entry.ParseFromArray(it->value().data(), it->value().size()))
+      return false;
+
+    if (entry.has_directory_specific_info()) {
+      int64_t changestamp = entry.directory_specific_info().changestamp();
+      entry.mutable_directory_specific_info()->set_start_page_token(
+          drive::util::ConvertChangestampToStartPageToken(changestamp));
+
+      std::string serialized_entry;
+      if (!entry.SerializeToString(&serialized_entry)) {
+        DLOG(ERROR) << "Failed to serialize the entry";
+        return false;
+      }
+
+      batch.Put(entry.local_id(), serialized_entry);
+    }
+  }
+
+  return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
+}
+
+bool UpgradeOldDBVersions16To18(leveldb::DB* resource_map) {
+  // From 15->16, the field |alternate_url| was moved from FileSpecificData
+  // to ResourceEntry. Since it isn't saved for directories, we need to do a
+  // full fetch to get the |alternate_url| fetched for each directory.
+  // Put a new header with the latest version number, and clear the start page
+  // token.
+  std::string serialized_header;
+  if (!GetDefaultHeaderEntry().SerializeToString(&serialized_header))
+    return false;
+
+  leveldb::WriteBatch batch;
+  batch.Put(GetHeaderDBKey(), serialized_header);
+  return resource_map->Write(leveldb::WriteOptions(), &batch).ok();
+}
+
 }  // namespace
 
 ResourceMetadataStorage::Iterator::Iterator(
@@ -501,11 +572,21 @@ bool ResourceMetadataStorage::UpgradeOldDB(
   const base::FilePath preserved_resource_map_path =
       directory_path.Append(kPreservedResourceMapDBName);
 
+  leveldb_env::Options options;
+  options.max_open_files = 0;  // Use minimum.
+  options.create_if_missing = false;
+
   if (base::PathExists(preserved_resource_map_path)) {
     // Preserved DB is found. The previous attempt to create a new DB should not
     // be successful. Discard the imperfect new DB and restore the old DB.
-    if (!base::DeleteFile(resource_map_path, false /* recursive */) ||
-        !base::Move(preserved_resource_map_path, resource_map_path))
+    leveldb::Status status =
+        leveldb_chrome::DeleteDB(resource_map_path, options);
+    if (!status.ok()) {
+      LOG(ERROR) << "ERROR deleting " << resource_map_path
+                 << ", err:" << status.ToString();
+      return false;
+    }
+    if (!base::Move(preserved_resource_map_path, resource_map_path))
       return false;
   }
 
@@ -514,9 +595,6 @@ bool ResourceMetadataStorage::UpgradeOldDB(
 
   // Open DB.
   std::unique_ptr<leveldb::DB> resource_map;
-  leveldb_env::Options options;
-  options.max_open_files = 0;  // Use minimum.
-  options.create_if_missing = false;
   leveldb::Status status = leveldb_env::OpenDB(
       options, resource_map_path.AsUTF8Unsafe(), &resource_map);
   if (!status.ok())
@@ -554,9 +632,15 @@ bool ResourceMetadataStorage::UpgradeOldDB(
       return UpgradeOldDBVersion13(resource_map.get());
     case 14:
       return UpgradeOldDBVersion14(resource_map.get());
+    case 15:
+      return UpgradeOldDBVersion15(resource_map.get());
+    case 16:
+    case 17:
+    case 18:
+      return UpgradeOldDBVersions16To18(resource_map.get());
     case kDBVersion:
       static_assert(
-          kDBVersion == 15,
+          kDBVersion == 19,
           "database version and this function must be updated together");
       return true;
     default:
@@ -585,18 +669,18 @@ bool ResourceMetadataStorage::Initialize() {
   const base::FilePath trashed_resource_map_path =
       directory_path_.Append(kTrashedResourceMapDBName);
 
+  leveldb_env::Options options;
+  options.max_open_files = 0;  // Use minimum.
+  options.create_if_missing = false;
+
   // Discard unneeded DBs.
-  if (!base::DeleteFile(preserved_resource_map_path, true /* recursive */) ||
-      !base::DeleteFile(trashed_resource_map_path, true /* recursive */)) {
+  if (!leveldb_chrome::DeleteDB(preserved_resource_map_path, options).ok() ||
+      !leveldb_chrome::DeleteDB(trashed_resource_map_path, options).ok()) {
     LOG(ERROR) << "Failed to remove unneeded DBs.";
     return false;
   }
 
   // Try to open the existing DB.
-  leveldb_env::Options options;
-  options.max_open_files = 0;  // Use minimum.
-  options.create_if_missing = false;
-
   DBInitStatus open_existing_result = DB_INIT_NOT_FOUND;
   leveldb::Status status;
   if (base::PathExists(resource_map_path)) {
@@ -767,6 +851,33 @@ FileError ResourceMetadataStorage::GetLargestChangestamp(
   return FILE_ERROR_OK;
 }
 
+FileError ResourceMetadataStorage::GetStartPageToken(
+    std::string* start_page_token) {
+  base::AssertBlockingAllowed();
+  ResourceMetadataHeader header;
+  FileError error = GetHeader(&header);
+  if (error != FILE_ERROR_OK) {
+    DLOG(ERROR) << "Failed to get the header.";
+    return error;
+  }
+  *start_page_token = header.start_page_token();
+  return FILE_ERROR_OK;
+}
+
+FileError ResourceMetadataStorage::SetStartPageToken(
+    const std::string& start_page_token) {
+  base::AssertBlockingAllowed();
+
+  ResourceMetadataHeader header;
+  FileError error = GetHeader(&header);
+  if (error != FILE_ERROR_OK) {
+    DLOG(ERROR) << "Failed to get the header.";
+    return error;
+  }
+  header.set_start_page_token(start_page_token);
+  return PutHeader(header);
+}
+
 FileError ResourceMetadataStorage::PutEntry(const ResourceEntry& entry) {
   base::AssertBlockingAllowed();
 
@@ -920,7 +1031,7 @@ FileError ResourceMetadataStorage::GetIdByResourceId(
 ResourceMetadataStorage::RecoveredCacheInfo::RecoveredCacheInfo()
     : is_dirty(false) {}
 
-ResourceMetadataStorage::RecoveredCacheInfo::~RecoveredCacheInfo() {}
+ResourceMetadataStorage::RecoveredCacheInfo::~RecoveredCacheInfo() = default;
 
 ResourceMetadataStorage::~ResourceMetadataStorage() {
   base::AssertBlockingAllowed();

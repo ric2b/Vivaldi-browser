@@ -3,9 +3,6 @@
 <translationbundle lang="en-GB">
 <translation id="1002108253973310084">An incompatible protocol version was detected. Please make sure that you have the latest version of the software installed on both computers and try again.</translation>
 <translation id="1050693411695664090">Poor</translation>
-<translation id="1059802506829356230">• New look and feel.
-• Improved performance, responsiveness and reliability.
-• Support for playing audio from Windows or Linux computers.</translation>
 <translation id="1152528166145813711">Select…</translation>
 <translation id="1199593201721843963">Disable remote connections</translation>
 <translation id="1291443878853470558">You must enable remote connections if you want to use Chromoting to access this computer.</translation>
@@ -143,10 +140,12 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="4145029455188493639">Signed in as <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Some required components are missing. Please make sure that you have installed the latest version of the software and try again.</translation>
 <translation id="4156740505453712750">To protect access to this computer, please choose a PIN of <ph name="BOLD_START" />at least six digits<ph name="BOLD_END" />. This PIN will be required when connecting from another location.</translation>
+<translation id="4169432154993690151">To choose a profile picture, allow Chrome Remote Desktop to access your camera</translation>
 <translation id="4176825807642096119">Access code</translation>
 <translation id="4207623512727273241">Please run the installer before continuing.</translation>
 <translation id="4227991223508142681">Host Provisioning Utility</translation>
 <translation id="4240294130679914010">Chromoting Host Uninstaller</translation>
+<translation id="4249741460382919890">General fixes and stability improvements.</translation>
 <translation id="4277463233460010382">This computer is configured to allow one or more clients to connect without entering a PIN.</translation>
 <translation id="4277736576214464567">The access code is invalid. Please try again.</translation>
 <translation id="4361728918881830843">To enable remote connections to a different computer, install Chrome Remote Desktop there and click “<ph name="BUTTON_NAME" />”.</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">The remote host requires you to authenticate to a third-party website. To continue, you must grant Chrome Remote Desktop additional permissions to access this address:</translation>
 <translation id="507204348399810022">Are you sure that you want to disable remote connections to <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Failed to communicate with the server: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Please enter the same PIN in both boxes.</translation>
 <translation id="5170982930780719864">Invalid host id.</translation>
 <translation id="518094545883702183">This information is used only for diagnosing the problem that you are reporting, is available only to someone investigating your report, and is retained for no more than 30 days.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Something else.</translation>
 <translation id="6398765197997659313">Exit full screen</translation>
 <translation id="6441316101718669559">Desktop integration is not supported on this platform. You can still use the application, but the user experience will be degraded.</translation>
+<translation id="6502629188777329097">Securely access your computer</translation>
 <translation id="652218476070540101">The PIN for this computer is being updated…</translation>
 <translation id="6527303717912515753">Share</translation>
 <translation id="6541219117979389420">Application logs may include private information, including your identity (email address) and the names and properties of files and folders in Google Drive.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">From</translation>
 <translation id="677755392401385740">Host started for user: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">View/edit</translation>
+<translation id="6913710942997637770">To choose a profile picture, allow Chrome Remote Desktop to access your photos</translation>
 <translation id="6930242544192836755">Duration</translation>
 <translation id="6939719207673461467">Show/hide keyboard.</translation>
 <translation id="6944854424004126054">Restore window</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Remote connections for this computer have been disabled.</translation>
 <translation id="7678209621226490279">Dock Left</translation>
 <translation id="7693372326588366043">Refresh the list of hosts</translation>
+<translation id="7714222945760997814">Report this</translation>
 <translation id="7782471917492991422">Please check your computer's power management settings and ensure that it is not configured to sleep when idle.</translation>
 <translation id="7810127880729796595">Show statistics (connection: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Some required components are missing. Please make sure that you're running the latest version of Chrome and try again.</translation>

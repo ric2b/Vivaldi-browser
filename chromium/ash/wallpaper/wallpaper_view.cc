@@ -5,14 +5,15 @@
 #include "ash/wallpaper/wallpaper_view.h"
 
 #include "ash/public/cpp/login_constants.h"
+#include "ash/public/cpp/wallpaper_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/wallpaper/wallpaper_controller.h"
-#include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/window_animation_types.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
@@ -80,7 +81,7 @@ SkColor GetWallpaperDarkenColor() {
       Shell::Get()->wallpaper_controller()->GetProminentColor(
           color_utils::ColorProfile(color_utils::LumaRange::DARK,
                                     color_utils::SaturationRange::MUTED));
-  if (darken_color == WallpaperController::kInvalidColor)
+  if (darken_color == kInvalidWallpaperColor)
     darken_color = login_constants::kDefaultBaseColor;
 
   darken_color = color_utils::GetResultingPaintColor(
@@ -146,10 +147,10 @@ void WallpaperView::OnPaint(gfx::Canvas* canvas) {
   // Scale the image while maintaining the aspect ratio, cropping as necessary
   // to fill the wallpaper. Ideally the image should be larger than the largest
   // display supported, if not we will scale and center it if the layout is
-  // wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED.
+  // WALLPAPER_LAYOUT_CENTER_CROPPED.
   WallpaperController* controller = Shell::Get()->wallpaper_controller();
   gfx::ImageSkia wallpaper = controller->GetWallpaper();
-  wallpaper::WallpaperLayout layout = controller->GetWallpaperLayout();
+  WallpaperLayout layout = controller->GetWallpaperLayout();
 
   // Wallpapers with png format could be partially transparent. Fill the canvas
   // with black to make it opaque before painting the wallpaper.
@@ -165,7 +166,7 @@ void WallpaperView::OnPaint(gfx::Canvas* canvas) {
   }
 
   switch (layout) {
-    case wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED: {
+    case WALLPAPER_LAYOUT_CENTER_CROPPED: {
       // The dimension with the smallest ratio must be cropped, the other one
       // is preserved. Both are set in gfx::Size cropped_size.
       double horizontal_ratio =
@@ -193,19 +194,20 @@ void WallpaperView::OnPaint(gfx::Canvas* canvas) {
           width(), height(), true, flags);
       break;
     }
-    case wallpaper::WALLPAPER_LAYOUT_TILE: {
+    case WALLPAPER_LAYOUT_TILE: {
       canvas->TileImageInt(wallpaper, 0, 0, 0, 0, width(), height(), 1.0f,
-                           &flags);
+                           SkShader::kRepeat_TileMode,
+                           SkShader::kRepeat_TileMode, &flags);
       break;
     }
-    case wallpaper::WALLPAPER_LAYOUT_STRETCH: {
+    case WALLPAPER_LAYOUT_STRETCH: {
       // This is generally not recommended as it may show artifacts.
       canvas->DrawImageInt(wallpaper, 0, 0, wallpaper.width(),
                            wallpaper.height(), 0, 0, width(), height(), true,
                            flags);
       break;
     }
-    case wallpaper::WALLPAPER_LAYOUT_CENTER: {
+    case WALLPAPER_LAYOUT_CENTER: {
       float image_scale = canvas->image_scale();
       gfx::Rect wallpaper_rect(0, 0, wallpaper.width() / image_scale,
                                wallpaper.height() / image_scale);
@@ -234,9 +236,9 @@ void WallpaperView::ShowContextMenuForView(views::View* source,
   ShellPort::Get()->ShowContextMenu(point, source_type);
 }
 
-views::Widget* CreateWallpaper(aura::Window* root_window, int container_id) {
+views::Widget* CreateWallpaperWidget(aura::Window* root_window,
+                                     int container_id) {
   WallpaperController* controller = Shell::Get()->wallpaper_controller();
-  WallpaperDelegate* wallpaper_delegate = Shell::Get()->wallpaper_delegate();
 
   views::Widget* wallpaper_widget = new views::Widget;
   views::Widget::InitParams params(
@@ -247,7 +249,10 @@ views::Widget* CreateWallpaper(aura::Window* root_window, int container_id) {
   params.parent = root_window->GetChildById(container_id);
   wallpaper_widget->Init(params);
   wallpaper_widget->SetContentsView(new LayerControlView(new WallpaperView()));
-  int animation_type = wallpaper_delegate->GetAnimationType();
+  int animation_type =
+      controller->ShouldShowInitialAnimation()
+          ? wm::WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE
+          : ::wm::WINDOW_VISIBILITY_ANIMATION_TYPE_FADE;
   aura::Window* wallpaper_window = wallpaper_widget->GetNativeWindow();
   ::wm::SetWindowVisibilityAnimationType(wallpaper_window, animation_type);
 
@@ -256,17 +261,17 @@ views::Widget* CreateWallpaper(aura::Window* root_window, int container_id) {
   // 2. Wallpaper fades in from a non empty background.
   // 3. From an empty background, chrome transit to a logged in user session.
   // 4. From an empty background, guest user logged in.
-  if (wallpaper_delegate->ShouldShowInitialAnimation() ||
+  if (controller->ShouldShowInitialAnimation() ||
       RootWindowController::ForWindow(root_window)
-          ->animating_wallpaper_widget_controller() ||
+          ->wallpaper_widget_controller()
+          ->IsAnimating() ||
       Shell::Get()->session_controller()->NumberOfLoggedInUsers()) {
     ::wm::SetWindowVisibilityAnimationTransition(wallpaper_window,
                                                  ::wm::ANIMATE_SHOW);
-    int duration_override = wallpaper_delegate->GetAnimationDurationOverride();
-    if (duration_override) {
-      ::wm::SetWindowVisibilityAnimationDuration(
-          wallpaper_window,
-          base::TimeDelta::FromMilliseconds(duration_override));
+    base::TimeDelta animation_duration = controller->animation_duration();
+    if (!animation_duration.is_zero()) {
+      ::wm::SetWindowVisibilityAnimationDuration(wallpaper_window,
+                                                 animation_duration);
     }
   } else {
     // Disable animation if transition to login screen from an empty background.

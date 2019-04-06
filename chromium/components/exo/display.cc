@@ -15,6 +15,8 @@
 #include "components/exo/client_controlled_shell_surface.h"
 #include "components/exo/data_device.h"
 #include "components/exo/file_helper.h"
+#include "components/exo/input_method_surface.h"
+#include "components/exo/input_method_surface_manager.h"
 #include "components/exo/notification_surface.h"
 #include "components/exo/notification_surface_manager.h"
 #include "components/exo/shared_memory.h"
@@ -22,60 +24,38 @@
 #include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
 #include "components/exo/xdg_shell_surface.h"
+#include "ui/gfx/linux/client_native_pixmap_factory_dmabuf.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 #if defined(USE_OZONE)
 #include <GLES2/gl2extchromium.h>
 #include "components/exo/buffer.h"
-#include "gpu/ipc/client/gpu_memory_buffer_impl_native_pixmap.h"
+#include "gpu/ipc/common/gpu_memory_buffer_impl_native_pixmap.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "ui/ozone/public/ozone_switches.h"
 #endif
 
 namespace exo {
-namespace {
-#if defined(USE_OZONE)
-// TODO(dcastagna): The following formats should be determined at runtime
-// querying kms (via ozone).
-const gfx::BufferFormat kOverlayFormats[] = {
-// TODO(dcastagna): Remove RGBX/RGBA once all the platforms using the fullscreen
-// optimization will have switched to atomic.
-#if defined(ARCH_CPU_ARM_FAMILY)
-    gfx::BufferFormat::RGBX_8888, gfx::BufferFormat::RGBA_8888,
-#endif
-    gfx::BufferFormat::BGRX_8888, gfx::BufferFormat::BGRA_8888};
-
-const gfx::BufferFormat kOverlayFormatsForDrmAtomic[] = {
-    gfx::BufferFormat::RGBX_8888, gfx::BufferFormat::RGBA_8888,
-    gfx::BufferFormat::BGR_565, gfx::BufferFormat::YUV_420_BIPLANAR};
-#endif
-
-}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // Display, public:
 
-Display::Display() : Display(nullptr, std::unique_ptr<FileHelper>()) {}
+Display::Display() : Display(nullptr, nullptr, std::unique_ptr<FileHelper>()) {}
 
 Display::Display(NotificationSurfaceManager* notification_surface_manager,
+                 InputMethodSurfaceManager* input_method_surface_manager,
                  std::unique_ptr<FileHelper> file_helper)
     : notification_surface_manager_(notification_surface_manager),
+      input_method_surface_manager_(input_method_surface_manager),
       file_helper_(std::move(file_helper))
 #if defined(USE_OZONE)
       ,
-      overlay_formats_(std::begin(kOverlayFormats), std::end(kOverlayFormats))
+      client_native_pixmap_factory_(
+          gfx::CreateClientNativePixmapFactoryDmabuf())
 #endif
 {
-#if defined(USE_OZONE)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableDrmAtomic)) {
-    overlay_formats_.insert(overlay_formats_.end(),
-                            std::begin(kOverlayFormatsForDrmAtomic),
-                            std::end(kOverlayFormatsForDrmAtomic));
-  }
-#endif
 }
 
 Display::~Display() {}
@@ -116,7 +96,8 @@ std::unique_ptr<Buffer> Display::CreateLinuxDMABufBuffer(
 
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer =
       gpu::GpuMemoryBufferImplNativePixmap::CreateFromHandle(
-          handle, size, format, gfx::BufferUsage::GPU_READ,
+          client_native_pixmap_factory_.get(), handle, size, format,
+          gfx::BufferUsage::GPU_READ,
           gpu::GpuMemoryBufferImpl::DestructionCallback());
   if (!gpu_memory_buffer) {
     LOG(ERROR) << "Failed to create GpuMemoryBuffer from handle";
@@ -126,9 +107,9 @@ std::unique_ptr<Buffer> Display::CreateLinuxDMABufBuffer(
   // Using zero-copy for optimal performance.
   bool use_zero_copy = true;
 
-  bool is_overlay_candidate =
-      std::find(overlay_formats_.begin(), overlay_formats_.end(), format) !=
-      overlay_formats_.end();
+  // TODO(dcastagna): Re-enable NV12 format as HW overlay once b/113362843
+  // is addressed.
+  bool is_overlay_candidate = format != gfx::BufferFormat::YUV_420_BIPLANAR;
 
   return std::make_unique<Buffer>(
       std::move(gpu_memory_buffer), GL_TEXTURE_EXTERNAL_OES,
@@ -225,6 +206,26 @@ std::unique_ptr<NotificationSurface> Display::CreateNotificationSurface(
 std::unique_ptr<DataDevice> Display::CreateDataDevice(
     DataDeviceDelegate* delegate) {
   return std::make_unique<DataDevice>(delegate, &seat_, file_helper_.get());
+}
+
+std::unique_ptr<InputMethodSurface> Display::CreateInputMethodSurface(
+    Surface* surface,
+    double default_device_scale_factor) {
+  TRACE_EVENT1("exo", "Display::CreateInputMethodSurface", "surface",
+               surface->AsTracedValue());
+
+  if (!input_method_surface_manager_) {
+    DLOG(ERROR) << "Input method surface cannot be registered";
+    return nullptr;
+  }
+
+  if (surface->HasSurfaceDelegate()) {
+    DLOG(ERROR) << "Surface has already been assigned a role";
+    return nullptr;
+  }
+
+  return std::make_unique<InputMethodSurface>(
+      input_method_surface_manager_, surface, default_device_scale_factor);
 }
 
 }  // namespace exo

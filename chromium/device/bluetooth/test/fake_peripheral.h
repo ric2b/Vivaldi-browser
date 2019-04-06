@@ -59,6 +59,9 @@ class FakePeripheral : public device::BluetoothDevice {
   // Returns the service's Id.
   std::string AddFakeService(const device::BluetoothUUID& service_uuid);
 
+  // Remove a fake service with |identifier| from this peripheral.
+  bool RemoveFakeService(const std::string& identifier);
+
   // BluetoothDevice overrides:
   uint32_t GetBluetoothClass() const override;
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
@@ -110,6 +113,12 @@ class FakePeripheral : public device::BluetoothDevice {
       const GattConnectionCallback& callback,
       const ConnectErrorCallback& error_callback) override;
   bool IsGattServicesDiscoveryComplete() const override;
+#if defined(OS_CHROMEOS)
+  void ExecuteWrite(const base::Closure& callback,
+                    const ExecuteWriteErrorCallback& error_callback) override;
+  void AbortWrite(const base::Closure& callback,
+                  const AbortWriteErrorCallback& error_callback) override;
+#endif
 
  protected:
   void CreateGattConnectionImpl() override;

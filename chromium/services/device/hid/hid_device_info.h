@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef DEVICE_HID_HID_DEVICE_INFO_H_
-#define DEVICE_HID_HID_DEVICE_INFO_H_
+#ifndef SERVICES_DEVICE_HID_HID_DEVICE_INFO_H_
+#define SERVICES_DEVICE_HID_HID_DEVICE_INFO_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
-#include "services/device/public/interfaces/hid.mojom.h"
+#include "services/device/public/mojom/hid.mojom.h"
 
 namespace device {
 
@@ -94,4 +94,4 @@ class HidDeviceInfo : public base::RefCountedThreadSafe<HidDeviceInfo> {
 
 }  // namespace device
 
-#endif  // DEVICE_HID_HID_DEVICE_INFO_H_
+#endif  // SERVICES_DEVICE_HID_HID_DEVICE_INFO_H_

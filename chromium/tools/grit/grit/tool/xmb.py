@@ -168,6 +168,8 @@ Other options:
     return 'Exports all translateable messages into an XMB file.'
 
   def Run(self, opts, args):
+    os.environ['cwd'] = os.getcwd()
+
     self.SetOptions(opts)
 
     limit_file = None

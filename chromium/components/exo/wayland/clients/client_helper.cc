@@ -4,6 +4,7 @@
 
 #include "components/exo/wayland/clients/client_helper.h"
 
+#include <input-timestamps-unstable-v1-client-protocol.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include <presentation-time-client-protocol.h>
 #include <wayland-client-core.h>
@@ -31,6 +32,7 @@ DEFAULT_DELETER(wl_compositor, wl_compositor_destroy)
 DEFAULT_DELETER(wl_display, wl_display_disconnect)
 DEFAULT_DELETER(wl_pointer, wl_pointer_destroy)
 DEFAULT_DELETER(wl_region, wl_region_destroy)
+DEFAULT_DELETER(wl_registry, wl_registry_destroy)
 DEFAULT_DELETER(wl_seat, wl_seat_destroy)
 DEFAULT_DELETER(wl_shell, wl_shell_destroy)
 DEFAULT_DELETER(wl_shell_surface, wl_shell_surface_destroy)
@@ -47,6 +49,9 @@ DEFAULT_DELETER(struct wp_presentation_feedback,
 DEFAULT_DELETER(zaura_shell, zaura_shell_destroy)
 DEFAULT_DELETER(zaura_surface, zaura_surface_destroy)
 DEFAULT_DELETER(zaura_output, zaura_output_destroy)
+DEFAULT_DELETER(zwp_input_timestamps_manager_v1,
+                zwp_input_timestamps_manager_v1_destroy);
+DEFAULT_DELETER(zwp_input_timestamps_v1, zwp_input_timestamps_v1_destroy)
 DEFAULT_DELETER(zwp_linux_buffer_params_v1, zwp_linux_buffer_params_v1_destroy)
 DEFAULT_DELETER(zwp_linux_dmabuf_v1, zwp_linux_dmabuf_v1_destroy)
 

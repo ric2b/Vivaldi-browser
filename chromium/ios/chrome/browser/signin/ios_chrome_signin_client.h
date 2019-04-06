@@ -13,6 +13,7 @@
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/ios/browser/wait_for_network_callback_helper.h"
+#include "net/cookies/cookie_change_dispatcher.h"
 #include "net/url_request/url_request_context_getter.h"
 
 namespace ios {
@@ -44,25 +45,26 @@ class IOSChromeSigninClient : public SigninClient,
   std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
       const std::string& source,
-      net::URLRequestContextGetter* getter) override;
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+      override;
   void PreGaiaLogout(base::OnceClosure callback) override;
   scoped_refptr<TokenWebData> GetDatabase() override;
   PrefService* GetPrefs() override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   void DoFinalInit() override;
   bool CanRevokeCredentials() override;
   std::string GetSigninScopedDeviceId() override;
-  bool ShouldMergeSigninCredentialsIntoCookieJar() override;
   bool IsFirstRun() const override;
   bool AreSigninCookiesAllowed() override;
   void AddContentSettingsObserver(
       content_settings::Observer* observer) override;
   void RemoveContentSettingsObserver(
       content_settings::Observer* observer) override;
-  std::unique_ptr<CookieChangedSubscription> AddCookieChangedCallback(
+  std::unique_ptr<CookieChangeSubscription> AddCookieChangeCallback(
       const GURL& url,
       const std::string& name,
-      const net::CookieStore::CookieChangedCallback& callback) override;
+      net::CookieChangeCallback callback) override;
   void DelayNetworkCall(const base::Closure& callback) override;
 
   // SigninErrorController::Observer implementation.

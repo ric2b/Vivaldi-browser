@@ -8,28 +8,45 @@
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 
 #include "components/viz/service/surfaces/surface_deadline_client.h"
+#include "components/viz/service/viz_service_export.h"
+
+namespace base {
+class TickClock;
+}  // namespace base
 
 namespace viz {
 
-class SurfaceDependencyDeadline : public BeginFrameObserver {
+class FrameDeadline;
+
+class VIZ_SERVICE_EXPORT SurfaceDependencyDeadline : public BeginFrameObserver {
  public:
   SurfaceDependencyDeadline(SurfaceDeadlineClient* client,
-                            BeginFrameSource* begin_frame_source);
+                            BeginFrameSource* begin_frame_source,
+                            const base::TickClock* tick_clock);
   ~SurfaceDependencyDeadline() override;
 
-  void Set(uint32_t number_of_frames_to_deadline);
-  void Cancel();
+  // Sets up a deadline in wall time where
+  // deadline = frame_start_time + deadline_in_frames * frame_interval.
+  // It's possible for the deadline to already be in the past. In that case,
+  // this method will return false. Otherwise, it will return true.
+  bool Set(const FrameDeadline& frame_deadline);
 
-  bool has_deadline() const {
-    return number_of_frames_to_deadline_.has_value();
+  // If a deadline had been set, then cancel the deadline and return the
+  // the duration of the event tracked by this object. If there was no
+  // deadline set, then return base::nullopt.
+  base::Optional<base::TimeDelta> Cancel();
+
+  bool has_deadline() const { return deadline_.has_value(); }
+
+  base::Optional<base::TimeTicks> deadline_for_testing() const {
+    return deadline_;
   }
 
-  // Takes on the same BeginFrameSource and deadline as |other|. Returns
-  // false if they're already the same, and true otherwise.
-  bool InheritFrom(const SurfaceDependencyDeadline& other);
+  // Takes on the same BeginFrameSource and deadline as |other|.
+  void InheritFrom(const SurfaceDependencyDeadline& other);
 
-  bool operator==(const SurfaceDependencyDeadline& other);
-  bool operator!=(const SurfaceDependencyDeadline& other) {
+  bool operator==(const SurfaceDependencyDeadline& other) const;
+  bool operator!=(const SurfaceDependencyDeadline& other) const {
     return !(*this == other);
   }
 
@@ -40,12 +57,13 @@ class SurfaceDependencyDeadline : public BeginFrameObserver {
   bool WantsAnimateOnlyBeginFrames() const override;
 
  private:
-  void CancelInternal(bool deadline);
+  base::Optional<base::TimeDelta> CancelInternal(bool deadline);
 
   SurfaceDeadlineClient* const client_;
   BeginFrameSource* begin_frame_source_ = nullptr;
-  base::Optional<uint32_t> number_of_frames_to_deadline_;
+  const base::TickClock* tick_clock_;
   base::TimeTicks start_time_;
+  base::Optional<base::TimeTicks> deadline_;
 
   BeginFrameArgs last_begin_frame_args_;
 

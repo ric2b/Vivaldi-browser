@@ -60,7 +60,6 @@ WindowHangMonitor::WindowHangMonitor(base::TimeDelta ping_interval,
     : callback_(callback),
       ping_interval_(ping_interval),
       hang_timeout_(timeout),
-      timer_(false /* don't retain user task */, false /* don't repeat */),
       outstanding_ping_(nullptr) {
 }
 
@@ -151,8 +150,8 @@ void WindowHangMonitor::OnHangTimeout(HWND hwnd) {
     // The ping is still outstanding, the window is hung or has vanished.
     // Orphan the outstanding ping. If the callback arrives late, it will
     // delete it, or if the callback never arrives it'll leak.
-    outstanding_ping_->monitor = NULL;
-    outstanding_ping_ = NULL;
+    outstanding_ping_->monitor = nullptr;
+    outstanding_ping_ = nullptr;
 
     if (hwnd != FindChromeMessageWindow(window_process_.Pid())) {
       // The window vanished.

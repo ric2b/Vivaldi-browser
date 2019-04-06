@@ -6,8 +6,11 @@
 #include <list>
 #include <map>
 
+#include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_origin.h"
@@ -18,18 +21,22 @@
 #include "chrome/browser/ui/login/login_handler_test_utils.h"
 #include "chrome/browser/ui/login/login_interstitial_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/base/auth.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/cpp/features.h"
+#include "url/gurl.h"
 
 using content::NavigationController;
 using content::OpenURLParams;
@@ -103,6 +110,7 @@ const char kPrefetchAuthPage[] = "/login/prefetch.html";
 
 const char kMultiRealmTestPage[] = "/login/multi_realm.html";
 const int  kMultiRealmTestRealmCount = 2;
+const int kMultiRealmTestAuthRequestsCount = 4;
 
 const char kSingleRealmTestPage[] = "/login/single_realm.html";
 
@@ -136,13 +144,12 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, PrefetchAuthCancels) {
   class SetPrefetchForTest {
    public:
     explicit SetPrefetchForTest(bool prefetch)
-        : old_prerender_mode_(
-              prerender::PrerenderManager::GetMode(prerender::ORIGIN_NONE)) {
+        : old_prerender_mode_(prerender::PrerenderManager::GetMode()) {
       std::string exp_group = prefetch ? "ExperimentYes" : "ExperimentNo";
       base::FieldTrialList::CreateFieldTrial("Prefetch", exp_group);
       // Disable prerender so this is just a prefetch of the top-level page.
       prerender::PrerenderManager::SetMode(
-          prerender::PrerenderManager::PRERENDER_MODE_DISABLED);
+          prerender::PrerenderManager::PRERENDER_MODE_SIMPLE_LOAD_EXPERIMENT);
     }
 
     ~SetPrefetchForTest() {
@@ -177,46 +184,60 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, TestBasicAuth) {
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   NavigationController* controller = &contents->GetController();
-  LoginPromptBrowserTestObserver observer;
 
-  observer.Register(content::Source<NavigationController>(controller));
+  // If the network service crashes, basic auth should still be enabled.
+  for (bool crash_network_service : {false, true}) {
+    if (crash_network_service) {
+      // Can't crash the network service if it isn't enabled.
+      if (!base::FeatureList::IsEnabled(network::features::kNetworkService))
+        return;
 
-  {
-    WindowedAuthNeededObserver auth_needed_waiter(controller);
-    browser()->OpenURL(OpenURLParams(test_page, Referrer(),
-                                     WindowOpenDisposition::CURRENT_TAB,
-                                     ui::PAGE_TRANSITION_TYPED, false));
-    auth_needed_waiter.Wait();
-  }
+      SimulateNetworkServiceCrash();
+      // Flush the network interface to make sure it notices the crash.
+      content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+          ->FlushNetworkInterfaceForTesting();
+    }
 
-  ASSERT_FALSE(observer.handlers().empty());
-  {
-    WindowedAuthNeededObserver auth_needed_waiter(controller);
+    LoginPromptBrowserTestObserver observer;
+
+    observer.Register(content::Source<NavigationController>(controller));
+
+    {
+      WindowedAuthNeededObserver auth_needed_waiter(controller);
+      browser()->OpenURL(OpenURLParams(test_page, Referrer(),
+                                       WindowOpenDisposition::CURRENT_TAB,
+                                       ui::PAGE_TRANSITION_TYPED, false));
+      auth_needed_waiter.Wait();
+    }
+
+    ASSERT_FALSE(observer.handlers().empty());
+    {
+      WindowedAuthNeededObserver auth_needed_waiter(controller);
+      WindowedAuthSuppliedObserver auth_supplied_waiter(controller);
+      LoginHandler* handler = *observer.handlers().begin();
+
+      ASSERT_TRUE(handler);
+      handler->SetAuth(base::UTF8ToUTF16(bad_username_),
+                       base::UTF8ToUTF16(bad_password_));
+      auth_supplied_waiter.Wait();
+
+      // The request should be retried after the incorrect password is
+      // supplied.  This should result in a new AUTH_NEEDED notification
+      // for the same realm.
+      auth_needed_waiter.Wait();
+    }
+
+    ASSERT_EQ(1u, observer.handlers().size());
     WindowedAuthSuppliedObserver auth_supplied_waiter(controller);
     LoginHandler* handler = *observer.handlers().begin();
-
-    ASSERT_TRUE(handler);
-    handler->SetAuth(base::UTF8ToUTF16(bad_username_),
-                     base::UTF8ToUTF16(bad_password_));
+    SetAuthFor(handler);
     auth_supplied_waiter.Wait();
 
-    // The request should be retried after the incorrect password is
-    // supplied.  This should result in a new AUTH_NEEDED notification
-    // for the same realm.
-    auth_needed_waiter.Wait();
+    base::string16 expected_title = ExpectedTitleFromAuth(
+        base::ASCIIToUTF16("basicuser"), base::ASCIIToUTF16("secret"));
+    content::TitleWatcher title_watcher(contents, expected_title);
+    EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
   }
-
-  ASSERT_EQ(1u, observer.handlers().size());
-  WindowedAuthSuppliedObserver auth_supplied_waiter(controller);
-  LoginHandler* handler = *observer.handlers().begin();
-  SetAuthFor(handler);
-  auth_supplied_waiter.Wait();
-
-  base::string16 expected_title =
-      ExpectedTitleFromAuth(base::ASCIIToUTF16("basicuser"),
-                            base::ASCIIToUTF16("secret"));
-  content::TitleWatcher title_watcher(contents, expected_title);
-  EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
 }
 
 // Test that "Digest" HTTP authentication works.
@@ -366,11 +387,8 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, TestCancelAuth_OnNavigation) {
   LoginPromptBrowserTestObserver observer;
   observer.Register(content::Source<NavigationController>(controller));
 
-  // One LOAD_STOP event for LoginInterstitial, second for kAuthURL and third
-  // for kNoAuthURL, unless PlzNavigate is active, in which case the
-  // interrupted ongoing navigation does not receive LOAD_STOP.
-  const int kLoadStopEvents = content::IsBrowserSideNavigationEnabled() ? 2 : 3;
-  WindowedLoadStopObserver load_stop_waiter(controller, kLoadStopEvents);
+  // One LOAD_STOP event for kAuthURL and second  for kNoAuthURL.
+  WindowedLoadStopObserver load_stop_waiter(controller, 2);
   WindowedAuthNeededObserver auth_needed_waiter(controller);
   browser()->OpenURL(OpenURLParams(kAuthURL, Referrer(),
                                    WindowOpenDisposition::CURRENT_TAB,
@@ -402,11 +420,7 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, TestCancelAuth_OnBack) {
   // go back to.
   ui_test_utils::NavigateToURL(browser(), kNoAuthURL);
 
-  // Non-PlzNavigate: one LOAD_STOP event for kAuthURL and one for kNoAuthURL.
-  // PlzNavigate: one LOAD_STOP event for kAuthURL.
-  const int kLoadStopEvents =
-      content::IsBrowserSideNavigationEnabled() ? 1 : 2;
-  WindowedLoadStopObserver load_stop_waiter(controller, kLoadStopEvents);
+  WindowedLoadStopObserver load_stop_waiter(controller, 1);
   WindowedAuthNeededObserver auth_needed_waiter(controller);
   browser()->OpenURL(OpenURLParams(kAuthURL, Referrer(),
                                    WindowOpenDisposition::CURRENT_TAB,
@@ -445,11 +459,7 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, TestCancelAuth_OnForward) {
     load_stop_waiter.Wait();
   }
 
-  // Non-PlzNavigate: one LOAD_STOP event for kAuthURL and one for kNoAuthURL.
-  // PlzNavigate: one LOAD_STOP event for kAuthURL.
-  const int kLoadStopEvents =
-      content::IsBrowserSideNavigationEnabled() ? 1 : 2;
-  WindowedLoadStopObserver load_stop_waiter(controller, kLoadStopEvents);
+  WindowedLoadStopObserver load_stop_waiter(controller, 1);
   WindowedAuthNeededObserver auth_needed_waiter(controller);
   browser()->OpenURL(OpenURLParams(kAuthURL, Referrer(),
                                    WindowOpenDisposition::CURRENT_TAB,
@@ -466,104 +476,102 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, TestCancelAuth_OnForward) {
 // Test handling of resources that require authentication even though
 // the page they are included on doesn't.  In this case we should only
 // present the minimal number of prompts necessary for successfully
-// displaying the page.  First we check whether cancelling works as
-// expected.
-IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, MultipleRealmCancellation) {
+// displaying the page.
+class MultiRealmLoginPromptBrowserTest : public LoginPromptBrowserTest {
+ public:
+  void TearDownOnMainThread() override {
+    login_prompt_observer_.UnregisterAll();
+    LoginPromptBrowserTest::TearDownOnMainThread();
+  }
+
+  // Load the multi-realm test page, waits for LoginHandlers to be created, then
+  // calls |for_each_realm_func| once for each authentication realm, passing a
+  // LoginHandler for the realm as an argument. The page should stop loading
+  // after that.
+  template <class F>
+  void RunTest(const F& for_each_realm_func);
+
+  NavigationController* GetNavigationController() {
+    return &browser()
+                ->tab_strip_model()
+                ->GetActiveWebContents()
+                ->GetController();
+  }
+
+  LoginPromptBrowserTestObserver* login_prompt_observer() {
+    return &login_prompt_observer_;
+  }
+
+ private:
+  LoginPromptBrowserTestObserver login_prompt_observer_;
+};
+
+template <class F>
+void MultiRealmLoginPromptBrowserTest::RunTest(const F& for_each_realm_func) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL test_page = embedded_test_server()->GetURL(kMultiRealmTestPage);
 
-  content::WebContents* contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  NavigationController* controller = &contents->GetController();
-  LoginPromptBrowserTestObserver observer;
+  NavigationController* controller = GetNavigationController();
 
-  observer.Register(content::Source<NavigationController>(controller));
+  login_prompt_observer_.Register(
+      content::Source<NavigationController>(controller));
 
   WindowedLoadStopObserver load_stop_waiter(controller, 1);
 
-  {
-    WindowedAuthNeededObserver auth_needed_waiter(controller);
-    browser()->OpenURL(OpenURLParams(test_page, Referrer(),
-                                     WindowOpenDisposition::CURRENT_TAB,
-                                     ui::PAGE_TRANSITION_TYPED, false));
-    auth_needed_waiter.Wait();
-  }
+  browser()->OpenURL(OpenURLParams(test_page, Referrer(),
+                                   WindowOpenDisposition::CURRENT_TAB,
+                                   ui::PAGE_TRANSITION_TYPED, false));
 
-  int n_handlers = 0;
+  // Need to have LoginHandlers created for all requests that need
+  // authentication.
+  while (login_prompt_observer_.handlers().size() <
+         kMultiRealmTestAuthRequestsCount)
+    WindowedAuthNeededObserver(controller).Wait();
 
-  while (n_handlers < kMultiRealmTestRealmCount) {
-    WindowedAuthNeededObserver auth_needed_waiter(controller);
+  // Now confirm or cancel auth once per realm.
+  std::set<std::string> seen_realms;
+  for (int i = 0; i < kMultiRealmTestRealmCount; ++i) {
+    auto it = std::find_if(
+        login_prompt_observer_.handlers().begin(),
+        login_prompt_observer_.handlers().end(),
+        [&seen_realms](LoginHandler* handler) {
+          return seen_realms.count(handler->auth_info()->realm) == 0;
+        });
+    ASSERT_TRUE(it != login_prompt_observer_.handlers().end());
+    seen_realms.insert((*it)->auth_info()->realm);
 
-    while (!observer.handlers().empty()) {
-      WindowedAuthCancelledObserver auth_cancelled_waiter(controller);
-      LoginHandler* handler = *observer.handlers().begin();
-
-      ASSERT_TRUE(handler);
-      n_handlers++;
-      handler->CancelAuth();
-      auth_cancelled_waiter.Wait();
-    }
-
-    if (n_handlers < kMultiRealmTestRealmCount)
-      auth_needed_waiter.Wait();
+    for_each_realm_func(*it);
   }
 
   load_stop_waiter.Wait();
-
-  EXPECT_EQ(kMultiRealmTestRealmCount, n_handlers);
-  EXPECT_EQ(0, observer.auth_supplied_count());
-  EXPECT_LT(0, observer.auth_needed_count());
-  EXPECT_LT(0, observer.auth_cancelled_count());
 }
 
-// Similar to the MultipleRealmCancellation test above, but tests
-// whether supplying credentials work as exepcted.
-IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, MultipleRealmConfirmation) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL test_page = embedded_test_server()->GetURL(kMultiRealmTestPage);
+// Checks that cancelling works as expected.
+IN_PROC_BROWSER_TEST_F(MultiRealmLoginPromptBrowserTest,
+                       MultipleRealmCancellation) {
+  RunTest([this](LoginHandler* handler) {
+    WindowedAuthCancelledObserver waiter(GetNavigationController());
+    handler->CancelAuth();
+    waiter.Wait();
+  });
 
-  content::WebContents* contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  NavigationController* controller = &contents->GetController();
-  LoginPromptBrowserTestObserver observer;
+  EXPECT_EQ(0, login_prompt_observer()->auth_supplied_count());
+  EXPECT_LT(0, login_prompt_observer()->auth_needed_count());
+  EXPECT_LT(0, login_prompt_observer()->auth_cancelled_count());
+}
 
-  observer.Register(content::Source<NavigationController>(controller));
+// Checks that supplying credentials works as expected.
+IN_PROC_BROWSER_TEST_F(MultiRealmLoginPromptBrowserTest,
+                       MultipleRealmConfirmation) {
+  RunTest([this](LoginHandler* handler) {
+    WindowedAuthSuppliedObserver waiter(GetNavigationController());
+    SetAuthFor(handler);
+    waiter.Wait();
+  });
 
-  WindowedLoadStopObserver load_stop_waiter(controller, 1);
-  int n_handlers = 0;
-
-  {
-    WindowedAuthNeededObserver auth_needed_waiter(controller);
-
-    browser()->OpenURL(OpenURLParams(test_page, Referrer(),
-                                     WindowOpenDisposition::CURRENT_TAB,
-                                     ui::PAGE_TRANSITION_TYPED, false));
-    auth_needed_waiter.Wait();
-  }
-
-  while (n_handlers < kMultiRealmTestRealmCount) {
-    WindowedAuthNeededObserver auth_needed_waiter(controller);
-
-    while (!observer.handlers().empty()) {
-      WindowedAuthSuppliedObserver auth_supplied_waiter(controller);
-      LoginHandler* handler = *observer.handlers().begin();
-
-      ASSERT_TRUE(handler);
-      n_handlers++;
-      SetAuthFor(handler);
-      auth_supplied_waiter.Wait();
-    }
-
-    if (n_handlers < kMultiRealmTestRealmCount)
-      auth_needed_waiter.Wait();
-  }
-
-  load_stop_waiter.Wait();
-
-  EXPECT_EQ(kMultiRealmTestRealmCount, n_handlers);
-  EXPECT_LT(0, observer.auth_needed_count());
-  EXPECT_LT(0, observer.auth_supplied_count());
-  EXPECT_EQ(0, observer.auth_cancelled_count());
+  EXPECT_LT(0, login_prompt_observer()->auth_needed_count());
+  EXPECT_LT(0, login_prompt_observer()->auth_supplied_count());
+  EXPECT_EQ(0, login_prompt_observer()->auth_cancelled_count());
 }
 
 // Testing for recovery from an incorrect password for the case where
@@ -1267,8 +1275,17 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest,
 // This should cancel the login interstitial for the first page (www.a.com),
 // create a blank interstitial for second page (www.b.com) and show its URL in
 // the omnibox.
+
+// Fails occasionally on Mac. http://crbug.com/852703
+#if defined(OS_MACOSX)
+#define MAYBE_CancelLoginInterstitialOnRedirect \
+  DISABLED_CancelLoginInterstitialOnRedirect
+#else
+#define MAYBE_CancelLoginInterstitialOnRedirect \
+  CancelLoginInterstitialOnRedirect
+#endif
 IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest,
-                       CancelLoginInterstitialOnRedirect) {
+                       MAYBE_CancelLoginInterstitialOnRedirect) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // The test page redirects to www.a.com which triggers an auth dialog.
@@ -1533,6 +1550,47 @@ IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest,
   EXPECT_EQ(SSLBlockingPage::kTypeForTesting, contents->GetInterstitialPage()
                                                   ->GetDelegateForTesting()
                                                   ->GetTypeForTesting());
+}
+
+// Test where Basic HTTP authentication is disabled.
+IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, PRE_TestBasicAuthDisabled) {
+  // Disable all auth schemes. The modified list isn't respected until the
+  // browser is restarted, however.
+  g_browser_process->local_state()->SetString(prefs::kAuthSchemes, "");
+}
+
+IN_PROC_BROWSER_TEST_F(LoginPromptBrowserTest, TestBasicAuthDisabled) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL test_page = embedded_test_server()->GetURL(kAuthBasicPage);
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  NavigationController* controller = &contents->GetController();
+
+  // If the network service crashes, basic auth should still be disabled.
+  for (bool crash_network_service : {false, true}) {
+    // Crash the network service if it is enabled.
+    if (crash_network_service &&
+        base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+      SimulateNetworkServiceCrash();
+      // Flush the network interface to make sure it notices the crash.
+      content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+          ->FlushNetworkInterfaceForTesting();
+    }
+
+    LoginPromptBrowserTestObserver observer;
+
+    observer.Register(content::Source<NavigationController>(controller));
+    browser()->OpenURL(OpenURLParams(test_page, Referrer(),
+                                     WindowOpenDisposition::CURRENT_TAB,
+                                     ui::PAGE_TRANSITION_TYPED, false));
+    EXPECT_EQ(0, observer.auth_supplied_count());
+
+    const base::string16 kExpectedTitle =
+        base::ASCIIToUTF16("Denied: Missing Authorization Header");
+    content::TitleWatcher title_watcher(contents, kExpectedTitle);
+    EXPECT_EQ(kExpectedTitle, title_watcher.WaitAndGetTitle());
+  }
 }
 
 }  // namespace

@@ -31,11 +31,14 @@ class ShellMainDelegate : public content::ContentMainDelegate {
   void PreSandboxStartup() override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;
   content::ContentRendererClient* CreateContentRendererClient() override;
-  content::ContentUtilityClient* CreateContentUtilityClient() override;
   void ProcessExiting(const std::string& process_type) override;
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  void ZygoteStarting(std::vector<std::unique_ptr<content::ZygoteForkDelegate>>*
-                          delegates) override;
+  void ZygoteStarting(
+      std::vector<std::unique_ptr<service_manager::ZygoteForkDelegate>>*
+          delegates) override;
+#endif
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  void ZygoteForked() override;
 #endif
 
  protected:

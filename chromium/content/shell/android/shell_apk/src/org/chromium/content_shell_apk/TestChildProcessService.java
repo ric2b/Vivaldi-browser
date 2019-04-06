@@ -13,6 +13,7 @@ import android.os.RemoteException;
 import android.util.SparseArray;
 
 import org.chromium.base.CommandLine;
+import org.chromium.base.JNIUtils;
 import org.chromium.base.Log;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
@@ -83,11 +84,7 @@ public class TestChildProcessService extends ChildProcessService {
 
         @Override
         public void preloadNativeLibrary(Context hostContext) {
-            try {
-                LibraryLoader.get(LibraryProcessType.PROCESS_CHILD).preloadNow();
-            } catch (ProcessInitException e) {
-                Log.e(TAG, "Failed to preload native library.", e);
-            }
+            LibraryLoader.getInstance().preloadNow();
         }
 
         @Override
@@ -95,12 +92,13 @@ public class TestChildProcessService extends ChildProcessService {
             // Store the command line before loading the library to avoid an assert in CommandLine.
             mCommandLine = CommandLine.getJavaSwitchesOrNull();
 
-            LibraryLoader libraryLoader = null;
+            // Non-main processes are launched for testing. Mark them as such so that the JNI
+            // in the seconary dex won't be registered. See https://crbug.com/810720.
+            JNIUtils.enableSelectiveJniRegistration();
             boolean isLoaded = false;
             try {
-                libraryLoader = LibraryLoader.get(LibraryProcessType.PROCESS_CHILD);
-                libraryLoader.loadNow();
-                libraryLoader.ensureInitialized();
+                LibraryLoader.getInstance().loadNow();
+                LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_CHILD);
                 isLoaded = true;
             } catch (ProcessInitException e) {
                 Log.e(TAG, "Failed to load native library.", e);

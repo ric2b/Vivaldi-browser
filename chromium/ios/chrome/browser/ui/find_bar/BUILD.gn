@@ -5,12 +5,17 @@
 source_set("find_bar") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "find_bar_constants.h",
+    "find_bar_constants.mm",
     "find_bar_controller_ios.h",
     "find_bar_controller_ios.mm",
     "find_bar_touch_forwarding_view.h",
     "find_bar_touch_forwarding_view.mm",
+    "find_bar_ui_element.h",
     "find_bar_view.h",
     "find_bar_view.mm",
+    "legacy_find_bar_view.h",
+    "legacy_find_bar_view.mm",
   ]
   deps = [
     "resources:find_bg",
@@ -36,6 +41,9 @@ source_set("find_bar") {
     "//ios/chrome/browser/find_in_page",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/image_util",
+    "//ios/chrome/browser/ui/resources:menu_shadow",
+    "//ios/chrome/browser/ui/toolbar/buttons",
     "//ios/third_party/material_components_ios",
     "//ui/base",
     "//ui/gfx",
@@ -52,13 +60,14 @@ source_set("eg_tests") {
   deps = [
     ":find_bar",
     "//base",
+    "//base/test:test_support",
     "//components/strings",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/find_in_page",
+    "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/browser/ui/tools_menu/public",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
-    "//ios/testing:ios_test_support",
     "//ios/web/public/test/http_server",
     "//ui/base",
   ]

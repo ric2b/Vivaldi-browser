@@ -9,7 +9,6 @@
 #include <limits>
 #include <tuple>
 
-#include "base/files/file_util_proxy.h"
 #include "base/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "net/base/io_buffer.h"
@@ -161,10 +160,9 @@ void SandboxFileStreamWriter::DidCreateSnapshotFile(
 
   DCHECK(quota_manager_proxy->quota_manager());
   quota_manager_proxy->quota_manager()->GetUsageAndQuota(
-      url_.origin(),
-      FileSystemTypeToQuotaStorageType(url_.type()),
-      base::Bind(&SandboxFileStreamWriter::DidGetUsageAndQuota,
-                 weak_factory_.GetWeakPtr(), callback));
+      url_.origin(), FileSystemTypeToQuotaStorageType(url_.type()),
+      base::BindOnce(&SandboxFileStreamWriter::DidGetUsageAndQuota,
+                     weak_factory_.GetWeakPtr(), callback));
 }
 
 void SandboxFileStreamWriter::DidGetUsageAndQuota(
@@ -226,8 +224,8 @@ void SandboxFileStreamWriter::DidWrite(
     int overlapped = file_size_ - total_bytes_written_ - initial_offset_;
     if (overlapped < 0)
       overlapped = 0;
-    observers_.Notify(&FileUpdateObserver::OnUpdate,
-                      std::make_tuple(url_, write_response - overlapped));
+    observers_.Notify(&FileUpdateObserver::OnUpdate, url_,
+                      write_response - overlapped);
   }
   total_bytes_written_ += write_response;
 

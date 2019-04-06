@@ -4,6 +4,7 @@
 
 #include "apps/switches.h"
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -28,8 +29,7 @@ std::unique_ptr<base::Value> GetPrefDefaultValue(PrefService* prefs,
       prefs->GetDefaultPrefValue(path)->Clone());
 }
 
-::vivaldi::PrefProperties* GetPrefProperties(Profile* profile,
-                                             const std::string& path,
+::vivaldi::PrefProperties* GetPrefProperties(const std::string& path,
                                              std::string* error) {
   ::vivaldi::PrefProperties* properties =
       VivaldiPrefsApiNotificationFactory::GetPrefProperties(path);
@@ -47,12 +47,12 @@ std::unique_ptr<base::Value> TranslateEnumValue(
   if (!pref_properties->enum_properties)
     return original;
   if (!original->is_int())
-    return base::MakeUnique<base::Value>();
+    return std::make_unique<base::Value>();
   const auto& result = pref_properties->enum_properties->value_to_string.find(
       original->GetInt());
   if (result == pref_properties->enum_properties->value_to_string.end())
-    return base::MakeUnique<base::Value>();
-  return base::MakeUnique<base::Value>(result->second);
+    return std::make_unique<base::Value>();
+  return std::make_unique<base::Value>(result->second);
 }
 }  // anonymous namespace
 
@@ -73,6 +73,7 @@ void VivaldiPrefsApiNotification::BroadcastEvent(
 VivaldiPrefsApiNotification::VivaldiPrefsApiNotification(Profile* profile)
     : profile_(profile), weak_ptr_factory_(this) {
   prefs_registrar_.Init(profile->GetPrefs());
+  local_prefs_registrar_.Init(g_browser_process->local_state());
 
   // NOTE(andre@vivaldi.com) : Make sure the ExtensionPrefs has been created in
   // the ExtensionPrefsFactory-map in case another extension changes a setting
@@ -95,7 +96,24 @@ VivaldiPrefsApiNotificationFactory::GetPrefProperties(const std::string& path) {
   return &(item->second);
 }
 
-void VivaldiPrefsApiNotification::RegisterPref(const std::string& path) {
+void VivaldiPrefsApiNotification::RegisterPref(const std::string& path,
+                                               bool local_pref) {
+  if (local_pref)
+    RegisterLocalPref(path);
+  else
+    RegisterProfilePref(path);
+}
+
+void VivaldiPrefsApiNotification::RegisterLocalPref(const std::string& path) {
+  if (local_prefs_registrar_.IsObserved(path))
+    return;
+
+  local_prefs_registrar_.Add(path,
+                             base::Bind(&VivaldiPrefsApiNotification::OnChanged,
+                                        weak_ptr_factory_.GetWeakPtr()));
+}
+
+void VivaldiPrefsApiNotification::RegisterProfilePref(const std::string& path) {
   if (prefs_registrar_.IsObserved(path))
     return;
 
@@ -110,8 +128,11 @@ void VivaldiPrefsApiNotification::OnChanged(const std::string& path) {
   ::vivaldi::PrefProperties* properties =
       VivaldiPrefsApiNotificationFactory::GetPrefProperties(path);
   DCHECK(properties);
-  pref_value.value =
-      TranslateEnumValue(GetPrefValue(profile_->GetPrefs(), path), properties);
+  pref_value.value = TranslateEnumValue(
+      GetPrefValue(properties->local_pref ? g_browser_process->local_state()
+                                          : profile_->GetPrefs(),
+                   path),
+      properties);
 
   std::unique_ptr<base::ListValue> args =
       vivaldi::prefs::OnChanged::Create(pref_value);
@@ -175,13 +196,14 @@ bool PrefsGetFunction::RunAsync() {
       vivaldi::prefs::Get::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   const std::string& path = params->path;
-  ::vivaldi::PrefProperties* properties =
-      GetPrefProperties(GetProfile(), path, &error_);
+  ::vivaldi::PrefProperties* properties = GetPrefProperties(path, &error_);
   if (!properties)
     return false;
 
-  std::unique_ptr<base::Value> value(
-      GetPrefValue(GetProfile()->GetPrefs(), path));
+  std::unique_ptr<base::Value> value(GetPrefValue(
+      properties->local_pref ? g_browser_process->local_state()
+                             : GetProfile()->GetOriginalProfile()->GetPrefs(),
+      path));
   results_ = vivaldi::prefs::Get::Results::Create(
       *TranslateEnumValue(std::move(value), properties));
   SendResponse(true);
@@ -195,8 +217,7 @@ bool PrefsSetFunction::RunAsync() {
 
   const std::string& path = params->new_value.path;
   const auto& value = params->new_value.value;
-  ::vivaldi::PrefProperties* properties =
-      GetPrefProperties(GetProfile(), path, &error_);
+  ::vivaldi::PrefProperties* properties = GetPrefProperties(path, &error_);
   if (!properties)
     return false;
 
@@ -208,7 +229,9 @@ bool PrefsSetFunction::RunAsync() {
   DCHECK(!base::StartsWith(path, "vivaldi.system",
                            base::CompareCase::INSENSITIVE_ASCII));
 
-  PrefService* prefs = GetProfile()->GetPrefs();
+  PrefService* prefs = properties->local_pref
+                           ? g_browser_process->local_state()
+                           : GetProfile()->GetOriginalProfile()->GetPrefs();
 
   if (!properties->enum_properties) {
     const PrefService::Preference* pref = prefs->FindPreference(path);
@@ -249,10 +272,13 @@ bool PrefsResetFunction::RunAsync() {
       vivaldi::prefs::Get::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   const std::string& path = params->path;
-  if (!GetPrefProperties(GetProfile(), path, &error_))
+  ::vivaldi::PrefProperties* properties = GetPrefProperties(path, &error_);
+  if (!properties)
     return false;
 
-  PrefService* prefs = GetProfile()->GetPrefs();
+  PrefService* prefs = properties->local_pref
+                           ? g_browser_process->local_state()
+                           : GetProfile()->GetOriginalProfile()->GetPrefs();
   prefs->ClearPref(path);
 
   std::unique_ptr<base::Value> value(GetPrefValue(prefs, path));
@@ -266,8 +292,6 @@ bool PrefsGetForCacheFunction::RunAsync() {
       vivaldi::prefs::GetForCache::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  PrefService* prefs = GetProfile()->GetPrefs();
-
   std::vector<vivaldi::prefs::PreferenceValueAndDefault> results;
 
   for (const auto& path : params->paths) {
@@ -276,12 +300,16 @@ bool PrefsGetForCacheFunction::RunAsync() {
         VivaldiPrefsApiNotificationFactory::GetPrefProperties(path);
     if (!properties)
       continue;
+
+    PrefService* prefs = properties->local_pref
+                             ? g_browser_process->local_state()
+                             : GetProfile()->GetOriginalProfile()->GetPrefs();
     result.path = path;
     result.default_value =
         TranslateEnumValue(GetPrefDefaultValue(prefs, path), properties);
     result.value = TranslateEnumValue(GetPrefValue(prefs, path), properties);
     VivaldiPrefsApiNotificationFactory::GetForProfile(GetProfile())
-        ->RegisterPref(path);
+        ->RegisterPref(path, properties->local_pref);
     results.push_back(std::move(result));
   }
 

@@ -4,6 +4,8 @@
 
 #include "components/drive/chromeos/sync/entry_revert_performer.h"
 
+#include <utility>
+
 #include "components/drive/chromeos/change_list_processor.h"
 #include "components/drive/chromeos/file_system/operation_delegate.h"
 #include "components/drive/chromeos/resource_metadata.h"
@@ -94,25 +96,24 @@ EntryRevertPerformer::EntryRevertPerformer(
 }
 
 EntryRevertPerformer::~EntryRevertPerformer() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
 void EntryRevertPerformer::RevertEntry(const std::string& local_id,
                                        const ClientContext& context,
                                        const FileOperationCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   std::unique_ptr<ResourceEntry> entry(new ResourceEntry);
   ResourceEntry* entry_ptr = entry.get();
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(),
-      FROM_HERE,
-      base::Bind(&ResourceMetadata::GetResourceEntryById,
-                 base::Unretained(metadata_), local_id, entry_ptr),
-      base::Bind(&EntryRevertPerformer::RevertEntryAfterPrepare,
-                 weak_ptr_factory_.GetWeakPtr(), context, callback,
-                 base::Passed(&entry)));
+      blocking_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&ResourceMetadata::GetResourceEntryById,
+                     base::Unretained(metadata_), local_id, entry_ptr),
+      base::BindOnce(&EntryRevertPerformer::RevertEntryAfterPrepare,
+                     weak_ptr_factory_.GetWeakPtr(), context, callback,
+                     std::move(entry)));
 }
 
 void EntryRevertPerformer::RevertEntryAfterPrepare(
@@ -120,8 +121,8 @@ void EntryRevertPerformer::RevertEntryAfterPrepare(
     const FileOperationCallback& callback,
     std::unique_ptr<ResourceEntry> entry,
     FileError error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   if (error == FILE_ERROR_OK && entry->resource_id().empty())
     error = FILE_ERROR_INVALID_OPERATION;
@@ -143,31 +144,25 @@ void EntryRevertPerformer::RevertEntryAfterGetFileResource(
     const std::string& local_id,
     google_apis::DriveApiErrorCode status,
     std::unique_ptr<google_apis::FileResource> entry) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   FileChange* changed_files = new FileChange;
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(),
-      FROM_HERE,
-      base::Bind(&FinishRevert,
-                 metadata_,
-                 local_id,
-                 status,
-                 base::Passed(&entry),
-                 changed_files),
-      base::Bind(&EntryRevertPerformer::RevertEntryAfterFinishRevert,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 callback,
-                 base::Owned(changed_files)));
+      blocking_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&FinishRevert, metadata_, local_id, status,
+                     std::move(entry), changed_files),
+      base::BindOnce(&EntryRevertPerformer::RevertEntryAfterFinishRevert,
+                     weak_ptr_factory_.GetWeakPtr(), callback,
+                     base::Owned(changed_files)));
 }
 
 void EntryRevertPerformer::RevertEntryAfterFinishRevert(
     const FileOperationCallback& callback,
     const FileChange* changed_files,
     FileError error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!callback.is_null());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(callback);
 
   delegate_->OnFileChangedByOperation(*changed_files);
 

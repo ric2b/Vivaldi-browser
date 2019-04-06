@@ -22,11 +22,11 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/nacl/browser/nacl_browser.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/common/result_codes.h"
-#include "third_party/WebKit/public/platform/WebCache.h"
+#include "third_party/blink/public/platform/web_cache.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/table_model_observer.h"
 #include "ui/base/text/bytes_formatting.h"
@@ -49,9 +49,6 @@ const int64_t kRefreshTimeMS = 1000;
 bool IsSharedByGroup(int column_id) {
   switch (column_id) {
     case IDS_TASK_MANAGER_MEM_FOOTPRINT_COLUMN:
-    case IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN:
-    case IDS_TASK_MANAGER_SHARED_MEM_COLUMN:
-    case IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN:
     case IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN:
     case IDS_TASK_MANAGER_CPU_COLUMN:
     case IDS_TASK_MANAGER_START_TIME_COLUMN:
@@ -376,18 +373,6 @@ base::string16 TaskManagerTableModel::GetText(int row, int column) {
       return stringifier_->GetMemoryUsageText(
           observed_task_manager()->GetMemoryFootprintUsage(tasks_[row]), false);
 
-    case IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN:
-      return stringifier_->GetMemoryUsageText(
-          observed_task_manager()->GetPrivateMemoryUsage(tasks_[row]), false);
-
-    case IDS_TASK_MANAGER_SHARED_MEM_COLUMN:
-      return stringifier_->GetMemoryUsageText(
-          observed_task_manager()->GetSharedMemoryUsage(tasks_[row]), false);
-
-    case IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN:
-      return stringifier_->GetMemoryUsageText(
-          observed_task_manager()->GetPhysicalMemoryUsage(tasks_[row]), false);
-
     case IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN:
       return stringifier_->GetMemoryUsageText(
           observed_task_manager()->GetSwappedMemoryUsage(tasks_[row]), false);
@@ -537,21 +522,6 @@ int TaskManagerTableModel::CompareValues(int row1,
       return ValueCompare(
           observed_task_manager()->GetMemoryFootprintUsage(tasks_[row1]),
           observed_task_manager()->GetMemoryFootprintUsage(tasks_[row2]));
-
-    case IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN:
-      return ValueCompare(
-          observed_task_manager()->GetPrivateMemoryUsage(tasks_[row1]),
-          observed_task_manager()->GetPrivateMemoryUsage(tasks_[row2]));
-
-    case IDS_TASK_MANAGER_SHARED_MEM_COLUMN:
-      return ValueCompare(
-          observed_task_manager()->GetSharedMemoryUsage(tasks_[row1]),
-          observed_task_manager()->GetSharedMemoryUsage(tasks_[row2]));
-
-    case IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN:
-      return ValueCompare(
-          observed_task_manager()->GetPhysicalMemoryUsage(tasks_[row1]),
-          observed_task_manager()->GetPhysicalMemoryUsage(tasks_[row2]));
 
     case IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN:
       return ValueCompare(
@@ -757,20 +727,9 @@ void TaskManagerTableModel::UpdateRefreshTypes(int column_id, bool visibility) {
       type = REFRESH_TYPE_MEMORY_FOOTPRINT;
       break;
 
-    case IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN:
-      type = REFRESH_TYPE_PHYSICAL_MEMORY;
-      break;
-    case IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN:
-    case IDS_TASK_MANAGER_SHARED_MEM_COLUMN:
     case IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN:
-      type = REFRESH_TYPE_MEMORY_DETAILS;
+      type = REFRESH_TYPE_SWAPPED_MEM;
       if (table_view_delegate_->IsColumnVisible(
-              IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN) ||
-          table_view_delegate_->IsColumnVisible(
-              IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN) ||
-          table_view_delegate_->IsColumnVisible(
-              IDS_TASK_MANAGER_SHARED_MEM_COLUMN) ||
-          table_view_delegate_->IsColumnVisible(
               IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN)) {
         needs_refresh = true;
       }

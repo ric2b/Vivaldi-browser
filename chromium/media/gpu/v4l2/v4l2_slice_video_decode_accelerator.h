@@ -15,7 +15,6 @@
 
 #include "base/containers/queue.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/waitable_event.h"
@@ -84,13 +83,13 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   // Record for output buffers.
   struct OutputRecord {
     OutputRecord();
-    OutputRecord(OutputRecord&&) = default;
+    OutputRecord(OutputRecord&&);
+    ~OutputRecord();
     bool at_device;
     bool at_client;
     int32_t picture_id;
     GLuint client_texture_id;
     GLuint texture_id;
-    scoped_refptr<gl::GLImage> gl_image;
     EGLSyncKHR egl_sync;
     std::vector<base::ScopedFD> dmabuf_fds;
     bool cleared;
@@ -134,7 +133,8 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   // be outputted in the same order as SurfaceReady calls. To do so, the
   // surfaces are put on decoder_display_queue_ and sent to output in that
   // order once all preceding surfaces are sent.
-  void SurfaceReady(const scoped_refptr<V4L2DecodeSurface>& dec_surface);
+  void SurfaceReady(int32_t bitstream_id,
+                    const scoped_refptr<V4L2DecodeSurface>& dec_surface);
 
   //
   // Internal methods of this class.
@@ -268,13 +268,12 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
       const gfx::Size& size,
       uint32_t fourcc);
 
-  // Take the GLImage |gl_image|, created for |picture_buffer_id|, and use it
+  // Take the dmabuf |passed_dmabuf_fds|, for |picture_buffer_id|, and use it
   // for OutputRecord at |buffer_index|. The buffer is backed by
   // |passed_dmabuf_fds|, and the OutputRecord takes ownership of them.
-  void AssignGLImage(
+  void AssignDmaBufs(
       size_t buffer_index,
       int32_t picture_buffer_id,
-      scoped_refptr<gl::GLImage> gl_image,
       // TODO(posciak): (https://crbug.com/561749) we should normally be able to
       // pass the vector by itself via std::move, but it's not possible to do
       // this if this method is used as a callback.
@@ -339,9 +338,11 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   void ReusePictureBufferTask(int32_t picture_buffer_id,
                               std::unique_ptr<EGLSyncKHRRef> egl_sync_ref);
 
-  // Called to actually send |dec_surface| to the client, after it is decoded
-  // preserving the order in which it was scheduled via SurfaceReady().
-  void OutputSurface(const scoped_refptr<V4L2DecodeSurface>& dec_surface);
+  // Called to actually send |dec_surface| to the client - as a result of
+  // decoding the stream in |bitstream_id| - after it is decoded preserving
+  // the order in which it was scheduled via SurfaceReady().
+  void OutputSurface(int32_t bitstream_id,
+                     const scoped_refptr<V4L2DecodeSurface>& dec_surface);
 
   // Goes over the |decoder_display_queue_| and sends all buffers from the
   // front of the queue that are already decoded to the client, in order.
@@ -413,13 +414,16 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
 
   struct BitstreamBufferRef;
   // Input queue of stream buffers coming from the client.
-  base::queue<linked_ptr<BitstreamBufferRef>> decoder_input_queue_;
+  base::queue<std::unique_ptr<BitstreamBufferRef>> decoder_input_queue_;
   // BitstreamBuffer currently being processed.
   std::unique_ptr<BitstreamBufferRef> decoder_current_bitstream_buffer_;
 
   // Queue storing decode surfaces ready to be output as soon as they are
-  // decoded. The surfaces must be output in order they are queued.
-  base::queue<scoped_refptr<V4L2DecodeSurface>> decoder_display_queue_;
+  // decoded, together with the bitstream_id from which they were decoded,
+  // in order to be able to pass it back to the client.
+  // The surfaces must be output in order they are queued.
+  base::queue<std::pair<int32_t, scoped_refptr<V4L2DecodeSurface>>>
+      decoder_display_queue_;
 
   // Decoder state.
   State state_;
@@ -432,12 +436,6 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   bool decoder_flushing_;
   bool decoder_resetting_;
   bool surface_set_change_pending_;
-
-  // Hardware accelerators.
-  // TODO(posciak): Try to have a superclass here if possible.
-  std::unique_ptr<V4L2H264Accelerator> h264_accelerator_;
-  std::unique_ptr<V4L2VP8Accelerator> vp8_accelerator_;
-  std::unique_ptr<V4L2VP9Accelerator> vp9_accelerator_;
 
   // Codec-specific software decoder in use.
   std::unique_ptr<AcceleratedVideoDecoder> decoder_;

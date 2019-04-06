@@ -52,14 +52,11 @@ class LocationBar {
   // Updates the visibility and toggled state of the save credit card icon.
   virtual void UpdateSaveCreditCardIcon() = 0;
 
-  // Updates the visibility of the find bar image icon.
-  virtual void UpdateFindBarIconVisibility() = 0;
+  // Updates the visibility and toggled state of the local card migration icon.
+  virtual void UpdateLocalCardMigrationIcon() = 0;
 
   // Updates the visibility of the bookmark star.
   virtual void UpdateBookmarkStarVisibility() = 0;
-
-  // Updates the visibility of the zoom icon.
-  virtual void UpdateZoomViewVisibility() = 0;
 
   // Updates the visibility of the location bar. Animates the transition if
   // |animate| is true.
@@ -104,6 +101,9 @@ class LocationBarTesting {
   // Invokes the content setting image at |index|, displaying the bubble.
   // Returns false if there is none.
   virtual bool TestContentSettingImagePressed(size_t index) = 0;
+
+  // Returns if the content setting image at |index| is displaying a bubble.
+  virtual bool IsContentSettingBubbleShowing(size_t index) = 0;
 
  protected:
   virtual ~LocationBarTesting() {}

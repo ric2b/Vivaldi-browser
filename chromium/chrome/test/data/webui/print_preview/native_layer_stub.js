@@ -4,8 +4,8 @@
 
 cr.define('print_preview', function() {
   /**
-  * Test version of the native layer.
-  */
+   * Test version of the native layer.
+   */
   class NativeLayerStub extends TestBrowserProxy {
     constructor() {
       super([
@@ -57,6 +57,14 @@ cr.define('print_preview', function() {
        * @private {string} The ID of a printer with a bad driver.
        */
       this.badPrinterId_ = '';
+
+      /** @private {number} The number of total pages in the document. */
+      this.pageCount_ = 1;
+    }
+
+    /** @param {number} pageCount The number of pages in the document. */
+    setPageCount(pageCount) {
+      this.pageCount_ = pageCount;
     }
 
     /** @override */
@@ -82,22 +90,18 @@ cr.define('print_preview', function() {
 
     /** @override */
     getPreview(printTicket, pageCount) {
-      this.methodCalled('getPreview', {
-        printTicket: printTicket,
-        pageCount: pageCount
-      });
+      this.methodCalled(
+          'getPreview', {printTicket: printTicket, pageCount: pageCount});
       const printTicketParsed = JSON.parse(printTicket);
-      if (printTicketParsed.deviceName == this.badPrinterId_) {
-        let rejectString = print_preview.PreviewArea.EventType.SETTINGS_INVALID;
-        rejectString = rejectString.substring(
-            rejectString.lastIndexOf('.') + 1, rejectString.length);
-        return Promise.reject(rejectString);
-      }
+      if (printTicketParsed.deviceName == this.badPrinterId_)
+        return Promise.reject('SETTINGS_INVALID');
       const pageRanges = printTicketParsed.pageRange;
       const requestId = printTicketParsed.requestID;
       if (pageRanges.length == 0) {  // assume full length document, 1 page.
-        cr.webUIListenerCallback('page-count-ready', 1, requestId, 100);
-        cr.webUIListenerCallback('page-preview-ready', 0, 0, requestId);
+        cr.webUIListenerCallback(
+            'page-count-ready', this.pageCount_, requestId, 100);
+        for (let i = 0; i < this.pageCount_; i++)
+          cr.webUIListenerCallback('page-preview-ready', i, 0, requestId);
       } else {
         const pages = pageRanges.reduce(function(soFar, range) {
           for (let page = range.from; page <= range.to; page++) {
@@ -106,7 +110,7 @@ cr.define('print_preview', function() {
           return soFar;
         }, []);
         cr.webUIListenerCallback(
-            'page-count-ready', pages.length, requestId, 100);
+            'page-count-ready', this.pageCount_, requestId, 100);
         pages.forEach(function(page) {
           cr.webUIListenerCallback(
               'page-preview-ready', page - 1, 0, requestId);
@@ -123,7 +127,9 @@ cr.define('print_preview', function() {
 
     /** @override */
     getPrinterCapabilities(printerId, type) {
-      this.methodCalled('getPrinterCapabilities', printerId, type);
+      this.methodCalled(
+          'getPrinterCapabilities',
+          {destinationId: printerId, printerType: type});
       if (type != print_preview.PrinterType.LOCAL_PRINTER)
         return Promise.reject();
       return this.localDestinationCapabilities_.get(printerId);
@@ -183,7 +189,8 @@ cr.define('print_preview', function() {
      *     provided.
      */
     setLocalDestinationCapabilities(response, opt_reject) {
-      this.localDestinationCapabilities_.set(response.printer.deviceName,
+      this.localDestinationCapabilities_.set(
+          response.printer.deviceName,
           opt_reject ? Promise.reject() : Promise.resolve(response));
     }
 

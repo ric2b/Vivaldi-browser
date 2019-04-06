@@ -9,25 +9,25 @@
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/location.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/dns/dns_protocol.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
 
 namespace {
 
-class DnsConfigServiceTest : public testing::Test {
+class DnsConfigServiceTest : public TestWithScopedTaskEnvironment {
  public:
   void OnConfigChanged(const DnsConfig& config) {
     last_config_ = config;
     if (quit_on_config_)
-      base::RunLoop::QuitCurrentWhenIdleDeprecated();
+      std::move(quit_on_config_).Run();
   }
 
  protected:
@@ -59,13 +59,11 @@ class DnsConfigServiceTest : public testing::Test {
   };
 
   void WaitForConfig(base::TimeDelta timeout) {
-    base::CancelableClosure closure(base::MessageLoop::QuitWhenIdleClosure());
+    base::RunLoop run_loop;
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, closure.callback(), timeout);
-    quit_on_config_ = true;
-    base::RunLoop().Run();
-    quit_on_config_ = false;
-    closure.Cancel();
+        FROM_HERE, run_loop.QuitClosure(), timeout);
+    quit_on_config_ = run_loop.QuitClosure();
+    run_loop.Run();
   }
 
   // Generate a config using the given seed..
@@ -88,8 +86,6 @@ class DnsConfigServiceTest : public testing::Test {
   }
 
   void SetUp() override {
-    quit_on_config_ = false;
-
     service_.reset(new TestDnsConfigService());
     service_->WatchConfig(base::Bind(&DnsConfigServiceTest::OnConfigChanged,
                                      base::Unretained(this)));
@@ -97,7 +93,7 @@ class DnsConfigServiceTest : public testing::Test {
   }
 
   DnsConfig last_config_;
-  bool quit_on_config_;
+  base::OnceClosure quit_on_config_;
 
   // Service under test.
   std::unique_ptr<TestDnsConfigService> service_;

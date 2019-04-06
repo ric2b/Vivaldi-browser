@@ -27,9 +27,8 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/sync/driver/sync_service_observer.h"
 #include "components/sync/driver/sync_type_preference_provider.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/url_request/url_request_context_getter.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -41,7 +40,6 @@ class Browser;
 class GoogleServiceAuthError;
 class PermissionRequestCreator;
 class Profile;
-class SupervisedUserRegistrationUtility;
 class SupervisedUserServiceObserver;
 class SupervisedUserSettingsService;
 class SupervisedUserSiteList;
@@ -61,10 +59,6 @@ namespace extensions {
 class ExtensionRegistry;
 }
 
-namespace syncer {
-class SyncSetupInProgressHandle;
-}
-
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
@@ -79,14 +73,15 @@ class SupervisedUserService : public KeyedService,
 #endif
                               public syncer::SyncTypePreferenceProvider,
 #if !defined(OS_ANDROID)
-                              public syncer::SyncServiceObserver,
                               public BrowserListObserver,
 #endif
                               public SupervisedUserURLFilter::Observer {
  public:
-  using NavigationBlockedCallback = base::Callback<void(content::WebContents*)>;
-  using AuthErrorCallback = base::Callback<void(const GoogleServiceAuthError&)>;
-  using SuccessCallback = base::Callback<void(bool)>;
+  using NavigationBlockedCallback =
+      base::RepeatingCallback<void(content::WebContents*)>;
+  using AuthErrorCallback =
+      base::OnceCallback<void(const GoogleServiceAuthError&)>;
+  using SuccessCallback = base::OnceCallback<void(bool)>;
 
   class Delegate {
    public:
@@ -122,16 +117,16 @@ class SupervisedUserService : public KeyedService,
   bool AccessRequestsEnabled();
 
   // Adds an access request for the given URL.
-  void AddURLAccessRequest(const GURL& url, const SuccessCallback& callback);
+  void AddURLAccessRequest(const GURL& url, SuccessCallback callback);
 
   // Reports |url| to the SafeSearch API, because the user thinks this is an
   // inappropriate URL.
-  void ReportURL(const GURL& url, const SuccessCallback& callback);
+  void ReportURL(const GURL& url, SuccessCallback callback);
 
   // Adds an install request for the given WebStore item (App/Extension).
   void AddExtensionInstallRequest(const std::string& extension_id,
                                   const base::Version& version,
-                                  const SuccessCallback& callback);
+                                  SuccessCallback callback);
 
   // Same as above, but without a callback, just logging errors on failure.
   void AddExtensionInstallRequest(const std::string& extension_id,
@@ -140,7 +135,7 @@ class SupervisedUserService : public KeyedService,
   // Adds an update request for the given WebStore item (App/Extension).
   void AddExtensionUpdateRequest(const std::string& extension_id,
                                  const base::Version& version,
-                                 const SuccessCallback& callback);
+                                 SuccessCallback callback);
 
   // Same as above, but without a callback, just logging errors on failure.
   void AddExtensionUpdateRequest(const std::string& extension_id,
@@ -174,17 +169,6 @@ class SupervisedUserService : public KeyedService,
   // Initializes this profile for syncing, using the provided |refresh_token| to
   // mint access tokens for Sync.
   void InitSync(const std::string& refresh_token);
-
-  // Convenience method that registers this supervised user using
-  // |registration_utility| and initializes sync with the returned token.
-  // The |callback| will be called when registration is complete,
-  // whether it succeeded or not -- unless registration was cancelled manually,
-  // in which case the callback will be ignored.
-  void RegisterAndInitSync(
-      SupervisedUserRegistrationUtility* registration_utility,
-      Profile* custodian_profile,
-      const std::string& supervised_user_id,
-      const AuthErrorCallback& callback);
 #endif
 
   void AddNavigationBlockedCallback(const NavigationBlockedCallback& callback);
@@ -210,9 +194,6 @@ class SupervisedUserService : public KeyedService,
   syncer::ModelTypeSet GetPreferredDataTypes() const override;
 
 #if !defined(OS_ANDROID)
-  // syncer::SyncServiceObserver implementation:
-  void OnStateChanged(syncer::SyncService* sync) override;
-
   // BrowserListObserver implementation:
   void OnBrowserSetLastActive(Browser* browser) override;
 #endif  // !defined(OS_ANDROID)
@@ -233,27 +214,13 @@ class SupervisedUserService : public KeyedService,
       ExtensionManagementPolicyProviderWithSUInitiatedInstalls);
 
   using CreatePermissionRequestCallback =
-      base::Callback<void(PermissionRequestCreator*, const SuccessCallback&)>;
+      base::RepeatingCallback<void(PermissionRequestCreator*, SuccessCallback)>;
 
   // Use |SupervisedUserServiceFactory::GetForProfile(..)| to get
   // an instance of this service.
   explicit SupervisedUserService(Profile* profile);
 
   void SetActive(bool active);
-
-#if !defined(OS_ANDROID)
-  void OnCustodianProfileDownloaded(const base::string16& full_name);
-
-  void OnSupervisedUserRegistered(const AuthErrorCallback& callback,
-                                  Profile* custodian_profile,
-                                  const GoogleServiceAuthError& auth_error,
-                                  const std::string& token);
-
-  void SetupSync();
-  void StartSetupSync();
-  void FinishSetupSyncWhenReady();
-  void FinishSetupSync();
-#endif
 
   bool ProfileIsSupervised() const;
 
@@ -311,11 +278,11 @@ class SupervisedUserService : public KeyedService,
   size_t FindEnabledPermissionRequestCreator(size_t start);
   void AddPermissionRequestInternal(
       const CreatePermissionRequestCallback& create_request,
-      const SuccessCallback& callback,
+      SuccessCallback callback,
       size_t index);
   void OnPermissionRequestIssued(
       const CreatePermissionRequestCallback& create_request,
-      const SuccessCallback& callback,
+      SuccessCallback callback,
       size_t index,
       bool success);
 
@@ -378,8 +345,6 @@ class SupervisedUserService : public KeyedService,
 
   PrefChangeRegistrar pref_change_registrar_;
 
-  // True iff we're waiting for the Sync service to be initialized.
-  bool waiting_for_sync_initialization_;
   bool is_profile_active_;
 
   std::vector<NavigationBlockedCallback> navigation_blocked_callbacks_;
@@ -422,9 +387,6 @@ class SupervisedUserService : public KeyedService,
 #endif
 
   base::ObserverList<SupervisedUserServiceObserver> observer_list_;
-
-  // Prevents Sync from running until configuration is complete.
-  std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
 
   base::WeakPtrFactory<SupervisedUserService> weak_ptr_factory_;
 

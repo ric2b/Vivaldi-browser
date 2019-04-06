@@ -20,24 +20,24 @@
 #include "base/trace_event/memory_dump_request_args.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/values.h"
-#include "net/base/network_throttle_manager_impl.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_response_body_drainer.h"
-#include "net/http/http_stream_factory_impl.h"
+#include "net/http/http_stream_factory.h"
 #include "net/http/url_security_manager.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/quic/chromium/quic_crypto_client_stream_factory.h"
 #include "net/quic/chromium/quic_stream_factory.h"
-#include "net/quic/core/crypto/quic_random.h"
-#include "net/quic/core/quic_packets.h"
-#include "net/quic/core/quic_tag.h"
-#include "net/quic/core/quic_utils.h"
-#include "net/quic/platform/impl/quic_chromium_clock.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_pool_manager_impl.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
-#include "net/spdy/chromium/spdy_session_pool.h"
+#include "net/socket/websocket_endpoint_lock_manager.h"
+#include "net/spdy/spdy_session_pool.h"
+#include "net/third_party/quic/core/crypto/quic_random.h"
+#include "net/third_party/quic/core/quic_packets.h"
+#include "net/third_party/quic/core/quic_tag.h"
+#include "net/third_party/quic/core/quic_utils.h"
+#include "net/third_party/quic/platform/impl/quic_chromium_clock.h"
 
 namespace net {
 
@@ -48,7 +48,8 @@ base::AtomicSequenceNumber g_next_shard_id;
 std::unique_ptr<ClientSocketPoolManager> CreateSocketPoolManager(
     HttpNetworkSession::SocketPoolType pool_type,
     const HttpNetworkSession::Context& context,
-    const std::string& ssl_session_cache_shard) {
+    const std::string& ssl_session_cache_shard,
+    WebSocketEndpointLockManager* websocket_endpoint_lock_manager) {
   // TODO(yutak): Differentiate WebSocket pool manager and allow more
   // simultaneous connections for WebSockets.
   return std::make_unique<ClientSocketPoolManagerImpl>(
@@ -60,7 +61,7 @@ std::unique_ptr<ClientSocketPoolManager> CreateSocketPoolManager(
       context.cert_verifier, context.channel_id_service,
       context.transport_security_state, context.cert_transparency_verifier,
       context.ct_policy_enforcer, ssl_session_cache_shard,
-      context.ssl_config_service, pool_type);
+      context.ssl_config_service, websocket_endpoint_lock_manager, pool_type);
 }
 
 }  // unnamed namespace
@@ -74,21 +75,23 @@ namespace {
 // Keep all HTTP2 parameters in |http2_settings|, even the ones that are not
 // implemented, to be sent to the server.
 // Set default values for settings that |http2_settings| does not specify.
-SettingsMap AddDefaultHttp2Settings(SettingsMap http2_settings) {
+spdy::SettingsMap AddDefaultHttp2Settings(spdy::SettingsMap http2_settings) {
   // Set default values only if |http2_settings| does not have
   // a value set for given setting.
-  SettingsMap::iterator it = http2_settings.find(SETTINGS_HEADER_TABLE_SIZE);
+  spdy::SettingsMap::iterator it =
+      http2_settings.find(spdy::SETTINGS_HEADER_TABLE_SIZE);
   if (it == http2_settings.end())
-    http2_settings[SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
+    http2_settings[spdy::SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
 
-  it = http2_settings.find(SETTINGS_MAX_CONCURRENT_STREAMS);
+  it = http2_settings.find(spdy::SETTINGS_MAX_CONCURRENT_STREAMS);
   if (it == http2_settings.end())
-    http2_settings[SETTINGS_MAX_CONCURRENT_STREAMS] =
+    http2_settings[spdy::SETTINGS_MAX_CONCURRENT_STREAMS] =
         kSpdyMaxConcurrentPushedStreams;
 
-  it = http2_settings.find(SETTINGS_INITIAL_WINDOW_SIZE);
+  it = http2_settings.find(spdy::SETTINGS_INITIAL_WINDOW_SIZE);
   if (it == http2_settings.end())
-    http2_settings[SETTINGS_INITIAL_WINDOW_SIZE] = kSpdyStreamMaxRecvWindowSize;
+    http2_settings[spdy::SETTINGS_INITIAL_WINDOW_SIZE] =
+        kSpdyStreamMaxRecvWindowSize;
 
   return http2_settings;
 }
@@ -107,22 +110,22 @@ HttpNetworkSession::Params::Params()
       spdy_session_max_recv_window_size(kSpdySessionMaxRecvWindowSize),
       time_func(&base::TimeTicks::Now),
       enable_http2_alternative_service(false),
+      enable_websocket_over_http2(false),
       enable_quic(false),
-      quic_max_packet_length(kDefaultMaxPacketSize),
+      quic_max_packet_length(quic::kDefaultMaxPacketSize),
       quic_max_server_configs_stored_in_properties(0u),
+      quic_enable_socket_recv_optimization(false),
       mark_quic_broken_when_network_blackholes(false),
-      retry_without_alt_svc_on_quic_errors(false),
+      retry_without_alt_svc_on_quic_errors(true),
       support_ietf_format_quic_altsvc(false),
       quic_close_sessions_on_ip_change(false),
+      quic_goaway_sessions_on_ip_change(false),
       quic_idle_connection_timeout_seconds(kIdleConnectionTimeoutSeconds),
-      quic_reduced_ping_timeout_seconds(kPingTimeoutSecs),
+      quic_reduced_ping_timeout_seconds(quic::kPingTimeoutSecs),
       quic_max_time_before_crypto_handshake_seconds(
-          kMaxTimeForCryptoHandshakeSecs),
+          quic::kMaxTimeForCryptoHandshakeSecs),
       quic_max_idle_time_before_crypto_handshake_seconds(
-          kInitialIdleTimeoutSecs),
-      quic_connect_using_default_network(false),
-      quic_migrate_sessions_on_network_change(false),
-      quic_migrate_sessions_early(false),
+          quic::kInitialIdleTimeoutSecs),
       quic_migrate_sessions_on_network_change_v2(false),
       quic_migrate_sessions_early_v2(false),
       quic_max_time_on_non_default_network(
@@ -130,16 +133,17 @@ HttpNetworkSession::Params::Params()
       quic_max_migrations_to_non_default_network_on_path_degrading(
           kMaxMigrationsToNonDefaultNetworkOnPathDegrading),
       quic_allow_server_migration(false),
-      quic_allow_remote_alt_svc(false),
+      quic_allow_remote_alt_svc(true),
       quic_disable_bidirectional_streams(false),
       quic_force_hol_blocking(false),
       quic_race_cert_verification(false),
       quic_estimate_initial_rtt(false),
       quic_headers_include_h2_stream_dependency(false),
       enable_token_binding(false),
+      enable_channel_id(false),
       http_09_on_non_default_ports_enabled(false),
       disable_idle_sockets_close_on_memory_pressure(false) {
-  quic_supported_versions.push_back(QUIC_VERSION_39);
+  quic_supported_versions.push_back(quic::QUIC_VERSION_43);
 }
 
 HttpNetworkSession::Params::Params(const Params& other) = default;
@@ -154,7 +158,7 @@ HttpNetworkSession::Context::Context()
       transport_security_state(nullptr),
       cert_transparency_verifier(nullptr),
       ct_policy_enforcer(nullptr),
-      proxy_service(nullptr),
+      proxy_resolution_service(nullptr),
       ssl_config_service(nullptr),
       http_auth_handler_factory(nullptr),
       net_log(nullptr),
@@ -177,8 +181,10 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
       http_server_properties_(context.http_server_properties),
       cert_verifier_(context.cert_verifier),
       http_auth_handler_factory_(context.http_auth_handler_factory),
-      proxy_service_(context.proxy_service),
+      proxy_resolution_service_(context.proxy_resolution_service),
       ssl_config_service_(context.ssl_config_service),
+      websocket_endpoint_lock_manager_(
+          std::make_unique<WebSocketEndpointLockManager>()),
       push_delegate_(nullptr),
       quic_stream_factory_(
           context.net_log,
@@ -195,21 +201,20 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           context.cert_transparency_verifier,
           context.socket_performance_watcher_factory,
           context.quic_crypto_client_stream_factory,
-          context.quic_random ? context.quic_random : QuicRandom::GetInstance(),
+          context.quic_random ? context.quic_random
+                              : quic::QuicRandom::GetInstance(),
           context.quic_clock ? context.quic_clock
-                             : QuicChromiumClock::GetInstance(),
+                             : quic::QuicChromiumClock::GetInstance(),
           params.quic_max_packet_length,
           params.quic_user_agent_id,
           params.quic_max_server_configs_stored_in_properties > 0,
           params.quic_close_sessions_on_ip_change,
+          params.quic_goaway_sessions_on_ip_change,
           params.mark_quic_broken_when_network_blackholes,
           params.quic_idle_connection_timeout_seconds,
           params.quic_reduced_ping_timeout_seconds,
           params.quic_max_time_before_crypto_handshake_seconds,
           params.quic_max_idle_time_before_crypto_handshake_seconds,
-          params.quic_connect_using_default_network,
-          params.quic_migrate_sessions_on_network_change,
-          params.quic_migrate_sessions_early,
           params.quic_migrate_sessions_on_network_change_v2,
           params.quic_migrate_sessions_early_v2,
           params.quic_max_time_on_non_default_network,
@@ -220,7 +225,9 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           params.quic_headers_include_h2_stream_dependency,
           params.quic_connection_options,
           params.quic_client_connection_options,
-          params.enable_token_binding),
+          params.enable_token_binding,
+          params.enable_channel_id,
+          params.quic_enable_socket_recv_optimization),
       spdy_session_pool_(context.host_resolver,
                          context.ssl_config_service,
                          context.http_server_properties,
@@ -230,22 +237,22 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
                          params.support_ietf_format_quic_altsvc,
                          params.spdy_session_max_recv_window_size,
                          AddDefaultHttp2Settings(params.http2_settings),
-                         params.time_func,
-                         context.proxy_delegate),
-      http_stream_factory_(std::make_unique<HttpStreamFactoryImpl>(this)),
-      network_stream_throttler_(std::make_unique<NetworkThrottleManagerImpl>()),
+                         params.time_func),
+      http_stream_factory_(std::make_unique<HttpStreamFactory>(this)),
       params_(params),
       context_(context) {
-  DCHECK(proxy_service_);
-  DCHECK(ssl_config_service_.get());
+  DCHECK(proxy_resolution_service_);
+  DCHECK(ssl_config_service_);
   CHECK(http_server_properties_);
 
   const std::string ssl_session_cache_shard =
       "http_network_session/" + base::IntToString(g_next_shard_id.GetNext());
   normal_socket_pool_manager_ = CreateSocketPoolManager(
-      NORMAL_SOCKET_POOL, context, ssl_session_cache_shard);
+      NORMAL_SOCKET_POOL, context, ssl_session_cache_shard,
+      websocket_endpoint_lock_manager_.get());
   websocket_socket_pool_manager_ = CreateSocketPoolManager(
-      WEBSOCKET_SOCKET_POOL, context, ssl_session_cache_shard);
+      WEBSOCKET_SOCKET_POOL, context, ssl_session_cache_shard,
+      websocket_endpoint_lock_manager_.get());
 
   if (params_.enable_http2) {
     next_protos_.push_back(kProtoHTTP2);
@@ -335,7 +342,7 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
 
   auto connection_options(std::make_unique<base::ListValue>());
   for (const auto& option : params_.quic_connection_options)
-    connection_options->AppendString(QuicTagToString(option));
+    connection_options->AppendString(quic::QuicTagToString(option));
   dict->Set("connection_options", std::move(connection_options));
 
   auto supported_versions(std::make_unique<base::ListValue>());
@@ -365,10 +372,8 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
                    params_.quic_disable_bidirectional_streams);
   dict->SetBoolean("close_sessions_on_ip_change",
                    params_.quic_close_sessions_on_ip_change);
-  dict->SetBoolean("migrate_sessions_on_network_change",
-                   params_.quic_migrate_sessions_on_network_change);
-  dict->SetBoolean("migrate_sessions_early",
-                   params_.quic_migrate_sessions_early);
+  dict->SetBoolean("goaway_sessions_on_ip_change",
+                   params_.quic_goaway_sessions_on_ip_change);
   dict->SetBoolean("migrate_sessions_on_network_change_v2",
                    params_.quic_migrate_sessions_on_network_change_v2);
   dict->SetBoolean("migrate_sessions_early_v2",
@@ -392,7 +397,7 @@ void HttpNetworkSession::CloseAllConnections() {
   normal_socket_pool_manager_->FlushSocketPoolsWithError(ERR_ABORTED);
   websocket_socket_pool_manager_->FlushSocketPoolsWithError(ERR_ABORTED);
   spdy_session_pool_.CloseCurrentSessions(ERR_ABORTED);
-  quic_stream_factory_.CloseAllSessions(ERR_ABORTED, QUIC_INTERNAL_ERROR);
+  quic_stream_factory_.CloseAllSessions(ERR_ABORTED, quic::QUIC_INTERNAL_ERROR);
 }
 
 void HttpNetworkSession::CloseIdleConnections() {
@@ -440,8 +445,12 @@ void HttpNetworkSession::GetSSLConfig(const HttpRequestInfo& request,
   *proxy_config = *server_config;
   if (request.privacy_mode == PRIVACY_MODE_ENABLED) {
     server_config->channel_id_enabled = false;
-  } else if (params_.enable_token_binding && context_.channel_id_service) {
-    server_config->token_binding_params.push_back(TB_PARAM_ECDSAP256);
+  } else {
+    server_config->channel_id_enabled = params_.enable_channel_id;
+    proxy_config->channel_id_enabled = params_.enable_channel_id;
+    if (params_.enable_token_binding && context_.channel_id_service) {
+      server_config->token_binding_params.push_back(TB_PARAM_ECDSAP256);
+    }
   }
 }
 

@@ -8,9 +8,9 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/win/visual_studio_version.gni")
 import("//build/toolchain/clang_static_analyzer.gni")
 import("//build/toolchain/goma.gni")
-import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/toolchain.gni")
-import("//build/toolchain/concurrent_links.gni")
+
+import("//build/toolchain/cc_wrapper.gni")
 
 # Should only be running on Windows.
 assert(is_win)
@@ -38,19 +38,6 @@ if (use_goma) {
   goma_prefix = cc_wrapper + " "
 } else {
   goma_prefix = ""
-}
-
-if (disable_goma) {
-  goma_disabled = "true"
-} else {
-  goma_disabled = "false"
-}
-
-pool("huge_pool") {
-  depth = huge_concurrent_links
-  if (is_vivaldi) {
-    global = true
-  }
 }
 
 # Copy the VS runtime DLL for the default toolchain to the root build directory
@@ -88,8 +75,6 @@ template("msvc_toolchain") {
 
       # This value needs to be passed through unchanged.
       host_toolchain = host_toolchain
-
-      current_os = "win"
     }
 
     # Make these apply to all tools below.
@@ -111,15 +96,7 @@ template("msvc_toolchain") {
       toolchain_uses_clang = is_clang
     }
 
-    if (toolchain_uses_clang && host_os != "win") {
-      # This toolchain definition uses response files for compilations.  GN uses
-      # the quoting rules of the host OS, while clang-cl always defaults to
-      # cmd.exe quoting rules for parsing response files.  Tell clang-cl to use
-      # POSIX quoting rules, so it can understand what GN generates.
-      cl = "${invoker.cl} --rsp-quoting=posix"
-    } else {
-      cl = invoker.cl
-    }
+    cl = invoker.cl
 
     if (toolchain_uses_clang && use_clang_static_analyzer) {
       analyzer_prefix =
@@ -155,19 +132,36 @@ template("msvc_toolchain") {
     # %PATH%) -- e.g. 32-bit MSVS builds require %PATH% to be set and just
     # passing in a list of include directories isn't enough.
     if (defined(invoker.sys_include_flags)) {
-      if (disable_goma) {
-        # If disable_goma = true, need to pass GOMA_DISABLED env to
-        # gomacc.exe via environment.{x86,x64}.
-        env_wrapper = "ninja -t msvc -e $env -- "  # Note trailing space.
-      } else {
-        env_wrapper = ""
-      }
+      env_wrapper = ""
       sys_include_flags = "${invoker.sys_include_flags} "  # Note trailing space.
     } else {
       # clang-cl doesn't need this env hoop, so omit it there.
       assert(!toolchain_uses_clang)
       env_wrapper = "ninja -t msvc -e $env -- "  # Note trailing space.
       sys_include_flags = ""
+    }
+
+    # ninja does not have -t msvc other than windows, and lld doesn't depend on
+    # mt.exe in PATH on non-Windows, so it's not needed there anyways.
+    if (defined(invoker.sys_lib_flags)) {
+      linker_wrapper = ""
+      sys_lib_flags = "${invoker.sys_lib_flags} "  # Note trailing space
+    } else if (use_lld) {
+      # Invoke ninja as wrapper instead of tool wrapper, because python
+      # invocation requires higher cpu usage compared to ninja invocation, and
+      # the python wrapper is only needed to work around link.exe problems.
+      # TODO(thakis): Remove wrapper once lld-link can merge manifests without
+      # relying on mt.exe being in %PATH% on Windows.
+      linker_wrapper = "ninja -t msvc -e $env -- "  # Note trailing space.
+      sys_lib_flags = ""
+      if (defined(is_vivaldi) && is_vivaldi) {
+        vivaldi_signing_wrapper = rebase_path("//vivaldi/scripts/signing_wrapper.py", root_build_dir)
+        linker_wrapper = "$python_path $vivaldi_signing_wrapper $linker_wrapper"
+      }
+    } else {
+      linker_wrapper =
+          "$python_path $tool_wrapper_path link-wrapper $env False "  # Note trailing space.
+      sys_lib_flags = ""
     }
 
     clflags = ""
@@ -238,7 +232,7 @@ template("msvc_toolchain") {
 
     tool("alink") {
       rspfile = "{{output}}.rsp"
-      command = "$python_path $tool_wrapper_path link-wrapper $env False $lib /nologo {{arflags}} /OUT:{{output}} @$rspfile"
+      command = "$linker_wrapper$lib /nologo ${sys_lib_flags}{{arflags}} /OUT:{{output}} @$rspfile"
       description = "LIB {{output}}"
       outputs = [
         # Ignore {{output_extension}} and always use .lib, there's no reason to
@@ -260,7 +254,7 @@ template("msvc_toolchain") {
       rspfile = "${dllname}.rsp"
       pool = "//build/toolchain:link_pool($default_toolchain)"
 
-      command = "$python_path $tool_wrapper_path link-wrapper $env False $link /nologo /IMPLIB:$libname /DLL /OUT:$dllname /PDB:$pdbname @$rspfile"
+      command = "$linker_wrapper$link /nologo ${sys_lib_flags}/IMPLIB:$libname /DLL /OUT:$dllname /PDB:$pdbname @$rspfile"
 
       default_output_extension = ".dll"
       default_output_dir = "{{root_out_dir}}"
@@ -293,7 +287,7 @@ template("msvc_toolchain") {
       rspfile = "${dllname}.rsp"
       pool = "//build/toolchain:link_pool($default_toolchain)"
 
-      command = "$python_path $tool_wrapper_path link-wrapper $env False $link /nologo /DLL /OUT:$dllname /PDB:$pdbname @$rspfile"
+      command = "$linker_wrapper$link /nologo ${sys_lib_flags}/DLL /OUT:$dllname /PDB:$pdbname @$rspfile"
 
       default_output_extension = ".dll"
       default_output_dir = "{{root_out_dir}}"
@@ -317,24 +311,21 @@ template("msvc_toolchain") {
       rspfile = "$exename.rsp"
       pool = "//build/toolchain:link_pool($default_toolchain)"
 
-      command = "$python_path $tool_wrapper_path link-wrapper $env False $link /nologo /OUT:$exename /PDB:$pdbname @$rspfile"
+      command = "$linker_wrapper$link /nologo ${sys_lib_flags}/OUT:$exename /PDB:$pdbname @$rspfile"
+
+      if (host_os == "win") {
+        shellprefix = "cmd /c"
+      } else {
+        shellprefix = ""
+      }
+      not_needed([ "shellprefix" ])
 
       if (is_official_build) {
         # On bots, the binary's PDB grow and eventually exceed 4G, causing the
         # link to fail. As there's no utility to keeping the PDB around
         # incrementally anyway in this config (because we're doing
         # non-incremental LTCG builds), delete it before linking.
-        command = "cmd /c $python_path $tool_wrapper_path delete-file $pdbname && $command"
-      }
-
-      if (linkrepro_root_dir != "") {
-        # Create the directory that will receive the link repro for this target
-        # if needed. Note that this will create one directory per link target
-        # even if this target doesn't generate a link repro. This is necessary
-        # because the linker doesn't generate the directory specified to the
-        # /LINKREPRO flag if it doesn't exist.
-        linkrepro_dir = "$linkrepro_root_dir\\{{target_output_name}}"
-        command = "cmd /c mkdir $linkrepro_dir && $command"
+        command = "$shellprefix $python_path $tool_wrapper_path delete-file $pdbname && $command"
       }
 
       default_output_extension = ".exe"
@@ -359,10 +350,16 @@ template("msvc_toolchain") {
     tool("stamp") {
       command = stamp_command
       description = stamp_description
+      pool = "//build/toolchain:action_pool($default_toolchain)"
     }
     tool("copy") {
       command = copy_command
       description = copy_description
+      pool = "//build/toolchain:action_pool($default_toolchain)"
+    }
+
+    tool("action") {
+      pool = "//build/toolchain:action_pool($default_toolchain)"
     }
   }
 }
@@ -373,37 +370,55 @@ if (host_os == "win") {
   clang_cl = "clang-cl"
 }
 
-# 32-bit toolchains. Only define these when the target architecture is 32-bit
-# since we don't do any 32-bit cross compiles when targeting 64-bit (the
-# build does generate some 64-bit stuff from 32-bit target builds).
-if (target_cpu == "x86") {
-  x86_toolchain_data = exec_script("setup_toolchain.py",
-                                   [
-                                     visual_studio_path,
-                                     windows_sdk_path,
-                                     visual_studio_runtime_dirs,
-                                     "x86",
-                                     goma_disabled,
-                                   ],
-                                   "scope")
+if (target_cpu == "x86" || target_cpu == "x64") {
+  win_build_host_cpu = target_cpu
+} else {
+  win_build_host_cpu = host_cpu
+}
 
-  msvc_toolchain("x86") {
-    environment = "environment.x86"
-    cl = "${goma_prefix}\"${x86_toolchain_data.vc_bin_dir}/cl.exe\""
+# x86, arm and arm64 build cpu toolchains for Windows (not WinUWP). Only
+# define when the build cpu is one of these architectures since we don't
+# do any cross compiles when targeting x64-bit (the build does generate
+# some 64-bit stuff from x86/arm/arm64 target builds).
+if (win_build_host_cpu != "x64") {
+  build_cpu_toolchain_data = exec_script("setup_toolchain.py",
+                                         [
+                                           visual_studio_path,
+                                           windows_sdk_path,
+                                           visual_studio_runtime_dirs,
+                                           host_os,
+                                           win_build_host_cpu,
+                                           "environment." + win_build_host_cpu,
+                                         ],
+                                         "scope")
+
+  msvc_toolchain(win_build_host_cpu) {
+    environment = "environment." + win_build_host_cpu
+    cl = "${goma_prefix}\"${build_cpu_toolchain_data.vc_bin_dir}/cl.exe\""
+    if (host_os != "win") {
+      # For win cross build.
+      sys_lib_flags = "${build_cpu_toolchain_data.libpath_flags}"
+    }
     toolchain_args = {
-      current_cpu = "x86"
+      current_os = "win"
+      current_cpu = win_build_host_cpu
       is_clang = false
     }
   }
 
-  msvc_toolchain("win_clang_x86") {
-    environment = "environment.x86"
+  msvc_toolchain("win_clang_" + win_build_host_cpu) {
+    environment = "environment." + win_build_host_cpu
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
     cl = "${goma_prefix}$prefix/${clang_cl}"
-    sys_include_flags = "${x86_toolchain_data.include_flags_imsvc}"
+    sys_include_flags = "${build_cpu_toolchain_data.include_flags_imsvc}"
+    if (host_os != "win") {
+      # For win cross build.
+      sys_lib_flags = "${build_cpu_toolchain_data.libpath_flags}"
+    }
 
     toolchain_args = {
-      current_cpu = "x86"
+      current_os = "win"
+      current_cpu = win_build_host_cpu
       is_clang = true
     }
   }
@@ -415,8 +430,9 @@ x64_toolchain_data = exec_script("setup_toolchain.py",
                                    visual_studio_path,
                                    windows_sdk_path,
                                    visual_studio_runtime_dirs,
+                                   "win",
                                    "x64",
-                                   goma_disabled,
+                                   "environment.x64",
                                  ],
                                  "scope")
 
@@ -424,12 +440,17 @@ template("win_x64_toolchains") {
   msvc_toolchain(target_name) {
     environment = "environment.x64"
     cl = "${goma_prefix}\"${x64_toolchain_data.vc_bin_dir}/cl.exe\""
+    if (host_os != "win") {
+      # For win cross build
+      sys_lib_flags = "${x64_toolchain_data.libpath_flags}"
+    }
 
     toolchain_args = {
       if (defined(invoker.toolchain_args)) {
         forward_variables_from(invoker.toolchain_args, "*")
       }
       is_clang = false
+      current_os = "win"
       current_cpu = "x64"
     }
   }
@@ -439,12 +460,17 @@ template("win_x64_toolchains") {
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
     cl = "${goma_prefix}$prefix/${clang_cl}"
     sys_include_flags = "${x64_toolchain_data.include_flags_imsvc}"
+    if (host_os != "win") {
+      # For win cross build
+      sys_lib_flags = "${x64_toolchain_data.libpath_flags}"
+    }
 
     toolchain_args = {
       if (defined(invoker.toolchain_args)) {
         forward_variables_from(invoker.toolchain_args, "*")
       }
       is_clang = true
+      current_os = "win"
       current_cpu = "x64"
     }
   }
@@ -467,30 +493,29 @@ win_x64_toolchains("nacl_win64") {
   }
 }
 
-# WinRT toolchains. Only define these when targeting them.
-#
-# NOTE: This is currently broken because it references vc_bin_dir. brettw@
-# changed this around a bit, and I don't know what this should be set to
-# in terms of what setup_toolchain returns for a certain CPU architecture.
-if (target_os == "winrt_81" || target_os == "winrt_81_phone" ||
-    target_os == "winrt_10") {
-  msvc_toolchain("winrt_x86") {
-    environment = "environment.winrt_x86"
-    cl = "${goma_prefix}\"${vc_bin_dir}/cl.exe\""
+# WinUWP toolchains. Only define these when targeting them.
 
+if (target_os == "winuwp") {
+  assert(target_cpu == "x64" || target_cpu == "x86" || target_cpu == "arm" ||
+         target_cpu == "arm64")
+  store_cpu_toolchain_data = exec_script("setup_toolchain.py",
+                                         [
+                                           visual_studio_path,
+                                           windows_sdk_path,
+                                           visual_studio_runtime_dirs,
+                                           target_os,
+                                           target_cpu,
+                                           "environment.store_" + target_cpu,
+                                         ],
+                                         "scope")
+
+  msvc_toolchain("uwp_" + target_cpu) {
+    environment = "environment.store_" + target_cpu
+    cl = "${goma_prefix}\"${store_cpu_toolchain_data.vc_bin_dir}/cl.exe\""
     toolchain_args = {
+      current_os = "winuwp"
+      current_cpu = target_cpu
       is_clang = false
-      current_cpu = "x86"
-    }
-  }
-
-  msvc_toolchain("winrt_x64") {
-    environment = "environment.winrt_x64"
-    cl = "${goma_prefix}\"${vc_bin_dir}/cl.exe\""
-
-    toolchain_args = {
-      is_clang = false
-      current_cpu = "x64"
     }
   }
 }

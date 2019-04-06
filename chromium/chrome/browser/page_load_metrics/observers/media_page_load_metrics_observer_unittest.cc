@@ -7,14 +7,14 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_tracker.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "chrome/common/page_load_metrics/test/page_load_metrics_test_util.h"
-#include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
+#include "third_party/blink/public/platform/web_loading_behavior_flag.h"
 #include "url/gurl.h"
 
 namespace {

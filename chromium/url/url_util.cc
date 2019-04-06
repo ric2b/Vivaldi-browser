@@ -27,26 +27,25 @@ enum WhitespaceRemovalPolicy {
 };
 
 const SchemeWithType kStandardURLSchemes[] = {
-    {kHttpScheme, SCHEME_WITH_PORT},
-    {kHttpsScheme, SCHEME_WITH_PORT},
+    {kHttpsScheme, SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},
+    {kHttpScheme, SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},
     // Yes, file URLs can have a hostname, so file URLs should be handled as
     // "standard". File URLs never have a port as specified by the SchemeType
-    // field.
-    {kFileScheme, SCHEME_WITHOUT_PORT},
-    {kFtpScheme, SCHEME_WITH_PORT},
-    {kGopherScheme, SCHEME_WITH_PORT},
-    {kWsScheme, SCHEME_WITH_PORT},   // WebSocket.
-    {kWssScheme, SCHEME_WITH_PORT},  // WebSocket secure.
+    // field.  Unlike other SCHEME_WITH_HOST schemes, the 'host' in a file
+    // URL may be empty, a behavior which is special-cased during
+    // canonicalization.
+    {kFileScheme, SCHEME_WITH_HOST},
+    {kFtpScheme, SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},
+    {kGopherScheme, SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},
+    {kWssScheme,
+     SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},  // WebSocket secure.
+    {kWsScheme, SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},  // WebSocket.
     {kFileSystemScheme, SCHEME_WITHOUT_AUTHORITY},
-    {kHttpSuboriginScheme, SCHEME_WITH_PORT},
-    {kHttpsSuboriginScheme, SCHEME_WITH_PORT},
 };
 
 const SchemeWithType kReferrerURLSchemes[] = {
-    {kHttpScheme, SCHEME_WITH_PORT},
-    {kHttpsScheme, SCHEME_WITH_PORT},
-    {kHttpSuboriginScheme, SCHEME_WITH_PORT},
-    {kHttpsSuboriginScheme, SCHEME_WITH_PORT},
+    {kHttpsScheme, SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},
+    {kHttpScheme, SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION},
 };
 
 const char* kSecureSchemes[] = {
@@ -67,18 +66,18 @@ const char* kNoAccessSchemes[] = {
 };
 
 const char* kCORSEnabledSchemes[] = {
-  kHttpScheme,
   kHttpsScheme,
+  kHttpScheme,
   kDataScheme,
 };
 
 const char* kWebStorageSchemes[] = {
-  kHttpScheme,
   kHttpsScheme,
+  kHttpScheme,
   kFileScheme,
   kFtpScheme,
-  kWsScheme,
   kWssScheme,
+  kWsScheme,
 };
 
 const char* kEmptyDocumentSchemes[] = {
@@ -245,7 +244,7 @@ bool DoCanonicalize(const CHAR* spec,
   // This is the parsed version of the input URL, we have to canonicalize it
   // before storing it in our object.
   bool success;
-  SchemeType unused_scheme_type = SCHEME_WITH_PORT;
+  SchemeType scheme_type = SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION;
   if (DoCompareSchemeComponent(spec, scheme, url::kFileScheme)) {
     // File URLs are special.
     ParseFileURL(spec, spec_len, &parsed_input);
@@ -258,10 +257,10 @@ bool DoCanonicalize(const CHAR* spec,
                                         charset_converter, output,
                                         output_parsed);
 
-  } else if (DoIsStandard(spec, scheme, &unused_scheme_type)) {
+  } else if (DoIsStandard(spec, scheme, &scheme_type)) {
     // All "normal" URLs.
     ParseStandardURL(spec, spec_len, &parsed_input);
-    success = CanonicalizeStandardURL(spec, spec_len, parsed_input,
+    success = CanonicalizeStandardURL(spec, spec_len, parsed_input, scheme_type,
                                       charset_converter, output, output_parsed);
 
   } else if (DoCompareSchemeComponent(spec, scheme, url::kMailToScheme)) {
@@ -308,7 +307,7 @@ bool DoResolveRelative(const char* base_spec,
     base_is_hierarchical = num_slashes > 0;
   }
 
-  SchemeType unused_scheme_type = SCHEME_WITH_PORT;
+  SchemeType unused_scheme_type = SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION;
   bool standard_base_scheme =
       base_parsed.scheme.is_nonempty() &&
       DoIsStandard(base_spec, base_parsed.scheme, &unused_scheme_type);
@@ -443,10 +442,10 @@ bool DoReplaceComponents(const char* spec,
     return ReplaceFileSystemURL(spec, parsed, replacements, charset_converter,
                                 output, out_parsed);
   }
-  SchemeType unused_scheme_type = SCHEME_WITH_PORT;
-  if (DoIsStandard(spec, parsed.scheme, &unused_scheme_type)) {
-    return ReplaceStandardURL(spec, parsed, replacements, charset_converter,
-                              output, out_parsed);
+  SchemeType scheme_type = SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION;
+  if (DoIsStandard(spec, parsed.scheme, &scheme_type)) {
+    return ReplaceStandardURL(spec, parsed, replacements, scheme_type,
+                              charset_converter, output, out_parsed);
   }
   if (DoCompareSchemeComponent(spec, parsed.scheme, url::kMailToScheme)) {
     return ReplaceMailtoURL(spec, parsed, replacements, output, out_parsed);
@@ -642,6 +641,12 @@ bool IsStandard(const char* spec, const Component& scheme) {
 }
 
 bool GetStandardSchemeType(const char* spec,
+                           const Component& scheme,
+                           SchemeType* type) {
+  return DoIsStandard(spec, scheme, type);
+}
+
+bool GetStandardSchemeType(const base::char16* spec,
                            const Component& scheme,
                            SchemeType* type) {
   return DoIsStandard(spec, scheme, type);

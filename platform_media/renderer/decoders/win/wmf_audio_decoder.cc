@@ -7,8 +7,6 @@
 
 #include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
 
-#include "platform_media/common/pipeline_stats.h"
-
 namespace media {
 
 WMFAudioDecoder::WMFAudioDecoder(
@@ -26,13 +24,12 @@ std::string WMFAudioDecoder::GetDisplayName() const {
 void WMFAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                  CdmContext* cdm_context,
                                  const InitCB& init_cb,
-                                 const OutputCB& output_cb) {
-  pipeline_stats::AddDecoderClass(GetDisplayName());
-
+                                 const OutputCB& output_cb,
+                                 const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
   impl_.Initialize(config, init_cb, output_cb);
 }
 
-void WMFAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void WMFAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                              const DecodeCB& decode_cb) {
   impl_.Decode(buffer, decode_cb);
 }

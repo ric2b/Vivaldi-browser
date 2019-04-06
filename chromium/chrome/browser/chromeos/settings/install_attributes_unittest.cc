@@ -12,12 +12,13 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
 #include "chromeos/chromeos_paths.h"
-#include "chromeos/cryptohome/tpm_util.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/util/tpm_util.h"
 #include "components/policy/proto/install_attributes.pb.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -48,7 +49,7 @@ class InstallAttributesTest : public testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    ASSERT_TRUE(PathService::OverrideAndCreateIfNeeded(
+    ASSERT_TRUE(base::PathService::OverrideAndCreateIfNeeded(
         FILE_INSTALL_ATTRIBUTES, GetTempPath(), true, false));
     DBusThreadManager::Initialize();
     install_attributes_ = std::make_unique<InstallAttributes>(
@@ -95,33 +96,53 @@ class InstallAttributesTest : public testing::Test {
 };
 
 TEST_F(InstallAttributesTest, Lock) {
-  EXPECT_EQ(InstallAttributes::LOCK_SUCCESS,
-            LockDeviceAndWaitForResult(policy::DEVICE_MODE_ENTERPRISE,
-                                       kTestDomain,
-                                       std::string(),  // realm
-                                       kTestDeviceId));
+  {
+    base::HistogramTester histogram_tester;
+    EXPECT_EQ(
+        InstallAttributes::LOCK_SUCCESS,
+        LockDeviceAndWaitForResult(policy::DEVICE_MODE_ENTERPRISE, kTestDomain,
+                                   std::string(),  // realm
+                                   kTestDeviceId));
+    histogram_tester.ExpectUniqueSample(
+        "Enterprise.ExistingInstallAttributesLock", 0, 1);
+  }
 
-  // Locking an already locked device should succeed if the parameters match.
-  EXPECT_EQ(InstallAttributes::LOCK_SUCCESS,
-            LockDeviceAndWaitForResult(policy::DEVICE_MODE_ENTERPRISE,
-                                       kTestDomain,
-                                       std::string(),  // realm
-                                       kTestDeviceId));
+  {
+    // Locking an already locked device should succeed if the parameters match.
+    base::HistogramTester histogram_tester;
+    EXPECT_EQ(
+        InstallAttributes::LOCK_SUCCESS,
+        LockDeviceAndWaitForResult(policy::DEVICE_MODE_ENTERPRISE, kTestDomain,
+                                   std::string(),  // realm
+                                   kTestDeviceId));
+    histogram_tester.ExpectUniqueSample(
+        "Enterprise.ExistingInstallAttributesLock", 1, 1);
+  }
 
-  // But another domain should fail.
-  EXPECT_EQ(InstallAttributes::LOCK_WRONG_DOMAIN,
-            LockDeviceAndWaitForResult(policy::DEVICE_MODE_ENTERPRISE,
-                                       "anotherexample.com",
-                                       std::string(),  // realm
-                                       kTestDeviceId));
+  {
+    // But another domain should fail.
+    base::HistogramTester histogram_tester;
+    EXPECT_EQ(InstallAttributes::LOCK_WRONG_DOMAIN,
+              LockDeviceAndWaitForResult(policy::DEVICE_MODE_ENTERPRISE,
+                                         "anotherexample.com",
+                                         std::string(),  // realm
+                                         kTestDeviceId));
+    histogram_tester.ExpectTotalCount(
+        "Enterprise.ExistingInstallAttributesLock", 0);
+  }
 
-  // A non-matching mode should fail as well.
-  EXPECT_EQ(InstallAttributes::LOCK_WRONG_MODE,
-            LockDeviceAndWaitForResult(
-                policy::DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH,
-                std::string(),    // domain
-                std::string(),    // realm
-                std::string()));  // device id
+  {
+    // A non-matching mode should fail as well.
+    base::HistogramTester histogram_tester;
+    EXPECT_EQ(InstallAttributes::LOCK_WRONG_MODE,
+              LockDeviceAndWaitForResult(
+                  policy::DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH,
+                  std::string(),    // domain
+                  std::string(),    // realm
+                  std::string()));  // device id
+    histogram_tester.ExpectTotalCount(
+        "Enterprise.ExistingInstallAttributesLock", 0);
+  }
 }
 
 TEST_F(InstallAttributesTest, IsEnterpriseManagedCloud) {

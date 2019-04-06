@@ -27,7 +27,7 @@
 #include "media/base/media_switches.h"
 #include "media/base/mock_filters.h"
 #include "media/cdm/cdm_module.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest-param-test.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,7 +51,9 @@ using ::testing::StrictMock;
 using ::testing::StrNe;
 using ::testing::Unused;
 
-MATCHER(IsEmpty, "") { return arg.empty(); }
+MATCHER(IsEmpty, "") {
+  return arg.empty();
+}
 MATCHER(NotEmpty, "") {
   return !arg.empty();
 }
@@ -178,35 +180,21 @@ const uint8_t kEncryptedData2[] = {
 // all entries must be equal to kOriginalDataSize to make the subsample entries
 // valid.
 
-const SubsampleEntry kSubsampleEntriesNormal[] = {
-  { 2, 7 },
-  { 3, 11 },
-  { 1, 0 }
-};
+const SubsampleEntry kSubsampleEntriesNormal[] = {{2, 7}, {3, 11}, {1, 0}};
 
 const SubsampleEntry kSubsampleEntriesWrongSize[] = {
-  { 3, 6 }, // This entry doesn't match the correct entry.
-  { 3, 11 },
-  { 1, 0 }
-};
+    {3, 6},  // This entry doesn't match the correct entry.
+    {3, 11},
+    {1, 0}};
 
 const SubsampleEntry kSubsampleEntriesInvalidTotalSize[] = {
-  { 1, 1000 }, // This entry is too large.
-  { 3, 11 },
-  { 1, 0 }
-};
+    {1, 1000},  // This entry is too large.
+    {3, 11},
+    {1, 0}};
 
-const SubsampleEntry kSubsampleEntriesClearOnly[] = {
-  { 7, 0 },
-  { 8, 0 },
-  { 9, 0 }
-};
+const SubsampleEntry kSubsampleEntriesClearOnly[] = {{7, 0}, {8, 0}, {9, 0}};
 
-const SubsampleEntry kSubsampleEntriesCypherOnly[] = {
-  { 0, 6 },
-  { 0, 8 },
-  { 0, 10 }
-};
+const SubsampleEntry kSubsampleEntriesCypherOnly[] = {{0, 6}, {0, 8}, {0, 10}};
 
 scoped_refptr<DecoderBuffer> CreateEncryptedBuffer(
     const std::vector<uint8_t>& data,
@@ -214,16 +202,21 @@ scoped_refptr<DecoderBuffer> CreateEncryptedBuffer(
     const std::vector<uint8_t>& iv,
     const std::vector<SubsampleEntry>& subsample_entries) {
   DCHECK(!data.empty());
+  DCHECK(!iv.empty());
   scoped_refptr<DecoderBuffer> encrypted_buffer(new DecoderBuffer(data.size()));
-  memcpy(encrypted_buffer->writable_data(), &data[0], data.size());
-  CHECK(encrypted_buffer.get());
-  std::string key_id_string(
-      reinterpret_cast<const char*>(key_id.empty() ? NULL : &key_id[0]),
-      key_id.size());
-  std::string iv_string(
-      reinterpret_cast<const char*>(iv.empty() ? NULL : &iv[0]), iv.size());
-  encrypted_buffer->set_decrypt_config(std::unique_ptr<DecryptConfig>(
-      new DecryptConfig(key_id_string, iv_string, subsample_entries)));
+  memcpy(encrypted_buffer->writable_data(), data.data(), data.size());
+  std::string key_id_string(key_id.begin(), key_id.end());
+  std::string iv_string(iv.begin(), iv.end());
+  encrypted_buffer->set_decrypt_config(DecryptConfig::CreateCencConfig(
+      key_id_string, iv_string, subsample_entries));
+  return encrypted_buffer;
+}
+
+scoped_refptr<DecoderBuffer> CreateClearBuffer(
+    const std::vector<uint8_t>& data) {
+  DCHECK(!data.empty());
+  scoped_refptr<DecoderBuffer> encrypted_buffer(new DecoderBuffer(data.size()));
+  memcpy(encrypted_buffer->writable_data(), data.data(), data.size());
   return encrypted_buffer;
 }
 
@@ -283,11 +276,15 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
       CdmModule::GetInstance()->Initialize(helper_->LibraryPath());
 #endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 
+      CdmAdapter::CreateCdmFunc create_cdm_func =
+          CdmModule::GetInstance()->GetCreateCdmFunc();
+
       std::unique_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
       std::unique_ptr<CdmAuxiliaryHelper> cdm_helper(
           new MockCdmAuxiliaryHelper(std::move(allocator)));
       CdmAdapter::Create(
-          helper_->KeySystemName(), cdm_config, std::move(cdm_helper),
+          helper_->KeySystemName(), url::Origin::Create(GURL("http://foo.com")),
+          cdm_config, create_cdm_func, std::move(cdm_helper),
           base::Bind(&MockCdmClient::OnSessionMessage,
                      base::Unretained(&cdm_client_)),
           base::Bind(&MockCdmClient::OnSessionClosed,
@@ -370,7 +367,7 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
     DCHECK(!key_id.empty());
     EXPECT_CALL(cdm_client_,
                 OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
-    cdm_->CreateSessionAndGenerateRequest(CdmSessionType::TEMPORARY_SESSION,
+    cdm_->CreateSessionAndGenerateRequest(CdmSessionType::kTemporary,
                                           EmeInitDataType::WEBM, key_id,
                                           CreateSessionPromise(RESOLVED));
     // This expects the promise to be called synchronously, which is the case
@@ -430,8 +427,8 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
     return false;
   }
 
-  MOCK_METHOD2(BufferDecrypted, void(Decryptor::Status,
-                                     const scoped_refptr<DecoderBuffer>&));
+  MOCK_METHOD2(BufferDecrypted,
+               void(Decryptor::Status, scoped_refptr<DecoderBuffer>));
 
   enum DecryptExpectation {
     SUCCESS,
@@ -441,7 +438,7 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
     NO_KEY
   };
 
-  void DecryptAndExpect(const scoped_refptr<DecoderBuffer>& encrypted,
+  void DecryptAndExpect(scoped_refptr<DecoderBuffer> encrypted,
                         const std::vector<uint8_t>& plain_text,
                         DecryptExpectation result) {
     scoped_refptr<DecoderBuffer> decrypted;
@@ -472,8 +469,8 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
 
     std::vector<uint8_t> decrypted_text;
     if (decrypted.get() && decrypted->data_size()) {
-      decrypted_text.assign(
-        decrypted->data(), decrypted->data() + decrypted->data_size());
+      decrypted_text.assign(decrypted->data(),
+                            decrypted->data() + decrypted->data_size());
     }
 
     switch (result) {
@@ -522,13 +519,13 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
 
 TEST_P(AesDecryptorTest, CreateSessionWithEmptyInitData) {
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
-      std::vector<uint8_t>(), CreateSessionPromise(REJECTED));
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM, std::vector<uint8_t>(),
+      CreateSessionPromise(REJECTED));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::CENC,
-      std::vector<uint8_t>(), CreateSessionPromise(REJECTED));
+      CdmSessionType::kTemporary, EmeInitDataType::CENC, std::vector<uint8_t>(),
+      CreateSessionPromise(REJECTED));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::KEYIDS,
+      CdmSessionType::kTemporary, EmeInitDataType::KEYIDS,
       std::vector<uint8_t>(), CreateSessionPromise(REJECTED));
 }
 
@@ -537,41 +534,41 @@ TEST_P(AesDecryptorTest, CreateSessionWithVariousLengthInitData_WebM) {
   init_data.resize(1);
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
       std::vector<uint8_t>(init_data), CreateSessionPromise(RESOLVED));
 
   init_data.resize(16);  // The expected size.
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
       std::vector<uint8_t>(init_data), CreateSessionPromise(RESOLVED));
 
   init_data.resize(512);
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
       std::vector<uint8_t>(init_data), CreateSessionPromise(RESOLVED));
 
   init_data.resize(513);
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
       std::vector<uint8_t>(init_data), CreateSessionPromise(REJECTED));
 }
 
 TEST_P(AesDecryptorTest, MultipleCreateSession) {
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
       std::vector<uint8_t>(1), CreateSessionPromise(RESOLVED));
 
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
       std::vector<uint8_t>(1), CreateSessionPromise(RESOLVED));
 
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::WEBM,
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
       std::vector<uint8_t>(1), CreateSessionPromise(RESOLVED));
 }
 
@@ -593,7 +590,7 @@ TEST_P(AesDecryptorTest, CreateSessionWithCencInitData) {
 
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::CENC,
+      CdmSessionType::kTemporary, EmeInitDataType::CENC,
       std::vector<uint8_t>(init_data, init_data + arraysize(init_data)),
       CreateSessionPromise(RESOLVED));
 }
@@ -604,7 +601,7 @@ TEST_P(AesDecryptorTest, CreateSessionWithKeyIdsInitData) {
 
   EXPECT_CALL(cdm_client_, OnSessionMessage(NotEmpty(), _, IsJSONDictionary()));
   cdm_->CreateSessionAndGenerateRequest(
-      CdmSessionType::TEMPORARY_SESSION, EmeInitDataType::KEYIDS,
+      CdmSessionType::kTemporary, EmeInitDataType::KEYIDS,
       std::vector<uint8_t>(init_data, init_data + arraysize(init_data) - 1),
       CreateSessionPromise(RESOLVED));
 }
@@ -619,9 +616,9 @@ TEST_P(AesDecryptorTest, NormalDecryption) {
 
 TEST_P(AesDecryptorTest, UnencryptedFrame) {
   // An empty iv string signals that the frame is unencrypted.
-  scoped_refptr<DecoderBuffer> encrypted_buffer = CreateEncryptedBuffer(
-      original_data_, key_id_, std::vector<uint8_t>(), no_subsample_entries_);
-  DecryptAndExpect(encrypted_buffer, original_data_, SUCCESS);
+  scoped_refptr<DecoderBuffer> unencrypted_buffer =
+      CreateClearBuffer(original_data_);
+  DecryptAndExpect(unencrypted_buffer, original_data_, SUCCESS);
 }
 
 TEST_P(AesDecryptorTest, WrongKey) {
@@ -645,8 +642,8 @@ TEST_P(AesDecryptorTest, KeyReplacement) {
       encrypted_data_, key_id_, iv_, no_subsample_entries_);
 
   UpdateSessionAndExpect(session_id, kWrongKeyAsJWK, RESOLVED, true);
-  ASSERT_NO_FATAL_FAILURE(DecryptAndExpect(
-      encrypted_buffer, original_data_, DATA_MISMATCH));
+  ASSERT_NO_FATAL_FAILURE(
+      DecryptAndExpect(encrypted_buffer, original_data_, DATA_MISMATCH));
 
   UpdateSessionAndExpect(session_id, kKeyAsJWK, RESOLVED, false);
   ASSERT_NO_FATAL_FAILURE(
@@ -706,17 +703,17 @@ TEST_P(AesDecryptorTest, CorruptedData) {
   std::vector<uint8_t> bad_data = encrypted_data_;
   bad_data[1]++;
 
-  scoped_refptr<DecoderBuffer> encrypted_buffer = CreateEncryptedBuffer(
-      bad_data, key_id_, iv_, no_subsample_entries_);
+  scoped_refptr<DecoderBuffer> encrypted_buffer =
+      CreateEncryptedBuffer(bad_data, key_id_, iv_, no_subsample_entries_);
   DecryptAndExpect(encrypted_buffer, original_data_, DATA_MISMATCH);
 }
 
 TEST_P(AesDecryptorTest, EncryptedAsUnencryptedFailure) {
   std::string session_id = CreateSession(key_id_);
   UpdateSessionAndExpect(session_id, kKeyAsJWK, RESOLVED, true);
-  scoped_refptr<DecoderBuffer> encrypted_buffer = CreateEncryptedBuffer(
-      encrypted_data_, key_id_, std::vector<uint8_t>(), no_subsample_entries_);
-  DecryptAndExpect(encrypted_buffer, original_data_, DATA_MISMATCH);
+  scoped_refptr<DecoderBuffer> unencrypted_buffer =
+      CreateClearBuffer(encrypted_data_);
+  DecryptAndExpect(unencrypted_buffer, original_data_, DATA_MISMATCH);
 }
 
 TEST_P(AesDecryptorTest, SubsampleDecryption) {
@@ -760,9 +757,9 @@ TEST_P(AesDecryptorTest, SubsampleInvalidTotalSize) {
       kSubsampleEntriesInvalidTotalSize +
           arraysize(kSubsampleEntriesInvalidTotalSize));
 
-  scoped_refptr<DecoderBuffer> encrypted_buffer = CreateEncryptedBuffer(
-      subsample_encrypted_data_, key_id_, iv_,
-      subsample_entries_invalid_total_size);
+  scoped_refptr<DecoderBuffer> encrypted_buffer =
+      CreateEncryptedBuffer(subsample_encrypted_data_, key_id_, iv_,
+                            subsample_entries_invalid_total_size);
   DecryptAndExpect(encrypted_buffer, original_data_, DECRYPT_ERROR);
 }
 

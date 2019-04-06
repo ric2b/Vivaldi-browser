@@ -52,6 +52,7 @@ enum FieldTypeGroupForMetrics {
   GROUP_USERNAME,
   GROUP_STREET_ADDRESS,
   GROUP_CREDIT_CARD_VERIFICATION,
+  GROUP_UNFILLABLE,
   NUM_FIELD_TYPE_GROUPS_FOR_METRICS
 };
 
@@ -65,22 +66,52 @@ std::string PreviousSaveCreditCardPromptUserDecisionToString(
             prefs::NUM_PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISIONS);
   std::string previous_response;
   if (previous_save_credit_card_prompt_user_decision ==
-      prefs::PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISION_ACCEPTED)
+      prefs::PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISION_ACCEPTED) {
     previous_response = ".PreviouslyAccepted";
-  else if (previous_save_credit_card_prompt_user_decision ==
-           prefs::PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISION_DENIED)
+  } else if (previous_save_credit_card_prompt_user_decision ==
+             prefs::PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISION_DENIED) {
     previous_response = ".PreviouslyDenied";
-  else
+  } else {
     DCHECK_EQ(previous_save_credit_card_prompt_user_decision,
               prefs::PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISION_NONE);
+    previous_response = ".NoPreviousDecision";
+  }
   return previous_response;
 }
 
-ukm::SourceId NewUkmSourceWithUrl(ukm::UkmRecorder* ukm_recorder,
-                                  const GURL& url) {
-  ukm::SourceId source_id = ukm::UkmRecorder::GetNewSourceID();
-  AutofillMetrics::UpdateSourceURL(ukm_recorder, source_id, url);
-  return source_id;
+// Reduce FormSignature space (in UKM) to a small range for privacy reasons.
+int64_t HashFormSignature(autofill::FormSignature form_signature) {
+  return static_cast<uint64_t>(form_signature) % 1021;
+}
+
+// Reduce FieldSignature space (in UKM) to a small range for privacy reasons.
+int64_t HashFieldSignature(autofill::FieldSignature field_signature) {
+  return static_cast<uint64_t>(field_signature) % 1021;
+}
+
+std::string GetHistogramSuffixForSecurityLevel(
+    security_state::SecurityLevel level) {
+  switch (level) {
+    case security_state::EV_SECURE:
+      return "EV_SECURE";
+    case security_state::SECURE:
+      return "SECURE";
+    case security_state::NONE:
+      return "NONE";
+    case security_state::HTTP_SHOW_WARNING:
+      return "HTTP_SHOW_WARNING";
+    case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
+      return "SECURE_WITH_POLICY_INSTALLED_CERT";
+    case security_state::DANGEROUS:
+      return "DANGEROUS";
+    default:
+      return "OTHER";
+  }
+}
+
+std::string GetSecurityLevelHistogramName(const std::string prefix,
+                                          security_state::SecurityLevel level) {
+  return prefix + "." + GetHistogramSuffixForSecurityLevel(level);
 }
 
 }  // namespace
@@ -143,6 +174,7 @@ int GetFieldTypeGroupMetric(ServerFieldType field_type,
           break;
         case ADDRESS_HOME_STREET_ADDRESS:
           group = GROUP_STREET_ADDRESS;
+          break;
         case ADDRESS_HOME_CITY:
           group = GROUP_ADDRESS_CITY;
           break;
@@ -209,6 +241,10 @@ int GetFieldTypeGroupMetric(ServerFieldType field_type,
       group = GROUP_USERNAME;
       break;
 
+    case UNFILLABLE:
+      group = GROUP_UNFILLABLE;
+      break;
+
     case TRANSACTION:
       NOTREACHED();
       break;
@@ -226,6 +262,8 @@ namespace {
 
 // A version of the UMA_HISTOGRAM_ENUMERATION macro that allows the |name|
 // to vary over the program's runtime.
+// TODO(crbug.com/850520): Remove this function when the remaining logs use the
+// histogram_functions instead.
 void LogUMAHistogramEnumeration(const std::string& name,
                                 int sample,
                                 int boundary_value) {
@@ -236,17 +274,6 @@ void LogUMAHistogramEnumeration(const std::string& name,
       name, 1, boundary_value, boundary_value + 1,
       base::HistogramBase::kUmaTargetedHistogramFlag);
   histogram->Add(sample);
-}
-
-// A version of the UMA_HISTOGRAM_LONG_TIMES macro that allows the |name|
-// to vary over the program's runtime.
-void LogUMAHistogramLongTimes(const std::string& name,
-                              const base::TimeDelta& duration) {
-  // Note: This leaks memory, which is expected behavior.
-  base::HistogramBase* histogram = base::Histogram::FactoryTimeGet(
-      name, base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1),
-      50, base::HistogramBase::kUmaTargetedHistogramFlag);
-  histogram->AddTime(duration);
 }
 
 const char* GetQualityMetricPredictionSource(
@@ -271,8 +298,7 @@ const char* GetQualityMetricTypeSuffix(
   switch (metric_type) {
     default:
       NOTREACHED();
-    // Fall through...
-
+      FALLTHROUGH;
     case AutofillMetrics::TYPE_SUBMISSION:
       return "";
     case AutofillMetrics::TYPE_NO_SUBMISSION:
@@ -354,14 +380,14 @@ void LogPredictionQualityMetricsForFieldsOnlyFilledWhenFocused(
     // Only log aggregate true negative; do not log type specific metrics
     // for UNKNOWN/EMPTY.
     DVLOG(2) << "TRUE NEGATIVE";
-    LogUMAHistogramEnumeration(
+    base::UmaHistogramEnumeration(
         aggregate_histogram,
         (is_empty ? AutofillMetrics::TRUE_NEGATIVE_EMPTY
                   : (is_ambiguous ? AutofillMetrics::TRUE_NEGATIVE_AMBIGUOUS
                                   : AutofillMetrics::TRUE_NEGATIVE_UNKNOWN)),
         AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
     if (log_rationalization_metrics) {
-      LogUMAHistogramEnumeration(
+      base::UmaHistogramEnumeration(
           rationalization_quality_histogram,
           (is_empty ? AutofillMetrics::RATIONALIZATION_GOOD
                     : AutofillMetrics::RATIONALIZATION_OK),
@@ -376,16 +402,16 @@ void LogPredictionQualityMetricsForFieldsOnlyFilledWhenFocused(
   // automatically if there has been no rationalization.
   if (predicted_type == actual_type) {
     DVLOG(2) << "TRUE POSITIVE";
-    LogUMAHistogramEnumeration(aggregate_histogram,
-                               AutofillMetrics::TRUE_POSITIVE,
-                               AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
+    base::UmaHistogramEnumeration(
+        aggregate_histogram, AutofillMetrics::TRUE_POSITIVE,
+        AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
     LogUMAHistogramEnumeration(
         type_specific_histogram,
         GetFieldTypeGroupMetric(actual_type, AutofillMetrics::TRUE_POSITIVE),
         KMaxFieldTypeGroupMetric);
     if (log_rationalization_metrics) {
       bool duplicated_filling = DuplicatedFilling(form, field);
-      LogUMAHistogramEnumeration(
+      base::UmaHistogramEnumeration(
           rationalization_quality_histogram,
           (duplicated_filling ? AutofillMetrics::RATIONALIZATION_BAD
                               : AutofillMetrics::RATIONALIZATION_OK),
@@ -397,9 +423,9 @@ void LogPredictionQualityMetricsForFieldsOnlyFilledWhenFocused(
   DVLOG(2) << "MISMATCH";
   // Here the prediction is wrong, but user has to provide some value still.
   // This should be a false negative.
-  LogUMAHistogramEnumeration(aggregate_histogram,
-                             AutofillMetrics::FALSE_NEGATIVE_MISMATCH,
-                             AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
+  base::UmaHistogramEnumeration(
+      aggregate_histogram, AutofillMetrics::FALSE_NEGATIVE_MISMATCH,
+      AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
   // Log FALSE_NEGATIVE_MISMATCH for predicted type if it did predicted
   // something but actual type is different.
   if (predicted_type != UNKNOWN_TYPE)
@@ -412,7 +438,7 @@ void LogPredictionQualityMetricsForFieldsOnlyFilledWhenFocused(
     // Logging RATIONALIZATION_OK despite of type mismatch here because autofill
     // would have got it wrong with or without rationalization. Rationalization
     // here does not help, neither does it do any harm.
-    LogUMAHistogramEnumeration(
+    base::UmaHistogramEnumeration(
         rationalization_quality_histogram, AutofillMetrics::RATIONALIZATION_OK,
         AutofillMetrics::NUM_RATIONALIZATION_QUALITY_METRICS);
   }
@@ -434,7 +460,7 @@ void LogPredictionQualityMetricsForCommonFields(
       // Only log aggregate true negative; do not log type specific metrics
       // for UNKNOWN/EMPTY.
       DVLOG(2) << "TRUE NEGATIVE";
-      LogUMAHistogramEnumeration(
+      base::UmaHistogramEnumeration(
           aggregate_histogram,
           (is_empty ? AutofillMetrics::TRUE_NEGATIVE_EMPTY
                     : (is_ambiguous ? AutofillMetrics::TRUE_NEGATIVE_AMBIGUOUS
@@ -446,9 +472,9 @@ void LogPredictionQualityMetricsForCommonFields(
     DVLOG(2) << "TRUE POSITIVE";
     // Log both aggregate and type specific true positive if we correctly
     // predict that type with which the field was filled.
-    LogUMAHistogramEnumeration(aggregate_histogram,
-                               AutofillMetrics::TRUE_POSITIVE,
-                               AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
+    base::UmaHistogramEnumeration(
+        aggregate_histogram, AutofillMetrics::TRUE_POSITIVE,
+        AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
     LogUMAHistogramEnumeration(
         type_specific_histogram,
         GetFieldTypeGroupMetric(actual_type, AutofillMetrics::TRUE_POSITIVE),
@@ -466,8 +492,9 @@ void LogPredictionQualityMetricsForCommonFields(
         (is_empty ? AutofillMetrics::FALSE_POSITIVE_EMPTY
                   : (is_ambiguous ? AutofillMetrics::FALSE_POSITIVE_AMBIGUOUS
                                   : AutofillMetrics::FALSE_POSITIVE_UNKNOWN));
-    LogUMAHistogramEnumeration(aggregate_histogram, metric,
-                               AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
+    base::UmaHistogramEnumeration(
+        aggregate_histogram, metric,
+        AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
     LogUMAHistogramEnumeration(type_specific_histogram,
                                GetFieldTypeGroupMetric(predicted_type, metric),
                                KMaxFieldTypeGroupMetric);
@@ -479,9 +506,9 @@ void LogPredictionQualityMetricsForCommonFields(
   // unknown.
   if (predicted_type == UNKNOWN_TYPE) {
     DVLOG(2) << "FALSE NEGATIVE";
-    LogUMAHistogramEnumeration(aggregate_histogram,
-                               AutofillMetrics::FALSE_NEGATIVE_UNKNOWN,
-                               AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
+    base::UmaHistogramEnumeration(
+        aggregate_histogram, AutofillMetrics::FALSE_NEGATIVE_UNKNOWN,
+        AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
     LogUMAHistogramEnumeration(
         type_specific_histogram,
         GetFieldTypeGroupMetric(actual_type,
@@ -497,9 +524,9 @@ void LogPredictionQualityMetricsForCommonFields(
   // This is a mismatch. From the reference of the actual type, this is a false
   // negative (it was T, but predicted U). From the reference of the prediction,
   // this is a false positive (predicted it was T, but it was U).
-  LogUMAHistogramEnumeration(aggregate_histogram,
-                             AutofillMetrics::FALSE_NEGATIVE_MISMATCH,
-                             AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
+  base::UmaHistogramEnumeration(
+      aggregate_histogram, AutofillMetrics::FALSE_NEGATIVE_MISMATCH,
+      AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
   LogUMAHistogramEnumeration(
       type_specific_histogram,
       GetFieldTypeGroupMetric(actual_type,
@@ -616,11 +643,11 @@ AutofillMetrics::FormEvent GetCardNumberStatusFormEvent(
 }  // namespace
 
 // static
-void AutofillMetrics::UpdateSourceURL(ukm::UkmRecorder* ukm_recorder,
-                                      ukm::SourceId source_id,
-                                      const GURL& url) {
-  if (ukm_recorder)
-    ukm_recorder->UpdateSourceURL(source_id, url);
+void AutofillMetrics::LogSubmittedCardStateMetric(
+    SubmittedCardStateMetric metric) {
+  DCHECK_LT(metric, NUM_SUBMITTED_CARD_STATE_METRICS);
+  UMA_HISTOGRAM_ENUMERATION("Autofill.SubmittedCardState", metric,
+                            NUM_SUBMITTED_CARD_STATE_METRICS);
 }
 
 // static
@@ -630,6 +657,48 @@ void AutofillMetrics::LogSubmittedServerCardExpirationStatusMetric(
   UMA_HISTOGRAM_ENUMERATION(
       "Autofill.SubmittedServerCardExpirationStatus", metric,
       NUM_SUBMITTED_SERVER_CARD_EXPIRATION_STATUS_METRICS);
+}
+
+// static
+void AutofillMetrics::LogUploadDisallowedForNetworkMetric(
+    const std::string& network) {
+  UploadDisallowedForNetworkMetric metric;
+  if (network == kEloCard) {
+    metric = DISALLOWED_ELO;
+  } else if (network == kJCBCard) {
+    metric = DISALLOWED_JCB;
+  } else {
+    NOTREACHED();
+    return;
+  }
+  UMA_HISTOGRAM_ENUMERATION("Autofill.CreditCardUploadDisallowedForNetwork",
+                            metric);
+}
+
+// static
+void AutofillMetrics::LogUploadOfferedCardOriginMetric(
+    UploadOfferedCardOriginMetric metric) {
+  DCHECK_LT(metric, NUM_UPLOAD_OFFERED_CARD_ORIGIN_METRICS);
+  UMA_HISTOGRAM_ENUMERATION("Autofill.UploadOfferedCardOrigin", metric,
+                            NUM_UPLOAD_OFFERED_CARD_ORIGIN_METRICS);
+}
+
+// static
+void AutofillMetrics::LogUploadAcceptedCardOriginMetric(
+    UploadAcceptedCardOriginMetric metric) {
+  DCHECK_LT(metric, NUM_UPLOAD_ACCEPTED_CARD_ORIGIN_METRICS);
+  UMA_HISTOGRAM_ENUMERATION("Autofill.UploadAcceptedCardOrigin", metric,
+                            NUM_UPLOAD_ACCEPTED_CARD_ORIGIN_METRICS);
+}
+
+// static
+void AutofillMetrics::LogSaveCardCardholderNamePrefilled(bool prefilled) {
+  UMA_HISTOGRAM_BOOLEAN("Autofill.SaveCardCardholderNamePrefilled", prefilled);
+}
+
+// static
+void AutofillMetrics::LogSaveCardCardholderNameWasEdited(bool edited) {
+  UMA_HISTOGRAM_BOOLEAN("Autofill.SaveCardCardholderNameWasEdited", edited);
 }
 
 // static
@@ -652,7 +721,9 @@ void AutofillMetrics::LogCreditCardInfoBarMetric(
   DCHECK_LT(metric, NUM_INFO_BAR_METRICS);
 
   std::string destination = is_uploading ? ".Server" : ".Local";
-  LogUMAHistogramEnumeration(
+  base::UmaHistogramEnumeration("Autofill.CreditCardInfoBar" + destination,
+                                metric, NUM_INFO_BAR_METRICS);
+  base::UmaHistogramEnumeration(
       "Autofill.CreditCardInfoBar" + destination +
           PreviousSaveCreditCardPromptUserDecisionToString(
               previous_save_credit_card_prompt_user_decision),
@@ -671,15 +742,51 @@ void AutofillMetrics::LogSaveCardPromptMetric(
     SaveCardPromptMetric metric,
     bool is_uploading,
     bool is_reshow,
-    int previous_save_credit_card_prompt_user_decision) {
+    bool is_requesting_cardholder_name,
+    int previous_save_credit_card_prompt_user_decision,
+    security_state::SecurityLevel security_level) {
   DCHECK_LT(metric, NUM_SAVE_CARD_PROMPT_METRICS);
   std::string destination = is_uploading ? ".Upload" : ".Local";
   std::string show = is_reshow ? ".Reshows" : ".FirstShow";
-  LogUMAHistogramEnumeration(
-      "Autofill.SaveCreditCardPrompt" + destination + show +
+  std::string metric_with_destination_and_show =
+      "Autofill.SaveCreditCardPrompt" + destination + show;
+  base::UmaHistogramEnumeration(metric_with_destination_and_show, metric,
+                                NUM_SAVE_CARD_PROMPT_METRICS);
+  if (is_requesting_cardholder_name) {
+    base::UmaHistogramEnumeration(
+        metric_with_destination_and_show + ".RequestingCardholderName", metric,
+        NUM_SAVE_CARD_PROMPT_METRICS);
+  }
+  base::UmaHistogramEnumeration(
+      metric_with_destination_and_show +
           PreviousSaveCreditCardPromptUserDecisionToString(
               previous_save_credit_card_prompt_user_decision),
       metric, NUM_SAVE_CARD_PROMPT_METRICS);
+
+  LogSaveCardPromptMetricBySecurityLevel(metric, is_uploading, security_level);
+}
+
+// static
+void AutofillMetrics::LogSaveCardPromptMetricBySecurityLevel(
+    SaveCardPromptMetric metric,
+    bool is_uploading,
+    security_state::SecurityLevel security_level) {
+  // Getting a SECURITY_LEVEL_COUNT security level means that it was not
+  // possible to get the real security level. Don't log.
+  if (security_level == security_state::SecurityLevel::SECURITY_LEVEL_COUNT) {
+    return;
+  }
+
+  std::string histogram_name = "Autofill.SaveCreditCardPrompt.";
+  if (is_uploading) {
+    histogram_name += "Upload";
+  } else {
+    histogram_name += "Local";
+  }
+
+  base::UmaHistogramEnumeration(
+      GetSecurityLevelHistogramName(histogram_name, security_level), metric,
+      NUM_SAVE_CARD_PROMPT_METRICS);
 }
 
 // static
@@ -695,9 +802,47 @@ void AutofillMetrics::LogScanCreditCardCompleted(
     const base::TimeDelta& duration,
     bool completed) {
   std::string suffix = completed ? "Completed" : "Cancelled";
-  LogUMAHistogramLongTimes("Autofill.ScanCreditCard.Duration_" + suffix,
-                           duration);
+  base::UmaHistogramLongTimes("Autofill.ScanCreditCard.Duration_" + suffix,
+                              duration);
   UMA_HISTOGRAM_BOOLEAN("Autofill.ScanCreditCard.Completed", completed);
+}
+
+// static
+void AutofillMetrics::LogLocalCardMigrationBubbleOfferMetric(
+    LocalCardMigrationBubbleOfferMetric metric,
+    bool is_reshow) {
+  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_BUBBLE_OFFER_METRICS);
+  std::string histogram_name = "Autofill.LocalCardMigrationBubbleOffer.";
+  histogram_name += is_reshow ? "Reshows" : "FirstShow";
+  base::UmaHistogramEnumeration(histogram_name, metric,
+                                NUM_LOCAL_CARD_MIGRATION_BUBBLE_OFFER_METRICS);
+}
+
+// static
+void AutofillMetrics::LogLocalCardMigrationBubbleUserInteractionMetric(
+    LocalCardMigrationBubbleUserInteractionMetric metric,
+    bool is_reshow) {
+  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_BUBBLE_USER_INTERACTION_METRICS);
+  std::string histogram_name =
+      "Autofill.LocalCardMigrationBubbleUserInteraction.";
+  histogram_name += is_reshow ? "Reshows" : "FirstShow";
+  base::UmaHistogramEnumeration(
+      histogram_name, metric,
+      NUM_LOCAL_CARD_MIGRATION_BUBBLE_USER_INTERACTION_METRICS);
+}
+
+// static
+void AutofillMetrics::LogSaveCardWithFirstAndLastNameOffered(bool is_local) {
+  std::string histogram_name = "Autofill.SaveCardWithFirstAndLastNameOffered.";
+  histogram_name += is_local ? "Local" : "Server";
+  base::UmaHistogramBoolean(histogram_name, true);
+}
+
+// static
+void AutofillMetrics::LogSaveCardWithFirstAndLastNameComplete(bool is_local) {
+  std::string histogram_name = "Autofill.SaveCardWithFirstAndLastNameComplete.";
+  histogram_name += is_local ? "Local" : "Server";
+  base::UmaHistogramBoolean(histogram_name, true);
 }
 
 // static
@@ -730,9 +875,9 @@ void AutofillMetrics::LogUnmaskPromptEventDuration(
       NOTREACHED();
       return;
   }
-  LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.Duration", duration);
-  LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.Duration." + suffix,
-                           duration);
+  base::UmaHistogramLongTimes("Autofill.UnmaskPrompt.Duration", duration);
+  base::UmaHistogramLongTimes("Autofill.UnmaskPrompt.Duration." + suffix,
+                              duration);
 }
 
 // static
@@ -787,10 +932,10 @@ void AutofillMetrics::LogRealPanDuration(
       NOTREACHED();
       return;
   }
-  LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.GetRealPanDuration",
-                           duration);
-  LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.GetRealPanDuration." + suffix,
-                           duration);
+  base::UmaHistogramLongTimes("Autofill.UnmaskPrompt.GetRealPanDuration",
+                              duration);
+  base::UmaHistogramLongTimes(
+      "Autofill.UnmaskPrompt.GetRealPanDuration." + suffix, duration);
 }
 
 // static
@@ -813,9 +958,10 @@ void AutofillMetrics::LogUnmaskingDuration(
       NOTREACHED();
       return;
   }
-  LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.UnmaskingDuration", duration);
-  LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.UnmaskingDuration." + suffix,
-                           duration);
+  base::UmaHistogramLongTimes("Autofill.UnmaskPrompt.UnmaskingDuration",
+                              duration);
+  base::UmaHistogramLongTimes(
+      "Autofill.UnmaskPrompt.UnmaskingDuration." + suffix, duration);
 }
 
 // static
@@ -845,7 +991,7 @@ void AutofillMetrics::LogServerPredictionQualityMetrics(
     QualityMetricType metric_type) {
   LogPredictionQualityMetrics(
       PREDICTION_SOURCE_SERVER,
-      AutofillType(field.overall_server_type()).GetStorableType(),
+      AutofillType(field.server_type()).GetStorableType(),
       form_interactions_ukm_logger, form, field, metric_type,
       false /*log_rationalization_metrics*/);
 }
@@ -869,35 +1015,80 @@ void AutofillMetrics::LogServerQueryMetric(ServerQueryMetric metric) {
 }
 
 // static
-void AutofillMetrics::LogUserHappinessMetric(UserHappinessMetric metric,
-                                             FieldTypeGroup field_type_group) {
+void AutofillMetrics::LogUserHappinessMetric(
+    UserHappinessMetric metric,
+    FieldTypeGroup field_type_group,
+    security_state::SecurityLevel security_level) {
   LogUserHappinessMetric(
-      metric, {FormTypes::FieldTypeGroupToFormType(field_type_group)});
+      metric, {FormTypes::FieldTypeGroupToFormType(field_type_group)},
+      security_level);
 }
 
 // static
 void AutofillMetrics::LogUserHappinessMetric(
     UserHappinessMetric metric,
-    const std::set<FormType>& form_types) {
+    const std::set<FormType>& form_types,
+    security_state::SecurityLevel security_level) {
   DCHECK_LT(metric, NUM_USER_HAPPINESS_METRICS);
   UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness", metric,
                             NUM_USER_HAPPINESS_METRICS);
   if (base::ContainsKey(form_types, CREDIT_CARD_FORM)) {
     UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.CreditCard", metric,
                               NUM_USER_HAPPINESS_METRICS);
+    LogUserHappinessBySecurityLevel(metric, CREDIT_CARD_FORM, security_level);
   }
   if (base::ContainsKey(form_types, ADDRESS_FORM)) {
     UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.Address", metric,
                               NUM_USER_HAPPINESS_METRICS);
+    LogUserHappinessBySecurityLevel(metric, ADDRESS_FORM, security_level);
   }
   if (base::ContainsKey(form_types, PASSWORD_FORM)) {
     UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.Password", metric,
                               NUM_USER_HAPPINESS_METRICS);
+    LogUserHappinessBySecurityLevel(metric, PASSWORD_FORM, security_level);
   }
   if (base::ContainsKey(form_types, UNKNOWN_FORM_TYPE)) {
     UMA_HISTOGRAM_ENUMERATION("Autofill.UserHappiness.Unknown", metric,
                               NUM_USER_HAPPINESS_METRICS);
+    LogUserHappinessBySecurityLevel(metric, UNKNOWN_FORM_TYPE, security_level);
   }
+}
+
+// static
+void AutofillMetrics::LogUserHappinessBySecurityLevel(
+    UserHappinessMetric metric,
+    FormType form_type,
+    security_state::SecurityLevel security_level) {
+  if (security_level == security_state::SecurityLevel::SECURITY_LEVEL_COUNT) {
+    return;
+  }
+
+  std::string histogram_name = "Autofill.UserHappiness.";
+  switch (form_type) {
+    case CREDIT_CARD_FORM:
+      histogram_name += "CreditCard";
+      break;
+
+    case ADDRESS_FORM:
+      histogram_name += "Address";
+      break;
+
+    case PASSWORD_FORM:
+      histogram_name += "Password";
+      break;
+
+    case UNKNOWN_FORM_TYPE:
+      histogram_name += "Unknown";
+      break;
+
+    default:
+      NOTREACHED();
+      return;
+  }
+
+  base::UmaHistogramEnumeration(
+      GetSecurityLevelHistogramName(histogram_name, security_level), metric,
+      NUM_USER_HAPPINESS_METRICS);
 }
 
 // static
@@ -1104,6 +1295,12 @@ void AutofillMetrics::LogNumberOfCreditCardsDeletedForDisuse(size_t num_cards) {
 }
 
 // static
+void AutofillMetrics::LogHiddenOrPresentationalSelectFieldsFilled() {
+  UMA_HISTOGRAM_BOOLEAN("Autofill.HiddenOrPresentationalSelectFieldsFilled",
+                        true);
+}
+
+// static
 void AutofillMetrics::LogNumberOfProfilesAtAutofillableFormSubmission(
     size_t num_profiles) {
   UMA_HISTOGRAM_COUNTS(
@@ -1181,7 +1378,10 @@ void AutofillMetrics::LogProfileActionOnFormSubmitted(
 // static
 void AutofillMetrics::LogAutofillFormSubmittedState(
     AutofillFormSubmittedState state,
+    bool is_for_credit_card,
+    const std::set<FormType>& form_types,
     const base::TimeTicks& form_parsed_timestamp,
+    FormSignature form_signature,
     AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
   UMA_HISTOGRAM_ENUMERATION("Autofill.FormSubmittedState", state,
                             AUTOFILL_FORM_SUBMITTED_STATE_ENUM_SIZE);
@@ -1216,7 +1416,9 @@ void AutofillMetrics::LogAutofillFormSubmittedState(
       NOTREACHED();
       break;
   }
-  form_interactions_ukm_logger->LogFormSubmitted(state, form_parsed_timestamp);
+  form_interactions_ukm_logger->LogFormSubmitted(is_for_credit_card, form_types,
+                                                 state, form_parsed_timestamp,
+                                                 form_signature);
 }
 
 // static
@@ -1267,13 +1469,13 @@ void AutofillMetrics::LogShowedHttpNotSecureExplanation() {
 
 // static
 void AutofillMetrics::LogCardUploadDecisionsUkm(ukm::UkmRecorder* ukm_recorder,
+                                                ukm::SourceId source_id,
                                                 const GURL& url,
                                                 int upload_decision_metrics) {
   DCHECK(upload_decision_metrics);
   DCHECK_LT(upload_decision_metrics, 1 << kNumCardUploadDecisionMetrics);
   if (!url.is_valid())
     return;
-  ukm::SourceId source_id = NewUkmSourceWithUrl(ukm_recorder, url);
   ukm::builders::Autofill_CardUploadDecision(source_id)
       .SetUploadDecision(upload_decision_metrics)
       .Record(ukm_recorder);
@@ -1282,16 +1484,23 @@ void AutofillMetrics::LogCardUploadDecisionsUkm(ukm::UkmRecorder* ukm_recorder,
 // static
 void AutofillMetrics::LogDeveloperEngagementUkm(
     ukm::UkmRecorder* ukm_recorder,
+    ukm::SourceId source_id,
     const GURL& url,
-    int developer_engagement_metrics) {
+    bool is_for_credit_card,
+    std::set<FormType> form_types,
+    int developer_engagement_metrics,
+    FormSignature form_signature) {
   DCHECK(developer_engagement_metrics);
   DCHECK_LT(developer_engagement_metrics,
             1 << NUM_DEVELOPER_ENGAGEMENT_METRICS);
   if (!url.is_valid())
     return;
-  ukm::SourceId source_id = NewUkmSourceWithUrl(ukm_recorder, url);
+
   ukm::builders::Autofill_DeveloperEngagement(source_id)
       .SetDeveloperEngagement(developer_engagement_metrics)
+      .SetIsForCreditCard(is_for_credit_card)
+      .SetFormTypes(FormTypesToBitVector(form_types))
+      .SetFormSignature(HashFormSignature(form_signature))
       .Record(ukm_recorder);
 }
 
@@ -1313,12 +1522,13 @@ AutofillMetrics::FormEventLogger::FormEventLogger(
       logged_suggestion_filled_was_masked_server_card_(false),
       form_interactions_ukm_logger_(form_interactions_ukm_logger) {}
 
-void AutofillMetrics::FormEventLogger::OnDidInteractWithAutofillableForm() {
+void AutofillMetrics::FormEventLogger::OnDidInteractWithAutofillableForm(
+    FormSignature form_signature) {
   if (!has_logged_interacted_) {
     has_logged_interacted_ = true;
     form_interactions_ukm_logger_->LogInteractedWithForm(
         is_for_credit_card_, local_record_type_count_,
-        server_record_type_count_);
+        server_record_type_count_, form_signature);
     Log(AutofillMetrics::FORM_EVENT_INTERACTED_ONCE);
   }
 }
@@ -1343,10 +1553,11 @@ void AutofillMetrics::FormEventLogger::OnDidPollSuggestions(
 }
 
 void AutofillMetrics::FormEventLogger::OnDidShowSuggestions(
+    const FormStructure& form,
     const AutofillField& field,
     const base::TimeTicks& form_parsed_timestamp) {
-  form_interactions_ukm_logger_->LogSuggestionsShown(field,
-                                                     form_parsed_timestamp);
+  form_interactions_ukm_logger_->LogSuggestionsShown(
+      form, field, form_parsed_timestamp);
 
   Log(AutofillMetrics::FORM_EVENT_SUGGESTIONS_SHOWN);
   if (!has_logged_suggestions_shown_) {
@@ -1383,10 +1594,12 @@ void AutofillMetrics::FormEventLogger::OnDidSelectMaskedServerCardSuggestion(
 
 void AutofillMetrics::FormEventLogger::OnDidFillSuggestion(
     const CreditCard& credit_card,
-    const base::TimeTicks& form_parsed_timestamp) {
+    const FormStructure& form,
+    const AutofillField& field) {
   DCHECK(is_for_credit_card_);
   form_interactions_ukm_logger_->LogDidFillSuggestion(
-      static_cast<int>(credit_card.record_type()), form_parsed_timestamp);
+      static_cast<int>(credit_card.record_type()),
+      /*is_for_credit_card=*/true, form, field);
 
   if (credit_card.record_type() == CreditCard::MASKED_SERVER_CARD)
     Log(AutofillMetrics::FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED);
@@ -1405,6 +1618,10 @@ void AutofillMetrics::FormEventLogger::OnDidFillSuggestion(
     if (credit_card.record_type() == CreditCard::MASKED_SERVER_CARD) {
       Log(AutofillMetrics::
               FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED_ONCE);
+      if (has_logged_bank_name_available_) {
+        Log(AutofillMetrics::
+                FORM_EVENT_SERVER_SUGGESTION_FILLED_WITH_BANK_NAME_AVAILABLE_ONCE);
+      }
     } else if (credit_card.record_type() == CreditCard::FULL_SERVER_CARD) {
       Log(AutofillMetrics::FORM_EVENT_SERVER_SUGGESTION_FILLED_ONCE);
       if (has_logged_bank_name_available_) {
@@ -1422,10 +1639,12 @@ void AutofillMetrics::FormEventLogger::OnDidFillSuggestion(
 
 void AutofillMetrics::FormEventLogger::OnDidFillSuggestion(
     const AutofillProfile& profile,
-    const base::TimeTicks& form_parsed_timestamp) {
+    const FormStructure& form,
+    const AutofillField& field) {
   DCHECK(!is_for_credit_card_);
   form_interactions_ukm_logger_->LogDidFillSuggestion(
-      static_cast<int>(profile.record_type()), form_parsed_timestamp);
+      static_cast<int>(profile.record_type()),
+      /*is_for_for_credit_card=*/false, form, field);
 
   if (profile.record_type() == AutofillProfile::SERVER_PROFILE)
     Log(AutofillMetrics::FORM_EVENT_SERVER_SUGGESTION_FILLED);
@@ -1508,6 +1727,22 @@ void AutofillMetrics::FormEventLogger::SetBankNameAvailable() {
   has_logged_bank_name_available_ = true;
 }
 
+void AutofillMetrics::FormEventLogger::OnDidSeeDynamicForm() {
+  Log(AutofillMetrics::FORM_EVENT_DID_SEE_DYNAMIC_FORM);
+}
+
+void AutofillMetrics::FormEventLogger::OnDidSeeFillableDynamicForm() {
+  Log(AutofillMetrics::FORM_EVENT_DID_SEE_FILLABLE_DYNAMIC_FORM);
+}
+
+void AutofillMetrics::FormEventLogger::OnDidRefill() {
+  Log(AutofillMetrics::FORM_EVENT_DID_DYNAMIC_REFILL);
+}
+
+void AutofillMetrics::FormEventLogger::OnSubsequentRefillAttempt() {
+  Log(AutofillMetrics::FORM_EVENT_DYNAMIC_CHANGE_AFTER_REFILL);
+}
+
 void AutofillMetrics::FormEventLogger::Log(FormEvent event) const {
   DCHECK_LT(event, NUM_FORM_EVENTS);
   std::string name("Autofill.FormEvents.");
@@ -1515,19 +1750,17 @@ void AutofillMetrics::FormEventLogger::Log(FormEvent event) const {
     name += "CreditCard";
   else
     name += "Address";
-  LogUMAHistogramEnumeration(name, event, NUM_FORM_EVENTS);
+  base::UmaHistogramEnumeration(name, event, NUM_FORM_EVENTS);
 
   // Log again in a different histogram for credit card forms on nonsecure
   // pages, so that form interactions on nonsecure pages can be analyzed on
   // their own.
   if (is_for_credit_card_ && !is_context_secure_) {
-    LogUMAHistogramEnumeration(name + ".OnNonsecurePage", event,
-                               NUM_FORM_EVENTS);
+    base::UmaHistogramEnumeration(name + ".OnNonsecurePage", event,
+                                  NUM_FORM_EVENTS);
   }
 
   // Logging again in a different histogram for segmentation purposes.
-  // TODO(waltercacau): Re-evaluate if we still need such fine grained
-  // segmentation. http://crbug.com/454018
   if (server_record_type_count_ == 0 && local_record_type_count_ == 0)
     name += ".WithNoData";
   else if (server_record_type_count_ > 0 && local_record_type_count_ == 0)
@@ -1536,14 +1769,14 @@ void AutofillMetrics::FormEventLogger::Log(FormEvent event) const {
     name += ".WithOnlyLocalData";
   else
     name += ".WithBothServerAndLocalData";
-  LogUMAHistogramEnumeration(name, event, NUM_FORM_EVENTS);
+  base::UmaHistogramEnumeration(name, event, NUM_FORM_EVENTS);
 }
 
 void AutofillMetrics::FormEventLogger::Log(
     BankNameDisplayedFormEvent event) const {
   DCHECK_LT(event, BANK_NAME_NUM_FORM_EVENTS);
   std::string name("Autofill.FormEvents.CreditCard.BankNameDisplayed");
-  LogUMAHistogramEnumeration(name, event, BANK_NAME_NUM_FORM_EVENTS);
+  base::UmaHistogramEnumeration(name, event, BANK_NAME_NUM_FORM_EVENTS);
 }
 
 AutofillMetrics::FormInteractionsUkmLogger::FormInteractionsUkmLogger(
@@ -1551,43 +1784,44 @@ AutofillMetrics::FormInteractionsUkmLogger::FormInteractionsUkmLogger(
     : ukm_recorder_(ukm_recorder) {}
 
 void AutofillMetrics::FormInteractionsUkmLogger::OnFormsParsed(
-    const GURL& url) {
+    const GURL& url,
+    const ukm::SourceId source_id) {
   if (ukm_recorder_ == nullptr)
     return;
 
   url_ = url;
+  source_id_ = source_id;
 }
 
 void AutofillMetrics::FormInteractionsUkmLogger::LogInteractedWithForm(
     bool is_for_credit_card,
     size_t local_record_type_count,
-    size_t server_record_type_count) {
+    size_t server_record_type_count,
+    FormSignature form_signature) {
   if (!CanLog())
     return;
-
-  if (source_id_ == -1)
-    GetNewSourceID();
 
   ukm::builders::Autofill_InteractedWithForm(source_id_)
       .SetIsForCreditCard(is_for_credit_card)
       .SetLocalRecordTypeCount(local_record_type_count)
       .SetServerRecordTypeCount(server_record_type_count)
+      .SetFormSignature(HashFormSignature(form_signature))
       .Record(ukm_recorder_);
 }
 
 void AutofillMetrics::FormInteractionsUkmLogger::LogSuggestionsShown(
+    const FormStructure& form,
     const AutofillField& field,
     const base::TimeTicks& form_parsed_timestamp) {
   if (!CanLog())
     return;
 
-  if (source_id_ == -1)
-    GetNewSourceID();
-
   ukm::builders::Autofill_SuggestionsShown(source_id_)
       .SetHeuristicType(static_cast<int>(field.heuristic_type()))
       .SetHtmlFieldType(static_cast<int>(field.html_type()))
-      .SetServerType(static_cast<int>(field.overall_server_type()))
+      .SetServerType(static_cast<int>(field.server_type()))
+      .SetFormSignature(HashFormSignature(form.form_signature()))
+      .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form_parsed_timestamp))
       .Record(ukm_recorder_);
@@ -1598,9 +1832,6 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogSelectedMaskedServerCard(
   if (!CanLog())
     return;
 
-  if (source_id_ == -1)
-    GetNewSourceID();
-
   ukm::builders::Autofill_SelectedMaskedServerCard(source_id_)
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form_parsed_timestamp))
@@ -1609,39 +1840,40 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogSelectedMaskedServerCard(
 
 void AutofillMetrics::FormInteractionsUkmLogger::LogDidFillSuggestion(
     int record_type,
-    const base::TimeTicks& form_parsed_timestamp) {
+    bool is_for_credit_card,
+    const FormStructure& form,
+    const AutofillField& field) {
   if (!CanLog())
     return;
 
-  if (source_id_ == -1)
-    GetNewSourceID();
-
   ukm::builders::Autofill_SuggestionFilled(source_id_)
       .SetRecordType(record_type)
+      .SetIsForCreditCard(is_for_credit_card)
       .SetMillisecondsSinceFormParsed(
-          MillisecondsSinceFormParsed(form_parsed_timestamp))
+          MillisecondsSinceFormParsed(form.form_parsed_timestamp()))
+      .SetFormSignature(HashFormSignature(form.form_signature()))
+      .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
       .Record(ukm_recorder_);
 }
 
 void AutofillMetrics::FormInteractionsUkmLogger::LogTextFieldDidChange(
-    const AutofillField& field,
-    const base::TimeTicks& form_parsed_timestamp) {
+    const FormStructure& form,
+    const AutofillField& field) {
   if (!CanLog())
     return;
 
-  if (source_id_ == -1)
-    GetNewSourceID();
-
   ukm::builders::Autofill_TextFieldDidChange(source_id_)
+      .SetFormSignature(HashFormSignature(form.form_signature()))
+      .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
       .SetFieldTypeGroup(static_cast<int>(field.Type().group()))
       .SetHeuristicType(static_cast<int>(field.heuristic_type()))
-      .SetServerType(static_cast<int>(field.overall_server_type()))
+      .SetServerType(static_cast<int>(field.server_type()))
       .SetHtmlFieldType(static_cast<int>(field.html_type()))
       .SetHtmlFieldMode(static_cast<int>(field.html_mode()))
       .SetIsAutofilled(field.is_autofilled)
       .SetIsEmpty(field.IsEmpty())
       .SetMillisecondsSinceFormParsed(
-          MillisecondsSinceFormParsed(form_parsed_timestamp))
+          MillisecondsSinceFormParsed(form.form_parsed_timestamp()))
       .Record(ukm_recorder_);
 }
 
@@ -1652,14 +1884,11 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFieldFillStatus(
   if (!CanLog())
     return;
 
-  if (source_id_ == -1)
-    GetNewSourceID();
-
   ukm::builders::Autofill_FieldFillStatus(source_id_)
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form.form_parsed_timestamp()))
-      .SetFormSignature(static_cast<int64_t>(form.form_signature()))
-      .SetFieldSignature(static_cast<int64_t>(field.GetFieldSignature()))
+      .SetFormSignature(HashFormSignature(form.form_signature()))
+      .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
       .SetValidationEvent(static_cast<int64_t>(metric_type))
       .SetIsAutofilled(static_cast<int64_t>(field.is_autofilled))
       .SetWasPreviouslyAutofilled(
@@ -1680,14 +1909,11 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFieldType(
   if (!CanLog())
     return;
 
-  if (source_id_ == -1)
-    GetNewSourceID();
-
   ukm::builders::Autofill_FieldTypeValidation(source_id_)
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form_parsed_timestamp))
-      .SetFormSignature(static_cast<int64_t>(form_signature))
-      .SetFieldSignature(static_cast<int64_t>(field_signature))
+      .SetFormSignature(HashFormSignature(form_signature))
+      .SetFieldSignature(HashFieldSignature(field_signature))
       .SetValidationEvent(static_cast<int64_t>(metric_type))
       .SetPredictionSource(static_cast<int64_t>(prediction_source))
       .SetPredictedType(static_cast<int64_t>(predicted_type))
@@ -1695,17 +1921,71 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFieldType(
       .Record(ukm_recorder_);
 }
 
-void AutofillMetrics::FormInteractionsUkmLogger::LogFormSubmitted(
-    AutofillFormSubmittedState state,
-    const base::TimeTicks& form_parsed_timestamp) {
+void AutofillMetrics::FormInteractionsUkmLogger::
+    LogHiddenRepresentationalFieldSkipDecision(const FormStructure& form,
+                                               const AutofillField& field,
+                                               bool is_skipped) {
   if (!CanLog())
     return;
 
-  if (source_id_ == -1)
-    GetNewSourceID();
+  ukm::builders::Autofill_HiddenRepresentationalFieldSkipDecision(source_id_)
+      .SetFormSignature(HashFormSignature(form.form_signature()))
+      .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
+      .SetFieldTypeGroup(static_cast<int>(field.Type().group()))
+      .SetFieldOverallType(static_cast<int>(field.Type().GetStorableType()))
+      .SetHeuristicType(static_cast<int>(field.heuristic_type()))
+      .SetServerType(static_cast<int>(field.server_type()))
+      .SetHtmlFieldType(static_cast<int>(field.html_type()))
+      .SetHtmlFieldMode(static_cast<int>(field.html_mode()))
+      .SetIsSkipped(is_skipped)
+      .Record(ukm_recorder_);
+}
+
+void AutofillMetrics::FormInteractionsUkmLogger::
+    LogRepeatedServerTypePredictionRationalized(
+        const FormSignature form_signature,
+        const AutofillField& field,
+        ServerFieldType old_type) {
+  if (!CanLog())
+    return;
+
+  ukm::builders::Autofill_RepeatedServerTypePredictionRationalized(source_id_)
+      .SetFormSignature(HashFormSignature(form_signature))
+      .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
+      .SetFieldTypeGroup(static_cast<int>(field.Type().group()))
+      .SetFieldNewOverallType(static_cast<int>(field.Type().GetStorableType()))
+      .SetHeuristicType(static_cast<int>(field.heuristic_type()))
+      .SetHtmlFieldType(static_cast<int>(field.html_type()))
+      .SetHtmlFieldMode(static_cast<int>(field.html_mode()))
+      .SetServerType(static_cast<int>(field.server_type()))
+      .SetFieldOldOverallType(static_cast<int>(old_type))
+      .Record(ukm_recorder_);
+}
+
+int64_t AutofillMetrics::FormTypesToBitVector(
+    const std::set<FormType>& form_types) {
+  int64_t form_type_bv = 0;
+  for (const FormType& form_type : form_types) {
+    DCHECK_LT(static_cast<int64_t>(form_type), 63);
+    form_type_bv |= 1LL << static_cast<int64_t>(form_type);
+  }
+  return form_type_bv;
+}
+
+void AutofillMetrics::FormInteractionsUkmLogger::LogFormSubmitted(
+    bool is_for_credit_card,
+    const std::set<FormType>& form_types,
+    AutofillFormSubmittedState state,
+    const base::TimeTicks& form_parsed_timestamp,
+    FormSignature form_signature) {
+  if (!CanLog())
+    return;
 
   ukm::builders::Autofill_FormSubmitted builder(source_id_);
-  builder.SetAutofillFormSubmittedState(static_cast<int>(state));
+  builder.SetAutofillFormSubmittedState(static_cast<int>(state))
+      .SetIsForCreditCard(is_for_credit_card)
+      .SetFormTypes(FormTypesToBitVector(form_types))
+      .SetFormSignature(HashFormSignature(form_signature));
   if (form_parsed_timestamp.is_null())
     DCHECK(state == NON_FILLABLE_FORM_OR_NEW_DATA ||
            state == FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS)
@@ -1715,13 +1995,6 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFormSubmitted(
         MillisecondsSinceFormParsed(form_parsed_timestamp));
 
   builder.Record(ukm_recorder_);
-}
-
-void AutofillMetrics::FormInteractionsUkmLogger::UpdateSourceURL(
-    const GURL& url) {
-  url_ = url;
-  if (CanLog())
-    AutofillMetrics::UpdateSourceURL(ukm_recorder_, source_id_, url_);
 }
 
 bool AutofillMetrics::FormInteractionsUkmLogger::CanLog() const {
@@ -1735,11 +2008,6 @@ int64_t AutofillMetrics::FormInteractionsUkmLogger::MillisecondsSinceFormParsed(
   base::TimeTicks now =
       pinned_timestamp_.is_null() ? base::TimeTicks::Now() : pinned_timestamp_;
   return (now - form_parsed_timestamp).InMilliseconds();
-}
-
-void AutofillMetrics::FormInteractionsUkmLogger::GetNewSourceID() {
-  source_id_ = ukm_recorder_->GetNewSourceID();
-  AutofillMetrics::UpdateSourceURL(ukm_recorder_, source_id_, url_);
 }
 
 AutofillMetrics::UkmTimestampPin::UkmTimestampPin(

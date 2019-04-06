@@ -164,7 +164,8 @@ AuditorResult AnnotationInstance::Deserialize(
   if (unique_id_hash_code == TRAFFIC_ANNOTATION_FOR_TESTS.unique_id_hash_code ||
       unique_id_hash_code ==
           PARTIAL_TRAFFIC_ANNOTATION_FOR_TESTS.unique_id_hash_code) {
-    return AuditorResult(AuditorResult::Type::RESULT_IGNORE);
+    return AuditorResult(AuditorResult::Type::ERROR_TEST_ANNOTATION, "",
+                         file_path, line_number);
   }
 
   // Process undefined tags.
@@ -179,13 +180,6 @@ AuditorResult AnnotationInstance::Deserialize(
   if (unique_id_hash_code == MISSING_TRAFFIC_ANNOTATION.unique_id_hash_code)
     return AuditorResult(AuditorResult::Type::ERROR_MISSING_TAG_USED, "",
                          file_path, line_number);
-
-  // TODO(crbug.com/656607): Remove this test.
-  // Process temporary tag.
-  if (unique_id_hash_code ==
-      NO_TRAFFIC_ANNOTATION_BUG_656607.unique_id_hash_code) {
-    return AuditorResult(AuditorResult::Type::RESULT_IGNORE);
-  }
 
   // Decode serialized proto.
   std::string annotation_text = "";
@@ -452,7 +446,6 @@ AuditorResult AnnotationInstance::CreateCompleteAnnotation(
   traffic_annotation::NetworkTrafficAnnotation_TrafficPolicy* dst_policy =
       combination->proto.mutable_policy();
 
-  MERGE_STRING_FIELDS(src_policy, dst_policy, empty_policy_justification);
   MERGE_STRING_FIELDS(src_policy, dst_policy, cookies_store);
   MERGE_STRING_FIELDS(src_policy, dst_policy, setting);
 
@@ -614,6 +607,42 @@ AnnotationInstance AnnotationInstance::LoadFromArchive(
   }
 
   return annotation;
+}
+
+std::string AnnotationInstance::Serialize() const {
+  std::string text;
+  std::set<int> fields;
+
+  text = base::StringPrintf(
+      "{\tType: %i\n"
+      "\tID: %s\n"
+      "\tHashcode 1: %i\n"
+      "\tHashcode 2: %i\n"
+      "\tFrom Archive: %i\n"
+      "\tSource File: %s\n",
+      static_cast<int>(type), proto.unique_id().c_str(), unique_id_hash_code,
+      second_id_hash_code, is_loaded_from_archive,
+      proto.source().file().c_str());
+
+  GetSemanticsFieldNumbers(&fields);
+  text += "\tSemantics: ";
+  for (int i : fields)
+    text += base::StringPrintf("%s,", kSemanticsFields[i].c_str());
+
+  GetPolicyFieldNumbers(&fields);
+  text += "\n\tPolicies: ";
+  for (int i : fields) {
+    text += base::StringPrintf("%s%s,", i < 0 ? "-" : "",
+                               kPolicyFields[abs(i)].c_str());
+  }
+  text += "\n}";
+
+  return text;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const AnnotationInstance& instance) {
+  return out << instance.Serialize();
 }
 
 CallInstance::CallInstance() : line_number(0), is_annotated(false) {}

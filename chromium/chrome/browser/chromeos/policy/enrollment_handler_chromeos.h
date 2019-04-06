@@ -17,7 +17,7 @@
 #include "chrome/browser/chromeos/policy/device_cloud_policy_validator.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "chrome/browser/chromeos/settings/install_attributes.h"
-#include "chromeos/attestation/attestation_constants.h"
+#include "chromeos/dbus/attestation_constants.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -149,6 +149,9 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
       chromeos::attestation::AttestationStatus status,
       const std::string& pem_certificate_chain);
 
+  // Starts the enrollment flow for the offline demo mode.
+  void StartOfflineDemoEnrollmentFlow();
+
   // Starts registration if the store is initialized.
   void StartRegistration();
 
@@ -183,7 +186,7 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
 
   // Handles the available licenses request.
   void HandleAvailableLicensesResult(
-      bool success,
+      DeviceManagementStatus status,
       const CloudPolicyClient::LicenseMap& license_map);
 
   // Initiates storing DM token. For Active Directory devices only.
@@ -200,6 +203,16 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
 
   // Handles result from device policy refresh via authpolicyd.
   void HandleActiveDirectoryPolicyRefreshed(authpolicy::ErrorType error);
+
+  // Handles the blob for the device policy for the offline demo mode.
+  void OnOfflinePolicyBlobLoaded(base::Optional<std::string> blob);
+
+  // Handles the policy validation result for the offline demo mode.
+  void OnOfflinePolicyValidated(DeviceCloudPolicyValidator* validator);
+
+  std::unique_ptr<DeviceCloudPolicyValidator> CreateValidator(
+      std::unique_ptr<enterprise_management::PolicyFetchResponse> policy,
+      const std::string& domain);
 
   // Drops any ongoing actions.
   void Stop();

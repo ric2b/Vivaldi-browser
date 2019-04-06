@@ -20,7 +20,7 @@
 #include "components/drive/job_queue.h"
 #include "components/drive/service/drive_service_interface.h"
 #include "net/base/network_change_notifier.h"
-#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 
 class PrefService;
 
@@ -86,13 +86,24 @@ class JobScheduler : public net::NetworkChangeNotifier::NetworkChangeObserver,
   // |callback| must not be null.
   void GetAboutResource(const google_apis::AboutResourceCallback& callback);
 
+  // Adds a GetStartPageToken operation to the queue.
+  // If |team_drive_id| is empty then it will return the start token for the
+  // users changelog.
+  // |callback| must not be null.
+  void GetStartPageToken(const std::string& team_drive_id,
+                         const google_apis::StartPageTokenCallback& callback);
+
   // Adds a GetAllTeamDriveList operation to the queue.
   // |callback| must not be null.
   void GetAllTeamDriveList(const google_apis::TeamDriveListCallback& callback);
 
   // Adds a GetAllFileList operation to the queue.
+  // If |team_drive_id| is empty then it will return the file list for the
+  // users default corpus, otherwise will return the file list for the
+  // specified team drive.
   // |callback| must not be null.
-  void GetAllFileList(const google_apis::FileListCallback& callback);
+  void GetAllFileList(const std::string& team_drive_id,
+                      const google_apis::FileListCallback& callback);
 
   // Adds a GetFileListInDirectory operation to the queue.
   // |callback| must not be null.
@@ -107,6 +118,15 @@ class JobScheduler : public net::NetworkChangeNotifier::NetworkChangeObserver,
   // Adds a GetChangeList operation to the queue.
   // |callback| must not be null.
   void GetChangeList(int64_t start_changestamp,
+                     const google_apis::ChangeListCallback& callback);
+
+  // Adds a GetChangeList operation to the queue, where |start_page_token|
+  // is used to specify where to start retrieving the change list from.
+  // If |team_drive_id| is empty then it will return the change list for the
+  // users changelog.
+  // |callback| must not be null.
+  void GetChangeList(const std::string& team_drive_id,
+                     const std::string& start_page_token,
                      const google_apis::ChangeListCallback& callback);
 
   // Adds GetRemainingChangeList operation to the queue.
@@ -314,6 +334,13 @@ class JobScheduler : public net::NetworkChangeNotifier::NetworkChangeObserver,
       const google_apis::AboutResourceCallback& callback,
       google_apis::DriveApiErrorCode error,
       std::unique_ptr<google_apis::AboutResource> about_resource);
+
+  // Callback for job finishing with a GetStartPageTokenCallback.
+  void OnGetStartPageTokenDone(
+      JobID job_id,
+      const google_apis::StartPageTokenCallback& callback,
+      google_apis::DriveApiErrorCode error,
+      std::unique_ptr<google_apis::StartPageToken> start_page_token);
 
   // Callback for job finishing with a GetShareUrlCallback.
   void OnGetShareUrlJobDone(

@@ -19,7 +19,7 @@
 #include "base/logging.h"
 #include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 
 namespace arc {
 
@@ -199,8 +199,7 @@ void FakeFileSystemInstance::OpenFileToRead(const std::string& url,
   auto iter = files_.find(url);
   if (iter == files_.end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  base::Passed(mojo::ScopedHandle())));
+        FROM_HERE, base::BindOnce(std::move(callback), mojo::ScopedHandle()));
     return;
   }
   const File& file = iter->second;
@@ -208,16 +207,12 @@ void FakeFileSystemInstance::OpenFileToRead(const std::string& url,
       file.seekable == File::Seekable::YES
           ? CreateRegularFileDescriptor(file.content, temp_dir_.GetPath())
           : CreateStreamFileDescriptor(file.content);
-  mojo::edk::ScopedPlatformHandle platform_handle(
-      mojo::edk::PlatformHandle(fd.release()));
-  MojoHandle wrapped_handle;
-  MojoResult result = mojo::edk::CreatePlatformHandleWrapper(
-      std::move(platform_handle), &wrapped_handle);
-  DCHECK_EQ(MOJO_RESULT_OK, result);
+  mojo::ScopedHandle wrapped_handle =
+      mojo::WrapPlatformHandle(mojo::PlatformHandle(std::move(fd)));
+  DCHECK(wrapped_handle.is_valid());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::BindOnce(std::move(callback), base::Passed(mojo::ScopedHandle(
-                                              mojo::Handle(wrapped_handle)))));
+      base::BindOnce(std::move(callback), std::move(wrapped_handle)));
 }
 
 void FakeFileSystemInstance::GetDocument(const std::string& authority,
@@ -227,13 +222,12 @@ void FakeFileSystemInstance::GetDocument(const std::string& authority,
   auto iter = documents_.find(DocumentKey(authority, document_id));
   if (iter == documents_.end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  base::Passed(mojom::DocumentPtr())));
+        FROM_HERE, base::BindOnce(std::move(callback), mojom::DocumentPtr()));
     return;
   }
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback),
-                                base::Passed(MakeDocument(iter->second))));
+      FROM_HERE,
+      base::BindOnce(std::move(callback), MakeDocument(iter->second)));
 }
 
 void FakeFileSystemInstance::GetChildDocuments(
@@ -256,9 +250,8 @@ void FakeFileSystemInstance::GetChildDocuments(
     children.emplace_back(MakeDocument(doc_iter->second));
   }
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback),
-                     base::Passed(base::make_optional(std::move(children)))));
+      FROM_HERE, base::BindOnce(std::move(callback),
+                                base::make_optional(std::move(children))));
 }
 
 void FakeFileSystemInstance::GetRecentDocuments(
@@ -281,7 +274,7 @@ void FakeFileSystemInstance::GetRecentDocuments(
 }
 
 void FakeFileSystemInstance::InitDeprecated(mojom::FileSystemHostPtr host) {
-  Init(std::move(host), base::BindOnce(&base::DoNothing));
+  Init(std::move(host), base::DoNothing());
 }
 
 void FakeFileSystemInstance::Init(mojom::FileSystemHostPtr host,

@@ -18,11 +18,6 @@
 #include "ui/base/page_transition_types.h"
 
 class GURL;
-namespace net {
-class AuthChallengeInfo;
-class ClientCertStore;
-class URLRequest;
-}
 
 namespace network {
 struct ResourceResponse;
@@ -33,7 +28,6 @@ namespace content {
 class AppCacheService;
 class NavigationData;
 class ResourceContext;
-class ResourceDispatcherHostLoginDelegate;
 class ResourceThrottle;
 struct StreamInfo;
 
@@ -41,11 +35,7 @@ struct StreamInfo;
 // observing and modifying requests.
 class CONTENT_EXPORT ResourceDispatcherHostDelegate {
  public:
-  // Called when a request begins. Return false to abort the request.
-  virtual bool ShouldBeginRequest(const std::string& method,
-                                  const GURL& url,
-                                  ResourceType resource_type,
-                                  ResourceContext* resource_context);
+  virtual ~ResourceDispatcherHostDelegate();
 
   // Called after ShouldBeginRequest to allow the embedder to add resource
   // throttles.
@@ -69,22 +59,8 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
       bool is_new_request,
       std::vector<std::unique_ptr<ResourceThrottle>>* throttles);
 
-  // Creates a ResourceDispatcherHostLoginDelegate that asks the user for a
-  // username and password.
-  virtual ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
-      net::AuthChallengeInfo* auth_info,
-      net::URLRequest* request);
-
-  // Launches the url for the given tab. Returns true if an attempt to handle
-  // the url was made, e.g. by launching an app. Note that this does not
-  // guarantee that the app successfully handled it.
-  virtual bool HandleExternalProtocol(const GURL& url,
-                                      ResourceRequestInfo* info);
-
   // Returns true and sets |origin| if a Stream should be created for the
-  // resource. |plugin_path| is the plugin which will be used to handle the
-  // request (if the stream will be rendered in a BrowserPlugin). It may be
-  // empty. If true is returned, a new Stream will be created and
+  // resource. If true is returned, a new Stream will be created and
   // OnStreamCreated() will be called with a StreamHandle instance for the
   // Stream. The handle contains the URL for reading the Stream etc. The
   // Stream's origin will be set to |origin|.
@@ -94,7 +70,6 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
   // renderer process.
   virtual bool ShouldInterceptResourceAsStream(
       net::URLRequest* request,
-      const base::FilePath& plugin_path,
       const std::string& mime_type,
       GURL* origin,
       std::string* payload);
@@ -135,13 +110,6 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
   // Asks the embedder for NavigationData related to this request. It is only
   // called for navigation requests.
   virtual NavigationData* GetNavigationData(net::URLRequest* request) const;
-
-  // Get platform ClientCertStore. May return nullptr.
-  virtual std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
-      ResourceContext* resource_context);
-
- protected:
-  virtual ~ResourceDispatcherHostDelegate();
 };
 
 }  // namespace content

@@ -10,7 +10,7 @@
 
 #include "base/time/time.h"
 #include "chrome/browser/ui/app_list/search/answer_card/answer_card_contents.h"
-#include "ui/app_list/search_provider.h"
+#include "chrome/browser/ui/app_list/search/search_provider.h"
 #include "url/gurl.h"
 
 class AppListControllerDelegate;
@@ -43,7 +43,7 @@ class AnswerCardSearchProvider : public SearchProvider,
                            bool has_answer_card,
                            const std::string& result_title,
                            const std::string& issued_query) override;
-  void DidStopLoading(const AnswerCardContents* source) override;
+  void OnContentsReady(const AnswerCardContents* source) override;
 
  private:
   enum class RequestState {

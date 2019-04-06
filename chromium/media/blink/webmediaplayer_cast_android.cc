@@ -11,9 +11,9 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/blink/webmediaplayer_impl.h"
 #include "media/blink/webmediaplayer_params.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_media_player_client.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkFontStyle.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -129,7 +129,6 @@ scoped_refptr<VideoFrame> MakeTextFrameForCast(
                  bitmap.getPixels());
 
   gpu::Mailbox texture_mailbox;
-  gl->GenMailboxCHROMIUM(texture_mailbox.name);
   gl->ProduceTextureDirectCHROMIUM(remote_playback_texture_id,
                                    texture_mailbox.name);
 
@@ -209,12 +208,12 @@ void WebMediaPlayerCast::OnBufferingUpdate(int percentage) {
   DVLOG(1) << __func__;
 }
 
-void WebMediaPlayerCast::OnSeekRequest(const base::TimeDelta& time_to_seek) {
+void WebMediaPlayerCast::OnSeekRequest(base::TimeDelta time_to_seek) {
   DVLOG(1) << __func__;
   client_->RequestSeek(time_to_seek.InSecondsF());
 }
 
-void WebMediaPlayerCast::OnSeekComplete(const base::TimeDelta& current_time) {
+void WebMediaPlayerCast::OnSeekComplete(base::TimeDelta current_time) {
   DVLOG(1) << __func__;
   remote_time_at_ = base::TimeTicks::Now();
   remote_time_ = current_time;
@@ -247,7 +246,7 @@ void WebMediaPlayerCast::OnConnectedToRemoteDevice(
   is_remote_ = true;
   initializing_ = true;
   paused_ = false;
-  client_->PlaybackStateChanged();
+  client_->RequestPlay();
 
   remote_playback_message_ = remote_playback_message;
   webmediaplayer_->SuspendForRemote();
@@ -312,7 +311,7 @@ void WebMediaPlayerCast::OnMediaPlayerPlay() {
   if (is_remote_ && paused_) {
     paused_ = false;
     remote_time_at_ = base::TimeTicks::Now();
-    client_->PlaybackStateChanged();
+    client_->RequestPlay();
   }
   // Blink expects a timeChanged() in response to a seek().
   if (should_notify_time_changed_)
@@ -323,7 +322,7 @@ void WebMediaPlayerCast::OnMediaPlayerPause() {
   DVLOG(1) << __func__ << " is_remote_ = " << is_remote_;
   if (is_remote_ && !paused_) {
     paused_ = true;
-    client_->PlaybackStateChanged();
+    client_->RequestPause();
   }
 }
 

@@ -57,6 +57,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/shell_integration_win.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 
 namespace {
 
@@ -162,7 +163,7 @@ bool UpdateTaskCategory(
     JumpListUpdater* jumplist_updater,
     IncognitoModePrefs::Availability incognito_availability) {
   base::FilePath chrome_path;
-  if (!PathService::Get(base::FILE_EXE, &chrome_path))
+  if (!base::PathService::Get(base::FILE_EXE, &chrome_path))
     return false;
 
   int icon_index = install_static::GetIconResourceIndex();
@@ -629,7 +630,7 @@ void JumpList::PostRunUpdate() {
   IncognitoModePrefs::Availability incognito_availability =
       IncognitoModePrefs::GetAvailability(profile_->GetPrefs());
 
-  auto update_transaction = base::MakeUnique<UpdateTransaction>();
+  auto update_transaction = std::make_unique<UpdateTransaction>();
   if (most_visited_should_update_)
     update_transaction->most_visited_icons = std::move(most_visited_icons_);
   if (recently_closed_should_update_) {
@@ -658,7 +659,7 @@ void JumpList::PostRunUpdate() {
           base::Bind(&JumpList::OnRunUpdateCompletion,
                      weak_ptr_factory_.GetWeakPtr(),
                      base::Passed(std::move(update_transaction))))) {
-    OnRunUpdateCompletion(base::MakeUnique<UpdateTransaction>());
+    OnRunUpdateCompletion(std::make_unique<UpdateTransaction>());
   }
 }
 

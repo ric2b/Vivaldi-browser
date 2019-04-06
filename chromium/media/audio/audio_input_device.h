@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // Low-latency audio capturing class utilizing audio input stream provided
-// by a server (browser) process by use of an IPC interface.
+// by a server process by use of an IPC interface.
 //
 // Relationship of classes:
 //
@@ -11,8 +11,8 @@
 //           ^                                  ^
 //           |                                  |
 //           v                  IPC             v
-// AudioInputRendererHost  <----------->  AudioInputIPC
-//           ^                            (AudioInputMessageFilter)
+// MojoAudioInputStream    <----------->  AudioInputIPC
+//           ^                            (MojoAudioInputIPC)
 //           |
 //           v
 // AudioInputDeviceManager
@@ -22,30 +22,22 @@
 // The AudioInputDevice user registers an AudioInputDevice::CaptureCallback by
 // calling Initialize().  The callback will be called with recorded audio from
 // the underlying audio layers.
-// The session ID is used by the AudioInputRendererHost to start the device
-// referenced by this ID.
+// The session ID is used by the RenderFrameAudioInputStreamFactory to start
+// the device referenced by this ID.
 //
 // State sequences:
 //
-// Start -> InitializeOnIOThread -> CreateStream ->
+// Start -> CreateStream ->
 //       <- OnStreamCreated <-
-//       -> StartOnIOThread -> PlayStream ->
-//
+//       -> RecordStream ->
 //
 // AudioInputDevice::Capture => low latency audio transport on audio thread =>
-//                               |
-// Stop --> ShutDownOnIOThread ------>  CloseStream -> Close
 //
-// This class depends on two threads to function:
+// Stop ->  CloseStream -> Close
 //
-// 1. An IO thread.
-//    This thread is used to asynchronously process Start/Stop etc operations
-//    that are available via the public interface.  The public methods are
-//    asynchronous and simply post a task to the IO thread to actually perform
-//    the work.
-// 2. Audio transport thread.
-//    Responsible for calling the CaptureCallback and feed audio samples from
-//    the server side audio layer using a socket and shared memory.
+// This class depends on the audio transport thread. That thread is responsible
+// for calling the CaptureCallback and feeding it audio samples from the server
+// side audio layer using a socket and shared memory.
 //
 // Implementation notes:
 // - The user must call Stop() before deleting the class instance.
@@ -58,42 +50,35 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/read_only_shared_memory_region.h"
+#include "base/optional.h"
+#include "base/sequence_checker.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "media/audio/alive_checker.h"
 #include "media/audio/audio_device_thread.h"
 #include "media/audio/audio_input_ipc.h"
-#include "media/audio/scoped_task_runner_observer.h"
 #include "media/base/audio_capturer_source.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace media {
 
-// TODO(henrika): This class is based on the AudioOutputDevice class and it has
-// many components in common. Investigate potential for re-factoring.
-// See http://crbug.com/179597.
-// TODO(henrika): Add support for event handling (e.g. OnStateChanged,
-// OnCaptureStopped etc.) and ensure that we can deliver these notifications
-// to any clients using this class.
 class MEDIA_EXPORT AudioInputDevice : public AudioCapturerSource,
-                                      public AudioInputIPCDelegate,
-                                      public ScopedTaskRunnerObserver {
+                                      public AudioInputIPCDelegate {
  public:
   // NOTE: Clients must call Initialize() before using.
-  AudioInputDevice(
-      std::unique_ptr<AudioInputIPC> ipc,
-      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
+  AudioInputDevice(std::unique_ptr<AudioInputIPC> ipc,
+                   base::ThreadPriority thread_priority);
 
   // AudioCapturerSource implementation.
   void Initialize(const AudioParameters& params,
-                  CaptureCallback* callback,
-                  int session_id) override;
+                  CaptureCallback* callback) override;
   void Start() override;
   void Stop() override;
   void SetVolume(double volume) override;
   void SetAutomaticGainControl(bool enabled) override;
+  void SetOutputDeviceForAec(const std::string& output_device_id) override;
 
  private:
   friend class base::RefCountedThreadSafe<AudioInputDevice>;
@@ -109,79 +94,61 @@ class MEDIA_EXPORT AudioInputDevice : public AudioCapturerSource,
     RECORDING,        // Receiving audio data.
   };
 
+  // This enum is used for UMA, so the only allowed operation on this definition
+  // is to add new states to the bottom, update kMaxValue, and update the
+  // histogram "Media.Audio.Capture.StreamCallbackError2".
+  enum Error {
+    kNoError = 0,
+    kErrorDuringCreation = 1,
+    kErrorDuringCapture = 2,
+    kMaxValue = kErrorDuringCapture
+  };
+
   ~AudioInputDevice() override;
 
-  // Methods called on IO thread ----------------------------------------------
   // AudioInputIPCDelegate implementation.
-  void OnStreamCreated(base::SharedMemoryHandle handle,
+  void OnStreamCreated(base::ReadOnlySharedMemoryRegion shared_memory_region,
                        base::SyncSocket::Handle socket_handle,
                        bool initially_muted) override;
   void OnError() override;
   void OnMuted(bool is_muted) override;
   void OnIPCClosed() override;
 
-  // Methods called on IO thread ----------------------------------------------
-  // The following methods are tasks posted on the IO thread that needs to
-  // be executed on that thread. They interact with AudioInputMessageFilter and
-  // sends IPC messages on that thread.
-  void InitializeOnIOThread(const AudioParameters& params,
-                            CaptureCallback* callback,
-                            int session_id);
-  void StartUpOnIOThread();
-  void ShutDownOnIOThread();
-  void SetVolumeOnIOThread(double volume);
-  void SetAutomaticGainControlOnIOThread(bool enabled);
-
-  // base::MessageLoop::DestructionObserver implementation for the IO loop.
-  // If the IO loop dies before we do, we shut down the audio thread from here.
-  void WillDestroyCurrentMessageLoop() override;
-
   // This is called by |alive_checker_| if it detects that the input stream is
-  // dead. Called on the IO thread.
+  // dead.
   void DetectedDeadInputStream();
 
   AudioParameters audio_parameters_;
 
+  const base::ThreadPriority thread_priority_;
+
   CaptureCallback* callback_;
 
   // A pointer to the IPC layer that takes care of sending requests over to
-  // the AudioInputRendererHost.  Only valid when state_ != IPC_CLOSED and must
-  // only be accessed on the IO thread.
+  // the stream implementation.  Only valid when state_ != IPC_CLOSED.
   std::unique_ptr<AudioInputIPC> ipc_;
 
-  // Current state (must only be accessed from the IO thread).  See comments for
-  // State enum above.
+  // Current state. See comments for State enum above.
   State state_;
 
-  // The media session ID used to identify which input device to be started.
-  // Only modified in Initialize() and ShutDownOnIOThread().
-  int session_id_;
+  // For UMA stats. May only be accessed on the IO thread.
+  Error had_error_ = kNoError;
 
   // Stores the Automatic Gain Control state. Default is false.
-  // Only modified on the IO thread.
   bool agc_is_enabled_;
 
-  // In order to avoid a race between OnStreamCreated and Stop(), we use this
-  // guard to control stopping and starting the audio thread.
-  base::Lock audio_thread_lock_;
-
   // Checks regularly that the input stream is alive and notifies us if it
-  // isn't by calling DetectedDeadInputStream(). Created and deleted on the IO
-  // thread. Must outlive |audio_callback_|.
+  // isn't by calling DetectedDeadInputStream(). Must outlive |audio_callback_|.
   std::unique_ptr<AliveChecker> alive_checker_;
 
-  // Created and deleted on the IO thread, with the exception of in Stop(),
-  // where |audio_thread_| is reset (see comment on |audio_thread_lock_| above).
   std::unique_ptr<AudioInputDevice::AudioThreadCallback> audio_callback_;
   std::unique_ptr<AudioDeviceThread> audio_thread_;
 
-  // Temporary hack to ignore OnStreamCreated() due to the user calling Stop()
-  // so we don't start the audio thread pointing to a potentially freed
-  // |callback_|.
-  //
-  // TODO(miu): Replace this by changing AudioCapturerSource to accept the
-  // callback via Start(). See http://crbug.com/151051 for details.
-  bool stopping_hack_;
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  // Cache the output device used for AEC in case it's called before the stream
+  // is created.
+  base::Optional<std::string> output_device_id_for_aec_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(AudioInputDevice);
 };

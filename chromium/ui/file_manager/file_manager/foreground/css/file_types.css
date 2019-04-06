@@ -42,6 +42,12 @@
       url(../images/filetype/2x/filetype_folder_shared.png) 2x);
 }
 
+.team-drive-root[file-type-icon='folder'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/hard_drive.png) 1x,
+      url(../images/volumes/2x/hard_drive.png) 2x);
+}
+
 tree .tree-item[selected] > .tree-row > [file-type-icon='folder'] {
   background-image: -webkit-image-set(
       url(../images/filetype/filetype_folder_active.png) 1x,
@@ -52,6 +58,13 @@ tree .tree-item[selected] > .tree-row > .shared[file-type-icon='folder'] {
   background-image: -webkit-image-set(
       url(../images/filetype/filetype_folder_shared_active.png) 1x,
       url(../images/filetype/2x/filetype_folder_shared_active.png) 2x);
+}
+
+tree .tree-item[selected] > .tree-row >
+.team-drive-root[file-type-icon='folder'] {
+  background-image: -webkit-image-set(
+      url(../images/filetype/filetype_team_drive_active.png) 1x,
+      url(../images/filetype/2x/filetype_team_drive_active.png) 2x);
 }
 
 /* TODO(fukino): Check if 'form' is in use, and remove this if possible. */
@@ -198,6 +211,19 @@ tree .tree-item[selected] > .tree-row > .shared[file-type-icon='folder'] {
       url(../images/volumes/2x/archive_active.png) 2x);
 }
 
+[root-type-icon='my_files'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/my_files.png) 1x,
+      url(../images/volumes/2x/my_files.png) 2x);
+}
+
+.tree-row[selected] [root-type-icon='my_files'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/my_files_active.png) 1x,
+      url(../images/volumes/2x/my_files_active.png) 2x);
+}
+
+[file-type-icon='downloads'],
 [volume-type-icon='downloads'] {
   background-image: -webkit-image-set(
       url(../images/volumes/downloads.png) 1x,
@@ -221,6 +247,17 @@ tree .tree-item[selected] > .tree-row > .shared[file-type-icon='folder'] {
       url(../images/volumes/drive_active.png) 1x,
       url(../images/volumes/2x/drive_active.png) 2x);
 }
+[volume-type-icon='shortcut'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/shortcut.png) 1x,
+      url(../images/volumes/2x/shortcut.png) 2x);
+}
+
+.tree-row[selected] [volume-type-icon='shortcut'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/shortcut_active.png) 1x,
+      url(../images/volumes/2x/shortcut_active.png) 2x);
+}
 
 .drive-volume > .tree-row > [volume-type-icon='drive'] {
   background-image: -webkit-image-set(
@@ -234,7 +271,7 @@ tree .tree-item[selected] > .tree-row > .shared[file-type-icon='folder'] {
       url(../images/volumes/2x/service_drive_active.png) 2x);
 }
 
-[volume-type-icon='team_drives_grand_root'],[volume-type-icon='team_drive'] {
+[volume-type-icon='team_drives_grand_root'] {
   background-image: -webkit-image-set(
       url(../images/volumes/team_drive.png) 1x,
       url(../images/volumes/2x/team_drive.png) 2x);
@@ -246,10 +283,16 @@ tree .tree-item[selected] > .tree-row > .shared[file-type-icon='folder'] {
       url(../images/volumes/2x/team_drive_active.png) 2x);
 }
 
+[volume-type-icon='team_drive'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/hard_drive.png) 1x,
+      url(../images/volumes/2x/hard_drive.png) 2x);
+}
+
 .tree-row[selected] [volume-type-icon='team_drive'] {
   background-image: -webkit-image-set(
-      url(../images/volumes/team_drive_active.png) 1x,
-      url(../images/volumes/2x/team_drive_active.png) 2x);
+      url(../images/volumes/hard_drive_active.png) 1x,
+      url(../images/volumes/2x/hard_drive_active.png) 2x);
 }
 
 [volume-type-icon='drive_offline'] {
@@ -415,4 +458,32 @@ cr-menu-item[command='#install-new-extension'] .icon.start {
   background-image: -webkit-image-set(
       url(../images/volumes/recent_active.png) 1x,
       url(../images/volumes/2x/recent_active.png) 2x);
+}
+
+[file-type-icon='crostini'],
+[root-type-icon='crostini'],
+[volume-type-icon='crostini'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/linux_files.png) 1x,
+      url(../images/volumes/2x/linux_files.png) 2x);
+}
+
+.tree-row[selected] [root-type-icon='crostini'],
+.tree-row[selected] [volume-type-icon='crostini'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/linux_files_active.png) 1x,
+      url(../images/volumes/2x/linux_files_active.png) 2x);
+}
+
+[file-type-icon='android_files'],
+[volume-type-icon='android_files'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/android.png) 1x,
+      url(../images/volumes/2x/android.png) 2x);
+}
+
+.tree-row[selected] [volume-type-icon='android_files'] {
+  background-image: -webkit-image-set(
+      url(../images/volumes/android_active.png) 1x,
+      url(../images/volumes/2x/android_active.png) 2x);
 }

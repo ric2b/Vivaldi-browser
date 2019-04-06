@@ -18,12 +18,12 @@
 #include "gpu/command_buffer/service/common_decoder.h"
 #include "gpu/command_buffer/service/decoder_client.h"
 #include "gpu/command_buffer/service/feature_info.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_service_test.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/mocks.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
+#include "gpu/config/gpu_preferences.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_mock.h"
 #include "ui/gl/gl_version_info.h"
@@ -93,6 +93,8 @@ class ProgramManagerTestBase : public GpuServiceTest, public DecoderClient {
   bool OnWaitSyncToken(const gpu::SyncToken&) override { return false; }
   void OnDescheduleUntilFinished() override {}
   void OnRescheduleAfterFinished() override {}
+  void OnSwapBuffers(uint64_t swap_id, uint32_t flags) override {}
+  void ScheduleGrContextCleanup() override {}
 
   std::unique_ptr<ProgramManager> manager_;
   GpuPreferences gpu_preferences_;
@@ -2554,7 +2556,7 @@ INSTANTIATE_TEST_CASE_P(
         make_gl_ext_tuple("4.5",
                           "GL_NV_path_rendering "
                           "GL_NV_framebuffer_mixed_samples"),
-        make_gl_ext_tuple("opengl es 3.1",
+        make_gl_ext_tuple("OpenGL ES 3.1",
                           "GL_NV_path_rendering "
                           "GL_NV_framebuffer_mixed_samples")));
 
@@ -2640,7 +2642,7 @@ INSTANTIATE_TEST_CASE_P(
         make_gl_ext_tuple("3.2",
                           "GL_ARB_draw_buffers GL_ARB_blend_func_extended "
                           "GL_ARB_program_interface_query"),
-        make_gl_ext_tuple("opengl es 3.1",
+        make_gl_ext_tuple("OpenGL ES 3.1",
                           "GL_EXT_draw_buffers GL_EXT_blend_func_extended")));
 
 }  // namespace gles2

@@ -14,11 +14,7 @@ namespace {
 template <class T>
 const T& ReturnOverriddenValue(const base::Optional<T>& value,
                                const T& default_value) {
-  if (value) {
-    return *value;
-  } else {
-    return default_value;
-  }
+  return value ? *value : default_value;
 }
 
 }  // namespace
@@ -74,11 +70,17 @@ bool HeadlessBrowserContextOptions::incognito_mode() const {
                                browser_options_->incognito_mode);
 }
 
-bool HeadlessBrowserContextOptions::allow_cookies() const {
-  return ReturnOverriddenValue(allow_cookies_, browser_options_->allow_cookies);
+bool HeadlessBrowserContextOptions::site_per_process() const {
+  return ReturnOverriddenValue(site_per_process_,
+                               browser_options_->site_per_process);
 }
 
-const base::Callback<void(WebPreferences*)>&
+bool HeadlessBrowserContextOptions::block_new_web_contents() const {
+  return ReturnOverriddenValue(block_new_web_contents_,
+                               browser_options_->block_new_web_contents);
+}
+
+base::RepeatingCallback<void(WebPreferences*)>
 HeadlessBrowserContextOptions::override_web_preferences_callback() const {
   return ReturnOverriddenValue(
       override_web_preferences_callback_,
@@ -92,6 +94,12 @@ const ProtocolHandlerMap& HeadlessBrowserContextOptions::protocol_handlers()
 
 ProtocolHandlerMap HeadlessBrowserContextOptions::TakeProtocolHandlers() {
   return std::move(protocol_handlers_);
+}
+
+gfx::FontRenderParams::Hinting
+HeadlessBrowserContextOptions::font_render_hinting() const {
+  return ReturnOverriddenValue(font_render_hinting_,
+                               browser_options_->font_render_hinting);
 }
 
 }  // namespace headless

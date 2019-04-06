@@ -28,7 +28,28 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilityCursorHighlightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityFocusHighlightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySelectToSpeakEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityDictationEnabled[];
 ASH_PUBLIC_EXPORT extern const char kShouldAlwaysShowAccessibilityMenu[];
+
+ASH_PUBLIC_EXPORT extern const char kDockedMagnifierEnabled[];
+ASH_PUBLIC_EXPORT extern const char kDockedMagnifierScale[];
+ASH_PUBLIC_EXPORT extern const char
+    kDockedMagnifierAcceleratorDialogHasBeenAccepted[];
+ASH_PUBLIC_EXPORT extern const char
+    kHighContrastAcceleratorDialogHasBeenAccepted[];
+ASH_PUBLIC_EXPORT extern const char
+    kScreenMagnifierAcceleratorDialogHasBeenAccepted[];
+ASH_PUBLIC_EXPORT extern const char
+    kDictationAcceleratorDialogHasBeenAccepted[];
+
+ASH_PUBLIC_EXPORT extern const char kDisplayMixedMirrorModeParams[];
+ASH_PUBLIC_EXPORT extern const char kDisplayPowerState[];
+ASH_PUBLIC_EXPORT extern const char kDisplayProperties[];
+ASH_PUBLIC_EXPORT extern const char kDisplayRotationLock[];
+ASH_PUBLIC_EXPORT extern const char kDisplayTouchAssociations[];
+ASH_PUBLIC_EXPORT extern const char kDisplayTouchPortAssociations[];
+ASH_PUBLIC_EXPORT extern const char kExternalDisplayMirrorInfo[];
+ASH_PUBLIC_EXPORT extern const char kSecondaryDisplays[];
 
 ASH_PUBLIC_EXPORT extern const char kHasSeenStylus[];
 ASH_PUBLIC_EXPORT extern const char kShownPaletteWelcomeBubble[];
@@ -40,6 +61,32 @@ ASH_PUBLIC_EXPORT extern const char kNightLightTemperature[];
 ASH_PUBLIC_EXPORT extern const char kNightLightScheduleType[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCustomStartTime[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCustomEndTime[];
+
+ASH_PUBLIC_EXPORT extern const char kAllowScreenLock[];
+ASH_PUBLIC_EXPORT extern const char kEnableAutoScreenLock[];
+ASH_PUBLIC_EXPORT extern const char kPowerAcScreenDimDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerAcScreenOffDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerAcScreenLockDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerAcIdleWarningDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerAcIdleDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerBatteryScreenDimDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerBatteryScreenOffDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerBatteryScreenLockDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerBatteryIdleWarningDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerBatteryIdleDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerLockScreenDimDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerLockScreenOffDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kPowerAcIdleAction[];
+ASH_PUBLIC_EXPORT extern const char kPowerBatteryIdleAction[];
+ASH_PUBLIC_EXPORT extern const char kPowerLidClosedAction[];
+ASH_PUBLIC_EXPORT extern const char kPowerUseAudioActivity[];
+ASH_PUBLIC_EXPORT extern const char kPowerUseVideoActivity[];
+ASH_PUBLIC_EXPORT extern const char kPowerAllowScreenWakeLocks[];
+ASH_PUBLIC_EXPORT extern const char kPowerPresentationScreenDimDelayFactor[];
+ASH_PUBLIC_EXPORT extern const char kPowerUserActivityScreenDimDelayFactor[];
+ASH_PUBLIC_EXPORT extern const char kPowerWaitForInitialUserActivity[];
+ASH_PUBLIC_EXPORT extern const char
+    kPowerForceNonzeroBrightnessForUserActivity[];
 
 ASH_PUBLIC_EXPORT extern const char kShelfAlignment[];
 ASH_PUBLIC_EXPORT extern const char kShelfAlignmentLocal[];
@@ -56,10 +103,15 @@ ASH_PUBLIC_EXPORT extern const char kWallpaperColors[];
 ASH_PUBLIC_EXPORT extern const char kUserBluetoothAdapterEnabled[];
 ASH_PUBLIC_EXPORT extern const char kSystemBluetoothAdapterEnabled[];
 
+ASH_PUBLIC_EXPORT extern const char kTapDraggingEnabled[];
 ASH_PUBLIC_EXPORT extern const char kTouchpadEnabled[];
 ASH_PUBLIC_EXPORT extern const char kTouchscreenEnabled[];
 
 ASH_PUBLIC_EXPORT extern const char kQuickUnlockPinSalt[];
+
+ASH_PUBLIC_EXPORT extern const char kDetachableBaseDevices[];
+
+ASH_PUBLIC_EXPORT extern const char kCursorMotionBlurEnabled[];
 
 }  // namespace prefs
 

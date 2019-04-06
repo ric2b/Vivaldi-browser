@@ -8,15 +8,19 @@
 #include <memory>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "chrome/browser/printing/print_job_worker_owner.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "printing/print_settings.h"
 
 namespace base {
+class Location;
 class RefCountedMemory;
+class SequencedTaskRunner;
 }
 
 namespace printing {
@@ -24,68 +28,74 @@ namespace printing {
 class JobEventDetails;
 class MetafilePlayer;
 class PrintJobWorker;
-class PrintJobWorkerOwner;
 class PrintedDocument;
 #if defined(OS_WIN)
 class PrintedPage;
 #endif
 class PrinterQuery;
-
-void HoldRefCallback(const scoped_refptr<PrintJobWorkerOwner>& owner,
-                     const base::Closure& callback);
+class PrintSettings;
 
 // Manages the print work for a specific document. Talks to the printer through
 // PrintingContext through PrintJobWorker. Hides access to PrintingContext in a
 // worker thread so the caller never blocks. PrintJob will send notifications on
 // any state change. While printing, the PrintJobManager instance keeps a
 // reference to the job to be sure it is kept alive. All the code in this class
-// runs in the UI thread.
-class PrintJob : public PrintJobWorkerOwner,
+// runs in the UI thread. All virtual functions are virtual only so that
+// TestPrintJob can override them in tests.
+class PrintJob : public base::RefCountedThreadSafe<PrintJob>,
                  public content::NotificationObserver {
  public:
   // Create a empty PrintJob. When initializing with this constructor,
   // post-constructor initialization must be done with Initialize().
   PrintJob();
 
-  // Grabs the ownership of the PrintJobWorker from another job, which is
-  // usually a PrinterQuery. Set the expected page count of the print job.
-  void Initialize(PrintJobWorkerOwner* job,
-                  const base::string16& name,
-                  int page_count);
+  // Grabs the ownership of the PrintJobWorker from a PrinterQuery along with
+  // the print settings. Sets the expected page count of the print job based on
+  // the settings.
+  virtual void Initialize(PrinterQuery* query,
+                          const base::string16& name,
+                          int page_count);
+
+#if defined(OS_WIN)
+  void StartConversionToNativeFormat(
+      const scoped_refptr<base::RefCountedMemory>& print_data,
+      const gfx::Size& page_size,
+      const gfx::Rect& content_area,
+      const gfx::Point& physical_offsets);
+
+  // Overwrites the PDF page mapping to fill in values of -1 for all indices
+  // that are not selected. This is needed when the user opens the system
+  // dialog from the link in Print Preview on Windows and then sets a selection
+  // of pages, because all PDF pages will be converted, but only the user's
+  // selected pages should be sent to the printer. See https://crbug.com/823876.
+  void ResetPageMapping();
+#endif
 
   // content::NotificationObserver implementation.
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // PrintJobWorkerOwner implementation.
-  void GetSettingsDone(const PrintSettings& new_settings,
-                       PrintingContext::Result result) override;
-  std::unique_ptr<PrintJobWorker> DetachWorker(
-      PrintJobWorkerOwner* new_owner) override;
-  const PrintSettings& settings() const override;
-  int cookie() const override;
-
   // Starts the actual printing. Signals the worker that it should begin to
   // spool as soon as data is available.
-  void StartPrinting();
+  virtual void StartPrinting();
 
   // Asks for the worker thread to finish its queued tasks and disconnects the
   // delegate object. The PrintJobManager will remove its reference.
   // WARNING: This may have the side-effect of destroying the object if the
   // caller doesn't have a handle to the object. Use PrintJob::is_stopped() to
   // check whether the worker thread has actually stopped.
-  void Stop();
+  virtual void Stop();
 
   // Cancels printing job and stops the worker thread. Takes effect immediately.
   // The caller must have a reference to the PrintJob before calling Cancel(),
   // since Cancel() calls Stop(). See WARNING above for Stop().
-  void Cancel();
+  virtual void Cancel();
 
   // Synchronously wait for the job to finish. It is mainly useful when the
   // process is about to be shut down and we're waiting for the spooler to eat
   // our data.
-  bool FlushJob(base::TimeDelta timeout);
+  virtual bool FlushJob(base::TimeDelta timeout);
 
   // Returns true if the print job is pending, i.e. between a StartPrinting()
   // and the end of the spooling.
@@ -94,30 +104,38 @@ class PrintJob : public PrintJobWorkerOwner,
   // Access the current printed document. Warning: may be NULL.
   PrintedDocument* document() const;
 
-#if defined(OS_WIN)
-  void StartPdfToEmfConversion(
-      const scoped_refptr<base::RefCountedMemory>& bytes,
-      const gfx::Size& page_size,
-      const gfx::Rect& content_area,
-      bool print_text_with_gdi);
+  // Returns true if tasks posted to this TaskRunner are sequenced
+  // with this call.
+  bool RunsTasksInCurrentSequence() const;
 
-  void StartPdfToPostScriptConversion(
-      const scoped_refptr<base::RefCountedMemory>& bytes,
-      const gfx::Rect& content_area,
-      const gfx::Point& physical_offset,
-      bool ps_level2);
-
-  void StartPdfToTextConversion(
-      const scoped_refptr<base::RefCountedMemory>& bytes,
-      const gfx::Size& page_size);
-#endif  // defined(OS_WIN)
+  // Posts the given task to be run.
+  bool PostTask(const base::Location& from_here, base::OnceClosure task);
 
  protected:
+  // Refcounted class.
+  friend class base::RefCountedThreadSafe<PrintJob>;
+
   ~PrintJob() override;
 
+  // The functions below are used for tests only.
+  void set_job_pending(bool pending);
+  void set_settings(const PrintSettings& settings);
+
+  // Updates |document_| to a new instance. Protected so that tests can access
+  // it.
+  void UpdatePrintedDocument(scoped_refptr<PrintedDocument> new_document);
+
  private:
-  // Updates |document_| to a new instance.
-  void UpdatePrintedDocument(PrintedDocument* new_document);
+#if defined(OS_WIN)
+  FRIEND_TEST_ALL_PREFIXES(PrintJobTest, PageRangeMapping);
+#endif
+
+  // Clears reference to |document_|.
+  void ClearPrintedDocument();
+
+  // Helper method for UpdatePrintedDocument() and ClearPrintedDocument() to
+  // sync |document_| updates with |worker_|.
+  void SyncPrintedDocumentToWorker();
 
   // Processes a NOTIFY_PRINT_JOB_EVENT notification.
   void OnNotifyPrintJobEvent(const JobEventDetails& event_details);
@@ -136,10 +154,29 @@ class PrintJob : public PrintJobWorkerOwner,
   void HoldUntilStopIsCalled();
 
 #if defined(OS_WIN)
+  virtual void StartPdfToEmfConversion(
+      const scoped_refptr<base::RefCountedMemory>& bytes,
+      const gfx::Size& page_size,
+      const gfx::Rect& content_area);
+
+  virtual void StartPdfToPostScriptConversion(
+      const scoped_refptr<base::RefCountedMemory>& bytes,
+      const gfx::Rect& content_area,
+      const gfx::Point& physical_offsets,
+      bool ps_level2);
+
+  virtual void StartPdfToTextConversion(
+      const scoped_refptr<base::RefCountedMemory>& bytes,
+      const gfx::Size& page_size);
+
   void OnPdfConversionStarted(int page_count);
   void OnPdfPageConverted(int page_number,
                           float scale_factor,
                           std::unique_ptr<MetafilePlayer> metafile);
+
+  // Helper method to do the work for ResetPageMapping(). Split for unit tests.
+  static std::vector<int> GetFullPageMapping(const std::vector<int>& pages,
+                                             int total_page_count);
 #endif  // defined(OS_WIN)
 
   content::NotificationRegistrar registrar_;
@@ -167,6 +204,10 @@ class PrintJob : public PrintJobWorkerOwner,
   std::unique_ptr<PdfConversionState> pdf_conversion_state_;
   std::vector<int> pdf_page_mapping_;
 #endif  // defined(OS_WIN)
+
+  // Task runner reference. Used to send notifications in the right
+  // thread.
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   // Used at shutdown so that we can quit a nested run loop.
   base::WeakPtrFactory<PrintJob> quit_factory_;

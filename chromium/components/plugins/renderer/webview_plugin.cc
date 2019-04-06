@@ -17,23 +17,21 @@
 #include "content/public/renderer/render_view.h"
 #include "gin/converter.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
-#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/web_coalesced_input_event.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
+#include "third_party/blink/public/web/web_view.h"
 
-using blink::WebCanvas;
 using blink::WebCursorInfo;
 using blink::WebDragData;
 using blink::WebDragOperationsMask;
 using blink::WebFrameWidget;
-using blink::WebImage;
 using blink::WebLocalFrame;
 using blink::WebMouseEvent;
 using blink::WebPlugin;
@@ -154,7 +152,7 @@ bool WebViewPlugin::IsErrorPlaceholder() {
   return delegate_->IsErrorPlaceholder();
 }
 
-void WebViewPlugin::Paint(WebCanvas* canvas, const WebRect& rect) {
+void WebViewPlugin::Paint(cc::PaintCanvas* canvas, const WebRect& rect) {
   gfx::Rect paint_rect = gfx::IntersectRects(rect_, rect);
   if (paint_rect.IsEmpty())
     return;
@@ -173,7 +171,7 @@ void WebViewPlugin::Paint(WebCanvas* canvas, const WebRect& rect) {
       SkFloatToScalar(1.0 / container_->DeviceScaleFactor());
   canvas->scale(inverse_scale, inverse_scale);
 
-  web_view()->Paint(canvas, paint_rect);
+  web_view()->PaintContent(canvas, paint_rect);
 
   canvas->restore();
 }
@@ -249,16 +247,17 @@ void WebViewPlugin::DidFinishLoading() {
 }
 
 void WebViewPlugin::DidFailLoading(const WebURLError& error) {
-  DCHECK(!error_.get());
+  DCHECK(!error_);
   error_.reset(new WebURLError(error));
 }
 
 WebViewPlugin::WebViewHelper::WebViewHelper(WebViewPlugin* plugin,
                                             const WebPreferences& preferences)
     : plugin_(plugin) {
-  web_view_ = WebView::Create(/* client = */ this,
+  web_view_ = WebView::Create(/*client=*/this,
+                              /*widget_client=*/this,
                               blink::mojom::PageVisibilityState::kVisible,
-                              /* opener = */ nullptr);
+                              /*opener=*/nullptr);
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
   // consistent view of our preferences.
   content::RenderView::ApplyWebPreferences(preferences, web_view_);
@@ -290,6 +289,10 @@ bool WebViewPlugin::WebViewHelper::CanUpdateLayout() {
   return true;
 }
 
+blink::WebWidgetClient* WebViewPlugin::WebViewHelper::WidgetClient() {
+  return this;
+}
+
 void WebViewPlugin::WebViewHelper::SetToolTipText(
     const WebString& text,
     blink::WebTextDirection hint) {
@@ -300,7 +303,7 @@ void WebViewPlugin::WebViewHelper::SetToolTipText(
 void WebViewPlugin::WebViewHelper::StartDragging(blink::WebReferrerPolicy,
                                                  const WebDragData&,
                                                  WebDragOperationsMask,
-                                                 const WebImage&,
+                                                 const SkBitmap&,
                                                  const WebPoint&) {
   // Immediately stop dragging.
   main_frame()->FrameWidget()->DragSourceSystemDragEnded();

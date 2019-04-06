@@ -12,31 +12,67 @@
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/content_uri_utils.h"
+#endif
+
 namespace offline_pages {
+
+ArchiveValidator::ArchiveValidator() {
+  secure_hash_ = crypto::SecureHash::Create(crypto::SecureHash::SHA256);
+}
+
+ArchiveValidator::~ArchiveValidator() = default;
+
+void ArchiveValidator::Update(const char* input, size_t len) {
+  secure_hash_->Update(input, len);
+}
+
+std::string ArchiveValidator::Finish() {
+  std::string digest(crypto::kSHA256Length, 0);
+  secure_hash_->Finish(&(digest[0]), digest.size());
+  return digest;
+}
 
 // static
 std::string ArchiveValidator::ComputeDigest(const base::FilePath& file_path) {
-  base::File file(file_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
-  if (!file.IsValid())
-    return std::string();
+  std::pair<int64_t, std::string> result = GetSizeAndComputeDigest(file_path);
+  return result.second;
+}
 
-  std::unique_ptr<crypto::SecureHash> secure_hash(
-      crypto::SecureHash::Create(crypto::SecureHash::SHA256));
+// static
+std::pair<int64_t, std::string> ArchiveValidator::GetSizeAndComputeDigest(
+    const base::FilePath& file_path) {
+  base::File file;
+#if defined(OS_ANDROID)
+  if (file_path.IsContentUri()) {
+    file = base::OpenContentUriForRead(file_path);
+  } else {
+#endif  // defined(OS_ANDROID)
+    file.Initialize(file_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+#if defined(OS_ANDROID)
+  }
+#endif  // defined(OS_ANDROID)
+  if (!file.IsValid())
+    return std::make_pair(0LL, std::string());
+
+  ArchiveValidator archive_validator;
 
   const int kMaxBufferSize = 1024;
   std::vector<char> buffer(kMaxBufferSize);
+  int64_t total_read = 0LL;
   int bytes_read;
   do {
     bytes_read = file.ReadAtCurrentPos(buffer.data(), kMaxBufferSize);
-    if (bytes_read > 0)
-      secure_hash->Update(buffer.data(), bytes_read);
+    if (bytes_read > 0) {
+      total_read += bytes_read;
+      archive_validator.Update(buffer.data(), bytes_read);
+    }
   } while (bytes_read > 0);
   if (bytes_read < 0)
-    return std::string();
+    return std::make_pair(0LL, std::string());
 
-  std::string result_bytes(crypto::kSHA256Length, 0);
-  secure_hash->Finish(&result_bytes[0], result_bytes.size());
-  return result_bytes;
+  return std::make_pair(total_read, archive_validator.Finish());
 }
 
 // static

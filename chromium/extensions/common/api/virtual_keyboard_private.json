@@ -31,7 +31,7 @@
       {
         "id": "KeyboardMode",
         "type": "string",
-        "enum": [ "FULL_WIDTH", "FLOATING" ],
+        "enum": [ "FULL_WIDTH", "FLOATING", "FULLSCREEN" ],
         "description": "The value of the virtual keyboard mode to set to."
       },
       {
@@ -71,6 +71,22 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "List of experimental feature flags."
+          }
+        }
+      },
+      {
+        "id": "ContainerBehaviorOptions",
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "KeyboardMode",
+            "name": "mode",
+            "description": "The value of the virtual keyboard mode to set to."
+          },
+          "bounds": {
+            "$ref": "Bounds",
+            "description": "The bounds of the virtual keyboard after changing mode",
+            "optional": true
           }
         }
       }
@@ -184,20 +200,20 @@
         ]
       },
       {
-        "name": "setMode",
+        "name": "setContainerBehavior",
         "type": "function",
-        "description": "Sets the virtual keyboard container mode.",
+        "description": "Sets the virtual keyboard container behavior",
         "parameters": [
           {
-            "$ref": "KeyboardMode",
-            "name": "mode",
-            "description": "The value of the virtual keyboard mode to set to."
+            "$ref": "ContainerBehaviorOptions",
+            "name": "options",
+            "description": "Optional parameters for new container behavior."
           },
           {
             "type": "function",
             "name": "callback",
             "optional": true,
-            "description": "Called when container mode is ready to change.",
+            "description": "Called when container mode is ready to chagne.",
             "parameters": []
           }
         ]
@@ -225,8 +241,33 @@
             "description": "The value of the virtual keyboard state to change to."
           }
         ]
+      },
+      {
+        "name": "setOccludedBounds",
+        "type": "function",
+        "description": "Sets the areas on the screen that are blocked by the virtual keyboard.",
+        "parameters": [
+          {
+            "name": "boundsList",
+            "type": "array",
+            "description": "List of rectangles representing regions occluded by the keyboard.",
+            "items": { "$ref": "Bounds" }
+          }
+        ]
+      },
+      {
+        "name": "setHitTestBounds",
+        "type": "function",
+        "description": "Sets the areas on the keyboard window where events are handled. Any event outside of these areas are passed on to the window behind it.",
+        "parameters": [
+          {
+            "name": "boundsList",
+            "type": "array",
+            "description": "List of rectangles representing regions where events targeting the keyboard should be handled.",
+            "items": { "$ref": "Bounds" }
+          }
+        ]
       }
-
     ],
     "events": [
       {

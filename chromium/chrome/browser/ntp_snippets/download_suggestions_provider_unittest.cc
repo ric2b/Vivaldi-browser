@@ -8,23 +8,22 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/default_clock.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/mock_content_suggestions_provider_observer.h"
 #include "components/ntp_snippets/offline_pages/offline_pages_test_utils.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/test/fake_download_item.h"
-#include "content/public/test/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using content::DownloadItem;
+using download::DownloadItem;
 using content::FakeDownloadItem;
 using content::MockDownloadManager;
 using ntp_snippets::Category;
@@ -159,7 +158,7 @@ std::vector<OfflinePageItem> CreateDummyOfflinePages(
 }
 
 std::unique_ptr<FakeDownloadItem> CreateDummyAssetDownload(int id) {
-  std::unique_ptr<FakeDownloadItem> item = base::MakeUnique<FakeDownloadItem>();
+  std::unique_ptr<FakeDownloadItem> item = std::make_unique<FakeDownloadItem>();
   item->SetId(id);
   std::string id_string = base::IntToString(id);
   item->SetGuid("XYZ-100032-EFZBDF-13323-PXZ" + id_string);
@@ -259,7 +258,7 @@ class DownloadSuggestionsProviderTest : public testing::Test {
  public:
   DownloadSuggestionsProviderTest()
       : download_history_(&downloads_manager_for_history_,
-                          base::MakeUnique<DummyHistoryAdapter>()),
+                          std::make_unique<DummyHistoryAdapter>()),
         pref_service_(new TestingPrefServiceSimple()) {
     DownloadSuggestionsProvider::RegisterProfilePrefs(
         pref_service()->registry());
@@ -295,7 +294,7 @@ class DownloadSuggestionsProviderTest : public testing::Test {
 
     // TODO(crbug.com/681766): Extract DownloadHistory interface and move
     // implementation into DownloadHistoryImpl. Then mock it.
-    provider_ = base::MakeUnique<DownloadSuggestionsProvider>(
+    provider_ = std::make_unique<DownloadSuggestionsProvider>(
         &observer_, show_offline_pages ? &offline_pages_model_ : nullptr,
         show_assets ? &downloads_manager_ : nullptr, &download_history_,
         pref_service(), clock);
@@ -323,7 +322,8 @@ class DownloadSuggestionsProviderTest : public testing::Test {
   void FireOfflinePageDeleted(const OfflinePageItem& item) {
     DCHECK(provider_);
     offline_pages::OfflinePageModel::DeletedPageInfo info(
-        item.offline_id, item.client_id, item.request_origin);
+        item.offline_id, item.system_download_id, item.client_id,
+        item.request_origin, item.url);
     provider_->OfflinePageDeleted(info);
   }
 

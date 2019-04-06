@@ -17,11 +17,14 @@
 #include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/timer/elapsed_timer.h"
 #include "chrome/browser/chromeos/file_system_provider/abort_callback.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "chrome/browser/chromeos/file_system_provider/watcher.h"
 #include "chrome/browser/chromeos/smb_client/smb_service.h"
+#include "chrome/browser/chromeos/smb_client/smb_task_queue.h"
+#include "chrome/browser/chromeos/smb_client/temp_file_manager.h"
 #include "chromeos/dbus/smb_provider_client.h"
 #include "storage/browser/fileapi/async_file_util.h"
 #include "storage/browser/fileapi/watcher_manager.h"
@@ -40,10 +43,10 @@ class RequestManager;
 // filesystems.
 // Smb is an application level protocol used by Windows and Samba fileservers.
 // Allows Files App to mount smb filesystems.
-class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface {
+class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
+                      public base::SupportsWeakPtr<SmbFileSystem> {
  public:
   using UnmountCallback = base::OnceCallback<base::File::Error(
-      const ProviderId&,
       const std::string&,
       file_system_provider::Service::UnmountReason)>;
 
@@ -52,97 +55,93 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface {
       UnmountCallback unmount_callback);
   ~SmbFileSystem() override;
 
-  static base::File::Error TranslateError(smbprovider::ErrorType);
-
   // ProvidedFileSystemInterface overrides.
   file_system_provider::AbortCallback RequestUnmount(
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback GetMetadata(
       const base::FilePath& entry_path,
       ProvidedFileSystemInterface::MetadataFieldMask fields,
-      const ProvidedFileSystemInterface::GetMetadataCallback& callback)
-      override;
+      ProvidedFileSystemInterface::GetMetadataCallback callback) override;
 
   file_system_provider::AbortCallback GetActions(
       const std::vector<base::FilePath>& entry_paths,
-      const GetActionsCallback& callback) override;
+      GetActionsCallback callback) override;
 
   file_system_provider::AbortCallback ExecuteAction(
       const std::vector<base::FilePath>& entry_paths,
       const std::string& action_id,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback ReadDirectory(
       const base::FilePath& directory_path,
-      const storage::AsyncFileUtil::ReadDirectoryCallback& callback) override;
+      storage::AsyncFileUtil::ReadDirectoryCallback callback) override;
 
   file_system_provider::AbortCallback OpenFile(
       const base::FilePath& file_path,
       file_system_provider::OpenFileMode mode,
-      const OpenFileCallback& callback) override;
+      OpenFileCallback callback) override;
 
   file_system_provider::AbortCallback CloseFile(
       int file_handle,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback ReadFile(
       int file_handle,
       net::IOBuffer* buffer,
       int64_t offset,
       int length,
-      const ReadChunkReceivedCallback& callback) override;
+      ReadChunkReceivedCallback callback) override;
 
   file_system_provider::AbortCallback CreateDirectory(
       const base::FilePath& directory_path,
       bool recursive,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback CreateFile(
       const base::FilePath& file_path,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback DeleteEntry(
       const base::FilePath& entry_path,
       bool recursive,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback CopyEntry(
       const base::FilePath& source_path,
       const base::FilePath& target_path,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback MoveEntry(
       const base::FilePath& source_path,
       const base::FilePath& target_path,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback Truncate(
       const base::FilePath& file_path,
       int64_t length,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback WriteFile(
       int file_handle,
       net::IOBuffer* buffer,
       int64_t offset,
       int length,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
   file_system_provider::AbortCallback AddWatcher(
       const GURL& origin,
       const base::FilePath& entry_path,
       bool recursive,
       bool persistent,
-      const storage::AsyncFileUtil::StatusCallback& callback,
+      storage::AsyncFileUtil::StatusCallback callback,
       const storage::WatcherManager::NotificationCallback&
           notification_callback) override;
 
-  void RemoveWatcher(
-      const GURL& origin,
-      const base::FilePath& entry_path,
-      bool recursive,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+  void RemoveWatcher(const GURL& origin,
+                     const base::FilePath& entry_path,
+                     bool recursive,
+                     storage::AsyncFileUtil::StatusCallback callback) override;
 
   const file_system_provider::ProvidedFileSystemInfo& GetFileSystemInfo()
       const override;
@@ -166,58 +165,126 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface {
       std::unique_ptr<file_system_provider::ProvidedFileSystemObserver::Changes>
           changes,
       const std::string& tag,
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+      storage::AsyncFileUtil::StatusCallback callback) override;
 
-  void Configure(
-      const storage::AsyncFileUtil::StatusCallback& callback) override;
+  void Configure(storage::AsyncFileUtil::StatusCallback callback) override;
 
   base::WeakPtr<ProvidedFileSystemInterface> GetWeakPtr() override;
 
  private:
-  void Abort();
+  void Abort(OperationId operation_id);
+
+  // Initializes temp_file_manager_.
+  void InitTempFileManager();
+
+  // Calls InitTempFileManager() and executes |task|.
+  void InitTempFileManagerAndExecuteTask(SmbTask task);
+
+  // Calls WriteFile in SmbProviderClient.
+  file_system_provider::AbortCallback CallWriteFile(
+      int file_handle,
+      const std::vector<uint8_t>& data,
+      int64_t offset,
+      int length,
+      storage::AsyncFileUtil::StatusCallback callback);
+
+  file_system_provider::AbortCallback CreateAbortCallback(
+      OperationId operation_id);
 
   file_system_provider::AbortCallback CreateAbortCallback();
 
+  // Starts a copy operation to copy |source_path| to |target_path| with the
+  // OperationId |operation_id|.
+  void StartCopy(const base::FilePath& source_path,
+                 const base::FilePath& target_path,
+                 OperationId operation_id,
+                 storage::AsyncFileUtil::StatusCallback callback);
+
+  // Continues a copy corresponding to |operation_id| and |copy_token|.
+  void ContinueCopy(OperationId operation_id,
+                    int32_t copy_token,
+                    storage::AsyncFileUtil::StatusCallback callback);
+
   void HandleRequestUnmountCallback(
-      const storage::AsyncFileUtil::StatusCallback& callback,
+      storage::AsyncFileUtil::StatusCallback callback,
       smbprovider::ErrorType error);
 
   void HandleRequestReadDirectoryCallback(
-      const storage::AsyncFileUtil::ReadDirectoryCallback& callback,
+      storage::AsyncFileUtil::ReadDirectoryCallback callback,
+      const base::ElapsedTimer& metrics_timer,
       smbprovider::ErrorType error,
-      const smbprovider::DirectoryEntryList& entries) const;
+      const smbprovider::DirectoryEntryListProto& entries) const;
 
   void HandleRequestGetMetadataEntryCallback(
       ProvidedFileSystemInterface::MetadataFieldMask fields,
-      const ProvidedFileSystemInterface::GetMetadataCallback& callback,
+      ProvidedFileSystemInterface::GetMetadataCallback callback,
       smbprovider::ErrorType error,
-      const smbprovider::DirectoryEntry& entry) const;
+      const smbprovider::DirectoryEntryProto& entry) const;
 
-  void HandleRequestOpenFileCallback(const OpenFileCallback& callback,
+  void HandleRequestOpenFileCallback(OpenFileCallback callback,
                                      smbprovider::ErrorType error,
                                      int32_t file_id) const;
 
-  void HandleRequestCloseFileCallback(
-      const storage::AsyncFileUtil::StatusCallback& callback,
-      smbprovider::ErrorType error) const;
+  void HandleStatusCallback(storage::AsyncFileUtil::StatusCallback callback,
+                            smbprovider::ErrorType error) const;
 
   base::File::Error RunUnmountCallback(
-      const ProviderId& provider_id,
       const std::string& file_system_id,
       file_system_provider::Service::UnmountReason reason);
+
+  void HandleRequestReadFileCallback(int32_t length,
+                                     scoped_refptr<net::IOBuffer> buffer,
+                                     ReadChunkReceivedCallback callback,
+                                     smbprovider::ErrorType error,
+                                     const base::ScopedFD& fd) const;
+
+  void HandleGetDeleteListCallback(
+      storage::AsyncFileUtil::StatusCallback callback,
+      OperationId operation_id,
+      smbprovider::ErrorType list_error,
+      const smbprovider::DeleteListProto& delete_list);
+
+  void HandleDeleteEntryCallback(
+      storage::AsyncFileUtil::StatusCallback callback,
+      smbprovider::ErrorType list_error,
+      bool is_last_entry,
+      smbprovider::ErrorType delete_error) const;
+
+  void HandleStartCopyCallback(storage::AsyncFileUtil::StatusCallback callback,
+                               OperationId operation_id,
+                               smbprovider::ErrorType error,
+                               int32_t copy_token);
+
+  void HandleContinueCopyCallback(
+      storage::AsyncFileUtil::StatusCallback callback,
+      OperationId operation_id,
+      int32_t copy_token,
+      smbprovider::ErrorType error);
 
   int32_t GetMountId() const;
 
   SmbProviderClient* GetSmbProviderClient() const;
+  base::WeakPtr<SmbProviderClient> GetWeakSmbProviderClient() const;
 
-  file_system_provider::ProvidedFileSystemInfo file_system_info_;
-  file_system_provider::OpenedFiles opened_files_;
-  storage::AsyncFileUtil::EntryList entry_list_;
-  file_system_provider::Watchers watchers_;
+  // Gets a new OperationId and adds |task| to the task_queue_ with it. Returns
+  // an AbortCallback to abort the newly created operation.
+  file_system_provider::AbortCallback EnqueueTaskAndGetCallback(SmbTask task);
+
+  // Adds |task| to the task_queue_ for |operation_id|.
+  void EnqueueTask(SmbTask task, OperationId operation_id);
+
+  // Gets a new OperationId and adds |task| to the task_queue_ with it. Returns
+  // the OperationId for the newly created Operation.
+  OperationId EnqueueTaskAndGetOperationId(SmbTask task);
+
+  const file_system_provider::ProvidedFileSystemInfo file_system_info_;
+  // opened_files_ is marked const since is currently unsupported.
+  const file_system_provider::OpenedFiles opened_files_;
 
   UnmountCallback unmount_callback_;
+  std::unique_ptr<TempFileManager> temp_file_manager_;
+  mutable SmbTaskQueue task_queue_;
 
-  base::WeakPtrFactory<SmbFileSystem> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(SmbFileSystem);
 };
 

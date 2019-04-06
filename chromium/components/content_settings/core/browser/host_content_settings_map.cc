@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
@@ -21,6 +22,7 @@
 #include "build/build_config.h"
 #include "components/content_settings/core/browser/content_settings_default_provider.h"
 #include "components/content_settings/core/browser/content_settings_details.h"
+#include "components/content_settings/core/browser/content_settings_ephemeral_provider.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_observable_provider.h"
 #include "components/content_settings/core/browser/content_settings_policy_provider.h"
@@ -33,6 +35,7 @@
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -64,6 +67,7 @@ constexpr ProviderNamesSourceMapEntry kProviderNamesSourceMap[] = {
     {"supervised_user", content_settings::SETTING_SOURCE_SUPERVISED},
     {"extension", content_settings::SETTING_SOURCE_EXTENSION},
     {"notification_android", content_settings::SETTING_SOURCE_USER},
+    {"ephemeral", content_settings::SETTING_SOURCE_USER},
     {"preference", content_settings::SETTING_SOURCE_USER},
     {"default", content_settings::SETTING_SOURCE_USER},
     {"tests", content_settings::SETTING_SOURCE_USER},
@@ -184,6 +188,13 @@ content_settings::PatternPair GetPatternsForContentSettingsType(
   return patterns;
 }
 
+// This enum is used to collect Flash permission data.
+enum class FlashPermissions {
+  kFirstTime = 0,
+  kRepeated = 1,
+  kMaxValue = kRepeated,
+};
+
 }  // namespace
 
 HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
@@ -218,11 +229,19 @@ HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
   if (is_guest_profile)
     pref_provider_->ClearPrefs();
 
-  auto default_provider = base::MakeUnique<content_settings::DefaultProvider>(
+  content_settings::EphemeralProvider* ephemeral_provider =
+      new content_settings::EphemeralProvider(store_last_modified_);
+  content_settings_providers_[EPHEMERAL_PROVIDER] =
+      base::WrapUnique(ephemeral_provider);
+  user_modifiable_providers_.push_back(ephemeral_provider);
+  ephemeral_provider->AddObserver(this);
+
+  auto default_provider = std::make_unique<content_settings::DefaultProvider>(
       prefs_, is_incognito_);
   default_provider->AddObserver(this);
   content_settings_providers_[DEFAULT_PROVIDER] = std::move(default_provider);
 
+  InitializePluginsDataSettings();
   RecordExceptionMetrics();
 }
 
@@ -499,6 +518,23 @@ void HostContentSettingsMap::SetContentSettingCustomScope(
   DCHECK(content_settings::ContentSettingsRegistry::GetInstance()->Get(
       content_type));
 
+  // Record stats on Flash permission grants with ephemeral storage.
+  if (content_type == CONTENT_SETTINGS_TYPE_PLUGINS &&
+      setting == CONTENT_SETTING_ALLOW &&
+      base::FeatureList::IsEnabled(
+          content_settings::features::kEnableEphemeralFlashPermission)) {
+    GURL url(primary_pattern.ToString());
+    ContentSettingsPattern temp_patterns[2];
+    std::unique_ptr<base::Value> value(GetContentSettingValueAndPatterns(
+        content_settings_providers_[PREF_PROVIDER].get(), url, url,
+        CONTENT_SETTINGS_TYPE_PLUGINS_DATA, resource_identifier, is_incognito_,
+        temp_patterns, temp_patterns + 1));
+
+    UMA_HISTOGRAM_ENUMERATION(
+        "ContentSettings.EphemeralFlashPermission",
+        value ? FlashPermissions::kRepeated : FlashPermissions::kFirstTime);
+  }
+
   std::unique_ptr<base::Value> value;
   // A value of CONTENT_SETTING_DEFAULT implies deleting the content setting.
   if (setting != CONTENT_SETTING_DEFAULT) {
@@ -531,6 +567,10 @@ void HostContentSettingsMap::SetContentSettingDefaultScope(
 
 base::WeakPtr<HostContentSettingsMap> HostContentSettingsMap::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
+}
+
+void HostContentSettingsMap::SetClockForTesting(base::Clock* clock) {
+  pref_provider_->SetClockForTesting(clock);
 }
 
 void HostContentSettingsMap::RecordExceptionMetrics() {
@@ -623,8 +663,10 @@ base::Time HostContentSettingsMap::GetSettingLastModifiedDate(
 void HostContentSettingsMap::ClearSettingsForOneTypeWithPredicate(
     ContentSettingsType content_type,
     base::Time begin_time,
+    base::Time end_time,
     const PatternSourcePredicate& pattern_predicate) {
-  if (pattern_predicate.is_null() && begin_time.is_null()) {
+  if (pattern_predicate.is_null() && begin_time.is_null() &&
+      (end_time.is_null() || end_time.is_max())) {
     ClearSettingsForOneType(content_type);
     return;
   }
@@ -639,7 +681,8 @@ void HostContentSettingsMap::ClearSettingsForOneTypeWithPredicate(
         base::Time last_modified = provider->GetWebsiteSettingLastModified(
             setting.primary_pattern, setting.secondary_pattern, content_type,
             std::string());
-        if (last_modified >= begin_time) {
+        if (last_modified >= begin_time &&
+            (last_modified < end_time || end_time.is_null())) {
           provider->SetWebsiteSetting(setting.primary_pattern,
                                       setting.secondary_pattern, content_type,
                                       std::string(), nullptr);
@@ -653,7 +696,7 @@ void HostContentSettingsMap::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
-    std::string resource_identifier) {
+    const std::string& resource_identifier) {
   for (content_settings::Observer& observer : observers_) {
     observer.OnContentSettingChanged(primary_pattern, secondary_pattern,
                                      content_type, resource_identifier);
@@ -687,10 +730,9 @@ void HostContentSettingsMap::AddSettingsForOneType(
 
   while (rule_iterator->HasNext()) {
     const content_settings::Rule& rule = rule_iterator->Next();
-    settings->push_back(ContentSettingPatternSource(
-        rule.primary_pattern, rule.secondary_pattern,
-        base::MakeUnique<base::Value>(rule.value->Clone()),
-        kProviderNamesSourceMap[provider_type].provider_name, incognito));
+    settings->emplace_back(
+        rule.primary_pattern, rule.secondary_pattern, rule.value->Clone(),
+        kProviderNamesSourceMap[provider_type].provider_name, incognito);
   }
 }
 
@@ -842,13 +884,39 @@ HostContentSettingsMap::GetContentSettingValueAndPatterns(
           *primary_pattern = rule.primary_pattern;
         if (secondary_pattern)
           *secondary_pattern = rule.secondary_pattern;
-        return base::WrapUnique(rule.value.get()->DeepCopy());
+        return base::WrapUnique(rule.value->DeepCopy());
       }
     }
   }
   return std::unique_ptr<base::Value>();
 }
 
-void HostContentSettingsMap::SetClockForTesting(base::Clock* clock) {
-  pref_provider_->SetClockForTesting(clock);
+void HostContentSettingsMap::InitializePluginsDataSettings() {
+  if (!content_settings::WebsiteSettingsRegistry::GetInstance()->Get(
+          CONTENT_SETTINGS_TYPE_PLUGINS_DATA)) {
+    return;
+  }
+  ContentSettingsForOneType host_settings;
+  GetSettingsForOneType(CONTENT_SETTINGS_TYPE_PLUGINS_DATA, std::string(),
+                        &host_settings);
+  if (host_settings.empty()) {
+    GetSettingsForOneType(CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
+                          &host_settings);
+    for (ContentSettingPatternSource pattern : host_settings) {
+      if (pattern.source != "preference")
+        continue;
+      const GURL primary(pattern.primary_pattern.ToString());
+      if (!primary.is_valid())
+        continue;
+      DCHECK_EQ(ContentSettingsPattern::Relation::IDENTITY,
+                ContentSettingsPattern::Wildcard().Compare(
+                    pattern.secondary_pattern));
+      auto dict = std::make_unique<base::DictionaryValue>();
+      constexpr char kFlagKey[] = "flashPreviouslyChanged";
+      dict->SetKey(kFlagKey, base::Value(true));
+      SetWebsiteSettingDefaultScope(primary, primary,
+                                    CONTENT_SETTINGS_TYPE_PLUGINS_DATA,
+                                    std::string(), std::move(dict));
+    }
+  }
 }

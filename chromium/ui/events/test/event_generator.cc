@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
@@ -36,26 +35,29 @@
 
 namespace ui {
 namespace test {
-namespace {
 
-void DummyCallback(EventType, const gfx::Vector2dF&) {
-}
-
+// A TickClock that advances time by one millisecond on each call to NowTicks().
 class TestTickClock : public base::TickClock {
  public:
-  // Starts off with a clock set to TimeTicks().
-  TestTickClock() {}
+  TestTickClock() = default;
 
-  base::TimeTicks NowTicks() override {
-    return base::TimeTicks() +
-           base::TimeDelta::FromMicroseconds(ticks_++ * 1000);
+  // Unconditionally returns a tick count that is 1ms later than the previous
+  // call, starting at 1ms.
+  base::TimeTicks NowTicks() const override {
+    static constexpr base::TimeDelta kOneMillisecond =
+        base::TimeDelta::FromMilliseconds(1);
+    return ticks_ += kOneMillisecond;
   }
 
  private:
-  int64_t ticks_ = 1;
+  mutable base::TimeTicks ticks_;
 
   DISALLOW_COPY_AND_ASSIGN(TestTickClock);
 };
+
+namespace {
+
+void DummyCallback(EventType, const gfx::Vector2dF&) {}
 
 class TestTouchEvent : public ui::TouchEvent {
  public:
@@ -306,14 +308,18 @@ void EventGenerator::PressMoveAndReleaseTouchToCenterOf(EventTarget* window) {
 }
 
 void EventGenerator::GestureTapAt(const gfx::Point& location) {
+  UpdateCurrentDispatcher(location);
+  gfx::Point converted_location = location;
+  delegate()->ConvertPointToTarget(current_target_, &converted_location);
+
   const int kTouchId = 2;
   ui::TouchEvent press(
-      ui::ET_TOUCH_PRESSED, location, ui::EventTimeForNow(),
+      ui::ET_TOUCH_PRESSED, converted_location, ui::EventTimeForNow(),
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, kTouchId));
   Dispatch(&press);
 
   ui::TouchEvent release(
-      ui::ET_TOUCH_RELEASED, location,
+      ui::ET_TOUCH_RELEASED, converted_location,
       press.time_stamp() + base::TimeDelta::FromMilliseconds(50),
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, kTouchId));
   Dispatch(&release);
@@ -625,7 +631,8 @@ void EventGenerator::Dispatch(ui::Event* event) {
 
 void EventGenerator::Init(gfx::NativeWindow root_window,
                           gfx::NativeWindow window_context) {
-  ui::SetEventTickClockForTesting(std::make_unique<TestTickClock>());
+  tick_clock_ = std::make_unique<TestTickClock>();
+  ui::SetEventTickClockForTesting(tick_clock_.get());
   delegate()->SetContext(this, root_window, window_context);
   if (window_context)
     current_location_ = delegate()->CenterOfWindow(window_context);
@@ -721,9 +728,8 @@ void EventGenerator::DoDispatchEvent(ui::Event* event, bool async) {
     std::unique_ptr<ui::Event> pending_event = ui::Event::Clone(*event);
     if (pending_events_.empty()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::Bind(&EventGenerator::DispatchNextPendingEvent,
-                     base::Unretained(this)));
+          FROM_HERE, base::BindOnce(&EventGenerator::DispatchNextPendingEvent,
+                                    base::Unretained(this)));
     }
     pending_events_.push_back(std::move(pending_event));
   } else {
@@ -767,9 +773,8 @@ void EventGenerator::DispatchNextPendingEvent() {
   pending_events_.pop_front();
   if (!pending_events_.empty()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&EventGenerator::DispatchNextPendingEvent,
-                   base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&EventGenerator::DispatchNextPendingEvent,
+                                  base::Unretained(this)));
   }
 }
 

@@ -6,9 +6,9 @@
 
 #include "chrome/browser/chromeos/display/output_protection_controller_ash.h"
 #include "chrome/browser/chromeos/display/output_protection_controller_mus.h"
-#include "chrome/browser/ui/ash/ash_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
@@ -29,9 +29,6 @@ bool GetCurrentDisplayId(content::RenderFrameHost* rfh, int64_t* display_id) {
       screen->GetDisplayNearestView(rfh->GetNativeView());
   *display_id = display.id();
   return true;
-}
-
-void DoNothing(bool status) {
 }
 
 }  // namespace
@@ -102,7 +99,7 @@ bool OutputProtectionDelegate::InitializeControllerIfNecessary() {
   if (!window)
     return false;
 
-  if (ash_util::IsRunningInMash())
+  if (!features::IsAshInBrowserProcess())
     controller_ = std::make_unique<OutputProtectionControllerMus>();
   else
     controller_ = std::make_unique<OutputProtectionControllerAsh>();
@@ -132,10 +129,10 @@ void OutputProtectionDelegate::OnWindowHierarchyChanged(
   if (desired_method_mask_ != display::CONTENT_PROTECTION_METHOD_NONE) {
     DCHECK(controller_);
     controller_->SetProtection(new_display_id, desired_method_mask_,
-                               base::Bind(&DoNothing));
+                               base::DoNothing());
     controller_->SetProtection(display_id_,
                                display::CONTENT_PROTECTION_METHOD_NONE,
-                               base::Bind(&DoNothing));
+                               base::DoNothing());
   }
   display_id_ = new_display_id;
 }

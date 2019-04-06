@@ -14,7 +14,7 @@
 namespace viz {
 
 VIZ_RESOURCE_FORMAT_EXPORT SkColorType
-ResourceFormatToClosestSkColorType(ResourceFormat format);
+ResourceFormatToClosestSkColorType(bool gpu_compositing, ResourceFormat format);
 VIZ_RESOURCE_FORMAT_EXPORT int BitsPerPixel(ResourceFormat format);
 
 // The following functions use unsigned int instead of GLenum, since including
@@ -27,15 +27,30 @@ VIZ_RESOURCE_FORMAT_EXPORT unsigned int GLInternalFormat(ResourceFormat format);
 VIZ_RESOURCE_FORMAT_EXPORT unsigned int GLCopyTextureInternalFormat(
     ResourceFormat format);
 
+// Returns the pixel format of the resource when mapped into client-side memory.
+// Returns a default value when IsGpuMemoryBufferFormatSupported() returns false
+// for a given format, as in this case the resource will not be mapped into
+// client-side memory, and the returned value is not used.
 VIZ_RESOURCE_FORMAT_EXPORT gfx::BufferFormat BufferFormat(
     ResourceFormat format);
 VIZ_RESOURCE_FORMAT_EXPORT bool IsResourceFormatCompressed(
     ResourceFormat format);
-VIZ_RESOURCE_FORMAT_EXPORT bool DoesResourceFormatSupportAlpha(
-    ResourceFormat format);
 VIZ_RESOURCE_FORMAT_EXPORT unsigned int TextureStorageFormat(
     ResourceFormat format);
-VIZ_RESOURCE_FORMAT_EXPORT GrPixelConfig ToGrPixelConfig(ResourceFormat format);
+
+// Returns whether the format can be used with GpuMemoryBuffer texture storage,
+// allocated through TexStorage2DImageCHROMIUM.
+VIZ_RESOURCE_FORMAT_EXPORT bool IsGpuMemoryBufferFormatSupported(
+    ResourceFormat format);
+
+// Returns whether the format can be used as a software bitmap for export to the
+// display compositor.
+VIZ_RESOURCE_FORMAT_EXPORT bool IsBitmapFormatSupported(ResourceFormat format);
+
+VIZ_RESOURCE_FORMAT_EXPORT ResourceFormat
+GetResourceFormat(gfx::BufferFormat format);
+
+VIZ_RESOURCE_FORMAT_EXPORT bool GLSupportsFormat(ResourceFormat format);
 
 }  // namespace viz
 

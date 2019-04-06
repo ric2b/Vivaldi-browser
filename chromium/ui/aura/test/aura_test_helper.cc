@@ -5,7 +5,6 @@
 #include "ui/aura/test/aura_test_helper.h"
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/focus_client.h"
@@ -72,10 +71,13 @@ AuraTestHelper* AuraTestHelper::GetInstance() {
 
 void AuraTestHelper::EnableMusWithTestWindowTree(
     WindowTreeClientDelegate* window_tree_delegate,
-    WindowManagerDelegate* window_manager_delegate) {
+    WindowManagerDelegate* window_manager_delegate,
+    WindowTreeClient::Config config) {
   DCHECK(!setup_called_);
   DCHECK_EQ(Mode::LOCAL, mode_);
-  mode_ = Mode::MUS_CREATE_WINDOW_TREE_CLIENT;
+  mode_ = (config == WindowTreeClient::Config::kMashDeprecated)
+              ? Mode::MUS_CREATE_WINDOW_TREE_CLIENT
+              : Mode::MUS2_CREATE_WINDOW_TREE_CLIENT;
   window_tree_delegate_ = window_tree_delegate;
   window_manager_delegate_ = window_manager_delegate;
 }
@@ -121,8 +123,10 @@ void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
   const Env::Mode env_mode =
       (mode_ == Mode::LOCAL) ? Env::Mode::LOCAL : Env::Mode::MUS;
 
-  if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT)
+  if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT ||
+      mode_ == Mode::MUS2_CREATE_WINDOW_TREE_CLIENT) {
     InitWindowTreeClient();
+  }
   if (!Env::GetInstanceDontCreate())
     env_ = Env::CreateInstance(env_mode);
   else
@@ -175,7 +179,8 @@ void AuraTestHelper::SetUp(ui::ContextFactory* context_factory,
     }
   }
 
-  if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT) {
+  if (mode_ == Mode::MUS_CREATE_WINDOW_TREE_CLIENT ||
+      mode_ == Mode::MUS2_CREATE_WINDOW_TREE_CLIENT) {
     window_tree_client_->focus_synchronizer()->SetActiveFocusClient(
         focus_client_.get(), root_window());
     window_tree()->AckAllChanges();
@@ -242,8 +247,13 @@ client::CaptureClient* AuraTestHelper::capture_client() {
 
 void AuraTestHelper::InitWindowTreeClient() {
   window_tree_client_setup_ = std::make_unique<TestWindowTreeClientSetup>();
-  window_tree_client_setup_->InitForWindowManager(window_tree_delegate_,
-                                                  window_manager_delegate_);
+  if (mode_ == Mode::MUS2_CREATE_WINDOW_TREE_CLIENT) {
+    window_tree_client_setup_->InitWithoutEmbed(
+        window_tree_delegate_, WindowTreeClient::Config::kMus2);
+  } else {
+    window_tree_client_setup_->InitForWindowManager(window_tree_delegate_,
+                                                    window_manager_delegate_);
+  }
   window_tree_client_ = window_tree_client_setup_->window_tree_client();
   window_tree_client_->capture_synchronizer()->AttachToCaptureClient(
       capture_client_.get());

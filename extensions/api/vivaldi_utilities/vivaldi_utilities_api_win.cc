@@ -35,4 +35,55 @@ void UtilitiesGetUniqueUserIdFunction::WriteUserIdToOSProfile(
     return;
   key.WriteValue(kUniqueUserValue, base::UTF8ToUTF16(user_id).c_str());
 }
+
+bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
+    vivaldi::utilities::DateFormats* date_formats) {
+  // According to MSDN documentation max len is 80
+  // https://msdn.microsoft.com/en-us/library/windows/desktop/
+  //   dd373896(v=vs.85).aspx
+  wchar_t result_buffer[80];
+  int len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STIMEFORMAT,
+                            result_buffer, arraysize(result_buffer));
+
+  if (len == 0) {
+    return false;
+  }
+
+  std::string timeformat = base::UTF16ToUTF8(result_buffer);
+  len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTDATE,
+                        result_buffer, arraysize(result_buffer));
+
+  if (len == 0) {
+    return false;
+  }
+
+  std::string shortformat = base::UTF16ToUTF8(result_buffer);
+  len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SLONGDATE,
+                        result_buffer, arraysize(result_buffer));
+
+  if (len == 0) {
+    return false;
+  }
+
+  std::string longdateformat = base::UTF16ToUTF8(result_buffer);
+  len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK,
+                        result_buffer, arraysize(result_buffer));
+
+  if (len == 0) {
+    return false;
+  }
+  int first_day_of_week = _wtoi(result_buffer);
+
+  // convert Win API MSDN to js standard 0-6 (Sunday to Saturday)
+  // https://msdn.microsoft.com/en-us/library/windows/desktop/
+  //   dd373771(v=vs.85).aspx
+  date_formats->first_day_of_week =
+      first_day_of_week < 6 ? ++first_day_of_week : 0;
+
+  date_formats->short_date_format = shortformat;
+  date_formats->long_date_format = longdateformat;
+  date_formats->time_format = timeformat;
+  return true;
+}
+
 }  // namespace extensions

@@ -6,6 +6,7 @@
 #define CONTENT_SHELL_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/command_line.h"
@@ -14,10 +15,10 @@
 #include "content/public/common/content_switches.h"
 #include "content/shell/test_runner/test_runner_export.h"
 #include "content/shell/test_runner/web_frame_test_client.h"
-#include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebFrameClient.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_effective_connection_type.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
 
 namespace test_runner {
 
@@ -39,7 +40,7 @@ class TEST_RUNNER_EXPORT WebFrameTestProxyBase {
  protected:
   WebFrameTestProxyBase();
   ~WebFrameTestProxyBase();
-  blink::WebFrameClient* test_client() { return test_client_.get(); }
+  blink::WebLocalFrameClient* test_client() { return test_client_.get(); }
 
  private:
   std::unique_ptr<WebFrameTestClient> test_client_;
@@ -51,24 +52,22 @@ class TEST_RUNNER_EXPORT WebFrameTestProxyBase {
 // WebFrameTestProxy is used during LayoutTests and always instantiated, at time
 // of writing with Base=RenderFrameImpl. It does not directly inherit from it
 // for layering purposes.
-template <class Base, typename P>
+template <class Base>
 class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
  public:
-  explicit WebFrameTestProxy(P p) : Base(std::move(p)) {}
+  template <typename... Args>
+  explicit WebFrameTestProxy(Args&&... args)
+      : Base(std::forward<Args>(args)...) {}
 
   virtual ~WebFrameTestProxy() {}
 
-  // WebFrameClient implementation.
+  // WebLocalFrameClient implementation.
   blink::WebPlugin* CreatePlugin(
       const blink::WebPluginParams& params) override {
     blink::WebPlugin* plugin = test_client()->CreatePlugin(params);
     if (plugin)
       return plugin;
     return Base::CreatePlugin(params);
-  }
-
-  blink::WebScreenOrientationClient* GetWebScreenOrientationClient() override {
-    return test_client()->GetWebScreenOrientationClient();
   }
 
   void DidAddMessageToConsole(const blink::WebConsoleMessage& message,
@@ -81,16 +80,14 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
                                  stack_trace);
   }
 
-  bool CanCreatePluginWithoutRenderer(
-      const blink::WebString& mime_type) override {
-    const char suffix[] = "-can-create-without-renderer";
-    return mime_type.Utf8().find(suffix) != std::string::npos;
-  }
-
   void DownloadURL(const blink::WebURLRequest& request,
-                   const blink::WebString& suggested_name) override {
-    test_client()->DownloadURL(request, suggested_name);
-    Base::DownloadURL(request, suggested_name);
+                   blink::WebLocalFrameClient::CrossOriginRedirects
+                       cross_origin_redirect_behavior,
+                   mojo::ScopedMessagePipeHandle blob_url_token) override {
+    test_client()->DownloadURL(request, cross_origin_redirect_behavior,
+                               mojo::ScopedMessagePipeHandle());
+    Base::DownloadURL(request, cross_origin_redirect_behavior,
+                      std::move(blob_url_token));
   }
 
 
@@ -98,11 +95,6 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
                                blink::WebURLRequest& request) override {
     test_client()->DidStartProvisionalLoad(document_loader, request);
     Base::DidStartProvisionalLoad(document_loader, request);
-  }
-
-  void DidReceiveServerRedirectForProvisionalLoad() override {
-    test_client()->DidReceiveServerRedirectForProvisionalLoad();
-    Base::DidReceiveServerRedirectForProvisionalLoad();
   }
 
   void DidFailProvisionalLoad(
@@ -124,6 +116,14 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
                                             global_object_reuse_policy);
     Base::DidCommitProvisionalLoad(item, commit_type,
                                    global_object_reuse_policy);
+  }
+
+  void DidFinishSameDocumentNavigation(const blink::WebHistoryItem& item,
+                                       blink::WebHistoryCommitType commit_type,
+                                       bool content_initiated) {
+    test_client()->DidFinishSameDocumentNavigation(item, commit_type,
+                                                   content_initiated);
+    Base::DidFinishSameDocumentNavigation(item, commit_type, content_initiated);
   }
 
   void DidReceiveTitle(const blink::WebString& title,
@@ -232,7 +232,7 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
   }
 
   blink::WebNavigationPolicy DecidePolicyForNavigation(
-      const blink::WebFrameClient::NavigationPolicyInfo& info) override {
+      const blink::WebLocalFrameClient::NavigationPolicyInfo& info) override {
     blink::WebNavigationPolicy policy =
         test_client()->DecidePolicyForNavigation(info);
     if (policy == blink::kWebNavigationPolicyIgnore)
@@ -244,15 +244,19 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
   void PostAccessibilityEvent(const blink::WebAXObject& object,
                               blink::WebAXEvent event) override {
     test_client()->PostAccessibilityEvent(object, event);
+    // Guard against the case where |this| was deleted as a result of an
+    // accessibility listener detaching a frame. If that occurs, the
+    // WebAXObject will be detached.
+    if (object.IsDetached())
+      return;  // |this| is invalid.
     Base::PostAccessibilityEvent(object, event);
   }
 
   void CheckIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
-      const blink::WebSecurityOrigin& security_origin,
       blink::WebSetSinkIdCallbacks* web_callbacks) override {
-    test_client()->CheckIfAudioSinkExistsAndIsAuthorized(
-        sink_id, security_origin, web_callbacks);
+    test_client()->CheckIfAudioSinkExistsAndIsAuthorized(sink_id,
+                                                         web_callbacks);
   }
 
   void DidClearWindowObject() override {

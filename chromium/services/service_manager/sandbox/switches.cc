@@ -28,6 +28,7 @@ const char kUtilitySandbox[] = "utility";
 const char kCdmSandbox[] = "cdm";
 const char kPdfCompositorSandbox[] = "pdf_compositor";
 const char kProfilingSandbox[] = "profiling";
+const char kAudioSandbox[] = "audio";
 
 // Flags owned by the service manager sandbox.
 
@@ -44,6 +45,12 @@ const char kAllowSandboxDebugging[] = "allow-sandbox-debugging";
 
 // Disable appcontainer/lowbox for renderer on Win8+ platforms.
 const char kDisableAppContainer[] = "disable-appcontainer";
+
+// Disables the GPU process sandbox.
+const char kDisableGpuSandbox[] = "disable-gpu-sandbox";
+
+// Disables usage of the namespace sandbox.
+const char kDisableNamespaceSandbox[] = "disable-namespace-sandbox";
 
 // Disable the seccomp filter sandbox (seccomp-bpf) (Linux only).
 const char kDisableSeccompFilterSandbox[] = "disable-seccomp-filter-sandbox";
@@ -63,10 +70,34 @@ const char kGpuSandboxAllowSysVShm[] = "gpu-sandbox-allow-sysv-shm";
 // Makes GPU sandbox failures fatal.
 const char kGpuSandboxFailuresFatal[] = "gpu-sandbox-failures-fatal";
 
+// Disables the sandbox for all process types that are normally sandboxed.
+const char kNoSandbox[] = "no-sandbox";
+
 #if defined(OS_WIN)
 // Allows third party modules to inject by disabling the BINARY_SIGNATURE
 // mitigation policy on Win10+. Also has other effects in ELF.
 const char kAllowThirdPartyModules[] = "allow-third-party-modules";
+
+// Add additional capabilities to the AppContainer sandbox on the GPU process.
+const char kAddGpuAppContainerCaps[] = "add-gpu-appcontainer-caps";
+
+// Disables AppContainer sandbox on the GPU process.
+const char kDisableGpuAppContainer[] = "disable-gpu-appcontainer";
+
+// Disables low-privilege AppContainer sandbox on the GPU process.
+const char kDisableGpuLpac[] = "disable-gpu-lpac";
+
+// Enables AppContainer sandbox on the GPU process.
+const char kEnableGpuAppContainer[] = "enable-gpu-appcontainer";
+
+// Disables the sandbox and gives the process elevated privileges.
+const char kNoSandboxAndElevatedPrivileges[] = "no-sandbox-and-elevated";
+#endif
+
+#if defined(OS_MACOSX)
+// Cause the OS X sandbox write to syslog every time an access to a resource
+// is denied by the sandbox.
+const char kEnableSandboxLogging[] = "enable-sandbox-logging";
 #endif
 
 // Flags spied upon from other layers.
@@ -75,12 +106,6 @@ const char kPpapiBrokerProcess[] = "ppapi-broker";
 const char kPpapiPluginProcess[] = "ppapi";
 const char kRendererProcess[] = "renderer";
 const char kUtilityProcess[] = "utility";
-const char kDisableGpuSandbox[] = "disable-gpu-sandbox";
-const char kNoSandbox[] = "no-sandbox";
-#if defined(OS_WIN)
-const char kNoSandboxAndElevatedPrivileges[] = "no-sandbox-and-elevated";
-#endif
-const char kEnableSandboxLogging[] = "enable-sandbox-logging";
 
 }  // namespace switches
 

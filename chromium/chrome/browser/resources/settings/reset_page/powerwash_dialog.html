@@ -10,7 +10,7 @@
   <template>
     <style include="settings-shared">
     </style>
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}"
+    <cr-dialog id="dialog" close-text="$i18n{close}"
         ignore-enter-key>
       <div slot="title">$i18n{powerwashDialogTitle}</div>
       <div slot="body">
@@ -22,12 +22,12 @@
         </span>
       </div>
       <div slot="button-container">
-        <paper-button class="cancel-button" on-tap="onCancelTap_"
+        <paper-button class="cancel-button" on-click="onCancelTap_"
             id="cancel">$i18n{cancel}</paper-button>
         <paper-button class="action-button" id="powerwash"
-            on-tap="onRestartTap_">$i18n{powerwashDialogButton}</paper-button>
+            on-click="onRestartTap_">$i18n{powerwashDialogButton}</paper-button>
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
   <script src="powerwash_dialog.js"></script>
 </dom-module>

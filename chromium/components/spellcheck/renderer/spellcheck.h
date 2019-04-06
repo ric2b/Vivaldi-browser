@@ -14,12 +14,13 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "components/spellcheck/common/spellcheck.mojom.h"
 #include "components/spellcheck/renderer/custom_dictionary_engine.h"
-#include "components/spellcheck/spellcheck_build_features.h"
-#include "content/public/renderer/render_thread_observer.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 class SpellcheckLanguage;
 struct SpellCheckResult;
@@ -28,18 +29,27 @@ namespace blink {
 class WebTextCheckingCompletion;
 struct WebTextCheckingResult;
 template <typename T> class WebVector;
+class WebString;
 }
 
 namespace service_manager {
 class LocalInterfaceProvider;
 }
 
+class DictionaryUpdateObserver {
+ public:
+  virtual ~DictionaryUpdateObserver() = default;
+  // |words_added| is newly added words to dictionary as correct words.
+  // OnDictionaryUpdated should be called even if |words_added| empty.
+  virtual void OnDictionaryUpdated(
+      const blink::WebVector<blink::WebString>& words_added) = 0;
+};
+
 // TODO(morrita): Needs reorg with SpellCheckProvider.
 // See http://crbug.com/73699.
 // Shared spellchecking logic/data for a RenderProcess. All RenderViews use
 // this object to perform spellchecking tasks.
-class SpellCheck : public content::RenderThreadObserver,
-                   public base::SupportsWeakPtr<SpellCheck>,
+class SpellCheck : public base::SupportsWeakPtr<SpellCheck>,
                    public spellcheck::mojom::SpellChecker {
  public:
   // TODO(groby): I wonder if this can be private, non-mac only.
@@ -49,8 +59,8 @@ class SpellCheck : public content::RenderThreadObserver,
     USE_NATIVE_CHECKER,  // Use native checker to double-check.
   };
 
-  explicit SpellCheck(
-      service_manager::LocalInterfaceProvider* embedder_provider);
+  SpellCheck(service_manager::BinderRegistry* registry,
+             service_manager::LocalInterfaceProvider* embedder_provider);
   ~SpellCheck() override;
 
   void AddSpellcheckLanguage(base::File file, const std::string& language);
@@ -110,6 +120,11 @@ class SpellCheck : public content::RenderThreadObserver,
 
   bool IsSpellcheckEnabled();
 
+  // Add observer on dictionary update event.
+  void AddDictionaryUpdateObserver(DictionaryUpdateObserver* observer);
+  // Remove observer on dictionary update event.
+  void RemoveDictionaryUpdateObserver(DictionaryUpdateObserver* observer);
+
  private:
    friend class SpellCheckTest;
    FRIEND_TEST_ALL_PREFIXES(SpellCheckTest, GetAutoCorrectionWord_EN_US);
@@ -135,6 +150,10 @@ class SpellCheck : public content::RenderThreadObserver,
    void CustomDictionaryChanged(
        const std::vector<std::string>& words_added,
        const std::vector<std::string>& words_removed) override;
+
+   // Performs dictionary update notification.
+   void NotifyDictionaryObservers(
+       const blink::WebVector<blink::WebString>& words_added);
 
 #if !BUILDFLAG(USE_BROWSER_SPELLCHECKER)
   // Posts delayed spellcheck task and clear it if any.
@@ -166,6 +185,11 @@ class SpellCheck : public content::RenderThreadObserver,
 
   // Remember state for spellchecking.
   bool spellcheck_enabled_;
+
+  // Observers of update dictionary events.
+  base::ObserverList<DictionaryUpdateObserver> dictionary_update_observers_;
+
+  base::WeakPtrFactory<SpellCheck> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SpellCheck);
 };

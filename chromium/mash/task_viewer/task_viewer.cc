@@ -7,21 +7,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/catalog/public/interfaces/catalog.mojom.h"
-#include "services/catalog/public/interfaces/constants.mojom.h"
+#include "services/catalog/public/mojom/catalog.mojom.h"
+#include "services/catalog/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/interfaces/constants.mojom.h"
-#include "services/service_manager/public/interfaces/service_manager.mojom.h"
+#include "services/service_manager/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/mojom/service_manager.mojom.h"
 #include "ui/base/models/table_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -215,7 +216,7 @@ class TaskViewerContents
   }
 
   void InsertInstance(const service_manager::Identity& identity, uint32_t pid) {
-    instances_.push_back(base::MakeUnique<InstanceInfo>(identity, pid));
+    instances_.push_back(std::make_unique<InstanceInfo>(identity, pid));
   }
 
   void OnGotCatalogEntries(std::vector<catalog::mojom::EntryPtr> entries) {
@@ -296,9 +297,11 @@ void TaskViewer::RemoveWindow(views::Widget* widget) {
 }
 
 void TaskViewer::OnStart() {
-  aura_init_ = views::AuraInit::Create(
-      context()->connector(), context()->identity(), "views_mus_resources.pak",
-      std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+  views::AuraInit::InitParams params;
+  params.connector = context()->connector();
+  params.identity = context()->identity();
+  params.mode = views::AuraInit::Mode::AURA_MUS;
+  aura_init_ = views::AuraInit::Create(params);
   if (!aura_init_)
     context()->QuitNow();
 }

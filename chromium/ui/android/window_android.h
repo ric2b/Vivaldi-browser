@@ -31,6 +31,8 @@ class BeginFrameSource;
 
 namespace ui {
 
+extern UI_ANDROID_EXPORT const float kDefaultMouseWheelTickMultiplier;
+
 class WindowAndroidCompositor;
 class WindowAndroidObserver;
 
@@ -41,7 +43,7 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   static WindowAndroid* FromJavaWindowAndroid(
       const base::android::JavaParamRef<jobject>& jwindow_android);
 
-  WindowAndroid(JNIEnv* env, jobject obj, int display_id);
+  WindowAndroid(JNIEnv* env, jobject obj, int display_id, float scroll_factor);
 
   ~WindowAndroid() override;
 
@@ -86,6 +88,8 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   // Return whether the specified Android permission can be requested by Chrome.
   bool CanRequestPermission(const std::string& permission);
 
+  float mouse_wheel_scroll_factor() const { return mouse_wheel_scroll_factor_; }
+
   static WindowAndroid* CreateForTesting();
 
   // Return the window token for this window, if one exists.
@@ -114,6 +118,7 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   std::unique_ptr<WindowBeginFrameSource> begin_frame_source_;
   bool needs_begin_frames_;
   std::list<base::Closure> vsync_complete_callbacks_;
+  float mouse_wheel_scroll_factor_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowAndroid);
 };

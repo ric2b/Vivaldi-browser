@@ -14,29 +14,35 @@
 namespace device {
 
 // TODO(mthiesse, crbug.com/769373): Remove DEVICE_VR_EXPORT.
-class DEVICE_VR_EXPORT FakeVRDevice : public VRDeviceBase {
+class DEVICE_VR_EXPORT FakeVRDevice : public VRDeviceBase,
+                                      public mojom::XRSessionController {
  public:
-  FakeVRDevice();
+  FakeVRDevice(unsigned int id);
   ~FakeVRDevice() override;
 
-  void RequestPresent(
-      VRDisplayImpl* display,
-      mojom::VRSubmitFrameClientPtr submit_client,
-      mojom::VRPresentationProviderRequest request,
-      mojom::VRRequestPresentOptionsPtr present_options,
-      mojom::VRDisplayHost::RequestPresentCallback callback) override;
-  void ExitPresent() override;
-
+  void RequestSession(
+      mojom::XRDeviceRuntimeSessionOptionsPtr options,
+      mojom::XRRuntime::RequestSessionCallback callback) override;
   void SetPose(mojom::VRPosePtr pose) { pose_ = std::move(pose); }
 
+  void SetFrameDataRestricted(bool restricted) override {}
+
+  using VRDeviceBase::IsPresenting;  // Make it public for tests.
+
+  void StopSession() { OnPresentingControllerMojoConnectionError(); }
+
  private:
-  void OnMagicWindowPoseRequest(
-      mojom::VRMagicWindowProvider::GetPoseCallback callback) override;
+  void OnPresentingControllerMojoConnectionError();
+
+  void OnMagicWindowFrameDataRequest(
+      mojom::VRMagicWindowProvider::GetFrameDataCallback callback) override;
 
   mojom::VRDisplayInfoPtr InitBasicDevice();
   mojom::VREyeParametersPtr InitEye(float fov, float offset, uint32_t size);
 
   mojom::VRPosePtr pose_;
+
+  mojo::Binding<mojom::XRSessionController> controller_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeVRDevice);
 };

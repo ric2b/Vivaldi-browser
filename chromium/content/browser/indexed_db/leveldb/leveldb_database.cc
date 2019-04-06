@@ -23,6 +23,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/time/default_clock.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
@@ -39,6 +40,7 @@
 #include "third_party/leveldatabase/src/include/leveldb/slice.h"
 
 using base::StringPiece;
+using leveldb_env::DBTracker;
 
 namespace content {
 
@@ -238,7 +240,7 @@ LevelDBSnapshot::~LevelDBSnapshot() {
 }
 
 LevelDBDatabase::LevelDBDatabase(size_t max_open_iterators)
-    : iterator_lru_(max_open_iterators) {
+    : clock_(new base::DefaultClock()), iterator_lru_(max_open_iterators) {
   DCHECK(max_open_iterators);
 }
 
@@ -334,7 +336,7 @@ std::unique_ptr<LevelDBDatabase> LevelDBDatabase::OpenInMemory(
   std::unique_ptr<ComparatorAdapter> comparator_adapter(
       std::make_unique<ComparatorAdapter>(comparator));
   std::unique_ptr<leveldb::Env> in_memory_env(
-      leveldb_chrome::NewMemEnv(LevelDBEnv::Get()));
+      leveldb_chrome::NewMemEnv("indexed-db", LevelDBEnv::Get()));
 
   std::unique_ptr<leveldb::DB> db;
   std::unique_ptr<const leveldb::FilterPolicy> filter_policy;
@@ -375,6 +377,7 @@ leveldb::Status LevelDBDatabase::Put(const StringPiece& key,
   else
     UMA_HISTOGRAM_TIMES("WebCore.IndexedDB.LevelDB.PutTime",
                         base::TimeTicks::Now() - begin_time);
+  last_modified_ = clock_->Now();
   return s;
 }
 
@@ -386,6 +389,7 @@ leveldb::Status LevelDBDatabase::Remove(const StringPiece& key) {
       db_->Delete(write_options, leveldb_env::MakeSlice(key));
   if (!s.IsNotFound())
     LOG(ERROR) << "LevelDB remove failed: " << s.ToString();
+  last_modified_ = clock_->Now();
   return s;
 }
 
@@ -426,24 +430,20 @@ leveldb::Status LevelDBDatabase::Write(const LevelDBWriteBatch& write_batch) {
     UMA_HISTOGRAM_TIMES("WebCore.IndexedDB.LevelDB.WriteTime",
                         base::TimeTicks::Now() - begin_time);
   }
+  last_modified_ = clock_->Now();
   return s;
 }
 
 std::unique_ptr<LevelDBIterator> LevelDBDatabase::CreateIterator(
-    const LevelDBSnapshot* snapshot) {
-  leveldb::ReadOptions read_options;
-  read_options.verify_checksums = true;  // TODO(jsbell): Disable this if the
-                                         // performance impact is too great.
-  read_options.snapshot = snapshot ? snapshot->snapshot_ : nullptr;
-
+    const leveldb::ReadOptions& options) {
   num_iterators_++;
   max_iterators_ = std::max(max_iterators_, num_iterators_);
   // Iterator isn't added to lru cache until it is used, as memory isn't loaded
   // for the iterator until it's first Seek call.
-  std::unique_ptr<leveldb::Iterator> i(db_->NewIterator(read_options));
+  std::unique_ptr<leveldb::Iterator> i(db_->NewIterator(options));
   return std::unique_ptr<LevelDBIterator>(
       IndexedDBClassFactory::Get()->CreateIteratorImpl(std::move(i), this,
-                                                       read_options.snapshot));
+                                                       options.snapshot));
 }
 
 const LevelDBComparator* LevelDBDatabase::Comparator() const {
@@ -464,6 +464,19 @@ void LevelDBDatabase::CompactAll() {
   db_->CompactRange(nullptr, nullptr);
 }
 
+leveldb::ReadOptions LevelDBDatabase::DefaultReadOptions() {
+  return DefaultReadOptions(nullptr);
+}
+
+leveldb::ReadOptions LevelDBDatabase::DefaultReadOptions(
+    const LevelDBSnapshot* snapshot) {
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums = true;  // TODO(jsbell): Disable this if the
+                                         // performance impact is too great.
+  read_options.snapshot = snapshot ? snapshot->snapshot_ : nullptr;
+  return read_options;
+}
+
 bool LevelDBDatabase::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
@@ -471,28 +484,47 @@ bool LevelDBDatabase::OnMemoryDump(
     return false;
   // All leveldb databases are already dumped by leveldb_env::DBTracker. Add
   // an edge to the existing database.
-  auto* tracker_dump =
+  auto* db_tracker_dump =
       leveldb_env::DBTracker::GetOrCreateAllocatorDump(pmd, db_.get());
-  if (!tracker_dump)
+  if (!db_tracker_dump)
     return true;
 
-  auto* dump = pmd->CreateAllocatorDump(
-      base::StringPrintf("site_storage/index_db/0x%" PRIXPTR,
+  auto* db_dump = pmd->CreateAllocatorDump(
+      base::StringPrintf("site_storage/index_db/db_0x%" PRIXPTR,
                          reinterpret_cast<uintptr_t>(db_.get())));
-  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                  tracker_dump->GetSizeInternal());
-  pmd->AddOwnershipEdge(dump->guid(), tracker_dump->guid());
+  db_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                     base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                     db_tracker_dump->GetSizeInternal());
+  pmd->AddOwnershipEdge(db_dump->guid(), db_tracker_dump->guid());
 
-  // Dumps in BACKGROUND mode cannot have strings or edges in order to minimize
-  // trace size and instrumentation overhead.
+  if (env_ && leveldb_chrome::IsMemEnv(env_.get())) {
+    // All leveldb env's are already dumped by leveldb_env::DBTracker. Add
+    // an edge to the existing env.
+    auto* env_tracker_dump =
+        DBTracker::GetOrCreateAllocatorDump(pmd, env_.get());
+    auto* env_dump = pmd->CreateAllocatorDump(
+        base::StringPrintf("site_storage/index_db/memenv_0x%" PRIXPTR,
+                           reinterpret_cast<uintptr_t>(env_.get())));
+    env_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                        base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                        env_tracker_dump->GetSizeInternal());
+    pmd->AddOwnershipEdge(env_dump->guid(), env_tracker_dump->guid());
+  }
+
+  // Dumps in BACKGROUND mode can only have whitelisted strings (and there are
+  // currently none) so return early.
   if (args.level_of_detail ==
       base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
     return true;
   }
 
-  dump->AddString("file_name", "", file_name_for_tracing);
+  db_dump->AddString("file_name", "", file_name_for_tracing);
+
   return true;
+}
+
+void LevelDBDatabase::SetClockForTesting(std::unique_ptr<base::Clock> clock) {
+  clock_ = std::move(clock);
 }
 
 std::unique_ptr<leveldb::Iterator> LevelDBDatabase::CreateLevelDBIterator(

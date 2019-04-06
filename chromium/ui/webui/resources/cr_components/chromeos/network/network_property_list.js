@@ -14,6 +14,16 @@ Polymer({
 
   properties: {
     /**
+     * If true, all fields are shown as editable. Fields without an edit type
+     * or that are policy enforced will be shown as 'readonly'. Used for lists
+     * with dynamic edit types (e.g. network-ip-config).
+     */
+    editable: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
      * The dictionary containing the properties to display.
      * @type {!Object|undefined}
      */
@@ -34,9 +44,10 @@ Polymer({
      * Edit type of editable fields. May contain a property for any field in
      * |fields|. Other properties will be ignored. Property values can be:
      *   'String' - A text input will be displayed.
+     *   'StringArray' - A text input will be displayed that expects a comma
+     *       separated list of strings.
      *   'Password' - A string with input type = password.
      *   TODO(stevenjb): Support types with custom validation, e.g. IPAddress.
-     *   TODO(stevenjb): Support 'Number'.
      * When a field changes, the 'property-change' event will be fired with
      * the field name and the new value provided in the event detail.
      */
@@ -64,17 +75,17 @@ Polymer({
   onValueChange_: function(event) {
     if (!this.propertyDict)
       return;
-    var field = event.target.id;
-    var curValue = this.get(field, this.propertyDict);
-    if (typeof curValue == 'object') {
+    var key = event.target.id;
+    var curValue = this.get(key, this.propertyDict);
+    if (typeof curValue == 'object' && !Array.isArray(curValue)) {
       // Extract the property from an ONC managed dictionary.
       curValue = CrOnc.getActiveValue(
           /** @type {!CrOnc.ManagedProperty} */ (curValue));
     }
-    var newValue = event.target.value;
+    var newValue = this.getValueFromEditField_(key, event.target.value);
     if (newValue == curValue)
       return;
-    this.fire('property-change', {field: field, value: newValue});
+    this.fire('property-change', {field: key, value: newValue});
   },
 
   /**
@@ -119,19 +130,65 @@ Polymer({
 
   /**
    * @param {string} key The property key.
-   * @param {string} type The field type.
+   * @param {!Object} propertyDict
+   * @return {boolean}
+   * @private
+   */
+  isPropertyEditable_: function(key, propertyDict) {
+    var property = /** @type {!CrOnc.ManagedProperty|undefined} */ (
+        this.get(key, propertyDict));
+    if (property === undefined) {
+      // Unspecified properties in policy configurations are not user
+      // modifiable. https://crbug.com/819837.
+      var source = propertyDict.Source;
+      return source != 'UserPolicy' && source != 'DevicePolicy';
+    }
+    return !this.isNetworkPolicyEnforced(property);
+  },
+
+  /**
+   * @param {string} key The property key.
+   * @param {!Object} editFieldTypes
+   * @return {boolean} True if the edit type for the key is a valid type.
+   * @private
+   */
+  isEditType_: function(key, editFieldTypes) {
+    var editType = editFieldTypes[key];
+    return editType == 'String' || editType == 'StringArray' ||
+        editType == 'Password';
+  },
+
+  /**
+   * @param {string} key The property key.
    * @param {!Object} propertyDict
    * @param {!Object} editFieldTypes
    * @return {boolean}
    * @private
    */
-  isEditable_: function(key, type, propertyDict, editFieldTypes) {
-    var property = /** @type {!CrOnc.ManagedProperty|undefined} */ (
-        this.get(key, propertyDict));
-    if (this.isNetworkPolicyEnforced(property))
-      return false;
-    var editType = editFieldTypes[key];
-    return editType !== undefined && (type == '' || editType == type);
+  isEditable_: function(key, propertyDict, editFieldTypes) {
+    return this.isEditType_(key, editFieldTypes) &&
+        this.isPropertyEditable_(key, propertyDict);
+  },
+
+  /**
+   * @param {string} key The property key.
+   * @param {!Object} propertyDict
+   * @param {!Object} editFieldTypes
+   * @return {boolean}
+   * @private
+   */
+  showEditable_: function(key, propertyDict, editFieldTypes) {
+    return this.isEditable_(key, propertyDict, editFieldTypes) || this.editable;
+  },
+
+  /**
+   * @param {string} key The property key.
+   * @param {!Object} editFieldTypes
+   * @return {string}
+   * @private
+   */
+  getEditInputType_: function(key, editFieldTypes) {
+    return editFieldTypes[key] == 'Password' ? 'password' : 'text';
   },
 
   /**
@@ -141,7 +198,13 @@ Polymer({
    * @private
    */
   getProperty_: function(key, propertyDict) {
-    return this.get(key, propertyDict);
+    var property = this.get(key, propertyDict);
+    if (property === undefined && propertyDict.Source) {
+      // Provide an empty property object with the network policy source.
+      // See https://crbug.com/819837 for more info.
+      return {Effective: propertyDict.Source};
+    }
+    return property;
   },
 
   /**
@@ -155,16 +218,20 @@ Polymer({
     var value = this.get(key, propertyDict);
     if (value === undefined)
       return '';
-    if (typeof value == 'object') {
+    if (typeof value == 'object' && !Array.isArray(value)) {
       // Extract the property from an ONC managed dictionary
       value =
           CrOnc.getActiveValue(/** @type {!CrOnc.ManagedProperty} */ (value));
     }
+    if (Array.isArray(value))
+      return value.join(', ');
+
     var customValue = this.getCustomPropertyValue_(key, value);
     if (customValue)
       return customValue;
     if (typeof value == 'number' || typeof value == 'boolean')
       return value.toString();
+
     assert(typeof value == 'string');
     var valueStr = /** @type {string} */ (value);
     var oncKey = 'Onc' + prefix + key;
@@ -173,6 +240,20 @@ Polymer({
     if (this.i18nExists(oncKey))
       return this.i18n(oncKey);
     return valueStr;
+  },
+
+  /**
+   * Converts edit field values to the correct edit type.
+   * @param {string} key The property key.
+   * @param {*} fieldValue The value from the field.
+   * @return {*}
+   * @private
+   */
+  getValueFromEditField_(key, fieldValue) {
+    var editType = this.editFieldTypes[key];
+    if (editType == 'StringArray')
+      return fieldValue.toString().split(/, */);
+    return fieldValue;
   },
 
   /**

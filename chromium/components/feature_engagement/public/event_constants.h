@@ -6,7 +6,7 @@
 #define COMPONENTS_FEATURE_ENGAGEMENT_PUBLIC_EVENT_CONSTANTS_H_
 
 #include "build/build_config.h"
-#include "components/feature_engagement/features.h"
+#include "components/feature_engagement/buildflags.h"
 
 namespace feature_engagement {
 
@@ -64,6 +64,9 @@ extern const char kClearedBrowsingData[];
 
 // The user has viewed their reading list.
 extern const char kViewedReadingList[];
+
+// The user has viewed the the BottomToolbar tip.
+extern const char kBottomToolbarOpened[];
 #endif  // defined(OS_IOS)
 
 }  // namespace events

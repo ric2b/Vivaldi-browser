@@ -16,15 +16,15 @@
 #include <vector>
 
 #include "base/debug/activity_analyzer.h"
-#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/browser_watcher/stability_report.pb.h"
 #include "components/browser_watcher/stability_report_extractor.h"
-#include "components/browser_watcher/system_session_analyzer_win.h"
+#include "components/metrics/system_session_analyzer_win.h"
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
+#include "third_party/crashpad/crashpad/util/file/file_writer.h"
 
 namespace browser_watcher {
 
@@ -39,12 +39,12 @@ class PostmortemReportCollector {
   // crash reports. If |report_database| is set, postmortem crash reports are
   // generated and registered against it. If |analyzer| is set, it used to
   // analyze the containing system session.
-  PostmortemReportCollector(SystemSessionAnalyzer* analyzer);
+  PostmortemReportCollector(metrics::SystemSessionAnalyzer* analyzer);
   PostmortemReportCollector(const std::string& product_name,
                             const std::string& version_number,
                             const std::string& channel_name,
                             crashpad::CrashReportDatabase* report_database,
-                            SystemSessionAnalyzer* analyzer);
+                            metrics::SystemSessionAnalyzer* analyzer);
   ~PostmortemReportCollector();
 
   // Analyzes |stability_files|, logs postmortem user metrics and optionally
@@ -94,17 +94,18 @@ class PostmortemReportCollector {
   void GenerateCrashReport(const crashpad::UUID& client_id,
                            StabilityReport* report_proto);
 
-  virtual bool WriteReportToMinidump(StabilityReport* report,
-                                     const crashpad::UUID& client_id,
-                                     const crashpad::UUID& report_id,
-                                     base::PlatformFile minidump_file);
+  virtual bool WriteReportToMinidump(
+      StabilityReport* report,
+      const crashpad::UUID& client_id,
+      const crashpad::UUID& report_id,
+      crashpad::FileWriterInterface* minidump_file);
 
   std::string product_name_;
   std::string version_number_;
   std::string channel_name_;
 
   crashpad::CrashReportDatabase* report_database_;  // Not owned.
-  SystemSessionAnalyzer* system_session_analyzer_;  // Not owned.
+  metrics::SystemSessionAnalyzer* system_session_analyzer_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(PostmortemReportCollector);
 };

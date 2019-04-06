@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
@@ -126,7 +125,7 @@ void RecentDownloadSource::OnReadDirectory(
 
   for (const auto& entry : entries) {
     base::FilePath subpath = path.Append(entry.name);
-    if (entry.is_directory) {
+    if (entry.type == filesystem::mojom::FsFileType::DIRECTORY) {
       ScanDirectory(subpath);
     } else {
       storage::FileSystemURL url = BuildDownloadsURL(subpath);

@@ -19,8 +19,8 @@
 #include "chrome/browser/themes/custom_theme_supplier.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -33,6 +33,7 @@
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/ui_base_switches.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -66,7 +67,7 @@ class ThemeServiceTest : public extensions::ExtensionServiceTestBase {
   std::string LoadUnpackedThemeAt(const base::FilePath& temp_dir) {
     base::FilePath dst_manifest_path = temp_dir.AppendASCII("manifest.json");
     base::FilePath test_data_dir;
-    EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
+    EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
     base::FilePath src_manifest_path =
         test_data_dir.AppendASCII("extensions/theme_minimal/manifest.json");
     EXPECT_TRUE(base::CopyFile(src_manifest_path, dst_manifest_path));
@@ -400,6 +401,26 @@ TEST_F(ThemeServiceSupervisedUserTest, SupervisedUserThemeReplacesNativeTheme) {
   EXPECT_EQ(get_theme_supplier(theme_service)->get_theme_type(),
             CustomThemeSupplier::SUPERVISED_USER_THEME);
 }
+
+TEST_F(ThemeServiceTest, UserThemeTakesPrecedenceOverSystemTheme) {
+  ThemeService* theme_service =
+      ThemeServiceFactory::GetForProfile(profile_.get());
+
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  const std::string& extension_id = LoadUnpackedThemeAt(temp_dir.GetPath());
+  ASSERT_EQ(extension_id, theme_service->GetThemeID());
+
+  // Set preference |prefs::kUsesSystemTheme| to true which conflicts with
+  // having a user theme selected.
+  profile_->GetPrefs()->SetBoolean(prefs::kUsesSystemTheme, true);
+  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(prefs::kUsesSystemTheme));
+
+  // Initialization should fix the preference inconsistency.
+  theme_service->Init(profile_.get());
+  ASSERT_EQ(extension_id, theme_service->GetThemeID());
+  EXPECT_FALSE(profile_->GetPrefs()->GetBoolean(prefs::kUsesSystemTheme));
+}
 #endif // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #endif // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
@@ -407,6 +428,10 @@ TEST_F(ThemeServiceSupervisedUserTest, SupervisedUserThemeReplacesNativeTheme) {
 // Check that the function which computes the separator color behaves as
 // expected for a variety of inputs.
 TEST_F(ThemeServiceTest, SeparatorColor) {
+  // Refresh does not draw the toolbar top separator.
+  if (ui::MaterialDesignController::IsRefreshUi())
+    return;
+
   // Ensure Windows 10 machines use the built-in default colors rather than the
   // current system native colors.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -431,7 +456,7 @@ TEST_F(ThemeServiceTest, SeparatorColor) {
     EXPECT_EQ(theme_color, separator_color);
 
     // For the default theme, the separator should darken the frame.
-    double frame_luminance = color_utils::GetRelativeLuminance(frame_color);
+    float frame_luminance = color_utils::GetRelativeLuminance(frame_color);
     EXPECT_LT(color_utils::GetRelativeLuminance(separator_color),
               frame_luminance);
 
@@ -441,8 +466,8 @@ TEST_F(ThemeServiceTest, SeparatorColor) {
     // "tab" (frame color) since otherwise the contrast the contrast with the
     // "tab color" would be too minimal.
     separator_color = GetSeparatorColor(frame_color, tab_color);
-    double tab_luminance = color_utils::GetRelativeLuminance(tab_color);
-    double separator_luminance =
+    float tab_luminance = color_utils::GetRelativeLuminance(tab_color);
+    float separator_luminance =
         color_utils::GetRelativeLuminance(separator_color);
     EXPECT_LT(separator_luminance, tab_luminance);
     EXPECT_LT(separator_luminance, frame_luminance);
@@ -488,7 +513,7 @@ TEST_F(ThemeServiceTest, SeparatorColor) {
     // And if we reverse the colors, the separator should lighten the "frame"
     // (tab color).
     separator_color = GetSeparatorColor(frame_color, tab_color);
-    double tab_luminance = color_utils::GetRelativeLuminance(tab_color);
+    float tab_luminance = color_utils::GetRelativeLuminance(tab_color);
     EXPECT_GT(color_utils::GetRelativeLuminance(separator_color),
               tab_luminance);
 
@@ -496,7 +521,7 @@ TEST_F(ThemeServiceTest, SeparatorColor) {
     // should also be lighter than the tab color since otherwise the contrast
     // with the tab would be too minimal.
     separator_color = GetSeparatorColor(tab_color, SK_ColorBLACK);
-    double separator_luminance =
+    float separator_luminance =
         color_utils::GetRelativeLuminance(separator_color);
     EXPECT_GT(separator_luminance, 0);
     EXPECT_GT(separator_luminance, tab_luminance);

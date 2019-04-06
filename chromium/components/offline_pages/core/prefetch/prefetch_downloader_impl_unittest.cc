@@ -6,11 +6,11 @@
 
 #include <vector>
 
-#include "base/memory/ptr_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
-#include "components/download/public/test/test_download_service.h"
+#include "components/download/public/background_service/test/test_download_service.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/prefetch/prefetch_request_test_base.h"
 #include "components/offline_pages/core/prefetch/prefetch_server_urls.h"
@@ -28,6 +28,7 @@ const char kDownloadId2[] = "Abcd";
 const char kFailedDownloadId[] = "f1f1FF";
 const char kDownloadLocation[] = "page/1";
 const char kDownloadLocation2[] = "page/zz";
+const char kOperationName[] = "operation-123";
 const char kServerPathForDownload[] = "/v1/media/page/1";
 }  // namespace
 
@@ -40,13 +41,11 @@ class PrefetchDownloaderImplTest : public PrefetchRequestTestBase {
   void SetUp() override {
     PrefetchRequestTestBase::SetUp();
 
-    clock_ = new base::SimpleTestClock();
-
     prefetch_service_taco_.reset(new PrefetchServiceTestTaco);
 
     auto downloader = std::make_unique<PrefetchDownloaderImpl>(
         &download_service_, kTestChannel);
-    downloader->SetClockForTesting(base::WrapUnique(clock_));
+    downloader->SetClockForTesting(&clock_);
     download_service_.SetFailedDownload(kFailedDownloadId, false);
     download_service_.SetIsReady(true);
     download_client_ = std::make_unique<TestDownloadClient>(downloader.get());
@@ -68,8 +67,10 @@ class PrefetchDownloaderImplTest : public PrefetchRequestTestBase {
   }
 
   void StartDownload(const std::string& download_id,
-                     const std::string& download_location) {
-    prefetch_downloader()->StartDownload(download_id, download_location);
+                     const std::string& download_location,
+                     const std::string& operation_name) {
+    prefetch_downloader()->StartDownload(download_id, download_location,
+                                         operation_name);
   }
 
   base::Optional<download::DownloadParams> GetDownload(
@@ -81,7 +82,7 @@ class PrefetchDownloaderImplTest : public PrefetchRequestTestBase {
     return prefetch_dispatcher()->download_results;
   }
 
-  base::SimpleTestClock* clock() { return clock_; }
+  base::SimpleTestClock* clock() { return &clock_; }
 
   PrefetchDownloader* prefetch_downloader() const {
     return prefetch_service_taco_->prefetch_service()->GetPrefetchDownloader();
@@ -96,7 +97,7 @@ class PrefetchDownloaderImplTest : public PrefetchRequestTestBase {
   download::test::TestDownloadService download_service_;
   std::unique_ptr<TestDownloadClient> download_client_;
   std::unique_ptr<PrefetchServiceTestTaco> prefetch_service_taco_;
-  base::SimpleTestClock* clock_;
+  base::SimpleTestClock clock_;
 };
 
 TEST_F(PrefetchDownloaderImplTest, DownloadParams) {
@@ -104,7 +105,7 @@ TEST_F(PrefetchDownloaderImplTest, DownloadParams) {
   base::Time epoch = base::Time();
   clock()->SetNow(epoch);
 
-  StartDownload(kDownloadId, kDownloadLocation);
+  StartDownload(kDownloadId, kDownloadLocation, kOperationName);
   base::Optional<download::DownloadParams> params = GetDownload(kDownloadId);
   ASSERT_TRUE(params.has_value());
   EXPECT_EQ(kDownloadId, params->guid);
@@ -118,7 +119,9 @@ TEST_F(PrefetchDownloaderImplTest, DownloadParams) {
   std::string alt_value;
   EXPECT_TRUE(net::GetValueForKeyInQuery(download_url, "alt", &alt_value));
   EXPECT_EQ("media", alt_value);
-  EXPECT_TRUE(params->request_params.request_headers.IsEmpty());
+  EXPECT_EQ(base::StrCat({kPrefetchOperationHeaderName, ": ", kOperationName,
+                          "\r\n\r\n"}),
+            params->request_params.request_headers.ToString());
 
   EXPECT_EQ(base::TimeDelta::FromDays(2),
             params->scheduling_params.cancel_time - epoch);
@@ -129,7 +132,7 @@ TEST_F(PrefetchDownloaderImplTest, ExperimentHeaderInDownloadParams) {
   OnDownloadServiceReady();
   SetUpExperimentOption();
 
-  StartDownload(kDownloadId, kDownloadLocation);
+  StartDownload(kDownloadId, kDownloadLocation, kOperationName);
   base::Optional<download::DownloadParams> params = GetDownload(kDownloadId);
   ASSERT_TRUE(params.has_value());
   std::string header_value;
@@ -141,8 +144,8 @@ TEST_F(PrefetchDownloaderImplTest, ExperimentHeaderInDownloadParams) {
 
 TEST_F(PrefetchDownloaderImplTest, DownloadSucceeded) {
   OnDownloadServiceReady();
-  StartDownload(kDownloadId, kDownloadLocation);
-  StartDownload(kDownloadId2, kDownloadLocation2);
+  StartDownload(kDownloadId, kDownloadLocation, kOperationName);
+  StartDownload(kDownloadId2, kDownloadLocation2, kOperationName);
   RunUntilIdle();
   ASSERT_EQ(2u, completed_downloads().size());
   EXPECT_EQ(kDownloadId, completed_downloads()[0].download_id);
@@ -153,7 +156,7 @@ TEST_F(PrefetchDownloaderImplTest, DownloadSucceeded) {
 
 TEST_F(PrefetchDownloaderImplTest, DownloadFailed) {
   OnDownloadServiceReady();
-  StartDownload(kFailedDownloadId, kDownloadLocation);
+  StartDownload(kFailedDownloadId, kDownloadLocation, kOperationName);
   RunUntilIdle();
   ASSERT_EQ(1u, completed_downloads().size());
   EXPECT_EQ(kFailedDownloadId, completed_downloads()[0].download_id);

@@ -16,7 +16,6 @@
     "256": "common/images/icon256.png"
   },
   "permissions": [
-    // Comment out chrome:// permissions to debug on a desktop browser.
     "chrome://extension-icon/",
     "chrome://resources/",
     "chrome://theme/",
@@ -137,6 +136,14 @@
       "default_icon": "common/images/file_types/200/generic.png",
       "file_filters": [
         "filesystem:*.gslides"
+      ]
+    },
+    {
+      "id": "install-linux-package",
+      "default_title": "__MSG_INSTALL_LINUX_PACKAGE__",
+      "default_icon": "common/images/file_types/200/generic.png",
+      "file_filters": [
+        "filesystem:*.deb"
       ]
     },
     // The following handlers are used only internally, therefore they do not

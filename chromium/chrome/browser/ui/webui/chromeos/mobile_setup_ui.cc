@@ -19,7 +19,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -426,18 +425,22 @@ void MobileSetupHandler::GetPropertiesAndCallStatusChanged(
 }
 
 void MobileSetupHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback(kJsApiStartActivation,
-      base::Bind(&MobileSetupHandler::HandleStartActivation,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(kJsApiSetTransactionStatus,
-      base::Bind(&MobileSetupHandler::HandleSetTransactionStatus,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(kJsApiPaymentPortalLoad,
-      base::Bind(&MobileSetupHandler::HandlePaymentPortalLoad,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(kJsGetDeviceInfo,
-      base::Bind(&MobileSetupHandler::HandleGetDeviceInfo,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kJsApiStartActivation,
+      base::BindRepeating(&MobileSetupHandler::HandleStartActivation,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kJsApiSetTransactionStatus,
+      base::BindRepeating(&MobileSetupHandler::HandleSetTransactionStatus,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kJsApiPaymentPortalLoad,
+      base::BindRepeating(&MobileSetupHandler::HandlePaymentPortalLoad,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kJsGetDeviceInfo,
+      base::BindRepeating(&MobileSetupHandler::HandleGetDeviceInfo,
+                          base::Unretained(this)));
 }
 
 void MobileSetupHandler::HandleStartActivation(const base::ListValue* args) {

@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/test_simple_task_runner.h"
@@ -30,16 +31,18 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync/protocol/experiment_status.pb.h"
 #include "components/sync/protocol/experiments_specifics.pb.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace gcm {
 
 namespace {
 
+const char kTestChannelStatusRequestURL[] = "http://channel.status.request.com";
 const char kTestAppID1[] = "TestApp1";
 const char kTestAppID2[] = "TestApp2";
 const char kUserID1[] = "user1";
@@ -78,9 +81,7 @@ void FakeGCMConnectionObserver::OnDisconnected() {
 }
 
 void PumpCurrentLoop() {
-  base::MessageLoop::ScopedNestableTaskAllower
-      nestable_task_allower(base::MessageLoop::current());
-  base::RunLoop().RunUntilIdle();
+  base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).RunUntilIdle();
 }
 
 void PumpUILoop() {
@@ -167,6 +168,8 @@ class GCMDriverTest : public testing::Test {
   TestingPrefServiceSimple prefs_;
   base::MessageLoopForUI message_loop_;
   base::Thread io_thread_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
+
   std::unique_ptr<GCMDriverDesktop> driver_;
   std::unique_ptr<FakeGCMAppHandler> gcm_app_handler_;
   std::unique_ptr<FakeGCMConnectionObserver> gcm_connection_observer_;
@@ -188,8 +191,7 @@ GCMDriverTest::GCMDriverTest()
     : io_thread_("IOThread"),
       registration_result_(GCMClient::UNKNOWN_ERROR),
       send_result_(GCMClient::UNKNOWN_ERROR),
-      unregistration_result_(GCMClient::UNKNOWN_ERROR) {
-}
+      unregistration_result_(GCMClient::UNKNOWN_ERROR) {}
 
 GCMDriverTest::~GCMDriverTest() {
 }
@@ -244,8 +246,10 @@ void GCMDriverTest::CreateDriver() {
   driver_.reset(new GCMDriverDesktop(
       std::unique_ptr<GCMClientFactory>(new FakeGCMClientFactory(
           base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner())),
-      chrome_build_info, "http://channel.status.request.url",
-      "user-agent-string", &prefs_, temp_dir_.GetPath(), request_context,
+      chrome_build_info, kTestChannelStatusRequestURL, "user-agent-string",
+      &prefs_, temp_dir_.GetPath(), request_context,
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          &test_url_loader_factory_),
       base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner(),
       message_loop_.task_runner()));
 
@@ -935,8 +939,6 @@ class GCMChannelStatusSyncerTest : public GCMDriverTest {
   }
 
  private:
-  net::TestURLFetcherFactory url_fetcher_factory_;
-
   DISALLOW_COPY_AND_ASSIGN(GCMChannelStatusSyncerTest);
 };
 
@@ -948,8 +950,6 @@ GCMChannelStatusSyncerTest::~GCMChannelStatusSyncerTest() {
 
 void GCMChannelStatusSyncerTest::SetUp() {
   GCMDriverTest::SetUp();
-
-  url_fetcher_factory_.set_remove_fetcher_on_delete(true);
 }
 
 void GCMChannelStatusSyncerTest::CompleteGCMChannelStatusRequest(
@@ -962,14 +962,7 @@ void GCMChannelStatusSyncerTest::CompleteGCMChannelStatusRequest(
   if (poll_interval_seconds)
     response_proto.set_poll_interval_seconds(poll_interval_seconds);
 
-  std::string response_string;
-  response_proto.SerializeToString(&response_string);
-
-  net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-  ASSERT_TRUE(fetcher);
-  fetcher->set_response_code(net::HTTP_OK);
-  fetcher->SetResponseString(response_string);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  syncer()->request_for_testing()->ParseResponseProto(response_proto);
 }
 
 bool GCMChannelStatusSyncerTest::CompareDelaySeconds(

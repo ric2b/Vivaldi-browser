@@ -133,7 +133,7 @@ void SynthesizeKeyEventsSequence(NSWindow* window,
 
 // A helper function to watch for the event queue. The specific task will be
 // fired when there is no more event in the queue.
-void EventQueueWatcher(const base::Closure& task) {
+void EventQueueWatcher(base::OnceClosure task) {
   NSEvent* event = [NSApp nextEventMatchingMask:NSAnyEventMask
                                       untilDate:nil
                                          inMode:NSDefaultRunLoopMode
@@ -141,9 +141,9 @@ void EventQueueWatcher(const base::Closure& task) {
   // If there is still event in the queue, then we need to check again.
   if (event) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&EventQueueWatcher, task));
+        FROM_HERE, base::BindOnce(&EventQueueWatcher, std::move(task)));
   } else {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, task);
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(task));
   }
 }
 
@@ -251,9 +251,8 @@ bool SendKeyPress(gfx::NativeWindow window,
                   bool alt,
                   bool command) {
   CHECK(g_ui_controls_enabled);
-  return SendKeyPressNotifyWhenDone(window, key,
-                                    control, shift, alt, command,
-                                    base::Closure());
+  return SendKeyPressNotifyWhenDone(window, key, control, shift, alt, command,
+                                    base::OnceClosure());
 }
 
 // Win and Linux implement a SendKeyPress() this as a
@@ -264,7 +263,7 @@ bool SendKeyPressNotifyWhenDone(gfx::NativeWindow window,
                                 bool shift,
                                 bool alt,
                                 bool command,
-                                const base::Closure& task) {
+                                base::OnceClosure task) {
   CHECK(g_ui_controls_enabled);
   DCHECK(base::MessageLoopForUI::IsCurrent());
 
@@ -283,7 +282,7 @@ bool SendKeyPressNotifyWhenDone(gfx::NativeWindow window,
 
   if (!task.is_null()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&EventQueueWatcher, task));
+        FROM_HERE, base::BindOnce(&EventQueueWatcher, std::move(task)));
   }
 
   return true;
@@ -291,14 +290,14 @@ bool SendKeyPressNotifyWhenDone(gfx::NativeWindow window,
 
 bool SendMouseMove(long x, long y) {
   CHECK(g_ui_controls_enabled);
-  return SendMouseMoveNotifyWhenDone(x, y, base::Closure());
+  return SendMouseMoveNotifyWhenDone(x, y, base::OnceClosure());
 }
 
 // Input position is in screen coordinates.  However, NSMouseMoved
 // events require them window-relative, so we adjust.  We *DO* flip
 // the coordinate space, so input events can be the same for all
 // platforms.  E.g. (0,0) is upper-left.
-bool SendMouseMoveNotifyWhenDone(long x, long y, const base::Closure& task) {
+bool SendMouseMoveNotifyWhenDone(long x, long y, base::OnceClosure task) {
   CHECK(g_ui_controls_enabled);
   g_mouse_location = gfx::ScreenPointToNSPoint(gfx::Point(x, y));  // flip!
 
@@ -332,41 +331,47 @@ bool SendMouseMoveNotifyWhenDone(long x, long y, const base::Closure& task) {
 
   if (!task.is_null()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&EventQueueWatcher, task));
+        FROM_HERE, base::BindOnce(&EventQueueWatcher, std::move(task)));
   }
 
   return true;
 }
 
-bool SendMouseEvents(MouseButton type, int state) {
+bool SendMouseEvents(MouseButton type,
+                     int button_state,
+                     int accelerator_state) {
   CHECK(g_ui_controls_enabled);
-  return SendMouseEventsNotifyWhenDone(type, state, base::Closure());
+  return SendMouseEventsNotifyWhenDone(type, button_state, base::OnceClosure(),
+                                       accelerator_state);
 }
 
-bool SendMouseEventsNotifyWhenDone(MouseButton type, int state,
-                                   const base::Closure& task) {
+bool SendMouseEventsNotifyWhenDone(MouseButton type,
+                                   int button_state,
+                                   base::OnceClosure task,
+                                   int accelerator_state) {
   CHECK(g_ui_controls_enabled);
-  // On windows it appears state can be (UP|DOWN).  It is unclear if
-  // that'll happen here but prepare for it just in case.
-  if (state == (UP|DOWN)) {
-    return (SendMouseEventsNotifyWhenDone(type, DOWN, base::Closure()) &&
-            SendMouseEventsNotifyWhenDone(type, UP, task));
+  // Handle the special case of mouse clicking (UP | DOWN) case.
+  if (button_state == (UP | DOWN)) {
+    return (SendMouseEventsNotifyWhenDone(type, DOWN, base::OnceClosure(),
+                                          accelerator_state) &&
+            SendMouseEventsNotifyWhenDone(type, UP, std::move(task),
+                                          accelerator_state));
   }
   NSEventType event_type = NSLeftMouseDown;
   if (type == LEFT) {
-    if (state == UP) {
+    if (button_state == UP) {
       event_type = NSLeftMouseUp;
     } else {
       event_type = NSLeftMouseDown;
     }
   } else if (type == MIDDLE) {
-    if (state == UP) {
+    if (button_state == UP) {
       event_type = NSOtherMouseUp;
     } else {
       event_type = NSOtherMouseDown;
     }
   } else if (type == RIGHT) {
-    if (state == UP) {
+    if (button_state == UP) {
       event_type = NSRightMouseUp;
     } else {
       event_type = NSRightMouseDown;
@@ -375,28 +380,39 @@ bool SendMouseEventsNotifyWhenDone(MouseButton type, int state,
     NOTREACHED();
     return false;
   }
-  g_mouse_button_down[type] = state == DOWN;
+  g_mouse_button_down[type] = button_state == DOWN;
 
   NSWindow* window = WindowAtCurrentMouseLocation();
   NSPoint pointInWindow = g_mouse_location;
   if (window)
     pointInWindow = ui::ConvertPointFromScreenToWindow(window, pointInWindow);
 
+  // Process the accelerator key state.
+  NSEventModifierFlags modifier = 0;
+  if (accelerator_state & kShift)
+    modifier |= NSEventModifierFlagShift;
+  if (accelerator_state & kControl)
+    modifier |= NSEventModifierFlagControl;
+  if (accelerator_state & kAlt)
+    modifier |= NSEventModifierFlagOption;
+  if (accelerator_state & kCommand)
+    modifier |= NSEventModifierFlagCommand;
+
   NSEvent* event =
       [NSEvent mouseEventWithType:event_type
                          location:pointInWindow
-                    modifierFlags:0
+                    modifierFlags:modifier
                         timestamp:TimeIntervalSinceSystemStartup()
                      windowNumber:[window windowNumber]
                           context:nil
                       eventNumber:0
                        clickCount:1
-                         pressure:state == DOWN ? 1.0 : 0.0];
+                         pressure:button_state == DOWN ? 1.0 : 0.0];
   [[NSApplication sharedApplication] postEvent:event atStart:NO];
 
   if (!task.is_null()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&EventQueueWatcher, task));
+        FROM_HERE, base::BindOnce(&EventQueueWatcher, std::move(task)));
   }
 
   return true;
@@ -404,12 +420,7 @@ bool SendMouseEventsNotifyWhenDone(MouseButton type, int state,
 
 bool SendMouseClick(MouseButton type) {
   CHECK(g_ui_controls_enabled);
-  return SendMouseEventsNotifyWhenDone(type, UP|DOWN, base::Closure());
-}
-
-void RunClosureAfterAllPendingUIEvents(const base::Closure& closure) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&EventQueueWatcher, closure));
+  return SendMouseEventsNotifyWhenDone(type, UP | DOWN, base::OnceClosure());
 }
 
 bool IsFullKeyboardAccessEnabled() {

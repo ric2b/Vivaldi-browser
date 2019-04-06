@@ -27,9 +27,8 @@ class LayerTreeHost;
 
 class RasterizeAndRecordBenchmark : public MicroBenchmark {
  public:
-  explicit RasterizeAndRecordBenchmark(
-      std::unique_ptr<base::Value> value,
-      const MicroBenchmark::DoneCallback& callback);
+  explicit RasterizeAndRecordBenchmark(std::unique_ptr<base::Value> value,
+                                       MicroBenchmark::DoneCallback callback);
   ~RasterizeAndRecordBenchmark() override;
 
   // Implements MicroBenchmark interface.
@@ -46,8 +45,10 @@ class RasterizeAndRecordBenchmark : public MicroBenchmark {
     RecordResults();
     ~RecordResults();
 
-    int pixels_recorded;
-    size_t bytes_used;
+    int pixels_recorded = 0;
+    size_t painter_memory_usage = 0;
+    size_t paint_op_memory_usage = 0;
+    size_t paint_op_count = 0;
     base::TimeDelta total_best_time[RecordingSource::RECORDING_MODE_COUNT];
   };
 

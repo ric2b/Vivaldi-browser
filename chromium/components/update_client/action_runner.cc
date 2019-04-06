@@ -8,16 +8,17 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/task_scheduler/post_task.h"
+#include "build/build_config.h"
 #include "components/update_client/component.h"
 #include "components/update_client/configurator.h"
 #include "components/update_client/task_traits.h"
 #include "components/update_client/update_client.h"
+#include "components/update_client/update_engine.h"
 
 namespace update_client {
 
@@ -35,20 +36,23 @@ void ActionRunner::Run(Callback run_complete) {
   run_complete_ = std::move(run_complete);
 
   base::CreateSequencedTaskRunnerWithTraits(kTaskTraits)
-      ->PostTask(FROM_HERE,
-                 base::BindOnce(&ActionRunner::Unpack, base::Unretained(this)));
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(&ActionRunner::Unpack, base::Unretained(this),
+                         component_.config()->CreateServiceManagerConnector()));
 }
 
-void ActionRunner::Unpack() {
-  const auto& installer = component_.crx_component().installer;
+void ActionRunner::Unpack(
+    std::unique_ptr<service_manager::Connector> connector) {
+  const auto& installer = component_.crx_component()->installer;
 
   base::FilePath file_path;
   installer->GetInstalledFile(component_.action_run(), &file_path);
 
   // Contains the key hash of the CRX this object is allowed to run.
   const auto key_hash = component_.config()->GetRunActionKeyHash();
-  auto unpacker = base::MakeRefCounted<ComponentUnpacker>(key_hash, file_path,
-                                                          installer, nullptr);
+  auto unpacker = base::MakeRefCounted<ComponentUnpacker>(
+      key_hash, file_path, installer, std::move(connector));
   unpacker->Unpack(
       base::BindOnce(&ActionRunner::UnpackComplete, base::Unretained(this)));
 }

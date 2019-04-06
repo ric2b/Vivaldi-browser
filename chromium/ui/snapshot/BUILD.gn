@@ -10,7 +10,6 @@ jumbo_component("snapshot") {
   sources = [
     "screenshot_grabber.cc",
     "screenshot_grabber.h",
-    "screenshot_grabber_observer.h",
     "snapshot.cc",
     "snapshot.h",
     "snapshot_android.cc",
@@ -101,7 +100,7 @@ test("snapshot_unittests") {
     ":snapshot",
     "//base",
     "//base/test:test_support",
-    "//mojo/edk/system",
+    "//mojo/core/embedder",
     "//skia",
     "//testing/gtest",
     "//ui/base",

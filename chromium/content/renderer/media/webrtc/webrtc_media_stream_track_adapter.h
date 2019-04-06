@@ -10,12 +10,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/waitable_event.h"
 #include "content/common/content_export.h"
-#include "content/renderer/media/remote_media_stream_track_adapter.h"
+#include "content/renderer/media/stream/remote_media_stream_track_adapter.h"
 #include "content/renderer/media/webrtc/media_stream_video_webrtc_sink.h"
 #include "content/renderer/media/webrtc/webrtc_audio_sink.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter.h"
-#include "third_party/WebKit/public/platform/WebMediaStream.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
+#include "third_party/blink/public/platform/web_media_stream.h"
+#include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 
 namespace content {
@@ -53,6 +53,7 @@ class CONTENT_EXPORT WebRtcMediaStreamTrackAdapter
   void Dispose();
 
   bool is_initialized() const;
+  void InitializeOnMainThread();
   // These methods must be called on the main thread.
   // TODO(hbos): Allow these methods to be called on any thread and make them
   // const. https://crbug.com/756436
@@ -116,6 +117,7 @@ class CONTENT_EXPORT WebRtcMediaStreamTrackAdapter
   // completed on the main thread.
   base::WaitableEvent remote_track_can_complete_initialization_;
   bool is_initialized_;
+  bool is_disposed_;
   blink::WebMediaStreamTrack web_track_;
   scoped_refptr<webrtc::MediaStreamTrackInterface> webrtc_track_;
   // If the track is local, a sink is added to the local webrtc track that is

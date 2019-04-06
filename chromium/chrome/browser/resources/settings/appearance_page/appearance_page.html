@@ -5,7 +5,6 @@
 <link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="appearance_browser_proxy.html">
 <link rel="import" href="../controls/controlled_radio_button.html">
 <link rel="import" href="../controls/extension_controlled_indicator.html">
@@ -27,40 +26,34 @@
         -webkit-margin-start: 12px;
       }
 
+      /* Lines up with cr-input. */
       #custom-input {
-        margin-bottom: 1rem;
-      }
-
-      #customHomePage {
-        --paper-input-container: {
-          width: 200px;
-        };
-        width: 100%;  /* Pushes policy indicators to end. */
+        --cr-radio-button-disc: {
+          /* (cr-input line-height + cr-input top/bottom padding) / 2 -
+             cr-radio disc-wrapper height / 2 */
+          margin-top: calc((1.54em + 12px) / 2 - 8px);
+        }
+        align-items: start;
       }
 
       /* The theme mixes a link and a paper-button divided by a separator with
        * grit expressions and dom-if templates. That leads to a tricky thing
        * to style correctly, these are a workaround. */
       #themeRow paper-button {
-        -webkit-margin-end: 8px;
+        -webkit-margin-end: 20px;
       }
 
       #themeRow .separator {
          -webkit-margin-start: 0;
-      }
-
-      #useSystem {
-        -webkit-margin-start: calc(var(--cr-button-edge-spacing) * -1);
       }
     </style>
     <settings-animated-pages id="pages" section="appearance"
         focus-config="[[focusConfig_]]">
       <neon-animatable route-path="default">
 <if expr="chromeos">
-        <button icon-class="icon-external" id="wallpaperButton"
-            is="cr-link-row"
+        <cr-link-row icon-class="icon-external" id="wallpaperButton"
             hidden="[[!pageVisibility.setWallpaper]]"
-            on-tap="openWallpaperManager_"
+            on-click="openWallpaperManager_"
             label="$i18n{setWallpaper}" sub-label="$i18n{openWallpaperApp}"
             disabled="[[isWallpaperPolicyControlled_]]">
           <template is="dom-if" if="[[isWallpaperPolicyControlled_]]">
@@ -68,19 +61,19 @@
                 indicator-type="devicePolicy">
             </cr-policy-indicator>
           </template>
-        </button>
+        </cr-link-row>
         <div class="hr"></div>
 </if>
         <div class="settings-row continuation" id="themeRow"
             hidden="[[!pageVisibility.setTheme]]">
-          <button class="first" icon-class="icon-external" is="cr-link-row"
+          <cr-link-row class="first" icon-class="icon-external"
               hidden="[[!pageVisibility.setTheme]]"
               label="$i18n{themes}" sub-label="[[themeSublabel_]]"
-              on-tap="openThemeUrl_"></button>
+              on-click="openThemeUrl_"></cr-link-row>
 <if expr="not is_linux or chromeos">
           <template is="dom-if" if="[[prefs.extensions.theme.id.value]]">
             <div class="separator"></div>
-            <paper-button id="useDefault" on-tap="onUseDefaultTap_"
+            <paper-button id="useDefault" on-click="onUseDefaultTap_"
                 class="secondary-button">
               $i18n{resetToDefaultTheme}
             </paper-button>
@@ -94,14 +87,14 @@
             <div class="separator"></div>
             <template is="dom-if" if="[[showUseClassic_(
                 prefs.extensions.theme.id.value, useSystemTheme_)]]" restamp>
-              <paper-button id="useDefault" on-tap="onUseDefaultTap_"
+              <paper-button id="useDefault" on-click="onUseDefaultTap_"
                   class="secondary-button">
                 $i18n{useClassicTheme}
               </paper-button>
             </template>
             <template is="dom-if" if="[[showUseSystem_(
                 prefs.extensions.theme.id.value, useSystemTheme_)]]" restamp>
-              <paper-button id="useSystem" on-tap="onUseSystemTap_"
+              <paper-button id="useSystem" on-click="onUseSystemTap_"
                   class="secondary-button">
                 $i18n{useSystemTheme}
               </paper-button>
@@ -166,24 +159,21 @@
               menu-options="[[fontSizeOptions_]]">
           </settings-dropdown-menu>
         </div>
-        <button class="hr" is="cr-link-row"
+        <cr-link-row class="hr"
             icon-class="subpage-arrow" id="customize-fonts-subpage-trigger"
-            label="$i18n{customizeFonts}" on-tap="onCustomizeFontsTap_">
-        </button>
+            label="$i18n{customizeFonts}" on-click="onCustomizeFontsTap_">
+        </cr-link-row>
         <div class="settings-box" hidden="[[!pageVisibility.pageZoom]]">
           <div id="pageZoom" class="start">$i18n{pageZoom}</div>
-          <div class="md-select-wrapper">
-            <select id="zoomLevel" class="md-select" aria-labelledby="pageZoom"
-                on-change="onZoomLevelChange_">
-              <template is="dom-repeat" items="[[pageZoomLevels_]]">
-                <option value="[[item]]"
-                    selected="[[zoomValuesEqual_(item, defaultZoom_)]]">
-                  [[formatZoom_(item)]]%
-                </option>
-              </template>
-            </select>
-            <span class="md-select-underline"></span>
-          </div>
+          <select id="zoomLevel" class="md-select" aria-labelledby="pageZoom"
+              on-change="onZoomLevelChange_">
+            <template is="dom-repeat" items="[[pageZoomLevels_]]">
+              <option value="[[item]]"
+                  selected="[[zoomValuesEqual_(item, defaultZoom_)]]">
+                [[formatZoom_(item)]]%
+              </option>
+            </template>
+          </select>
         </div>
 <if expr="is_macosx">
         <settings-toggle-button pref="{{prefs.webkit.webprefs.tabs_to_links}}"

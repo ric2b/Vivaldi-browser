@@ -6,13 +6,15 @@
 
 #include <stddef.h>
 
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
+#include "ash/public/cpp/app_menu_constants.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/app_list_button.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/shelf_widget.h"
@@ -21,7 +23,8 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
+#include "base/test/bind_test_util.h"
+#include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -30,8 +33,6 @@
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
-#include "chrome/browser/ui/app_list/app_list_service.h"
-#include "chrome/browser/ui/ash/app_list/test/app_list_service_ash_test_api.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_test_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
@@ -49,7 +50,7 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_app_window_icon_observer.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -66,10 +67,6 @@
 #include "extensions/common/switches.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_switches.h"
-#include "ui/app_list/views/app_list_item_view.h"
-#include "ui/app_list/views/apps_grid_view.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/mus/change_completion_waiter.h"
 #include "ui/aura/window.h"
@@ -195,25 +192,13 @@ class LauncherPlatformAppBrowserTest
         shelf_id, shelf_model()->item_count());
   }
 
-  // Returns the last item in the shelf; note that panels are pinned to the end.
+  // Returns the last item in the shelf.
   const ash::ShelfItem& GetLastLauncherItem() {
     return shelf_model()->items()[shelf_model()->item_count() - 1];
   }
 
   ash::ShelfItemDelegate* GetShelfItemDelegate(const ash::ShelfID& id) {
     return shelf_model()->GetShelfItemDelegate(id);
-  }
-
-  AppWindow* CreateAppWindowAndRunLoop(content::BrowserContext* context,
-                                       const Extension* extension,
-                                       const AppWindow::CreateParams& params) {
-    AppWindow* window = CreateAppWindowFromParams(context, extension, params);
-    // The shelf items for panel app windows are controlled by Ash's
-    // ShelfWindowWatcher and added to Ash's ShelfModel. Spin a RunLoop to allow
-    // the shelf item to synchronize to Chrome's separate ShelfModel.
-    if (params.window_type == AppWindow::WINDOW_TYPE_PANEL)
-      base::RunLoop().RunUntilIdle();
-    return window;
   }
 
   ChromeLauncherController* controller_;
@@ -233,7 +218,7 @@ enum RipOffCommand {
   RIP_OFF_ITEM_AND_DONT_RELEASE_MOUSE,
 };
 
-class ShelfAppBrowserTest : public ExtensionBrowserTest {
+class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
  protected:
   ShelfAppBrowserTest() {}
 
@@ -247,7 +232,7 @@ class ShelfAppBrowserTest : public ExtensionBrowserTest {
 
     controller_ = ChromeLauncherController::instance();
     ASSERT_TRUE(controller_);
-    ExtensionBrowserTest::SetUpOnMainThread();
+    extensions::ExtensionBrowserTest::SetUpOnMainThread();
   }
 
   size_t NumberOfDetectedLauncherBrowsers(bool show_all_tabs) {
@@ -263,7 +248,7 @@ class ShelfAppBrowserTest : public ExtensionBrowserTest {
                                           WindowOpenDisposition disposition) {
     EXPECT_TRUE(LoadExtension(test_data_dir_.AppendASCII(name)));
 
-    ExtensionService* service =
+    extensions::ExtensionService* service =
         extensions::ExtensionSystem::Get(profile())->extension_service();
     const Extension* extension =
         service->GetExtensionById(last_loaded_extension_id(), false);
@@ -275,7 +260,7 @@ class ShelfAppBrowserTest : public ExtensionBrowserTest {
   }
 
   ash::ShelfID CreateShortcut(const char* name) {
-    ExtensionService* service =
+    extensions::ExtensionService* service =
         extensions::ExtensionSystem::Get(profile())->extension_service();
     LoadExtension(test_data_dir_.AppendASCII(name));
 
@@ -344,8 +329,20 @@ class ShelfAppBrowserTest : public ExtensionBrowserTest {
     return LauncherContextMenu::Create(controller_, &item, display_id);
   }
 
-  bool IsItemPresentInMenu(LauncherContextMenu* menu, int command_id) {
-    return menu->GetIndexOfCommandId(command_id) != -1;
+  bool IsItemPresentInMenu(LauncherContextMenu* launcher_context_menu,
+                           int command_id) {
+    base::RunLoop run_loop;
+    std::unique_ptr<ui::MenuModel> menu;
+    launcher_context_menu->GetMenuModel(base::BindLambdaForTesting(
+        [&](std::unique_ptr<ui::MenuModel> created_menu) {
+          menu = std::move(created_menu);
+          run_loop.Quit();
+        }));
+    run_loop.Run();
+    ui::MenuModel* menu_ptr = menu.get();
+    int index = 0;
+    return ui::MenuModel::GetModelAndIndexForCommandId(command_id, &menu_ptr,
+                                                       &index);
   }
 
   ChromeLauncherController* controller_ = nullptr;
@@ -719,45 +716,6 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
   EXPECT_TRUE(window1a->GetBaseWindow()->IsActive());
 }
 
-// Confirm that item selection behavior for Chrome app panels is correct.
-IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, PanelItemClickBehavior) {
-  // Enable experimental APIs to allow panel creation.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      extensions::switches::kEnableExperimentalExtensionApis);
-  // Launch a platform app and create a panel window for it.
-  const Extension* extension1 = LoadAndLaunchPlatformApp("launch", "Launched");
-  AppWindow::CreateParams params;
-  params.window_type = AppWindow::WINDOW_TYPE_PANEL;
-  params.focused = false;
-  AppWindow* panel =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension1, params);
-  EXPECT_TRUE(panel->GetNativeWindow()->IsVisible());
-  // Panels should not be active by default.
-  EXPECT_FALSE(panel->GetBaseWindow()->IsActive());
-  // Confirm that an item delegate was created and is in the correct state.
-  const ash::ShelfItem& item = GetLastLauncherItem();
-  EXPECT_EQ(ash::TYPE_APP_PANEL, item.type);
-  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
-  EXPECT_EQ(ash::TYPE_APP_PANEL,
-            panel->GetNativeWindow()->GetProperty(ash::kShelfItemTypeKey));
-  EXPECT_EQ(item.id.Serialize(),
-            *panel->GetNativeWindow()->GetProperty(ash::kShelfIDKey));
-  // Click the item and confirm that the panel is activated.
-  EXPECT_EQ(ash::SHELF_ACTION_WINDOW_ACTIVATED, SelectItem(item.id));
-  EXPECT_TRUE(panel->GetBaseWindow()->IsActive());
-  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
-  // Click the item again and confirm that the panel is minimized.
-  EXPECT_EQ(ash::SHELF_ACTION_WINDOW_MINIMIZED, SelectItem(item.id));
-  EXPECT_TRUE(panel->GetBaseWindow()->IsMinimized());
-  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
-  // Click the item again and confirm that the panel is activated.
-  EXPECT_EQ(ash::SHELF_ACTION_WINDOW_ACTIVATED, SelectItem(item.id));
-  EXPECT_TRUE(panel->GetNativeWindow()->IsVisible());
-  EXPECT_TRUE(panel->GetBaseWindow()->IsActive());
-  EXPECT_FALSE(panel->GetBaseWindow()->IsMinimized());
-  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
-}
-
 IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, BrowserActivation) {
   int item_count = shelf_model()->item_count();
 
@@ -776,63 +734,49 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, BrowserActivation) {
 }
 
 // Test that opening an app sets the correct icon
-// TODO(crbug.com/735842): Flaky on CrOS MSan.
-IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, DISABLED_SetIcon) {
+IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, SetIcon) {
   TestAppWindowIconObserver test_observer(browser()->profile());
-
-  // Enable experimental APIs to allow panel creation.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      extensions::switches::kEnableExperimentalExtensionApis);
 
   int base_shelf_item_count = shelf_model()->item_count();
   ExtensionTestMessageListener ready_listener("ready", true);
   LoadAndLaunchPlatformApp("app_icon", "Launched");
 
-  // Create panel window.
-  ready_listener.WaitUntilSatisfied();
-  ready_listener.Reply("createPanelWindow");
-  ready_listener.Reset();
-  // Default app icon + extension icon updates.
-  test_observer.WaitForIconUpdates(2);
-
-  // Set panel window icon.
-  ready_listener.WaitUntilSatisfied();
-  ready_listener.Reply("setPanelWindowIcon");
-  ready_listener.Reset();
-  // Custom icon update.
-  test_observer.WaitForIconUpdate();
-
   // Create non-shelf window.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("createNonShelfWindow");
   ready_listener.Reset();
   // Default app icon + extension icon updates.
   test_observer.WaitForIconUpdates(2);
 
   // Create shelf window.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("createShelfWindow");
   ready_listener.Reset();
   // Default app icon + extension icon updates.
   test_observer.WaitForIconUpdates(2);
 
   // Set shelf window icon.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("setShelfWindowIcon");
   ready_listener.Reset();
   // Custom icon update.
   test_observer.WaitForIconUpdate();
 
-  // This test creates one app window, one app window with custom icon and one
-  // panel window.
-  int shelf_item_count = shelf_model()->item_count();
+  // Create shelf window with custom icon on init.
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
+  ready_listener.Reply("createShelfWindowWithCustomIcon");
+  ready_listener.Reset();
+  // Default app icon + extension icon + custom icon updates.
+  test_observer.WaitForIconUpdates(3);
+  const gfx::ImageSkia app_item_custom_image = test_observer.last_app_icon();
+
+  const int shelf_item_count = shelf_model()->item_count();
   ASSERT_EQ(base_shelf_item_count + 3, shelf_item_count);
-  // The Panel will be the last item, the app second-to-last.
-  const ash::ShelfItem& app_item = shelf_model()->items()[shelf_item_count - 3];
+
+  const ash::ShelfItem& app_item =
+      shelf_model()->items()[base_shelf_item_count];
   const ash::ShelfItem& app_custom_icon_item =
-      shelf_model()->items()[shelf_item_count - 2];
-  const ash::ShelfItem& panel_item =
-      shelf_model()->items()[shelf_item_count - 1];
+      shelf_model()->items()[base_shelf_item_count + 1];
 
   // Icons for Apps are set by the AppWindowLauncherController, so
   // image_set_by_controller() should be set.
@@ -846,18 +790,18 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, DISABLED_SetIcon) {
   ASSERT_TRUE(app_custom_icon_item_delegate);
   EXPECT_TRUE(app_custom_icon_item_delegate->image_set_by_controller());
 
-  // Ensure icon heights are correct (see test.js in app_icon/ test directory)
-  EXPECT_EQ(ash::kShelfSize, app_item.image.height());
+  // Ensure icon height is correct (see test.js in app_icon/ test directory)
+  // Note, images are no longer available in ChromeLauncherController. They are
+  // are passed directly to the ShelfController.
   EXPECT_EQ(extension_misc::EXTENSION_ICON_LARGE,
-            app_custom_icon_item.image.height());
-  EXPECT_EQ(64, panel_item.image.height());
+            app_item_custom_image.height());
 
   // No more icon updates.
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(8, test_observer.icon_updates());
 
   // Exit.
-  ready_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ready_listener.Reply("exit");
   ready_listener.Reset();
 }
@@ -1003,7 +947,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, LaunchInBackground) {
 IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, LaunchMaximized) {
   MaximizeWindow(browser()->window());
   content::WindowedNotificationObserver open_observer(
-      chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+      chrome::NOTIFICATION_BROWSER_OPENED,
       content::NotificationService::AllSources());
   chrome::NewEmptyWindow(browser()->profile());
   open_observer.Wait();
@@ -1033,9 +977,11 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ActivateApp) {
   const Extension* extension =
       LoadExtension(test_data_dir_.AppendASCII("app1"));
 
-  controller_->ActivateApp(extension->id(), ash::LAUNCH_FROM_UNKNOWN, 0);
+  controller_->ActivateApp(extension->id(), ash::LAUNCH_FROM_UNKNOWN, 0,
+                           display::kInvalidDisplayId);
   EXPECT_EQ(++tab_count, tab_strip->count());
-  controller_->ActivateApp(extension->id(), ash::LAUNCH_FROM_UNKNOWN, 0);
+  controller_->ActivateApp(extension->id(), ash::LAUNCH_FROM_UNKNOWN, 0,
+                           display::kInvalidDisplayId);
   EXPECT_EQ(tab_count, tab_strip->count());
 }
 
@@ -1101,8 +1047,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, TabDragAndDrop) {
 
   // Detach a tab at index 1 (app1) from |tab_strip_model1| and insert it as an
   // active tab at index 1 to |tab_strip_model2|.
-  content::WebContents* detached_tab = tab_strip_model1->DetachWebContentsAt(1);
-  tab_strip_model2->InsertWebContentsAt(1, detached_tab,
+  std::unique_ptr<content::WebContents> detached_tab =
+      tab_strip_model1->DetachWebContentsAt(1);
+  tab_strip_model2->InsertWebContentsAt(1, std::move(detached_tab),
                                         TabStripModel::ADD_ACTIVE);
   EXPECT_EQ(1, tab_strip_model1->count());
   EXPECT_EQ(2, tab_strip_model2->count());
@@ -1340,28 +1287,6 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, AltNumberAppsTabbing) {
   EXPECT_TRUE(window1a->IsActive());
 }
 
-// Test that we can launch a platform app panel and get a running item.
-IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, LaunchPanelWindow) {
-  int item_count = shelf_model()->item_count();
-  const Extension* extension = LoadAndLaunchPlatformApp("launch", "Launched");
-  AppWindow::CreateParams params;
-  params.window_type = AppWindow::WINDOW_TYPE_PANEL;
-  params.focused = false;
-  AppWindow* window =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
-  ++item_count;
-  ASSERT_EQ(item_count, shelf_model()->item_count());
-  const ash::ShelfItem& item = GetLastLauncherItem();
-  EXPECT_EQ(ash::TYPE_APP_PANEL, item.type);
-  // Opening a panel does not activate it.
-  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
-  CloseAppWindow(window);
-  // Spin a run loop so Ash's handling of the window closing syncs to Chrome.
-  base::RunLoop().RunUntilIdle();
-  --item_count;
-  EXPECT_EQ(item_count, shelf_model()->item_count());
-}
-
 // Test that we get correct shelf presence with hidden app windows.
 IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, HiddenAppWindows) {
   int item_count = shelf_model()->item_count();
@@ -1371,13 +1296,13 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, HiddenAppWindows) {
   // Create a hidden window.
   params.hidden = true;
   AppWindow* window_1 =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_EQ(item_count, shelf_model()->item_count());
 
   // Create a visible window.
   params.hidden = false;
   AppWindow* window_2 =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
   ++item_count;
   EXPECT_EQ(item_count, shelf_model()->item_count());
 
@@ -1407,7 +1332,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, WindowAttentionStatus) {
   AppWindow::CreateParams params;
   params.focused = false;
   AppWindow* window =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_TRUE(window->GetNativeWindow()->IsVisible());
   // The window should not be active by default.
   EXPECT_FALSE(window->GetBaseWindow()->IsActive());
@@ -1430,42 +1355,6 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, WindowAttentionStatus) {
   EXPECT_EQ(ash::STATUS_RUNNING, item.status);
 }
 
-// Test attention states of panels.
-IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, PanelAttentionStatus) {
-  const Extension* extension = LoadAndLaunchPlatformApp("launch", "Launched");
-  AppWindow::CreateParams params;
-  params.window_type = AppWindow::WINDOW_TYPE_PANEL;
-  params.focused = false;
-  AppWindow* panel =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
-  EXPECT_TRUE(panel->GetNativeWindow()->IsVisible());
-  // Panels should not be active by default.
-  EXPECT_FALSE(panel->GetBaseWindow()->IsActive());
-  // Confirm that a shelf item was created and is the correct state.
-  const ash::ShelfItem& item = GetLastLauncherItem();
-  EXPECT_TRUE(GetShelfItemDelegate(item.id));
-  EXPECT_EQ(ash::TYPE_APP_PANEL, item.type);
-  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
-
-  // App windows should go to attention state.
-  panel->GetNativeWindow()->SetProperty(aura::client::kDrawAttentionKey, true);
-  // Ash updates panel shelf items; spin a run loop to sync Chrome's ShelfModel.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(ash::STATUS_ATTENTION, item.status);
-
-  // Click the item and confirm that the panel is activated.
-  EXPECT_EQ(ash::SHELF_ACTION_WINDOW_ACTIVATED, SelectItem(item.id));
-  // Ash updates panel shelf items; spin a run loop to sync Chrome's ShelfModel.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(panel->GetBaseWindow()->IsActive());
-
-  // Active windows don't show attention.
-  panel->GetNativeWindow()->SetProperty(aura::client::kDrawAttentionKey, true);
-  // Ash updates panel shelf items; spin a run loop to sync Chrome's ShelfModel.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
-}
-
 IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
                        ShowInShelfWindowsWithWindowKeySet) {
   // Add a window with shelf True, close it
@@ -1476,7 +1365,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
   params.show_in_shelf = true;
   params.window_key = "window1";
   AppWindow* window1 =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
   // There should be only 1 item added to the shelf.
   EXPECT_EQ(item_count + 1, shelf_model()->item_count());
   CloseAppWindow(window1);
@@ -1488,12 +1377,12 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
 
   params.show_in_shelf = false;
   params.window_key = "window1";
-  window1 = CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_EQ(item_count + 1, shelf_model()->item_count());
   params.show_in_shelf = true;
   params.window_key = "window2";
   AppWindow* window2 =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
   // There should be 2 items added to the shelf: although window1 has
   // show_in_shelf set to false, it's the first window created so its icon must
   // show up in shelf.
@@ -1509,7 +1398,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
 
   params.show_in_shelf = false;
   params.window_key = "window1";
-  window1 = CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
   // There should be 1 item added to the shelf: although show_in_shelf is false,
   // this is the first window created.
   EXPECT_EQ(item_count + 1, shelf_model()->item_count());
@@ -1522,11 +1411,11 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
 
   params.show_in_shelf = true;
   params.window_key = "window1";
-  window1 = CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_EQ(item_count + 1, shelf_model()->item_count());  // main window
   params.show_in_shelf = false;
   params.window_key = "window2";
-  window2 = CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+  window2 = CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_EQ(item_count + 2, shelf_model()->item_count());
   CloseAppWindow(window1);
   // There should be 1 item added to the shelf as the second window
@@ -1541,21 +1430,21 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
 
   params.show_in_shelf = false;
   params.window_key = "window1";
-  window1 = CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_EQ(item_count + 1, shelf_model()->item_count());
   params.show_in_shelf = false;
   params.window_key = "window2";
-  window2 = CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+  window2 = CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_EQ(item_count + 1, shelf_model()->item_count());
   params.show_in_shelf = true;
   params.window_key = "window3";
   AppWindow* window3 =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
   EXPECT_EQ(item_count + 2, shelf_model()->item_count());
   params.show_in_shelf = true;
   params.window_key = "window4";
   AppWindow* window4 =
-      CreateAppWindowAndRunLoop(browser()->profile(), extension, params);
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
   // There should be 3 items added to the shelf.
   EXPECT_EQ(item_count + 3, shelf_model()->item_count());
   // Any window close order should be valid
@@ -1678,219 +1567,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ActivateAfterSessionRestore) {
   EXPECT_TRUE(browser2->window()->IsActive());
 }
 
-// Do various drag and drop interaction tests between the application list and
-// the launcher.
-// TODO(skuhne): Test is flaky with a real compositor: crbug.com/331924
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_DragAndDrop) {
-  // Get a number of interfaces we need.
-  ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow(),
-                                     gfx::Point());
-  ash::ShelfViewTestAPI test(GetPrimaryShelfView());
-  AppListService* service = AppListService::Get();
-
-  // There should be two items in our launcher by this time.
-  EXPECT_EQ(2, shelf_model()->item_count());
-  EXPECT_FALSE(service->IsAppListVisible());
-
-  // Open the app list menu and check that the drag and drop host was set.
-  gfx::Rect app_list_bounds =
-      test.shelf_view()->GetAppListButton()->GetBoundsInScreen();
-  generator.MoveMouseTo(app_list_bounds.CenterPoint().x(),
-                        app_list_bounds.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  generator.ClickLeftButton();
-
-  EXPECT_TRUE(service->IsAppListVisible());
-  app_list::AppsGridView* grid_view =
-      AppListServiceAshTestApi().GetRootGridView();
-  ASSERT_TRUE(grid_view);
-  ASSERT_TRUE(grid_view->has_drag_and_drop_host_for_test());
-
-  // There should be 2 items in our application list.
-  const views::ViewModelT<app_list::AppListItemView>* vm_grid =
-      grid_view->view_model_for_test();
-  EXPECT_EQ(2, vm_grid->view_size());
-
-  // Test #1: Drag an app list which does not exist yet item into the
-  // launcher. Keeping it dragged, see that a new item gets created. Continuing
-  // to drag it out should remove it again.
-
-  // Get over item #1 of the application list and press the mouse button.
-  views::View* item1 = vm_grid->view_at(1);
-  gfx::Rect bounds_grid_1 = item1->GetBoundsInScreen();
-  generator.MoveMouseTo(bounds_grid_1.CenterPoint().x(),
-                        bounds_grid_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  generator.PressLeftButton();
-
-  EXPECT_FALSE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-
-  // Drag the item into the shelf and check that a new item gets created.
-  const views::ViewModel* vm_shelf = test.shelf_view()->view_model_for_test();
-  views::View* shelf1 = vm_shelf->view_at(1);
-  gfx::Rect bounds_shelf_1 = shelf1->GetBoundsInScreen();
-  generator.MoveMouseTo(bounds_shelf_1.CenterPoint().x(),
-                        bounds_shelf_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-
-  // Check that a new item got created.
-  EXPECT_EQ(3, shelf_model()->item_count());
-  EXPECT_TRUE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-
-  // Move it where the item originally was and check that it disappears again.
-  generator.MoveMouseTo(bounds_grid_1.CenterPoint().x(),
-                        bounds_grid_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, shelf_model()->item_count());
-  EXPECT_FALSE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-
-  // Dropping it should keep the launcher as it originally was.
-  generator.ReleaseLeftButton();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, shelf_model()->item_count());
-  // There are a few animations which need finishing before we can continue.
-  test.RunMessageLoopUntilAnimationsDone();
-  // Move the mouse outside of the launcher.
-  generator.MoveMouseTo(0, 0);
-
-  // Test #2: Check that the unknown item dropped into the launcher will
-  // create a new item.
-  generator.MoveMouseTo(bounds_grid_1.CenterPoint().x(),
-                        bounds_grid_1.CenterPoint().y());
-  generator.PressLeftButton();
-  generator.MoveMouseTo(bounds_shelf_1.CenterPoint().x(),
-                        bounds_shelf_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(3, shelf_model()->item_count());
-  EXPECT_TRUE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-  generator.ReleaseLeftButton();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-  EXPECT_EQ(3, shelf_model()->item_count());  // It should be still there.
-  test.RunMessageLoopUntilAnimationsDone();
-
-  // Test #3: Check that the now known item dropped into the launcher will
-  // not create a new item.
-  generator.MoveMouseTo(bounds_grid_1.CenterPoint().x(),
-                        bounds_grid_1.CenterPoint().y());
-  generator.PressLeftButton();
-  generator.MoveMouseTo(bounds_shelf_1.CenterPoint().x(),
-                        bounds_shelf_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(3, shelf_model()->item_count());  // No new item got added.
-  EXPECT_TRUE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-  generator.ReleaseLeftButton();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-  EXPECT_EQ(3, shelf_model()->item_count());  // And it remains that way.
-
-  // Test #4: Check that by pressing ESC the operation gets cancelled.
-  generator.MoveMouseTo(bounds_grid_1.CenterPoint().x(),
-                        bounds_grid_1.CenterPoint().y());
-  generator.PressLeftButton();
-  generator.MoveMouseTo(bounds_shelf_1.CenterPoint().x(),
-                        bounds_shelf_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  // Issue an ESC and see that the operation gets cancelled.
-  generator.PressKey(ui::VKEY_ESCAPE, 0);
-  generator.ReleaseKey(ui::VKEY_ESCAPE, 0);
-  EXPECT_FALSE(grid_view->dragging());
-  EXPECT_FALSE(grid_view->has_dragged_view());
-  generator.ReleaseLeftButton();
-}
-
-// Do basic drag and drop interaction tests between the application list and
-// the launcher in the secondary monitor.
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, MultiDisplayBasicDragAndDrop) {
-  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
-  // list (http://crbug.com/759779).
-  if (app_list::features::IsFullscreenAppListEnabled())
-    return;
-
-  // Update the display configuration to add a secondary display.
-  display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
-      .UpdateDisplay("800x800,801+0-800x800");
-
-  // Get a number of interfaces we need.
-  DCHECK_EQ(ash::Shell::GetAllRootWindows().size(), 2U);
-  aura::Window* secondary_root_window = ash::Shell::GetAllRootWindows()[1];
-  ash::Shelf* secondary_shelf = ash::Shelf::ForWindow(secondary_root_window);
-
-  ui::test::EventGenerator generator(secondary_root_window, gfx::Point());
-  ash::ShelfViewTestAPI test(secondary_shelf->GetShelfViewForTesting());
-  AppListService* service = AppListService::Get();
-
-  // There should be two items in our shelf by this time.
-  EXPECT_EQ(2, shelf_model()->item_count());
-  EXPECT_FALSE(service->IsAppListVisible());
-
-  // Open the app list menu and check that the drag and drop host was set.
-  gfx::Rect app_list_bounds =
-      test.shelf_view()->GetAppListButton()->GetBoundsInScreen();
-  display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(
-          secondary_root_window);
-  const gfx::Point& origin = display.bounds().origin();
-  app_list_bounds.Offset(-origin.x(), -origin.y());
-
-  generator.MoveMouseTo(app_list_bounds.CenterPoint().x(),
-                        app_list_bounds.CenterPoint().y());
-  generator.ClickLeftButton();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(service->IsAppListVisible());
-
-  app_list::AppsGridView* grid_view =
-      AppListServiceAshTestApi().GetRootGridView();
-  ASSERT_TRUE(grid_view);
-  ASSERT_TRUE(grid_view->has_drag_and_drop_host_for_test());
-
-  // There should be 2 items in our application list.
-  const views::ViewModelT<app_list::AppListItemView>* vm_grid =
-      grid_view->view_model_for_test();
-  EXPECT_EQ(2, vm_grid->view_size());
-
-  // Drag an app list item which does not exist yet in the shelf.
-  // Keeping it dragged, see that a new item gets created.
-  // Continuing to drag it out should remove it again.
-
-  // Get over item #1 of the application list and press the mouse button.
-  views::View* item1 = vm_grid->view_at(1);
-  gfx::Rect bounds_grid_1 = item1->GetBoundsInScreen();
-  bounds_grid_1.Offset(-origin.x(), -origin.y());
-  generator.MoveMouseTo(bounds_grid_1.CenterPoint().x(),
-                        bounds_grid_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  generator.PressLeftButton();
-
-  EXPECT_FALSE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-
-  // Drag the item into the shelf and check that a new item gets created.
-  const views::ViewModel* vm_shelf = test.shelf_view()->view_model_for_test();
-  views::View* shelf1 = vm_shelf->view_at(1);
-  gfx::Rect bounds_shelf_1 = shelf1->GetBoundsInScreen();
-  bounds_shelf_1.Offset(-origin.x(), -origin.y());
-  generator.MoveMouseTo(bounds_shelf_1.CenterPoint().x(),
-                        bounds_shelf_1.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-
-  // Check that a new item got created.
-  EXPECT_EQ(3, shelf_model()->item_count());
-  EXPECT_TRUE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-
-  // Move it to an empty slot on grid_view.
-  gfx::Rect empty_slot_rect = bounds_grid_1;
-  empty_slot_rect.Offset(0, grid_view->GetTotalTileSize().height());
-  generator.MoveMouseTo(empty_slot_rect.CenterPoint().x(),
-                        empty_slot_rect.CenterPoint().y());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, shelf_model()->item_count());
-  EXPECT_FALSE(grid_view->forward_events_to_drag_and_drop_host_for_test());
-
-  // Dropping it should keep the shelf as it originally was.
-  generator.ReleaseLeftButton();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, shelf_model()->item_count());
-}
+// TODO(crbug.com/759779, crbug.com/819386): add back |DISABLED_DragAndDrop|.
+// TODO(crbug.com/759779, crbug.com/819386): add back
+// |MultiDisplayBasicDragAndDrop|.
 
 // Do tests for removal of items from the shelf by dragging.
 // Disabled due to flake: http://crbug.com/448482
@@ -1991,48 +1670,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_DragOffShelf) {
   EXPECT_FALSE(test.IsOverflowButtonVisible());
 }
 
-// Check that clicking on an app shelf item launches a new browser.
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ClickItem) {
-  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
-  // list (http://crbug.com/759779).
-  if (app_list::features::IsFullscreenAppListEnabled())
-    return;
-
-  // Get a number of interfaces we need.
-  ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow(),
-                                     gfx::Point());
-  ash::ShelfViewTestAPI test(GetPrimaryShelfView());
-  AppListService* service = AppListService::Get();
-  // There should be two items in our shelf by this time.
-  EXPECT_EQ(2, shelf_model()->item_count());
-  EXPECT_FALSE(service->IsAppListVisible());
-
-  // Open the app list menu and check that the drag and drop host was set.
-  gfx::Rect app_list_bounds =
-      test.shelf_view()->GetAppListButton()->GetBoundsInScreen();
-  generator.MoveMouseTo(app_list_bounds.CenterPoint().x(),
-                        app_list_bounds.CenterPoint().y());
-  generator.ClickLeftButton();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(service->IsAppListVisible());
-
-  // Click an app icon in the app grid view.
-  app_list::AppsGridView* grid_view =
-      AppListServiceAshTestApi().GetRootGridView();
-  ASSERT_TRUE(grid_view);
-  const views::ViewModelT<app_list::AppListItemView>* vm_grid =
-      grid_view->view_model_for_test();
-  EXPECT_EQ(2, vm_grid->view_size());
-  gfx::Rect bounds_grid_1 = vm_grid->view_at(1)->GetBoundsInScreen();
-  // Test now that a click does create a new application tab.
-  TabStripModel* tab_strip = browser()->tab_strip_model();
-  int tab_count = tab_strip->count();
-  generator.MoveMouseTo(bounds_grid_1.CenterPoint().x(),
-                        bounds_grid_1.CenterPoint().y());
-  generator.ClickLeftButton();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(tab_count + 1, tab_strip->count());
-}
+// TODO(crbug.com/759779, crbug.com/819386): add back |ClickItem|.
 
 // Check browser shortcut item functionality.
 IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestNoDefaultBrowser,
@@ -2103,7 +1741,8 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, MatchingShelfIDandActiveTab) {
 
 // Check that a windowed V1 application can navigate away from its domain, but
 // still gets detected properly.
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, V1AppNavigation) {
+// Disabled due to https://crbug.com/838743.
+IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_V1AppNavigation) {
   // We assume that the web store is always there (which it apparently is).
   controller_->PinAppWithID(extensions::kWebStoreAppId);
   const ash::ShelfID id(extensions::kWebStoreAppId);
@@ -2216,8 +1855,10 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, TabbedHostedAndBookmarkApps) {
             shelf_model()->ItemByID(bookmark_app_shelf_id)->status);
 
   // Now use the launcher controller to activate the apps.
-  controller_->ActivateApp(hosted_app->id(), ash::LAUNCH_FROM_APP_LIST, 0);
-  controller_->ActivateApp(bookmark_app->id(), ash::LAUNCH_FROM_APP_LIST, 0);
+  controller_->ActivateApp(hosted_app->id(), ash::LAUNCH_FROM_APP_LIST, 0,
+                           display::kInvalidDisplayId);
+  controller_->ActivateApp(bookmark_app->id(), ash::LAUNCH_FROM_APP_LIST, 0,
+                           display::kInvalidDisplayId);
 
   // There should be no new browsers or tabs as both apps were already open.
   EXPECT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
@@ -2267,8 +1908,10 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, WindowedHostedAndBookmarkApps) {
             shelf_model()->ItemByID(bookmark_app_shelf_id)->status);
 
   // Now use the launcher controller to activate the apps.
-  controller_->ActivateApp(hosted_app->id(), ash::LAUNCH_FROM_APP_LIST, 0);
-  controller_->ActivateApp(bookmark_app->id(), ash::LAUNCH_FROM_APP_LIST, 0);
+  controller_->ActivateApp(hosted_app->id(), ash::LAUNCH_FROM_APP_LIST, 0,
+                           display::kInvalidDisplayId);
+  controller_->ActivateApp(bookmark_app->id(), ash::LAUNCH_FROM_APP_LIST, 0,
+                           display::kInvalidDisplayId);
 
   // There should be two new browsers.
   EXPECT_EQ(3u, chrome::GetBrowserCount(browser()->profile()));
@@ -2287,17 +1930,15 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
   // Open a context menu for the existing browser window.
   std::unique_ptr<LauncherContextMenu> menu1 = CreateBrowserItemContextMenu();
   // Check if "Close" is added to in the context menu.
-  ASSERT_TRUE(
-      IsItemPresentInMenu(menu1.get(), LauncherContextMenu::MENU_CLOSE));
+  ASSERT_TRUE(IsItemPresentInMenu(menu1.get(), ash::MENU_CLOSE));
 
   // Close all windows via the menu item.
-  CloseBrowserWindow(browser(), menu1.get(), LauncherContextMenu::MENU_CLOSE);
+  CloseBrowserWindow(browser(), menu1.get(), ash::MENU_CLOSE);
   EXPECT_EQ(0u, BrowserList::GetInstance()->size());
 
   // Check if "Close" is removed from the context menu.
   std::unique_ptr<LauncherContextMenu> menu2 = CreateBrowserItemContextMenu();
-  ASSERT_FALSE(
-      IsItemPresentInMenu(menu2.get(), LauncherContextMenu::MENU_CLOSE));
+  ASSERT_FALSE(IsItemPresentInMenu(menu2.get(), ash::MENU_CLOSE));
 }
 
 // Chrome's ShelfModel should have back button, AppList and browser items and

@@ -4,6 +4,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/run_loop.h"
@@ -22,7 +23,6 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
-#include "components/signin/core/browser/fake_auth_status_provider.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -81,7 +81,7 @@ TEST_F(AppControllerTest, LastProfile) {
 
   // Delete the active profile.
   profile_manager_.profile_manager()->ScheduleProfileForDeletion(
-      dest_path1, ProfileManager::CreateCallback());
+      dest_path1, base::DoNothing());
 
   base::RunLoop().RunUntilIdle();
 

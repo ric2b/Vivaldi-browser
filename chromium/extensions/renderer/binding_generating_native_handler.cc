@@ -21,6 +21,13 @@ BindingGeneratingNativeHandler::BindingGeneratingNativeHandler(
     const std::string& bind_to)
     : context_(context), api_name_(api_name), bind_to_(bind_to) {}
 
+void BindingGeneratingNativeHandler::Initialize() {}
+
+bool BindingGeneratingNativeHandler::IsInitialized() {
+  // There's no initialization to do, so just always return true.
+  return true;
+}
+
 v8::Local<v8::Object> BindingGeneratingNativeHandler::NewInstance() {
   base::ElapsedTimer timer;
   // This long sequence of commands effectively runs the JavaScript code,

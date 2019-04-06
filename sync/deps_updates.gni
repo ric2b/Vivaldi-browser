@@ -4,10 +4,6 @@ update_target("//chrome:browser_dependencies") {
   public_deps += [ "//vivaldi/sync:browser" ]
 }
 
-update_target("//chrome/browser:browser") {
-  public_deps += [ "//vivaldi/sync:browser" ]
-}
-
 if (is_android) {
   update_target("//chrome:chrome_android_core") {
     deps += [ "//vivaldi/sync:browser" ]

@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -73,8 +72,9 @@ bool OfflineEnabledHandler::AlwaysParseForType(Manifest::Type type) const {
   return type == Manifest::TYPE_PLATFORM_APP;
 }
 
-const std::vector<std::string> OfflineEnabledHandler::Keys() const {
-  return SingleKey(keys::kOfflineEnabled);
+base::span<const char* const> OfflineEnabledHandler::Keys() const {
+  static constexpr const char* kKeys[] = {keys::kOfflineEnabled};
+  return kKeys;
 }
 
 }  // namespace extensions

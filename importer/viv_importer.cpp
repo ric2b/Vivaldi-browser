@@ -4,6 +4,7 @@
 
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/ini_parser.h"
 #include "importer/imported_speeddial_entry.h"
@@ -29,12 +30,8 @@ bool ReadOperaIniFile(const base::FilePath &profile_dir,
   return true;
 }
 
-OperaImporter::OperaImporter(const importer::ImportConfig& import_config)
-    : wand_version_(0), master_password_required_(false) {
-  if (import_config.arguments.size() >= 1) {
-    master_password_ = import_config.arguments[0];
-  }
-}
+OperaImporter::OperaImporter()
+    : wand_version_(0), master_password_required_(false) {}
 
 OperaImporter::~OperaImporter() {}
 
@@ -43,6 +40,7 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
                                 ImporterBridge* bridge) {
   bridge_ = bridge;
   profile_dir_ = source_profile.source_path;
+  master_password_ = base::UTF8ToUTF16(source_profile.master_password);
 
   base::FilePath file = profile_dir_;
 

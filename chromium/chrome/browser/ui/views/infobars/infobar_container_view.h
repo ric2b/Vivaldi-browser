@@ -21,17 +21,17 @@ class InfoBarContainerView : public views::AccessiblePaneView,
   explicit InfoBarContainerView(Delegate* delegate);
   ~InfoBarContainerView() override;
 
-  // AccessiblePaneView:
-  gfx::Size CalculatePreferredSize() const override;
-  const char* GetClassName() const override;
+  // views::AccessiblePaneView:
   void Layout() override;
+  const char* GetClassName() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
+  gfx::Size CalculatePreferredSize() const override;
 
   // InfobarContainer:
   void PlatformSpecificAddInfoBar(infobars::InfoBar* infobar,
                                   size_t position) override;
   void PlatformSpecificRemoveInfoBar(infobars::InfoBar* infobar) override;
+  void PlatformSpecificInfoBarStateChanged(bool is_animating) override;
 
  private:
   // This view draws the shadow over the web contents below the

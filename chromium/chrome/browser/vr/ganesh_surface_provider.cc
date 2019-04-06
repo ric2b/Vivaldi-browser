@@ -4,10 +4,11 @@
 
 #include "chrome/browser/vr/ganesh_surface_provider.h"
 
-#include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrContextOptions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_version_info.h"
@@ -21,10 +22,11 @@ GaneshSurfaceProvider::GaneshSurfaceProvider() {
   const char* renderer_str =
       reinterpret_cast<const char*>(glGetString(GL_RENDERER));
   std::string extensions_string(gl::GetGLExtensionsFromCurrentContext());
-  gl::ExtensionSet extensions(gl::MakeExtensionSet(extensions_string));
+  gfx::ExtensionSet extensions(gfx::MakeExtensionSet(extensions_string));
   gl::GLVersionInfo gl_version_info(version_str, renderer_str, extensions);
+  const bool use_version_es2 = false;
   sk_sp<const GrGLInterface> gr_interface =
-      gl::init::CreateGrGLInterface(gl_version_info);
+      gl::init::CreateGrGLInterface(gl_version_info, use_version_es2);
   DCHECK(gr_interface.get());
   gr_context_ = GrContext::MakeGL(std::move(gr_interface));
   DCHECK(gr_context_.get());
@@ -43,11 +45,13 @@ sk_sp<SkSurface> GaneshSurfaceProvider::MakeSurface(const gfx::Size& size) {
 GLuint GaneshSurfaceProvider::FlushSurface(SkSurface* surface,
                                            GLuint reuse_texture_id) {
   surface->getCanvas()->flush();
-  GrBackendObject backend_object =
-      surface->getTextureHandle(SkSurface::kFlushRead_BackendHandleAccess);
-  DCHECK_NE(backend_object, 0);
-  GLuint texture_id =
-      skia::GrBackendObjectToGrGLTextureInfo(backend_object)->fID;
+  GrBackendTexture backend_texture =
+      surface->getBackendTexture(SkSurface::kFlushRead_BackendHandleAccess);
+  DCHECK(backend_texture.isValid());
+  GrGLTextureInfo info;
+  bool result = backend_texture.getGLTextureInfo(&info);
+  DCHECK(result);
+  GLuint texture_id = info.fID;
   DCHECK_NE(texture_id, 0u);
   surface->getCanvas()->getGrContext()->resetContext();
   glBindFramebufferEXT(GL_FRAMEBUFFER, main_fbo_);

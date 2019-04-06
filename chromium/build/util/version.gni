@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
-if (is_vivaldi) {
+if (defined(is_vivaldi) && is_vivaldi) {
   import("//vivaldi/gn/config/version.gni")
 }
 
@@ -39,7 +39,7 @@ _result = exec_script("version.py",
 
 # Full version. For example "45.0.12321.0"
 chrome_version_full = _result.full
-if (is_vivaldi) {
+if (defined(is_vivaldi) && is_vivaldi) {
   chrome_version_full = vivaldi_version_full
 }
 
@@ -49,7 +49,7 @@ chrome_version_minor = _result.minor
 chrome_version_build = _result.build
 chrome_version_patch = _result.patch
 
-if (is_mac && !is_vivaldi) {
+if (is_mac && !(defined(is_vivaldi) && is_vivaldi)) {
   _result = exec_script("version.py",
                         [
                           "-f",

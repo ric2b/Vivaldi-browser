@@ -19,9 +19,9 @@
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chromeos/cryptohome/tpm_util.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/util/tpm_util.h"
 #include "components/policy/proto/install_attributes.pb.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -50,6 +50,13 @@ void WarnIfNonempty(const std::map<std::string, std::string>& map,
   if (!ReadMapKey(map, key).empty()) {
     LOG(WARNING) << key << " expected to be empty.";
   }
+}
+
+// Reports the metric for whether the locking succeeded with existing locked
+// attributes equal to the requested ones.
+void ReportExistingLockUma(bool is_existing_lock) {
+  UMA_HISTOGRAM_BOOLEAN("Enterprise.ExistingInstallAttributesLock",
+                        is_existing_lock);
 }
 
 }  // namespace
@@ -219,6 +226,7 @@ void InstallAttributes::LockDevice(policy::DeviceMode device_mode,
     }
 
     // Already locked in the right mode, signal success.
+    ReportExistingLockUma(true /* is_existing_lock */);
     callback.Run(LOCK_SUCCESS);
     return;
   }
@@ -335,6 +343,7 @@ void InstallAttributes::OnReadImmutableAttributes(
     return;
   }
 
+  ReportExistingLockUma(false /* is_existing_lock */);
   callback.Run(LOCK_SUCCESS);
 }
 

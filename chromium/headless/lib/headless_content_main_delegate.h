@@ -19,8 +19,11 @@
 #include "headless/public/headless_export.h"
 
 namespace base {
+namespace debug {
+struct CrashKeyString;
+}  // namespace debug
 class CommandLine;
-}
+}  // namespace base
 
 namespace headless {
 
@@ -40,6 +43,9 @@ class HEADLESS_EXPORT HeadlessContentMainDelegate
   int RunProcess(
       const std::string& process_type,
       const content::MainFunctionParams& main_function_params) override;
+#if defined(OS_MACOSX)
+  void PreContentInitialization() override;
+#endif
   content::ContentBrowserClient* CreateContentBrowserClient() override;
   content::ContentUtilityClient* CreateContentUtilityClient() override;
   content::ContentRendererClient* CreateContentRendererClient() override;
@@ -66,6 +72,7 @@ class HEADLESS_EXPORT HeadlessContentMainDelegate
   HeadlessPlatformEventSource platform_event_source_;
 
   std::unique_ptr<HeadlessBrowserImpl> browser_;
+  base::debug::CrashKeyString* headless_crash_key_;  // Note: never deallocated.
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessContentMainDelegate);
 };

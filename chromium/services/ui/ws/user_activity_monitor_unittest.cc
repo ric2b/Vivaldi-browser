@@ -4,8 +4,6 @@
 
 #include "services/ui/ws/user_activity_monitor.h"
 
-#include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -92,7 +90,7 @@ class UserActivityMonitorTest : public TaskRunnerTestBase {
   void SetUp() override {
     TaskRunnerTestBase::SetUp();
     monitor_ = std::make_unique<UserActivityMonitor>(
-        task_runner()->GetMockTickClock());
+        task_runner()->DeprecatedGetMockTickClock());
   }
 
   std::unique_ptr<UserActivityMonitor> monitor_;

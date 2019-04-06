@@ -9,6 +9,7 @@
 
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/test/views/chrome_test_views_delegate.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -17,26 +18,12 @@
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/label_button.h"
-#include "ui/views/test/test_views_delegate.h"
 
 using ::testing::_;
 using ::testing::Return;
 using ::testing::StrictMock;
 
 namespace views {
-class FakeButtonListener : public views::ButtonListener {
- public:
-  FakeButtonListener() {}
-  ~FakeButtonListener() override;
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FakeButtonListener);
-};
-
-FakeButtonListener::~FakeButtonListener() {}
-void FakeButtonListener::ButtonPressed(views::Button* sender,
-                                       const ui::Event& event) {}
 
 namespace {
 
@@ -80,28 +67,21 @@ class GlobalErrorBubbleViewTest : public testing::Test {
   GlobalErrorBubbleViewTest()
       : mock_global_error_with_standard_bubble_(
             std::make_unique<StrictMock<MockGlobalErrorWithStandardBubble>>()),
-        button_(&mock_button_listener_, base::string16()),
+        button_(nullptr, base::string16()),
         view_(std::make_unique<GlobalErrorBubbleView>(
             &arg_view_,
-            anchor_point_,
+            gfx::Rect(anchor_point_, gfx::Size()),
             arrow_,
             nullptr,
             mock_global_error_with_standard_bubble_->AsWeakPtr())) {}
 
-  void SetUp() override {
-    testing::Test::SetUp();
-    test_views_delegate_.set_layout_provider(
-        ChromeLayoutProvider::CreateLayoutProvider());
-  }
-
  protected:
-  views::TestViewsDelegate test_views_delegate_;
+  ChromeTestViewsDelegate test_views_delegate_;
   std::unique_ptr<StrictMock<MockGlobalErrorWithStandardBubble>>
       mock_global_error_with_standard_bubble_;
   views::View arg_view_;
   const gfx::Point anchor_point_;
   views::BubbleBorder::Arrow arrow_;
-  FakeButtonListener mock_button_listener_;
   views::LabelButton button_;
   std::unique_ptr<GlobalErrorBubbleView> view_;
 
@@ -130,8 +110,6 @@ TEST_F(GlobalErrorBubbleViewTest, Basic) {
 
   EXPECT_CALL(*mock_global_error_with_standard_bubble_,
               GetBubbleViewAcceptButtonLabel());
-  EXPECT_CALL(*mock_global_error_with_standard_bubble_,
-              GetBubbleViewCancelButtonLabel());
   EXPECT_CALL(*mock_global_error_with_standard_bubble_,
               ShouldAddElevationIconToAcceptButton())
       .WillOnce(Return(false));

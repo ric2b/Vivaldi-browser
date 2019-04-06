@@ -26,6 +26,7 @@
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 #include "components/password_manager/core/browser/hash_password_manager.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_reuse_detector_consumer.h"
 #endif
@@ -33,6 +34,7 @@
 class PrefService;
 
 namespace autofill {
+struct FormData;
 struct PasswordForm;
 }
 
@@ -47,6 +49,10 @@ class PasswordStoreConsumer;
 class PasswordStoreSigninNotifier;
 class PasswordSyncableService;
 struct InteractionsStats;
+
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+using PasswordHashDataList = base::Optional<std::vector<PasswordHashData>>;
+#endif
 
 // Interface for storing form passwords in a platform-specific secure way.
 // The login request/manipulation API is not threadsafe and must be used
@@ -81,6 +87,7 @@ class PasswordStore : protected PasswordStoreSync,
                const std::string& signon_realm,
                const GURL& origin);
     explicit FormDigest(const autofill::PasswordForm& form);
+    explicit FormDigest(const autofill::FormData& form);
     FormDigest(const FormDigest& other);
     FormDigest(FormDigest&& other);
     FormDigest& operator=(const FormDigest& other);
@@ -249,6 +256,10 @@ class PasswordStore : protected PasswordStoreSync,
 
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  // Immediately called after |Init()| to retrieve password hash data for
+  // reuse detection.
+  void PreparePasswordHashData(const std::string& sync_username);
+
   // Checks that some suffix of |input| equals to a password saved on another
   // registry controlled domain than |domain|.
   // If such suffix is found, |consumer|->OnReuseFound() is called on the same
@@ -258,18 +269,37 @@ class PasswordStore : protected PasswordStoreSync,
                           const std::string& domain,
                           PasswordReuseDetectorConsumer* consumer);
 
-  // Saves a hash of |password| for password reuse checking.
-  virtual void SaveSyncPasswordHash(const base::string16& password);
+  // Saves |username| and a hash of |password| for Gaia password reuse checking.
+  // |event| is used for metric logging and for distinguishing sync password
+  // hash change event and other non-sync Gaia password change event.
+  virtual void SaveGaiaPasswordHash(const std::string& username,
+                                    const base::string16& password,
+                                    metrics_util::SyncPasswordHashChange event);
 
-  // Saves |sync_password_data| for password reuse checking.
-  virtual void SaveSyncPasswordHash(const SyncPasswordData& sync_password_data);
+  // Saves |username| and a hash of |password| for enterprise password reuse
+  // checking.
+  virtual void SaveEnterprisePasswordHash(const std::string& username,
+                                          const base::string16& password);
 
-  // Clears the saved sync password hash.
-  virtual void ClearSyncPasswordHash();
+  // Saves |sync_password_data| for sync password reuse checking.
+  // |event| is used for metric logging.
+  virtual void SaveSyncPasswordHash(const PasswordHashData& sync_password_data,
+                                    metrics_util::SyncPasswordHashChange event);
+
+  // Clears the saved password hash for |username|.
+  virtual void ClearPasswordHash(const std::string& username);
 
   // Shouldn't be called more than once, |notifier| must be not nullptr.
   void SetPasswordStoreSigninNotifier(
       std::unique_ptr<PasswordStoreSigninNotifier> notifier);
+
+  // Schedules the update of password hashes used by reuse detector.
+  void SchedulePasswordHashUpdate(bool should_log_metrics);
+
+  // Schedules the update of enterprise login and change password URLs.
+  // These URLs are used in enterprise password reuse detection.
+  void ScheduleEnterprisePasswordURLUpdate();
+
 #endif
 
  protected:
@@ -319,10 +349,11 @@ class PasswordStore : protected PasswordStoreSync,
     ~CheckReuseRequest() override;
 
     // PasswordReuseDetectorConsumer
-    void OnReuseFound(size_t password_length,
-                      bool matches_sync_password,
-                      const std::vector<std::string>& matches_domains,
-                      int saved_passwords) override;
+    void OnReuseFound(
+        size_t password_length,
+        base::Optional<PasswordHashData> reused_protected_password_hash,
+        const std::vector<std::string>& matching_domains,
+        int saved_passwords) override;
 
    private:
     const scoped_refptr<base::SequencedTaskRunner> origin_task_runner_;
@@ -436,17 +467,34 @@ class PasswordStore : protected PasswordStoreSync,
 
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  // Saves |username| and a hash of |password| for password reuse checking.
+  // |is_gaia_password| indicates if it is a Gaia account. |event| is used for
+  // metric logging.
+  void SaveProtectedPasswordHash(const std::string& username,
+                                 const base::string16& password,
+                                 bool is_gaia_password,
+                                 metrics_util::SyncPasswordHashChange event);
+
   // Synchronous implementation of CheckReuse().
   void CheckReuseImpl(std::unique_ptr<CheckReuseRequest> request,
                       const base::string16& input,
                       const std::string& domain);
 
-  // Synchronous implementation of SaveSyncPasswordHash().
-  void SaveSyncPasswordHashImpl(
-      base::Optional<SyncPasswordData> sync_password_data);
+  // Synchronous implementation of SaveProtectedPasswordHash().
+  // |should_log_metrics| indicates whether to log the counts of captured
+  // password hashes.
+  void SaveProtectedPasswordHashImpl(
+      PasswordHashDataList protected_password_data_list,
+      bool should_log_metrics);
 
-  // Synchronous implementation of ClearSyncPasswordHash().
-  void ClearSyncPasswordHashImpl();
+  // Propagates enterprise login urls and change password url to
+  // |reuse_detector_|.
+  void SaveEnterprisePasswordURLs(
+      const std::vector<GURL>& enterprise_login_urls,
+      const GURL& enterprise_change_password_url);
+
+  // Synchronous implementation of ClearProtectedPasswordHash().
+  void ClearProtectedPasswordHashImpl();
 #endif
 
   scoped_refptr<base::SequencedTaskRunner> main_task_runner() const {
@@ -603,6 +651,7 @@ class PasswordStore : protected PasswordStoreSync,
   std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  PrefService* prefs_ = nullptr;
   // PasswordReuseDetector can be only destroyed on the background sequence. It
   // can't be owned by PasswordStore because PasswordStore can be destroyed on
   // the UI thread and DestroyOnBackgroundThread isn't guaranteed to be called.

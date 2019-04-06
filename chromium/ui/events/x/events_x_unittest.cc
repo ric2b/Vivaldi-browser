@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
@@ -21,6 +21,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/test/events_test_utils.h"
 #include "ui/events/test/events_test_utils_x11.h"
+#include "ui/events/test/scoped_event_test_tick_clock.h"
 #include "ui/events/x/events_x_utils.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/x/x11.h"
@@ -381,7 +382,7 @@ TEST_F(EventsXTest, TouchEventNotRemovingFromNativeMapping) {
 
 // Copied events should not remove native touch id mappings, as this causes a
 // crash (crbug.com/467102). Copied events do not contain a proper
-// base::NativeEvent and should not attempt to access it.
+// PlatformEvent and should not attempt to access it.
 TEST_F(EventsXTest, CopiedTouchEventNotRemovingFromNativeMapping) {
   std::vector<int> devices;
   devices.push_back(0);
@@ -548,30 +549,21 @@ base::TimeTicks TimeTicksFromMillis(int64_t millis) {
   return base::TimeTicks() + base::TimeDelta::FromMilliseconds(millis);
 }
 
-class MockTickClock : public base::TickClock {
- public:
-  explicit MockTickClock(int64_t milliseconds)
-      : ticks_(TimeTicksFromMillis(milliseconds)) {}
-  base::TimeTicks NowTicks() override { return ticks_; }
-
- private:
-  base::TimeTicks ticks_;
-};
-
 }  // namespace
 
 TEST_F(EventsXTest, TimestampRolloverAndAdjustWhenDecreasing) {
   XEvent event;
   InitButtonEvent(&event, true, gfx::Point(5, 10), 1, 0);
 
-  ResetTimestampRolloverCountersForTesting(
-      std::make_unique<MockTickClock>(0x100000001));
+  test::ScopedEventTestTickClock clock;
+  clock.SetNowTicks(TimeTicksFromMillis(0x100000001));
+  ResetTimestampRolloverCountersForTesting();
 
   event.xbutton.time = 0xFFFFFFFF;
   EXPECT_EQ(TimeTicksFromMillis(0xFFFFFFFF), ui::EventTimeFromNative(&event));
 
-  ResetTimestampRolloverCountersForTesting(
-      std::make_unique<MockTickClock>(0x100000007));
+  clock.SetNowTicks(TimeTicksFromMillis(0x100000007));
+  ResetTimestampRolloverCountersForTesting();
 
   event.xbutton.time = 3;
   EXPECT_EQ(TimeTicksFromMillis(0x100000000 + 3),
@@ -582,15 +574,17 @@ TEST_F(EventsXTest, NoTimestampRolloverWhenMonotonicIncreasing) {
   XEvent event;
   InitButtonEvent(&event, true, gfx::Point(5, 10), 1, 0);
 
-  ResetTimestampRolloverCountersForTesting(std::make_unique<MockTickClock>(10));
+  test::ScopedEventTestTickClock clock;
+  clock.SetNowTicks(TimeTicksFromMillis(10));
+  ResetTimestampRolloverCountersForTesting();
 
   event.xbutton.time = 6;
   EXPECT_EQ(TimeTicksFromMillis(6), ui::EventTimeFromNative(&event));
   event.xbutton.time = 7;
   EXPECT_EQ(TimeTicksFromMillis(7), ui::EventTimeFromNative(&event));
 
-  ResetTimestampRolloverCountersForTesting(
-      std::make_unique<MockTickClock>(0x100000005));
+  clock.SetNowTicks(TimeTicksFromMillis(0x100000005));
+  ResetTimestampRolloverCountersForTesting();
 
   event.xbutton.time = 0xFFFFFFFF;
   EXPECT_EQ(TimeTicksFromMillis(0xFFFFFFFF), ui::EventTimeFromNative(&event));

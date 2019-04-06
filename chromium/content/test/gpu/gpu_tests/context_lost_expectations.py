@@ -7,6 +7,9 @@ from gpu_tests.gpu_test_expectations import GpuTestExpectations
 # See the GpuTestExpectations class for documentation.
 
 class ContextLostExpectations(GpuTestExpectations):
+  def __init__(self, is_asan=False):
+    super(ContextLostExpectations, self).__init__(is_asan=is_asan)
+
   def SetExpectations(self):
     # Sample Usage:
     # self.Fail('ContextLost_WebGLContextLostFromGPUProcessExit',
@@ -53,3 +56,4 @@ class ContextLostExpectations(GpuTestExpectations):
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=611906)
     self.Fail('ContextLost_WebGLContextLostFromQuantity',
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=611906)
+

@@ -28,16 +28,30 @@ TEST(NativeLibraryTest, LoadFailureWithNullError) {
 
 TEST(NativeLibraryTest, GetNativeLibraryName) {
   const char kExpectedName[] =
-#if defined(OS_IOS)
+#if defined(OS_WIN)
+      "mylib.dll";
+#elif defined(OS_IOS)
       "mylib";
 #elif defined(OS_MACOSX)
       "libmylib.dylib";
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
       "libmylib.so";
-#elif defined(OS_WIN)
-      "mylib.dll";
 #endif
   EXPECT_EQ(kExpectedName, GetNativeLibraryName("mylib"));
+}
+
+TEST(NativeLibraryTest, GetLoadableModuleName) {
+  const char kExpectedName[] =
+#if defined(OS_WIN)
+      "mylib.dll";
+#elif defined(OS_IOS)
+      "mylib";
+#elif defined(OS_MACOSX)
+      "mylib.so";
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
+      "libmylib.so";
+#endif
+  EXPECT_EQ(kExpectedName, GetLoadableModuleName("mylib"));
 }
 
 // We don't support dynamic loading on iOS, and ASAN will complain about our
@@ -46,14 +60,14 @@ TEST(NativeLibraryTest, GetNativeLibraryName) {
 #if !defined(OS_IOS) && !defined(ADDRESS_SANITIZER)
 
 const char kTestLibraryName[] =
-#if defined(OS_MACOSX)
+#if defined(OS_WIN)
+    "test_shared_library.dll";
+#elif defined(OS_MACOSX)
     "libtest_shared_library.dylib";
 #elif defined(OS_ANDROID) && defined(COMPONENT_BUILD)
     "libtest_shared_library.cr.so";
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
     "libtest_shared_library.so";
-#elif defined(OS_WIN)
-    "test_shared_library.dll";
 #endif
 
 class TestLibrary {
@@ -63,7 +77,12 @@ class TestLibrary {
   explicit TestLibrary(const NativeLibraryOptions& options)
     : library_(nullptr) {
     base::FilePath exe_path;
+
+#if !defined(OS_FUCHSIA)
+    // Libraries do not sit alongside the executable in Fuchsia. NativeLibrary
+    // is aware of this and is able to resolve library paths correctly.
     CHECK(base::PathService::Get(base::DIR_EXE, &exe_path));
+#endif
 
     library_ = LoadNativeLibraryWithOptions(
         exe_path.AppendASCII(kTestLibraryName), options, nullptr);

@@ -5,21 +5,19 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SIGNIN_DICE_TURN_SYNC_ON_HELPER_H_
 #define CHROME_BROWSER_UI_WEBUI_SIGNIN_DICE_TURN_SYNC_ON_HELPER_H_
 
+#include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_startup_tracker.h"
-#include "chrome/browser/ui/browser_list_observer.h"
-#include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
-#include "chrome/browser/ui/webui/signin/signin_email_confirmation_dialog.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/signin_metrics.h"
 
 class Browser;
-class BrowserList;
 class ProfileOAuth2TokenService;
 class SigninManager;
 
@@ -33,9 +31,7 @@ class SyncSetupInProgressHandle;
 
 // Handles details of signing the user in with SigninManager and turning on
 // sync for an account that is already present in the token service.
-class DiceTurnSyncOnHelper : public BrowserListObserver,
-                             public LoginUIService::Observer,
-                             public SyncStartupTracker::Observer {
+class DiceTurnSyncOnHelper : public SyncStartupTracker::Observer {
  public:
   // Behavior when the signin is aborted (by an error or cancelled by the user).
   enum class SigninAbortedMode {
@@ -45,11 +41,71 @@ class DiceTurnSyncOnHelper : public BrowserListObserver,
     KEEP_ACCOUNT
   };
 
+  // User choice when signing in.
+  // Used for UMA histograms, Hence, constants should never be deleted or
+  // reordered, and  new constants should only be appended at the end.
+  // Keep this in sync with SigninChoice in histograms.xml.
+  enum SigninChoice {
+    SIGNIN_CHOICE_CANCEL = 0,       // Signin is cancelled.
+    SIGNIN_CHOICE_CONTINUE = 1,     // Signin continues in the current profile.
+    SIGNIN_CHOICE_NEW_PROFILE = 2,  // Signin continues in a new profile.
+    // SIGNIN_CHOICE_SIZE should always be last.
+    SIGNIN_CHOICE_SIZE,
+  };
+
+  using SigninChoiceCallback = base::OnceCallback<void(SigninChoice)>;
+
+  // Delegate implementing the UI prompts.
+  class Delegate {
+   public:
+    virtual ~Delegate() {}
+
+    // Shows a login error to the user.
+    virtual void ShowLoginError(const std::string& email,
+                                const std::string& error_message) = 0;
+
+    // Shows a confirmation dialog when the user was previously signed in with a
+    // different account in the same profile. |callback| must be called.
+    virtual void ShowMergeSyncDataConfirmation(
+        const std::string& previous_email,
+        const std::string& new_email,
+        SigninChoiceCallback callback) = 0;
+
+    // Shows a confirmation dialog when the user is signing in a managed
+    // account. |callback| must be called.
+    virtual void ShowEnterpriseAccountConfirmation(
+        const std::string& email,
+        SigninChoiceCallback callback) = 0;
+
+    // Shows a sync confirmation screen offering to open the Sync settings.
+    // |callback| must be called.
+    virtual void ShowSyncConfirmation(
+        base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
+            callback) = 0;
+
+    // Opens the Sync settings page.
+    virtual void ShowSyncSettings() = 0;
+
+    // Opens the signin page in a new profile.
+    virtual void ShowSigninPageInNewProfile(Profile* new_profile,
+                                            const std::string& username) = 0;
+  };
+
   // Create a helper that turns sync on for an account that is already present
   // in the token service.
   DiceTurnSyncOnHelper(Profile* profile,
+                       signin_metrics::AccessPoint signin_access_point,
+                       signin_metrics::PromoAction signin_promo_action,
+                       signin_metrics::Reason signin_reason,
+                       const std::string& account_id,
+                       SigninAbortedMode signin_aborted_mode,
+                       std::unique_ptr<Delegate> delegate);
+
+  // Convenience constructor using the default delegate.
+  DiceTurnSyncOnHelper(Profile* profile,
                        Browser* browser,
                        signin_metrics::AccessPoint signin_access_point,
+                       signin_metrics::PromoAction signin_promo_action,
                        signin_metrics::Reason signin_reason,
                        const std::string& account_id,
                        SigninAbortedMode signin_aborted_mode);
@@ -59,6 +115,8 @@ class DiceTurnSyncOnHelper : public BrowserListObserver,
   void SyncStartupFailed() override;
 
  private:
+  friend class base::DeleteHelper<DiceTurnSyncOnHelper>;
+
   enum class ProfileMode {
     // Attempts to sign the user in |profile_|. Note that if the account to be
     // signed in is a managed account, then a profile confirmation dialog is
@@ -70,21 +128,6 @@ class DiceTurnSyncOnHelper : public BrowserListObserver,
     NEW_PROFILE
   };
 
-  // User input handler for the signin confirmation dialog.
-  class SigninDialogDelegate : public ui::ProfileSigninConfirmationDelegate {
-   public:
-    explicit SigninDialogDelegate(
-        base::WeakPtr<DiceTurnSyncOnHelper> sync_starter);
-    ~SigninDialogDelegate() override;
-    void OnCancelSignin() override;
-    void OnContinueSignin() override;
-    void OnSigninWithNewProfile() override;
-
-   private:
-    base::WeakPtr<DiceTurnSyncOnHelper> sync_starter_;
-  };
-  friend class SigninDialogDelegate;
-
   // DiceTurnSyncOnHelper deletes itself.
   ~DiceTurnSyncOnHelper() override;
 
@@ -92,8 +135,11 @@ class DiceTurnSyncOnHelper : public BrowserListObserver,
   // and false otherwise.
   bool HasCanOfferSigninError();
 
-  // Callback used with ConfirmEmailDialogDelegate.
-  void ConfirmEmailAction(SigninEmailConfirmationDialog::Action action);
+  // Used as callback for ShowMergeSyncDataConfirmation().
+  void OnMergeAccountConfirmation(SigninChoice choice);
+
+  // Used as callback for ShowEnterpriseAccountConfirmation().
+  void OnEnterpriseAccountConfirmation(SigninChoice choice);
 
   // Turns sync on with the current profile or a new profile.
   void TurnSyncOnWithProfileMode(ProfileMode profile_mode);
@@ -132,21 +178,24 @@ class DiceTurnSyncOnHelper : public BrowserListObserver,
   // confirmation dialog will be updated accordingly.
   void ShowSyncConfirmationUI();
 
-  // LoginUIService::Observer override. Deletes this object.
-  void OnSyncConfirmationUIClosed(
-      LoginUIService::SyncConfirmationUIClosedResult result) override;
-
-  // BrowserListObserver override.
-  void OnBrowserRemoved(Browser* browser) override;
+  // Handles the user input from the sync confirmation UI and deletes this
+  // object.
+  void FinishSyncSetupAndDelete(
+      LoginUIService::SyncConfirmationUIClosedResult result);
 
   // Aborts the flow and deletes this object.
   void AbortAndDelete();
 
+  // This function enables all unified consent services when the unified consent
+  // feature is enabled.
+  void EnableUnifiedConsentIfNeeded();
+
+  std::unique_ptr<Delegate> delegate_;
   Profile* profile_;
-  Browser* browser_;
   SigninManager* signin_manager_;
   ProfileOAuth2TokenService* token_service_;
   const signin_metrics::AccessPoint signin_access_point_;
+  const signin_metrics::PromoAction signin_promo_action_;
   const signin_metrics::Reason signin_reason_;
 
   // Whether the refresh token should be deleted if the Sync flow is aborted.
@@ -163,10 +212,6 @@ class DiceTurnSyncOnHelper : public BrowserListObserver,
   std::string dm_token_;
   std::string client_id_;
 
-  ScopedObserver<BrowserList, BrowserListObserver>
-      scoped_browser_list_observer_;
-  ScopedObserver<LoginUIService, LoginUIService::Observer>
-      scoped_login_ui_service_observer_;
   std::unique_ptr<SyncStartupTracker> sync_startup_tracker_;
 
   base::WeakPtrFactory<DiceTurnSyncOnHelper> weak_pointer_factory_;

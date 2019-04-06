@@ -9,7 +9,6 @@
 #include <sched.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -30,6 +29,8 @@
 
 #if defined(OS_FUCHSIA)
 #include <zircon/process.h>
+#else
+#include <sys/resource.h>
 #endif
 
 namespace base {
@@ -234,8 +235,9 @@ void PlatformThread::Detach(PlatformThreadHandle thread_handle) {
   CHECK_EQ(0, pthread_detach(thread_handle.platform_handle()));
 }
 
-// Mac has its own Set/GetCurrentThreadPriority() implementations.
-#if !defined(OS_MACOSX)
+// Mac and Fuchsia have their own Set/GetCurrentThreadPriority()
+// implementations.
+#if !defined(OS_MACOSX) && !defined(OS_FUCHSIA)
 
 // static
 bool PlatformThread::CanIncreaseCurrentThreadPriority() {
@@ -298,6 +300,6 @@ ThreadPriority PlatformThread::GetCurrentThreadPriority() {
 #endif  // !defined(OS_NACL)
 }
 
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MACOSX) && !defined(OS_FUCHSIA)
 
 }  // namespace base

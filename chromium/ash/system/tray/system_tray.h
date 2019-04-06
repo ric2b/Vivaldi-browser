@@ -12,6 +12,7 @@
 #include "ash/ash_export.h"
 #include "ash/system/tray/system_tray_bubble.h"
 #include "ash/system/tray/system_tray_view.h"
+#include "ash/system/tray/time_to_click_recorder.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "base/callback.h"
 #include "base/macros.h"
@@ -21,14 +22,17 @@
 namespace ash {
 
 enum class LoginStatus;
+class NotificationTray;
 class ScreenTrayItem;
 class SystemBubbleWrapper;
 class SystemTrayItem;
 class TrayAccessibility;
 class TrayAudio;
+class TrayBluetooth;
 class TrayCapsLock;
 class TrayCast;
 class TrayEnterprise;
+class TrayIME;
 class TrayNetwork;
 class TrayNightLight;
 class TrayScale;
@@ -38,7 +42,7 @@ class TraySystemInfo;
 class TrayTiles;
 class TrayTracing;
 class TrayUpdate;
-class WebNotificationTray;
+class TrayVPN;
 
 // There are different methods for creating bubble views.
 enum BubbleCreationType {
@@ -50,7 +54,8 @@ enum BubbleCreationType {
 // manages all the SystemTrayItem controllers, creates icon views that appear in
 // the tray, creates the bubble menu and fills the menu with items. It is also
 // the view that contains the icons in the tray.
-class ASH_EXPORT SystemTray : public TrayBackgroundView {
+class ASH_EXPORT SystemTray : public TrayBackgroundView,
+                              public TimeToClickRecorder::Delegate {
  public:
   explicit SystemTray(Shelf* shelf);
   ~SystemTray() override;
@@ -61,7 +66,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
 
   // Calls TrayBackgroundView::Initialize(), creates the tray items, and
   // adds them to SystemTrayNotifier.
-  void InitializeTrayItems(WebNotificationTray* web_notification_tray);
+  void InitializeTrayItems(NotificationTray* notification_tray);
 
   // Resets internal pointers. This has to be called before deletion.
   void Shutdown();
@@ -113,17 +118,26 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // Returns true if system bubble is visible.
   bool IsSystemBubbleVisible() const;
 
+  // Enable / disable SystemTray button in status area. If the bubble is open
+  // when disabling, also close it.
+  void SetTrayEnabled(bool enabled);
+
   // Returns view for help button if default view is shown. Returns NULL
   // otherwise.
   views::View* GetHelpButtonView() const;
 
   // Returns TrayAudio object if present or null otherwise.
   TrayAudio* GetTrayAudio() const;
-
-  // Determines if it's ok to switch away from the currently active user. Screen
-  // casting may block this (or at least throw up a confirmation dialog). Calls
-  // |callback| with the result.
-  void CanSwitchAwayFromActiveUser(base::OnceCallback<void(bool)> callback);
+  // Returns TrayBluetooth object if present or null otherwise.
+  TrayBluetooth* GetTrayBluetooth() const;
+  // Returns TrayCast object if present or null otherwise.
+  TrayCast* GetTrayCast() const;
+  // Returns TrayAccessibility object if present or null otherwise.
+  TrayAccessibility* GetTrayAccessibility() const;
+  // Returns TrayVPN object if present or null otherwise.
+  TrayVPN* GetTrayVPN() const;
+  // Returns TrayIME object if present or null otherwise.
+  TrayIME* GetTrayIME() const;
 
   // TrayBackgroundView:
   void UpdateAfterShelfAlignmentChange() override;
@@ -136,6 +150,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   void CloseBubble() override;
   void ShowBubble(bool show_by_click) override;
   views::TrayBubbleView* GetBubbleView() override;
+  void SetVisible(bool visible) override;
 
   // views::TrayBubbleView::Delegate:
   void BubbleViewDestroyed() override;
@@ -145,8 +160,8 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   bool ShouldEnableExtraKeyboardAccessibility() override;
   void HideBubble(const views::TrayBubbleView* bubble_view) override;
 
-  ScreenTrayItem* GetScreenShareItem() { return screen_share_tray_item_; }
-  ScreenTrayItem* GetScreenCaptureItem() { return screen_capture_tray_item_; }
+  // TimeToClickRecorder::Delegate:
+  void RecordTimeToClick() override;
 
   // Activates the system tray bubble.
   void ActivateBubble();
@@ -179,9 +194,9 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
                  bool persistent,
                  bool show_by_click);
 
-  // Checks the current status of the system tray and updates the web
-  // notification tray according to the current status.
-  void UpdateWebNotifications();
+  // Checks the current status of the system tray and updates the notification
+  // tray according to the current status.
+  void UpdateNotificationTrayBubblePosition();
 
   // Deactivate the system tray in the shelf if it was active before.
   void CloseSystemBubbleAndDeactivateSystemTray();
@@ -190,8 +205,8 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // and the percentage of the work area height covered by the system menu.
   void RecordSystemMenuMetrics();
 
-  // The web notification tray view that appears adjacent to this view.
-  WebNotificationTray* web_notification_tray_ = nullptr;
+  // The notification tray view that appears adjacent to this view.
+  NotificationTray* notification_tray_ = nullptr;
 
   // Items.
   std::vector<std::unique_ptr<SystemTrayItem>> items_;
@@ -211,13 +226,18 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // Note that the value is only valid when |system_bubble_| is true.
   bool full_system_tray_menu_ = false;
 
+  base::Optional<base::TimeTicks> last_button_clicked_;
+
   // These objects are not owned by this class.
   TrayAccessibility* tray_accessibility_ = nullptr;
   TrayAudio* tray_audio_ = nullptr;
+  TrayBluetooth* tray_bluetooth_ = nullptr;
   TrayCapsLock* tray_caps_lock_ = nullptr;
   TrayCast* tray_cast_ = nullptr;
   TrayEnterprise* tray_enterprise_ = nullptr;
+  TrayIME* tray_ime_ = nullptr;
   TrayNetwork* tray_network_ = nullptr;
+  TrayVPN* tray_vpn_ = nullptr;
   TrayTiles* tray_tiles_ = nullptr;
   TrayScale* tray_scale_ = nullptr;
   TraySessionLengthLimit* tray_session_length_limit_ = nullptr;
@@ -226,10 +246,6 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   TrayTracing* tray_tracing_ = nullptr;
   TrayUpdate* tray_update_ = nullptr;
   TrayNightLight* tray_night_light_ = nullptr;
-
-  // A reference to the Screen share and capture item.
-  ScreenTrayItem* screen_capture_tray_item_ = nullptr;  // not owned
-  ScreenTrayItem* screen_share_tray_item_ = nullptr;    // not owned
 
   DISALLOW_COPY_AND_ASSIGN(SystemTray);
 };

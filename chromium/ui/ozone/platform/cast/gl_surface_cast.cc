@@ -4,8 +4,9 @@
 
 #include "ui/ozone/platform/cast/gl_surface_cast.h"
 
+#include <string>
+
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "chromecast/base/cast_features.h"
 #include "chromecast/base/chromecast_switches.h"
@@ -18,7 +19,7 @@ namespace {
 // TODO(halliwell): We might need to customize this value on various devices
 // or make it dynamic that throttles framerate if device is overheating.
 base::TimeDelta GetVSyncInterval() {
-  if (base::FeatureList::IsEnabled(chromecast::kTripleBuffer720)) {
+  if (chromecast::IsFeatureEnabled(chromecast::kTripleBuffer720)) {
     return base::TimeDelta::FromSeconds(1) / 59.94;
   }
 
@@ -49,7 +50,9 @@ GLSurfaceCast::GLSurfaceCast(gfx::AcceleratedWidget widget,
       parent_(parent),
       supports_swap_buffer_with_bounds_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableSwapBuffersWithBounds)) {
+              switches::kEnableSwapBuffersWithBounds)),
+      uses_triple_buffering_(
+          chromecast::IsFeatureEnabled(chromecast::kTripleBuffer720)) {
   DCHECK(parent_);
 }
 
@@ -96,13 +99,21 @@ bool GLSurfaceCast::Resize(const gfx::Size& size,
                                         has_alpha);
 }
 
-bool GLSurfaceCast::ScheduleOverlayPlane(int z_order,
-                                         gfx::OverlayTransform transform,
-                                         gl::GLImage* image,
-                                         const gfx::Rect& bounds_rect,
-                                         const gfx::RectF& crop_rect) {
+bool GLSurfaceCast::ScheduleOverlayPlane(
+    int z_order,
+    gfx::OverlayTransform transform,
+    gl::GLImage* image,
+    const gfx::Rect& bounds_rect,
+    const gfx::RectF& crop_rect,
+    bool enable_blend,
+    std::unique_ptr<gfx::GpuFence> gpu_fence) {
+  // Currently the Ozone-Cast platform doesn't use the gpu_fence, so we don't
+  // propagate it further. If this changes we will need to store the gpu fence
+  // to ensure it stays valid for as long as the operation needs it, and pass a
+  // pointer to the fence in the call below.
   return image->ScheduleOverlayPlane(widget_, z_order, transform, bounds_rect,
-                                     crop_rect);
+                                     crop_rect, enable_blend,
+                                     /* gpu_fence */ nullptr);
 }
 
 EGLConfig GLSurfaceCast::GetConfig() {
@@ -125,6 +136,10 @@ EGLConfig GLSurfaceCast::GetConfig() {
     config_ = ChooseEGLConfig(GetDisplay(), config_attribs);
   }
   return config_;
+}
+
+int GLSurfaceCast::GetBufferCount() const {
+  return uses_triple_buffering_ ? 3 : 2;
 }
 
 GLSurfaceCast::~GLSurfaceCast() {

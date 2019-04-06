@@ -15,15 +15,12 @@ namespace media {
 class MockDemuxerHost : public DemuxerHost {
  public:
   MockDemuxerHost();
-  virtual ~MockDemuxerHost();
+  ~MockDemuxerHost() override;
 
   MOCK_METHOD1(OnBufferedTimeRangesChanged,
                void(const Ranges<base::TimeDelta>&));
   MOCK_METHOD1(SetDuration, void(base::TimeDelta duration));
   MOCK_METHOD1(OnDemuxerError, void(PipelineStatus error));
-  MOCK_METHOD2(AddTextStream, void(DemuxerStream*,
-                                   const TextTrackConfig&));
-  MOCK_METHOD1(RemoveTextStream, void(DemuxerStream*));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockDemuxerHost);

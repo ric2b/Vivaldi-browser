@@ -462,6 +462,9 @@ Combobox::Combobox(ui::ComboboxModel* model, Style style)
     arrow_image_ = *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
         IDR_MENU_DROPARROW);
   }
+
+  if (UseMd())
+    focus_ring_ = FocusRing::Install(this);
 }
 
 Combobox::~Combobox() {
@@ -533,11 +536,9 @@ void Combobox::SetInvalid(bool invalid) {
 
   invalid_ = invalid;
 
-  if (HasFocus() && UseMd()) {
-    FocusRing::Install(this, invalid_
-                                 ? ui::NativeTheme::kColorId_AlertSeverityHigh
-                                 : ui::NativeTheme::kColorId_NumColors);
-  }
+  if (focus_ring_)
+    focus_ring_->SetInvalid(invalid);
+
   UpdateBorder();
   SchedulePaint();
 }
@@ -746,11 +747,6 @@ void Combobox::OnFocus() {
   View::OnFocus();
   // Border renders differently when focused.
   SchedulePaint();
-  if (UseMd()) {
-    FocusRing::Install(this, invalid_
-                                 ? ui::NativeTheme::kColorId_AlertSeverityHigh
-                                 : ui::NativeTheme::kColorId_NumColors);
-  }
 }
 
 void Combobox::OnBlur() {
@@ -761,34 +757,34 @@ void Combobox::OnBlur() {
     selector_->OnViewBlur();
   // Border renders differently when focused.
   SchedulePaint();
-  if (UseMd())
-    FocusRing::Uninstall(this);
 }
 
 void Combobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  // AX_ROLE_COMBO_BOX is for UI elements with a dropdown and an editable text
-  // field, which views::Combobox does not have. Use AX_ROLE_POP_UP_BUTTON to
-  // match an HTML <select> element.
-  node_data->role = ui::AX_ROLE_POP_UP_BUTTON;
+  // ax::mojom::Role::kComboBox is for UI elements with a dropdown and
+  // an editable text field, which views::Combobox does not have. Use
+  // ax::mojom::Role::kPopUpButton to match an HTML <select> element.
+  node_data->role = ax::mojom::Role::kPopUpButton;
 
   node_data->SetName(accessible_name_);
   node_data->SetValue(model_->GetItemAt(selected_index_));
   if (enabled()) {
-    node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
-                               ui::AX_DEFAULT_ACTION_VERB_OPEN);
+    node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kOpen);
   }
-  node_data->AddIntAttribute(ui::AX_ATTR_POS_IN_SET, selected_index_);
-  node_data->AddIntAttribute(ui::AX_ATTR_SET_SIZE, model_->GetItemCount());
+  node_data->AddIntAttribute(ax::mojom::IntAttribute::kPosInSet,
+                             selected_index_);
+  node_data->AddIntAttribute(ax::mojom::IntAttribute::kSetSize,
+                             model_->GetItemCount());
 }
 
 bool Combobox::HandleAccessibleAction(const ui::AXActionData& action_data) {
   // The action handling in View would generate a mouse event and send it to
   // |this|. However, mouse events for Combobox are handled by |arrow_button_|,
   // which is hidden from the a11y tree (so can't expose actions). Rather than
-  // forwarding AX_ACTION_DO_DEFAULT to View and then forwarding the mouse event
-  // it generates to |arrow_button_| to have it forward back to |this| (as its
-  // ButtonListener), just handle the action explicitly here and bypass View.
-  if (enabled() && action_data.action == ui::AX_ACTION_DO_DEFAULT) {
+  // forwarding ax::mojom::Action::kDoDefault to View and then forwarding the
+  // mouse event it generates to |arrow_button_| to have it forward back to
+  // |this| (as its ButtonListener), just handle the action explicitly here and
+  // bypass View.
+  if (enabled() && action_data.action == ax::mojom::Action::kDoDefault) {
     ShowDropDownMenu(ui::MENU_SOURCE_KEYBOARD);
     return true;
   }
@@ -996,7 +992,7 @@ void Combobox::OnMenuClosed(Button::ButtonState original_button_state) {
 }
 
 void Combobox::OnPerformAction() {
-  NotifyAccessibilityEvent(ui::AX_EVENT_VALUE_CHANGED, true);
+  NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
   SchedulePaint();
 
   // This combobox may be deleted by the listener.

@@ -15,12 +15,12 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
-#include "base/memory/linked_ptr.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "services/service_manager/embedder/embedded_service_info.h"
+#include "third_party/blink/public/mojom/blob/blob.mojom.h"
 
 #if !defined(OS_ANDROID)
 #include "content/public/browser/zoom_level_delegate.h"
@@ -30,7 +30,6 @@ class GURL;
 
 namespace base {
 class FilePath;
-class Time;
 }
 
 namespace service_manager {
@@ -50,6 +49,7 @@ class URLRequestContextGetter;
 }
 
 namespace storage {
+class BlobStorageContext;
 class SpecialStoragePolicy;
 }
 
@@ -67,7 +67,8 @@ class BrowsingDataRemover;
 class BrowsingDataRemoverDelegate;
 class DownloadManager;
 class DownloadManagerDelegate;
-class PermissionManager;
+class PermissionController;
+class PermissionControllerDelegate;
 struct PushEventPayload;
 class PushMessagingService;
 class ResourceContext;
@@ -80,7 +81,7 @@ class SSLHostStateDelegate;
 // content.
 using ProtocolHandlerMap =
     std::map<std::string,
-             linked_ptr<net::URLRequestJobFactory::ProtocolHandler>>;
+             std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>>;
 
 // A owning vector of protocol interceptors.
 using URLRequestInterceptorScopedVector =
@@ -101,6 +102,10 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Returns a BrowsingDataRemover that can schedule data deletion tasks
   // for this |context|.
   static BrowsingDataRemover* GetBrowsingDataRemover(BrowserContext* context);
+
+  // Returns the PermissionController associated with this context. There's
+  // always a PermissionController instance for each BrowserContext.
+  static PermissionController* GetPermissionController(BrowserContext* context);
 
   // Returns a StoragePartition for the given SiteInstance. By default this will
   // create a new StoragePartition if it doesn't exist, unless |can_create| is
@@ -132,21 +137,29 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       BrowserContext* browser_context);
 
   using BlobCallback = base::OnceCallback<void(std::unique_ptr<BlobHandle>)>;
+  using BlobContextGetter =
+      base::RepeatingCallback<base::WeakPtr<storage::BlobStorageContext>()>;
 
-  // |callback| returns a nullptr scoped_ptr on failure.
+  // This method should be called on UI thread and calls back on UI thread
+  // as well. Note that retrieving a blob ptr out of BlobHandle can only be
+  // done on IO. |callback| returns a nullptr on failure.
   static void CreateMemoryBackedBlob(BrowserContext* browser_context,
                                      const char* data,
                                      size_t length,
                                      const std::string& content_type,
                                      BlobCallback callback);
 
-  // |callback| returns a nullptr scoped_ptr on failure.
-  static void CreateFileBackedBlob(BrowserContext* browser_context,
-                                   const base::FilePath& path,
-                                   int64_t offset,
-                                   int64_t size,
-                                   const base::Time& expected_modification_time,
-                                   BlobCallback callback);
+  // Get a BlobStorageContext getter that needs to run on IO thread.
+  static BlobContextGetter GetBlobStorageContext(
+      BrowserContext* browser_context);
+
+  // Returns a mojom::BlobPtr for a specific blob. If no blob exists with the
+  // given UUID, the BlobPtr pipe will close.
+  // This method should be called on the UI thread.
+  // TODO(mek): Blob UUIDs should be entirely internal to the blob system, so
+  // eliminate this method in favor of just passing around the BlobPtr directly.
+  static blink::mojom::BlobPtr GetBlobPtr(BrowserContext* browser_context,
+                                          const std::string& uuid);
 
   // Delivers a push message with |data| to the Service Worker identified by
   // |origin| and |service_worker_registration_id|.
@@ -181,7 +194,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
 
   // Returns a Service User ID associated with this BrowserContext. This ID is
   // not persistent across runs. See
-  // services/service_manager/public/interfaces/connector.mojom. By default,
+  // services/service_manager/public/mojom/connector.mojom. By default,
   // this user id is randomly generated when Initialize() is called.
   static const std::string& GetServiceUserIdFor(
       BrowserContext* browser_context);
@@ -248,9 +261,12 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // return nullptr, implementing the default exception storage strategy.
   virtual SSLHostStateDelegate* GetSSLHostStateDelegate() = 0;
 
-  // Returns the PermissionManager associated with that context if any, nullptr
-  // otherwise.
-  virtual PermissionManager* GetPermissionManager() = 0;
+  // Returns the PermissionControllerDelegate associated with this context if
+  // any, nullptr otherwise.
+  //
+  // Note: if you want to check a permission status, you probably need
+  // BrowserContext::GetPermissionController() instead.
+  virtual PermissionControllerDelegate* GetPermissionControllerDelegate() = 0;
 
   // Returns the BackgroundFetchDelegate associated with that context if any,
   // nullptr otherwise.
@@ -295,6 +311,9 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // by the Service Manager.
   virtual void RegisterInProcessServices(StaticServiceMap* services) {}
 
+  // Returns a unique string associated with this browser context.
+  virtual const std::string& UniqueId() const;
+
   // Returns a random salt string that is used for creating media device IDs.
   // Returns a random string by default.
   virtual std::string GetMediaDeviceIDSalt();
@@ -311,7 +330,8 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   virtual media::VideoDecodePerfHistory* GetVideoDecodePerfHistory();
 
  private:
-  const std::string media_device_id_salt_;
+  const std::string unique_id_;
+  bool was_notify_will_be_destroyed_called_ = false;
 };
 
 }  // namespace content

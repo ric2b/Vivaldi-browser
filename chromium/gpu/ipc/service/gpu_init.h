@@ -7,17 +7,20 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
+#include "gpu/vulkan/buildflags.h"
 
 namespace base {
 class CommandLine;
 }
 
 namespace gpu {
+
+class VulkanImplementation;
 
 class GPU_IPC_SERVICE_EXPORT GpuSandboxHelper {
  public:
@@ -44,17 +47,29 @@ class GPU_IPC_SERVICE_EXPORT GpuInit {
   bool InitializeAndStartSandbox(base::CommandLine* command_line,
                                  const GpuPreferences& gpu_preferences);
   void InitializeInProcess(base::CommandLine* command_line,
-                           const GpuPreferences& gpu_preferences,
-                           const GPUInfo* gpu_info = nullptr,
-                           const GpuFeatureInfo* gpu_feature_info = nullptr);
+                           const GpuPreferences& gpu_preferences);
 
   const GPUInfo& gpu_info() const { return gpu_info_; }
   const GpuFeatureInfo& gpu_feature_info() const { return gpu_feature_info_; }
+  const base::Optional<GPUInfo>& gpu_info_for_hardware_gpu() const {
+    return gpu_info_for_hardware_gpu_;
+  }
+  const base::Optional<GpuFeatureInfo>& gpu_feature_info_for_hardware_gpu()
+      const {
+    return gpu_feature_info_for_hardware_gpu_;
+  }
   const GpuPreferences& gpu_preferences() const { return gpu_preferences_; }
   std::unique_ptr<GpuWatchdogThread> TakeWatchdogThread() {
     return std::move(watchdog_thread_);
   }
   bool init_successful() const { return init_successful_; }
+#if BUILDFLAG(ENABLE_VULKAN)
+  VulkanImplementation* vulkan_implementation() {
+    return vulkan_implementation_.get();
+  }
+#else
+  VulkanImplementation* vulkan_implementation() { return nullptr; }
+#endif
 
  private:
   GpuSandboxHelper* sandbox_helper_ = nullptr;
@@ -64,8 +79,17 @@ class GPU_IPC_SERVICE_EXPORT GpuInit {
   GpuPreferences gpu_preferences_;
   bool init_successful_ = false;
 
-  bool ShouldEnableSwiftShader(base::CommandLine* command_line);
+  // The following data are collected from hardware GPU and saved before
+  // switching to SwiftShader.
+  base::Optional<GPUInfo> gpu_info_for_hardware_gpu_;
+  base::Optional<GpuFeatureInfo> gpu_feature_info_for_hardware_gpu_;
+
+#if BUILDFLAG(ENABLE_VULKAN)
+  std::unique_ptr<VulkanImplementation> vulkan_implementation_;
+#endif
+
   void AdjustInfoToSwiftShader();
+
   DISALLOW_COPY_AND_ASSIGN(GpuInit);
 };
 

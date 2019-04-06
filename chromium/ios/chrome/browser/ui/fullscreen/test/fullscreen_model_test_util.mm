@@ -14,7 +14,8 @@
 void SetUpFullscreenModelForTesting(FullscreenModel* model,
                                     CGFloat toolbar_height) {
   EXPECT_GE(toolbar_height, 0.0);
-  model->SetToolbarHeight(toolbar_height);
+  model->SetCollapsedToolbarHeight(0.0);
+  model->SetExpandedToolbarHeight(toolbar_height);
   model->SetScrollViewHeight(2 * toolbar_height);
   model->SetContentHeight(2 * model->GetScrollViewHeight());
   model->ResetForNavigation();
@@ -34,18 +35,23 @@ void SimulateFullscreenUserScrollForProgress(FullscreenModel* model,
                                              CGFloat progress) {
   ASSERT_GE(progress, 0.0);
   ASSERT_LE(progress, 1.0);
-  CGFloat toolbar_height = model->GetToolbarHeight();
+  SimulateFullscreenUserScrollWithDelta(
+      model, GetFullscreenOffsetDeltaForProgress(model, progress));
+}
+
+CGFloat GetFullscreenOffsetDeltaForProgress(FullscreenModel* model,
+                                            CGFloat progress) {
+  CGFloat height_delta = model->toolbar_height_delta();
   CGFloat base_offset =
       GetFullscreenBaseOffsetForProgress(model, model->progress());
   CGFloat final_y_content_offset =
-      base_offset + (1.0 - progress) * toolbar_height;
-  CGFloat delta = final_y_content_offset - model->GetYContentOffset();
-  SimulateFullscreenUserScrollWithDelta(model, delta);
+      base_offset + (1.0 - progress) * height_delta;
+  return final_y_content_offset - model->GetYContentOffset();
 }
 
 CGFloat GetFullscreenBaseOffsetForProgress(FullscreenModel* model,
                                            CGFloat progress) {
   EXPECT_TRUE(model->has_base_offset());
   return model->GetYContentOffset() -
-         (1.0 - progress) * model->GetToolbarHeight();
+         (1.0 - progress) * model->toolbar_height_delta();
 }

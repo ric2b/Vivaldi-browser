@@ -63,8 +63,8 @@ class TrayPopupUtils {
   // can grow into the CENTER container if space is required and available. The
   // CENTER container has a flexible width.
   //
-  // TODO(mohsen): Merge this into TrayDetailsView::AddScrollListSubHeader()
-  // once network and VPN also use TrayDetailsView::AddScrollListSubHeader().
+  // TODO(mohsen): Merge this into TrayDetailedView::AddScrollListSubHeader()
+  // once network and VPN also use TrayDetailedView::AddScrollListSubHeader().
   static TriView* CreateSubHeaderRowView(bool start_visible);
 
   // Creates a container view to be used by system menu rows that want to embed
@@ -135,12 +135,6 @@ class TrayPopupUtils {
   static void ConfigureContainer(TriView::Container container,
                                  views::View* container_view);
 
-  // Creates a button for use in the system menu that only has a visible border
-  // when being hovered/clicked. Caller assumes ownership.
-  static views::LabelButton* CreateTrayPopupBorderlessButton(
-      views::ButtonListener* listener,
-      const base::string16& text);
-
   // Creates a button for use in the system menu. For MD, this is a prominent
   // text
   // button. For non-MD, this does the same thing as the above. Caller assumes
@@ -154,13 +148,12 @@ class TrayPopupUtils {
   // returned separator.
   static views::Separator* CreateVerticalSeparator();
 
-  // Creates in InkDrop instance for |host| according to the |ink_drop_style|.
+  // Creates in InkDrop instance for |host|.
   // All styles are configured to show the highlight when the ripple is visible.
   //
   // All targetable views in the system menu should delegate
   // InkDropHost::CreateInkDrop() calls here.
   static std::unique_ptr<views::InkDrop> CreateInkDrop(
-      TrayPopupInkDropStyle ink_drop_style,
       views::InkDropHostView* host);
 
   // Creates an InkDropRipple instance for |host| according to the

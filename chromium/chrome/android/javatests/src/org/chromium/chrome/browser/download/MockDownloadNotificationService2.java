@@ -11,10 +11,11 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.download.DownloadUpdate.PendingState;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.offline_items_collection.ContentId;
+import org.chromium.components.offline_items_collection.FailState;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
+import org.chromium.components.offline_items_collection.PendingState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,12 +60,13 @@ public class MockDownloadNotificationService2 extends DownloadNotificationServic
     public int notifyDownloadSuccessful(final ContentId id, final String filePath,
             final String fileName, final long systemDownloadId, final boolean isOffTheRecord,
             final boolean isSupportedMimeType, final boolean isOpenable, final Bitmap icon,
-            final String originalUrl, final String referrer) {
+            final String originalUrl, final String referrer, final long totalBytes) {
         return ThreadUtils.runOnUiThreadBlockingNoException(
                 ()
                         -> MockDownloadNotificationService2.super.notifyDownloadSuccessful(id,
                                 filePath, fileName, systemDownloadId, isOffTheRecord,
-                                isSupportedMimeType, isOpenable, icon, originalUrl, referrer));
+                                isSupportedMimeType, isOpenable, icon, originalUrl, referrer,
+                                totalBytes));
     }
 
     @Override
@@ -82,7 +84,7 @@ public class MockDownloadNotificationService2 extends DownloadNotificationServic
     @Override
     void notifyDownloadPaused(ContentId id, String fileName, boolean isResumable,
             boolean isAutoResumable, boolean isOffTheRecord, boolean isTransient, Bitmap icon,
-            boolean hasUserGesture, boolean forceRebuild, PendingState pendingState) {
+            boolean hasUserGesture, boolean forceRebuild, @PendingState int pendingState) {
         ThreadUtils.runOnUiThreadBlocking(
                 ()
                         -> MockDownloadNotificationService2.super.notifyDownloadPaused(id, fileName,
@@ -91,11 +93,12 @@ public class MockDownloadNotificationService2 extends DownloadNotificationServic
     }
 
     @Override
-    public void notifyDownloadFailed(final ContentId id, final String fileName, final Bitmap icon) {
+    public void notifyDownloadFailed(final ContentId id, final String fileName, final Bitmap icon,
+            @FailState int failState) {
         ThreadUtils.runOnUiThreadBlocking(
                 ()
                         -> MockDownloadNotificationService2.super.notifyDownloadFailed(
-                                id, fileName, icon));
+                                id, fileName, icon, failState));
     }
 
     @Override

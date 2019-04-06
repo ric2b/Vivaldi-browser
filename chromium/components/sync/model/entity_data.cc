@@ -5,8 +5,10 @@
 #include "components/sync/model/entity_data.h"
 
 #include <algorithm>
+#include <ostream>
 #include <utility>
 
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -28,21 +30,36 @@ std::string UniquePositionToString(
 }  // namespace
 
 EntityData::EntityData() = default;
-EntityData::~EntityData() = default;
+
+EntityData::EntityData(EntityData&& other)
+    : id(std::move(other.id)),
+      client_tag_hash(std::move(other.client_tag_hash)),
+      server_defined_unique_tag(std::move(other.server_defined_unique_tag)),
+      non_unique_name(std::move(other.non_unique_name)),
+      creation_time(other.creation_time),
+      modification_time(other.modification_time),
+      parent_id(std::move(other.parent_id)),
+      is_folder(other.is_folder) {
+  specifics.Swap(&other.specifics);
+  unique_position.Swap(&other.unique_position);
+}
+
 EntityData::EntityData(const EntityData& src) = default;
 
-void EntityData::Swap(EntityData* other) {
-  id.swap(other->id);
-  client_tag_hash.swap(other->client_tag_hash);
-  non_unique_name.swap(other->non_unique_name);
+EntityData::~EntityData() = default;
 
-  specifics.Swap(&other->specifics);
-
-  std::swap(creation_time, other->creation_time);
-  std::swap(modification_time, other->modification_time);
-
-  parent_id.swap(other->parent_id);
-  unique_position.Swap(&other->unique_position);
+EntityData& EntityData::operator=(EntityData&& other) {
+  id = std::move(other.id);
+  client_tag_hash = std::move(other.client_tag_hash);
+  server_defined_unique_tag = std::move(other.server_defined_unique_tag);
+  non_unique_name = std::move(other.non_unique_name);
+  creation_time = other.creation_time;
+  modification_time = other.modification_time;
+  parent_id = other.parent_id;
+  is_folder = other.is_folder;
+  specifics.Swap(&other.specifics);
+  unique_position.Swap(&other.unique_position);
+  return *this;
 }
 
 EntityDataPtr EntityData::PassToPtr() {
@@ -54,6 +71,15 @@ EntityDataPtr EntityData::PassToPtr() {
 EntityDataPtr EntityData::UpdateId(const std::string& new_id) const {
   EntityData entity_data(*this);
   entity_data.id = new_id;
+  EntityDataPtr target;
+  target.swap_value(&entity_data);
+  return target;
+}
+
+EntityDataPtr EntityData::UpdateSpecifics(
+    const sync_pb::EntitySpecifics& new_specifics) const {
+  EntityData entity_data(*this);
+  entity_data.specifics = new_specifics;
   EntityDataPtr target;
   target.swap_value(&entity_data);
   return target;
@@ -71,11 +97,13 @@ std::unique_ptr<base::DictionaryValue> EntityData::ToDictionaryValue() {
   dict->Set("SPECIFICS", EntitySpecificsToValue(specifics));
   ADD_TO_DICT(dict, id);
   ADD_TO_DICT(dict, client_tag_hash);
+  ADD_TO_DICT(dict, server_defined_unique_tag);
   ADD_TO_DICT(dict, non_unique_name);
   ADD_TO_DICT(dict, parent_id);
   ADD_TO_DICT_WITH_TRANSFORM(dict, creation_time, GetTimeDebugString);
   ADD_TO_DICT_WITH_TRANSFORM(dict, modification_time, GetTimeDebugString);
   ADD_TO_DICT_WITH_TRANSFORM(dict, unique_position, UniquePositionToString);
+  dict->SetBoolean("IS_FOLDER", is_folder);
   return dict;
 }
 
@@ -87,6 +115,7 @@ size_t EntityData::EstimateMemoryUsage() const {
   size_t memory_usage = 0;
   memory_usage += EstimateMemoryUsage(id);
   memory_usage += EstimateMemoryUsage(client_tag_hash);
+  memory_usage += EstimateMemoryUsage(server_defined_unique_tag);
   memory_usage += EstimateMemoryUsage(non_unique_name);
   memory_usage += EstimateMemoryUsage(specifics);
   memory_usage += EstimateMemoryUsage(parent_id);
@@ -95,16 +124,27 @@ size_t EntityData::EstimateMemoryUsage() const {
 }
 
 void EntityDataTraits::SwapValue(EntityData* dest, EntityData* src) {
-  dest->Swap(src);
+  std::swap(*dest, *src);
 }
 
 bool EntityDataTraits::HasValue(const EntityData& value) {
-  return !value.client_tag_hash.empty();
+  return !value.client_tag_hash.empty() || !value.id.empty();
 }
 
 const EntityData& EntityDataTraits::DefaultValue() {
   CR_DEFINE_STATIC_LOCAL(EntityData, default_instance, ());
   return default_instance;
+}
+
+void PrintTo(const EntityData& entity_data, std::ostream* os) {
+  std::string specifics;
+  base::JSONWriter::WriteWithOptions(
+      *syncer::EntitySpecificsToValue(entity_data.specifics),
+      base::JSONWriter::OPTIONS_PRETTY_PRINT, &specifics);
+  *os << "{ id: '" << entity_data.id << "', client_tag_hash: '"
+      << entity_data.client_tag_hash << "', server_defined_unique_tag: '"
+      << entity_data.server_defined_unique_tag << "', specifics: " << specifics
+      << "}";
 }
 
 }  // namespace syncer

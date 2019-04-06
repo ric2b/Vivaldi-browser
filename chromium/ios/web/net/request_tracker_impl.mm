@@ -8,8 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/logging.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -79,9 +79,6 @@ static void RegisterTracker(web::RequestTrackerImpl* tracker, NSString* key) {
     (*g_trackers)[scoped_key] = tracker;
   }
 }
-
-// Empty callback.
-void DoNothing(bool flag) {}
 
 }  // namespace
 
@@ -244,7 +241,7 @@ void RequestTrackerImpl::RunAfterRequestsCancel(const base::Closure& callback) {
   // This ensures that |callback| runs after anything elese queued on the IO
   // thread, in particular CancelRequest() calls made from closing trackers.
   web::WebThread::PostTaskAndReply(web::WebThread::IO, FROM_HERE,
-                                   base::Bind(&base::DoNothing), callback);
+                                   base::DoNothing(), callback);
 }
 
 // static
@@ -493,8 +490,7 @@ void RequestTrackerImplTraits::Destruct(const RequestTrackerImpl* t) {
     // method is the mechanism by which all RequestTrackerImpl instances are
     // destroyed, the object inconstant_t points to won't be deleted while
     // the block is executing (and Destruct() itself will do the deleting).
-    web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
-                             base::BindBlockArc(^{
+    web::WebThread::PostTask(web::WebThread::IO, FROM_HERE, base::BindOnce(^{
                                inconstant_t->Destruct();
                              }));
   }
@@ -511,7 +507,7 @@ void RequestTrackerImpl::Destruct() {
   }
   InvalidateWeakPtrs();
   // Delete on the UI thread.
-  web::WebThread::PostTask(web::WebThread::UI, FROM_HERE, base::BindBlockArc(^{
+  web::WebThread::PostTask(web::WebThread::UI, FROM_HERE, base::BindOnce(^{
                              delete this;
                            }));
 }
@@ -605,7 +601,7 @@ void RequestTrackerImpl::EvaluateSSLCallbackForCounts(TrackerCounts* counts) {
       break;
     case CertPolicy::ALLOWED:
       counts->ssl_callback.Run(YES);
-      counts->ssl_callback = base::Bind(&DoNothing);
+      counts->ssl_callback = base::DoNothing();
       break;
     default:
       NOTREACHED();
@@ -633,7 +629,7 @@ void RequestTrackerImpl::CancelRequestForCounts(TrackerCounts* counts) {
   counts->done = true;
   counts_by_request_.erase(counts->request);
   counts->ssl_callback.Run(NO);
-  counts->ssl_callback = base::Bind(&DoNothing);
+  counts->ssl_callback = base::DoNothing();
   Notify();
 }
 

@@ -21,14 +21,11 @@ LayerTreeFrameSinkLocal::LayerTreeFrameSinkLocal(
     const viz::FrameSinkId& frame_sink_id,
     viz::HostFrameSinkManager* host_frame_sink_manager,
     const std::string& debug_label)
-    : cc::LayerTreeFrameSink(nullptr, nullptr, nullptr, nullptr, nullptr),
+    : cc::LayerTreeFrameSink(nullptr, nullptr, nullptr, nullptr),
       frame_sink_id_(frame_sink_id),
-      host_frame_sink_manager_(host_frame_sink_manager),
-      weak_factory_(this) {
+      host_frame_sink_manager_(host_frame_sink_manager) {
   host_frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_, this);
-#if DCHECK_IS_ON()
   host_frame_sink_manager_->SetFrameSinkDebugLabel(frame_sink_id_, debug_label);
-#endif
 }
 
 LayerTreeFrameSinkLocal::~LayerTreeFrameSinkLocal() {
@@ -56,16 +53,11 @@ void LayerTreeFrameSinkLocal::SetSurfaceChangedCallback(
   surface_changed_callback_ = callback;
 }
 
-base::WeakPtr<LayerTreeFrameSinkLocal> LayerTreeFrameSinkLocal::GetWeakPtr() {
-  return weak_factory_.GetWeakPtr();
-}
-
 void LayerTreeFrameSinkLocal::DetachFromClient() {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   client_->SetBeginFrameSource(nullptr);
   begin_frame_source_.reset();
-  support_->EvictCurrentSurface();
   support_.reset();
   thread_checker_.reset();
   cc::LayerTreeFrameSink::DetachFromClient();
@@ -87,9 +79,7 @@ void LayerTreeFrameSinkLocal::SubmitCompositorFrame(
 
   DCHECK(local_surface_id_.is_valid());
 
-  bool result =
-      support_->SubmitCompositorFrame(local_surface_id_, std::move(frame));
-  DCHECK(result);
+  support_->SubmitCompositorFrame(local_surface_id_, std::move(frame));
 }
 
 void LayerTreeFrameSinkLocal::DidNotProduceFrame(
@@ -99,6 +89,19 @@ void LayerTreeFrameSinkLocal::DidNotProduceFrame(
   DCHECK(!ack.has_damage);
   DCHECK_LE(viz::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
   support_->DidNotProduceFrame(ack);
+}
+
+void LayerTreeFrameSinkLocal::DidAllocateSharedBitmap(
+    mojo::ScopedSharedBufferHandle buffer,
+    const viz::SharedBitmapId& id) {
+  // No software compositing used with this implementation.
+  NOTIMPLEMENTED();
+}
+
+void LayerTreeFrameSinkLocal::DidDeleteSharedBitmap(
+    const viz::SharedBitmapId& id) {
+  // No software compositing used with this implementation.
+  NOTIMPLEMENTED();
 }
 
 void LayerTreeFrameSinkLocal::DidReceiveCompositorFrameAck(
@@ -114,19 +117,10 @@ void LayerTreeFrameSinkLocal::DidReceiveCompositorFrameAck(
 
 void LayerTreeFrameSinkLocal::DidPresentCompositorFrame(
     uint32_t presentation_token,
-    base::TimeTicks time,
-    base::TimeDelta refresh,
-    uint32_t flags) {
+    const gfx::PresentationFeedback& feedback) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
-  client_->DidPresentCompositorFrame(presentation_token, time, refresh, flags);
-}
-
-void LayerTreeFrameSinkLocal::DidDiscardCompositorFrame(
-    uint32_t presentation_token) {
-  DCHECK(thread_checker_);
-  DCHECK(thread_checker_->CalledOnValidThread());
-  client_->DidDiscardCompositorFrame(presentation_token);
+  client_->DidPresentCompositorFrame(presentation_token, feedback);
 }
 
 void LayerTreeFrameSinkLocal::OnBeginFrame(const viz::BeginFrameArgs& args) {

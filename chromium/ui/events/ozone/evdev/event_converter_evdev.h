@@ -12,7 +12,7 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_pump_libevent.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/ozone/evdev/event_dispatch_callback.h"
 #include "ui/events/ozone/evdev/events_ozone_evdev_export.h"
@@ -24,13 +24,14 @@ namespace ui {
 enum class DomCode;
 
 class EVENTS_OZONE_EVDEV_EXPORT EventConverterEvdev
-    : public base::MessagePumpLibevent::Watcher {
+    : public base::MessagePumpLibevent::FdWatcher {
  public:
   EventConverterEvdev(int fd,
                       const base::FilePath& path,
                       int id,
                       InputDeviceType type,
                       const std::string& name,
+                      const std::string& phys,
                       uint16_t vendor_id,
                       uint16_t product_id);
   ~EventConverterEvdev() override;
@@ -109,13 +110,13 @@ class EVENTS_OZONE_EVDEV_EXPORT EventConverterEvdev
 
   // Sets callback to enable/disable palm suppression.
   virtual void SetPalmSuppressionCallback(
-      const base::Callback<void(bool)>& callback);
+      const base::RepeatingCallback<void(bool)>& callback);
 
   // Helper to generate a base::TimeTicks from an input_event's time
   static base::TimeTicks TimeTicksFromInputEvent(const input_event& event);
 
  protected:
-  // base::MessagePumpLibevent::Watcher:
+  // base::MessagePumpLibevent::FdWatcher:
   void OnFileCanWriteWithoutBlocking(int fd) override;
 
   // File descriptor to read.
@@ -132,7 +133,7 @@ class EVENTS_OZONE_EVDEV_EXPORT EventConverterEvdev
   bool watching_ = false;
 
   // Controller for watching the input fd.
-  base::MessagePumpLibevent::FileDescriptorWatcher controller_;
+  base::MessagePumpLibevent::FdWatchController controller_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EventConverterEvdev);

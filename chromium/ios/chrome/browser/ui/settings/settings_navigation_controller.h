@@ -11,7 +11,6 @@
 
 @protocol BrowserCommands;
 @protocol ImportDataControllerDelegate;
-@class OpenUrlCommand;
 @protocol UserFeedbackDataSource;
 
 namespace ios {
@@ -41,8 +40,7 @@ class ChromeBrowserState;
 
 // Controller to modify user settings.
 @interface SettingsNavigationController
-    : UINavigationController<ApplicationSettingsCommands,
-                             SettingsControllerProtocol>
+    : UINavigationController<ApplicationSettingsCommands>
 
 // Whether sync changes should be committed when the settings are being
 // dismissed. Defaults to YES.
@@ -96,9 +94,10 @@ newClearBrowsingDataController:(ios::ChromeBrowserState*)browserState
 newSavePasswordsController:(ios::ChromeBrowserState*)browserState
                   delegate:(id<SettingsNavigationControllerDelegate>)delegate;
 
-// Creates and displays a new UserFeedbackViewController. |browserState| is used
-// to personalize some settings aspects and should not be nil. |dataSource| is
-// used to populate the UserFeedbackViewController. |delegate| may be nil.
+// Creates and displays a new UIViewController for user to report an issue.
+// |browserState| is used to personalize some settings aspects and should not
+// be nil. |dataSource| is used to populate the UIViewController. |delegate|
+// may be nil.
 + (SettingsNavigationController*)
 newUserFeedbackController:(ios::ChromeBrowserState*)browserState
                  delegate:(id<SettingsNavigationControllerDelegate>)delegate
@@ -138,6 +137,10 @@ initWithRootViewController:(UIViewController*)rootViewController
 
 // Returns the current main browser state.
 - (ios::ChromeBrowserState*)mainBrowserState;
+
+// Notifies this |SettingsNavigationController| that it will be dismissed such
+// that it has a possibility to do necessary clean up.
+- (void)settingsWillBeDismissed;
 
 // Closes this |SettingsNavigationController| by asking its delegate.
 - (void)closeSettings;

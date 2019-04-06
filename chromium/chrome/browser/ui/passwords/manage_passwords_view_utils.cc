@@ -106,33 +106,32 @@ void GetSavePasswordDialogTitleTextAndLinkRange(
     title_id = dialog_type == PasswordTitleType::UPDATE_PASSWORD
                    ? IDS_UPDATE_PASSWORD_DIFFERENT_DOMAINS_TITLE
                    : IDS_SAVE_PASSWORD_DIFFERENT_DOMAINS_TITLE;
-    replacements.push_back(
-        url_formatter::FormatUrlForSecurityDisplay(form_origin_url));
+    replacements.push_back(url_formatter::FormatUrlForSecurityDisplay(
+        form_origin_url, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
+  }
+  base::string16 title_link;
+  if (title_id == IDS_SAVE_ACCOUNT) {
+    title_link =
+        is_smartlock_branding_enabled
+            ? l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SMART_LOCK)
+            : l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_TITLE_BRAND);
+    replacements.insert(replacements.begin(), title_link);
   }
 
-  if (is_smartlock_branding_enabled) {
-    // "Google Smart Lock" should be a hyperlink.
-    base::string16 title_link =
-        l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SMART_LOCK);
-    replacements.insert(replacements.begin(), title_link);
-    *title = l10n_util::GetStringFUTF16(title_id, replacements, &offsets);
-    if (!offsets.empty()) {
-      // |offsets| can be empty when the localised string associated with
-      // |title_id| could not be found. While this situation is an error, it
-      // needs to be handled gracefully, see http://crbug.com/658902#c18.
-      *title_link_range =
-          gfx::Range(offsets[0], offsets[0] + title_link.length());
-    }
-  } else {
-    replacements.insert(
-        replacements.begin(),
-        l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_TITLE_BRAND));
-    *title = l10n_util::GetStringFUTF16(title_id, replacements, &offsets);
+  *title = l10n_util::GetStringFUTF16(title_id, replacements, &offsets);
+  if (title_id == IDS_SAVE_ACCOUNT && is_smartlock_branding_enabled &&
+      !offsets.empty()) {
+    // |offsets| can be empty when the localised string associated with
+    // |title_id| could not be found. While this situation is an error, it
+    // needs to be handled gracefully, see http://crbug.com/658902#c18.
+    *title_link_range =
+        gfx::Range(offsets[0], offsets[0] + title_link.length());
   }
 }
 
 void GetManagePasswordsDialogTitleText(const GURL& user_visible_url,
                                        const GURL& password_origin_url,
+                                       bool has_credentials,
                                        base::string16* title) {
   DCHECK(!password_manager::IsValidAndroidFacetURI(password_origin_url.spec()));
   // Check whether the registry controlled domains for user-visible URL
@@ -142,9 +141,14 @@ void GetManagePasswordsDialogTitleText(const GURL& user_visible_url,
     base::string16 formatted_url =
         url_formatter::FormatUrlForSecurityDisplay(password_origin_url);
     *title = l10n_util::GetStringFUTF16(
-        IDS_MANAGE_PASSWORDS_TITLE_DIFFERENT_DOMAIN, formatted_url);
+        has_credentials
+            ? IDS_MANAGE_PASSWORDS_DIFFERENT_DOMAIN_TITLE
+            : IDS_MANAGE_PASSWORDS_DIFFERENT_DOMAIN_NO_PASSWORDS_TITLE,
+        formatted_url);
   } else {
-    *title = l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_TITLE);
+    *title = l10n_util::GetStringUTF16(
+        has_credentials ? IDS_MANAGE_PASSWORDS_TITLE
+                        : IDS_MANAGE_PASSWORDS_NO_PASSWORDS_TITLE);
   }
 }
 

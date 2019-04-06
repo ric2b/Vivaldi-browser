@@ -18,6 +18,10 @@ extern NSString* const kToolsMenuDidShowNotification;
 extern NSString* const kToolsMenuDidHideNotification;
 
 // Tools Menu item IDs.
+// Reload item accessibility Identifier.
+extern NSString* const kToolsMenuReload;
+// Stop item accessibility Identifier.
+extern NSString* const kToolsMenuStop;
 // New Tab item accessibility Identifier.
 extern NSString* const kToolsMenuNewTabId;
 // New incognito Tab item accessibility Identifier.
@@ -26,6 +30,8 @@ extern NSString* const kToolsMenuNewIncognitoTabId;
 extern NSString* const kToolsMenuCloseAllTabsId;
 // Close all incognito Tabs item accessibility Identifier.
 extern NSString* const kToolsMenuCloseAllIncognitoTabsId;
+// Close the current tab item accessibility Identifier.
+extern NSString* const kToolsMenuCloseTabId;
 // Bookmarks item accessibility Identifier.
 extern NSString* const kToolsMenuBookmarksId;
 // Reading List item accessibility Identifier.
@@ -46,6 +52,20 @@ extern NSString* const kToolsMenuSettingsId;
 extern NSString* const kToolsMenuHelpId;
 // Request mobile item accessibility Identifier.
 extern NSString* const kToolsMenuRequestMobileId;
+// ReadLater item accessibility Identifier.
+extern NSString* const kToolsMenuReadLater;
+// AddBookmark item accessibility Identifier.
+extern NSString* const kToolsMenuAddToBookmarks;
+// EditBookmark item accessibility Identifier.
+extern NSString* const kToolsMenuEditBookmark;
+// SiteInformation item accessibility Identifier.
+extern NSString* const kToolsMenuSiteInformation;
+// Paste and Go item accessibility Identifier.
+extern NSString* const kToolsMenuPasteAndGo;
+// Voice Search item accessibility Identifier.
+extern NSString* const kToolsMenuVoiceSearch;
+// QR Code Search item accessibility Identifier.
+extern NSString* const kToolsMenuQRCodeSearch;
 
 // Identifiers for tools menu items (for metrics purposes).
 typedef NS_ENUM(int, ToolsMenuItemID) {

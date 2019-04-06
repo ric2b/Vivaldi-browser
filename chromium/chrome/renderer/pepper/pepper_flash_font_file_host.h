@@ -15,7 +15,7 @@
 #include "ppapi/host/resource_host.h"
 
 #if defined(OS_LINUX) || defined(OS_OPENBSD)
-#include "base/files/scoped_file.h"
+#include "base/files/file.h"
 #elif defined(OS_WIN)
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkTypeface.h"
@@ -50,8 +50,8 @@ class PepperFlashFontFileHost : public ppapi::host::ResourceHost {
                          uint32_t table);
   bool GetFontData(uint32_t table, void* buffer, size_t* length);
 
-#if defined(OS_LINUX) || defined(OS_OPENBSD)
-  base::ScopedFD fd_;
+#if defined(OS_LINUX)
+  base::File font_file_;
 #elif defined(OS_WIN)
   sk_sp<SkTypeface> typeface_;
 #endif

@@ -12,6 +12,7 @@
 #include "net/base/net_errors.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/known_roots.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util_ios.h"
@@ -204,6 +205,18 @@ CertStatus CertVerifyProcIOS::GetCertFailureStatusFromTrust(SecTrustRef trust) {
       CFBundleCopyLocalizedString(bundle, hostname_mismatch_string,
                                   hostname_mismatch_string,
                                   CFSTR("SecCertificate")));
+  CFStringRef root_certificate_string =
+      CFSTR("Unable to build chain to root certificate.");
+  ScopedCFTypeRef<CFStringRef> root_certificate_error(
+      CFBundleCopyLocalizedString(bundle, root_certificate_string,
+                                  root_certificate_string,
+                                  CFSTR("SecCertificate")));
+  CFStringRef policy_requirements_not_met_string =
+      CFSTR("Policy requirements not met.");
+  ScopedCFTypeRef<CFStringRef> policy_requirements_not_met_error(
+      CFBundleCopyLocalizedString(bundle, policy_requirements_not_met_string,
+                                  policy_requirements_not_met_string,
+                                  CFSTR("SecCertificate")));
 
   for (CFIndex i = 0; i < properties_length; ++i) {
     CFDictionaryRef dict = reinterpret_cast<CFDictionaryRef>(
@@ -219,6 +232,10 @@ CertStatus CertVerifyProcIOS::GetCertFailureStatusFromTrust(SecTrustRef trust) {
       reason |= CERT_STATUS_WEAK_KEY;
     } else if (CFEqual(error, hostname_mismatch_error)) {
       reason |= CERT_STATUS_COMMON_NAME_INVALID;
+    } else if (CFEqual(error, policy_requirements_not_met_error)) {
+      reason |= CERT_STATUS_INVALID | CERT_STATUS_AUTHORITY_INVALID;
+    } else if (CFEqual(error, root_certificate_error)) {
+      reason |= CERT_STATUS_AUTHORITY_INVALID;
     } else {
       reason |= CERT_STATUS_INVALID;
     }
@@ -228,10 +245,6 @@ CertStatus CertVerifyProcIOS::GetCertFailureStatusFromTrust(SecTrustRef trust) {
 }
 
 bool CertVerifyProcIOS::SupportsAdditionalTrustAnchors() const {
-  return false;
-}
-
-bool CertVerifyProcIOS::SupportsOCSPStapling() const {
   return false;
 }
 
@@ -270,7 +283,7 @@ int CertVerifyProcIOS::VerifyInternal(
   if (CFArrayGetCount(final_chain) == 0)
     return ERR_FAILED;
 
-  // TODO(sleevi): Support CRLSet revocation.
+  // TODO(rsleevi): Support CRLSet revocation.
   switch (trust_result) {
     case kSecTrustResultUnspecified:
     case kSecTrustResultProceed:
@@ -284,10 +297,18 @@ int CertVerifyProcIOS::VerifyInternal(
 
   GetCertChainInfo(final_chain, verify_result);
 
-  // iOS lacks the ability to distinguish built-in versus non-built-in roots,
-  // so opt to 'fail open' of any restrictive policies that apply to built-in
-  // roots.
-  verify_result->is_issued_by_known_root = false;
+  // While iOS lacks the ability to distinguish system-trusted versus
+  // user-installed roots, the set of roots that are expected to comply with
+  // the Baseline Requirements can be determined by
+  // GetNetTrustAnchorHistogramForSPKI() - a non-zero value means that it is
+  // known as a publicly trusted, and therefore subject to the BRs, cert.
+  for (auto it = verify_result->public_key_hashes.rbegin();
+       it != verify_result->public_key_hashes.rend() &&
+       !verify_result->is_issued_by_known_root;
+       ++it) {
+    verify_result->is_issued_by_known_root =
+        GetNetTrustAnchorHistogramIdForSPKI(*it) != 0;
+  }
 
   if (IsCertStatusError(verify_result->cert_status))
     return MapCertStatusToNetError(verify_result->cert_status);

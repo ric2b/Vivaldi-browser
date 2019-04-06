@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.ntp.cards;
 
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
@@ -13,9 +14,10 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.net.NetworkChangeNotifier;
 
 import java.util.Arrays;
@@ -37,12 +39,11 @@ public class SectionList
 
     /** Maps suggestion categories to sections, with stable iteration ordering. */
     private final Map<Integer, SuggestionsSection> mSections = new LinkedHashMap<>();
+
     /** List of categories that are hidden because they have no content to show. */
     private final Set<Integer> mBlacklistedCategories = new HashSet<>();
     private final SuggestionsUiDelegate mUiDelegate;
     private final OfflinePageBridge mOfflinePageBridge;
-
-    private boolean mHasExternalSections;
 
     public SectionList(SuggestionsUiDelegate uiDelegate, OfflinePageBridge offlinePageBridge) {
         mUiDelegate = uiDelegate;
@@ -75,10 +76,17 @@ public class SectionList
             if (SnippetsBridge.isCategoryEnabled(categoryStatus)) {
                 resetSection(category, categoryStatus, alwaysAllowEmptySections,
                         shouldReportPrefetchedSuggestionsMetrics(category));
+            } else {
+                // If articles category is currently disabled, we may still need to show an
+                // expandable header for the section.
+                maybeAddSectionForHeader(category);
             }
         }
 
-        maybeHideArticlesHeader();
+        if (!ChromeFeatureList.isEnabled(
+                    ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)) {
+            maybeHideArticlesHeader();
+        }
         recordDisplayedSuggestions(categories);
     }
 
@@ -117,7 +125,7 @@ public class SectionList
                     this, mUiDelegate, suggestionsRanker, mOfflinePageBridge, info);
             mSections.put(category, section);
             suggestionsRanker.registerCategory(category);
-            addChild(section);
+            addChildren(section);
         } else {
             section.clearData();
         }
@@ -163,10 +171,13 @@ public class SectionList
                 removeSection(mSections.get(category));
                 return;
 
-            default:
+            case CategoryStatus.AVAILABLE_LOADING:
+            case CategoryStatus.AVAILABLE:
+            case CategoryStatus.INITIALIZING:
                 mSections.get(category).setStatus(status);
                 return;
         }
+        assert false : status;
     }
 
     @Override
@@ -181,21 +192,15 @@ public class SectionList
     }
 
     @Override
-    public void dismissSection(SuggestionsSection section) {
-        mUiDelegate.getSuggestionsSource().dismissCategory(section.getCategory());
-        removeSection(section);
+    public void onSuggestionsVisibilityChanged(@CategoryInt int category) {
+        if (!mSections.containsKey(category)) return;
+        mSections.get(category).updateExpandableHeader();
     }
 
     @Override
-    public boolean isResetAllowed() {
-        if (!FeatureUtilities.isChromeHomeEnabled()) return false;
-
-        // TODO(dgn): Also check if the bottom sheet is closed and how long since it has been closed
-        // or opened, so that we don't refresh content while the user still cares about it.
-        // Note: don't only use visibility, as pending FetchMore requests can still come, we don't
-        // want to clear all the current suggestions in that case. See https://crbug.com/711414
-
-        return !mUiDelegate.isVisible();
+    public void dismissSection(SuggestionsSection section) {
+        mUiDelegate.getSuggestionsSource().dismissCategory(section.getCategory());
+        removeSection(section);
     }
 
     /**
@@ -220,17 +225,6 @@ public class SectionList
      */
     public boolean isEmpty() {
         return mSections.isEmpty();
-    }
-
-    /** Returns whether content has recently been inserted in any of the sections. */
-    public boolean hasRecentlyInsertedContent() {
-        boolean value = false;
-        for (SuggestionsSection section : mSections.values()) {
-            // We explicitly go through all the sections to make sure we reset the flag everywhere.
-            boolean sectionHasRecentInsertion = section.hasRecentlyInsertedContent();
-            value = value || sectionHasRecentInsertion;
-        }
-        return value;
     }
 
     /**
@@ -263,17 +257,6 @@ public class SectionList
             // parameters.
             supportingSections.get(0).fetchSuggestions(null, null);
         }
-    }
-
-    /**
-     * Drops all but the first {@code n} thumbnails on articles.
-     * @param n The number of article thumbnails to keep.
-     */
-    public void dropAllButFirstNArticleThumbnails(int n) {
-        SuggestionsSection articles = mSections.get(KnownCategories.ARTICLES);
-        if (articles == null) return;
-
-        articles.dropAllButFirstNThumbnails(n);
     }
 
     /** Returns a string showing the categories of all the contained sections. */
@@ -322,10 +305,14 @@ public class SectionList
 
     private void removeSection(SuggestionsSection section) {
         mSections.remove(section.getCategory());
+        section.destroy();
         removeChild(section);
     }
 
     private void removeAllSections() {
+        for (SuggestionsSection section : mSections.values()) {
+            section.destroy();
+        }
         mSections.clear();
         removeChildren();
     }
@@ -333,7 +320,7 @@ public class SectionList
     /** Hides the header for the {@link KnownCategories#ARTICLES} section when necessary. */
     private void maybeHideArticlesHeader() {
         // If there is more than a section we want to show the headers for disambiguation purposes.
-        if (mSections.size() != 1 || mHasExternalSections) return;
+        if (mSections.size() != 1) return;
 
         SuggestionsSection articlesSection = mSections.get(KnownCategories.ARTICLES);
         if (articlesSection == null) return;
@@ -342,11 +329,24 @@ public class SectionList
     }
 
     /**
-     * Sets whether there are external sections shown above or below the section list.
-     * Only intended for use in a rough contextual suggestions prototype.
+     * A section that allows zero items should be created for showing the section header if it is
+     * not yet created.
+     * @param category The category that needs a correspond section shown for the header.
      */
-    void setHasExternalSections(boolean hasExternalSections) {
-        mHasExternalSections = hasExternalSections;
+    private void maybeAddSectionForHeader(@CategoryInt int category) {
+        if (!ChromeFeatureList.isEnabled(
+                    ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER))
+            return;
+        if (category != KnownCategories.ARTICLES) return;
+
+        // Don't add a header if the entire articles section is disabled by policy.
+        if (!PrefServiceBridge.getInstance().getBoolean(Pref.NTP_ARTICLES_SECTION_ENABLED)) return;
+
+        SuggestionsSection section = mSections.get(category);
+        if (section != null) return;
+
+        int status = mUiDelegate.getSuggestionsSource().getCategoryStatus(category);
+        resetSection(category, status, true, shouldReportPrefetchedSuggestionsMetrics(category));
     }
 
     /**

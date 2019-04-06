@@ -51,6 +51,8 @@ public class SignInPromo extends OptionalLeaf {
     @VisibleForTesting
     static final long SUPPRESSION_PERIOD_MS = TimeUnit.DAYS.toMillis(1);
 
+    private static boolean sDisablePromoForTests;
+
     /**
      * Whether the promo has been dismissed by the user.
      */
@@ -74,7 +76,7 @@ public class SignInPromo extends OptionalLeaf {
     private SignInPromo(SuggestionsUiDelegate uiDelegate) {
         Context context = ContextUtils.getApplicationContext();
         SuggestionsSource suggestionsSource = uiDelegate.getSuggestionsSource();
-        SigninManager signinManager = SigninManager.get(context);
+        SigninManager signinManager = SigninManager.get();
 
         mCanSignIn = signinManager.isSignInAllowed() && !signinManager.isSignedInOnNative();
         mCanShowPersonalizedSuggestions = suggestionsSource.areRemoteSuggestionsEnabled();
@@ -100,6 +102,7 @@ public class SignInPromo extends OptionalLeaf {
     }
 
     public static SignInPromo maybeCreatePromo(SuggestionsUiDelegate uiDelegate) {
+        if (sDisablePromoForTests) return null;
         if (ChromePreferenceManager.getInstance().getNewTabPageSigninPromoDismissed()) return null;
         if (getSuppressionStatus()) return null;
         return new SignInPromo(uiDelegate);
@@ -148,8 +151,8 @@ public class SignInPromo extends OptionalLeaf {
     }
 
     @Override
-    protected void visitOptionalItem(NodeVisitor visitor) {
-        visitor.visitSignInPromo();
+    public String describeForTesting() {
+        return "SIGN_IN_PROMO";
     }
 
     private void updateVisibility() {
@@ -167,12 +170,16 @@ public class SignInPromo extends OptionalLeaf {
         mDismissed = true;
         updateVisibility();
 
-        final @StringRes int promoHeader;
         ChromePreferenceManager.getInstance().setNewTabPageSigninPromoDismissed(true);
-        promoHeader = mSigninPromoController.getDescriptionStringId();
+        final @StringRes int promoHeader = mSigninPromoController.getDescriptionStringId();
 
         mSigninObserver.unregister();
         itemRemovedCallback.onResult(ContextUtils.getApplicationContext().getString(promoHeader));
+    }
+
+    @VisibleForTesting
+    public static void setDisablePromoForTests(boolean disable) {
+        sDisablePromoForTests = disable;
     }
 
     @VisibleForTesting
@@ -282,7 +289,7 @@ public class SignInPromo extends OptionalLeaf {
                             ? R.layout.personalized_signin_promo_view_modern_content_suggestions
                             : R.layout.personalized_signin_promo_view_ntp_content_suggestions,
                     parent, config, contextMenuManager);
-            if (!FeatureUtilities.isChromeHomeEnabled()) {
+            if (!FeatureUtilities.isChromeModernDesignEnabled()) {
                 getParams().topMargin = parent.getResources().getDimensionPixelSize(
                         R.dimen.ntp_sign_in_promo_margin_top);
             }

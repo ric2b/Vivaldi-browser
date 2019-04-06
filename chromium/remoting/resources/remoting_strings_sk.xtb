@@ -3,9 +3,6 @@
 <translationbundle lang="sk">
 <translation id="1002108253973310084">Bola zistená nekompatibilná verzia protokolu. Uistite sa, že máte na oboch počítačoch nainštalovanú najnovšiu verziu príslušného softvéru a skúste to znova.</translation>
 <translation id="1050693411695664090">Slabé</translation>
-<translation id="1059802506829356230">• Nový vzhľad a lepší dojem.
-• Vylepšený výkon, reakcie a spoľahlivosť.
-• Podpora prehrávania zvuku v počítačoch so systémom Windows alebo Linux.</translation>
 <translation id="1152528166145813711">Vyberte…</translation>
 <translation id="1199593201721843963">Zakázať vzdialené pripojenia</translation>
 <translation id="1291443878853470558">Ak chcete použiť na prístup k tomuto počítaču aplikáciu Chromoting, musíte povoliť vzdialené pripojenia.</translation>
@@ -143,10 +140,12 @@ Informácie o ochrane osobných údajov nájdete v Pravidlách ochrany osobných
 <translation id="4145029455188493639">Prihlásený/-á ako <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Niektoré potrebné komponenty chýbajú. Uistite sa, že máte nainštalovanú najnovšiu verziu príslušného softvéru a skúste to znova.</translation>
 <translation id="4156740505453712750">Ak chcete ochrániť tento počítač pred neautorizovaným prístupom, nastavte si kód PIN obsahujúci <ph name="BOLD_START" />najmenej šesť číslic<ph name="BOLD_END" />. Tento kód PIN budete musieť zadať pri pokuse o pripojenie z iného miesta.</translation>
+<translation id="4169432154993690151">Ak si chcete vybrať profilovú fotku, povoľte Vzdialenej ploche Chrome prístup k fotoaparátu</translation>
 <translation id="4176825807642096119">Prístupový kód</translation>
 <translation id="4207623512727273241">Pred pokračovaním spustite inštalátor.</translation>
 <translation id="4227991223508142681">Pomôcka na poskytovanie hostiteľských služieb</translation>
 <translation id="4240294130679914010">Nástroj na odinštalovanie hostiteľa funkcie Chromoting</translation>
+<translation id="4249741460382919890">Všeobecné opravy a vylepšenia stability.</translation>
 <translation id="4277463233460010382">Tento počítač je nakonfigurovaný tak, aby povolil pripojenie jedného alebo viacerých klientov bez zadania kódu PIN.</translation>
 <translation id="4277736576214464567">Prístupový kód je neplatný. Skúste to znova.</translation>
 <translation id="4361728918881830843">Ak chcete povoliť vzdialené pripojenie k inému počítaču, nainštalujte na ňom Vzdialenú plochu Chrome a potom kliknite na tlačidlo <ph name="BUTTON_NAME" />.</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">Vzdialený hostiteľ od vás vyžaduje overenie na webových stránkach tretej strany. Ak chcete pokračovať, musíte vzdialenej ploche Chrome udeliť dodatočné oprávnenie na prístup k tejto adrese:</translation>
 <translation id="507204348399810022">Naozaj chcete zakázať vzdialené pripojenia k zariadeniu <ph name="HOSTNAME" />?</translation>
+<translation id="5081343395220691640">Nepodarilo sa nadviazať komunikáciu so serverom: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Do obidvoch polí zadajte rovnaký kód PIN.</translation>
 <translation id="5170982930780719864">Neplatný identifikátor hostiteľa</translation>
 <translation id="518094545883702183">K týmto informáciám, ktoré sa používajú iba na diagnostiku vami nahláseného problému, má prístup výhradne osoba prešetrujúca vaše hlásenie. Tieto informácie budú uchovávané maximálne 30 dní.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Niečo iné.</translation>
 <translation id="6398765197997659313">Ukončiť zobrazenie na celú obrazovku</translation>
 <translation id="6441316101718669559">Táto platforma nepodporuje integráciu stolných počítačov. Aplikáciu môžete stále používať, avšak používateľské prostredie bude znehodnotené.</translation>
+<translation id="6502629188777329097">Bezpečný prístup k počítaču</translation>
 <translation id="652218476070540101">Prebieha aktualizácia kódu PIN pre tento počítač...</translation>
 <translation id="6527303717912515753">Zdieľať</translation>
 <translation id="6541219117979389420">Denníky aplikácie môžu obsahovať osobné informácie vrátane vašej totožnosti (e-mailovej adresy), názvov a vlastností súborov a priečinkov na Disku Google.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">Od</translation>
 <translation id="677755392401385740">Hostiteľ bol spustený pre používateľa: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Zobraziť/upraviť</translation>
+<translation id="6913710942997637770">Ak si chcete vybrať profilovú fotku, povoľte Vzdialenej ploche Chrome prístup k fotkám</translation>
 <translation id="6930242544192836755">Trvanie</translation>
 <translation id="6939719207673461467">Zobraziť/skryť klávesnicu</translation>
 <translation id="6944854424004126054">Obnovenie okna</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Vzdialené pripojenia k tomuto počítaču boli zakázané.</translation>
 <translation id="7678209621226490279">Vložiť do doku vľavo</translation>
 <translation id="7693372326588366043">Obnoviť zoznam hostiteľov</translation>
+<translation id="7714222945760997814">Nahlásiť</translation>
 <translation id="7782471917492991422">Skontrolujte nastavenia správy napájania svojho počítača a uistite sa, že nie je nakonfigurovaný prechod do režimu spánku pri nečinnosti.</translation>
 <translation id="7810127880729796595">Zobraziť štatistiky (pripojenie: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Niektoré potrebné komponenty chýbajú. Uistite sa, že používate najnovšiu verziu prehliadača Chrome a skúste to znova.</translation>

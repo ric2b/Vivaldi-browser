@@ -127,7 +127,6 @@ constexpr NSTimeInterval kAnimationDelay = 1.5;
     case AppMenuIconController::IconType::UPGRADE_NOTIFICATION:
       return &kBrowserToolsUpdateIcon;
     case AppMenuIconController::IconType::GLOBAL_ERROR:
-    case AppMenuIconController::IconType::INCOMPATIBILITY_WARNING:
       return &kBrowserToolsErrorIcon;
   }
 
@@ -163,6 +162,11 @@ constexpr NSTimeInterval kAnimationDelay = 1.5;
   if (severity != severity_ || type != type_) {
     severity_ = severity;
     type_ = type;
+
+    [self setToolTip:severity_ == AppMenuIconController::Severity::NONE
+                         ? l10n_util::GetNSString(IDS_APPMENU_TOOLTIP)
+                         : l10n_util::GetNSString(
+                               IDS_APPMENU_TOOLTIP_UPDATE_AVAILABLE)];
 
     if (animatedIcon_) {
       [self updateAnimatedIconColor];

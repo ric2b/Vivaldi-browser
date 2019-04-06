@@ -10,25 +10,7 @@ from gpu_tests import gpu_integration_test
 from gpu_tests import path_util
 from gpu_tests import webgl_conformance_expectations
 from gpu_tests import webgl2_conformance_expectations
-
-conformance_relcomps = (
-  'third_party', 'webgl', 'src', 'sdk', 'tests')
-
-extensions_relcomps = (
-    'content', 'test', 'data', 'gpu')
-
-conformance_relpath = os.path.join(*conformance_relcomps)
-extensions_relpath = os.path.join(*extensions_relcomps)
-conformance_path = os.path.join(path_util.GetChromiumSrcDir(),
-                                conformance_relpath)
-
-# These URL prefixes are needed because having more than one static
-# server dir is causing the base server directory to be moved up the
-# directory hierarchy.
-url_prefixes_to_trim = [
-  '/'.join(conformance_relcomps) + '/',
-  '/'.join(extensions_relcomps) + '/'
-]
+from gpu_tests import webgl_test_util
 
 conformance_harness_script = r"""
   var testHarness = {};
@@ -125,7 +107,7 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       name = _GenerateTestNameFromTestPath(test_path).replace(
           '.', '_')
       yield (name,
-             os.path.join(conformance_relpath, test_path),
+             os.path.join(webgl_test_util.conformance_relpath, test_path),
              ('_RunConformanceTest'))
 
     #
@@ -134,14 +116,16 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     extension_tests = cls._GetExtensionList()
     # Coverage test.
     yield('WebglExtension_TestCoverage',
-          os.path.join(extensions_relpath, 'webgl_extension_test.html'),
+          os.path.join(webgl_test_util.extensions_relpath,
+                       'webgl_extension_test.html'),
           ('_RunExtensionCoverageTest',
            extension_tests,
            cls._webgl_version))
     # Individual extension tests.
     for extension in extension_tests:
       yield('WebglExtension_%s' % extension,
-            os.path.join(extensions_relpath, 'webgl_extension_test.html'),
+            os.path.join(webgl_test_util.extensions_relpath,
+                         'webgl_extension_test.html'),
             ('_RunExtensionTest',
              extension,
              cls._webgl_version))
@@ -167,7 +151,6 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         'OES_vertex_array_object',
         'WEBGL_color_buffer_float',
         'WEBGL_compressed_texture_astc',
-        'WEBGL_compressed_texture_atc',
         'WEBGL_compressed_texture_etc1',
         'WEBGL_compressed_texture_pvrtc',
         'WEBGL_compressed_texture_s3tc',
@@ -185,7 +168,6 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         'EXT_texture_filter_anisotropic',
         'OES_texture_float_linear',
         'WEBGL_compressed_texture_astc',
-        'WEBGL_compressed_texture_atc',
         'WEBGL_compressed_texture_etc',
         'WEBGL_compressed_texture_etc1',
         'WEBGL_compressed_texture_pvrtc',
@@ -264,11 +246,14 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       '--disable-domain-blocking-for-3d-apis',
       '--disable-gpu-process-crash-limit',
       '--test-type=gpu',
-      '--enable-experimental-canvas-features',
+      '--enable-experimental-web-platform-features',
       # Try disabling the GPU watchdog to see if this affects the
       # intermittent GPU process hangs that have been seen on the
       # waterfall. crbug.com/596622 crbug.com/609252
-      '--disable-gpu-watchdog'
+      '--disable-gpu-watchdog',
+      # TODO(http://crbug.com/832952): Remove this when WebXR spec is more
+      # stable and setCompatibleXRDevice is part of the conformance test.
+      '--disable-blink-features=WebXR'
     ]
     # Note that the overriding of the default --js-flags probably
     # won't interact well with RestartBrowserIfNecessaryWithArgs, but
@@ -294,14 +279,12 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   @classmethod
   def _CreateExpectations(cls):
     assert cls._webgl_version == 1 or cls._webgl_version == 2
+    clz = None
     if cls._webgl_version == 1:
-      return webgl_conformance_expectations.WebGLConformanceExpectations(
-        conformance_path, url_prefixes=url_prefixes_to_trim,
-        is_asan=cls._is_asan)
+      clz = webgl_conformance_expectations.WebGLConformanceExpectations
     else:
-      return webgl2_conformance_expectations.WebGL2ConformanceExpectations(
-        conformance_path, url_prefixes=url_prefixes_to_trim,
-        is_asan=cls._is_asan)
+      clz = webgl2_conformance_expectations.WebGL2ConformanceExpectations
+    return clz(is_asan=cls._is_asan)
 
   @classmethod
   def SetUpProcess(cls):
@@ -312,8 +295,10 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     # implicitly becomes the common base directory, i.e., the Chromium
     # src dir, and all URLs have to be specified relative to that.
     cls.SetStaticServerDirs([
-      os.path.join(path_util.GetChromiumSrcDir(), conformance_relpath),
-      os.path.join(path_util.GetChromiumSrcDir(), extensions_relpath)])
+      os.path.join(path_util.GetChromiumSrcDir(),
+                   webgl_test_util.conformance_relpath),
+      os.path.join(path_util.GetChromiumSrcDir(),
+                   webgl_test_util.extensions_relpath)])
 
   # Helper functions.
 
@@ -329,7 +314,8 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   def _ParseTests(cls, path, version, webgl2_only, folder_min_version):
     test_paths = []
     current_dir = os.path.dirname(path)
-    full_path = os.path.normpath(os.path.join(conformance_path, path))
+    full_path = os.path.normpath(os.path.join(webgl_test_util.conformance_path,
+                                              path))
     webgl_version = int(version.split('.')[0])
 
     if not os.path.exists(full_path):

@@ -26,6 +26,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/process_map.h"
@@ -40,6 +41,12 @@ using content::WebContents;
 namespace extensions {
 
 namespace {
+
+bool IsExtensionProcessSharingAllowed() {
+  // TODO(nick): Currently, process sharing is allowed even in
+  // --site-per-process. Lock this down.  https://crbug.com/766267
+  return true;
+}
 
 class ProcessManagementTest : public ExtensionBrowserTest {
  private:
@@ -267,8 +274,13 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ProcessOverflow) {
   EXPECT_EQ(web1_host, web2_host);
   EXPECT_NE(web1_host, extension1_host);
 
-  // Extensions only share with each other.
-  EXPECT_EQ(extension1_host, extension2_host);
+  if (IsExtensionProcessSharingAllowed()) {
+    // Extensions only share with each other ...
+    EXPECT_EQ(extension1_host, extension2_host);
+  } else {
+    // Unless extensions are not allowed to share, even with each other.
+    EXPECT_NE(extension1_host, extension2_host);
+  }
 }
 
 // See
@@ -309,9 +321,12 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ExtensionProcessBalancing) {
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("api_test/management/test")));
 
+  // TODO(lukasza): It might be worth it to navigate to actual
+  // chrome-extension:// URIs below (not to HTTP URIs) to make sure the 1/3rd
+  // of process limit also applies to normal tabs (not just to background pages
+  // and scripts).
   ui_test_utils::NavigateToURL(
       browser(), base_url.Resolve("isolated_apps/app1/main.html"));
-
   ui_test_utils::NavigateToURL(
       browser(), base_url.Resolve("api_test/management/test/basics.html"));
 
@@ -321,13 +336,27 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest, MAYBE_ExtensionProcessBalancing) {
   for (extensions::ExtensionHost* host : epm->background_hosts())
     process_ids.insert(host->render_process_host()->GetID());
 
-  // We've loaded 5 extensions with background pages, 1 extension without
-  // background page, and one isolated app. We expect only 2 unique processes
-  // hosting those extensions.
-  extensions::ProcessMap* process_map = extensions::ProcessMap::Get(profile);
+  // We've loaded 5 extensions with background pages
+  // (api_test/browser_action/*), 1 extension without background page
+  // (api_test/management), and one isolated app. With extension process
+  // sharing, we expect only 2 unique processes hosting the background
+  // pages/scripts of these extensions (which extension gets assigned to which
+  // process is randomized).  If extension process sharing is disabled, there is
+  // no process limit, and each of the 5 background pages/scripts will be hosted
+  // in a separate process.
+  if (IsExtensionProcessSharingAllowed())
+    EXPECT_EQ(2u, process_ids.size());
+  else
+    EXPECT_EQ(5u, process_ids.size());
 
-  EXPECT_GE((size_t) 6, process_map->size());
-  EXPECT_EQ((size_t) 2, process_ids.size());
+  // ProcessMap will always have exactly 5 entries - one for each of the
+  // extensions with a background page (api_test/browser_action/*).  There won't
+  // be any additional entries, since 1) the isolated app will be associated
+  // with a separate content::BrowserContext and 2) the navigation to
+  // api_test/management/test/basics.html navigates to a file: URI (not to a
+  // chrome-extension: URI).
+  extensions::ProcessMap* process_map = extensions::ProcessMap::Get(profile);
+  EXPECT_EQ(5u, process_map->size());
 }
 
 IN_PROC_BROWSER_TEST_F(ProcessManagementTest,
@@ -518,6 +547,13 @@ IN_PROC_BROWSER_TEST_F(ProcessManagementTest,
   EXPECT_TRUE(new_site_instance->HasProcess());
   EXPECT_EQ(new_site_instance->GetProcess(),
             web_contents->GetSiteInstance()->GetProcess());
+
+  // Ensure that reloading a blocked error page completes.
+  content::TestNavigationObserver reload_observer(new_web_contents);
+  new_web_contents->GetController().Reload(content::ReloadType::NORMAL, false);
+  reload_observer.Wait();
+  EXPECT_EQ(reload_observer.last_navigation_url(), blocked_url);
+  EXPECT_FALSE(reload_observer.last_navigation_succeeded());
 }
 
 // Check that whether we can access the window object of a window.open()'d url

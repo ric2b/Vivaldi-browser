@@ -83,6 +83,11 @@
             "type": "boolean",
             "optional": true,
             "description": "true if this is a trash folder, otherwise false."
+          },
+          "separator": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if this is a separator, otherwise false."
           }
         }
       },

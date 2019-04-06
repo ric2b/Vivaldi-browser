@@ -10,11 +10,10 @@
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/permissions/permission_manager.h"
-#include "chrome/browser/notifications/notification_permission_context.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/render_messages.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -22,8 +21,10 @@
 #include "content/public/browser/render_view_host.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
+#include "chrome/browser/notifications/notification_permission_context.h"
+#include "components/guest_view/vivaldi_guest_view_constants.h"
 #include "content/public/browser/permission_type.h"
 
 namespace extensions {
@@ -97,13 +98,14 @@ void ChromeWebViewPermissionHelperDelegate::OnOpenPDF(const GURL& url) {
 void ChromeWebViewPermissionHelperDelegate::CanDownload(
     const GURL& url,
     const std::string& request_method,
-    const content::DownloadInformation& info,
-    const base::Callback<void(const content::DownloadItemAction&)>& callback) {
+    const base::Callback<void(bool)>& callback) {
   base::DictionaryValue request_info;
   request_info.SetString(guest_view::kUrl, url.spec());
-  request_info.SetDouble(guest_view::kFileSize, static_cast<double>(info.size));
-  request_info.SetString(guest_view::kMimeType, info.mime_type);
-  request_info.SetString(guest_view::kSuggestedFilename, info.suggested_filename);
+  request_info.SetDouble(guest_view::kFileSize,
+                         static_cast<double>(download_info_.size));
+  request_info.SetString(guest_view::kMimeType, download_info_.mime_type);
+  request_info.SetString(guest_view::kSuggestedFilename,
+                         download_info_.suggested_filename);
 
   web_view_permission_helper()->RequestPermission(
       WEB_VIEW_PERMISSION_TYPE_DOWNLOAD,
@@ -111,19 +113,25 @@ void ChromeWebViewPermissionHelperDelegate::CanDownload(
       base::Bind(
           &ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse,
           weak_factory_.GetWeakPtr(),
-          callback),
+          callback,
+          download_info_.open_flags_cb),
       false /* allowed_by_default */);
 }
 
 void ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse(
-    const base::Callback<void(const content::DownloadItemAction&)>& callback,
+    const base::Callback<void(bool)>& callback,
+    const base::Callback<void(bool,bool)>& open_flags_cb,
     bool allow,
     const std::string& user_input) {
-  bool open_when_finished = user_input == "open";
-  bool ask_whereto_save = user_input == "saveas";
-  callback.Run(content::DownloadItemAction(
-                 allow && web_view_guest()->attached(),
-                 open_when_finished, ask_whereto_save));
+  bool open_when_done = user_input == "open";
+  bool ask_for_target = user_input == "saveas";
+  if (!open_flags_cb.is_null()) {
+    content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::Bind(open_flags_cb, open_when_done, ask_for_target));
+  }
+
+  callback.Run(allow && web_view_guest()->attached());
 }
 
 void ChromeWebViewPermissionHelperDelegate::RequestPointerLockPermission(

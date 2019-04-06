@@ -42,9 +42,18 @@ class JavaScriptDialogManager : public content::JavaScriptDialogManager {
   base::string16 GetTitle(content::WebContents* web_contents,
                           const GURL& alerting_frame_url);
 
+  // Displays a dialog asking the user if they want to leave a page. Displays
+  // a different message if the site is in an app window.
+  void RunBeforeUnloadDialogWithOptions(
+      content::WebContents* web_contents,
+      content::RenderFrameHost* render_frame_host,
+      bool is_reload,
+      bool is_app,
+      DialogClosedCallback callback);
+
   // JavaScriptDialogManager:
   void RunJavaScriptDialog(content::WebContents* web_contents,
-                           const GURL& alerting_frame_url,
+                           content::RenderFrameHost* render_frame_host,
                            content::JavaScriptDialogType dialog_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,

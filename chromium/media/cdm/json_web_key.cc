@@ -32,7 +32,7 @@ const char kKeyIdsTag[] = "kids";
 const char kTypeTag[] = "type";
 const char kTemporarySession[] = "temporary";
 const char kPersistentLicenseSession[] = "persistent-license";
-const char kPersistentReleaseMessageSession[] = "persistent-release-message";
+const char kPersistentUsageRecordSession[] = "persistent-usage-record";
 
 static std::string ShortenTo64Characters(const std::string& input) {
   // Convert |input| into a string with escaped characters replacing any
@@ -100,14 +100,14 @@ std::string GenerateJWKSet(const KeyIdAndKeyPairs& keys,
   base::DictionaryValue jwk_set;
   jwk_set.Set(kKeysTag, std::move(list));
   switch (session_type) {
-    case CdmSessionType::TEMPORARY_SESSION:
+    case CdmSessionType::kTemporary:
       jwk_set.SetString(kTypeTag, kTemporarySession);
       break;
-    case CdmSessionType::PERSISTENT_LICENSE_SESSION:
+    case CdmSessionType::kPersistentLicense:
       jwk_set.SetString(kTypeTag, kPersistentLicenseSession);
       break;
-    case CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION:
-      jwk_set.SetString(kTypeTag, kPersistentReleaseMessageSession);
+    case CdmSessionType::kPersistentUsageRecord:
+      jwk_set.SetString(kTypeTag, kPersistentUsageRecordSession);
       break;
   }
 
@@ -212,16 +212,16 @@ bool ExtractKeysFromJWKSet(const std::string& jwk_set,
   std::string session_type_id;
   if (!dictionary->Get(kTypeTag, &value)) {
     // Not specified, so use the default type.
-    *session_type = CdmSessionType::TEMPORARY_SESSION;
+    *session_type = CdmSessionType::kTemporary;
   } else if (!value->GetAsString(&session_type_id)) {
     DVLOG(1) << "Invalid '" << kTypeTag << "' value";
     return false;
   } else if (session_type_id == kTemporarySession) {
-    *session_type = CdmSessionType::TEMPORARY_SESSION;
+    *session_type = CdmSessionType::kTemporary;
   } else if (session_type_id == kPersistentLicenseSession) {
-    *session_type = CdmSessionType::PERSISTENT_LICENSE_SESSION;
-  } else if (session_type_id == kPersistentReleaseMessageSession) {
-    *session_type = CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION;
+    *session_type = CdmSessionType::kPersistentLicense;
+  } else if (session_type_id == kPersistentUsageRecordSession) {
+    *session_type = CdmSessionType::kPersistentUsageRecord;
   } else {
     DVLOG(1) << "Invalid '" << kTypeTag << "' value: " << session_type_id;
     return false;
@@ -317,14 +317,14 @@ void CreateLicenseRequest(const KeyIdList& key_ids,
   request->Set(kKeyIdsTag, std::move(list));
 
   switch (session_type) {
-    case CdmSessionType::TEMPORARY_SESSION:
+    case CdmSessionType::kTemporary:
       request->SetString(kTypeTag, kTemporarySession);
       break;
-    case CdmSessionType::PERSISTENT_LICENSE_SESSION:
+    case CdmSessionType::kPersistentLicense:
       request->SetString(kTypeTag, kPersistentLicenseSession);
       break;
-    case CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION:
-      request->SetString(kTypeTag, kPersistentReleaseMessageSession);
+    case CdmSessionType::kPersistentUsageRecord:
+      request->SetString(kTypeTag, kPersistentUsageRecordSession);
       break;
   }
 

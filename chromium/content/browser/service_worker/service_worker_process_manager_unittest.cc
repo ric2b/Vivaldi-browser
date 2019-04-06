@@ -4,8 +4,9 @@
 
 #include "content/browser/service_worker/service_worker_process_manager.h"
 
+#include <string>
+
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/site_instance_impl.h"
@@ -36,7 +37,11 @@ class SiteInstanceRenderProcessHostFactory : public RenderProcessHostFactory {
       SiteInstance* site_instance) const override {
     processes_.push_back(
         std::make_unique<MockRenderProcessHost>(browser_context));
-    last_site_instance_used_ = site_instance;
+
+    // A spare RenderProcessHost is created with a null SiteInstance.
+    if (site_instance)
+      last_site_instance_used_ = site_instance;
+
     return processes_.back().get();
   }
 
@@ -65,14 +70,14 @@ class ServiceWorkerProcessManagerTest : public testing::Test {
     script_url_ = GURL("http://www.example.com/sw.js");
     render_process_host_factory_.reset(
         new SiteInstanceRenderProcessHostFactory());
-    RenderProcessHostImpl::set_render_process_host_factory(
+    RenderProcessHostImpl::set_render_process_host_factory_for_testing(
         render_process_host_factory_.get());
   }
 
   void TearDown() override {
     process_manager_->Shutdown();
     process_manager_.reset();
-    RenderProcessHostImpl::set_render_process_host_factory(nullptr);
+    RenderProcessHostImpl::set_render_process_host_factory_for_testing(nullptr);
     render_process_host_factory_.reset();
   }
 
@@ -114,12 +119,13 @@ TEST_F(ServiceWorkerProcessManagerTest,
 
   // Allocate a process to a worker, when process reuse is authorized.
   ServiceWorkerProcessManager::AllocatedProcessInfo process_info;
-  ServiceWorkerStatusCode status = process_manager_->AllocateWorkerProcess(
-      kEmbeddedWorkerId, pattern_, script_url_,
-      true /* can_use_existing_process */, &process_info);
+  blink::ServiceWorkerStatusCode status =
+      process_manager_->AllocateWorkerProcess(
+          kEmbeddedWorkerId, pattern_, script_url_,
+          true /* can_use_existing_process */, &process_info);
 
   // An existing process should be allocated to the worker.
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, status);
   EXPECT_EQ(host->GetID(), process_info.process_id);
   EXPECT_EQ(ServiceWorkerMetrics::StartSituation::EXISTING_UNREADY_PROCESS,
             process_info.start_situation);
@@ -154,12 +160,13 @@ TEST_F(ServiceWorkerProcessManagerTest,
 
   // Allocate a process to a worker, when process reuse is disallowed.
   ServiceWorkerProcessManager::AllocatedProcessInfo process_info;
-  ServiceWorkerStatusCode status = process_manager_->AllocateWorkerProcess(
-      kEmbeddedWorkerId, pattern_, script_url_,
-      false /* can_use_existing_process */, &process_info);
+  blink::ServiceWorkerStatusCode status =
+      process_manager_->AllocateWorkerProcess(
+          kEmbeddedWorkerId, pattern_, script_url_,
+          false /* can_use_existing_process */, &process_info);
 
   // A new process should be allocated to the worker.
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, status);
   EXPECT_NE(host->GetID(), process_info.process_id);
   EXPECT_EQ(ServiceWorkerMetrics::StartSituation::NEW_PROCESS,
             process_info.start_situation);
@@ -182,12 +189,13 @@ TEST_F(ServiceWorkerProcessManagerTest, AllocateWorkerProcess_InShutdown) {
   ASSERT_TRUE(process_manager_->IsShutdown());
 
   ServiceWorkerProcessManager::AllocatedProcessInfo process_info;
-  ServiceWorkerStatusCode status = process_manager_->AllocateWorkerProcess(
-      1, pattern_, script_url_, true /* can_use_existing_process */,
-      &process_info);
+  blink::ServiceWorkerStatusCode status =
+      process_manager_->AllocateWorkerProcess(
+          1, pattern_, script_url_, true /* can_use_existing_process */,
+          &process_info);
 
   // Allocating a process in shutdown should abort.
-  EXPECT_EQ(SERVICE_WORKER_ERROR_ABORT, status);
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kErrorAbort, status);
   EXPECT_EQ(ChildProcessHost::kInvalidUniqueID, process_info.process_id);
   EXPECT_EQ(ServiceWorkerMetrics::StartSituation::UNKNOWN,
             process_info.start_situation);
@@ -208,10 +216,11 @@ TEST_F(ServiceWorkerProcessManagerTest,
   {
     const int kEmbeddedWorkerId = 55;  // dummy value
     ServiceWorkerProcessManager::AllocatedProcessInfo process_info;
-    ServiceWorkerStatusCode status = process_manager_->AllocateWorkerProcess(
-        kEmbeddedWorkerId, pattern_, script_url_,
-        true /* can_use_existing_process */, &process_info);
-    EXPECT_EQ(SERVICE_WORKER_OK, status);
+    blink::ServiceWorkerStatusCode status =
+        process_manager_->AllocateWorkerProcess(
+            kEmbeddedWorkerId, pattern_, script_url_,
+            true /* can_use_existing_process */, &process_info);
+    EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, status);
     // Instead of testing the input to the CreateRenderProcessHost(), it'd be
     // more interesting to check the StoragePartition of the returned process
     // here and below. Alas, MockRenderProcessHosts always use the default
@@ -243,10 +252,11 @@ TEST_F(ServiceWorkerProcessManagerTest,
   {
     const int kEmbeddedWorkerId = 77;  // dummy value
     ServiceWorkerProcessManager::AllocatedProcessInfo process_info;
-    ServiceWorkerStatusCode status = process_manager_->AllocateWorkerProcess(
-        kEmbeddedWorkerId, pattern_, script_url_,
-        true /* can_use_existing_process */, &process_info);
-    EXPECT_EQ(SERVICE_WORKER_OK, status);
+    blink::ServiceWorkerStatusCode status =
+        process_manager_->AllocateWorkerProcess(
+            kEmbeddedWorkerId, pattern_, script_url_,
+            true /* can_use_existing_process */, &process_info);
+    EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, status);
     EXPECT_EQ(
         kGuestSiteUrl,
         render_process_host_factory_->last_site_instance_used()->GetSiteURL());

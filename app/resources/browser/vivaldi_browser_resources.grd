@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <grit latest_public_release="0" current_release="1">
   <release seq="1" allow_pseudo="false">
-    <structures>
-      <structure name="IDR_HELP_CONTENT_HTML"
-                 file="help\help_content.html"
-                 flattenhtml="true" type="chrome_html" />
-    </structures>
-
     <includes>
       <include name="IDR_MD_USER_MANAGER_SHARED_STYLES_HTML"
                file="md_user_manager\shared_styles.html"

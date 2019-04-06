@@ -43,8 +43,11 @@ def kill(proc, timeout_in_seconds=10):
     print >> sys.stderr, 'Xvfb running after SIGTERM and SIGKILL; good luck!'
 
 
-def run_executable(cmd, env):
+def run_executable(cmd, env, stdoutfile=None):
   """Runs an executable within Xvfb on Linux or normally on other platforms.
+
+  If |stdoutfile| is provided, symbolization via script is disabled and stdout
+  is written to this file as well as to stdout.
 
   Returns the exit code of the specified commandline, or 1 on failure.
   """
@@ -72,7 +75,7 @@ def run_executable(cmd, env):
         xcompmgr_proc = subprocess.Popen('xcompmgr', stdout=subprocess.PIPE,
                                          stderr=subprocess.STDOUT, env=env)
 
-        return test_env.run_executable(cmd, env)
+        return test_env.run_executable(cmd, env, stdoutfile)
       except OSError as e:
         print >> sys.stderr, 'Failed to start Xvfb or Openbox: %s' % str(e)
         return 1
@@ -81,6 +84,8 @@ def run_executable(cmd, env):
         kill(xcompmgr_proc)
     else:
       env['_CHROMIUM_INSIDE_XVFB'] = '1'
+      if stdoutfile:
+        env['_XVFB_EXECUTABLE_STDOUTFILE'] = stdoutfile
       xvfb_script = __file__
       if xvfb_script.endswith('.pyc'):
         xvfb_script = xvfb_script[:-1]
@@ -89,7 +94,7 @@ def run_executable(cmd, env):
                               "+extension RANDR",
                               xvfb_script] + cmd, env=env)
   else:
-    return test_env.run_executable(cmd, env)
+    return test_env.run_executable(cmd, env, stdoutfile)
 
 
 def main():
@@ -106,7 +111,10 @@ def main():
     print >> sys.stderr, USAGE
     return 3
 
-  return run_executable(sys.argv[1:], os.environ.copy())
+  stdoutfile = os.environ.get('_XVFB_EXECUTABLE_STDOUTFILE')
+  if stdoutfile:
+    del os.environ['_XVFB_EXECUTABLE_STDOUTFILE']
+  return run_executable(sys.argv[1:], os.environ.copy(), stdoutfile)
 
 
 if __name__ == "__main__":

@@ -5,15 +5,16 @@
 #ifndef COMPONENTS_SPELLCHECK_RENDERER_SPELLCHECK_PROVIDER_H_
 #define COMPONENTS_SPELLCHECK_RENDERER_SPELLCHECK_PROVIDER_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "components/spellcheck/common/spellcheck.mojom.h"
-#include "components/spellcheck/spellcheck_build_features.h"
+#include "components/spellcheck/spellcheck_buildflags.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
-#include "third_party/WebKit/public/web/WebTextCheckClient.h"
+#include "third_party/blink/public/web/web_text_check_client.h"
 
 class SpellCheck;
 struct SpellCheckResult;
@@ -59,16 +60,19 @@ class SpellCheckProvider
   void set_spellcheck(SpellCheck* spellcheck) { spellcheck_ = spellcheck; }
 
   // content::RenderFrameObserver:
-  bool OnMessageReceived(const IPC::Message& message) override;
   void FocusedNodeChanged(const blink::WebNode& node) override;
 
  private:
   friend class TestingSpellCheckProvider;
+  class DictionaryUpdateObserverImpl;
 
   // Sets the SpellCheckHost (for unit tests).
   void SetSpellCheckHostForTesting(spellcheck::mojom::SpellCheckHostPtr host) {
     spell_check_host_ = std::move(host);
   }
+
+  // Reset dictionary_update_observer_ in TestingSpellCheckProvider dtor.
+  void ResetDictionaryUpdateObserverForTesting();
 
   // Returns the SpellCheckHost.
   spellcheck::mojom::SpellCheckHost& GetSpellCheckHost();
@@ -124,10 +128,16 @@ class SpellCheckProvider
   // Weak pointer to shared (per renderer) spellcheck data.
   SpellCheck* spellcheck_;
 
+  // Not owned. |embedder_provider_| should outlive SpellCheckProvider.
   service_manager::LocalInterfaceProvider* embedder_provider_;
 
   // Interface to the SpellCheckHost.
   spellcheck::mojom::SpellCheckHostPtr spell_check_host_;
+
+  // Dictionary updated observer.
+  std::unique_ptr<DictionaryUpdateObserverImpl> dictionary_update_observer_;
+
+  base::WeakPtrFactory<SpellCheckProvider> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SpellCheckProvider);
 };

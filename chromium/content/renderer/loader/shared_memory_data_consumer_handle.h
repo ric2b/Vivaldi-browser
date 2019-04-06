@@ -14,7 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "content/public/renderer/request_peer.h"
-#include "third_party/WebKit/public/platform/WebDataConsumerHandle.h"
+#include "third_party/blink/public/platform/web_data_consumer_handle.h"
 
 namespace content {
 
@@ -81,7 +81,9 @@ class CONTENT_EXPORT SharedMemoryDataConsumerHandle final
                                  std::unique_ptr<Writer>* writer);
   ~SharedMemoryDataConsumerHandle() override;
 
-  std::unique_ptr<Reader> ObtainReader(Client* client) override;
+  std::unique_ptr<Reader> ObtainReader(
+      Client* client,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
 
  private:
   const char* DebugName() const override;

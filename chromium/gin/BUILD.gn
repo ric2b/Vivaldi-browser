@@ -5,14 +5,8 @@
 import("//build/buildflag_header.gni")
 import("//build/config/allocator.gni")
 import("//testing/test.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 import("//v8/gni/v8.gni")
-
-# "features" to avoid collision with existing gin_features.h file.
-buildflag_header("features") {
-  header = "features.h"
-
-  flags = [ "USE_PARTITION_ALLOC=$use_partition_alloc" ]
-}
 
 component("gin") {
   sources = [
@@ -32,6 +26,8 @@ component("gin") {
     "function_template.cc",
     "function_template.h",
     "gin_export.h",
+    "gin_features.cc",
+    "gin_features.h",
     "handle.h",
     "interceptor.cc",
     "interceptor.h",
@@ -51,16 +47,12 @@ component("gin") {
     "public/v8_idle_task_runner.h",
     "public/v8_platform.h",
     "public/wrapper_info.h",
-    "run_microtasks_observer.cc",
-    "run_microtasks_observer.h",
     "runner.cc",
     "runner.h",
     "shell_runner.cc",
     "shell_runner.h",
     "try_catch.cc",
     "try_catch.h",
-    "v8_background_task_runner.cc",
-    "v8_background_task_runner.h",
     "v8_foreground_task_runner.cc",
     "v8_foreground_task_runner.h",
     "v8_foreground_task_runner_base.cc",
@@ -87,7 +79,6 @@ component("gin") {
   defines = [ "GIN_IMPLEMENTATION" ]
 
   public_deps = [
-    ":features",
     "//base",
     "//v8",
   ]
@@ -111,7 +102,6 @@ executable("gin_shell") {
     ":gin",
     "//base",
     "//base:i18n",
-    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
     "//v8",
   ]
@@ -146,7 +136,6 @@ test("gin_unittests") {
     "data_object_builder_unittest.cc",
     "interceptor_unittest.cc",
     "per_context_data_unittest.cc",
-    "shell/gin_shell_unittest.cc",
     "shell_runner_unittest.cc",
     "test/run_all_unittests.cc",
     "v8_isolate_memory_dump_provider_unittest.cc",
@@ -155,9 +144,10 @@ test("gin_unittests") {
   ]
 
   deps = [
-    ":gin_shell",
     ":gin_test",
     "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
     "//v8",
   ]
 
@@ -166,12 +156,25 @@ test("gin_unittests") {
     "//v8:external_startup_data",
   ]
 
-  data = [
-    "shell/hello_world.js",
-    "../OWNERS",
-  ]
-
   data_deps = [
-    ":gin_shell",
+    "//tools/v8_context_snapshot:v8_context_snapshot",
   ]
+  data = []
+
+  # gin_shell is not an Android app.
+  if (!is_android) {
+    sources += [ "shell/gin_shell_unittest.cc" ]
+    deps += [ ":gin_shell" ]
+    data_deps += [ ":gin_shell" ]
+    data += [ "shell/hello_world.js" ]
+  }
+
+  # On Android, the APK must bundle the startup data.
+  if (is_android) {
+    if (use_v8_context_snapshot) {
+      deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+    } else {
+      deps += [ "//v8:v8_external_startup_data_assets" ]
+    }
+  }
 }

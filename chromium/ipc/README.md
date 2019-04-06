@@ -54,7 +54,7 @@ In the limit, this is the preferred destination for any message conversions
 pertaining to foundational system services (more info at
 [https://www.chromium.org/servicification](https://www.chromium.org/servicification).)
 For other code it may make sense to introduce services elsewhere (*e.g.*, in
-`//chrome/services` or `//components/foo/service`), or to simply
+`//chrome/services` or `//components/services`), or to simply
 avoid using services altogether for now and instead define some one-off Mojom
 interface alongside the old messages file.
 
@@ -157,7 +157,7 @@ service. Your first order of business is to translate this into a suitable
 public interface definition within that service:
 
 ``` cpp
-// src/services/data_decoder/public/interfaces/png_decoder.mojom
+// src/services/data_decoder/public/mojom/png_decoder.mojom
 module data_decoder.mojom;
 
 interface PngDecoder {
@@ -167,7 +167,7 @@ interface PngDecoder {
 ```
 
 and you'll also want to define the implementation within
-`//services/data_decoder`, pluging in some appropriate binder so the service
+`//services/data_decoder`, plugging in some appropriate binder so the service
 knows how to bind incoming interface requests to your implementation:
 
 ``` cpp
@@ -191,8 +191,8 @@ DataDecoderService::DataDecoderService() {
 ```
 
 and finally you need to update the usage of the old IPC by probably deleting
-lots of ugly code which sets up a `UtilityProcessHostImpl` and replacing it
-with something like:
+lots of ugly code which sets up a `UtilityProcessHost` and replacing it with
+something like:
 
 ``` cpp
 void OnDecodedPng(const std::vector<uint8_t>& rgba_data) { /* ... */ }
@@ -369,13 +369,11 @@ it.
 
 Depending on what resources you need access to, the main classes are:
 
-| Renderer Class  | Corresponding Browser Class |  Explanation                                                                                                      |
-|-----------------|-----------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `RenderFrame`   | `RenderFrameHost`           |  A single frame. Use this for frame-to-frame messages.                                                            |
-| `RenderView`    | `RenderViewHost`            | A view (conceptually a 'tab'). You cannot send Mojo messages to a `RenderView` directly, since frames in a tab can
-                                                  be in multiple processes (and the classes are deprecated). Migrate these to `RenderFrame` instead, or see section
-                                                  [Migrating IPC calls to `RenderView` or `RenderViewHost`](#UMigrating-IPC-calls-to-RenderView-or-RenderViewHost). |
-| `RenderProcess` | `RenderProcessHost`         | A process, containing multiple frames (probably from the same origin, but not always).                            |
+| Renderer Class  | Corresponding Browser Class |  Explanation                                                                                                       |
+|-----------------|-----------------------------|--------------------------------------------------------------------------------------------------------------------|
+| `RenderFrame`   | `RenderFrameHost`           |  A single frame. Use this for frame-to-frame messages.                                                             |
+| `RenderView`    | `RenderViewHost`            | A view (conceptually a 'tab'). You cannot send Mojo messages to a `RenderView` directly, since frames in a tab can be in multiple processes (and the classes are deprecated). Migrate these to `RenderFrame` instead, or see section [Migrating IPC calls to `RenderView` or `RenderViewHost`](#UMigrating-IPC-calls-to-RenderView-or-RenderViewHost).  |
+| `RenderProcess` | `RenderProcessHost`         | A process, containing multiple frames (probably from the same origin, but not always).                             |
 
 **NOTE:** Previously, classes that ended with `Host` were implemented on the
 browser side; the equivalent classes on the renderer side had the same name
@@ -466,15 +464,15 @@ errors look like:
 
 ```sh
 [ERROR:service_manager.cc(158)] Connection InterfaceProviderSpec prevented
-service: content_renderer from binding interface: content::mojom::Logger
+service: content_renderer from binding interface: content.mojom.Logger
 exposed by: content_browser
 ```
 
 This means something in the renderer process (called "content_renderer") was
-trying to bind to `content::mojom::Logger` in the browser process (called
+trying to bind to `content.mojom.Logger` in the browser process (called
 "content_browser"). To add a capability for this, we need to find the json file
 with the capabilities for "content_browser", and add our new interface with name
-`content::mojom::Logger` to the "renderer" section.
+`content.mojom.Logger` to the "renderer" section.
 
 In this example, the capabilities for "content_browser" are implemented in
 [content_browser_manifest.json](/content/public/app/mojo/content_browser_manifest.json).
@@ -492,14 +490,14 @@ It should look like:
           //...
 ```
 
-To add permission for `content::mojom::Logger`, add the string
-`"content::mojom::Logger"` to the "renderer" list.
+To add permission for `content.mojom.Logger`, add the string
+`"content.mojom.Logger"` to the "renderer" list.
 
 Similarly, if the error was:
 
 ```sh
 [ERROR:service_manager.cc(158)] Connection InterfaceProviderSpec prevented
-service: content_browser from binding interface: content::mojom::Logger exposed
+service: content_browser from binding interface: content.mojom.Logger exposed
 by: content_renderer
 ```
 
@@ -689,7 +687,7 @@ if such a use case is blocking your work.
 
 ### Using Legacy IPC Traits
 
-InsSome circumstances there may be a C++ enum, struct, or class that you want
+In some circumstances there may be a C++ enum, struct, or class that you want
 to use in a Mojom via [type mapping](/mojo/public/cpp/bindings#Type-Mapping),
 and that type may already have `IPC::ParamTraits` defined (possibly via
 `IPC_STRUCT_TRAITS*` macros) for legacy IPC.
@@ -719,7 +717,6 @@ the wire format used is defined entirely by `IPC::ParamTraits<T>` for whatever
 `foo::mojom::MyGiganticStructure` to `foo::MyGiganticStructure`, your typemap
 must point to some header which defines
 `IPC::ParamTraits<foo::MyGiganticStructure>`.
-```
 
 There are several examples of this traits implementation in common IPC traits
 defined [here](https://code.google.com/p/chromium/codesearch#chromium/src/ipc/ipc_message_utils.h).

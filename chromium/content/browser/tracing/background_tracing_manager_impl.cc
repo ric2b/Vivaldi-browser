@@ -25,7 +25,7 @@
 #include "content/public/browser/tracing_delegate.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "services/resource_coordinator/public/cpp/tracing/chrome_trace_event_agent.h"
+#include "services/tracing/public/cpp/trace_event_agent.h"
 
 namespace content {
 
@@ -44,8 +44,10 @@ enum BackgroundTracingMetrics {
   FINALIZATION_ALLOWED = 5,
   FINALIZATION_DISALLOWED = 6,
   FINALIZATION_STARTED = 7,
-  FINALIZATION_COMPLETE = 8,
+  OBSOLETE_FINALIZATION_COMPLETE = 8,
   SCENARIO_ACTION_FAILED_LOWRES_CLOCK = 9,
+  UPLOAD_FAILED = 10,
+  UPLOAD_SUCCEEDED = 11,
   NUMBER_OF_BACKGROUND_TRACING_METRICS,
 };
 
@@ -105,20 +107,22 @@ BackgroundTracingManagerImpl::~BackgroundTracingManagerImpl() {
 }
 
 void BackgroundTracingManagerImpl::AddMetadataGeneratorFunction() {
-  tracing::ChromeTraceEventAgent::GetInstance()->AddMetadataGeneratorFunction(
-      base::BindRepeating(&BackgroundTracingManagerImpl::GenerateMetadataDict,
-                          base::Unretained(this)));
+  TracingControllerImpl::GetInstance()
+      ->GetTraceEventAgent()
+      ->AddMetadataGeneratorFunction(base::BindRepeating(
+          &BackgroundTracingManagerImpl::GenerateMetadataDict,
+          base::Unretained(this)));
 }
 
 void BackgroundTracingManagerImpl::WhenIdle(
     base::Callback<void()> idle_callback) {
   CHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
-  idle_callback_ = idle_callback;
+  idle_callback_ = std::move(idle_callback);
 }
 
 bool BackgroundTracingManagerImpl::SetActiveScenario(
     std::unique_ptr<BackgroundTracingConfig> config,
-    const BackgroundTracingManager::ReceiveCallback& receive_callback,
+    BackgroundTracingManager::ReceiveCallback receive_callback,
     DataFiltering data_filtering) {
   CHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   RecordBackgroundTracingMetric(SCENARIO_ACTIVATION_REQUESTED);
@@ -178,7 +182,7 @@ bool BackgroundTracingManagerImpl::SetActiveScenario(
   }
 
   config_ = std::move(config_impl);
-  receive_callback_ = receive_callback;
+  receive_callback_ = std::move(receive_callback);
   requires_anonymized_data_ = requires_anonymized_data;
 
   if (config_) {
@@ -339,7 +343,7 @@ void BackgroundTracingManagerImpl::TriggerNamedEvent(
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
         base::BindOnce(&BackgroundTracingManagerImpl::TriggerNamedEvent,
-                       base::Unretained(this), handle, callback));
+                       base::Unretained(this), handle, std::move(callback)));
     return;
   }
 
@@ -359,12 +363,12 @@ void BackgroundTracingManagerImpl::TriggerNamedEvent(
 
   if (!is_valid_trigger) {
     if (!callback.is_null())
-      callback.Run(false);
+      std::move(callback).Run(false);
     return;
   }
 
   triggered_named_event_handle_ = handle;
-  OnRuleTriggered(triggered_rule, callback);
+  OnRuleTriggered(triggered_rule, std::move(callback));
 }
 
 void BackgroundTracingManagerImpl::OnRuleTriggered(
@@ -375,7 +379,7 @@ void BackgroundTracingManagerImpl::OnRuleTriggered(
   double trigger_chance = triggered_rule->trigger_chance();
   if (trigger_chance < 1.0 && base::RandDouble() > trigger_chance) {
     if (!callback.is_null())
-      callback.Run(false);
+      std::move(callback).Run(false);
     return;
   }
 
@@ -400,7 +404,7 @@ void BackgroundTracingManagerImpl::OnRuleTriggered(
         trace_delay = -1;
       } else {
         if (!callback.is_null())
-          callback.Run(false);
+          std::move(callback).Run(false);
         return;
       }
     }
@@ -410,7 +414,7 @@ void BackgroundTracingManagerImpl::OnRuleTriggered(
     // otherwise we do nothing.
     if (!is_tracing_ || is_gathering_ || tracing_timer_) {
       if (!callback.is_null())
-        callback.Run(false);
+        std::move(callback).Run(false);
       return;
     }
 
@@ -418,9 +422,9 @@ void BackgroundTracingManagerImpl::OnRuleTriggered(
   }
 
   if (trace_delay < 0) {
-    BeginFinalizing(callback);
+    BeginFinalizing(std::move(callback));
   } else {
-    tracing_timer_.reset(new TracingTimer(callback));
+    tracing_timer_.reset(new TracingTimer(std::move(callback)));
     tracing_timer_->StartTimer(trace_delay);
   }
 
@@ -505,19 +509,20 @@ void BackgroundTracingManagerImpl::OnFinalizeStarted(
   if (!receive_callback_.is_null()) {
     receive_callback_.Run(
         file_contents, std::move(metadata),
-        base::Bind(&BackgroundTracingManagerImpl::OnFinalizeComplete,
-                   base::Unretained(this)));
+        base::BindOnce(&BackgroundTracingManagerImpl::OnFinalizeComplete,
+                       base::Unretained(this)));
   }
+
   if (!started_finalizing_closure.is_null())
-    started_finalizing_closure.Run();
+    std::move(started_finalizing_closure).Run();
 }
 
-void BackgroundTracingManagerImpl::OnFinalizeComplete() {
+void BackgroundTracingManagerImpl::OnFinalizeComplete(bool success) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(&BackgroundTracingManagerImpl::OnFinalizeComplete,
-                       base::Unretained(this)));
+                       base::Unretained(this), success));
     return;
   }
 
@@ -541,7 +546,11 @@ void BackgroundTracingManagerImpl::OnFinalizeComplete() {
     AbortScenario();
   }
 
-  RecordBackgroundTracingMetric(FINALIZATION_COMPLETE);
+  if (success) {
+    RecordBackgroundTracingMetric(UPLOAD_SUCCEEDED);
+  } else {
+    RecordBackgroundTracingMetric(UPLOAD_FAILED);
+  }
 }
 
 bool BackgroundTracingManagerImpl::IsAllowedFinalization() const {
@@ -560,9 +569,10 @@ BackgroundTracingManagerImpl::GenerateMetadataDict() {
     auto config_dict = std::make_unique<base::DictionaryValue>();
     config_->IntoDict(config_dict.get());
     metadata_dict->Set("config", std::move(config_dict));
+    metadata_dict->SetString("scenario_name", config_->scenario_name());
   }
   if (last_triggered_rule_)
-    metadata_dict->Set("last_triggered_rule_", std::move(last_triggered_rule_));
+    metadata_dict->Set("last_triggered_rule", std::move(last_triggered_rule_));
   return metadata_dict;
 }
 
@@ -582,19 +592,21 @@ void BackgroundTracingManagerImpl::BeginFinalizing(
   }
   if (is_allowed_finalization) {
     trace_data_endpoint = TracingControllerImpl::CreateCompressedStringEndpoint(
-        TracingControllerImpl::CreateCallbackEndpoint(
-            base::Bind(&BackgroundTracingManagerImpl::OnFinalizeStarted,
-                       base::Unretained(this), started_finalizing_closure)),
+        TracingControllerImpl::CreateCallbackEndpoint(base::Bind(
+            &BackgroundTracingManagerImpl::OnFinalizeStarted,
+            base::Unretained(this), std::move(started_finalizing_closure))),
         true /* compress_with_background_priority */);
     RecordBackgroundTracingMetric(FINALIZATION_ALLOWED);
   } else {
-    if (!callback.is_null()) {
+    if (!std::move(callback).is_null()) {
       trace_data_endpoint =
           TracingControllerImpl::CreateCallbackEndpoint(base::BindRepeating(
               [](base::Closure closure,
                  std::unique_ptr<const base::DictionaryValue> metadata,
-                 base::RefCountedString* file_contents) { closure.Run(); },
-              started_finalizing_closure));
+                 base::RefCountedString* file_contents) {
+                std::move(closure).Run();
+              },
+              std::move(started_finalizing_closure)));
     }
     RecordBackgroundTracingMetric(FINALIZATION_DISALLOWED);
   }

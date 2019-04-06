@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -35,11 +34,12 @@
 #include "content/public/common/context_menu_params.h"
 #include "net/base/load_states.h"
 #include "net/http/http_request_headers.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -140,8 +140,8 @@ bool CoreTabHelper::GetStatusTextForWebContents(
     if (!guest_manager)
       return false;
     return guest_manager->ForEachGuest(
-        source, base::Bind(&CoreTabHelper::GetStatusTextForWebContents,
-                           status_text));
+        source, base::BindRepeating(&CoreTabHelper::GetStatusTextForWebContents,
+                                    status_text));
 #else  // !BUILDFLAG(ENABLE_EXTENSIONS)
     return false;
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -176,17 +176,17 @@ bool CoreTabHelper::GetStatusTextForWebContents(
       *status_text =
           l10n_util::GetStringUTF16(IDS_LOAD_STATE_ESTABLISHING_PROXY_TUNNEL);
       return true;
-    case net::LOAD_STATE_DOWNLOADING_PROXY_SCRIPT:
+    case net::LOAD_STATE_DOWNLOADING_PAC_FILE:
       *status_text =
-          l10n_util::GetStringUTF16(IDS_LOAD_STATE_DOWNLOADING_PROXY_SCRIPT);
+          l10n_util::GetStringUTF16(IDS_LOAD_STATE_DOWNLOADING_PAC_FILE);
       return true;
     case net::LOAD_STATE_RESOLVING_PROXY_FOR_URL:
       *status_text =
           l10n_util::GetStringUTF16(IDS_LOAD_STATE_RESOLVING_PROXY_FOR_URL);
       return true;
-    case net::LOAD_STATE_RESOLVING_HOST_IN_PROXY_SCRIPT:
-      *status_text = l10n_util::GetStringUTF16(
-          IDS_LOAD_STATE_RESOLVING_HOST_IN_PROXY_SCRIPT);
+    case net::LOAD_STATE_RESOLVING_HOST_IN_PAC_FILE:
+      *status_text =
+          l10n_util::GetStringUTF16(IDS_LOAD_STATE_RESOLVING_HOST_IN_PAC_FILE);
       return true;
     case net::LOAD_STATE_RESOLVING_HOST:
       *status_text = l10n_util::GetStringUTF16(IDS_LOAD_STATE_RESOLVING_HOST);
@@ -214,9 +214,6 @@ bool CoreTabHelper::GetStatusTextForWebContents(
           l10n_util::GetStringFUTF16(IDS_LOAD_STATE_WAITING_FOR_RESPONSE,
                                      source->GetLoadStateHost());
       return true;
-    case net::LOAD_STATE_THROTTLED:
-      *status_text = l10n_util::GetStringUTF16(IDS_LOAD_STATE_THROTTLED);
-      return true;
     // Ignore net::LOAD_STATE_READING_RESPONSE and net::LOAD_STATE_IDLE
     case net::LOAD_STATE_IDLE:
     case net::LOAD_STATE_READING_RESPONSE:
@@ -241,9 +238,12 @@ void CoreTabHelper::DidStartLoading() {
   UpdateContentRestrictions(0);
 }
 
-void CoreTabHelper::WasShown() {
-  web_cache::WebCacheManager::GetInstance()->ObserveActivity(
-      web_contents()->GetMainFrame()->GetProcess()->GetID());
+void CoreTabHelper::OnVisibilityChanged(content::Visibility visibility) {
+  // TODO(jochen): Consider handling OCCLUDED tabs the same way as HIDDEN tabs.
+  if (visibility != content::Visibility::HIDDEN) {
+    web_cache::WebCacheManager::GetInstance()->ObserveActivity(
+        web_contents()->GetMainFrame()->GetProcess()->GetID());
+  }
 }
 
 void CoreTabHelper::WebContentsDestroyed() {
@@ -283,6 +283,16 @@ void CoreTabHelper::BeforeUnloadFired(const base::TimeTicks& proceed_time) {
 
 void CoreTabHelper::BeforeUnloadDialogCancelled() {
   OnCloseCanceled();
+}
+
+// Update back/forward buttons for web_contents that are active.
+void CoreTabHelper::NavigationEntriesDeleted() {
+#if !defined(OS_ANDROID)
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (web_contents() == browser->tab_strip_model()->GetActiveWebContents())
+      browser->command_controller()->TabStateChanged();
+  }
+#endif
 }
 
 // Handles the image thumbnail for the context node, composes a image search

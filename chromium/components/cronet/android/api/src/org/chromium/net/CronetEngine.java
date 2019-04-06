@@ -7,11 +7,13 @@ package org.chromium.net;
 import android.content.Context;
 import android.net.http.HttpResponseCache;
 import android.support.annotation.VisibleForTesting;
+import android.util.Log;
 
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLStreamHandlerFactory;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -27,6 +29,8 @@ import javax.net.ssl.HttpsURLConnection;
  * using {@link Builder}.
  */
 public abstract class CronetEngine {
+    private static final String TAG = CronetEngine.class.getSimpleName();
+
     /**
      * A builder for {@link CronetEngine}s, which allows runtime configuration of
      * {@code CronetEngine}. Configuration options are set on the builder and
@@ -318,9 +322,15 @@ public abstract class CronetEngine {
          * @return the created {@code ICronetEngineBuilder}.
          */
         private static ICronetEngineBuilder createBuilderDelegate(Context context) {
-            List<CronetProvider> providerList =
-                    getEnabledCronetProviders(context, CronetProvider.getAllProviders(context));
-            return providerList.get(0).createBuilder().mBuilderDelegate;
+            List<CronetProvider> providers =
+                    new ArrayList<>(CronetProvider.getAllProviders(context));
+            CronetProvider provider = getEnabledCronetProviders(context, providers).get(0);
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG,
+                        String.format("Using '%s' provider for creating CronetEngine.Builder.",
+                                provider));
+            }
+            return provider.createBuilder().mBuilderDelegate;
         }
 
         /**
@@ -328,6 +338,7 @@ public abstract class CronetEngine {
          * is sorted based on the provider versions and types.
          *
          * @param context Android Context to use.
+         * @param providers the list of enabled and disabled providers to filter out and sort.
          * @return the sorted list of enabled providers. The list contains at least one provider.
          * @throws RuntimeException is the list of providers is empty or all of the providers
          *                          are disabled.

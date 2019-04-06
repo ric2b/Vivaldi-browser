@@ -11,6 +11,7 @@
 #include <string>
 
 #include "content/common/content_export.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 
 namespace net {
 struct RedirectInfo;
@@ -22,7 +23,6 @@ struct URLLoaderCompletionStatus;
 }
 
 namespace content {
-
 
 // This is implemented by our custom resource loader within content. The Peer
 // and it's bridge should have identical lifetimes as they represent each end of
@@ -69,14 +69,12 @@ class CONTENT_EXPORT RequestPeer {
   virtual void OnReceivedResponse(
       const network::ResourceResponseInfo& info) = 0;
 
-  // Called when a chunk of response data is downloaded.  This method may be
-  // called multiple times or not at all if an error occurs.  This method is
-  // only called if RequestInfo::download_to_file was set to true, and in
-  // that case, OnReceivedData will not be called.
-  // The encoded_data_length is the length of the encoded data transferred
-  // over the network, which could be different from data length (e.g. for
-  // gzipped content).
-  virtual void OnDownloadedData(int len, int encoded_data_length) = 0;
+  // Called when the response body becomes available. This method is only called
+  // if |pass_response_pipe_to_peer| was set to true when calling StartAsync.
+  // TODO(mek): Deprecate OnReceivedData in favor of this method, and always use
+  // this codepath.
+  virtual void OnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body) = 0;
 
   // Called when a chunk of response data is available. This method may
   // be called multiple times or not at all if an error occurs.

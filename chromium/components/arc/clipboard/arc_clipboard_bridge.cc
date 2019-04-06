@@ -84,6 +84,31 @@ mojom::ClipRepresentationPtr CreatePlainText(const ui::Clipboard* clipboard) {
                                         mojom::ClipValue::NewText(text));
 }
 
+mojom::ClipDataPtr GetClipData(const ui::Clipboard* clipboard) {
+  DCHECK(clipboard);
+
+  std::vector<base::string16> mime_types;
+  bool contains_files;
+  clipboard->ReadAvailableTypes(ui::CLIPBOARD_TYPE_COPY_PASTE, &mime_types,
+                                &contains_files);
+
+  mojom::ClipDataPtr clip_data(mojom::ClipData::New());
+
+  // Populate ClipData with ClipRepresentation objects.
+  for (const auto& mime_type16 : mime_types) {
+    const std::string mime_type(base::UTF16ToUTF8(mime_type16));
+    if (mime_type == ui::Clipboard::kMimeTypeHTML) {
+      clip_data->representations.push_back(CreateHTML(clipboard));
+    } else if (mime_type == ui::Clipboard::kMimeTypeText) {
+      clip_data->representations.push_back(CreatePlainText(clipboard));
+    } else {
+      // TODO(ricardoq): Add other supported mime_types here.
+      DLOG(WARNING) << "Unsupported mime type: " << mime_type;
+    }
+  }
+  return clip_data;
+}
+
 void ProcessHTML(const mojom::ClipRepresentation* repr,
                  ui::ScopedClipboardWriter* writer) {
   DCHECK(repr);
@@ -180,29 +205,6 @@ void ArcClipboardBridge::OnClipboardDataChanged() {
   clipboard_instance->OnHostClipboardUpdated();
 }
 
-void ArcClipboardBridge::SetTextContentDeprecated(const std::string& text) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
-  // Order is important. AutoReset should outlive ScopedClipboardWriter.
-  base::AutoReset<bool> auto_reset(&event_originated_at_instance_, true);
-  ui::ScopedClipboardWriter writer(ui::CLIPBOARD_TYPE_COPY_PASTE);
-  writer.WriteText(base::UTF8ToUTF16(text));
-}
-
-void ArcClipboardBridge::GetTextContentDeprecated() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
-  base::string16 text;
-  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
-  clipboard->ReadText(ui::CLIPBOARD_TYPE_COPY_PASTE, &text);
-
-  mojom::ClipboardInstance* clipboard_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->clipboard(), OnGetTextContentDeprecated);
-  if (!clipboard_instance)
-    return;
-  clipboard_instance->OnGetTextContentDeprecated(base::UTF16ToUTF8(text));
-}
-
 void ArcClipboardBridge::SetClipContent(mojom::ClipDataPtr clip_data) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -228,35 +230,24 @@ void ArcClipboardBridge::GetClipContent(GetClipContentCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
-  std::vector<base::string16> mime_types;
-  bool contains_files;
-  clipboard->ReadAvailableTypes(ui::CLIPBOARD_TYPE_COPY_PASTE, &mime_types,
-                                &contains_files);
+  mojom::ClipDataPtr clip_data = GetClipData(clipboard);
+  std::move(callback).Run(std::move(clip_data));
+}
 
-  mojom::ClipDataPtr clip_data(mojom::ClipData::New());
+void ArcClipboardBridge::GetClipContentDeprecated(
+    GetClipContentCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  // Populate ClipData with ClipRepresentation objects.
-  for (const auto& mime_type16 : mime_types) {
-    const std::string mime_type(base::UTF16ToUTF8(mime_type16));
-    if (mime_type == ui::Clipboard::kMimeTypeHTML) {
-      clip_data->representations.push_back(CreateHTML(clipboard));
-    } else if (mime_type == ui::Clipboard::kMimeTypeText) {
-      clip_data->representations.push_back(CreatePlainText(clipboard));
-    } else {
-      // TODO(ricardoq): Add other supported mime_types here.
-      DLOG(WARNING) << "Unsupported mime type: " << mime_type;
-    }
-  }
+  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+  mojom::ClipDataPtr clip_data = GetClipData(clipboard);
 
+  // Old version of ClipboardInstance can't handle a ClipData larger than 800K.
   if (!DoesClipFitIntoInstance(clip_data)) {
     clip_data->representations.clear();
     clip_data->representations.push_back(mojom::ClipRepresentation::New(
         kMimeTypeTextError,
         mojom::ClipValue::NewText(kErrorSizeTooBigForBinder)));
   }
-
-  // Invoke the |callback|, even if |clip_data| is empty, since Instance is
-  // waiting for a response.
   std::move(callback).Run(std::move(clip_data));
 }
 

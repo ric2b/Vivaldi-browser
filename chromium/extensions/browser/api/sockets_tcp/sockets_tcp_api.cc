@@ -4,8 +4,8 @@
 
 #include "extensions/browser/api/sockets_tcp/sockets_tcp_api.h"
 
-#include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/socket_permission_request.h"
 #include "extensions/browser/api/socket/tcp_socket.h"

@@ -6,8 +6,8 @@ package org.chromium.chrome.browser.webapps;
 
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.os.AsyncTask;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
@@ -69,7 +69,7 @@ public class WebApkInstaller {
         if (mInstallDelegate == null) {
             notify(WebApkInstallResult.FAILURE);
             WebApkUma.recordGooglePlayInstallResult(
-                    WebApkUma.GOOGLE_PLAY_INSTALL_FAILED_NO_DELEGATE);
+                    WebApkUma.GooglePlayInstallResult.FAILED_NO_DELEGATE);
             return;
         }
 

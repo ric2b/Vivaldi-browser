@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_PASSWORDS_MODEL_DELEGATE_MOCK_H_
 #define CHROME_BROWSER_UI_PASSWORDS_PASSWORDS_MODEL_DELEGATE_MOCK_H_
 
+#include <memory>
+#include <vector>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
@@ -25,7 +28,6 @@ class PasswordsModelDelegateMock
   MOCK_CONST_METHOD0(GetPendingPassword, const autofill::PasswordForm&());
   MOCK_CONST_METHOD0(GetCredentialSource,
                      password_manager::metrics_util::CredentialSourceType());
-  MOCK_CONST_METHOD0(IsPasswordOverridden, bool());
   MOCK_CONST_METHOD0(
       GetCurrentForms,
       const std::vector<std::unique_ptr<autofill::PasswordForm>>&());
@@ -38,6 +40,7 @@ class PasswordsModelDelegateMock
   MOCK_METHOD0(OnNopeUpdateClicked, void());
   MOCK_METHOD0(NeverSavePassword, void());
   MOCK_METHOD1(UpdatePassword, void(const autofill::PasswordForm&));
+  MOCK_METHOD0(OnPasswordsRevealed, void());
   MOCK_METHOD2(SavePassword,
                void(const base::string16&, const base::string16&));
   MOCK_METHOD2(ChooseCredential, void(const autofill::PasswordForm&,
@@ -46,7 +49,8 @@ class PasswordsModelDelegateMock
   MOCK_METHOD0(NavigateToSmartLockHelpPage, void());
   MOCK_METHOD0(NavigateToPasswordManagerAccountDashboard, void());
   MOCK_METHOD0(NavigateToPasswordManagerSettingsPage, void());
-  MOCK_METHOD0(NavigateToChromeSignIn, void());
+  MOCK_METHOD2(EnableSync,
+               void(const AccountInfo& account, bool is_default_promo_account));
   MOCK_METHOD0(OnDialogHidden, void());
   MOCK_METHOD0(AuthenticateUser, bool());
   MOCK_CONST_METHOD0(ArePasswordsRevealedWhenBubbleIsOpened, bool());

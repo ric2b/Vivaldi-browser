@@ -25,7 +25,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -35,8 +34,6 @@
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/test/database_test_utils.h"
 #include "components/history/core/test/test_history_database.h"
-#include "components/sync/model/attachments/attachment_id.h"
-#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_change_processor.h"
@@ -86,17 +83,15 @@ class HistoryServiceTest : public testing::Test {
 
     // Make sure we don't have any event pending that could disrupt the next
     // test.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
-    base::RunLoop().Run();
+    base::RunLoop().RunUntilIdle();
   }
 
   void CleanupHistoryService() {
     DCHECK(history_service_);
 
+    base::RunLoop run_loop;
     history_service_->ClearCachedDataForContextID(nullptr);
-    history_service_->SetOnBackendDestroyTask(
-        base::MessageLoop::QuitWhenIdleClosure());
+    history_service_->SetOnBackendDestroyTask(run_loop.QuitClosure());
     history_service_->Cleanup();
     history_service_.reset();
 
@@ -104,24 +99,26 @@ class HistoryServiceTest : public testing::Test {
     // moving to the next test. Note: if this never terminates, somebody is
     // probably leaking a reference to the history backend, so it never calls
     // our destroy task.
-    base::RunLoop().Run();
+    run_loop.Run();
   }
 
   // Fills the query_url_row_ and query_url_visits_ structures with the
   // information about the given URL and returns true. If the URL was not
   // found, this will return false and those structures will not be changed.
   bool QueryURL(history::HistoryService* history, const GURL& url) {
+    base::RunLoop run_loop;
     history_service_->QueryURL(
-        url,
-        true,
-        base::Bind(&HistoryServiceTest::SaveURLAndQuit, base::Unretained(this)),
+        url, true,
+        base::BindOnce(&HistoryServiceTest::SaveURLAndQuit,
+                       base::Unretained(this), run_loop.QuitClosure()),
         &tracker_);
-    base::RunLoop().Run();  // Will be exited in SaveURLAndQuit.
+    run_loop.Run();  // Will be exited in SaveURLAndQuit.
     return query_url_success_;
   }
 
   // Callback for HistoryService::QueryURL.
-  void SaveURLAndQuit(bool success,
+  void SaveURLAndQuit(base::OnceClosure done,
+                      bool success,
                       const URLRow& url_row,
                       const VisitVector& visits) {
     query_url_success_ = success;
@@ -132,28 +129,30 @@ class HistoryServiceTest : public testing::Test {
       query_url_row_ = URLRow();
       query_url_visits_.clear();
     }
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
+    std::move(done).Run();
   }
 
   // Fills in saved_redirects_ with the redirect information for the given URL,
   // returning true on success. False means the URL was not found.
   void QueryRedirectsFrom(history::HistoryService* history, const GURL& url) {
+    base::RunLoop run_loop;
     history_service_->QueryRedirectsFrom(
         url,
         base::Bind(&HistoryServiceTest::OnRedirectQueryComplete,
-                   base::Unretained(this)),
+                   base::Unretained(this), run_loop.QuitClosure()),
         &tracker_);
-    base::RunLoop().Run();  // Will be exited in *QueryComplete.
+    run_loop.Run();  // Will be exited in *QueryComplete.
   }
 
   // Callback for QueryRedirects.
-  void OnRedirectQueryComplete(const history::RedirectList* redirects) {
+  void OnRedirectQueryComplete(base::OnceClosure done,
+                               const history::RedirectList* redirects) {
     saved_redirects_.clear();
     if (!redirects->empty()) {
       saved_redirects_.insert(
           saved_redirects_.end(), redirects->begin(), redirects->end());
     }
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
+    std::move(done).Run();
   }
 
   base::ScopedTempDir temp_dir_;
@@ -629,6 +628,7 @@ TEST_F(HistoryServiceTest, HistoryDBTask) {
   int invoke_count = 0;
   bool done_invoked = false;
   history_service_->ScheduleDBTask(
+      FROM_HERE,
       std::unique_ptr<history::HistoryDBTask>(
           new HistoryDBTaskImpl(&invoke_count, &done_invoked)),
       &task_tracker);
@@ -649,6 +649,7 @@ TEST_F(HistoryServiceTest, HistoryDBTaskCanceled) {
   int invoke_count = 0;
   bool done_invoked = false;
   history_service_->ScheduleDBTask(
+      FROM_HERE,
       std::unique_ptr<history::HistoryDBTask>(
           new HistoryDBTaskImpl(&invoke_count, &done_invoked)),
       &task_tracker);
@@ -752,12 +753,8 @@ TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
           .ToInternalValue());
   global_id_directive->set_start_time_usec(3);
   global_id_directive->set_end_time_usec(10);
-  directives.push_back(syncer::SyncData::CreateRemoteData(
-      1,
-      entity_specs,
-      base::Time(),
-      syncer::AttachmentIdList(),
-      syncer::AttachmentServiceProxyForTest::Create()));
+  directives.push_back(
+      syncer::SyncData::CreateRemoteData(1, entity_specs, base::Time()));
 
   // 2nd directive.
   global_id_directive->Clear();
@@ -766,12 +763,8 @@ TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
           .ToInternalValue());
   global_id_directive->set_start_time_usec(13);
   global_id_directive->set_end_time_usec(19);
-  directives.push_back(syncer::SyncData::CreateRemoteData(
-      2,
-      entity_specs,
-      base::Time(),
-      syncer::AttachmentIdList(),
-      syncer::AttachmentServiceProxyForTest::Create()));
+  directives.push_back(
+      syncer::SyncData::CreateRemoteData(2, entity_specs, base::Time()));
 
   syncer::FakeSyncChangeProcessor change_processor;
   EXPECT_FALSE(history_service_
@@ -838,23 +831,15 @@ TEST_F(HistoryServiceTest, ProcessTimeRangeDeleteDirective) {
           ->mutable_time_range_directive();
   time_range_directive->set_start_time_usec(2);
   time_range_directive->set_end_time_usec(5);
-  directives.push_back(syncer::SyncData::CreateRemoteData(
-      1,
-      entity_specs,
-      base::Time(),
-      syncer::AttachmentIdList(),
-      syncer::AttachmentServiceProxyForTest::Create()));
+  directives.push_back(
+      syncer::SyncData::CreateRemoteData(1, entity_specs, base::Time()));
 
   // 2nd directive.
   time_range_directive->Clear();
   time_range_directive->set_start_time_usec(8);
   time_range_directive->set_end_time_usec(10);
-  directives.push_back(syncer::SyncData::CreateRemoteData(
-      2,
-      entity_specs,
-      base::Time(),
-      syncer::AttachmentIdList(),
-      syncer::AttachmentServiceProxyForTest::Create()));
+  directives.push_back(
+      syncer::SyncData::CreateRemoteData(2, entity_specs, base::Time()));
 
   syncer::FakeSyncChangeProcessor change_processor;
   EXPECT_FALSE(history_service_

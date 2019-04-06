@@ -18,6 +18,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/language_usage_metrics/language_usage_metrics.h"
+#include "components/metrics/expired_histogram_util.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
@@ -27,6 +28,8 @@
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/variations/field_trial_config/field_trial_util.h"
 #include "components/variations/service/variations_service.h"
+#include "components/variations/synthetic_trials_active_group_id_provider.h"
+#include "components/variations/variations_crash_keys.h"
 #include "components/variations/variations_http_header_provider.h"
 #include "ios/chrome/browser/about_flags.h"
 #include "ios/chrome/browser/application_context_impl.h"
@@ -36,7 +39,7 @@
 #include "ios/chrome/browser/chrome_paths.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #include "ios/chrome/browser/install_time_util.h"
-#include "ios/chrome/browser/metrics/field_trial_synchronizer.h"
+#include "ios/chrome/browser/metrics/ios_expired_histograms_array.h"
 #include "ios/chrome/browser/open_from_clipboard/create_clipboard_recent_content.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/translate/translate_service_ios.h"
@@ -46,7 +49,7 @@
 #include "net/http/http_network_layer.h"
 #include "net/http/http_stream_factory.h"
 #include "net/url_request/url_request.h"
-#include "rlz/features/features.h"
+#include "rlz/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -78,7 +81,7 @@ void IOSChromeMainParts::PreMainMessageLoopStart() {
   CHECK(!loaded_locale.empty());
 
   base::FilePath resources_pack_path;
-  PathService::Get(ios::FILE_RESOURCES_PACK, &resources_pack_path);
+  base::PathService::Get(ios::FILE_RESOURCES_PACK, &resources_pack_path);
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       resources_pack_path, ui::SCALE_FACTOR_100P);
 }
@@ -99,7 +102,7 @@ void IOSChromeMainParts::PreCreateThreads() {
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   base::FilePath local_state_path;
-  CHECK(PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
+  CHECK(base::PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
   application_context_.reset(new ApplicationContextImpl(
       local_state_task_runner.get(), parsed_command_line_,
       l10n_util::GetLocaleOverride()));
@@ -126,8 +129,10 @@ void IOSChromeMainParts::PreCreateThreads() {
   // initialization is handled in PreMainMessageLoopRun since it posts tasks.
   SetupFieldTrials();
 
-  // Initialize FieldTrialSynchronizer system.
-  field_trial_synchronizer_.reset(new ios::FieldTrialSynchronizer);
+  variations::InitCrashKeys();
+
+  metrics::EnableExpiryChecker(::kExpiredHistogramsHashes,
+                               ::kNumExpiredHistograms);
 
   application_context_->PreCreateThreads();
 }
@@ -189,9 +194,6 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
         last_used_browser_state->GetPrefs());
     variations_service->PerformPreMainMessageLoopStartup();
   }
-
-  translate::TranslateDownloadManager::RequestLanguageList(
-      last_used_browser_state->GetPrefs());
 }
 
 void IOSChromeMainParts::PostMainMessageLoopRun() {
@@ -228,14 +230,16 @@ void IOSChromeMainParts::SetupFieldTrials() {
   application_context_->GetVariationsService()->SetupFieldTrials(
       "dummy-enable-gpu-benchmarking", switches::kEnableFeatures,
       switches::kDisableFeatures,
-      /*unforceable_field_trials=*/std::set<std::string>(),
-      std::move(feature_list), &variation_ids, &ios_field_trials_);
+      /*unforceable_field_trials=*/std::set<std::string>(), variation_ids,
+      std::move(feature_list), &ios_field_trials_);
 }
 
 void IOSChromeMainParts::SetupMetrics() {
   metrics::MetricsService* metrics = application_context_->GetMetricsService();
   metrics->synthetic_trial_registry()->AddSyntheticTrialObserver(
       variations::VariationsHttpHeaderProvider::GetInstance());
+  metrics->synthetic_trial_registry()->AddSyntheticTrialObserver(
+      variations::SyntheticTrialsActiveGroupIdProvider::GetInstance());
   // Now that field trials have been created, initializes metrics recording.
   metrics->InitializeMetricsRecordingState();
 }

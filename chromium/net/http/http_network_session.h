@@ -30,9 +30,9 @@
 #include "net/http/http_stream_factory.h"
 #include "net/quic/chromium/quic_stream_factory.h"
 #include "net/socket/next_proto.h"
-#include "net/spdy/chromium/spdy_session_pool.h"
-#include "net/spdy/core/spdy_protocol.h"
+#include "net/spdy/spdy_session_pool.h"
 #include "net/ssl/ssl_client_auth_cache.h"
+#include "net/third_party/spdy/core/spdy_protocol.h"
 
 namespace base {
 class Value;
@@ -57,10 +57,13 @@ class HttpResponseBodyDrainer;
 class HttpServerProperties;
 class NetLog;
 class NetworkQualityProvider;
-class NetworkThrottleManager;
 class ProxyDelegate;
-class ProxyService;
+class ProxyResolutionService;
+}  // namespace net
+namespace quic {
 class QuicClock;
+}  // namespace quic
+namespace net {
 class QuicCryptoClientStreamFactory;
 class SocketPerformanceWatcherFactory;
 class SOCKSClientSocketPool;
@@ -68,6 +71,7 @@ class SSLClientSocketPool;
 class SSLConfigService;
 class TransportClientSocketPool;
 class TransportSecurityState;
+class WebSocketEndpointLockManager;
 
 // Specifies the maximum HPACK dynamic table size the server is allowed to set.
 const uint32_t kSpdyMaxHeaderTableSize = 64 * 1024;
@@ -109,11 +113,13 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     size_t spdy_session_max_recv_window_size;
     // HTTP/2 connection settings.
     // Unknown settings will still be sent to the server.
-    SettingsMap http2_settings;
+    spdy::SettingsMap http2_settings;
     // Source of time for SPDY connections.
     SpdySessionPool::TimeFunc time_func;
     // Whether to enable HTTP/2 Alt-Svc entries.
     bool enable_http2_alternative_service;
+    // Whether to enable Websocket over HTTP/2.
+    bool enable_websocket_over_http2;
 
     // Enables QUIC support.
     bool enable_quic;
@@ -121,7 +127,7 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // QUIC runtime configuration options.
 
     // Versions of QUIC which may be used.
-    QuicTransportVersionVector quic_supported_versions;
+    quic::QuicTransportVersionVector quic_supported_versions;
     // User agent description to send in the QUIC handshake.
     std::string quic_user_agent_id;
     // Limit on the size of QUIC packets.
@@ -132,10 +138,12 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // QUIC will be used for all connections in this set.
     std::set<HostPortPair> origins_to_force_quic_on;
     // Set of QUIC tags to send in the handshake's connection options.
-    QuicTagVector quic_connection_options;
+    quic::QuicTagVector quic_connection_options;
     // Set of QUIC tags to send in the handshake's connection options that only
     // affect the client.
-    QuicTagVector quic_client_connection_options;
+    quic::QuicTagVector quic_client_connection_options;
+    // Enables experimental optimization for receiving data in UDPSocket.
+    bool quic_enable_socket_recv_optimization;
 
     // Active QUIC experiments
 
@@ -150,6 +158,9 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     bool support_ietf_format_quic_altsvc;
     // If true, all QUIC sessions are closed when any local IP address changes.
     bool quic_close_sessions_on_ip_change;
+    // If true, all QUIC sessions are marked as goaway when any local IP address
+    // changes.
+    bool quic_goaway_sessions_on_ip_change;
     // Specifies QUIC idle connection state lifetime.
     int quic_idle_connection_timeout_seconds;
     // Specifies the reduced ping timeout subsequent connections should use when
@@ -160,14 +171,6 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     int quic_max_time_before_crypto_handshake_seconds;
     // Maximum idle time before the crypto handshake has completed.
     int quic_max_idle_time_before_crypto_handshake_seconds;
-    // If true, QUIC will attempt to explicitly use default network for sockets.
-    bool quic_connect_using_default_network;
-    // If true, active QUIC sessions may be migrated onto a new network when
-    // the platform indicates that the default network is changing.
-    bool quic_migrate_sessions_on_network_change;
-    // If true, active QUIC sessions experiencing poor connectivity may be
-    // migrated onto a new network.
-    bool quic_migrate_sessions_early;
     // If true, connection migration v2 will be used to migrate existing
     // sessions to network when the platform indicates that the default network
     // is changing.
@@ -204,6 +207,8 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
 
     // Enable support for Token Binding.
     bool enable_token_binding;
+    // Enable Channel ID. Channel ID is being deprecated.
+    bool enable_channel_id;
 
     // Enable HTTP/0.9 for HTTP/HTTPS on ports other than the default one for
     // each protocol.
@@ -227,7 +232,7 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     TransportSecurityState* transport_security_state;
     CTVerifier* cert_transparency_verifier;
     CTPolicyEnforcer* ct_policy_enforcer;
-    ProxyService* proxy_service;
+    ProxyResolutionService* proxy_resolution_service;
     SSLConfigService* ssl_config_service;
     HttpAuthHandlerFactory* http_auth_handler_factory;
     HttpServerProperties* http_server_properties;
@@ -236,9 +241,9 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     NetworkQualityProvider* network_quality_provider;
 
     // Source of time for QUIC connections.
-    QuicClock* quic_clock;
+    quic::QuicClock* quic_clock;
     // Source of entropy for QUIC connections.
-    QuicRandom* quic_random;
+    quic::QuicRandom* quic_random;
     // Optional factory to use for creating QuicCryptoClientStreams.
     QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory;
 
@@ -277,8 +282,13 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
       const HostPortPair& proxy_server);
 
   CertVerifier* cert_verifier() { return cert_verifier_; }
-  ProxyService* proxy_service() { return proxy_service_; }
-  SSLConfigService* ssl_config_service() { return ssl_config_service_.get(); }
+  ProxyResolutionService* proxy_resolution_service() {
+      return proxy_resolution_service_;
+  }
+  SSLConfigService* ssl_config_service() { return ssl_config_service_; }
+  WebSocketEndpointLockManager* websocket_endpoint_lock_manager() {
+    return websocket_endpoint_lock_manager_.get();
+  }
   SpdySessionPool* spdy_session_pool() { return &spdy_session_pool_; }
   QuicStreamFactory* quic_stream_factory() { return &quic_stream_factory_; }
   HttpAuthHandlerFactory* http_auth_handler_factory() {
@@ -289,9 +299,6 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
   }
   HttpStreamFactory* http_stream_factory() {
     return http_stream_factory_.get();
-  }
-  NetworkThrottleManager* throttler() {
-    return network_stream_throttler_.get();
   }
   NetLog* net_log() {
     return net_log_;
@@ -356,12 +363,13 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
   CertVerifier* const cert_verifier_;
   HttpAuthHandlerFactory* const http_auth_handler_factory_;
 
-  // Not const since it's modified by HttpNetworkSessionPeer for testing.
-  ProxyService* proxy_service_;
-  const scoped_refptr<SSLConfigService> ssl_config_service_;
+  ProxyResolutionService* const proxy_resolution_service_;
+  SSLConfigService* const ssl_config_service_;
 
   HttpAuthCache http_auth_cache_;
   SSLClientAuthCache ssl_client_auth_cache_;
+  std::unique_ptr<WebSocketEndpointLockManager>
+      websocket_endpoint_lock_manager_;
   std::unique_ptr<ClientSocketPoolManager> normal_socket_pool_manager_;
   std::unique_ptr<ClientSocketPoolManager> websocket_socket_pool_manager_;
   std::unique_ptr<ServerPushDelegate> push_delegate_;
@@ -370,8 +378,6 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
   std::unique_ptr<HttpStreamFactory> http_stream_factory_;
   std::map<HttpResponseBodyDrainer*, std::unique_ptr<HttpResponseBodyDrainer>>
       response_drainers_;
-  std::unique_ptr<NetworkThrottleManager> network_stream_throttler_;
-
   NextProtoVector next_protos_;
 
   Params params_;

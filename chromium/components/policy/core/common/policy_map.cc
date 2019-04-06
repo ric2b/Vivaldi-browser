@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 
 namespace policy {
@@ -16,9 +15,8 @@ PolicyMap::Entry::Entry() = default;
 
 PolicyMap::Entry::~Entry() = default;
 
-PolicyMap::Entry::Entry(Entry&&) = default;
-
-PolicyMap::Entry& PolicyMap::Entry::operator=(Entry&&) = default;
+PolicyMap::Entry::Entry(Entry&&) noexcept = default;
+PolicyMap::Entry& PolicyMap::Entry::operator=(Entry&&) noexcept = default;
 
 PolicyMap::Entry PolicyMap::Entry::DeepCopy() const {
   Entry copy;
@@ -27,6 +25,7 @@ PolicyMap::Entry PolicyMap::Entry::DeepCopy() const {
   copy.source = source;
   if (value)
     copy.value = value->CreateDeepCopy();
+  copy.error = error;
   if (external_data_fetcher) {
     copy.external_data_fetcher.reset(
         new ExternalDataFetcher(*external_data_fetcher));
@@ -49,6 +48,7 @@ bool PolicyMap::Entry::Equals(const PolicyMap::Entry& other) const {
   return level == other.level && scope == other.scope &&
          source == other.source &&  // Necessary for PolicyUIHandler observers.
                                     // They have to update when sources change.
+         error == other.error &&
          ((!value && !other.value) ||
           (value && other.value && *value == *other.value)) &&
          ExternalDataFetcher::Equals(external_data_fetcher.get(),
@@ -66,8 +66,18 @@ const PolicyMap::Entry* PolicyMap::Get(const std::string& policy) const {
   return entry == map_.end() ? nullptr : &entry->second;
 }
 
+PolicyMap::Entry* PolicyMap::GetMutable(const std::string& policy) {
+  PolicyMapType::iterator entry = map_.find(policy);
+  return entry == map_.end() ? nullptr : &entry->second;
+}
+
 const base::Value* PolicyMap::GetValue(const std::string& policy) const {
   PolicyMapType::const_iterator entry = map_.find(policy);
+  return entry == map_.end() ? nullptr : entry->second.value.get();
+}
+
+base::Value* PolicyMap::GetMutableValue(const std::string& policy) {
+  PolicyMapType::iterator entry = map_.find(policy);
   return entry == map_.end() ? nullptr : entry->second.value.get();
 }
 
@@ -89,6 +99,10 @@ void PolicyMap::Set(
 
 void PolicyMap::Set(const std::string& policy, Entry entry) {
   map_[policy] = std::move(entry);
+}
+
+void PolicyMap::SetError(const std::string& policy, const std::string& error) {
+  map_[policy].error = error;
 }
 
 void PolicyMap::SetSourceForAll(PolicySource source) {

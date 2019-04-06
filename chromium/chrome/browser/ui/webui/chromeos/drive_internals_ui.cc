@@ -138,6 +138,7 @@ std::string FormatEntry(const base::FilePath& path,
   StringAppendF(&out, "  shared: %s\n", entry.shared() ? "true" : "false");
   StringAppendF(&out, "  shared_with_me: %s\n",
                 entry.shared_with_me() ? "true" : "false");
+  StringAppendF(&out, "  alternate_url: %s\n", entry.alternate_url().c_str());
 
   const drive::PlatformFileInfoProto& file_info = entry.file_info();
   StringAppendF(&out, "  file_info\n");
@@ -167,8 +168,6 @@ std::string FormatEntry(const base::FilePath& path,
   if (entry.has_file_specific_info()) {
     const drive::FileSpecificInfo& file_specific_info =
         entry.file_specific_info();
-    StringAppendF(&out, "    alternate_url: %s\n",
-                  file_specific_info.alternate_url().c_str());
     StringAppendF(&out, "    content_mime_type: %s\n",
                   file_specific_info.content_mime_type().c_str());
     StringAppendF(&out, "    file_md5: %s\n",
@@ -247,8 +246,6 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
       drive::DriveServiceInterface* drive_service);
   void UpdateAppListSection(
       drive::DriveServiceInterface* drive_service);
-  void UpdateLocalMetadataSection(
-      drive::DebugInfoCollector* debug_info_collector);
   void UpdateDeltaUpdateStatusSection(
       drive::DebugInfoCollector* debug_info_collector);
   void UpdateInFlightOperationsSection(drive::JobListInterface* job_list);
@@ -291,13 +288,11 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
   void OnGetAppList(google_apis::DriveApiErrorCode status,
                     std::unique_ptr<google_apis::AppList> app_list);
 
-  // Callback for DebugInfoCollector::GetMetadata for local update.
-  void OnGetFilesystemMetadataForLocal(
-      const drive::FileSystemMetadata& metadata);
-
   // Callback for DebugInfoCollector::GetMetadata for delta update.
   void OnGetFilesystemMetadataForDeltaUpdate(
-      const drive::FileSystemMetadata& metadata);
+      const drive::FileSystemMetadata& metadata,
+      const std::map<std::string, drive::FileSystemMetadata>&
+          team_drive_metadata);
 
   // Called when the page requests periodic update.
   void OnPeriodicUpdate(const base::ListValue* args);
@@ -375,28 +370,28 @@ void DriveInternalsWebUIHandler::OnGetAppList(
 void DriveInternalsWebUIHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "pageLoaded",
-      base::Bind(&DriveInternalsWebUIHandler::OnPageLoaded,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&DriveInternalsWebUIHandler::OnPageLoaded,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "periodicUpdate",
-      base::Bind(&DriveInternalsWebUIHandler::OnPeriodicUpdate,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&DriveInternalsWebUIHandler::OnPeriodicUpdate,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "clearAccessToken",
-      base::Bind(&DriveInternalsWebUIHandler::ClearAccessToken,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&DriveInternalsWebUIHandler::ClearAccessToken,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "clearRefreshToken",
-      base::Bind(&DriveInternalsWebUIHandler::ClearRefreshToken,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&DriveInternalsWebUIHandler::ClearRefreshToken,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "resetDriveFileSystem",
-      base::Bind(&DriveInternalsWebUIHandler::ResetDriveFileSystem,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&DriveInternalsWebUIHandler::ResetDriveFileSystem,
+                          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "listFileEntries",
-      base::Bind(&DriveInternalsWebUIHandler::ListFileEntries,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&DriveInternalsWebUIHandler::ListFileEntries,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 drive::DriveIntegrationService*
@@ -435,24 +430,30 @@ void DriveInternalsWebUIHandler::OnPageLoaded(const base::ListValue* args) {
   if (!integration_service)
     return;
 
-  drive::DriveServiceInterface* drive_service =
-      integration_service->drive_service();
-  DCHECK(drive_service);
-  drive::DebugInfoCollector* debug_info_collector =
-      integration_service->debug_info_collector();
-  DCHECK(debug_info_collector);
-
   UpdateDriveRelatedPreferencesSection();
-  UpdateConnectionStatusSection(drive_service);
-  UpdateAboutResourceSection(drive_service);
-  UpdateAppListSection(drive_service);
-  UpdateLocalMetadataSection(debug_info_collector);
-  UpdateDeltaUpdateStatusSection(debug_info_collector);
-  UpdateInFlightOperationsSection(integration_service->job_list());
   UpdateGCacheContentsSection();
-  UpdateCacheContentsSection(debug_info_collector);
   UpdateLocalStorageUsageSection();
   UpdatePathConfigurationsSection();
+
+  drive::DriveServiceInterface* drive_service =
+      integration_service->drive_service();
+  if (drive_service) {
+    UpdateConnectionStatusSection(drive_service);
+    UpdateAboutResourceSection(drive_service);
+    UpdateAppListSection(drive_service);
+  }
+
+  drive::DebugInfoCollector* debug_info_collector =
+      integration_service->debug_info_collector();
+  if (debug_info_collector) {
+    UpdateDeltaUpdateStatusSection(debug_info_collector);
+    UpdateCacheContentsSection(debug_info_collector);
+  }
+
+  drive::JobListInterface* job_list = integration_service->job_list();
+  if (job_list) {
+    UpdateInFlightOperationsSection(job_list);
+  }
 
   // When the drive-internals page is reloaded by the reload key, the page
   // content is recreated, but this WebUI object is not (instead, OnPageLoaded
@@ -541,27 +542,6 @@ void DriveInternalsWebUIHandler::UpdateAppListSection(
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void DriveInternalsWebUIHandler::UpdateLocalMetadataSection(
-    drive::DebugInfoCollector* debug_info_collector) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(debug_info_collector);
-
-  debug_info_collector->GetMetadata(
-      base::Bind(&DriveInternalsWebUIHandler::OnGetFilesystemMetadataForLocal,
-                 weak_ptr_factory_.GetWeakPtr()));
-}
-
-void DriveInternalsWebUIHandler::OnGetFilesystemMetadataForLocal(
-    const drive::FileSystemMetadata& metadata) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  base::DictionaryValue local_metadata;
-  local_metadata.SetDouble("account-largest-changestamp-local",
-                           metadata.largest_changestamp);
-  local_metadata.SetBoolean("account-metadata-refreshing", metadata.refreshing);
-  web_ui()->CallJavascriptFunctionUnsafe("updateLocalMetadata", local_metadata);
-}
-
 void DriveInternalsWebUIHandler::ClearAccessToken(const base::ListValue* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -617,7 +597,9 @@ void DriveInternalsWebUIHandler::UpdateDeltaUpdateStatusSection(
 }
 
 void DriveInternalsWebUIHandler::OnGetFilesystemMetadataForDeltaUpdate(
-    const drive::FileSystemMetadata& metadata) {
+    const drive::FileSystemMetadata& metadata,
+    const std::map<std::string, drive::FileSystemMetadata>&
+        team_drive_metadata) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   Profile* profile = Profile::FromWebUI(web_ui());
@@ -630,13 +612,40 @@ void DriveInternalsWebUIHandler::OnGetFilesystemMetadataForDeltaUpdate(
   delta_update_status.SetBoolean(
       "push-notification-enabled",
       drive_notification_manager->push_notification_enabled());
-  delta_update_status.SetString(
-      "last-update-check-time",
-      google_apis::util::FormatTimeAsStringLocaltime(
-          metadata.last_update_check_time));
-  delta_update_status.SetString(
-      "last-update-check-error",
+
+  auto items = std::make_unique<base::ListValue>();
+  // Users default corpus first.
+  auto app_data = std::make_unique<base::DictionaryValue>();
+  app_data->SetString("id", "default corpus");
+  app_data->SetString("root_entry_path", metadata.path);
+  app_data->SetString("start_page_token", metadata.start_page_token);
+  app_data->SetString("last_check_time",
+                      google_apis::util::FormatTimeAsStringLocaltime(
+                          metadata.last_update_check_time));
+  app_data->SetString(
+      "last_check_result",
       drive::FileErrorToString(metadata.last_update_check_error));
+  app_data->SetString("refreshing", metadata.refreshing ? "Yes" : "No");
+
+  items->Append(std::move(app_data));
+
+  for (const auto& team_drive : team_drive_metadata) {
+    app_data = std::make_unique<base::DictionaryValue>();
+    app_data->SetString("id", team_drive.first);
+    app_data->SetString("root_entry_path", team_drive.second.path);
+    app_data->SetString("start_page_token", team_drive.second.start_page_token);
+    app_data->SetString("last_check_time",
+                        google_apis::util::FormatTimeAsStringLocaltime(
+                            team_drive.second.last_update_check_time));
+    app_data->SetString(
+        "last_check_result",
+        drive::FileErrorToString(team_drive.second.last_update_check_error));
+    app_data->SetString("refreshing",
+                        team_drive.second.refreshing ? "Yes" : "No");
+    items->Append(std::move(app_data));
+  }
+
+  delta_update_status.Set("items", std::move(items));
 
   web_ui()->CallJavascriptFunctionUnsafe("updateDeltaUpdateStatus",
                                          delta_update_status);
@@ -712,7 +721,7 @@ void DriveInternalsWebUIHandler::UpdateLocalStorageUsageSection() {
 
   // Propagate the amount of local free space in bytes.
   base::FilePath home_path;
-  if (PathService::Get(base::DIR_HOME, &home_path)) {
+  if (base::PathService::Get(base::DIR_HOME, &home_path)) {
     base::DictionaryValue* local_storage_summary = new base::DictionaryValue;
     base::PostTaskWithTraitsAndReply(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
@@ -733,7 +742,7 @@ void DriveInternalsWebUIHandler::UpdateCacheContentsSection(
   debug_info_collector->IterateFileCache(
       base::Bind(&DriveInternalsWebUIHandler::UpdateCacheEntry,
                  weak_ptr_factory_.GetWeakPtr()),
-      base::Bind(&base::DoNothing));
+      base::DoNothing());
 }
 
 void DriveInternalsWebUIHandler::UpdateEventLogSection() {
@@ -888,8 +897,12 @@ void DriveInternalsWebUIHandler::OnPeriodicUpdate(const base::ListValue* args) {
   if (!integration_service)
     return;
 
-  UpdateInFlightOperationsSection(integration_service->job_list());
   UpdateEventLogSection();
+
+  drive::JobListInterface* job_list = integration_service->job_list();
+  if (job_list) {
+    UpdateInFlightOperationsSection(job_list);
+  }
 }
 
 }  // namespace

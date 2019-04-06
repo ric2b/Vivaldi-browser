@@ -20,11 +20,12 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_storage_delegate.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/lofi_decider.h"
 #include "components/data_reduction_proxy/core/common/lofi_ui_service.h"
 #include "components/data_reduction_proxy/core/common/resource_type_provider.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 
 namespace base {
 class Value;
@@ -119,7 +120,10 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
       int64_t original_size,
       bool data_reduction_proxy_enabled,
       DataReductionProxyRequestType request_type,
-      const std::string& mime_type);
+      const std::string& mime_type,
+      bool is_user_traffic,
+      data_use_measurement::DataUseUserData::DataUseContentType content_type,
+      int32_t service_hash_code);
 
   // Overrides of DataReductionProxyEventStorageDelegate. Bridges to the UI
   // thread objects.
@@ -140,6 +144,14 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
 
   // Called when the user clears the browsing history.
   void DeleteBrowsingHistory(const base::Time start, const base::Time end);
+
+  // Notifies |this| that the user has requested to clear the browser
+  // cache. This method is not called if only a subset of site entries are
+  // cleared.
+  void OnCacheCleared(const base::Time start, const base::Time end);
+
+  // Forwards proxy authentication headers to the UI thread.
+  void UpdateProxyRequestHeaders(net::HttpRequestHeaders headers);
 
   // Various accessor methods.
   DataReductionProxyConfigurator* configurator() const {

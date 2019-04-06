@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 
 class GURL;
 
@@ -25,6 +26,21 @@ class URLRequest;
 }
 
 namespace client_hints {
+
+namespace internal {
+
+// Returns |rtt| after adding host-specific random noise, and rounding it as
+// per the NetInfo spec to improve privacy.
+unsigned long RoundRtt(const std::string& host,
+                       const base::Optional<base::TimeDelta>& rtt);
+
+// Returns downlink (in Mbps) after adding host-specific random noise to
+// |downlink_kbps| (which is in Kbps), and rounding it as per the NetInfo spec
+// to improve privacy.
+double RoundKbpsToMbps(const std::string& host,
+                       const base::Optional<int32_t>& downlink_kbps);
+
+}  // namespace internal
 
 // Allow the embedder to return additional headers related to client hints that
 // should be sent when fetching |url|. May return a nullptr.

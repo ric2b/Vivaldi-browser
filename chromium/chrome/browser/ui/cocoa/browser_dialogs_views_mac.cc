@@ -15,9 +15,9 @@
 #include "chrome/browser/ui/cocoa/bubble_anchor_helper_views.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
+#include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 #include "chrome/browser/ui/views/extensions/extension_installed_bubble_view.h"
-#include "chrome/browser/ui/views/first_run_bubble.h"
 #include "chrome/browser/ui/views/importer/import_lock_dialog_view.h"
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
@@ -46,11 +46,11 @@ bool ShowAllDialogsWithViewsToolkit() {
              features::kShowAllDialogsWithViewsToolkit);
 }
 
-void ShowPageInfoBubbleViews(
-    Browser* browser,
-    content::WebContents* web_contents,
-    const GURL& virtual_url,
-    const security_state::SecurityInfo& security_info) {
+void ShowPageInfoBubbleViews(Browser* browser,
+                             content::WebContents* web_contents,
+                             const GURL& virtual_url,
+                             const security_state::SecurityInfo& security_info,
+                             bubble_anchor_util::Anchor anchor) {
   // Don't show the bubble again if it's already showing. A second click on the
   // location icon in the omnibox will dismiss an open bubble. This behaviour is
   // consistent with the non-Mac views implementation.
@@ -63,12 +63,18 @@ void ShowPageInfoBubbleViews(
     return;
   }
 
+  views::View* anchor_view =
+      bubble_anchor_util::GetPageInfoAnchorView(browser, anchor);
+  gfx::Rect anchor_rect =
+      anchor_view ? gfx::Rect()
+                  : bubble_anchor_util::GetPageInfoAnchorRect(browser);
+  gfx::NativeWindow parent_window = browser->window()->GetNativeWindow();
   views::BubbleDialogDelegateView* bubble =
-      PageInfoBubbleView::CreatePageInfoBubble(browser, web_contents,
-                                               virtual_url, security_info);
+      PageInfoBubbleView::CreatePageInfoBubble(
+          anchor_view, anchor_rect, parent_window, browser->profile(),
+          web_contents, virtual_url, security_info);
   bubble->GetWidget()->Show();
-  KeepBubbleAnchored(
-      bubble, GetPageInfoDecoration(browser->window()->GetNativeWindow()));
+  KeepBubbleAnchored(bubble, GetPageInfoDecoration(parent_window));
 }
 
 void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
@@ -148,17 +154,14 @@ void ShowImportLockDialogViews(gfx::NativeWindow parent,
   return ImportLockDialogView::Show(parent, callback, importer_locktext);
 }
 
-void ShowFirstRunBubbleViews(Browser* browser) {
-  return FirstRunBubble::Show(browser);
-}
-
 void ShowPasswordReuseWarningDialog(
     content::WebContents* web_contents,
     safe_browsing::ChromePasswordProtectionService* service,
+    safe_browsing::ReusedPasswordType password_type,
     safe_browsing::OnWarningDone done_callback) {
   safe_browsing::PasswordReuseModalWarningDialog* dialog =
       new safe_browsing::PasswordReuseModalWarningDialog(
-          web_contents, service, std::move(done_callback));
+          web_contents, service, password_type, std::move(done_callback));
   constrained_window::CreateBrowserModalDialogViews(
       dialog, web_contents->GetTopLevelNativeWindow())
       ->Show();

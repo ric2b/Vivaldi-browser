@@ -9,16 +9,6 @@
 namespace chromeos {
 namespace system {
 
-TEST(NameValuePairsParser, TestGetSingleValueFromTool) {
-  NameValuePairsParser::NameValueMap map;
-  NameValuePairsParser parser(&map);
-  const char* command[] = { "/bin/echo", "Foo" };
-  EXPECT_TRUE(parser.GetSingleValueFromTool(arraysize(command), command,
-                                            "foo"));
-  ASSERT_EQ(1U, map.size());
-  EXPECT_EQ("Foo", map["foo"]);
-}
-
 TEST(NameValuePairsParser, TestParseNameValuePairs) {
   NameValuePairsParser::NameValueMap map;
   NameValuePairsParser parser(&map);
@@ -112,6 +102,17 @@ TEST(NameValuePairsParser, TestParseNameValuePairsFromTool) {
   EXPECT_EQ("", map["key"]);
   EXPECT_EQ("LFS=0,0 LF=1784220250,2971030570 LK=9064076660,9342689170",
             map["vdat_timers"]);
+}
+
+TEST(NameValuePairsParser, DeletePairsWithValue) {
+  NameValuePairsParser::NameValueMap map = {
+      {"foo", "good"}, {"bar", "bad"}, {"baz", "good"}, {"end", "bad"},
+  };
+  NameValuePairsParser parser(&map);
+  parser.DeletePairsWithValue("bad");
+  ASSERT_EQ(2u, map.size());
+  EXPECT_EQ("good", map["foo"]);
+  EXPECT_EQ("good", map["baz"]);
 }
 
 }  // namespace system

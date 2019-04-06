@@ -11,10 +11,6 @@ namespace app_list {
 
 class APP_LIST_MODEL_EXPORT SearchBoxModelObserver {
  public:
-  // Invoked when the some properties of the speech recognition button is
-  // changed.
-  virtual void SpeechRecognitionButtonPropChanged() = 0;
-
   // Invoked when hint text is changed.
   virtual void HintTextChanged() = 0;
 
@@ -23,6 +19,9 @@ class APP_LIST_MODEL_EXPORT SearchBoxModelObserver {
 
   // Invoked when text or voice search flag is changed.
   virtual void Update() = 0;
+
+  // Invoked when the search engine is changed.
+  virtual void SearchEngineChanged() = 0;
 
  protected:
   virtual ~SearchBoxModelObserver() {}

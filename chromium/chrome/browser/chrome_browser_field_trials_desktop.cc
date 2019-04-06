@@ -24,13 +24,12 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "chrome/browser/prerender/prerender_field_trial.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/metrics/persistent_system_profile.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/common/content_switches.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 #if defined(OS_WIN)
 #include "base/win/pe_image.h"
@@ -53,7 +52,6 @@ namespace chrome {
 namespace {
 
 void SetupStunProbeTrial() {
-#if BUILDFLAG(ENABLE_WEBRTC)
   std::map<std::string, std::string> params;
   if (!variations::GetVariationParams("StunProbeTrial2", &params))
     return;
@@ -70,7 +68,6 @@ void SetupStunProbeTrial() {
 
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kWebRtcStunProbeTrialParameter, cmd_param);
-#endif
 }
 
 #if defined(OS_WIN)
@@ -92,7 +89,7 @@ void RecordChromeModuleInfo(
 
   GUID guid;
   DWORD age;
-  pe.GetDebugId(&guid, &age);
+  pe.GetDebugId(&guid, &age, /* pdb_file= */ nullptr);
   module.age = age;
   static_assert(sizeof(module.identifier) >= sizeof(guid),
                 "Identifier field must be able to contain a GUID.");
@@ -207,11 +204,10 @@ void SetupStabilityDebugging() {
 }  // namespace
 
 void SetupDesktopFieldTrials() {
-  prerender::ConfigurePrerender();
+  prerender::ConfigureNoStatePrefetch();
   SetupStunProbeTrial();
 #if defined(OS_WIN)
   SetupStabilityDebugging();
-  base::FeatureList::IsEnabled(features::kModuleDatabase);
 #endif  // defined(OS_WIN)
 }
 

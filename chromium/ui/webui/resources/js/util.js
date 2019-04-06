@@ -56,7 +56,7 @@ function announceAccessibleMessage(msg) {
  * @param {string} s The URL to generate the CSS url for.
  * @return {string} The CSS url string.
  */
-function url(s) {
+function getUrlForCss(s) {
   // http://www.w3.org/TR/css3-values/#uris
   // Parentheses, commas, whitespace characters, single quotes (') and double
   // quotes (") appearing in a URI must be escaped with a backslash
@@ -200,13 +200,6 @@ function queryRequiredElement(selectors, opt_context) {
       element, HTMLElement, 'Missing required element: ' + selectors);
 }
 
-// We don't have access to window.parent, so we'll receive the window
-// message like this.
-var vivaldiWindow = null;
-window.addEventListener("message", function(event) {
-  vivaldiWindow = event.source;
-});
-
 // Handle click on a link. If the link points to a chrome: or file: url, then
 // call into the browser to do the navigation.
 ['click', 'auxclick'].forEach(function(eventName) {
@@ -242,13 +235,6 @@ window.addEventListener("message", function(event) {
       return;
 
     anchor = /** @type {!HTMLAnchorElement} */ (anchor);
-
-    // Send this URL to vivaldi.
-    if (vivaldiWindow) {
-      e.preventDefault();
-      vivaldiWindow.postMessage(anchor.href, "*");
-    }
-
     if ((anchor.protocol == 'file:' || anchor.protocol == 'about:') &&
         (e.button == 0 || e.button == 1)) {
       chrome.send('navigateToUrl', [

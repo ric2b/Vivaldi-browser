@@ -10,7 +10,7 @@
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission.mojom.h"
 
 namespace url {
 class Origin;
@@ -49,6 +49,9 @@ class CONTENT_EXPORT PermissionServiceContext : public WebContentsObserver {
   GURL GetEmbeddingOrigin() const;
 
   RenderFrameHost* render_frame_host() const;
+  RenderProcessHost* render_process_host() const {
+    return render_process_host_;
+  }
 
  private:
   class PermissionSubscription;

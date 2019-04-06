@@ -5,35 +5,48 @@
 package org.chromium.chrome.browser.preferences.password;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Fragment;
 import android.app.FragmentManager;
 import android.app.FragmentTransaction;
 import android.content.Intent;
+import android.os.Bundle;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 
 /**
  * Tests for the "Save Passwords" settings screen.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class PasswordReauthenticationFragmentTest {
+    // All reauthentication scopes to be checked in the tests.
+    private static final int[] ALL_SCOPES = {ReauthenticationManager.ReauthScope.ONE_AT_A_TIME,
+            ReauthenticationManager.ReauthScope.BULK};
+
     /**
      * Creates a dummy fragment, pushes the reauth fragment on top of it, then resolves the activity
      * for the reauth fragment and checks that back stack is in a correct state.
      * @param resultCode The code which is passed to the reauth fragment as the result of the
      *                   activity.
+     * @param scope The scope of the reauthentication.
      */
-    private void checkPopFromBackStackOnResult(int resultCode) {
+    private void checkPopFromBackStackOnResult(
+            int resultCode, @ReauthenticationManager.ReauthScope int scope) {
         PasswordReauthenticationFragment passwordReauthentication =
                 new PasswordReauthenticationFragment();
+        Bundle args = new Bundle();
+        args.putInt(PasswordReauthenticationFragment.DESCRIPTION_ID, 0);
+        args.putSerializable(PasswordReauthenticationFragment.SCOPE_ID, scope);
+        passwordReauthentication.setArguments(args);
 
         // Replacement fragment for PasswordEntryEditor, which is the fragment that
         // replaces PasswordReauthentication after popBackStack is called.
@@ -70,19 +83,33 @@ public class PasswordReauthenticationFragmentTest {
 
     /**
      * Ensure that upon successful reauthentication PasswordReauthenticationFragment is popped from
-     * the FragmentManager backstack.
+     * the FragmentManager backstack and the reauthentication is marked as valid.
      */
     @Test
     public void testOnOkActivityResult() {
-        checkPopFromBackStackOnResult(Activity.RESULT_OK);
+        for (int scope : ALL_SCOPES) {
+            // Ensure that the reauthentication state is changed by setting it to fail the final
+            // expectation.
+            ReauthenticationManager.resetLastReauth();
+
+            checkPopFromBackStackOnResult(Activity.RESULT_OK, scope);
+            assertTrue(ReauthenticationManager.authenticationStillValid(scope));
+        }
     }
 
     /**
      * Ensure that upon canceled reauthentication PasswordReauthenticationFragment is popped from
-     * the FragmentManager backstack.
+     * the FragmentManager backstack and the reauthentication is marked as invalid.
      */
     @Test
     public void testOnCanceledActivityResult() {
-        checkPopFromBackStackOnResult(Activity.RESULT_CANCELED);
+        for (int scope : ALL_SCOPES) {
+            // Ensure that the reauthentication state is changed by setting it to fail the final
+            // expectation.
+            ReauthenticationManager.recordLastReauth(System.currentTimeMillis(), scope);
+
+            checkPopFromBackStackOnResult(Activity.RESULT_CANCELED, scope);
+            assertFalse(ReauthenticationManager.authenticationStillValid(scope));
+        }
     }
 }

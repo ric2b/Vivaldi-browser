@@ -1,11 +1,11 @@
 #if defined(__x86_64__) && !defined(OPENSSL_NO_ASM)
 .text	
 
-.globl	_aesni_encrypt
-.private_extern _aesni_encrypt
+.globl	_aes_hw_encrypt
+.private_extern _aes_hw_encrypt
 
 .p2align	4
-_aesni_encrypt:
+_aes_hw_encrypt:
 	movups	(%rdi),%xmm2
 	movl	240(%rdx),%eax
 	movups	(%rdx),%xmm0
@@ -26,11 +26,11 @@ L$oop_enc1_1:
 	.byte	0xf3,0xc3
 
 
-.globl	_aesni_decrypt
-.private_extern _aesni_decrypt
+.globl	_aes_hw_decrypt
+.private_extern _aes_hw_decrypt
 
 .p2align	4
-_aesni_decrypt:
+_aes_hw_decrypt:
 	movups	(%rdi),%xmm2
 	movl	240(%rdx),%eax
 	movups	(%rdx),%xmm0
@@ -492,11 +492,11 @@ L$dec_loop8_enter:
 .byte	102,68,15,56,223,200
 	.byte	0xf3,0xc3
 
-.globl	_aesni_ecb_encrypt
-.private_extern _aesni_ecb_encrypt
+.globl	_aes_hw_ecb_encrypt
+.private_extern _aes_hw_ecb_encrypt
 
 .p2align	4
-_aesni_ecb_encrypt:
+_aes_hw_ecb_encrypt:
 	andq	$-16,%rdx
 	jz	L$ecb_ret
 
@@ -835,11 +835,11 @@ L$ecb_ret:
 	pxor	%xmm1,%xmm1
 	.byte	0xf3,0xc3
 
-.globl	_aesni_ccm64_encrypt_blocks
-.private_extern _aesni_ccm64_encrypt_blocks
+.globl	_aes_hw_ccm64_encrypt_blocks
+.private_extern _aes_hw_ccm64_encrypt_blocks
 
 .p2align	4
-_aesni_ccm64_encrypt_blocks:
+_aes_hw_ccm64_encrypt_blocks:
 	movl	240(%rcx),%eax
 	movdqu	(%r8),%xmm6
 	movdqa	L$increment64(%rip),%xmm9
@@ -899,11 +899,11 @@ L$ccm64_enc2_loop:
 	pxor	%xmm6,%xmm6
 	.byte	0xf3,0xc3
 
-.globl	_aesni_ccm64_decrypt_blocks
-.private_extern _aesni_ccm64_decrypt_blocks
+.globl	_aes_hw_ccm64_decrypt_blocks
+.private_extern _aes_hw_ccm64_decrypt_blocks
 
 .p2align	4
-_aesni_ccm64_decrypt_blocks:
+_aes_hw_ccm64_decrypt_blocks:
 	movl	240(%rcx),%eax
 	movups	(%r8),%xmm6
 	movdqu	(%r9),%xmm3
@@ -997,11 +997,12 @@ L$oop_enc1_6:
 	pxor	%xmm6,%xmm6
 	.byte	0xf3,0xc3
 
-.globl	_aesni_ctr32_encrypt_blocks
-.private_extern _aesni_ctr32_encrypt_blocks
+.globl	_aes_hw_ctr32_encrypt_blocks
+.private_extern _aes_hw_ctr32_encrypt_blocks
 
 .p2align	4
-_aesni_ctr32_encrypt_blocks:
+_aes_hw_ctr32_encrypt_blocks:
+
 	cmpq	$1,%rdx
 	jne	L$ctr32_bulk
 
@@ -1032,7 +1033,9 @@ L$oop_enc1_7:
 .p2align	4
 L$ctr32_bulk:
 	leaq	(%rsp),%r11
+
 	pushq	%rbp
+
 	subq	$128,%rsp
 	andq	$-16,%rsp
 
@@ -1567,17 +1570,23 @@ L$ctr32_done:
 	movaps	%xmm0,112(%rsp)
 	pxor	%xmm15,%xmm15
 	movq	-8(%r11),%rbp
+
 	leaq	(%r11),%rsp
+
 L$ctr32_epilogue:
 	.byte	0xf3,0xc3
 
-.globl	_aesni_xts_encrypt
-.private_extern _aesni_xts_encrypt
+
+.globl	_aes_hw_xts_encrypt
+.private_extern _aes_hw_xts_encrypt
 
 .p2align	4
-_aesni_xts_encrypt:
+_aes_hw_xts_encrypt:
+
 	leaq	(%rsp),%r11
+
 	pushq	%rbp
+
 	subq	$112,%rsp
 	andq	$-16,%rsp
 	movups	(%r9),%xmm2
@@ -2032,17 +2041,23 @@ L$xts_enc_ret:
 	pxor	%xmm14,%xmm14
 	pxor	%xmm15,%xmm15
 	movq	-8(%r11),%rbp
+
 	leaq	(%r11),%rsp
+
 L$xts_enc_epilogue:
 	.byte	0xf3,0xc3
 
-.globl	_aesni_xts_decrypt
-.private_extern _aesni_xts_decrypt
+
+.globl	_aes_hw_xts_decrypt
+.private_extern _aes_hw_xts_decrypt
 
 .p2align	4
-_aesni_xts_decrypt:
+_aes_hw_xts_decrypt:
+
 	leaq	(%rsp),%r11
+
 	pushq	%rbp
+
 	subq	$112,%rsp
 	andq	$-16,%rsp
 	movups	(%r9),%xmm2
@@ -2534,21 +2549,30 @@ L$xts_dec_ret:
 	pxor	%xmm14,%xmm14
 	pxor	%xmm15,%xmm15
 	movq	-8(%r11),%rbp
+
 	leaq	(%r11),%rsp
+
 L$xts_dec_epilogue:
 	.byte	0xf3,0xc3
 
-.globl	_aesni_ocb_encrypt
-.private_extern _aesni_ocb_encrypt
+
+.globl	_aes_hw_ocb_encrypt
+.private_extern _aes_hw_ocb_encrypt
 
 .p2align	5
-_aesni_ocb_encrypt:
+_aes_hw_ocb_encrypt:
+
 	leaq	(%rsp),%rax
 	pushq	%rbx
+
 	pushq	%rbp
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	movq	8(%rax),%rbx
 	movq	8+8(%rax),%rbp
 
@@ -2725,14 +2749,22 @@ L$ocb_enc_done:
 	pxor	%xmm14,%xmm14
 	pxor	%xmm15,%xmm15
 	leaq	40(%rsp),%rax
+
 	movq	-40(%rax),%r14
+
 	movq	-32(%rax),%r13
+
 	movq	-24(%rax),%r12
+
 	movq	-16(%rax),%rbp
+
 	movq	-8(%rax),%rbx
+
 	leaq	(%rax),%rsp
+
 L$ocb_enc_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -2941,17 +2973,23 @@ L$ocb_enc_loop1:
 	.byte	0xf3,0xc3
 
 
-.globl	_aesni_ocb_decrypt
-.private_extern _aesni_ocb_decrypt
+.globl	_aes_hw_ocb_decrypt
+.private_extern _aes_hw_ocb_decrypt
 
 .p2align	5
-_aesni_ocb_decrypt:
+_aes_hw_ocb_decrypt:
+
 	leaq	(%rsp),%rax
 	pushq	%rbx
+
 	pushq	%rbp
+
 	pushq	%r12
+
 	pushq	%r13
+
 	pushq	%r14
+
 	movq	8(%rax),%rbx
 	movq	8+8(%rax),%rbp
 
@@ -3150,14 +3188,22 @@ L$ocb_dec_done:
 	pxor	%xmm14,%xmm14
 	pxor	%xmm15,%xmm15
 	leaq	40(%rsp),%rax
+
 	movq	-40(%rax),%r14
+
 	movq	-32(%rax),%r13
+
 	movq	-24(%rax),%r12
+
 	movq	-16(%rax),%rbp
+
 	movq	-8(%rax),%rbx
+
 	leaq	(%rax),%rsp
+
 L$ocb_dec_epilogue:
 	.byte	0xf3,0xc3
+
 
 
 
@@ -3354,11 +3400,12 @@ L$ocb_dec_loop1:
 .byte	102,15,56,223,215
 	.byte	0xf3,0xc3
 
-.globl	_aesni_cbc_encrypt
-.private_extern _aesni_cbc_encrypt
+.globl	_aes_hw_cbc_encrypt
+.private_extern _aes_hw_cbc_encrypt
 
 .p2align	4
-_aesni_cbc_encrypt:
+_aes_hw_cbc_encrypt:
+
 	testq	%rdx,%rdx
 	jz	L$cbc_ret
 
@@ -3452,7 +3499,9 @@ L$oop_dec1_16:
 .p2align	4
 L$cbc_decrypt_bulk:
 	leaq	(%rsp),%r11
+
 	pushq	%rbp
+
 	subq	$16,%rsp
 	andq	$-16,%rsp
 	movq	%rcx,%rbp
@@ -3937,16 +3986,21 @@ L$cbc_dec_ret:
 	xorps	%xmm0,%xmm0
 	pxor	%xmm1,%xmm1
 	movq	-8(%r11),%rbp
+
 	leaq	(%r11),%rsp
+
 L$cbc_ret:
 	.byte	0xf3,0xc3
 
-.globl	_aesni_set_decrypt_key
-.private_extern _aesni_set_decrypt_key
+
+.globl	_aes_hw_set_decrypt_key
+.private_extern _aes_hw_set_decrypt_key
 
 .p2align	4
-_aesni_set_decrypt_key:
+_aes_hw_set_decrypt_key:
+
 .byte	0x48,0x83,0xEC,0x08
+
 	call	__aesni_set_encrypt_key
 	shll	$4,%esi
 	testl	%eax,%eax
@@ -3979,16 +4033,20 @@ L$dec_key_inverse:
 	pxor	%xmm0,%xmm0
 L$dec_key_ret:
 	addq	$8,%rsp
+
 	.byte	0xf3,0xc3
+
 L$SEH_end_set_decrypt_key:
 
-.globl	_aesni_set_encrypt_key
-.private_extern _aesni_set_encrypt_key
+.globl	_aes_hw_set_encrypt_key
+.private_extern _aes_hw_set_encrypt_key
 
 .p2align	4
-_aesni_set_encrypt_key:
+_aes_hw_set_encrypt_key:
 __aesni_set_encrypt_key:
+
 .byte	0x48,0x83,0xEC,0x08
+
 	movq	$-1,%rax
 	testq	%rdi,%rdi
 	jz	L$enc_key_ret
@@ -4282,7 +4340,9 @@ L$enc_key_ret:
 	pxor	%xmm4,%xmm4
 	pxor	%xmm5,%xmm5
 	addq	$8,%rsp
+
 	.byte	0xf3,0xc3
+
 L$SEH_end_set_encrypt_key:
 
 .p2align	4

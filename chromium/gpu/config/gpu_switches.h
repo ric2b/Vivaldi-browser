@@ -7,36 +7,21 @@
 
 #include "gpu/gpu_export.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/common/feature_toggles.h"
-#endif
-
 namespace switches {
 
-GPU_EXPORT extern const char kAMDSwitchable[];
 GPU_EXPORT extern const char kDisableGpuDriverBugWorkarounds[];
 GPU_EXPORT extern const char kDisableGpuRasterization[];
 GPU_EXPORT extern const char kEnableGpuRasterization[];
-GPU_EXPORT extern const char kEnableOOPRasterization[];
-GPU_EXPORT extern const char kGpuPreferences[];
-GPU_EXPORT extern const char kGpuActiveVendorID[];
-GPU_EXPORT extern const char kGpuActiveDeviceID[];
-GPU_EXPORT extern const char kGpuDeviceID[];
-GPU_EXPORT extern const char kGpuDriverVendor[];
-GPU_EXPORT extern const char kGpuDriverVersion[];
-GPU_EXPORT extern const char kGpuDriverDate[];
-GPU_EXPORT extern const char kGpuSecondaryVendorIDs[];
-GPU_EXPORT extern const char kGpuSecondaryDeviceIDs[];
-GPU_EXPORT extern const char kGpuTestingNoCompleteInfoCollection[];
-GPU_EXPORT extern const char kGpuVendorID[];
-GPU_EXPORT extern const char kIgnoreGpuBlacklist[];
 GPU_EXPORT extern const char kGpuBlacklistTestGroup[];
 GPU_EXPORT extern const char kGpuDriverBugListTestGroup[];
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
-GPU_EXPORT extern const char kEnablePlatformAcceleratedVideoDecoding[];
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
+GPU_EXPORT extern const char kGpuPreferences[];
+GPU_EXPORT extern const char kIgnoreGpuBlacklist[];
+GPU_EXPORT extern const char kMaxActiveWebGLContexts[];
+GPU_EXPORT extern const char kShaderDiskCacheSizeKB[];
+GPU_EXPORT extern const char kUseGpuFencesForOverlayPlanes[];
+GPU_EXPORT extern const char kWebglAntialiasingMode[];
+GPU_EXPORT extern const char kWebglMSAASampleCount[];
+GPU_EXPORT extern const char kDisableGpuProcessForDX12VulkanInfoCollection[];
 }  // namespace switches
 
 #endif  // GPU_CONFIG_GPU_SWITCHES_H_

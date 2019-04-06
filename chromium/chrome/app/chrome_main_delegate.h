@@ -13,10 +13,13 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_content_client.h"
 #include "content/public/app/content_main_delegate.h"
+#include "ui/base/resource/data_pack.h"
 
 namespace base {
 class CommandLine;
 }
+
+class ChromeContentBrowserClient;
 
 // Chrome implementation of ContentMainDelegate.
 class ChromeMainDelegate : public content::ContentMainDelegate {
@@ -46,17 +49,20 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   bool ShouldSendMachPort(const std::string& process_type) override;
   bool DelaySandboxInitialization(const std::string& process_type) override;
 #elif defined(OS_LINUX)
-  void ZygoteStarting(std::vector<std::unique_ptr<content::ZygoteForkDelegate>>*
-                          delegates) override;
+  void ZygoteStarting(
+      std::vector<std::unique_ptr<service_manager::ZygoteForkDelegate>>*
+          delegates) override;
   void ZygoteForked() override;
 #endif
   bool ShouldEnableProfilerRecording() override;
   service_manager::ProcessType OverrideProcessType() override;
+  void PreContentInitialization() override;
 
   content::ContentBrowserClient* CreateContentBrowserClient() override;
   content::ContentGpuClient* CreateContentGpuClient() override;
   content::ContentRendererClient* CreateContentRendererClient() override;
   content::ContentUtilityClient* CreateContentUtilityClient() override;
+  ui::DataPack* LoadServiceManifestDataPack() override;
 
 #if defined(OS_MACOSX)
   void InitMacCrashReporter(const base::CommandLine& command_line,
@@ -65,6 +71,12 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
 #endif  // defined(OS_MACOSX)
 
   ChromeContentClient chrome_content_client_;
+
+  std::unique_ptr<ChromeContentBrowserClient> chrome_content_browser_client_;
+
+  // This field is loaded by LoadServiceManifestDataPack() and passed to
+  // ContentBrowserClient in CreateContentBrowserClient()
+  std::unique_ptr<ui::DataPack> service_manifest_data_pack_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeMainDelegate);
 };

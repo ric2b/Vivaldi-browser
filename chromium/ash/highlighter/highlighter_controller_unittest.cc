@@ -6,10 +6,13 @@
 
 #include <memory>
 
-#include "ash/fast_ink/fast_ink_points.h"
+#include "ash/components/fast_ink/fast_ink_points.h"
 #include "ash/highlighter/highlighter_controller_test_api.h"
 #include "ash/public/cpp/config.h"
 #include "ash/shell.h"
+#include "ash/system/palette/mock_palette_tool_delegate.h"
+#include "ash/system/palette/palette_tool.h"
+#include "ash/system/palette/tools/metalayer_mode.h"
 #include "ash/test/ash_test_base.h"
 #include "base/strings/stringprintf.h"
 #include "ui/aura/window_tree_host.h"
@@ -19,6 +22,43 @@
 namespace ash {
 namespace {
 
+class TestHighlighterObserver : public HighlighterController::Observer {
+ public:
+  TestHighlighterObserver() = default;
+  ~TestHighlighterObserver() override = default;
+
+  // HighlighterController::Observer:
+  void OnHighlighterEnabledChanged(HighlighterEnabledState state) override {
+    switch (state) {
+      case HighlighterEnabledState::kEnabled:
+        ++enabled_count_;
+        break;
+      case HighlighterEnabledState::kDisabledByUser:
+        ++disabled_by_user_count_;
+        break;
+      case HighlighterEnabledState::kDisabledBySessionAbort:
+        ++disabled_by_session_abort_;
+        break;
+      case HighlighterEnabledState::kDisabledBySessionComplete:
+        ++disabled_by_session_complete_;
+        break;
+    }
+  }
+
+  void OnHighlighterSelectionRecognized(const gfx::Rect& rect) override {
+    last_recognized_rect_ = rect;
+  }
+
+  int enabled_count_ = 0;
+  int disabled_by_user_count_ = 0;
+  int disabled_by_session_abort_ = 0;
+  int disabled_by_session_complete_ = 0;
+  gfx::Rect last_recognized_rect_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestHighlighterObserver);
+};
+
 class HighlighterControllerTest : public AshTestBase {
  public:
   HighlighterControllerTest() = default;
@@ -26,11 +66,16 @@ class HighlighterControllerTest : public AshTestBase {
 
   void SetUp() override {
     AshTestBase::SetUp();
-    controller_test_api_ = std::make_unique<HighlighterControllerTestApi>(
-        Shell::Get()->highlighter_controller());
+    controller_ = Shell::Get()->highlighter_controller();
+    controller_test_api_ =
+        std::make_unique<HighlighterControllerTestApi>(controller_);
+
+    palette_tool_delegate_ = std::make_unique<MockPaletteToolDelegate>();
+    tool_ = std::make_unique<MetalayerMode>(palette_tool_delegate_.get());
   }
 
   void TearDown() override {
+    tool_.reset();
     // This needs to be called first to reset the controller state before the
     // shell instance gets torn down.
     controller_test_api_.reset();
@@ -46,13 +91,14 @@ class HighlighterControllerTest : public AshTestBase {
 
  protected:
   void TraceRect(const gfx::Rect& rect) {
-    GetEventGenerator().MoveTouch(gfx::Point(rect.x(), rect.y()));
-    GetEventGenerator().PressTouch();
-    GetEventGenerator().MoveTouch(gfx::Point(rect.right(), rect.y()));
-    GetEventGenerator().MoveTouch(gfx::Point(rect.right(), rect.bottom()));
-    GetEventGenerator().MoveTouch(gfx::Point(rect.x(), rect.bottom()));
-    GetEventGenerator().MoveTouch(gfx::Point(rect.x(), rect.y()));
-    GetEventGenerator().ReleaseTouch();
+    ui::test::EventGenerator* event_generator = GetEventGenerator();
+    event_generator->MoveTouch(gfx::Point(rect.x(), rect.y()));
+    event_generator->PressTouch();
+    event_generator->MoveTouch(gfx::Point(rect.right(), rect.y()));
+    event_generator->MoveTouch(gfx::Point(rect.right(), rect.bottom()));
+    event_generator->MoveTouch(gfx::Point(rect.x(), rect.bottom()));
+    event_generator->MoveTouch(gfx::Point(rect.x(), rect.y()));
+    event_generator->ReleaseTouch();
 
     // The the events above will trigger a frame, so wait until a new
     // CompositorFrame is generated before terminating.
@@ -61,6 +107,10 @@ class HighlighterControllerTest : public AshTestBase {
   }
 
   std::unique_ptr<HighlighterControllerTestApi> controller_test_api_;
+  std::unique_ptr<MockPaletteToolDelegate> palette_tool_delegate_;
+  std::unique_ptr<PaletteTool> tool_;
+
+  HighlighterController* controller_ = nullptr;  // Not owned.
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HighlighterControllerTest);
@@ -72,10 +122,11 @@ class HighlighterControllerTest : public AshTestBase {
 // receives points from stylus movements as expected.
 TEST_F(HighlighterControllerTest, HighlighterRenderer) {
   // The highlighter pointer mode only works with stylus.
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
 
   // When disabled the highlighter pointer should not be showing.
-  GetEventGenerator().MoveTouch(gfx::Point(1, 1));
+  event_generator->MoveTouch(gfx::Point(1, 1));
   EXPECT_FALSE(controller_test_api_->IsShowingHighlighter());
 
   // Verify that by enabling the mode, the highlighter pointer should still not
@@ -84,27 +135,27 @@ TEST_F(HighlighterControllerTest, HighlighterRenderer) {
   EXPECT_FALSE(controller_test_api_->IsShowingHighlighter());
 
   // Verify moving the stylus 4 times will not display the highlighter pointer.
-  GetEventGenerator().MoveTouch(gfx::Point(2, 2));
-  GetEventGenerator().MoveTouch(gfx::Point(3, 3));
-  GetEventGenerator().MoveTouch(gfx::Point(4, 4));
-  GetEventGenerator().MoveTouch(gfx::Point(5, 5));
+  event_generator->MoveTouch(gfx::Point(2, 2));
+  event_generator->MoveTouch(gfx::Point(3, 3));
+  event_generator->MoveTouch(gfx::Point(4, 4));
+  event_generator->MoveTouch(gfx::Point(5, 5));
   EXPECT_FALSE(controller_test_api_->IsShowingHighlighter());
 
   // Verify pressing the stylus will show the highlighter pointer and add a
   // point but will not activate fading out.
-  GetEventGenerator().PressTouch();
+  event_generator->PressTouch();
   EXPECT_TRUE(controller_test_api_->IsShowingHighlighter());
   EXPECT_FALSE(controller_test_api_->IsFadingAway());
   EXPECT_EQ(1, controller_test_api_->points().GetNumberOfPoints());
 
   // Verify dragging the stylus 2 times will add 2 more points.
-  GetEventGenerator().MoveTouch(gfx::Point(6, 6));
-  GetEventGenerator().MoveTouch(gfx::Point(7, 7));
+  event_generator->MoveTouch(gfx::Point(6, 6));
+  event_generator->MoveTouch(gfx::Point(7, 7));
   EXPECT_EQ(3, controller_test_api_->points().GetNumberOfPoints());
 
   // Verify releasing the stylus still shows the highlighter pointer, which is
   // fading away.
-  GetEventGenerator().ReleaseTouch();
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->IsShowingHighlighter());
   EXPECT_TRUE(controller_test_api_->IsFadingAway());
 
@@ -119,28 +170,28 @@ TEST_F(HighlighterControllerTest, HighlighterRenderer) {
   // immediately.
   controller_test_api_->DestroyPointerView();
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(6, 6));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(6, 6));
   EXPECT_TRUE(controller_test_api_->IsShowingHighlighter());
   controller_test_api_->SetEnabled(false);
   EXPECT_FALSE(controller_test_api_->IsShowingHighlighter());
 
   // Verify that the highlighter pointer does not add points while disabled.
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(8, 8));
-  GetEventGenerator().ReleaseTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(9, 9));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(8, 8));
+  event_generator->ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(9, 9));
   EXPECT_FALSE(controller_test_api_->IsShowingHighlighter());
 
   // Verify that the highlighter pointer does not get shown if points are not
   // coming from the stylus, even when enabled.
-  GetEventGenerator().ExitPenPointerMode();
+  event_generator->ExitPenPointerMode();
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(10, 10));
-  GetEventGenerator().MoveTouch(gfx::Point(11, 11));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(10, 10));
+  event_generator->MoveTouch(gfx::Point(11, 11));
   EXPECT_FALSE(controller_test_api_->IsShowingHighlighter());
-  GetEventGenerator().ReleaseTouch();
+  event_generator->ReleaseTouch();
 }
 
 // Test to ensure the class responsible for drawing the highlighter pointer
@@ -148,8 +199,9 @@ TEST_F(HighlighterControllerTest, HighlighterRenderer) {
 TEST_F(HighlighterControllerTest, HighlighterPrediction) {
   controller_test_api_->SetEnabled(true);
   // The highlighter pointer mode only works with stylus.
-  GetEventGenerator().EnterPenPointerMode();
-  GetEventGenerator().PressTouch();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
+  event_generator->PressTouch();
   EXPECT_TRUE(controller_test_api_->IsShowingHighlighter());
 
   EXPECT_EQ(1, controller_test_api_->points().GetNumberOfPoints());
@@ -158,9 +210,9 @@ TEST_F(HighlighterControllerTest, HighlighterPrediction) {
   EXPECT_EQ(0, controller_test_api_->predicted_points().GetNumberOfPoints());
 
   // Verify dragging the stylus 3 times will add some predicted points.
-  GetEventGenerator().MoveTouch(gfx::Point(10, 10));
-  GetEventGenerator().MoveTouch(gfx::Point(20, 20));
-  GetEventGenerator().MoveTouch(gfx::Point(30, 30));
+  event_generator->MoveTouch(gfx::Point(10, 10));
+  event_generator->MoveTouch(gfx::Point(20, 20));
+  event_generator->MoveTouch(gfx::Point(30, 30));
   EXPECT_NE(0, controller_test_api_->predicted_points().GetNumberOfPoints());
   // Verify predicted points are in the right direction.
   for (const auto& point : controller_test_api_->predicted_points().points()) {
@@ -172,68 +224,81 @@ TEST_F(HighlighterControllerTest, HighlighterPrediction) {
 // Test that stylus gestures are correctly recognized by HighlighterController.
 TEST_F(HighlighterControllerTest, HighlighterGestures) {
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
+
+  TestHighlighterObserver observer;
+  controller_->AddObserver(&observer);
 
   // A non-horizontal stroke is not recognized
   controller_test_api_->ResetSelection();
-  GetEventGenerator().MoveTouch(gfx::Point(100, 100));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(200, 200));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(100, 100));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(200, 200));
+  event_generator->ReleaseTouch();
   EXPECT_FALSE(controller_test_api_->HandleSelectionCalled());
 
   // An almost horizontal stroke is recognized
   controller_test_api_->ResetSelection();
-  GetEventGenerator().MoveTouch(gfx::Point(100, 100));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(300, 102));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(100, 100));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(300, 102));
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
 
   // Horizontal stroke selection rectangle should:
   //   have the same horizontal center line as the stroke bounding box,
   //   be 4dp wider than the stroke bounding box,
   //   be exactly 14dp high.
-  EXPECT_EQ("98,94 204x14", controller_test_api_->selection().ToString());
+  gfx::Rect expected_rect(98, 94, 204, 14);
+  EXPECT_EQ(expected_rect, controller_test_api_->selection());
+  EXPECT_EQ(expected_rect, observer.last_recognized_rect_);
 
   // An insufficiently closed C-like shape is not recognized
   controller_test_api_->ResetSelection();
-  GetEventGenerator().MoveTouch(gfx::Point(100, 0));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(0, 0));
-  GetEventGenerator().MoveTouch(gfx::Point(0, 100));
-  GetEventGenerator().MoveTouch(gfx::Point(100, 100));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(100, 0));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(0, 0));
+  event_generator->MoveTouch(gfx::Point(0, 100));
+  event_generator->MoveTouch(gfx::Point(100, 100));
+  event_generator->ReleaseTouch();
   EXPECT_FALSE(controller_test_api_->HandleSelectionCalled());
 
   // An almost closed G-like shape is recognized
   controller_test_api_->ResetSelection();
-  GetEventGenerator().MoveTouch(gfx::Point(200, 0));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(0, 0));
-  GetEventGenerator().MoveTouch(gfx::Point(0, 100));
-  GetEventGenerator().MoveTouch(gfx::Point(200, 100));
-  GetEventGenerator().MoveTouch(gfx::Point(200, 20));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(200, 0));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(0, 0));
+  event_generator->MoveTouch(gfx::Point(0, 100));
+  event_generator->MoveTouch(gfx::Point(200, 100));
+  event_generator->MoveTouch(gfx::Point(200, 20));
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
-  EXPECT_EQ("0,0 200x100", controller_test_api_->selection().ToString());
+  expected_rect = gfx::Rect(0, 0, 200, 100);
+  EXPECT_EQ(expected_rect, controller_test_api_->selection());
+  EXPECT_EQ(expected_rect, observer.last_recognized_rect_);
 
   // A closed diamond shape is recognized
   controller_test_api_->ResetSelection();
-  GetEventGenerator().MoveTouch(gfx::Point(100, 50));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(200, 150));
-  GetEventGenerator().MoveTouch(gfx::Point(100, 250));
-  GetEventGenerator().MoveTouch(gfx::Point(0, 150));
-  GetEventGenerator().MoveTouch(gfx::Point(100, 50));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(100, 50));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(200, 150));
+  event_generator->MoveTouch(gfx::Point(100, 250));
+  event_generator->MoveTouch(gfx::Point(0, 150));
+  event_generator->MoveTouch(gfx::Point(100, 50));
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
-  EXPECT_EQ("0,50 200x200", controller_test_api_->selection().ToString());
+  expected_rect = gfx::Rect(0, 50, 200, 200);
+  EXPECT_EQ(expected_rect, controller_test_api_->selection());
+  EXPECT_EQ(expected_rect, observer.last_recognized_rect_);
+
+  controller_->RemoveObserver(&observer);
 }
 
 TEST_F(HighlighterControllerTest, HighlighterGesturesScaled) {
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
 
   const gfx::Rect original_rect(200, 100, 400, 300);
 
@@ -269,7 +334,8 @@ TEST_F(HighlighterControllerTest, HighlighterGesturesScaled) {
 // Test that stylus gesture recognition correctly handles display rotation
 TEST_F(HighlighterControllerTest, HighlighterGesturesRotated) {
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
 
   const gfx::Rect trace(200, 100, 400, 300);
 
@@ -306,25 +372,26 @@ TEST_F(HighlighterControllerTest, HighlighterGesturesRotated) {
 // contiguous.
 TEST_F(HighlighterControllerTest, InterruptedStroke) {
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
 
   UpdateDisplayAndWaitForCompositingEnded("1500x1000");
 
   // An interrupted stroke close to the screen edge should be recognized as a
   // contiguous stroke.
   controller_test_api_->ResetSelection();
-  GetEventGenerator().MoveTouch(gfx::Point(300, 100));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(0, 100));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(300, 100));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(0, 100));
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->IsWaitingToResumeStroke());
   EXPECT_FALSE(controller_test_api_->HandleSelectionCalled());
   EXPECT_FALSE(controller_test_api_->IsFadingAway());
 
-  GetEventGenerator().MoveTouch(gfx::Point(0, 200));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(300, 200));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(0, 200));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(300, 200));
+  event_generator->ReleaseTouch();
   EXPECT_FALSE(controller_test_api_->IsWaitingToResumeStroke());
   EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
   EXPECT_EQ("0,100 300x100", controller_test_api_->selection().ToString());
@@ -332,10 +399,10 @@ TEST_F(HighlighterControllerTest, InterruptedStroke) {
   // Repeat the same gesture, but simulate a timeout after the gap. This should
   // force the gesture completion.
   controller_test_api_->ResetSelection();
-  GetEventGenerator().MoveTouch(gfx::Point(300, 100));
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(0, 100));
-  GetEventGenerator().ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(300, 100));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(0, 100));
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_->IsWaitingToResumeStroke());
   EXPECT_FALSE(controller_test_api_->HandleSelectionCalled());
   EXPECT_FALSE(controller_test_api_->IsFadingAway());
@@ -349,7 +416,8 @@ TEST_F(HighlighterControllerTest, InterruptedStroke) {
 // Test that the selection is never crossing the screen bounds.
 TEST_F(HighlighterControllerTest, SelectionInsideScreen) {
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
 
   constexpr float display_scales[] = {1.f, 1.5f, 2.0f};
 
@@ -397,29 +465,29 @@ TEST_F(HighlighterControllerTest, SelectionInsideScreen) {
 
     // Horizontal stroke completely offscreen.
     controller_test_api_->ResetSelection();
-    GetEventGenerator().MoveTouch(gfx::Point(0, -100));
-    GetEventGenerator().PressTouch();
-    GetEventGenerator().MoveTouch(gfx::Point(1000, -100));
-    GetEventGenerator().ReleaseTouch();
+    event_generator->MoveTouch(gfx::Point(0, -100));
+    event_generator->PressTouch();
+    event_generator->MoveTouch(gfx::Point(1000, -100));
+    event_generator->ReleaseTouch();
     controller_test_api_->SimulateInterruptedStrokeTimeout();
     EXPECT_FALSE(controller_test_api_->HandleSelectionCalled());
 
     // Horizontal stroke along the top edge of the screen.
     controller_test_api_->ResetSelection();
-    GetEventGenerator().MoveTouch(gfx::Point(0, 0));
-    GetEventGenerator().PressTouch();
-    GetEventGenerator().MoveTouch(gfx::Point(1000, 0));
-    GetEventGenerator().ReleaseTouch();
+    event_generator->MoveTouch(gfx::Point(0, 0));
+    event_generator->PressTouch();
+    event_generator->MoveTouch(gfx::Point(1000, 0));
+    event_generator->ReleaseTouch();
     controller_test_api_->SimulateInterruptedStrokeTimeout();
     EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
     EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
 
     // Horizontal stroke along the bottom edge of the screen.
     controller_test_api_->ResetSelection();
-    GetEventGenerator().MoveTouch(gfx::Point(0, 999));
-    GetEventGenerator().PressTouch();
-    GetEventGenerator().MoveTouch(gfx::Point(1000, 999));
-    GetEventGenerator().ReleaseTouch();
+    event_generator->MoveTouch(gfx::Point(0, 999));
+    event_generator->PressTouch();
+    event_generator->MoveTouch(gfx::Point(1000, 999));
+    event_generator->ReleaseTouch();
     controller_test_api_->SimulateInterruptedStrokeTimeout();
     EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
     EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
@@ -429,7 +497,8 @@ TEST_F(HighlighterControllerTest, SelectionInsideScreen) {
 // Test that a detached client does not receive notifications.
 TEST_F(HighlighterControllerTest, DetachedClient) {
   controller_test_api_->SetEnabled(true);
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
 
   UpdateDisplayAndWaitForCompositingEnded("1500x1000");
   const gfx::Rect trace(200, 100, 400, 300);
@@ -459,6 +528,129 @@ TEST_F(HighlighterControllerTest, DetachedClient) {
   controller_test_api_->ResetSelection();
   TraceRect(trace);
   EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
+}
+
+// Test enabling/disabling metalayer mode by selecting/deselecting on palette
+// tool and calling UpdateEnabledState notify observers properly.
+TEST_F(HighlighterControllerTest, UpdateEnabledState) {
+  TestHighlighterObserver observer;
+  controller_->AddObserver(&observer);
+
+  // Assert initial state.
+  ASSERT_EQ(0, observer.enabled_count_);
+  ASSERT_EQ(0, observer.disabled_by_user_count_);
+  ASSERT_EQ(0, observer.disabled_by_session_abort_);
+  ASSERT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Test enabling.
+  tool_->OnEnable();
+  EXPECT_EQ(1, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(0, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Test disabling by user.
+  tool_->OnDisable();
+  EXPECT_EQ(1, observer.enabled_count_);
+  EXPECT_EQ(1, observer.disabled_by_user_count_);
+  EXPECT_EQ(0, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Test disabling by session abort.
+  tool_->OnEnable();
+  EXPECT_EQ(2, observer.enabled_count_);
+  EXPECT_EQ(1, observer.disabled_by_user_count_);
+  EXPECT_EQ(0, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+  controller_->UpdateEnabledState(
+      HighlighterEnabledState::kDisabledBySessionAbort);
+  EXPECT_EQ(2, observer.enabled_count_);
+  EXPECT_EQ(1, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Test disabling by session complete.
+  tool_->OnEnable();
+  EXPECT_EQ(3, observer.enabled_count_);
+  EXPECT_EQ(1, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+  controller_->UpdateEnabledState(
+      HighlighterEnabledState::kDisabledBySessionComplete);
+  EXPECT_EQ(3, observer.enabled_count_);
+  EXPECT_EQ(1, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(1, observer.disabled_by_session_complete_);
+
+  controller_->RemoveObserver(&observer);
+}
+
+// Test aborting a metalayer session and notifying observers properly.
+TEST_F(HighlighterControllerTest, AbortSession) {
+  TestHighlighterObserver observer;
+  controller_->AddObserver(&observer);
+
+  // Assert initial state.
+  ASSERT_EQ(0, observer.enabled_count_);
+  ASSERT_EQ(0, observer.disabled_by_user_count_);
+  ASSERT_EQ(0, observer.disabled_by_session_abort_);
+  ASSERT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Start metalayer session.
+  tool_->OnEnable();
+  EXPECT_EQ(1, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(0, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Abort metalayer session.
+  controller_->AbortSession();
+  EXPECT_EQ(1, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Assert no-op when aborting an aborted session.
+  controller_->AbortSession();
+  EXPECT_EQ(1, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+
+  // Assert no-op when aborting a completed session.
+  tool_->OnEnable();
+  EXPECT_EQ(2, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(0, observer.disabled_by_session_complete_);
+  controller_->UpdateEnabledState(
+      HighlighterEnabledState::kDisabledBySessionComplete);
+  EXPECT_EQ(2, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(1, observer.disabled_by_session_complete_);
+  controller_->AbortSession();
+  EXPECT_EQ(2, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(1, observer.disabled_by_session_complete_);
+
+  // Assert no-op when aborting a disabled session.
+  tool_->OnEnable();
+  EXPECT_EQ(3, observer.enabled_count_);
+  EXPECT_EQ(0, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(1, observer.disabled_by_session_complete_);
+  tool_->OnDisable();
+  EXPECT_EQ(3, observer.enabled_count_);
+  EXPECT_EQ(1, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(1, observer.disabled_by_session_complete_);
+  controller_->AbortSession();
+  EXPECT_EQ(3, observer.enabled_count_);
+  EXPECT_EQ(1, observer.disabled_by_user_count_);
+  EXPECT_EQ(1, observer.disabled_by_session_abort_);
+  EXPECT_EQ(1, observer.disabled_by_session_complete_);
 }
 
 }  // namespace ash

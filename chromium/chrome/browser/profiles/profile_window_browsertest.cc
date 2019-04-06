@@ -9,7 +9,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -30,6 +29,7 @@
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/base/web_ui_browser_test.h"
+#include "components/account_id/account_id.h"
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/search_engines/template_url_service.h"
@@ -81,7 +81,7 @@ void WaitForHistoryBackendToRun(Profile* profile) {
   std::unique_ptr<history::HistoryDBTask> task(new WaitForHistoryTask());
   history::HistoryService* history = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
-  history->ScheduleDBTask(std::move(task), &task_tracker);
+  history->ScheduleDBTask(FROM_HERE, std::move(task), &task_tracker);
   content::RunMessageLoop();
 }
 
@@ -103,7 +103,7 @@ base::FilePath CreateTestingProfile(const std::string& name,
   base::FilePath profile_path =
       manager->user_data_dir().AppendASCII(relative_path);
   storage.AddProfile(profile_path, base::ASCIIToUTF16(name), std::string(),
-                     base::string16(), 0u, std::string());
+                     base::string16(), 0u, std::string(), EmptyAccountId());
 
   EXPECT_EQ(starting_number_of_profiles + 1u, storage.GetNumberOfProfiles());
   return profile_path;
@@ -117,7 +117,6 @@ class ProfileWindowBrowserTest : public InProcessBrowserTest {
   ~ProfileWindowBrowserTest() override {}
 
   Browser* OpenGuestBrowser();
-  void CloseBrowser(Browser* browser);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ProfileWindowBrowserTest);
@@ -130,7 +129,7 @@ Browser* ProfileWindowBrowserTest::OpenGuestBrowser() {
   // does incomplete initialization that would lead to
   // SystemUrlRequestContextGetter being leaked.
   content::WindowedNotificationObserver browser_creation_observer(
-      chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+      chrome::NOTIFICATION_BROWSER_OPENED,
       content::NotificationService::AllSources());
   profiles::SwitchToGuestProfile(ProfileManager::CreateCallback());
 
@@ -152,14 +151,6 @@ Browser* ProfileWindowBrowserTest::OpenGuestBrowser() {
       TemplateURLServiceFactory::GetForProfile(guest));
 
   return browser;
-}
-
-void ProfileWindowBrowserTest::CloseBrowser(Browser* browser) {
-  content::WindowedNotificationObserver window_close_observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::Source<Browser>(browser));
-  browser->window()->Close();
-  window_close_observer.Wait();
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileWindowBrowserTest, OpenGuestBrowser) {
@@ -205,7 +196,7 @@ IN_PROC_BROWSER_TEST_F(ProfileWindowBrowserTest, GuestClearsCookies) {
   cookie = content::GetCookies(guest_profile, url);
   EXPECT_EQ("cookie1", cookie);
 
-  CloseBrowser(guest_browser);
+  CloseBrowserSynchronously(guest_browser);
 
   // Closing the browser has removed the cookie.
   cookie = content::GetCookies(guest_profile, url);

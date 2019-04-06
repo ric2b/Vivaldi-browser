@@ -4,56 +4,80 @@
 
 #include "base/timer/mock_timer.h"
 
+#include "base/test/test_simple_task_runner.h"
+
 namespace base {
 
-MockTimer::MockTimer(bool retain_user_task, bool is_repeating)
-    : Timer(retain_user_task, is_repeating),
-      is_running_(false) {
+namespace {
+
+void FlushPendingTasks(TestSimpleTaskRunner* task_runner) {
+  // Do not use TestSimpleTaskRunner::RunPendingTasks() here. As RunPendingTasks
+  // overrides ThreadTaskRunnerHandle when it runs tasks, tasks posted by timer
+  // tasks to TTRH go to |test_task_runner_|, though they should be posted to
+  // the original task runner.
+  // Do not use TestSimpleTaskRunner::RunPendingTasks(), as its overridden
+  // ThreadTaskRunnerHandle causes unexpected side effects.
+  for (TestPendingTask& task : task_runner->TakePendingTasks())
+    std::move(task.task).Run();
 }
 
-MockTimer::MockTimer(const Location& posted_from,
-                     TimeDelta delay,
-                     const base::Closure& user_task,
-                     bool is_repeating)
-    : Timer(true, is_repeating), delay_(delay), is_running_(false) {}
+}  // namespace
 
-MockTimer::~MockTimer() = default;
-
-bool MockTimer::IsRunning() const {
-  return is_running_;
+MockOneShotTimer::MockOneShotTimer()
+    : OneShotTimer(&clock_),
+      test_task_runner_(MakeRefCounted<TestSimpleTaskRunner>()) {
+  OneShotTimer::SetTaskRunner(test_task_runner_);
 }
 
-base::TimeDelta MockTimer::GetCurrentDelay() const {
-  return delay_;
+MockOneShotTimer::~MockOneShotTimer() = default;
+
+void MockOneShotTimer::SetTaskRunner(
+    scoped_refptr<SequencedTaskRunner> task_runner) {
+  NOTREACHED() << "MockOneShotTimer doesn't support SetTaskRunner().";
 }
 
-void MockTimer::Start(const Location& posted_from,
-                      TimeDelta delay,
-                      const base::Closure& user_task) {
-  delay_ = delay;
-  user_task_ = user_task;
-  Reset();
+void MockOneShotTimer::Fire() {
+  DCHECK(IsRunning());
+  clock_.Advance(std::max(TimeDelta(), desired_run_time() - clock_.NowTicks()));
+  FlushPendingTasks(test_task_runner_.get());
 }
 
-void MockTimer::Stop() {
-  is_running_ = false;
-  if (!retain_user_task())
-    user_task_.Reset();
+MockRepeatingTimer::MockRepeatingTimer()
+    : RepeatingTimer(&clock_),
+      test_task_runner_(MakeRefCounted<TestSimpleTaskRunner>()) {
+  RepeatingTimer::SetTaskRunner(test_task_runner_);
 }
 
-void MockTimer::Reset() {
-  DCHECK(!user_task_.is_null());
-  is_running_ = true;
+MockRepeatingTimer::~MockRepeatingTimer() = default;
+
+void MockRepeatingTimer::SetTaskRunner(
+    scoped_refptr<SequencedTaskRunner> task_runner) {
+  NOTREACHED() << "MockRepeatingTimer doesn't support SetTaskRunner().";
 }
 
-void MockTimer::Fire() {
-  DCHECK(is_running_);
-  base::Closure old_task = user_task_;
-  if (is_repeating())
-    Reset();
-  else
-    Stop();
-  old_task.Run();
+void MockRepeatingTimer::Fire() {
+  DCHECK(IsRunning());
+  clock_.Advance(std::max(TimeDelta(), desired_run_time() - clock_.NowTicks()));
+  FlushPendingTasks(test_task_runner_.get());
+}
+
+MockRetainingOneShotTimer::MockRetainingOneShotTimer()
+    : RetainingOneShotTimer(&clock_),
+      test_task_runner_(MakeRefCounted<TestSimpleTaskRunner>()) {
+  RetainingOneShotTimer::SetTaskRunner(test_task_runner_);
+}
+
+MockRetainingOneShotTimer::~MockRetainingOneShotTimer() = default;
+
+void MockRetainingOneShotTimer::SetTaskRunner(
+    scoped_refptr<SequencedTaskRunner> task_runner) {
+  NOTREACHED() << "MockRetainingOneShotTimer doesn't support SetTaskRunner().";
+}
+
+void MockRetainingOneShotTimer::Fire() {
+  DCHECK(IsRunning());
+  clock_.Advance(std::max(TimeDelta(), desired_run_time() - clock_.NowTicks()));
+  FlushPendingTasks(test_task_runner_.get());
 }
 
 }  // namespace base

@@ -15,8 +15,7 @@
 #include "base/process/process_handle.h"
 #include "base/synchronization/lock.h"
 #include "content/public/browser/browser_child_process_observer.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/render_process_host_observer.h"
 
 namespace content {
 
@@ -24,7 +23,7 @@ namespace content {
 // access to mach task ports for content child processes.
 class CONTENT_EXPORT MachBroker : public base::PortProvider,
                                   public BrowserChildProcessObserver,
-                                  public NotificationObserver,
+                                  public RenderProcessHostObserver,
                                   public base::PortProvider::Observer {
  public:
   // For use in child processes. This will send the task port of the current
@@ -56,13 +55,14 @@ class CONTENT_EXPORT MachBroker : public base::PortProvider,
   // Implement |BrowserChildProcessObserver|.
   void BrowserChildProcessHostDisconnected(
       const ChildProcessData& data) override;
-  void BrowserChildProcessCrashed(const ChildProcessData& data,
-      int exit_code) override;
+  void BrowserChildProcessCrashed(
+      const ChildProcessData& data,
+      const ChildProcessTerminationInfo& info) override;
 
-  // Implement |NotificationObserver|.
-  void Observe(int type,
-               const NotificationSource& source,
-               const NotificationDetails& details) override;
+  // Implement |RenderProcessHostObserver|.
+  void RenderProcessExited(RenderProcessHost* host,
+                           const ChildProcessTerminationInfo& info) override;
+  void RenderProcessHostDestroyed(RenderProcessHost* host) override;
 
   // Returns the Mach port name to use when sending or receiving messages.
   // Does the Right Thing in the browser and in child processes.
@@ -86,10 +86,6 @@ class CONTENT_EXPORT MachBroker : public base::PortProvider,
 
   // Whether or not the class has been initialized.
   bool initialized_;
-
-  // Used to register for notifications received by NotificationObserver.
-  // Accessed only on the UI thread.
-  NotificationRegistrar registrar_;
 
   // Stores the Child process unique id (RenderProcessHost ID) for every
   // process. Protected by base::MachPortBroker::GetLock().

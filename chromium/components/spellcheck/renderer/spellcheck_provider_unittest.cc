@@ -2,17 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/strings/utf_string_conversions.h"
 #include "components/spellcheck/renderer/spellcheck_provider_test.h"
+
+#include "base/strings/utf_string_conversions.h"
+#include "components/spellcheck/renderer/spellcheck.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebTextCheckingCompletion.h"
-#include "third_party/WebKit/public/web/WebTextCheckingResult.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_text_checking_completion.h"
+#include "third_party/blink/public/web/web_text_checking_result.h"
 
 namespace {
 
-class SpellCheckProviderCacheTest : public SpellCheckProviderTest {};
+class SpellCheckProviderCacheTest : public SpellCheckProviderTest {
+ protected:
+  void UpdateCustomDictionary() {
+    SpellCheck* spellcheck = provider_.spellcheck();
+    EXPECT_NE(spellcheck, nullptr);
+    // Skip adding friend class - use public CustomDictionaryChanged from
+    // |spellcheck::mojom::SpellChecker|
+    static_cast<spellcheck::mojom::SpellChecker*>(spellcheck)
+        ->CustomDictionaryChanged({}, {});
+  }
+};
 
 TEST_F(SpellCheckProviderCacheTest, SubstringWithoutMisspellings) {
   FakeTextCheckingCompletion completion;
@@ -46,6 +58,19 @@ TEST_F(SpellCheckProviderCacheTest, ShorterTextNotSubstring) {
   provider_.SetLastResults(base::ASCIIToUTF16("This is a test"), last_results);
   EXPECT_FALSE(provider_.SatisfyRequestFromCache(
       base::ASCIIToUTF16("That is a"), &completion));
+  EXPECT_EQ(completion.completion_count_, 0U);
+}
+
+TEST_F(SpellCheckProviderCacheTest, ResetCacheOnCustomDictionaryUpdate) {
+  FakeTextCheckingCompletion completion;
+
+  blink::WebVector<blink::WebTextCheckingResult> last_results;
+  provider_.SetLastResults(base::ASCIIToUTF16("This is a test"), last_results);
+
+  UpdateCustomDictionary();
+
+  EXPECT_FALSE(provider_.SatisfyRequestFromCache(
+      base::ASCIIToUTF16("This is a"), &completion));
   EXPECT_EQ(completion.completion_count_, 0U);
 }
 

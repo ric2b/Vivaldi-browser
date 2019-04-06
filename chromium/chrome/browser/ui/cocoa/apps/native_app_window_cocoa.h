@@ -67,6 +67,7 @@ class NativeAppWindowCocoa : public extensions::NativeAppWindow,
   void Show() override;
   void ShowInactive() override;
   void Hide() override;
+  bool IsVisible() const override;
   void Close() override;
   void Activate() override;
   void Deactivate() override;
@@ -123,9 +124,6 @@ class NativeAppWindowCocoa : public extensions::NativeAppWindow,
 
   NSRect restored_bounds() const { return restored_bounds_; }
 
-  // Need access to WebContents() which is private.
-  content::WebContents* VivaldiWebContents() const { return WebContents(); }
-
  protected:
   // NativeAppWindow implementation.
   void SetFullscreen(int fullscreen_types) override;
@@ -145,7 +143,6 @@ class NativeAppWindowCocoa : public extensions::NativeAppWindow,
   gfx::Insets GetFrameInsets() const override;
   bool CanHaveAlphaEnabled() const override;
   void SetActivateOnPointer(bool activate_on_pointer) override;
-  void UpdateEventTargeterWithInset() override;
 
   // These are used to simulate Mac-style hide/show. Since windows can be hidden
   // and shown using the app.window API, this sets is_hidden_with_app_ to

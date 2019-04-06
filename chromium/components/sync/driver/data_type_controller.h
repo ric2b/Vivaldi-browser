@@ -8,12 +8,14 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/sync_stop_metadata_fate.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
 #include "components/sync/engine/cycle/status_counters.h"
 #include "components/sync/model/data_type_error_handler.h"
@@ -41,8 +43,7 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
                      // in sync with the cloud.
     STOPPING,        // The controller is in the process of stopping
                      // and is waiting for dependent services to stop.
-    DISABLED         // The controller was started but encountered an error
-                     // so it is disabled waiting for it to be stopped.
+    FAILED           // The controller was started but encountered an error.
   };
 
   // This enum is used for "Sync.*ConfigureFailre" histograms so the order
@@ -66,6 +67,8 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
 
   using ModelLoadCallback = base::Callback<void(ModelType, const SyncError&)>;
 
+  using StopCallback = base::OnceClosure;
+
   using AllNodesCallback =
       base::Callback<void(const ModelType, std::unique_ptr<base::ListValue>)>;
 
@@ -73,7 +76,7 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
       base::Callback<void(ModelType, const StatusCounters&)>;
 
   using TypeMap = std::map<ModelType, std::unique_ptr<DataTypeController>>;
-  using StateMap = std::map<ModelType, DataTypeController::State>;
+  using TypeVector = std::vector<std::unique_ptr<DataTypeController>>;
 
   // Returns true if the start result should trigger an unrecoverable error.
   // Public so unit tests can use this function as well.
@@ -126,15 +129,21 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
   // See comments for ModelAssociationManager::OnSingleDataTypeWillStop.
   virtual void DeactivateDataType(ModelTypeConfigurer* configurer) = 0;
 
-  // Synchronously stops the data type. If StartAssociating has already been
-  // called but is not done yet it will be aborted. Similarly if LoadModels
-  // has not completed it will also be aborted.
+  // Stops the data type. If StartAssociating has already been called but is not
+  // done yet it will be aborted. Similarly if LoadModels has not completed it
+  // will also be aborted. Implementations may enter STOPPING state
+  // transitionaly but should eventually become STOPPED. At this point,
+  // |callback| will be run. |callback| must not be null.
+  //
   // NOTE: Stop() should be called after sync backend machinery has stopped
   // routing changes to this data type. Stop() should ensure the data type
   // logic shuts down gracefully by flushing remaining changes and calling
   // StopSyncing on the SyncableService. This assumes no changes will ever
   // propagate from sync again from point where Stop() is called.
-  virtual void Stop() = 0;
+  // KEEP_METADATA is used when the engine just stops sync, and CLEAR_METADATA
+  // is used when the user disables sync for data type.
+  virtual void Stop(SyncStopMetadataFate metadata_fate,
+                    StopCallback callback) = 0;
 
   // Name of this data type.  For logging purposes only.
   std::string name() const { return ModelTypeToString(type()); }
@@ -168,15 +177,16 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
  protected:
   explicit DataTypeController(ModelType type);
 
-  // Allows subclasses to DCHECK that they're on the correct thread.
+  // Allows subclasses to DCHECK that they're on the correct sequence.
+  // TODO(crbug.com/846238): Rename this to CalledOnValidSequence.
   bool CalledOnValidThread() const;
 
  private:
   // The type this object is responsible for controlling.
   const ModelType type_;
 
-  // Used to check that functions are called on the correct thread.
-  base::ThreadChecker thread_checker_;
+  // Used to check that functions are called on the correct sequence.
+  base::SequenceChecker sequence_checker_;
 };
 
 }  // namespace syncer

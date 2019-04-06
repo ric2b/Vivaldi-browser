@@ -12,6 +12,7 @@ import android.view.inputmethod.EditorInfo;
 
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.content_public.browser.InputMethodManagerWrapper;
 
 /**
  * A factory class for {@link ThreadedInputConnection}. The class also includes triggering
@@ -37,6 +38,7 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
     private ThreadedInputConnection mThreadedInputConnection;
     private CheckInvalidator mCheckInvalidator;
     private boolean mReentrantTriggering;
+    private boolean mTriggerDelayedOnCreateInputConnection;
 
     // Initialization-on-demand holder for Handler.
     private static class LazyHandlerHolder {
@@ -69,6 +71,7 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
     ThreadedInputConnectionFactory(InputMethodManagerWrapper inputMethodManagerWrapper) {
         mInputMethodManagerWrapper = inputMethodManagerWrapper;
         mInputMethodUma = createInputMethodUma();
+        mTriggerDelayedOnCreateInputConnection = true;
     }
 
     @Override
@@ -80,7 +83,7 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
     protected ThreadedInputConnectionProxyView createProxyView(
             Handler handler, View containerView) {
         return new ThreadedInputConnectionProxyView(
-                containerView.getContext(), handler, containerView);
+                containerView.getContext(), handler, containerView, this);
     }
 
     @VisibleForTesting
@@ -88,23 +91,20 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
         return new InputMethodUma();
     }
 
+    @VisibleForTesting
+    @Override
+    public void setTriggerDelayedOnCreateInputConnection(boolean trigger) {
+        mTriggerDelayedOnCreateInputConnection = trigger;
+    }
+
+    // Note that ThreadedInputConnectionProxyView intentionally calls
+    // View#onCreateInputConnection() and not a separate method in this class.
+    // There are third party apps that override WebView#onCreateInputConnection(),
+    // and we still want to call them for consistency.
+    // We let ThreadedInputConnectionProxyView and TestInputMethodManagerWrapper call
+    // setTriggerDelayedOnCreateInputConnection(false) explicitly to avoid delayed triggering.
     private boolean shouldTriggerDelayedOnCreateInputConnection() {
-        // Note that ThreadedInputConnectionProxyView intentionally calls
-        // View#onCreateInputConnection() and not a separate method in this class.
-        // There are third party apps that override WebView#onCreateInputConnection(),
-        // and we still want to call them for consistency. The setback here is that the only
-        // way to distinguish calls from InputMethodManager and from ProxyView is by looking at
-        // the call stack.
-        // TODO - avoid using reflection here. See crbug.com/636474
-        for (StackTraceElement ste : Thread.currentThread().getStackTrace()) {
-            String className = ste.getClassName();
-            if (className != null
-                    && (className.contains(ThreadedInputConnectionProxyView.class.getName())
-                    || className.contains("TestInputMethodManagerWrapper"))) {
-                return false;
-            }
-        }
-        return true;
+        return mTriggerDelayedOnCreateInputConnection;
     }
 
     @Override
@@ -121,7 +121,10 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
             Log.i(TAG, "initializeAndGet. outAttr: " + ImeUtils.getEditorInfoDebugString(outAttrs));
         }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+        // https://crbug.com/820756
+        final String htcMailPackageId = "com.htc.android.mail";
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N
+                || htcMailPackageId.equals(view.getContext().getPackageName())) {
             // IMM can internally ignore subsequent activation requests, e.g., by checking
             // mServedConnecting.
             if (mCheckInvalidator != null) mCheckInvalidator.invalidate();

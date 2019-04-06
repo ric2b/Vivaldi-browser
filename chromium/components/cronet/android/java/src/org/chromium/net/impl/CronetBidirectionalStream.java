@@ -86,6 +86,10 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
     private final String mRequestHeaders[];
     private final boolean mDelayRequestHeadersUntilFirstFlush;
     private final Collection<Object> mRequestAnnotations;
+    private final boolean mTrafficStatsTagSet;
+    private final int mTrafficStatsTag;
+    private final boolean mTrafficStatsUidSet;
+    private final int mTrafficStatsUid;
     private CronetException mException;
 
     /*
@@ -226,7 +230,9 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
     CronetBidirectionalStream(CronetUrlRequestContext requestContext, String url,
             @CronetEngineBase.StreamPriority int priority, Callback callback, Executor executor,
             String httpMethod, List<Map.Entry<String, String>> requestHeaders,
-            boolean delayRequestHeadersUntilNextFlush, Collection<Object> requestAnnotations) {
+            boolean delayRequestHeadersUntilNextFlush, Collection<Object> requestAnnotations,
+            boolean trafficStatsTagSet, int trafficStatsTag, boolean trafficStatsUidSet,
+            int trafficStatsUid) {
         mRequestContext = requestContext;
         mInitialUrl = url;
         mInitialPriority = convertStreamPriority(priority);
@@ -238,6 +244,10 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
         mPendingData = new LinkedList<>();
         mFlushData = new LinkedList<>();
         mRequestAnnotations = requestAnnotations;
+        mTrafficStatsTagSet = trafficStatsTagSet;
+        mTrafficStatsTag = trafficStatsTag;
+        mTrafficStatsUidSet = trafficStatsUidSet;
+        mTrafficStatsUid = trafficStatsUid;
     }
 
     @Override
@@ -250,7 +260,8 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
                 mNativeStream = nativeCreateBidirectionalStream(
                         mRequestContext.getUrlRequestContextAdapter(),
                         !mDelayRequestHeadersUntilFirstFlush,
-                        mRequestContext.hasRequestFinishedListener());
+                        mRequestContext.hasRequestFinishedListener(), mTrafficStatsTagSet,
+                        mTrafficStatsTag, mTrafficStatsUidSet, mTrafficStatsUid);
                 mRequestContext.onRequestStarted();
                 // Non-zero startResult means an argument error.
                 int startResult = nativeStart(mNativeStream, mInitialUrl, mInitialPriority,
@@ -461,6 +472,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
     @CalledByNative
     private void onStreamReady(final boolean requestHeadersSent) {
         postTaskToExecutor(new Runnable() {
+            @Override
             public void run() {
                 synchronized (mNativeStreamLock) {
                     if (isDoneLocked()) {
@@ -500,6 +512,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
             return;
         }
         postTaskToExecutor(new Runnable() {
+            @Override
             public void run() {
                 synchronized (mNativeStreamLock) {
                     if (isDoneLocked()) {
@@ -574,6 +587,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
         final UrlResponseInfo.HeaderBlock trailersBlock =
                 new UrlResponseInfoImpl.HeaderBlockImpl(headersListFromStrings(trailers));
         postTaskToExecutor(new Runnable() {
+            @Override
             public void run() {
                 synchronized (mNativeStreamLock) {
                     if (isDoneLocked()) {
@@ -597,10 +611,11 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
         if (mResponseInfo != null) {
             mResponseInfo.setReceivedByteCount(receivedByteCount);
         }
-        if (errorCode == NetworkException.ERROR_QUIC_PROTOCOL_FAILED) {
+        if (errorCode == NetworkException.ERROR_QUIC_PROTOCOL_FAILED
+                || errorCode == NetworkException.ERROR_NETWORK_CHANGED) {
             failWithException(
                     new QuicExceptionImpl("Exception in BidirectionalStream: " + errorString,
-                            nativeError, nativeQuicError));
+                            errorCode, nativeError, nativeQuicError));
         } else {
             failWithException(new BidirectionalStreamNetworkException(
                     "Exception in BidirectionalStream: " + errorString, errorCode, nativeError));
@@ -614,6 +629,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
     @CalledByNative
     private void onCanceled() {
         postTaskToExecutor(new Runnable() {
+            @Override
             public void run() {
                 try {
                     mCallback.onCanceled(CronetBidirectionalStream.this, mResponseInfo);
@@ -724,10 +740,9 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
 
     private UrlResponseInfoImpl prepareResponseInfoOnNetworkThread(int httpStatusCode,
             String negotiatedProtocol, String[] headers, long receivedByteCount) {
-        UrlResponseInfoImpl responseInfo =
-                new UrlResponseInfoImpl(Arrays.asList(mInitialUrl), httpStatusCode, "",
-                        headersListFromStrings(headers), false, negotiatedProtocol, null);
-        responseInfo.setReceivedByteCount(receivedByteCount);
+        UrlResponseInfoImpl responseInfo = new UrlResponseInfoImpl(Arrays.asList(mInitialUrl),
+                httpStatusCode, "", headersListFromStrings(headers), false, negotiatedProtocol,
+                null, receivedByteCount);
         return responseInfo;
     }
 
@@ -783,6 +798,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
      */
     private void failWithException(final CronetException exception) {
         postTaskToExecutor(new Runnable() {
+            @Override
             public void run() {
                 failWithExceptionOnExecutor(exception);
             }
@@ -791,7 +807,9 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
 
     // Native methods are implemented in cronet_bidirectional_stream_adapter.cc.
     private native long nativeCreateBidirectionalStream(long urlRequestContextAdapter,
-            boolean sendRequestHeadersAutomatically, boolean enableMetricsCollection);
+            boolean sendRequestHeadersAutomatically, boolean enableMetricsCollection,
+            boolean trafficStatsTagSet, int trafficStatsTag, boolean trafficStatsUidSet,
+            int trafficStatsUid);
 
     @NativeClassQualifiedName("CronetBidirectionalStreamAdapter")
     private native int nativeStart(long nativePtr, String url, int priority, String method,

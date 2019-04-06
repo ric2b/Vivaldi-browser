@@ -10,7 +10,6 @@ import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.HAVE_I
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.IMMEDIATE_RESPONSE;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NEXT_YEAR;
 
-import android.content.DialogInterface;
 import android.support.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -26,7 +25,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
+import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
 import java.util.concurrent.ExecutionException;
@@ -104,7 +106,7 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
                 new String[] {"4111111111111111", "Jon Doe"},
                 mPaymentRequestTestRule.getEditorTextUpdate());
         mPaymentRequestTestRule.clickInCardEditorAndWait(
-                R.id.payments_edit_done_button, mPaymentRequestTestRule.getReadyToPay());
+                R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToPay());
 
         // Complete the transaction.
         mPaymentRequestTestRule.clickAndWait(
@@ -112,7 +114,7 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the canMakePayment events were logged correctly.
         int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
@@ -176,6 +178,40 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
                 | Event.COMPLETED | Event.HAD_INITIAL_FORM_OF_PAYMENT
                 | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.CAN_MAKE_PAYMENT_TRUE
+                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER
+                | Event.SELECTED_OTHER;
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "PaymentRequest.Events", expectedSample));
+    }
+
+    /**
+     * Tests that the CanMakePayment metrics are correctly logged for the case of a merchant
+     * calling it, receiving false as a response because can make payment is disabled, showing the
+     * Payment Request and the user completes the flow.
+     */
+    @Test
+    @MediumTest
+    @Feature({"Payments"})
+    public void testCanMakePaymentDisabled_Complete()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        ThreadUtils.runOnUiThreadBlocking((Runnable) () -> {
+            PrefServiceBridge.getInstance().setBoolean(Pref.CAN_MAKE_PAYMENT_ENABLED, false);
+        });
+
+        // Install the app so CanMakePayment returns true if it is enabled.
+        mPaymentRequestTestRule.installPaymentApp(HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE);
+
+        // Initiate an complete a payment request.
+        mPaymentRequestTestRule.triggerUIAndWait(
+                "queryShow", mPaymentRequestTestRule.getReadyForInput());
+        mPaymentRequestTestRule.clickAndWait(
+                R.id.button_primary, mPaymentRequestTestRule.getDismissed());
+
+        // Make sure the canMakePayment events were logged correctly.
+        int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
+                | Event.COMPLETED | Event.HAD_INITIAL_FORM_OF_PAYMENT
+                | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.CAN_MAKE_PAYMENT_FALSE
                 | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER
                 | Event.SELECTED_OTHER;
         Assert.assertEquals(1,

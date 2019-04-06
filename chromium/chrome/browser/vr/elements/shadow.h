@@ -8,13 +8,16 @@
 #include "base/macros.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/renderers/base_quad_renderer.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace vr {
 
 // A shadow is meant to be the ancestor of elements to which a shadow is to be
 // applied. The shadow is applied across its padding.
-class Shadow : public UiElement {
+// By default the direct child is used as the shadow caster. This behavior can
+// be changed by manually setting a shadow caster.
+class VR_UI_EXPORT Shadow : public UiElement {
  public:
   Shadow();
   ~Shadow() override;
@@ -22,8 +25,11 @@ class Shadow : public UiElement {
   void Render(UiElementRenderer* renderer,
               const CameraModel& camera_model) const override;
 
-  void LayOutChildren() override;
+  void LayOutContributingChildren() override;
   void set_intensity(float intensity) { intensity_ = intensity; }
+  void set_shadow_caster(UiElement* shadow_caster) {
+    shadow_caster_ = shadow_caster;
+  }
 
   class Renderer : public BaseQuadRenderer {
    public:
@@ -55,6 +61,8 @@ class Shadow : public UiElement {
  private:
   float depth_;
   float intensity_ = 1.0f;
+  UiElement* shadow_caster_ = nullptr;
+  gfx::SizeF contributed_size_;
 
   DISALLOW_COPY_AND_ASSIGN(Shadow);
 };

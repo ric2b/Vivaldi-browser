@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/process/kill.h"
 #include "chrome/test/chromedriver/capabilities.h"
 #include "chrome/test/chromedriver/net/sync_websocket_factory.h"
 
@@ -18,20 +19,17 @@ class DevToolsEventListener;
 namespace base {
 class DictionaryValue;
 class FilePath;
+enum TerminationStatus;
 }
 
 class Chrome;
 class DeviceManager;
-class PortManager;
-class PortServer;
 class Status;
 class URLRequestContextGetter;
 
 Status LaunchChrome(URLRequestContextGetter* context_getter,
                     const SyncWebSocketFactory& socket_factory,
                     DeviceManager* device_manager,
-                    PortServer* port_server,
-                    PortManager* port_manager,
                     const Capabilities& capabilities,
                     std::vector<std::unique_ptr<DevToolsEventListener>>
                         devtools_event_listeners,
@@ -48,6 +46,10 @@ Status PrepareUserDataDir(
     const base::FilePath& user_data_dir,
     const base::DictionaryValue* custom_prefs,
     const base::DictionaryValue* custom_local_state);
+Status ParseDevToolsActivePortFile(const base::FilePath& user_data_dir,
+                                   int* port);
+Status RemoveOldDevToolsActivePortFile(const base::FilePath& user_data_dir);
+std::string GetTerminationReason(base::TerminationStatus status);
 }  // namespace internal
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CHROME_LAUNCHER_H_

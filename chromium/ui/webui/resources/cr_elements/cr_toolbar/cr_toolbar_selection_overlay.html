@@ -1,15 +1,35 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 
 <dom-module id="cr-toolbar-selection-overlay">
   <template>
-    <style>
+    <style include="cr-icons paper-button-style">
       :host {
         -webkit-padding-start: var(--cr-toolbar-field-margin, 0);
+        background: white;
+        border-bottom: 1px solid var(--google-grey-300);
+        bottom: 0;
+        color: var(--google-grey-900);
         display: flex;
-        height: 56px;
+        left: 0;
+        opacity: 0;
+        pointer-events: none;
+        position: absolute;
+        right: 0;
+        top: 0;
+        transition: opacity var(--cr-toolbar-overlay-animation-duration),
+                    visibility var(--cr-toolbar-overlay-animation-duration);
+        visibility: hidden;
+      }
+
+      :host([show]) {
+        opacity: 1;
+        pointer-events: initial;
+        visibility: initial;
       }
 
       #overlay-content {
@@ -22,20 +42,14 @@
       }
 
       paper-button {
-        font-weight: 500;
-      }
-
-      paper-button[disabled] {
-        background: transparent;
-        color: inherit;
-        opacity: 0.7;
+        -webkit-margin-start: 8px;
       }
 
       #number-selected {
         flex: 1;
       }
 
-      button {
+      paper-icon-button-light {
         -webkit-margin-end: 24px;
         -webkit-margin-start: 2px;
         height: 36px;
@@ -47,21 +61,23 @@
         width: 20px;
       }
     </style>
-    <div id="overlay-content">
-      <button is="paper-icon-button-light"
-          on-tap="onClearSelectionTap_"
-          title="[[cancelLabel]]">
-        <iron-icon icon="cr:clear"></iron-icon>
-      </button>
-      <div id="number-selected">[[selectionLabel]]</div>
-      <paper-button on-tap="onClearSelectionTap_">
-        [[cancelLabel]]
-      </paper-button>
-      <paper-button id="delete" on-tap="onDeleteTap_"
-          disabled="[[deleteDisabled]]">
-        [[deleteLabel]]
-      </paper-button>
-    </div>
+    <template is="dom-if" if="[[hasShown_]]">
+      <div id="overlay-content">
+        <paper-icon-button-light>
+          <button on-tap="onClearSelectionTap_" title="[[cancelLabel]]">
+            <iron-icon icon="cr:clear"></iron-icon>
+          </button>
+        </paper-icon-button-light>
+        <div id="number-selected">[[selectionLabel_]]</div>
+        <paper-button on-tap="onClearSelectionTap_">
+          [[cancelLabel]]
+        </paper-button>
+        <paper-button id="delete" on-tap="onDeleteTap_"
+            disabled="[[deleteDisabled]]">
+          [[deleteLabel]]
+        </paper-button>
+      </div>
+    </template>
   </template>
   <script src="cr_toolbar_selection_overlay.js"></script>
 </dom-module>

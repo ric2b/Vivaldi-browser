@@ -20,7 +20,7 @@
 #include "chromeos/login/auth/user_context.h"
 #include "components/user_manager/user.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/device/public/interfaces/fingerprint.mojom.h"
+#include "services/device/public/mojom/fingerprint.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
@@ -168,8 +168,8 @@ class ScreenLocker : public AuthStatusConsumer,
   static void InitClass();
   static void ShutDownClass();
 
-  // Handles a request from the session manager to lock the screen.
-  static void HandleLockScreenRequest();
+  // Handles a request from the session manager to show the lock screen.
+  static void HandleShowLockScreenRequest();
 
   // Show the screen locker.
   static void Show();
@@ -206,7 +206,7 @@ class ScreenLocker : public AuthStatusConsumer,
   // fingerprint::mojom::FingerprintObserver:
   void OnAuthScanDone(
       uint32_t scan_result,
-      const std::unordered_map<std::string, std::vector<std::string>>& matches)
+      const base::flat_map<std::string, std::vector<std::string>>& matches)
       override;
   void OnSessionFailed() override;
   void OnRestarted() override {}
@@ -235,6 +235,12 @@ class ScreenLocker : public AuthStatusConsumer,
   // ash is fully locked and post lock animation finishes. Otherwise, the start
   // lock request is failed.
   void OnStartLockCallback(bool locked);
+
+  void OnPinAttemptDone(const UserContext& user_context, bool success);
+
+  // Called to continue authentication against cryptohome after the pin login
+  // check has completed.
+  void ContinueAuthenticate(const UserContext& user_context);
 
   // WebUIScreenLocker instance in use.
   std::unique_ptr<WebUIScreenLocker> web_ui_;

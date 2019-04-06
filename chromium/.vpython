@@ -25,6 +25,7 @@
 python_version: "2.7"
 
 # Used by:
+#   build/chromeos/run_vm_test.py
 #   third_party/catapult
 #
 # This version must be compatible with the version range specified by
@@ -67,6 +68,7 @@ wheel: <
 
 # Used by:
 #   third_party/catapult
+#   chrome/test/vr/perf/latency/run_latency_test.py
 #
 # This version must be compatible with the version range specified by
 # //third_party/catapult/telemetry/telemetry/internal/util/external_modules.py
@@ -123,4 +125,53 @@ wheel: <
 wheel: <
   name: "infra/python/wheels/simplejson/${vpython_platform}"
   version: "version:3.13.2"
+>
+
+# Used by:
+#   tools/perf/core/results_dashboard.py
+wheel: <
+  name: "infra/python/wheels/httplib2-py2_py3"
+  version: "version:0.10.3"
+>
+
+# Used by:
+#   chrome/test/vr/perf/latency/run_latency_test.py
+wheel: <
+  name: "infra/python/wheels/peakutils-py2_py3"
+  version: "version:1.0.3"
+  match_tag: <
+    abi: "cp27mu"
+    platform: "manylinux1_i686"
+  >
+  match_tag: <
+    abi: "cp27mu"
+    platform: "manylinux1_x86_64"
+  >
+>
+wheel: <
+  name: "infra/python/wheels/pyserial-py2_py3"
+  version: "version:3.4"
+>
+wheel: <
+  name: "infra/python/wheels/scipy/${vpython_platform}"
+  version: "version:0.19.0"
+  match_tag: <
+    abi: "cp27mu"
+    platform: "manylinux1_i686"
+  >
+  match_tag: <
+    abi: "cp27mu"
+    platform: "manylinux1_x86_64"
+  >
+>
+
+# Used by:
+#   content/test/gpu/gpu_tests/color_profile_manager_mac.py
+# Note: there's a version of this wheel for even older OS versions,
+# but we don't need it for the GPU tests, and it looks like there are
+# bugs in the not_match_tag implementation.
+wheel: <
+  name: "infra/python/wheels/pyobjc/${vpython_platform}"
+  version: "version:4.1"
+  match_tag: < platform: "macosx_10_10_intel" >
 >

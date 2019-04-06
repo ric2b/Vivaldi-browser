@@ -4,20 +4,27 @@
 
 #include "base/stl_util.h"
 
+#include <array>
 #include <deque>
 #include <forward_list>
 #include <functional>
+#include <initializer_list>
 #include <iterator>
 #include <list>
 #include <map>
+#include <queue>
 #include <set>
+#include <stack>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "base/containers/queue.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -93,6 +100,185 @@ struct HashByFirst {
 
 namespace base {
 namespace {
+
+TEST(STLUtilTest, Size) {
+  {
+    std::vector<int> vector = {1, 2, 3, 4, 5};
+    static_assert(
+        std::is_same<decltype(base::size(vector)),
+                     decltype(vector.size())>::value,
+        "base::size(vector) should have the same type as vector.size()");
+    EXPECT_EQ(vector.size(), base::size(vector));
+  }
+
+  {
+    std::string empty_str;
+    static_assert(
+        std::is_same<decltype(base::size(empty_str)),
+                     decltype(empty_str.size())>::value,
+        "base::size(empty_str) should have the same type as empty_str.size()");
+    EXPECT_EQ(0u, base::size(empty_str));
+  }
+
+  {
+    std::array<int, 4> array = {{1, 2, 3, 4}};
+    static_assert(
+        std::is_same<decltype(base::size(array)),
+                     decltype(array.size())>::value,
+        "base::size(array) should have the same type as array.size()");
+    static_assert(base::size(array) == array.size(),
+                  "base::size(array) should be equal to array.size()");
+  }
+
+  {
+    int array[] = {1, 2, 3};
+    static_assert(std::is_same<size_t, decltype(base::size(array))>::value,
+                  "base::size(array) should be of type size_t");
+    static_assert(3u == base::size(array), "base::size(array) should be 3");
+  }
+}
+
+TEST(STLUtilTest, Empty) {
+  {
+    std::vector<int> vector;
+    static_assert(
+        std::is_same<decltype(base::empty(vector)),
+                     decltype(vector.empty())>::value,
+        "base::empty(vector) should have the same type as vector.empty()");
+    EXPECT_EQ(vector.empty(), base::empty(vector));
+  }
+
+  {
+    std::array<int, 4> array = {{1, 2, 3, 4}};
+    static_assert(
+        std::is_same<decltype(base::empty(array)),
+                     decltype(array.empty())>::value,
+        "base::empty(array) should have the same type as array.empty()");
+    static_assert(base::empty(array) == array.empty(),
+                  "base::empty(array) should be equal to array.empty()");
+  }
+
+  {
+    int array[] = {1, 2, 3};
+    static_assert(std::is_same<bool, decltype(base::empty(array))>::value,
+                  "base::empty(array) should be of type bool");
+    static_assert(!base::empty(array), "base::empty(array) should be false");
+  }
+
+  {
+    constexpr std::initializer_list<int> il;
+    static_assert(std::is_same<bool, decltype(base::empty(il))>::value,
+                  "base::empty(il) should be of type bool");
+    static_assert(base::empty(il), "base::empty(il) should be true");
+  }
+}
+
+TEST(STLUtilTest, Data) {
+  {
+    std::vector<int> vector = {1, 2, 3, 4, 5};
+    static_assert(
+        std::is_same<decltype(base::data(vector)),
+                     decltype(vector.data())>::value,
+        "base::data(vector) should have the same type as vector.data()");
+    EXPECT_EQ(vector.data(), base::data(vector));
+  }
+
+  {
+    const std::string cstr = "const string";
+    static_assert(
+        std::is_same<decltype(base::data(cstr)), decltype(cstr.data())>::value,
+        "base::data(cstr) should have the same type as cstr.data()");
+
+    EXPECT_EQ(cstr.data(), base::data(cstr));
+  }
+
+  {
+    std::string str = "mutable string";
+    static_assert(std::is_same<decltype(base::data(str)), char*>::value,
+                  "base::data(str) should be of type char*");
+    EXPECT_EQ(str.data(), base::data(str));
+  }
+
+  {
+    std::string empty_str;
+    static_assert(std::is_same<decltype(base::data(empty_str)), char*>::value,
+                  "base::data(empty_str) should be of type char*");
+    EXPECT_EQ(empty_str.data(), base::data(empty_str));
+  }
+
+  {
+    std::array<int, 4> array = {{1, 2, 3, 4}};
+    static_assert(
+        std::is_same<decltype(base::data(array)),
+                     decltype(array.data())>::value,
+        "base::data(array) should have the same type as array.data()");
+    // std::array::data() is not constexpr prior to C++17, hence the runtime
+    // check.
+    EXPECT_EQ(array.data(), base::data(array));
+  }
+
+  {
+    constexpr int array[] = {1, 2, 3};
+    static_assert(std::is_same<const int*, decltype(base::data(array))>::value,
+                  "base::data(array) should be of type const int*");
+    static_assert(array == base::data(array),
+                  "base::data(array) should be array");
+  }
+
+  {
+    constexpr std::initializer_list<int> il;
+    static_assert(
+        std::is_same<decltype(il.begin()), decltype(base::data(il))>::value,
+        "base::data(il) should have the same type as il.begin()");
+    static_assert(il.begin() == base::data(il),
+                  "base::data(il) should be equal to il.begin()");
+  }
+}
+
+TEST(STLUtilTest, GetUnderlyingContainer) {
+  {
+    std::queue<int> queue({1, 2, 3, 4, 5});
+    static_assert(std::is_same<decltype(GetUnderlyingContainer(queue)),
+                               const std::deque<int>&>::value,
+                  "GetUnderlyingContainer(queue) should be of type deque");
+    EXPECT_THAT(GetUnderlyingContainer(queue),
+                testing::ElementsAre(1, 2, 3, 4, 5));
+  }
+
+  {
+    std::queue<int> queue;
+    EXPECT_THAT(GetUnderlyingContainer(queue), testing::ElementsAre());
+  }
+
+  {
+    base::queue<int> queue({1, 2, 3, 4, 5});
+    static_assert(
+        std::is_same<decltype(GetUnderlyingContainer(queue)),
+                     const base::circular_deque<int>&>::value,
+        "GetUnderlyingContainer(queue) should be of type circular_deque");
+    EXPECT_THAT(GetUnderlyingContainer(queue),
+                testing::ElementsAre(1, 2, 3, 4, 5));
+  }
+
+  {
+    std::vector<int> values = {1, 2, 3, 4, 5};
+    std::priority_queue<int> queue(values.begin(), values.end());
+    static_assert(std::is_same<decltype(GetUnderlyingContainer(queue)),
+                               const std::vector<int>&>::value,
+                  "GetUnderlyingContainer(queue) should be of type vector");
+    EXPECT_THAT(GetUnderlyingContainer(queue),
+                testing::UnorderedElementsAre(1, 2, 3, 4, 5));
+  }
+
+  {
+    std::stack<int> stack({1, 2, 3, 4, 5});
+    static_assert(std::is_same<decltype(GetUnderlyingContainer(stack)),
+                               const std::deque<int>&>::value,
+                  "GetUnderlyingContainer(stack) should be of type deque");
+    EXPECT_THAT(GetUnderlyingContainer(stack),
+                testing::ElementsAre(1, 2, 3, 4, 5));
+  }
+}
 
 TEST(STLUtilTest, STLIsSorted) {
   {
@@ -299,31 +485,6 @@ TEST(STLUtilTest, STLIncludes) {
   EXPECT_TRUE(STLIncludes<std::set<int> >(a3, a2));
 }
 
-TEST(StringAsArrayTest, Empty) {
-  std::string empty;
-  EXPECT_EQ(nullptr, string_as_array(&empty));
-}
-
-TEST(StringAsArrayTest, NullTerminated) {
-  // If any std::string implementation is not null-terminated, this should
-  // fail. All compilers we use return a null-terminated buffer, but please do
-  // not rely on this fact in your code.
-  std::string str("abcde");
-  str.resize(3);
-  EXPECT_STREQ("abc", string_as_array(&str));
-}
-
-TEST(StringAsArrayTest, WriteCopy) {
-  // With a COW implementation, this test will fail if
-  // string_as_array(&str) is implemented as
-  // const_cast<char*>(str->data()).
-  std::string s1("abc");
-  const std::string s2(s1);
-  string_as_array(&s1)[1] = 'x';
-  EXPECT_EQ("axc", s1);
-  EXPECT_EQ("abc", s2);
-}
-
 TEST(Erase, String) {
   const std::pair<std::string, std::string> test_data[] = {
       {"", ""}, {"abc", "bc"}, {"abca", "bc"},
@@ -436,6 +597,15 @@ TEST(ContainsValue, OrdinaryArrays) {
 
   const char allowed_chars_including_nul[] = "abcd";
   EXPECT_TRUE(ContainsValue(allowed_chars_including_nul, 0));
+}
+
+TEST(STLUtilTest, OptionalOrNullptr) {
+  Optional<float> optional;
+  EXPECT_EQ(nullptr, base::OptionalOrNullptr(optional));
+
+  optional = 0.1f;
+  EXPECT_EQ(&optional.value(), base::OptionalOrNullptr(optional));
+  EXPECT_NE(nullptr, base::OptionalOrNullptr(optional));
 }
 
 }  // namespace

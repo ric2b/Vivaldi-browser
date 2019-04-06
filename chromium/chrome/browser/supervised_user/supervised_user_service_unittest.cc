@@ -40,7 +40,7 @@
 #include "components/version_info/version_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -251,7 +251,7 @@ class MockPermissionRequestCreator : public PermissionRequestCreator {
 
   void AnswerRequest(size_t index, bool result) {
     ASSERT_LT(index, requested_urls_.size());
-    callbacks_[index].Run(result);
+    std::move(callbacks_[index]).Run(result);
     callbacks_.erase(callbacks_.begin() + index);
     requested_urls_.erase(requested_urls_.begin() + index);
   }
@@ -261,19 +261,19 @@ class MockPermissionRequestCreator : public PermissionRequestCreator {
   bool IsEnabled() const override { return enabled_; }
 
   void CreateURLAccessRequest(const GURL& url_requested,
-                              const SuccessCallback& callback) override {
+                              SuccessCallback callback) override {
     ASSERT_TRUE(enabled_);
     requested_urls_.push_back(url_requested);
-    callbacks_.push_back(callback);
+    callbacks_.push_back(std::move(callback));
   }
 
   void CreateExtensionInstallRequest(const std::string& extension_id,
-                                     const SuccessCallback& callback) override {
+                                     SuccessCallback callback) override {
     FAIL();
   }
 
   void CreateExtensionUpdateRequest(const std::string& id,
-                                    const SuccessCallback& callback) override {
+                                    SuccessCallback callback) override {
     FAIL();
   }
 
@@ -407,7 +407,7 @@ class SupervisedUserServiceExtensionTestBase
     std::unique_ptr<base::DictionaryValue> source(new base::DictionaryValue());
     source->SetString(extensions::manifest_keys::kName, "Theme");
     source->Set(extensions::manifest_keys::kTheme,
-                base::MakeUnique<base::DictionaryValue>());
+                std::make_unique<base::DictionaryValue>());
     source->SetString(extensions::manifest_keys::kVersion, "1.0");
     extensions::ExtensionBuilder builder;
     scoped_refptr<extensions::Extension> extension =
@@ -416,16 +416,8 @@ class SupervisedUserServiceExtensionTestBase
   }
 
   scoped_refptr<extensions::Extension> MakeExtension(bool by_custodian) {
-    std::unique_ptr<base::DictionaryValue> manifest =
-        extensions::DictionaryBuilder()
-            .Set(extensions::manifest_keys::kName, "Extension")
-            .Set(extensions::manifest_keys::kVersion, "1.0")
-            .Build();
-
-    extensions::ExtensionBuilder builder;
     scoped_refptr<extensions::Extension> extension =
-        builder.SetManifest(std::move(manifest))
-            .Build();
+        extensions::ExtensionBuilder("Extension").Build();
     extensions::util::SetWasInstalledByCustodian(extension->id(),
                                                  profile_.get(), by_custodian);
 
@@ -513,7 +505,7 @@ TEST_F(SupervisedUserServiceExtensionTest,
     EXPECT_FALSE(error_2.empty());
   }
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   EXPECT_FALSE(supervised_user_service->GetDebugPolicyProviderName().empty());
 #endif
 }
@@ -585,7 +577,7 @@ TEST_F(SupervisedUserServiceExtensionTest,
     EXPECT_FALSE(error_4.empty());
   }
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   EXPECT_FALSE(supervised_user_service->GetDebugPolicyProviderName().empty());
 #endif
 }
@@ -633,7 +625,7 @@ TEST_F(SupervisedUserServiceExtensionTest, InstallContentPacks) {
 
   // Load a whitelist.
   base::FilePath test_data_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
   SupervisedUserWhitelistService* whitelist_service =
       supervised_user_service->GetWhitelistService();
   base::FilePath whitelist_path =

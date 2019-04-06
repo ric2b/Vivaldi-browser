@@ -8,6 +8,8 @@ source_set("main") {
     "browser_view_information.h",
     "browser_view_wrangler.h",
     "browser_view_wrangler.mm",
+    "bvc_container_view_controller.h",
+    "bvc_container_view_controller.mm",
     "main_containing_view_controller.h",
     "main_containing_view_controller.mm",
     "main_coordinator.h",
@@ -23,7 +25,6 @@ source_set("main") {
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browsing_data",
-    "//ios/chrome/browser/browsing_data:browsing_data_internal",
     "//ios/chrome/browser/crash_report:crash_report_internal",
     "//ios/chrome/browser/device_sharing",
     "//ios/chrome/browser/sessions",
@@ -70,6 +71,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui:ui_internal",
+    "//ios/chrome/browser/ui/tab_switcher",
     "//ios/chrome/test:block_cleanup_test",
     "//ios/web/public/test",
     "//testing/gtest",
@@ -85,9 +87,7 @@ source_set("test_support") {
   ]
   deps = [
     "//base",
-    "//base/test:test_support",
     "//ios/chrome/browser/ui/tab_switcher",
-    "//ios/chrome/test:block_cleanup_test",
-    "//testing/gtest",
+    "//ios/chrome/test:test_support",
   ]
 }

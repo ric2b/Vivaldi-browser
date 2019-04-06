@@ -39,8 +39,8 @@ class WebUIMessageListener : public base::SupportsWeakPtr<WebUIMessageListener>{
   WebUIMessageListener(content::WebUI* web_ui, const std::string& message)
       : message_loop_(new content::MessageLoopRunner) {
     web_ui->RegisterMessageCallback(
-        message, base::Bind(&WebUIMessageListener::HandleMessage,
-                            AsWeakPtr()));
+        message,
+        base::BindRepeating(&WebUIMessageListener::HandleMessage, AsWeakPtr()));
   }
   bool Wait() {
     message_loop_->Run();
@@ -110,7 +110,7 @@ class WebUIWebViewBrowserTest : public WebUIBrowserTest {
         base::FilePath(FILE_PATH_LITERAL("webview_basic.js")));
 
     base::FilePath test_data_dir;
-    PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+    base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
     embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
     ASSERT_TRUE(embedded_test_server()->Start());
   }
@@ -143,7 +143,13 @@ IN_PROC_BROWSER_TEST_F(WebUIWebViewBrowserTest, DisplayNone) {
       "testDisplayNone", base::Value(GetTestUrl("empty.html").spec())));
 }
 
-IN_PROC_BROWSER_TEST_F(WebUIWebViewBrowserTest, ExecuteScriptCode) {
+// TODO(crbug.com/861600) Flaky on CrOS trybots.
+#if defined(OS_CHROMEOS) && !defined(NDEBUG)
+#define MAYBE_ExecuteScriptCode DISABLED_ExecuteScriptCode
+#else
+#define MAYBE_ExecuteScriptCode ExecuteScriptCode
+#endif
+IN_PROC_BROWSER_TEST_F(WebUIWebViewBrowserTest, MAYBE_ExecuteScriptCode) {
   ui_test_utils::NavigateToURL(browser(), GetWebViewEnabledWebUIURL());
 
   ASSERT_TRUE(WebUIBrowserTest::RunJavascriptAsyncTest(
@@ -203,9 +209,17 @@ IN_PROC_BROWSER_TEST_F(
       base::Value(GetTestUrl("empty.html").spec())));
 }
 
+#if defined(OS_CHROMEOS) && !defined(NDEBUG)
+// TODO(crbug.com/859320) Fails on CrOS dbg with --enable-features=Mash.
+#define MAYBE_AddContentScriptToOneWebViewShouldNotInjectToTheOtherWebView \
+  DISABLED_AddContentScriptToOneWebViewShouldNotInjectToTheOtherWebView
+#else
+#define MAYBE_AddContentScriptToOneWebViewShouldNotInjectToTheOtherWebView \
+  AddContentScriptToOneWebViewShouldNotInjectToTheOtherWebView
+#endif
 IN_PROC_BROWSER_TEST_F(
     WebUIWebViewBrowserTest,
-    AddContentScriptToOneWebViewShouldNotInjectToTheOtherWebView) {
+    MAYBE_AddContentScriptToOneWebViewShouldNotInjectToTheOtherWebView) {
   ui_test_utils::NavigateToURL(browser(), GetWebViewEnabledWebUIURL());
 
   ASSERT_TRUE(WebUIBrowserTest::RunJavascriptAsyncTest(
@@ -228,8 +242,16 @@ IN_PROC_BROWSER_TEST_F(WebUIWebViewBrowserTest,
       base::Value(GetTestUrl("empty.html").spec())));
 }
 
+#if defined(OS_CHROMEOS) && !defined(NDEBUG)
+// TODO(crbug.com/859320) Fails on CrOS dbg with --enable-features=Mash.
+#define MAYBE_AddContentScriptsWithNewWindowAPI \
+  DISABLED_AddContentScriptsWithNewWindowAPI
+#else
+#define MAYBE_AddContentScriptsWithNewWindowAPI \
+  AddContentScriptsWithNewWindowAPI
+#endif
 IN_PROC_BROWSER_TEST_F(WebUIWebViewBrowserTest,
-                       AddContentScriptsWithNewWindowAPI) {
+                       MAYBE_AddContentScriptsWithNewWindowAPI) {
   ui_test_utils::NavigateToURL(browser(), GetWebViewEnabledWebUIURL());
 
   ASSERT_TRUE(WebUIBrowserTest::RunJavascriptAsyncTest(

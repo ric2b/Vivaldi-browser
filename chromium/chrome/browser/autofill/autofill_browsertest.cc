@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -39,7 +38,6 @@
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/validation.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
@@ -162,7 +160,7 @@ class AutofillTest : public InProcessBrowserTest {
       observer.reset(new WindowedPersonalDataManagerObserver(browser()));
 
     std::string js = GetJSToFillForm(data) + submit_js;
-    ASSERT_TRUE(content::ExecuteScript(render_view_host(), js));
+    ASSERT_TRUE(content::ExecuteScript(web_contents(), js));
     if (simulate_click) {
       // Simulate a mouse click to submit the form because form submissions not
       // triggered by user gestures are ignored.
@@ -219,9 +217,8 @@ class AutofillTest : public InProcessBrowserTest {
     return parsed_profiles;
   }
 
-  content::RenderViewHost* render_view_host() {
-    return browser()->tab_strip_model()->GetActiveWebContents()->
-        GetRenderViewHost();
+  content::WebContents* web_contents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
   }
 
  private:

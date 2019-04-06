@@ -23,7 +23,7 @@ namespace base {
 class Value;
 class DictionaryValue;
 class SequencedTaskRunner;
-}
+}  // namespace base
 
 namespace vivaldi {
 class NotesStorage;
@@ -31,7 +31,7 @@ class NotesLoadDetails;
 
 class Notes_Node : public ui::TreeNode<Notes_Node> {
  public:
-  enum Type { NOTE, FOLDER, OTHER, TRASH };
+  enum Type { NOTE, FOLDER, OTHER, TRASH, SEPARATOR };
 
   static const int64_t kInvalidSyncTransactionVersion;
 
@@ -45,7 +45,7 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
               int64_t* max_node_id,
               NotesCodec* checksummer);
 
-  void SetType(Type type) { type_ = type; }
+  void SetType(Type type);
   Type type() const { return type_; }
   bool is_folder() const {
     return type_ == FOLDER || type_ == TRASH || type_ == OTHER;
@@ -53,6 +53,7 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   bool is_note() const { return type_ == NOTE; }
   bool is_other() const { return type_ == OTHER; }
   bool is_trash() const { return type_ == TRASH; }
+  bool is_separator() const { return type_ == SEPARATOR; }
 
   // Returns an unique id for this node.
   // For notes nodes that are managed by the notes model, the IDs are
@@ -62,7 +63,6 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
 
   // Get the creation time for the node.
   base::Time GetCreationTime() const { return creation_time_; }
-  base::string16 GetFilename() { return filename_; }
 
   const base::string16& GetContent() const { return content_; }
 
@@ -71,9 +71,7 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   const NoteAttachment& GetAttachment(const std::string& checksum) const {
     return attachments_.at(checksum);
   }
-  const NoteAttachments& GetAttachments() const {
-    return attachments_;
-  }
+  const NoteAttachments& GetAttachments() const { return attachments_; }
   void SetContent(const base::string16& content) { content_ = content; }
   void SetURL(const GURL& url) { url_ = url; }
   void SetCreationTime(const base::Time creation_time) {
@@ -89,9 +87,7 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
     attachments_.erase(checksum);
   }
 
-  void ClearAttachments() {
-    attachments_.clear();
-  }
+  void ClearAttachments() { attachments_.clear(); }
 
   void set_sync_transaction_version(int64_t sync_transaction_version) {
     sync_transaction_version_ = sync_transaction_version;
@@ -103,8 +99,6 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
 
   // Type of node, folder or note.
   Type type_;
-  // Filename of attached content.
-  base::string16 filename_;
   // Time of creation.
   base::Time creation_time_;
   // Time of modification.

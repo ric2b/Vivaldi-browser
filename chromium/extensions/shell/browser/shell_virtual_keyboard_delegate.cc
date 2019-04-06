@@ -61,7 +61,10 @@ bool ShellVirtualKeyboardDelegate::IsLanguageSettingsEnabled() {
   return false;
 }
 
-bool ShellVirtualKeyboardDelegate::SetVirtualKeyboardMode(int mode_enum) {
+bool ShellVirtualKeyboardDelegate::SetVirtualKeyboardMode(
+    int mode_enum,
+    base::Optional<gfx::Rect> target_bounds,
+    OnSetModeCallback on_set_mode_callback) {
   return false;
 }
 
@@ -71,6 +74,16 @@ bool ShellVirtualKeyboardDelegate::SetDraggableArea(
 }
 
 bool ShellVirtualKeyboardDelegate::SetRequestedKeyboardState(int state_enum) {
+  return false;
+}
+
+bool ShellVirtualKeyboardDelegate::SetOccludedBounds(
+    const std::vector<gfx::Rect>& bounds) {
+  return false;
+}
+
+bool ShellVirtualKeyboardDelegate::SetHitTestBounds(
+    const std::vector<gfx::Rect>& bounds) {
   return false;
 }
 

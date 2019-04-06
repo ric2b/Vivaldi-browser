@@ -15,8 +15,8 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log.h"
-#include "net/proxy/proxy_config_service.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_config_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/ssl_config.h"
 #include "net/ssl/ssl_config_service.h"
 #include "net/test/url_request/url_request_failed_job.h"
@@ -59,7 +59,7 @@ class AwURLRequestContextGetterTest : public ::testing::Test {
 
     getter_ = base::MakeRefCounted<android_webview::AwURLRequestContextGetter>(
         temp_dir_.GetPath(), temp_dir_.GetPath().AppendASCII("ChannelID"),
-        net::ProxyService::CreateSystemProxyConfigService(
+        net::ProxyResolutionService::CreateSystemProxyConfigService(
             content::BrowserThread::GetTaskRunnerForThread(
                 content::BrowserThread::IO)),
         pref_service_.get(), &net_log_);
@@ -97,6 +97,21 @@ TEST_F(AwURLRequestContextGetterTest, SymantecPoliciesExempted) {
   EXPECT_FALSE(config.symantec_enforcement_disabled);
   config_service->GetSSLConfig(&config);
   EXPECT_TRUE(config.symantec_enforcement_disabled);
+}
+
+// Tests that SHA-1 is still allowed for locally-installed trust anchors,
+// including those in application manifests, as it should behave like
+// the Android system.
+TEST_F(AwURLRequestContextGetterTest, SHA1LocalAnchorsAllowed) {
+  net::URLRequestContext* context = getter_->GetURLRequestContext();
+  ASSERT_TRUE(context);
+  net::SSLConfigService* config_service = context->ssl_config_service();
+  ASSERT_TRUE(config_service);
+
+  net::SSLConfig config;
+  EXPECT_FALSE(config.sha1_local_anchors_enabled);
+  config_service->GetSSLConfig(&config);
+  EXPECT_TRUE(config.sha1_local_anchors_enabled);
 }
 
 }  // namespace android_webview

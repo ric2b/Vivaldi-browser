@@ -16,7 +16,6 @@
 #include "base/time/clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/notifications/notification_interactive_uitest_support.h"
 #include "chrome/browser/notifications/notification_test_util.h"
@@ -36,15 +35,14 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
-#include "ui/message_center/notification.h"
 #include "ui/message_center/notification_blocker.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/notification.h"
 #include "url/gurl.h"
 
 #if defined(OS_MACOSX)
@@ -217,7 +215,7 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestDenyOnPermissionRequestUI) {
   CreateSimpleNotification(browser(), false);
   ASSERT_EQ(0, GetNotificationCount());
   ContentSettingsForOneType settings;
-  GetPrefsByContentSetting(CONTENT_SETTING_BLOCK, &settings);
+  GetDisabledContentSettings(&settings);
   EXPECT_TRUE(CheckOriginInSetting(settings, GetTestPageURL()));
 }
 
@@ -230,13 +228,11 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestClosePermissionRequestUI) {
   CreateSimpleNotification(browser(), false);
   ASSERT_EQ(0, GetNotificationCount());
   ContentSettingsForOneType settings;
-  GetPrefsByContentSetting(CONTENT_SETTING_BLOCK, &settings);
+  GetDisabledContentSettings(&settings);
   EXPECT_EQ(0U, settings.size());
 }
 
 IN_PROC_BROWSER_TEST_F(NotificationsTest, TestPermissionAPI) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  EnablePermissionsEmbargo(&scoped_feature_list);
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Test that Notification.permission returns the right thing.
@@ -248,8 +244,14 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestPermissionAPI) {
 
   DenyOrigin(GetTestPageURL().GetOrigin());
   EXPECT_EQ("denied", QueryPermissionStatus(browser()));
+}
 
-  DropOriginPreference(GetTestPageURL().GetOrigin());
+IN_PROC_BROWSER_TEST_F(NotificationsTest, TestPermissionEmbargo) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  EnablePermissionsEmbargo(&scoped_feature_list);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURL(browser(), GetTestPageURL());
 
   // Verify embargo behaviour - automatically blocked after 3 dismisses.
   ASSERT_TRUE(RequestAndDismissPermission(browser()));
@@ -351,7 +353,7 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestCreateDenyCloseNotifications) {
 
   DenyOrigin(GetTestPageURL().GetOrigin());
   ContentSettingsForOneType settings;
-  GetPrefsByContentSetting(CONTENT_SETTING_BLOCK, &settings);
+  GetDisabledContentSettings(&settings);
   ASSERT_TRUE(CheckOriginInSetting(settings, GetTestPageURL().GetOrigin()));
 
   EXPECT_EQ(1, GetNotificationCount());
@@ -361,36 +363,6 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestCreateDenyCloseNotifications) {
       (*notifications.rbegin())->id(),
       true);  // by_user
   ASSERT_EQ(0, GetNotificationCount());
-}
-
-// Crashes on Linux/Win. See http://crbug.com/160657.
-IN_PROC_BROWSER_TEST_F(
-    NotificationsTest,
-    DISABLED_TestOriginPrefsNotSavedInIncognito) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  // Verify that allow/deny origin preferences are not saved in incognito.
-  Browser* incognito = CreateIncognitoBrowser();
-  ui_test_utils::NavigateToURL(incognito, GetTestPageURL());
-  ASSERT_TRUE(RequestAndDenyPermission(incognito));
-  CloseBrowserWindow(incognito);
-
-  incognito = CreateIncognitoBrowser();
-  ui_test_utils::NavigateToURL(incognito, GetTestPageURL());
-  ASSERT_TRUE(RequestAndAcceptPermission(incognito));
-  CreateSimpleNotification(incognito, true);
-  ASSERT_EQ(1, GetNotificationCount());
-  CloseBrowserWindow(incognito);
-
-  incognito = CreateIncognitoBrowser();
-  ui_test_utils::NavigateToURL(incognito, GetTestPageURL());
-  ASSERT_TRUE(RequestPermissionAndWait(incognito));
-
-  ContentSettingsForOneType settings;
-  GetPrefsByContentSetting(CONTENT_SETTING_BLOCK, &settings);
-  EXPECT_EQ(0U, settings.size());
-  GetPrefsByContentSetting(CONTENT_SETTING_ALLOW, &settings);
-  EXPECT_EQ(0U, settings.size());
 }
 
 IN_PROC_BROWSER_TEST_F(NotificationsTest, TestCloseTabWithPermissionRequestUI) {
@@ -460,6 +432,8 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestNotificationReplacement) {
 
 IN_PROC_BROWSER_TEST_F(NotificationsTest,
                        TestNotificationReplacementReappearance) {
+  message_center::MessageCenter::Get()->SetHasMessageCenterView(false);
+
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Test that we can replace a notification using the tag, and that it will
@@ -481,11 +455,7 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest,
   message_center::MessageCenter::Get()->ClickOnNotification(
       (*notifications.rbegin())->id());
 
-#if defined(OS_CHROMEOS)
-  ASSERT_EQ(0, GetNotificationPopupCount());
-#else
   ASSERT_EQ(1, GetNotificationPopupCount());
-#endif
 
   result = CreateNotification(
       browser(), true, "abc.png", "Title2", "Body2", "chat");
@@ -595,9 +565,6 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayNormal) {
 }
 
 IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayFullscreen) {
-#if defined(OS_MACOSX)
-  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
-#endif
   ASSERT_TRUE(embedded_test_server()->Start());
 
   AllowAllOrigins();
@@ -680,9 +647,6 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayMultiFullscreen) {
 // Verify that a notification is actually displayed when the webpage that
 // creates it is fullscreen with the fullscreen notification flag turned on.
 IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayPopupNotification) {
-#if defined(OS_MACOSX)
-  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
-#endif
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Creates a simple notification.

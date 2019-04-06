@@ -33,6 +33,9 @@ enum TapMultipleTargetsStrategy {
   TAP_MULTIPLE_TARGETS_STRATEGY_MAX = TAP_MULTIPLE_TARGETS_STRATEGY_NONE,
 };
 
+// User preferences needed to be passed to the renderer process.
+// TODO(crbug.com/869748): Move the preferences into
+// third_party/blink/public/mojom as a mojom struct.
 struct CONTENT_EXPORT RendererPreferences {
   RendererPreferences();
   RendererPreferences(const RendererPreferences& other);
@@ -56,17 +59,6 @@ struct CONTENT_EXPORT RendererPreferences {
   // Whether embedded bitmap strikes in fonts should be used.
   // Current only used by Linux.
   bool use_bitmaps;
-
-  // Whether images should be shown or not.
-  bool should_show_images;
-
-  // Should plugins be shown after a click. "Click to play."
-  // Note: This will override the host-preferences that
-  // might be allow, block or ask.
-  bool should_ask_plugin_content;
-
-  // Should plugins be enabled.
-  bool should_enable_plugin_content;
 
   // The type of subpixel rendering to use for text.
   // Currently only used by Linux and Windows.
@@ -103,9 +95,11 @@ struct CONTENT_EXPORT RendererPreferences {
   bool use_custom_colors;
 
   // Set to false to not send referrers.
+  // The default value should be in sync with blink::PrivacyPreferences.
   bool enable_referrers;
 
   // Set to true to indicate that the preference to set DNT to 1 is enabled.
+  // The default value should be in sync with blink::PrivacyPreferences.
   bool enable_do_not_track;
 
   // Whether to allow the use of Encrypted Media Extensions (EME), except for
@@ -178,10 +172,23 @@ struct CONTENT_EXPORT RendererPreferences {
   int32_t arrow_bitmap_width_horizontal_scroll_bar_in_dips;
 #endif
 
-  // The default font size used for rendering on Linux.
-  int default_font_size;
+  // Vivaldi specific:
+  // Maps to the Cycle focus setting in Vivaldi.
+  bool allow_tab_cycle_from_webpage_into_ui = false;
 
-  bool serve_resources_only_from_cache;
+  // Whether images should be shown or not.
+  bool should_show_images = true;
+
+  // Should plugins be shown after a click. "Click to play."
+  // Note: This will override the host-preferences that
+  // might be allow, block or ask.
+  bool should_ask_plugin_content = false;
+
+  // Should plugins be enabled.
+  bool should_enable_plugin_content = true;
+
+  bool serve_resources_only_from_cache = false;
+  // End Vivaldi specific
 };
 
 }  // namespace content

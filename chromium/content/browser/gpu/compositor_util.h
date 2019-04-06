@@ -6,11 +6,11 @@
 #define CONTENT_BROWSER_GPU_COMPOSITOR_UTIL_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/values.h"
 #include "content/common/content_export.h"
-#include "ui/gfx/buffer_types.h"
 
 namespace content {
 
@@ -37,9 +37,6 @@ CONTENT_EXPORT int NumberOfRendererRasterThreads();
 // Returns true if main thread can be pipelined with activation.
 CONTENT_EXPORT bool IsMainFrameBeforeActivationEnabled();
 
-// Returns true if images can be decode asynchronously from rasterization.
-CONTENT_EXPORT bool IsCheckerImagingEnabled();
-
 // Returns true if image animations should run in the compositor.
 CONTENT_EXPORT bool IsCompositorImageAnimationEnabled();
 
@@ -47,10 +44,10 @@ CONTENT_EXPORT std::unique_ptr<base::DictionaryValue> GetFeatureStatus();
 CONTENT_EXPORT std::unique_ptr<base::ListValue> GetProblems();
 CONTENT_EXPORT std::vector<std::string> GetDriverBugWorkarounds();
 
-// Populate a list of buffer usage/format for which a per platform specific
-// texture target must be used instead of GL_TEXTURE_2D.
-CONTENT_EXPORT std::vector<gfx::BufferUsageAndFormat>
-CreateBufferUsageAndFormatExceptionList();
+CONTENT_EXPORT std::unique_ptr<base::DictionaryValue>
+GetFeatureStatusForHardwareGpu();
+CONTENT_EXPORT std::unique_ptr<base::ListValue> GetProblemsForHardwareGpu();
+CONTENT_EXPORT std::vector<std::string> GetDriverBugWorkaroundsForHardwareGpu();
 
 }  // namespace content
 

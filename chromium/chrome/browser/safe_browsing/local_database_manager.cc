@@ -35,11 +35,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_switches.h"
-#include "components/safe_browsing/db/notification_types.h"
 #include "components/safe_browsing/db/util.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_service.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "url/url_constants.h"
 
 using content::BrowserThread;
@@ -278,6 +275,7 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
       update_in_progress_(false),
       database_update_in_progress_(false),
       closing_database_(false),
+      opening_database_(false),
       check_timeout_(base::TimeDelta::FromMilliseconds(kCheckTimeoutMs)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(sb_service_.get() != NULL);
@@ -329,10 +327,6 @@ bool LocalSafeBrowsingDatabaseManager::CanCheckResourceType(
     content::ResourceType resource_type) const {
   // We check all types since most checks are fast.
   return true;
-}
-
-bool LocalSafeBrowsingDatabaseManager::CanCheckSubresourceFilter() const {
-  return false;
 }
 
 bool LocalSafeBrowsingDatabaseManager::CanCheckUrl(const GURL& url) const {
@@ -514,8 +508,6 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(
   prefix_hits.erase(std::unique(prefix_hits.begin(), prefix_hits.end()),
                     prefix_hits.end());
 
-  UMA_HISTOGRAM_TIMES("SB2.FilterCheck", base::TimeTicks::Now() - start);
-
   if (prefix_hits.empty() && cache_hits.empty())
     return true;  // URL is okay.
 
@@ -545,7 +537,6 @@ bool LocalSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
     const GURL& url,
     Client* client) {
   // The check for the Subresource Filter in only implemented for pver4.
-  NOTREACHED();
   return true;
 }
 
@@ -618,7 +609,7 @@ void LocalSafeBrowsingDatabaseManager::AddChunks(
   safe_browsing_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&LocalSafeBrowsingDatabaseManager::AddDatabaseChunks, this,
-                     list, base::Passed(&chunks), callback));
+                     list, std::move(chunks), callback));
 }
 
 void LocalSafeBrowsingDatabaseManager::DeleteChunks(
@@ -628,7 +619,7 @@ void LocalSafeBrowsingDatabaseManager::DeleteChunks(
   safe_browsing_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&LocalSafeBrowsingDatabaseManager::DeleteDatabaseChunks,
-                     this, base::Passed(&chunk_deletes)));
+                     this, std::move(chunk_deletes)));
 }
 
 void LocalSafeBrowsingDatabaseManager::UpdateStarted() {
@@ -660,10 +651,10 @@ void LocalSafeBrowsingDatabaseManager::ResetDatabase() {
 }
 
 void LocalSafeBrowsingDatabaseManager::StartOnIOThread(
-    net::URLRequestContextGetter* request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const V4ProtocolConfig& config) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  SafeBrowsingDatabaseManager::StartOnIOThread(request_context_getter, config);
+  SafeBrowsingDatabaseManager::StartOnIOThread(url_loader_factory, config);
 
   if (enabled_)
     return;
@@ -695,10 +686,7 @@ void LocalSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
 void LocalSafeBrowsingDatabaseManager::NotifyDatabaseUpdateFinished(
     bool update_succeeded) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  content::NotificationService::current()->Notify(
-      NOTIFICATION_SAFE_BROWSING_UPDATE_COMPLETE,
-      content::Source<SafeBrowsingDatabaseManager>(this),
-      content::Details<bool>(&update_succeeded));
+  update_complete_callback_list_.Notify();
 }
 
 LocalSafeBrowsingDatabaseManager::QueuedCheck::QueuedCheck(
@@ -749,9 +737,20 @@ void LocalSafeBrowsingDatabaseManager::DoStopOnIOThread() {
   //    case the database will be recreated before our deletion request is
   //    handled, and could be used on the IO thread in that time period, leading
   //    to the same problem as above.
-  // Checking DatabaseAvailable() avoids both of these.
-  if (DatabaseAvailable()) {
-    closing_database_ = true;
+  //
+  // If the database is not currently available, but a GetDatabase() task is
+  // posted to |safe_browsing_task_runner_|, then it will be available in the
+  // future.  In this case, post the OnCloseDatabase() task so that resources
+  // will not be leaked.
+  bool post_task = false;
+  {
+    base::AutoLock lock(database_lock_);
+    if (!closing_database_ && (database_ || opening_database_)) {
+      closing_database_ = true;
+      post_task = true;
+    }
+  }
+  if (post_task) {
     safe_browsing_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&LocalSafeBrowsingDatabaseManager::OnCloseDatabase,
@@ -779,17 +778,24 @@ bool LocalSafeBrowsingDatabaseManager::DatabaseAvailable() const {
 bool LocalSafeBrowsingDatabaseManager::MakeDatabaseAvailable() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(enabled_);
-  if (DatabaseAvailable())
-    return true;
+  {
+    base::AutoLock lock(database_lock_);
+    if (!closing_database_ && database_)
+      return true;
+    if (opening_database_)
+      return false;
+    opening_database_ = true;
+  }
   safe_browsing_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
           base::IgnoreResult(&LocalSafeBrowsingDatabaseManager::GetDatabase),
-          this));
+          this, true));
   return false;
 }
 
-SafeBrowsingDatabase* LocalSafeBrowsingDatabaseManager::GetDatabase() {
+SafeBrowsingDatabase* LocalSafeBrowsingDatabaseManager::GetDatabase(
+    bool reset_opening_database) {
   DCHECK(safe_browsing_task_runner_->RunsTasksInCurrentSequence());
 
   if (database_)
@@ -808,6 +814,8 @@ SafeBrowsingDatabase* LocalSafeBrowsingDatabaseManager::GetDatabase() {
     // the new database object above, and the setting of |database_| below.
     base::AutoLock lock(database_lock_);
     database_ = database.release();
+    if (reset_opening_database)
+      opening_database_ = false;
   }
 
   BrowserThread::PostTask(
@@ -1030,19 +1038,15 @@ void LocalSafeBrowsingDatabaseManager::DatabaseUpdateFinished(
 
 void LocalSafeBrowsingDatabaseManager::OnCloseDatabase() {
   DCHECK(safe_browsing_task_runner_->RunsTasksInCurrentSequence());
-  DCHECK(closing_database_);
 
-  // Because |closing_database_| is true, nothing on the IO thread will be
-  // accessing the database, so it's safe to delete and then NULL the pointer.
-  delete database_;
-  database_ = NULL;
-
-  // Acquiring the lock here guarantees correct ordering between the resetting
-  // of |database_| above and of |closing_database_| below, which ensures there
-  // won't be a window during which the IO thread falsely believes the database
-  // is available.
-  base::AutoLock lock(database_lock_);
-  closing_database_ = false;
+  SafeBrowsingDatabase* to_delete = database_;
+  {
+    base::AutoLock lock(database_lock_);
+    DCHECK(closing_database_);
+    database_ = nullptr;
+    closing_database_ = false;
+  }
+  delete to_delete;
 }
 
 void LocalSafeBrowsingDatabaseManager::OnResetDatabase() {

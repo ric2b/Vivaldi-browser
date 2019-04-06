@@ -6,13 +6,14 @@
 #define CHROME_BROWSER_VR_ELEMENTS_TRANSIENT_ELEMENT_H_
 
 #include "base/callback.h"
-#include "chrome/browser/vr/elements/textured_element.h"
+#include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 
 namespace vr {
 
 // Base class for a transient element that automatically hides itself after some
 // point in time. The exacly transience behavior depends on the subclass.
-class TransientElement : public UiElement {
+class VR_UI_EXPORT TransientElement : public UiElement {
  public:
   ~TransientElement() override;
 
@@ -39,14 +40,13 @@ class TransientElement : public UiElement {
 };
 
 // An element that hides itself after after a set timeout.
-class SimpleTransientElement : public TransientElement {
+class VR_UI_EXPORT SimpleTransientElement : public TransientElement {
  public:
   explicit SimpleTransientElement(const base::TimeDelta& timeout);
   ~SimpleTransientElement() override;
 
  private:
-  bool OnBeginFrame(const base::TimeTicks& time,
-                    const gfx::Transform& head_pose) override;
+  bool OnBeginFrame(const gfx::Transform& head_pose) override;
 
   typedef TransientElement super;
 
@@ -58,43 +58,6 @@ class SimpleTransientElement : public TransientElement {
 enum class TransientElementHideReason : int {
   kTimeout,
   kSignal,
-};
-
-// An element that waits for a signal or timeout to hide itself once its been
-// made visible. The element will stay visible for at least the set
-// minimum duration regardless of when ::Signal is called. The set callback
-// is triggered when the element hides itself.
-class ShowUntilSignalTransientElement : public TransientElement {
- public:
-  typedef typename base::RepeatingCallback<void()> OnMinDurationCallback;
-  typedef typename base::RepeatingCallback<void(TransientElementHideReason)>
-      OnHideCallback;
-
-  ShowUntilSignalTransientElement(const base::TimeDelta& min_duration,
-                                  const base::TimeDelta& timeout,
-                                  OnMinDurationCallback min_duration_callback,
-                                  OnHideCallback hide_callback);
-  ~ShowUntilSignalTransientElement() override;
-
-  // This must be called before the set timeout to hide the element.
-  void Signal(bool value);
-
- protected:
-  void Reset() override;
-
- private:
-  bool OnBeginFrame(const base::TimeTicks& time,
-                    const gfx::Transform& head_pose) override;
-
-  typedef TransientElement super;
-
-  base::TimeDelta min_duration_;
-  OnMinDurationCallback min_duration_callback_;
-  OnHideCallback hide_callback_;
-  bool signaled_ = false;
-  bool min_duration_callback_called_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(ShowUntilSignalTransientElement);
 };
 
 }  // namespace vr

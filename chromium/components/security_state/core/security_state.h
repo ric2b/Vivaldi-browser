@@ -27,10 +27,6 @@
 // the form of a VisibleSecurityState struct.
 namespace security_state {
 
-// A feature for showing a warning in autofill dropdowns for password
-// and credit cards fields when the top-level page is not HTTPS.
-extern const base::Feature kHttpFormWarningFeature;
-
 // Describes the overall security state of the page.
 //
 // These values are persisted to logs. Entries should not be renumbered and
@@ -94,7 +90,8 @@ enum MaliciousContentStatus {
   MALICIOUS_CONTENT_STATUS_MALWARE,
   MALICIOUS_CONTENT_STATUS_UNWANTED_SOFTWARE,
   MALICIOUS_CONTENT_STATUS_SOCIAL_ENGINEERING,
-  MALICIOUS_CONTENT_STATUS_PASSWORD_REUSE,
+  MALICIOUS_CONTENT_STATUS_SIGN_IN_PASSWORD_REUSE,
+  MALICIOUS_CONTENT_STATUS_ENTERPRISE_PASSWORD_REUSE,
 };
 
 // Describes the security status of a page or request. This is the
@@ -228,8 +225,7 @@ void GetSecurityInfo(
 // |kHttpFormWarningFeature| feature.
 bool IsHttpWarningInFormEnabled();
 
-// Returns true for a valid |url| with a cryptographic scheme, e.g., HTTPS,
-// HTTPS-SO, WSS.
+// Returns true for a valid |url| with a cryptographic scheme, e.g., HTTPS, WSS.
 bool IsSchemeCryptographic(const GURL& url);
 
 // Returns true for a valid |url| with localhost or file:// scheme origin.

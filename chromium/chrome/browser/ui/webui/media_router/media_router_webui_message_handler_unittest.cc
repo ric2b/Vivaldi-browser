@@ -89,11 +89,12 @@ class MockMediaRouterUI : public MediaRouterUI {
  public:
   explicit MockMediaRouterUI(content::WebUI* web_ui)
       : MediaRouterUI(web_ui) {}
-  ~MockMediaRouterUI() {}
+  ~MockMediaRouterUI() override {}
 
-  MOCK_METHOD0(UIInitialized, void());
+  MOCK_METHOD0(OnUIInitialized, void());
   MOCK_CONST_METHOD0(UserSelectedTabMirroringForCurrentOrigin, bool());
   MOCK_METHOD1(RecordCastModeSelection, void(MediaCastMode cast_mode));
+  MOCK_CONST_METHOD0(GetPresentationRequestSourceName, std::string());
   MOCK_CONST_METHOD0(cast_modes, const std::set<MediaCastMode>&());
   MOCK_METHOD1(OnMediaControllerUIAvailable,
                void(const MediaRoute::Id& route_id));
@@ -398,7 +399,6 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, SetCastModesList) {
 TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateMediaRouteStatus) {
   MediaStatus status;
   status.title = "test title";
-  status.description = "test description";
   status.can_play_pause = true;
   status.can_set_volume = true;
   status.play_state = MediaStatus::PlayState::BUFFERING;
@@ -414,7 +414,6 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateMediaRouteStatus) {
       ExtractDictFromCallArg("media_router.ui.updateRouteStatus");
 
   EXPECT_EQ(status.title, GetStringFromDict(status_value, "title"));
-  EXPECT_EQ(status.description, GetStringFromDict(status_value, "description"));
   EXPECT_EQ(status.can_play_pause,
             GetBooleanFromDict(status_value, "canPlayPause"));
   EXPECT_EQ(status.can_mute, GetBooleanFromDict(status_value, "canMute"));
@@ -557,6 +556,8 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, RetrieveCastModeSelection) {
   EXPECT_CALL(*mock_media_router_ui_, cast_modes())
       .WillRepeatedly(ReturnRef(cast_modes));
 
+  EXPECT_CALL(*mock_media_router_ui_, GetPresentationRequestSourceName())
+      .WillRepeatedly(Return("source"));
   EXPECT_CALL(*mock_media_router_ui_,
               UserSelectedTabMirroringForCurrentOrigin())
       .WillOnce(Return(true));

@@ -51,7 +51,7 @@ ScopedJavaLocalRef<jobject> FormFieldDataAndroid::GetJavaPeer() {
         env, jname, jlabel, jvalue, jautocomplete_attr,
         field_ptr_->should_autocomplete, jplaceholder, jtype, jid,
         joption_values, joption_contents, IsCheckable(field_ptr_->check_status),
-        IsChecked(field_ptr_->check_status));
+        IsChecked(field_ptr_->check_status), field_ptr_->max_length);
     java_ref_ = JavaObjectWeakGlobalRef(env, obj);
   }
   return obj;
@@ -76,7 +76,7 @@ void FormFieldDataAndroid::GetValue() {
   field_ptr_->is_autofilled = true;
 }
 
-void FormFieldDataAndroid::OnTextFieldDidChange(const base::string16& value) {
+void FormFieldDataAndroid::OnFormFieldDidChange(const base::string16& value) {
   field_ptr_->value = value;
   field_ptr_->is_autofilled = false;
   JNIEnv* env = AttachCurrentThread();

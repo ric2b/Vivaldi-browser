@@ -40,28 +40,28 @@ void ProtocolHandlersHandler::OnJavascriptDisallowed() {
 }
 
 void ProtocolHandlersHandler::RegisterMessages() {
-  web_ui()->RegisterMessageCallback("observeProtocolHandlers",
-      base::Bind(&ProtocolHandlersHandler::HandleObserveProtocolHandlers,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("observeProtocolHandlersEnabledState",
-      base::Bind(
+  web_ui()->RegisterMessageCallback(
+      "observeProtocolHandlers",
+      base::BindRepeating(
+          &ProtocolHandlersHandler::HandleObserveProtocolHandlers,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "observeProtocolHandlersEnabledState",
+      base::BindRepeating(
           &ProtocolHandlersHandler::HandleObserveProtocolHandlersEnabledState,
           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("clearDefault",
-      base::Bind(&ProtocolHandlersHandler::HandleClearDefault,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("removeHandler",
-      base::Bind(&ProtocolHandlersHandler::HandleRemoveHandler,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("setHandlersEnabled",
-      base::Bind(&ProtocolHandlersHandler::HandleSetHandlersEnabled,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("setDefault",
-      base::Bind(&ProtocolHandlersHandler::HandleSetDefault,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback("removeIgnoredHandler",
-      base::Bind(&ProtocolHandlersHandler::HandleRemoveIgnoredHandler,
-                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "removeHandler",
+      base::BindRepeating(&ProtocolHandlersHandler::HandleRemoveHandler,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setHandlersEnabled",
+      base::BindRepeating(&ProtocolHandlersHandler::HandleSetHandlersEnabled,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setDefault",
+      base::BindRepeating(&ProtocolHandlersHandler::HandleSetDefault,
+                          base::Unretained(this)));
 }
 
 ProtocolHandlerRegistry* ProtocolHandlersHandler::GetProtocolHandlerRegistry() {
@@ -70,15 +70,19 @@ ProtocolHandlerRegistry* ProtocolHandlersHandler::GetProtocolHandlerRegistry() {
 }
 
 static void GetHandlersAsListValue(
+    const ProtocolHandlerRegistry& registry,
     const ProtocolHandlerRegistry::ProtocolHandlerList& handlers,
     base::ListValue* handler_list) {
   ProtocolHandlerRegistry::ProtocolHandlerList::const_iterator handler;
   for (handler = handlers.begin(); handler != handlers.end(); ++handler) {
     std::unique_ptr<base::DictionaryValue> handler_value(
         new base::DictionaryValue());
+    handler_value->SetString("protocol_display_name",
+                             handler->GetProtocolDisplayName());
     handler_value->SetString("protocol", handler->protocol());
     handler_value->SetString("spec", handler->url().spec());
     handler_value->SetString("host", handler->url().host());
+    handler_value->SetBoolean("is_default", registry.IsDefault(*handler));
     handler_list->Append(std::move(handler_value));
   }
 }
@@ -87,17 +91,12 @@ void ProtocolHandlersHandler::GetHandlersForProtocol(
     const std::string& protocol,
     base::DictionaryValue* handlers_value) {
   ProtocolHandlerRegistry* registry = GetProtocolHandlerRegistry();
+  handlers_value->SetString("protocol_display_name",
+                            ProtocolHandler::GetProtocolDisplayName(protocol));
   handlers_value->SetString("protocol", protocol);
-  handlers_value->SetInteger("default_handler",
-      registry->GetHandlerIndex(protocol));
-  handlers_value->SetBoolean(
-      "is_default_handler_set_by_user",
-      registry->IsRegisteredByUser(registry->GetHandlerFor(protocol)));
-  handlers_value->SetBoolean("has_policy_recommendations",
-                             registry->HasPolicyRegisteredHandler(protocol));
 
   auto handlers_list = std::make_unique<base::ListValue>();
-  GetHandlersAsListValue(registry->GetHandlersFor(protocol),
+  GetHandlersAsListValue(*registry, registry->GetHandlersFor(protocol),
                          handlers_list.get());
   handlers_value->Set("handlers", std::move(handlers_list));
 }
@@ -106,7 +105,7 @@ void ProtocolHandlersHandler::GetIgnoredHandlers(base::ListValue* handlers) {
   ProtocolHandlerRegistry* registry = GetProtocolHandlerRegistry();
   ProtocolHandlerRegistry::ProtocolHandlerList ignored_handlers =
       registry->GetIgnoredHandlers();
-  return GetHandlersAsListValue(ignored_handlers, handlers);
+  return GetHandlersAsListValue(*registry, ignored_handlers, handlers);
 }
 
 void ProtocolHandlersHandler::UpdateHandlerList() {
@@ -148,30 +147,13 @@ void ProtocolHandlersHandler::SendHandlersEnabledValue() {
 }
 
 void ProtocolHandlersHandler::HandleRemoveHandler(const base::ListValue* args) {
-  const base::ListValue* list;
-  if (!args->GetList(0, &list)) {
-    NOTREACHED();
-    return;
-  }
-
-  ProtocolHandler handler(ParseHandlerFromArgs(list));
+  ProtocolHandler handler(ParseHandlerFromArgs(args));
+  CHECK(!handler.IsEmpty());
   GetProtocolHandlerRegistry()->RemoveHandler(handler);
 
   // No need to call UpdateHandlerList() - we should receive a notification
   // that the ProtocolHandlerRegistry has changed and we will update the view
   // then.
-}
-
-void ProtocolHandlersHandler::HandleRemoveIgnoredHandler(
-    const base::ListValue* args) {
-  const base::ListValue* list;
-  if (!args->GetList(0, &list)) {
-    NOTREACHED();
-    return;
-  }
-
-  ProtocolHandler handler(ParseHandlerFromArgs(list));
-  GetProtocolHandlerRegistry()->RemoveIgnoredHandler(handler);
 }
 
 void ProtocolHandlersHandler::HandleSetHandlersEnabled(
@@ -184,18 +166,8 @@ void ProtocolHandlersHandler::HandleSetHandlersEnabled(
     GetProtocolHandlerRegistry()->Disable();
 }
 
-void ProtocolHandlersHandler::HandleClearDefault(const base::ListValue* args) {
-  const base::Value* value;
-  CHECK(args->Get(0, &value));
-  std::string protocol_to_clear;
-  CHECK(value->GetAsString(&protocol_to_clear));
-  GetProtocolHandlerRegistry()->ClearDefault(protocol_to_clear);
-}
-
 void ProtocolHandlersHandler::HandleSetDefault(const base::ListValue* args) {
-  const base::ListValue* list;
-  CHECK(args->GetList(0, &list));
-  const ProtocolHandler& handler(ParseHandlerFromArgs(list));
+  const ProtocolHandler& handler(ParseHandlerFromArgs(args));
   CHECK(!handler.IsEmpty());
   GetProtocolHandlerRegistry()->OnAcceptRegisterProtocolHandler(handler);
 }

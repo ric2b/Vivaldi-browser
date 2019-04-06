@@ -26,7 +26,9 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace policy {
@@ -68,12 +70,13 @@ class MockOAuth2TokenService : public FakeOAuth2TokenService {
   ~MockOAuth2TokenService() override;
 
   // OAuth2TokenService:
-  void FetchOAuth2Token(RequestImpl* request,
-                        const std::string& account_id,
-                        net::URLRequestContextGetter* getter,
-                        const std::string& client_id,
-                        const std::string& client_secret,
-                        const ScopeSet& scopes) override;
+  void FetchOAuth2Token(
+      RequestImpl* request,
+      const std::string& account_id,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      const std::string& client_id,
+      const std::string& client_secret,
+      const ScopeSet& scopes) override;
 
   // OAuth2TokenService:
   void InvalidateAccessTokenImpl(const std::string& account_id,
@@ -102,7 +105,7 @@ MockOAuth2TokenService::~MockOAuth2TokenService() {
 void MockOAuth2TokenService::FetchOAuth2Token(
     OAuth2TokenService::RequestImpl* request,
     const std::string& account_id,
-    net::URLRequestContextGetter* getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const std::string& client_id,
     const std::string& client_secret,
     const FakeOAuth2TokenService::ScopeSet& scopes) {
@@ -200,7 +203,7 @@ class UploadJobTestBase : public testing::Test, public UploadJob::Delegate {
     std::unique_ptr<UploadJob> upload_job(new UploadJobImpl(
         GetServerURL(), kRobotAccountId, &oauth2_service_,
         request_context_getter_.get(), this, std::move(mime_boundary_generator),
-        base::ThreadTaskRunnerHandle::Get()));
+        TRAFFIC_ANNOTATION_FOR_TESTS, base::ThreadTaskRunnerHandle::Get()));
 
     std::map<std::string, std::string> header_entries;
     header_entries.insert(std::make_pair(kCustomField1, "CUSTOM1"));

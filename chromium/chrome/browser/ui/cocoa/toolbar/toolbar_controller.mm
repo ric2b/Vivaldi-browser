@@ -95,9 +95,6 @@ const CGFloat kElementPadding = 4;
 // wide inset.
 const CGFloat kButtonInset = 2;
 
-// The y-offset of the browser actions container from the location bar.
-const CGFloat kContainerYOffset = 2;
-
 // The minimum width of the location bar in pixels.
 const CGFloat kMinimumLocationBarWidth = 100.0;
 
@@ -269,9 +266,9 @@ class NotificationBridge : public AppMenuIconController::Delegate {
             : NSViewMinXMargin | NSViewMinYMargin;
 
   // Make Material Design layout adjustments to the NIB items.
-  ToolbarView* toolbarView = [self toolbarView];
+  ToolbarViewCocoa* toolbarView = [self toolbarView];
   NSRect toolbarBounds = [toolbarView bounds];
-  NSSize toolbarButtonSize = [ToolbarButton toolbarButtonSize];
+  NSSize toolbarButtonSize = [ToolbarButtonCocoa toolbarButtonSize];
 
   // Set the toolbar height.
   NSRect frame = [toolbarView frame];
@@ -310,7 +307,8 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   // Adjust the menu button's position.
   NSRect menuButtonFrame = [appMenuButton_ frame];
   if (isRTL) {
-    menuButtonFrame.origin.x = [ToolbarController appMenuPadding];
+    menuButtonFrame.origin.x =
+        [ToolbarController appMenuPadding] + kButtonInset;
   } else {
     CGFloat menuButtonFrameMaxX =
         NSMaxX(toolbarBounds) - [ToolbarController appMenuPadding];
@@ -350,10 +348,10 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   // Correctly position the extension buttons' container view.
   NSRect containerFrame = [browserActionsContainerView_ frame];
   containerFrame.size.width += kButtonInset;
-  containerFrame.origin.y = locationBarFrame.origin.y + kContainerYOffset;
-  containerFrame.size.height = toolbarButtonSize.height;
+  containerFrame.origin.y = locationBarFrame.origin.y;
+  containerFrame.size.height = kLocationBarHeight;
   if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout())
-    containerFrame.origin.x = NSMinX(locationBarFrame);
+    containerFrame.origin.x = NSMinX(locationBarFrame) - kButtonInset;
   [browserActionsContainerView_ setFrame:containerFrame];
   [browserActionsContainerView_ setAutoresizingMask:trailingButtonMask];
 
@@ -498,7 +496,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   [[backButton_ cell]
       accessibilitySetOverrideValue:description
                        forAttribute:NSAccessibilityDescriptionAttribute];
-  NSString* helpTag = l10n_util::GetNSStringWithFixup(IDS_ACCNAME_TOOLTIP_BACK);
+  NSString* helpTag = l10n_util::GetNSStringWithFixup(IDS_ACCDESCRIPTION_BACK);
   [[backButton_ cell]
       accessibilitySetOverrideValue:helpTag
                        forAttribute:NSAccessibilityHelpAttribute];
@@ -507,7 +505,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   [[forwardButton_ cell]
       accessibilitySetOverrideValue:description
                        forAttribute:NSAccessibilityDescriptionAttribute];
-  helpTag = l10n_util::GetNSStringWithFixup(IDS_ACCNAME_TOOLTIP_FORWARD);
+  helpTag = l10n_util::GetNSStringWithFixup(IDS_ACCDESCRIPTION_FORWARD);
   [[forwardButton_ cell]
       accessibilitySetOverrideValue:helpTag
                        forAttribute:NSAccessibilityHelpAttribute];
@@ -570,8 +568,8 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   [self mouseMoved:event];
 }
 
-- (ToolbarView*)toolbarView {
-  return base::mac::ObjCCastStrict<ToolbarView>([self view]);
+- (ToolbarViewCocoa*)toolbarView {
+  return base::mac::ObjCCastStrict<ToolbarViewCocoa>([self view]);
 }
 
 - (LocationBarViewMac*)locationBarBridge {
@@ -868,7 +866,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
     // it afterwards.
     [browserActionsContainerView_ stopAnimation];
     NSRect containerFrame = [browserActionsContainerView_ frame];
-    containerFrame.origin.y = [locationBar_ frame].origin.y + kContainerYOffset;
+    containerFrame.origin.y = [locationBar_ frame].origin.y;
     [browserActionsContainerView_ setFrame:containerFrame];
     [self pinLocationBarBeforeBrowserActionsContainerAndAnimate:NO];
   }
@@ -1013,7 +1011,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
 }
 
 - (void)setDividerOpacity:(CGFloat)opacity {
-  ToolbarView* toolbarView = [self toolbarView];
+  ToolbarViewCocoa* toolbarView = [self toolbarView];
   [toolbarView setShowsDivider:(opacity > 0 ? YES : NO)];
   [toolbarView setDividerOpacity:opacity];
   [toolbarView setNeedsDisplay:YES];
@@ -1039,8 +1037,8 @@ class NotificationBridge : public AppMenuIconController::Delegate {
 // (URLDropTargetController protocol)
 - (void)dropURLs:(NSArray*)urls inView:(NSView*)view at:(NSPoint)point {
   // TODO(viettrungluu): This code is more or less copied from the code in
-  // |TabStripController|. I'll refactor this soon to make it common and expand
-  // its capabilities (e.g., allow text DnD).
+  // |TabStripControllerCocoa|. I'll refactor this soon to make it common and
+  // expand its capabilities (e.g., allow text DnD).
   if ([urls count] < 1) {
     NOTREACHED();
     return;
@@ -1075,8 +1073,8 @@ class NotificationBridge : public AppMenuIconController::Delegate {
 // (URLDropTargetController protocol)
 - (void)dropText:(NSString*)text inView:(NSView*)view at:(NSPoint)point {
   // TODO(viettrungluu): This code is more or less copied from the code in
-  // |TabStripController|. I'll refactor this soon to make it common and expand
-  // its capabilities (e.g., allow text DnD).
+  // |TabStripControllerCocoa|. I'll refactor this soon to make it common and
+  // expand its capabilities (e.g., allow text DnD).
 
   // If the input is plain text, classify the input and make the URL.
   AutocompleteMatch match;

@@ -48,12 +48,12 @@ void VivaldiBookmarksAPI::Shutdown() {
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI> >::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_factory_bookmark = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*
 VivaldiBookmarksAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_bookmark.Pointer();
 }
 
 namespace {

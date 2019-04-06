@@ -9,16 +9,15 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/gcm/gcm_product_util.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/gcm_driver/gcm_profile_service.h"
@@ -35,7 +34,9 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace gcm {
@@ -51,14 +52,15 @@ std::unique_ptr<KeyedService> BuildGCMProfileService(
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
       base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
-  return base::MakeUnique<gcm::GCMProfileService>(
+  return std::make_unique<gcm::GCMProfileService>(
       profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess(),
       chrome::GetChannel(),
       gcm::GetProductCategoryForSubtypes(profile->GetPrefs()),
-      std::unique_ptr<ProfileIdentityProvider>(new ProfileIdentityProvider(
-          SigninManagerFactory::GetForProfile(profile),
-          ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
-          LoginUIServiceFactory::GetShowLoginPopupCallbackForProfile(profile))),
+      IdentityManagerFactory::GetForProfile(profile),
+      SigninManagerFactory::GetForProfile(profile),
+      ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
       std::unique_ptr<gcm::GCMClientFactory>(new gcm::FakeGCMClientFactory(
           content::BrowserThread::GetTaskRunnerForThread(
               content::BrowserThread::UI),

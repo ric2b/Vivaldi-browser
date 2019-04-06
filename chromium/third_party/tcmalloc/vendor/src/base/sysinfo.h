@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2006, Google Inc.
 // All rights reserved.
 // 
@@ -38,7 +39,7 @@
 #include <time.h>
 #if (defined(_WIN32) || defined(__MINGW32__)) && (!defined(__CYGWIN__) && !defined(__CYGWIN32__))
 #include <windows.h>   // for DWORD
-#include <TlHelp32.h>  // for CreateToolhelp32Snapshot
+#include <tlhelp32.h>  // for CreateToolhelp32Snapshot
 #endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>    // for pid_t
@@ -69,16 +70,12 @@ extern const char* GetenvBeforeMain(const char* name);
 // reasons, as documented in sysinfo.cc.  path must have space PATH_MAX.
 extern bool GetUniquePathFromEnv(const char* env_name, char* path);
 
-extern int NumCPUs();
+extern int GetSystemCPUsCount();
 
 void SleepForMilliseconds(int milliseconds);
 
-// processor cycles per second of each processor.  Thread-safe.
-extern double CyclesPerSecond(void);
-
-
 //  Return true if we're running POSIX (e.g., NPTL on Linux) threads,
-//  as opposed to a non-POSIX thread libary.  The thing that we care
+//  as opposed to a non-POSIX thread library.  The thing that we care
 //  about is whether a thread's pid is the same as the thread that
 //  spawned it.  If so, this function returns true.
 //  Thread-safe.

@@ -20,18 +20,18 @@
 #include "base/logging.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/time/time_to_iso8601.h"
 #include "base/values.h"
+#include "components/download/public/common/download_item.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/download_item.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "url/gurl.h"
 
-using content::DownloadDangerType;
-using content::DownloadItem;
+using download::DownloadDangerType;
+using download::DownloadItem;
 
 namespace {
 
@@ -77,26 +77,17 @@ int64_t GetEndTimeMsEpoch(const DownloadItem& item) {
   return (item.GetEndTime() - base::Time::UnixEpoch()).InMilliseconds();
 }
 
-std::string TimeToISO8601(const base::Time& t) {
-  base::Time::Exploded exploded;
-  t.UTCExplode(&exploded);
-  return base::StringPrintf(
-      "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", exploded.year, exploded.month,
-      exploded.day_of_month, exploded.hour, exploded.minute, exploded.second,
-      exploded.millisecond);
-}
-
 std::string GetStartTime(const DownloadItem& item) {
-  return TimeToISO8601(item.GetStartTime());
+  return base::TimeToISO8601(item.GetStartTime());
 }
 
 std::string GetEndTime(const DownloadItem& item) {
-  return TimeToISO8601(item.GetEndTime());
+  return base::TimeToISO8601(item.GetEndTime());
 }
 
 bool GetDangerAccepted(const DownloadItem& item) {
   return (item.GetDangerType() ==
-          content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED);
+          download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED);
 }
 
 bool GetExists(const DownloadItem& item) {

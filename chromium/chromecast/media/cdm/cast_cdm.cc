@@ -24,6 +24,11 @@ namespace chromecast {
 namespace media {
 namespace {
 
+using KeyStatus = ::media::CdmKeyInformation::KeyStatus;
+
+constexpr size_t kKeyStatusCount =
+    static_cast<size_t>(KeyStatus::KEY_STATUS_MAX) + 1;
+
 class CastCdmContextImpl : public CastCdmContext {
  public:
   explicit CastCdmContextImpl(CastCdm* cast_cdm) : cast_cdm_(cast_cdm) {
@@ -33,7 +38,7 @@ class CastCdmContextImpl : public CastCdmContext {
 
   // CastCdmContext implementation:
   int RegisterPlayer(const base::Closure& new_key_cb,
-                     const base::Closure& cdm_unset_cb) override  {
+                     const base::Closure& cdm_unset_cb) override {
     return cast_cdm_->RegisterPlayer(new_key_cb, cdm_unset_cb);
   }
 
@@ -146,10 +151,8 @@ void CastCdm::GetStatusForPolicy(
     std::unique_ptr<::media::KeyStatusCdmPromise> promise) {
   int min_hdcp_x10 = HdcpVersionX10(min_hdcp_version);
   int cur_hdcp_x10 = MediaCapabilities::GetHdcpVersion();
-  promise->resolve(
-      cur_hdcp_x10 >= min_hdcp_x10
-          ? ::media::CdmKeyInformation::KeyStatus::USABLE
-          : ::media::CdmKeyInformation::KeyStatus::OUTPUT_RESTRICTED);
+  promise->resolve(cur_hdcp_x10 >= min_hdcp_x10 ? KeyStatus::USABLE
+                                                : KeyStatus::OUTPUT_RESTRICTED);
 }
 
 void CastCdm::OnSessionMessage(const std::string& session_id,
@@ -167,18 +170,15 @@ void CastCdm::OnSessionKeysChange(const std::string& session_id,
                                   ::media::CdmKeysInfo keys_info) {
   logging::LogMessage log_message(__FILE__, __LINE__, logging::LOG_INFO);
   log_message.stream() << "keystatuseschange ";
-  int status_count[::media::CdmKeyInformation::KEY_STATUS_MAX] = {0};
+  int status_count[kKeyStatusCount] = {0};
   for (const auto& key_info : keys_info) {
     status_count[key_info->status]++;
   }
   for (int i = 0; i != ::media::CdmKeyInformation::KEY_STATUS_MAX; ++i) {
     if (status_count[i] == 0)
       continue;
-    log_message.stream()
-        << status_count[i] << " "
-        << ::media::CdmKeyInformation::KeyStatusToString(
-               static_cast<::media::CdmKeyInformation::KeyStatus>(i))
-        << " ";
+    log_message.stream() << status_count[i] << " " << static_cast<KeyStatus>(i)
+                         << " ";
   }
 
   session_keys_change_cb_.Run(session_id, newly_usable_keys,

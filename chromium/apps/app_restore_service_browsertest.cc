@@ -6,7 +6,7 @@
 #include "apps/app_restore_service_factory.h"
 #include "apps/saved_files_service.h"
 #include "base/threading/thread_restrictions.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
+#include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
@@ -55,7 +55,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, RunningAppsAreRecorded) {
   ExtensionTestMessageListener restart_listener("onRestarted", false);
   apps::AppRestoreServiceFactory::GetForBrowserContext(browser()->profile())
       ->HandleStartup(true);
-  restart_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(restart_listener.WaitUntilSatisfied());
 }
 
 // Tests that apps are recorded in the preferences as active when and only when
@@ -196,7 +196,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, MAYBE_FileAccessIsRestored) {
   apps::AppRestoreServiceFactory::GetForBrowserContext(browser()->profile())
       ->HandleStartup(true);
 
-  access_ok_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(access_ok_listener.WaitUntilSatisfied());
 }
 
 }  // namespace apps

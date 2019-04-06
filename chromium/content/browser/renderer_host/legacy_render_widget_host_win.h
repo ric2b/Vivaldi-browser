@@ -15,21 +15,22 @@
 
 #include "base/macros.h"
 #include "content/common/content_export.h"
+#include "ui/compositor/compositor_animation_observer.h"
 #include "ui/gfx/geometry/rect.h"
-
-namespace gfx {
-namespace win {
-class DirectManipulationHelper;
-}  // namespace win
-}  // namespace gfx
 
 namespace ui {
 class AXSystemCaretWin;
+class DirectManipulationHelper;
 class WindowEventTarget;
-}
+namespace win {
+class DirectManipulationHelper;
+}  // namespace win
+}  // namespace ui
 
 namespace content {
 class RenderWidgetHostViewAura;
+
+class DirectManipulationBrowserTest;
 
 // Reasons for the existence of this class outlined below:-
 // 1. Some screen readers expect every tab / every unique web content container
@@ -98,6 +99,7 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
     MESSAGE_HANDLER_EX(WM_NCCALCSIZE, OnNCCalcSize)
     MESSAGE_HANDLER_EX(WM_SIZE, OnSize)
     MESSAGE_HANDLER_EX(WM_WINDOWPOSCHANGED, OnWindowPosChanged)
+    MESSAGE_HANDLER_EX(DM_POINTERHITTEST, OnPointerHitTest)
   END_MSG_MAP()
 
   HWND hwnd() { return m_hWnd; }
@@ -125,10 +127,16 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
   // Changes the position of the system caret used for accessibility.
   void MoveCaretTo(const gfx::Rect& bounds);
 
+  // DirectManipulation needs to poll for new events every frame while finger
+  // gesturing on touchpad.
+  void PollForNextEvent();
+
  protected:
   void OnFinalMessage(HWND hwnd) override;
 
  private:
+  friend class DirectManipulationBrowserTest;
+
   explicit LegacyRenderWidgetHostHWND(HWND parent);
   ~LegacyRenderWidgetHostHWND() override;
 
@@ -157,6 +165,12 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
   LRESULT OnSize(UINT message, WPARAM w_param, LPARAM l_param);
   LRESULT OnWindowPosChanged(UINT message, WPARAM w_param, LPARAM l_param);
 
+  LRESULT OnPointerHitTest(UINT message, WPARAM w_param, LPARAM l_param);
+
+  void CreateAnimationObserver();
+
+  void DestroyAnimationObserver();
+
   Microsoft::WRL::ComPtr<IAccessible> window_accessible_;
 
   // Set to true if we turned on mouse tracking.
@@ -170,8 +184,11 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
   // This class provides functionality to register the legacy window as a
   // Direct Manipulation consumer. This allows us to support smooth scroll
   // in Chrome on Windows 10.
-  std::unique_ptr<gfx::win::DirectManipulationHelper>
+  std::unique_ptr<ui::win::DirectManipulationHelper>
       direct_manipulation_helper_;
+
+  std::unique_ptr<ui::CompositorAnimationObserver>
+      compositor_animation_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(LegacyRenderWidgetHostHWND);
 };

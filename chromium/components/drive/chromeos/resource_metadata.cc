@@ -85,7 +85,7 @@ FileError ResourceMetadata::Initialize() {
 }
 
 void ResourceMetadata::Destroy() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   blocking_task_runner_->PostTask(
       FROM_HERE,
@@ -100,6 +100,10 @@ FileError ResourceMetadata::Reset() {
     return FILE_ERROR_NO_LOCAL_SPACE;
 
   FileError error = storage_->SetLargestChangestamp(0);
+  if (error != FILE_ERROR_OK)
+    return error;
+
+  error = storage_->SetStartPageToken(std::string());
   if (error != FILE_ERROR_OK)
     return error;
 
@@ -231,18 +235,18 @@ void ResourceMetadata::DestroyOnBlockingPool() {
   delete this;
 }
 
-FileError ResourceMetadata::GetLargestChangestamp(int64_t* out_value) {
+FileError ResourceMetadata::GetStartPageToken(std::string* out_value) {
   DCHECK(blocking_task_runner_->RunsTasksInCurrentSequence());
-  return storage_->GetLargestChangestamp(out_value);
+  return storage_->GetStartPageToken(out_value);
 }
 
-FileError ResourceMetadata::SetLargestChangestamp(int64_t value) {
+FileError ResourceMetadata::SetStartPageToken(const std::string& value) {
   DCHECK(blocking_task_runner_->RunsTasksInCurrentSequence());
 
   if (!EnoughDiskSpaceIsAvailableForDBOperation(storage_->directory_path()))
     return FILE_ERROR_NO_LOCAL_SPACE;
 
-  return storage_->SetLargestChangestamp(value);
+  return storage_->SetStartPageToken(value);
 }
 
 FileError ResourceMetadata::AddEntry(const ResourceEntry& entry,

@@ -12,28 +12,8 @@
 namespace offline_pages {
 
 // static
-std::vector<PrefetchItemState> PrefetchTaskTestBase::GetAllStatesExcept(
-    PrefetchItemState state_to_exclude) {
-  static const PrefetchItemState all_states[] = {
-      PrefetchItemState::NEW_REQUEST,
-      PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE,
-      PrefetchItemState::AWAITING_GCM,
-      PrefetchItemState::RECEIVED_GCM,
-      PrefetchItemState::SENT_GET_OPERATION,
-      PrefetchItemState::RECEIVED_BUNDLE,
-      PrefetchItemState::DOWNLOADING,
-      PrefetchItemState::DOWNLOADED,
-      PrefetchItemState::IMPORTING,
-      PrefetchItemState::FINISHED,
-      PrefetchItemState::ZOMBIE,
-  };
-  std::vector<PrefetchItemState> states;
-  for (const auto& state : all_states) {
-    if (state != state_to_exclude)
-      states.push_back(state);
-  }
-  return states;
-}
+constexpr std::array<PrefetchItemState, 11>
+    PrefetchTaskTestBase::kOrderedPrefetchItemStates;
 
 PrefetchTaskTestBase::PrefetchTaskTestBase()
     : store_test_util_(task_runner()) {}
@@ -50,6 +30,19 @@ void PrefetchTaskTestBase::TearDown() {
   TaskTestBase::TearDown();
 }
 
+// static
+std::vector<PrefetchItemState> PrefetchTaskTestBase::GetAllStatesExcept(
+    std::set<PrefetchItemState> states_to_exclude) {
+  std::vector<PrefetchItemState> selected_states;
+  for (const PrefetchItemState state : kOrderedPrefetchItemStates) {
+    if (states_to_exclude.count(state) == 0)
+      selected_states.push_back(state);
+  }
+  CHECK_EQ(selected_states.size(),
+           kOrderedPrefetchItemStates.size() - states_to_exclude.size());
+  return selected_states;
+}
+
 int64_t PrefetchTaskTestBase::InsertPrefetchItemInStateWithOperation(
     std::string operation_name,
     PrefetchItemState state) {
@@ -63,9 +56,10 @@ int64_t PrefetchTaskTestBase::InsertPrefetchItemInStateWithOperation(
   return item.offline_id;
 }
 
+// static
 std::set<PrefetchItem> PrefetchTaskTestBase::FilterByState(
     const std::set<PrefetchItem>& items,
-    PrefetchItemState state) const {
+    PrefetchItemState state) {
   std::set<PrefetchItem> result;
   for (const PrefetchItem& item : items) {
     if (item.state == state)

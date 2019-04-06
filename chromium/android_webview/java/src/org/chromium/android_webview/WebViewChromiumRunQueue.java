@@ -7,7 +7,10 @@ package org.chromium.android_webview;
 import org.chromium.base.ThreadUtils;
 
 import java.util.Queue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Queue used for running tasks, initiated through WebView APIs, on the UI thread.
@@ -15,17 +18,17 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class WebViewChromiumRunQueue {
     private final Queue<Runnable> mQueue;
-    private final ShouldDrainQueueCallable mShouldDrainQueueCallable;
+    private final ChromiumHasStartedCallable mChromiumHasStartedCallable;
 
     /**
      * Callable representing whether WebView has been initialized, and we should start running
      * tasks.
      */
-    public static interface ShouldDrainQueueCallable { public boolean shouldDrainQueue(); }
+    public static interface ChromiumHasStartedCallable { public boolean hasStarted(); }
 
-    public WebViewChromiumRunQueue(ShouldDrainQueueCallable shouldDrainQueueCallable) {
+    public WebViewChromiumRunQueue(ChromiumHasStartedCallable chromiumHasStartedCallable) {
         mQueue = new ConcurrentLinkedQueue<Runnable>();
-        mShouldDrainQueueCallable = shouldDrainQueueCallable;
+        mChromiumHasStartedCallable = chromiumHasStartedCallable;
     }
 
     /**
@@ -34,7 +37,7 @@ public class WebViewChromiumRunQueue {
      */
     public void addTask(Runnable task) {
         mQueue.add(task);
-        if (mShouldDrainQueueCallable.shouldDrainQueue()) {
+        if (mChromiumHasStartedCallable.hasStarted()) {
             ThreadUtils.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -57,5 +60,38 @@ public class WebViewChromiumRunQueue {
             task.run();
             task = mQueue.poll();
         }
+    }
+
+    public boolean chromiumHasStarted() {
+        return mChromiumHasStartedCallable.hasStarted();
+    }
+
+    public <T> T runBlockingFuture(FutureTask<T> task) {
+        if (!chromiumHasStarted()) throw new RuntimeException("Must be started before we block!");
+        if (ThreadUtils.runningOnUiThread()) {
+            throw new IllegalStateException("This method should only be called off the UI thread");
+        }
+        addTask(task);
+        try {
+            return task.get(4, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new RuntimeException("Probable deadlock detected due to WebView API being called "
+                            + "on incorrect thread while the UI thread is blocked.",
+                    e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // We have a 4 second timeout to try to detect deadlocks to detect and aid in debugging
+    // deadlocks.
+    // Do not call this method while on the UI thread!
+    public void runVoidTaskOnUiThreadBlocking(Runnable r) {
+        FutureTask<Void> task = new FutureTask<Void>(r, null);
+        runBlockingFuture(task);
+    }
+
+    public <T> T runOnUiThreadBlocking(Callable<T> c) {
+        return runBlockingFuture(new FutureTask<T>(c));
     }
 }

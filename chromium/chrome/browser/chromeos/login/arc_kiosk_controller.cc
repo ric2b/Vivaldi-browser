@@ -19,8 +19,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/login/auth/user_context.h"
+#include "components/account_id/account_id.h"
 #include "components/session_manager/core/session_manager.h"
-#include "components/signin/core/account_id/account_id.h"
 
 namespace chromeos {
 
@@ -34,13 +34,14 @@ ArcKioskController::ArcKioskController(LoginDisplayHost* host, OobeUI* oobe_ui)
       weak_ptr_factory_(this) {}
 
 ArcKioskController::~ArcKioskController() {
-  arc_kiosk_splash_screen_view_->SetDelegate(nullptr);
+  if (arc_kiosk_splash_screen_view_)
+    arc_kiosk_splash_screen_view_->SetDelegate(nullptr);
 }
 
 void ArcKioskController::StartArcKiosk(const AccountId& account_id) {
   DVLOG(1) << "Starting ARC Kiosk for account: " << account_id.GetUserEmail();
 
-  host_->GetWebUILoginView()->SetUIEnabled(true);
+  host_->GetLoginDisplay()->SetUIEnabled(true);
 
   arc_kiosk_splash_screen_view_->SetDelegate(this);
   arc_kiosk_splash_screen_view_->Show();
@@ -57,8 +58,8 @@ void ArcKioskController::CleanUp() {
   // Delegate is registered only when |profile_| is set.
   if (profile_)
     ArcKioskAppService::Get(profile_)->SetDelegate(nullptr);
-  if (host_)
-    host_->Finalize(base::OnceClosure());
+
+  host_->Finalize(base::OnceClosure());
 }
 
 void ArcKioskController::CloseSplashScreen() {
@@ -72,8 +73,8 @@ void ArcKioskController::OnAuthFailure(const AuthFailure& error) {
   LOG(ERROR) << "ARC Kiosk launch failed. Will now shut down, error="
              << error.GetErrorString();
   KioskAppLaunchError::Save(KioskAppLaunchError::ARC_AUTH_FAILED);
-  chrome::AttemptUserExit();
   CleanUp();
+  chrome::AttemptUserExit();
 }
 
 void ArcKioskController::OnAuthSuccess(const UserContext& user_context) {
@@ -124,14 +125,19 @@ void ArcKioskController::OnProfilePrepared(Profile* profile,
   // a profile load, so invalidate the delegate now.
   UserSessionManager::GetInstance()->DelegateDeleted(this);
   ArcKioskAppService::Get(profile_)->SetDelegate(this);
-  arc_kiosk_splash_screen_view_->UpdateArcKioskState(
-      ArcKioskSplashScreenView::ArcKioskState::WAITING_APP_LAUNCH);
+  if (arc_kiosk_splash_screen_view_) {
+    arc_kiosk_splash_screen_view_->UpdateArcKioskState(
+        ArcKioskSplashScreenView::ArcKioskState::WAITING_APP_LAUNCH);
+  }
 }
 
 void ArcKioskController::OnAppStarted() {
   DVLOG(1) << "ARC Kiosk launch succeeded, wait for app window.";
-  arc_kiosk_splash_screen_view_->UpdateArcKioskState(
-      ArcKioskSplashScreenView::ArcKioskState::WAITING_APP_WINDOW);
+
+  if (arc_kiosk_splash_screen_view_) {
+    arc_kiosk_splash_screen_view_->UpdateArcKioskState(
+        ArcKioskSplashScreenView::ArcKioskState::WAITING_APP_WINDOW);
+  }
 }
 
 void ArcKioskController::OnAppWindowLaunched() {
@@ -148,6 +154,10 @@ void ArcKioskController::OnCancelArcKioskLaunch() {
   KioskAppLaunchError::Save(KioskAppLaunchError::USER_CANCEL);
   CleanUp();
   chrome::AttemptUserExit();
+}
+
+void ArcKioskController::OnDeletingSplashScreenView() {
+  arc_kiosk_splash_screen_view_ = nullptr;
 }
 
 }  // namespace chromeos

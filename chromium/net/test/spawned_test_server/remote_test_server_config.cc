@@ -16,6 +16,10 @@
 #include "build/build_config.h"
 #include "url/gurl.h"
 
+#if defined(OS_FUCHSIA)
+#include "base/base_paths_fuchsia.h"
+#endif
+
 namespace net {
 
 namespace {
@@ -23,11 +27,11 @@ namespace {
 base::FilePath GetTestServerConfigFilePath() {
   base::FilePath dir;
 #if defined(OS_ANDROID)
-  PathService::Get(base::DIR_ANDROID_EXTERNAL_STORAGE, &dir);
+  base::PathService::Get(base::DIR_ANDROID_EXTERNAL_STORAGE, &dir);
 #elif defined(OS_FUCHSIA)
-  dir = base::FilePath("/system");
+  dir = base::FilePath("/data");
 #else
-  PathService::Get(base::DIR_TEMP, &dir);
+  base::PathService::Get(base::DIR_TEMP, &dir);
 #endif
   return dir.AppendASCII("net-test-server-config");
 }

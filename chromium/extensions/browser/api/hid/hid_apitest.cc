@@ -5,8 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -18,8 +19,8 @@
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/device/public/cpp/hid/hid_report_descriptor.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/hid.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/hid.mojom.h"
 #include "services/service_manager/public/cpp/service_context.h"
 
 using base::ThreadTaskRunnerHandle;
@@ -168,7 +169,7 @@ class FakeHidManager : public device::mojom::HidManager {
     // Strong binds a instance of FakeHidConnctionImpl.
     device::mojom::HidConnectionPtr client;
     mojo::MakeStrongBinding(
-        base::MakeUnique<FakeHidConnectionImpl>(devices_[device_guid]->Clone()),
+        std::make_unique<FakeHidConnectionImpl>(devices_[device_guid]->Clone()),
         mojo::MakeRequest(&client));
     std::move(callback).Run(std::move(client));
   }
@@ -252,17 +253,23 @@ class TestExtensionsAPIClient : public ShellExtensionsAPIClient {
 
 class HidApiTest : public ShellApiTest {
  public:
-  void SetUpOnMainThread() override {
-    ShellApiTest::SetUpOnMainThread();
-
-    fake_hid_manager_ = base::MakeUnique<FakeHidManager>();
-    // Because Device Service also runs in this process(browser process), here
-    // we can directly set our binder to intercept interface requests against
-    // it.
+  HidApiTest() {
+    // Because Device Service also runs in this process (browser process), we
+    // can set our binder to intercept requests for HidManager interface to it.
+    fake_hid_manager_ = std::make_unique<FakeHidManager>();
     service_manager::ServiceContext::SetGlobalBinderForTesting(
         device::mojom::kServiceName, device::mojom::HidManager::Name_,
         base::Bind(&FakeHidManager::Bind,
                    base::Unretained(fake_hid_manager_.get())));
+  }
+
+  ~HidApiTest() override {
+    service_manager::ServiceContext::ClearGlobalBindersForTesting(
+        device::mojom::kServiceName);
+  }
+
+  void SetUpOnMainThread() override {
+    ShellApiTest::SetUpOnMainThread();
 
     AddDevice(kTestDeviceGuids[0], 0x18D1, 0x58F0, false, "A");
     AddDevice(kTestDeviceGuids[1], 0x18D1, 0x58F0, true, "B");

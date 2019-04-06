@@ -8,7 +8,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/gtest_util.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_preferences.h"
 #include "media/base/limits.h"
 #include "media/mojo/clients/mojo_video_encode_accelerator.h"
 #include "media/mojo/interfaces/video_encode_accelerator.mojom.h"
@@ -52,8 +52,8 @@ class MockVideoEncodeAcceleratorClient : public VideoEncodeAccelerator::Client {
 
   MOCK_METHOD3(RequireBitstreamBuffers,
                void(unsigned int, const gfx::Size&, size_t));
-  MOCK_METHOD4(BitstreamBufferReady,
-               void(int32_t, size_t, bool, base::TimeDelta));
+  MOCK_METHOD2(BitstreamBufferReady,
+               void(int32_t, const media::BitstreamBufferMetadata&));
   MOCK_METHOD1(NotifyError, void(VideoEncodeAccelerator::Error));
 
  private:
@@ -239,8 +239,11 @@ TEST_F(MojoVideoEncodeAcceleratorIntegrationTest, EncodeOneFrame) {
     video_frame->AddSharedMemoryHandle(shmem.handle());
     const bool is_keyframe = true;
 
-    EXPECT_CALL(*mock_vea_client,
-                BitstreamBufferReady(kBistreamBufferId, _, is_keyframe, _));
+    EXPECT_CALL(*mock_vea_client, BitstreamBufferReady(kBistreamBufferId, _))
+        .WillOnce(testing::Invoke(
+            [is_keyframe](int32_t, const BitstreamBufferMetadata& metadata) {
+              EXPECT_EQ(is_keyframe, metadata.key_frame);
+            }));
 
     mojo_vea()->Encode(video_frame, is_keyframe);
     base::RunLoop().RunUntilIdle();
@@ -297,7 +300,39 @@ TEST_F(MojoVideoEncodeAcceleratorIntegrationTest, EncodingParametersChange) {
 
   mojo_vea()->RequestEncodingParametersChange(kNewBitrate, kNewFramerate);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(kNewBitrate, fake_vea()->stored_bitrates().front());
+  VideoBitrateAllocation expected_bitrate_allocation;
+  expected_bitrate_allocation.SetBitrate(0, 0, kNewBitrate);
+  EXPECT_EQ(expected_bitrate_allocation,
+            fake_vea()->stored_bitrate_allocations().back());
+}
+
+// Tests that a RequestEncodingParametersChange() ripples through correctly.
+TEST_F(MojoVideoEncodeAcceleratorIntegrationTest,
+       EncodingParametersWithBitrateAllocation) {
+  auto mock_vea_client = std::make_unique<MockVideoEncodeAcceleratorClient>();
+  Initialize(mock_vea_client.get());
+
+  const uint32_t kNewFramerate = 321321u;
+  const size_t kMaxNumBitrates = VideoBitrateAllocation::kMaxSpatialLayers *
+                                 VideoBitrateAllocation::kMaxTemporalLayers;
+
+  // Verify translation of VideoBitrateAllocation into vector of bitrates for
+  // everything from empty array up to max number of layers.
+  VideoBitrateAllocation bitrate_allocation;
+  for (size_t i = 0; i <= kMaxNumBitrates; ++i) {
+    if (i > 0) {
+      int layer_bitrate = i * 1000;
+      const size_t si = (i - 1) / VideoBitrateAllocation::kMaxTemporalLayers;
+      const size_t ti = (i - 1) % VideoBitrateAllocation::kMaxTemporalLayers;
+      bitrate_allocation.SetBitrate(si, ti, layer_bitrate);
+    }
+
+    mojo_vea()->RequestEncodingParametersChange(bitrate_allocation,
+                                                kNewFramerate);
+    base::RunLoop().RunUntilIdle();
+    EXPECT_EQ(bitrate_allocation,
+              fake_vea()->stored_bitrate_allocations().back());
+  }
 }
 
 // Tests that calls are sent nowhere when the connection has been Close()d --

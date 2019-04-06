@@ -16,7 +16,7 @@
 #include "media/base/android/media_resource_getter.h"
 #include "media/base/timestamp_constants.h"
 #include "net/base/escape.h"
-#include "third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
+#include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_availability.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/android/java_bitmap.h"
 
@@ -28,15 +28,6 @@ using base::android::AttachCurrentThread;
 using content::BrowserThread;
 using media::MediaPlayerAndroid;
 
-namespace {
-/*
- * Dummy function for RequestMediaResources callback. The callback is never
- * actually called by MediaPlayerAndroid or RemoteMediaPlayer but is needed
- * to compile the constructor call.
- */
-void DoNothing(int /*i*/) {}
-}
-
 namespace remote_media {
 
 RemoteMediaPlayerBridge::RemoteMediaPlayerBridge(
@@ -45,7 +36,7 @@ RemoteMediaPlayerBridge::RemoteMediaPlayerBridge(
     RemoteMediaPlayerManager* manager)
     : MediaPlayerAndroid(player_id,
                          manager,
-                         base::Bind(&DoNothing),
+                         base::DoNothing(),
                          manager->GetLocalPlayer(player_id)->frame_url()),
       width_(0),
       height_(0),

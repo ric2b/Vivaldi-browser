@@ -7,12 +7,68 @@
 #include <string>
 
 #include "base/guid.h"
+#include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "net/base/ip_endpoint.h"
+#include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
 
+#include "chromeos/printing/printing_constants.h"
+
 namespace chromeos {
+
+// Returns true if the scheme is both valid and non-empty.
+bool IsSchemeValid(const url::Parsed& parsed) {
+  return parsed.scheme.is_valid() && parsed.scheme.is_nonempty();
+}
+
+// Returns true if |parsed| contains a valid port. A valid port is one that
+// either contains a valid value or is completely missing.
+bool IsPortValid(const url::Parsed& parsed) {
+  // A length of -1 indicates that the port is missing.
+  return parsed.port.len == -1 ||
+         (parsed.port.is_valid() && parsed.port.is_nonempty());
+}
+
+// Returns |printer_uri| broken into components if it represents a valid uri. A
+// valid uri contains a scheme, host, and a valid or missing port number.
+// Optionally, the uri contains a path.
+base::Optional<UriComponents> ParseUri(const std::string& printer_uri) {
+  const char* uri_ptr = printer_uri.c_str();
+  url::Parsed parsed;
+  url::ParseStandardURL(uri_ptr, printer_uri.length(), &parsed);
+  if (!IsSchemeValid(parsed) || !parsed.host.is_valid() ||
+      !IsPortValid(parsed)) {
+    LOG(WARNING) << "Could not parse printer uri";
+    return {};
+  }
+  base::StringPiece scheme(&uri_ptr[parsed.scheme.begin], parsed.scheme.len);
+  base::StringPiece host(&uri_ptr[parsed.host.begin], parsed.host.len);
+  base::StringPiece path =
+      parsed.path.is_valid()
+          ? base::StringPiece(&uri_ptr[parsed.path.begin], parsed.path.len)
+          : "";
+
+  int port = ParsePort(uri_ptr, parsed.port);
+  if (port == url::SpecialPort::PORT_INVALID) {
+    LOG(WARNING) << "Port is invalid";
+    return {};
+  }
+  // Port not specified.
+  if (port == url::SpecialPort::PORT_UNSPECIFIED) {
+    if (scheme == kIppScheme) {
+      port = kIppPort;
+    } else if (scheme == kIppsScheme) {
+      port = kIppsPort;
+    }
+  }
+
+  bool encrypted = scheme != kIppScheme;
+  return base::Optional<UriComponents>(base::in_place, encrypted,
+                                       scheme.as_string(), host.as_string(),
+                                       port, path.as_string());
+}
 
 namespace {
 
@@ -118,7 +174,37 @@ Printer::PrinterProtocol Printer::GetProtocol() const {
   if (uri.starts_with("lpd:"))
     return PrinterProtocol::kLpd;
 
+  if (uri.starts_with("ippusb:"))
+    return PrinterProtocol::kIppUsb;
+
   return PrinterProtocol::kUnknown;
+}
+
+bool Printer::HasNetworkProtocol() const {
+  Printer::PrinterProtocol current_protocol = GetProtocol();
+  switch (current_protocol) {
+    case PrinterProtocol::kIpp:
+    case PrinterProtocol::kIpps:
+    case PrinterProtocol::kHttp:
+    case PrinterProtocol::kHttps:
+    case PrinterProtocol::kSocket:
+    case PrinterProtocol::kLpd:
+      return true;
+    default:
+      return false;
+  }
+}
+
+std::string Printer::UriForCups() const {
+  if (!effective_uri_.empty()) {
+    return effective_uri_;
+  } else {
+    return uri_;
+  }
+}
+
+base::Optional<UriComponents> Printer::GetUriComponents() const {
+  return chromeos::ParseUri(uri_);
 }
 
 bool Printer::PpdReference::operator==(

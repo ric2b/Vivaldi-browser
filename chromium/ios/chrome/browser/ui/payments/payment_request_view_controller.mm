@@ -11,10 +11,10 @@
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_item+collection_view_controller.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
+#import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/ui/payments/cells/page_info_item.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/payments/cells/price_item.h"
@@ -160,7 +160,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)setDataSource:(id<PaymentRequestViewControllerDataSource>)dataSource {
   _dataSource = dataSource;
-  [_payButton setEnabled:[_dataSource canPay]];
 }
 
 - (void)setCancellable:(BOOL)cancellable {
@@ -174,6 +173,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)loadModel {
   [super loadModel];
   CollectionViewModel* model = self.collectionViewModel;
+
+  [_payButton setEnabled:[_dataSource canPay]];
 
   // Summary section.
   [model addSectionWithIdentifier:SectionIdentifierSummary];
@@ -381,6 +382,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
     case ItemTypeSummaryPageInfo:
       // Selecting the page info item should not trigger an action.
       break;
+    case ItemTypeSpinner:
+      // Selecting the page info item should not trigger an action.
+      break;
     default:
       NOTREACHED();
       break;
@@ -411,7 +415,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // the total so there should not be an ink ripple. The footer and the page
   // info items should also not have a ripple.
   if ((type == ItemTypeSummaryTotal && ![_dataSource hasPaymentItems]) ||
-      type == ItemTypeFooterText || type == ItemTypeSummaryPageInfo) {
+      type == ItemTypeFooterText || type == ItemTypeSummaryPageInfo ||
+      type == ItemTypeSpinner) {
     return YES;
   } else {
     return NO;

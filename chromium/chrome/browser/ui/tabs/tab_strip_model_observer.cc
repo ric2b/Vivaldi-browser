@@ -21,8 +21,8 @@ void TabStripModelObserver::TabClosingAt(TabStripModel* tab_strip_model,
 }
 
 void TabStripModelObserver::TabDetachedAt(WebContents* contents,
-                                          int index) {
-}
+                                          int index,
+                                          bool was_active) {}
 
 void TabStripModelObserver::TabDeactivated(WebContents* contents) {
 }
@@ -67,10 +67,8 @@ void TabStripModelObserver::TabBlockedStateChanged(WebContents* contents,
 void TabStripModelObserver::TabStripEmpty() {
 }
 
-void TabStripModelObserver::WillCloseAllTabs() {
-}
+void TabStripModelObserver::WillCloseAllTabs(TabStripModel* tab_strip_model) {}
 
-void TabStripModelObserver::CloseAllTabsCanceled() {
-}
-
+void TabStripModelObserver::CloseAllTabsStopped(TabStripModel* tab_strip_model,
+                                                CloseAllStoppedReason reason) {}
 void TabStripModelObserver::SetTabNeedsAttentionAt(int index, bool attention) {}

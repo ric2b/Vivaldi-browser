@@ -5,6 +5,7 @@
 #ifndef BASE_METRICS_HISTOGRAM_MACROS_H_
 #define BASE_METRICS_HISTOGRAM_MACROS_H_
 
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros_internal.h"
 #include "base/metrics/histogram_macros_local.h"
@@ -35,6 +36,28 @@
 // an element of the Enum.
 // All of these macros must be called with |name| as a runtime constant.
 
+// The first variant of UMA_HISTOGRAM_ENUMERATION accepts two arguments: the
+// histogram name and the enum sample. It deduces the correct boundary value to
+// use by looking for an enumerator with the name kMaxValue. kMaxValue should
+// share the value of the highest enumerator: this avoids switch statements
+// having to handle a sentinel no-op value.
+//
+// Sample usage:
+//   // These values are persisted to logs. Entries should not be renumbered and
+//   // numeric values should never be reused.
+//   enum class MyEnum {
+//     kFirstValue = 0,
+//     kSecondValue = 1,
+//     ...
+//     kFinalValue = N,
+//     kMaxValue = kFinalValue,
+//   };
+//   UMA_HISTOGRAM_ENUMERATION("My.Enumeration", MyEnum::kSomeValue);
+//
+// The second variant requires three arguments: the first two are the same as
+// before, and the third argument is the enum boundary: this must be strictly
+// greater than any other enumerator that will be sampled.
+//
 // Sample usage:
 //   // These values are persisted to logs. Entries should not be renumbered and
 //   // numeric values should never be reused.
@@ -48,11 +71,25 @@
 //   UMA_HISTOGRAM_ENUMERATION("My.Enumeration",
 //                             MyEnum::SOME_VALUE, MyEnum::COUNT);
 //
-// Note: The value in |sample| must be strictly less than |enum_size|.
+// Note: If the enum is used in a switch, it is often desirable to avoid writing
+// a case statement to handle an unused sentinel value (i.e. COUNT in the above
+// example). For scoped enums, this is awkward since it requires casting the
+// enum to an arithmetic type and adding one. Instead, prefer the two argument
+// version of the macro which automatically deduces the boundary from kMaxValue.
+#define UMA_HISTOGRAM_ENUMERATION(name, ...)                            \
+  CR_EXPAND_ARG(INTERNAL_UMA_HISTOGRAM_ENUMERATION_GET_MACRO(           \
+      __VA_ARGS__, INTERNAL_UMA_HISTOGRAM_ENUMERATION_SPECIFY_BOUNDARY, \
+      INTERNAL_UMA_HISTOGRAM_ENUMERATION_DEDUCE_BOUNDARY)(              \
+      name, __VA_ARGS__, base::HistogramBase::kUmaTargetedHistogramFlag))
 
-#define UMA_HISTOGRAM_ENUMERATION(name, sample, enum_size) \
-  INTERNAL_HISTOGRAM_ENUMERATION_WITH_FLAG(                \
-      name, sample, enum_size, base::HistogramBase::kUmaTargetedHistogramFlag)
+// As above but "scaled" count to avoid overflows caused by increments of
+// large amounts. See UMA_HISTOGRAM_SCALED_EXACT_LINEAR for more information.
+// Only the new format utilizing an internal kMaxValue is supported.
+// It'll be necessary to #include "base/lazy_instance.h" to use this macro.
+#define UMA_HISTOGRAM_SCALED_ENUMERATION(name, sample, count, scale) \
+  INTERNAL_HISTOGRAM_SCALED_ENUMERATION_WITH_FLAG(                   \
+      name, sample, count, scale,                                    \
+      base::HistogramBase::kUmaTargetedHistogramFlag)
 
 // Histogram for boolean values.
 
@@ -85,6 +122,20 @@
 //   UMA_HISTOGRAM_PERCENTAGE("Histogram.Percent", percent_as_int);
 #define UMA_HISTOGRAM_PERCENTAGE(name, percent_as_int) \
   UMA_HISTOGRAM_EXACT_LINEAR(name, percent_as_int, 101)
+
+//------------------------------------------------------------------------------
+// Scaled Linear histograms.
+
+// These take |count| and |scale| parameters to allow cumulative reporting of
+// large numbers. Only the scaled count is reported but the reminder is kept so
+// multiple calls will accumulate correctly.  Only "exact linear" is supported.
+// It'll be necessary to #include "base/lazy_instance.h" to use this macro.
+
+#define UMA_HISTOGRAM_SCALED_EXACT_LINEAR(name, sample, count, value_max, \
+                                          scale)                          \
+  INTERNAL_HISTOGRAM_SCALED_EXACT_LINEAR_WITH_FLAG(                       \
+      name, sample, count, value_max, scale,                              \
+      base::HistogramBase::kUmaTargetedHistogramFlag)
 
 //------------------------------------------------------------------------------
 // Count histograms. These are used for collecting numeric data. Note that we
@@ -150,7 +201,8 @@
 // Sample usage:
 //   UMA_HISTOGRAM_TIMES("My.Timing.Histogram", time_delta);
 
-// Short timings - up to 10 seconds.
+// Short timings - up to 10 seconds. For high-resolution (microseconds) timings,
+// see UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES.
 #define UMA_HISTOGRAM_TIMES(name, sample) UMA_HISTOGRAM_CUSTOM_TIMES(          \
     name, sample, base::TimeDelta::FromMilliseconds(1),                        \
     base::TimeDelta::FromSeconds(10), 50)
@@ -178,10 +230,32 @@
 // Sample usage:
 //   UMA_HISTOGRAM_CUSTOM_TIMES("Very.Long.Timing.Histogram", time_delta,
 //       base::TimeDelta::FromSeconds(1), base::TimeDelta::FromDays(1), 100);
-#define UMA_HISTOGRAM_CUSTOM_TIMES(name, sample, min, max, bucket_count)       \
-    STATIC_HISTOGRAM_POINTER_BLOCK(name, AddTime(sample),                      \
-        base::Histogram::FactoryTimeGet(name, min, max, bucket_count,          \
-            base::HistogramBase::kUmaTargetedHistogramFlag))
+#define UMA_HISTOGRAM_CUSTOM_TIMES(name, sample, min, max, bucket_count) \
+  STATIC_HISTOGRAM_POINTER_BLOCK(                                        \
+      name, AddTimeMillisecondsGranularity(sample),                      \
+      base::Histogram::FactoryTimeGet(                                   \
+          name, min, max, bucket_count,                                  \
+          base::HistogramBase::kUmaTargetedHistogramFlag))
+
+// Same as UMA_HISTOGRAM_CUSTOM_TIMES but reports |sample| in microseconds,
+// dropping the report if this client doesn't have a high-resolution clock.
+//
+// Note: dropping reports on clients with low-resolution clocks means these
+// reports will be biased to a portion of the population on Windows. See
+// Windows.HasHighResolutionTimeTicks for the affected sample.
+//
+// Sample usage:
+//  UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+//      "High.Resolution.TimingMicroseconds.Histogram", time_delta,
+//      base::TimeDelta::FromMicroseconds(1),
+//      base::TimeDelta::FromMilliseconds(10), 100);
+#define UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(name, sample, min, max, \
+                                                bucket_count)           \
+  STATIC_HISTOGRAM_POINTER_BLOCK(                                       \
+      name, AddTimeMicrosecondsGranularity(sample),                     \
+      base::Histogram::FactoryMicrosecondsTimeGet(                      \
+          name, min, max, bucket_count,                                 \
+          base::HistogramBase::kUmaTargetedHistogramFlag))
 
 // Scoped class which logs its time on this earth as a UMA statistic. This is
 // recommended for when you want a histogram which measures the time it takes
@@ -298,8 +372,8 @@
 // Samples should be one of the std::vector<int> list provided via
 // |custom_ranges|. See comments above CustomRanges::FactoryGet about the
 // requirement of |custom_ranges|. You can use the helper function
-// CustomHistogram::ArrayToCustomRanges to transform a C-style array of valid
-// sample values to a std::vector<int>.
+// CustomHistogram::ArrayToCustomEnumRanges to transform a C-style array of
+// valid sample values to a std::vector<int>.
 #define UMA_HISTOGRAM_CUSTOM_ENUMERATION(name, sample, custom_ranges)          \
     STATIC_HISTOGRAM_POINTER_BLOCK(name, Add(sample),                          \
         base::CustomHistogram::FactoryGet(name, custom_ranges,                 \

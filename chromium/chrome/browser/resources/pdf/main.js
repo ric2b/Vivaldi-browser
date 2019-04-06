@@ -6,6 +6,7 @@
 
 /**
  * Global PDFViewer object, accessible for testing.
+ *
  * @type Object
  */
 var viewer;
@@ -15,12 +16,14 @@ var viewer;
 /**
  * Stores any pending messages received which should be passed to the
  * PDFViewer when it is created.
+ *
  * @type Array
  */
 var pendingMessages = [];
 
 /**
  * Handles events that are received prior to the PDFViewer being created.
+ *
  * @param {Object} message A message event received.
  */
 function handleScriptingMessage(message) {
@@ -29,7 +32,9 @@ function handleScriptingMessage(message) {
 
 /**
  * Initialize the global PDFViewer and pass any outstanding messages to it.
- * @param {Object} browserApi An object providing an API to the browser.
+ *
+ * @param {Promise<BrowserApi>} browserApi A promise resolving to an API
+ *     to the browser.
  */
 function initViewer(browserApi) {
   // PDFViewer will handle any messages after it is created.
@@ -40,6 +45,26 @@ function initViewer(browserApi) {
 }
 
 /**
+ * Determine if the content settings allow PDFs to execute javascript.
+ *
+ * @param {Promise<BrowserApi>} browserApi A promise resolving to an API
+ *     to the browser.
+ */
+function configureJavaScriptContentSetting(browserApi) {
+  return new Promise((resolve, reject) => {
+    chrome.contentSettings.javascript.get(
+        {
+          'primaryUrl': browserApi.getStreamInfo().originalUrl,
+          'secondaryUrl': window.origin
+        },
+        (result) => {
+          browserApi.getStreamInfo().javascript = result.setting;
+          resolve(browserApi);
+        });
+  });
+}
+
+/**
  * Entrypoint for starting the PDF viewer. This function obtains the browser
  * API for the PDF and constructs a PDFViewer object with it.
  */
@@ -47,8 +72,13 @@ function main() {
   // Set up an event listener to catch scripting messages which are sent prior
   // to the PDFViewer being created.
   window.addEventListener('message', handleScriptingMessage, false);
+  var chain = createBrowserApi();
 
-  createBrowserApi().then(initViewer);
+  // Content settings may not be present in test environments.
+  if (chrome.contentSettings)
+    chain = chain.then(configureJavaScriptContentSetting);
+
+  chain.then(initViewer);
 }
 
 main();

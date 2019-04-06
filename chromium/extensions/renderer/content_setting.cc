@@ -4,11 +4,12 @@
 
 #include "extensions/renderer/content_setting.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "content/public/common/console_message_level.h"
 #include "extensions/renderer/bindings/api_binding_types.h"
+#include "extensions/renderer/bindings/api_binding_util.h"
+#include "extensions/renderer/bindings/api_invocation_errors.h"
 #include "extensions/renderer/bindings/api_request_handler.h"
 #include "extensions/renderer/bindings/api_signature.h"
 #include "extensions/renderer/bindings/api_type_reference_map.h"
@@ -108,6 +109,10 @@ gin::ObjectTemplateBuilder ContentSetting::GetObjectTemplateBuilder(
                  &ContentSetting::GetResourceIdentifiers);
 }
 
+const char* ContentSetting::GetTypeName() {
+  return "ContentSetting";
+}
+
 void ContentSetting::Get(gin::Arguments* arguments) {
   HandleFunction("get", arguments);
 }
@@ -130,6 +135,9 @@ void ContentSetting::HandleFunction(const std::string& method_name,
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
 
+  if (!binding::IsContextValidOrThrowError(context))
+    return;
+
   std::vector<v8::Local<v8::Value>> argument_list = arguments->GetAll();
 
   std::string full_name = "contentSettings.ContentSetting." + method_name;
@@ -140,10 +148,12 @@ void ContentSetting::HandleFunction(const std::string& method_name,
   std::unique_ptr<base::ListValue> converted_arguments;
   v8::Local<v8::Function> callback;
   std::string error;
-  if (!type_refs_->GetTypeMethodSignature(full_name)->ParseArgumentsToJSON(
-          context, argument_list, *type_refs_, &converted_arguments, &callback,
-          &error)) {
-    arguments->ThrowTypeError("Invalid invocation: " + error);
+  const APISignature* signature = type_refs_->GetTypeMethodSignature(full_name);
+  if (!signature->ParseArgumentsToJSON(context, argument_list, *type_refs_,
+                                       &converted_arguments, &callback,
+                                       &error)) {
+    arguments->ThrowTypeError(api_errors::InvocationError(
+        full_name, signature->GetExpectedSignature(), error));
     return;
   }
 
@@ -159,10 +169,10 @@ void ContentSetting::HandleFunction(const std::string& method_name,
         // Deprecated settings are always set to "allow". Populate the result to
         // avoid breaking extensions.
         v8::Local<v8::Object> object = v8::Object::New(isolate);
-        v8::Maybe<bool> result = object->DefineOwnProperty(
+        v8::Maybe<bool> result = object->CreateDataProperty(
             context, gin::StringToSymbol(isolate, "setting"),
             gin::StringToSymbol(isolate, "allow"));
-        // Since we just defined this object, DefineOwnProperty() should never
+        // Since we just defined this object, CreateDataProperty() should never
         // fail.
         CHECK(result.ToChecked());
         args.push_back(object);

@@ -19,6 +19,7 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
   void OnAccessibilityHelperInstanceReady(
       mojom::AccessibilityHelperInstancePtr accessibility_helper_ptr) override;
   void OnAppInstanceReady(mojom::AppInstancePtr app_ptr) override;
+  void OnAppfuseInstanceReady(mojom::AppfuseInstancePtr appfuse_ptr) override;
   void OnAudioInstanceReady(mojom::AudioInstancePtr audio_ptr) override;
   void OnAuthInstanceReady(mojom::AuthInstancePtr auth_ptr) override;
   void OnBackupSettingsInstanceReady(
@@ -35,11 +36,15 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
       mojom::ClipboardInstancePtr clipboard_ptr) override;
   void OnCrashCollectorInstanceReady(
       mojom::CrashCollectorInstancePtr crash_collector_ptr) override;
+  void OnDiskQuotaInstanceReady(
+      mojom::DiskQuotaInstancePtr disk_quota_ptr) override;
   void OnEnterpriseReportingInstanceReady(
       mojom::EnterpriseReportingInstancePtr enterprise_reporting_ptr) override;
   void OnFileSystemInstanceReady(
       mojom::FileSystemInstancePtr file_system_ptr) override;
   void OnImeInstanceReady(mojom::ImeInstancePtr ime_ptr) override;
+  void OnInputMethodManagerInstanceReady(
+      mojom::InputMethodManagerInstancePtr input_method_manager_ptr) override;
   void OnIntentHelperInstanceReady(
       mojom::IntentHelperInstancePtr intent_helper_ptr) override;
   void OnKioskInstanceReady(mojom::KioskInstancePtr kiosk_ptr) override;
@@ -60,8 +65,11 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
   void OnProcessInstanceReady(mojom::ProcessInstancePtr process_ptr) override;
   void OnRotationLockInstanceReady(
       mojom::RotationLockInstancePtr rotation_lock_ptr) override;
+  void OnScreenCaptureInstanceReady(
+      mojom::ScreenCaptureInstancePtr screen_capture_ptr) override;
   void OnStorageManagerInstanceReady(
       mojom::StorageManagerInstancePtr storage_manager_ptr) override;
+  void OnTimerInstanceReady(mojom::TimerInstancePtr timer_ptr) override;
   void OnTracingInstanceReady(mojom::TracingInstancePtr trace_ptr) override;
   void OnTtsInstanceReady(mojom::TtsInstancePtr tts_ptr) override;
   void OnUsbHostInstanceReady(mojom::UsbHostInstancePtr usb_ptr) override;
@@ -72,6 +80,8 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
       mojom::VoiceInteractionFrameworkInstancePtr framework_ptr) override;
   void OnVolumeMounterInstanceReady(
       mojom::VolumeMounterInstancePtr volume_mounter_ptr) override;
+  void OnWakeLockInstanceReady(
+      mojom::WakeLockInstancePtr wakelock_ptr) override;
   void OnWallpaperInstanceReady(
       mojom::WallpaperInstancePtr wallpaper_ptr) override;
 

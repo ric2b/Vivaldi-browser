@@ -6,7 +6,8 @@
 
 #include "ash/system/user/button_from_view.h"
 
-#include "ash/ash_constants.h"
+#include "ash/public/cpp/ash_constants.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "base/strings/string_util.h"
@@ -45,8 +46,10 @@ ButtonFromView::ButtonFromView(views::View* content,
 
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
 
-  SetBackground(views::CreateThemedSolidBackground(
-      this, ui::NativeTheme::kColorId_BubbleBackground));
+  SetBackground(features::IsSystemTrayUnifiedEnabled()
+                    ? views::CreateSolidBackground(kUnifiedMenuBackgroundColor)
+                    : views::CreateThemedSolidBackground(
+                          this, ui::NativeTheme::kColorId_BubbleBackground));
 }
 
 ButtonFromView::~ButtonFromView() = default;
@@ -63,10 +66,12 @@ void ButtonFromView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   views::Button::GetAccessibleNodeData(node_data);
   // If no label has been explicitly set via Button::SetAccessibleName(),
   // use the content's label.
-  if (node_data->GetStringAttribute(ui::AX_ATTR_NAME).empty()) {
+  if (node_data->GetStringAttribute(ax::mojom::StringAttribute::kName)
+          .empty()) {
     ui::AXNodeData content_data;
     content_->GetAccessibleNodeData(&content_data);
-    node_data->SetName(content_data.GetStringAttribute(ui::AX_ATTR_NAME));
+    node_data->SetName(
+        content_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 }
 
@@ -96,8 +101,7 @@ void ButtonFromView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
 }
 
 std::unique_ptr<views::InkDrop> ButtonFromView::CreateInkDrop() {
-  return TrayPopupUtils::CreateInkDrop(TrayPopupInkDropStyle::INSET_BOUNDS,
-                                       this);
+  return TrayPopupUtils::CreateInkDrop(this);
 }
 
 std::unique_ptr<views::InkDropRipple> ButtonFromView::CreateInkDropRipple()

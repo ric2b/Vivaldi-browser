@@ -31,12 +31,11 @@ class MockAudioRendererSink : public SwitchableAudioRendererSink {
   MOCK_METHOD1(SetVolume, bool(double volume));
   MOCK_METHOD0(CurrentThreadIsRenderingThread, bool());
 
-  OutputDeviceInfo GetOutputDeviceInfo();
+  OutputDeviceInfo GetOutputDeviceInfo() override;
 
-  bool IsOptimizedForHardwareParameters();
+  bool IsOptimizedForHardwareParameters() override;
 
   void SwitchOutputDevice(const std::string& device_id,
-                          const url::Origin& security_origin,
                           const OutputDeviceStatusCB& callback) override;
   void Initialize(const AudioParameters& params,
                   RenderCallback* renderer) override;

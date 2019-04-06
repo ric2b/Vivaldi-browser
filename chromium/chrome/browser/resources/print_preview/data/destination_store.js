@@ -234,6 +234,10 @@ cr.define('print_preview', function() {
         [
           print_preview.PrinterType.LOCAL_PRINTER,
           print_preview.DestinationStorePrinterSearchStatus.START
+        ],
+        [
+          print_preview.PrinterType.CLOUD_PRINTER,
+          print_preview.DestinationStorePrinterSearchStatus.START
         ]
       ]);
 
@@ -259,7 +263,6 @@ cr.define('print_preview', function() {
        */
       this.useSystemDefaultAsDefault_ =
           loadTimeData.getBoolean('useSystemDefaultPrinter');
-
 
       /**
        * The recent print destinations, set when the store is initialized.
@@ -720,7 +723,7 @@ cr.define('print_preview', function() {
                   (caps) => this.onCapabilitiesSet_(
                       destination.origin, destination.id, caps),
                   () => this.onGetCapabilitiesFail_(
-                      destination.origin, destination.origin));
+                      destination.origin, destination.id));
         } else {
           assert(
               this.cloudPrintInterface_ != null,
@@ -748,13 +751,14 @@ cr.define('print_preview', function() {
      * Attempts to resolve a provisional destination.
      * @param {!print_preview.Destination} destination Provisional destination
      *     that should be resolved.
+     * @return {!Promise<?print_preview.Destination>}
      */
     resolveProvisionalDestination(destination) {
       assert(
           destination.provisionalType ==
               print_preview.DestinationProvisionalType.NEEDS_USB_PERMISSION,
           'Provisional type cannot be resolved.');
-      this.nativeLayer_.grantExtensionPrinterAccess(destination.id)
+      return this.nativeLayer_.grantExtensionPrinterAccess(destination.id)
           .then(
               destinationInfo => {
                 /**
@@ -769,6 +773,7 @@ cr.define('print_preview', function() {
                 this.insertIntoStore_(parsedDestination);
                 this.dispatchProvisionalDestinationResolvedEvent_(
                     destination.id, parsedDestination);
+                return parsedDestination;
               },
               () => {
                 /**
@@ -779,6 +784,7 @@ cr.define('print_preview', function() {
                 this.removeProvisionalDestination_(destination.id);
                 this.dispatchProvisionalDestinationResolvedEvent_(
                     destination.id, null);
+                return null;
               });
     }
 
@@ -871,11 +877,23 @@ cr.define('print_preview', function() {
 
     /** Initiates loading of all known destination types. */
     startLoadAllDestinations() {
-      this.startLoadCloudDestinations();
-      for (const printerType of Object.values(print_preview.PrinterType)) {
-        if (printerType !== print_preview.PrinterType.PDF_PRINTER)
-          this.startLoadDestinations(printerType);
-      }
+      // Printer types that need to be retrieved from the handler.
+      let types = [
+        print_preview.PrinterType.PRIVET_PRINTER,
+        print_preview.PrinterType.EXTENSION_PRINTER,
+        print_preview.PrinterType.LOCAL_PRINTER,
+      ];
+
+      // If the cloud printer handler is enabled, request cloud printers from
+      // the handler instead of trying to directly communicate with the cloud
+      // print server. See https://crbug.com/829414.
+      if (loadTimeData.getBoolean('cloudPrinterHandlerEnabled'))
+        types.push(print_preview.PrinterType.CLOUD_PRINTER);
+      else
+        this.startLoadCloudDestinations();
+
+      for (const printerType of types)
+        this.startLoadDestinations(printerType);
     }
 
     /**
@@ -1005,11 +1023,11 @@ cr.define('print_preview', function() {
      */
     updateDestination_(destination) {
       assert(destination.constructor !== Array, 'Single printer expected');
-      destination.capabilities_ =
-          localizeCapabilities(assert(destination.capabilities_));
+      destination.capabilities =
+          localizeCapabilities(assert(destination.capabilities));
       if (print_preview.originToType(destination.origin) !==
           print_preview.PrinterType.LOCAL_PRINTER) {
-        destination.capabilities_ = sortMediaSizes(destination.capabilities_);
+        destination.capabilities = sortMediaSizes(destination.capabilities);
       }
       const existingDestination =
           this.destinationMap_[this.getKey_(destination)];
@@ -1053,7 +1071,7 @@ cr.define('print_preview', function() {
       const key = this.getKey_(destination);
       const existingDestination = this.destinationMap_[key];
       if (existingDestination == null) {
-        destination.isRecent |=
+        destination.isRecent = destination.isRecent ||
             this.recentDestinations_.some(function(recent) {
               return (
                   destination.id == recent.id &&

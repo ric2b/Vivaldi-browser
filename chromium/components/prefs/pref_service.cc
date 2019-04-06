@@ -30,7 +30,7 @@ namespace {
 class ReadErrorHandler : public PersistentPrefStore::ReadErrorDelegate {
  public:
   using ErrorCallback =
-      base::Callback<void(PersistentPrefStore::PrefReadError)>;
+      base::RepeatingCallback<void(PersistentPrefStore::PrefReadError)>;
   explicit ReadErrorHandler(ErrorCallback cb) : callback_(cb) {}
 
   void OnError(PersistentPrefStore::PrefReadError error) override {
@@ -61,35 +61,26 @@ uint32_t GetWriteFlags(const PrefService::Preference* pref) {
 PrefService::PrefService(
     std::unique_ptr<PrefNotifierImpl> pref_notifier,
     std::unique_ptr<PrefValueStore> pref_value_store,
-    PersistentPrefStore* user_prefs,
-    PrefRegistry* pref_registry,
-    base::Callback<void(PersistentPrefStore::PrefReadError)>
+    scoped_refptr<PersistentPrefStore> user_prefs,
+    scoped_refptr<PrefRegistry> pref_registry,
+    base::RepeatingCallback<void(PersistentPrefStore::PrefReadError)>
         read_error_callback,
     bool async)
     : pref_notifier_(std::move(pref_notifier)),
       pref_value_store_(std::move(pref_value_store)),
-      pref_registry_(pref_registry),
-      user_pref_store_(user_prefs),
-      read_error_callback_(read_error_callback) {
+      user_pref_store_(std::move(user_prefs)),
+      read_error_callback_(std::move(read_error_callback)),
+      pref_registry_(std::move(pref_registry)) {
   pref_notifier_->SetPrefService(this);
 
-  // TODO(battre): This is a check for crbug.com/435208 to make sure that
-  // access violations are caused by a use-after-free bug and not by an
-  // initialization bug.
-  CHECK(pref_registry_);
-  CHECK(pref_value_store_);
+  DCHECK(pref_registry_);
+  DCHECK(pref_value_store_);
 
   InitFromStorage(async);
 }
 
 PrefService::~PrefService() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Reset pointers so accesses after destruction reliably crash.
-  pref_value_store_.reset();
-  pref_registry_ = nullptr;
-  user_pref_store_ = nullptr;
-  pref_notifier_.reset();
 }
 
 void PrefService::InitFromStorage(bool async) {
@@ -285,6 +276,17 @@ bool PrefService::IsUserModifiablePreference(
   return pref && pref->IsUserModifiable();
 }
 
+const base::Value* PrefService::Get(const std::string& path) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  const base::Value* value = GetPreferenceValue(path);
+  if (!value) {
+    NOTREACHED() << "Trying to read an unregistered pref: " << path;
+    return nullptr;
+  }
+  return value;
+}
+
 const base::DictionaryValue* PrefService::GetDictionary(
     const std::string& path) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -476,6 +478,14 @@ void PrefService::SetTime(const std::string& path, base::Time value) {
 base::Time PrefService::GetTime(const std::string& path) const {
   return base::Time::FromDeltaSinceWindowsEpoch(
       base::TimeDelta::FromMicroseconds(GetInt64(path)));
+}
+
+void PrefService::SetTimeDelta(const std::string& path, base::TimeDelta value) {
+  SetInt64(path, value.InMicroseconds());
+}
+
+base::TimeDelta PrefService::GetTimeDelta(const std::string& path) const {
+  return base::TimeDelta::FromMicroseconds(GetInt64(path));
 }
 
 base::Value* PrefService::GetMutableUserPref(const std::string& path,

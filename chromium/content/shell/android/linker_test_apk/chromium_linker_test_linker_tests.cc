@@ -41,7 +41,7 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
       in_browser_process ? "BROWSER_LINKER_TEST: " : "RENDERER_LINKER_TEST: ";
 
   // The RELRO section(s) will appear in /proc/self/maps as a mapped memory
-  // region for a file with a recognizable name. For the LegacyLinker the
+  // region for a file with a recognizable name. For the Chromium Linker the
   // full name will be something like:
   //
   //   "/dev/ashmem/RELRO:<libname> (deleted)"
@@ -140,12 +140,11 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
     }
   }
 
-  VLOG(0)
-      << prefix
-      << base::StringPrintf(
-             "There are %d shared RELRO sections in this process, %d are bad",
-             num_shared_relros,
-             num_bad_shared_relros);
+  VLOG(0) << prefix
+          << base::StringPrintf(
+                 "There are %d shared RELRO sections in this process, of which "
+                 "%d are bad",
+                 num_shared_relros, num_bad_shared_relros);
 
   if (num_bad_shared_relros > 0) {
     LOG(ERROR) << prefix << "FAIL Bad RELROs sections in this process";

@@ -12,6 +12,10 @@
 <translation id="1084824384139382525">Copiază adresa linkului</translation>
 <translation id="1128109161498068552">Nu permite niciunui site web să folosească mesajele rezervate sistemului pentru a accesa dispozitive MIDI</translation>
 <translation id="114140604515785785">Director rădăcină pentru extensie:</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD, plural,
+        =1 {O descărcare este în desfășurare. Vreți să anulați descărcarea și să ieșiți din modul incognito?}
+        few {# descărcări sunt în desfășurare. Vreți să anulați descărcările și să ieșiți din modul incognito?}
+        other {# de descărcări sunt în desfășurare. Vreți să anulați descărcările și să ieșiți din modul incognito?}}</translation>
 <translation id="1163931534039071049">&amp;Afișează sursa cadrului</translation>
 <translation id="1165039591588034296">Eroare</translation>
 <translation id="1175364870820465910">Ti&amp;părește...</translation>
@@ -40,6 +44,8 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Deschide linkul cu...</translation>
 <translation id="159359590073980872">Memorie cache de imagini</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD, plural,
+       =1 {Descărcare în desfășurare} other {Descărcări în desfășurare}}</translation>
 <translation id="1601560923496285236">Aplică</translation>
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1620510694547887537">Cameră video</translation>
@@ -603,6 +609,8 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="9027459031423301635">Deschide linkul într-o fi&amp;lă nouă</translation>
 <translation id="9056810968620647706">Nu s-a găsit nicio potrivire.</translation>
 <translation id="9088234649737575428">Plugin-ul <ph name="PLUGIN_NAME" /> este blocat conform politicii companiei</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD, plural,
+       =1 {Descărcare în desfășurare} other {Descărcări în desfășurare}}</translation>
 <translation id="9137916601698928395">Deschide linkul ca <ph name="USER" /></translation>
 <translation id="9153341767479566106">Alte extensii care nu au putut fi încărcate:</translation>
 <translation id="9170848237812810038">&amp;Anulează</translation>

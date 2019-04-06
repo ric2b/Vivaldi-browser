@@ -36,16 +36,6 @@ class ShelfTooltipManagerTest : public AshTestBase {
   bool IsTimerRunning() { return tooltip_manager_->timer_.IsRunning(); }
   views::Widget* GetTooltip() { return tooltip_manager_->bubble_->GetWidget(); }
 
-  std::unique_ptr<views::Widget> CreateTestWidget() {
-    std::unique_ptr<views::Widget> widget = std::make_unique<views::Widget>();
-    views::Widget::InitParams params;
-    params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    params.context = CurrentContext();
-    widget->Init(params);
-    widget->Show();
-    return widget;
-  }
-
  protected:
   ShelfView* shelf_view_;
   ShelfTooltipManager* tooltip_manager_;
@@ -164,79 +154,71 @@ TEST_F(ShelfTooltipManagerTest, HideWhenShelfIsAutoHideHidden) {
 }
 
 TEST_F(ShelfTooltipManagerTest, HideForEvents) {
-  // TODO: investigate failure in mash. http://crbug.com/695563.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
-  ui::test::EventGenerator& generator = GetEventGenerator();
+  ui::test::EventGenerator* generator = GetEventGenerator();
   gfx::Rect shelf_bounds = shelf_view_->GetBoundsInScreen();
 
   // Should hide if the mouse exits the shelf area.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.MoveMouseTo(shelf_bounds.CenterPoint());
-  generator.SendMouseExit();
+  generator->MoveMouseTo(shelf_bounds.CenterPoint());
+  generator->SendMouseExit();
   EXPECT_FALSE(tooltip_manager_->IsVisible());
 
   // Should hide if the mouse is pressed in the shelf area.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.MoveMouseTo(shelf_bounds.CenterPoint());
-  generator.PressLeftButton();
+  generator->MoveMouseTo(shelf_bounds.CenterPoint());
+  generator->PressLeftButton();
   EXPECT_FALSE(tooltip_manager_->IsVisible());
 
   // Should hide for touch events in the shelf.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.set_current_location(shelf_bounds.CenterPoint());
-  generator.PressTouch();
+  generator->set_current_location(shelf_bounds.CenterPoint());
+  generator->PressTouch();
   EXPECT_FALSE(tooltip_manager_->IsVisible());
 
   // Should hide for gesture events in the shelf.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.GestureTapDownAndUp(shelf_bounds.CenterPoint());
+  generator->GestureTapDownAndUp(shelf_bounds.CenterPoint());
   EXPECT_FALSE(tooltip_manager_->IsVisible());
 }
 
 TEST_F(ShelfTooltipManagerTest, HideForExternalEvents) {
-  // TODO: investigate failure in mash. http://crbug.com/695563.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
-  ui::test::EventGenerator& generator = GetEventGenerator();
+  ui::test::EventGenerator* generator = GetEventGenerator();
 
   // Should hide for touches outside the shelf.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.set_current_location(gfx::Point());
-  generator.PressTouch();
+  generator->set_current_location(gfx::Point());
+  generator->PressTouch();
   EXPECT_FALSE(tooltip_manager_->IsVisible());
-  generator.ReleaseTouch();
+  generator->ReleaseTouch();
 
   // Should hide for touch events on the tooltip.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.set_current_location(
+  generator->set_current_location(
       GetTooltip()->GetWindowBoundsInScreen().CenterPoint());
-  generator.PressTouch();
+  generator->PressTouch();
   EXPECT_FALSE(tooltip_manager_->IsVisible());
-  generator.ReleaseTouch();
+  generator->ReleaseTouch();
 
   // Should hide for gestures outside the shelf.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.GestureTapDownAndUp(gfx::Point());
+  generator->GestureTapDownAndUp(gfx::Point());
   EXPECT_FALSE(tooltip_manager_->IsVisible());
 }
 
 TEST_F(ShelfTooltipManagerTest, DoNotHideForKeyEvents) {
-  ui::test::EventGenerator& generator = GetEventGenerator();
+  ui::test::EventGenerator* generator = GetEventGenerator();
 
   // Should not hide for key events.
   tooltip_manager_->ShowTooltip(shelf_view_->GetAppListButton());
   ASSERT_TRUE(tooltip_manager_->IsVisible());
-  generator.PressKey(ui::VKEY_A, ui::EF_NONE);
+  generator->PressKey(ui::VKEY_A, ui::EF_NONE);
   EXPECT_TRUE(tooltip_manager_->IsVisible());
 }
 

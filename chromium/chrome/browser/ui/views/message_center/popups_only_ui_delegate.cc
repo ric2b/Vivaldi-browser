@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/views/message_center/popups_only_ui_delegate.h"
 
-#include "chrome/browser/browser_process.h"
 #include "ui/display/screen.h"
+#include "ui/message_center/message_center.h"
 #include "ui/message_center/ui_controller.h"
 #include "ui/message_center/views/desktop_popup_alignment_delegate.h"
 #include "ui/message_center/views/message_popup_collection.h"
@@ -18,7 +18,8 @@ PopupsOnlyUiDelegate::PopupsOnlyUiDelegate() {
   ui_controller_.reset(new message_center::UiController(this));
   alignment_delegate_.reset(new message_center::DesktopPopupAlignmentDelegate);
   popup_collection_.reset(new message_center::MessagePopupCollection(
-      message_center(), ui_controller_.get(), alignment_delegate_.get()));
+      message_center(), alignment_delegate_.get()));
+  message_center()->SetHasMessageCenterView(false);
 }
 
 PopupsOnlyUiDelegate::~PopupsOnlyUiDelegate() {
@@ -34,7 +35,7 @@ message_center::MessageCenter* PopupsOnlyUiDelegate::message_center() {
 
 bool PopupsOnlyUiDelegate::ShowPopups() {
   alignment_delegate_->StartObserving(display::Screen::GetScreen());
-  popup_collection_->DoUpdateIfPossible();
+  popup_collection_->DoUpdate();
   return true;
 }
 

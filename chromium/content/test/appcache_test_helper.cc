@@ -49,28 +49,26 @@ void AppCacheTestHelper::AddGroupAndCache(AppCacheServiceImpl*
   base::RunLoop().Run();
 }
 
-void AppCacheTestHelper::GetOriginsWithCaches(AppCacheServiceImpl*
-    appcache_service, std::set<GURL>* origins) {
+void AppCacheTestHelper::GetOriginsWithCaches(
+    AppCacheServiceImpl* appcache_service,
+    std::set<url::Origin>* origins) {
   appcache_info_ = new AppCacheInfoCollection;
   origins_ = origins;
   appcache_service->GetAllAppCacheInfo(
       appcache_info_.get(),
-      base::Bind(&AppCacheTestHelper::OnGotAppCacheInfo,
-                 base::Unretained(this)));
+      base::BindOnce(&AppCacheTestHelper::OnGotAppCacheInfo,
+                     base::Unretained(this)));
 
   // OnGotAppCacheInfo will quit the message loop.
   base::RunLoop().Run();
 }
 
 void AppCacheTestHelper::OnGotAppCacheInfo(int rv) {
-  typedef std::map<GURL, AppCacheInfoVector> InfoByOrigin;
 
   origins_->clear();
-  for (InfoByOrigin::const_iterator origin =
-           appcache_info_->infos_by_origin.begin();
-       origin != appcache_info_->infos_by_origin.end(); ++origin) {
-    origins_->insert(origin->first);
-  }
+  for (const auto& kvp : appcache_info_->infos_by_origin)
+    origins_->insert(kvp.first);
+
   base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 

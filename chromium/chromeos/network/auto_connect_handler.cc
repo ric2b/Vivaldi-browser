@@ -44,6 +44,32 @@ void DisconnectErrorCallback(
                  << "Error data: " << error_data_ss.str();
 }
 
+void RemoveNetworkConfigurationErrorCallback(
+    const std::string& error_name,
+    std::unique_ptr<base::DictionaryValue> error_data) {
+  std::stringstream error_data_ss;
+  if (error_data)
+    error_data_ss << *error_data;
+  else
+    error_data_ss << "<none>";
+  NET_LOG(ERROR) << "AutoConnectHandler RemoveNetworkConfiguration failed. "
+                 << "Error name: \"" << error_name << "\", "
+                 << "Error data: " << error_data_ss.str();
+}
+
+void SetPropertiesErrorCallback(
+    const std::string& error_name,
+    std::unique_ptr<base::DictionaryValue> error_data) {
+  std::stringstream error_data_ss;
+  if (error_data)
+    error_data_ss << *error_data;
+  else
+    error_data_ss << "<none>";
+  NET_LOG(ERROR) << "AutoConnectHandler SetProperties failed. "
+                 << "Error name: \"" << error_name << "\", "
+                 << "Error data: " << error_data_ss.str();
+}
+
 std::string AutoConnectReasonsToString(int auto_connect_reasons) {
   std::string result;
 
@@ -139,20 +165,14 @@ void AutoConnectHandler::ConnectToNetworkRequested(
   request_best_connection_pending_ = false;
 }
 
-void AutoConnectHandler::PoliciesChanged(const std::string& userhash) {
-  // Ignore user policies.
-  if (!userhash.empty())
-    return;
-  DisconnectIfPolicyRequires();
-}
-
 void AutoConnectHandler::PoliciesApplied(const std::string& userhash) {
   if (userhash.empty()) {
     device_policy_applied_ = true;
   } else {
     user_policy_applied_ = true;
-    DisconnectIfPolicyRequires();
   }
+
+  DisconnectIfPolicyRequires();
 
   // Request to connect to the best network only if there is at least one
   // managed network. Otherwise only process existing requests.
@@ -175,8 +195,9 @@ void AutoConnectHandler::ScanCompleted(const DeviceState* device) {
   connect_to_best_services_after_scan_ = false;
   // Request ConnectToBestServices after processing any pending DBus calls.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&AutoConnectHandler::CallShillConnectToBestServices,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(&AutoConnectHandler::CallShillConnectToBestServices,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void AutoConnectHandler::ResolveRequestCompleted(
@@ -199,6 +220,11 @@ void AutoConnectHandler::AddObserver(Observer* observer) {
 
 void AutoConnectHandler::RemoveObserver(Observer* observer) {
   observer_list_.RemoveObserver(observer);
+}
+
+void AutoConnectHandler::NotifyAutoConnectInitiatedForTest(
+    int auto_connect_reasons) {
+  NotifyAutoConnectInitiated(auto_connect_reasons);
 }
 
 void AutoConnectHandler::NotifyAutoConnectInitiated(int auto_connect_reasons) {
@@ -257,58 +283,144 @@ void AutoConnectHandler::CheckBestConnection() {
 }
 
 void AutoConnectHandler::DisconnectIfPolicyRequires() {
-  if (applied_autoconnect_policy_ || !LoginState::Get()->IsUserLoggedIn() ||
-      !user_policy_applied_) {
+  // Only block networks in a user session.
+  if (!LoginState::Get()->IsUserLoggedIn())
     return;
+
+  // Wait for both user and device policy to be applied before disconnecting.
+  // The device policy holds the policies, which might cause the network to get
+  // disconnected. The user policy might hold a valid network configuration,
+  // which prevents the network from being disconnected.
+  if (!user_policy_applied_ || !device_policy_applied_)
+    return;
+
+  const base::DictionaryValue* global_network_config =
+      managed_configuration_handler_->GetGlobalConfigFromPolicy(
+          std::string() /* no username hash, device policy */);
+  if (!global_network_config)
+    return;
+
+  DisconnectAndRemoveBlacklistedNetworks();
+
+  const base::Value* connect_value = global_network_config->FindKeyOfType(
+      ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
+      base::Value::Type::BOOLEAN);
+  bool only_policy_connect = connect_value ? connect_value->GetBool() : false;
+
+  const base::Value* autoconnect_value = global_network_config->FindKeyOfType(
+      ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
+      base::Value::Type::BOOLEAN);
+  bool only_policy_autoconnect =
+      autoconnect_value ? autoconnect_value->GetBool() : false;
+
+  // Reset |applied_autoconnect_policy_| if auto-connect policy is disabled.
+  if (!only_policy_autoconnect)
+    applied_autoconnect_policy_ = false;
+
+  if (only_policy_connect) {
+    // Disconnect and remove network configurations for all unmanaged networks.
+    DisconnectFromAllUnmanagedWiFiNetworks(true, false);
+  } else if (only_policy_autoconnect && !applied_autoconnect_policy_) {
+    // Disconnect and disable auto-connect for all unmanaged networks.
+    DisconnectFromAllUnmanagedWiFiNetworks(false, true);
+    applied_autoconnect_policy_ = true;
   }
+}
+
+void AutoConnectHandler::DisconnectAndRemoveBlacklistedNetworks() {
+  NET_LOG_DEBUG("DisconnectAndRemoveBlacklistedNetworks", "");
 
   const base::DictionaryValue* global_network_config =
       managed_configuration_handler_->GetGlobalConfigFromPolicy(
           std::string() /* no username hash, device policy */);
 
-  if (!global_network_config)
-    return;  // Device policy is not set, yet.
+  const base::Value* blacklist_value = global_network_config->FindKeyOfType(
+      ::onc::global_network_config::kBlacklistedHexSSIDs,
+      base::Value::Type::LIST);
+  if (!blacklist_value || blacklist_value->GetList().empty())
+    return;  // No blacklisted WiFi networks set.
 
-  applied_autoconnect_policy_ = true;
-
-  bool only_policy_autoconnect = false;
-  global_network_config->GetBooleanWithoutPathExpansion(
-      ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
-      &only_policy_autoconnect);
-  bool only_policy_connect = false;
-  global_network_config->GetBooleanWithoutPathExpansion(
-      ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
-      &only_policy_connect);
-
-  if (only_policy_autoconnect || only_policy_connect)
-    DisconnectFromUnmanagedSharedWiFiNetworks();
-}
-
-void AutoConnectHandler::DisconnectFromUnmanagedSharedWiFiNetworks() {
-  NET_LOG_DEBUG("DisconnectFromUnmanagedSharedWiFiNetworks", "");
+  std::set<std::string> blacklist;
+  for (const base::Value& hex_ssid_value : blacklist_value->GetList())
+    blacklist.insert(hex_ssid_value.GetString());
 
   NetworkStateHandler::NetworkStateList networks;
-  network_state_handler_->GetVisibleNetworkListByType(
-      NetworkTypePattern::WiFi(), &networks);
+  network_state_handler_->GetNetworkListByType(NetworkTypePattern::WiFi(),
+                                               false, false, 0, &networks);
   for (const NetworkState* network : networks) {
-    if (!(network->IsConnectingState() || network->IsConnectedState()))
-      break;  // Connected and connecting networks are listed first.
-
-    if (network->IsPrivate())
+    if (blacklist.find(network->GetHexSsid()) == blacklist.end())
       continue;
 
-    const bool network_is_policy_managed =
+    const bool is_managed =
         !network->profile_path().empty() && !network->guid().empty() &&
         managed_configuration_handler_->FindPolicyByGuidAndProfile(
             network->guid(), network->profile_path(), nullptr /* onc_source */);
-    if (network_is_policy_managed)
+    if (is_managed)
       continue;
 
-    NET_LOG_EVENT("Disconnect Forced by Policy", network->path());
-    network_connection_handler_->DisconnectNetwork(
-        network->path(), base::Bind(&base::DoNothing),
-        base::Bind(&DisconnectErrorCallback, network->path()));
+    if (network->IsConnectingOrConnected())
+      DisconnectNetwork(network->path());
+
+    if (network->IsInProfile())
+      RemoveNetworkConfigurationForNetwork(network->path());
   }
+}
+
+void AutoConnectHandler::DisconnectFromAllUnmanagedWiFiNetworks(
+    bool remove_configuration,
+    bool disable_auto_connect) {
+  NET_LOG_DEBUG("DisconnectFromAllUnmanagedWiFiNetworks", "");
+
+  NetworkStateHandler::NetworkStateList networks;
+  network_state_handler_->GetNetworkListByType(NetworkTypePattern::WiFi(),
+                                               false, false, 0, &networks);
+  for (const NetworkState* network : networks) {
+    const bool is_managed =
+        !network->profile_path().empty() && !network->guid().empty() &&
+        managed_configuration_handler_->FindPolicyByGuidAndProfile(
+            network->guid(), network->profile_path(), nullptr /* onc_source */);
+    if (is_managed)
+      continue;
+
+    if (network->IsConnectingOrConnected())
+      DisconnectNetwork(network->path());
+
+    if (network->IsInProfile()) {
+      if (remove_configuration)
+        RemoveNetworkConfigurationForNetwork(network->path());
+      else if (disable_auto_connect)
+        DisableAutoconnectForWiFiNetwork(network->path());
+    }
+  }
+}
+
+void AutoConnectHandler::DisconnectNetwork(const std::string& service_path) {
+  NET_LOG_EVENT("Disconnect forced by policy", service_path);
+
+  network_connection_handler_->DisconnectNetwork(
+      service_path, base::DoNothing(),
+      base::Bind(&DisconnectErrorCallback, service_path));
+}
+
+void AutoConnectHandler::RemoveNetworkConfigurationForNetwork(
+    const std::string& service_path) {
+  NET_LOG_EVENT("Remove configuration forced by policy", service_path);
+
+  managed_configuration_handler_->RemoveConfiguration(
+      service_path, base::DoNothing(),
+      base::Bind(&RemoveNetworkConfigurationErrorCallback));
+}
+
+void AutoConnectHandler::DisableAutoconnectForWiFiNetwork(
+    const std::string& service_path) {
+  NET_LOG_EVENT("Disable auto-connect forced by policy", service_path);
+
+  base::DictionaryValue properties;
+  properties.SetPath({::onc::network_config::kWiFi, ::onc::wifi::kAutoConnect},
+                     base::Value(false));
+  managed_configuration_handler_->SetProperties(
+      service_path, properties, base::DoNothing(),
+      base::Bind(&SetPropertiesErrorCallback));
 }
 
 void AutoConnectHandler::CallShillConnectToBestServices() {

@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
@@ -24,7 +23,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_message_macros.h"
-#include "printing/features/features.h"
+#include "printing/buildflags/buildflags.h"
 
 using content::BrowserThread;
 
@@ -85,7 +84,6 @@ PrintViewManager::~PrintViewManager() {
   DCHECK_EQ(NOT_PREVIEWING, print_preview_state_);
 }
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
 bool PrintViewManager::PrintForSystemDialogNow(
     const base::Closure& dialog_shown_callback) {
   DCHECK(!dialog_shown_callback.is_null());
@@ -96,7 +94,7 @@ bool PrintViewManager::PrintForSystemDialogNow(
   SetPrintingRFH(print_preview_rfh_);
   int32_t id = print_preview_rfh_->GetRoutingID();
   return PrintNowInternal(print_preview_rfh_,
-                          base::MakeUnique<PrintMsg_PrintForSystemDialog>(id));
+                          std::make_unique<PrintMsg_PrintForSystemDialog>(id));
 }
 
 bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
@@ -112,7 +110,6 @@ bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
 
   return !!print_preview_dialog->GetWebUI();
 }
-#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
 bool PrintViewManager::PrintPreviewNow(content::RenderFrameHost* rfh,
                                        bool has_selection) {
@@ -122,7 +119,7 @@ bool PrintViewManager::PrintPreviewNow(content::RenderFrameHost* rfh,
   if (print_preview_state_ != NOT_PREVIEWING)
     return false;
 
-  auto message = base::MakeUnique<PrintMsg_InitiatePrintPreview>(
+  auto message = std::make_unique<PrintMsg_InitiatePrintPreview>(
       rfh->GetRoutingID(), has_selection);
   if (!PrintNowInternal(rfh, std::move(message)))
     return false;

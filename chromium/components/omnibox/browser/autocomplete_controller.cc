@@ -4,9 +4,11 @@
 
 #include "components/omnibox/browser/autocomplete_controller.h"
 
-#include <stddef.h>
+#include <inttypes.h>
 
+#include <cstddef>
 #include <memory>
+#include <numeric>
 #include <set>
 #include <string>
 #include <utility>
@@ -19,17 +21,19 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_controller_delegate.h"
 #include "components/omnibox/browser/bookmark_provider.h"
 #include "components/omnibox/browser/builtin_provider.h"
 #include "components/omnibox/browser/clipboard_url_provider.h"
+#include "components/omnibox/browser/document_provider.h"
 #include "components/omnibox/browser/history_quick_provider.h"
 #include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/keyword_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/physical_web_provider.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
@@ -37,6 +41,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
+#include "ui/base/device_form_factor.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(OS_IOS)
@@ -143,14 +148,6 @@ void AutocompleteMatchToAssistedQuery(
       *subtype = 177;
       return;
     }
-    case AutocompleteMatchType::PHYSICAL_WEB: {
-      *subtype = 190;
-      return;
-    }
-    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW: {
-      *subtype = 191;
-      return;
-    }
     default: {
       // This value indicates a native chrome suggestion with no named subtype
       // (yet).
@@ -187,8 +184,13 @@ bool IsTrivialAutocompletion(const AutocompleteMatch& match) {
 
 // Whether this autocomplete match type supports custom descriptions.
 bool AutocompleteMatchHasCustomDescription(const AutocompleteMatch& match) {
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_DESKTOP &&
+      OmniboxFieldTrial::IsNewAnswerLayoutEnabled() &&
+      match.type == AutocompleteMatchType::CALCULATOR) {
+    return true;
+  }
   return match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
-      match.type == AutocompleteMatchType::SEARCH_SUGGEST_PROFILE;
+         match.type == AutocompleteMatchType::SEARCH_SUGGEST_PROFILE;
 }
 
 }  // namespace
@@ -199,6 +201,7 @@ AutocompleteController::AutocompleteController(
     int provider_types)
     : delegate_(delegate),
       provider_client_(std::move(provider_client)),
+      document_provider_(nullptr),
       history_url_provider_(nullptr),
       keyword_provider_(nullptr),
       search_provider_(nullptr),
@@ -236,6 +239,10 @@ AutocompleteController::AutocompleteController(
     if (zero_suggest_provider_)
       providers_.push_back(zero_suggest_provider_);
   }
+  if (provider_types & AutocompleteProvider::TYPE_DOCUMENT) {
+    document_provider_ = DocumentProvider::Create(provider_client_.get(), this);
+    providers_.push_back(document_provider_);
+  }
   if (provider_types & AutocompleteProvider::TYPE_CLIPBOARD_URL) {
 #if !defined(OS_IOS)
     // On iOS, a global ClipboardRecentContent should've been created by now
@@ -257,15 +264,15 @@ AutocompleteController::AutocompleteController(
           ClipboardRecentContent::GetInstance()));
     }
   }
-  if (provider_types & AutocompleteProvider::TYPE_PHYSICAL_WEB) {
-    PhysicalWebProvider* physical_web_provider = PhysicalWebProvider::Create(
-        provider_client_.get(), history_url_provider_);
-    if (physical_web_provider)
-      providers_.push_back(physical_web_provider);
-  }
+
+  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+      this, "AutocompleteController", base::ThreadTaskRunnerHandle::Get());
 }
 
 AutocompleteController::~AutocompleteController() {
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
+
   // The providers may have tasks outstanding that hold refs to them.  We need
   // to ensure they won't call us back if they outlive us.  (Practically,
   // calling Stop() should also cancel those tasks and make it so that we hold
@@ -431,7 +438,7 @@ void AutocompleteController::ResetSession() {
 void AutocompleteController::UpdateMatchDestinationURLWithQueryFormulationTime(
     base::TimeDelta query_formulation_time,
     AutocompleteMatch* match) const {
-  if (!match->search_terms_args.get() ||
+  if (!match->search_terms_args ||
       match->search_terms_args->assisted_query_stats.empty())
     return;
 
@@ -497,11 +504,14 @@ void AutocompleteController::UpdateResult(
   // Sort the matches and trim to a small number of "best" matches.
   result_.SortAndCull(input_, template_url_service_);
 
+  if (OmniboxFieldTrial::IsTabSwitchSuggestionsEnabled())
+    result_.ConvertOpenTabMatches(provider_client_.get(), &input_);
+
   // Need to validate before invoking CopyOldMatches as the old matches are not
   // valid against the current input.
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   result_.Validate();
-#endif
+#endif  // DCHECK_IS_ON()
 
   if (!done_) {
     // This conditional needs to match the conditional in Start that invokes
@@ -662,7 +672,7 @@ void AutocompleteController::UpdateAssistedQueryStats(
     AutocompleteMatch* match = result->match_at(index);
     const TemplateURL* template_url =
         match->GetTemplateURL(template_url_service_, false);
-    if (!template_url || !match->search_terms_args.get())
+    if (!template_url || !match->search_terms_args)
       continue;
     std::string selected_index;
     // Prevent trivial suggestions from getting credit for being selected.
@@ -732,4 +742,30 @@ void AutocompleteController::StopHelper(bool clear_result,
     // touch the edit... this is all a mess and should be cleaned up :(
     NotifyChanged(false);
   }
+}
+
+bool AutocompleteController::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* process_memory_dump) {
+  size_t res = 0;
+
+  // provider_client_ seems to be small enough to ignore it.
+
+  // TODO(dyaroshev): implement memory estimation for scoped_refptr in
+  // base::trace_event.
+  res += std::accumulate(providers_.begin(), providers_.end(), 0u,
+                         [](size_t sum, const auto& provider) {
+                           return sum + sizeof(AutocompleteProvider) +
+                                  provider->EstimateMemoryUsage();
+                         });
+
+  res += input_.EstimateMemoryUsage();
+  res += result_.EstimateMemoryUsage();
+
+  auto* dump = process_memory_dump->CreateAllocatorDump(
+      base::StringPrintf("omnibox/autocomplete_controller/0x%" PRIXPTR,
+                         reinterpret_cast<uintptr_t>(this)));
+  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                  base::trace_event::MemoryAllocatorDump::kUnitsBytes, res);
+  return true;
 }

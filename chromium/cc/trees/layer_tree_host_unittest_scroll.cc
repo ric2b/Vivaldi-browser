@@ -5,7 +5,6 @@
 #include "cc/trees/layer_tree_host.h"
 
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -109,11 +108,11 @@ class LayerTreeHostScrollTestScrollSimple : public LayerTreeHostScrollTest {
       LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
     if (!layer_tree_host()->SourceFrameNumber()) {
-      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->scroll_offset());
+      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->CurrentScrollOffset());
     } else {
-      EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(initial_scroll_,
-                                                  scroll_amount_),
-                       scroll_layer->scroll_offset());
+      EXPECT_VECTOR_EQ(
+          gfx::ScrollOffsetWithDelta(initial_scroll_, scroll_amount_),
+          scroll_layer->CurrentScrollOffset());
 
       // Pretend like Javascript updated the scroll position itself.
       scroll_layer->SetScrollOffset(second_scroll_);
@@ -181,18 +180,13 @@ class LayerTreeHostScrollTestScrollMultipleRedraw
   void BeginCommitOnThread(LayerTreeHostImpl* impl) override {
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 0:
-        EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer_->scroll_offset());
+        EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer_->CurrentScrollOffset());
         break;
       case 1:
-        EXPECT_VECTOR_EQ(
-            gfx::ScrollOffsetWithDelta(initial_scroll_,
-                                       scroll_amount_ + scroll_amount_),
-            scroll_layer_->scroll_offset());
       case 2:
-        EXPECT_VECTOR_EQ(
-            gfx::ScrollOffsetWithDelta(initial_scroll_,
-                                       scroll_amount_ + scroll_amount_),
-            scroll_layer_->scroll_offset());
+        EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(
+                             initial_scroll_, scroll_amount_ + scroll_amount_),
+                         scroll_layer_->CurrentScrollOffset());
         break;
     }
   }
@@ -219,15 +213,14 @@ class LayerTreeHostScrollTestScrollMultipleRedraw
       EXPECT_VECTOR_EQ(scroll_amount_ + scroll_amount_,
                        ScrollDelta(scroll_layer));
 
-      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer_->scroll_offset());
+      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer_->CurrentScrollOffset());
       PostSetNeedsCommitToMainThread();
     } else if (impl->active_tree()->source_frame_number() == 1) {
       // Third or later draw after second commit.
       EXPECT_GE(impl->SourceAnimationFrameNumberForTesting(), 3u);
-      EXPECT_VECTOR_EQ(
-          gfx::ScrollOffsetWithDelta(initial_scroll_,
-                                     scroll_amount_ + scroll_amount_),
-          scroll_layer_->scroll_offset());
+      EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(
+                           initial_scroll_, scroll_amount_ + scroll_amount_),
+                       scroll_layer_->CurrentScrollOffset());
       EndTest();
     }
   }
@@ -289,7 +282,8 @@ class LayerTreeHostScrollTestScrollAbortedCommit
         // This will not be aborted because of the initial prop changes.
         EXPECT_EQ(0, num_impl_scrolls_);
         EXPECT_EQ(0, layer_tree_host()->SourceFrameNumber());
-        EXPECT_VECTOR_EQ(initial_scroll_, root_scroll_layer->scroll_offset());
+        EXPECT_VECTOR_EQ(initial_scroll_,
+                         root_scroll_layer->CurrentScrollOffset());
         EXPECT_EQ(1.f, layer_tree_host()->page_scale_factor());
         break;
       case 2:
@@ -299,7 +293,7 @@ class LayerTreeHostScrollTestScrollAbortedCommit
         EXPECT_EQ(1, layer_tree_host()->SourceFrameNumber());
         EXPECT_VECTOR_EQ(
             gfx::ScrollOffsetWithDelta(initial_scroll_, impl_scroll_),
-            root_scroll_layer->scroll_offset());
+            root_scroll_layer->CurrentScrollOffset());
         EXPECT_EQ(impl_scale_, layer_tree_host()->page_scale_factor());
         PostSetNeedsRedrawToMainThread();
         break;
@@ -308,14 +302,13 @@ class LayerTreeHostScrollTestScrollAbortedCommit
         EXPECT_EQ(2, num_impl_scrolls_);
         // The source frame number still increases even with the abort.
         EXPECT_EQ(2, layer_tree_host()->SourceFrameNumber());
-        EXPECT_VECTOR_EQ(
-            gfx::ScrollOffsetWithDelta(initial_scroll_,
-                                       impl_scroll_ + impl_scroll_),
-            root_scroll_layer->scroll_offset());
+        EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(
+                             initial_scroll_, impl_scroll_ + impl_scroll_),
+                         root_scroll_layer->CurrentScrollOffset());
         EXPECT_EQ(impl_scale_ * impl_scale_,
                   layer_tree_host()->page_scale_factor());
         root_scroll_layer->SetScrollOffset(gfx::ScrollOffsetWithDelta(
-            root_scroll_layer->scroll_offset(), second_main_scroll_));
+            root_scroll_layer->CurrentScrollOffset(), second_main_scroll_));
         break;
       case 4:
         // This commit will also be aborted.
@@ -324,7 +317,7 @@ class LayerTreeHostScrollTestScrollAbortedCommit
         gfx::Vector2dF delta =
             impl_scroll_ + impl_scroll_ + impl_scroll_ + second_main_scroll_;
         EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(initial_scroll_, delta),
-                         root_scroll_layer->scroll_offset());
+                         root_scroll_layer->CurrentScrollOffset());
 
         // End the test by drawing to verify this commit is also aborted.
         PostSetNeedsRedrawToMainThread();
@@ -568,7 +561,7 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
         num_scrolls_(0) {}
 
   void SetupTree() override {
-    layer_tree_host()->SetDeviceScaleFactor(device_scale_factor_);
+    SetInitialDeviceScaleFactor(device_scale_factor_);
 
     scoped_refptr<Layer> root_layer = Layer::Create();
     root_layer->SetBounds(gfx::Size(10, 10));
@@ -640,7 +633,7 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
   }
 
   void DidScroll(const gfx::ScrollOffset& offset, const ElementId& element_id) {
-    final_scroll_offset_ = expected_scroll_layer_->scroll_offset();
+    final_scroll_offset_ = expected_scroll_layer_->CurrentScrollOffset();
     EXPECT_VECTOR_EQ(offset, final_scroll_offset_);
     EXPECT_EQ(element_id, expected_scroll_layer_->element_id());
   }
@@ -652,25 +645,25 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
   void UpdateLayerTreeHost(
       LayerTreeHostClient::VisualStateUpdate requested_update) override {
     EXPECT_VECTOR_EQ(gfx::Vector2d(),
-                     expected_no_scroll_layer_->scroll_offset());
+                     expected_no_scroll_layer_->CurrentScrollOffset());
 
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 0:
         EXPECT_VECTOR_EQ(initial_offset_,
-                         expected_scroll_layer_->scroll_offset());
+                         expected_scroll_layer_->CurrentScrollOffset());
         break;
       case 1:
         EXPECT_VECTOR_EQ(
             gfx::ScrollOffsetWithDelta(initial_offset_, scroll_amount_),
-            expected_scroll_layer_->scroll_offset());
+            expected_scroll_layer_->CurrentScrollOffset());
 
         // Pretend like Javascript updated the scroll position itself.
         expected_scroll_layer_->SetScrollOffset(javascript_scroll_);
         break;
       case 2:
-        EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(javascript_scroll_,
-                                                    scroll_amount_),
-                         expected_scroll_layer_->scroll_offset());
+        EXPECT_VECTOR_EQ(
+            gfx::ScrollOffsetWithDelta(javascript_scroll_, scroll_amount_),
+            expected_scroll_layer_->CurrentScrollOffset());
         break;
     }
   }
@@ -857,10 +850,10 @@ class LayerTreeHostScrollTestSimple : public LayerTreeHostScrollTest {
       LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
     if (!layer_tree_host()->SourceFrameNumber()) {
-      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->scroll_offset());
+      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->CurrentScrollOffset());
     } else {
       EXPECT_VECTOR_EQ(
-          scroll_layer->scroll_offset(),
+          scroll_layer->CurrentScrollOffset(),
           gfx::ScrollOffsetWithDelta(initial_scroll_, impl_thread_scroll1_));
 
       // Pretend like Javascript updated the scroll position itself with a
@@ -1255,7 +1248,7 @@ class LayerTreeHostScrollTestImplScrollUnderMainThreadScrollingParent
     layer_tree_host()
         ->inner_viewport_scroll_layer()
         ->AddMainThreadScrollingReasons(
-            MainThreadScrollingReason::kNonFastScrollableRegion);
+            MainThreadScrollingReason::kScrollbarScrolling);
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
@@ -1273,7 +1266,7 @@ class LayerTreeHostScrollTestImplScrollUnderMainThreadScrollingParent
         impl->TryScroll(gfx::PointF(1.f, 1.f), InputHandler::TOUCHSCREEN,
                         scroll_tree, inner_scroll_node);
     EXPECT_EQ(InputHandler::SCROLL_ON_MAIN_THREAD, status.thread);
-    EXPECT_EQ(MainThreadScrollingReason::kNonFastScrollableRegion,
+    EXPECT_EQ(MainThreadScrollingReason::kScrollbarScrolling,
               status.main_thread_scrolling_reasons);
 
     status = impl->TryScroll(gfx::PointF(1.f, 1.f), InputHandler::TOUCHSCREEN,
@@ -1306,12 +1299,6 @@ class ThreadCheckingInputHandlerClient : public InputHandlerClient {
       ADD_FAILURE() << "Animate called on wrong thread";
   }
 
-  void MainThreadHasStoppedFlinging() override {
-    if (!task_runner_->BelongsToCurrentThread())
-      ADD_FAILURE() << "MainThreadHasStoppedFlinging called on wrong thread";
-    *received_stop_flinging_ = true;
-  }
-
   void ReconcileElasticOverscrollAndRootScroll() override {
     if (!task_runner_->BelongsToCurrentThread()) {
       ADD_FAILURE() << "ReconcileElasticOverscrollAndRootScroll called on "
@@ -1342,52 +1329,6 @@ class ThreadCheckingInputHandlerClient : public InputHandlerClient {
   base::SingleThreadTaskRunner* task_runner_;
   bool* received_stop_flinging_;
 };
-
-void BindInputHandlerOnCompositorThread(
-    const base::WeakPtr<InputHandler>& input_handler,
-    ThreadCheckingInputHandlerClient* client) {
-  input_handler->BindToClient(client, false);
-}
-
-TEST(LayerTreeHostFlingTest, DidStopFlingingThread) {
-  base::Thread impl_thread("cc");
-  ASSERT_TRUE(impl_thread.Start());
-  ASSERT_TRUE(impl_thread.task_runner());
-
-  bool received_stop_flinging = false;
-  LayerTreeSettings settings;
-
-  StubLayerTreeHostClient layer_tree_host_client;
-  TestTaskGraphRunner task_graph_runner;
-
-  auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
-
-  LayerTreeHost::InitParams params;
-  params.client = &layer_tree_host_client;
-  params.task_graph_runner = &task_graph_runner;
-  params.settings = &settings;
-  params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
-  params.mutator_host = animation_host.get();
-  params.ukm_recorder_factory = std::make_unique<TestUkmRecorderFactory>();
-  std::unique_ptr<LayerTreeHost> layer_tree_host =
-      LayerTreeHost::CreateThreaded(impl_thread.task_runner(), &params);
-
-  ThreadCheckingInputHandlerClient input_handler_client(
-      impl_thread.task_runner().get(), &received_stop_flinging);
-  impl_thread.task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&BindInputHandlerOnCompositorThread,
-                                layer_tree_host->GetInputHandler(),
-                                base::Unretained(&input_handler_client)));
-
-  layer_tree_host->DidStopFlinging();
-
-  animation_host->SetMutatorHostClient(nullptr);
-  layer_tree_host = nullptr;
-  animation_host = nullptr;
-
-  impl_thread.Stop();
-  EXPECT_TRUE(received_stop_flinging);
-}
 
 class LayerTreeHostScrollTestLayerStructureChange
     : public LayerTreeHostScrollTest {
@@ -1559,19 +1500,19 @@ class LayerTreeHostScrollTestScrollMFBA : public LayerTreeHostScrollTest {
     Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 0:
-        EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->scroll_offset());
+        EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->CurrentScrollOffset());
         break;
       case 1:
         EXPECT_VECTOR_EQ(
             gfx::ScrollOffsetWithDelta(initial_scroll_, scroll_amount_),
-            scroll_layer->scroll_offset());
+            scroll_layer->CurrentScrollOffset());
         // Pretend like Javascript updated the scroll position itself.
         scroll_layer->SetScrollOffset(second_scroll_);
         break;
       case 2:
         // Third frame does not see a scroll delta because we only did one
         // scroll for the second and third frames.
-        EXPECT_VECTOR_EQ(second_scroll_, scroll_layer->scroll_offset());
+        EXPECT_VECTOR_EQ(second_scroll_, scroll_layer->CurrentScrollOffset());
         // Pretend like Javascript updated the scroll position itself.
         scroll_layer->SetScrollOffset(third_scroll_);
         break;
@@ -1687,7 +1628,8 @@ class LayerTreeHostScrollTestScrollAbortedCommitMFBA
         // This will not be aborted because of the initial prop changes.
         EXPECT_EQ(0, num_impl_scrolls_);
         EXPECT_EQ(0, layer_tree_host()->SourceFrameNumber());
-        EXPECT_VECTOR_EQ(initial_scroll_, root_scroll_layer->scroll_offset());
+        EXPECT_VECTOR_EQ(initial_scroll_,
+                         root_scroll_layer->CurrentScrollOffset());
         break;
       case 2:
         // This commit will not be aborted because of the scroll change.
@@ -1695,9 +1637,9 @@ class LayerTreeHostScrollTestScrollAbortedCommitMFBA
         EXPECT_EQ(1, layer_tree_host()->SourceFrameNumber());
         EXPECT_VECTOR_EQ(
             gfx::ScrollOffsetWithDelta(initial_scroll_, impl_scroll_),
-            root_scroll_layer->scroll_offset());
+            root_scroll_layer->CurrentScrollOffset());
         root_scroll_layer->SetScrollOffset(gfx::ScrollOffsetWithDelta(
-            root_scroll_layer->scroll_offset(), second_main_scroll_));
+            root_scroll_layer->CurrentScrollOffset(), second_main_scroll_));
         break;
       case 3: {
         // This commit will be aborted.
@@ -1707,7 +1649,7 @@ class LayerTreeHostScrollTestScrollAbortedCommitMFBA
         gfx::Vector2dF delta =
             impl_scroll_ + impl_scroll_ + second_main_scroll_;
         EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(initial_scroll_, delta),
-                         root_scroll_layer->scroll_offset());
+                         root_scroll_layer->CurrentScrollOffset());
         break;
       }
       case 4: {
@@ -1717,7 +1659,7 @@ class LayerTreeHostScrollTestScrollAbortedCommitMFBA
         gfx::Vector2dF delta =
             impl_scroll_ + impl_scroll_ + impl_scroll_ + second_main_scroll_;
         EXPECT_VECTOR_EQ(gfx::ScrollOffsetWithDelta(initial_scroll_, delta),
-                         root_scroll_layer->scroll_offset());
+                         root_scroll_layer->CurrentScrollOffset());
         break;
       }
     }
@@ -1874,7 +1816,6 @@ class MockInputHandlerClient : public InputHandlerClient {
 
   void WillShutdown() override {}
   void Animate(base::TimeTicks) override {}
-  void MainThreadHasStoppedFlinging() override {}
   void UpdateRootLayerStateForSynchronousInputHandler(
       const gfx::ScrollOffset& total_scroll_offset,
       const gfx::ScrollOffset& max_scroll_offset,
@@ -1910,7 +1851,7 @@ class LayerTreeHostScrollTestElasticOverscroll
 
   void BindInputHandler(base::WeakPtr<InputHandler> input_handler) {
     DCHECK(task_runner_provider()->IsImplThread());
-    input_handler->BindToClient(&input_handler_client_, false);
+    input_handler->BindToClient(&input_handler_client_);
     scroll_elasticity_helper_ = input_handler->CreateScrollElasticityHelper();
     DCHECK(scroll_elasticity_helper_);
   }
@@ -2063,11 +2004,11 @@ class LayerTreeHostScrollTestPropertyTreeUpdate
       LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* scroll_layer = layer_tree_host()->inner_viewport_scroll_layer();
     if (layer_tree_host()->SourceFrameNumber() == 0) {
-      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->scroll_offset());
+      EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->CurrentScrollOffset());
     } else {
       EXPECT_VECTOR_EQ(
           gfx::ScrollOffsetWithDelta(initial_scroll_, scroll_amount_),
-          scroll_layer->scroll_offset());
+          scroll_layer->CurrentScrollOffset());
       scroll_layer->SetScrollOffset(second_scroll_);
       scroll_layer->SetOpacity(0.5f);
     }
@@ -2147,7 +2088,7 @@ class LayerTreeHostScrollTestImplSideInvalidation
         gfx::ScrollOffset delta_to_send =
             outer_viewport_offsets_[2] - outer_viewport_offsets_[1];
         outer_viewport_layer->SetScrollOffset(
-            outer_viewport_layer->scroll_offset() + delta_to_send);
+            outer_viewport_layer->CurrentScrollOffset() + delta_to_send);
       } break;
       case 2:
         // Let the commit abort for the second set of deltas.

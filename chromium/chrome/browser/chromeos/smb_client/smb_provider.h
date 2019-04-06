@@ -29,7 +29,6 @@ using file_system_provider::ProviderInterface;
 class SmbProvider : public ProviderInterface {
  public:
   using UnmountCallback = base::RepeatingCallback<base::File::Error(
-      const ProviderId&,
       const std::string&,
       file_system_provider::Service::UnmountReason)>;
 
@@ -43,6 +42,7 @@ class SmbProvider : public ProviderInterface {
   const ProviderId& GetId() const override;
   const std::string& GetName() const override;
   const IconSet& GetIconSet() const override;
+  bool RequestMount(Profile* profile) override;
 
  private:
   ProviderId provider_id_;

@@ -14,15 +14,24 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/reload_type.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/common/frame_navigate_params.h"
+#include "content/public/common/resource_load_info.mojom.h"
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/range/range.h"
+
+namespace blink {
+namespace mojom {
+enum class ViewportFit;
+}  // namespace mojom
+}  // namespace blink
 
 namespace gfx {
 class Size;
@@ -33,6 +42,7 @@ namespace content {
 class NavigationEntry;
 class NavigationHandle;
 class RenderFrameHost;
+class RenderProcessHost;
 class RenderViewHost;
 class RenderWidgetHost;
 class WebContents;
@@ -128,9 +138,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void RenderViewHostChanged(RenderViewHost* old_host,
                                      RenderViewHost* new_host) {}
 
-  // This method is invoked when the process for the current main
-  // RenderFrameHost becomes unresponsive.
-  virtual void OnRendererUnresponsive(RenderWidgetHost* render_widget_host) {}
+  // This method is invoked when a process in the WebContents becomes
+  // unresponsive.
+  virtual void OnRendererUnresponsive(RenderProcessHost* render_process_host) {}
 
   // Navigation ----------------------------------------------------------------
 
@@ -208,9 +218,11 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
 
   // Document load events ------------------------------------------------------
 
-  // These two methods correspond to the points in time when the spinner of the
-  // tab starts and stops spinning.
+  // These three methods correspond to the points in time when a document starts
+  // loading for the first time (initiates outgoing requests), when incoming
+  // data subsequently starts arriving, and when it finishes loading.
   virtual void DidStartLoading() {}
+  virtual void DidReceiveResponse() {}
   virtual void DidStopLoading() {}
 
   // This method is invoked once the window.document object of the main frame
@@ -251,13 +263,11 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
       const std::string& mime_type,
       ResourceType resource_type) {}
 
-  // This method is invoked when a response has been received for a subresource
-  // request.
-  virtual void SubresourceResponseStarted(const GURL& url,
-                                          const GURL& referrer,
-                                          const std::string& method,
-                                          ResourceType resource_type,
-                                          const std::string& ip) {}
+  // This method is invoked when a resource associate with the frame
+  // |render_frame_host| has been loaded, successfully or not.
+  virtual void ResourceLoadComplete(
+      RenderFrameHost* render_frame_host,
+      const mojom::ResourceLoadInfo& resource_load_info) {}
 
   // This method is invoked when the extdata has been set (Vivaldi).
   virtual void ExtDataSet(WebContents* contents) {}
@@ -277,8 +287,13 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // This normally happens as a result of a new navigation. It will be
   // followed by a NavigationEntryCommitted() call for the new page that
   // caused the pruning. It could also be a result of removing an item from
-  // the list to fix up after interstitials.
+  // the list to delete history or fix up after interstitials.
   virtual void NavigationListPruned(const PrunedDetails& pruned_details) {}
+
+  // Invoked when NavigationEntries have been deleted because of a history
+  // deletion. Observers should ensure that they remove all traces of the
+  // deleted entries.
+  virtual void NavigationEntriesDeleted() {}
 
   // Invoked when a NavigationEntry has changed.
   //
@@ -316,18 +331,16 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // signalled through this callback includes:
   // 1) any mouse down event (blink::WebInputEvent::MouseDown);
   // 2) the start of a scroll (blink::WebInputEvent::GestureScrollBegin);
-  // 3) any raw key down event (blink::WebInputEvent::RawKeyDown);
-  // 4) any touch event (inc. scrolls) (blink::WebInputEvent::TouchStart); and
-  // 5) a browser navigation or reload (blink::WebInputEvent::Undefined).
+  // 3) any raw key down event (blink::WebInputEvent::RawKeyDown); and
+  // 4) any touch event (inc. scrolls) (blink::WebInputEvent::TouchStart).
   virtual void DidGetUserInteraction(const blink::WebInputEvent::Type type) {}
 
   // This method is invoked when a RenderViewHost of this WebContents was
   // configured to ignore UI events, and an UI event took place.
   virtual void DidGetIgnoredUIEvent() {}
 
-  // These methods are invoked every time the WebContents changes visibility.
-  virtual void WasShown() {}
-  virtual void WasHidden() {}
+  // Invoked every time the WebContents changes visibility.
+  virtual void OnVisibilityChanged(Visibility visibility) {}
 
   // Invoked when the main frame changes size.
   virtual void MainFrameWasResized(bool width_changed) {}
@@ -348,6 +361,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // in the DOM.
   virtual void PepperInstanceCreated() {}
   virtual void PepperInstanceDeleted() {}
+
+  // This method is called when the viewport fit of a WebContents changes.
+  virtual void ViewportFitChanged(blink::mojom::ViewportFit value) {}
 
   // Notification that a plugin has crashed.
   // |plugin_pid| is the process ID identifying the plugin process. Note that
@@ -384,6 +400,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // process.
   virtual void DidUpdateFaviconURL(const std::vector<FaviconURL>& candidates) {}
 
+  // Called when an audio change occurs.
+  virtual void OnAudioStateChanged(bool audible) {}
+
   // Invoked when the WebContents is muted/unmuted.
   virtual void DidUpdateAudioMutingState(bool muted) {}
 
@@ -396,6 +415,13 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // fullscreen mode.
   virtual void DidToggleFullscreenModeForTab(bool entered_fullscreen,
                                              bool will_cause_resize) {}
+
+  // Signals that |rfh| has the current fullscreen element. This is invoked
+  // when:
+  //  1) an element in this frame enters fullscreen or in nested fullscreen, or
+  //  2) after an element in a descendant frame exits fullscreen and makes
+  //     this frame own the current fullscreen element again.
+  virtual void DidAcquireFullscreen(RenderFrameHost* rfh) {}
 
   // Invoked when an interstitial page is attached or detached.
   virtual void DidAttachInterstitialPage() {}
@@ -415,25 +441,49 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // from a render frame, but only when the accessibility mode has the
   // ui::AXMode::kWebContents flag set.
   virtual void AccessibilityEventReceived(
-      const std::vector<AXEventNotificationDetails>& details) {}
+      const AXEventNotificationDetails& details) {}
   virtual void AccessibilityLocationChangesReceived(
       const std::vector<AXLocationChangeNotificationDetails>& details) {}
 
   // Invoked when theme color is changed to |theme_color|.
   virtual void DidChangeThemeColor(SkColor theme_color) {}
 
+  // Invoked when text selection is changed.
+  virtual void DidChangeTextSelection(const base::string16& text,
+                                      const gfx::Range& range) {}
+
   // Invoked when media is playing or paused.  |id| is unique per player and per
   // RenderFrameHost.  There may be multiple players within a RenderFrameHost
   // and subsequently within a WebContents.  MediaStartedPlaying() will always
   // be followed by MediaStoppedPlaying() after player teardown.  Observers must
   // release all stored copies of |id| when MediaStoppedPlaying() is received.
+  // |has_video| and |has_audio| can both be false in cases where the media
+  // is playing muted and should be considered as inaudible for all intent and
+  // purposes.
   struct MediaPlayerInfo {
     MediaPlayerInfo(bool has_video, bool has_audio)
         : has_video(has_video), has_audio(has_audio) {}
     bool has_video;
     bool has_audio;
   };
-  using MediaPlayerId = std::pair<RenderFrameHost*, int>;
+
+  struct CONTENT_EXPORT MediaPlayerId {
+   public:
+    static MediaPlayerId createMediaPlayerIdForTests();
+
+    MediaPlayerId(RenderFrameHost* render_frame_host, int delegate_id);
+
+    bool operator==(const MediaPlayerId& other) const;
+    bool operator!=(const MediaPlayerId& other) const;
+    bool operator<(const MediaPlayerId& other) const;
+
+    RenderFrameHost* render_frame_host = nullptr;
+    int delegate_id = 0;
+
+   private:
+    MediaPlayerId() = default;
+  };
+
   virtual void MediaStartedPlaying(const MediaPlayerInfo& video_type,
                                    const MediaPlayerId& id) {}
   enum class MediaStoppedReason {

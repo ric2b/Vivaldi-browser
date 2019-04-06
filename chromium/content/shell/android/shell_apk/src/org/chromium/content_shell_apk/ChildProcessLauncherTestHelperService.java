@@ -20,8 +20,8 @@ import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.process_launcher.FileDescriptorInfo;
-import org.chromium.content.browser.ChildProcessCreationParams;
-import org.chromium.content.browser.ChildProcessLauncherHelper;
+import org.chromium.content.browser.ChildProcessLauncherHelperImpl;
+import org.chromium.content_public.browser.ChildProcessCreationParams;
 
 /**
  * A Service that assists the ChildProcessLauncherTest that responds to one message, which
@@ -53,13 +53,13 @@ public class ChildProcessLauncherTestHelperService extends Service {
 
     private final HandlerThread mHandlerThread = new HandlerThread("Helper Service Handler");
 
-    private ChildProcessLauncherHelper mProcessLauncher;
+    private ChildProcessLauncherHelperImpl mProcessLauncher;
 
     @Override
     public void onCreate() {
         CommandLine.init(null);
         try {
-            LibraryLoader.get(LibraryProcessType.PROCESS_CHILD).ensureInitialized();
+            LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_CHILD);
         } catch (ProcessInitException ex) {
             throw new RuntimeException(ex);
         }
@@ -77,11 +77,10 @@ public class ChildProcessLauncherTestHelperService extends Service {
     private void doBindService(final Message msg) {
         String[] commandLine = { "_", "--" + BaseSwitches.RENDERER_WAIT_FOR_JAVA_DEBUGGER };
         final boolean bindToCaller = true;
-        ChildProcessCreationParams params = new ChildProcessCreationParams(getPackageName(), false,
-                LibraryProcessType.PROCESS_CHILD, bindToCaller,
-                false /* ignoreVisibilityForImportance */);
+        ChildProcessCreationParams.set(getPackageName(), false, LibraryProcessType.PROCESS_CHILD,
+                bindToCaller, false /* ignoreVisibilityForImportance */);
         mProcessLauncher = ChildProcessLauncherTestUtils.startForTesting(true /* sandboxed */,
-                commandLine, new FileDescriptorInfo[0], params, true /* doSetupConnection */);
+                commandLine, new FileDescriptorInfo[0], true /* doSetupConnection */);
 
         // Poll the launcher until the connection is set up. The main test in
         // ChildProcessLauncherTest, which has bound the connection to this service, manages the

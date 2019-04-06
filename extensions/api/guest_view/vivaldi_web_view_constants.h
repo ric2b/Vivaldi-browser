@@ -8,13 +8,12 @@ namespace webview {
 extern const char kEventSSLStateChanged[];
 extern const char kEventTargetURLChanged[];
 extern const char kEventCreateSearch[];
-extern const char kEventMediaStateChanged[];
 extern const char kEventPasteAndGo[];
 extern const char kEventSimpleAction[];
-extern const char kEventWebContentsDiscarded[];
 extern const char kAttributeExtensionHost[];
 extern const char kEventOnFullscreen[];
 extern const char kEventContentBlocked[];
+extern const char kEventWebContentsCreated[];
 
 extern const char kNewSearchName[];
 extern const char kNewSearchUrl[];
@@ -27,6 +26,10 @@ extern const char kTotalElements[];
 extern const char kGenCommand[];
 extern const char kGenText[];
 extern const char kGenUrl[];
+
+// Parameters/properties on events.
+extern const char kInitialHeight[];
+extern const char kInitialLeft[];
 
 }  // namespace webview
 

@@ -10,7 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "services/metrics/public/cpp/metrics_export.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
-#include "services/metrics/public/interfaces/ukm_interface.mojom.h"
+#include "services/metrics/public/mojom/ukm_interface.mojom.h"
 
 namespace service_manager {
 class Connector;
@@ -44,6 +44,7 @@ class METRICS_EXPORT MojoUkmRecorder : public UkmRecorder {
  private:
   // UkmRecorder:
   void UpdateSourceURL(SourceId source_id, const GURL& url) override;
+  void UpdateAppURL(SourceId source_id, const GURL& url) override;
   void AddEntry(mojom::UkmEntryPtr entry) override;
 
   mojom::UkmRecorderInterfacePtr interface_;

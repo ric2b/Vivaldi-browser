@@ -20,11 +20,12 @@ PassThroughAudioDecoder::~PassThroughAudioDecoder() {
 void PassThroughAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                          CdmContext* cdm_context,
                                          const InitCB& init_cb,
-                                         const OutputCB& output_cb) {
+                                         const OutputCB& output_cb,
+                                         const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
   impl_.Initialize(config, init_cb, output_cb);
 }
 
-void PassThroughAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void PassThroughAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                      const DecodeCB& decode_cb) {
   impl_.Decode(buffer, decode_cb);
 }

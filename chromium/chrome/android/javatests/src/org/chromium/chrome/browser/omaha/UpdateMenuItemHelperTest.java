@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.omaha;
 
 import android.content.Context;
 import android.support.test.filters.MediumTest;
-import android.view.View;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -27,7 +26,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.ui.test.util.UiRestriction;
 
 /**
@@ -212,14 +210,14 @@ public class UpdateMenuItemHelperTest {
         // checkUpdateMenuItemIsShowing() opens the menu; hide it and assert it's dismissed.
         hideAppMenuAndAssertMenuShown();
 
-        // Ensure not shown in tab switcher app menu.
+        // Enter the tab switcher.
         OverviewModeBehaviorWatcher overviewModeWatcher = new OverviewModeBehaviorWatcher(
                 mActivityTestRule.getActivity().getLayoutManager(), true, false);
-        View tabSwitcherButton =
-                mActivityTestRule.getActivity().findViewById(R.id.tab_switcher_button);
-        Assert.assertNotNull("'tab_switcher_button' view is not found", tabSwitcherButton);
-        TouchCommon.singleClickView(tabSwitcherButton);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> mActivityTestRule.getActivity().getLayoutManager().showOverview(false));
         overviewModeWatcher.waitForBehavior();
+
+        // Make sure the item is not shown in tab switcher app menu.
         showAppMenuAndAssertMenuShown();
         Assert.assertFalse("Update menu item is showing.",
                 mActivityTestRule.getActivity()
@@ -234,7 +232,7 @@ public class UpdateMenuItemHelperTest {
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getActivity().getAppMenuHandler().showAppMenu(null, false);
+                mActivityTestRule.getActivity().getAppMenuHandler().showAppMenu(null, false, false);
             }
         });
         CriteriaHelper.pollInstrumentationThread(new Criteria() {

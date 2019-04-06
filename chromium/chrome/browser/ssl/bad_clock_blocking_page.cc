@@ -9,6 +9,7 @@
 #include "base/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
+#include "chrome/browser/interstitials/enterprise_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/ssl/cert_report_helper.h"
@@ -34,17 +35,17 @@ using content::NavigationEntry;
 
 namespace {
 
-const char kMetricsName[] = "bad_clock";
+const char kBadClockMetricsName[] = "bad_clock";
 
-std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
+std::unique_ptr<ChromeMetricsHelper> CreateBadClockMetricsHelper(
     content::WebContents* web_contents,
     const GURL& request_url) {
   // Set up the metrics helper for the BadClockUI.
   security_interstitials::MetricsHelper::ReportDetails reporting_info;
-  reporting_info.metric_prefix = kMetricsName;
+  reporting_info.metric_prefix = kBadClockMetricsName;
   std::unique_ptr<ChromeMetricsHelper> metrics_helper =
       std::make_unique<ChromeMetricsHelper>(web_contents, request_url,
-                                            reporting_info, kMetricsName);
+                                            reporting_info);
   metrics_helper.get()->StartRecordingCaptivePortalMetrics(false);
   return metrics_helper;
 }
@@ -70,7 +71,8 @@ BadClockBlockingPage::BadClockBlockingPage(
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
     : SSLBlockingPageBase(
           web_contents,
-          certificate_reporting::ErrorReport::INTERSTITIAL_CLOCK,
+          cert_error,
+          CertificateErrorReport::INTERSTITIAL_CLOCK,
           ssl_info,
           request_url,
           std::move(ssl_cert_reporter),
@@ -79,8 +81,9 @@ BadClockBlockingPage::BadClockBlockingPage(
           std::make_unique<SSLErrorControllerClient>(
               web_contents,
               ssl_info,
+              cert_error,
               request_url,
-              CreateMetricsHelper(web_contents, request_url))),
+              CreateBadClockMetricsHelper(web_contents, request_url))),
       callback_(callback),
       ssl_info_(ssl_info),
       bad_clock_ui_(new security_interstitials::BadClockUI(request_url,
@@ -116,12 +119,6 @@ void BadClockBlockingPage::OverrideEntry(NavigationEntry* entry) {
   entry->GetSSL() = content::SSLStatus(ssl_info_);
 }
 
-void BadClockBlockingPage::SetSSLCertReporterForTesting(
-    std::unique_ptr<SSLCertReporter> ssl_cert_reporter) {
-  cert_report_helper()->SetSSLCertReporterForTesting(
-      std::move(ssl_cert_reporter));
-}
-
 // This handles the commands sent from the interstitial JavaScript.
 void BadClockBlockingPage::CommandReceived(const std::string& command) {
   if (command == "\"pageLoadComplete\"") {
@@ -148,8 +145,7 @@ void BadClockBlockingPage::OverrideRendererPrefs(
     content::RendererPreferences* prefs) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile,
-                                                      web_contents());
+  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile);
 }
 
 void BadClockBlockingPage::OnDontProceed() {

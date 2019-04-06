@@ -191,6 +191,7 @@ class DirectoryBackingStore {
   bool MigrateVersion88To89();
   bool MigrateVersion89To90();
   bool MigrateVersion90To91();
+  bool MigrateVersion91To92();
 
   bool MigrateVivaldiVersion0To1();
 

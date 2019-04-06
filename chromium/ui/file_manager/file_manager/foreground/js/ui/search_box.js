@@ -44,8 +44,8 @@ function SearchBox(element, searchButton) {
    * Text input of the search box.
    * @type {!HTMLInputElement}
    */
-  this.inputElement = /** @type {!HTMLInputElement} */ (
-      element.querySelector('input'));
+  this.inputElement =
+      /** @type {!HTMLInputElement} */ (element.querySelector('cr-input'));
 
   /**
    * Clear button of the search box.
@@ -144,7 +144,8 @@ SearchBox.AutocompleteList.prototype.onMouseOver_ = function(event) {
  * ListItem element for autocomplete.
  *
  * @param {Document} document Document.
- * @param {SearchItem|SearchResult} item An object representing a suggestion.
+ * @param {SearchItem|chrome.fileManagerPrivate.SearchResult} item An object
+ * representing a suggestion.
  * @constructor
  * @private
  */
@@ -189,7 +190,7 @@ SearchBox.prototype.clear = function() {
 SearchBox.prototype.setHidden = function(hidden) {
   this.element.hidden = hidden;
   this.searchButton.hidden = hidden;
-}
+};
 
 /**
  * @private
@@ -208,6 +209,7 @@ SearchBox.prototype.onFocus_ = function() {
   this.autocompleteList.attachToInput(this.inputElement);
   this.updateStyles_();
   this.searchButtonToggleRipple_.activated = true;
+  metrics.recordUserAction('SelectSearch');
 };
 
 /**
@@ -219,6 +221,8 @@ SearchBox.prototype.onBlur_ = function() {
   this.autocompleteList.detach();
   this.updateStyles_();
   this.searchButtonToggleRipple_.activated = false;
+  // When input has any text we keep it displayed with current search.
+  this.inputElement.hidden = this.inputElement.value.length == 0;
 };
 
 /**
@@ -276,6 +280,7 @@ SearchBox.prototype.updateStyles_ = function() {
  * @private
  */
 SearchBox.prototype.onSearchButtonClick_ = function() {
+  this.inputElement.hidden = false;
   this.inputElement.focus();
 };
 

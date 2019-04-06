@@ -14,20 +14,20 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/tab_helper.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
-#include "extensions/common/feature_switch.h"
-#include "extensions/common/switches.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -57,6 +57,8 @@ enum InjectionType { CONTENT_SCRIPT, EXECUTE_SCRIPT };
 enum HostType { ALL_HOSTS, EXPLICIT_HOSTS };
 
 enum RequiresConsent { REQUIRES_CONSENT, DOES_NOT_REQUIRE_CONSENT };
+
+enum WithholdPermissions { WITHHOLD_PERMISSIONS, DONT_WITHHOLD_PERMISSIONS };
 
 // Runs all pending tasks in the renderer associated with |web_contents|.
 // Returns true on success.
@@ -97,20 +99,19 @@ class ExtensionActionRunnerBrowserTest : public ExtensionBrowserTest {
   // one will be created.
   // This could potentially return NULL if LoadExtension() fails.
   const Extension* CreateExtension(HostType host_type,
-                                   InjectionType injection_type);
+                                   InjectionType injection_type,
+                                   WithholdPermissions withhold_permissions);
 
  private:
   std::vector<std::unique_ptr<TestExtensionDir>> test_extension_dirs_;
   std::vector<const Extension*> extensions_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 void ExtensionActionRunnerBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   ExtensionBrowserTest::SetUpCommandLine(command_line);
-  // We append the actual switch to the commandline because it needs to be
-  // passed over to the renderer, which a FeatureSwitch::ScopedOverride will
-  // not do.
-  command_line->AppendSwitch(switches::kEnableScriptsRequireAction);
+  scoped_feature_list_.InitAndEnableFeature(features::kRuntimeHostPermissions);
 }
 
 void ExtensionActionRunnerBrowserTest::TearDownOnMainThread() {
@@ -119,7 +120,8 @@ void ExtensionActionRunnerBrowserTest::TearDownOnMainThread() {
 
 const Extension* ExtensionActionRunnerBrowserTest::CreateExtension(
     HostType host_type,
-    InjectionType injection_type) {
+    InjectionType injection_type,
+    WithholdPermissions withhold_permissions) {
   std::string name = base::StringPrintf(
       "%s %s",
       injection_type == CONTENT_SCRIPT ? "content_script" : "execute_script",
@@ -167,6 +169,12 @@ const Extension* ExtensionActionRunnerBrowserTest::CreateExtension(
   if (extension) {
     test_extension_dirs_.push_back(std::move(dir));
     extensions_.push_back(extension);
+
+    ScriptingPermissionsModifier modifier(profile(), extension);
+    if (withhold_permissions == WITHHOLD_PERMISSIONS &&
+        modifier.CanAffectExtension()) {
+      modifier.SetWithholdHostPermissions(true);
+    }
   }
 
   // If extension is NULL here, it will be caught later in the test.
@@ -268,7 +276,7 @@ testing::AssertionResult ActiveScriptTester::Verify() {
   // If the extension has permission, we should be able to simply wait for it
   // to execute.
   if (requires_consent_ == DOES_NOT_REQUIRE_CONSENT) {
-    inject_success_listener_->WaitUntilSatisfied();
+    EXPECT_TRUE(inject_success_listener_->WaitUntilSatisfied());
     return testing::AssertionSuccess();
   }
 
@@ -286,7 +294,7 @@ testing::AssertionResult ActiveScriptTester::Verify() {
   runner->RunAction(extension_, true);
 
   // Now, the extension should be able to inject the script.
-  inject_success_listener_->WaitUntilSatisfied();
+  EXPECT_TRUE(inject_success_listener_->WaitUntilSatisfied());
 
   // The extension should no longer want to run.
   wants_to_run = WantsToRun();
@@ -310,28 +318,29 @@ bool ActiveScriptTester::WantsToRun() {
 
 IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
                        ActiveScriptsAreDisplayedAndDelayExecution) {
-  // First, we load up three extensions:
+  // First, we load up four extensions:
   // - An extension that injects scripts into all hosts,
   // - An extension that injects scripts into explicit hosts,
   // - An extension with a content script that runs on all hosts,
   // - An extension with a content script that runs on explicit hosts.
-  // The extensions that operate on explicit hosts have permission; the ones
-  // that request all hosts require user consent.
+  // All extensions should require user consent.
   std::vector<std::unique_ptr<ActiveScriptTester>> testers;
   testers.push_back(std::make_unique<ActiveScriptTester>(
-      "inject_scripts_all_hosts", CreateExtension(ALL_HOSTS, EXECUTE_SCRIPT),
+      "inject_scripts_all_hosts",
+      CreateExtension(ALL_HOSTS, EXECUTE_SCRIPT, WITHHOLD_PERMISSIONS),
       browser(), REQUIRES_CONSENT, EXECUTE_SCRIPT));
   testers.push_back(std::make_unique<ActiveScriptTester>(
       "inject_scripts_explicit_hosts",
-      CreateExtension(EXPLICIT_HOSTS, EXECUTE_SCRIPT), browser(),
-      DOES_NOT_REQUIRE_CONSENT, EXECUTE_SCRIPT));
+      CreateExtension(EXPLICIT_HOSTS, EXECUTE_SCRIPT, WITHHOLD_PERMISSIONS),
+      browser(), REQUIRES_CONSENT, EXECUTE_SCRIPT));
   testers.push_back(std::make_unique<ActiveScriptTester>(
-      "content_scripts_all_hosts", CreateExtension(ALL_HOSTS, CONTENT_SCRIPT),
+      "content_scripts_all_hosts",
+      CreateExtension(ALL_HOSTS, CONTENT_SCRIPT, WITHHOLD_PERMISSIONS),
       browser(), REQUIRES_CONSENT, CONTENT_SCRIPT));
   testers.push_back(std::make_unique<ActiveScriptTester>(
       "content_scripts_explicit_hosts",
-      CreateExtension(EXPLICIT_HOSTS, CONTENT_SCRIPT), browser(),
-      DOES_NOT_REQUIRE_CONSENT, CONTENT_SCRIPT));
+      CreateExtension(EXPLICIT_HOSTS, CONTENT_SCRIPT, WITHHOLD_PERMISSIONS),
+      browser(), REQUIRES_CONSENT, CONTENT_SCRIPT));
 
   // Navigate to an URL (which matches the explicit host specified in the
   // extension content_scripts_explicit_hosts). All four extensions should
@@ -350,9 +359,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
 IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
                        RemoveExtensionWithPendingInjections) {
   // Load up two extensions, each with content scripts.
-  const Extension* extension1 = CreateExtension(ALL_HOSTS, CONTENT_SCRIPT);
+  const Extension* extension1 =
+      CreateExtension(ALL_HOSTS, CONTENT_SCRIPT, WITHHOLD_PERMISSIONS);
   ASSERT_TRUE(extension1);
-  const Extension* extension2 = CreateExtension(ALL_HOSTS, CONTENT_SCRIPT);
+  const Extension* extension2 =
+      CreateExtension(ALL_HOSTS, CONTENT_SCRIPT, WITHHOLD_PERMISSIONS);
   ASSERT_TRUE(extension2);
 
   ASSERT_NE(extension1->id(), extension2->id());
@@ -388,7 +399,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
                                        false /* won't reply */));
   inject_success_listener.set_extension_id(extension1->id());
   action_runner->RunAction(extension1, true);
-  inject_success_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(inject_success_listener.WaitUntilSatisfied());
 }
 
 // Test that granting the extension all urls permission allows it to run on
@@ -396,7 +407,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
 IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
                        GrantExtensionAllUrlsPermission) {
   // Loadup an extension and navigate.
-  const Extension* extension = CreateExtension(ALL_HOSTS, CONTENT_SCRIPT);
+  const Extension* extension =
+      CreateExtension(ALL_HOSTS, CONTENT_SCRIPT, WITHHOLD_PERMISSIONS);
   ASSERT_TRUE(extension);
 
   content::WebContents* web_contents =
@@ -422,7 +434,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
 
   // Enable the extension to run on all urls.
   ScriptingPermissionsModifier modifier(profile(), extension);
-  modifier.SetAllowedOnAllUrls(true);
+  modifier.SetWithholdHostPermissions(false);
   EXPECT_TRUE(RunAllPendingInRenderer(web_contents));
 
   // Navigate again - this time, the extension should execute immediately (and
@@ -434,7 +446,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
 
   // Revoke all urls permissions.
   inject_success_listener.Reset();
-  modifier.SetAllowedOnAllUrls(false);
+  modifier.SetWithholdHostPermissions(true);
   EXPECT_TRUE(RunAllPendingInRenderer(web_contents));
 
   // Re-navigate; the extension should again need permission to run.
@@ -453,6 +465,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
   const Extension* extension = LoadExtension(
       test_data_dir_.AppendASCII("blocked_actions/content_scripts"));
   ASSERT_TRUE(extension);
+  ScriptingPermissionsModifier(profile(), extension)
+      .SetWithholdHostPermissions(true);
+
   ui_test_utils::NavigateToURL(browser(), url);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -531,6 +546,27 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
       web_contents->GetController().GetLastCommittedEntry()->GetUniqueID());
 }
 
+IN_PROC_BROWSER_TEST_F(ExtensionActionRunnerBrowserTest,
+                       ScriptsExecuteWhenNoPermissionsWithheld) {
+  // If we don't withhold permissions, extensions should execute normally.
+  std::vector<std::unique_ptr<ActiveScriptTester>> testers;
+  testers.push_back(std::make_unique<ActiveScriptTester>(
+      "content_scripts_all_hosts",
+      CreateExtension(ALL_HOSTS, CONTENT_SCRIPT, DONT_WITHHOLD_PERMISSIONS),
+      browser(), DOES_NOT_REQUIRE_CONSENT, CONTENT_SCRIPT));
+  testers.push_back(std::make_unique<ActiveScriptTester>(
+      "inject_scripts_all_hosts",
+      CreateExtension(ALL_HOSTS, EXECUTE_SCRIPT, DONT_WITHHOLD_PERMISSIONS),
+      browser(), DOES_NOT_REQUIRE_CONSENT, EXECUTE_SCRIPT));
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/extensions/test_file.html"));
+
+  for (const auto& tester : testers)
+    EXPECT_TRUE(tester->Verify()) << tester->name();
+}
+
 // A version of the test with the flag off, in order to test that everything
 // still works as expected.
 class FlagOffExtensionActionRunnerBrowserTest
@@ -546,10 +582,12 @@ IN_PROC_BROWSER_TEST_F(FlagOffExtensionActionRunnerBrowserTest,
                        ScriptsExecuteWhenFlagAbsent) {
   std::vector<std::unique_ptr<ActiveScriptTester>> testers;
   testers.push_back(std::make_unique<ActiveScriptTester>(
-      "content_scripts_all_hosts", CreateExtension(ALL_HOSTS, CONTENT_SCRIPT),
+      "content_scripts_all_hosts",
+      CreateExtension(ALL_HOSTS, CONTENT_SCRIPT, DONT_WITHHOLD_PERMISSIONS),
       browser(), DOES_NOT_REQUIRE_CONSENT, CONTENT_SCRIPT));
   testers.push_back(std::make_unique<ActiveScriptTester>(
-      "inject_scripts_all_hosts", CreateExtension(ALL_HOSTS, EXECUTE_SCRIPT),
+      "inject_scripts_all_hosts",
+      CreateExtension(ALL_HOSTS, EXECUTE_SCRIPT, DONT_WITHHOLD_PERMISSIONS),
       browser(), DOES_NOT_REQUIRE_CONSENT, EXECUTE_SCRIPT));
 
   ASSERT_TRUE(embedded_test_server()->Start());

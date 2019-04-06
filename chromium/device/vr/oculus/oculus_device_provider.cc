@@ -14,41 +14,30 @@ namespace device {
 OculusVRDeviceProvider::OculusVRDeviceProvider() : initialized_(false) {}
 
 OculusVRDeviceProvider::~OculusVRDeviceProvider() {
-  device::GamepadDataFetcherManager::GetInstance()->RemoveSourceFactory(
-      device::GAMEPAD_SOURCE_OCULUS);
-  // TODO(billorr): Shut down VR.
 }
 
 void OculusVRDeviceProvider::Initialize(
-    base::RepeatingCallback<void(VRDevice*)> add_device_callback,
-    base::RepeatingCallback<void(VRDevice*)> remove_device_callback,
+    base::RepeatingCallback<void(unsigned int,
+                                 mojom::VRDisplayInfoPtr,
+                                 mojom::XRRuntimePtr)> add_device_callback,
+    base::RepeatingCallback<void(unsigned int)> remove_device_callback,
     base::OnceClosure initialization_complete) {
   CreateDevice();
   if (device_)
-    add_device_callback.Run(device_.get());
+    add_device_callback.Run(device_->GetId(), device_->GetVRDisplayInfo(),
+                            device_->BindXRRuntimePtr());
   initialized_ = true;
   std::move(initialization_complete).Run();
 }
 
 void OculusVRDeviceProvider::CreateDevice() {
   // TODO(billorr): Check for headset presence without starting runtime.
-  ovrInitParams initParams = {ovrInit_RequestVersion, OVR_MINOR_VERSION, NULL,
-                              0, 0};
-  ovrResult result = ovr_Initialize(&initParams);
-  if (OVR_FAILURE(result)) {
-    return;
-  }
+  device_ = std::make_unique<OculusDevice>();
 
-  // TODO(792657): luid should be used to handle multi-gpu machines.
-  ovrGraphicsLuid luid;
-  result = ovr_Create(&session_, &luid);
-  if (OVR_FAILURE(result)) {
-    return;
+  // If the device failed to inialize, don't return it.
+  if (!device_->IsInitialized()) {
+    device_ = nullptr;
   }
-
-  device_ = std::make_unique<OculusDevice>(session_);
-  GamepadDataFetcherManager::GetInstance()->AddFactory(
-      new OculusGamepadDataFetcher::Factory(device_->GetId(), session_));
 }
 
 bool OculusVRDeviceProvider::Initialized() {

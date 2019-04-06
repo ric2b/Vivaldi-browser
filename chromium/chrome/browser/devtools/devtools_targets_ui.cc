@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -18,6 +17,7 @@
 #include "base/values.h"
 #include "base/version.h"
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/serialize_host_descriptions.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -85,7 +85,7 @@ class CancelableTimer {
 class LocalTargetsUIHandler : public DevToolsTargetsUIHandler,
                               public content::DevToolsAgentHostObserver {
  public:
-  explicit LocalTargetsUIHandler(const Callback& callback);
+  LocalTargetsUIHandler(const Callback& callback, Profile* profile);
   ~LocalTargetsUIHandler() override;
 
   // DevToolsTargetsUIHandler overrides.
@@ -99,15 +99,16 @@ private:
 
  void ScheduleUpdate();
  void UpdateTargets();
- void SendTargets(const DevToolsAgentHost::List& targets);
 
+ Profile* profile_;
  std::unique_ptr<CancelableTimer> timer_;
  base::WeakPtrFactory<LocalTargetsUIHandler> weak_factory_;
 };
 
-LocalTargetsUIHandler::LocalTargetsUIHandler(
-    const Callback& callback)
+LocalTargetsUIHandler::LocalTargetsUIHandler(const Callback& callback,
+                                             Profile* profile)
     : DevToolsTargetsUIHandler(kTargetSourceLocal, callback),
+      profile_(profile),
       weak_factory_(this) {
   DevToolsAgentHost::AddObserver(this);
   UpdateTargets();
@@ -143,16 +144,17 @@ void LocalTargetsUIHandler::ScheduleUpdate() {
 }
 
 void LocalTargetsUIHandler::UpdateTargets() {
-  SendTargets(DevToolsAgentHost::GetOrCreateAll());
-}
+  content::DevToolsAgentHost::List targets =
+      DevToolsAgentHost::GetOrCreateAll();
 
-void LocalTargetsUIHandler::SendTargets(
-    const content::DevToolsAgentHost::List& targets) {
   std::vector<HostDescriptionNode> hosts;
   hosts.reserve(targets.size());
-
   targets_.clear();
   for (const scoped_refptr<DevToolsAgentHost>& host : targets) {
+    if (Profile::FromBrowserContext(host->GetBrowserContext()) != profile_)
+      continue;
+    if (!DevToolsWindow::AllowDevToolsFor(profile_, host->GetWebContents()))
+      continue;
     targets_[host->GetId()] = host;
     hosts.push_back({host->GetId(), host->GetParentId(),
                      std::move(*Serialize(host.get()))});
@@ -243,7 +245,7 @@ void AdbTargetsUIHandler::DeviceListChanged(
         kAdbDeviceIdFormat,
         device->serial().c_str());
     device_data->SetString(kTargetIdField, device_id);
-    auto browser_list = base::MakeUnique<base::ListValue>();
+    auto browser_list = std::make_unique<base::ListValue>();
 
     DevToolsAndroidBridge::RemoteBrowsers& browsers = device->browsers();
     for (DevToolsAndroidBridge::RemoteBrowsers::iterator bit =
@@ -263,7 +265,7 @@ void AdbTargetsUIHandler::DeviceListChanged(
       browser_data->SetString(kTargetIdField, browser_id);
       browser_data->SetString(kTargetSourceField, source_id());
 
-      auto page_list = base::MakeUnique<base::ListValue>();
+      auto page_list = std::make_unique<base::ListValue>();
       remote_browsers_[browser_id] = browser;
       for (const auto& page : browser->pages()) {
         scoped_refptr<DevToolsAgentHost> host = page->CreateTarget();
@@ -305,9 +307,10 @@ DevToolsTargetsUIHandler::~DevToolsTargetsUIHandler() {
 // static
 std::unique_ptr<DevToolsTargetsUIHandler>
 DevToolsTargetsUIHandler::CreateForLocal(
-    const DevToolsTargetsUIHandler::Callback& callback) {
+    const DevToolsTargetsUIHandler::Callback& callback,
+    Profile* profile) {
   return std::unique_ptr<DevToolsTargetsUIHandler>(
-      new LocalTargetsUIHandler(callback));
+      new LocalTargetsUIHandler(callback, profile));
 }
 
 // static
@@ -338,7 +341,7 @@ DevToolsTargetsUIHandler::GetBrowserAgentHost(const std::string& browser_id) {
 
 std::unique_ptr<base::DictionaryValue> DevToolsTargetsUIHandler::Serialize(
     DevToolsAgentHost* host) {
-  auto target_data = base::MakeUnique<base::DictionaryValue>();
+  auto target_data = std::make_unique<base::DictionaryValue>();
   target_data->SetString(kTargetSourceField, source_id_);
   target_data->SetString(kTargetIdField, host->GetId());
   target_data->SetString(kTargetTypeField, host->GetType());
@@ -382,14 +385,14 @@ void PortForwardingStatusSerializer::PortStatusChanged(
   base::DictionaryValue result;
   for (ForwardingStatus::const_iterator sit = status.begin();
       sit != status.end(); ++sit) {
-    auto port_status_dict = base::MakeUnique<base::DictionaryValue>();
+    auto port_status_dict = std::make_unique<base::DictionaryValue>();
     const PortStatusMap& port_status_map = sit->second;
     for (PortStatusMap::const_iterator it = port_status_map.begin();
          it != port_status_map.end(); ++it) {
       port_status_dict->SetInteger(base::IntToString(it->first), it->second);
     }
 
-    auto device_status_dict = base::MakeUnique<base::DictionaryValue>();
+    auto device_status_dict = std::make_unique<base::DictionaryValue>();
     device_status_dict->Set(kPortForwardingPorts, std::move(port_status_dict));
     device_status_dict->SetString(kPortForwardingBrowserId,
                                   sit->first->GetId());

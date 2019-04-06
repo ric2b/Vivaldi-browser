@@ -9,7 +9,6 @@
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/stylus_utils.h"
 #include "ash/public/interfaces/constants.mojom.h"
-#include "ash/wm/window_animations.h"
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -42,6 +41,7 @@
 #include "extensions/common/extension.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/events/devices/input_device_manager.h"
+#include "ui/wm/core/window_animations.h"
 
 using ash::mojom::CloseLockScreenNoteReason;
 using ash::mojom::LockScreenNoteOrigin;
@@ -120,10 +120,9 @@ void StateController::SetReadyCallbackForTesting(
   ready_callback_ = ready_callback;
 }
 
-void StateController::SetTickClockForTesting(
-    std::unique_ptr<base::TickClock> clock) {
+void StateController::SetTickClockForTesting(const base::TickClock* clock) {
   DCHECK(!tick_clock_);
-  tick_clock_ = std::move(clock);
+  tick_clock_ = clock;
 }
 
 void StateController::SetAppManagerForTesting(
@@ -140,7 +139,7 @@ void StateController::SetLockScreenLockScreenProfileCreatorForTesting(
 
 void StateController::Initialize() {
   if (!tick_clock_)
-    tick_clock_ = std::make_unique<base::DefaultTickClock>();
+    tick_clock_ = base::DefaultTickClock::GetInstance();
 
   // The tray action ptr might be set previously if the client was being created
   // for testing.
@@ -228,14 +227,13 @@ void StateController::InitializeWithCryptoKey(Profile* profile,
   // Lock screen profile creator might have been set by a test.
   if (!lock_screen_profile_creator_) {
     lock_screen_profile_creator_ =
-        std::make_unique<LockScreenProfileCreatorImpl>(profile,
-                                                       tick_clock_.get());
+        std::make_unique<LockScreenProfileCreatorImpl>(profile, tick_clock_);
   }
   lock_screen_profile_creator_->Initialize();
 
   // App manager might have been set previously by a test.
   if (!app_manager_)
-    app_manager_ = std::make_unique<AppManagerImpl>(tick_clock_.get());
+    app_manager_ = std::make_unique<AppManagerImpl>(tick_clock_);
   app_manager_->Initialize(profile, lock_screen_profile_creator_.get());
 
   first_app_run_toast_manager_ =
@@ -304,7 +302,7 @@ void StateController::RequestNewLockScreenNote(LockScreenNoteOrigin origin) {
   DCHECK(app_manager_->IsNoteTakingAppAvailable());
 
   UMA_HISTOGRAM_ENUMERATION("Apps.LockScreen.NoteTakingApp.LaunchRequestReason",
-                            origin, LockScreenNoteOrigin::kCount);
+                            origin);
 
   // Update state to launching even if app fails to launch - this is to notify
   // listeners that a lock screen note request was handled.
@@ -358,7 +356,7 @@ void StateController::OnSessionStateChanged() {
       base::Bind(&StateController::OnNoteTakingAvailabilityChanged,
                  base::Unretained(this)));
   note_app_window_metrics_ =
-      std::make_unique<AppWindowMetricsTracker>(tick_clock_.get());
+      std::make_unique<AppWindowMetricsTracker>(tick_clock_);
   lock_screen_data_->SetSessionLocked(true);
   OnNoteTakingAvailabilityChanged();
 }
@@ -506,8 +504,7 @@ void StateController::ResetNoteTakingWindowAndMoveToNextState(
   if (lock_screen_note_state_ != TrayActionState::kAvailable &&
       lock_screen_note_state_ != TrayActionState::kNotAvailable) {
     UMA_HISTOGRAM_ENUMERATION(
-        "Apps.LockScreen.NoteTakingApp.NoteTakingExitReason", reason,
-        CloseLockScreenNoteReason::kCount);
+        "Apps.LockScreen.NoteTakingApp.NoteTakingExitReason", reason);
   }
 
   if (focus_cycler_delegate_ &&

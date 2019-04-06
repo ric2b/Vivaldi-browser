@@ -14,12 +14,16 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
+#include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "ui/aura/aura_export.h"
 #include "ui/aura/client/window_types.h"
 #include "ui/aura/window_observer.h"
+#include "ui/aura/window_port.h"
 #include "ui/base/class_property.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/layer_delegate.h"
@@ -44,6 +48,7 @@ class Transform;
 }
 
 namespace ui {
+enum class DomCode;
 class Layer;
 namespace mojom {
 enum class EventTargetingPolicy;
@@ -53,9 +58,9 @@ enum class EventTargetingPolicy;
 namespace aura {
 
 class LayoutManager;
+class ScopedKeyboardHook;
 class WindowDelegate;
 class WindowObserver;
-class WindowPort;
 class WindowPortForShutdown;
 class WindowTreeHost;
 
@@ -88,12 +93,26 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
     // The window's occlusion state isn't tracked
     // (WindowOcclusionTracker::Track) or hasn't been computed yet.
     UNKNOWN,
-    // The window is occluded, i.e. one of these conditions is true:
-    // - The window is hidden (Window::IsVisible() is true).
-    // - The bounds of the window are completely covered by opaque windows.
+    // The window or one of its descendants IsVisible() [1] and:
+    // - Its bounds aren't completely covered by fully opaque windows [2], or,
+    // - Its transform, bounds or opacity is animated.
+    VISIBLE,
+    // The window or one of its descendants IsVisible() [1], but they all:
+    // - Have bounds completely covered by fully opaque windows [2], and,
+    // - Have no transform, bounds or opacity animation.
     OCCLUDED,
-    // The window is not occluded.
-    NOT_OCCLUDED,
+    // The window is not IsVisible() [1].
+    HIDDEN,
+    // [1] A window can only be IsVisible() if all its parent are IsVisible().
+    // [2] A window is "fully opaque" if:
+    // - It's visible (IsVisible()).
+    // - It's not transparent (transparent()).
+    // - It's transform, bounds and opacity aren't animated.
+    // - Its combined opacity is 1 (GetCombinedOpacity()).
+    // - The type of its layer is not ui::LAYER_NOT_DRAWN.
+    //
+    // TODO(fdoray): A window that clips its children shouldn't be VISIBLE just
+    // because it has an animated child.
   };
 
   typedef std::vector<Window*> Windows;
@@ -167,10 +186,10 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // account the visibility of the layer and ancestors, where as this tracks
   // whether Show() without a Hide() has been invoked.
   bool TargetVisibility() const { return visible_; }
-  // Returns the occlusion state of this window. Will be UNKNOWN if the
-  // occlusion state of this window isn't tracked
-  // (WindowOcclusionTracker::Track). Will be stale if called within the scope
-  // of a WindowOcclusionTracker::ScopedPauseOcclusionTracking.
+  // Returns the occlusion state of this window. Is UNKNOWN if the occlusion
+  // state of this window isn't tracked (WindowOcclusionTracker::Track) or
+  // hasn't been computed yet. Is stale if called within the scope of a
+  // WindowOcclusionTracker::ScopedPauseOcclusionTracking.
   OcclusionState occlusion_state() const { return occlusion_state_; }
 
   // Returns the window's bounds in root window's coordinates.
@@ -321,6 +340,13 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Returns true if this window has capture.
   bool HasCapture();
 
+  // Requests that |keys| be intercepted at the platform level and routed
+  // directly to the web content.  If |codes| has no value, all keys will be
+  // intercepted.  Returns a ScopedKeyboardHook instance which stops capturing
+  // system key events when destroyed.
+  std::unique_ptr<ScopedKeyboardHook> CaptureSystemKeyEvents(
+      base::Optional<base::flat_set<ui::DomCode>> codes);
+
   // Suppresses painting window content by disgarding damaged rect and ignoring
   // new paint requests. This is a one way operation and there is no way to
   // reenable painting.
@@ -362,22 +388,42 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // that does not involve a resize or a device scale factor change.
   void AllocateLocalSurfaceId();
 
+  // When a child-allocated viz::LocalSurfaceId is being processed, this returns
+  // true.
+  bool IsLocalSurfaceIdAllocationSuppressed() const;
+
+  viz::ScopedSurfaceIdAllocator GetSurfaceIdAllocator(
+      base::OnceCallback<void()> allocation_task);
+
   // Gets the current viz::LocalSurfaceId.
   const viz::LocalSurfaceId& GetLocalSurfaceId() const;
+
+  // Sets the current viz::LocalSurfaceId, in cases where the embedded client
+  // has allocated one. Also sets child sequence number component of the
+  // viz::LocalSurfaceId allocator.
+  void UpdateLocalSurfaceIdFromEmbeddedClient(
+      const base::Optional<viz::LocalSurfaceId>&
+          embedded_client_local_surface_id);
 
   // Returns the FrameSinkId. In LOCAL mode, this returns a valid FrameSinkId
   // only if a LayerTreeFrameSink has been created. In MUS mode, this always
   // return a valid FrameSinkId.
-  viz::FrameSinkId GetFrameSinkId() const;
+  const viz::FrameSinkId& GetFrameSinkId() const;
 
-  const viz::FrameSinkId& embed_frame_sink_id() const {
-    return embed_frame_sink_id_;
+  // Use SetEmbedFrameSinkId() when this window is embedding another client.
+  // See comment for |frame_sink_id_| below for more details.
+  void SetEmbedFrameSinkId(const viz::FrameSinkId& embed_frame_sink_id);
+  void set_frame_sink_id(const viz::FrameSinkId& frame_sink_id) {
+    DCHECK(!embeds_external_client_);
+    DCHECK(!frame_sink_id_.is_valid());
+    frame_sink_id_ = frame_sink_id;
   }
-  void set_embed_frame_sink_id(const viz::FrameSinkId& embed_frame_sink_id) {
-    embed_frame_sink_id_ = embed_frame_sink_id;
-  }
-  // Returns whether this window is an embed window.
+
+  // Returns whether this window is embedding another client.
   bool IsEmbeddingClient() const;
+
+  // ui::GestureConsumer:
+  bool RequiresDoubleTapGestureEvents() const override;
 
  protected:
   // Deletes (or removes if not owned by parent) all child windows. Intended for
@@ -415,7 +461,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   void SetVisible(bool visible);
 
   // Updates the occlusion state of the window.
-  void SetOccluded(bool occluded);
+  void SetOcclusionState(OcclusionState occlusion_state);
 
   // Schedules a paint for the Window's entire bounds.
   void SchedulePaint();
@@ -491,7 +537,8 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   void OnPaintLayer(const ui::PaintContext& context) override;
   void OnLayerBoundsChanged(const gfx::Rect& old_bounds,
                             ui::PropertyChangeReason reason) override;
-  void OnLayerTransformed(ui::PropertyChangeReason reason) override;
+  void OnLayerTransformed(const gfx::Transform& old_transform,
+                          ui::PropertyChangeReason reason) override;
   void OnLayerOpacityChanged(ui::PropertyChangeReason reason) override;
 
   // Overridden from ui::EventTarget:
@@ -504,6 +551,11 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   // Updates the layer name based on the window's name and id.
   void UpdateLayerName();
+
+  void RegisterFrameSinkId();
+  void UnregisterFrameSinkId();
+  bool registered_frame_sink_id_ = false;
+  bool disable_frame_sink_id_registration_ = false;
 
   // Window owns its corresponding WindowPort, but the ref is held as a raw
   // pointer in |port_| so that it can still be accessed during destruction.
@@ -547,8 +599,13 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   int id_;
 
-  // Only set when it is embedding another client inside.
-  viz::FrameSinkId embed_frame_sink_id_;
+  // The FrameSinkId associated with this window. If this window is embedding
+  // another client, then this should be set to the FrameSinkId of that client,
+  // and |embeds_external_client_| is turned on. However, a window can still
+  // have a valid FrameSinkId without embedding another client, to facilitate
+  // hit-testing.
+  viz::FrameSinkId frame_sink_id_;
+  bool embeds_external_client_ = false;
 
   // Whether layer is initialized as non-opaque. Defaults to false.
   bool transparent_;

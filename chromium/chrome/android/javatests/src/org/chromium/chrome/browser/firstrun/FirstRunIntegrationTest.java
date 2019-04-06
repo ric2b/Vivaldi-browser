@@ -32,8 +32,8 @@ import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.locale.DefaultSearchEngineDialogHelperUtils;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManager.SearchEnginePromoType;
+import org.chromium.chrome.browser.search_engines.TemplateUrl;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
-import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrl;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.MultiActivityTestRule;
@@ -68,15 +68,12 @@ public class FirstRunIntegrationTest {
     @SmallTest
     public void testGenericViewIntentGoesToFirstRun() {
         final String asyncClassName = ChromeLauncherActivity.class.getName();
-        runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
-            @Override
-            public void run() {
-                final Context context = InstrumentationRegistry.getTargetContext();
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://test.com"));
-                intent.setPackage(context.getPackageName());
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(intent);
-            }
+        runFirstRunRedirectTestForActivity(asyncClassName, () -> {
+            final Context context = InstrumentationRegistry.getTargetContext();
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://test.com"));
+            intent.setPackage(context.getPackageName());
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
         });
     }
 
@@ -84,15 +81,12 @@ public class FirstRunIntegrationTest {
     @SmallTest
     public void testRedirectCustomTabActivityToFirstRun() {
         final String asyncClassName = ChromeLauncherActivity.class.getName();
-        runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
-            @Override
-            public void run() {
-                Context context = InstrumentationRegistry.getTargetContext();
-                CustomTabsIntent customTabIntent = new CustomTabsIntent.Builder().build();
-                customTabIntent.intent.setPackage(context.getPackageName());
-                customTabIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                customTabIntent.launchUrl(context, Uri.parse("http://test.com"));
-            }
+        runFirstRunRedirectTestForActivity(asyncClassName, () -> {
+            Context context = InstrumentationRegistry.getTargetContext();
+            CustomTabsIntent customTabIntent = new CustomTabsIntent.Builder().build();
+            customTabIntent.intent.setPackage(context.getPackageName());
+            customTabIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            customTabIntent.launchUrl(context, Uri.parse("http://test.com"));
         });
     }
 
@@ -100,15 +94,12 @@ public class FirstRunIntegrationTest {
     @SmallTest
     public void testRedirectChromeTabbedActivityToFirstRun() {
         final String asyncClassName = ChromeTabbedActivity.class.getName();
-        runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
-            @Override
-            public void run() {
-                final Context context = InstrumentationRegistry.getTargetContext();
-                Intent intent = new Intent();
-                intent.setClassName(context, asyncClassName);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(intent);
-            }
+        runFirstRunRedirectTestForActivity(asyncClassName, () -> {
+            final Context context = InstrumentationRegistry.getTargetContext();
+            Intent intent = new Intent();
+            intent.setClassName(context, asyncClassName);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
         });
     }
 
@@ -116,15 +107,12 @@ public class FirstRunIntegrationTest {
     @SmallTest
     public void testRedirectSearchActivityToFirstRun() {
         final String asyncClassName = SearchActivity.class.getName();
-        runFirstRunRedirectTestForActivity(asyncClassName, new Runnable() {
-            @Override
-            public void run() {
-                final Context context = InstrumentationRegistry.getTargetContext();
-                Intent intent = new Intent();
-                intent.setClassName(context, asyncClassName);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(intent);
-            }
+        runFirstRunRedirectTestForActivity(asyncClassName, () -> {
+            final Context context = InstrumentationRegistry.getTargetContext();
+            Intent intent = new Intent();
+            intent.setClassName(context, asyncClassName);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
         });
     }
 
@@ -198,9 +186,12 @@ public class FirstRunIntegrationTest {
     @Test
     @SmallTest
     public void testAbortFirstRun() throws Exception {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        final ActivityMonitor launcherActivityMonitor =
+                new ActivityMonitor(ChromeLauncherActivity.class.getName(), null, false);
+        instrumentation.addMonitor(launcherActivityMonitor);
         final ActivityMonitor freMonitor =
                 new ActivityMonitor(FirstRunActivity.class.getName(), null, false);
-        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         instrumentation.addMonitor(freMonitor);
 
         final Context context = instrumentation.getTargetContext();
@@ -209,27 +200,35 @@ public class FirstRunIntegrationTest {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(intent);
 
-        // Because the AsyncInitializationActivity notices that the FRE hasn't been run yet, it
-        // redirects to it.  Once the user closes the FRE, the user should be kicked back into the
-        // startup flow where they were interrupted.
+        final Activity chromeLauncherActivity = instrumentation.waitForMonitorWithTimeout(
+                launcherActivityMonitor, CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
+        Assert.assertNotNull(chromeLauncherActivity);
+
+        // Because the ChromeLauncherActivity notices that the FRE hasn't been run yet, it
+        // redirects to it.
         mActivity = instrumentation.waitForMonitorWithTimeout(
                 freMonitor, CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
-        instrumentation.removeMonitor(freMonitor);
-        ActivityMonitor activityMonitor =
-                new ActivityMonitor(ChromeLauncherActivity.class.getName(), null, false);
-        instrumentation.addMonitor(activityMonitor);
+        Assert.assertNotNull(mActivity);
 
+        // Once the user closes the FRE, the user should be kicked back into the
+        // startup flow where they were interrupted.
         Assert.assertEquals(0, mTestObserver.abortFirstRunExperienceCallback.getCallCount());
         mActivity.onBackPressed();
         mTestObserver.abortFirstRunExperienceCallback.waitForCallback(
                 "FirstRunActivity didn't abort", 0);
 
-        mActivity = instrumentation.waitForMonitorWithTimeout(
-                activityMonitor, CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return mActivity.isFinishing();
+            }
+        });
+
+        // ChromeLauncherActivity should finish if FRE was aborted.
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return chromeLauncherActivity.isFinishing();
             }
         });
     }
@@ -237,13 +236,13 @@ public class FirstRunIntegrationTest {
     @Test
     @MediumTest
     public void testDefaultSearchEngine_DontShow() throws Exception {
-        runSearchEnginePromptTest(LocaleManager.SEARCH_ENGINE_PROMO_DONT_SHOW);
+        runSearchEnginePromptTest(LocaleManager.SearchEnginePromoType.DONT_SHOW);
     }
 
     @Test
     @MediumTest
     public void testDefaultSearchEngine_ShowExisting() throws Exception {
-        runSearchEnginePromptTest(LocaleManager.SEARCH_ENGINE_PROMO_SHOW_EXISTING);
+        runSearchEnginePromptTest(LocaleManager.SearchEnginePromoType.SHOW_EXISTING);
     }
 
     private void runSearchEnginePromptTest(@SearchEnginePromoType final int searchPromoType)
@@ -257,7 +256,7 @@ public class FirstRunIntegrationTest {
 
             @Override
             public List<TemplateUrl> getSearchEnginesForPromoDialog(int promoType) {
-                return TemplateUrlService.getInstance().getSearchEngines();
+                return TemplateUrlService.getInstance().getTemplateUrls();
             }
         };
         LocaleManager.setInstanceForTest(mockManager);
@@ -278,7 +277,8 @@ public class FirstRunIntegrationTest {
         // startup flow where they were interrupted.
         mActivity = instrumentation.waitForMonitorWithTimeout(
                 freMonitor, CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
-        instrumentation.removeMonitor(freMonitor);
+        Assert.assertNotNull(mActivity);
+
         ActivityMonitor activityMonitor =
                 new ActivityMonitor(ChromeTabbedActivity.class.getName(), null, false);
         instrumentation.addMonitor(activityMonitor);
@@ -305,7 +305,7 @@ public class FirstRunIntegrationTest {
         }
 
         // Select a default search engine.
-        if (searchPromoType == LocaleManager.SEARCH_ENGINE_PROMO_DONT_SHOW) {
+        if (searchPromoType == LocaleManager.SearchEnginePromoType.DONT_SHOW) {
             Assert.assertFalse("Search engine page was shown.",
                     freProperties.getBoolean(FirstRunActivityBase.SHOW_SEARCH_ENGINE_PAGE));
         } else {
@@ -345,13 +345,10 @@ public class FirstRunIntegrationTest {
             }
         });
 
-        ThreadUtils.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                Button button = (Button) activity.findViewById(id);
-                Assert.assertNotNull(message, button);
-                button.performClick();
-            }
+        ThreadUtils.runOnUiThread(() -> {
+            Button button = (Button) activity.findViewById(id);
+            Assert.assertNotNull(message, button);
+            button.performClick();
         });
     }
 }

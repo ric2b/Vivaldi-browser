@@ -42,20 +42,31 @@ class FakeBaseTabStripController : public TabStripController {
                              ui::MenuSourceType source_type) override;
   int HasAvailableDragActions() const override;
   void OnDropIndexUpdate(int index, bool drop_before) override;
-  void PerformDrop(bool drop_before, int index, const GURL& url) override;
   bool IsCompatibleWith(TabStrip* other) const override;
+  NewTabButtonPosition GetNewTabButtonPosition() const override;
   void CreateNewTab() override;
   void CreateNewTabWithLocation(const base::string16& loc) override;
   bool IsIncognito() override;
   void StackedLayoutMaybeChanged() override;
+  bool IsSingleTabModeAvailable() override;
+  bool ShouldDrawStrokes() const override;
   void OnStartedDraggingTabs() override;
   void OnStoppedDraggingTabs() override;
-  void CheckFileSupported(const GURL& url) override;
+  bool HasVisibleBackgroundTabShapes() const override;
+  bool EverHasVisibleBackgroundTabShapes() const override;
+  SkColor GetFrameColor() const override;
   SkColor GetToolbarTopSeparatorColor() const override;
+  SkColor GetTabBackgroundColor(TabState state, bool opaque) const override;
+  SkColor GetTabForegroundColor(TabState state) const override;
+  int GetTabBackgroundResourceId(
+      BrowserNonClientFrameView::ActiveState active_state,
+      bool* has_custom_image) const override;
   base::string16 GetAccessibleTabName(const Tab* tab) const override;
   Profile* GetProfile() const override;
 
  private:
+  void SetActiveIndex(int new_index);
+
   TabStrip* tab_strip_ = nullptr;
 
   int num_tabs_ = 0;

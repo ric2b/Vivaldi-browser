@@ -7,12 +7,14 @@
 #include <string>
 #include <utility>
 
+#include <memory>
+
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/base32/base32.h"
 #include "components/certificate_transparency/log_dns_client.h"
 #include "components/certificate_transparency/mock_log_dns_traffic.h"
@@ -183,9 +185,8 @@ void AddCacheEntry(net::HostCache* cache,
 
 class SingleTreeTrackerTest : public ::testing::Test {
   void SetUp() override {
-    log_ =
-        net::CTLogVerifier::Create(GetTestPublicKey(), "testlog",
-                                   "https://ct.example.com", kDNSRequestSuffix);
+    log_ = net::CTLogVerifier::Create(GetTestPublicKey(), "testlog",
+                                      kDNSRequestSuffix);
 
     ASSERT_TRUE(log_);
     ASSERT_EQ(log_->key_id(), GetTestPublicKeyId());
@@ -204,10 +205,10 @@ class SingleTreeTrackerTest : public ::testing::Test {
 
  protected:
   void CreateTreeTracker() {
-    log_dns_client_ = base::MakeUnique<LogDnsClient>(
+    log_dns_client_ = std::make_unique<LogDnsClient>(
         mock_dns_.CreateDnsClient(), net_log_with_source_, 1);
 
-    tree_tracker_ = base::MakeUnique<SingleTreeTracker>(
+    tree_tracker_ = std::make_unique<SingleTreeTracker>(
         log_, log_dns_client_.get(), &host_resolver_, &net_log_);
   }
 
@@ -653,6 +654,45 @@ TEST_F(SingleTreeTrackerTest, TestEntryIncludedAfterInclusionCheckSuccess) {
       net_log_, LeafHash(chain_.get(), cert_sct_.get()), true));
 }
 
+// Tests that inclusion checks are aborted and SCTs discarded if under critical
+// memory pressure.
+TEST_F(SingleTreeTrackerTest,
+       TestInclusionCheckCancelledIfUnderMemoryPressure) {
+  CreateTreeTracker();
+  AddCacheEntry(host_resolver_.GetHostCache(), kHostname,
+                net::HostCache::Entry::SOURCE_DNS, kZeroTTL);
+
+  tree_tracker_->OnSCTVerified(kHostname, chain_.get(), cert_sct_.get());
+  EXPECT_EQ(
+      SingleTreeTracker::SCT_PENDING_NEWER_STH,
+      tree_tracker_->GetLogEntryInclusionStatus(chain_.get(), cert_sct_.get()));
+
+  // Provide with a fresh STH, which is for a tree of size 2.
+  SignedTreeHead sth;
+  ASSERT_TRUE(GetSignedTreeHeadForTreeOfSize2(&sth));
+  ASSERT_TRUE(log_->VerifySignedTreeHead(sth));
+
+  // Make the first event that is processed a critical memory pressure
+  // notification. This should be handled before the response to the first DNS
+  // request, so no requests after the first one should be sent (the leaf index
+  // request).
+  base::MemoryPressureListener::NotifyMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+
+  ASSERT_TRUE(mock_dns_.ExpectLeafIndexRequestAndResponse(
+      Base32LeafHash(chain_.get(), cert_sct_.get()) + ".hash." +
+          kDNSRequestSuffix,
+      0));
+
+  tree_tracker_->NewSTHObserved(sth);
+  base::RunLoop().RunUntilIdle();
+
+  // Expect the SCT to have been discarded.
+  EXPECT_EQ(
+      SingleTreeTracker::SCT_NOT_OBSERVED,
+      tree_tracker_->GetLogEntryInclusionStatus(chain_.get(), cert_sct_.get()));
+}
+
 // Test that pending entries transition states correctly according to the
 // STHs provided:
 // * Start without an STH.
@@ -878,23 +918,59 @@ TEST_F(SingleTreeTrackerTest,
 // Test that entries are no longer pending after a network state
 // change.
 TEST_F(SingleTreeTrackerTest, DiscardsPendingEntriesAfterNetworkChange) {
-  CreateTreeTrackerWithDefaultDnsExpectation();
+  // Setup expectations for 2 SCTs to pass inclusion checking.
+  // However, the first should be cancelled half way through (when the network
+  // change occurs) and the second should be throttled (and then cancelled) so,
+  // by the end of test, neither should actually have passed the checks.
+  std::vector<std::string> audit_proof;
+  FillVectorWithValidAuditProofForTreeOfSize2(&audit_proof);
+
+  ASSERT_TRUE(mock_dns_.ExpectLeafIndexRequestAndResponse(
+      Base32LeafHash(chain_.get(), cert_sct_.get()) + ".hash." +
+          kDNSRequestSuffix,
+      0));
+  ASSERT_TRUE(mock_dns_.ExpectAuditProofRequestAndResponse(
+      std::string("0.0.2.tree.") + kDNSRequestSuffix, audit_proof.begin(),
+      audit_proof.begin() + 1));
+
+  scoped_refptr<SignedCertificateTimestamp> second_sct(GetSCT());
+  second_sct->timestamp -= base::TimeDelta::FromHours(1);
+
+  ASSERT_TRUE(mock_dns_.ExpectLeafIndexRequestAndResponse(
+      Base32LeafHash(chain_.get(), second_sct.get()) + ".hash." +
+          kDNSRequestSuffix,
+      1));
+  ASSERT_TRUE(mock_dns_.ExpectAuditProofRequestAndResponse(
+      std::string("0.1.2.tree.") + kDNSRequestSuffix, audit_proof.begin(),
+      audit_proof.begin() + 1));
+
+  CreateTreeTracker();
   AddCacheEntry(host_resolver_.GetHostCache(), kHostname,
                 net::HostCache::Entry::SOURCE_DNS, kZeroTTL);
 
-  tree_tracker_->OnSCTVerified(kHostname, chain_.get(), cert_sct_.get());
+  // Provide an STH to the tree_tracker_.
+  SignedTreeHead sth;
+  GetSignedTreeHeadForTreeOfSize2(&sth);
+  tree_tracker_->NewSTHObserved(sth);
 
-  EXPECT_EQ(
-      SingleTreeTracker::SCT_PENDING_NEWER_STH,
-      tree_tracker_->GetLogEntryInclusionStatus(chain_.get(), cert_sct_.get()));
+  tree_tracker_->OnSCTVerified(kHostname, chain_.get(), cert_sct_.get());
+  tree_tracker_->OnSCTVerified(kHostname, chain_.get(), second_sct.get());
+
+  for (auto sct : {cert_sct_, second_sct}) {
+    EXPECT_EQ(
+        SingleTreeTracker::SCT_PENDING_INCLUSION_CHECK,
+        tree_tracker_->GetLogEntryInclusionStatus(chain_.get(), sct.get()));
+  }
 
   net_change_notifier_->NotifyObserversOfNetworkChangeForTests(
       net::NetworkChangeNotifier::CONNECTION_UNKNOWN);
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(
-      SingleTreeTracker::SCT_NOT_OBSERVED,
-      tree_tracker_->GetLogEntryInclusionStatus(chain_.get(), cert_sct_.get()));
+  for (auto sct : {cert_sct_, second_sct}) {
+    EXPECT_EQ(
+        SingleTreeTracker::SCT_NOT_OBSERVED,
+        tree_tracker_->GetLogEntryInclusionStatus(chain_.get(), sct.get()));
+  }
 }
 
 }  // namespace certificate_transparency

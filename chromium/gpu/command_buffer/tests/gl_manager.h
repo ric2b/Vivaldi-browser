@@ -14,12 +14,12 @@
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/command_buffer/service/feature_info.h"
-#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/config/gpu_feature_info.h"
+#include "gpu/config/gpu_preferences.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -34,6 +34,7 @@ class GLSurface;
 namespace gpu {
 
 class CommandBufferDirect;
+class GpuMemoryBufferFactory;
 class ImageFactory;
 class MailboxManager;
 class SyncPointManager;
@@ -107,6 +108,11 @@ class GLManager : private GpuControl {
     use_iosurface_memory_buffers_ = use_iosurface_memory_buffers;
   }
 
+  void set_use_native_pixmap_memory_buffers(
+      bool use_native_pixmap_memory_buffers) {
+    use_native_pixmap_memory_buffers_ = use_native_pixmap_memory_buffers;
+  }
+
   void SetCommandsPaused(bool paused);
 
   gles2::GLES2Decoder* decoder() const {
@@ -136,7 +142,7 @@ class GLManager : private GpuControl {
                       size_t height,
                       unsigned internalformat) override;
   void DestroyImage(int32_t id) override;
-  void SignalQuery(uint32_t query, const base::Closure& callback) override;
+  void SignalQuery(uint32_t query, base::OnceClosure callback) override;
   void CreateGpuFence(uint32_t gpu_fence_id, ClientGpuFence source) override;
   void GetGpuFence(uint32_t gpu_fence_id,
                    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)>
@@ -149,13 +155,14 @@ class GLManager : private GpuControl {
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncReleased(uint64_t release) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
-                       const base::Closure& callback) override;
+                       base::OnceClosure callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
-  void SetSnapshotRequested() override;
 
   size_t GetSharedMemoryBytesAllocated() const;
   ContextType GetContextType() const;
+
+  void Reset();
 
  private:
   void SetupBaseContext();
@@ -181,10 +188,12 @@ class GLManager : private GpuControl {
   std::unique_ptr<gles2::GLES2CmdHelper> gles2_helper_;
   std::unique_ptr<TransferBuffer> transfer_buffer_;
   std::unique_ptr<gles2::GLES2Implementation> gles2_implementation_;
+  std::unique_ptr<gpu::GpuMemoryBufferFactory> gpu_memory_buffer_factory_;
 
   uint64_t next_fence_sync_release_ = 1;
 
   bool use_iosurface_memory_buffers_ = false;
+  bool use_native_pixmap_memory_buffers_ = false;
 
   Capabilities capabilities_;
 

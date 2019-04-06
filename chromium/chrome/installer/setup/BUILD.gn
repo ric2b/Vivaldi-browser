@@ -2,8 +2,17 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
+import("//chrome/installer/setup/buildflags.gni")
 import("//chrome/process_version_rc_template.gni")
 import("//testing/test.gni")
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+
+  # Use ZUCCHINI since ZUCCHINI_ENABLED is too long a name for setup.rc.
+  flags = [ "ZUCCHINI=$use_zucchini" ]
+}
 
 if (is_win) {
   executable("setup") {
@@ -21,14 +30,15 @@ if (is_win) {
     configs += [ "//build/config/win:windowed" ]
 
     deps = [
+      ":buildflags",
       ":lib",
       ":setup_exe_version",
-      "//build/config:exe_and_shlib_deps",
       "//build/win:default_exe_manifest",
       "//chrome/install_static:install_static_util",
       "//components/crash/content/app:app",
       "//components/crash/content/app:crash_export_thunks",
       "//components/crash/content/app:run_as_crashpad_handler",
+      "//content/public/common:static_switches",
     ]
 
     libs = [ "netapi32.lib" ]
@@ -48,8 +58,6 @@ if (is_win) {
       "installer_crash_reporting.h",
       "installer_state.cc",
       "installer_state.h",
-      "persistent_histogram_storage.cc",
-      "persistent_histogram_storage.h",
       "progress_calculator.cc",
       "progress_calculator.h",
       "setup_constants.cc",
@@ -69,17 +77,18 @@ if (is_win) {
     ]
 
     public_deps = [
+      ":buildflags",
       "//base",
       "//chrome/common:constants",
       "//chrome/common:version_header",
       "//chrome/install_static:install_static_util",
       "//chrome/installer/util:with_rc_strings",
-      "//chrome/installer/zucchini:zucchini_io",
       "//chrome_elf:constants",
       "//components/base32",
       "//components/crash/content/app",
       "//components/crash/core/common",
-      "//content/public/common:static_switches",
+      "//components/zucchini:zucchini_io",
+      "//components/zucchini:zucchini_lib",
       "//courgette:courgette_lib",
       "//rlz:rlz_lib",
       "//third_party/bspatch",
@@ -116,7 +125,7 @@ if (is_win) {
       ":lib",
       "//base",
       "//base:i18n",
-      "//base/allocator:features",
+      "//base/allocator:buildflags",
       "//base/test:test_support",
       "//chrome/install_static:install_static_util",
       "//chrome/install_static/test:test_support",

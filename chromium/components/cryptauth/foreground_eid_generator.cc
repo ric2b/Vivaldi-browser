@@ -5,16 +5,17 @@
 #include "components/cryptauth/foreground_eid_generator.h"
 
 #include <cstring>
+#include <memory>
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
 #include "components/cryptauth/raw_eid_generator.h"
 #include "components/cryptauth/raw_eid_generator_impl.h"
-#include "components/cryptauth/remote_device.h"
-#include "components/proximity_auth/logging/logging.h"
+#include "components/cryptauth/remote_device_ref.h"
 
 namespace cryptauth {
 
@@ -58,7 +59,7 @@ std::string ForegroundEidGenerator::EidData::DataInHex() const {
 }
 
 ForegroundEidGenerator::ForegroundEidGenerator()
-    : ForegroundEidGenerator(base::MakeUnique<RawEidGeneratorImpl>(),
+    : ForegroundEidGenerator(std::make_unique<RawEidGeneratorImpl>(),
                              base::DefaultClock::GetInstance()) {}
 
 ForegroundEidGenerator::ForegroundEidGenerator(
@@ -124,8 +125,9 @@ std::string ForegroundEidGenerator::IdentifyRemoteDeviceByAdvertisement(
 
   for (const auto& device_id : device_ids) {
     std::vector<std::string> possible_advertisements =
-        GeneratePossibleAdvertisements(RemoteDevice::DerivePublicKey(device_id),
-                                       scanning_device_beacon_seeds);
+        GeneratePossibleAdvertisements(
+            RemoteDeviceRef::DerivePublicKey(device_id),
+            scanning_device_beacon_seeds);
     for (const auto& possible_advertisement : possible_advertisements) {
       if (service_data_without_flags == possible_advertisement) {
         return device_id;

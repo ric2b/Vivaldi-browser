@@ -63,12 +63,10 @@ class FileWriteWatcher::FileWriteWatcherImpl {
   struct PathWatchInfo {
     std::vector<base::Closure> on_write_callbacks;
     base::FilePathWatcher watcher;
-    base::Timer timer;
+    base::OneShotTimer timer;
 
     explicit PathWatchInfo(const base::Closure& on_write_callback)
-        : on_write_callbacks(1, on_write_callback),
-          timer(false /* retain_closure_on_reset */, false /* is_repeating */) {
-    }
+        : on_write_callbacks(1, on_write_callback) {}
   };
 
   base::TimeDelta delay_;
@@ -113,8 +111,7 @@ void FileWriteWatcher::FileWriteWatcherImpl::StartWatch(
                  google_apis::CreateRelayCallback(on_write_callback)));
 }
 
-FileWriteWatcher::FileWriteWatcherImpl::~FileWriteWatcherImpl() {
-}
+FileWriteWatcher::FileWriteWatcherImpl::~FileWriteWatcherImpl() = default;
 
 void FileWriteWatcher::FileWriteWatcherImpl::DestroyOnBlockingThread() {
   delete this;

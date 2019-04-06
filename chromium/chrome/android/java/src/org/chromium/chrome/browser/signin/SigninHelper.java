@@ -7,12 +7,12 @@ package org.chromium.chrome.browser.signin;
 import android.accounts.Account;
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.os.AsyncTask;
 
 import com.google.android.gms.auth.AccountChangeEvent;
 import com.google.android.gms.auth.GoogleAuthException;
 import com.google.android.gms.auth.GoogleAuthUtil;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
@@ -119,7 +119,7 @@ public class SigninHelper {
     private SigninHelper(Context context) {
         mContext = context;
         mProfileSyncService = ProfileSyncService.get();
-        mSigninManager = SigninManager.get(mContext);
+        mSigninManager = SigninManager.get();
         mAccountTrackerService = AccountTrackerService.get();
         mOAuth2TokenService = OAuth2TokenService.getForProfile(Profile.getLastUsedProfile());
         mChromeSigninController = ChromeSigninController.get();
@@ -181,7 +181,7 @@ public class SigninHelper {
             mOAuth2TokenService.validateAccounts(false);
         }
 
-        if (mProfileSyncService != null && AndroidSyncSettings.isSyncEnabled(mContext)) {
+        if (mProfileSyncService != null && AndroidSyncSettings.isSyncEnabled()) {
             if (mProfileSyncService.isFirstSetupComplete()) {
                 if (accountsChanged) {
                     // Nudge the syncer to ensure it does a full sync.

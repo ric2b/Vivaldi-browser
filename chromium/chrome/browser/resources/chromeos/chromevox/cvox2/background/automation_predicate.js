@@ -20,6 +20,23 @@ var Role = chrome.automation.RoleType;
 var State = chrome.automation.StateType;
 
 /**
+ * A helper to find any actionable children.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+var hasActionableDescendant = function(node) {
+  // DefaultActionVerb does not have value 'none' even though it gets set.
+  if (node.defaultActionVerb != 'none')
+    return true;
+
+  var result = false;
+  for (var i = 0; i < node.children.length; i++)
+    result = hasActionableDescendant(node.children[i]);
+
+  return result;
+};
+
+/**
  * @constructor
  */
 AutomationPredicate = function() {};
@@ -46,18 +63,23 @@ AutomationPredicate.roles = function(roles) {
 /**
  * Constructs a predicate given a list of roles or predicates.
  * @param {{anyRole: (Array<Role>|undefined),
- *          anyPredicate: (Array<AutomationPredicate.Unary>|undefined)}} params
+ *          anyPredicate: (Array<AutomationPredicate.Unary>|undefined),
+ *          anyAttribute: (Object|undefined)}} params
  * @return {AutomationPredicate.Unary}
  */
 AutomationPredicate.match = function(params) {
   var anyRole = params.anyRole || [];
   var anyPredicate = params.anyPredicate || [];
+  var anyAttribute = params.anyAttribute || {};
   return function(node) {
     return anyRole.some(function(role) {
       return role == node.role;
     }) ||
         anyPredicate.some(function(p) {
           return p(node);
+        }) ||
+        Object.keys(anyAttribute).some(function(key) {
+          return node[key] === anyAttribute[key];
         });
   };
 };
@@ -162,11 +184,20 @@ AutomationPredicate.focused = function(node) {
  */
 AutomationPredicate.leaf = function(node) {
   return !node.firstChild || node.role == Role.BUTTON ||
-      node.role == Role.BUTTON_DROP_DOWN || node.role == Role.POP_UP_BUTTON ||
-      node.role == Role.SLIDER || node.role == Role.TEXT_FIELD ||
+      node.role == Role.POP_UP_BUTTON || node.role == Role.SLIDER ||
+      node.role == Role.TEXT_FIELD ||
+      // A node acting as a label should be a leaf if it has no actionable
+      // controls.
+      (!!node.labelFor && node.labelFor.length > 0 &&
+       !hasActionableDescendant(node)) ||
+      (!!node.descriptionFor && node.descriptionFor.length > 0 &&
+       !hasActionableDescendant(node)) ||
+      (node.activeDescendantFor && node.activeDescendantFor.length > 0) ||
+      (node.role == Role.MENU_ITEM && !hasActionableDescendant(node)) ||
       node.state[State.INVISIBLE] || node.children.every(function(n) {
         return n.state[State.INVISIBLE];
-      });
+      }) ||
+      !!AutomationPredicate.math(node);
 };
 
 /**
@@ -232,6 +263,24 @@ AutomationPredicate.object = function(node) {
        AutomationPredicate.formField(node)))
     return true;
 
+  // Containers who have name from contents should be treated like objects if
+  // the contents is all static text and not large.
+  if (node.name && node.nameFrom == 'contents') {
+    var onlyStaticText = true;
+    var textLength = 0;
+    for (var i = 0, child; child = node.children[i]; i++) {
+      if (child.role != Role.STATIC_TEXT) {
+        onlyStaticText = false;
+        break;
+      }
+      textLength += child.name ? child.name.length + textLength : textLength;
+    }
+
+    if (onlyStaticText && textLength > 0 &&
+        textLength < constants.OBJECT_MAX_CHARCOUNT)
+      return true;
+  }
+
   // Otherwise, leaf or static text nodes that don't contain only whitespace
   // should be visited with the exception of non-text only nodes. This covers
   // cases where an author might make a link with a name of ' '.
@@ -273,6 +322,10 @@ AutomationPredicate.linebreak = function(first, second) {
  * @return {boolean}
  */
 AutomationPredicate.container = function(node) {
+  // Math is never a container.
+  if (AutomationPredicate.math(node))
+    return false;
+
   return AutomationPredicate.match({
     anyRole: [
       Role.GENERIC_CONTAINER, Role.DOCUMENT, Role.GROUP, Role.LIST,
@@ -314,8 +367,6 @@ AutomationPredicate.structuralContainer = AutomationPredicate.roles([
 AutomationPredicate.root = function(node) {
   switch (node.role) {
     case Role.WINDOW:
-    case Role.MENU:
-    case Role.MENU_BAR:
       return true;
     case Role.DIALOG:
       // The below logic handles nested dialogs properly in the desktop tree
@@ -338,7 +389,7 @@ AutomationPredicate.root = function(node) {
           (node.parent.root.role == Role.DESKTOP &&
            node.parent.role == Role.WEB_VIEW);
     default:
-      return false;
+      return !!node.modal;
   }
 };
 
@@ -350,9 +401,10 @@ AutomationPredicate.root = function(node) {
  * @param {AutomationNode} node
  * @return {boolean}
  */
-AutomationPredicate.editableRoot = function(node) {
+AutomationPredicate.rootOrEditableRoot = function(node) {
   return AutomationPredicate.root(node) ||
-      node.state.richlyEditable && node.state.focused;
+      (node.state.richlyEditable && node.state.focused &&
+       node.children.length > 0);
 };
 
 /**
@@ -371,8 +423,23 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
   if (AutomationPredicate.structuralContainer(node))
     return true;
 
+  // Ignore nodes acting as labels for another control, that don't
+  // have actionable descendants.
+  if (!!node.labelFor && node.labelFor.length > 0 &&
+      !hasActionableDescendant(node))
+    return true;
+
+  // Similarly, ignore nodes acting as descriptions.
+  if (!!node.descriptionFor && node.descriptionFor.length > 0 &&
+      !hasActionableDescendant(node))
+    return true;
+
   // Don't ignore nodes with names or name-like attribute.
   if (node.name || node.value || node.description || node.url)
+    return false;
+
+  // Don't ignore math nodes.
+  if (AutomationPredicate.math(node))
     return false;
 
   // Ignore some roles.
@@ -390,8 +457,18 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
  */
 AutomationPredicate.checkable = AutomationPredicate.roles([
   Role.CHECK_BOX, Role.RADIO_BUTTON, Role.MENU_ITEM_CHECK_BOX,
-  Role.MENU_ITEM_RADIO, Role.TREE_ITEM
+  Role.MENU_ITEM_RADIO, Role.TOGGLE_BUTTON, Role.TREE_ITEM
 ]);
+
+/**
+ * Returns if the node is clickable.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.clickable = AutomationPredicate.match({
+  anyPredicate: [AutomationPredicate.button, AutomationPredicate.link],
+  anyAttribute: {clickable: true}
+});
 
 // Table related predicates.
 /**
@@ -499,8 +576,9 @@ AutomationPredicate.supportsImageData =
  * @return {boolean}
  */
 AutomationPredicate.contextualBraille = function(node) {
-  return node.parent != null && node.parent.role == Role.ROW &&
-      AutomationPredicate.cellLike(node);
+  return node.parent != null &&
+      ((node.parent.role == Role.ROW && AutomationPredicate.cellLike(node)) ||
+       (node.parent.role == Role.TREE && node.parent.state[State.HORIZONTAL]));
 };
 
 /**
@@ -510,6 +588,37 @@ AutomationPredicate.contextualBraille = function(node) {
  */
 AutomationPredicate.multiline = function(node) {
   return node.state[State.MULTILINE] || node.state[State.RICHLY_EDITABLE];
+};
+
+/**
+ * Matches against a node that should be auto-scrolled during navigation.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.autoScrollable = function(node) {
+  return node.scrollable &&
+      (node.role == Role.GRID || node.role == Role.LIST ||
+       node.role == Role.POP_UP_BUTTON || node.role == Role.SCROLL_VIEW);
+};
+
+/**
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.math = function(node) {
+  return node.role == Role.MATH || !!node.htmlAttributes['data-mathml'];
+};
+
+/**
+ * Matches against editable nodes, that should not be treated in the usual
+ * fashion.
+ * Instead, only output the contents around the selection in braille.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.shouldOnlyOutputSelectionChangeInBraille = function(node) {
+  return node.state[State.RICHLY_EDITABLE] && node.state[State.FOCUSED] &&
+      node.role == Role.LOG;
 };
 
 });  // goog.scope

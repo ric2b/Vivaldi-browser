@@ -17,6 +17,7 @@
 #include "components/gcm_driver/crypto/message_payload_parser.h"
 #include "components/gcm_driver/crypto/p256_key_util.h"
 #include "components/gcm_driver/crypto/proto/gcm_encryption_data.pb.h"
+#include "crypto/ec_private_key.h"
 
 namespace gcm {
 
@@ -61,13 +62,34 @@ void GCMEncryptionProvider::Init(
 void GCMEncryptionProvider::GetEncryptionInfo(
     const std::string& app_id,
     const std::string& authorized_entity,
-    const EncryptionInfoCallback& callback) {
+    EncryptionInfoCallback callback) {
   DCHECK(key_store_);
-  key_store_->GetKeys(app_id, authorized_entity,
-                      false /* fallback_to_empty_authorized_entity */,
-                      base::Bind(&GCMEncryptionProvider::DidGetEncryptionInfo,
-                                 weak_ptr_factory_.GetWeakPtr(), app_id,
-                                 authorized_entity, callback));
+  key_store_->GetKeys(
+      app_id, authorized_entity,
+      false /* fallback_to_empty_authorized_entity */,
+      base::BindOnce(&GCMEncryptionProvider::DidGetEncryptionInfo,
+                     weak_ptr_factory_.GetWeakPtr(), app_id, authorized_entity,
+                     std::move(callback)));
+}
+
+void GCMEncryptionProvider::DidGetEncryptionInfo(
+    const std::string& app_id,
+    const std::string& authorized_entity,
+    EncryptionInfoCallback callback,
+    std::unique_ptr<crypto::ECPrivateKey> key,
+    const std::string& auth_secret) {
+  if (!key) {
+    key_store_->CreateKeys(
+        app_id, authorized_entity,
+        base::BindOnce(&GCMEncryptionProvider::DidCreateEncryptionInfo,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    return;
+  }
+
+  std::string public_key;
+  const bool success = GetRawPublicKey(*key, &public_key);
+  DCHECK(success);
+  std::move(callback).Run(public_key, auth_secret);
 }
 
 void GCMEncryptionProvider::RemoveEncryptionInfo(
@@ -207,42 +229,26 @@ void GCMEncryptionProvider::DecryptMessage(
   key_store_->GetKeys(
       app_id, message.sender_id /* authorized_entity */,
       true /* fallback_to_empty_authorized_entity */,
-      base::Bind(&GCMEncryptionProvider::DecryptMessageWithKey,
-                 weak_ptr_factory_.GetWeakPtr(), message.collapse_key,
-                 message.sender_id, std::move(salt), std::move(public_key),
-                 record_size, std::move(ciphertext), version, callback));
-}
-
-void GCMEncryptionProvider::DidGetEncryptionInfo(
-    const std::string& app_id,
-    const std::string& authorized_entity,
-    const EncryptionInfoCallback& callback,
-    const KeyPair& pair,
-    const std::string& auth_secret) {
-  if (!pair.IsInitialized()) {
-    key_store_->CreateKeys(
-        app_id, authorized_entity,
-        base::Bind(&GCMEncryptionProvider::DidCreateEncryptionInfo,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
-    return;
-  }
-
-  DCHECK_EQ(KeyPair::ECDH_P256, pair.type());
-  callback.Run(pair.public_key(), auth_secret);
+      base::BindOnce(&GCMEncryptionProvider::DecryptMessageWithKey,
+                     weak_ptr_factory_.GetWeakPtr(), message.collapse_key,
+                     message.sender_id, std::move(salt), std::move(public_key),
+                     record_size, std::move(ciphertext), version, callback));
 }
 
 void GCMEncryptionProvider::DidCreateEncryptionInfo(
-    const EncryptionInfoCallback& callback,
-    const KeyPair& pair,
+    EncryptionInfoCallback callback,
+    std::unique_ptr<crypto::ECPrivateKey> key,
     const std::string& auth_secret) {
-  if (!pair.IsInitialized()) {
-    callback.Run(std::string() /* p256dh */,
-                 std::string() /* auth_secret */);
+  if (!key) {
+    std::move(callback).Run(std::string() /* p256dh */,
+                            std::string() /* auth_secret */);
     return;
   }
 
-  DCHECK_EQ(KeyPair::ECDH_P256, pair.type());
-  callback.Run(pair.public_key(), auth_secret);
+  std::string public_key;
+  const bool success = GetRawPublicKey(*key, &public_key);
+  DCHECK(success);
+  std::move(callback).Run(public_key, auth_secret);
 }
 
 void GCMEncryptionProvider::DecryptMessageWithKey(
@@ -254,19 +260,17 @@ void GCMEncryptionProvider::DecryptMessageWithKey(
     const std::string& ciphertext,
     GCMMessageCryptographer::Version version,
     const MessageCallback& callback,
-    const KeyPair& pair,
+    std::unique_ptr<crypto::ECPrivateKey> key,
     const std::string& auth_secret) {
-  if (!pair.IsInitialized()) {
+  if (!key) {
     DLOG(ERROR) << "Unable to retrieve the keys for the incoming message.";
     callback.Run(GCMDecryptionResult::NO_KEYS, IncomingMessage());
     return;
   }
 
-  DCHECK_EQ(KeyPair::ECDH_P256, pair.type());
 
   std::string shared_secret;
-  if (!ComputeSharedP256Secret(pair.private_key(), public_key,
-                               &shared_secret)) {
+  if (!ComputeSharedP256Secret(*key, public_key, &shared_secret)) {
     DLOG(ERROR) << "Unable to calculate the shared secret.";
     callback.Run(GCMDecryptionResult::INVALID_SHARED_SECRET, IncomingMessage());
     return;
@@ -276,7 +280,10 @@ void GCMEncryptionProvider::DecryptMessageWithKey(
 
   GCMMessageCryptographer cryptographer(version);
 
-  if (!cryptographer.Decrypt(pair.public_key(), public_key, shared_secret,
+  std::string exported_public_key;
+  const bool success = GetRawPublicKey(*key, &exported_public_key);
+  DCHECK(success);
+  if (!cryptographer.Decrypt(exported_public_key, public_key, shared_secret,
                              auth_secret, salt, ciphertext, record_size,
                              &plaintext)) {
     DLOG(ERROR) << "Unable to decrypt the incoming data.";

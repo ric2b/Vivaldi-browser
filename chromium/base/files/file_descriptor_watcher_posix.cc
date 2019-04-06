@@ -8,6 +8,8 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop_current.h"
+#include "base/message_loop/message_pump_for_io.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -41,10 +43,10 @@ FileDescriptorWatcher::Controller::~Controller() {
 }
 
 class FileDescriptorWatcher::Controller::Watcher
-    : public MessageLoopForIO::Watcher,
-      public MessageLoop::DestructionObserver {
+    : public MessagePumpForIO::FdWatcher,
+      public MessageLoopCurrent::DestructionObserver {
  public:
-  Watcher(WeakPtr<Controller> controller, MessageLoopForIO::Mode mode, int fd);
+  Watcher(WeakPtr<Controller> controller, MessagePumpForIO::Mode mode, int fd);
   ~Watcher() override;
 
   void StartWatching();
@@ -52,15 +54,15 @@ class FileDescriptorWatcher::Controller::Watcher
  private:
   friend class FileDescriptorWatcher;
 
-  // MessageLoopForIO::Watcher:
+  // MessagePumpForIO::FdWatcher:
   void OnFileCanReadWithoutBlocking(int fd) override;
   void OnFileCanWriteWithoutBlocking(int fd) override;
 
-  // MessageLoop::DestructionObserver:
+  // MessageLoopCurrent::DestructionObserver:
   void WillDestroyCurrentMessageLoop() override;
 
-  // Used to instruct the MessageLoopForIO to stop watching the file descriptor.
-  MessageLoopForIO::FileDescriptorWatcher file_descriptor_watcher_;
+  // The MessageLoopForIO's watch handle (stops the watch when destroyed).
+  MessagePumpForIO::FdWatchController fd_watch_controller_;
 
   // Runs tasks on the sequence on which this was instantiated (i.e. the
   // sequence on which the callback must run).
@@ -72,7 +74,7 @@ class FileDescriptorWatcher::Controller::Watcher
 
   // Whether this Watcher is notified when |fd_| becomes readable or writable
   // without blocking.
-  const MessageLoopForIO::Mode mode_;
+  const MessagePumpForIO::Mode mode_;
 
   // The watched file descriptor.
   const int fd_;
@@ -90,9 +92,9 @@ class FileDescriptorWatcher::Controller::Watcher
 
 FileDescriptorWatcher::Controller::Watcher::Watcher(
     WeakPtr<Controller> controller,
-    MessageLoopForIO::Mode mode,
+    MessagePumpForIO::Mode mode,
     int fd)
-    : file_descriptor_watcher_(FROM_HERE),
+    : fd_watch_controller_(FROM_HERE),
       controller_(controller),
       mode_(mode),
       fd_(fd) {
@@ -102,14 +104,14 @@ FileDescriptorWatcher::Controller::Watcher::Watcher(
 
 FileDescriptorWatcher::Controller::Watcher::~Watcher() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  MessageLoopForIO::current()->RemoveDestructionObserver(this);
+  MessageLoopCurrentForIO::Get()->RemoveDestructionObserver(this);
 }
 
 void FileDescriptorWatcher::Controller::Watcher::StartWatching() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (!MessageLoopForIO::current()->WatchFileDescriptor(
-          fd_, false, mode_, &file_descriptor_watcher_, this)) {
+  if (!MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+          fd_, false, mode_, &fd_watch_controller_, this)) {
     // TODO(wez): Ideally we would [D]CHECK here, or propagate the failure back
     // to the caller, but there is no guarantee that they haven't already
     // closed |fd_| on another thread, so the best we can do is Debug-log.
@@ -117,7 +119,7 @@ void FileDescriptorWatcher::Controller::Watcher::StartWatching() {
   }
 
   if (!registered_as_destruction_observer_) {
-    MessageLoopForIO::current()->AddDestructionObserver(this);
+    MessageLoopCurrentForIO::Get()->AddDestructionObserver(this);
     registered_as_destruction_observer_ = true;
   }
 }
@@ -125,7 +127,7 @@ void FileDescriptorWatcher::Controller::Watcher::StartWatching() {
 void FileDescriptorWatcher::Controller::Watcher::OnFileCanReadWithoutBlocking(
     int fd) {
   DCHECK_EQ(fd_, fd);
-  DCHECK_EQ(MessageLoopForIO::WATCH_READ, mode_);
+  DCHECK_EQ(MessagePumpForIO::WATCH_READ, mode_);
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Run the callback on the sequence on which the watch was initiated.
@@ -136,7 +138,7 @@ void FileDescriptorWatcher::Controller::Watcher::OnFileCanReadWithoutBlocking(
 void FileDescriptorWatcher::Controller::Watcher::OnFileCanWriteWithoutBlocking(
     int fd) {
   DCHECK_EQ(fd_, fd);
-  DCHECK_EQ(MessageLoopForIO::WATCH_WRITE, mode_);
+  DCHECK_EQ(MessagePumpForIO::WATCH_WRITE, mode_);
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Run the callback on the sequence on which the watch was initiated.
@@ -155,7 +157,7 @@ void FileDescriptorWatcher::Controller::Watcher::
   delete this;
 }
 
-FileDescriptorWatcher::Controller::Controller(MessageLoopForIO::Mode mode,
+FileDescriptorWatcher::Controller::Controller(MessagePumpForIO::Mode mode,
                                               int fd,
                                               const Closure& callback)
     : callback_(callback),
@@ -203,13 +205,13 @@ FileDescriptorWatcher::~FileDescriptorWatcher() {
 
 std::unique_ptr<FileDescriptorWatcher::Controller>
 FileDescriptorWatcher::WatchReadable(int fd, const Closure& callback) {
-  return WrapUnique(new Controller(MessageLoopForIO::WATCH_READ, fd, callback));
+  return WrapUnique(new Controller(MessagePumpForIO::WATCH_READ, fd, callback));
 }
 
 std::unique_ptr<FileDescriptorWatcher::Controller>
 FileDescriptorWatcher::WatchWritable(int fd, const Closure& callback) {
   return WrapUnique(
-      new Controller(MessageLoopForIO::WATCH_WRITE, fd, callback));
+      new Controller(MessagePumpForIO::WATCH_WRITE, fd, callback));
 }
 
 }  // namespace base

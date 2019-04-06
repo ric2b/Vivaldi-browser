@@ -10,25 +10,29 @@
 #include "chrome/renderer/extensions/file_browser_handler_custom_bindings.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/v8_helpers.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebDOMFileSystem.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_dom_file_system.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace extensions {
 
 FileManagerPrivateCustomBindings::FileManagerPrivateCustomBindings(
     ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction("GetFileSystem", "fileManagerPrivate",
-                base::Bind(&FileManagerPrivateCustomBindings::GetFileSystem,
-                           base::Unretained(this)));
-  RouteFunction(
+    : ObjectBackedNativeHandler(context) {}
+
+void FileManagerPrivateCustomBindings::AddRoutes() {
+  RouteHandlerFunction(
+      "GetFileSystem", "fileManagerPrivate",
+      base::Bind(&FileManagerPrivateCustomBindings::GetFileSystem,
+                 base::Unretained(this)));
+  RouteHandlerFunction(
       "GetExternalFileEntry", "fileManagerPrivate",
       base::Bind(&FileManagerPrivateCustomBindings::GetExternalFileEntry,
                  base::Unretained(this)));
-  RouteFunction("GetEntryURL", "fileManagerPrivate",
-                base::Bind(&FileManagerPrivateCustomBindings::GetEntryURL,
-                           base::Unretained(this)));
+  RouteHandlerFunction(
+      "GetEntryURL", "fileManagerPrivate",
+      base::Bind(&FileManagerPrivateCustomBindings::GetEntryURL,
+                 base::Unretained(this)));
 }
 
 void FileManagerPrivateCustomBindings::GetFileSystem(

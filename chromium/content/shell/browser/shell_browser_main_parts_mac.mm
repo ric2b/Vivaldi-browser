@@ -9,16 +9,12 @@
 #include "base/mac/bundle_locations.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
-#include "content/shell/browser/shell_application_mac.h"
 
 #include "app/vivaldi_apptools.h"
 
 namespace content {
 
 void ShellBrowserMainParts::PreMainMessageLoopStart() {
-  // Force the NSApplication subclass to be used.
-  [ShellCrApplication sharedApplication];
-
   if (vivaldi::IsVivaldiRunning()) {
     base::scoped_nsobject<NSNib> nib(
         [[NSNib alloc] initWithNibNamed:@"VivaldiMainMenu"

@@ -56,8 +56,8 @@ void MarkAttemptCompletedTaskTest::PumpLoop() {
 
 void MarkAttemptCompletedTaskTest::InitializeStore(RequestQueueStore* store) {
   store->Initialize(
-      base::Bind(&MarkAttemptCompletedTaskTest::InitializeStoreDone,
-                 base::Unretained(this)));
+      base::BindOnce(&MarkAttemptCompletedTaskTest::InitializeStoreDone,
+                     base::Unretained(this)));
   PumpLoop();
 }
 
@@ -67,9 +67,9 @@ void MarkAttemptCompletedTaskTest::AddStartedItemToStore(
   SavePageRequest request_1(kRequestId1, kUrl1, kClientId1, creation_time,
                             true);
   request_1.MarkAttemptStarted(base::Time::Now());
-  store->AddRequest(request_1,
-                    base::Bind(&MarkAttemptCompletedTaskTest::AddRequestDone,
-                               base::Unretained(this)));
+  store->AddRequest(
+      request_1, base::BindOnce(&MarkAttemptCompletedTaskTest::AddRequestDone,
+                                base::Unretained(this)));
   PumpLoop();
 }
 
@@ -92,9 +92,9 @@ TEST_F(MarkAttemptCompletedTaskTest, MarkAttemptCompletedWhenExists) {
   AddStartedItemToStore(&store);
 
   MarkAttemptCompletedTask task(
-      &store, kRequestId1,
-      base::Bind(&MarkAttemptCompletedTaskTest::ChangeRequestsStateCallback,
-                 base::Unretained(this)));
+      &store, kRequestId1, FailState::CANNOT_DOWNLOAD,
+      base::BindOnce(&MarkAttemptCompletedTaskTest::ChangeRequestsStateCallback,
+                     base::Unretained(this)));
 
   task.Run();
   PumpLoop();
@@ -116,9 +116,9 @@ TEST_F(MarkAttemptCompletedTaskTest, MarkAttemptCompletedWhenItemMissing) {
   AddStartedItemToStore(&store);
   // Try to mark request 2 (not in the store).
   MarkAttemptCompletedTask task(
-      &store, kRequestId2,
-      base::Bind(&MarkAttemptCompletedTaskTest::ChangeRequestsStateCallback,
-                 base::Unretained(this)));
+      &store, kRequestId2, FailState::CANNOT_DOWNLOAD,
+      base::BindOnce(&MarkAttemptCompletedTaskTest::ChangeRequestsStateCallback,
+                     base::Unretained(this)));
   task.Run();
   PumpLoop();
   ASSERT_TRUE(last_result());

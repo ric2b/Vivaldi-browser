@@ -7,9 +7,9 @@
 
 #include <string>
 
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "extensions/browser/extension_function.h"
 
 namespace extensions {
 
@@ -29,8 +29,7 @@ struct AXActionData;
 namespace extensions {
 
 // Implementation of the chrome.automation API.
-class AutomationInternalEnableTabFunction
-    : public ChromeUIThreadExtensionFunction {
+class AutomationInternalEnableTabFunction : public UIThreadExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("automationInternal.enableTab",
                              AUTOMATIONINTERNAL_ENABLETAB)
  protected:
@@ -57,7 +56,8 @@ class AutomationInternalPerformActionFunction
 
 class AutomationInternalEnableFrameFunction : public UIThreadExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("automationInternal.enableFrame",
-                             AUTOMATIONINTERNAL_PERFORMACTION)
+                             AUTOMATIONINTERNAL_ENABLEFRAME)
+
  protected:
   ~AutomationInternalEnableFrameFunction() override {}
 
@@ -77,7 +77,7 @@ class AutomationInternalEnableDesktopFunction
 class AutomationInternalQuerySelectorFunction
     : public UIThreadExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("automationInternal.querySelector",
-                             AUTOMATIONINTERNAL_ENABLEDESKTOP)
+                             AUTOMATIONINTERNAL_QUERYSELECTOR)
 
  public:
   typedef base::Callback<void(const std::string& error,

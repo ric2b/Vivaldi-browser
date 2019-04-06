@@ -4,15 +4,16 @@ kenrb@chromium.org
 # for *aura*
 per-file *aura*=sadrul@chromium.org
 
-# Windows.
-per-file *win*=ananta@chromium.org
-
 # for *mac*
 asvitkine@chromium.org
 
 # for GPU-related stuff in *mac*
 kbr@chromium.org
 ccameron@chromium.org
+
+# for *android*
+per-file *android*=ericrk@chromium.org
+per-file *android*=khushalsagar@chromium.org
 
 # For touch/gesture specific changes
 rjkroege@chromium.org
@@ -26,12 +27,13 @@ fsamuel@chromium.org
 per-file *delegated_frame*=fsamuel@chromium.org
 
 # WebSQL
-per-file database_*=jsbell@chromium.org
-per-file database_*=michaeln@chromium.org
+per-file web_database_*=jsbell@chromium.org
+per-file web_database_*=pwnall@chromium.org
 
-# Offscreen Canvas
-per-file offscreen_canvas*.*=xlai@chromium.org
-per-file offscreen_canvas*.*=xidachen@chromium.org
-per-file offscreen_canvas*.*=junov@chromium.org
+# Embedded Frame Sinks (eg. Offscreen Canvas)
+per-file embedded_frame_sink*.*=xlai@chromium.org
+per-file embedded_frame_sink*.*=xidachen@chromium.org
+per-file embedded_frame_sink*.*=junov@chromium.org
+per-file embedded_frame_sink*.*=kylechar@chromium.org
 
 # COMPONENT: Internals>Core

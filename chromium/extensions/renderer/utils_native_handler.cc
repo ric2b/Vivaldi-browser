@@ -6,18 +6,19 @@
 
 #include "base/macros.h"
 #include "extensions/renderer/script_context.h"
-#include "third_party/WebKit/public/web/WebSerializedScriptValue.h"
+#include "third_party/blink/public/web/web_serialized_script_value.h"
 
 namespace extensions {
 
 UtilsNativeHandler::UtilsNativeHandler(ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction(
-      "deepCopy",
-      base::Bind(&UtilsNativeHandler::DeepCopy, base::Unretained(this)));
-}
+    : ObjectBackedNativeHandler(context) {}
 
 UtilsNativeHandler::~UtilsNativeHandler() {}
+
+void UtilsNativeHandler::AddRoutes() {
+  RouteHandlerFunction("deepCopy", base::Bind(&UtilsNativeHandler::DeepCopy,
+                                              base::Unretained(this)));
+}
 
 void UtilsNativeHandler::DeepCopy(
     const v8::FunctionCallbackInfo<v8::Value>& args) {

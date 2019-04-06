@@ -3,11 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/run_loop.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
+#include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/api/runtime/runtime_api.h"
@@ -17,8 +16,11 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/test/result_catcher.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/url_constants.h"
+
+namespace extensions {
 
 // Tests the privileged components of chrome.runtime.
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ChromeRuntimePrivileged) {
@@ -47,8 +49,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ChromeRuntimeUninstallURL) {
                                 .AppendASCII("sets_uninstall_url")));
   ASSERT_TRUE(RunExtensionTest("runtime/uninstall_url")) << message_;
 }
-
-namespace extensions {
 
 namespace {
 
@@ -214,7 +214,14 @@ IN_PROC_BROWSER_TEST_F(RuntimeAPIUpdateTest,
     ASSERT_TRUE(extension_v1);
     EXPECT_TRUE(catcher.GetNextResult());
   }
+
   ASSERT_TRUE(CrashEnabledExtension(extension_id));
+
+  // The process-terminated notification may be received immediately before
+  // the task that will actually update the active-extensions count, so spin
+  // the message loop to ensure we are up-to-date.
+  base::RunLoop().RunUntilIdle();
+
   {
     // Update to version 2, expect runtime.onInstalled with
     // previousVersion = '1'.

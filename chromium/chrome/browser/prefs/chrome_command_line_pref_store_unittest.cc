@@ -13,9 +13,9 @@
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
-#include "components/ssl_config/ssl_config_prefs.h"
 #include "content/public/common/content_switches.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -49,7 +49,7 @@ class TestCommandLinePrefStore : public ChromeCommandLinePrefStore {
   void VerifySSLCipherSuites(const char* const* ciphers,
                              size_t cipher_count) {
     const base::Value* value = NULL;
-    ASSERT_TRUE(GetValue(ssl_config::prefs::kCipherSuiteBlacklist, &value));
+    ASSERT_TRUE(GetValue(prefs::kCipherSuiteBlacklist, &value));
     ASSERT_EQ(base::Value::Type::LIST, value->type());
     const base::ListValue* list_value =
         static_cast<const base::ListValue*>(value);
@@ -75,7 +75,7 @@ TEST(ChromeCommandLinePrefStoreTest, SimpleStringPref) {
       new ChromeCommandLinePrefStore(&cl);
 
   const base::Value* actual = NULL;
-  EXPECT_TRUE(store->GetValue(prefs::kApplicationLocale, &actual));
+  EXPECT_TRUE(store->GetValue(language::prefs::kApplicationLocale, &actual));
   std::string result;
   EXPECT_TRUE(actual->GetAsString(&result));
   EXPECT_EQ("hi-MOM", result);

@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/session/session_controller.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
@@ -18,7 +19,7 @@
 #include "ash/test_shell_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -130,6 +131,11 @@ void TrayUserTest::ClickUserItem(ui::test::EventGenerator* generator) {
 
 // Make sure that we show items for all users in the tray accordingly.
 TEST_F(TrayUserTest, CheckTrayItemSize) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   InitializeParameters(1, false);
   tray_user()->UpdateAfterLoginStatusChangeForTest(LoginStatus::GUEST);
   gfx::Size size = tray_user()->GetLayoutSizeForTest();
@@ -141,16 +147,21 @@ TEST_F(TrayUserTest, CheckTrayItemSize) {
 
 // Make sure that in single user mode the user panel cannot be activated.
 TEST_F(TrayUserTest, SingleUserModeDoesNotAllowAddingUser) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   InitializeParameters(1, false);
 
   // Move the mouse over the status area and click to open the status menu.
-  ui::test::EventGenerator& generator = GetEventGenerator();
+  ui::test::EventGenerator* generator = GetEventGenerator();
 
   EXPECT_FALSE(tray()->IsSystemBubbleVisible());
 
   EXPECT_EQ(TrayUser::HIDDEN, tray_user()->GetStateForTest());
 
-  ShowTrayMenu(&generator);
+  ShowTrayMenu(generator);
 
   EXPECT_TRUE(tray()->HasSystemBubble());
   EXPECT_TRUE(tray()->IsSystemBubbleVisible());
@@ -160,9 +171,14 @@ TEST_F(TrayUserTest, SingleUserModeDoesNotAllowAddingUser) {
 }
 
 TEST_F(TrayUserTest, AccessibleLabelContainsSingleUserInfo) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   InitializeParameters(1, false);
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  ShowTrayMenu(&generator);
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  ShowTrayMenu(generator);
 
   views::View* view =
       tray_user()->user_view_for_test()->user_card_view_for_test();
@@ -170,14 +186,19 @@ TEST_F(TrayUserTest, AccessibleLabelContainsSingleUserInfo) {
   view->GetAccessibleNodeData(&node_data);
   EXPECT_EQ(
       base::UTF8ToUTF16("Über tray Über tray Über tray Über tray First@tray"),
-      node_data.GetString16Attribute(ui::AX_ATTR_NAME));
-  EXPECT_EQ(ui::AX_ROLE_STATIC_TEXT, node_data.role);
+      node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
+  EXPECT_EQ(ax::mojom::Role::kStaticText, node_data.role);
 }
 
 TEST_F(TrayUserTest, AccessibleLabelContainsMultiUserInfo) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   InitializeParameters(1, true);
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  ShowTrayMenu(&generator);
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  ShowTrayMenu(generator);
 
   views::View* view =
       tray_user()->user_view_for_test()->user_card_view_for_test();
@@ -185,8 +206,8 @@ TEST_F(TrayUserTest, AccessibleLabelContainsMultiUserInfo) {
   view->GetAccessibleNodeData(&node_data);
   EXPECT_EQ(
       base::UTF8ToUTF16("Über tray Über tray Über tray Über tray First@tray"),
-      node_data.GetString16Attribute(ui::AX_ATTR_NAME));
-  EXPECT_EQ(ui::AX_ROLE_BUTTON, node_data.role);
+      node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
+  EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
 }
 
 // Make sure that in multi user mode the user panel can be activated and there
@@ -194,36 +215,41 @@ TEST_F(TrayUserTest, AccessibleLabelContainsMultiUserInfo) {
 // Note: the mouse watcher (for automatic closing upon leave) cannot be tested
 // here since it does not work with the event system in unit tests.
 TEST_F(TrayUserTest, MultiUserModeDoesNotAllowToAddUser) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   // Sign in more than one user.
   InitializeParameters(2, true);
 
   // Move the mouse over the status area and click to open the status menu.
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  generator.set_async(false);
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->set_async(false);
 
   // Verify that nothing is shown.
   EXPECT_FALSE(tray()->IsSystemBubbleVisible());
   EXPECT_FALSE(tray_user()->GetStateForTest());
   // After clicking on the tray the menu should get shown and for each logged
   // in user we should get a visible item.
-  ShowTrayMenu(&generator);
+  ShowTrayMenu(generator);
 
   EXPECT_TRUE(tray()->HasSystemBubble());
   EXPECT_TRUE(tray()->IsSystemBubbleVisible());
   EXPECT_EQ(TrayUser::SHOWN, tray_user()->GetStateForTest());
 
   // Move the mouse over the user item and it should hover.
-  MoveOverUserItem(&generator);
+  MoveOverUserItem(generator);
   EXPECT_EQ(TrayUser::HOVERED, tray_user()->GetStateForTest());
 
   // Check that clicking the button allows to add item if we have still room
   // for one more user.
-  ClickUserItem(&generator);
+  ClickUserItem(generator);
   EXPECT_EQ(TrayUser::ACTIVE, tray_user()->GetStateForTest());
 
   // Click the button again to see that the menu goes away.
-  ClickUserItem(&generator);
-  MoveOverUserItem(&generator);
+  ClickUserItem(generator);
+  MoveOverUserItem(generator);
   EXPECT_EQ(TrayUser::HOVERED, tray_user()->GetStateForTest());
 
   // Close and check that everything is deleted.
@@ -234,21 +260,26 @@ TEST_F(TrayUserTest, MultiUserModeDoesNotAllowToAddUser) {
 
 // Make sure that user changing gets properly executed.
 TEST_F(TrayUserTest, MultiUserModeButtonClicks) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   // Have two users.
   InitializeParameters(2, true);
-  ui::test::EventGenerator& generator = GetEventGenerator();
-  ShowTrayMenu(&generator);
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  ShowTrayMenu(generator);
 
   // Gets the second user before user switching.
   const mojom::UserSession* second_user = controller()->GetUserSession(1);
 
   // Switch to a new user "Second@tray" - which has a capitalized name.
-  ClickUserItem(&generator);
+  ClickUserItem(generator);
   gfx::Rect user_card_bounds = tray_user()->GetUserPanelBoundsInScreenForTest();
   gfx::Point second_user_point = user_card_bounds.CenterPoint() +
                                  gfx::Vector2d(0, user_card_bounds.height());
-  generator.MoveMouseTo(second_user_point);
-  generator.ClickLeftButton();
+  generator->MoveMouseTo(second_user_point);
+  generator->ClickLeftButton();
 
   // SwitchActiverUser is an async mojo call. Spin the loop to let it finish.
   RunAllPendingInMessageLoop();
@@ -265,6 +296,11 @@ TEST_F(TrayUserTest, MultiUserModeButtonClicks) {
 
 // Test SessionController updates avatar image.
 TEST_F(TrayUserTest, AvatarChange) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   InitializeParameters(1, false);
 
   // Expect empty avatar initially (that is how the test sets up).
@@ -274,7 +310,7 @@ TEST_F(TrayUserTest, AvatarChange) {
   const gfx::ImageSkia red_icon =
       CreateImageSkiaWithColor(kTrayItemSize, kTrayItemSize, SK_ColorRED);
   mojom::UserSessionPtr user = controller()->GetUserSession(0)->Clone();
-  user->user_info->avatar = red_icon;
+  user->user_info->avatar->image = red_icon;
   controller()->UpdateUserSession(std::move(user));
   EXPECT_TRUE(gfx::test::AreImagesEqual(
       gfx::Image(red_icon),

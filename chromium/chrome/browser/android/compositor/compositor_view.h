@@ -89,17 +89,16 @@ class CompositorView : public content::CompositorClient,
   // CompositorClient implementation:
   void UpdateLayerTreeHost() override;
   void DidSwapFrame(int pending_frames) override;
-  void DidSwapBuffers() override;
+  void DidSwapBuffers(const gfx::Size& swap_size) override;
   ui::UIResourceProvider* GetUIResourceProvider();
 
  private:
   ~CompositorView() override;
 
   // content::BrowserChildProcessObserver implementation:
-  void BrowserChildProcessHostDisconnected(
-      const content::ChildProcessData& data) override;
-  void BrowserChildProcessCrashed(const content::ChildProcessData& data,
-                                  int exit_code) override;
+  void BrowserChildProcessKilled(
+      const content::ChildProcessData& data,
+      const content::ChildProcessTerminationInfo& info) override;
 
   void SetBackground(bool visible, SkColor color);
 

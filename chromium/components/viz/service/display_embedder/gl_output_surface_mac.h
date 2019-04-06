@@ -12,10 +12,11 @@ namespace viz {
 
 class GLOutputSurfaceMac : public GLOutputSurfaceBufferQueue {
  public:
-  GLOutputSurfaceMac(scoped_refptr<InProcessContextProvider> context_provider,
+  GLOutputSurfaceMac(scoped_refptr<VizProcessContextProvider> context_provider,
                      gpu::SurfaceHandle surface_handle,
                      SyntheticBeginFrameSource* synthetic_begin_frame_source,
-                     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
+                     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+                     bool allow_overlays);
   ~GLOutputSurfaceMac() override;
 
  private:

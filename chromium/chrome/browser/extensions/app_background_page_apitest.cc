@@ -23,7 +23,7 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
@@ -47,16 +47,16 @@
 
 using extensions::Extension;
 
-class AppBackgroundPageApiTest : public ExtensionApiTest {
+class AppBackgroundPageApiTest : public extensions::ExtensionApiTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
+    extensions::ExtensionApiTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kDisablePopupBlocking);
     command_line->AppendSwitch(extensions::switches::kAllowHTTPBackgroundPage);
   }
 
   void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(StartEmbeddedTestServer());
   }
@@ -141,7 +141,7 @@ class AppBackgroundPageNaClTest : public AppBackgroundPageApiTest {
   void LaunchTestingApp() {
     base::ScopedAllowBlockingForTesting allow_blocking;
     base::FilePath app_dir;
-    PathService::Get(chrome::DIR_GEN_TEST_DATA, &app_dir);
+    base::PathService::Get(chrome::DIR_GEN_TEST_DATA, &app_dir);
     app_dir = app_dir.AppendASCII(
         "ppapi/tests/extensions/background_keepalive/newlib");
     extension_ = LoadExtension(app_dir);

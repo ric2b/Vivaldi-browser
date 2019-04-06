@@ -20,12 +20,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "build/build_config.h"
 #include "content/browser/bad_message.h"
+#include "content/common/frame_messages.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/file_chooser_params.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -35,7 +38,6 @@ class RenderFrameHost;
 class Shell;
 class SiteInstance;
 class ToRenderFrameHost;
-struct ScreenInfo;
 
 // Navigates the frame represented by |node| to |url|, blocking until the
 // navigation finishes.
@@ -47,6 +49,14 @@ void SetShouldProceedOnBeforeUnload(Shell* shell, bool proceed, bool success);
 
 // Extends the ToRenderFrameHost mechanism to FrameTreeNodes.
 RenderFrameHost* ConvertToRenderFrameHost(FrameTreeNode* frame_tree_node);
+
+// Helper function to navigate a window to a |url|, using a browser-initiated
+// navigation that will stay in the same BrowsingInstance.  Most
+// browser-initiated navigations swap BrowsingInstances, but some tests need a
+// navigation to swap processes for cross-site URLs (even outside of
+// --site-per-process) while staying in the same BrowsingInstance.
+WARN_UNUSED_RESULT bool NavigateToURLInSameBrowsingInstance(Shell* window,
+                                                            const GURL& url);
 
 // Creates compact textual representations of the state of the frame tree that
 // is appropriate for use in assertions.
@@ -183,47 +193,6 @@ class UrlCommitObserver : WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(UrlCommitObserver);
 };
 
-// Class to sniff incoming IPCs for FrameHostMsg_UpdateResizeParams messages.
-// This allows the message to continue to the target child so that processing
-// can be verified by tests.
-class UpdateResizeParamsMessageFilter : public content::BrowserMessageFilter {
- public:
-  UpdateResizeParamsMessageFilter();
-
-  gfx::Rect last_rect() const { return last_rect_; }
-
-  void WaitForRect();
-  void ResetRectRunLoop();
-
-  // Returns the new viz::FrameSinkId immediately if the IPC has been received.
-  // Otherwise this will block the UI thread until it has been received, then it
-  // will return the new viz::FrameSinkId.
-  viz::FrameSinkId GetOrWaitForId();
-
- protected:
-  ~UpdateResizeParamsMessageFilter() override;
-
- private:
-  void OnUpdateResizeParams(const gfx::Rect& screen_space_rect,
-                            const gfx::Size& local_frame_size,
-                            const ScreenInfo& screen_info,
-                            uint64_t sequence_number,
-                            const viz::SurfaceId& surface_id);
-  void OnUpdatedFrameRectOnUI(const gfx::Rect& rect);
-  void OnUpdatedFrameSinkIdOnUI();
-
-  bool OnMessageReceived(const IPC::Message& message) override;
-
-  viz::FrameSinkId frame_sink_id_;
-  base::RunLoop frame_sink_id_run_loop_;
-
-  std::unique_ptr<base::RunLoop> screen_space_rect_run_loop_;
-  bool screen_space_rect_received_;
-  gfx::Rect last_rect_;
-
-  DISALLOW_COPY_AND_ASSIGN(UpdateResizeParamsMessageFilter);
-};
-
 // Waits for a kill of the given RenderProcessHost and returns the
 // BadMessageReason that caused a //content-triggerred kill.
 //
@@ -249,6 +218,38 @@ class RenderProcessHostKillWaiter {
   base::HistogramTester histogram_tester_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderProcessHostKillWaiter);
+};
+
+class ShowWidgetMessageFilter : public content::BrowserMessageFilter {
+ public:
+  ShowWidgetMessageFilter();
+
+  bool OnMessageReceived(const IPC::Message& message) override;
+
+  gfx::Rect last_initial_rect() const { return initial_rect_; }
+
+  int last_routing_id() const { return routing_id_; }
+
+  void Wait();
+
+  void Reset();
+
+ private:
+  ~ShowWidgetMessageFilter() override;
+
+  void OnShowWidget(int route_id, const gfx::Rect& initial_rect);
+
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
+  void OnShowPopup(const FrameHostMsg_ShowPopup_Params& params);
+#endif
+
+  void OnShowWidgetOnUI(int route_id, const gfx::Rect& initial_rect);
+
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+  gfx::Rect initial_rect_;
+  int routing_id_ = MSG_ROUTING_NONE;
+
+  DISALLOW_COPY_AND_ASSIGN(ShowWidgetMessageFilter);
 };
 
 }  // namespace content

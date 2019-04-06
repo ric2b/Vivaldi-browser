@@ -12,7 +12,8 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
 #include "sql/connection.h"
@@ -26,66 +27,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/sqlite/sqlite3.h"
 
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-#include "base/ios/ios_util.h"
-#endif  // defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-
 namespace sql {
 namespace test {
-
-// Replaces the database time source with an object that steps forward 1ms on
-// each check, and which can be jumped forward an arbitrary amount of time
-// programmatically.
-class ScopedMockTimeSource {
- public:
-  ScopedMockTimeSource(Connection& db)
-      : db_(db),
-        delta_(base::TimeDelta::FromMilliseconds(1)) {
-    // Save the current source and replace it.
-    save_.swap(db_.clock_);
-    db_.clock_.reset(new MockTimeSource(*this));
-  }
-  ~ScopedMockTimeSource() {
-    // Put original source back.
-    db_.clock_.swap(save_);
-  }
-
-  void adjust(const base::TimeDelta& delta) {
-    current_time_ += delta;
-  }
-
- private:
-  class MockTimeSource : public TimeSource {
-   public:
-    MockTimeSource(ScopedMockTimeSource& owner)
-        : owner_(owner) {
-    }
-    ~MockTimeSource() override = default;
-
-    base::TimeTicks Now() override {
-      base::TimeTicks ret(owner_.current_time_);
-      owner_.current_time_ += owner_.delta_;
-      return ret;
-    }
-
-   private:
-    ScopedMockTimeSource& owner_;
-    DISALLOW_COPY_AND_ASSIGN(MockTimeSource);
-  };
-
-  Connection& db_;
-
-  // Saves original source from |db_|.
-  std::unique_ptr<TimeSource> save_;
-
-  // Current time returned by mock.
-  base::TimeTicks current_time_;
-
-  // How far to jump on each Now() call.
-  base::TimeDelta delta_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedMockTimeSource);
-};
 
 // Allow a test to add a SQLite function in a scoped context.
 class ScopedScalarFunction {
@@ -94,14 +37,14 @@ class ScopedScalarFunction {
       sql::Connection& db,
       const char* function_name,
       int args,
-      base::Callback<void(sqlite3_context*,int,sqlite3_value**)> cb)
-      : db_(db.db_), function_name_(function_name), cb_(cb) {
-    sqlite3_create_function_v2(db_, function_name, args, SQLITE_UTF8,
-                               this, &Run, NULL, NULL, NULL);
+      base::RepeatingCallback<void(sqlite3_context*, int, sqlite3_value**)> cb)
+      : db_(db.db_), function_name_(function_name), cb_(std::move(cb)) {
+    sqlite3_create_function_v2(db_, function_name, args, SQLITE_UTF8, this,
+                               &Run, nullptr, nullptr, nullptr);
   }
   ~ScopedScalarFunction() {
-    sqlite3_create_function_v2(db_, function_name_, 0, SQLITE_UTF8,
-                               NULL, NULL, NULL, NULL, NULL);
+    sqlite3_create_function_v2(db_, function_name_, 0, SQLITE_UTF8, nullptr,
+                               nullptr, nullptr, nullptr, nullptr);
   }
 
  private:
@@ -113,7 +56,7 @@ class ScopedScalarFunction {
 
   sqlite3* db_;
   const char* function_name_;
-  base::Callback<void(sqlite3_context*,int,sqlite3_value**)> cb_;
+  base::RepeatingCallback<void(sqlite3_context*, int, sqlite3_value**)> cb_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedScalarFunction);
 };
@@ -121,15 +64,11 @@ class ScopedScalarFunction {
 // Allow a test to add a SQLite commit hook in a scoped context.
 class ScopedCommitHook {
  public:
-  ScopedCommitHook(sql::Connection& db,
-                   base::Callback<int(void)> cb)
-      : db_(db.db_),
-        cb_(cb) {
+  ScopedCommitHook(sql::Connection& db, base::RepeatingCallback<int()> cb)
+      : db_(db.db_), cb_(std::move(cb)) {
     sqlite3_commit_hook(db_, &Run, this);
   }
-  ~ScopedCommitHook() {
-    sqlite3_commit_hook(db_, NULL, NULL);
-  }
+  ~ScopedCommitHook() { sqlite3_commit_hook(db_, nullptr, nullptr); }
 
  private:
   static int Run(void* p) {
@@ -138,7 +77,7 @@ class ScopedCommitHook {
   }
 
   sqlite3* db_;
-  base::Callback<int(void)> cb_;
+  base::RepeatingCallback<int(void)> cb_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedCommitHook);
 };
@@ -191,7 +130,7 @@ void ErrorCallbackSetHelper(sql::Connection* db,
                             int error, sql::Statement* stmt) {
   // The ref count should not go to zero when changing the callback.
   EXPECT_GT(*counter, 0u);
-  db->set_error_callback(base::Bind(&IgnoreErrorCallback));
+  db->set_error_callback(base::BindRepeating(&IgnoreErrorCallback));
   EXPECT_GT(*counter, 0u);
 }
 
@@ -232,18 +171,20 @@ class ScopedUmaskSetter {
 #endif  // defined(OS_POSIX)
 
 // SQLite function to adjust mock time by |argv[0]| milliseconds.
-void sqlite_adjust_millis(sql::test::ScopedMockTimeSource* time_mock,
+void sqlite_adjust_millis(base::SimpleTestTickClock* mock_clock,
                           sqlite3_context* context,
-                          int argc, sqlite3_value** argv) {
-  int64_t milliseconds = argc > 0 ? sqlite3_value_int64(argv[0]) : 1000;
-  time_mock->adjust(base::TimeDelta::FromMilliseconds(milliseconds));
+                          int argc,
+                          sqlite3_value** argv) {
+  CHECK_EQ(argc, 1);
+  int64_t milliseconds = sqlite3_value_int64(argv[0]);
+  mock_clock->Advance(base::TimeDelta::FromMilliseconds(milliseconds));
   sqlite3_result_int64(context, milliseconds);
 }
 
 // Adjust mock time by |milliseconds| on commit.
-int adjust_commit_hook(sql::test::ScopedMockTimeSource* time_mock,
+int adjust_commit_hook(base::SimpleTestTickClock* mock_clock,
                        int64_t milliseconds) {
-  time_mock->adjust(base::TimeDelta::FromMilliseconds(milliseconds));
+  mock_clock->Advance(base::TimeDelta::FromMilliseconds(milliseconds));
   return SQLITE_OK;
 }
 
@@ -278,35 +219,58 @@ TEST_F(SQLConnectionTest, ExecuteWithErrorCode) {
 }
 
 TEST_F(SQLConnectionTest, CachedStatement) {
-  sql::StatementID id1("foo", 12);
+  sql::StatementID id1 = SQL_FROM_HERE;
+  sql::StatementID id2 = SQL_FROM_HERE;
+  static const char kId1Sql[] = "SELECT a FROM foo";
+  static const char kId2Sql[] = "SELECT b FROM foo";
 
   ASSERT_TRUE(db().Execute("CREATE TABLE foo (a, b)"));
   ASSERT_TRUE(db().Execute("INSERT INTO foo(a, b) VALUES (12, 13)"));
 
-  // Create a new cached statement.
+  sqlite3_stmt* raw_id1_statement;
+  sqlite3_stmt* raw_id2_statement;
   {
-    sql::Statement s(db().GetCachedStatement(id1, "SELECT a FROM foo"));
-    ASSERT_TRUE(s.is_valid());
+    scoped_refptr<sql::Connection::StatementRef> ref_from_id1 =
+        db().GetCachedStatement(id1, kId1Sql);
+    raw_id1_statement = ref_from_id1->stmt();
 
-    ASSERT_TRUE(s.Step());
-    EXPECT_EQ(12, s.ColumnInt(0));
+    sql::Statement from_id1(std::move(ref_from_id1));
+    ASSERT_TRUE(from_id1.is_valid());
+    ASSERT_TRUE(from_id1.Step());
+    EXPECT_EQ(12, from_id1.ColumnInt(0));
+
+    scoped_refptr<sql::Connection::StatementRef> ref_from_id2 =
+        db().GetCachedStatement(id2, kId2Sql);
+    raw_id2_statement = ref_from_id2->stmt();
+    EXPECT_NE(raw_id1_statement, raw_id2_statement);
+
+    sql::Statement from_id2(std::move(ref_from_id2));
+    ASSERT_TRUE(from_id2.is_valid());
+    ASSERT_TRUE(from_id2.Step());
+    EXPECT_EQ(13, from_id2.ColumnInt(0));
   }
 
-  // The statement should be cached still.
-  EXPECT_TRUE(db().HasCachedStatement(id1));
-
   {
-    // Get the same statement using different SQL. This should ignore our
-    // SQL and use the cached one (so it will be valid).
-    sql::Statement s(db().GetCachedStatement(id1, "something invalid("));
-    ASSERT_TRUE(s.is_valid());
+    scoped_refptr<sql::Connection::StatementRef> ref_from_id1 =
+        db().GetCachedStatement(id1, kId1Sql);
+    EXPECT_EQ(raw_id1_statement, ref_from_id1->stmt())
+        << "statement was not cached";
 
-    ASSERT_TRUE(s.Step());
-    EXPECT_EQ(12, s.ColumnInt(0));
+    sql::Statement from_id1(std::move(ref_from_id1));
+    ASSERT_TRUE(from_id1.is_valid());
+    ASSERT_TRUE(from_id1.Step()) << "cached statement was not reset";
+    EXPECT_EQ(12, from_id1.ColumnInt(0));
+
+    scoped_refptr<sql::Connection::StatementRef> ref_from_id2 =
+        db().GetCachedStatement(id2, kId2Sql);
+    EXPECT_EQ(raw_id2_statement, ref_from_id2->stmt())
+        << "statement was not cached";
+
+    sql::Statement from_id2(std::move(ref_from_id2));
+    ASSERT_TRUE(from_id2.is_valid());
+    ASSERT_TRUE(from_id2.Step()) << "cached statement was not reset";
+    EXPECT_EQ(13, from_id2.ColumnInt(0));
   }
-
-  // Make sure other statements aren't marked as cached.
-  EXPECT_FALSE(db().HasCachedStatement(SQL_FROM_HERE));
 }
 
 TEST_F(SQLConnectionTest, IsSQLValidTest) {
@@ -315,30 +279,41 @@ TEST_F(SQLConnectionTest, IsSQLValidTest) {
   ASSERT_FALSE(db().IsSQLValid("SELECT no_exist FROM foo"));
 }
 
-TEST_F(SQLConnectionTest, DoesStuffExist) {
-  // Test DoesTableExist and DoesIndexExist.
+TEST_F(SQLConnectionTest, DoesTableExist) {
   EXPECT_FALSE(db().DoesTableExist("foo"));
-  ASSERT_TRUE(db().Execute("CREATE TABLE foo (a, b)"));
-  ASSERT_TRUE(db().Execute("CREATE INDEX foo_a ON foo (a)"));
-  EXPECT_FALSE(db().DoesIndexExist("foo"));
-  EXPECT_TRUE(db().DoesTableExist("foo"));
-  EXPECT_TRUE(db().DoesIndexExist("foo_a"));
-  EXPECT_FALSE(db().DoesTableExist("foo_a"));
+  EXPECT_FALSE(db().DoesTableExist("foo_index"));
 
-  // Test DoesViewExist.  The CREATE VIEW is an older form because some iOS
-  // versions use an earlier version of SQLite, and the difference isn't
-  // relevant for this test.
+  ASSERT_TRUE(db().Execute("CREATE TABLE foo (a, b)"));
+  ASSERT_TRUE(db().Execute("CREATE INDEX foo_index ON foo (a)"));
+  EXPECT_TRUE(db().DoesTableExist("foo"));
+  EXPECT_FALSE(db().DoesTableExist("foo_index"));
+}
+
+TEST_F(SQLConnectionTest, DoesIndexExist) {
+  ASSERT_TRUE(db().Execute("CREATE TABLE foo (a, b)"));
+  EXPECT_FALSE(db().DoesIndexExist("foo"));
+  EXPECT_FALSE(db().DoesIndexExist("foo_ubdex"));
+
+  ASSERT_TRUE(db().Execute("CREATE INDEX foo_index ON foo (a)"));
+  EXPECT_TRUE(db().DoesIndexExist("foo_index"));
+  EXPECT_FALSE(db().DoesIndexExist("foo"));
+}
+
+TEST_F(SQLConnectionTest, DoesViewExist) {
   EXPECT_FALSE(db().DoesViewExist("voo"));
-  ASSERT_TRUE(db().Execute("CREATE VIEW voo AS SELECT 1"));
+  ASSERT_TRUE(db().Execute("CREATE VIEW voo (a) AS SELECT 1"));
   EXPECT_FALSE(db().DoesIndexExist("voo"));
   EXPECT_FALSE(db().DoesTableExist("voo"));
   EXPECT_TRUE(db().DoesViewExist("voo"));
+}
 
-  // Test DoesColumnExist.
+TEST_F(SQLConnectionTest, DoesColumnExist) {
+  ASSERT_TRUE(db().Execute("CREATE TABLE foo (a, b)"));
+
   EXPECT_FALSE(db().DoesColumnExist("foo", "bar"));
   EXPECT_TRUE(db().DoesColumnExist("foo", "a"));
 
-  // Testing for a column on a nonexistent table.
+  ASSERT_FALSE(db().DoesTableExist("bar"));
   EXPECT_FALSE(db().DoesColumnExist("bar", "b"));
 
   // Names are not case sensitive.
@@ -418,7 +393,7 @@ TEST_F(SQLConnectionTest, ErrorCallback) {
   int error = SQLITE_OK;
   {
     sql::ScopedErrorCallback sec(
-        &db(), base::Bind(&sql::CaptureErrorCallback, &error));
+        &db(), base::BindRepeating(&sql::CaptureErrorCallback, &error));
     EXPECT_FALSE(db().Execute("INSERT INTO foo (id) VALUES (12)"));
 
     // Later versions of SQLite throw SQLITE_CONSTRAINT_UNIQUE.  The specific
@@ -436,7 +411,7 @@ TEST_F(SQLConnectionTest, ErrorCallback) {
     EXPECT_EQ(SQLITE_OK, error);
   }
 
-  // base::Bind() can curry arguments to be passed by const reference
+  // base::BindRepeating() can curry arguments to be passed by const reference
   // to the callback function.  If the callback function calls
   // re/set_error_callback(), the storage for those arguments can be
   // deleted while the callback function is still executing.
@@ -448,8 +423,8 @@ TEST_F(SQLConnectionTest, ErrorCallback) {
   {
     size_t count = 0;
     sql::ScopedErrorCallback sec(
-        &db(), base::Bind(&ErrorCallbackSetHelper,
-                          &db(), &count, RefCounter(&count)));
+        &db(), base::BindRepeating(&ErrorCallbackSetHelper, &db(), &count,
+                                   RefCounter(&count)));
 
     EXPECT_FALSE(db().Execute("INSERT INTO foo (id) VALUES (12)"));
   }
@@ -458,8 +433,8 @@ TEST_F(SQLConnectionTest, ErrorCallback) {
   {
     size_t count = 0;
     sql::ScopedErrorCallback sec(
-        &db(), base::Bind(&ErrorCallbackResetHelper,
-                          &db(), &count, RefCounter(&count)));
+        &db(), base::BindRepeating(&ErrorCallbackResetHelper, &db(), &count,
+                                   RefCounter(&count)));
 
     EXPECT_FALSE(db().Execute("INSERT INTO foo (id) VALUES (12)"));
   }
@@ -527,9 +502,9 @@ void TestPageSize(const base::FilePath& db_prefix,
                   const std::string& expected_initial_page_size,
                   int final_page_size,
                   const std::string& expected_final_page_size) {
-  const char kCreateSql[] = "CREATE TABLE x (t TEXT)";
-  const char kInsertSql1[] = "INSERT INTO x VALUES ('This is a test')";
-  const char kInsertSql2[] = "INSERT INTO x VALUES ('That was a test')";
+  static const char kCreateSql[] = "CREATE TABLE x (t TEXT)";
+  static const char kInsertSql1[] = "INSERT INTO x VALUES ('This is a test')";
+  static const char kInsertSql2[] = "INSERT INTO x VALUES ('That was a test')";
 
   const base::FilePath db_path = db_prefix.InsertBeforeExtensionASCII(
       base::IntToString(initial_page_size));
@@ -669,15 +644,7 @@ TEST_F(SQLConnectionTest, RazeNOTADB) {
   // statements that access the database.
   {
     sql::test::ScopedErrorExpecter expecter;
-
-    // Earlier versions of Chromium compiled against SQLite 3.6.7.3, which
-    // returned SQLITE_IOERR_SHORT_READ in this case.  Some platforms may still
-    // compile against an earlier SQLite via USE_SYSTEM_SQLITE.
-    if (expecter.SQLiteLibVersionNumber() < 3008005) {
-      expecter.ExpectError(SQLITE_IOERR_SHORT_READ);
-    } else {
-      expecter.ExpectError(SQLITE_NOTADB);
-    }
+    expecter.ExpectError(SQLITE_NOTADB);
 
     EXPECT_TRUE(db().Open(db_path()));
     ASSERT_TRUE(expecter.SawExpectedErrors());
@@ -740,9 +707,8 @@ TEST_F(SQLConnectionTest, RazeCallbackReopen) {
     ASSERT_TRUE(expecter.SawExpectedErrors());
   }
 
-  db().set_error_callback(base::Bind(&RazeErrorCallback,
-                                     &db(),
-                                     SQLITE_CORRUPT));
+  db().set_error_callback(
+      base::BindRepeating(&RazeErrorCallback, &db(), SQLITE_CORRUPT));
 
   // When the PRAGMA calls in Open() raise SQLITE_CORRUPT, the error
   // callback will call RazeAndClose().  Open() will then fail and be
@@ -917,7 +883,7 @@ TEST_F(SQLConnectionTest, Delete) {
 }
 
 // This test manually sets on disk permissions, these don't exist on Fuchsia.
-#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
+#if defined(OS_POSIX)
 // Test that set_restrict_to_user() trims database permissions so that
 // only the owner (and root) can read.
 TEST_F(SQLConnectionTest, UserPermission) {
@@ -981,7 +947,7 @@ TEST_F(SQLConnectionTest, UserPermission) {
   EXPECT_TRUE(base::GetPosixFilePermissions(journal, &mode));
   ASSERT_EQ((mode & base::FILE_PERMISSION_USER_MASK), mode);
 }
-#endif  // defined(OS_POSIX) && !defined(OS_FUCHSIA)
+#endif  // defined(OS_POSIX)
 
 // Test that errors start happening once Poison() is called.
 TEST_F(SQLConnectionTest, Poison) {
@@ -1021,9 +987,8 @@ TEST_F(SQLConnectionTest, Poison) {
   // Test that poisoning the database during a transaction works (with errors).
   // RazeErrorCallback() poisons the database, the extra COMMIT causes
   // CommitTransaction() to throw an error while commiting.
-  db().set_error_callback(base::Bind(&RazeErrorCallback,
-                                     &db(),
-                                     SQLITE_ERROR));
+  db().set_error_callback(
+      base::BindRepeating(&RazeErrorCallback, &db(), SQLITE_ERROR));
   db().Close();
   ASSERT_TRUE(db().Open(db_path()));
   EXPECT_TRUE(db().BeginTransaction());
@@ -1038,7 +1003,7 @@ TEST_F(SQLConnectionTest, AttachDatabase) {
   // Create a database to attach to.
   base::FilePath attach_path =
       db_path().DirName().AppendASCII("SQLConnectionAttach.db");
-  const char kAttachmentPoint[] = "other";
+  static const char kAttachmentPoint[] = "other";
   {
     sql::Connection other_db;
     ASSERT_TRUE(other_db.Open(attach_path));
@@ -1070,7 +1035,7 @@ TEST_F(SQLConnectionTest, AttachDatabaseWithOpenTransaction) {
   // Create a database to attach to.
   base::FilePath attach_path =
       db_path().DirName().AppendASCII("SQLConnectionAttach.db");
-  const char kAttachmentPoint[] = "other";
+  static const char kAttachmentPoint[] = "other";
   {
     sql::Connection other_db;
     ASSERT_TRUE(other_db.Open(attach_path));
@@ -1080,31 +1045,6 @@ TEST_F(SQLConnectionTest, AttachDatabaseWithOpenTransaction) {
 
   // Cannot see the attached database, yet.
   EXPECT_FALSE(db().IsSQLValid("SELECT count(*) from other.bar"));
-
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  // SQLite before 3.21 does not support ATTACH and DETACH in transactions.
-
-  // Attach fails in a transaction.
-  EXPECT_TRUE(db().BeginTransaction());
-  {
-    sql::test::ScopedErrorExpecter expecter;
-    expecter.ExpectError(SQLITE_ERROR);
-    EXPECT_FALSE(db().AttachDatabase(attach_path, kAttachmentPoint));
-    EXPECT_FALSE(db().IsSQLValid("SELECT count(*) from other.bar"));
-    ASSERT_TRUE(expecter.SawExpectedErrors());
-  }
-
-  // Detach also fails in a transaction.
-  {
-    sql::test::ScopedErrorExpecter expecter;
-    expecter.ExpectError(SQLITE_ERROR);
-    EXPECT_FALSE(db().DetachDatabase(kAttachmentPoint));
-    ASSERT_TRUE(expecter.SawExpectedErrors());
-  }
-
-  db().RollbackTransaction();
-#else   // defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  // Chrome's SQLite (3.21+) supports ATTACH and DETACH in transactions.
 
   // Attach succeeds in a transaction.
   EXPECT_TRUE(db().BeginTransaction());
@@ -1132,7 +1072,6 @@ TEST_F(SQLConnectionTest, AttachDatabaseWithOpenTransaction) {
   db().RollbackTransaction();
   EXPECT_TRUE(db().DetachDatabase(kAttachmentPoint));
   EXPECT_FALSE(db().IsSQLValid("SELECT count(*) from other.bar"));
-#endif  // defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
 }
 
 TEST_F(SQLConnectionTest, Basic_QuickIntegrityCheck) {
@@ -1189,8 +1128,8 @@ TEST_F(SQLConnectionTest, EventsExecute) {
   // Open() uses Execute() extensively, don't track those calls.
   base::HistogramTester tester;
 
-  const char kHistogramName[] = "Sqlite.Stats.Test";
-  const char kGlobalHistogramName[] = "Sqlite.Stats";
+  static const char kHistogramName[] = "Sqlite.Stats.Test";
+  static const char kGlobalHistogramName[] = "Sqlite.Stats";
 
   ASSERT_TRUE(db().BeginTransaction());
   const char* kCreateSql = "CREATE TABLE foo (id INTEGER PRIMARY KEY, value)";
@@ -1263,10 +1202,11 @@ TEST_F(SQLConnectionTest, EventsStatement) {
   db().set_histogram_tag("Test");
   ASSERT_TRUE(db().Open(db_path()));
 
-  const char kHistogramName[] = "Sqlite.Stats.Test";
-  const char kGlobalHistogramName[] = "Sqlite.Stats";
+  static const char kHistogramName[] = "Sqlite.Stats.Test";
+  static const char kGlobalHistogramName[] = "Sqlite.Stats";
 
-  const char* kCreateSql = "CREATE TABLE foo (id INTEGER PRIMARY KEY, value)";
+  static const char kCreateSql[] =
+      "CREATE TABLE foo (id INTEGER PRIMARY KEY, value)";
   EXPECT_TRUE(db().Execute(kCreateSql));
   EXPECT_TRUE(db().Execute("INSERT INTO foo VALUES (10, 'text')"));
   EXPECT_TRUE(db().Execute("INSERT INTO foo VALUES (11, 'text')"));
@@ -1328,14 +1268,18 @@ TEST_F(SQLConnectionTest, TimeQuery) {
   db().set_histogram_tag("Test");
   ASSERT_TRUE(db().OpenInMemory());
 
-  sql::test::ScopedMockTimeSource time_mock(db());
+  auto mock_clock = std::make_unique<base::SimpleTestTickClock>();
+  // Retaining the pointer is safe because the connection keeps it alive.
+  base::SimpleTestTickClock* mock_clock_ptr = mock_clock.get();
+  db().set_clock_for_testing(std::move(mock_clock));
 
   const char* kCreateSql = "CREATE TABLE foo (id INTEGER PRIMARY KEY, value)";
   EXPECT_TRUE(db().Execute(kCreateSql));
 
   // Function to inject pauses into statements.
   sql::test::ScopedScalarFunction scoper(
-      db(), "milliadjust", 1, base::Bind(&sqlite_adjust_millis, &time_mock));
+      db(), "milliadjust", 1,
+      base::BindRepeating(&sqlite_adjust_millis, mock_clock_ptr));
 
   base::HistogramTester tester;
 
@@ -1344,8 +1288,7 @@ TEST_F(SQLConnectionTest, TimeQuery) {
   std::unique_ptr<base::HistogramSamples> samples(
       tester.GetHistogramSamplesSinceCreation(kQueryTime));
   ASSERT_TRUE(samples);
-  // 10 for the adjust, 1 for the measurement.
-  EXPECT_EQ(11, samples->sum());
+  EXPECT_EQ(10, samples->sum());
 
   samples = tester.GetHistogramSamplesSinceCreation(kUpdateTime);
   EXPECT_EQ(0, samples->sum());
@@ -1366,14 +1309,18 @@ TEST_F(SQLConnectionTest, TimeUpdateAutocommit) {
   db().set_histogram_tag("Test");
   ASSERT_TRUE(db().OpenInMemory());
 
-  sql::test::ScopedMockTimeSource time_mock(db());
+  auto mock_clock = std::make_unique<base::SimpleTestTickClock>();
+  // Retaining the pointer is safe because the connection keeps it alive.
+  base::SimpleTestTickClock* mock_clock_ptr = mock_clock.get();
+  db().set_clock_for_testing(std::move(mock_clock));
 
   const char* kCreateSql = "CREATE TABLE foo (id INTEGER PRIMARY KEY, value)";
   EXPECT_TRUE(db().Execute(kCreateSql));
 
   // Function to inject pauses into statements.
   sql::test::ScopedScalarFunction scoper(
-      db(), "milliadjust", 1, base::Bind(&sqlite_adjust_millis, &time_mock));
+      db(), "milliadjust", 1,
+      base::BindRepeating(&sqlite_adjust_millis, mock_clock_ptr));
 
   base::HistogramTester tester;
 
@@ -1382,21 +1329,18 @@ TEST_F(SQLConnectionTest, TimeUpdateAutocommit) {
   std::unique_ptr<base::HistogramSamples> samples(
       tester.GetHistogramSamplesSinceCreation(kQueryTime));
   ASSERT_TRUE(samples);
-  // 10 for the adjust, 1 for the measurement.
-  EXPECT_EQ(11, samples->sum());
+  EXPECT_EQ(10, samples->sum());
 
   samples = tester.GetHistogramSamplesSinceCreation(kUpdateTime);
   ASSERT_TRUE(samples);
-  // 10 for the adjust, 1 for the measurement.
-  EXPECT_EQ(11, samples->sum());
+  EXPECT_EQ(10, samples->sum());
 
   samples = tester.GetHistogramSamplesSinceCreation(kCommitTime);
   EXPECT_EQ(0, samples->sum());
 
   samples = tester.GetHistogramSamplesSinceCreation(kAutoCommitTime);
   ASSERT_TRUE(samples);
-  // 10 for the adjust, 1 for the measurement.
-  EXPECT_EQ(11, samples->sum());
+  EXPECT_EQ(10, samples->sum());
 }
 
 // Update with explicit transaction allocates time to QueryTime, UpdateTime, and
@@ -1408,46 +1352,46 @@ TEST_F(SQLConnectionTest, TimeUpdateTransaction) {
   db().set_histogram_tag("Test");
   ASSERT_TRUE(db().OpenInMemory());
 
-  sql::test::ScopedMockTimeSource time_mock(db());
+  auto mock_clock = std::make_unique<base::SimpleTestTickClock>();
+  // Retaining the pointer is safe because the connection keeps it alive.
+  base::SimpleTestTickClock* mock_clock_ptr = mock_clock.get();
+  db().set_clock_for_testing(std::move(mock_clock));
 
   const char* kCreateSql = "CREATE TABLE foo (id INTEGER PRIMARY KEY, value)";
   EXPECT_TRUE(db().Execute(kCreateSql));
 
   // Function to inject pauses into statements.
   sql::test::ScopedScalarFunction scoper(
-      db(), "milliadjust", 1, base::Bind(&sqlite_adjust_millis, &time_mock));
+      db(), "milliadjust", 1,
+      base::BindRepeating(&sqlite_adjust_millis, mock_clock_ptr));
 
   base::HistogramTester tester;
 
   {
     // Make the commit slow.
     sql::test::ScopedCommitHook scoped_hook(
-        db(), base::Bind(adjust_commit_hook, &time_mock, 100));
+        db(), base::BindRepeating(adjust_commit_hook, mock_clock_ptr, 1000));
     ASSERT_TRUE(db().BeginTransaction());
     EXPECT_TRUE(db().Execute(
         "INSERT INTO foo VALUES (11, milliadjust(10))"));
-    EXPECT_TRUE(db().Execute(
-        "UPDATE foo SET value = milliadjust(10) WHERE id = 11"));
+    EXPECT_TRUE(
+        db().Execute("UPDATE foo SET value = milliadjust(100) WHERE id = 11"));
     EXPECT_TRUE(db().CommitTransaction());
   }
 
   std::unique_ptr<base::HistogramSamples> samples(
       tester.GetHistogramSamplesSinceCreation(kQueryTime));
   ASSERT_TRUE(samples);
-  // 10 for insert adjust, 10 for update adjust, 100 for commit adjust, 1 for
-  // measuring each of BEGIN, INSERT, UPDATE, and COMMIT.
-  EXPECT_EQ(124, samples->sum());
+  // 10 for insert, 100 for update, 1000 for commit
+  EXPECT_EQ(1110, samples->sum());
 
   samples = tester.GetHistogramSamplesSinceCreation(kUpdateTime);
   ASSERT_TRUE(samples);
-  // 10 for insert adjust, 10 for update adjust, 100 for commit adjust, 1 for
-  // measuring each of INSERT, UPDATE, and COMMIT.
-  EXPECT_EQ(123, samples->sum());
+  EXPECT_EQ(1110, samples->sum());
 
   samples = tester.GetHistogramSamplesSinceCreation(kCommitTime);
   ASSERT_TRUE(samples);
-  // 100 for commit adjust, 1 for measuring COMMIT.
-  EXPECT_EQ(101, samples->sum());
+  EXPECT_EQ(1000, samples->sum());
 
   samples = tester.GetHistogramSamplesSinceCreation(kAutoCommitTime);
   EXPECT_EQ(0, samples->sum());
@@ -1456,7 +1400,7 @@ TEST_F(SQLConnectionTest, TimeUpdateTransaction) {
 TEST_F(SQLConnectionTest, OnMemoryDump) {
   base::trace_event::MemoryDumpArgs args = {
       base::trace_event::MemoryDumpLevelOfDetail::DETAILED};
-  base::trace_event::ProcessMemoryDump pmd(nullptr, args);
+  base::trace_event::ProcessMemoryDump pmd(args);
   ASSERT_TRUE(db().memory_dump_provider_->OnMemoryDump(args, &pmd));
   EXPECT_GE(pmd.allocator_dumps().size(), 1u);
 }
@@ -1478,7 +1422,7 @@ TEST_F(SQLConnectionTest, CollectDiagnosticInfo) {
 
   // Some other error doesn't include the statment.
   // TODO(shess): This is weak.
-  const std::string full_info = db().CollectErrorInfo(SQLITE_FULL, NULL);
+  const std::string full_info = db().CollectErrorInfo(SQLITE_FULL, nullptr);
   EXPECT_EQ(std::string::npos, full_info.find(kSimpleSql));
 
   // A table to see in the SQLITE_ERROR results.
@@ -1533,10 +1477,8 @@ TEST_F(SQLConnectionTest, RegisterIntentToUpload) {
 TEST_F(SQLConnectionTest, MmapInitiallyEnabled) {
   {
     sql::Statement s(db().GetUniqueStatement("PRAGMA mmap_size"));
-
-    // SQLite doesn't have mmap support (perhaps an early iOS release).
-    if (!s.Step())
-      return;
+    ASSERT_TRUE(s.Step())
+        << "All supported SQLite versions should have mmap support";
 
     // If mmap I/O is not on, attempt to turn it on.  If that succeeds, then
     // Open() should have turned it on.  If mmap support is disabled, 0 is
@@ -1569,10 +1511,8 @@ TEST_F(SQLConnectionTest, MmapInitiallyEnabledAltStatus) {
 
   {
     sql::Statement s(db().GetUniqueStatement("PRAGMA mmap_size"));
-
-    // SQLite doesn't have mmap support (perhaps an early iOS release).
-    if (!s.Step())
-      return;
+    ASSERT_TRUE(s.Step())
+        << "All supported SQLite versions should have mmap support";
 
     // If mmap I/O is not on, attempt to turn it on.  If that succeeds, then
     // Open() should have turned it on.  If mmap support is disabled, 0 is
@@ -1595,14 +1535,6 @@ TEST_F(SQLConnectionTest, MmapInitiallyEnabledAltStatus) {
 }
 
 TEST_F(SQLConnectionTest, GetAppropriateMmapSize) {
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  // Mmap is not supported on iOS9.
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    ASSERT_EQ(0UL, db().GetAppropriateMmapSize());
-    return;
-  }
-#endif  // defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-
   const size_t kMmapAlot = 25 * 1024 * 1024;
   int64_t mmap_status = MetaTable::kMmapFailure;
 
@@ -1646,15 +1578,6 @@ TEST_F(SQLConnectionTest, GetAppropriateMmapSize) {
 }
 
 TEST_F(SQLConnectionTest, GetAppropriateMmapSizeAltStatus) {
-#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-  // Mmap is not supported on iOS9.  Make sure that test takes precedence.
-  if (!base::ios::IsRunningOnIOS10OrLater()) {
-    db().set_mmap_alt_status();
-    ASSERT_EQ(0UL, db().GetAppropriateMmapSize());
-    return;
-  }
-#endif  // defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
-
   const size_t kMmapAlot = 25 * 1024 * 1024;
 
   // At this point, Connection still expects a future [meta] table.
@@ -1697,7 +1620,7 @@ TEST_F(SQLConnectionTest, CompileError) {
   // DEATH tests not supported on Android, iOS, or Fuchsia.
 #if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_FUCHSIA)
   if (DLOG_IS_ON(FATAL)) {
-    db().set_error_callback(base::Bind(&IgnoreErrorCallback));
+    db().set_error_callback(base::BindRepeating(&IgnoreErrorCallback));
     ASSERT_DEATH({
         db().GetUniqueStatement("SELECT x");
       }, "SQL compile error no such column: x");

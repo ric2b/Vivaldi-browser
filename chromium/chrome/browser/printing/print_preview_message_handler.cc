@@ -24,8 +24,11 @@
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print_messages.h"
-#include "components/printing/service/public/cpp/pdf_service_mojo_utils.h"
+#include "components/services/pdf_compositor/public/cpp/pdf_service_mojo_types.h"
+#include "components/services/pdf_compositor/public/cpp/pdf_service_mojo_utils.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "printing/page_size_margins.h"
@@ -55,19 +58,17 @@ void StopWorker(int document_cookie) {
   }
 }
 
-scoped_refptr<base::RefCountedBytes> GetDataFromHandle(
+scoped_refptr<base::RefCountedMemory> GetDataFromHandle(
     base::SharedMemoryHandle handle,
     uint32_t data_size) {
-  std::unique_ptr<base::SharedMemory> shared_buf(
-      new base::SharedMemory(handle, true));
+  auto shared_buf = std::make_unique<base::SharedMemory>(handle, true);
   if (!shared_buf->Map(data_size)) {
     NOTREACHED();
     return nullptr;
   }
 
-  unsigned char* data_begin = static_cast<unsigned char*>(shared_buf->memory());
-  std::vector<unsigned char> data(data_begin, data_begin + data_size);
-  return base::RefCountedBytes::TakeVector(&data);
+  return base::MakeRefCounted<base::RefCountedSharedMemory>(
+      std::move(shared_buf), data_size);
 }
 
 }  // namespace
@@ -89,11 +90,15 @@ WebContents* PrintPreviewMessageHandler::GetPrintPreviewDialog() {
   return dialog_controller->GetPrintPreviewForContents(web_contents());
 }
 
-PrintPreviewUI* PrintPreviewMessageHandler::GetPrintPreviewUI() {
+PrintPreviewUI* PrintPreviewMessageHandler::GetPrintPreviewUI(
+    int preview_ui_id) {
   WebContents* dialog = GetPrintPreviewDialog();
   if (!dialog || !dialog->GetWebUI())
     return nullptr;
-  return static_cast<PrintPreviewUI*>(dialog->GetWebUI()->GetController());
+  PrintPreviewUI* preview_ui =
+      static_cast<PrintPreviewUI*>(dialog->GetWebUI()->GetController());
+  return preview_ui->GetIDForPrintPreviewUI() == preview_ui_id ? preview_ui
+                                                               : nullptr;
 }
 
 void PrintPreviewMessageHandler::OnRequestPrintPreview(
@@ -108,29 +113,31 @@ void PrintPreviewMessageHandler::OnRequestPrintPreview(
 }
 
 void PrintPreviewMessageHandler::OnDidGetPreviewPageCount(
-    const PrintHostMsg_DidGetPreviewPageCount_Params& params) {
+    const PrintHostMsg_DidGetPreviewPageCount_Params& params,
+    const PrintHostMsg_PreviewIds& ids) {
   if (params.page_count <= 0) {
     NOTREACHED();
     return;
   }
 
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
 
-  if (params.clear_preview_data)
-    print_preview_ui->ClearAllPreviewData();
-
-  print_preview_ui->OnDidGetPreviewPageCount(params);
+  print_preview_ui->ClearAllPreviewData();
+  print_preview_ui->OnDidGetPreviewPageCount(params, ids.request_id);
 }
 
 void PrintPreviewMessageHandler::OnDidPreviewPage(
-    const PrintHostMsg_DidPreviewPage_Params& params) {
+    content::RenderFrameHost* render_frame_host,
+    const PrintHostMsg_DidPreviewPage_Params& params,
+    const PrintHostMsg_PreviewIds& ids) {
   int page_number = params.page_number;
-  if (page_number < FIRST_PAGE_INDEX || !params.data_size)
+  const PrintHostMsg_DidPrintContent_Params& content = params.content;
+  if (page_number < FIRST_PAGE_INDEX || !content.data_size)
     return;
 
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
 
@@ -139,20 +146,24 @@ void PrintPreviewMessageHandler::OnDidPreviewPage(
     DCHECK(client);
 
     // Use utility process to convert skia metafile to pdf.
-    client->DoComposite(
-        params.metafile_data_handle, params.data_size,
+    client->DoCompositePageToPdf(
+        params.document_cookie, render_frame_host, params.page_number,
+        content.metafile_data_handle, content.data_size,
+        content.subframe_content_info,
         base::BindOnce(&PrintPreviewMessageHandler::OnCompositePdfPageDone,
                        weak_ptr_factory_.GetWeakPtr(), params.page_number,
-                       params.preview_request_id));
+                       ids));
   } else {
     NotifyUIPreviewPageReady(
-        page_number, params.preview_request_id,
-        GetDataFromHandle(params.metafile_data_handle, params.data_size));
+        page_number, ids,
+        GetDataFromHandle(content.metafile_data_handle, content.data_size));
   }
 }
 
 void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
-    const PrintHostMsg_DidPreviewDocument_Params& params) {
+    content::RenderFrameHost* render_frame_host,
+    const PrintHostMsg_DidPreviewDocument_Params& params,
+    const PrintHostMsg_PreviewIds& ids) {
   // Always try to stop the worker.
   StopWorker(params.document_cookie);
 
@@ -161,129 +172,150 @@ void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
     return;
   }
 
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
 
+  const PrintHostMsg_DidPrintContent_Params& content = params.content;
   if (IsOopifEnabled() && print_preview_ui->source_is_modifiable()) {
     auto* client = PrintCompositeClient::FromWebContents(web_contents());
     DCHECK(client);
 
-    client->DoComposite(
-        params.metafile_data_handle, params.data_size,
+    client->DoCompositeDocumentToPdf(
+        params.document_cookie, render_frame_host, content.metafile_data_handle,
+        content.data_size, content.subframe_content_info,
         base::BindOnce(&PrintPreviewMessageHandler::OnCompositePdfDocumentDone,
                        weak_ptr_factory_.GetWeakPtr(),
-                       params.expected_pages_count, params.preview_request_id));
+                       params.expected_pages_count, ids));
   } else {
     NotifyUIPreviewDocumentReady(
-        params.expected_pages_count, params.preview_request_id,
-        GetDataFromHandle(params.metafile_data_handle, params.data_size));
+        params.expected_pages_count, ids,
+        GetDataFromHandle(content.metafile_data_handle, content.data_size));
   }
 }
 
-void PrintPreviewMessageHandler::OnPrintPreviewFailed(int document_cookie) {
+void PrintPreviewMessageHandler::OnPrintPreviewFailed(
+    int document_cookie,
+    const PrintHostMsg_PreviewIds& ids) {
   StopWorker(document_cookie);
 
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
-  print_preview_ui->OnPrintPreviewFailed();
+  print_preview_ui->OnPrintPreviewFailed(ids.request_id);
 }
 
 void PrintPreviewMessageHandler::OnDidGetDefaultPageLayout(
     const PageSizeMargins& page_layout_in_points,
     const gfx::Rect& printable_area_in_points,
-    bool has_custom_page_size_style) {
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+    bool has_custom_page_size_style,
+    const PrintHostMsg_PreviewIds& ids) {
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
-  print_preview_ui->OnDidGetDefaultPageLayout(page_layout_in_points,
-                                              printable_area_in_points,
-                                              has_custom_page_size_style);
+
+  print_preview_ui->OnDidGetDefaultPageLayout(
+      page_layout_in_points, printable_area_in_points,
+      has_custom_page_size_style, ids.request_id);
 }
 
-void PrintPreviewMessageHandler::OnPrintPreviewCancelled(int document_cookie) {
+void PrintPreviewMessageHandler::OnPrintPreviewCancelled(
+    int document_cookie,
+    const PrintHostMsg_PreviewIds& ids) {
   // Always need to stop the worker.
   StopWorker(document_cookie);
 
   // Notify UI
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
-  print_preview_ui->OnPrintPreviewCancelled();
+  print_preview_ui->OnPrintPreviewCancelled(ids.request_id);
 }
 
-void PrintPreviewMessageHandler::OnInvalidPrinterSettings(int document_cookie) {
+void PrintPreviewMessageHandler::OnInvalidPrinterSettings(
+    int document_cookie,
+    const PrintHostMsg_PreviewIds& ids) {
   StopWorker(document_cookie);
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
-  print_preview_ui->OnInvalidPrinterSettings();
+  print_preview_ui->OnInvalidPrinterSettings(ids.request_id);
 }
 
 void PrintPreviewMessageHandler::OnSetOptionsFromDocument(
-    const PrintHostMsg_SetOptionsFromDocument_Params& params) {
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+    const PrintHostMsg_SetOptionsFromDocument_Params& params,
+    const PrintHostMsg_PreviewIds& ids) {
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
-  print_preview_ui->OnSetOptionsFromDocument(params);
+  print_preview_ui->OnSetOptionsFromDocument(params, ids.request_id);
 }
 
 void PrintPreviewMessageHandler::NotifyUIPreviewPageReady(
     int page_number,
-    int request_id,
-    scoped_refptr<base::RefCountedBytes> data_bytes) {
+    const PrintHostMsg_PreviewIds& ids,
+    scoped_refptr<base::RefCountedMemory> data_bytes) {
   DCHECK(data_bytes);
 
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
+
+  // Don't bother notifying the UI if this request has been cancelled already.
+  bool cancel = false;
+  PrintPreviewUI::GetCurrentPrintPreviewStatus(ids, &cancel);
+  if (cancel)
+    return;
+
   print_preview_ui->SetPrintPreviewDataForIndex(page_number,
                                                 std::move(data_bytes));
-  print_preview_ui->OnDidPreviewPage(page_number, request_id);
+  print_preview_ui->OnDidPreviewPage(page_number, ids.request_id);
 }
 
 void PrintPreviewMessageHandler::NotifyUIPreviewDocumentReady(
     int page_count,
-    int request_id,
-    scoped_refptr<base::RefCountedBytes> data_bytes) {
+    const PrintHostMsg_PreviewIds& ids,
+    scoped_refptr<base::RefCountedMemory> data_bytes) {
   if (!data_bytes || !data_bytes->size())
     return;
 
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI();
+  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
   if (!print_preview_ui)
     return;
+
   print_preview_ui->SetPrintPreviewDataForIndex(COMPLETE_PREVIEW_DOCUMENT_INDEX,
                                                 std::move(data_bytes));
-  print_preview_ui->OnPreviewDataIsAvailable(page_count, request_id);
+  print_preview_ui->OnPreviewDataIsAvailable(page_count, ids.request_id);
 }
 
 void PrintPreviewMessageHandler::OnCompositePdfPageDone(
     int page_number,
-    int request_id,
+    const PrintHostMsg_PreviewIds& ids,
     mojom::PdfCompositor::Status status,
-    mojo::ScopedSharedBufferHandle handle) {
+    base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (status != mojom::PdfCompositor::Status::SUCCESS) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
     return;
   }
-  NotifyUIPreviewPageReady(page_number, request_id,
-                           GetDataFromMojoHandle(std::move(handle)));
+  NotifyUIPreviewPageReady(
+      page_number, ids,
+      base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
 }
 
 void PrintPreviewMessageHandler::OnCompositePdfDocumentDone(
     int page_count,
-    int request_id,
+    const PrintHostMsg_PreviewIds& ids,
     mojom::PdfCompositor::Status status,
-    mojo::ScopedSharedBufferHandle handle) {
+    base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (status != mojom::PdfCompositor::Status::SUCCESS) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
     return;
   }
-  NotifyUIPreviewDocumentReady(page_count, request_id,
-                               GetDataFromMojoHandle(std::move(handle)));
+  NotifyUIPreviewDocumentReady(
+      page_count, ids,
+      base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
 }
 
 bool PrintPreviewMessageHandler::OnMessageReceived(
@@ -294,6 +326,9 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
                                    render_frame_host)
     IPC_MESSAGE_HANDLER(PrintHostMsg_RequestPrintPreview,
                         OnRequestPrintPreview)
+    IPC_MESSAGE_HANDLER(PrintHostMsg_DidPreviewPage, OnDidPreviewPage)
+    IPC_MESSAGE_HANDLER(PrintHostMsg_MetafileReadyForPrinting,
+                        OnMetafileReadyForPrinting)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   if (handled)
@@ -303,9 +338,6 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(PrintPreviewMessageHandler, message)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPreviewPageCount,
                         OnDidGetPreviewPageCount)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidPreviewPage, OnDidPreviewPage)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_MetafileReadyForPrinting,
-                        OnMetafileReadyForPrinting)
     IPC_MESSAGE_HANDLER(PrintHostMsg_PrintPreviewFailed,
                         OnPrintPreviewFailed)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetDefaultPageLayout,

@@ -4,9 +4,12 @@
 
 #include "chrome/browser/offline_pages/android/cct_request_observer.h"
 
+#include <utility>
+
 #include "base/android/callback_android.h"
 #include "base/android/jni_int_wrapper.h"
 #include "base/android/jni_string.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/android/app_hooks.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/offline_page_feature.h"
@@ -59,7 +62,7 @@ void CCTRequestObserver::OnCompleted(
           env, as_jint(static_cast<int>(status)),
           base::android::ConvertUTF8ToJavaString(env, request.client_id().id));
 
-  base::android::RunCallbackAndroid(j_callback_, callback_info);
+  base::android::RunObjectCallbackAndroid(j_callback_, callback_info);
 }
 
 void CCTRequestObserver::OnChanged(const SavePageRequest& request) {}

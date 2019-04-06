@@ -4,7 +4,7 @@
 
 import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
-import("//device/vr/features/features.gni")
+import("//device/vr/buildflags/buildflags.gni")
 import("//testing/test.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
@@ -59,6 +59,10 @@ jumbo_component("gfx") {
     "color_utils.h",
     "decorated_text.cc",
     "decorated_text.h",
+    "decorated_text_mac.h",
+    "decorated_text_mac.mm",
+    "extension_set.cc",
+    "extension_set.h",
     "favicon_size.cc",
     "favicon_size.h",
     "font.cc",
@@ -123,6 +127,7 @@ jumbo_component("gfx") {
     "mac/nswindow_frame_controls.h",
     "mac/nswindow_frame_controls.mm",
     "mac/scoped_cocoa_disable_screen_updates.h",
+    "mac/scoped_cocoa_disable_screen_updates.mm",
     "nine_image_painter.cc",
     "nine_image_painter.h",
     "path.cc",
@@ -172,8 +177,6 @@ jumbo_component("gfx") {
     "utf16_indexing.h",
     "vsync_provider.cc",
     "vsync_provider.h",
-    "win/direct_manipulation.cc",
-    "win/direct_manipulation.h",
     "win/direct_write.cc",
     "win/direct_write.h",
     "win/hwnd_util.cc",
@@ -252,7 +255,7 @@ jumbo_component("gfx") {
     "//base:base_static",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
-    "//device/vr/features",
+    "//device/vr/buildflags",
     "//skia",
     "//third_party/zlib",
   ]
@@ -299,10 +302,8 @@ jumbo_component("gfx") {
     sources += [ "scoped_cg_context_save_gstate_mac.h" ]
     set_sources_assignment_filter(sources_assignment_filter)
   } else {
-    deps += [
-      "//cc/paint",
-      "//third_party:freetype_harfbuzz",
-    ]
+    public_deps += [ "//cc/paint" ]
+    deps += [ "//third_party:freetype_harfbuzz" ]
   }
 
   # Android.
@@ -407,20 +408,25 @@ jumbo_component("color_space") {
     "skia_color_space_util.cc",
     "skia_color_space_util.h",
   ]
+  deps = [
+    "//skia:skcms",
+  ]
   public_deps = [
     "//base",
     "//skia",
   ]
   if (is_mac) {
+    sources += [
+      "mac/display_icc_profiles.cc",
+      "mac/display_icc_profiles.h",
+    ]
     libs = [
       "CoreFoundation.framework",
       "CoreGraphics.framework",
     ]
   }
   if (use_x11) {
-    deps = [
-      "//ui/gfx/x",
-    ]
+    deps += [ "//ui/gfx/x" ]
     configs += [ "//build/config/linux:x11" ]
   }
   defines = [ "COLOR_SPACE_IMPLEMENTATION" ]
@@ -566,6 +572,10 @@ source_set("memory_buffer_sources") {
     deps += [ "//third_party/libdrm" ]
   }
 
+  if (is_linux || is_android) {
+    deps += [ "//third_party/libsync" ]
+  }
+
   if (is_mac) {
     sources += [
       "mac/io_surface.cc",
@@ -573,6 +583,10 @@ source_set("memory_buffer_sources") {
     ]
 
     public_deps += [ "//ui/gfx:color_space" ]
+  }
+
+  if (is_win) {
+    public_deps += [ "//ipc:message_support" ]
   }
 }
 
@@ -603,8 +617,6 @@ static_library("test_support") {
     "image/image_unittest_util.h",
     "image/image_unittest_util_ios.mm",
     "image/image_unittest_util_mac.mm",
-    "test/fontconfig_util_linux.cc",
-    "test/fontconfig_util_linux.h",
     "test/gfx_util.cc",
     "test/gfx_util.h",
     "test/icc_profiles.cc",
@@ -624,8 +636,10 @@ static_library("test_support") {
     "//ui/gfx/geometry",
   ]
 
-  if (is_linux) {
-    deps += [ "//third_party/fontconfig" ]
+  if (!is_ios) {
+    sources += [ "render_text_test_api.h" ]
+
+    deps += [ "//third_party:freetype_harfbuzz" ]
   }
 }
 
@@ -789,7 +803,7 @@ test("gfx_unittests") {
   if (!is_ios) {
     deps += [
       "//cc/paint",
-      "//mojo/edk/system",
+      "//mojo/core/embedder",
       "//mojo/public/cpp/bindings",
       "//ui/gfx/geometry/mojo:unit_test",
       "//ui/gfx/image/mojo:unit_test",

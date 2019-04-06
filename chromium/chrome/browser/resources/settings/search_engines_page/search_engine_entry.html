@@ -8,7 +8,6 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="../controls/extension_controlled_indicator.html">
 <link rel="import" href="../focus_row_behavior.html">
-<link rel="import" href="search_engine_dialog.html">
 <link rel="import" href="search_engine_entry_css.html">
 <link rel="import" href="search_engines_browser_proxy.html">
 <link rel="import" href="../settings_shared_css.html">
@@ -41,10 +40,6 @@
       }
     </style>
 
-    <template is="dom-if" if="[[showEditSearchEngineDialog_]]" restamp>
-      <settings-search-engine-dialog model="[[engine]]">
-      </settings-search-engine-dialog>
-    </template>
     <div class="list-item" focus-row-container>
       <div id="name-column">
         <div class="favicon-image"
@@ -53,24 +48,25 @@
       </div>
       <div id="keyword-column"><div>[[engine.keyword]]</div></div>
       <div id="url-column" class="text-elide">[[engine.url]]</div>
-      <button is="paper-icon-button-light" class="icon-more-vert"
-          on-tap="onDotsTap_" title="$i18n{moreActions}" focus-row-control
-          focus-type="cr-menu-button">
-      </button>
-      <dialog is="cr-action-menu">
-        <button class="dropdown-item" on-tap="onMakeDefaultTap_"
+      <paper-icon-button-light class="icon-more-vert">
+        <button on-click="onDotsTap_" title="$i18n{moreActions}"
+            focus-row-control focus-type="cr-menu-button">
+        </button>
+      </paper-icon-button-light>
+      <cr-action-menu>
+        <button slot="item" class="dropdown-item" on-click="onMakeDefaultTap_"
             hidden$="[[!engine.canBeDefault]]" id="makeDefault">
           $i18n{searchEnginesMakeDefault}
         </button>
-        <button class="dropdown-item" on-tap="onEditTap_"
+        <button slot="item" class="dropdown-item" on-click="onEditTap_"
             hidden$="[[!engine.canBeEdited]]" id="edit">
           $i18n{edit}
         </button>
-        <button class="dropdown-item" on-tap="onDeleteTap_"
+        <button slot="item" class="dropdown-item" on-click="onDeleteTap_"
             hidden$="[[!engine.canBeRemoved]]" id="delete">
           $i18n{searchEnginesRemoveFromList}
         </button>
-      </dialog>
+      </cr-action-menu>
     </div>
     <template is="dom-if" if="[[engine.extension]]">
       <extension-controlled-indicator

@@ -8,6 +8,7 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "mojo/public/cpp/base/string16_mojom_traits.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/ui/public/interfaces/ime/ime_struct_traits_test.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -110,9 +111,13 @@ TEST_F(IMEStructTraitsTest, CandidateWindowEntry) {
 TEST_F(IMEStructTraitsTest, CompositionText) {
   CompositionText input;
   input.text = base::UTF8ToUTF16("abcdefghij");
-  input.ime_text_spans.push_back(ImeTextSpan(0, 2, SK_ColorGRAY, false));
-  input.ime_text_spans.push_back(ImeTextSpan(
-      ImeTextSpan::Type::kComposition, 3, 6, SK_ColorRED, true, SK_ColorGREEN));
+  ImeTextSpan ime_text_span_1(0, 2, ImeTextSpan::Thickness::kThin);
+  ime_text_span_1.underline_color = SK_ColorGRAY;
+  input.ime_text_spans.push_back(ime_text_span_1);
+  ImeTextSpan ime_text_span_2(ImeTextSpan::Type::kComposition, 3, 6,
+                              ImeTextSpan::Thickness::kThick, SK_ColorGREEN);
+  ime_text_span_2.underline_color = SK_ColorRED;
+  input.ime_text_spans.push_back(ime_text_span_2);
   input.selection = gfx::Range(1, 7);
 
   CompositionText output;

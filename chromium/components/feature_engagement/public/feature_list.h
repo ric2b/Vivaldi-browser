@@ -9,7 +9,7 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
-#include "components/feature_engagement/features.h"
+#include "components/feature_engagement/buildflags.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/flags_ui/feature_entry.h"
 
@@ -53,8 +53,6 @@ DEFINE_VARIATION_PARAM(kIPHDownloadPageFeature, "IPH_DownloadPage");
 DEFINE_VARIATION_PARAM(kIPHDownloadPageScreenshotFeature,
                        "IPH_DownloadPageScreenshot");
 DEFINE_VARIATION_PARAM(kIPHChromeHomeExpandFeature, "IPH_ChromeHomeExpand");
-DEFINE_VARIATION_PARAM(kIPHChromeHomeMenuHeaderFeature,
-                       "IPH_ChromeHomeMenuHeader");
 DEFINE_VARIATION_PARAM(kIPHChromeHomePullToRefreshFeature,
                        "IPH_ChromeHomePullToRefresh");
 DEFINE_VARIATION_PARAM(kIPHMediaDownloadFeature, "IPH_MediaDownload");
@@ -66,6 +64,15 @@ DEFINE_VARIATION_PARAM(kIPHContextualSearchPromotePanelOpenFeature,
                        "IPH_ContextualSearchPromotePanelOpen");
 DEFINE_VARIATION_PARAM(kIPHContextualSearchOptInFeature,
                        "IPH_ContextualSearchOptIn");
+DEFINE_VARIATION_PARAM(kIPHContextualSuggestionsFeature,
+                       "IPH_ContextualSuggestions");
+DEFINE_VARIATION_PARAM(kIPHDownloadSettingsFeature, "IPH_DownloadSettings");
+DEFINE_VARIATION_PARAM(kIPHDownloadInfoBarDownloadContinuingFeature,
+                       "IPH_DownloadInfoBarDownloadContinuing");
+DEFINE_VARIATION_PARAM(kIPHDownloadInfoBarDownloadsAreFasterFeature,
+                       "IPH_DownloadInfoBarDownloadsAreFaster");
+DEFINE_VARIATION_PARAM(kIPHHomePageButtonFeature, "IPH_HomePageButton");
+DEFINE_VARIATION_PARAM(kIPHNewTabPageButtonFeature, "IPH_NewTabPageButton");
 #endif  // defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 DEFINE_VARIATION_PARAM(kIPHBookmarkFeature, "IPH_Bookmark");
@@ -73,6 +80,9 @@ DEFINE_VARIATION_PARAM(kIPHIncognitoWindowFeature, "IPH_IncognitoWindow");
 DEFINE_VARIATION_PARAM(kIPHNewTabFeature, "IPH_NewTab");
 #endif  // BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 #if defined(OS_IOS)
+DEFINE_VARIATION_PARAM(kIPHBottomToolbarTipFeature, "IPH_BottomToolbarTip");
+DEFINE_VARIATION_PARAM(kIPHLongPressToolbarTipFeature,
+                       "IPH_LongPressToolbarTip");
 DEFINE_VARIATION_PARAM(kIPHNewTabTipFeature, "IPH_NewTabTip");
 DEFINE_VARIATION_PARAM(kIPHNewIncognitoTabTipFeature, "IPH_NewIncognitoTabTip");
 DEFINE_VARIATION_PARAM(kIPHBadgedReadingListFeature, "IPH_BadgedReadingList");
@@ -92,18 +102,25 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHDownloadPageFeature),
         VARIATION_ENTRY(kIPHDownloadPageScreenshotFeature),
         VARIATION_ENTRY(kIPHChromeHomeExpandFeature),
-        VARIATION_ENTRY(kIPHChromeHomeMenuHeaderFeature),
         VARIATION_ENTRY(kIPHChromeHomePullToRefreshFeature),
         VARIATION_ENTRY(kIPHMediaDownloadFeature),
         VARIATION_ENTRY(kIPHContextualSearchWebSearchFeature),
         VARIATION_ENTRY(kIPHContextualSearchPromoteTapFeature),
         VARIATION_ENTRY(kIPHContextualSearchPromotePanelOpenFeature),
         VARIATION_ENTRY(kIPHContextualSearchOptInFeature),
+        VARIATION_ENTRY(kIPHContextualSuggestionsFeature),
+        VARIATION_ENTRY(kIPHDownloadSettingsFeature),
+        VARIATION_ENTRY(kIPHDownloadInfoBarDownloadContinuingFeature),
+        VARIATION_ENTRY(kIPHDownloadInfoBarDownloadsAreFasterFeature),
+        VARIATION_ENTRY(kIPHHomePageButtonFeature),
+        VARIATION_ENTRY(kIPHNewTabPageButtonFeature),
 #elif BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
         VARIATION_ENTRY(kIPHBookmarkFeature),
         VARIATION_ENTRY(kIPHIncognitoWindowFeature),
         VARIATION_ENTRY(kIPHNewTabFeature),
 #elif defined(OS_IOS)
+        VARIATION_ENTRY(kIPHBottomToolbarTipFeature),
+        VARIATION_ENTRY(kIPHLongPressToolbarTipFeature),
         VARIATION_ENTRY(kIPHNewTabTipFeature),
         VARIATION_ENTRY(kIPHNewIncognitoTabTipFeature),
         VARIATION_ENTRY(kIPHBadgedReadingListFeature),

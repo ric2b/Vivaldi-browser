@@ -25,7 +25,8 @@
   AccessSyncWallpaperInfoKey: 'wallpaper-sync-info-key',
 
   /**
-   * Key to access last changed date of a surprise wallpaper in
+   * Key to access last changed date of a surprise me wallpaper (on the old
+   * picker) or a daily refresh wallpaper (on the new picker) in
    * chrome.storage.local or chrome.storage.sync.
    */
   AccessLastSurpriseWallpaperChangedDate: 'wallpaper-last-changed-date-key',
@@ -43,9 +44,22 @@
   AccessSyncSurpriseMeEnabledKey: 'sync-surprise-me-enabled-key',
 
   /**
-   * Suffix to append to baseURL if requesting high resoultion wallpaper.
+   * Key to access the info related to daily refresh feature (on the new
+   * wallpaper picker) in chrome.storage.local.
    */
-  HighResolutionSuffix: '_high_resolution.jpg',
+  AccessLocalDailyRefreshInfoKey: 'daily-refresh-info-key',
+
+  /**
+   * Key to access the info related to daily refresh feature (on the new
+   * wallpaper picker) in chrome.storage.sync.
+   */
+  AccessSyncDailyRefreshInfoKey: 'sync-daily-refresh-info-key',
+
+  /**
+   * Key to access the images info (on the new wallpaper picker) in
+   * chrome.storage.local.
+   */
+  AccessLocalImagesInfoKey: 'images-info-key',
 
   /**
    * URL to get latest wallpaper RSS feed.
@@ -88,9 +102,9 @@
   CustomWallpaperThumbnailSuffix: '_thumbnail',
 
   /**
-   * Suffix to append to the base url of an online wallpaper thumbnail.
+   * The default layout of each wallpaper thumbnail.
    */
-  OnlineWallpaperThumbnailUrlSuffix: '_thumbnail.png',
+  WallpaperThumbnailDefaultLayout: 'CENTER_CROPPED',
 
   /**
    * Wallpaper directory enum.
@@ -100,5 +114,11 @@
   /**
    * The filename prefix for a third party wallpaper.
    */
-  ThirdPartyWallpaperPrefix: 'third_party_'
+  ThirdPartyWallpaperPrefix: 'third_party_',
+
+  /**
+   * The name of the custom event that's fired when the wallpaper is changed by
+   * third-party apps.
+   */
+  WallpaperChangedBy3rdParty: 'wallpaperChangedBy3rdParty'
 };

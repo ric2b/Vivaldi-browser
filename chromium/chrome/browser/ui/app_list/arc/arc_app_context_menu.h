@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_CONTEXT_MENU_H_
 #define CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_CONTEXT_MENU_H_
 
-#include <string>
+#include <memory>
 
 #include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_context_menu.h"
@@ -17,6 +17,10 @@ namespace app_list {
 class AppContextMenuDelegate;
 }
 
+namespace arc {
+class ArcAppShortcutsMenuBuilder;
+}
+
 class ArcAppContextMenu : public app_list::AppContextMenu {
  public:
   ArcAppContextMenu(app_list::AppContextMenuDelegate* delegate,
@@ -25,7 +29,8 @@ class ArcAppContextMenu : public app_list::AppContextMenu {
                     AppListControllerDelegate* controller);
   ~ArcAppContextMenu() override;
 
-  // AppListContextMenu overrides:
+  // AppContextMenu overrides:
+  void GetMenuModel(GetMenuModelCallback callback) override;
   void BuildMenu(ui::SimpleMenuModel* menu_model) override;
 
   // ui::SimpleMenuModel::Delegate overrides:
@@ -33,8 +38,14 @@ class ArcAppContextMenu : public app_list::AppContextMenu {
   bool IsCommandIdEnabled(int command_id) const override;
 
  private:
-  void IsAppOpen();
+  // Build additional app shortcuts menu items.
+  // TODO(warx): consider merging into BuildMenu.
+  void BuildAppShortcutsMenu(std::unique_ptr<ui::SimpleMenuModel> menu_model,
+                             GetMenuModelCallback callback);
+
   void ShowPackageInfo();
+
+  std::unique_ptr<arc::ArcAppShortcutsMenuBuilder> app_shortcuts_menu_builder_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAppContextMenu);
 };

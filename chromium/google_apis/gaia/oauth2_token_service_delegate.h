@@ -6,13 +6,14 @@
 #define GOOGLE_APIS_GAIA_OAUTH2_TOKEN_SERVICE_DELEGATE_H_
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "net/base/backoff_entry.h"
 
-namespace net {
-class URLRequestContextGetter;
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 // Abstract base class to fetch and maintain refresh tokens from various
@@ -20,6 +21,10 @@ class URLRequestContextGetter;
 // CreateAccessTokenFetcher properly.
 class OAuth2TokenServiceDelegate {
  public:
+  // Refresh token guaranteed to be invalid. Can be passed to
+  // UpdateCredentials() to force an authentication error.
+  static const char kInvalidRefreshToken[];
+
   enum LoadCredentialsState {
     LOAD_CREDENTIALS_UNKNOWN,
     LOAD_CREDENTIALS_NOT_STARTED,
@@ -36,11 +41,12 @@ class OAuth2TokenServiceDelegate {
 
   virtual OAuth2AccessTokenFetcher* CreateAccessTokenFetcher(
       const std::string& account_id,
-      net::URLRequestContextGetter* getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       OAuth2AccessTokenConsumer* consumer) = 0;
 
   virtual bool RefreshTokenIsAvailable(const std::string& account_id) const = 0;
-  virtual bool RefreshTokenHasError(const std::string& account_id) const;
+  virtual GoogleServiceAuthError GetAuthError(
+      const std::string& account_id) const;
   virtual void UpdateAuthError(const std::string& account_id,
                                const GoogleServiceAuthError& error) {}
 
@@ -57,7 +63,8 @@ class OAuth2TokenServiceDelegate {
   virtual void UpdateCredentials(const std::string& account_id,
                                  const std::string& refresh_token) {}
   virtual void RevokeCredentials(const std::string& account_id) {}
-  virtual net::URLRequestContextGetter* GetRequestContext() const;
+  virtual scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory()
+      const;
 
   bool ValidateAccountId(const std::string& account_id) const;
 
@@ -75,10 +82,13 @@ class OAuth2TokenServiceDelegate {
   virtual LoadCredentialsState GetLoadCredentialsState() const;
 
  protected:
-  // Called by subclasses to notify observers.
+  // Called by subclasses to notify observers. Some are virtual to allow Android
+  // to broadcast the notifications to Java code.
   virtual void FireRefreshTokenAvailable(const std::string& account_id);
   virtual void FireRefreshTokenRevoked(const std::string& account_id);
   virtual void FireRefreshTokensLoaded();
+  void FireAuthErrorChanged(const std::string& account_id,
+                            const GoogleServiceAuthError& error);
 
   // Helper class to scope batch changes.
   class ScopedBatchChange {
@@ -90,12 +100,6 @@ class OAuth2TokenServiceDelegate {
     OAuth2TokenServiceDelegate* delegate_;  // Weak.
     DISALLOW_COPY_AND_ASSIGN(ScopedBatchChange);
   };
-
-  // This function is called by derived classes to help implement
-  // RefreshTokenHasError().  It centralizes the code for determining if
-  // |error| is worthy of being reported as an error for purposes of
-  // RefreshTokenHasError().
-  static bool IsError(const GoogleServiceAuthError& error);
 
  private:
   // List of observers to notify when refresh token availability changes.

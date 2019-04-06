@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace printing {
 
@@ -26,23 +27,27 @@ struct PdfRenderSettings {
 #endif
   };
 
-  PdfRenderSettings() : dpi(0), autorotate(false), mode(Mode::NORMAL) {}
+  PdfRenderSettings()
+      : autorotate(false), use_color(true), mode(Mode::NORMAL) {}
   PdfRenderSettings(const gfx::Rect& area,
                     const gfx::Point& offsets,
-                    int dpi,
+                    const gfx::Size& dpi,
                     bool autorotate,
+                    bool use_color,
                     Mode mode)
       : area(area),
         offsets(offsets),
         dpi(dpi),
         autorotate(autorotate),
+        use_color(use_color),
         mode(mode) {}
   ~PdfRenderSettings() {}
 
   gfx::Rect area;
   gfx::Point offsets;
-  int dpi;
+  gfx::Size dpi;
   bool autorotate;
+  bool use_color;
   Mode mode;
 };
 

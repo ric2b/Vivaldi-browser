@@ -31,7 +31,7 @@ bool IsTabletModeActive() {
 
 PowerButtonDisplayController::PowerButtonDisplayController(
     BacklightsForcedOffSetter* backlights_forced_off_setter,
-    base::TickClock* tick_clock)
+    const base::TickClock* tick_clock)
     : backlights_forced_off_setter_(backlights_forced_off_setter),
       backlights_forced_off_observer_(this),
       tick_clock_(tick_clock),
@@ -39,7 +39,7 @@ PowerButtonDisplayController::PowerButtonDisplayController(
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
       this);
   ui::InputDeviceManager::GetInstance()->AddObserver(this);
-  Shell::Get()->PrependPreTargetHandler(this);
+  Shell::Get()->AddPreTargetHandler(this, ui::EventTarget::Priority::kSystem);
 
   backlights_forced_off_observer_.Add(backlights_forced_off_setter_);
 }

@@ -32,16 +32,23 @@ class MEDIA_GPU_EXPORT VaapiJpegEncoder {
 
   // Encode a JPEG picture. It will fill VA-API parameters and call
   // corresponding VA-API methods according to |input_size|.
+  // |exif_buffer| contains the EXIF data that will be inserted to the JPEG
+  // image.
+  // |exif_buffer_size| is the size of |exif_buffer|.
   // |quality| is the JPEG image quality
   // |surface_id| is the VA surface that contains input image.
   // |output_buffer_id| is the ID of VA buffer that encoded image will be
   // stored. The size of it should be at least as large as
   // GetMaxCodedBufferSize().
+  // |exif_offset| is the offset where Exif data should be filled into.
   // Return false on failure.
   bool Encode(const gfx::Size& input_size,
+              const uint8_t* exif_buffer,
+              size_t exif_buffer_size,
               int quality,
               VASurfaceID surface_id,
-              VABufferID output_buffer_id);
+              VABufferID output_buffer_id,
+              size_t* exif_offset);
 
   // Gets the maximum possible encoded result size.
   // |size| is the dimension of the YUV image to be encoded.

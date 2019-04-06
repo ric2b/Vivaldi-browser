@@ -22,6 +22,7 @@
     "files": [
       "android_webview/ui/aw_strings.grd",
       "ash/ash_strings.grd",
+      "ash/components/ash_components_strings.grd",
       "chrome/app/chromium_strings.grd",
       "chrome/app/generated_resources.grd",
       "chrome/app/google_chrome_strings.grd",
@@ -62,7 +63,7 @@
       "chrome/android/java/strings/android_chrome_strings.grd",
       "chrome/android/webapk/strings/android_webapk_strings.grd",
       "components/autofill/android/java/strings/autofill_strings.grd",
-      "components/web_contents_delegate_android/java/strings/web_contents_delegate_android_strings.grd",
+      "components/embedder_support/android/java/strings/web_contents_delegate_android_strings.grd",
       "content/public/android/java/strings/android_content_strings.grd",
       "ui/android/java/strings/android_ui_strings.grd",
     ],
@@ -87,6 +88,8 @@
     "tools/grit/grit/testdata/substitute_tmpl.grd": "Test data",
     "tools/grit/grit/testdata/whitelist_resources.grd": "Test data",
     "tools/grit/grit/testdata/whitelist_strings.grd": "Test data",
+    "tools/translation/testdata/not_translated.grd": "Test data",
+    "tools/translation/testdata/test.grd": "Test data",
     "ui/strings/app_locale_settings.grd": "Not UI strings; localized separately",
   },
 }

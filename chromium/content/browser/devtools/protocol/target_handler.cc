@@ -4,14 +4,23 @@
 
 #include "content/browser/devtools/protocol/target_handler.h"
 
+#include "base/base64.h"
+#include "base/containers/flat_map.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/strings/stringprintf.h"
+#include "base/unguessable_token.h"
 #include "base/values.h"
+#include "build/build_config.h"
+#include "content/browser/devtools/browser_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_manager.h"
 #include "content/browser/devtools/devtools_session.h"
+#include "content/browser/devtools/target_registry.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/web_contents.h"
 
 namespace content {
 namespace protocol {
@@ -20,6 +29,19 @@ namespace {
 
 static const char kMethod[] = "method";
 static const char kResumeMethod[] = "Runtime.runIfWaitingForDebugger";
+static const char kInitializerScript[] = R"(
+  (function() {
+    const bindingName = "%s";
+    const binding = window[bindingName];
+    delete window[bindingName];
+    if (window.self === window.top) {
+      window[bindingName] = {
+        onmessage: () => {},
+        send: binding
+      };
+    }
+  })();
+)";
 
 std::unique_ptr<Target::TargetInfo> CreateInfo(DevToolsAgentHost* host) {
   std::unique_ptr<Target::TargetInfo> target_info =
@@ -32,8 +54,156 @@ std::unique_ptr<Target::TargetInfo> CreateInfo(DevToolsAgentHost* host) {
           .Build();
   if (!host->GetOpenerId().empty())
     target_info->SetOpenerId(host->GetOpenerId());
+  if (host->GetBrowserContext())
+    target_info->SetBrowserContextId(host->GetBrowserContext()->UniqueId());
   return target_info;
 }
+
+static std::string TerminationStatusToString(base::TerminationStatus status) {
+  switch (status) {
+    case base::TERMINATION_STATUS_NORMAL_TERMINATION:
+      return "normal";
+    case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
+      return "abnormal";
+    case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
+      return "killed";
+    case base::TERMINATION_STATUS_PROCESS_CRASHED:
+      return "crashed";
+    case base::TERMINATION_STATUS_STILL_RUNNING:
+      return "still running";
+#if defined(OS_CHROMEOS)
+    // Used for the case when oom-killer kills a process on ChromeOS.
+    case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
+      return "oom killed";
+#endif
+#if defined(OS_ANDROID)
+    // On Android processes are spawned from the system Zygote and we do not get
+    // the termination status.  We can't know if the termination was a crash or
+    // an oom kill for sure: but we can use status of the strong process
+    // bindings as a hint.
+    case base::TERMINATION_STATUS_OOM_PROTECTED:
+      return "oom protected";
+#endif
+    case base::TERMINATION_STATUS_LAUNCH_FAILED:
+      return "failed to launch";
+    case base::TERMINATION_STATUS_OOM:
+      return "oom";
+    case base::TERMINATION_STATUS_MAX_ENUM:
+      break;
+  }
+  NOTREACHED() << "Unknown Termination Status.";
+  return "unknown";
+}
+
+class BrowserToPageConnector;
+
+base::LazyInstance<base::flat_map<DevToolsAgentHost*,
+                                  std::unique_ptr<BrowserToPageConnector>>>::
+    Leaky g_browser_to_page_connectors;
+
+class BrowserToPageConnector : public DevToolsAgentHostClient {
+ public:
+  BrowserToPageConnector(const std::string& binding_name,
+                         DevToolsAgentHost* page_host)
+      : binding_name_(binding_name), page_host_(page_host) {
+    browser_host_ = BrowserDevToolsAgentHost::CreateForDiscovery();
+    browser_host_->AttachClient(this);
+    page_host_->AttachClient(this);
+
+    SendProtocolMessageToPage("Page.enable", std::make_unique<base::Value>());
+    SendProtocolMessageToPage("Runtime.enable",
+                              std::make_unique<base::Value>());
+
+    std::unique_ptr<base::DictionaryValue> add_binding_params =
+        std::make_unique<base::DictionaryValue>();
+    add_binding_params->SetString("name", binding_name);
+    SendProtocolMessageToPage("Runtime.addBinding",
+                              std::move(add_binding_params));
+
+    std::string initializer_script =
+        base::StringPrintf(kInitializerScript, binding_name.c_str());
+
+    std::unique_ptr<base::DictionaryValue> params =
+        std::make_unique<base::DictionaryValue>();
+    params->SetString("scriptSource", initializer_script);
+    SendProtocolMessageToPage("Page.addScriptToEvaluateOnLoad",
+                              std::move(params));
+
+    std::unique_ptr<base::DictionaryValue> evaluate_params =
+        std::make_unique<base::DictionaryValue>();
+    evaluate_params->SetString("expression", initializer_script);
+    SendProtocolMessageToPage("Runtime.evaluate", std::move(evaluate_params));
+    g_browser_to_page_connectors.Get()[page_host_.get()].reset(this);
+  }
+
+ private:
+  void SendProtocolMessageToPage(const char* method,
+                                 std::unique_ptr<base::Value> params) {
+    base::DictionaryValue message;
+    message.SetInteger("id", page_message_id_++);
+    message.SetString("method", method);
+    message.Set("params", std::move(params));
+    std::string json_message;
+    base::JSONWriter::Write(message, &json_message);
+    page_host_->DispatchProtocolMessage(this, json_message);
+  }
+
+  void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
+                               const std::string& message) override {
+    if (agent_host == page_host_.get()) {
+      std::unique_ptr<base::Value> value = base::JSONReader::Read(message);
+      if (!value || !value->is_dict())
+        return;
+      // Make sure this is a binding call.
+      base::Value* method = value->FindKey("method");
+      if (!method || !method->is_string() ||
+          method->GetString() != "Runtime.bindingCalled")
+        return;
+      base::Value* params = value->FindKey("params");
+      if (!params || !params->is_dict())
+        return;
+      base::Value* name = params->FindKey("name");
+      if (!name || !name->is_string() || name->GetString() != binding_name_)
+        return;
+      base::Value* payload = params->FindKey("payload");
+      if (!payload || !payload->is_string())
+        return;
+      browser_host_->DispatchProtocolMessage(this, payload->GetString());
+      return;
+    }
+    DCHECK(agent_host == browser_host_.get());
+
+    std::string encoded;
+    base::Base64Encode(message, &encoded);
+    std::string eval_code = "window." + binding_name_ + ".onmessage(atob(\"";
+    std::string eval_suffix = "\"))";
+    eval_code.reserve(eval_code.size() + encoded.size() + eval_suffix.size());
+    eval_code.append(encoded);
+    eval_code.append(eval_suffix);
+
+    std::unique_ptr<base::DictionaryValue> params =
+        std::make_unique<base::DictionaryValue>();
+    params->SetString("expression", eval_code);
+    SendProtocolMessageToPage("Runtime.evaluate", std::move(params));
+  }
+
+  void AgentHostClosed(DevToolsAgentHost* agent_host) override {
+    if (agent_host == browser_host_.get()) {
+      page_host_->DetachClient(this);
+    } else {
+      DCHECK(agent_host == page_host_.get());
+      browser_host_->DetachClient(this);
+    }
+    g_browser_to_page_connectors.Get().erase(page_host_.get());
+  }
+
+  std::string binding_name_;
+  scoped_refptr<DevToolsAgentHost> browser_host_;
+  scoped_refptr<DevToolsAgentHost> page_host_;
+  int page_message_id_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(BrowserToPageConnector);
+};
 
 }  // namespace
 
@@ -46,9 +216,11 @@ class TargetHandler::Throttle : public content::NavigationThrottle {
   void Clear();
   // content::NavigationThrottle implementation:
   NavigationThrottle::ThrottleCheckResult WillProcessResponse() override;
+  NavigationThrottle::ThrottleCheckResult WillFailRequest() override;
   const char* GetNameForLogging() override;
 
  private:
+  NavigationThrottle::ThrottleCheckResult MaybeAttach();
   void CleanupPointers();
 
   base::WeakPtr<protocol::TargetHandler> target_handler_;
@@ -61,28 +233,41 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
  public:
   static std::string Attach(TargetHandler* handler,
                             DevToolsAgentHost* agent_host,
-                            bool waiting_for_debugger) {
-    std::string id = base::StringPrintf("%s:%d", agent_host->GetId().c_str(),
-                                        ++handler->last_session_id_);
-    Session* session = new Session(handler, agent_host, id);
+                            bool waiting_for_debugger,
+                            bool flatten_protocol) {
+    std::string id = base::UnguessableToken::Create().ToString();
+    Session* session = new Session(handler, agent_host, id, flatten_protocol);
     handler->attached_sessions_[id].reset(session);
-    agent_host->AttachClient(session);
+    DevToolsAgentHostImpl* agent_host_impl =
+        static_cast<DevToolsAgentHostImpl*>(agent_host);
+    if (flatten_protocol) {
+      handler->target_registry_->AttachSubtargetSession(id, agent_host_impl,
+                                                        session);
+    } else {
+      agent_host_impl->AttachClient(session);
+    }
     handler->frontend_->AttachedToTarget(id, CreateInfo(agent_host),
                                          waiting_for_debugger);
     return id;
   }
 
   ~Session() override {
-    if (agent_host_)
-      agent_host_->DetachClient(this);
+    if (!agent_host_)
+      return;
+    if (handler_->target_registry_)
+      handler_->target_registry_->DetachSubtargetSession(id_);
+    agent_host_->DetachClient(this);
   }
 
   void Detach(bool host_closed) {
     handler_->frontend_->DetachedFromTarget(id_, agent_host_->GetId());
     if (host_closed)
       handler_->auto_attacher_.AgentHostClosed(agent_host_.get());
-    else
+    else {
+      if (handler_->target_registry_)
+        handler_->target_registry_->DetachSubtargetSession(id_);
       agent_host_->DetachClient(this);
+    }
     handler_->auto_attached_sessions_.erase(agent_host_.get());
     agent_host_ = nullptr;
     handler_->attached_sessions_.erase(id_);
@@ -111,15 +296,26 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
   }
 
  private:
+  friend class TargetHandler;
+
   Session(TargetHandler* handler,
           DevToolsAgentHost* agent_host,
-          const std::string& id)
-      : handler_(handler), agent_host_(agent_host), id_(id) {}
+          const std::string& id,
+          bool flatten_protocol)
+      : handler_(handler),
+        agent_host_(agent_host),
+        id_(id),
+        flatten_protocol_(flatten_protocol) {}
 
   // DevToolsAgentHostClient implementation.
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                const std::string& message) override {
     DCHECK(agent_host == agent_host_.get());
+    if (flatten_protocol_) {
+      handler_->target_registry_->SendMessageToClient(id_, message);
+      return;
+    }
+
     handler_->frontend_->ReceivedMessageFromTarget(id_, message,
                                                    agent_host_->GetId());
   }
@@ -132,6 +328,7 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
   TargetHandler* handler_;
   scoped_refptr<DevToolsAgentHost> agent_host_;
   std::string id_;
+  bool flatten_protocol_;
   Throttle* throttle_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(Session);
@@ -163,6 +360,15 @@ void TargetHandler::Throttle::CleanupPointers() {
 
 NavigationThrottle::ThrottleCheckResult
 TargetHandler::Throttle::WillProcessResponse() {
+  return MaybeAttach();
+}
+
+NavigationThrottle::ThrottleCheckResult
+TargetHandler::Throttle::WillFailRequest() {
+  return MaybeAttach();
+}
+
+NavigationThrottle::ThrottleCheckResult TargetHandler::Throttle::MaybeAttach() {
   if (!target_handler_)
     return PROCEED;
   agent_host_ = target_handler_->auto_attacher_.AutoAttachToFrame(
@@ -186,12 +392,17 @@ void TargetHandler::Throttle::Clear() {
   }
 }
 
-TargetHandler::TargetHandler()
+TargetHandler::TargetHandler(bool browser_only,
+                             const std::string& owner_target_id,
+                             TargetRegistry* target_registry)
     : DevToolsDomainHandler(Target::Metainfo::domainName),
       auto_attacher_(
           base::Bind(&TargetHandler::AutoAttach, base::Unretained(this)),
           base::Bind(&TargetHandler::AutoDetach, base::Unretained(this))),
       discover_(false),
+      browser_only_(browser_only),
+      owner_target_id_(owner_target_id),
+      target_registry_(target_registry),
       weak_factory_(this) {}
 
 TargetHandler::~TargetHandler() {
@@ -209,7 +420,7 @@ void TargetHandler::Wire(UberDispatcher* dispatcher) {
   Target::Dispatcher::wire(dispatcher, this);
 }
 
-void TargetHandler::SetRenderer(RenderProcessHost* process_host,
+void TargetHandler::SetRenderer(int process_host_id,
                                 RenderFrameHostImpl* frame_host) {
   auto_attacher_.SetRenderFrameHost(frame_host);
 }
@@ -243,7 +454,8 @@ void TargetHandler::ClearThrottles() {
 
 void TargetHandler::AutoAttach(DevToolsAgentHost* host,
                                bool waiting_for_debugger) {
-  std::string session_id = Session::Attach(this, host, waiting_for_debugger);
+  std::string session_id =
+      Session::Attach(this, host, waiting_for_debugger, false);
   auto_attached_sessions_[host] = attached_sessions_[session_id].get();
 }
 
@@ -259,6 +471,7 @@ Response TargetHandler::FindSession(Maybe<std::string> session_id,
                                     Session** session,
                                     bool fall_through) {
   *session = nullptr;
+  fall_through &= !browser_only_;
   if (session_id.isJust()) {
     auto it = attached_sessions_.find(session_id.fromJust());
     if (it == attached_sessions_.end()) {
@@ -309,14 +522,7 @@ Response TargetHandler::SetAutoAttach(
   auto_attacher_.SetAutoAttach(auto_attach, wait_for_debugger_on_start);
   if (!auto_attacher_.ShouldThrottleFramesNavigation())
     ClearThrottles();
-  return Response::FallThrough();
-}
-
-Response TargetHandler::SetAttachToFrames(bool value) {
-  auto_attacher_.SetAttachToFrames(value);
-  if (!auto_attacher_.ShouldThrottleFramesNavigation())
-    ClearThrottles();
-  return Response::OK();
+  return browser_only_ ? Response::OK() : Response::FallThrough();
 }
 
 Response TargetHandler::SetRemoteLocations(
@@ -325,13 +531,27 @@ Response TargetHandler::SetRemoteLocations(
 }
 
 Response TargetHandler::AttachToTarget(const std::string& target_id,
+                                       Maybe<bool> flatten,
                                        std::string* out_session_id) {
   // TODO(dgozman): only allow reported hosts.
   scoped_refptr<DevToolsAgentHost> agent_host =
       DevToolsAgentHost::GetForId(target_id);
   if (!agent_host)
     return Response::InvalidParams("No target with given id found");
-  *out_session_id = Session::Attach(this, agent_host.get(), false);
+  if (flatten.fromMaybe(false) && !target_registry_) {
+    return Response::InvalidParams(
+        "Will only provide flatten access for browser endpoint");
+  }
+  *out_session_id =
+      Session::Attach(this, agent_host.get(), false, flatten.fromMaybe(false));
+  return Response::OK();
+}
+
+Response TargetHandler::AttachToBrowserTarget(std::string* out_session_id) {
+  scoped_refptr<DevToolsAgentHost> agent_host =
+      DevToolsAgentHost::CreateForBrowser(
+          nullptr, DevToolsAgentHost::CreateServerSocketCallback());
+  *out_session_id = Session::Attach(this, agent_host.get(), false, true);
   return Response::OK();
 }
 
@@ -354,13 +574,20 @@ Response TargetHandler::SendMessageToTarget(const std::string& message,
       FindSession(std::move(session_id), std::move(target_id), &session, true);
   if (!response.isSuccess())
     return response;
+  if (session->flatten_protocol_) {
+    return Response::Error(
+        "When using flat protocol, messages are routed to the target "
+        "via the sessionId attribute.");
+  }
   session->SendMessageToAgentHost(message);
   return Response::OK();
 }
 
 Response TargetHandler::GetTargetInfo(
-    const std::string& target_id,
+    Maybe<std::string> maybe_target_id,
     std::unique_ptr<Target::TargetInfo>* target_info) {
+  const std::string& target_id =
+      maybe_target_id.isJust() ? maybe_target_id.fromJust() : owner_target_id_;
   // TODO(dgozman): only allow reported hosts.
   scoped_refptr<DevToolsAgentHost> agent_host(
       DevToolsAgentHost::GetForId(target_id));
@@ -390,12 +617,42 @@ Response TargetHandler::CloseTarget(const std::string& target_id,
   return Response::OK();
 }
 
+Response TargetHandler::ExposeDevToolsProtocol(
+    const std::string& target_id,
+    Maybe<std::string> binding_name) {
+  if (!browser_only_) {
+    return Response::InvalidParams(
+        "Cannot grant remote debugging capability from non-browser session.");
+  }
+  scoped_refptr<DevToolsAgentHost> agent_host =
+      DevToolsAgentHost::GetForId(target_id);
+  if (!agent_host)
+    return Response::InvalidParams("No target with given id found");
+
+  if (g_browser_to_page_connectors.Get()[agent_host.get()]) {
+    return Response::Error(base::StringPrintf(
+        "Target with id %s is already granted remote debugging bindings.",
+        target_id.c_str()));
+  }
+  if (!agent_host->GetWebContents()) {
+    return Response::Error(
+        "RemoteDebuggingBinding can be granted only to page targets");
+  }
+
+  new BrowserToPageConnector(binding_name.fromMaybe("cdp"), agent_host.get());
+  return Response::OK();
+}
+
 Response TargetHandler::CreateBrowserContext(std::string* out_context_id) {
   return Response::Error("Not supported");
 }
 
-Response TargetHandler::DisposeBrowserContext(const std::string& context_id,
-                                              bool* out_success) {
+Response TargetHandler::DisposeBrowserContext(const std::string& context_id) {
+  return Response::Error("Not supported");
+}
+
+Response TargetHandler::GetBrowserContexts(
+    std::unique_ptr<protocol::Array<String>>* browser_context_ids) {
   return Response::Error("Not supported");
 }
 
@@ -463,6 +720,16 @@ void TargetHandler::DevToolsAgentHostDetached(DevToolsAgentHost* host) {
   if (reported_hosts_.find(host) == reported_hosts_.end())
     return;
   frontend_->TargetInfoChanged(CreateInfo(host));
+}
+
+void TargetHandler::DevToolsAgentHostCrashed(DevToolsAgentHost* host,
+                                             base::TerminationStatus status) {
+  if (reported_hosts_.find(host) == reported_hosts_.end())
+    return;
+  frontend_->TargetCrashed(host->GetId(), TerminationStatusToString(status),
+                           host->GetWebContents()
+                               ? host->GetWebContents()->GetCrashedErrorCode()
+                               : 0);
 }
 
 }  // namespace protocol

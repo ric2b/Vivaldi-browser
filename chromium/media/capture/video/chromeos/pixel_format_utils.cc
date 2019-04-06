@@ -4,14 +4,14 @@
 
 #include "media/capture/video/chromeos/pixel_format_utils.h"
 
-#include <libdrm/drm_fourcc.h>
+#include <drm_fourcc.h>
 
 namespace media {
 
 namespace {
 
 struct SupportedFormat {
-  arc::mojom::HalPixelFormat hal_format;
+  cros::mojom::HalPixelFormat hal_format;
   ChromiumPixelFormat cr_format;
 } const kSupportedFormats[] = {
     // The Android camera HAL v3 has three types of mandatory pixel formats:
@@ -29,15 +29,18 @@ struct SupportedFormat {
     // only implementation-defined preview buffers.  We should use the video
     // capture stream in Chrome VCD as it is mandatory for the camera HAL to
     // support YUV flexbile format video streams.
-    {arc::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_YCbCr_420_888,
+    {cros::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_YCbCr_420_888,
      {PIXEL_FORMAT_NV12, gfx::BufferFormat::YUV_420_BIPLANAR}},
+    // FIXME(jcliang): MJPEG is not accurate; we should have BLOB or JPEG
+    {cros::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_BLOB,
+     {PIXEL_FORMAT_MJPEG, gfx::BufferFormat::R_8}},
     // Add more mappings when we have more devices.
 };
 
 }  // namespace
 
 std::vector<ChromiumPixelFormat> PixFormatHalToChromium(
-    arc::mojom::HalPixelFormat from) {
+    cros::mojom::HalPixelFormat from) {
   std::vector<ChromiumPixelFormat> ret;
   for (const auto& it : kSupportedFormats) {
     if (it.hal_format == from) {
@@ -51,6 +54,8 @@ uint32_t PixFormatVideoToDrm(VideoPixelFormat from) {
   switch (from) {
     case PIXEL_FORMAT_NV12:
       return DRM_FORMAT_NV12;
+    case PIXEL_FORMAT_MJPEG:
+      return DRM_FORMAT_R8;
     default:
       // Unsupported format.
       return 0;

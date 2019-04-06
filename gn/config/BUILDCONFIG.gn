@@ -1,4 +1,7 @@
-import("//vivaldi/gn/config/vivaldi_build_settings.gni")
+declare_args() {
+  is_vivaldi = true
+}
+assert (is_vivaldi)
 
-# Set up default extra compiler/link configs for Vivaldi
-import("//vivaldi/gn/config/product_configs.gni")
+import ("//build/config/BUILDCONFIG.gn")
+import ("//vivaldi/gn/config/product_configs.gni")

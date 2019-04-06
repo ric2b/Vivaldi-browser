@@ -9,7 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/testing_profile.h"
@@ -38,9 +38,9 @@ const base::FilePath kFileReadFailedPath =
 base::FilePath GetModulePath() {
   base::FilePath module_dir;
 #if defined(OS_ANDROID)
-  EXPECT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &module_dir));
+  EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &module_dir));
 #else
-  EXPECT_TRUE(PathService::Get(base::DIR_MODULE, &module_dir));
+  EXPECT_TRUE(base::PathService::Get(base::DIR_MODULE, &module_dir));
 #endif
   return module_dir;
 }

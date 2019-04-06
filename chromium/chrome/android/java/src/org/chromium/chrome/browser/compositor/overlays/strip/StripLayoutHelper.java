@@ -214,8 +214,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         mTabMenu.setWidth(menuWidth);
         mTabMenu.setModal(true);
 
-        int screenWidthDp = context.getResources().getConfiguration().screenWidthDp;
-        mShouldCascadeTabs = screenWidthDp >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP;
+        mShouldCascadeTabs = DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
         mStripStacker = mShouldCascadeTabs ? mCascadingStripStacker : mScrollingStripStacker;
         mIsFirstLayoutPass = true;
     }
@@ -393,7 +392,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 float delta = calculateOffsetToMakeTabVisible(tab, true, true, true);
                 // During this resize, mMinScrollOffset will be changing, so the scroll effect
                 // cannot be properly animated. Jump to the new scroll offset instead.
-                mScrollOffset += delta;
+                mScrollOffset = (int) (mScrollOffset + delta);
             }
 
             updateStrip();
@@ -1631,7 +1630,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         if (shouldAnimate && !mAnimationsDisabledForTesting) {
             mScroller.startScroll(mScrollOffset, 0, (int) delta, 0, time, EXPAND_DURATION_MS);
         } else {
-            mScrollOffset += delta;
+            mScrollOffset = (int) (mScrollOffset + delta);
         }
     }
 

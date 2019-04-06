@@ -65,15 +65,6 @@ class EventForwarder {
                     jint android_meta_state,
                     jint tool_type);
 
-  void OnMouseWheelEvent(JNIEnv* env,
-                         const base::android::JavaParamRef<jobject>& obj,
-                         jlong time_ms,
-                         jfloat x,
-                         jfloat y,
-                         jfloat ticks_x,
-                         jfloat ticks_y,
-                         jfloat pixels_per_tick);
-
   void OnDragEvent(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& jobj,
                    jint action,
@@ -84,11 +75,56 @@ class EventForwarder {
                    const base::android::JavaParamRef<jobjectArray>& j_mimeTypes,
                    const base::android::JavaParamRef<jstring>& j_content);
 
-  bool OnGestureEvent(JNIEnv* env,
-                      const base::android::JavaParamRef<jobject>& jobj,
-                      jint type,
-                      jlong time_ms,
-                      jfloat delta);
+  jboolean OnGestureEvent(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& jobj,
+                          jint type,
+                          jlong time_ms,
+                          jfloat scale);
+
+  jboolean OnGenericMotionEvent(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& motion_event,
+      jlong time_ms);
+
+  jboolean OnKeyUp(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj,
+                   const base::android::JavaParamRef<jobject>& key_event,
+                   jint key_code);
+
+  jboolean DispatchKeyEvent(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& motion_event);
+
+  void ScrollBy(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& jobj,
+                jfloat delta_x,
+                jfloat delta_y);
+
+  void ScrollTo(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& jobj,
+                jfloat x,
+                jfloat y);
+
+  void DoubleTap(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& jobj,
+                 jlong time_ms,
+                 jint x,
+                 jint y);
+
+  void StartFling(JNIEnv* env,
+                  const base::android::JavaParamRef<jobject>& jobj,
+                  jlong time_ms,
+                  jfloat velocity_x,
+                  jfloat velocity_y,
+                  jboolean synthetic_scroll,
+                  jboolean prevent_boosting);
+
+  void CancelFling(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& jobj,
+                   jlong time_ms,
+                   jboolean prevent_boosting);
 
  private:
   friend class ViewAndroid;

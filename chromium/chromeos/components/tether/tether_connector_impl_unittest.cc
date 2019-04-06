@@ -6,9 +6,9 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/test/histogram_tester.h"
-#include "base/test/simple_test_clock.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chromeos/components/tether/connect_tethering_operation.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/fake_active_host.h"
@@ -27,7 +27,9 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_test.h"
-#include "components/cryptauth/remote_device.h"
+#include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
+#include "chromeos/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
+#include "components/cryptauth/remote_device_ref.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -48,8 +50,6 @@ const char kPassword[] = "password";
 
 const char kWifiNetworkGuid[] = "wifiNetworkGuid";
 
-constexpr base::TimeDelta kConnectToHostTime = base::TimeDelta::FromSeconds(13);
-
 std::string CreateWifiConfigurationJsonString() {
   std::stringstream ss;
   ss << "{"
@@ -63,11 +63,15 @@ std::string CreateWifiConfigurationJsonString() {
 class FakeConnectTetheringOperation : public ConnectTetheringOperation {
  public:
   FakeConnectTetheringOperation(
-      const cryptauth::RemoteDevice& device_to_connect,
+      cryptauth::RemoteDeviceRef device_to_connect,
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
       BleConnectionManager* connection_manager,
       TetherHostResponseRecorder* tether_host_response_recorder,
       bool setup_required)
       : ConnectTetheringOperation(device_to_connect,
+                                  device_sync_client,
+                                  secure_channel_client,
                                   connection_manager,
                                   tether_host_response_recorder,
                                   setup_required),
@@ -84,11 +88,12 @@ class FakeConnectTetheringOperation : public ConnectTetheringOperation {
     NotifyObserversOfSuccessfulResponse(ssid, password);
   }
 
-  void SendFailedResponse(ConnectTetheringResponse_ResponseCode error_code) {
+  void SendFailedResponse(
+      ConnectTetheringOperation::HostResponseErrorCode error_code) {
     NotifyObserversOfConnectionFailure(error_code);
   }
 
-  cryptauth::RemoteDevice GetRemoteDevice() {
+  cryptauth::RemoteDeviceRef GetRemoteDevice() {
     EXPECT_EQ(1u, remote_devices().size());
     return remote_devices()[0];
   }
@@ -112,14 +117,16 @@ class FakeConnectTetheringOperationFactory
  protected:
   // ConnectTetheringOperation::Factory:
   std::unique_ptr<ConnectTetheringOperation> BuildInstance(
-      const cryptauth::RemoteDevice& device_to_connect,
+      cryptauth::RemoteDeviceRef device_to_connect,
+      device_sync::DeviceSyncClient* device_sync_client,
+      secure_channel::SecureChannelClient* secure_channel_client,
       BleConnectionManager* connection_manager,
       TetherHostResponseRecorder* tether_host_response_recorder,
       bool setup_required) override {
     FakeConnectTetheringOperation* operation =
-        new FakeConnectTetheringOperation(device_to_connect, connection_manager,
-                                          tether_host_response_recorder,
-                                          setup_required);
+        new FakeConnectTetheringOperation(
+            device_to_connect, device_sync_client, secure_channel_client,
+            connection_manager, tether_host_response_recorder, setup_required);
     created_operations_.push_back(operation);
     return base::WrapUnique(operation);
   }
@@ -133,7 +140,7 @@ class FakeConnectTetheringOperationFactory
 class TetherConnectorImplTest : public NetworkStateTest {
  public:
   TetherConnectorImplTest()
-      : test_devices_(cryptauth::GenerateTestRemoteDevices(2u)) {}
+      : test_devices_(cryptauth::CreateRemoteDeviceRefListForTest(2u)) {}
   ~TetherConnectorImplTest() override = default;
 
   void SetUp() override {
@@ -147,6 +154,10 @@ class TetherConnectorImplTest : public NetworkStateTest {
     ConnectTetheringOperation::Factory::SetInstanceForTesting(
         fake_operation_factory_.get());
 
+    fake_device_sync_client_ =
+        std::make_unique<device_sync::FakeDeviceSyncClient>();
+    fake_secure_channel_client_ =
+        std::make_unique<secure_channel::FakeSecureChannelClient>();
     fake_wifi_hotspot_connector_ =
         std::make_unique<FakeWifiHotspotConnector>(network_state_handler());
     fake_active_host_ = std::make_unique<FakeActiveHost>();
@@ -161,17 +172,17 @@ class TetherConnectorImplTest : public NetworkStateTest {
     fake_notification_presenter_ =
         std::make_unique<FakeNotificationPresenter>();
     mock_host_connection_metrics_logger_ =
-        base::WrapUnique(new StrictMock<MockHostConnectionMetricsLogger>);
+        base::WrapUnique(new StrictMock<MockHostConnectionMetricsLogger>(
+            fake_ble_connection_manager_.get(), fake_active_host_.get()));
     fake_disconnect_tethering_request_sender_ =
         std::make_unique<FakeDisconnectTetheringRequestSender>();
     fake_wifi_hotspot_disconnector_ =
         std::make_unique<FakeWifiHotspotDisconnector>();
-    test_clock_ = std::make_unique<base::SimpleTestClock>();
-    test_clock_->SetNow(base::Time::UnixEpoch());
 
     result_.clear();
 
     tether_connector_ = base::WrapUnique(new TetherConnectorImpl(
+        fake_device_sync_client_.get(), fake_secure_channel_client_.get(),
         network_state_handler(), fake_wifi_hotspot_connector_.get(),
         fake_active_host_.get(), fake_tether_host_fetcher_.get(),
         fake_ble_connection_manager_.get(),
@@ -180,7 +191,7 @@ class TetherConnectorImplTest : public NetworkStateTest {
         fake_notification_presenter_.get(),
         mock_host_connection_metrics_logger_.get(),
         fake_disconnect_tethering_request_sender_.get(),
-        fake_wifi_hotspot_disconnector_.get(), test_clock_.get()));
+        fake_wifi_hotspot_disconnector_.get()));
 
     SetUpTetherNetworks();
   }
@@ -239,7 +250,6 @@ class TetherConnectorImplTest : public NetworkStateTest {
   }
 
   void SuccessfullyJoinWifiNetwork() {
-    test_clock_->Advance(kConnectToHostTime);
     ConfigureService(CreateWifiConfigurationJsonString());
     fake_wifi_hotspot_connector_->CallMostRecentCallback(kWifiNetworkGuid);
   }
@@ -258,18 +268,21 @@ class TetherConnectorImplTest : public NetworkStateTest {
   }
 
   void VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode response_code,
+      ConnectTetheringOperation::HostResponseErrorCode response_code,
       bool setup_required,
       HostConnectionMetricsLogger::ConnectionToHostResult expected_event_type) {
     EXPECT_CALL(*mock_host_connection_metrics_logger_,
-                RecordConnectionToHostResult(expected_event_type));
+                RecordConnectionToHostResult(
+                    expected_event_type,
+                    test_devices_[setup_required ? 1 : 0].GetDeviceId()));
 
     EXPECT_FALSE(
         fake_notification_presenter_->is_setup_required_notification_shown());
 
     // test_devices_[0] does not require first-time setup, but test_devices_[1]
     // does require first-time setup. See SetUpTetherNetworks().
-    cryptauth::RemoteDevice test_device = test_devices_[setup_required ? 1 : 0];
+    cryptauth::RemoteDeviceRef test_device =
+        test_devices_[setup_required ? 1 : 0];
 
     CallConnect(GetTetherNetworkGuid(test_device.GetDeviceId()));
     EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -303,8 +316,6 @@ class TetherConnectorImplTest : public NetworkStateTest {
               GetResultAndReset());
     EXPECT_TRUE(fake_notification_presenter_
                     ->is_connection_failed_notification_shown());
-    histogram_tester_.ExpectTotalCount(
-        "InstantTethering.Performance.ConnectToHostDuration", 0 /* count */);
   }
 
   std::string GetResultAndReset() {
@@ -313,13 +324,16 @@ class TetherConnectorImplTest : public NetworkStateTest {
     return result;
   }
 
-  const std::vector<cryptauth::RemoteDevice> test_devices_;
+  const cryptauth::RemoteDeviceRefList test_devices_;
   const base::MessageLoop message_loop_;
 
   std::unique_ptr<FakeConnectTetheringOperationFactory> fake_operation_factory_;
   std::unique_ptr<FakeWifiHotspotConnector> fake_wifi_hotspot_connector_;
   std::unique_ptr<FakeActiveHost> fake_active_host_;
   std::unique_ptr<FakeTetherHostFetcher> fake_tether_host_fetcher_;
+  std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
+  std::unique_ptr<secure_channel::SecureChannelClient>
+      fake_secure_channel_client_;
   std::unique_ptr<FakeBleConnectionManager> fake_ble_connection_manager_;
   std::unique_ptr<MockTetherHostResponseRecorder>
       mock_tether_host_response_recorder_;
@@ -333,7 +347,6 @@ class TetherConnectorImplTest : public NetworkStateTest {
   std::unique_ptr<FakeDisconnectTetheringRequestSender>
       fake_disconnect_tethering_request_sender_;
   std::unique_ptr<FakeWifiHotspotDisconnector> fake_wifi_hotspot_disconnector_;
-  std::unique_ptr<base::SimpleTestClock> test_clock_;
 
   std::string result_;
   base::HistogramTester histogram_tester_;
@@ -345,14 +358,16 @@ class TetherConnectorImplTest : public NetworkStateTest {
 };
 
 TEST_F(TetherConnectorImplTest, TestCannotFetchDevice) {
+  // Base64-encoded version of "nonexistentDeviceId".
+  const char kNonexistentDeviceId[] = "bm9uZXhpc3RlbnREZXZpY2VJZA==";
+
   EXPECT_CALL(
       *mock_host_connection_metrics_logger_,
       RecordConnectionToHostResult(
           HostConnectionMetricsLogger::ConnectionToHostResult::
-              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_INTERNAL_ERROR));
+              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_INTERNAL_ERROR,
+          kNonexistentDeviceId));
 
-  // Base64-encoded version of "nonexistentDeviceId".
-  const char kNonexistentDeviceId[] = "bm9uZXhpc3RlbnREZXZpY2VJZA==";
   CallConnect(GetTetherNetworkGuid(kNonexistentDeviceId));
 
   // Since an invalid device ID was used, no connection should have been
@@ -362,8 +377,6 @@ TEST_F(TetherConnectorImplTest, TestCannotFetchDevice) {
   EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed, GetResultAndReset());
   EXPECT_TRUE(
       fake_notification_presenter_->is_connection_failed_notification_shown());
-  histogram_tester_.ExpectTotalCount(
-      "InstantTethering.Performance.ConnectToHostDuration", 0 /* count */);
 }
 
 TEST_F(TetherConnectorImplTest, TestCancelWhileOperationActive) {
@@ -371,7 +384,8 @@ TEST_F(TetherConnectorImplTest, TestCancelWhileOperationActive) {
       *mock_host_connection_metrics_logger_,
       RecordConnectionToHostResult(
           HostConnectionMetricsLogger::ConnectionToHostResult::
-              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER));
+              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER,
+          test_devices_[0].GetDeviceId()));
 
   CallConnect(GetTetherNetworkGuid(test_devices_[0].GetDeviceId()));
   EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -399,15 +413,12 @@ TEST_F(TetherConnectorImplTest, TestCancelWhileOperationActive) {
       fake_disconnect_tethering_request_sender_->device_ids_sent_requests());
   EXPECT_FALSE(
       fake_notification_presenter_->is_connection_failed_notification_shown());
-  histogram_tester_.ExpectTotalCount(
-      "InstantTethering.Performance.ConnectToHostDuration", 0 /* count */);
 }
 
 TEST_F(TetherConnectorImplTest,
        TestConnectTetheringOperationFails_SetupNotRequired) {
   VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode::
-          ConnectTetheringResponse_ResponseCode_UNKNOWN_ERROR,
+      ConnectTetheringOperation::HostResponseErrorCode::UNKNOWN_ERROR,
       false /* setup_required */,
       HostConnectionMetricsLogger::ConnectionToHostResult::
           CONNECTION_RESULT_FAILURE_UNKNOWN_ERROR);
@@ -416,8 +427,7 @@ TEST_F(TetherConnectorImplTest,
 TEST_F(TetherConnectorImplTest,
        TestConnectTetheringOperationFails_SetupRequired) {
   VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode::
-          ConnectTetheringResponse_ResponseCode_UNKNOWN_ERROR,
+      ConnectTetheringOperation::HostResponseErrorCode::UNKNOWN_ERROR,
       true /* setup_required */,
       HostConnectionMetricsLogger::ConnectionToHostResult::
           CONNECTION_RESULT_FAILURE_UNKNOWN_ERROR);
@@ -426,8 +436,7 @@ TEST_F(TetherConnectorImplTest,
 TEST_F(TetherConnectorImplTest,
        TestConnectTetheringOperationFails_ProvisioningFailed) {
   VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode::
-          ConnectTetheringResponse_ResponseCode_PROVISIONING_FAILED,
+      ConnectTetheringOperation::HostResponseErrorCode::PROVISIONING_FAILED,
       false /* setup_required */,
       HostConnectionMetricsLogger::ConnectionToHostResult::
           CONNECTION_RESULT_PROVISIONING_FAILED);
@@ -436,8 +445,7 @@ TEST_F(TetherConnectorImplTest,
 TEST_F(TetherConnectorImplTest,
        TestConnectTetheringOperationFails_TetheringTimeout_SetupNotRequired) {
   VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode::
-          ConnectTetheringResponse_ResponseCode_TETHERING_TIMEOUT,
+      ConnectTetheringOperation::HostResponseErrorCode::TETHERING_TIMEOUT,
       false /* setup_required */,
       HostConnectionMetricsLogger::ConnectionToHostResult::
           CONNECTION_RESULT_FAILURE_TETHERING_TIMED_OUT_FIRST_TIME_SETUP_WAS_NOT_REQUIRED);
@@ -446,8 +454,7 @@ TEST_F(TetherConnectorImplTest,
 TEST_F(TetherConnectorImplTest,
        TestConnectTetheringOperationFails_TetheringTimeout_SetupRequired) {
   VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode::
-          ConnectTetheringResponse_ResponseCode_TETHERING_TIMEOUT,
+      ConnectTetheringOperation::HostResponseErrorCode::TETHERING_TIMEOUT,
       true /* setup_required */,
       HostConnectionMetricsLogger::ConnectionToHostResult::
           CONNECTION_RESULT_FAILURE_TETHERING_TIMED_OUT_FIRST_TIME_SETUP_WAS_REQUIRED);
@@ -456,8 +463,7 @@ TEST_F(TetherConnectorImplTest,
 TEST_F(TetherConnectorImplTest,
        TestConnectTetheringOperationFails_TetheringUnsupported) {
   VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode::
-          ConnectTetheringResponse_ResponseCode_TETHERING_UNSUPPORTED,
+      ConnectTetheringOperation::HostResponseErrorCode::TETHERING_UNSUPPORTED,
       false /* setup_required */,
       HostConnectionMetricsLogger::ConnectionToHostResult::
           CONNECTION_RESULT_FAILURE_TETHERING_UNSUPPORTED);
@@ -465,11 +471,47 @@ TEST_F(TetherConnectorImplTest,
 
 TEST_F(TetherConnectorImplTest, TestConnectTetheringOperationFails_NoCellData) {
   VerifyConnectTetheringOperationFails(
-      ConnectTetheringResponse_ResponseCode::
-          ConnectTetheringResponse_ResponseCode_NO_CELL_DATA,
+      ConnectTetheringOperation::HostResponseErrorCode::NO_CELL_DATA,
       false /* setup_required */,
       HostConnectionMetricsLogger::ConnectionToHostResult::
           CONNECTION_RESULT_FAILURE_NO_CELL_DATA);
+}
+
+TEST_F(TetherConnectorImplTest,
+       TestConnectTetheringOperationFails_EnableHotspotFailed) {
+  VerifyConnectTetheringOperationFails(
+      ConnectTetheringOperation::HostResponseErrorCode::ENABLING_HOTSPOT_FAILED,
+      false /* setup_required */,
+      HostConnectionMetricsLogger::ConnectionToHostResult::
+          CONNECTION_RESULT_FAILURE_ENABLING_HOTSPOT_FAILED);
+}
+
+TEST_F(TetherConnectorImplTest,
+       TestConnectTetheringOperationFails_EnableHotspotTimeout) {
+  VerifyConnectTetheringOperationFails(
+      ConnectTetheringOperation::HostResponseErrorCode::
+          ENABLING_HOTSPOT_TIMEOUT,
+      false /* setup_required */,
+      HostConnectionMetricsLogger::ConnectionToHostResult::
+          CONNECTION_RESULT_FAILURE_ENABLING_HOTSPOT_TIMEOUT);
+}
+
+TEST_F(TetherConnectorImplTest, TestConnectTetheringOperationFails_NoResponse) {
+  VerifyConnectTetheringOperationFails(
+      ConnectTetheringOperation::HostResponseErrorCode::NO_RESPONSE,
+      false /* setup_required */,
+      HostConnectionMetricsLogger::ConnectionToHostResult::
+          CONNECTION_RESULT_FAILURE_NO_RESPONSE);
+}
+
+TEST_F(TetherConnectorImplTest,
+       TestConnectTetheringOperationFails_InvalidHotspotCredentials) {
+  VerifyConnectTetheringOperationFails(
+      ConnectTetheringOperation::HostResponseErrorCode::
+          INVALID_HOTSPOT_CREDENTIALS,
+      false /* setup_required */,
+      HostConnectionMetricsLogger::ConnectionToHostResult::
+          CONNECTION_RESULT_FAILURE_INVALID_HOTSPOT_CREDENTIALS);
 }
 
 TEST_F(TetherConnectorImplTest,
@@ -487,7 +529,8 @@ TEST_F(TetherConnectorImplTest, TestConnectingToWifiFails) {
   EXPECT_CALL(*mock_host_connection_metrics_logger_,
               RecordConnectionToHostResult(
                   HostConnectionMetricsLogger::ConnectionToHostResult::
-                      CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_TIMEOUT));
+                      CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_TIMEOUT,
+                  test_devices_[0].GetDeviceId()));
 
   CallConnect(GetTetherNetworkGuid(test_devices_[0].GetDeviceId()));
   EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -524,8 +567,6 @@ TEST_F(TetherConnectorImplTest, TestConnectingToWifiFails) {
   EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed, GetResultAndReset());
   EXPECT_TRUE(
       fake_notification_presenter_->is_connection_failed_notification_shown());
-  histogram_tester_.ExpectTotalCount(
-      "InstantTethering.Performance.ConnectToHostDuration", 0 /* count */);
 }
 
 TEST_F(TetherConnectorImplTest, TestCancelWhileConnectingToWifi) {
@@ -533,7 +574,8 @@ TEST_F(TetherConnectorImplTest, TestCancelWhileConnectingToWifi) {
       *mock_host_connection_metrics_logger_,
       RecordConnectionToHostResult(
           HostConnectionMetricsLogger::ConnectionToHostResult::
-              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER));
+              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER,
+          test_devices_[0].GetDeviceId()));
 
   CallConnect(GetTetherNetworkGuid(test_devices_[0].GetDeviceId()));
   EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -574,15 +616,14 @@ TEST_F(TetherConnectorImplTest, TestCancelWhileConnectingToWifi) {
   EXPECT_EQ(
       kWifiNetworkGuid,
       fake_wifi_hotspot_disconnector_->last_disconnected_wifi_network_guid());
-  histogram_tester_.ExpectTotalCount(
-      "InstantTethering.Performance.ConnectToHostDuration", 0 /* count */);
 }
 
 TEST_F(TetherConnectorImplTest, TestSuccessfulConnection) {
   EXPECT_CALL(*mock_host_connection_metrics_logger_,
               RecordConnectionToHostResult(
                   HostConnectionMetricsLogger::ConnectionToHostResult::
-                      CONNECTION_RESULT_SUCCESS));
+                      CONNECTION_RESULT_SUCCESS,
+                  test_devices_[0].GetDeviceId()));
 
   CallConnect(GetTetherNetworkGuid(test_devices_[0].GetDeviceId()));
   EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -624,9 +665,6 @@ TEST_F(TetherConnectorImplTest, TestSuccessfulConnection) {
   EXPECT_EQ(GetTetherNetworkGuid(test_devices_[0].GetDeviceId()),
             fake_active_host_->GetTetherNetworkGuid());
   EXPECT_EQ(kWifiNetworkGuid, fake_active_host_->GetWifiNetworkGuid());
-  histogram_tester_.ExpectTimeBucketCount(
-      "InstantTethering.Performance.ConnectToHostDuration", kConnectToHostTime,
-      1 /* count */);
 
   EXPECT_EQ(kSuccessResult, GetResultAndReset());
   EXPECT_FALSE(
@@ -637,7 +675,8 @@ TEST_F(TetherConnectorImplTest, TestSuccessfulConnection_SetupRequired) {
   EXPECT_CALL(*mock_host_connection_metrics_logger_,
               RecordConnectionToHostResult(
                   HostConnectionMetricsLogger::ConnectionToHostResult::
-                      CONNECTION_RESULT_SUCCESS));
+                      CONNECTION_RESULT_SUCCESS,
+                  test_devices_[1].GetDeviceId()));
   EXPECT_FALSE(
       fake_notification_presenter_->is_setup_required_notification_shown());
 
@@ -665,9 +704,6 @@ TEST_F(TetherConnectorImplTest, TestSuccessfulConnection_SetupRequired) {
   EXPECT_EQ(kSuccessResult, GetResultAndReset());
   EXPECT_FALSE(
       fake_notification_presenter_->is_connection_failed_notification_shown());
-  histogram_tester_.ExpectTimeBucketCount(
-      "InstantTethering.Performance.ConnectToHostDuration", kConnectToHostTime,
-      1 /* count */);
 }
 
 TEST_F(TetherConnectorImplTest,
@@ -676,11 +712,13 @@ TEST_F(TetherConnectorImplTest,
       *mock_host_connection_metrics_logger_,
       RecordConnectionToHostResult(
           HostConnectionMetricsLogger::ConnectionToHostResult::
-              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER));
+              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER,
+          test_devices_[0].GetDeviceId()));
   EXPECT_CALL(*mock_host_connection_metrics_logger_,
               RecordConnectionToHostResult(
                   HostConnectionMetricsLogger::ConnectionToHostResult::
-                      CONNECTION_RESULT_SUCCESS));
+                      CONNECTION_RESULT_SUCCESS,
+                  test_devices_[1].GetDeviceId()));
 
   CallConnect(GetTetherNetworkGuid(test_devices_[0].GetDeviceId()));
   EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -694,11 +732,6 @@ TEST_F(TetherConnectorImplTest,
   // An operation should have been created.
   EXPECT_EQ(1u, fake_operation_factory_->created_operations().size());
 
-  // Simulate the progression of some time in the connection process.
-  base::TimeDelta firstConnectToHostAttemptTime =
-      base::TimeDelta::FromSeconds(7);
-  test_clock_->Advance(firstConnectToHostAttemptTime);
-
   // Before the created operation replies, start a new connection to device 1.
   CallConnect(GetTetherNetworkGuid(test_devices_[1].GetDeviceId()));
   // The first connection attempt should have resulted in a connect canceled
@@ -707,8 +740,6 @@ TEST_F(TetherConnectorImplTest,
             GetResultAndReset());
   EXPECT_FALSE(
       fake_notification_presenter_->is_connection_failed_notification_shown());
-  histogram_tester_.ExpectTotalCount(
-      "InstantTethering.Performance.ConnectToHostDuration", 0 /* count */);
 
   // Now, the active host should be the second device.
   EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -739,14 +770,7 @@ TEST_F(TetherConnectorImplTest,
   EXPECT_EQ(fake_active_host_->GetTetherNetworkGuid(),
             fake_wifi_hotspot_connector_->most_recent_tether_network_guid());
 
-  const base::TimeDelta kSecondConnectToHostAttemptAdditionalTime =
-      base::TimeDelta::FromSeconds(2);
-  test_clock_->Advance(kSecondConnectToHostAttemptAdditionalTime);
   SuccessfullyJoinWifiNetwork();
-  histogram_tester_.ExpectTimeBucketCount(
-      "InstantTethering.Performance.ConnectToHostDuration",
-      kConnectToHostTime + kSecondConnectToHostAttemptAdditionalTime,
-      1 /* count */);
 }
 
 TEST_F(TetherConnectorImplTest,
@@ -755,11 +779,13 @@ TEST_F(TetherConnectorImplTest,
       *mock_host_connection_metrics_logger_,
       RecordConnectionToHostResult(
           HostConnectionMetricsLogger::ConnectionToHostResult::
-              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER));
+              CONNECTION_RESULT_FAILURE_CLIENT_CONNECTION_CANCELED_BY_USER,
+          test_devices_[0].GetDeviceId()));
   EXPECT_CALL(*mock_host_connection_metrics_logger_,
               RecordConnectionToHostResult(
                   HostConnectionMetricsLogger::ConnectionToHostResult::
-                      CONNECTION_RESULT_SUCCESS));
+                      CONNECTION_RESULT_SUCCESS,
+                  test_devices_[1].GetDeviceId()));
 
   CallConnect(GetTetherNetworkGuid(test_devices_[0].GetDeviceId()));
   EXPECT_EQ(ActiveHost::ActiveHostStatus::CONNECTING,
@@ -799,8 +825,6 @@ TEST_F(TetherConnectorImplTest,
   EXPECT_EQ(GetTetherNetworkGuid(test_devices_[1].GetDeviceId()),
             fake_active_host_->GetTetherNetworkGuid());
   EXPECT_TRUE(fake_active_host_->GetWifiNetworkGuid().empty());
-  histogram_tester_.ExpectTotalCount(
-      "InstantTethering.Performance.ConnectToHostDuration", 0 /* count */);
 
   // The second operation replies successfully, and this response should
   // result in a Wi-Fi connection attempt.
@@ -814,9 +838,6 @@ TEST_F(TetherConnectorImplTest,
             fake_wifi_hotspot_connector_->most_recent_tether_network_guid());
 
   SuccessfullyJoinWifiNetwork();
-  histogram_tester_.ExpectTimeBucketCount(
-      "InstantTethering.Performance.ConnectToHostDuration",
-      kConnectToHostTime * 2, 1 /* count */);
 }
 
 }  // namespace tether

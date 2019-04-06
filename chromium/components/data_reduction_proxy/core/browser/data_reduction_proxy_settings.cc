@@ -13,7 +13,6 @@
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "build/build_config.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
@@ -52,7 +51,7 @@ namespace data_reduction_proxy {
 DataReductionProxySettings::DataReductionProxySettings()
     : unreachable_(false),
       deferred_initialization_(false),
-      data_reduction_proxy_enabled_pref_name_(),
+
       prefs_(nullptr),
       config_(nullptr),
       clock_(base::DefaultClock::GetInstance()) {}
@@ -79,7 +78,7 @@ void DataReductionProxySettings::InitDataReductionProxySettings(
   DCHECK(prefs);
   DCHECK(io_data);
   DCHECK(io_data->config());
-  DCHECK(data_reduction_proxy_service.get());
+  DCHECK(data_reduction_proxy_service);
   data_reduction_proxy_enabled_pref_name_ =
       data_reduction_proxy_enabled_pref_name;
   prefs_ = prefs;
@@ -115,6 +114,8 @@ void DataReductionProxySettings::SetCallbackToRegisterSyntheticFieldTrial(
 }
 
 bool DataReductionProxySettings::IsDataReductionProxyEnabled() const {
+  if (spdy_proxy_auth_enabled_.GetPrefName().empty())
+    return false;
   return spdy_proxy_auth_enabled_.GetValue() ||
          params::ShouldForceEnableDataReductionProxy();
 }
@@ -149,11 +150,12 @@ int64_t DataReductionProxySettings::GetDataReductionLastUpdateTime() {
       data_reduction_proxy_service_->compression_stats()->GetLastUpdateTime();
 }
 
-void DataReductionProxySettings::ClearDataSavingStatistics() {
+void DataReductionProxySettings::ClearDataSavingStatistics(
+    DataReductionProxySavingsClearedReason reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(data_reduction_proxy_service_->compression_stats());
-  data_reduction_proxy_service_->compression_stats()
-      ->ClearDataSavingStatistics();
+  data_reduction_proxy_service_->compression_stats()->ClearDataSavingStatistics(
+      reason);
 }
 
 int64_t DataReductionProxySettings::GetTotalHttpContentLengthSaved() {
@@ -281,6 +283,7 @@ void DataReductionProxySettings::RecordDataReductionInit() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   RecordStartupState(IsDataReductionProxyEnabled() ? PROXY_ENABLED
                                                    : PROXY_DISABLED);
+  RecordStartupSavings();
 }
 
 void DataReductionProxySettings::RecordStartupState(
@@ -288,6 +291,38 @@ void DataReductionProxySettings::RecordStartupState(
   UMA_HISTOGRAM_ENUMERATION(kUMAProxyStartupStateHistogram,
                             state,
                             PROXY_STARTUP_STATE_COUNT);
+}
+
+void DataReductionProxySettings::RecordStartupSavings() const {
+  // Minimum bytes the user should have browsed, for the data savings percent
+  // UMA to be recorded at startup.
+  const unsigned int kMinOriginalContentLengthBytes =
+      10 * 1024 * 1024;  // 10 MB.
+
+  if (!IsDataReductionProxyEnabled())
+    return;
+
+  DCHECK(data_reduction_proxy_service_->compression_stats());
+  int64_t original_content_length =
+      data_reduction_proxy_service_->compression_stats()
+          ->GetHttpOriginalContentLength();
+  int64_t received_content_length =
+      data_reduction_proxy_service_->compression_stats()
+          ->GetHttpReceivedContentLength();
+  if (original_content_length < kMinOriginalContentLengthBytes)
+    return;
+  int savings_percent =
+      static_cast<int>(((original_content_length - received_content_length) /
+                        (float)original_content_length) *
+                       100.0);
+  if (savings_percent >= 0) {
+    UMA_HISTOGRAM_PERCENTAGE("DataReductionProxy.StartupSavingsPercent",
+                             savings_percent > 0 ? savings_percent : 0);
+  }
+  if (savings_percent < 0) {
+    UMA_HISTOGRAM_PERCENTAGE("DataReductionProxy.StartupNegativeSavingsPercent",
+                             -savings_percent);
+  }
 }
 
 ContentLengthList

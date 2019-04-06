@@ -13,14 +13,14 @@
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/posix/global_descriptors.h"
 #include "build/build_config.h"
-#include "chromecast/chromecast_features.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/browser/cast_content_browser_client.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "chromecast/common/cast_resource_delegate.h"
 #include "chromecast/common/global_descriptors.h"
 #include "chromecast/renderer/cast_content_renderer_client.h"
@@ -38,13 +38,17 @@
 #include "ui/base/resource/resource_bundle_android.h"
 #elif defined(OS_LINUX)
 #include "chromecast/app/linux/cast_crash_reporter_client.h"
+#include "services/service_manager/sandbox/switches.h"
 #endif  // defined(OS_LINUX)
 
 namespace {
 
 #if defined(OS_LINUX)
-base::LazyInstance<chromecast::CastCrashReporterClient>::Leaky
-    g_crash_reporter_client = LAZY_INSTANCE_INITIALIZER;
+chromecast::CastCrashReporterClient* GetCastCrashReporter() {
+  static base::NoDestructor<chromecast::CastCrashReporterClient>
+      crash_reporter_client;
+  return crash_reporter_client.get();
+}
 #endif  // defined(OS_LINUX)
 
 #if defined(OS_ANDROID)
@@ -72,7 +76,7 @@ bool CastMainDelegate::BasicStartupComplete(int* exit_code) {
   // Browser process logs are recorded for attaching with crash dumps.
   if (process_type.empty()) {
     base::FilePath log_file;
-    PathService::Get(FILE_CAST_ANDROID_LOG, &log_file);
+    base::PathService::Get(FILE_CAST_ANDROID_LOG, &log_file);
     settings.logging_dest = logging::LOG_TO_ALL;
     settings.log_file = log_file.value().c_str();
     settings.delete_old = logging::DELETE_OLD_LOG_FILE;
@@ -142,12 +146,12 @@ void CastMainDelegate::PreSandboxStartup() {
 // TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
 #if defined(OS_ANDROID)
   base::FilePath log_file;
-  PathService::Get(FILE_CAST_ANDROID_LOG, &log_file);
+  base::PathService::Get(FILE_CAST_ANDROID_LOG, &log_file);
   chromecast::CrashHandler::Initialize(process_type, log_file);
 #elif defined(OS_LINUX)
-  crash_reporter::SetCrashReporterClient(g_crash_reporter_client.Pointer());
+  crash_reporter::SetCrashReporterClient(GetCastCrashReporter());
 
-  if (process_type != switches::kZygoteProcess) {
+  if (process_type != service_manager::switches::kZygoteProcess) {
     CastCrashReporterClient::InitCrashReporter(process_type);
   }
 #endif  // defined(OS_LINUX)
@@ -184,7 +188,7 @@ void CastMainDelegate::ZygoteForked() {
 
 void CastMainDelegate::InitializeResourceBundle() {
   base::FilePath pak_file;
-  CHECK(PathService::Get(FILE_CAST_PAK, &pak_file));
+  CHECK(base::PathService::Get(FILE_CAST_PAK, &pak_file));
 #if defined(OS_ANDROID)
   // On Android, the renderer runs with a different UID and can never access
   // the file system. Use the file descriptor passed in at launch time.

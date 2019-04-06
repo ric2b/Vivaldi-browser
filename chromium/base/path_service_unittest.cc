@@ -30,7 +30,7 @@ bool ReturnsValidPath(int dir_type) {
   // Some paths might not exist on some platforms in which case confirming
   // |result| is true and !path.empty() is the best we can do.
   bool check_path_exists = true;
-#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
+#if defined(OS_POSIX)
   // If chromium has never been started on this account, the cache path may not
   // exist.
   if (dir_type == DIR_CACHE)
@@ -42,9 +42,14 @@ bool ReturnsValidPath(int dir_type) {
   if (dir_type == DIR_USER_DESKTOP)
     check_path_exists = false;
 #endif
+#if defined(OS_IOS)
+  // Bundled unittests on iOS may not have Resources directory in the bundle.
+  if (dir_type == DIR_ASSETS)
+    check_path_exists = false;
+#endif
 #if defined(OS_MACOSX)
-  if (dir_type != DIR_EXE && dir_type != DIR_MODULE &&
-      dir_type != FILE_EXE && dir_type != FILE_MODULE) {
+  if (dir_type != DIR_EXE && dir_type != DIR_MODULE && dir_type != FILE_EXE &&
+      dir_type != FILE_MODULE) {
     if (path.ReferencesParent())
       return false;
   }
@@ -86,8 +91,9 @@ TEST_F(PathServiceTest, Get) {
     if (key == DIR_USER_DESKTOP)
       continue;  // iOS doesn't implement DIR_USER_DESKTOP.
 #elif defined(OS_FUCHSIA)
-    if (key == DIR_USER_DESKTOP)
-      continue;  // Fuchsia doesn't implement DIR_USER_DESKTOP.
+    if (key == DIR_USER_DESKTOP || key == FILE_MODULE || key == DIR_MODULE)
+      continue;  // Fuchsia doesn't implement DIR_USER_DESKTOP, FILE_MODULE and
+                 // DIR_MODULE.
 #endif
     EXPECT_PRED1(ReturnsValidPath, key);
   }
@@ -111,7 +117,7 @@ TEST_F(PathServiceTest, Get) {
        ++key) {
     EXPECT_PRED1(ReturnsValidPath, key);
   }
-#elif defined(OS_POSIX) && !defined(OS_FUCHSIA)
+#elif defined(OS_POSIX)
   for (int key = PATH_POSIX_START + 1; key < PATH_POSIX_END;
        ++key) {
     EXPECT_PRED1(ReturnsValidPath, key);

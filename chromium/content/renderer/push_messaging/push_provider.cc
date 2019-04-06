@@ -17,9 +17,9 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/renderer/service_worker/web_service_worker_registration_impl.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/modules/push_messaging/WebPushSubscription.h"
-#include "third_party/WebKit/public/platform/modules/push_messaging/WebPushSubscriptionOptions.h"
+#include "third_party/blink/public/platform/modules/push_messaging/web_push_subscription.h"
+#include "third_party/blink/public/platform/modules/push_messaging/web_push_subscription_options.h"
+#include "third_party/blink/public/platform/web_string.h"
 
 namespace content {
 namespace {
@@ -28,6 +28,8 @@ const char* PushRegistrationStatusToString(
     mojom::PushRegistrationStatus status) {
   switch (status) {
     case mojom::PushRegistrationStatus::SUCCESS_FROM_PUSH_SERVICE:
+    case mojom::PushRegistrationStatus::
+        SUCCESS_NEW_SUBSCRIPTION_FROM_PUSH_SERVICE:
       return "Registration successful - from push service";
 
     case mojom::PushRegistrationStatus::NO_SERVICE_WORKER:
@@ -108,6 +110,8 @@ blink::WebPushError PushRegistrationStatusToWebPushError(
       error_type = blink::WebPushError::kErrorTypeInvalidState;
       break;
     case mojom::PushRegistrationStatus::SUCCESS_FROM_PUSH_SERVICE:
+    case mojom::PushRegistrationStatus::
+        SUCCESS_NEW_SUBSCRIPTION_FROM_PUSH_SERVICE:
     case mojom::PushRegistrationStatus::NO_SERVICE_WORKER:
     case mojom::PushRegistrationStatus::SERVICE_NOT_AVAILABLE:
     case mojom::PushRegistrationStatus::LIMIT_REACHED:
@@ -140,7 +144,7 @@ PushProvider::PushProvider(const scoped_refptr<base::SingleThreadTaskRunner>&
   if (!main_thread_task_runner->BelongsToCurrentThread()) {
     main_thread_task_runner->PostTask(
         FROM_HERE,
-        base::BindOnce(&PushProvider::GetInterface, base::Passed(&request)));
+        base::BindOnce(&PushProvider::GetInterface, std::move(request)));
   } else {
     GetInterface(std::move(request));
   }
@@ -198,7 +202,7 @@ void PushProvider::Subscribe(
       // Safe to use base::Unretained because |push_messaging_manager_ |is owned
       // by |this|.
       base::BindOnce(&PushProvider::DidSubscribe, base::Unretained(this),
-                     base::Passed(&callbacks)));
+                     std::move(callbacks)));
 }
 
 void PushProvider::DidSubscribe(
@@ -211,6 +215,8 @@ void PushProvider::DidSubscribe(
   DCHECK(callbacks);
 
   if (status == mojom::PushRegistrationStatus::SUCCESS_FROM_PUSH_SERVICE ||
+      status == mojom::PushRegistrationStatus::
+                    SUCCESS_NEW_SUBSCRIPTION_FROM_PUSH_SERVICE ||
       status == mojom::PushRegistrationStatus::SUCCESS_FROM_CACHE) {
     DCHECK(endpoint);
     DCHECK(options);
@@ -240,7 +246,7 @@ void PushProvider::Unsubscribe(
       // Safe to use base::Unretained because |push_messaging_manager_ |is owned
       // by |this|.
       base::BindOnce(&PushProvider::DidUnsubscribe, base::Unretained(this),
-                     base::Passed(&callbacks)));
+                     std::move(callbacks)));
 }
 
 void PushProvider::DidUnsubscribe(
@@ -273,7 +279,7 @@ void PushProvider::GetSubscription(
       // Safe to use base::Unretained because |push_messaging_manager_ |is owned
       // by |this|.
       base::BindOnce(&PushProvider::DidGetSubscription, base::Unretained(this),
-                     base::Passed(&callbacks)));
+                     std::move(callbacks)));
 }
 
 void PushProvider::DidGetSubscription(

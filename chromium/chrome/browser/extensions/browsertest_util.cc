@@ -14,16 +14,13 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/notification_types.h"
-#include "extensions/browser/process_manager.h"
 #include "extensions/common/extension.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -43,46 +40,11 @@ ExtensionService* GetExtensionService(Profile* profile) {
 
 }  // namespace
 
-std::string ExecuteScriptInBackgroundPage(Profile* profile,
-                                          const std::string& extension_id,
-                                          const std::string& script) {
-  extensions::ProcessManager* manager =
-      extensions::ProcessManager::Get(profile);
-  extensions::ExtensionHost* host =
-      manager->GetBackgroundHostForExtension(extension_id);
-  if (host == NULL) {
-    ADD_FAILURE() << "Extension " << extension_id << " has no background page.";
-    return "";
-  }
-  std::string result;
-  if (!content::ExecuteScriptAndExtractString(
-           host->host_contents(), script, &result)) {
-    ADD_FAILURE() << "Executing script failed: " << script;
-    result.clear();
-  }
-  return result;
-}
-
-bool ExecuteScriptInBackgroundPageNoWait(Profile* profile,
-                                         const std::string& extension_id,
-                                         const std::string& script) {
-  extensions::ProcessManager* manager =
-      extensions::ProcessManager::Get(profile);
-  extensions::ExtensionHost* host =
-      manager->GetBackgroundHostForExtension(extension_id);
-  if (host == NULL) {
-    ADD_FAILURE() << "Extension " << extension_id << " has no background page.";
-    return false;
-  }
-  content::ExecuteScriptAsync(host->host_contents(), script);
-  return true;
-}
-
 void CreateAndInitializeLocalCache() {
 #if defined(OS_CHROMEOS)
   base::FilePath extension_cache_dir;
-  CHECK(PathService::Get(chromeos::DIR_DEVICE_EXTENSION_LOCAL_CACHE,
-                         &extension_cache_dir));
+  CHECK(base::PathService::Get(chromeos::DIR_DEVICE_EXTENSION_LOCAL_CACHE,
+                               &extension_cache_dir));
   base::FilePath cache_init_file = extension_cache_dir.Append(
       extensions::LocalExtensionCache::kCacheReadyFlagFileName);
   EXPECT_EQ(base::WriteFile(cache_init_file, "", 0), 0);

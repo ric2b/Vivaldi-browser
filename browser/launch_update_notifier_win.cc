@@ -17,6 +17,7 @@
 #include "components/prefs/pref_service.h"
 #include "prefs/vivaldi_pref_names.h"
 
+#include "installer/util/vivaldi_install_util.h"
 
 namespace vivaldi {
 
@@ -43,7 +44,8 @@ void LaunchUpdateNotifier(Profile* profile) {
   base::FilePath update_notifier_path;
   base::PathService::Get(base::DIR_EXE, &update_notifier_path);
   update_notifier_path =
-      update_notifier_path.Append(installer::kVivaldiUpdateNotifierExe);
+      update_notifier_path.Append(
+          vivaldi::constants::kVivaldiUpdateNotifierExe);
 
   base::string16 command;
   base::string16 notifier_path_string(

@@ -10,7 +10,6 @@
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
@@ -273,7 +272,15 @@ void LabelButton::Layout() {
       label_area.height());
 
   gfx::Point image_origin(child_area.origin());
-  image_origin.Offset(0, (child_area.height() - image_size.height()) / 2);
+  if (label_->multi_line()) {
+    // Right now this code currently only works for CheckBox and RadioButton
+    // descendants that have multi-line enabled for their label.
+    image_origin.Offset(
+        0, std::max(
+               0, (label_->font_list().GetHeight() - image_size.height()) / 2));
+  } else {
+    image_origin.Offset(0, (child_area.height() - image_size.height()) / 2);
+  }
   if (horizontal_alignment_ == gfx::ALIGN_CENTER) {
     const int spacing = (image_size.width() > 0 && label_size.width() > 0) ?
         image_label_spacing_ : 0;
@@ -391,7 +398,7 @@ std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()
     const {
   return ShouldUseFloodFillInkDrop()
              ? std::make_unique<views::InkDropHighlight>(
-                   size(), kInkDropSmallCornerRadius,
+                   size(), ink_drop_small_corner_radius(),
                    gfx::RectF(GetLocalBounds()).CenterPoint(),
                    GetInkDropBaseColor())
              : CreateDefaultInkDropHighlight(

@@ -7,9 +7,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "third_party/WebKit/public/platform/WebCrypto.h"
-#include "third_party/WebKit/public/platform/WebCryptoAlgorithm.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
+#include "base/single_thread_task_runner.h"
+#include "third_party/blink/public/platform/web_crypto.h"
+#include "third_party/blink/public/platform/web_crypto_algorithm.h"
+#include "third_party/blink/public/platform/web_vector.h"
 
 namespace webcrypto {
 

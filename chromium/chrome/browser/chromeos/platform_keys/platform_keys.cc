@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "net/base/hash_value.h"
 #include "net/cert/x509_certificate.h"
@@ -40,7 +39,7 @@ void IntersectOnWorkerThread(const net::CertificateList& certs1,
     if (it == fingerprints2.end())
       continue;
     const auto& cert2 = it->second;
-    DCHECK(cert1->Equals(cert2.get()));
+    DCHECK(cert1->EqualsExcludingChain(cert2.get()));
     intersection->push_back(cert1);
   }
 }

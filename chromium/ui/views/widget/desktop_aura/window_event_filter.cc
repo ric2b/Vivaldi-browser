@@ -4,7 +4,7 @@
 
 #include "ui/views/widget/desktop_aura/window_event_filter.h"
 
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -89,28 +89,31 @@ void WindowEventFilter::OnClickedCaption(ui::MouseEvent* event,
       break;
     case LinuxUI::WINDOW_FRAME_ACTION_LOWER:
       LowerWindow();
+      event->SetHandled();
       break;
     case LinuxUI::WINDOW_FRAME_ACTION_MINIMIZE:
       window_tree_host_->Minimize();
+      event->SetHandled();
       break;
     case LinuxUI::WINDOW_FRAME_ACTION_TOGGLE_MAXIMIZE:
       if (target->GetProperty(aura::client::kResizeBehaviorKey) &
           ui::mojom::kResizeBehaviorCanMaximize)
         ToggleMaximizedState();
+      event->SetHandled();
       break;
     case LinuxUI::WINDOW_FRAME_ACTION_MENU:
       views::Widget* widget = views::Widget::GetWidgetForNativeView(target);
       if (!widget)
         break;
       views::View* view = widget->GetContentsView();
-      if (!view)
+      if (!view || !view->context_menu_controller())
         break;
       gfx::Point location(event->location());
       views::View::ConvertPointToScreen(view, &location);
       view->ShowContextMenu(location, ui::MENU_SOURCE_MOUSE);
+      event->SetHandled();
       break;
   }
-  event->SetHandled();
 }
 
 void WindowEventFilter::OnClickedMaximizeButton(ui::MouseEvent* event) {

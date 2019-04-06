@@ -8,12 +8,14 @@
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/resource_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "extensions/browser/api/dns/host_resolver_wrapper.h"
 #include "extensions/common/api/dns.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log_with_source.h"
+#include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_context_getter.h"
 
 using content::BrowserThread;
 using extensions::api::dns::ResolveCallbackResolveInfo;
@@ -23,30 +25,33 @@ namespace Resolve = extensions::api::dns::Resolve;
 namespace extensions {
 
 DnsResolveFunction::DnsResolveFunction()
-    : resource_context_(), response_(false), addresses_(new net::AddressList) {}
+    : response_(false), addresses_(new net::AddressList) {}
 
 DnsResolveFunction::~DnsResolveFunction() {}
 
-bool DnsResolveFunction::RunAsync() {
+ExtensionFunction::ResponseAction DnsResolveFunction::Run() {
   std::unique_ptr<Resolve::Params> params(Resolve::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   hostname_ = params->hostname;
-  resource_context_ = browser_context()->GetResourceContext();
+  url_request_context_getter_ =
+      content::BrowserContext::GetDefaultStoragePartition(browser_context())
+          ->GetURLRequestContext();
 
   bool result = BrowserThread::PostTask(
       BrowserThread::IO,
       FROM_HERE,
       base::Bind(&DnsResolveFunction::WorkOnIOThread, this));
   DCHECK(result);
-  return true;
+  return RespondLater();
 }
 
 void DnsResolveFunction::WorkOnIOThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   net::HostResolver* host_resolver =
-      HostResolverWrapper::GetInstance()->GetHostResolver(resource_context_);
+      HostResolverWrapper::GetInstance()->GetHostResolver(
+          url_request_context_getter_.get());
   DCHECK(host_resolver);
 
   // Yes, we are passing zero as the port. There are some interesting but not
@@ -68,27 +73,27 @@ void DnsResolveFunction::WorkOnIOThread() {
     OnLookupFinished(resolve_result);
 }
 
-void DnsResolveFunction::RespondOnUIThread() {
+void DnsResolveFunction::RespondOnUIThread(
+    std::unique_ptr<base::ListValue> results) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  SendResponse(response_);
+  Respond(response_ ? ArgumentList(std::move(results))
+                    : Error(kUnknownErrorDoNotUse));
 }
 
 void DnsResolveFunction::OnLookupFinished(int resolve_result) {
-  std::unique_ptr<ResolveCallbackResolveInfo> resolve_info(
-      new ResolveCallbackResolveInfo());
+  auto resolve_info = std::make_unique<ResolveCallbackResolveInfo>();
   resolve_info->result_code = resolve_result;
   if (resolve_result == net::OK) {
     DCHECK(!addresses_->empty());
     resolve_info->address.reset(
         new std::string(addresses_->front().ToStringWithoutPort()));
   }
-  results_ = Resolve::Results::Create(*resolve_info);
   response_ = true;
 
   bool post_task_result = BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&DnsResolveFunction::RespondOnUIThread, this));
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&DnsResolveFunction::RespondOnUIThread, this,
+                     Resolve::Results::Create(*resolve_info)));
   DCHECK(post_task_result);
 
   Release();  // Added in WorkOnIOThread().

@@ -32,10 +32,13 @@ class CONTENT_EXPORT MediaInterfaceFactory
   // media::mojom::InterfaceFactory implementation.
   void CreateAudioDecoder(media::mojom::AudioDecoderRequest request) final;
   void CreateVideoDecoder(media::mojom::VideoDecoderRequest request) final;
-  void CreateRenderer(const std::string& audio_device_id,
+  void CreateRenderer(media::mojom::HostedRendererType type,
+                      const std::string& type_specific_id,
                       media::mojom::RendererRequest request) final;
   void CreateCdm(const std::string& key_system,
                  media::mojom::ContentDecryptionModuleRequest request) final;
+  void CreateDecryptor(int cdm_id,
+                       media::mojom::DecryptorRequest request) final;
   // TODO(xhwang): We should not expose this here.
   void CreateCdmProxy(const std::string& cdm_guid,
                       media::mojom::CdmProxyRequest request) final;

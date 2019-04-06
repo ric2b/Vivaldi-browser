@@ -9,17 +9,17 @@
 #include "chrome/browser/ui/views/tabs/fake_base_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/views/test/views_test_base.h"
 
-class AlertIndicatorButtonTest : public views::ViewsTestBase {
+class AlertIndicatorButtonTest : public ChromeViewsTestBase {
  public:
   AlertIndicatorButtonTest() {}
 
   ~AlertIndicatorButtonTest() override {}
 
   void SetUp() override {
-    views::ViewsTestBase::SetUp();
+    ChromeViewsTestBase::SetUp();
 
     controller_ = new FakeBaseTabStripController;
     tab_strip_ = new TabStrip(std::unique_ptr<TabStripController>(controller_));
@@ -43,7 +43,7 @@ class AlertIndicatorButtonTest : public views::ViewsTestBase {
     // All windows need to be closed before tear down.
     widget_.reset();
 
-    views::ViewsTestBase::TearDown();
+    ChromeViewsTestBase::TearDown();
   }
 
  protected:
@@ -85,6 +85,7 @@ TEST_F(AlertIndicatorButtonTest, ButtonUpdateOnAudioStateAnimation) {
 
   TabRendererData start_media;
   start_media.alert_state = TabAlertState::AUDIO_PLAYING;
+  start_media.pinned = media_tab->data().pinned;
   media_tab->SetData(std::move(start_media));
 
   // When audio starts, pinned inactive tab shows indicator.
@@ -94,6 +95,7 @@ TEST_F(AlertIndicatorButtonTest, ButtonUpdateOnAudioStateAnimation) {
 
   TabRendererData stop_media;
   stop_media.alert_state = TabAlertState::NONE;
+  stop_media.pinned = media_tab->data().pinned;
   media_tab->SetData(std::move(stop_media));
 
   // When audio ends, pinned inactive tab fades out indicator.

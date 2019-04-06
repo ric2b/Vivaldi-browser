@@ -4,6 +4,10 @@
 
 #include "components/offline_pages/core/prefetch/mark_operation_done_task.h"
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include "components/offline_pages/core/prefetch/prefetch_item.h"
 #include "components/offline_pages/core/prefetch/prefetch_task_test_base.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
@@ -61,29 +65,20 @@ class MarkOperationDoneTaskTest : public PrefetchTaskTestBase {
 TEST_F(MarkOperationDoneTaskTest, StoreFailure) {
   store_util()->SimulateInitializationError();
 
-  MarkOperationDoneTask task(dispatcher(), store(), kOperationName);
-  ExpectTaskCompletes(&task);
-
-  task.Run();
-  RunUntilIdle();
+  RunTask(std::make_unique<MarkOperationDoneTask>(dispatcher(), store(),
+                                                  kOperationName));
 }
 
 TEST_F(MarkOperationDoneTaskTest, NoOpTask) {
   MarkOperationDoneTask task(dispatcher(), store(), kOperationName);
-  ExpectTaskCompletes(&task);
-
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
   ExpectStoreChangeCount(&task, 0);
 }
 
 TEST_F(MarkOperationDoneTaskTest, SingleMatchingURL) {
   int64_t id = InsertAwaitingGCMOperation(kOperationName);
   MarkOperationDoneTask task(dispatcher(), store(), kOperationName);
-
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
   ExpectStoreChangeCount(&task, 1);
 
   EXPECT_EQ(1, store_util()->CountPrefetchItems());
@@ -98,10 +93,7 @@ TEST_F(MarkOperationDoneTaskTest, NoSuchURLs) {
 
   // Start a task for an unrelated operation name.
   MarkOperationDoneTask task(dispatcher(), store(), kOtherOperationName);
-
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
   ExpectStoreChangeCount(&task, 0);
 
   ASSERT_TRUE(store_util()->GetPrefetchItem(id1));
@@ -123,10 +115,7 @@ TEST_F(MarkOperationDoneTaskTest, ManyURLs) {
 
   // Start a task for the first operation name.
   MarkOperationDoneTask task(dispatcher(), store(), kOperationName);
-
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
   ExpectStoreChangeCount(&task, ids.size());
 
   // The items should be in the new state.
@@ -143,31 +132,25 @@ TEST_F(MarkOperationDoneTaskTest, ManyURLs) {
 }
 
 TEST_F(MarkOperationDoneTaskTest, URLsInWrongState) {
-  std::vector<int64_t> ids;
-  ids.push_back(InsertPrefetchItemInStateWithOperation(
-      kOperationName, PrefetchItemState::SENT_GET_OPERATION));
-  ids.push_back(InsertPrefetchItemInStateWithOperation(
-      kOperationName, PrefetchItemState::RECEIVED_BUNDLE));
-  ids.push_back(InsertPrefetchItemInStateWithOperation(
-      kOperationName, PrefetchItemState::DOWNLOADING));
-  ids.push_back(InsertPrefetchItemInStateWithOperation(
-      kOperationName, PrefetchItemState::FINISHED));
-  ids.push_back(InsertPrefetchItemInStateWithOperation(
-      kOperationName, PrefetchItemState::ZOMBIE));
+  // Insert items in all states but AWAITING_GCM.
+  std::set<PrefetchItem> inserted_items;
+  for (PrefetchItemState state :
+       GetAllStatesExcept({PrefetchItemState::AWAITING_GCM})) {
+    PrefetchItem item = item_generator()->CreateItem(state);
+    item.operation_name = kOperationName;
+    EXPECT_TRUE(store_util()->InsertPrefetchItem(item));
+    inserted_items.insert(item);
+  }
 
-  // Start a task for the first operation name.
+  // Start a task for the operation name.
   MarkOperationDoneTask task(dispatcher(), store(), kOperationName);
-
-  ExpectTaskCompletes(&task);
-  task.Run();
-  RunUntilIdle();
+  RunTask(&task);
   ExpectStoreChangeCount(&task, 0);
 
-  for (int64_t id : ids) {
-    ASSERT_TRUE(store_util()->GetPrefetchItem(id));
-    EXPECT_NE(PrefetchItemState::RECEIVED_GCM,
-              store_util()->GetPrefetchItem(id)->state);
-  }
+  // No item should have been changed.
+  std::set<PrefetchItem> items_after_run;
+  EXPECT_EQ(inserted_items.size(), store_util()->GetAllItems(&items_after_run));
+  EXPECT_EQ(inserted_items, items_after_run);
 }
 
 }  // namespace offline_pages

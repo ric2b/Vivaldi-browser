@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_OFFLINE_PAGES_CORE_PREFETCH_PREFETCH_TYPES_H_
 #define COMPONENTS_OFFLINE_PAGES_CORE_PREFETCH_PREFETCH_TYPES_H_
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -86,13 +87,16 @@ struct RenderPageInfo {
   base::Time render_time;
 };
 
-// List of states a prefetch item can be at during its progress through the
-// prefetching process. They follow somewhat the order below, but some states
-// might be skipped.
+// Contains all states an item can be at during its progress through the
+// prefetching pipeline. State progression will normally follow the order below,
+// but some states might be skipped and there might be backtracking when
+// retrying a failed operation.
 //
 // Changes to this enum must be reflected in the respective metrics enum named
 // OfflinePrefetchItemState in enums.xml. Use the exact same integer value for
-// each mirrored entry.
+// each mirrored entry. Existing elements should never have their assigned
+// values changed. Changes should also be reflected in
+// |PrefetchTaskTestBase::kOrderedPrefetchItemStates|.
 enum class PrefetchItemState {
   // New request just received from the client.
   NEW_REQUEST = 0,
@@ -172,6 +176,9 @@ enum class PrefetchItemErrorCode {
   STALE_AT_DOWNLOADING = 1000,
   STALE_AT_IMPORTING = 1050,
   STALE_AT_UNKNOWN = 1100,
+  // The item was terminated due to not being concluded after being more than 7
+  // days in the pipeline.
+  STUCK = 1150,
   // Exceeded maximum retries for get operation request.
   GET_OPERATION_MAX_ATTEMPTS_REACHED = 1200,
   // Exceeded maximum retries limit for generate page bundle request.
@@ -183,15 +190,18 @@ enum class PrefetchItemErrorCode {
   // The archive importing was not completed probably due to that Chrome was
   // killed before everything finishes.
   IMPORT_LOST = 1600,
+  // The page suggestion is no longer valid, so the item no longer needs to be
+  // downloaded.
+  SUGGESTION_INVALIDATED = 1700,
   // Note: Must always have the same value as the last actual entry.
-  MAX = IMPORT_LOST
+  MAX = SUGGESTION_INVALIDATED
 };
 
 // Callback invoked upon completion of a prefetch request.
 using PrefetchRequestFinishedCallback =
-    base::Callback<void(PrefetchRequestStatus status,
-                        const std::string& operation_name,
-                        const std::vector<RenderPageInfo>& pages)>;
+    base::OnceCallback<void(PrefetchRequestStatus status,
+                            const std::string& operation_name,
+                            const std::vector<RenderPageInfo>& pages)>;
 
 // Holds information about a suggested URL to be prefetched.
 struct PrefetchURL {
@@ -228,10 +238,6 @@ struct PrefetchDownloadResult {
   int64_t file_size = 0;
 };
 
-// Callback invoked upon completion of a download.
-using PrefetchDownloadCompletedCallback =
-    base::Callback<void(const PrefetchDownloadResult& result)>;
-
 // Describes all the info needed to import an archive.
 struct PrefetchArchiveInfo {
   PrefetchArchiveInfo();
@@ -247,6 +253,15 @@ struct PrefetchArchiveInfo {
   base::FilePath file_path;
   int64_t file_size = 0;
 };
+
+// These operators are implemented for testing only, see test_util.cc.
+// They are provided here to avoid ODR problems.
+std::ostream& operator<<(std::ostream& out,
+                         PrefetchBackgroundTaskRescheduleType value);
+std::ostream& operator<<(std::ostream& out, PrefetchRequestStatus value);
+std::ostream& operator<<(std::ostream& out, RenderStatus value);
+std::ostream& operator<<(std::ostream& out, const PrefetchItemState& value);
+std::ostream& operator<<(std::ostream& out, PrefetchItemErrorCode value);
 
 }  // namespace offline_pages
 

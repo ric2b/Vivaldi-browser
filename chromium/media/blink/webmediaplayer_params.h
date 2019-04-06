@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "cc/layers/surface_layer.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "media/base/media_log.h"
 #include "media/base/media_observer.h"
@@ -21,7 +22,7 @@
 #include "media/blink/media_blink_export.h"
 #include "media/filters/context_3d.h"
 #include "media/mojo/interfaces/media_metrics_provider.mojom.h"
-#include "third_party/WebKit/public/platform/WebVideoFrameSubmitter.h"
+#include "third_party/blink/public/platform/web_video_frame_submitter.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
@@ -41,14 +42,15 @@ class WebSurfaceLayerBridgeObserver;
 namespace media {
 
 class SwitchableAudioRendererSink;
-class SurfaceManager;
 
 // Holds parameters for constructing WebMediaPlayerImpl without having
 // to plumb arguments through various abstraction layers.
 class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
  public:
-  typedef base::Callback<void(const base::Closure&)> DeferLoadCB;
-  typedef base::Callback<Context3D()> Context3DCB;
+  // Returns true if load will deferred. False if it will run immediately.
+  using DeferLoadCB = base::RepeatingCallback<bool(base::OnceClosure)>;
+
+  using Context3DCB = base::Callback<Context3D()>;
 
   // Callback to obtain the media ContextProvider.
   // Requires being called on the media thread.
@@ -79,7 +81,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
           video_frame_compositor_task_runner,
       const AdjustAllocatedMemoryCB& adjust_allocated_memory_cb,
       blink::WebContentDecryptionModule* initial_cdm,
-      SurfaceManager* surface_manager,
       RequestRoutingTokenCallback request_routing_token_cb,
       base::WeakPtr<MediaObserver> media_observer,
       base::TimeDelta max_keyframe_distance_to_disable_background_video,
@@ -87,9 +88,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
       bool enable_instant_source_buffer_gc,
       bool embedded_media_experience_enabled,
       mojom::MediaMetricsProviderPtr metrics_provider,
-      base::Callback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
-          blink::WebSurfaceLayerBridgeObserver*)> bridge_callback,
-      scoped_refptr<viz::ContextProvider> context_provider);
+      base::OnceCallback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
+          blink::WebSurfaceLayerBridgeObserver*,
+          cc::UpdateSubmissionStateCB)> bridge_callback,
+      scoped_refptr<viz::ContextProvider> context_provider,
+      bool use_surface_layer_for_video);
 
   ~WebMediaPlayerParams();
 
@@ -137,8 +140,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
     return adjust_allocated_memory_cb_;
   }
 
-  SurfaceManager* surface_manager() const { return surface_manager_; }
-
   base::WeakPtr<MediaObserver> media_observer() const {
     return media_observer_;
   }
@@ -164,13 +165,19 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
     return request_routing_token_cb_;
   }
 
-  const base::Callback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
-      blink::WebSurfaceLayerBridgeObserver*)>& create_bridge_callback() const {
-    return create_bridge_callback_;
+  base::OnceCallback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
+      blink::WebSurfaceLayerBridgeObserver*,
+      cc::UpdateSubmissionStateCB)>
+  create_bridge_callback() {
+    return std::move(create_bridge_callback_);
   }
 
   scoped_refptr<viz::ContextProvider> context_provider() {
     return context_provider_;
+  }
+
+  bool use_surface_layer_for_video() const {
+    return use_surface_layer_for_video_;
   }
 
  private:
@@ -188,7 +195,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   AdjustAllocatedMemoryCB adjust_allocated_memory_cb_;
 
   blink::WebContentDecryptionModule* initial_cdm_;
-  SurfaceManager* surface_manager_;
   RequestRoutingTokenCallback request_routing_token_cb_;
   base::WeakPtr<MediaObserver> media_observer_;
   base::TimeDelta max_keyframe_distance_to_disable_background_video_;
@@ -196,10 +202,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   bool enable_instant_source_buffer_gc_;
   const bool embedded_media_experience_enabled_;
   mojom::MediaMetricsProviderPtr metrics_provider_;
-  base::Callback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
-      blink::WebSurfaceLayerBridgeObserver*)>
+  base::OnceCallback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
+      blink::WebSurfaceLayerBridgeObserver*,
+      cc::UpdateSubmissionStateCB)>
       create_bridge_callback_;
   scoped_refptr<viz::ContextProvider> context_provider_;
+  bool use_surface_layer_for_video_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(WebMediaPlayerParams);
 };

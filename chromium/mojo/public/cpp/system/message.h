@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
 #include "mojo/public/c/system/message_pipe.h"
 #include "mojo/public/cpp/system/handle.h"
@@ -52,7 +53,7 @@ using ScopedMessageHandle = ScopedHandleBase<MessageHandle>;
 
 inline MojoResult CreateMessage(ScopedMessageHandle* handle) {
   MojoMessageHandle raw_handle;
-  MojoResult rv = MojoCreateMessage(&raw_handle);
+  MojoResult rv = MojoCreateMessage(nullptr, &raw_handle);
   if (rv != MOJO_RESULT_OK)
     return rv;
 
@@ -60,18 +61,21 @@ inline MojoResult CreateMessage(ScopedMessageHandle* handle) {
   return MOJO_RESULT_OK;
 }
 
-inline MojoResult GetSerializedMessageContents(
-    MessageHandle message,
-    void** buffer,
-    uint32_t* num_bytes,
-    std::vector<ScopedHandle>* handles,
-    MojoGetSerializedMessageContentsFlags flags) {
+inline MojoResult GetMessageData(MessageHandle message,
+                                 void** buffer,
+                                 uint32_t* num_bytes,
+                                 std::vector<ScopedHandle>* handles,
+                                 MojoGetMessageDataFlags flags) {
   DCHECK(message.is_valid());
   DCHECK(num_bytes);
   DCHECK(buffer);
   uint32_t num_handles = 0;
-  MojoResult rv = MojoGetSerializedMessageContents(
-      message.value(), buffer, num_bytes, nullptr, &num_handles, flags);
+
+  MojoGetMessageDataOptions options;
+  options.struct_size = sizeof(options);
+  options.flags = flags;
+  MojoResult rv = MojoGetMessageData(message.value(), &options, buffer,
+                                     num_bytes, nullptr, &num_handles);
   if (rv != MOJO_RESULT_RESOURCE_EXHAUSTED) {
     if (handles)
       handles->clear();
@@ -79,15 +83,17 @@ inline MojoResult GetSerializedMessageContents(
   }
 
   handles->resize(num_handles);
-  return MojoGetSerializedMessageContents(
-      message.value(), buffer, num_bytes,
-      reinterpret_cast<MojoHandle*>(handles->data()), &num_handles, flags);
+  return MojoGetMessageData(message.value(), &options, buffer, num_bytes,
+                            reinterpret_cast<MojoHandle*>(handles->data()),
+                            &num_handles);
 }
 
 inline MojoResult NotifyBadMessage(MessageHandle message,
                                    const base::StringPiece& error) {
   DCHECK(message.is_valid());
-  return MojoNotifyBadMessage(message.value(), error.data(), error.size());
+  DCHECK(base::IsValueInRangeForNumericType<uint32_t>(error.size()));
+  return MojoNotifyBadMessage(message.value(), error.data(),
+                              static_cast<uint32_t>(error.size()), nullptr);
 }
 
 }  // namespace mojo

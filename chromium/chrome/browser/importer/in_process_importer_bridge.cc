@@ -8,7 +8,6 @@
 
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -110,7 +109,7 @@ std::unique_ptr<TemplateURL> CreateTemplateURL(const base::string16& url,
   // Otherwise, we use the shortcut.
   data.SetShortName(title.empty() ? keyword : title);
   data.SetURL(TemplateURLRef::DisplayURLToURLRef(url));
-  return base::MakeUnique<TemplateURL>(data);
+  return std::make_unique<TemplateURL>(data);
 }
 
 // Parses the OpenSearch XML files in |xml_files| and populates |search_engines|

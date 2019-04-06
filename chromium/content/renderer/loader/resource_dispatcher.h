@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/containers/circular_deque.h"
 #include "base/containers/hash_tables.h"
@@ -22,16 +23,23 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
+#include "content/public/common/resource_load_info.mojom.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/common/shared_url_loader_factory.h"
 #include "content/public/common/url_loader_throttle.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "net/base/host_port_pair.h"
+#include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/network/public/interfaces/url_loader.mojom.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
+#include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 #include "url/gurl.h"
-#include "url/origin.h"
+
+namespace base {
+class WaitableEvent;
+}
 
 namespace net {
 struct RedirectInfo;
@@ -48,9 +56,9 @@ class URLLoaderFactory;
 }
 
 namespace content {
+struct NavigationResponseOverrideParameters;
 class RequestPeer;
 class ResourceDispatcherDelegate;
-struct SiteIsolationResponseMetaData;
 struct SyncLoadResponse;
 class ThrottlingURLLoader;
 class URLLoaderClientImpl;
@@ -69,8 +77,7 @@ class CONTENT_EXPORT ResourceDispatcher {
   // CORS preflight requests.
   static int MakeRequestID();
 
-  explicit ResourceDispatcher(
-      scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner);
+  ResourceDispatcher();
   virtual ~ResourceDispatcher();
 
   // Call this method to load the resource synchronously (i.e., in one shot).
@@ -83,14 +90,20 @@ class CONTENT_EXPORT ResourceDispatcher {
   //
   // |routing_id| is used to associated the bridge with a frame's network
   // context.
+  // |timeout| is used to abort the sync request on timeouts. TimeDelta::Max()
+  // is interpreted as no-timeout.
+  // If |download_to_blob_registry| is not null, it is used to redirect the
+  // download to a blob, using StartAsync's |pass_response_pipe_to_peer| flag.
   virtual void StartSync(
       std::unique_ptr<network::ResourceRequest> request,
       int routing_id,
-      const url::Origin& frame_origin,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       SyncLoadResponse* response,
-      scoped_refptr<SharedURLLoaderFactory> url_loader_factory,
-      std::vector<std::unique_ptr<URLLoaderThrottle>> throttles);
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
+      base::TimeDelta timeout,
+      blink::mojom::BlobRegistryPtrInfo download_to_blob_registry,
+      std::unique_ptr<RequestPeer> peer);
 
   // Call this method to initiate the request. If this method succeeds, then
   // the peer's methods will be called asynchronously to report various events.
@@ -99,19 +112,26 @@ class CONTENT_EXPORT ResourceDispatcher {
   // |routing_id| is used to associated the bridge with a frame's network
   // context.
   //
+  // If |pass_response_pipe_to_peer| is true, the raw datapipe containing the
+  // response body is passed on to |peer| without any extra processing. If it
+  // is set to false instead OnReceivedData is called on the |peer| whenever a
+  // chunk of data is available.
+  //
   // You need to pass a non-null |loading_task_runner| to specify task queue to
   // execute loading tasks on.
   virtual int StartAsync(
       std::unique_ptr<network::ResourceRequest> request,
       int routing_id,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
-      const url::Origin& frame_origin,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       bool is_sync,
+      bool pass_response_pipe_to_peer,
       std::unique_ptr<RequestPeer> peer,
-      scoped_refptr<SharedURLLoaderFactory> url_loader_factory,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
-      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints);
+      std::unique_ptr<NavigationResponseOverrideParameters>
+          response_override_params,
+      base::OnceClosure* continue_navigation_function);
 
   // Removes a request from the |pending_requests_| list, returning true if the
   // request was found and removed.
@@ -138,16 +158,20 @@ class CONTENT_EXPORT ResourceDispatcher {
     delegate_ = delegate;
   }
 
-  void SetThreadTaskRunner(
-      scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner) {
-    thread_task_runner_ = thread_task_runner;
-  }
-
   base::WeakPtr<ResourceDispatcher> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
 
   void OnTransferSizeUpdated(int request_id, int32_t transfer_size_diff);
+
+  // This is used only when |this| is created for a worker thread.
+  // Sets |terminate_sync_load_event_| which will be signaled from the main
+  // thread when the worker thread is being terminated so that the sync requests
+  // requested on the worker thread can be aborted.
+  void set_terminate_sync_load_event(
+      base::WaitableEvent* terminate_sync_load_event) {
+    terminate_sync_load_event_ = terminate_sync_load_event;
+  }
 
  private:
   friend class URLLoaderClientImpl;
@@ -158,11 +182,11 @@ class CONTENT_EXPORT ResourceDispatcher {
     PendingRequestInfo(std::unique_ptr<RequestPeer> peer,
                        ResourceType resource_type,
                        int render_frame_id,
-                       const url::Origin& frame_origin,
                        const GURL& request_url,
                        const std::string& method,
                        const GURL& referrer,
-                       bool download_to_file);
+                       std::unique_ptr<NavigationResponseOverrideParameters>
+                           response_override_params);
 
     ~PendingRequestInfo();
 
@@ -172,21 +196,31 @@ class CONTENT_EXPORT ResourceDispatcher {
     bool is_deferred = false;
     // Original requested url.
     GURL url;
-    // The security origin of the frame that initiates this request.
-    url::Origin frame_origin;
     // The url, method and referrer of the latest response even in case of
     // redirection.
     GURL response_url;
     std::string response_method;
     GURL response_referrer;
-    bool download_to_file;
     bool has_pending_redirect = false;
-    base::TimeTicks request_start;
-    base::TimeTicks response_start;
-    base::TimeTicks completion_time;
+    base::TimeTicks local_request_start;
+    base::TimeTicks local_response_start;
+    base::TimeTicks remote_request_start;
+    net::LoadTimingInfo load_timing_info;
     linked_ptr<base::SharedMemory> buffer;
-    std::unique_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
     int buffer_size;
+    net::HostPortPair host_port_pair;
+    bool network_accessed = false;
+    std::string mime_type;
+    std::unique_ptr<NavigationResponseOverrideParameters>
+        navigation_response_override;
+    bool should_follow_redirect = true;
+    bool always_access_network = false;
+    // Network error code the request completed with, or net::ERR_IO_PENDING if
+    // it's not completed. Used both to distinguish completion from
+    // cancellation, and to log histograms.
+    int net_error = net::ERR_IO_PENDING;
+
+    std::vector<content::mojom::RedirectInfoPtr> redirect_info_chain;
 
     // For mojo loading.
     std::unique_ptr<ThrottlingURLLoader> url_loader;
@@ -211,7 +245,8 @@ class CONTENT_EXPORT ResourceDispatcher {
       const net::RedirectInfo& redirect_info,
       const network::ResourceResponseHead& response_head,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
-  void OnDownloadedData(int request_id, int data_len, int encoded_data_length);
+  void OnStartLoadingResponseBody(int request_id,
+                                  mojo::ScopedDataPipeConsumerHandle body);
   void OnRequestComplete(int request_id,
                          const network::URLLoaderCompletionStatus& status);
 
@@ -220,20 +255,14 @@ class CONTENT_EXPORT ResourceDispatcher {
       const network::ResourceResponseHead& browser_info,
       network::ResourceResponseInfo* renderer_info) const;
 
-  base::TimeTicks ToRendererCompletionTime(
-      const PendingRequestInfo& request_info,
-      const base::TimeTicks& browser_completion_time) const;
-
-  void ContinueForNavigation(
-      int request_id,
-      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints);
+  void ContinueForNavigation(int request_id);
 
   // All pending requests issued to the host
   PendingRequestMap pending_requests_;
 
   ResourceDispatcherDelegate* delegate_;
 
-  scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner_;
+  base::WaitableEvent* terminate_sync_load_event_ = nullptr;
 
   base::WeakPtrFactory<ResourceDispatcher> weak_factory_;
 

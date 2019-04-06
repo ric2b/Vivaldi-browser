@@ -5,13 +5,13 @@
 #ifndef CONTENT_RENDERER_SERVICE_WORKER_SERVICE_WORKER_TYPE_CONVERTERS_H_
 #define CONTENT_RENDERER_SERVICE_WORKER_SERVICE_WORKER_TYPE_CONVERTERS_H_
 
-#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
-#include "content/common/service_worker/service_worker_status_code.h"
-#include "third_party/WebKit/common/service_worker/service_worker_event_status.mojom.h"
-#include "third_party/WebKit/public/platform/modules/payments/WebCanMakePaymentEventData.h"
-#include "third_party/WebKit/public/platform/modules/payments/WebPaymentRequestEventData.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
-#include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerContextProxy.h"
+#include "content/common/service_worker/service_worker.mojom.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_event_status.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_app.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/web_can_make_payment_event_data.h"
+#include "third_party/blink/public/platform/modules/payments/web_payment_request_event_data.h"
+#include "third_party/blink/public/web/modules/service_worker/web_service_worker_context_proxy.h"
 
 namespace mojo {
 

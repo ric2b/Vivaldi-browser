@@ -23,18 +23,18 @@ struct HSL {
 
 // The minimum contrast between text and background that is still readable.
 // This value is taken from w3c accessibility guidelines.
-const double kMinimumReadableContrastRatio = 4.5f;
+constexpr float kMinimumReadableContrastRatio = 4.5f;
 
 // Determines the contrast ratio of two colors or two relative luminance values
 // (as computed by RelativeLuminance()), calculated according to
 // http://www.w3.org/TR/WCAG20/#contrast-ratiodef .
-GFX_EXPORT double GetContrastRatio(SkColor color_a, SkColor color_b);
-GFX_EXPORT double GetContrastRatio(double luminance_a, double luminance_b);
+GFX_EXPORT float GetContrastRatio(SkColor color_a, SkColor color_b);
+GFX_EXPORT float GetContrastRatio(float luminance_a, float luminance_b);
 
 // The relative luminance of |color|, that is, the weighted sum of the
 // linearized RGB components, normalized to 0..1, per BT.709.  See
 // http://www.w3.org/TR/WCAG20/#relativeluminancedef .
-GFX_EXPORT double GetRelativeLuminance(SkColor color);
+GFX_EXPORT float GetRelativeLuminance(SkColor color);
 
 // The luma of |color|, that is, the weighted sum of the gamma-compressed R'G'B'
 // components, per BT.601, a.k.a. the Y' in Y'UV.  See
@@ -63,6 +63,10 @@ GFX_EXPORT bool IsWithinHSLRange(const HSL& hsl,
 // and lightness which are outside of the valid range [0, 1] to -1.  -1 is a
 // special value which indicates 'no change'.
 GFX_EXPORT void MakeHSLShiftValid(HSL* hsl);
+
+// Returns whether pasing |hsl| to HSLShift() would have any effect.  Assumes
+// |hsl| is a valid shift (as defined by MakeHSLShiftValid()).
+GFX_EXPORT bool IsHSLShiftMeaningful(const HSL& hsl);
 
 // HSL-Shift an SkColor. The shift values are in the range of 0-1, with the
 // option to specify -1 for 'no change'. The shift values are defined as:
@@ -125,6 +129,38 @@ GFX_EXPORT SkColor PickContrastingColor(SkColor foreground1,
                                         SkColor foreground2,
                                         SkColor background);
 
+// This function attempts to select a color based on |default_foreground| that
+// will meet the minimum contrast ratio when used as a text color on top of
+// |background|. If |default_foreground| already meets the minimum contrast
+// ratio, this function will simply return it. Otherwise it will blend the color
+// darker/lighter until either the contrast ratio is acceptable or the color
+// cannot become any more extreme. Only use with opaque background.
+GFX_EXPORT SkColor GetColorWithMinimumContrast(SkColor default_foreground,
+                                               SkColor background);
+
+// Attempts to select an alpha value such that blending |target| onto |source|
+// with that alpha produces a color of at least |contrast_ratio| against |base|.
+// If |source| already meets the minimum contrast ratio, this function will
+// simply return 0. Otherwise it will blend the |target| onto |source| until
+// either the contrast ratio is acceptable or the color cannot become any more
+// extreme. |base| must be opaque.
+GFX_EXPORT SkAlpha GetBlendValueWithMinimumContrast(SkColor source,
+                                                    SkColor target,
+                                                    SkColor base,
+                                                    float contrast_ratio);
+
+// Returns the minimum alpha value such that blending |target| onto |source|
+// produces a color that contrasts against |base| with at least |contrast_ratio|
+// unless this is impossible, in which case SK_AlphaOPAQUE is returned.
+// Use only with opaque colors. |alpha_error_tolerance| should normally be 0 for
+// best accuracy, but if performance is critical then it can be a positive value
+// (4 is recommended) to save a few cycles and give "close enough" alpha.
+GFX_EXPORT SkAlpha FindBlendValueForContrastRatio(SkColor source,
+                                                  SkColor target,
+                                                  SkColor base,
+                                                  float contrast_ratio,
+                                                  int alpha_error_tolerance);
+
 // Invert a color.
 GFX_EXPORT SkColor InvertColor(SkColor color);
 
@@ -145,6 +181,12 @@ GFX_EXPORT std::string SkColorToRgbaString(SkColor color);
 
 // Creates an rgb string for an SkColor. For example: '255,0,255'.
 GFX_EXPORT std::string SkColorToRgbString(SkColor color);
+
+// Sets the color_utils darkest color to |color| from the SK_ColorBLACK default.
+GFX_EXPORT void SetDarkestColor(SkColor color);
+
+// Returns the current color_utils darkest color so tests can clean up.
+GFX_EXPORT SkColor GetDarkestColorForTesting();
 
 }  // namespace color_utils
 

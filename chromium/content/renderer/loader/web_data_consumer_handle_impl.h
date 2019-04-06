@@ -9,10 +9,11 @@
 
 #include <memory>
 
+#include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
-#include "third_party/WebKit/public/platform/WebDataConsumerHandle.h"
+#include "third_party/blink/public/platform/web_data_consumer_handle.h"
 
 namespace content {
 
@@ -24,7 +25,9 @@ class CONTENT_EXPORT WebDataConsumerHandleImpl final
  public:
   class CONTENT_EXPORT ReaderImpl final : public Reader {
    public:
-    ReaderImpl(scoped_refptr<Context> context, Client* client);
+    ReaderImpl(scoped_refptr<Context> context,
+               Client* client,
+               scoped_refptr<base::SingleThreadTaskRunner> task_runner);
     ~ReaderImpl() override;
     Result Read(void* data,
                 size_t size,
@@ -46,7 +49,9 @@ class CONTENT_EXPORT WebDataConsumerHandleImpl final
 
     DISALLOW_COPY_AND_ASSIGN(ReaderImpl);
   };
-  std::unique_ptr<Reader> ObtainReader(Client* client) override;
+  std::unique_ptr<Reader> ObtainReader(
+      Client* client,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
 
   explicit WebDataConsumerHandleImpl(Handle handle);
   ~WebDataConsumerHandleImpl() override;

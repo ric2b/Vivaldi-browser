@@ -31,6 +31,18 @@ group("gles2") {
   }
 }
 
+group("raster") {
+  if (is_component_build) {
+    public_deps = [
+      "//gpu:gles2",
+    ]
+  } else {
+    public_deps = [
+      ":raster_sources",
+    ]
+  }
+}
+
 source_set("common_sources") {
   visibility = [ "//gpu/*" ]
 
@@ -46,12 +58,16 @@ source_set("common_sources") {
     "cmd_buffer_common.h",
     "command_buffer.h",
     "command_buffer_id.h",
+    "common_cmd_format.h",
     "constants.h",
     "context_creation_attribs.cc",
     "context_creation_attribs.h",
     "context_result.h",
+    "debug_marker_manager.cc",
+    "debug_marker_manager.h",
     "discardable_handle.cc",
     "discardable_handle.h",
+    "gl2_types.h",
     "gpu_memory_buffer_support.cc",
     "gpu_memory_buffer_support.h",
     "id_allocator.cc",
@@ -65,6 +81,7 @@ source_set("common_sources") {
     "scheduling_priority.h",
     "swap_buffers_complete_params.cc",
     "swap_buffers_complete_params.h",
+    "swap_buffers_flags.h",
     "sync_token.cc",
     "sync_token.h",
     "texture_in_use_response.h",
@@ -93,9 +110,6 @@ source_set("gles2_sources") {
   visibility = [ "//gpu/*" ]
 
   sources = [
-    "debug_marker_manager.cc",
-    "debug_marker_manager.h",
-    "gl2_types.h",
     "gles2_cmd_format.cc",
     "gles2_cmd_format.h",
     "gles2_cmd_format_autogen.h",
@@ -111,6 +125,33 @@ source_set("gles2_sources") {
   ]
   public_deps = [
     ":common",
+  ]
+}
+
+source_set("raster_sources") {
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "raster_cmd_format.cc",
+    "raster_cmd_format.h",
+    "raster_cmd_format_autogen.h",
+    "raster_cmd_ids.h",
+    "raster_cmd_ids_autogen.h",
+    "skia_utils.cc",
+    "skia_utils.h",
+  ]
+
+  configs += [ "//gpu:raster_implementation" ]
+
+  deps = [
+    ":gles2_utils",
+    "//base",
+    "//skia",
+    "//ui/gl:gl",
+  ]
+  public_deps = [
+    ":common",
+    "//components/viz/common:resource_format",
   ]
 }
 

@@ -20,7 +20,9 @@ class AshWindowTreeHostMus : public AshWindowTreeHost,
   ~AshWindowTreeHostMus() override;
 
   // AshWindowTreeHost:
-  bool ConfineCursorToRootWindow() override;
+  void ConfineCursorToRootWindow() override;
+  void ConfineCursorToBoundsInRoot(const gfx::Rect& bounds_in_root) override;
+  gfx::Rect GetLastCursorConfineBoundsInPixels() const override;
   void SetRootWindowTransformer(
       std::unique_ptr<RootWindowTransformer> transformer) override;
   gfx::Insets GetHostInsets() const override;
@@ -35,12 +37,14 @@ class AshWindowTreeHostMus : public AshWindowTreeHost,
   void SetRootTransform(const gfx::Transform& transform) override;
   gfx::Transform GetRootTransform() const override;
   gfx::Transform GetInverseRootTransform() const override;
-  void UpdateRootWindowSizeInPixels(
-      const gfx::Size& host_size_in_pixels) override;
+  gfx::Rect GetTransformedRootWindowBoundsInPixels(
+      const gfx::Size& host_size_in_pixels) const override;
   void OnCursorVisibilityChangedNative(bool show) override;
 
  private:
   std::unique_ptr<TransformerHelper> transformer_helper_;
+
+  gfx::Rect last_cursor_confine_bounds_in_pixels_;
 
   DISALLOW_COPY_AND_ASSIGN(AshWindowTreeHostMus);
 };

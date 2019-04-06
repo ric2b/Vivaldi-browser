@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -15,17 +16,25 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/webrtc/webrtc_content_browsertest_base.h"
 #include "content/browser/webrtc/webrtc_internals.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_manager_connection.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "media/audio/audio_manager.h"
 #include "media/audio/fake_audio_input_stream.h"
+#include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/audio/public/mojom/constants.mojom.h"
+#include "services/audio/public/mojom/testing_api.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "testing/gtest/include/gtest/gtest-param-test.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
+#include "services/service_manager/sandbox/features.h"
 #endif
 
 namespace {
@@ -48,6 +57,18 @@ static const char kRenderDuplicatedMediastreamAndStop[] =
 
 // Results returned by JS.
 static const char kOK[] = "OK";
+
+// Temporary enum, used for running the tests with different combination of
+// flags while audio service is under experiment.
+// TODO(https://crbug.com/850878) Remove after enabling sandboxing on all
+// platforms.
+enum class AudioServiceFeatures {
+  kDisabled,
+  kOutOfProcess,
+#if defined(OS_WIN)
+  kSandboxed,
+#endif
+};
 
 std::string GenerateGetUserMediaWithMandatorySourceID(
     const std::string& function_name,
@@ -94,11 +115,44 @@ bool VerifyDisableLocalEcho(bool expect_value,
 
 namespace content {
 
-class WebRtcGetUserMediaBrowserTest : public WebRtcContentBrowserTestBase {
+class WebRtcGetUserMediaBrowserTest
+    : public WebRtcContentBrowserTestBase,
+      public testing::WithParamInterface<AudioServiceFeatures> {
  public:
   WebRtcGetUserMediaBrowserTest() {
     // Automatically grant device permission.
     AppendUseFakeUIForMediaStreamFlag();
+    std::vector<base::Feature> audio_service_oop_features = {
+        features::kAudioServiceAudioStreams,
+        features::kAudioServiceOutOfProcess};
+    switch (GetParam()) {
+      case AudioServiceFeatures::kDisabled:
+        // Force audio service out of process to disabled.
+        audio_service_features_.InitWithFeatures({},
+                                                 audio_service_oop_features);
+        break;
+      case AudioServiceFeatures::kOutOfProcess:
+        // Force audio service out of process to enabled.
+        audio_service_features_.InitWithFeatures(
+            audio_service_oop_features,
+#if defined(OS_WIN)
+            // Force audio service sandboxing (available only on Windows) to
+            // disabled.
+            {service_manager::features::kAudioServiceSandbox});
+#else
+            {});
+#endif
+        break;
+#if defined(OS_WIN)
+      case AudioServiceFeatures::kSandboxed:
+        // Force audio service out of process and sandboxing to enabled.
+        audio_service_oop_features.push_back(
+            service_manager::features::kAudioServiceSandbox);
+        audio_service_features_.InitWithFeatures(audio_service_oop_features,
+                                                 {});
+        break;
+#endif
+    }
   }
   ~WebRtcGetUserMediaBrowserTest() override {}
 
@@ -158,6 +212,9 @@ class WebRtcGetUserMediaBrowserTest : public WebRtcContentBrowserTestBase {
     ASSERT_FALSE(audio_ids->empty());
     ASSERT_FALSE(video_ids->empty());
   }
+
+ private:
+  base::test::ScopedFeatureList audio_service_features_;
 };
 
 // These tests will all make a getUserMedia call with different constraints and
@@ -170,7 +227,7 @@ class WebRtcGetUserMediaBrowserTest : public WebRtcContentBrowserTestBase {
 #else
 #define MAYBE_GetVideoStreamAndStop GetVideoStreamAndStop
 #endif
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        MAYBE_GetVideoStreamAndStop) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -189,7 +246,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 #define MAYBE_RenderSameTrackMediastreamAndStop \
   RenderSameTrackMediastreamAndStop
 #endif
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        MAYBE_RenderSameTrackMediastreamAndStop) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -201,7 +258,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                          kRenderSameTrackMediastreamAndStop));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        RenderClonedMediastreamAndStop) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -214,7 +271,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                          kRenderClonedMediastreamAndStop));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        kRenderClonedTrackMediastreamAndStop) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -226,7 +283,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                          kRenderClonedTrackMediastreamAndStop));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        kRenderDuplicatedMediastreamAndStop) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -238,7 +295,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                           kRenderDuplicatedMediastreamAndStop));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetAudioAndVideoStreamAndStop) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -249,7 +306,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
       "%s({video: true, audio: true});", kGetUserMediaAndStop));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetAudioAndVideoStreamAndClone) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -259,16 +316,9 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   ExecuteJavascriptAndWaitForOk("getUserMediaAndClone();");
 }
 
-// http://crbug.com/803516 : Flaky on Linux debug
-#if defined(OS_LINUX) && !defined(NDEBUG)
-#define MAYBE_RenderVideoTrackInMultipleTagsAndPause \
-  DISABLED_RenderVideoTrackInMultipleTagsAndPause
-#else
-#define MAYBE_RenderVideoTrackInMultipleTagsAndPause \
-  RenderVideoTrackInMultipleTagsAndPause
-#endif
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       MAYBE_RenderVideoTrackInMultipleTagsAndPause) {
+// TODO(crbug.com/803516) : Flaky on all platforms.
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_RenderVideoTrackInMultipleTagsAndPause) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -285,7 +335,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 #define MAYBE_GetUserMediaWithMandatorySourceID \
   GetUserMediaWithMandatorySourceID
 #endif
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        MAYBE_GetUserMediaWithMandatorySourceID) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -311,7 +361,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 }
 #undef MAYBE_GetUserMediaWithMandatorySourceID
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetUserMediaWithInvalidMandatorySourceID) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -343,7 +393,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                     kGetUserMediaAndExpectFailure, "", video_ids[0])));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetUserMediaWithInvalidOptionalSourceID) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -376,8 +426,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
           video_ids[0])));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       TwoGetUserMediaAndStop) {
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest, TwoGetUserMediaAndStop) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -387,8 +436,9 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
       "twoGetUserMediaAndStop({video: true, audio: true});");
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       TwoGetUserMediaWithEqualConstraints) {
+// Flaky. See https://crbug.com/846741.
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_TwoGetUserMediaWithEqualConstraints) {
   std::string constraints1 = "{video: true, audio: true}";
   const std::string& constraints2 = constraints1;
   std::string expected_result = "w=640:h=480-w=640:h=480";
@@ -397,8 +447,9 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                                                   expected_result);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       TwoGetUserMediaWithSecondVideoCropped) {
+// Flaky. See https://crbug.com/843844.
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_TwoGetUserMediaWithSecondVideoCropped) {
   std::string constraints1 = "{video: true}";
   std::string constraints2 =
       "{video: {width: {exact: 640}, height: {exact: 360}}}";
@@ -407,16 +458,10 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                                                   expected_result);
 }
 
-// Test fails under MSan, http://crbug.com/445745
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_TwoGetUserMediaWithFirstHdSecondVga \
-  DISABLED_TwoGetUserMediaWithFirstHdSecondVga
-#else
-#define MAYBE_TwoGetUserMediaWithFirstHdSecondVga \
-  TwoGetUserMediaWithFirstHdSecondVga
-#endif
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       MAYBE_TwoGetUserMediaWithFirstHdSecondVga) {
+// Test fails under MSan, http://crbug.com/445745.
+// Flaky. See https://crbug.com/846960.
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_TwoGetUserMediaWithFirstHdSecondVga) {
   std::string constraints1 =
       "{video: {width : {exact: 1280}, height: {exact: 720}}}";
   std::string constraints2 =
@@ -428,7 +473,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 
 // Timing out on Windows 7 bot: http://crbug.com/443294
 // Flaky: http://crbug.com/660656; possible the test is too perf sensitive.
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        DISABLED_TwoGetUserMediaWithFirst1080pSecondVga) {
   std::string constraints1 =
       "{video: {mandatory: {maxWidth:1920 , minWidth:1920 , maxHeight: 1080, "
@@ -440,7 +485,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                                                   expected_result);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetUserMediaWithTooHighVideoConstraintsValues) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -459,16 +504,16 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   EXPECT_EQ("OverconstrainedError", ExecuteJavascriptAndReturnResult(call));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetUserMediaFailToAccessAudioDevice) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
   NavigateToURL(shell(), url);
 
-  // Set the maximum allowed input and output streams to 0
-  // so that the call to create a new audio input stream will fail.
-  media::AudioManager::Get()->SetMaxStreamCountForTesting(0, 0);
+  // Make sure we'll fail creating the audio stream.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kFailAudioStreamCreation);
 
   const std::string call = base::StringPrintf(
       "%s({video: false, audio: true});", kGetUserMediaAndExpectFailure);
@@ -478,8 +523,9 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 // This test makes two getUserMedia requests, one with impossible constraints
 // that should trigger an error, and one with valid constraints. The test
 // verifies getUserMedia can succeed after being given impossible constraints.
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       TwoGetUserMediaAndCheckCallbackAfterFailure) {
+// Flaky. See https://crbug.com/846984.
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_TwoGetUserMediaAndCheckCallbackAfterFailure) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -514,7 +560,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 #endif
 
 // This test calls getUserMedia and checks for aspect ratio behavior.
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        TestGetUserMediaAspectRatio4To3) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -529,8 +575,9 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 }
 
 // This test calls getUserMedia and checks for aspect ratio behavior.
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       TestGetUserMediaAspectRatio16To9) {
+// Flaky: crbug.com/846582.
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_TestGetUserMediaAspectRatio16To9) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -544,7 +591,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 }
 
 // This test calls getUserMedia and checks for aspect ratio behavior.
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        TestGetUserMediaAspectRatio1To1) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -561,7 +608,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 // This test calls getUserMedia in an iframe and immediately close the iframe
 // in the scope of the success callback.
 // Flaky: crbug.com/727601.
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        DISABLED_AudioInIFrameAndCloseInSuccessCb) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -573,8 +620,9 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   ExecuteJavascriptAndWaitForOk(call);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       VideoInIFrameAndCloseInSuccessCb) {
+// Flaky: crbug.com/807638
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_VideoInIFrameAndCloseInSuccessCb) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -587,7 +635,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 
 // This test calls getUserMedia in an iframe and immediately close the iframe
 // in the scope of the failure callback.
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        VideoWithBadConstraintsInIFrameAndCloseInFailureCb) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -607,7 +655,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   ExecuteJavascriptAndWaitForOk(call);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        InvalidSourceIdInIFrameAndCloseInFailureCb) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -621,7 +669,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   ExecuteJavascriptAndWaitForOk(call);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        DisableLocalEchoParameter) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableExperimentalWebPlatformFeatures);
@@ -634,13 +682,13 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
       BrowserMainLoop::GetInstance()->media_stream_manager();
 
   manager->SetGenerateStreamCallbackForTesting(
-      base::Bind(&VerifyDisableLocalEcho, false));
+      base::BindOnce(&VerifyDisableLocalEcho, false));
   std::string call = GenerateGetUserMediaWithDisableLocalEcho(
       "getUserMediaAndExpectSuccess", "false");
   ExecuteJavascriptAndWaitForOk(call);
 
   manager->SetGenerateStreamCallbackForTesting(
-      base::Bind(&VerifyDisableLocalEcho, true));
+      base::BindOnce(&VerifyDisableLocalEcho, true));
   call = GenerateGetUserMediaWithDisableLocalEcho(
       "getUserMediaAndExpectSuccess", "true");
   ExecuteJavascriptAndWaitForOk(call);
@@ -649,14 +697,14 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
       MediaStreamManager::GenerateStreamTestCallback());
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest, GetAudioSettingsDefault) {
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest, GetAudioSettingsDefault) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
   NavigateToURL(shell(), url);
   ExecuteJavascriptAndWaitForOk("getAudioSettingsDefault()");
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetAudioSettingsNoEchoCancellation) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -664,7 +712,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   ExecuteJavascriptAndWaitForOk("getAudioSettingsNoEchoCancellation()");
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetAudioSettingsDeviceId) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -672,9 +720,114 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   ExecuteJavascriptAndWaitForOk("getAudioSettingsDeviceId()");
 }
 
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest, SrcObjectAddVideoTrack) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectAddVideoTrack()");
+}
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+// TODO(crbug.com/848330) Flaky on all platforms
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLE_SrcObjectReplaceInactiveTracks) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectReplaceInactiveTracks()");
+}
+
+// Flaky on all platforms. https://crbug.com/835332
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_SrcObjectRemoveVideoTrack) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectRemoveVideoTrack()");
+}
+
+// Flaky. https://crbug.com/843844
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       DISABLED_SrcObjectRemoveFirstOfTwoVideoTracks) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectRemoveFirstOfTwoVideoTracks()");
+}
+
+// TODO(guidou): Add SrcObjectAddAudioTrack and SrcObjectRemoveAudioTrack tests
+// when a straightforward mechanism to detect the presence/absence of audio in a
+// media element with an assigned MediaStream becomes available.
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       SrcObjectReassignSameObject) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectReassignSameObject()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest, ApplyConstraintsVideo) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("applyConstraintsVideo()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       ApplyConstraintsVideoTwoStreams) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("applyConstraintsVideoTwoStreams()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       ApplyConstraintsVideoOverconstrained) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("applyConstraintsVideoOverconstrained()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       ApplyConstraintsNonDevice) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("applyConstraintsNonDevice()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       ConcurrentGetUserMediaStop) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("concurrentGetUserMediaStop()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       GetUserMediaAfterStopElementCapture) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("getUserMediaAfterStopCanvasCapture()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       GetUserMediaEchoCancellationOnAndOff) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("getUserMediaEchoCancellationOnAndOff()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetAudioStreamAndCheckMutingInitiallyUnmuted) {
+  // Muting tests do not work with the out-of-process audio service.
+  // https://crbug.com/843490.
+  if (GetParam() != AudioServiceFeatures::kDisabled)
+    return;
+
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -697,8 +850,13 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                 "failTestAfterTimeout('Got no unmute event', 1500);"));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetAudioStreamAndCheckMutingInitiallyMuted) {
+  // Muting tests do not work with the out-of-process audio service.
+  // https://crbug.com/843490.
+  if (GetParam() != AudioServiceFeatures::kDisabled)
+    return;
+
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -722,86 +880,51 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
                 "failTestAfterTimeout('Got no mute event', 1500);"));
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest, SrcObjectAddVideoTrack) {
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       RecoverFromCrashInAudioService) {
+  // This test only makes sense with the audio service running out of process,
+  // with or without sandbox.
+  if (GetParam() == AudioServiceFeatures::kDisabled)
+    return;
+
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
   NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("srcObjectAddVideoTrack()");
+
+  ExecuteJavascriptAndWaitForOk("setUpForAudioServiceCrash()");
+
+  // Crash the utility process for the audio service
+  service_manager::Connector* connector =
+      ServiceManagerConnection::GetForProcess()->GetConnector();
+  audio::mojom::TestingApiPtr service_testing_api;
+  connector->BindInterface(audio::mojom::kServiceName,
+                           mojo::MakeRequest(&service_testing_api));
+  service_testing_api->Crash();
+
+  ExecuteJavascriptAndWaitForOk("verifyAfterAudioServiceCrash()");
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       SrcObjectRemoveVideoTrack) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("srcObjectRemoveVideoTrack()");
-}
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       SrcObjectRemoveFirstOfTwoVideoTracks) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("srcObjectRemoveFirstOfTwoVideoTracks()");
-}
-
-// TODO(guidou): Add SrcObjectAddAudioTrack and SrcObjectRemoveAudioTrack tests
-// when a straightforward mechanism to detect the presence/absence of audio in a
-// media element with an assigned MediaStream becomes available.
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       SrcObjectReassignSameObject) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("srcObjectReassignSameObject()");
-}
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest, ApplyConstraintsVideo) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("applyConstraintsVideo()");
-}
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       ApplyConstraintsVideoTwoStreams) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("applyConstraintsVideoTwoStreams()");
-}
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       ApplyConstraintsVideoOverconstrained) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("applyConstraintsVideoOverconstrained()");
-}
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       ApplyConstraintsNonDevice) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("applyConstraintsNonDevice()");
-}
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       ConcurrentGetUserMediaStop) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("concurrentGetUserMediaStop()");
-}
-
-IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       GetUserMediaAfterStopElementCapture) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  NavigateToURL(shell(), url);
-  ExecuteJavascriptAndWaitForOk("getUserMediaAfterStopCanvasCapture()");
-}
+// We run these tests with the audio service both in and out of the the browser
+// process to have waterfall coverage while the feature rolls out. It should be
+// removed after launch.
+#if (defined(OS_LINUX) && !defined(CHROME_OS)) || defined(OS_MACOSX)
+// Supported platforms.
+INSTANTIATE_TEST_CASE_P(,
+                        WebRtcGetUserMediaBrowserTest,
+                        ::testing::Values(AudioServiceFeatures::kDisabled,
+                                          AudioServiceFeatures::kOutOfProcess));
+#elif defined(OS_WIN)
+// On Windows, also run in sandboxed mode.
+INSTANTIATE_TEST_CASE_P(,
+                        WebRtcGetUserMediaBrowserTest,
+                        ::testing::Values(AudioServiceFeatures::kDisabled,
+                                          AudioServiceFeatures::kOutOfProcess,
+                                          AudioServiceFeatures::kSandboxed));
+#else
+// Platforms where the out of process audio service is not supported
+INSTANTIATE_TEST_CASE_P(,
+                        WebRtcGetUserMediaBrowserTest,
+                        ::testing::Values(AudioServiceFeatures::kDisabled));
+#endif
 
 }  // namespace content

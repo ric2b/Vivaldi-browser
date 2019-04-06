@@ -8,7 +8,48 @@ range and/or the range is not possible to specify a priori).
 
 [TOC]
 
-## Emitting to Histograms
+## Naming Your Histogram
+
+Histogram names should be in the form Group.Name or Group.Subgroup.Name,
+etc., where each group organizes related histograms.
+
+## Coding (Emitting to Histograms)
+
+Generally you'll be best served by using one of the macros in
+[https://cs.chromium.org/chromium/src/base/metrics/histogram_macros.h](histogram_macros.h)
+if possible.
+
+### Don't Use the Same Histogram Logging Call in Multiple Places
+
+These logging macros and functions have long names and sometimes include extra
+parameters (defining the number of buckets for example).  Use a helper function
+if possible.  This leads to shorter, more readable code that's also more
+resilient to problems that could be introduced when making changes.  (One could,
+for example, erroneously change the bucketing of the histogram in one call but
+not the other.)
+
+### Use Fixed Strings When Using Histogram Macros
+
+When using histogram macros (calls such as `UMA_HISTOGRAM_ENUMERATION`), you're
+not allow to construct your string dynamically so that it can vary at a
+callsite.  At a given callsite (preferably you have only one), the string should
+be the same every time the macro is called.  If you need to use dynamic names,
+use the functions in histogram_functions.h instead of the macros.
+
+### Don't Use Same String in Multiple Places
+
+If you must use the histogram name in multiple places, use a compile-time
+constant of appropriate scope that can be referenced everywhere. Using inline
+strings in multiple places can lead to errors if you ever need to revise the
+name and you update one one location and forget another.
+
+### Efficiency
+
+Don't worry about it.  In general, the histogram code is highly optimized.  Do
+not be concerned about the processing cost of emitting to a histogram (unless
+you're using [sparse histograms](#When-To-Use-Sparse-Histograms)).
+
+## Picking Your Histogram Type
 
 ### Directly Measure What You Want
 
@@ -26,12 +67,6 @@ two histograms to get the total histogram, you're implicitly assuming those
 values are independent, which may not be the case.  Directly measure what you
 care about; don't try to derive it from other data.
 
-### Efficiency
-
-In general, the histogram code is highly optimized.  Do not be concerned about
-the processing cost of emitting to a histogram (unless you're using [sparse
-histograms](#When-To-Use-Sparse-Histograms)).
-
 ### Enum Histograms
 
 Enumerated histogram are most appropriate when you have a list of connected /
@@ -47,28 +82,59 @@ If few buckets will be emitted to, consider using a [sparse
 histogram](#When-To-Use-Sparse-Histograms).
 
 You may append to your enum if the possible states/actions grows.  However, you
-should not reorder, renumber, or otherwise reuse existing values.  As such,
-please put this warning by the enum definition:
+should not reorder, renumber, or otherwise reuse existing values. Definitions
+for enums recorded in histograms should be prefixed by the following warning:
 ```
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
-enum class NEW_TAB_PAGE_ACTION {
-  USE_OMNIBOX = 0,
-  CLICK_TILE = 1,
-  OPEN_BOOKMARK = 2,
-  COUNT
-};
 ```
 
-Also, please explicitly set enum values `= 0`, `= 1`, `= 2`, etc.  This makes
-clearer that the actual values are important.  In addition, it helps confirm
-the values align between the enum definition and
-[histograms.xml](./histograms.xml).  The COUNT value should not include an
-explicit value--this lets the compiler keep the COUNT up-to-date.
+The enums themselves should have explicit enumerator values set (`= 0`, `= 1`,
+`= 2`), to make it clear that the actual values are important and to make it
+easy to match the values between the C++ definition and
+[histograms.xml](./histograms.xml).
 
-If your enum histogram has a catch-all / miscellaneous bucket, put that bucket
-first (`= 0`).  This will make the bucket easy to find on the dashboard if
-later you add additional buckets to your histogram.
+There are two common patterns for defining enums. If an enum is used in a
+`switch` statement, it should be defined like this:
+```
+enum class NewTabPageAction {
+  kUseOmnibox = 0,
+  kClickTitle = 1,
+  kOpenBookmark = 2,
+  kMaxValue = kOpenBookmark,
+};
+```
+`kMaxValue` is a special enumerator value that shares the value of the highest
+enumerator: this should be done by assigning it the name of the enumerator with
+the highest explicit integral value. `switch` statements will not need to handle
+an otherwise unused sentinel value.
+
+Enumerators defined in this way should be recorded using the two argument
+version of `UMA_HISTOGRAM_ENUMERATION`:
+```
+UMA_HISTOGRAM_ENUMERATION("NewTabPageAction", action);
+```
+which automatically deduces the range of the enum from `kMaxValue`.
+
+Alternatively, enums can be defined with a sentinel enumerator value at the end:
+```
+enum class NewTabPageAction {
+  kUseOmnibox = 0,
+  kClickTitle = 1,
+  kOpenBookmark = 2,
+  kCount,
+};
+```
+The `kCount` enumerator should not include an explicit value--this lets the
+compiler keep `kCount` up-to-date. Enumerators defined in this way should be
+recoded using the three argument version of `UMA_HISTOGRAM_ENUMERATION`:
+```
+UMA_HISTOGRAM_ENUMERATION("NewTabPageAction", action, NewTabPageAction::kCount);
+```
+
+Finally, if your enum histogram has a catch-all / miscellaneous bucket, put that
+bucket first (`= 0`).  This will make the bucket easy to find on the dashboard
+if later you add additional buckets to your histogram.
 
 ### Flag Histograms
 
@@ -132,12 +198,46 @@ good reason (and consider whether [sparse histograms](#When-To-Use-Sparse-
 Histograms) might work better for you in that case--they do not pre- allocate
 their buckets).
 
+### Percentage or Ratio Histograms
+
+You can easily emit a percentage histogram using the
+UMA_HISTOGRAM_PERCENTAGE macro provided in
+[histogram_macros.h](https://cs.chromium.org/chromium/src/base/metrics/histogram_macros.h).
+You can also easily emit any ratio as a linear histogram (for equally
+sized buckets).
+
+For such histograms, you should think carefully about _when_ the values are
+emitted.  Normally, you should emit values periodically at a set time interval,
+such as every 5 minutes.  Conversely, we strongly discourage emitting values
+based on event triggers.  For example, we do not recommend recording a ratio
+at the end of a video playback.
+
+Why?  You typically cannot make decisions based on histograms whose values are
+recorded in response to an event, because such metrics can conflate heavy usage
+with light usage.  It's easier to reason about metrics that route around this
+source of bias.
+
+Many developers have been bitten by this.  For example, it was previously common
+to emit an actions-per-minute ratio whenever Chrome was backgrounded.
+Precisely, these metrics computed the number of uses of a particular action
+during a Chrome session, divided by length of time Chrome had been open.
+Sometimes, the recorded rate was based on a short interaction with Chrome – a
+few seconds or a minute.  Other times, the recorded rate was based on a long
+interaction, tens of minutes or hours.  These two situations are
+indistinguishable in the UMA logs – the recorded values can be identical.
+
+This inability to distinguish these two qualitatively different settings make
+such histograms effectively uninterpretable and not actionable.  Emitting at a
+regular interval avoids the issue.  Each value will represent the same amount of
+time (e.g., one minute of video playback).
+
 ### Local Histograms
 
-Histograms can be added via [Local macros](https://codesearch.chromium.org/chromium/src/base/metrics/histogram_macros_local.h). These will still record
-locally, but will not be uploaded to UMA and will therefore not be available
-for analysis. This can be useful for metrics only needed for local debugging.
-We don't recommend using local histograms outside of that scenario.
+Histograms can be added via [Local macros](https://codesearch.chromium.org/chromium/src/base/metrics/histogram_macros_local.h).
+These will still record locally, but will not be uploaded to UMA and will
+therefore not be available for analysis. This can be useful for metrics only
+needed for local debugging. We don't recommend using local histograms outside
+of that scenario.
 
 ### Multidimensional Histograms
 
@@ -150,7 +250,56 @@ as well as the other three permutations.
 There is no general purpose solution for this type of analysis. We suggest
 using the workaround of using an enum of length MxN, where you log each unique
 pair {state, feature} as a separate entry in the same enum. If this causes a
-large explosion in data (i.e. >100 enum entries), a [sparse histogram](#When-To-Use-Sparse-Histograms) may be appropriate. If you are unsure of the best way to proceed, please contact someone from the OWNERS file.
+large explosion in data (i.e. >100 enum entries), a [sparse histogram](#When-To-Use-Sparse-Histograms)
+may be appropriate. If you are unsure of the best way to proceed, please
+contact someone from the OWNERS file.
+
+## Histogram Expiry
+
+Histogram expiry is specified by **'expires_after'** attribute in histogram
+descriptions in histograms.xml. The attribute can be specified as date in
+**YYYY-MM-DD** format or as Chrome milestone in **M**\*(e.g. M68) format. After
+a histogram expires, it will not be recorded (nor uploaded to the UMA servers).
+The code to record it becomes dead code, and should be removed from the
+codebase along with marking the histogram definition as obsolete. However, if
+histogram would remain useful, the expiration should be extended accordingly
+before it becomes expired. If histogram you care about already expired, see
+[Expired Histogram Whitelist](#Expired-histogram-whitelist).
+
+For all the new histograms the use of expiry attribute will be strongly
+encouraged and enforced by Chrome metrics team through reviews.
+
+#### How to choose expiry for histograms
+
+For new histograms if it is used for launching a project for which the timeline
+is known then pick an expiry based on your project timeline. Otherwise, we
+recommend choosing 3-6 months.
+
+For already existing histograms here are different scenarios:
+
+*   Owner moved to different project - find new owner
+*   Owner doesn’t use it, team doesn’t use it - remove
+*   Not in use now, but maybe useful in the far future - remove
+*   Not in use now, but maybe useful in the near future - pick 3 months or 2
+    milestone ahead
+*   Actively in use now, useful for short term - pick 3-6 month or appropriate
+    number of milestones ahead
+*   Actively in use, seems useful for indefinite time - pick 1 year or more
+
+### Expired histogram notifier
+
+Expired histogram notifier will notify owners in advance by creating crbugs so
+that the owners can extend the lifetime of the histogram if needed or deprecate
+it. It will regularly check all the histograms in histograms.xml and will
+determine expired histograms or histograms expiring soon. Based on that it will
+create or update crbugs that will be assigned to histogram owners.
+
+### Expired histogram whitelist
+
+If a histogram expires but turns out to be useful, you can add histogram name
+to the whitelist until the updated expiration date reaches to the stable
+channel. For adding histogram to the whitelist, see internal documentation
+[Histogram Expiry](https://goto.google.com/histogram-expiry-gdoc)
 
 ## Testing
 
@@ -159,9 +308,24 @@ emitted to when you expect and not emitted to at other times. Also check that
 the values emitted to are correct.  Finally, for count histograms, make sure
 that buckets capture enough precision for your needs over the range.
 
+Pro tip: You can filter the set of histograms shown on `chrome://histograms` by
+specifying a prefix. For example, `chrome://histograms/Extensions.Load` will
+show only histograms whose names match the pattern "Extensions.Load*".
+
 In addition to testing interactively, you can have unit tests examine the
-values emitted to histograms.  See [histogram_tester.h](https://cs.chromium.org/chromium/src/base/test/histogram_tester.h)
+values emitted to histograms.  See [histogram_tester.h](https://cs.chromium.org/chromium/src/base/test/metrics/histogram_tester.h)
 for details.
+
+## Interpreting the Resulting Data
+
+The top of [go/uma-guide](http://go/uma-guide) has good advice on how to go
+about analyzing and interpreting the results of UMA data uploaded by users.  If
+you're reading this page, you've probably just finished adding a histogram to
+the Chromium source code and you're waiting for users to update their version of
+Chrome to a version that includes your code.  In this case, the best advice is
+to remind you that users who update frequently / quickly are biased.  Best take
+the initial statistics with a grain of salt; they're probably *mostly* right but
+not entirely so.
 
 ## Revising Histograms
 
@@ -173,10 +337,16 @@ interpretations of the data and make no sense.
 ## Deleting Histograms
 
 Please delete the code that emits to histograms that are no longer needed.
-Histograms take up memory.  Cleaning up histograms that you no longer care about
-is good!  But see the note below on [Deleting Histogram Entries](#Deleting-Histogram-Entries).
+Histograms take up memory.  Cleaning up histograms that you no longer care
+about is good!  But see the note below on [Deleting Histogram Entries](#Deleting-Histogram-Entries).
 
 ## Documenting Histograms
+
+Document histograms in [histograms.xml](./histograms.xml).  There is also a
+[google-internal version of the file](http://go/chrome-histograms-internal) for
+the rare case when the histogram is confidential (added only to Chrome code,
+not Chromium code; or, an accurate description about how to interpret the
+histogram would reveal information about Google's plans).
 
 ### Add Histogram and Documentation in the Same Changelist
 
@@ -196,8 +366,8 @@ with your feature.  Please add a sentence or two of background if necessary.
 
 It is good practice to note caveats associated with your histogram in this
 section, such as which platforms are supported (if the set of supported
-platforms is surprising).  E.g., a desktop feature that happens not to be logged
-on Mac.
+platforms is surprising).  E.g., a desktop feature that happens not to be
+logged on Mac.
 
 ### State When It Is Recorded
 
@@ -222,6 +392,9 @@ unused histograms as obsolete, annotating them with the associated date or
 milestone in the obsolete tag entry.  If your histogram is being replaced by a
 new version, we suggest noting that in the previous histogram's description.
 
+A changelist that marks a histogram as obsolete should be reviewed by all
+current owners.
+
 Deleting histogram entries would be bad if someone to accidentally reused your
 old histogram name and thereby corrupts new data with whatever old data is still
 coming in.  It's also useful to keep obsolete histogram descriptions in
@@ -239,6 +412,9 @@ element is used only to construct a partial name, to be completed by further
 suffixes, annotate the element with the attribute `base="true"`. This instructs
 tools not to treat the partial base name as a distinct histogram. Note that
 suffixes can be applied recursively.
+
+You can also declare ownership of `<histogram_suffixes>`. If there's no owner
+specified, the generated histograms will inherit owners from the parents.
 
 ### Enum labels
 

@@ -3,6 +3,7 @@
 # file, run "gn help dotfile" at the command line.
 
 import("//build/dotfile_settings.gni")
+import("//third_party/angle/dotfile_settings.gni")
 
 # The location of the build configuration file.
 buildconfig = "//build/config/BUILDCONFIG.gn"
@@ -36,18 +37,18 @@ default_args = {
   v8_extra_library_files = [
     # Dependencies used by the extra libraries. Putting them here causes them
     # to be executed first during snapshot creation.
-    "//third_party/WebKit/Source/core/streams/CommonOperations.js",
-    "//third_party/WebKit/Source/core/streams/CommonStrings.js",
-    "//third_party/WebKit/Source/core/streams/SimpleQueue.js",
+    "//third_party/blink/renderer/core/streams/CommonOperations.js",
+    "//third_party/blink/renderer/core/streams/CommonStrings.js",
+    "//third_party/blink/renderer/core/streams/SimpleQueue.js",
 
     # Extra libraries.
-    "//third_party/WebKit/Source/core/streams/ByteLengthQueuingStrategy.js",
-    "//third_party/WebKit/Source/core/streams/CountQueuingStrategy.js",
-    "//third_party/WebKit/Source/core/streams/ReadableStream.js",
-    "//third_party/WebKit/Source/core/streams/WritableStream.js",
+    "//third_party/blink/renderer/core/streams/ByteLengthQueuingStrategy.js",
+    "//third_party/blink/renderer/core/streams/CountQueuingStrategy.js",
+    "//third_party/blink/renderer/core/streams/ReadableStream.js",
+    "//third_party/blink/renderer/core/streams/WritableStream.js",
+    "//third_party/blink/renderer/core/streams/TransformStream.js",
   ]
-  v8_experimental_extra_library_files =
-      [ "//third_party/WebKit/Source/core/streams/TransformStream.js" ]
+  v8_experimental_extra_library_files = []
   v8_enable_gdbjit = false
   v8_imminent_deprecation_warnings = false
 
@@ -85,7 +86,9 @@ check_targets = [
   "//chrome/app_shim/*",
   "//chrome/browser/chromeos/*",
   "//chrome/browser/extensions/*",
+  "//chrome/browser/resource_coordinator/*",
   "//chrome/browser/ui/*",
+  "//chrome/chrome_cleaner/*",
   "//chrome/common/*",
   "//chrome/installer/*",
   "//chrome/profiling",
@@ -108,11 +111,11 @@ check_targets = [
   "//extensions:extensions_unittests",
   "//extensions/browser:browser_tests",
   "//extensions/browser:unit_tests",
+  "//extensions/browser/install:*",
+  "//extensions/common:common",
   "//extensions/common:unit_tests",
   "//extensions/renderer:unit_tests",
-  "//extensions/shell:browser_tests",
-  "//extensions/shell:unit_tests",
-  "//extensions/utility:unit_tests",
+  "//extensions/shell/*",
   "//gin/*",
   "//google_apis/*",
   "//google_update/*",
@@ -134,6 +137,7 @@ check_targets = [
   #"//pdf/*",  # Medium-hard.
   #"//ppapi/*",  # Lots of errors.
   "//ppapi/examples/*",
+  "//ppapi/tests/*",
   "//printing/*",
 
   #"//remoting/*",  # Medium-hard.
@@ -147,21 +151,29 @@ check_targets = [
   "//testing/*",
 
   #"//third_party/*",  # May not ever want this.
-  "//third_party/breakpad/*",
+  #"//third_party/breakpad/*",  # Small errors.
+  "//third_party/boringssl/*",
   "//third_party/brotli/*",
+  "//third_party/fuchsia-sdk/*",
   "//third_party/hunspell/*",
   "//third_party/leveldatabase/*",
-  "//third_party/libaddressinput/*",
+
+  #"//third_party/libaddressinput/*",  # Small errors.
   "//third_party/libphonenumber/*",
-  "//third_party/libwebp/*",
+
+  #"//third_party/libwebp/*",  # Errors: https://crbug.com/800762
   "//third_party/snappy/*",
-  "//third_party/WebKit/*",
+
+  #"//third_party/WebKit/*",  # Errors: https://crbug.com/800764
+  #"//third_party/webrtc/*",  # Errors: https://crbug.com/824831
+  "//third_party/webrtc_overrides/*",
   "//tools/*",
 
   "//ui/*",
   "//url/*",
-  "//v8/*",
-  "//win8/*",
+
+  #"//v8/*",  # Errors: https://bugs.chromium.org/p/v8/issues/detail?id=7330
+  "//webrunner/*",
 ]
 
 # These are the list of GN files that run exec_script. This whitelist exists
@@ -227,7 +239,9 @@ check_targets = [
 #      files and passes them to a script, it will always be correct.
 
 exec_script_whitelist =
-    build_dotfile_settings.exec_script_whitelist + [
+    build_dotfile_settings.exec_script_whitelist +
+    angle_dotfile_settings.exec_script_whitelist +
+    [
       # Whitelist entries for //build should go into
       # //build/dotfile_settings.gni instead, so that they can be shared
       # with other repos. The entries in this list should be only for files
@@ -244,9 +258,6 @@ exec_script_whitelist =
       "//remoting/host/installer/win/generate_clsids.gni",
 
       # TODO(dpranke): Get these from the appropriate repos instead.
-      "//third_party/angle/BUILD.gn",
-      "//third_party/angle/src/tests/BUILD.gn",
-      "//third_party/angle/src/vulkan_support/BUILD.gn",
       "//third_party/catapult/tracing/BUILD.gn",
       "//third_party/google_input_tools/inputview.gni",
 

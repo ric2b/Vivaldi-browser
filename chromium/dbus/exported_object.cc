@@ -10,8 +10,8 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "dbus/bus.h"
@@ -191,7 +191,10 @@ DBusHandlerResult ExportedObject::HandleMessage(
     DBusConnection* connection,
     DBusMessage* raw_message) {
   bus_->AssertOnDBusThread();
-  DCHECK_EQ(DBUS_MESSAGE_TYPE_METHOD_CALL, dbus_message_get_type(raw_message));
+  // ExportedObject only handles method calls. Ignore other message types (e.g.
+  // signal).
+  if (dbus_message_get_type(raw_message) != DBUS_MESSAGE_TYPE_METHOD_CALL)
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
   // raw_message will be unrefed on exit of the function. Increment the
   // reference so we can use it in MethodCall.
@@ -220,12 +223,10 @@ DBusHandlerResult ExportedObject::HandleMessage(
   const base::TimeTicks start_time = base::TimeTicks::Now();
   if (bus_->HasDBusThread()) {
     // Post a task to run the method in the origin thread.
-    bus_->GetOriginTaskRunner()->PostTask(FROM_HERE,
-                                          base::Bind(&ExportedObject::RunMethod,
-                                                     this,
-                                                     iter->second,
-                                                     base::Passed(&method_call),
-                                                     start_time));
+    bus_->GetOriginTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ExportedObject::RunMethod, this, iter->second,
+                       std::move(method_call), start_time));
   } else {
     // If the D-Bus thread is not used, just call the method directly.
     MethodCall* method = method_call.get();
@@ -259,12 +260,9 @@ void ExportedObject::SendResponse(base::TimeTicks start_time,
   DCHECK(method_call);
   if (bus_->HasDBusThread()) {
     bus_->GetDBusTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&ExportedObject::OnMethodCompleted,
-                   this,
-                   base::Passed(&method_call),
-                   base::Passed(&response),
-                   start_time));
+        FROM_HERE, base::BindOnce(&ExportedObject::OnMethodCompleted, this,
+                                  std::move(method_call), std::move(response),
+                                  start_time));
   } else {
     OnMethodCompleted(std::move(method_call), std::move(response), start_time);
   }

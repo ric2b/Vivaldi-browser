@@ -25,6 +25,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/dns/host_resolver.h"
 #include "net/log/net_log_with_source.h"
+#include "net/test/test_data_directory.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -106,7 +107,7 @@ bool GetLocalCertificatesDir(const base::FilePath& certificates_dir,
   }
 
   base::FilePath src_dir;
-  if (!PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
+  if (!base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir))
     return false;
 
   *local_certificates_dir = src_dir.Append(certificates_dir);
@@ -157,9 +158,32 @@ std::string OCSPDateToString(
       return "early";
     case BaseTestServer::SSLOptions::OCSP_DATE_LONG:
       return "long";
+    case BaseTestServer::SSLOptions::OCSP_DATE_LONGER:
+      return "longer";
   }
   NOTREACHED();
   return std::string();
+}
+
+std::string OCSPProducedToString(
+    BaseTestServer::SSLOptions::OCSPProduced ocsp_produced) {
+  switch (ocsp_produced) {
+    case BaseTestServer::SSLOptions::OCSPProduced::OCSP_PRODUCED_VALID:
+      return "valid";
+    case BaseTestServer::SSLOptions::OCSPProduced::OCSP_PRODUCED_BEFORE_CERT:
+      return "before";
+    case BaseTestServer::SSLOptions::OCSPProduced::OCSP_PRODUCED_AFTER_CERT:
+      return "after";
+    default:
+      NOTREACHED();
+      return std::string();
+  }
+}
+
+bool RegisterRootCertsInternal(const base::FilePath& file_path) {
+  TestRootCerts* root_certs = TestRootCerts::GetInstance();
+  return root_certs->AddFromFile(file_path.AppendASCII("ocsp-test-root.pem")) &&
+         root_certs->AddFromFile(file_path.AppendASCII("root_ca_cert.pem"));
 }
 
 }  // namespace
@@ -187,6 +211,7 @@ base::FilePath BaseTestServer::SSLOptions::GetCertificateFile() const {
     case CERT_BAD_VALIDITY:
       return base::FilePath(FILE_PATH_LITERAL("bad_validity.pem"));
     case CERT_AUTO:
+    case CERT_AUTO_WITH_INTERMEDIATE:
     case CERT_AUTO_AIA_INTERMEDIATE:
       return base::FilePath();
     default:
@@ -196,8 +221,10 @@ base::FilePath BaseTestServer::SSLOptions::GetCertificateFile() const {
 }
 
 std::string BaseTestServer::SSLOptions::GetOCSPArgument() const {
-  if (server_certificate != CERT_AUTO)
+  if (server_certificate != CERT_AUTO &&
+      server_certificate != CERT_AUTO_WITH_INTERMEDIATE) {
     return std::string();
+  }
 
   // |ocsp_responses| overrides when it is non-empty.
   if (!ocsp_responses.empty()) {
@@ -214,8 +241,10 @@ std::string BaseTestServer::SSLOptions::GetOCSPArgument() const {
 }
 
 std::string BaseTestServer::SSLOptions::GetOCSPDateArgument() const {
-  if (server_certificate != CERT_AUTO)
+  if (server_certificate != CERT_AUTO &&
+      server_certificate != CERT_AUTO_WITH_INTERMEDIATE) {
     return std::string();
+  }
 
   if (!ocsp_responses.empty()) {
     std::string arg;
@@ -231,20 +260,56 @@ std::string BaseTestServer::SSLOptions::GetOCSPDateArgument() const {
 }
 
 std::string BaseTestServer::SSLOptions::GetOCSPProducedArgument() const {
-  if (server_certificate != CERT_AUTO)
+  if (server_certificate != CERT_AUTO &&
+      server_certificate != CERT_AUTO_WITH_INTERMEDIATE) {
+    return std::string();
+  }
+
+  return OCSPProducedToString(ocsp_produced);
+}
+
+std::string BaseTestServer::SSLOptions::GetOCSPIntermediateArgument() const {
+  if (server_certificate != CERT_AUTO_WITH_INTERMEDIATE)
     return std::string();
 
-  switch (ocsp_produced) {
-    case OCSP_PRODUCED_VALID:
-      return "valid";
-    case OCSP_PRODUCED_BEFORE_CERT:
-      return "before";
-    case OCSP_PRODUCED_AFTER_CERT:
-      return "after";
-    default:
-      NOTREACHED();
-      return std::string();
+  // |ocsp_intermediate_responses| overrides when it is non-empty.
+  if (!ocsp_intermediate_responses.empty()) {
+    std::string arg;
+    for (size_t i = 0; i < ocsp_intermediate_responses.size(); i++) {
+      if (i != 0)
+        arg += ":";
+      arg += OCSPStatusToString(ocsp_intermediate_responses[i].status);
+    }
+    return arg;
   }
+
+  return OCSPStatusToString(ocsp_intermediate_status);
+}
+
+std::string BaseTestServer::SSLOptions::GetOCSPIntermediateDateArgument()
+    const {
+  if (server_certificate != CERT_AUTO_WITH_INTERMEDIATE)
+    return std::string();
+
+  if (!ocsp_intermediate_responses.empty()) {
+    std::string arg;
+    for (size_t i = 0; i < ocsp_intermediate_responses.size(); i++) {
+      if (i != 0)
+        arg += ":";
+      arg += OCSPDateToString(ocsp_intermediate_responses[i].date);
+    }
+    return arg;
+  }
+
+  return OCSPDateToString(ocsp_intermediate_date);
+}
+
+std::string BaseTestServer::SSLOptions::GetOCSPIntermediateProducedArgument()
+    const {
+  if (server_certificate != CERT_AUTO_WITH_INTERMEDIATE)
+    return std::string();
+
+  return OCSPProducedToString(ocsp_intermediate_produced);
 }
 
 BaseTestServer::BaseTestServer(Type type) : type_(type) {
@@ -377,6 +442,11 @@ bool BaseTestServer::GetFilePathWithReplacements(
   return true;
 }
 
+void BaseTestServer::RegisterTestCerts() {
+  bool added_root_certs = RegisterRootCertsInternal(GetTestCertsDirectory());
+  DCHECK(added_root_certs);
+}
+
 bool BaseTestServer::LoadTestRootCert() const {
   TestRootCerts* root_certs = TestRootCerts::GetInstance();
   if (!root_certs)
@@ -387,15 +457,7 @@ bool BaseTestServer::LoadTestRootCert() const {
   if (!GetLocalCertificatesDir(certificates_dir_, &root_certificate_path))
     return false;
 
-  if (ssl_options_.server_certificate == SSLOptions::CERT_AUTO ||
-      ssl_options_.server_certificate ==
-          SSLOptions::CERT_AUTO_AIA_INTERMEDIATE) {
-    return root_certs->AddFromFile(
-        root_certificate_path.AppendASCII("ocsp-test-root.pem"));
-  } else {
-    return root_certs->AddFromFile(
-        root_certificate_path.AppendASCII("root_ca_cert.pem"));
-  }
+  return RegisterRootCertsInternal(root_certificate_path);
 }
 
 scoped_refptr<X509Certificate> BaseTestServer::GetCertificate() const {
@@ -575,6 +637,25 @@ bool BaseTestServer::GenerateArguments(base::DictionaryValue* arguments) const {
     std::string ocsp_produced_arg = ssl_options_.GetOCSPProducedArgument();
     if (!ocsp_produced_arg.empty())
       arguments->SetString("ocsp-produced", ocsp_produced_arg);
+
+    std::string ocsp_intermediate_arg =
+        ssl_options_.GetOCSPIntermediateArgument();
+    if (!ocsp_intermediate_arg.empty())
+      arguments->SetString("ocsp-intermediate", ocsp_intermediate_arg);
+
+    std::string ocsp_intermediate_date_arg =
+        ssl_options_.GetOCSPIntermediateDateArgument();
+    if (!ocsp_intermediate_date_arg.empty()) {
+      arguments->SetString("ocsp-intermediate-date",
+                           ocsp_intermediate_date_arg);
+    }
+
+    std::string ocsp_intermediate_produced_arg =
+        ssl_options_.GetOCSPIntermediateProducedArgument();
+    if (!ocsp_intermediate_produced_arg.empty()) {
+      arguments->SetString("ocsp-intermediate-produced",
+                           ocsp_intermediate_produced_arg);
+    }
 
     if (ssl_options_.cert_serial != 0) {
       arguments->SetInteger("cert-serial", ssl_options_.cert_serial);

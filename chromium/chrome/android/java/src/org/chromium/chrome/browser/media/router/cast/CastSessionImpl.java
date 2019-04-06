@@ -20,6 +20,8 @@ import org.json.JSONObject;
 
 import org.chromium.base.Log;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.media.router.MediaController;
+import org.chromium.chrome.browser.media.router.MediaSource;
 import org.chromium.chrome.browser.media.ui.MediaNotificationInfo;
 import org.chromium.chrome.browser.media.ui.MediaNotificationListener;
 import org.chromium.chrome.browser.media.ui.MediaNotificationManager;
@@ -131,7 +133,7 @@ public class CastSessionImpl implements MediaNotificationListener, CastSession {
         Intent contentIntent = Tab.createBringTabToFrontIntent(tabId);
         if (contentIntent != null) {
             contentIntent.putExtra(MediaNotificationUma.INTENT_EXTRA_NAME,
-                    MediaNotificationUma.SOURCE_PRESENTATION);
+                    MediaNotificationUma.Source.PRESENTATION);
         }
         mNotificationBuilder =
                 new MediaNotificationInfo.Builder()
@@ -480,5 +482,11 @@ public class CastSessionImpl implements MediaNotificationListener, CastSession {
                 CastMessageHandler.INVALID_SEQUENCE_NUMBER);
 
         if (mMediaPlayer != null && !isApiClientInvalid()) mMediaPlayer.requestStatus(mApiClient);
+    }
+
+    @Override
+    public MediaController getMediaController() {
+        // MediaController is not used with the CastSessionImpl.
+        return null;
     }
 }

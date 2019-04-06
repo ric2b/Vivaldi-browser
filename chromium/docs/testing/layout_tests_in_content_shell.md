@@ -3,10 +3,10 @@
 ## Basic usage
 
 Layout tests can be run with `content_shell`. To just dump the render tree, use
-the `--run-layout-test` flag:
+the `--run-web-tests` flag:
 
 ```bash
-out/Default/content_shell --run-layout-test foo.html
+out/Default/content_shell --run-web-tests foo.html
 ```
 
 ### Compiling
@@ -17,11 +17,11 @@ binaries required to run the tests.
 
 ### Running
 
-You can run layout tests using `run-webkit-tests` (in
-`src/third_party/WebKit/Tools/Scripts`).
+You can run layout tests using `run_web_tests.py` (in
+`src/third_party/blink/tools`).
 
 ```bash
-third_party/WebKit/Tools/Scripts/run-webkit-tests storage/indexeddb
+third_party/blink/tools/run_web_tests.py storage/indexeddb
 ```
 
 or execute the shell directly:

@@ -7,6 +7,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
@@ -14,7 +15,6 @@
 #include "ui/views/animation/test/ink_drop_host_view_test_api.h"
 #include "ui/views/animation/test/test_ink_drop.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/views/test/views_test_base.h"
 
 #if defined(OS_CHROMEOS)
 #include "ui/aura/window.h"
@@ -81,9 +81,10 @@ class TestIconLabelBubbleView : public IconLabelBubbleView {
 
   bool ShouldShowLabel() const override {
     return !IsShrinking() ||
-           (width() > (image()->GetPreferredSize().width() +
-                       2 * LocationBarView::kIconInteriorPadding +
-                       2 * GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING)));
+           (width() >
+            (image()->GetPreferredSize().width() +
+             GetLayoutInsets(LOCATION_BAR_ICON_INTERIOR_PADDING).width() +
+             2 * GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING)));
   }
 
   double WidthMultiplier() const override {
@@ -117,24 +118,11 @@ class TestIconLabelBubbleView : public IconLabelBubbleView {
 
 }  // namespace
 
-class IconLabelBubbleViewTest : public views::ViewsTestBase {
- public:
-  IconLabelBubbleViewTest()
-      : views::ViewsTestBase(),
-        widget_(nullptr),
-        view_(nullptr),
-        ink_drop_(nullptr),
-        steady_reached_(false),
-        shrinking_reached_(false),
-        minimum_size_reached_(false),
-        previous_width_(0),
-        initial_image_x_(0) {}
-  ~IconLabelBubbleViewTest() override {}
-
+class IconLabelBubbleViewTest : public ChromeViewsTestBase {
  protected:
-  // views::ViewsTestBase:
+  // ChromeViewsTestBase:
   void SetUp() override {
-    views::ViewsTestBase::SetUp();
+    ChromeViewsTestBase::SetUp();
     gfx::FontList font_list;
 
     CreateWidget();
@@ -151,7 +139,7 @@ class IconLabelBubbleViewTest : public views::ViewsTestBase {
     if (widget_ && !widget_->IsClosed())
       widget_->Close();
 
-    ViewsTestBase::TearDown();
+    ChromeViewsTestBase::TearDown();
   }
 
   void VerifyWithAnimationStep(int step) {
@@ -193,7 +181,8 @@ class IconLabelBubbleViewTest : public views::ViewsTestBase {
     minimum_size_reached_ = false;
     previous_width_ = 0;
     initial_image_x_ = GetImageBounds().x();
-    EXPECT_EQ(0, initial_image_x_);
+    EXPECT_EQ(GetLayoutInsets(LOCATION_BAR_ICON_INTERIOR_PADDING).left(),
+              initial_image_x_);
   }
 
   void VerifyAnimationStep() {
@@ -263,16 +252,16 @@ class IconLabelBubbleViewTest : public views::ViewsTestBase {
     return view_->GetImageView()->bounds();
   }
 
-  views::Widget* widget_;
-  TestIconLabelBubbleView* view_;
-  TestInkDrop* ink_drop_;
+  views::Widget* widget_ = nullptr;
+  TestIconLabelBubbleView* view_ = nullptr;
+  TestInkDrop* ink_drop_ = nullptr;
   std::unique_ptr<ui::test::EventGenerator> generator_;
 
-  bool steady_reached_;
-  bool shrinking_reached_;
-  bool minimum_size_reached_;
-  int previous_width_;
-  int initial_image_x_;
+  bool steady_reached_ = false;
+  bool shrinking_reached_ = false;
+  bool minimum_size_reached_ = false;
+  int previous_width_ = 0;
+  int initial_image_x_ = 0;
 };
 
 // Tests layout rules for IconLabelBubbleView while simulating animation.
@@ -375,7 +364,7 @@ TEST_F(IconLabelBubbleViewTest, GestureInkDropState) {
 #if defined(OS_CHROMEOS)
 // Verifies IconLabelBubbleView::CalculatePreferredSize() doesn't crash when
 // there is a widget but no compositor.
-using IconLabelBubbleViewCrashTest = views::ViewsTestBase;
+using IconLabelBubbleViewCrashTest = ChromeViewsTestBase;
 
 TEST_F(IconLabelBubbleViewCrashTest,
        GetPreferredSizeDoesntCrashWhenNoCompositor) {

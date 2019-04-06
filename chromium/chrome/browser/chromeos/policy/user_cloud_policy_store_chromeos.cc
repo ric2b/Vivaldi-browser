@@ -40,7 +40,8 @@ UserCloudPolicyStoreChromeOS::UserCloudPolicyStoreChromeOS(
     const AccountId& account_id,
     const base::FilePath& user_policy_key_dir,
     bool is_active_directory)
-    : UserCloudPolicyStoreBase(background_task_runner),
+    : UserCloudPolicyStoreBase(background_task_runner,
+                               PolicyScope::POLICY_SCOPE_USER),
       session_manager_client_(session_manager_client),
       account_id_(account_id),
       is_active_directory_(is_active_directory),
@@ -130,7 +131,7 @@ void UserCloudPolicyStoreChromeOS::ValidatePolicyForStore(
   // Create and configure a validator.
   std::unique_ptr<UserCloudPolicyValidator> validator = CreateValidator(
       std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_VALIDATED);
-  validator->ValidateUsername(account_id_.GetUserEmail(), true);
+  validator->ValidateUser(account_id_);
   const std::string& cached_policy_key =
       cached_policy_key_loader_->cached_policy_key();
   if (cached_policy_key.empty()) {
@@ -279,7 +280,7 @@ UserCloudPolicyStoreChromeOS::CreateValidatorForLoad(
     validator->ValidateDeviceId(
         std::string(), CloudPolicyValidatorBase::DEVICE_ID_NOT_REQUIRED);
   } else {
-    validator->ValidateUsername(account_id_.GetUserEmail(), true);
+    validator->ValidateUser(account_id_);
     // The policy loaded from session manager need not be validated using the
     // verification key since it is secure, and since there may be legacy policy
     // data that was stored without a verification key.

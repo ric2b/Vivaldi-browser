@@ -68,6 +68,17 @@ enum PageLoadTimingStatus {
   // We received a first input timestamp without a first input delay.
   INVALID_NULL_FIRST_INPUT_DELAY,
 
+  // We received a longest input delay without a longest input timestamp.
+  INVALID_NULL_LONGEST_INPUT_TIMESTAMP,
+  // We received a longest input timestamp without a longest input delay.
+  INVALID_NULL_LONGEST_INPUT_DELAY,
+
+  // Longest input delay cannot happen before first input delay.
+  INVALID_LONGEST_INPUT_TIMESTAMP_LESS_THAN_FIRST_INPUT_TIMESTAMP,
+
+  // Longest input delay cannot be less than first input delay.
+  INVALID_LONGEST_INPUT_DELAY_LESS_THAN_FIRST_INPUT_DELAY,
+
   // New values should be added before this final entry.
   LAST_PAGE_LOAD_TIMING_STATUS
 };
@@ -92,11 +103,13 @@ class PageLoadMetricsUpdateDispatcher {
 
     virtual void OnTimingChanged() = 0;
     virtual void OnSubFrameTimingChanged(
+        content::RenderFrameHost* rfh,
         const mojom::PageLoadTiming& timing) = 0;
     virtual void OnMainFrameMetadataChanged() = 0;
     virtual void OnSubframeMetadataChanged() = 0;
     virtual void UpdateFeaturesUsage(
         const mojom::PageLoadFeatures& new_features) = 0;
+    virtual void UpdateDataUse(const mojom::PageLoadDataUse& new_data_use) = 0;
   };
 
   // The |client| instance must outlive this object.
@@ -109,7 +122,14 @@ class PageLoadMetricsUpdateDispatcher {
   void UpdateMetrics(content::RenderFrameHost* render_frame_host,
                      const mojom::PageLoadTiming& new_timing,
                      const mojom::PageLoadMetadata& new_metadata,
-                     const mojom::PageLoadFeatures& new_features);
+                     const mojom::PageLoadFeatures& new_features,
+                     const mojom::PageLoadDataUse& new_data_use);
+
+  // This method is only intended to be called for PageLoadFeatures being
+  // recorded directly from the browser process. Features coming from the
+  // renderer process should use the main flow into |UpdateMetrics|.
+  void UpdateFeatures(content::RenderFrameHost* render_frame_host,
+                      const mojom::PageLoadFeatures& new_features);
 
   void DidFinishSubFrameNavigation(
       content::NavigationHandle* navigation_handle);
@@ -140,10 +160,12 @@ class PageLoadMetricsUpdateDispatcher {
   void MaybeDispatchTimingUpdates(bool did_merge_new_timing_value);
   void DispatchTimingUpdates();
 
+  void UpdateDataUse(const mojom::PageLoadDataUse& new_data_use);
+
   // The client is guaranteed to outlive this object.
   Client* const client_;
 
-  std::unique_ptr<base::Timer> timer_;
+  std::unique_ptr<base::OneShotTimer> timer_;
 
   // Time the navigation for this page load was initiated.
   const base::TimeTicks navigation_start_;

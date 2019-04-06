@@ -8,7 +8,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_test_util.h"
 #include "chrome/browser/sync_file_system/drive_backend/leveldb_wrapper.h"
@@ -69,7 +68,7 @@ std::unique_ptr<DatabaseContents> CreateTestDatabaseContents() {
 class MetadataDatabaseIndexTest : public testing::Test {
  public:
   void SetUp() override {
-    in_memory_env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    in_memory_env_ = leveldb_chrome::NewMemEnv("MetadataDatabaseIndexTest");
     InitializeLevelDB();
 
     contents_ = CreateTestDatabaseContents();

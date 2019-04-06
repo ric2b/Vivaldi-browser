@@ -21,8 +21,9 @@
 
 using crazy::Globals;
 using crazy::Error;
+using crazy::RDebug;
 using crazy::SearchPathList;
-using crazy::ScopedGlobalLock;
+using crazy::ScopedLockedGlobals;
 using crazy::LibraryView;
 
 //
@@ -33,7 +34,6 @@ struct crazy_context_t {
  public:
   crazy_context_t()
       : load_address(0),
-        file_offset(0),
         error(),
         search_paths(),
         java_vm(NULL),
@@ -46,7 +46,6 @@ struct crazy_context_t {
   void ResetSearchPaths();
 
   size_t load_address;
-  size_t file_offset;
   Error error;
   SearchPathList search_paths;
   void* java_vm;
@@ -66,7 +65,9 @@ void crazy_context_t::ResetSearchPaths() {
 extern "C" {
 
 void crazy_set_sdk_build_version(int sdk_build_version) {
-  *Globals::GetSDKBuildVersion() = sdk_build_version;
+  // NOTE: This must be called before creating the Globals instance,
+  // so do not use Globals::Get() or a ScopedLockedGlobals instance here.
+  Globals::sdk_build_version = sdk_build_version;
 }
 
 crazy_context_t* crazy_context_create() {
@@ -90,15 +91,6 @@ void crazy_context_set_load_address(crazy_context_t* context,
 
 size_t crazy_context_get_load_address(crazy_context_t* context) {
   return context->load_address;
-}
-
-void crazy_context_set_file_offset(crazy_context_t* context,
-                                   size_t file_offset) {
-  context->file_offset = file_offset;
-}
-
-size_t crazy_context_get_file_offset(crazy_context_t* context) {
-  return context->file_offset;
 }
 
 crazy_status_t crazy_context_add_search_path(crazy_context_t* context,
@@ -167,19 +159,16 @@ void crazy_context_destroy(crazy_context_t* context) { delete context; }
 // if callback is NULL.
 class ScopedDelayedCallbackPoster {
  public:
-  ScopedDelayedCallbackPoster(crazy_context_t* context) {
+  ScopedDelayedCallbackPoster(crazy_context_t* context, RDebug* rdebug) {
     if (context && context->callback_poster) {
-      crazy::Globals::GetRDebug()->SetDelayedCallbackPoster(&PostFromContext,
-                                                            context);
-      set_delayed_callback_poster_ = true;
-    } else {
-      set_delayed_callback_poster_ = false;
+      rdebug->SetDelayedCallbackPoster(&PostFromContext, context);
+      rdebug_ = rdebug;
     }
   }
 
   ~ScopedDelayedCallbackPoster() {
-    if (set_delayed_callback_poster_)
-      crazy::Globals::GetRDebug()->SetDelayedCallbackPoster(NULL, NULL);
+    if (rdebug_)
+      rdebug_->SetDelayedCallbackPoster(nullptr, nullptr);
   }
 
  private:
@@ -187,32 +176,25 @@ class ScopedDelayedCallbackPoster {
   static bool PostFromContext(void* crazy_context,
                               crazy_callback_handler_t handler,
                               void* opaque) {
-    crazy_context_t* context = static_cast<crazy_context_t*>(crazy_context);
+    auto* context = static_cast<crazy_context_t*>(crazy_context);
     crazy_callback_t callback;
     callback.handler = handler;
     callback.opaque = opaque;
-    return context->callback_poster(&callback,
-                                    context->callback_poster_opaque);
+    return context->callback_poster(&callback, context->callback_poster_opaque);
   }
 
-  // True if the context offered a callback_poster, otherwise false.
-  bool set_delayed_callback_poster_;
+  // Non-null iff the context offered a callback_poster.
+  RDebug* rdebug_ = nullptr;
 };
 
 crazy_status_t crazy_library_open(crazy_library_t** library,
                                   const char* lib_name,
                                   crazy_context_t* context) {
-  ScopedDelayedCallbackPoster poster(context);
-  ScopedGlobalLock lock;
+  ScopedLockedGlobals globals;
+  ScopedDelayedCallbackPoster poster(context, globals->rdebug());
 
-  LibraryView* wrap =
-      crazy::Globals::GetLibraries()->LoadLibrary(lib_name,
-                                                  RTLD_NOW,
-                                                  context->load_address,
-                                                  context->file_offset,
-                                                  &context->search_paths,
-                                                  false,
-                                                  &context->error);
+  LibraryView* wrap = globals->libraries()->LoadLibrary(
+      lib_name, context->load_address, &context->search_paths, &context->error);
 
   if (!wrap)
     return CRAZY_STATUS_FAILURE;
@@ -221,40 +203,7 @@ crazy_status_t crazy_library_open(crazy_library_t** library,
     crazy::SharedLibrary* lib = wrap->GetCrazy();
     if (!lib->SetJavaVM(
              context->java_vm, context->minimum_jni_version, &context->error)) {
-      crazy::Globals::GetLibraries()->UnloadLibrary(wrap);
-      return CRAZY_STATUS_FAILURE;
-    }
-  }
-
-  *library = reinterpret_cast<crazy_library_t*>(wrap);
-  return CRAZY_STATUS_SUCCESS;
-}
-
-crazy_status_t crazy_library_open_in_zip_file(crazy_library_t** library,
-                                              const char* zipfile_name,
-                                              const char* lib_name,
-                                              crazy_context_t* context) {
-  ScopedDelayedCallbackPoster poster(context);
-  ScopedGlobalLock lock;
-
-  LibraryView* wrap =
-      crazy::Globals::GetLibraries()->LoadLibraryInZipFile(
-          zipfile_name,
-          lib_name,
-          RTLD_NOW,
-          context->load_address,
-          &context->search_paths,
-          false,
-          &context->error);
-
-  if (!wrap)
-    return CRAZY_STATUS_FAILURE;
-
-  if (context->java_vm != NULL && wrap->IsCrazy()) {
-    crazy::SharedLibrary* lib = wrap->GetCrazy();
-    if (!lib->SetJavaVM(
-             context->java_vm, context->minimum_jni_version, &context->error)) {
-      crazy::Globals::GetLibraries()->UnloadLibrary(wrap);
+      globals->libraries()->UnloadLibrary(wrap);
       return CRAZY_STATUS_FAILURE;
     }
   }
@@ -326,9 +275,8 @@ crazy_status_t crazy_library_use_shared_relro(crazy_library_t* library,
 crazy_status_t crazy_library_find_by_name(const char* library_name,
                                           crazy_library_t** library) {
   {
-    ScopedGlobalLock lock;
-    LibraryView* wrap =
-        Globals::GetLibraries()->FindLibraryByName(library_name);
+    ScopedLockedGlobals globals;
+    LibraryView* wrap = globals->libraries()->FindLibraryByName(library_name);
     if (!wrap)
       return CRAZY_STATUS_FAILURE;
 
@@ -358,8 +306,8 @@ crazy_status_t crazy_linker_find_symbol(const char* symbol_name,
 crazy_status_t crazy_library_find_from_address(void* address,
                                                crazy_library_t** library) {
   {
-    ScopedGlobalLock lock;
-    LibraryView* wrap = Globals::GetLibraries()->FindLibraryForAddress(address);
+    ScopedLockedGlobals globals;
+    LibraryView* wrap = globals->libraries()->FindLibraryForAddress(address);
     if (!wrap)
       return CRAZY_STATUS_FAILURE;
 
@@ -377,11 +325,11 @@ void crazy_library_close(crazy_library_t* library) {
 void crazy_library_close_with_context(crazy_library_t* library,
                                       crazy_context_t* context) {
   if (library) {
-    ScopedDelayedCallbackPoster poster(context);
-    ScopedGlobalLock lock;
+    ScopedLockedGlobals globals;
+    ScopedDelayedCallbackPoster poster(context, globals->rdebug());
     LibraryView* wrap = reinterpret_cast<LibraryView*>(library);
 
-    Globals::GetLibraries()->UnloadLibrary(wrap);
+    globals->libraries()->UnloadLibrary(wrap);
   }
 }
 

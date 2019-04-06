@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "base/message_loop/message_loop.h"
 #import "ios/chrome/browser/store_kit/store_kit_launcher.h"
 #import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
 #import "ios/chrome/browser/web/chrome_web_test.h"
@@ -87,6 +86,7 @@ TEST_F(LegacyDownloadManagerControllerTest, TestXibViewConnections) {
   EXPECT_TRUE([_controller googleDriveButton]);
 }
 
+// TODO(crbug.com/804250): this test is flaky.
 TEST_F(LegacyDownloadManagerControllerTest, TestStart) {
   [_controller start];
   EXPECT_TRUE(

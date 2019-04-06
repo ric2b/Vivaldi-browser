@@ -10,8 +10,8 @@
 
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/system/handle.h"
 #include "mojo/public/cpp/system/message.h"
 
@@ -24,7 +24,7 @@ namespace internal {
 //
 // A Buffer may be moved around. A moved-from Buffer is reset and may no longer
 // be used to Allocate memory unless re-Initialized.
-class MOJO_CPP_BINDINGS_EXPORT Buffer {
+class COMPONENT_EXPORT(MOJO_CPP_BINDINGS_BASE) Buffer {
  public:
   // Constructs an invalid Buffer. May not call Allocate().
   Buffer();
@@ -39,11 +39,17 @@ class MOJO_CPP_BINDINGS_EXPORT Buffer {
   // Like above, but gives the Buffer an underlying message object which can
   // have its payload extended to acquire more storage capacity on Allocate().
   //
-  // |data| and |size| must correspond to |message|'s serialized buffer contents
-  // at the time of construction.
+  // |data| and |size| must correspond to |message|'s data buffer at the time of
+  // construction.
+  //
+  // |payload_size| is the length of the payload as known by |message|, and it
+  // must be less than or equal to |size|.
   //
   // |message| is NOT owned and must outlive this Buffer.
-  Buffer(MessageHandle message, void* data, size_t size);
+  Buffer(MessageHandle message,
+         size_t message_payload_size,
+         void* data,
+         size_t size);
 
   Buffer(Buffer&& other);
   ~Buffer();
@@ -99,8 +105,21 @@ class MOJO_CPP_BINDINGS_EXPORT Buffer {
 
  private:
   MessageHandle message_;
+
+  // The payload size from the message's internal perspective. This differs from
+  // |size_| as Mojo may intentionally over-allocate space to account for future
+  // growth. It differs from |cursor_| because we don't push payload size
+  // updates to the message object as frequently as we update |cursor_|, for
+  // performance.
+  size_t message_payload_size_ = 0;
+
+  // The storage location and capacity currently backing |message_|. Owned by
+  // the message object internally, not by this Buffer.
   void* data_ = nullptr;
   size_t size_ = 0;
+
+  // The current write offset into |data_| if this Buffer is being used for
+  // message creation.
   size_t cursor_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(Buffer);

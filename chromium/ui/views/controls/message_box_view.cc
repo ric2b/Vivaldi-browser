@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include "base/i18n/rtl.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -136,7 +135,7 @@ void MessageBoxView::SetLink(const base::string16& text,
 }
 
 void MessageBoxView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_ALERT;
+  node_data->role = ax::mojom::Role::kAlert;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -148,7 +147,7 @@ void MessageBoxView::ViewHierarchyChanged(
     if (prompt_field_)
       prompt_field_->SelectAll(true);
 
-    NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, true);
+    NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
   }
 }
 
@@ -207,8 +206,9 @@ void MessageBoxView::Init(const InitParams& params) {
     message_labels_[0]->SetSelectable(true);
 
   if (params.options & HAS_PROMPT_FIELD) {
-    prompt_field_ = new Textfield;
+    prompt_field_ = new Textfield();
     prompt_field_->SetText(params.default_prompt);
+    prompt_field_->SetAccessibleName(params.message);
   }
 
   inter_row_vertical_spacing_ = params.inter_row_vertical_spacing;

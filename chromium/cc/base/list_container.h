@@ -136,6 +136,16 @@ class ListContainer {
     return result;
   }
 
+  // Insert |count| new elements of |DerivedElementType| after |at|. If |at| is
+  // end() elements will be inserted to the empty list. This will invalidate all
+  // outstanding pointers and iterators. Return a valid iterator for the
+  // beginning of the newly inserted segment.
+  template <typename DerivedElementType>
+  Iterator InsertAfterAndInvalidateAllPointers(Iterator at, size_t count) {
+    return InsertBeforeAndInvalidateAllPointers<DerivedElementType>(
+        at != end() ? ++at : at, count);
+  }
+
   ListContainer& operator=(ListContainer&& other) {
     helper_.data_.swap(other.helper_.data_);
     return *this;
@@ -144,22 +154,6 @@ class ListContainer {
   template <typename DerivedElementType>
   void swap(ListContainer<DerivedElementType>& other) {
     helper_.data_.swap(other.helper_.data_);
-  }
-
-  // Appends a new item without copying. The original item will not be
-  // destructed and will be replaced with a new DerivedElementType. The
-  // DerivedElementType does not have to match the moved type as a full block
-  // of memory will be moved (up to MaxSizeForDerivedClass()). A pointer to
-  // the moved element is returned.
-  template <typename DerivedElementType>
-  DerivedElementType* AppendByMoving(DerivedElementType* item) {
-    size_t max_size_for_derived_class = helper_.MaxSizeForDerivedClass();
-    void* new_item = helper_.Allocate(alignof(DerivedElementType),
-                                      max_size_for_derived_class);
-    memcpy(new_item, static_cast<void*>(item), max_size_for_derived_class);
-    // Construct a new element in-place so it can be destructed safely.
-    new (item) DerivedElementType;
-    return static_cast<DerivedElementType*>(new_item);
   }
 
   size_t size() const { return helper_.size(); }

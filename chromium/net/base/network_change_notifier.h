@@ -21,7 +21,6 @@ struct DnsConfig;
 class NetworkChangeNotifierFactory;
 struct NetworkInterface;
 typedef std::vector<NetworkInterface> NetworkInterfaceList;
-class URLRequest;
 
 #if defined(OS_LINUX)
 namespace internal {
@@ -141,6 +140,11 @@ class NET_EXPORT NetworkChangeNotifier {
     virtual void OnDNSChanged() = 0;
     // Will be called when DNS settings of the system have been loaded.
     // Use GetDnsConfig to obtain the current settings.
+    // NOTE(pauljensen): This will not be called if the initial DNS config
+    // has already been read before this observer is registered.
+    // Determining if a DNS config has already been read can be done by
+    // calling GetDnsConfig() after registering an observer, and seeing if
+    // the DnsConfig's IsValid() returns true.
     virtual void OnInitialDNSConfigRead();
 
    protected:
@@ -433,22 +437,6 @@ class NET_EXPORT NetworkChangeNotifier {
   // Return a string equivalent to |type|.
   static const char* ConnectionTypeToString(ConnectionType type);
 
-  // Let the NetworkChangeNotifier know we received some data.
-  // This is used for producing histogram data about the accuracy of
-  // the NetworkChangenotifier's online detection and rough network
-  // connection measurements.
-  static void NotifyDataReceived(const URLRequest& request, int bytes_read);
-
-  // Register the Observer callbacks for producing histogram data.  This
-  // should be called from the network thread to avoid race conditions.
-  // ShutdownHistogramWatcher() must be called prior to NetworkChangeNotifier
-  // destruction.
-  static void InitHistogramWatcher();
-
-  // Unregister the Observer callbacks for producing histogram data.  This
-  // should be called from the network thread to avoid race conditions.
-  static void ShutdownHistogramWatcher();
-
   // Invoked at the time a new user metrics log record is being finalized, on
   // the main thread. NCN Histograms that want to be logged once per record
   // should be logged in this method. Platform-specific histograms should be
@@ -550,11 +538,12 @@ class NET_EXPORT NetworkChangeNotifier {
   static void NotifyObserversOfSpecificNetworkChange(NetworkChangeType type,
                                                      NetworkHandle network);
 
-  // Stores |config| in NetworkState and notifies OnDNSChanged observers.
+  // Stores |config| in NetworkState and notifies observers. The first
+  // notification will be OnInitialDNSConfigRead, and after that OnDNSChanged.
   static void SetDnsConfig(const DnsConfig& config);
-  // Stores |config| in NetworkState and notifies OnInitialDNSConfigRead
-  // observers.
-  static void SetInitialDnsConfig(const DnsConfig& config);
+
+  // Clears previous DnsConfig, if any, to simulate the first one being set.
+  static void ClearDnsConfigForTesting();
 
   // Infer connection type from |GetNetworkList|. If all network interfaces
   // have the same type, return it, otherwise return CONNECTION_UNKNOWN.
@@ -566,7 +555,6 @@ class NET_EXPORT NetworkChangeNotifier {
   friend class NetworkChangeNotifierLinuxTest;
   friend class NetworkChangeNotifierWinTest;
 
-  class HistogramWatcher;
   class NetworkState;
   class NetworkChangeCalculator;
 
@@ -595,9 +583,6 @@ class NET_EXPORT NetworkChangeNotifier {
 
   // The current network state. Hosts DnsConfig, exposed via GetDnsConfig.
   std::unique_ptr<NetworkState> network_state_;
-
-  // A little-piggy-back observer that simply logs UMA histogram data.
-  std::unique_ptr<HistogramWatcher> histogram_watcher_;
 
   // Computes NetworkChange signal from IPAddress and ConnectionType signals.
   std::unique_ptr<NetworkChangeCalculator> network_change_calculator_;

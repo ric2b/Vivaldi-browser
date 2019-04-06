@@ -12,16 +12,19 @@
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/service/display/overlay_candidate_validator.h"
 #include "components/viz/service/display/software_output_device.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
-#include "gpu/vulkan/features.h"
-#include "gpu/vulkan/vulkan_surface.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/color_space.h"
 #include "ui/latency/latency_info.h"
+
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "components/viz/common/gpu/vulkan_context_provider.h"
+#include "gpu/vulkan/vulkan_surface.h"
+#endif
 
 namespace gfx {
 class ColorSpace;
@@ -53,13 +56,17 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     bool supports_stencil = false;
   };
 
+  // Constructor for skia-based compositing.
+  OutputSurface();
   // Constructor for GL-based compositing.
   explicit OutputSurface(scoped_refptr<ContextProvider> context_provider);
   // Constructor for software compositing.
   explicit OutputSurface(std::unique_ptr<SoftwareOutputDevice> software_device);
+#if BUILDFLAG(ENABLE_VULKAN)
   // Constructor for Vulkan-based compositing.
   explicit OutputSurface(
       scoped_refptr<VulkanContextProvider> vulkan_context_provider);
+#endif
 
   virtual ~OutputSurface();
 
@@ -70,9 +77,11 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   // In the event of a lost context, the entire output surface should be
   // recreated.
   ContextProvider* context_provider() const { return context_provider_.get(); }
+#if BUILDFLAG(ENABLE_VULKAN)
   VulkanContextProvider* vulkan_context_provider() const {
     return vulkan_context_provider_.get();
   }
+#endif
   SoftwareOutputDevice* software_device() const {
     return software_device_.get();
   }
@@ -108,9 +117,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   // Get the format for the main image's overlay.
   virtual gfx::BufferFormat GetOverlayBufferFormat() const = 0;
 
-  // If this returns true, then the surface will not attempt to draw.
-  virtual bool SurfaceIsSuspendForRecycle() const = 0;
-
   virtual void Reshape(const gfx::Size& size,
                        float device_scale_factor,
                        const gfx::ColorSpace& color_space,
@@ -134,54 +140,32 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   virtual gpu::VulkanSurface* GetVulkanSurface() = 0;
 #endif
 
-  // A helper class for implementations of OutputSurface that want to cache
-  // LatencyInfos that can be updated when we get the corresponding
-  // gfx::SwapResponse.
-  class VIZ_SERVICE_EXPORT LatencyInfoCache {
-   public:
-    class Client {
-     public:
-      virtual ~Client() = default;
-      virtual void LatencyInfoCompleted(
-          const std::vector<ui::LatencyInfo>& latency_info) = 0;
-    };
+  // Updates the GpuFence associated with this surface. The id of a newly
+  // created GpuFence is returned, or if an error occurs, or fences are not
+  // supported, the special id of 0 (meaning "no fence") is returned.  In all
+  // cases, any previously associated fence is destroyed. The returned fence id
+  // corresponds to the GL id used by the CHROMIUM_gpu_fence GL extension and
+  // can be passed directly to any related extension functions.
+  virtual unsigned UpdateGpuFence() = 0;
 
-    explicit LatencyInfoCache(Client* client);
-    ~LatencyInfoCache();
+  // If set to true, the OutputSurface must deliver
+  // OutputSurfaceclient::DidSwapWithSize notifications to its client.
+  // OutputSurfaces which support delivering swap size notifications should
+  // override this.
+  virtual void SetNeedsSwapSizeNotifications(
+      bool needs_swap_size_notifications);
 
-    // Returns true if there's a snapshot request.
-    bool WillSwap(std::vector<ui::LatencyInfo> latency_info);
-    void OnSwapBuffersCompleted(const gfx::SwapResponse& response);
-
-   private:
-    struct SwapInfo {
-      SwapInfo(uint64_t id, std::vector<ui::LatencyInfo> info);
-      SwapInfo(SwapInfo&& src);
-      SwapInfo& operator=(SwapInfo&& src);
-      ~SwapInfo();
-      uint64_t swap_id;
-      std::vector<ui::LatencyInfo> latency_info;
-      DISALLOW_COPY_AND_ASSIGN(SwapInfo);
-    };
-
-    Client* client_ = nullptr;
-
-    // Incremented in sync with the ImageTransportSurface's swap_id_.
-    uint64_t swap_id_ = 0;
-    base::circular_deque<SwapInfo> swap_infos_;
-
-    // We only expect a couple swap acks outstanding, but there are cases where
-    // we will get timestamps for swaps from several frames ago when using
-    // platform extensions like eglGetFrameTimestampsANDROID.
-    static constexpr size_t kCacheCountMax = 10;
-
-    DISALLOW_COPY_AND_ASSIGN(LatencyInfoCache);
-  };
+  // Updates timing info on the provided LatencyInfo when swap completes.
+  static void UpdateLatencyInfoOnSwap(
+      const gfx::SwapResponse& response,
+      std::vector<ui::LatencyInfo>* latency_info);
 
  protected:
   struct OutputSurface::Capabilities capabilities_;
   scoped_refptr<ContextProvider> context_provider_;
+#if BUILDFLAG(ENABLE_VULKAN)
   scoped_refptr<VulkanContextProvider> vulkan_context_provider_;
+#endif
   std::unique_ptr<SoftwareOutputDevice> software_device_;
 
  private:

@@ -18,6 +18,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/component_cloud_policy_store.h"
@@ -81,7 +82,7 @@ class ComponentCloudPolicyService::Backend
   void ClearCache();
 
   // The passed credentials will be used to validate the policies.
-  void SetCredentials(const std::string& username,
+  void SetCredentials(const AccountId& account_id,
                       const std::string& dm_token,
                       const std::string& device_id,
                       const std::string& public_key,
@@ -158,17 +159,17 @@ void ComponentCloudPolicyService::Backend::ClearCache() {
 }
 
 void ComponentCloudPolicyService::Backend::SetCredentials(
-    const std::string& username,
+    const AccountId& account_id,
     const std::string& dm_token,
     const std::string& device_id,
     const std::string& public_key,
     int public_key_version) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!username.empty());
+  DCHECK(account_id.is_valid());
   DCHECK(!dm_token.empty());
-  DVLOG(1) << "Updating credentials: username = " << username
+  DVLOG(1) << "Updating credentials: account id = " << account_id
            << ", public_key_version = " << public_key_version;
-  store_.SetCredentials(username, dm_token, device_id, public_key,
+  store_.SetCredentials(account_id, dm_token, device_id, public_key,
                         public_key_version);
   has_credentials_set_ = true;
   // Trigger an additional update against the last fetched policies. This helps
@@ -201,8 +202,8 @@ void ComponentCloudPolicyService::Backend::InitIfNeeded() {
   std::unique_ptr<PolicyBundle> bundle(std::make_unique<PolicyBundle>());
   bundle->CopyFrom(store_.policy());
   service_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&ComponentCloudPolicyService::SetPolicy, service_,
-                            base::Passed(&bundle)));
+      FROM_HERE, base::BindOnce(&ComponentCloudPolicyService::SetPolicy,
+                                service_, std::move(bundle)));
 
   initialized_ = true;
 
@@ -232,8 +233,8 @@ void ComponentCloudPolicyService::Backend::
   std::unique_ptr<PolicyBundle> bundle(std::make_unique<PolicyBundle>());
   bundle->CopyFrom(store_.policy());
   service_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&ComponentCloudPolicyService::SetPolicy, service_,
-                            base::Passed(&bundle)));
+      FROM_HERE, base::BindOnce(&ComponentCloudPolicyService::SetPolicy,
+                                service_, std::move(bundle)));
 }
 
 void ComponentCloudPolicyService::Backend::UpdateWithLastFetchedPolicy() {
@@ -283,6 +284,8 @@ ComponentCloudPolicyService::ComponentCloudPolicyService(
       io_task_runner_(io_task_runner),
       weak_ptr_factory_(this) {
   DCHECK(policy_type == dm_protocol::kChromeExtensionPolicyType ||
+         policy_type ==
+             dm_protocol::kChromeMachineLevelExtensionCloudPolicyType ||
          policy_type == dm_protocol::kChromeSigninExtensionPolicyType);
   CHECK(!core_->client());
 
@@ -418,6 +421,10 @@ void ComponentCloudPolicyService::UpdateFromSuperiorStore() {
     // updates, to handle the case of the user registering for policy after the
     // session starts.
     std::string username = policy->username();
+    std::string gaia_id = policy->gaia_id();
+    AccountId account_id =
+        gaia_id.empty() ? AccountId::FromUserEmail(username)
+                        : AccountId::FromUserEmailGaiaId(username, gaia_id);
     std::string request_token = policy->request_token();
     std::string device_id =
         policy->has_device_id() ? policy->device_id() : std::string();
@@ -427,7 +434,7 @@ void ComponentCloudPolicyService::UpdateFromSuperiorStore() {
     backend_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&Backend::SetCredentials, base::Unretained(backend_.get()),
-                   username, request_token, device_id, public_key,
+                   account_id, request_token, device_id, public_key,
                    public_key_version));
   }
 
@@ -462,9 +469,9 @@ void ComponentCloudPolicyService::UpdateFromClient() {
   }
 
   backend_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&Backend::SetFetchedPolicy, base::Unretained(backend_.get()),
-                 base::Passed(&valid_responses)));
+      FROM_HERE, base::BindOnce(&Backend::SetFetchedPolicy,
+                                base::Unretained(backend_.get()),
+                                std::move(valid_responses)));
 }
 
 void ComponentCloudPolicyService::UpdateFromSchemaRegistry() {

@@ -28,7 +28,7 @@
 #include "extensions/common/extension_l10n_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "services/identity/public/cpp/scope_set.h"
-#include "services/identity/public/interfaces/constants.mojom.h"
+#include "services/identity/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_CHROMEOS)
@@ -58,8 +58,6 @@ const char* const kPublicSessionAllowedOrigins[] = {
 
 }  // namespace
 
-namespace identity = api::identity;
-
 IdentityGetAuthTokenFunction::IdentityGetAuthTokenFunction()
     :
 #if defined(OS_CHROMEOS)
@@ -86,8 +84,8 @@ bool IdentityGetAuthTokenFunction::RunAsync() {
     return false;
   }
 
-  std::unique_ptr<identity::GetAuthToken::Params> params(
-      identity::GetAuthToken::Params::Create(*args_));
+  std::unique_ptr<api::identity::GetAuthToken::Params> params(
+      api::identity::GetAuthToken::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   interactive_ = params->details.get() &&
       params->details->interactive.get() &&
@@ -293,8 +291,8 @@ void IdentityGetAuthTokenFunction::StartSigninFlow() {
   // Start listening for the primary account being available and display a
   // login prompt.
   GetIdentityManager()->GetPrimaryAccountWhenAvailable(
-      base::Bind(&IdentityGetAuthTokenFunction::OnPrimaryAccountAvailable,
-                 base::Unretained(this)));
+      base::BindOnce(&IdentityGetAuthTokenFunction::OnPrimaryAccountAvailable,
+                     base::Unretained(this)));
 
   ShowLoginPopup();
 }

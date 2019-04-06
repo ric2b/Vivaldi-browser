@@ -9,14 +9,23 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/weak_ptr.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/rand_util.h"
+#include "content/browser/bad_message.h"
+#include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/ssl/ssl_error_handler.h"
+#include "content/browser/ssl/ssl_manager.h"
+#include "content/browser/websockets/websocket_handshake_request_info_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/storage_partition.h"
+#include "services/network/network_context.h"
+#include "services/network/public/cpp/features.h"
 
 namespace content {
 
@@ -24,11 +33,105 @@ namespace {
 
 const char kWebSocketManagerKeyName[] = "web_socket_manager";
 
-// Max number of pending connections per WebSocketManager used for per-renderer
-// WebSocket throttling.
-const int kMaxPendingWebSocketConnections = 255;
-
 }  // namespace
+
+class WebSocketManager::Delegate final : public network::WebSocket::Delegate {
+ public:
+  explicit Delegate(WebSocketManager* manager) : manager_(manager) {}
+  ~Delegate() override {}
+
+  net::URLRequestContext* GetURLRequestContext() override {
+    return manager_->GetURLRequestContext();
+  }
+
+  void OnLostConnectionToClient(network::WebSocket* impl) override {
+    manager_->OnLostConnectionToClient(impl);
+  }
+
+  void OnSSLCertificateError(
+      std::unique_ptr<net::WebSocketEventInterface::SSLErrorCallbacks>
+          callbacks,
+      const GURL& url,
+      int child_id,
+      int frame_id,
+      const net::SSLInfo& ssl_info,
+      bool fatal) override {
+    ssl_error_handler_delegate_ =
+        std::make_unique<SSLErrorHandlerDelegate>(std::move(callbacks));
+    SSLManager::OnSSLCertificateSubresourceError(
+        ssl_error_handler_delegate_->GetWeakPtr(), url, child_id, frame_id,
+        ssl_info, fatal);
+  }
+
+  void ReportBadMessage(BadMessageReason reason,
+                        network::WebSocket* impl) override {
+    bad_message::BadMessageReason reason_to_pass =
+        bad_message::WSI_UNEXPECTED_ADD_CHANNEL_REQUEST;
+    switch (reason) {
+      case BadMessageReason::kUnexpectedAddChannelRequest:
+        reason_to_pass = bad_message::WSI_UNEXPECTED_ADD_CHANNEL_REQUEST;
+        break;
+      case BadMessageReason::kUnexpectedSendFrame:
+        reason_to_pass = bad_message::WSI_UNEXPECTED_SEND_FRAME;
+        break;
+    }
+    bad_message::ReceivedBadMessage(manager_->process_id_, reason_to_pass);
+    OnLostConnectionToClient(impl);
+  }
+
+  bool CanReadRawCookies() override {
+    return ChildProcessSecurityPolicyImpl::GetInstance()->CanReadRawCookies(
+        manager_->process_id_);
+  }
+
+  void OnCreateURLRequest(int child_id,
+                          int frame_id,
+                          net::URLRequest* url_request) override {
+    WebSocketHandshakeRequestInfoImpl::CreateInfoAndAssociateWithRequest(
+        child_id, frame_id, url_request);
+  }
+
+ private:
+  class SSLErrorHandlerDelegate final : public SSLErrorHandler::Delegate {
+   public:
+    explicit SSLErrorHandlerDelegate(
+        std::unique_ptr<net::WebSocketEventInterface::SSLErrorCallbacks>
+            callbacks)
+        : callbacks_(std::move(callbacks)), weak_ptr_factory_(this) {}
+    ~SSLErrorHandlerDelegate() override {}
+
+    base::WeakPtr<SSLErrorHandler::Delegate> GetWeakPtr() {
+      return weak_ptr_factory_.GetWeakPtr();
+    }
+
+    // SSLErrorHandler::Delegate methods
+    void CancelSSLRequest(int error, const net::SSLInfo* ssl_info) override {
+      DVLOG(3) << "SSLErrorHandlerDelegate::CancelSSLRequest"
+               << " error=" << error << " cert_status="
+               << (ssl_info ? ssl_info->cert_status
+                            : static_cast<net::CertStatus>(-1));
+      callbacks_->CancelSSLRequest(error, ssl_info);
+    }
+
+    void ContinueSSLRequest() override {
+      DVLOG(3) << "SSLErrorHandlerDelegate::ContinueSSLRequest";
+      callbacks_->ContinueSSLRequest();
+    }
+
+   private:
+    std::unique_ptr<net::WebSocketEventInterface::SSLErrorCallbacks> callbacks_;
+
+    base::WeakPtrFactory<SSLErrorHandlerDelegate> weak_ptr_factory_;
+
+    DISALLOW_COPY_AND_ASSIGN(SSLErrorHandlerDelegate);
+  };
+
+  std::unique_ptr<SSLErrorHandlerDelegate> ssl_error_handler_delegate_;
+  // |manager_| outlives this object.
+  WebSocketManager* const manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(Delegate);
+};
 
 class WebSocketManager::Handle : public base::SupportsUserData::Data,
                                  public RenderProcessHostObserver {
@@ -57,11 +160,24 @@ class WebSocketManager::Handle : public base::SupportsUserData::Data,
 void WebSocketManager::CreateWebSocket(
     int process_id,
     int frame_id,
-    blink::mojom::WebSocketRequest request) {
+    url::Origin origin,
+    network::mojom::AuthenticationHandlerPtr auth_handler,
+    network::mojom::WebSocketRequest request) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
   RenderProcessHost* host = RenderProcessHost::FromID(process_id);
   DCHECK(host);
+
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    StoragePartition* storage_partition = host->GetStoragePartition();
+    network::mojom::NetworkContext* network_context =
+        storage_partition->GetNetworkContext();
+    network_context->CreateWebSocket(std::move(request), process_id, frame_id,
+                                     origin, std::move(auth_handler));
+    return;
+  }
+  // |auth_handler| is provided only for the network service path.
+  DCHECK(!auth_handler);
 
   // Maintain a WebSocketManager per RenderProcessHost. While the instance of
   // WebSocketManager is allocated on the UI thread, it must only be used and
@@ -78,20 +194,16 @@ void WebSocketManager::CreateWebSocket(
     DCHECK(handle->manager());
   }
 
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&WebSocketManager::DoCreateWebSocket,
-                                         base::Unretained(handle->manager()),
-                                         frame_id, base::Passed(&request)));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&WebSocketManager::DoCreateWebSocket,
+                     base::Unretained(handle->manager()), frame_id,
+                     std::move(origin), std::move(request)));
 }
 
 WebSocketManager::WebSocketManager(int process_id,
                                    StoragePartition* storage_partition)
     : process_id_(process_id),
-      num_pending_connections_(0),
-      num_current_succeeded_connections_(0),
-      num_previous_succeeded_connections_(0),
-      num_current_failed_connections_(0),
-      num_previous_failed_connections_(0),
       context_destroyed_(false) {
   if (storage_partition) {
     url_request_context_getter_ = storage_partition->GetURLRequestContext();
@@ -111,37 +223,39 @@ WebSocketManager::~WebSocketManager() {
   if (!context_destroyed_ && url_request_context_getter_)
     url_request_context_getter_->RemoveObserver(this);
 
-  for (auto* impl : impls_) {
+  for (const auto& impl : impls_) {
     impl->GoAway();
-    delete impl;
   }
 }
 
 void WebSocketManager::DoCreateWebSocket(
     int frame_id,
-    blink::mojom::WebSocketRequest request) {
+    url::Origin origin,
+    network::mojom::WebSocketRequest request) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
-  if (num_pending_connections_ >= kMaxPendingWebSocketConnections) {
+  if (throttler_.HasTooManyPendingConnections()) {
     // Too many websockets!
     request.ResetWithReason(
-        blink::mojom::WebSocket::kInsufficientResources,
+        network::mojom::WebSocket::kInsufficientResources,
         "Error in connection establishment: net::ERR_INSUFFICIENT_RESOURCES");
     return;
   }
+
   if (context_destroyed_) {
     request.ResetWithReason(
-        blink::mojom::WebSocket::kInsufficientResources,
+        network::mojom::WebSocket::kInsufficientResources,
         "Error in connection establishment: net::ERR_UNEXPECTED");
     return;
   }
 
-  // Keep all WebSocketImpls alive until either the client drops its
+  // Keep all network::WebSockets alive until either the client drops its
   // connection (see OnLostConnectionToClient) or we need to shutdown.
 
-  impls_.insert(CreateWebSocketImpl(this, std::move(request), process_id_,
-                                    frame_id, CalculateDelay()));
-  ++num_pending_connections_;
+  impls_.insert(DoCreateWebSocketInternal(
+      std::make_unique<Delegate>(this), std::move(request),
+      throttler_.IssuePendingConnectionTracker(), process_id_, frame_id,
+      std::move(origin), throttler_.CalculateDelay()));
 
   if (!throttling_period_timer_.IsRunning()) {
     throttling_period_timer_.Start(
@@ -152,78 +266,43 @@ void WebSocketManager::DoCreateWebSocket(
   }
 }
 
-// Calculate delay as described in the per-renderer WebSocket throttling
-// design doc: https://goo.gl/tldFNn
-base::TimeDelta WebSocketManager::CalculateDelay() const {
-  int64_t f = num_previous_failed_connections_ +
-              num_current_failed_connections_;
-  int64_t s = num_previous_succeeded_connections_ +
-              num_current_succeeded_connections_;
-  int p = num_pending_connections_;
-  return base::TimeDelta::FromMilliseconds(
-      base::RandInt(1000, 5000) *
-      (1 << std::min(p + f / (s + 1), INT64_C(16))) / 65536);
-}
-
 void WebSocketManager::ThrottlingPeriodTimerCallback() {
-  num_previous_failed_connections_ = num_current_failed_connections_;
-  num_current_failed_connections_ = 0;
-
-  num_previous_succeeded_connections_ = num_current_succeeded_connections_;
-  num_current_succeeded_connections_ = 0;
-
-  if (num_pending_connections_ == 0 &&
-      num_previous_failed_connections_ == 0 &&
-      num_previous_succeeded_connections_ == 0) {
+  throttler_.Roll();
+  if (throttler_.IsClean())
     throttling_period_timer_.Stop();
-  }
 }
 
-WebSocketImpl* WebSocketManager::CreateWebSocketImpl(
-    WebSocketImpl::Delegate* delegate,
-    blink::mojom::WebSocketRequest request,
+std::unique_ptr<network::WebSocket> WebSocketManager::DoCreateWebSocketInternal(
+    std::unique_ptr<network::WebSocket::Delegate> delegate,
+    network::mojom::WebSocketRequest request,
+    network::WebSocketThrottler::PendingConnection pending_connection_tracker,
     int child_id,
     int frame_id,
+    url::Origin origin,
     base::TimeDelta delay) {
-  return new WebSocketImpl(delegate, std::move(request), child_id, frame_id,
-                           delay);
-}
-
-int WebSocketManager::GetClientProcessId() {
-  return process_id_;
+  return std::make_unique<network::WebSocket>(
+      std::move(delegate), std::move(request), nullptr,
+      std::move(pending_connection_tracker), child_id, frame_id,
+      std::move(origin), delay);
 }
 
 net::URLRequestContext* WebSocketManager::GetURLRequestContext() {
   return url_request_context_getter_->GetURLRequestContext();
 }
 
-void WebSocketManager::OnReceivedResponseFromServer(WebSocketImpl* impl) {
-  // The server accepted this WebSocket connection.
-  impl->OnHandshakeSucceeded();
-  --num_pending_connections_;
-  DCHECK_GE(num_pending_connections_, 0);
-  ++num_current_succeeded_connections_;
-}
-
-void WebSocketManager::OnLostConnectionToClient(WebSocketImpl* impl) {
+void WebSocketManager::OnLostConnectionToClient(network::WebSocket* impl) {
   // The client is no longer interested in this WebSocket.
-  if (!impl->handshake_succeeded()) {
-    // Update throttling counters (failure).
-    --num_pending_connections_;
-    DCHECK_GE(num_pending_connections_, 0);
-    ++num_current_failed_connections_;
-  }
   impl->GoAway();
-  impls_.erase(impl);
-  delete impl;
+  const auto it = impls_.find(impl);
+  DCHECK(it != impls_.end());
+  impls_.erase(it);
 }
 
 void WebSocketManager::OnContextShuttingDown() {
   context_destroyed_ = true;
   url_request_context_getter_ = nullptr;
-  for (auto* impl : impls_) {
+  for (const auto& impl : impls_) {
     impl->GoAway();
-    delete impl;
   }
   impls_.clear();
 }

@@ -13,6 +13,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/drive/chromeos/about_resource_loader.h"
+#include "components/drive/chromeos/about_resource_root_folder_id_loader.h"
 #include "components/drive/chromeos/change_list_loader.h"
 #include "components/drive/chromeos/drive_test_util.h"
 #include "components/drive/chromeos/fake_free_disk_space_getter.h"
@@ -20,7 +22,9 @@
 #include "components/drive/chromeos/file_system/move_operation.h"
 #include "components/drive/chromeos/file_system/operation_delegate.h"
 #include "components/drive/chromeos/file_system/remove_operation.h"
+#include "components/drive/chromeos/loader_controller.h"
 #include "components/drive/chromeos/resource_metadata.h"
+#include "components/drive/chromeos/start_page_token_loader.h"
 #include "components/drive/drive.pb.h"
 #include "components/drive/event_logger.h"
 #include "components/drive/file_change.h"
@@ -106,19 +110,19 @@ class SyncClientTest : public testing::Test {
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
-    pref_service_.reset(new TestingPrefServiceSimple);
+    pref_service_ = std::make_unique<TestingPrefServiceSimple>();
     test_util::RegisterDrivePrefs(pref_service_->registry());
 
-    fake_network_change_notifier_.reset(
-        new test_util::FakeNetworkChangeNotifier);
+    fake_network_change_notifier_ =
+        std::make_unique<test_util::FakeNetworkChangeNotifier>();
 
-    logger_.reset(new EventLogger);
+    logger_ = std::make_unique<EventLogger>();
 
-    drive_service_.reset(new SyncClientTestDriveService);
+    drive_service_ = std::make_unique<SyncClientTestDriveService>();
 
-    scheduler_.reset(new JobScheduler(
+    scheduler_ = std::make_unique<JobScheduler>(
         pref_service_.get(), logger_.get(), drive_service_.get(),
-        base::ThreadTaskRunnerHandle::Get().get(), nullptr));
+        base::ThreadTaskRunnerHandle::Get().get(), nullptr);
 
     metadata_storage_.reset(new ResourceMetadataStorage(
         temp_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get().get()));
@@ -126,7 +130,7 @@ class SyncClientTest : public testing::Test {
 
     cache_.reset(new FileCache(metadata_storage_.get(), temp_dir_.GetPath(),
                                base::ThreadTaskRunnerHandle::Get().get(),
-                               NULL /* free_disk_space_getter */));
+                               nullptr /* free_disk_space_getter */));
     ASSERT_TRUE(cache_->Initialize());
 
     metadata_.reset(new internal::ResourceMetadata(
@@ -134,21 +138,25 @@ class SyncClientTest : public testing::Test {
         base::ThreadTaskRunnerHandle::Get()));
     ASSERT_EQ(FILE_ERROR_OK, metadata_->Initialize());
 
-    about_resource_loader_.reset(new AboutResourceLoader(scheduler_.get()));
-    loader_controller_.reset(new LoaderController);
-    change_list_loader_.reset(new ChangeListLoader(
-        logger_.get(),
-        base::ThreadTaskRunnerHandle::Get().get(),
-        metadata_.get(),
-        scheduler_.get(),
-        about_resource_loader_.get(),
-        loader_controller_.get()));
+    about_resource_loader_ =
+        std::make_unique<AboutResourceLoader>(scheduler_.get());
+    root_folder_id_loader_ = std::make_unique<AboutResourceRootFolderIdLoader>(
+        about_resource_loader_.get());
+
+    start_page_token_loader_ = std::make_unique<StartPageTokenLoader>(
+        drive::util::kTeamDriveIdDefaultCorpus, scheduler_.get());
+    loader_controller_ = std::make_unique<LoaderController>();
+    change_list_loader_ = std::make_unique<ChangeListLoader>(
+        logger_.get(), base::ThreadTaskRunnerHandle::Get().get(),
+        metadata_.get(), scheduler_.get(), root_folder_id_loader_.get(),
+        start_page_token_loader_.get(), loader_controller_.get(),
+        util::kTeamDriveIdDefaultCorpus, util::GetDriveMyDriveRootPath());
     ASSERT_NO_FATAL_FAILURE(SetUpTestData());
 
-    sync_client_.reset(
-        new SyncClient(base::ThreadTaskRunnerHandle::Get().get(), &delegate_,
-                       scheduler_.get(), metadata_.get(), cache_.get(),
-                       loader_controller_.get(), temp_dir_.GetPath()));
+    sync_client_ = std::make_unique<SyncClient>(
+        base::ThreadTaskRunnerHandle::Get().get(), &delegate_, scheduler_.get(),
+        metadata_.get(), cache_.get(), loader_controller_.get(),
+        temp_dir_.GetPath());
 
     // Disable delaying so that DoSyncLoop() starts immediately.
     sync_client_->set_delay_for_testing(base::TimeDelta::FromSeconds(0));
@@ -259,9 +267,11 @@ class SyncClientTest : public testing::Test {
   std::unique_ptr<FileCache, test_util::DestroyHelperForTests> cache_;
   std::unique_ptr<ResourceMetadata, test_util::DestroyHelperForTests> metadata_;
   std::unique_ptr<AboutResourceLoader> about_resource_loader_;
+  std::unique_ptr<StartPageTokenLoader> start_page_token_loader_;
   std::unique_ptr<LoaderController> loader_controller_;
   std::unique_ptr<ChangeListLoader> change_list_loader_;
   std::unique_ptr<SyncClient> sync_client_;
+  std::unique_ptr<AboutResourceRootFolderIdLoader> root_folder_id_loader_;
 
   std::map<std::string, std::string> resource_ids_;  // Name-to-id map.
 };

@@ -43,22 +43,11 @@ LayerTreeFrameSink::LayerTreeFrameSink(
     scoped_refptr<viz::ContextProvider> context_provider,
     scoped_refptr<viz::RasterContextProvider> worker_context_provider,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    viz::SharedBitmapManager* shared_bitmap_manager)
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
     : context_provider_(std::move(context_provider)),
       worker_context_provider_(std::move(worker_context_provider)),
       compositor_task_runner_(std::move(compositor_task_runner)),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
-      shared_bitmap_manager_(shared_bitmap_manager),
-      weak_ptr_factory_(this) {
-  DETACH_FROM_THREAD(thread_checker_);
-}
-
-LayerTreeFrameSink::LayerTreeFrameSink(
-    scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider)
-    : vulkan_context_provider_(vulkan_context_provider),
-      gpu_memory_buffer_manager_(nullptr),
-      shared_bitmap_manager_(nullptr),
       weak_ptr_factory_(this) {
   DETACH_FROM_THREAD(thread_checker_);
 }
@@ -66,6 +55,10 @@ LayerTreeFrameSink::LayerTreeFrameSink(
 LayerTreeFrameSink::~LayerTreeFrameSink() {
   if (client_)
     DetachFromClient();
+}
+
+base::WeakPtr<LayerTreeFrameSink> LayerTreeFrameSink::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 bool LayerTreeFrameSink::BindToClient(LayerTreeFrameSinkClient* client) {

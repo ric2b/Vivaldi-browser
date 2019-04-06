@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/callback_forward.h"
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "cc/trees/element_id.h"
 #include "cc/trees/layer_tree_mutator.h"
@@ -62,12 +61,14 @@ class MutatorHost {
   // TODO(smcgruer): Once we only tick scroll-based animations on scroll, we
   // don't need to pass the scroll tree in here.
   virtual bool TickAnimations(base::TimeTicks monotonic_time,
-                              const ScrollTree& scroll_tree) = 0;
+                              const ScrollTree& scroll_tree,
+                              bool is_active_tree) = 0;
   // Tick animations that depends on scroll offset.
   virtual void TickScrollAnimations(base::TimeTicks monotonic_time,
                                     const ScrollTree& scroll_tree) = 0;
   virtual bool UpdateAnimationState(bool start_ready_animations,
                                     MutatorEvents* events) = 0;
+  virtual void PromoteScrollTimelinesPendingToActive() = 0;
 
   virtual std::unique_ptr<MutatorEvents> CreateEvents() = 0;
   virtual void SetAnimationEvents(std::unique_ptr<MutatorEvents> events) = 0;
@@ -109,8 +110,9 @@ class MutatorHost {
                                    ElementListType list_type,
                                    float* start_scale) const = 0;
 
-  virtual bool HasAnyAnimation(ElementId element_id) const = 0;
-  virtual bool HasTickingAnimationForTesting(ElementId element_id) const = 0;
+  virtual bool IsElementAnimating(ElementId element_id) const = 0;
+  virtual bool HasTickingKeyframeModelForTesting(
+      ElementId element_id) const = 0;
 
   virtual void ImplOnlyScrollAnimationCreate(
       ElementId element_id,
@@ -129,7 +131,8 @@ class MutatorHost {
 
   virtual size_t CompositedAnimationsCount() const = 0;
   virtual size_t MainThreadAnimationsCount() const = 0;
-  virtual size_t MainThreadCompositableAnimationsCount() const = 0;
+  virtual bool CurrentFrameHadRAF() const = 0;
+  virtual bool NextFrameHasPendingRAF() const = 0;
 };
 
 class MutatorEvents {

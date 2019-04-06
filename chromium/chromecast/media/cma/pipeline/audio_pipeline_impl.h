@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "chromecast/media/cma/backend/cma_backend.h"
 #include "chromecast/media/cma/pipeline/av_pipeline_client.h"
 #include "chromecast/media/cma/pipeline/av_pipeline_impl.h"
-#include "chromecast/public/media/media_pipeline_backend.h"
 #include "chromecast/public/media/stream_id.h"
 #include "media/base/pipeline_status.h"
 
@@ -26,7 +26,7 @@ class CodedFrameProvider;
 
 class AudioPipelineImpl : public AvPipelineImpl {
  public:
-  AudioPipelineImpl(MediaPipelineBackend::AudioDecoder* decoder,
+  AudioPipelineImpl(CmaBackend::AudioDecoder* decoder,
                     const AvPipelineClient& client);
   ~AudioPipelineImpl() override;
 
@@ -45,9 +45,11 @@ class AudioPipelineImpl : public AvPipelineImpl {
                       const ::media::AudioDecoderConfig& audio_config,
                       const ::media::VideoDecoderConfig& video_config) override;
   const EncryptionScheme& GetEncryptionScheme(StreamId id) const override;
+  std::unique_ptr<StreamDecryptor> CreateDecryptor() override;
 
-  MediaPipelineBackend::AudioDecoder* const audio_decoder_;
-  EncryptionScheme encryption_scheme_;
+  CmaBackend::AudioDecoder* const audio_decoder_;
+
+  AudioConfig audio_config_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioPipelineImpl);
 };

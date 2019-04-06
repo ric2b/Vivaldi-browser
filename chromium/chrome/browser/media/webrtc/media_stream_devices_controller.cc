@@ -9,7 +9,6 @@
 
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -37,7 +36,7 @@
 #include "content/public/common/media_stream_request.h"
 #include "content/public/common/origin_util.h"
 #include "extensions/common/constants.h"
-#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
 #if defined(OS_ANDROID)
 #include <vector>
@@ -120,41 +119,48 @@ bool HasAvailableDevices(ContentSettingsType content_type,
 // static
 void MediaStreamDevicesController::RequestPermissions(
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback) {
+    content::MediaResponseCallback callback) {
   content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
       request.render_process_id, request.render_frame_id);
   // The RFH may have been destroyed by the time the request is processed.
   if (!rfh) {
-    callback.Run(content::MediaStreamDevices(),
-                 content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
-                 std::unique_ptr<content::MediaStreamUI>());
+    std::move(callback).Run(content::MediaStreamDevices(),
+                            content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
+                            std::unique_ptr<content::MediaStreamUI>());
     return;
   }
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(rfh);
   std::unique_ptr<MediaStreamDevicesController> controller(
-      new MediaStreamDevicesController(web_contents, request, callback));
+      new MediaStreamDevicesController(web_contents, request,
+                                       std::move(callback)));
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   std::vector<ContentSettingsType> content_settings_types;
 
-  if (controller->ShouldRequestAudio())
-    content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
-  if (controller->ShouldRequestVideo())
-    content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
-
   PermissionManager* permission_manager = PermissionManager::Get(profile);
-  bool will_prompt_for_audio =
-      permission_manager
-          ->GetPermissionStatusForFrame(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-                                        rfh, request.security_origin)
-          .content_setting == CONTENT_SETTING_ASK;
-  bool will_prompt_for_video = permission_manager
-                                   ->GetPermissionStatusForFrame(
-                                       CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
-                                       rfh, request.security_origin)
-                                   .content_setting == CONTENT_SETTING_ASK;
+  bool will_prompt_for_audio = false;
+  bool will_prompt_for_video = false;
+
+  if (controller->ShouldRequestAudio()) {
+    content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
+    will_prompt_for_audio =
+        permission_manager->GetPermissionStatusForFrame(
+                                CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                                rfh,
+                                request.security_origin).content_setting ==
+        CONTENT_SETTING_ASK;
+  }
+  if (controller->ShouldRequestVideo()) {
+    content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
+    will_prompt_for_video =
+        permission_manager->GetPermissionStatusForFrame(
+                                CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                                rfh,
+                                request.security_origin).content_setting ==
+        CONTENT_SETTING_ASK;
+  }
 
   permission_manager->RequestPermissions(
       content_settings_types, rfh, request.security_origin,
@@ -172,28 +178,24 @@ void MediaStreamDevicesController::RequestAndroidPermissionsIfNeeded(
     bool did_prompt_for_video,
     const std::vector<ContentSetting>& responses) {
 #if defined(OS_ANDROID)
-  if (did_prompt_for_audio || did_prompt_for_video) {
-    // If the user was already prompted for mic/camera, we would have requested
-    // Android permission at that point.
-    // TODO(raymes): If we (for example) prompt the user for mic, but camera
-    // has been previously granted, we may return an ALLOW result for camera
-    // even if the Android permission isn't present. See crbug.com/775372.
-    controller->PromptAnsweredGroupedRequest(responses);
-    return;
-  }
-
   // If either audio or video was previously allowed and Chrome no longer has
   // the necessary permissions, show a infobar to attempt to address this
   // mismatch.
   std::vector<ContentSettingsType> content_settings_types;
   // The audio setting will always be the first one in the vector, if it was
   // requested.
-  if (controller->ShouldRequestAudio() &&
+  // If the user was already prompted for mic (|did_prompt_for_audio| flag), we
+  // would have requested Android permission at that point.
+  if (!did_prompt_for_audio &&
+      controller->ShouldRequestAudio() &&
       responses.front() == CONTENT_SETTING_ALLOW) {
     content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
   }
 
-  if (controller->ShouldRequestVideo() &&
+  // If the user was already prompted for camera (|did_prompt_for_video| flag),
+  // we would have requested Android permission at that point.
+  if (!did_prompt_for_video &&
+      controller->ShouldRequestVideo() &&
       responses.back() == CONTENT_SETTING_ALLOW) {
     content_settings_types.push_back(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
   }
@@ -202,19 +204,28 @@ void MediaStreamDevicesController::RequestAndroidPermissionsIfNeeded(
     return;
   }
 
-  if (PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfobar(
-          web_contents, content_settings_types)) {
-    PermissionUpdateInfoBarDelegate::Create(
-        web_contents, content_settings_types,
-        base::Bind(&MediaStreamDevicesController::AndroidOSPromptAnswered,
-                   base::Passed(&controller), responses));
-  } else {
-    // TODO(raymes): We can get here for 2 reasons: (1) android permission has
-    // already been granted, and (2) we can't get a handle to WindowAndroid.
-    // In case (2) this will actually result in success being reported even
-    // when the Android permission isn't present. crbug.com/775372.
-    controller->PromptAnsweredGroupedRequest(responses);
+  ShowPermissionInfoBarState show_permission_infobar_state =
+      PermissionUpdateInfoBarDelegate::ShouldShowPermissionInfoBar(
+          web_contents, content_settings_types);
+  switch (show_permission_infobar_state) {
+    case ShowPermissionInfoBarState::NO_NEED_TO_SHOW_PERMISSION_INFOBAR:
+      controller->PromptAnsweredGroupedRequest(responses);
+      return;
+    case ShowPermissionInfoBarState::SHOW_PERMISSION_INFOBAR:
+      PermissionUpdateInfoBarDelegate::Create(
+          web_contents, content_settings_types,
+          base::BindOnce(&MediaStreamDevicesController::AndroidOSPromptAnswered,
+                         base::Passed(&controller), responses));
+      return;
+    case ShowPermissionInfoBarState::CANNOT_SHOW_PERMISSION_INFOBAR: {
+      std::vector<ContentSetting> blocked_responses(responses.size(),
+                                                    CONTENT_SETTING_BLOCK);
+      controller->PromptAnsweredGroupedRequest(blocked_responses);
+      return;
+    }
   }
+
+  NOTREACHED() << "Unknown show permission infobar state.";
 #else
   controller->PromptAnsweredGroupedRequest(responses);
 #endif
@@ -251,9 +262,9 @@ void MediaStreamDevicesController::RegisterProfilePrefs(
 
 MediaStreamDevicesController::~MediaStreamDevicesController() {
   if (!callback_.is_null()) {
-    callback_.Run(content::MediaStreamDevices(),
-                  content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
-                  std::unique_ptr<content::MediaStreamUI>());
+    std::move(callback_).Run(content::MediaStreamDevices(),
+                             content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
+                             std::unique_ptr<content::MediaStreamUI>());
   }
 }
 
@@ -291,8 +302,10 @@ void MediaStreamDevicesController::PromptAnsweredGroupedRequest(
 MediaStreamDevicesController::MediaStreamDevicesController(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback)
-    : web_contents_(web_contents), request_(request), callback_(callback) {
+    content::MediaResponseCallback callback)
+    : web_contents_(web_contents),
+      request_(request),
+      callback_(std::move(callback)) {
   DCHECK(content::IsOriginSecure(request_.security_origin) ||
          request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY);
 
@@ -317,8 +330,9 @@ MediaStreamDevicesController::MediaStreamDevicesController(
     DCHECK_NE(CONTENT_SETTING_DEFAULT, video_setting_);
     content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
         request.render_process_id, request.render_frame_id);
-    if (!rfh->IsFeatureEnabled(blink::FeaturePolicyFeature::kMicrophone) ||
-        !rfh->IsFeatureEnabled(blink::FeaturePolicyFeature::kCamera)) {
+    if (!rfh->IsFeatureEnabled(
+            blink::mojom::FeaturePolicyFeature::kMicrophone) ||
+        !rfh->IsFeatureEnabled(blink::mojom::FeaturePolicyFeature::kCamera)) {
       rfh->AddMessageToConsole(content::CONSOLE_MESSAGE_LEVEL_WARNING,
                                kPepperMediaFeaturePolicyDeprecationMessage);
     }
@@ -454,7 +468,7 @@ void MediaStreamDevicesController::RunCallback(bool blocked_by_feature_policy) {
              ->GetMediaStreamCaptureIndicator()
              ->RegisterMediaStream(web_contents_, devices);
   }
-  base::ResetAndReturn(&callback_).Run(devices, request_result, std::move(ui));
+  std::move(callback_).Run(devices, request_result, std::move(ui));
 }
 
 void MediaStreamDevicesController::UpdateTabSpecificContentSettings(
@@ -500,7 +514,7 @@ void MediaStreamDevicesController::UpdateTabSpecificContentSettings(
 
   content_settings_->OnMediaStreamPermissionSet(
       PermissionManager::Get(profile_)->GetCanonicalOrigin(
-          request_.security_origin),
+          request_.security_origin, web_contents_->GetLastCommittedURL()),
       microphone_camera_state, selected_audio_device, selected_video_device,
       requested_audio_device, requested_video_device);
 }

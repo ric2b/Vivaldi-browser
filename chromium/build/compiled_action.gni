@@ -83,6 +83,7 @@ template("compiled_action") {
   action(target_name) {
     forward_variables_from(invoker,
                            [
+                             "data_deps",
                              "deps",
                              "inputs",
                              "outputs",
@@ -109,9 +110,6 @@ template("compiled_action") {
     host_executable =
         get_label_info(host_tool, "root_out_dir") + "/" +
         get_label_info(host_tool, "name") + _host_executable_suffix
-
-    # Add the executable itself as an input.
-    inputs += [ host_executable ]
 
     deps += [ host_tool ]
 
@@ -157,9 +155,6 @@ template("compiled_action_foreach") {
     host_executable =
         get_label_info(host_tool, "root_out_dir") + "/" +
         get_label_info(host_tool, "name") + _host_executable_suffix
-
-    # Add the executable itself as an input.
-    inputs += [ host_executable ]
 
     deps += [ host_tool ]
 

@@ -7,10 +7,6 @@ help to the user when setup steps are necessary.  This document covers several
 different ways we might discover printers, and how they integrate into the
 printing flows.
 
-Note that this doc is, at present, a design for the future instead of a
-description of the status quo.  For up-to-date information on the implementation
-refer to http://crbug.com/742487.
-
 ## Categorizing printers
 The fact that CUPS supports many printing modalities means that we have a
 mishmash of ways we could print.  Within ChromeOS, we divide CUPS printers into
@@ -66,8 +62,8 @@ Defined in `chome/browser/chromeos/printing/cups_printers_manager.[cc|h]`.
 
 The `CupsPrintersManager` class is the top-level object responsible for
 providing information about available printers of all 4 types to all consumers.
-It is instantiated on demand, and is not intended to be a long-lived structure;
-it should be destroyed when its immediate usefulness is complete.
+It is a BrowserContextKeyedService; only one exists for the duration of the
+browser session. It's destroyed at the end of the current browser session.
 
 It provides this information both via an Observer interface, for consumers that
 require live updates to changes in availability, and also via a simpler "Give me

@@ -10,8 +10,9 @@ OmniboxLog::OmniboxLog(
     metrics::OmniboxInputType input_type,
     bool is_popup_open,
     size_t selected_index,
+    WindowOpenDisposition disposition,
     bool is_paste_and_go,
-    SessionID::id_type tab_id,
+    SessionID tab_id,
     metrics::OmniboxEventProto::PageClassification current_page_classification,
     base::TimeDelta elapsed_time_since_user_first_modified_omnibox,
     size_t completed_length,
@@ -22,6 +23,7 @@ OmniboxLog::OmniboxLog(
       input_type(input_type),
       is_popup_open(is_popup_open),
       selected_index(selected_index),
+      disposition(disposition),
       is_paste_and_go(is_paste_and_go),
       tab_id(tab_id),
       current_page_classification(current_page_classification),
@@ -30,7 +32,6 @@ OmniboxLog::OmniboxLog(
       completed_length(completed_length),
       elapsed_time_since_last_change_to_default_match(
           elapsed_time_since_last_change_to_default_match),
-      result(result),
-      providers_info() {}
+      result(result) {}
 
 OmniboxLog::~OmniboxLog() {}

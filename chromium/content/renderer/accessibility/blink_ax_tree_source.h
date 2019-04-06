@@ -10,8 +10,8 @@
 #include <set>
 
 #include "content/common/ax_content_node_data.h"
-#include "third_party/WebKit/public/web/WebAXObject.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/blink/public/web/web_ax_object.h"
+#include "third_party/blink/public/web/web_document.h"
 #include "ui/accessibility/ax_modes.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_source.h"
@@ -109,6 +109,11 @@ class BlinkAXTreeSource
   }
 
   blink::WebAXObject ComputeRoot() const;
+
+  uint32_t kMaxStringAttributeLength = 10000;
+  void TruncateAndAddStringAttribute(AXContentNodeData* dst,
+                                     ax::mojom::StringAttribute attribute,
+                                     const std::string& value) const;
 
   RenderFrameImpl* render_frame_;
 

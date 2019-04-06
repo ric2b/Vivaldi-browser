@@ -74,9 +74,9 @@ SkColor GetHarmonyTextColorForNonStandardNativeTheme(
       color_id = ui::NativeTheme::kColorId_LinkEnabled;
       break;
     case STYLE_RED:
-      return inverted_scheme ? gfx::kGoogleRed300 : gfx::kGoogleRed700;
+      return inverted_scheme ? gfx::kGoogleRed300 : gfx::kGoogleRed600;
     case STYLE_GREEN:
-      return inverted_scheme ? gfx::kGoogleGreen300 : gfx::kGoogleGreen700;
+      return inverted_scheme ? gfx::kGoogleGreen300 : gfx::kGoogleGreen600;
   }
   return theme.GetSystemColor(color_id);
 }
@@ -142,7 +142,7 @@ const gfx::FontList& HarmonyTypographyProvider::GetFont(int context,
 
   // Use a bold style for emphasized text in body contexts, and ignore |style|
   // otherwise.
-  if (style == STYLE_EMPHASIZED) {
+  if (style == STYLE_EMPHASIZED || style == STYLE_EMPHASIZED_SECONDARY) {
     switch (context) {
       case CONTEXT_BODY_TEXT_SMALL:
       case CONTEXT_BODY_TEXT_LARGE:
@@ -194,15 +194,17 @@ SkColor HarmonyTypographyProvider::GetColor(const views::View& view,
     case views::style::STYLE_LINK:
       return gfx::kGoogleBlue700;
     case STYLE_SECONDARY:
+    case STYLE_EMPHASIZED_SECONDARY:
     case STYLE_HINT:
-      return SkColorSetRGB(0x75, 0x75, 0x75);
+      return gfx::kGoogleGrey700;
     case STYLE_RED:
       return gfx::kGoogleRed700;
     case STYLE_GREEN:
       return gfx::kGoogleGreen700;
   }
 
-  return SkColorSetRGB(0x21, 0x21, 0x21);  // Primary for everything else.
+  // Use GoogleGrey900 as primary color for everything else.
+  return gfx::kGoogleGrey900;
 }
 
 int HarmonyTypographyProvider::GetLineHeight(int context, int style) const {
@@ -264,6 +266,7 @@ int HarmonyTypographyProvider::GetLineHeight(int context, int style) const {
   switch (context) {
     case views::style::CONTEXT_BUTTON:
     case views::style::CONTEXT_BUTTON_MD:
+    case CONTEXT_TOOLBAR_BUTTON:
       return kButtonAbsoluteHeight;
     case views::style::CONTEXT_DIALOG_TITLE:
       return title_height;

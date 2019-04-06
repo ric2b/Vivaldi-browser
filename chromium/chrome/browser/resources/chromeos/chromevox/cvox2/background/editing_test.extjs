@@ -60,7 +60,7 @@ TEST_F('EditingTest', 'Focus', function() {
         .expectSpeech('textArea',
                       'Line 1\nline 2\nline 3',
                       'Text area')
-        .expectBraille('textArea Line 1 mled',
+        .expectBraille('textArea Line 1\nline 2\nline 3 mled',
                       {startIndex: 9, endIndex: 9});
 
     mockFeedback.replay();
@@ -77,19 +77,19 @@ TEST_F('EditingTest', 'Multiline', function() {
         .expectSpeech('textArea',
                       'Line 1\nline 2\nline 3',
                       'Text area')
-        .expectBraille('textArea Line 1 mled',
+        .expectBraille('textArea Line 1\nline 2\nline 3 mled',
                       {startIndex: 9, endIndex: 9})
         .call(textarea.setSelection.bind(textarea, 1, 1))
         .expectSpeech('i')
-        .expectBraille('textArea Line 1 mled',
-                       {startIndex: 10, endIndex: 10})
+        .expectBraille('Line 1\nmled',
+                       {startIndex: 1, endIndex: 1})
         .call(textarea.setSelection.bind(textarea, 7, 7))
         .expectSpeech('line 2')
-        .expectBraille('line 2',
+        .expectBraille('line 2\n',
                        {startIndex: 0, endIndex: 0})
         .call(textarea.setSelection.bind(textarea, 7, 13))
         .expectSpeech('line 2', 'selected')
-        .expectBraille('line 2',
+        .expectBraille('line 2\n',
                        {startIndex: 0, endIndex: 6});
 
     mockFeedback.replay();
@@ -171,7 +171,7 @@ TEST_F('EditingTest', 'RichTextMoveByLine', function() {
           .expectBraille('\n')
           .call(moveByLine)
           .expectSpeech('hello', 'Heading 2')
-          .expectBraille('hello h2')
+          .expectBraille('hello h2 mled')
           .replay();
     });
     input.focus();
@@ -203,7 +203,7 @@ TEST_F('EditingTest', 'RichTextMoveByCharacter', function() {
   */}, function(root) {
     var input = root.find({role: RoleType.TEXT_FIELD});
     var moveByChar = input.doDefault.bind(input);
-    var lineText = 'This is a test.';
+    var lineText = 'This is a test. mled';
 
     this.listenOnce(input, 'focus', function() {
       mockFeedback.call(moveByChar)
@@ -262,7 +262,7 @@ TEST_F('EditingTest', 'RichTextMoveByCharacterNodeWorkaround', function() {
   */}, function(root) {
     var input = root.find({role: RoleType.TEXT_FIELD});
     var moveByChar = input.doDefault.bind(input)
-    var lineText = 'hello world';
+    var lineText = 'hello world mled';
 
     this.listenOnce(input, 'focus', function() {
       mockFeedback.call(moveByChar)
@@ -303,7 +303,7 @@ TEST_F('EditingTest', 'RichTextMoveByCharacterEndOfLine', function() {
   */}, function(root) {
     var input = root.find({role: RoleType.TEXT_FIELD});
     var moveByChar = input.doDefault.bind(input);
-    var lineText = 'Test';
+    var lineText = 'Test mled';
 
     this.listenOnce(input, 'focus', function() {
       mockFeedback.call(moveByChar)
@@ -339,8 +339,8 @@ TEST_F('EditingTest', 'RichTextLinkOutput', function() {
   */}, function(root) {
     var input = root.find({role: RoleType.TEXT_FIELD});
     var moveByChar = input.doDefault.bind(input);
-    var lineText = 'a test';
-    var lineOnLinkText = 'a test lnk';
+    var lineText = 'a test mled';
+    var lineOnLinkText = 'a test lnk mled';
 
     this.listenOnce(input, 'focus', function() {
       mockFeedback.call(moveByChar)
@@ -420,19 +420,20 @@ TEST_F('EditingTest', 'RichTextImageByCharacter', function() {
     var moveByChar = input.doDefault.bind(input);
 
     this.listenOnce(input, 'focus', function() {
-      var lineText = 'dog is a cat test';
-      var lineOnDogText = 'dog img is a cat test';
+      var lineText = 'dog is a cat test mled';
+      var lineOnDogText = 'dog img is a cat test mled';
       var lineOnCatText = 'dog is a cat img test';
       mockFeedback
           // This is initial output from focusing the contenteditable (which has
           // no role).
           .expectSpeech('dog', 'Image', ' is a ', 'cat', 'Image', ' test')
           .expectBraille('dog img is a cat img test')
+          .clearPendingOutput()
           .call(moveByChar)
           .expectSpeech('dog', 'Image')
-          .expectBraille(lineText, {startIndex: 3, endIndex: 3})
+          .expectBraille(lineOnDogText, {startIndex: 1, endIndex: 1})
           .call(moveByChar)
-          .expectSpeech('i')
+          .expectSpeech('og ')
           .expectBraille(lineText, {startIndex: 4, endIndex: 4})
           .call(moveByChar)
           .expectSpeech('s')
@@ -507,10 +508,10 @@ TEST_F('EditingTest', 'RichTextSelectByLine', function() {
       // By character.
       mockFeedback.call(move)
           .expectSpeech('f', 'selected')
-          .expectBraille('first line\n', {startIndex: 0, endIndex: 1})
+          .expectBraille('first line\nmled', {startIndex: 0, endIndex: 1})
           .call(move)
           .expectSpeech('i', 'added to selection')
-          .expectBraille('first line\n', {startIndex: 0, endIndex: 2})
+          .expectBraille('first line\nmled', {startIndex: 0, endIndex: 2})
 
           // Forward selection.
 
@@ -533,7 +534,7 @@ TEST_F('EditingTest', 'RichTextSelectByLine', function() {
 
           .call(move)
           .expectSpeech('fi', 'selected')
-          .expectBraille('first line\n', {startIndex: 0, endIndex: 2})
+          .expectBraille('first line\nmled', {startIndex: 0, endIndex: 2})
 
           // Document boundary.
           .call(move)
@@ -853,4 +854,89 @@ TEST_F('EditingTest', 'EditableLineBaseLineAnchorOrFocus', function() {
     assertEquals(0, e1.startOffset);
     assertEquals(3, e1.endOffset);
   })
+});
+
+TEST_F('EditingTest', 'IsValidLine', function() {
+  this.runWithLoadedTree(function() {/*!
+    <div contenteditable role="textbox">
+      <p style="word-spacing:100000px">this is a test</p>
+      <p>end</p>
+    </div>
+  */}, function(root) {
+    // Each word is on its own line, but parented by a static text.
+    var text, endText;
+    [text, endText] = root.findAll({role: RoleType.STATIC_TEXT});
+
+    // The EditableLine object automatically adjusts to surround the line no
+    // matter what the input is.
+    var line = new editing.EditableLine(text, 0, text, 0);
+    assertTrue(line.isValidLine());
+
+    // During the course of editing operations, this line may become
+    // invalidted. For example, if a user starts typing into the line, the
+    // bounding nodes might change.
+    // Simulate that here by modifying private state.
+
+    // This puts the line at offset 8 (|this is a|).
+    line.localLineStartContainerOffset_ = 0;
+    line.localLineEndContainerOffset_ = 8;
+    assertFalse(line.isValidLine());
+
+    // This puts us in the first line.
+    line.localLineStartContainerOffset_ = 0;
+    line.localLineEndContainerOffset_ = 4;
+    assertTrue(line.isValidLine());
+
+    // This is still fine (for our purposes) because the line is still intact.
+    line.localLineStartContainerOffset_ = 0;
+    line.localLineEndContainerOffset_ = 2;
+    assertTrue(line.isValidLine());
+
+    // The line has changed. The end has been moved for some reason.
+    line.lineEndContainer_ = endText;
+    assertFalse(line.isValidLine());
+  })
+});
+
+TEST_F('EditingTest', 'TelTrimsWhitespace', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <div id="go"></div>
+    <input id="input" type="tel"></input>
+    <script>
+      var data = [
+        '6               ',
+        '60              ',
+        '601             ',
+        '60              '
+      ];
+      var go = document.getElementById('go');
+      var input = document.getElementById('input');
+      var index = 0;
+      go.addEventListener('click', function() {
+        input.value = data[index];
+        index++;
+        input.selectionStart = index;
+        input.selectionEnd = index;
+      }, true);
+    </script>
+  */}, function(root) {
+    var input = root.find({role: RoleType.TEXT_FIELD});
+    var go = root.find({role: RoleType.GENERIC_CONTAINER});
+    var enterKey = go.doDefault.bind(go);
+    this.listenOnce(input, 'focus', function() {
+      mockFeedback.call(enterKey)
+          .expectSpeech('6')
+          .call(enterKey)
+          .expectSpeech('0')
+          .call(enterKey)
+          .expectSpeech('1')
+
+          // Deletion.
+          .call(enterKey)
+          .expectSpeech('1')
+          .replay();
+    });
+    input.focus();
+  });
 });

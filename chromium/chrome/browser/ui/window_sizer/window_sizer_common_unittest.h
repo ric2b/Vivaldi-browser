@@ -46,8 +46,6 @@ static const gfx::Rect taskbar_top_work_area(0, 34, 1024, 734);
 static const gfx::Rect taskbar_left_work_area(107, 0, 917, 768);
 static const gfx::Rect taskbar_right_work_area(0, 0, 917, 768);
 
-extern int kWindowTilePixels;
-
 // Testing implementation of WindowSizer::StateProvider that we use to fake
 // persistent storage and existing windows.
 class TestStateProvider : public WindowSizer::StateProvider {
@@ -57,11 +55,9 @@ class TestStateProvider : public WindowSizer::StateProvider {
 
   void SetPersistentState(const gfx::Rect& bounds,
                           const gfx::Rect& work_area,
-                          ui::WindowShowState show_state,
-                          bool has_persistent_data);
+                          ui::WindowShowState show_state);
   void SetLastActiveState(const gfx::Rect& bounds,
-                          ui::WindowShowState show_state,
-                          bool has_last_active_data);
+                          ui::WindowShowState show_state);
 
   // Overridden from WindowSizer::StateProvider:
   bool GetPersistentState(gfx::Rect* bounds,
@@ -88,54 +84,27 @@ class TestStateProvider : public WindowSizer::StateProvider {
 
 enum Source { DEFAULT, LAST_ACTIVE, PERSISTED, BOTH };
 
-// Sets up the window bounds, monitor bounds, show states and more to get the
-// resulting |out_bounds| and |out_show_state| from the WindowSizer.
-// |source| specifies which type of data gets set for the test: Either the
-// last active window, the persisted value which was stored earlier, both or
-// none. For all these states the |bounds| and |work_area| get used, for the
-// show states either |show_state_persisted| or |show_state_last| will be used.
-// |display_index| is the index of the display to return from
-// GetDisplayNearestWindow(), and is only used on aura.
-void GetWindowBoundsAndShowState(const gfx::Rect& monitor1_bounds,
-                                 const gfx::Rect& monitor1_work_area,
-                                 const gfx::Rect& monitor2_bounds,
-                                 const gfx::Rect& bounds,
-                                 const gfx::Rect& work_area,
-                                 ui::WindowShowState show_state_persisted,
-                                 ui::WindowShowState show_state_last,
-                                 Source source,
-                                 const Browser* browser,
-                                 const gfx::Rect& passed_in,
-                                 size_t display_index,
-                                 gfx::Rect* out_bounds,
-                                 ui::WindowShowState* out_show_state);
+class WindowSizerTestUtil {
+ public:
+  // Sets up the window bounds, monitor bounds, and work area to get the
+  // resulting |out_bounds| from the WindowSizer.
+  // |source| specifies which type of data gets set for the test: Either the
+  // last active window, the persisted value which was stored earlier, both or
+  // none. For all these states the |bounds| and |work_area| get used, for the
+  // show states either |show_state_persisted| or |show_state_last| will be
+  // used.
+  static void GetWindowBounds(const gfx::Rect& monitor1_bounds,
+                              const gfx::Rect& monitor1_work_area,
+                              const gfx::Rect& monitor2_bounds,
+                              const gfx::Rect& bounds,
+                              const gfx::Rect& work_area,
+                              Source source,
+                              const Browser* browser,
+                              const gfx::Rect& passed_in,
+                              gfx::Rect* out_bounds);
 
-// Sets up the window bounds, monitor bounds, and work area to get the
-// resulting |out_bounds| from the WindowSizer.
-// |source| specifies which type of data gets set for the test: Either the
-// last active window, the persisted value which was stored earlier, both or
-// none. For all these states the |bounds| and |work_area| get used, for the
-// show states either |show_state_persisted| or |show_state_last| will be used.
-void GetWindowBounds(const gfx::Rect& monitor1_bounds,
-                     const gfx::Rect& monitor1_work_area,
-                     const gfx::Rect& monitor2_bounds,
-                     const gfx::Rect& bounds,
-                     const gfx::Rect& work_area,
-                     Source source,
-                     const Browser* browser,
-                     const gfx::Rect& passed_in,
-                     gfx::Rect* out_bounds);
-
-// Sets up the window |bounds| and various system states which have an influence
-// on the WindowSizer and then determines the resulting show state from it.
-// |bounds| specifies the |browser| last or persistent bounds depending on
-// |source|. The |display_config| is the primary display configuration used.
-ui::WindowShowState GetWindowShowState(
-    ui::WindowShowState show_state_persisted,
-    ui::WindowShowState show_state_last,
-    Source source,
-    const Browser* browser,
-    const gfx::Rect& bounds,
-    const gfx::Rect& display_config);
+ private:
+  DISALLOW_IMPLICIT_CONSTRUCTORS(WindowSizerTestUtil);
+};
 
 #endif  // CHROME_BROWSER_UI_WINDOW_SIZER_WINDOW_SIZER_COMMON_UNITTEST_H_

@@ -4,8 +4,7 @@
 
 #include "chrome/browser/vr/elements/keyboard.h"
 
-#include "chrome/browser/vr/controller_mesh.h"
-#include "chrome/browser/vr/model/controller_model.h"
+#include "chrome/browser/vr/frame_lifecycle.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 
 namespace vr {
@@ -13,6 +12,7 @@ namespace vr {
 Keyboard::Keyboard() {
   SetName(kKeyboard);
   set_focusable(false);
+  set_hit_testable(true);
   SetVisibleImmediately(false);
 }
 
@@ -21,6 +21,14 @@ Keyboard::~Keyboard() = default;
 void Keyboard::SetKeyboardDelegate(KeyboardDelegate* keyboard_delegate) {
   delegate_ = keyboard_delegate;
   UpdateDelegateVisibility();
+}
+
+void Keyboard::OnTouchStateUpdated(bool is_touching,
+                                   const gfx::PointF& touch_position) {
+  if (!delegate_)
+    return;
+
+  delegate_->OnTouchStateUpdated(is_touching, touch_position);
 }
 
 void Keyboard::HitTest(const HitTestRequest& request,
@@ -49,56 +57,64 @@ void Keyboard::HitTest(const HitTestRequest& request,
 
 void Keyboard::NotifyClientFloatAnimated(float value,
                                          int target_property_id,
-                                         cc::Animation* animation) {
+                                         cc::KeyframeModel* animation) {
   DCHECK(target_property_id == OPACITY);
   UiElement::NotifyClientFloatAnimated(value, target_property_id, animation);
   UpdateDelegateVisibility();
 }
 
-void Keyboard::OnHoverEnter(const gfx::PointF& position) {
+void Keyboard::OnHoverEnter(const gfx::PointF& position,
+                            base::TimeTicks timestamp) {
   if (!delegate_)
     return;
 
   delegate_->OnHoverEnter(position);
 }
 
-void Keyboard::OnHoverLeave() {
+void Keyboard::OnHoverLeave(base::TimeTicks) {
   if (!delegate_)
     return;
 
   delegate_->OnHoverLeave();
 }
 
-void Keyboard::OnMove(const gfx::PointF& position) {
+void Keyboard::OnHoverMove(const gfx::PointF& position,
+                           base::TimeTicks timestamp) {
   if (!delegate_)
     return;
 
-  delegate_->OnMove(position);
+  delegate_->OnHoverMove(position);
 }
 
-void Keyboard::OnButtonDown(const gfx::PointF& position) {
+void Keyboard::OnButtonDown(const gfx::PointF& position,
+                            base::TimeTicks timestamp) {
   if (!delegate_)
     return;
 
   delegate_->OnButtonDown(position);
 }
 
-void Keyboard::OnButtonUp(const gfx::PointF& position) {
+void Keyboard::OnButtonUp(const gfx::PointF& position,
+                          base::TimeTicks timestamp) {
   if (!delegate_)
     return;
 
   delegate_->OnButtonUp(position);
 }
 
-bool Keyboard::OnBeginFrame(const base::TimeTicks& time,
-                            const gfx::Transform& head_pose) {
+void Keyboard::AdvanceKeyboardFrameIfNeeded() {
+  // This is the keyboard's equivalent to OnBeginFrame(), but is separate
+  // because it must run on every frame - not just if the keyboard is visible.
   if (!delegate_)
-    return false;
+    return;
 
   delegate_->OnBeginFrame();
+}
+
+bool Keyboard::OnBeginFrame(const gfx::Transform& head_pose) {
   // We return false here because any visible changes to the keyboard, such as
   // hover effects and showing/hiding of the keyboard will be drawn by the
-  // controller's dirtyness, so it's safe to assume not visual changes here.
+  // controller's dirtyness, so it's safe to assume no visual changes here.
   return false;
 }
 
@@ -114,7 +130,7 @@ void Keyboard::Render(UiElementRenderer* renderer,
   if (!delegate_)
     return;
 
-  delegate_->Draw(camera_model);
+  renderer->DrawKeyboard(camera_model, delegate_);
 }
 
 void Keyboard::OnSetFocusable() {
@@ -129,6 +145,15 @@ void Keyboard::UpdateDelegateVisibility() {
     delegate_->ShowKeyboard();
   else
     delegate_->HideKeyboard();
+}
+
+Keyboard::Renderer::Renderer() {}
+
+Keyboard::Renderer::~Renderer() {}
+
+void Keyboard::Renderer::Draw(const CameraModel& camera_model,
+                              KeyboardDelegate* delegate) {
+  delegate->Draw(camera_model);
 }
 
 }  // namespace vr

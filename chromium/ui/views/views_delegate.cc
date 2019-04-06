@@ -5,7 +5,6 @@
 #include "ui/views/views_delegate.h"
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "ui/views/views_touch_selection_controller_factory.h"
 #include "ui/views/widget/native_widget_private.h"
@@ -61,8 +60,7 @@ bool ViewsDelegate::GetSavedWindowPlacement(
 }
 
 void ViewsDelegate::NotifyAccessibilityEvent(View* view,
-                                             ui::AXEvent event_type) {
-}
+                                             ax::mojom::Event event_type) {}
 
 void ViewsDelegate::NotifyMenuItemFocused(const base::string16& menu_name,
                                           const base::string16& menu_item_name,
@@ -79,6 +77,10 @@ ViewsDelegate::ProcessAcceleratorWhileMenuShowing(
 
 #if defined(OS_WIN)
 HICON ViewsDelegate::GetDefaultWindowIcon() const {
+  return nullptr;
+}
+
+HICON ViewsDelegate::GetSmallWindowIcon() const {
   return nullptr;
 }
 
@@ -102,11 +104,9 @@ void ViewsDelegate::AddRef() {
 void ViewsDelegate::ReleaseRef() {
 }
 
-content::WebContents* ViewsDelegate::CreateWebContents(
-    content::BrowserContext* browser_context,
-    content::SiteInstance* site_instance) {
-  return nullptr;
-}
+void ViewsDelegate::OnBeforeWidgetInit(
+    Widget::InitParams* params,
+    internal::NativeWidgetDelegate* delegate) {}
 
 base::TimeDelta ViewsDelegate::GetTextfieldPasswordRevealDuration() {
   return base::TimeDelta();

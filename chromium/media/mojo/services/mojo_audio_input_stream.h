@@ -10,6 +10,7 @@
 
 #include "base/sequence_checker.h"
 #include "media/audio/audio_input_delegate.h"
+#include "media/mojo/interfaces/audio_data_pipe.mojom.h"
 #include "media/mojo/interfaces/audio_input_stream.mojom.h"
 #include "media/mojo/services/media_mojo_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -22,8 +23,8 @@ class MEDIA_MOJO_EXPORT MojoAudioInputStream
     : public mojom::AudioInputStream,
       public AudioInputDelegate::EventHandler {
  public:
-  using StreamCreatedCallback = base::OnceCallback<
-      void(mojo::ScopedSharedBufferHandle, mojo::ScopedHandle, bool)>;
+  using StreamCreatedCallback =
+      base::OnceCallback<void(mojom::ReadOnlyAudioDataPipePtr, bool)>;
   using CreateDelegateCallback =
       base::OnceCallback<std::unique_ptr<AudioInputDelegate>(
           AudioInputDelegate::EventHandler*)>;
@@ -41,6 +42,8 @@ class MEDIA_MOJO_EXPORT MojoAudioInputStream
 
   ~MojoAudioInputStream() override;
 
+  void SetOutputDeviceForAec(const std::string& raw_output_device_id);
+
  private:
   // mojom::AudioInputStream implementation.
   void Record() override;
@@ -49,7 +52,7 @@ class MEDIA_MOJO_EXPORT MojoAudioInputStream
   // AudioInputDelegate::EventHandler implementation.
   void OnStreamCreated(
       int stream_id,
-      const base::SharedMemory* shared_memory,
+      base::ReadOnlySharedMemoryRegion shared_memory_region,
       std::unique_ptr<base::CancelableSyncSocket> foreign_socket,
       bool initially_muted) override;
   void OnMuted(int stream_id, bool is_muted) override;

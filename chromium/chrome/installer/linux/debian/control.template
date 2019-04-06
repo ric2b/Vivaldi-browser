@@ -9,7 +9,7 @@ Package: @@PACKAGE@@-@@CHANNEL@@
 Provides: @@PROVIDES@@
 Pre-Depends: @@PREDEPENDS@@
 Depends: @@DEPENDS@@
-Recommends: adobe-flashplugin, chromium-codecs-ffmpeg-extra
+Recommends: @@RECOMMENDS@@
 Architecture: @@ARCHITECTURE@@
 Homepage: https://vivaldi.com
 Description: @@SHORTDESC@@

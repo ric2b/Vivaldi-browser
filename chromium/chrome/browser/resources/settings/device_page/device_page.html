@@ -24,46 +24,53 @@
         focus-config="[[focusConfig_]]">
       <neon-animatable id="main" route-path="default">
         <div id="pointersRow" class="settings-box first"
-            on-tap="onPointersTap_" actionable>
+            on-click="onPointersTap_" actionable>
           <div class="start">
             [[getPointersTitle_(hasMouse_, hasTouchpad_)]]
           </div>
-          <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label$="[[getPointersTitle_(hasMouse_,
-                  hasTouchpad_)]]"></button>
+          <paper-icon-button-light class="subpage-arrow">
+            <button
+                aria-label$="[[getPointersTitle_(hasMouse_, hasTouchpad_)]]">
+            </button>
+          </paper-icon-button-light>
         </div>
-        <div id="keyboardRow" class="settings-box" on-tap="onKeyboardTap_"
+        <div id="keyboardRow" class="settings-box" on-click="onKeyboardTap_"
             actionable>
           <div class="start">$i18n{keyboardTitle}</div>
-          <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label="$i18n{keyboardTitle}"></button>
+          <paper-icon-button-light class="subpage-arrow">
+            <button aria-label="$i18n{keyboardTitle}"></button>
+          </paper-icon-button-light>
         </div>
         <template is="dom-if" if="[[hasStylus_]]">
-          <div id="stylusRow" class="settings-box" on-tap="onStylusTap_"
+          <div id="stylusRow" class="settings-box" on-click="onStylusTap_"
               actionable>
             <div class="start">$i18n{stylusTitle}</div>
-          <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label="$i18n{stylusTitle}"></button>
+            <paper-icon-button-light class="subpage-arrow">
+              <button aria-label="$i18n{stylusTitle}"></button>
+            </paper-icon-button-light>
           </div>
         </template>
-        <div id="displayRow" class="settings-box" on-tap="onDisplayTap_"
+        <div id="displayRow" class="settings-box" on-click="onDisplayTap_"
             actionable>
           <div class="start">$i18n{displayTitle}</div>
-          <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label="$i18n{displayTitle}"></button>
+          <paper-icon-button-light class="subpage-arrow">
+            <button aria-label="$i18n{displayTitle}"></button>
+          </paper-icon-button-light>
         </div>
-        <div id="storageRow" class="settings-box" on-tap="onStorageTap_"
+        <div id="storageRow" class="settings-box" on-click="onStorageTap_"
             actionable>
           <div class="start">$i18n{storageTitle}</div>
-          <button class="subpage-arrow" is="paper-icon-button-light"
-              aria-label="$i18n{storageTitle}"></button>
+          <paper-icon-button-light class="subpage-arrow">
+            <button aria-label="$i18n{storageTitle}"></button>
+          </paper-icon-button-light>
         </div>
         <template is="dom-if" if="[[enablePowerSettings_]]">
-          <div id="powerRow" class="settings-box" on-tap="onPowerTap_"
+          <div id="powerRow" class="settings-box" on-click="onPowerTap_"
               actionable>
             <div class="start">$i18n{powerTitle}</div>
-            <button class="subpage-arrow" is="paper-icon-button-light"
-                aria-label="$i18n{powerTitle}"></button>
+            <paper-icon-button-light class="subpage-arrow">
+              <button aria-label="$i18n{powerTitle}"></button>
+            </paper-icon-button-light>
           </div>
         </template>
       </neon-animatable>
@@ -83,10 +90,11 @@
           <settings-keyboard prefs="{{prefs}}"></settings-keyboard>
         </settings-subpage>
       </template>
-      <template is="dom-if" route-path="/stylus" no-search$="[[!hasStylus_]]">
+      <template is="dom-if" route-path="/stylus" no-search="[[!hasStylus_]]">
         <settings-subpage
             associated-control="[[$$('#stylusRow')]]"
-            page-title="$i18n{stylusTitle}">
+            page-title="$i18n{stylusTitle}"
+            no-search$="[[!hasStylus_]]">
           <settings-stylus prefs="{{prefs}}"></settings-stylus>
         </settings-subpage>
       </template>
@@ -101,14 +109,17 @@
         <settings-subpage
             associated-control="[[$$('#storageRow')]]"
             page-title="$i18n{storageTitle}">
-          <settings-storage></settings-storage>
+          <settings-storage prefs="{{prefs}}"
+              show-crostini="[[showCrostini]]">
+          </settings-storage>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/power"
-          no-search$="[[!enablePowerSettings_]]">
+          no-search="[[!enablePowerSettings_]]">
         <settings-subpage
             associated-control="[[$$('#powerRow')]]"
-            page-title="$i18n{powerTitle}">
+            page-title="$i18n{powerTitle}"
+            no-search$="[[!enablePowerSettings_]]">
           <settings-power enable-power-settings="[[enablePowerSettings_]]">
           </settings-power>
         </settings-subpage>

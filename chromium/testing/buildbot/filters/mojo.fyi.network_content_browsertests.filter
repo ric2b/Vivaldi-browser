@@ -1,21 +1,8 @@
-# http://crbug.com/715640
--ServiceWorkerBrowserTest.FetchPageWithSaveData
--ServiceWorkerBrowserTest.ImportsBustMemcache
--ServiceWorkerBrowserTest.Reload
--ServiceWorkerBrowserTest.ResponseFromHTTPSServiceWorkerIsMarkedAsSecure
--ServiceWorkerBrowserTest.ResponseFromHTTPServiceWorkerIsNotMarkedAsSecure
--ServiceWorkerNavigationPreloadTest.CanceledByInterceptor
--ServiceWorkerNavigationPreloadTest.RespondWithNavigationPreloadWithMimeSniffing
--ServiceWorkerV8CacheStrategiesAggressiveTest.V8CacheOnCacheStorage
--ServiceWorkerV8CacheStrategiesNormalTest.V8CacheOnCacheStorage
--ServiceWorkerV8CodeCacheForCacheStorageTest.V8CacheOnCacheStorage
--ServiceWorkerVersionBrowserTest.ServiceWorkerScriptHeader
+# NOTE: if adding an exclusion for an existing failure (e.g. additional test for
+# feature X that is already not working), please add it beside the existing
+# failures. Otherwise please reach out to network-service-dev@.
 
-# ServiceWorker restart needs to read installed scripts.
-# https://crbug.com/756312
--ServiceWorkerVersionBrowserV8CacheTest.Restart
-
-# http://crbug.com/721398
+# https://crbug.com/721398
 -ClearSiteDataThrottleBrowserTest.CacheIntegrationTest
 -ClearSiteDataThrottleBrowserTest.CookiesIntegrationTest
 -ClearSiteDataThrottleBrowserTest.Credentials
@@ -27,64 +14,19 @@
 -ClearSiteDataThrottleBrowserTest.StorageServiceWorkersIntegrationTest
 -ClearSiteDataThrottleBrowserTest.Types
 
+# https://crbug.com/820060
+-PreviewsStateBrowserTest.ShouldEnableLoFiModeNavigateBackThenForward
+-PreviewsStateBrowserTest.ShouldEnableLoFiModeOff
+-PreviewsStateBrowserTest.ShouldEnableLoFiModeOn
+-PreviewsStateBrowserTest.ShouldEnableLoFiModeReload
+-PreviewsStateBrowserTest.ShouldEnableLoFiModeReloadDisableLoFi
 
-# Plugin throttle is not implemented. http://crbug.com/764474
--DataUrlNavigationBrowserTest.PDF_BrowserInitiatedNavigation_Allow
--DataUrlNavigationBrowserTest.PDF_FormPost_Block
--DataUrlNavigationBrowserTest.PDF_Navigation_Block
--DataUrlNavigationBrowserTest.PDF_NavigationFromFrame_Block
--DataUrlNavigationBrowserTest.PDF_NavigationFromFrame_TopFrameIsDataURL_Block
+# https://crbug.com/837666
+-NavigationHandleImplBrowserTest.RedirectToRendererDebugUrl
 
 -AsyncResourceHandlerBrowserTest/AsyncResourceHandlerBrowserTest.UploadProgress*
--CrossSiteResourceHandlerTest.NoDeliveryToDetachedFrame
--CrossSiteTransferTest.NoLeakOnCrossSiteCancel
--CrossSiteTransferTest.ReplaceEntryCrossProcessThenTransfer
--DevToolsDownloadContentTest.MultiDownload
--DevToolsDownloadContentTest.DefaultDownload
--DevToolsDownloadContentTest.ResetDownloadState
--DevToolsDownloadContentTest.DownloadCancelled
--DevToolsDownloadContentTest.DeniedDownload
--DevToolsDownloadContentTest.DefaultDownloadHeadless
--DevToolsDownloadContentTest.SingleDownload
--DevToolsProtocolTest.ControlNavigationsMainFrame
--DevToolsProtocolTest.SubresourceWithCertificateError
--GetUserMediaVideoCaptureBrowserTest.RecoverFromCrashInVideoCaptureProcess
--IsolatedDevToolsProtocolTest.ControlNavigationsChildFrames
--IsolateIcelandFrameTreeBrowserTest.ProcessSwitchForIsolatedBlob
--ManifestBrowserTest.UseCredentialsSendCookies
--NavigationHandleImplBrowserTest.ErrorCodeOnRedirect
--NavigationHandleImplBrowserTest.RedirectToRendererDebugUrl
--PowerMonitorTest.TestGpuProcess
--PowerMonitorTest.TestRendererProcess
--PowerMonitorTest.TestUtilityProcess
--PreviewsStateResourceDispatcherHostBrowserTest.ShouldEnableLoFiModeNavigateBackThenForward
--PreviewsStateResourceDispatcherHostBrowserTest.ShouldEnableLoFiModeOff
--PreviewsStateResourceDispatcherHostBrowserTest.ShouldEnableLoFiModeOn
--PreviewsStateResourceDispatcherHostBrowserTest.ShouldEnableLoFiModeReload
--PreviewsStateResourceDispatcherHostBrowserTest.ShouldEnableLoFiModeReloadDisableLoFi
--RenderFrameHostImplBrowserTest.AbortedRendererInitiatedNavigationDoNotCancelPendingXHR
--RenderFrameHostImplBrowserTest.StreamHandleReleasedOnRendererCrash
--RenderThreadImplBrowserTest.NonResourceDispatchIPCTasksDontGoThroughScheduler
--RenderThreadImplBrowserTest.ResourceDispatchIPCTasksGoThroughScheduler
--RenderViewBrowserTest.ConfirmCacheInformationPlumbed
--RequestDataResourceDispatcherHostBrowserTest.Basic
--RequestDataResourceDispatcherHostBrowserTest.BasicCrossSite
--RequestDataResourceDispatcherHostBrowserTest.CrossOriginAuxiliary
--RequestDataResourceDispatcherHostBrowserTest.CrossOriginNested
--RequestDataResourceDispatcherHostBrowserTest.FailedNavigation
--RequestDataResourceDispatcherHostBrowserTest.LinkRelPrefetch
--RequestDataResourceDispatcherHostBrowserTest.LinkRelPrefetchReferrerPolicy
--RequestDataResourceDispatcherHostBrowserTest.SameOriginAuxiliary
--RequestDataResourceDispatcherHostBrowserTest.SameOriginNested
--SitePerProcessIgnoreCertErrorsBrowserTest.SubresourceWithCertificateErrors
--WebContentsImplBrowserTest.ClearNonVisiblePendingOnFail
--WebContentsImplBrowserTest.DownloadImage_Deny_FileImage
--WebContentsImplBrowserTest.LoadingStateChangedForSameDocumentNavigation
--WebContentsImplBrowserTest.UserAgentOverride
--WorkerTest.WorkerTlsClientAuthFetch
--WorkerTest.WorkerTlsClientAuthImportScripts
 
-# content/network/url_loader_impl.cc should handle failure in
+# services/network/url_loader.cc should handle failure in
 # URLLoaderImpl::OnResponseBodyStreamRead(). Note this is flaky, so it will pass
 # sometimes.
 -SRC_ClearKey/EncryptedMediaTest.FrameSizeChangeVideo/0
@@ -92,43 +34,25 @@
 # Cross-origin request to file:// URL should be blocked. crbug.com/759230
 -BrowserSideNavigationBrowserDisableWebSecurityTest.ValidateBaseUrlForDataUrl
 
-# This test validates that the renderer does not hang indefinitely in a sync
-# XMLHttpRequest when ResourceDispatcherHostImpl::CancelRequestsForProcess is
-# called to tear down the browser-side request state without signaling
-# completion. With the network service this will be equivalent to a network
-# service process crash.
--ResourceDispatcherHostBrowserTest.SyncXMLHttpRequest_Cancelled
-
-# http://crbug.com/783990
-# Add support for http auth.
--WorkerTest.SharedWorkerHttpAuth
--WorkerTest.WorkerHttpAuth
-
-# http://crbug.com/787614
--ResourceDispatcherHostBrowserTest.ContentDispositionEmpty
--ResourceDispatcherHostBrowserTest.ContentDispositionInline
--ResourceDispatcherHostBrowserTest.CrossOriginRedirectBlocked
--ResourceDispatcherHostBrowserTest.CrossSiteAfterCrash
--ResourceDispatcherHostBrowserTest.CrossSiteNavigationNonBuffered
--ResourceDispatcherHostBrowserTest.DoNotSniffHTMLFromImageGIF
--ResourceDispatcherHostBrowserTest.DoNotSniffHTMLFromTextPlain
--ResourceDispatcherHostBrowserTest.PageTransitionClientRedirect
--ResourceDispatcherHostBrowserTest.RespectNoSniffDirective
--ResourceDispatcherHostBrowserTest.SniffHTMLWithNoContentType
--ResourceDispatcherHostBrowserTest.SniffNoContentTypeNoData
-
-# Cross-site document blocking needs to be implemented in the network service.
-# https://crbug.com/786505 (cross site document blocking)
-# https://crbug.com/792546 (cross site document blocking in network service)
--SiteIsolationStatsGathererBrowserTest.CrossSiteDocumentBlockingForMimeType
--CrossSiteDocumentBlockingTest.BlockDocuments
+# https://crbug.com/846352: CORB/NetworkService: Remove
+# CrossSiteDocumentResourceHandler while preserving test coverage - the tests
+# below can be probably removed altogether once NetworkService ships and the
+# CrossSiteDocumentResourceHandler is removed.  See the bug for details.
 -CrossSiteDocumentBlockingIsolatedOriginTest.BlockDocumentsFromIsolatedOrigin
--CrossSiteDocumentBlockingTest.RangeRequest
 -CrossSiteDocumentBlockingServiceWorkerTest.NoNetwork
--CrossSiteDocumentBlockingServiceWorkerTest.NetworkAndOpaqueResponse
 
-# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests__dbg__1_%2F69105%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_content_browsertests%2F0%2Flogs%2FWebContentsImplBrowserTest.DownloadImage_Allow_FileImage%2F0
--WebContentsImplBrowserTest.DownloadImage_Allow_FileImage
+# Flakes on Android.
+# https://crbug.com/827318
+-RenderThreadImplBrowserTest.NonResourceDispatchIPCTasksDontGoThroughScheduler
 
-# https://crbug.com/808759
--DownloadContentTest.DownloadAttributeBlobURL
+# Network service path needs some way to update the per-WebContents load state.
+# https://crbug.com/819663.
+-WebContentsImplBrowserTest.UpdateLoadState
+
+# Previously Fails because of missing support to navigate to filesystem URLs,
+# https://crbug.com/797292. Still failing, cause unknown.
+-BlockedSchemeNavigationBrowserTest.WindowOpenRedirectAndBack/1
+
+# NOTE: if adding an exclusion for an existing failure (e.g. additional test for
+# feature X that is already not working), please add it beside the existing
+# failures. Otherwise please reach out to network-service-dev@.

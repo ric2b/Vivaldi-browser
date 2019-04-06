@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include <cmath>
+#include <tuple>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -584,7 +585,7 @@ TEST_F(VideoRendererAlgorithmTest, OnLastFrameDroppedFirstFrame) {
   ASSERT_EQ(1, GetCurrentFrameDropCount());
 
   // Render the frame and check counts at each step.
-  const int kLastValue = 2 * 5 + 2;  // Cadence is 2.
+  const int kLastValue = 2 * 5 + 2 - 1;  // Cadence is 2, -1 for Render() above.
   for (int i = 0; i < kLastValue; ++i) {
     frame = RenderAndStep(&display_tg, &frames_dropped);
     ASSERT_TRUE(frame);
@@ -924,8 +925,9 @@ TEST_F(VideoRendererAlgorithmTest, BestFrameByCadenceOverdisplayed) {
   algorithm_.EnqueueFrame(CreateFrame(frame_tg.interval(2)));
   algorithm_.EnqueueFrame(CreateFrame(frame_tg.interval(3)));
 
-  // The next frame should only be displayed once, since the previous one was
-  // over displayed by one frame.
+  // The next frame should still be displayed once, even though the previous
+  // one was displayed twice; the eventual drift reset will correct this (tested
+  // by BestFrameByCadenceOverdisplayedForDrift below).
   size_t frames_dropped = 0;
   scoped_refptr<VideoFrame> frame = RenderAndStep(&display_tg, &frames_dropped);
   ASSERT_TRUE(frame);
@@ -935,14 +937,6 @@ TEST_F(VideoRendererAlgorithmTest, BestFrameByCadenceOverdisplayed) {
   // Enqueuing a new frame should keep the correct cadence values.
   algorithm_.EnqueueFrame(CreateFrame(frame_tg.interval(4)));
 
-  ASSERT_EQ(2, GetCurrentFrameDisplayCount());
-  ASSERT_EQ(1, GetCurrentFrameDropCount());
-  ASSERT_EQ(2, GetCurrentFrameIdealDisplayCount());
-
-  frame = RenderAndStep(&display_tg, &frames_dropped);
-  ASSERT_TRUE(frame);
-  EXPECT_EQ(frame_tg.interval(3), frame->timestamp());
-  EXPECT_EQ(0u, frames_dropped);
   ASSERT_EQ(1, GetCurrentFrameDisplayCount());
   ASSERT_EQ(0, GetCurrentFrameDropCount());
   ASSERT_EQ(2, GetCurrentFrameIdealDisplayCount());
@@ -1128,22 +1122,15 @@ TEST_F(VideoRendererAlgorithmTest, BestFrameByFractionalCadence) {
     TickGenerator frame_tg(base::TimeTicks(), test_rate[0]);
     TickGenerator display_tg(tick_clock_->NowTicks(), test_rate[1]);
 
-    const size_t desired_drop_pattern = test_rate[0] / test_rate[1] - 1;
     scoped_refptr<VideoFrame> current_frame;
     RunFramePumpTest(
         true, &frame_tg, &display_tg,
-        [&current_frame, desired_drop_pattern, this](
-            const scoped_refptr<VideoFrame>& frame, size_t frames_dropped) {
+        [&current_frame, this](const scoped_refptr<VideoFrame>& frame,
+                               size_t frames_dropped) {
           ASSERT_TRUE(frame);
 
-          // The first frame should have zero dropped frames, but each Render()
-          // call after should drop the same number of frames based on the
-          // fractional cadence.
-          if (!current_frame)
-            ASSERT_EQ(0u, frames_dropped);
-          else
-            ASSERT_EQ(desired_drop_pattern, frames_dropped);
-
+          // We don't count frames dropped that cadence says we should skip.
+          ASSERT_EQ(0u, frames_dropped);
           ASSERT_NE(current_frame, frame);
           ASSERT_TRUE(is_using_cadence());
           current_frame = frame;
@@ -1367,8 +1354,8 @@ class VideoRendererAlgorithmCadenceTest
       public ::testing::WithParamInterface<::testing::tuple<double, double>> {};
 
 TEST_P(VideoRendererAlgorithmCadenceTest, CadenceTest) {
-  double display_rate = std::tr1::get<0>(GetParam());
-  double frame_rate = std::tr1::get<1>(GetParam());
+  double display_rate = std::get<0>(GetParam());
+  double frame_rate = std::get<1>(GetParam());
 
   TickGenerator frame_tg(base::TimeTicks(), frame_rate);
   TickGenerator display_tg(tick_clock_->NowTicks(), display_rate);

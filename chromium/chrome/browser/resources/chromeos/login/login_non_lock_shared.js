@@ -8,9 +8,6 @@
  * screen, added it to login_shared.js.
  */
 
-// <include src="network_dropdown.js">
-
-// <include src="oobe_screen_reset_confirmation_overlay.js">
 // <include src="oobe_screen_reset.js">
 // <include src="oobe_screen_autolaunch.js">
 // <include src="oobe_screen_enable_kiosk.js">
@@ -18,6 +15,7 @@
 // <include src="oobe_screen_user_image.js">
 // <include src="oobe_screen_voice_interaction_value_prop.js">
 // <include src="oobe_screen_wait_for_container_ready.js">
+// <include src="oobe_select.js">
 
 // <include src="screen_app_launch_splash.js">
 // <include src="screen_arc_kiosk_splash.js">
@@ -36,6 +34,9 @@
 // <include src="screen_encryption_migration.js">
 // <include src="screen_update_required.js">
 // <include src="screen_sync_consent.js">
+// <include src="screen_recommend_apps.js">
+// <include src="screen_app_downloading.js">
+// <include src="screen_discover.js">
 
 // <include src="../../gaia_auth_host/authenticator.js">
 

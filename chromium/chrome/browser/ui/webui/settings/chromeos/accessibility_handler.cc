@@ -12,6 +12,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/constants.h"
 
 namespace chromeos {
 namespace settings {
@@ -25,16 +26,17 @@ AccessibilityHandler::~AccessibilityHandler() {}
 void AccessibilityHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "showChromeVoxSettings",
-      base::Bind(&AccessibilityHandler::HandleShowChromeVoxSettings,
-                 base::Unretained(this)));
+      base::BindRepeating(&AccessibilityHandler::HandleShowChromeVoxSettings,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "showSelectToSpeakSettings",
-      base::Bind(&AccessibilityHandler::HandleShowSelectToSpeakSettings,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &AccessibilityHandler::HandleShowSelectToSpeakSettings,
+          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "showSwitchAccessSettings",
-      base::Bind(&AccessibilityHandler::HandleShowSwitchAccessSettings,
-                 base::Unretained(this)));
+      base::BindRepeating(&AccessibilityHandler::HandleShowSwitchAccessSettings,
+                          base::Unretained(this)));
 }
 
 void AccessibilityHandler::HandleShowChromeVoxSettings(

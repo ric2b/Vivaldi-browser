@@ -14,12 +14,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/nullable_string16.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/public/platform/WebScopedVirtualTimePauser.h"
+#include "third_party/blink/public/platform/web_scoped_virtual_time_pauser.h"
 #include "url/gurl.h"
 
 namespace blink {
 namespace scheduler {
-class RendererScheduler;
+class WebThreadScheduler;
 }
 }  // namespace blink
 
@@ -37,16 +37,20 @@ class DOMStorageProxy;
 class CONTENT_EXPORT DOMStorageCachedArea
     : public base::RefCounted<DOMStorageCachedArea> {
  public:
-  DOMStorageCachedArea(int64_t namespace_id,
-                       const GURL& origin,
-                       DOMStorageProxy* proxy,
-                       blink::scheduler::RendererScheduler* renderer_scheduler);
+  DOMStorageCachedArea(
+      const std::string& namespace_id,
+      const GURL& origin,
+      DOMStorageProxy* proxy,
+      blink::scheduler::WebThreadScheduler* main_thread_scheduler);
 
-  int64_t namespace_id() const { return namespace_id_; }
+  const std::string& namespace_id() const { return namespace_id_; }
   const GURL& origin() const { return origin_; }
 
   unsigned GetLength(int connection_id);
-  base::NullableString16 GetKey(int connection_id, unsigned index);
+  // See DOMStorageMap for the meaning of |did_decrease_iterator|.
+  base::NullableString16 GetKey(int connection_id,
+                                unsigned index,
+                                bool* did_decrease_iterator = nullptr);
   base::NullableString16 GetItem(int connection_id, const base::string16& key);
   bool SetItem(int connection_id,
                const base::string16& key,
@@ -97,11 +101,14 @@ class CONTENT_EXPORT DOMStorageCachedArea
   bool ignore_all_mutations_;
   std::map<base::string16, int> ignore_key_mutations_;
 
-  int64_t namespace_id_;
+  std::string namespace_id_;
   GURL origin_;
   scoped_refptr<DOMStorageMap> map_;
   scoped_refptr<DOMStorageProxy> proxy_;
-  blink::scheduler::RendererScheduler* renderer_scheduler_;  // NOT OWNED
+
+  // Not owned.
+  blink::scheduler::WebThreadScheduler* main_thread_scheduler_;
+
   base::WeakPtrFactory<DOMStorageCachedArea> weak_factory_;
 };
 

@@ -26,9 +26,11 @@ class Device {
   Status SetUp(const std::string& package,
                const std::string& activity,
                const std::string& process,
+               const std::string& device_socket,
+               const std::string& exec_name,
                const std::string& args,
                bool use_running_app,
-               int port);
+               int* port);
 
   Status TearDown();
 
@@ -41,8 +43,8 @@ class Device {
 
   Status ForwardDevtoolsPort(const std::string& package,
                              const std::string& process,
-                             int port,
-                             std::string* device_socket);
+                             std::string* device_socket,
+                             int* devtools_port);
 
   const std::string serial_;
   std::string active_package_;

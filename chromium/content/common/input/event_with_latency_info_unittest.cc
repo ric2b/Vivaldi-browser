@@ -7,7 +7,7 @@
 #include <limits>
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -25,16 +25,20 @@ using EventWithLatencyInfoTest = testing::Test;
 TouchEventWithLatencyInfo CreateTouchEvent(WebInputEvent::Type type,
                                            double timestamp,
                                            unsigned touch_count = 1) {
-  TouchEventWithLatencyInfo touch(type, WebInputEvent::kNoModifiers, timestamp,
-                                  ui::LatencyInfo());
+  TouchEventWithLatencyInfo touch(
+      type, WebInputEvent::kNoModifiers,
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp),
+      ui::LatencyInfo());
   touch.event.touches_length = touch_count;
   return touch;
 }
 
 MouseEventWithLatencyInfo CreateMouseEvent(WebInputEvent::Type type,
                                            double timestamp) {
-  return MouseEventWithLatencyInfo(type, WebInputEvent::kNoModifiers, timestamp,
-                                   ui::LatencyInfo());
+  return MouseEventWithLatencyInfo(
+      type, WebInputEvent::kNoModifiers,
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp),
+      ui::LatencyInfo());
 }
 
 MouseWheelEventWithLatencyInfo CreateMouseWheelEvent(
@@ -43,7 +47,9 @@ MouseWheelEventWithLatencyInfo CreateMouseWheelEvent(
     float deltaY = 0.0f,
     int modifiers = WebInputEvent::kNoModifiers) {
   MouseWheelEventWithLatencyInfo mouse_wheel(
-      WebInputEvent::kMouseWheel, modifiers, timestamp, ui::LatencyInfo());
+      WebInputEvent::kMouseWheel, modifiers,
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp),
+      ui::LatencyInfo());
   mouse_wheel.event.delta_x = deltaX;
   mouse_wheel.event.delta_y = deltaY;
   return mouse_wheel;
@@ -53,10 +59,11 @@ GestureEventWithLatencyInfo CreateGestureEvent(WebInputEvent::Type type,
                                                double timestamp,
                                                float x = 0.0f,
                                                float y = 0.0f) {
-  GestureEventWithLatencyInfo gesture(type, WebInputEvent::kNoModifiers,
-                                      timestamp, ui::LatencyInfo());
-  gesture.event.x = x;
-  gesture.event.y = y;
+  GestureEventWithLatencyInfo gesture(
+      type, WebInputEvent::kNoModifiers,
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp),
+      ui::LatencyInfo());
+  gesture.event.SetPositionInWidget(gfx::PointF(x, y));
   return gesture;
 }
 
@@ -69,7 +76,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForMouseEvent) {
   ASSERT_TRUE(mouse_0.CanCoalesceWith(mouse_1));
   mouse_0.CoalesceWith(mouse_1);
   // Coalescing WebMouseEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, mouse_0.event.TimeStampSeconds());
+  EXPECT_EQ(10.0, mouse_0.event.TimeStamp().since_origin().InSecondsF());
 }
 
 TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForMouseWheelEvent) {
@@ -79,7 +86,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForMouseWheelEvent) {
   ASSERT_TRUE(mouse_wheel_0.CanCoalesceWith(mouse_wheel_1));
   mouse_wheel_0.CoalesceWith(mouse_wheel_1);
   // Coalescing WebMouseWheelEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, mouse_wheel_0.event.TimeStampSeconds());
+  EXPECT_EQ(10.0, mouse_wheel_0.event.TimeStamp().since_origin().InSecondsF());
 }
 
 TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForTouchEvent) {
@@ -91,7 +98,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForTouchEvent) {
   ASSERT_TRUE(touch_0.CanCoalesceWith(touch_1));
   touch_0.CoalesceWith(touch_1);
   // Coalescing WebTouchEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, touch_0.event.TimeStampSeconds());
+  EXPECT_EQ(10.0, touch_0.event.TimeStamp().since_origin().InSecondsF());
 }
 
 TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForGestureEvent) {
@@ -103,28 +110,27 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForGestureEvent) {
   ASSERT_TRUE(scroll_0.CanCoalesceWith(scroll_1));
   scroll_0.CoalesceWith(scroll_1);
   // Coalescing WebGestureEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, scroll_0.event.TimeStampSeconds());
+  EXPECT_EQ(10.0, scroll_0.event.TimeStamp().since_origin().InSecondsF());
 }
 
 TEST_F(EventWithLatencyInfoTest, LatencyInfoCoalescing) {
   MouseEventWithLatencyInfo mouse_0 =
       CreateMouseEvent(WebInputEvent::kMouseMove, 5.0);
   mouse_0.latency.AddLatencyNumberWithTimestamp(
-      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0, base::TimeTicks(), 1);
+      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, base::TimeTicks(), 1);
   MouseEventWithLatencyInfo mouse_1 =
       CreateMouseEvent(WebInputEvent::kMouseMove, 10.0);
 
   ASSERT_TRUE(mouse_0.CanCoalesceWith(mouse_1));
 
-  ui::LatencyInfo::LatencyComponent component;
   EXPECT_FALSE(mouse_1.latency.FindLatency(
-      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, &component));
+      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, nullptr));
 
   mouse_0.CoalesceWith(mouse_1);
 
   // Coalescing WebMouseEvent preservers older LatencyInfo.
   EXPECT_TRUE(mouse_1.latency.FindLatency(
-      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, &component));
+      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, nullptr));
 }
 
 WebTouchPoint CreateTouchPoint(WebTouchPoint::State state, int id) {
@@ -361,7 +367,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescing) {
 
   EXPECT_TRUE(CanCoalesce(mouse_wheel_0, mouse_wheel_1));
   Coalesce(mouse_wheel_1, &mouse_wheel_0);
-  EXPECT_EQ(10.0, mouse_wheel_0.event.TimeStampSeconds());
+  EXPECT_EQ(10.0, mouse_wheel_0.event.TimeStamp().since_origin().InSecondsF());
 }
 
 }  // namespace

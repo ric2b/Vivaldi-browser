@@ -9,7 +9,6 @@
 
 #include <limits>
 
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/raster/raster_buffer.h"
 #include "cc/raster/synchronous_task_graph_runner.h"
@@ -43,10 +42,8 @@ FakeTileManager::FakeTileManager(TileManagerClient* client,
       image_decode_cache_(
           kN32_SkColorType,
           LayerTreeSettings().decoded_image_working_set_budget_bytes) {
-  SetDecodedImageTracker(&decoded_image_tracker_);
   SetResources(resource_pool, &image_decode_cache_, GetGlobalTaskGraphRunner(),
                GetGlobalRasterBufferProvider(),
-               std::numeric_limits<size_t>::max(),
                false /* use_gpu_rasterization */);
   SetTileTaskManagerForTesting(std::make_unique<FakeTileTaskManagerImpl>());
 }

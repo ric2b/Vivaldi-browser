@@ -95,7 +95,14 @@ class ExternalProviderImplChromeOSTest : public ExtensionServiceTestBase {
   }
 
   void TearDown() override {
+    // If some extensions are being installed (on a background thread) and we
+    // stop before the intsallation is complete, some installation related
+    // objects might be leaked (as the background thread won't block on exit and
+    // finish cleanly).
+    // So ensure we let pending extension installations finish.
+    WaitForPendingStandaloneExtensionsInstalled();
     chromeos::KioskAppManager::Shutdown();
+    ExtensionServiceTestBase::TearDown();
   }
 
   // Waits until all possible standalone extensions are installed.
@@ -149,7 +156,8 @@ TEST_F(ExternalProviderImplChromeOSTest, AppMode) {
 
 // Normal mode, standalone app should be installed, because sync is enabled but
 // not running.
-TEST_F(ExternalProviderImplChromeOSTest, Standalone) {
+// flaky: crbug.com/854206
+TEST_F(ExternalProviderImplChromeOSTest, DISABLED_Standalone) {
   InitServiceWithExternalProviders(true);
 
   WaitForPendingStandaloneExtensionsInstalled();
@@ -160,7 +168,8 @@ TEST_F(ExternalProviderImplChromeOSTest, Standalone) {
 }
 
 // Should include only subset of default apps
-TEST_F(ExternalProviderImplChromeOSTest, StandaloneChild) {
+// flaky: crbug.com/854206
+TEST_F(ExternalProviderImplChromeOSTest, DISABLED_StandaloneChild) {
   InitServiceWithExternalProvidersAndUserType(true /* standalone */,
                                               true /* is_child */);
 

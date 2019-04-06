@@ -184,20 +184,10 @@
   <!-- End of Bookmarks Bar Context Menu strings. -->
 
   <!-- Begin of Bookmarks Bubble strings. -->
-  <if expr="not use_titlecase">
-    <message name="IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARKED" desc="Title of the bubble after bookmarking a page.">
-      Bookmark added
-    </message>
-  </if>
-  <if expr="use_titlecase">
-    <message name="IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARKED" desc="In Title Case: Title of the bubble after bookmarking a page.">
-      Bookmark Added
-    </message>
-  </if>
-  <message name="IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARK" desc="Title of the bubble when re-clicking on a bookmark">
-    Bookmark
+  <message name="IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARKED" desc="Title of the bubble after bookmarking a page.">
+    Bookmark added
   </message>
-  <message name="IDS_BOOKMARK_AX_BUBBLE_PAGE_BOOKMARK" desc="Title of the bubble when re-clicking on a bookmark, read by spoken feedback">
+  <message name="IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARK" desc="Title of the bubble when re-clicking on a bookmark">
     Edit bookmark
   </message>
   <message name="IDS_BOOKMARK_BUBBLE_NAME_LABEL" desc="Text preceding the title of the page that was bookmarked">
@@ -213,18 +203,18 @@
     Bookmark folder
   </message>
   <if expr="not use_titlecase">
-    <message name="IDS_BOOKMARK_BUBBLE_OPTIONS" desc="Title of the button the user can click to edit details of the bookmark">
-      Edit...
+    <message name="IDS_BOOKMARK_BUBBLE_OPTIONS" desc="Title of the button the user can click to go to a more advanced bookmark editor">
+      More...
     </message>
-    <message name="IDS_BOOKMARK_BUBBLE_CHOOSER_ANOTHER_FOLDER" desc="Text in the combobox allowing the user to choose another folder (by bringing up th editor).">
+    <message name="IDS_BOOKMARK_BUBBLE_CHOOSER_ANOTHER_FOLDER" desc="Text in the combobox allowing the user to choose another folder (by bringing up the editor).">
       Choose another folder...
     </message>
   </if>
   <if expr="use_titlecase">
-    <message name="IDS_BOOKMARK_BUBBLE_OPTIONS" desc="In Title Case: Title of the button the user can click to edit details of the bookmark">
-      Edit...
+    <message name="IDS_BOOKMARK_BUBBLE_OPTIONS" desc="In Title Case: Title of the button the user can click to go to a more advanced bookmark editor">
+      More...
     </message>
-    <message name="IDS_BOOKMARK_BUBBLE_CHOOSER_ANOTHER_FOLDER" desc="In Title Case: Text in the combobox allowing the user to choose another folder (by bringing up th editor).">
+    <message name="IDS_BOOKMARK_BUBBLE_CHOOSER_ANOTHER_FOLDER" desc="In Title Case: Text in the combobox allowing the user to choose another folder (by bringing up the editor).">
       Choose Another Folder...
     </message>
   </if>
@@ -235,6 +225,15 @@
     To get your bookmarks on all your devices, <ph name="SIGN_IN_LINK">$1<ex>sign in</ex></ph>.
   </message>
   <!-- End of Bookmarks Sync Promo strings. -->
+
+  <!-- Begin of Bookmarks Sync Promo strings for Desktop Identity Consistency. -->
+  <message name="IDS_BOOKMARK_DICE_PROMO_SIGNIN_MESSAGE" desc="Text of the sync promo displayed at the bottom of the bookmark bubble asking the user to sign in and enable sync.">
+    To get your bookmarks on all your devices, sign in and turn on sync.
+  </message>
+  <message name="IDS_BOOKMARK_DICE_PROMO_SYNC_MESSAGE" desc="Text of the sync promo displayed at the bottom of the bookmark bubble asking the user to enable sync.">
+    To get your bookmarks on all your devices, turn on sync.
+  </message>
+  <!-- End of Bookmarks Sync Promo strings for Desktop Identity Consistency. -->
 
   <!-- Begin of Desktop to iOS Promo strings. -->
   <if expr="is_win">
@@ -400,6 +399,9 @@
   </message>
   <message name="IDS_MD_BOOKMARK_MANAGER_EMPTY_LIST" desc="The message shown when the user has no bookmarks added. 'Star' refers to the icon in the omnibox for adding to bookmarks.">
     To bookmark pages, click the star in the address bar
+  </message>
+   <message name="IDS_MD_BOOKMARK_MANAGER_EMPTY_UNMODIFIABLE_LIST" desc="The message shown when an unmodifiable bookmark folder is empty.">
+    This folder is empty
   </message>
   <message name="IDS_MD_BOOKMARK_MANAGER_FOLDER_LABEL" desc="Label for a folder of bookmarks which is used to label folders for screen reader users.">
     Folder

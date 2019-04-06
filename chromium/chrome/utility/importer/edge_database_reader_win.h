@@ -78,12 +78,18 @@ class EdgeDatabaseReader : public EdgeErrorObject {
   // Open the database from a file path. Returns true on success.
   bool OpenDatabase(const base::string16& database_file);
 
+  void set_log_folder(const base::string16& log_folder) {
+    log_folder_ = log_folder;
+  }
+
   // Open a row enumerator for a specified table. Returns a nullptr on error.
   std::unique_ptr<EdgeDatabaseTableEnumerator> OpenTableEnumerator(
       const base::string16& table_name);
 
  private:
   bool IsOpen() { return instance_id_ != JET_instanceNil; }
+
+  base::string16 log_folder_;
 
   JET_DBID db_id_;
   JET_INSTANCE instance_id_;

@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
 
-#include "base/mac/bind_objc_block.h"
+#include "base/bind.h"
 #include "base/mac/foundation_util.h"
 #include "base/optional.h"
 #include "base/strings/sys_string_conversions.h"
@@ -14,10 +14,13 @@
 #include "components/ntp_tiles/metrics.h"
 #include "components/ntp_tiles/most_visited_sites.h"
 #include "components/ntp_tiles/ntp_tile.h"
+#include "components/reading_list/core/reading_list_model.h"
+#import "components/reading_list/ios/reading_list_model_bridge_observer.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/ntp_tiles/most_visited_sites_observer_bridge.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_whats_new_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
@@ -32,10 +35,10 @@
 #import "ios/chrome/browser/ui/content_suggestions/mediator_util.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
 #include "ios/chrome/browser/ui/ntp/ntp_tile_saver.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/images/branded_image_provider.h"
-#include "ios/public/provider/chrome/browser/images/whats_new_icon.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -46,23 +49,28 @@ namespace {
 using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
 
 // Maximum number of most visited tiles fetched.
-const NSInteger kMaxNumMostVisitedTiles = 8;
+const NSInteger kMaxNumMostVisitedTilesLegacy = 8;
+const NSInteger kMaxNumMostVisitedTiles = 4;
 
 }  // namespace
 
 @interface ContentSuggestionsMediator ()<ContentSuggestionsItemDelegate,
                                          ContentSuggestionsServiceObserver,
-                                         MostVisitedSitesObserving> {
+                                         MostVisitedSitesObserving,
+                                         ReadingListModelBridgeObserver> {
   // Bridge for this class to become an observer of a ContentSuggestionsService.
   std::unique_ptr<ContentSuggestionsServiceBridge> _suggestionBridge;
   std::unique_ptr<ntp_tiles::MostVisitedSites> _mostVisitedSites;
   std::unique_ptr<ntp_tiles::MostVisitedSitesObserverBridge> _mostVisitedBridge;
   std::unique_ptr<NotificationPromoWhatsNew> _notificationPromo;
+  std::unique_ptr<ReadingListModelBridge> _readingListModelBridge;
 }
 
 // Most visited items from the MostVisitedSites service currently displayed.
 @property(nonatomic, strong)
     NSMutableArray<ContentSuggestionsMostVisitedItem*>* mostVisitedItems;
+@property(nonatomic, strong)
+    NSArray<ContentSuggestionsMostVisitedActionItem*>* actionButtonItems;
 // Most visited items from the MostVisitedSites service (copied upon receiving
 // the callback). Those items are up to date with the model.
 @property(nonatomic, strong)
@@ -94,12 +102,19 @@ const NSInteger kMaxNumMostVisitedTiles = 8;
 @property(nonatomic, strong) ContentSuggestionsFaviconMediator* faviconMediator;
 // Item for the Learn More section, containing the string.
 @property(nonatomic, strong) ContentSuggestionsLearnMoreItem* learnMoreItem;
+// Item for the reading list action item.  Reference is used to update the
+// reading list count.
+@property(nonatomic, strong)
+    ContentSuggestionsMostVisitedActionItem* readingListItem;
+// Number of unread items in reading list model.
+@property(nonatomic, assign) NSInteger readingListUnreadCount;
 
 @end
 
 @implementation ContentSuggestionsMediator
 
 @synthesize mostVisitedItems = _mostVisitedItems;
+@synthesize actionButtonItems = _actionButtonItems;
 @synthesize freshMostVisitedItems = _freshMostVisitedItems;
 @synthesize logoSectionInfo = _logoSectionInfo;
 @synthesize promoSectionInfo = _promoSectionInfo;
@@ -114,6 +129,10 @@ const NSInteger kMaxNumMostVisitedTiles = 8;
 @synthesize faviconMediator = _faviconMediator;
 @synthesize learnMoreItem = _learnMoreItem;
 @synthesize readingListNeedsReload = _readingListNeedsReload;
+@synthesize readingListItem = _readingListItem;
+@synthesize readingListUnreadCount = _readingListUnreadCount;
+@synthesize contentArticlesExpanded = _contentArticlesExpanded;
+@synthesize contentArticlesEnabled = _contentArticlesEnabled;
 
 #pragma mark - Public
 
@@ -122,7 +141,8 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
       largeIconService:(favicon::LargeIconService*)largeIconService
         largeIconCache:(LargeIconCache*)largeIconCache
        mostVisitedSite:
-           (std::unique_ptr<ntp_tiles::MostVisitedSites>)mostVisitedSites {
+           (std::unique_ptr<ntp_tiles::MostVisitedSites>)mostVisitedSites
+      readingListModel:(ReadingListModel*)readingListModel {
   self = [super init];
   if (self) {
     _suggestionBridge =
@@ -149,8 +169,15 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     _mostVisitedSites = std::move(mostVisitedSites);
     _mostVisitedBridge =
         std::make_unique<ntp_tiles::MostVisitedSitesObserverBridge>(self);
+    NSInteger maxNumMostVisitedTiles = IsUIRefreshPhase1Enabled()
+                                           ? kMaxNumMostVisitedTiles
+                                           : kMaxNumMostVisitedTilesLegacy;
     _mostVisitedSites->SetMostVisitedURLsObserver(_mostVisitedBridge.get(),
-                                                  kMaxNumMostVisitedTiles);
+                                                  maxNumMostVisitedTiles);
+    if (IsUIRefreshPhase1Enabled()) {
+      _readingListModelBridge =
+          std::make_unique<ReadingListModelBridge>(self, readingListModel);
+    }
   }
   return self;
 }
@@ -175,7 +202,8 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
 }
 
 + (NSUInteger)maxSitesShown {
-  return kMaxNumMostVisitedTiles;
+  return IsUIRefreshPhase1Enabled() ? kMaxNumMostVisitedTiles
+                                    : kMaxNumMostVisitedTilesLegacy;
 }
 
 #pragma mark - ContentSuggestionsDataSource
@@ -190,7 +218,9 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     [sectionsInfo addObject:self.promoSectionInfo];
   }
 
-  if (self.mostVisitedItems.count > 0) {
+  // Since action items are always visible in UI Refresh, always add
+  // |mostVisitedSectionInfo| in UI Refresh.
+  if (self.mostVisitedItems.count > 0 || IsUIRefreshPhase1Enabled()) {
     [sectionsInfo addObject:self.mostVisitedSectionInfo];
   }
 
@@ -203,8 +233,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     if (!self.sectionInformationByCategory[categoryWrapper]) {
       [self addSectionInformationForCategory:category];
     }
-    if (IsCategoryStatusAvailable(
-            self.contentService->GetCategoryStatus(category))) {
+    if ([self isCategoryAvailable:category]) {
       [sectionsInfo
           addObject:self.sectionInformationByCategory[categoryWrapper]];
     }
@@ -234,6 +263,9 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     }
   } else if (sectionInfo == self.mostVisitedSectionInfo) {
     [convertedSuggestions addObjectsFromArray:self.mostVisitedItems];
+    if (IsUIRefreshPhase1Enabled()) {
+      [convertedSuggestions addObjectsFromArray:self.actionButtonItems];
+    }
   } else if (sectionInfo == self.learnMoreSectionInfo) {
     [convertedSuggestions addObject:self.learnMoreItem];
   } else {
@@ -304,15 +336,13 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
       }
 
       __weak ContentSuggestionsMediator* weakSelf = self;
-      ntp_snippets::FetchDoneCallback serviceCallback = base::Bind(
-          &BindWrapper,
-          base::BindBlockArc(^void(
-              ntp_snippets::Status status,
-              const std::vector<ntp_snippets::ContentSuggestion>& suggestions) {
+      ntp_snippets::FetchDoneCallback serviceCallback = base::BindOnce(
+          ^void(ntp_snippets::Status status,
+                std::vector<ntp_snippets::ContentSuggestion> suggestions) {
             [weakSelf didFetchMoreSuggestions:suggestions
                                withStatusCode:status
                                      callback:callback];
-          }));
+          });
 
       self.contentService->Fetch([wrapper category], known_suggestion_ids,
                                  std::move(serviceCallback));
@@ -336,6 +366,25 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
   return [self.headerProvider headerForWidth:width];
 }
 
+- (void)toggleArticlesVisibility {
+  [self.contentArticlesExpanded setValue:![self.contentArticlesExpanded value]];
+
+  // Update the section information for new collapsed state.
+  ntp_snippets::Category category = ntp_snippets::Category::FromKnownCategory(
+      ntp_snippets::KnownCategories::ARTICLES);
+  ContentSuggestionsCategoryWrapper* wrapper =
+      [ContentSuggestionsCategoryWrapper wrapperWithCategory:category];
+  ContentSuggestionsSectionInformation* sectionInfo =
+      self.sectionInformationByCategory[wrapper];
+  sectionInfo.expanded = [self.contentArticlesExpanded value];
+
+  // Reloading the section with animations looks bad because the section
+  // border with the new collapsed height draws before the elements collapse.
+  [UIView setAnimationsEnabled:NO];
+  [self.dataSink reloadSection:sectionInfo];
+  [UIView setAnimationsEnabled:YES];
+}
+
 #pragma mark - ContentSuggestionsServiceObserver
 
 - (void)contentSuggestionsService:
@@ -352,8 +401,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     self.readingListNeedsReload = NO;
   }
 
-  if (ntp_snippets::IsCategoryStatusAvailable(
-          self.contentService->GetCategoryStatus(category))) {
+  if ([self isCategoryAvailable:category]) {
     [self.dataSink
         dataAvailableForSection:self.sectionInformationByCategory[wrapper]
                     forceReload:forceReload];
@@ -366,7 +414,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
                   statusChangedTo:(ntp_snippets::CategoryStatus)status {
   ContentSuggestionsCategoryWrapper* wrapper =
       [[ContentSuggestionsCategoryWrapper alloc] initWithCategory:category];
-  if (!ntp_snippets::IsCategoryStatusInitOrAvailable(status)) {
+  if (![self isCategoryInitOrAvailable:category]) {
     // Remove the category from the UI if it is not available.
     ContentSuggestionsSectionInformation* sectionInfo =
         self.sectionInformationByCategory[wrapper];
@@ -424,7 +472,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
                                               .sectionInfo],
       suggestedItem.suggestionIdentifier.IDInSection);
   self.contentService->FetchSuggestionImage(
-      suggestionID, base::BindBlockArc(^(const gfx::Image& image) {
+      suggestionID, base::BindOnce(^(const gfx::Image& image) {
         if (image.IsEmpty()) {
           return;
         }
@@ -502,8 +550,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
             (const std::vector<ntp_snippets::ContentSuggestion>&)suggestions
           fromCategory:(ntp_snippets::Category&)category
            toItemArray:(NSMutableArray<CSCollectionViewItem*>*)itemArray {
-  if (!ntp_snippets::IsCategoryStatusAvailable(
-          self.contentService->GetCategoryStatus(category))) {
+  if (![self isCategoryExpanded:category]) {
     return;
   }
 
@@ -532,8 +579,9 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
   base::Optional<ntp_snippets::CategoryInfo> categoryInfo =
       self.contentService->GetCategoryInfo(category);
 
+  BOOL expanded = [self isCategoryExpanded:category];
   ContentSuggestionsSectionInformation* sectionInfo =
-      SectionInformationFromCategoryInfo(categoryInfo, category);
+      SectionInformationFromCategoryInfo(categoryInfo, category, expanded);
 
   self.sectionInformationByCategory[[ContentSuggestionsCategoryWrapper
       wrapperWithCategory:category]] = sectionInfo;
@@ -568,6 +616,75 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
 - (void)useFreshMostVisited {
   self.mostVisitedItems = self.freshMostVisitedItems;
   [self.dataSink reloadSection:self.mostVisitedSectionInfo];
+}
+
+// ntp_snippets doesn't differentiate between disabled vs collapsed, so if
+// the status is |CATEGORY_EXPLICITLY_DISABLED|, check the value of
+// |contentArticlesEnabled|.
+- (BOOL)isCategoryInitOrAvailable:(ntp_snippets::Category)category {
+  ntp_snippets::CategoryStatus status =
+      self.contentService->GetCategoryStatus(category);
+  if (IsUIRefreshPhase1Enabled() &&
+      category.IsKnownCategory(ntp_snippets::KnownCategories::ARTICLES) &&
+      status == ntp_snippets::CategoryStatus::CATEGORY_EXPLICITLY_DISABLED)
+    return [self.contentArticlesEnabled value];
+  else
+    return IsCategoryStatusInitOrAvailable(
+        self.contentService->GetCategoryStatus(category));
+}
+
+// ntp_snippets doesn't differentiate between disabled vs collapsed, so if
+// the status is |CATEGORY_EXPLICITLY_DISABLED|, check the value of
+// |contentArticlesEnabled|.
+- (BOOL)isCategoryAvailable:(ntp_snippets::Category)category {
+  ntp_snippets::CategoryStatus status =
+      self.contentService->GetCategoryStatus(category);
+  if (IsUIRefreshPhase1Enabled() &&
+      category.IsKnownCategory(ntp_snippets::KnownCategories::ARTICLES) &&
+      status == ntp_snippets::CategoryStatus::CATEGORY_EXPLICITLY_DISABLED) {
+    return [self.contentArticlesEnabled value];
+  } else {
+    return IsCategoryStatusAvailable(
+        self.contentService->GetCategoryStatus(category));
+  }
+}
+
+// Returns whether the Articles category pref indicates it should be expanded,
+// otherwise returns YES.
+- (BOOL)isCategoryExpanded:(ntp_snippets::Category)category {
+  if (IsUIRefreshPhase1Enabled() &&
+      category.IsKnownCategory(ntp_snippets::KnownCategories::ARTICLES))
+    return [self.contentArticlesExpanded value];
+  else
+    return YES;
+}
+
+#pragma mark - Properties
+
+- (NSArray<ContentSuggestionsMostVisitedActionItem*>*)actionButtonItems {
+  if (!_actionButtonItems) {
+    self.readingListItem = ReadingListActionItem();
+    self.readingListItem.count = self.readingListUnreadCount;
+    _actionButtonItems = @[
+      BookmarkActionItem(), self.readingListItem, RecentTabsActionItem(),
+      HistoryActionItem()
+    ];
+  }
+  return _actionButtonItems;
+}
+
+#pragma mark - ReadingListModelBridgeObserver
+
+- (void)readingListModelLoaded:(const ReadingListModel*)model {
+  [self readingListModelDidApplyChanges:model];
+}
+
+- (void)readingListModelDidApplyChanges:(const ReadingListModel*)model {
+  self.readingListUnreadCount = model->unread_size();
+  if (self.readingListItem) {
+    self.readingListItem.count = self.readingListUnreadCount;
+    [self.dataSink itemHasChanged:self.readingListItem];
+  }
 }
 
 @end

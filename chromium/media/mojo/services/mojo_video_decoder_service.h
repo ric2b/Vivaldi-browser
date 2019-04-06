@@ -22,7 +22,7 @@
 
 namespace media {
 
-class ContentDecryptionModule;
+class CdmContextRef;
 class DecoderBuffer;
 class MojoCdmServiceContext;
 class MojoDecoderBufferReader;
@@ -46,7 +46,8 @@ class MEDIA_MOJO_EXPORT MojoVideoDecoderService final
       mojom::MediaLogAssociatedPtrInfo media_log,
       mojom::VideoFrameHandleReleaserRequest video_frame_handle_releaser,
       mojo::ScopedDataPipeConsumerHandle decoder_buffer_pipe,
-      mojom::CommandBufferIdPtr command_buffer_id) final;
+      mojom::CommandBufferIdPtr command_buffer_id,
+      const gfx::ColorSpace& target_color_space) final;
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   int32_t cdm_id,
@@ -60,9 +61,7 @@ class MEDIA_MOJO_EXPORT MojoVideoDecoderService final
   // running mojom::VideoDecoder callbacks after connection error happens and
   // |this| is deleted. It's not safe to run the callbacks after a connection
   // error.
-  void OnDecoderInitialized(InitializeCallback callback,
-                            scoped_refptr<ContentDecryptionModule> cdm,
-                            bool success);
+  void OnDecoderInitialized(InitializeCallback callback, bool success);
   void OnReaderRead(DecodeCallback callback,
                     scoped_refptr<DecoderBuffer> buffer);
   void OnDecoderDecoded(DecodeCallback callback, DecodeStatus status);
@@ -76,6 +75,9 @@ class MEDIA_MOJO_EXPORT MojoVideoDecoderService final
   void OnDecoderRequestedOverlayInfo(
       bool restart_for_transitions,
       const ProvideOverlayInfoCB& provide_overlay_info_cb);
+
+  // Whether this instance is active (Decode() was called at least once).
+  bool is_active_instance_ = false;
 
   // Decoder factory.
   MojoMediaClient* mojo_media_client_;
@@ -97,9 +99,9 @@ class MEDIA_MOJO_EXPORT MojoVideoDecoderService final
   // Helper for reading DecoderBuffer data from the DataPipe.
   std::unique_ptr<MojoDecoderBufferReader> mojo_decoder_buffer_reader_;
 
-  // Owns the CdmContext (which is passed to |decoder_|), and therefore must be
-  // kept alive for the lifetime of |decoder_|.
-  scoped_refptr<ContentDecryptionModule> cdm_;
+  // Holds the CdmContextRef to keep the CdmContext alive for the lifetime of
+  // the |decoder_|.
+  std::unique_ptr<CdmContextRef> cdm_context_ref_;
 
   std::unique_ptr<media::VideoDecoder> decoder_;
 

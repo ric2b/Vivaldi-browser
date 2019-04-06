@@ -4,9 +4,9 @@
 
 #include "ui/wm/test/wm_test_helper.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/input_devices/input_device_client.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
@@ -15,8 +15,10 @@
 #include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/test/mus/window_tree_client_private.h"
 #include "ui/aura/test/test_focus_client.h"
 #include "ui/aura/window.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/wm/core/compound_event_filter.h"
 #include "ui/wm/core/default_activation_client.h"
 #include "ui/wm/core/wm_state.h"
@@ -47,8 +49,7 @@ WMTestHelper::WMTestHelper(const gfx::Size& default_window_size,
       new aura::client::DefaultCaptureClient(host_->window()));
 }
 
-WMTestHelper::~WMTestHelper() {
-}
+WMTestHelper::~WMTestHelper() = default;
 
 aura::Window* WMTestHelper::GetDefaultParent(aura::Window* window,
                                              const gfx::Rect& bounds) {
@@ -56,25 +57,27 @@ aura::Window* WMTestHelper::GetDefaultParent(aura::Window* window,
 }
 
 void WMTestHelper::InitLocalHost(const gfx::Size& default_window_size) {
-  host_.reset(aura::WindowTreeHost::Create(gfx::Rect(default_window_size)));
+  host_ = aura::WindowTreeHost::Create(
+      ui::PlatformWindowInitProperties{gfx::Rect(default_window_size)});
   host_->InitHost();
 }
 
 void WMTestHelper::InitMusHost(service_manager::Connector* connector) {
   DCHECK(!aura::Env::GetInstance()->HasWindowTreeClient());
 
-  input_device_client_ = base::MakeUnique<ui::InputDeviceClient>();
+  input_device_client_ = std::make_unique<ui::InputDeviceClient>();
   ui::mojom::InputDeviceServerPtr input_device_server;
   connector->BindInterface(ui::mojom::kServiceName, &input_device_server);
   input_device_client_->Connect(std::move(input_device_server));
 
-  property_converter_ = base::MakeUnique<aura::PropertyConverter>();
+  property_converter_ = std::make_unique<aura::PropertyConverter>();
 
   const bool create_discardable_memory = false;
-  window_tree_client_ = base::MakeUnique<aura::WindowTreeClient>(
-      connector, this, nullptr, nullptr, nullptr, create_discardable_memory);
+  window_tree_client_ = aura::WindowTreeClient::CreateForWindowTreeHostFactory(
+      connector, this, create_discardable_memory);
   aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client_.get());
-  window_tree_client_->ConnectViaWindowTreeHostFactory();
+  aura::WindowTreeClientPrivate(window_tree_client_.get())
+      .WaitForInitialDisplays();
 
   // ConnectViaWindowTreeHostFactory() should callback to OnEmbed() and set
   // |host_|.
@@ -94,6 +97,7 @@ void WMTestHelper::OnEmbedRootDestroyed(
 void WMTestHelper::OnLostConnection(aura::WindowTreeClient* client) {}
 
 void WMTestHelper::OnPointerEventObserved(const ui::PointerEvent& event,
+                                          int64_t display_id,
                                           aura::Window* target) {}
 
 aura::PropertyConverter* WMTestHelper::GetPropertyConverter() {

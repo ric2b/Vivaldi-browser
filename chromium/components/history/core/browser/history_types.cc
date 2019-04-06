@@ -20,12 +20,14 @@ VisitRow::VisitRow(URLID arg_url_id,
                    base::Time arg_visit_time,
                    VisitID arg_referring_visit,
                    ui::PageTransition arg_transition,
-                   SegmentID arg_segment_id)
+                   SegmentID arg_segment_id,
+                   bool arg_incremented_omnibox_typed_score)
     : url_id(arg_url_id),
       visit_time(arg_visit_time),
       referring_visit(arg_referring_visit),
       transition(arg_transition),
-      segment_id(arg_segment_id) {}
+      segment_id(arg_segment_id),
+      incremented_omnibox_typed_score(arg_incremented_omnibox_typed_score) {}
 
 VisitRow::~VisitRow() {
 }
@@ -190,13 +192,7 @@ MostVisitedURL::MostVisitedURL(const GURL& url,
 
 MostVisitedURL::MostVisitedURL(const MostVisitedURL& other) = default;
 
-// TODO(bug 706963) this should be implemented as "= default" when Android
-// toolchain is updated.
-MostVisitedURL::MostVisitedURL(MostVisitedURL&& other) noexcept
-    : url(std::move(other.url)),
-      title(std::move(other.title)),
-      last_forced_time(other.last_forced_time),
-      redirects(std::move(other.redirects)) {}
+MostVisitedURL::MostVisitedURL(MostVisitedURL&& other) noexcept = default;
 
 MostVisitedURL::~MostVisitedURL() {}
 
@@ -264,7 +260,8 @@ HistoryAddPageArgs::HistoryAddPageArgs()
                          false,
                          SOURCE_BROWSED,
                          false,
-                         true) {}
+                         true,
+                         base::nullopt) {}
 
 HistoryAddPageArgs::HistoryAddPageArgs(const GURL& url,
                                        base::Time time,
@@ -276,7 +273,8 @@ HistoryAddPageArgs::HistoryAddPageArgs(const GURL& url,
                                        bool hidden,
                                        VisitSource source,
                                        bool did_replace_entry,
-                                       bool consider_for_ntp_most_visited)
+                                       bool consider_for_ntp_most_visited,
+                                       base::Optional<base::string16> title)
     : url(url),
       time(time),
       context_id(context_id),
@@ -287,7 +285,8 @@ HistoryAddPageArgs::HistoryAddPageArgs(const GURL& url,
       hidden(hidden),
       visit_source(source),
       did_replace_entry(did_replace_entry),
-      consider_for_ntp_most_visited(consider_for_ntp_most_visited) {}
+      consider_for_ntp_most_visited(consider_for_ntp_most_visited),
+      title(title) {}
 
 HistoryAddPageArgs::HistoryAddPageArgs(const HistoryAddPageArgs& other) =
     default;
@@ -356,5 +355,63 @@ void ExpireHistoryArgs::SetTimeRangeForOneDay(base::Time time) {
   // 24 hours away, so add 36 hours and round back down to midnight.
   end_time = (begin_time + base::TimeDelta::FromHours(36)).LocalMidnight();
 }
+
+// DeletionTimeRange ----------------------------------------------------------
+
+DeletionTimeRange DeletionTimeRange::Invalid() {
+  return DeletionTimeRange();
+}
+
+DeletionTimeRange DeletionTimeRange::AllTime() {
+  return DeletionTimeRange(base::Time(), base::Time::Max());
+}
+
+bool DeletionTimeRange::IsValid() const {
+  return end_.is_null() || begin_ <= end_;
+}
+
+bool DeletionTimeRange::IsAllTime() const {
+  return begin_.is_null() && (end_.is_null() || end_.is_max());
+}
+
+// DeletionInfo
+// ----------------------------------------------------------
+
+// static
+DeletionInfo DeletionInfo::ForAllHistory() {
+  return DeletionInfo(DeletionTimeRange::AllTime(), false, {}, {},
+                      base::nullopt);
+}
+
+// static
+DeletionInfo DeletionInfo::ForUrls(URLRows deleted_rows,
+                                   std::set<GURL> favicon_urls) {
+  return DeletionInfo(DeletionTimeRange::Invalid(), false,
+                      std::move(deleted_rows), std::move(favicon_urls),
+                      base::nullopt);
+}
+
+DeletionInfo::DeletionInfo(const DeletionTimeRange& time_range,
+                           bool is_from_expiration,
+                           URLRows deleted_rows,
+                           std::set<GURL> favicon_urls,
+                           base::Optional<std::set<GURL>> restrict_urls)
+    : time_range_(time_range),
+      is_from_expiration_(is_from_expiration),
+      deleted_rows_(std::move(deleted_rows)),
+      favicon_urls_(std::move(favicon_urls)),
+      restrict_urls_(std::move(restrict_urls)) {
+  // If time_range is all time or invalid, restrict_urls should be empty.
+  DCHECK(!time_range_.IsAllTime() || !restrict_urls_.has_value());
+  DCHECK(time_range_.IsValid() || !restrict_urls_.has_value());
+  // If restrict_urls_ is defined, it should be non-empty.
+  DCHECK(!restrict_urls_.has_value() || !restrict_urls_->empty());
+};
+
+DeletionInfo::~DeletionInfo() = default;
+
+DeletionInfo::DeletionInfo(DeletionInfo&& other) noexcept = default;
+
+DeletionInfo& DeletionInfo::operator=(DeletionInfo&& rhs) noexcept = default;
 
 }  // namespace history

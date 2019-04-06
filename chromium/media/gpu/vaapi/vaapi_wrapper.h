@@ -89,7 +89,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Return true when JPEG encode is supported.
   static bool IsJpegEncodeSupported();
 
-  // Create |num_surfaces| backing surfaces in driver for VASurfaces of
+  // Creates |num_surfaces| backing surfaces in driver for VASurfaces of
   // |va_format|, each of size |size|. Returns true when successful, with the
   // created IDs in |va_surfaces| to be managed and later wrapped in
   // VASurfaces.
@@ -102,7 +102,12 @@ class MEDIA_GPU_EXPORT VaapiWrapper
                               size_t num_surfaces,
                               std::vector<VASurfaceID>* va_surfaces);
 
-  // Free all memory allocated in CreateSurfaces.
+  // Creates a VA Context associated with the set of |va_surfaces| of |size|.
+  bool CreateContext(unsigned int va_format,
+                     const gfx::Size& size,
+                     const std::vector<VASurfaceID>& va_surfaces);
+
+  // Frees all memory allocated in CreateSurfaces.
   virtual void DestroySurfaces();
 
   // Create a VASurface for |pixmap|. The ownership of the surface is
@@ -117,7 +122,9 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Data submitted via this method awaits in the HW codec until
   // ExecuteAndDestroyPendingBuffers() is called to execute or
   // DestroyPendingBuffers() is used to cancel a pending job.
-  bool SubmitBuffer(VABufferType va_buffer_type, size_t size, void* buffer);
+  bool SubmitBuffer(VABufferType va_buffer_type,
+                    size_t size,
+                    const void* buffer);
 
   // Submit a VAEncMiscParameterBuffer of given |misc_param_type|, copying its
   // data from |buffer| of size |size|, into HW codec. The data in |buffer| is
@@ -127,7 +134,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // DestroyPendingBuffers() is used to cancel a pending job.
   bool SubmitVAEncMiscParamBuffer(VAEncMiscParameterType misc_param_type,
                                   size_t size,
-                                  void* buffer);
+                                  const void* buffer);
 
   // Cancel and destroy all buffers queued to the HW codec via SubmitBuffer().
   // Useful when a pending job is to be cancelled (on reset or error).
@@ -218,16 +225,8 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Free all memory allocated in CreateSurfaces.
   void DestroySurfaces_Locked();
 
-  // Create a VASurface of |va_format|, |size| and using |va_attribs|
-  // attributes. The ownership of the surface is transferred to the
-  // caller. It differs from surfaces created using CreateSurfaces(),
-  // where VaapiWrapper is the owner of the surfaces.
-  scoped_refptr<VASurface> CreateUnownedSurface(
-      unsigned int va_format,
-      const gfx::Size& size,
-      const std::vector<VASurfaceAttrib>& va_attribs);
-  // Destroys a |va_surface| created using CreateUnownedSurface.
-  void DestroyUnownedSurface(VASurfaceID va_surface_id);
+  // Destroys a |va_surface_id|.
+  void DestroySurface(VASurfaceID va_surface_id);
 
   // Initialize the video post processing context with the |size| of
   // the input pictures to be processed.

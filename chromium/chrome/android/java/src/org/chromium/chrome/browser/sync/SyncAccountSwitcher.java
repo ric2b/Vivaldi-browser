@@ -4,14 +4,15 @@
 
 package org.chromium.chrome.browser.sync;
 
-import android.app.Activity;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
+import android.support.v4.app.FragmentActivity;
 import android.text.TextUtils;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Promise;
 import org.chromium.chrome.browser.preferences.SyncedAccountPreference;
+import org.chromium.chrome.browser.signin.AccountSigninActivity;
 import org.chromium.chrome.browser.signin.ConfirmImportSyncDataDialog;
 import org.chromium.chrome.browser.signin.ConfirmImportSyncDataDialog.ImportSyncType;
 import org.chromium.chrome.browser.signin.ConfirmSyncDataStateMachine;
@@ -33,7 +34,7 @@ public class SyncAccountSwitcher
     private static final String TAG = "SyncAccountSwitcher";
 
     private final SyncedAccountPreference mSyncedAccountPreference;
-    private final Activity mActivity;
+    private final FragmentActivity mActivity;
 
     private String mNewAccountName;
 
@@ -43,7 +44,8 @@ public class SyncAccountSwitcher
      *                 for the data sync fragment.
      * @param syncedAccountPreference The preference to update once signin has been completed.
      */
-    public SyncAccountSwitcher(Activity activity, SyncedAccountPreference syncedAccountPreference) {
+    public SyncAccountSwitcher(
+            FragmentActivity activity, SyncedAccountPreference syncedAccountPreference) {
         mActivity = activity;
         mSyncedAccountPreference = syncedAccountPreference;
     }
@@ -57,7 +59,7 @@ public class SyncAccountSwitcher
 
         if (TextUtils.equals(mNewAccountName, currentAccount)) return false;
 
-        new ConfirmSyncDataStateMachine(mActivity, mActivity.getFragmentManager(),
+        new ConfirmSyncDataStateMachine(mActivity, mActivity.getSupportFragmentManager(),
                 ImportSyncType.SWITCHING_SYNC_ACCOUNTS, currentAccount, mNewAccountName, this);
 
         // Don't update the selected account in the preference. It will be updated by
@@ -70,22 +72,25 @@ public class SyncAccountSwitcher
         assert mNewAccountName != null;
 
         // Sign out first to ensure we don't wipe the data when sync is still on.
-        SigninManager.get(mActivity).signOutPromise()
+        SigninManager.get().signOutPromise()
                 .then(new Promise.AsyncFunction<Void, Void>(){
                     @Override
                     public Promise<Void> apply(Void argument) {
                         // Once signed out, clear the last signed in user and wipe data if needed.
-                        SigninManager.get(mActivity).clearLastSignedInUser();
+                        SigninManager.get().clearLastSignedInUser();
                         return SigninManager.wipeSyncUserDataIfRequired(wipeData);
                     }
                 }).then(new Callback<Void>(){
                     @Override
                     public void onResult(Void result) {
                         // Once the data has been wiped (if needed), sign in to the next account.
-                        SigninManager.get(mActivity)
-                            .signIn(mNewAccountName, mActivity, SyncAccountSwitcher.this);
+                        SigninManager.get().signIn(
+                                mNewAccountName, mActivity, SyncAccountSwitcher.this);
                     }
                 });
+
+        AccountSigninActivity.recordSwitchAccountSourceHistogram(
+                AccountSigninActivity.SwitchAccountSource.SYNC_ACCOUNT_SWITCHER);
     }
 
     @Override

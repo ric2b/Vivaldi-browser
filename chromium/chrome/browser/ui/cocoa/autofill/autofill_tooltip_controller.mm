@@ -32,9 +32,9 @@ CGFloat kTooltipInset = 10;
 
 #pragma mark AutofillTooltip
 
-// The actual tooltip control - based on HoverButton, which comes with free
+// The actual tooltip control - based on HoverButtonCocoa, which comes with free
 // hover handling.
-@interface AutofillTooltip : HoverButton {
+@interface AutofillTooltip : HoverButtonCocoa {
  @private
   // Not owned - |tooltipController_| owns this object.
   AutofillTooltipController* tooltipController_;
@@ -58,7 +58,7 @@ CGFloat kTooltipInset = 10;
                     hints:nil];
 }
 
-- (void)setHoverState:(HoverState)state {
+- (void)setHoverState:(CloseButtonHoverState)state {
   [super setHoverState:state];
   [tooltipController_ updateTooltipDisplayState];
 }

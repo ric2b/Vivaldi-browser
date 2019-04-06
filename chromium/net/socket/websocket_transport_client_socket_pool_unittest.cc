@@ -30,6 +30,7 @@
 #include "net/socket/transport_client_socket_pool_test_util.h"
 #include "net/socket/websocket_endpoint_lock_manager.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -53,7 +54,8 @@ void RunLoopForTimePeriod(base::TimeDelta period) {
   run_loop.Run();
 }
 
-class WebSocketTransportClientSocketPoolTest : public ::testing::Test {
+class WebSocketTransportClientSocketPoolTest
+    : public TestWithScopedTaskEnvironment {
  protected:
   WebSocketTransportClientSocketPoolTest()
       : params_(new TransportSocketParams(
@@ -67,14 +69,18 @@ class WebSocketTransportClientSocketPoolTest : public ::testing::Test {
               kMaxSocketsPerGroup,
               host_resolver_.get(),
               &client_socket_factory_,
-              nullptr) {}
+              &websocket_endpoint_lock_manager_,
+              nullptr) {
+    websocket_endpoint_lock_manager_.SetUnlockDelayForTesting(
+        base::TimeDelta());
+  }
 
   ~WebSocketTransportClientSocketPoolTest() override {
     RunUntilIdle();
     // ReleaseAllConnections() calls RunUntilIdle() after releasing each
     // connection.
     ReleaseAllConnections(ClientSocketPoolTest::NO_KEEP_ALIVE);
-    EXPECT_TRUE(WebSocketEndpointLockManager::GetInstance()->IsEmpty());
+    EXPECT_TRUE(websocket_endpoint_lock_manager_.IsEmpty());
   }
 
   static void RunUntilIdle() { base::RunLoop().RunUntilIdle(); }
@@ -111,9 +117,9 @@ class WebSocketTransportClientSocketPoolTest : public ::testing::Test {
   scoped_refptr<TransportSocketParams> params_;
   std::unique_ptr<MockHostResolver> host_resolver_;
   MockTransportClientSocketFactory client_socket_factory_;
+  WebSocketEndpointLockManager websocket_endpoint_lock_manager_;
   WebSocketTransportClientSocketPool pool_;
   ClientSocketPoolTest test_base_;
-  ScopedWebSocketEndpointZeroUnlockDelay zero_unlock_delay_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebSocketTransportClientSocketPoolTest);
@@ -484,7 +490,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
   EXPECT_THAT(request(0)->WaitForResult(), IsOk());
   EXPECT_FALSE(request(1)->handle()->is_initialized());
-  WebSocketTransportClientSocketPool::UnlockEndpoint(request(0)->handle());
+  WebSocketTransportClientSocketPool::UnlockEndpoint(
+      request(0)->handle(), &websocket_endpoint_lock_manager_);
   RunUntilIdle();
   EXPECT_TRUE(request(1)->handle()->is_initialized());
 }
@@ -511,9 +518,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 // socket which finishes first.
 TEST_F(WebSocketTransportClientSocketPoolTest,
        IPv6FallbackSocketIPv4FinishesFirst) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // This is the IPv6 socket.
@@ -550,9 +557,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 // finish first.
 TEST_F(WebSocketTransportClientSocketPoolTest,
        IPv6FallbackSocketIPv6FinishesFirst) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // This is the IPv6 socket.
@@ -588,9 +595,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 
 TEST_F(WebSocketTransportClientSocketPoolTest,
        IPv6NoIPv4AddressesToFallbackTo) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_DELAYED_CLIENT_SOCKET);
@@ -618,9 +625,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest, IPv4HasNoFallback) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_DELAYED_CLIENT_SOCKET);
@@ -649,9 +656,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv4HasNoFallback) {
 // If all IPv6 addresses fail to connect synchronously, then IPv4 connections
 // proceeed immediately.
 TEST_F(WebSocketTransportClientSocketPoolTest, IPv6InstantFail) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // First IPv6 socket.
@@ -684,9 +691,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6InstantFail) {
 // If all IPv6 addresses fail before the IPv4 fallback timeout, then the IPv4
 // connections proceed immediately.
 TEST_F(WebSocketTransportClientSocketPoolTest, IPv6RapidFail) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // First IPv6 socket.
@@ -727,9 +734,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6RapidFail) {
 // can only happen if the sockets are different types, since sockets of the same
 // type do not race).
 TEST_F(WebSocketTransportClientSocketPoolTest, FirstSuccessWins) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_TRIGGERABLE_CLIENT_SOCKET);
@@ -764,9 +771,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest, FirstSuccessWins) {
 
 // We should not report failure until all connections have failed.
 TEST_F(WebSocketTransportClientSocketPoolTest, LastFailureWins) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_DELAYED_FAILING_CLIENT_SOCKET);
@@ -805,9 +812,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest, LastFailureWins) {
 // because it takes 4 minutes. Run with --gtest_also_run_disabled_tests if you
 // want to run it.
 TEST_F(WebSocketTransportClientSocketPoolTest, DISABLED_OverallTimeoutApplies) {
-  WebSocketTransportClientSocketPool pool(kMaxSockets, kMaxSocketsPerGroup,
-                                          host_resolver_.get(),
-                                          &client_socket_factory_, nullptr);
+  WebSocketTransportClientSocketPool pool(
+      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
+      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
   const base::TimeDelta connect_job_timeout = pool.ConnectionTimeout();
 
   client_socket_factory_.set_default_client_socket_type(
@@ -839,7 +846,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest, MaxSocketsEnforced) {
   host_resolver_->set_synchronous_mode(true);
   for (int i = 0; i < kMaxSockets; ++i) {
     ASSERT_THAT(StartRequest("a", kDefaultPriority), IsOk());
-    WebSocketTransportClientSocketPool::UnlockEndpoint(request(i)->handle());
+    WebSocketTransportClientSocketPool::UnlockEndpoint(
+        request(i)->handle(), &websocket_endpoint_lock_manager_);
     RunUntilIdle();
   }
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
@@ -854,7 +862,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest, MaxSocketsEnforcedWhenPending) {
     RunUntilIdle();
     EXPECT_TRUE(request(i)->handle()->is_initialized());
     EXPECT_TRUE(request(i)->handle()->socket());
-    WebSocketTransportClientSocketPool::UnlockEndpoint(request(i)->handle());
+    WebSocketTransportClientSocketPool::UnlockEndpoint(
+        request(i)->handle(), &websocket_endpoint_lock_manager_);
   }
   // Now there are 32 sockets connected, and one stalled.
   RunUntilIdle();
@@ -866,7 +875,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest, StalledSocketReleased) {
   host_resolver_->set_synchronous_mode(true);
   for (int i = 0; i < kMaxSockets; ++i) {
     ASSERT_THAT(StartRequest("a", kDefaultPriority), IsOk());
-    WebSocketTransportClientSocketPool::UnlockEndpoint(request(i)->handle());
+    WebSocketTransportClientSocketPool::UnlockEndpoint(
+        request(i)->handle(), &websocket_endpoint_lock_manager_);
     RunUntilIdle();
   }
 
@@ -1067,7 +1077,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest, EndpointLockIsOnlyReleasedOnce) {
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
   // First socket completes handshake.
-  WebSocketTransportClientSocketPool::UnlockEndpoint(request(0)->handle());
+  WebSocketTransportClientSocketPool::UnlockEndpoint(
+      request(0)->handle(), &websocket_endpoint_lock_manager_);
   RunUntilIdle();
   // First socket is closed.
   request(0)->handle()->Reset();

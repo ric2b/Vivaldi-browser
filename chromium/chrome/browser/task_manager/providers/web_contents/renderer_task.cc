@@ -33,7 +33,7 @@ namespace {
 // |render_process_host|.
 ProcessResourceUsage* CreateRendererResourcesSampler(
     content::RenderProcessHost* render_process_host) {
-  chrome::mojom::ResourceUsageReporterPtr service;
+  content::mojom::ResourceUsageReporterPtr service;
   BindInterface(render_process_host, &service);
   return new ProcessResourceUsage(std::move(service));
 }
@@ -80,7 +80,7 @@ RendererTask::RendererTask(const base::string16& title,
     : Task(title,
            GetRapporSampleName(web_contents),
            icon,
-           render_process_host->GetHandle()),
+           render_process_host->GetProcess().Handle()),
       web_contents_(web_contents),
       render_process_host_(render_process_host),
       renderer_resources_sampler_(
@@ -158,7 +158,7 @@ base::string16 RendererTask::GetProfileName() const {
   return profile_name_;
 }
 
-int RendererTask::GetTabId() const {
+SessionID RendererTask::GetTabId() const {
   return SessionTabHelper::IdForTab(web_contents_);
 }
 

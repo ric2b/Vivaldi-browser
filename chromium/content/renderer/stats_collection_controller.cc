@@ -5,7 +5,6 @@
 #include "content/renderer/stats_collection_controller.h"
 
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
@@ -17,9 +16,9 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_view.h"
 
 namespace content {
 

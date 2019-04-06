@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/message_loop/message_loop_current.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "media/base/media_switches.h"
 
@@ -49,11 +50,18 @@ class AlsaVolumeControl::ScopedAlsaMixer {
     alsa_err = alsa_->MixerAttach(mixer, mixer_device_name.c_str());
     if (alsa_err < 0) {
       LOG(ERROR) << "MixerAttach error: " << alsa_->StrError(alsa_err);
+      alsa_->MixerClose(mixer);
       mixer = nullptr;
       return;
     }
     ALSA_ASSERT(MixerElementRegister, mixer, NULL, NULL);
-    ALSA_ASSERT(MixerLoad, mixer);
+    alsa_err = alsa->MixerLoad(mixer);
+    if (alsa_err < 0) {
+      LOG(ERROR) << "MixerLoad error: " << alsa_->StrError(alsa_err);
+      alsa_->MixerClose(mixer);
+      mixer = nullptr;
+      return;
+    }
 
     snd_mixer_selem_id_t* sid = NULL;
     ALSA_ASSERT(MixerSelemIdMalloc, &sid);
@@ -339,21 +347,22 @@ void AlsaVolumeControl::RefreshMixerFds(ScopedAlsaMixer* mixer) {
   DCHECK_GT(num_fds, 0);
   for (int i = 0; i < num_fds; ++i) {
     auto watcher =
-        std::make_unique<base::MessageLoopForIO::FileDescriptorWatcher>(
-            FROM_HERE);
-    base::MessageLoopForIO::current()->WatchFileDescriptor(
-        pfds[i].fd, true /* persistent */, base::MessageLoopForIO::WATCH_READ,
+        std::make_unique<base::MessagePumpForIO::FdWatchController>(FROM_HERE);
+    base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+        pfds[i].fd, true /* persistent */, base::MessagePumpForIO::WATCH_READ,
         watcher.get(), this);
     file_descriptor_watchers_.push_back(std::move(watcher));
   }
 }
 
 void AlsaVolumeControl::OnFileCanReadWithoutBlocking(int fd) {
-  alsa_->MixerHandleEvents(volume_mixer_->mixer);
-  if (mute_mixer_) {
+  if (volume_mixer_->mixer) {
+    alsa_->MixerHandleEvents(volume_mixer_->mixer);
+  }
+  if (mute_mixer_ && mute_mixer_->mixer) {
     alsa_->MixerHandleEvents(mute_mixer_->mixer);
   }
-  if (amp_mixer_) {
+  if (amp_mixer_ && amp_mixer_->mixer) {
     // amixer locks up if we don't call this for unknown reasons.
     alsa_->MixerHandleEvents(amp_mixer_->mixer);
   }

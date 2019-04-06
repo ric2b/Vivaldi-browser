@@ -7,8 +7,8 @@
 
 #include <stddef.h>
 
-#include "components/viz/common/resources/resource_settings.h"
 #include "components/viz/common/viz_common_export.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace viz {
 
@@ -18,7 +18,6 @@ class VIZ_COMMON_EXPORT RendererSettings {
   RendererSettings(const RendererSettings& other);
   ~RendererSettings();
 
-  ResourceSettings resource_settings;
   bool allow_antialiasing = true;
   bool force_antialiasing = false;
   bool force_blending_with_shaders = false;
@@ -30,10 +29,16 @@ class VIZ_COMMON_EXPORT RendererSettings {
   bool show_overdraw_feedback = false;
   bool enable_draw_occlusion = false;
   bool use_skia_renderer = false;
+  bool use_skia_deferred_display_list = false;
+  bool allow_overlays = true;
   bool dont_round_texture_sizes_for_pixel_tests = false;
   int highp_threshold_min = 0;
+  bool auto_resize_output_surface = true;
 
   int slow_down_compositing_scale_factor = 1;
+
+  // The required minimum size for DrawQuad to apply Draw Occlusion on.
+  gfx::Size kMinimumDrawOcclusionSize = gfx::Size(60, 60);
 };
 
 }  // namespace viz

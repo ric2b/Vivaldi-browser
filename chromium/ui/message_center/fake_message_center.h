@@ -27,8 +27,9 @@ class FakeMessageCenter : public MessageCenter {
   size_t NotificationCount() const override;
   bool HasPopupNotifications() const override;
   bool IsQuietMode() const override;
-  message_center::Notification* FindVisibleNotificationById(
-      const std::string& id) override;
+  Notification* FindVisibleNotificationById(const std::string& id) override;
+  NotificationList::Notifications FindNotificationsByAppId(
+      const std::string& app_id) override;
   const NotificationList::Notifications& GetVisibleNotifications() override;
   NotificationList::PopupNotifications GetPopupNotifications() override;
   void AddNotification(std::unique_ptr<Notification> notification) override;
@@ -64,6 +65,8 @@ class FakeMessageCenter : public MessageCenter {
   void EnterQuietModeWithExpire(const base::TimeDelta& expires_in) override;
   void SetVisibility(Visibility visible) override;
   bool IsMessageCenterVisible() const override;
+  void SetHasMessageCenterView(bool has_message_center_view) override;
+  bool HasMessageCenterView() const override;
   void RestartPopupTimers() override;
   void PausePopupTimers() override;
   const base::string16& GetSystemNotificationAppName() const override;
@@ -71,9 +74,14 @@ class FakeMessageCenter : public MessageCenter {
 
  protected:
   void DisableTimersForTest() override;
+  const base::ObserverList<MessageCenterObserver>& observer_list() const {
+    return observer_list_;
+  }
 
  private:
+  base::ObserverList<MessageCenterObserver> observer_list_;
   const NotificationList::Notifications empty_notifications_;
+  bool has_message_center_view_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(FakeMessageCenter);
 };

@@ -3,7 +3,6 @@
 #include "app/vivaldi_apptools.h"
 
 #include "app/vivaldi_constants.h"
-#include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 
@@ -14,6 +13,7 @@ namespace {
 const char *vivaldi_extra_locales_array[] = {
   "be",
   "en-AU",
+  "en-IN",
   "eo",
   "es-PE",
   "eu",

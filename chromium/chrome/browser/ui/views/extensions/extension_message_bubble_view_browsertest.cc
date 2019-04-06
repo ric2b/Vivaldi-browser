@@ -4,14 +4,15 @@
 
 #include "base/auto_reset.h"
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/extensions/extension_message_bubble_browsertest.h"
 #include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
-#include "ui/views/controls/link.h"
-#include "ui/views/controls/link_listener.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/window/dialog_client_view.h"
 
 namespace {
@@ -122,15 +123,19 @@ void ExtensionMessageBubbleViewBrowserTest::CheckBubbleIsNotPresentNative(
 void ExtensionMessageBubbleViewBrowserTest::ClickLearnMoreButton(
     Browser* browser) {
   ToolbarActionsBarBubbleViews* bubble = GetViewsBubbleForBrowser(browser);
-  static_cast<views::LinkListener*>(bubble)->LinkClicked(
-      const_cast<views::Link*>(bubble->learn_more_button()), 0);
+  const views::ImageButton* learn_more = bubble->learn_more_button();
+  const gfx::Point origin;
+  static_cast<views::ButtonListener*>(bubble)->ButtonPressed(
+      const_cast<views::ImageButton*>(learn_more),
+      ui::MouseEvent(ui::ET_MOUSE_PRESSED, origin, origin,
+                     ui::EventTimeForNow(), 0, 0));
 
   // Clicking a button closes asynchronously. Since the close is asynchronous,
   // platform events may happen before the close completes and the dialog needs
   // to report a valid state.
   ui::AXNodeData node_data;
   bubble->GetWidget()->GetRootView()->GetAccessibleNodeData(&node_data);
-  EXPECT_EQ(ui::AX_ROLE_DIALOG, node_data.role);
+  EXPECT_EQ(ax::mojom::Role::kAlertDialog, node_data.role);
 }
 
 void ExtensionMessageBubbleViewBrowserTest::ClickActionButton(
@@ -278,7 +283,15 @@ IN_PROC_BROWSER_TEST_F(NtpExtensionBubbleViewBrowserTest,
   TestControlledNewTabPageBubbleShown(true);
 }
 
+// Flaky on Mac https://crbug.com/851655
+#if defined(OS_MACOSX)
+#define MAYBE_TestBubbleClosedAfterExtensionUninstall \
+  DISABLED_TestBubbleClosedAfterExtensionUninstall
+#else
+#define MAYBE_TestBubbleClosedAfterExtensionUninstall \
+  TestBubbleClosedAfterExtensionUninstall
+#endif
 IN_PROC_BROWSER_TEST_F(NtpExtensionBubbleViewBrowserTest,
-                       TestBubbleClosedAfterExtensionUninstall) {
+                       MAYBE_TestBubbleClosedAfterExtensionUninstall) {
   TestBubbleClosedAfterExtensionUninstall();
 }

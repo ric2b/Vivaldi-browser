@@ -14,9 +14,11 @@
 #include "base/macros.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
-#include "net/url_request/network_error_logging_delegate.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace base {
 class Value;
@@ -36,94 +38,119 @@ extern const base::Feature NET_EXPORT kNetworkErrorLogging;
 
 namespace net {
 
-class NET_EXPORT NetworkErrorLoggingService
-    : public NetworkErrorLoggingDelegate {
+class NetworkErrorLoggingDelegate;
+
+class NET_EXPORT NetworkErrorLoggingService {
  public:
+  // The details of a network error that are included in an NEL report.
+  //
+  // See http://wicg.github.io/network-error-logging/#dfn-network-error-object
+  // for details on the semantics of each field.
+  struct NET_EXPORT RequestDetails {
+    RequestDetails();
+    RequestDetails(const RequestDetails& other);
+    ~RequestDetails();
+
+    GURL uri;
+    GURL referrer;
+    std::string user_agent;
+    IPAddress server_ip;
+    std::string protocol;
+    std::string method;
+    int status_code;
+    base::TimeDelta elapsed_time;
+    Error type;
+
+    // Upload nesting depth of this request.
+    //
+    // If the request is not a Reporting upload, the depth is 0.
+    //
+    // If the request is a Reporting upload, the depth is the max of the depth
+    // of the requests reported within it plus 1. (Non-NEL reports are
+    // considered to have depth 0.)
+    int reporting_upload_depth;
+  };
+
+  static const char kHeaderName[];
+
   static const char kReportType[];
+
+  static const int kMaxNestedReportDepth;
 
   // Keys for data included in report bodies. Exposed for tests.
 
-  static const char kUriKey[];
   static const char kReferrerKey[];
+  static const char kSamplingFractionKey[];
   static const char kServerIpKey[];
   static const char kProtocolKey[];
+  static const char kMethodKey[];
   static const char kStatusCodeKey[];
   static const char kElapsedTimeKey[];
+  static const char kPhaseKey[];
   static const char kTypeKey[];
 
-  // Creates the NetworkErrorLoggingService.
+  static void RecordHeaderDiscardedForNoNetworkErrorLoggingService();
+  static void RecordHeaderDiscardedForInvalidSSLInfo();
+  static void RecordHeaderDiscardedForCertStatusError();
+  static void RecordHeaderDiscardedForMissingRemoteEndpoint();
+
+  static void RecordRequestDiscardedForNoNetworkErrorLoggingService();
+
+  static std::unique_ptr<NetworkErrorLoggingService> Create(
+      std::unique_ptr<NetworkErrorLoggingDelegate> delegate);
+
+  virtual ~NetworkErrorLoggingService();
+
+  // Ingests a "NEL:" header received for |origin| from |received_ip_address|
+  // with normalized value |value|. May or may not actually set a policy for
+  // that origin.
+  virtual void OnHeader(const url::Origin& origin,
+                        const IPAddress& received_ip_address,
+                        const std::string& value) = 0;
+
+  // Considers queueing a network error report for the request described in
+  // |details|.  The contents of |details| might be changed, depending on the
+  // NEL policy associated with the request's origin.  Note that |details| is
+  // passed by value, so that it doesn't need to be copied in this function if
+  // it needs to be changed.  Consider using std::move to pass this parameter if
+  // the caller doesn't need to access it after this method call.
   //
-  // Will return nullptr if Network Error Logging is disabled via
-  // base::FeatureList.
-  static std::unique_ptr<NetworkErrorLoggingService> Create();
+  // Note that Network Error Logging can report a fraction of successful
+  // requests as well (to calculate error rates), so this should be called on
+  // *all* requests.
+  virtual void OnRequest(RequestDetails details) = 0;
 
-  // NetworkErrorLoggingDelegate implementation:
+  // Removes browsing data (origin policies) associated with any origin for
+  // which |origin_filter| returns true.
+  virtual void RemoveBrowsingData(
+      const base::RepeatingCallback<bool(const GURL&)>& origin_filter) = 0;
 
-  ~NetworkErrorLoggingService() override;
+  // Removes browsing data (origin policies) for all origins. Allows slight
+  // optimization over passing an always-true filter to RemoveBrowsingData.
+  virtual void RemoveAllBrowsingData() = 0;
 
-  void SetReportingService(ReportingService* reporting_service) override;
+  // Sets the ReportingService that will be used to queue network error reports.
+  // If |nullptr| is passed, reports will be queued locally or discarded.
+  // |reporting_service| must outlive the NetworkErrorLoggingService.
+  void SetReportingService(ReportingService* reporting_service);
 
-  void OnHeader(const url::Origin& origin, const std::string& value) override;
+  // Sets a base::TickClock (used to track policy expiration) for tests.
+  // |tick_clock| must outlive the NetworkErrorLoggingService, and cannot be
+  // nullptr.
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
-  void OnNetworkError(const ErrorDetails& details) override;
+  virtual base::Value StatusAsValue() const;
 
-  void RemoveBrowsingData(
-      const base::RepeatingCallback<bool(const GURL&)>& origin_filter) override;
+  virtual std::set<url::Origin> GetPolicyOriginsForTesting();
 
-  void SetTickClockForTesting(base::TickClock* tick_clock);
-
- private:
-  // NEL Policy set by an origin.
-  struct OriginPolicy {
-    // Reporting API endpoint group to which reports should be sent.
-    std::string report_to;
-
-    base::TimeTicks expires;
-
-    bool include_subdomains;
-  };
-
-  // Map from origin to origin's (owned) policy.
-  // Would be unordered_map, but url::Origin has no hash.
-  using PolicyMap = std::map<url::Origin, OriginPolicy>;
-
-  // Wildcard policies are policies for which the includeSubdomains flag is set.
-  //
-  // Wildcard policies are accessed by domain name, not full origin, so there
-  // can be multiple wildcard policies per domain name.
-  //
-  // This is a map from domain name to the set of pointers to wildcard policies
-  // in that domain.
-  //
-  // Policies in the map are unowned; they are pointers to the original in the
-  // PolicyMap.
-  using WildcardPolicyMap =
-      std::map<std::string, std::set<const OriginPolicy*>>;
-
+ protected:
   NetworkErrorLoggingService();
 
-  // Would be const, but base::TickClock::NowTicks isn't.
-  bool ParseHeader(const std::string& json_value, OriginPolicy* policy_out);
-
-  const OriginPolicy* FindPolicyForOrigin(const url::Origin& origin) const;
-  const OriginPolicy* FindWildcardPolicyForDomain(
-      const std::string& domain) const;
-  void MaybeAddWildcardPolicy(const url::Origin& origin,
-                              const OriginPolicy* policy);
-  void MaybeRemoveWildcardPolicy(const url::Origin& origin,
-                                 const OriginPolicy* policy);
-  std::unique_ptr<const base::Value> CreateReportBody(
-      const std::string& type,
-      const ErrorDetails& details) const;
-
-  base::TickClock* tick_clock_;
-
-  // Unowned.
+  // Unowned:
+  const base::TickClock* tick_clock_;
   ReportingService* reporting_service_;
 
-  PolicyMap policies_;
-  WildcardPolicyMap wildcard_policies_;
-
+ private:
   DISALLOW_COPY_AND_ASSIGN(NetworkErrorLoggingService);
 };
 

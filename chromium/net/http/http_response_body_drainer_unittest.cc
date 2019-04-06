@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -16,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -26,8 +28,9 @@
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/http_stream.h"
 #include "net/http/transport_security_state.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/ssl_config_service_defaults.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -91,15 +94,15 @@ class MockHttpStream : public HttpStream {
                        bool can_send_early,
                        RequestPriority priority,
                        const NetLogWithSource& net_log,
-                       const CompletionCallback& callback) override {
+                       CompletionOnceCallback callback) override {
     return ERR_UNEXPECTED;
   }
   int SendRequest(const HttpRequestHeaders& request_headers,
                   HttpResponseInfo* response,
-                  const CompletionCallback& callback) override {
+                  CompletionOnceCallback callback) override {
     return ERR_UNEXPECTED;
   }
-  int ReadResponseHeaders(const CompletionCallback& callback) override {
+  int ReadResponseHeaders(CompletionOnceCallback callback) override {
     return ERR_UNEXPECTED;
   }
 
@@ -125,7 +128,7 @@ class MockHttpStream : public HttpStream {
   // Mocked API
   int ReadResponseBody(IOBuffer* buf,
                        int buf_len,
-                       const CompletionCallback& callback) override;
+                       CompletionOnceCallback callback) override;
   void Close(bool not_reusable) override {
     CHECK(!closed_);
     closed_ = true;
@@ -170,7 +173,7 @@ class MockHttpStream : public HttpStream {
 
   CloseResultWaiter* const result_waiter_;
   scoped_refptr<IOBuffer> user_buf_;
-  CompletionCallback callback_;
+  CompletionOnceCallback callback_;
   int buf_len_;
   bool closed_;
   bool stall_reads_forever_;
@@ -187,7 +190,7 @@ class MockHttpStream : public HttpStream {
 
 int MockHttpStream::ReadResponseBody(IOBuffer* buf,
                                      int buf_len,
-                                     const CompletionCallback& callback) {
+                                     CompletionOnceCallback callback) {
   CHECK(!callback.is_null());
   CHECK(callback_.is_null());
   CHECK(buf);
@@ -201,10 +204,10 @@ int MockHttpStream::ReadResponseBody(IOBuffer* buf,
   if (!is_sync_) {
     user_buf_ = buf;
     buf_len_ = buf_len;
-    callback_ = callback;
+    callback_ = std::move(callback);
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&MockHttpStream::CompleteRead, weak_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&MockHttpStream::CompleteRead,
+                                  weak_factory_.GetWeakPtr()));
     return ERR_IO_PENDING;
   } else {
     return ReadResponseBodyImpl(buf, buf_len);
@@ -229,15 +232,13 @@ int MockHttpStream::ReadResponseBodyImpl(IOBuffer* buf, int buf_len) {
 void MockHttpStream::CompleteRead() {
   int result = ReadResponseBodyImpl(user_buf_.get(), buf_len_);
   user_buf_ = NULL;
-  CompletionCallback callback = callback_;
-  callback_.Reset();
-  callback.Run(result);
+  base::ResetAndReturn(&callback_).Run(result);
 }
 
-class HttpResponseBodyDrainerTest : public testing::Test {
+class HttpResponseBodyDrainerTest : public TestWithScopedTaskEnvironment {
  protected:
   HttpResponseBodyDrainerTest()
-      : proxy_service_(ProxyService::CreateDirect()),
+      : proxy_resolution_service_(ProxyResolutionService::CreateDirect()),
         ssl_config_service_(new SSLConfigServiceDefaults),
         http_server_properties_(new HttpServerPropertiesImpl()),
         session_(CreateNetworkSession()),
@@ -248,7 +249,7 @@ class HttpResponseBodyDrainerTest : public testing::Test {
 
   HttpNetworkSession* CreateNetworkSession() {
     HttpNetworkSession::Context context;
-    context.proxy_service = proxy_service_.get();
+    context.proxy_resolution_service = proxy_resolution_service_.get();
     context.ssl_config_service = ssl_config_service_.get();
     context.http_server_properties = http_server_properties_.get();
     context.cert_verifier = &cert_verifier_;
@@ -258,13 +259,13 @@ class HttpResponseBodyDrainerTest : public testing::Test {
     return new HttpNetworkSession(HttpNetworkSession::Params(), context);
   }
 
-  std::unique_ptr<ProxyService> proxy_service_;
-  scoped_refptr<SSLConfigService> ssl_config_service_;
+  std::unique_ptr<ProxyResolutionService> proxy_resolution_service_;
+  std::unique_ptr<SSLConfigService> ssl_config_service_;
   std::unique_ptr<HttpServerPropertiesImpl> http_server_properties_;
   MockCertVerifier cert_verifier_;
   TransportSecurityState transport_security_state_;
   MultiLogCTVerifier ct_verifier_;
-  CTPolicyEnforcer ct_policy_enforcer_;
+  DefaultCTPolicyEnforcer ct_policy_enforcer_;
   const std::unique_ptr<HttpNetworkSession> session_;
   CloseResultWaiter result_waiter_;
   MockHttpStream* const mock_stream_;  // Owned by |drainer_|.

@@ -11,6 +11,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -23,26 +24,36 @@
 #include "content/public/browser/tracing_controller.h"
 
 namespace base {
-class Timer;
+class RepeatingTimer;
+}
+
+namespace media {
+class VideoFrame;
 }
 
 namespace content {
 
 class DevToolsAgentHostImpl;
+class DevToolsVideoConsumer;
 class DevToolsIOContext;
+class FrameTreeNode;
+class NavigationHandleImpl;
+class RenderFrameHost;
+class RenderProcessHost;
 
 namespace protocol {
 
 class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
  public:
-  enum Target { Browser, Renderer };
-  CONTENT_EXPORT TracingHandler(Target target,
-                                int frame_tree_node_id,
+  CONTENT_EXPORT TracingHandler(FrameTreeNode* frame_tree_node,
                                 DevToolsIOContext* io_context);
   CONTENT_EXPORT ~TracingHandler() override;
 
   static std::vector<TracingHandler*> ForAgentHost(DevToolsAgentHostImpl* host);
 
+  // DevToolsDomainHandler implementation.
+  void SetRenderer(int process_host_id,
+                   RenderFrameHostImpl* frame_host) override;
   void Wire(UberDispatcher* dispatcher) override;
   Response Disable() override;
 
@@ -65,6 +76,8 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
   Response RecordClockSyncMarker(const std::string& sync_id) override;
 
   bool did_initiate_recording() { return did_initiate_recording_; }
+  void ReadyToCommitNavigation(NavigationHandleImpl* navigation_handle);
+  void FrameDeleted(RenderFrameHostImpl* frame_host);
 
  private:
   friend class TracingHandlerTest;
@@ -86,7 +99,7 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
   void OnMemoryDumpFinished(std::unique_ptr<RequestMemoryDumpCallback> callback,
                             bool success,
                             uint64_t dump_id);
-
+  void OnFrameFromVideoConsumer(scoped_refptr<media::VideoFrame> frame);
   // Assuming that the input is a potentially incomplete string representation
   // of a comma separated list of JSON objects, return the longest prefix that
   // is a valid list and store the rest to be used in subsequent calls.
@@ -98,21 +111,28 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
       const scoped_refptr<TracingController::TraceDataEndpoint>& endpoint,
       const std::string& agent_label);
   bool IsTracing() const;
+  void EmitFrameTree();
   static bool IsStartupTracingActive();
   CONTENT_EXPORT static base::trace_event::TraceConfig
       GetTraceConfigFromDevToolsConfig(
           const base::DictionaryValue& devtools_config);
+  void SetupProcessFilter(RenderFrameHost*);
+  void AppendProcessId(RenderFrameHost*,
+                       std::unordered_set<base::ProcessId>* process_set);
+  void OnProcessReady(RenderProcessHost*);
 
-  std::unique_ptr<base::Timer> buffer_usage_poll_timer_;
-  Target target_;
+  std::unique_ptr<base::RepeatingTimer> buffer_usage_poll_timer_;
 
   std::unique_ptr<Tracing::Frontend> frontend_;
   DevToolsIOContext* io_context_;
-  int frame_tree_node_id_;
+  FrameTreeNode* frame_tree_node_;
   bool did_initiate_recording_;
   bool return_as_stream_;
   bool gzip_compression_;
   TraceDataBufferState trace_data_buffer_state_;
+  std::unique_ptr<DevToolsVideoConsumer> video_consumer_;
+  int number_of_screenshots_from_video_consumer_ = 0;
+  base::trace_event::TraceConfig trace_config_;
   base::WeakPtrFactory<TracingHandler> weak_factory_;
 
   FRIEND_TEST_ALL_PREFIXES(TracingHandlerTest,

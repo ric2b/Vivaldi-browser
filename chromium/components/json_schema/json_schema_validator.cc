@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <memory>
 #include <vector>
 
 #include "base/json/json_reader.h"
@@ -96,6 +97,7 @@ bool IsValidSchema(const base::DictionaryValue* dict,
     { schema::kPattern,                 base::Value::Type::STRING      },
     { schema::kPatternProperties,       base::Value::Type::DICTIONARY  },
     { schema::kProperties,              base::Value::Type::DICTIONARY  },
+    { schema::kRequired,                base::Value::Type::LIST        },
     { schema::kTitle,                   base::Value::Type::STRING      },
   };
 
@@ -232,6 +234,19 @@ bool IsValidSchema(const base::DictionaryValue* dict,
       if (!IsValidSchema(dictionary_value, options, error)) {
         DCHECK(!error->empty());
         return false;
+      }
+    }
+
+    // Validate "required" attribute.
+    if (it.key() == schema::kRequired) {
+      it.value().GetAsList(&list_value);
+      for (const base::Value& value : *list_value) {
+        if (value.type() != base::Value::Type::STRING) {
+          *error = "Invalid value in 'required' attribute";
+          return false;
+        }
+        // TODO(crbug.com/856903): Check that |value| is a key in
+        // schema::kProperties
       }
     }
 
@@ -612,7 +627,7 @@ void JSONSchemaValidator::ValidateObject(const base::DictionaryValue* instance,
   if (schema->GetDictionary(schema::kPatternProperties, &pattern_properties)) {
     for (base::DictionaryValue::Iterator it(*pattern_properties); !it.IsAtEnd();
          it.Advance()) {
-      auto prop_pattern = base::MakeUnique<re2::RE2>(it.key());
+      auto prop_pattern = std::make_unique<re2::RE2>(it.key());
       if (!prop_pattern->ok()) {
         LOG(WARNING) << "Regular expression /" << it.key()
                      << "/ is invalid: " << prop_pattern->error() << ".";

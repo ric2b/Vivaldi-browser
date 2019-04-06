@@ -11,9 +11,9 @@
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/public/test/render_view_test.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_settings.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/base/resource/resource_bundle.h"
 
 namespace pdf {
@@ -58,6 +58,14 @@ class FakeRendererPpapiHost : public content::RendererPpapiHost {
       const base::SharedMemoryHandle& handle) override {
     return base::SharedMemoryHandle();
   }
+  base::UnsafeSharedMemoryRegion ShareUnsafeSharedMemoryRegionWithRemote(
+      const base::UnsafeSharedMemoryRegion& region) override {
+    return base::UnsafeSharedMemoryRegion();
+  }
+  base::ReadOnlySharedMemoryRegion ShareReadOnlySharedMemoryRegionWithRemote(
+      const base::ReadOnlySharedMemoryRegion& region) override {
+    return base::ReadOnlySharedMemoryRegion();
+  }
   bool IsRunningInProcess() const override { return false; }
   std::string GetPluginName() const override { return std::string(); }
   void SetToExternalPluginHost() override {}
@@ -83,7 +91,7 @@ class PdfAccessibilityTreeTest : public content::RenderViewTest {
     content::RenderViewTest::SetUp();
 
     base::FilePath pak_dir;
-    PathService::Get(base::DIR_MODULE, &pak_dir);
+    base::PathService::Get(base::DIR_MODULE, &pak_dir);
     base::FilePath pak_file =
         pak_dir.Append(FILE_PATH_LITERAL("components_tests_resources.pak"));
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
@@ -92,6 +100,10 @@ class PdfAccessibilityTreeTest : public content::RenderViewTest {
     viewport_info_.zoom = 1.0;
     viewport_info_.scroll = {0, 0};
     viewport_info_.offset = {0, 0};
+    viewport_info_.selection_start_page_index = 0;
+    viewport_info_.selection_start_char_index = 0;
+    viewport_info_.selection_end_page_index = 0;
+    viewport_info_.selection_end_char_index = 0;
     doc_info_.page_count = 1;
     page_info_.page_index = 0;
     page_info_.text_run_count = 0;
@@ -121,7 +133,8 @@ TEST_F(PdfAccessibilityTreeTest, TestEmptyPDFPage) {
   pdf_accessibility_tree.SetAccessibilityPageInfo(page_info_, text_runs_,
                                                   chars_);
 
-  EXPECT_EQ(ui::AX_ROLE_GROUP, pdf_accessibility_tree.GetRoot()->data().role);
+  EXPECT_EQ(ax::mojom::Role::kGroup,
+            pdf_accessibility_tree.GetRoot()->data().role);
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestAccessibilityDisabledDuringPDFLoad) {

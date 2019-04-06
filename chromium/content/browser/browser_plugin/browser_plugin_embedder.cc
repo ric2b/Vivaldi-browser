@@ -60,7 +60,8 @@ void BrowserPluginEmbedder::CancelGuestDialogs() {
     return;
 
   GetBrowserPluginGuestManager()->ForEachGuest(
-      web_contents(), base::Bind(&BrowserPluginEmbedder::CancelDialogs));
+      web_contents(),
+      base::BindRepeating(&BrowserPluginEmbedder::CancelDialogs));
 }
 
 void BrowserPluginEmbedder::StartDrag(BrowserPluginGuest* guest) {
@@ -101,7 +102,7 @@ void BrowserPluginEmbedder::DidSendScreenRects() {
 
   GetBrowserPluginGuestManager()->ForEachGuest(
       web_contents(),
-      base::Bind(&BrowserPluginEmbedder::DidSendScreenRectsCallback));
+      base::BindRepeating(&BrowserPluginEmbedder::DidSendScreenRectsCallback));
 }
 
 bool BrowserPluginEmbedder::OnMessageReceived(
@@ -179,8 +180,9 @@ bool BrowserPluginEmbedder::HandleKeyboardEvent(
   bool event_consumed = false;
   GetBrowserPluginGuestManager()->ForEachGuest(
       web_contents(),
-      base::Bind(&BrowserPluginEmbedder::UnlockMouseIfNecessaryCallback,
-                 &event_consumed));
+      base::BindRepeating(
+          &BrowserPluginEmbedder::UnlockMouseIfNecessaryCallback,
+          &event_consumed));
 
   return event_consumed;
 }
@@ -194,27 +196,18 @@ BrowserPluginGuest* BrowserPluginEmbedder::GetFullPageGuest() {
 }
 
 // static
-bool BrowserPluginEmbedder::GuestRecentlyAudibleCallback(WebContents* guest) {
-  return guest->WasRecentlyAudible();
+bool BrowserPluginEmbedder::GuestCurrentlyAudibleCallback(WebContents* guest) {
+  return guest->IsCurrentlyAudible();
 }
 
-bool BrowserPluginEmbedder::WereAnyGuestsRecentlyAudible() {
+bool BrowserPluginEmbedder::AreAnyGuestsCurrentlyAudible() {
   if (!GetBrowserPluginGuestManager())
     return false;
 
   return GetBrowserPluginGuestManager()->ForEachGuest(
       web_contents(),
-      base::Bind(&BrowserPluginEmbedder::GuestRecentlyAudibleCallback));
-}
-
-bool BrowserPluginEmbedder::AreAnyGuestsFocused() {
-  BrowserPluginGuestManager::GuestCallback callback =
-      base::Bind([](WebContents* guest) {
-        return static_cast<WebContentsImpl*>(guest)
-            ->GetBrowserPluginGuest()
-            ->focused();
-      });
-  return GetBrowserPluginGuestManager()->ForEachGuest(web_contents(), callback);
+      base::BindRepeating(
+          &BrowserPluginEmbedder::GuestCurrentlyAudibleCallback));
 }
 
 // static

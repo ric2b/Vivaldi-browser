@@ -4,8 +4,10 @@
 <translation id="1031362278801463162">Carregando visualização</translation>
 <translation id="1049795001945932310">&amp;Configurações de idioma</translation>
 <translation id="1084824384139382525">&amp;Copiar endereço do link</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD, plural, =1 {Continuar Download} other {Continuar Downloads}}</translation>
 <translation id="1128109161498068552">Não permitir que os site usem mensagens exclusivas do sistema para acessar dispositivos MIDI</translation>
 <translation id="114140604515785785">Diretório raiz da extensão:</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD, plural, =1 {Um download está em andamento. Deseja cancelar o download e sair do modo privado?} other {# downloads estão em andamento. Deseja cancelar os downloads e sair do modo privado?}}</translation>
 <translation id="1163931534039071049">Exibir código &amp;fonte do frame</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Remover</translation>
@@ -17,7 +19,9 @@
 <translation id="1465176863081977902">&amp;Copiar endereço do áudio</translation>
 <translation id="1476607407192946488">&amp;Configurações de idioma</translation>
 <translation id="1588438908519853928">Normal</translation>
+<translation id="1588870296199743671">Abrir link com...</translation>
 <translation id="159359590073980872">Cache de Imagem</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD, plural, =1 {Download em andamento} other {Downloads em andamento}}</translation>
 <translation id="1620510694547887537">Câmera</translation>
 <translation id="1627276047960621195">Descritores de Arquivos</translation>
 <translation id="1635033183663317347">Instalada pelo seu tutor legal.</translation>
@@ -88,6 +92,7 @@
 <translation id="3285322247471302225">Nova &amp;Guia</translation>
 <translation id="33022249435934718">Handles do GDI</translation>
 <translation id="3319048459796106952">Nova janela &amp;privada</translation>
+<translation id="3341703758641437857">Permitir acesso a URLs de arquivos locais</translation>
 <translation id="3347086966102161372">&amp;Copiar endereço da imagem</translation>
 <translation id="335985608243443814">Procurar...</translation>
 <translation id="3396331542604645348">A impressora selecionada não está disponível ou instalada corretamente.  Verifique sua impressora ou selecione outra.</translation>
@@ -95,6 +100,7 @@
 <translation id="345693547134384690">Abrir imagem em nova &amp;guia</translation>
 <translation id="3467267818798281173">&amp;Obter sugestões da Google</translation>
 <translation id="3511307672085573050">&amp;Copiar endereço do link</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD, plural, =1 {Cancelar Download} other {Cancelar Downloads}}</translation>
 <translation id="3627588569887975815">Abrir link em janela &amp;privada</translation>
 <translation id="3668823961463113931">Manipuladores de protocolos</translation>
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
@@ -129,6 +135,7 @@
 <translation id="4240511609794012987">Memória compartilhada</translation>
 <translation id="4256316378292851214">&amp;Salvar vídeo como...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB ativos)</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD, plural, =1 {Continuar Download} other {Continuar Downloads}}</translation>
 <translation id="4363771538994847871">Nenhum destino para transmissão foi encontrado. Precisa de ajuda?</translation>
 <translation id="4384652540891215547">Habilitar a extensão</translation>
 <translation id="4414232939543644979">Nova Janela &amp;Privada</translation>
@@ -137,6 +144,7 @@
 <translation id="4481249487722541506">Carregar Extensão Descompactada...</translation>
 <translation id="4522570452068850558">Detalhes</translation>
 <translation id="4552089082226364758">Flash</translation>
+<translation id="4557136421275541763">Aviso:</translation>
 <translation id="4579581181964204535">Não foi possível transmitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Acessar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicativos e extensões só podem ser modificados pelo administrador (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -171,6 +179,8 @@
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5689516760719285838">Localização</translation>
 <translation id="5715711091495208045">Agente de Plugin: <ph name="PLUGIN_NAME" /></translation>
+<translation id="5729996640881880439">Descupe, não podemos exibir o código para este erro.</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD, plural, =1 {Cancelar Download} other {Cancelar Downloads}}</translation>
 <translation id="5764483294734785780">&amp;Salvar áudio como...</translation>
 <translation id="5780973441651030252">Prioridade</translation>
 <translation id="5804241973901381774">Permissões</translation>
@@ -281,6 +291,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8338952601723052325">Website do desenvolvedor</translation>
 <translation id="8357224663288891423">Atalhos de Teclado para Extensões e Aplicativos</translation>
 <translation id="8434480141477525001">Porta de Depuração do NaCl</translation>
+<translation id="8449008133205184768">Colar na formatação atual</translation>
 <translation id="8512476990829870887">Encerrar Processo</translation>
 <translation id="8523849605371521713">Adicionada por uma política administrativa</translation>
 <translation id="8546306075665861288">Cache de imagem</translation>
@@ -304,7 +315,9 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8938356204940892126">Cancelar</translation>
 <translation id="895944840846194039">Memória JavaScript</translation>
 <translation id="8973557916016709913">Remover zoom</translation>
+<translation id="9003647077635673607">Permitir em todos os sites</translation>
 <translation id="9027459031423301635">Abrir link em nova &amp;guia</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD, plural, =1 {Download em andamento} other {Downloads em andamento}}</translation>
 <translation id="9170848237812810038">Des&amp;fazer</translation>
 <translation id="9219103736887031265">Imagens</translation>
 <translation id="994289308992179865">&amp;Repetir</translation>

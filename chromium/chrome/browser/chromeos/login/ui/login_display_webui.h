@@ -11,7 +11,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
-#include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/ui/webui/chromeos/login/native_window_delegate.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "components/user_manager/user.h"
@@ -28,7 +27,7 @@ class LoginDisplayWebUI : public LoginDisplay,
                           public SigninScreenHandlerDelegate,
                           public ui::UserActivityObserver {
  public:
-  explicit LoginDisplayWebUI(LoginDisplay::Delegate* delegate);
+  LoginDisplayWebUI();
   ~LoginDisplayWebUI() override;
 
   // LoginDisplay implementation:
@@ -54,21 +53,13 @@ class LoginDisplayWebUI : public LoginDisplay,
   gfx::NativeWindow GetNativeWindow() const override;
 
   // SigninScreenHandlerDelegate implementation:
-  void CancelPasswordChangedFlow() override;
-  void ResyncUserData() override;
-  void MigrateUserData(const std::string& old_password) override;
-
   void Login(const UserContext& user_context,
              const SigninSpecifics& specifics) override;
   bool IsSigninInProgress() const override;
   void Signout() override;
-  void CompleteLogin(const UserContext& user_context) override;
 
   void OnSigninScreenReady() override;
-  void OnGaiaScreenReady() override;
   void CancelUserAdding() override;
-  void LoadWallpaper(const AccountId& account_id) override;
-  void LoadSigninWallpaper() override;
   void ShowEnterpriseEnrollmentScreen() override;
   void ShowEnableDebuggingScreen() override;
   void ShowKioskEnableScreen() override;
@@ -76,21 +67,15 @@ class LoginDisplayWebUI : public LoginDisplay,
   void ShowUpdateRequiredScreen() override;
   void ShowWrongHWIDScreen() override;
   void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) override;
-  virtual void ShowSigninScreenForCreds(const std::string& username,
-                                        const std::string& password);
   bool IsShowGuest() const override;
   bool IsShowUsers() const override;
   bool ShowUsersHasChanged() const override;
   bool IsAllowNewUser() const override;
   bool AllowNewUserChanged() const override;
   bool IsUserSigninCompleted() const override;
-  void SetDisplayEmail(const std::string& email) override;
-  void SetDisplayAndGivenName(const std::string& display_name,
-                              const std::string& given_name) override;
 
   void HandleGetUsers() override;
   void CheckUserStatus(const AccountId& account_id) override;
-  bool IsUserWhitelisted(const AccountId& account_id) override;
 
   // ui::UserActivityDetector implementation:
   void OnUserActivity(const ui::Event* event) override;

@@ -15,8 +15,9 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "third_party/WebKit/public/web/WebScopedUserGesture.h"
+#include "third_party/blink/public/platform/web_fullscreen_video_status.h"
+#include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/web/web_scoped_user_gesture.h"
 #include "ui/gfx/geometry/size.h"
 
 #if defined(OS_ANDROID)
@@ -47,11 +48,12 @@ RendererWebMediaPlayerDelegate::RendererWebMediaPlayerDelegate(
 #if defined(OS_ANDROID)
   // On Android, due to the instability of the OS level media components, we
   // consider all pre-KitKat devices to be potentially buggy.
-  is_jelly_bean_ |= base::android::BuildInfo::GetInstance()->sdk_int() <= 18;
+  is_jelly_bean_ |= base::android::BuildInfo::GetInstance()->sdk_int() <=
+                    base::android::SDK_VERSION_JELLY_BEAN_MR2;
 #endif
 
   idle_cleanup_timer_.SetTaskRunner(
-      render_frame->GetTaskRunner(blink::TaskType::kUnthrottled));
+      render_frame->GetTaskRunner(blink::TaskType::kInternalMedia));
 }
 
 RendererWebMediaPlayerDelegate::~RendererWebMediaPlayerDelegate() {}
@@ -114,6 +116,44 @@ void RendererWebMediaPlayerDelegate::DidPlayerMutedStatusChange(int delegate_id,
                                                                 bool muted) {
   Send(new MediaPlayerDelegateHostMsg_OnMutedStatusChanged(routing_id(),
                                                            delegate_id, muted));
+}
+
+void RendererWebMediaPlayerDelegate::DidPictureInPictureModeStart(
+    int delegate_id,
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& natural_size,
+    blink::WebMediaPlayer::PipWindowOpenedCallback callback) {
+  int request_id = next_picture_in_picture_callback_id_++;
+  enter_picture_in_picture_callback_map_.insert(
+      std::make_pair(request_id, std::move(callback)));
+  Send(new MediaPlayerDelegateHostMsg_OnPictureInPictureModeStarted(
+      routing_id(), delegate_id, surface_id, natural_size, request_id));
+}
+
+void RendererWebMediaPlayerDelegate::DidPictureInPictureModeEnd(
+    int delegate_id,
+    base::OnceClosure callback) {
+  int request_id = next_picture_in_picture_callback_id_++;
+  exit_picture_in_picture_callback_map_.insert(
+      std::make_pair(request_id, std::move(callback)));
+  Send(new MediaPlayerDelegateHostMsg_OnPictureInPictureModeEnded(
+      routing_id(), delegate_id, request_id));
+}
+
+void RendererWebMediaPlayerDelegate::DidPictureInPictureSurfaceChange(
+    int delegate_id,
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& natural_size) {
+  Send(new MediaPlayerDelegateHostMsg_OnPictureInPictureSurfaceChanged(
+      routing_id(), delegate_id, surface_id, natural_size));
+}
+
+void RendererWebMediaPlayerDelegate::
+    RegisterPictureInPictureWindowResizeCallback(
+        int player_id,
+        blink::WebMediaPlayer::PipWindowResizedCallback callback) {
+  picture_in_picture_window_resize_observer_ =
+      std::make_pair(player_id, std::move(callback));
 }
 
 void RendererWebMediaPlayerDelegate::DidPause(int player_id) {
@@ -186,9 +226,9 @@ bool RendererWebMediaPlayerDelegate::IsStale(int player_id) {
 
 void RendererWebMediaPlayerDelegate::SetIsEffectivelyFullscreen(
     int player_id,
-    bool is_fullscreen) {
+    blink::WebFullscreenVideoStatus fullscreen_video_status) {
   Send(new MediaPlayerDelegateHostMsg_OnMediaEffectivelyFullscreenChanged(
-      routing_id(), player_id, is_fullscreen));
+      routing_id(), player_id, fullscreen_video_status));
 }
 
 void RendererWebMediaPlayerDelegate::DidPlayerSizeChange(
@@ -234,6 +274,17 @@ bool RendererWebMediaPlayerDelegate::OnMessageReceived(
                         OnMediaDelegateVolumeMultiplierUpdate)
     IPC_MESSAGE_HANDLER(MediaPlayerDelegateMsg_BecamePersistentVideo,
                         OnMediaDelegateBecamePersistentVideo)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateMsg_EndPictureInPictureMode,
+                        OnPictureInPictureModeEnded)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateMsg_ClickPictureInPictureControl,
+                        OnPictureInPictureControlClicked)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateMsg_OnPictureInPictureModeEnded_ACK,
+                        OnPictureInPictureModeEndedAck)
+    IPC_MESSAGE_HANDLER(
+        MediaPlayerDelegateMsg_OnPictureInPictureModeStarted_ACK,
+        OnPictureInPictureModeStartedAck)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateMsg_OnPictureInPictureWindowResize,
+                        OnPictureInPictureWindowResize)
     IPC_MESSAGE_UNHANDLED(return false)
   IPC_END_MESSAGE_MAP()
   return true;
@@ -242,7 +293,7 @@ bool RendererWebMediaPlayerDelegate::OnMessageReceived(
 void RendererWebMediaPlayerDelegate::SetIdleCleanupParamsForTesting(
     base::TimeDelta idle_timeout,
     base::TimeDelta idle_cleanup_interval,
-    base::TickClock* tick_clock,
+    const base::TickClock* tick_clock,
     bool is_jelly_bean) {
   idle_cleanup_interval_ = idle_cleanup_interval;
   idle_timeout_ = idle_timeout;
@@ -336,6 +387,54 @@ void RendererWebMediaPlayerDelegate::OnMediaDelegateBecamePersistentVideo(
   Observer* observer = id_map_.Lookup(player_id);
   if (observer)
     observer->OnBecamePersistentVideo(value);
+}
+
+void RendererWebMediaPlayerDelegate::OnPictureInPictureModeEnded(
+    int player_id) {
+  Observer* observer = id_map_.Lookup(player_id);
+  if (observer)
+    observer->OnPictureInPictureModeEnded();
+}
+
+void RendererWebMediaPlayerDelegate::OnPictureInPictureControlClicked(
+    int player_id,
+    const std::string& control_id) {
+  Observer* observer = id_map_.Lookup(player_id);
+  if (observer)
+    observer->OnPictureInPictureControlClicked(control_id);
+}
+
+void RendererWebMediaPlayerDelegate::OnPictureInPictureModeEndedAck(
+    int player_id,
+    int request_id) {
+  auto iter = exit_picture_in_picture_callback_map_.find(request_id);
+  DCHECK(iter != exit_picture_in_picture_callback_map_.end());
+
+  std::move(iter->second).Run();
+  exit_picture_in_picture_callback_map_.erase(iter);
+}
+
+void RendererWebMediaPlayerDelegate::OnPictureInPictureModeStartedAck(
+    int player_id,
+    int request_id,
+    const gfx::Size& window_size) {
+  auto iter = enter_picture_in_picture_callback_map_.find(request_id);
+  DCHECK(iter != enter_picture_in_picture_callback_map_.end());
+
+  std::move(iter->second).Run(blink::WebSize(window_size));
+  enter_picture_in_picture_callback_map_.erase(iter);
+}
+
+void RendererWebMediaPlayerDelegate::OnPictureInPictureWindowResize(
+    int player_id,
+    const gfx::Size& window_size) {
+  if (!picture_in_picture_window_resize_observer_ ||
+      picture_in_picture_window_resize_observer_->first != player_id) {
+    return;
+  }
+
+  picture_in_picture_window_resize_observer_->second.Run(
+      blink::WebSize(window_size));
 }
 
 void RendererWebMediaPlayerDelegate::ScheduleUpdateTask() {

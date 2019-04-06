@@ -33,7 +33,7 @@ class MockBluetoothDevice : public BluetoothDevice {
                       const std::string& address,
                       bool paired,
                       bool connected);
-  virtual ~MockBluetoothDevice();
+  ~MockBluetoothDevice() override;
 
   MOCK_CONST_METHOD0(GetBluetoothClass, uint32_t());
   MOCK_CONST_METHOD0(GetType, BluetoothTransport());
@@ -105,6 +105,14 @@ class MockBluetoothDevice : public BluetoothDevice {
                      BluetoothRemoteGattService*(const std::string&));
   MOCK_METHOD0(CreateGattConnectionImpl, void());
   MOCK_METHOD0(DisconnectGatt, void());
+#if defined(OS_CHROMEOS)
+  MOCK_METHOD2(ExecuteWrite,
+               void(const base::Closure& callback,
+                    const ExecuteWriteErrorCallback& error_callback));
+  MOCK_METHOD2(AbortWrite,
+               void(const base::Closure& callback,
+                    const AbortWriteErrorCallback& error_callback));
+#endif
 
   // BluetoothDevice manages the lifetime of its BluetoothGATTServices.
   // This method takes ownership of the MockBluetoothGATTServices. This is only

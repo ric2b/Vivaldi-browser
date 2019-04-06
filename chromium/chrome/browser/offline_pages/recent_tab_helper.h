@@ -30,6 +30,23 @@ class RecentTabHelper
       public content::WebContentsUserData<RecentTabHelper>,
       public SnapshotController::Client {
  public:
+  // Possible values to be reported to the IsSavingSamePage histogram. Reflects
+  // the contents of the respective histogram enum and must be kept in sync with
+  // it.
+  enum class IsSavingSamePageEnum {
+    // The snapshot is for a new page.
+    kNewPage = 0,
+    // The snapshot is for a page that has already been saved but a better
+    // expected quality.
+    kSamePageBetterQuality = 1,
+    // The snapshot is for a page that has already been saved at the same
+    // expected quality.
+    kSamePageSameQuality = 2,
+    // Note: Always leave this item last. Update if the actual last item
+    // changes.
+    kMaxValue = kSamePageSameQuality,
+  };
+
   ~RecentTabHelper() override;
 
   // content::WebContentsObserver
@@ -38,8 +55,7 @@ class RecentTabHelper
   void DocumentAvailableInMainFrame() override;
   void DocumentOnLoadCompletedInMainFrame() override;
   void WebContentsDestroyed() override;
-  void WasHidden() override;
-  void WasShown() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
 
   // Notifies that the tab of the associated WebContents will (most probably) be
   // closed. This call is expected to always happen before the one to WasHidden.
@@ -95,6 +111,9 @@ class RecentTabHelper
   explicit RecentTabHelper(content::WebContents* web_contents);
   friend class content::WebContentsUserData<RecentTabHelper>;
 
+  void WebContentsWasHidden();
+  void WebContentsWasShown();
+
   bool EnsureInitialized();
   void ContinueSnapshotWithIdsToPurge(SnapshotProgressInfo* snapshot_info,
                                       const std::vector<int64_t>& page_ids);
@@ -139,8 +158,9 @@ class RecentTabHelper
   std::unique_ptr<SnapshotProgressInfo> last_n_ongoing_snapshot_info_;
 
   // Snapshot information for the last successful snapshot requested by
-  // last_n. Null if no successful one has ever completed for the current page.
-  // It is cleared when the referenced snapshot is deleted.
+  // last_n for the currently loaded page. Null if no successful one has ever
+  // completed for the current page. It is cleared when the referenced snapshot
+  // is about to be deleted.
   std::unique_ptr<SnapshotProgressInfo> last_n_latest_saved_snapshot_info_;
 
   // If empty, the tab does not have AndroidId and can not capture pages.

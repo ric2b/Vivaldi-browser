@@ -15,6 +15,7 @@ const char kRequestVersionInfo[] = "requestVersionInfo";
 const char kReturnFilePaths[] = "returnFilePaths";
 const char kReturnFlashVersion[] = "returnFlashVersion";
 const char kReturnVariationInfo[] = "returnVariationInfo";
+const char kReturnVariationCmd[] = "returnVariationCmd";
 
 // Strings.
 const char kApplicationLabel[] = "application_label";
@@ -26,7 +27,6 @@ const char kCommandLine[] = "command_line";
 const char kCommandLineName[] = "command_line_name";
 const char kCompany[] = "company";
 #if defined(OS_WIN)
-const char kCompiler[] = "compiler";
 const char kUpdateCohortName[] = "update_cohort_name";
 #endif
 const char kCopyright[] = "copyright";
@@ -69,7 +69,9 @@ const char kRevision[] = "revision";
 const char kTitle[] = "title";
 const char kUserAgent[] = "useragent";
 const char kUserAgentName[] = "user_agent_name";
+const char kVariationsCmdName[] = "variations_cmd_name";
 const char kVariationsName[] = "variations_name";
+const char kVariationsShowCmdQuery[] = "show-variations-cmd";
 const char kVersion[] = "version";
 const char kVersionBitSize[] = "version_bitsize";
 const char kVersionModifier[] = "version_modifier";

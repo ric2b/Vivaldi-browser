@@ -41,10 +41,8 @@ Polymer({
     prefs: {type: Object},
 
     /**
-     * setModes_ is a partially applied function that stores the previously
-     * entered password. It's defined only when the user has already entered a
-     * valid password.
-     *
+     * setModes_ is a partially applied function that stores the current auth
+     * token. It's defined only when the user has entered a valid password.
      * @type {Object|undefined}
      * @private
      */
@@ -52,6 +50,12 @@ Polymer({
       type: Object,
       observer: 'onSetModesChanged_',
     },
+
+    /**
+     * Authentication token provided by password-prompt-dialog.
+     * @private
+     */
+    authToken_: String,
 
     /**
      * writeUma_ is a function that handles writing uma stats. It may be
@@ -191,6 +195,7 @@ Polymer({
         settings.EasyUnlockBrowserProxyImpl.getInstance();
     this.fingerprintBrowserProxy_ =
         settings.FingerprintBrowserProxyImpl.getInstance();
+    this.updateNumFingerprints_();
 
     if (this.easyUnlockAllowed_) {
       this.addWebUIListener(
@@ -210,12 +215,7 @@ Polymer({
   currentRouteChanged: function(newRoute, oldRoute) {
     if (newRoute == settings.routes.LOCK_SCREEN) {
       this.updateUnlockType();
-      if (this.fingerprintUnlockEnabled_ && this.fingerprintBrowserProxy_) {
-        this.fingerprintBrowserProxy_.getNumFingerprints().then(
-            numFingerprints => {
-              this.numFingerprints_ = numFingerprints;
-            });
-      }
+      this.updateNumFingerprints_();
     }
 
     if (this.shouldAskForPassword_(newRoute)) {
@@ -231,6 +231,20 @@ Polymer({
   },
 
   /**
+   * @param {!Event} event
+   * @private
+   */
+  onScreenLockChange_: function(event) {
+    const target = /** @type {!SettingsToggleButtonElement} */ (event.target);
+    if (!this.authToken_) {
+      console.error('Screen lock changed with expired token.');
+      target.checked = !target.checked;
+      return;
+    }
+    this.setLockScreenEnabled(this.authToken_, target.checked);
+  },
+
+  /**
    * Called when the unlock type has changed.
    * @param {!string} selected The current unlock type.
    * @private
@@ -240,8 +254,10 @@ Polymer({
       return;
 
     if (selected != LockScreenUnlockType.PIN_PASSWORD && this.setModes_) {
-      this.setModes_.call(null, [], [], function(didSet) {
-        assert(didSet, 'Failed to clear quick unlock modes');
+      this.setModes_.call(null, [], [], function(result) {
+        assert(result, 'Failed to clear quick unlock modes');
+        if (!result)
+          console.error('Failed to clear quick unlock modes');
       });
     }
   },
@@ -267,7 +283,7 @@ Polymer({
     else if (!this.$$('#unlockType').disabled)
       cr.ui.focusWithoutInk(assert(this.$$('#unlockType')));
     else
-      cr.ui.focusWithoutInk(assert(this.$$('#screenLockDiv')));
+      cr.ui.focusWithoutInk(assert(this.$$('#enableLockScreen')));
   },
 
   /**
@@ -383,5 +399,26 @@ Polymer({
   getShowEasyUnlockToggle_: function(
       easyUnlockEnabled, proximityDetectionAllowed) {
     return easyUnlockEnabled && proximityDetectionAllowed;
+  },
+
+  /** @private */
+  updateNumFingerprints_: function() {
+    if (this.fingerprintUnlockEnabled_ && this.fingerprintBrowserProxy_) {
+      this.fingerprintBrowserProxy_.getNumFingerprints().then(
+          numFingerprints => {
+            this.numFingerprints_ = numFingerprints;
+          });
+    }
+  },
+
+  /**
+   * Looks up the translation id, which depends on PIN login support.
+   * @param {boolean} hasPinLogin
+   * @private
+   */
+  selectLockScreenOptionsString(hasPinLogin) {
+    if (hasPinLogin)
+      return this.i18n('lockScreenOptionsLoginLock');
+    return this.i18n('lockScreenOptionsLock');
   },
 });

@@ -30,13 +30,17 @@ void InspectorHandler::Wire(UberDispatcher* dispatcher) {
   Inspector::Dispatcher::wire(dispatcher, this);
 }
 
-void InspectorHandler::SetRenderer(RenderProcessHost* process_host,
+void InspectorHandler::SetRenderer(int process_host_id,
                                    RenderFrameHostImpl* frame_host) {
   host_ = frame_host;
 }
 
 void InspectorHandler::TargetCrashed() {
   frontend_->TargetCrashed();
+}
+
+void InspectorHandler::TargetReloadedAfterCrash() {
+  frontend_->TargetReloadedAfterCrash();
 }
 
 void InspectorHandler::TargetDetached(const std::string& reason) {

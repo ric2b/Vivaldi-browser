@@ -11,7 +11,7 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/log_manager.h"
-#include "components/password_manager/core/browser/password_form_manager.h"
+#include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_internals_service.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -23,7 +23,7 @@
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/passwords/password_manager_internals_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
@@ -32,17 +32,16 @@
 #error "This file requires ARC support."
 #endif
 
-using password_manager::PasswordFormManager;
+using password_manager::PasswordFormManagerForUI;
 using password_manager::PasswordManagerMetricsRecorder;
 using password_manager::PasswordStore;
-using password_manager::PasswordSyncState;
+using password_manager::SyncState;
 
 namespace {
 
 const syncer::SyncService* GetSyncService(
     ios::ChromeBrowserState* browser_state) {
-  return IOSChromeProfileSyncServiceFactory::GetForBrowserStateIfExists(
-      browser_state);
+  return ProfileSyncServiceFactory::GetForBrowserStateIfExists(browser_state);
 }
 
 const SigninManagerBase* GetSigninManager(
@@ -71,11 +70,16 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
 
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
 
-PasswordSyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
+SyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
   browser_sync::ProfileSyncService* sync_service =
-      IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-          delegate_.browserState);
+      ProfileSyncServiceFactory::GetForBrowserState(delegate_.browserState);
   return password_manager_util::GetPasswordSyncState(sync_service);
+}
+
+SyncState IOSChromePasswordManagerClient::GetHistorySyncState() const {
+  browser_sync::ProfileSyncService* sync_service =
+      ProfileSyncServiceFactory::GetForBrowserState(delegate_.browserState);
+  return password_manager_util::GetHistorySyncState(sync_service);
 }
 
 bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
@@ -87,7 +91,7 @@ bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
 }
 
 bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
-    std::unique_ptr<PasswordFormManager> form_to_save,
+    std::unique_ptr<PasswordFormManagerForUI> form_to_save,
     bool update_password) {
   if (form_to_save->IsBlacklisted())
     return false;
@@ -102,7 +106,7 @@ bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
 }
 
 void IOSChromePasswordManagerClient::ShowManualFallbackForSaving(
-    std::unique_ptr<password_manager::PasswordFormManager> form_to_save,
+    std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save,
     bool has_generated_password,
     bool is_update) {
   NOTIMPLEMENTED();
@@ -113,7 +117,7 @@ void IOSChromePasswordManagerClient::HideManualFallbackForSaving() {
 }
 
 void IOSChromePasswordManagerClient::AutomaticPasswordSave(
-    std::unique_ptr<PasswordFormManager> saved_form_manager) {
+    std::unique_ptr<PasswordFormManagerForUI> saved_form_manager) {
   NOTIMPLEMENTED();
 }
 
@@ -126,7 +130,7 @@ IOSChromePasswordManagerClient::GetPasswordManager() const {
   return delegate_.passwordManager;
 }
 
-PrefService* IOSChromePasswordManagerClient::GetPrefs() {
+PrefService* IOSChromePasswordManagerClient::GetPrefs() const {
   return (delegate_.browserState)->GetPrefs();
 }
 
@@ -156,10 +160,6 @@ void IOSChromePasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
 
 void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {
   helper_.NotifyStorePasswordCalled();
-}
-
-void IOSChromePasswordManagerClient::ForceSavePassword() {
-  NOTIMPLEMENTED();
 }
 
 bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage()

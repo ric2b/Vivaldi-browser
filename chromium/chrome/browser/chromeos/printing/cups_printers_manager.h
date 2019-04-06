@@ -11,8 +11,14 @@
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/chromeos/printing/printer_event_tracker.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_service.h"
 
 class Profile;
+
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
 
 namespace chromeos {
 
@@ -23,7 +29,7 @@ class SyncedPrintersManager;
 
 // Top level manager of available CUPS printers in ChromeOS.  All functions
 // in this class must be called from a sequenced context.
-class CupsPrintersManager {
+class CupsPrintersManager : public KeyedService {
  public:
   // Classes of printers tracked.  See doc/cups_printers_management.md for
   // details on what these mean.
@@ -53,9 +59,13 @@ class CupsPrintersManager {
       std::unique_ptr<PrinterDetector> usb_printer_detector,
       std::unique_ptr<PrinterDetector> zeroconf_printer_detector,
       scoped_refptr<PpdProvider> ppd_provider,
-      PrinterEventTracker* event_tracker);
+      PrinterEventTracker* event_tracker,
+      PrefService* pref_service);
 
-  virtual ~CupsPrintersManager() = default;
+  // Register the printing preferences with the |registry|.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  ~CupsPrintersManager() override = default;
 
   // Get the known printers in the given class.
   virtual std::vector<Printer> GetPrinters(
@@ -78,15 +88,11 @@ class CupsPrintersManager {
   // the printer_id is not that of a configured printer.
   virtual void RemoveConfiguredPrinter(const std::string& printer_id) = 0;
 
-  // Add or remove observers.
+  // Add or remove observers.  Observers do not need to be on the same
+  // sequence as the CupsPrintersManager.  Callbacks for a given observer
+  // will be on the same sequence as was used to call AddObserver().
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
-
-  // Allows CupsPrinterManager to begin receiving callbacks from the
-  // PrinterDetectors that it is observing. This method is meant to be called
-  // only once after CupsPrintersManager has been added as an observer to the
-  // appropriate PrinterDetector objects.
-  virtual void Start() = 0;
 
   // Record that the given printers has been installed in CUPS for usage.  If
   // |printer| is not a configured or enterprise printer, this will have the

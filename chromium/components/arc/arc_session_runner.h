@@ -6,8 +6,10 @@
 #define COMPONENTS_ARC_ARC_SESSION_RUNNER_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -74,9 +76,12 @@ class ArcSessionRunner : public ArcSession::Observer {
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  // Starts the ARC service, then it will connect the Mojo channel. When the
-  // bridge becomes ready, registered Observer's OnSessionReady() is called.
-  void RequestStart(ArcInstanceMode request_mode);
+  // Starts the mini ARC instance.
+  void RequestStartMiniInstance();
+
+  // Starts the full ARC instance, then it will connect the Mojo channel. When
+  // the bridge becomes ready, registered Observer's OnSessionReady() is called.
+  void RequestUpgrade(ArcSession::UpgradeParams params);
 
   // Stops the ARC service.
   void RequestStop();
@@ -101,8 +106,13 @@ class ArcSessionRunner : public ArcSession::Observer {
   // Restarts an ARC instance.
   void RestartArcSession();
 
+  // Starts an ARC instance in |request_mode|.
+  void RequestStart(ArcInstanceMode request_mode);
+
   // ArcSession::Observer:
-  void OnSessionStopped(ArcStopReason reason, bool was_running) override;
+  void OnSessionStopped(ArcStopReason reason,
+                        bool was_running,
+                        bool full_requested) override;
 
   THREAD_CHECKER(thread_checker_);
 
@@ -125,6 +135,9 @@ class ArcSessionRunner : public ArcSession::Observer {
   // ArcSession object for currently running ARC instance. This should be
   // nullptr if the state is STOPPED, otherwise non-nullptr.
   std::unique_ptr<ArcSession> arc_session_;
+
+  // Parameters to upgrade request.
+  ArcSession::UpgradeParams upgrade_params_;
 
   // WeakPtrFactory to use callbacks.
   base::WeakPtrFactory<ArcSessionRunner> weak_ptr_factory_;

@@ -11,8 +11,8 @@
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "content/browser/background_fetch/storage/database_task.h"
-#include "content/common/service_worker/service_worker_status_code.h"
-#include "third_party/WebKit/public/platform/modules/background_fetch/background_fetch.mojom.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -24,7 +24,7 @@ namespace background_fetch {
 class GetDeveloperIdsTask : public DatabaseTask {
  public:
   GetDeveloperIdsTask(
-      BackgroundFetchDataManager* data_manager,
+      DatabaseTaskHost* host,
       int64_t service_worker_registration_id,
       const url::Origin& origin,
       blink::mojom::BackgroundFetchService::GetDeveloperIdsCallback callback);
@@ -36,12 +36,16 @@ class GetDeveloperIdsTask : public DatabaseTask {
 
  private:
   void DidGetUniqueIds(const base::flat_map<std::string, std::string>& data_map,
-                       ServiceWorkerStatusCode status);
+                       blink::ServiceWorkerStatusCode status);
+
+  void FinishWithError(blink::mojom::BackgroundFetchError error) override;
 
   int64_t service_worker_registration_id_;
   url::Origin origin_;
 
   blink::mojom::BackgroundFetchService::GetDeveloperIdsCallback callback_;
+
+  std::vector<std::string> developer_ids_;
 
   base::WeakPtrFactory<GetDeveloperIdsTask> weak_factory_;  // Keep as last.
 

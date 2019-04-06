@@ -9,14 +9,14 @@
 namespace net {
 
 int NetworkDelegateImpl::OnBeforeURLRequest(URLRequest* request,
-                                            const CompletionCallback& callback,
+                                            CompletionOnceCallback callback,
                                             GURL* new_url) {
   return OK;
 }
 
 int NetworkDelegateImpl::OnBeforeStartTransaction(
     URLRequest* request,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     HttpRequestHeaders* headers) {
   return OK;
 }
@@ -33,7 +33,7 @@ void NetworkDelegateImpl::OnStartTransaction(
 
 int NetworkDelegateImpl::OnHeadersReceived(
     URLRequest* request,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const HttpResponseHeaders* original_response_headers,
     scoped_refptr<HttpResponseHeaders>* override_response_headers,
     GURL* allowed_unsafe_redirect_url) {
@@ -54,12 +54,7 @@ void NetworkDelegateImpl::OnNetworkBytesSent(URLRequest* request,
 
 void NetworkDelegateImpl::OnCompleted(URLRequest* request,
                                       bool started,
-                                      int net_error) {
-  OnCompleted(request, started);
-}
-
-// Deprecated.
-void NetworkDelegateImpl::OnCompleted(URLRequest* request, bool started) {}
+                                      int net_error) {}
 
 void NetworkDelegateImpl::OnURLRequestDestroyed(URLRequest* request) {
 }
@@ -71,7 +66,7 @@ void NetworkDelegateImpl::OnPACScriptError(int line_number,
 NetworkDelegate::AuthRequiredResponse NetworkDelegateImpl::OnAuthRequired(
     URLRequest* request,
     const AuthChallengeInfo& auth_info,
-    const AuthCallback& callback,
+    AuthCallback callback,
     AuthCredentials* credentials) {
   return AUTH_REQUIRED_RESPONSE_NO_ACTION;
 }
@@ -116,9 +111,10 @@ bool NetworkDelegateImpl::OnCanQueueReportingReport(
   return true;
 }
 
-bool NetworkDelegateImpl::OnCanSendReportingReport(
-    const url::Origin& origin) const {
-  return true;
+void NetworkDelegateImpl::OnCanSendReportingReports(
+    std::set<url::Origin> origins,
+    base::OnceCallback<void(std::set<url::Origin>)> result_callback) const {
+  std::move(result_callback).Run(std::move(origins));
 }
 
 bool NetworkDelegateImpl::OnCanSetReportingClient(const url::Origin& origin,

@@ -47,8 +47,7 @@ bool DoEncode(OpusEncoder* opus_encoder,
   data_out->resize(kOpusMaxDataBytes);
   const opus_int32 result = opus_encode_float(
       opus_encoder, data_in, num_samples,
-      reinterpret_cast<uint8_t*>(base::string_as_array(data_out)),
-      kOpusMaxDataBytes);
+      reinterpret_cast<uint8_t*>(base::data(*data_out)), kOpusMaxDataBytes);
 
   if (result > 1) {
     // TODO(ajose): Investigate improving this. http://crbug.com/547918
@@ -108,8 +107,7 @@ void AudioTrackOpusEncoder::OnSetFormat(
   converted_params_ = media::AudioParameters(
       media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
       media::GuessChannelLayout(std::min(input_params_.channels(), 2)),
-      kOpusPreferredSamplingRate, input_params_.bits_per_sample(),
-      kOpusPreferredFramesPerBuffer);
+      kOpusPreferredSamplingRate, kOpusPreferredFramesPerBuffer);
   DVLOG(1) << "|input_params_|:" << input_params_.AsHumanReadableString()
            << " -->|converted_params_|:"
            << converted_params_.AsHumanReadableString();

@@ -5,14 +5,13 @@
 #include "extensions/renderer/declarative_content_hooks_delegate.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "extensions/common/api/declarative/declarative_constants.h"
 #include "extensions/renderer/bindings/api_type_reference_map.h"
 #include "extensions/renderer/bindings/argument_spec.h"
 #include "gin/arguments.h"
 #include "gin/converter.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/web/WebSelector.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_selector.h"
 
 namespace extensions {
 

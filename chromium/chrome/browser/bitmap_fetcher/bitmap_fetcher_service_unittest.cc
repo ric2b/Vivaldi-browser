@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -51,7 +50,7 @@ class TestService : public BitmapFetcherService {
   std::unique_ptr<BitmapFetcher> CreateFetcher(
       const GURL& url,
       const net::NetworkTrafficAnnotationTag& traffic_annotation) override {
-    return base::MakeUnique<BitmapFetcher>(url, this, traffic_annotation);
+    return std::make_unique<BitmapFetcher>(url, this, traffic_annotation);
   }
 };
 

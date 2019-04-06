@@ -21,7 +21,8 @@ class GPU_IPC_SERVICE_EXPORT DirectCompositionChildSurfaceWin
   DirectCompositionChildSurfaceWin(const gfx::Size& size,
                                    bool is_hdr,
                                    bool has_alpha,
-                                   bool enable_dc_layers);
+                                   bool use_dcomp_surface,
+                                   bool allow_tearing);
 
   // GLSurfaceEGL implementation.
   using GLSurfaceEGL::Initialize;
@@ -37,6 +38,7 @@ class GPU_IPC_SERVICE_EXPORT DirectCompositionChildSurfaceWin
   bool SupportsDCLayers() const override;
   bool SetDrawRectangle(const gfx::Rect& rect) override;
   gfx::Vector2d GetDrawOffset() const override;
+  void SetVSyncEnabled(bool enabled) override;
 
   const Microsoft::WRL::ComPtr<IDCompositionSurface>& dcomp_surface() const {
     return dcomp_surface_;
@@ -52,12 +54,13 @@ class GPU_IPC_SERVICE_EXPORT DirectCompositionChildSurfaceWin
   ~DirectCompositionChildSurfaceWin() override;
 
  private:
-  void ReleaseCurrentSurface();
+  // Releases previous surface or swap chain, and initializes new surface or
+  // swap chain.
   bool InitializeSurface();
   // Release the texture that's currently being drawn to. If will_discard is
   // true then the surface should be discarded without swapping any contents
-  // to it.
-  void ReleaseDrawTexture(bool will_discard);
+  // to it. Returns false if this fails.
+  bool ReleaseDrawTexture(bool will_discard);
 
   // This is a placeholder surface used when not rendering to the
   // DirectComposition surface.
@@ -70,9 +73,11 @@ class GPU_IPC_SERVICE_EXPORT DirectCompositionChildSurfaceWin
   const gfx::Size size_;
   const bool is_hdr_;
   const bool has_alpha_;
-  const bool enable_dc_layers_;
+  const bool use_dcomp_surface_;
+  const bool allow_tearing_;
   gfx::Rect swap_rect_;
   gfx::Vector2d draw_offset_;
+  bool vsync_enabled_ = true;
 
   // This is a number that increments once for every EndDraw on a surface, and
   // is used to determine when the contents have changed so Commit() needs to

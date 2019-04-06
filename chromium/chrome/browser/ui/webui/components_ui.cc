@@ -41,6 +41,8 @@ content::WebUIDataSource* CreateComponentsUIHTMLSource(Profile* profile) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIComponentsHost);
 
+  source->OverrideContentSecurityPolicyScriptSrc(
+      "script-src chrome://resources 'self' 'unsafe-eval';");
   source->AddLocalizedString("componentsTitle", IDS_COMPONENTS_TITLE);
   source->AddLocalizedString("componentsNoneInstalled",
                              IDS_COMPONENTS_NONE_INSTALLED);
@@ -99,13 +101,13 @@ ComponentsDOMHandler::ComponentsDOMHandler() {
 void ComponentsDOMHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "requestComponentsData",
-      base::Bind(&ComponentsDOMHandler::HandleRequestComponentsData,
-                 base::Unretained(this)));
+      base::BindRepeating(&ComponentsDOMHandler::HandleRequestComponentsData,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       "checkUpdate",
-      base::Bind(&ComponentsDOMHandler::HandleCheckUpdate,
-                 base::Unretained(this)));
+      base::BindRepeating(&ComponentsDOMHandler::HandleCheckUpdate,
+                          base::Unretained(this)));
 }
 
 void ComponentsDOMHandler::HandleRequestComponentsData(
@@ -164,8 +166,9 @@ ComponentsUI::~ComponentsUI() {
 void ComponentsUI::OnDemandUpdate(const std::string& component_id) {
   component_updater::ComponentUpdateService* cus =
       g_browser_process->component_updater();
-  cus->GetOnDemandUpdater().OnDemandUpdate(component_id,
-                                           component_updater::Callback());
+  cus->GetOnDemandUpdater().OnDemandUpdate(
+      component_id, component_updater::OnDemandUpdater::Priority::FOREGROUND,
+      component_updater::Callback());
 }
 
 // static
@@ -214,6 +217,8 @@ base::string16 ComponentsUI::ComponentEventToString(Events event) {
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_EVT_STATUS_UPDATED);
     case Events::COMPONENT_NOT_UPDATED:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_EVT_STATUS_NOTUPDATED);
+    case Events::COMPONENT_UPDATE_ERROR:
+      return l10n_util::GetStringUTF16(IDS_COMPONENTS_EVT_STATUS_UPDATE_ERROR);
     case Events::COMPONENT_UPDATE_DOWNLOADING:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_EVT_STATUS_DOWNLOADING);
   }
@@ -245,7 +250,7 @@ base::string16 ComponentsUI::ServiceStatusToString(
     case update_client::ComponentState::kUpToDate:
       return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPTODATE);
     case update_client::ComponentState::kUpdateError:
-      return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_NOUPDATE);
+      return l10n_util::GetStringUTF16(IDS_COMPONENTS_SVC_STATUS_UPDATE_ERROR);
     case update_client::ComponentState::kUninstalled:  // Fall through.
     case update_client::ComponentState::kRun:
     case update_client::ComponentState::kLastStatus:

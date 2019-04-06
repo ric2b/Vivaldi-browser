@@ -52,6 +52,7 @@ class IncludeNode(base.Node):
             'allowexternalscript': 'false',
             'relativepath': 'false',
             'use_base_dir': 'true',
+            'skip_minify': 'false',
            }
 
   def GetInputPath(self):
@@ -90,9 +91,11 @@ class IncludeNode(base.Node):
       data = self._GetFlattenedData(allow_external_script=allow_external_script)
     else:
       data = util.ReadFile(filename, util.BINARY)
-    # Note that the minifier will only do anything if a minifier command
-    # has been set in the command line.
-    data = minifier.Minify(data, filename)
+
+    if self.attrs['skip_minify'] != 'true':
+      # Note that the minifier will only do anything if a minifier command
+      # has been set in the command line.
+      data = minifier.Minify(data, filename)
 
     # Include does not care about the encoding, because it only returns binary
     # data.
@@ -119,17 +122,11 @@ class IncludeNode(base.Node):
     allow_external_script = self.attrs['allowexternalscript'] == 'true'
     return grit.format.html_inline.GetResourceFilenames(
          self.ToRealPath(self.GetInputPath()),
+         self,
          allow_external_script=allow_external_script)
 
   def IsResourceMapSource(self):
     return True
-
-  def GeneratesResourceMapEntry(self, output_all_resource_defines,
-                                is_active_descendant):
-    # includes always generate resource entries.
-    if output_all_resource_defines:
-      return True
-    return is_active_descendant
 
   @staticmethod
   def Construct(parent, name, type, file, translateable=True,

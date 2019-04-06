@@ -13,7 +13,6 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/md5.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -368,7 +367,7 @@ void DevToolsFileHelper::AddUserConfirmedFileSystem(const std::string& type,
                               prefs::kDevToolsFileSystemPaths);
   base::DictionaryValue* file_systems_paths_value = update.Get();
   file_systems_paths_value->SetWithoutPathExpansion(
-      file_system_path, base::MakeUnique<base::Value>(type));
+      file_system_path, std::make_unique<base::Value>(type));
 }
 
 void DevToolsFileHelper::FailedToAddFileSystem(const std::string& error) {

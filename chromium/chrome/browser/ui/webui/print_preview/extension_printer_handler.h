@@ -18,7 +18,6 @@
 namespace base {
 class DictionaryValue;
 class ListValue;
-class RefCountedBytes;
 class RefCountedMemory;
 }
 
@@ -57,13 +56,12 @@ class ExtensionPrinterHandler : public PrinterHandler {
                         GetPrintersDoneCallback done_callback) override;
   void StartGetCapability(const std::string& destination_id,
                           GetCapabilityCallback callback) override;
-  // TODO(tbarzic): It might make sense to have the strings in a single struct.
   void StartPrint(const std::string& destination_id,
                   const std::string& capability,
                   const base::string16& job_title,
                   const std::string& ticket_json,
                   const gfx::Size& page_size,
-                  const scoped_refptr<base::RefCountedBytes>& print_data,
+                  const scoped_refptr<base::RefCountedMemory>& print_data,
                   PrintCallback callback) override;
   void StartGrantPrinterAccess(const std::string& printer_id,
                                GetPrinterInfoCallback callback) override;

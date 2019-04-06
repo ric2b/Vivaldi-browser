@@ -11,7 +11,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 
 UsbInternalsUI::UsbInternalsUI(content::WebUI* web_ui)
-    : MojoWebUIController(web_ui) {
+    : ui::MojoWebUIController(web_ui) {
   // Set up the chrome://usb-internals source.
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIUsbInternalsHost);
@@ -20,17 +20,19 @@ UsbInternalsUI::UsbInternalsUI(content::WebUI* web_ui)
   source->AddResourcePath(
       "chrome/browser/ui/webui/usb_internals/usb_internals.mojom.js",
       IDR_USB_INTERNALS_MOJO_JS);
-  source->AddResourcePath("url/mojo/origin.mojom.js", IDR_ORIGIN_MOJO_JS);
-  source->AddResourcePath("url/mojo/url.mojom.js", IDR_URL_MOJO_JS);
+  source->AddResourcePath("url/mojom/origin.mojom.js", IDR_ORIGIN_MOJO_JS);
+  source->AddResourcePath("url/mojom/url.mojom.js", IDR_URL_MOJO_JS);
   source->SetDefaultResource(IDR_USB_INTERNALS_HTML);
   source->UseGzip();
 
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
+  AddHandlerToRegistry(base::BindRepeating(
+      &UsbInternalsUI::BindUsbInternalsPageHandler, base::Unretained(this)));
 }
 
 UsbInternalsUI::~UsbInternalsUI() {}
 
-void UsbInternalsUI::BindUIHandler(
+void UsbInternalsUI::BindUsbInternalsPageHandler(
     mojom::UsbInternalsPageHandlerRequest request) {
   page_handler_.reset(new UsbInternalsPageHandler(std::move(request)));
 }

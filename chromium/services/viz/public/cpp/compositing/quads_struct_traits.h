@@ -350,6 +350,11 @@ struct StructTraits<viz::mojom::TileQuadStateDataView, viz::DrawQuad> {
     return quad->swizzle_contents;
   }
 
+  static bool is_premultiplied(const viz::DrawQuad& input) {
+    const viz::TileDrawQuad* quad = viz::TileDrawQuad::MaterialCast(&input);
+    return quad->is_premultiplied;
+  }
+
   static bool nearest_neighbor(const viz::DrawQuad& input) {
     const viz::TileDrawQuad* quad = viz::TileDrawQuad::MaterialCast(&input);
     return quad->nearest_neighbor;
@@ -444,6 +449,11 @@ struct StructTraits<viz::mojom::YUVVideoQuadStateDataView, viz::DrawQuad> {
     const viz::YUVVideoDrawQuad* quad =
         viz::YUVVideoDrawQuad::MaterialCast(&input);
     return quad->require_overlay;
+  }
+  static bool is_protected_video(const viz::DrawQuad& input) {
+    const viz::YUVVideoDrawQuad* quad =
+        viz::YUVVideoDrawQuad::MaterialCast(&input);
+    return quad->is_protected_video;
   }
 
   static bool Read(viz::mojom::YUVVideoQuadStateDataView data,

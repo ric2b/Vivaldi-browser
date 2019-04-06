@@ -6,14 +6,15 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #import "base/ios/block_types.h"
 #include "base/logging.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/certificate_policy_cache.h"
+#include "ios/web/public/features.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
 #include "net/cert/cert_verify_proc_ios.h"
@@ -62,11 +63,6 @@ loadPolicyForRejectedTrustResult:(SecTrustResultType)trustResult
 @implementation CRWCertVerificationController
 
 #pragma mark - Public
-
-- (instancetype)init {
-  NOTREACHED();
-  return nil;
-}
 
 - (instancetype)initWithBrowserState:(web::BrowserState*)browserState {
   DCHECK(browserState);
@@ -128,11 +124,11 @@ loadPolicyForRejectedTrustResult:(SecTrustResultType)trustResult
   // |webView:didFailProvisionalNavigation:withError:|.
   if (!cert->intermediate_buffers().empty()) {
     cert = net::X509Certificate::CreateFromBuffer(
-        net::x509_util::DupCryptoBuffer(cert->cert_buffer()), {});
+        bssl::UpRef(cert->cert_buffer()), {});
     DCHECK(cert);
   }
   DCHECK(cert->intermediate_buffers().empty());
-  web::WebThread::PostTask(web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
+  web::WebThread::PostTask(web::WebThread::IO, FROM_HERE, base::BindOnce(^{
                              _certPolicyCache->AllowCertForHost(
                                  cert.get(), base::SysNSStringToUTF8(host),
                                  status);
@@ -170,7 +166,7 @@ decideLoadPolicyForRejectedTrustResult:(SecTrustResultType)trustResult
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK(handler);
   web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
+      web::WebThread::IO, FROM_HERE, base::BindOnce(^{
         // |loadPolicyForRejectedTrustResult:certStatus:serverTrust:host:| can
         // only be called on IO thread.
         net::CertStatus certStatus =
@@ -183,7 +179,7 @@ decideLoadPolicyForRejectedTrustResult:(SecTrustResultType)trustResult
                                               host:host];
 
         web::WebThread::PostTask(web::WebThread::UI, FROM_HERE,
-                                 base::BindBlockArc(^{
+                                 base::BindOnce(^{
                                    handler(policy, certStatus);
                                  }));
       }));
@@ -196,16 +192,24 @@ decideLoadPolicyForRejectedTrustResult:(SecTrustResultType)trustResult
   // SecTrustEvaluate performs trust evaluation synchronously, possibly making
   // network requests. The UI thread should not be blocked by that operation.
   base::PostTaskWithTraits(
-      FROM_HERE, {base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-      base::BindBlockArc(^{
+      FROM_HERE, {base::TaskShutdownBehavior::BLOCK_SHUTDOWN}, base::BindOnce(^{
         SecTrustResultType trustResult = kSecTrustResultInvalid;
         if (SecTrustEvaluate(trust.get(), &trustResult) != errSecSuccess) {
           trustResult = kSecTrustResultInvalid;
         }
         // Use GCD API, which is guaranteed to be called during shutdown.
-        dispatch_async(dispatch_get_main_queue(), ^{
-          completionHandler(trustResult);
-        });
+
+        if (base::FeatureList::IsEnabled(
+                web::features::kUseWebThreadInCertVerificationController)) {
+          web::WebThread::PostTask(web::WebThread::UI, FROM_HERE,
+                                   base::BindOnce(^{
+                                     completionHandler(trustResult);
+                                   }));
+        } else {
+          dispatch_async(dispatch_get_main_queue(), ^{
+            completionHandler(trustResult);
+          });
+        }
       }));
 }
 

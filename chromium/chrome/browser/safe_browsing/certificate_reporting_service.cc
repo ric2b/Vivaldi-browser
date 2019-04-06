@@ -10,11 +10,11 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "components/certificate_reporting/error_report.h"
+#include "chrome/browser/ssl/certificate_error_report.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
-#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace {
 
@@ -42,11 +42,6 @@ void RecordUMAEvent(CertificateReportingService::ReportOutcome outcome) {
   UMA_HISTOGRAM_ENUMERATION(
       CertificateReportingService::kReportEventHistogram, outcome,
       CertificateReportingService::ReportOutcome::EVENT_COUNT);
-}
-
-void CleanupOnIOThread(
-    std::unique_ptr<CertificateReportingService::Reporter> reporter) {
-  reporter.reset();
 }
 
 }  // namespace
@@ -93,7 +88,7 @@ CertificateReportingService::BoundedReportList::items() const {
 }
 
 CertificateReportingService::Reporter::Reporter(
-    std::unique_ptr<certificate_reporting::ErrorReporter> error_reporter,
+    std::unique_ptr<CertificateErrorReporter> error_reporter,
     std::unique_ptr<BoundedReportList> retry_list,
     base::Clock* clock,
     base::TimeDelta report_ttl,
@@ -110,12 +105,10 @@ CertificateReportingService::Reporter::~Reporter() {}
 
 void CertificateReportingService::Reporter::Send(
     const std::string& serialized_report) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   SendInternal(Report(current_report_id_++, clock_->Now(), serialized_report));
 }
 
 void CertificateReportingService::Reporter::SendPending() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (!retries_enabled_) {
     return;
   }
@@ -132,7 +125,7 @@ void CertificateReportingService::Reporter::SendPending() {
     if (!report.is_retried) {
       // If this is the first retry, deserialize the report, set its retry bit
       // and serialize again.
-      certificate_reporting::ErrorReport error_report;
+      CertificateErrorReport error_report;
       CHECK(error_report.InitializeFromString(report.serialized_report));
       error_report.SetIsRetryUpload(true);
       CHECK(error_report.Serialize(&report.serialized_report));
@@ -153,25 +146,27 @@ CertificateReportingService::Reporter::GetQueueForTesting() const {
   return retry_list_.get();
 }
 
+void CertificateReportingService::Reporter::
+    SetClosureWhenNoInflightReportsForTesting(const base::Closure& closure) {
+  no_in_flight_reports_ = closure;
+}
+
 void CertificateReportingService::Reporter::SendInternal(
     const CertificateReportingService::Report& report) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   inflight_reports_.insert(std::make_pair(report.report_id, report));
   RecordUMAEvent(ReportOutcome::SUBMITTED);
   error_reporter_->SendExtendedReportingReport(
       report.serialized_report,
-      base::Bind(&CertificateReportingService::Reporter::SuccessCallback,
-                 weak_factory_.GetWeakPtr(), report.report_id),
-      base::Bind(&CertificateReportingService::Reporter::ErrorCallback,
-                 weak_factory_.GetWeakPtr(), report.report_id));
+      base::BindOnce(&CertificateReportingService::Reporter::SuccessCallback,
+                     weak_factory_.GetWeakPtr(), report.report_id),
+      base::BindOnce(&CertificateReportingService::Reporter::ErrorCallback,
+                     weak_factory_.GetWeakPtr(), report.report_id));
 }
 
 void CertificateReportingService::Reporter::ErrorCallback(
     int report_id,
-    const GURL& url,
     int net_error,
     int http_response_code) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   RecordUMAOnFailure(net_error);
   RecordUMAEvent(ReportOutcome::FAILED);
   if (retries_enabled_) {
@@ -180,17 +175,20 @@ void CertificateReportingService::Reporter::ErrorCallback(
     retry_list_->Add(it->second);
   }
   CHECK_GT(inflight_reports_.erase(report_id), 0u);
+  if (inflight_reports_.empty() && no_in_flight_reports_)
+    no_in_flight_reports_.Run();
 }
 
 void CertificateReportingService::Reporter::SuccessCallback(int report_id) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   RecordUMAEvent(ReportOutcome::SUCCESSFUL);
   CHECK_GT(inflight_reports_.erase(report_id), 0u);
+  if (inflight_reports_.empty() && no_in_flight_reports_)
+    no_in_flight_reports_.Run();
 }
 
 CertificateReportingService::CertificateReportingService(
     safe_browsing::SafeBrowsingService* safe_browsing_service,
-    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     Profile* profile,
     uint8_t server_public_key[/* 32 */],
     uint32_t server_public_key_version,
@@ -199,7 +197,7 @@ CertificateReportingService::CertificateReportingService(
     base::Clock* clock,
     const base::Callback<void()>& reset_callback)
     : pref_service_(*profile->GetPrefs()),
-      url_request_context_(nullptr),
+      url_loader_factory_(url_loader_factory),
       max_queued_report_count_(max_queued_report_count),
       max_report_age_(max_report_age),
       clock_(clock),
@@ -208,10 +206,6 @@ CertificateReportingService::CertificateReportingService(
       server_public_key_version_(server_public_key_version) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(clock_);
-  // Subscribe to SafeBrowsing shutdown notifications.
-  safe_browsing_service_shutdown_subscription_ =
-      safe_browsing_service->RegisterShutdownCallback(base::Bind(
-          &CertificateReportingService::Shutdown, base::Unretained(this)));
 
   // Subscribe to SafeBrowsing preference change notifications.
   safe_browsing_state_subscription_ =
@@ -219,13 +213,8 @@ CertificateReportingService::CertificateReportingService(
           base::Bind(&CertificateReportingService::OnPreferenceChanged,
                      base::Unretained(this)));
 
-  content::BrowserThread::PostTaskAndReply(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&CertificateReportingService::InitializeOnIOThread,
-                     base::Unretained(this), true, url_request_context_getter,
-                     max_queued_report_count_, max_report_age_, clock_,
-                     server_public_key_, server_public_key_version_),
-      reset_callback_);
+  Reset(true);
+  reset_callback_.Run();
 }
 
 CertificateReportingService::~CertificateReportingService() {
@@ -233,65 +222,25 @@ CertificateReportingService::~CertificateReportingService() {
 }
 
 void CertificateReportingService::Shutdown() {
-  // Shutdown will be called twice: Once after SafeBrowsing shuts down, and once
-  // when all KeyedServices shut down. All calls after the first one are no-op.
-  url_request_context_ = nullptr;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&CleanupOnIOThread, base::Passed(std::move(reporter_))));
+  reporter_.reset();
 }
 
 void CertificateReportingService::Send(const std::string& serialized_report) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!reporter_) {
-    return;
-  }
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&CertificateReportingService::Reporter::Send,
-                     base::Unretained(reporter_.get()), serialized_report));
+  if (reporter_)
+    reporter_->Send(serialized_report);
 }
 
 void CertificateReportingService::SendPending() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!reporter_) {
-    return;
-  }
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&CertificateReportingService::Reporter::SendPending,
-                     base::Unretained(reporter_.get())));
-}
-
-void CertificateReportingService::InitializeOnIOThread(
-    bool enabled,
-    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
-    size_t max_queued_report_count,
-    base::TimeDelta max_report_age,
-    base::Clock* clock,
-    uint8_t* server_public_key,
-    uint32_t server_public_key_version) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  DCHECK(!url_request_context_);
-  url_request_context_ = url_request_context_getter->GetURLRequestContext();
-  ResetOnIOThread(enabled, url_request_context_, max_queued_report_count,
-                  max_report_age, clock, server_public_key,
-                  server_public_key_version);
+  if (reporter_)
+    reporter_->SendPending();
 }
 
 void CertificateReportingService::SetEnabled(bool enabled) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  // Don't reset if the service is already shut down.
-  if (!url_request_context_)
-    return;
-
-  content::BrowserThread::PostTaskAndReply(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&CertificateReportingService::ResetOnIOThread,
-                     base::Unretained(this), enabled, url_request_context_,
-                     max_queued_report_count_, max_report_age_, clock_,
-                     server_public_key_, server_public_key_version_),
-      reset_callback_);
+  Reset(enabled);
+  reset_callback_.Run();
 }
 
 CertificateReportingService::Reporter*
@@ -304,37 +253,26 @@ GURL CertificateReportingService::GetReportingURLForTesting() {
   return GURL(kExtendedReportingUploadUrl);
 }
 
-void CertificateReportingService::ResetOnIOThread(
-    bool enabled,
-    net::URLRequestContext* url_request_context,
-    size_t max_queued_report_count,
-    base::TimeDelta max_report_age,
-    base::Clock* clock,
-    uint8_t* const server_public_key,
-    uint32_t server_public_key_version) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  // url_request_context_ is null during shutdown.
-  if (!enabled || !url_request_context) {
+void CertificateReportingService::Reset(bool enabled) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!enabled) {
     reporter_.reset();
     return;
   }
-  std::unique_ptr<certificate_reporting::ErrorReporter> error_reporter;
-  if (server_public_key) {
-    // Only used in tests.
-    std::unique_ptr<net::ReportSender> report_sender(new net::ReportSender(
-        url_request_context, TRAFFIC_ANNOTATION_FOR_TESTS));
-    error_reporter.reset(new certificate_reporting::ErrorReporter(
-        GURL(kExtendedReportingUploadUrl), server_public_key,
-        server_public_key_version, std::move(report_sender)));
+  std::unique_ptr<CertificateErrorReporter> error_reporter;
+  if (server_public_key_) {
+    error_reporter.reset(new CertificateErrorReporter(
+        url_loader_factory_, GURL(kExtendedReportingUploadUrl),
+        server_public_key_, server_public_key_version_));
   } else {
-    error_reporter.reset(new certificate_reporting::ErrorReporter(
-        url_request_context, GURL(kExtendedReportingUploadUrl)));
+    error_reporter.reset(new CertificateErrorReporter(
+        url_loader_factory_, GURL(kExtendedReportingUploadUrl)));
   }
   reporter_.reset(
       new Reporter(std::move(error_reporter),
                    std::unique_ptr<BoundedReportList>(
-                       new BoundedReportList(max_queued_report_count)),
-                   clock, max_report_age, true /* retries_enabled */));
+                       new BoundedReportList(max_queued_report_count_)),
+                   clock_, max_report_age_, true /* retries_enabled */));
 }
 
 void CertificateReportingService::OnPreferenceChanged() {

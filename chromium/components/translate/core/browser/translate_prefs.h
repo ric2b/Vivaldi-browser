@@ -35,13 +35,40 @@ namespace translate {
 // These settings support the new UI.
 extern const base::Feature kImprovedLanguageSettings;
 
+// Enables or disables the regional locales as valid selection for the display
+// UI.
+extern const base::Feature kRegionalLocalesAsDisplayUI;
+
 // Enables or disables using the most recent target language as the default
 // target language option.
 extern const base::Feature kTranslateRecentTarget;
 
-// The name of the parameter for the number of translations, after which the
-// "Always Translate" checkbox default to checked.
-extern const char kAlwaysTranslateOfferThreshold[];
+// Enable or disable the Translate popup altogether.
+extern const base::Feature kTranslateUI;
+
+// Minimum number of times the user must accept a translation before we show
+// a shortcut to the "Always Translate" functionality.
+#if defined(OS_ANDROID) || defined(OS_IOS)
+// The "Always Translate" shortcut is always shown on iOS and Android.
+constexpr int kAlwaysTranslateShortcutMinimumAccepts = 1;
+#else
+constexpr int kAlwaysTranslateShortcutMinimumAccepts = 3;
+#endif
+
+// Minimum number of times the user must deny a translation before we show
+// a shortcut to the "Never Translate" functionality.
+// Android and iOS implementations do not offer a drop down (for space reasons),
+// so we are more aggressive about showing this shortcut.
+#if defined(OS_ANDROID)
+// On Android, this shows the "Never Translate" shortcut after two denials just
+// like on iOS. However, the last event is not counted so we must subtract one
+// to get the same behavior.
+constexpr int kNeverTranslateShortcutMinimumDenials = 1;
+#elif defined(OS_IOS)
+constexpr int kNeverTranslateShortcutMinimumDenials = 2;
+#else
+constexpr int kNeverTranslateShortcutMinimumDenials = 3;
+#endif
 
 class TranslateAcceptLanguages;
 
@@ -96,6 +123,7 @@ struct TranslateLanguageInfo {
 class TranslatePrefs {
  public:
   static const char kPrefLanguageProfile[];
+  static const char kPrefForceTriggerTranslateCount[];
   static const char kPrefTranslateSiteBlacklist[];
   static const char kPrefTranslateWhitelists[];
   static const char kPrefTranslateDeniedCount[];
@@ -257,6 +285,20 @@ class TranslatePrefs {
   void SetRecentTargetLanguage(const std::string& target_language);
   std::string GetRecentTargetLanguage() const;
 
+  // Gets the value for the pref that represents how often the
+  // kOverrideTranslateTriggerInIndia experiment made translate trigger on an
+  // English page when it otherwise wouldn't have. This pref is used to
+  // determine whether the experiment should be suppressed for a particular user
+  int GetForceTriggerOnEnglishPagesCount() const;
+  // Increments the pref that represents how often the
+  // kOverrideTranslateTriggerInIndia experiment made translate trigger on an
+  // English page when it otherwise wouldn't have.
+  void ReportForceTriggerOnEnglishPages();
+  // Decrements the pref that represents how often the
+  // kOverrideTranslateTriggerInIndia experiment made translate trigger on an
+  // English page when it otherwise wouldn't have.
+  void ReportAcceptedAfterForceTriggerOnEnglishPages();
+
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
   static void MigrateUserPrefs(PrefService* user_prefs,
                                const char* accept_languages_pref);
@@ -269,6 +311,8 @@ class TranslatePrefs {
   FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest, UnblockLanguage);
   FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest, AddToLanguageList);
   FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest, RemoveFromLanguageList);
+  FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest,
+                           RemoveFromLanguageListClearsRecentLanguage);
   FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest, AddToLanguageListFeatureEnabled);
   FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest,
                            RemoveFromLanguageListFeatureEnabled);

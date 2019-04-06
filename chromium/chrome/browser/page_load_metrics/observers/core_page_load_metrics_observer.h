@@ -17,6 +17,8 @@ namespace internal {
 extern const char kHistogramFirstLayout[];
 extern const char kHistogramFirstInputDelay[];
 extern const char kHistogramFirstInputTimestamp[];
+extern const char kHistogramLongestInputDelay[];
+extern const char kHistogramLongestInputTimestamp[];
 extern const char kHistogramFirstPaint[];
 extern const char kHistogramFirstTextPaint[];
 extern const char kHistogramDomContentLoaded[];
@@ -45,21 +47,22 @@ extern const char kHistogramLoadTypeParseStartNewNavigation[];
 
 extern const char kHistogramFailedProvisionalLoad[];
 
+extern const char kHistogramUserGestureNavigationToForwardBack[];
+
 extern const char kHistogramPageTimingForegroundDuration[];
 extern const char kHistogramPageTimingForegroundDurationNoCommit[];
 
 extern const char kHistogramForegroundToFirstMeaningfulPaint[];
 
-extern const char kRapporMetricsNameCoarseTiming[];
 extern const char kHistogramFirstMeaningfulPaintStatus[];
 extern const char kHistogramTimeToInteractiveStatus[];
 
 extern const char kHistogramFirstNonScrollInputAfterFirstPaint[];
 extern const char kHistogramFirstScrollInputAfterFirstPaint[];
 
-extern const char kHistogramTotalBytes[];
-extern const char kHistogramNetworkBytes[];
-extern const char kHistogramCacheBytes[];
+extern const char kHistogramPageLoadTotalBytes[];
+extern const char kHistogramPageLoadNetworkBytes[];
+extern const char kHistogramPageLoadCacheBytes[];
 
 extern const char kHistogramLoadTypeTotalBytesForwardBack[];
 extern const char kHistogramLoadTypeNetworkBytesForwardBack[];
@@ -206,8 +209,6 @@ class CorePageLoadMetricsObserver
   void RecordByteAndResourceHistograms(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info);
-  void RecordRappor(const page_load_metrics::mojom::PageLoadTiming& timing,
-                    const page_load_metrics::PageLoadExtraInfo& info);
   void RecordForegroundDurationHistograms(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info,

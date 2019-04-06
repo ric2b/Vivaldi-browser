@@ -7,12 +7,13 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_features.h"
@@ -23,10 +24,10 @@
 #include "extensions/browser/guest_view/extensions_guest_view_manager_delegate.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/mime_handler_view/test_mime_handler_view_guest.h"
+#include "extensions/browser/process_manager.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/url_request/url_request_filter.h"
-#include "net/url_request/url_request_interceptor.h"
+#include "net/test/embedded_test_server/http_request.h"
 
 using extensions::ExtensionsAPIClient;
 using extensions::MimeHandlerViewGuest;
@@ -39,89 +40,7 @@ using guest_view::TestGuestViewManagerFactory;
 // The test extension id is set by the key value in the manifest.
 const char kExtensionId[] = "oickdpebdnfbgkcaoklfcdhjniefkcji";
 
-// Counts the number of URL requests made for a given URL.
-class URLRequestCounter {
- public:
-  explicit URLRequestCounter(const GURL& url) : url_(url), count_(0) {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    base::RunLoop run_loop;
-    content::BrowserThread::PostTaskAndReply(
-        content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&URLRequestCounter::AddInterceptor, base::Unretained(this)),
-        run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  ~URLRequestCounter() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    base::RunLoop run_loop;
-    content::BrowserThread::PostTaskAndReply(
-        content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&URLRequestCounter::RemoveInterceptor,
-                   base::Unretained(this)),
-        run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  int GetCount() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    // Do a round-trip to the IO thread to guarantee that the UI thread has
-    // been notified of all the requests triggered by the IO thread.
-    base::RunLoop run_loop;
-    content::BrowserThread::PostTaskAndReply(
-        content::BrowserThread::IO, FROM_HERE, base::Bind(&base::DoNothing),
-        run_loop.QuitClosure());
-    run_loop.Run();
-    return count_;
-  }
-
- private:
-  // This class runs a callback when a URL request is intercepted. It doesn't
-  // handle the request itself.
-  class SimpleRequestInterceptor : public net::URLRequestInterceptor {
-   public:
-    explicit SimpleRequestInterceptor(const base::Closure& callback)
-        : callback_(callback) {}
-
-    // URLRequestInterceptor implementation:
-    net::URLRequestJob* MaybeInterceptRequest(
-        net::URLRequest* request,
-        net::NetworkDelegate* network_delegate) const override {
-      DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-      content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                       callback_);
-      return nullptr;
-    }
-
-   private:
-    const base::Closure callback_;
-  };
-
-  void RequestFired() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    ++count_;
-  }
-
-  void AddInterceptor() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-    net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-        url_, std::make_unique<SimpleRequestInterceptor>(base::Bind(
-                  &URLRequestCounter::RequestFired, base::Unretained(this))));
-  }
-
-  void RemoveInterceptor() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-    net::URLRequestFilter::GetInstance()->RemoveUrlHandler(url_);
-  }
-
-  const GURL url_;
-  // |count_| is only accessed on the UI thread.
-  int count_;
-
-  DISALLOW_COPY_AND_ASSIGN(URLRequestCounter);
-};
-
-class MimeHandlerViewTest : public ExtensionApiTest,
+class MimeHandlerViewTest : public extensions::ExtensionApiTest,
                             public testing::WithParamInterface<bool> {
  public:
   MimeHandlerViewTest() {
@@ -131,10 +50,12 @@ class MimeHandlerViewTest : public ExtensionApiTest,
   ~MimeHandlerViewTest() override {}
 
   void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
 
     embedded_test_server()->ServeFilesFromDirectory(
         test_data_dir_.AppendASCII("mime_handler_view"));
+    embedded_test_server()->RegisterRequestMonitor(base::BindRepeating(
+        &MimeHandlerViewTest::MonitorRequest, base::Unretained(this)));
     ASSERT_TRUE(StartEmbeddedTestServer());
   }
 
@@ -144,7 +65,7 @@ class MimeHandlerViewTest : public ExtensionApiTest,
   // MimeHandlerViewGuest will be based on OOPIF and we can remove this comment
   // (https://crbug.com/642826).
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
+    extensions::ExtensionApiTest::SetUpCommandLine(command_line);
 
     bool use_cross_process_frames_for_guests = GetParam();
     if (use_cross_process_frames_for_guests) {
@@ -207,9 +128,17 @@ class MimeHandlerViewTest : public ExtensionApiTest,
     RunTestWithUrl(embedded_test_server()->GetURL("/" + path));
   }
 
+  int basic_count() const { return basic_count_; }
+
  private:
+  void MonitorRequest(const net::test_server::HttpRequest& request) {
+    if (request.relative_url == "/testBasic.csv")
+      basic_count_++;
+  }
+
   TestGuestViewManagerFactory factory_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  int basic_count_ = 0;
 };
 
 INSTANTIATE_TEST_CASE_P(MimeHandlerViewTests,
@@ -281,7 +210,46 @@ IN_PROC_BROWSER_TEST_P(MimeHandlerViewTest, ResizeBeforeAttach) {
 // Regression test for crbug.com/587709.
 IN_PROC_BROWSER_TEST_P(MimeHandlerViewTest, SingleRequest) {
   GURL url(embedded_test_server()->GetURL("/testBasic.csv"));
-  URLRequestCounter request_counter(url);
   RunTest("testBasic.csv");
-  EXPECT_EQ(1, request_counter.GetCount());
+  EXPECT_EQ(1, basic_count());
+}
+
+// Test that a mime handler view can keep a background page alive.
+IN_PROC_BROWSER_TEST_P(MimeHandlerViewTest, BackgroundPage) {
+  extensions::ProcessManager::SetEventPageIdleTimeForTesting(1);
+  extensions::ProcessManager::SetEventPageSuspendingTimeForTesting(1);
+  RunTest("testBackgroundPage.csv");
+}
+
+IN_PROC_BROWSER_TEST_P(MimeHandlerViewTest, TargetBlankAnchor) {
+  RunTest("testTargetBlankAnchor.csv");
+  ASSERT_EQ(2, browser()->tab_strip_model()->count());
+  content::WaitForLoadStop(browser()->tab_strip_model()->GetWebContentsAt(1));
+  EXPECT_EQ(
+      GURL("about:blank"),
+      browser()->tab_strip_model()->GetWebContentsAt(1)->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_P(MimeHandlerViewTest, BeforeUnload_NoDialog) {
+  ASSERT_NO_FATAL_FAILURE(RunTest("testBeforeUnloadNoDialog.csv"));
+  content::PrepContentsForBeforeUnloadTest(
+      browser()->tab_strip_model()->GetWebContentsAt(0));
+
+  // Try to navigate away from the page. If the beforeunload listener is
+  // triggered and a dialog is shown, this navigation will never complete,
+  // causing the test to timeout and fail.
+  ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+}
+
+IN_PROC_BROWSER_TEST_P(MimeHandlerViewTest, BeforeUnload_ShowDialog) {
+  ASSERT_NO_FATAL_FAILURE(RunTest("testBeforeUnloadShowDialog.csv"));
+  auto* web_contents = browser()->tab_strip_model()->GetWebContentsAt(0);
+  content::PrepContentsForBeforeUnloadTest(web_contents);
+  web_contents->GetController().Reload(content::ReloadType::NORMAL, false);
+
+  app_modal::JavaScriptAppModalDialog* before_unload_dialog =
+      ui_test_utils::WaitForAppModalDialog();
+  EXPECT_TRUE(before_unload_dialog->is_before_unload_dialog());
+  EXPECT_TRUE(before_unload_dialog->is_reload());
+  before_unload_dialog->OnAccept(base::string16(), false);
 }

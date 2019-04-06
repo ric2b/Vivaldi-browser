@@ -8,7 +8,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/show_menu/show_menu_api.h"
@@ -88,6 +88,7 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
   command_updater_->UpdateCommandEnabled(IDC_VIV_WINDOW_PANEL, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS,
                                          true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_WINDOW_MINIMIZE, true);
 }
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {
@@ -146,6 +147,7 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_HISTORY_PANEL:
     case IDC_VIV_TOGGLE_IMAGES:
     case IDC_VIV_WINDOW_PANEL:
+    case IDC_VIV_WINDOW_MINIMIZE:
       // The API is registered with a regular profile.
       extensions::ShowMenuAPI::GetFactoryInstance()
           ->Get(browser->profile()->GetOriginalProfile())

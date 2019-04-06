@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -37,8 +38,11 @@ NSString* const kBrowserActionButtonDraggingNotification =
 NSString* const kBrowserActionButtonDragEndNotification =
     @"BrowserActionButtonDragEndNotification";
 
-static const CGFloat kAnimationDuration = 0.2;
-static const CGFloat kMinimumDragDistance = 5;
+static const CGFloat kBrowserActionButtonAnimationDuration = 0.2;
+static const CGFloat kBrowserActionButtonMinimumDragDistance = 5;
+
+// Mirrors ui/views/mouse_constants.h for suppressing popup activation.
+static const int kBrowserActionButtonMinimumMsBetweenCloseOpenPopup = 100;
 
 @interface BrowserActionButton ()
 - (void)endDrag;
@@ -61,6 +65,14 @@ class ToolbarActionViewDelegateBridge : public ToolbarActionViewDelegate {
 
   bool user_shown_popup_visible() const { return user_shown_popup_visible_; }
 
+  bool CanShowPopup() const {
+    // If the user clicks on the browser action button to close the bubble,
+    // don't show the next popup too soon on the mouse button up.
+    base::TimeDelta delta = base::TimeTicks::Now() - popup_closed_time_;
+    return delta.InMilliseconds() >=
+           kBrowserActionButtonMinimumMsBetweenCloseOpenPopup;
+  }
+
  private:
   // ToolbarActionViewDelegate:
   content::WebContents* GetCurrentWebContents() const override;
@@ -71,6 +83,11 @@ class ToolbarActionViewDelegateBridge : public ToolbarActionViewDelegate {
 
   // A helper method to implement showing the context menu.
   void DoShowContextMenu();
+
+  // Tracks when the menu was closed so that the button can ignore the incoming
+  // mouse button up event if its too soon. This simulates the same behavior
+  // provided by the views toolkit MenuButton Pressed Locked tracking state.
+  base::TimeTicks popup_closed_time_;
 
   // The owning button. Weak.
   BrowserActionButton* owner_;
@@ -157,6 +174,7 @@ void ToolbarActionViewDelegateBridge::OnPopupShown(bool by_user) {
 }
 
 void ToolbarActionViewDelegateBridge::OnPopupClosed() {
+  popup_closed_time_ = base::TimeTicks::Now();
   user_shown_popup_visible_ = false;
   [owner_ updateHighlightedState];
 }
@@ -217,7 +235,7 @@ void ToolbarActionViewDelegateBridge::DoShowContextMenu() {
     [self setShowsBorderOnlyWhileMouseInside:YES];
 
     moveAnimation_.reset([[NSViewAnimation alloc] init]);
-    [moveAnimation_ gtm_setDuration:kAnimationDuration
+    [moveAnimation_ gtm_setDuration:kBrowserActionButtonAnimationDuration
                           eventMask:NSLeftMouseUpMask];
     [moveAnimation_ setAnimationBlockingMode:NSAnimationNonblocking];
 
@@ -277,11 +295,13 @@ void ToolbarActionViewDelegateBridge::DoShowContextMenu() {
 
   NSPoint eventPoint = [theEvent locationInWindow];
   if (!isBeingDragged_) {
-    // Don't initiate a drag until it moves at least kMinimumDragDistance.
+    // Don't initiate a drag until it moves at least
+    // kBrowserActionButtonMinimumDragDistance.
     NSPoint dragStart = [self convertPoint:dragStartPoint_ toView:nil];
     CGFloat dx = eventPoint.x - dragStart.x;
     CGFloat dy = eventPoint.y - dragStart.y;
-    if (dx*dx + dy*dy < kMinimumDragDistance*kMinimumDragDistance)
+    if (dx * dx + dy * dy < kBrowserActionButtonMinimumDragDistance *
+                                kBrowserActionButtonMinimumDragDistance)
       return;
 
     // The start of a drag. Position the button above all others.
@@ -330,7 +350,9 @@ void ToolbarActionViewDelegateBridge::DoShowContextMenu() {
                                fromView:nil];
   // Only perform the click if we didn't drag the button.
   if (NSPointInRect(location, [self bounds]) && !isBeingDragged_) {
-    [self performClick:self];
+    if (viewControllerDelegate_->CanShowPopup()) {
+      [self performClick:self];
+    }
   } else {
     // Make sure an ESC to end a drag doesn't trigger 2 endDrags.
     if (isBeingDragged_) {

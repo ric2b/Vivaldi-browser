@@ -23,10 +23,13 @@
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
@@ -76,13 +79,13 @@ base::FilePath GetShortcutDataDir(const web_app::ShortcutInfo& shortcut_info) {
 
 void UpdateAllShortcutsForShortcutInfo(
     const base::string16& old_app_title,
-    const base::Closure& callback,
+    base::OnceClosure callback,
     std::unique_ptr<web_app::ShortcutInfo> shortcut_info) {
   base::FilePath shortcut_data_dir = GetShortcutDataDir(*shortcut_info);
-  web_app::ShortcutInfo::PostIOTaskAndReply(
+  web_app::internals::PostShortcutIOTaskAndReply(
       base::BindOnce(&web_app::internals::UpdatePlatformShortcuts,
                      shortcut_data_dir, old_app_title),
-      std::move(shortcut_info), callback);
+      std::move(shortcut_info), std::move(callback));
 }
 
 void OnImageLoaded(std::unique_ptr<web_app::ShortcutInfo> shortcut_info,
@@ -107,7 +110,7 @@ void OnImageLoaded(std::unique_ptr<web_app::ShortcutInfo> shortcut_info,
     shortcut_info->favicon = std::move(image_family);
   }
 
-  callback.Run(std::move(shortcut_info));
+  std::move(callback).Run(std::move(shortcut_info));
 }
 
 void ScheduleCreatePlatformShortcut(
@@ -115,7 +118,7 @@ void ScheduleCreatePlatformShortcut(
     const web_app::ShortcutLocations& locations,
     std::unique_ptr<web_app::ShortcutInfo> shortcut_info) {
   base::FilePath shortcut_data_dir = GetShortcutDataDir(*shortcut_info);
-  web_app::ShortcutInfo::PostIOTask(
+  web_app::internals::PostShortcutIOTask(
       base::BindOnce(
           base::IgnoreResult(&web_app::internals::CreatePlatformShortcuts),
           shortcut_data_dir, locations, reason),
@@ -134,13 +137,9 @@ void DeleteShortcutInfoOnUIThread(
 
 namespace web_app {
 
-// The following string is used to build the directory name for
-// shortcuts to chrome applications (the kind which are installed
-// from a CRX).  Application shortcuts to URLs use the {host}_{path}
-// for the name of this directory.  Hosts can't include an underscore.
-// By starting this string with an underscore, we ensure that there
-// are no naming conflicts.
-static const char kCrxAppPrefix[] = "_crx_";
+void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterListPref(prefs::kWebAppInstallForceList);
+}
 
 namespace internals {
 
@@ -154,41 +153,29 @@ base::FilePath GetSanitizedFileName(const base::string16& name) {
   return base::FilePath(file_name);
 }
 
-}  // namespace internals
-
-ShortcutInfo::ShortcutInfo() {}
-
-ShortcutInfo::~ShortcutInfo() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+void PostShortcutIOTask(base::OnceCallback<void(const ShortcutInfo&)> task,
+                        std::unique_ptr<ShortcutInfo> shortcut_info) {
+  PostShortcutIOTaskAndReply(std::move(task), std::move(shortcut_info),
+                             base::OnceClosure());
 }
 
-// static
-void ShortcutInfo::PostIOTask(
-    base::OnceCallback<void(const ShortcutInfo&)> task,
-    std::unique_ptr<ShortcutInfo> shortcut_info) {
-  PostIOTaskAndReply(std::move(task), std::move(shortcut_info),
-                     base::Closure());
-}
-
-// static
-void ShortcutInfo::PostIOTaskAndReply(
+void PostShortcutIOTaskAndReply(
     base::OnceCallback<void(const ShortcutInfo&)> task,
     std::unique_ptr<ShortcutInfo> shortcut_info,
-    const base::Closure& reply) {
+    base::OnceClosure reply) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Ownership of |shortcut_info| moves to the Reply, which is guaranteed to
   // outlive the const reference.
   const web_app::ShortcutInfo& shortcut_info_ref = *shortcut_info;
-  GetTaskRunner()->PostTaskAndReply(
+  GetShortcutIOTaskRunner()->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(std::move(task), base::ConstRef(shortcut_info_ref)),
       base::BindOnce(&DeleteShortcutInfoOnUIThread, std::move(shortcut_info),
-                     reply));
+                     std::move(reply)));
 }
 
-// static
-scoped_refptr<base::TaskRunner> ShortcutInfo::GetTaskRunner() {
+scoped_refptr<base::TaskRunner> GetShortcutIOTaskRunner() {
   constexpr base::TaskTraits traits = {
       base::MayBlock(), base::TaskPriority::BACKGROUND,
       base::TaskShutdownBehavior::BLOCK_SHUTDOWN};
@@ -199,6 +186,14 @@ scoped_refptr<base::TaskRunner> ShortcutInfo::GetTaskRunner() {
 #else
   return base::TaskScheduler::GetInstance()->CreateTaskRunnerWithTraits(traits);
 #endif
+}
+
+}  // namespace internals
+
+ShortcutInfo::ShortcutInfo() {}
+
+ShortcutInfo::~ShortcutInfo() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 ShortcutLocations::ShortcutLocations()
@@ -233,7 +228,7 @@ std::unique_ptr<ShortcutInfo> ShortcutInfoForExtensionAndProfile(
 
 void GetShortcutInfoForApp(const extensions::Extension* extension,
                            Profile* profile,
-                           const ShortcutInfoCallback& callback) {
+                           ShortcutInfoCallback callback) {
   std::unique_ptr<web_app::ShortcutInfo> shortcut_info(
       web_app::ShortcutInfoForExtensionAndProfile(extension, profile));
 
@@ -278,7 +273,8 @@ void GetShortcutInfoForApp(const extensions::Extension* extension,
   // image and exit immediately.
   extensions::ImageLoader::Get(profile)->LoadImageFamilyAsync(
       extension, info_list,
-      base::Bind(&OnImageLoaded, base::Passed(&shortcut_info), callback));
+      base::Bind(&OnImageLoaded, base::Passed(&shortcut_info),
+                 base::Passed(&callback)));
 }
 
 bool ShouldCreateShortcutFor(web_app::ShortcutCreationReason reason,
@@ -367,27 +363,6 @@ std::string GenerateApplicationNameFromInfo(const ShortcutInfo& shortcut_info) {
     return GenerateApplicationNameFromURL(shortcut_info.url);
 }
 
-std::string GenerateApplicationNameFromURL(const GURL& url) {
-  std::string t;
-  t.append(url.host());
-  t.append("_");
-  t.append(url.path());
-  return t;
-}
-
-std::string GenerateApplicationNameFromExtensionId(const std::string& id) {
-  std::string t(kCrxAppPrefix);
-  t.append(id);
-  return t;
-}
-
-std::string GetExtensionIdFromApplicationName(const std::string& app_name) {
-  std::string prefix(kCrxAppPrefix);
-  if (app_name.substr(0, prefix.length()) != prefix)
-    return std::string();
-  return app_name.substr(prefix.length());
-}
-
 void CreateShortcutsWithInfo(ShortcutCreationReason reason,
                              const ShortcutLocations& locations,
                              std::unique_ptr<ShortcutInfo> shortcut_info) {
@@ -434,7 +409,7 @@ void DeleteAllShortcuts(Profile* profile, const extensions::Extension* app) {
   std::unique_ptr<ShortcutInfo> shortcut_info(
       ShortcutInfoForExtensionAndProfile(app, profile));
   base::FilePath shortcut_data_dir = GetShortcutDataDir(*shortcut_info);
-  ShortcutInfo::PostIOTask(
+  internals::PostShortcutIOTask(
       base::BindOnce(&internals::DeletePlatformShortcuts, shortcut_data_dir),
       std::move(shortcut_info));
 }
@@ -442,12 +417,12 @@ void DeleteAllShortcuts(Profile* profile, const extensions::Extension* app) {
 void UpdateAllShortcuts(const base::string16& old_app_title,
                         Profile* profile,
                         const extensions::Extension* app,
-                        const base::Closure& callback) {
+                        base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  GetShortcutInfoForApp(
-      app, profile,
-      base::Bind(&UpdateAllShortcutsForShortcutInfo, old_app_title, callback));
+  GetShortcutInfoForApp(app, profile,
+                        base::BindOnce(&UpdateAllShortcutsForShortcutInfo,
+                                       old_app_title, std::move(callback)));
 }
 
 bool IsValidUrl(const GURL& url) {

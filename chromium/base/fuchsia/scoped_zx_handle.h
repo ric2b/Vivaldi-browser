@@ -5,28 +5,14 @@
 #ifndef BASE_FUCHSIA_SCOPED_ZX_HANDLE_H_
 #define BASE_FUCHSIA_SCOPED_ZX_HANDLE_H_
 
-#include <zircon/status.h>
-#include <zircon/syscalls.h>
-
-#include "base/fuchsia/fuchsia_logging.h"
-#include "base/scoped_generic.h"
+#include <lib/zx/handle.h>
 
 namespace base {
 
-namespace internal {
-
-struct ScopedZxHandleTraits {
-  static zx_handle_t InvalidValue() { return ZX_HANDLE_INVALID; }
-  static void Free(zx_handle_t object) {
-    zx_status_t status = zx_handle_close(object);
-    ZX_CHECK(status == ZX_OK, status) << "zx_handle_close";
-  }
-};
-
-}  // namespace internal
-
-using ScopedZxHandle =
-    ScopedGeneric<zx_handle_t, internal::ScopedZxHandleTraits>;
+// TODO(852541): Temporary shim to implement the old ScopedGeneric based
+// container as a native zx::handle. Remove this once all callers have been
+// migrated to use the libzx containers.
+using ScopedZxHandle = zx::handle;
 
 }  // namespace base
 

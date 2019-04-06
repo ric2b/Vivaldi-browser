@@ -17,8 +17,11 @@
 #include "ash/shell_port.h"
 #include "ash/wm/default_window_resizer.h"
 #include "ash/wm/panels/panel_window_resizer.h"
+#include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ash/wm/workspace/two_step_edge_cycler.h"
@@ -50,9 +53,6 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
     return nullptr;
   }
 
-  if (!window_state->can_be_dragged())
-    return nullptr;
-
   // TODO(varkha): The chaining of window resizers causes some of the logic
   // to be repeated and the logic flow difficult to control. With some windows
   // classes using reparenting during drag operations it becomes challenging to
@@ -64,13 +64,29 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
   // refactor and eliminate chaining.
   std::unique_ptr<WindowResizer> window_resizer;
 
+  if (Shell::Get()
+          ->tablet_mode_controller()
+          ->IsTabletModeWindowManagerEnabled()) {
+    // We still don't allow any dragging or resizing happening on the area other
+    // then caption area. Only allow dragging that happends on the tab(s).
+    if (window_component != HTCAPTION || !wm::IsDraggingTabs(window))
+      return nullptr;
+
+    window_state->CreateDragDetails(point_in_parent, window_component, source);
+    window_resizer =
+        std::make_unique<TabletModeBrowserWindowDragController>(window_state);
+    window_resizer = ShellPort::Get()->CreateDragWindowResizer(
+        std::move(window_resizer), window_state);
+    return window_resizer;
+  }
+
   if (!window_state->IsNormalOrSnapped())
-    return std::unique_ptr<WindowResizer>();
+    return nullptr;
 
   int bounds_change =
       WindowResizer::GetBoundsChangeForWindowComponent(window_component);
   if (bounds_change == WindowResizer::kBoundsChangeDirection_None)
-    return std::unique_ptr<WindowResizer>();
+    return nullptr;
 
   window_state->CreateDragDetails(point_in_parent, window_component, source);
   const int parent_shell_window_id =

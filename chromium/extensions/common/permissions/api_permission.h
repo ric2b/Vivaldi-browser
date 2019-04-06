@@ -82,7 +82,7 @@ class APIPermission {
     kCryptotokenPrivate,
     kDataReductionProxy,
     kDiagnostics,
-    kDial,
+    kDeleted_Dial,  // API removed.
     kDebugger,
     kDeclarative,
     kDeclarativeContent,
@@ -102,7 +102,7 @@ class APIPermission {
     kEmbeddedExtensionOptions,
     kEnterprisePlatformKeys,
     kEnterprisePlatformKeysPrivate,
-    kExperienceSamplingPrivate,
+    kDeleted_ExperienceSamplingPrivate,
     kExperimental,
     kExtensionView,
     kExternallyConnectableAllUrls,
@@ -252,6 +252,11 @@ class APIPermission {
     kDeclarativeNetRequest,
     kLockWindowFullscreenPrivate,
     kWebrtcLoggingPrivateAudioDebug,
+    kEnterpriseReportingPrivate,
+    kCecPrivate,
+    kSafeBrowsingPrivate,
+    kFileSystemRequestDownloads,
+    kSystemPowerSource,
 
     // vivaldi permissions
 
@@ -417,6 +422,7 @@ class APIPermissionInfo {
 
  private:
   // Instances should only be constructed from within a PermissionsProvider.
+  friend class CastAPIPermissions;
   friend class ChromeAPIPermissions;
   friend class ExtensionsAPIPermissions;
   friend class VivaldiAPIPermissions;

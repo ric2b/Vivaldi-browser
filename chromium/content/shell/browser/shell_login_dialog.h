@@ -5,10 +5,13 @@
 #ifndef CONTENT_SHELL_BROWSER_SHELL_LOGIN_DIALOG_H_
 #define CONTENT_SHELL_BROWSER_SHELL_LOGIN_DIALOG_H_
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "content/public/browser/resource_dispatcher_host_login_delegate.h"
+#include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/login_delegate.h"
 
 #if defined(OS_MACOSX)
 #if __OBJC__
@@ -20,19 +23,21 @@ class ShellLoginDialogHelper;
 
 namespace net {
 class AuthChallengeInfo;
-class URLRequest;
 }
 
 namespace content {
 
 // This class provides a dialog box to ask the user for credentials. Useful in
 // ResourceDispatcherHostDelegate::CreateLoginDelegate.
-class ShellLoginDialog : public ResourceDispatcherHostLoginDelegate {
+class ShellLoginDialog : public LoginDelegate {
  public:
   // Threading: IO thread.
-  ShellLoginDialog(net::AuthChallengeInfo* auth_info, net::URLRequest* request);
+  ShellLoginDialog(
+      net::AuthChallengeInfo* auth_info,
+      base::OnceCallback<void(const base::Optional<net::AuthCredentials>&)>
+          auth_required_callback);
 
-  // ResourceDispatcherHostLoginDelegate implementation:
+  // LoginDelegate implementation:
   // Threading: IO thread.
   void OnRequestCancelled() override;
 
@@ -71,13 +76,7 @@ class ShellLoginDialog : public ResourceDispatcherHostLoginDelegate {
                            const base::string16& username,
                            const base::string16& password);
 
-  // Who/where/what asked for the authentication.
-  // Threading: IO thread.
-  scoped_refptr<net::AuthChallengeInfo> auth_info_;
-
-  // The request that wants login data.
-  // Threading: IO thread.
-  net::URLRequest* request_;
+  LoginAuthRequiredCallback auth_required_callback_;
 
 #if defined(OS_MACOSX)
   // Threading: UI thread.

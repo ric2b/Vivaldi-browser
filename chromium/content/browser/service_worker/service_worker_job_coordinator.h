@@ -13,7 +13,7 @@
 #include "content/browser/service_worker/service_worker_register_job.h"
 #include "content/browser/service_worker/service_worker_unregister_job.h"
 #include "content/common/content_export.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -29,18 +29,17 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
 
   void Register(const GURL& script_url,
                 const blink::mojom::ServiceWorkerRegistrationOptions& options,
-                const ServiceWorkerRegisterJob::RegistrationCallback& callback);
+                ServiceWorkerRegisterJob::RegistrationCallback callback);
 
-  void Unregister(
-      const GURL& pattern,
-      const ServiceWorkerUnregisterJob::UnregistrationCallback& callback);
+  void Unregister(const GURL& pattern,
+                  ServiceWorkerUnregisterJob::UnregistrationCallback callback);
 
   void Update(ServiceWorkerRegistration* registration, bool force_bypass_cache);
 
   void Update(ServiceWorkerRegistration* registration,
               bool force_bypass_cache,
               bool skip_script_comparison,
-              const ServiceWorkerRegisterJob::RegistrationCallback& callback);
+              ServiceWorkerRegisterJob::RegistrationCallback callback);
 
   // Calls ServiceWorkerRegisterJobBase::Abort() on all jobs and removes them.
   void AbortAll();

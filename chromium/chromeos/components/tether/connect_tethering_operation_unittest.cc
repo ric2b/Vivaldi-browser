@@ -8,14 +8,18 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/test/histogram_tester.h"
+#include "base/memory/ptr_util.h"
+#include "base/optional.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
-#include "chromeos/components/tether/ble_constants.h"
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/mock_tether_host_response_recorder.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
 #include "chromeos/components/tether/proto_test_util.h"
+#include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
+#include "chromeos/services/secure_channel/ble_constants.h"
+#include "chromeos/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -40,21 +44,25 @@ class TestObserver final : public ConnectTetheringOperation::Observer {
   TestObserver() = default;
   ~TestObserver() = default;
 
-  const cryptauth::RemoteDevice& remote_device() { return remote_device_; }
+  base::Optional<cryptauth::RemoteDeviceRef> remote_device() {
+    return remote_device_;
+  }
   const std::string& ssid() { return ssid_; }
   const std::string& password() { return password_; }
   bool has_received_failure() { return has_received_failure_; }
   bool has_sent_request() { return has_sent_request_; }
-  ConnectTetheringResponse_ResponseCode error_code() { return error_code_; }
+  ConnectTetheringOperation::HostResponseErrorCode error_code() {
+    return error_code_;
+  }
 
   // ConnectTetheringOperation::Observer:
   void OnConnectTetheringRequestSent(
-      const cryptauth::RemoteDevice& remote_device) override {
+      cryptauth::RemoteDeviceRef remote_device) override {
     has_sent_request_ = true;
   }
 
   void OnSuccessfulConnectTetheringResponse(
-      const cryptauth::RemoteDevice& remote_device,
+      cryptauth::RemoteDeviceRef remote_device,
       const std::string& ssid,
       const std::string& password) override {
     remote_device_ = remote_device;
@@ -63,20 +71,20 @@ class TestObserver final : public ConnectTetheringOperation::Observer {
   }
 
   void OnConnectTetheringFailure(
-      const cryptauth::RemoteDevice& remote_device,
-      ConnectTetheringResponse_ResponseCode error_code) override {
+      cryptauth::RemoteDeviceRef remote_device,
+      ConnectTetheringOperation::HostResponseErrorCode error_code) override {
     has_received_failure_ = true;
     remote_device_ = remote_device;
     error_code_ = error_code;
   }
 
  private:
-  cryptauth::RemoteDevice remote_device_;
+  base::Optional<cryptauth::RemoteDeviceRef> remote_device_;
   std::string ssid_;
   std::string password_;
   bool has_received_failure_ = false;
   bool has_sent_request_ = false;
-  ConnectTetheringResponse_ResponseCode error_code_;
+  ConnectTetheringOperation::HostResponseErrorCode error_code_;
 };
 
 std::string CreateConnectTetheringRequestString() {
@@ -111,22 +119,26 @@ class ConnectTetheringOperationTest : public testing::Test {
   ConnectTetheringOperationTest()
       : connect_tethering_request_string_(
             CreateConnectTetheringRequestString()),
-        test_device_(cryptauth::GenerateTestRemoteDevices(1)[0]) {}
+        test_device_(cryptauth::CreateRemoteDeviceRefListForTest(1)[0]) {}
 
   void SetUp() override {
+    fake_device_sync_client_ =
+        std::make_unique<device_sync::FakeDeviceSyncClient>();
+    fake_secure_channel_client_ =
+        std::make_unique<secure_channel::FakeSecureChannelClient>();
     fake_ble_connection_manager_ = std::make_unique<FakeBleConnectionManager>();
     mock_tether_host_response_recorder_ =
         std::make_unique<StrictMock<MockTetherHostResponseRecorder>>();
     test_observer_ = base::WrapUnique(new TestObserver());
 
     operation_ = base::WrapUnique(new ConnectTetheringOperation(
-        test_device_, fake_ble_connection_manager_.get(),
+        test_device_, fake_device_sync_client_.get(),
+        fake_secure_channel_client_.get(), fake_ble_connection_manager_.get(),
         mock_tether_host_response_recorder_.get(), false /* setup_required */));
     operation_->AddObserver(test_observer_.get());
 
-    test_clock_ = new base::SimpleTestClock();
-    test_clock_->SetNow(base::Time::UnixEpoch());
-    operation_->SetClockForTest(base::WrapUnique(test_clock_));
+    test_clock_.SetNow(base::Time::UnixEpoch());
+    operation_->SetClockForTest(&test_clock_);
 
     operation_->Initialize();
   }
@@ -154,8 +166,9 @@ class ConnectTetheringOperationTest : public testing::Test {
 
   void SimulateResponseReceivedAndVerifyObserverCallbackInvoked(
       ConnectTetheringResponse_ResponseCode response_code,
+      ConnectTetheringOperation::HostResponseErrorCode expected_error_code,
       bool use_proto_without_ssid_and_password) {
-    test_clock_->Advance(kConnectTetheringResponseTime);
+    test_clock_.Advance(kConnectTetheringResponseTime);
 
     fake_ble_connection_manager_->ReceiveMessage(
         test_device_.GetDeviceId(),
@@ -184,7 +197,7 @@ class ConnectTetheringOperationTest : public testing::Test {
       EXPECT_EQ(std::string(kTestPassword), test_observer_->password());
     } else {
       EXPECT_TRUE(test_observer_->has_received_failure());
-      EXPECT_EQ(expected_response_code, test_observer_->error_code());
+      EXPECT_EQ(expected_error_code, test_observer_->error_code());
     }
 
     histogram_tester_.ExpectTimeBucketCount(
@@ -196,20 +209,24 @@ class ConnectTetheringOperationTest : public testing::Test {
     uint32_t expected_response_timeout_seconds =
         setup_required
             ? ConnectTetheringOperation::kSetupRequiredResponseTimeoutSeconds
-            : MessageTransferOperation::kDefaultTimeoutSeconds;
+            : ConnectTetheringOperation::
+                  kSetupNotRequiredResponseTimeoutSeconds;
 
     EXPECT_EQ(expected_response_timeout_seconds,
-              operation_->GetTimeoutSeconds());
+              operation_->GetMessageTimeoutSeconds());
   }
 
   const std::string connect_tethering_request_string_;
-  const cryptauth::RemoteDevice test_device_;
+  const cryptauth::RemoteDeviceRef test_device_;
 
+  std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
+  std::unique_ptr<secure_channel::SecureChannelClient>
+      fake_secure_channel_client_;
   std::unique_ptr<FakeBleConnectionManager> fake_ble_connection_manager_;
   std::unique_ptr<StrictMock<MockTetherHostResponseRecorder>>
       mock_tether_host_response_recorder_;
   std::unique_ptr<TestObserver> test_observer_;
-  base::SimpleTestClock* test_clock_;
+  base::SimpleTestClock test_clock_;
   std::unique_ptr<ConnectTetheringOperation> operation_;
 
   base::HistogramTester histogram_tester_;
@@ -227,6 +244,8 @@ TEST_F(ConnectTetheringOperationTest, TestOperation_SuccessButInvalidResponse) {
   SimulateResponseReceivedAndVerifyObserverCallbackInvoked(
       ConnectTetheringResponse_ResponseCode::
           ConnectTetheringResponse_ResponseCode_SUCCESS,
+      ConnectTetheringOperation::HostResponseErrorCode::
+          INVALID_HOTSPOT_CREDENTIALS,
       true /* use_proto_without_ssid_and_password */);
 }
 
@@ -238,6 +257,7 @@ TEST_F(ConnectTetheringOperationTest, TestOperation_SuccessWithValidResponse) {
   SimulateResponseReceivedAndVerifyObserverCallbackInvoked(
       ConnectTetheringResponse_ResponseCode::
           ConnectTetheringResponse_ResponseCode_SUCCESS,
+      ConnectTetheringOperation::HostResponseErrorCode::UNKNOWN_ERROR,
       false /* use_proto_without_ssid_and_password */);
 }
 
@@ -250,6 +270,7 @@ TEST_F(ConnectTetheringOperationTest, TestOperation_UnknownError) {
   SimulateResponseReceivedAndVerifyObserverCallbackInvoked(
       ConnectTetheringResponse_ResponseCode::
           ConnectTetheringResponse_ResponseCode_UNKNOWN_ERROR,
+      ConnectTetheringOperation::HostResponseErrorCode::UNKNOWN_ERROR,
       false /* use_proto_without_ssid_and_password */);
 }
 
@@ -262,6 +283,7 @@ TEST_F(ConnectTetheringOperationTest, TestOperation_ProvisioningFailed) {
   SimulateResponseReceivedAndVerifyObserverCallbackInvoked(
       ConnectTetheringResponse_ResponseCode::
           ConnectTetheringResponse_ResponseCode_PROVISIONING_FAILED,
+      ConnectTetheringOperation::HostResponseErrorCode::PROVISIONING_FAILED,
       false /* use_proto_without_ssid_and_password */);
 }
 
@@ -277,8 +299,7 @@ TEST_F(ConnectTetheringOperationTest, TestCannotConnect) {
 
   // The maximum number of connection failures has occurred.
   EXPECT_TRUE(test_observer_->has_received_failure());
-  EXPECT_EQ(ConnectTetheringResponse_ResponseCode::
-                ConnectTetheringResponse_ResponseCode_UNKNOWN_ERROR,
+  EXPECT_EQ(ConnectTetheringOperation::HostResponseErrorCode::NO_RESPONSE,
             test_observer_->error_code());
 
   histogram_tester_.ExpectTotalCount(
@@ -287,11 +308,12 @@ TEST_F(ConnectTetheringOperationTest, TestCannotConnect) {
 
 TEST_F(ConnectTetheringOperationTest, TestOperation_SetupRequired) {
   operation_ = base::WrapUnique(new ConnectTetheringOperation(
-      test_device_, fake_ble_connection_manager_.get(),
+      test_device_, fake_device_sync_client_.get(),
+      fake_secure_channel_client_.get(), fake_ble_connection_manager_.get(),
       mock_tether_host_response_recorder_.get(), true /* setup_required */));
   VerifyResponseTimeoutSeconds(true /* setup_required */);
 }
 
 }  // namespace tether
 
-}  // namespace cryptauth
+}  // namespace chromeos

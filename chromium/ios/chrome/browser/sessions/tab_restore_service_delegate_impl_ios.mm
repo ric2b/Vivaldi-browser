@@ -24,7 +24,7 @@
 
 TabRestoreServiceDelegateImplIOS::TabRestoreServiceDelegateImplIOS(
     ios::ChromeBrowserState* browser_state)
-    : browser_state_(browser_state) {}
+    : browser_state_(browser_state), session_id_(SessionID::NewUnique()) {}
 
 TabRestoreServiceDelegateImplIOS::~TabRestoreServiceDelegateImplIOS() {}
 
@@ -40,7 +40,7 @@ void TabRestoreServiceDelegateImplIOS::ShowBrowserWindow() {
   // shown.
 }
 
-const SessionID& TabRestoreServiceDelegateImplIOS::GetSessionID() const {
+SessionID TabRestoreServiceDelegateImplIOS::GetSessionID() const {
   return session_id_;
 }
 

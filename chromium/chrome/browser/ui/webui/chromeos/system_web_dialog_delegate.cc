@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "chrome/browser/chromeos/options/network_config_view.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "components/session_manager/core/session_manager.h"
@@ -42,6 +41,10 @@ void SystemWebDialogDelegate::GetDialogSize(gfx::Size* size) const {
   size->SetSize(kDialogWidth, kDialogHeight);
 }
 
+std::string SystemWebDialogDelegate::GetDialogArgs() const {
+  return std::string();
+}
+
 void SystemWebDialogDelegate::OnDialogShown(
     content::WebUI* webui,
     content::RenderViewHost* render_view_host) {
@@ -61,20 +64,14 @@ bool SystemWebDialogDelegate::ShouldShowDialogTitle() const {
   return !title_.empty();
 }
 
-void SystemWebDialogDelegate::ShowSystemDialog() {
-  // NetworkConfigView does not interact well with web dialogs. For now, do
-  // not show the dialog while NetworkConfigView is shown: crbug.com/791955.
-  // TODO(stevenjb): Remove this when NetworkConfigView is deprecated.
-  if (NetworkConfigView::HasInstance()) {
-    delete this;
-    return;
-  }
+void SystemWebDialogDelegate::ShowSystemDialog(bool is_minimal_style) {
   content::BrowserContext* browser_context =
       ProfileManager::GetActiveUserProfile();
   int container_id = GetDialogModalType() == ui::MODAL_TYPE_NONE
                          ? ash::kShellWindowId_AlwaysOnTopContainer
                          : ash::kShellWindowId_LockSystemModalContainer;
-  chrome::ShowWebDialogInContainer(container_id, browser_context, this);
+  chrome::ShowWebDialogInContainer(container_id, browser_context, this,
+                                   is_minimal_style);
 }
 
 }  // namespace chromeos

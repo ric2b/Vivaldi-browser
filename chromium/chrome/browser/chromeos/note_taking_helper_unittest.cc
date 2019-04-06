@@ -15,7 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/note_taking_controller_client.h"
@@ -405,7 +405,7 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
             .Append(extensions::DictionaryBuilder()
                         .Set("action", app_runtime::ToString(
                                            app_runtime::ACTION_TYPE_NEW_NOTE))
-                        .SetBoolean("enabled_on_lock_screen", true)
+                        .Set("enabled_on_lock_screen", true)
                         .Build())
             .Build();
 

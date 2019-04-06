@@ -33,7 +33,6 @@
 #include "cc/layers/touch_action_region.h"
 #include "cc/tiles/tile_priority.h"
 #include "cc/trees/element_id.h"
-#include "cc/trees/mutator_host_client.h"
 #include "cc/trees/target_property.h"
 #include "components/viz/common/quads/shared_quad_state.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -45,13 +44,13 @@
 
 namespace base {
 namespace trace_event {
-class ConvertableToTraceFormat;
 class TracedValue;
 }
 class DictionaryValue;
 }
 
 namespace viz {
+class ClientResourceProvider;
 class RenderPass;
 }
 
@@ -59,9 +58,7 @@ namespace cc {
 
 class AppendQuadsData;
 class LayerTreeImpl;
-class LayerTreeResourceProvider;
 class MicroBenchmarkImpl;
-class MutatorHost;
 class PrioritizedTile;
 class ScrollbarLayerImplBase;
 class SimpleEnclosedRegion;
@@ -86,7 +83,8 @@ class CC_EXPORT LayerImpl {
 
   int id() const { return layer_id_; }
 
-  // Interactions with attached animations.
+  // Whether this layer is on the active tree, return false if it's on the
+  // pending tree.
   bool IsActive() const;
 
   void SetHasTransformNode(bool val) { has_transform_node_ = val; }
@@ -107,23 +105,22 @@ class CC_EXPORT LayerImpl {
   void SetScrollTreeIndex(int index);
   int scroll_tree_index() const { return scroll_tree_index_; }
 
-  void set_offset_to_transform_parent(const gfx::Vector2dF& offset) {
+  void SetOffsetToTransformParent(const gfx::Vector2dF& offset) {
     offset_to_transform_parent_ = offset;
   }
   gfx::Vector2dF offset_to_transform_parent() const {
     return offset_to_transform_parent_;
   }
 
-  void set_should_flatten_transform_from_property_tree(bool should_flatten) {
-    should_flatten_transform_from_property_tree_ = should_flatten;
+  void SetShouldFlattenScreenSpaceTransformFromPropertyTree(
+      bool should_flatten) {
+    should_flatten_screen_space_transform_from_property_tree_ = should_flatten;
   }
-  bool should_flatten_transform_from_property_tree() const {
-    return should_flatten_transform_from_property_tree_;
+  bool should_flatten_screen_space_transform_from_property_tree() const {
+    return should_flatten_screen_space_transform_from_property_tree_;
   }
 
   bool is_clipped() const { return draw_properties_.is_clipped; }
-
-  void UpdatePropertyTreeScrollOffset();
 
   LayerTreeImpl* layer_tree_impl() const { return layer_tree_impl_; }
 
@@ -136,14 +133,12 @@ class CC_EXPORT LayerImpl {
   // WillDraw must be called before AppendQuads. If WillDraw returns false,
   // AppendQuads and DidDraw will not be called. If WillDraw returns true,
   // DidDraw is guaranteed to be called before another WillDraw or before
-  // the layer is destroyed. To enforce this, any class that overrides
-  // WillDraw/DidDraw must call the base class version only if WillDraw
-  // returns true.
+  // the layer is destroyed.
   virtual bool WillDraw(DrawMode draw_mode,
-                        LayerTreeResourceProvider* resource_provider);
+                        viz::ClientResourceProvider* resource_provider);
   virtual void AppendQuads(viz::RenderPass* render_pass,
                            AppendQuadsData* append_quads_data) {}
-  virtual void DidDraw(LayerTreeResourceProvider* resource_provider);
+  virtual void DidDraw(viz::ClientResourceProvider* resource_provider);
 
   // Verify that the resource ids in the quad are valid.
   void ValidateQuadResources(viz::DrawQuad* quad) const {
@@ -196,7 +191,6 @@ class CC_EXPORT LayerImpl {
   bool contents_opaque() const { return contents_opaque_; }
 
   float Opacity() const;
-  const gfx::Transform& Transform() const;
 
   // Stable identifier for clients. See comment in cc/trees/element_id.h.
   void SetElementId(ElementId element_id);
@@ -335,6 +329,16 @@ class CC_EXPORT LayerImpl {
     return touch_action_region_;
   }
 
+  // Set or get the region that contains wheel event handler.
+  // The |wheel_event_handler_region| specify the area where wheel event handler
+  // could block impl scrolling.
+  void SetWheelEventHandlerRegion(const Region& wheel_event_handler_region) {
+    wheel_event_handler_region_ = wheel_event_handler_region;
+  }
+  const Region& wheel_event_handler_region() const {
+    return wheel_event_handler_region_;
+  }
+
   // Note this rect is in layer space (not content space).
   void SetUpdateRect(const gfx::Rect& update_rect);
   const gfx::Rect& update_rect() const { return update_rect_; }
@@ -368,8 +372,13 @@ class CC_EXPORT LayerImpl {
   // that rendered this layer was lost.
   virtual void ReleaseResources();
 
+  // Releases resources in response to memory pressure. The default
+  // implementation just calls ReleaseResources() and subclasses will override
+  // if that's not appropriate.
+  virtual void OnPurgeMemory();
+
   // Release tile resources held by this layer. Called when a rendering mode
-  // switch has occured and tiles are no longer valid.
+  // switch has occurred and tiles are no longer valid.
   virtual void ReleaseTileResources();
 
   // Recreate tile resources held by this layer after they were released by a
@@ -377,8 +386,12 @@ class CC_EXPORT LayerImpl {
   virtual void RecreateTileResources();
 
   virtual std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl);
-  virtual bool IsSnapped();
   virtual void PushPropertiesTo(LayerImpl* layer);
+
+  // Internal to property tree construction (which only happens in tests on a
+  // LayerImpl tree. See Layer::IsSnappedToPixelGridInTarget() for explanation,
+  // as this mirrors that method.
+  virtual bool IsSnappedToPixelGridInTarget();
 
   virtual void GetAllPrioritizedTilesForTracing(
       std::vector<PrioritizedTile>* prioritized_tiles) const;
@@ -390,8 +403,7 @@ class CC_EXPORT LayerImpl {
 
   virtual void RunMicroBenchmark(MicroBenchmarkImpl* benchmark);
 
-  void SetDebugInfo(
-      std::unique_ptr<base::trace_event::ConvertableToTraceFormat> debug_info);
+  void SetDebugInfo(std::unique_ptr<base::trace_event::TracedValue> debug_info);
 
   void set_contributes_to_drawn_render_surface(bool is_member) {
     contributes_to_drawn_render_surface_ = is_member;
@@ -419,8 +431,6 @@ class CC_EXPORT LayerImpl {
 
   virtual gfx::Rect GetEnclosingRectInTargetSpace() const;
 
-  bool has_copy_requests_in_target_subtree();
-
   void UpdatePropertyTreeForAnimationIfNeeded(ElementId element_id);
 
   float GetIdealContentsScale() const;
@@ -433,11 +443,6 @@ class CC_EXPORT LayerImpl {
     return has_will_change_transform_hint_;
   }
 
-  void SetTrilinearFiltering(bool trilinear_filtering);
-  bool trilinear_filtering() const { return trilinear_filtering_; }
-
-  MutatorHost* GetMutatorHost() const;
-
   ElementListType GetElementTypeForAnimation() const;
 
   void set_needs_show_scrollbars(bool yes) { needs_show_scrollbars_ = yes; }
@@ -449,6 +454,9 @@ class CC_EXPORT LayerImpl {
   bool raster_even_if_not_drawn() const { return raster_even_if_not_drawn_; }
 
   void EnsureValidPropertyTreeIndices() const;
+
+  // TODO(sunxd): Remove this function and replace it with visitor pattern.
+  virtual bool is_surface_layer() const;
 
  protected:
   LayerImpl(LayerTreeImpl* layer_impl,
@@ -496,7 +504,7 @@ class CC_EXPORT LayerImpl {
   // |scroll_container_bounds|).
   bool scrollable_ : 1;
 
-  bool should_flatten_transform_from_property_tree_ : 1;
+  bool should_flatten_screen_space_transform_from_property_tree_ : 1;
 
   // Tracks if drawing-related properties have changed since last redraw.
   // TODO(wutao): We want to distinquish the sources of change so that we can
@@ -528,12 +536,12 @@ class CC_EXPORT LayerImpl {
 
   Region non_fast_scrollable_region_;
   TouchActionRegion touch_action_region_;
+  Region wheel_event_handler_region_;
   SkColor background_color_;
   SkColor safe_opaque_background_color_;
 
   gfx::PointF position_;
 
-  gfx::Rect clip_rect_in_target_space_;
   int transform_tree_index_;
   int effect_tree_index_;
   int clip_tree_index_;
@@ -566,12 +574,10 @@ class CC_EXPORT LayerImpl {
   DrawProperties draw_properties_;
   PerformanceProperties<LayerImpl> performance_properties_;
 
-  std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
-      owned_debug_info_;
-  base::trace_event::ConvertableToTraceFormat* debug_info_;
+  std::unique_ptr<base::trace_event::TracedValue> owned_debug_info_;
+  base::trace_event::TracedValue* debug_info_;
 
   bool has_will_change_transform_hint_ : 1;
-  bool trilinear_filtering_ : 1;
   bool needs_push_properties_ : 1;
   bool scrollbars_hidden_ : 1;
 

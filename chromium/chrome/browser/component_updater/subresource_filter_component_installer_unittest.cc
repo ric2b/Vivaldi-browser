@@ -13,12 +13,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
-#include "base/test/scoped_task_environment.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/version.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -29,6 +28,7 @@
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -107,9 +107,9 @@ class SubresourceFilterComponentInstallerTest : public PlatformTest {
         pref_service_.registry());
 
     auto content_service =
-        base::MakeUnique<subresource_filter::ContentRulesetService>(
+        std::make_unique<subresource_filter::ContentRulesetService>(
             base::ThreadTaskRunnerHandle::Get());
-    auto test_ruleset_service = base::MakeUnique<TestRulesetService>(
+    auto test_ruleset_service = std::make_unique<TestRulesetService>(
         &pref_service_, base::ThreadTaskRunnerHandle::Get(),
         content_service.get(), ruleset_service_dir_.GetPath());
     test_ruleset_service_ = test_ruleset_service.get();
@@ -117,12 +117,12 @@ class SubresourceFilterComponentInstallerTest : public PlatformTest {
 
     TestingBrowserProcess::GetGlobal()->SetRulesetService(
         std::move(content_service));
-    policy_ = base::MakeUnique<SubresourceFilterComponentInstallerPolicy>();
+    policy_ = std::make_unique<SubresourceFilterComponentInstallerPolicy>();
   }
 
   void TearDown() override {
     TestingBrowserProcess::GetGlobal()->SetRulesetService(nullptr);
-    scoped_task_environment_.RunUntilIdle();
+    thread_bundle_.RunUntilIdle();
     PlatformTest::TearDown();
   }
 
@@ -171,13 +171,9 @@ class SubresourceFilterComponentInstallerTest : public PlatformTest {
   }
 
  protected:
-  void RunUntilIdle() {
-    scoped_task_environment_.RunUntilIdle();
-    base::RunLoop().RunUntilIdle();
-  }
+  content::TestBrowserThreadBundle thread_bundle_;
 
  private:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   base::ScopedTempDir component_install_dir_;
   base::ScopedTempDir ruleset_service_dir_;
@@ -192,26 +188,28 @@ class SubresourceFilterComponentInstallerTest : public PlatformTest {
 
 TEST_F(SubresourceFilterComponentInstallerTest,
        TestComponentRegistrationWhenFeatureDisabled) {
-  subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
-      scoped_feature(base::FeatureList::OVERRIDE_DISABLE_FEATURE);
+  base::test::ScopedFeatureList scoped_disable;
+  scoped_disable.InitAndDisableFeature(
+      subresource_filter::kSafeBrowsingSubresourceFilter);
   std::unique_ptr<SubresourceFilterMockComponentUpdateService>
       component_updater(new SubresourceFilterMockComponentUpdateService());
   EXPECT_CALL(*component_updater, RegisterComponent(testing::_)).Times(0);
   RegisterSubresourceFilterComponent(component_updater.get());
-  RunUntilIdle();
+  thread_bundle_.RunUntilIdle();
 }
 
 TEST_F(SubresourceFilterComponentInstallerTest,
        TestComponentRegistrationWhenFeatureEnabled) {
-  subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
-      scoped_feature(base::FeatureList::OVERRIDE_ENABLE_FEATURE);
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(
+      subresource_filter::kSafeBrowsingSubresourceFilter);
   std::unique_ptr<SubresourceFilterMockComponentUpdateService>
       component_updater(new SubresourceFilterMockComponentUpdateService());
   EXPECT_CALL(*component_updater, RegisterComponent(testing::_))
       .Times(1)
       .WillOnce(testing::Return(true));
   RegisterSubresourceFilterComponent(component_updater.get());
-  RunUntilIdle();
+  thread_bundle_.RunUntilIdle();
 }
 
 TEST_F(SubresourceFilterComponentInstallerTest, LoadEmptyRuleset) {

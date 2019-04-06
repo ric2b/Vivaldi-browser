@@ -4,8 +4,13 @@
 
 #include "chrome/browser/media/media_engagement_contents_observer.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/optional.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -15,12 +20,14 @@
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/media/media_engagement_service_factory.h"
 #include "chrome/browser/media/media_engagement_session.h"
+#include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/ukm/ukm_source.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/test_service_manager_context.h"
 #include "content/public/test/web_contents_tester.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,8 +44,12 @@ class MediaEngagementContentsObserverTest
 
     ChromeRenderViewHostTestHarness::SetUp();
 
+    test_service_manager_context_ =
+        std::make_unique<content::TestServiceManagerContext>();
+
     SetContents(content::WebContentsTester::CreateTestWebContents(
         browser_context(), nullptr));
+    RecentlyAudibleHelper::CreateForWebContents(web_contents());
 
     service_ =
         base::WrapUnique(new MediaEngagementService(profile(), &test_clock_));
@@ -52,6 +63,12 @@ class MediaEngagementContentsObserverTest
     SimulateInaudible();
   }
 
+  void TearDown() override {
+    // Must be reset before browser thread teardown.
+    test_service_manager_context_.reset();
+    ChromeRenderViewHostTestHarness::TearDown();
+  }
+
   MediaEngagementContentsObserver* CreateContentsObserverFor(
       content::WebContents* web_contents) {
     MediaEngagementContentsObserver* contents_observer =
@@ -61,12 +78,12 @@ class MediaEngagementContentsObserverTest
   }
 
   bool IsTimerRunning() const {
-    return contents_observer_->playback_timer_->IsRunning();
+    return contents_observer_->playback_timer_.IsRunning();
   }
 
   bool IsTimerRunningForPlayer(int id) const {
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     auto audible_row = contents_observer_->audible_players_.find(player_id);
     return audible_row != contents_observer_->audible_players_.end() &&
            audible_row->second.second;
@@ -93,8 +110,8 @@ class MediaEngagementContentsObserverTest
   }
 
   void SimulateResizeEvent(int id, gfx::Size size) {
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     contents_observer_->MediaResized(size, player_id);
   }
 
@@ -110,8 +127,8 @@ class MediaEngagementContentsObserverTest
       content::WebContentsObserver::MediaPlayerInfo player_info,
       int id,
       bool muted_state) {
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     contents_observer_->MediaStartedPlaying(player_info, player_id);
     SimulateMutedStateChange(id, muted_state);
   }
@@ -122,8 +139,8 @@ class MediaEngagementContentsObserverTest
     test_clock_.Advance(elapsed);
 
     content::WebContentsObserver::MediaPlayerInfo player_info(true, true);
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     contents_observer_->MediaStoppedPlaying(
         player_info, player_id,
         finished
@@ -137,14 +154,18 @@ class MediaEngagementContentsObserverTest
   }
 
   void SimulateMutedStateChange(int id, bool muted) {
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     contents_observer_->MediaMutedStatusChanged(player_id, muted);
   }
 
-  void SimulateIsVisible() { contents_observer_->WasShown(); }
+  void SimulateIsVisible() {
+    contents_observer_->OnVisibilityChanged(content::Visibility::VISIBLE);
+  }
 
-  void SimulateIsHidden() { contents_observer_->WasHidden(); }
+  void SimulateIsHidden() {
+    contents_observer_->OnVisibilityChanged(content::Visibility::HIDDEN);
+  }
 
   bool AreConditionsMet() const {
     return contents_observer_->AreConditionsMet();
@@ -160,8 +181,8 @@ class MediaEngagementContentsObserverTest
 
   void SimulateSignificantPlaybackTimeForPlayer(int id) {
     SimulateLongMediaPlayback(id);
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     contents_observer_->OnSignificantMediaPlaybackTimeForPlayer(player_id);
   }
 
@@ -223,12 +244,12 @@ class MediaEngagementContentsObserverTest
 
   void SimulateAudible() {
     content::WebContentsTester::For(web_contents())
-        ->SetWasRecentlyAudible(true);
+        ->SetIsCurrentlyAudible(true);
   }
 
   void SimulateInaudible() {
     content::WebContentsTester::For(web_contents())
-        ->SetWasRecentlyAudible(false);
+        ->SetIsCurrentlyAudible(false);
   }
 
   void ExpectUkmEntry(GURL url,
@@ -312,8 +333,8 @@ class MediaEngagementContentsObserverTest
   }
 
   void ForceUpdateTimer(int id) {
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     contents_observer_->UpdatePlayerTimer(player_id);
   }
 
@@ -344,8 +365,8 @@ class MediaEngagementContentsObserverTest
   }
 
   void ExpectPlaybackTime(int id, base::TimeDelta expected_time) {
-    content::WebContentsObserver::MediaPlayerId player_id =
-        std::make_pair(nullptr /* RenderFrameHost */, id);
+    content::WebContentsObserver::MediaPlayerId player_id(
+        nullptr /* RenderFrameHost */, id);
     EXPECT_EQ(expected_time, contents_observer_->GetPlayerState(player_id)
                                  .playback_timer->Elapsed());
   }
@@ -395,6 +416,12 @@ class MediaEngagementContentsObserverTest
   const base::TimeDelta kMaxWaitingTime =
       MediaEngagementContentsObserver::kSignificantMediaPlaybackTime +
       base::TimeDelta::FromSeconds(2);
+
+  // WebContentsImpl accesses
+  // content::ServiceManagerConnection::GetForProcess(), so
+  // we must make sure it is instantiated.
+  std::unique_ptr<content::TestServiceManagerContext>
+      test_service_manager_context_;
 };
 
 // TODO(mlamouri): test that visits are not recorded multiple times when a

@@ -23,4 +23,7 @@ include_rules = [
   "+components/webdata_services",
   "+google_apis",
   "+net",
+  "+services/identity/public/cpp",
+  "+services/network/public/cpp",
+  "+services/network/test",
 ]

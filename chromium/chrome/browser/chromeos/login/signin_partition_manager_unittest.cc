@@ -18,7 +18,6 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/web_contents_tester.h"
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
@@ -81,10 +80,8 @@ class SigninPartitionManagerTest : public ChromeRenderViewHostTestHarness {
 
     signin_browser_context_ = std::make_unique<TestingProfile>();
 
-    signin_ui_web_contents_ = base::WrapUnique<content::WebContents>(
-        content::WebContentsTester::CreateTestWebContents(
-            GetSigninProfile(),
-            content::SiteInstance::Create(GetSigninProfile())));
+    signin_ui_web_contents_ = content::WebContentsTester::CreateTestWebContents(
+        GetSigninProfile(), content::SiteInstance::Create(GetSigninProfile()));
 
     GURL url(kEmbedderUrl);
     content::WebContentsTester::For(signin_ui_web_contents())
@@ -103,6 +100,11 @@ class SigninPartitionManagerTest : public ChromeRenderViewHostTestHarness {
     signin_ui_web_contents_.reset();
 
     signin_browser_context_.reset();
+
+    // ChromeRenderViewHostTestHarness::TearDown() simulates shutdown and
+    // ~URLRequestContextGetter() assumes BrowserThreads are still up so this
+    // must happen first.
+    system_request_context_getter_ = nullptr;
 
     ChromeRenderViewHostTestHarness::TearDown();
   }

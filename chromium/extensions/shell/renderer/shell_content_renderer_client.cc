@@ -4,7 +4,7 @@
 
 #include "extensions/shell/renderer/shell_content_renderer_client.h"
 
-#include "components/nacl/common/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_observer.h"
@@ -18,7 +18,7 @@
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container.h"
 #include "extensions/shell/common/shell_extensions_client.h"
 #include "extensions/shell/renderer/shell_extensions_renderer_client.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 #if BUILDFLAG(ENABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
@@ -84,13 +84,15 @@ blink::WebPlugin* ShellContentRendererClient::CreatePluginReplacement(
   return NULL;
 }
 
-bool ShellContentRendererClient::WillSendRequest(
+void ShellContentRendererClient::WillSendRequest(
     blink::WebLocalFrame* frame,
     ui::PageTransition transition_type,
     const blink::WebURL& url,
-    GURL* new_url) {
+    const url::Origin* initiator_origin,
+    GURL* new_url,
+    bool* attach_same_site_cookies) {
+  *attach_same_site_cookies = false;
   // TODO(jamescook): Cause an error for bad extension scheme requests?
-  return false;
 }
 
 bool ShellContentRendererClient::IsExternalPepperPlugin(
@@ -105,20 +107,17 @@ bool ShellContentRendererClient::IsExternalPepperPlugin(
 #endif
 }
 
-bool ShellContentRendererClient::ShouldGatherSiteIsolationStats() const {
-  return false;
-}
-
 content::BrowserPluginDelegate*
 ShellContentRendererClient::CreateBrowserPluginDelegate(
     content::RenderFrame* render_frame,
+    const content::WebPluginInfo& info,
     const std::string& mime_type,
     const GURL& original_url) {
   if (mime_type == content::kBrowserPluginMimeType) {
     return new extensions::ExtensionsGuestViewContainer(render_frame);
   } else {
-    return new extensions::MimeHandlerViewContainer(
-        render_frame, mime_type, original_url);
+    return new extensions::MimeHandlerViewContainer(render_frame, info,
+                                                    mime_type, original_url);
   }
 }
 

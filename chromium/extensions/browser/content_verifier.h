@@ -13,9 +13,13 @@
 #include "base/memory/ref_counted.h"
 #include "base/scoped_observer.h"
 #include "base/version.h"
+#include "content/public/browser/browser_thread.h"
+#include "extensions/browser/content_verifier/content_hash.h"
 #include "extensions/browser/content_verifier_delegate.h"
+#include "extensions/browser/content_verifier_io_data.h"
 #include "extensions/browser/content_verify_job.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace base {
 class FilePath;
@@ -28,8 +32,6 @@ class BrowserContext;
 namespace extensions {
 
 class Extension;
-class ContentHashFetcher;
-class ContentVerifierIOData;
 class ManagementPolicy;
 
 // Used for managing overall content verification - both fetching content
@@ -64,7 +66,7 @@ class ContentVerifier : public base::RefCountedThreadSafe<ContentVerifier>,
 
   // Called (typically by a verification job) to indicate that verification
   // failed while reading some file in |extension_id|.
-  void VerifyFailed(const std::string& extension_id,
+  void VerifyFailed(const ExtensionId& extension_id,
                     ContentVerifyJob::FailureReason reason);
 
   // ExtensionRegistryObserver interface
@@ -74,20 +76,60 @@ class ContentVerifier : public base::RefCountedThreadSafe<ContentVerifier>,
                            const Extension* extension,
                            UnloadedExtensionReason reason) override;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(ContentVerifier);
+  using ContentHashCallback =
+      base::OnceCallback<void(const scoped_refptr<const ContentHash>&)>;
 
+  // Retrieves ContentHash for an extension through |callback|.
+  // Must be called on IO thread.
+  // |callback| is called on IO thread.
+  // |force_missing_computed_hashes_creation| should be true if
+  // computed_hashes.json is required to be created if that file is missing or
+  // unreadable.
+  // TODO(lazyboy): |force_missing_computed_hashes_creation| should always be
+  // true, handing its behavior adds extra complexity in HashHelper and this
+  // param should be removed when we can unify/fix computed_hashes.json
+  // treatment, see https://crbug.com/819832 for details.
+  void GetContentHash(const ExtensionId& extension_id,
+                      const base::FilePath& extension_root,
+                      const base::Version& extension_version,
+                      bool force_missing_computed_hashes_creation,
+                      ContentHashCallback callback);
+
+  GURL GetSignatureFetchUrlForTest(const ExtensionId& extension_id,
+                                   const base::Version& extension_version);
+
+  // Test helper to recompute |io_data_| for |extension| without having to
+  // call |OnExtensionLoaded|.
+  void ResetIODataForTesting(const Extension* extension);
+
+ private:
+  friend class ContentVerifierTest;
   friend class base::RefCountedThreadSafe<ContentVerifier>;
+  friend class HashHelper;
   ~ContentVerifier() override;
 
-  void OnFetchComplete(
-      const std::string& extension_id,
-      bool success,
-      bool was_force_check,
-      const std::set<base::FilePath>& hash_mismatch_unix_paths);
+  void ShutdownOnIO();
 
-  void OnFetchCompleteHelper(const std::string& extension_id,
-                             bool should_verify_any_paths_result);
+  class HashHelper;
+
+  void OnFetchComplete(const scoped_refptr<const ContentHash>& content_hash);
+  ContentHash::FetchParams GetFetchParams(
+      const ExtensionId& extension_id,
+      const base::Version& extension_version);
+
+  // Binds an URLLoaderFactoryRequest on the UI thread.
+  void BindURLLoaderFactoryRequestOnUIThread(
+      network::mojom::URLLoaderFactoryRequest url_loader_factory_request);
+
+  // Performs IO thread operations after extension load.
+  void OnExtensionLoadedOnIO(
+      const ExtensionId& extension_id,
+      const base::FilePath& extension_root,
+      const base::Version& extension_version,
+      std::unique_ptr<ContentVerifierIOData::ExtensionData> data);
+  // Performs IO thread operations after extension unload.
+  void OnExtensionUnloadedOnIO(const ExtensionId& extension_id,
+                               const base::Version& extension_version);
 
   // Returns true if any of the paths in |relative_unix_paths| *should* have
   // their contents verified. (Some files get transcoded during the install
@@ -98,21 +140,37 @@ class ContentVerifier : public base::RefCountedThreadSafe<ContentVerifier>,
       const base::FilePath& extension_root,
       const std::set<base::FilePath>& relative_unix_paths);
 
-  // Set to true once we've begun shutting down.
-  bool shutdown_;
+  // Returns the HashHelper instance, making sure we create it at most once.
+  // Must *not* be called after |shutdown_on_io_| is set to true.
+  HashHelper* GetOrCreateHashHelper();
 
-  content::BrowserContext* context_;
+  // Set to true once we've begun shutting down on UI thread.
+  // Updated and accessed only on UI thread.
+  bool shutdown_on_ui_ = false;
+
+  // Set to true once we've begun shutting down on IO thread.
+  // Updated and accessed only on IO thread.
+  bool shutdown_on_io_ = false;
+
+  content::BrowserContext* const context_;
+
+  // Guards creation of |hash_helper_|, limiting number of creation to <= 1.
+  // Accessed only on IO thread.
+  bool hash_helper_created_ = false;
+
+  // Created and used on IO thread.
+  std::unique_ptr<HashHelper, content::BrowserThread::DeleteOnIOThread>
+      hash_helper_;
 
   std::unique_ptr<ContentVerifierDelegate> delegate_;
-
-  // For fetching content hash signatures.
-  std::unique_ptr<ContentHashFetcher> fetcher_;
 
   // For observing the ExtensionRegistry.
   ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver> observer_;
 
   // Data that should only be used on the IO thread.
   scoped_refptr<ContentVerifierIOData> io_data_;
+
+  DISALLOW_COPY_AND_ASSIGN(ContentVerifier);
 };
 
 }  // namespace extensions

@@ -12,15 +12,12 @@
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller_delegate.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
-#include "chrome/browser/ui/ash/test_wallpaper_controller.h"
-#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/proximity_auth/screenlock_bridge.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -68,20 +65,13 @@ class SigninPrepareUserListTest : public ash::AshTestBase,
 
     fake_user_manager_->set_owner_id(AccountId::FromUserEmail(kOwner));
 
-    chromeos::WallpaperManager::Initialize();
     chromeos::DeviceSettingsService::Initialize();
     chromeos::CrosSettings::Initialize();
-    wallpaper_controller_client_ =
-        std::make_unique<WallpaperControllerClient>();
-    wallpaper_controller_client_->InitForTesting(
-        test_wallpaper_controller_.CreateInterfacePtr());
   }
 
   void TearDown() override {
-    chromeos::WallpaperManager::Shutdown();
     controller_.reset();
     profile_manager_.reset();
-    wallpaper_controller_client_.reset();
     ash::AshTestBase::TearDown();
   }
 
@@ -93,8 +83,6 @@ class SigninPrepareUserListTest : public ash::AshTestBase,
   std::unique_ptr<TestingProfileManager> profile_manager_;
   std::map<std::string, proximity_auth::mojom::AuthType> user_auth_type_map;
   std::unique_ptr<MultiProfileUserController> controller_;
-  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
-  TestWallpaperController test_wallpaper_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(SigninPrepareUserListTest);
 };

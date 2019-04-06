@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_set.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
@@ -32,6 +33,7 @@ using internal::PropertyNode;
 using internal::RestrictionNode;
 using internal::SchemaData;
 using internal::SchemaNode;
+using internal::SchemaNodeMetadata;
 
 namespace {
 
@@ -49,16 +51,32 @@ typedef std::vector<std::pair<std::string, int*> > ReferenceList;
 // for "$ref" attributes).
 struct StorageSizes {
   StorageSizes()
-      : strings(0), schema_nodes(0), property_nodes(0), properties_nodes(0),
-        restriction_nodes(0), int_enums(0), string_enums(0) { }
+      : strings(0),
+        schema_nodes(0),
+        property_nodes(0),
+        properties_nodes(0),
+        restriction_nodes(0),
+        required_properties(0),
+        int_enums(0),
+        string_enums(0) {}
   size_t strings;
   size_t schema_nodes;
   size_t property_nodes;
   size_t properties_nodes;
   size_t restriction_nodes;
+  size_t required_properties;
   size_t int_enums;
   size_t string_enums;
 };
+
+// A policy-specific extension to schema. If a schema contains this key and the
+// value is true, the policy value should not be displayed on the UI.
+constexpr char kSensitiveValue[] = "sensitiveValue";
+
+// |Schema::MaskSensitiveValues| will replace sensitive values with this string.
+// It should be consistent with the mask |NetworkConfigurationPolicyHandler|
+// uses for network credential fields.
+constexpr char kSensitiveValueMask[] = "********";
 
 // An invalid index, indicating that a node is not present; similar to a NULL
 // pointer.
@@ -156,6 +174,13 @@ class Schema::InternalStorage
     return schema(0);
   }
 
+  // Returns the validation_schema root node if one was generated, or nullptr.
+  const SchemaNode* validation_schema_root_node() const {
+    return schema_data_.validation_schema_root_index >= 0
+               ? schema(schema_data_.validation_schema_root_index)
+               : nullptr;
+  }
+
   const SchemaNode* schema(int index) const {
     return schema_data_.schema_nodes + index;
   }
@@ -172,12 +197,31 @@ class Schema::InternalStorage
     return schema_data_.restriction_nodes + index;
   }
 
+  const char* const* required_property(int index) const {
+    return schema_data_.required_properties + index;
+  }
+
   const int* int_enums(int index) const {
     return schema_data_.int_enums + index;
   }
 
   const char* const* string_enums(int index) const {
     return schema_data_.string_enums + index;
+  }
+
+  // Returns the metadata entry for the |SchemaNode| at index
+  // |schema_node_index| or nullptr if the |SchemaNode| has no metadata.
+  const SchemaNodeMetadata* metadata(int schema_node_index) const {
+    if (!schema_data_.schema_nodes_metadata)
+      return nullptr;
+    return schema_data_.schema_nodes_metadata + schema_node_index;
+  }
+
+  // Returns true if there is a |SchemaNodeMetadata| entry for at least one
+  // |SchemaNode| in this |InternalStorage|. If this function returns false,
+  // |metadata(index)| calls will return nullptr for all valid |index| values.
+  bool has_metadata_for_any_schema_node() const {
+    return schema_data_.schema_nodes_metadata;
   }
 
   // Compiles regular expression |pattern|. The result is cached and will be
@@ -258,8 +302,10 @@ class Schema::InternalStorage
   std::vector<PropertyNode> property_nodes_;
   std::vector<PropertiesNode> properties_nodes_;
   std::vector<RestrictionNode> restriction_nodes_;
+  std::vector<const char*> required_properties_;
   std::vector<int> int_enums_;
   std::vector<const char*> string_enums_;
+  std::vector<SchemaNodeMetadata> schema_nodes_metadata_;
 
   DISALLOW_COPY_AND_ASSIGN(InternalStorage);
 };
@@ -278,8 +324,12 @@ scoped_refptr<const Schema::InternalStorage> Schema::InternalStorage::Wrap(
   storage->schema_data_.property_nodes = data->property_nodes;
   storage->schema_data_.properties_nodes = data->properties_nodes;
   storage->schema_data_.restriction_nodes = data->restriction_nodes;
+  storage->schema_data_.required_properties = data->required_properties;
   storage->schema_data_.int_enums = data->int_enums;
   storage->schema_data_.string_enums = data->string_enums;
+  storage->schema_data_.validation_schema_root_index =
+      data->validation_schema_root_index;
+  storage->schema_data_.schema_nodes_metadata = data->schema_nodes_metadata;
   return storage;
 }
 
@@ -300,8 +350,10 @@ Schema::InternalStorage::ParseSchema(const base::DictionaryValue& schema,
   storage->property_nodes_.reserve(sizes.property_nodes);
   storage->properties_nodes_.reserve(sizes.properties_nodes);
   storage->restriction_nodes_.reserve(sizes.restriction_nodes);
+  storage->required_properties_.reserve(sizes.required_properties);
   storage->int_enums_.reserve(sizes.int_enums);
   storage->string_enums_.reserve(sizes.string_enums);
+  storage->schema_nodes_metadata_.reserve(sizes.schema_nodes);
 
   int root_index = kInvalid;
   IdMap id_map;
@@ -317,12 +369,12 @@ Schema::InternalStorage::ParseSchema(const base::DictionaryValue& schema,
   // None of this should ever happen without having been already detected.
   // But, if it does happen, then it will lead to corrupted memory; drop
   // everything in that case.
-  if (root_index != 0 ||
-      sizes.strings != storage->strings_.size() ||
+  if (root_index != 0 || sizes.strings != storage->strings_.size() ||
       sizes.schema_nodes != storage->schema_nodes_.size() ||
       sizes.property_nodes != storage->property_nodes_.size() ||
       sizes.properties_nodes != storage->properties_nodes_.size() ||
       sizes.restriction_nodes != storage->restriction_nodes_.size() ||
+      sizes.required_properties != storage->required_properties_.size() ||
       sizes.int_enums != storage->int_enums_.size() ||
       sizes.string_enums != storage->string_enums_.size()) {
     *error = "Failed to parse the schema due to a Chrome bug. Please file a "
@@ -333,13 +385,29 @@ Schema::InternalStorage::ParseSchema(const base::DictionaryValue& schema,
   if (!ResolveReferences(id_map, reference_list, error))
     return nullptr;
 
+  bool schema_nodes_metadata_used = false;
+  for (const SchemaNodeMetadata& metadata : storage->schema_nodes_metadata_) {
+    if (metadata.is_sensitive_value) {
+      schema_nodes_metadata_used = true;
+      break;
+    }
+  }
+
   SchemaData* data = &storage->schema_data_;
   data->schema_nodes = storage->schema_nodes_.data();
   data->property_nodes = storage->property_nodes_.data();
   data->properties_nodes = storage->properties_nodes_.data();
   data->restriction_nodes = storage->restriction_nodes_.data();
+  data->required_properties = storage->required_properties_.data();
   data->int_enums = storage->int_enums_.data();
   data->string_enums = storage->string_enums_.data();
+  data->validation_schema_root_index = -1;
+  if (schema_nodes_metadata_used) {
+    data->schema_nodes_metadata = storage->schema_nodes_metadata_.data();
+  } else {
+    storage->schema_nodes_metadata_.clear();
+    data->schema_nodes_metadata = nullptr;
+  }
   return storage;
 }
 
@@ -408,6 +476,14 @@ void Schema::InternalStorage::DetermineStorageSizes(
         sizes->property_nodes++;
       }
     }
+
+    const base::Value* required_properties = schema.FindKey(schema::kRequired);
+    if (required_properties) {
+      // This should have been verified by the JSONSchemaValidator.
+      CHECK(required_properties->is_list());
+      sizes->strings += required_properties->GetList().size();
+      sizes->required_properties += required_properties->GetList().size();
+    }
   } else if (schema.HasKey(schema::kEnum)) {
     const base::ListValue* possible_values = nullptr;
     if (schema.GetList(schema::kEnum, &possible_values)) {
@@ -461,9 +537,12 @@ bool Schema::InternalStorage::Parse(const base::DictionaryValue& schema,
 
   *index = static_cast<int>(schema_nodes_.size());
   schema_nodes_.push_back(SchemaNode());
+  schema_nodes_metadata_.push_back(SchemaNodeMetadata());
   SchemaNode* schema_node = &schema_nodes_.back();
+  SchemaNodeMetadata* schema_node_metadata = &schema_nodes_metadata_.back();
   schema_node->type = type;
   schema_node->extra = kInvalid;
+  schema_node_metadata->is_sensitive_value = false;
 
   if (type == base::Value::Type::DICTIONARY) {
     if (!ParseDictionary(schema, schema_node, id_map, reference_list, error))
@@ -494,6 +573,10 @@ bool Schema::InternalStorage::Parse(const base::DictionaryValue& schema,
     }
     (*id_map)[id_string] = *index;
   }
+
+  bool is_sensitive_value = false;
+  if (schema.GetBoolean(kSensitiveValue, &is_sensitive_value))
+    schema_node_metadata->is_sensitive_value = is_sensitive_value;
 
   return true;
 }
@@ -577,10 +660,22 @@ bool Schema::InternalStorage::ParseDictionary(
     CHECK_EQ(static_cast<int>(pattern_properties->size()), index - base_index);
   }
 
+  properties_nodes_[extra].required_begin = required_properties_.size();
+  const base::Value* required_properties = schema.FindKey(schema::kRequired);
+  if (required_properties) {
+    for (const base::Value& val : required_properties->GetList()) {
+      strings_.push_back(val.GetString());
+      required_properties_.push_back(strings_.back().c_str());
+    }
+  }
+  properties_nodes_[extra].required_end = required_properties_.size();
+
   if (properties_nodes_[extra].begin == properties_nodes_[extra].pattern_end) {
     properties_nodes_[extra].begin = kInvalid;
     properties_nodes_[extra].end = kInvalid;
     properties_nodes_[extra].pattern_end = kInvalid;
+    properties_nodes_[extra].required_begin = kInvalid;
+    properties_nodes_[extra].required_end = kInvalid;
   }
 
   return true;
@@ -799,6 +894,7 @@ bool Schema::Validate(const base::Value& value,
   int int_value;
   std::string str_value;
   if (value.GetAsDictionary(&dict)) {
+    base::flat_set<std::string> present_properties;
     for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd();
          it.Advance()) {
       SchemaList schema_list = GetMatchingProperties(it.key());
@@ -808,6 +904,7 @@ bool Schema::Validate(const base::Value& value,
         if (!StrategyAllowUnknownOnTopLevel(strategy))
           return false;
       } else {
+        bool all_subschemas_are_valid = true;
         for (SchemaList::iterator subschema = schema_list.begin();
              subschema != schema_list.end(); ++subschema) {
           if (!subschema->Validate(it.value(),
@@ -815,12 +912,25 @@ bool Schema::Validate(const base::Value& value,
                                    error_path,
                                    error)) {
             // Invalid property was detected.
+            all_subschemas_are_valid = false;
             AddDictKeyPrefixToPath(it.key(), error_path);
             if (!StrategyAllowInvalidOnTopLevel(strategy))
               return false;
           }
         }
+        if (all_subschemas_are_valid)
+          present_properties.insert(it.key());
       }
+    }
+
+    for (const auto& required_property : GetRequiredProperties()) {
+      if (base::ContainsKey(present_properties, required_property))
+        continue;
+
+      SchemaErrorFound(
+          error_path, error,
+          "Missing or invalid required property: " + required_property);
+      return false;
     }
   } else if (value.GetAsList(&list)) {
     for (base::ListValue::const_iterator it = list->begin(); it != list->end();
@@ -875,6 +985,7 @@ bool Schema::Normalize(base::Value* value,
   base::DictionaryValue* dict = nullptr;
   base::ListValue* list = nullptr;
   if (value->GetAsDictionary(&dict)) {
+    base::flat_set<std::string> present_properties;
     std::vector<std::string> drop_list;  // Contains the keys to drop.
     for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd();
          it.Advance()) {
@@ -887,6 +998,7 @@ bool Schema::Normalize(base::Value* value,
         else
           return false;
       } else {
+        bool all_subschemas_are_valid = true;
         for (SchemaList::iterator subschema = schema_list.begin();
              subschema != schema_list.end(); ++subschema) {
           base::Value* sub_value = nullptr;
@@ -897,6 +1009,7 @@ bool Schema::Normalize(base::Value* value,
                                     error,
                                     changed)) {
             // Invalid property was detected.
+            all_subschemas_are_valid = false;
             AddDictKeyPrefixToPath(it.key(), error_path);
             if (StrategyAllowInvalidOnTopLevel(strategy)) {
               drop_list.push_back(it.key());
@@ -906,8 +1019,21 @@ bool Schema::Normalize(base::Value* value,
             }
           }
         }
+        if (all_subschemas_are_valid)
+          present_properties.insert(it.key());
       }
     }
+
+    for (const auto& required_property : GetRequiredProperties()) {
+      if (base::ContainsKey(present_properties, required_property))
+        continue;
+
+      SchemaErrorFound(
+          error_path, error,
+          "Missing or invalid required property: " + required_property);
+      return false;
+    }
+
     if (changed && !drop_list.empty())
       *changed = true;
     for (std::vector<std::string>::const_iterator it = drop_list.begin();
@@ -946,6 +1072,18 @@ bool Schema::Normalize(base::Value* value,
   return Validate(*value, strategy, error_path, error);
 }
 
+void Schema::MaskSensitiveValues(base::Value* value) const {
+  if (!valid())
+    return;
+
+  // If there's no metadata in the |storage_|, no value has been marked as
+  // sensitive.
+  if (!storage_->has_metadata_for_any_schema_node())
+    return;
+
+  MaskSensitiveValuesRecurse(value);
+}
+
 // static
 Schema Schema::Parse(const std::string& content, std::string* error) {
   // Validate as a generic JSON schema, and ignore unknown attributes; they
@@ -976,7 +1114,7 @@ Schema Schema::Parse(const std::string& content, std::string* error) {
 
   scoped_refptr<const InternalStorage> storage =
       InternalStorage::ParseSchema(*dict, error);
-  if (!storage.get())
+  if (!storage)
     return Schema();
   return Schema(storage, storage->root_node());
 }
@@ -1035,6 +1173,17 @@ SchemaList Schema::GetPatternProperties(const std::string& key) const {
     }
   }
   return matching_properties;
+}
+
+std::vector<std::string> Schema::GetRequiredProperties() const {
+  CHECK(valid());
+  CHECK_EQ(base::Value::Type::DICTIONARY, type());
+  const PropertiesNode* node = storage_->properties(node_->extra);
+  const size_t begin = node->required_begin;
+  const size_t end = node->required_end;
+
+  return std::vector<std::string>(storage_->required_property(begin),
+                                  storage_->required_property(end));
 }
 
 Schema Schema::GetProperty(const std::string& key) const {
@@ -1104,6 +1253,56 @@ bool Schema::ValidateStringRestriction(int index, const char* str) const {
     re2::RE2* regex = storage_->CompileRegex(*storage_->string_enums(index));
     return re2::RE2::PartialMatch(str, *regex);
   }
+}
+
+void Schema::MaskSensitiveValuesRecurse(base::Value* value) const {
+  if (IsSensitiveValue())
+    *value = base::Value(kSensitiveValueMask);
+
+  if (value->type() != type())
+    return;
+
+  base::DictionaryValue* dict = nullptr;
+  base::ListValue* list = nullptr;
+  if (value->GetAsDictionary(&dict)) {
+    // Iterating over |base::Value::DictItems()| yields temporaries of the type
+    // |std::pair<const std::string&, base::Value&>|. It is not possible to
+    // capture the returned |std::pair| in a reference. However, it is still
+    // possible to mutate the |base::Value| through the |pair|'s |second|, which
+    // itself is a reference.
+    for (std::pair<const std::string&, base::Value&> dict_item :
+         dict->DictItems()) {
+      auto& value = dict_item.second;
+      SchemaList schema_list = GetMatchingProperties(dict_item.first);
+      for (const auto& schema_item : schema_list)
+        schema_item.MaskSensitiveValuesRecurse(&value);
+    }
+  } else if (value->GetAsList(&list)) {
+    for (auto& list_elem : list->GetList())
+      GetItems().MaskSensitiveValuesRecurse(&list_elem);
+  }
+}
+
+Schema Schema::GetValidationSchema() const {
+  CHECK(valid());
+  const SchemaNode* validation_schema_root_node =
+      storage_->validation_schema_root_node();
+  if (!validation_schema_root_node)
+    return Schema();
+  return Schema(storage_, validation_schema_root_node);
+}
+
+bool Schema::IsSensitiveValue() const {
+  CHECK(valid());
+
+  // This is safe because |node_| is guaranteed to have been returned from
+  // |storage_| and |storage_->root_node()| always returns to the |SchemaNode|
+  // with index 0.
+  int index = node_ - storage_->root_node();
+  const SchemaNodeMetadata* metadata = storage_->metadata(index);
+  if (!metadata)
+    return false;
+  return metadata->is_sensitive_value;
 }
 
 }  // namespace policy

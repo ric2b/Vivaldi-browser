@@ -4,8 +4,10 @@
 
 #include "components/sync/driver/frontend_data_type_controller.h"
 
+#include <utility>
+
 #include "base/logging.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/model_associator.h"
@@ -69,12 +71,13 @@ void FrontendDataTypeController::StartAssociating(
   start_callback_ = start_callback;
   state_ = ASSOCIATING;
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&FrontendDataTypeController::Associate,
                             base::AsWeakPtr(this)));
 }
 
-void FrontendDataTypeController::Stop() {
+// For directory datatypes metadata clears by SyncManager::PurgeDisabledTypes().
+void FrontendDataTypeController::Stop(SyncStopMetadataFate metadata_fate) {
   DCHECK(CalledOnValidThread());
 
   if (state_ == NOT_RUNNING)
@@ -196,7 +199,7 @@ void FrontendDataTypeController::StartDone(
   if (!IsSuccessfulResult(start_result)) {
     CleanUp();
     if (start_result == ASSOCIATION_FAILED) {
-      state_ = DISABLED;
+      state_ = FAILED;
     } else {
       state_ = NOT_RUNNING;
     }
@@ -209,7 +212,7 @@ void FrontendDataTypeController::StartDone(
 std::unique_ptr<DataTypeErrorHandler>
 FrontendDataTypeController::CreateErrorHandler() {
   return std::make_unique<DataTypeErrorHandlerImpl>(
-      base::ThreadTaskRunnerHandle::Get(), dump_stack_,
+      base::SequencedTaskRunnerHandle::Get(), dump_stack_,
       base::Bind(&FrontendDataTypeController::OnUnrecoverableError,
                  base::AsWeakPtr(this)));
 }
@@ -248,8 +251,8 @@ AssociatorInterface* FrontendDataTypeController::model_associator() const {
 }
 
 void FrontendDataTypeController::set_model_associator(
-    AssociatorInterface* model_associator) {
-  model_associator_.reset(model_associator);
+    std::unique_ptr<AssociatorInterface> model_associator) {
+  model_associator_ = std::move(model_associator);
 }
 
 ChangeProcessor* FrontendDataTypeController::GetChangeProcessor() const {
@@ -257,8 +260,8 @@ ChangeProcessor* FrontendDataTypeController::GetChangeProcessor() const {
 }
 
 void FrontendDataTypeController::set_change_processor(
-    ChangeProcessor* change_processor) {
-  change_processor_.reset(change_processor);
+    std::unique_ptr<ChangeProcessor> change_processor) {
+  change_processor_ = std::move(change_processor);
 }
 
 }  // namespace syncer

@@ -11,6 +11,7 @@
 
 #include "base/debug/dump_without_crashing.h"
 #include "base/json/json_writer.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -79,7 +80,7 @@ base::string16 WebUI::GetJavascriptCall(
   return result;
 }
 
-WebUIImpl::WebUIImpl(WebContents* contents)
+WebUIImpl::WebUIImpl(WebContentsImpl* contents)
     : bindings_(BINDINGS_POLICY_WEB_UI),
       web_contents_(contents),
       web_contents_observer_(new MainFrameNavigationObserver(this, contents)) {
@@ -105,9 +106,14 @@ bool WebUIImpl::OnMessageReceived(const IPC::Message& message,
 }
 
 void WebUIImpl::OnWebUISend(RenderFrameHost* sender,
-                            const GURL& source_url,
                             const std::string& message,
                             const base::ListValue& args) {
+  // Ignore IPCs from frames that are pending deletion.  See also
+  // https://crbug.com/780920.
+  if (!sender->IsCurrent())
+    return;
+
+  const GURL& source_url = sender->GetLastCommittedURL();
   if (!ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
           sender->GetProcess()->GetID()) ||
       !WebUIControllerFactoryRegistry::GetInstance()->IsURLAcceptableForWebUI(
@@ -118,9 +124,12 @@ void WebUIImpl::OnWebUISend(RenderFrameHost* sender,
     return;
   }
 
-  // Ignore IPCs from swapped-out frames.  See also https://crbug.com/780920.
-  if (!sender->IsCurrent())
+  if (base::EndsWith(message, "RequiringGesture",
+                     base::CompareCase::SENSITIVE) &&
+      !web_contents_->HasRecentInteractiveInputEvent()) {
+    LOG(ERROR) << message << " received without recent user interaction";
     return;
+  }
 
   ProcessWebUIMessage(source_url, message, args);
 }
@@ -168,8 +177,9 @@ WebUIController* WebUIImpl::GetController() const {
   return controller_.get();
 }
 
-void WebUIImpl::SetController(WebUIController* controller) {
-  controller_.reset(controller);
+void WebUIImpl::SetController(std::unique_ptr<WebUIController> controller) {
+  DCHECK(controller);
+  controller_ = std::move(controller);
 }
 
 bool WebUIImpl::CanCallJavascript() {
@@ -239,9 +249,9 @@ void WebUIImpl::CallJavascriptFunctionUnsafe(
   ExecuteJavascript(GetJavascriptCall(function_name, args));
 }
 
-void WebUIImpl::RegisterMessageCallback(const std::string &message,
+void WebUIImpl::RegisterMessageCallback(base::StringPiece message,
                                         const MessageCallback& callback) {
-  message_callbacks_.insert(std::make_pair(message, callback));
+  message_callbacks_.emplace(message.as_string(), callback);
 }
 
 void WebUIImpl::ProcessWebUIMessage(const GURL& source_url,
@@ -251,11 +261,10 @@ void WebUIImpl::ProcessWebUIMessage(const GURL& source_url,
     return;
 
   // Look up the callback for this message.
-  MessageCallbackMap::const_iterator callback =
-      message_callbacks_.find(message);
-  if (callback != message_callbacks_.end()) {
+  auto callback_pair = message_callbacks_.find(message);
+  if (callback_pair != message_callbacks_.end()) {
     // Forward this message and content on.
-    callback->second.Run(&args);
+    callback_pair->second.Run(&args);
   } else {
     NOTREACHED() << "Unhandled chrome.send(\"" << message << "\");";
   }

@@ -7,7 +7,7 @@
 #include <memory>
 #include <set>
 
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "components/offline_pages/core/prefetch/mock_prefetch_item_generator.h"
 #include "components/offline_pages/core/prefetch/prefetch_item.h"
 #include "components/offline_pages/core/prefetch/prefetch_task_test_base.h"
@@ -44,9 +44,7 @@ TEST_F(MetricsFinalizationTaskTest, StoreFailure) {
   store_util()->SimulateInitializationError();
 
   // Execute the metrics task.
-  ExpectTaskCompletes(metrics_finalization_task_.get());
-  metrics_finalization_task_->Run();
-  RunUntilIdle();
+  RunTask(metrics_finalization_task_.get());
 }
 
 // Tests that the task works correctly with an empty database.
@@ -54,28 +52,13 @@ TEST_F(MetricsFinalizationTaskTest, EmptyRun) {
   EXPECT_EQ(0, store_util()->CountPrefetchItems());
 
   // Execute the metrics task.
-  ExpectTaskCompletes(metrics_finalization_task_.get());
-  metrics_finalization_task_->Run();
-  RunUntilIdle();
+  RunTask(metrics_finalization_task_.get());
   EXPECT_EQ(0, store_util()->CountPrefetchItems());
 }
 
-// Verifies that expired and non-expired items from all expirable states are
-// properly handled.
 TEST_F(MetricsFinalizationTaskTest, LeavesOtherStatesAlone) {
-  // Insert fresh and stale items for all expirable states from all buckets.
-  std::vector<PrefetchItemState> all_states_but_finished = {
-      PrefetchItemState::NEW_REQUEST,
-      PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE,
-      PrefetchItemState::AWAITING_GCM,
-      PrefetchItemState::RECEIVED_GCM,
-      PrefetchItemState::SENT_GET_OPERATION,
-      PrefetchItemState::RECEIVED_BUNDLE,
-      PrefetchItemState::DOWNLOADING,
-      PrefetchItemState::DOWNLOADED,
-      PrefetchItemState::IMPORTING,
-      PrefetchItemState::ZOMBIE,
-  };
+  std::vector<PrefetchItemState> all_states_but_finished =
+      GetAllStatesExcept({PrefetchItemState::FINISHED});
 
   for (auto& state : all_states_but_finished) {
     PrefetchItem item = item_generator()->CreateItem(state);
@@ -87,9 +70,7 @@ TEST_F(MetricsFinalizationTaskTest, LeavesOtherStatesAlone) {
   EXPECT_EQ(10U, store_util()->GetAllItems(&all_inserted_items));
 
   // Execute the task.
-  ExpectTaskCompletes(metrics_finalization_task_.get());
-  metrics_finalization_task_->Run();
-  RunUntilIdle();
+  RunTask(metrics_finalization_task_.get());
 
   std::set<PrefetchItem> all_items_after_task;
   EXPECT_EQ(10U, store_util()->GetAllItems(&all_items_after_task));
@@ -111,9 +92,7 @@ TEST_F(MetricsFinalizationTaskTest, FinalizesMultipleItems) {
   ASSERT_TRUE(store_util()->InsertPrefetchItem(unfinished_item));
 
   // Execute the metrics task.
-  ExpectTaskCompletes(metrics_finalization_task_.get());
-  metrics_finalization_task_->Run();
-  RunUntilIdle();
+  RunTask(metrics_finalization_task_.get());
 
   std::set<PrefetchItem> all_items;
   // The finished ones should be zombies and the new request should be
@@ -147,9 +126,7 @@ TEST_F(MetricsFinalizationTaskTest, MetricsAreReported) {
 
   // Execute the metrics task.
   base::HistogramTester histogram_tester;
-  ExpectTaskCompletes(metrics_finalization_task_.get());
-  metrics_finalization_task_->Run();
-  RunUntilIdle();
+  RunTask(metrics_finalization_task_.get());
 
   std::set<PrefetchItem> all_items;
   EXPECT_EQ(3U, store_util()->GetAllItems(&all_items));
@@ -232,9 +209,7 @@ TEST_F(MetricsFinalizationTaskTest, FileSizeMetricsAreReportedCorrectly) {
 
   // Execute the metrics task.
   base::HistogramTester histogram_tester;
-  ExpectTaskCompletes(metrics_finalization_task_.get());
-  metrics_finalization_task_->Run();
-  RunUntilIdle();
+  RunTask(metrics_finalization_task_.get());
 
   std::set<PrefetchItem> all_items;
   EXPECT_EQ(5U, store_util()->GetAllItems(&all_items));
@@ -262,77 +237,28 @@ TEST_F(MetricsFinalizationTaskTest, FileSizeMetricsAreReportedCorrectly) {
 // Verifies that items from all states are counted properly.
 TEST_F(MetricsFinalizationTaskTest,
        CountsItemsInEachStateMetricReportedCorectly) {
-  // Insert fresh and stale items for all expirable states from all buckets.
-  std::vector<PrefetchItemState> states_for_items = {
-      PrefetchItemState::NEW_REQUEST,
-      PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE,
-      PrefetchItemState::AWAITING_GCM,
-      PrefetchItemState::RECEIVED_GCM,
-      PrefetchItemState::SENT_GET_OPERATION,
-      PrefetchItemState::RECEIVED_BUNDLE,
-      PrefetchItemState::DOWNLOADING,
-      PrefetchItemState::DOWNLOADED,
-      PrefetchItemState::FINISHED,
-      PrefetchItemState::FINISHED,
-      PrefetchItemState::IMPORTING,
-      PrefetchItemState::ZOMBIE,
-      PrefetchItemState::ZOMBIE,
-  };
-
-  for (auto& state : states_for_items) {
-    PrefetchItem item = item_generator()->CreateItem(state);
-    EXPECT_TRUE(store_util()->InsertPrefetchItem(item))
-        << "Failed inserting item with state " << static_cast<int>(state);
+  // Insert a different number of items for each state.
+  for (size_t i = 0; i < kOrderedPrefetchItemStates.size(); ++i) {
+    PrefetchItemState state = kOrderedPrefetchItemStates[i];
+    for (size_t j = 0; j < i + 1; ++j) {
+      PrefetchItem item = item_generator()->CreateItem(state);
+      EXPECT_TRUE(store_util()->InsertPrefetchItem(item))
+          << "Failed inserting item with state " << static_cast<int>(state);
+    }
   }
-
-  std::set<PrefetchItem> all_inserted_items;
-  EXPECT_EQ(13U, store_util()->GetAllItems(&all_inserted_items));
 
   // Execute the task.
   base::HistogramTester histogram_tester;
-  ExpectTaskCompletes(metrics_finalization_task_.get());
-  metrics_finalization_task_->Run();
-  RunUntilIdle();
+  RunTask(metrics_finalization_task_.get());
 
-  histogram_tester.ExpectTotalCount("OfflinePages.Prefetching.StateCounts", 13);
+  histogram_tester.ExpectTotalCount("OfflinePages.Prefetching.StateCounts", 66);
 
-  // Check that histogram was recorded correctly for each state.
-  // One sample on most buckets, two samples for finished and zombie.
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::NEW_REQUEST), 1);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE), 1);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::AWAITING_GCM), 1);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::RECEIVED_GCM), 1);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::SENT_GET_OPERATION), 1);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::RECEIVED_BUNDLE), 1);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::DOWNLOADING), 1);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::DOWNLOADED), 1);
-  // Two samples for the "finished" bucket.
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::FINISHED), 2);
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::IMPORTING), 1);
-  // Two samples for the "zombie" bucket.
-  histogram_tester.ExpectBucketCount(
-      "OfflinePages.Prefetching.StateCounts",
-      static_cast<int>(PrefetchItemState::ZOMBIE), 2);
+  // Check that histogram was recorded correctly for items in each state.
+  for (size_t i = 0; i < kOrderedPrefetchItemStates.size(); ++i) {
+    histogram_tester.ExpectBucketCount(
+        "OfflinePages.Prefetching.StateCounts",
+        static_cast<int>(kOrderedPrefetchItemStates[i]), i + 1);
+  }
 }
 
 }  // namespace offline_pages

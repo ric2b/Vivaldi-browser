@@ -5,7 +5,6 @@
 #include "content/public/test/content_browser_test.h"
 
 #include "base/command_line.h"
-#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
@@ -26,24 +25,33 @@
 #include "content/shell/app/shell_main_delegate.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "base/mac/foundation_util.h"
+#endif
+
 #if !defined(OS_CHROMEOS) && defined(OS_LINUX)
 #include "ui/base/ime/input_method_initializer.h"
+#endif
+
+#if defined(USE_AURA) && defined(TOOLKIT_VIEWS)
+#include "ui/views/test/widget_test_api.h"  // nogncheck
 #endif
 
 namespace content {
 
 ContentBrowserTest::ContentBrowserTest() {
 #if defined(OS_MACOSX)
+  base::mac::SetOverrideAmIBundled(true);
+
   // See comment in InProcessBrowserTest::InProcessBrowserTest().
   base::FilePath content_shell_path;
-  CHECK(PathService::Get(base::FILE_EXE, &content_shell_path));
+  CHECK(base::PathService::Get(base::FILE_EXE, &content_shell_path));
   content_shell_path = content_shell_path.DirName();
   content_shell_path = content_shell_path.Append(
       FILE_PATH_LITERAL("Content Shell.app/Contents/MacOS/Content Shell"));
-  CHECK(PathService::Override(base::FILE_EXE, content_shell_path));
+  CHECK(base::PathService::Override(base::FILE_EXE, content_shell_path));
 #endif
-  base::FilePath content_test_data(FILE_PATH_LITERAL("content/test/data"));
-  CreateTestServer(content_test_data);
+  CreateTestServer(GetTestDataFilePath());
 }
 
 ContentBrowserTest::~ContentBrowserTest() {
@@ -63,7 +71,7 @@ void ContentBrowserTest::SetUp() {
     // setting a global that may be used after ContentBrowserTest is
     // destroyed.
     ContentRendererClient* old_client =
-        switches::IsRunLayoutTestSwitchPresent()
+        switches::IsRunWebTestsSwitchPresent()
             ? SetRendererClientForTesting(new LayoutTestContentRendererClient)
             : SetRendererClientForTesting(new ShellContentRendererClient);
     // No-one should have set this value before we did.
@@ -72,13 +80,20 @@ void ContentBrowserTest::SetUp() {
 #elif defined(OS_MACOSX)
   // See InProcessBrowserTest::PrepareTestCommandLine().
   base::FilePath subprocess_path;
-  PathService::Get(base::FILE_EXE, &subprocess_path);
+  base::PathService::Get(base::FILE_EXE, &subprocess_path);
   subprocess_path = subprocess_path.DirName().DirName();
   DCHECK_EQ(subprocess_path.BaseName().value(), "Contents");
   subprocess_path = subprocess_path.Append(
       "Frameworks/Content Shell Helper.app/Contents/MacOS/Content Shell Helper");
   command_line->AppendSwitchPath(switches::kBrowserSubprocessPath,
                                  subprocess_path);
+#endif
+
+#if defined(USE_AURA) && defined(TOOLKIT_VIEWS)
+  // https://crbug.com/695054: Ignore window activation/deactivation to make
+  // the Chrome-internal focus unaffected by OS events caused by running tests
+  // in parallel.
+  views::DisableActivationChangeHandlingForTests();
 #endif
 
   // LinuxInputMethodContextFactory has to be initialized.
@@ -103,9 +118,10 @@ void ContentBrowserTest::TearDown() {
 }
 
 void ContentBrowserTest::PreRunTestOnMainThread() {
-  if (!switches::IsRunLayoutTestSwitchPresent()) {
+  if (!switches::IsRunWebTestsSwitchPresent()) {
     CHECK_EQ(Shell::windows().size(), 1u);
     shell_ = Shell::windows()[0];
+    SetInitialWebContents(shell_->web_contents());
   }
 
 #if defined(OS_MACOSX)
@@ -151,6 +167,10 @@ Shell* ContentBrowserTest::CreateOffTheRecordBrowser() {
   return Shell::CreateNewWindow(
       ShellContentBrowserClient::Get()->off_the_record_browser_context(),
       GURL(url::kAboutBlankURL), nullptr, gfx::Size());
+}
+
+base::FilePath ContentBrowserTest::GetTestDataFilePath() {
+  return base::FilePath(FILE_PATH_LITERAL("content/test/data"));
 }
 
 }  // namespace content

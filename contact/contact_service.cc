@@ -261,6 +261,23 @@ base::CancelableTaskTracker::TaskId ContactService::CreateContact(
       base::Bind(callback, query_results));
 }
 
+base::CancelableTaskTracker::TaskId ContactService::CreateContacts(
+    std::vector<contact::ContactRow> contacts,
+    const CreateContactsCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<CreateContactsResult> create_results =
+      std::shared_ptr<CreateContactsResult>(new CreateContactsResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&ContactBackend::CreateContacts, contact_backend_, contacts,
+                 create_results),
+      base::Bind(callback, create_results));
+}
+
 base::CancelableTaskTracker::TaskId ContactService::AddProperty(
     AddPropertyObject ev,
     const ContactCallback& callback,
@@ -359,18 +376,19 @@ base::CancelableTaskTracker::TaskId ContactService::GetAllContacts(
 }
 
 base::CancelableTaskTracker::TaskId ContactService::GetAllEmailAddresses(
-  const QueryEmailAddressesCallback& callback,
-  base::CancelableTaskTracker* tracker) {
+    const QueryEmailAddressesCallback& callback,
+    base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr <contact::EmailAddressRows> query_results =
-    std::shared_ptr<EmailAddressRows>(new EmailAddressRows());
+  std::shared_ptr<contact::EmailAddressRows> query_results =
+      std::shared_ptr<EmailAddressRows>(new EmailAddressRows());
 
-  return tracker->PostTaskAndReply(backend_task_runner_.get(), FROM_HERE,
-    base::Bind(&ContactBackend::GetAllEmailAddresses,
-      contact_backend_, query_results),
-    base::Bind(callback, query_results));
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&ContactBackend::GetAllEmailAddresses, contact_backend_,
+                 query_results),
+      base::Bind(callback, query_results));
 }
 
 base::CancelableTaskTracker::TaskId ContactService::UpdateContact(

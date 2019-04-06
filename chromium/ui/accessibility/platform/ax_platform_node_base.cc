@@ -26,12 +26,6 @@ const AXNodeData& AXPlatformNodeBase::GetData() const {
   return empty_data;
 }
 
-gfx::Rect AXPlatformNodeBase::GetBoundsInScreen() const {
-  if (delegate_)
-    return delegate_->GetScreenBoundsRect();
-  return gfx::Rect();
-}
-
 gfx::NativeViewAccessible AXPlatformNodeBase::GetParent() {
   if (delegate_)
     return delegate_->GetParent();
@@ -116,107 +110,116 @@ bool AXPlatformNodeBase::IsDescendant(AXPlatformNodeBase* node) {
   return IsDescendant(parent);
 }
 
-bool AXPlatformNodeBase::HasBoolAttribute(AXBoolAttribute attribute) const {
+bool AXPlatformNodeBase::HasBoolAttribute(
+    ax::mojom::BoolAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().HasBoolAttribute(attribute);
 }
 
-bool AXPlatformNodeBase::GetBoolAttribute(AXBoolAttribute attribute) const {
+bool AXPlatformNodeBase::GetBoolAttribute(
+    ax::mojom::BoolAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().GetBoolAttribute(attribute);
 }
 
-bool AXPlatformNodeBase::GetBoolAttribute(AXBoolAttribute attribute,
+bool AXPlatformNodeBase::GetBoolAttribute(ax::mojom::BoolAttribute attribute,
                                           bool* value) const {
   if (!delegate_)
     return false;
   return GetData().GetBoolAttribute(attribute, value);
 }
 
-bool AXPlatformNodeBase::HasFloatAttribute(AXFloatAttribute attribute) const {
+bool AXPlatformNodeBase::HasFloatAttribute(
+    ax::mojom::FloatAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().HasFloatAttribute(attribute);
 }
 
-float AXPlatformNodeBase::GetFloatAttribute(AXFloatAttribute attribute) const {
+float AXPlatformNodeBase::GetFloatAttribute(
+    ax::mojom::FloatAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().GetFloatAttribute(attribute);
 }
 
-bool AXPlatformNodeBase::GetFloatAttribute(AXFloatAttribute attribute,
+bool AXPlatformNodeBase::GetFloatAttribute(ax::mojom::FloatAttribute attribute,
                                            float* value) const {
   if (!delegate_)
     return false;
   return GetData().GetFloatAttribute(attribute, value);
 }
 
-bool AXPlatformNodeBase::HasIntAttribute(AXIntAttribute attribute) const {
+bool AXPlatformNodeBase::HasIntAttribute(
+    ax::mojom::IntAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().HasIntAttribute(attribute);
 }
 
-int AXPlatformNodeBase::GetIntAttribute(AXIntAttribute attribute) const {
+int AXPlatformNodeBase::GetIntAttribute(
+    ax::mojom::IntAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().GetIntAttribute(attribute);
 }
 
-bool AXPlatformNodeBase::GetIntAttribute(AXIntAttribute attribute,
+bool AXPlatformNodeBase::GetIntAttribute(ax::mojom::IntAttribute attribute,
                                          int* value) const {
   if (!delegate_)
     return false;
   return GetData().GetIntAttribute(attribute, value);
 }
 
-bool AXPlatformNodeBase::HasStringAttribute(AXStringAttribute attribute) const {
+bool AXPlatformNodeBase::HasStringAttribute(
+    ax::mojom::StringAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().HasStringAttribute(attribute);
 }
 
 const std::string& AXPlatformNodeBase::GetStringAttribute(
-    AXStringAttribute attribute) const {
+    ax::mojom::StringAttribute attribute) const {
   CR_DEFINE_STATIC_LOCAL(std::string, empty_data, ());
   if (!delegate_)
     return empty_data;
   return GetData().GetStringAttribute(attribute);
 }
 
-bool AXPlatformNodeBase::GetStringAttribute(AXStringAttribute attribute,
-                                            std::string* value) const {
+bool AXPlatformNodeBase::GetStringAttribute(
+    ax::mojom::StringAttribute attribute,
+    std::string* value) const {
   if (!delegate_)
     return false;
   return GetData().GetStringAttribute(attribute, value);
 }
 
 base::string16 AXPlatformNodeBase::GetString16Attribute(
-    AXStringAttribute attribute) const {
+    ax::mojom::StringAttribute attribute) const {
   if (!delegate_)
     return base::string16();
   return GetData().GetString16Attribute(attribute);
 }
 
-bool AXPlatformNodeBase::GetString16Attribute(AXStringAttribute attribute,
-                                              base::string16* value) const {
+bool AXPlatformNodeBase::GetString16Attribute(
+    ax::mojom::StringAttribute attribute,
+    base::string16* value) const {
   if (!delegate_)
     return false;
   return GetData().GetString16Attribute(attribute, value);
 }
 
 bool AXPlatformNodeBase::HasIntListAttribute(
-    AXIntListAttribute attribute) const {
+    ax::mojom::IntListAttribute attribute) const {
   if (!delegate_)
     return false;
   return GetData().HasIntListAttribute(attribute);
 }
 
 const std::vector<int32_t>& AXPlatformNodeBase::GetIntListAttribute(
-    AXIntListAttribute attribute) const {
+    ax::mojom::IntListAttribute attribute) const {
   CR_DEFINE_STATIC_LOCAL(std::vector<int32_t>, empty_data, ());
   if (!delegate_)
     return empty_data;
@@ -224,7 +227,7 @@ const std::vector<int32_t>& AXPlatformNodeBase::GetIntListAttribute(
 }
 
 bool AXPlatformNodeBase::GetIntListAttribute(
-    AXIntListAttribute attribute,
+    ax::mojom::IntListAttribute attribute,
     std::vector<int32_t>* value) const {
   if (!delegate_)
     return false;
@@ -246,7 +249,7 @@ AXPlatformNodeBase* AXPlatformNodeBase::FromNativeViewAccessible(
 
 bool AXPlatformNodeBase::SetTextSelection(int start_offset, int end_offset) {
   AXActionData action_data;
-  action_data.action = AX_ACTION_SET_SELECTION;
+  action_data.action = ax::mojom::Action::kSetSelection;
   action_data.anchor_node_id = action_data.focus_node_id = GetData().id;
   action_data.anchor_offset = start_offset;
   action_data.focus_offset = end_offset;
@@ -257,30 +260,35 @@ bool AXPlatformNodeBase::SetTextSelection(int start_offset, int end_offset) {
 }
 
 bool AXPlatformNodeBase::IsTextOnlyObject() const {
-  return GetData().role == AX_ROLE_STATIC_TEXT ||
-         GetData().role == AX_ROLE_LINE_BREAK ||
-         GetData().role == AX_ROLE_INLINE_TEXT_BOX;
+  return GetData().role == ax::mojom::Role::kStaticText ||
+         GetData().role == ax::mojom::Role::kLineBreak ||
+         GetData().role == ax::mojom::Role::kInlineTextBox;
+}
+
+bool AXPlatformNodeBase::IsFocusedInputWithSuggestions() {
+  return HasInputSuggestions() && IsPlainTextField() &&
+         delegate_->GetFocus() == GetNativeViewAccessible();
 }
 
 bool AXPlatformNodeBase::IsPlainTextField() const {
   // We need to check both the role and editable state, because some ARIA text
   // fields may in fact not be editable, whilst some editable fields might not
   // have the role.
-  return !GetData().HasState(AX_STATE_RICHLY_EDITABLE) &&
-         (GetData().role == AX_ROLE_TEXT_FIELD ||
-          GetData().role == AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX ||
-          GetData().role == AX_ROLE_SEARCH_BOX ||
-          GetBoolAttribute(AX_ATTR_EDITABLE_ROOT));
+  return !GetData().HasState(ax::mojom::State::kRichlyEditable) &&
+         (GetData().role == ax::mojom::Role::kTextField ||
+          GetData().role == ax::mojom::Role::kTextFieldWithComboBox ||
+          GetData().role == ax::mojom::Role::kSearchBox ||
+          GetBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot));
 }
 
 bool AXPlatformNodeBase::IsRichTextField() const {
-  return GetBoolAttribute(AX_ATTR_EDITABLE_ROOT) &&
-         GetData().HasState(AX_STATE_RICHLY_EDITABLE);
+  return GetBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot) &&
+         GetData().HasState(ax::mojom::State::kRichlyEditable);
 }
 
 base::string16 AXPlatformNodeBase::GetInnerText() {
   if (IsTextOnlyObject())
-    return GetString16Attribute(AX_ATTR_NAME);
+    return GetString16Attribute(ax::mojom::StringAttribute::kName);
 
   base::string16 text;
   for (int i = 0; i < GetChildCount(); ++i) {
@@ -296,14 +304,14 @@ base::string16 AXPlatformNodeBase::GetInnerText() {
 
 bool AXPlatformNodeBase::IsRangeValueSupported() const {
   switch (GetData().role) {
-    case AX_ROLE_METER:
-    case AX_ROLE_PROGRESS_INDICATOR:
-    case AX_ROLE_SLIDER:
-    case AX_ROLE_SPIN_BUTTON:
-    case AX_ROLE_SCROLL_BAR:
+    case ax::mojom::Role::kMeter:
+    case ax::mojom::Role::kProgressIndicator:
+    case ax::mojom::Role::kSlider:
+    case ax::mojom::Role::kSpinButton:
+    case ax::mojom::Role::kScrollBar:
       return true;
-    case AX_ROLE_SPLITTER:
-      return GetData().HasState(AX_STATE_FOCUSABLE);
+    case ax::mojom::Role::kSplitter:
+      return GetData().HasState(ax::mojom::State::kFocusable);
     default:
       return false;
   }
@@ -311,12 +319,28 @@ bool AXPlatformNodeBase::IsRangeValueSupported() const {
 
 base::string16 AXPlatformNodeBase::GetRangeValueText() {
   float fval;
-  base::string16 value = GetString16Attribute(AX_ATTR_VALUE);
+  base::string16 value =
+      GetString16Attribute(ax::mojom::StringAttribute::kValue);
 
-  if (value.empty() && GetFloatAttribute(AX_ATTR_VALUE_FOR_RANGE, &fval)) {
+  if (value.empty() &&
+      GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange, &fval)) {
     value = base::NumberToString16(fval);
   }
   return value;
+}
+
+AXPlatformNodeBase* AXPlatformNodeBase::GetSelectionContainer() const {
+  if (!delegate_)
+    return nullptr;
+  AXPlatformNodeBase* container = const_cast<AXPlatformNodeBase*>(this);
+  while (container &&
+         !IsContainerWithSelectableChildrenRole(container->GetData().role)) {
+    gfx::NativeViewAccessible parent_accessible = container->GetParent();
+    AXPlatformNodeBase* parent = FromNativeViewAccessible(parent_accessible);
+
+    container = parent;
+  }
+  return container;
 }
 
 AXPlatformNodeBase* AXPlatformNodeBase::GetTable() const {
@@ -342,13 +366,9 @@ AXPlatformNodeBase* AXPlatformNodeBase::GetTableCell(int index) const {
   AXPlatformNodeBase* table = GetTable();
   if (!table)
     return nullptr;
-  const std::vector<int32_t>& unique_cell_ids =
-      table->GetIntListAttribute(AX_ATTR_UNIQUE_CELL_IDS);
-  if (index < 0 || index >= static_cast<int>(unique_cell_ids.size()))
-    return nullptr;
 
   return static_cast<AXPlatformNodeBase*>(
-      table->delegate_->GetFromNodeID(unique_cell_ids[index]));
+      table->delegate_->GetFromNodeID(table->delegate_->CellIndexToId(index)));
 }
 
 AXPlatformNodeBase* AXPlatformNodeBase::GetTableCell(int row,
@@ -366,18 +386,9 @@ AXPlatformNodeBase* AXPlatformNodeBase::GetTableCell(int row,
   if (!table)
     return nullptr;
 
-  // In contrast to unique cell IDs, these are duplicated whenever a cell spans
-  // multiple columns or rows.
-  const std::vector<int32_t>& cell_ids =
-      table->GetIntListAttribute(AX_ATTR_CELL_IDS);
-  DCHECK_EQ(GetTableRowCount() * GetTableColumnCount(),
-            static_cast<int>(cell_ids.size()));
-  int position = row * GetTableColumnCount() + column;
-  if (position < 0 || position >= static_cast<int>(cell_ids.size()))
-    return nullptr;
-
+  int32_t cell_id = table->delegate_->GetCellId(row, column);
   return static_cast<AXPlatformNodeBase*>(
-      table->delegate_->GetFromNodeID(cell_ids[position]));
+      table->delegate_->GetFromNodeID(cell_id));
 }
 
 int AXPlatformNodeBase::GetTableCellIndex() const {
@@ -388,18 +399,11 @@ int AXPlatformNodeBase::GetTableCellIndex() const {
   if (!table)
     return -1;
 
-  const std::vector<int32_t>& unique_cell_ids =
-      table->GetIntListAttribute(AX_ATTR_UNIQUE_CELL_IDS);
-  auto iter =
-      std::find(unique_cell_ids.begin(), unique_cell_ids.end(), GetData().id);
-  if (iter == unique_cell_ids.end())
-    return -1;
-
-  return std::distance(unique_cell_ids.begin(), iter);
+  return table->delegate_->CellIdToIndex(GetData().id);
 }
 
 int AXPlatformNodeBase::GetTableColumn() const {
-  return GetIntAttribute(AX_ATTR_TABLE_CELL_COLUMN_INDEX);
+  return GetIntAttribute(ax::mojom::IntAttribute::kTableCellColumnIndex);
 }
 
 int AXPlatformNodeBase::GetTableColumnCount() const {
@@ -407,7 +411,7 @@ int AXPlatformNodeBase::GetTableColumnCount() const {
   if (!table)
     return 0;
 
-  return table->GetIntAttribute(AX_ATTR_TABLE_COLUMN_COUNT);
+  return table->GetIntAttribute(ax::mojom::IntAttribute::kTableColumnCount);
 }
 
 int AXPlatformNodeBase::GetTableColumnSpan() const {
@@ -415,13 +419,14 @@ int AXPlatformNodeBase::GetTableColumnSpan() const {
     return 0;
 
   int column_span;
-  if (GetIntAttribute(AX_ATTR_TABLE_CELL_COLUMN_SPAN, &column_span))
+  if (GetIntAttribute(ax::mojom::IntAttribute::kTableCellColumnSpan,
+                      &column_span))
     return column_span;
   return 1;
 }
 
 int AXPlatformNodeBase::GetTableRow() const {
-  return GetIntAttribute(AX_ATTR_TABLE_CELL_ROW_INDEX);
+  return GetIntAttribute(ax::mojom::IntAttribute::kTableCellRowIndex);
 }
 
 int AXPlatformNodeBase::GetTableRowCount() const {
@@ -429,7 +434,7 @@ int AXPlatformNodeBase::GetTableRowCount() const {
   if (!table)
     return 0;
 
-  return table->GetIntAttribute(AX_ATTR_TABLE_ROW_COUNT);
+  return table->GetIntAttribute(ax::mojom::IntAttribute::kTableRowCount);
 }
 
 int AXPlatformNodeBase::GetTableRowSpan() const {
@@ -437,14 +442,15 @@ int AXPlatformNodeBase::GetTableRowSpan() const {
     return 0;
 
   int row_span;
-  if (GetIntAttribute(AX_ATTR_TABLE_CELL_ROW_SPAN, &row_span))
+  if (GetIntAttribute(ax::mojom::IntAttribute::kTableCellRowSpan, &row_span))
     return row_span;
   return 1;
 }
 
 bool AXPlatformNodeBase::HasCaret() {
-  if (IsPlainTextField() && HasIntAttribute(ui::AX_ATTR_TEXT_SEL_START) &&
-      HasIntAttribute(ui::AX_ATTR_TEXT_SEL_END)) {
+  if (IsPlainTextField() &&
+      HasIntAttribute(ax::mojom::IntAttribute::kTextSelStart) &&
+      HasIntAttribute(ax::mojom::IntAttribute::kTextSelEnd)) {
     return true;
   }
 
@@ -489,12 +495,12 @@ bool AXPlatformNodeBase::IsLeaf() {
   // (Note that whilst ARIA buttons can have only presentational children, HTML5
   // buttons are allowed to have content.)
   switch (GetData().role) {
-    case ui::AX_ROLE_IMAGE:
-    case ui::AX_ROLE_METER:
-    case ui::AX_ROLE_SCROLL_BAR:
-    case ui::AX_ROLE_SLIDER:
-    case ui::AX_ROLE_SPLITTER:
-    case ui::AX_ROLE_PROGRESS_INDICATOR:
+    case ax::mojom::Role::kImage:
+    case ax::mojom::Role::kMeter:
+    case ax::mojom::Role::kScrollBar:
+    case ax::mojom::Role::kSlider:
+    case ax::mojom::Role::kSplitter:
+    case ax::mojom::Role::kProgressIndicator:
       return true;
     default:
       return false;
@@ -525,7 +531,8 @@ base::string16 AXPlatformNodeBase::GetValue() {
     // On Windows, the value of a document should be its URL.
     return base::UTF8ToUTF16(delegate_->GetTreeData().url);
   }
-  base::string16 value = GetString16Attribute(ui::AX_ATTR_VALUE);
+  base::string16 value =
+      GetString16Attribute(ax::mojom::StringAttribute::kValue);
 
   // Some screen readers like Jaws and VoiceOver require a
   // value to be set in text fields with rich content, even though the same

@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/printing/cloud_print/privet_http_asynchronous_factory.h"
 #include "chrome/browser/printing/cloud_print/privet_http_impl.h"
@@ -79,7 +79,7 @@ class MockPrivetHttpFactory : public PrivetHTTPAsynchronousFactory {
 
   std::unique_ptr<PrivetHTTPResolution> CreatePrivetHTTP(
       const std::string& name) override {
-    return base::MakeUnique<MockResolution>(name, request_context_.get());
+    return std::make_unique<MockResolution>(name, request_context_.get());
   }
 
  private:
@@ -100,7 +100,7 @@ class PrivetNotificationsListenerTest : public testing::Test {
     description_.description = kExampleDeviceDescription;
   }
 
-  virtual ~PrivetNotificationsListenerTest() {}
+  ~PrivetNotificationsListenerTest() override {}
 
   bool SuccessfulResponseToInfo(const std::string& response) {
     net::TestURLFetcher* fetcher = fetcher_factory_.GetFetcherByID(0);
@@ -255,13 +255,15 @@ class PrivetNotificationsNotificationTest : public testing::Test {
   void SetUp() override {
     testing::Test::SetUp();
 
-    profile_manager_ = base::MakeUnique<TestingProfileManager>(
+    profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(profile_manager_->SetUp());
     profile_ = profile_manager_->CreateTestingProfile("test-user");
+    display_service_ =
+        std::make_unique<NotificationDisplayServiceTester>(profile_);
 
     TestingBrowserProcess::GetGlobal()->SetNotificationUIManager(
-        base::MakeUnique<StubNotificationUIManager>());
+        std::make_unique<StubNotificationUIManager>());
   }
 
   void TearDown() override {
@@ -269,21 +271,17 @@ class PrivetNotificationsNotificationTest : public testing::Test {
     testing::Test::TearDown();
   }
 
- protected:
-  StubNotificationUIManager* ui_manager() const {
-    return static_cast<StubNotificationUIManager*>(
-        TestingBrowserProcess::GetGlobal()->notification_ui_manager());
-  }
-
   Profile* profile() { return profile_; }
 
- private:
   // The thread bundle must be first so it is destroyed last.
   content::TestBrowserThreadBundle thread_bundle_;
+
+  std::unique_ptr<NotificationDisplayServiceTester> display_service_;
 
   std::unique_ptr<TestingProfileManager> profile_manager_;
   Profile* profile_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(PrivetNotificationsNotificationTest);
 };
 
@@ -293,14 +291,20 @@ TEST_F(PrivetNotificationsNotificationTest, AddToCloudPrint) {
   // The notification is added asynchronously.
   base::RunLoop().RunUntilIdle();
 
-  ASSERT_EQ(1U, ui_manager()->GetNotificationCount());
-  const auto& notification = ui_manager()->GetNotificationAt(0);
-  notification.ButtonClick(0 /* add */);
+  auto notifications = display_service_->GetDisplayedNotificationsForType(
+      NotificationHandler::Type::TRANSIENT);
+  ASSERT_EQ(1U, notifications.size());
+  display_service_->SimulateClick(NotificationHandler::Type::TRANSIENT,
+                                  notifications[0].id(), 0 /* add */,
+                                  base::nullopt);
 
   EXPECT_EQ("chrome://devices/", service.open_tab_url().spec());
   EXPECT_EQ(1U, service.open_tab_count());
   EXPECT_EQ(0U, service.disable_notifications_count());
-  EXPECT_EQ(0U, ui_manager()->GetNotificationCount());
+  EXPECT_EQ(0U, display_service_
+                    ->GetDisplayedNotificationsForType(
+                        NotificationHandler::Type::TRANSIENT)
+                    .size());
 }
 
 TEST_F(PrivetNotificationsNotificationTest, DontShowAgain) {
@@ -309,14 +313,20 @@ TEST_F(PrivetNotificationsNotificationTest, DontShowAgain) {
   // The notification is added asynchronously.
   base::RunLoop().RunUntilIdle();
 
-  ASSERT_EQ(1U, ui_manager()->GetNotificationCount());
-  const auto& notification = ui_manager()->GetNotificationAt(0);
-  notification.ButtonClick(1 /* don't show again */);
+  auto notifications = display_service_->GetDisplayedNotificationsForType(
+      NotificationHandler::Type::TRANSIENT);
+  ASSERT_EQ(1U, notifications.size());
+  display_service_->SimulateClick(NotificationHandler::Type::TRANSIENT,
+                                  notifications[0].id(),
+                                  1 /* don't show again */, base::nullopt);
 
   EXPECT_EQ("", service.open_tab_url().spec());
   EXPECT_EQ(0U, service.open_tab_count());
   EXPECT_EQ(1U, service.disable_notifications_count());
-  EXPECT_EQ(0U, ui_manager()->GetNotificationCount());
+  EXPECT_EQ(0U, display_service_
+                    ->GetDisplayedNotificationsForType(
+                        NotificationHandler::Type::TRANSIENT)
+                    .size());
 }
 
 }  // namespace

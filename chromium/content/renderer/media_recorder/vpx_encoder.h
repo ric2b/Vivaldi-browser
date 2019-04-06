@@ -7,15 +7,10 @@
 
 #include <vector>
 
+#include "base/single_thread_task_runner.h"
 #include "content/renderer/media_recorder/video_track_recorder.h"
-
-extern "C" {
-// VPX_CODEC_DISABLE_COMPAT excludes parts of the libvpx API that provide
-// backwards compatibility for legacy applications using the library.
-#define VPX_CODEC_DISABLE_COMPAT 1
 #include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
 #include "third_party/libvpx/source/libvpx/vpx/vpx_encoder.h"
-}
 
 namespace content {
 
@@ -36,7 +31,8 @@ class VpxEncoder final : public VideoTrackRecorder::Encoder {
   VpxEncoder(
       bool use_vp9,
       const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
-      int32_t bits_per_second);
+      int32_t bits_per_second,
+      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner);
 
  private:
   // VideoTrackRecorder::Encoder implementation.

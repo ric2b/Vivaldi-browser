@@ -8,12 +8,11 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/net_errors.h"
-#include "net/proxy/mojo_proxy_resolver_v8_tracing_bindings.h"
-#include "net/proxy/proxy_resolver_factory.h"
-#include "net/proxy/proxy_resolver_v8_tracing.h"
+#include "net/proxy_resolution/mojo_proxy_resolver_v8_tracing_bindings.h"
+#include "net/proxy_resolution/proxy_resolver_factory.h"
+#include "net/proxy_resolution/proxy_resolver_v8_tracing.h"
 #include "services/proxy_resolver/proxy_resolver_impl.h"
 
 namespace proxy_resolver {
@@ -21,7 +20,7 @@ namespace proxy_resolver {
 class ProxyResolverFactoryImpl::Job {
  public:
   Job(ProxyResolverFactoryImpl* parent,
-      const scoped_refptr<net::ProxyResolverScriptData>& pac_script,
+      const scoped_refptr<net::PacFileData>& pac_script,
       net::ProxyResolverV8TracingFactory* proxy_resolver_factory,
       mojo::InterfaceRequest<mojom::ProxyResolver> request,
       mojom::ProxyResolverFactoryRequestClientPtr client,
@@ -47,7 +46,7 @@ class ProxyResolverFactoryImpl::Job {
 
 ProxyResolverFactoryImpl::Job::Job(
     ProxyResolverFactoryImpl* factory,
-    const scoped_refptr<net::ProxyResolverScriptData>& pac_script,
+    const scoped_refptr<net::PacFileData>& pac_script,
     net::ProxyResolverV8TracingFactory* proxy_resolver_factory,
     mojo::InterfaceRequest<mojom::ProxyResolver> request,
     mojom::ProxyResolverFactoryRequestClientPtr client,
@@ -122,7 +121,7 @@ void ProxyResolverFactoryImpl::CreateResolver(
   // The Job will call RemoveJob on |this| when either the create request
   // finishes or |request| or |client| encounters a connection error.
   std::unique_ptr<Job> job = std::make_unique<Job>(
-      this, net::ProxyResolverScriptData::FromUTF8(pac_script),
+      this, net::PacFileData::FromUTF8(pac_script),
       proxy_resolver_impl_factory_.get(), std::move(request), std::move(client),
       service_ref_->Clone());
   Job* job_ptr = job.get();

@@ -4,8 +4,10 @@
 
 #include "chrome/browser/vr/elements/omnibox_formatting.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/range/range.h"
+#include "ui/gfx/render_text.h"
 #include "ui/gfx/text_constants.h"
 
 namespace vr {
@@ -15,7 +17,7 @@ TextFormatting ConvertClassification(
     size_t text_length,
     const ColorScheme& color_scheme) {
   TextFormatting formatting;
-  formatting.push_back(TextFormattingAttribute(color_scheme.suggestion_text,
+  formatting.push_back(TextFormattingAttribute(color_scheme.url_bar_text,
                                                gfx::Range(0, text_length)));
 
   for (size_t i = 0; i < classifications.size(); ++i) {
@@ -40,16 +42,115 @@ TextFormatting ConvertClassification(
     }
 
     if (classifications[i].style & ACMatchClassification::URL) {
-      formatting.push_back(TextFormattingAttribute(
-          color_scheme.suggestion_url_text, current_range));
-    } else if (classifications[i].style & ACMatchClassification::DIM) {
-      formatting.push_back(TextFormattingAttribute(
-          color_scheme.suggestion_dim_text, current_range));
+      formatting.push_back(
+          TextFormattingAttribute(color_scheme.hyperlink, current_range));
     } else if (classifications[i].style & ACMatchClassification::INVISIBLE) {
       formatting.push_back(
           TextFormattingAttribute(SK_ColorTRANSPARENT, current_range));
     }
   }
+  return formatting;
+}
+
+url_formatter::FormatUrlTypes GetVrFormatUrlTypes() {
+  return url_formatter::kFormatUrlOmitDefaults |
+         url_formatter::kFormatUrlOmitHTTPS |
+         url_formatter::kFormatUrlOmitTrivialSubdomains;
+}
+
+VR_UI_EXPORT base::string16 FormatUrlForVr(const GURL& gurl,
+                                           url::Parsed* new_parsed) {
+  return url_formatter::FormatUrl(gurl, GetVrFormatUrlTypes(),
+                                  net::UnescapeRule::NORMAL, new_parsed,
+                                  nullptr, nullptr);
+}
+
+ElisionParameters GetElisionParameters(const GURL& gurl,
+                                       const url::Parsed& parsed,
+                                       gfx::RenderText* render_text,
+                                       int min_path_pixels) {
+  // In situations where there is no host, do not attempt to position the TLD.
+  bool allow_offset = gurl.IsStandard() && parsed.host.is_nonempty();
+  int total_width = render_text->GetContentWidth();
+
+  ElisionParameters result;
+
+  // Find the rightmost extent of the host portion. To safely handle RTL,
+  // compute the union of all rendered host segments.
+  gfx::Range range(0, parsed.CountCharactersBefore(url::Parsed::PATH, false));
+  std::vector<gfx::Rect> rects = render_text->GetSubstringBounds(range);
+  gfx::Rect host_bounds;
+  for (const auto& rect : rects)
+    host_bounds.Union(rect);
+
+  // Choose a right-edge cutoff point.  If there is nothing after the host, then
+  // it's the end of the host.  If there is a path, then include a limited
+  // portion of the path.
+  int path_width = total_width - host_bounds.width();
+  int field_width = render_text->display_rect().width();
+  int anchor_point =
+      host_bounds.width() + std::min(min_path_pixels, path_width);
+
+  if (allow_offset && anchor_point > field_width) {
+    result.offset = field_width - anchor_point;
+    result.fade_left = true;
+  }
+  if (total_width + result.offset > field_width) {
+    result.fade_right = true;
+  }
+
+  return result;
+}
+
+TextFormatting CreateUrlFormatting(const base::string16& formatted_url,
+                                   const url::Parsed& parsed,
+                                   SkColor emphasized_color,
+                                   SkColor deemphasized_color) {
+  const url::Component& scheme = parsed.scheme;
+  const url::Component& host = parsed.host;
+
+  const base::string16 url_scheme =
+      formatted_url.substr(scheme.begin, scheme.len);
+
+  // Data URLs are rarely human-readable and can be used for spoofing, so draw
+  // attention to the scheme to emphasize "this is just a bunch of data".  For
+  // normal URLs, the host is the best proxy for "identity".
+  // TODO(cjgrant): Handle extensions, if required, for desktop.
+  enum DeemphasizeComponents {
+    ALL_BUT_SCHEME,
+    ALL_BUT_HOST,
+    NOTHING,
+  } deemphasize_mode = NOTHING;
+  if (url_scheme == base::UTF8ToUTF16(url::kDataScheme))
+    deemphasize_mode = ALL_BUT_SCHEME;
+  else if (host.is_nonempty())
+    deemphasize_mode = ALL_BUT_HOST;
+
+  gfx::Range scheme_range = scheme.is_nonempty()
+                                ? gfx::Range(scheme.begin, scheme.end())
+                                : gfx::Range::InvalidRange();
+  TextFormatting formatting;
+  switch (deemphasize_mode) {
+    case NOTHING:
+      formatting.push_back(TextFormattingAttribute(emphasized_color,
+                                                   gfx::Range::InvalidRange()));
+      break;
+    case ALL_BUT_SCHEME:
+      DCHECK(scheme_range.IsValid());
+      formatting.push_back(TextFormattingAttribute(deemphasized_color,
+                                                   gfx::Range::InvalidRange()));
+      formatting.push_back(
+          TextFormattingAttribute(emphasized_color, scheme_range));
+
+      break;
+    case ALL_BUT_HOST:
+      formatting.push_back(TextFormattingAttribute(deemphasized_color,
+                                                   gfx::Range::InvalidRange()));
+      formatting.push_back(TextFormattingAttribute(
+          emphasized_color, gfx::Range(host.begin, host.end())));
+      break;
+  }
+
   return formatting;
 }
 

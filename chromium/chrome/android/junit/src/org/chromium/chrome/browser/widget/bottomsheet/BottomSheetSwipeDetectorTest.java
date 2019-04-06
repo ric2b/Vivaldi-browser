@@ -18,9 +18,9 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetSwipeDetector.SwipeableBottomSheet;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +28,7 @@ import java.util.List;
 /**
  * Unit tests for the {@link BottomSheetSwipeDetector} class.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public final class BottomSheetSwipeDetectorTest {
     /** The minimum height of the bottom sheet. */
@@ -91,8 +91,10 @@ public final class BottomSheetSwipeDetectorTest {
         }
 
         @Override
-        public float getContainerHeightPx() {
-            return mMaxOffset;
+        public boolean isTouchEventInToolbar(MotionEvent event) {
+            // This will be implementation specific in practice. This checks that the motion event
+            // occured above the bottom of the toolbar.
+            return event.getRawY() < (mMaxOffset - mCurrentSheetOffset) + mMinOffset;
         }
 
         @Override

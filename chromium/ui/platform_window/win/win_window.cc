@@ -41,8 +41,7 @@ gfx::Rect GetWindowBoundsForClientBounds(DWORD style, DWORD ex_style,
 
 }  // namespace
 
-WinWindow::WinWindow(PlatformWindowDelegate* delegate,
-                     const gfx::Rect& bounds)
+WinWindow::WinWindow(PlatformWindowDelegate* delegate, const gfx::Rect& bounds)
     : delegate_(delegate) {
   CHECK(delegate_);
   DWORD window_style = WS_OVERLAPPEDWINDOW;
@@ -101,13 +100,17 @@ void WinWindow::SetTitle(const base::string16& title) {
 }
 
 void WinWindow::SetCapture() {
-  if (::GetCapture() != hwnd())
+  if (!HasCapture())
     ::SetCapture(hwnd());
 }
 
 void WinWindow::ReleaseCapture() {
-  if (::GetCapture() == hwnd())
+  if (HasCapture())
     ::ReleaseCapture();
+}
+
+bool WinWindow::HasCapture() const {
+  return ::GetCapture() == hwnd();
 }
 
 void WinWindow::ToggleFullscreen() {}
@@ -118,11 +121,17 @@ void WinWindow::Minimize() {}
 
 void WinWindow::Restore() {}
 
+PlatformWindowState WinWindow::GetPlatformWindowState() const {
+  return PlatformWindowState::PLATFORM_WINDOW_STATE_UNKNOWN;
+}
+
 void WinWindow::SetCursor(PlatformCursor cursor) {
   ::SetCursor(cursor);
 }
 
-void WinWindow::MoveCursorTo(const gfx::Point& location) {}
+void WinWindow::MoveCursorTo(const gfx::Point& location) {
+  ::SetCursorPos(location.x(), location.y());
+}
 
 void WinWindow::ConfineCursorToBounds(const gfx::Rect& bounds) {
 }

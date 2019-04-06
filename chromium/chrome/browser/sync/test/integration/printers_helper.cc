@@ -10,9 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/chromeos/printing/synced_printers_manager.h"
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
@@ -68,19 +66,7 @@ std::string PrinterId(int index) {
 
 chromeos::SyncedPrintersManager* GetPrinterStore(
     content::BrowserContext* context) {
-  chromeos::SyncedPrintersManager* manager =
-      chromeos::SyncedPrintersManagerFactory::GetForBrowserContext(context);
-
-  // TODO(sync): crbug.com/709094: Remove all of this once the bug is fixed.
-  // Must wait for ModelTypeStore initialization. It is fairly difficult to get
-  // to the particular SequencedTaskRunner created inside of ModelTypeStoreImpl,
-  // so run everything!
-  content::RunAllTasksUntilIdle();
-  // Wait for UI thread task completion to make sure PrintersSyncBridge received
-  // ModelTypeStore.
-  base::RunLoop().RunUntilIdle();
-
-  return manager;
+  return chromeos::SyncedPrintersManagerFactory::GetForBrowserContext(context);
 }
 
 }  // namespace
@@ -121,6 +107,17 @@ chromeos::Printer CreateTestPrinter(int index) {
   printer.set_uri(base::StringPrintf("ipp://192.168.1.%d", index));
 
   return printer;
+}
+
+void WaitForPrinterStoreToLoad(content::BrowserContext* context) {
+  GetPrinterStore(context);
+  // Run tasks to allow a ModelTypeStore to be associated with the
+  // SyncedPrinterManager.
+  //
+  // TODO(sync): Remove this forced initialization once there is a mechanism
+  // to queue writes/reads before the ModelTypeStore is associated with the
+  // SyncedPrinterManager. https://crbug.com/709094.
+  content::RunAllTasksUntilIdle();
 }
 
 chromeos::SyncedPrintersManager* GetVerifierPrinterStore() {

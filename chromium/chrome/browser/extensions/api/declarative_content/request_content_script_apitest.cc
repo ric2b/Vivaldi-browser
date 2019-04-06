@@ -6,12 +6,12 @@
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -185,7 +185,7 @@ testing::AssertionResult RequestContentScriptAPITest::CreateAndLoadExtension(
   extension_ = extension;
 
   // Wait for rules to be setup before navigating to trigger script injection.
-  injection_setup_listener.WaitUntilSatisfied();
+  EXPECT_TRUE(injection_setup_listener.WaitUntilSatisfied());
 
   return testing::AssertionSuccess();
 }

@@ -26,10 +26,10 @@
 #include "ipc/ipc_platform_file.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/host_dispatcher.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebPluginContainer.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 #include "ui/gfx/geometry/point.h"
 
 namespace content {
@@ -235,6 +235,26 @@ RendererPpapiHostImpl::ShareSharedMemoryHandleWithRemote(
     return base::SharedMemory::DuplicateHandle(handle);
   }
   return dispatcher_->ShareSharedMemoryHandleWithRemote(handle);
+}
+
+base::UnsafeSharedMemoryRegion
+RendererPpapiHostImpl::ShareUnsafeSharedMemoryRegionWithRemote(
+    const base::UnsafeSharedMemoryRegion& region) {
+  if (!dispatcher_) {
+    DCHECK(is_running_in_process_);
+    return region.Duplicate();
+  }
+  return dispatcher_->ShareUnsafeSharedMemoryRegionWithRemote(region);
+}
+
+base::ReadOnlySharedMemoryRegion
+RendererPpapiHostImpl::ShareReadOnlySharedMemoryRegionWithRemote(
+    const base::ReadOnlySharedMemoryRegion& region) {
+  if (!dispatcher_) {
+    DCHECK(is_running_in_process_);
+    return region.Duplicate();
+  }
+  return dispatcher_->ShareReadOnlySharedMemoryRegionWithRemote(region);
 }
 
 bool RendererPpapiHostImpl::IsRunningInProcess() const {

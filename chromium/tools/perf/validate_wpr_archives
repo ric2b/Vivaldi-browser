@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env vpython
 # Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -19,13 +19,15 @@ path_util.AddAndroidPylibToPath()
 def GetAllStorySets():
   story_sets = []
   benchmarks_to_skip = [
+      'analysis_metrics_ct',
       'skpicture_printer_ct',
       'screenshot_ct',
-      'smoothness_ct',
+      'rendering.cluster_telemetry',
       'repaint_ct',
       'rasterize_and_record_micro_ct',
       'multipage_skpicture_printer_ct',
       'loading.cluster_telemetry',
+      'memory.cluster_telemetry',
       'skpicture_printer',
       'cros_tab_switching.typical_24',
       'multipage_skpicture_printer',

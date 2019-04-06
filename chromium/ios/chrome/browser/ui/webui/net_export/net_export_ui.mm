@@ -97,12 +97,11 @@ NetExportMessageHandler::NetExportMessageHandler()
           GetApplicationContext()->GetNetLog()->net_export_file_writer()),
       state_observer_manager_(this),
       weak_ptr_factory_(this) {
-  file_writer_->Initialize(
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::IO));
+  file_writer_->Initialize();
 }
 
 NetExportMessageHandler::~NetExportMessageHandler() {
-  file_writer_->StopNetLog(nullptr, nullptr);
+  file_writer_->StopNetLog(nullptr);
 }
 
 void NetExportMessageHandler::RegisterMessages() {
@@ -110,20 +109,20 @@ void NetExportMessageHandler::RegisterMessages() {
 
   web_ui()->RegisterMessageCallback(
       net_log::kEnableNotifyUIWithStateHandler,
-      base::Bind(&NetExportMessageHandler::OnEnableNotifyUIWithState,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnEnableNotifyUIWithState,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       net_log::kStartNetLogHandler,
-      base::Bind(&NetExportMessageHandler::OnStartNetLog,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnStartNetLog,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       net_log::kStopNetLogHandler,
-      base::Bind(&NetExportMessageHandler::OnStopNetLog,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnStopNetLog,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       net_log::kSendNetLogHandler,
-      base::Bind(&NetExportMessageHandler::OnSendNetLog,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetExportMessageHandler::OnSendNetLog,
+                          base::Unretained(this)));
 }
 
 void NetExportMessageHandler::OnEnableNotifyUIWithState(
@@ -148,22 +147,24 @@ void NetExportMessageHandler::OnStartNetLog(const base::ListValue* list) {
   }
 
   // Determine the max file size.
-  size_t max_log_file_size = net_log::NetExportFileWriter::kNoLimit;
-  if (params.size() > 1 && params[1].is_int() && params[1].GetInt() > 0) {
-    max_log_file_size = params[1].GetInt();
+  uint64_t max_log_file_size = net_log::NetExportFileWriter::kNoLimit;
+  // Unlike in desktop/Android net_export_ui, the size limit here is encoded
+  // into a base::Value as a double; this is a behavior difference between
+  // ValueResultFromWKResult and V8ValueConverter[Impl]::FromV8Value[Impl].
+  if (params.size() > 1 && (params[1].is_int() || params[1].is_double()) &&
+      params[1].GetDouble() > 0.0) {
+    max_log_file_size = params[1].GetDouble();
   }
 
   file_writer_->StartNetLog(
       base::FilePath(), capture_mode, max_log_file_size,
       base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
-      GetChannelString(),
-      {GetApplicationContext()->GetSystemURLRequestContext()});
+      GetChannelString(), GetApplicationContext()->GetSystemNetworkContext());
 }
 
 void NetExportMessageHandler::OnStopNetLog(const base::ListValue* list) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  file_writer_->StopNetLog(
-      nullptr, GetApplicationContext()->GetSystemURLRequestContext());
+  file_writer_->StopNetLog(nullptr);
 }
 
 void NetExportMessageHandler::OnSendNetLog(const base::ListValue* list) {

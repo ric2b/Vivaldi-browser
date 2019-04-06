@@ -12,6 +12,7 @@
 #include "ash/public/cpp/immersive/immersive_gesture_handler.h"
 #include "ash/public/cpp/immersive/immersive_handler_factory.h"
 #include "base/metrics/histogram_macros.h"
+#include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/base_event_utils.h"
@@ -60,6 +61,10 @@ const int ImmersiveFullscreenController::kImmersiveFullscreenTopEdgeInset = 8;
 // static
 const int ImmersiveFullscreenController::kMouseRevealBoundsHeight = 3;
 
+// static
+bool ImmersiveFullscreenController::value_for_animations_disabled_for_test_ =
+    false;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 ImmersiveFullscreenController::ImmersiveFullscreenController()
@@ -73,7 +78,7 @@ ImmersiveFullscreenController::ImmersiveFullscreenController()
       mouse_x_when_hit_top_in_screen_(-1),
       gesture_begun_(false),
       animation_(new gfx::SlideAnimation(this)),
-      animations_disabled_for_test_(false),
+      animations_disabled_for_test_(value_for_animations_disabled_for_test_),
       weak_ptr_factory_(this) {}
 
 ImmersiveFullscreenController::~ImmersiveFullscreenController() {
@@ -122,6 +127,8 @@ void ImmersiveFullscreenController::SetEnabled(WindowType window_type,
       if (immersive_focus_watcher_)
         immersive_focus_watcher_->UpdateFocusRevealedLock();
     }
+
+    delegate_->OnImmersiveFullscreenEntered();
   } else {
     // Stop cursor-at-top tracking.
     top_edge_hover_timer_.Stop();
@@ -324,6 +331,11 @@ void ImmersiveFullscreenController::EnableWindowObservers(bool enable) {
   }
 }
 
+bool ImmersiveFullscreenController::IsTargetForWidget(
+    views::Widget* target) const {
+  return target == widget_ || target == top_container_->GetWidget();
+}
+
 void ImmersiveFullscreenController::UpdateTopEdgeHoverTimer(
     const ui::MouseEvent& event,
     const gfx::Point& location_in_screen,
@@ -335,9 +347,8 @@ void ImmersiveFullscreenController::UpdateTopEdgeHoverTimer(
   // activation. This allows the timer to be started when |widget_| is inactive
   // but prevents starting the timer if the mouse is over a portion of the top
   // edge obscured by an unrelated widget.
-  if (!top_edge_hover_timer_.IsRunning() && target != widget_) {
+  if (!top_edge_hover_timer_.IsRunning() && !IsTargetForWidget(target))
     return;
-  }
 
   // Mouse hover should not initiate revealing the top-of-window views while a
   // window has mouse capture.

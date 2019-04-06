@@ -7,15 +7,17 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/power_utils.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
@@ -30,7 +32,7 @@ namespace {
 base::string16 GetBatteryTimeText(base::TimeDelta time_left) {
   int hour = 0;
   int min = 0;
-  ash::PowerStatus::SplitTimeIntoHoursAndMinutes(time_left, &hour, &min);
+  ash::power_utils::SplitTimeIntoHoursAndMinutes(time_left, &hour, &min);
 
   base::string16 time_text;
   if (hour == 0 || min == 0) {
@@ -79,37 +81,34 @@ void PowerHandler::TestAPI::SetLidClosedBehavior(
 
 PowerHandler::PowerHandler(PrefService* prefs)
     : prefs_(prefs),
-      power_status_observer_(this),
       power_manager_client_observer_(this),
-      weak_ptr_factory_(this) {
-  power_status_ = ash::PowerStatus::Get();
-}
+      weak_ptr_factory_(this) {}
 
 PowerHandler::~PowerHandler() {}
 
 void PowerHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "updatePowerStatus", base::Bind(&PowerHandler::HandleUpdatePowerStatus,
-                                      base::Unretained(this)));
+      "updatePowerStatus",
+      base::BindRepeating(&PowerHandler::HandleUpdatePowerStatus,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "setPowerSource",
-      base::Bind(&PowerHandler::HandleSetPowerSource, base::Unretained(this)));
+      "setPowerSource", base::BindRepeating(&PowerHandler::HandleSetPowerSource,
+                                            base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "requestPowerManagementSettings",
-      base::Bind(&PowerHandler::HandleRequestPowerManagementSettings,
-                 base::Unretained(this)));
+      base::BindRepeating(&PowerHandler::HandleRequestPowerManagementSettings,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "setLidClosedBehavior",
-      base::Bind(&PowerHandler::HandleSetLidClosedBehavior,
-                 base::Unretained(this)));
+      base::BindRepeating(&PowerHandler::HandleSetLidClosedBehavior,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "setIdleBehavior",
-      base::Bind(&PowerHandler::HandleSetIdleBehavior, base::Unretained(this)));
+      base::BindRepeating(&PowerHandler::HandleSetIdleBehavior,
+                          base::Unretained(this)));
 }
 
 void PowerHandler::OnJavascriptAllowed() {
-  power_status_observer_.Add(power_status_);
-
   PowerManagerClient* power_manager_client =
       DBusThreadManager::Get()->GetPowerManagerClient();
   power_manager_client_observer_.Add(power_manager_client);
@@ -121,24 +120,27 @@ void PowerHandler::OnJavascriptAllowed() {
                                     base::Unretained(this), false /* force */));
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(prefs_);
-  pref_change_registrar_->Add(prefs::kPowerAcIdleAction, callback);
-  pref_change_registrar_->Add(prefs::kPowerAcScreenDimDelayMs, callback);
-  pref_change_registrar_->Add(prefs::kPowerAcScreenOffDelayMs, callback);
-  pref_change_registrar_->Add(prefs::kPowerAcScreenLockDelayMs, callback);
-  pref_change_registrar_->Add(prefs::kPowerBatteryIdleAction, callback);
-  pref_change_registrar_->Add(prefs::kPowerBatteryScreenDimDelayMs, callback);
-  pref_change_registrar_->Add(prefs::kPowerBatteryScreenOffDelayMs, callback);
-  pref_change_registrar_->Add(prefs::kPowerBatteryScreenLockDelayMs, callback);
-  pref_change_registrar_->Add(prefs::kPowerLidClosedAction, callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerAcIdleAction, callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerAcScreenDimDelayMs, callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerAcScreenOffDelayMs, callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerAcScreenLockDelayMs, callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerBatteryIdleAction, callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerBatteryScreenDimDelayMs,
+                              callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerBatteryScreenOffDelayMs,
+                              callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerBatteryScreenLockDelayMs,
+                              callback);
+  pref_change_registrar_->Add(ash::prefs::kPowerLidClosedAction, callback);
 }
 
 void PowerHandler::OnJavascriptDisallowed() {
-  power_status_observer_.RemoveAll();
   power_manager_client_observer_.RemoveAll();
   pref_change_registrar_.reset();
 }
 
-void PowerHandler::OnPowerStatusChanged() {
+void PowerHandler::PowerChanged(
+    const power_manager::PowerSupplyProperties& proto) {
   SendBatteryStatus();
   SendPowerSources();
 }
@@ -157,7 +159,9 @@ void PowerHandler::LidEventReceived(PowerManagerClient::LidState state,
 
 void PowerHandler::HandleUpdatePowerStatus(const base::ListValue* args) {
   AllowJavascript();
-  power_status_->RequestStatusUpdate();
+  chromeos::DBusThreadManager::Get()
+      ->GetPowerManagerClient()
+      ->RequestStatusUpdate();
 }
 
 void PowerHandler::HandleSetPowerSource(const base::ListValue* args) {
@@ -165,7 +169,8 @@ void PowerHandler::HandleSetPowerSource(const base::ListValue* args) {
 
   std::string id;
   CHECK(args->GetString(0, &id));
-  power_status_->SetPowerSource(id);
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->SetPowerSource(
+      id);
 }
 
 void PowerHandler::HandleRequestPowerManagementSettings(
@@ -183,42 +188,42 @@ void PowerHandler::HandleSetIdleBehavior(const base::ListValue* args) {
     case IdleBehavior::DISPLAY_OFF_SLEEP:
       // The default behavior is to turn the display off and sleep. Clear the
       // prefs so we use the default delays.
-      prefs_->ClearPref(prefs::kPowerAcIdleAction);
-      prefs_->ClearPref(prefs::kPowerAcScreenDimDelayMs);
-      prefs_->ClearPref(prefs::kPowerAcScreenOffDelayMs);
-      prefs_->ClearPref(prefs::kPowerAcScreenLockDelayMs);
-      prefs_->ClearPref(prefs::kPowerBatteryIdleAction);
-      prefs_->ClearPref(prefs::kPowerBatteryScreenDimDelayMs);
-      prefs_->ClearPref(prefs::kPowerBatteryScreenOffDelayMs);
-      prefs_->ClearPref(prefs::kPowerBatteryScreenLockDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerAcIdleAction);
+      prefs_->ClearPref(ash::prefs::kPowerAcScreenDimDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerAcScreenOffDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerAcScreenLockDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerBatteryIdleAction);
+      prefs_->ClearPref(ash::prefs::kPowerBatteryScreenDimDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerBatteryScreenOffDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerBatteryScreenLockDelayMs);
       break;
     case IdleBehavior::DISPLAY_OFF:
       // Override idle actions to keep the system awake, but use the default
       // screen delays.
-      prefs_->SetInteger(prefs::kPowerAcIdleAction,
+      prefs_->SetInteger(ash::prefs::kPowerAcIdleAction,
                          PowerPolicyController::ACTION_DO_NOTHING);
-      prefs_->ClearPref(prefs::kPowerAcScreenDimDelayMs);
-      prefs_->ClearPref(prefs::kPowerAcScreenOffDelayMs);
-      prefs_->ClearPref(prefs::kPowerAcScreenLockDelayMs);
-      prefs_->SetInteger(prefs::kPowerBatteryIdleAction,
+      prefs_->ClearPref(ash::prefs::kPowerAcScreenDimDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerAcScreenOffDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerAcScreenLockDelayMs);
+      prefs_->SetInteger(ash::prefs::kPowerBatteryIdleAction,
                          PowerPolicyController::ACTION_DO_NOTHING);
-      prefs_->ClearPref(prefs::kPowerBatteryScreenDimDelayMs);
-      prefs_->ClearPref(prefs::kPowerBatteryScreenOffDelayMs);
-      prefs_->ClearPref(prefs::kPowerBatteryScreenLockDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerBatteryScreenDimDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerBatteryScreenOffDelayMs);
+      prefs_->ClearPref(ash::prefs::kPowerBatteryScreenLockDelayMs);
       break;
     case IdleBehavior::DISPLAY_ON:
       // Override idle actions and set screen delays to 0 in order to disable
       // them (i.e. keep the screen on).
-      prefs_->SetInteger(prefs::kPowerAcIdleAction,
+      prefs_->SetInteger(ash::prefs::kPowerAcIdleAction,
                          PowerPolicyController::ACTION_DO_NOTHING);
-      prefs_->SetInteger(prefs::kPowerAcScreenDimDelayMs, 0);
-      prefs_->SetInteger(prefs::kPowerAcScreenOffDelayMs, 0);
-      prefs_->SetInteger(prefs::kPowerAcScreenLockDelayMs, 0);
-      prefs_->SetInteger(prefs::kPowerBatteryIdleAction,
+      prefs_->SetInteger(ash::prefs::kPowerAcScreenDimDelayMs, 0);
+      prefs_->SetInteger(ash::prefs::kPowerAcScreenOffDelayMs, 0);
+      prefs_->SetInteger(ash::prefs::kPowerAcScreenLockDelayMs, 0);
+      prefs_->SetInteger(ash::prefs::kPowerBatteryIdleAction,
                          PowerPolicyController::ACTION_DO_NOTHING);
-      prefs_->SetInteger(prefs::kPowerBatteryScreenDimDelayMs, 0);
-      prefs_->SetInteger(prefs::kPowerBatteryScreenOffDelayMs, 0);
-      prefs_->SetInteger(prefs::kPowerBatteryScreenLockDelayMs, 0);
+      prefs_->SetInteger(ash::prefs::kPowerBatteryScreenDimDelayMs, 0);
+      prefs_->SetInteger(ash::prefs::kPowerBatteryScreenOffDelayMs, 0);
+      prefs_->SetInteger(ash::prefs::kPowerBatteryScreenLockDelayMs, 0);
       break;
     default:
       NOTREACHED() << "Invalid idle behavior " << value;
@@ -232,10 +237,10 @@ void PowerHandler::HandleSetLidClosedBehavior(const base::ListValue* args) {
   CHECK(args->GetInteger(0, &value));
   switch (static_cast<PowerPolicyController::Action>(value)) {
     case PowerPolicyController::ACTION_SUSPEND:
-      prefs_->ClearPref(prefs::kPowerLidClosedAction);
+      prefs_->ClearPref(ash::prefs::kPowerLidClosedAction);
       break;
     case PowerPolicyController::ACTION_DO_NOTHING:
-      prefs_->SetInteger(prefs::kPowerLidClosedAction,
+      prefs_->SetInteger(ash::prefs::kPowerLidClosedAction,
                          PowerPolicyController::ACTION_DO_NOTHING);
       break;
     default:
@@ -244,16 +249,22 @@ void PowerHandler::HandleSetLidClosedBehavior(const base::ListValue* args) {
 }
 
 void PowerHandler::SendBatteryStatus() {
-  bool charging = power_status_->IsBatteryCharging();
-  bool calculating = power_status_->IsBatteryTimeBeingCalculated();
-  int percent = power_status_->GetRoundedBatteryPercent();
+  const base::Optional<power_manager::PowerSupplyProperties>& proto =
+      DBusThreadManager::Get()->GetPowerManagerClient()->GetLastStatus();
+  DCHECK(proto);
+  bool charging = proto->battery_state() ==
+                  power_manager::PowerSupplyProperties_BatteryState_CHARGING;
+  bool calculating = proto->is_calculating_battery_time();
+  int percent =
+      ash::power_utils::GetRoundedBatteryPercent(proto->battery_percent());
   base::TimeDelta time_left;
   bool show_time = false;
 
   if (!calculating) {
-    time_left = charging ? power_status_->GetBatteryTimeToFull()
-                         : power_status_->GetBatteryTimeToEmpty();
-    show_time = ash::PowerStatus::ShouldDisplayBatteryTime(time_left);
+    time_left = base::TimeDelta::FromSeconds(
+        charging ? proto->battery_time_to_full_sec()
+                 : proto->battery_time_to_empty_sec());
+    show_time = ash::power_utils::ShouldDisplayBatteryTime(time_left);
   }
 
   base::string16 status_text;
@@ -268,7 +279,10 @@ void PowerHandler::SendBatteryStatus() {
   }
 
   base::DictionaryValue battery_dict;
-  battery_dict.SetBoolean("present", power_status_->IsBatteryPresent());
+  battery_dict.SetBoolean(
+      "present",
+      proto->battery_state() !=
+          power_manager::PowerSupplyProperties_BatteryState_NOT_PRESENT);
   battery_dict.SetBoolean("charging", charging);
   battery_dict.SetBoolean("calculating", calculating);
   battery_dict.SetInteger("percent", percent);
@@ -278,19 +292,25 @@ void PowerHandler::SendBatteryStatus() {
 }
 
 void PowerHandler::SendPowerSources() {
+  const base::Optional<power_manager::PowerSupplyProperties>& proto =
+      DBusThreadManager::Get()->GetPowerManagerClient()->GetLastStatus();
+  DCHECK(proto);
   base::ListValue sources_list;
-  for (const auto& source : power_status_->GetPowerSources()) {
+  for (int i = 0; i < proto->available_external_power_source_size(); i++) {
+    const auto& source = proto->available_external_power_source(i);
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-    dict->SetString("id", source.id);
-    dict->SetInteger("type", source.type);
+    dict->SetString("id", source.id());
+    dict->SetBoolean("is_dedicated_charger", source.active_by_default());
     dict->SetString("description",
-                    l10n_util::GetStringUTF16(source.description_id));
+                    ash::power_utils::PowerSourceToDisplayString(source));
     sources_list.Append(std::move(dict));
   }
 
-  FireWebUIListener("power-sources-changed", sources_list,
-                    base::Value(power_status_->GetCurrentPowerSourceID()),
-                    base::Value(power_status_->IsUsbChargerConnected()));
+  FireWebUIListener(
+      "power-sources-changed", sources_list,
+      base::Value(proto->external_power_source_id()),
+      base::Value(proto->external_power() ==
+                  power_manager::PowerSupplyProperties_ExternalPower_USB));
 }
 
 void PowerHandler::SendPowerManagementSettings(bool force) {
@@ -300,31 +320,32 @@ void PowerHandler::SendPowerManagementSettings(bool force) {
   // be able to display something meaningful in the UI in those cases anyway.
   const PowerPolicyController::Action idle_action =
       static_cast<PowerPolicyController::Action>(
-          prefs_->GetInteger(prefs::kPowerAcIdleAction));
+          prefs_->GetInteger(ash::prefs::kPowerAcIdleAction));
   IdleBehavior idle_behavior = IdleBehavior::OTHER;
   if (idle_action == PowerPolicyController::ACTION_SUSPEND) {
     idle_behavior = IdleBehavior::DISPLAY_OFF_SLEEP;
   } else if (idle_action == PowerPolicyController::ACTION_DO_NOTHING) {
-    idle_behavior = (prefs_->GetInteger(prefs::kPowerAcScreenOffDelayMs) > 0
-                         ? IdleBehavior::DISPLAY_OFF
-                         : IdleBehavior::DISPLAY_ON);
+    idle_behavior =
+        (prefs_->GetInteger(ash::prefs::kPowerAcScreenOffDelayMs) > 0
+             ? IdleBehavior::DISPLAY_OFF
+             : IdleBehavior::DISPLAY_ON);
   }
 
   const bool idle_controlled =
-      prefs_->IsManagedPreference(prefs::kPowerAcIdleAction) ||
-      prefs_->IsManagedPreference(prefs::kPowerAcScreenDimDelayMs) ||
-      prefs_->IsManagedPreference(prefs::kPowerAcScreenOffDelayMs) ||
-      prefs_->IsManagedPreference(prefs::kPowerAcScreenLockDelayMs) ||
-      prefs_->IsManagedPreference(prefs::kPowerBatteryIdleAction) ||
-      prefs_->IsManagedPreference(prefs::kPowerBatteryScreenDimDelayMs) ||
-      prefs_->IsManagedPreference(prefs::kPowerBatteryScreenOffDelayMs) ||
-      prefs_->IsManagedPreference(prefs::kPowerBatteryScreenLockDelayMs);
+      prefs_->IsManagedPreference(ash::prefs::kPowerAcIdleAction) ||
+      prefs_->IsManagedPreference(ash::prefs::kPowerAcScreenDimDelayMs) ||
+      prefs_->IsManagedPreference(ash::prefs::kPowerAcScreenOffDelayMs) ||
+      prefs_->IsManagedPreference(ash::prefs::kPowerAcScreenLockDelayMs) ||
+      prefs_->IsManagedPreference(ash::prefs::kPowerBatteryIdleAction) ||
+      prefs_->IsManagedPreference(ash::prefs::kPowerBatteryScreenDimDelayMs) ||
+      prefs_->IsManagedPreference(ash::prefs::kPowerBatteryScreenOffDelayMs) ||
+      prefs_->IsManagedPreference(ash::prefs::kPowerBatteryScreenLockDelayMs);
 
   const PowerPolicyController::Action lid_closed_behavior =
       static_cast<PowerPolicyController::Action>(
-          prefs_->GetInteger(prefs::kPowerLidClosedAction));
+          prefs_->GetInteger(ash::prefs::kPowerLidClosedAction));
   const bool lid_closed_controlled =
-      prefs_->IsManagedPreference(prefs::kPowerLidClosedAction);
+      prefs_->IsManagedPreference(ash::prefs::kPowerLidClosedAction);
   const bool has_lid = lid_state_ != PowerManagerClient::LidState::NOT_PRESENT;
 
   // Don't notify the UI if nothing changed.

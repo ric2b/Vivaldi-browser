@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
@@ -56,6 +57,7 @@ class UpdateNotifierManager {
   bool notification_accepted_ = false;
   std::unique_ptr<UpdateNotifierWindow> update_notifier_window_;
   base::MessageLoop* ui_thread_loop_ = nullptr;
+  base::RunLoop run_loop_;
 
   std::unique_ptr<base::WaitableEvent> global_restart_event_;
   base::WaitableEventWatcher global_restart_event_watch_;

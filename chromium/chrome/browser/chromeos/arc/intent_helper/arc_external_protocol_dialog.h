@@ -10,11 +10,19 @@
 #include <vector>
 
 #include "components/arc/common/intent_helper.mojom.h"
+#include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
 
+namespace content {
+class WebContents;
+}  // namespace content
+
 namespace arc {
+
+using GurlAndActivityInfo =
+    std::pair<GURL, ArcIntentHelperBridge::ActivityName>;
 
 // An enum returned from GetAction function. This is visible for testing.
 enum class GetActionResult {
@@ -45,19 +53,16 @@ bool RunArcExternalProtocolDialog(const GURL& url,
 
 GetActionResult GetActionForTesting(
     const GURL& original_url,
-    bool always_ask_user,
     const std::vector<mojom::IntentHandlerInfoPtr>& handlers,
     size_t selected_app_index,
-    std::pair<GURL, std::string>* out_url_and_package);
+    GurlAndActivityInfo* out_url_and_activity_name,
+    bool* safe_to_bypass_ui);
 
 GURL GetUrlToNavigateOnDeactivateForTesting(
     const std::vector<mojom::IntentHandlerInfoPtr>& handlers);
 
-bool IsSafeToRedirectToArcWithoutUserConfirmationForTesting(
-    const GURL& url,
-    ui::PageTransition page_transition,
-    const GURL& last_url,
-    ui::PageTransition last_page_transition);
+bool GetAndResetSafeToRedirectToArcWithoutUserConfirmationFlagForTesting(
+    content::WebContents* web_contents);
 
 bool IsChromeAnAppCandidateForTesting(
     const std::vector<mojom::IntentHandlerInfoPtr>& handlers);

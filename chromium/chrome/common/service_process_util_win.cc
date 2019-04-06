@@ -4,6 +4,8 @@
 
 #include "chrome/common/service_process_util.h"
 
+#include <windows.h>
+
 #include <algorithm>
 #include <memory>
 
@@ -42,7 +44,7 @@ std::string GetServiceProcessAutoRunKey() {
 // versions of Chrome.
 std::string GetObsoleteServiceProcessAutoRunKey() {
   base::FilePath user_data_dir;
-  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   std::string scoped_name = base::WideToUTF8(user_data_dir.value());
   std::replace(scoped_name.begin(), scoped_name.end(), '\\', '!');
   std::replace(scoped_name.begin(), scoped_name.end(), '/', '!');
@@ -80,8 +82,8 @@ class ServiceProcessTerminateMonitor
 }  // namespace
 
 // Gets the name of the service process IPC channel.
-mojo::edk::NamedPlatformHandle GetServiceProcessChannel() {
-  return mojo::edk::NamedPlatformHandle(
+mojo::NamedPlatformChannel::ServerName GetServiceProcessServerName() {
+  return mojo::NamedPlatformChannel::ServerNameFromUTF8(
       GetServiceProcessScopedVersionedName("_service_ipc"));
 }
 

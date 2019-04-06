@@ -19,11 +19,7 @@ bool IsPinchToZoomEnabled();
 
 V8CacheOptions GetV8CacheOptions();
 
-ProgressBarCompletion GetProgressBarCompletionPolicy();
-
 SavePreviousDocumentResources GetSavePreviousDocumentResources();
-
-CONTENT_EXPORT bool IsUseZoomForDSFEnabled();
 
 void WaitForDebugger(const std::string& label);
 

@@ -21,10 +21,9 @@
 #include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/test/test_utils.h"
 
-
 class AutocompleteController;
 
-class OmniboxApiTest : public ExtensionApiTest {
+class OmniboxApiTest : public extensions::ExtensionApiTest {
  protected:
   LocationBar* GetLocationBar(Browser* browser) const {
     return browser->window()->GetLocationBar();

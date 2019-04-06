@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "components/ui_devtools/DOM.h"
@@ -16,18 +17,22 @@
 #include "components/ui_devtools/devtools_client.h"
 #include "components/ui_devtools/devtools_export.h"
 #include "components/ui_devtools/string_util.h"
-#include "net/server/http_server.h"
+#include "services/network/public/cpp/server/http_server.h"
 
 namespace ui_devtools {
 
-class UI_DEVTOOLS_EXPORT UiDevToolsServer : public net::HttpServer::Delegate {
+class UI_DEVTOOLS_EXPORT UiDevToolsServer
+    : public network::server::HttpServer::Delegate {
  public:
   ~UiDevToolsServer() override;
 
   // Returns an empty unique_ptr if ui devtools flag isn't enabled or if a
-  // server instance has already been created.
+  // server instance has already been created. Server doesn't know anything
+  // about the caller, so both UI and Viz pass their corresponding params.
   static std::unique_ptr<UiDevToolsServer> Create(
-      scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner);
+      network::mojom::NetworkContext* network_context,
+      const char* enable_devtools_flag,
+      int default_port);
 
   // Returns a list of attached UiDevToolsClient name + URL
   using NameUrlPair = std::pair<std::string, std::string>;
@@ -36,19 +41,25 @@ class UI_DEVTOOLS_EXPORT UiDevToolsServer : public net::HttpServer::Delegate {
   void AttachClient(std::unique_ptr<UiDevToolsClient> client);
   void SendOverWebSocket(int connection_id, const String& message);
 
- private:
-  explicit UiDevToolsServer(
-      scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner);
+  int port() const { return port_; }
 
-  void Start(const std::string& address_string, uint16_t port);
-  void StartServer(const std::string& address_string, uint16_t port);
+ private:
+  UiDevToolsServer(const char* enable_devtools_flag, int default_port);
+
+  void Start(network::mojom::NetworkContext* network_context,
+             const std::string& address_string);
+  void MakeServer(network::mojom::TCPServerSocketPtr server_socket,
+                  int result,
+                  const base::Optional<net::IPEndPoint>& local_addr);
 
   // HttpServer::Delegate
   void OnConnect(int connection_id) override;
-  void OnHttpRequest(int connection_id,
-                     const net::HttpServerRequestInfo& info) override;
-  void OnWebSocketRequest(int connection_id,
-                          const net::HttpServerRequestInfo& info) override;
+  void OnHttpRequest(
+      int connection_id,
+      const network::server::HttpServerRequestInfo& info) override;
+  void OnWebSocketRequest(
+      int connection_id,
+      const network::server::HttpServerRequestInfo& info) override;
   void OnWebSocketMessage(int connection_id, const std::string& data) override;
   void OnClose(int connection_id) override;
 
@@ -57,13 +68,16 @@ class UI_DEVTOOLS_EXPORT UiDevToolsServer : public net::HttpServer::Delegate {
   ClientsList clients_;
   ConnectionsMap connections_;
 
-  std::unique_ptr<base::Thread> thread_;
-  std::unique_ptr<net::HttpServer> server_;
-  scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
+  std::unique_ptr<network::server::HttpServer> server_;
+
+  // The port the devtools server listens on
+  const int port_;
 
   // The server (owned by ash for now)
   static UiDevToolsServer* devtools_server_;
+
+  SEQUENCE_CHECKER(devtools_server_sequence_);
+  base::WeakPtrFactory<UiDevToolsServer> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(UiDevToolsServer);
 };

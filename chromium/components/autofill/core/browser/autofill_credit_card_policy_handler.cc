@@ -26,6 +26,10 @@ void AutofillCreditCardPolicyHandler::ApplyPolicySettings(
   if (value && value->GetAsBoolean(&autofill_credit_card_enabled) &&
       !autofill_credit_card_enabled) {
     prefs->SetBoolean(autofill::prefs::kAutofillCreditCardEnabled, false);
+  } else {
+    // Temporary fix for M69. If there is no policy explicitly disabling this
+    // pref, it should be set to true.
+    prefs->SetBoolean(autofill::prefs::kAutofillCreditCardEnabled, true);
   }
 }
 

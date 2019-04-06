@@ -61,6 +61,7 @@ public class MockResourcesForLayout extends MockResources {
         mFloats.put(R.dimen.tabswitcher_border_frame_padding_top, 50.f);
         mFloats.put(R.dimen.tabswitcher_border_frame_transparent_top, 3.f);
         mFloats.put(R.dimen.tabswitcher_border_frame_transparent_side, 2.f);
+        mFloats.put(R.dimen.open_new_tab_animation_y_translation, -20.f);
         mBooleans.put(org.chromium.chrome.R.bool.compositor_tab_title_fake_bold_text, true);
         mStrings.put(R.string.tab_loading_default_title, "Loading...");
         mFloats.put(org.chromium.chrome.R.dimen.overlay_panel_bar_height, 56.f);
@@ -68,6 +69,12 @@ public class MockResourcesForLayout extends MockResources {
         mFloats.put(org.chromium.chrome.R.dimen.contextual_search_bar_banner_padding, 12.f);
         mFloats.put(org.chromium.chrome.R.dimen.contextual_search_end_button_width, 41.f);
         mFloats.put(org.chromium.chrome.R.dimen.toolbar_height_no_shadow, 56.f);
+        mIntegers.put(R.color.modern_light_grey, 0xFFF1F3F4);
+        mIntegers.put(R.color.modern_primary_color, Color.WHITE);
+        mIntegers.put(R.color.default_primary_color, 0xFFF2F2F2);
+        mIntegers.put(R.color.incognito_primary_color, 0xFF505050);
+        mIntegers.put(R.color.incognito_modern_primary_color, 0xFF3C4043);
+        mIntegers.put(R.color.ntp_bg, 0xFFF2F2F2);
     }
 
     @Override

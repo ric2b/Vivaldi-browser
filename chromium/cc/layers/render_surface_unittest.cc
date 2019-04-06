@@ -68,7 +68,7 @@ class FakePictureLayerImplForRenderSurfaceTest : public FakePictureLayerImpl {
     for (const auto& rect : quad_rects_) {
       auto* quad = render_pass->CreateAndAppendDrawQuad<viz::TileDrawQuad>();
       quad->SetNew(shared_quad_state, rect, rect, needs_blending, 0,
-                   gfx::RectF(rect), bounds(), false, false, false);
+                   gfx::RectF(rect), bounds(), false, false, false, false);
     }
   }
 
@@ -98,7 +98,7 @@ TEST(RenderSurfaceTest, VerifySurfaceChangesAreTrackedProperly) {
   host_impl.active_tree()->ResetAllChangeTracking();
   host_impl.active_tree()->SetRootLayerForTesting(std::move(owning_layer));
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl.active_tree()->UpdateDrawProperties();
 
@@ -158,7 +158,7 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectSharedQuadState) {
   root_layer->test_properties()->AddChild(std::move(owning_layer));
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root_layer));
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl.active_tree()->UpdateDrawProperties();
 
@@ -216,7 +216,7 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectRenderPass) {
   root_layer->test_properties()->AddChild(std::move(owning_layer));
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root_layer));
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl.active_tree()->UpdateDrawProperties();
 
@@ -245,6 +245,8 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceDropsOccludedRenderPassDrawQuads) {
   std::unique_ptr<LayerTreeFrameSink> layer_tree_frame_sink =
       FakeLayerTreeFrameSink::Create3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
+  // Set a big enough viewport to show the entire render pass.
+  host_impl.SetViewportSize(gfx::Size(1000, 1000));
 
   std::unique_ptr<LayerImpl> root_layer =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -270,7 +272,7 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceDropsOccludedRenderPassDrawQuads) {
   root_layer->test_properties()->AddChild(std::move(owning_layer));
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root_layer));
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl.active_tree()->UpdateDrawProperties();
 
@@ -312,6 +314,8 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceIgnoreMaskLayerOcclusion) {
   std::unique_ptr<LayerTreeFrameSink> layer_tree_frame_sink =
       FakeLayerTreeFrameSink::Create3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
+  // Set a big enough viewport to show the entire render pass.
+  host_impl.SetViewportSize(gfx::Size(1000, 1000));
 
   std::unique_ptr<LayerImpl> root_layer =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -337,7 +341,7 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceIgnoreMaskLayerOcclusion) {
   root_layer->test_properties()->AddChild(std::move(owning_layer));
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root_layer));
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl.active_tree()->UpdateDrawProperties();
 

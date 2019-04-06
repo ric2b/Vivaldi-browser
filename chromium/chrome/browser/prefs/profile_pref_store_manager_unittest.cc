@@ -16,14 +16,11 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/sequenced_worker_pool_owner.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
 #include "chrome/common/chrome_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -39,7 +36,7 @@
 #include "services/preferences/public/cpp/tracked/configuration.h"
 #include "services/preferences/public/cpp/tracked/mock_validation_delegate.h"
 #include "services/preferences/public/cpp/tracked/pref_names.h"
-#include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -151,7 +148,7 @@ class ProfilePrefStoreManagerTest : public testing::Test,
 
   void SetUp() override {
     mock_validation_delegate_record_ = new MockValidationDelegateRecord;
-    mock_validation_delegate_ = base::MakeUnique<MockValidationDelegate>(
+    mock_validation_delegate_ = std::make_unique<MockValidationDelegate>(
         mock_validation_delegate_record_);
 
     ProfilePrefStoreManager::RegisterProfilePrefs(profile_pref_registry_.get());
@@ -263,13 +260,13 @@ class ProfilePrefStoreManagerTest : public testing::Test,
     PrefStoreReadObserver read_observer(pref_store);
     PersistentPrefStore::PrefReadError error = read_observer.Read();
     EXPECT_EQ(PersistentPrefStore::PREF_READ_ERROR_NO_FILE, error);
-    pref_store->SetValue(kTrackedAtomic, base::MakeUnique<base::Value>(kFoobar),
+    pref_store->SetValue(kTrackedAtomic, std::make_unique<base::Value>(kFoobar),
                          WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     pref_store->SetValue(kProtectedAtomic,
-                         base::MakeUnique<base::Value>(kHelloWorld),
+                         std::make_unique<base::Value>(kHelloWorld),
                          WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     pref_store->SetValue(kUnprotectedPref,
-                         base::MakeUnique<base::Value>(kFoobar),
+                         std::make_unique<base::Value>(kFoobar),
                          WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     pref_store->RemoveObserver(&registry_verifier_);
     base::RunLoop run_loop;
@@ -363,7 +360,7 @@ class ProfilePrefStoreManagerTest : public testing::Test,
         service_manager::CapabilitySet());
     static_cast<service_manager::mojom::Service*>(pref_service_context_.get())
         ->OnBindInterface(source, interface_name, std::move(handle),
-                          base::Bind(&base::DoNothing));
+                          base::DoNothing());
   }
 
   base::test::ScopedFeatureList feature_list_;
@@ -410,10 +407,10 @@ TEST_F(ProfilePrefStoreManagerTest, ProtectValues) {
 }
 
 TEST_F(ProfilePrefStoreManagerTest, InitializePrefsFromMasterPrefs) {
-  auto master_prefs = base::MakeUnique<base::DictionaryValue>();
-  master_prefs->Set(kTrackedAtomic, base::MakeUnique<base::Value>(kFoobar));
+  auto master_prefs = std::make_unique<base::DictionaryValue>();
+  master_prefs->Set(kTrackedAtomic, std::make_unique<base::Value>(kFoobar));
   master_prefs->Set(kProtectedAtomic,
-                    base::MakeUnique<base::Value>(kHelloWorld));
+                    std::make_unique<base::Value>(kHelloWorld));
   EXPECT_TRUE(manager_->InitializePrefsFromMasterPrefs(
       prefs::CloneTrackedConfiguration(configuration_), kReportingIdCount,
       std::move(master_prefs)));
@@ -569,7 +566,7 @@ TEST_F(ProfilePrefStoreManagerTest, ProtectedToUnprotected) {
   // Trigger the logic that migrates it back to the unprotected preferences
   // file.
   pref_store_->SetValue(kProtectedAtomic,
-                        base::MakeUnique<base::Value>(kGoodbyeWorld),
+                        std::make_unique<base::Value>(kGoodbyeWorld),
                         WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
   LoadExistingPrefs();
   ExpectStringValueEquals(kProtectedAtomic, kGoodbyeWorld);

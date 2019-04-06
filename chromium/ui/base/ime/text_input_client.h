@@ -10,6 +10,7 @@
 
 #include "base/i18n/rtl.h"
 #include "base/strings/string16.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
@@ -29,6 +30,21 @@ enum class TextEditCommand;
 // An interface implemented by a View that needs text input support.
 class UI_BASE_IME_EXPORT TextInputClient {
  public:
+  // The reason the control was focused, used by the virtual keyboard to detect
+  // pen input.
+  enum FocusReason {
+    // Not focused.
+    FOCUS_REASON_NONE,
+    // User initiated with mouse.
+    FOCUS_REASON_MOUSE,
+    // User initiated with touch.
+    FOCUS_REASON_TOUCH,
+    // User initiated with pen.
+    FOCUS_REASON_PEN,
+    // All other reasons (e.g. system initiated, mouse)
+    FOCUS_REASON_OTHER,
+  };
+
   virtual ~TextInputClient();
 
   // Input method result -------------------------------------------------------
@@ -96,6 +112,9 @@ class UI_BASE_IME_EXPORT TextInputClient {
 
   // Returns true if there is composition text.
   virtual bool HasCompositionText() const = 0;
+
+  // Returns how the text input client was focused.
+  virtual FocusReason GetFocusReason() const = 0;
 
   // Document content operations ----------------------------------------------
 
@@ -169,9 +188,14 @@ class UI_BASE_IME_EXPORT TextInputClient {
   // or user-specified, keybindings that may be set up.
   virtual void SetTextEditCommandForNextKeyEvent(TextEditCommand command) = 0;
 
-  // Returns a string description of the view hosting the given text input
-  // element (ie. the URL for web contents), used for recording metrics.
-  virtual const std::string& GetClientSourceInfo() const = 0;
+  // Returns a UKM source for identifying the input client (e.g. for web input
+  // clients, the source represents the URL of the page).
+  virtual ukm::SourceId GetClientSourceForMetrics() const = 0;
+
+  // Returns whether text entered into this text client should be used to
+  // improve typing suggestions for the user. This should return false for text
+  // fields that are considered 'private' (e.g. in incognito tabs).
+  virtual bool ShouldDoLearning() = 0;
 };
 
 }  // namespace ui

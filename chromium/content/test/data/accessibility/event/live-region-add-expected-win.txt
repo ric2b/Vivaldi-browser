@@ -1,4 +1,3 @@
-IA2_EVENT_TEXT_INSERTED on role=DIV new_text={'<obj>' start=6 end=7}
-EVENT_OBJECT_SHOW on role=P
-EVENT_OBJECT_REORDER on role=DIV
-EVENT_OBJECT_LIVEREGIONCHANGED on role=DIV
+EVENT_OBJECT_REORDER on <div#live> role=DIV
+EVENT_OBJECT_SHOW on <p> role=P
+IA2_EVENT_TEXT_INSERTED on <div#live> role=DIV new_text={'<obj>' start=6 end=7}

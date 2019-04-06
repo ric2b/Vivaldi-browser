@@ -141,6 +141,9 @@ class MediaSessionImpl : public MediaSession,
   // MediaSessionService declared state and guessed state (audio_focus_state_).
   CONTENT_EXPORT bool IsActuallyPaused() const override;
 
+  // Set the volume multiplier applied during ducking.
+  CONTENT_EXPORT void SetDuckingVolumeMultiplier(double multiplier) override;
+
   // Let the media session start ducking such that the volume multiplier is
   // reduced.
   CONTENT_EXPORT void StartDucking() override;
@@ -196,6 +199,11 @@ class MediaSessionImpl : public MediaSession,
   // to blink::MediaSession corresponding to the current routed service.
   void DidReceiveAction(blink::mojom::MediaSessionAction action) override;
 
+  // Requests audio focus to the AudioFocusDelegate.
+  // Returns whether the request was granted.
+  CONTENT_EXPORT bool RequestSystemAudioFocus(
+      AudioFocusManager::AudioFocusType audio_focus_type);
+
  private:
   friend class content::WebContentsUserData<MediaSessionImpl>;
   friend class ::MediaSessionImplBrowserTest;
@@ -236,11 +244,6 @@ class MediaSessionImpl : public MediaSession,
   CONTENT_EXPORT void OnSuspendInternal(MediaSession::SuspendType suspend_type,
                                         State new_state);
   CONTENT_EXPORT void OnResumeInternal(MediaSession::SuspendType suspend_type);
-
-  // Requests audio focus to the AudioFocusDelegate.
-  // Returns whether the request was granted.
-  CONTENT_EXPORT bool RequestSystemAudioFocus(
-      AudioFocusManager::AudioFocusType audio_focus_type);
 
   // To be called after a call to AbandonAudioFocus() in order request the
   // delegate to abandon the audio focus.
@@ -301,6 +304,8 @@ class MediaSessionImpl : public MediaSession,
   // is set to |true| after StartDucking(), and will be set to |false| after
   // StopDucking().
   bool is_ducking_;
+
+  double ducking_volume_multiplier_;
 
   base::CallbackList<void(State)> media_session_state_listeners_;
 

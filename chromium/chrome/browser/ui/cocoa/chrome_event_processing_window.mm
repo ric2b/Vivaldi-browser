@@ -36,19 +36,14 @@
   return self;
 }
 
-- (BOOL)handleExtraKeyboardShortcut:(NSEvent*)event {
-  return [commandDispatcherDelegate_ handleExtraKeyboardShortcut:event
-                                                          window:self];
-}
-
 // CommandDispatchingWindow implementation.
 
 - (void)setCommandHandler:(id<UserInterfaceItemCommandHandler>)commandHandler {
   commandHandler_.reset([commandHandler retain]);
 }
 
-- (BOOL)redispatchKeyEvent:(NSEvent*)event {
-  return [commandDispatcher_ redispatchKeyEvent:event];
+- (CommandDispatcher*)commandDispatcher {
+  return commandDispatcher_.get();
 }
 
 - (BOOL)defaultPerformKeyEquivalent:(NSEvent*)event {

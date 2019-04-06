@@ -6,11 +6,11 @@
 #define UI_EVENTS_BLINK_WEB_INPUT_EVENT_H_
 
 #include "base/callback.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
-#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
-#include "third_party/WebKit/public/platform/WebTouchEvent.h"
+#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_keyboard_event.h"
+#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
+#include "third_party/blink/public/platform/web_touch_event.h"
 
 namespace ui {
 class GestureEvent;
@@ -51,7 +51,8 @@ blink::WebGestureEvent MakeWebGestureEvent(
     const ScrollEvent& event,
     const base::Callback<gfx::PointF(const ui::LocatedEvent& event)>&
         screen_location_callback);
-blink::WebGestureEvent MakeWebGestureEventFlingCancel();
+blink::WebGestureEvent MakeWebGestureEventFlingCancel(
+    const blink::WebMouseWheelEvent& wheel_event);
 
 }  // namespace ui
 

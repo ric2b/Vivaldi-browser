@@ -14,6 +14,10 @@ ResourceHandler::Delegate::Delegate() {}
 
 ResourceHandler::Delegate::~Delegate() {}
 
+void ResourceHandler::Delegate::PauseReadingBodyFromNet() {}
+
+void ResourceHandler::Delegate::ResumeReadingBodyFromNet() {}
+
 void ResourceHandler::SetDelegate(Delegate* delegate) {
   delegate_ = delegate;
 }
@@ -40,6 +44,11 @@ void ResourceHandler::Resume() {
   ReleaseController()->Resume();
 }
 
+void ResourceHandler::ResumeForRedirect(
+    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+  ReleaseController()->ResumeForRedirect(modified_request_headers);
+}
+
 void ResourceHandler::Cancel() {
   ReleaseController()->Cancel();
 }
@@ -50,6 +59,14 @@ void ResourceHandler::CancelWithError(int error_code) {
 
 void ResourceHandler::OutOfBandCancel(int error_code, bool tell_renderer) {
   delegate_->OutOfBandCancel(error_code, tell_renderer);
+}
+
+void ResourceHandler::PauseReadingBodyFromNet() {
+  delegate_->PauseReadingBodyFromNet();
+}
+
+void ResourceHandler::ResumeReadingBodyFromNet() {
+  delegate_->ResumeReadingBodyFromNet();
 }
 
 void ResourceHandler::GetNumericArg(const std::string& name, int* result) {
@@ -70,23 +87,5 @@ int ResourceHandler::GetRequestID() const {
 ResourceMessageFilter* ResourceHandler::GetFilter() const {
   return GetRequestInfo()->requester_info()->filter();
 }
-
-/* NOTE(yngve): Risk of infinite loop, should only be a problem for us,
- * if we add new subclasses, chromium will still use the abstract definition.
- */
-void ResourceHandler::OnResponseStarted(
-    network::ResourceResponse* response,
-    std::unique_ptr<ResourceController> controller) {
-  OnResponseStarted(response, std::move(controller), false, false);
-}
-
-void ResourceHandler::OnResponseStarted(
-    network::ResourceResponse* response,
-    std::unique_ptr<ResourceController> controller,
-    bool open_when_done,
-    bool ask_for_target) {
-  OnResponseStarted(response, std::move(controller));
-}
-
 
 }  // namespace content

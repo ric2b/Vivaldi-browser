@@ -7,9 +7,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
-#include "components/printing/service/public/interfaces/pdf_compositor.mojom.h"
+#include "components/services/pdf_compositor/public/interfaces/pdf_compositor.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -17,6 +18,7 @@ class PrintPreviewUI;
 struct PrintHostMsg_DidGetPreviewPageCount_Params;
 struct PrintHostMsg_DidPreviewDocument_Params;
 struct PrintHostMsg_DidPreviewPage_Params;
+struct PrintHostMsg_PreviewIds;
 struct PrintHostMsg_RequestPrintPreview_Params;
 struct PrintHostMsg_SetOptionsFromDocument_Params;
 
@@ -52,8 +54,9 @@ class PrintPreviewMessageHandler
   // observed.
   content::WebContents* GetPrintPreviewDialog();
 
-  // Gets the PrintPreviewUI associated with the WebContents being observed.
-  PrintPreviewUI* GetPrintPreviewUI();
+  // Gets the PrintPreviewUI associated with the WebContents being observed and
+  // verifies that its id matches |preview_ui_id|.
+  PrintPreviewUI* GetPrintPreviewUI(int preview_ui_id);
 
   // Message handlers.
   void OnRequestPrintPreview(
@@ -61,36 +64,46 @@ class PrintPreviewMessageHandler
       const PrintHostMsg_RequestPrintPreview_Params& params);
   void OnDidGetDefaultPageLayout(const PageSizeMargins& page_layout_in_points,
                                  const gfx::Rect& printable_area_in_points,
-                                 bool has_custom_page_size_style);
+                                 bool has_custom_page_size_style,
+                                 const PrintHostMsg_PreviewIds& ids);
   void OnDidGetPreviewPageCount(
-      const PrintHostMsg_DidGetPreviewPageCount_Params& params);
-  void OnDidPreviewPage(const PrintHostMsg_DidPreviewPage_Params& params);
+      const PrintHostMsg_DidGetPreviewPageCount_Params& params,
+      const PrintHostMsg_PreviewIds& ids);
+  void OnDidPreviewPage(content::RenderFrameHost* render_frame_host,
+                        const PrintHostMsg_DidPreviewPage_Params& params,
+                        const PrintHostMsg_PreviewIds& ids);
   void OnMetafileReadyForPrinting(
-      const PrintHostMsg_DidPreviewDocument_Params& params);
-  void OnPrintPreviewFailed(int document_cookie);
-  void OnPrintPreviewCancelled(int document_cookie);
-  void OnInvalidPrinterSettings(int document_cookie);
+      content::RenderFrameHost* render_frame_host,
+      const PrintHostMsg_DidPreviewDocument_Params& params,
+      const PrintHostMsg_PreviewIds& ids);
+  void OnPrintPreviewFailed(int document_cookie,
+                            const PrintHostMsg_PreviewIds& ids);
+  void OnPrintPreviewCancelled(int document_cookie,
+                               const PrintHostMsg_PreviewIds& ids);
+  void OnInvalidPrinterSettings(int document_cookie,
+                                const PrintHostMsg_PreviewIds& ids);
   void OnSetOptionsFromDocument(
-      const PrintHostMsg_SetOptionsFromDocument_Params& params);
+      const PrintHostMsg_SetOptionsFromDocument_Params& params,
+      const PrintHostMsg_PreviewIds& ids);
 
   void NotifyUIPreviewPageReady(
       int page_number,
-      int request_id,
-      scoped_refptr<base::RefCountedBytes> data_bytes);
+      const PrintHostMsg_PreviewIds& ids,
+      scoped_refptr<base::RefCountedMemory> data_bytes);
   void NotifyUIPreviewDocumentReady(
       int page_count,
-      int request_id,
-      scoped_refptr<base::RefCountedBytes> data_bytes);
+      const PrintHostMsg_PreviewIds& ids,
+      scoped_refptr<base::RefCountedMemory> data_bytes);
 
   // Callbacks for pdf compositor client.
   void OnCompositePdfPageDone(int page_number,
-                              int request_id,
+                              const PrintHostMsg_PreviewIds& ids,
                               mojom::PdfCompositor::Status status,
-                              mojo::ScopedSharedBufferHandle handle);
+                              base::ReadOnlySharedMemoryRegion region);
   void OnCompositePdfDocumentDone(int page_count,
-                                  int request_id,
+                                  const PrintHostMsg_PreviewIds& ids,
                                   mojom::PdfCompositor::Status status,
-                                  mojo::ScopedSharedBufferHandle handle);
+                                  base::ReadOnlySharedMemoryRegion region);
 
   base::WeakPtrFactory<PrintPreviewMessageHandler> weak_ptr_factory_;
 

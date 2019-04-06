@@ -4,6 +4,7 @@
 
 #include "ash/system/screen_security/screen_tray_item.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
 #include "ash/system/screen_security/screen_capture_tray_item.h"
 #include "ash/system/screen_security/screen_share_tray_item.h"
@@ -12,6 +13,7 @@
 #include "ash/test/ash_test_base.h"
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -37,12 +39,13 @@ void ClickViewCenter(views::View* view) {
 
 class ScreenTrayItemTest : public AshTestBase {
  public:
-  ScreenTrayItemTest() : tray_item_(NULL), stop_callback_hit_count_(0) {}
+  ScreenTrayItemTest() {}
   ~ScreenTrayItemTest() override = default;
 
   ScreenTrayItem* tray_item() { return tray_item_; }
   void set_tray_item(ScreenTrayItem* tray_item) { tray_item_ = tray_item; }
 
+  void reset_stop_callback_hit_count() { stop_callback_hit_count_ = 0; }
   int stop_callback_hit_count() const { return stop_callback_hit_count_; }
 
   void StartSession() {
@@ -55,8 +58,8 @@ class ScreenTrayItemTest : public AshTestBase {
   void StopCallback() { stop_callback_hit_count_++; }
 
  private:
-  ScreenTrayItem* tray_item_;
-  int stop_callback_hit_count_;
+  ScreenTrayItem* tray_item_ = nullptr;
+  int stop_callback_hit_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenTrayItemTest);
 };
@@ -68,6 +71,12 @@ class ScreenCaptureTest : public ScreenTrayItemTest {
 
   void SetUp() override {
     ScreenTrayItemTest::SetUp();
+
+    // TODO(tetsui): Remove after UnifiedSystemTray launch.
+    // https://crbug.com/847104
+    if (features::IsSystemTrayUnifiedEnabled())
+      return;
+
     // This tray item is owned by its parent system tray view and will
     // be deleted automatically when its parent is destroyed in AshTestBase.
     ScreenTrayItem* item = new ScreenCaptureTrayItem(GetPrimarySystemTray());
@@ -86,6 +95,12 @@ class ScreenShareTest : public ScreenTrayItemTest {
 
   void SetUp() override {
     ScreenTrayItemTest::SetUp();
+
+    // TODO(tetsui): Remove after UnifiedSystemTray launch.
+    // https://crbug.com/847104
+    if (features::IsSystemTrayUnifiedEnabled())
+      return;
+
     // This tray item is owned by its parent system tray view and will
     // be deleted automatically when its parent is destroyed in AshTestBase.
     ScreenTrayItem* item = new ScreenShareTrayItem(GetPrimarySystemTray());
@@ -111,74 +126,83 @@ void TestStartAndStop(ScreenTrayItemTest* test) {
 }
 
 TEST_F(ScreenCaptureTest, StartAndStop) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   TestStartAndStop(this);
 }
 
 TEST_F(ScreenShareTest, StartAndStop) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   TestStartAndStop(this);
 }
 
-void TestNotificationStartAndStop(ScreenTrayItemTest* test,
-                                  const base::Closure& start_function,
-                                  const base::Closure& stop_function) {
+void TestNotificationStartAndStop(
+    ScreenTrayItemTest* test,
+    const std::vector<base::RepeatingClosure>& start_functions,
+    const base::RepeatingClosure& stop_function) {
+  test->reset_stop_callback_hit_count();
   ScreenTrayItem* tray_item = test->tray_item();
   EXPECT_FALSE(tray_item->is_started());
 
-  start_function.Run();
-  EXPECT_TRUE(tray_item->is_started());
+  for (const auto& start : start_functions) {
+    start.Run();
+    EXPECT_TRUE(tray_item->is_started());
+  }
 
-  // The stop callback shouldn't be called because we stopped
-  // through the notification system.
+  // The stop callback is called even if the notification fires.
   stop_function.Run();
   EXPECT_FALSE(tray_item->is_started());
-  EXPECT_EQ(0, test->stop_callback_hit_count());
+  EXPECT_EQ(static_cast<int>(start_functions.size()),
+            test->stop_callback_hit_count());
 }
 
 TEST_F(ScreenCaptureTest, NotificationStartAndStop) {
-  base::Closure start_function = base::Bind(
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
+  base::RepeatingClosure start_function = base::BindRepeating(
       &SystemTrayNotifier::NotifyScreenCaptureStart,
       base::Unretained(Shell::Get()->system_tray_notifier()),
       base::Bind(&ScreenTrayItemTest::StopCallback, base::Unretained(this)),
       base::UTF8ToUTF16(kTestScreenCaptureAppName));
 
-  base::Closure stop_function =
-      base::Bind(&SystemTrayNotifier::NotifyScreenCaptureStop,
-                 base::Unretained(Shell::Get()->system_tray_notifier()));
+  base::RepeatingClosure stop_function = base::BindRepeating(
+      &SystemTrayNotifier::NotifyScreenCaptureStop,
+      base::Unretained(Shell::Get()->system_tray_notifier()));
 
-  TestNotificationStartAndStop(this, start_function, stop_function);
+  TestNotificationStartAndStop(this, {start_function}, stop_function);
+  TestNotificationStartAndStop(this, {start_function, start_function},
+                               stop_function);
 }
 
 TEST_F(ScreenShareTest, NotificationStartAndStop) {
-  base::Closure start_func = base::Bind(
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
+  base::RepeatingClosure start_function = base::BindRepeating(
       &SystemTrayNotifier::NotifyScreenShareStart,
       base::Unretained(Shell::Get()->system_tray_notifier()),
       base::Bind(&ScreenTrayItemTest::StopCallback, base::Unretained(this)),
       base::UTF8ToUTF16(kTestScreenShareHelperName));
 
-  base::Closure stop_func =
-      base::Bind(&SystemTrayNotifier::NotifyScreenShareStop,
-                 base::Unretained(Shell::Get()->system_tray_notifier()));
+  base::RepeatingClosure stop_function = base::BindRepeating(
+      &SystemTrayNotifier::NotifyScreenShareStop,
+      base::Unretained(Shell::Get()->system_tray_notifier()));
 
-  TestNotificationStartAndStop(this, start_func, stop_func);
-}
-
-void TestNotificationView(ScreenTrayItemTest* test) {
-  ScreenTrayItem* tray_item = test->tray_item();
-
-  test->StartSession();
-  message_center::MessageCenter* message_center =
-      message_center::MessageCenter::Get();
-  EXPECT_TRUE(message_center->FindVisibleNotificationById(
-      tray_item->GetNotificationId()));
-  test->StopSession();
-}
-
-TEST_F(ScreenCaptureTest, NotificationView) {
-  TestNotificationView(this);
-}
-
-TEST_F(ScreenShareTest, NotificationView) {
-  TestNotificationView(this);
+  TestNotificationStartAndStop(this, {start_function}, stop_function);
+  TestNotificationStartAndStop(this, {start_function, start_function},
+                               stop_function);
 }
 
 void TestSystemTrayInteraction(ScreenTrayItemTest* test) {
@@ -187,8 +211,7 @@ void TestSystemTrayInteraction(ScreenTrayItemTest* test) {
 
   std::vector<SystemTrayItem*> tray_items =
       AshTestBase::GetPrimarySystemTray()->GetTrayItems();
-  EXPECT_NE(std::find(tray_items.begin(), tray_items.end(), tray_item),
-            tray_items.end());
+  EXPECT_TRUE(base::ContainsValue(tray_items, tray_item));
 
   test->StartSession();
   EXPECT_TRUE(tray_item->tray_view()->visible());
@@ -210,10 +233,20 @@ void TestSystemTrayInteraction(ScreenTrayItemTest* test) {
 }
 
 TEST_F(ScreenCaptureTest, SystemTrayInteraction) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   TestSystemTrayInteraction(this);
 }
 
 TEST_F(ScreenShareTest, SystemTrayInteraction) {
+  // TODO(tetsui): Remove the test after UnifiedSystemTray launch.
+  // https://crbug.com/847104
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   TestSystemTrayInteraction(this);
 }
 

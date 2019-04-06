@@ -39,6 +39,7 @@ class MessageLoopRunner;
 class RenderFrameHost;
 class RenderWidgetHost;
 class Shell;
+class ToRenderFrameHost;
 class WebContents;
 
 // Generate the file path for testing a particular test.
@@ -59,12 +60,22 @@ base::FilePath GetTestFilePath(const char* dir, const char* file);
 // content/test/data/<file>
 GURL GetTestUrl(const char* dir, const char* file);
 
-// Navigates |window| to |url|, blocking until the navigation finishes.
-// Returns true if the page was loaded successfully and the last committed
-// URL matches |url|.
+// Navigates |window| to |url|, blocking until the navigation finishes. Returns
+// true if the page was loaded successfully and the last committed URL matches
+// |url|.  This is a browser-initiated navigation that simulates a user typing
+// |url| into the address bar.
+//
 // TODO(alexmos): any tests that use this function and expect successful
 // navigations should do EXPECT_TRUE(NavigateToURL()).
 bool NavigateToURL(Shell* window, const GURL& url);
+
+// Performs a renderer-initiated navigation of |window| to |url|, blocking
+// until the navigation finishes.  The navigation is done by assigning
+// location.href in the frame |adapter|. Returns true if the page was loaded
+// successfully and the last committed URL matches |url|.
+WARN_UNUSED_RESULT bool NavigateToURLFromRenderer(
+    const ToRenderFrameHost& adapter,
+    const GURL& url);
 
 void LoadDataWithBaseURL(Shell* window,
                          const GURL& url,
@@ -130,7 +141,9 @@ class ShellAddedObserver {
 class RenderWidgetHostViewCocoaObserver {
  public:
   // The method name for 'didAddSubview'.
-  static const char* kDidAddSubview;
+  static constexpr char kDidAddSubview[] = "didAddSubview:";
+  static constexpr char kShowDefinitionForAttributedString[] =
+      "showDefinitionForAttributedString:atPoint:";
 
   // Returns the method swizzler for the given |method_name|. This is useful
   // when the original implementation of the method is needed.
@@ -151,6 +164,10 @@ class RenderWidgetHostViewCocoaObserver {
   // coordinates. The view will be dismissed shortly after this call.
   virtual void DidAddSubviewWillBeDismissed(
       const gfx::Rect& rect_in_root_view) {}
+  // Called when RenderWidgeHostViewCocoa is asked to show definition of
+  // |for_word| using Mac's dictionary popup.
+  virtual void OnShowDefinitionForAttributedString(
+      const std::string& for_word) {}
 
   WebContents* web_contents() const { return web_contents_; }
 

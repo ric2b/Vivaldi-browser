@@ -13,6 +13,7 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/sessions/core/session_id.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
 #include "components/sync/driver/sync_service_observer.h"
@@ -40,7 +41,6 @@ class OpenTabsUIDelegate;
 
 namespace syncer {
 class SyncService;
-class SyncServiceBase;
 }  // namespace syncer
 
 namespace ui {
@@ -64,8 +64,6 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
   // recently closed window items list.
   static int GetFirstRecentTabsCommandId();
 
-  // If |open_tabs_delegate| is NULL, the default delegate for |browser|'s
-  // profile will be used.
   RecentTabsSubMenuModel(ui::AcceleratorProvider* accelerator_provider,
                          Browser* browser);
   ~RecentTabsSubMenuModel() override;
@@ -87,7 +85,7 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
   struct TabNavigationItem;
   typedef std::vector<TabNavigationItem> TabNavigationItems;
 
-  typedef std::vector<SessionID::id_type> WindowItems;
+  typedef std::vector<SessionID> WindowItems;
 
   // Build the menu items by populating the menumodel.
   void Build();
@@ -100,14 +98,14 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
 
   // Build a recently closed tab item with parameters needed to restore it, and
   // add it to the menumodel at |curr_model_index|.
-  void BuildLocalTabItem(int seesion_id,
+  void BuildLocalTabItem(SessionID session_id,
                          const base::string16& title,
                          const GURL& url,
                          int curr_model_index);
 
   // Build the recently closed window item with parameters needed to restore it,
   // and add it to the menumodel at |curr_model_index|.
-  void BuildLocalWindowItem(const SessionID::id_type& window_id,
+  void BuildLocalWindowItem(SessionID window_id,
                             int num_tabs,
                             int curr_model_index);
 
@@ -117,7 +115,7 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
 
   // Add the favicon for the device section header.
   void AddDeviceFavicon(int index_in_menu,
-                        sync_sessions::SyncedSession::DeviceType device_type);
+                        sync_pb::SyncEnums::DeviceType device_type);
 
   // Add the favicon for a local or other devices' tab asynchronously,
   // OnFaviconDataAvailable() will be invoked when the favicon is ready.
@@ -137,11 +135,8 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
   // TabNavigationItems in |tab_items|.
   int CommandIdToTabVectorIndex(int command_id, TabNavigationItems** tab_items);
 
-  // Used to access (and lazily initialize) open_tabs_delegate_.
-  // TODO(tim): This lazy-init for member variables is error prone because you
-  // can always skip going through the function and access the field directly.
-  // Consider instead having code just deal with potentially NULL open_tabs_
-  // and have it initialized by an event / callback.
+  // Convenience function to access OpenTabsUIDelegate provided by SyncService.
+  // Can return null if session sync is not running.
   sync_sessions::OpenTabsUIDelegate* GetOpenTabsUIDelegate();
 
   // Overridden from TabRestoreServiceObserver:
@@ -155,7 +150,7 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
 
   Browser* const browser_;  // Weak.
 
-  sync_sessions::OpenTabsUIDelegate* open_tabs_delegate_;  // Weak.
+  syncer::SyncService* const sync_service_;  // Weak.
 
   // Accelerator for reopening last closed tab.
   ui::Accelerator reopen_closed_tab_accelerator_;
@@ -197,8 +192,7 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
   ScopedObserver<sessions::TabRestoreService, RecentTabsSubMenuModel>
       tab_restore_service_observer_;
 
-  ScopedObserver<syncer::SyncServiceBase, RecentTabsSubMenuModel>
-      sync_observer_;
+  ScopedObserver<syncer::SyncService, RecentTabsSubMenuModel> sync_observer_;
 #endif
 
   base::WeakPtrFactory<RecentTabsSubMenuModel> weak_ptr_factory_;

@@ -140,11 +140,6 @@ class MockInputMethodBase : public InputMethodBase {
 
  private:
   // Overriden from InputMethod.
-  bool OnUntranslatedIMEMessage(
-      const base::NativeEvent& event,
-      InputMethod::NativeEventResult* result) override {
-    return false;
-  }
   ui::EventDispatchDetails DispatchKeyEvent(ui::KeyEvent*) override {
     return ui::EventDispatchDetails();
   }
@@ -185,7 +180,7 @@ class MockInputMethodObserver : public InputMethodObserver {
   void OnTextInputStateChanged(const TextInputClient* client) override {
     verifier_->OnTextInputStateChanged(client);
   }
-  void OnShowImeIfNeeded() override {}
+  void OnShowVirtualKeyboardIfEnabled() override {}
   void OnInputMethodDestroyed(const InputMethod* client) override {}
 
   ClientChangeVerifier* verifier_;

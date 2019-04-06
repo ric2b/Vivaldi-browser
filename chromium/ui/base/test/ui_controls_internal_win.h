@@ -19,13 +19,13 @@ bool SendKeyPressImpl(HWND hwnd,
                       bool control,
                       bool shift,
                       bool alt,
-                      const base::Closure& task);
-bool SendMouseMoveImpl(long screen_x, long screen_y, const base::Closure& task);
+                      base::OnceClosure task);
+bool SendMouseMoveImpl(long screen_x, long screen_y, base::OnceClosure task);
 bool SendMouseEventsImpl(MouseButton type,
-                         int state,
-                         const base::Closure& task);
+                         int button_state,
+                         base::OnceClosure task,
+                         int accelerator_state);
 bool SendTouchEventsImpl(int action, int num, int x, int y);
-void RunClosureAfterAllPendingUITasksImpl(const base::Closure& task);
 
 }  // namespace internal
 }  // namespace ui_controls

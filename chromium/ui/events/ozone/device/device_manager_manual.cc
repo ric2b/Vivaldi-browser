@@ -17,11 +17,11 @@ namespace ui {
 
 namespace {
 
-const char kDevInput[] = "/dev/input";
+const base::FilePath::CharType kDevInput[] = FILE_PATH_LITERAL("/dev/input");
 
 void ScanDevicesOnWorkerThread(std::vector<base::FilePath>* result) {
-  base::FileEnumerator file_enum(base::FilePath(FILE_PATH_LITERAL(kDevInput)),
-                                 false, base::FileEnumerator::FILES,
+  base::FileEnumerator file_enum(base::FilePath(kDevInput), false,
+                                 base::FileEnumerator::FILES,
                                  FILE_PATH_LITERAL("event*[0-9]"));
   for (base::FilePath path = file_enum.Next(); !path.empty();
        path = file_enum.Next()) {
@@ -58,9 +58,9 @@ void DeviceManagerManual::RemoveObserver(DeviceEventObserver* observer) {
 }
 
 void DeviceManagerManual::StartWatching() {
-  if (!watcher_.Watch(base::FilePath(FILE_PATH_LITERAL(kDevInput)), false,
-                      base::Bind(&DeviceManagerManual::OnWatcherEvent,
-                                 weak_ptr_factory_.GetWeakPtr()))) {
+  if (!watcher_.Watch(base::FilePath(kDevInput), false,
+                      base::BindRepeating(&DeviceManagerManual::OnWatcherEvent,
+                                          weak_ptr_factory_.GetWeakPtr()))) {
     LOG(ERROR) << "Failed to start FilePathWatcher";
   }
 }
@@ -70,9 +70,9 @@ void DeviceManagerManual::InitiateScanDevices() {
   base::PostTaskWithTraitsAndReply(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&ScanDevicesOnWorkerThread, result),
-      base::Bind(&DeviceManagerManual::OnDevicesScanned,
-                 weak_ptr_factory_.GetWeakPtr(), base::Owned(result)));
+      base::BindOnce(&ScanDevicesOnWorkerThread, result),
+      base::BindOnce(&DeviceManagerManual::OnDevicesScanned,
+                     weak_ptr_factory_.GetWeakPtr(), base::Owned(result)));
 }
 
 void DeviceManagerManual::OnDevicesScanned(

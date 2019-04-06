@@ -24,7 +24,6 @@
 namespace {
 
 const char kTestUrl[] = "http://www.example.com/";
-const char kTextHtml[] = "text/html";
 
 }  // namespace
 
@@ -40,7 +39,7 @@ class MockResourceThrottleDelegate
   MOCK_METHOD0(Cancel, void());
   MOCK_METHOD0(CancelAndIgnore, void());
   MOCK_METHOD1(CancelWithError, void(int));
-  MOCK_METHOD2(Resume, void(bool, bool));
+  MOCK_METHOD0(Resume, void());
 };
 
 // Posts |quit_closure| to UI thread.
@@ -81,8 +80,7 @@ class DownloadResourceThrottleTest : public ChromeRenderViewHostTestHarness {
     throttle_ = new DownloadResourceThrottle(
         limiter_,
         base::Bind(&tab_util::GetWebContentsByID, process_id, render_view_id),
-        GURL(kTestUrl), "GET",
-        *(new content::DownloadInformation(0, kTextHtml, base::string16())));
+        GURL(kTestUrl), "GET");
     throttle_->set_delegate_for_testing(&resource_throttle_delegate_);
     bool defer;
     throttle_->WillStartRequest(&defer);
@@ -112,7 +110,7 @@ class DownloadResourceThrottleTest : public ChromeRenderViewHostTestHarness {
 };
 
 TEST_F(DownloadResourceThrottleTest, StartDownloadThrottle_Basic) {
-  EXPECT_CALL(resource_throttle_delegate_, Resume(false, false))
+  EXPECT_CALL(resource_throttle_delegate_, Resume())
       .WillOnce(QuitLoop(run_loop_->QuitClosure()));
   StartThrottle();
 }

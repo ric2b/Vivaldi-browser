@@ -4,6 +4,7 @@
 
 #include "components/signin/core/browser/account_reconcilor_delegate.h"
 
+#include "base/logging.h"
 #include "base/time/time.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
@@ -17,6 +18,11 @@ bool AccountReconcilorDelegate::IsAccountConsistencyEnforced() const {
   return false;
 }
 
+std::string AccountReconcilorDelegate::GetGaiaApiSource() const {
+  NOTREACHED() << "Reconcile is not enabled, no Gaia API calls should be made.";
+  return "ChromiumAccountReconcilorInvalidSource";
+}
+
 bool AccountReconcilorDelegate::ShouldAbortReconcileIfPrimaryHasError() const {
   return false;
 }
@@ -25,13 +31,15 @@ std::string AccountReconcilorDelegate::GetFirstGaiaAccountForReconcile(
     const std::vector<std::string>& chrome_accounts,
     const std::vector<gaia::ListedAccount>& gaia_accounts,
     const std::string& primary_account,
-    bool first_execution) const {
+    bool first_execution,
+    bool will_logout) const {
   return std::string();
 }
 
-bool AccountReconcilorDelegate::ShouldRevokeAllSecondaryTokensBeforeReconcile(
+AccountReconcilorDelegate::RevokeTokenOption
+AccountReconcilorDelegate::ShouldRevokeSecondaryTokensBeforeReconcile(
     const std::vector<gaia::ListedAccount>& gaia_accounts) {
-  return false;
+  return RevokeTokenOption::kDoNotRevoke;
 }
 
 base::TimeDelta AccountReconcilorDelegate::GetReconcileTimeout() const {

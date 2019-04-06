@@ -19,6 +19,7 @@ var engagementTableBody = null;
 var sortReverse = true;
 var sortKey = 'totalScore';
 var configTableBody = null;
+var showNoPlaybacks = false;
 
 /**
  * Creates a single row in the engagement table.
@@ -37,8 +38,9 @@ function createRow(rowInfo) {
       new Date(rowInfo.lastMediaPlaybackTime).toISOString() :
       '';
   td[6].textContent = rowInfo.isHigh ? 'Yes' : 'No';
-  td[7].textContent = rowInfo.totalScore ? rowInfo.totalScore.toFixed(2) : '0';
-  td[8].getElementsByClassName('engagement-bar')[0].style.width =
+  td[7].textContent = rowInfo.highScoreChanges;
+  td[8].textContent = rowInfo.totalScore ? rowInfo.totalScore.toFixed(2) : '0';
+  td[9].getElementsByClassName('engagement-bar')[0].style.width =
       (rowInfo.totalScore * 50) + 'px';
   return document.importNode(template.content, true);
 }
@@ -77,7 +79,8 @@ function compareTableItem(sortKey, a, b) {
 
   if (sortKey == 'visits' || sortKey == 'mediaPlaybacks' ||
       sortKey == 'lastMediaPlaybackTime' || sortKey == 'totalScore' ||
-      sortKey == 'audiblePlaybacks' || sortKey == 'significantPlaybacks') {
+      sortKey == 'audiblePlaybacks' || sortKey == 'significantPlaybacks' ||
+      sortKey == 'highScoreChanges' || sortKey == 'isHigh') {
     return val1 - val2;
   }
 
@@ -108,11 +111,33 @@ function renderConfigTable(config) {
   configTableBody.innerHTML = '';
 
   configTableBody.appendChild(
-      createConfigRow('Min Visits', config.scoreMinVisits));
+      createConfigRow('Min Sessions', config.scoreMinVisits));
   configTableBody.appendChild(
       createConfigRow('Lower Threshold', config.highScoreLowerThreshold));
   configTableBody.appendChild(
       createConfigRow('Upper Threshold', config.highScoreUpperThreshold));
+
+  configTableBody.appendChild(createConfigRow(
+      'Record MEI data', formatFeatureFlag(config.featureRecordData)));
+  configTableBody.appendChild(createConfigRow(
+      'Bypass autoplay based on MEI',
+      formatFeatureFlag(config.featureBypassAutoplay)));
+  configTableBody.appendChild(createConfigRow(
+      'Preload MEI data', formatFeatureFlag(config.featurePreloadData)));
+  configTableBody.appendChild(
+      createConfigRow('Autoplay Policy', config.autoplayPolicy));
+  configTableBody.appendChild(createConfigRow(
+      'Preload version',
+      config.preloadVersion ? config.preloadVersion : 'Not Available'));
+}
+
+/**
+ * Converts a boolean into a string value.
+ * @param {bool} value The value of the config setting.
+ * @return {string}
+ */
+function formatFeatureFlag(value) {
+  return value ? 'Enabled' : 'Disabled';
 }
 
 /**
@@ -121,7 +146,8 @@ function renderConfigTable(config) {
 function renderTable() {
   clearTable();
   sortInfo();
-  info.forEach(rowInfo => engagementTableBody.appendChild(createRow(rowInfo)));
+  info.filter(rowInfo => (showNoPlaybacks || rowInfo.mediaPlaybacks > 0))
+      .forEach(rowInfo => engagementTableBody.appendChild(createRow(rowInfo)));
 }
 
 /**
@@ -173,5 +199,27 @@ document.addEventListener('DOMContentLoaded', function() {
       renderTable();
     });
   }
+
+  // Add handler to 'copy all to clipboard' button
+  var copyAllToClipboardButton = $('copy-all-to-clipboard');
+  copyAllToClipboardButton.addEventListener('click', (e) => {
+    // Make sure nothing is selected
+    window.getSelection().removeAllRanges();
+
+    document.execCommand('selectAll');
+    document.execCommand('copy');
+
+    // And deselect everything at the end.
+    window.getSelection().removeAllRanges();
+  });
+
+  // Add handler to 'show no playbacks' checkbox
+  var showNoPlaybacksCheckbox = $('show-no-playbacks');
+  showNoPlaybacksCheckbox.addEventListener('change', (e) => {
+    showNoPlaybacks = e.target.checked;
+    renderTable();
+  });
+
 });
+
 })();

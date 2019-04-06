@@ -10,10 +10,9 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
+#include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/sync_file_system/drive_backend/sync_engine.h"
@@ -42,6 +41,7 @@ class FakeDriveServiceFactory
   std::unique_ptr<drive::DriveServiceInterface> CreateDriveService(
       OAuth2TokenService* oauth2_token_service,
       net::URLRequestContextGetter* url_request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       base::SequencedTaskRunner* blocking_task_runner) override {
     std::unique_ptr<drive::FakeDriveService> drive_service(
         new drive::FakeDriveService);
@@ -70,7 +70,7 @@ class SyncFileSystemTest : public extensions::PlatformAppBrowserTest,
   }
 
   void SetUpOnMainThread() override {
-    in_memory_env_.reset(leveldb_chrome::NewMemEnv(leveldb::Env::Default()));
+    in_memory_env_ = leveldb_chrome::NewMemEnv("SyncFileSystemTest");
     extensions::PlatformAppBrowserTest::SetUpOnMainThread();
     ASSERT_TRUE(base_dir_.CreateUniqueTempDir());
 
@@ -78,7 +78,7 @@ class SyncFileSystemTest : public extensions::PlatformAppBrowserTest,
         SyncFileSystemServiceFactory::GetInstance();
 
     content::BrowserContext* context = browser()->profile();
-    ExtensionServiceInterface* extension_service =
+    extensions::ExtensionServiceInterface* extension_service =
         extensions::ExtensionSystem::Get(context)->extension_service();
 
     std::unique_ptr<drive_backend::SyncEngine::DriveServiceFactory>
@@ -91,12 +91,13 @@ class SyncFileSystemTest : public extensions::PlatformAppBrowserTest,
         base::ThreadTaskRunnerHandle::Get(),  // ui_task_runner
         MakeSequencedTaskRunner(), MakeSequencedTaskRunner(),
         base_dir_.GetPath(),
-        NULL,  // task_logger
-        NULL,  // notification_manager
+        nullptr,  // task_logger
+        nullptr,  // notification_manager
         extension_service,
         fake_signin_manager_.get(),  // signin_manager
-        NULL,                        // token_service
-        NULL,                        // request_context
+        nullptr,                     // token_service
+        nullptr,                     // request_context
+        nullptr,                     // url_loader_factory
         std::move(drive_service_factory), in_memory_env_.get());
     remote_service_->SetSyncEnabled(true);
     factory->set_mock_remote_file_service(

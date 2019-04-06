@@ -1,5 +1,5 @@
 
-update_target("//testing/gtest:gtest") {
+update_target("//third_party/googletest:gtest") {
   sources += [
     "//vivaldi/testing/disable_unittests.cpp",
     "//vivaldi/testing/disable_unittests_api.h",

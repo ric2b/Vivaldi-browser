@@ -62,6 +62,7 @@ struct SandboxTypeToResourceIDMapping {
 // Mapping from sandbox process types to resource IDs containing the sandbox
 // profile for all process types known to service_manager.
 // TODO(tsepez): Implement profile for SANDBOX_TYPE_NETWORK.
+// TODO(https://crbug.com/850878): Implement profile for SANDBOX_TYPE_AUDIO.
 SandboxTypeToResourceIDMapping kDefaultSandboxTypeToResourceIDMapping[] = {
     {SANDBOX_TYPE_NO_SANDBOX, nullptr},
     {SANDBOX_TYPE_RENDERER, kSeatbeltPolicyString_renderer},
@@ -73,6 +74,7 @@ SandboxTypeToResourceIDMapping kDefaultSandboxTypeToResourceIDMapping[] = {
     {SANDBOX_TYPE_NACL_LOADER, kSeatbeltPolicyString_nacl_loader},
     {SANDBOX_TYPE_PDF_COMPOSITOR, kSeatbeltPolicyString_ppapi},
     {SANDBOX_TYPE_PROFILING, kSeatbeltPolicyString_utility},
+    {SANDBOX_TYPE_AUDIO, nullptr},
 };
 
 static_assert(arraysize(kDefaultSandboxTypeToResourceIDMapping) ==
@@ -92,10 +94,10 @@ const char* SandboxMac::kSandboxEnableLogging = "ENABLE_LOGGING";
 const char* SandboxMac::kSandboxHomedirAsLiteral = "USER_HOMEDIR_AS_LITERAL";
 const char* SandboxMac::kSandboxLoggingPathAsLiteral = "LOG_FILE_PATH";
 const char* SandboxMac::kSandboxOSVersion = "OS_VERSION";
-const char* SandboxMac::kSandboxPermittedDir = "PERMITTED_DIR";
 const char* SandboxMac::kSandboxElCapOrLater = "ELCAP_OR_LATER";
 const char* SandboxMac::kSandboxMacOS1013 = "MACOS_1013";
 const char* SandboxMac::kSandboxBundleVersionPath = "BUNDLE_VERSION_PATH";
+const char* SandboxMac::kSandboxHighSierraOrLater = "HIGH_SIERRA_OR_LATER";
 
 // Warm up System APIs that empirically need to be accessed before the Sandbox
 // is turned on.
@@ -166,8 +168,11 @@ void SandboxMac::Warmup(SandboxType sandbox_type) {
     CFTimeZoneCopySystem();
   }
 
-  if (sandbox_type == SANDBOX_TYPE_PPAPI) {
-    // Preload AppKit color spaces used for Flash/ppapi. http://crbug.com/348304
+  if (sandbox_type == SANDBOX_TYPE_PPAPI ||
+      sandbox_type == SANDBOX_TYPE_PDF_COMPOSITOR) {
+    // Preload AppKit color spaces used for ppapi(https://crbug.com/348304),
+    // as well as pdf compositor service likely on version 10.10 or
+    // older(https://crbug.com/822218).
     NSColor* color = [NSColor controlTextColor];
     [color colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
   }
@@ -198,28 +203,12 @@ std::string LoadSandboxTemplate(SandboxType sandbox_type) {
 // Turns on the OS X sandbox for this process.
 
 // static
-bool SandboxMac::Enable(SandboxType sandbox_type,
-                        const base::FilePath& allowed_dir) {
-  // Sanity - currently only some sandboxes support a directory being
-  // passed in.
-  if (sandbox_type != SANDBOX_TYPE_UTILITY) {
-    DCHECK(allowed_dir.empty())
-        << "Only SANDBOX_TYPE_UTILITY allows a custom directory parameter.";
-  }
-
+bool SandboxMac::Enable(SandboxType sandbox_type) {
   std::string sandbox_data = LoadSandboxTemplate(sandbox_type);
   if (sandbox_data.empty())
     return false;
 
   sandbox::SandboxCompiler compiler(sandbox_data);
-
-  if (!allowed_dir.empty()) {
-    // Add the sandbox parameters necessary to access the given directory.
-    base::FilePath allowed_dir_canonical = GetCanonicalPath(allowed_dir);
-    if (!compiler.InsertStringParam(kSandboxPermittedDir,
-                                    allowed_dir_canonical.value()))
-      return false;
-  }
 
   // Enable verbose logging if enabled on the command line. (See common.sb
   // for details).
@@ -250,8 +239,13 @@ bool SandboxMac::Enable(SandboxType sandbox_type,
   if (!compiler.InsertBooleanParam(kSandboxElCapOrLater, elcap_or_later))
     return false;
 
-  bool macos_1013 = base::mac::IsOS10_13();
+  bool macos_1013 = base::mac::IsOS10_13() ;
   if (!compiler.InsertBooleanParam(kSandboxMacOS1013, macos_1013))
+    return false;
+
+  bool high_sierra_or_later = base::mac::IsAtLeastOS10_13();
+  if (!compiler.InsertBooleanParam(kSandboxHighSierraOrLater,
+      high_sierra_or_later))
     return false;
 
   if (sandbox_type == service_manager::SANDBOX_TYPE_CDM) {

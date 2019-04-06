@@ -19,8 +19,6 @@
 #include "base/trace_event/trace_event_impl.h"
 #include "base/values.h"
 #include "content/public/browser/browser_thread.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/resource_coordinator/public/interfaces/service_constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace content {
@@ -45,19 +43,14 @@ std::string GuidToString(const GUID& guid) {
 }  // namespace
 
 EtwTracingAgent::EtwTracingAgent(service_manager::Connector* connector)
-    : binding_(this), thread_("EtwConsumerThread"), is_tracing_(false) {
+    : BaseAgent(connector,
+                kETWTraceLabel,
+                tracing::mojom::TraceDataType::OBJECT,
+                false /* supports_explicit_clock_sync */,
+                base::kNullProcessId),
+      thread_("EtwConsumerThread"),
+      is_tracing_(false) {
   DCHECK(!g_etw_tracing_agent);
-  // Connect to the agent registry interface.
-  tracing::mojom::AgentRegistryPtr agent_registry;
-  connector->BindInterface(resource_coordinator::mojom::kServiceName,
-                           &agent_registry);
-
-  // Register this agent.
-  tracing::mojom::AgentPtr agent;
-  binding_.Bind(mojo::MakeRequest(&agent));
-  agent_registry->RegisterAgent(std::move(agent), kETWTraceLabel,
-                                tracing::mojom::TraceDataType::OBJECT,
-                                false /* supports_explicit_clock_sync */);
   g_etw_tracing_agent = this;
 }
 
@@ -67,14 +60,13 @@ EtwTracingAgent::~EtwTracingAgent() {
   g_etw_tracing_agent = nullptr;
 }
 
-void EtwTracingAgent::StartTracing(
-    const std::string& config,
-    base::TimeTicks coordinator_time,
-    const Agent::StartTracingCallback& callback) {
+void EtwTracingAgent::StartTracing(const std::string& config,
+                                   base::TimeTicks coordinator_time,
+                                   Agent::StartTracingCallback callback) {
   base::trace_event::TraceConfig trace_config(config);
   // Activate kernel tracing.
   if (!trace_config.IsSystraceEnabled() || !StartKernelSessionTracing()) {
-    callback.Run(false /* success */);
+    std::move(callback).Run(false /* success */);
     return;
   }
   is_tracing_ = true;
@@ -85,9 +77,9 @@ void EtwTracingAgent::StartTracing(
   // Tracing agents, e.g. this, live as long as BrowserMainLoop lives and so
   // using base::Unretained here is safe.
   thread_.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&EtwTracingAgent::TraceAndConsumeOnThread,
-                            base::Unretained(this)));
-  callback.Run(true /* success */);
+      FROM_HERE, base::BindOnce(&EtwTracingAgent::TraceAndConsumeOnThread,
+                                base::Unretained(this)));
+  std::move(callback).Run(true /* success */);
 }
 
 void EtwTracingAgent::StopAndFlush(tracing::mojom::RecorderPtr recorder) {
@@ -101,23 +93,7 @@ void EtwTracingAgent::StopAndFlush(tracing::mojom::RecorderPtr recorder) {
   // BrowserMainLoop lives and so using base::Unretained here is safe.
   thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&EtwTracingAgent::FlushOnThread, base::Unretained(this)));
-}
-
-void EtwTracingAgent::RequestClockSyncMarker(
-    const std::string& sync_id,
-    const Agent::RequestClockSyncMarkerCallback& callback) {
-  NOTREACHED();
-}
-
-void EtwTracingAgent::GetCategories(
-    const Agent::GetCategoriesCallback& callback) {
-  callback.Run("");
-}
-
-void EtwTracingAgent::RequestBufferStatus(
-    const Agent::RequestBufferStatusCallback& callback) {
-  callback.Run(0, 0);
+      base::BindOnce(&EtwTracingAgent::FlushOnThread, base::Unretained(this)));
 }
 
 void EtwTracingAgent::OnStopSystemTracingDone(const std::string& output) {
@@ -190,8 +166,8 @@ void EtwTracingAgent::ProcessEvent(EVENT_TRACE* event) {
 
 void EtwTracingAgent::AddSyncEventToBuffer() {
   // Sync the clocks.
-  base::Time walltime = base::Time::NowFromSystemTime();
-  base::TimeTicks now = base::TimeTicks::Now();
+  base::Time walltime = base::subtle::TimeNowFromSystemTimeIgnoringOverride();
+  base::TimeTicks now = TRACE_TIME_TICKS_NOW();
 
   LARGE_INTEGER walltime_in_us;
   walltime_in_us.QuadPart = walltime.ToInternalValue();

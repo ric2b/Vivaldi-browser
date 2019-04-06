@@ -28,7 +28,8 @@ class AutofillProvider {
                                         int32_t id,
                                         const FormData& form,
                                         const FormFieldData& field,
-                                        const gfx::RectF& bounding_box) = 0;
+                                        const gfx::RectF& bounding_box,
+                                        bool autoselect_first_suggestion) = 0;
 
   virtual void OnTextFieldDidChange(AutofillHandlerProxy* handler,
                                     const FormData& form,
@@ -41,7 +42,12 @@ class AutofillProvider {
                                     const FormFieldData& field,
                                     const gfx::RectF& bounding_box) = 0;
 
-  virtual bool OnFormSubmitted(AutofillHandlerProxy* handler,
+  virtual void OnSelectControlDidChange(AutofillHandlerProxy* handler,
+                                        const FormData& form,
+                                        const FormFieldData& field,
+                                        const gfx::RectF& bounding_box) = 0;
+
+  virtual void OnFormSubmitted(AutofillHandlerProxy* handler,
                                const FormData& form,
                                bool known_success,
                                SubmissionSource source,

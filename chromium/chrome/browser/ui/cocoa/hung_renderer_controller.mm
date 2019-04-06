@@ -8,9 +8,12 @@
 
 #include "base/mac/bundle_locations.h"
 #include "base/macros.h"
+#include "base/scoped_observer.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/browser/hang_monitor/hang_crash_dump.h"
 #import "chrome/browser/ui/cocoa/multi_key_equivalent_button.h"
 #import "chrome/browser/ui/cocoa/tab_contents/favicon_util_mac.h"
+#include "chrome/browser/ui/hung_renderer/hung_renderer_core.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/common/logging_chrome.h"
@@ -18,8 +21,10 @@
 #include "chrome/grit/theme_resources.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/result_codes.h"
 #include "skia/ext/skia_utils_mac.h"
@@ -39,13 +44,16 @@ using content::WebContents;
 // The dialog will contain a list of all tabs that share a renderer
 // process with |contents|.  The caller must not delete any tab
 // contents without first calling endForWebContents.
-- (void)showForWebContents:(content::WebContents*)contents;
+- (void)showForWebContents:(content::WebContents*)contents
+          renderWidgetHost:(content::RenderWidgetHost*)renderWidget
+          timeoutRestarter:(base::RepeatingClosure)timeoutRestarter;
 
 // Notifies the dialog that |contents| is either responsive or closed.
 // If |contents| shares the same render process as the tab contents
 // this dialog was created for, this function will close the dialog.
 // If |contents| has a different process, this function does nothing.
-- (void)endForWebContents:(content::WebContents*)contents;
+- (void)endForWebContents:(content::WebContents*)contents
+         renderWidgetHost:(content::RenderWidgetHost*)renderWidget;
 
 // Called by |hungContentsObserver_| to indicate that |hungContents_|
 // has gone away.
@@ -60,23 +68,29 @@ using content::WebContents;
 namespace {
 // We only support showing one of these at a time per app.  The
 // controller owns itself and is released when its window is closed.
-HungRendererController* g_hung_renderer_controller_instance = NULL;
+HungRendererController* g_hung_renderer_controller_instance = nil;
 }  // namespace
 
-class HungRendererWebContentsObserverBridge
-    : public content::WebContentsObserver {
+class HungRendererObserverBridge : public content::WebContentsObserver,
+                                   public content::RenderProcessHostObserver,
+                                   public content::RenderWidgetHostObserver {
  public:
-  HungRendererWebContentsObserverBridge(WebContents* web_contents,
-                                        HungRendererController* controller)
-    : content::WebContentsObserver(web_contents),
-      controller_(controller) {
+  HungRendererObserverBridge(WebContents* web_contents,
+                             content::RenderWidgetHost* hung_widget,
+                             HungRendererController* controller)
+      : content::WebContentsObserver(web_contents),
+        hung_process_(hung_widget->GetProcess()),
+        process_observer_(this),
+        widget_observer_(this),
+        controller_(controller) {
+    process_observer_.Add(hung_process_);
+    widget_observer_.Add(hung_widget);
   }
+
+  ~HungRendererObserverBridge() override = default;
 
  protected:
   // WebContentsObserver overrides:
-  void RenderProcessGone(base::TerminationStatus status) override {
-    [controller_ renderProcessGone];
-  }
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override {
     [controller_ tabUpdated];
@@ -84,10 +98,31 @@ class HungRendererWebContentsObserverBridge
 
   void WebContentsDestroyed() override { [controller_ renderProcessGone]; }
 
+  // RenderProcessHostObserver overrides:
+  void RenderProcessExited(
+      content::RenderProcessHost* host,
+      const content::ChildProcessTerminationInfo& info) override {
+    [controller_ renderProcessGone];
+  }
+
+  // RenderWidgetHostObserver overrides:
+  void RenderWidgetHostDestroyed(
+      content::RenderWidgetHost* widget_host) override {
+    [controller_ renderProcessGone];
+  }
+
  private:
+  content::RenderProcessHost* hung_process_;
+
+  ScopedObserver<content::RenderProcessHost, content::RenderProcessHostObserver>
+      process_observer_;
+
+  ScopedObserver<content::RenderWidgetHost, content::RenderWidgetHostObserver>
+      widget_observer_;
+
   HungRendererController* controller_;  // weak
 
-  DISALLOW_COPY_AND_ASSIGN(HungRendererWebContentsObserverBridge);
+  DISALLOW_COPY_AND_ASSIGN(HungRendererObserverBridge);
 };
 
 @implementation HungRendererController
@@ -152,18 +187,24 @@ class HungRendererWebContentsObserverBridge
                                         delta:windowDelta];
 }
 
-+ (void)showForWebContents:(content::WebContents*)contents {
++ (void)showForWebContents:(content::WebContents*)contents
+          renderWidgetHost:(content::RenderWidgetHost*)renderWidget
+          timeoutRestarter:(base::RepeatingClosure)timeoutRestarter {
   if (!logging::DialogsAreSuppressed()) {
     if (!g_hung_renderer_controller_instance)
       g_hung_renderer_controller_instance = [[HungRendererController alloc]
           initWithWindowNibName:@"HungRendererDialog"];
-    [g_hung_renderer_controller_instance showForWebContents:contents];
+    [g_hung_renderer_controller_instance showForWebContents:contents
+                                           renderWidgetHost:renderWidget
+                                           timeoutRestarter:timeoutRestarter];
   }
 }
 
-+ (void)endForWebContents:(content::WebContents*)contents {
++ (void)endForWebContents:(content::WebContents*)contents
+         renderWidgetHost:(content::RenderWidgetHost*)renderWidget {
   if (!logging::DialogsAreSuppressed() && g_hung_renderer_controller_instance)
-    [g_hung_renderer_controller_instance endForWebContents:contents];
+    [g_hung_renderer_controller_instance endForWebContents:contents
+                                          renderWidgetHost:renderWidget];
 }
 
 + (bool)isShowing {
@@ -171,19 +212,20 @@ class HungRendererWebContentsObserverBridge
 }
 
 - (IBAction)kill:(id)sender {
-  if (hungContents_) {
-    hungContents_->GetMainFrame()->GetProcess()->Shutdown(
-        content::RESULT_CODE_HUNG, false);
+  if (hungWidget_) {
+    auto* rph = hungWidget_->GetProcess();
+    CrashDumpHungChildProcess(rph->GetProcess().Handle());
+    rph->Shutdown(content::RESULT_CODE_HUNG);
   }
+
   // Cannot call performClose:, because the close button is disabled.
   [self close];
 }
 
 - (IBAction)wait:(id)sender {
-  if (hungContents_ && hungContents_->GetRenderViewHost())
-    hungContents_->GetRenderViewHost()
-        ->GetWidget()
-        ->RestartHangMonitorTimeoutIfNecessary();
+  if (!hangMonitorRestarter_.is_null())
+    hangMonitorRestarter_.Run();
+
   // Cannot call performClose:, because the close button is disabled.
   [self close];
 }
@@ -223,7 +265,16 @@ class HungRendererWebContentsObserverBridge
 
   // Prevent kills from happening after close if the user had the
   // button depressed just when new activity was detected.
-  hungContents_ = NULL;
+  hungContents_ = nullptr;
+  hungWidget_ = nullptr;
+  hangMonitorRestarter_ = base::RepeatingClosure();
+
+  // Reset the observer now. It is not necessarily the case that this class
+  // actually holds a reference to the containing BrowserWindow, and if it does
+  // not, the BrowserWindow's destructor can run *before* this object is cleaned
+  // up by the autorelease pool. This can't happen in practice, but it can
+  // happen in tests.
+  hungContentsObserver_.reset();
 
   [self autorelease];
 }
@@ -233,24 +284,27 @@ class HungRendererWebContentsObserverBridge
 // Tabs closed by their renderer will close the dialog (that's
 // activity!), so it would not add much value.  Also, the views
 // implementation only monitors the initiating tab.
-- (void)showForWebContents:(WebContents*)contents {
+- (void)showForWebContents:(WebContents*)contents
+          renderWidgetHost:(content::RenderWidgetHost*)renderWidget
+          timeoutRestarter:(base::RepeatingClosure)timeoutRestarter {
   DCHECK(contents);
+  DCHECK(!timeoutRestarter.is_null());
   hungContents_ = contents;
+  hungWidget_ = renderWidget;
+  hangMonitorRestarter_ = timeoutRestarter;
   hungContentsObserver_.reset(
-      new HungRendererWebContentsObserverBridge(contents, self));
+      new HungRendererObserverBridge(contents, renderWidget, self));
+
   base::scoped_nsobject<NSMutableArray> titles([[NSMutableArray alloc] init]);
   base::scoped_nsobject<NSMutableArray> favicons([[NSMutableArray alloc] init]);
-  for (TabContentsIterator it; !it.done(); it.Next()) {
-    if (it->GetMainFrame()->GetProcess() ==
-            hungContents_->GetMainFrame()->GetProcess() &&
-        !it->IsCrashed()) {
-      base::string16 title = it->GetTitle();
-      if (title.empty())
-        title = CoreTabHelper::GetDefaultTitle();
-      [titles addObject:base::SysUTF16ToNSString(title)];
-      [favicons addObject:mac::FaviconForWebContents(*it)];
-    }
+
+  for (auto* hungContents :
+       GetHungWebContentsList(contents, renderWidget->GetProcess())) {
+    [titles addObject:base::SysUTF16ToNSString(GetHungWebContentsTitle(
+                          hungContents, renderWidget->GetProcess()))];
+    [favicons addObject:mac::FaviconForWebContents(hungContents)];
   }
+
   hungTitles_.reset([titles copy]);
   hungFavicons_.reset([favicons copy]);
   [tableView_ reloadData];
@@ -260,11 +314,14 @@ class HungRendererWebContentsObserverBridge
   [self showWindow:self];
 }
 
-- (void)endForWebContents:(WebContents*)contents {
+- (void)endForWebContents:(WebContents*)contents
+         renderWidgetHost:(content::RenderWidgetHost*)renderWidget {
   DCHECK(contents);
   DCHECK(hungContents_);
-  if (hungContents_ && hungContents_->GetMainFrame()->GetProcess() ==
-                           contents->GetMainFrame()->GetProcess()) {
+  DCHECK(renderWidget);
+  DCHECK(hungWidget_);
+  DCHECK(!hangMonitorRestarter_.is_null());
+  if (hungContents_ && hungWidget_ == renderWidget) {
     // Cannot call performClose:, because the close button is disabled.
     [self close];
   }
@@ -278,11 +335,9 @@ class HungRendererWebContentsObserverBridge
 - (void)tabUpdated {
   // Tab was updated so restart the hang monitor if necessary and dismiss the
   // current dialog.
-  if (hungContents_ && hungContents_->GetRenderViewHost()) {
-    hungContents_->GetRenderViewHost()
-        ->GetWidget()
-        ->RestartHangMonitorTimeoutIfNecessary();
-  }
+  if (!hangMonitorRestarter_.is_null())
+    hangMonitorRestarter_.Run();
+
   [self close];
 }
 

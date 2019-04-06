@@ -7,10 +7,9 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -31,24 +30,21 @@
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/feature_engagement/features.h"
+#include "components/feature_engagement/buildflags.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/plugin_service.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_message.h"
-#include "net/base/filename_util.h"
-#include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -72,22 +68,9 @@ bool DetermineTabStripLayoutStacked(PrefService* prefs, bool* adjust_layout) {
   *adjust_layout = true;
   return prefs->GetBoolean(prefs::kTabStripStackedLayout);
 #else
-  return false;
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kForceStackedTabStripLayout);
 #endif
-}
-
-// Get the MIME type of the file pointed to by the url, based on the file's
-// extension. Must be called on a thread that allows IO.
-std::string FindURLMimeType(const GURL& url) {
-  DCHECK(!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
-  base::FilePath full_path;
-  net::FileURLToFilePath(url, &full_path);
-
-  // Get the MIME type based on the filename.
-  std::string mime_type;
-  net::GetMimeTypeFromFile(full_path, &mime_type);
-
-  return mime_type;
 }
 
 }  // namespace
@@ -183,8 +166,7 @@ BrowserTabStripController::BrowserTabStripController(TabStripModel* model,
     : model_(model),
       tabstrip_(NULL),
       browser_view_(browser_view),
-      hover_tab_selector_(model),
-      weak_ptr_factory_(this) {
+      hover_tab_selector_(model) {
   model_->AddObserver(this);
 
   local_pref_registrar_.Init(g_browser_process->local_state());
@@ -285,7 +267,6 @@ void BrowserTabStripController::CloseTab(int model_index,
   // Cancel any pending tab transition.
   hover_tab_selector_.CancelTabTransition();
 
-  tabstrip_->PrepareForCloseAt(model_index, source);
   model_->CloseWebContentsAt(model_index,
                              TabStripModel::CLOSE_USER_GESTURE |
                              TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
@@ -320,28 +301,26 @@ void BrowserTabStripController::OnDropIndexUpdate(int index,
   }
 }
 
-void BrowserTabStripController::PerformDrop(bool drop_before,
-                                            int index,
-                                            const GURL& url) {
-  NavigateParams params(browser_view_->browser(), url,
-                        ui::PAGE_TRANSITION_LINK);
-  params.tabstrip_index = index;
-
-  if (drop_before) {
-    base::RecordAction(UserMetricsAction("Tab_DropURLBetweenTabs"));
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  } else {
-    base::RecordAction(UserMetricsAction("Tab_DropURLOnTab"));
-    params.disposition = WindowOpenDisposition::CURRENT_TAB;
-    params.source_contents = model_->GetWebContentsAt(index);
-  }
-  params.window_action = NavigateParams::SHOW_WINDOW;
-  Navigate(&params);
-}
-
 bool BrowserTabStripController::IsCompatibleWith(TabStrip* other) const {
   Profile* other_profile = other->controller()->GetProfile();
   return other_profile == GetProfile();
+}
+
+NewTabButtonPosition BrowserTabStripController::GetNewTabButtonPosition()
+    const {
+  const std::string switch_value =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kNewTabButtonPosition);
+  if (switch_value == switches::kNewTabButtonPositionOppositeCaption)
+    return GetFrameView()->CaptionButtonsOnLeadingEdge() ? TRAILING : LEADING;
+  if (switch_value == switches::kNewTabButtonPositionLeading)
+    return LEADING;
+  if (switch_value == switches::kNewTabButtonPositionAfterTabs)
+    return AFTER_TABS;
+  if (switch_value == switches::kNewTabButtonPositionTrailing)
+    return TRAILING;
+
+  return AFTER_TABS;
 }
 
 void BrowserTabStripController::CreateNewTab() {
@@ -383,6 +362,14 @@ void BrowserTabStripController::StackedLayoutMaybeChanged() {
                                                tabstrip_->stacked_layout());
 }
 
+bool BrowserTabStripController::IsSingleTabModeAvailable() {
+  return GetFrameView()->IsSingleTabModeAvailable();
+}
+
+bool BrowserTabStripController::ShouldDrawStrokes() const {
+  return GetFrameView()->ShouldDrawStrokes();
+}
+
 void BrowserTabStripController::OnStartedDraggingTabs() {
   if (!immersive_reveal_lock_.get()) {
     // The top-of-window views should be revealed while the user is dragging
@@ -399,16 +386,37 @@ void BrowserTabStripController::OnStoppedDraggingTabs() {
   immersive_reveal_lock_.reset();
 }
 
-void BrowserTabStripController::CheckFileSupported(const GURL& url) {
-  base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&FindURLMimeType, url),
-      base::Bind(&BrowserTabStripController::OnFindURLMimeTypeCompleted,
-                 weak_ptr_factory_.GetWeakPtr(), url));
+bool BrowserTabStripController::HasVisibleBackgroundTabShapes() const {
+  return GetFrameView()->HasVisibleBackgroundTabShapes(
+      BrowserNonClientFrameView::kUseCurrent);
+}
+
+bool BrowserTabStripController::EverHasVisibleBackgroundTabShapes() const {
+  return GetFrameView()->EverHasVisibleBackgroundTabShapes();
+}
+
+SkColor BrowserTabStripController::GetFrameColor() const {
+  return GetFrameView()->GetFrameColor();
 }
 
 SkColor BrowserTabStripController::GetToolbarTopSeparatorColor() const {
-  return browser_view_->frame()->GetFrameView()->GetToolbarTopSeparatorColor();
+  return GetFrameView()->GetToolbarTopSeparatorColor();
+}
+
+SkColor BrowserTabStripController::GetTabBackgroundColor(TabState state,
+                                                         bool opaque) const {
+  return GetFrameView()->GetTabBackgroundColor(state, opaque);
+}
+
+SkColor BrowserTabStripController::GetTabForegroundColor(TabState state) const {
+  return GetFrameView()->GetTabForegroundColor(state);
+}
+
+int BrowserTabStripController::GetTabBackgroundResourceId(
+    BrowserNonClientFrameView::ActiveState active_state,
+    bool* has_custom_image) const {
+  return GetFrameView()->GetTabBackgroundResourceId(active_state,
+                                                    has_custom_image);
 }
 
 base::string16 BrowserTabStripController::GetAccessibleTabName(
@@ -434,11 +442,12 @@ void BrowserTabStripController::TabInsertedAt(TabStripModel* tab_strip_model,
 }
 
 void BrowserTabStripController::TabDetachedAt(WebContents* contents,
-                                              int model_index) {
+                                              int model_index,
+                                              bool was_active) {
   // Cancel any pending tab transition.
   hover_tab_selector_.CancelTabTransition();
 
-  tabstrip_->RemoveTabAt(contents, model_index);
+  tabstrip_->RemoveTabAt(contents, model_index, was_active);
 }
 
 void BrowserTabStripController::ActiveTabChanged(
@@ -457,7 +466,7 @@ void BrowserTabStripController::ActiveTabChanged(
 void BrowserTabStripController::TabSelectionChanged(
     TabStripModel* tab_strip_model,
     const ui::ListSelectionModel& old_model) {
-  tabstrip_->SetSelection(old_model, model_->selection_model());
+  tabstrip_->SetSelection(model_->selection_model());
 }
 
 void BrowserTabStripController::TabMoved(WebContents* contents,
@@ -476,12 +485,6 @@ void BrowserTabStripController::TabMoved(WebContents* contents,
 void BrowserTabStripController::TabChangedAt(WebContents* contents,
                                              int model_index,
                                              TabChangeType change_type) {
-  if (change_type == TabChangeType::kTitleNotLoading) {
-    tabstrip_->TabTitleChangedNotLoading(model_index);
-    // We'll receive another notification of the change asynchronously.
-    return;
-  }
-
   SetTabDataAt(contents, model_index);
 }
 
@@ -507,6 +510,15 @@ void BrowserTabStripController::TabBlockedStateChanged(WebContents* contents,
 void BrowserTabStripController::SetTabNeedsAttentionAt(int index,
                                                        bool attention) {
   tabstrip_->SetTabNeedsAttention(index, attention);
+}
+
+BrowserNonClientFrameView* BrowserTabStripController::GetFrameView() {
+  return browser_view_->frame()->GetFrameView();
+}
+
+const BrowserNonClientFrameView* BrowserTabStripController::GetFrameView()
+    const {
+  return browser_view_->frame()->GetFrameView();
 }
 
 TabRendererData BrowserTabStripController::TabRendererDataFromModel(
@@ -580,22 +592,4 @@ void BrowserTabStripController::UpdateStackedLayout() {
       g_browser_process->local_state(), &adjust_layout);
   tabstrip_->set_adjust_layout(adjust_layout);
   tabstrip_->SetStackedLayout(stacked_layout);
-}
-
-void BrowserTabStripController::OnFindURLMimeTypeCompleted(
-    const GURL& url,
-    const std::string& mime_type) {
-  // Check whether the mime type, if given, is known to be supported or whether
-  // there is a plugin that supports the mime type (e.g. PDF).
-  // TODO(bauerb): This possibly uses stale information, but it's guaranteed not
-  // to do disk access.
-  content::WebPluginInfo plugin;
-  tabstrip_->FileSupported(
-      url,
-      mime_type.empty() || blink::IsSupportedMimeType(mime_type) ||
-          content::PluginService::GetInstance()->GetPluginInfo(
-              -1,                // process ID
-              MSG_ROUTING_NONE,  // routing ID
-              model_->profile()->GetResourceContext(), url, url::Origin(),
-              mime_type, false, NULL, &plugin, NULL));
 }

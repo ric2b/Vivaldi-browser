@@ -5,7 +5,7 @@
 /**
  * Function to take the screenshot of the current screen.
  * @param {function(HTMLCanvasElement)} callback Callback for returning the
- *                                      canvas with the screenshot on it.
+ *     canvas with the screenshot. Called with null if the screenshot failed.
  */
 function takeScreenshot(callback) {
   var screenshotStream = null;
@@ -20,7 +20,7 @@ function takeScreenshot(callback) {
           video, 0, 0, video.videoWidth, video.videoHeight);
 
       video.pause();
-      video.src = '';
+      video.srcObject = null;
 
       screenshotStream.getVideoTracks()[0].stop();
       screenshotStream = null;
@@ -39,7 +39,7 @@ function takeScreenshot(callback) {
       function(stream) {
         if (stream) {
           screenshotStream = stream;
-          video.src = window.URL.createObjectURL(screenshotStream);
+          video.srcObject = screenshotStream;
           video.play();
         }
       },
@@ -47,5 +47,6 @@ function takeScreenshot(callback) {
         console.error(
             'takeScreenshot failed: ' + err.name + '; ' + err.message + '; ' +
             err.constraintName);
+        callback(null);
       });
 }

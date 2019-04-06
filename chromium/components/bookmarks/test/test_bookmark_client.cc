@@ -12,6 +12,7 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_storage.h"
@@ -30,11 +31,13 @@ std::unique_ptr<BookmarkModel> TestBookmarkClient::CreateModel() {
 // static
 std::unique_ptr<BookmarkModel> TestBookmarkClient::CreateModelWithClient(
     std::unique_ptr<BookmarkClient> client) {
+  BookmarkClient* client_ptr = client.get();
   std::unique_ptr<BookmarkModel> bookmark_model(
       new BookmarkModel(std::move(client)));
   std::unique_ptr<BookmarkLoadDetails> details =
-      bookmark_model->CreateLoadDetails();
+      std::make_unique<BookmarkLoadDetails>(client_ptr);
   details->LoadExtraNodes();
+  details->CreateUrlIndex();
   bookmark_model->DoneLoading(std::move(details));
   return bookmark_model;
 }
@@ -49,8 +52,7 @@ void TestBookmarkClient::SetExtraNodesToLoad(
 }
 
 bool TestBookmarkClient::IsExtraNodeRoot(const BookmarkNode* node) {
-  return std::find(unowned_extra_nodes_.begin(), unowned_extra_nodes_.end(),
-                   node) != unowned_extra_nodes_.end();
+  return base::ContainsValue(unowned_extra_nodes_, node);
 }
 
 bool TestBookmarkClient::IsAnExtraNode(const BookmarkNode* node) {
@@ -92,6 +94,14 @@ bool TestBookmarkClient::CanSyncNode(const BookmarkNode* node) {
 bool TestBookmarkClient::CanBeEditedByUser(const BookmarkNode* node) {
   return !IsAnExtraNode(node);
 }
+
+std::string TestBookmarkClient::EncodeBookmarkSyncMetadata() {
+  return std::string();
+}
+
+void TestBookmarkClient::DecodeBookmarkSyncMetadata(
+    const std::string& metadata_str,
+    const base::RepeatingClosure& schedule_save_closure) {}
 
 // static
 BookmarkPermanentNodeList TestBookmarkClient::LoadExtraNodes(

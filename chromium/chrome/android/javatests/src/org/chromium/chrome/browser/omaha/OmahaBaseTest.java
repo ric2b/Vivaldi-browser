@@ -21,6 +21,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.omaha.MockRequestGenerator;
 import org.chromium.chrome.test.omaha.MockRequestGenerator.DeviceType;
+import org.chromium.chrome.test.omaha.MockRequestGenerator.SignedInStatus;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -83,8 +84,8 @@ public class OmahaBaseTest {
 
         @Override
         protected RequestGenerator createRequestGenerator(Context context) {
-            mMockGenerator = new MockRequestGenerator(
-                    context, mIsOnTablet ? DeviceType.TABLET : DeviceType.HANDSET);
+            mMockGenerator = new MockRequestGenerator(context,
+                    mIsOnTablet ? DeviceType.TABLET : DeviceType.HANDSET, SignedInStatus.FALSE);
             return mMockGenerator;
         }
 
@@ -251,7 +252,7 @@ public class OmahaBaseTest {
         // and one for the ping request.
         Assert.assertTrue(mDelegate.mInstallEventWasSent);
         Assert.assertEquals(1, mDelegate.mPostResults.size());
-        Assert.assertEquals(OmahaBase.POST_RESULT_SENT, mDelegate.mPostResults.get(0).intValue());
+        Assert.assertEquals(OmahaBase.PostResult.SENT, mDelegate.mPostResults.get(0).intValue());
         Assert.assertEquals(2, mDelegate.mGenerateAndPostRequestResults.size());
         Assert.assertTrue(mDelegate.mGenerateAndPostRequestResults.get(0));
         Assert.assertTrue(mDelegate.mGenerateAndPostRequestResults.get(1));
@@ -286,7 +287,7 @@ public class OmahaBaseTest {
         // Only the regular ping should have been sent.
         Assert.assertFalse(mDelegate.mInstallEventWasSent);
         Assert.assertEquals(1, mDelegate.mPostResults.size());
-        Assert.assertEquals(OmahaBase.POST_RESULT_SENT, mDelegate.mPostResults.get(0).intValue());
+        Assert.assertEquals(OmahaBase.PostResult.SENT, mDelegate.mPostResults.get(0).intValue());
         Assert.assertEquals(1, mDelegate.mGenerateAndPostRequestResults.size());
         Assert.assertTrue(mDelegate.mGenerateAndPostRequestResults.get(0));
 
@@ -360,7 +361,7 @@ public class OmahaBaseTest {
         // Should be too early to post, causing it to be rescheduled.
         Assert.assertEquals(1, mDelegate.mPostResults.size());
         Assert.assertEquals(
-                OmahaBase.POST_RESULT_SCHEDULED, mDelegate.mPostResults.get(0).intValue());
+                OmahaBase.PostResult.SCHEDULED, mDelegate.mPostResults.get(0).intValue());
         Assert.assertEquals(0, mDelegate.mGenerateAndPostRequestResults.size());
 
         // The next scheduled event is the POST.  Because request generation code wasn't run, the
@@ -403,7 +404,7 @@ public class OmahaBaseTest {
 
         // Because we didn't send an install event, only one POST should have occurred.
         Assert.assertEquals(1, mDelegate.mPostResults.size());
-        Assert.assertEquals(OmahaBase.POST_RESULT_SENT, mDelegate.mPostResults.get(0).intValue());
+        Assert.assertEquals(OmahaBase.PostResult.SENT, mDelegate.mPostResults.get(0).intValue());
         Assert.assertEquals(1, mDelegate.mGenerateAndPostRequestResults.size());
         Assert.assertTrue(mDelegate.mGenerateAndPostRequestResults.get(0));
 
@@ -449,7 +450,7 @@ public class OmahaBaseTest {
 
         // Because we didn't send an install event, only one POST should have occurred.
         Assert.assertEquals(1, mDelegate.mPostResults.size());
-        Assert.assertEquals(OmahaBase.POST_RESULT_FAILED, mDelegate.mPostResults.get(0).intValue());
+        Assert.assertEquals(OmahaBase.PostResult.FAILED, mDelegate.mPostResults.get(0).intValue());
         Assert.assertEquals(1, mDelegate.mGenerateAndPostRequestResults.size());
         Assert.assertFalse(mDelegate.mGenerateAndPostRequestResults.get(0));
 
@@ -488,7 +489,7 @@ public class OmahaBaseTest {
 
         // Because we didn't send an install event, only one POST should have occurred.
         Assert.assertEquals(1, mDelegate.mPostResults.size());
-        Assert.assertEquals(OmahaBase.POST_RESULT_SENT, mDelegate.mPostResults.get(0).intValue());
+        Assert.assertEquals(OmahaBase.PostResult.SENT, mDelegate.mPostResults.get(0).intValue());
         Assert.assertEquals(1, mDelegate.mGenerateAndPostRequestResults.size());
         Assert.assertTrue(mDelegate.mGenerateAndPostRequestResults.get(0));
 
@@ -533,7 +534,7 @@ public class OmahaBaseTest {
 
         // Because we didn't send an install event, only one POST should have occurred.
         Assert.assertEquals(1, mDelegate.mPostResults.size());
-        Assert.assertEquals(OmahaBase.POST_RESULT_SENT, mDelegate.mPostResults.get(0).intValue());
+        Assert.assertEquals(OmahaBase.PostResult.SENT, mDelegate.mPostResults.get(0).intValue());
         Assert.assertEquals(1, mDelegate.mGenerateAndPostRequestResults.size());
         Assert.assertTrue(mDelegate.mGenerateAndPostRequestResults.get(0));
 

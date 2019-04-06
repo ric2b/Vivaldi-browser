@@ -4,10 +4,11 @@
 
 #include "chrome/browser/chromeos/first_run/steps/tray_step.h"
 
-#include "ash/first_run/first_run_helper.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shell.h"
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/public/interfaces/first_run_helper.mojom.h"
+#include "base/bind.h"
 #include "base/i18n/rtl.h"
+#include "chrome/browser/chromeos/first_run/first_run_controller.h"
 #include "chrome/browser/chromeos/first_run/step_names.h"
 #include "chrome/browser/ui/webui/chromeos/first_run/first_run_actor.h"
 #include "ui/gfx/geometry/rect.h"
@@ -16,25 +17,29 @@
 namespace chromeos {
 namespace first_run {
 
-TrayStep::TrayStep(ash::FirstRunHelper* shell_helper, FirstRunActor* actor)
-    : Step(kTrayStep, shell_helper, actor) {
-}
+TrayStep::TrayStep(FirstRunController* controller, FirstRunActor* actor)
+    : Step(kTrayStep, controller, actor) {}
 
 void TrayStep::DoShow() {
-  if (!shell_helper()->IsTrayBubbleOpened())
-    shell_helper()->OpenTrayBubble();
-  gfx::Rect bounds = shell_helper()->GetTrayBubbleBounds();
+  // FirstRunController owns this object, so use Unretained.
+  first_run_controller()->first_run_helper_ptr()->OpenTrayBubble(
+      base::BindOnce(&TrayStep::ShowWithBubbleBounds, base::Unretained(this)));
+}
+
+void TrayStep::ShowWithBubbleBounds(const gfx::Rect& bounds) {
   actor()->AddRectangularHole(bounds.x(), bounds.y(), bounds.width(),
       bounds.height());
   FirstRunActor::StepPosition position;
   position.SetTop(bounds.y());
-  ash::ShelfAlignment alignment =
-      ash::Shelf::ForWindow(ash::Shell::GetPrimaryRootWindow())->alignment();
+  ash::ShelfAlignment alignment = first_run_controller()->GetShelfAlignment();
   if ((!base::i18n::IsRTL() && alignment != ash::SHELF_ALIGNMENT_LEFT) ||
-      alignment == ash::SHELF_ALIGNMENT_RIGHT)
-    position.SetRight(GetOverlaySize().width() - bounds.x());
-  else
+      alignment == ash::SHELF_ALIGNMENT_RIGHT) {
+    // Compute pixel inset from right side of screen.
+    const gfx::Size overlay_size = first_run_controller()->GetOverlaySize();
+    position.SetRight(overlay_size.width() - bounds.x());
+  } else {
     position.SetLeft(bounds.right());
+  }
   actor()->ShowStepPositioned(name(), position);
 }
 

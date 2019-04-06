@@ -12,6 +12,9 @@
 #include "base/macros.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/profile_notification.h"
+#include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
+
+class ChromeAshMessageCenterClient;
 
 // The interface that a NotificationPlatformBridge uses to pass back information
 // and interactions from the native notification system. TODO(estade): this
@@ -29,13 +32,20 @@ class NotificationPlatformBridgeDelegate {
   virtual void HandleNotificationClicked(const std::string& id) = 0;
 
   // To be called when a button in a notification is clicked.
-  virtual void HandleNotificationButtonClicked(const std::string& id,
-                                               int button_index) = 0;
+  virtual void HandleNotificationButtonClicked(
+      const std::string& id,
+      int button_index,
+      const base::Optional<base::string16>& reply) = 0;
+
+  // To be called when the settings button in a notification is clicked.
+  virtual void HandleNotificationSettingsButtonClicked(
+      const std::string& id) = 0;
+
+  // To be called when a notification (source) should be disabled.
+  virtual void DisableNotification(const std::string& id) = 0;
 };
 
 // A platform bridge that uses Ash's message center to display notifications.
-// Currently under development and controlled by feature:
-//   --enable-features=NativeNotifications
 class NotificationPlatformBridgeChromeOs
     : public NotificationPlatformBridge,
       public NotificationPlatformBridgeDelegate {
@@ -46,35 +56,46 @@ class NotificationPlatformBridgeChromeOs
 
   // NotificationPlatformBridge:
   void Display(NotificationHandler::Type notification_type,
-               const std::string& profile_id,
-               bool is_incognito,
+               Profile* profile,
                const message_center::Notification& notification,
                std::unique_ptr<NotificationCommon::Metadata> metadata) override;
-  void Close(const std::string& profile_id,
-             const std::string& notification_id) override;
-  void GetDisplayed(
-      const std::string& profile_id,
-      bool incognito,
-      const GetDisplayedNotificationsCallback& callback) const override;
+  void Close(Profile* profile, const std::string& notification_id) override;
+  void GetDisplayed(Profile* profile,
+                    GetDisplayedNotificationsCallback callback) const override;
   void SetReadyCallback(NotificationBridgeReadyCallback callback) override;
 
   // NotificationPlatformBridgeDelegate:
   void HandleNotificationClosed(const std::string& id, bool by_user) override;
   void HandleNotificationClicked(const std::string& id) override;
-  void HandleNotificationButtonClicked(const std::string& id,
-                                       int button_index) override;
+  void HandleNotificationButtonClicked(
+      const std::string& id,
+      int button_index,
+      const base::Optional<base::string16>& reply) override;
+  void HandleNotificationSettingsButtonClicked(const std::string& id) override;
+  void DisableNotification(const std::string& id) override;
 
  private:
+  // Gets the ProfileNotification for the given identifier which has been
+  // mutated to uniquely identify the profile. This may return null if the
+  // notification has already been closed due to profile shutdown. Ash may
+  // asynchronously inform |this| of actions on notificationafter their
+  // associated profile has already been destroyed.
   ProfileNotification* GetProfileNotification(
       const std::string& profile_notification_id);
 
-  std::unique_ptr<NotificationPlatformBridge> impl_;
+  void OnProfileDestroying(Profile* profile);
+
+  std::unique_ptr<ChromeAshMessageCenterClient> impl_;
 
   // A container for all active notifications, where IDs are permuted to
   // uniquely identify both the notification and its source profile. The key is
   // the permuted ID.
   std::map<std::string, std::unique_ptr<ProfileNotification>>
       active_notifications_;
+
+  std::map<Profile*,
+           std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>>
+      profile_shutdown_subscriptions_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationPlatformBridgeChromeOs);
 };

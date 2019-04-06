@@ -6,6 +6,7 @@
 #define UI_VIEWS_CONTROLS_IMAGE_VIEW_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/view.h"
 
@@ -82,7 +83,12 @@ class VIEWS_EXPORT ImageView : public View {
   views::PaintInfo::ScaleType GetPaintScaleType() const override;
 
  private:
+  friend class ImageViewTest;
+
   void OnPaintImage(gfx::Canvas* canvas);
+
+  // Gets an ImageSkia to paint that has proper rep for |scale|.
+  gfx::ImageSkia GetPaintImage(float scale);
 
   // Returns true if |img| is the same as the last image we painted. This is
   // intended to be a quick check, not exhaustive. In other words it's possible
@@ -96,20 +102,20 @@ class VIEWS_EXPORT ImageView : public View {
   // properties.
   gfx::Point ComputeImageOrigin(const gfx::Size& image_size) const;
 
-  // Whether the image size is set.
-  bool image_size_set_;
-
   // The actual image size.
-  gfx::Size image_size_;
+  base::Optional<gfx::Size> image_size_;
 
   // The underlying image.
   gfx::ImageSkia image_;
 
+  // Caches the scaled image reps.
+  gfx::ImageSkia scaled_image_;
+
   // Horizontal alignment.
-  Alignment horiz_alignment_;
+  Alignment horizontal_alignment_;
 
   // Vertical alignment.
-  Alignment vert_alignment_;
+  Alignment vertical_alignment_;
 
   // The current tooltip text.
   base::string16 tooltip_text_;

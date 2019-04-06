@@ -18,12 +18,12 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/test_utils.h"
-#include "device/geolocation/public/cpp/scoped_geolocation_overrider.h"
-#include "device/geolocation/public/interfaces/geoposition.mojom.h"
+#include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
+#include "services/device/public/mojom/geoposition.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
+#include "third_party/blink/public/platform/web_rect.h"
 #include "ui/gfx/geometry/rect.h"
 
 using testing::ElementsAre;

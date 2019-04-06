@@ -188,7 +188,6 @@ gcc_toolchain("mipsel") {
   nm = "${toolprefix}nm"
 
   toolchain_args = {
-    use_cc_wrapper = false
     cc_wrapper = ""
     current_cpu = "mipsel"
     current_os = "linux"

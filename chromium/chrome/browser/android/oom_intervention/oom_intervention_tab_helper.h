@@ -5,17 +5,19 @@
 #ifndef CHROME_BROWSER_ANDROID_OOM_INTERVENTION_OOM_INTERVENTION_TAB_HELPER_H_
 #define CHROME_BROWSER_ANDROID_OOM_INTERVENTION_OOM_INTERVENTION_TAB_HELPER_H_
 
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/oom_intervention/near_oom_monitor.h"
-#include "chrome/browser/metrics/oom/out_of_memory_reporter.h"
 #include "chrome/browser/ui/interventions/intervention_delegate.h"
+#include "components/crash/content/browser/crash_metrics_reporter_android.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/oom_intervention.mojom.h"
+#include "third_party/blink/public/platform/oom_intervention.mojom.h"
 
 namespace content {
 class WebContents;
@@ -23,13 +25,11 @@ class WebContents;
 
 class OomInterventionDecider;
 
-// A tab helper for near-OOM intervention. This class depends on
-// OutOfMemoryReporter. OutOfMemoryReporter must be created on TabHelpers
-// before creating OomInterventionTabHelper.
+// A tab helper for near-OOM intervention.
 class OomInterventionTabHelper
     : public content::WebContentsObserver,
       public content::WebContentsUserData<OomInterventionTabHelper>,
-      public OutOfMemoryReporter::Observer,
+      public crash_reporter::CrashMetricsReporter::Observer,
       public blink::mojom::OomInterventionHost,
       public InterventionDelegate {
  public:
@@ -43,6 +43,7 @@ class OomInterventionTabHelper
   // InterventionDelegate:
   void AcceptIntervention() override;
   void DeclineIntervention() override;
+  void DeclineInterventionSticky() override;
 
  private:
   explicit OomInterventionTabHelper(content::WebContents* web_contents);
@@ -55,12 +56,13 @@ class OomInterventionTabHelper
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DocumentAvailableInMainFrame() override;
-  void WasShown() override;
-  void WasHidden() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
 
-  // OutOfMemoryReporter::Observer:
-  void OnForegroundOOMDetected(const GURL& url,
-                               ukm::SourceId source_id) override;
+  // CrashDumpManager::Observer:
+  void OnCrashDumpProcessed(
+      int rph_id,
+      const crash_reporter::CrashMetricsReporter::ReportedCrashTypeSet&
+          reported_counts) override;
 
   // Starts observing near-OOM situation if it's not started.
   void StartMonitoringIfNeeded();
@@ -77,6 +79,8 @@ class OomInterventionTabHelper
   void OnDetectionWindowElapsedWithoutHighMemoryUsage();
 
   void ResetInterventionState();
+
+  void ResetInterfaces();
 
   bool navigation_started_ = false;
   base::Optional<base::TimeTicks> near_oom_detected_time_;
@@ -102,6 +106,18 @@ class OomInterventionTabHelper
   InterventionState intervention_state_ = InterventionState::NOT_TRIGGERED;
 
   mojo::Binding<blink::mojom::OomInterventionHost> binding_;
+
+  // The shared memory region that stores metrics written by the renderer
+  // process. The memory is updated frequently and the browser should touch the
+  // memory only after renderer process is dead.
+  base::UnsafeSharedMemoryRegion shared_metrics_buffer_;
+  base::WritableSharedMemoryMapping metrics_mapping_;
+
+  base::TimeTicks last_navigation_timestamp_;
+
+  ScopedObserver<crash_reporter::CrashMetricsReporter,
+                 crash_reporter::CrashMetricsReporter::Observer>
+      scoped_observer_;
 
   base::WeakPtrFactory<OomInterventionTabHelper> weak_ptr_factory_;
 };

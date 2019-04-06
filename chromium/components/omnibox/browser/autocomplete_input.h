@@ -93,11 +93,13 @@ class AutocompleteInput {
   // formatted string with the same meaning as the original URL (i.e. it will
   // re-append a slash if necessary).  Because this uses Parse() under the hood
   // to determine the meaning of the different strings, callers need to supply a
-  // |scheme_classifier| to pass to Parse().
+  // |scheme_classifier| to pass to Parse(). If |offset| is non-null, it will
+  // be updated with any changes that shift it.
   static base::string16 FormattedStringWithEquivalentMeaning(
       const GURL& url,
       const base::string16& formatted_url,
-      const AutocompleteSchemeClassifier& scheme_classifier);
+      const AutocompleteSchemeClassifier& scheme_classifier,
+      size_t* offset);
 
   // Returns the number of non-empty components in |parts| besides the host.
   static int NumNonHostComponents(const url::Parsed& parts);
@@ -225,6 +227,10 @@ class AutocompleteInput {
 
   // Resets all internal variables to the null-constructed state.
   void Clear();
+
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
 
  private:
   friend class AutocompleteProviderTest;

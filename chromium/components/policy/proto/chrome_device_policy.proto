@@ -176,11 +176,10 @@ message AutoUpdateSettingsProto {
   optional bool update_disabled = 1;
 
   // Specifies the prefix of the target version we want the device to
-  // update to, if it's on a older version. If the device is already on
+  // update to, if it's on an older version. If the device is already on
   // a version with the given prefix, then there's no effect. If the device is
-  // on a higher version, it will remain on the higher version as we
-  // don't support rollback yet. The format of this version can be one
-  // of the following:
+  // on a higher version, the behavior depends on |rollback_to_target_version|.
+  // The format of this version can be one of the following:
   // ---------------------------------------------------------------------
   // "" (or not set at all): update to latest version available.
   // 1412.: update to any minor version of 1412 (e.g. 1412.24.34 or 1412.60.2)
@@ -239,6 +238,42 @@ message AutoUpdateSettingsProto {
   // True if AU payloads may be shared with and consumed from other devices
   // on the LAN, using p2p. False otherwise.
   optional bool p2p_enabled = 9 [default = false];
+
+  // The possible types of rollback.
+  enum RollbackToTargetVersion {
+    // No value set. Default is ROLLBACK_DISABLED.
+    ROLLBACK_UNSPECIFIED = 0;
+    // No rollback should happen if |target_version_prefix| specifies an older
+    // version than the currently installed Chrome OS version.
+    ROLLBACK_DISABLED = 1;
+    // If |target_version_prefix| specifies an older version than the currently
+    // installed Chrome OS version, the device should roll back to a Chrome OS
+    // version starting with |target_version_prefix|.
+    ROLLBACK_WITH_FULL_POWERWASH = 2;
+  }
+
+  // Specifies what should happen if |target_version_prefix| specifies an older
+  // version than the currently installed Chrome OS version.
+  optional RollbackToTargetVersion rollback_to_target_version = 10
+      [default = ROLLBACK_DISABLED];
+
+  // Specifies the number of Chrome milestones rollback should be allowed,
+  // starting from the stable version at any time. Setting this policy prevents
+  // firmware and kernel rollback protection to apply for at least this number
+  // of milestones.
+  optional int32 rollback_allowed_milestones = 11 [default = 0];
+
+  // Specifies the time intervals during which the device is not allowed to do
+  // automatic update checks. This is a JSON string, for details see
+  // "DeviceAutoUpdateTimeRestrictions" in policy_templates.json.
+  optional string disallowed_time_intervals = 12;
+
+  // Specifies the percent of the fleet to update per week. Each week is
+  // represented by an int in the list. For example, a list with values
+  // [5,20,100] means: by the end of week 1, 5% of devices should be updated. By
+  // the end of week 2, 20% of devices should be updated. By the end of week 3,
+  // 100% of devices should be updated.
+  repeated int32 staging_percent_of_fleet_per_week = 13;
 }
 
 message OBSOLETE_StartUpUrlsProto {
@@ -828,7 +863,7 @@ message CastReceiverNameProto {
   optional string name = 1;
 }
 
-// Day of the week and time settings for DeviceOffHoursIntervalProto.
+// Day of the week and time in milliseconds since the start of the day.
 message WeeklyTimeProto {
   enum DayOfWeek {
     DAY_OF_WEEK_UNSPECIFIED = 0;
@@ -842,13 +877,12 @@ message WeeklyTimeProto {
   }
   // Day of week.
   optional DayOfWeek day_of_week = 1;
-  // Time of day in milliseconds from beginning of the day
-  // in timezone that is defined in DeviceOffHoursProto.
+  // Time of day in milliseconds from beginning of the day.
   optional int32 time = 2;
 }
 
-// Start and end interval settings for DeviceOffHoursProto.
-message DeviceOffHoursIntervalProto {
+// Start and end of an interval represented by WeeklyTimes
+message WeeklyTimeIntervalProto {
   optional WeeklyTimeProto start = 1;
   optional WeeklyTimeProto end = 2;
 }
@@ -856,8 +890,9 @@ message DeviceOffHoursIntervalProto {
 // Allow less restricted using of Chromebooks that are managed by school,
 // while the device is not at school ("OffHours").
 message DeviceOffHoursProto {
-  // List of intervals when ignored policies are not applied.
-  repeated DeviceOffHoursIntervalProto intervals = 1;
+  // List of intervals when ignored policies are not applied. These intervals
+  // are in the timezone specified by the timezone string.
+  repeated WeeklyTimeIntervalProto intervals = 1;
   // Timezone in the same format as SystemTimezoneProto.timezone.
   // If timezone isn't set then "GMT" will be used
   optional string timezone = 2;
@@ -868,6 +903,7 @@ message DeviceOffHoursProto {
   // During OffHoursMode default settings of ignored policies are used.
   repeated int32 ignored_policy_proto_tags = 3;
 }
+
 // The url and hash that specified in JSON format that can be used to retrieve
 // the device-level printers configuration file.
 message DeviceNativePrintersProto {
@@ -904,8 +940,16 @@ message DeviceNativePrintersWhitelistProto {
 
 // Settings to control the behavior of the TPM firmware update functionality.
 message TPMFirmwareUpdateSettingsProto {
-  // Whether the user can invoke the update via powerwash.
+  // Whether the user is allowed to invoke the update via powerwash. This flow
+  // performs a powerwash operation (which implies a TPM clear), followed by
+  // installation of the TPM firmware update. As a result of the powerwash, all
+  // writable data on the device will be cleared.
   optional bool allow_user_initiated_powerwash = 1;
+
+  // Whether the user is allowed to invoke a variant of the update flow that
+  // clears the TPM to install the firmware update, but preserves device-wide
+  // state (including enrollment). User data will not be preserved in this flow.
+  optional bool allow_user_initiated_preserve_device_state = 2;
 }
 
 // Settings to control the minimum version that is allowed to sign in / stay
@@ -936,6 +980,77 @@ message DeviceLoginScreenAutoSelectCertificateForUrls {
 // (true by default)
 message UnaffiliatedArcAllowedProto {
   optional bool unaffiliated_arc_allowed = 1;
+}
+
+// Allowed encryption types for requesting Kerberos tickets from Active
+// Directory servers. Applies to Active Directory management mode only.
+message DeviceKerberosEncryptionTypesProto {
+  enum Types {
+    ENC_TYPES_ALL = 0;     // AES + RC4_HMAC.
+    ENC_TYPES_STRONG = 1;  // AES only.
+    ENC_TYPES_LEGACY = 2;  // RC4_HMAC only.
+    // Next ID to use: 3
+  }
+
+  optional Types types = 1 [default = ENC_TYPES_STRONG];
+}
+
+// Specifies how user policy from device GPOs interacts with user policy from
+// user GPOs. In 'MERGE' mode, device GPOs take preference in case of conflicts.
+// Applies to Active Directory management mode only.
+message DeviceUserPolicyLoopbackProcessingModeProto {
+  enum Mode {
+    USER_POLICY_MODE_DEFAULT = 0;  // Only take user policy from user GPOs.
+    USER_POLICY_MODE_MERGE = 1;    // Merge device GPOs on top of user GPOs.
+    USER_POLICY_MODE_REPLACE = 2;  // Only take user policy from device GPOs.
+    // Next ID to use: 3
+  }
+
+  optional Mode mode = 1 [default = USER_POLICY_MODE_DEFAULT];
+}
+
+// Specifies a list of origins. Each of the specified origins will run in its
+// own process on the sign-in screen.
+message DeviceLoginScreenIsolateOriginsProto {
+  // A comma-separated list of the origins to be run in a separate process on
+  // the sign-in screen.
+  // If the value of this policy does not match the value of the user policy
+  // IsolateOrigins, the chrome process will be restarted on user sign-in to
+  // apply the value specified by the user policy.
+  optional string isolate_origins = 1;
+}
+
+// Specifies if each site should run in its own process on the sign-in screen.
+message DeviceLoginScreenSitePerProcessProto {
+  // If true, each site will run in its own process on the sign-in screen.
+  // If the value of this policy does not match the value of the user policy
+  // SitePerProcess, the chrome process will be restarted on user sign-in to
+  // apply the value specified by the user policy.
+  optional bool site_per_process = 1;
+}
+
+// Setting to control if running virtual machines on Chrome OS is allowed.
+message VirtualMachinesAllowedProto {
+  optional bool virtual_machines_allowed = 1 [default = true];
+}
+
+// Specifies if and how often Active Directory machine (computer) account
+// passwords are changed in the AuthPolicy daemon in Chrome OS.
+// Applies to Active Directory management mode only.
+message DeviceMachinePasswordChangeRateProto {
+  optional int32 rate_days = 1;
+}
+
+// Setting to control the authentication type for newly added users which log in
+// via SAML.
+message SamlLoginAuthenticationTypeProto {
+  enum Type {
+    TYPE_DEFAULT = 0;             // Implementation-defined default config.
+    TYPE_CLIENT_CERTIFICATE = 1;  // Client certificate authentication.
+    // Next ID to use: 2
+  }
+
+  optional Type saml_login_authentication_type = 1 [default = TYPE_DEFAULT];
 }
 
 message ChromeDeviceSettingsProto {
@@ -1016,4 +1131,16 @@ message ChromeDeviceSettingsProto {
       device_login_screen_auto_select_certificate_for_urls = 62;
   optional UnaffiliatedArcAllowedProto unaffiliated_arc_allowed = 63;
   optional NetworkHostnameProto network_hostname = 64;
+  optional DeviceKerberosEncryptionTypesProto device_kerberos_encryption_types =
+      65;
+  optional DeviceUserPolicyLoopbackProcessingModeProto
+      device_user_policy_loopback_processing_mode = 66;
+  optional DeviceLoginScreenIsolateOriginsProto
+      device_login_screen_isolate_origins = 67;
+  optional DeviceLoginScreenSitePerProcessProto
+      device_login_screen_site_per_process = 68;
+  optional VirtualMachinesAllowedProto virtual_machines_allowed = 69;
+  optional DeviceMachinePasswordChangeRateProto
+      device_machine_password_change_rate = 70;
+  optional SamlLoginAuthenticationTypeProto saml_login_authentication_type = 71;
 }

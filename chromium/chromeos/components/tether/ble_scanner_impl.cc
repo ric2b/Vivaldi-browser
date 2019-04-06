@@ -7,14 +7,18 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/components/tether/ble_constants.h"
-#include "chromeos/components/tether/ble_synchronizer.h"
+#include "chromeos/chromeos_switches.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "chromeos/components/tether/tether_host_fetcher.h"
+#include "chromeos/services/secure_channel/ble_constants.h"
+#include "chromeos/services/secure_channel/ble_service_data_helper.h"
+#include "chromeos/services/secure_channel/ble_synchronizer.h"
+#include "chromeos/services/secure_channel/device_id_pair.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
-#include "components/cryptauth/remote_device.h"
-#include "components/proximity_auth/logging/logging.h"
+#include "components/cryptauth/remote_device_ref.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_uuid.h"
@@ -25,10 +29,18 @@ namespace tether {
 
 namespace {
 
-// Valid service data must include at least 4 bytes: 2 bytes associated with the
-// scanning device (used as a scan filter) and 2 bytes which identify the
-// advertising device to the scanning device.
-const size_t kMinNumBytesInServiceData = 4;
+// Instant Tethering does not make use of the "local device ID" argument, since
+// all connections are from the same device.
+// TODO(hansberry): Remove when SecureChannelClient migration is complete.
+const char kStubLocalDeviceId[] = "N/A";
+
+// Valid advertisement service data must be at least 2 bytes.
+// As of March 2018, valid background advertisement service data is exactly 2
+// bytes, which identify the advertising device to the scanning device.
+// Valid foreground advertisement service data must include at least 4 bytes:
+// 2 bytes associated with the scanning device (used as a scan filter) and 2
+// bytes which identify the advertising device to the scanning device.
+const size_t kMinNumBytesInServiceData = 2;
 
 }  // namespace
 
@@ -38,15 +50,14 @@ BleScannerImpl::Factory* BleScannerImpl::Factory::factory_instance_ = nullptr;
 // static
 std::unique_ptr<BleScanner> BleScannerImpl::Factory::NewInstance(
     scoped_refptr<device::BluetoothAdapter> adapter,
-    cryptauth::LocalDeviceDataProvider* local_device_data_provider,
-    BleSynchronizerBase* ble_synchronizer,
+    secure_channel::BleServiceDataHelper* ble_service_data_helper,
+    secure_channel::BleSynchronizerBase* ble_synchronizer,
     TetherHostFetcher* tether_host_fetcher) {
   if (!factory_instance_)
     factory_instance_ = new Factory();
 
-  return factory_instance_->BuildInstance(adapter, local_device_data_provider,
-                                          ble_synchronizer,
-                                          tether_host_fetcher);
+  return factory_instance_->BuildInstance(
+      adapter, ble_service_data_helper, ble_synchronizer, tether_host_fetcher);
 }
 
 // static
@@ -56,12 +67,11 @@ void BleScannerImpl::Factory::SetInstanceForTesting(Factory* factory) {
 
 std::unique_ptr<BleScanner> BleScannerImpl::Factory::BuildInstance(
     scoped_refptr<device::BluetoothAdapter> adapter,
-    cryptauth::LocalDeviceDataProvider* local_device_data_provider,
-    BleSynchronizerBase* ble_synchronizer,
+    secure_channel::BleServiceDataHelper* ble_service_data_helper,
+    secure_channel::BleSynchronizerBase* ble_synchronizer,
     TetherHostFetcher* tether_host_fetcher) {
-  return std::make_unique<BleScannerImpl>(adapter, local_device_data_provider,
-                                          ble_synchronizer,
-                                          tether_host_fetcher);
+  return base::WrapUnique(new BleScannerImpl(
+      adapter, ble_service_data_helper, ble_synchronizer, tether_host_fetcher));
 }
 
 BleScannerImpl::ServiceDataProviderImpl::ServiceDataProviderImpl() = default;
@@ -72,20 +82,19 @@ const std::vector<uint8_t>*
 BleScannerImpl::ServiceDataProviderImpl::GetServiceDataForUUID(
     device::BluetoothDevice* bluetooth_device) {
   return bluetooth_device->GetServiceDataForUUID(
-      device::BluetoothUUID(kAdvertisingServiceUuid));
+      device::BluetoothUUID(secure_channel::kAdvertisingServiceUuid));
 }
 
 BleScannerImpl::BleScannerImpl(
     scoped_refptr<device::BluetoothAdapter> adapter,
-    cryptauth::LocalDeviceDataProvider* local_device_data_provider,
-    BleSynchronizerBase* ble_synchronizer,
+    secure_channel::BleServiceDataHelper* ble_service_data_helper,
+    secure_channel::BleSynchronizerBase* ble_synchronizer,
     TetherHostFetcher* tether_host_fetcher)
     : adapter_(adapter),
-      local_device_data_provider_(local_device_data_provider),
+      ble_service_data_helper_(ble_service_data_helper),
       ble_synchronizer_(ble_synchronizer),
       tether_host_fetcher_(tether_host_fetcher),
       service_data_provider_(std::make_unique<ServiceDataProviderImpl>()),
-      eid_generator_(std::make_unique<cryptauth::ForegroundEidGenerator>()),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this) {
   adapter_->AddObserver(this);
@@ -96,28 +105,14 @@ BleScannerImpl::~BleScannerImpl() {
 }
 
 bool BleScannerImpl::RegisterScanFilterForDevice(const std::string& device_id) {
-  if (registered_remote_device_ids_.size() >= kMaxConcurrentAdvertisements) {
+  if (registered_remote_device_ids_.size() >=
+      secure_channel::kMaxConcurrentAdvertisements) {
     // Each scan filter corresponds to an advertisement. Thus, the number of
     // concurrent advertisements cannot exceed the maximum number of concurrent
     // advertisements.
     PA_LOG(WARNING) << "Attempted to start a scan for a new device when the "
                     << "maximum number of devices have already been "
                     << "registered.";
-    return false;
-  }
-
-  std::vector<cryptauth::BeaconSeed> local_device_beacon_seeds;
-  if (!local_device_data_provider_->GetLocalDeviceData(
-          nullptr, &local_device_beacon_seeds)) {
-    PA_LOG(WARNING) << "Error fetching the local device's beacon seeds. Cannot "
-                    << "generate scan without beacon seeds.";
-    return false;
-  }
-
-  std::unique_ptr<cryptauth::ForegroundEidGenerator::EidData> scan_filters =
-      eid_generator_->GenerateBackgroundScanFilter(local_device_beacon_seeds);
-  if (!scan_filters) {
-    PA_LOG(WARNING) << "Error generating background scan filters. Cannot scan";
     return false;
   }
 
@@ -159,10 +154,8 @@ bool BleScannerImpl::IsDiscoverySessionActive() {
 
 void BleScannerImpl::SetTestDoubles(
     std::unique_ptr<ServiceDataProvider> service_data_provider,
-    std::unique_ptr<cryptauth::ForegroundEidGenerator> eid_generator,
     scoped_refptr<base::TaskRunner> test_task_runner) {
   service_data_provider_ = std::move(service_data_provider);
-  eid_generator_ = std::move(eid_generator);
   task_runner_ = test_task_runner;
 }
 
@@ -305,40 +298,23 @@ void BleScannerImpl::HandleDeviceUpdated(
 void BleScannerImpl::CheckForMatchingScanFilters(
     device::BluetoothDevice* bluetooth_device,
     const std::string& service_data) {
-  std::vector<cryptauth::BeaconSeed> beacon_seeds;
-  if (!local_device_data_provider_->GetLocalDeviceData(nullptr,
-                                                       &beacon_seeds)) {
-    // If no beacon seeds are available, the scan cannot be checked for a match.
-    return;
-  }
+  secure_channel::DeviceIdPairSet device_id_pair_set;
+  for (const auto& remote_device_id : registered_remote_device_ids_)
+    device_id_pair_set.emplace(remote_device_id, kStubLocalDeviceId);
 
-  const std::string device_id =
-      eid_generator_->IdentifyRemoteDeviceByAdvertisement(
-          service_data, registered_remote_device_ids_, beacon_seeds);
+  base::Optional<secure_channel::BleServiceDataHelper::DeviceWithBackgroundBool>
+      device_with_background_bool =
+          ble_service_data_helper_->IdentifyRemoteDevice(service_data,
+                                                         device_id_pair_set);
 
   // If the service data does not correspond to an advertisement from a device
   // on this account, ignore it.
-  if (device_id.empty())
+  if (!device_with_background_bool)
     return;
 
-  tether_host_fetcher_->FetchTetherHost(
-      device_id,
-      base::Bind(&BleScannerImpl::OnIdentifiedHostFetched,
-                 weak_ptr_factory_.GetWeakPtr(), bluetooth_device, device_id));
-}
-
-void BleScannerImpl::OnIdentifiedHostFetched(
-    device::BluetoothDevice* bluetooth_device,
-    const std::string& device_id,
-    std::unique_ptr<cryptauth::RemoteDevice> identified_device) {
-  if (!identified_device) {
-    PA_LOG(ERROR) << "Unable to fetch RemoteDevice object with ID \""
-                  << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(device_id)
-                  << "\".";
-    return;
-  }
-
-  NotifyReceivedAdvertisementFromDevice(*identified_device, bluetooth_device);
+  NotifyReceivedAdvertisementFromDevice(
+      device_with_background_bool->first /* remote_device */, bluetooth_device,
+      device_with_background_bool->second /* is_background_advertisement */);
 }
 
 void BleScannerImpl::ScheduleStatusChangeNotification(
@@ -351,8 +327,8 @@ void BleScannerImpl::ScheduleStatusChangeNotification(
   // cannot occur. See crbug.com/776241.
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&BleScannerImpl::NotifyDiscoverySessionStateChanged,
-                 weak_ptr_factory_.GetWeakPtr(), discovery_session_active));
+      base::BindOnce(&BleScannerImpl::NotifyDiscoverySessionStateChanged,
+                     weak_ptr_factory_.GetWeakPtr(), discovery_session_active));
 }
 
 }  // namespace tether

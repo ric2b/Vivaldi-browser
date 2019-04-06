@@ -7,16 +7,18 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/containers/linked_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
+#include "net/base/interval.h"
 #include "net/base/net_export.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/log/net_log_with_source.h"
@@ -72,12 +74,12 @@ class NET_EXPORT_PRIVATE MemEntryImpl final
   };
 
   // Constructor for parent entries.
-  MemEntryImpl(MemBackendImpl* backend,
+  MemEntryImpl(base::WeakPtr<MemBackendImpl> backend,
                const std::string& key,
                net::NetLog* net_log);
 
   // Constructor for child entries.
-  MemEntryImpl(MemBackendImpl* backend,
+  MemEntryImpl(base::WeakPtr<MemBackendImpl> backend,
                int child_id,
                MemEntryImpl* parent,
                net::NetLog* net_log);
@@ -109,38 +111,39 @@ class NET_EXPORT_PRIVATE MemEntryImpl final
                int offset,
                IOBuffer* buf,
                int buf_len,
-               const CompletionCallback& callback) override;
+               CompletionOnceCallback callback) override;
   int WriteData(int index,
                 int offset,
                 IOBuffer* buf,
                 int buf_len,
-                const CompletionCallback& callback,
+                CompletionOnceCallback callback,
                 bool truncate) override;
   int ReadSparseData(int64_t offset,
                      IOBuffer* buf,
                      int buf_len,
-                     const CompletionCallback& callback) override;
+                     CompletionOnceCallback callback) override;
   int WriteSparseData(int64_t offset,
                       IOBuffer* buf,
                       int buf_len,
-                      const CompletionCallback& callback) override;
+                      CompletionOnceCallback callback) override;
   int GetAvailableRange(int64_t offset,
                         int len,
                         int64_t* start,
-                        const CompletionCallback& callback) override;
+                        CompletionOnceCallback callback) override;
   bool CouldBeSparse() const override;
   void CancelSparseIO() override {}
-  int ReadyForSparseIO(const CompletionCallback& callback) override;
+  int ReadyForSparseIO(CompletionOnceCallback callback) override;
+  void SetLastUsedTimeForTest(base::Time time) override;
   size_t EstimateMemoryUsage() const;
 
  private:
-  MemEntryImpl(MemBackendImpl* backend,
+  MemEntryImpl(base::WeakPtr<MemBackendImpl> backend,
                const std::string& key,
                int child_id,
                MemEntryImpl* parent,
                net::NetLog* net_log);
 
-  using EntryMap = std::unordered_map<int, MemEntryImpl*>;
+  using EntryMap = std::map<int, MemEntryImpl*>;
 
   static const int kNumStreams = 3;
 
@@ -165,10 +168,11 @@ class NET_EXPORT_PRIVATE MemEntryImpl final
   // created.
   MemEntryImpl* GetChild(int64_t offset, bool create);
 
-  // Finds the first child located within the range [|offset|, |offset + len|).
-  // Returns the number of bytes ahead of |offset| to reach the first available
-  // bytes in the entry. The first child found is output to |child|.
-  int FindNextChild(int64_t offset, int len, MemEntryImpl** child);
+  // Returns an interval describing what's stored in the child entry pointed to
+  // by i, in global coordinates.
+  // Precondition: i != children_.end();
+  net::Interval<int64_t> ChildInterval(
+      MemEntryImpl::EntryMap::const_iterator i);
 
   std::string key_;
   std::vector<char> data_[kNumStreams];  // User data.
@@ -183,7 +187,7 @@ class NET_EXPORT_PRIVATE MemEntryImpl final
 
   base::Time last_modified_;
   base::Time last_used_;
-  MemBackendImpl* backend_;   // Back pointer to the cache.
+  base::WeakPtr<MemBackendImpl> backend_;  // Back pointer to the cache.
   bool doomed_;               // True if this entry was removed from the cache.
 
   net::NetLogWithSource net_log_;

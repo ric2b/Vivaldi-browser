@@ -209,7 +209,10 @@ void EdgeImporter::ParseFavoritesDatabase(
   if (database_path.empty())
     return;
 
+  base::FilePath log_folder = database_path.DirName().Append(L"LogFiles");
+
   EdgeDatabaseReader database;
+  database.set_log_folder(log_folder.value());
   if (!database.OpenDatabase(database_path.value())) {
     DVLOG(1) << "Error opening database " << database.GetErrorMessage();
     return;

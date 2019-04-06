@@ -8,8 +8,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "content/common/content_export.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "third_party/WebKit/public/platform/InterfaceProvider.h"
+#include "third_party/blink/public/platform/interface_provider.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -23,7 +24,8 @@ namespace content {
 
 // An implementation of blink::InterfaceProvider that forwards to a
 // service_manager::InterfaceProvider.
-class BlinkInterfaceProviderImpl final : public blink::InterfaceProvider {
+class CONTENT_EXPORT BlinkInterfaceProviderImpl final
+    : public blink::InterfaceProvider {
  public:
   explicit BlinkInterfaceProviderImpl(service_manager::Connector* connector);
   ~BlinkInterfaceProviderImpl();

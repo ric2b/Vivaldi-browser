@@ -27,6 +27,9 @@ const char kAutofillCreditCardSigninPromoImpressionCount[] =
     "autofill.credit_card_signin_promo_impression_count";
 
 // Boolean that is true if Autofill is enabled and allowed to save profile data.
+const char kAutofillProfileEnabled[] = "autofill.profile_enabled";
+
+// Boolean that is true if Autofill is enabled and allowed to save data.
 const char kAutofillEnabled[] = "autofill.enabled";
 
 // Integer that is set to the last version where the profile deduping routine
@@ -45,10 +48,6 @@ const char kAutofillLastVersionDisusedCreditCardsDeleted[] =
 
 // Boolean that is true if the orphan rows in the autofill table were removed.
 const char kAutofillOrphanRowsRemoved[] = "autofill.orphan_rows_removed";
-
-// Boolean that is true if Autofill address profiles were fixed regarding their
-// bad use dates.
-const char kAutofillProfileUseDatesFixed[] = "autofill.profile_use_dates_fixed";
 
 // Boolean that's true when Wallet card and address import is enabled by the
 // user.

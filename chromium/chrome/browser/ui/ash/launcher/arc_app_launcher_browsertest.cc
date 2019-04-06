@@ -16,27 +16,25 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
-#include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_test_util.h"
+#include "chrome/browser/ui/ash/launcher/shelf_spinner_controller.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "content/public/test/browser_test_utils.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/test/event_generator.h"
@@ -76,8 +74,6 @@ constexpr char kTestAppName2[] = "Test ARC App 2";
 constexpr char kTestShortcutName[] = "Test Shortcut";
 constexpr char kTestShortcutName2[] = "Test Shortcut 2";
 constexpr char kTestAppPackage[] = "test.arc.app.package";
-constexpr char kTestAppPackage2[] = "test.arc.app.package2";
-constexpr char kTestAppPackage3[] = "test.arc.app.package3";
 constexpr char kTestAppActivity[] = "test.arc.app.package.activity";
 constexpr char kTestAppActivity2[] = "test.arc.gitapp.package.activity2";
 constexpr char kTestShelfGroup[] = "shelf_group";
@@ -124,8 +120,8 @@ class AppAnimatedWaiter {
   void Wait() {
     const base::TimeDelta threshold =
         base::TimeDelta::FromMilliseconds(kAppAnimatedThresholdMs);
-    ArcAppDeferredLauncherController* controller =
-        ChromeLauncherController::instance()->GetArcDeferredLauncher();
+    ShelfSpinnerController* controller =
+        ChromeLauncherController::instance()->GetShelfSpinnerController();
     while (controller->GetActiveTime(app_id_) < threshold) {
       base::RunLoop().RunUntilIdle();
     }
@@ -142,7 +138,7 @@ enum TestAction {
 };
 
 // Test parameters include TestAction and pin/unpin state.
-typedef std::tr1::tuple<TestAction, bool> TestParameter;
+typedef std::tuple<TestAction, bool> TestParameter;
 
 TestParameter build_test_parameter[] = {
     TestParameter(TEST_ACTION_START, false),
@@ -158,7 +154,7 @@ std::string CreateIntentUriWithShelfGroup(const std::string& shelf_group_id) {
 
 }  // namespace
 
-class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
+class ArcAppLauncherBrowserTest : public extensions::ExtensionBrowserTest {
  public:
   ArcAppLauncherBrowserTest() {}
   ~ArcAppLauncherBrowserTest() override {}
@@ -166,14 +162,13 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
  protected:
   // content::BrowserTestBase:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionBrowserTest::SetUpCommandLine(command_line);
+    extensions::ExtensionBrowserTest::SetUpCommandLine(command_line);
     arc::SetArcAvailableCommandLineForTesting(command_line);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    ExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
-    arc::ArcSessionManager::DisableUIForTesting();
-    arc::ArcAuthNotification::DisableForTesting();
+    extensions::ExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
+    arc::ArcSessionManager::SetUiEnabledForTesting(false);
   }
 
   void SetUpOnMainThread() override {
@@ -365,9 +360,9 @@ class ArcAppDeferredLauncherWithParamsBrowserTest
   ~ArcAppDeferredLauncherWithParamsBrowserTest() override = default;
 
  protected:
-  bool is_pinned() const { return std::tr1::get<1>(GetParam()); }
+  bool is_pinned() const { return std::get<1>(GetParam()); }
 
-  TestAction test_action() const { return std::tr1::get<0>(GetParam()); }
+  TestAction test_action() const { return std::get<0>(GetParam()); }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ArcAppDeferredLauncherWithParamsBrowserTest);
@@ -411,7 +406,8 @@ IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherWithParamsBrowserTest,
               SelectShelfItem(shelf_id, ui::ET_MOUSE_PRESSED,
                               display::kInvalidDisplayId));
   } else {
-    arc::LaunchApp(profile(), app_id, ui::EF_LEFT_MOUSE_BUTTON);
+    arc::LaunchApp(profile(), app_id, ui::EF_LEFT_MOUSE_BUTTON,
+                   arc::UserInteractionType::NOT_USER_INITIATED);
   }
 
   const ash::ShelfItem* item = controller->GetItem(shelf_id);
@@ -424,7 +420,7 @@ IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherWithParamsBrowserTest,
       // should stop animation and delete icon from the shelf.
       InstallTestApps(kTestAppPackage, false);
       SendPackageAdded(kTestAppPackage, false);
-      EXPECT_TRUE(controller->GetArcDeferredLauncher()
+      EXPECT_TRUE(controller->GetShelfSpinnerController()
                       ->GetActiveTime(app_id)
                       .is_zero());
       EXPECT_EQ(is_pinned(), controller->GetItem(shelf_id) != nullptr);
@@ -437,7 +433,7 @@ IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherWithParamsBrowserTest,
       ash::ShelfItemDelegate* delegate = GetShelfItemDelegate(app_id);
       ASSERT_TRUE(delegate);
       delegate->Close();
-      EXPECT_TRUE(controller->GetArcDeferredLauncher()
+      EXPECT_TRUE(controller->GetShelfSpinnerController()
                       ->GetActiveTime(app_id)
                       .is_zero());
       EXPECT_EQ(is_pinned(), controller->GetItem(shelf_id) != nullptr);
@@ -489,52 +485,6 @@ IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, PinOnPackageUpdateAndRemove) {
   EXPECT_FALSE(controller->GetItem(shelf_id2));
 }
 
-// This test validates that app list is shown on new package and not shown
-// on package update.
-IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, AppListShown) {
-  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
-  // list (http://crbug.com/759779).
-  if (app_list::features::IsFullscreenAppListEnabled())
-    return;
-
-  StartInstance();
-  AppListService* app_list_service = AppListService::Get();
-  ASSERT_TRUE(app_list_service);
-
-  EXPECT_FALSE(app_list_service->IsAppListVisible());
-
-  SendInstallationStarted(kTestAppPackage);
-  SendInstallationStarted(kTestAppPackage2);
-
-  // New package is available. Show app list.
-  SendInstallationFinished(kTestAppPackage, true);
-  InstallTestApps(kTestAppPackage, false);
-  SendPackageAdded(kTestAppPackage, true);
-  EXPECT_TRUE(app_list_service->IsAppListVisible());
-
-  app_list_service->DismissAppList();
-  EXPECT_FALSE(app_list_service->IsAppListVisible());
-
-  // Send package update event. App list is not shown.
-  SendPackageAdded(kTestAppPackage, true);
-  EXPECT_FALSE(app_list_service->IsAppListVisible());
-
-  // Install next package from batch. Next new package is available.
-  // Don't show app list.
-  SendInstallationFinished(kTestAppPackage2, true);
-  InstallTestApps(kTestAppPackage2, false);
-  SendPackageAdded(kTestAppPackage2, true);
-  EXPECT_FALSE(app_list_service->IsAppListVisible());
-
-  // Run next installation batch. App list should be shown again.
-  SendInstallationStarted(kTestAppPackage3);
-  SendInstallationFinished(kTestAppPackage3, true);
-  InstallTestApps(kTestAppPackage3, false);
-  SendPackageAdded(kTestAppPackage3, true);
-  EXPECT_TRUE(app_list_service->IsAppListVisible());
-  app_list_service->DismissAppList();
-}
-
 // Test AppListControllerDelegate::IsAppOpen for ARC apps.
 IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, IsAppOpen) {
   StartInstance();
@@ -542,10 +492,11 @@ IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, IsAppOpen) {
   SendPackageAdded(kTestAppPackage, true);
   const std::string app_id = GetTestApp1Id(kTestAppPackage);
 
-  AppListService* service = AppListService::Get();
-  AppListControllerDelegate* delegate = service->GetControllerDelegate();
+  AppListClientImpl* client = AppListClientImpl::GetInstance();
+  AppListControllerDelegate* delegate = client;
   EXPECT_FALSE(delegate->IsAppOpen(app_id));
-  arc::LaunchApp(profile(), app_id, ui::EF_LEFT_MOUSE_BUTTON);
+  arc::LaunchApp(profile(), app_id, ui::EF_LEFT_MOUSE_BUTTON,
+                 arc::UserInteractionType::NOT_USER_INITIATED);
   EXPECT_FALSE(delegate->IsAppOpen(app_id));
   // Simulate task creation so the app is marked as running/open.
   std::unique_ptr<ArcAppListPrefs::AppInfo> info = app_prefs()->GetApp(app_id);

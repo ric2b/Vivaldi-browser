@@ -10,37 +10,33 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/search_engines/util.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
-#include "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/toolbar_commands.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller_factory.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
-#import "ios/chrome/browser/ui/location_bar/location_bar_coordinator.h"
-#include "ios/chrome/browser/ui/omnibox/location_bar_controller.h"
-#include "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
-#include "ios/chrome/browser/ui/omnibox/location_bar_delegate.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_popup_positioner.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_legacy_coordinator.h"
+#import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
-#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_coordinator.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_button_factory.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_positioner.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_style.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tools_menu_button.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/tools_menu_button_observer_bridge.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_button_updater.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_button_visibility_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_mediator.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_style.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_view_controller.h"
-#import "ios/chrome/browser/ui/toolbar/public/web_toolbar_controller_constants.h"
-#include "ios/chrome/browser/ui/toolbar/toolbar_model_ios.h"
-#import "ios/chrome/browser/ui/toolbar/tools_menu_button_observer_bridge.h"
+#import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
+#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
+#import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
+#import "ios/chrome/browser/ui/tools_menu/public/tools_menu_presentation_provider.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_coordinator.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/ui/voice/text_to_speech_player.h"
@@ -48,16 +44,15 @@
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/material_timing.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/web/public/navigation_item.h"
-#import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface ToolbarCoordinator ()<LocationBarDelegate, OmniboxPopupPositioner> {
-  std::unique_ptr<LocationBarControllerImpl> _locationBar;
+@interface ToolbarCoordinator ()<OmniboxPopupPositioner,
+                                 ToolbarCommands,
+                                 ToolsMenuPresentationProvider> {
   // Observer that updates |toolbarViewController| for fullscreen events.
   std::unique_ptr<FullscreenControllerObserver> _fullscreenObserver;
 }
@@ -71,30 +66,79 @@
 // Button observer for the ToolsMenu button.
 @property(nonatomic, strong)
     ToolsMenuButtonObserverBridge* toolsMenuButtonObserverBridge;
-// Coordinator for the omnibox popup.
-@property(nonatomic, strong) OmniboxPopupCoordinator* omniboxPopupCoordinator;
 // The coordinator for the location bar in the toolbar.
-@property(nonatomic, strong) LocationBarCoordinator* locationBarCoordinator;
+@property(nonatomic, strong)
+    LocationBarLegacyCoordinator* locationBarCoordinator;
+// Weak reference to ChromeBrowserState;
+@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
+// The dispatcher for this view controller.
+@property(nonatomic, weak) CommandDispatcher* dispatcher;
+// The commands endpoint for this view controller.
+@property(nonatomic, weak)
+    id<ApplicationCommands, BrowserCommands, OmniboxFocuser>
+        commandsEndpoint;
+// Coordinator for the tools menu UI.
+@property(nonatomic, strong) ToolsMenuCoordinator* toolsMenuCoordinator;
+// Button updater for the toolbar.
+@property(nonatomic, strong) ToolbarButtonUpdater* buttonUpdater;
 
 @end
 
 @implementation ToolbarCoordinator
+@synthesize commandDispatcher = _commandDispatcher;
 @synthesize delegate = _delegate;
 @synthesize browserState = _browserState;
 @synthesize buttonUpdater = _buttonUpdater;
 @synthesize dispatcher = _dispatcher;
 @synthesize mediator = _mediator;
-@synthesize omniboxPopupCoordinator = _omniboxPopupCoordinator;
 @synthesize started = _started;
 @synthesize toolbarViewController = _toolbarViewController;
 @synthesize toolsMenuButtonObserverBridge = _toolsMenuButtonObserverBridge;
+@synthesize toolsMenuCoordinator = _toolsMenuCoordinator;
 @synthesize URLLoader = _URLLoader;
 @synthesize webStateList = _webStateList;
 @synthesize locationBarCoordinator = _locationBarCoordinator;
+@synthesize commandsEndpoint = _commandsEndpoint;
+
+- (instancetype)
+initWithToolsMenuConfigurationProvider:
+    (id<ToolsMenuConfigurationProvider>)configurationProvider
+                            dispatcher:(CommandDispatcher*)dispatcher
+                          browserState:(ios::ChromeBrowserState*)browserState {
+  self = [super init];
+  if (self) {
+    DCHECK(browserState);
+    _mediator = [[ToolbarMediator alloc] init];
+    _dispatcher = dispatcher;
+    _commandsEndpoint =
+        static_cast<CommandDispatcher<ApplicationCommands, BrowserCommands,
+                                      OmniboxFocuser>*>(dispatcher);
+    _browserState = browserState;
+
+    _toolsMenuCoordinator = [[ToolsMenuCoordinator alloc] init];
+    _toolsMenuCoordinator.dispatcher = dispatcher;
+    _toolsMenuCoordinator.configurationProvider = configurationProvider;
+    _toolsMenuCoordinator.presentationProvider = self;
+    [_toolsMenuCoordinator start];
+
+    [dispatcher startDispatchingToTarget:self
+                             forProtocol:@protocol(ToolbarCommands)];
+
+    NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
+    [defaultCenter addObserver:self
+                      selector:@selector(toolsMenuWillShowNotification:)
+                          name:kToolsMenuWillShowNotification
+                        object:_toolsMenuCoordinator];
+    [defaultCenter addObserver:self
+                      selector:@selector(toolsMenuWillHideNotification:)
+                          name:kToolsMenuWillHideNotification
+                        object:_toolsMenuCoordinator];
+  }
+  return self;
+}
 
 - (instancetype)init {
   if ((self = [super init])) {
-    _mediator = [[ToolbarMediator alloc] init];
   }
   return self;
 }
@@ -123,52 +167,45 @@
   if (self.started)
     return;
 
+  DCHECK(self.commandDispatcher);
+  [self.commandDispatcher startDispatchingToTarget:self
+                                       forProtocol:@protocol(FakeboxFocuser)];
+
   self.started = YES;
   BOOL isIncognito = self.browserState->IsOffTheRecord();
 
-  self.locationBarCoordinator = [[LocationBarCoordinator alloc] init];
+  self.locationBarCoordinator = [[LocationBarLegacyCoordinator alloc] init];
   self.locationBarCoordinator.browserState = self.browserState;
   self.locationBarCoordinator.dispatcher = self.dispatcher;
+  self.locationBarCoordinator.commandDispatcher = self.commandDispatcher;
   self.locationBarCoordinator.URLLoader = self.URLLoader;
   self.locationBarCoordinator.delegate = self.delegate;
+  self.locationBarCoordinator.webStateList = self.webStateList;
+  self.locationBarCoordinator.popupPositioner = self;
   [self.locationBarCoordinator start];
-
-  // TODO(crbug.com/785253): Move this to the LocationBarCoordinator once it is
-  // created.
-  _locationBar = std::make_unique<LocationBarControllerImpl>(
-      self.locationBarCoordinator.locationBarView, self.browserState, self,
-      self.dispatcher);
-  self.locationBarCoordinator.locationBarController = _locationBar.get();
-  _locationBar->SetURLLoader(self.locationBarCoordinator);
-  self.omniboxPopupCoordinator = _locationBar->CreatePopupCoordinator(self);
-  [self.omniboxPopupCoordinator start];
-  // End of TODO(crbug.com/785253):.
 
   ToolbarStyle style = isIncognito ? INCOGNITO : NORMAL;
   ToolbarButtonFactory* factory =
       [[ToolbarButtonFactory alloc] initWithStyle:style];
-  factory.dispatcher = self.dispatcher;
+  factory.dispatcher = self.commandsEndpoint;
   factory.visibilityConfiguration =
       [[ToolbarButtonVisibilityConfiguration alloc] initWithType:LEGACY];
 
   self.buttonUpdater = [[ToolbarButtonUpdater alloc] init];
   self.buttonUpdater.factory = factory;
-  self.toolbarViewController =
-      [[ToolbarViewController alloc] initWithDispatcher:self.dispatcher
-                                          buttonFactory:factory
-                                          buttonUpdater:self.buttonUpdater
-                                         omniboxFocuser:self];
-  self.toolbarViewController.locationBarView =
-      self.locationBarCoordinator.locationBarView;
-  self.toolbarViewController.dispatcher = self.dispatcher;
+  self.toolbarViewController = [[ToolbarViewController alloc]
+      initWithDispatcher:self.commandsEndpoint
+           buttonFactory:factory
+           buttonUpdater:self.buttonUpdater
+          omniboxFocuser:self.locationBarCoordinator];
+  self.toolbarViewController.locationBarView = self.locationBarCoordinator.view;
+  self.toolbarViewController.dispatcher = self.commandsEndpoint;
 
-  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
-    _fullscreenObserver =
-        std::make_unique<FullscreenUIUpdater>(self.toolbarViewController);
-    FullscreenControllerFactory::GetInstance()
-        ->GetForBrowserState(self.browserState)
-        ->AddObserver(_fullscreenObserver.get());
-  }
+  _fullscreenObserver =
+      std::make_unique<FullscreenUIUpdater>(self.toolbarViewController);
+  FullscreenControllerFactory::GetInstance()
+      ->GetForBrowserState(self.browserState)
+      ->AddObserver(_fullscreenObserver.get());
 
   DCHECK(self.toolbarViewController.toolsMenuButton);
   self.toolsMenuButtonObserverBridge = [[ToolsMenuButtonObserverBridge alloc]
@@ -176,8 +213,6 @@
                         self.browserState)
       toolbarButton:self.toolbarViewController.toolsMenuButton];
 
-  self.mediator.voiceSearchProvider =
-      ios::GetChromeBrowserProvider()->GetVoiceSearchProvider();
   self.mediator.consumer = self.toolbarViewController;
   self.mediator.webStateList = self.webStateList;
   self.mediator.bookmarkModel =
@@ -191,71 +226,33 @@
   if (!self.started)
     return;
 
+  [self.commandDispatcher stopDispatchingToTarget:self];
+
+  [self setToolbarBackgroundToIncognitoNTPColorWithAlpha:0];
   self.started = NO;
   self.delegate = nil;
   [self.mediator disconnect];
-  // The popup has to be destroyed before the location bar.
-  [self.omniboxPopupCoordinator stop];
-  _locationBar.reset();
   [self.locationBarCoordinator stop];
   [self stopObservingTTSNotifications];
 
-  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
-    FullscreenControllerFactory::GetInstance()
-        ->GetForBrowserState(self.browserState)
-        ->RemoveObserver(_fullscreenObserver.get());
-    _fullscreenObserver = nullptr;
-  }
+  FullscreenControllerFactory::GetInstance()
+      ->GetForBrowserState(self.browserState)
+      ->RemoveObserver(_fullscreenObserver.get());
+  _fullscreenObserver = nullptr;
 }
 
-#pragma mark - Public
+#pragma mark - PrimaryToolbarCoordinator
+
+- (id<TabHistoryUIUpdater>)tabHistoryUIUpdater {
+  return self.buttonUpdater;
+}
 
 - (id<ActivityServicePositioner>)activityServicePositioner {
   return self.toolbarViewController;
 }
 
-- (void)updateToolbarState {
-  // Updates the omnibox.
-  [self.locationBarCoordinator updateOmniboxState];
-  // Updates the toolbar buttons.
-  if ([self getWebState])
-    [self.mediator updateConsumerForWebState:[self getWebState]];
-}
-
-- (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
-  web::NavigationItem* item =
-      webState->GetNavigationManager()->GetVisibleItem();
-  GURL URL = item ? item->GetURL().GetOrigin() : GURL::EmptyGURL();
-  BOOL isNTP = (URL == GURL(kChromeUINewTabURL));
-
-  // Don't do anything for a live non-ntp tab.
-  if (webState == [self getWebState] && !isNTP) {
-    [self.locationBarCoordinator.locationBarView setHidden:NO];
-    return;
-  }
-
-  self.viewController.view.hidden = NO;
-  [self.locationBarCoordinator.locationBarView setHidden:YES];
-  [self.mediator updateConsumerForWebState:webState];
-  [self.toolbarViewController updateForSideSwipeSnapshotOnNTP:isNTP];
-}
-
-- (void)resetToolbarAfterSideSwipeSnapshot {
-  [self.mediator updateConsumerForWebState:[self getWebState]];
-  [self.locationBarCoordinator.locationBarView setHidden:NO];
-  [self.toolbarViewController resetAfterSideSwipeSnapshot];
-}
-
-- (void)setToolsMenuIsVisibleForToolsMenuButton:(BOOL)isVisible {
-  [self.toolbarViewController.toolsMenuButton setToolsMenuIsVisible:isVisible];
-}
-
-- (void)triggerToolsMenuButtonAnimation {
-  [self.toolbarViewController.toolsMenuButton triggerAnimation];
-}
-
-- (void)setBackgroundToIncognitoNTPColorWithAlpha:(CGFloat)alpha {
-  [self.toolbarViewController setBackgroundToIncognitoNTPColorWithAlpha:alpha];
+- (id<OmniboxFocuser>)omniboxFocuser {
+  return self.locationBarCoordinator;
 }
 
 - (void)showPrerenderingAnimation {
@@ -263,22 +260,30 @@
 }
 
 - (BOOL)isOmniboxFirstResponder {
-  return
-      [self.locationBarCoordinator.locationBarView.textField isFirstResponder];
+  return [self.locationBarCoordinator isOmniboxFirstResponder];
 }
 
 - (BOOL)showingOmniboxPopup {
-  OmniboxViewIOS* omniboxViewIOS =
-      static_cast<OmniboxViewIOS*>(_locationBar.get()->GetLocationEntry());
-  return omniboxViewIOS->IsPopupOpen();
+  return [self.locationBarCoordinator showingOmniboxPopup];
 }
 
-- (void)activateFakeSafeAreaInsets:(UIEdgeInsets)fakeSafeAreaInsets {
-  [self.toolbarViewController activateFakeSafeAreaInsets:fakeSafeAreaInsets];
-}
+- (void)transitionToLocationBarFocusedState:(BOOL)focused {
+  if (IsIPadIdiom()) {
+    [self.toolbarViewController locationBarIsFirstResonderOnIPad:focused];
+    return;
+  }
 
-- (void)deactivateFakeSafeAreaInsets {
-  [self.toolbarViewController deactivateFakeSafeAreaInsets];
+  DCHECK(!IsIPadIdiom());
+  if (focused == self.toolbarViewController.expanded) {
+    // The view controller is already in the correct state.
+    return;
+  }
+
+  if (focused) {
+    [self expandOmniboxAnimated:YES];
+  } else {
+    [self contractOmnibox];
+  }
 }
 
 // TODO(crbug.com/786940): This protocol should move to the ViewController
@@ -286,79 +291,112 @@
 // is more advanced.
 #pragma mark OmniboxPopupPositioner methods.
 
-- (UIView*)popupAnchorView {
-  return self.toolbarViewController.view;
+- (UIView*)popupParentView {
+  return self.toolbarViewController.view.superview;
 }
 
-#pragma mark - LocationBarDelegate
+- (UIViewController*)popupParentViewController {
+  return self.toolbarViewController.parentViewController;
+}
 
-- (void)locationBarHasBecomeFirstResponder {
-  [self.delegate locationBarDidBecomeFirstResponder];
-  if (IsIPadIdiom()) {
-    [self.toolbarViewController locationBarIsFirstResonderOnIPad:YES];
-  } else if (!self.toolbarViewController.expanded) {
-    [self expandOmniboxAnimated:YES];
+#pragma mark - ToolsMenuPresentationStateProvider
+
+- (BOOL)isShowingToolsMenu {
+  return [_toolsMenuCoordinator isShowingToolsMenu];
+}
+
+#pragma mark - ToolbarCoordinating
+
+- (void)updateToolsMenu {
+  [_toolsMenuCoordinator updateConfiguration];
+}
+
+#pragma mark - ToolbarCommands
+
+- (void)triggerToolsMenuButtonAnimation {
+  [self.toolbarViewController.toolsMenuButton triggerAnimation];
+}
+
+#pragma mark - NewTabPageControllerDelegate
+
+- (void)setToolbarBackgroundToIncognitoNTPColorWithAlpha:(CGFloat)alpha {
+  [self.toolbarViewController setBackgroundToIncognitoNTPColorWithAlpha:alpha];
+}
+
+- (void)setScrollProgressForTabletOmnibox:(CGFloat)progress {
+  NOTREACHED();
+}
+
+#pragma mark - ToolbarSnapshotProviding
+
+- (UIView*)snapshotForTabSwitcher {
+  UIView* toolbarSnapshotView;
+  if ([self.viewController.view window]) {
+    toolbarSnapshotView =
+        [self.viewController.view snapshotViewAfterScreenUpdates:NO];
+  } else {
+    toolbarSnapshotView =
+        [[UIView alloc] initWithFrame:self.viewController.view.frame];
+    [toolbarSnapshotView layer].contents = static_cast<id>(
+        CaptureViewWithOption(self.viewController.view, 0, kClientSideRendering)
+            .CGImage);
   }
+  return toolbarSnapshotView;
 }
 
-- (void)locationBarHasResignedFirstResponder {
-  [self.delegate locationBarDidResignFirstResponder];
-  if (IsIPadIdiom()) {
-    [self.toolbarViewController locationBarIsFirstResonderOnIPad:NO];
-  } else if (self.toolbarViewController.expanded) {
-    [self contractOmnibox];
-  }
+- (UIView*)snapshotForStackViewWithWidth:(CGFloat)width
+                          safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
+  CGRect oldFrame = self.viewController.view.superview.frame;
+  CGRect newFrame = oldFrame;
+  newFrame.size.width = width;
+
+  if (self.webStateList->GetActiveWebState())
+    [self updateToolbarForSnapshot:self.webStateList->GetActiveWebState()];
+
+  self.viewController.view.superview.frame = newFrame;
+  [self.toolbarViewController activateFakeSafeAreaInsets:safeAreaInsets];
+  [self.viewController.view.superview layoutIfNeeded];
+
+  UIView* toolbarSnapshotView = [self snapshotForTabSwitcher];
+
+  self.viewController.view.superview.frame = oldFrame;
+  [self.toolbarViewController deactivateFakeSafeAreaInsets];
+
+  if (self.webStateList->GetActiveWebState())
+    [self resetToolbarAfterSnapshot];
+
+  return toolbarSnapshotView;
 }
 
-- (void)locationBarBeganEdit {
-  [self.delegate locationBarBeganEdit];
-}
-
-- (web::WebState*)getWebState {
-  return self.webStateList->GetActiveWebState();
-}
-
-- (ToolbarModel*)toolbarModel {
-  ToolbarModelIOS* toolbarModelIOS = [self.delegate toolbarModelIOS];
-  return toolbarModelIOS ? toolbarModelIOS->GetToolbarModel() : nullptr;
-}
-
-#pragma mark - OmniboxFocuser
-
-- (void)focusOmnibox {
-  [self.locationBarCoordinator.locationBarView.textField becomeFirstResponder];
-}
-
-- (void)cancelOmniboxEdit {
-  _locationBar->HideKeyboardAndEndEditing();
-  [self updateToolbarState];
+- (UIColor*)toolbarBackgroundColor {
+  if (self.webStateList && self.webStateList->GetActiveWebState() &&
+      IsVisibleUrlNewTabPage(self.webStateList->GetActiveWebState()))
+    return self.toolbarViewController.backgroundColorNTP;
+  return nil;
 }
 
 #pragma mark - FakeboxFocuser
 
 - (void)focusFakebox {
   if (IsIPadIdiom()) {
-    OmniboxEditModel* model = _locationBar->GetLocationEntry()->model();
-    // Setting the caret visibility to false causes OmniboxEditModel to indicate
-    // that omnibox interaction was initiated from the fakebox. Note that
-    // SetCaretVisibility is a no-op unless OnSetFocus is called first.  Only
-    // set fakebox on iPad, where there is a distinction between the omnibox
-    // and the fakebox on the NTP.  On iPhone there is no visible omnibox, so
-    // there's no need to indicate interaction was initiated from the fakebox.
-    model->OnSetFocus(false);
-    model->SetCaretVisibility(false);
+    // On iPhone there is no visible omnibox, so there's no need to indicate
+    // interaction was initiated from the fakebox.
+    [self.locationBarCoordinator focusOmniboxFromFakebox];
   } else {
     [self expandOmniboxAnimated:NO];
+    [self.locationBarCoordinator focusOmnibox];
   }
 
-  [self focusOmnibox];
+  if ([self.locationBarCoordinator omniboxPopupHasAutocompleteResults]) {
+    [self onFakeboxAnimationComplete];
+  }
 }
 
 - (void)onFakeboxBlur {
   DCHECK(!IsIPadIdiom());
   // Hide the toolbar if the NTP is currently displayed.
-  web::WebState* webState = [self getWebState];
-  if (webState && (webState->GetVisibleURL() == GURL(kChromeUINewTabURL))) {
+  web::WebState* webState = self.webStateList->GetActiveWebState();
+  if (webState && IsVisibleUrlNewTabPage(webState)) {
     self.viewController.view.hidden = YES;
   }
 }
@@ -368,32 +406,26 @@
   self.viewController.view.hidden = NO;
 }
 
-#pragma mark - VoiceSearchControllerDelegate
+#pragma mark - SideSwipeToolbarInteracting
 
-- (void)receiveVoiceSearchResult:(NSString*)result {
-  DCHECK(result);
-  [self loadURLForQuery:result];
+- (BOOL)isInsideToolbar:(CGPoint)point {
+  // The toolbar frame is inset by -1 because CGRectContainsPoint does include
+  // points on the max X and Y edges, which will happen frequently with edge
+  // swipes from the right side.
+  CGRect toolbarFrame = CGRectInset(self.viewController.view.frame, -1, -1);
+  return CGRectContainsPoint(toolbarFrame, point);
 }
 
-#pragma mark - QRScannerResultLoading
+#pragma mark - SideSwipeToolbarSnapshotProviding
 
-- (void)receiveQRScannerResult:(NSString*)result loadImmediately:(BOOL)load {
-  DCHECK(result);
-  if (load) {
-    [self loadURLForQuery:result];
-  } else {
-    [self focusOmnibox];
-    [self.locationBarCoordinator.locationBarView.textField
-        insertTextWhileEditing:result];
-    // The call to |setText| shouldn't be needed, but without it the "Go" button
-    // of the keyboard is disabled.
-    [self.locationBarCoordinator.locationBarView.textField setText:result];
-    // Notify the accessibility system to start reading the new contents of the
-    // Omnibox.
-    UIAccessibilityPostNotification(
-        UIAccessibilityScreenChangedNotification,
-        self.locationBarCoordinator.locationBarView.textField);
-  }
+- (UIImage*)toolbarSideSwipeSnapshotForWebState:(web::WebState*)webState {
+  [self updateToolbarForSnapshot:webState];
+  UIImage* toolbarSnapshot = CaptureViewWithOption(
+      [self.viewController view], [[UIScreen mainScreen] scale],
+      kClientSideRendering);
+
+  [self resetToolbarAfterSnapshot];
+  return toolbarSnapshot;
 }
 
 #pragma mark - ToolsMenuPresentationProvider
@@ -468,28 +500,31 @@
 
 #pragma mark - Private
 
-// Navigate to |query| from omnibox.
-- (void)loadURLForQuery:(NSString*)query {
-  GURL searchURL;
-  metrics::OmniboxInputType type = AutocompleteInput::Parse(
-      base::SysNSStringToUTF16(query), std::string(),
-      AutocompleteSchemeClassifierImpl(), nullptr, nullptr, &searchURL);
-  if (type != metrics::OmniboxInputType::URL || !searchURL.is_valid()) {
-    searchURL = GetDefaultSearchURLForSearchTerms(
-        ios::TemplateURLServiceFactory::GetForBrowserState(self.browserState),
-        base::SysNSStringToUTF16(query));
+// Updates the toolbar so it is in a state where a snapshot for |webState| can
+// be taken.
+- (void)updateToolbarForSnapshot:(web::WebState*)webState {
+  BOOL isNTP = IsVisibleUrlNewTabPage(webState);
+
+  self.viewController.view.hidden = NO;
+  // Don't do anything for the current tab if it is not a non-incognito NTP.
+  if (webState == self.webStateList->GetActiveWebState() &&
+      !(isNTP && !self.browserState->IsOffTheRecord())) {
+    [self.locationBarCoordinator.view setHidden:NO];
+    return;
   }
-  if (searchURL.is_valid()) {
-    // It is necessary to include PAGE_TRANSITION_FROM_ADDRESS_BAR in the
-    // transition type is so that query-in-the-omnibox is triggered for the
-    // URL.
-    ui::PageTransition transition = ui::PageTransitionFromInt(
-        ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
-    [self.URLLoader loadURL:GURL(searchURL)
-                   referrer:web::Referrer()
-                 transition:transition
-          rendererInitiated:NO];
-  }
+
+  [self.locationBarCoordinator.view setHidden:YES];
+  [self.mediator updateConsumerForWebState:webState];
+  [self.toolbarViewController updateForSnapshotOnNTP:isNTP];
+}
+
+// Resets the toolbar after taking a snapshot. After calling this method the
+// toolbar is adapted to the current webState.
+- (void)resetToolbarAfterSnapshot {
+  [self.mediator
+      updateConsumerForWebState:self.webStateList->GetActiveWebState()];
+  [self.locationBarCoordinator.view setHidden:NO];
+  [self.toolbarViewController resetAfterSnapshot];
 }
 
 // Animates |_toolbar| and |_locationBarView| for omnibox expansion. If
@@ -510,9 +545,8 @@
     [completionAnimator startAnimationAfterDelay:ios::material::kDuration4];
   }];
 
-  [self.locationBarCoordinator.locationBarView
-      addExpandOmniboxAnimations:animator
-              completionAnimator:completionAnimator];
+  [self.locationBarCoordinator addExpandOmniboxAnimations:animator
+                                       completionAnimator:completionAnimator];
   [self.toolbarViewController addToolbarExpansionAnimations:animator
                                          completionAnimator:completionAnimator];
   [animator startAnimation];
@@ -533,10 +567,19 @@
                  curve:UIViewAnimationCurveEaseInOut
             animations:^{
             }];
-  [self.locationBarCoordinator.locationBarView
-      addContractOmniboxAnimations:animator];
+  [self.locationBarCoordinator addContractOmniboxAnimations:animator];
   [self.toolbarViewController addToolbarContractionAnimations:animator];
   [animator startAnimation];
+}
+
+// Called when the tools menu will show.
+- (void)toolsMenuWillShowNotification:(NSNotification*)note {
+  [self.toolbarViewController.toolsMenuButton setToolsMenuIsVisible:YES];
+}
+
+// Called when the tools menu will hide.
+- (void)toolsMenuWillHideNotification:(NSNotification*)note {
+  [self.toolbarViewController.toolsMenuButton setToolsMenuIsVisible:NO];
 }
 
 @end

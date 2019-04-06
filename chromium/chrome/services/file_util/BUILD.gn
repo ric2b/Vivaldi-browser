@@ -18,7 +18,8 @@ source_set("lib") {
   ]
 
   public_deps = [
-    "//chrome/services/file_util/public/interfaces",
+    "//chrome/services/file_util/public/mojom",
+    "//mojo/public/mojom/base",
     "//services/service_manager/public/cpp",
   ]
 
@@ -28,7 +29,7 @@ source_set("lib") {
       "zip_file_creator.h",
     ]
 
-    deps += [ "//components/filesystem/public/interfaces" ]
+    deps += [ "//components/services/filesystem/public/interfaces" ]
   }
 
   if (safe_browsing_mode == 1) {

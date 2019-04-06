@@ -23,6 +23,7 @@
 #include "content/browser/accessibility/browser_accessibility_win.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
 #include "ui/base/win/atl_module.h"
+#include "ui/gfx/win/hwnd_util.h"
 
 namespace content {
 
@@ -204,6 +205,23 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
     return;
   }
 
+  if (only_web_events_) {
+    std::string hwnd_class_name = base::UTF16ToUTF8(gfx::GetClassName(hwnd));
+    if (hwnd_class_name != "Chrome_RenderWidgetHostHWND")
+      return;
+
+    Microsoft::WRL::ComPtr<IServiceProvider> service_provider;
+    hr = iaccessible->QueryInterface(service_provider.GetAddressOf());
+    if (!SUCCEEDED(hr))
+      return;
+
+    Microsoft::WRL::ComPtr<IAccessible> content_document;
+    hr = service_provider->QueryService(GUID_IAccessibleContentDocument,
+                                        content_document.GetAddressOf());
+    if (!SUCCEEDED(hr))
+      return;
+  }
+
   std::string event_str = AccessibilityEventToStringUTF8(event);
   if (event_str.empty()) {
     VLOG(1) << "Ignoring event " << event;
@@ -240,11 +258,47 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
   AccessibleStates ia2_state = 0;
   Microsoft::WRL::ComPtr<IAccessible2> iaccessible2;
   hr = QueryIAccessible2(iaccessible.Get(), iaccessible2.GetAddressOf());
-  if (SUCCEEDED(hr))
-    iaccessible2->get_states(&ia2_state);
+  bool has_ia2 = SUCCEEDED(hr) && iaccessible2;
 
-  std::string log = base::StringPrintf(
-      "%s on role=%s", event_str.c_str(), RoleVariantToString(role).c_str());
+  base::string16 html_tag;
+  base::string16 obj_class;
+  base::string16 html_id;
+
+  if (has_ia2) {
+    iaccessible2->get_states(&ia2_state);
+    base::win::ScopedBstr attributes_bstr;
+    if (S_OK == iaccessible2->get_attributes(attributes_bstr.Receive())) {
+      std::vector<base::string16> ia2_attributes = base::SplitString(
+          base::string16(attributes_bstr, attributes_bstr.Length()),
+          base::string16(1, ';'), base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+      for (base::string16& attr : ia2_attributes) {
+        if (base::StringPiece16(attr).starts_with(L"class:"))
+          obj_class = attr.substr(6);  // HTML or view class
+        if (base::StringPiece16(attr).starts_with(L"id:")) {
+          html_id = base::string16(L"#");
+          html_id += attr.substr(3);
+        }
+        if (base::StringPiece16(attr).starts_with(L"tag:")) {
+          html_tag = attr.substr(4);
+        }
+      }
+    }
+  }
+
+  std::string log = base::StringPrintf("%s on", event_str.c_str());
+  if (!html_tag.empty()) {
+    // HTML node with tag
+    log += base::StringPrintf(
+        " <%s%s%s%s>", base::UTF16ToUTF8(html_tag).c_str(),
+        base::UTF16ToUTF8(html_id).c_str(), obj_class.empty() ? "" : ".",
+        base::UTF16ToUTF8(obj_class).c_str());
+  } else if (!obj_class.empty()) {
+    // Non-HTML node with class
+    log +=
+        base::StringPrintf(" class=%s", base::UTF16ToUTF8(obj_class).c_str());
+  }
+
+  log += base::StringPrintf(" role=%s", RoleVariantToString(role).c_str());
   if (name_bstr.Length() > 0)
     log += base::StringPrintf(" name=\"%s\"", BstrToUTF8(name_bstr).c_str());
   if (value_bstr.Length() > 0)
@@ -253,6 +307,19 @@ void AccessibilityEventRecorderWin::OnWinEventHook(
   log += base::UTF16ToUTF8(IAccessibleStateToString(ia_state));
   log += " ";
   log += base::UTF16ToUTF8(IAccessible2StateToString(ia2_state));
+
+  // Group position, e.g. L3, 5 of 7
+  LONG group_level, similar_items_in_group, position_in_group;
+  if (has_ia2 &&
+      iaccessible2->get_groupPosition(&group_level, &similar_items_in_group,
+                                      &position_in_group) == S_OK) {
+    if (group_level)
+      log += base::StringPrintf(" level=%ld", group_level);
+    if (similar_items_in_group) {
+      log += base::StringPrintf(" %ld of %ld", position_in_group,
+                                similar_items_in_group);
+    }
+  }
 
   // For TEXT_REMOVED and TEXT_INSERTED events, query the text that was
   // inserted or removed and include that in the log.

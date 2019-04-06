@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 
+#include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/window_properties.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -64,8 +66,14 @@ void SettingsWindowManager::ShowChromePageForProfile(Profile* profile,
   params.user_gesture = true;
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
   Navigate(&params);
-  settings_session_map_[profile] = params.browser->session_id().id();
+
+  // operator[] not used because SessionID has no default constructor.
+  settings_session_map_.emplace(profile, SessionID::InvalidValue())
+      .first->second = params.browser->session_id();
   DCHECK(params.browser->is_trusted_source());
+
+  auto* window = params.browser->window()->GetNativeWindow();
+  window->SetProperty(kOverrideWindowIconResourceIdKey, IDR_SETTINGS_LOGO_192);
 
   for (SettingsWindowManagerObserver& observer : observers_)
     observer.OnNewSettingsWindow(params.browser);
@@ -82,7 +90,7 @@ bool SettingsWindowManager::IsSettingsBrowser(Browser* browser) const {
   ProfileSessionMap::const_iterator iter =
       settings_session_map_.find(browser->profile());
   return (iter != settings_session_map_.end() &&
-          iter->second == browser->session_id().id());
+          iter->second == browser->session_id());
 }
 
 SettingsWindowManager::SettingsWindowManager() {}

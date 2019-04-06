@@ -5,7 +5,6 @@
 #include <stddef.h>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -147,15 +146,14 @@ TEST_F(ResourceManagerTest, TestOnMemoryDumpEmitsData) {
   base::trace_event::MemoryDumpArgs dump_args = {
       base::trace_event::MemoryDumpLevelOfDetail::DETAILED};
   std::unique_ptr<base::trace_event::ProcessMemoryDump> process_memory_dump =
-      std::make_unique<base::trace_event::ProcessMemoryDump>(nullptr,
-                                                             dump_args);
+      std::make_unique<base::trace_event::ProcessMemoryDump>(dump_args);
   resource_manager_.OnMemoryDump(dump_args, process_memory_dump.get());
   const auto& allocator_dumps = process_memory_dump->allocator_dumps();
   const char* system_allocator_pool_name =
       base::trace_event::MemoryDumpManager::GetInstance()
           ->system_allocator_pool_name();
-  size_t expected_dump_count = system_allocator_pool_name ? 2 : 1;
-  EXPECT_EQ(expected_dump_count, allocator_dumps.size());
+  size_t kExpectedDumpCount = 10;
+  EXPECT_EQ(kExpectedDumpCount, allocator_dumps.size());
   for (const auto& dump : allocator_dumps) {
     ASSERT_TRUE(dump.first.find("ui/resource_manager") == 0 ||
                 dump.first.find(system_allocator_pool_name) == 0);

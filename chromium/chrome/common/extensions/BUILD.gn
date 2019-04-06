@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/json_schema_compiler/json_features.gni")
 
@@ -11,7 +11,7 @@ assert(enable_extensions)
 
 json_features("extension_features_unittest") {
   feature_type = "APIFeature"
-  provider_class = "UnittestFeatureProvider"
+  method_name = "AddUnittestAPIFeatures"
   sources = [
     "//chrome/test/data/extensions/extension_api_unittest/api_features.json",
   ]
@@ -26,9 +26,5 @@ group("test_features") {
 mojom("mojo_bindings") {
   sources = [
     "mojom/inline_install.mojom",
-  ]
-
-  public_deps = [
-    "//mojo/common:common_custom_types",
   ]
 }

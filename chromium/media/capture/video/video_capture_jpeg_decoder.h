@@ -7,12 +7,14 @@
 
 #include "base/callback.h"
 #include "media/capture/capture_export.h"
-#include "media/capture/mojo/video_capture_types.mojom.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_frame_receiver.h"
 
 namespace media {
 
+// All methods are allowed to be called from any thread, but calls must be
+// non-concurrently.
 class CAPTURE_EXPORT VideoCaptureJpegDecoder {
  public:
   // Enumeration of decoder status. The enumeration is published for clients to
@@ -24,7 +26,7 @@ class CAPTURE_EXPORT VideoCaptureJpegDecoder {
                    // decode error.
   };
 
-  using DecodeDoneCB = base::Callback<void(
+  using DecodeDoneCB = base::RepeatingCallback<void(
       int buffer_id,
       int frame_feedback_id,
       std::unique_ptr<VideoCaptureDevice::Client::Buffer::

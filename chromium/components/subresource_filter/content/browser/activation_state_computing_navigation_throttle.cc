@@ -52,36 +52,68 @@ ActivationStateComputingNavigationThrottle::
       weak_ptr_factory_(this) {}
 
 ActivationStateComputingNavigationThrottle::
-    ~ActivationStateComputingNavigationThrottle() {
-  if (!destruction_closure_.is_null())
-    std::move(destruction_closure_).Run();
-}
+    ~ActivationStateComputingNavigationThrottle() = default;
 
 void ActivationStateComputingNavigationThrottle::
     NotifyPageActivationWithRuleset(
         VerifiedRuleset::Handle* ruleset_handle,
         const ActivationState& page_activation_state) {
   DCHECK(navigation_handle()->IsInMainFrame());
-  DCHECK(!parent_activation_state_);
-  DCHECK(!ruleset_handle_);
-  // DISABLED implies null ruleset.
-  DCHECK(page_activation_state.activation_level != ActivationLevel::DISABLED ||
-         !ruleset_handle);
+  DCHECK_NE(ActivationLevel::DISABLED, page_activation_state.activation_level);
   parent_activation_state_ = page_activation_state;
   ruleset_handle_ = ruleset_handle;
 }
 
 content::NavigationThrottle::ThrottleCheckResult
+ActivationStateComputingNavigationThrottle::WillStartRequest() {
+  if (parent_activation_state_)
+    CheckActivationState();
+  return content::NavigationThrottle::PROCEED;
+}
+
+content::NavigationThrottle::ThrottleCheckResult
+ActivationStateComputingNavigationThrottle::WillRedirectRequest() {
+  if (parent_activation_state_)
+    CheckActivationState();
+  return content::NavigationThrottle::PROCEED;
+}
+
+content::NavigationThrottle::ThrottleCheckResult
 ActivationStateComputingNavigationThrottle::WillProcessResponse() {
-  // Main frame navigations with disabled page-level activation become
-  // pass-through throttles.
-  if (!parent_activation_state_ ||
-      parent_activation_state_->activation_level == ActivationLevel::DISABLED) {
+  // If no parent activation, this is main frame that was never notified of
+  // activation.
+  if (!parent_activation_state_) {
     DCHECK(navigation_handle()->IsInMainFrame());
+    DCHECK(!async_filter_);
     DCHECK(!ruleset_handle_);
     return content::NavigationThrottle::PROCEED;
   }
 
+  // Throttles which have finished their last check should just proceed here.
+  // All others need to defer and either wait for their existing check to
+  // finish, or start a new check now if there was no previous speculative
+  // check.
+  if (async_filter_ && async_filter_->has_activation_state()) {
+    LogDelayMetrics(base::TimeDelta::FromMilliseconds(0));
+    if (navigation_handle()->IsInMainFrame())
+      UpdateWithMoreAccurateState();
+    return content::NavigationThrottle::PROCEED;
+  }
+  DCHECK(!defer_timer_);
+  defer_timer_ = std::make_unique<base::ElapsedTimer>();
+  if (!async_filter_) {
+    DCHECK(navigation_handle()->IsInMainFrame());
+    CheckActivationState();
+  }
+  return content::NavigationThrottle::DEFER;
+}
+
+const char* ActivationStateComputingNavigationThrottle::GetNameForLogging() {
+  return "ActivationStateComputingNavigationThrottle";
+}
+
+void ActivationStateComputingNavigationThrottle::CheckActivationState() {
+  DCHECK(parent_activation_state_);
   DCHECK(ruleset_handle_);
   AsyncDocumentSubresourceFilter::InitializationParams params;
   params.document_url = navigation_handle()->GetURL();
@@ -92,24 +124,39 @@ ActivationStateComputingNavigationThrottle::WillProcessResponse() {
     params.parent_document_origin = parent->GetLastCommittedOrigin();
   }
 
+  // If there is an existing |async_filter_| that hasn't called
+  // OnActivationStateComputed, it will be deleted here and never call that
+  // method. This is by design of the AsyncDocumentSubresourceFilter, which
+  // will drop the message via weak pointer semantics.
   async_filter_ = std::make_unique<AsyncDocumentSubresourceFilter>(
       ruleset_handle_, std::move(params),
       base::Bind(&ActivationStateComputingNavigationThrottle::
                      OnActivationStateComputed,
                  weak_ptr_factory_.GetWeakPtr()));
-
-  defer_timestamp_ = base::TimeTicks::Now();
-  return content::NavigationThrottle::DEFER;
-}
-
-const char* ActivationStateComputingNavigationThrottle::GetNameForLogging() {
-  return "ActivationStateComputingNavigationThrottle";
 }
 
 void ActivationStateComputingNavigationThrottle::OnActivationStateComputed(
     ActivationState state) {
-  DCHECK(!defer_timestamp_.is_null());
-  base::TimeDelta delay = base::TimeTicks::Now() - defer_timestamp_;
+  if (defer_timer_) {
+    LogDelayMetrics(defer_timer_->Elapsed());
+    if (navigation_handle()->IsInMainFrame())
+      UpdateWithMoreAccurateState();
+    Resume();
+  }
+}
+
+void ActivationStateComputingNavigationThrottle::UpdateWithMoreAccurateState() {
+  // This method is only needed for main frame navigations that are notified of
+  // page activation more than once. Even for those that are updated once, it
+  // should be a no-op.
+  DCHECK(navigation_handle()->IsInMainFrame());
+  DCHECK(parent_activation_state_);
+  DCHECK(async_filter_);
+  async_filter_->UpdateWithMoreAccurateState(*parent_activation_state_);
+}
+
+void ActivationStateComputingNavigationThrottle::LogDelayMetrics(
+    base::TimeDelta delay) const {
   UMA_HISTOGRAM_CUSTOM_MICRO_TIMES(
       "SubresourceFilter.DocumentLoad.ActivationComputingDelay", delay,
       base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(10),
@@ -120,7 +167,6 @@ void ActivationStateComputingNavigationThrottle::OnActivationStateComputed(
         delay, base::TimeDelta::FromMicroseconds(1),
         base::TimeDelta::FromSeconds(10), 50);
   }
-  Resume();
 }
 
 AsyncDocumentSubresourceFilter*

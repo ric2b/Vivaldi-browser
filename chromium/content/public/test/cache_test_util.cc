@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "content/public/test/cache_test_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/http/http_cache.h"
@@ -72,8 +71,8 @@ void CacheTestUtil::CreateCacheEntriesOnIOThread(
   SetNumberOfWaitedTasks(keys.size());
 
   for (const std::string& key : keys) {
-    WaitForCompletion(
-        backend_->CreateEntry(key, &entries_[pos++], done_callback_));
+    WaitForCompletion(backend_->CreateEntry(key, net::HIGHEST, &entries_[pos++],
+                                            done_callback_));
   }
 }
 

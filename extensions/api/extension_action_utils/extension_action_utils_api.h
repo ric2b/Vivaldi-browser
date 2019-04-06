@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
@@ -67,6 +68,10 @@ class ExtensionActionUtil
 
   ScopedObserver<ExtensionActionAPI, ExtensionActionAPI::Observer>
       extension_action_api_observer_;
+
+  static std::string GetShortcutTextForExtensionAction(
+      ExtensionAction* action,
+      content::BrowserContext* browser_context);
 
   void OnImageLoaded(const std::string& extension_id, const gfx::Image& image);
 
@@ -228,7 +233,7 @@ class ExtensionActionUtilsRemoveExtensionFunction
     : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.removeExtension",
-                             GETTOOLBAR_EXTENSIONS)
+                             EXTENSIONS_REMOVE)
   ExtensionActionUtilsRemoveExtensionFunction();
 
  private:
@@ -238,6 +243,22 @@ class ExtensionActionUtilsRemoveExtensionFunction
   bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsRemoveExtensionFunction);
+};
+
+class ExtensionActionUtilsShowExtensionOptionsFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("extensionActionUtils.showExtensionOptions",
+                             EXTENSIONS_SHOWOPTIONS)
+  ExtensionActionUtilsShowExtensionOptionsFunction() = default;
+
+ private:
+  ~ExtensionActionUtilsShowExtensionOptionsFunction() override = default;
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsShowExtensionOptionsFunction);
 };
 
 }  // namespace extensions

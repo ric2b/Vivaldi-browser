@@ -32,7 +32,7 @@ display::Display DesktopScreenWin::GetDisplayMatching(
 }
 
 HWND DesktopScreenWin::GetHWNDFromNativeView(gfx::NativeView window) const {
-  aura::WindowTreeHost* host = window ? window->GetHost() : NULL;
+  aura::WindowTreeHost* host = window->GetHost();
   return host ? host->GetAcceleratedWidget() : NULL;
 }
 

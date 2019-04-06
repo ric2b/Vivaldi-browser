@@ -3,6 +3,7 @@ import subprocess
 import read_deps_file as deps_utils
 import datetime
 import platform
+import shlex
 
 SRC = os.path.dirname(os.path.dirname(__file__))
 
@@ -22,6 +23,10 @@ OS_CHOICES = {
   "linux2": "linux",
   "linux3": "linux",
   "android": "android",
+  "arm":"arm",
+  "arm64":"arm64",
+  "x86":"x86",
+  "x64":"x64",
 }
 
 def IsAndroidEnabled():
@@ -29,12 +34,48 @@ def IsAndroidEnabled():
     return True
   return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
 
+def ProcessGNDefinesItems(items):
+  """Converts a list of strings to a list of key-value pairs."""
+  result = []
+  for item in items:
+    tokens = item.split('=', 1)
+    # Some GN variables have hyphens, which we don't support.
+    if len(tokens) == 2:
+      val = tokens[1]
+      if val[0] == '"' and val[-1] == '"':
+        val = val[1:-1]
+      elif val[0] == "'" and val[-1] == "'":
+        val = val[1:-1]
+      result += [(tokens[0], val)]
+    else:
+      # No value supplied, treat it as a boolean and set it. Note that we
+      # use the string '1' here so we have a consistent definition whether
+      # you do 'foo=1' or 'foo'.
+      result += [(tokens[0], '1')]
+  return result
+
+def GetGNVars():
+  """Returns a dictionary of all GN vars."""
+  # GYP defines from the environment.
+  env_items = ProcessGNDefinesItems(
+      shlex.split(os.environ.get('GN_DEFINES', '')))
+
+  return dict(env_items)
+
 host_os = OS_CHOICES.get(sys.platform, 'unix')
 checkout_os = host_os
+checkout_cpu = "x64"
 if IsAndroidEnabled():
   checkout_os = "android"
+  checkout_cpu = "arm"
 
 checkout_os = "checkout_"+checkout_os
+
+gnvars = GetGNVars()
+if "target_cpu" in gnvars:
+  checkout_cpu = gnvars["target_cpu"]
+
+checkout_cpu = "checkout_"+checkout_cpu
 
 script_name = sys.argv[0]
 if not os.path.isabs(script_name):
@@ -67,7 +108,12 @@ def RunHooks(hooks, cwd, env=None, prefix_name=None):
     '__builtin__': None,
     'host_os': host_os,
     checkout_os: True,
+    checkout_cpu: True,
   }
+  global_vars["checkout_x64"]= True # Always checking out on x64 systems
+  if checkout_os == "checkout_android":
+    global_vars["checkout_linux"]= True # Always checking out android on linux systems
+
   for an_os in set(list(OS_CHOICES.itervalues())+["telemetry_dependencies"]):
     global_vars.setdefault("checkout_"+an_os, False)
   for hook in hooks:
@@ -105,6 +151,13 @@ if "--clobber-out" in sys.argv:
     stop_time = datetime.datetime.now()
     print "Deleted", out_dir, "in", (stop_time-start_time).total_seconds(), "seconds"
     sys.stdout.flush()
+  if IsAndroidEnabled() and int(os.environ.get("CHROME_HEADLESS",0)):
+    print "Cleaning checkout ", sourcedir
+    sys.stdout.flush()
+    subprocess.call(["git", "clean", "-fdx"], cwd=sourcedir)
+    subprocess.call(["git", "submodule", "foreach", "--recursive", "git clean -fdx"], cwd=sourcedir)
+
+
 
 
 deps_content = deps_utils.GetDepsContent("DEPS")

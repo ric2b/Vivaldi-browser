@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/guid.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -29,7 +28,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 
-using content::DownloadItem;
+using download::DownloadItem;
 using content::DownloadManager;
 using ntp_snippets::Category;
 using ntp_snippets::CategoryInfo;
@@ -38,8 +37,6 @@ using ntp_snippets::ContentSuggestion;
 using ntp_snippets::prefs::kDismissedAssetDownloadSuggestions;
 using ntp_snippets::prefs::kDismissedOfflinePageDownloadSuggestions;
 using offline_pages::OfflinePageItem;
-using offline_pages::OfflinePageModelQuery;
-using offline_pages::OfflinePageModelQueryBuilder;
 
 namespace {
 
@@ -240,6 +237,13 @@ void DownloadSuggestionsProvider::FetchSuggestionImage(
       FROM_HERE, base::BindOnce(std::move(callback), gfx::Image()));
 }
 
+void DownloadSuggestionsProvider::FetchSuggestionImageData(
+    const ContentSuggestion::ID& suggestion_id,
+    ntp_snippets::ImageDataFetchedCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::string()));
+}
+
 void DownloadSuggestionsProvider::Fetch(
     const ntp_snippets::Category& category,
     const std::set<std::string>& known_suggestion_ids,
@@ -252,7 +256,7 @@ void DownloadSuggestionsProvider::Fetch(
           ntp_snippets::Status(
               ntp_snippets::StatusCode::PERMANENT_ERROR,
               "DownloadSuggestionsProvider has no |Fetch| functionality!"),
-          base::Passed(std::vector<ContentSuggestion>())));
+          std::vector<ContentSuggestion>()));
 }
 
 void DownloadSuggestionsProvider::ClearHistory(
@@ -434,7 +438,7 @@ void DownloadSuggestionsProvider::OnDownloadRemoved(DownloadItem* item) {
 }
 
 void DownloadSuggestionsProvider::OnDownloadDestroyed(
-    content::DownloadItem* item) {
+    download::DownloadItem* item) {
   DCHECK(is_asset_downloads_initialization_complete_);
 
   item->RemoveObserver(this);
@@ -585,7 +589,7 @@ ContentSuggestion DownloadSuggestionsProvider::ConvertOfflinePage(
   }
   suggestion.set_publish_date(GetOfflinePagePublishedTime(offline_page));
   suggestion.set_publisher_name(base::UTF8ToUTF16(offline_page.url.host()));
-  auto extra = base::MakeUnique<ntp_snippets::DownloadSuggestionExtra>();
+  auto extra = std::make_unique<ntp_snippets::DownloadSuggestionExtra>();
   extra->is_download_asset = false;
   extra->offline_page_id = offline_page.offline_id;
   suggestion.set_download_suggestion_extra(std::move(extra));
@@ -603,7 +607,7 @@ ContentSuggestion DownloadSuggestionsProvider::ConvertDownloadItem(
   suggestion.set_publish_date(GetAssetDownloadPublishedTime(download_item));
   suggestion.set_publisher_name(
       base::UTF8ToUTF16(download_item.GetURL().host()));
-  auto extra = base::MakeUnique<ntp_snippets::DownloadSuggestionExtra>();
+  auto extra = std::make_unique<ntp_snippets::DownloadSuggestionExtra>();
   extra->download_guid = download_item.GetGuid();
   extra->target_file_path = download_item.GetTargetFilePath();
   extra->mime_type = download_item.GetMimeType();
@@ -624,7 +628,7 @@ bool DownloadSuggestionsProvider::IsDownloadOutdated(
 }
 
 bool DownloadSuggestionsProvider::CacheAssetDownloadIfNeeded(
-    const content::DownloadItem* item) {
+    const download::DownloadItem* item) {
   if (!IsAssetDownloadCompleted(*item)) {
     return false;
   }
@@ -721,7 +725,6 @@ void DownloadSuggestionsProvider::UpdateOfflinePagesCache(
     bool notify,
     const std::vector<offline_pages::OfflinePageItem>&
         all_download_offline_pages) {
-
   std::set<std::string> old_dismissed_ids =
       ReadOfflinePageDismissedIDsFromPrefs();
   std::set<std::string> retained_dismissed_ids;

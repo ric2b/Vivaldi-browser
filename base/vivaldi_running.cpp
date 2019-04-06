@@ -13,6 +13,7 @@ bool g_vivaldi_is_running = false;
 bool g_debugging_vivaldi = false;
 bool g_forced_vivaldi_status = false;
 bool g_tab_drag_in_progress = false;
+bool g_block_next_context_menu = false;
 
 void CheckVivaldiStatus() {
   if (g_checked_vivaldi_status)
@@ -63,6 +64,14 @@ bool IsTabDragInProgress() {
 
 void SetTabDragInProgress(bool tab_drag_in_progress) {
   g_tab_drag_in_progress = tab_drag_in_progress;
+}
+
+bool GetBlockNextContextMenu() {
+  return g_block_next_context_menu;
+}
+
+void SetBlockNextContextMenu(bool block_next_context_menu) {
+  g_block_next_context_menu = block_next_context_menu;
 }
 
 void CommandLineAppendSwitchNoDup(base::CommandLine* const cmd_line,

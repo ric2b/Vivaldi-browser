@@ -66,8 +66,7 @@ void VivaldiFrameObserver::RenderFrameHostChanged(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   content::RendererPreferences* prefs =
       web_contents()->GetMutableRendererPrefs();
-  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile_,
-                                                      web_contents());
+  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile_);
   web_contents()->GetRenderViewHost()->SyncRendererPrefs();
 }
 

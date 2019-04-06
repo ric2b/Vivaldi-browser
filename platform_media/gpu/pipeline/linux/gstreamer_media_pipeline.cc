@@ -34,8 +34,7 @@ void GStreamerMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb)
 
 }
 
-void GStreamerMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb,
-                                           uint32_t texture_id)  {
+void GStreamerMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb)  {
 
 }
 

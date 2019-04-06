@@ -19,12 +19,20 @@ class ASH_EXPORT WallpaperControllerTestApi {
   virtual ~WallpaperControllerTestApi();
 
   // Creates and sets a new wallpaper that cause the prominent color of the
-  // |controller_| to be a valid (aka not kInvalidColor) color. The
-  // WallpaperControllerObservers should be notified as well. This is assumes
-  // the default DARK-MUTED luma-saturation ranges are in effect.
+  // |controller_| to be a valid (i.e. not kInvalidWallpaperColor) color. The
+  // WallpaperControllerObservers should be notified as well. This assumes the
+  // default DARK-MUTED luma-saturation ranges are in effect.
   //
   // The expected prominent color is returned.
   SkColor ApplyColorProducingWallpaper();
+
+  // Simulates starting the fullscreen wallpaper preview.
+  void StartWallpaperPreview();
+
+  // Simulates ending the fullscreen wallpaper preview.
+  // |confirm_preview_wallpaper| indicates if the preview wallpaper should be
+  // set as the actual user wallpaper.
+  void EndWallpaperPreview(bool confirm_preview_wallpaper);
 
  private:
   WallpaperController* controller_;

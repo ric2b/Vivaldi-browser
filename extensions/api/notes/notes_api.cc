@@ -86,13 +86,12 @@ void NotesAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<NotesAPI>>::DestructorAtExit g_factory =
-    LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<BrowserContextKeyedAPIFactory<NotesAPI> >::
+    DestructorAtExit g_factory_notes = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<NotesAPI>* NotesAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_notes.Pointer();
 }
 
 void NotesAPI::OnListenerAdded(const EventListenerInfo& details) {
@@ -124,7 +123,7 @@ std::unique_ptr<std::vector<NoteAttachment>> CreateNoteAttachments(
 
 std::unique_ptr<NoteTreeNode> CreateTreeNode(Notes_Node* node) {
   std::unique_ptr<NoteTreeNode> notes_tree_node =
-      base::MakeUnique<NoteTreeNode>();
+      std::make_unique<NoteTreeNode>();
 
   notes_tree_node->id = base::Int64ToString(node->id());
 
@@ -135,6 +134,8 @@ std::unique_ptr<NoteTreeNode> CreateTreeNode(Notes_Node* node) {
     notes_tree_node->index.reset(new int(parent->GetIndexOf(node)));
   }
   notes_tree_node->trash.reset(new bool(node->is_trash()));
+
+  notes_tree_node->separator.reset(new bool(node->is_separator()));
 
   notes_tree_node->title.reset(
       new std::string(base::UTF16ToUTF8(node->GetTitle())));
@@ -297,7 +298,7 @@ bool NotesCreateFunction::RunAsync() {
   Notes_Node* parent = NULL;
 
   int64_t id = model->GetNewIndex();
-  std::unique_ptr<Notes_Node> newnode = base::MakeUnique<Notes_Node>(id);
+  std::unique_ptr<Notes_Node> newnode = std::make_unique<Notes_Node>(id);
   Notes_Node* newnode_ptr = newnode.get();
   // Lots of optionals, make sure to check for the contents.
   if (params->note.title.get()) {
@@ -308,7 +309,12 @@ bool NotesCreateFunction::RunAsync() {
 
   if (params->note.type.get()) {
     std::string type = (*params->note.type);
-    newnode->SetType((type == "note" ? Notes_Node::NOTE : Notes_Node::FOLDER));
+    if (type == "note")
+      newnode->SetType(Notes_Node::NOTE);
+    else if (type == "separator")
+      newnode->SetType(Notes_Node::SEPARATOR);
+    else
+      newnode->SetType(Notes_Node::FOLDER);
   } else {
     // default to note
     newnode->SetType(Notes_Node::NOTE);
@@ -479,10 +485,25 @@ bool NotesRemoveFunction::RunAsync() {
     NOTREACHED();
     return true;
   }
+
+  bool move_to_trash = true;
+  if (node->is_separator()) {
+    move_to_trash = false;
+  } else {
+    Notes_Node* tmp = node;
+    while (!tmp->is_root()) {
+      if (tmp->parent() == trash_node) {
+        move_to_trash = false;
+        break;
+      }
+      tmp = tmp->parent();
+    }
+  }
+
   int indexofdeleted = parent->GetIndexOf(node);
   // TODO(pettern): Event notifications should be handled in the observer
   // for the model.
-  if (parent != trash_node) {
+  if (move_to_trash) {
     Notes_Node* old_parent = node->parent();
     int oldIndex = old_parent->GetIndexOf(node);
 

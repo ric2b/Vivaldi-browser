@@ -19,7 +19,7 @@
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/login/auth/user_context.h"
-#include "services/device/public/interfaces/wake_lock.mojom.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
 #include "third_party/cros_system_api/dbus/cryptohome/dbus-constants.h"
 
 namespace base {
@@ -64,7 +64,9 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
       FreeDiskSpaceFetcher free_disk_space_fetcher);
   // Testing only: Sets the tick clock used to measure elapsed time during
   // migration.
-  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
+  // This doesn't toke the ownership of the clock. |tick_clock| must outlive the
+  // EncryptionMigrationScreenHandler instance.
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
   virtual device::mojom::WakeLock* GetWakeLock();
 
@@ -180,7 +182,7 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
   std::unique_ptr<LoginFeedback> login_feedback_;
 
   // Used to measure elapsed time during migration.
-  std::unique_ptr<base::TickClock> tick_clock_;
+  const base::TickClock* tick_clock_;
 
   FreeDiskSpaceFetcher free_disk_space_fetcher_;
 

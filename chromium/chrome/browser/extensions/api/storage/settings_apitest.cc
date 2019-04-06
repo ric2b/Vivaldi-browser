@@ -64,7 +64,7 @@ const char kManagedStorageExtensionId[] = "kjmkgkdkpedkejedfhmfcenooemhbpbo";
 class MockSchemaRegistryObserver : public policy::SchemaRegistry::Observer {
  public:
   MockSchemaRegistryObserver() {}
-  virtual ~MockSchemaRegistryObserver() {}
+  ~MockSchemaRegistryObserver() override {}
 
   MOCK_METHOD1(OnSchemaRegistryUpdated, void(bool));
 };
@@ -482,7 +482,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ManagedStorage) {
           .Set("string-policy", "value")
           .Set("int-policy", -123)
           .Set("double-policy", 456e7)
-          .SetBoolean("boolean-policy", true)
+          .Set("boolean-policy", true)
           .Set("list-policy", extensions::ListBuilder()
                                   .Append("one")
                                   .Append("two")

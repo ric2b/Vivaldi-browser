@@ -5,12 +5,17 @@
 #ifndef CONTENT_PUBLIC_BROWSER_NOTIFICATION_TYPES_H_
 #define CONTENT_PUBLIC_BROWSER_NOTIFICATION_TYPES_H_
 
-// This file describes various types used to describe and filter notifications
-// that pass through the NotificationService.
-//
-// Only notifications that are fired from the content module should be here. We
-// should never have a notification that is fired by the embedder and listened
-// to by content.
+// **
+// ** NOTICE
+// **
+// ** The notification system is deprecated, obsolete, and is slowly being
+// ** removed. See https://crbug.com/268984 and https://crbug.com/170921.
+// **
+// ** Please don't add any new notification types, and please help migrate
+// ** existing uses of the notification types below to use the Observer and
+// ** Callback patterns.
+// **
+
 namespace content {
 
 enum NotificationType {
@@ -67,14 +72,6 @@ enum NotificationType {
 
   // WebContents ---------------------------------------------------------------
 
-  // This notification is sent when a render view host has connected to a
-  // renderer process. The source is a Source<WebContents> with a pointer to
-  // the WebContents.  A WEB_CONTENTS_DISCONNECTED notification is
-  // guaranteed before the source pointer becomes junk.  No details are
-  // expected.
-  // DEPRECATED: Use WebContentsObserver::RenderViewReady()
-  NOTIFICATION_WEB_CONTENTS_CONNECTED,
-
   // This message is sent after a WebContents is disconnected from the
   // renderer process.  The source is a Source<WebContents> with a pointer to
   // the WebContents (the pointer is usable).  No details are expected.
@@ -94,21 +91,25 @@ enum NotificationType {
   // A RenderViewHost was created for a WebContents. The source is the
   // associated WebContents, and the details is the RenderViewHost
   // pointer.
+  // DEPRECATED: Use WebContentsObserver::RenderViewCreated()
   NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED,
 
   // Indicates that a RenderProcessHost was created and its handle is now
   // available. The source will be the RenderProcessHost that corresponds to
   // the process.
+  // DEPRECATED: Use RenderProcessHostObserver::RenderProcessReady()
   NOTIFICATION_RENDERER_PROCESS_CREATED,
 
   // Indicates that a RenderProcessHost is destructing. The source will be the
   // RenderProcessHost that corresponds to the process.
+  // DEPRECATED: Use RenderProcessHostObserver::RenderProcessHostDestroyed()
   NOTIFICATION_RENDERER_PROCESS_TERMINATED,
 
   // Indicates that a render process was closed (meaning it exited, but the
   // RenderProcessHost might be reused).  The source will be the corresponding
-  // RenderProcessHost.  The details will be a RendererClosedDetails struct.
-  // This may get sent along with RENDERER_PROCESS_TERMINATED.
+  // RenderProcessHost.  The details will be a ChildProcessTerminationInfo
+  // struct. This may get sent along with RENDERER_PROCESS_TERMINATED.
+  // DEPRECATED: Use RenderProcessHostObserver::RenderProcessExited()
   NOTIFICATION_RENDERER_PROCESS_CLOSED,
 
   // Indicates that a RenderWidgetHost has become unresponsive for a period of
@@ -118,15 +119,20 @@ enum NotificationType {
 
   // This is sent when a RenderWidgetHost is being destroyed. The source is
   // the RenderWidgetHost, the details are not used.
+  // DEPRECATED: Use RenderWidgetHostObserver::RenderWidgetHostDestroyed()
   NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
 
-  // Sent after the backing store has been updated but before the widget has
-  // painted. The source is the RenderWidgetHost, the details are not used.
-  NOTIFICATION_RENDER_WIDGET_HOST_DID_COMPLETE_RESIZE_OR_REPAINT,
+  // Sent after the renderer has updated visual properties on the main thread
+  // and committed the change on the compositor thread. The source is the
+  // RenderWidgetHost, the details are not used.
+  NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_VISUAL_PROPERTIES,
 
   // Indicates a RenderWidgetHost has been hidden or restored. The source is
   // the RWH whose visibility changed, the details is a bool set to true if
   // the new state is "visible."
+  //
+  // DEPRECATED:
+  // Use RenderWidgetHostObserver::RenderWidgetHostVisibilityChanged()
   NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
 
   // The focused element inside a page has changed.  The source is the
@@ -147,5 +153,16 @@ enum NotificationType {
 };
 
 }  // namespace content
+
+// **
+// ** NOTICE
+// **
+// ** The notification system is deprecated, obsolete, and is slowly being
+// ** removed. See https://crbug.com/268984 and https://crbug.com/170921.
+// **
+// ** Please don't add any new notification types, and please help migrate
+// ** existing uses of the notification types below to use the Observer and
+// ** Callback patterns.
+// **
 
 #endif  // CONTENT_PUBLIC_BROWSER_NOTIFICATION_TYPES_H_

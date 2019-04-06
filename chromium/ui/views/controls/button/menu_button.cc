@@ -259,6 +259,7 @@ bool MenuButton::OnKeyPressed(const ui::KeyEvent& event) {
       // Alt-space on windows should show the window menu.
       if (event.IsAltDown())
         break;
+      FALLTHROUGH;
     case ui::VKEY_RETURN:
     case ui::VKEY_UP:
     case ui::VKEY_DOWN: {
@@ -285,12 +286,10 @@ bool MenuButton::OnKeyReleased(const ui::KeyEvent& event) {
 
 void MenuButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Button::GetAccessibleNodeData(node_data);
-  node_data->role = ui::AX_ROLE_POP_UP_BUTTON;
-  node_data->AddState(ui::AX_STATE_HASPOPUP);
-  if (enabled()) {
-    node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
-                               ui::AX_DEFAULT_ACTION_VERB_OPEN);
-  }
+  node_data->role = ax::mojom::Role::kPopUpButton;
+  node_data->SetHasPopup(ax::mojom::HasPopup::kMenu);
+  if (enabled())
+    node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kOpen);
 }
 
 void MenuButton::PaintMenuMarker(gfx::Canvas* canvas) {
@@ -386,7 +385,8 @@ void MenuButton::DecrementPressedLocked() {
     if (should_disable_after_press_) {
       desired_state = STATE_DISABLED;
       should_disable_after_press_ = false;
-    } else if (ShouldEnterHoveredState()) {
+    } else if (GetWidget() && !GetWidget()->dragged_view() &&
+               ShouldEnterHoveredState()) {
       desired_state = STATE_HOVERED;
       GetInkDrop()->SetHovered(true);
     }

@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,7 +26,9 @@
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory_util.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_header_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
+#include "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_provider_test_singleton.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_test_utils.h"
@@ -38,7 +41,6 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/wait_util.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -96,13 +98,17 @@ ContentSuggestion Suggestion(Category category,
 }
 
 // Select the cell with the |matcher| by scrolling the collection.
-// 150 is a reasonable scroll displacement that works for all UI elements, while
+// 200 is a reasonable scroll displacement that works for all UI elements, while
 // not being too slow.
 GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
+  // Start the scroll from the middle of the screen in case the bottom of the
+  // screen is obscured by the bottom toolbar.
+  id<GREYAction> action =
+      grey_scrollInDirectionWithStartPoint(kGREYDirectionDown, 230, 0.5, 0.5);
   return [[EarlGrey
       selectElementWithMatcher:grey_allOf(matcher, grey_sufficientlyVisible(),
                                           nil)]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 150)
+         usingSearchAction:action
       onElementWithMatcher:chrome_test_util::ContentSuggestionCollectionView()];
 }
 
@@ -160,6 +166,16 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   [super tearDown];
 }
 
+// Per crbug.com/845186, Disable flakey iPad Retina tests that are limited
+// to iOS 10.2.
++ (NSArray*)testInvocations {
+#if TARGET_IPHONE_SIMULATOR
+  if (IsIPadIdiom() && !base::ios::IsRunningOnOrLater(10, 3, 0))
+    return @[];
+#endif  // TARGET_IPHONE_SIMULATOR
+  return [super testInvocations];
+}
+
 - (void)setUp {
   self.provider->FireCategoryStatusChanged(self.category,
                                            CategoryStatus::AVAILABLE);
@@ -173,7 +189,8 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 - (void)tearDown {
   self.provider->FireCategoryStatusChanged(
       self.category, CategoryStatus::ALL_SUGGESTIONS_EXPLICITLY_DISABLED);
-  chrome_test_util::ClearBrowsingHistory();
+  GREYAssertTrue(chrome_test_util::ClearBrowsingHistory(),
+                 @"Clearing Browsing History timed out");
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   [super tearDown];
 }
@@ -228,6 +245,12 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 // Tests that after dismissing a ReadingList item, it is not displayed on the
 // NTP. But it is still unread in the Reading List surface.
 - (void)testSwipeToDismissReadingListItem {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
+
   // Add two items to Reading List.
   std::string stdTitle1{"test title1"};
   std::string stdTitle2{"test title2"};
@@ -309,6 +332,12 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 // Tests that only the 3 most recent Reading List items are displayed.
 - (void)testReadingListItem {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
+
   // Create entry titles for 4 unread entries and 1 read entry.
   std::string stdTitle1{"test unread title1"};
   std::string stdTitle2{"test unread title2"};
@@ -353,6 +382,11 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 // Tests that tapping "More" on the Reading List section opens the Reading List
 // surface.
 - (void)testMoreReadingListSection {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
   // Add an entry to make sure the Reading List section is displayed.
   ReadingListModel* readingListModel =
       ReadingListModelFactory::GetForBrowserState(self.browserState);
@@ -391,6 +425,12 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 // Tests that the section titles are displayed only if there are two sections.
 - (void)testSectionTitle {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
+
   ReadingListModel* readingListModel =
       ReadingListModelFactory::GetForBrowserState(self.browserState);
   readingListModel->AddEntry(GURL("http://chromium.org"), "test title",
@@ -462,15 +502,28 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
   // Test that the omnibox is visible and taking full width, before any scroll
   // happen on iPhone.
-  if (!IsIPadIdiom()) {
-    CGFloat collectionWidth = ntp_home::CollectionView().bounds.size.width;
-    [[EarlGrey
-        selectElementWithMatcher:grey_accessibilityID(
-                                     ntp_home::FakeOmniboxAccessibilityID())]
-        assertWithMatcher:grey_allOf(grey_sufficientlyVisible(),
-                                     ntp_home::OmniboxWidthBetween(
-                                         collectionWidth + 1, 1),
-                                     nil)];
+  if (!content_suggestions::IsRegularXRegularSizeClass()) {
+    if (!IsUIRefreshPhase1Enabled()) {
+      CGFloat collectionWidth = ntp_home::CollectionView().bounds.size.width;
+      [[EarlGrey
+          selectElementWithMatcher:grey_accessibilityID(
+                                       ntp_home::FakeOmniboxAccessibilityID())]
+          assertWithMatcher:grey_allOf(grey_sufficientlyVisible(),
+                                       ntp_home::OmniboxWidthBetween(
+                                           collectionWidth + 1, 1),
+                                       nil)];
+    }
+
+    // Test that the omnibox is still pinned to the top of the screen and
+    // under the safe area.
+    CGFloat safeAreaTop = IsUIRefreshPhase1Enabled() ? StatusBarHeight() : 0;
+    CGFloat contentOffset = ntp_home::CollectionView().contentOffset.y;
+    CGFloat fakeOmniboxOrigin = ntp_home::FakeOmnibox().frame.origin.y;
+    CGFloat pinnedOffset = contentOffset - (fakeOmniboxOrigin - safeAreaTop);
+    [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                            [ContentSuggestionsHeaderItem
+                                                accessibilityIdentifier])]
+        assertWithMatcher:ntp_home::HeaderPinnedOffset(pinnedOffset)];
   }
 
   // Check that the first items are visible as the collection should be
@@ -483,12 +536,13 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 // Tests that the "Learn More" cell is present only if there is a suggestion in
 // the section.
 - (void)testLearnMore {
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::
-                                          ContentSuggestionCollectionView()]
-      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          [ContentSuggestionsLearnMoreItem
-                                              accessibilityIdentifier])]
+  id<GREYAction> action =
+      grey_scrollInDirectionWithStartPoint(kGREYDirectionDown, 200, 0.5, 0.5);
+  [[[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                           [ContentSuggestionsLearnMoreItem
+                                               accessibilityIdentifier])]
+         usingSearchAction:action
+      onElementWithMatcher:chrome_test_util::ContentSuggestionCollectionView()]
       assertWithMatcher:grey_nil()];
 
   std::vector<ContentSuggestion> suggestions;
@@ -503,6 +557,12 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 // Tests that when long pressing a Reading List entry, a context menu is shown.
 - (void)testReadingListLongPress {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
+
   NSString* title = @"ReadingList test title";
   std::string sTitle{"ReadingList test title"};
   ReadingListModel* readingListModel =
@@ -512,7 +572,7 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
   [CellWithMatcher(grey_accessibilityID(title)) performAction:grey_longPress()];
 
-  if (!IsIPadIdiom()) {
+  if (!content_suggestions::IsRegularXRegularSizeClass()) {
     [[EarlGrey selectElementWithMatcher:
                    chrome_test_util::ButtonWithAccessibilityLabelId(
                        IDS_APP_CANCEL)] assertWithMatcher:grey_interactable()];
@@ -527,6 +587,12 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 // Tests that "Open in New Tab" in context menu opens in a new tab.
 - (void)testReadingListOpenNewTab {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
+
   // Setup.
   [self setupReadingListContextMenu];
   const GURL pageURL = self.testServer->GetURL(kPageURL);
@@ -555,8 +621,8 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
                     error:&error];
     return error == nil;
   };
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
-                 testing::kWaitForUIElementTimeout, condition),
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 base::test::ios::kWaitForUIElementTimeout, condition),
              @"Collection view not visible");
 
   // Check the page has been correctly opened.
@@ -570,6 +636,12 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 // Tests that "Open in New Incognito Tab" in context menu opens in a new
 // incognito tab.
 - (void)testReadingListOpenNewIncognitoTab {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
+
   // Setup.
   [self setupReadingListContextMenu];
   const GURL pageURL = self.testServer->GetURL(kPageURL);
@@ -596,6 +668,12 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 // Tests that "Remove" in context menu removes the entry.
 - (void)testReadingListRemove {
+  // TODO(crbug.com/807330): The collection view reading list section is not
+  // used in ui refresh.
+  if (IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(@"ReadingList section does not exist in UI Refresh");
+  }
+
   // Setup.
   NSString* title = @"ReadingList test title";
   [self setupReadingListContextMenu];
@@ -644,8 +722,8 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
                     error:&error];
     return error == nil;
   };
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
-                 testing::kWaitForUIElementTimeout, condition),
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 base::test::ios::kWaitForUIElementTimeout, condition),
              @"Collection view not visible");
 
   // Check the page has been correctly opened.
@@ -716,15 +794,17 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
   // Check the tile is back.
   [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::StaticTextWithAccessibilityLabel(pageTitle)]
-      assertWithMatcher:grey_sufficientlyVisible()];
+                 grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(
+                                pageTitle),
+                            grey_sufficientlyVisible(), nil)]
+      assertWithMatcher:grey_notNil()];
 }
 
 // Tests that the context menu has the correct actions.
 - (void)testMostVisitedLongPress {
   [self setupMostVisitedTileLongPress];
 
-  if (!IsIPadIdiom()) {
+  if (!content_suggestions::IsRegularXRegularSizeClass()) {
     [[EarlGrey selectElementWithMatcher:
                    chrome_test_util::ButtonWithAccessibilityLabelId(
                        IDS_APP_CANCEL)] assertWithMatcher:grey_interactable()];
@@ -779,7 +859,8 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   NSString* pageTitle = base::SysUTF8ToNSString(kPageTitle);
 
   // Clear history and verify that the tile does not exist.
-  chrome_test_util::ClearBrowsingHistory();
+  GREYAssertTrue(chrome_test_util::ClearBrowsingHistory(),
+                 @"Clearing Browsing History timed out");
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   [ChromeEarlGrey loadURL:pageURL];
   [ChromeEarlGrey waitForWebViewContainingText:kPageLoadedString];

@@ -15,6 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/sequence_checker.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/sync_manager.h"
@@ -72,6 +73,7 @@ class SyncManagerImpl
                           ModelTypeSet to_journal,
                           ModelTypeSet to_unapply) override;
   void UpdateCredentials(const SyncCredentials& credentials) override;
+  void InvalidateCredentials() override;
   void StartSyncingNormally(base::Time last_poll_time) override;
   void StartConfiguration() override;
   void ConfigureSyncer(ConfigureReason reason,
@@ -86,13 +88,13 @@ class SyncManagerImpl
   void RemoveObserver(SyncManager::Observer* observer) override;
   SyncStatus GetDetailedStatus() const override;
   void SaveChanges() override;
-  void ShutdownOnSyncThread(ShutdownReason reason) override;
+  void ShutdownOnSyncThread() override;
   UserShare* GetUserShare() override;
   ModelTypeConnector* GetModelTypeConnector() override;
   std::unique_ptr<ModelTypeConnector> GetModelTypeConnectorProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
-  bool HasUnsyncedItems() override;
+  bool HasUnsyncedItemsForTest() override;
   SyncEncryptionHandler* GetEncryptionHandler() override;
   std::vector<std::unique_ptr<ProtocolEvent>> GetBufferedProtocolEvents()
       override;
@@ -236,7 +238,7 @@ class SyncManagerImpl
 
   const std::string name_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // Thread-safe handle used by
   // HandleCalculateChangesChangeEventFromSyncApi(), which can be

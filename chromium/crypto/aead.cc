@@ -21,6 +21,12 @@ Aead::Aead(AeadAlgorithm algorithm) : key_(nullptr) {
     case AES_128_CTR_HMAC_SHA256:
       aead_ = EVP_aead_aes_128_ctr_hmac_sha256();
       break;
+    case AES_256_GCM:
+      aead_ = EVP_aead_aes_256_gcm();
+      break;
+    case AES_256_GCM_SIV:
+      aead_ = EVP_aead_aes_256_gcm_siv();
+      break;
   }
 }
 

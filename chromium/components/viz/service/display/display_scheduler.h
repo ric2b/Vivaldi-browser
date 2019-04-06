@@ -50,8 +50,12 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
   void SetRootSurfaceResourcesLocked(bool locked);
   void ForceImmediateSwapIfPossible();
   void SetNeedsOneBeginFrame();
-  base::TimeTicks CurrentFrameTime() {
+  base::TimeTicks current_frame_time() const {
     return current_begin_frame_args_.frame_time;
+  }
+  base::TimeTicks current_frame_display_time() const {
+    return current_begin_frame_args_.frame_time +
+           current_begin_frame_args_.interval;
   }
   virtual void DisplayResized();
   virtual void SetNewRootSurface(const SurfaceId& root_surface_id);
@@ -71,7 +75,8 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
   // SurfaceObserver implementation.
   void OnSurfaceCreated(const SurfaceId& surface_id) override;
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override;
-  void OnSurfaceActivated(const SurfaceId& surface_id) override;
+  void OnSurfaceActivated(const SurfaceId& surface_id,
+                          base::Optional<base::TimeDelta> duration) override;
   void OnSurfaceDestroyed(const SurfaceId& surface_id) override;
   bool OnSurfaceDamaged(const SurfaceId& surface_id,
                         const BeginFrameAck& ack) override;

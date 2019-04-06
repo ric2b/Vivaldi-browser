@@ -25,24 +25,23 @@
 #include "net/base/network_change_notifier.h"
 
 namespace net {
+struct MutableNetworkTrafficAnnotationTag;
 class URLRequestContextGetter;
 }
 
-namespace rtc {
-struct PacketOptions;
+namespace network {
+class ProxyResolvingClientSocketFactory;
 }
 
 namespace content {
 
 class P2PSocketHost;
-class ResourceContext;
 
 class P2PSocketDispatcherHost
     : public content::BrowserMessageFilter,
       public net::NetworkChangeNotifier::NetworkChangeObserver {
  public:
-  P2PSocketDispatcherHost(content::ResourceContext* resource_context,
-                          net::URLRequestContextGetter* url_context);
+  explicit P2PSocketDispatcherHost(net::URLRequestContextGetter* url_context);
 
   // content::BrowserMessageFilter overrides.
   void OnChannelClosing() override;
@@ -87,11 +86,11 @@ class P2PSocketDispatcherHost
   void OnAcceptIncomingTcpConnection(int listen_socket_id,
                                      const net::IPEndPoint& remote_address,
                                      int connected_socket_id);
-  void OnSend(int socket_id,
-              const net::IPEndPoint& socket_address,
-              const std::vector<char>& data,
-              const rtc::PacketOptions& options,
-              uint64_t packet_id);
+  void OnSend(
+      int socket_id,
+      const std::vector<char>& data,
+      const P2PPacketInfo& packet_info,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
   void OnSetOption(int socket_id, P2PSocketOption option, int value);
   void OnDestroySocket(int socket_id);
 
@@ -110,8 +109,10 @@ class P2PSocketDispatcherHost
 
   void StopRtpDumpOnIOThread(bool incoming, bool outgoing);
 
-  content::ResourceContext* resource_context_;
   scoped_refptr<net::URLRequestContextGetter> url_context_;
+  // Initialized on browser IO thread.
+  std::unique_ptr<network::ProxyResolvingClientSocketFactory>
+      proxy_resolving_socket_factory_;
 
   SocketsMap sockets_;
 

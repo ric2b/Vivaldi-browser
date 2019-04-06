@@ -4,10 +4,14 @@
 
 static_library("content") {
   sources = [
+    "activation_list.cc",
+    "activation_list.h",
     "previews_content_util.cc",
     "previews_content_util.h",
-    "previews_io_data.cc",
-    "previews_io_data.h",
+    "previews_decider_impl.cc",
+    "previews_decider_impl.h",
+    "previews_hints.cc",
+    "previews_hints.h",
     "previews_optimization_guide.cc",
     "previews_optimization_guide.h",
     "previews_ui_service.cc",
@@ -16,6 +20,7 @@ static_library("content") {
 
   deps = [
     "//base",
+    "//components/blacklist/opt_out_blacklist",
     "//components/optimization_guide",
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/previews/core",
@@ -29,8 +34,9 @@ static_library("content") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "activation_list_unittest.cc",
     "previews_content_util_unittest.cc",
-    "previews_io_data_unittest.cc",
+    "previews_decider_impl_unittest.cc",
     "previews_optimization_guide_unittest.cc",
     "previews_ui_service_unittest.cc",
   ]
@@ -38,6 +44,7 @@ source_set("unit_tests") {
   deps = [
     ":content",
     "//base",
+    "//components/blacklist/opt_out_blacklist",
     "//components/optimization_guide",
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/previews/core",

@@ -36,12 +36,30 @@ void BluetoothGattCharacteristicDelegateWrapper::SetValue(
       error_callback);
 }
 
-void BluetoothGattCharacteristicDelegateWrapper::StartNotifications() {
-  service()->GetDelegate()->OnNotificationsStart(nullptr, characteristic_);
+void BluetoothGattCharacteristicDelegateWrapper::StartNotifications(
+    const dbus::ObjectPath& device_path,
+    device::BluetoothGattCharacteristic::NotificationType notification_type) {
+  service()->GetDelegate()->OnNotificationsStart(
+      GetDeviceWithPath(device_path), notification_type, characteristic_);
 }
 
-void BluetoothGattCharacteristicDelegateWrapper::StopNotifications() {
-  service()->GetDelegate()->OnNotificationsStop(nullptr, characteristic_);
+void BluetoothGattCharacteristicDelegateWrapper::StopNotifications(
+    const dbus::ObjectPath& device_path) {
+  service()->GetDelegate()->OnNotificationsStop(GetDeviceWithPath(device_path),
+                                                characteristic_);
+}
+
+void BluetoothGattCharacteristicDelegateWrapper::PrepareSetValue(
+    const dbus::ObjectPath& device_path,
+    const std::vector<uint8_t>& value,
+    int offset,
+    bool has_subsequent_request,
+    const base::Closure& callback,
+    const device::BluetoothLocalGattService::Delegate::ErrorCallback&
+        error_callback) {
+  service()->GetDelegate()->OnCharacteristicPrepareWriteRequest(
+      GetDeviceWithPath(device_path), characteristic_, value, offset,
+      has_subsequent_request, callback, error_callback);
 }
 
 }  // namespace bluez

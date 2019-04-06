@@ -62,7 +62,7 @@ def GritSourceFiles():
   return sorted(files)
 
 
-def Inputs(filename, defines, ids_file, target_platform=None, exclude_grit_source=False):
+def Inputs(filename, defines, ids_file, target_platform=None):
   grd = grd_reader.Parse(
       filename, debug=False, defines=defines, tags_to_ignore=set(['message']),
       first_ids_file=ids_file, target_platform=target_platform)
@@ -88,7 +88,7 @@ def Inputs(filename, defines, ids_file, target_platform=None, exclude_grit_sourc
             files.update(node.GetHtmlResourceFilenames())
         elif node.name == 'grit':
           first_ids_file = node.GetFirstIdsFile()
-          if first_ids_file and not exclude_grit_source:
+          if first_ids_file:
             files.add(first_ids_file)
         elif node.name == 'include':
           files.add(grd.ToRealPath(node.GetInputPath()))
@@ -110,6 +110,8 @@ def PrintUsage():
 
 
 def DoMain(argv):
+  os.environ['cwd'] = os.getcwd()
+
   parser = optparse.OptionParser()
   parser.add_option("--inputs", action="store_true", dest="inputs")
   parser.add_option("--outputs", action="store_true", dest="outputs")
@@ -119,15 +121,8 @@ def DoMain(argv):
   parser.add_option("-E", action="append", dest="build_env", default=[])
   parser.add_option("-p", action="store", dest="predetermined_ids_file")
   parser.add_option("-w", action="append", dest="whitelist_files", default=[])
-  parser.add_option("--output-all-resource-defines", action="store_true",
-                    dest="output_all_resource_defines", default=True,
-                    help="Unused")
-  parser.add_option("--no-output-all-resource-defines", action="store_false",
-                    dest="output_all_resource_defines", default=True,
-                    help="Unused")
   parser.add_option("-f", dest="ids_file", default="")
   parser.add_option("-t", dest="target_platform", default=None)
-  parser.add_option("--exclude-grit-source", action="store_true")
 
   options, args = parser.parse_args(argv)
 
@@ -148,16 +143,14 @@ def DoMain(argv):
     if len(args) == 1:
       filename = args[0]
       inputs = Inputs(filename, defines, options.ids_file,
-                      options.target_platform,
-                      exclude_grit_source= options.exclude_grit_source)
+                      options.target_platform)
 
     # Add in the grit source files.  If one of these change, we want to re-run
     # grit.
-    if not options.exclude_grit_source:
-      inputs.extend(GritSourceFiles())
+    inputs.extend(GritSourceFiles())
     inputs = [f.replace('\\', '/') for f in inputs]
 
-    if len(args) == 1 and not options.exclude_grit_source:
+    if len(args) == 1:
       # Include grd file as second input (works around gyp expecting it).
       inputs.insert(1, args[0])
     if options.whitelist_files:

@@ -24,6 +24,7 @@
         flex: 1;
         font-size: 123%;
         font-weight: 400;
+        letter-spacing: .25px;
         line-height: normal;
       }
 
@@ -40,12 +41,10 @@
         display: flex;
       }
 
-      #menuButton {
+      #menuButtonContainer {
         height: 32px;
-        margin-bottom: 6px;
-        margin-top: 6px;
         min-width: 32px;
-        padding: 6px;
+        padding: 6px 0;
         width: 32px;
       }
 
@@ -61,6 +60,11 @@
 
       :host([narrow]) #centeredContent {
         justify-content: flex-end;
+      }
+
+      :host([has-overlay]) {
+        transition: visibility var(--cr-toolbar-overlay-animation-duration);
+        visibility: hidden;
       }
 
       :host([narrow][showing-search_]) #leftContent {
@@ -130,12 +134,14 @@
       <div id="leftSpacer">
         <!-- Note: showing #menuPromo relies on this dom-if being [restamp]. -->
         <template is="dom-if" if="[[showMenu]]" restamp>
-          <button id="menuButton" is="paper-icon-button-light"
-              class="icon-menu-white no-overlap"
-              on-tap="onMenuTap_"
-              title="[[titleIfNotShowMenuPromo_(menuLabel, showMenuPromo)]]"
-              aria-label$="[[menuLabel]]">
-          </button>
+          <paper-icon-button-light id="menuButtonContainer"
+              class="icon-menu-white no-overlap">
+            <button id="menuButton"
+                on-tap="onMenuTap_"
+                title="[[titleIfNotShowMenuPromo_(menuLabel, showMenuPromo)]]"
+                aria-label$="[[menuLabel]]">
+            </button>
+          </paper-icon-button-light>
           <template is="dom-if" if="[[showMenuPromo]]">
             <div id="menuPromo" role="tooltip">
               [[menuPromo]]

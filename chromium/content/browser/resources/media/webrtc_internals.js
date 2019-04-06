@@ -26,7 +26,7 @@ var PeerConnectionRecord = (function() {
       updateLog: [],
       url: '',
     };
-  };
+  }
 
   PeerConnectionRecord.prototype = {
     /** @override */
@@ -355,4 +355,14 @@ function setAudioDebugRecordingsEnabled() {
  */
 function setEventLogRecordingsEnabled() {
   dumpCreator.setEventLogRecordingsCheckbox();
+}
+
+
+/**
+ * Notification that event log recordings may be turned off/on by the user.
+ * Used e.g. on page load to update the UI to reflect the recording state's
+ * mutability.
+ */
+function setEventLogRecordingsToggleability(isToggleable) {
+  dumpCreator.setEventLogRecordingsCheckboxMutability(isToggleable);
 }

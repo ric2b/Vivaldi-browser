@@ -76,7 +76,7 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // be used.
   HttpServerPropertiesManager(std::unique_ptr<PrefDelegate> pref_delegate,
                               NetLog* net_log,
-                              base::TickClock* clock = nullptr);
+                              const base::TickClock* clock = nullptr);
 
   ~HttpServerPropertiesManager() override;
 
@@ -106,7 +106,7 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
       const url::SchemeHostPort& origin,
       const AlternativeService& alternative_service,
       base::Time expiration,
-      const QuicTransportVersionVector& advertised_versions) override;
+      const quic::QuicTransportVersionVector& advertised_versions) override;
   bool SetAlternativeServices(const url::SchemeHostPort& origin,
                               const AlternativeServiceInfoVector&
                                   alternative_service_info_vector) override;
@@ -131,9 +131,10 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   const ServerNetworkStats* GetServerNetworkStats(
       const url::SchemeHostPort& server) override;
   const ServerNetworkStatsMap& server_network_stats_map() const override;
-  bool SetQuicServerInfo(const QuicServerId& server_id,
+  bool SetQuicServerInfo(const quic::QuicServerId& server_id,
                          const std::string& server_info) override;
-  const std::string* GetQuicServerInfo(const QuicServerId& server_id) override;
+  const std::string* GetQuicServerInfo(
+      const quic::QuicServerId& server_id) override;
   const QuicServerInfoMap& quic_server_info_map() const override;
   size_t max_server_configs_stored_in_properties() const override;
   void SetMaxServerConfigsStoredInProperties(
@@ -267,7 +268,7 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // result of them being changed by the changes just made by this class.
   bool setting_prefs_ = false;
 
-  base::TickClock* clock_;  // Unowned
+  const base::TickClock* clock_;  // Unowned
 
   // Set to true once the initial prefs have been loaded.
   bool is_initialized_ = false;

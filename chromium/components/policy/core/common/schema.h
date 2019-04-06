@@ -56,6 +56,10 @@ typedef std::vector<Schema> SchemaList;
 // types of inner elements, for structured types.
 // Objects of this class refer to external, immutable data and are cheap to
 // copy.
+//
+// Schema validation is based on a subset of the JSON Schema standard.
+// TODO(crbug.com/856901): Document the supported subset of the JSON Schema
+// standard.
 class POLICY_EXPORT Schema {
  public:
   // Used internally to store shared data.
@@ -113,6 +117,13 @@ class POLICY_EXPORT Schema {
                  std::string* error,
                  bool* changed) const;
 
+  // Modifies |value| in place - masks values that have been marked as sensitive
+  // ("sensitiveValue": true) in this Schema. Note that |value| may not be
+  // schema-valid according to this Schema after this function returns - the
+  // masking is performed by replacing values with string values, so the value
+  // types may not correspond to this Schema anymore.
+  void MaskSensitiveValues(base::Value* value) const;
+
   // Used to iterate over the known properties of Type::DICTIONARY schemas.
   class POLICY_EXPORT Iterator {
    public:
@@ -155,6 +166,10 @@ class POLICY_EXPORT Schema {
   // Returns all Schemas from pattern properties that match |key|. May be empty.
   SchemaList GetPatternProperties(const std::string& key) const;
 
+  // Returns this Schema's required properties. May be empty if the Schema has
+  // no required properties.
+  std::vector<std::string> GetRequiredProperties() const;
+
   // Returns the Schema for additional properties. If additional properties are
   // not allowed for this Schema then the Schema returned is not valid.
   Schema GetAdditionalProperties() const;
@@ -176,6 +191,19 @@ class POLICY_EXPORT Schema {
   // otherwise invalid memory will be read. A CHECK is currently enforcing this.
   Schema GetItems() const;
 
+  // Gets the validation schema associated with this |schema| - or if there
+  // isn't one, returns an empty invalid schema. There are a few policies that
+  // contain embedded JSON - these policies have a schema for validating that
+  // JSON that is more complicated than the regular schema. For other policies
+  // it is not defined. To get the validation schema for a policy, call
+  // |chrome_schema.GetValidationSchema().GetKnownProperty(policy_name)|, where
+  // |chrome_schema| is the root schema that has all policies as children.
+  Schema GetValidationSchema() const;
+
+  // If this returns true, the schema metadata says that the value described by
+  // this schema should not be displayed on the UI.
+  bool IsSensitiveValue() const;
+
  private:
   // Builds a schema pointing to the inner structure of |storage|,
   // rooted at |node|.
@@ -184,6 +212,8 @@ class POLICY_EXPORT Schema {
 
   bool ValidateIntegerRestriction(int index, int value) const;
   bool ValidateStringRestriction(int index, const char* str) const;
+
+  void MaskSensitiveValuesRecurse(base::Value* value) const;
 
   scoped_refptr<const InternalStorage> storage_;
   const internal::SchemaNode* node_;

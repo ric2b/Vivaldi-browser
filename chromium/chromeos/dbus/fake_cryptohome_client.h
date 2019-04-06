@@ -37,13 +37,11 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
       WaitForServiceToBeAvailableCallback callback) override;
   void IsMounted(DBusMethodCallback<bool> callback) override;
   void Unmount(DBusMethodCallback<bool> callback) override;
-  void AsyncCheckKey(const cryptohome::Identification& cryptohome_id,
-                     const std::string& key,
-                     AsyncMethodCallback callback) override;
-  void AsyncMigrateKey(const cryptohome::Identification& cryptohome_id,
-                       const std::string& from_key,
-                       const std::string& to_key,
-                       AsyncMethodCallback callback) override;
+  void MigrateKeyEx(
+      const cryptohome::AccountIdentifier& account,
+      const cryptohome::AuthorizationRequest& auth_request,
+      const cryptohome::MigrateKeyRequest& migrate_request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void AsyncRemove(const cryptohome::Identification& cryptohome_id,
                    AsyncMethodCallback callback) override;
   void RenameCryptohome(
@@ -59,15 +57,9 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
                             DBusMethodCallback<std::string> callback) override;
   std::string BlockingGetSanitizedUsername(
       const cryptohome::Identification& cryptohome_id) override;
-  void AsyncMount(const cryptohome::Identification& cryptohome_id,
-                  const std::string& key,
-                  int flags,
-                  AsyncMethodCallback callback) override;
-  void AsyncAddKey(const cryptohome::Identification& cryptohome_id,
-                   const std::string& key,
-                   const std::string& new_key,
-                   AsyncMethodCallback callback) override;
-  void AsyncMountGuest(AsyncMethodCallback callback) override;
+  void MountGuestEx(
+      const cryptohome::MountGuestRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void TpmIsReady(DBusMethodCallback<bool> callback) override;
   void TpmIsEnabled(DBusMethodCallback<bool> callback) override;
   bool CallTpmIsEnabledAndBlock(bool* enabled) override;
@@ -96,6 +88,9 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   bool InstallAttributesIsInvalid(bool* is_invalid) override;
   bool InstallAttributesIsFirstInstall(bool* is_first_install) override;
   void TpmAttestationIsPrepared(DBusMethodCallback<bool> callback) override;
+  void TpmAttestationGetEnrollmentId(
+      bool ignore_cache,
+      DBusMethodCallback<TpmAttestationDataResult> callback) override;
   void TpmAttestationIsEnrolled(DBusMethodCallback<bool> callback) override;
   void AsyncTpmAttestationCreateEnrollRequest(
       chromeos::attestation::PrivacyCAType pca_type,
@@ -211,6 +206,14 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void NeedsDircryptoMigration(const cryptohome::Identification& cryptohome_id,
                                DBusMethodCallback<bool> callback) override;
+  void GetSupportedKeyPolicies(
+      const cryptohome::GetSupportedKeyPoliciesRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void IsQuotaSupported(DBusMethodCallback<bool> callback) override;
+  void GetCurrentSpaceForUid(uid_t android_uid,
+                             DBusMethodCallback<int64_t> callback) override;
+  void GetCurrentSpaceForGid(gid_t android_gid,
+                             DBusMethodCallback<int64_t> callback) override;
 
   /////////// Test helpers ////////////
 
@@ -244,6 +247,15 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
     cryptohome_error_ = error;
   }
 
+  void set_tpm_attestation_enrollment_id(bool ignore_cache,
+                                         const std::string& eid) {
+    if (ignore_cache) {
+      tpm_attestation_enrollment_id_ignore_cache_ = eid;
+    } else {
+      tpm_attestation_enrollment_id_ = eid;
+    }
+  }
+
   void set_tpm_attestation_is_enrolled(bool enrolled) {
     tpm_attestation_is_enrolled_ = enrolled;
   }
@@ -254,6 +266,14 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
 
   void set_tpm_attestation_does_key_exist_should_succeed(bool should_succeed) {
     tpm_attestation_does_key_exist_should_succeed_ = should_succeed;
+  }
+
+  void set_supports_low_entropy_credentials(bool supports) {
+    supports_low_entropy_credentials_ = supports;
+  }
+
+  void set_enable_auth_check(bool enable_auth_check) {
+    enable_auth_check_ = enable_auth_check;
   }
 
   void SetTpmAttestationUserCertificate(
@@ -282,6 +302,9 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   }
   bool hidden_mount() const { return last_mount_request_.hidden_mount(); }
   bool public_mount() const { return last_mount_request_.public_mount(); }
+  const std::string& get_secret_for_last_mount_authentication() const {
+    return last_mount_auth_request_.key().secret();
+  }
 
   // MigrateToDircrypto getters.
   const cryptohome::Identification& get_id_for_disk_migrated_to_dircrypto()
@@ -329,6 +352,11 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   // Loads install attributes from the stub file.
   bool LoadInstallAttributes();
 
+  // Finds a key matching the given label. Wildcard labels are supported.
+  std::map<std::string, cryptohome::Key>::const_iterator FindKey(
+      const std::map<std::string, cryptohome::Key>& keys,
+      const std::string& label);
+
   bool service_is_available_;
   base::ObserverList<Observer> observer_list_;
 
@@ -344,7 +372,8 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   std::map<std::string, std::vector<uint8_t>> install_attrs_;
   bool locked_;
 
-  std::map<cryptohome::Identification, cryptohome::KeyData> key_data_map_;
+  std::map<cryptohome::Identification, std::map<std::string, cryptohome::Key>>
+      key_data_map_;
 
   // User attestation certificate mapped by cryptohome_id and key_name.
   std::map<std::pair<cryptohome::Identification, std::string>, std::string>
@@ -360,14 +389,22 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   uint64_t dircrypto_migration_progress_;
 
   bool needs_dircrypto_migration_ = false;
+  std::string tpm_attestation_enrollment_id_ignore_cache_ =
+      "6fcc0ebddec3db95cdcf82476d594f4d60db934c5b47fa6085c707b2a93e205b";
+  std::string tpm_attestation_enrollment_id_ =
+      "6fcc0ebddec3db95cdcf82476d594f4d60db934c5b47fa6085c707b2a93e205b";
   bool tpm_attestation_is_enrolled_ = true;
   bool tpm_attestation_is_prepared_ = true;
   bool tpm_attestation_does_key_exist_should_succeed_ = true;
+  bool supports_low_entropy_credentials_ = false;
+  // Controls if CheckKeyEx actually checks the key.
+  bool enable_auth_check_ = false;
 
   // MountEx fields.
   cryptohome::CryptohomeErrorCode cryptohome_error_ =
       cryptohome::CRYPTOHOME_ERROR_NOT_SET;
   cryptohome::MountRequest last_mount_request_;
+  cryptohome::AuthorizationRequest last_mount_auth_request_;
 
   // MigrateToDircrypto fields.
   cryptohome::Identification id_for_disk_migrated_to_dircrypto_;

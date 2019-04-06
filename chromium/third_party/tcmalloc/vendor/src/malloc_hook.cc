@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -48,6 +49,7 @@
 #include <algorithm>
 #include "base/logging.h"
 #include "base/spinlock.h"
+#include "maybe_emergency_malloc.h"
 #include "maybe_threads.h"
 #include "malloc_hook-inl.h"
 #include <gperftools/malloc_hook.h>
@@ -157,44 +159,6 @@ extern "C" void MallocHook_InitAtFirstAllocation_HeapLeakChecker() {
 
 namespace base { namespace internal {
 
-// The code below is DEPRECATED.
-template<typename PtrT>
-PtrT AtomicPtr<PtrT>::Exchange(PtrT new_val) {
-  base::subtle::MemoryBarrier();  // Release semantics.
-  // Depending on the system, NoBarrier_AtomicExchange(AtomicWord*)
-  // may have been defined to return an AtomicWord, Atomic32, or
-  // Atomic64.  We hide that implementation detail here with an
-  // explicit cast.  This prevents MSVC 2005, at least, from complaining.
-  PtrT old_val = reinterpret_cast<PtrT>(static_cast<AtomicWord>(
-      base::subtle::NoBarrier_AtomicExchange(
-          &data_,
-          reinterpret_cast<AtomicWord>(new_val))));
-  base::subtle::MemoryBarrier();  // And acquire semantics.
-  return old_val;
-}
-
-template<typename PtrT>
-PtrT AtomicPtr<PtrT>::CompareAndSwap(PtrT old_val, PtrT new_val) {
-  base::subtle::MemoryBarrier();  // Release semantics.
-  PtrT retval = reinterpret_cast<PtrT>(static_cast<AtomicWord>(
-      base::subtle::NoBarrier_CompareAndSwap(
-          &data_,
-          reinterpret_cast<AtomicWord>(old_val),
-          reinterpret_cast<AtomicWord>(new_val))));
-  base::subtle::MemoryBarrier();  // And acquire semantics.
-  return retval;
-}
-
-AtomicPtr<MallocHook::NewHook>    new_hook_ = { 0 };
-AtomicPtr<MallocHook::DeleteHook> delete_hook_ = { 0 };
-AtomicPtr<MallocHook::PreMmapHook> premmap_hook_ = { 0 };
-AtomicPtr<MallocHook::MmapHook>   mmap_hook_ = { 0 };
-AtomicPtr<MallocHook::MunmapHook> munmap_hook_ = { 0 };
-AtomicPtr<MallocHook::MremapHook> mremap_hook_ = { 0 };
-AtomicPtr<MallocHook::PreSbrkHook> presbrk_hook_ = { 0 };
-AtomicPtr<MallocHook::SbrkHook>   sbrk_hook_ = { 0 };
-// End of DEPRECATED code section.
-
 // This lock is shared between all implementations of HookList::Add & Remove.
 // The potential for contention is very small.  This needs to be a SpinLock and
 // not a Mutex since it's possible for Mutex locking to allocate memory (e.g.,
@@ -218,11 +182,21 @@ bool HookList<T>::Add(T value_as_t) {
     return false;
   }
   AtomicWord prev_num_hooks = base::subtle::Acquire_Load(&priv_end);
-  base::subtle::Release_Store(&priv_data[index], value);
+  base::subtle::NoBarrier_Store(&priv_data[index], value);
   if (prev_num_hooks <= index) {
-    base::subtle::Release_Store(&priv_end, index + 1);
+    base::subtle::NoBarrier_Store(&priv_end, index + 1);
   }
   return true;
+}
+
+template <typename T>
+void HookList<T>::FixupPrivEndLocked() {
+  AtomicWord hooks_end = base::subtle::NoBarrier_Load(&priv_end);
+  while ((hooks_end > 0) &&
+         (base::subtle::NoBarrier_Load(&priv_data[hooks_end - 1]) == 0)) {
+    --hooks_end;
+  }
+  base::subtle::NoBarrier_Store(&priv_end, hooks_end);
 }
 
 template <typename T>
@@ -231,25 +205,17 @@ bool HookList<T>::Remove(T value_as_t) {
     return false;
   }
   SpinLockHolder l(&hooklist_spinlock);
-  AtomicWord hooks_end = base::subtle::Acquire_Load(&priv_end);
+  AtomicWord hooks_end = base::subtle::NoBarrier_Load(&priv_end);
   int index = 0;
   while (index < hooks_end && value_as_t != bit_cast<T>(
-             base::subtle::Acquire_Load(&priv_data[index]))) {
+             base::subtle::NoBarrier_Load(&priv_data[index]))) {
     ++index;
   }
   if (index == hooks_end) {
     return false;
   }
-  base::subtle::Release_Store(&priv_data[index], 0);
-  if (hooks_end == index + 1) {
-    // Adjust hooks_end down to the lowest possible value.
-    hooks_end = index;
-    while ((hooks_end > 0) &&
-           (base::subtle::Acquire_Load(&priv_data[hooks_end - 1]) == 0)) {
-      --hooks_end;
-    }
-    base::subtle::Release_Store(&priv_end, hooks_end);
-  }
+  base::subtle::NoBarrier_Store(&priv_data[index], 0);
+  FixupPrivEndLocked();
   return true;
 }
 
@@ -266,6 +232,21 @@ int HookList<T>::Traverse(T* output_array, int n) const {
     }
   }
   return actual_hooks_end;
+}
+
+template <typename T>
+T HookList<T>::ExchangeSingular(T value_as_t) {
+  AtomicWord value = bit_cast<AtomicWord>(value_as_t);
+  AtomicWord old_value;
+  SpinLockHolder l(&hooklist_spinlock);
+  old_value = base::subtle::NoBarrier_Load(&priv_data[kHookListSingularIdx]);
+  base::subtle::NoBarrier_Store(&priv_data[kHookListSingularIdx], value);
+  if (value != 0) {
+    base::subtle::NoBarrier_Store(&priv_end, kHookListSingularIdx + 1);
+  } else {
+    FixupPrivEndLocked();
+  }
+  return bit_cast<T>(old_value);
 }
 
 // Initialize a HookList (optionally with the given initial_value in index 0).
@@ -297,17 +278,6 @@ HookList<MallocHook::MunmapReplacement> munmap_replacement_ = { 0 };
 #undef INIT_HOOK_LIST
 
 } }  // namespace base::internal
-
-// The code below is DEPRECATED.
-using base::internal::new_hook_;
-using base::internal::delete_hook_;
-using base::internal::premmap_hook_;
-using base::internal::mmap_hook_;
-using base::internal::munmap_hook_;
-using base::internal::mremap_hook_;
-using base::internal::presbrk_hook_;
-using base::internal::sbrk_hook_;
-// End of DEPRECATED code section.
 
 using base::internal::kHookListMaxValues;
 using base::internal::new_hooks_;
@@ -454,49 +424,49 @@ int MallocHook_RemoveSbrkHook(MallocHook_SbrkHook hook) {
 extern "C"
 MallocHook_NewHook MallocHook_SetNewHook(MallocHook_NewHook hook) {
   RAW_VLOG(10, "SetNewHook(%p)", hook);
-  return new_hook_.Exchange(hook);
+  return new_hooks_.ExchangeSingular(hook);
 }
 
 extern "C"
 MallocHook_DeleteHook MallocHook_SetDeleteHook(MallocHook_DeleteHook hook) {
   RAW_VLOG(10, "SetDeleteHook(%p)", hook);
-  return delete_hook_.Exchange(hook);
+  return delete_hooks_.ExchangeSingular(hook);
 }
 
 extern "C"
 MallocHook_PreMmapHook MallocHook_SetPreMmapHook(MallocHook_PreMmapHook hook) {
   RAW_VLOG(10, "SetPreMmapHook(%p)", hook);
-  return premmap_hook_.Exchange(hook);
+  return premmap_hooks_.ExchangeSingular(hook);
 }
 
 extern "C"
 MallocHook_MmapHook MallocHook_SetMmapHook(MallocHook_MmapHook hook) {
   RAW_VLOG(10, "SetMmapHook(%p)", hook);
-  return mmap_hook_.Exchange(hook);
+  return mmap_hooks_.ExchangeSingular(hook);
 }
 
 extern "C"
 MallocHook_MunmapHook MallocHook_SetMunmapHook(MallocHook_MunmapHook hook) {
   RAW_VLOG(10, "SetMunmapHook(%p)", hook);
-  return munmap_hook_.Exchange(hook);
+  return munmap_hooks_.ExchangeSingular(hook);
 }
 
 extern "C"
 MallocHook_MremapHook MallocHook_SetMremapHook(MallocHook_MremapHook hook) {
   RAW_VLOG(10, "SetMremapHook(%p)", hook);
-  return mremap_hook_.Exchange(hook);
+  return mremap_hooks_.ExchangeSingular(hook);
 }
 
 extern "C"
 MallocHook_PreSbrkHook MallocHook_SetPreSbrkHook(MallocHook_PreSbrkHook hook) {
   RAW_VLOG(10, "SetPreSbrkHook(%p)", hook);
-  return presbrk_hook_.Exchange(hook);
+  return presbrk_hooks_.ExchangeSingular(hook);
 }
 
 extern "C"
 MallocHook_SbrkHook MallocHook_SetSbrkHook(MallocHook_SbrkHook hook) {
   RAW_VLOG(10, "SetSbrkHook(%p)", hook);
-  return sbrk_hook_.Exchange(hook);
+  return sbrk_hooks_.ExchangeSingular(hook);
 }
 // End of DEPRECATED code section.
 
@@ -522,10 +492,16 @@ MallocHook_SbrkHook MallocHook_SetSbrkHook(MallocHook_SbrkHook hook) {
 
 
 void MallocHook::InvokeNewHookSlow(const void* p, size_t s) {
+  if (tcmalloc::IsEmergencyPtr(p)) {
+    return;
+  }
   INVOKE_HOOKS(NewHook, new_hooks_, (p, s));
 }
 
 void MallocHook::InvokeDeleteHookSlow(const void* p) {
+  if (tcmalloc::IsEmergencyPtr(p)) {
+    return;
+  }
   INVOKE_HOOKS(DeleteHook, delete_hooks_, (p));
 }
 
@@ -591,6 +567,8 @@ void MallocHook::InvokeSbrkHookSlow(const void* result, ptrdiff_t increment) {
 
 #undef INVOKE_HOOKS
 
+#ifndef NO_TCMALLOC_SAMPLES
+
 DEFINE_ATTRIBUTE_SECTION_VARS(google_malloc);
 DECLARE_ATTRIBUTE_SECTION_VARS(google_malloc);
   // actual functions are in debugallocation.cc or tcmalloc.cc
@@ -636,6 +614,8 @@ static inline void CheckInHookCaller() {
   }
 }
 
+#endif // !NO_TCMALLOC_SAMPLES
+
 // We can improve behavior/compactness of this function
 // if we pass a generic test function (with a generic arg)
 // into the implementations for GetStackTrace instead of the skip_count.
@@ -667,6 +647,14 @@ extern "C" int MallocHook_GetCallerStackTrace(void** result, int max_depth,
     return 0;
   for (int i = 0; i < depth; ++i) {  // stack[0] is our immediate caller
     if (InHookCaller(stack[i])) {
+      // fast-path to slow-path calls may be implemented by compiler
+      // as non-tail calls. Causing two functions on stack trace to be
+      // inside google_malloc. In such case we're skipping to
+      // outermost such frame since this is where malloc stack frames
+      // really start.
+      while (i + 1 < depth && InHookCaller(stack[i+1])) {
+        i++;
+      }
       RAW_VLOG(10, "Found hooked allocator at %d: %p <- %p",
                    i, stack[i], stack[i+1]);
       i += 1;  // skip hook caller frame

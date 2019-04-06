@@ -85,7 +85,8 @@ const char kImePathKeyName[] = "ime_path";
 extensions::ComponentLoader* GetComponentLoader(Profile* profile) {
   extensions::ExtensionSystem* extension_system =
       extensions::ExtensionSystem::Get(profile);
-  ExtensionService* extension_service = extension_system->extension_service();
+  extensions::ExtensionService* extension_service =
+      extension_system->extension_service();
   return extension_service->component_loader();
 }
 
@@ -95,7 +96,8 @@ void DoLoadExtension(Profile* profile,
                      const base::FilePath& file_path) {
   extensions::ExtensionSystem* extension_system =
       extensions::ExtensionSystem::Get(profile);
-  ExtensionService* extension_service = extension_system->extension_service();
+  extensions::ExtensionService* extension_service =
+      extension_system->extension_service();
   DCHECK(extension_service);
   if (extension_service->GetExtensionById(extension_id, false)) {
     VLOG(1) << "the IME extension(id=\"" << extension_id
@@ -341,7 +343,7 @@ void ComponentExtensionIMEManagerImpl::ReadComponentExtensionsInfo(
 
     if (!component_ime.path.IsAbsolute()) {
       base::FilePath resources_path;
-      if (!PathService::Get(chrome::DIR_RESOURCES, &resources_path))
+      if (!base::PathService::Get(chrome::DIR_RESOURCES, &resources_path))
         NOTREACHED();
       component_ime.path = resources_path.Append(component_ime.path);
     }

@@ -24,6 +24,10 @@
 #include "components/history/core/browser/url_database.h"
 #include "db/vivaldi_history_types.h"
 #include "extensions/schema/history_private.h"
+#include "extensions/tools/vivaldi_tools.h"
+
+using vivaldi::MilliSecondsFromTime;
+using vivaldi::GetTime;
 
 namespace extensions {
 
@@ -46,17 +50,6 @@ typedef std::vector<vivaldi::history_private::TopUrlItem> TopSitesPerDayList;
 
 using bookmarks::BookmarkModel;
 
-namespace {
-
-// Start chromium copied code
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
-double MilliSecondsFromTime(const base::Time& time) {
-  return 1000 * time.ToDoubleT();
-}
-
 std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
   std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
 
@@ -70,10 +63,6 @@ std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
 
   return history_item;
 }
-
-// End chromium copied code
-
-}  // namespace
 
 HistoryPrivateAPI::HistoryPrivateAPI(content::BrowserContext* context)
     : browser_context_(context) {
@@ -155,12 +144,12 @@ HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<HistoryPrivateAPI>>::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+    DestructorAtExit g_factory_history = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<HistoryPrivateAPI>*
 HistoryPrivateAPI::GetFactoryInstance() {
-  return g_factory.Pointer();
+  return g_factory_history.Pointer();
 }
 
 template <>

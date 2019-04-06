@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2005, Google Inc.
  * All rights reserved.
  * 
@@ -32,7 +33,7 @@
  *
  * Module for heap-profiling.
  *
- * For full(er) information, see doc/heapprofile.html
+ * For full(er) information, see docs/heapprofile.html
  *
  * This module can be linked into your program with
  * no slowdown caused by this unless you activate the profiler
@@ -61,13 +62,6 @@
 # endif
 #endif
 
-// Make the linker NOT to strip functions in this file.
-#if defined(_WIN64)
-#pragma comment(linker, "/INCLUDE:HeapProfilerStart")
-#elif defined(_WIN32)
-#pragma comment(linker, "/INCLUDE:_HeapProfilerStart")
-#endif
-
 /* All this code should be usable from within C apps. */
 #ifdef __cplusplus
 extern "C" {
@@ -75,23 +69,8 @@ extern "C" {
 
 /* Start profiling and arrange to write profile data to file names
  * of the form: "prefix.0000", "prefix.0001", ...
- *
- * If |prefix| is NULL then dumps will not be written to disk. Applications
- * can use GetHeapProfile() to get profile data, but HeapProfilerDump() will do
- * nothing.
  */
 PERFTOOLS_DLL_DECL void HeapProfilerStart(const char* prefix);
-
-/* Start profiling with a callback function that returns application-generated
- * stacks. Profiles are not written to disk, but may be obtained via
- * GetHeapProfile(). The callback:
- * 1. May optionally skip the first |skip_count| items on the stack.
- * 2. Must provide a |stack| buffer of at least size 32 * sizeof(void*).
- * 3. Must return the number of items copied or zero.
- */
-typedef int (*StackGeneratorFunction)(int skip_count, void** stack);
-PERFTOOLS_DLL_DECL void HeapProfilerWithPseudoStackStart(
-    StackGeneratorFunction callback);
 
 /* Returns non-zero if we are currently profiling the heap.  (Returns
  * an int rather than a bool so it's usable from C.)  This is true
@@ -118,18 +97,6 @@ PERFTOOLS_DLL_DECL void HeapProfilerDump(const char *reason);
  * and should be free()-ed as soon as the caller does not need it anymore.
  */
 PERFTOOLS_DLL_DECL char* GetHeapProfile();
-
-/* Callback function for iterating through all allocated objects. Accepts
- * pointer to user data passed into IterateAllocatedObjects and pointer
- * to the object being visited.
- */
-typedef void (*AddressVisitor)(void* data, const void* ptr);
-
-/* Iterate over all live allocated objects. For each allocation the
- * callback will be invoked with the data argument and allocation pointer.
- */
-PERFTOOLS_DLL_DECL void IterateAllocatedObjects(AddressVisitor callback,
-                                                void* data);
 
 #ifdef __cplusplus
 }  // extern "C"

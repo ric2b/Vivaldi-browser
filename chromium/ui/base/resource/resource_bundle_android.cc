@@ -8,11 +8,9 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "jni/ResourceBundle_jni.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/data_pack.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 
@@ -82,7 +80,7 @@ std::unique_ptr<DataPack> LoadDataPackFromLocalePak(
 
 void ResourceBundle::LoadCommonResources() {
   base::FilePath disk_path;
-  PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &disk_path);
+  base::PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &disk_path);
   disk_path = disk_path.AppendASCII("vivaldi_100_percent.pak");
   if (LoadFromApkOrFile("assets/vivaldi_100_percent.pak",
                         &disk_path,
@@ -177,6 +175,21 @@ void LoadMainAndroidPackFile(const char* path_within_apk,
   }
 }
 
+std::unique_ptr<DataPack> GetDataPackFromPackFile(
+    const char* path_within_apk,
+    const base::FilePath& disk_file_path) {
+  if (LoadFromApkOrFile(path_within_apk, &disk_file_path, &g_resources_pack_fd,
+                        &g_resources_pack_region)) {
+    std::unique_ptr<DataPack> data_pack =
+        std::make_unique<DataPack>(SCALE_FACTOR_NONE);
+    if (data_pack->LoadFromFileRegion(base::File(g_resources_pack_fd),
+                                      g_resources_pack_region)) {
+      return data_pack;
+    }
+  }
+  return nullptr;
+}
+
 int GetMainAndroidPackFd(base::MemoryMappedFile::Region* out_region) {
   DCHECK_GE(g_resources_pack_fd, 0);
   *out_region = g_resources_pack_region;
@@ -209,11 +222,6 @@ std::string GetPathForAndroidLocalePakWithinApk(const std::string& locale) {
     return std::string();
   }
   return base::android::ConvertJavaStringToUTF8(env, ret.obj());
-}
-
-float GetPrimaryDisplayScale() {
-  return Java_ResourceBundle_getPrimaryDisplayScale(
-      base::android::AttachCurrentThread());
 }
 
 }  // namespace ui

@@ -18,11 +18,11 @@ source_set("service_manager") {
     ":interfaces",
     "//base",
     "//base/test:test_config",
-    "//mojo/common:common_base",
-    "//mojo/edk/system",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//services/service_manager/runner/common",
   ]
 
@@ -38,7 +38,7 @@ mojom("interfaces") {
   ]
 
   deps = [
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
   ]
 }
 
@@ -57,7 +57,6 @@ executable("service_manager_unittest_target") {
   deps = [
     ":interfaces",
     "//base",
-    "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp/standalone_service:main",
@@ -105,10 +104,9 @@ service("service_manager_unittest_embedder") {
     ":interfaces",
     "//base",
     "//build/win:default_exe_manifest",
-    "//mojo/edk/system",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp/standalone_service:main",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//services/service_manager/runner:init",
     "//services/service_manager/runner/common",
   ]

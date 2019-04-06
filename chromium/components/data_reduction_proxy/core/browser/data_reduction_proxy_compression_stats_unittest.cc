@@ -14,7 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -433,7 +433,9 @@ class DataReductionProxyCompressionStatsTest : public testing::Test {
   }
 
   void ClearDataSavingStatistics() {
-    compression_stats_->ClearDataSavingStatistics();
+    compression_stats_->ClearDataSavingStatistics(
+        DataReductionProxySavingsClearedReason::
+            USER_ACTION_DELETE_BROWSING_HISTORY);
   }
 
   void DeleteBrowsingHistory(const base::Time& start, const base::Time& end) {
@@ -468,6 +470,32 @@ class DataReductionProxyCompressionStatsTest : public testing::Test {
 
   bool IsDataReductionProxyEnabled() {
     return drp_test_context_->IsDataReductionProxyEnabled();
+  }
+
+  void InitializeWeeklyAggregateDataUse(const base::Time& now) {
+    compression_stats_->InitializeWeeklyAggregateDataUse(now);
+  }
+
+  void RecordWeeklyAggregateDataUse(
+      const base::Time& now,
+      int32_t received_kb,
+      bool is_user_request,
+      data_use_measurement::DataUseUserData::DataUseContentType content_type,
+      int32_t service_hash_code) {
+    compression_stats_->RecordWeeklyAggregateDataUse(
+        now, received_kb, is_user_request, content_type, service_hash_code);
+  }
+
+  void VerifyDictionaryPref(const std::string& pref,
+                            int key,
+                            int expected_value) const {
+    const base::DictionaryValue* dict =
+        compression_stats_->pref_service_->GetDictionary(pref);
+    EXPECT_EQ(expected_value != 0, dict->HasKey(base::IntToString(key)));
+    if (expected_value) {
+      EXPECT_EQ(expected_value,
+                dict->FindKey(base::IntToString(key))->GetInt());
+    }
   }
 
  private:
@@ -567,7 +595,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, TotalLengths) {
 
   compression_stats()->RecordDataUseWithMimeType(
       kReceivedLength, kOriginalLength, IsDataReductionProxyEnabled(),
-      UNKNOWN_TYPE, std::string());
+      UNKNOWN_TYPE, std::string(), true,
+      data_use_measurement::DataUseUserData::OTHER, 0);
 
   EXPECT_EQ(kReceivedLength,
             GetInt64(data_reduction_proxy::prefs::kHttpReceivedContentLength));
@@ -578,7 +607,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, TotalLengths) {
   // Record the same numbers again, and total lengths should be doubled.
   compression_stats()->RecordDataUseWithMimeType(
       kReceivedLength, kOriginalLength, IsDataReductionProxyEnabled(),
-      UNKNOWN_TYPE, std::string());
+      UNKNOWN_TYPE, std::string(), true,
+      data_use_measurement::DataUseUserData::OTHER, 0);
 
   EXPECT_EQ(kReceivedLength * 2,
             GetInt64(data_reduction_proxy::prefs::kHttpReceivedContentLength));
@@ -852,73 +882,6 @@ TEST_F(DataReductionProxyCompressionStatsTest, PartialDayTimeChange) {
       received2, 2, kNumDaysInHistory);
 }
 
-TEST_F(DataReductionProxyCompressionStatsTest, ForwardMultipleDays) {
-  base::HistogramTester histogram_tester;
-  const int64_t kOriginalLength = 200;
-  const int64_t kReceivedLength = 100;
-  RecordContentLengthPrefs(
-      kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
-      FakeNow());
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 1);
-
-  // Forward three days.
-  SetFakeTimeDeltaInHours(3 * 24);
-
-  RecordContentLengthPrefs(
-      kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
-      FakeNow());
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 2);
-
-  int64_t original[] = {kOriginalLength, 0, 0, kOriginalLength};
-  int64_t received[] = {kReceivedLength, 0, 0, kReceivedLength};
-  VerifyDailyDataSavingContentLengthPrefLists(
-      original, 4, received, 4, original, 4, received, 4, original, 4, received,
-      4, kNumDaysInHistory);
-
-  // Forward four more days.
-  AddFakeTimeDeltaInHours(4 * 24);
-  RecordContentLengthPrefs(
-      kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
-      FakeNow());
-  int64_t original2[] = {
-      kOriginalLength, 0, 0, kOriginalLength, 0, 0, 0, kOriginalLength,
-  };
-  int64_t received2[] = {
-      kReceivedLength, 0, 0, kReceivedLength, 0, 0, 0, kReceivedLength,
-  };
-  VerifyDailyDataSavingContentLengthPrefLists(
-      original2, 8, received2, 8, original2, 8, received2, 8, original2, 8,
-      received2, 8, kNumDaysInHistory);
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 3);
-
-  // Forward |kNumDaysInHistory| more days.
-  AddFakeTimeDeltaInHours(kNumDaysInHistory * 24);
-  RecordContentLengthPrefs(
-      kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
-      FakeNow());
-  int64_t original3[] = {kOriginalLength};
-  int64_t received3[] = {kReceivedLength};
-  VerifyDailyDataSavingContentLengthPrefLists(
-      original3, 1, received3, 1, original3, 1, received3, 1, original3, 1,
-      received3, 1, kNumDaysInHistory);
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 4);
-
-  // Forward |kNumDaysInHistory| + 1 more days.
-  AddFakeTimeDeltaInHours((kNumDaysInHistory + 1)* 24);
-  RecordContentLengthPrefs(
-      kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
-      FakeNow());
-  VerifyDailyDataSavingContentLengthPrefLists(
-      original3, 1, received3, 1, original3, 1, received3, 1, original3, 1,
-      received3, 1, kNumDaysInHistory);
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 5);
-}
-
 TEST_F(DataReductionProxyCompressionStatsTest, BackwardAndForwardOneDay) {
   base::HistogramTester histogram_tester;
   const int64_t kOriginalLength = 200;
@@ -929,10 +892,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, BackwardAndForwardOneDay) {
   RecordContentLengthPrefs(
       kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
       FakeNow());
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 1);
 
-  // Backward one day.
+  // Backward one day, expect no count.
   SetFakeTimeDeltaInHours(-24);
   RecordContentLengthPrefs(
       kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
@@ -942,10 +903,10 @@ TEST_F(DataReductionProxyCompressionStatsTest, BackwardAndForwardOneDay) {
   VerifyDailyDataSavingContentLengthPrefLists(
       original, 1, received, 1, original, 1, received, 1, original, 1, received,
       1, kNumDaysInHistory);
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 2);
+  histogram_tester.ExpectTotalCount("DataReductionProxy.SavingsCleared.Reason",
+                                    0);
 
-  // Then, Forward one day
+  // Then forward one day, expect no count.
   AddFakeTimeDeltaInHours(24);
   RecordContentLengthPrefs(
       kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
@@ -955,8 +916,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, BackwardAndForwardOneDay) {
   VerifyDailyDataSavingContentLengthPrefLists(
       original2, 2, received2, 2, original2, 2, received2, 2, original2, 2,
       received2, 2, kNumDaysInHistory);
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 3);
+  histogram_tester.ExpectTotalCount("DataReductionProxy.SavingsCleared.Reason",
+                                    0);
 }
 
 TEST_F(DataReductionProxyCompressionStatsTest, BackwardTwoDays) {
@@ -969,10 +930,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, BackwardTwoDays) {
   RecordContentLengthPrefs(
       kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
       FakeNow());
-  histogram_tester.ExpectUniqueSample(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 1);
 
-  // Backward two days.
+  // Backward two days, expect SYSTEM_CLOCK_MOVED_BACK.
   SetFakeTimeDeltaInHours(-2 * 24);
   RecordContentLengthPrefs(
       kReceivedLength, kOriginalLength, true, VIA_DATA_REDUCTION_PROXY,
@@ -980,30 +939,27 @@ TEST_F(DataReductionProxyCompressionStatsTest, BackwardTwoDays) {
   VerifyDailyDataSavingContentLengthPrefLists(
       original, 1, received, 1, original, 1, received, 1, original, 1, received,
       1, kNumDaysInHistory);
-  histogram_tester.ExpectTotalCount(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", 2);
-  histogram_tester.ExpectBucketCount(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", true, 1);
+  histogram_tester.ExpectUniqueSample(
+      "DataReductionProxy.SavingsCleared.Reason",
+      DataReductionProxySavingsClearedReason::SYSTEM_CLOCK_MOVED_BACK, 1);
   VerifyPrefInt64(prefs::kDataReductionProxySavingsClearedNegativeSystemClock,
                   FakeNow().ToInternalValue());
 
-  // Backward two days.
+  // Backward another two days, expect SYSTEM_CLOCK_MOVED_BACK.
   SetFakeTimeDeltaInHours(-4 * 24);
   RecordContentLengthPrefs(kReceivedLength, kOriginalLength, true,
                            VIA_DATA_REDUCTION_PROXY, FakeNow());
-  histogram_tester.ExpectTotalCount(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", 3);
-  histogram_tester.ExpectBucketCount(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", true, 2);
+  histogram_tester.ExpectUniqueSample(
+      "DataReductionProxy.SavingsCleared.Reason",
+      DataReductionProxySavingsClearedReason::SYSTEM_CLOCK_MOVED_BACK, 2);
 
-  // Forward 10 days.
-  AddFakeTimeDeltaInHours(10 * 24);
+  // Forward 2 days, expect no change.
+  AddFakeTimeDeltaInHours(2 * 24);
   RecordContentLengthPrefs(kReceivedLength, kOriginalLength, true,
                            VIA_DATA_REDUCTION_PROXY, FakeNow());
-  histogram_tester.ExpectTotalCount(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", 4);
-  histogram_tester.ExpectBucketCount(
-      "DataReductionProxy.SavingsCleared.NegativeSystemClock", false, 2);
+  histogram_tester.ExpectUniqueSample(
+      "DataReductionProxy.SavingsCleared.Reason",
+      DataReductionProxySavingsClearedReason::SYSTEM_CLOCK_MOVED_BACK, 2);
 }
 
 TEST_F(DataReductionProxyCompressionStatsTest, NormalizeHostname) {
@@ -1364,6 +1320,136 @@ TEST_F(DataReductionProxyCompressionStatsTest, ClearDataSavingStatistics) {
   VerifyDailyDataSavingContentLengthPrefLists(nullptr, 0, nullptr, 0, nullptr,
                                               0, nullptr, 0, nullptr, 0,
                                               nullptr, 0, 0);
+}
+
+TEST_F(DataReductionProxyCompressionStatsTest, WeeklyAggregateDataUse) {
+  const int32_t kDataUseKB = 100;
+  base::HistogramTester histogram_tester;
+
+  InitializeWeeklyAggregateDataUse(base::Time::Now());
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.ThisWeekAggregateKB.Services.Downstream.Background",
+      0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.ThisWeekAggregateKB.Services.Downstream.Foreground",
+      0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.LastWeekAggregateKB.Services.Downstream.Background",
+      0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.LastWeekAggregateKB.Services.Downstream.Foreground",
+      0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.ThisWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.LastWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      0);
+
+  RecordWeeklyAggregateDataUse(
+      base::Time::Now(), kDataUseKB, true,
+      data_use_measurement::DataUseUserData::MAIN_FRAME_HTML, 0);
+  VerifyDictionaryPref(prefs::kThisWeekUserTrafficContentTypeDownstreamKB,
+                       data_use_measurement::DataUseUserData::MAIN_FRAME_HTML,
+                       kDataUseKB);
+
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.ThisWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      0);
+
+  InitializeWeeklyAggregateDataUse(base::Time::Now());
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.ThisWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      data_use_measurement::DataUseUserData::MAIN_FRAME_HTML, kDataUseKB);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.LastWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      data_use_measurement::DataUseUserData::MAIN_FRAME_HTML, 0);
+}
+
+TEST_F(DataReductionProxyCompressionStatsTest, AggregateDataUseForwardWeeks) {
+  const int32_t kMainFrameKB = 100;
+  const int32_t kNonMainFrameKB = 101;
+  base::HistogramTester histogram_tester;
+
+  base::Time fake_time_now = base::Time::Now();
+
+  InitializeWeeklyAggregateDataUse(fake_time_now);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.ThisWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      0);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.LastWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      0);
+
+  RecordWeeklyAggregateDataUse(
+      fake_time_now, kMainFrameKB, true,
+      data_use_measurement::DataUseUserData::MAIN_FRAME_HTML, 0);
+  VerifyDictionaryPref(prefs::kThisWeekUserTrafficContentTypeDownstreamKB,
+                       data_use_measurement::DataUseUserData::MAIN_FRAME_HTML,
+                       kMainFrameKB);
+  RecordWeeklyAggregateDataUse(
+      fake_time_now, kNonMainFrameKB, true,
+      data_use_measurement::DataUseUserData::NON_MAIN_FRAME_HTML, 0);
+  VerifyDictionaryPref(
+      prefs::kThisWeekUserTrafficContentTypeDownstreamKB,
+      data_use_measurement::DataUseUserData::NON_MAIN_FRAME_HTML,
+      kNonMainFrameKB);
+
+  // Fast forward 7 days, and verify that the last week histograms are recorded.
+  fake_time_now += base::TimeDelta::FromDays(7);
+  InitializeWeeklyAggregateDataUse(fake_time_now);
+  VerifyDictionaryPref(prefs::kLastWeekUserTrafficContentTypeDownstreamKB,
+                       data_use_measurement::DataUseUserData::MAIN_FRAME_HTML,
+                       kMainFrameKB);
+  VerifyDictionaryPref(
+      prefs::kLastWeekUserTrafficContentTypeDownstreamKB,
+      data_use_measurement::DataUseUserData::NON_MAIN_FRAME_HTML,
+      kNonMainFrameKB);
+
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.LastWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      data_use_measurement::DataUseUserData::MAIN_FRAME_HTML, kMainFrameKB);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.LastWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      data_use_measurement::DataUseUserData::NON_MAIN_FRAME_HTML,
+      kNonMainFrameKB);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.ThisWeekAggregateKB.UserTraffic.Downstream."
+      "ContentType",
+      0);
+
+  // Subsequent data use should be recorded to the current week prefs.
+  RecordWeeklyAggregateDataUse(
+      fake_time_now, kMainFrameKB, true,
+      data_use_measurement::DataUseUserData::MAIN_FRAME_HTML, 0);
+  VerifyDictionaryPref(prefs::kThisWeekUserTrafficContentTypeDownstreamKB,
+                       data_use_measurement::DataUseUserData::MAIN_FRAME_HTML,
+                       kMainFrameKB);
+
+  // Fast forward by more than two weeks, and the prefs will be cleared.
+  fake_time_now += base::TimeDelta::FromDays(15);
+  InitializeWeeklyAggregateDataUse(fake_time_now);
+  VerifyDictionaryPref(prefs::kLastWeekUserTrafficContentTypeDownstreamKB,
+                       data_use_measurement::DataUseUserData::MAIN_FRAME_HTML,
+                       0);
+  VerifyDictionaryPref(
+      prefs::kLastWeekUserTrafficContentTypeDownstreamKB,
+      data_use_measurement::DataUseUserData::NON_MAIN_FRAME_HTML, 0);
+  VerifyDictionaryPref(prefs::kThisWeekUserTrafficContentTypeDownstreamKB,
+                       data_use_measurement::DataUseUserData::MAIN_FRAME_HTML,
+                       0);
+  VerifyDictionaryPref(
+      prefs::kThisWeekUserTrafficContentTypeDownstreamKB,
+      data_use_measurement::DataUseUserData::NON_MAIN_FRAME_HTML, 0);
 }
 
 }  // namespace data_reduction_proxy

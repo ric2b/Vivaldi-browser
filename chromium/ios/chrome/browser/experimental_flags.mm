@@ -22,7 +22,9 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/signin/core/browser/signin_switches.h"
 #include "components/variations/variations_associated_data.h"
+#include "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #include "ios/chrome/browser/chrome_switches.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/web/public/web_view_creation_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -32,7 +34,6 @@
 namespace {
 
 NSString* const kEnableStartupCrash = @"EnableStartupCrash";
-NSString* const kEnableViewCopyPasswords = @"EnableViewCopyPasswords";
 NSString* const kFirstRunForceEnabled = @"FirstRunForceEnabled";
 NSString* const kGaiaEnvironment = @"GAIAEnvironment";
 NSString* const kOriginServerHost = @"AlternateOriginServerHost";
@@ -95,22 +96,6 @@ bool IsMemoryDebuggingEnabled() {
 #endif  // CHROMIUM_BUILD
 }
 
-// TODO(crbug.com/760084): Remove this method and replace with base::Feature or
-// remove it all.
-bool IsNewClearBrowsingDataUIEnabled() {
-  return false;
-}
-
-// Emergency switch for https://crbug.com/527084 in case of unforeseen UX
-// regressions.
-// Defaults to Enabled unless the Finch trial has explicitly disabled it.
-bool IsPageIconForDowngradedHTTPSEnabled() {
-  std::string group_name =
-      base::FieldTrialList::FindFullName("IOSPageIconForDowngradedHTTPS");
-  return !base::StartsWith(group_name, "Disabled",
-                           base::CompareCase::INSENSITIVE_ASCII);
-}
-
 bool IsStartupCrashEnabled() {
   return [[NSUserDefaults standardUserDefaults] boolForKey:kEnableStartupCrash];
 }
@@ -123,21 +108,8 @@ bool MustClearApplicationGroupSandbox() {
   return value;
 }
 
-// This feature is on by default. Finch and experimental settings can be used to
-// disable it.
-// TODO(crbug.com/739404): Remove this method and the experimental flag once the
-// feature spends a couple of releases in stable.
-bool IsViewCopyPasswordsEnabled() {
-  if (!base::FeatureList::IsEnabled(password_manager::features::kViewPasswords))
-    return false;
-  NSString* viewCopyPasswordFlag = [[NSUserDefaults standardUserDefaults]
-      objectForKey:kEnableViewCopyPasswords];
-  return ![viewCopyPasswordFlag isEqualToString:@"Disabled"];
-}
-
-bool IsNewFeedbackKitEnabled() {
-  return [[NSUserDefaults standardUserDefaults]
-      boolForKey:@"NewFeedbackKitEnabled"];
+bool IsNewClearBrowsingDataUIEnabled() {
+  return base::FeatureList::IsEnabled(kNewClearBrowsingDataUI);
 }
 
 bool IsThirdPartyKeyboardWorkaroundEnabled() {
@@ -152,6 +124,26 @@ bool IsThirdPartyKeyboardWorkaroundEnabled() {
 
   // Check if the Finch experiment is turned on.
   return base::FeatureList::IsEnabled(kEnableThirdPartyKeyboardWorkaround);
+}
+
+bool IsRecentTabsUIRebootEnabled() {
+  return base::FeatureList::IsEnabled(kUIRefreshPhase1);
+}
+
+bool IsBookmarksUIRebootEnabled() {
+  return base::FeatureList::IsEnabled(kUIRefreshPhase1);
+}
+
+bool IsReadingListUIRebootEnabled() {
+  return base::FeatureList::IsEnabled(kUIRefreshPhase1);
+}
+
+bool IsCollectionsUIRebootEnabled() {
+  return base::FeatureList::IsEnabled(kCollectionsUIReboot);
+}
+
+bool IsSettingsUIRebootEnabled() {
+  return base::FeatureList::IsEnabled(kUIRefreshPhase1);
 }
 
 }  // namespace experimental_flags

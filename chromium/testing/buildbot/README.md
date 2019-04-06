@@ -77,7 +77,7 @@ your tryjob). Non-trybot changes have to be landed manually :(.
 When adding tests or bumping timeouts, care must be taken to ensure the
 infrastructure has capacity to handle the extra load.  This is especially true
 for the established
-[Chromium CQ builders](https://chromium.googlesource.com/chromium/src/+/master/infra/config/cq.cfg),
+[Chromium CQ builders](https://chromium.googlesource.com/chromium/src/+/master/infra/config/branch/cq.cfg),
 as they operate under strict execution requirements. Make sure to get an
 infrastructure engineer on the Crossover Team to sign off that there is both
 buildbot and swarming capacity available.
@@ -117,6 +117,11 @@ generated JSON file. Commonly used arguments include:
 
     * `can_use_on_swarming_builders`: if set to False, disables running this
       test on Swarming on any bot.
+
+* `experiment_percentage`: an integer indicating that the test should be run
+  as an experiment in the given percentage of builds. Tests running as
+  experiments will not cause the containing builds to fail. Values should be
+  in `[0, 100]` and will be clamped accordingly.
 
 * `android_swarming`: Swarming parameters to be applied only on Android bots.
   (This feature was added mainly to match the original handwritten JSON files,

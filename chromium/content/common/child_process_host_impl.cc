@@ -11,7 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/hash.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
 #include "base/path_service.h"
@@ -30,7 +29,7 @@
 #include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/message_filter.h"
-#include "services/resource_coordinator/public/interfaces/memory_instrumentation/constants.mojom.h"
+#include "services/resource_coordinator/public/mojom/memory_instrumentation/constants.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
 #if defined(OS_LINUX)
@@ -68,7 +67,7 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
   // On most platforms, the child executable is the same as the current
   // executable.
   if (child_path.empty())
-    PathService::Get(CHILD_PROCESS_EXE, &child_path);
+    base::PathService::Get(CHILD_PROCESS_EXE, &child_path);
   return child_path;
 }
 

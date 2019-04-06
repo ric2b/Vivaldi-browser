@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "ash/app_list/model/search/search_result.h"
+#include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 
 class AppListControllerDelegate;
 class Profile;
@@ -18,7 +18,7 @@ namespace app_list {
 class AnswerCardContents;
 
 // Result of AnswerCardSearchProvider.
-class AnswerCardResult : public SearchResult {
+class AnswerCardResult : public ChromeSearchResult {
  public:
   AnswerCardResult(Profile* profile,
                    AppListControllerDelegate* list_controller,
@@ -30,9 +30,6 @@ class AnswerCardResult : public SearchResult {
   ~AnswerCardResult() override;
 
   void OnContentsDestroying();
-
-  // SearchResult overrides:
-  std::unique_ptr<SearchResult> Duplicate() const override;
 
   void Open(int event_flags) override;
 

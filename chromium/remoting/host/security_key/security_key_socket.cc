@@ -12,6 +12,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/stream_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace remoting {
 
@@ -31,7 +32,7 @@ SecurityKeySocket::SecurityKeySocket(std::unique_ptr<net::StreamSocket> socket,
                                      const base::Closure& timeout_callback)
     : socket_(std::move(socket)),
       read_buffer_(new net::IOBufferWithSize(kRequestReadBufferLength)) {
-  timer_.reset(new base::Timer(false, false));
+  timer_.reset(new base::OneShotTimer());
   timer_->Start(FROM_HERE, timeout, timeout_callback);
 }
 
@@ -107,10 +108,33 @@ void SecurityKeySocket::OnDataWritten(int result) {
 void SecurityKeySocket::DoWrite() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(write_buffer_);
-
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("security_key_socket", R"(
+        semantics {
+          sender: "Security Key Socket"
+          description:
+            "This request performs the communication between processes when "
+            "handling security key (gnubby) authentication."
+          trigger:
+            "Performing an action (such as signing into a website with "
+            "two-factor authentication enabled) that requires a security key "
+            "touch."
+          data: "Security key protocol data."
+          destination: LOCAL
+        }
+        policy {
+          cookies_allowed: NO
+          setting: "This feature cannot be disabled in Settings."
+          chrome_policy {
+            RemoteAccessHostAllowGnubbyAuth {
+              RemoteAccessHostAllowGnubbyAuth: false
+            }
+          }
+        })");
   int result = socket_->Write(
       write_buffer_.get(), write_buffer_->BytesRemaining(),
-      base::Bind(&SecurityKeySocket::OnDataWritten, base::Unretained(this)));
+      base::Bind(&SecurityKeySocket::OnDataWritten, base::Unretained(this)),
+      traffic_annotation);
   if (result != net::ERR_IO_PENDING) {
     OnDataWritten(result);
   }

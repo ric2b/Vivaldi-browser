@@ -7,6 +7,7 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "gpu/ipc/common/gpu_surface_tracker.h"
 #include "jni/DialogOverlayImpl_jni.h"
@@ -37,14 +38,14 @@ static jlong JNI_DialogOverlayImpl_Init(JNIEnv* env,
   // reprojection video surface.
   RenderWidgetHostViewBase* rwhvb =
       static_cast<RenderWidgetHostViewBase*>(rfhi->GetView());
-  if (rwhvb->IsInVR())
+  if (!rwhvb || rwhvb->IsInVR())
     return 0;
 
   WebContentsImpl* web_contents_impl = static_cast<WebContentsImpl*>(
       content::WebContents::FromRenderFrameHost(rfhi));
 
   // If the overlay would not be immediately used, fail the request.
-  if (!rfhi->IsCurrent() || web_contents_impl->IsHidden())
+  if (!rfhi->IsCurrent() || !web_contents_impl || web_contents_impl->IsHidden())
     return 0;
 
   // Dialog-based overlays are not supported for persistent video.
@@ -180,9 +181,10 @@ void DialogOverlayImpl::FrameDeleted(RenderFrameHost* render_frame_host) {
     Stop();
 }
 
-void DialogOverlayImpl::WasHidden() {
+void DialogOverlayImpl::OnVisibilityChanged(content::Visibility visibility) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  Stop();
+  if (visibility == content::Visibility::HIDDEN)
+    Stop();
 }
 
 void DialogOverlayImpl::WebContentsDestroyed() {

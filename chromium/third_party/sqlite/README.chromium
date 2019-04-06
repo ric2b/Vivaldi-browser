@@ -1,6 +1,6 @@
 Name: sqlite
 URL: https://sqlite.org/
-Version: 3.21.0
+Version: 3.24.0
 Included In Release: Yes
 Security Critical: Yes
 License: Public domain
@@ -42,7 +42,7 @@ The directory structure is as follows. Files common to all third_party projects
                   build, which merges all the code in one .c file and one .h
                   file. See https://www.sqlite.org/amalgamation.html
 * amalgamation/config.h - Linux build configuration
-* google_generate_amalgamation.sh - Script that generates the amalgamation
+* scripts/ - Scripts that generate the files in the amalgamation
 * sqlite.h - The header used by the rest of Chromium to include SQLite. This
              forwards to amalgamation/sqlite3.h
 * fuzz/ - Google OSS-Fuzz (ClusterFuzz) testing for Chromium's SQLite build
@@ -54,7 +54,7 @@ The directory structure is as follows. Files common to all third_party projects
 third_party/sqlite/src is the patched source from SQLite.  This is used to
 generate the amalgamation, a concatenation of all of the files into a giant
 sqlite3.c.  To prototype, edit in src/, then call
-  ./google_generate_amalgamation.sh
+  ./scripts/generate_amalgamation.sh
 to regenerate sqlite3.c.  The code in src/ is much easier to edit, and the
 SQLite test framework can easily be run.  During development it may be
 convenient to modify BUILD.gn based on src/main.mk to just pull in the src/
@@ -101,8 +101,8 @@ git add patches/*.patch
 git commit -m "Rebuild patches for sqlite_${BASE}"
 
 # Re-generate the amalgamation.
-./google_generate_amalgamation.sh
-git commit -m 'google_generate_amalgamation.sh' amalgamation/
+./scripts/generate_amalgamation.sh
+git commit -m './scripts/generate_amalgamation.sh' amalgamation/
 # At this point everything should build and work.
 
 # Do a squash upload.  This should add your single patch to patches/, and apply
@@ -110,9 +110,9 @@ git commit -m 'google_generate_amalgamation.sh' amalgamation/
 # will have hash changes.  A sensible check-in comment would be something like
 # the patch's checkin comment, plus "regenerate amalgamation and generate patch
 # file."
-# TODO(shess): Should hash changes be checked in, or backed out?
+# TODO(pwnall): Should hash changes be checked in, or backed out?
 
-# Find a sucker.  Send review.
+# Find unsuspecting victim and send review.
 
 ---
 
@@ -132,31 +132,31 @@ others. The basic idea below is to generate git branches to work with:
 We will upload sqlite-new-upstream as a massive (800k LOC+) CL that cannot
 possibly be reviewed, but is generated in an automated fashion. We will then
 squash sqlite-new to sqlite-new-upstream and obtain one CL that only contains
-diffs. The second CL is still large, but it's a fraction of the fits (automated)
-CL.
+diffs. The second CL is still large, but it's a fraction of the first
+(automated) CL.
 
 # The steps below are easier if done in the SQLite directory.
 cd third_party/sqlite
 
-export OLD=3170000
-export NEW=3190300
+export OLD=3240000
+export NEW=3250000
 export GNU_SED=sed  # OSX: "brew install gnu-sed", then use "gsed" here.
 
 #### Download and unpack the new SQLite release.
 git new-branch sqlite-new-upstream
 # URL from "Alternative Source Code Formats" at https://sqlite.org/download.html
-curl https://sqlite.org/2017/sqlite-src-3190300.zip > upstream.zip
+curl https://sqlite.org/2018/sqlite-src-${NEW}.zip > upstream.zip
 mkdir sqlite-src-$NEW
 unzip ./upstream.zip -d sqlite-src-$NEW
 rm ./upstream.zip
-mv sqlite-src-$NEW/SQLite-*/* sqlite-src-$NEW/
-rmdir mv sqlite-src-$NEW/SQLite-*/
+mv sqlite-src-$NEW/sqlite-*/* sqlite-src-$NEW/
+rmdir sqlite-src-$NEW/sqlite-*/
 xdg-open sqlite-src-$NEW  # Make sure everything looks right.
 
 #### Add the new release code in a separate CL, for code review sanity.
 git add sqlite-src-$NEW  # Committing the code as downloaded, on purpose.
 git clean -i -d -x sqlite-src-$NEW  # Make sure no file is git-ignored.
-git commit -m "sqlite: Add code for release 3.19"
+git commit -m "sqlite: Add code for release 3.25.0"
 git cl upload  # Have the new code in a separate (impossible to review) CL.
 
 #### Create a branch for the old SQLite release's upstream version.
@@ -204,16 +204,24 @@ git rebase sqlite-new-base
 
 #### Finally, create the branch that we'll upload.
 git new-branch --upstream-current sqlite-new-cl
-./google_generate_amalgamation.sh
+./scripts/generate_amalgamation.sh
+git cl format amalgamation/rename_exports.h
+
+#### Validate the upgrade.
 # The goal is to have a set of reasonably-independent CLs which can be
 # understood separately, so that future importers can sensibly determine how to
 # handle conflicts.  So use git-rebase and slipstream fixups back into their
 # original CL until everything builds and works.
 cd ../..
 ninja -C out/Default
+# Check that extract_sqlite_api.py added chrome_ to all exported symbols.
+# Only "_fini" and "_init" should be unprefixed.
+nm -B out/Default/libchromium_sqlite3.so | cut -c 18- | sort | grep '^T'
 out/Default/sql_unittests
-third_party/WebKit/Tools/Scripts/run-webkit-tests -t Default storage/websql/*
+third_party/blink/tools/run_web_tests.py -t Default storage/websql/*
 cd third_party/sqlite
+
+#### Create the review.
 # Rebuild the patch set.
 git rm patches/*
 git format-patch --output-directory=patches --ignore-space-change \
@@ -227,7 +235,7 @@ git cl upload --squash
 # <https://www.sqlite.org/changes.html> which might be deemed important. Don't
 # enumerate all of the patch messages, those are assumed, but do reference any
 # material changes made.
-# TODO(shess) Describe an appropriate comment style.  Seems like it should at
+# TODO(pwnall) Describe an appropriate comment style.  Seems like it should at
 # least include the SQLite version number.  Meanwhile, look in the logs for past
 # commits to model things on.
 
@@ -243,6 +251,8 @@ distinct CLs.
 --------------------------------------------
 
 4) Running SQLite's test suite within the Chromium checkout.
+
+TODO(pwnall): This hasn't been tried out for at least a year.
 
 Prerequisites: The test suite requires tcl-dev and libicu-dev.  Install those on
 Ubuntu like:
@@ -281,7 +291,7 @@ for the same reason as for OSX.
 
 --
 
-NOTE(shess): On Ubuntu it is possible to run the tests in a tmpfs something
+NOTE(pwnall): On Ubuntu it is possible to run the tests in a tmpfs something
 like:
 
 TMPFS=/dev/shm/sqlite_build

@@ -12,7 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -46,6 +46,10 @@ class TestRenderViewContextMenu : public RenderViewContextMenu {
   // in the menu.
   // A list of command ids can be found in chrome/app/chrome_command_ids.h.
   bool IsItemPresent(int command_id) const;
+
+  // Returns true if the command specified by |command_id| is checked in the
+  // menu.
+  bool IsItemChecked(int command_id) const;
 
   // Returns true if a command specified by any command id between
   // |command_id_first| and |command_id_last| (inclusive) is present in the

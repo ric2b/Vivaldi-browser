@@ -62,8 +62,8 @@ void CommandBufferHelper::CalcImmediateEntries(int waiting_count) {
         total_entry_count_ /
         ((curr_get == last_flush_put_) ? kAutoFlushSmall : kAutoFlushBig);
 
-    int32_t pending =
-        (put_ + total_entry_count_ - last_flush_put_) % total_entry_count_;
+    int32_t pending = (put_ + total_entry_count_ - last_ordering_barrier_put_) %
+                      total_entry_count_;
 
     if (pending > 0 && pending >= limit) {
       // Time to force flush.
@@ -125,8 +125,10 @@ void CommandBufferHelper::SetGetBuffer(int32_t id,
 
 void CommandBufferHelper::FreeRingBuffer() {
   if (HaveRingBuffer()) {
-    FlushLazy();
+    OrderingBarrier();
     command_buffer_->DestroyTransferBuffer(ring_buffer_id_);
+    // SetGetBuffer is an IPC, so previous work needs to be flushed first.
+    Flush();
     SetGetBuffer(-1, nullptr);
   }
 }
@@ -168,6 +170,7 @@ bool CommandBufferHelper::WaitForGetOffsetInRange(int32_t start, int32_t end) {
 }
 
 void CommandBufferHelper::Flush() {
+  TRACE_EVENT0("gpu", "CommandBufferHelper::Flush");
   // Wrap put_ before flush.
   if (put_ == total_entry_count_)
     put_ = 0;
@@ -314,7 +317,14 @@ void CommandBufferHelper::WaitForAvailableEntries(int32_t count) {
   // Try to get 'count' entries without flushing.
   CalcImmediateEntries(count);
   if (immediate_entry_count_ < count) {
-    // Try again with a shallow Flush().
+    // Update cached_get_offset_ and try again.
+    UpdateCachedState(command_buffer_->GetLastState());
+    CalcImmediateEntries(count);
+  }
+
+  if (immediate_entry_count_ < count) {
+    // Try again with a shallow Flush(). Flush can change immediate_entry_count_
+    // because of the auto flush logic.
     FlushLazy();
     CalcImmediateEntries(count);
     if (immediate_entry_count_ < count) {
@@ -362,7 +372,7 @@ bool CommandBufferHelper::OnMemoryDump(
         "free_size", MemoryAllocatorDump::kUnitsBytes,
         GetTotalFreeEntriesNoWaiting() * sizeof(CommandBufferEntry));
     base::UnguessableToken shared_memory_guid =
-        ring_buffer_->backing()->shared_memory_handle().GetGUID();
+        ring_buffer_->backing()->GetGUID();
     const int kImportance = 2;
     if (!shared_memory_guid.is_empty()) {
       pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), shared_memory_guid,

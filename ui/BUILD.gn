@@ -1,5 +1,11 @@
-static_library("ui") {
+import("//build/config/jumbo.gni")
+
+jumbo_static_library("ui") {
   sources = [
+    "lazy_load_service_factory.cc",
+    "lazy_load_service_factory.h",
+    "lazy_load_service.cc",
+    "lazy_load_service.h",
     "views/vivaldi_pin_shortcut.cpp",
     "views/vivaldi_pin_shortcut.h",
     "webgui/notes_ui.cpp",
@@ -18,6 +24,7 @@ static_library("ui") {
     "//base:base",
     "//components/translate/content/browser",
     "//content/public/browser",
+    "//vivaldi/prefs:prefs_files_generator",
     "//skia",
   ]
   if (!is_android) {

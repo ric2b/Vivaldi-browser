@@ -5,7 +5,6 @@
 #include <stdint.h>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "gpu/command_buffer/client/client_test_helper.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
 #include "gpu/command_buffer/service/gpu_service_test.h"
@@ -85,7 +84,7 @@ class BaseGpuTest : public GpuServiceTest {
       gl_version = "2.1";
       extensions = "GL_EXT_timer_query";
     } else if (GetTimerType() == gl::GPUTiming::kTimerTypeDisjoint) {
-      gl_version = "opengl es 3.0";
+      gl_version = "OpenGL ES 3.0";
       extensions = "GL_EXT_disjoint_timer_query";
     } else if (GetTimerType() == gl::GPUTiming::kTimerTypeARB) {
       // TODO(sievers): The tracer should not depend on ARB_occlusion_query.

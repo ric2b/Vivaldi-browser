@@ -2,75 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/macros.h"
+#include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
+#include "base/values.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/syncable/read_node.h"
-#include "components/sync/syncable/read_transaction.h"
 
 using base::FeatureList;
 using syncer::ModelType;
 using syncer::ModelTypeSet;
+using syncer::ModelTypeFromString;
 using syncer::ModelTypeToString;
 using syncer::ProxyTypes;
 using syncer::SyncPrefs;
 using syncer::UserSelectableTypes;
-using syncer::UserShare;
 
 namespace {
 
-bool DoesTopLevelNodeExist(UserShare* user_share, ModelType type) {
-  syncer::ReadTransaction trans(FROM_HERE, user_share);
-  syncer::ReadNode node(&trans);
-  return node.InitTypeRoot(type) == syncer::BaseNode::INIT_OK;
-}
-
-void VerifyExistence(UserShare* user_share,
-                     bool should_root_node_exist,
-                     ModelType type) {
-  EXPECT_EQ(should_root_node_exist, DoesTopLevelNodeExist(user_share, type))
-      << ModelTypeToString(type);
-}
-
-void VerifyExistence(UserShare* user_share,
-                     bool should_root_node_exist,
-                     ModelType grouped,
-                     ModelType selectable) {
-  EXPECT_EQ(should_root_node_exist, DoesTopLevelNodeExist(user_share, grouped))
-      << ModelTypeToString(selectable) << "->" << ModelTypeToString(grouped);
-}
-
-bool IsUnready(const syncer::DataTypeStatusTable& data_type_status_table,
-               ModelType type) {
-  return data_type_status_table.GetUnreadyErrorTypes().Has(type);
-}
-
-// The current approach this test class takes is to examine the Directory and
-// check for root nodes to see if a type is currently enabled. While this works
-// for things in the directory, it does not work for USS types. USS does not
-// have any general data access mechanism, at least yet. Until that exists,
-// simply omit types that may be USS from these cases.
-ModelTypeSet UnifiedSyncServiceTypes() {
-  ModelTypeSet set;
-  if (FeatureList::IsEnabled(switches::kSyncUSSAutocomplete)) {
-    set.Put(syncer::AUTOFILL);
-  }
-  if (FeatureList::IsEnabled(switches::kSyncUSSTypedURL)) {
-    set.Put(syncer::TYPED_URLS);
-  }
-  set.Put(syncer::DEVICE_INFO);
-  // PRINTERS was the first USS type, and should precede all other USS types.
-  // All new types should be USS. This logic is fragile to reordering ModelType.
-  for (int typeInt = syncer::PRINTERS; typeInt < syncer::FIRST_PROXY_TYPE;
-       typeInt++) {
-    set.Put(static_cast<ModelType>(typeInt));
-  }
-  return set;
-}
+const bool kUserEventsSeparatePrefGroup = false;
 
 // Some types show up in multiple groups. This means that there are at least two
 // user selectable groups that will cause these types to become enabled. This
@@ -84,8 +40,8 @@ ModelTypeSet MultiGroupTypes(const SyncPrefs& sync_prefs,
   ModelTypeSet multi;
   for (ModelTypeSet::Iterator si = selectable_types.First(); si.Good();
        si.Inc()) {
-    const ModelTypeSet grouped_types =
-        sync_prefs.ResolvePrefGroups(registered_types, ModelTypeSet(si.Get()));
+    const ModelTypeSet grouped_types = sync_prefs.ResolvePrefGroups(
+        registered_types, ModelTypeSet(si.Get()), kUserEventsSeparatePrefGroup);
     for (ModelTypeSet::Iterator gi = grouped_types.First(); gi.Good();
          gi.Inc()) {
       if (seen.Has(gi.Get())) {
@@ -108,6 +64,35 @@ class EnableDisableSingleClientTest : public SyncTest {
   // Don't use self-notifications as they can trigger additional sync cycles.
   bool TestUsesSelfNotifications() override { return false; }
 
+  bool ModelTypeExists(ModelType type) {
+    base::RunLoop loop;
+    std::unique_ptr<base::ListValue> all_nodes;
+    GetSyncService(0)->GetAllNodes(
+        base::BindLambdaForTesting([&](std::unique_ptr<base::ListValue> nodes) {
+          all_nodes = std::move(nodes);
+          loop.Quit();
+        }));
+    loop.Run();
+    // Look for the root node corresponding to |type|.
+    for (const base::Value& value : all_nodes->GetList()) {
+      DCHECK(value.is_dict());
+      const base::Value* nodes = value.FindKey("nodes");
+      DCHECK(nodes);
+      DCHECK(nodes->is_list());
+      // Ignore types that are empty, because we expect the root node.
+      if (nodes->GetList().empty()) {
+        continue;
+      }
+      const base::Value* model_type = value.FindKey("type");
+      DCHECK(model_type);
+      DCHECK(model_type->is_string());
+      if (type == ModelTypeFromString(model_type->GetString())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
  protected:
   void SetupTest(bool all_types_enabled) {
     ASSERT_TRUE(SetupClients());
@@ -117,23 +102,17 @@ class EnableDisableSingleClientTest : public SyncTest {
     } else {
       ASSERT_TRUE(GetClient(0)->SetupSync(ModelTypeSet()));
     }
-    user_share_ = GetSyncService(0)->GetUserShare();
-    data_type_status_table_ = GetSyncService(0)->data_type_status_table();
 
     registered_types_ = GetSyncService(0)->GetRegisteredDataTypes();
     selectable_types_ = UserSelectableTypes();
     multi_grouped_types_ = MultiGroupTypes(*sync_prefs_, registered_types_);
-    registered_directory_types_ = Difference(
-        Difference(registered_types_, UnifiedSyncServiceTypes()), ProxyTypes());
-    registered_selectable_types_ =
-        Intersection(registered_types_, UserSelectableTypes());
   }
 
   ModelTypeSet ResolveGroup(ModelType type) {
-    return Difference(Difference(sync_prefs_->ResolvePrefGroups(
-                                     registered_types_, ModelTypeSet(type)),
-                                 ProxyTypes()),
-                      UnifiedSyncServiceTypes());
+    return Difference(
+        sync_prefs_->ResolvePrefGroups(registered_types_, ModelTypeSet(type),
+                                       kUserEventsSeparatePrefGroup),
+        ProxyTypes());
   }
 
   ModelTypeSet WithoutMultiTypes(const ModelTypeSet& input) {
@@ -147,13 +126,9 @@ class EnableDisableSingleClientTest : public SyncTest {
   }
 
   std::unique_ptr<SyncPrefs> sync_prefs_;
-  UserShare* user_share_;
-  syncer::DataTypeStatusTable data_type_status_table_;
   ModelTypeSet registered_types_;
   ModelTypeSet selectable_types_;
   ModelTypeSet multi_grouped_types_;
-  ModelTypeSet registered_directory_types_;
-  ModelTypeSet registered_selectable_types_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EnableDisableSingleClientTest);
@@ -161,7 +136,7 @@ class EnableDisableSingleClientTest : public SyncTest {
 
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableOneAtATime) {
   // Setup sync with no enabled types.
-  SetupTest(false);
+  SetupTest(/*all_types_enabled=*/false);
 
   for (ModelTypeSet::Iterator si = selectable_types_.First(); si.Good();
        si.Inc()) {
@@ -169,36 +144,31 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableOneAtATime) {
     const ModelTypeSet single_grouped_types = WithoutMultiTypes(grouped_types);
     for (ModelTypeSet::Iterator sgi = single_grouped_types.First(); sgi.Good();
          sgi.Inc()) {
-      VerifyExistence(user_share_, false, sgi.Get(), si.Get());
+      ASSERT_FALSE(ModelTypeExists(sgi.Get()))
+          << " for " << ModelTypeToString(si.Get());
     }
 
     EXPECT_TRUE(GetClient(0)->EnableSyncForDatatype(si.Get()));
 
     for (ModelTypeSet::Iterator gi = grouped_types.First(); gi.Good();
          gi.Inc()) {
-      VerifyExistence(user_share_, true, gi.Get(), si.Get());
+      EXPECT_TRUE(ModelTypeExists(gi.Get()))
+          << " for " << ModelTypeToString(si.Get());
     }
   }
 }
 
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, DisableOneAtATime) {
   // Setup sync with no disabled types.
-  SetupTest(true);
-
-  // Make sure all top-level nodes exist first.
-  for (ModelTypeSet::Iterator rdi = registered_directory_types_.First();
-       rdi.Good(); rdi.Inc()) {
-    EXPECT_TRUE(DoesTopLevelNodeExist(user_share_, rdi.Get()) ||
-                IsUnready(data_type_status_table_, rdi.Get()))
-        << ModelTypeToString(rdi.Get());
-  }
+  SetupTest(/*all_types_enabled=*/true);
 
   for (ModelTypeSet::Iterator si = selectable_types_.First(); si.Good();
        si.Inc()) {
     const ModelTypeSet grouped_types = ResolveGroup(si.Get());
     for (ModelTypeSet::Iterator gi = grouped_types.First(); gi.Good();
          gi.Inc()) {
-      VerifyExistence(user_share_, true, gi.Get(), si.Get());
+      ASSERT_TRUE(ModelTypeExists(gi.Get()))
+          << " for " << ModelTypeToString(si.Get());
     }
 
     EXPECT_TRUE(GetClient(0)->DisableSyncForDatatype(si.Get()));
@@ -206,7 +176,8 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, DisableOneAtATime) {
     const ModelTypeSet single_grouped_types = WithoutMultiTypes(grouped_types);
     for (ModelTypeSet::Iterator sgi = single_grouped_types.First(); sgi.Good();
          sgi.Inc()) {
-      VerifyExistence(user_share_, false, sgi.Get(), si.Get());
+      EXPECT_FALSE(ModelTypeExists(sgi.Get()))
+          << " for " << ModelTypeToString(si.Get());
     }
   }
 
@@ -214,7 +185,137 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, DisableOneAtATime) {
   // did not check these after disabling inside the above loop.
   for (ModelTypeSet::Iterator mgi = multi_grouped_types_.First(); mgi.Good();
        mgi.Inc()) {
-    VerifyExistence(user_share_, false, mgi.Get());
+    EXPECT_FALSE(ModelTypeExists(mgi.Get()))
+        << " for " << ModelTypeToString(mgi.Get());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
+                       FastEnableDisableOneAtATime) {
+  // Setup sync with no enabled types.
+  SetupTest(/*all_types_enabled=*/false);
+
+  for (ModelTypeSet::Iterator si = selectable_types_.First(); si.Good();
+       si.Inc()) {
+    const ModelTypeSet grouped_types = ResolveGroup(si.Get());
+    const ModelTypeSet single_grouped_types = WithoutMultiTypes(grouped_types);
+    for (ModelTypeSet::Iterator sgi = single_grouped_types.First(); sgi.Good();
+         sgi.Inc()) {
+      ASSERT_FALSE(ModelTypeExists(sgi.Get()))
+          << " for " << ModelTypeToString(si.Get());
+    }
+
+    // Enable and then disable immediately afterwards, before the datatype has
+    // had the chance to finish startup (which usually involves task posting).
+    EXPECT_TRUE(GetClient(0)->EnableSyncForDatatype(si.Get()));
+    EXPECT_TRUE(GetClient(0)->DisableSyncForDatatype(si.Get()));
+
+    for (ModelTypeSet::Iterator sgi = single_grouped_types.First(); sgi.Good();
+         sgi.Inc()) {
+      EXPECT_FALSE(ModelTypeExists(sgi.Get()))
+          << " for " << ModelTypeToString(si.Get());
+    }
+  }
+
+  // Lastly make sure that all the multi grouped times are all gone, since we
+  // did not check these after disabling inside the above loop.
+  for (ModelTypeSet::Iterator mgi = multi_grouped_types_.First(); mgi.Good();
+       mgi.Inc()) {
+    EXPECT_FALSE(ModelTypeExists(mgi.Get()))
+        << " for " << ModelTypeToString(mgi.Get());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
+                       FastDisableEnableOneAtATime) {
+  // Setup sync with no disabled types.
+  SetupTest(/*all_types_enabled=*/true);
+
+  for (ModelTypeSet::Iterator si = selectable_types_.First(); si.Good();
+       si.Inc()) {
+    const ModelTypeSet grouped_types = ResolveGroup(si.Get());
+    for (ModelTypeSet::Iterator gi = grouped_types.First(); gi.Good();
+         gi.Inc()) {
+      ASSERT_TRUE(ModelTypeExists(gi.Get()))
+          << " for " << ModelTypeToString(si.Get());
+    }
+
+    // Disable and then reenable immediately afterwards, before the datatype has
+    // had the chance to stop fully (which usually involves task posting).
+    EXPECT_TRUE(GetClient(0)->DisableSyncForDatatype(si.Get()));
+    EXPECT_TRUE(GetClient(0)->EnableSyncForDatatype(si.Get()));
+
+    for (ModelTypeSet::Iterator gi = grouped_types.First(); gi.Good();
+         gi.Inc()) {
+      EXPECT_TRUE(ModelTypeExists(gi.Get()))
+          << " for " << ModelTypeToString(si.Get());
+    }
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
+                       FastEnableDisableEnableOneAtATime) {
+  // Setup sync with no enabled types.
+  SetupTest(/*all_types_enabled=*/false);
+
+  for (ModelTypeSet::Iterator si = selectable_types_.First(); si.Good();
+       si.Inc()) {
+    const ModelTypeSet grouped_types = ResolveGroup(si.Get());
+    const ModelTypeSet single_grouped_types = WithoutMultiTypes(grouped_types);
+    for (ModelTypeSet::Iterator sgi = single_grouped_types.First(); sgi.Good();
+         sgi.Inc()) {
+      ASSERT_FALSE(ModelTypeExists(sgi.Get()))
+          << " for " << ModelTypeToString(si.Get());
+    }
+
+    // Fast enable-disable-enable sequence, before the datatype has had the
+    // chance to transition fully across states (usually involves task posting).
+    EXPECT_TRUE(GetClient(0)->EnableSyncForDatatype(si.Get()));
+    EXPECT_TRUE(GetClient(0)->DisableSyncForDatatype(si.Get()));
+    EXPECT_TRUE(GetClient(0)->EnableSyncForDatatype(si.Get()));
+
+    for (ModelTypeSet::Iterator sgi = single_grouped_types.First(); sgi.Good();
+         sgi.Inc()) {
+      EXPECT_TRUE(ModelTypeExists(sgi.Get()))
+          << " for " << ModelTypeToString(si.Get());
+    }
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableDisable) {
+  SetupTest(/*all_types_enabled=*/false);
+
+  // Enable all, and then disable immediately afterwards, before datatypes
+  // have had the chance to finish startup (which usually involves task
+  // posting).
+  GetClient(0)->EnableSyncForAllDatatypes();
+  GetClient(0)->DisableSyncForAllDatatypes();
+
+  for (ModelTypeSet::Iterator si = selectable_types_.First(); si.Good();
+       si.Inc()) {
+    EXPECT_FALSE(ModelTypeExists(si.Get()))
+        << " for " << ModelTypeToString(si.Get());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, FastEnableDisableEnable) {
+  SetupTest(/*all_types_enabled=*/false);
+
+  // Enable all, and then disable+reenable immediately afterwards, before
+  // datatypes have had the chance to finish startup (which usually involves
+  // task posting).
+  GetClient(0)->EnableSyncForAllDatatypes();
+  GetClient(0)->DisableSyncForAllDatatypes();
+  GetClient(0)->EnableSyncForAllDatatypes();
+
+  // Proxy types don't really run.
+  const ModelTypeSet non_proxy_types =
+      Difference(selectable_types_, ProxyTypes());
+
+  for (ModelTypeSet::Iterator si = non_proxy_types.First(); si.Good();
+       si.Inc()) {
+    EXPECT_TRUE(ModelTypeExists(si.Get()))
+        << " for " << ModelTypeToString(si.Get());
   }
 }
 

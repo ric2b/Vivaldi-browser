@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
@@ -61,7 +60,7 @@ base::FilePath GetOobeCompleteFlagPath() {
     return base::FilePath(kOobeCompleteFlagFilePath);
   } else {
     base::FilePath user_data_dir;
-    PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+    base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
     return user_data_dir.AppendASCII(".oobe_completed");
   }
 }
@@ -86,7 +85,6 @@ namespace chromeos {
 void StartupUtils::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kOobeComplete, false);
   registry->RegisterStringPref(prefs::kOobeScreenPending, "");
-  registry->RegisterBooleanPref(prefs::kOobeMdMode, false);
   registry->RegisterIntegerPref(prefs::kDeviceRegistered, -1);
   registry->RegisterBooleanPref(prefs::kEnrollmentRecoveryRequired, false);
   registry->RegisterStringPref(prefs::kInitialLocale, "en-US");

@@ -13,17 +13,17 @@
 #include "ppapi/shared_impl/url_request_info_data.h"
 #include "ppapi/thunk/thunk.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebFrameClient.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/public/web/web_view.h"
 
 // This test is a end-to-end test from the resource to the WebKit request
 // object. The actual resource implementation is so simple, it makes sense to
 // test it by making sure the conversion routines actually work at the same
 // time.
 
-using blink::WebFrameClient;
+using blink::WebLocalFrameClient;
 using blink::WebString;
 using blink::WebView;
 using blink::WebURL;
@@ -32,7 +32,7 @@ using blink::WebURLRequest;
 namespace {
 
 // The base class destructor is protected, so derive.
-class TestWebFrameClient : public WebFrameClient {};
+class TestWebFrameClient : public WebLocalFrameClient {};
 
 }  // namespace
 
@@ -59,14 +59,6 @@ class URLRequestInfoTest : public RenderViewTest {
   void TearDown() override {
     test_globals_.GetResourceTracker()->DidDeleteInstance(pp_instance_);
     RenderViewTest::TearDown();
-  }
-
-  bool GetDownloadToFile() {
-    WebURLRequest web_request;
-    URLRequestInfoData data = info_->GetData();
-    if (!CreateWebURLRequest(pp_instance_, &data, GetMainFrame(), &web_request))
-      return false;
-    return web_request.DownloadToFile();
   }
 
   WebString GetURL() {
@@ -129,13 +121,8 @@ TEST_F(URLRequestInfoTest, AsURLRequestInfo) {
 TEST_F(URLRequestInfoTest, StreamToFile) {
   SetStringProperty(PP_URLREQUESTPROPERTY_URL, "http://www.google.com");
 
-  EXPECT_FALSE(GetDownloadToFile());
-
-  EXPECT_TRUE(SetBooleanProperty(PP_URLREQUESTPROPERTY_STREAMTOFILE, true));
-  EXPECT_TRUE(GetDownloadToFile());
-
-  EXPECT_TRUE(SetBooleanProperty(PP_URLREQUESTPROPERTY_STREAMTOFILE, false));
-  EXPECT_FALSE(GetDownloadToFile());
+  EXPECT_FALSE(SetBooleanProperty(PP_URLREQUESTPROPERTY_STREAMTOFILE, true));
+  EXPECT_FALSE(SetBooleanProperty(PP_URLREQUESTPROPERTY_STREAMTOFILE, false));
 }
 
 TEST_F(URLRequestInfoTest, FollowRedirects) {

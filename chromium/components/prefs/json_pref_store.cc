@@ -287,8 +287,8 @@ void JsonPrefStore::CommitPendingWrite(base::OnceClosure done_callback) {
     // posted to |file_task_runner_| will run after currently pending disk
     // operations. Also, by definition of PostTaskAndReply(), the reply will run
     // on the current sequence.
-    file_task_runner_->PostTaskAndReply(
-        FROM_HERE, base::BindOnce(&base::DoNothing), std::move(done_callback));
+    file_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                        std::move(done_callback));
   }
 }
 
@@ -408,7 +408,7 @@ void JsonPrefStore::OnFileRead(std::unique_ptr<ReadResult> read_result) {
         read_only_ = true;
         break;
       case PREF_READ_ERROR_NONE:
-        DCHECK(read_result->value.get());
+        DCHECK(read_result->value);
         unfiltered_prefs.reset(
             static_cast<base::DictionaryValue*>(read_result->value.release()));
         break;

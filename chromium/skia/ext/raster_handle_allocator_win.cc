@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 #include <windows.h>
+
 #include <psapi.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "base/debug/gdi_debug_util_win.h"
 #include "base/memory/ptr_util.h"
@@ -57,7 +59,7 @@ static bool Create(int width,
 
   size_t row_bytes = skia::PlatformCanvasStrideForWidth(width);
   if (do_clear)
-    bzero(pixels, row_bytes * height);
+    memset(pixels, 0, row_bytes * height);
 
   HDC hdc = CreateCompatibleDC(nullptr);
   if (!hdc) {
@@ -132,7 +134,7 @@ std::unique_ptr<SkCanvas> CreatePlatformCanvasWithSharedSection(
     SkRasterHandleAllocator::Rec rec;
     if (Create(width, height, is_opaque, shared_section, false, &rec))
       return SkRasterHandleAllocator::MakeCanvas(
-          base::MakeUnique<GDIAllocator>(), info, &rec);
+          std::make_unique<GDIAllocator>(), info, &rec);
   } else {
     DCHECK(shared_section != NULL);
     void* pixels =
@@ -141,7 +143,7 @@ std::unique_ptr<SkCanvas> CreatePlatformCanvasWithSharedSection(
       SkBitmap bitmap;
       if (bitmap.installPixels(info, pixels, row_bytes, unmap_view_proc,
                                nullptr)) {
-        return base::MakeUnique<SkCanvas>(bitmap);
+        return std::make_unique<SkCanvas>(bitmap);
       }
     }
   }

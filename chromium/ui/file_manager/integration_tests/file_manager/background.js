@@ -48,7 +48,7 @@ function testPromise(promise) {
   return testPromiseAndApps(
       promise,
       [remoteCall, galleryApp, audioPlayerApp, videoPlayerApp]);
-};
+}
 
 /**
  * Executes a sequence of test steps.
@@ -115,6 +115,7 @@ StepsRunner.prototype.run_ = function(steps) {
 
 /**
  * Basic entry set for the local volume.
+ *
  * @type {Array<TestEntryInfo>}
  * @const
  */
@@ -127,10 +128,13 @@ var BASIC_LOCAL_ENTRY_SET = [
 ];
 
 /**
- * Basic entry set for the drive volume.
+ * Basic entry set for the drive volume that only includes read-write entries
+ * (no read-only or similar entries).
  *
  * TODO(hirono): Add a case for an entry cached by FileCache. For testing
  *               Drive, create more entries with Drive specific attributes.
+ * TODO(sashab): Merge items from COMPLEX_DRIVE_ENTRY_SET into here (so all
+ *               tests run with read-only files) once crbug.com/850834 is fixed.
  *
  * @type {Array<TestEntryInfo>}
  * @const
@@ -146,6 +150,35 @@ var BASIC_DRIVE_ENTRY_SET = [
   ENTRIES.testSharedDocument
 ];
 
+/**
+ * Basic entry set for the local crostini volume.
+ * @type {!Array<!TestEntryInfo>}
+ * @const
+ */
+var BASIC_CROSTINI_ENTRY_SET = [
+  ENTRIES.hello,
+  ENTRIES.world,
+  ENTRIES.desktop,
+];
+
+/**
+ * More complex entry set for Drive that includes entries with varying
+ * permissions (such as read-only entries).
+ *
+ * @type {Array<TestEntryInfo>}
+ * @const
+ */
+var COMPLEX_DRIVE_ENTRY_SET = [
+  ENTRIES.hello, ENTRIES.photos, ENTRIES.readOnlyFolder,
+  ENTRIES.readOnlyDocument, ENTRIES.readOnlyStrictDocument, ENTRIES.readOnlyFile
+];
+
+/**
+ * Nested entry set (directories inside each other).
+ *
+ * @type {Array<TestEntryInfo>}
+ * @const
+ */
 var NESTED_ENTRY_SET = [
   ENTRIES.directoryA,
   ENTRIES.directoryB,
@@ -153,7 +186,7 @@ var NESTED_ENTRY_SET = [
 ];
 
 /**
- * Expecetd list of preset entries in fake test volumes. This should be in sync
+ * Expected list of preset entries in fake test volumes. This should be in sync
  * with FakeTestVolume::PrepareTestEntries in the test harness.
  *
  * @type {Array<TestEntryInfo>}
@@ -206,6 +239,24 @@ var SHARED_WITH_ME_ENTRY_SET = [
 ];
 
 /**
+ * Entry set for Drive that includes team drives of various permissions and
+ * nested files with various permissions.
+ *
+ * TODO(sashab): Add support for capabilities of Team Drive roots.
+ *
+ * @type {Array<TestEntryInfo>}
+ * @const
+ */
+var TEAM_DRIVE_ENTRY_SET = [
+  ENTRIES.hello,
+  ENTRIES.teamDriveA,
+  ENTRIES.teamDriveAFile,
+  ENTRIES.teamDriveAHostedFile,
+  ENTRIES.teamDriveB,
+  ENTRIES.teamDriveBFile,
+];
+
+/**
  * Opens a Files app's main window.
  *
  * TODO(mtomasz): Pass a volumeId or an enum value instead of full paths.
@@ -249,6 +300,7 @@ function openNewWindow(appState, initialRoot, opt_callback) {
  */
 function openAndWaitForClosingDialog(
     dialogParams, volumeName, expectedSet, closeDialog) {
+  var caller = getCaller();
   var resultPromise = new Promise(function(fulfill) {
     chrome.fileSystem.chooseEntry(
         dialogParams,
@@ -277,7 +329,8 @@ function openAndWaitForClosingDialog(
             return remoteCall.callRemoteTestUtil('getWindows', null, []).
                 then(function(windows) {
                   if (windows[windowId])
-                    return pending('Window %s does not hide.', windowId);
+                    return pending(
+                        caller, 'Window %s does not hide.', windowId);
                   else
                     return resultPromise;
                 });
@@ -290,7 +343,6 @@ function openAndWaitForClosingDialog(
  * Opens a Files app's main window and waits until it is initialized. Fills
  * the window with initial files. Should be called for the first window only.
  *
- * TODO(hirono): Add parameters to specify the entry set to be prepared.
  * TODO(mtomasz): Pass a volumeId or an enum value instead of full paths.
  *
  * @param {Object} appState App state to be passed with on opening the Files
@@ -299,13 +351,21 @@ function openAndWaitForClosingDialog(
  *     directory during initialization. Can be null, for no default path.
  * @param {function(string, Array<Array<string>>)=} opt_callback Callback with
  *     the window ID and with the file list.
+ * @param {!Array<TestEntryInfo>>} opt_initialLocalEntries List of initial
+ *     entries to load in Google Drive (defaults to a basic entry set).
+ * @param {!Array<TestEntryInfo>>} opt_initialDriveEntries List of initial
+ *     entries to load in Google Drive (defaults to a basic entry set).
  * @return {Promise} Promise to be fulfilled with the result object, which
  *     contains the window ID and the file list.
  */
-function setupAndWaitUntilReady(appState, initialRoot, opt_callback) {
+function setupAndWaitUntilReady(
+    appState, initialRoot, opt_callback, opt_initialLocalEntries,
+    opt_initialDriveEntries) {
+  var initialLocalEntries = opt_initialLocalEntries || BASIC_LOCAL_ENTRY_SET;
+  var initialDriveEntries = opt_initialDriveEntries || BASIC_DRIVE_ENTRY_SET;
   var windowPromise = openNewWindow(appState, initialRoot);
-  var localEntriesPromise = addEntries(['local'], BASIC_LOCAL_ENTRY_SET);
-  var driveEntriesPromise = addEntries(['drive'], BASIC_DRIVE_ENTRY_SET);
+  var localEntriesPromise = addEntries(['local'], initialLocalEntries);
+  var driveEntriesPromise = addEntries(['drive'], initialDriveEntries);
   var detailedTablePromise = windowPromise.then(function(windowId) {
     return remoteCall.waitForElement(windowId, '#detail-table').
       then(function() {
@@ -372,24 +432,29 @@ function getFileType(fileListEntry) {
  */
 var testcase = {};
 
-// Ensure the test cases are loaded.
+/**
+ * When the FileManagerBrowserTest harness loads this test extension, request
+ * configuration and other details from that harness, including the test case
+ * name to run. Use the configuration/details to setup the test ennvironment,
+ * then run the test case using chrome.test.RunTests.
+ */
 window.addEventListener('load', function() {
   var steps = [
-    // Check for the guest mode.
+    // Request the guest mode state.
     function() {
       chrome.test.sendMessage(
           JSON.stringify({name: 'isInGuestMode'}), steps.shift());
     },
-    // Obtain the test case name.
-    function(result) {
-      if (JSON.parse(result) != chrome.extension.inIncognitoContext)
+    // Request the root entry paths.
+    function(mode) {
+      if (JSON.parse(mode) != chrome.extension.inIncognitoContext)
         return;
       chrome.test.sendMessage(
           JSON.stringify({name: 'getRootPaths'}), steps.shift());
     },
-    // Obtain the root entry paths.
-    function(result) {
-      var roots = JSON.parse(result);
+    // Request the test case name.
+    function(paths) {
+      var roots = JSON.parse(paths);
       RootPath.DOWNLOADS = roots.downloads;
       RootPath.DRIVE = roots.drive;
       chrome.test.sendMessage(
@@ -397,14 +462,23 @@ window.addEventListener('load', function() {
     },
     // Run the test case.
     function(testCaseName) {
-      var targetTest = testcase[testCaseName];
-      if (!targetTest) {
-        chrome.test.fail(testCaseName + ' is not found.');
+      // Get the test function from testcase namespace testCaseName.
+      var test = testcase[testCaseName];
+      // Verify test is an unnamed (aka 'anonymous') Function.
+      if (!test instanceof Function || test.name) {
+        chrome.test.fail('[' + testCaseName + '] not found.');
         return;
       }
-      // Specify the name of test to the test system.
-      targetTest.generatedName = testCaseName;
-      chrome.test.runTests([targetTest]);
+      // Define the test case and its name for chrome.test logging.
+      test.generatedName = testCaseName;
+      var testCaseSymbol = Symbol(testCaseName);
+      var testCase = {
+        [testCaseSymbol] :() => {
+          return test();
+        },
+      };
+      // Run the test.
+      chrome.test.runTests([testCase[testCaseSymbol]]);
     }
   ];
   steps.shift()();

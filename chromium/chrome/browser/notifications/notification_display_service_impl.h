@@ -58,9 +58,6 @@ class NotificationDisplayServiceImpl : public NotificationDisplayService {
   NotificationHandler* GetNotificationHandler(
       NotificationHandler::Type notification_type);
 
-  // Removes an implementation object added via AddNotificationHandler.
-  void RemoveNotificationHandler(NotificationHandler::Type notification_type);
-
   // NotificationDisplayService implementation:
   void Display(NotificationHandler::Type notification_type,
                const message_center::Notification& notification,
@@ -68,7 +65,16 @@ class NotificationDisplayServiceImpl : public NotificationDisplayService {
                    nullptr) override;
   void Close(NotificationHandler::Type notification_type,
              const std::string& notification_id) override;
-  void GetDisplayed(const DisplayedNotificationsCallback& callback) override;
+  void GetDisplayed(DisplayedNotificationsCallback callback) override;
+
+  static void ProfileLoadedCallback(NotificationCommon::Operation operation,
+                                    NotificationHandler::Type notification_type,
+                                    const GURL& origin,
+                                    const std::string& notification_id,
+                                    const base::Optional<int>& action_index,
+                                    const base::Optional<base::string16>& reply,
+                                    const base::Optional<bool>& by_user,
+                                    Profile* profile);
 
  private:
   // Called when the NotificationPlatformBridge may have been initialized.

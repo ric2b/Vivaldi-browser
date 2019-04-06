@@ -21,25 +21,6 @@
 
 namespace media {
 
-namespace {
-
-#if defined(PLATFORM_MEDIA_HWA)
-scoped_refptr<VideoFrame> GetVideoFrameFromTexture(
-    const scoped_refptr<DecoderBuffer>& buffer,
-    const VideoDecoderConfig& config,
-    std::unique_ptr<PassThroughDecoderTexture> texture) {
-  DCHECK(texture);
-   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes] = {
-       *texture->mailbox_holder};
-  return VideoFrame::WrapNativeTextures(VideoPixelFormat::PIXEL_FORMAT_ARGB,
-      mailbox_holders, texture->mailbox_holder_release_cb,
-      config.coded_size(), config.visible_rect(), config.natural_size(),
-      buffer->timestamp());
-}
-#endif
-
-}  // namespace
-
 template <DemuxerStream::Type StreamType>
 PassThroughDecoderImpl<StreamType>::PassThroughDecoderImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
@@ -55,9 +36,9 @@ void PassThroughDecoderImpl<StreamType>::Initialize(
   DCHECK(config.IsValidConfig());
 
   if (!IsValidConfig(config)) {
-    LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-              << " Media Config not accepted for codec : "
-              << GetCodecName(config.codec());
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " Media Config not accepted for codec : "
+            << GetCodecName(config.codec());
     task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
     return;
   } else {
@@ -74,7 +55,7 @@ void PassThroughDecoderImpl<StreamType>::Initialize(
 
 template <DemuxerStream::Type StreamType>
 void PassThroughDecoderImpl<StreamType>::Decode(
-    const scoped_refptr<DecoderBuffer>& buffer,
+    scoped_refptr<DecoderBuffer> buffer,
     const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(IsValidConfig(config_));
@@ -181,10 +162,8 @@ PassThroughDecoderImpl<DemuxerStream::AUDIO>::DecoderBufferToOutputBuffer(
     data[channel] = buffer->data() + channel * channel_size;
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " input_samples_per_second : " << config_.input_samples_per_second()
           << " samples_per_second : " << config_.samples_per_second();
 
-  // FEATURE_INPUT_SAMPLES_PER_SECOND
   return AudioBuffer::CopyFrom(config_.sample_format(),
                                config_.channel_layout(),
                                channel_count,
@@ -199,13 +178,6 @@ scoped_refptr<VideoFrame>
 PassThroughDecoderImpl<DemuxerStream::VIDEO>::DecoderBufferToOutputBuffer(
     const scoped_refptr<DecoderBuffer>& buffer) const {
   DCHECK(task_runner_->BelongsToCurrentThread());
-
-#if defined(PLATFORM_MEDIA_HWA)
-  std::unique_ptr<AutoReleasedPassThroughDecoderTexture> wrapped_texture =
-      buffer->PassWrappedTexture();
-  if (wrapped_texture)
-    return GetVideoFrameFromTexture(buffer, config_, wrapped_texture->Pass());
-#endif
 
   return GetVideoFrameFromMemory(buffer, config_);
 }

@@ -24,7 +24,6 @@
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service_observer.h"
-#include "net/url_request/url_fetcher_delegate.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 
 class AutocompleteProviderClient;
@@ -37,8 +36,8 @@ namespace history {
 struct KeywordSearchTermVisit;
 }
 
-namespace net {
-class URLFetcher;
+namespace network {
+class SimpleURLLoader;
 }
 
 // Autocomplete provider for searches and suggestions from a search engine.
@@ -52,8 +51,7 @@ class URLFetcher;
 // comes back, the provider creates and returns matches for the best
 // suggestions.
 class SearchProvider : public BaseSearchProvider,
-                       public TemplateURLServiceObserver,
-                       public net::URLFetcherDelegate {
+                       public TemplateURLServiceObserver {
  public:
   SearchProvider(AutocompleteProviderClient* client,
                  AutocompleteProviderListener* listener);
@@ -101,9 +99,9 @@ class SearchProvider : public BaseSearchProvider,
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DoTrimHttpScheme);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest,
                            DontTrimHttpSchemeIfInputHasScheme);
-  FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DontTrimHttpsScheme);
-  FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DontTrimHttpsSchemeDespiteFlag);
-  FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DoTrimHttpsSchemeIfFlag);
+  FRIEND_TEST_ALL_PREFIXES(SearchProviderTest,
+                           DontTrimHttpsSchemeIfInputHasScheme);
+  FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DoTrimHttpsScheme);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, ClearPrefetchedResults);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, SetPrefetchQuery);
 
@@ -177,8 +175,9 @@ class SearchProvider : public BaseSearchProvider,
   // TemplateURLServiceObserver:
   void OnTemplateURLServiceChanged() override;
 
-  // net::URLFetcherDelegate:
-  void OnURLFetchComplete(const net::URLFetcher* source) override;
+  // Called back from SimpleURLLoader.
+  void OnURLLoadComplete(const network::SimpleURLLoader* source,
+                         std::unique_ptr<std::string> response_body);
 
   // Stops the suggest query.
   // NOTE: This does not update |done_|.  Callers must do so.
@@ -196,7 +195,7 @@ class SearchProvider : public BaseSearchProvider,
   void SortResults(bool is_keyword, SearchSuggestionParser::Results* results);
 
   // Records UMA statistics about a suggest server response.
-  void LogFetchComplete(bool success, bool is_keyword);
+  void LogLoadComplete(bool success, bool is_keyword);
 
   // Updates |matches_| from the latest results; applies calculated relevances
   // if suggested relevances cause undesirable behavior. Updates |done_|.
@@ -229,12 +228,12 @@ class SearchProvider : public BaseSearchProvider,
   // NOTE: This function does not update |done_|.  Callers must do so.
   void StartOrStopSuggestQuery(bool minimal_changes);
 
-  // Stops |fetcher| if it's running.  This includes resetting the scoped_ptr.
-  void CancelFetcher(std::unique_ptr<net::URLFetcher>* fetcher);
+  // Stops |loader| if it's running.  This includes resetting the unique_ptr.
+  void CancelLoader(std::unique_ptr<network::SimpleURLLoader>* loader);
 
   // Returns true when the current query can be sent to at least one suggest
   // service.  This will be false for example when suggest is disabled.  In
-  // the process, calculates whether the query may contain potentionally
+  // the process, calculates whether the query may contain potentially
   // private data and stores the result in |is_query_private|; such queries
   // should not be sent to the default search engine.
   bool IsQuerySuitableForSuggest(bool* query_is_private) const;
@@ -243,7 +242,7 @@ class SearchProvider : public BaseSearchProvider,
   // information (and hence the suggest request shouldn't be sent).  In
   // particular, if the input type might be a URL, we take extra care so that
   // it isn't sent to the server.
-  bool IsQueryPotentionallyPrivate() const;
+  bool IsQueryPotentiallyPrivate() const;
 
   // Remove existing keyword results if the user is no longer in keyword mode,
   // and, if |minimal_changes| is false, revise the existing results to
@@ -260,10 +259,10 @@ class SearchProvider : public BaseSearchProvider,
   void ApplyCalculatedNavigationRelevance(
       SearchSuggestionParser::NavigationResults* list);
 
-  // Starts a new URLFetcher requesting suggest results from |template_url|;
-  // callers own the returned URLFetcher, which is NULL for invalid providers.
-  std::unique_ptr<net::URLFetcher> CreateSuggestFetcher(
-      int id,
+  // Starts a new SimpleURLLoader requesting suggest results from
+  // |template_url|; callers own the returned SimpleURLLoader, which is NULL for
+  // invalid providers.
+  std::unique_ptr<network::SimpleURLLoader> CreateSuggestLoader(
       const TemplateURL* template_url,
       const AutocompleteInput& input);
 
@@ -372,6 +371,9 @@ class SearchProvider : public BaseSearchProvider,
   // AnswersQueryData.
   AnswersQueryData FindAnswersPrefetchData();
 
+  // Finds image URLs in most relevant results and uses client to prefetch them.
+  void PrefetchImages(SearchSuggestionParser::Results* results);
+
   AutocompleteProviderListener* listener_;
 
   // Maintains the TemplateURLs used.
@@ -399,11 +401,11 @@ class SearchProvider : public BaseSearchProvider,
   // The time at which we sent a query to the suggest server.
   base::TimeTicks time_suggest_request_sent_;
 
-  // Fetchers used to retrieve results for the keyword and default providers.
-  // After a fetcher's results are returned, it gets reset, so a non-null
-  // fetcher indicates that fetcher is still in flight.
-  std::unique_ptr<net::URLFetcher> keyword_fetcher_;
-  std::unique_ptr<net::URLFetcher> default_fetcher_;
+  // Loaders used to retrieve results for the keyword and default providers.
+  // After a loader's results are returned, it gets reset, so a non-null
+  // loader indicates that loader is still in flight.
+  std::unique_ptr<network::SimpleURLLoader> keyword_loader_;
+  std::unique_ptr<network::SimpleURLLoader> default_loader_;
 
   // Results from the default and keyword search providers.
   SearchSuggestionParser::Results default_results_;

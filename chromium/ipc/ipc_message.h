@@ -15,7 +15,7 @@
 #include "base/pickle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "ipc/ipc_features.h"
+#include "ipc/ipc_buildflags.h"
 #include "ipc/ipc_message_support_export.h"
 
 namespace mojo {
@@ -249,7 +249,7 @@ class IPC_MESSAGE_SUPPORT_EXPORT Message : public base::Pickle {
     int32_t routing;  // ID of the view that this message is destined for
     uint32_t type;    // specifies the user-defined message type
     uint32_t flags;   // specifies control flags for the message
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
     uint16_t num_fds; // the number of descriptors included with this message
     uint16_t pad;     // explicitly initialize this to appease valgrind
 #endif

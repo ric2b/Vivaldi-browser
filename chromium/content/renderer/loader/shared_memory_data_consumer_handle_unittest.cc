@@ -15,7 +15,6 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -26,7 +25,7 @@
 #include "content/public/renderer/fixed_received_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 namespace content {
 
@@ -142,7 +141,9 @@ class ThreadedSharedMemoryDataConsumerHandleTest : public ::testing::Test {
     void ReadData() {
       if (!client_) {
         client_.reset(new ClientImpl(this));
-        reader_ = handle_->ObtainReader(client_.get());
+        reader_ = handle_->ObtainReader(
+            client_.get(),
+            blink::scheduler::GetSingleThreadTaskRunnerForTesting());
       }
 
       Result rv = kOk;
@@ -217,7 +218,8 @@ void RunPostedTasks() {
 TEST_P(SharedMemoryDataConsumerHandleTest, ReadFromEmpty) {
   char buffer[4];
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   Result result = reader->Read(buffer, 4, kNone, &read);
 
   EXPECT_EQ(kShouldWait, result);
@@ -229,7 +231,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AutoClose) {
   size_t read = 88;
 
   writer_.reset();
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   Result result = reader->Read(buffer, 4, kNone, &read);
 
   EXPECT_EQ(kDone, result);
@@ -241,7 +244,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReadSimple) {
 
   char buffer[4] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   Result result = reader->Read(buffer, 3, kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -269,7 +273,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReadAfterHandleIsGone) {
 
   char buffer[8] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
 
   handle_.reset();
 
@@ -295,7 +300,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReObtainReader) {
 
   char buffer[4] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   Result result = reader->Read(buffer, 3, kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -303,7 +309,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReObtainReader) {
   EXPECT_STREQ("hel", buffer);
 
   reader.reset();
-  reader = handle_->ObtainReader(nullptr);
+  reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
 
   result = reader->Read(buffer, 3, kNone, &read);
   EXPECT_EQ(kOk, result);
@@ -327,7 +334,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseBeforeReading) {
 
   char buffer[20] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   Result result = reader->Read(buffer, sizeof(buffer), kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -344,7 +352,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseWithDataBeforeZeroRead) {
   writer_->Close();
 
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   Result result = reader->Read(nullptr, 0, kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -355,7 +364,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseWithoutDataBeforeZeroRead) {
   writer_->Close();
 
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   Result result = reader->Read(nullptr, 0, kNone, &read);
 
   EXPECT_EQ(kDone, result);
@@ -375,7 +385,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AddMultipleData) {
   size_t read;
   Result result;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   std::fill(&buffer[0], &buffer[arraysize(buffer)], 0);
   result = reader->Read(buffer, 6, kNone, &read);
   EXPECT_EQ(kOk, result);
@@ -419,7 +430,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AddMultipleDataInteractively) {
   size_t read;
   Result result;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   std::fill(&buffer[0], &buffer[arraysize(buffer)], 0);
   result = reader->Read(buffer, 6, kNone, &read);
   EXPECT_EQ(kOk, result);
@@ -481,7 +493,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, RegisterClient) {
   EXPECT_CALL(checkpoint, Call(4));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(1);
   RunPostedTasks();
   checkpoint.Call(2);
@@ -504,7 +517,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, RegisterClientWhenDataExists) {
   checkpoint.Call(0);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(1);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(2);
   RunPostedTasks();
   checkpoint.Call(3);
@@ -527,7 +541,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AddDataWhenClientIsRegistered) {
   EXPECT_CALL(checkpoint, Call(5));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -552,7 +567,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseWithClientAndData) {
   EXPECT_CALL(checkpoint, Call(3));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -569,7 +585,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReleaseReader) {
   EXPECT_CALL(checkpoint, Call(2));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(1);
   reader.reset();
   writer_->AddData(NewFixedData("Once "));
@@ -581,7 +598,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, TwoPhaseReadShouldWait) {
   const void* buffer = &result;
   size_t size = 99;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   result = reader->BeginRead(&buffer, kNone, &size);
   EXPECT_EQ(kShouldWait, result);
   EXPECT_EQ(nullptr, buffer);
@@ -595,7 +613,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, TwoPhaseReadSimple) {
   const void* buffer = &result;
   size_t size = 99;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   result = reader->BeginRead(&buffer, kNone, &size);
   EXPECT_EQ(kOk, result);
   EXPECT_EQ(5u, size);
@@ -666,7 +685,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CallOnClearWhenDestructed2) {
   handle_.reset(new SharedMemoryDataConsumerHandle(
       kApplyBackpressure,
       base::Bind(&DestructionTrackingFunction::Call, on_clear), &writer_));
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   handle_.reset();
   on_clear = nullptr;
   checkpoint.Call(1);
@@ -740,7 +760,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, TwoPhaseReadWithMultipleData) {
   const void* buffer = &result;
   size_t size = 99;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   result = reader->BeginRead(&buffer, kNone, &size);
   EXPECT_EQ(kOk, result);
   EXPECT_EQ(5u, size);
@@ -780,7 +801,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ErrorRead) {
   Result result;
   char buffer[20] = {};
   size_t read = 99;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
 
   writer_->Fail();
   result = reader->Read(buffer, sizeof(buffer), kNone, &read);
@@ -793,7 +815,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ErrorTwoPhaseRead) {
   Result result;
   const void* pointer = &result;
   size_t size = 99;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
 
   writer_->Fail();
   result = reader->BeginRead(&pointer, kNone, &size);
@@ -807,7 +830,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, FailWhileTwoPhaseReadIsInProgress) {
   Result result;
   const void* pointer = nullptr;
   size_t size = 0;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
 
   writer_->AddData(NewFixedData("Once "));
   result = reader->BeginRead(&pointer, kNone, &size);
@@ -843,7 +867,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, FailWithClient) {
   EXPECT_CALL(checkpoint, Call(3));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(1);
   writer_->Fail();
   checkpoint.Call(2);
@@ -864,7 +889,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, FailWithClientAndData) {
   EXPECT_CALL(checkpoint, Call(4));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -887,7 +913,8 @@ TEST_P(SharedMemoryDataConsumerHandleTest, RecursiveErrorNotification) {
   EXPECT_CALL(checkpoint, Call(3));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->ObtainReader(
+      &client_, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -914,7 +941,8 @@ TEST(SharedMemoryDataConsumerHandleBackpressureTest, Read) {
   writer->AddData(
       std::make_unique<LoggingFixedReceivedData>("data4", "time ", logger));
 
-  auto reader = handle->ObtainReader(nullptr);
+  auto reader = handle->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   logger->Add("1");
   result = reader->Read(buffer, 2, kNone, &size);
   EXPECT_EQ(kOk, result);
@@ -957,7 +985,8 @@ TEST(SharedMemoryDataConsumerHandleBackpressureTest, CloseAndReset) {
   writer->AddData(
       std::make_unique<LoggingFixedReceivedData>("data3", "a ", logger));
 
-  auto reader = handle->ObtainReader(nullptr);
+  auto reader = handle->ObtainReader(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   logger->Add("1");
   result = reader->Read(buffer, 2, kNone, &size);
   EXPECT_EQ(kOk, result);

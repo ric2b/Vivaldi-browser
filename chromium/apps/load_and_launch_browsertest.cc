@@ -10,7 +10,7 @@
 #include "base/process/launch.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
-#include "chrome/browser/apps/app_browsertest_util.h"
+#include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -20,6 +20,7 @@
 #include "content/public/test/test_launcher.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "services/service_manager/sandbox/switches.h"
 
 using extensions::PlatformAppBrowserTest;
 
@@ -28,8 +29,7 @@ namespace apps {
 namespace {
 
 const char* kSwitchesToCopy[] = {
-    switches::kUserDataDir,
-    switches::kNoSandbox,
+    service_manager::switches::kNoSandbox, switches::kUserDataDir,
 };
 
 constexpr char kTestExtensionId[] = "behllobkkfkfnphdnhnkndlbkcpglgmj";

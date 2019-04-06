@@ -9,7 +9,6 @@
 
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "third_party/skia/include/core/SkColor.h"
 
 class PrefService;
 
@@ -23,35 +22,35 @@ class SyncService;
 
 namespace autofill {
 
-struct Suggestion;
-
 extern const base::Feature kAutofillAlwaysFillAddresses;
 extern const base::Feature kAutofillCreateDataForTest;
 extern const base::Feature kAutofillCreditCardAssist;
 extern const base::Feature kAutofillScanCardholderName;
 extern const base::Feature kAutofillCreditCardAblationExperiment;
-extern const base::Feature kAutofillCreditCardBankNameDisplay;
-extern const base::Feature kAutofillCreditCardPopupLayout;
-extern const base::Feature kAutofillCreditCardLastUsedDateDisplay;
+extern const base::Feature kAutofillCreditCardLocalCardMigration;
 extern const base::Feature kAutofillDeleteDisusedAddresses;
 extern const base::Feature kAutofillDeleteDisusedCreditCards;
 extern const base::Feature kAutofillExpandedPopupViews;
-extern const base::Feature kAutofillOfferLocalSaveIfServerCardManuallyEntered;
+extern const base::Feature kAutofillPreferServerNamePredictions;
 extern const base::Feature kAutofillRationalizeFieldTypePredictions;
-extern const base::Feature kAutofillSendBillingCustomerNumber;
+extern const base::Feature kAutofillSaveCardDialogUnlabeledExpirationDate;
+extern const base::Feature kAutofillSuggestInvalidProfileData;
 extern const base::Feature kAutofillSuppressDisusedAddresses;
 extern const base::Feature kAutofillSuppressDisusedCreditCards;
-extern const base::Feature kAutofillToolkitViewsCreditCardDialogsMac;
+extern const base::Feature kAutofillUpstream;
 extern const base::Feature kAutofillUpstreamAllowAllEmailDomains;
-extern const base::Feature kAutofillUpstreamRequestCvcIfMissing;
-extern const base::Feature kAutofillUpstreamSendDetectedValues;
+extern const base::Feature kAutofillUpstreamAlwaysRequestCardholderName;
+extern const base::Feature kAutofillUpstreamBlankCardholderNameField;
+extern const base::Feature kAutofillUpstreamEditableCardholderName;
 extern const base::Feature kAutofillUpstreamSendPanFirstSix;
+extern const base::Feature kAutofillUpstreamUpdatePromptExplanation;
+extern const base::Feature kAutofillVoteUsingInvalidProfileData;
 extern const char kCreditCardSigninPromoImpressionLimitParamKey[];
 extern const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[];
 extern const char kAutofillUpstreamMaxMinutesSinceAutofillProfileUseKey[];
 
 #if defined(OS_MACOSX)
-extern const base::Feature kCreditCardAutofillTouchBar;
+extern const base::Feature kMacViewsAutofillPopup;
 #endif  // defined(OS_MACOSX)
 
 // Returns true if autofill should be enabled. See also
@@ -79,82 +78,53 @@ bool IsCreditCardUploadEnabled(const PrefService* pref_service,
                                const syncer::SyncService* sync_service,
                                const std::string& user_email);
 
-// Returns whether the new Autofill credit card popup layout experiment is
+// Returns whether Autofill credit card local card migration experiment is
 // enabled.
-bool IsAutofillCreditCardPopupLayoutExperimentEnabled();
+bool IsAutofillCreditCardLocalCardMigrationExperimentEnabled();
 
-// Returns whether Autofill credit card last used date display experiment is
-// enabled.
-bool IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled();
+// For testing purposes; not to be launched.  When enabled, Chrome Upstream
+// always requests that the user enters/confirms cardholder name in the
+// offer-to-save dialog, regardless of if it was present or if the user is a
+// Google Payments customer.  Note that this will override the detected
+// cardholder name, if one was found.
+bool IsAutofillUpstreamAlwaysRequestCardholderNameExperimentEnabled();
 
-// Returns whether Autofill credit card last used date shows expiration date.
-bool ShowExpirationDateInAutofillCreditCardLastUsedDate();
+// For experimental purposes; not to be made available in chrome://flags. When
+// enabled and Chrome Upstream requests the cardholder name in the offer-to-save
+// dialog, the field will be blank instead of being prefilled with the name from
+// the user's Google Account.
+bool IsAutofillUpstreamBlankCardholderNameFieldExperimentEnabled();
 
-// Returns whether Autofill credit card bank name display experiment is enabled.
-bool IsAutofillCreditCardBankNameDisplayExperimentEnabled();
-
-// Returns the background color for credit card autofill popup, or
-// |SK_ColorTRANSPARENT| if the new credit card autofill popup layout experiment
-// is not enabled.
-SkColor GetCreditCardPopupBackgroundColor();
-
-// Returns the divider color for credit card autofill popup, or
-// |SK_ColorTRANSPARENT| if the new credit card autofill popup layout experiment
-// is not enabled.
-SkColor GetCreditCardPopupDividerColor();
-
-// Returns true if the credit card autofill popup suggestion value is displayed
-// in bold type face.
-bool IsCreditCardPopupValueBold();
-
-// Returns the dropdown item height for autofill popup, returning 0 if the
-// dropdown item height isn't configured in an experiment to tweak autofill
-// popup layout.
-unsigned int GetPopupDropdownItemHeight();
-
-// Returns true if the icon in the credit card autofill popup must be displayed
-// before the credit card value or any other suggestion text.
-bool IsIconInCreditCardPopupAtStart();
-
-// Modifies the suggestion value and label if the new credit card autofill popup
-// experiment is enabled to tweak the display of the value and label.
-void ModifyAutofillCreditCardSuggestion(struct Suggestion* suggestion);
-
-// Returns the margin for the icon, label and between icon and label. Returns 0
-// if the margin isn't configured in an experiment to tweak autofill popup
-// layout.
-unsigned int GetPopupMargin();
-
-// Returns whether the experiment is enabled where if Chrome Autofill has a
-// server card synced down from Payments but the user manually enters its card
-// number into a checkout form anyway, the option to locally save the card is
-// offered.
-bool IsAutofillOfferLocalSaveIfServerCardManuallyEnteredExperimentEnabled();
-
-// Returns whether the experiment is enabled where Chrome reads billing customer
-// number from priority preference and sends it along with UploadCardRequest and
-// FullCardRequest.
-bool IsAutofillSendBillingCustomerNumberExperimentEnabled();
-
-// Returns whether the experiment is enabled where Chrome Upstream requests CVC
-// in the offer to save bubble if it was not detected during the checkout flow.
-bool IsAutofillUpstreamRequestCvcIfMissingExperimentEnabled();
-
-// Returns whether the experiment is enabled where Chrome Upstream always checks
-// to see if it can offer to save (even though some data like name, address, and
-// CVC might be missing) by sending metadata on what form values were detected
-// along with whether the user is a Google Payments customer.
-bool IsAutofillUpstreamSendDetectedValuesExperimentEnabled();
+// Returns whether the experiment is enabled where Chrome Upstream can request
+// the user to enter/confirm cardholder name in the offer-to-save bubble if it
+// was not detected or was conflicting during the checkout flow and the user is
+// NOT a Google Payments customer.
+bool IsAutofillUpstreamEditableCardholderNameExperimentEnabled();
 
 // Returns whether the experiment is enabled where Chrome Upstream sends the
 // first six digits of the card PAN to Google Payments to help determine whether
 // card upload is possible.
 bool IsAutofillUpstreamSendPanFirstSixExperimentEnabled();
 
+// Returns whether the experiment is enbaled where upstream sends updated
+// prompt explanation which changes 'save this card' to 'save your card and
+// billing address.'
+bool IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled();
+
 #if defined(OS_MACOSX)
-// Returns whether the Credit Card Autofill Touch Bar experiment is enabled.
-bool IsCreditCardAutofillTouchBarExperimentEnabled();
+// Returns true if whether the views autofill popup feature is enabled or the
+// we're using the views browser.
+bool IsMacViewsAutofillPopupExperimentEnabled();
 #endif  // defined(OS_MACOSX)
+
+// Returns true if the native Views implementation of the Desktop dropdown
+// should be used. This will also be true if the kExperimentalUi flag is true,
+// which forces a bunch of forthcoming UI changes on.
+bool ShouldUseNativeViews();
+
+// Returns true if expiration dates on the save card dialog should be
+// unlabeled, i.e. not preceded by "Exp."
+bool IsAutofillSaveCardDialogUnlabeledExpirationDateEnabled();
 
 }  // namespace autofill
 

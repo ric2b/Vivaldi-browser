@@ -6,6 +6,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
@@ -69,13 +70,12 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
   void CallAllFunctions(int* counter) {
     // Following functions are deferred.
     runner_->AddWatcher(
-        kAuthority, kDocumentId,
-        base::Bind([](ArcFileSystemOperationRunner::ChangeType type) {}),
-        base::Bind([](int* counter, int64_t watcher_id) { ++*counter; },
-                   counter));
+        kAuthority, kDocumentId, base::DoNothing(),
+        base::BindOnce([](int* counter, int64_t watcher_id) { ++*counter; },
+                       counter));
     runner_->GetChildDocuments(
         kAuthority, kDocumentId,
-        base::Bind(
+        base::BindOnce(
             [](int* counter,
                base::Optional<std::vector<mojom::DocumentPtr>> documents) {
               ++*counter;
@@ -83,22 +83,23 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
             counter));
     runner_->GetDocument(
         kAuthority, kDocumentId,
-        base::Bind(
+        base::BindOnce(
             [](int* counter, mojom::DocumentPtr document) { ++*counter; },
             counter));
     runner_->GetFileSize(
         GURL(kUrl),
-        base::Bind([](int* counter, int64_t size) { ++*counter; }, counter));
+        base::BindOnce([](int* counter, int64_t size) { ++*counter; },
+                       counter));
     runner_->GetMimeType(
         GURL(kUrl),
-        base::Bind(
+        base::BindOnce(
             [](int* counter, const base::Optional<std::string>& mime_type) {
               ++*counter;
             },
             counter));
     runner_->GetRecentDocuments(
         kAuthority, kDocumentId,
-        base::Bind(
+        base::BindOnce(
             [](int* counter,
                base::Optional<std::vector<mojom::DocumentPtr>> documents) {
               ++*counter;
@@ -106,13 +107,14 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
             counter));
     runner_->OpenFileToRead(
         GURL(kUrl),
-        base::Bind([](int* counter, mojo::ScopedHandle handle) { ++*counter; },
-                   counter));
+        base::BindOnce(
+            [](int* counter, mojo::ScopedHandle handle) { ++*counter; },
+            counter));
 
     // RemoveWatcher() is never deferred.
     runner_->RemoveWatcher(
-        123,
-        base::Bind([](int* counter, bool success) { ++*counter; }, counter));
+        123, base::BindOnce([](int* counter, bool success) { ++*counter; },
+                            counter));
   }
 
   content::TestBrowserThreadBundle thread_bundle_;

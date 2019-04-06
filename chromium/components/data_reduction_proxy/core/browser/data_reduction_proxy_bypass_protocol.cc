@@ -16,15 +16,18 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_type_info.h"
+#include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "net/base/load_flags.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
-#include "net/proxy/proxy_config.h"
-#include "net/proxy/proxy_info.h"
-#include "net/proxy/proxy_list.h"
-#include "net/proxy/proxy_retry_info.h"
-#include "net/proxy/proxy_server.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_config.h"
+#include "net/proxy_resolution/proxy_info.h"
+#include "net/proxy_resolution/proxy_list.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/proxy_resolution/proxy_retry_info.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
@@ -34,37 +37,38 @@ namespace data_reduction_proxy {
 
 namespace {
 
-// Adds non-empty entries in |data_reduction_proxies| to the retry map
-// maintained by the proxy service of the request. Adds
-// |data_reduction_proxies.second| to the retry list only if |bypass_all| is
-// true.
-void MarkProxiesAsBadUntil(
-    net::URLRequest* request,
-    const base::TimeDelta& bypass_duration,
-    bool bypass_all,
-    const std::vector<net::ProxyServer>& data_reduction_proxies) {
-  DCHECK(!data_reduction_proxies.empty());
+// Adds the Data Reduction Proxy servers in |proxy_type_info| that should be
+// marked bad according to |data_reduction_proxy_info| to the retry map
+// maintained by the proxy resolution service of the |request|.
+void MarkProxiesAsBad(const net::URLRequest& request,
+                      const DataReductionProxyInfo& data_reduction_proxy_info,
+                      const DataReductionProxyTypeInfo& proxy_type_info) {
+  DCHECK_GT(proxy_type_info.proxy_servers.size(), proxy_type_info.proxy_index);
+
   // Synthesize a suitable |ProxyInfo| to add the proxies to the
   // |ProxyRetryInfoMap| of the proxy service.
   net::ProxyList proxy_list;
-  std::vector<net::ProxyServer> additional_bad_proxies;
-  for (const net::ProxyServer& proxy_server : data_reduction_proxies) {
-    DCHECK(proxy_server.is_valid());
-    proxy_list.AddProxyServer(proxy_server);
-    if (!bypass_all)
-      break;
-    additional_bad_proxies.push_back(proxy_server);
+
+  const size_t bad_proxy_end_index = data_reduction_proxy_info.bypass_all
+                                         ? proxy_type_info.proxy_servers.size()
+                                         : proxy_type_info.proxy_index + 1U;
+
+  for (size_t i = proxy_type_info.proxy_index; i < bad_proxy_end_index; ++i) {
+    const net::ProxyServer& bad_proxy =
+        proxy_type_info.proxy_servers[i].proxy_server();
+    DCHECK(bad_proxy.is_valid());
+    DCHECK(!bad_proxy.is_direct());
+    proxy_list.AddProxyServer(bad_proxy);
   }
+  std::vector<net::ProxyServer> bad_proxies = proxy_list.GetAll();
   proxy_list.AddProxyServer(net::ProxyServer::Direct());
 
   net::ProxyInfo proxy_info;
   proxy_info.UseProxyList(proxy_list);
-  DCHECK(request->context());
-  net::ProxyService* proxy_service = request->context()->proxy_service();
-  DCHECK(proxy_service);
 
-  proxy_service->MarkProxiesAsBadUntil(
-      proxy_info, bypass_duration, additional_bad_proxies, request->net_log());
+  request.context()->proxy_resolution_service()->MarkProxiesAsBadUntil(
+      proxy_info, data_reduction_proxy_info.bypass_duration, bad_proxies,
+      request.net_log());
 }
 
 void ReportResponseProxyServerStatusHistogram(
@@ -92,29 +96,63 @@ bool DataReductionProxyBypassProtocol::MaybeBypassProxyAndPrepareToRetry(
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(request);
 
-  DataReductionProxyTypeInfo data_reduction_proxy_type_info;
   DataReductionProxyBypassType bypass_type;
 
   const net::HttpResponseHeaders* response_headers =
       request->response_info().headers.get();
   bool retry;
-  if (!response_headers) {
-    retry = HandleInValidResponseHeadersCase(
-        *request, data_reduction_proxy_info, &data_reduction_proxy_type_info,
-        &bypass_type);
 
+  std::vector<DataReductionProxyServer> placeholder_proxy_servers;
+  base::Optional<DataReductionProxyTypeInfo> proxy_type_info =
+      config_->FindConfiguredDataReductionProxy(request->proxy_server());
+
+  if (!response_headers) {
+    retry = HandleInvalidResponseHeadersCase(
+        *request, proxy_type_info, data_reduction_proxy_info, &bypass_type);
   } else {
+    if (!proxy_type_info) {
+      if (!request->proxy_server().is_valid() ||
+          request->proxy_server().is_direct() ||
+          request->proxy_server().host_port_pair().IsEmpty()) {
+        ReportResponseProxyServerStatusHistogram(
+            RESPONSE_PROXY_SERVER_STATUS_EMPTY);
+        return false;
+      }
+
+      if (!HasDataReductionProxyViaHeader(*response_headers, nullptr)) {
+        ReportResponseProxyServerStatusHistogram(
+            RESPONSE_PROXY_SERVER_STATUS_NON_DRP_NO_VIA);
+        return false;
+      }
+
+      ReportResponseProxyServerStatusHistogram(
+          RESPONSE_PROXY_SERVER_STATUS_NON_DRP_WITH_VIA);
+
+      // If the |proxy_server| doesn't match any of the currently configured
+      // Data Reduction Proxies, but it still has the Data Reduction Proxy via
+      // header, then apply the bypass logic regardless.
+      // TODO(sclittle): Remove this workaround once http://crbug.com/876776 is
+      // fixed.
+      placeholder_proxy_servers.push_back(DataReductionProxyServer(
+          request->proxy_server(), ProxyServer_ProxyType_CORE));
+      proxy_type_info.emplace(DataReductionProxyTypeInfo(
+          placeholder_proxy_servers, 0U /* proxy_index */));
+    } else {
+      ReportResponseProxyServerStatusHistogram(
+          RESPONSE_PROXY_SERVER_STATUS_DRP);
+    }
+
+    DCHECK(proxy_type_info);
     retry = HandleValidResponseHeadersCase(
-        *request, proxy_bypass_type, data_reduction_proxy_info,
-        &data_reduction_proxy_type_info, &bypass_type);
+        *request, *proxy_type_info, proxy_bypass_type,
+        data_reduction_proxy_info, &bypass_type);
   }
   if (!retry)
     return false;
 
   if (data_reduction_proxy_info->mark_proxies_as_bad) {
-    MarkProxiesAsBadUntil(request, data_reduction_proxy_info->bypass_duration,
-                          data_reduction_proxy_info->bypass_all,
-                          data_reduction_proxy_type_info.proxy_servers);
+    DCHECK(proxy_type_info);
+    MarkProxiesAsBad(*request, *data_reduction_proxy_info, *proxy_type_info);
   } else {
     request->SetLoadFlags(request->load_flags() | net::LOAD_BYPASS_CACHE |
                           net::LOAD_BYPASS_PROXY);
@@ -124,10 +162,11 @@ bool DataReductionProxyBypassProtocol::MaybeBypassProxyAndPrepareToRetry(
          net::HttpUtil::IsMethodIdempotent(request->method());
 }
 
-bool DataReductionProxyBypassProtocol::HandleInValidResponseHeadersCase(
+bool DataReductionProxyBypassProtocol::HandleInvalidResponseHeadersCase(
     const net::URLRequest& request,
+    const base::Optional<DataReductionProxyTypeInfo>&
+        data_reduction_proxy_type_info,
     DataReductionProxyInfo* data_reduction_proxy_info,
-    DataReductionProxyTypeInfo* data_reduction_proxy_type_info,
     DataReductionProxyBypassType* bypass_type) const {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(nullptr, request.response_info().headers.get());
@@ -139,10 +178,8 @@ bool DataReductionProxyBypassProtocol::HandleInValidResponseHeadersCase(
     return false;
   }
 
-  if (!config_->WasDataReductionProxyUsed(&request,
-                                          data_reduction_proxy_type_info)) {
+  if (!data_reduction_proxy_type_info)
     return false;
-  }
 
   DCHECK(request.url().SchemeIs(url::kHttpScheme));
 
@@ -184,9 +221,9 @@ bool DataReductionProxyBypassProtocol::HandleInValidResponseHeadersCase(
 
 bool DataReductionProxyBypassProtocol::HandleValidResponseHeadersCase(
     const net::URLRequest& request,
+    const DataReductionProxyTypeInfo& data_reduction_proxy_type_info,
     DataReductionProxyBypassType* proxy_bypass_type,
     DataReductionProxyInfo* data_reduction_proxy_info,
-    DataReductionProxyTypeInfo* data_reduction_proxy_type_info,
     DataReductionProxyBypassType* bypass_type) const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -196,51 +233,14 @@ bool DataReductionProxyBypassProtocol::HandleValidResponseHeadersCase(
       request.response_info().headers.get();
 
   DCHECK(response_headers);
-  if (!request.proxy_server().is_valid() ||
-      request.proxy_server().is_direct() ||
-      request.proxy_server().host_port_pair().IsEmpty()) {
-    ReportResponseProxyServerStatusHistogram(
-        RESPONSE_PROXY_SERVER_STATUS_EMPTY);
-    return false;
-  }
-
-  if (!config_->WasDataReductionProxyUsed(&request,
-                                          data_reduction_proxy_type_info)) {
-    if (!HasDataReductionProxyViaHeader(*response_headers, nullptr)) {
-      ReportResponseProxyServerStatusHistogram(
-          RESPONSE_PROXY_SERVER_STATUS_NON_DRP_NO_VIA);
-      return false;
-    }
-    ReportResponseProxyServerStatusHistogram(
-        RESPONSE_PROXY_SERVER_STATUS_NON_DRP_WITH_VIA);
-
-    // If the |proxy_server| doesn't match any of the currently configured
-    // Data Reduction Proxies, but it still has the Data Reduction Proxy via
-    // header, then apply the bypass logic regardless.
-    // TODO(sclittle): Remove this workaround once http://crbug.com/476610 is
-    // fixed.
-    const net::HostPortPair host_port_pair =
-        !request.proxy_server().is_valid() || request.proxy_server().is_direct()
-            ? net::HostPortPair()
-            : request.proxy_server().host_port_pair();
-    data_reduction_proxy_type_info->proxy_servers.push_back(
-        net::ProxyServer(net::ProxyServer::SCHEME_HTTPS, host_port_pair));
-    data_reduction_proxy_type_info->proxy_servers.push_back(
-        net::ProxyServer(net::ProxyServer::SCHEME_HTTP, host_port_pair));
-    data_reduction_proxy_type_info->proxy_index = 0;
-  } else {
-    ReportResponseProxyServerStatusHistogram(RESPONSE_PROXY_SERVER_STATUS_DRP);
-  }
-  if (data_reduction_proxy_type_info->proxy_servers.empty())
-    return false;
 
   // At this point, the response is expected to have the data reduction proxy
   // via header, so detect and report cases where the via header is missing.
   DataReductionProxyBypassStats::DetectAndRecordMissingViaHeaderResponseCode(
-      data_reduction_proxy_type_info->proxy_index == 0, *response_headers);
+      data_reduction_proxy_type_info.proxy_index == 0U, *response_headers);
 
   // GetDataReductionProxyBypassType will only log a net_log event if a bypass
-  // command was sent via the data reduction proxy headers
+  // command was sent via the data reduction proxy headers.
   *bypass_type = GetDataReductionProxyBypassType(
       request.url_chain(), *response_headers, data_reduction_proxy_info);
 
@@ -250,16 +250,21 @@ bool DataReductionProxyBypassProtocol::HandleValidResponseHeadersCase(
     return false;
 
   DCHECK(request.context());
-  DCHECK(request.context()->proxy_service());
-  net::ProxyServer proxy_server =
-      data_reduction_proxy_type_info->proxy_servers.front();
+  DCHECK(request.context()->proxy_resolution_service());
+  DCHECK_GT(data_reduction_proxy_type_info.proxy_servers.size(),
+            data_reduction_proxy_type_info.proxy_index);
+
+  const net::ProxyServer& proxy_server =
+      data_reduction_proxy_type_info
+          .proxy_servers[data_reduction_proxy_type_info.proxy_index]
+          .proxy_server();
 
   // Only record UMA if the proxy isn't already on the retry list.
   if (!config_->IsProxyBypassed(
-          request.context()->proxy_service()->proxy_retry_info(), proxy_server,
-          nullptr)) {
+          request.context()->proxy_resolution_service()->proxy_retry_info(),
+          proxy_server, nullptr)) {
     DataReductionProxyBypassStats::RecordDataReductionProxyBypassInfo(
-        data_reduction_proxy_type_info->proxy_index == 0,
+        data_reduction_proxy_type_info.proxy_index == 0U,
         data_reduction_proxy_info->bypass_all, proxy_server, *bypass_type);
   }
   return true;

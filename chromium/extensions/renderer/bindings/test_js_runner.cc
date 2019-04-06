@@ -5,7 +5,6 @@
 #include "extensions/renderer/bindings/test_js_runner.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "extensions/renderer/bindings/api_binding_test_util.h"
 
 namespace extensions {
@@ -84,6 +83,9 @@ void TestJSRunner::RunJSFunction(v8::Local<v8::Function> function,
     return;
   }
 
+  // Functions should always run in the scope of the context.
+  v8::Context::Scope context_scope(context);
+
   if (will_call_js_)
     will_call_js_.Run();
 
@@ -124,6 +126,7 @@ void TestJSRunner::Flush() {
   for (auto& call : calls) {
     v8::Isolate* isolate = call.isolate;
     v8::Local<v8::Context> context = call.context.Get(isolate);
+    v8::Context::Scope context_scope(context);
     std::vector<v8::Local<v8::Value>> local_arguments;
     local_arguments.reserve(call.arguments.size());
     for (auto& arg : call.arguments)

@@ -24,7 +24,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -126,11 +126,13 @@ ash::MenuItemList AppShortcutLauncherItemController::GetAppMenuItems(
   return items;
 }
 
-std::unique_ptr<ui::MenuModel>
-AppShortcutLauncherItemController::GetContextMenu(int64_t display_id) {
+void AppShortcutLauncherItemController::GetContextMenu(
+    int64_t display_id,
+    GetMenuModelCallback callback) {
   ChromeLauncherController* controller = ChromeLauncherController::instance();
   const ash::ShelfItem* item = controller->GetItem(shelf_id());
-  return LauncherContextMenu::Create(controller, item, display_id);
+  context_menu_ = LauncherContextMenu::Create(controller, item, display_id);
+  context_menu_->GetMenuModel(std::move(callback));
 }
 
 void AppShortcutLauncherItemController::ExecuteCommand(bool from_context_menu,

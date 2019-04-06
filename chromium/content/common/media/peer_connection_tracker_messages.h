@@ -15,35 +15,28 @@
 #define IPC_MESSAGE_START PeerConnectionTrackerMsgStart
 
 IPC_STRUCT_BEGIN(PeerConnectionInfo)
+  // ID of the peer connection. Unique only within the renderer process.
   IPC_STRUCT_MEMBER(int, lid)
+  // Textual ID of the peer connection. It corresponds to RTCPeerConnection.id.
+  // TODO(eladalon): Update comment or remove TODO, depending on whether
+  // RTCPeerconnection.id ends up being standardized or rejected.
+  // https://crbug.com/775415
+  IPC_STRUCT_MEMBER(std::string, peer_connection_id)
+  // Serialized version of RTCConfiguration.
   IPC_STRUCT_MEMBER(std::string, rtc_configuration)
+  // Serialized version of blink::WebMediaConstraints.
   IPC_STRUCT_MEMBER(std::string, constraints)
+  // The URL of the blink::WebLocalFrame within which this peer connection
+  // lives. Used for debugging purposes (displayed by WebRTC-Internals).
   IPC_STRUCT_MEMBER(std::string, url)
 IPC_STRUCT_END()
 
 // Messages sent from PeerConnectionTracker to PeerConnectionTrackerHost.
 IPC_MESSAGE_CONTROL1(PeerConnectionTrackerHost_AddPeerConnection,
                      PeerConnectionInfo /* info */)
-IPC_MESSAGE_CONTROL1(PeerConnectionTrackerHost_RemovePeerConnection,
-                     int /* lid */)
-IPC_MESSAGE_CONTROL3(PeerConnectionTrackerHost_UpdatePeerConnection,
-                     int /* lid */,
-                     std::string /* type */,
-                     std::string /* value */)
 IPC_MESSAGE_CONTROL2(PeerConnectionTrackerHost_AddStats,
                      int /* lid */,
                      base::ListValue /* value */)
-IPC_MESSAGE_CONTROL5(PeerConnectionTrackerHost_GetUserMedia,
-                     std::string /*origin*/,
-                     bool /*audio*/,
-                     bool /*video*/,
-                     // The constraints strings are for dispaly only and should
-                     // not be parsed by the browser for security reasons.
-                     std::string /* audio_constraints */,
-                     std::string /* video_constraints */)
-IPC_MESSAGE_CONTROL2(PeerConnectionTrackerHost_WebRtcEventLogWrite,
-                     int /* lid */,
-                     std::string /* output */)
 
 // Messages sent to PeerConnectionTracker.
 IPC_MESSAGE_CONTROL0(PeerConnectionTracker_GetAllStats)

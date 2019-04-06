@@ -9,14 +9,15 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
-#include "base/test/scoped_task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/conflicts/module_database_observer_win.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -43,7 +44,15 @@ class ModuleDatabaseTest : public testing::Test {
   ModuleDatabaseTest()
       : dll1_(kDll1),
         dll2_(kDll2),
+        scoped_testing_local_state_(TestingBrowserProcess::GetGlobal()),
         module_database_(base::SequencedTaskRunnerHandle::Get()) {}
+
+  void TearDown() override {
+    // Give work on background threads a chance run, as it may want to use
+    // |mock_time_task_runner_|, which gets destroyed before
+    // |test_browser_thread_bundle_|
+    test_browser_thread_bundle_.RunUntilIdle();
+  }
 
   const ModuleDatabase::ModuleMap& modules() {
     return module_database_.modules_;
@@ -56,7 +65,6 @@ class ModuleDatabaseTest : public testing::Test {
   }
 
   void RunSchedulerUntilIdle() {
-    // Call ScopedTaskEnvironment::RunUntilIdle() when it supports mocking time.
     base::TaskScheduler::GetInstance()->FlushForTesting();
     mock_time_task_runner_->RunUntilIdle();
   }
@@ -71,9 +79,11 @@ class ModuleDatabaseTest : public testing::Test {
 
  private:
   // Must be before |module_database_|.
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
 
   base::ScopedMockTimeMessageLoopTaskRunner mock_time_task_runner_;
+
+  ScopedTestingLocalState scoped_testing_local_state_;
 
   ModuleDatabase module_database_;
 
@@ -152,17 +162,24 @@ class DummyObserver : public ModuleDatabaseObserver {
     new_module_count_++;
   }
 
+  void OnKnownModuleLoaded(const ModuleInfoKey& module_key,
+                           const ModuleInfoData& module_data) override {
+    known_module_loaded_count_++;
+  }
+
   void OnModuleDatabaseIdle() override {
     on_module_database_idle_called_ = true;
   }
 
   int new_module_count() { return new_module_count_; }
+  int known_module_loaded_count() { return known_module_loaded_count_; }
   bool on_module_database_idle_called() {
     return on_module_database_idle_called_;
   }
 
  private:
   int new_module_count_ = 0;
+  int known_module_loaded_count_ = 0;
   bool on_module_database_idle_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(DummyObserver);
@@ -194,6 +211,34 @@ TEST_F(ModuleDatabaseTest, Observers) {
   EXPECT_EQ(1, after_load_observer.new_module_count());
 
   module_database()->RemoveObserver(&after_load_observer);
+}
+
+TEST_F(ModuleDatabaseTest, OnKnownModuleLoaded) {
+  DummyObserver dummy_observer;
+  module_database()->AddObserver(&dummy_observer);
+
+  EXPECT_EQ(0, dummy_observer.new_module_count());
+  EXPECT_EQ(0, dummy_observer.known_module_loaded_count());
+
+  // Assume there is one shell extension.
+  module_database()->OnShellExtensionEnumerated(dll1_, kSize1, kTime1);
+  module_database()->OnShellExtensionEnumerationFinished();
+  module_database()->OnImeEnumerationFinished();
+
+  RunSchedulerUntilIdle();
+
+  EXPECT_EQ(1, dummy_observer.new_module_count());
+  EXPECT_EQ(0, dummy_observer.known_module_loaded_count());
+
+  // Pretend the shell extension loads.
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
+                                  kGoodAddress1);
+  RunSchedulerUntilIdle();
+
+  EXPECT_EQ(1, dummy_observer.new_module_count());
+  EXPECT_EQ(1, dummy_observer.known_module_loaded_count());
+
+  module_database()->RemoveObserver(&dummy_observer);
 }
 
 // Tests the idle cycle of the ModuleDatabase.

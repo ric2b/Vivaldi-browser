@@ -23,11 +23,11 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "net/base/net_errors.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/web/WebTestingSupport.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/web/web_testing_support.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "v8/include/v8.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -73,6 +73,10 @@ class TestServiceImpl : public mojom::TestService {
   }
 
   void DoTerminateProcess(DoTerminateProcessCallback callback) override {
+    NOTREACHED();
+  }
+
+  void DoCrashImmediately(DoCrashImmediatelyCallback callback) override {
     NOTREACHED();
   }
 
@@ -184,6 +188,20 @@ void ShellContentRendererClient::DidInitializeWorkerContextOnWorkerThread(
           switches::kExposeInternalsForTesting)) {
     blink::WebTestingSupport::InjectInternalsObject(context);
   }
+}
+
+bool ShellContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
+                                            const GURL& url,
+                                            const std::string& http_method,
+                                            bool is_initial_navigation,
+                                            bool is_server_redirect,
+                                            bool* send_referrer) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kContentShellAlwaysFork)) {
+    *send_referrer = true;
+    return true;
+  }
+  return false;
 }
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)

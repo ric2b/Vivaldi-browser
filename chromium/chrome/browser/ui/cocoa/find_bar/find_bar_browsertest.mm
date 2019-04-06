@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "ui/base/test/ui_controls.h"
 #import "ui/events/test/cocoa_test_event_utils.h"
 
@@ -83,9 +84,14 @@ void SimulateKeyPress(NSWindow* window, ui::KeyboardCode key) {
 
 }  // namespace
 
-typedef InProcessBrowserTest FindBarBrowserTest;
+class FindBarBrowserTest : public InProcessBrowserTest {
+ private:
+  test::ScopedMacViewsBrowserMode cocoa_browser_mode_{false};
+};
 
-IN_PROC_BROWSER_TEST_F(FindBarBrowserTest, FocusOnTabSwitch) {
+// Disabled. See https://crbug.com/845389 - this regressed somewhere between
+// r545258 and r559030, but it may be obsolete soon.
+IN_PROC_BROWSER_TEST_F(FindBarBrowserTest, DISABLED_FocusOnTabSwitch) {
   AddTabAtIndex(1, GURL("about:blank"), ui::PAGE_TRANSITION_LINK);
   browser()->GetFindBarController()->Show();
 
@@ -201,7 +207,9 @@ IN_PROC_BROWSER_TEST_F(FindBarBrowserTest,
   EXPECT_TRUE([previousButton isEnabled]);
 }
 
-IN_PROC_BROWSER_TEST_F(FindBarBrowserTest, EscapeKey) {
+// Disabled. See https://crbug.com/845389 - this regressed somewhere between
+// r545258 and r559030, but it may be obsolete soon.
+IN_PROC_BROWSER_TEST_F(FindBarBrowserTest, DISABLED_EscapeKey) {
   // Enter fullscreen.
   std::unique_ptr<FullscreenNotificationObserver> waiter(
       new FullscreenNotificationObserver());

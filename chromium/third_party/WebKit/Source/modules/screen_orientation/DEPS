@@ -1,8 +1,0 @@
-include_rules = [
-    "+device/screen_orientation/public/interfaces/screen_orientation.mojom-blink.h",
-    "-modules",
-    "+modules/EventTargetModules.h",
-    "+modules/ModulesExport.h",
-    "+modules/screen_orientation",
-    "+services/device/public/interfaces/constants.mojom-blink.h",
-]

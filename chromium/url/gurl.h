@@ -78,7 +78,7 @@ class URL_EXPORT GURL {
   ~GURL();
 
   GURL& operator=(const GURL& other);
-  GURL& operator=(GURL&& other);
+  GURL& operator=(GURL&& other) noexcept;
 
   // Returns true when this object represents a valid parsed URL. When not
   // valid, other functions will still succeed, but you will not get canonical
@@ -250,19 +250,12 @@ class URL_EXPORT GURL {
   // higher-level and more complete semantics. See that function's documentation
   // for more detail.
   bool SchemeIsCryptographic() const {
-    return SchemeIs(url::kHttpsScheme) || SchemeIs(url::kWssScheme) ||
-           SchemeIs(url::kHttpsSuboriginScheme);
+    return SchemeIs(url::kHttpsScheme) || SchemeIs(url::kWssScheme);
   }
 
   // Returns true if the scheme is "blob".
   bool SchemeIsBlob() const {
     return SchemeIs(url::kBlobScheme);
-  }
-
-  // Returns true if the scheme indicates a serialized suborigin.
-  bool SchemeIsSuborigin() const {
-    return SchemeIs(url::kHttpSuboriginScheme) ||
-           SchemeIs(url::kHttpsSuboriginScheme);
   }
 
   // The "content" of the URL is everything after the scheme (skipping the
@@ -492,6 +485,6 @@ URL_EXPORT bool operator!=(const base::StringPiece& spec, const GURL& x);
 // variable named |<var_name>|.  This helps ensure that the value of |url| gets
 // preserved in crash dumps.
 #define DEBUG_ALIAS_FOR_GURL(var_name, url) \
-  DEBUG_ALIAS_FOR_CSTR(var_name, url.possibly_invalid_spec().c_str(), 128)
+  DEBUG_ALIAS_FOR_CSTR(var_name, (url).possibly_invalid_spec().c_str(), 128)
 
 #endif  // URL_GURL_H_

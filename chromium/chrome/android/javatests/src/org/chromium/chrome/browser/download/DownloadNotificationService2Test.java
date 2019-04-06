@@ -27,13 +27,13 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.download.DownloadUpdate.PendingState;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
 import org.chromium.components.offline_items_collection.OfflineItemProgressUnit;
+import org.chromium.components.offline_items_collection.PendingState;
 
 import java.util.Arrays;
 import java.util.List;
@@ -54,8 +54,10 @@ public class DownloadNotificationService2Test {
 
     @ClassParameter
     private static List<ParameterSet> sClassParams = Arrays.asList(
-            new ParameterSet().value(false).name("DisableOfflinePagesDescriptivePendingStatus"),
-            new ParameterSet().value(true).name("EnableOfflinePagesDescriptivePendingStatus"));
+            new ParameterSet().value(false, false).name("GenericStatus"),
+            new ParameterSet().value(true, false).name("EnableDescriptivePendingStatusOnly"),
+            new ParameterSet().value(false, true).name("EnableDescriptiveFailStatusOnly"),
+            new ParameterSet().value(true, true).name("EnableDescriptivePendingAndFailStatus"));
 
     @Rule
     public TestRule mFeaturesProcessor = new Features.JUnitProcessor();
@@ -69,9 +71,12 @@ public class DownloadNotificationService2Test {
     private DownloadSharedPreferenceHelper mDownloadSharedPreferenceHelper;
 
     private final boolean mEnableOfflinePagesDescriptivePendingStatus;
+    private final boolean mEnableOfflinePagesDescriptiveFailStatus;
 
-    public DownloadNotificationService2Test(boolean enableOfflinePagesDescriptivePendingStatus) {
+    public DownloadNotificationService2Test(boolean enableOfflinePagesDescriptivePendingStatus,
+            boolean enableOfflinePagesDescriptiveFailStatus) {
         mEnableOfflinePagesDescriptivePendingStatus = enableOfflinePagesDescriptivePendingStatus;
+        mEnableOfflinePagesDescriptiveFailStatus = enableOfflinePagesDescriptiveFailStatus;
     }
 
     private static DownloadSharedPreferenceEntry buildEntryStringWithGuid(ContentId contentId,
@@ -88,6 +93,11 @@ public class DownloadNotificationService2Test {
         } else {
             Features.getInstance().disable(
                     ChromeFeatureList.OFFLINE_PAGES_DESCRIPTIVE_PENDING_STATUS);
+        }
+        if (mEnableOfflinePagesDescriptiveFailStatus) {
+            Features.getInstance().enable(ChromeFeatureList.OFFLINE_PAGES_DESCRIPTIVE_FAIL_STATUS);
+        } else {
+            Features.getInstance().disable(ChromeFeatureList.OFFLINE_PAGES_DESCRIPTIVE_FAIL_STATUS);
         }
         DownloadNotificationService2.clearResumptionAttemptLeft();
         mDownloadNotificationService = new MockDownloadNotificationService2();
@@ -147,7 +157,7 @@ public class DownloadNotificationService2Test {
 
         // Download is successful.
         mDownloadNotificationService.notifyDownloadSuccessful(
-                ID1, "", "test", 1L, true, true, true, null, "", "");
+                ID1, "", "test", 1L, true, true, true, null, "", "", 0);
         assertEquals(1, mDownloadNotificationService.getNotificationIds().size());
         assertFalse(mDownloadForegroundServiceManager.mDownloadUpdateQueue.containsKey(
                 notificationId1));

@@ -56,10 +56,6 @@ IGNORED_EXTENSIONS = (
 EXECUTABLE_PATHS = (
   'chrome/test/data/app_shim/app_shim_32_bit.app/contents/'
       'macos/app_mode_loader',
-  'chrome/test/data/extensions/uitest/plugins/plugin.plugin/contents/'
-      'macos/testnetscapeplugin',
-  'chrome/test/data/extensions/uitest/plugins_private/plugin.plugin/contents/'
-      'macos/testnetscapeplugin',
 )
 
 # These files must not have the executable bit set. This is mainly a performance
@@ -325,7 +321,8 @@ def check_file(root_path, rel_path):
 
 
 def check_files(root, files):
-  gen = (check_file(root, f) for f in files if not is_ignored(f))
+  gen = (check_file(root, f) for f in files
+         if not is_ignored(f) and not os.path.isdir(f))
   return filter(None, gen)
 
 

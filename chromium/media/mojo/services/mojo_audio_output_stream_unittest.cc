@@ -6,11 +6,12 @@
 
 #include <utility>
 
-#include "base/memory/shared_memory.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sync_socket.h"
 #include "media/audio/audio_output_controller.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -57,7 +58,7 @@ class TestCancelableSyncSocket : public base::CancelableSyncSocket {
 class MockDelegate : public AudioOutputDelegate {
  public:
   MockDelegate() = default;
-  ~MockDelegate() = default;
+  ~MockDelegate() override = default;
 
   MOCK_METHOD0(GetStreamId, int());
   MOCK_METHOD0(OnPlayStream, void());
@@ -88,44 +89,31 @@ class MockDelegateFactory {
 
 class MockDeleter {
  public:
-  MOCK_METHOD0(Finished, void());
+  MOCK_METHOD1(Finished, void(bool));
 };
 
-class MockClient : public mojom::AudioOutputStreamClient {
+class MockClient {
  public:
   MockClient() = default;
 
-  void Initialized(mojo::ScopedSharedBufferHandle shared_buffer,
-                   mojo::ScopedHandle socket_handle) {
-    ASSERT_TRUE(shared_buffer.is_valid());
-    ASSERT_TRUE(socket_handle.is_valid());
+  void Initialize(mojom::ReadWriteAudioDataPipePtr data_pipe) {
+    ASSERT_TRUE(data_pipe->shared_memory.IsValid());
+    ASSERT_TRUE(data_pipe->socket.is_valid());
 
     base::PlatformFile fd;
-    mojo::UnwrapPlatformFile(std::move(socket_handle), &fd);
+    mojo::UnwrapPlatformFile(std::move(data_pipe->socket), &fd);
     socket_ = std::make_unique<base::CancelableSyncSocket>(fd);
     EXPECT_NE(socket_->handle(), base::CancelableSyncSocket::kInvalidHandle);
 
-    size_t memory_length;
-    base::SharedMemoryHandle shmem_handle;
-    mojo::UnwrappedSharedMemoryHandleProtection protection;
-    EXPECT_EQ(
-        mojo::UnwrapSharedMemoryHandle(std::move(shared_buffer), &shmem_handle,
-                                       &memory_length, &protection),
-        MOJO_RESULT_OK);
-    EXPECT_EQ(protection,
-              mojo::UnwrappedSharedMemoryHandleProtection::kReadWrite);
-    buffer_ = std::make_unique<base::SharedMemory>(shmem_handle,
-                                                   false /* read_only */);
+    shared_memory_region_ = std::move(data_pipe->shared_memory);
 
     GotNotification();
   }
 
   MOCK_METHOD0(GotNotification, void());
 
-  MOCK_METHOD0(OnError, void());
-
  private:
-  std::unique_ptr<base::SharedMemory> buffer_;
+  base::UnsafeSharedMemoryRegion shared_memory_region_;
   std::unique_ptr<base::CancelableSyncSocket> socket_;
 };
 
@@ -134,10 +122,9 @@ std::unique_ptr<AudioOutputDelegate> CreateNoDelegate(
   return nullptr;
 }
 
-void NotCalled(mojo::ScopedSharedBufferHandle shared_buffer,
-               mojo::ScopedHandle socket_handle) {
-  EXPECT_TRUE(false) << "The StreamCreated callback was called despite the "
-                        "test expecting it not to.";
+void NotCalled(mojom::AudioOutputStreamPtr, mojom::ReadWriteAudioDataPipePtr) {
+  ADD_FAILURE() << "The StreamCreated callback was called despite the test "
+                   "expecting it not to.";
 }
 
 }  // namespace
@@ -145,30 +132,38 @@ void NotCalled(mojo::ScopedSharedBufferHandle shared_buffer,
 class MojoAudioOutputStreamTest : public Test {
  public:
   MojoAudioOutputStreamTest()
-      : foreign_socket_(std::make_unique<TestCancelableSyncSocket>()),
-        client_binding_(&client_, mojo::MakeRequest(&client_ptr_)) {}
+      : foreign_socket_(std::make_unique<TestCancelableSyncSocket>()) {}
 
   AudioOutputStreamPtr CreateAudioOutput() {
-    AudioOutputStreamPtr p;
+    mojom::AudioOutputStreamPtr p;
+    pending_stream_request_ = mojo::MakeRequest(&p);
     ExpectDelegateCreation();
     impl_ = std::make_unique<MojoAudioOutputStream>(
-        mojo::MakeRequest(&p), std::move(client_ptr_),
         base::BindOnce(&MockDelegateFactory::CreateDelegate,
                        base::Unretained(&mock_delegate_factory_)),
-        base::BindOnce(&MockClient::Initialized, base::Unretained(&client_)),
+        base::BindOnce(&MojoAudioOutputStreamTest::CreatedStream,
+                       base::Unretained(this)),
         base::BindOnce(&MockDeleter::Finished, base::Unretained(&deleter_)));
-    EXPECT_TRUE(p.is_bound());
     return p;
   }
 
  protected:
+  void CreatedStream(mojom::AudioOutputStreamPtr stream,
+                     mojom::ReadWriteAudioDataPipePtr data_pipe) {
+    EXPECT_EQ(mojo::FuseMessagePipes(pending_stream_request_.PassMessagePipe(),
+                                     stream.PassInterface().PassHandle()),
+              MOJO_RESULT_OK);
+    client_.Initialize(std::move(data_pipe));
+  }
+
   void ExpectDelegateCreation() {
     delegate_ = new StrictMock<MockDelegate>();
     mock_delegate_factory_.PrepareDelegateForCreation(
         base::WrapUnique(delegate_));
     EXPECT_TRUE(
         base::CancelableSyncSocket::CreatePair(&local_, foreign_socket_.get()));
-    EXPECT_TRUE(mem_.CreateAnonymous(kShmemSize));
+    mem_ = base::UnsafeSharedMemoryRegion::Create(kShmemSize);
+    EXPECT_TRUE(mem_.IsValid());
     EXPECT_CALL(mock_delegate_factory_, MockCreateDelegate(NotNull()))
         .WillOnce(SaveArg<0>(&delegate_event_handler_));
   }
@@ -176,51 +171,57 @@ class MojoAudioOutputStreamTest : public Test {
   base::MessageLoop loop_;
   base::CancelableSyncSocket local_;
   std::unique_ptr<TestCancelableSyncSocket> foreign_socket_;
-  base::SharedMemory mem_;
+  base::UnsafeSharedMemoryRegion mem_;
   StrictMock<MockDelegate>* delegate_ = nullptr;
   AudioOutputDelegate::EventHandler* delegate_event_handler_ = nullptr;
   StrictMock<MockDelegateFactory> mock_delegate_factory_;
   StrictMock<MockDeleter> deleter_;
   StrictMock<MockClient> client_;
-  media::mojom::AudioOutputStreamClientPtr client_ptr_;
-  mojo::Binding<media::mojom::AudioOutputStreamClient> client_binding_;
+  mojom::AudioOutputStreamRequest pending_stream_request_;
   std::unique_ptr<MojoAudioOutputStream> impl_;
 };
 
 TEST_F(MojoAudioOutputStreamTest, NoDelegate_SignalsError) {
-  bool deleter_called = false;
-  EXPECT_CALL(client_, OnError()).Times(1);
   mojom::AudioOutputStreamPtr stream_ptr;
   MojoAudioOutputStream stream(
-      mojo::MakeRequest(&stream_ptr), std::move(client_ptr_),
       base::BindOnce(&CreateNoDelegate), base::BindOnce(&NotCalled),
-      base::BindOnce([](bool* p) { *p = true; }, &deleter_called));
-  EXPECT_FALSE(deleter_called)
-      << "Stream shouldn't call the deleter from its constructor.";
+      base::BindOnce(&MockDeleter::Finished, base::Unretained(&deleter_)));
+  EXPECT_CALL(deleter_, Finished(true));
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(deleter_called);
 }
 
 TEST_F(MojoAudioOutputStreamTest, Play_Plays) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
+
+  EXPECT_CALL(client_, GotNotification());
   EXPECT_CALL(*delegate_, OnPlayStream());
 
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
+                                           std::move(foreign_socket_));
   audio_output_ptr->Play();
   base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(MojoAudioOutputStreamTest, Pause_Pauses) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
+
+  EXPECT_CALL(client_, GotNotification());
   EXPECT_CALL(*delegate_, OnPauseStream());
 
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
+                                           std::move(foreign_socket_));
   audio_output_ptr->Pause();
   base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(MojoAudioOutputStreamTest, SetVolume_SetsVolume) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
+
+  EXPECT_CALL(client_, GotNotification());
   EXPECT_CALL(*delegate_, OnSetVolume(kNewVolume));
 
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
+                                           std::move(foreign_socket_));
   audio_output_ptr->SetVolume(kNewVolume);
   base::RunLoop().RunUntilIdle();
 }
@@ -232,7 +233,7 @@ TEST_F(MojoAudioOutputStreamTest, DestructWithCallPending_Safe) {
 
   ASSERT_NE(nullptr, delegate_event_handler_);
   foreign_socket_->ExpectOwnershipTransfer();
-  delegate_event_handler_->OnStreamCreated(kStreamId, &mem_,
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
                                            std::move(foreign_socket_));
   audio_output_ptr->Play();
   impl_.reset();
@@ -247,7 +248,7 @@ TEST_F(MojoAudioOutputStreamTest, Created_NotifiesClient) {
 
   ASSERT_NE(nullptr, delegate_event_handler_);
   foreign_socket_->ExpectOwnershipTransfer();
-  delegate_event_handler_->OnStreamCreated(kStreamId, &mem_,
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
                                            std::move(foreign_socket_));
 
   base::RunLoop().RunUntilIdle();
@@ -255,9 +256,11 @@ TEST_F(MojoAudioOutputStreamTest, Created_NotifiesClient) {
 
 TEST_F(MojoAudioOutputStreamTest, SetVolumeTooLarge_Error) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
-  EXPECT_CALL(deleter_, Finished());
-  EXPECT_CALL(client_, OnError()).Times(1);
+  EXPECT_CALL(deleter_, Finished(true));
+  EXPECT_CALL(client_, GotNotification());
 
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
+                                           std::move(foreign_socket_));
   audio_output_ptr->SetVolume(15);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClear(&deleter_);
@@ -265,9 +268,11 @@ TEST_F(MojoAudioOutputStreamTest, SetVolumeTooLarge_Error) {
 
 TEST_F(MojoAudioOutputStreamTest, SetVolumeNegative_Error) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
-  EXPECT_CALL(deleter_, Finished());
-  EXPECT_CALL(client_, OnError()).Times(1);
+  EXPECT_CALL(deleter_, Finished(true));
+  EXPECT_CALL(client_, GotNotification());
 
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
+                                           std::move(foreign_socket_));
   audio_output_ptr->SetVolume(-0.5);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClear(&deleter_);
@@ -275,8 +280,7 @@ TEST_F(MojoAudioOutputStreamTest, SetVolumeNegative_Error) {
 
 TEST_F(MojoAudioOutputStreamTest, DelegateErrorBeforeCreated_PropagatesError) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
-  EXPECT_CALL(deleter_, Finished());
-  EXPECT_CALL(client_, OnError()).Times(1);
+  EXPECT_CALL(deleter_, Finished(true));
 
   ASSERT_NE(nullptr, delegate_event_handler_);
   delegate_event_handler_->OnStreamError(kStreamId);
@@ -288,13 +292,12 @@ TEST_F(MojoAudioOutputStreamTest, DelegateErrorBeforeCreated_PropagatesError) {
 TEST_F(MojoAudioOutputStreamTest, DelegateErrorAfterCreated_PropagatesError) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
   EXPECT_CALL(client_, GotNotification());
-  EXPECT_CALL(deleter_, Finished());
-  EXPECT_CALL(client_, OnError()).Times(1);
+  EXPECT_CALL(deleter_, Finished(true));
   base::RunLoop().RunUntilIdle();
 
   ASSERT_NE(nullptr, delegate_event_handler_);
   foreign_socket_->ExpectOwnershipTransfer();
-  delegate_event_handler_->OnStreamCreated(kStreamId, &mem_,
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
                                            std::move(foreign_socket_));
   delegate_event_handler_->OnStreamError(kStreamId);
 
@@ -302,9 +305,14 @@ TEST_F(MojoAudioOutputStreamTest, DelegateErrorAfterCreated_PropagatesError) {
   Mock::VerifyAndClear(&deleter_);
 }
 
-TEST_F(MojoAudioOutputStreamTest, RemoteEndGone_Error) {
+TEST_F(MojoAudioOutputStreamTest, RemoteEndGone_CallsDeleter) {
   AudioOutputStreamPtr audio_output_ptr = CreateAudioOutput();
-  EXPECT_CALL(deleter_, Finished());
+
+  EXPECT_CALL(client_, GotNotification());
+  EXPECT_CALL(deleter_, Finished(false));
+
+  delegate_event_handler_->OnStreamCreated(kStreamId, std::move(mem_),
+                                           std::move(foreign_socket_));
   audio_output_ptr.reset();
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClear(&deleter_);

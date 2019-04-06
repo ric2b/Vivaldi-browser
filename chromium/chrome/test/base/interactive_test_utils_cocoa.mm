@@ -2,28 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/test/base/interactive_test_utils.h"
+#include "chrome/test/base/interactive_test_utils_cocoa.h"
 
 #import <Cocoa/Cocoa.h>
 
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "build/buildflag.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
+#include "ui/base/ui_features.h"
 
 namespace ui_test_utils {
 
+namespace internal {
+
 namespace {
 
-void MoveMouseToNSViewCenterAndPress(
-    NSView* view,
-    ui_controls::MouseButton button,
-    int state,
-    const base::Closure& task) {
+void MoveMouseToNSViewCenterAndPress(NSView* view,
+                                     ui_controls::MouseButton button,
+                                     int button_state,
+                                     const base::RepeatingClosure& task) {
   NSWindow* window = [view window];
   NSScreen* screen = [window screen];
   DCHECK(screen);
@@ -38,12 +43,13 @@ void MoveMouseToNSViewCenterAndPress(
 
   ui_controls::SendMouseMoveNotifyWhenDone(
       center.x, center.y,
-      base::Bind(&internal::ClickTask, button, state, task));
+      base::BindOnce(&internal::ClickTask, button, button_state, task,
+                     ui_controls::kNoAccelerator));
 }
 
 }  // namespace
 
-bool IsViewFocused(const Browser* browser, ViewID vid) {
+bool IsViewFocusedCocoa(const Browser* browser, ViewID vid) {
   NSWindow* window = browser->window()->GetNativeWindow();
   DCHECK(window);
   NSView* view = view_id_util::GetView(window, vid);
@@ -72,25 +78,39 @@ bool IsViewFocused(const Browser* browser, ViewID vid) {
   return false;
 }
 
-void ClickOnView(const Browser* browser, ViewID vid) {
+void ClickOnViewCocoa(const Browser* browser, ViewID vid) {
   NSWindow* window = browser->window()->GetNativeWindow();
   DCHECK(window);
   NSView* view = view_id_util::GetView(window, vid);
   DCHECK(view);
   MoveMouseToNSViewCenterAndPress(
-      view,
-      ui_controls::LEFT,
-      ui_controls::DOWN | ui_controls::UP,
-      base::MessageLoop::QuitWhenIdleClosure());
+      view, ui_controls::LEFT, ui_controls::DOWN | ui_controls::UP,
+      base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
   content::RunMessageLoop();
 }
 
+void FocusViewCocoa(const Browser* browser, ViewID vid) {
+  NSWindow* window = browser->window()->GetNativeWindow();
+  DCHECK(window);
+  NSView* view = view_id_util::GetView(window, vid);
+  DCHECK(view);
+  [window makeFirstResponder:view];
+}
+
+}  // namespace internal
+
+#if !BUILDFLAG(MAC_VIEWS_BROWSER)
+bool IsViewFocused(const Browser* browser, ViewID vid) {
+  return internal::IsViewFocusedCocoa(browser, vid);
+}
+
+void ClickOnView(const Browser* browser, ViewID vid) {
+  internal::ClickOnViewCocoa(browser, vid);
+}
+
 void FocusView(const Browser* browser, ViewID vid) {
-   NSWindow* window = browser->window()->GetNativeWindow();
-   DCHECK(window);
-   NSView* view = view_id_util::GetView(window, vid);
-   DCHECK(view);
-   [window makeFirstResponder:view];
- }
+  internal::FocusViewCocoa(browser, vid);
+}
+#endif  // !BUILDFLAG(MAC_VIEWS_BROWSER)
 
 }  // namespace ui_test_utils

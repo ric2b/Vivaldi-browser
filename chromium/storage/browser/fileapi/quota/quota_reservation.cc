@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "storage/browser/fileapi/quota/open_file_handle.h"
 #include "storage/browser/fileapi/quota/quota_reservation_buffer.h"
 
@@ -66,7 +67,7 @@ QuotaReservationManager* QuotaReservation::reservation_manager() {
   return reservation_buffer_->reservation_manager();
 }
 
-const GURL& QuotaReservation::origin() const {
+const url::Origin& QuotaReservation::origin() const {
   return reservation_buffer_->origin();
 }
 

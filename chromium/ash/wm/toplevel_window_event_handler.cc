@@ -6,7 +6,6 @@
 
 #include "ash/shell.h"
 #include "ash/wm/window_state.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
@@ -45,7 +44,7 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
     aura::Window* window,
     const gfx::Point& point_in_parent,
     int window_component,
-    const wm::WmToplevelWindowEventHandler::EndClosure& end_closure) {
+    wm::WmToplevelWindowEventHandler::EndClosure end_closure) {
   aura::Window* gesture_target =
       wm_toplevel_window_event_handler_.gesture_target();
   ::wm::WindowMoveSource source = gesture_target
@@ -57,7 +56,8 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
         ui::GestureRecognizer::ShouldCancelTouches::DontCancel);
   }
   return wm_toplevel_window_event_handler_.AttemptToStartDrag(
-      window, point_in_parent, window_component, source, end_closure);
+      window, point_in_parent, window_component, source,
+      std::move(end_closure));
 }
 
 ::wm::WindowMoveResult ToplevelWindowEventHandler::RunMoveLoop(
@@ -88,7 +88,7 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
   if (cursor_client)
     cursor_client->SetCursor(ui::CursorType::kPointer);
 
-  base::RunLoop run_loop;
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
 
   wm::WmToplevelWindowEventHandler::DragResult result =
       wm::WmToplevelWindowEventHandler::DragResult::SUCCESS;
@@ -102,8 +102,6 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
   in_move_loop_ = true;
   base::WeakPtr<ToplevelWindowEventHandler> weak_ptr(
       weak_factory_.GetWeakPtr());
-  base::MessageLoop* loop = base::MessageLoop::current();
-  base::MessageLoop::ScopedNestableTaskAllower allow_nested(loop);
 
   // Disable window position auto management while dragging and restore it
   // aftrewards.

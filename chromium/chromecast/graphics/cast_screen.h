@@ -22,6 +22,7 @@ class CastBrowserMainParts;
 // To then subsequently access CastScreen, see CastBrowerProcess.
 class CastScreen : public display::ScreenBase {
  public:
+  CastScreen();
   ~CastScreen() override;
 
   // display::Screen overrides:
@@ -31,13 +32,12 @@ class CastScreen : public display::ScreenBase {
   display::Display GetDisplayNearestWindow(
       gfx::NativeWindow window) const override;
 
-  void OnDisplayChanged(float scale_factor, gfx::Rect bounds);
+  void OnDisplayChanged(int64_t display_id,
+                        float scale_factor,
+                        display::Display::Rotation rotation,
+                        const gfx::Rect& bounds);
 
  private:
-  CastScreen();
-
-  friend class shell::CastBrowserMainParts;
-
   DISALLOW_COPY_AND_ASSIGN(CastScreen);
 };
 

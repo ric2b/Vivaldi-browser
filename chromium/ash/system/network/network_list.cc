@@ -7,15 +7,15 @@
 #include <memory>
 #include <utility>
 
-#include "ash/ash_view_ids.h"
 #include "ash/metrics/user_metrics_recorder.h"
-#include "ash/public/cpp/config.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/bluetooth/bluetooth_power_controller.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/network/network_icon.h"
 #include "ash/system/network/network_icon_animation.h"
 #include "ash/system/network/network_info.h"
@@ -25,7 +25,6 @@
 #include "ash/system/power/power_status.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/system_menu_button.h"
-#include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_info_label.h"
 #include "ash/system/tray/tray_popup_item_style.h"
@@ -45,10 +44,12 @@
 #include "chromeos/network/network_state_handler_observer.h"
 #include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "components/device_event_log/device_event_log.h"
+#include "components/onc/onc_constants.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/image/image_skia.h"
@@ -63,12 +64,11 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/fill_layout.h"
-
 #include "ui/views/view.h"
 
+using chromeos::ManagedNetworkConfigurationHandler;
 using chromeos::NetworkHandler;
 using chromeos::NetworkStateHandler;
-using chromeos::ManagedNetworkConfigurationHandler;
 using chromeos::NetworkTypePattern;
 
 namespace ash {
@@ -78,28 +78,6 @@ namespace {
 const int64_t kBluetoothTimeoutDelaySeconds = 2;
 const int kMobileNetworkBatteryIconSize = 14;
 const int kPowerStatusPaddingRight = 10;
-
-bool IsProhibitedByPolicy(const chromeos::NetworkState* network) {
-  if (!NetworkTypePattern::WiFi().MatchesType(network->type()))
-    return false;
-  if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted())
-    return false;
-  ManagedNetworkConfigurationHandler* managed_configuration_handler =
-      NetworkHandler::Get()->managed_network_configuration_handler();
-  const base::DictionaryValue* global_network_config =
-      managed_configuration_handler->GetGlobalConfigFromPolicy(
-          std::string() /* no username hash, device policy */);
-  bool policy_prohibites_unmanaged = false;
-  if (global_network_config) {
-    global_network_config->GetBooleanWithoutPathExpansion(
-        ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
-        &policy_prohibites_unmanaged);
-  }
-  if (!policy_prohibites_unmanaged)
-    return false;
-  return !managed_configuration_handler->FindPolicyByGuidAndProfile(
-      network->guid(), network->profile_path(), nullptr /* onc_source */);
-}
 
 bool IsCellularSimLocked() {
   const chromeos::DeviceState* cellular_device =
@@ -112,8 +90,14 @@ void ShowCellularSettings() {
   const chromeos::NetworkState* cellular_network =
       NetworkHandler::Get()->network_state_handler()->FirstNetworkByType(
           NetworkTypePattern::Cellular());
-  Shell::Get()->system_tray_controller()->ShowNetworkSettings(
+  Shell::Get()->system_tray_model()->client_ptr()->ShowNetworkSettings(
       cellular_network ? cellular_network->guid() : std::string());
+}
+
+bool IsSecondaryUser() {
+  SessionController* session_controller = Shell::Get()->session_controller();
+  return session_controller->IsActiveUserSessionStarted() &&
+         !session_controller->IsUserPrimary();
 }
 
 }  // namespace
@@ -140,16 +124,6 @@ class NetworkListView::SectionHeaderRowView : public views::View,
 
   void SetSubtitle(int subtitle_id) {
     network_row_title_view_->SetSubtitle(subtitle_id);
-
-    // The left padding of the toggle is different depending on whether the
-    // subtitle is displayed.
-    const int toggle_left_padding = subtitle_id == 0
-                                        ? kToggleLeftPaddingWithoutSubtitle
-                                        : kToggleLeftPaddingWithSubtitle;
-    const gfx::Insets previous_insets = toggle_->border()->GetInsets();
-    toggle_->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(previous_insets.top(), toggle_left_padding,
-                    previous_insets.bottom(), previous_insets.right())));
   }
 
   virtual void SetToggleState(bool toggle_enabled, bool is_on) {
@@ -188,9 +162,6 @@ class NetworkListView::SectionHeaderRowView : public views::View,
   }
 
  private:
-  static const int kToggleLeftPaddingWithoutSubtitle = 18;
-  static const int kToggleLeftPaddingWithSubtitle = 8;
-
   void InitializeLayout() {
     TrayPopupUtils::ConfigureAsStickyHeader(this);
     SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -233,7 +204,7 @@ namespace {
 class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
                             public chromeos::NetworkStateHandlerObserver {
  public:
-  MobileHeaderRowView(NetworkStateHandler* network_state_handler)
+  explicit MobileHeaderRowView(NetworkStateHandler* network_state_handler)
       : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_MOBILE),
         network_state_handler_(network_state_handler),
         weak_ptr_factory_(this) {
@@ -316,6 +287,8 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
         network_state_handler_->GetTechnologyState(
             NetworkTypePattern::Tether());
 
+    bool default_toggle_enabled = !IsSecondaryUser();
+
     // If Cellular is available, toggle state and subtitle reflect Cellular.
     if (cellular_state != NetworkStateHandler::TECHNOLOGY_UNAVAILABLE) {
       const chromeos::DeviceState* cellular_device =
@@ -323,7 +296,7 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
               NetworkTypePattern::Cellular());
       bool cellular_enabled =
           cellular_state == NetworkStateHandler::TECHNOLOGY_ENABLED;
-      SetToggleState(true /* toggle_enabled */, cellular_enabled);
+      SetToggleState(default_toggle_enabled, cellular_enabled);
 
       int subtitle = 0;
       if (!cellular_device ||
@@ -370,7 +343,7 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
         // "Initializing...". TODO(stevenjb): Rename the string to _MOBILE.
         SetSubtitle(IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR);
       } else {
-        SetToggleState(true /* toggle_enabled */, false /* is_on */);
+        SetToggleState(default_toggle_enabled, false /* is_on */);
         SetSubtitle(IDS_ASH_STATUS_TRAY_ENABLING_MOBILE_ENABLES_BLUETOOTH);
       }
       return;
@@ -388,7 +361,7 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
         network_state_handler_->SetTechnologyEnabled(
             NetworkTypePattern::Tether(), true /* enabled */,
             chromeos::network_handler::ErrorCallback());
-        SetToggleState(true /* toggle_enabled */, true /* is_on */);
+        SetToggleState(default_toggle_enabled, true /* is_on */);
         // "Initializing...". TODO(stevenjb): Rename the string to _MOBILE.
         SetSubtitle(IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR);
         return;
@@ -401,7 +374,7 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
                               NetworkTypePattern::Tether())) {
       subtitle = IDS_ASH_STATUS_TRAY_NO_MOBILE_DEVICES_FOUND;
     }
-    SetToggleState(true /* toggle_enabled */, tether_enabled /* is_on */);
+    SetToggleState(default_toggle_enabled, tether_enabled /* is_on */);
     SetSubtitle(subtitle);
   }
 
@@ -444,12 +417,12 @@ class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
  public:
   WifiHeaderRowView()
       : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_WIFI),
-        join_(nullptr) {}
+        join_button_(nullptr) {}
 
   ~WifiHeaderRowView() override = default;
 
   void SetToggleState(bool toggle_enabled, bool is_on) override {
-    join_->SetEnabled(is_on);
+    join_button_->SetEnabled(toggle_enabled && is_on);
     SectionHeaderRowView::SetToggleState(toggle_enabled, is_on);
   }
 
@@ -473,20 +446,19 @@ class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
     gfx::ImageSkia disabled_image = network_icon::GetImageForNewWifiNetwork(
         SkColorSetA(prominent_color, kDisabledJoinIconAlpha),
         SkColorSetA(prominent_color, kDisabledJoinBadgeAlpha));
-    join_ = new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
-                                 normal_image, disabled_image,
-                                 IDS_ASH_STATUS_TRAY_OTHER_WIFI);
-    join_->SetInkDropColor(prominent_color);
-    join_->SetEnabled(enabled);
-    container()->AddView(TriView::Container::END, join_);
+    join_button_ = new SystemMenuButton(this, normal_image, disabled_image,
+                                        IDS_ASH_STATUS_TRAY_OTHER_WIFI);
+    join_button_->SetInkDropColor(prominent_color);
+    join_button_->SetEnabled(enabled);
+    container()->AddView(TriView::Container::END, join_button_);
   }
 
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
-    if (sender == join_) {
+    if (sender == join_button_) {
       Shell::Get()->metrics()->RecordUserMetricsAction(
           UMA_STATUS_AREA_NETWORK_JOIN_OTHER_CLICKED);
-      Shell::Get()->system_tray_controller()->ShowNetworkCreate(
-          shill::kTypeWifi);
+      Shell::Get()->system_tray_model()->client_ptr()->ShowNetworkCreate(
+          ::onc::network_type::kWiFi);
       return;
     }
     SectionHeaderRowView::ButtonPressed(sender, event);
@@ -506,7 +478,7 @@ class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
   static constexpr int kDisabledJoinIconAlpha = 0x1D;
 
   // A button to invoke "Join Wi-Fi network" dialog.
-  SystemMenuButton* join_;
+  SystemMenuButton* join_button_;
 
   DISALLOW_COPY_AND_ASSIGN(WifiHeaderRowView);
 };
@@ -515,8 +487,9 @@ class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
 
 // NetworkListView:
 
-NetworkListView::NetworkListView(SystemTrayItem* owner, LoginStatus login)
-    : NetworkStateListDetailedView(owner, LIST_TYPE_NETWORK, login),
+NetworkListView::NetworkListView(DetailedViewDelegate* delegate,
+                                 LoginStatus login)
+    : NetworkStateListDetailedView(delegate, LIST_TYPE_NETWORK, login),
       needs_relayout_(false),
       no_wifi_networks_view_(nullptr),
       mobile_header_view_(nullptr),
@@ -568,7 +541,7 @@ void NetworkListView::UpdateNetworks(
     if (!NetworkTypePattern::NonVirtual().MatchesType(network->type()))
       continue;
     // If cellular is disabled, skip the default cellular service.
-    if (network->Matches(NetworkTypePattern::Cellular()) && !cellular_enabled)
+    if (network->IsDefaultCellular() && !cellular_enabled)
       continue;
     network_list_.push_back(std::make_unique<NetworkInfo>(network->guid()));
   }
@@ -586,7 +559,13 @@ void NetworkListView::UpdateNetworkIcons() {
         handler->GetNetworkStateFromGuid(info->guid);
     if (!network)
       continue;
-    bool prohibited_by_policy = IsProhibitedByPolicy(network);
+    bool prohibited_by_policy =
+        Shell::Get()->session_controller()->IsActiveUserSessionStarted() &&
+        NetworkHandler::Get()
+            ->managed_network_configuration_handler()
+            ->IsNetworkBlockedByPolicy(network->type(), network->guid(),
+                                       network->profile_path(),
+                                       network->GetHexSsid());
     info->label = network_icon::GetLabelForNetwork(
         network, network_icon::ICON_TYPE_MENU_LIST);
     info->image =
@@ -666,7 +645,7 @@ NetworkListView::UpdateNetworkListEntries() {
   // TODO(jamescook): Create UIProxyConfigService under mash. This will require
   // the mojo pref service to work with prefs in Local State.
   // http://crbug.com/718072
-  if (Shell::GetAshConfig() != Config::MASH) {
+  if (::features::IsAshInBrowserProcess()) {
     using_proxy = NetworkHandler::Get()
                       ->ui_proxy_config_service()
                       ->HasDefaultNetworkProxyConfigured();
@@ -706,10 +685,12 @@ NetworkListView::UpdateNetworkListEntries() {
     return new_guids;
   }
 
+  bool should_clear_info_label = true;
   if (!handler->FirstNetworkByType(NetworkTypePattern::WiFi())) {
     UpdateInfoLabel(IDS_ASH_STATUS_TRAY_NETWORK_WIFI_ENABLED, index,
                     &no_wifi_networks_view_);
     ++index;
+    should_clear_info_label = false;
   }
 
   // Add Wi-Fi networks.
@@ -722,6 +703,9 @@ NetworkListView::UpdateNetworkListEntries() {
   if (index == 0) {
     UpdateInfoLabel(IDS_ASH_STATUS_TRAY_NO_NETWORKS, index,
                     &no_wifi_networks_view_);
+  } else if (should_clear_info_label) {
+    // Update the label to show nothing.
+    UpdateInfoLabel(0, index, &no_wifi_networks_view_);
   }
 
   return new_guids;
@@ -745,7 +729,7 @@ bool NetworkListView::ShouldMobileDataSectionBeShown() {
   // Secondary users cannot enable Bluetooth, and Tether is only UNINITIALIZED
   // if Bluetooth is disabled. Hide the section in this case.
   if (handler->IsTechnologyUninitialized(NetworkTypePattern::Tether()) &&
-      !Shell::Get()->session_controller()->IsUserPrimary()) {
+      IsSecondaryUser()) {
     return false;
   }
 
@@ -776,16 +760,17 @@ void NetworkListView::UpdateViewForNetwork(HoverHighlightView* view,
 
   // Add an additional icon to the right of the label for networks
   // that require it (e.g. Tether, controlled by extension).
-  views::View* power_icon = CreatePowerStatusView(info);
-  if (power_icon) {
-    view->AddRightView(
-        power_icon, views::CreateEmptyBorder(
-                        gfx::Insets(0 /* top */, 0 /* left */, 0 /* bottom */,
-                                    kPowerStatusPaddingRight)));
+  views::View* icon = CreatePowerStatusView(info);
+  if (icon) {
+    view->AddRightView(icon, views::CreateEmptyBorder(gfx::Insets(
+                                 0 /* top */, 0 /* left */, 0 /* bottom */,
+                                 kPowerStatusPaddingRight)));
   } else {
-    views::View* controlled_icon = CreateControlledByExtensionView(info);
-    if (controlled_icon)
-      view->AddRightView(controlled_icon);
+    icon = CreatePolicyView(info);
+    if (!icon)
+      icon = CreateControlledByExtensionView(info);
+    if (icon)
+      view->AddRightView(icon);
   }
 
   needs_relayout_ = true;
@@ -815,6 +800,27 @@ views::View* NetworkListView::CreatePowerStatusView(const NetworkInfo& info) {
   icon->SetTooltipText(base::FormatPercent(network->battery_percentage()));
 
   return icon;
+}
+
+views::View* NetworkListView::CreatePolicyView(const NetworkInfo& info) {
+  // Check if the network is managed by policy.
+  const chromeos::NetworkState* network =
+      NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
+          info.guid);
+  if (!network)
+    return nullptr;
+  const base::DictionaryValue* policy =
+      NetworkHandler::Get()
+          ->managed_network_configuration_handler()
+          ->FindPolicyByGuidAndProfile(network->guid(), network->profile_path(),
+                                       nullptr /* onc_source */);
+  if (!policy)
+    return nullptr;
+
+  views::ImageView* controlled_icon = TrayPopupUtils::CreateMainImageView();
+  controlled_icon->SetImage(
+      gfx::CreateVectorIcon(kSystemMenuBusinessIcon, kMenuIconColor));
+  return controlled_icon;
 }
 
 views::View* NetworkListView::CreateControlledByExtensionView(
@@ -875,8 +881,10 @@ void NetworkListView::PlaceViewAtIndex(views::View* view, int index) {
     scroll_content()->AddChildViewAt(view, index);
   } else {
     // No re-order and re-layout is necessary if |view| is already at |index|.
-    if (scroll_content()->child_at(index) == view)
+    if (index < scroll_content()->child_count() &&
+        scroll_content()->child_at(index) == view) {
       return;
+    }
     scroll_content()->ReorderChildView(view, index);
   }
   needs_relayout_ = true;
@@ -922,7 +930,7 @@ int NetworkListView::UpdateSectionHeaderRow(NetworkTypePattern pattern,
   // visible when the header row is not at the top of the list.
   if (child_index > 0) {
     if (!*separator_view)
-      *separator_view = TrayPopupUtils::CreateListSubHeaderSeparator();
+      *separator_view = CreateListSubHeaderSeparator();
     PlaceViewAtIndex(*separator_view, child_index++);
   } else {
     if (*separator_view)
@@ -930,9 +938,10 @@ int NetworkListView::UpdateSectionHeaderRow(NetworkTypePattern pattern,
     *separator_view = nullptr;
   }
 
+  bool default_toggle_enabled = !IsSecondaryUser();
   // Mobile updates its toggle state independently.
   if (!pattern.MatchesPattern(NetworkTypePattern::Mobile()))
-    (*view)->SetToggleState(true /* toggle_enabled */, enabled /* is_on */);
+    (*view)->SetToggleState(default_toggle_enabled, enabled /* is_on */);
   PlaceViewAtIndex(*view, child_index++);
   return child_index;
 }

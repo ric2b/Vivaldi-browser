@@ -18,8 +18,6 @@
 #include "chrome/common/importer/importer_type.h"
 #include "url/gurl.h"
 
-#include "importer/import_config.h"
-
 // Types needed for importing data from other browsers and the Google Toolbar.
 namespace importer {
 
@@ -36,7 +34,7 @@ enum ImportItem {
   NOTES              = 1 << 7,
   MASTER_PASSWORD    = 1 << 8, // Requires a master password
   SPEED_DIAL         = 1 << 9, // Speed Dials
-  ALL                = (1 << 9) - 1  // All the bits should be 1, hence the -1.
+  ALL                = (1 << 10) - 1  // All the bits should be 1, hence the -1.
 };
 
 // Contains information needed for importing bookmarks/search engine urls, etc.

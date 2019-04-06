@@ -29,7 +29,7 @@
 #include "crypto/random.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
-#include "net/proxy/proxy_server.h"
+#include "net/base/proxy_server.h"
 #include "net/url_request/url_request.h"
 
 #if defined(USE_GOOGLE_API_KEYS_FOR_AUTH_KEY)
@@ -297,6 +297,12 @@ void DataReductionProxyRequestOptions::RegenerateRequestHeaderValue() {
     headers.push_back(FormatOption(kExperimentsOption, experiment));
 
   header_value_ = base::JoinString(headers, ", ");
+
+  if (update_header_callback_) {
+    net::HttpRequestHeaders headers;
+    headers.SetHeader(chrome_proxy_header(), header_value_);
+    update_header_callback_.Run(std::move(headers));
+  }
 }
 
 std::string DataReductionProxyRequestOptions::GetSessionKeyFromRequestHeaders(

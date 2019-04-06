@@ -3,6 +3,8 @@
 #include "base/path_service.h"
 #include "importer/chromium_profile_importer.h"
 
+using base::PathService;
+
 base::FilePath GetProfileDir(importer::ImporterType importerType) {
   base::FilePath home_path;
   if (!PathService::Get(base::DIR_HOME, &home_path)) {

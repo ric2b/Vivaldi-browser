@@ -4,6 +4,7 @@
 
 #include "gpu/command_buffer/service/transform_feedback_manager.h"
 
+#include "base/numerics/checked_math.h"
 #include "gpu/command_buffer/service/buffer_manager.h"
 #include "ui/gl/gl_version_info.h"
 
@@ -15,6 +16,7 @@ TransformFeedback::TransformFeedback(TransformFeedbackManager* manager,
                                      GLuint service_id)
     : IndexedBufferBindingHost(
           manager->max_transform_feedback_separate_attribs(),
+          GL_TRANSFORM_FEEDBACK_BUFFER,
           manager->needs_emulation()),
       manager_(manager),
       client_id_(client_id),
@@ -22,7 +24,8 @@ TransformFeedback::TransformFeedback(TransformFeedbackManager* manager,
       has_been_bound_(false),
       active_(false),
       paused_(false),
-      primitive_mode_(GL_NONE) {
+      primitive_mode_(GL_NONE),
+      vertices_drawn_(0) {
   DCHECK_LE(0u, client_id);
   DCHECK_LT(0u, service_id);
 }
@@ -35,16 +38,34 @@ TransformFeedback::~TransformFeedback() {
   }
 }
 
-void TransformFeedback::DoBindTransformFeedback(GLenum target) {
+void TransformFeedback::DoBindTransformFeedback(
+    GLenum target,
+    TransformFeedback* last_bound_transform_feedback,
+    Buffer* bound_transform_feedback_buffer) {
   DCHECK_LT(0u, service_id_);
   glBindTransformFeedback(target, service_id_);
+  // GL drivers differ on whether GL_TRANSFORM_FEEDBACK_BUFFER is changed
+  // when calling glBindTransformFeedback. To make them consistent, we
+  // explicitly bind the buffer we think should be bound here.
+  if (bound_transform_feedback_buffer &&
+      !bound_transform_feedback_buffer->IsDeleted()) {
+    glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER,
+                 bound_transform_feedback_buffer->service_id());
+  } else {
+    glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, 0);
+  }
   has_been_bound_ = true;
-  OnBindHost(target);
   if (active_ && !paused_) {
     // This could only happen during virtual context switching.
     // Otherwise the validation should generate a GL error without calling
     // into this function.
     glResumeTransformFeedback();
+  }
+  if (last_bound_transform_feedback != this) {
+    if (last_bound_transform_feedback) {
+      last_bound_transform_feedback->SetIsBound(false);
+    }
+    SetIsBound(true);
   }
 }
 
@@ -56,6 +77,7 @@ void TransformFeedback::DoBeginTransformFeedback(GLenum primitive_mode) {
   glBeginTransformFeedback(primitive_mode);
   active_ = true;
   primitive_mode_ = primitive_mode;
+  vertices_drawn_ = 0;
 }
 
 void TransformFeedback::DoEndTransformFeedback() {
@@ -77,9 +99,52 @@ void TransformFeedback::DoResumeTransformFeedback() {
   paused_ = false;
 }
 
+bool TransformFeedback::GetVerticesNeededForDraw(GLenum mode,
+                                                 GLsizei count,
+                                                 GLsizei primcount,
+                                                 GLsizei* vertices_out) const {
+  // Transform feedback only outputs complete primitives, so we need to round
+  // down to the nearest complete primitive before multiplying by the number of
+  // instances.
+  base::CheckedNumeric<GLsizei> checked_vertices = vertices_drawn_;
+  base::CheckedNumeric<GLsizei> checked_count = count;
+  base::CheckedNumeric<GLsizei> checked_primcount = primcount;
+  switch (mode) {
+    case GL_TRIANGLES:
+      checked_vertices +=
+          checked_primcount * (checked_count - checked_count % 3);
+      break;
+    case GL_LINES:
+      checked_vertices +=
+          checked_primcount * (checked_count - checked_count % 2);
+      break;
+    default:
+      NOTREACHED();
+      FALLTHROUGH;
+    case GL_POINTS:
+      checked_vertices += checked_primcount * checked_count;
+  }
+  // Note that the use of GLsizei limits us to 32-bit numbers of vertices. If
+  // the command buffer is upgraded to allow 64-bit buffer sizes then this
+  // should be expanded to 64 bits as well.
+  *vertices_out = checked_vertices.ValueOrDefault(0);
+  return checked_vertices.IsValid();
+}
+
+void TransformFeedback::OnVerticesDrawn(GLenum mode,
+                                        GLsizei count,
+                                        GLsizei primcount) {
+  if (active_ && !paused_) {
+    GLsizei vertices = 0;
+    bool valid = GetVerticesNeededForDraw(mode, count, primcount, &vertices);
+    DCHECK(valid);
+    vertices_drawn_ = vertices;
+  }
+}
 
 TransformFeedbackManager::TransformFeedbackManager(
-    GLuint max_transform_feedback_separate_attribs, bool needs_emulation)
+    GLuint max_transform_feedback_separate_attribs,
+    bool needs_emulation)
     : max_transform_feedback_separate_attribs_(
           max_transform_feedback_separate_attribs),
       needs_emulation_(needs_emulation),

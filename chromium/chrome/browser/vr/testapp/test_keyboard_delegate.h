@@ -37,17 +37,18 @@ class TestKeyboardDelegate : public KeyboardDelegate {
                const gfx::Point3F& ray_target,
                gfx::Point3F* hit_position) override;
   void Draw(const CameraModel& model) override;
+  bool SupportsSelection() override;
 
   void Initialize(SkiaSurfaceProvider* provider, UiElementRenderer* renderer);
   void SetUiInterface(KeyboardUiInterface* keyboard) {
-    keyboard_interface_ = keyboard;
+    ui_interface_ = keyboard;
   }
-  void UpdateInput(const vr::TextInputInfo& info) { input_info_ = info; }
+  void UpdateInput(const vr::TextInputInfo& info);
   bool HandleInput(ui::Event* e);
 
  private:
   std::unique_ptr<TestKeyboardRenderer> renderer_;
-  KeyboardUiInterface* keyboard_interface_ = nullptr;
+  KeyboardUiInterface* ui_interface_ = nullptr;
   gfx::Transform world_space_transform_;
   bool editing_;
   TextInputInfo input_info_;

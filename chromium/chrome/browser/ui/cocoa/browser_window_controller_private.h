@@ -108,12 +108,6 @@ enum class FullscreenSource {
 // The opacity for the toolbar divider; 0 means that it shouldn't be shown.
 - (CGFloat)toolbarDividerOpacity;
 
-// Update visibility of the infobar tip, depending on the state of the window.
-- (void)updateInfoBarTipVisibility;
-
-// The distance from the toolbar bottom to the anchor point for InfoBars.
-- (NSInteger)infoBarAnchorPointY;
-
 // Enter fullscreen by toggling the AppKit Fullscreen API.
 - (void)enterAppKitFullscreen;
 
@@ -146,16 +140,6 @@ enum class FullscreenSource {
 // Sets the content view's subviews. Attempts to not touch the tabContentArea
 // to prevent redraws.
 - (void)setContentViewSubviews:(NSArray*)subviews;
-
-// There is a bug in Mavericks for applications linked against OSX 10.8 and
-// earlier. The bug requires Screens Have Separate Spaces to be enabled, and
-// for the window to be on a secondary screen. When AppKit Fullscreen is
-// invoked on the window, its final frame is 22pt too short. These methods
-// detect when the relevant conditions have been met so that a hack can be
-// applied to fix the size of the window.
-// http://crbug.com/396980
-+ (BOOL)systemSettingsRequireMavericksAppKitFullscreenHack;
-- (BOOL)shouldUseMavericksAppKitFullscreenHack;
 
 // Whether the instance should use a custom transition when animating into and
 // out of AppKit Fullscreen.

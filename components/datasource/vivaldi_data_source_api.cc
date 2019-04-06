@@ -116,7 +116,7 @@ bool VivaldiDataSourcesAPI::GetMappings() {
 }
 
 void VivaldiDataSourcesAPI::SaveMappings() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   std::unique_ptr<base::DictionaryValue> root(new base::DictionaryValue);
   std::unique_ptr<base::DictionaryValue> item(new base::DictionaryValue);
@@ -169,7 +169,7 @@ bool VivaldiDataSourcesAPI::AddMapping(const std::string& id,
       std::make_pair(id, new VivaldiDataSourceItem(id, file_path)));
   }
   content::BrowserThread::PostTask(
-    content::BrowserThread::FILE, FROM_HERE,
+    content::BrowserThread::IO, FROM_HERE,
     base::Bind(&VivaldiDataSourcesAPI::SaveMappings, base::Unretained(this)));
 
   return true;
@@ -187,7 +187,7 @@ bool VivaldiDataSourcesAPI::RemoveMapping(const std::string& id) {
     id_to_file_map_.erase(it);
 
     content::BrowserThread::PostTask(
-      content::BrowserThread::FILE, FROM_HERE,
+      content::BrowserThread::IO, FROM_HERE,
       base::Bind(&VivaldiDataSourcesAPI::SaveMappings, base::Unretained(this)));
 
     return true;
@@ -202,10 +202,10 @@ void VivaldiDataSourcesAPI::GetDataForId(
     const content::URLDataSource::GotDataCallback& callback) {
   content::BrowserThread::ID thread_id;
   if (!content::BrowserThread::GetCurrentThreadIdentifier(&thread_id)) {
-    thread_id = content::BrowserThread::FILE;
+    thread_id = content::BrowserThread::IO;
   }
   content::BrowserThread::PostTask(
-      content::BrowserThread::FILE, FROM_HERE,
+      content::BrowserThread::IO, FROM_HERE,
       base::Bind(&VivaldiDataSourcesAPI::GetDataForIdOnFileThread,
                  base::Unretained(this), id, callback, thread_id));
 }
@@ -214,7 +214,7 @@ void VivaldiDataSourcesAPI::GetDataForIdOnFileThread(
     const std::string& id,
     const content::URLDataSource::GotDataCallback& callback,
     content::BrowserThread::ID thread_id) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   // Accessed from multiple threads.
   base::AutoLock lock(map_lock_);

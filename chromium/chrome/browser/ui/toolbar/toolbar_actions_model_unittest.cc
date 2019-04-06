@@ -22,7 +22,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/extension_util.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -46,6 +45,7 @@
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/value_builder.h"
+#include "extensions/test/test_extension_dir.h"
 
 namespace {
 
@@ -1428,7 +1428,7 @@ TEST_F(ToolbarActionsModelUnitTest, AddUserScriptExtension) {
       extensions::ExtensionBuilder("a")
           .SetLocation(extensions::Manifest::INTERNAL)
           .MergeManifest(extensions::DictionaryBuilder()
-                             .SetBoolean("converted_from_user_script", true)
+                             .Set("converted_from_user_script", true)
                              .Build())
           .Build();
 

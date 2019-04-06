@@ -39,7 +39,7 @@
         <div class="secondary">[[currentlyOnChannelText_]]</div>
       </div>
       <div class="separator"></div>
-      <paper-button on-tap="onChangeChannelTap_"
+      <paper-button on-click="onChangeChannelTap_"
           disabled="[[!canChangeChannel_]]">
         $i18n{aboutChangeChannel}
       </paper-button>
@@ -76,7 +76,9 @@
     </div>
     <div class="settings-box two-line single-column">
       <div>$i18n{aboutCommandLineLabel}</div>
-      <div id="command-line" class="secondary">$i18n{aboutCommandLine}</div>
+      <div id="command-line" class="secondary">
+        [[i18n('aboutCommandLine')]]
+      </div>
     </div>
     <div class="settings-box two-line single-column">
       <div>$i18n{aboutBuildDateLabel}</div>

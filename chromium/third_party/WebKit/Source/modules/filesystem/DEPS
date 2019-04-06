@@ -1,6 +1,0 @@
-include_rules = [
-    "-modules",
-    "+modules/EventTargetModules.h",
-    "+modules/ModulesExport.h",
-    "+modules/filesystem",
-]

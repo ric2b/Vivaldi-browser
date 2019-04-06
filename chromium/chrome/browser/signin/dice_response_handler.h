@@ -10,9 +10,11 @@
 #include <vector>
 
 #include "base/cancelable_callback.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/browser/account_reconcilor.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 
@@ -56,7 +58,9 @@ class DiceResponseHandler : public KeyedService {
                       ProfileOAuth2TokenService* profile_oauth2_token_service,
                       AccountTrackerService* account_tracker_service,
                       AccountReconcilor* account_reconcilor,
-                      AboutSigninInternals* about_signin_internals);
+                      AboutSigninInternals* about_signin_internals,
+                      signin::AccountConsistencyMethod account_consistency,
+                      const base::FilePath& profile_path_);
   ~DiceResponseHandler() override;
 
   // Must be called when receiving a Dice response header.
@@ -153,6 +157,8 @@ class DiceResponseHandler : public KeyedService {
   AccountTrackerService* account_tracker_service_;
   AccountReconcilor* account_reconcilor_;
   AboutSigninInternals* about_signin_internals_;
+  signin::AccountConsistencyMethod account_consistency_;
+  base::FilePath profile_path_;
   std::vector<std::unique_ptr<DiceTokenFetcher>> token_fetchers_;
 
   DISALLOW_COPY_AND_ASSIGN(DiceResponseHandler);

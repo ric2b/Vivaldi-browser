@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "remoting/client/input/touch_input_strategy.h"
 #include "remoting/client/ui/desktop_viewport.h"
 #include "remoting/client/ui/fling_animation.h"
@@ -29,8 +31,12 @@ class GestureInterpreter {
     TRACKPAD_INPUT_MODE
   };
 
-  GestureInterpreter(RendererProxy* renderer, ChromotingSession* input_stub);
+  GestureInterpreter();
   ~GestureInterpreter();
+
+  // Sets the context for the interpreter. Both arguments are nullable. If both
+  // are nullptr then methods below will have no effect.
+  void SetContext(RendererProxy* renderer, ChromotingSession* input_stub);
 
   // Must be called right after the renderer is ready.
   void SetInputMode(InputMode mode);
@@ -77,6 +83,8 @@ class GestureInterpreter {
   void OnSurfaceSizeChanged(int width, int height);
   void OnDesktopSizeChanged(int width, int height);
 
+  base::WeakPtr<GestureInterpreter> GetWeakPtr();
+
  private:
   void PanWithoutAbortAnimations(float translation_x, float translation_y);
 
@@ -103,16 +111,17 @@ class GestureInterpreter {
   InputMode input_mode_ = UNDEFINED_INPUT_MODE;
   std::unique_ptr<TouchInputStrategy> input_strategy_;
   DesktopViewport viewport_;
-  RendererProxy* renderer_;
-  ChromotingSession* input_stub_;
+  RendererProxy* renderer_ = nullptr;
+  ChromotingSession* input_stub_ = nullptr;
   TouchInputStrategy::Gesture gesture_in_progress_;
 
   FlingAnimation pan_animation_;
   FlingAnimation scroll_animation_;
 
+  base::WeakPtrFactory<GestureInterpreter> weak_factory_;
+
   // GestureInterpreter is neither copyable nor movable.
-  GestureInterpreter(const GestureInterpreter&) = delete;
-  GestureInterpreter& operator=(const GestureInterpreter&) = delete;
+  DISALLOW_COPY_AND_ASSIGN(GestureInterpreter);
 };
 
 }  // namespace remoting

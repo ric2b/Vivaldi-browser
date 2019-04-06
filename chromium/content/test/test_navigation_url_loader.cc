@@ -13,12 +13,11 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/ssl_status.h"
-#include "content/public/browser/stream_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/resource_response.h"
-#include "services/network/public/interfaces/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace content {
 
@@ -32,7 +31,10 @@ TestNavigationURLLoader::TestNavigationURLLoader(
   DCHECK(IsBrowserSideNavigationEnabled());
 }
 
-void TestNavigationURLLoader::FollowRedirect() {
+void TestNavigationURLLoader::FollowRedirect(
+    const base::Optional<std::vector<std::string>>&
+        to_be_removed_request_headers,
+    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
   redirect_count_++;
 }
 
@@ -52,7 +54,7 @@ void TestNavigationURLLoader::SimulateServerRedirect(const GURL& redirect_url) {
 }
 
 void TestNavigationURLLoader::SimulateError(int error_code) {
-  delegate_->OnRequestFailed(false, error_code, base::nullopt);
+  delegate_->OnRequestFailed(network::URLLoaderCompletionStatus(error_code));
 }
 
 void TestNavigationURLLoader::CallOnRequestRedirected(
@@ -63,7 +65,6 @@ void TestNavigationURLLoader::CallOnRequestRedirected(
 
 void TestNavigationURLLoader::CallOnResponseStarted(
     const scoped_refptr<network::ResourceResponse>& response,
-    std::unique_ptr<StreamHandle> body,
     std::unique_ptr<NavigationData> navigation_data) {
   // Start the request_ids at 1000 to avoid collisions with request ids from
   // network resources (it should be rare to compare these in unit tests).
@@ -74,10 +75,23 @@ void TestNavigationURLLoader::CallOnResponseStarted(
           ->GetProcess()
           ->GetID();
   GlobalRequestID global_id(child_id, ++request_id);
-  delegate_->OnResponseStarted(
-      response, network::mojom::URLLoaderClientEndpointsPtr(), std::move(body),
-      net::SSLInfo(), std::move(navigation_data), global_id, false, false,
-      base::nullopt);
+
+  // Create a bidirectionnal communication pipe between a URLLoader and a
+  // URLLoaderClient. It will be closed at the end of this function. The sole
+  // purpose of this is not to violate some DCHECKs when the navigation commits.
+  network::mojom::URLLoaderClientPtr url_loader_client_ptr;
+  network::mojom::URLLoaderClientRequest url_loader_client_request =
+      mojo::MakeRequest(&url_loader_client_ptr);
+  network::mojom::URLLoaderPtr url_loader_ptr;
+  network::mojom::URLLoaderRequest url_loader_request =
+      mojo::MakeRequest(&url_loader_ptr);
+  auto url_loader_client_endpoints =
+      network::mojom::URLLoaderClientEndpoints::New(
+          url_loader_ptr.PassInterface(), std::move(url_loader_client_request));
+
+  delegate_->OnResponseStarted(response, std::move(url_loader_client_endpoints),
+                               std::move(navigation_data), global_id, false,
+                               false, base::nullopt);
 }
 
 TestNavigationURLLoader::~TestNavigationURLLoader() {}

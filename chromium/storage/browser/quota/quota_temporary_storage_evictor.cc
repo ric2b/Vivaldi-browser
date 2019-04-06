@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
 #define UMA_HISTOGRAM_MBYTES(name, sample)          \
@@ -160,8 +160,8 @@ void QuotaTemporaryStorageEvictor::StartEvictionTimerWithDelay(int delay_ms) {
 void QuotaTemporaryStorageEvictor::ConsiderEviction() {
   OnEvictionRoundStarted();
   quota_eviction_handler_->GetEvictionRoundInfo(
-      base::Bind(&QuotaTemporaryStorageEvictor::OnGotEvictionRoundInfo,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&QuotaTemporaryStorageEvictor::OnGotEvictionRoundInfo,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void QuotaTemporaryStorageEvictor::OnGotEvictionRoundInfo(
@@ -211,8 +211,8 @@ void QuotaTemporaryStorageEvictor::OnGotEvictionRoundInfo(
     quota_eviction_handler_->GetEvictionOrigin(
         blink::mojom::StorageType::kTemporary, in_progress_eviction_origins_,
         settings.pool_size,
-        base::Bind(&QuotaTemporaryStorageEvictor::OnGotEvictionOrigin,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&QuotaTemporaryStorageEvictor::OnGotEvictionOrigin,
+                       weak_factory_.GetWeakPtr()));
     return;
   }
 
@@ -242,8 +242,8 @@ void QuotaTemporaryStorageEvictor::OnGotEvictionOrigin(const GURL& origin) {
 
   quota_eviction_handler_->EvictOriginData(
       origin, blink::mojom::StorageType::kTemporary,
-      base::Bind(&QuotaTemporaryStorageEvictor::OnEvictionComplete,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&QuotaTemporaryStorageEvictor::OnEvictionComplete,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void QuotaTemporaryStorageEvictor::OnEvictionComplete(

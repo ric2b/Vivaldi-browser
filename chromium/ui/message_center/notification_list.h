@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <list>
+#include <map>
 #include <set>
 #include <string>
 
@@ -15,7 +16,7 @@
 #include "base/macros.h"
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/notification_blocker.h"
-#include "ui/message_center/notification_types.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 
 namespace base {
 class TimeDelta;
@@ -37,18 +38,19 @@ struct NotifierId;
 
 // Comparers used to auto-sort the lists of Notifications.
 struct MESSAGE_CENTER_EXPORT ComparePriorityTimestampSerial {
-  bool operator()(Notification* n1, Notification* n2);
+  bool operator()(Notification* n1, Notification* n2) const;
 };
 
 struct MESSAGE_CENTER_EXPORT CompareTimestampSerial {
-  bool operator()(Notification* n1, Notification* n2);
+  bool operator()(Notification* n1, Notification* n2) const;
 };
 
 // An adapter to allow use of the comparers above with std::unique_ptr.
 template <typename PlainCompare>
 struct UniquePtrCompare {
   template <typename T>
-  bool operator()(const std::unique_ptr<T>& n1, const std::unique_ptr<T>& n2) {
+  bool operator()(const std::unique_ptr<T>& n1,
+                  const std::unique_ptr<T>& n2) const {
     return PlainCompare()(n1.get(), n2.get());
   }
 };
@@ -56,11 +58,19 @@ struct UniquePtrCompare {
 // A helper class to manage the list of notifications.
 class MESSAGE_CENTER_EXPORT NotificationList {
  public:
+  struct NotificationState {
+    bool operator!=(const NotificationState& other) const;
+
+    bool shown_as_popup = false;
+    bool is_read = false;
+  };
+
   // Auto-sorted set. Matches the order in which Notifications are shown in
   // Notification Center.
   using Notifications = std::set<Notification*, ComparePriorityTimestampSerial>;
   using OwnedNotifications =
-      std::set<std::unique_ptr<Notification>,
+      std::map<std::unique_ptr<Notification>,
+               NotificationState,
                UniquePtrCompare<ComparePriorityTimestampSerial>>;
 
   // Auto-sorted set used to return the Notifications to be shown as popup
@@ -83,7 +93,11 @@ class MESSAGE_CENTER_EXPORT NotificationList {
 
   void RemoveNotification(const std::string& id);
 
+  // Returns all notifications that have a matching |notifier_id|.
   Notifications GetNotificationsByNotifierId(const NotifierId& notifier_id);
+
+  // Returns all notifications that have a matching |app_id|.
+  Notifications GetNotificationsByAppId(const std::string& app_id);
 
   // Returns true if the notification exists and was updated.
   bool SetNotificationIcon(const std::string& notification_id,
@@ -113,9 +127,8 @@ class MESSAGE_CENTER_EXPORT NotificationList {
   // It also stores the list of notifications which are blocked by |blockers|
   // to |blocked|. |blocked| can be NULL if the caller doesn't care which
   // notifications are blocked.
-  PopupNotifications GetPopupNotifications(
-      const NotificationBlockers& blockers,
-      std::list<const Notification*>* blocked);
+  PopupNotifications GetPopupNotifications(const NotificationBlockers& blockers,
+                                           std::list<std::string>* blocked);
 
   // Marks a specific popup item as shown. Set |mark_notification_as_read| to
   // true in case marking the notification as read too.
@@ -139,6 +152,8 @@ class MESSAGE_CENTER_EXPORT NotificationList {
   // Returns the notification with the corresponding id. If not found, returns
   // NULL. Notification instance is owned by this list.
   Notification* GetNotificationById(const std::string& id);
+
+  void PopupBlocked(const std::string& id);
 
   // Returns all visible notifications, in a (priority-timestamp) order.
   // Suitable for rendering notifications in a MessageCenter.

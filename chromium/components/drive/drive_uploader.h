@@ -16,7 +16,7 @@
 #include "base/threading/thread_checker.h"
 #include "components/drive/service/drive_service_interface.h"
 #include "google_apis/drive/drive_api_error_codes.h"
-#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 
 class GURL;
 
@@ -44,7 +44,7 @@ typedef base::Callback<void(
 
 class DriveUploaderInterface {
  public:
-  virtual ~DriveUploaderInterface() {}
+  virtual ~DriveUploaderInterface() = default;
 
   // Starts batch processing for upload requests. All requests which upload
   // small files (less than kMaxMultipartUploadSize) between

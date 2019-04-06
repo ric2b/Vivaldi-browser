@@ -6,7 +6,6 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/test/scoped_task_environment.h"
 #include "ios/chrome/app/application_delegate/app_state.h"
 #include "ios/chrome/app/application_delegate/app_state_testing.h"
 #include "ios/chrome/app/application_delegate/mock_tab_opener.h"
@@ -19,6 +18,7 @@
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/test/base/scoped_block_swizzler.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
+#include "ios/web/public/test/test_web_thread_bundle.h"
 #import "net/base/mac/url_conversions.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -105,6 +105,12 @@ typedef Tab* (^mock_gurl_nsuinteger_pagetransition)(const GURL&,
   return nil;
 }
 
+- (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion
+                           dismissOmnibox:(BOOL)dismissOmnibox {
+  if (completion)
+    completion();
+}
+
 - (void)expectNewForegroundTab {
   // no-op.
 }
@@ -141,19 +147,37 @@ class URLOpenerTest : public PlatformTest {
   MainController* GetMainController() {
     if (!main_controller_) {
       main_controller_ = [[MainController alloc] init];
-      [main_controller_ setUpAsForegrounded];
+
       id mainTabModel = [OCMockObject mockForClass:[TabModel class]];
       [[mainTabModel stub] resetSessionMetrics];
       [[mainTabModel stub] browserStateDestroyed];
       [[mainTabModel stub] addObserver:[OCMArg any]];
       [[mainTabModel stub] removeObserver:[OCMArg any]];
       [[main_controller_ browserViewInformation] setMainTabModel:mainTabModel];
+
+      id otrTabModel = [OCMockObject mockForClass:[TabModel class]];
+      [[otrTabModel stub] resetSessionMetrics];
+      [[otrTabModel stub] browserStateDestroyed];
+      [[otrTabModel stub] addObserver:[OCMArg any]];
+      [[otrTabModel stub] removeObserver:[OCMArg any]];
+      [[main_controller_ browserViewInformation] setOtrTabModel:otrTabModel];
+      [main_controller_
+          setUpAsForegroundedWithBrowserState:GetChromeBrowserState()];
     }
     return main_controller_;
   }
 
+  ios::ChromeBrowserState* GetChromeBrowserState() {
+    if (!chrome_browser_state_.get()) {
+      TestChromeBrowserState::Builder builder;
+      chrome_browser_state_ = builder.Build();
+    }
+    return chrome_browser_state_.get();
+  }
+
  private:
-  base::test::ScopedTaskEnvironment task_environment_;
+  web::TestWebThreadBundle thread_bundle_;
+  std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   MainController* main_controller_;
 };
 
@@ -185,7 +209,7 @@ TEST_F(URLOpenerTest, HandleOpenURLWithNoOpenTab) {
   // Setup main controller.
   MainController* controller = GetMainController();
   controller.browserViewInformation.mainBVC = bvcMock;
-  controller.tabSwitcherController = tabSwitcherController;
+  controller.tabSwitcher = tabSwitcherController;
   controller.tabSwitcherActive = YES;
 
   id mainApplicationDelegate =
@@ -213,10 +237,7 @@ TEST_F(URLOpenerTest, HandleOpenURLWithOpenTabs) {
   NSURL* url = [NSURL URLWithString:@"chromium://www.google.com"];
   URLOpenerMockBVC* bvc_mock = [[URLOpenerMockBVC alloc] init];
   URLOpenerMockBVC* otr_bvc_mock = [[URLOpenerMockBVC alloc] init];
-  TestChromeBrowserState::Builder main_browser_state_builder;
-  std::unique_ptr<TestChromeBrowserState> chrome_browser_state =
-      main_browser_state_builder.Build();
-  bvc_mock.browserState = chrome_browser_state.get();
+  bvc_mock.browserState = GetChromeBrowserState();
 
   // Setup main controller.
   MainController* controller = GetMainController();
@@ -224,6 +245,8 @@ TEST_F(URLOpenerTest, HandleOpenURLWithOpenTabs) {
       static_cast<BrowserViewController*>(bvc_mock);
   controller.browserViewInformation.otrBVC =
       static_cast<BrowserViewController*>(otr_bvc_mock);
+  controller.browserViewInformation.currentBVC =
+      static_cast<BrowserViewController*>(bvc_mock);
 
   NSDictionary<NSString*, id>* options = nil;
   [URLOpener openURL:url

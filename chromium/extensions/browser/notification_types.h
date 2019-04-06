@@ -8,11 +8,22 @@
 #include <string>
 
 #include "content/public/browser/notification_types.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if !BUILDFLAG(ENABLE_EXTENSIONS)
 #error "Extensions must be enabled"
 #endif
+
+// **
+// ** NOTICE
+// **
+// ** The notification system is deprecated, obsolete, and is slowly being
+// ** removed. See https://crbug.com/268984 and https://crbug.com/411569.
+// **
+// ** Please don't add any new notification types, and please help migrate
+// ** existing uses of the notification types below to use the Observer and
+// ** Callback patterns.
+// **
 
 namespace extensions {
 
@@ -25,6 +36,7 @@ enum NotificationType {
 
   // Sent when a CrxInstaller finishes. Source is the CrxInstaller that
   // finished. The details are the extension which was installed.
+  // DEPRECATED: Use extensions::InstallObserver::OnFinishCrxInstall()
   NOTIFICATION_CRX_INSTALLER_DONE = NOTIFICATION_EXTENSIONS_START,
 
   // Sent when the known installed extensions have all been loaded.  In
@@ -34,8 +46,9 @@ enum NotificationType {
   // DEPRECATED: Use ExtensionSystem::Get(browser_context)->ready().Post().
   NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
 
-  // An error occured while attempting to load an extension. The details are a
+  // An error occurred while attempting to load an extension. The details are a
   // string with details about why the load failed.
+  // DEPRECATED: Use extensions::LoadErrorReporter::OnLoadFailure()
   NOTIFICATION_EXTENSION_LOAD_ERROR,
 
   // Sent when attempting to load a new extension, but they are disabled. The
@@ -46,7 +59,7 @@ enum NotificationType {
   // UpdatedExtensionPermissionsInfo, and the source is a BrowserContext*.
   NOTIFICATION_EXTENSION_PERMISSIONS_UPDATED,
 
-  // An error occured during extension install. The details are a string with
+  // An error occurred during extension install. The details are a string with
   // details about why the install failed.
   NOTIFICATION_EXTENSION_INSTALL_ERROR,
 
@@ -67,11 +80,17 @@ enum NotificationType {
 
   // Sent before an ExtensionHost* is destroyed. The details are
   // an ExtensionHost* and the source is a BrowserContext*.
+  //
+  // DEPRECATED: Use
+  // extensions::ExtensionHostObserver::OnExtensionHostDestroyed()
   NOTIFICATION_EXTENSION_HOST_DESTROYED,
 
   // Sent by an ExtensionHost* when it has finished its initial page load,
   // including any external resources.
   // The details are an ExtensionHost* and the source is a BrowserContext*.
+  //
+  // DEPRECATED: Use extensions::DeferredStartRenderHostObserver::
+  // OnDeferredStartRenderHostDidStopFirstLoad()
   NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
 
   // Sent by an ExtensionHost* when its render view requests closing through
@@ -86,11 +105,6 @@ enum NotificationType {
 
   // Sent when a background page is ready so other components can load.
   NOTIFICATION_EXTENSION_BACKGROUND_PAGE_READY,
-
-  // Sent when the count of page actions has changed. Note that some of them
-  // may not apply to the current page. The source is a LocationBar*. There
-  // are no details.
-  NOTIFICATION_EXTENSION_PAGE_ACTION_COUNT_CHANGED,
 
   // Sent when an extension command has been removed. The source is the
   // BrowserContext* and the details is an ExtensionCommandRemovedDetails
@@ -162,6 +176,7 @@ enum NotificationType {
 
   // Sent when there are new user scripts available.  The details are a
   // pointer to SharedMemory containing the new scripts.
+  // DEPRECATED: Use extensions::UserScriptLoader::Observer::OnScriptsLoaded()
   NOTIFICATION_USER_SCRIPTS_UPDATED,
   NOTIFICATION_EXTENSIONS_END
 };
@@ -175,6 +190,17 @@ struct ExtensionCommandRemovedDetails {
   std::string command_name;
   std::string accelerator;
 };
+
+// **
+// ** NOTICE
+// **
+// ** The notification system is deprecated, obsolete, and is slowly being
+// ** removed. See https://crbug.com/268984 and https://crbug.com/411569.
+// **
+// ** Please don't add any new notification types, and please help migrate
+// ** existing uses of the notification types below to use the Observer and
+// ** Callback patterns.
+// **
 
 }  // namespace extensions
 

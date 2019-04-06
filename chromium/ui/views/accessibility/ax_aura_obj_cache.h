@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/views/views_export.h"
 
@@ -38,9 +38,11 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
 
   class Delegate {
    public:
+    virtual ~Delegate() {}
+
     virtual void OnChildWindowRemoved(AXAuraObjWrapper* parent) = 0;
     virtual void OnEvent(AXAuraObjWrapper* aura_obj,
-                         ui::AXEvent event_type) = 0;
+                         ax::mojom::Event event_type) = 0;
   };
 
   // Get or create an entry in the cache based on an Aura view.
@@ -67,9 +69,6 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
   // Lookup a cached entry based on an id.
   AXAuraObjWrapper* Get(int32_t id);
 
-  // Remove a cached entry based on an id.
-  void Remove(int32_t id);
-
   // Get all top level windows this cache knows about.
   void GetTopLevelWindows(std::vector<AXAuraObjWrapper*>* children);
 
@@ -80,7 +79,7 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
   void OnFocusedViewChanged();
 
   // Tell our delegate to fire an event on a given object.
-  void FireEvent(AXAuraObjWrapper* aura_obj, ui::AXEvent event_type);
+  void FireEvent(AXAuraObjWrapper* aura_obj, ax::mojom::Event event_type);
 
   // Indicates if this object's currently being destroyed.
   bool is_destroying() { return is_destroying_; }

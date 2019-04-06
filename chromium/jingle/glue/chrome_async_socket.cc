@@ -27,10 +27,13 @@
 namespace jingle_glue {
 
 ChromeAsyncSocket::ChromeAsyncSocket(
-    ResolvingClientSocketFactory* resolving_client_socket_factory,
+    std::unique_ptr<ResolvingClientSocketFactory>
+        resolving_client_socket_factory,
     size_t read_buf_size,
-    size_t write_buf_size)
-    : resolving_client_socket_factory_(resolving_client_socket_factory),
+    size_t write_buf_size,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation)
+    : resolving_client_socket_factory_(
+          std::move(resolving_client_socket_factory)),
       state_(STATE_CLOSED),
       error_(ERROR_NONE),
       net_error_(net::OK),
@@ -41,6 +44,7 @@ ChromeAsyncSocket::ChromeAsyncSocket(
       write_state_(IDLE),
       write_buf_(new net::IOBufferWithSize(write_buf_size)),
       write_end_(0U),
+      traffic_annotation_(traffic_annotation),
       weak_ptr_factory_(this) {
   DCHECK(resolving_client_socket_factory_.get());
   DCHECK_GT(read_buf_size, 0U);
@@ -299,10 +303,10 @@ void ChromeAsyncSocket::DoWrite() {
   // have received a reply to a message we sent to the server and
   // before we send the next message.
   int status =
-      transport_socket_->Write(
-          write_buf_.get(), write_end_,
-          base::Bind(&ChromeAsyncSocket::ProcessWriteDone,
-                     weak_ptr_factory_.GetWeakPtr()));
+      transport_socket_->Write(write_buf_.get(), write_end_,
+                               base::Bind(&ChromeAsyncSocket::ProcessWriteDone,
+                                          weak_ptr_factory_.GetWeakPtr()),
+                               traffic_annotation_);
   write_state_ = PENDING;
   if (status != net::ERR_IO_PENDING) {
     ProcessWriteDone(status);

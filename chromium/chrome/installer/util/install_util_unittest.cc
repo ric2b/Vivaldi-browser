@@ -16,7 +16,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_path_override.h"
@@ -104,7 +103,7 @@ class MockRegistryValuePredicate : public InstallUtil::RegistryValuePredicate {
 class TestBrowserDistribution : public BrowserDistribution {
  public:
   TestBrowserDistribution()
-      : BrowserDistribution(base::MakeUnique<TestAppRegistrationData>()) {}
+      : BrowserDistribution(std::make_unique<TestAppRegistrationData>()) {}
 };
 
 class InstallUtilTest : public testing::Test {
@@ -554,4 +553,27 @@ TEST(DeleteRegistryKeyTest, DeleteAccessRightIsEnoughToDelete) {
 
   EXPECT_TRUE(InstallUtil::DeleteRegistryKey(HKEY_CURRENT_USER, L"TestKey",
                                              WorkItem::kWow64Default));
+}
+
+TEST_F(InstallUtilTest, GetToastActivatorRegistryPath) {
+  base::string16 toast_activator_reg_path =
+      InstallUtil::GetToastActivatorRegistryPath();
+  EXPECT_FALSE(toast_activator_reg_path.empty());
+
+  // Confirm that the string is a path followed by a GUID.
+  size_t guid_begin = toast_activator_reg_path.find('{');
+  EXPECT_NE(std::wstring::npos, guid_begin);
+  ASSERT_GE(guid_begin, 1u);
+  EXPECT_EQ(L'\\', toast_activator_reg_path[guid_begin - 1]);
+
+  // A GUID has the form "{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}".
+  constexpr size_t kGuidLength = 38;
+  EXPECT_EQ(kGuidLength, toast_activator_reg_path.length() - guid_begin);
+
+  EXPECT_EQ('}', toast_activator_reg_path.back());
+}
+
+TEST_F(InstallUtilTest, GuidToSquid) {
+  ASSERT_EQ(InstallUtil::GuidToSquid(L"EDA620E3-AA98-3846-B81E-3493CB2E0E02"),
+            L"3E026ADE89AA64838BE14339BCE2E020");
 }

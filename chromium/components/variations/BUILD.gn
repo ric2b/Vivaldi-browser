@@ -25,10 +25,10 @@ static_library("variations") {
     "entropy_provider.h",
     "experiment_labels.cc",
     "experiment_labels.h",
+    "hashing.cc",
+    "hashing.h",
     "metrics.cc",
     "metrics.h",
-    "metrics_util.cc",
-    "metrics_util.h",
     "platform_field_trials.h",
     "pref_names.cc",
     "pref_names.h",
@@ -38,6 +38,8 @@ static_library("variations") {
     "proto/permuted_entropy_cache.proto",
     "proto/study.proto",
     "proto/variations_seed.proto",
+    "seed_response.cc",
+    "seed_response.h",
     "study_filtering.cc",
     "study_filtering.h",
     "synthetic_trial_registry.cc",
@@ -48,6 +50,8 @@ static_library("variations") {
     "synthetic_trials_active_group_id_provider.h",
     "variations_associated_data.cc",
     "variations_associated_data.h",
+    "variations_crash_keys.cc",
+    "variations_crash_keys.h",
     "variations_experiment_util.cc",
     "variations_experiment_util.h",
     "variations_http_header_provider.cc",
@@ -66,8 +70,6 @@ static_library("variations") {
     "variations_switches.h",
     "variations_url_constants.cc",
     "variations_url_constants.h",
-    "variations_util.cc",
-    "variations_util.h",
   ]
 
   if (is_android || is_ios) {
@@ -83,7 +85,6 @@ static_library("variations") {
     "//components/crash/core/common:crash_key",
     "//components/prefs",
     "//crypto",
-    "//third_party/mt19937ar",
     "//third_party/protobuf:protobuf_lite",
     "//third_party/zlib/google:compression_utils",
   ]
@@ -100,6 +101,15 @@ if (is_android) {
       "android/java/src/org/chromium/components/variations/firstrun/VariationsSeedBridge.java",
     ]
     jni_package = "variations"
+  }
+
+  android_library("load_seed_result_enum_java") {
+    deps = [ "//base:base_java" ]
+    srcjar_deps = [ ":load_seed_result_enum_srcjar" ]
+  }
+
+  java_cpp_enum("load_seed_result_enum_srcjar") {
+    sources = [ "metrics.h" ]
   }
 }
 
@@ -128,11 +138,13 @@ source_set("unit_tests") {
     "child_process_field_trial_syncer_unittest.cc",
     "entropy_provider_unittest.cc",
     "experiment_labels_unittest.cc",
-    "metrics_util_unittest.cc",
+    "hashing_unittest.cc",
+    "net/variations_command_line_unittest.cc",
     "net/variations_http_headers_unittest.cc",
     "study_filtering_unittest.cc",
     "synthetic_trial_registry_unittest.cc",
     "variations_associated_data_unittest.cc",
+    "variations_crash_keys_unittest.cc",
     "variations_http_header_provider_unittest.cc",
     "variations_id_collection_unittest.cc",
     "variations_request_scheduler_unittest.cc",
@@ -150,8 +162,10 @@ source_set("unit_tests") {
     "net",
     "proto",
     "//base/test:test_support",
+    "//components/crash/core/common:crash_key",
     "//components/prefs:test_support",
-    "//components/variations/field_trial_config:unit_tests",
+    "//components/variations/field_trial_config:field_trial_config",
+    "//testing/gmock",
     "//testing/gtest",
     "//third_party/zlib/google:compression_utils",
   ]
@@ -165,6 +179,7 @@ test("variations_unittests") {
   deps = [
     ":unit_tests",
     "//components/test:test_support",
+    "//components/variations/field_trial_config:unit_tests",
     "//components/variations/service:unit_tests",
   ]
 }

@@ -1414,6 +1414,9 @@ static const GLES2Util::EnumToString enum_to_string_table[] = {
         0x84F7, "GL_COMMANDS_COMPLETED_CHROMIUM",
     },
     {
+        0x84F8, "GL_READBACK_SHADOW_COPIES_UPDATED_CHROMIUM",
+    },
+    {
         0x84F9, "GL_DEPTH_STENCIL_OES",
     },
     {
@@ -4529,7 +4532,7 @@ std::string GLES2Util::GetStringFaceType(uint32_t value) {
                                            arraysize(string_table), value);
 }
 
-std::string GLES2Util::GetStringFramebufferParameter(uint32_t value) {
+std::string GLES2Util::GetStringFramebufferAttachmentParameter(uint32_t value) {
   static const EnumToString string_table[] = {
       {GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
        "GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE"},
@@ -4619,6 +4622,8 @@ std::string GLES2Util::GetStringGLState(uint32_t value) {
       {GL_STENCIL_BITS, "GL_STENCIL_BITS"},
       {GL_TEXTURE_BINDING_2D, "GL_TEXTURE_BINDING_2D"},
       {GL_TEXTURE_BINDING_CUBE_MAP, "GL_TEXTURE_BINDING_CUBE_MAP"},
+      {GL_TEXTURE_FILTERING_HINT_CHROMIUM,
+       "GL_TEXTURE_FILTERING_HINT_CHROMIUM"},
       {GL_UNPACK_ALIGNMENT, "GL_UNPACK_ALIGNMENT"},
       {GL_BIND_GENERATES_RESOURCE_CHROMIUM,
        "GL_BIND_GENERATES_RESOURCE_CHROMIUM"},
@@ -4795,6 +4800,8 @@ std::string GLES2Util::GetStringHintMode(uint32_t value) {
 std::string GLES2Util::GetStringHintTarget(uint32_t value) {
   static const EnumToString string_table[] = {
       {GL_GENERATE_MIPMAP_HINT, "GL_GENERATE_MIPMAP_HINT"},
+      {GL_TEXTURE_FILTERING_HINT_CHROMIUM,
+       "GL_TEXTURE_FILTERING_HINT_CHROMIUM"},
       {GL_FRAGMENT_SHADER_DERIVATIVE_HINT,
        "GL_FRAGMENT_SHADER_DERIVATIVE_HINT"},
   };
@@ -5067,6 +5074,8 @@ std::string GLES2Util::GetStringQueryTarget(uint32_t value) {
       {GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM,
        "GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM"},
       {GL_COMMANDS_COMPLETED_CHROMIUM, "GL_COMMANDS_COMPLETED_CHROMIUM"},
+      {GL_READBACK_SHADOW_COPIES_UPDATED_CHROMIUM,
+       "GL_READBACK_SHADOW_COPIES_UPDATED_CHROMIUM"},
   };
   return GLES2Util::GetQualifiedEnumString(string_table,
                                            arraysize(string_table), value);

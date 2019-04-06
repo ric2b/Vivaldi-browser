@@ -87,6 +87,15 @@ bool GetDeviceIdentifiers(int fd,
   return true;
 }
 
+void GetDevicePhysInfo(int fd, const base::FilePath& path, std::string* phys) {
+  char device_phys[kMaximumDeviceNameLength];
+  if (ioctl(fd, EVIOCGPHYS(kMaximumDeviceNameLength - 1), &device_phys) < 0) {
+    PLOG(INFO) << "Failed EVIOCGPHYS (path=" << path.value() << ")";
+    return;
+  }
+  *phys = device_phys;
+}
+
 // |request| needs to be the equivalent to:
 // struct input_mt_request_layout {
 //   uint32_t code;
@@ -183,6 +192,8 @@ bool EventDeviceInfo::Initialize(int fd, const base::FilePath& path) {
 
   if (!GetDeviceIdentifiers(fd, path, &vendor_id_, &product_id_))
     return false;
+
+  GetDevicePhysInfo(fd, path, &phys_);
 
   device_type_ = GetInputDeviceTypeFromPath(path);
 

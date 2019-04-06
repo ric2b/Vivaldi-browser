@@ -11,12 +11,14 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/sequenced_task_runner.h"
 #include "base/task_runner.h"
 #include "base/test/test_pending_task.h"
 
-namespace net {
-
+namespace quic {
 class MockClock;
+}  // namespace quic
+namespace net {
 
 namespace test {
 
@@ -24,7 +26,7 @@ typedef base::TestPendingTask PostedTask;
 
 class TestTaskRunner : public base::SequencedTaskRunner {
  public:
-  explicit TestTaskRunner(MockClock* clock);
+  explicit TestTaskRunner(quic::MockClock* clock);
 
   // base::TaskRunner implementation.
   bool PostDelayedTask(const base::Location& from_here,
@@ -52,7 +54,7 @@ class TestTaskRunner : public base::SequencedTaskRunner {
  private:
   std::vector<PostedTask>::iterator FindNextTask();
 
-  MockClock* const clock_;
+  quic::MockClock* const clock_;
   std::vector<PostedTask> tasks_;
 
   DISALLOW_COPY_AND_ASSIGN(TestTaskRunner);

@@ -38,7 +38,7 @@ void HighlighterControllerClient::Detach() {
 
 void HighlighterControllerClient::SimulateSelectionTimeoutForTesting() {
   DCHECK(delay_timer_ && delay_timer_->IsRunning());
-  delay_timer_->user_task().Run();
+  delay_timer_->FireNow();
   delay_timer_.reset();
 }
 
@@ -62,12 +62,11 @@ void HighlighterControllerClient::ConnectToHighlighterController() {
 void HighlighterControllerClient::HandleSelection(const gfx::Rect& rect) {
   // Delay the actual voice interaction service invocation for better
   // visual synchronization with the metalayer animation.
-  delay_timer_ = std::make_unique<base::Timer>(
+  delay_timer_ = std::make_unique<base::OneShotTimer>();
+  delay_timer_->Start(
       FROM_HERE, base::TimeDelta::FromMilliseconds(kSelectionReportDelayMs),
       base::Bind(&HighlighterControllerClient::ReportSelection,
-                 base::Unretained(this), rect),
-      false /* is_repeating */);
-  delay_timer_->Reset();
+                 base::Unretained(this), rect));
 }
 
 void HighlighterControllerClient::HandleEnabledStateChange(bool enabled) {

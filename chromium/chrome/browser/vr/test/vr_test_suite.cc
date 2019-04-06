@@ -10,7 +10,8 @@
 #include "base/path_service.h"
 #include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/core/embedder/embedder.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 
@@ -27,17 +28,18 @@ void VrTestSuite::Initialize() {
       std::make_unique<base::test::ScopedTaskEnvironment>(
           base::test::ScopedTaskEnvironment::MainThreadType::UI);
 
-  mojo::edk::Init();
+  mojo::core::Init();
 
   base::FilePath pak_path;
 #if defined(OS_ANDROID)
   ui::RegisterPathProvider();
-  PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_path);
+  base::PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_path);
 #else
-  PathService::Get(base::DIR_MODULE, &pak_path);
+  base::PathService::Get(base::DIR_MODULE, &pak_path);
 #endif
   ui::ResourceBundle::InitSharedInstanceWithPakPath(
       pak_path.AppendASCII("vr_test.pak"));
+  ui::MaterialDesignController::Initialize();
 }
 
 void VrTestSuite::Shutdown() {

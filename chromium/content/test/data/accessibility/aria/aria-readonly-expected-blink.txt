@@ -1,11 +1,11 @@
 rootWebArea
 ++genericContainer
-++++textField
+++++textField value='Readonly-false input'
 ++++++genericContainer
 ++++++++staticText name='Readonly-false input'
 ++++++++++inlineTextBox name='Readonly-false input'
 ++genericContainer
-++++textField restriction=readOnly
+++++textField value='Readonly-true input' restriction=readOnly
 ++++++genericContainer
 ++++++++staticText name='Readonly-true input'
 ++++++++++inlineTextBox name='Readonly-true input'
@@ -18,7 +18,7 @@ rootWebArea
 ++textField name='Readonly-false contenteditable textbox'
 ++textField name='Readonly-true contenteditable textbox' restriction=readOnly
 ++checkBox name='Readonly checkbox' restriction=readOnly
-++textFieldWithComboBox haspopup name='Readonly combobox' restriction=readOnly
+++textFieldWithComboBox name='Readonly combobox' restriction=readOnly haspopup=listbox
 ++listBox name='Readonly listbox' restriction=readOnly
 ++radioGroup name='Readonly radiogroup' restriction=readOnly
 ++slider horizontal name='Readonly slider' restriction=readOnly

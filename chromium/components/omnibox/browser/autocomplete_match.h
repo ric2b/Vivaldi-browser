@@ -63,7 +63,7 @@ struct AutocompleteMatch {
   // This structure holds the classification information for each span.
   struct ACMatchClassification {
     // The values in here are not mutually exclusive -- use them like a
-    // bitfield.  This also means we use "int" instead of this enum type when
+    // bit field.  This also means we use "int" instead of this enum type when
     // passing the values around, so the compiler doesn't complain.
     //
     // A Java counterpart will be generated for this enum.
@@ -82,6 +82,14 @@ struct AutocompleteMatch {
     ACMatchClassification(size_t offset, int style)
         : offset(offset),
           style(style) {
+    }
+
+    bool operator==(const ACMatchClassification& other) const {
+      return offset == other.offset && style == other.style;
+    }
+
+    bool operator!=(const ACMatchClassification& other) const {
+      return offset != other.offset || style != other.style;
     }
 
     // Offset within the string that this classification starts
@@ -114,8 +122,12 @@ struct AutocompleteMatch {
   // Converts |type| to a string representation.  Used in logging and debugging.
   AutocompleteMatch& operator=(const AutocompleteMatch& match);
 
-  // Gets the vector icon identifier for the icon to be shown for |type|.
-  static const gfx::VectorIcon& TypeToVectorIcon(Type type);
+  // Gets the vector icon identifier for the icon to be shown for |type|. If
+  // |is_bookmark| is true, returns a bookmark icon rather than what the type
+  // would determine.
+  static const gfx::VectorIcon& TypeToVectorIcon(Type type,
+                                                 bool is_bookmark,
+                                                 bool is_tab_match);
 
   // Comparison function for determining when one match is better than another.
   static bool MoreRelevant(const AutocompleteMatch& elem1,
@@ -192,6 +204,10 @@ struct AutocompleteMatch {
       TemplateURLService* template_url_service,
       const base::string16& keyword,
       const std::string& host);
+  static const TemplateURL* GetTemplateURLWithKeyword(
+      const TemplateURLService* template_url_service,
+      const base::string16& keyword,
+      const std::string& host);
 
   // Returns |url| altered by stripping off "www.", converting https protocol
   // to http, and stripping excess query parameters.  These conversions are
@@ -210,7 +226,7 @@ struct AutocompleteMatch {
   // seems to matter to the user.
   static GURL GURLToStrippedGURL(const GURL& url,
                                  const AutocompleteInput& input,
-                                 TemplateURLService* template_url_service,
+                                 const TemplateURLService* template_url_service,
                                  const base::string16& keyword);
 
   // Sets the |match_in_scheme|, |match_in_subdomain|, and |match_after_host|
@@ -286,6 +302,10 @@ struct AutocompleteMatch {
   TemplateURL* GetTemplateURL(TemplateURLService* template_url_service,
                               bool allow_fallback_to_destination_host) const;
 
+  // Gets the URL for the match image (whether it be an answer or entity). If
+  // there isn't an image URL, returns an empty GURL (test with is_empty()).
+  GURL ImageUrl() const;
+
   // Adds optional information to the |additional_info| dictionary.
   void RecordAdditionalInfo(const std::string& property,
                             const std::string& value);
@@ -310,19 +330,35 @@ struct AutocompleteMatch {
   // This is used to decide whether we should call DeleteMatch().
   bool SupportsDeletion() const;
 
-  // Swaps the contents and description fields, and their associated
-  // classifications, if this is a match for which we should emphasize the
-  // title (stored in the description field) over the URL (in the contents
-  // field).  Intended to only be used at the UI level before displaying, lest
-  // other omnibox systems get confused about which is which.  See the code
-  // that sets |swap_contents_and_description| for conditions under which
-  // it is true.
-  void PossiblySwapContentsAndDescriptionForDisplay();
+  // Returns a copy of this match with the contents and description fields, and
+  // their associated classifications, possibly swapped.  We swap these if this
+  // is a match for which we should emphasize the title (stored in the
+  // description field) over the URL (in the contents field).
+  //
+  // We specifically return a copy to prevent the UI code from accidentally
+  // mucking with the matches stored in the model, lest other omnibox systems
+  // get confused about which is which.  See the code that sets
+  // |swap_contents_and_description| for conditions they are swapped.
+  AutocompleteMatch GetMatchWithContentsAndDescriptionPossiblySwapped() const;
 
   // If this match is a tail suggestion, prepends the passed |common_prefix|.
   // If not, but the prefix matches the beginning of the suggestion, dims that
   // portion in the classification.
   void InlineTailPrefix(const base::string16& common_prefix);
+
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
+
+  // Some types of matches (answers for dictionary definitions, e.g.) do not
+  // follow the common rules for reversing lines.
+  bool IsExceptedFromLineReversal() const;
+
+  // Not to be confused with |has_tab_match|, this returns true if the match
+  // has a matching tab and will use a switch-to-tab button. It returns false,
+  // for example, when the switch button is not shown because a keyword match
+  // is taking precedence.
+  bool ShouldShowTabMatch() const;
 
   // The provider of this match, used to remember which provider the user had
   // selected when the input changes. This may be NULL, in which case there is
@@ -377,6 +413,11 @@ struct AutocompleteMatch {
   // duplicates.
   GURL stripped_destination_url;
 
+  // Optional image information. Used for entity suggestions. The dominant color
+  // can be used to paint the image placeholder while fetching the image.
+  std::string image_dominant_color;
+  std::string image_url;
+
   // The main text displayed in the address bar dropdown.
   base::string16 contents;
   ACMatchClassifications contents_class;
@@ -403,6 +444,9 @@ struct AutocompleteMatch {
 
   // Type of this match.
   Type type;
+
+  // True if we saw a tab that matched this suggestion.
+  bool has_tab_match;
 
   // Used to identify the specific source / type for suggestions by the
   // suggest server. See |result_subtype_identifier| in omnibox.proto for more
@@ -453,7 +497,7 @@ struct AutocompleteMatch {
   // ensure if a match is deleted, the duplicates are deleted as well.
   std::vector<AutocompleteMatch> duplicate_matches;
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   // Does a data integrity check on this match.
   void Validate() const;
 
@@ -461,7 +505,7 @@ struct AutocompleteMatch {
   void ValidateClassifications(
       const base::string16& text,
       const ACMatchClassifications& classifications) const;
-#endif
+#endif  // DCHECK_IS_ON()
 };
 
 typedef AutocompleteMatch::ACMatchClassification ACMatchClassification;

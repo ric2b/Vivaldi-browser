@@ -4,10 +4,6 @@
 
 package org.chromium.chrome.browser.download.ui;
 
-import static org.chromium.chrome.browser.widget.DateDividedAdapter.TYPE_DATE;
-import static org.chromium.chrome.browser.widget.DateDividedAdapter.TYPE_HEADER;
-import static org.chromium.chrome.browser.widget.DateDividedAdapter.TYPE_NORMAL;
-
 import android.content.SharedPreferences.Editor;
 import android.support.test.filters.SmallTest;
 import android.support.v7.widget.RecyclerView;
@@ -22,15 +18,18 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.DownloadItem;
 import org.chromium.chrome.browser.download.ui.StubbedProvider.StubbedDownloadDelegate;
 import org.chromium.chrome.browser.download.ui.StubbedProvider.StubbedOfflineContentProvider;
 import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
+import org.chromium.chrome.browser.widget.DateDividedAdapter.ItemViewType;
+import org.chromium.components.download.DownloadState;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineItem;
-import org.chromium.content_public.browser.DownloadState;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Set;
 
 /**
@@ -88,7 +87,7 @@ public class DownloadHistoryAdapterTest {
 
     /**
      * Object for use in {@link #checkAdapterContents(Object...)} that corresponds to
-     * {@link #TYPE_HEADER}.
+     * {@link ItemViewType#HEADER}.
      */
     private static final Integer HEADER = -1;
 
@@ -108,6 +107,11 @@ public class DownloadHistoryAdapterTest {
         mOfflineContentProvider = mBackendProvider.getOfflineContentProvider();
         Editor editor = ContextUtils.getAppSharedPreferences().edit();
         editor.putBoolean(PREF_SHOW_STORAGE_INFO_HEADER, true).apply();
+
+        HashMap<String, Boolean> features = new HashMap<String, Boolean>();
+        features.put(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE, false);
+        features.put(ChromeFeatureList.DOWNLOAD_HOME_SHOW_STORAGE_INFO, false);
+        ChromeFeatureList.setTestFeatures(features);
     }
 
     private void initializeAdapter(boolean showOffTheRecord, boolean hasHeader) throws Exception {
@@ -225,7 +229,8 @@ public class DownloadHistoryAdapterTest {
         }
     }
 
-    private void onFilterChanged(final int flag, int numberOfCallsToWaitFor) throws Exception {
+    private void onFilterChanged(final @DownloadFilter.Type int flag, int numberOfCallsToWaitFor)
+            throws Exception {
         int callCount = mObserver.onChangedCallback.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -249,7 +254,7 @@ public class DownloadHistoryAdapterTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mAdapter.onManagerDestroyed();
+                mAdapter.destroy();
             }
         });
 
@@ -491,20 +496,20 @@ public class DownloadHistoryAdapterTest {
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
         Assert.assertEquals(1666, mAdapter.getTotalDownloadSize());
 
-        onFilterChanged(DownloadFilter.FILTER_AUDIO, 2);
+        onFilterChanged(DownloadFilter.Type.AUDIO, 2);
         checkAdapterContents(HEADER, null, item5, item4);
         Assert.assertEquals(1666, mAdapter.getTotalDownloadSize()); // Total size ignores filters.
 
-        onFilterChanged(DownloadFilter.FILTER_VIDEO, 2);
+        onFilterChanged(DownloadFilter.Type.VIDEO, 2);
         checkAdapterContents(HEADER, null, item3);
 
-        onFilterChanged(DownloadFilter.FILTER_IMAGE, 2);
+        onFilterChanged(DownloadFilter.Type.IMAGE, 2);
         checkAdapterContents(HEADER, null, item1, item0);
 
-        onFilterChanged(DownloadFilter.FILTER_PAGE, 2);
+        onFilterChanged(DownloadFilter.Type.PAGE, 2);
         checkAdapterContents(HEADER, null, item6);
 
-        onFilterChanged(DownloadFilter.FILTER_ALL, 2);
+        onFilterChanged(DownloadFilter.Type.ALL, 2);
         checkAdapterContents(
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
         Assert.assertEquals(1666, mAdapter.getTotalDownloadSize());
@@ -529,13 +534,13 @@ public class DownloadHistoryAdapterTest {
         checkAdapterContents(HEADER, null, item2, null, item0);
 
         // Filter shows nothing when the item is deleted because it's a different kind of item.
-        onFilterChanged(DownloadFilter.FILTER_AUDIO, 1);
+        onFilterChanged(DownloadFilter.Type.AUDIO, 1);
         Assert.assertEquals(0, mAdapter.getItemCount());
         onOfflineItemDeleted(item0.id, 0);
         Assert.assertEquals(0, mAdapter.getItemCount());
 
         // Filter shows just pages.
-        onFilterChanged(DownloadFilter.FILTER_PAGE, 2);
+        onFilterChanged(DownloadFilter.Type.PAGE, 2);
         checkAdapterContents(HEADER, null, item2);
         onOfflineItemDeleted(item2.id, 1);
         Assert.assertEquals(0, mAdapter.getItemCount());
@@ -660,7 +665,7 @@ public class DownloadHistoryAdapterTest {
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
 
         // Change the filter
-        onFilterChanged(DownloadFilter.FILTER_IMAGE, 2);
+        onFilterChanged(DownloadFilter.Type.IMAGE, 2);
         checkAdapterContents(HEADER, null, item1, item0);
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -732,14 +737,14 @@ public class DownloadHistoryAdapterTest {
         for (int i = 0; i < expectedItems.length; i++) {
             if (HEADER.equals(expectedItems[i])) {
                 Assert.assertEquals("The header should be the first item in the adapter.", 0, i);
-                Assert.assertEquals(TYPE_HEADER, mAdapter.getItemViewType(i));
+                Assert.assertEquals(ItemViewType.HEADER, mAdapter.getItemViewType(i));
             } else if (expectedItems[i] == null) {
                 // Expect a date.
                 // TODO(dfalcantara): Check what date the header is showing.
-                Assert.assertEquals(TYPE_DATE, mAdapter.getItemViewType(i));
+                Assert.assertEquals(ItemViewType.DATE, mAdapter.getItemViewType(i));
             } else {
                 // Expect a particular item.
-                Assert.assertEquals(TYPE_NORMAL, mAdapter.getItemViewType(i));
+                Assert.assertEquals(ItemViewType.NORMAL, mAdapter.getItemViewType(i));
                 Assert.assertEquals(expectedItems[i],
                         ((DownloadHistoryItemWrapper) mAdapter.getItemAt(i).second).getItem());
             }

@@ -11,43 +11,45 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "content/shell/test_runner/layout_test_runtime_flags.h"
+#include "services/service_manager/public/cpp/connector.h"
 // FIXME: Including platform_canvas.h here is a layering violation.
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebCompositeAndReadbackAsyncCallback.h"
-#include "third_party/WebKit/public/platform/WebImage.h"
-#include "third_party/WebKit/public/platform/WebMockClipboard.h"
-#include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebPagePopup.h"
-#include "third_party/WebKit/public/web/WebPrintParams.h"
+#include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_image.h"
+#include "third_party/blink/public/platform/web_point.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_page_popup.h"
+#include "third_party/blink/public/web/web_print_params.h"
 #include "ui/gfx/geometry/point.h"
 
 namespace test_runner {
 
 namespace {
 
-class CaptureCallback : public blink::WebCompositeAndReadbackAsyncCallback {
+class CaptureCallback : public base::RefCountedThreadSafe<CaptureCallback> {
  public:
   explicit CaptureCallback(base::OnceCallback<void(const SkBitmap&)> callback);
-  virtual ~CaptureCallback();
 
   void set_wait_for_popup(bool wait) { wait_for_popup_ = wait; }
   void set_popup_position(const gfx::Point& position) {
     popup_position_ = position;
   }
 
-  // WebCompositeAndReadbackAsyncCallback implementation.
-  void DidCompositeAndReadback(const SkBitmap& bitmap) override;
+  void DidCompositeAndReadback(const SkBitmap& bitmap);
 
  private:
+  friend class base::RefCountedThreadSafe<CaptureCallback>;
+  ~CaptureCallback();
+
   base::OnceCallback<void(const SkBitmap&)> callback_;
   SkBitmap main_bitmap_;
   bool wait_for_popup_;
@@ -75,9 +77,10 @@ void DrawSelectionRect(
 void CapturePixelsForPrinting(
     blink::WebLocalFrame* web_frame,
     base::OnceCallback<void(const SkBitmap&)> callback) {
-  web_frame->FrameWidget()->UpdateAllLifecyclePhases();
+  auto* frame_widget = web_frame->LocalRoot()->FrameWidget();
+  frame_widget->UpdateAllLifecyclePhases();
 
-  blink::WebSize page_size_in_pixels = web_frame->FrameWidget()->Size();
+  blink::WebSize page_size_in_pixels = frame_widget->Size();
 
   int page_count = web_frame->PrintBegin(page_size_in_pixels);
   int totalHeight = page_count * (page_size_in_pixels.height + 1) - 1;
@@ -111,7 +114,6 @@ void CaptureCallback::DidCompositeAndReadback(const SkBitmap& bitmap) {
                bitmap.info().width(), "y", bitmap.info().height());
   if (!wait_for_popup_) {
     std::move(callback_).Run(bitmap);
-    delete this;
     return;
   }
   if (main_bitmap_.isNull()) {
@@ -124,7 +126,6 @@ void CaptureCallback::DidCompositeAndReadback(const SkBitmap& bitmap) {
   SkCanvas canvas(main_bitmap_);
   canvas.drawBitmap(bitmap, popup_position_.x(), popup_position_.y());
   std::move(callback_).Run(main_bitmap_);
-  delete this;
 }
 
 }  // namespace
@@ -137,15 +138,18 @@ void DumpPixelsAsync(blink::WebLocalFrame* web_frame,
   DCHECK(!callback.is_null());
 
   blink::WebWidget* web_widget = web_frame->FrameWidget();
-  CaptureCallback* capture_callback = new CaptureCallback(std::move(callback));
-  web_widget->CompositeAndReadbackAsync(capture_callback);
+  auto capture_callback =
+      base::MakeRefCounted<CaptureCallback>(std::move(callback));
+  auto did_readback = base::BindRepeating(
+      &CaptureCallback::DidCompositeAndReadback, capture_callback);
+  web_widget->CompositeAndReadbackAsync(did_readback);
   if (blink::WebPagePopup* popup = web_widget->GetPagePopup()) {
     capture_callback->set_wait_for_popup(true);
     blink::WebPoint position = popup->PositionRelativeToOwner();
     position.x *= device_scale_factor_for_test;
     position.y *= device_scale_factor_for_test;
     capture_callback->set_popup_position(position);
-    popup->CompositeAndReadbackAsync(capture_callback);
+    popup->CompositeAndReadbackAsync(did_readback);
   }
 }
 
@@ -156,7 +160,7 @@ void PrintFrameAsync(blink::WebLocalFrame* web_frame,
   web_frame->GetTaskRunner(blink::TaskType::kInternalTest)
       ->PostTask(FROM_HERE, base::BindOnce(&CapturePixelsForPrinting,
                                            base::Unretained(web_frame),
-                                           base::Passed(std::move(callback))));
+                                           std::move(callback)));
 }
 
 base::OnceCallback<void(const SkBitmap&)>
@@ -171,8 +175,7 @@ CreateSelectionBoundsRectDrawingCallback(
   if (wr.IsEmpty())
     return original_callback;
 
-  return base::BindOnce(&DrawSelectionRect, wr,
-                        base::Passed(std::move(original_callback)));
+  return base::BindOnce(&DrawSelectionRect, wr, std::move(original_callback));
 }
 
 void CopyImageAtAndCapturePixels(
@@ -180,24 +183,25 @@ void CopyImageAtAndCapturePixels(
     int x,
     int y,
     base::OnceCallback<void(const SkBitmap&)> callback) {
-  DCHECK(!callback.is_null());
-  uint64_t sequence_number =
-      blink::Platform::Current()->Clipboard()->SequenceNumber(
-          blink::mojom::ClipboardBuffer::kStandard);
+  blink::mojom::ClipboardHostPtr clipboard;
+  blink::Platform::Current()->GetConnector()->BindInterface(
+      blink::Platform::Current()->GetBrowserServiceName(), &clipboard);
+
+  uint64_t sequence_number_before = 0;
+  clipboard->GetSequenceNumber(ui::CLIPBOARD_TYPE_COPY_PASTE,
+                               &sequence_number_before);
   web_frame->CopyImageAt(blink::WebPoint(x, y));
-  if (sequence_number ==
-      blink::Platform::Current()->Clipboard()->SequenceNumber(
-          blink::mojom::ClipboardBuffer::kStandard)) {
-    SkBitmap emptyBitmap;
-    std::move(callback).Run(emptyBitmap);
+  uint64_t sequence_number_after = 0;
+  clipboard->GetSequenceNumber(ui::CLIPBOARD_TYPE_COPY_PASTE,
+                               &sequence_number_after);
+  if (sequence_number_before == sequence_number_after) {
+    std::move(callback).Run(SkBitmap());
     return;
   }
 
-  blink::WebImage image =
-      static_cast<blink::WebMockClipboard*>(
-          blink::Platform::Current()->Clipboard())
-          ->ReadRawImage(blink::mojom::ClipboardBuffer::kStandard);
-  std::move(callback).Run(image.GetSkBitmap());
+  SkBitmap bitmap;
+  clipboard->ReadImage(ui::CLIPBOARD_TYPE_COPY_PASTE, &bitmap);
+  std::move(callback).Run(bitmap);
 }
 
 }  // namespace test_runner

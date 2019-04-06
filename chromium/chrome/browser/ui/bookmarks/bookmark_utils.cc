@@ -22,9 +22,10 @@
 #include "components/user_prefs/user_prefs.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/material_design/material_design_controller.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/commands/command_service.h"
@@ -33,14 +34,12 @@
 #endif
 
 #if defined(TOOLKIT_VIEWS)
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #endif
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #include "chrome/grit/theme_resources.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #endif
 
@@ -298,8 +297,19 @@ gfx::ImageSkia GetBookmarkFolderIcon(SkColor text_color) {
 #if defined(OS_WIN)
   return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
       IDR_BOOKMARK_BAR_FOLDER);
+#elif defined(OS_MACOSX)
+  int resource_id = color_utils::IsDark(text_color)
+                        ? IDR_BOOKMARK_BAR_FOLDER
+                        : IDR_BOOKMARK_BAR_FOLDER_WHITE;
+  std::unique_ptr<gfx::ImageSkia> image(ui::ResourceBundle::GetSharedInstance()
+                                            .GetNativeImageNamed(resource_id)
+                                            .CopyImageSkia());
+  return *image.get();
 #else
-  return GetFolderIcon(vector_icons::kFolderIcon, text_color);
+  return GetFolderIcon(ui::MaterialDesignController::IsTouchOptimizedUiEnabled()
+                           ? vector_icons::kFolderTouchIcon
+                           : vector_icons::kFolderIcon,
+                       text_color);
 #endif
 }
 
@@ -308,7 +318,10 @@ gfx::ImageSkia GetBookmarkManagedFolderIcon(SkColor text_color) {
   return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
       IDR_BOOKMARK_BAR_FOLDER_MANAGED);
 #else
-  return GetFolderIcon(kFolderManagedIcon, text_color);
+  return GetFolderIcon(ui::MaterialDesignController::IsTouchOptimizedUiEnabled()
+                           ? vector_icons::kFolderManagedTouchIcon
+                           : vector_icons::kFolderManagedIcon,
+                       text_color);
 #endif
 }
 #endif

@@ -1,23 +1,28 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 import("//third_party/closure_compiler/compile_js.gni")
 
-group("closure_compile") {
+js_type_check("closure_compile") {
   deps = [
     ":offline_ad_login",
     ":oobe_change_picture",
+    ":oobe_select",
   ]
 }
 
-js_binary("offline_ad_login") {
+js_library("oobe_select") {
+}
+
+js_library("offline_ad_login") {
   deps = [
+    ":oobe_select",
     "//ui/webui/resources/js:load_time_data",
   ]
 }
 
-js_binary("oobe_change_picture") {
+js_library("oobe_change_picture") {
   deps = [
     "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_list",
     "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_pane",

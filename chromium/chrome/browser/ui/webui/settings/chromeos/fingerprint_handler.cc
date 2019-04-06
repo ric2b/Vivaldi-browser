@@ -19,7 +19,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/common/service_manager_connection.h"
-#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -31,7 +31,7 @@ namespace settings {
 namespace {
 
 // The max number of fingerprints that can be stored.
-const int kMaxAllowedFingerprints = 5;
+constexpr int kMaxAllowedFingerprints = 3;
 
 std::unique_ptr<base::DictionaryValue> GetFingerprintsInfo(
     const std::vector<std::string>& fingerprints_list) {
@@ -72,40 +72,39 @@ void FingerprintHandler::RegisterMessages() {
   // Note: getFingerprintsList must be called before observers will be added.
   web_ui()->RegisterMessageCallback(
       "getFingerprintsList",
-      base::Bind(&FingerprintHandler::HandleGetFingerprintsList,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleGetFingerprintsList,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getNumFingerprints",
-      base::Bind(&FingerprintHandler::HandleGetNumFingerprints,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleGetNumFingerprints,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "startEnroll",
-      base::Bind(&FingerprintHandler::HandleStartEnroll,
-                 base::Unretained(this)));
+      "startEnroll", base::BindRepeating(&FingerprintHandler::HandleStartEnroll,
+                                         base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "cancelCurrentEnroll",
-      base::Bind(&FingerprintHandler::HandleCancelCurrentEnroll,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleCancelCurrentEnroll,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getEnrollmentLabel",
-      base::Bind(&FingerprintHandler::HandleGetEnrollmentLabel,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleGetEnrollmentLabel,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "removeEnrollment",
-      base::Bind(&FingerprintHandler::HandleRemoveEnrollment,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleRemoveEnrollment,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "changeEnrollmentLabel",
-      base::Bind(&FingerprintHandler::HandleChangeEnrollmentLabel,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleChangeEnrollmentLabel,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "startAuthentication",
-      base::Bind(&FingerprintHandler::HandleStartAuthentication,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleStartAuthentication,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "endCurrentAuthentication",
-      base::Bind(&FingerprintHandler::HandleEndCurrentAuthentication,
-                 base::Unretained(this)));
+      base::BindRepeating(&FingerprintHandler::HandleEndCurrentAuthentication,
+                          base::Unretained(this)));
 }
 
 void FingerprintHandler::OnJavascriptAllowed() {
@@ -134,7 +133,7 @@ void FingerprintHandler::OnEnrollScanDone(uint32_t scan_result,
 
 void FingerprintHandler::OnAuthScanDone(
     uint32_t scan_result,
-    const std::unordered_map<std::string, std::vector<std::string>>& matches) {
+    const base::flat_map<std::string, std::vector<std::string>>& matches) {
   if (SessionManager::Get()->session_state() == SessionState::LOCKED)
     return;
 
@@ -184,8 +183,7 @@ void FingerprintHandler::HandleGetFingerprintsList(
 
 void FingerprintHandler::OnGetFingerprintsList(
     const std::string& callback_id,
-    const std::unordered_map<std::string, std::string>&
-        fingerprints_list_mapping) {
+    const base::flat_map<std::string, std::string>& fingerprints_list_mapping) {
   fingerprints_labels_.clear();
   fingerprints_paths_.clear();
   for (auto it = fingerprints_list_mapping.begin();

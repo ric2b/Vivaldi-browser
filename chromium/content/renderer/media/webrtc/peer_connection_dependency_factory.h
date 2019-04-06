@@ -9,7 +9,7 @@
 
 #include "base/files/file.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
@@ -46,7 +46,7 @@ class WebRtcAudioDeviceImpl;
 
 // Object factory for RTC PeerConnections.
 class CONTENT_EXPORT PeerConnectionDependencyFactory
-    : base::MessageLoop::DestructionObserver {
+    : base::MessageLoopCurrent::DestructionObserver {
  public:
   PeerConnectionDependencyFactory(
       P2PSocketDispatcher* p2p_socket_dispatcher);
@@ -94,6 +94,13 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
       int sdp_mline_index,
       const std::string& sdp);
 
+  // Returns the most optimistic view of the capabilities of the system for
+  // sending or receiving media of the given kind ("audio" or "video").
+  virtual std::unique_ptr<webrtc::RtpCapabilities> GetSenderCapabilities(
+      const std::string& kind);
+  virtual std::unique_ptr<webrtc::RtpCapabilities> GetReceiverCapabilities(
+      const std::string& kind);
+
   WebRtcAudioDeviceImpl* GetWebRtcAudioDevice();
 
   void EnsureInitialized();
@@ -110,7 +117,7 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   void EnsureWebRtcAudioDeviceImpl();
 
  private:
-  // Implement base::MessageLoop::DestructionObserver.
+  // Implement base::MessageLoopCurrent::DestructionObserver.
   // This makes sure the libjingle PeerConnectionFactory is released before
   // the renderer message loop is destroyed.
   void WillDestroyCurrentMessageLoop() override;

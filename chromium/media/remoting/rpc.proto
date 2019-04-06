@@ -66,6 +66,7 @@ message AudioDecoderConfig {
     kCodecPCM_ALAW = 14;
     kCodecALAC = 15;
     kCodecAC3 = 16;
+    kCodecMpegHAudio = 17;
   }
 
   // Proto version of media::SampleFormat.
@@ -82,6 +83,7 @@ message AudioDecoderConfig {
     kSampleFormatS24 = 8;
     kSampleFormatAc3 = 9;
     kSampleFormatEac3 = 10;
+    kSampleFormatMpegHAudio = 11;
   };
 
   // Proto version of media::ChannelLayout.
@@ -119,6 +121,7 @@ message AudioDecoderConfig {
     CHANNEL_LAYOUT_DISCRETE = 29;
     CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC = 30;
     CHANNEL_LAYOUT_4_1_QUAD_SIDE = 31;
+    CHANNEL_LAYOUT_BITSTREAM = 32;
   };
 
   optional Codec codec = 1;
@@ -183,7 +186,9 @@ message VideoDecoderConfig {
     DOLBYVISION_PROFILE5 = 21;
     DOLBYVISION_PROFILE7 = 22;
     THEORAPROFILE_ANY = 23;
-    AV1PROFILE_PROFILE0 = 24;
+    AV1PROFILE_PROFILE_MAIN = 24;
+    AV1PROFILE_PROFILE_HIGH = 25;
+    AV1PROFILE_PROFILE_PRO = 26;
   };
 
   // Proto version of media::VideoPixelFormat.
@@ -238,6 +243,14 @@ message VideoDecoderConfig {
   optional bytes extra_data = 9;
 }
 
+// Proto version of media::EncryptionMode
+// NEVER change these numbers or re-use old ones; only add new ones.
+enum EncryptionMode {
+  kUnencrypted = 0;
+  kCenc = 1;
+  kCbcs = 2;
+}
+
 message DecryptConfig {
   message SubSample {
     optional uint32 clear_bytes = 1;
@@ -247,6 +260,9 @@ message DecryptConfig {
   optional bytes key_id = 1;
   optional bytes iv = 2;
   repeated SubSample sub_samples = 3;
+  optional EncryptionMode mode = 4;
+  optional uint32 crypt_byte_block = 5;
+  optional uint32 skip_byte_block = 6;
 }
 
 message PipelineStatistics {
@@ -304,9 +320,9 @@ enum CdmMessageType {
 // Proto version of media::CdmSessionType.
 // NEVER change these numbers or re-use old ones; only add new ones.
 enum CdmSessionType {
-  TEMPORARY_SESSION = 0;
-  PERSISTENT_LICENSE_SESSION = 1;
-  PERSISTENT_RELEASE_MESSAGE_SESSION = 2;
+  kTemporary = 0;
+  kPersistentLicense = 1;
+  kPersistentUsageRecord = 2;
 };
 
 message RendererInitialize {

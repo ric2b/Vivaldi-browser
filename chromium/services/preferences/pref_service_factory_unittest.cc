@@ -6,10 +6,8 @@
 
 #include "base/barrier_closure.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/sequenced_worker_pool_owner.h"
 #include "components/prefs/in_memory_pref_store.h"
 #include "components/prefs/overlay_user_pref_store.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -24,12 +22,12 @@
 #include "services/preferences/public/cpp/in_process_service_factory.h"
 #include "services/preferences/public/cpp/pref_service_main.h"
 #include "services/preferences/public/cpp/scoped_pref_update.h"
-#include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/unittest_common.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
-#include "services/service_manager/public/interfaces/service_factory.mojom.h"
+#include "services/service_manager/public/mojom/service_factory.mojom.h"
 
 namespace prefs {
 namespace {
@@ -615,16 +613,16 @@ class IncognitoPrefServiceFactoryTest
         base::MakeRefCounted<InMemoryPrefStore>();
     scoped_refptr<PersistentPrefStore> underlay =
         base::MakeRefCounted<InMemoryPrefStore>();
-    const auto overlay_pref_names = GetOverlayPrefNames();
-    delegate->InitIncognitoUserPrefs(overlay, underlay, overlay_pref_names);
+    const auto persistent_pref_names = GetPersistentPrefNames();
+    delegate->InitIncognitoUserPrefs(overlay, underlay, persistent_pref_names);
     auto overlay_pref_store = base::MakeRefCounted<OverlayUserPrefStore>(
         overlay.get(), underlay.get());
-    for (auto* overlay_pref_name : overlay_pref_names)
-      overlay_pref_store->RegisterOverlayPref(overlay_pref_name);
+    for (auto* persistent_pref_name : persistent_pref_names)
+      overlay_pref_store->RegisterPersistentPref(persistent_pref_name);
     factory->set_user_prefs(std::move(overlay_pref_store));
   }
 
-  std::vector<const char*> GetOverlayPrefNames() {
+  std::vector<const char*> GetPersistentPrefNames() {
     if (GetParam())
       return {kInitialKey, kOtherInitialKey, kKey};
     return {};

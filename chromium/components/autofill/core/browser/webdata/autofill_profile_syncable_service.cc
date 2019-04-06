@@ -21,6 +21,7 @@
 #include "components/autofill/core/browser/form_group.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/sync/model/sync_error.h"
 #include "components/sync/model/sync_error_factory.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -95,9 +96,9 @@ AutofillProfileSyncableService::MergeDataAndStartSyncing(
     std::unique_ptr<syncer::SyncChangeProcessor> sync_processor,
     std::unique_ptr<syncer::SyncErrorFactory> sync_error_factory) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!sync_processor_.get());
-  DCHECK(sync_processor.get());
-  DCHECK(sync_error_factory.get());
+  DCHECK(!sync_processor_);
+  DCHECK(sync_processor);
+  DCHECK(sync_error_factory);
   DVLOG(1) << "Associating Autofill: MergeDataAndStartSyncing";
 
   syncer::SyncMergeResult merge_result(type);
@@ -216,7 +217,7 @@ void AutofillProfileSyncableService::StopSyncing(syncer::ModelType type) {
 syncer::SyncDataList AutofillProfileSyncableService::GetAllSyncData(
     syncer::ModelType type) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(sync_processor_.get());
+  DCHECK(sync_processor_);
   DCHECK_EQ(type, syncer::AUTOFILL_PROFILE);
 
   syncer::SyncDataList current_data;
@@ -229,7 +230,7 @@ syncer::SyncError AutofillProfileSyncableService::ProcessSyncChanges(
     const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!sync_processor_.get()) {
+  if (!sync_processor_) {
     syncer::SyncError error(FROM_HERE,
                             syncer::SyncError::DATATYPE_ERROR,
                             "Models not yet associated.",
@@ -279,7 +280,7 @@ void AutofillProfileSyncableService::AutofillProfileChanged(
   // up we are going to process all when MergeData..() is called. If we receive
   // notification after the sync exited, it will be sinced next time Chrome
   // starts.
-  if (sync_processor_.get()) {
+  if (sync_processor_) {
     ActOnChange(change);
   } else if (!flare_.is_null()) {
     flare_.Run(syncer::AUTOFILL_PROFILE);
@@ -323,7 +324,10 @@ bool AutofillProfileSyncableService::OverwriteProfileWithServerData(
   bool diff = false;
   if (specifics.has_origin() && profile->origin() != specifics.origin()) {
     bool was_verified = profile->IsVerified();
-    profile->set_origin(specifics.origin());
+    // In this case, the local origin must be empty on the local |profile|, but
+    // the remote profile was verified.
+    if (specifics.origin() == kSettingsOrigin)
+      profile->set_origin(kSettingsOrigin);
     diff = true;
 
     // Verified profiles should never be overwritten by unverified ones.
@@ -579,7 +583,7 @@ void AutofillProfileSyncableService::ActOnChange(
       (change.type() == AutofillProfileChange::REMOVE &&
        !change.data_model()) ||
       (change.type() != AutofillProfileChange::REMOVE && change.data_model()));
-  DCHECK(sync_processor_.get());
+  DCHECK(sync_processor_);
 
   if (change.data_model() &&
       change.data_model()->record_type() != AutofillProfile::LOCAL_PROFILE) {

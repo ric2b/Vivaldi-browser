@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <memory>
 
-#include "ash/keyboard/keyboard_observer_register.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller.h"
@@ -33,6 +33,7 @@
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/core/window_properties.h"
 #include "ui/wm/public/activation_client.h"
 
 namespace ash {
@@ -43,14 +44,14 @@ WorkspaceLayoutManager::WorkspaceLayoutManager(aura::Window* window)
       root_window_controller_(RootWindowController::ForWindow(root_window_)),
       work_area_in_parent_(
           screen_util::GetDisplayWorkAreaBoundsInParent(window_)),
-      is_fullscreen_(wm::GetWindowForFullscreenMode(window) != nullptr),
-      keyboard_observer_(this) {
+      is_fullscreen_(wm::GetWindowForFullscreenMode(window) != nullptr) {
   Shell::Get()->AddShellObserver(this);
   Shell::Get()->activation_client()->AddObserver(this);
   root_window_->AddObserver(this);
   display::Screen::GetScreen()->AddObserver(this);
-  DCHECK(window->GetProperty(kSnapChildrenToPixelBoundary));
+  DCHECK(window->GetProperty(::wm::kSnapChildrenToPixelBoundary));
   backdrop_controller_ = std::make_unique<BackdropController>(window_);
+  keyboard::KeyboardController::Get()->AddObserver(this);
 }
 
 WorkspaceLayoutManager::~WorkspaceLayoutManager() {
@@ -64,6 +65,7 @@ WorkspaceLayoutManager::~WorkspaceLayoutManager() {
   display::Screen::GetScreen()->RemoveObserver(this);
   Shell::Get()->activation_client()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
+  keyboard::KeyboardController::Get()->RemoveObserver(this);
 }
 
 void WorkspaceLayoutManager::SetBackdropDelegate(
@@ -145,7 +147,7 @@ void WorkspaceLayoutManager::SetChildBounds(aura::Window* child,
 //////////////////////////////////////////////////////////////////////////////
 // WorkspaceLayoutManager, keyboard::KeyboardControllerObserver implementation:
 
-void WorkspaceLayoutManager::OnKeyboardWorkspaceDisplacingBoundsChanging(
+void WorkspaceLayoutManager::OnKeyboardWorkspaceDisplacingBoundsChanged(
     const gfx::Rect& new_bounds) {
   aura::Window* window = wm::GetActiveWindow();
   if (!window)
@@ -184,10 +186,6 @@ void WorkspaceLayoutManager::OnKeyboardWorkspaceDisplacingBoundsChanging(
   }
 }
 
-void WorkspaceLayoutManager::OnKeyboardClosed() {
-  keyboard_observer_.RemoveAll();
-}
-
 //////////////////////////////////////////////////////////////////////////////
 // WorkspaceLayoutManager, aura::WindowObserver implementation:
 
@@ -222,7 +220,7 @@ void WorkspaceLayoutManager::OnWindowPropertyChanged(aura::Window* window,
       if (window->parent() != container)
         container->AddChild(window);
     }
-  } else if (key == aura::client::kHasBackdrop) {
+  } else if (key == kBackdropWindowMode) {
     backdrop_controller_->UpdateBackdrop();
   }
 }
@@ -340,13 +338,6 @@ void WorkspaceLayoutManager::OnPinnedStateChanged(aura::Window* pinned_window) {
   }
 
   UpdateAlwaysOnTop(is_pinned ? pinned_window : nullptr);
-}
-
-void WorkspaceLayoutManager::OnVirtualKeyboardStateChanged(
-    bool activated,
-    aura::Window* root_window) {
-  UpdateKeyboardObserverFromStateChanged(activated, root_window, root_window_,
-                                         &keyboard_observer_);
 }
 
 //////////////////////////////////////////////////////////////////////////////

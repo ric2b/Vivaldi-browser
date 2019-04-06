@@ -12,7 +12,6 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/shortcut_info.h"
@@ -31,12 +30,6 @@ using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 
 namespace {
-
-// Called after saving the update request proto either succeeds or fails.
-void OnStoredUpdateRequest(const JavaRef<jobject>& java_callback,
-                           bool success) {
-  base::android::RunCallbackAndroid(java_callback, success);
-}
 
 // Called after the update either succeeds or fails.
 void OnUpdated(const JavaRef<jobject>& java_callback,
@@ -129,8 +122,8 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
       base::FilePath(update_request_path), info, primary_icon, badge_icon,
       webapk_package, std::to_string(java_webapk_version),
       icon_url_to_murmur2_hash, java_is_manifest_stale, update_reason,
-      base::Bind(&OnStoredUpdateRequest,
-                 ScopedJavaGlobalRef<jobject>(java_callback)));
+      base::BindOnce(&base::android::RunBooleanCallbackAndroid,
+                     ScopedJavaGlobalRef<jobject>(java_callback)));
 }
 
 // static JNI method.

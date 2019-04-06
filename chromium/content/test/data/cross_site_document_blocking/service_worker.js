@@ -5,10 +5,6 @@
 // This service worker is used by the CrossSiteDocumentBlockingServiceWorkerTest
 // browser test - please see the comments there for more details.
 
-self.addEventListener('activate', function(event) {
-  event.waitUntil(self.clients.claim()); // Become available to all pages
-});
-
 function createHtmlNoSniffResponse() {
   var headers = new Headers();
   headers.append('Content-Type', 'text/html');
@@ -16,9 +12,6 @@ function createHtmlNoSniffResponse() {
   return new Response('Response created by service worker',
                       { status: 200, headers: headers });
 }
-
-var previousResponse = undefined;
-var previousUrl = undefined;
 
 self.addEventListener('fetch', function(event) {
   // This handles response to the request issued in the
@@ -28,28 +21,17 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // This handles response to the first request in the
-  // CrossSiteDocumentBlockingServiceWorkerTest.NetworkAndOpaqueResponse test.
-  if (previousUrl != event.request.url || !previousResponse) {
-    event.respondWith(new Promise(function(resolve, reject) {
-        fetch(event.request)
-            .then(function(response) {
-                previousResponse = response;
-                previousUrl = event.request.url;
-
-                reject('Expected error from service worker');
-            })
-            .catch(function(error) {
-                reject('Unexpected error: ' + error);
-            });
-    }));
+  // This handles response to the request issued in the
+  // CrossSiteDocumentBlockingServiceWorkerTest.NetworkToServiceWorkerResponse
+  // test.
+  if (event.request.url.endsWith('nosniff.txt')) {
+    event.respondWith(
+        fetch(event.request).then(
+            response => Promise.reject('Expected error from service worker'),
+            error => Promise.reject('Unexpected error: ' + error)));
     return;
   }
 
-  // This handles response to the second request in the
-  // CrossSiteDocumentBlockingServiceWorkerTest.NetworkAndOpaqueResponse test.
-  if (previousUrl == event.request.url && previousResponse) {
-    event.respondWith(previousResponse.clone());
-    return;
-  }
+  // Let the request go to the network in all the other cases (e.g. when
+  // reloading the test page at cross_site_document_blocking/request.html).
 });

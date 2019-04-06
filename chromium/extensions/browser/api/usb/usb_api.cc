@@ -13,12 +13,11 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/values.h"
 #include "device/base/device_client.h"
 #include "device/usb/public/cpp/filter_utils.h"
-#include "device/usb/public/interfaces/device_manager.mojom.h"
+#include "device/usb/public/mojom/device_manager.mojom.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device_handle.h"
 #include "device/usb/usb_service.h"
@@ -27,6 +26,7 @@
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/usb/usb_device_resource.h"
 #include "extensions/browser/api/usb/usb_guid_map.h"
+#include "extensions/browser/extension_function_constants.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/api/usb.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -669,8 +669,14 @@ ExtensionFunction::ResponseAction UsbGetUserSelectedDevicesFunction::Run() {
       filters.push_back(ConvertDeviceFilter(filter));
   }
 
-  prompt_ = ExtensionsAPIClient::Get()->CreateDevicePermissionsPrompt(
-      GetAssociatedWebContents());
+  content::WebContents* web_contents = GetSenderWebContents();
+  if (!web_contents) {
+    return RespondNow(
+        Error(function_constants::kCouldNotFindSenderWebContents));
+  }
+
+  prompt_ =
+      ExtensionsAPIClient::Get()->CreateDevicePermissionsPrompt(web_contents);
   if (!prompt_) {
     return RespondNow(Error(kErrorNotSupported));
   }

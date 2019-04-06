@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "extensions/browser/extension_function.h"
@@ -17,8 +18,22 @@
 namespace extensions {
 namespace vivaldi {
 
+class VivaldiWebViewChromeAsyncExtensionFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  VivaldiWebViewChromeAsyncExtensionFunction() {}
+
+ protected:
+  ~VivaldiWebViewChromeAsyncExtensionFunction() override {}
+  bool PreRunValidation(std::string* error) override;
+
+  WebViewGuest* guest_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiWebViewChromeAsyncExtensionFunction);
+};
+
 class WebViewPrivateSetVisibleFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.setVisible",
                              WEBVIEWINTERNAL_SETVISIBLE);
@@ -29,12 +44,12 @@ class WebViewPrivateSetVisibleFunction
   ~WebViewPrivateSetVisibleFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSetVisibleFunction);
 };
 
 class WebViewInternalThumbnailFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   WebViewInternalThumbnailFunction();
 
@@ -42,7 +57,6 @@ class WebViewInternalThumbnailFunction
   ~WebViewInternalThumbnailFunction() override;
   virtual void SendResultFromBitmap(const SkBitmap& screen_capture);
   bool InternalRunAsyncSafe(
-      WebViewGuest* guest,
       const std::unique_ptr<web_view_private::ThumbnailParams>& params);
 
   // Quality setting to use when encoding jpegs.  Set in RunImpl().
@@ -58,8 +72,7 @@ class WebViewInternalThumbnailFunction
 
  private:
   // Callback for the RWH::CopyFromBackingStore call.
-  void CopyFromBackingStoreComplete(const SkBitmap& bitmap,
-                                    content::ReadbackResponse response);
+  void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
 };
 
 class WebViewPrivateGetThumbnailFunction
@@ -72,7 +85,7 @@ class WebViewPrivateGetThumbnailFunction
 
  protected:
   ~WebViewPrivateGetThumbnailFunction() override;
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
  private:
   void SendInternalError();
@@ -90,7 +103,7 @@ class WebViewPrivateGetThumbnailFromServiceFunction
 
  protected:
   ~WebViewPrivateGetThumbnailFromServiceFunction() override;
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
   void SendResultFromBitmap(const SkBitmap& screen_capture) override;
 
   GURL url_;
@@ -110,7 +123,7 @@ class WebViewPrivateAddToThumbnailServiceFunction
 
  protected:
   ~WebViewPrivateAddToThumbnailServiceFunction() override;
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
   void SendResultFromBitmap(const SkBitmap& screen_capture) override;
   void SetPageThumbnailOnUIThread(
       bool send_result,
@@ -127,7 +140,7 @@ class WebViewPrivateAddToThumbnailServiceFunction
 };
 
 class WebViewPrivateShowPageInfoFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.showPageInfo",
                              WEBVIEWINTERNAL_SHOWPAGEINFO);
@@ -138,13 +151,13 @@ class WebViewPrivateShowPageInfoFunction
   ~WebViewPrivateShowPageInfoFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateShowPageInfoFunction);
 };
 
 class WebViewPrivateSetIsFullscreenFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.setIsFullscreen",
                              WEBVIEWINTERNAL_SETISFULLSCREEN);
@@ -155,13 +168,13 @@ class WebViewPrivateSetIsFullscreenFunction
   ~WebViewPrivateSetIsFullscreenFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSetIsFullscreenFunction);
 };
 
 class WebViewPrivateGetPageHistoryFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.getPageHistory",
                              WEBVIEWINTERNAL_GETPAGEHISTORY);
@@ -172,13 +185,13 @@ class WebViewPrivateGetPageHistoryFunction
   ~WebViewPrivateGetPageHistoryFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetPageHistoryFunction);
 };
 
 class WebViewPrivateSetExtensionHostFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.setExtensionHost",
                              WEBVIEWINTERNAL_SETEXTENSIONHOST);
@@ -189,13 +202,13 @@ class WebViewPrivateSetExtensionHostFunction
   ~WebViewPrivateSetExtensionHostFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSetExtensionHostFunction);
 };
 
 class WebViewPrivateAllowBlockedInsecureContentFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.allowBlockedInsecureContent",
                              WEBVIEWINTERNAL_ALLOWBLOCKEDINSECURECONTENT)
@@ -205,13 +218,13 @@ class WebViewPrivateAllowBlockedInsecureContentFunction
   ~WebViewPrivateAllowBlockedInsecureContentFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAllowBlockedInsecureContentFunction);
 };
 
 class WebViewPrivateGetFocusedElementInfoFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.getFocusedElementInfo",
                              WEBVIEWINTERNAL_GETFOCUSEDELEMENTINFO)
@@ -221,29 +234,13 @@ class WebViewPrivateGetFocusedElementInfoFunction
   ~WebViewPrivateGetFocusedElementInfoFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
 };
 
-class WebViewPrivateResetGestureStateFunction
-    : public LegacyWebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewPrivate.resetGestureState",
-                             WEBVIEWINTERNAL_RESETGESTURESTATE)
-  WebViewPrivateResetGestureStateFunction();
-
- protected:
-  ~WebViewPrivateResetGestureStateFunction() override;
-
- private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateResetGestureStateFunction);
-};
-
 class WebViewPrivateSendRequestFunction
-    : public LegacyWebViewInternalExtensionFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.sendRequest",
                              WEBVIEWINTERNAL_SENDREQUEST)
@@ -253,7 +250,7 @@ class WebViewPrivateSendRequestFunction
   ~WebViewPrivateSendRequestFunction() override;
 
  private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
+  bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSendRequestFunction);
 };

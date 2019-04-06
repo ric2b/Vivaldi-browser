@@ -13,7 +13,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "media/gpu/media_gpu_export.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -84,11 +83,11 @@ namespace media {
 //                                       v
 //                       VaapiWrapper frees VASurfaceID.
 //
-class MEDIA_GPU_EXPORT VASurface
-    : public base::RefCountedThreadSafe<VASurface> {
+class VASurface : public base::RefCountedThreadSafe<VASurface> {
  public:
   // Provided by user, will be called when all references to the surface
   // are released.
+  // TODO(mcasas): make this a OnceCallback, https://crbug.com/822346.
   using ReleaseCB = base::Callback<void(VASurfaceID)>;
 
   VASurface(VASurfaceID va_surface_id,

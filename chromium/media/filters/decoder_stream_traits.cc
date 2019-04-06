@@ -31,20 +31,23 @@ bool DecoderStreamTraits<DemuxerStream::AUDIO>::NeedsBitstreamConversion(
 
 // static
 scoped_refptr<DecoderStreamTraits<DemuxerStream::AUDIO>::OutputType>
-    DecoderStreamTraits<DemuxerStream::AUDIO>::CreateEOSOutput() {
+DecoderStreamTraits<DemuxerStream::AUDIO>::CreateEOSOutput() {
   return OutputType::CreateEOSBuffer();
 }
 
-// static
+DecoderStreamTraits<DemuxerStream::AUDIO>::DecoderStreamTraits(
+    MediaLog* media_log,
+    ChannelLayout initial_hw_layout)
+    : media_log_(media_log), initial_hw_layout_(initial_hw_layout) {}
+
 DecoderStreamTraits<DemuxerStream::AUDIO>::DecoderConfigType
 DecoderStreamTraits<DemuxerStream::AUDIO>::GetDecoderConfig(
     DemuxerStream* stream) {
-  return stream->audio_decoder_config();
+  auto config = stream->audio_decoder_config();
+  // Demuxer is not aware of hw layout, so we set it here.
+  config.set_target_output_channel_layout(initial_hw_layout_);
+  return config;
 }
-
-DecoderStreamTraits<DemuxerStream::AUDIO>::DecoderStreamTraits(
-    MediaLog* media_log)
-    : media_log_(media_log) {}
 
 void DecoderStreamTraits<DemuxerStream::AUDIO>::ReportStatistics(
     const StatisticsCB& statistics_cb,
@@ -59,10 +62,13 @@ void DecoderStreamTraits<DemuxerStream::AUDIO>::InitializeDecoder(
     bool /* low_delay */,
     CdmContext* cdm_context,
     const InitCB& init_cb,
-    const OutputCB& output_cb) {
+    const OutputCB& output_cb,
+    const DecoderType::WaitingForDecryptionKeyCB&
+        waiting_for_decryption_key_cb) {
   DCHECK(config.IsValidConfig());
   stats_.audio_decoder_name = decoder->GetDisplayName();
-  decoder->Initialize(config, cdm_context, init_cb, output_cb);
+  decoder->Initialize(config, cdm_context, init_cb, output_cb,
+                      waiting_for_decryption_key_cb);
 }
 
 void DecoderStreamTraits<DemuxerStream::AUDIO>::OnStreamReset(
@@ -75,7 +81,7 @@ void DecoderStreamTraits<DemuxerStream::AUDIO>::OnStreamReset(
 }
 
 void DecoderStreamTraits<DemuxerStream::AUDIO>::OnDecode(
-    const scoped_refptr<DecoderBuffer>& buffer) {
+    const DecoderBuffer& buffer) {
   audio_ts_validator_->CheckForTimestampGap(buffer);
 }
 
@@ -111,17 +117,16 @@ DecoderStreamTraits<DemuxerStream::VIDEO>::CreateEOSOutput() {
   return OutputType::CreateEOSFrame();
 }
 
-// static
+DecoderStreamTraits<DemuxerStream::VIDEO>::DecoderStreamTraits(
+    MediaLog* media_log)
+    // Randomly selected number of samples to keep.
+    : keyframe_distance_average_(16) {}
+
 DecoderStreamTraits<DemuxerStream::VIDEO>::DecoderConfigType
 DecoderStreamTraits<DemuxerStream::VIDEO>::GetDecoderConfig(
     DemuxerStream* stream) {
   return stream->video_decoder_config();
 }
-
-DecoderStreamTraits<DemuxerStream::VIDEO>::DecoderStreamTraits(
-    MediaLog* media_log)
-    // Randomly selected number of samples to keep.
-    : keyframe_distance_average_(16) {}
 
 void DecoderStreamTraits<DemuxerStream::VIDEO>::ReportStatistics(
     const StatisticsCB& statistics_cb,
@@ -146,10 +151,14 @@ void DecoderStreamTraits<DemuxerStream::VIDEO>::InitializeDecoder(
     bool low_delay,
     CdmContext* cdm_context,
     const InitCB& init_cb,
-    const OutputCB& output_cb) {
+    const OutputCB& output_cb,
+    const DecoderType::WaitingForDecryptionKeyCB&
+        waiting_for_decryption_key_cb) {
   DCHECK(config.IsValidConfig());
   stats_.video_decoder_name = decoder->GetDisplayName();
-  decoder->Initialize(config, low_delay, cdm_context, init_cb, output_cb);
+  DVLOG(2) << stats_.video_decoder_name;
+  decoder->Initialize(config, low_delay, cdm_context, init_cb, output_cb,
+                      waiting_for_decryption_key_cb);
 }
 
 void DecoderStreamTraits<DemuxerStream::VIDEO>::OnStreamReset(
@@ -160,22 +169,19 @@ void DecoderStreamTraits<DemuxerStream::VIDEO>::OnStreamReset(
 }
 
 void DecoderStreamTraits<DemuxerStream::VIDEO>::OnDecode(
-    const scoped_refptr<DecoderBuffer>& buffer) {
-  if (!buffer)
-    return;
-
-  if (buffer->end_of_stream()) {
+    const DecoderBuffer& buffer) {
+  if (buffer.end_of_stream()) {
     last_keyframe_timestamp_ = base::TimeDelta();
     return;
   }
 
-  if (buffer->discard_padding().first == kInfiniteDuration)
-    frames_to_drop_.insert(buffer->timestamp());
+  if (buffer.discard_padding().first == kInfiniteDuration)
+    frames_to_drop_.insert(buffer.timestamp());
 
-  if (!buffer->is_key_frame())
+  if (!buffer.is_key_frame())
     return;
 
-  base::TimeDelta current_frame_timestamp = buffer->timestamp();
+  base::TimeDelta current_frame_timestamp = buffer.timestamp();
   if (last_keyframe_timestamp_.is_zero()) {
     last_keyframe_timestamp_ = current_frame_timestamp;
     return;

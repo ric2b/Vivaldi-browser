@@ -15,9 +15,9 @@ namespace resource_coordinator {
 
 PageCoordinationUnitImpl::PageCoordinationUnitImpl(
     const CoordinationUnitID& id,
+    CoordinationUnitGraph* graph,
     std::unique_ptr<service_manager::ServiceContextRef> service_ref)
-    : CoordinationUnitInterface(id, std::move(service_ref)),
-      was_almost_idle_(false) {}
+    : CoordinationUnitInterface(id, graph, std::move(service_ref)) {}
 
 PageCoordinationUnitImpl::~PageCoordinationUnitImpl() {
   for (auto* child_frame : frame_coordination_units_)
@@ -26,8 +26,8 @@ PageCoordinationUnitImpl::~PageCoordinationUnitImpl() {
 
 void PageCoordinationUnitImpl::AddFrame(const CoordinationUnitID& cu_id) {
   DCHECK(cu_id.type == CoordinationUnitType::kFrame);
-  FrameCoordinationUnitImpl* frame_cu = static_cast<FrameCoordinationUnitImpl*>(
-      CoordinationUnitBase::GetCoordinationUnitByID(cu_id));
+  FrameCoordinationUnitImpl* frame_cu =
+      FrameCoordinationUnitImpl::GetCoordinationUnitByID(graph_, cu_id);
   if (!frame_cu)
     return;
   if (AddFrame(frame_cu))
@@ -37,11 +37,15 @@ void PageCoordinationUnitImpl::AddFrame(const CoordinationUnitID& cu_id) {
 void PageCoordinationUnitImpl::RemoveFrame(const CoordinationUnitID& cu_id) {
   DCHECK(cu_id != id());
   FrameCoordinationUnitImpl* frame_cu =
-      FrameCoordinationUnitImpl::GetCoordinationUnitByID(cu_id);
+      FrameCoordinationUnitImpl::GetCoordinationUnitByID(graph_, cu_id);
   if (!frame_cu)
     return;
   if (RemoveFrame(frame_cu))
     frame_cu->RemovePageCoordinationUnit(this);
+}
+
+void PageCoordinationUnitImpl::SetIsLoading(bool is_loading) {
+  SetProperty(mojom::PropertyType::kIsLoading, is_loading);
 }
 
 void PageCoordinationUnitImpl::SetVisibility(bool visible) {
@@ -60,29 +64,12 @@ void PageCoordinationUnitImpl::OnTitleUpdated() {
   SendEvent(mojom::Event::kTitleUpdated);
 }
 
-void PageCoordinationUnitImpl::OnMainFrameNavigationCommitted() {
+void PageCoordinationUnitImpl::OnMainFrameNavigationCommitted(
+    int64_t navigation_id,
+    const std::string& url) {
+  main_frame_url_ = url;
+  navigation_id_ = navigation_id;
   SendEvent(mojom::Event::kNavigationCommitted);
-}
-
-bool PageCoordinationUnitImpl::CheckAndUpdateAlmostIdleStateIfNeeded() {
-  auto* main_frame_cu = GetMainFrameCoordinationUnit();
-  if (!main_frame_cu)
-    return false;
-  auto* process_cu = main_frame_cu->GetProcessCoordinationUnit();
-  if (!process_cu)
-    return false;
-  int64_t main_thread_task_load_is_low = 0;
-  int64_t is_network_almost_idle = 0;
-  if (!process_cu->GetProperty(mojom::PropertyType::kMainThreadTaskLoadIsLow,
-                               &main_thread_task_load_is_low) ||
-      !main_frame_cu->GetProperty(mojom::PropertyType::kNetworkAlmostIdle,
-                                  &is_network_almost_idle)) {
-    return false;
-  }
-  bool is_almost_idle = main_thread_task_load_is_low && is_network_almost_idle;
-  if (!was_almost_idle_)
-    was_almost_idle_ = is_almost_idle;
-  return is_almost_idle;
 }
 
 std::set<ProcessCoordinationUnitImpl*>
@@ -97,12 +84,8 @@ PageCoordinationUnitImpl::GetAssociatedProcessCoordinationUnits() const {
   return process_cus;
 }
 
-bool PageCoordinationUnitImpl::WasAlmostIdle() const {
-  return was_almost_idle_;
-}
-
 bool PageCoordinationUnitImpl::IsVisible() const {
-  int64_t is_visible;
+  int64_t is_visible = 0;
   bool has_property = GetProperty(mojom::PropertyType::kVisible, &is_visible);
   DCHECK(has_property && (is_visible == 0 || is_visible == 1));
   return is_visible;
@@ -116,7 +99,7 @@ double PageCoordinationUnitImpl::GetCPUUsage() const {
         process_cu->GetAssociatedPageCoordinationUnits().size();
     DCHECK_LE(1u, pages_in_process);
 
-    int64_t process_cpu_usage;
+    int64_t process_cpu_usage = 0;
     if (process_cu->GetProperty(mojom::PropertyType::kCPUUsage,
                                 &process_cpu_usage)) {
       cpu_usage += static_cast<double>(process_cpu_usage) / pages_in_process;
@@ -151,10 +134,18 @@ base::TimeDelta PageCoordinationUnitImpl::TimeSinceLastVisibilityChange()
   return ResourceCoordinatorClock::NowTicks() - visibility_change_time_;
 }
 
+FrameCoordinationUnitImpl*
+PageCoordinationUnitImpl::GetMainFrameCoordinationUnit() const {
+  for (auto* frame_cu : frame_coordination_units_) {
+    if (frame_cu->IsMainFrame())
+      return frame_cu;
+  }
+  return nullptr;
+}
+
 void PageCoordinationUnitImpl::OnEventReceived(mojom::Event event) {
   if (event == mojom::Event::kNavigationCommitted) {
     navigation_committed_time_ = ResourceCoordinatorClock::NowTicks();
-    was_almost_idle_ = false;
   }
   for (auto& observer : observers())
     observer.OnPageEventReceived(this, event);
@@ -178,15 +169,6 @@ bool PageCoordinationUnitImpl::AddFrame(FrameCoordinationUnitImpl* frame_cu) {
 bool PageCoordinationUnitImpl::RemoveFrame(
     FrameCoordinationUnitImpl* frame_cu) {
   return frame_coordination_units_.erase(frame_cu) > 0;
-}
-
-FrameCoordinationUnitImpl*
-PageCoordinationUnitImpl::GetMainFrameCoordinationUnit() {
-  for (auto* frame_cu : frame_coordination_units_) {
-    if (frame_cu->IsMainFrame())
-      return frame_cu;
-  }
-  return nullptr;
 }
 
 }  // namespace resource_coordinator

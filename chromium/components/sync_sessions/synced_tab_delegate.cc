@@ -9,8 +9,4 @@ namespace sync_sessions {
 SyncedTabDelegate::SyncedTabDelegate() {}
 SyncedTabDelegate::~SyncedTabDelegate() {}
 
-std::string SyncedTabDelegate::GetExtData() const {
-  return std::string();
-}
-
 }  // namespace sync_sessions

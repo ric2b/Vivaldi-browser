@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/files/file_util_proxy.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -77,6 +76,8 @@ class Index {
                           const Time& time);
   vector<FilePath> Search(const string& query);
   void NormalizeVectors();
+  void Reset();
+  void EnsureInitialized();
 
  private:
   FileId GetFileId(const FilePath& file_path);
@@ -148,6 +149,20 @@ Trigram TrigramAtIndex(const vector<TrigramChar>& trigram_chars, size_t index) {
 }
 
 Index::Index() : last_file_id_(0) {
+  Reset();
+}
+
+void Index::Reset() {
+  file_ids_.clear();
+  index_.clear();
+  index_times_.clear();
+  is_normalized_.clear();
+  last_file_id_ = 0;
+}
+
+void Index::EnsureInitialized() {
+  if (index_.size() != 0)
+    return;
   index_.resize(kTrigramCount);
   is_normalized_.resize(kTrigramCount);
   std::fill(is_normalized_.begin(), is_normalized_.end(), true);
@@ -155,6 +170,7 @@ Index::Index() : last_file_id_(0) {
 
 Time Index::LastModifiedTimeForFile(const FilePath& file_path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  EnsureInitialized();
   Time last_modified_time;
   if (index_times_.find(file_path) != index_times_.end())
     last_modified_time = index_times_[file_path];
@@ -165,6 +181,7 @@ void Index::SetTrigramsForFile(const FilePath& file_path,
                                const vector<Trigram>& index,
                                const Time& time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  EnsureInitialized();
   FileId file_id = GetFileId(file_path);
   vector<Trigram>::const_iterator it = index.begin();
   for (; it != index.end(); ++it) {
@@ -177,6 +194,7 @@ void Index::SetTrigramsForFile(const FilePath& file_path,
 
 vector<FilePath> Index::Search(const string& query) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  EnsureInitialized();
   const char* data = query.c_str();
   vector<TrigramChar> trigram_chars;
   trigram_chars.reserve(query.size());
@@ -221,6 +239,7 @@ vector<FilePath> Index::Search(const string& query) {
 
 FileId Index::GetFileId(const FilePath& file_path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  EnsureInitialized();
   string file_path_str = file_path.AsUTF8Unsafe();
   if (file_ids_.find(file_path) != file_ids_.end())
     return file_ids_[file_path];
@@ -230,6 +249,7 @@ FileId Index::GetFileId(const FilePath& file_path) {
 
 void Index::NormalizeVectors() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  EnsureInitialized();
   for (size_t i = 0; i < kTrigramCount; ++i) {
     if (!is_normalized_[i]) {
       std::sort(index_[i].begin(), index_[i].end());
@@ -246,10 +266,12 @@ typedef Callback<void(bool, const vector<bool>&)> IndexerCallback;
 
 DevToolsFileSystemIndexer::FileSystemIndexingJob::FileSystemIndexingJob(
     const FilePath& file_system_path,
+    const std::vector<base::FilePath>& excluded_folders,
     const TotalWorkCallback& total_work_callback,
     const WorkedCallback& worked_callback,
     const DoneCallback& done_callback)
     : file_system_path_(file_system_path),
+      excluded_folders_(excluded_folders),
       total_work_callback_(total_work_callback),
       worked_callback_(worked_callback),
       done_callback_(done_callback),
@@ -257,6 +279,7 @@ DevToolsFileSystemIndexer::FileSystemIndexingJob::FileSystemIndexingJob(
       stopped_(false) {
   current_trigrams_set_.resize(kTrigramCount);
   current_trigrams_.reserve(kTrigramCount);
+  pending_folders_.push_back(file_system_path);
 }
 
 DevToolsFileSystemIndexer::FileSystemIndexingJob::~FileSystemIndexingJob() {}
@@ -282,10 +305,22 @@ void DevToolsFileSystemIndexer::FileSystemIndexingJob::CollectFilesToIndex() {
   if (stopped_)
     return;
   if (!file_enumerator_) {
-    file_enumerator_.reset(
-        new FileEnumerator(file_system_path_, true, FileEnumerator::FILES));
+    file_enumerator_.reset(new FileEnumerator(
+        pending_folders_.back(), false,
+        FileEnumerator::FILES | FileEnumerator::DIRECTORIES));
+    pending_folders_.pop_back();
   }
   FilePath file_path = file_enumerator_->Next();
+  if (file_path.empty() && !pending_folders_.empty()) {
+    file_enumerator_.reset(new FileEnumerator(
+        pending_folders_.back(), false,
+        FileEnumerator::FILES | FileEnumerator::DIRECTORIES));
+    pending_folders_.pop_back();
+    impl_task_runner()->PostTask(
+        FROM_HERE, BindOnce(&FileSystemIndexingJob::CollectFilesToIndex, this));
+    return;
+  }
+
   if (file_path.empty()) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
@@ -294,6 +329,20 @@ void DevToolsFileSystemIndexer::FileSystemIndexingJob::CollectFilesToIndex() {
     IndexFiles();
     return;
   }
+  if (file_enumerator_->GetInfo().IsDirectory()) {
+    bool excluded = false;
+    for (const FilePath& excluded_folder : excluded_folders_) {
+      excluded = excluded_folder.IsParent(file_path);
+      if (excluded)
+        break;
+    }
+    if (!excluded)
+      pending_folders_.push_back(file_path);
+    impl_task_runner()->PostTask(
+        FROM_HERE, BindOnce(&FileSystemIndexingJob::CollectFilesToIndex, this));
+    return;
+  }
+
   Time saved_last_modified_time =
       g_trigram_index.Get().LastModifiedTimeForFile(file_path);
   FileEnumerator::FileInfo file_info = file_enumerator_->GetInfo();
@@ -409,22 +458,36 @@ void DevToolsFileSystemIndexer::FileSystemIndexingJob::ReportWorked() {
   }
 }
 
-DevToolsFileSystemIndexer::DevToolsFileSystemIndexer() {}
+static int g_instance_count = 0;
 
-DevToolsFileSystemIndexer::~DevToolsFileSystemIndexer() {}
+DevToolsFileSystemIndexer::DevToolsFileSystemIndexer() {
+  impl_task_runner()->PostTask(FROM_HERE,
+                               base::BindOnce([]() { ++g_instance_count; }));
+}
+
+DevToolsFileSystemIndexer::~DevToolsFileSystemIndexer() {
+  impl_task_runner()->PostTask(FROM_HERE, base::BindOnce([]() {
+                                 --g_instance_count;
+                                 if (!g_instance_count)
+                                   g_trigram_index.Get().Reset();
+                               }));
+}
 
 scoped_refptr<DevToolsFileSystemIndexer::FileSystemIndexingJob>
 DevToolsFileSystemIndexer::IndexPath(
     const string& file_system_path,
+    const vector<string>& excluded_folders,
     const TotalWorkCallback& total_work_callback,
     const WorkedCallback& worked_callback,
     const DoneCallback& done_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  scoped_refptr<FileSystemIndexingJob> indexing_job =
-      new FileSystemIndexingJob(FilePath::FromUTF8Unsafe(file_system_path),
-                                total_work_callback,
-                                worked_callback,
-                                done_callback);
+  vector<base::FilePath> paths;
+  for (const string& path : excluded_folders) {
+    paths.push_back(FilePath::FromUTF8Unsafe(path));
+  }
+  scoped_refptr<FileSystemIndexingJob> indexing_job = new FileSystemIndexingJob(
+      FilePath::FromUTF8Unsafe(file_system_path), paths, total_work_callback,
+      worked_callback, done_callback);
   indexing_job->Start();
   return indexing_job;
 }

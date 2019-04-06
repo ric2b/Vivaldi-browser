@@ -10,9 +10,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/tick_clock.h"
-#include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/common/content_features.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
 
@@ -58,8 +58,8 @@ class ServiceWorkerTimeoutTimerTest : public testing::Test {
   }
 
   void EnableServicification() {
-    feature_list_.InitWithFeatures({features::kNetworkService}, {});
-    ASSERT_TRUE(ServiceWorkerUtils::IsServicificationEnabled());
+    feature_list_.InitWithFeatures({network::features::kNetworkService}, {});
+    ASSERT_TRUE(blink::ServiceWorkerUtils::IsServicificationEnabled());
   }
 
   base::TestMockTimeTaskRunner* task_runner() { return task_runner_.get(); }
@@ -94,7 +94,7 @@ TEST_F(ServiceWorkerTimeoutTimerTest, IdleTimer) {
   // Nothing happens since there is an inflight event.
   EXPECT_FALSE(is_idle);
 
-  int event_id_2 = timer.StartEvent(do_nothing_callback);
+  int event_id_2 = timer.StartEvent(std::move(do_nothing_callback));
   task_runner()->FastForwardBy(kIdleInterval);
   // Nothing happens since there are two inflight events.
   EXPECT_FALSE(is_idle);
@@ -113,7 +113,7 @@ TEST_F(ServiceWorkerTimeoutTimerTest, IdleTimer) {
 TEST_F(ServiceWorkerTimeoutTimerTest, EventTimer) {
   EnableServicification();
 
-  ServiceWorkerTimeoutTimer timer(base::BindRepeating(&base::DoNothing),
+  ServiceWorkerTimeoutTimer timer(base::DoNothing(),
                                   task_runner()->GetMockTickClock());
   MockEvent event1, event2;
 
@@ -134,6 +134,33 @@ TEST_F(ServiceWorkerTimeoutTimerTest, EventTimer) {
   EXPECT_TRUE(event2.has_aborted());
 }
 
+TEST_F(ServiceWorkerTimeoutTimerTest, CustomTimeouts) {
+  EnableServicification();
+
+  ServiceWorkerTimeoutTimer timer(base::DoNothing(),
+                                  task_runner()->GetMockTickClock());
+  MockEvent event1, event2;
+  int event_id1 = timer.StartEventWithCustomTimeout(
+      event1.CreateAbortCallback(), ServiceWorkerTimeoutTimer::kUpdateInterval -
+                                        base::TimeDelta::FromSeconds(1));
+  int event_id2 = timer.StartEventWithCustomTimeout(
+      event2.CreateAbortCallback(),
+      ServiceWorkerTimeoutTimer::kUpdateInterval * 2 -
+          base::TimeDelta::FromSeconds(1));
+  event1.set_event_id(event_id1);
+  event2.set_event_id(event_id2);
+  task_runner()->FastForwardBy(ServiceWorkerTimeoutTimer::kUpdateInterval +
+                               base::TimeDelta::FromSeconds(1));
+
+  EXPECT_TRUE(event1.has_aborted());
+  EXPECT_FALSE(event2.has_aborted());
+  task_runner()->FastForwardBy(ServiceWorkerTimeoutTimer::kUpdateInterval +
+                               base::TimeDelta::FromSeconds(1));
+
+  EXPECT_TRUE(event1.has_aborted());
+  EXPECT_TRUE(event2.has_aborted());
+}
+
 TEST_F(ServiceWorkerTimeoutTimerTest, BecomeIdleAfterAbort) {
   EnableServicification();
 
@@ -148,11 +175,9 @@ TEST_F(ServiceWorkerTimeoutTimerTest, BecomeIdleAfterAbort) {
                                ServiceWorkerTimeoutTimer::kUpdateInterval +
                                base::TimeDelta::FromSeconds(1));
 
+  // |event| should have been aborted, and at the same time, the idle timeout
+  // should also be fired since there has been an aborted event.
   EXPECT_TRUE(event.has_aborted());
-  EXPECT_FALSE(is_idle);
-  task_runner()->FastForwardBy(ServiceWorkerTimeoutTimer::kIdleDelay +
-                               base::TimeDelta::FromSeconds(1));
-
   EXPECT_TRUE(is_idle);
 }
 
@@ -161,7 +186,7 @@ TEST_F(ServiceWorkerTimeoutTimerTest, AbortAllOnDestruction) {
 
   MockEvent event1, event2;
   {
-    ServiceWorkerTimeoutTimer timer(base::BindRepeating(&base::DoNothing),
+    ServiceWorkerTimeoutTimer timer(base::DoNothing(),
                                     task_runner()->GetMockTickClock());
 
     int event_id1 = timer.StartEvent(event1.CreateAbortCallback());
@@ -181,7 +206,7 @@ TEST_F(ServiceWorkerTimeoutTimerTest, AbortAllOnDestruction) {
 
 TEST_F(ServiceWorkerTimeoutTimerTest, PushPendingTask) {
   EnableServicification();
-  ServiceWorkerTimeoutTimer timer(base::BindRepeating(&base::DoNothing),
+  ServiceWorkerTimeoutTimer timer(base::DoNothing(),
                                   task_runner()->GetMockTickClock());
   task_runner()->FastForwardBy(ServiceWorkerTimeoutTimer::kIdleDelay +
                                ServiceWorkerTimeoutTimer::kUpdateInterval +
@@ -216,7 +241,7 @@ TEST_F(ServiceWorkerTimeoutTimerTest, SetIdleTimerDelayToZero) {
     bool is_idle = false;
     ServiceWorkerTimeoutTimer timer(CreateReceiverWithCalledFlag(&is_idle),
                                     task_runner()->GetMockTickClock());
-    int event_id = timer.StartEvent(base::BindRepeating([](int) {}));
+    int event_id = timer.StartEvent(base::BindOnce([](int) {}));
     timer.SetIdleTimerDelayToZero();
     // Nothing happens since there is an inflight event.
     EXPECT_FALSE(is_idle);
@@ -230,8 +255,8 @@ TEST_F(ServiceWorkerTimeoutTimerTest, SetIdleTimerDelayToZero) {
     bool is_idle = false;
     ServiceWorkerTimeoutTimer timer(CreateReceiverWithCalledFlag(&is_idle),
                                     task_runner()->GetMockTickClock());
-    int event_id_1 = timer.StartEvent(base::BindRepeating([](int) {}));
-    int event_id_2 = timer.StartEvent(base::BindRepeating([](int) {}));
+    int event_id_1 = timer.StartEvent(base::BindOnce([](int) {}));
+    int event_id_2 = timer.StartEvent(base::BindOnce([](int) {}));
     timer.SetIdleTimerDelayToZero();
     // Nothing happens since there are two inflight events.
     EXPECT_FALSE(is_idle);
@@ -248,7 +273,8 @@ TEST_F(ServiceWorkerTimeoutTimerTest, SetIdleTimerDelayToZero) {
 }
 
 TEST_F(ServiceWorkerTimeoutTimerTest, NonS13nServiceWorker) {
-  ASSERT_FALSE(ServiceWorkerUtils::IsServicificationEnabled());
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
 
   MockEvent event;
   {

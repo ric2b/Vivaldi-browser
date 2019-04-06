@@ -23,11 +23,11 @@ import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowActivity;
 import org.robolectric.shadows.multidex.ShadowMultiDex;
 
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 
 /** Unit tests for {@link ApplicationStatus}. */
-@RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
+@RunWith(BaseRobolectricTestRunner.class)
+@Config(manifest = Config.NONE,
         shadows = {ApplicationStatusTest.TrackingShadowActivity.class, ShadowMultiDex.class})
 public class ApplicationStatusTest {
     /** Shadow that tracks calls to onWindowFocusChanged and dispatchKeyEvent. */

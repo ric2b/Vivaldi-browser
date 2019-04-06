@@ -15,6 +15,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
@@ -429,6 +430,16 @@ Value::const_dict_iterator_proxy Value::DictItems() const {
   return const_dict_iterator_proxy(&dict_);
 }
 
+size_t Value::DictSize() const {
+  CHECK(is_dict());
+  return dict_.size();
+}
+
+bool Value::DictEmpty() const {
+  CHECK(is_dict());
+  return dict_.empty();
+}
+
 bool Value::GetAsBoolean(bool* out_value) const {
   if (out_value && is_bool()) {
     *out_value = bool_value_;
@@ -553,8 +564,7 @@ bool operator==(const Value& lhs, const Value& rhs) {
         return false;
       return std::equal(std::begin(lhs.dict_), std::end(lhs.dict_),
                         std::begin(rhs.dict_),
-                        [](const Value::DictStorage::value_type& u,
-                           const Value::DictStorage::value_type& v) {
+                        [](const auto& u, const auto& v) {
                           return std::tie(u.first, *u.second) ==
                                  std::tie(v.first, *v.second);
                         });
@@ -1338,7 +1348,7 @@ void ListValue::AppendStrings(const std::vector<string16>& in_values) {
 
 bool ListValue::AppendIfNotPresent(std::unique_ptr<Value> in_value) {
   DCHECK(in_value);
-  if (std::find(list_.begin(), list_.end(), *in_value) != list_.end())
+  if (ContainsValue(list_, *in_value))
     return false;
 
   list_.push_back(std::move(*in_value));

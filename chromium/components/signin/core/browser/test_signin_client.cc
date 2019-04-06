@@ -4,16 +4,23 @@
 
 #include "components/signin/core/browser/test_signin_client.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/signin/core/browser/webdata/token_service_table.h"
 #include "components/webdata/common/web_data_service_base.h"
 #include "components/webdata/common/web_database_service.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 TestSigninClient::TestSigninClient(PrefService* pref_service)
-    : pref_service_(pref_service), are_signin_cookies_allowed_(true) {}
+    : shared_factory_(
+          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+              &test_url_loader_factory_)),
+      pref_service_(pref_service),
+      are_signin_cookies_allowed_(true),
+      network_calls_delayed_(false) {}
 
 TestSigninClient::~TestSigninClient() {}
 
@@ -30,7 +37,7 @@ scoped_refptr<TokenWebData> TestSigninClient::GetDatabase() {
 bool TestSigninClient::CanRevokeCredentials() { return true; }
 
 std::string TestSigninClient::GetSigninScopedDeviceId() {
-  return std::string();
+  return "DeviceID";
 }
 
 void TestSigninClient::OnSignedOut() {}
@@ -43,6 +50,11 @@ void TestSigninClient::PostSignedIn(const std::string& account_id,
 
 net::URLRequestContextGetter* TestSigninClient::GetURLRequestContext() {
   return request_context_.get();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+TestSigninClient::GetURLLoaderFactory() {
+  return shared_factory_;
 }
 
 void TestSigninClient::SetURLRequestContext(
@@ -67,16 +79,21 @@ void TestSigninClient::LoadTokenDatabase() {
   database_->Init();
 }
 
-bool TestSigninClient::ShouldMergeSigninCredentialsIntoCookieJar() {
-  return true;
+std::unique_ptr<SigninClient::CookieChangeSubscription>
+TestSigninClient::AddCookieChangeCallback(const GURL& url,
+                                          const std::string& name,
+                                          net::CookieChangeCallback callback) {
+  return std::make_unique<SigninClient::CookieChangeSubscription>();
 }
 
-std::unique_ptr<SigninClient::CookieChangedSubscription>
-TestSigninClient::AddCookieChangedCallback(
-    const GURL& url,
-    const std::string& name,
-    const net::CookieStore::CookieChangedCallback& callback) {
-  return base::WrapUnique(new SigninClient::CookieChangedSubscription);
+void TestSigninClient::SetNetworkCallsDelayed(bool value) {
+  network_calls_delayed_ = value;
+
+  if (!network_calls_delayed_) {
+    for (base::OnceClosure& call : delayed_network_calls_)
+      std::move(call).Run();
+    delayed_network_calls_.clear();
+  }
 }
 
 bool TestSigninClient::IsFirstRun() const {
@@ -100,14 +117,19 @@ void TestSigninClient::RemoveContentSettingsObserver(
 }
 
 void TestSigninClient::DelayNetworkCall(const base::Closure& callback) {
-  callback.Run();
+  if (network_calls_delayed_) {
+    delayed_network_calls_.push_back(callback);
+  } else {
+    callback.Run();
+  }
 }
 
 std::unique_ptr<GaiaAuthFetcher> TestSigninClient::CreateGaiaAuthFetcher(
     GaiaAuthConsumer* consumer,
     const std::string& source,
-    net::URLRequestContextGetter* getter) {
-  return std::make_unique<GaiaAuthFetcher>(consumer, source, getter);
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  return std::make_unique<GaiaAuthFetcher>(consumer, source,
+                                           url_loader_factory);
 }
 
 void TestSigninClient::PreGaiaLogout(base::OnceClosure callback) {

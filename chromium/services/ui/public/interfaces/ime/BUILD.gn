@@ -5,17 +5,12 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("ime") {
-  # See //services/ui/public/interfaces/BUILD.gn
-  if (is_chromeos) {
-    support_lazy_serialization = true
-  }
-
   sources = [
     "ime.mojom",
   ]
 
   public_deps = [
-    "//mojo/common:common_custom_types",
+    "//mojo/public/mojom/base",
     "//ui/events/mojo:interfaces",
     "//ui/gfx/geometry/mojo",
     "//ui/gfx/range/mojo",

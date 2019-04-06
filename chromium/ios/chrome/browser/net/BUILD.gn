@@ -66,6 +66,8 @@ source_set("unit_tests") {
     ":net",
     "//base",
     "//base/test:test_support",
+    "//ios/net",
+    "//ios/net:test_support",
     "//ios/web/public/test",
     "//net",
     "//net:test_support",

@@ -7,7 +7,6 @@
 
 import json
 import StringIO
-import os
 import sys
 import unittest
 
@@ -190,10 +189,6 @@ TRYSERVER_CONFIG = """\
     'tryserver.chromium.mac': {
       'try_builder2': 'fake_config',
     },
-  },
-  'luci_tryservers': {
-    'luci_tryserver1': ['luci_builder1'],
-    'luci_tryserver2': ['luci_builder2'],
   },
   'configs': {},
   'mixins': {},
@@ -437,6 +432,75 @@ class UnitTest(unittest.TestCase):
                   mbw.files)
 
 
+  def test_multiple_isolate_maps(self):
+    files = {
+      '/tmp/swarming_targets': 'cc_perftests\n',
+      '/fake_src/testing/buildbot/gn_isolate_map.pyl': (
+          "{'cc_perftests': {"
+          "  'label': '//cc:cc_perftests',"
+          "  'type': 'raw',"
+          "  'args': [],"
+          "}}\n"
+      ),
+      '/fake_src/testing/buildbot/gn_isolate_map2.pyl': (
+          "{'cc_perftests2': {"
+          "  'label': '//cc:cc_perftests',"
+          "  'type': 'raw',"
+          "  'args': [],"
+          "}}\n"
+      ),
+      'c:\\fake_src\out\Default\cc_perftests.exe.runtime_deps': (
+          "cc_perftests\n"
+      ),
+    }
+    mbw = self.fake_mbw(files=files, win32=True)
+    self.check(['gen',
+                '-c', 'debug_goma',
+                '--swarming-targets-file', '/tmp/swarming_targets',
+                '--isolate-map-file',
+                '/fake_src/testing/buildbot/gn_isolate_map.pyl',
+                '--isolate-map-file',
+                '/fake_src/testing/buildbot/gn_isolate_map2.pyl',
+                '//out/Default'], mbw=mbw, ret=0)
+    self.assertIn('c:\\fake_src\\out\\Default\\cc_perftests.isolate',
+                  mbw.files)
+    self.assertIn('c:\\fake_src\\out\\Default\\cc_perftests.isolated.gen.json',
+                  mbw.files)
+
+
+  def test_duplicate_isolate_maps(self):
+    files = {
+      '/tmp/swarming_targets': 'cc_perftests\n',
+      '/fake_src/testing/buildbot/gn_isolate_map.pyl': (
+          "{'cc_perftests': {"
+          "  'label': '//cc:cc_perftests',"
+          "  'type': 'raw',"
+          "  'args': [],"
+          "}}\n"
+      ),
+      '/fake_src/testing/buildbot/gn_isolate_map2.pyl': (
+          "{'cc_perftests': {"
+          "  'label': '//cc:cc_perftests',"
+          "  'type': 'raw',"
+          "  'args': [],"
+          "}}\n"
+      ),
+      'c:\\fake_src\out\Default\cc_perftests.exe.runtime_deps': (
+          "cc_perftests\n"
+      ),
+    }
+    mbw = self.fake_mbw(files=files, win32=True)
+    # Check that passing duplicate targets into mb fails.
+    self.check(['gen',
+                '-c', 'debug_goma',
+                '--swarming-targets-file', '/tmp/swarming_targets',
+                '--isolate-map-file',
+                '/fake_src/testing/buildbot/gn_isolate_map.pyl',
+                '--isolate-map-file',
+                '/fake_src/testing/buildbot/gn_isolate_map2.pyl',
+                '//out/Default'], mbw=mbw, ret=1)
+
+
   def test_isolate(self):
     files = {
       '/fake_src/out/Default/toolchain.ninja': "",
@@ -563,21 +627,37 @@ class UnitTest(unittest.TestCase):
     mbw.files[mbw.default_config] = TEST_BAD_CONFIG
     self.check(['validate'], mbw=mbw, ret=1)
 
-  def test_buildbucket(self):
-    mbw = self.fake_mbw()
-    mbw.files[mbw.default_config] = TRYSERVER_CONFIG
-    self.check(['gerrit-buildbucket-config'], mbw=mbw,
-               ret=0,
-               out=('# This file was generated using '
-                    '"tools/mb/mb.py gerrit-buildbucket-config".\n'
-                    '[bucket "luci.luci_tryserver1"]\n'
-                    '\tbuilder = luci_builder1\n'
-                    '[bucket "luci.luci_tryserver2"]\n'
-                    '\tbuilder = luci_builder2\n'
-                    '[bucket "master.tryserver.chromium.linux"]\n'
-                    '\tbuilder = try_builder\n'
-                    '[bucket "master.tryserver.chromium.mac"]\n'
-                    '\tbuilder = try_builder2\n'))
+  def test_build_command_unix(self):
+    files = {
+      '/fake_src/out/Default/toolchain.ninja': '',
+      '/fake_src/testing/buildbot/gn_isolate_map.pyl': (
+          '{"base_unittests": {'
+          '  "label": "//base:base_unittests",'
+          '  "type": "raw",'
+          '  "args": [],'
+          '}}\n')
+    }
+
+    mbw = self.fake_mbw(files)
+    self.check(['run', '//out/Default', 'base_unittests'], mbw=mbw, ret=0)
+    self.assertIn(['autoninja', '-C', 'out/Default', 'base_unittests'],
+                  mbw.calls)
+
+  def test_build_command_windows(self):
+    files = {
+      'c:\\fake_src\\out\\Default\\toolchain.ninja': '',
+      'c:\\fake_src\\testing\\buildbot\\gn_isolate_map.pyl': (
+          '{"base_unittests": {'
+          '  "label": "//base:base_unittests",'
+          '  "type": "raw",'
+          '  "args": [],'
+          '}}\n')
+    }
+
+    mbw = self.fake_mbw(files, True)
+    self.check(['run', '//out/Default', 'base_unittests'], mbw=mbw, ret=0)
+    self.assertIn(['autoninja.bat', '-C', 'out\\Default', 'base_unittests'],
+                  mbw.calls)
 
 
 if __name__ == '__main__':

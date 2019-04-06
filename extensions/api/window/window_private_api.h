@@ -43,6 +43,7 @@ class VivaldiWindowsAPI : public BrowserListObserver,
  protected:
   // chrome::BrowserListObserver implementation
   void OnBrowserRemoved(Browser* browser) override;
+  void OnBrowserAdded(Browser* browser) override;
 
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>;

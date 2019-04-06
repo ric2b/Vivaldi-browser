@@ -7,10 +7,12 @@
 #include <algorithm>
 
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/brightness_control_delegate.h"
+#include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
@@ -20,11 +22,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/slider.h"
@@ -33,15 +37,6 @@
 
 namespace ash {
 namespace tray {
-namespace {
-
-// We don't let the screen brightness go lower than this when it's being
-// adjusted via the slider.  Otherwise, if the user doesn't know about the
-// brightness keys, they may turn the backlight off and not know how to turn it
-// back on.
-const double kMinBrightnessPercent = 5.0;
-
-}  // namespace
 
 class BrightnessView : public TabletModeObserver,
                        public views::View,
@@ -107,7 +102,7 @@ BrightnessView::BrightnessView(bool default_view, double initial_percent)
 
   slider_ = TrayPopupUtils::CreateSlider(this);
   slider_->SetValue(static_cast<float>(initial_percent / 100.0));
-  slider_->SetAccessibleName(
+  slider_->GetViewAccessibility().OverrideName(
       rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_BRIGHTNESS));
   tri_view->AddView(TriView::Container::CENTER, slider_);
 
@@ -173,7 +168,8 @@ void BrightnessView::SliderDragEnded(views::Slider* slider) {
 }  // namespace tray
 
 TrayBrightness::TrayBrightness(SystemTray* system_tray)
-    : SystemTrayItem(system_tray, UMA_DISPLAY_BRIGHTNESS),
+    : SystemTrayItem(system_tray,
+                     SystemTrayItemUmaType::UMA_DISPLAY_BRIGHTNESS),
       brightness_view_(nullptr),
       current_percent_(100.0),
       got_current_percent_(false),
@@ -238,15 +234,21 @@ bool TrayBrightness::ShouldShowShelf() const {
   return false;
 }
 
-void TrayBrightness::BrightnessChanged(int level, bool user_initiated) {
+void TrayBrightness::ScreenBrightnessChanged(
+    const power_manager::BacklightBrightnessChange& change) {
   Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_BRIGHTNESS_CHANGED);
-  double percent = static_cast<double>(level);
-  HandleBrightnessChanged(percent, user_initiated);
+  const bool user_initiated =
+      change.cause() ==
+      power_manager::BacklightBrightnessChange_Cause_USER_REQUEST;
+  HandleBrightnessChanged(change.percent(), user_initiated);
 }
 
 void TrayBrightness::HandleBrightnessChanged(double percent,
                                              bool user_initiated) {
+  if (features::IsSystemTrayUnifiedEnabled())
+    return;
+
   current_percent_ = percent;
   got_current_percent_ = true;
 

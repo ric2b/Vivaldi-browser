@@ -9,14 +9,13 @@
 #include <string>
 #include <vector>
 
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_storage_monitor.h"
-#include "chrome/browser/extensions/test_extension_dir.h"
+#include "chrome/browser/extensions/extension_storage_monitor_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
@@ -30,8 +29,9 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace extensions {
 
@@ -40,6 +40,12 @@ namespace {
 const int kInitialUsageThreshold = 500;
 
 const char kWriteDataApp[] = "storage_monitor/write_data";
+
+std::unique_ptr<KeyedService> CreateExtensionStorageMonitorInstance(
+    content::BrowserContext* context) {
+  return std::make_unique<ExtensionStorageMonitor>(
+      Profile::FromBrowserContext(context));
+}
 
 class NotificationObserver {
  public:
@@ -89,7 +95,7 @@ class NotificationObserver {
 
 class ExtensionStorageMonitorTest : public ExtensionBrowserTest {
  public:
-  ExtensionStorageMonitorTest() : storage_monitor_(NULL) {}
+  ExtensionStorageMonitorTest() = default;
 
  protected:
   // ExtensionBrowserTest overrides:
@@ -104,14 +110,9 @@ class ExtensionStorageMonitorTest : public ExtensionBrowserTest {
     InitStorageMonitor();
   }
 
-  void TearDownOnMainThread() override {
-    display_service_.reset();
-    ExtensionBrowserTest::TearDownOnMainThread();
-  }
-
   ExtensionStorageMonitor* monitor() {
     CHECK(storage_monitor_);
-    return storage_monitor_;
+    return storage_monitor_.get();
   }
 
   int64_t GetInitialExtensionThreshold() {
@@ -192,10 +193,18 @@ class ExtensionStorageMonitorTest : public ExtensionBrowserTest {
     WriteBytes(extension, num_bytes, filesystem, false);
   }
 
-  void SimulateProfileShutdown() { storage_monitor_->StopMonitoringAll(); }
+  void SimulateProfileShutdown() {
+    // Setting a testing factory function deletes the current
+    // ExtensionStorageMonitor; see KeyedServiceFactory::SetTestingFactory().
+    ExtensionStorageMonitorFactory::GetInstance()->SetTestingFactoryAndUse(
+        profile(), &CreateExtensionStorageMonitorInstance);
+    InitStorageMonitor();
+  }
 
   void InitStorageMonitor() {
-    storage_monitor_ = ExtensionStorageMonitor::Get(profile());
+    EXPECT_FALSE(storage_monitor_);
+    storage_monitor_ =
+        ExtensionStorageMonitor::Get(profile())->weak_ptr_factory_.GetWeakPtr();
     ASSERT_TRUE(storage_monitor_);
 
     // Override thresholds so that we don't have to write a huge amount of data
@@ -270,7 +279,7 @@ class ExtensionStorageMonitorTest : public ExtensionBrowserTest {
     }
   }
 
-  ExtensionStorageMonitor* storage_monitor_;
+  base::WeakPtr<ExtensionStorageMonitor> storage_monitor_;
   std::unique_ptr<NotificationDisplayServiceTester> display_service_;
   std::vector<std::unique_ptr<TestExtensionDir>> temp_dirs_;
 };
@@ -324,7 +333,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionStorageMonitorTest, UserDisabledNotifications) {
   // Fake clicking the notification button to disable notifications.
   display_service_->GetNotification(GetNotificationId(extension->id()))
       ->delegate()
-      ->ButtonClick(ExtensionStorageMonitor::BUTTON_DISABLE_NOTIFICATION);
+      ->Click(ExtensionStorageMonitor::BUTTON_DISABLE_NOTIFICATION,
+              base::nullopt);
 
   EXPECT_FALSE(IsStorageNotificationEnabled(extension->id()));
 
@@ -429,7 +439,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionStorageMonitorTest,
                                          extension->id());
   display_service_->GetNotification(GetNotificationId(extension->id()))
       ->delegate()
-      ->ButtonClick(ExtensionStorageMonitor::BUTTON_UNINSTALL);
+      ->Click(ExtensionStorageMonitor::BUTTON_UNINSTALL, base::nullopt);
   observer.WaitForExtensionUninstalled();
 }
 

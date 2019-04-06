@@ -14,18 +14,18 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/common/browser_controls_state_param_traits.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/web_application_info_provider_param_traits.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/offline_pages/features/features.h"
+#include "components/offline_pages/buildflags/buildflags.h"
 #include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
-#include "media/media_features.h"
-#include "ppapi/features/features.h"
+#include "media/media_buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "url/gurl.h"
 #include "url/ipc/url_param_traits.h"
 #include "url/origin.h"
@@ -64,11 +64,6 @@ IPC_MESSAGE_ROUTED0(ChromeViewHostMsg_DownloadPageLater)
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_SetIsShowingDownloadButtonInErrorPage,
                     bool /* showing download button */)
 #endif
-
-#if defined(OS_ANDROID)
-// Sent when navigating to chrome://sandbox to install bindings onto the WebUI.
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_AddSandboxStatusExtension)
-#endif  // defined(OS_ANDROID)
 
 //-----------------------------------------------------------------------------
 // Misc messages

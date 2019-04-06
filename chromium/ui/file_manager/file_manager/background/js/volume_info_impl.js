@@ -30,10 +30,12 @@
  * @param {boolean} hasMedia When true the volume has been identified
  *     as containing media such as photos or videos.
  * @param {boolean} configurable When true, then the volume can be configured.
+ * @param {boolean} watchable When true, then the volume can be watched.
  * @param {VolumeManagerCommon.Source} source Source of the volume's data.
  * @param {VolumeManagerCommon.FileSystemType} diskFileSystemType File system
  *     type indentifier.
- * @param {!IconSet} iconSet Set of icons for this volume.
+ * @param {!chrome.fileManagerPrivate.IconSet} iconSet Set of icons for this
+ *     volume.
  */
 function VolumeInfoImpl(
     volumeType, volumeId, fileSystem, error, deviceType, devicePath, isReadOnly,
@@ -46,12 +48,19 @@ function VolumeInfoImpl(
   this.displayRoot_ = null;
   this.teamDriveDisplayRoot_ = null;
 
-  /** @type {boolean} */
-  this.isTeamDrivesEnabled_ = false;
+  /**
+   * @type {FilesAppEntry} an entry to be used as prefix of this volume on
+   *     breadcrumbs, e.g. "My Files > Downloads", "My Files" is a prefixEntry
+   *     on "Downloads" VolumeInfo.
+   */
+  this.prefixEntry_ = null;
 
-  chrome.commandLinePrivate.hasSwitch('team-drives', function(enabled) {
-    this.isTeamDrivesEnabled_ = enabled;
-  }.bind(this));
+  /** @type {Promise<boolean>} */
+  this.isTeamDrivesEnabledPromise_ = new Promise(resolve => {
+    chrome.commandLinePrivate.hasSwitch('disable-team-drives', enabled => {
+      resolve(!enabled);
+    });
+  });
 
   /** @type {Object<!FakeEntry>} */
   this.fakeEntries_ = {};
@@ -210,11 +219,58 @@ VolumeInfoImpl.prototype = /** @struct */ {
     return this.diskFileSystemType_;
   },
   /**
-   * @return {IconSet} Set of icons for this volume.
+   * @return {chrome.fileManagerPrivate.IconSet} Set of icons for this volume.
    */
   get iconSet() {
     return this.iconSet_;
-  }
+  },
+  /**
+   * @type {FilesAppEntry} an entry to be used as prefix of this volume on
+   *     breadcrumbs, e.g. "My Files > Downloads", "My Files" is a prefixEntry
+   *     on "Downloads" VolumeInfo.
+   */
+  get prefixEntry() {
+    return this.prefixEntry_;
+  },
+  set prefixEntry(entry) {
+    this.prefixEntry_ = entry;
+  },
+};
+
+/**
+ * Returns a promise to the entry for the given URL
+ * @param {string} url The filesystem URL
+ * @return {!Promise<Entry>}
+ */
+VolumeInfoImpl.resolveFileSystemUrl_ = function(url) {
+  return new Promise(window.webkitResolveLocalFileSystemURL.bind(null, url));
+};
+
+/**
+ * Sets |teamDriveDisplayRoot_| if team drives are enabled.
+ *
+ * The return value will resolve once this operation is complete.
+ * @return {!Promise<void>}
+ */
+VolumeInfoImpl.prototype.resolveTeamDrivesRoot_ = function() {
+  return this.isTeamDrivesEnabledPromise_.then(enabled => {
+    if (!enabled) {
+      return;
+    }
+    return VolumeInfoImpl
+        .resolveFileSystemUrl_(
+            this.fileSystem_.root.toURL() +
+            VolumeManagerCommon.TEAM_DRIVES_DIRECTORY_NAME)
+        .then(
+            teamDrivesRoot => {
+              this.teamDriveDisplayRoot_ = teamDrivesRoot;
+            },
+            error => {
+              if (error.name != 'NotFoundError') {
+                throw error;
+              }
+            });
+  });
 };
 
 /**
@@ -234,26 +290,16 @@ VolumeInfoImpl.prototype.resolveDisplayRoot = function(opt_onSuccess,
             Promise.reject(this.error));
     } else {
       // For Drive, we need to resolve.
-      var displayRootURL = this.fileSystem_.root.toURL() + '/root';
-      this.displayRootPromise_ = new Promise(
-          window.webkitResolveLocalFileSystemURL.bind(null, displayRootURL));
-      if (this.isTeamDrivesEnabled_) {
-        // Make sure that the Team Drives display root is also resolved when
-        // Drive root is resolved.
-        this.displayRootPromise_ =
-            Promise
-                .all([
-                  this.displayRootPromise_,
-                  new Promise(window.webkitResolveLocalFileSystemURL.bind(
-                      null,
-                      this.fileSystem_.root.toURL() +
-                          VolumeManagerCommon.TEAM_DRIVES_DIRECTORY_PATH))
-                ])
-                .then(function(displayRoots) {
-                  this.teamDriveDisplayRoot_ = displayRoots[1];
-                  return displayRoots[0];
-                }.bind(this));
-      }
+      var displayRootURL = this.fileSystem_.root.toURL() + 'root';
+      this.displayRootPromise_ =
+          Promise
+              .all([
+                VolumeInfoImpl.resolveFileSystemUrl_(displayRootURL),
+                this.resolveTeamDrivesRoot_()
+              ])
+              .then(([root]) => {
+                return root;
+              });
     }
 
     // Store the obtained displayRoot.

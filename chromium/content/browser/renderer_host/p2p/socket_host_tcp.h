@@ -18,6 +18,11 @@
 #include "content/common/p2p_socket_type.h"
 #include "net/base/completion_callback.h"
 #include "net/base/ip_endpoint.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+
+namespace network {
+class ProxyResolvingClientSocketFactory;
+}  // namespace network
 
 namespace net {
 class DrainableIOBuffer;
@@ -33,7 +38,9 @@ class CONTENT_EXPORT P2PSocketHostTcpBase : public P2PSocketHost {
   P2PSocketHostTcpBase(IPC::Sender* message_sender,
                        int socket_id,
                        P2PSocketType type,
-                       net::URLRequestContextGetter* url_context);
+                       net::URLRequestContextGetter* url_context,
+                       network::ProxyResolvingClientSocketFactory*
+                           proxy_resolving_socket_factory);
   ~P2PSocketHostTcpBase() override;
 
   bool InitAccepted(const net::IPEndPoint& remote_address,
@@ -47,7 +54,8 @@ class CONTENT_EXPORT P2PSocketHostTcpBase : public P2PSocketHost {
   void Send(const net::IPEndPoint& to,
             const std::vector<char>& data,
             const rtc::PacketOptions& options,
-            uint64_t packet_id) override;
+            uint64_t packet_id,
+            const net::NetworkTrafficAnnotationTag traffic_annotation) override;
   std::unique_ptr<P2PSocketHost> AcceptIncomingTcpConnection(
       const net::IPEndPoint& remote_address,
       int id) override;
@@ -56,19 +64,24 @@ class CONTENT_EXPORT P2PSocketHostTcpBase : public P2PSocketHost {
  protected:
   struct SendBuffer {
     SendBuffer();
-    SendBuffer(int32_t packet_id, scoped_refptr<net::DrainableIOBuffer> buffer);
+    SendBuffer(int32_t packet_id,
+               scoped_refptr<net::DrainableIOBuffer> buffer,
+               const net::NetworkTrafficAnnotationTag traffic_annotation);
     SendBuffer(const SendBuffer& rhs);
     ~SendBuffer();
 
     int32_t rtc_packet_id;
     scoped_refptr<net::DrainableIOBuffer> buffer;
+    net::MutableNetworkTrafficAnnotationTag traffic_annotation;
   };
 
   // Derived classes will provide the implementation.
   virtual int ProcessInput(char* input, int input_len) = 0;
-  virtual void DoSend(const net::IPEndPoint& to,
-                      const std::vector<char>& data,
-                      const rtc::PacketOptions& options) = 0;
+  virtual void DoSend(
+      const net::IPEndPoint& to,
+      const std::vector<char>& data,
+      const rtc::PacketOptions& options,
+      const net::NetworkTrafficAnnotationTag traffic_annotation) = 0;
 
   void WriteOrQueue(SendBuffer& send_buffer);
   void OnPacket(const std::vector<char>& data);
@@ -77,10 +90,6 @@ class CONTENT_EXPORT P2PSocketHostTcpBase : public P2PSocketHost {
  private:
   friend class P2PSocketHostTcpTestBase;
   friend class P2PSocketHostTcpServerTest;
-
-  // SSL/TLS connection functions.
-  void StartTls();
-  void ProcessTlsSslConnectDone(int status);
 
   void DidCompleteRead(int result);
   void DoRead();
@@ -109,6 +118,7 @@ class CONTENT_EXPORT P2PSocketHostTcpBase : public P2PSocketHost {
   bool connected_;
   P2PSocketType type_;
   scoped_refptr<net::URLRequestContextGetter> url_context_;
+  network::ProxyResolvingClientSocketFactory* proxy_resolving_socket_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(P2PSocketHostTcpBase);
 };
@@ -118,14 +128,19 @@ class CONTENT_EXPORT P2PSocketHostTcp : public P2PSocketHostTcpBase {
   P2PSocketHostTcp(IPC::Sender* message_sender,
                    int socket_id,
                    P2PSocketType type,
-                   net::URLRequestContextGetter* url_context);
+                   net::URLRequestContextGetter* url_context,
+                   network::ProxyResolvingClientSocketFactory*
+                       proxy_resolving_socket_factory);
+
   ~P2PSocketHostTcp() override;
 
  protected:
   int ProcessInput(char* input, int input_len) override;
-  void DoSend(const net::IPEndPoint& to,
-              const std::vector<char>& data,
-              const rtc::PacketOptions& options) override;
+  void DoSend(
+      const net::IPEndPoint& to,
+      const std::vector<char>& data,
+      const rtc::PacketOptions& options,
+      const net::NetworkTrafficAnnotationTag traffic_annotation) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(P2PSocketHostTcp);
@@ -140,15 +155,19 @@ class CONTENT_EXPORT P2PSocketHostStunTcp : public P2PSocketHostTcpBase {
   P2PSocketHostStunTcp(IPC::Sender* message_sender,
                        int socket_id,
                        P2PSocketType type,
-                       net::URLRequestContextGetter* url_context);
+                       net::URLRequestContextGetter* url_context,
+                       network::ProxyResolvingClientSocketFactory*
+                           proxy_resolving_socket_factory);
 
   ~P2PSocketHostStunTcp() override;
 
  protected:
   int ProcessInput(char* input, int input_len) override;
-  void DoSend(const net::IPEndPoint& to,
-              const std::vector<char>& data,
-              const rtc::PacketOptions& options) override;
+  void DoSend(
+      const net::IPEndPoint& to,
+      const std::vector<char>& data,
+      const rtc::PacketOptions& options,
+      const net::NetworkTrafficAnnotationTag traffic_annotation) override;
 
  private:
   int GetExpectedPacketSize(const char* data, int len, int* pad_bytes);

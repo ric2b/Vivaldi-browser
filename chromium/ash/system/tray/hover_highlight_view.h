@@ -38,7 +38,9 @@ class HoverHighlightView : public ActionableView {
   };
 
   // If |listener| is null then no action is taken on click.
+  // The former uses default for |use_unified_theme|.
   explicit HoverHighlightView(ViewClickListener* listener);
+  HoverHighlightView(ViewClickListener* listener, bool use_unified_theme);
   ~HoverHighlightView() override;
 
   // Convenience function for populating the view with an icon and a label. This
@@ -96,6 +98,9 @@ class HoverHighlightView : public ActionableView {
   views::ImageView* left_icon() { return left_icon_; }
 
  protected:
+  // Override from Button to also set the tooltip for all child elements.
+  void OnSetTooltipText(const base::string16& tooltip_text) override;
+
   // views::View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
@@ -136,6 +141,7 @@ class HoverHighlightView : public ActionableView {
   views::View* right_view_ = nullptr;
   TriView* tri_view_ = nullptr;
   bool expandable_ = false;
+  const bool use_unified_theme_;
   AccessibilityState accessibility_state_ = AccessibilityState::DEFAULT;
 
   DISALLOW_COPY_AND_ASSIGN(HoverHighlightView);

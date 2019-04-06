@@ -37,14 +37,18 @@ import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwAutofillManager;
 import org.chromium.android_webview.AwAutofillProvider;
+import org.chromium.android_webview.AwAutofillUMA;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient.AwWebResourceRequest;
 import org.chromium.android_webview.AwWebResourceResponse;
 import org.chromium.android_webview.test.AwActivityTestRule.TestDependencyFactory;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.MetricsUtils;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.autofill.SubmissionSource;
@@ -55,6 +59,7 @@ import java.io.ByteArrayInputStream;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -424,8 +429,19 @@ public class AwAutofillTest {
     }
 
     private class TestAwAutofillManager extends AwAutofillManager {
+        private boolean mDisabled;
+
         public TestAwAutofillManager(Context context) {
             super(context);
+        }
+
+        public void setDisabled() {
+            mDisabled = true;
+        }
+
+        @Override
+        public boolean isDisabled() {
+            return mDisabled;
         }
 
         @Override
@@ -491,6 +507,239 @@ public class AwAutofillTest {
         }
     }
 
+    private static class AwAutofillSessionUMATestHelper {
+        private final static String DATA =
+                "<html><head></head><body><form action='a.html' name='formname' id='formid'>"
+                + "<label>User Name:</label>"
+                + "<input type='text' id='text1' name='username'"
+                + " placeholder='placeholder@placeholder.com' autocomplete='username name'>"
+                + "<input type='submit'>"
+                + "</form>"
+                + "<form><input type='text' id='text2'/></form></body></html>";
+
+        private final static int TOTAL_CONTROLS = 1; // text1
+
+        public final static int NO_FORM_SUBMISSION = -1;
+
+        public AwAutofillSessionUMATestHelper(AwAutofillTest test) {
+            mTest = test;
+            initDeltaSamples();
+        }
+
+        public int getSessionValue() {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionValue = getUMAEnumerateValue(mSessionDelta);
+                }
+            });
+            return mSessionValue;
+        }
+
+        public int getSubmissionSourceValue() {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    mSourceValue = getUMAEnumerateValue(mSubmissionSourceDelta);
+                }
+            });
+            return mSourceValue;
+        }
+
+        private int getUMAEnumerateValue(HashMap<MetricsUtils.HistogramDelta, Integer> deltas) {
+            int value = NO_FORM_SUBMISSION;
+            for (MetricsUtils.HistogramDelta delta : deltas.keySet()) {
+                if (delta.getDelta() != 0) {
+                    assertEquals(NO_FORM_SUBMISSION, value);
+                    value = deltas.get(delta);
+                }
+            }
+            return value;
+        }
+
+        public void triggerAutofill(TestWebServer webServer) throws Throwable {
+            final String url = webServer.setResponse(FILE, DATA, null);
+            mTest.loadUrlSync(url);
+            mTest.executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
+            mTest.dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
+            // Note that we currently call ENTER/EXIT one more time.
+            mCnt += mTest.waitForCallbackAndVerifyTypes(mCnt,
+                    new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+        }
+
+        public void simulateUserSelectSuggestion() throws Throwable {
+            // Simulate user select suggestion
+            TestViewStructure viewStructure = mTest.mTestValues.testViewStructure;
+            assertNotNull(viewStructure);
+            assertEquals(TOTAL_CONTROLS, viewStructure.getChildCount());
+
+            TestViewStructure child0 = viewStructure.getChild(0);
+
+            // Autofill form and verify filled values.
+            SparseArray<AutofillValue> values = new SparseArray<AutofillValue>();
+            values.append(child0.getId(), AutofillValue.forText("example@example.com"));
+            mCnt = mTest.getCallbackCount();
+            mTest.clearChangedValues();
+            mTest.invokeAutofill(values);
+            mCnt += mTest.waitForCallbackAndVerifyTypes(
+                    mCnt, new Integer[] {AUTOFILL_VALUE_CHANGED});
+        }
+
+        public void simulateUserChangeAutofilledField() throws Throwable {
+            mTest.executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
+            mTest.dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_B);
+            mCnt += mTest.waitForCallbackAndVerifyTypes(mCnt,
+                    new Integer[] {
+                            AUTOFILL_VIEW_EXITED, AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+        }
+
+        public void submitForm() throws Throwable {
+            mTest.executeJavaScriptAndWaitForResult("document.getElementById('formid').submit();");
+            mCnt += mTest.waitForCallbackAndVerifyTypes(
+                    mCnt, new Integer[] {AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
+        }
+
+        public void startNewSession() throws Throwable {
+            // Start a new session by moving focus to another form.
+            mTest.executeJavaScriptAndWaitForResult("document.getElementById('text2').select();");
+            mTest.dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
+            // Note that we currently call ENTER/EXIT one more time.
+            mCnt += mTest.waitForCallbackAndVerifyTypes(mCnt,
+                    new Integer[] {AUTOFILL_VIEW_EXITED, AUTOFILL_VIEW_ENTERED,
+                            AUTOFILL_VIEW_EXITED, AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+        }
+
+        public void simulateUserChangeField() throws Throwable {
+            mTest.executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
+            mTest.dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_B);
+            mCnt += mTest.waitForCallbackAndVerifyTypes(mCnt,
+                    new Integer[] {
+                            AUTOFILL_VIEW_EXITED, AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+        }
+
+        private void initDeltaSamples() {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionDelta = new HashMap<MetricsUtils.HistogramDelta, Integer>();
+                    for (int i = 0; i < AwAutofillUMA.AUTOFILL_SESSION_HISTOGRAM_COUNT; i++) {
+                        mSessionDelta.put(
+                                new MetricsUtils.HistogramDelta(
+                                        AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_AUTOFILL_SESSION, i),
+                                i);
+                    }
+                    mSubmissionSourceDelta = new HashMap<MetricsUtils.HistogramDelta, Integer>();
+                    for (int i = 0; i < AwAutofillUMA.SUBMISSION_SOURCE_HISTOGRAM_COUNT; i++) {
+                        mSubmissionSourceDelta.put(
+                                new MetricsUtils.HistogramDelta(
+                                        AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_SUBMISSION_SOURCE, i),
+                                i);
+                    }
+                    mAutofillWebViewViewEnabled = new MetricsUtils.HistogramDelta(
+                            AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_ENABLED, 1 /*true*/);
+                    mAutofillWebViewViewDisabled = new MetricsUtils.HistogramDelta(
+                            AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_ENABLED, 0 /*false*/);
+                    mAutofillWebViewCreatedByActivityContext = new MetricsUtils.HistogramDelta(
+                            AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_CREATED_BY_ACTIVITY_CONTEXT, 1);
+                    mAutofillWebViewCreatedByAppContext = new MetricsUtils.HistogramDelta(
+                            AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_CREATED_BY_ACTIVITY_CONTEXT, 0);
+                    mUserChangedAutofilledField = new MetricsUtils.HistogramDelta(
+                            AwAutofillUMA.UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD, 1 /*true*/);
+                    mUserChangedNonAutofilledField = new MetricsUtils.HistogramDelta(
+                            AwAutofillUMA.UMA_AUTOFILL_USER_CHANGED_AUTOFILLED_FIELD, 0 /*falsTe*/);
+                }
+            });
+        }
+
+        public int getHistogramSampleCount(String name) throws Throwable {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    mHistogramSimpleCount =
+                            Integer.valueOf(RecordHistogram.getHistogramTotalCountForTesting(name));
+                }
+            });
+            return mHistogramSimpleCount;
+        }
+
+        public void verifyAutofillEnabled() throws Throwable {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertEquals(1, mAutofillWebViewViewEnabled.getDelta());
+                    assertEquals(0, mAutofillWebViewViewDisabled.getDelta());
+                }
+            });
+        }
+
+        public void verifyAutofillDisabled() throws Throwable {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertEquals(0, mAutofillWebViewViewEnabled.getDelta());
+                    assertEquals(1, mAutofillWebViewViewDisabled.getDelta());
+                }
+            });
+        }
+
+        public void verifyUserChangedAutofilledField() throws Throwable {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertEquals(0, mUserChangedNonAutofilledField.getDelta());
+                    assertEquals(1, mUserChangedAutofilledField.getDelta());
+                }
+            });
+        }
+
+        public void verifyUserChangedNonAutofilledField() throws Throwable {
+            // User changed the form, but not the autofilled field.
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertEquals(1, mUserChangedNonAutofilledField.getDelta());
+                    assertEquals(0, mUserChangedAutofilledField.getDelta());
+                }
+            });
+        }
+
+        public void verifyUserDidntChangeForm() throws Throwable {
+            // User didn't change the form at all.
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertEquals(0, mUserChangedNonAutofilledField.getDelta());
+                    assertEquals(0, mUserChangedAutofilledField.getDelta());
+                }
+            });
+        }
+
+        public void verifyWebViewCreatedByActivityContext() throws Throwable {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertEquals(1, mAutofillWebViewCreatedByActivityContext.getDelta());
+                    assertEquals(0, mAutofillWebViewCreatedByAppContext.getDelta());
+                }
+            });
+        }
+
+        private int mCnt = 0;
+        private AwAutofillTest mTest;
+        private volatile Integer mSessionValue;
+        private HashMap<MetricsUtils.HistogramDelta, Integer> mSessionDelta;
+        private MetricsUtils.HistogramDelta mAutofillWebViewViewEnabled;
+        private MetricsUtils.HistogramDelta mAutofillWebViewViewDisabled;
+        private MetricsUtils.HistogramDelta mUserChangedAutofilledField;
+        private MetricsUtils.HistogramDelta mUserChangedNonAutofilledField;
+        private MetricsUtils.HistogramDelta mAutofillWebViewCreatedByActivityContext;
+        private MetricsUtils.HistogramDelta mAutofillWebViewCreatedByAppContext;
+        private volatile Integer mSourceValue;
+        private HashMap<MetricsUtils.HistogramDelta, Integer> mSubmissionSourceDelta;
+        private volatile Integer mHistogramSimpleCount;
+    }
+
     @Rule
     public AwActivityTestRule mRule = new AwActivityTestRule();
 
@@ -501,21 +750,25 @@ public class AwAutofillTest {
     private ConcurrentLinkedQueue<Integer> mEventQueue = new ConcurrentLinkedQueue<>();
     private TestValues mTestValues = new TestValues();
     private int mSubmissionSource;
+    private TestAwAutofillManager mTestAwAutofillManager;
+    private AwAutofillSessionUMATestHelper mUMATestHelper;
 
     @Before
     public void setUp() throws Exception {
+        mUMATestHelper = new AwAutofillSessionUMATestHelper(this);
         mContentsClient = new AwAutofillTestClient();
         mTestContainerView = mRule.createAwTestContainerViewOnMainSync(
                 mContentsClient, false, new TestDependencyFactory() {
                     @Override
                     public AutofillProvider createAutofillProvider(
                             Context context, ViewGroup containerView) {
+                        mTestAwAutofillManager = new TestAwAutofillManager(context);
                         return new AwAutofillProvider(
-                                containerView, new TestAwAutofillManager(context));
+                                containerView, mTestAwAutofillManager, context);
                     }
                 });
         mAwContents = mTestContainerView.getAwContents();
-        mRule.enableJavaScriptOnUiThread(mAwContents);
+        AwActivityTestRule.enableJavaScriptOnUiThread(mAwContents);
     }
 
     @Test
@@ -560,7 +813,7 @@ public class AwAutofillTest {
             DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "text1");
             // Note that we currently depend on keyboard app's behavior.
             // TODO(changwan): mock out IME interaction.
-            Assert.assertTrue(DOMUtils.clickNode(mTestContainerView.getContentViewCore(), "text1"));
+            Assert.assertTrue(DOMUtils.clickNode(mTestContainerView.getWebContents(), "text1"));
             cnt += waitForCallbackAndVerifyTypes(
                     cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED});
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
@@ -583,7 +836,7 @@ public class AwAutofillTest {
         TestWebServer webServer = TestWebServer.start();
         final String data = "<html><head></head><body><form action='a.html' name='formname'>"
                 + "<label>User Name:</label>"
-                + "<input type='text' id='text1' name='username'"
+                + "<input type='text' id='text1' name='username' maxlength='30'"
                 + " placeholder='placeholder@placeholder.com' autocomplete='username name'>"
                 + "<input type='checkbox' id='checkbox1' name='showpassword'>"
                 + "<select id='select1' name='month'>"
@@ -635,6 +888,7 @@ public class AwAutofillTest {
             assertEquals("text1", htmlInfo0.getAttribute("id"));
             assertEquals("username", htmlInfo0.getAttribute("name"));
             assertEquals("User Name:", htmlInfo0.getAttribute("label"));
+            assertEquals("30", htmlInfo0.getAttribute("maxlength"));
 
             // Verify checkbox control filled correctly in ViewStructure.
             TestViewStructure child1 = viewStructure.getChild(1);
@@ -646,6 +900,7 @@ public class AwAutofillTest {
             assertEquals("checkbox1", htmlInfo1.getAttribute("id"));
             assertEquals("showpassword", htmlInfo1.getAttribute("name"));
             assertEquals("", htmlInfo1.getAttribute("label"));
+            assertNull(htmlInfo1.getAttribute("maxlength"));
 
             // Verify select control filled correctly in ViewStructure.
             TestViewStructure child2 = viewStructure.getChild(2);
@@ -768,7 +1023,12 @@ public class AwAutofillTest {
             assertEquals(1, values.size());
             assertEquals("a", values.get(0).second.getTextValue());
             executeJavaScriptAndWaitForResult("document.getElementById('text1').value='c';");
-            assertEquals(5, getCallbackCount());
+            if (BuildInfo.isAtLeastP()) {
+                // There is no AUTOFILL_CANCEL from Android P.
+                assertEquals(4, getCallbackCount());
+            } else {
+                assertEquals(5, getCallbackCount());
+            }
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_B);
             // Check if NotifyVirtualValueChanged() called one more time and value is 'cb', this
             // means javascript change didn't trigger the NotifyVirtualValueChanged().
@@ -989,7 +1249,7 @@ public class AwAutofillTest {
             // Note that we currently depend on keyboard app's behavior.
             // TODO(changwan): mock out IME interaction.
             Assert.assertTrue(
-                    DOMUtils.clickNode(mTestContainerView.getContentViewCore(), "passwordid"));
+                    DOMUtils.clickNode(mTestContainerView.getWebContents(), "passwordid"));
             cnt += waitForCallbackAndVerifyTypes(
                     cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED});
         }
@@ -1076,6 +1336,470 @@ public class AwAutofillTest {
         }
     }
 
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testSelectControlChangeNotification() throws Throwable {
+        int cnt = 0;
+        TestWebServer webServer = TestWebServer.start();
+        final String data = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body>"
+                + "<form action='a.html' name='formname' id='formid'>"
+                + "<input type='text' id='text1' name='username'>"
+                + "<select id='color' autofocus><option value='red'>red</option><option "
+                + "value='blue' id='blue'>blue</option></select>"
+                + "</form>"
+                + "</body>"
+                + "</html>";
+        try {
+            final String url = webServer.setResponse(FILE, data, null);
+            loadUrlSync(url);
+            executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
+            dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
+            cnt += waitForCallbackAndVerifyTypes(cnt,
+                    new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+            clearChangedValues();
+            executeJavaScriptAndWaitForResult("document.getElementById('color').focus();");
+            dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_DPAD_CENTER);
+            // Use key B to select 'blue'.
+            dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_B);
+            cnt += waitForCallbackAndVerifyTypes(cnt,
+                    new Integer[] {
+                            AUTOFILL_VIEW_EXITED, AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+            ArrayList<Pair<Integer, AutofillValue>> values = getChangedValues();
+            assertEquals(1, values.size());
+            assertTrue(values.get(0).second.isList());
+            assertEquals(1, values.get(0).second.getListValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testSelectControlChangeStartAutofillSession() throws Throwable {
+        int cnt = 0;
+        TestWebServer webServer = TestWebServer.start();
+        final String data = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body>"
+                + "<form action='a.html' name='formname' id='formid'>"
+                + "<input type='text' id='text1' name='username'>"
+                + "<select id='color' autofocus><option value='red'>red</option><option "
+                + "value='blue' id='blue'>blue</option></select>"
+                + "</form>"
+                + "</body>"
+                + "</html>";
+        try {
+            final String url = webServer.setResponse(FILE, data, null);
+            loadUrlSync(url);
+            // Change select control first shall start autofill session.
+            dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_DPAD_CENTER);
+            // Use key B to select 'blue'.
+            dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_B);
+            cnt += waitForCallbackAndVerifyTypes(cnt,
+                    new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+            ArrayList<Pair<Integer, AutofillValue>> values = getChangedValues();
+            assertEquals(1, values.size());
+            assertTrue(values.get(0).second.isList());
+            assertEquals(1, values.get(0).second.getListValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUserInitiatedJavascriptSelectControlChangeNotification() throws Throwable {
+        int cnt = 0;
+        TestWebServer webServer = TestWebServer.start();
+        final String data = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body>"
+                + "<script>"
+                + "function myFunction() {"
+                + "  document.getElementById('color').value = 'blue';"
+                + "}"
+                + "</script>"
+                + "<form action='a.html' name='formname' id='formid'>"
+                + "<button onclick='myFunction();' autofocus>button </button>"
+                + "<select id='color' autofocus><option value='red'>red</option><option "
+                + "value='blue' id='blue'>blue</option></select>"
+                + "</form>"
+                + "</body>"
+                + "</html>";
+        try {
+            final String url = webServer.setResponse(FILE, data, null);
+            loadUrlSync(url);
+            // Change select control first shall start autofill session.
+            dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_DPAD_CENTER);
+            cnt += waitForCallbackAndVerifyTypes(cnt,
+                    new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+            ArrayList<Pair<Integer, AutofillValue>> values = getChangedValues();
+            assertEquals(1, values.size());
+            assertTrue(values.get(0).second.isList());
+            assertEquals(1, values.get(0).second.getListValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testJavascriptNotTriggerSelectControlChangeNotification() throws Throwable {
+        int cnt = 0;
+        TestWebServer webServer = TestWebServer.start();
+        final String data = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body onload='myFunction();'>"
+                + "<script>"
+                + "function myFunction() {"
+                + "  document.getElementById('color').value = 'blue';"
+                + "}"
+                + "</script>"
+                + "<form action='a.html' name='formname' id='formid'>"
+                + "<button onclick='myFunction();' autofocus>button </button>"
+                + "<select id='color' autofocus><option value='red'>red</option><option "
+                + "value='blue' id='blue'>blue</option></select>"
+                + "</form>"
+                + "</body>"
+                + "</html>";
+        try {
+            final String url = webServer.setResponse(FILE, data, null);
+            loadUrlSync(url);
+            waitForCallbackAndVerifyTypes(cnt, new Integer[] {});
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserSelectSuggestionUserChangeFormFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.simulateUserSelectSuggestion();
+            mUMATestHelper.simulateUserChangeField();
+            mUMATestHelper.submitForm();
+            assertEquals(AwAutofillUMA.USER_SELECT_SUGGESTION_USER_CHANGE_FORM_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillUMA.FORM_SUBMISSION, mUMATestHelper.getSubmissionSourceValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserSelectSuggestionUserChangeFormNoFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.simulateUserSelectSuggestion();
+            mUMATestHelper.simulateUserChangeField();
+            mUMATestHelper.startNewSession();
+            assertEquals(AwAutofillUMA.USER_SELECT_SUGGESTION_USER_CHANGE_FORM_NO_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserSelectNotSuggestionUserChangeFormNoFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            int count = mUMATestHelper.getHistogramSampleCount(
+                    AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_SUGGESTION_TIME);
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.simulateUserChangeField();
+            mUMATestHelper.startNewSession();
+            assertEquals(
+                    AwAutofillUMA.USER_NOT_SELECT_SUGGESTION_USER_CHANGE_FORM_NO_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+            assertEquals(count + 1,
+                    mUMATestHelper.getHistogramSampleCount(
+                            AwAutofillUMA.UMA_AUTOFILL_WEBVIEW_SUGGESTION_TIME));
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserNotSelectSuggestionUserChangeFormFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.simulateUserChangeField();
+            mUMATestHelper.submitForm();
+            assertEquals(AwAutofillUMA.USER_NOT_SELECT_SUGGESTION_USER_CHANGE_FORM_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillUMA.FORM_SUBMISSION, mUMATestHelper.getSubmissionSourceValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMANoSuggestionUserChangeFormNoFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            mUMATestHelper.simulateUserChangeField();
+            mUMATestHelper.startNewSession();
+            assertEquals(AwAutofillUMA.NO_SUGGESTION_USER_CHANGE_FORM_NO_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserChangedNonAutofilledField();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMANoSuggestionUserChangeFormFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            mUMATestHelper.simulateUserChangeField();
+            mUMATestHelper.submitForm();
+            assertEquals(AwAutofillUMA.NO_SUGGESTION_USER_CHANGE_FORM_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillUMA.FORM_SUBMISSION, mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserChangedNonAutofilledField();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserSelectSuggestionUserNotChangeFormFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.simulateUserSelectSuggestion();
+            mUMATestHelper.submitForm();
+            assertEquals(AwAutofillUMA.USER_SELECT_SUGGESTION_USER_NOT_CHANGE_FORM_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillUMA.FORM_SUBMISSION, mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserDidntChangeForm();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserSelectSuggestionUserNotChangeFormNoFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.simulateUserSelectSuggestion();
+            mUMATestHelper.startNewSession();
+            assertEquals(
+                    AwAutofillUMA.USER_SELECT_SUGGESTION_USER_NOT_CHANGE_FORM_NO_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserDidntChangeForm();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserSelectNotSuggestionUserNotChangeFormNoFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.startNewSession();
+            assertEquals(
+                    AwAutofillUMA.USER_NOT_SELECT_SUGGESTION_USER_NOT_CHANGE_FORM_NO_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserDidntChangeForm();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserNotSelectSuggestionUserNotChangeFormFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.submitForm();
+            assertEquals(
+                    AwAutofillUMA.USER_NOT_SELECT_SUGGESTION_USER_NOT_CHANGE_FORM_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillUMA.FORM_SUBMISSION, mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserDidntChangeForm();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMANoSuggestionUserNotChangeFormNoFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            mUMATestHelper.startNewSession();
+            assertEquals(AwAutofillUMA.NO_SUGGESTION_USER_NOT_CHANGE_FORM_NO_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserDidntChangeForm();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMANoSuggestionUserNotChangeFormFormSubmitted() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            mUMATestHelper.submitForm();
+            assertEquals(AwAutofillUMA.NO_SUGGESTION_USER_NOT_CHANGE_FORM_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillUMA.FORM_SUBMISSION, mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserDidntChangeForm();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMANoCallbackFromFramework() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            mUMATestHelper.startNewSession();
+            assertEquals(
+                    AwAutofillUMA.NO_CALLBACK_FORM_FRAMEWORK, mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAAutofillDisabled() throws Throwable {
+        mTestAwAutofillManager.setDisabled();
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            mUMATestHelper.verifyAutofillDisabled();
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAAutofillEnabled() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            mUMATestHelper.verifyAutofillEnabled();
+            assertEquals(AwAutofillSessionUMATestHelper.NO_FORM_SUBMISSION,
+                    mUMATestHelper.getSubmissionSourceValue());
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAUserChangeAutofilledField() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            mUMATestHelper.triggerAutofill(webServer);
+            invokeOnProvideAutoFillVirtualStructure();
+            invokeOnInputUIShown();
+            mUMATestHelper.simulateUserSelectSuggestion();
+            mUMATestHelper.simulateUserChangeAutofilledField();
+            mUMATestHelper.submitForm();
+            assertEquals(AwAutofillUMA.USER_SELECT_SUGGESTION_USER_CHANGE_FORM_FORM_SUBMITTED,
+                    mUMATestHelper.getSessionValue());
+            assertEquals(AwAutofillUMA.FORM_SUBMISSION, mUMATestHelper.getSubmissionSourceValue());
+            mUMATestHelper.verifyUserChangedAutofilledField();
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testUMAAutofillCreatedByActivityContext() throws Throwable {
+        mUMATestHelper.verifyWebViewCreatedByActivityContext();
+    }
+
     private void loadUrlSync(String url) throws Exception {
         mRule.loadUrlSync(
                 mTestContainerView.getAwContents(), mContentsClient.getOnPageFinishedHelper(), url);
@@ -1113,6 +1837,15 @@ public class AwAutofillTest {
         });
     }
 
+    private void invokeOnInputUIShown() {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mTestAwAutofillManager.notifyInputUIChange();
+            }
+        });
+    }
+
     private int getCallbackCount() {
         return mCallbackHelper.getCallCount();
     }
@@ -1134,23 +1867,35 @@ public class AwAutofillTest {
      */
     private int waitForCallbackAndVerifyTypes(int currentCallCount, Integer[] expectedEventArray)
             throws InterruptedException, TimeoutException {
+        Integer[] adjustedEventArray;
+        // Didn't call cancel after Android P.
+        if (BuildInfo.isAtLeastP()) {
+            ArrayList<Integer> adjusted = new ArrayList<Integer>();
+            for (Integer event : expectedEventArray) {
+                if (event != AUTOFILL_CANCEL) adjusted.add(event);
+            }
+            adjustedEventArray = new Integer[adjusted.size()];
+            adjusted.toArray(adjustedEventArray);
+        } else {
+            adjustedEventArray = expectedEventArray;
+        }
         try {
             // Check against the call count to avoid missing out a callback in between waits, while
             // exposing it so that the test can control where the call count starts.
-            mCallbackHelper.waitForCallback(currentCallCount, expectedEventArray.length);
+            mCallbackHelper.waitForCallback(currentCallCount, adjustedEventArray.length);
             Object[] objectArray = mEventQueue.toArray();
             mEventQueue.clear();
             Integer[] resultArray = Arrays.copyOf(objectArray, objectArray.length, Integer[].class);
-            Assert.assertArrayEquals("Expect: " + Arrays.toString(expectedEventArray)
+            Assert.assertArrayEquals("Expect: " + Arrays.toString(adjustedEventArray)
                             + " Result: " + Arrays.toString(resultArray),
-                    expectedEventArray, resultArray);
-            return expectedEventArray.length;
+                    adjustedEventArray, resultArray);
+            return adjustedEventArray.length;
         } catch (TimeoutException e) {
             Object[] objectArray = mEventQueue.toArray();
             Integer[] resultArray = Arrays.copyOf(objectArray, objectArray.length, Integer[].class);
-            Assert.assertArrayEquals("Expect:" + Arrays.toString(expectedEventArray)
+            Assert.assertArrayEquals("Expect:" + Arrays.toString(adjustedEventArray)
                             + " Result:" + Arrays.toString(resultArray),
-                    expectedEventArray, resultArray);
+                    adjustedEventArray, resultArray);
             throw e;
         }
     }

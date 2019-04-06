@@ -7,10 +7,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
 #include "chrome/browser/background_fetch/background_fetch_download_client.h"
@@ -19,12 +20,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/download/content/factory/download_service_factory.h"
-#include "components/download/public/clients.h"
-#include "components/download/public/download_service.h"
-#include "components/download/public/task_scheduler.h"
+#include "components/download/public/background_service/clients.h"
+#include "components/download/public/background_service/download_service.h"
+#include "components/download/public/background_service/features.h"
+#include "components/download/public/background_service/task_scheduler.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/offline_pages/features/features.h"
+#include "components/offline_pages/buildflags/buildflags.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/download/service/download_task_scheduler.h"
@@ -55,41 +59,57 @@ DownloadServiceFactory::~DownloadServiceFactory() = default;
 
 KeyedService* DownloadServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  auto clients = base::MakeUnique<download::DownloadClientMap>();
+  auto clients = std::make_unique<download::DownloadClientMap>();
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
-  clients->insert(std::make_pair(
-      download::DownloadClient::OFFLINE_PAGE_PREFETCH,
-      base::MakeUnique<offline_pages::OfflinePrefetchDownloadClient>(context)));
+  // Offline prefetch doesn't support incognito.
+  if (!context->IsOffTheRecord()) {
+    clients->insert(std::make_pair(
+        download::DownloadClient::OFFLINE_PAGE_PREFETCH,
+        std::make_unique<offline_pages::OfflinePrefetchDownloadClient>(
+            context)));
+  }
 #endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
 
   clients->insert(
       std::make_pair(download::DownloadClient::BACKGROUND_FETCH,
-                     base::MakeUnique<BackgroundFetchDownloadClient>(context)));
+                     std::make_unique<BackgroundFetchDownloadClient>(context)));
 
-  auto* download_manager = content::BrowserContext::GetDownloadManager(context);
+  // Build in memory download service for incognito profile.
+  if (context->IsOffTheRecord() &&
+      base::FeatureList::IsEnabled(download::kDownloadServiceIncognito)) {
+    content::BrowserContext::BlobContextGetter blob_context_getter =
+        content::BrowserContext::GetBlobStorageContext(context);
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
+        content::BrowserThread::GetTaskRunnerForThread(
+            content::BrowserThread::IO);
 
-  base::FilePath storage_dir;
-  if (!context->IsOffTheRecord() && !context->GetPath().empty()) {
-    storage_dir =
-        context->GetPath().Append(chrome::kDownloadServiceStorageDirname);
-  }
+    return download::BuildInMemoryDownloadService(
+        context, std::move(clients), base::FilePath(), blob_context_getter,
+        io_task_runner);
+  } else {
+    // Build download service for normal profile.
+    base::FilePath storage_dir;
+    if (!context->IsOffTheRecord() && !context->GetPath().empty()) {
+      storage_dir =
+          context->GetPath().Append(chrome::kDownloadServiceStorageDirname);
+    }
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner =
+        base::CreateSequencedTaskRunnerWithTraits(
+            {base::MayBlock(), base::TaskPriority::BACKGROUND});
 
-  scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
-
-  std::unique_ptr<download::TaskScheduler> task_scheduler;
-
+    std::unique_ptr<download::TaskScheduler> task_scheduler;
 #if defined(OS_ANDROID)
-  task_scheduler = base::MakeUnique<download::android::DownloadTaskScheduler>();
+    task_scheduler =
+        std::make_unique<download::android::DownloadTaskScheduler>();
 #else
-  task_scheduler = base::MakeUnique<DownloadTaskSchedulerImpl>(context);
+    task_scheduler = std::make_unique<DownloadTaskSchedulerImpl>(context);
 #endif
 
-  return download::CreateDownloadService(std::move(clients), download_manager,
-                                         storage_dir, background_task_runner,
-                                         std::move(task_scheduler));
+    return download::BuildDownloadService(context, std::move(clients),
+                                          storage_dir, background_task_runner,
+                                          std::move(task_scheduler));
+  }
 }
 
 content::BrowserContext* DownloadServiceFactory::GetBrowserContextToUse(

@@ -6,9 +6,9 @@
 
 #include <stddef.h>
 
+#include "cc/animation/animation.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
-#include "cc/animation/animation_player.h"
 #include "cc/base/math_util.h"
 #include "cc/base/region.h"
 #include "cc/layers/append_quads_data.h"
@@ -154,7 +154,7 @@ LayerTestCommon::LayerImplTest::LayerImplTest(
   host_->host_impl()->active_tree()->SetRootLayerForTesting(std::move(root));
   host_->host_impl()->SetVisible(true);
   EXPECT_TRUE(
-      host_->host_impl()->InitializeRenderer(layer_tree_frame_sink_.get()));
+      host_->host_impl()->InitializeFrameSink(layer_tree_frame_sink_.get()));
 
   const int timeline_id = AnimationIdProvider::NextTimelineId();
   timeline_ = AnimationTimeline::Create(timeline_id);
@@ -191,9 +191,10 @@ void LayerTestCommon::LayerImplTest::AppendQuadsWithOcclusion(
                       SimpleEnclosedRegion(occluded), SimpleEnclosedRegion());
   layer_impl->draw_properties().occlusion_in_content_space = occlusion;
 
-  layer_impl->WillDraw(DRAW_MODE_HARDWARE, resource_provider());
-  layer_impl->AppendQuads(render_pass_.get(), &data);
-  layer_impl->DidDraw(resource_provider());
+  if (layer_impl->WillDraw(DRAW_MODE_HARDWARE, resource_provider())) {
+    layer_impl->AppendQuads(render_pass_.get(), &data);
+    layer_impl->DidDraw(resource_provider());
+  }
 }
 
 void LayerTestCommon::LayerImplTest::AppendQuadsForPassWithOcclusion(
@@ -225,10 +226,7 @@ void LayerTestCommon::LayerImplTest::AppendSurfaceQuadsWithOcclusion(
   surface_impl->set_occlusion_in_content_space(
       Occlusion(gfx::Transform(), SimpleEnclosedRegion(occluded),
                 SimpleEnclosedRegion()));
-  surface_impl->AppendQuads(resource_provider()->IsSoftware()
-                                ? DRAW_MODE_SOFTWARE
-                                : DRAW_MODE_HARDWARE,
-                            render_pass_.get(), &data);
+  surface_impl->AppendQuads(DRAW_MODE_HARDWARE, render_pass_.get(), &data);
 }
 
 void LayerTestCommon::LayerImplTest::RequestCopyOfOutput() {

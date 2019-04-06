@@ -19,11 +19,11 @@
 #include "base/compiler_specific.h"
 #include "gpu/command_buffer/client/client_test_helper.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
+#include "gpu/command_buffer/client/mock_transfer_buffer.h"
 #include "gpu/command_buffer/client/program_info_manager.h"
 #include "gpu/command_buffer/client/query_tracker.h"
 #include "gpu/command_buffer/client/ring_buffer.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
-#include "gpu/command_buffer/client/transfer_buffer.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -94,254 +94,6 @@ struct Str7 {
   char str[7];
 };
 #pragma pack(pop)
-
-class MockTransferBuffer : public TransferBufferInterface {
- public:
-  struct ExpectedMemoryInfo {
-    uint32_t offset;
-    int32_t id;
-    uint8_t* ptr;
-  };
-
-  MockTransferBuffer(
-      CommandBuffer* command_buffer,
-      unsigned int size,
-      unsigned int result_size,
-      unsigned int alignment,
-      bool initialize_fail)
-      : command_buffer_(command_buffer),
-        size_(size),
-        result_size_(result_size),
-        alignment_(alignment),
-        actual_buffer_index_(0),
-        expected_buffer_index_(0),
-        last_alloc_(NULL),
-        expected_offset_(result_size),
-        actual_offset_(result_size),
-        initialize_fail_(initialize_fail) {
-    // We have to allocate the buffers here because
-    // we need to know their address before GLES2Implementation::Initialize
-    // is called.
-    for (int ii = 0; ii < kNumBuffers; ++ii) {
-      buffers_[ii] = command_buffer_->CreateTransferBuffer(
-          size_ + ii * alignment_,
-          &buffer_ids_[ii]);
-      EXPECT_NE(-1, buffer_ids_[ii]);
-    }
-  }
-
-  ~MockTransferBuffer() override = default;
-
-  base::SharedMemoryHandle shared_memory_handle() const override;
-  bool Initialize(unsigned int starting_buffer_size,
-                  unsigned int result_size,
-                  unsigned int /* min_buffer_size */,
-                  unsigned int /* max_buffer_size */,
-                  unsigned int alignment,
-                  unsigned int size_to_flush) override;
-  int GetShmId() override;
-  void* GetResultBuffer() override;
-  int GetResultOffset() override;
-  void Free() override;
-  bool HaveBuffer() const override;
-  void* AllocUpTo(unsigned int size, unsigned int* size_allocated) override;
-  void* Alloc(unsigned int size) override;
-  RingBuffer::Offset GetOffset(void* pointer) const override;
-  void DiscardBlock(void* p) override;
-  void FreePendingToken(void* p, unsigned int /* token */) override;
-  unsigned int GetSize() const override;
-  unsigned int GetFreeSize() const override;
-  unsigned int GetFragmentedFreeSize() const override;
-  void ShrinkLastBlock(unsigned int new_size) override;
-
-  size_t MaxTransferBufferSize() {
-    return size_ - result_size_;
-  }
-
-  unsigned int RoundToAlignment(unsigned int size) {
-    return (size + alignment_ - 1) & ~(alignment_ - 1);
-  }
-
-  bool InSync() {
-    return expected_buffer_index_ == actual_buffer_index_ &&
-           expected_offset_ == actual_offset_;
-  }
-
-  ExpectedMemoryInfo GetExpectedMemory(size_t size) {
-    ExpectedMemoryInfo mem;
-    mem.offset = AllocateExpectedTransferBuffer(size);
-    mem.id = GetExpectedTransferBufferId();
-    mem.ptr = static_cast<uint8_t*>(
-        GetExpectedTransferAddressFromOffset(mem.offset, size));
-    return mem;
-  }
-
-  ExpectedMemoryInfo GetExpectedResultMemory(size_t size) {
-    ExpectedMemoryInfo mem;
-    mem.offset = GetExpectedResultBufferOffset();
-    mem.id = GetExpectedResultBufferId();
-    mem.ptr = static_cast<uint8_t*>(
-        GetExpectedTransferAddressFromOffset(mem.offset, size));
-    return mem;
-  }
-
- private:
-  static const int kNumBuffers = 2;
-
-  uint8_t* actual_buffer() const {
-    return static_cast<uint8_t*>(buffers_[actual_buffer_index_]->memory());
-  }
-
-  uint8_t* expected_buffer() const {
-    return static_cast<uint8_t*>(buffers_[expected_buffer_index_]->memory());
-  }
-
-  uint32_t AllocateExpectedTransferBuffer(size_t size) {
-    EXPECT_LE(size, MaxTransferBufferSize());
-
-    // Toggle which buffer we get each time to simulate the buffer being
-    // reallocated.
-    expected_buffer_index_ = (expected_buffer_index_ + 1) % kNumBuffers;
-
-    if (expected_offset_ + size > size_) {
-      expected_offset_ = result_size_;
-    }
-    uint32_t offset = expected_offset_;
-    expected_offset_ += RoundToAlignment(size);
-
-    // Make sure each buffer has a different offset.
-    return offset + expected_buffer_index_ * alignment_;
-  }
-
-  void* GetExpectedTransferAddressFromOffset(uint32_t offset, size_t size) {
-    EXPECT_GE(offset, expected_buffer_index_ * alignment_);
-    EXPECT_LE(offset + size, size_ + expected_buffer_index_ * alignment_);
-    return expected_buffer() + offset;
-  }
-
-  int GetExpectedResultBufferId() {
-    return buffer_ids_[expected_buffer_index_];
-  }
-
-  uint32_t GetExpectedResultBufferOffset() {
-    return expected_buffer_index_ * alignment_;
-  }
-
-  int GetExpectedTransferBufferId() {
-    return buffer_ids_[expected_buffer_index_];
-  }
-
-  CommandBuffer* command_buffer_;
-  size_t size_;
-  size_t result_size_;
-  uint32_t alignment_;
-  int buffer_ids_[kNumBuffers];
-  scoped_refptr<Buffer> buffers_[kNumBuffers];
-  int actual_buffer_index_;
-  int expected_buffer_index_;
-  void* last_alloc_;
-  uint32_t expected_offset_;
-  uint32_t actual_offset_;
-  bool initialize_fail_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockTransferBuffer);
-};
-
-base::SharedMemoryHandle MockTransferBuffer::shared_memory_handle() const {
-  return base::SharedMemoryHandle();
-}
-
-bool MockTransferBuffer::Initialize(
-    unsigned int starting_buffer_size,
-    unsigned int result_size,
-    unsigned int /* min_buffer_size */,
-    unsigned int /* max_buffer_size */,
-    unsigned int alignment,
-    unsigned int /* size_to_flush */) {
-  // Just check they match.
-  return size_ == starting_buffer_size &&
-         result_size_ == result_size &&
-         alignment_ == alignment && !initialize_fail_;
-};
-
-int MockTransferBuffer::GetShmId() {
-  return buffer_ids_[actual_buffer_index_];
-}
-
-void* MockTransferBuffer::GetResultBuffer() {
-  return actual_buffer() + actual_buffer_index_ * alignment_;
-}
-
-int MockTransferBuffer::GetResultOffset() {
-  return actual_buffer_index_ * alignment_;
-}
-
-void MockTransferBuffer::Free() {
-  NOTREACHED();
-}
-
-bool MockTransferBuffer::HaveBuffer() const {
-  return true;
-}
-
-void* MockTransferBuffer::AllocUpTo(
-    unsigned int size, unsigned int* size_allocated) {
-  EXPECT_TRUE(size_allocated != NULL);
-  EXPECT_TRUE(last_alloc_ == NULL);
-
-  // Toggle which buffer we get each time to simulate the buffer being
-  // reallocated.
-  actual_buffer_index_ = (actual_buffer_index_ + 1) % kNumBuffers;
-
-  size = std::min(static_cast<size_t>(size), MaxTransferBufferSize());
-  if (actual_offset_ + size > size_) {
-    actual_offset_ = result_size_;
-  }
-  uint32_t offset = actual_offset_;
-  actual_offset_ += RoundToAlignment(size);
-  *size_allocated = size;
-
-  // Make sure each buffer has a different offset.
-  last_alloc_ = actual_buffer() + offset + actual_buffer_index_ * alignment_;
-  return last_alloc_;
-}
-
-void* MockTransferBuffer::Alloc(unsigned int size) {
-  EXPECT_LE(size, MaxTransferBufferSize());
-  unsigned int temp = 0;
-  void* p = AllocUpTo(size, &temp);
-  EXPECT_EQ(temp, size);
-  return p;
-}
-
-RingBuffer::Offset MockTransferBuffer::GetOffset(void* pointer) const {
-  // Make sure each buffer has a different offset.
-  return static_cast<uint8_t*>(pointer) - actual_buffer();
-}
-
-void MockTransferBuffer::DiscardBlock(void* p) {
-  EXPECT_EQ(last_alloc_, p);
-  last_alloc_ = NULL;
-}
-
-void MockTransferBuffer::FreePendingToken(void* p, unsigned int /* token */) {
-  EXPECT_EQ(last_alloc_, p);
-  last_alloc_ = NULL;
-}
-
-unsigned int MockTransferBuffer::GetSize() const {
-  return 0;
-}
-
-unsigned int MockTransferBuffer::GetFreeSize() const {
-  return 0;
-}
-
-unsigned int MockTransferBuffer::GetFragmentedFreeSize() const {
-  return 0;
-}
-
-void MockTransferBuffer::ShrinkLastBlock(unsigned int new_size) {}
 
 // API wrapper for Buffers.
 class GenBuffersAPI {
@@ -709,6 +461,8 @@ class GLES2ImplementationTest : public testing::Test {
     return limits;
   }
 
+  void ResetErrorMessageCallback() { gl_->error_message_callback_.Reset(); }
+
   TestContext test_contexts_[kNumTestContexts];
 
   scoped_refptr<ShareGroup> share_group_;
@@ -820,6 +574,30 @@ class GLES2ImplementationStrictSharedTest : public GLES2ImplementationTest {
     ResApi::Delete(gl1, 1, &id2);
     ResApi::Gen(gl2, 1, &id3);
     EXPECT_EQ(id1, id3);
+  }
+
+  // Require that deleting definitely-invalid IDs produces an error.
+  template <class ResApi>
+  void DeletingInvalidIdGeneratesError() {
+    GLES2Implementation* gl1 = test_contexts_[0].gl_.get();
+    GLuint id1;
+    ResApi::Gen(gl1, 1, &id1);
+    const GLuint kDefinitelyInvalidId = 0xBEEF;
+    EXPECT_EQ(GL_NO_ERROR, CheckError());
+    ResApi::Delete(gl1, 1, &kDefinitelyInvalidId);
+    EXPECT_EQ(GL_INVALID_VALUE, CheckError());
+  }
+
+  // Require that double-deleting IDs produces an error.
+  template <class ResApi>
+  void DoubleDeletingIdGeneratesError() {
+    GLES2Implementation* gl1 = test_contexts_[0].gl_.get();
+    GLuint id1;
+    ResApi::Gen(gl1, 1, &id1);
+    ResApi::Delete(gl1, 1, &id1);
+    EXPECT_EQ(GL_NO_ERROR, CheckError());
+    ResApi::Delete(gl1, 1, &id1);
+    EXPECT_EQ(GL_INVALID_VALUE, CheckError());
   }
 };
 
@@ -3195,6 +2973,34 @@ TEST_F(GLES2ImplementationStrictSharedTest,
   CrossContextGenerationAutoFlushTest<GenTexturesAPI>();
 }
 
+// Test deleting an invalid ID.
+TEST_F(GLES2ImplementationStrictSharedTest,
+       DeletingInvalidIdGeneratesErrorBuffers) {
+  DeletingInvalidIdGeneratesError<GenBuffersAPI>();
+}
+TEST_F(GLES2ImplementationStrictSharedTest,
+       DeletingInvalidIdGeneratesErrorRenderbuffers) {
+  DeletingInvalidIdGeneratesError<GenRenderbuffersAPI>();
+}
+TEST_F(GLES2ImplementationStrictSharedTest,
+       DeletingInvalidIdGeneratesErrorTextures) {
+  DeletingInvalidIdGeneratesError<GenTexturesAPI>();
+}
+
+// Test double-deleting the same ID.
+TEST_F(GLES2ImplementationStrictSharedTest,
+       DoubleDeletingIdGeneratesErrorBuffers) {
+  DoubleDeletingIdGeneratesError<GenBuffersAPI>();
+}
+TEST_F(GLES2ImplementationStrictSharedTest,
+       DoubleDeletingIdGeneratesErrorRenderbuffers) {
+  DoubleDeletingIdGeneratesError<GenRenderbuffersAPI>();
+}
+TEST_F(GLES2ImplementationStrictSharedTest,
+       DoubleDeletingIdGeneratesErrorTextures) {
+  DoubleDeletingIdGeneratesError<GenTexturesAPI>();
+}
+
 TEST_F(GLES2ImplementationTest, GetString) {
   const uint32_t kBucketId = GLES2Implementation::kResultBucketId;
   const Str7 kString = {"foobar"};
@@ -3744,10 +3550,10 @@ TEST_F(GLES2ImplementationTest, ProduceTextureDirectCHROMIUM) {
     GLbyte data[GL_MAILBOX_SIZE_CHROMIUM];
   };
 
-  Mailbox mailbox = Mailbox::Generate();
+  Mailbox mailbox;
+  gl_->ProduceTextureDirectCHROMIUM(kTexturesStartId, mailbox.name);
   Cmds expected;
   expected.cmd.Init(kTexturesStartId, mailbox.name);
-  gl_->ProduceTextureDirectCHROMIUM(kTexturesStartId, mailbox.name);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
@@ -4381,59 +4187,6 @@ TEST_F(GLES2ImplementationTest, DeleteBuffersUnmapsDataStore) {
   EXPECT_EQ(GL_INVALID_OPERATION, CheckError());
 }
 
-TEST_F(GLES3ImplementationTest, GetBufferSubDataAsyncCHROMIUM) {
-  const GLuint kBufferId = 123;
-  void* mem;
-
-  const int TARGET_COUNT = 8;
-  GLenum targets[TARGET_COUNT] = {
-    GL_ARRAY_BUFFER,
-    GL_ELEMENT_ARRAY_BUFFER,
-    GL_COPY_READ_BUFFER,
-    GL_COPY_WRITE_BUFFER,
-    GL_TRANSFORM_FEEDBACK_BUFFER,
-    GL_UNIFORM_BUFFER,
-    GL_PIXEL_PACK_BUFFER,
-    GL_PIXEL_UNPACK_BUFFER,
-  };
-
-  // Positive tests
-  for (int i = 0; i < TARGET_COUNT; i++) {
-    gl_->BindBuffer(targets[i], kBufferId);
-    mem = gl_->GetBufferSubDataAsyncCHROMIUM(targets[i], 10, 64);
-    EXPECT_TRUE(mem != nullptr);
-    EXPECT_EQ(GL_NO_ERROR, CheckError());
-    gl_->FreeSharedMemory(mem);
-    EXPECT_EQ(GL_NO_ERROR, CheckError());
-    gl_->BindBuffer(targets[i], 0);
-  }
-
-  // Negative tests: invalid target
-  for (int i = 0; i < TARGET_COUNT; i++) {
-    GLenum wrong_target = targets[(i + 1) % TARGET_COUNT];
-    gl_->BindBuffer(targets[i], kBufferId);
-    mem = gl_->GetBufferSubDataAsyncCHROMIUM(wrong_target, 10, 64);
-    EXPECT_TRUE(mem == nullptr);
-    EXPECT_EQ(GL_INVALID_OPERATION, CheckError());
-    gl_->BindBuffer(targets[i], 0);
-  }
-}
-
-TEST_F(GLES3ImplementationTest, GetBufferSubDataAsyncCHROMIUMInvalidValue) {
-  const GLuint kBufferId = 123;
-  void* mem;
-
-  gl_->BindBuffer(GL_ARRAY_BUFFER, kBufferId);
-
-  mem = gl_->GetBufferSubDataAsyncCHROMIUM(GL_ARRAY_BUFFER, -1, 64);
-  EXPECT_TRUE(mem == nullptr);
-  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
-
-  mem = gl_->GetBufferSubDataAsyncCHROMIUM(GL_ARRAY_BUFFER, 0, -1);
-  EXPECT_TRUE(mem == nullptr);
-  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
-}
-
 TEST_F(GLES2ImplementationTest, GetInternalformativ) {
   const GLint kNumSampleCounts = 8;
   struct Cmds {
@@ -4479,15 +4232,19 @@ TEST_F(GLES2ImplementationTest, SignalSyncToken) {
 
   // Request a signal sync token, which gives a callback to the GpuControl to
   // run when the sync token is reached.
-  base::Closure signal_closure;
-  EXPECT_CALL(*gpu_control_, SignalSyncToken(_, _))
-      .WillOnce(SaveArg<1>(&signal_closure));
-  gl_->SignalSyncToken(sync_token, base::Bind(&CountCallback, &signaled_count));
+  base::OnceClosure signal_closure;
+  EXPECT_CALL(*gpu_control_, DoSignalSyncToken(_, _))
+      .WillOnce(Invoke([&signal_closure](const SyncToken& sync_token,
+                                         base::OnceClosure* callback) {
+        signal_closure = std::move(*callback);
+      }));
+  gl_->SignalSyncToken(sync_token,
+                       base::BindOnce(&CountCallback, &signaled_count));
   EXPECT_EQ(0, signaled_count);
 
   // When GpuControl runs the callback, the original callback we gave to
   // GLES2Implementation is run.
-  signal_closure.Run();
+  std::move(signal_closure).Run();
   EXPECT_EQ(1, signaled_count);
 }
 
@@ -4509,10 +4266,14 @@ TEST_F(GLES2ImplementationTest, SignalSyncTokenAfterContextLoss) {
 
   // Request a signal sync token, which gives a callback to the GpuControl to
   // run when the sync token is reached.
-  base::Closure signal_closure;
-  EXPECT_CALL(*gpu_control_, SignalSyncToken(_, _))
-      .WillOnce(SaveArg<1>(&signal_closure));
-  gl_->SignalSyncToken(sync_token, base::Bind(&CountCallback, &signaled_count));
+  base::OnceClosure signal_closure;
+  EXPECT_CALL(*gpu_control_, DoSignalSyncToken(_, _))
+      .WillOnce(Invoke([&signal_closure](const SyncToken& sync_token,
+                                         base::OnceClosure* callback) {
+        signal_closure = std::move(*callback);
+      }));
+  gl_->SignalSyncToken(sync_token,
+                       base::BindOnce(&CountCallback, &signaled_count));
   EXPECT_EQ(0, signaled_count);
 
   // Inform the GLES2Implementation that the context is lost.
@@ -4522,14 +4283,14 @@ TEST_F(GLES2ImplementationTest, SignalSyncTokenAfterContextLoss) {
   // When GpuControl runs the callback, the original callback we gave to
   // GLES2Implementation is *not* run, since the context is lost and we
   // have already run the lost context callback.
-  signal_closure.Run();
+  std::move(signal_closure).Run();
   EXPECT_EQ(0, signaled_count);
 }
 
 TEST_F(GLES2ImplementationTest, ReportLoss) {
   GpuControlClient* gl_as_client = gl_;
   int lost_count = 0;
-  gl_->SetLostContextCallback(base::Bind(&CountCallback, &lost_count));
+  gl_->SetLostContextCallback(base::BindOnce(&CountCallback, &lost_count));
   EXPECT_EQ(0, lost_count);
 
   EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), gl_->GetGraphicsResetStatusKHR());
@@ -4543,7 +4304,7 @@ TEST_F(GLES2ImplementationTest, ReportLoss) {
 TEST_F(GLES2ImplementationTest, ReportLossReentrant) {
   GpuControlClient* gl_as_client = gl_;
   int lost_count = 0;
-  gl_->SetLostContextCallback(base::Bind(&CountCallback, &lost_count));
+  gl_->SetLostContextCallback(base::BindOnce(&CountCallback, &lost_count));
   EXPECT_EQ(0, lost_count);
 
   EXPECT_EQ(static_cast<GLenum>(GL_NO_ERROR), gl_->GetGraphicsResetStatusKHR());
@@ -4588,13 +4349,16 @@ TEST_F(GLES2ImplementationTest, DiscardableMemoryDelete) {
       share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
 }
 
-TEST_F(GLES2ImplementationTest, DiscardableMemoryLockFail) {
+TEST_F(GLES2ImplementationTest, DiscardableTextureLockFail) {
   const GLuint texture_id = 1;
   gl_->InitializeDiscardableTextureCHROMIUM(texture_id);
   EXPECT_TRUE(
       share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
 
-  // Unlock and delete the handle.
+  // Unlock the handle on the client side.
+  gl_->UnlockDiscardableTextureCHROMIUM(texture_id);
+
+  // Unlock and delete the handle on the service side.
   ClientDiscardableHandle client_handle =
       share_group_->discardable_texture_manager()->GetHandleForTesting(
           texture_id);
@@ -4610,7 +4374,7 @@ TEST_F(GLES2ImplementationTest, DiscardableMemoryLockFail) {
       share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
 }
 
-TEST_F(GLES2ImplementationTest, DiscardableMemoryDoubleInitError) {
+TEST_F(GLES2ImplementationTest, DiscardableTextureDoubleInitError) {
   const GLuint texture_id = 1;
   gl_->InitializeDiscardableTextureCHROMIUM(texture_id);
   EXPECT_EQ(GL_NO_ERROR, CheckError());
@@ -4618,10 +4382,63 @@ TEST_F(GLES2ImplementationTest, DiscardableMemoryDoubleInitError) {
   EXPECT_EQ(GL_INVALID_VALUE, CheckError());
 }
 
-TEST_F(GLES2ImplementationTest, DiscardableMemoryLockError) {
+TEST_F(GLES2ImplementationTest, DiscardableTextureLockError) {
   const GLuint texture_id = 1;
   EXPECT_FALSE(gl_->LockDiscardableTextureCHROMIUM(texture_id));
   EXPECT_EQ(GL_INVALID_VALUE, CheckError());
+}
+
+TEST_F(GLES2ImplementationTest, DiscardableTextureLockCounting) {
+  const GLint texture_id = 1;
+  gl_->InitializeDiscardableTextureCHROMIUM(texture_id);
+  EXPECT_TRUE(
+      share_group_->discardable_texture_manager()->TextureIsValid(texture_id));
+
+  // Bind the texture.
+  gl_->BindTexture(GL_TEXTURE_2D, texture_id);
+  GLint bound_texture_id = 0;
+  gl_->GetIntegerv(GL_TEXTURE_BINDING_2D, &bound_texture_id);
+  EXPECT_EQ(texture_id, bound_texture_id);
+
+  // Lock the texture 3 more times (for 4 locks total).
+  for (int i = 0; i < 3; ++i) {
+    gl_->LockDiscardableTextureCHROMIUM(texture_id);
+  }
+
+  // Unlock 4 times. Only after the last unlock should the texture be unbound.
+  for (int i = 0; i < 4; ++i) {
+    gl_->UnlockDiscardableTextureCHROMIUM(texture_id);
+    bound_texture_id = 0;
+    gl_->GetIntegerv(GL_TEXTURE_BINDING_2D, &bound_texture_id);
+    if (i < 3) {
+      EXPECT_EQ(texture_id, bound_texture_id);
+    } else {
+      EXPECT_EQ(0, bound_texture_id);
+    }
+  }
+}
+
+struct ErrorMessageCounter {
+  explicit ErrorMessageCounter(GLES2Implementation* gl) : gl(gl) {}
+
+  void Callback(const char* message, int32_t id) {
+    if (++num_calls == 1)
+      gl->ShaderBinary(-1, nullptr, 0, nullptr, 0);
+  }
+
+  GLES2Implementation* gl;
+  int32_t num_calls = 0;
+};
+
+TEST_F(GLES2ImplementationTest, ReentrantErrorCallbacksShouldNotCrash) {
+  ErrorMessageCounter counter(gl_);
+  gl_->SetErrorMessageCallback(base::BindRepeating(
+      &ErrorMessageCounter::Callback, base::Unretained(&counter)));
+  // Call any function which can easily provoke an error. See also the
+  // callback above.
+  gl_->ShaderBinary(-1, nullptr, 0, nullptr, 0);
+  EXPECT_EQ(2, counter.num_calls);
+  ResetErrorMessageCallback();
 }
 
 #include "base/macros.h"

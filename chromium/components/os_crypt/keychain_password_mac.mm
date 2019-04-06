@@ -32,14 +32,9 @@ std::string AddRandomPasswordToKeychain(const AppleKeychain& keychain,
   void* password_data =
       const_cast<void*>(static_cast<const void*>(password.data()));
 
-  OSStatus error = keychain.AddGenericPassword(NULL,
-                                               service_name.size(),
-                                               service_name.data(),
-                                               account_name.size(),
-                                               account_name.data(),
-                                               password.size(),
-                                               password_data,
-                                               NULL);
+  OSStatus error = keychain.AddGenericPassword(
+      service_name.size(), service_name.data(), account_name.size(),
+      account_name.data(), password.size(), password_data, NULL);
 
   if (error != noErr) {
     OSSTATUS_DLOG(ERROR, error) << "Keychain add failed";
@@ -55,8 +50,8 @@ std::string AddRandomPasswordToKeychain(const AppleKeychain& keychain,
 // the encryption keyword.  So as to not lose encrypted data when system
 // locale changes we DO NOT LOCALIZE.
 #if defined(GOOGLE_CHROME_BUILD)
-const char KeychainPassword::service_name[] = "Chrome Safe Storage";
-const char KeychainPassword::account_name[] = "Chrome";
+const char KeychainPassword::service_name[] = "Vivaldi Safe Storage";
+const char KeychainPassword::account_name[] = "Vivaldi";
 #else
 const char KeychainPassword::service_name[] = "Chromium Safe Storage";
 const char KeychainPassword::account_name[] = "Chromium";
@@ -66,13 +61,13 @@ std::string KeychainPassword::GetPassword() const {
   UInt32 password_length = 0;
   void* password_data = NULL;
   OSStatus error = keychain_.FindGenericPassword(
-      nullptr, strlen(service_name), service_name, strlen(account_name),
-      account_name, &password_length, &password_data, NULL);
+      strlen(service_name), service_name, strlen(account_name), account_name,
+      &password_length, &password_data, NULL);
 
   if (error == noErr) {
     std::string password =
         std::string(static_cast<char*>(password_data), password_length);
-    keychain_.ItemFreeContent(NULL, password_data);
+    keychain_.ItemFreeContent(password_data);
     return password;
   } else if (error == errSecItemNotFound) {
     return AddRandomPasswordToKeychain(keychain_, service_name, account_name);
@@ -90,8 +85,7 @@ std::string KeychainPassword::GetPassword(
 
   UInt32 password_length = 0;
   void* password_data = NULL;
-  OSStatus error = keychain_.FindGenericPassword(NULL,
-                                                 service_name.size(),
+  OSStatus error = keychain_.FindGenericPassword(service_name.size(),
                                                  service_name.data(),
                                                  account_name.size(),
                                                  account_name.data(),
@@ -102,7 +96,7 @@ std::string KeychainPassword::GetPassword(
   if (error == noErr) {
     std::string password =
     std::string(static_cast<char*>(password_data), password_length);
-    keychain_.ItemFreeContent(NULL, password_data);
+    keychain_.ItemFreeContent(password_data);
     return password;
   } else if (error == errSecItemNotFound) {
     // The requested account has no passwords in keychain, we can stop

@@ -10,6 +10,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "content/browser/background_fetch/background_fetch_request_info.h"
 #include "content/browser/background_fetch/background_fetch_test_base.h"
+#include "content/public/browser/browser_thread.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -60,7 +61,7 @@ class FakeController : public BackgroundFetchScheduler::Controller {
   }
 
   static void OnJobFinished(const BackgroundFetchRegistrationId&,
-                            bool aborted) {}
+                            BackgroundFetchReasonToAbort reason_to_abort) {}
 
   int jobs_started_ = 0;
   BackgroundFetchScheduler* scheduler_;
@@ -80,7 +81,7 @@ class BackgroundFetchSchedulerTest
   void PostQuitAfterRepeatingBarriers(base::Closure quit_closure,
                                       int number_of_barriers) {
     if (--number_of_barriers == 0) {
-      quit_closure.Run();
+      std::move(quit_closure).Run();
       return;
     }
 
@@ -88,7 +89,8 @@ class BackgroundFetchSchedulerTest
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(
             &BackgroundFetchSchedulerTest::PostQuitAfterRepeatingBarriers,
-            base::Unretained(this), quit_closure, number_of_barriers));
+            base::Unretained(this), std::move(quit_closure),
+            number_of_barriers));
   }
 
   void PopNextRequest(

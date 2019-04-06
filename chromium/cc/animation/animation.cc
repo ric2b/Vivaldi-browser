@@ -1,297 +1,381 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "cc/animation/animation.h"
 
-#include <cmath>
+#include <inttypes.h>
+#include <algorithm>
 
-#include "base/memory/ptr_util.h"
-#include "base/strings/string_util.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/trace_event/trace_event.h"
-#include "cc/animation/animation_curve.h"
-
-namespace {
-
-// This should match the RunState enum.
-static const char* const s_runStateNames[] = {"WAITING_FOR_TARGET_AVAILABILITY",
-                                              "WAITING_FOR_DELETION",
-                                              "STARTING",
-                                              "RUNNING",
-                                              "PAUSED",
-                                              "FINISHED",
-                                              "ABORTED",
-                                              "ABORTED_BUT_NEEDS_COMPLETION"};
-
-static_assert(static_cast<int>(cc::Animation::LAST_RUN_STATE) + 1 ==
-                  arraysize(s_runStateNames),
-              "RunStateEnumSize should equal the number of elements in "
-              "s_runStateNames");
-
-static const char* const s_curveTypeNames[] = {
-    "COLOR", "FLOAT", "TRANSFORM", "FILTER", "SCROLL_OFFSET", "SIZE"};
-
-static_assert(static_cast<int>(cc::AnimationCurve::LAST_CURVE_TYPE) + 1 ==
-                  arraysize(s_curveTypeNames),
-              "CurveType enum should equal the number of elements in "
-              "s_runStateNames");
-
-}  // namespace
+#include "cc/animation/animation_delegate.h"
+#include "cc/animation/animation_events.h"
+#include "cc/animation/animation_host.h"
+#include "cc/animation/animation_timeline.h"
+#include "cc/animation/keyframe_effect.h"
+#include "cc/animation/scroll_offset_animation_curve.h"
+#include "cc/animation/transform_operations.h"
+#include "cc/trees/property_animation_state.h"
 
 namespace cc {
 
-std::string Animation::ToString(RunState state) {
-  return s_runStateNames[state];
+scoped_refptr<Animation> Animation::Create(int id) {
+  return base::WrapRefCounted(new Animation(id));
 }
 
-std::unique_ptr<Animation> Animation::Create(
-    std::unique_ptr<AnimationCurve> curve,
-    int animation_id,
-    int group_id,
-    int target_property_id) {
-  return base::WrapUnique(new Animation(std::move(curve), animation_id,
-                                        group_id, target_property_id));
+Animation::Animation(int id)
+    : animation_host_(),
+      animation_timeline_(),
+      animation_delegate_(),
+      id_(id),
+      ticking_keyframe_effects_count(0) {
+  DCHECK(id_);
 }
-
-Animation::Animation(std::unique_ptr<AnimationCurve> curve,
-                     int animation_id,
-                     int group_id,
-                     int target_property_id)
-    : curve_(std::move(curve)),
-      id_(animation_id),
-      group_(group_id),
-      target_property_id_(target_property_id),
-      run_state_(WAITING_FOR_TARGET_AVAILABILITY),
-      iterations_(1),
-      iteration_start_(0),
-      direction_(Direction::NORMAL),
-      playback_rate_(1),
-      fill_mode_(FillMode::BOTH),
-      needs_synchronized_start_time_(false),
-      received_finished_event_(false),
-      suspended_(false),
-      is_controlling_instance_(false),
-      is_impl_only_(false),
-      affects_active_elements_(true),
-      affects_pending_elements_(true) {}
 
 Animation::~Animation() {
-  if (run_state_ == RUNNING || run_state_ == PAUSED)
-    SetRunState(ABORTED, base::TimeTicks());
+  DCHECK(!animation_timeline_);
 }
 
-void Animation::SetRunState(RunState run_state,
-                            base::TimeTicks monotonic_time) {
-  if (suspended_)
+scoped_refptr<Animation> Animation::CreateImplInstance() const {
+  return Animation::Create(id());
+}
+
+ElementId Animation::element_id_of_keyframe_effect(
+    KeyframeEffectId keyframe_effect_id) const {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  return GetKeyframeEffectById(keyframe_effect_id)->element_id();
+}
+
+bool Animation::IsElementAttached(ElementId id) const {
+  return !!element_to_keyframe_effect_id_map_.count(id);
+}
+
+void Animation::SetAnimationHost(AnimationHost* animation_host) {
+  animation_host_ = animation_host;
+}
+
+void Animation::SetAnimationTimeline(AnimationTimeline* timeline) {
+  if (animation_timeline_ == timeline)
     return;
 
-  char name_buffer[256];
-  base::snprintf(name_buffer, sizeof(name_buffer), "%s-%d-%d",
-                 s_curveTypeNames[curve_->Type()], target_property_id_, group_);
-
-  bool is_waiting_to_start =
-      run_state_ == WAITING_FOR_TARGET_AVAILABILITY || run_state_ == STARTING;
-
-  if (is_controlling_instance_ && is_waiting_to_start && run_state == RUNNING) {
-    TRACE_EVENT_ASYNC_BEGIN1(
-        "cc", "Animation", this, "Name", TRACE_STR_COPY(name_buffer));
+  // We need to unregister keyframe_effect to manage ElementAnimations and
+  // observers properly.
+  if (!element_to_keyframe_effect_id_map_.empty() && animation_host_) {
+    // Destroy ElementAnimations or release it if it's still needed.
+    UnregisterKeyframeEffects();
   }
 
-  bool was_finished = is_finished();
+  animation_timeline_ = timeline;
 
-  const char* old_run_state_name = s_runStateNames[run_state_];
-
-  if (run_state == RUNNING && run_state_ == PAUSED)
-    total_paused_time_ += (monotonic_time - pause_time_);
-  else if (run_state == PAUSED)
-    pause_time_ = monotonic_time;
-  run_state_ = run_state;
-
-  const char* new_run_state_name = s_runStateNames[run_state];
-
-  if (is_controlling_instance_ && !was_finished && is_finished())
-    TRACE_EVENT_ASYNC_END0("cc", "Animation", this);
-
-  char state_buffer[256];
-  base::snprintf(state_buffer,
-                 sizeof(state_buffer),
-                 "%s->%s",
-                 old_run_state_name,
-                 new_run_state_name);
-
-  TRACE_EVENT_INSTANT2(
-      "cc", "ElementAnimations::SetRunState", TRACE_EVENT_SCOPE_THREAD, "Name",
-      TRACE_STR_COPY(name_buffer), "State", TRACE_STR_COPY(state_buffer));
+  // Register animation only if layer AND host attached. Unlike the
+  // SingleKeyframeEffectAnimation case, all keyframe_effects have been attached
+  // to their corresponding elements.
+  if (!element_to_keyframe_effect_id_map_.empty() && animation_host_) {
+    RegisterKeyframeEffects();
+  }
 }
 
-void Animation::Suspend(base::TimeTicks monotonic_time) {
-  SetRunState(PAUSED, monotonic_time);
-  suspended_ = true;
+bool Animation::has_element_animations() const {
+  return !element_to_keyframe_effect_id_map_.empty();
 }
 
-void Animation::Resume(base::TimeTicks monotonic_time) {
-  suspended_ = false;
-  SetRunState(RUNNING, monotonic_time);
+scoped_refptr<ElementAnimations> Animation::element_animations(
+    KeyframeEffectId keyframe_effect_id) const {
+  return GetKeyframeEffectById(keyframe_effect_id)->element_animations();
 }
 
-bool Animation::IsFinishedAt(base::TimeTicks monotonic_time) const {
-  if (is_finished())
-    return true;
-
-  if (needs_synchronized_start_time_)
-    return false;
-
-  if (playback_rate_ == 0)
-    return false;
-
-  return run_state_ == RUNNING && iterations_ >= 0 &&
-         (curve_->Duration() * (iterations_ / std::abs(playback_rate_))) <=
-             (monotonic_time + time_offset_ - start_time_ - total_paused_time_);
+void Animation::AttachElementForKeyframeEffect(
+    ElementId element_id,
+    KeyframeEffectId keyframe_effect_id) {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  GetKeyframeEffectById(keyframe_effect_id)->AttachElement(element_id);
+  element_to_keyframe_effect_id_map_[element_id].emplace(keyframe_effect_id);
+  // Register animation only if layer AND host attached.
+  if (animation_host_) {
+    // Create ElementAnimations or re-use existing.
+    RegisterKeyframeEffect(element_id, keyframe_effect_id);
+  }
 }
 
-bool Animation::InEffect(base::TimeTicks monotonic_time) const {
-  return ConvertToActiveTime(monotonic_time) >= base::TimeDelta() ||
-         (fill_mode_ == FillMode::BOTH || fill_mode_ == FillMode::BACKWARDS);
+void Animation::DetachElementForKeyframeEffect(
+    ElementId element_id,
+    KeyframeEffectId keyframe_effect_id) {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  DCHECK_EQ(GetKeyframeEffectById(keyframe_effect_id)->element_id(),
+            element_id);
+
+  UnregisterKeyframeEffect(element_id, keyframe_effect_id);
+  GetKeyframeEffectById(keyframe_effect_id)->DetachElement();
+  element_to_keyframe_effect_id_map_[element_id].erase(keyframe_effect_id);
 }
 
-base::TimeTicks Animation::ConvertFromActiveTime(
-    base::TimeDelta active_time) const {
-  // When waiting on receiving a start time, then our global clock is 'stuck' at
-  // the initial state.
-  if ((run_state_ == STARTING && !has_set_start_time()) ||
-      needs_synchronized_start_time())
-    return base::TimeTicks();
-
-  // If we're paused, time is 'stuck' at the pause time.
-  if (run_state_ == PAUSED)
-    return pause_time_ - time_offset_;
-
-  return active_time - time_offset_ + start_time_ + total_paused_time_;
-}
-
-base::TimeDelta Animation::ConvertToActiveTime(
-    base::TimeTicks monotonic_time) const {
-  // If we're just starting or we're waiting on receiving a start time,
-  // time is 'stuck' at the initial state.
-  if ((run_state_ == STARTING && !has_set_start_time()) ||
-      needs_synchronized_start_time()) {
-    return time_offset_;
+void Animation::DetachElement() {
+  if (animation_host_) {
+    // Destroy ElementAnimations or release it if it's still needed.
+    UnregisterKeyframeEffects();
   }
 
-  // Compute active time. If we're paused, time is 'stuck' at the pause time.
-  base::TimeTicks active_time =
-      (run_state_ == PAUSED) ? pause_time_ : (monotonic_time + time_offset_);
-
-  // Returned time should always be relative to the start time and should
-  // subtract all time spent paused.
-  return active_time - start_time_ - total_paused_time_;
-}
-
-base::TimeDelta Animation::TrimTimeToCurrentIteration(
-    base::TimeTicks monotonic_time) const {
-  // Check for valid parameters
-  DCHECK(playback_rate_);
-  DCHECK_GE(iteration_start_, 0);
-
-  base::TimeDelta active_time = ConvertToActiveTime(monotonic_time);
-  base::TimeDelta start_offset = curve_->Duration() * iteration_start_;
-
-  // Return start offset if we are before the start of the animation
-  if (active_time < base::TimeDelta())
-    return start_offset;
-  // Always return zero if we have no iterations.
-  if (!iterations_)
-    return base::TimeDelta();
-
-  // Don't attempt to trim if we have no duration.
-  if (curve_->Duration() <= base::TimeDelta())
-    return base::TimeDelta();
-
-  base::TimeDelta repeated_duration = curve_->Duration() * iterations_;
-  base::TimeDelta active_duration =
-      repeated_duration / std::abs(playback_rate_);
-
-  // Check if we are past active duration
-  if (iterations_ > 0 && active_time >= active_duration)
-    active_time = active_duration;
-
-  // Calculate the scaled active time
-  base::TimeDelta scaled_active_time;
-  if (playback_rate_ < 0) {
-    scaled_active_time =
-        ((active_time - active_duration) * playback_rate_) + start_offset;
-  } else {
-    scaled_active_time = (active_time * playback_rate_) + start_offset;
+  for (auto pair = element_to_keyframe_effect_id_map_.begin();
+       pair != element_to_keyframe_effect_id_map_.end();) {
+    for (auto keyframe_effect = pair->second.begin();
+         keyframe_effect != pair->second.end();) {
+      GetKeyframeEffectById(*keyframe_effect)->DetachElement();
+      keyframe_effect = pair->second.erase(keyframe_effect);
+    }
+    pair = element_to_keyframe_effect_id_map_.erase(pair);
   }
-
-  // Calculate the iteration time
-  base::TimeDelta iteration_time;
-  if (scaled_active_time - start_offset == repeated_duration &&
-      fmod(iterations_ + iteration_start_, 1) == 0)
-    iteration_time = curve_->Duration();
-  else
-    iteration_time = scaled_active_time % curve_->Duration();
-
-  // Calculate the current iteration
-  int iteration;
-  if (scaled_active_time <= base::TimeDelta())
-    iteration = 0;
-  else if (iteration_time == curve_->Duration())
-    iteration = ceil(iteration_start_ + iterations_ - 1);
-  else
-    iteration = static_cast<int>(scaled_active_time / curve_->Duration());
-
-  // Check if we are running the animation in reverse direction for the current
-  // iteration
-  bool reverse =
-      (direction_ == Direction::REVERSE) ||
-      (direction_ == Direction::ALTERNATE_NORMAL && iteration % 2 == 1) ||
-      (direction_ == Direction::ALTERNATE_REVERSE && iteration % 2 == 0);
-
-  // If we are running the animation in reverse direction, reverse the result
-  if (reverse)
-    iteration_time = curve_->Duration() - iteration_time;
-
-  return iteration_time;
+  DCHECK_EQ(element_to_keyframe_effect_id_map_.size(), 0u);
 }
 
-std::unique_ptr<Animation> Animation::CloneAndInitialize(
-    RunState initial_run_state) const {
-  std::unique_ptr<Animation> to_return(
-      new Animation(curve_->Clone(), id_, group_, target_property_id_));
-  to_return->run_state_ = initial_run_state;
-  to_return->iterations_ = iterations_;
-  to_return->iteration_start_ = iteration_start_;
-  to_return->start_time_ = start_time_;
-  to_return->pause_time_ = pause_time_;
-  to_return->total_paused_time_ = total_paused_time_;
-  to_return->time_offset_ = time_offset_;
-  to_return->direction_ = direction_;
-  to_return->playback_rate_ = playback_rate_;
-  to_return->fill_mode_ = fill_mode_;
-  DCHECK(!to_return->is_controlling_instance_);
-  to_return->is_controlling_instance_ = true;
-  return to_return;
+void Animation::RegisterKeyframeEffect(ElementId element_id,
+                                       KeyframeEffectId keyframe_effect_id) {
+  DCHECK(animation_host_);
+  KeyframeEffect* keyframe_effect = GetKeyframeEffectById(keyframe_effect_id);
+  DCHECK(!keyframe_effect->has_bound_element_animations());
+
+  if (!keyframe_effect->has_attached_element())
+    return;
+  animation_host_->RegisterKeyframeEffectForElement(element_id,
+                                                    keyframe_effect);
 }
 
-void Animation::PushPropertiesTo(Animation* other) const {
-  // Currently, we only push changes due to pausing and resuming animations on
-  // the main thread.
-  if (run_state_ == Animation::PAUSED ||
-      other->run_state_ == Animation::PAUSED) {
-    other->run_state_ = run_state_;
-    other->pause_time_ = pause_time_;
-    other->total_paused_time_ = total_paused_time_;
+void Animation::UnregisterKeyframeEffect(ElementId element_id,
+                                         KeyframeEffectId keyframe_effect_id) {
+  DCHECK(animation_host_);
+  KeyframeEffect* keyframe_effect = GetKeyframeEffectById(keyframe_effect_id);
+  DCHECK(keyframe_effect);
+  if (keyframe_effect->has_attached_element() &&
+      keyframe_effect->has_bound_element_animations()) {
+    animation_host_->UnregisterKeyframeEffectForElement(element_id,
+                                                        keyframe_effect);
   }
+}
+void Animation::RegisterKeyframeEffects() {
+  for (auto& element_id_keyframe_effect_id :
+       element_to_keyframe_effect_id_map_) {
+    const ElementId element_id = element_id_keyframe_effect_id.first;
+    const std::unordered_set<KeyframeEffectId>& keyframe_effect_ids =
+        element_id_keyframe_effect_id.second;
+    for (auto& keyframe_effect_id : keyframe_effect_ids)
+      RegisterKeyframeEffect(element_id, keyframe_effect_id);
+  }
+}
+
+void Animation::UnregisterKeyframeEffects() {
+  for (auto& element_id_keyframe_effect_id :
+       element_to_keyframe_effect_id_map_) {
+    const ElementId element_id = element_id_keyframe_effect_id.first;
+    const std::unordered_set<KeyframeEffectId>& keyframe_effect_ids =
+        element_id_keyframe_effect_id.second;
+    for (auto& keyframe_effect_id : keyframe_effect_ids)
+      UnregisterKeyframeEffect(element_id, keyframe_effect_id);
+  }
+  animation_host_->RemoveFromTicking(this);
+}
+
+void Animation::PushAttachedKeyframeEffectsToImplThread(
+    Animation* animation_impl) const {
+  for (auto& keyframe_effect : keyframe_effects_) {
+    KeyframeEffect* keyframe_effect_impl =
+        animation_impl->GetKeyframeEffectById(keyframe_effect->id());
+    if (keyframe_effect_impl)
+      continue;
+
+    std::unique_ptr<KeyframeEffect> to_add =
+        keyframe_effect->CreateImplInstance();
+    animation_impl->AddKeyframeEffect(std::move(to_add));
+  }
+}
+
+void Animation::PushPropertiesToImplThread(Animation* animation_impl) {
+  for (auto& keyframe_effect : keyframe_effects_) {
+    if (KeyframeEffect* keyframe_effect_impl =
+            animation_impl->GetKeyframeEffectById(keyframe_effect->id())) {
+      keyframe_effect->PushPropertiesTo(keyframe_effect_impl);
+    }
+  }
+}
+
+void Animation::AddKeyframeModelForKeyframeEffect(
+    std::unique_ptr<KeyframeModel> keyframe_model,
+    KeyframeEffectId keyframe_effect_id) {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  GetKeyframeEffectById(keyframe_effect_id)
+      ->AddKeyframeModel(std::move(keyframe_model));
+}
+
+void Animation::PauseKeyframeModelForKeyframeEffect(
+    int keyframe_model_id,
+    double time_offset,
+    KeyframeEffectId keyframe_effect_id) {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  GetKeyframeEffectById(keyframe_effect_id)
+      ->PauseKeyframeModel(keyframe_model_id, time_offset);
+}
+
+void Animation::RemoveKeyframeModelForKeyframeEffect(
+    int keyframe_model_id,
+    KeyframeEffectId keyframe_effect_id) {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  GetKeyframeEffectById(keyframe_effect_id)
+      ->RemoveKeyframeModel(keyframe_model_id);
+}
+
+void Animation::AbortKeyframeModelForKeyframeEffect(
+    int keyframe_model_id,
+    KeyframeEffectId keyframe_effect_id) {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  GetKeyframeEffectById(keyframe_effect_id)
+      ->AbortKeyframeModel(keyframe_model_id);
+}
+
+void Animation::AbortKeyframeModelsWithProperty(
+    TargetProperty::Type target_property,
+    bool needs_completion) {
+  for (auto& keyframe_effect : keyframe_effects_)
+    keyframe_effect->AbortKeyframeModelsWithProperty(target_property,
+                                                     needs_completion);
+}
+
+void Animation::PushPropertiesTo(Animation* animation_impl) {
+  // In general when pushing proerties to impl thread we first push attached
+  // properties to impl followed by removing the detached ones. However, we
+  // never remove individual keyframe effect from an animation so there is no
+  // need to remove the detached ones.
+  PushAttachedKeyframeEffectsToImplThread(animation_impl);
+  PushPropertiesToImplThread(animation_impl);
+}
+
+void Animation::Tick(base::TimeTicks monotonic_time) {
+  DCHECK(!monotonic_time.is_null());
+  for (auto& keyframe_effect : keyframe_effects_)
+    keyframe_effect->Tick(monotonic_time);
+}
+
+void Animation::UpdateState(bool start_ready_animations,
+                            AnimationEvents* events) {
+  for (auto& keyframe_effect : keyframe_effects_) {
+    keyframe_effect->UpdateState(start_ready_animations, events);
+    keyframe_effect->UpdateTickingState(UpdateTickingType::NORMAL);
+  }
+}
+
+void Animation::AddToTicking() {
+  ++ticking_keyframe_effects_count;
+  if (ticking_keyframe_effects_count > 1)
+    return;
+  DCHECK(animation_host_);
+  animation_host_->AddToTicking(this);
+}
+
+void Animation::KeyframeModelRemovedFromTicking() {
+  DCHECK_GE(ticking_keyframe_effects_count, 0);
+  if (!ticking_keyframe_effects_count)
+    return;
+  --ticking_keyframe_effects_count;
+  DCHECK(animation_host_);
+  DCHECK_GE(ticking_keyframe_effects_count, 0);
+  if (ticking_keyframe_effects_count)
+    return;
+  animation_host_->RemoveFromTicking(this);
+}
+
+void Animation::NotifyKeyframeModelStarted(const AnimationEvent& event) {
+  if (animation_delegate_) {
+    animation_delegate_->NotifyAnimationStarted(
+        event.monotonic_time, event.target_property, event.group_id);
+  }
+}
+
+void Animation::NotifyKeyframeModelFinished(const AnimationEvent& event) {
+  if (animation_delegate_) {
+    animation_delegate_->NotifyAnimationFinished(
+        event.monotonic_time, event.target_property, event.group_id);
+  }
+}
+
+void Animation::NotifyKeyframeModelAborted(const AnimationEvent& event) {
+  if (animation_delegate_) {
+    animation_delegate_->NotifyAnimationAborted(
+        event.monotonic_time, event.target_property, event.group_id);
+  }
+}
+
+void Animation::NotifyKeyframeModelTakeover(const AnimationEvent& event) {
+  DCHECK(event.target_property == TargetProperty::SCROLL_OFFSET);
+
+  if (animation_delegate_) {
+    DCHECK(event.curve);
+    std::unique_ptr<AnimationCurve> animation_curve = event.curve->Clone();
+    animation_delegate_->NotifyAnimationTakeover(
+        event.monotonic_time, event.target_property, event.animation_start_time,
+        std::move(animation_curve));
+  }
+}
+
+size_t Animation::TickingKeyframeModelsCount() const {
+  size_t count = 0;
+  for (auto& keyframe_effect : keyframe_effects_)
+    count += keyframe_effect->TickingKeyframeModelsCount();
+  return count;
+}
+
+void Animation::SetNeedsCommit() {
+  DCHECK(animation_host_);
+  animation_host_->SetNeedsCommit();
+}
+
+void Animation::SetNeedsPushProperties() {
+  if (!animation_timeline_)
+    return;
+  animation_timeline_->SetNeedsPushProperties();
+}
+
+void Animation::ActivateKeyframeEffects() {
+  for (auto& keyframe_effect : keyframe_effects_) {
+    keyframe_effect->ActivateKeyframeEffects();
+    keyframe_effect->UpdateTickingState(UpdateTickingType::NORMAL);
+  }
+}
+
+KeyframeModel* Animation::GetKeyframeModelForKeyframeEffect(
+    TargetProperty::Type target_property,
+    KeyframeEffectId keyframe_effect_id) const {
+  DCHECK(GetKeyframeEffectById(keyframe_effect_id));
+  return GetKeyframeEffectById(keyframe_effect_id)
+      ->GetKeyframeModel(target_property);
 }
 
 std::string Animation::ToString() const {
-  return base::StringPrintf(
-      "Animation{id=%d, group=%d, target_property_id=%d, "
-      "run_state=%s}",
-      id_, group_, target_property_id_,
-      Animation::ToString(run_state_).c_str());
+  std::string output = base::StringPrintf("Animation{id=%d", id_);
+  for (const auto& keyframe_effect : keyframe_effects_) {
+    output +=
+        base::StringPrintf(", element_id=%s, keyframe_models=[%s]",
+                           keyframe_effect->element_id().ToString().c_str(),
+                           keyframe_effect->KeyframeModelsToString().c_str());
+  }
+  return output + "}";
+}
+
+bool Animation::IsWorkletAnimation() const {
+  return false;
+}
+
+void Animation::AddKeyframeEffect(
+    std::unique_ptr<KeyframeEffect> keyframe_effect) {
+  keyframe_effect->SetAnimation(this);
+  keyframe_effects_.push_back(std::move(keyframe_effect));
+
+  SetNeedsPushProperties();
+}
+
+KeyframeEffect* Animation::GetKeyframeEffectById(
+    KeyframeEffectId keyframe_effect_id) const {
+  // May return nullptr when syncing keyframe_effects_ to impl.
+  return keyframe_effects_.size() > keyframe_effect_id
+             ? keyframe_effects_[keyframe_effect_id].get()
+             : nullptr;
 }
 
 }  // namespace cc

@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -19,8 +18,8 @@
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_fake.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_test_util.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
@@ -79,9 +78,8 @@ void PassphraseCollectionViewControllerTest::SetUp() {
   chrome_browser_state_ = test_cbs_builder.Build();
 
   fake_sync_service_ = static_cast<browser_sync::ProfileSyncServiceMock*>(
-      IOSChromeProfileSyncServiceFactory::GetInstance()
-          ->SetTestingFactoryAndUse(chrome_browser_state_.get(),
-                                    CreateNiceProfileSyncServiceMock));
+      ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+          chrome_browser_state_.get(), CreateNiceProfileSyncServiceMock));
   ON_CALL(*fake_sync_service_, GetRegisteredDataTypes())
       .WillByDefault(Return(syncer::ModelTypeSet()));
   fake_sync_service_->Initialize();

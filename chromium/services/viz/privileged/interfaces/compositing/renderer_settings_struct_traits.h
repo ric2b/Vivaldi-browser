@@ -12,11 +12,6 @@ namespace mojo {
 template <>
 struct StructTraits<viz::mojom::RendererSettingsDataView,
                     viz::RendererSettings> {
-  static const viz::ResourceSettings& resource_settings(
-      const viz::RendererSettings& input) {
-    return input.resource_settings;
-  }
-
   static bool allow_antialiasing(const viz::RendererSettings& input) {
     return input.allow_antialiasing;
   }
@@ -70,6 +65,15 @@ struct StructTraits<viz::mojom::RendererSettingsDataView,
 
   static bool use_skia_renderer(const viz::RendererSettings& input) {
     return input.use_skia_renderer;
+  }
+
+  static bool use_skia_deferred_display_list(
+      const viz::RendererSettings& input) {
+    return input.use_skia_deferred_display_list;
+  }
+
+  static bool allow_overlays(const viz::RendererSettings& input) {
+    return input.allow_overlays;
   }
 
   static bool Read(viz::mojom::RendererSettingsDataView data,

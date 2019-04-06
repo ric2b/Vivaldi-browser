@@ -12,16 +12,16 @@
 #include "build/build_config.h"
 #include "components/nacl/loader/nacl_listener.h"
 #include "components/nacl/loader/nacl_main_platform_delegate.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/core/embedder/embedder.h"
+#include "services/service_manager/sandbox/switches.h"
 
 // main() routine for the NaCl loader process.
 int NaClMain(const content::MainFunctionParams& parameters) {
   const base::CommandLine& parsed_command_line = parameters.command_line;
 
   // The Mojo EDK must be initialized before using IPC.
-  mojo::edk::Init();
+  mojo::core::Init();
 
   // The main thread of the plugin services IO.
   base::MessageLoopForIO main_message_loop;
@@ -35,7 +35,8 @@ int NaClMain(const content::MainFunctionParams& parameters) {
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
     defined(OS_ANDROID)
   NaClMainPlatformDelegate platform;
-  bool no_sandbox = parsed_command_line.HasSwitch(switches::kNoSandbox);
+  bool no_sandbox =
+      parsed_command_line.HasSwitch(service_manager::switches::kNoSandbox);
 
 #if defined(OS_POSIX)
   // The number of cores must be obtained before the invocation of

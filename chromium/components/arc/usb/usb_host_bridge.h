@@ -9,13 +9,12 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "components/arc/common/usb_host.mojom.h"
 #include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "device/usb/public/interfaces/device_manager.mojom.h"
+#include "device/usb/public/mojom/device_manager.mojom.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_service.h"
 
@@ -23,9 +22,12 @@ namespace content {
 class BrowserContext;
 }  // namespace content
 
+class BrowserContextKeyedServiceFactory;
+
 namespace arc {
 
 class ArcBridgeService;
+class ArcUsbHostUiDelegate;
 
 // Private implementation of UsbHostHost.
 class ArcUsbHostBridge : public KeyedService,
@@ -43,12 +45,16 @@ class ArcUsbHostBridge : public KeyedService,
                             ArcBridgeService* bridge_service);
   ~ArcUsbHostBridge() override;
 
+  // Returns the factory instance for this class.
+  static BrowserContextKeyedServiceFactory* GetFactory();
+
   // mojom::UsbHostHost overrides:
   void RequestPermission(const std::string& guid,
                          const std::string& package,
                          bool interactive,
                          RequestPermissionCallback callback) override;
   void OpenDevice(const std::string& guid,
+                  const base::Optional<std::string>& package,
                   OpenDeviceCallback callback) override;
   void GetDeviceInfo(const std::string& guid,
                      GetDeviceInfoCallback callback) override;
@@ -60,19 +66,31 @@ class ArcUsbHostBridge : public KeyedService,
 
   // ConnectionObserver<mojom::UsbHostInstance> overrides:
   void OnConnectionReady() override;
+  void OnConnectionClosed() override;
+
+  // KeyedService overrides:
+  void Shutdown() override;
+
+  void SetUiDelegate(ArcUsbHostUiDelegate* ui_delegate);
 
  private:
+  std::vector<std::string> GetEventReceiverPackages(
+      scoped_refptr<device::UsbDevice> device);
   void OnDeviceChecked(const std::string& guid, bool allowed);
   void DoRequestUserAuthorization(const std::string& guid,
                                   const std::string& package,
                                   RequestPermissionCallback callback);
-  bool HasPermissionForDevice(const std::string& guid);
+  bool HasPermissionForDevice(const std::string& guid,
+                              const std::string& package);
+  void HandleScanDeviceListRequest(const std::string& package,
+                                   RequestPermissionCallback callback);
 
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
   mojom::UsbHostHostPtr usb_host_ptr_;
   ScopedObserver<device::UsbService, device::UsbService::Observer>
       usb_observer_;
   device::UsbService* usb_service_;
+  ArcUsbHostUiDelegate* ui_delegate_ = nullptr;
 
   // WeakPtrFactory to use for callbacks.
   base::WeakPtrFactory<ArcUsbHostBridge> weak_factory_;

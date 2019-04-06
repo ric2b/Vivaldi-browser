@@ -64,7 +64,7 @@ std::vector<mojom::CompositionSegmentPtr> ConvertSegments(
     segment->start_offset = ime_text_span.start_offset;
     segment->end_offset = ime_text_span.end_offset;
     segment->emphasized =
-        (ime_text_span.thick ||
+        (ime_text_span.thickness == ui::ImeTextSpan::Thickness::kThick ||
          (composition.selection.start() == ime_text_span.start_offset &&
           composition.selection.end() == ime_text_span.end_offset));
     segments.push_back(std::move(segment));
@@ -134,29 +134,39 @@ void ArcImeBridgeImpl::SendOnKeyboardAppearanceChanging(
   ime_instance->OnKeyboardAppearanceChanging(new_bounds, is_available);
 }
 
-void ArcImeBridgeImpl::OnTextInputTypeChanged(mojom::TextInputType type) {
-  delegate_->OnTextInputTypeChanged(ConvertTextInputType(type));
+void ArcImeBridgeImpl::OnTextInputTypeChanged(
+    mojom::TextInputType type,
+    bool is_personalized_learning_allowed) {
+  delegate_->OnTextInputTypeChanged(ConvertTextInputType(type),
+                                    is_personalized_learning_allowed);
 }
 
-void ArcImeBridgeImpl::OnCursorRectChanged(const gfx::Rect& rect) {
-  delegate_->OnCursorRectChanged(rect);
+void ArcImeBridgeImpl::OnCursorRectChanged(const gfx::Rect& rect,
+                                           bool is_screen_coordinates) {
+  delegate_->OnCursorRectChanged(rect, is_screen_coordinates);
 }
 
 void ArcImeBridgeImpl::OnCancelComposition() {
   delegate_->OnCancelComposition();
 }
 
-void ArcImeBridgeImpl::ShowImeIfNeeded() {
-  delegate_->ShowImeIfNeeded();
+void ArcImeBridgeImpl::ShowVirtualKeyboardIfEnabled() {
+  delegate_->ShowVirtualKeyboardIfEnabled();
 }
 
 void ArcImeBridgeImpl::OnCursorRectChangedWithSurroundingText(
     const gfx::Rect& rect,
     const gfx::Range& text_range,
     const std::string& text_in_range,
-    const gfx::Range& selection_range) {
+    const gfx::Range& selection_range,
+    bool is_screen_coordinates) {
   delegate_->OnCursorRectChangedWithSurroundingText(
-      rect, text_range, base::UTF8ToUTF16(text_in_range), selection_range);
+      rect, text_range, base::UTF8ToUTF16(text_in_range), selection_range,
+      is_screen_coordinates);
+}
+
+void ArcImeBridgeImpl::RequestHideIme() {
+  delegate_->RequestHideIme();
 }
 
 }  // namespace arc

@@ -127,6 +127,7 @@ typedef struct VdbeOpList VdbeOpList;
 #define P4_INT64      (-14) /* P4 is a 64-bit signed integer */
 #define P4_INTARRAY   (-15) /* P4 is a vector of 32-bit integers */
 #define P4_FUNCCTX    (-16) /* P4 is a pointer to an sqlite3_context object */
+#define P4_DYNBLOB    (-17) /* Pointer to memory from sqliteMalloc() */
 
 /* Error message codes for OP_Halt */
 #define P5_ConstraintNotNull 1
@@ -196,7 +197,24 @@ void sqlite3VdbeEndCoroutine(Vdbe*,int);
 # define sqlite3VdbeVerifyNoMallocRequired(A,B)
 # define sqlite3VdbeVerifyNoResultRow(A)
 #endif
-VdbeOp *sqlite3VdbeAddOpList(Vdbe*, int nOp, VdbeOpList const *aOp, int iLineno);
+#if defined(SQLITE_DEBUG)
+  void sqlite3VdbeVerifyAbortable(Vdbe *p, int);
+#else
+# define sqlite3VdbeVerifyAbortable(A,B)
+#endif
+VdbeOp *sqlite3VdbeAddOpList(Vdbe*, int nOp, VdbeOpList const *aOp,int iLineno);
+#ifndef SQLITE_OMIT_EXPLAIN
+  void sqlite3VdbeExplain(Parse*,u8,const char*,...);
+  void sqlite3VdbeExplainPop(Parse*);
+  int sqlite3VdbeExplainParent(Parse*);
+# define ExplainQueryPlan(P)        sqlite3VdbeExplain P
+# define ExplainQueryPlanPop(P)     sqlite3VdbeExplainPop(P)
+# define ExplainQueryPlanParent(P)  sqlite3VdbeExplainParent(P)
+#else
+# define ExplainQueryPlan(P)
+# define ExplainQueryPlanPop(P)
+# define ExplainQueryPlanParent(P) 0
+#endif
 void sqlite3VdbeAddParseSchemaOp(Vdbe*,int,char*);
 void sqlite3VdbeChangeOpcode(Vdbe*, u32 addr, u8);
 void sqlite3VdbeChangeP1(Vdbe*, u32 addr, int P1);
@@ -219,6 +237,9 @@ void sqlite3VdbeClearObject(sqlite3*,Vdbe*);
 void sqlite3VdbeMakeReady(Vdbe*,Parse*);
 int sqlite3VdbeFinalize(Vdbe*);
 void sqlite3VdbeResolveLabel(Vdbe*, int);
+#ifdef SQLITE_COVERAGE_TEST
+  int sqlite3VdbeLabelHasBeenResolved(Vdbe*,int);
+#endif
 int sqlite3VdbeCurrentAddr(Vdbe*);
 #ifdef SQLITE_DEBUG
   int sqlite3VdbeAssertMayAbort(Vdbe *, int);

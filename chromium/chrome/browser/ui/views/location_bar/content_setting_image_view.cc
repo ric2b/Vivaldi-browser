@@ -133,6 +133,10 @@ bool ContentSettingImageView::ShouldShowLabel() const {
          (slide_animator_.is_animating() || pause_animation_);
 }
 
+bool ContentSettingImageView::ShouldShowSeparator() const {
+  return false;
+}
+
 double ContentSettingImageView::WidthMultiplier() const {
   double state = pause_animation_ ? pause_animation_state_
                                   : slide_animator_.GetCurrentValue();
@@ -208,6 +212,11 @@ bool ContentSettingImageView::ShowBubble(const ui::Event& event) {
 
 bool ContentSettingImageView::IsBubbleShowing() const {
   return bubble_view_ != nullptr;
+}
+
+ContentSettingImageModel::ImageType ContentSettingImageView::GetTypeForTesting()
+    const {
+  return content_setting_image_model_->image_type();
 }
 
 SkColor ContentSettingImageView::GetInkDropBaseColor() const {

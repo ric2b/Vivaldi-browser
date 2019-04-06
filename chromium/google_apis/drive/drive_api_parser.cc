@@ -179,6 +179,8 @@ const char kTeamDriveListKind[] = "drive#teamDriveList";
 const char kCapabilities[] = "capabilities";
 
 // Team Drive capabilities.
+// See "capabilities" in
+// https://developers.google.com/drive/v2/reference/teamdrives#resource.
 const char kCanAddChildren[] = "canAddChildren";
 const char kCanComment[] = "canComment";
 const char kCanCopy[] = "canCopy";
@@ -198,6 +200,17 @@ const char kCanShare[] = "canShare";
 const char kFileListKind[] = "drive#fileList";
 const char kNextLink[] = "nextLink";
 
+// File Resource capabilities.
+// See "capabilities" in
+// https://developers.google.com/drive/v2/reference/files#resource.
+const char kCanChangeRestrictedDownload[] = "canChangeRestrictedDownload";
+const char kCanDelete[] = "canDelete";
+const char kCanMoveItemIntoTeamDrive[] = "canMoveItemIntoTeamDrive";
+const char kCanMoveTeamDriveItem[] = "canMoveTeamDriveItem";
+const char kCanReadTeamDrive[] = "canReadTeamDrive";
+const char kCanTrash[] = "canTrash";
+const char kCanUntrash[] = "canUntrash";
+
 // Change Resource
 // https://developers.google.com/drive/v2/reference/changes
 const char kChangeKind[] = "drive#change";
@@ -207,6 +220,8 @@ const char kDeleted[] = "deleted";
 const char kFile[] = "file";
 const char kTeamDrive[] = "teamDrive";
 const char kTeamDriveId[] = "teamDriveId";
+const char kStartPageToken[] = "startPageToken";
+const char kNewStartPageToken[] = "newStartPageToken";
 
 // Changes List
 // https://developers.google.com/drive/v2/reference/changes/list
@@ -456,7 +471,7 @@ TeamDriveCapabilities::TeamDriveCapabilities()
 TeamDriveCapabilities::TeamDriveCapabilities(const TeamDriveCapabilities& src) =
     default;
 
-TeamDriveCapabilities::~TeamDriveCapabilities(){}
+TeamDriveCapabilities::~TeamDriveCapabilities() = default;
 
 // static
 void TeamDriveCapabilities::RegisterJSONConverter(
@@ -598,6 +613,73 @@ bool ParentReference::Parse(const base::Value& value) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// FileResourceCapabilities implementation
+
+FileResourceCapabilities::FileResourceCapabilities()
+    : can_add_children_(false),
+      can_change_restricted_download_(false),
+      can_comment_(false),
+      can_copy_(false),
+      can_delete_(false),
+      can_download_(false),
+      can_edit_(false),
+      can_list_children_(false),
+      can_move_item_into_team_drive_(false),
+      can_move_team_drive_item_(false),
+      can_read_revisions_(false),
+      can_read_team_drive_(false),
+      can_remove_children_(false),
+      can_rename_(false),
+      can_share_(false),
+      can_trash_(false),
+      can_untrash_(false) {}
+
+FileResourceCapabilities::FileResourceCapabilities(
+    const FileResourceCapabilities& src) = default;
+
+FileResourceCapabilities::~FileResourceCapabilities() {}
+
+// static
+void FileResourceCapabilities::RegisterJSONConverter(
+    base::JSONValueConverter<FileResourceCapabilities>* converter) {
+  converter->RegisterBoolField(kCanAddChildren,
+                               &FileResourceCapabilities::can_add_children_);
+  converter->RegisterBoolField(
+      kCanChangeRestrictedDownload,
+      &FileResourceCapabilities::can_change_restricted_download_);
+  converter->RegisterBoolField(kCanComment,
+                               &FileResourceCapabilities::can_comment_);
+  converter->RegisterBoolField(kCanCopy, &FileResourceCapabilities::can_copy_);
+  converter->RegisterBoolField(kCanDelete,
+                               &FileResourceCapabilities::can_delete_);
+  converter->RegisterBoolField(kCanDownload,
+                               &FileResourceCapabilities::can_download_);
+  converter->RegisterBoolField(kCanEdit, &FileResourceCapabilities::can_edit_);
+  converter->RegisterBoolField(kCanListChildren,
+                               &FileResourceCapabilities::can_list_children_);
+  converter->RegisterBoolField(
+      kCanMoveItemIntoTeamDrive,
+      &FileResourceCapabilities::can_move_item_into_team_drive_);
+  converter->RegisterBoolField(
+      kCanMoveTeamDriveItem,
+      &FileResourceCapabilities::can_move_team_drive_item_);
+  converter->RegisterBoolField(kCanReadRevisions,
+                               &FileResourceCapabilities::can_read_revisions_);
+  converter->RegisterBoolField(kCanReadTeamDrive,
+                               &FileResourceCapabilities::can_read_team_drive_);
+  converter->RegisterBoolField(kCanRemoveChildren,
+                               &FileResourceCapabilities::can_remove_children_);
+  converter->RegisterBoolField(kCanRename,
+                               &FileResourceCapabilities::can_rename_);
+  converter->RegisterBoolField(kCanShare,
+                               &FileResourceCapabilities::can_share_);
+  converter->RegisterBoolField(kCanTrash,
+                               &FileResourceCapabilities::can_trash_);
+  converter->RegisterBoolField(kCanUntrash,
+                               &FileResourceCapabilities::can_untrash_);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // FileResource implementation
 
 FileResource::FileResource() : shared_(false), file_size_(kUnsetFileSize) {}
@@ -616,6 +698,7 @@ void FileResource::RegisterJSONConverter(
   converter->RegisterNestedField(kLabels, &FileResource::labels_);
   converter->RegisterNestedField(kImageMediaMetadata,
                                  &FileResource::image_media_metadata_);
+  converter->RegisterNestedField(kCapabilities, &FileResource::capabilities_);
   converter->RegisterCustomField<base::Time>(
       kCreatedDate,
       &FileResource::created_date_,
@@ -653,6 +736,7 @@ void FileResource::RegisterJSONConverter(
       kOpenWithLinks,
       &FileResource::open_with_links_,
       GetOpenWithLinksFromDictionaryValue);
+  converter->RegisterStringField(kTeamDriveId, &FileResource::team_drive_id_);
 }
 
 // static
@@ -789,9 +873,9 @@ bool ChangeResource::GetType(base::StringPiece type_name,
 ////////////////////////////////////////////////////////////////////////////////
 // ChangeList implementation
 
-ChangeList::ChangeList() : largest_change_id_(0) {}
+ChangeList::ChangeList() = default;
 
-ChangeList::~ChangeList() {}
+ChangeList::~ChangeList() = default;
 
 // static
 void ChangeList::RegisterJSONConverter(
@@ -801,6 +885,8 @@ void ChangeList::RegisterJSONConverter(
                                        GetGURLFromString);
   converter->RegisterCustomField<int64_t>(
       kLargestChangeId, &ChangeList::largest_change_id_, &base::StringToInt64);
+  converter->RegisterStringField(kNewStartPageToken,
+                                 &ChangeList::new_start_page_token_);
   converter->RegisterRepeatedMessage<ChangeResource>(kItems,
                                                      &ChangeList::items_);
 }
@@ -901,6 +987,42 @@ bool ImageMediaMetadata::Parse(const base::Value& value) {
   base::JSONValueConverter<ImageMediaMetadata> converter;
   if (!converter.Convert(value, this)) {
     LOG(ERROR) << "Unable to parse: Invalid ImageMediaMetadata.";
+    return false;
+  }
+  return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// StartPageToken implementation
+
+StartPageToken::StartPageToken() = default;
+
+StartPageToken::~StartPageToken() = default;
+
+// static
+void StartPageToken::RegisterJSONConverter(
+    base::JSONValueConverter<StartPageToken>* converter) {
+  converter->RegisterStringField(kStartPageToken,
+                                 &StartPageToken::start_page_token_);
+}
+
+// static
+std::unique_ptr<StartPageToken> StartPageToken::CreateFrom(
+    const base::Value& value) {
+  std::unique_ptr<StartPageToken> result = std::make_unique<StartPageToken>();
+
+  if (!result->Parse(value)) {
+    LOG(ERROR) << "Unable to parse: Invalid StartPageToken JSON.";
+    return nullptr;
+  }
+
+  return result;
+}
+
+bool StartPageToken::Parse(const base::Value& value) {
+  base::JSONValueConverter<StartPageToken> converter;
+  if (!converter.Convert(value, this)) {
+    LOG(ERROR) << "Unable to parse: Invalid StartPageToken.";
     return false;
   }
   return true;

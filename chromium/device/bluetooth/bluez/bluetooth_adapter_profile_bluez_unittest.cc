@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -65,8 +66,7 @@ class BluetoothAdapterProfileBlueZTest : public testing::Test {
     ASSERT_TRUE(adapter_->IsPresent());
 
     // Turn on the adapter.
-    adapter_->SetPowered(true, base::Bind(&base::DoNothing),
-                         base::Bind(&base::DoNothing));
+    adapter_->SetPowered(true, base::DoNothing(), base::DoNothing());
     ASSERT_TRUE(adapter_->IsPowered());
   }
 
@@ -193,12 +193,12 @@ TEST_F(BluetoothAdapterProfileBlueZTest, DelegateCount) {
   EXPECT_EQ(1U, profile_->DelegateCount());
 
   profile_->RemoveDelegate(fake_delegate_autopair_.device_path_,
-                           base::Bind(&base::DoNothing));
+                           base::DoNothing());
 
   EXPECT_EQ(1U, profile_->DelegateCount());
 
   profile_->RemoveDelegate(fake_delegate_paired_.device_path_,
-                           base::Bind(&base::DoNothing));
+                           base::DoNothing());
 
   EXPECT_EQ(0U, profile_->DelegateCount());
 }

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_PERMISSIONS_PERMISSION_DECISION_AUTO_BLOCKER_H_
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
@@ -20,13 +21,9 @@
 class GURL;
 class Profile;
 
-namespace content {
-class WebContents;
-}
-
-namespace safe_browsing {
-class SafeBrowsingDatabaseManager;
-}
+namespace settings {
+FORWARD_DECLARE_TEST(SiteSettingsHandlerTest, GetAllSites);
+}  // namespace settings
 
 // The PermissionDecisionAutoBlocker decides whether or not a given origin
 // should be automatically blocked from requesting a permission. When an origin
@@ -34,8 +31,8 @@ class SafeBrowsingDatabaseManager;
 // requests made by the origin are automatically blocked. Once the embargo is
 // lifted, the origin will be permitted to request a permission again, which may
 // result in it being placed under embargo again. Currently, an origin can be
-// placed under embargo if it appears on Safe Browsing's API blacklist, or if it
-// has a number of prior dismissals greater than a threshold.
+// placed under embargo if it has a number of prior dismissals greater than a
+// threshold.
 class PermissionDecisionAutoBlocker : public KeyedService {
  public:
   class Factory : public BrowserContextKeyedServiceFactory {
@@ -60,11 +57,10 @@ class PermissionDecisionAutoBlocker : public KeyedService {
   static PermissionDecisionAutoBlocker* GetForProfile(Profile* profile);
 
   // Checks the status of the content setting to determine if |request_origin|
-  // is under embargo for |permission|. This checks both embargo for Permissions
-  // Blacklisting and repeated dismissals. Prefer to use
-  // PermissionManager::GetPermissionStatus when possible. This method is only
-  // exposed to facilitate permission checks from threads other than the
-  // UI thread. See crbug.com/658020.
+  // is under embargo for |permission|. This checks all types of embargo.
+  // Prefer to use PermissionManager::GetPermissionStatus when possible. This
+  // method is only exposed to facilitate permission checks from threads other
+  // than the UI thread. See https://crbug.com/658020.
   static PermissionResult GetEmbargoResult(HostContentSettingsMap* settings_map,
                                            const GURL& request_origin,
                                            ContentSettingsType permission,
@@ -73,17 +69,8 @@ class PermissionDecisionAutoBlocker : public KeyedService {
   // Updates the threshold to start blocking prompts from the field trial.
   static void UpdateFromVariations();
 
-  // Makes an asynchronous call to Safe Browsing to check the API blacklist.
-  // Places the (|request_origin|, |permission|) pair under embargo if they are
-  // on the blacklist.
-  void CheckSafeBrowsingBlacklist(content::WebContents* web_contents,
-                                  const GURL& request_origin,
-                                  ContentSettingsType permission,
-                                  base::Callback<void(bool)> callback);
-
   // Checks the status of the content setting to determine if |request_origin|
-  // is under embargo for |permission|. This checks both embargo for Permissions
-  // Blacklisting and repeated dismissals.
+  // is under embargo for |permission|. This checks all types of embargo.
   PermissionResult GetEmbargoResult(const GURL& request_origin,
                                     ContentSettingsType permission);
 
@@ -109,9 +96,8 @@ class PermissionDecisionAutoBlocker : public KeyedService {
 
   // Clears any existing embargo status for |url|, |permission|. For permissions
   // embargoed under repeated dismissals, this means a prompt will be shown to
-  // the user on next permission request. On blacklisted permissions, the next
-  // permission request will re-embargo the permission only if it is still
-  // blacklisted. This is a NO-OP for non-embargoed |url|, |permission| pairs.
+  // the user on next permission request. This is a NO-OP for non-embargoed
+  // |url|, |permission| pairs.
   void RemoveEmbargoByUrl(const GURL& url, ContentSettingsType permission);
 
   // Removes any recorded counts for urls which match |filter|.
@@ -120,41 +106,26 @@ class PermissionDecisionAutoBlocker : public KeyedService {
  private:
   friend class PermissionContextBaseTests;
   friend class PermissionDecisionAutoBlockerUnitTest;
+  FRIEND_TEST_ALL_PREFIXES(settings::SiteSettingsHandlerTest, GetAllSites);
 
   explicit PermissionDecisionAutoBlocker(Profile* profile);
   ~PermissionDecisionAutoBlocker() override;
-
-  // Get the result of the Safe Browsing check, if |should_be_embargoed| is true
-  // then |request_origin| will be placed under embargo for that |permission|.
-  void CheckSafeBrowsingResult(const GURL& request_origin,
-                               ContentSettingsType permission,
-                               base::Callback<void(bool)> callback,
-                               bool should_be_embargoed);
 
   void PlaceUnderEmbargo(const GURL& request_origin,
                          ContentSettingsType permission,
                          const char* key);
 
-  void SetSafeBrowsingDatabaseManagerAndTimeoutForTesting(
-      scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> db_manager,
-      int timeout);
-
-  void SetClockForTesting(std::unique_ptr<base::Clock> clock);
+  void SetClockForTesting(base::Clock* clock);
 
   // Keys used for storing count data in a website setting.
   static const char kPromptDismissCountKey[];
   static const char kPromptIgnoreCountKey[];
   static const char kPermissionDismissalEmbargoKey[];
   static const char kPermissionIgnoreEmbargoKey[];
-  static const char kPermissionBlacklistEmbargoKey[];
 
   Profile* profile_;
-  scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> db_manager_;
 
-  // Timeout in ms.
-  int safe_browsing_timeout_;
-
-  std::unique_ptr<base::Clock> clock_;
+  base::Clock* clock_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(PermissionDecisionAutoBlocker);
 };

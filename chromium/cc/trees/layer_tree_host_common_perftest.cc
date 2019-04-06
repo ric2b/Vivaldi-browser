@@ -21,6 +21,7 @@
 #include "cc/test/layer_tree_test.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/transform_node.h"
 #include "components/viz/test/paths.h"
 #include "testing/perf/perf_test.h"
 
@@ -40,14 +41,16 @@ class LayerTreeHostCommonPerfTest : public LayerTreeTest {
 
   void ReadTestFile(const std::string& name) {
     base::FilePath test_data_dir;
-    ASSERT_TRUE(PathService::Get(viz::Paths::DIR_TEST_DATA, &test_data_dir));
+    ASSERT_TRUE(
+        base::PathService::Get(viz::Paths::DIR_TEST_DATA, &test_data_dir));
     base::FilePath json_file = test_data_dir.AppendASCII(name + ".json");
     ASSERT_TRUE(base::ReadFileToString(json_file, &json_));
   }
 
   void SetupTree() override {
     gfx::Size viewport = gfx::Size(720, 1038);
-    layer_tree_host()->SetViewportSize(viewport);
+    layer_tree_host()->SetViewportSizeAndScale(viewport, 1.f,
+                                               viz::LocalSurfaceId());
     scoped_refptr<Layer> root =
         ParseTreeFromJson(json_, &content_layer_client_);
     ASSERT_TRUE(root.get());
@@ -109,7 +112,10 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
         active_tree->elastic_overscroll()->Current(active_tree->IsActiveTree()),
         active_tree->OverscrollElasticityLayer(), max_texture_size,
         host_impl->settings().layer_transforms_should_scale_layer_contents,
-        &update_list, active_tree->property_trees());
+        &update_list, active_tree->property_trees(),
+        active_tree->property_trees()->transform_tree.Node(
+            active_tree->InnerViewportContainerLayer()
+                ->transform_tree_index()));
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
   }
 };

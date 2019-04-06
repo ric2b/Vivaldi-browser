@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/connection_error_callback.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/lib/interface_ptr_state.h"
@@ -48,15 +48,15 @@ class InterfacePtr {
   InterfacePtr(decltype(nullptr)) {}
 
   // Takes over the binding of another InterfacePtr.
-  InterfacePtr(InterfacePtr&& other) {
+  InterfacePtr(InterfacePtr&& other) noexcept {
     internal_state_.Swap(&other.internal_state_);
   }
 
-  explicit InterfacePtr(PtrInfoType&& info) { Bind(std::move(info)); }
+  explicit InterfacePtr(PtrInfoType&& info) noexcept { Bind(std::move(info)); }
 
   // Takes over the binding of another InterfacePtr, and closes any message pipe
   // already bound to this pointer.
-  InterfacePtr& operator=(InterfacePtr&& other) {
+  InterfacePtr& operator=(InterfacePtr&& other) noexcept {
     reset();
     internal_state_.Swap(&other.internal_state_);
     return *this;
@@ -78,12 +78,12 @@ class InterfacePtr {
   // has the same effect as reset(). In this case, the InterfacePtr is not
   // considered as bound.
   //
-  // |runner| must belong to the same thread. It will be used to dispatch all
-  // callbacks and connection error notification. It is useful when you attach
-  // multiple task runners to a single thread for the purposes of task
-  // scheduling.
+  // Optionally, |runner| is a SequencedTaskRunner bound to the current sequence
+  // on which all callbacks and connection error notifications will be
+  // dispatched. It is only useful to specify this to use a different
+  // SequencedTaskRunner than SequencedTaskRunnerHandle::Get().
   void Bind(InterfacePtrInfo<Interface> info,
-            scoped_refptr<base::SingleThreadTaskRunner> runner = nullptr) {
+            scoped_refptr<base::SequencedTaskRunner> runner = nullptr) {
     reset();
     if (info.is_valid())
       internal_state_.Bind(std::move(info), std::move(runner));
@@ -127,6 +127,12 @@ class InterfacePtr {
   // stimulus.
   void FlushForTesting() { internal_state_.FlushForTesting(); }
 
+  // Same as |FlushForTesting()| but will call |callback| when the flush is
+  // complete.
+  void FlushAsyncForTesting(base::OnceClosure callback) {
+    internal_state_.FlushAsyncForTesting(std::move(callback));
+  }
+
   // Closes the bound message pipe, if any.
   void reset() {
     State doomed;
@@ -144,6 +150,9 @@ class InterfacePtr {
   bool HasAssociatedInterfaces() const {
     return internal_state_.HasAssociatedInterfaces();
   }
+
+  // Returns true if bound and awaiting a response to a message.
+  bool IsExpectingResponse() { return internal_state_.has_pending_callbacks(); }
 
   // Indicates whether the message pipe has encountered an error. If true,
   // method calls made on this interface will be dropped (and may already have
@@ -216,7 +225,7 @@ class InterfacePtr {
 template <typename Interface>
 InterfacePtr<Interface> MakeProxy(
     InterfacePtrInfo<Interface> info,
-    scoped_refptr<base::SingleThreadTaskRunner> runner = nullptr) {
+    scoped_refptr<base::SequencedTaskRunner> runner = nullptr) {
   InterfacePtr<Interface> ptr;
   if (info.is_valid())
     ptr.Bind(std::move(info), std::move(runner));

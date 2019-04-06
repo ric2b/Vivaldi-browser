@@ -65,6 +65,7 @@ void ContactRow::Swap(ContactRow* other) {
   std::swap(avatar_url_, other->avatar_url_);
   std::swap(separator_, other->separator_);
   std::swap(generated_from_sent_mail_, other->generated_from_sent_mail_);
+  std::swap(trusted_, other->trusted_);
 }
 
 ContactRow::ContactRow(const ContactRow& other) = default;

@@ -11,7 +11,6 @@
 
 #include <gtk/gtk.h>
 
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/composition_text_util_pango.h"
@@ -166,7 +165,7 @@ void X11InputMethodContextImplGtk2::ResetXModifierKeycodesCache() {
 }
 
 GdkEvent* X11InputMethodContextImplGtk2::GdkEventFromNativeEvent(
-    const base::NativeEvent& native_event) {
+    const ui::PlatformEvent& native_event) {
   XEvent xkeyevent;
   if (native_event->type == GenericEvent) {
     // If this is an XI2 key event, build a matching core X event, to avoid

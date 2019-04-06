@@ -6,7 +6,6 @@
 #define COMPONENTS_WEBDATA_SERVICES_WEB_DATA_SERVICE_TEST_UTIL_H__
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "components/signin/core/browser/webdata/token_web_data.h"
 #include "components/webdata_services/web_data_service_wrapper.h"
 
@@ -33,7 +32,11 @@ class MockWebDataServiceWrapper : public MockWebDataServiceWrapperBase {
 
   ~MockWebDataServiceWrapper() override;
 
-  scoped_refptr<autofill::AutofillWebDataService> GetAutofillWebData() override;
+  scoped_refptr<autofill::AutofillWebDataService> GetProfileAutofillWebData()
+      override;
+
+  scoped_refptr<autofill::AutofillWebDataService> GetAccountAutofillWebData()
+      override;
 
   scoped_refptr<TokenWebData> GetTokenWebData() override;
 

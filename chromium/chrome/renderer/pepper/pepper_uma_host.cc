@@ -18,16 +18,14 @@
 #include "content/public/renderer/pepper_plugin_instance.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
-#include "extensions/features/features.h"
-#include "media/media_features.h"
+#include "extensions/buildflags/buildflags.h"
+#include "media/media_buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ppapi/c/pp_errors.h"
-#include "ppapi/features/features.h"
 #include "ppapi/host/dispatch_host_message.h"
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/ppapi_messages.h"
-
-#include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"
@@ -54,10 +52,6 @@ const char* const kWhitelistedHistogramPrefixes[] = {
 };
 
 const char* const kWhitelistedPluginBaseNames[] = {
-#if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
-    kWidevineCdmAdapterFileName,  // see http://crbug.com/368743
-                                  // and http://crbug.com/410630
-#endif
     ChromeContentClient::kPDFPluginPath,
 };
 

@@ -10,7 +10,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "chromecast/chromecast_buildflags.h"
 
+class TtsController;
 class PrefService;
 
 namespace net {
@@ -20,16 +22,22 @@ class NetLog;
 namespace chromecast {
 class CastService;
 class CastScreen;
+class CastWebViewFactory;
 class ConnectivityChecker;
 
 namespace metrics {
-class CastMetricsHelper;
 class CastMetricsServiceClient;
 }  // namespace metrics
 
 namespace shell {
+
+#if defined(USE_AURA) && BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+class AccessibilityManager;
+#endif  // defined(USE_AURA) && BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+
 class CastBrowserContext;
 class CastContentBrowserClient;
+class CastDisplayConfigurator;
 class RemoteDebuggingServer;
 
 class CastBrowserProcess {
@@ -44,11 +52,19 @@ class CastBrowserProcess {
   void SetBrowserContext(std::unique_ptr<CastBrowserContext> browser_context);
   void SetCastContentBrowserClient(CastContentBrowserClient* browser_client);
   void SetCastService(std::unique_ptr<CastService> cast_service);
+
 #if defined(USE_AURA)
+
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  void SetAccessibilityManager(
+      std::unique_ptr<AccessibilityManager> accessibility_manager);
+  void ClearAccessibilityManager();
+#endif  // BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+
   void SetCastScreen(std::unique_ptr<CastScreen> cast_screen);
+  void SetDisplayConfigurator(
+      std::unique_ptr<CastDisplayConfigurator> display_configurator);
 #endif  // defined(USE_AURA)
-  void SetMetricsHelper(
-      std::unique_ptr<metrics::CastMetricsHelper> metrics_helper);
   void SetMetricsServiceClient(
       std::unique_ptr<metrics::CastMetricsServiceClient>
           metrics_service_client);
@@ -58,6 +74,8 @@ class CastBrowserProcess {
   void SetConnectivityChecker(
       scoped_refptr<ConnectivityChecker> connectivity_checker);
   void SetNetLog(net::NetLog* net_log);
+  void SetTtsController(std::unique_ptr<TtsController> tts_controller);
+  void SetWebViewFactory(CastWebViewFactory* web_view_factory);
 
   CastContentBrowserClient* browser_client() const {
     return cast_content_browser_client_;
@@ -66,6 +84,16 @@ class CastBrowserProcess {
   CastService* cast_service() const { return cast_service_.get(); }
 #if defined(USE_AURA)
   CastScreen* cast_screen() const { return cast_screen_.get(); }
+  CastDisplayConfigurator* display_configurator() const {
+    return display_configurator_.get();
+  }
+
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  AccessibilityManager* accessibility_manager() const {
+    return accessibility_manager_.get();
+  }
+#endif  //  BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+
 #endif  // defined(USE_AURA)
   metrics::CastMetricsServiceClient* metrics_service_client() const {
     return metrics_service_client_.get();
@@ -78,13 +106,20 @@ class CastBrowserProcess {
     return remote_debugging_server_.get();
   }
   net::NetLog* net_log() const { return net_log_; }
+  TtsController* tts_controller() const { return tts_controller_.get(); }
+  CastWebViewFactory* web_view_factory() const { return web_view_factory_; }
 
  private:
   // Note: The following order should match the order they are set in
   // CastBrowserMainParts.
-  std::unique_ptr<metrics::CastMetricsHelper> metrics_helper_;
 #if defined(USE_AURA)
   std::unique_ptr<CastScreen> cast_screen_;
+  std::unique_ptr<CastDisplayConfigurator> display_configurator_;
+
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  std::unique_ptr<AccessibilityManager> accessibility_manager_;
+#endif  // BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+
 #endif  // defined(USE_AURA)
   std::unique_ptr<PrefService> pref_service_;
   scoped_refptr<ConnectivityChecker> connectivity_checker_;
@@ -92,8 +127,10 @@ class CastBrowserProcess {
   std::unique_ptr<metrics::CastMetricsServiceClient> metrics_service_client_;
   std::unique_ptr<RemoteDebuggingServer> remote_debugging_server_;
 
+  CastWebViewFactory* web_view_factory_ = nullptr;
   CastContentBrowserClient* cast_content_browser_client_;
   net::NetLog* net_log_;
+  std::unique_ptr<TtsController> tts_controller_;
 
   // Note: CastService must be destroyed before others.
   std::unique_ptr<CastService> cast_service_;

@@ -11,7 +11,7 @@
 #import "ios/chrome/browser/ui/image_util/image_util.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
+#import "ios/chrome/browser/ui/toolbar/legacy/toolbar_utils.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_snapshot_providing.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
@@ -56,18 +56,9 @@
       [[NewTabPageToolbarController alloc] initWithDispatcher:dispatcher];
   _toolbarController.readingListModel = readingListModel;
 
-  UIView* toolbarView = [_toolbarController view];
-
   [self addSubview:[_toolbarController view]];
 
-  if (IsSafeAreaCompatibleToolbarEnabled()) {
-    [self addConstraintsToToolbar];
-  } else {
-    CGRect toolbarFrame = self.bounds;
-    toolbarFrame.size.height = ntp_header::kToolbarHeight;
-    toolbarView.frame = toolbarFrame;
-    [toolbarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
-  }
+  [self addConstraintsToToolbar];
 }
 
 - (void)setCanGoForward:(BOOL)canGoForward {
@@ -111,9 +102,16 @@
   [_shadow setAlpha:0];
 }
 
+- (CGFloat)searchFieldProgressForOffset:(CGFloat)offset
+                         safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
+  NOTREACHED();
+  return 0;
+}
+
 - (void)updateSearchFieldWidth:(NSLayoutConstraint*)widthConstraint
                         height:(NSLayoutConstraint*)heightConstraint
                      topMargin:(NSLayoutConstraint*)topMarginConstraint
+                     hintLabel:(UILabel*)hintLabel
             subviewConstraints:(NSArray*)constraints
                      forOffset:(CGFloat)offset
                    screenWidth:(CGFloat)screenWidth
@@ -121,8 +119,8 @@
   CGFloat contentWidth = std::max<CGFloat>(
       0, screenWidth - safeAreaInsets.left - safeAreaInsets.right);
   // The scroll offset at which point searchField's frame should stop growing.
-  CGFloat maxScaleOffset =
-      self.frame.size.height - ntp_header::kMinHeaderHeight;
+  CGFloat maxScaleOffset = self.frame.size.height -
+                           ntp_header::kMinHeaderHeight - safeAreaInsets.top;
   // The scroll offset at which point searchField's frame should start
   // growing.
   CGFloat startScaleOffset = maxScaleOffset - ntp_header::kAnimationDistance;
@@ -143,7 +141,7 @@
   CGFloat maxXInset = ui::AlignValueToUpperPixel(
       (searchFieldNormalWidth - screenWidth) / 2 - 1);
   CGFloat maxHeightDiff =
-      ntp_header::kToolbarHeight - content_suggestions::kSearchFieldHeight;
+      ntp_header::ToolbarHeight() - content_suggestions::kSearchFieldHeight;
 
   widthConstraint.constant = searchFieldNormalWidth - 2 * maxXInset * percent;
   topMarginConstraint.constant = -content_suggestions::searchFieldTopMargin() -
@@ -160,7 +158,8 @@
       percent * (ntp_header::kMaxHorizontalMarginDiff + safeAreaInsets.left);
   for (NSLayoutConstraint* constraint in constraints) {
     if (constraint.constant > 0)
-      constraint.constant = constantDiff + ntp_header::kHintLabelSidePadding;
+      constraint.constant =
+          constantDiff + ntp_header::kHintLabelSidePaddingLegacy;
     else
       constraint.constant = -constantDiff;
   }
@@ -168,11 +167,8 @@
 
 - (void)safeAreaInsetsDidChange {
   [super safeAreaInsetsDidChange];
-  if (IsSafeAreaCompatibleToolbarEnabled()) {
-    _toolbarController.heightConstraint.constant =
-        ToolbarHeightWithTopOfScreenOffset(
-            [_toolbarController statusBarOffset]);
-  }
+  _toolbarController.heightConstraint.constant =
+      ToolbarHeightWithTopOfScreenOffset([_toolbarController statusBarOffset]);
 }
 
 - (void)fadeOutShadow {

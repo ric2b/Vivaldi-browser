@@ -22,12 +22,11 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.components.autofill.AutofillPopup;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.DropdownPopupWindowInterface;
 import org.chromium.ui.R;
 import org.chromium.ui.UiUtils;
 
@@ -77,29 +76,25 @@ public class AutofillPopupWithKeyboardTest {
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
                 "John Smith", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "",
                 "US", "(415) 888-9999", "john@acme.inc", "en"));
-        final AtomicReference<ContentViewCore> viewCoreRef = new AtomicReference<ContentViewCore>();
         final AtomicReference<WebContents> webContentsRef = new AtomicReference<WebContents>();
         final AtomicReference<ViewGroup> viewRef = new AtomicReference<ViewGroup>();
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            viewCoreRef.set(mActivityTestRule.getActivity().getCurrentContentViewCore());
-            webContentsRef.set(viewCoreRef.get().getWebContents());
-            viewRef.set(viewCoreRef.get().getContainerView());
+            webContentsRef.set(mActivityTestRule.getActivity().getCurrentWebContents());
+            viewRef.set(mActivityTestRule.getActivity().getActivityTab().getContentView());
         });
         DOMUtils.waitForNonZeroNodeBounds(webContentsRef.get(), "fn");
 
         // Click on the unfocused input element for the first time to focus on it. This brings up
         // the autofill popup and shows the keyboard at the same time. Showing the keyboard should
         // not hide the autofill popup.
-        DOMUtils.clickNode(viewCoreRef.get(), "fn");
+        DOMUtils.clickNode(webContentsRef.get(), "fn");
 
         // Wait until the keyboard is showing.
         CriteriaHelper.pollUiThread(new Criteria("Keyboard was never shown.") {
             @Override
             public boolean isSatisfied() {
                 return UiUtils.isKeyboardShowing(mActivityTestRule.getActivity(),
-                        mActivityTestRule.getActivity()
-                                .getCurrentContentViewCore()
-                                .getContainerView());
+                        mActivityTestRule.getActivity().getActivityTab().getContentView());
             }
         });
 
@@ -113,8 +108,8 @@ public class AutofillPopupWithKeyboardTest {
                 });
         Object popupObject = ThreadUtils.runOnUiThreadBlocking(
                 () -> viewRef.get().findViewById(R.id.dropdown_popup_window).getTag());
-        Assert.assertTrue(popupObject instanceof AutofillPopup);
-        final AutofillPopup popup = (AutofillPopup) popupObject;
+        Assert.assertTrue(popupObject instanceof DropdownPopupWindowInterface);
+        final DropdownPopupWindowInterface popup = (DropdownPopupWindowInterface) popupObject;
         CriteriaHelper.pollUiThread(new Criteria("Autofill Popup was never shown.") {
             @Override
             public boolean isSatisfied() {

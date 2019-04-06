@@ -41,6 +41,10 @@ class ArcProcess {
   std::vector<std::string>& packages() { return packages_; }
   const std::vector<std::string>& packages() const { return packages_; }
 
+  void set_process_state(mojom::ProcessState process_state) {
+    process_state_ = process_state;
+  }
+
   // Returns true if the process is important and should be protected more
   // from OOM kills than other processes.
   // TODO(cylee|yusukes): Check what stock Android does for handling OOM and
@@ -53,6 +57,9 @@ class ArcProcess {
   bool IsKernelKillable() const;
 
  private:
+  // Returns true if this is ARC protected process which we don't allow to kill.
+  bool IsArcProtected() const;
+
   base::ProcessId nspid_;
   base::ProcessId pid_;
   std::string process_name_;

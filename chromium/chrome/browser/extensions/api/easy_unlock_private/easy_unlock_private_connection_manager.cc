@@ -24,11 +24,11 @@ const char kEasyUnlockFeatureName[] = "easy_unlock";
 api::easy_unlock_private::ConnectionStatus ToApiConnectionStatus(
     Connection::Status status) {
   switch (status) {
-    case Connection::DISCONNECTED:
+    case Connection::Status::DISCONNECTED:
       return api::easy_unlock_private::CONNECTION_STATUS_DISCONNECTED;
-    case Connection::IN_PROGRESS:
+    case Connection::Status::IN_PROGRESS:
       return api::easy_unlock_private::CONNECTION_STATUS_IN_PROGRESS;
-    case Connection::CONNECTED:
+    case Connection::Status::CONNECTED:
       return api::easy_unlock_private::CONNECTION_STATUS_CONNECTED;
   }
   return api::easy_unlock_private::CONNECTION_STATUS_NONE;
@@ -38,7 +38,9 @@ api::easy_unlock_private::ConnectionStatus ToApiConnectionStatus(
 
 EasyUnlockPrivateConnectionManager::EasyUnlockPrivateConnectionManager(
     content::BrowserContext* context)
-    : browser_context_(context) {}
+    : browser_context_(context) {
+  extensions::ExtensionRegistry::Get(browser_context_)->AddObserver(this);
+}
 
 EasyUnlockPrivateConnectionManager::~EasyUnlockPrivateConnectionManager() {
   // Remove |this| as an observer from all connections passed to
@@ -46,12 +48,17 @@ EasyUnlockPrivateConnectionManager::~EasyUnlockPrivateConnectionManager() {
   for (const auto& extension_id : extensions_) {
     base::hash_set<int>* connections =
         GetResourceManager()->GetResourceIds(extension_id);
+    if (!connections)
+      continue;
+
     for (int connection_id : *connections) {
       Connection* connection = GetConnection(extension_id, connection_id);
       if (connection)
         connection->RemoveObserver(this);
     }
   }
+
+  extensions::ExtensionRegistry::Get(browser_context_)->RemoveObserver(this);
 }
 
 int EasyUnlockPrivateConnectionManager::AddConnection(
@@ -154,6 +161,13 @@ void EasyUnlockPrivateConnectionManager::OnSendCompleted(
       api::easy_unlock_private::OnSendCompleted::Create(0, data, success);
   DispatchConnectionEvent(event_name, histogram_value, &connection,
                           std::move(args));
+}
+
+void EasyUnlockPrivateConnectionManager::OnExtensionUnloaded(
+    content::BrowserContext* browser_context,
+    const Extension* extension,
+    UnloadedExtensionReason reason) {
+  extensions_.erase(extension->id());
 }
 
 void EasyUnlockPrivateConnectionManager::DispatchConnectionEvent(

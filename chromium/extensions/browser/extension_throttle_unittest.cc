@@ -192,10 +192,6 @@ void ExtensionThrottleEntryTest::SetUp() {
   entry_->ResetToBlank(now_);
 }
 
-std::ostream& operator<<(std::ostream& out, const base::TimeTicks& time) {
-  return out << time.ToInternalValue();
-}
-
 TEST_F(ExtensionThrottleEntryTest, CanThrottleRequest) {
   entry_->set_exponential_backoff_release_time(entry_->ImplGetTimeNow() +
                                                TimeDelta::FromMilliseconds(1));
@@ -257,7 +253,7 @@ TEST_F(ExtensionThrottleEntryTest, IsEntryReallyOutdated) {
       TimeAndBool(now_ - lifetime, true, __LINE__),
       TimeAndBool(now_ - (lifetime + kFiveMs), true, __LINE__)};
 
-  for (unsigned int i = 0; i < arraysize(test_values); ++i) {
+  for (unsigned int i = 0; i < base::size(test_values); ++i) {
     entry_->set_exponential_backoff_release_time(test_values[i].time);
     EXPECT_EQ(entry_->IsEntryOutdated(), test_values[i].result)
         << "Test case #" << i << " line " << test_values[i].line << " failed";
@@ -338,30 +334,6 @@ class ExtensionThrottleManagerTest : public testing::Test {
 
   void SetUp() override { request_->SetLoadFlags(0); }
 
-  void ExpectEntryAllowsAllOnErrorIfOptedOut(
-      ExtensionThrottleEntryInterface* entry,
-      bool opted_out,
-      const URLRequest& request) {
-    EXPECT_FALSE(entry->ShouldRejectRequest(request));
-    for (int i = 0; i < 10; ++i) {
-      entry->UpdateWithResponse(503);
-    }
-    EXPECT_NE(opted_out, entry->ShouldRejectRequest(request));
-
-    if (opted_out) {
-      // We're not mocking out GetTimeNow() in this scenario
-      // so add a 100 ms buffer to avoid flakiness (that should always
-      // give enough time to get from the TimeTicks::Now() call here
-      // to the TimeTicks::Now() call in the entry class).
-      EXPECT_GT(TimeTicks::Now() + TimeDelta::FromMilliseconds(100),
-                entry->GetExponentialBackoffReleaseTime());
-    } else {
-      // As above, add 100 ms.
-      EXPECT_LT(TimeTicks::Now() + TimeDelta::FromMilliseconds(100),
-                entry->GetExponentialBackoffReleaseTime());
-    }
-  }
-
   base::MessageLoopForIO message_loop_;
   // context_ must be declared before request_.
   TestURLRequestContext context_;
@@ -389,7 +361,7 @@ TEST_F(ExtensionThrottleManagerTest, IsUrlStandardised) {
       GurlAndString(GURL("http://www.example.com:1234/"),
                     std::string("http://www.example.com:1234/"), __LINE__)};
 
-  for (unsigned int i = 0; i < arraysize(test_values); ++i) {
+  for (unsigned int i = 0; i < base::size(test_values); ++i) {
     std::string temp = manager.DoGetUrlIdFromUrl(test_values[i].url);
     EXPECT_EQ(temp, test_values[i].result) << "Test case #" << i << " line "
                                            << test_values[i].line << " failed";

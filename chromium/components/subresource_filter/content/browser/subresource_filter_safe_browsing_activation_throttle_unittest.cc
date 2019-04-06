@@ -11,14 +11,15 @@
 #include <utility>
 #include <vector>
 
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "build/build_config.h"
 #include "components/safe_browsing/db/test_database_manager.h"
-#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
@@ -33,6 +34,8 @@
 #include "components/subresource_filter/core/common/activation_state.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
+#include "components/ukm/content/source_url_recorder.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "components/url_pattern_index/proto/rules.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -40,6 +43,7 @@
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_navigation_throttle.h"
 #include "content/public/test/test_renderer_host.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -50,66 +54,48 @@ namespace {
 const char kUrlA[] = "https://example_a.com";
 const char kUrlB[] = "https://example_b.com";
 const char kUrlC[] = "https://example_c.com";
-const char kUrlD[] = "https://example_d.com";
 
 char kURL[] = "http://example.test/";
 char kURLWithParams[] = "http://example.test/?v=10";
 char kRedirectURL[] = "http://redirect.test/";
 
-// Names of navigation chain patterns histogram.
-const char kMatchesPatternHistogramNameSubresourceFilterSuffix[] =
-    "SubresourceFilter.PageLoad.RedirectChainMatchPattern."
-    "SubresourceFilterOnly";
-const char kNavigationChainSizeSubresourceFilterSuffix[] =
-    "SubresourceFilter.PageLoad.RedirectChainLength.SubresourceFilterOnly";
 const char kSafeBrowsingNavigationDelay[] =
     "SubresourceFilter.PageLoad.SafeBrowsingDelay";
-const char kSafeBrowsingNavigationDelayNoSpeculation[] =
-    "SubresourceFilter.PageLoad.SafeBrowsingDelay.NoRedirectSpeculation";
 const char kSafeBrowsingCheckTime[] =
     "SubresourceFilter.SafeBrowsing.CheckTime";
-const char kMatchesPatternHistogramName[] =
+const char kActivationListHistogram[] =
     "SubresourceFilter.PageLoad.ActivationList";
-const char kNavigationChainSize[] =
-    "SubresourceFilter.PageLoad.RedirectChainLength.";
 
 class MockSubresourceFilterClient : public SubresourceFilterClient {
  public:
   MockSubresourceFilterClient() = default;
   ~MockSubresourceFilterClient() override = default;
 
-  // Mocks have trouble with move-only types passed in the constructor.
-  void set_ruleset_dealer(
-      std::unique_ptr<VerifiedRulesetDealer::Handle> ruleset_dealer) {
-    ruleset_dealer_ = std::move(ruleset_dealer);
-  }
-
-  bool OnPageActivationComputed(content::NavigationHandle* handle,
-                                bool activated,
-                                bool suppress_notifications) override {
+  ActivationLevel OnPageActivationComputed(
+      content::NavigationHandle* handle,
+      ActivationLevel effective_level,
+      ActivationDecision* decision) override {
     DCHECK(handle->IsInMainFrame());
-    return whitelisted_hosts_.count(handle->GetURL().host());
-  }
-
-  void WhitelistInCurrentWebContents(const GURL& url) override {
-    ASSERT_TRUE(url.SchemeIsHTTPOrHTTPS());
-    whitelisted_hosts_.insert(url.host());
-  }
-
-  VerifiedRulesetDealer::Handle* GetRulesetDealer() override {
-    return ruleset_dealer_.get();
+    if (whitelisted_hosts_.count(handle->GetURL().host())) {
+      if (effective_level == subresource_filter::ActivationLevel::ENABLED)
+        *decision = subresource_filter::ActivationDecision::URL_WHITELISTED;
+      return ActivationLevel::DISABLED;
+    }
+    return effective_level;
   }
 
   MOCK_METHOD0(ShowNotification, void());
-  MOCK_METHOD0(OnNewNavigationStarted, void());
   MOCK_METHOD0(ForceActivationInCurrentWebContents, bool());
+
+  void WhitelistInCurrentWebContents(const GURL& url) {
+    ASSERT_TRUE(url.SchemeIsHTTPOrHTTPS());
+    whitelisted_hosts_.insert(url.host());
+  }
 
   void ClearWhitelist() { whitelisted_hosts_.clear(); }
 
  private:
   std::set<std::string> whitelisted_hosts_;
-
-  std::unique_ptr<VerifiedRulesetDealer::Handle> ruleset_dealer_;
 
   DISALLOW_COPY_AND_ASSIGN(MockSubresourceFilterClient);
 };
@@ -182,21 +168,22 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     rules.push_back(testing::CreateSuffixRule("disallowed.html"));
     ASSERT_NO_FATAL_FAILURE(test_ruleset_creator_.CreateRulesetWithRules(
         rules, &test_ruleset_pair_));
-    auto ruleset_dealer = std::make_unique<VerifiedRulesetDealer::Handle>(
-        base::MessageLoop::current()->task_runner());
-    ruleset_dealer->SetRulesetFile(
-        testing::TestRuleset::Open(test_ruleset_pair_.indexed));
+    ruleset_dealer_ = std::make_unique<VerifiedRulesetDealer::Handle>(
+        base::MessageLoopCurrent::Get()->task_runner());
+    ruleset_dealer_->TryOpenAndSetRulesetFile(test_ruleset_pair_.indexed.path,
+                                              base::DoNothing());
+
+    auto* contents = RenderViewHostTestHarness::web_contents();
     client_ =
         std::make_unique<::testing::NiceMock<MockSubresourceFilterClient>>();
-    client_->set_ruleset_dealer(std::move(ruleset_dealer));
-    ContentSubresourceFilterDriverFactory::CreateForWebContents(
-        RenderViewHostTestHarness::web_contents(), client_.get());
+    throttle_manager_ =
+        std::make_unique<ContentSubresourceFilterThrottleManager>(
+            client_.get(), ruleset_dealer_.get(), contents);
     fake_safe_browsing_database_ = new FakeSafeBrowsingDatabaseManager();
     NavigateAndCommit(GURL("https://test.com"));
-    Observe(RenderViewHostTestHarness::web_contents());
+    Observe(contents);
 
-    observer_ = std::make_unique<TestSubresourceFilterObserver>(
-        RenderViewHostTestHarness::web_contents());
+    observer_ = std::make_unique<TestSubresourceFilterObserver>(contents);
   }
 
   virtual void Configure() {
@@ -206,7 +193,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
   }
 
   void TearDown() override {
-    client_.reset();
+    ruleset_dealer_.reset();
 
     // RunUntilIdle() must be called multiple times to flush any outstanding
     // cross-thread interactions.
@@ -221,11 +208,6 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     content::RenderViewHostTestHarness::TearDown();
   }
 
-  ContentSubresourceFilterDriverFactory* factory() {
-    return ContentSubresourceFilterDriverFactory::FromWebContents(
-        RenderViewHostTestHarness::web_contents());
-  }
-
   TestSubresourceFilterObserver* observer() { return observer_.get(); }
 
   // content::WebContentsObserver:
@@ -238,8 +220,8 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
               fake_safe_browsing_database_));
     }
     std::vector<std::unique_ptr<content::NavigationThrottle>> throttles;
-    factory()->throttle_manager()->MaybeAppendNavigationThrottles(
-        navigation_handle, &throttles);
+    throttle_manager_->MaybeAppendNavigationThrottles(navigation_handle,
+                                                      &throttles);
     for (auto& it : throttles) {
       navigation_handle->RegisterThrottleForTesting(std::move(it));
     }
@@ -338,9 +320,6 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     fake_safe_browsing_database_->RemoveAllBlacklistedUrls();
   }
 
-  // With a null database the throttle becomes pass-through.
-  void UsePassThroughThrottle() { fake_safe_browsing_database_ = nullptr; }
-
   void RunUntilIdle() {
     base::RunLoop().RunUntilIdle();
     test_io_task_runner_->RunUntilIdle();
@@ -369,6 +348,10 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
 
   testing::TestRulesetCreator test_ruleset_creator_;
   testing::TestRulesetPair test_ruleset_pair_;
+
+  std::unique_ptr<VerifiedRulesetDealer::Handle> ruleset_dealer_;
+
+  std::unique_ptr<ContentSubresourceFilterThrottleManager> throttle_manager_;
 
   std::unique_ptr<content::NavigationSimulator> navigation_simulator_;
   std::unique_ptr<MockSubresourceFilterClient> client_;
@@ -444,22 +427,22 @@ class SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling
 };
 
 struct ActivationScopeTestData {
-  ActivationDecision expected_activation_decision;
+  ActivationLevel expected_activation_level;
   bool url_matches_activation_list;
   ActivationScope activation_scope;
 };
 
 const ActivationScopeTestData kActivationScopeTestData[] = {
-    {ActivationDecision::ACTIVATED, false /* url_matches_activation_list */,
+    {ActivationLevel::ENABLED, false /* url_matches_activation_list */,
      ActivationScope::ALL_SITES},
-    {ActivationDecision::ACTIVATED, true /* url_matches_activation_list */,
+    {ActivationLevel::ENABLED, true /* url_matches_activation_list */,
      ActivationScope::ALL_SITES},
-    {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-     true /* url_matches_activation_list */, ActivationScope::NO_SITES},
-    {ActivationDecision::ACTIVATED, true /* url_matches_activation_list */,
+    {ActivationLevel::DISABLED, true /* url_matches_activation_list */,
+     ActivationScope::NO_SITES},
+    {ActivationLevel::ENABLED, true /* url_matches_activation_list */,
      ActivationScope::ACTIVATION_LIST},
-    {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-     false /* url_matches_activation_list */, ActivationScope::ACTIVATION_LIST},
+    {ActivationLevel::DISABLED, false /* url_matches_activation_list */,
+     ActivationScope::ACTIVATION_LIST},
 };
 
 class SubresourceFilterSafeBrowsingActivationThrottleScopeTest
@@ -474,30 +457,10 @@ class SubresourceFilterSafeBrowsingActivationThrottleScopeTest
       SubresourceFilterSafeBrowsingActivationThrottleScopeTest);
 };
 
-TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
-       PassThroughThrottle) {
-  UsePassThroughThrottle();
-  SimulateNavigateAndCommit({GURL(kURL), GURL(kRedirectURL)}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-            *observer()->GetPageActivationForLastCommittedLoad());
-
-  scoped_configuration()->ResetConfiguration(
-      Configuration(ActivationLevel::ENABLED, ActivationScope::ALL_SITES));
-  SimulateNavigateAndCommit({GURL(kURL), GURL(kRedirectURL)}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
-            *observer()->GetPageActivationForLastCommittedLoad());
-
-  scoped_configuration()->ResetConfiguration(
-      Configuration(ActivationLevel::ENABLED, ActivationScope::NO_SITES));
-  SimulateNavigateAndCommit({GURL(kURL), GURL(kRedirectURL)}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-            *observer()->GetPageActivationForLastCommittedLoad());
-}
-
 TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, NoConfigs) {
   scoped_configuration()->ResetConfiguration(std::vector<Configuration>());
   SimulateNavigateAndCommit({GURL(kURL)}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 }
 
@@ -512,7 +475,6 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
   config2.activation_conditions.priority = 1;
 
   Configuration config3(ActivationLevel::ENABLED, ActivationScope::ALL_SITES);
-  config3.activation_options.should_whitelist_site_on_reload = true;
   config3.activation_conditions.priority = 0;
 
   scoped_configuration()->ResetConfiguration({config1, config2, config3});
@@ -526,21 +488,12 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
   ConfigureForMatch(match_url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
                     metadata);
   SimulateNavigateAndCommit({match_url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATION_DISABLED,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 
   // Should match |config3|.
   SimulateNavigateAndCommit({non_match_url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
-            *observer()->GetPageActivationForLastCommittedLoad());
-
-  // Should match |config3|, but a reload, so this should get whitelisted.
-  auto reload_simulator = content::NavigationSimulator::CreateRendererInitiated(
-      non_match_url, main_rfh());
-  reload_simulator->SetTransition(ui::PAGE_TRANSITION_RELOAD);
-  reload_simulator->Start();
-  SimulateCommit(reload_simulator.get());
-  EXPECT_EQ(ActivationDecision::URL_WHITELISTED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 }
 
@@ -552,18 +505,18 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
   GURL url(kURL);
 
   SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 
   ConfigureForMatch(url);
   SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATION_DISABLED,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 
   // Whitelisting occurs last, so the decision should still be DISABLED.
-  factory()->client()->WhitelistInCurrentWebContents(url);
+  client()->WhitelistInCurrentWebContents(url);
   SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATION_DISABLED,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 }
 
@@ -573,12 +526,12 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
       Configuration(ActivationLevel::ENABLED, ActivationScope::ALL_SITES));
   GURL url(kURL);
   SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 
   ConfigureForMatch(url);
   SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 
   // Adding performance measurement should keep activation.
@@ -587,17 +540,17 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
   config_with_perf.activation_options.performance_measurement_rate = 1.0;
   scoped_configuration()->ResetConfiguration(std::move(config_with_perf));
   SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
 }
 
 TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
        NavigationFails_NoActivation) {
-  EXPECT_EQ(base::Optional<ActivationDecision>(),
+  EXPECT_EQ(base::Optional<ActivationLevel>(),
             observer()->GetPageActivationForLastCommittedLoad());
   content::NavigationSimulator::NavigateAndFailFromDocument(
       GURL(kURL), net::ERR_TIMED_OUT, main_rfh());
-  EXPECT_EQ(base::Optional<ActivationDecision>(),
+  EXPECT_EQ(base::Optional<ActivationLevel>(),
             observer()->GetPageActivationForLastCommittedLoad());
 }
 
@@ -605,177 +558,68 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
        NotificationVisibility) {
   GURL url(kURL);
   ConfigureForMatch(url);
-  EXPECT_CALL(*client(), OnNewNavigationStarted()).Times(1);
   content::RenderFrameHost* rfh = SimulateNavigateAndCommit({url}, main_rfh());
 
   EXPECT_CALL(*client(), ShowNotification()).Times(1);
   EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(rfh));
 }
 
-TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
-       SuppressNotificationVisibility) {
-  Configuration config(ActivationLevel::ENABLED, ActivationScope::ALL_SITES);
-  config.activation_options.should_suppress_notifications = true;
-  scoped_configuration()->ResetConfiguration(std::move(config));
-
-  GURL url(kURL);
-  content::RenderFrameHost* rfh = SimulateNavigateAndCommit({url}, main_rfh());
-  EXPECT_CALL(*client(), ShowNotification()).Times(0);
-  EXPECT_CALL(*client(), OnNewNavigationStarted()).Times(0);
-  EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(rfh));
-}
-
-TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
-       WhitelistSiteOnReload) {
-  const struct {
-    content::Referrer referrer;
-    ui::PageTransition transition;
-    ActivationDecision expected_activation_decision;
-  } kTestCases[] = {
-      {content::Referrer(), ui::PAGE_TRANSITION_LINK,
-       ActivationDecision::ACTIVATED},
-      {content::Referrer(GURL(kUrlA), blink::kWebReferrerPolicyDefault),
-       ui::PAGE_TRANSITION_LINK, ActivationDecision::ACTIVATED},
-      {content::Referrer(GURL(kURL), blink::kWebReferrerPolicyDefault),
-       ui::PAGE_TRANSITION_LINK, ActivationDecision::URL_WHITELISTED},
-      {content::Referrer(), ui::PAGE_TRANSITION_RELOAD,
-       ActivationDecision::URL_WHITELISTED}};
-
-  Configuration config(ActivationLevel::ENABLED, ActivationScope::ALL_SITES);
-  config.activation_options.should_whitelist_site_on_reload = true;
-  scoped_configuration()->ResetConfiguration(std::move(config));
-
-  for (const auto& test_case : kTestCases) {
-    SCOPED_TRACE(::testing::Message("referrer = \"")
-                 << test_case.referrer.url << "\""
-                 << " transition = \"" << test_case.transition << "\"");
-
-    auto simulator = content::NavigationSimulator::CreateRendererInitiated(
-        GURL(kURL), main_rfh());
-    simulator->SetTransition(test_case.transition);
-    simulator->SetReferrer(test_case.referrer);
-    SimulateCommit(simulator.get());
-    EXPECT_EQ(test_case.expected_activation_decision,
-              *observer()->GetPageActivationForLastCommittedLoad());
-    // Verify that if the first URL failed to activate, subsequent same-origin
-    // navigations also fail to activate.
-    simulator = content::NavigationSimulator::CreateRendererInitiated(
-        GURL(kURLWithParams), main_rfh());
-    SimulateCommit(simulator.get());
-    EXPECT_EQ(test_case.expected_activation_decision,
-              *observer()->GetPageActivationForLastCommittedLoad());
-  }
-}
-
-TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
-       ActivateForFrameState) {
-  const struct {
-    ActivationDecision activation_decision;
-    ActivationLevel activation_level;
-  } kTestCases[] = {
-      {ActivationDecision::ACTIVATED, ActivationLevel::DRYRUN},
-      {ActivationDecision::ACTIVATED, ActivationLevel::ENABLED},
-      {ActivationDecision::ACTIVATION_DISABLED, ActivationLevel::DISABLED},
-  };
-  for (const auto& test_data : kTestCases) {
-    SCOPED_TRACE(::testing::Message()
-                 << "activation_decision "
-                 << static_cast<int>(test_data.activation_decision)
-                 << " activation_level " << test_data.activation_level);
-    client()->ClearWhitelist();
-    scoped_configuration()->ResetConfiguration(Configuration(
-        test_data.activation_level, ActivationScope::ACTIVATION_LIST,
-        ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL));
-    const GURL url(kURLWithParams);
-    safe_browsing::ThreatMetadata metadata;
-    metadata.threat_pattern_type =
-        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS;
-    ConfigureForMatch(url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
-                      metadata);
-    SimulateNavigateAndCommit({url}, main_rfh());
-    EXPECT_EQ(test_data.activation_decision,
-              *observer()->GetPageActivationForLastCommittedLoad());
-
-    // Whitelisting is only applied when the page will otherwise activate.
-    client()->WhitelistInCurrentWebContents(url);
-    ActivationDecision decision =
-        test_data.activation_level == ActivationLevel::DISABLED
-            ? test_data.activation_decision
-            : ActivationDecision::URL_WHITELISTED;
-    SimulateNavigateAndCommit({url}, main_rfh());
-    EXPECT_EQ(decision, *observer()->GetPageActivationForLastCommittedLoad());
-  }
-}
-
 TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, ActivationList) {
   const struct {
-    ActivationDecision expected_activation_decision;
+    ActivationLevel expected_activation_level;
     ActivationList activation_list;
     safe_browsing::SBThreatType threat_type;
     safe_browsing::ThreatPatternType threat_type_metadata;
   } kTestCases[] = {
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET, ActivationList::NONE,
+      {ActivationLevel::DISABLED, ActivationList::NONE,
        safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
        safe_browsing::ThreatPatternType::NONE},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
        safe_browsing::ThreatPatternType::MALWARE_LANDING},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
        safe_browsing::ThreatPatternType::MALWARE_DISTRIBUTION},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_API_ABUSE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_BLACKLISTED_RESOURCE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_BINARY_MALWARE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_UNWANTED,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_MALWARE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_SAFE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATED, ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::ENABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
        safe_browsing::ThreatPatternType::NONE},
-      {ActivationDecision::ACTIVATED,
-       ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
+      {ActivationLevel::ENABLED, ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATED, ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::ENABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
-      {ActivationDecision::ACTIVATED, ActivationList::SUBRESOURCE_FILTER,
+      {ActivationLevel::ENABLED, ActivationList::SUBRESOURCE_FILTER,
        safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER,
        safe_browsing::ThreatPatternType::NONE},
-      {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
-       ActivationList::PHISHING_INTERSTITIAL,
+      {ActivationLevel::DISABLED, ActivationList::PHISHING_INTERSTITIAL,
        safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER,
        safe_browsing::ThreatPatternType::NONE},
   };
@@ -790,7 +634,7 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, ActivationList) {
     ConfigureForMatch(test_url, test_case.threat_type, metadata);
     SimulateNavigateAndCommit({GURL(kUrlA), GURL(kUrlB), GURL(kUrlC), test_url},
                               main_rfh());
-    EXPECT_EQ(test_case.expected_activation_decision,
+    EXPECT_EQ(test_case.expected_activation_level,
               *observer()->GetPageActivationForLastCommittedLoad());
   }
 }
@@ -803,8 +647,69 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
   fake_safe_browsing_database()->set_synchronous_failure();
   SimulateStartAndExpectProceed(url);
   SimulateCommitAndExpectProceed();
-  tester().ExpectTotalCount(kMatchesPatternHistogramNameSubresourceFilterSuffix,
-                            0);
+  tester().ExpectUniqueSample(kActivationListHistogram, ActivationList::NONE,
+                              1);
+}
+
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, LogsUkm) {
+  ukm::InitializeSourceUrlRecorderForWebContents(
+      RenderViewHostTestHarness::web_contents());
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+  const GURL url(kURL);
+  ConfigureForMatch(url);
+  SimulateNavigateAndCommit({url}, main_rfh());
+  using SubresourceFilter = ukm::builders::SubresourceFilter;
+  const auto& entries =
+      test_ukm_recorder.GetEntriesByName(SubresourceFilter::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* entry : entries) {
+    test_ukm_recorder.ExpectEntrySourceHasUrl(entry, url);
+    test_ukm_recorder.ExpectEntryMetric(
+        entry, SubresourceFilter::kActivationDecisionName,
+        static_cast<int64_t>(ActivationDecision::ACTIVATED));
+  }
+}
+
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
+       LogsUkmNoActivation) {
+  ukm::InitializeSourceUrlRecorderForWebContents(
+      RenderViewHostTestHarness::web_contents());
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+  const GURL url(kURL);
+  SimulateNavigateAndCommit({url}, main_rfh());
+  using SubresourceFilter = ukm::builders::SubresourceFilter;
+  const auto& entries =
+      test_ukm_recorder.GetEntriesByName(SubresourceFilter::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* entry : entries) {
+    test_ukm_recorder.ExpectEntrySourceHasUrl(entry, url);
+    test_ukm_recorder.ExpectEntryMetric(
+        entry, SubresourceFilter::kActivationDecisionName,
+        static_cast<int64_t>(
+            ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET));
+  }
+}
+
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, LogsUkmDryRun) {
+  scoped_configuration()->ResetConfiguration(
+      Configuration(ActivationLevel::DRYRUN, ActivationScope::ALL_SITES));
+  ukm::InitializeSourceUrlRecorderForWebContents(
+      RenderViewHostTestHarness::web_contents());
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+  const GURL url(kURL);
+  SimulateNavigateAndCommit({url}, main_rfh());
+  using SubresourceFilter = ukm::builders::SubresourceFilter;
+  const auto& entries =
+      test_ukm_recorder.GetEntriesByName(SubresourceFilter::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  for (const auto* entry : entries) {
+    test_ukm_recorder.ExpectEntrySourceHasUrl(entry, url);
+    test_ukm_recorder.ExpectEntryMetric(
+        entry, SubresourceFilter::kActivationDecisionName,
+        static_cast<int64_t>(ActivationDecision::ACTIVATED));
+    test_ukm_recorder.ExpectEntryMetric(entry, SubresourceFilter::kDryRunName,
+                                        true);
+  }
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
@@ -818,16 +723,12 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
   if (test_data.url_matches_activation_list)
     ConfigureForMatch(test_url);
   SimulateNavigateAndCommit({test_url}, main_rfh());
-  EXPECT_EQ(test_data.expected_activation_decision,
+  EXPECT_EQ(test_data.expected_activation_level,
             *observer()->GetPageActivationForLastCommittedLoad());
   if (test_data.url_matches_activation_list) {
-    factory()->client()->WhitelistInCurrentWebContents(test_url);
-    ActivationDecision expected_decision =
-        test_data.expected_activation_decision;
-    if (expected_decision == ActivationDecision::ACTIVATED)
-      expected_decision = ActivationDecision::URL_WHITELISTED;
+    client()->WhitelistInCurrentWebContents(test_url);
     SimulateNavigateAndCommit({test_url}, main_rfh());
-    EXPECT_EQ(expected_decision,
+    EXPECT_EQ(ActivationLevel::DISABLED,
               *observer()->GetPageActivationForLastCommittedLoad());
   }
 };
@@ -852,16 +753,7 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
     if (test_data.url_matches_activation_list)
       ConfigureForMatch(GURL(url));
     SimulateNavigateAndCommit({GURL(url)}, main_rfh());
-    ActivationDecision expected_decision =
-        ActivationDecision::UNSUPPORTED_SCHEME;
-    // We only log UNSUPPORTED_SCHEME if the navigation would have otherwise
-    // activated. Note that non http/s URLs will never match an activation list.
-    if (test_data.expected_activation_decision ==
-            ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET ||
-        test_data.activation_scope == ActivationScope::ACTIVATION_LIST) {
-      expected_decision = ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET;
-    }
-    EXPECT_EQ(expected_decision,
+    EXPECT_EQ(ActivationLevel::DISABLED,
               *observer()->GetPageActivationForLastCommittedLoad());
   }
 
@@ -870,28 +762,23 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
     if (test_data.url_matches_activation_list)
       ConfigureForMatch(GURL(url));
     SimulateNavigateAndCommit({GURL(url)}, main_rfh());
-    EXPECT_EQ(test_data.expected_activation_decision,
+    EXPECT_EQ(test_data.expected_activation_level,
               *observer()->GetPageActivationForLastCommittedLoad());
   }
 };
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
        ListNotMatched_NoActivation) {
-  const ActivationListTestData& test_data = GetParam();
   const GURL url(kURL);
   SimulateStartAndExpectProceed(url);
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectUniqueSample(kMatchesPatternHistogramName,
+  tester().ExpectUniqueSample(kActivationListHistogram,
                               static_cast<int>(ActivationList::NONE), 1);
 
   tester().ExpectTotalCount(kSafeBrowsingNavigationDelay, 1);
-  tester().ExpectTotalCount(kSafeBrowsingNavigationDelayNoSpeculation, 1);
   tester().ExpectTotalCount(kSafeBrowsingCheckTime, 1);
-
-  const std::string suffix(GetSuffixForList(test_data.activation_list_type));
-  tester().ExpectTotalCount(kNavigationChainSize + suffix, 0);
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
@@ -901,29 +788,23 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
   ConfigureForMatchParam(url);
   SimulateStartAndExpectProceed(url);
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectUniqueSample(kMatchesPatternHistogramName,
+  tester().ExpectUniqueSample(kActivationListHistogram,
                               static_cast<int>(test_data.activation_list_type),
                               1);
-  const std::string suffix(GetSuffixForList(test_data.activation_list_type));
-  tester().ExpectUniqueSample(kNavigationChainSize + suffix, 1, 1);
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
        ListNotMatchedAfterRedirect_NoActivation) {
-  const ActivationListTestData& test_data = GetParam();
   const GURL url(kURL);
   SimulateStartAndExpectProceed(url);
   SimulateRedirectAndExpectProceed(GURL(kRedirectURL));
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectUniqueSample(kMatchesPatternHistogramName,
+  tester().ExpectUniqueSample(kActivationListHistogram,
                               static_cast<int>(ActivationList::NONE), 1);
-
-  const std::string suffix(GetSuffixForList(test_data.activation_list_type));
-  tester().ExpectTotalCount(kNavigationChainSize + suffix, 0);
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
@@ -934,14 +815,11 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
   SimulateStartAndExpectProceed(url);
   SimulateRedirectAndExpectProceed(GURL(kRedirectURL));
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectUniqueSample(kMatchesPatternHistogramName,
+  tester().ExpectUniqueSample(kActivationListHistogram,
                               static_cast<int>(test_data.activation_list_type),
                               1);
-
-  const std::string suffix(GetSuffixForList(test_data.activation_list_type));
-  tester().ExpectUniqueSample(kNavigationChainSize + suffix, 2, 1);
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
@@ -962,13 +840,9 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
   EXPECT_EQ(expected_delay, test_io_task_runner()->NextPendingTaskDelay());
   test_io_task_runner()->FastForwardBy(expected_delay);
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectTotalCount(kMatchesPatternHistogramNameSubresourceFilterSuffix,
-                            0);
-  tester().ExpectTotalCount(kNavigationChainSizeSubresourceFilterSuffix, 0);
   tester().ExpectTotalCount(kSafeBrowsingNavigationDelay, 1);
-  tester().ExpectTotalCount(kSafeBrowsingNavigationDelayNoSpeculation, 1);
   tester().ExpectTotalCount(kSafeBrowsingCheckTime, 1);
 }
 
@@ -984,18 +858,14 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
   RunUntilIdle();
 
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectUniqueSample(kMatchesPatternHistogramName,
+  tester().ExpectUniqueSample(kActivationListHistogram,
                               static_cast<int>(test_data.activation_list_type),
                               1);
 
-  const std::string suffix(GetSuffixForList(test_data.activation_list_type));
-  tester().ExpectUniqueSample(kNavigationChainSize + suffix, 1, 1);
-
   tester().ExpectTimeBucketCount(kSafeBrowsingNavigationDelay,
                                  base::TimeDelta::FromMilliseconds(0), 1);
-  tester().ExpectTotalCount(kSafeBrowsingNavigationDelayNoSpeculation, 1);
 }
 
 // Flaky on Win, Chromium and Linux. http://crbug.com/748524
@@ -1013,19 +883,82 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
   RunUntilIdle();
 
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATED,
+  EXPECT_EQ(ActivationLevel::ENABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectUniqueSample(kMatchesPatternHistogramName,
+  tester().ExpectUniqueSample(kActivationListHistogram,
                               static_cast<int>(test_data.activation_list_type),
                               1);
 
   const std::string suffix(GetSuffixForList(test_data.activation_list_type));
-  tester().ExpectUniqueSample(kNavigationChainSize + suffix, 2, 1);
-
   tester().ExpectTimeBucketCount(kSafeBrowsingNavigationDelay,
                                  base::TimeDelta::FromMilliseconds(0), 1);
-  tester().ExpectTotalCount(kSafeBrowsingNavigationDelayNoSpeculation, 1);
   tester().ExpectTotalCount(kSafeBrowsingCheckTime, 2);
+}
+
+struct RedirectSamplesAndResults {
+  std::vector<GURL> urls;
+  bool expected_activation;
+  ActivationPosition expected_position;
+};
+
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
+       ActivationTriggeredOnRedirect) {
+  // Turn on the feature to perform safebrowsing on redirects.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      kSafeBrowsingSubresourceFilterConsiderRedirects);
+  std::string histogram_string =
+      "SubresourceFilter.PageLoad.Activation.RedirectPosition";
+
+  // Set up the urls for enforcement.
+  GURL normal_url("https://example.regular");
+  GURL bad_url("https://example.bad");
+  GURL worse_url("https://example.worse");
+
+  // Set up the configurations, make phishing worse than subresource_filter.
+  Configuration config_p1(ActivationLevel::ENABLED,
+                          ActivationScope::ACTIVATION_LIST,
+                          ActivationList::SUBRESOURCE_FILTER);
+  config_p1.activation_conditions.priority = 1;
+  Configuration config_p2(ActivationLevel::ENABLED,
+                          ActivationScope::ACTIVATION_LIST,
+                          ActivationList::PHISHING_INTERSTITIAL);
+  config_p2.activation_conditions.priority = 2;
+  scoped_configuration()->ResetConfiguration({config_p1, config_p2});
+
+  // Configure the URLs to match on different lists, phishing is worse.
+  ConfigureForMatch(bad_url, safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER);
+  ConfigureForMatch(worse_url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
+
+  // Check cases where there are multiple redirection.
+  const RedirectSamplesAndResults kTestCases[] = {
+      {{worse_url, normal_url, normal_url}, true, ActivationPosition::kFirst},
+      {{bad_url, normal_url, worse_url}, true, ActivationPosition::kLast},
+      {{worse_url, normal_url, bad_url}, true, ActivationPosition::kFirst},
+      {{normal_url, worse_url, bad_url}, true, ActivationPosition::kLast},
+      {{normal_url, normal_url}, false, ActivationPosition::kMaxValue},
+      {{normal_url, bad_url, normal_url}, false, ActivationPosition::kMaxValue},
+      {{worse_url}, true, ActivationPosition::kOnly},
+  };
+  for (const auto& test_case : kTestCases) {
+    const base::HistogramTester histograms;
+    SimulateStartAndExpectProceed(test_case.urls[0]);
+    for (size_t index = 1; index < test_case.urls.size(); index++) {
+      SimulateRedirectAndExpectProceed(test_case.urls[index]);
+    }
+    RunUntilIdle();
+    SimulateCommitAndExpectProceed();
+    if (test_case.expected_activation) {
+      EXPECT_EQ(ActivationLevel::ENABLED,
+                *observer()->GetPageActivationForLastCommittedLoad());
+      histograms.ExpectUniqueSample(histogram_string,
+                                    test_case.expected_position, 1);
+    } else {
+      EXPECT_EQ(ActivationLevel::DISABLED,
+                *observer()->GetPageActivationForLastCommittedLoad());
+      histograms.ExpectTotalCount(histogram_string, 0);
+    }
+  }
 }
 
 // Disabled due to flaky failures: https://crbug.com/753669.
@@ -1044,75 +977,10 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
   RunUntilIdle();
 
   SimulateCommitAndExpectProceed();
-  EXPECT_EQ(ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+  EXPECT_EQ(ActivationLevel::DISABLED,
             *observer()->GetPageActivationForLastCommittedLoad());
-  tester().ExpectTotalCount(kMatchesPatternHistogramNameSubresourceFilterSuffix,
-                            0);
-  tester().ExpectTotalCount(kNavigationChainSizeSubresourceFilterSuffix, 0);
   tester().ExpectTimeBucketCount(kSafeBrowsingNavigationDelay,
                                  base::TimeDelta::FromMilliseconds(0), 1);
-  tester().ExpectTotalCount(kSafeBrowsingNavigationDelayNoSpeculation, 1);
-}
-
-TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
-       RedirectPatternTest) {
-  struct RedirectRedirectChainMatchPatternTestData {
-    std::vector<bool> blacklisted_urls;
-    std::vector<GURL> navigation_chain;
-  } kRedirectRecordedHistogramsTestData[] = {
-      {{false}, {GURL(kUrlA)}},
-      {{true}, {GURL(kUrlA)}},
-      {{false, false}, {GURL(kUrlA), GURL(kUrlB)}},
-      {{false, true}, {GURL(kUrlA), GURL(kUrlB)}},
-      {{true, false}, {GURL(kUrlA), GURL(kUrlB)}},
-      {{true, true}, {GURL(kUrlA), GURL(kUrlB)}},
-      {{false, false, false}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{false, false, true}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{false, true, false}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{false, true, true}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{true, false, false}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{true, false, true}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{true, true, false}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{true, true, true}, {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC)}},
-      {{false, true, false, false},
-       {GURL(kUrlA), GURL(kUrlB), GURL(kUrlC), GURL(kUrlD)}},
-  };
-
-  for (const auto& test_data : kRedirectRecordedHistogramsTestData) {
-    base::HistogramTester histogram_tester;
-    ClearAllBlacklistedUrls();
-    auto it = test_data.navigation_chain.begin();
-    for (size_t i = 0u; i < test_data.blacklisted_urls.size(); ++i) {
-      if (test_data.blacklisted_urls[i])
-        ConfigureForMatchParam(test_data.navigation_chain[i]);
-    }
-    SimulateStartAndExpectProceed(*it);
-    for (++it; it != test_data.navigation_chain.end(); ++it)
-      SimulateRedirectAndExpectProceed(*it);
-    SimulateCommitAndExpectProceed();
-
-    // Verify histograms
-    const std::string suffix_param(
-        GetSuffixForList(GetParam().activation_list_type));
-    auto check_histogram = [&](std::string suffix) {
-      bool matches =
-          suffix == suffix_param && test_data.blacklisted_urls.back();
-      if (matches) {
-        histogram_tester.ExpectUniqueSample(
-            kMatchesPatternHistogramName,
-            static_cast<int>(GetParam().activation_list_type), 1);
-        histogram_tester.ExpectBucketCount(kNavigationChainSize + suffix,
-                                           test_data.navigation_chain.size(),
-                                           1);
-      } else {
-        histogram_tester.ExpectTotalCount(kNavigationChainSize + suffix, 0);
-      }
-    };
-
-    check_histogram("SocialEngineeringAdsInterstitial");
-    check_histogram("PhishingInterstitial");
-    check_histogram("SubresourceFilterOnly");
-  }
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleTestWithCancelling,

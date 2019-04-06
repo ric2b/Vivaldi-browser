@@ -39,7 +39,6 @@
 #include "content/public/browser/notification_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/message_center/message_center.h"
 
 using ::testing::_;
 using ::testing::Invoke;
@@ -320,9 +319,10 @@ void AutomaticRebootManagerBasicTest::SetUp() {
   update_reboot_needed_uptime_file_ =
       temp_dir.Append("update_reboot_needed_uptime");
   ASSERT_EQ(0, base::WriteFile(update_reboot_needed_uptime_file_, NULL, 0));
-  ASSERT_TRUE(PathService::Override(chromeos::FILE_UPTIME, uptime_file));
-  ASSERT_TRUE(PathService::Override(chromeos::FILE_UPDATE_REBOOT_NEEDED_UPTIME,
-                                    update_reboot_needed_uptime_file_));
+  ASSERT_TRUE(base::PathService::Override(chromeos::FILE_UPTIME, uptime_file));
+  ASSERT_TRUE(
+      base::PathService::Override(chromeos::FILE_UPDATE_REBOOT_NEEDED_UPTIME,
+                                  update_reboot_needed_uptime_file_));
 
   TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
   AutomaticRebootManager::RegisterPrefs(local_state_.registry());
@@ -456,8 +456,8 @@ void AutomaticRebootManagerBasicTest::ExpectNoRebootRequest() {
 
 void AutomaticRebootManagerBasicTest::CreateAutomaticRebootManager(
     bool expect_reboot) {
-  automatic_reboot_manager_.reset(new AutomaticRebootManager(
-      std::unique_ptr<base::TickClock>(task_runner_->GetMockTickClock())));
+  automatic_reboot_manager_.reset(
+      new AutomaticRebootManager(task_runner_->GetMockTickClock()));
   automatic_reboot_manager_observer_.Init(automatic_reboot_manager_.get());
   task_runner_->RunUntilIdle();
   EXPECT_EQ(expect_reboot ? 1 : 0,

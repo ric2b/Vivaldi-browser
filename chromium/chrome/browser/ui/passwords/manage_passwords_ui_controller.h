@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_UI_CONTROLLER_H_
 #define CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_UI_CONTROLLER_H_
 
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -12,7 +13,7 @@
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -28,10 +29,11 @@ class WebContents;
 namespace password_manager {
 enum class CredentialType;
 struct InteractionsStats;
-class PasswordFormManager;
+class PasswordFormManagerForUI;
 }
 
 class AccountChooserPrompt;
+struct AccountInfo;
 class AutoSigninFirstRunPrompt;
 class ManagePasswordsIconView;
 class PasswordDialogController;
@@ -55,13 +57,13 @@ class ManagePasswordsUIController
 
   // PasswordsClientUIDelegate:
   void OnPasswordSubmitted(
-      std::unique_ptr<password_manager::PasswordFormManager> form_manager)
+      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager)
       override;
   void OnUpdatePasswordSubmitted(
-      std::unique_ptr<password_manager::PasswordFormManager> form_manager)
+      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager)
       override;
   void OnShowManualFallbackForSaving(
-      std::unique_ptr<password_manager::PasswordFormManager> form_manager,
+      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager,
       bool has_generated_password,
       bool is_update) override;
   void OnHideManualFallbackForSaving() override;
@@ -74,7 +76,7 @@ class ManagePasswordsUIController
       const GURL& origin) override;
   void OnPromptEnableAutoSignin() override;
   void OnAutomaticPasswordSave(
-      std::unique_ptr<password_manager::PasswordFormManager> form_manager)
+      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager)
       override;
   void OnPasswordAutofilled(
       const std::map<base::string16, const autofill::PasswordForm*>&
@@ -107,7 +109,6 @@ class ManagePasswordsUIController
   const autofill::PasswordForm& GetPendingPassword() const override;
   password_manager::metrics_util::CredentialSourceType GetCredentialSource()
       const override;
-  bool IsPasswordOverridden() const override;
   const std::vector<std::unique_ptr<autofill::PasswordForm>>& GetCurrentForms()
       const override;
   const password_manager::InteractionsStats* GetCurrentInteractionStats()
@@ -118,19 +119,27 @@ class ManagePasswordsUIController
   void OnNoInteraction() override;
   void OnNopeUpdateClicked() override;
   void NeverSavePassword() override;
+  void OnPasswordsRevealed() override;
   void SavePassword(const base::string16& username,
                     const base::string16& password) override;
-  void UpdatePassword(const autofill::PasswordForm& password_form) override;
   void ChooseCredential(
       const autofill::PasswordForm& form,
       password_manager::CredentialType credential_type) override;
   void NavigateToSmartLockHelpPage() override;
   void NavigateToPasswordManagerAccountDashboard() override;
   void NavigateToPasswordManagerSettingsPage() override;
-  void NavigateToChromeSignIn() override;
+  void EnableSync(const AccountInfo& account,
+                  bool is_default_promo_account) override;
   void OnDialogHidden() override;
   bool AuthenticateUser() override;
   bool ArePasswordsRevealedWhenBubbleIsOpened() const override;
+
+#if defined(UNIT_TEST)
+  // Overwrites the client for |passwords_data_|.
+  void set_client(password_manager::PasswordManagerClient* client) {
+    passwords_data_.set_client(client);
+  }
+#endif  // defined(UNIT_TEST)
 
  protected:
   explicit ManagePasswordsUIController(
@@ -139,8 +148,6 @@ class ManagePasswordsUIController
   // The pieces of saving and blacklisting passwords that interact with
   // FormManager, split off into internal functions for testing/mocking.
   virtual void SavePasswordInternal();
-  virtual void UpdatePasswordInternal(
-      const autofill::PasswordForm& password_form);
   virtual void NeverSavePasswordInternal();
 
   // Called when a PasswordForm is autofilled, when a new PasswordForm is
@@ -165,19 +172,10 @@ class ManagePasswordsUIController
            bubble_status_ == SHOULD_POP_UP_AFTER_REAUTH;
   }
 
-  // For Vivaldi, show the bubble without anchoring it to any icon, since we
-  // don't have the location bar or the icon.
-  virtual void VivaldiShowBubble();
-
-  // Overwrites the client for |passwords_data_|.
-  void set_client(password_manager::PasswordManagerClient* client) {
-    passwords_data_.set_client(client);
-  }
-
   // content::WebContentsObserver:
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void WasHidden() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
 
  private:
   friend class content::WebContentsUserData<ManagePasswordsUIController>;
@@ -199,6 +197,10 @@ class ManagePasswordsUIController
 
   // Shows the password bubble without user interaction.
   void ShowBubbleWithoutUserInteraction();
+
+  // Resets |bubble_status_| signalling that if the bubble was due to pop up,
+  // it shouldn't anymore.
+  void ClearPopUpFlagForBubble();
 
   // Closes the account chooser gracefully so the callback is called. Then sets
   // the state to MANAGE_STATE.

@@ -18,8 +18,10 @@
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
 #include "base/process/process_handle.h"
+#include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/values.h"
@@ -38,6 +40,8 @@ std::string HistogramTypeToString(HistogramType type) {
       return "CUSTOM_HISTOGRAM";
     case SPARSE_HISTOGRAM:
       return "SPARSE_HISTOGRAM";
+    case DUMMY_HISTOGRAM:
+      return "DUMMY_HISTOGRAM";
   }
   NOTREACHED();
   return "UNKNOWN";
@@ -85,8 +89,40 @@ void HistogramBase::ClearFlags(int32_t flags) {
   subtle::NoBarrier_Store(&flags_, old_flags & ~flags);
 }
 
-void HistogramBase::AddTime(const TimeDelta& time) {
-  Add(static_cast<Sample>(time.InMilliseconds()));
+void HistogramBase::AddScaled(Sample value, int count, int scale) {
+  DCHECK_LT(0, scale);
+
+  // Convert raw count and probabilistically round up/down if the remainder
+  // is more than a random number [0, scale). This gives a more accurate
+  // count when there are a large number of records. RandInt is "inclusive",
+  // hence the -1 for the max value.
+  int64_t count_scaled = count / scale;
+  if (count - (count_scaled * scale) > base::RandInt(0, scale - 1))
+    count_scaled += 1;
+  if (count_scaled == 0)
+    return;
+
+  AddCount(value, count_scaled);
+}
+
+void HistogramBase::AddKilo(Sample value, int count) {
+  AddScaled(value, count, 1000);
+}
+
+void HistogramBase::AddKiB(Sample value, int count) {
+  AddScaled(value, count, 1024);
+}
+
+void HistogramBase::AddTimeMillisecondsGranularity(const TimeDelta& time) {
+  Add(saturated_cast<Sample>(time.InMilliseconds()));
+}
+
+void HistogramBase::AddTimeMicrosecondsGranularity(const TimeDelta& time) {
+  // Intentionally drop high-resolution reports on clients with low-resolution
+  // clocks. High-resolution metrics cannot make use of low-resolution data and
+  // reporting it merely adds noise to the metric. https://crbug.com/807615#c16
+  if (TimeTicks::IsHighResolution())
+    Add(saturated_cast<Sample>(time.InMicroseconds()));
 }
 
 void HistogramBase::AddBoolean(bool value) {
@@ -103,10 +139,7 @@ uint32_t HistogramBase::FindCorruption(const HistogramSamples& samples) const {
   return NO_INCONSISTENCIES;
 }
 
-bool HistogramBase::ValidateHistogramContents(bool crash_if_invalid,
-                                              int corrupted_count) const {
-  return true;
-}
+void HistogramBase::ValidateHistogramContents() const {}
 
 void HistogramBase::WriteJSON(std::string* output,
                               JSONVerbosityLevel verbosity_level) const {

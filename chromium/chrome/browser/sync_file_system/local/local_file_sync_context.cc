@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
@@ -549,7 +548,7 @@ void LocalFileSyncContext::OnSyncEnabled(const FileSystemURL& url) {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
   if (shutdown_on_io_)
     return;
-  UpdateChangesForOrigin(url.origin(), NoopClosure());
+  UpdateChangesForOrigin(url.origin(), base::DoNothing());
   if (url_syncable_callback_.is_null() ||
       sync_status()->IsWriting(url_waiting_sync_on_io_)) {
     return;
@@ -719,7 +718,7 @@ void LocalFileSyncContext::DidInitializeChangeTrackerOnIOThread(
 
   origins_with_pending_changes_.insert(origins_with_changes->begin(),
                                        origins_with_changes->end());
-  ScheduleNotifyChangesUpdatedOnIOThread(NoopClosure());
+  ScheduleNotifyChangesUpdatedOnIOThread(base::DoNothing());
 
   InitializeFileSystemContextOnIOThread(source_url, file_system_context,
                                         GURL(), std::string(),
@@ -863,7 +862,7 @@ void LocalFileSyncContext::PromoteDemotedChangesForURLs(
         FROM_HERE,
         base::BindOnce(&LocalFileSyncContext::PromoteDemotedChangesForURLs,
                        this, base::RetainedRef(file_system_context),
-                       base::Passed(&urls)));
+                       std::move(urls)));
     return;
   }
 
@@ -910,7 +909,7 @@ void LocalFileSyncContext::DidGetWritingStatusForSync(
   DCHECK(file_util);
 
   base::File::Error file_error = file_util->GetFileInfo(
-      base::MakeUnique<FileSystemOperationContext>(file_system_context).get(),
+      std::make_unique<FileSystemOperationContext>(file_system_context).get(),
       url, &file_info, &platform_path);
 
   storage::ScopedFile snapshot;
@@ -966,9 +965,9 @@ void LocalFileSyncContext::DidGetWritingStatusForSync(
                        url, true /* for_snapshot_sync */));
   }
 
-  ui_task_runner_->PostTask(FROM_HERE,
-                            base::BindOnce(callback, status, sync_file_info,
-                                           base::Passed(&snapshot)));
+  ui_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(callback, status, sync_file_info, std::move(snapshot)));
 }
 
 void LocalFileSyncContext::ClearSyncFlagOnIOThread(
@@ -986,7 +985,7 @@ void LocalFileSyncContext::ClearSyncFlagOnIOThread(
   }
 
   // Since a sync has finished the number of changes must have been updated.
-  UpdateChangesForOrigin(url.origin(), NoopClosure());
+  UpdateChangesForOrigin(url.origin(), base::DoNothing());
 }
 
 void LocalFileSyncContext::FinalizeSnapshotSyncOnIOThread(
@@ -997,7 +996,7 @@ void LocalFileSyncContext::FinalizeSnapshotSyncOnIOThread(
   sync_status()->EndWriting(url);
 
   // Since a sync has finished the number of changes must have been updated.
-  UpdateChangesForOrigin(url.origin(), NoopClosure());
+  UpdateChangesForOrigin(url.origin(), base::DoNothing());
 }
 
 void LocalFileSyncContext::DidApplyRemoteChange(

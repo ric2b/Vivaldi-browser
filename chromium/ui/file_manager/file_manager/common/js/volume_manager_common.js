@@ -95,6 +95,22 @@ VolumeManagerCommon.RootType = {
 
   // Fake root for the mixed "Recent" view.
   RECENT: 'recent',
+
+  // 'Google Drive' fake parent entry of 'My Drive', 'Shared with me' and
+  // 'Offline'.
+  DRIVE_FAKE_ROOT: 'drive_fake_root',
+
+  // 'Add new services' menu item.
+  ADD_NEW_SERVICES_MENU: 'add_new_services_menu',
+
+  // Root for crostini 'Linux Files'.
+  CROSTINI: 'crostini',
+
+  // Root for android files.
+  ANDROID_FILES: 'android_files',
+
+  // My Files root, which aggregates DOWNLOADS, ANDROID_FILES and CROSTINI.
+  MY_FILES: 'my_files',
 };
 Object.freeze(VolumeManagerCommon.RootType);
 
@@ -122,6 +138,11 @@ VolumeManagerCommon.RootTypesForUMA = [
   VolumeManagerCommon.RootType.DRIVE_RECENT,
   VolumeManagerCommon.RootType.MEDIA_VIEW,
   VolumeManagerCommon.RootType.RECENT,
+  VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT,
+  VolumeManagerCommon.RootType.ADD_NEW_SERVICES_MENU,
+  VolumeManagerCommon.RootType.CROSTINI,
+  VolumeManagerCommon.RootType.ANDROID_FILES,
+  VolumeManagerCommon.RootType.MY_FILES,
 ];
 console.assert(
     Object.keys(VolumeManagerCommon.RootType).length ===
@@ -204,6 +225,9 @@ VolumeManagerCommon.VolumeType = {
   MTP: 'mtp',
   PROVIDED: 'provided',
   MEDIA_VIEW: 'media_view',
+  CROSTINI: 'crostini',
+  ANDROID_FILES: 'android_files',
+  MY_FILES: 'my_files',
 };
 
 /**
@@ -226,6 +250,8 @@ VolumeManagerCommon.Source = {
  */
 VolumeManagerCommon.VolumeType.isNative = function(type) {
   return type === VolumeManagerCommon.VolumeType.DOWNLOADS ||
+      type === VolumeManagerCommon.VolumeType.ANDROID_FILES ||
+      type === VolumeManagerCommon.VolumeType.CROSTINI ||
       type === VolumeManagerCommon.VolumeType.REMOVABLE ||
       type === VolumeManagerCommon.VolumeType.ARCHIVE;
 };
@@ -259,6 +285,12 @@ VolumeManagerCommon.getVolumeTypeFromRootType = function(rootType) {
       return VolumeManagerCommon.VolumeType.PROVIDED;
     case VolumeManagerCommon.RootType.MEDIA_VIEW:
       return VolumeManagerCommon.VolumeType.MEDIA_VIEW;
+    case VolumeManagerCommon.RootType.CROSTINI:
+      return VolumeManagerCommon.VolumeType.CROSTINI;
+    case VolumeManagerCommon.RootType.ANDROID_FILES:
+      return VolumeManagerCommon.VolumeType.ANDROID_FILES;
+    case VolumeManagerCommon.RootType.MY_FILES:
+      return VolumeManagerCommon.VolumeType.MY_FILES;
   }
   assertNotReached('Unknown root type: ' + rootType);
 };
@@ -266,7 +298,7 @@ VolumeManagerCommon.getVolumeTypeFromRootType = function(rootType) {
 /**
  * @typedef {{
  *   type: VolumeManagerCommon.DriveConnectionType,
- *   reason: VolumeManagerCommon.DriveConnectionReason
+ *   reason: (VolumeManagerCommon.DriveConnectionReason|undefined)
  * }}
  */
 VolumeManagerCommon.DriveConnectionState;
@@ -281,7 +313,8 @@ VolumeManagerCommon.VolumeInfoProvider = function() {};
 
 /**
  * Obtains a volume info containing the passed entry.
- * @param {Entry|Object} entry Entry on the volume to be returned. Can be fake.
+ * @param {!Entry|!FakeEntry|!FilesAppEntry} entry Entry on the volume to be
+ *     returned. Can be fake.
  * @return {?VolumeInfo} The VolumeInfo instance or null if not found.
  */
 VolumeManagerCommon.VolumeInfoProvider.prototype.getVolumeInfo;

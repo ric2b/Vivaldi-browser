@@ -21,7 +21,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.content.common.ContentSwitches;
+import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.util.TestWebServer;
 
 /**
@@ -50,11 +50,7 @@ public class MediaAccessPermissionRequestTest {
             + "var video = document.querySelector('video');"
             + "function successCallback(stream) {"
             + "  window.document.title = 'grant';"
-            + "  if (window.URL) {"
-            + "    video.src = window.URL.createObjectURL(stream);"
-            + "  } else {"
-            + "    video.src = stream;"
-            + "  }"
+            + "  video.srcObject = stream;"
             + "}"
             + "function errorCallback(error){"
             + "  window.document.title = 'deny';"
@@ -100,7 +96,7 @@ public class MediaAccessPermissionRequestTest {
         final AwTestContainerView testContainerView =
                 mActivityTestRule.createAwTestContainerViewOnMainSync(contentsClient);
         final AwContents awContents = testContainerView.getAwContents();
-        mActivityTestRule.enableJavaScriptOnUiThread(awContents);
+        AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
         int callCount = helper.getCallCount();
         mActivityTestRule.loadUrlAsync(awContents, mWebRTCPage, null);
         helper.waitForCallback(callCount);
@@ -127,7 +123,7 @@ public class MediaAccessPermissionRequestTest {
         final AwTestContainerView testContainerView =
                 mActivityTestRule.createAwTestContainerViewOnMainSync(contentsClient);
         final AwContents awContents = testContainerView.getAwContents();
-        mActivityTestRule.enableJavaScriptOnUiThread(awContents);
+        AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
         int callCount = helper.getCallCount();
         mActivityTestRule.loadUrlAsync(awContents, mWebRTCPage, null);
         helper.waitForCallback(callCount);
@@ -160,7 +156,7 @@ public class MediaAccessPermissionRequestTest {
         final AwTestContainerView testContainerView =
                 mActivityTestRule.createAwTestContainerViewOnMainSync(contentsClient);
         final AwContents awContents = testContainerView.getAwContents();
-        mActivityTestRule.enableJavaScriptOnUiThread(awContents);
+        AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
         int callCount = helper.getCallCount();
         mActivityTestRule.loadUrlAsync(awContents, mWebRTCPage, null);
         helper.waitForCallback(callCount);
@@ -206,7 +202,7 @@ public class MediaAccessPermissionRequestTest {
         final AwTestContainerView testContainerView =
                 mActivityTestRule.createAwTestContainerViewOnMainSync(contentsClient);
         final AwContents awContents = testContainerView.getAwContents();
-        mActivityTestRule.enableJavaScriptOnUiThread(awContents);
+        AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
         int callCount = helper.getCallCount();
         mActivityTestRule.loadUrlAsync(awContents, mWebRTCPage, null);
         helper.waitForCallback(callCount);

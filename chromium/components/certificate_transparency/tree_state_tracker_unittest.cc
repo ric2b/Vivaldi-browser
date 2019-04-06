@@ -4,15 +4,15 @@
 
 #include "components/certificate_transparency/tree_state_tracker.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
-#include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/certificate_transparency/features.h"
 #include "net/base/net_errors.h"
 #include "net/cert/ct_log_verifier.h"
 #include "net/cert/ct_serialization.h"
@@ -34,9 +34,6 @@ using net::ct::GetTestPublicKey;
 using net::ct::kSthRootHashLength;
 using net::ct::GetX509CertSCT;
 
-const base::Feature kCTLogAuditing = {"CertificateTransparencyLogAuditing",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
-
 constexpr char kHostname[] = "example.test";
 constexpr base::TimeDelta kZeroTTL;
 
@@ -45,7 +42,6 @@ namespace certificate_transparency {
 class TreeStateTrackerTest : public ::testing::Test {
   void SetUp() override {
     log_ = net::CTLogVerifier::Create(GetTestPublicKey(), "testlog",
-                                      "https://ct.example.com",
                                       "unresolvable.invalid");
 
     ASSERT_TRUE(log_);
@@ -81,7 +77,7 @@ TEST_F(TreeStateTrackerTest, TestDelegatesCorrectly) {
   feature_list.InitAndEnableFeature(kCTLogAuditing);
 
   tree_tracker_ =
-      base::MakeUnique<TreeStateTracker>(verifiers, &host_resolver_, &net_log_);
+      std::make_unique<TreeStateTracker>(verifiers, &host_resolver_, &net_log_);
 
   // Add a cache entry for kHostname that indicates it was looked up over DNS.
   // SingleTreeTracker requires this before it will request an inclusion proof,

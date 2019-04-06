@@ -12,8 +12,8 @@
 #include "extensions/common/api/power.h"
 #include "extensions/common/extension.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace extensions {
@@ -36,8 +36,6 @@ device::mojom::WakeLockType LevelToWakeLockType(api::power::Level level) {
 
 base::LazyInstance<BrowserContextKeyedAPIFactory<PowerAPI>>::DestructorAtExit
     g_factory = LAZY_INSTANCE_INITIALIZER;
-
-void DoNothing(bool b) {}
 
 }  // namespace
 
@@ -137,7 +135,7 @@ void PowerAPI::Shutdown() {
 }
 
 void PowerAPI::ActivateWakeLock(device::mojom::WakeLockType type) {
-  GetWakeLock()->ChangeType(type, base::Bind(&DoNothing));
+  GetWakeLock()->ChangeType(type, base::DoNothing());
   if (!is_wake_lock_active_) {
     GetWakeLock()->RequestWakeLock();
     is_wake_lock_active_ = true;

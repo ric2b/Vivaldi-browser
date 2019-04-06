@@ -11,13 +11,18 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.UrlUtils;
+import org.chromium.content.browser.test.util.Coordinates;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
 import org.chromium.content_public.browser.AccessibilitySnapshotNode;
+import org.chromium.content_public.common.UseZoomForDSFPolicy;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
+
+import java.util.concurrent.ExecutionException;
 
 /**
  * Accessibility snapshot tests for Assist feature.
@@ -71,6 +76,19 @@ public class AccessibilitySnapshotTest {
         return callbackHelper.getValue();
     }
 
+    private double cssToPixel(double css) {
+        double zoomFactor = 0;
+        try {
+            zoomFactor = ThreadUtils.runOnUiThreadBlocking(() -> {
+                Coordinates coord = Coordinates.createFor(mActivityTestRule.getWebContents());
+                return coord.getDeviceScaleFactor();
+            });
+        } catch (ExecutionException ex) {
+            Assert.fail("Unexpected ExecutionException");
+        }
+        return Math.ceil(zoomFactor * css);
+    }
+
     /**
      * Verifies that AX tree is returned.
      */
@@ -117,7 +135,8 @@ public class AccessibilitySnapshotTest {
         Assert.assertEquals("foo", child.text);
 
         // The font size should take the scale into account.
-        Assert.assertEquals(32.0, child.textSize, 1.0);
+        double expected = UseZoomForDSFPolicy.isUseZoomForDSFEnabled() ? cssToPixel(32.0) : 32.0;
+        Assert.assertEquals(expected, child.textSize, 1.0);
     }
 
     @Test
@@ -182,17 +201,6 @@ public class AccessibilitySnapshotTest {
         Assert.assertEquals("foo", grandchild.text);
         Assert.assertTrue(grandchild.hasStyle);
         Assert.assertTrue(grandchild.bold);
-    }
-
-    @Test
-    @SmallTest
-    public void testRequestAccessibilitySnapshotNoStyle() throws Throwable {
-        final String data = "<table><thead></thead></table>";
-        AccessibilitySnapshotNode root = receiveAccessibilitySnapshot(data, null);
-        Assert.assertEquals(1, root.children.size());
-        Assert.assertEquals("", root.text);
-        AccessibilitySnapshotNode grandChild = root.children.get(0).children.get(0);
-        Assert.assertFalse(grandChild.hasStyle);
     }
 
     private String getSelectionScript(String node1, int start, String node2, int end) {

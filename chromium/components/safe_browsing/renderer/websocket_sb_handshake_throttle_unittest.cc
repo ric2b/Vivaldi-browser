@@ -16,8 +16,8 @@
 #include "net/http/http_request_headers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
 
 namespace safe_browsing {
 
@@ -31,7 +31,8 @@ class FakeSafeBrowsing : public mojom::SafeBrowsing {
       : render_frame_id_(),
         load_flags_(-1),
         resource_type_(),
-        has_user_gesture_(false) {}
+        has_user_gesture_(false),
+        originated_from_service_worker_(false) {}
 
   void CreateCheckerAndCheck(int32_t render_frame_id,
                              mojom::SafeBrowsingUrlCheckerRequest request,
@@ -41,6 +42,7 @@ class FakeSafeBrowsing : public mojom::SafeBrowsing {
                              int32_t load_flags,
                              content::ResourceType resource_type,
                              bool has_user_gesture,
+                             bool originated_from_service_worker,
                              CreateCheckerAndCheckCallback callback) override {
     render_frame_id_ = render_frame_id;
     request_ = std::move(request);
@@ -50,6 +52,7 @@ class FakeSafeBrowsing : public mojom::SafeBrowsing {
     load_flags_ = load_flags;
     resource_type_ = resource_type;
     has_user_gesture_ = has_user_gesture;
+    originated_from_service_worker_ = originated_from_service_worker;
     callback_ = std::move(callback);
     run_loop_.Quit();
   }
@@ -66,6 +69,7 @@ class FakeSafeBrowsing : public mojom::SafeBrowsing {
   int32_t load_flags_;
   content::ResourceType resource_type_;
   bool has_user_gesture_;
+  bool originated_from_service_worker_;
   CreateCheckerAndCheckCallback callback_;
   base::RunLoop run_loop_;
 };
@@ -102,7 +106,7 @@ class WebSocketSBHandshakeThrottleTest : public ::testing::Test {
   WebSocketSBHandshakeThrottleTest() : mojo_binding_(&safe_browsing_) {
     mojo_binding_.Bind(mojo::MakeRequest(&safe_browsing_ptr_));
     throttle_ = std::make_unique<WebSocketSBHandshakeThrottle>(
-        safe_browsing_ptr_.get());
+        safe_browsing_ptr_.get(), MSG_ROUTING_NONE);
   }
 
   base::test::ScopedTaskEnvironment message_loop_;
@@ -116,10 +120,8 @@ class WebSocketSBHandshakeThrottleTest : public ::testing::Test {
 TEST_F(WebSocketSBHandshakeThrottleTest, Construction) {}
 
 TEST_F(WebSocketSBHandshakeThrottleTest, CheckArguments) {
-  throttle_->ThrottleHandshake(GURL(kTestUrl), nullptr, &fake_callbacks_);
+  throttle_->ThrottleHandshake(GURL(kTestUrl), &fake_callbacks_);
   safe_browsing_.RunUntilCalled();
-  // TODO(ricea): Find a way to create a WebLocalFrame in a unit test so that
-  // the code that looks up the render_frame_id can be tested.
   EXPECT_EQ(MSG_ROUTING_NONE, safe_browsing_.render_frame_id_);
   EXPECT_EQ(GURL(kTestUrl), safe_browsing_.url_);
   EXPECT_EQ("GET", safe_browsing_.method_);
@@ -127,11 +129,12 @@ TEST_F(WebSocketSBHandshakeThrottleTest, CheckArguments) {
   EXPECT_EQ(0, safe_browsing_.load_flags_);
   EXPECT_EQ(content::RESOURCE_TYPE_SUB_RESOURCE, safe_browsing_.resource_type_);
   EXPECT_FALSE(safe_browsing_.has_user_gesture_);
+  EXPECT_FALSE(safe_browsing_.originated_from_service_worker_);
   EXPECT_TRUE(safe_browsing_.callback_);
 }
 
 TEST_F(WebSocketSBHandshakeThrottleTest, Safe) {
-  throttle_->ThrottleHandshake(GURL(kTestUrl), nullptr, &fake_callbacks_);
+  throttle_->ThrottleHandshake(GURL(kTestUrl), &fake_callbacks_);
   safe_browsing_.RunUntilCalled();
   std::move(safe_browsing_.callback_).Run(nullptr, true, false);
   fake_callbacks_.RunUntilCalled();
@@ -139,7 +142,7 @@ TEST_F(WebSocketSBHandshakeThrottleTest, Safe) {
 }
 
 TEST_F(WebSocketSBHandshakeThrottleTest, Unsafe) {
-  throttle_->ThrottleHandshake(GURL(kTestUrl), nullptr, &fake_callbacks_);
+  throttle_->ThrottleHandshake(GURL(kTestUrl), &fake_callbacks_);
   safe_browsing_.RunUntilCalled();
   std::move(safe_browsing_.callback_).Run(nullptr, false, false);
   fake_callbacks_.RunUntilCalled();
@@ -151,7 +154,7 @@ TEST_F(WebSocketSBHandshakeThrottleTest, Unsafe) {
 }
 
 TEST_F(WebSocketSBHandshakeThrottleTest, SlowCheckNotifier) {
-  throttle_->ThrottleHandshake(GURL(kTestUrl), nullptr, &fake_callbacks_);
+  throttle_->ThrottleHandshake(GURL(kTestUrl), &fake_callbacks_);
   safe_browsing_.RunUntilCalled();
 
   mojom::UrlCheckNotifierPtr slow_check_notifier;
@@ -167,7 +170,7 @@ TEST_F(WebSocketSBHandshakeThrottleTest, SlowCheckNotifier) {
 
 TEST_F(WebSocketSBHandshakeThrottleTest, MojoServiceNotThere) {
   mojo_binding_.Close();
-  throttle_->ThrottleHandshake(GURL(kTestUrl), nullptr, &fake_callbacks_);
+  throttle_->ThrottleHandshake(GURL(kTestUrl), &fake_callbacks_);
   fake_callbacks_.RunUntilCalled();
   EXPECT_EQ(FakeWebCallbacks::RESULT_SUCCESS, fake_callbacks_.result_);
 }

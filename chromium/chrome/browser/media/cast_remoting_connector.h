@@ -8,7 +8,9 @@
 #include <set>
 
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/supports_user_data.h"
+#include "components/sessions/core/session_id.h"
 #include "media/mojo/interfaces/mirror_service_remoting.mojom.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -92,6 +94,9 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
       media::mojom::MirrorServiceRemotingSourceRequest source_request,
       media::mojom::MirrorServiceRemoterPtr remoter);
 
+  // Called at the start of mirroring to reset the permission.
+  void ResetRemotingPermission();
+
  private:
   // Allow unit tests access to the private constructor and CreateBridge()
   // method, since unit tests don't have a complete browser (i.e., with a
@@ -107,7 +112,7 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
 
   // Main constructor. |tab_id| refers to any remoted content managed
   // by this instance (i.e., any remoted content from one tab/WebContents).
-  CastRemotingConnector(media_router::MediaRouter* router, int32_t tab_id);
+  CastRemotingConnector(media_router::MediaRouter* router, SessionID tab_id);
 
   // Creates a RemotingBridge that implements the requested Remoter service, and
   // binds it to the interface |request|.
@@ -145,6 +150,10 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
   void EstimateTransmissionCapacity(
       media::mojom::Remoter::EstimateTransmissionCapacityCallback callback);
 
+  // Called after permission check. Either call |remoter_| to start remoting or
+  // notify the source that start fails due to no permission.
+  void StartRemotingIfPermitted();
+
   // Called when RTP streams are started.
   void OnDataStreamsStarted(
       mojo::ScopedDataPipeConsumerHandle audio_pipe,
@@ -163,14 +172,11 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
 
   media_router::MediaRouter* const media_router_;
 
-  const int32_t tab_id_;
+  const SessionID tab_id_;
 
-  // Describes the remoting sink's metadata and the enabled features. The sink's
+  // Describes the remoting sink's metadata and its enabled features. The sink's
   // metadata is updated by the mirror service calling OnSinkAvailable() and
-  // cleared when remoting stops. The enabled features are set according to what
-  // has been enabled via |features::kMediaRemoting|. These are controlled
-  // manually via chrome://flags or the command line; or in-the-wild via feature
-  // experiments.
+  // cleared when remoting stops.
   media::mojom::RemotingSinkMetadata sink_metadata_;
 
   // Set of registered RemotingBridges, maintained by RegisterBridge() and
@@ -184,6 +190,10 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
 
   mojo::Binding<media::mojom::MirrorServiceRemotingSource> binding_;
   media::mojom::MirrorServiceRemoterPtr remoter_;
+
+  // Permission is checked the first time remoting requested to start for each
+  // casting session.
+  base::Optional<bool> remoting_allowed_;
 
   // Produces weak pointers that are only valid for the current remoting
   // session. This is used to cancel any outstanding callbacks when a remoting

@@ -7,13 +7,16 @@
 
 #include "chrome/installer/setup/install_worker.h"
 
-#include <windows.h>  // NOLINT
+#include <windows.h>
+
 #include <atlsecurity.h>
 #include <oaidl.h>
+#include <sddl.h>
 #include <shlobj.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
+#include <wrl/client.h>
 
 #include <memory>
 #include <vector>
@@ -23,6 +26,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
@@ -31,7 +35,6 @@
 #include "chrome/install_static/install_modes.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/setup/installer_state.h"
-#include "chrome/installer/setup/persistent_histogram_storage.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/update_active_setup_version_work_item.h"
@@ -54,12 +57,21 @@
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item_list.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 using base::ASCIIToUTF16;
 using base::win::RegKey;
 
 namespace installer {
 
 namespace {
+
+constexpr wchar_t kChromeInstallFilesCapabilitySid[] =
+    L"S-1-15-3-1024-3424233489-972189580-2057154623-747635277-1604371224-"
+    L"316187997-3786583170-1043257646";
+constexpr wchar_t kLpacChromeInstallFilesCapabilitySid[] =
+    L"S-1-15-3-1024-2302894289-466761758-1166120688-1039016420-2430351297-"
+    L"4240214049-4028510897-3317428798";
 
 void AddInstallerCopyTasks(const InstallerState& installer_state,
                            const base::FilePath& setup_path,
@@ -165,6 +177,35 @@ void AddFirewallRulesWorkItems(const InstallerState& installer_state,
                  is_new_install));
 }
 
+// Probes COM machinery to get an instance of notification_helper.exe's
+// NotificationActivator class.
+//
+// This is required so that COM purges its cache of the path to the binary,
+// which changes on updates.
+//
+// This callback unconditionally returns true since an install should not be
+// aborted if the probe fails.
+bool ProbeNotificationActivatorCallback(const CLSID& toast_activator_clsid,
+                                        const CallbackWorkItem& work_item) {
+  DCHECK(toast_activator_clsid != CLSID_NULL);
+
+  // Noop on rollback.
+  if (work_item.IsRollback())
+    return true;
+
+  Microsoft::WRL::ComPtr<IUnknown> notification_activator;
+  HRESULT hr =
+      ::CoCreateInstance(toast_activator_clsid, nullptr, CLSCTX_LOCAL_SERVER,
+                         IID_PPV_ARGS(&notification_activator));
+
+  if (hr != REGDB_E_CLASSNOTREG) {
+    LOG(ERROR) << "Unexpected result creating NotificationActivator; hr=0x"
+               << std::hex << hr;
+  }
+
+  return true;
+}
+
 // This is called when an MSI installation is run. It may be that a user is
 // attempting to install the MSI on top of a non-MSI managed installation. If
 // so, try and remove any existing "Add/Remove Programs" entry, as we want the
@@ -254,9 +295,9 @@ void AddChromeWorkItems(const InstallationState& original_state,
 
   if (installer_state.is_vivaldi()) {
     base::FilePath update_notifier(
-        target_path.Append(installer::kVivaldiUpdateNotifierExe));
+        target_path.Append(vivaldi::constants::kVivaldiUpdateNotifierExe));
     base::FilePath old_update_notifier(
-        target_path.Append(installer::kVivaldiUpdateNotifierOldExe));
+        target_path.Append(vivaldi::constants::kVivaldiUpdateNotifierOldExe));
 
     // Delete any update_notifier.old if present
     install_list->AddDeleteTreeWorkItem(old_update_notifier, temp_path);
@@ -271,7 +312,7 @@ void AddChromeWorkItems(const InstallationState& original_state,
 
     // Install the new update_notifier.exe
     install_list->AddCopyTreeWorkItem(
-        src_path.Append(installer::kVivaldiUpdateNotifierExe).value(),
+        src_path.Append(vivaldi::constants::kVivaldiUpdateNotifierExe).value(),
         update_notifier.value(), temp_path.value(),
         WorkItem::CopyOverWriteOption::ALWAYS);
   }
@@ -298,33 +339,20 @@ void AddChromeWorkItems(const InstallationState& original_state,
       ->set_best_effort(true);
 }
 
-// Add to the ACL of an object on disk. This follows the method from MSDN:
-// https://msdn.microsoft.com/en-us/library/windows/desktop/aa379283.aspx
-// This is done using explicit flags rather than the "security string" format
-// because strings do not necessarily read what is written which makes it
-// difficult to de-dup. Working with the binary format is always exact and the
-// system libraries will properly ignore duplicate ACL entries.
-bool AddAclToPath(const base::FilePath& path,
-                  const CSid& trustee,
+// Adds an ACE from a trustee SID, access mask and flags to an existing DACL.
+// If the exact ACE already exists then the DACL is not modified and true is
+// returned.
+bool AddAceToDacl(const ATL::CSid& trustee,
                   ACCESS_MASK access_mask,
-                  BYTE ace_flags) {
-  DCHECK(!path.empty());
-  DCHECK(trustee);
-
-  // Get the existing DACL.
-  ATL::CDacl dacl;
-  if (!ATL::AtlGetDacl(path.value().c_str(), SE_FILE_OBJECT, &dacl)) {
-    DPLOG(ERROR) << "Failed getting DACL for path \"" << path.value() << "\"";
-    return false;
-  }
-
+                  BYTE ace_flags,
+                  ATL::CDacl* dacl) {
   // Check if the requested access already exists and return if so.
-  for (UINT i = 0; i < dacl.GetAceCount(); ++i) {
+  for (UINT i = 0; i < dacl->GetAceCount(); ++i) {
     ATL::CSid sid;
     ACCESS_MASK mask = 0;
     BYTE type = 0;
     BYTE flags = 0;
-    dacl.GetAclEntry(i, &sid, &mask, &type, &flags);
+    dacl->GetAclEntry(i, &sid, &mask, &type, &flags);
     if (sid == trustee && type == ACCESS_ALLOWED_ACE_TYPE &&
         (flags & ace_flags) == ace_flags &&
         (mask & access_mask) == access_mask) {
@@ -333,9 +361,34 @@ bool AddAclToPath(const base::FilePath& path,
   }
 
   // Add the new access to the DACL.
-  if (!dacl.AddAllowedAce(trustee, access_mask, ace_flags)) {
-    DPLOG(ERROR) << "Failed adding ACE to DACL";
+  return dacl->AddAllowedAce(trustee, access_mask, ace_flags);
+}
+
+// Add to the ACL of an object on disk. This follows the method from MSDN:
+// https://msdn.microsoft.com/en-us/library/windows/desktop/aa379283.aspx
+// This is done using explicit flags rather than the "security string" format
+// because strings do not necessarily read what is written which makes it
+// difficult to de-dup. Working with the binary format is always exact and the
+// system libraries will properly ignore duplicate ACL entries.
+bool AddAclToPath(const base::FilePath& path,
+                  const std::vector<ATL::CSid>& trustees,
+                  ACCESS_MASK access_mask,
+                  BYTE ace_flags) {
+  DCHECK(!path.empty());
+
+  // Get the existing DACL.
+  ATL::CDacl dacl;
+  if (!ATL::AtlGetDacl(path.value().c_str(), SE_FILE_OBJECT, &dacl)) {
+    DPLOG(ERROR) << "Failed getting DACL for path \"" << path.value() << "\"";
     return false;
+  }
+
+  for (const auto& trustee : trustees) {
+    DCHECK(trustee.IsValid());
+    if (!AddAceToDacl(trustee, access_mask, ace_flags, &dacl)) {
+      DPLOG(ERROR) << "Failed adding ACE to DACL for trustee " << trustee.Sid();
+      return false;
+    }
   }
 
   // Attach the updated ACL as the object's DACL.
@@ -345,6 +398,32 @@ bool AddAclToPath(const base::FilePath& path,
   }
 
   return true;
+}
+
+bool AddAclToPath(const base::FilePath& path,
+                  const CSid& trustee,
+                  ACCESS_MASK access_mask,
+                  BYTE ace_flags) {
+  std::vector<ATL::CSid> trustees = {trustee};
+  return AddAclToPath(path, trustees, access_mask, ace_flags);
+}
+
+bool AddAclToPath(const base::FilePath& path,
+                  const std::vector<const wchar_t*>& trustees,
+                  ACCESS_MASK access_mask,
+                  BYTE ace_flags) {
+  std::vector<ATL::CSid> converted_trustees;
+  for (const wchar_t* trustee : trustees) {
+    PSID sid;
+    if (!::ConvertStringSidToSid(trustee, &sid)) {
+      DPLOG(ERROR) << "Failed to convert SID \"" << trustee << "\"";
+      return false;
+    }
+    converted_trustees.emplace_back(static_cast<SID*>(sid));
+    ::LocalFree(sid);
+  }
+
+  return AddAclToPath(path, converted_trustees, access_mask, ace_flags);
 }
 
 // Migrates consent for the collection of usage statistics from the binaries to
@@ -723,7 +802,7 @@ void AddInstallWorkItems(const InstallationState& original_state,
 
   // Create the directory in which persistent metrics will be stored.
   const base::FilePath histogram_storage_dir(
-      PersistentHistogramStorage::GetReportedStorageDir(target_path));
+      target_path.AppendASCII(kSetupHistogramAllocatorName));
   install_list->AddCreateDirWorkItem(histogram_storage_dir);
 
   if (installer_state.system_install()) {
@@ -750,6 +829,25 @@ void AddInstallWorkItems(const InstallationState& original_state,
   AddInstallerCopyTasks(installer_state, setup_path, archive_path, temp_path,
                         new_version, install_list);
 
+  WorkItem* add_ac_acl_to_install =
+      install_list->AddCallbackWorkItem(base::BindRepeating(
+          [](const base::FilePath& target_path,
+             const CallbackWorkItem& work_item) {
+            DCHECK(!work_item.IsRollback());
+            std::vector<const wchar_t*> sids = {
+                kChromeInstallFilesCapabilitySid,
+                kLpacChromeInstallFilesCapabilitySid};
+            bool success = AddAclToPath(
+                target_path, sids, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+                CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE);
+            base::UmaHistogramBoolean("Setup.Install.AddAppContainerAce",
+                                      success);
+            return success;
+          },
+          target_path));
+  add_ac_acl_to_install->set_best_effort(true);
+  add_ac_acl_to_install->set_rollback_enabled(false);
+
   const HKEY root = installer_state.root_key();
   // Only set "lang" for user-level installs since for system-level, the install
   // language may not be related to a given user's runtime language.
@@ -773,8 +871,18 @@ void AddInstallWorkItems(const InstallationState& original_state,
 
   AddOsUpgradeWorkItems(installer_state, setup_path, new_version, product,
                         install_list);
+#if defined(GOOGLE_CHROME_BUILD)
+  AddEnterpriseEnrollmentWorkItems(installer_state, setup_path, new_version,
+                                   product, install_list);
+#endif
   AddFirewallRulesWorkItems(installer_state, dist, current_version == nullptr,
                             install_list);
+
+  // We don't have a version check for Win10+ here so that Windows upgrades
+  // work.
+  AddNativeNotificationWorkItems(
+      installer_state.root_key(),
+      GetNotificationHelperPath(target_path, new_version), install_list);
 
   InstallUtil::AddUpdateDowngradeVersionItem(installer_state.system_install(),
                                              current_version, new_version, dist,
@@ -789,6 +897,55 @@ void AddInstallWorkItems(const InstallationState& original_state,
                          current_version,
                          new_version,
                          install_list);
+}
+
+void AddNativeNotificationWorkItems(
+    HKEY root,
+    const base::FilePath& notification_helper_path,
+    WorkItemList* list) {
+  if (notification_helper_path.empty()) {
+    LOG(DFATAL) << "The path to notification_helper.exe is invalid.";
+    return;
+  }
+
+  base::string16 toast_activator_reg_path =
+      InstallUtil::GetToastActivatorRegistryPath();
+
+  if (toast_activator_reg_path.empty()) {
+    LOG(DFATAL) << "Cannot retrieve the toast activator registry path";
+    return;
+  }
+
+  // Delete the old registration before adding in the new key to ensure that the
+  // COM probe/flush below does its job. Delete both 64-bit and 32-bit keys to
+  // handle 32-bit -> 64-bit or 64-bit -> 32-bit migration.
+  list->AddDeleteRegKeyWorkItem(root, toast_activator_reg_path,
+                                KEY_WOW64_32KEY);
+
+  list->AddDeleteRegKeyWorkItem(root, toast_activator_reg_path,
+                                KEY_WOW64_64KEY);
+
+  // Force COM to flush its cache containing the path to the old handler.
+  list->AddCallbackWorkItem(
+      base::BindRepeating(&ProbeNotificationActivatorCallback,
+                          install_static::GetToastActivatorClsid()));
+
+  base::string16 toast_activator_server_path =
+      toast_activator_reg_path + L"\\LocalServer32";
+
+  // Command-line featuring the quoted path to the exe.
+  base::string16 command(1, L'"');
+  command.append(notification_helper_path.value()).append(1, L'"');
+
+  list->AddCreateRegKeyWorkItem(root, toast_activator_server_path,
+                                WorkItem::kWow64Default);
+
+  list->AddSetRegValueWorkItem(root, toast_activator_server_path,
+                               WorkItem::kWow64Default, L"", command, true);
+
+  list->AddSetRegValueWorkItem(root, toast_activator_server_path,
+                               WorkItem::kWow64Default, L"ServerExecutable",
+                               notification_helper_path.value(), true);
 }
 
 void AddSetMsiMarkerWorkItem(const InstallerState& installer_state,
@@ -901,7 +1058,7 @@ void AppendUninstallCommandLineFlags(const InstallerState& installer_state,
   if (installer_state.verbose_logging())
     uninstall_cmd->AppendSwitch(installer::switches::kVerboseLogging);
   if (installer_state.is_vivaldi())
-    uninstall_cmd->AppendSwitch(installer::switches::kVivaldi);
+    uninstall_cmd->AppendSwitch(vivaldi::constants::kVivaldi);
 }
 
 void AddOsUpgradeWorkItems(const InstallerState& installer_state,
@@ -935,5 +1092,43 @@ void AddOsUpgradeWorkItems(const InstallerState& installer_state,
     cmd.AddWorkItems(installer_state.root_key(), cmd_key, install_list);
   }
 }
+
+#if defined(GOOGLE_CHROME_BUILD)
+void AddEnterpriseEnrollmentWorkItems(const InstallerState& installer_state,
+                                      const base::FilePath& setup_path,
+                                      const base::Version& new_version,
+                                      const Product& product,
+                                      WorkItemList* install_list) {
+  if (!installer_state.system_install())
+    return;
+
+  const HKEY root_key = installer_state.root_key();
+  const base::string16 cmd_key(
+      GetRegCommandKey(product.distribution(), kCmdStoreDMToken));
+
+  if (installer_state.operation() == InstallerState::UNINSTALL) {
+    install_list->AddDeleteRegKeyWorkItem(root_key, cmd_key, KEY_WOW64_32KEY)
+        ->set_log_message("Removing store DM token command");
+  } else {
+    // Register a command to allow Chrome to request Google Update to run
+    // setup.exe --store-dmtoken=<token>, which will store the specifed token in
+    // the registry.
+    base::CommandLine cmd_line(
+        installer_state.GetInstallerDirectory(new_version)
+            .Append(setup_path.BaseName()));
+    cmd_line.AppendSwitchASCII(switches::kStoreDMToken, "%1");
+    cmd_line.AppendSwitch(switches::kSystemLevel);
+    cmd_line.AppendSwitch(switches::kVerboseLogging);
+    InstallUtil::AppendModeSwitch(&cmd_line);
+
+    AppCommand cmd(cmd_line.GetCommandLineString());
+    // TODO(alito): For now setting this command as web accessible is required
+    // by Google Update.  Could revisit this should Google Update change the
+    // way permissions are handled for commands.
+    cmd.set_is_web_accessible(true);
+    cmd.AddWorkItems(root_key, cmd_key, install_list);
+  }
+}
+#endif
 
 }  // namespace installer

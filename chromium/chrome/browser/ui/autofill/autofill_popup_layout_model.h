@@ -10,7 +10,6 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
 #include "chrome/browser/ui/autofill/popup_view_common.h"
-#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
@@ -34,10 +33,6 @@ class AutofillPopupLayoutModel {
   // The minimum amount of padding between the Autofill name and subtext,
   // in dip.
   static const int kNamePadding = 15;
-
-  // The minimum amount of padding between the Autofill http warning message
-  // name and subtext, in dip.
-  static const int kHttpWarningNamePadding = 8;
 
   // The amount of padding around icons in dip.
   static const int kIconPadding = 5;
@@ -91,36 +86,22 @@ class AutofillPopupLayoutModel {
   // the top left of the popup.
   gfx::Rect GetRowBounds(size_t index) const;
 
-  // Gets the resource value for the given resource, returning -1 if the
+  // Gets the resource value for the given resource, returning 0 if the
   // resource isn't recognized.
   int GetIconResourceID(const base::string16& resource_name) const;
 
-  // Returns whether |GetBackgroundColor, GetDividerColor| returns a custom
-  // color configured in an experiment to tweak autofill popup layout.
-  bool IsPopupLayoutExperimentEnabled() const;
-
-  // Returns the background color for the autofill popup, or
-  // |SK_ColorTRANSPARENT| if not in an experiment to tweak autofill popup
-  // layout.
-  SkColor GetBackgroundColor() const;
-
-  // Returns the divider color for the autofill popup, or
-  // |SK_ColorTRANSPARENT| if not in an experiment to tweak autofill popup
-  // layout.
-  SkColor GetDividerColor() const;
-
-  // Returns the dropdown item height, or 0 if the dropdown item height isn't
-  // configured in an experiment to tweak autofill popup layout.
-  unsigned int GetDropdownItemHeight() const;
-
-  // Returns true if suggestion icon must be displayed before suggestion text.
-  bool IsIconAtStart(int frontend_id) const;
-
-  // Returns the margin for icon, label and between icon and label, or 0 if the
-  // margin isn't configured in an experiment to tweak autofill popup layout.
-  unsigned int GetMargin() const;
+  // Returns the string id for an accessible name which should be used to
+  // describe the given resource. Returns 0 if the resource isn't recognized;
+  // note that this doesn't necessarily mean anything went wrong, as some valid
+  // resources are intentionally omitted for screen readers.
+  int GetIconAccessibleNameResourceId(
+      const base::string16& resource_name) const;
 
   bool is_credit_card_popup() const { return is_credit_card_popup_; }
+
+  // Allows the provision of another implementation of view_common, for use in
+  // unit tests where using the real thing could cause crashes.
+  void SetUpForTesting(std::unique_ptr<PopupViewCommon> view_common);
 
  private:
   // Returns the enclosing rectangle for the element_bounds.
@@ -139,7 +120,7 @@ class AutofillPopupLayoutModel {
   // The bounds of the Autofill popup.
   gfx::Rect popup_bounds_;
 
-  PopupViewCommon view_common_;
+  std::unique_ptr<PopupViewCommon> view_common_;
 
   AutofillPopupViewDelegate* delegate_;  // Weak reference.
 

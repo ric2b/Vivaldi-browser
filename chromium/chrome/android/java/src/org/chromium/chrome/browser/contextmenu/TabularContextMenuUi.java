@@ -5,7 +5,9 @@
 package org.chromium.chrome.browser.contextmenu;
 
 import android.app.Activity;
-import android.content.DialogInterface;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -19,6 +21,7 @@ import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewGroup.MarginLayoutParams;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
@@ -30,6 +33,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.widget.ContextMenuDialog;
+import org.chromium.ui.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,19 +67,9 @@ public class TabularContextMenuUi implements ContextMenuUi, AdapterView.OnItemCl
         mContextMenuDialog =
                 createContextMenuDialog(activity, params, items, touchPointXPx, touchPointYPx);
 
-        mContextMenuDialog.setOnShowListener(new DialogInterface.OnShowListener() {
-            @Override
-            public void onShow(DialogInterface dialogInterface) {
-                onMenuShown.run();
-            }
-        });
+        mContextMenuDialog.setOnShowListener(dialogInterface -> { onMenuShown.run(); });
 
-        mContextMenuDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-            @Override
-            public void onDismiss(DialogInterface dialogInterface) {
-                onMenuClosed.run();
-            }
-        });
+        mContextMenuDialog.setOnDismissListener(dialogInterface -> { onMenuClosed.run(); });
 
         mContextMenuDialog.show();
     }
@@ -194,24 +188,31 @@ public class TabularContextMenuUi implements ContextMenuUi, AdapterView.OnItemCl
         final TextView headerTextView =
                 (TextView) baseLayout.findViewById(R.id.context_header_text);
         if (TextUtils.isEmpty(headerText)) {
-            baseLayout.findViewById(R.id.context_header_layout).setVisibility(View.GONE);
-            headerTextView.setVisibility(View.GONE);
-            baseLayout.findViewById(R.id.context_divider).setVisibility(View.GONE);
+            MarginLayoutParams marginParams =
+                    (MarginLayoutParams) baseLayout.findViewById(R.id.context_header_image)
+                            .getLayoutParams();
+            marginParams.bottomMargin = marginParams.topMargin;
             return;
         }
         headerTextView.setVisibility(View.VISIBLE);
         headerTextView.setText(headerText);
-        headerTextView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (headerTextView.getMaxLines() == Integer.MAX_VALUE) {
-                    headerTextView.setMaxLines(1);
-                    headerTextView.setEllipsize(TextUtils.TruncateAt.END);
-                } else {
-                    headerTextView.setMaxLines(Integer.MAX_VALUE);
-                    headerTextView.setEllipsize(null);
-                }
+        headerTextView.setOnClickListener(view -> {
+            if (headerTextView.getMaxLines() == Integer.MAX_VALUE) {
+                headerTextView.setMaxLines(1);
+                headerTextView.setEllipsize(TextUtils.TruncateAt.END);
+            } else {
+                headerTextView.setMaxLines(Integer.MAX_VALUE);
+                headerTextView.setEllipsize(null);
             }
+        });
+        if (TextUtils.isEmpty(params.getUnfilteredLinkUrl())) return;
+        headerTextView.setOnLongClickListener(view -> {
+            ClipboardManager clipboard = (ClipboardManager) view.getContext().getSystemService(
+                    Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("url", params.getUnfilteredLinkUrl());
+            clipboard.setPrimaryClip(clip);
+            Toast.makeText(view.getContext(), R.string.url_copied, Toast.LENGTH_SHORT).show();
+            return true;
         });
     }
 
@@ -327,7 +328,7 @@ public class TabularContextMenuUi implements ContextMenuUi, AdapterView.OnItemCl
                 res.getDimensionPixelSize(R.dimen.context_menu_min_padding);
 
         return Math.min(deviceWidthPx - tabLayoutSize - (2 * contextMenuMinimumPaddingPx)
-                        - res.getDimensionPixelSize(R.dimen.context_menu_image_top_margin) * 2
+                        - res.getDimensionPixelSize(R.dimen.context_menu_image_vertical_margin) * 2
                         - res.getDimensionPixelSize(R.dimen.context_menu_selectable_items_min_size),
                 res.getDimensionPixelSize(R.dimen.context_menu_header_image_max_height));
     }

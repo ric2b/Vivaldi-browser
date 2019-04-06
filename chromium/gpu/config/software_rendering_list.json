@@ -131,6 +131,10 @@
         },
         {
           "driver_vendor": "swiftshader"
+        },
+        {
+          "vendor_id": "0xffff",
+          "device_id": ["0xfffe"]
         }
       ],
       "features": [
@@ -406,7 +410,7 @@
             "op": ">=",
             "value": "10.1.3"
           },
-          "gl_renderer": ".*Gallium.*llvmpipe.*"
+          "gl_renderer": ".*llvmpipe.*"
         }
       ],
       "features": [
@@ -475,8 +479,8 @@
     },
     {
       "id": 68,
-      "description": "VMware has corrupt rendering on Windows",
-      "cr_bugs": [169470, 754435],
+      "description": "VMware Fusion 4 has corrupt rendering with Win Vista+",
+      "cr_bugs": [169470],
       "os": {
         "type": "win",
         "version": {
@@ -485,6 +489,10 @@
         }
       },
       "vendor_id": "0x15ad",
+      "driver_version": {
+        "op": "<=",
+        "value": "7.14.1.1134"
+      },
       "features": [
         "all"
       ]
@@ -912,10 +920,9 @@
           "value": "3.19.1"
         }
       },
-      "vendor_id": "0x8086",
-      "device_id": ["0x0402", "0x0406", "0x040a", "0x040b", "0x040e",
-                    "0x0a02", "0x0a06", "0x0a0a", "0x0a0b", "0x0a0e",
-                    "0x0d02", "0x0d06", "0x0d0a", "0x0d0b", "0x0d0e"],
+      "gpu_series": [
+        "intel_haswell"
+      ],
       "features": [
         "all"
       ]
@@ -962,7 +969,7 @@
       },
       "driver_vendor": "Mesa",
       "gl_vendor": "VMware.*",
-      "gl_renderer": ".*Gallium.*llvmpipe.*",
+      "gl_renderer": ".*llvmpipe.*",
       "features": [
         "all",
         {"exceptions": [
@@ -1140,7 +1147,7 @@
     },
     {
       "id": 122,
-      "description": "GPU rasterization should only be enabled on NVIDIA and Intel DX11+, and AMD RX-R2 GPUs for now.",
+      "description": "GPU rasterization should only be enabled on NVIDIA and Intel and AMD RX-R2 GPUs with DX11+ or any GPU using ANGLE's GL backend.",
       "cr_bugs": [643850],
       "os": {
         "type": "win"
@@ -1154,14 +1161,16 @@
           "pixel_shader_version": {
             "op": ">=",
             "value": "5.0"
-          }
+          },
+          "gl_renderer": ".*Direct3D11.*"
         },
         {
           "vendor_id": "0x8086",
           "pixel_shader_version": {
             "op": ">=",
             "value": "5.0"
-          }
+          },
+          "gl_renderer": ".*Direct3D11.*"
         },
         {
           "vendor_id": "0x1002",
@@ -1172,7 +1181,11 @@
           "driver_version": {
             "op": ">=",
             "value": "15.201"
-          }
+          },
+          "gl_renderer": ".*Direct3D11.*"
+        },
+        {
+          "gl_renderer": ".*OpenGL.*"
         }
       ]
     },
@@ -1309,7 +1322,7 @@
           "gl_renderer": ".*SVGA3D.*"
         },
         {
-          "gl_renderer": ".*Gallium.*llvmpipe.*"
+          "gl_renderer": ".*llvmpipe.*"
         },
         {
           "gl_renderer": "Mesa OffScreen"
@@ -1352,7 +1365,7 @@
     },
     {
       "id": 137,
-      "description": "GPU rasterization on CrOS is blacklisted on non-Intel GPUs for now.",
+      "description": "GPU rasterization on CrOS is blacklisted on anything but Intel or Mali GPUs for now.",
       "cr_bugs": [684094],
       "os": {
         "type": "chromeos"
@@ -1361,7 +1374,8 @@
         "gpu_rasterization"
       ],
       "exceptions": [
-        { "vendor_id": "0x8086" }
+        { "vendor_id": "0x8086" },
+        { "gl_renderer": "Mali-T.*" }
       ]
     },
     {
@@ -1468,9 +1482,13 @@
     {
       "id": 146,
       "description": "Disable D3D11/WebGL2 on AMD switchable graphics",
-      "cr_bugs": [451420, 755722],
+      "cr_bugs": [451420, 721121, 755722],
       "os": {
-        "type": "win"
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10"
+        }
       },
       "driver_date": {
         "op": "<",
@@ -1529,7 +1547,7 @@
     },
     {
       "id": 150,
-      "description": "Macs with NVidia GPUs experience rendering issues on High Sierra",
+      "description": "Macs with NVidia GPUs experience rendering issues on High Sierra until 10.13.4",
       "cr_bugs": [773705],
       "os": {
         "type": "macosx",
@@ -1538,6 +1556,17 @@
           "value": "10.13"
         }
       },
+      "exceptions": [
+        {
+          "os": {
+            "type": "macosx",
+            "version": {
+              "op": ">=",
+              "value": "10.13.4"
+            }
+          }
+        }
+      ],
       "vendor_id": "0x10de",
       "multi_gpu_category": "any",
       "features": [
@@ -1579,6 +1608,67 @@
       "test_group": 2,
       "features": [
         "accelerated_webgl"
+      ]
+    },
+    {
+      "id": 154,
+      "description": "Protected video decoding with swap chain is for Windows and Intel only",
+      "features": [
+        "protected_video_decode"
+      ],
+      "exceptions": [
+        {
+          "os": {
+            "type": "win",
+            "version": {
+              "op": ">=",
+              "value": "10.0"
+            }
+          },
+          "vendor_id": "0x8086"
+        }
+      ]
+    },
+    {
+      "id": 155,
+      "description": "Older Intel GPUs cannot support protected video decoding in swap chains",
+      "features": [
+        "protected_video_decode"
+      ],
+      "os": {
+        "type": "win",
+        "version": {
+          "op": ">=",
+          "value": "10.0"
+         }
+      },
+      "vendor_id": "0x8086",
+      "gpu_series": [
+        "intel_sandybridge",
+        "intel_valleyview",
+        "intel_ivybridge",
+        "intel_haswell",
+        "intel_cherryview",
+        "intel_broadwell",
+        "intel_apollolake",
+        "intel_skylake",
+        "intel_geminilake"
+      ]
+    },
+    {
+      "id":156,
+      "cr_bugs": [870964],
+      "description": "Frequent crashes on Adreno (TM) on L and below",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "6.0"
+        }
+      },
+      "gl_renderer": "Adreno.*",
+      "features": [
+        "oop_rasterization"
       ]
     }
   ]

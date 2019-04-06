@@ -10,10 +10,16 @@
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "ui/gfx/image/image.h"
+
+namespace favicon_base {
+struct FaviconImageResult;
+}
 
 namespace gfx {
 class RectF;
@@ -46,7 +52,7 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
                                    base::string16* body) override;
   bool RemoveSuggestion(const base::string16& value, int identifier) override;
   void ClearPreviewedForm() override;
-  bool IsCreditCardPopup() override;
+  autofill::PopupType GetPopupType() const override;
   autofill::AutofillDriver* GetAutofillDriver() override;
   void RegisterDeletionCallback(base::OnceClosure deletion_callback) override;
 
@@ -55,25 +61,29 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
       int key,
       const autofill::PasswordFormFillData& fill_data);
 
-  // Handles a request from the renderer to show a popup with the given
-  // |suggestions| from the password manager. |options| should be a bitwise mask
-  // of autofill::ShowPasswordSuggestionsOptions values.
+  // Handles a request from the renderer to show a popup with the suggestions
+  // from the password manager. |options| should be a bitwise mask of
+  // autofill::ShowPasswordSuggestionsOptions values.
   void OnShowPasswordSuggestions(int key,
                                  base::i18n::TextDirection text_direction,
                                  const base::string16& typed_username,
                                  int options,
                                  const gfx::RectF& bounds);
 
-  // Handles a request from the renderer to show a popup with a warning
-  // indicating that the form is not secure, used when a password field
-  // is autofilled on a non-secure page load.
-  void OnShowNotSecureWarning(base::i18n::TextDirection text_direction,
-                              const gfx::RectF& bounds);
+  // If there are relevant credentials for the current frame show them and
+  // return true. Otherwise, return false.
+  // This is currently used for cases in which the automatic generation
+  // option is offered through a different UI surface than the popup
+  // (e.g. via the keyboard accessory on Android).
+  bool MaybeShowPasswordSuggestions(const gfx::RectF& bounds,
+                                    base::i18n::TextDirection text_direction);
 
-  // Handles a request from the renderer to show a popup with an option to check
-  // user's saved passwords, used when a password field is not autofilled.
-  void OnShowManualFallbackSuggestion(base::i18n::TextDirection text_direction,
-                                      const gfx::RectF& bounds);
+  // If there are relevant credentials for the current frame, shows them with
+  // an additional 'generation' option and returns true. Otherwise, does nothing
+  // and returns false.
+  bool MaybeShowPasswordSuggestionsWithGeneration(
+      const gfx::RectF& bounds,
+      base::i18n::TextDirection text_direction);
 
   // Called when main frame navigates. Not called for in-page navigations.
   void DidNavigateMainFrame();
@@ -114,12 +124,19 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   // Finds login information for a |node| that was previously filled.
   bool FindLoginInfo(int key, autofill::PasswordFormFillData* found_password);
 
-  // Creates suggestion and records the metrics for the "Form not secure
-  // warning".
-  autofill::Suggestion CreateFormNotSecureWarning();
+  // Makes a request to the favicon service for the icon of |url|.
+  void RequestFavicon(const GURL& url);
+
+  // Called when the favicon was retrieved. When the icon is not ready or
+  // unavailable a fallback globe icon is used. The request to the favicon
+  // store is canceled on navigation.
+  void OnFaviconReady(const favicon_base::FaviconImageResult& result);
 
   // The logins we have filled so far with their associated info.
   LoginToPasswordInfoMap login_to_password_info_;
+
+  // Contains the favicon for the credentials offered on the current page.
+  gfx::Image page_favicon_;
 
   // When the autofill popup should be shown, |form_data_key_| identifies the
   // right password info in |login_to_password_info_|.
@@ -128,21 +145,15 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   // The driver that owns |this|.
   PasswordManagerDriver* password_manager_driver_;
 
-  // True if the Form-Not-Secure warning has been shown on the current
-  // navigation. Used for metrics.
-  bool did_show_form_not_secure_warning_ = false;
-
-  // Context in which the "Show all saved passwords" fallback was shown.
-  metrics_util::ShowAllSavedPasswordsContext
-      show_all_saved_passwords_shown_context_ =
-          metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_NONE;
-
   autofill::AutofillClient* autofill_client_;  // weak
 
   PasswordManagerClient* password_client_;
 
   // If not null then it will be called in destructor.
   base::OnceClosure deletion_callback_;
+
+  // Used to track a requested favicon.
+  base::CancelableTaskTracker favicon_tracker_;
 
   base::WeakPtrFactory<PasswordAutofillManager> weak_ptr_factory_;
 

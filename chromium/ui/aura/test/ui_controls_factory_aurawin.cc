@@ -4,7 +4,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/test/ui_controls_factory_aura.h"
@@ -41,8 +40,8 @@ class UIControlsWin : public UIControlsAura {
     DCHECK(!command);  // No command key on Aura
     HWND window =
         native_window->GetHost()->GetAcceleratedWidget();
-    return SendKeyPressImpl(
-        window, key, control, shift, alt, base::Closure());
+    return SendKeyPressImpl(window, key, control, shift, alt,
+                            base::OnceClosure());
   }
   bool SendKeyPressNotifyWhenDone(gfx::NativeWindow native_window,
                                   ui::KeyboardCode key,
@@ -50,39 +49,38 @@ class UIControlsWin : public UIControlsAura {
                                   bool shift,
                                   bool alt,
                                   bool command,
-                                  const base::Closure& task) override {
+                                  base::OnceClosure task) override {
     DCHECK(!command);  // No command key on Aura
     HWND window =
         native_window->GetHost()->GetAcceleratedWidget();
-    return SendKeyPressImpl(window, key, control, shift, alt, task);
+    return SendKeyPressImpl(window, key, control, shift, alt, std::move(task));
   }
   bool SendMouseMove(long screen_x, long screen_y) override {
-    return SendMouseMoveImpl(screen_x, screen_y, base::Closure());
+    return SendMouseMoveImpl(screen_x, screen_y, base::OnceClosure());
   }
   bool SendMouseMoveNotifyWhenDone(long screen_x,
                                    long screen_y,
-                                   const base::Closure& task) override {
-    return SendMouseMoveImpl(screen_x, screen_y, task);
+                                   base::OnceClosure task) override {
+    return SendMouseMoveImpl(screen_x, screen_y, std::move(task));
   }
-  bool SendMouseEvents(MouseButton type, int state) override {
-    return SendMouseEventsImpl(type, state, base::Closure());
+  bool SendMouseEvents(MouseButton type,
+                       int button_state,
+                       int accelerator_state) override {
+    return SendMouseEventsImpl(type, button_state, base::OnceClosure(),
+                               accelerator_state);
   }
   bool SendMouseEventsNotifyWhenDone(MouseButton type,
-                                     int state,
-                                     const base::Closure& task) override {
-    return SendMouseEventsImpl(type, state, task);
+                                     int button_state,
+                                     base::OnceClosure task,
+                                     int accelerator_state) override {
+    return SendMouseEventsImpl(type, button_state, std::move(task),
+                               accelerator_state);
   }
   bool SendMouseClick(MouseButton type) override {
-    return SendMouseEvents(type, UP | DOWN);
+    return SendMouseEvents(type, UP | DOWN, ui_controls::kNoAccelerator);
   }
   bool SendTouchEvents(int action, int num, int x, int y) override {
     return SendTouchEventsImpl(action, num, x, y);
-  }
-  void RunClosureAfterAllPendingUIEvents(
-      const base::Closure& closure) override {
-    // On windows, posting UI events is synchronous so just post the closure.
-    DCHECK(base::MessageLoopForUI::IsCurrent());
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, closure);
   }
 
  private:

@@ -9,9 +9,9 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "content/common/features.h"
-#include "third_party/WebKit/public/web/WebExternalPopupMenu.h"
-#include "third_party/WebKit/public/web/WebPopupMenuInfo.h"
+#include "content/common/buildflags.h"
+#include "third_party/blink/public/web/web_external_popup_menu.h"
+#include "third_party/blink/public/web/web_popup_menu_info.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace blink {

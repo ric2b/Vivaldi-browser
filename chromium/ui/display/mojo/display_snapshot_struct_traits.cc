@@ -4,6 +4,7 @@
 
 #include "ui/display/mojo/display_snapshot_struct_traits.h"
 
+#include "mojo/public/cpp/base/file_path_mojom_traits.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
@@ -130,9 +131,10 @@ bool StructTraits<display::mojom::DisplaySnapshotDataView,
   *out = std::make_unique<display::DisplaySnapshot>(
       data.display_id(), origin, physical_size, type,
       data.is_aspect_preserving_scaling(), data.has_overscan(),
-      data.has_color_correction_matrix(), color_space, display_name, file_path,
-      std::move(modes), std::move(edid), current_mode, native_mode,
-      data.product_id(), maximum_cursor_size);
+      data.has_color_correction_matrix(),
+      data.color_correction_in_linear_space(), color_space, display_name,
+      file_path, std::move(modes), std::move(edid), current_mode, native_mode,
+      data.product_code(), data.year_of_manufacture(), maximum_cursor_size);
   return true;
 }
 

@@ -12,8 +12,8 @@
 #include "content/shell/test_runner/test_runner.h"
 #include "content/shell/test_runner/web_test_delegate.h"
 #include "content/shell/test_runner/web_test_runner.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessorClient.h"
+#include "third_party/blink/public/platform/modules/webmidi/web_midi_accessor_client.h"
+#include "third_party/blink/public/platform/web_string.h"
 
 using midi::mojom::PortState;
 using midi::mojom::Result;
@@ -53,19 +53,31 @@ void MockWebMIDIAccessor::StartSession() {
   // Add a mock input and output port.
   addInputPort(PortState::CONNECTED);
   addOutputPort(PortState::CONNECTED);
-  interfaces_->GetDelegate()->PostTask(base::Bind(
+  interfaces_->GetDelegate()->PostTask(base::BindOnce(
       &MockWebMIDIAccessor::reportStartedSession, weak_factory_.GetWeakPtr(),
       interfaces_->GetTestRunner()->midiAccessorResult()));
+}
+
+void MockWebMIDIAccessor::RunDidReceiveMIDIData(unsigned port_index,
+                                                std::vector<unsigned char> data,
+                                                base::TimeTicks timestamp) {
+  client_->DidReceiveMIDIData(port_index, data.data(), data.size(), timestamp);
 }
 
 void MockWebMIDIAccessor::SendMIDIData(unsigned port_index,
                                        const unsigned char* data,
                                        size_t length,
-                                       double timestamp) {
+                                       base::TimeTicks timestamp) {
   // Emulate a loopback device for testing. Make sure if an input port that has
   // the same index exists.
-  if (port_index < next_input_port_index_)
-    client_->DidReceiveMIDIData(port_index, data, length, timestamp);
+  if (port_index < next_input_port_index_) {
+    std::vector<unsigned char> copied_data(data, data + length);
+    interfaces_->GetDelegate()->PostDelayedTask(
+        base::BindOnce(&MockWebMIDIAccessor::RunDidReceiveMIDIData,
+                       weak_factory_.GetWeakPtr(), port_index,
+                       std::move(copied_data), timestamp),
+        std::max(base::TimeDelta(), timestamp - base::TimeTicks::Now()));
+  }
 
   // Handle special sysex messages for testing.
   // A special sequence is [0xf0, 0x00, 0x02, 0x0d, 0x7f, <function>, 0xf7].

@@ -6,7 +6,7 @@
 
 #include <map>
 
-#include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -104,7 +104,7 @@ TEST_F(DataReductionProxyDataUseObserverTest,
   // Verify with no committed preview.
   previews::PreviewsUserData previews_user_data(3 /* page_id */);
   SetPreviewsUserData(data_use.get(), &previews_user_data);
-  EXPECT_CALL(*mock_drp_service(), UpdateContentLengths(_, _, _, _, _))
+  EXPECT_CALL(*mock_drp_service(), UpdateContentLengths(_, _, _, _, _, _, _, _))
       .Times(0);
   EXPECT_CALL(*mock_drp_service(), UpdateDataUseForHost(_, _, _)).Times(0);
   DidFinishLoad(data_use.get());
@@ -114,7 +114,7 @@ TEST_F(DataReductionProxyDataUseObserverTest,
   // Now verify with LOFI as committed preview.
   previews_user_data.SetCommittedPreviewsType(previews::PreviewsType::LOFI);
   SetPreviewsUserData(data_use.get(), &previews_user_data);
-  EXPECT_CALL(*mock_drp_service(), UpdateContentLengths(_, _, _, _, _))
+  EXPECT_CALL(*mock_drp_service(), UpdateContentLengths(_, _, _, _, _, _, _, _))
       .Times(0);
   EXPECT_CALL(*mock_drp_service(), UpdateDataUseForHost(_, _, _)).Times(0);
   DidFinishLoad(data_use.get());
@@ -132,11 +132,35 @@ TEST_F(DataReductionProxyDataUseObserverTest,
   previews_user_data.SetCommittedPreviewsType(previews::PreviewsType::NOSCRIPT);
   SetPreviewsUserData(data_use.get(), &previews_user_data);
   int inflation_value = 500000 * kInflationPercent / 100 + kInflationBytes;
+  EXPECT_EQ(251000, inflation_value);
   EXPECT_CALL(*mock_drp_service(),
-              UpdateContentLengths(0, inflation_value, true, _, _))
+              UpdateContentLengths(0, inflation_value, true, _, _, _, _, _))
       .Times(1);
   EXPECT_CALL(*mock_drp_service(),
-              UpdateDataUseForHost(0, 251000, "testsite.com"))
+              UpdateDataUseForHost(0, inflation_value, "testsite.com"))
+      .Times(1);
+  DidFinishLoad(data_use.get());
+  RunUntilIdle();
+}
+
+TEST_F(DataReductionProxyDataUseObserverTest,
+       OnPageDidFinishLoadHasCommittedNoScriptPreviewWithInflationPercent) {
+  std::unique_ptr<data_use_measurement::DataUse> data_use =
+      std::make_unique<data_use_measurement::DataUse>(
+          data_use_measurement::DataUse::TrafficType::USER_TRAFFIC);
+  data_use->IncrementTotalBytes(500000, 300);
+  data_use->set_url(GURL("https://testsite.com"));
+  previews::PreviewsUserData previews_user_data(7 /* page_id */);
+  previews_user_data.SetDataSavingsInflationPercent(80);
+  previews_user_data.SetCommittedPreviewsType(previews::PreviewsType::NOSCRIPT);
+  SetPreviewsUserData(data_use.get(), &previews_user_data);
+  int inflation_value = 500000 * 80 / 100;
+  EXPECT_EQ(400000, inflation_value);
+  EXPECT_CALL(*mock_drp_service(),
+              UpdateContentLengths(0, inflation_value, true, _, _, _, _, _))
+      .Times(1);
+  EXPECT_CALL(*mock_drp_service(),
+              UpdateDataUseForHost(0, inflation_value, "testsite.com"))
       .Times(1);
   DidFinishLoad(data_use.get());
   RunUntilIdle();

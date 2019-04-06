@@ -26,8 +26,6 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/switches.h"
-#include "third_party/webrtc/modules/desktop_capture/desktop_capture_options.h"
-#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using extensions::api::desktop_capture::ChooseDesktopMedia::Results::Options;
@@ -123,8 +121,7 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
 #else   // !defined(OS_CHROMEOS)
           screen_list = std::make_unique<NativeDesktopMediaList>(
               content::DesktopMediaID::TYPE_SCREEN,
-              webrtc::DesktopCapturer::CreateScreenCapturer(
-                  content::CreateDesktopCaptureOptions()));
+              content::desktop_capture::CreateScreenCapturer());
 #endif  // !defined(OS_CHROMEOS)
         }
         have_screen_list = true;
@@ -151,8 +148,7 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
           // used on multiple threads concurrently.
           window_list = std::make_unique<NativeDesktopMediaList>(
               content::DesktopMediaID::TYPE_WINDOW,
-              webrtc::DesktopCapturer::CreateWindowCapturer(
-                  content::CreateDesktopCaptureOptions()));
+              content::desktop_capture::CreateWindowCapturer());
 #endif  // !defined(OS_CHROMEOS)
         }
         have_window_list = true;
@@ -208,10 +204,14 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
   DesktopMediaPicker::DoneCallback callback = base::Bind(
       &DesktopCaptureChooseDesktopMediaFunctionBase::OnPickerDialogResults,
       this);
-
-  picker_->Show(web_contents, parent_window, parent_window,
-                base::UTF8ToUTF16(GetCallerDisplayName()), target_name,
-                std::move(source_lists), request_audio, callback);
+  DesktopMediaPicker::Params picker_params;
+  picker_params.web_contents = web_contents;
+  picker_params.context = parent_window;
+  picker_params.parent = parent_window;
+  picker_params.app_name = base::UTF8ToUTF16(GetCallerDisplayName());
+  picker_params.target_name = target_name;
+  picker_params.request_audio = request_audio;
+  picker_->Show(picker_params, std::move(source_lists), callback);
   origin_ = origin;
   return true;
 }

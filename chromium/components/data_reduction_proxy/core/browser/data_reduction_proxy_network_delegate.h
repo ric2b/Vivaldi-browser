@@ -15,9 +15,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "net/base/completion_callback.h"
 #include "net/base/layered_network_delegate.h"
-#include "net/proxy/proxy_retry_info.h"
+#include "net/proxy_resolution/proxy_retry_info.h"
 
 class GURL;
 
@@ -52,7 +53,7 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
  public:
   // Provides an additional proxy configuration that can be consulted after
   // proxy resolution. Used to get the Data Reduction Proxy config and give it
-  // to the OnResolveProxyHandler and RecordBytesHistograms.
+  // to the OnResolveProxyHandler and RecordBypassedBytesHistograms.
   typedef base::Callback<const net::ProxyConfig&()> ProxyConfigGetter;
 
   // Constructs a DataReductionProxyNetworkDelegate object with the given
@@ -77,17 +78,11 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
  private:
   friend class DataReductionProxyTestContext;
 
-  // Resets if Lo-Fi has been used for the last main frame load to false.
-  void OnBeforeURLRequestInternal(net::URLRequest* request,
-                                  const net::CompletionCallback& callback,
-                                  GURL* new_url) override;
-
   // Called before an HTTP transaction is started. Allows the delegate to
   // modify the Chrome-Proxy-Accept-Transform header to convey acceptable
   // content transformations.
   void OnBeforeStartTransactionInternal(
       net::URLRequest* request,
-      const net::CompletionCallback& callback,
       net::HttpRequestHeaders* headers) override;
 
   // Called after connection. Allows the delegate to read/write
@@ -108,13 +103,13 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   // |started| indicates whether the request has been started. If false,
   // some information like the socket address is not available.
   void OnCompletedInternal(net::URLRequest* request,
-                           bool started) override;
+                           bool started,
+                           int net_error) override;
 
   // Checks if a LoFi or Lite Pages response was received and sets the state on
   // DataReductionProxyData for |request|.
   void OnHeadersReceivedInternal(
       net::URLRequest* request,
-      const net::CompletionCallback& callback,
       const net::HttpResponseHeaders* original_response_headers,
       scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
       GURL* allowed_unsafe_redirect_url) override;
@@ -128,10 +123,14 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   // Posts to the UI thread to UpdateContentLengthPrefs in the data reduction
   // proxy metrics and updates |received_content_length_| and
   // |original_content_length_|.
-  void AccumulateDataUsage(int64_t data_used,
-                           int64_t original_size,
-                           DataReductionProxyRequestType request_type,
-                           const std::string& mime_type);
+  void AccumulateDataUsage(
+      int64_t data_used,
+      int64_t original_size,
+      DataReductionProxyRequestType request_type,
+      const std::string& mime_type,
+      bool is_user_traffic,
+      data_use_measurement::DataUseUserData::DataUseContentType content_type,
+      int32_t service_hash_code);
 
   // Record information such as histograms related to the Content-Length of
   // |request|. |original_content_length| is the length of the resource if

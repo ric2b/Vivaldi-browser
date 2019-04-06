@@ -50,10 +50,13 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content.browser.test.util.RenderProcessLimit;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.WebContents;
+import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 
 import java.lang.reflect.AnnotatedElement;
@@ -156,6 +159,29 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
             return 2;
         }
         return 0;
+    }
+
+    /**
+     * Waits for the activity to fully finish its native initialization.
+     * @param The {@link ChromeActivity} to wait for.
+     */
+    public static void waitForActivityNativeInitializationComplete(ChromeActivity activity) {
+        CriteriaHelper.pollUiThread(()
+                                            -> ChromeBrowserInitializer.getInstance(activity)
+                                                       .hasNativeInitializationCompleted(),
+                "Native initialization never finished",
+                20 * CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL,
+                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+
+        CriteriaHelper.pollUiThread(() -> activity.didFinishNativeInitialization(),
+                "Native initialization (of Activity) never finished");
+    }
+
+    /**
+     * Waits for the activity to fully finish its native initialization.
+     */
+    public void waitForActivityNativeInitializationComplete() {
+        waitForActivityNativeInitializationComplete(getActivity());
     }
 
     /**
@@ -317,7 +343,7 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
      * @param launchType The type of Tab Launch.
      */
     public Tab loadUrlInNewTab(final String url, final boolean incognito,
-            final TabLaunchType launchType) throws InterruptedException {
+            final @TabLaunchType int launchType) throws InterruptedException {
         Tab tab = null;
         try {
             tab = ThreadUtils.runOnUiThreadBlocking(new Callable<Tab>() {
@@ -407,21 +433,6 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
     }
 
     /**
-     * Waits for the activity to fully finish it's native initialization.
-     */
-    public void waitForActivityNativeInitializationComplete() {
-        CriteriaHelper.pollUiThread(()
-                                            -> ChromeBrowserInitializer.getInstance(getActivity())
-                                                       .hasNativeInitializationCompleted(),
-                "Native initialization never finished",
-                20 * CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL,
-                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
-
-        CriteriaHelper.pollUiThread(() -> getActivity().didFinishNativeInitialization(),
-                "Native initialization (of Activity) never finished");
-    }
-
-    /**
      * Prepares a URL intent to start the activity.
      * @param intent the intent to be modified
      * @param url the URL to be used (may be null)
@@ -463,12 +474,12 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
         TabModel incognitoTabModel = getActivity().getTabModelSelector().getModel(true);
         TabModelObserver observer = new EmptyTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, TabLaunchType type) {
+            public void didAddTab(Tab tab, @TabLaunchType int type) {
                 createdCallback.notifyCalled();
             }
 
             @Override
-            public void didSelectTab(Tab tab, TabSelectionType type, int lastId) {
+            public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
                 selectedCallback.notifyCalled();
             }
         };
@@ -592,11 +603,11 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
     public String runJavaScriptCodeInCurrentTab(String code)
             throws InterruptedException, TimeoutException {
         return JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                getActivity().getCurrentContentViewCore().getWebContents(), code);
+                getActivity().getCurrentWebContents(), code);
     }
 
     /**
-     * Waits till the ContentViewCore receives the expected page scale factor
+     * Waits till the WebContents receives the expected page scale factor
      * from the compositor and asserts that this happens.
      */
     public void assertWaitForPageScaleFactorMatch(float expectedScale) {
@@ -611,8 +622,40 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
         return mCurrentTestName;
     }
 
+    /**
+     * Gets the ChromeActivityTestRule's EmbeddedTestServer instance if it has one.
+     */
+    public EmbeddedTestServer getTestServer() {
+        return null;
+    }
+
+    /**
+     * @return {@link WebContents} of the active tab of the activity.
+     */
+    public WebContents getWebContents() {
+        return getActivity().getActivityTab().getWebContents();
+    }
+
     public void setActivity(T chromeActivity) {
         mSetActivity = chromeActivity;
+    }
+
+    /**
+     * Waits for an Activity of the given class to be started.
+     * @return The Activity.
+     */
+    @SuppressWarnings("unchecked")
+    public static <T extends ChromeActivity> T waitFor(final Class<T> expectedClass) {
+        final Activity[] holder = new Activity[1];
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                holder[0] = ApplicationStatus.getLastTrackedFocusedActivity();
+                return holder[0] != null && expectedClass.isAssignableFrom(holder[0].getClass())
+                        && ((ChromeActivity) holder[0]).getActivityTab() != null;
+            }
+        });
+        return (T) holder[0];
     }
 
     private class ChromeUncaughtExceptionHandler implements Thread.UncaughtExceptionHandler {

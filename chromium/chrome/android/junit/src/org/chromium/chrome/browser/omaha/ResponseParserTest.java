@@ -6,16 +6,14 @@ package org.chromium.chrome.browser.omaha;
 
 import android.util.Xml;
 
-import org.chromium.base.test.util.Feature;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
-
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
 import org.robolectric.annotation.Config;
-
 import org.xmlpull.v1.XmlSerializer;
+
+import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Feature;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -23,7 +21,7 @@ import java.io.StringWriter;
 /**
  * Unit tests for the Omaha ResponseParser.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class ResponseParserTest {
     // Note that the Omaha server appends "/" to the end of the URL codebase.
@@ -196,7 +194,7 @@ public class ResponseParserTest {
                 createTestXML("3.0", "12345", appStatus, addInstall, addPing, updateStatus, URL);
         ResponseParser parser =
                 new ResponseParser(true, "{APP_ID}", addInstall, addPing, updateStatus != null);
-        parser.parseResponse(xml);
+        OmahaBase.VersionConfig versionConfig = parser.parseResponse(xml);
 
         Assert.assertEquals("elapsed_seconds doesn't match.", 12345, parser.getDaystartSeconds());
         Assert.assertEquals("<app> status doesn't match.", appStatus, parser.getAppStatus());
@@ -213,6 +211,9 @@ public class ResponseParserTest {
             Assert.assertEquals(
                     "Market URL doesn't match.", null, parser.getURL());
         }
+        Assert.assertEquals("Version number doesn't match.", versionConfig.latestVersion,
+                parser.getNewVersion());
+        Assert.assertEquals("URL doesn't match.", versionConfig.downloadUrl, parser.getURL());
     }
 
     /**

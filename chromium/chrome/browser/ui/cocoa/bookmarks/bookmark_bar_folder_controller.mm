@@ -18,6 +18,7 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_hover_state.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_view.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_window.h"
+#import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_util.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_folder_target.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_cocoa_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
@@ -32,6 +33,7 @@
 #include "ui/base/theme_provider.h"
 #include "ui/resources/grit/ui_resources.h"
 
+using bookmarks::bookmark_bar_util::ValueInRangeInclusive;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 using bookmarks::BookmarkNodeData;
@@ -590,9 +592,14 @@ NSRect GetFirstButtonFrameForHeight(CGFloat height) {
 }
 
 // Set our window level to the right spot so we're above the menubar, dock, etc.
-// Factored out so we can override/noop in a unit test.
+// Factored out so we can override/noop in a unit test. This uses
+// NSStatusWindowLevel specifically so that this menu will be at the same level
+// as the "poof" animation window created by NSShowAnimationEffect(). This is
+// lower than the level of other popup menus (which are at
+// NSPopUpMenuWindowLevel) so this menu *could* get overdrawn by other menus,
+// but that shouldn't happen in practice.
 - (void)configureWindowLevel {
-  [[self window] setLevel:NSPopUpMenuWindowLevel];
+  [[self window] setLevel:NSStatusWindowLevel];
 }
 
 - (int)menuHeightForButtonCount:(int)buttonCount {
@@ -1216,12 +1223,6 @@ NSRect GetFirstButtonFrameForHeight(CGFloat height) {
 
 #pragma mark Drag & Drop
 
-// Find something like std::is_between<T>?  I can't believe one doesn't exist.
-// http://crbug.com/35966
-static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
-  return ((value >= low) && (value <= high));
-}
-
 // Return the proposed drop target for a hover open button, or nil if none.
 //
 // TODO(jrg): this is just like the version in
@@ -1713,17 +1714,6 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
     unichar theChar = [newText characterAtIndex:0];
     switch (theChar) {
 
-      // Keys that trigger opening of the selection.
-      case kUnicodeSpace: // Space.
-      case NSNewlineCharacter:
-      case NSCarriageReturnCharacter:
-      case NSEnterCharacter:
-        if (selectedIndex_ >= 0 && selectedIndex_ < [self buttonCount]) {
-          [barController_ openBookmark:[buttons_ objectAtIndex:selectedIndex_]];
-          return NO; // NO because the selection-handling code will close later.
-        } else {
-          return YES; // Triggering with no selection closes the menu.
-        }
       // Keys that cancel and close the menu.
       case kUnicodeEscape:
       case NSDeleteCharacter:
@@ -1739,6 +1729,22 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
         [self clearInputText];
         [self selectNext];
         return NO;
+      // Keys that trigger opening of the selection.
+      case kUnicodeSpace:  // Space.
+      case NSNewlineCharacter:
+      case NSCarriageReturnCharacter:
+      case NSEnterCharacter: {
+        BookmarkButton* btn = [self buttonAtIndex:selectedIndex_];
+        if (!btn)
+          return YES;  // Triggering with no selection closes the menu.
+
+        if (![btn isFolder]) {
+          [barController_ openBookmark:[buttons_ objectAtIndex:selectedIndex_]];
+          return NO;  // NO because the selection-handling code will close
+                      // later.
+        }
+        FALLTHROUGH;
+      }
       // Keys that open and close submenus.
       case NSRightArrowFunctionKey: {
         BookmarkButton* btn = [self buttonAtIndex:selectedIndex_];
@@ -2067,9 +2073,10 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   else if (buttonCount > 0)
     [self adjustWindowForButtonCount:buttonCount];
 
-  if (animate && !ignoreAnimations_)
+  if (animate && !ignoreAnimations_) {
     NSShowAnimationEffect(NSAnimationEffectDisappearingItemDefault, poofPoint,
                           NSZeroSize, nil, nil, nil);
+  }
 }
 
 - (id<BookmarkButtonControllerProtocol>)controllerForNode:

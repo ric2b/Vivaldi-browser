@@ -26,6 +26,8 @@ class NET_EXPORT CertVerifyResult {
 
   void Reset();
 
+  // Returns true if all the members of |this| are equal to |other|'s (including
+  // the |verified_cert| intermediates).
   bool operator==(const CertVerifyResult& other) const;
 
   // The certificate chain that was constructed during verification.
@@ -77,10 +79,6 @@ class NET_EXPORT CertVerifyResult {
   // is_issued_by_additional_trust_anchor is true if the root CA used for this
   // verification came from the list of additional trust anchors.
   bool is_issued_by_additional_trust_anchor;
-
-  // True if a fallback to the common name was used when matching the host
-  // name, rather than using the subjectAltName.
-  bool common_name_fallback_used;
 
   // Verification of stapled OCSP response, if present.
   OCSPVerifyResult ocsp_result;

@@ -13,7 +13,6 @@
 
 #include "base/atomicops.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/installer/util/app_registration_data.h"
 #include "chrome/installer/util/google_chrome_distribution.h"
 #include "chrome/installer/util/installer_util_strings.h"
@@ -32,7 +31,7 @@ BrowserDistribution* g_browser_distribution = NULL;
 }  // namespace
 
 BrowserDistribution::BrowserDistribution()
-    : app_reg_data_(base::MakeUnique<NonUpdatingAppRegistrationData>(
+    : app_reg_data_(std::make_unique<NonUpdatingAppRegistrationData>(
 #if defined(VIVALDI_BUILD)
           L"Software\\Vivaldi"
 #else
@@ -135,10 +134,10 @@ base::string16 BrowserDistribution::GetArguments()
   base::string16 arguments;
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(installer::switches::kVivaldiStandalone) &&
-      command_line.HasSwitch(installer::switches::kVivaldiInstallDir)) {
+  if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone) &&
+      command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
     base::FilePath install_path = command_line.GetSwitchValuePath(
-        installer::switches::kVivaldiInstallDir).Append(L"User Data");
+        vivaldi::constants::kVivaldiInstallDir).Append(L"User Data");
     arguments.assign(L"--user-data-dir=").append(install_path.value());
   }
   return arguments;

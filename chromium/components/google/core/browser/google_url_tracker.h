@@ -9,18 +9,21 @@
 
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/google/core/browser/google_url_tracker_client.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "net/base/network_change_notifier.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_fetcher_delegate.h"
 #include "url/gurl.h"
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
+
+namespace network {
+class SimpleURLLoader;
+}  // namespace network
 
 // This object is responsible for checking the Google URL once per network
 // change.  The current value is saved to prefs.
@@ -32,8 +35,7 @@ class PrefRegistrySyncable;
 // performed (ever) unless at least one consumer registers interest by calling
 // RequestServerCheck().
 class GoogleURLTracker
-    : public net::URLFetcherDelegate,
-      public net::NetworkChangeNotifier::NetworkChangeObserver,
+    : public net::NetworkChangeNotifier::NetworkChangeObserver,
       public KeyedService {
  public:
   // Callback that is called when the Google URL is updated.
@@ -41,23 +43,36 @@ class GoogleURLTracker
   typedef base::CallbackList<void()> CallbackList;
   typedef CallbackList::Subscription Subscription;
 
-  // The constructor does different things depending on which of these values
-  // you pass it.  Hopefully these are self-explanatory.
+  // The mode of the tracker that controls how the tracker behaves and that must
+  // be passed to its constructor.
   enum Mode {
+    // Use current local Google TLD.
+    // Defer network requests to update TLD until 5 seconds after
+    // creation, to avoid an expensive load during Chrome startup.
     NORMAL_MODE,
-    UNIT_TEST_MODE,
+
+    // Always use www.google.com.
+    ALWAYS_DOT_COM_MODE,
   };
 
   static const char kDefaultGoogleHomepage[];
 
+  // Flag to disable /searchdomaincheck lookups in Chrome and instead always use
+  // google.com. The tracker should be used in ALWAYS_DOT_COM_MODE when this
+  // flag is enabled.
+  // For more details, see http://goto.google.com/chrome-no-searchdomaincheck.
+  static const base::Feature kNoSearchDomainCheck;
+
   // Only the GoogleURLTrackerFactory and tests should call this.
+  // Note: you *must* manually call Shutdown() before this instance gets
+  // destroyed if you want to create another instance in the same binary
+  // (e.g. in unit tests).
   GoogleURLTracker(std::unique_ptr<GoogleURLTrackerClient> client, Mode mode);
 
   ~GoogleURLTracker() override;
 
   // Register user preferences for GoogleURLTracker.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-
 
   // Returns the current Google homepage URL.
   const GURL& google_url() const { return google_url_; }
@@ -78,8 +93,7 @@ class GoogleURLTracker
 
   static const char kSearchDomainCheckURL[];
 
-  // net::URLFetcherDelegate:
-  void OnURLFetchComplete(const net::URLFetcher* source) override;
+  void OnURLLoaderComplete(std::unique_ptr<std::string> response_body);
 
   // NetworkChangeNotifier::NetworkChangeObserver:
   void OnNetworkChanged(
@@ -88,31 +102,30 @@ class GoogleURLTracker
   // KeyedService:
   void Shutdown() override;
 
-  // Sets |need_to_fetch_| and attempts to start a fetch.
-  void SetNeedToFetch();
+  // Sets |need_to_load_| and attempts to start a load.
+  void SetNeedToLoad();
 
   // Called when the five second startup sleep has finished.  Runs any pending
-  // fetch.
+  // load.
   void FinishSleep();
 
-  // Starts the fetch of the up-to-date Google URL if we actually want to fetch
+  // Starts the load of the up-to-date Google URL if we actually want to load
   // it and can currently do so.
-  void StartFetchIfDesirable();
+  void StartLoadIfDesirable();
 
   CallbackList callback_list_;
 
   std::unique_ptr<GoogleURLTrackerClient> client_;
 
   GURL google_url_;
-  std::unique_ptr<net::URLFetcher> fetcher_;
-  int fetcher_id_;
-  bool in_startup_sleep_;  // True if we're in the five-second "no fetching"
+  std::unique_ptr<network::SimpleURLLoader> simple_loader_;
+  bool in_startup_sleep_;  // True if we're in the five-second "no loading"
                            // period that begins at browser start.
-  bool already_fetched_;   // True if we've already fetched a URL once this run;
-                           // we won't fetch again until after a restart.
-  bool need_to_fetch_;     // True if a consumer actually wants us to fetch an
+  bool already_loaded_;    // True if we've already loaded a URL once this run;
+                           // we won't load again until after a restart.
+  bool need_to_load_;      // True if a consumer actually wants us to load an
                            // updated URL.  If this is never set, we won't
-                           // bother to fetch anything.
+                           // bother to load anything.
                            // Consumers should register a callback via
                            // RegisterCallback().
   base::WeakPtrFactory<GoogleURLTracker> weak_ptr_factory_;

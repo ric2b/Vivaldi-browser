@@ -12,17 +12,27 @@
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/queue.h"
+#include "base/json/json_reader.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/devtools/devtools_interceptor_controller.h"
+#include "content/browser/devtools/devtools_io_context.h"
 #include "content/browser/devtools/devtools_session.h"
+#include "content/browser/devtools/devtools_stream_pipe.h"
+#include "content/browser/devtools/devtools_url_loader_interceptor.h"
 #include "content/browser/devtools/protocol/page.h"
 #include "content/browser/devtools/protocol/security.h"
+#include "content/browser/devtools/service_worker_devtools_agent_host.h"
+#include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/storage_partition_impl.h"
+#include "content/browser/web_package/signed_exchange_envelope.h"
+#include "content/browser/web_package/signed_exchange_error.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -37,20 +47,32 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_bytes_element_reader.h"
+#include "net/cert/ct_policy_status.h"
+#include "net/cert/ct_sct_to_string.h"
+#include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
+#include "net/ssl/ssl_cipher_suite_names.h"
+#include "net/ssl/ssl_connection_status_flags.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/data_element.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/http_raw_request_response_info.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "third_party/blink/public/platform/resource_request_blocked_reason.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 namespace content {
 namespace protocol {
@@ -66,128 +88,203 @@ using DeleteCookiesCallback = Network::Backend::DeleteCookiesCallback;
 using ClearBrowserCookiesCallback =
     Network::Backend::ClearBrowserCookiesCallback;
 
-const char kDevToolsEmulateNetworkConditionsClientId[] =
-    "X-DevTools-Emulate-Network-Conditions-Client-Id";
+Network::CertificateTransparencyCompliance SerializeCTPolicyCompliance(
+    net::ct::CTPolicyCompliance ct_compliance) {
+  switch (ct_compliance) {
+    case net::ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS:
+      return Network::CertificateTransparencyComplianceEnum::Compliant;
+    case net::ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS:
+    case net::ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS:
+      return Network::CertificateTransparencyComplianceEnum::NotCompliant;
+    case net::ct::CTPolicyCompliance::CT_POLICY_BUILD_NOT_TIMELY:
+    case net::ct::CTPolicyCompliance::
+        CT_POLICY_COMPLIANCE_DETAILS_NOT_AVAILABLE:
+      return Network::CertificateTransparencyComplianceEnum::Unknown;
+    case net::ct::CTPolicyCompliance::CT_POLICY_MAX:
+      NOTREACHED();
+      return Network::CertificateTransparencyComplianceEnum::Unknown;
+  }
+  NOTREACHED();
+  return Network::CertificateTransparencyComplianceEnum::Unknown;
+}
+
+std::unique_ptr<Network::Cookie> BuildCookie(
+    const net::CanonicalCookie& cookie) {
+  std::unique_ptr<Network::Cookie> devtools_cookie =
+      Network::Cookie::Create()
+          .SetName(cookie.Name())
+          .SetValue(cookie.Value())
+          .SetDomain(cookie.Domain())
+          .SetPath(cookie.Path())
+          .SetExpires(cookie.ExpiryDate().is_null()
+                          ? -1
+                          : cookie.ExpiryDate().ToDoubleT())
+          .SetSize(cookie.Name().length() + cookie.Value().length())
+          .SetHttpOnly(cookie.IsHttpOnly())
+          .SetSecure(cookie.IsSecure())
+          .SetSession(!cookie.IsPersistent())
+          .Build();
+
+  switch (cookie.SameSite()) {
+    case net::CookieSameSite::STRICT_MODE:
+      devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Strict);
+      break;
+    case net::CookieSameSite::LAX_MODE:
+      devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Lax);
+      break;
+    case net::CookieSameSite::NO_RESTRICTION:
+      break;
+  }
+  return devtools_cookie;
+}
+
+std::unique_ptr<ProtocolCookieArray> BuildCookieArray(
+    const std::vector<net::CanonicalCookie>& cookie_list) {
+  auto cookies = std::make_unique<ProtocolCookieArray>();
+
+  for (const net::CanonicalCookie& cookie : cookie_list)
+    cookies->addItem(BuildCookie(cookie));
+
+  return cookies;
+}
 
 class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
-  public:
-    CookieRetriever(std::unique_ptr<GetCookiesCallback> callback)
-        : callback_(std::move(callback)),
-          all_callback_(nullptr) {}
+ public:
+  CookieRetriever(std::unique_ptr<GetCookiesCallback> callback)
+      : callback_(std::move(callback)), all_callback_(nullptr) {
+    DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
+  }
 
-    CookieRetriever(std::unique_ptr<GetAllCookiesCallback> callback)
-        : callback_(nullptr),
-          all_callback_(std::move(callback)) {}
+  CookieRetriever(std::unique_ptr<GetAllCookiesCallback> callback)
+      : callback_(nullptr), all_callback_(std::move(callback)) {}
 
-    void RetrieveCookiesOnIO(
-        net::URLRequestContextGetter* context_getter,
-        const std::vector<GURL>& urls) {
-      DCHECK_CURRENTLY_ON(BrowserThread::IO);
-      callback_count_ = urls.size();
+  void RetrieveCookiesOnIO(net::URLRequestContextGetter* context_getter,
+                           const std::vector<GURL>& urls) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    callback_count_ = urls.size();
 
-      if (callback_count_ == 0) {
-        GotAllCookies();
-        return;
-      }
-
-      for (const GURL& url : urls) {
-        net::URLRequestContext* request_context =
-            context_getter->GetURLRequestContext();
-        request_context->cookie_store()->GetAllCookiesForURLAsync(
-            url, base::BindOnce(&CookieRetriever::GotCookies, this));
-      }
+    if (callback_count_ == 0) {
+      GotAllCookies();
+      return;
     }
 
-    void RetrieveAllCookiesOnIO(
-        net::URLRequestContextGetter* context_getter) {
-      DCHECK_CURRENTLY_ON(BrowserThread::IO);
-      callback_count_ = 1;
-
+    for (const GURL& url : urls) {
       net::URLRequestContext* request_context =
           context_getter->GetURLRequestContext();
-      request_context->cookie_store()->GetAllCookiesAsync(
-          base::BindOnce(&CookieRetriever::GotCookies, this));
+      request_context->cookie_store()->GetAllCookiesForURLAsync(
+          url, base::BindOnce(&CookieRetriever::GotCookies, this));
     }
-  protected:
-    virtual ~CookieRetriever() {}
+  }
 
-    void GotCookies(const net::CookieList& cookie_list) {
-      DCHECK_CURRENTLY_ON(BrowserThread::IO);
-      for (const net::CanonicalCookie& cookie : cookie_list) {
-        std::string key = base::StringPrintf(
-            "%s::%s::%s::%d", cookie.Name().c_str(), cookie.Domain().c_str(),
-            cookie.Path().c_str(), cookie.IsSecure());
-        cookies_[key] = cookie;
-      }
+  void RetrieveAllCookiesOnIO(net::URLRequestContextGetter* context_getter) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    callback_count_ = 1;
 
-      --callback_count_;
-      if (callback_count_ == 0)
-        GotAllCookies();
-    }
+    net::URLRequestContext* request_context =
+        context_getter->GetURLRequestContext();
+    request_context->cookie_store()->GetAllCookiesAsync(
+        base::BindOnce(&CookieRetriever::GotCookies, this));
+  }
 
-    void GotAllCookies() {
-      net::CookieList master_cookie_list;
-      for (const auto& pair : cookies_)
-        master_cookie_list.push_back(pair.second);
+ protected:
+  virtual ~CookieRetriever() {}
 
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::BindOnce(&CookieRetriever::SendCookiesResponseOnUI, this,
-                         master_cookie_list));
+  void GotCookies(const net::CookieList& cookie_list) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    for (const net::CanonicalCookie& cookie : cookie_list) {
+      std::string key = base::StringPrintf(
+          "%s::%s::%s::%d", cookie.Name().c_str(), cookie.Domain().c_str(),
+          cookie.Path().c_str(), cookie.IsSecure());
+      cookies_[key] = cookie;
     }
 
-    void SendCookiesResponseOnUI(const net::CookieList& cookie_list) {
-      DCHECK_CURRENTLY_ON(BrowserThread::UI);
-      std::unique_ptr<ProtocolCookieArray> cookies =
-          ProtocolCookieArray::create();
+    --callback_count_;
+    if (callback_count_ == 0)
+      GotAllCookies();
+  }
 
-      for (const net::CanonicalCookie& cookie : cookie_list) {
-        std::unique_ptr<Network::Cookie> devtools_cookie =
-            Network::Cookie::Create()
-                .SetName(cookie.Name())
-                .SetValue(cookie.Value())
-                .SetDomain(cookie.Domain())
-                .SetPath(cookie.Path())
-                .SetExpires(cookie.ExpiryDate().is_null() ? -1 : cookie.ExpiryDate().ToDoubleT())
-                .SetSize(cookie.Name().length() + cookie.Value().length())
-                .SetHttpOnly(cookie.IsHttpOnly())
-                .SetSecure(cookie.IsSecure())
-                .SetSession(!cookie.IsPersistent())
-                .Build();
+  void GotAllCookies() {
+    net::CookieList master_cookie_list;
+    for (const auto& pair : cookies_)
+      master_cookie_list.push_back(pair.second);
 
-        switch (cookie.SameSite()) {
-          case net::CookieSameSite::STRICT_MODE:
-            devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Strict);
-            break;
-          case net::CookieSameSite::LAX_MODE:
-            devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Lax);
-            break;
-          case net::CookieSameSite::NO_RESTRICTION:
-            break;
-       }
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&CookieRetriever::SendCookiesResponseOnUI, this,
+                       master_cookie_list));
+  }
 
-       cookies->addItem(std::move(devtools_cookie));
-      }
+  void SendCookiesResponseOnUI(const net::CookieList& cookie_list) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    std::unique_ptr<ProtocolCookieArray> cookies =
+        BuildCookieArray(cookie_list);
 
-      if (callback_) {
-        callback_->sendSuccess(std::move(cookies));
-      } else {
-        DCHECK(all_callback_);
-        all_callback_->sendSuccess(std::move(cookies));
-      }
+    if (callback_) {
+      callback_->sendSuccess(std::move(cookies));
+    } else {
+      DCHECK(all_callback_);
+      all_callback_->sendSuccess(std::move(cookies));
     }
+  }
 
-    std::unique_ptr<GetCookiesCallback> callback_;
-    std::unique_ptr<GetAllCookiesCallback> all_callback_;
-    int callback_count_ = 0;
-    std::unordered_map<std::string, net::CanonicalCookie> cookies_;
+  std::unique_ptr<GetCookiesCallback> callback_;
+  std::unique_ptr<GetAllCookiesCallback> all_callback_;
+  int callback_count_ = 0;
+  std::unordered_map<std::string, net::CanonicalCookie> cookies_;
 
-  private:
-    friend class base::RefCountedThreadSafe<CookieRetriever>;
+ private:
+  friend class base::RefCountedThreadSafe<CookieRetriever>;
+};
+
+class CookieRetrieverNetworkService
+    : public base::RefCounted<CookieRetrieverNetworkService> {
+ public:
+  static void Retrieve(network::mojom::CookieManager* cookie_manager,
+                       const std::vector<GURL> urls,
+                       std::unique_ptr<GetCookiesCallback> callback) {
+    scoped_refptr<CookieRetrieverNetworkService> self =
+        new CookieRetrieverNetworkService(std::move(callback));
+    net::CookieOptions cookie_options;
+    cookie_options.set_include_httponly();
+    cookie_options.set_same_site_cookie_mode(
+        net::CookieOptions::SameSiteCookieMode::INCLUDE_STRICT_AND_LAX);
+    cookie_options.set_do_not_update_access_time();
+    for (const auto& url : urls) {
+      cookie_manager->GetCookieList(
+          url, cookie_options,
+          base::BindOnce(&CookieRetrieverNetworkService::GotCookies, self));
+    }
+  }
+
+ private:
+  friend class base::RefCounted<CookieRetrieverNetworkService>;
+
+  CookieRetrieverNetworkService(std::unique_ptr<GetCookiesCallback> callback)
+      : callback_(std::move(callback)) {}
+
+  void GotCookies(const std::vector<net::CanonicalCookie>& cookies) {
+    for (const auto& cookie : cookies) {
+      std::string key = base::StringPrintf(
+          "%s::%s::%s::%d", cookie.Name().c_str(), cookie.Domain().c_str(),
+          cookie.Path().c_str(), cookie.IsSecure());
+      all_cookies_.emplace(std::move(key), cookie);
+    }
+  }
+
+  ~CookieRetrieverNetworkService() {
+    auto cookies = std::make_unique<ProtocolCookieArray>();
+    for (const auto& entry : all_cookies_)
+      cookies->addItem(BuildCookie(entry.second));
+    callback_->sendSuccess(std::move(cookies));
+  }
+
+  std::unique_ptr<GetCookiesCallback> callback_;
+  std::unordered_map<std::string, net::CanonicalCookie> all_cookies_;
 };
 
 void ClearedCookiesOnIO(std::unique_ptr<ClearBrowserCookiesCallback> callback,
                         uint32_t num_deleted) {
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
@@ -197,11 +294,12 @@ void ClearedCookiesOnIO(std::unique_ptr<ClearBrowserCookiesCallback> callback,
 
 void ClearCookiesOnIO(net::URLRequestContextGetter* context_getter,
                       std::unique_ptr<ClearBrowserCookiesCallback> callback) {
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext* request_context =
       context_getter->GetURLRequestContext();
   request_context->cookie_store()->DeleteAllAsync(
-      base::BindOnce(&ClearedCookiesOnIO, base::Passed(std::move(callback))));
+      base::BindOnce(&ClearedCookiesOnIO, std::move(callback)));
 }
 
 void DeletedCookiesOnIO(base::OnceClosure callback, uint32_t num_deleted) {
@@ -209,36 +307,38 @@ void DeletedCookiesOnIO(base::OnceClosure callback, uint32_t num_deleted) {
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, std::move(callback));
 }
 
-void DeleteSelectedCookiesOnIO(net::URLRequestContextGetter* context_getter,
-                               const std::string& name,
-                               const std::string& url_spec,
-                               const std::string& domain,
-                               const std::string& path,
-                               base::OnceClosure callback,
-                               const net::CookieList& cookie_list) {
-  net::URLRequestContext* request_context =
-      context_getter->GetURLRequestContext();
-  std::string normalized_domain = domain;
-  if (normalized_domain.empty()) {
-    GURL url(url_spec);
-    if (!url.SchemeIsHTTPOrHTTPS()) {
-      std::move(callback).Run();
-      return;
-    }
-    normalized_domain = url.host();
-  }
+std::vector<net::CanonicalCookie> FilterCookies(
+    const std::vector<net::CanonicalCookie>& cookies,
+    const std::string& name,
+    const std::string& normalized_domain,
+    const std::string& path) {
+  std::vector<net::CanonicalCookie> result;
 
-  net::CookieList filtered_list;
-  for (const auto& cookie : cookie_list) {
+  for (const auto& cookie : cookies) {
     if (cookie.Name() != name)
       continue;
     if (cookie.Domain() != normalized_domain)
       continue;
     if (!path.empty() && cookie.Path() != path)
       continue;
-    filtered_list.push_back(cookie);
+    result.push_back(cookie);
   }
 
+  return result;
+}
+
+void DeleteSelectedCookiesOnIO(net::URLRequestContextGetter* context_getter,
+                               const std::string& name,
+                               const std::string& normalized_domain,
+                               const std::string& path,
+                               base::OnceClosure callback,
+                               const net::CookieList& cookie_list) {
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
+
+  net::URLRequestContext* request_context =
+      context_getter->GetURLRequestContext();
+  net::CookieList filtered_list =
+      FilterCookies(cookie_list, name, normalized_domain, path);
   for (size_t i = 0; i < filtered_list.size(); ++i) {
     const auto& cookie = filtered_list[i];
     base::OnceCallback<void(uint32_t)> once_callback;
@@ -248,22 +348,22 @@ void DeleteSelectedCookiesOnIO(net::URLRequestContextGetter* context_getter,
         cookie, std::move(once_callback));
   }
   if (!filtered_list.size())
-    std::move(callback).Run();
+    DeletedCookiesOnIO(std::move(callback), 0);
 }
 
 void DeleteCookiesOnIO(net::URLRequestContextGetter* context_getter,
                        const std::string& name,
-                       const std::string& url,
-                       const std::string& domain,
+                       const std::string& normalized_domain,
                        const std::string& path,
                        base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
   net::URLRequestContext* request_context =
       context_getter->GetURLRequestContext();
 
   request_context->cookie_store()->GetAllCookiesAsync(base::BindOnce(
-      &DeleteSelectedCookiesOnIO, base::Unretained(context_getter), name, url,
-      domain, path, std::move(callback)));
+      &DeleteSelectedCookiesOnIO, base::Unretained(context_getter), name,
+      normalized_domain, path, std::move(callback)));
 }
 
 void CookieSetOnIO(std::unique_ptr<SetCookieCallback> callback, bool success) {
@@ -273,33 +373,46 @@ void CookieSetOnIO(std::unique_ptr<SetCookieCallback> callback, bool success) {
                                          std::move(callback), success));
 }
 
-void SetCookieOnIO(net::URLRequestContextGetter* context_getter,
-                   const std::string& name,
-                   const std::string& value,
-                   const std::string& url_spec,
-                   const std::string& domain,
-                   const std::string& path,
-                   bool secure,
-                   bool http_only,
-                   const std::string& same_site,
-                   double expires,
-                   base::OnceCallback<void(bool)> callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  net::URLRequestContext* request_context =
-      context_getter->GetURLRequestContext();
+void DeleteFilteredCookies(network::mojom::CookieManager* cookie_manager,
+                           const std::string& name,
+                           const std::string& normalized_domain,
+                           const std::string& path,
+                           std::unique_ptr<DeleteCookiesCallback> callback,
+                           const std::vector<net::CanonicalCookie>& cookies) {
+  std::vector<net::CanonicalCookie> filtered_list =
+      FilterCookies(cookies, name, normalized_domain, path);
 
-  if (url_spec.empty() && domain.empty()) {
-    std::move(callback).Run(false);
-    return;
+  base::RepeatingClosure barrier_closure = base::BarrierClosure(
+      filtered_list.size(),
+      base::BindOnce(&DeleteCookiesCallback::sendSuccess, std::move(callback)));
+
+  for (auto& cookie : filtered_list) {
+    cookie_manager->DeleteCanonicalCookie(
+        cookie, base::BindOnce([](base::RepeatingClosure callback,
+                                  bool) { callback.Run(); },
+                               barrier_closure));
   }
+}
 
+std::unique_ptr<net::CanonicalCookie> MakeCookieFromProtocolValues(
+    const std::string& name,
+    const std::string& value,
+    const std::string& url_spec,
+    const std::string& domain,
+    const std::string& path,
+    bool secure,
+    bool http_only,
+    const std::string& same_site,
+    double expires) {
   std::string normalized_domain = domain;
+
+  if (url_spec.empty() && domain.empty())
+    return nullptr;
+
   if (!url_spec.empty()) {
     GURL source_url = GURL(url_spec);
-    if (!source_url.SchemeIsHTTPOrHTTPS()) {
-      std::move(callback).Run(false);
-      return;
-    }
+    if (!source_url.SchemeIsHTTPOrHTTPS())
+      return nullptr;
 
     secure = secure || source_url.SchemeIsCryptographic();
     if (normalized_domain.empty())
@@ -322,45 +435,44 @@ void SetCookieOnIO(net::URLRequestContextGetter* context_getter,
   if (same_site == Network::CookieSameSiteEnum::Strict)
     css = net::CookieSameSite::STRICT_MODE;
 
-  std::unique_ptr<net::CanonicalCookie> cc(
-      net::CanonicalCookie::CreateSanitizedCookie(
-          url, name, value, normalized_domain, path, base::Time(),
-          expiration_date, base::Time(), secure, http_only, css,
-          net::COOKIE_PRIORITY_DEFAULT));
-  if (!cc) {
-    std::move(callback).Run(false);
-    return;
-  }
-  request_context->cookie_store()->SetCanonicalCookieAsync(
-      std::move(cc), secure, true /*modify_http_only*/, std::move(callback));
+  return net::CanonicalCookie::CreateSanitizedCookie(
+      url, name, value, normalized_domain, path, base::Time(), expiration_date,
+      base::Time(), secure, http_only, css, net::COOKIE_PRIORITY_DEFAULT);
 }
 
-void CookiesSetOnIO(std::unique_ptr<SetCookiesCallback> callback,
-                    bool success) {
+void SetCookieOnIO(net::URLRequestContextGetter* context_getter,
+                   std::unique_ptr<net::CanonicalCookie> cookie,
+                   base::OnceCallback<void(bool)> callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
+  net::URLRequestContext* request_context =
+      context_getter->GetURLRequestContext();
+
+  request_context->cookie_store()->SetCanonicalCookieAsync(
+      std::move(cookie), true /* secure_source */, true /*modify_http_only*/,
+      std::move(callback));
+}
+
+void CookiesSetOnIO(std::unique_ptr<SetCookiesCallback> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(&SetCookiesCallback::sendSuccess, std::move(callback)));
 }
 
-void SetCookiesOnIO(
-    net::URLRequestContextGetter* context_getter,
-    std::unique_ptr<protocol::Array<Network::CookieParam>> cookies,
-    base::OnceCallback<void(bool)> callback) {
+void SetCookiesOnIO(net::URLRequestContextGetter* context_getter,
+                    std::vector<std::unique_ptr<net::CanonicalCookie>> cookies,
+                    base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
 
-  for (size_t i = 0; i < cookies->length(); i++) {
-    Network::CookieParam* cookie = cookies->get(i);
-
-    base::OnceCallback<void(bool)> once_callback;
-    if (i == cookies->length() - 1)
-      once_callback = std::move(callback);
-
-    SetCookieOnIO(context_getter, cookie->GetName(), cookie->GetValue(),
-                  cookie->GetUrl(""), cookie->GetDomain(""),
-                  cookie->GetPath(""), cookie->GetSecure(false),
-                  cookie->GetHttpOnly(false), cookie->GetSameSite(""),
-                  cookie->GetExpires(-1), std::move(once_callback));
+  base::RepeatingClosure barrier_closure =
+      base::BarrierClosure(cookies.size(), std::move(callback));
+  for (auto& cookie : cookies) {
+    SetCookieOnIO(context_getter, std::move(cookie),
+                  base::BindOnce([](base::RepeatingClosure callback,
+                                    bool) { callback.Run(); },
+                                 barrier_closure));
   }
 }
 
@@ -470,15 +582,15 @@ String securityState(const GURL& url, const net::CertStatus& cert_status) {
   return Security::SecurityStateEnum::Secure;
 }
 
-DevToolsURLRequestInterceptor::InterceptionStage ToInterceptorStage(
+DevToolsNetworkInterceptor::InterceptionStage ToInterceptorStage(
     const protocol::Network::InterceptionStage& interceptor_stage) {
   if (interceptor_stage == protocol::Network::InterceptionStageEnum::Request)
-    return DevToolsURLRequestInterceptor::REQUEST;
+    return DevToolsNetworkInterceptor::REQUEST;
   if (interceptor_stage ==
       protocol::Network::InterceptionStageEnum::HeadersReceived)
-    return DevToolsURLRequestInterceptor::RESPONSE;
+    return DevToolsNetworkInterceptor::RESPONSE;
   NOTREACHED();
-  return DevToolsURLRequestInterceptor::REQUEST;
+  return DevToolsNetworkInterceptor::REQUEST;
 }
 
 net::Error NetErrorFromString(const std::string& error, bool* ok) {
@@ -507,34 +619,45 @@ net::Error NetErrorFromString(const std::string& error, bool* ok) {
     return net::ERR_INTERNET_DISCONNECTED;
   if (error == Network::ErrorReasonEnum::AddressUnreachable)
     return net::ERR_ADDRESS_UNREACHABLE;
+  if (error == Network::ErrorReasonEnum::BlockedByClient)
+    return net::ERR_BLOCKED_BY_CLIENT;
+  if (error == Network::ErrorReasonEnum::BlockedByResponse)
+    return net::ERR_BLOCKED_BY_RESPONSE;
   *ok = false;
   return net::ERR_FAILED;
 }
 
 String NetErrorToString(int net_error) {
-  if (net_error == net::ERR_ABORTED)
-    return Network::ErrorReasonEnum::Aborted;
-  if (net_error == net::ERR_TIMED_OUT)
-    return Network::ErrorReasonEnum::TimedOut;
-  if (net_error == net::ERR_ACCESS_DENIED)
-    return Network::ErrorReasonEnum::AccessDenied;
-  if (net_error == net::ERR_CONNECTION_CLOSED)
-    return Network::ErrorReasonEnum::ConnectionClosed;
-  if (net_error == net::ERR_CONNECTION_RESET)
-    return Network::ErrorReasonEnum::ConnectionReset;
-  if (net_error == net::ERR_CONNECTION_REFUSED)
-    return Network::ErrorReasonEnum::ConnectionRefused;
-  if (net_error == net::ERR_CONNECTION_ABORTED)
-    return Network::ErrorReasonEnum::ConnectionAborted;
-  if (net_error == net::ERR_CONNECTION_FAILED)
-    return Network::ErrorReasonEnum::ConnectionFailed;
-  if (net_error == net::ERR_NAME_NOT_RESOLVED)
-    return Network::ErrorReasonEnum::NameNotResolved;
-  if (net_error == net::ERR_INTERNET_DISCONNECTED)
-    return Network::ErrorReasonEnum::InternetDisconnected;
-  if (net_error == net::ERR_ADDRESS_UNREACHABLE)
-    return Network::ErrorReasonEnum::AddressUnreachable;
-  return Network::ErrorReasonEnum::Failed;
+  switch (net_error) {
+    case net::ERR_ABORTED:
+      return Network::ErrorReasonEnum::Aborted;
+    case net::ERR_TIMED_OUT:
+      return Network::ErrorReasonEnum::TimedOut;
+    case net::ERR_ACCESS_DENIED:
+      return Network::ErrorReasonEnum::AccessDenied;
+    case net::ERR_CONNECTION_CLOSED:
+      return Network::ErrorReasonEnum::ConnectionClosed;
+    case net::ERR_CONNECTION_RESET:
+      return Network::ErrorReasonEnum::ConnectionReset;
+    case net::ERR_CONNECTION_REFUSED:
+      return Network::ErrorReasonEnum::ConnectionRefused;
+    case net::ERR_CONNECTION_ABORTED:
+      return Network::ErrorReasonEnum::ConnectionAborted;
+    case net::ERR_CONNECTION_FAILED:
+      return Network::ErrorReasonEnum::ConnectionFailed;
+    case net::ERR_NAME_NOT_RESOLVED:
+      return Network::ErrorReasonEnum::NameNotResolved;
+    case net::ERR_INTERNET_DISCONNECTED:
+      return Network::ErrorReasonEnum::InternetDisconnected;
+    case net::ERR_ADDRESS_UNREACHABLE:
+      return Network::ErrorReasonEnum::AddressUnreachable;
+    case net::ERR_BLOCKED_BY_CLIENT:
+      return Network::ErrorReasonEnum::BlockedByClient;
+    case net::ERR_BLOCKED_BY_RESPONSE:
+      return Network::ErrorReasonEnum::BlockedByResponse;
+    default:
+      return Network::ErrorReasonEnum::Failed;
+  }
 }
 
 bool AddInterceptedResourceType(
@@ -573,15 +696,21 @@ bool AddInterceptedResourceType(
     intercepted_resource_types->insert(RESOURCE_TYPE_PREFETCH);
     return true;
   }
+  if (resource_type == protocol::Page::ResourceTypeEnum::CSPViolationReport) {
+    intercepted_resource_types->insert(RESOURCE_TYPE_CSP_REPORT);
+    return true;
+  }
+  if (resource_type == protocol::Page::ResourceTypeEnum::Ping) {
+    intercepted_resource_types->insert(RESOURCE_TYPE_PING);
+    return true;
+  }
   if (resource_type == protocol::Page::ResourceTypeEnum::Other) {
     intercepted_resource_types->insert(RESOURCE_TYPE_SUB_RESOURCE);
     intercepted_resource_types->insert(RESOURCE_TYPE_OBJECT);
     intercepted_resource_types->insert(RESOURCE_TYPE_WORKER);
     intercepted_resource_types->insert(RESOURCE_TYPE_SHARED_WORKER);
     intercepted_resource_types->insert(RESOURCE_TYPE_FAVICON);
-    intercepted_resource_types->insert(RESOURCE_TYPE_PING);
     intercepted_resource_types->insert(RESOURCE_TYPE_SERVICE_WORKER);
-    intercepted_resource_types->insert(RESOURCE_TYPE_CSP_REPORT);
     intercepted_resource_types->insert(RESOURCE_TYPE_PLUGIN_RESOURCE);
     return true;
   }
@@ -594,7 +723,7 @@ double timeDelta(base::TimeTicks time,
   return time.is_null() ? invalid_value : (time - start).InMillisecondsF();
 }
 
-std::unique_ptr<Network::ResourceTiming> getTiming(
+std::unique_ptr<Network::ResourceTiming> GetTiming(
     const net::LoadTimingInfo& load_timing) {
   const base::TimeTicks kNullTicks;
   return Network::ResourceTiming::Create()
@@ -628,26 +757,30 @@ std::unique_ptr<Network::ResourceTiming> getTiming(
       .Build();
 }
 
-std::unique_ptr<Object> getHeaders(const base::StringPairs& pairs) {
+std::unique_ptr<Object> GetHeaders(const base::StringPairs& pairs) {
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   for (const auto& pair : pairs) {
-    headers_dict->setString(pair.first, pair.second);
+    std::string value;
+    bool merge_with_another = headers_dict->getString(pair.first, &value);
+    headers_dict->setString(pair.first, merge_with_another
+                                            ? value + '\n' + pair.second
+                                            : pair.second);
   }
   return Object::fromValue(headers_dict.get(), nullptr);
 }
 
-String getProtocol(const GURL& url, const network::ResourceResponseHead& head) {
-  std::string protocol = head.alpn_negotiated_protocol;
+String GetProtocol(const GURL& url, const network::ResourceResponseInfo& info) {
+  std::string protocol = info.alpn_negotiated_protocol;
   if (protocol.empty() || protocol == "unknown") {
-    if (head.was_fetched_via_spdy) {
+    if (info.was_fetched_via_spdy) {
       protocol = "spdy";
     } else if (url.SchemeIsHTTPOrHTTPS()) {
       protocol = "http";
-      if (head.headers->GetHttpVersion() == net::HttpVersion(0, 9))
+      if (info.headers->GetHttpVersion() == net::HttpVersion(0, 9))
         protocol = "http/0.9";
-      else if (head.headers->GetHttpVersion() == net::HttpVersion(1, 0))
+      else if (info.headers->GetHttpVersion() == net::HttpVersion(1, 0))
         protocol = "http/1.0";
-      else if (head.headers->GetHttpVersion() == net::HttpVersion(1, 1))
+      else if (info.headers->GetHttpVersion() == net::HttpVersion(1, 1))
         protocol = "http/1.1";
     } else {
       protocol = url.scheme();
@@ -684,29 +817,165 @@ class NetworkNavigationThrottle : public content::NavigationThrottle {
   DISALLOW_COPY_AND_ASSIGN(NetworkNavigationThrottle);
 };
 
-void ConfigureServiceWorkerContextOnIO() {
-  std::set<std::string> headers;
-  headers.insert(kDevToolsEmulateNetworkConditionsClientId);
-  content::ServiceWorkerContext::AddExcludedHeadersForFetchEvent(headers);
+bool GetPostData(const net::URLRequest* request, std::string* post_data) {
+  if (!request->has_upload())
+    return false;
+
+  const net::UploadDataStream* stream = request->get_upload();
+  if (!stream->GetElementReaders())
+    return false;
+
+  const auto* element_readers = stream->GetElementReaders();
+
+  if (element_readers->empty())
+    return false;
+
+  post_data->clear();
+  for (const auto& element_reader : *element_readers) {
+    const net::UploadBytesElementReader* reader =
+        element_reader->AsBytesReader();
+    // TODO(caseq): Also support blobs.
+    if (!reader) {
+      post_data->clear();
+      return false;
+    }
+    // TODO(caseq): This should really be base64 encoded.
+    post_data->append(reader->bytes(), reader->length());
+  }
+  return true;
+}
+
+// TODO(caseq): all problems in the above function should be fixed here as well.
+bool GetPostData(const network::ResourceRequestBody& request_body,
+                 std::string* result) {
+  const std::vector<network::DataElement>* elements = request_body.elements();
+  if (elements->empty())
+    return false;
+  for (const auto& element : *elements) {
+    if (element.type() != network::DataElement::TYPE_BYTES)
+      return false;
+    result->append(element.bytes(), element.length());
+  }
+  return true;
+}
+
+String SignedExchangeErrorErrorFieldToString(SignedExchangeError::Field field) {
+  switch (field) {
+    case SignedExchangeError::Field::kSignatureSig:
+      return Network::SignedExchangeErrorFieldEnum::SignatureSig;
+    case SignedExchangeError::Field::kSignatureIintegrity:
+      return Network::SignedExchangeErrorFieldEnum::SignatureIntegrity;
+    case SignedExchangeError::Field::kSignatureCertUrl:
+      return Network::SignedExchangeErrorFieldEnum::SignatureCertUrl;
+    case SignedExchangeError::Field::kSignatureCertSha256:
+      return Network::SignedExchangeErrorFieldEnum::SignatureCertSha256;
+    case SignedExchangeError::Field::kSignatureValidityUrl:
+      return Network::SignedExchangeErrorFieldEnum::SignatureValidityUrl;
+    case SignedExchangeError::Field::kSignatureTimestamps:
+      return Network::SignedExchangeErrorFieldEnum::SignatureTimestamps;
+  }
+  NOTREACHED();
+  return "";
+}
+
+std::unique_ptr<Network::SignedExchangeError> BuildSignedExchangeError(
+    const SignedExchangeError& error) {
+  std::unique_ptr<Network::SignedExchangeError> signed_exchange_error =
+      Network::SignedExchangeError::Create().SetMessage(error.message).Build();
+  if (error.field) {
+    signed_exchange_error->SetSignatureIndex(error.field->first);
+    signed_exchange_error->SetErrorField(
+        SignedExchangeErrorErrorFieldToString(error.field->second));
+  }
+  return signed_exchange_error;
+}
+
+std::unique_ptr<Array<Network::SignedExchangeError>> BuildSignedExchangeErrors(
+    const std::vector<SignedExchangeError>& errors) {
+  std::unique_ptr<Array<Network::SignedExchangeError>> signed_exchange_errors =
+      Array<Network::SignedExchangeError>::create();
+  for (const auto& error : errors)
+    signed_exchange_errors->addItem(BuildSignedExchangeError(error));
+  return signed_exchange_errors;
 }
 
 }  // namespace
 
-NetworkHandler::NetworkHandler(const std::string& host_id)
+class BackgroundSyncRestorer {
+ public:
+  BackgroundSyncRestorer(const std::string& host_id,
+                         StoragePartition* storage_partition)
+      : host_id_(host_id), storage_partition_(storage_partition) {
+    SetServiceWorkerOffline(true);
+  }
+
+  ~BackgroundSyncRestorer() { SetServiceWorkerOffline(false); }
+
+  void SetStoragePartition(StoragePartition* storage_partition) {
+    storage_partition_ = storage_partition;
+  }
+
+ private:
+  void SetServiceWorkerOffline(bool offline) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    scoped_refptr<DevToolsAgentHost> host =
+        DevToolsAgentHost::GetForId(host_id_);
+    if (!host || !storage_partition_ ||
+        host->GetType() != DevToolsAgentHost::kTypeServiceWorker) {
+      return;
+    }
+    scoped_refptr<ServiceWorkerDevToolsAgentHost> service_worker_host =
+        static_cast<ServiceWorkerDevToolsAgentHost*>(host.get());
+    scoped_refptr<BackgroundSyncContext> sync_context =
+        static_cast<StoragePartitionImpl*>(storage_partition_)
+            ->GetBackgroundSyncContext();
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &SetServiceWorkerOfflineOnIO, sync_context,
+            base::RetainedRef(static_cast<ServiceWorkerContextWrapper*>(
+                storage_partition_->GetServiceWorkerContext())),
+            service_worker_host->version_id(), offline));
+  }
+
+  static void SetServiceWorkerOfflineOnIO(
+      scoped_refptr<BackgroundSyncContext> sync_context,
+      scoped_refptr<ServiceWorkerContextWrapper> swcontext,
+      int64_t version_id,
+      bool offline) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    ServiceWorkerVersion* version = swcontext.get()->GetLiveVersion(version_id);
+    if (!version)
+      return;
+    sync_context->background_sync_manager()->EmulateServiceWorkerOffline(
+        version->registration_id(), offline);
+  }
+
+  std::string host_id_;
+  StoragePartition* storage_partition_;
+
+  DISALLOW_COPY_AND_ASSIGN(BackgroundSyncRestorer);
+};
+
+NetworkHandler::NetworkHandler(const std::string& host_id,
+                               const base::UnguessableToken& devtools_token,
+                               DevToolsIOContext* io_context)
     : DevToolsDomainHandler(Network::Metainfo::domainName),
-      process_(nullptr),
+      host_id_(host_id),
+      devtools_token_(devtools_token),
+      io_context_(io_context),
+      browser_context_(nullptr),
+      storage_partition_(nullptr),
       host_(nullptr),
       enabled_(false),
-      host_id_(host_id),
       bypass_service_worker_(false),
       cache_disabled_(false),
       weak_factory_(this) {
+  DCHECK(io_context_);
   static bool have_configured_service_worker_context = false;
   if (have_configured_service_worker_context)
     return;
   have_configured_service_worker_context = true;
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&ConfigureServiceWorkerContextOnIO));
 }
 
 NetworkHandler::~NetworkHandler() {
@@ -724,10 +993,20 @@ void NetworkHandler::Wire(UberDispatcher* dispatcher) {
   Network::Dispatcher::wire(dispatcher, this);
 }
 
-void NetworkHandler::SetRenderer(RenderProcessHost* process_host,
+void NetworkHandler::SetRenderer(int render_process_host_id,
                                  RenderFrameHostImpl* frame_host) {
-  process_ = process_host;
+  RenderProcessHost* process_host =
+      RenderProcessHost::FromID(render_process_host_id);
+  if (process_host) {
+    storage_partition_ = process_host->GetStoragePartition();
+    browser_context_ = process_host->GetBrowserContext();
+  } else {
+    storage_partition_ = nullptr;
+    browser_context_ = nullptr;
+  }
   host_ = frame_host;
+  if (background_sync_restorer_)
+    background_sync_restorer_->SetStoragePartition(storage_partition_);
 }
 
 Response NetworkHandler::Enable(Maybe<int> max_total_size,
@@ -739,8 +1018,8 @@ Response NetworkHandler::Enable(Maybe<int> max_total_size,
 
 Response NetworkHandler::Disable() {
   enabled_ = false;
-  user_agent_ = std::string();
   interception_handle_.reset();
+  url_loader_interceptor_.reset();
   SetNetworkConditions(nullptr);
   extra_headers_.clear();
   return Response::FallThrough();
@@ -775,13 +1054,12 @@ class DevtoolsClearCacheObserver
 
 void NetworkHandler::ClearBrowserCache(
     std::unique_ptr<ClearBrowserCacheCallback> callback) {
-  if (!process_) {
+  if (!browser_context_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
   content::BrowsingDataRemover* remover =
-      content::BrowserContext::GetBrowsingDataRemover(
-          process_->GetBrowserContext());
+      content::BrowserContext::GetBrowsingDataRemover(browser_context_);
   remover->RemoveAndReply(
       base::Time(), base::Time::Max(),
       content::BrowsingDataRemover::DATA_TYPE_CACHE,
@@ -791,56 +1069,79 @@ void NetworkHandler::ClearBrowserCache(
 
 void NetworkHandler::ClearBrowserCookies(
     std::unique_ptr<ClearBrowserCookiesCallback> callback) {
-  if (!process_) {
+  if (!storage_partition_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &ClearCookiesOnIO,
-          base::Unretained(
-              process_->GetStoragePartition()->GetURLRequestContext()),
-          std::move(callback)));
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &ClearCookiesOnIO,
+            base::Unretained(storage_partition_->GetURLRequestContext()),
+            std::move(callback)));
+    return;
+  }
+
+  storage_partition_->GetCookieManagerForBrowserProcess()->DeleteCookies(
+      network::mojom::CookieDeletionFilter::New(),
+      base::BindOnce([](std::unique_ptr<ClearBrowserCookiesCallback> callback,
+                        uint32_t) { callback->sendSuccess(); },
+                     std::move(callback)));
 }
 
 void NetworkHandler::GetCookies(Maybe<Array<String>> protocol_urls,
                                 std::unique_ptr<GetCookiesCallback> callback) {
-  if (!host_) {
+  if (!host_ || !storage_partition_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
-
   std::vector<GURL> urls = ComputeCookieURLs(host_, protocol_urls);
-  scoped_refptr<CookieRetriever> retriever =
-      new CookieRetriever(std::move(callback));
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &CookieRetriever::RetrieveCookiesOnIO, retriever,
-          base::Unretained(
-              process_->GetStoragePartition()->GetURLRequestContext()),
-          urls));
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    scoped_refptr<CookieRetriever> retriever =
+        new CookieRetriever(std::move(callback));
+
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &CookieRetriever::RetrieveCookiesOnIO, retriever,
+            base::Unretained(storage_partition_->GetURLRequestContext()),
+            urls));
+    return;
+  }
+
+  CookieRetrieverNetworkService::Retrieve(
+      storage_partition_->GetCookieManagerForBrowserProcess(), urls,
+      std::move(callback));
 }
 
 void NetworkHandler::GetAllCookies(
     std::unique_ptr<GetAllCookiesCallback> callback) {
-  if (!process_) {
+  if (!storage_partition_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    scoped_refptr<CookieRetriever> retriever =
+        new CookieRetriever(std::move(callback));
 
-  scoped_refptr<CookieRetriever> retriever =
-      new CookieRetriever(std::move(callback));
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &CookieRetriever::RetrieveAllCookiesOnIO, retriever,
+            base::Unretained(storage_partition_->GetURLRequestContext())));
+    return;
+  }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  storage_partition_->GetCookieManagerForBrowserProcess()->GetAllCookies(
       base::BindOnce(
-          &CookieRetriever::RetrieveAllCookiesOnIO, retriever,
-          base::Unretained(
-              process_->GetStoragePartition()->GetURLRequestContext())));
+          [](std::unique_ptr<GetAllCookiesCallback> callback,
+             const std::vector<net::CanonicalCookie>& cookies) {
+            callback->sendSuccess(BuildCookieArray(cookies));
+          },
+          std::move(callback)));
 }
 
 void NetworkHandler::SetCookie(const std::string& name,
@@ -853,7 +1154,7 @@ void NetworkHandler::SetCookie(const std::string& name,
                                Maybe<std::string> same_site,
                                Maybe<double> expires,
                                std::unique_ptr<SetCookieCallback> callback) {
-  if (!process_) {
+  if (!storage_partition_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
@@ -863,71 +1164,128 @@ void NetworkHandler::SetCookie(const std::string& name,
         "At least one of the url and domain needs to be specified"));
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &SetCookieOnIO,
-          base::Unretained(
-              process_->GetStoragePartition()->GetURLRequestContext()),
-          name, value, url.fromMaybe(""), domain.fromMaybe(""),
-          path.fromMaybe(""), secure.fromMaybe(false),
-          http_only.fromMaybe(false), same_site.fromMaybe(""),
-          expires.fromMaybe(-1),
-          base::BindOnce(&CookieSetOnIO, std::move(callback))));
+  std::unique_ptr<net::CanonicalCookie> cookie = MakeCookieFromProtocolValues(
+      name, value, url.fromMaybe(""), domain.fromMaybe(""), path.fromMaybe(""),
+      secure.fromMaybe(false), http_only.fromMaybe(false),
+      same_site.fromMaybe(""), expires.fromMaybe(-1));
+
+  if (!cookie) {
+    // TODO(caseq): Current logic is for compatability only.
+    // Consider returning protocol error here.
+    callback->sendSuccess(false);
+    return;
+  }
+
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &SetCookieOnIO,
+            base::Unretained(storage_partition_->GetURLRequestContext()),
+            std::move(cookie),
+            base::BindOnce(&CookieSetOnIO, std::move(callback))));
+    return;
+  }
+
+  storage_partition_->GetCookieManagerForBrowserProcess()->SetCanonicalCookie(
+      *cookie, true /* secure_source */, true /* modify_http_only */,
+      base::BindOnce(&SetCookieCallback::sendSuccess, std::move(callback)));
 }
 
 void NetworkHandler::SetCookies(
     std::unique_ptr<protocol::Array<Network::CookieParam>> cookies,
     std::unique_ptr<SetCookiesCallback> callback) {
-  if (!process_) {
+  if (!storage_partition_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &SetCookiesOnIO,
-          base::Unretained(
-              process_->GetStoragePartition()->GetURLRequestContext()),
-          std::move(cookies),
-          base::BindOnce(&CookiesSetOnIO, std::move(callback))));
+  std::vector<std::unique_ptr<net::CanonicalCookie>> net_cookies;
+  for (size_t i = 0; i < cookies->length(); i++) {
+    Network::CookieParam* cookie = cookies->get(i);
+    std::unique_ptr<net::CanonicalCookie> net_cookie =
+        MakeCookieFromProtocolValues(
+            cookie->GetName(), cookie->GetValue(), cookie->GetUrl(""),
+            cookie->GetDomain(""), cookie->GetPath(""),
+            cookie->GetSecure(false), cookie->GetHttpOnly(false),
+            cookie->GetSameSite(""), cookie->GetExpires(-1));
+    if (!cookie) {
+      callback->sendFailure(Response::InvalidParams("Invalid cookie fields"));
+      return;
+    }
+    net_cookies.push_back(std::move(net_cookie));
+  }
+
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &SetCookiesOnIO,
+            base::Unretained(storage_partition_->GetURLRequestContext()),
+            std::move(net_cookies),
+            base::BindOnce(&CookiesSetOnIO, std::move(callback))));
+    return;
+  }
+
+  base::RepeatingClosure barrier_closure = base::BarrierClosure(
+      net_cookies.size(),
+      base::BindOnce(&SetCookiesCallback::sendSuccess, std::move(callback)));
+
+  auto* cookie_manager =
+      storage_partition_->GetCookieManagerForBrowserProcess();
+  for (const auto& cookie : net_cookies) {
+    cookie_manager->SetCanonicalCookie(
+        *cookie, true, true,
+        base::BindOnce(
+            [](base::RepeatingClosure callback, bool) { callback.Run(); },
+            barrier_closure));
+  }
 }
 
 void NetworkHandler::DeleteCookies(
     const std::string& name,
-    Maybe<std::string> url,
+    Maybe<std::string> url_spec,
     Maybe<std::string> domain,
     Maybe<std::string> path,
     std::unique_ptr<DeleteCookiesCallback> callback) {
-  if (!process_) {
+  if (!storage_partition_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
-
-  if (!url.isJust() && !domain.isJust()) {
+  if (!url_spec.isJust() && !domain.isJust()) {
     callback->sendFailure(Response::InvalidParams(
         "At least one of the url and domain needs to be specified"));
   }
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &DeleteCookiesOnIO,
-          base::Unretained(
-              process_->GetStoragePartition()->GetURLRequestContext()),
-          name, url.fromMaybe(""), domain.fromMaybe(""), path.fromMaybe(""),
-          base::BindOnce(&DeleteCookiesCallback::sendSuccess,
-                         std::move(callback))));
-}
 
-Response NetworkHandler::SetUserAgentOverride(const std::string& user_agent) {
-  if (user_agent.find('\n') != std::string::npos ||
-      user_agent.find('\r') != std::string::npos ||
-      user_agent.find('\0') != std::string::npos) {
-    return Response::InvalidParams("Invalid characters found in userAgent");
+  std::string normalized_domain = domain.fromMaybe("");
+  if (normalized_domain.empty()) {
+    GURL url(url_spec.fromMaybe(""));
+    if (!url.SchemeIsHTTPOrHTTPS()) {
+      callback->sendFailure(Response::InvalidParams(
+          "An http or https url URL must be specified"));
+      return;
+    }
+    normalized_domain = url.host();
   }
-  user_agent_ = user_agent;
-  return Response::FallThrough();
+
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &DeleteCookiesOnIO,
+            base::Unretained(storage_partition_->GetURLRequestContext()), name,
+            normalized_domain, path.fromMaybe(""),
+            base::BindOnce(&DeleteCookiesCallback::sendSuccess,
+                           std::move(callback))));
+    return;
+  }
+
+  auto* cookie_manager =
+      storage_partition_->GetCookieManagerForBrowserProcess();
+
+  cookie_manager->GetAllCookies(base::BindOnce(
+      &DeleteFilteredCookies, base::Unretained(cookie_manager), name,
+      normalized_domain, path.fromMaybe(""), std::move(callback)));
 }
 
 Response NetworkHandler::SetExtraHTTPHeaders(
@@ -979,103 +1337,344 @@ Response NetworkHandler::SetBypassServiceWorker(bool bypass) {
   return Response::FallThrough();
 }
 
-void NetworkHandler::NavigationPreloadRequestSent(
-    const std::string& request_id,
-    const network::ResourceRequest& request) {
+namespace {
+
+std::unique_ptr<protocol::Network::SecurityDetails> BuildSecurityDetails(
+    const net::SSLInfo& ssl_info) {
+  if (!ssl_info.cert)
+    return nullptr;
+  std::unique_ptr<
+      protocol::Array<protocol::Network::SignedCertificateTimestamp>>
+      signed_certificate_timestamp_list =
+          protocol::Array<Network::SignedCertificateTimestamp>::create();
+  for (auto const& sct : ssl_info.signed_certificate_timestamps) {
+    std::unique_ptr<protocol::Network::SignedCertificateTimestamp>
+        signed_certificate_timestamp =
+            Network::SignedCertificateTimestamp::Create()
+                .SetStatus(net::ct::StatusToString(sct.status))
+                .SetOrigin(net::ct::OriginToString(sct.sct->origin))
+                .SetLogDescription(sct.sct->log_description)
+                .SetLogId(base::HexEncode(sct.sct->log_id.c_str(),
+                                          sct.sct->log_id.length()))
+                .SetTimestamp((sct.sct->timestamp - base::Time::UnixEpoch())
+                                  .InMillisecondsF())
+                .SetHashAlgorithm(net::ct::HashAlgorithmToString(
+                    sct.sct->signature.hash_algorithm))
+                .SetSignatureAlgorithm(net::ct::SignatureAlgorithmToString(
+                    sct.sct->signature.signature_algorithm))
+                .SetSignatureData(
+                    base::HexEncode(sct.sct->signature.signature_data.c_str(),
+                                    sct.sct->signature.signature_data.length()))
+                .Build();
+    signed_certificate_timestamp_list->addItem(
+        std::move(signed_certificate_timestamp));
+  }
+  std::vector<std::string> san_dns;
+  std::vector<std::string> san_ip;
+  ssl_info.cert->GetSubjectAltName(&san_dns, &san_ip);
+  std::unique_ptr<Array<String>> san_list = Array<String>::create();
+  for (const std::string& san : san_dns)
+    san_list->addItem(san);
+  for (const std::string& san : san_ip) {
+    san_list->addItem(
+        net::IPAddress(reinterpret_cast<const uint8_t*>(san.data()), san.size())
+            .ToString());
+  }
+
+  const char* protocol = "";
+  const char* key_exchange = "";
+  const char* cipher = "";
+  const char* mac = nullptr;
+
+  int ssl_version =
+      net::SSLConnectionStatusToVersion(ssl_info.connection_status);
+
+  if (ssl_info.connection_status) {
+    net::SSLVersionToString(&protocol, ssl_version);
+
+    bool is_aead;
+    bool is_tls13;
+    uint16_t cipher_suite =
+        net::SSLConnectionStatusToCipherSuite(ssl_info.connection_status);
+    net::SSLCipherSuiteToStrings(&key_exchange, &cipher, &mac, &is_aead,
+                                 &is_tls13, cipher_suite);
+    if (key_exchange == nullptr) {
+      DCHECK(is_tls13);
+      key_exchange = "";
+    }
+  }
+
+  std::unique_ptr<protocol::Network::SecurityDetails> security_details =
+      protocol::Network::SecurityDetails::Create()
+          .SetProtocol(protocol)
+          .SetKeyExchange(key_exchange)
+          .SetCipher(cipher)
+          .SetSubjectName(ssl_info.cert->subject().common_name)
+          .SetSanList(std::move(san_list))
+          .SetIssuer(ssl_info.cert->issuer().common_name)
+          .SetValidFrom(ssl_info.cert->valid_start().ToDoubleT())
+          .SetValidTo(ssl_info.cert->valid_expiry().ToDoubleT())
+          .SetCertificateId(0)  // Keep this in protocol for compatability.
+          .SetSignedCertificateTimestampList(
+              std::move(signed_certificate_timestamp_list))
+          .SetCertificateTransparencyCompliance(
+              SerializeCTPolicyCompliance(ssl_info.ct_policy_compliance))
+          .Build();
+
+  if (ssl_info.key_exchange_group != 0) {
+    const char* key_exchange_group =
+        SSL_get_curve_name(ssl_info.key_exchange_group);
+    if (key_exchange_group)
+      security_details->SetKeyExchangeGroup(key_exchange_group);
+  }
+  if (mac)
+    security_details->SetMac(mac);
+
+  return security_details;
+}
+
+std::unique_ptr<Network::Response> BuildResponse(
+    const GURL& url,
+    const network::ResourceResponseInfo& info) {
+  std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
+  int status = 0;
+  std::string status_text;
+  if (info.headers) {
+    size_t iterator = 0;
+    std::string name;
+    std::string value;
+    while (info.headers->EnumerateHeaderLines(&iterator, &name, &value)) {
+      std::string old_value;
+      bool merge_with_another = headers_dict->getString(name, &old_value);
+      headers_dict->setString(
+          name, merge_with_another ? old_value + '\n' + value : value);
+    }
+    status = info.headers->response_code();
+    status_text = info.headers->GetStatusText();
+  } else if (url.SchemeIs(url::kDataScheme)) {
+    status = net::HTTP_OK;
+    status_text = "OK";
+  }
+
+  std::string url_fragment;
+  auto response =
+      Network::Response::Create()
+          .SetUrl(NetworkHandler::ExtractFragment(url, &url_fragment))
+          .SetStatus(status)
+          .SetStatusText(status_text)
+          .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
+          .SetMimeType(info.mime_type)
+          .SetConnectionReused(info.load_timing.socket_reused)
+          .SetConnectionId(info.load_timing.socket_log_id)
+          .SetSecurityState(securityState(url, info.cert_status))
+          .SetEncodedDataLength(info.encoded_data_length)
+          .SetTiming(GetTiming(info.load_timing))
+          .SetFromDiskCache(!info.load_timing.request_start_time.is_null() &&
+                            info.response_time <
+                                info.load_timing.request_start_time)
+          .Build();
+  response->SetFromServiceWorker(info.was_fetched_via_service_worker);
+  network::HttpRawRequestResponseInfo* raw_info =
+      info.raw_request_response_info.get();
+  if (raw_info) {
+    if (raw_info->http_status_code) {
+      response->SetStatus(raw_info->http_status_code);
+      response->SetStatusText(raw_info->http_status_text);
+    }
+    if (raw_info->request_headers.size()) {
+      response->SetRequestHeaders(GetHeaders(raw_info->request_headers));
+    }
+    if (!raw_info->request_headers_text.empty()) {
+      response->SetRequestHeadersText(raw_info->request_headers_text);
+    }
+    if (raw_info->response_headers.size())
+      response->SetHeaders(GetHeaders(raw_info->response_headers));
+    if (!raw_info->response_headers_text.empty())
+      response->SetHeadersText(raw_info->response_headers_text);
+  }
+  response->SetProtocol(GetProtocol(url, info));
+  response->SetRemoteIPAddress(info.socket_address.HostForURL());
+  response->SetRemotePort(info.socket_address.port());
+  if (info.ssl_info.has_value())
+    response->SetSecurityDetails(BuildSecurityDetails(*info.ssl_info));
+
+  return response;
+}
+
+String blockedReason(blink::ResourceRequestBlockedReason reason) {
+  switch (reason) {
+    case blink::ResourceRequestBlockedReason::kCSP:
+      return protocol::Network::BlockedReasonEnum::Csp;
+    case blink::ResourceRequestBlockedReason::kMixedContent:
+      return protocol::Network::BlockedReasonEnum::MixedContent;
+    case blink::ResourceRequestBlockedReason::kOrigin:
+      return protocol::Network::BlockedReasonEnum::Origin;
+    case blink::ResourceRequestBlockedReason::kInspector:
+      return protocol::Network::BlockedReasonEnum::Inspector;
+    case blink::ResourceRequestBlockedReason::kSubresourceFilter:
+      return protocol::Network::BlockedReasonEnum::SubresourceFilter;
+    case blink::ResourceRequestBlockedReason::kContentType:
+      return protocol::Network::BlockedReasonEnum::ContentType;
+    case blink::ResourceRequestBlockedReason::kOther:
+      return protocol::Network::BlockedReasonEnum::Other;
+    case blink::ResourceRequestBlockedReason::kCollapsedByClient:
+      return protocol::Network::BlockedReasonEnum::CollapsedByClient;
+  }
+  NOTREACHED();
+  return protocol::Network::BlockedReasonEnum::Other;
+}
+
+Maybe<String> GetBlockedReasonFor(
+    const network::URLLoaderCompletionStatus& status) {
+  if (status.error_code != net::ERR_BLOCKED_BY_CLIENT &&
+      status.error_code != net::ERR_BLOCKED_BY_RESPONSE)
+    return Maybe<String>();
+  return blockedReason(static_cast<blink::ResourceRequestBlockedReason>(
+      status.extended_error_code));
+}
+}  // namespace
+
+void NetworkHandler::NavigationRequestWillBeSent(
+    const NavigationRequest& nav_request) {
+  if (!enabled_)
+    return;
+
+  net::HttpRequestHeaders headers;
+  headers.AddHeadersFromString(nav_request.begin_params()->headers);
+  std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
+  for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();)
+    headers_dict->setString(it.name(), it.value());
+
+  const CommonNavigationParams& common_params = nav_request.common_params();
+  GURL referrer = common_params.referrer.url;
+  // This is normally added down the stack, so we have to fake it here.
+  if (!referrer.is_empty())
+    headers_dict->setString(net::HttpRequestHeaders::kReferer, referrer.spec());
+
+  std::unique_ptr<Network::Response> redirect_response;
+  const RequestNavigationParams& request_params = nav_request.request_params();
+  if (!request_params.redirect_response.empty()) {
+    redirect_response = BuildResponse(request_params.redirects.back(),
+                                      request_params.redirect_response.back());
+  }
+  std::string url_fragment;
+  std::string url_without_fragment =
+      ExtractFragment(common_params.url, &url_fragment);
+  auto request =
+      Network::Request::Create()
+          .SetUrl(url_without_fragment)
+          .SetMethod(common_params.method)
+          .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
+          .SetInitialPriority(resourcePriority(net::HIGHEST))
+          .SetReferrerPolicy(referrerPolicy(common_params.referrer.policy))
+          .Build();
+  if (!url_fragment.empty())
+    request->SetUrlFragment(url_fragment);
+
+  std::string post_data;
+  if (common_params.post_data &&
+      GetPostData(*common_params.post_data, &post_data)) {
+    request->SetPostData(post_data);
+  }
+  // TODO(caseq): report potentially blockable types
+  request->SetMixedContentType(Security::MixedContentTypeEnum::None);
+
+  std::unique_ptr<Network::Initiator> initiator;
+  const base::Optional<base::Value>& initiator_optional =
+      nav_request.begin_params()->devtools_initiator;
+  if (initiator_optional.has_value()) {
+    ErrorSupport ignored_errors;
+    initiator = Network::Initiator::fromValue(
+        toProtocolValue(&initiator_optional.value(), 1000).get(),
+        &ignored_errors);
+  }
+  if (!initiator) {
+    initiator = Network::Initiator::Create()
+                    .SetType(Network::Initiator::TypeEnum::Other)
+                    .Build();
+  }
+  std::string id = nav_request.devtools_navigation_token().ToString();
+  double current_ticks =
+      (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
+  double current_wall_time = base::Time::Now().ToDoubleT();
+  std::string frame_token =
+      nav_request.frame_tree_node()->devtools_frame_token().ToString();
+  frontend_->RequestWillBeSent(
+      id, id, url_without_fragment, std::move(request), current_ticks,
+      current_wall_time, std::move(initiator), std::move(redirect_response),
+      std::string(Page::ResourceTypeEnum::Document), std::move(frame_token),
+      common_params.has_user_gesture);
+}
+
+void NetworkHandler::RequestSent(const std::string& request_id,
+                                 const std::string& loader_id,
+                                 const network::ResourceRequest& request,
+                                 const char* initiator_type,
+                                 const base::Optional<GURL>& initiator_url) {
   if (!enabled_)
     return;
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   for (net::HttpRequestHeaders::Iterator it(request.headers); it.GetNext();)
     headers_dict->setString(it.name(), it.value());
-  frontend_->RequestWillBeSent(
-      request_id, "" /* loader_id */, request.url.spec(),
+  std::unique_ptr<Network::Initiator> initiator =
+      Network::Initiator::Create().SetType(initiator_type).Build();
+  if (initiator_url)
+    initiator->SetUrl(initiator_url->spec());
+  std::string url_fragment;
+  std::string url_without_fragment =
+      ExtractFragment(request.url, &url_fragment);
+  auto request_object =
       Network::Request::Create()
-          .SetUrl(request.url.spec())
+          .SetUrl(url_without_fragment)
           .SetMethod(request.method)
           .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
           .SetInitialPriority(resourcePriority(request.priority))
           .SetReferrerPolicy(referrerPolicy(request.referrer_policy))
-          .Build(),
+          .Build();
+  if (!url_fragment.empty())
+    request_object->SetUrlFragment(url_fragment);
+  frontend_->RequestWillBeSent(
+      request_id, loader_id, url_without_fragment, std::move(request_object),
       base::TimeTicks::Now().ToInternalValue() /
           static_cast<double>(base::Time::kMicrosecondsPerSecond),
-      base::Time::Now().ToDoubleT(),
-      Network::Initiator::Create()
-          .SetType(Network::Initiator::TypeEnum::Preload)
-          .Build(),
+      base::Time::Now().ToDoubleT(), std::move(initiator),
       std::unique_ptr<Network::Response>(),
-      std::string(Page::ResourceTypeEnum::Other));
+      std::string(Page::ResourceTypeEnum::Other),
+      Maybe<std::string>() /* frame_id */, request.has_user_gesture);
 }
 
-void NetworkHandler::NavigationPreloadResponseReceived(
-    const std::string& request_id,
-    const GURL& url,
-    const network::ResourceResponseHead& head) {
+void NetworkHandler::ResponseReceived(const std::string& request_id,
+                                      const std::string& loader_id,
+                                      const GURL& url,
+                                      const char* resource_type,
+                                      const network::ResourceResponseHead& head,
+                                      Maybe<std::string> frame_id) {
   if (!enabled_)
     return;
-  std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
-  size_t iterator = 0;
-  std::string name;
-  std::string value;
-  while (head.headers->EnumerateHeaderLines(&iterator, &name, &value))
-    headers_dict->setString(name, value);
-  std::unique_ptr<Network::Response> response(
-      Network::Response::Create()
-          .SetUrl(url.spec())
-          .SetStatus(head.headers->response_code())
-          .SetStatusText(head.headers->GetStatusText())
-          .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
-          .SetMimeType(head.mime_type)
-          .SetConnectionReused(head.load_timing.socket_reused)
-          .SetConnectionId(head.load_timing.socket_log_id)
-          .SetSecurityState(securityState(url, head.cert_status))
-          .SetEncodedDataLength(head.encoded_data_length)
-          .SetTiming(getTiming(head.load_timing))
-          .SetFromDiskCache(!head.load_timing.request_start_time.is_null() &&
-                            head.response_time <
-                                head.load_timing.request_start_time)
-          .Build());
-  if (head.raw_request_response_info) {
-    if (head.raw_request_response_info->http_status_code) {
-      response->SetStatus(head.raw_request_response_info->http_status_code);
-      response->SetStatusText(head.raw_request_response_info->http_status_text);
-    }
-    if (head.raw_request_response_info->request_headers.size()) {
-      response->SetRequestHeaders(
-          getHeaders(head.raw_request_response_info->request_headers));
-    }
-    if (!head.raw_request_response_info->request_headers_text.empty()) {
-      response->SetRequestHeadersText(
-          head.raw_request_response_info->request_headers_text);
-    }
-    if (head.raw_request_response_info->response_headers.size())
-      response->SetHeaders(
-          getHeaders(head.raw_request_response_info->response_headers));
-    if (!head.raw_request_response_info->response_headers_text.empty())
-      response->SetHeadersText(
-          head.raw_request_response_info->response_headers_text);
-  }
-  response->SetProtocol(getProtocol(url, head));
-  response->SetRemoteIPAddress(head.socket_address.HostForURL());
-  response->SetRemotePort(head.socket_address.port());
+  std::unique_ptr<Network::Response> response(BuildResponse(url, head));
   frontend_->ResponseReceived(
-      request_id, "" /* loader_id */,
+      request_id, loader_id,
       base::TimeTicks::Now().ToInternalValue() /
           static_cast<double>(base::Time::kMicrosecondsPerSecond),
-      Page::ResourceTypeEnum::Other, std::move(response));
+      resource_type, std::move(response), std::move(frame_id));
 }
 
-void NetworkHandler::NavigationPreloadCompleted(
+void NetworkHandler::LoadingComplete(
     const std::string& request_id,
+    const char* resource_type,
     const network::URLLoaderCompletionStatus& status) {
   if (!enabled_)
     return;
+
   if (status.error_code != net::OK) {
     frontend_->LoadingFailed(
         request_id,
         base::TimeTicks::Now().ToInternalValue() /
             static_cast<double>(base::Time::kMicrosecondsPerSecond),
-        Page::ResourceTypeEnum::Other, net::ErrorToString(status.error_code),
-        status.error_code == net::Error::ERR_ABORTED);
+        resource_type, net::ErrorToString(status.error_code),
+        status.error_code == net::Error::ERR_ABORTED,
+        GetBlockedReasonFor(status));
+    return;
   }
   frontend_->LoadingFinished(
       request_id,
@@ -1084,55 +1683,119 @@ void NetworkHandler::NavigationPreloadCompleted(
       status.encoded_data_length);
 }
 
-void NetworkHandler::NavigationFailed(NavigationRequest* navigation_request) {
+void NetworkHandler::OnSignedExchangeReceived(
+    base::Optional<const base::UnguessableToken> devtools_navigation_token,
+    const GURL& outer_request_url,
+    const network::ResourceResponseHead& outer_response,
+    const base::Optional<SignedExchangeEnvelope>& envelope,
+    const scoped_refptr<net::X509Certificate>& certificate,
+    const base::Optional<net::SSLInfo>& ssl_info,
+    const std::vector<SignedExchangeError>& errors) {
   if (!enabled_)
     return;
+  std::unique_ptr<Network::SignedExchangeInfo> signed_exchange_info =
+      Network::SignedExchangeInfo::Create()
+          .SetOuterResponse(BuildResponse(outer_request_url, outer_response))
+          .Build();
 
-  static int next_id = 0;
-  std::string request_id = base::IntToString(base::GetCurrentProcId()) + "." +
-                           base::IntToString(++next_id);
-  std::string error_string =
-      net::ErrorToString(navigation_request->net_error());
-  bool cancelled = navigation_request->net_error() == net::Error::ERR_ABORTED;
+  if (envelope) {
+    std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
+    for (const auto it : envelope->response_headers())
+      headers_dict->setString(it.first, it.second);
 
-  std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
-  net::HttpRequestHeaders headers;
-  headers.AddHeadersFromString(navigation_request->begin_params()->headers);
-  for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();)
-    headers_dict->setString(it.name(), it.value());
-  frontend_->RequestWillBeSent(
-      request_id, "" /* loader_id */,
-      navigation_request->common_params().url.spec(),
-      Network::Request::Create()
-          .SetUrl(navigation_request->common_params().url.spec())
-          .SetMethod(navigation_request->common_params().method)
-          .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
-          // Note: the priority value is copied from
-          // ResourceDispatcherHostImpl::BeginNavigationRequest but there isn't
-          // a good way of sharing this.
-          .SetInitialPriority(resourcePriority(net::HIGHEST))
-          .SetReferrerPolicy(referrerPolicy(
-              navigation_request->common_params().referrer.policy))
-          .Build(),
-      base::TimeTicks::Now().ToInternalValue() /
-          static_cast<double>(base::Time::kMicrosecondsPerSecond),
-      base::Time::Now().ToDoubleT(),
-      Network::Initiator::Create()
-          .SetType(Network::Initiator::TypeEnum::Parser)
-          .Build(),
-      std::unique_ptr<Network::Response>(),
-      std::string(Page::ResourceTypeEnum::Document));
+    const SignedExchangeSignatureHeaderField::Signature& sig =
+        envelope->signature();
+    std::unique_ptr<Array<Network::SignedExchangeSignature>> signatures =
+        Array<Network::SignedExchangeSignature>::create();
+    std::unique_ptr<Network::SignedExchangeSignature> signature =
+        Network::SignedExchangeSignature::Create()
+            .SetLabel(sig.label)
+            .SetSignature(base::HexEncode(sig.sig.data(), sig.sig.size()))
+            .SetIntegrity(sig.integrity)
+            .SetCertUrl(sig.cert_url.spec())
+            .SetValidityUrl(sig.validity_url.spec())
+            .SetDate(sig.date)
+            .SetExpires(sig.expires)
+            .Build();
+    if (sig.cert_sha256) {
+      signature->SetCertSha256(base::HexEncode(sig.cert_sha256->data,
+                                               sizeof(sig.cert_sha256->data)));
+    }
+    if (certificate) {
+      std::unique_ptr<Array<String>> encoded_certificates =
+          Array<String>::create();
+      std::string encoded;
+      base::Base64Encode(
+          net::x509_util::CryptoBufferAsStringPiece(certificate->cert_buffer()),
+          &encoded);
+      encoded_certificates->addItem(std::move(encoded));
+      for (const auto& cert : certificate->intermediate_buffers()) {
+        base::Base64Encode(
+            net::x509_util::CryptoBufferAsStringPiece(cert.get()), &encoded);
+        encoded_certificates->addItem(std::move(encoded));
+      }
+      signature->SetCertificates(std::move(encoded_certificates));
+    }
+    signatures->addItem(std::move(signature));
 
-  frontend_->LoadingFailed(
-      request_id,
-      base::TimeTicks::Now().ToInternalValue() /
-          static_cast<double>(base::Time::kMicrosecondsPerSecond),
-      Page::ResourceTypeEnum::Document, error_string, cancelled);
+    signed_exchange_info->SetHeader(
+        Network::SignedExchangeHeader::Create()
+            .SetRequestUrl(envelope->request_url().spec())
+            .SetRequestMethod(envelope->request_method())
+            .SetResponseCode(envelope->response_code())
+            .SetResponseHeaders(Object::fromValue(headers_dict.get(), nullptr))
+            .SetSignatures(std::move(signatures))
+            .Build());
+  }
+  if (ssl_info)
+    signed_exchange_info->SetSecurityDetails(BuildSecurityDetails(*ssl_info));
+  if (errors.size())
+    signed_exchange_info->SetErrors(BuildSignedExchangeErrors(errors));
+
+  frontend_->SignedExchangeReceived(
+      devtools_navigation_token ? devtools_navigation_token->ToString() : "",
+      std::move(signed_exchange_info));
 }
 
 DispatchResponse NetworkHandler::SetRequestInterception(
     std::unique_ptr<protocol::Array<protocol::Network::RequestPattern>>
         patterns) {
+  if (!patterns->length()) {
+    interception_handle_.reset();
+    url_loader_interceptor_.reset();
+    return Response::OK();
+  }
+
+  std::vector<DevToolsNetworkInterceptor::Pattern> interceptor_patterns;
+  for (size_t i = 0; i < patterns->length(); ++i) {
+    base::flat_set<ResourceType> resource_types;
+    std::string resource_type = patterns->get(i)->GetResourceType("");
+    if (!resource_type.empty()) {
+      if (!AddInterceptedResourceType(resource_type, &resource_types)) {
+        return Response::InvalidParams(base::StringPrintf(
+            "Cannot intercept resources of type '%s'", resource_type.c_str()));
+      }
+    }
+    interceptor_patterns.push_back(DevToolsNetworkInterceptor::Pattern(
+        patterns->get(i)->GetUrlPattern("*"), std::move(resource_types),
+        ToInterceptorStage(patterns->get(i)->GetInterceptionStage(
+            protocol::Network::InterceptionStageEnum::Request))));
+  }
+
+  if (!host_)
+    return Response::InternalError();
+
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    if (!url_loader_interceptor_) {
+      url_loader_interceptor_ = std::make_unique<DevToolsURLLoaderInterceptor>(
+          host_->frame_tree_node(),
+          base::BindRepeating(&NetworkHandler::RequestIntercepted,
+                              weak_factory_.GetWeakPtr()));
+    }
+    url_loader_interceptor_->SetPatterns(interceptor_patterns);
+    return Response::OK();
+  }
+
   WebContents* web_contents = WebContents::FromRenderFrameHost(host_);
   if (!web_contents)
     return Response::InternalError();
@@ -1143,68 +1806,17 @@ DispatchResponse NetworkHandler::SetRequestInterception(
   if (!interceptor)
     return Response::Error("Interception not supported");
 
-  if (!patterns->length()) {
-    interception_handle_.reset();
-    return Response::OK();
-  }
-
-  std::vector<DevToolsURLRequestInterceptor::Pattern> interceptor_patterns;
-  for (size_t i = 0; i < patterns->length(); ++i) {
-    base::flat_set<ResourceType> resource_types;
-    std::string resource_type = patterns->get(i)->GetResourceType("");
-    if (!resource_type.empty()) {
-      if (!AddInterceptedResourceType(resource_type, &resource_types)) {
-        return Response::InvalidParams(base::StringPrintf(
-            "Cannot intercept resources of type '%s'", resource_type.c_str()));
-      }
-    }
-    interceptor_patterns.push_back(DevToolsURLRequestInterceptor::Pattern(
-        patterns->get(i)->GetUrlPattern("*"), std::move(resource_types),
-        ToInterceptorStage(patterns->get(i)->GetInterceptionStage(
-            protocol::Network::InterceptionStageEnum::Request))));
-  }
-
   if (interception_handle_) {
-    interception_handle_->UpdatePatterns(std::move(interceptor_patterns));
+    interception_handle_->UpdatePatterns(interceptor_patterns);
   } else {
     interception_handle_ = interceptor->StartInterceptingRequests(
-        host_->frame_tree_node(), std::move(interceptor_patterns),
-        base::Bind(&NetworkHandler::RequestIntercepted,
-                   weak_factory_.GetWeakPtr()));
+        host_->frame_tree_node(), interceptor_patterns,
+        base::BindRepeating(&NetworkHandler::RequestIntercepted,
+                            weak_factory_.GetWeakPtr()));
   }
 
   return Response::OK();
 }
-
-namespace {
-bool GetPostData(const net::URLRequest* request, std::string* post_data) {
-  if (!request->has_upload())
-    return false;
-
-  const net::UploadDataStream* stream = request->get_upload();
-  if (!stream->GetElementReaders())
-    return false;
-
-  const auto* element_readers = stream->GetElementReaders();
-
-  if (element_readers->empty())
-    return false;
-
-  *post_data = "";
-  for (const auto& element_reader : *element_readers) {
-    const net::UploadBytesElementReader* reader =
-        element_reader->AsBytesReader();
-    // TODO(caseq): Also support blobs.
-    if (!reader) {
-      *post_data = "";
-      return false;
-    }
-    // TODO(alexclarke): This should really be base64 encoded.
-    *post_data += std::string(reader->bytes(), reader->length());
-  }
-  return true;
-}
-}  // namespace
 
 void NetworkHandler::ContinueInterceptedRequest(
     const std::string& interception_id,
@@ -1216,14 +1828,6 @@ void NetworkHandler::ContinueInterceptedRequest(
     Maybe<protocol::Network::Headers> headers,
     Maybe<protocol::Network::AuthChallengeResponse> auth_challenge_response,
     std::unique_ptr<ContinueInterceptedRequestCallback> callback) {
-  DevToolsInterceptorController* interceptor =
-      DevToolsInterceptorController::FromBrowserContext(
-          process_->GetBrowserContext());
-  if (!interceptor) {
-    callback->sendFailure(Response::InternalError());
-    return;
-  }
-
   base::Optional<std::string> raw_response;
   if (base64_raw_response.isJust()) {
     std::string decoded;
@@ -1247,22 +1851,39 @@ void NetworkHandler::ContinueInterceptedRequest(
     mark_as_canceled = true;
   }
 
-  interceptor->ContinueInterceptedRequest(
-      interception_id,
-      std::make_unique<DevToolsURLRequestInterceptor::Modifications>(
+  auto modifications =
+      std::make_unique<DevToolsNetworkInterceptor::Modifications>(
           std::move(error), std::move(raw_response), std::move(url),
           std::move(method), std::move(post_data), std::move(headers),
-          std::move(auth_challenge_response), mark_as_canceled),
-      std::move(callback));
+          std::move(auth_challenge_response), mark_as_canceled);
+
+  if (url_loader_interceptor_) {
+    url_loader_interceptor_->ContinueInterceptedRequest(
+        interception_id, std::move(modifications), std::move(callback));
+    return;
+  }
+
+  DevToolsInterceptorController* interceptor =
+      DevToolsInterceptorController::FromBrowserContext(browser_context_);
+  if (!interceptor) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+  interceptor->ContinueInterceptedRequest(
+      interception_id, std::move(modifications), std::move(callback));
 }
 
 void NetworkHandler::GetResponseBodyForInterception(
     const String& interception_id,
     std::unique_ptr<GetResponseBodyForInterceptionCallback> callback) {
-  DevToolsInterceptorController* interceptor =
-      DevToolsInterceptorController::FromBrowserContext(
-          process_->GetBrowserContext());
+  if (url_loader_interceptor_) {
+    url_loader_interceptor_->GetResponseBody(interception_id,
+                                             std::move(callback));
+    return;
+  }
 
+  DevToolsInterceptorController* interceptor =
+      DevToolsInterceptorController::FromBrowserContext(browser_context_);
   if (!interceptor) {
     callback->sendFailure(Response::InternalError());
     return;
@@ -1270,31 +1891,105 @@ void NetworkHandler::GetResponseBodyForInterception(
   interceptor->GetResponseBody(interception_id, std::move(callback));
 }
 
+void NetworkHandler::TakeResponseBodyForInterceptionAsStream(
+    const String& interception_id,
+    std::unique_ptr<TakeResponseBodyForInterceptionAsStreamCallback> callback) {
+  if (url_loader_interceptor_) {
+    url_loader_interceptor_->TakeResponseBodyPipe(
+        interception_id,
+        base::BindOnce(&NetworkHandler::OnResponseBodyPipeTaken,
+                       weak_factory_.GetWeakPtr(), std::move(callback)));
+    return;
+  }
+  callback->sendFailure(Response::Error(
+      "Network.takeResponseBodyForInterceptionAsStream is only "
+      "currently supported with --enable-features=NetworkService"));
+}
+
+void NetworkHandler::OnResponseBodyPipeTaken(
+    std::unique_ptr<TakeResponseBodyForInterceptionAsStreamCallback> callback,
+    Response response,
+    mojo::ScopedDataPipeConsumerHandle pipe,
+    const std::string& mime_type) {
+  DCHECK_EQ(response.isSuccess(), pipe.is_valid());
+  if (!response.isSuccess()) {
+    callback->sendFailure(std::move(response));
+    return;
+  }
+  // The pipe stream is owned only by io_context after we return.
+  bool is_binary = !DevToolsIOContext::IsTextMimeType(mime_type);
+  auto stream =
+      DevToolsStreamPipe::Create(io_context_, std::move(pipe), is_binary);
+  callback->sendSuccess(stream->handle());
+}
+
 // static
-GURL NetworkHandler::ClearUrlRef(const GURL& url) {
-  if (!url.has_ref())
-    return url;
+std::string NetworkHandler::ExtractFragment(const GURL& url,
+                                            std::string* fragment) {
+  if (!url.has_ref()) {
+    *fragment = std::string();
+    return url.spec();
+  }
+  *fragment = "#" + url.ref();
   GURL::Replacements replacements;
   replacements.ClearRef();
-  return url.ReplaceComponents(replacements);
+  return url.ReplaceComponents(replacements).spec();
+}
+
+// static
+std::unique_ptr<Network::Request>
+NetworkHandler::CreateRequestFromResourceRequest(
+    const network::ResourceRequest& request) {
+  std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
+  for (net::HttpRequestHeaders::Iterator it(request.headers); it.GetNext();)
+    headers_dict->setString(it.name(), it.value());
+  if (request.referrer.is_valid()) {
+    headers_dict->setString(net::HttpRequestHeaders::kReferer,
+                            request.referrer.spec());
+  }
+  std::string url_fragment;
+  std::unique_ptr<protocol::Network::Request> request_object =
+      Network::Request::Create()
+          .SetUrl(ExtractFragment(request.url, &url_fragment))
+          .SetMethod(request.method)
+          .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
+          .SetInitialPriority(resourcePriority(request.priority))
+          .SetReferrerPolicy(referrerPolicy(request.referrer_policy))
+          .Build();
+  if (!url_fragment.empty())
+    request_object->SetUrlFragment(url_fragment);
+  std::string post_data;
+  if (request.request_body && GetPostData(*request.request_body, &post_data))
+    request_object->SetPostData(std::move(post_data));
+  return request_object;
 }
 
 // static
 std::unique_ptr<Network::Request> NetworkHandler::CreateRequestFromURLRequest(
-    const net::URLRequest* request) {
+    const net::URLRequest* request,
+    const std::string& cookie) {
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   for (net::HttpRequestHeaders::Iterator it(request->extra_request_headers());
        it.GetNext();) {
     headers_dict->setString(it.name(), it.value());
   }
+  if (!cookie.empty())
+    headers_dict->setString(net::HttpRequestHeaders::kCookie, cookie);
+  if (!request->referrer().empty()) {
+    headers_dict->setString(net::HttpRequestHeaders::kReferer,
+                            request->referrer());
+  }
+  std::string url_fragment;
   std::unique_ptr<protocol::Network::Request> request_object =
       Network::Request::Create()
-          .SetUrl(ClearUrlRef(request->url()).spec())
+          .SetUrl(ExtractFragment(request->url(), &url_fragment))
           .SetMethod(request->method())
           .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
           .SetInitialPriority(resourcePriority(request->priority()))
           .SetReferrerPolicy(referrerPolicy(request->referrer_policy()))
           .Build();
+  if (!url_fragment.empty())
+    request_object->SetUrlFragment(url_fragment);
   std::string post_data;
   if (GetPostData(request, &post_data))
     request_object->SetPostData(std::move(post_data));
@@ -1321,12 +2016,19 @@ bool NetworkHandler::ShouldCancelNavigation(
   return interceptor && interceptor->ShouldCancelNavigation(global_request_id);
 }
 
-void NetworkHandler::WillSendNavigationRequest(net::HttpRequestHeaders* headers,
-                                               bool* skip_service_worker,
-                                               bool* disable_cache) {
-  headers->SetHeader(kDevToolsEmulateNetworkConditionsClientId, host_id_);
-  if (!user_agent_.empty())
-    headers->SetHeader(net::HttpRequestHeaders::kUserAgent, user_agent_);
+bool NetworkHandler::MaybeCreateProxyForInterception(
+    const base::UnguessableToken& frame_token,
+    int process_id,
+    bool is_download,
+    network::mojom::URLLoaderFactoryRequest* target_factory_request) {
+  return url_loader_interceptor_ &&
+         url_loader_interceptor_->CreateProxyForInterception(
+             frame_token, process_id, is_download, target_factory_request);
+}
+
+void NetworkHandler::ApplyOverrides(net::HttpRequestHeaders* headers,
+                                    bool* skip_service_worker,
+                                    bool* disable_cache) {
   for (auto& entry : extra_headers_)
     headers->SetHeader(entry.first, entry.second);
   *skip_service_worker |= bypass_service_worker_;
@@ -1366,11 +2068,11 @@ const char* ResourceTypeToString(ResourceType resource_type) {
     case RESOURCE_TYPE_XHR:
       return protocol::Page::ResourceTypeEnum::XHR;
     case RESOURCE_TYPE_PING:
-      return protocol::Page::ResourceTypeEnum::Other;
+      return protocol::Page::ResourceTypeEnum::Ping;
     case RESOURCE_TYPE_SERVICE_WORKER:
       return protocol::Page::ResourceTypeEnum::Other;
     case RESOURCE_TYPE_CSP_REPORT:
-      return protocol::Page::ResourceTypeEnum::Other;
+      return protocol::Page::ResourceTypeEnum::CSPViolationReport;
     case RESOURCE_TYPE_PLUGIN_RESOURCE:
       return protocol::Page::ResourceTypeEnum::Other;
     default:
@@ -1388,19 +2090,28 @@ void NetworkHandler::RequestIntercepted(
   frontend_->RequestIntercepted(
       info->interception_id, std::move(info->network_request),
       info->frame_id.ToString(), ResourceTypeToString(info->resource_type),
-      info->is_navigation, std::move(info->redirect_url),
-      std::move(info->auth_challenge), std::move(error_reason),
-      std::move(info->http_response_status_code),
+      info->is_navigation, std::move(info->is_download),
+      std::move(info->redirect_url), std::move(info->auth_challenge),
+      std::move(error_reason), std::move(info->http_response_status_code),
       std::move(info->response_headers));
 }
 
 void NetworkHandler::SetNetworkConditions(
     network::mojom::NetworkConditionsPtr conditions) {
-  if (!process_)
+  if (!storage_partition_)
     return;
-  StoragePartition* partition = process_->GetStoragePartition();
-  network::mojom::NetworkContext* context = partition->GetNetworkContext();
-  context->SetNetworkConditions(host_id_, std::move(conditions));
+  network::mojom::NetworkContext* context =
+      storage_partition_->GetNetworkContext();
+  bool offline = conditions ? conditions->offline : false;
+
+  if (!devtools_token_.is_empty())
+    context->SetNetworkConditions(devtools_token_, std::move(conditions));
+
+  if (offline == !!background_sync_restorer_)
+    return;
+  background_sync_restorer_.reset(
+      offline ? new BackgroundSyncRestorer(host_id_, storage_partition_)
+              : nullptr);
 }
 
 }  // namespace protocol

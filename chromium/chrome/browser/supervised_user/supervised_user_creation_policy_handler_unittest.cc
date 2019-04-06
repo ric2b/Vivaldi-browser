@@ -4,7 +4,6 @@
 
 #include "chrome/browser/supervised_user/supervised_user_creation_policy_handler.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/common/pref_names.h"
 #include "components/policy/core/common/policy_map.h"
@@ -18,7 +17,7 @@ class SupervisedUserCreationPolicyHandlerTest : public ::testing::Test {
  protected:
   void SetUpPolicyAndApply(const char* policy_name, bool value) {
     policies_.Set(policy_name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-                  POLICY_SOURCE_PLATFORM, base::MakeUnique<base::Value>(value),
+                  POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>(value),
                   nullptr);
     ApplyPolicySettings();
   }

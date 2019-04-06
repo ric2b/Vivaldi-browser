@@ -6,7 +6,9 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/storage_partition_impl.h"
@@ -18,6 +20,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/navigation_handle_observer.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -26,6 +29,8 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/cpp/features.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -67,7 +72,7 @@ class IsolatedOriginTest : public ContentBrowserTest {
 
 // Check that navigating a main frame from an non-isolated origin to an
 // isolated origin and vice versa swaps processes and uses a new SiteInstance,
-// both for browser-initiated and renderer-initiated navigations.
+// both for renderer-initiated and browser-initiated navigations.
 IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, MainFrameNavigation) {
   GURL unisolated_url(
       embedded_test_server()->GetURL("www.foo.com", "/title1.html"));
@@ -83,42 +88,29 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, MainFrameNavigation) {
   RenderProcessHost* unisolated_process =
       popup->web_contents()->GetMainFrame()->GetProcess();
 
-  // Perform a browser-initiated navigation to an isolated origin and ensure
-  // that this ends up in a new process and SiteInstance for isolated.foo.com.
-  EXPECT_TRUE(NavigateToURL(shell(), isolated_url));
-
+  // Go to isolated.foo.com with a renderer-initiated navigation.
+  EXPECT_TRUE(NavigateToURLFromRenderer(web_contents(), isolated_url));
   scoped_refptr<SiteInstance> isolated_instance =
       web_contents()->GetSiteInstance();
-  EXPECT_NE(isolated_instance, unisolated_instance);
-  EXPECT_NE(web_contents()->GetMainFrame()->GetProcess(), unisolated_process);
+  EXPECT_EQ(isolated_instance, web_contents()->GetSiteInstance());
+  EXPECT_NE(unisolated_process, web_contents()->GetMainFrame()->GetProcess());
 
   // The site URL for isolated.foo.com should be the full origin rather than
   // scheme and eTLD+1.
   EXPECT_EQ(isolated_url.GetOrigin(), isolated_instance->GetSiteURL());
 
-  // Now perform a renderer-initiated navigation to an unisolated origin,
-  // www.foo.com. This should end up in the |popup|'s process.
-  {
-    TestNavigationObserver observer(web_contents());
-    EXPECT_TRUE(ExecuteScript(
-        web_contents(), "location.href = '" + unisolated_url.spec() + "'"));
-    observer.Wait();
-  }
-
+  // Now use a renderer-initiated navigation to go to an unisolated origin,
+  // www.foo.com. This should end up back in the |popup|'s process.
+  EXPECT_TRUE(NavigateToURLFromRenderer(web_contents(), unisolated_url));
   EXPECT_EQ(unisolated_instance, web_contents()->GetSiteInstance());
   EXPECT_EQ(unisolated_process, web_contents()->GetMainFrame()->GetProcess());
 
-  // Go to isolated.foo.com again, this time with a renderer-initiated
-  // navigation from the unisolated www.foo.com.
-  {
-    TestNavigationObserver observer(web_contents());
-    EXPECT_TRUE(ExecuteScript(web_contents(),
-                              "location.href = '" + isolated_url.spec() + "'"));
-    observer.Wait();
-  }
-
-  EXPECT_EQ(isolated_instance, web_contents()->GetSiteInstance());
-  EXPECT_NE(unisolated_process, web_contents()->GetMainFrame()->GetProcess());
+  // Now, perform a browser-initiated navigation to an isolated origin and
+  // ensure that this ends up in a new process and SiteInstance for
+  // isolated.foo.com.
+  EXPECT_TRUE(NavigateToURL(shell(), isolated_url));
+  EXPECT_NE(web_contents()->GetSiteInstance(), unisolated_instance);
+  EXPECT_NE(web_contents()->GetMainFrame()->GetProcess(), unisolated_process);
 
   // Go back to www.foo.com: this should end up in the unisolated process.
   {
@@ -144,14 +136,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, MainFrameNavigation) {
   // isolated origin and ensure there is a different isolated process.
   GURL second_isolated_url(
       embedded_test_server()->GetURL("isolated.bar.com", "/title3.html"));
-  {
-    TestNavigationObserver observer(web_contents());
-    EXPECT_TRUE(
-        ExecuteScript(web_contents(),
-                      "location.href = '" + second_isolated_url.spec() + "'"));
-    observer.Wait();
-  }
-
+  EXPECT_TRUE(NavigateToURLFromRenderer(web_contents(), second_isolated_url));
   EXPECT_EQ(second_isolated_url.GetOrigin(),
             web_contents()->GetSiteInstance()->GetSiteURL());
   EXPECT_NE(isolated_instance, web_contents()->GetSiteInstance());
@@ -680,10 +665,6 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, ProcessLimit) {
 // https://crbug.com/738634.
 IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
                        ProcessReuseWithResponseStartedFromIsolatedOrigin) {
-  // This test requires PlzNavigate.
-  if (!IsBrowserSideNavigationEnabled())
-    return;
-
   // Set the process limit to 1.
   RenderProcessHost::SetMaxRendererProcessCount(1);
 
@@ -730,10 +711,6 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
 // an origin lock mismatch. See https://crbug.com/773809.
 IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
                        ProcessReuseWithLazilyAssignedSiteInstance) {
-  // This test requires PlzNavigate.
-  if (!IsBrowserSideNavigationEnabled())
-    return;
-
   // Set the process limit to 1.
   RenderProcessHost::SetMaxRendererProcessCount(1);
 
@@ -785,10 +762,6 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
 // response. See https://crbug.com/773809.
 IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
                        ProcessReuseWithLazilyAssignedIsolatedSiteInstance) {
-  // This test requires PlzNavigate.
-  if (!IsBrowserSideNavigationEnabled())
-    return;
-
   // Set the process limit to 1.
   RenderProcessHost::SetMaxRendererProcessCount(1);
 
@@ -840,10 +813,6 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
 // https://crbug.com/738634.
 IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
                        ProcessReuseWithResponseStartedFromUnisolatedOrigin) {
-  // This test requires PlzNavigate.
-  if (!IsBrowserSideNavigationEnabled())
-    return;
-
   // Set the process limit to 1.
   RenderProcessHost::SetMaxRendererProcessCount(1);
 
@@ -883,10 +852,6 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest,
 IN_PROC_BROWSER_TEST_F(
     IsolatedOriginTest,
     IsolatedSubframeDoesNotReuseUnsuitableProcessWithPendingSiteEntry) {
-  // This test requires PlzNavigate.
-  if (!IsBrowserSideNavigationEnabled())
-    return;
-
   // Set the process limit to 1.
   RenderProcessHost::SetMaxRendererProcessCount(1);
 
@@ -949,10 +914,6 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     IsolatedOriginTest,
     IsolatedServiceWorkerDoesNotReuseUnsuitableProcessWithPendingSiteEntry) {
-  // This test requires PlzNavigate.
-  if (!IsBrowserSideNavigationEnabled())
-    return;
-
   // Set the process limit to 1.
   RenderProcessHost::SetMaxRendererProcessCount(1);
 
@@ -1037,11 +998,12 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, IsolatedOriginWithSubdomain) {
 // This class allows intercepting the OpenLocalStorage method and changing
 // the parameters to the real implementation of it.
 class StoragePartitonInterceptor
-    : public mojom::StoragePartitionServiceInterceptorForTesting,
+    : public blink::mojom::StoragePartitionServiceInterceptorForTesting,
       public RenderProcessHostObserver {
  public:
-  StoragePartitonInterceptor(RenderProcessHostImpl* rph,
-                             mojom::StoragePartitionServiceRequest request) {
+  StoragePartitonInterceptor(
+      RenderProcessHostImpl* rph,
+      blink::mojom::StoragePartitionServiceRequest request) {
     StoragePartitionImpl* storage_partition =
         static_cast<StoragePartitionImpl*>(rph->GetStoragePartition());
 
@@ -1063,15 +1025,14 @@ class StoragePartitonInterceptor
   // Ensure this object is cleaned up when the process goes away, since it
   // is not owned by anyone else.
   void RenderProcessExited(RenderProcessHost* host,
-                           base::TerminationStatus status,
-                           int exit_code) override {
+                           const ChildProcessTerminationInfo& info) override {
     host->RemoveObserver(this);
     delete this;
   }
 
   // Allow all methods that aren't explicitly overriden to pass through
   // unmodified.
-  mojom::StoragePartitionService* GetForwardingInterface() override {
+  blink::mojom::StoragePartitionService* GetForwardingInterface() override {
     return storage_partition_service_;
   }
 
@@ -1079,7 +1040,7 @@ class StoragePartitonInterceptor
   // renderer process sending incorrect data to the browser process, so
   // security checks can be tested.
   void OpenLocalStorage(const url::Origin& origin,
-                        mojom::LevelDBWrapperRequest request) override {
+                        blink::mojom::StorageAreaRequest request) override {
     url::Origin mismatched_origin =
         url::Origin::Create(GURL("http://abc.foo.com"));
     GetForwardingInterface()->OpenLocalStorage(mismatched_origin,
@@ -1089,14 +1050,14 @@ class StoragePartitonInterceptor
  private:
   // Keep a pointer to the original implementation of the service, so all
   // calls can be forwarded to it.
-  mojom::StoragePartitionService* storage_partition_service_;
+  blink::mojom::StoragePartitionService* storage_partition_service_;
 
   DISALLOW_COPY_AND_ASSIGN(StoragePartitonInterceptor);
 };
 
 void CreateTestStoragePartitionService(
     RenderProcessHostImpl* rph,
-    mojom::StoragePartitionServiceRequest request) {
+    blink::mojom::StoragePartitionServiceRequest request) {
   // This object will register as RenderProcessHostObserver, so it will
   // clean itself automatically on process exit.
   new StoragePartitonInterceptor(rph, std::move(request));
@@ -1216,6 +1177,148 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginLongListTest, Test) {
   EXPECT_NE(main_frame->GetSiteInstance(), subframe2->GetSiteInstance());
   EXPECT_NE(subframe1->GetProcess()->GetID(), subframe2->GetProcess()->GetID());
   EXPECT_NE(subframe1->GetSiteInstance(), subframe2->GetSiteInstance());
+}
+
+// Check that navigating a subframe to an isolated origin error page puts the
+// subframe into an OOPIF and its own SiteInstance.  Also check that a
+// non-isolated error page in a subframe ends up in the correct SiteInstance.
+IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, SubframeErrorPages) {
+  GURL top_url(
+      embedded_test_server()->GetURL("/frame_tree/page_with_two_frames.html"));
+  GURL isolated_url(
+      embedded_test_server()->GetURL("isolated.foo.com", "/close-socket"));
+  GURL regular_url(embedded_test_server()->GetURL("a.com", "/close-socket"));
+
+  EXPECT_TRUE(NavigateToURL(shell(), top_url));
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  EXPECT_EQ(2u, root->child_count());
+
+  FrameTreeNode* child1 = root->child_at(0);
+  FrameTreeNode* child2 = root->child_at(1);
+
+  {
+    TestFrameNavigationObserver observer(child1);
+    NavigationHandleObserver handle_observer(web_contents(), isolated_url);
+    EXPECT_TRUE(ExecuteScript(
+        child1, "location.href = '" + isolated_url.spec() + "';"));
+    observer.Wait();
+    EXPECT_EQ(child1->current_url(), isolated_url);
+    EXPECT_TRUE(handle_observer.is_error());
+
+    EXPECT_NE(root->current_frame_host()->GetSiteInstance(),
+              child1->current_frame_host()->GetSiteInstance());
+    EXPECT_EQ(GURL(isolated_url.GetOrigin()),
+              child1->current_frame_host()->GetSiteInstance()->GetSiteURL());
+  }
+
+  {
+    TestFrameNavigationObserver observer(child2);
+    NavigationHandleObserver handle_observer(web_contents(), regular_url);
+    EXPECT_TRUE(
+        ExecuteScript(child2, "location.href = '" + regular_url.spec() + "';"));
+    observer.Wait();
+    EXPECT_EQ(child2->current_url(), regular_url);
+    EXPECT_TRUE(handle_observer.is_error());
+    if (AreAllSitesIsolatedForTesting()) {
+      EXPECT_NE(root->current_frame_host()->GetSiteInstance(),
+                child2->current_frame_host()->GetSiteInstance());
+      EXPECT_EQ(SiteInstance::GetSiteForURL(web_contents()->GetBrowserContext(),
+                                            regular_url),
+                child2->current_frame_host()->GetSiteInstance()->GetSiteURL());
+    } else {
+      EXPECT_EQ(root->current_frame_host()->GetSiteInstance(),
+                child2->current_frame_host()->GetSiteInstance());
+    }
+    EXPECT_NE(GURL(kUnreachableWebDataURL),
+              child2->current_frame_host()->GetSiteInstance()->GetSiteURL());
+  }
+}
+
+class IsolatedOriginTestWithMojoBlobURLs : public IsolatedOriginTest {
+ public:
+  IsolatedOriginTestWithMojoBlobURLs() {
+    scoped_feature_list_.InitAndEnableFeature(blink::features::kMojoBlobURLs);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(IsolatedOriginTestWithMojoBlobURLs, NavigateToBlobURL) {
+  GURL top_url(
+      embedded_test_server()->GetURL("www.foo.com", "/page_with_iframe.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), top_url));
+
+  GURL isolated_url(embedded_test_server()->GetURL("isolated.foo.com",
+                                                   "/page_with_iframe.html"));
+
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  FrameTreeNode* child = root->child_at(0);
+
+  NavigateIframeToURL(web_contents(), "test_iframe", isolated_url);
+  EXPECT_EQ(child->current_url(), isolated_url);
+  EXPECT_TRUE(child->current_frame_host()->IsCrossProcessSubframe());
+
+  // Now navigate the child frame to a Blob URL.
+  TestNavigationObserver load_observer(shell()->web_contents());
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents()->GetMainFrame(),
+                            "const b = new Blob(['foo']);\n"
+                            "const u = URL.createObjectURL(b);\n"
+                            "frames[0].location = u;\n"
+                            "URL.revokeObjectURL(u);"));
+  load_observer.Wait();
+  EXPECT_TRUE(base::StartsWith(child->current_url().spec(),
+                               "blob:http://www.foo.com",
+                               base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(load_observer.last_navigation_succeeded());
+}
+
+// Ensure that --disable-site-isolation-trials disables field trials.
+class IsolatedOriginTrialOverrideTest : public IsolatedOriginFieldTrialTest {
+ public:
+  IsolatedOriginTrialOverrideTest() {}
+
+  ~IsolatedOriginTrialOverrideTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(switches::kDisableSiteIsolationTrials);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(IsolatedOriginTrialOverrideTest);
+};
+
+IN_PROC_BROWSER_TEST_F(IsolatedOriginTrialOverrideTest, Test) {
+  if (AreAllSitesIsolatedForTesting())
+    return;
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  EXPECT_FALSE(policy->IsIsolatedOrigin(
+      url::Origin::Create(GURL("https://field.trial.com/"))));
+  EXPECT_FALSE(
+      policy->IsIsolatedOrigin(url::Origin::Create(GURL("https://bar.com/"))));
+}
+
+// Ensure that --disable-site-isolation-trials does not override the flag.
+class IsolatedOriginNoFlagOverrideTest : public IsolatedOriginTest {
+ public:
+  IsolatedOriginNoFlagOverrideTest() {}
+
+  ~IsolatedOriginNoFlagOverrideTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    IsolatedOriginTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(switches::kDisableSiteIsolationTrials);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(IsolatedOriginNoFlagOverrideTest);
+};
+
+IN_PROC_BROWSER_TEST_F(IsolatedOriginNoFlagOverrideTest, Test) {
+  GURL isolated_url(
+      embedded_test_server()->GetURL("isolated.foo.com", "/title2.html"));
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  EXPECT_TRUE(policy->IsIsolatedOrigin(url::Origin::Create(isolated_url)));
 }
 
 }  // namespace content

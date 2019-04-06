@@ -13,15 +13,17 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLog;
 
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
+import org.chromium.mojo_base.BigBufferUtil;
 import org.chromium.skia.mojom.Bitmap;
 import org.chromium.skia.mojom.ColorType;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.chromium.skia.mojom.ImageInfo;
 
 /**
  * Test suite for conversion-to-Frame utils.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class BitmapUtilsTest {
     private static final int VALID_WIDTH = 1;
@@ -46,6 +48,7 @@ public class BitmapUtilsTest {
     public void testConversionFailsWithInvalidBitmap() {
         Bitmap bitmap = new Bitmap();
         bitmap.pixelData = null;
+        bitmap.imageInfo = new ImageInfo();
 
         assertNull(BitmapUtils.convertToFrame(bitmap));
     }
@@ -57,9 +60,10 @@ public class BitmapUtilsTest {
     @Feature({"ShapeDetection"})
     public void testConversionFailsWithInvalidDimensions() {
         Bitmap bitmap = new Bitmap();
-        bitmap.pixelData = EMPTY_DATA;
-        bitmap.width = INVALID_WIDTH;
-        bitmap.height = VALID_HEIGHT;
+        bitmap.imageInfo = new ImageInfo();
+        bitmap.pixelData = BigBufferUtil.createBigBufferFromBytes(EMPTY_DATA);
+        bitmap.imageInfo.width = INVALID_WIDTH;
+        bitmap.imageInfo.height = VALID_HEIGHT;
 
         assertNull(BitmapUtils.convertToFrame(bitmap));
     }
@@ -71,10 +75,11 @@ public class BitmapUtilsTest {
     @Feature({"ShapeDetection"})
     public void testConversionFailsWithWronglyWrappedData() {
         Bitmap bitmap = new Bitmap();
-        bitmap.pixelData = EMPTY_DATA;
-        bitmap.width = VALID_WIDTH;
-        bitmap.height = VALID_HEIGHT;
-        bitmap.colorType = ColorType.RGBA_8888;
+        bitmap.imageInfo = new ImageInfo();
+        bitmap.pixelData = BigBufferUtil.createBigBufferFromBytes(EMPTY_DATA);
+        bitmap.imageInfo.width = VALID_WIDTH;
+        bitmap.imageInfo.height = VALID_HEIGHT;
+        bitmap.imageInfo.colorType = ColorType.RGBA_8888;
 
         assertNull(BitmapUtils.convertToFrame(bitmap));
     }

@@ -23,6 +23,9 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
   // mojom::FrameSinkManager:
   void RegisterFrameSinkId(const FrameSinkId& frame_sink_id) override {}
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id) override {}
+  void EnableSynchronizationReporting(
+      const FrameSinkId& frame_sink_id,
+      const std::string& reporting_label) override {}
   void SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
                               const std::string& debug_label) override {}
   void CreateRootCompositorFrameSink(
@@ -31,6 +34,9 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
       const FrameSinkId& frame_sink_id,
       mojom::CompositorFrameSinkRequest request,
       mojom::CompositorFrameSinkClientPtr client) override {}
+  void DestroyCompositorFrameSink(
+      const FrameSinkId& frame_sink_id,
+      DestroyCompositorFrameSinkCallback callback) override {}
   void RegisterFrameSinkHierarchy(
       const FrameSinkId& parent_frame_sink_id,
       const FrameSinkId& child_frame_sink_id) override {}
@@ -44,6 +50,10 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
       mojom::VideoDetectorObserverPtr observer) override {}
   void CreateVideoCapturer(
       mojom::FrameSinkVideoCapturerRequest request) override {}
+  void EvictSurfaces(const std::vector<SurfaceId>& surface_ids) override {}
+  void RequestCopyOfOutput(
+      const SurfaceId& surface_id,
+      std::unique_ptr<CopyOutputRequest> request) override {}
 
   mojo::Binding<mojom::FrameSinkManager> binding_;
   mojom::FrameSinkManagerClientPtr client_;

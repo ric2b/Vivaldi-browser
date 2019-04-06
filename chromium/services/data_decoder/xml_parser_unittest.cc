@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop.h"
 #include "services/data_decoder/xml_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -18,9 +17,11 @@ namespace {
 
 void TestParseXmlCallback(std::unique_ptr<base::Value>* value_out,
                           base::Optional<std::string>* error_out,
-                          std::unique_ptr<base::Value> value,
+                          base::Optional<base::Value> value,
                           const base::Optional<std::string>& error) {
-  *value_out = std::move(value);
+  std::unique_ptr<base::Value> value_ptr =
+      value ? base::Value::ToUniquePtrValue(std::move(value.value())) : nullptr;
+  *value_out = std::move(value_ptr);
   *error_out = error;
 }
 

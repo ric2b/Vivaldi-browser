@@ -18,12 +18,12 @@ a {
 #crosEulaFrame,
 #installationSettings,
 #logging {
-  font: 13px Roboto, sans-serif;
+  font-size: 13px;
 }
 
 #crosEulaFrame {
-  border: 1px solid var(--google-blue-500);
-  border-radius: 2px;
+  border: 1px solid rgb(218, 220, 224); /* #DADCE0 */
+  border-radius: 4px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .13);
 }
 
@@ -35,15 +35,12 @@ a {
 #logging {
   -webkit-margin-start: 20px;
   color: rgba(0, 0, 0, 0.54);
-  margin-bottom: 20px;
   margin-top: 23px; /* = 36 - font size */
 }
 
-#usageStats {
-  --paper-checkbox-size: 16px;
-  --paper-checkbox-checked-color: var(--google-blue-500);
-  --paper-checkbox-ink-size: 44px;
-  size: 16px;
+cr-toggle {
+  align-self: center;
+  width: 36px;
 }
 
 #usageStatsLabelContainer {
@@ -51,10 +48,20 @@ a {
   line-height: 20px;
 }
 
-.bottom-buttons {
-  padding: 0 6px; /* = 8px - 2px back button border */
+#settings-close-button {
+  -webkit-padding-end: 18px;
 }
 
-#eula-accept-button {
-  -webkit-padding-end: 18px;
+.tpm-password > div {
+  margin-top: 18px;
+}
+
+.password-row div {
+  color: rgb(66, 133, 244);
+  font: 24px Roboto;
+  margin-top: 82px;
+}
+
+.installation-settings-spinner {
+  -webkit-margin-end: 5px;
 }

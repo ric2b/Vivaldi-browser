@@ -30,20 +30,22 @@ namespace syncer {
 class SyncCycleSnapshot {
  public:
   SyncCycleSnapshot();
-  SyncCycleSnapshot(
-      const ModelNeutralState& model_neutral_state,
-      const ProgressMarkerMap& download_progress_markers,
-      bool is_silenced,
-      int num_encryption_conflicts,
-      int num_hierarchy_conflicts,
-      int num_server_conflicts,
-      bool notifications_enabled,
-      size_t num_entries,
-      base::Time sync_start_time,
-      base::Time poll_finish_time,
-      const std::vector<int>& num_entries_by_type,
-      const std::vector<int>& num_to_delete_entries_by_type,
-      sync_pb::GetUpdatesCallerInfo::GetUpdatesSource legacy_updates_source);
+  SyncCycleSnapshot(const ModelNeutralState& model_neutral_state,
+                    const ProgressMarkerMap& download_progress_markers,
+                    bool is_silenced,
+                    int num_encryption_conflicts,
+                    int num_hierarchy_conflicts,
+                    int num_server_conflicts,
+                    bool notifications_enabled,
+                    size_t num_entries,
+                    base::Time sync_start_time,
+                    base::Time poll_finish_time,
+                    const std::vector<int>& num_entries_by_type,
+                    const std::vector<int>& num_to_delete_entries_by_type,
+                    sync_pb::SyncEnums::GetUpdatesOrigin get_updates_origin,
+                    base::TimeDelta short_poll_interval,
+                    base::TimeDelta long_poll_interval,
+                    bool has_remaining_local_changes);
   SyncCycleSnapshot(const SyncCycleSnapshot& other);
   ~SyncCycleSnapshot();
 
@@ -63,7 +65,11 @@ class SyncCycleSnapshot {
   base::Time poll_finish_time() const;
   const std::vector<int>& num_entries_by_type() const;
   const std::vector<int>& num_to_delete_entries_by_type() const;
-  sync_pb::GetUpdatesCallerInfo::GetUpdatesSource legacy_updates_source() const;
+  sync_pb::SyncEnums::GetUpdatesOrigin get_updates_origin() const;
+  base::TimeDelta short_poll_interval() const;
+  base::TimeDelta long_poll_interval() const;
+  // Whether usynced items existed at the time the sync cycle completed.
+  bool has_remaining_local_changes() const;
 
   // Set iff this snapshot was not built using the default constructor.
   bool is_initialized() const;
@@ -83,10 +89,12 @@ class SyncCycleSnapshot {
   std::vector<int> num_entries_by_type_;
   std::vector<int> num_to_delete_entries_by_type_;
 
-  // This enum value used to be an important part of the sync protocol, but is
-  // now deprecated.  We continue to use it in the snapshot because there is
-  // still some value in displaying it on the about:sync page.
-  sync_pb::GetUpdatesCallerInfo::GetUpdatesSource legacy_updates_source_;
+  sync_pb::SyncEnums::GetUpdatesOrigin get_updates_origin_;
+
+  base::TimeDelta short_poll_interval_;
+  base::TimeDelta long_poll_interval_;
+
+  bool has_remaining_local_changes_;
 
   bool is_initialized_;
 };

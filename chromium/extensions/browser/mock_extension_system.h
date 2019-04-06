@@ -49,7 +49,10 @@ class MockExtensionSystem : public ExtensionSystem {
   void InstallUpdate(const std::string& extension_id,
                      const std::string& public_key,
                      const base::FilePath& temp_dir,
+                     bool install_immediately,
                      InstallUpdateCallback install_update_callback) override;
+  bool FinishDelayedInstallationIfReady(const std::string& extension_id,
+                                        bool install_immediately) override;
 
  private:
   content::BrowserContext* browser_context_;
@@ -78,6 +81,11 @@ class MockExtensionSystemFactory : public ExtensionSystemProvider {
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override {
     return new T(context);
+  }
+  content::BrowserContext* GetBrowserContextToUse(
+      content::BrowserContext* context) const override {
+    // Separate instance in incognito.
+    return context;
   }
 
   // ExtensionSystemProvider overrides:

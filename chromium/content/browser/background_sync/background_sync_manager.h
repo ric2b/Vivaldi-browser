@@ -26,11 +26,11 @@
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/common/content_export.h"
-#include "content/common/service_worker/service_worker_status_code.h"
 #include "content/public/browser/background_sync_parameters.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
+#include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/platform/modules/background_sync/background_sync.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
 #include "url/gurl.h"
 
 namespace blink {
@@ -107,6 +107,9 @@ class CONTENT_EXPORT BackgroundSyncManager
       bool last_chance,
       ServiceWorkerVersion::StatusCallback callback);
 
+  // Called from DevTools to toggle service worker "offline" status
+  void EmulateServiceWorkerOffline(int64_t service_worker_id, bool is_offline);
+
  protected:
   explicit BackgroundSyncManager(
       scoped_refptr<ServiceWorkerContextWrapper> context);
@@ -163,9 +166,9 @@ class CONTENT_EXPORT BackgroundSyncManager
   void DisableAndClearDidGetRegistrations(
       base::OnceClosure callback,
       const std::vector<std::pair<int64_t, std::string>>& user_data,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
   void DisableAndClearManagerClearedOne(base::OnceClosure barrier_closure,
-                                        ServiceWorkerStatusCode status);
+                                        blink::ServiceWorkerStatusCode status);
 
   // Returns the existing registration or nullptr if it cannot be found.
   BackgroundSyncRegistration* LookupActiveRegistration(
@@ -193,7 +196,7 @@ class CONTENT_EXPORT BackgroundSyncManager
   void InitDidGetDataFromBackend(
       base::OnceClosure callback,
       const std::vector<std::pair<int64_t, std::string>>& user_data,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
 
   // Register callbacks
   void RegisterCheckIfHasMainFrame(
@@ -216,15 +219,15 @@ class CONTENT_EXPORT BackgroundSyncManager
   void RegisterDidStore(int64_t sw_registration_id,
                         const BackgroundSyncRegistration& new_registration,
                         StatusAndRegistrationCallback callback,
-                        ServiceWorkerStatusCode status);
+                        blink::ServiceWorkerStatusCode status);
 
   // GetRegistrations callbacks
   void GetRegistrationsImpl(int64_t sw_registration_id,
                             StatusAndRegistrationsCallback callback);
 
   bool AreOptionConditionsMet(const BackgroundSyncRegistrationOptions& options);
-  bool IsRegistrationReadyToFire(
-      const BackgroundSyncRegistration& registration);
+  bool IsRegistrationReadyToFire(const BackgroundSyncRegistration& registration,
+                                 int64_t service_worker_id);
 
   // Determines if the browser needs to be able to run in the background (e.g.,
   // to run a pending registration or verify that a firing registration
@@ -244,7 +247,7 @@ class CONTENT_EXPORT BackgroundSyncManager
       BackgroundSyncRegistration::RegistrationId registration_id,
       base::OnceClosure event_fired_callback,
       base::OnceClosure event_completed_callback,
-      ServiceWorkerStatusCode service_worker_status,
+      blink::ServiceWorkerStatusCode service_worker_status,
       scoped_refptr<ServiceWorkerRegistration> service_worker_registration);
   void FireReadyEventsAllEventsFiring(base::OnceClosure callback);
 
@@ -254,14 +257,14 @@ class CONTENT_EXPORT BackgroundSyncManager
       int64_t service_worker_id,
       const std::string& tag,
       base::OnceClosure callback,
-      ServiceWorkerStatusCode status_code);
+      blink::ServiceWorkerStatusCode status_code);
   void EventCompleteImpl(int64_t service_worker_id,
                          const std::string& tag,
-                         ServiceWorkerStatusCode status_code,
+                         blink::ServiceWorkerStatusCode status_code,
                          base::OnceClosure callback);
   void EventCompleteDidStore(int64_t service_worker_id,
                              base::OnceClosure callback,
-                             ServiceWorkerStatusCode status_code);
+                             blink::ServiceWorkerStatusCode status_code);
 
   // Called when all sync events have completed.
   static void OnAllSyncEventsCompleted(const base::TimeTicks& start_time,
@@ -282,6 +285,9 @@ class CONTENT_EXPORT BackgroundSyncManager
 
   base::OnceClosure MakeEmptyCompletion();
 
+  blink::ServiceWorkerStatusCode CanEmulateSyncEvent(
+      scoped_refptr<ServiceWorkerVersion> active_version);
+
   SWIdToRegistrationsMap active_registrations_;
   CacheStorageScheduler op_scheduler_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
@@ -299,6 +305,8 @@ class CONTENT_EXPORT BackgroundSyncManager
   std::unique_ptr<BackgroundSyncNetworkObserver> network_observer_;
 
   base::Clock* clock_;
+
+  std::map<int64_t, int> emulated_offline_sw_;
 
   base::WeakPtrFactory<BackgroundSyncManager> weak_ptr_factory_;
 

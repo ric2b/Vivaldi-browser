@@ -7,6 +7,9 @@
 
 #include "base/feature_list.h"
 
+class PrefRegistrySimple;
+class PrefService;
+
 namespace content {
 class BrowserContext;
 }
@@ -18,20 +21,48 @@ bool MediaRouterEnabled(content::BrowserContext* context);
 
 #if !defined(OS_ANDROID)
 
-extern const base::Feature kEnableDialLocalDiscovery;
-extern const base::Feature kEnableCastDiscovery;
-extern const base::Feature kEnableCastLocalMedia;
+namespace prefs {
+// Pref name for the enterprise policy for allowing Cast devices on all IPs.
+constexpr char kMediaRouterCastAllowAllIPs[] =
+    "media_router.cast_allow_all_ips";
+}  // namespace prefs
 
-// Returns true if browser side DIAL discovery is enabled.
-bool DialLocalDiscoveryEnabled();
+// Registers |kMediaRouterCastAllowAllIPs| with local state pref |registry|.
+void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
+
+// If enabled, allows Media Router to connect to Cast devices on all IP
+// addresses, not just RFC1918/RFC4913 private addresses. Workaround for
+// https://crbug.com/813974.
+extern const base::Feature kCastAllowAllIPsFeature;
+
+// Returns true if CastMediaSinkService can connect to Cast devices on
+// all IPs, as determined by local state |pref_service| / feature flag.
+bool GetCastAllowAllIPsPref(PrefService* pref_service);
+
+extern const base::Feature kEnableDialSinkQuery;
+extern const base::Feature kEnableCastDiscovery;
+extern const base::Feature kCastMediaRouteProvider;
+
+// Returns true if browser side DIAL Media Route Provider is enabled.
+bool DialMediaRouteProviderEnabled();
 
 // Returns true if browser side Cast discovery is enabled.
 bool CastDiscoveryEnabled();
 
-// Returns true if local media casting is enabled.
-bool CastLocalMediaEnabled();
+// Returns true if browser side Cast Media Route Provider and sink query are
+// enabled.
+bool CastMediaRouteProviderEnabled();
 
-#endif
+// Returns true if the presentation receiver window for local media casting is
+// available on the current platform.
+// TODO(crbug.com/802332): Remove this when mac_views_browser=1 by default.
+bool PresentationReceiverWindowEnabled();
+
+// Returns true if the Views implementation of the Cast dialog should be used.
+// Returns false if the WebUI implementation should be used.
+bool ShouldUseViewsDialog();
+
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace media_router
 

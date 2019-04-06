@@ -36,6 +36,7 @@ enum UserSelectableSyncType {
   SYNCED_NOTIFICATIONS = 9,
   WIFI_CREDENTIAL = 10,
   READING_LIST = 11,
+  USER_EVENTS = 12,
 
   // TODO(lgcheng) ARC_PACKAGE would be selectable.
 

@@ -31,7 +31,6 @@ type_mappings = [
   "chrome.mojom.SearchEngineInfo=::importer::SearchEngineInfo",
   "chrome.mojom.SourceProfile=::importer::SourceProfile",
   "chrome.mojom.ImportItem=::importer::ImportItem",
-  "chrome.mojom.ImportConfig=::importer::ImportConfig",
   "chrome.mojom.ImportedNotesEntry=::ImportedNotesEntry",
   "chrome.mojom.ImportedSpeedDialEntry=::ImportedSpeedDialEntry",
 ]

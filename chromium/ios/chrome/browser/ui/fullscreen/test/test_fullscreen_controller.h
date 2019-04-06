@@ -24,6 +24,8 @@ class TestFullscreenController : public FullscreenController {
   bool IsEnabled() const override;
   void IncrementDisabledCounter() override;
   void DecrementDisabledCounter() override;
+  CGFloat GetProgress() const override;
+  void ResetModel() override;
 
  private:
   // The model.

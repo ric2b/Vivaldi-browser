@@ -37,7 +37,7 @@ class TestWindowManagerDelegate : public aura::WindowManagerDelegate {
   void OnWmClientJankinessChanged(const std::set<aura::Window*>& client_windows,
                                   bool not_responding) override;
   void OnWmBuildDragImage(const gfx::Point& screen_location,
-                          const SkBitmap& drag_image,
+                          const gfx::ImageSkia& drag_image,
                           const gfx::Vector2d& drag_image_offset,
                           ui::mojom::PointerKind source) override;
   void OnWmMoveDragImage(const gfx::Point& screen_location) override;
@@ -50,8 +50,7 @@ class TestWindowManagerDelegate : public aura::WindowManagerDelegate {
   ui::mojom::EventResult OnAccelerator(
       uint32_t accelerator_id,
       const ui::Event& event,
-      std::unordered_map<std::string, std::vector<uint8_t>>* properties)
-      override;
+      base::flat_map<std::string, std::vector<uint8_t>>* properties) override;
   void OnCursorTouchVisibleChanged(bool enabled) override;
   void OnWmPerformMoveLoop(aura::Window* window,
                            ui::mojom::MoveLoopSource source,

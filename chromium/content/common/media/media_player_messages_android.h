@@ -12,7 +12,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "media/blink/renderer_media_player_interface.h"
 #include "media/gpu/ipc/common/media_param_traits.h"
-#include "third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
+#include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_availability.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "url/gurl.h"
 
@@ -175,9 +175,6 @@ IPC_MESSAGE_ROUTED2(MediaPlayerHostMsg_SetVolume,
 IPC_MESSAGE_ROUTED2(MediaPlayerHostMsg_SetPoster,
                     int /* player_id */,
                     GURL /* poster url */)
-
-// Requests the player to enter fullscreen.
-IPC_MESSAGE_ROUTED1(MediaPlayerHostMsg_EnterFullscreen, int /* player_id */)
 
 // Play the media on a remote device, if possible.
 IPC_MESSAGE_ROUTED1(MediaPlayerHostMsg_RequestRemotePlayback,

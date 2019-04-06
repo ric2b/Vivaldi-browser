@@ -21,6 +21,10 @@ policy.Page.setSessionsList = function(sessions) {
   }
 };
 
+policy.Page.setSessionTitle = function(name) {
+  $('session-title').textContent = name;
+};
+
 // Override some methods of policy.Page.
 
 /**
@@ -28,6 +32,23 @@ policy.Page.setSessionsList = function(sessions) {
  */
 policy.Page.showInvalidSessionNameError = function() {
   $('invalid-session-name-error').hidden = false;
+};
+
+/**
+ * Shows error message of rename session.
+ */
+policy.Page.showRenameSessionError = function(errorMessage) {
+  $('session-rename-error').hidden = false;
+  $('session-rename-error').textContent = errorMessage;
+};
+
+/**
+ * Close dialog of rename session.
+ */
+policy.Page.closeRenameSessionDialog = function() {
+  $('session-rename-error').textContent = '';
+  $('session-rename-error').hidden = true;
+  $('rename-dialog').close();
 };
 
 /**
@@ -72,6 +93,14 @@ policy.Page.setPolicyValues = function(values) {
   }
 };
 
+function loadSession(sessionName) {
+  $('invalid-session-name-error').hidden = true;
+  $('session-name-field').value = '';
+  if (sessionName) {
+    chrome.send('loadSession', [sessionName]);
+  }
+}
+
 /** @override */
 policy.Page.prototype.initialize = function() {
   cr.ui.FocusOutlineManager.forDocument(document);
@@ -89,13 +118,14 @@ policy.Page.prototype.initialize = function() {
   };
 
   $('session-choice').onsubmit = () => {
-    $('invalid-session-name-error').hidden = true;
-    var session = $('session-name-field').value;
-    chrome.send('loadSession', [session]);
-    $('session-name-field').value = '';
+    loadSession($('session-name-field').value);
     // Return false in order to prevent the browser from reloading the whole
     // page.
     return false;
+  };
+
+  $('session-list').ondblclick = () => {
+    loadSession($('session-list').value);
   };
 
   $('show-unset').onchange = () => {
@@ -114,6 +144,37 @@ policy.Page.prototype.initialize = function() {
     if (sessionName) {
       chrome.send('deleteSession', [sessionName]);
     }
+  };
+
+  $('rename-session-button').onclick = () => {
+    $('session-rename-error').hidden = true;
+    var sessionName = $('session-list').value;
+    if (sessionName) {
+      $('rename-dialog').showModal();
+      $('new-session-name-field').value = '';
+      $('new-session-name-field').select();
+    }
+  };
+
+  $('cancel-rename-button').onclick = () => {
+    $('rename-dialog').close();
+  };
+
+  $('confirm-rename-button').onclick = () => {
+    $('session-rename-error').textContent = '';
+    var sessionName = $('session-list').value;
+    var newSessionName = $('new-session-name-field').value;
+    if (sessionName && newSessionName) {
+      chrome.send('renameSession', [sessionName, newSessionName]);
+    }
+  };
+
+  $('export-policies-linux').onclick = (event) => {
+    chrome.send('exportLinux', [policy.Page.getInstance().getDictionary()]);
+  };
+
+  $('export-policies-mac').onclick = (event) => {
+    chrome.send('exportMac', [policy.Page.getInstance().getDictionary()]);
   };
 
   // Notify the browser that the page has loaded, causing it to send the
@@ -186,6 +247,8 @@ policy.Policy.prototype.setStatus_ = function(value) {
     status = loadTimeData.getString('unset');
   } else if (value.error) {
     status = value.error;
+  } else if (!value.valid) {
+    status = loadTimeData.getString('errorInvalidType');
   } else {
     status = loadTimeData.getString('ok');
   }
@@ -199,7 +262,7 @@ policy.Policy.prototype.setStatus_ = function(value) {
  */
 policy.Policy.prototype.setValue_ = function(value) {
   this.value = value;
-  if (!value) {
+  if (value === undefined) {
     value = '';
   } else if (typeof value != 'string') {
     value = JSON.stringify(value);

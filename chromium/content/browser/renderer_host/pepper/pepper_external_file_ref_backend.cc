@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "base/files/file_path.h"
-#include "base/files/file_util_proxy.h"
+#include "base/files/file_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/public/browser/browser_thread.h"
@@ -19,6 +19,43 @@
 #include "ppapi/shared_impl/time_conversion.h"
 
 namespace content {
+
+namespace {
+
+struct GetFileInfoResults {
+  base::File::Error error;
+  base::File::Info info;
+};
+
+using GetFileInfoCallback =
+    base::OnceCallback<void(base::File::Error, const base::File::Info&)>;
+
+GetFileInfoResults DoGetFileInfo(const base::FilePath& path) {
+  GetFileInfoResults results;
+  if (!base::PathExists(path)) {
+    results.error = base::File::FILE_ERROR_NOT_FOUND;
+    return results;
+  }
+  results.error = base::GetFileInfo(path, &results.info)
+                      ? base::File::FILE_OK
+                      : base::File::FILE_ERROR_FAILED;
+  return results;
+}
+
+void SendGetFileInfoResults(GetFileInfoCallback callback,
+                            const GetFileInfoResults& results) {
+  std::move(callback).Run(results.error, results.info);
+}
+
+base::File::Error CallTouchFile(const base::FilePath& path,
+                                PP_Time last_access_time,
+                                PP_Time last_modified_time) {
+  bool result = base::TouchFile(path, ppapi::PPTimeToTime(last_access_time),
+                                ppapi::PPTimeToTime(last_modified_time));
+  return result ? base::File::FILE_OK : base::File::FILE_ERROR_FAILED;
+}
+
+}  // namespace
 
 PepperExternalFileRefBackend::PepperExternalFileRefBackend(
     ppapi::host::PpapiHost* host,
@@ -46,15 +83,11 @@ int32_t PepperExternalFileRefBackend::Touch(
     PP_Time last_access_time,
     PP_Time last_modified_time) {
   IPC::Message reply_msg = PpapiPluginMsg_FileRef_TouchReply();
-  base::FileUtilProxy::Touch(
-      task_runner_.get(),
-      path_,
-      ppapi::PPTimeToTime(last_access_time),
-      ppapi::PPTimeToTime(last_modified_time),
-      base::Bind(&PepperExternalFileRefBackend::DidFinish,
-                 weak_factory_.GetWeakPtr(),
-                 reply_context,
-                 reply_msg));
+  base::PostTaskAndReplyWithResult(
+      task_runner_.get(), FROM_HERE,
+      BindOnce(&CallTouchFile, path_, last_access_time, last_modified_time),
+      base::BindOnce(&PepperExternalFileRefBackend::DidFinish,
+                     weak_factory_.GetWeakPtr(), reply_context, reply_msg));
   return PP_OK_COMPLETIONPENDING;
 }
 
@@ -73,12 +106,12 @@ int32_t PepperExternalFileRefBackend::Rename(
 
 int32_t PepperExternalFileRefBackend::Query(
     ppapi::host::ReplyMessageContext reply_context) {
-  bool ok = base::FileUtilProxy::GetFileInfo(
-      task_runner_.get(),
-      path_,
-      base::Bind(&PepperExternalFileRefBackend::GetMetadataComplete,
-                 weak_factory_.GetWeakPtr(),
-                 reply_context));
+  bool ok = base::PostTaskAndReplyWithResult(
+      task_runner_.get(), FROM_HERE, base::BindOnce(&DoGetFileInfo, path_),
+      base::BindOnce(
+          &SendGetFileInfoResults,
+          base::BindOnce(&PepperExternalFileRefBackend::GetMetadataComplete,
+                         weak_factory_.GetWeakPtr(), reply_context)));
   DCHECK(ok);
   return PP_OK_COMPLETIONPENDING;
 }

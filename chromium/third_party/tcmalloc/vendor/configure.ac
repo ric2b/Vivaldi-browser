@@ -2,13 +2,13 @@
 ## In general, the safest way to proceed is to run ./autogen.sh
 
 # make sure we're interpreted by some minimal autoconf
-AC_PREREQ(2.57)
+AC_PREREQ([2.59])
 
-AC_INIT(gperftools, 2.0, google-perftools@googlegroups.com)
+AC_INIT([gperftools],[2.7],[gperftools@googlegroups.com])
 # Update this value for every release!  (A:B:C will map to foo.so.(A-C).C.B)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-TCMALLOC_SO_VERSION=5:0:1
-PROFILER_SO_VERSION=3:0:3
+TCMALLOC_SO_VERSION=9:3:5
+PROFILER_SO_VERSION=4:18:4
 
 AC_SUBST(TCMALLOC_SO_VERSION)
 AC_SUBST(PROFILER_SO_VERSION)
@@ -19,8 +19,9 @@ AC_CONFIG_SRCDIR(README)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE([dist-zip])
-AM_CONFIG_HEADER(src/config.h)
+AC_CONFIG_HEADERS([src/config.h])
 
+AM_MAINTAINER_MODE()
 # Export the version information (for tc_version and friends)
 TC_VERSION_MAJOR=`expr "$PACKAGE_VERSION" : '\([[0-9]]*\)'`
 TC_VERSION_MINOR=`expr "$PACKAGE_VERSION" : '[[0-9]]*\.\([[0-9]]*\)'`
@@ -29,6 +30,8 @@ AC_SUBST(TC_VERSION_MAJOR)
 AC_SUBST(TC_VERSION_MINOR)
 AC_SUBST(TC_VERSION_PATCH)
 AC_SUBST(PACKAGE_STRING)
+
+AX_GENERATE_CHANGELOG
 
 # The user can choose not to compile in the heap-profiler, the
 # heap-checker, or the cpu-profiler.  There's also the possibility
@@ -40,6 +43,7 @@ default_enable_heap_profiler=yes
 default_enable_heap_checker=yes
 default_enable_debugalloc=yes
 default_enable_minimal=no
+default_tcmalloc_alignment=16
 need_nanosleep=yes   # Used later, to decide if to run ACX_NANOSLEEP
 case "$host" in
    *-mingw*) default_enable_minimal=yes; default_enable_debugalloc=no;
@@ -48,6 +52,20 @@ case "$host" in
    *-freebsd*) default_enable_heap_checker=no;;
    *-darwin*) default_enable_heap_checker=no;;
 esac
+
+# Currently only backtrace works on s390.
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __s390__])],
+                  [default_enable_libunwind=no
+                   default_enable_backtrace=yes],
+                  [default_enable_libunwind=yes
+                   default_enable_backtrace=no])
+
+# Disable libunwind linking on ppc64 by default.
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __PPC64__])],
+                  [default_enable_libunwind=no
+                   default_tcmalloc_pagesize=64],
+                  [default_enable_libunwind=yes
+                   default_tcmalloc_pagesize=8])
 
 AC_ARG_ENABLE([cpu-profiler],
               [AS_HELP_STRING([--disable-cpu-profiler],
@@ -79,7 +97,50 @@ if test "$enable_minimal" = yes; then
   enable_heap_profiler=no
   enable_heap_checker=no
 fi
+AC_ARG_ENABLE([stacktrace-via-backtrace],
+              [AS_HELP_STRING([--enable-stacktrace-via-backtrace],
+                              [enable use of backtrace() for stacktrace capturing (may deadlock)])],
+              [enable_backtrace=yes],
+              [enable_backtrace="$default_enable_backtrace"])
+AC_ARG_ENABLE([libunwind],
+              [AS_HELP_STRING([--enable-libunwind],
+                              [enable libunwind linking])],
+              [],
+              [enable_libunwind="$default_enable_libunwind"])
+AC_ARG_WITH([tcmalloc-pagesize],
+            [AS_HELP_STRING([--with-tcmalloc-pagesize],
+                            [Set the tcmalloc internal page size to 8K, 32K or 64K])],
+            [],
+            [with_tcmalloc_pagesize=$default_tcmalloc_pagesize])
+AC_ARG_WITH([tcmalloc-alignment],
+            [AS_HELP_STRING([--with-tcmalloc-alignment],
+                            [Set the tcmalloc allocation alignment to 8 or 16 bytes])],
+            [],
+            [with_tcmalloc_alignment=$default_tcmalloc_alignment])
 
+case "$with_tcmalloc_pagesize" in
+  8)
+       #Default tcmalloc page size.
+       ;;
+  32)
+       AC_DEFINE(TCMALLOC_32K_PAGES, 1,
+                 [Define 32K of internal pages size for tcmalloc]);;
+  64)
+       AC_DEFINE(TCMALLOC_64K_PAGES, 1,
+                 [Define 64K of internal pages size for tcmalloc]);;
+  *)
+       AC_MSG_WARN([${with_tcmalloc_pagesize}K size not supported, using default tcmalloc page size.])
+esac
+case "$with_tcmalloc_alignment" in
+  8)
+       AC_DEFINE(TCMALLOC_ALIGN_8BYTES, 1,
+                 [Define 8 bytes of allocation alignment for tcmalloc]);;
+  16)
+       #Default tcmalloc allocation alignment.
+       ;;
+  *)
+       AC_MSG_WARN([${with_tcmalloc_alignment} bytes not supported, using default tcmalloc allocation alignment.])
+esac
 
 # Checks for programs.
 AC_PROG_CXX
@@ -92,32 +153,33 @@ AM_PROG_CC_C_O      # shrug: autogen.sh suddenly needs this for some reason
 AC_CHECK_TOOL([OBJCOPY], [objcopy], [])
 AS_IF([test -n "$OBJCOPY"], [dnl
   AC_CACHE_CHECK([if $OBJCOPY supports -W], gpt_cv_objcopy_weaken, [dnl
-    AC_LINK_IFELSE([void foo() {} int main() {return 0;}], [dnl
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([void foo() {} int main() {return 0;}])], [dnl
       AS_IF(["$OBJCOPY" -W foo conftest$ac_exeext /dev/null],
       	    [gpt_cv_objcopy_weaken=yes], [gpt_cv_objcopy_weaken=no])],
     [gpt_cv_objcopy_weaken=no])])],
   [gpt_cv_objcopy_weaken=no])
 AM_CONDITIONAL(HAVE_OBJCOPY_WEAKEN, test $gpt_cv_objcopy_weaken = yes)
 
-case $host_os in
-  *mingw*)
-    # Disabling fast install keeps libtool from creating wrapper scripts
-    # around the executables it builds.  Such scripts have caused failures on
-    # MinGW.  Using this option means an extra link step is executed during
-    # "make install".
-    AC_DISABLE_FAST_INSTALL
-    ;;
-   *)
-    AC_ENABLE_FAST_INSTALL
-    ;;
-esac
-
 AC_PROG_LIBTOOL
-AC_SUBST(LIBTOOL_DEPS)
-AM_CONDITIONAL(USE_LIBTOOL, test "x$LIBTOOL" != "x")
 
 AC_C_INLINE
 AX_C___ATTRIBUTE__
+
+AC_MSG_CHECKING(for __attribute__((aligned(N))) on functions)
+AC_CACHE_VAL(ac_cv___attribute__aligned_fn, [
+  AC_TRY_COMPILE(
+    [#include <stdlib.h>
+     void foo(void) __attribute__((aligned(128)));
+     void foo(void) { exit(1); }],
+    [],
+    ac_cv___attribute__aligned_fn=yes,
+    ac_cv___attribute__aligned_fn=no
+  )])
+if test "$ac_cv___attribute__aligned_fn" = "yes"; then
+  AC_DEFINE(HAVE___ATTRIBUTE__ALIGNED_FN, 1, [define if your compiler supports alignment of functions])
+fi
+AC_MSG_RESULT($ac_cv___attribute__aligned_fn)
+
 
 # Check whether some low-level functions/files are available
 AC_HEADER_STDC
@@ -128,13 +190,11 @@ AC_CHECK_TYPES([struct mallinfo],,, [#include <malloc.h>])
 AC_CHECK_TYPES([Elf32_Versym],,, [#include <elf.h>])   # for vdso_support.h
 AC_CHECK_FUNCS(sbrk)            # for tcmalloc to get memory
 AC_CHECK_FUNCS(geteuid)         # for turning off services when run as root
+AC_CHECK_FUNCS(fork)            # for the pthread_atfork setup
 AC_CHECK_HEADERS(features.h)    # for vdso_support.h
 AC_CHECK_HEADERS(malloc.h)      # some systems define stuff there, others not
-AC_CHECK_HEADERS(sys/malloc.h)  # where some versions of OS X put malloc.h
-AC_CHECK_HEADERS(malloc/malloc.h)  # another place OS X puts malloc.h (?)
 AC_CHECK_HEADERS(glob.h)        # for heap-profile-table (cleaning up profiles)
 AC_CHECK_HEADERS(execinfo.h)    # for stacktrace? and heapchecker_unittest
-AC_CHECK_HEADERS(libunwind.h)   # for stacktrace
 AC_CHECK_HEADERS(unwind.h)      # for stacktrace
 AC_CHECK_HEADERS(sched.h)       # for being nice in our spinlock code
 AC_CHECK_HEADERS(conflict-signal.h)      # defined on some windows platforms?
@@ -177,24 +237,32 @@ fi
 # This workaround comes from
 #    http://cygwin.com/ml/cygwin/2004-11/msg00138.html
 case "$host" in
+  *-*-mingw*)
+               dnl mingw doesn't have mmap, not worth
+               dnl checking. Especially given that mingw can be a
+               dnl cross-compiler
+               ;;
   *-*-cygwin*)
 	       ac_cv_func_mmap_fixed_mapped=yes
                AC_DEFINE(HAVE_MMAP, 1,
                          [Define to 1 if you have a working `mmap' system call.])
                ;;
-            *) AC_FUNC_MMAP
+            *) if test "$cross_compiling" = yes; then
+                 ac_cv_func_mmap_fixed_mapped=yes
+                 AC_DEFINE(HAVE_MMAP, 1,
+                           [Define to 1 if you have a working `mmap' system call.])
+               else
+                 AC_FUNC_MMAP
+               fi
                ;;
 esac
 
 # If AtomicWord != Atomic32, we need to define two versions of all the
 # atomicops functions.  If they're the same, we want to define only one.
 AC_MSG_CHECKING([if int32_t is the same type as intptr_t])
-AC_TRY_COMPILE([#include <stdint.h>],
-	       [int32_t v1 = 0; intptr_t v2 = 0; return (&v1 - &v2)],
-               [AC_DEFINE(INT32_EQUALS_INTPTR, 1,
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]], [[int32_t v1 = 0; intptr_t v2 = 0; return (&v1 - &v2)]])],[AC_DEFINE(INT32_EQUALS_INTPTR, 1,
                           Define to 1 if int32_t is equivalent to intptr_t)
-                AC_MSG_RESULT([yes])],
-               [AC_MSG_RESULT([no])])
+                AC_MSG_RESULT([yes])],[AC_MSG_RESULT([no])])
 
 # We want to access the "PC" (Program Counter) register from a struct
 # ucontext.  Every system has its own way of doing that.  We try all the
@@ -210,20 +278,24 @@ fi
 # Some tests test the behavior of .so files, and only make sense for dynamic.
 AM_CONDITIONAL(ENABLE_STATIC, test "$enable_static" = yes)
 
-# We want to link in libunwind if it exists
-AC_CHECK_LIB(unwind, backtrace, UNWIND_LIBS=-lunwind, UNWIND_LIBS=)
+# We want to link in libunwind if it is enabled and exists.
+UNWIND_LIBS=
+if test "$enable_libunwind" = yes; then
+  AC_CHECK_HEADERS([libunwind.h],
+                   [AC_CHECK_LIB(unwind, backtrace, UNWIND_LIBS=-lunwind)
+                    will_use_libunwind=yes])
+fi
 AC_SUBST(UNWIND_LIBS)
 
-# On x86_64, instead of libunwind, we can choose to compile with frame-pointers
-# (This isn't needed on i386, where -fno-omit-frame-pointer is the default).
+# On x86_64, instead of libunwind, we can choose to compile with frame-pointers.
 AC_ARG_ENABLE(frame_pointers,
               AS_HELP_STRING([--enable-frame-pointers],
                              [On x86_64 systems, compile with -fno-omit-frame-pointer (see INSTALL)]),
 	      , enable_frame_pointers=no)
 AM_CONDITIONAL(ENABLE_FRAME_POINTERS, test "$enable_frame_pointers" = yes)
 
-# Some x86_64 systems do not insert frame pointers by default (all
-# i386 systems that I know of, do.  I don't know about non-x86 chips).
+AC_MSG_CHECKING([for x86 without frame pointers])
+# Some x86_64 systems do not insert frame pointers by default.
 # We want to see if the current system is one of those.
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __x86_64__ == 1 ? 0 : 1])],
                   [is_x86_64=yes], [is_x86_64=no])
@@ -233,10 +305,14 @@ CFLAGS="$CFLAGS -S -O2 -o fp.s"
 # We do our own determination of success/failure in the grep, below.
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([int f(int x) {return x;}], [return f(0);])],
                   [:], [:])
+x86_no_fp_by_default=no
+AS_IF([test "$is_x86_64" = yes && ! grep 'mov.*rsp.*rbp' fp.s >/dev/null 2>&1], [x86_no_fp_by_default=yes])
 AM_CONDITIONAL(X86_64_AND_NO_FP_BY_DEFAULT,
-               test "$is_x86_64" = yes && ! grep 'mov.*rsp.*rbp' fp.s >/dev/null 2>&1)
+               test "$x86_no_fp_by_default" = yes)
 rm fp.s
 CFLAGS="$OLD_CFLAGS"
+AC_MSG_RESULT([$x86_no_fp_by_default])
+
 
 # We need to know if we're i386 so we can turn on -mmms, which is not
 # on by default for i386 (it is for x86_64).
@@ -251,17 +327,127 @@ AM_CONDITIONAL(I386, test "$is_i386" = yes)
 AC_CACHE_CHECK([if the compiler supports -Wno-unused-result],
                perftools_cv_w_no_unused_result,
 	       [OLD_CFLAGS="$CFLAGS"
-	        CFLAGS="$CFLAGS -Wno-error -Wno-unused-result"
+	        CFLAGS="$CFLAGS -Wno-error -Wunused-result"
 		# gcc doesn't warn about unknown flags unless it's
 		# also warning for some other purpose, hence the
 		# divide-by-0.  (We use -Wno-error to make sure the
 		# divide-by-0 doesn't cause this test to fail!)
+                #
+                # Also gcc is giving only warning for unknown flags of
+                # -Wno-XXX form. So in order to detect support we're
+                # using -Wunused-result which will cause gcc to give
+                # error which we can detect.
 	        AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, return 1/0)],
 	                          perftools_cv_w_no_unused_result=yes,
                                   perftools_cv_w_no_unused_result=no)
 	        CFLAGS="$OLD_CFLAGS"])
 AM_CONDITIONAL(HAVE_W_NO_UNUSED_RESULT,
 	       test "$perftools_cv_w_no_unused_result" = yes)
+
+AC_ARG_ENABLE([dynamic-sized-delete-support],
+              [AS_HELP_STRING([--enable-dynamic-sized-delete-support],
+                [try to build run-time switch for sized delete operator])],
+              [enable_dyn_sized_delete="$enableval"],
+              [enable_dyn_sized_delete=no])
+
+AS_IF([test "x$enable_dyn_sized_delete" = xyes],
+      [AC_DEFINE([ENABLE_DYNAMIC_SIZED_DELETE], 1,
+                 [Build runtime detection for sized delete])])
+
+AC_ARG_ENABLE([sized-delete],
+              [AS_HELP_STRING([--enable-sized-delete],
+                              [build sized delete operator])],
+              [enable_sized_delete="$enableval"],
+              [enable_sized_delete="no"])
+AS_IF([test "x$enable_sized_delete" = xyes],
+        [AC_DEFINE([ENABLE_SIZED_DELETE], 1, [Build sized deletion operators])
+         AC_MSG_NOTICE([Will build sized deallocation operators])],
+      [AS_IF([test "x$enable_dyn_sized_delete" = xyes],
+             [AC_MSG_NOTICE([Will build dynamically detected sized deallocation operators])],
+             [AC_MSG_NOTICE([Will build sized deallocation operators that ignore size])])])
+
+AC_CACHE_CHECK([if C++ compiler supports -fsized-deallocation],
+               [perftools_cv_sized_deallocation_result],
+               [AC_LANG_PUSH(C++)
+                OLD_CXXFLAGS="$CXXFLAGS"
+                CXXFLAGS="$CXXFLAGS -fsized-deallocation"
+                AC_LINK_IFELSE([AC_LANG_PROGRAM(
+                    [[#include <new>
+#include <stddef.h>]],
+                    [[static void (* volatile ptr)(void *, size_t) = ::operator delete; (*ptr)(0, 256);]])],
+                 perftools_cv_sized_deallocation_result=yes,
+                 perftools_cv_sized_deallocation_result=no)
+                CXXFLAGS="$OLD_CXXFLAGS"
+                AC_LANG_POP(C++)])
+
+AM_CONDITIONAL(HAVE_SIZED_DEALLOCATION,
+               test "$perftools_cv_sized_deallocation_result" = yes)
+
+AC_CACHE_CHECK([if C++ compiler supports std::align_val_t without options],
+               [perftools_cv_have_align_val_t],
+               [AC_LANG_PUSH(C++)
+                AC_LINK_IFELSE([AC_LANG_PROGRAM(
+                    [[#include <new>]],
+                    [[(::operator delete)((::operator new)(256, std::align_val_t(16)), std::align_val_t(16))]])],
+                 perftools_cv_have_align_val_t=yes,
+                 perftools_cv_have_align_val_t=no)
+                AC_LANG_POP(C++)])
+
+AC_CACHE_CHECK([if C++ compiler supports -faligned-new],
+               [perftools_cv_have_f_aligned_new],
+               [AC_LANG_PUSH(C++)
+                OLD_CXXFLAGS="$CXXFLAGS"
+                CXXFLAGS="$CXXFLAGS -faligned-new"
+                AC_LINK_IFELSE([AC_LANG_PROGRAM(
+                    [[#include <new>]],
+                    [[(::operator delete)((::operator new)(256, std::align_val_t(16)), std::align_val_t(16))]])],
+                 perftools_cv_have_f_aligned_new=yes,
+                 perftools_cv_have_f_aligned_new=no)
+                CXXFLAGS="$OLD_CXXFLAGS"
+                AC_LANG_POP(C++)])
+
+AM_CONDITIONAL(HAVE_F_ALIGNED_NEW,
+               test "$perftools_cv_have_f_aligned_new" = yes)
+
+AS_IF([test "$perftools_cv_have_align_val_t" = yes || test "$perftools_cv_have_f_aligned_new" = yes],
+        [AC_DEFINE([ENABLE_ALIGNED_NEW_DELETE], 1, [Build new/delete operators for overaligned types])
+         AC_MSG_NOTICE([Will build new/delete operators for overaligned types])],
+         AC_MSG_NOTICE([Will not build new/delete operators for overaligned types]))
+
+if test "$perftools_cv_have_align_val_t" = yes || test "$perftools_cv_have_f_aligned_new" = yes; then
+  AC_SUBST(ac_cv_have_std_align_val_t, 1)   # gperftools/tcmalloc.h and windows/gperftools/tcmalloc.h need this
+else
+  AC_SUBST(ac_cv_have_std_align_val_t, 0)
+fi
+
+
+AC_CACHE_CHECK([if target has _Unwind_Backtrace],
+               [perftools_cv_have_unwind_backtrace],
+               [AC_LANG_PUSH(C++)
+                AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+                    [[#include <unwind.h>]],
+                    [[&_Unwind_Backtrace]])],
+                 [perftools_cv_have_unwind_backtrace=yes],
+                 [perftools_cv_have_unwind_backtrace=no])
+                AC_LANG_POP(C++)])
+AS_IF([test "x$perftools_cv_have_unwind_backtrace" = xyes],
+      [AC_DEFINE(HAVE_UNWIND_BACKTRACE, 1, [Whether <unwind.h> contains _Unwind_Backtrace])])
+
+AS_IF([test "x$enable_backtrace" = xyes],
+      [default_emergency_malloc=yes],
+      [default_emergency_malloc=no])
+
+AS_IF([test "x$will_use_libunwind" = xyes],
+      [AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __arm__])],
+                         [default_emergency_malloc=yes])])
+
+AC_ARG_ENABLE([emergency-malloc],
+              [AS_HELP_STRING([--enable-emergency-malloc],
+                              [build emergency malloc feature])],
+              [enable_emergency_malloc="$enableval"],
+              [enable_emergency_malloc="$default_emergency_malloc"])
+
+AM_CONDITIONAL(BUILD_EMERGENCY_MALLOC, [test "x$enable_emergency_malloc" = xyes])
 
 # Defines PRIuS
 AC_COMPILER_CHARACTERISTICS
@@ -282,6 +468,14 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM(, [void *sp = __builtin_stack_pointer()])],
                 AC_MSG_RESULT([yes])],
                [AC_MSG_RESULT([no])])
 
+# Check for __builtin_expect()
+AC_MSG_CHECKING([for __builtin_expect()])
+AC_LINK_IFELSE([AC_LANG_PROGRAM(, return __builtin_expect(main != 0, 1))],
+               [AC_DEFINE(HAVE_BUILTIN_EXPECT, 1,
+                          Define to 1 if compiler supports __builtin_expect)
+                AC_MSG_RESULT([yes])],
+               [AC_MSG_RESULT([no])])
+
 # Check if __environ is available (for GetenvBeforeMain)
 AC_MSG_CHECKING([for __environ])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <unistd.h>],
@@ -295,24 +489,26 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <unistd.h>],
 # Note, however, that our code tickles a bug in gcc < 4.1.2
 # involving TLS and -fPIC (which our libraries will use) on x86:
 #   http://gcc.gnu.org/ml/gcc-bugs/2006-09/msg02275.html
+#
+# And mingw also does compile __thread but resultant code actually
+# fails to work correctly at least in some not so ancient version:
+# http://mingw-users.1079350.n2.nabble.com/gcc-4-4-multi-threaded-exception-handling-amp-thread-specifier-not-working-td3440749.html
+#
+# Also it was reported that earlier gcc versions for mips compile
+# __thread but it doesn't really work
 AC_MSG_CHECKING([for __thread])
-AC_LINK_IFELSE([AC_LANG_PROGRAM([#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)) && ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ < 1) || (__GNUC__ == 4 && __GNUC_MINOR__ == 1 && __GNUC_PATCHLEVEL__ < 2))
+AC_LINK_IFELSE([AC_LANG_PROGRAM([#if defined(__GNUC__) && ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ < 1) || (__GNUC__ == 4 && __GNUC_MINOR__ == 1 && __GNUC_PATCHLEVEL__ < 2))
 #error gcc has this bug: http://gcc.gnu.org/ml/gcc-bugs/2006-09/msg02275.html
-#endif], [static __thread int p = 0])],
+#elif defined(__MINGW32__)
+#error mingw doesnt really support tls
+#elif defined(__APPLE__)
+#error OSX __thread support is known to call malloc which makes it unsafe to use from malloc replacement
+#endif
+], [static __thread int p = 0])],
                [AC_DEFINE(HAVE_TLS, 1,
                           Define to 1 if compiler supports __thread)
                 AC_MSG_RESULT([yes])],
                [AC_MSG_RESULT([no])])
-
-# glibc's __malloc_hook/etc were declared volatile starting in glibc 2.14
-AC_MSG_CHECKING([if __malloc_hook is declared volatile])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <malloc.h>
-void* (* volatile __malloc_hook)(size_t, const void*) = 0;],)],
-                  [AC_DEFINE(MALLOC_HOOK_MAYBE_VOLATILE, volatile,
-                             Define to 'volatile' if __malloc_hook is declared volatile)
-                   AC_MSG_RESULT([yes])],
-                  [AC_DEFINE(MALLOC_HOOK_MAYBE_VOLATILE, )
-                   AC_MSG_RESULT([no])])
 
 # Nanosleep requires extra libraries on some architectures (solaris).
 # This sets NANOSLEEP_LIBS.  nanosleep doesn't exist on mingw, which
@@ -337,6 +533,26 @@ AC_CHECK_DECLS(uname,,, [#include <sys/utsname.h>])
 # In fact, a lot of the code in this directory depends on pthreads
 ACX_PTHREAD
 
+AC_LANG_SAVE
+AC_LANG_CPLUSPLUS
+AC_MSG_CHECKING([whether pthread symbols are available in C++ without including pthread.h])
+acx_pthread_despite_asking_for=no
+AC_LINK_IFELSE(
+  [AC_LANG_PROGRAM([
+      #include <string>
+      #include <vector>
+  ],[
+      pthread_t th; pthread_join(th, 0);
+  ])],[
+    acx_pthread_despite_asking_for=yes
+    AC_DEFINE(HAVE_PTHREAD_DESPITE_ASKING_FOR, 1, [defined to 1 if pthread symbols are exposed even without include pthread.h])
+    AC_DEFINE(HAVE_PTHREAD, 1, [])
+  ])
+AC_MSG_RESULT([$acx_pthread_despite_asking_for])
+AC_LANG_RESTORE
+
+AM_CONDITIONAL(HAVE_PTHREAD_DESPITE_ASKING_FOR, test x"$acx_pthread_despite_asking_for" = xyes)
+
 # Find out what namespace 'normal' STL code lives in
 AC_CXX_STL_NAMESPACE
 
@@ -345,6 +561,23 @@ AC_PROGRAM_INVOCATION_NAME
 
 # Make the install prefix available, to figure out where to look for pprof
 AC_INSTALL_PREFIX
+
+dnl only very recent mingw has sleep and nanosleep
+case "$host" in
+   *-mingw*)
+     AC_CHECK_DECLS([sleep], [], [], [#include <unistd.h>])
+     AC_CHECK_DECLS([nanosleep], [], [], [#include <time.h>])
+   ;;
+esac
+
+if test "x$enable_backtrace" = xyes; then
+  AC_CHECK_DECLS([backtrace], [], [], [#include <execinfo.h>])
+  save_LIBS=$LIBS
+  LIBS=$UNWIND_LIBS
+  AC_SEARCH_LIBS([backtrace], [execinfo])
+  UNWIND_LIBS=$LIBS
+  LIBS=$save_LIBS
+fi
 
 # For windows, this has a non-trivial value (__declspec(export)), but any
 # system that uses configure wants this to be the empty string.
@@ -392,13 +625,6 @@ AH_BOTTOM([
 AM_CONDITIONAL(MINGW, expr $host : '.*-mingw' >/dev/null 2>&1)
 AM_CONDITIONAL(OSX, expr $host : '.*-apple-darwin.*' >/dev/null 2>&1)
 
-# Redhat 7 (and below?) has sys/ucontext.h, but if you try to #include
-# it directly, the compiler gets upset.  So we pretend we don't have
-# it.
-if cat /etc/redhat-release 2>/dev/null | grep "Red Hat Linux release 7" >/dev/null 2>&1; then
-AC_DEFINE(HAVE_SYS_UCONTEXT_H, 0, [<sys/ucontext.h> is broken on redhat 7])
-fi
-
 # Export the --enable flags we set above.  We do this at the end so
 # other configure rules can enable or disable targets based on what
 # they find.
@@ -415,7 +641,26 @@ AM_CONDITIONAL(WITH_STACK_TRACE, test "$enable_cpu_profiler" = yes -o \
                                       "$enable_heap_profiler" = yes -o \
                                       "$enable_heap_checker" = yes)
 
+have_linux_sigev_thread_id=no
+AC_MSG_CHECKING([for Linux SIGEV_THREAD_ID])
+AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([[#include <signal.h>
+                           #include <time.h>]],
+                         [[return SIGEV_THREAD_ID || CLOCK_THREAD_CPUTIME_ID || __linux;]])],
+        [AC_DEFINE(HAVE_LINUX_SIGEV_THREAD_ID, 1,
+                  [Define if this is Linux that has SIGEV_THREAD_ID])
+         have_linux_sigev_thread_id=yes
+         AC_MSG_RESULT([yes])],
+        [AC_MSG_RESULT([no])])
+
 # Write generated configuration file
 AC_CONFIG_FILES([Makefile
                  src/gperftools/tcmalloc.h src/windows/gperftools/tcmalloc.h])
 AC_OUTPUT
+
+AS_IF([test "$x86_no_fp_by_default" = yes && test "x$enable_frame_pointers" != xyes && test "x$UNWIND_LIBS" = x && test "x$enable_minimal" != xyes],
+  [AS_IF([test "x$perftools_cv_have_unwind_backtrace" = xyes],
+    [AC_MSG_WARN([No frame pointers and no libunwind. Using experimental backtrace capturing via libgcc. Expect crashy cpu profiler.])],
+    [AS_IF([test "x$enable_backtrace" = xyes],
+      [AC_MSG_WARN([No frame pointers and no libunwind.  Using experimental backtrace(). Expect crashy cpu profiler.])],
+      [AC_MSG_FAILURE([No frame pointers and no libunwind. The compilation will fail])])])])

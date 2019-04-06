@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_BANNERS_APP_BANNER_METRICS_H_
 
 #include "chrome/browser/installable/installable_logging.h"
-#include "third_party/WebKit/public/platform/WebDisplayMode.h"
+#include "third_party/blink/public/common/manifest/web_display_mode.h"
 
 namespace banners {
 
@@ -48,7 +48,8 @@ enum DismissEvent {
   DISMISS_EVENT_CLOSE_BUTTON = 45,
   DISMISS_EVENT_INSTALL_TIMEOUT = 46,
   DISMISS_EVENT_DISMISSED = 47,
-  DISMISS_EVENT_MAX = 48,
+  DISMISS_EVENT_AMBIENT_INFOBAR_DISMISSED = 48,
+  DISMISS_EVENT_MAX = 49,
 };
 
 // This enum backs a UMA histogram, so it should be treated as append-only.

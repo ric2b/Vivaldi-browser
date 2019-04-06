@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -57,8 +58,9 @@ class SysAllocator;
 // aligned.
 //
 // Returns NULL when out of memory.
-extern void* TCMalloc_SystemAlloc(size_t bytes, size_t *actual_bytes,
-                                  size_t alignment = 0);
+extern PERFTOOLS_DLL_DECL
+void* TCMalloc_SystemAlloc(size_t bytes, size_t *actual_bytes,
+			   size_t alignment = 0);
 
 // This call is a hint to the operating system that the pages
 // contained in the specified range of memory will not be used for a
@@ -69,9 +71,22 @@ extern void* TCMalloc_SystemAlloc(size_t bytes, size_t *actual_bytes,
 // the address space next time they are touched, which can impact
 // performance.  (Only pages fully covered by the memory region will
 // be released, partial pages will not.)
-extern void TCMalloc_SystemRelease(void* start, size_t length);
+//
+// Returns false if release failed or not supported.
+extern PERFTOOLS_DLL_DECL
+bool TCMalloc_SystemRelease(void* start, size_t length);
+
+// Called to ressurect memory which has been previously released
+// to the system via TCMalloc_SystemRelease.  An attempt to
+// commit a page that is already committed does not cause this
+// function to fail.
+extern PERFTOOLS_DLL_DECL
+void TCMalloc_SystemCommit(void* start, size_t length);
 
 // The current system allocator.
-extern PERFTOOLS_DLL_DECL SysAllocator* sys_alloc;
+extern PERFTOOLS_DLL_DECL SysAllocator* tcmalloc_sys_alloc;
+
+// Number of bytes taken from system.
+extern PERFTOOLS_DLL_DECL size_t TCMalloc_SystemTaken;
 
 #endif /* TCMALLOC_SYSTEM_ALLOC_H_ */

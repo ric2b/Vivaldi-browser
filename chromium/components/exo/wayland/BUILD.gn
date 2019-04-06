@@ -30,27 +30,6 @@ if (use_ozone) {
   }
 }
 
-config("aura_shell_protocol_config") {
-  include_dirs = [ "." ]
-}
-
-source_set("aura_shell_protocol") {
-  sources = [
-    "aura-shell-client-protocol.h",
-    "aura-shell-protocol.c",
-    "aura-shell-server-protocol.h",
-  ]
-
-  deps = [
-    "//third_party/wayland:wayland_util",
-  ]
-
-  configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [ "//build/config/compiler:no_chromium_code" ]
-
-  public_configs = [ ":aura_shell_protocol_config" ]
-}
-
 source_set("wayland") {
   sources = [
     "scoped_wl.cc",
@@ -62,16 +41,18 @@ source_set("wayland") {
   defines = [ "EXO_IMPLEMENTATION" ]
 
   deps = [
-    ":aura_shell_protocol",
     "//ash/public/cpp",
     "//base",
     "//components/exo",
+    "//components/exo/wayland/public:aura_shell_protocol",
     "//device/gamepad",
     "//services/viz/public/interfaces",
     "//skia",
     "//third_party/wayland:wayland_server",
     "//third_party/wayland-protocols:alpha_compositing_protocol",
+    "//third_party/wayland-protocols:cursor_shapes_protocol",
     "//third_party/wayland-protocols:gaming_input_protocol",
+    "//third_party/wayland-protocols:input_timestamps_protocol",
     "//third_party/wayland-protocols:keyboard_configuration_protocol",
     "//third_party/wayland-protocols:keyboard_extension_protocol",
     "//third_party/wayland-protocols:pointer_gestures_protocol",
@@ -144,8 +125,8 @@ source_set("client_support") {
   ]
 
   deps = [
-    ":aura_shell_protocol",
     "//base",
+    "//components/exo/wayland/public:aura_shell_protocol",
     "//ui/gl",
     "//ui/gl/init",
   ]
@@ -153,6 +134,7 @@ source_set("client_support") {
   public_deps = [
     "//skia",
     "//third_party/wayland:wayland_client",
+    "//third_party/wayland-protocols:input_timestamps_protocol",
     "//third_party/wayland-protocols:linux_dmabuf_protocol",
     "//third_party/wayland-protocols:presentation_time_protocol",
   ]
@@ -180,9 +162,9 @@ executable("wayland_rects_client") {
   deps = [
     ":client_support",
     "//base",
-    "//build/config:exe_and_shlib_deps",
     "//skia",
     "//third_party/wayland:wayland_client",
+    "//third_party/wayland-protocols:input_timestamps_protocol",
     "//third_party/wayland-protocols:linux_dmabuf_protocol",
     "//third_party/wayland-protocols:presentation_time_protocol",
     "//ui/gfx/geometry",
@@ -232,7 +214,6 @@ executable("wayland_simple_client") {
     ":client_support",
     ":simple",
     "//base",
-    "//build/config:exe_and_shlib_deps",
   ]
 }
 
@@ -244,7 +225,6 @@ executable("wayland_subsurface_client") {
   deps = [
     ":client_support",
     "//base",
-    "//build/config:exe_and_shlib_deps",
     "//skia",
     "//third_party/wayland:wayland_client",
     "//third_party/wayland-protocols:linux_dmabuf_protocol",
@@ -292,7 +272,6 @@ executable("wayland_blur_client") {
     ":blur",
     ":client_support",
     "//base",
-    "//build/config:exe_and_shlib_deps",
   ]
 }
 
@@ -304,7 +283,6 @@ executable("wayland_info_client") {
   deps = [
     ":client_support",
     "//base",
-    "//build/config:exe_and_shlib_deps",
     "//third_party/wayland:wayland_client",
     "//ui/gfx/geometry",
   ]
@@ -333,7 +311,7 @@ test("wayland_client_perftests") {
     "//cc:test_support",
     "//components/exo",
     "//components/viz/test:test_support",
-    "//mojo/edk/embedder:headers",
+    "//mojo/core/embedder",
     "//testing/perf",
     "//ui/aura",
     "//ui/aura:test_support",
@@ -360,7 +338,6 @@ if (ozone_platform_gbm) {
     deps = [
       ":client_support",
       "//base",
-      "//build/config:exe_and_shlib_deps",
       "//skia",
       "//third_party/wayland:wayland_client",
       "//third_party/wayland-protocols:linux_dmabuf_protocol",

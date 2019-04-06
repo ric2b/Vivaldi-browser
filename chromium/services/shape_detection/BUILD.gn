@@ -8,8 +8,6 @@ import("//testing/test.gni")
 
 source_set("lib") {
   sources = [
-    "barcode_detection_impl.h",
-    "face_detection_provider_impl.h",
     "shape_detection_service.cc",
     "shape_detection_service.h",
     "text_detection_impl.h",
@@ -19,18 +17,26 @@ source_set("lib") {
     sources += [
       "barcode_detection_impl_mac.h",
       "barcode_detection_impl_mac.mm",
+      "barcode_detection_impl_mac_vision.h",
+      "barcode_detection_impl_mac_vision.mm",
+      "barcode_detection_provider_mac.h",
+      "barcode_detection_provider_mac.mm",
       "detection_utils_mac.h",
       "detection_utils_mac.mm",
       "face_detection_impl_mac.h",
       "face_detection_impl_mac.mm",
+      "face_detection_impl_mac_vision.h",
+      "face_detection_impl_mac_vision.mm",
+      "face_detection_provider_mac.h",
+      "face_detection_provider_mac.mm",
       "text_detection_impl_mac.h",
       "text_detection_impl_mac.mm",
     ]
     libs = [ "QuartzCore.framework" ]
   } else if (is_win) {
-    sources -= [ "face_detection_provider_impl.h" ]
     sources += [
-      "barcode_detection_impl.cc",
+      "barcode_detection_provider_impl.cc",
+      "barcode_detection_provider_impl.h",
       "detection_utils_win.cc",
       "detection_utils_win.h",
       "face_detection_impl_win.cc",
@@ -42,8 +48,10 @@ source_set("lib") {
     ]
   } else {
     sources += [
-      "barcode_detection_impl.cc",
+      "barcode_detection_provider_impl.cc",
+      "barcode_detection_provider_impl.h",
       "face_detection_provider_impl.cc",
+      "face_detection_provider_impl.h",
       "text_detection_impl.cc",
     ]
   }
@@ -58,7 +66,7 @@ source_set("lib") {
     "//base",
     "//media/capture",
     "//services/service_manager/public/cpp",
-    "//services/shape_detection/public/interfaces",
+    "//services/shape_detection/public/mojom",
   ]
 
   if (is_android) {
@@ -77,6 +85,7 @@ if (is_android) {
   android_library("shape_detection_java") {
     java_files = [
       "android/java/src/org/chromium/shape_detection/BarcodeDetectionImpl.java",
+      "android/java/src/org/chromium/shape_detection/BarcodeDetectionProviderImpl.java",
       "android/java/src/org/chromium/shape_detection/FaceDetectionImpl.java",
       "android/java/src/org/chromium/shape_detection/FaceDetectionImplGmsCore.java",
       "android/java/src/org/chromium/shape_detection/FaceDetectionProviderImpl.java",
@@ -91,12 +100,13 @@ if (is_android) {
       "$google_play_services_package:google_play_services_vision_common_java",
       "$google_play_services_package:google_play_services_vision_java",
       "//base:base_java",
-      "//mojo/android:system_java",
+      "//mojo/public/java:base_java",
       "//mojo/public/java:bindings_java",
       "//mojo/public/java:system_java",
-      "//services/service_manager/public/interfaces:interfaces_java",
+      "//mojo/public/java/system:system_impl_java",
       "//services/service_manager/public/java:service_manager_java",
-      "//services/shape_detection/public/interfaces:interfaces_java",
+      "//services/service_manager/public/mojom:mojom_java",
+      "//services/shape_detection/public/mojom:mojom_java",
       "//skia/public/interfaces:interfaces_java",
       "//ui/gfx/geometry/mojo:mojo_java",
     ]
@@ -138,5 +148,6 @@ source_set("tests") {
   data = [
     "//services/test/data/mona_lisa.jpg",
     "//services/test/data/text_detection.png",
+    "//services/test/data/the_beatles.jpg",
   ]
 }

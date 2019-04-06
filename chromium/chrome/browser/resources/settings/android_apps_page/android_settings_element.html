@@ -12,12 +12,13 @@
     <style include="settings-shared"></style>
     <div id="manageApps" class="settings-box first"
         on-keydown="onManageAndroidAppsKeydown_"
-        on-tap="onManageAndroidAppsTap_" actionable>
+        on-click="onManageAndroidAppsTap_" actionable>
       <div class="start">
         <div>$i18n{androidAppsManageApps}</div>
       </div>
-      <button class="icon-external" is="paper-icon-button-light">
-      </button>
+      <paper-icon-button-light class="icon-external">
+        <button></button>
+      </paper-icon-button-light>
     </div>
   </template>
   <script src="android_settings_element.js"></script>

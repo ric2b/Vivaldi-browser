@@ -36,7 +36,7 @@ if (generate_linker_map) {
   assert(
       is_official_build,
       "Linker map files should only be generated when is_official_build = true")
-  assert(target_os == "android" || target_os == "linux",
+  assert(current_os == "android" || target_os == "linux",
          "Linker map files should only be generated for Android and Linux")
 }
 
@@ -48,12 +48,7 @@ hermetic_xcode_path =
 declare_args() {
   if (is_clang) {
     # Clang compiler version. Clang files are placed at version-dependent paths.
-    if (llvm_force_head_revision) {
-      clang_version = "7.0.0"
-    } else {
-      # TODO(hans): Trunk was updated; remove after the next roll.
-      clang_version = "6.0.0"
-    }
+    clang_version = "7.0.0"
   }
 }
 
@@ -82,7 +77,7 @@ if (is_mac || is_ios) {
   # By appending .cr, we prevent name collisions with libraries already
   # loaded by the Android zygote.
   shlib_extension = ".cr.so"
-} else if (is_posix) {
+} else if (is_posix || is_fuchsia) {
   shlib_extension = ".so"
 } else if (is_win) {
   shlib_extension = ".dll"
@@ -91,7 +86,7 @@ if (is_mac || is_ios) {
 }
 
 # Prefix for shared library files.
-if (is_posix) {
+if (is_posix || is_fuchsia) {
   shlib_prefix = "lib"
 } else {
   shlib_prefix = ""
@@ -109,7 +104,7 @@ if (host_os == "win") {
   _tool_wrapper_path =
       rebase_path("//build/toolchain/win/tool_wrapper.py", root_build_dir)
 
-  stamp_command = "$python_path $_tool_wrapper_path stamp {{output}}"
+  stamp_command = "cmd /c type nul > \"{{output}}\""
   copy_command =
       "$python_path $_tool_wrapper_path recursive-mirror {{source}} {{output}}"
 } else {

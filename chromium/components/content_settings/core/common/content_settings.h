@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -46,7 +45,7 @@ int ContentSettingTypeToHistogramValue(ContentSettingsType content_setting,
 struct ContentSettingPatternSource {
   ContentSettingPatternSource(const ContentSettingsPattern& primary_pattern,
                               const ContentSettingsPattern& secondary_patttern,
-                              std::unique_ptr<base::Value> setting_value,
+                              base::Value setting_value,
                               const std::string& source,
                               bool incognito);
   ContentSettingPatternSource(const ContentSettingPatternSource& other);
@@ -58,7 +57,7 @@ struct ContentSettingPatternSource {
 
   ContentSettingsPattern primary_pattern;
   ContentSettingsPattern secondary_pattern;
-  std::unique_ptr<base::Value> setting_value;
+  base::Value setting_value;
   std::string source;
   bool incognito;
 };
@@ -72,6 +71,7 @@ struct RendererContentSettingRules {
   ContentSettingsForOneType script_rules;
   ContentSettingsForOneType autoplay_rules;
   ContentSettingsForOneType client_hints_rules;
+  ContentSettingsForOneType popup_redirect_rules;
 };
 
 namespace content_settings {

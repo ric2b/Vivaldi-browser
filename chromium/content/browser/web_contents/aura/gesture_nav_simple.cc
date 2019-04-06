@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "cc/paint/paint_flags.h"
@@ -555,6 +554,12 @@ bool GestureNavSimple::OnOverscrollUpdate(float delta_x, float delta_y) {
 }
 
 void GestureNavSimple::OnOverscrollComplete(OverscrollMode overscroll_mode) {
+  if (mode_ == OverscrollMode::OVERSCROLL_NONE) {
+    // Previous mode change has been ignored because of overscroll-behavior
+    // value; so, ignore this, too.
+    return;
+  }
+
   DCHECK_EQ(mode_, overscroll_mode);
 
   mode_ = OVERSCROLL_NONE;
@@ -597,7 +602,31 @@ void GestureNavSimple::OnOverscrollComplete(OverscrollMode overscroll_mode) {
 
 void GestureNavSimple::OnOverscrollModeChange(OverscrollMode old_mode,
                                               OverscrollMode new_mode,
-                                              OverscrollSource source) {
+                                              OverscrollSource source,
+                                              cc::OverscrollBehavior behavior) {
+  DCHECK(old_mode == OverscrollMode::OVERSCROLL_NONE ||
+         new_mode == OverscrollMode::OVERSCROLL_NONE);
+
+  // Do not start a new gesture-nav if overscroll-behavior-x is not auto.
+  if ((new_mode == OverscrollMode::OVERSCROLL_EAST ||
+       new_mode == OverscrollMode::OVERSCROLL_WEST) &&
+      behavior.x != cc::OverscrollBehavior::kOverscrollBehaviorTypeAuto) {
+    return;
+  }
+
+  // Do not start a new pull-to-refresh if overscroll-behavior-y is not auto.
+  if (new_mode == OverscrollMode::OVERSCROLL_SOUTH &&
+      behavior.y != cc::OverscrollBehavior::kOverscrollBehaviorTypeAuto) {
+    return;
+  }
+
+  if (old_mode != OverscrollMode::OVERSCROLL_NONE &&
+      mode_ == OverscrollMode::OVERSCROLL_NONE) {
+    // Previous mode change has been ignored because of overscroll-behavior
+    // value; so, ignore this one, too.
+    return;
+  }
+
   DCHECK_EQ(mode_, old_mode);
   if (mode_ == new_mode)
     return;
@@ -625,16 +654,16 @@ void GestureNavSimple::OnOverscrollModeChange(OverscrollMode old_mode,
       UmaNavigationType::NAVIGATION_TYPE_COUNT);
 
   const bool is_touchpad = source == OverscrollSource::TOUCHPAD;
-  const float start_threshold = GetOverscrollConfig(
-      is_touchpad ? OverscrollConfig::THRESHOLD_START_TOUCHPAD
-                  : OverscrollConfig::THRESHOLD_START_TOUCHSCREEN);
+  const float start_threshold = OverscrollConfig::GetThreshold(
+      is_touchpad ? OverscrollConfig::Threshold::kStartTouchpad
+                  : OverscrollConfig::Threshold::kStartTouchscreen);
   const gfx::Size size = GetDisplaySize();
   const int max_size = std::max(size.width(), size.height());
   completion_threshold_ =
-      max_size * GetOverscrollConfig(
+      max_size * OverscrollConfig::GetThreshold(
                      is_touchpad
-                         ? OverscrollConfig::THRESHOLD_COMPLETE_TOUCHPAD
-                         : OverscrollConfig::THRESHOLD_COMPLETE_TOUCHSCREEN) -
+                         ? OverscrollConfig::Threshold::kCompleteTouchpad
+                         : OverscrollConfig::Threshold::kCompleteTouchscreen) -
       start_threshold;
   DCHECK_LE(0, completion_threshold_);
 

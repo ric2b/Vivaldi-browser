@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/fake_input_method_delegate.h"
@@ -119,6 +120,10 @@ class TestInputMethodManager : public MockInputMethodManager {
   void ActivateInputMethodMenuItem(const std::string& key) override {
     last_activate_menu_item_key_ = key;
   }
+  void OverrideKeyboardKeyset(
+      chromeos::input_method::mojom::ImeKeyset keyset) override {
+    keyboard_keyset_ = keyset;
+  }
 
   InputMethodUtil* GetInputMethodUtil() override { return &util_; }
   scoped_refptr<InputMethodManager::State> GetActiveIMEState() override {
@@ -131,6 +136,7 @@ class TestInputMethodManager : public MockInputMethodManager {
   int add_menu_observer_count_ = 0;
   int remove_menu_observer_count_ = 0;
   std::string last_activate_menu_item_key_;
+  chromeos::input_method::mojom::ImeKeyset keyboard_keyset_;
   FakeInputMethodDelegate delegate_;
   InputMethodUtil util_;
 
@@ -190,6 +196,19 @@ TEST_F(ImeControllerClientTest, CapsLock) {
   client.OnCapsLockChanged(false);
   client.FlushMojoForTesting();
   EXPECT_FALSE(ime_controller_.is_caps_lock_enabled_);
+}
+
+TEST_F(ImeControllerClientTest, LayoutName) {
+  ImeControllerClient client(&input_method_manager_);
+  client.InitForTesting(ime_controller_.CreateInterfacePtr());
+
+  client.OnLayoutChanging("us(dvorak)");
+  client.FlushMojoForTesting();
+  EXPECT_EQ("us(dvorak)", ime_controller_.keyboard_layout_name_);
+
+  client.OnLayoutChanging("us");
+  client.FlushMojoForTesting();
+  EXPECT_EQ("us", ime_controller_.keyboard_layout_name_);
 }
 
 TEST_F(ImeControllerClientTest, ExtraInputEnabledStateChange) {
@@ -313,6 +332,18 @@ TEST_F(ImeControllerClientTest, ActivateImeMenuItem) {
   ImeControllerClient client(&input_method_manager_);
   client.ActivateImeMenuItem("key1");
   EXPECT_EQ("key1", input_method_manager_.last_activate_menu_item_key_);
+}
+
+TEST_F(ImeControllerClientTest, OverrideKeyboardKeyset) {
+  ImeControllerClient client(&input_method_manager_);
+  bool callback_called = false;
+  client.OverrideKeyboardKeyset(
+      chromeos::input_method::mojom::ImeKeyset::kEmoji,
+      base::BindLambdaForTesting(
+          [&callback_called]() { callback_called = true; }));
+  EXPECT_EQ(chromeos::input_method::mojom::ImeKeyset::kEmoji,
+            input_method_manager_.keyboard_keyset_);
+  EXPECT_TRUE(callback_called);
 }
 
 }  // namespace

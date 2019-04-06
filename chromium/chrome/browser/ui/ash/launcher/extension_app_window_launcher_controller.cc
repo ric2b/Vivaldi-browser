@@ -11,7 +11,6 @@
 #include "ash/public/cpp/window_properties.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/extension_app_window_launcher_item_controller.h"
@@ -31,11 +30,10 @@ namespace {
 // Get the ShelfID for a given |app_window|.
 ash::ShelfID GetShelfId(AppWindow* app_window) {
   // Set launch_id default value to an empty string. If showInShelf parameter
-  // is true or the window type is panel and the window key is not empty, its
-  // value is appended to the launch_id. Otherwise, if the window key is
-  // empty, the session_id is used.
+  // is true and the window key is not empty, its value is appended to the
+  // launch_id. Otherwise, if the window key is empty, the session_id is used.
   std::string launch_id;
-  if (app_window->show_in_shelf() || app_window->window_type_is_panel()) {
+  if (app_window->show_in_shelf()) {
     if (!app_window->window_key().empty())
       launch_id = app_window->window_key();
     else
@@ -129,14 +127,11 @@ void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
   window->SetProperty(ash::kShelfIDKey, new std::string(shelf_id.Serialize()));
   // TODO(msw): Set shelf item types earlier to avoid ShelfWindowWatcher races.
   // (maybe use Widget::InitParams::mus_properties in cash too crbug.com/750334)
-  window->SetProperty<int>(
-      ash::kShelfItemTypeKey,
-      app_window->window_type_is_panel() ? ash::TYPE_APP_PANEL : ash::TYPE_APP);
+  window->SetProperty<int>(ash::kShelfItemTypeKey, ash::TYPE_APP);
 
   // Windows created by IME extension should be treated the same way as the
   // virtual keyboard window, which does not register itself in launcher.
-  // Ash's ShelfWindowWatcher handles app panel windows separately.
-  if (app_window->is_ime_window() || app_window->window_type_is_panel())
+  if (app_window->is_ime_window())
     return;
 
   // Get the app's shelf identifier and add an entry to the map.
@@ -159,8 +154,8 @@ void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
 
     // Check for any existing pinned shelf item with a matching |shelf_id|.
     if (!owner()->GetItem(shelf_id)) {
-      owner()->CreateAppLauncherItem(std::move(controller),
-                                     ash::STATUS_RUNNING);
+      owner()->CreateAppLauncherItem(std::move(controller), ash::STATUS_RUNNING,
+                                     app_window->GetTitle());
     } else {
       owner()->shelf_model()->SetShelfItemDelegate(shelf_id,
                                                    std::move(controller));

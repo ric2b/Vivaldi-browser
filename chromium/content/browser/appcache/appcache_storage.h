@@ -19,6 +19,7 @@
 #include "content/browser/appcache/appcache_working_set.h"
 #include "content/common/content_export.h"
 #include "net/base/completion_callback.h"
+#include "url/origin.h"
 
 class GURL;
 
@@ -44,7 +45,7 @@ struct HttpResponseInfoIOBuffer;
 
 class CONTENT_EXPORT AppCacheStorage {
  public:
-  typedef std::map<GURL, int64_t> UsageMap;
+  using UsageMap = std::map<url::Origin, int64_t>;
 
   class CONTENT_EXPORT Delegate {
    public:
@@ -224,14 +225,13 @@ class CONTENT_EXPORT AppCacheStorage {
   friend class content::appcache_storage_unittest::AppCacheStorageTest;
 
   // Helper to call a collection of delegates.
-  #define FOR_EACH_DELEGATE(delegates, func_and_args)                \
-    do {                                                             \
-      for (DelegateReferenceVector::iterator it = delegates.begin(); \
-           it != delegates.end(); ++it) {                            \
-        if (it->get()->delegate)                                     \
-          it->get()->delegate->func_and_args;                        \
-      }                                                              \
-    } while (0)
+#define FOR_EACH_DELEGATE(delegates, func_and_args)                 \
+  do {                                                              \
+    for (const scoped_refptr<DelegateReference>& ref : delegates) { \
+      if (ref.get()->delegate)                                      \
+        ref.get()->delegate->func_and_args;                         \
+    }                                                               \
+  } while (0)
 
   // Helper used to manage multiple references to a 'delegate' and to
   // allow all pending callbacks to that delegate to be easily cancelled.
@@ -253,9 +253,8 @@ class CONTENT_EXPORT AppCacheStorage {
 
     virtual ~DelegateReference();
   };
-  typedef std::map<Delegate*, DelegateReference*> DelegateReferenceMap;
-  typedef std::vector<scoped_refptr<DelegateReference> >
-      DelegateReferenceVector;
+  using DelegateReferenceMap = std::map<Delegate*, DelegateReference*>;
+  using DelegateReferenceVector = std::vector<scoped_refptr<DelegateReference>>;
 
   // Helper used to manage an async LoadResponseInfo calls on behalf of
   // multiple callers.
@@ -314,9 +313,9 @@ class CONTENT_EXPORT AppCacheStorage {
   int64_t NewResponseId() { return ++last_response_id_; }
 
   // Helpers to query and notify the QuotaManager.
-  void UpdateUsageMapAndNotify(const GURL& origin, int64_t new_usage);
+  void UpdateUsageMapAndNotify(const url::Origin& origin, int64_t new_usage);
   void ClearUsageMapAndNotify();
-  void NotifyStorageAccessed(const GURL& origin);
+  void NotifyStorageAccessed(const url::Origin& origin);
 
   // The last storage id used for different object types.
   int64_t last_cache_id_;

@@ -54,6 +54,11 @@ const char kValueRequestActiveDirectoryEnrollPlayUser[] =
 const char kValueRequestActiveDirectoryPlayActivity[] =
     "active_directory_play_activity";
 const char kValueRequestCheckDeviceLicense[] = "check_device_license";
+const char kValueRequestAppInstallReport[] = "app_install_report";
+const char kValueRequestTokenEnrollment[] = "register_browser";
+const char kValueRequestChromeDesktopReport[] = "chrome_desktop_report";
+const char kValueRequestInitialEnrollmentStateRetrieval[] =
+    "device_initial_enrollment_state";
 
 const char kChromeDevicePolicyType[] = "google/chromeos/device";
 #if defined(OS_CHROMEOS)
@@ -69,6 +74,10 @@ const char kChromePublicAccountPolicyType[] = "google/chromeos/publicaccount";
 const char kChromeExtensionPolicyType[] = "google/chrome/extension";
 const char kChromeSigninExtensionPolicyType[] =
     "google/chromeos/signinextension";
+const char kChromeMachineLevelUserCloudPolicyType[] =
+    "google/chrome/machine-level-user";
+const char kChromeMachineLevelExtensionCloudPolicyType[] =
+    "google/chrome/machine-level-extension";
 
 }  // namespace dm_protocol
 

@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2007, Google Inc.
  * All rights reserved.
  *
@@ -62,6 +63,11 @@
 #include <sys/types.h>       /* for _off_t */
 #include <assert.h>
 #include <stdlib.h>          /* for rand, srand, _strtoxxx */
+
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+#define _TIMESPEC_DEFINED
+#include <time.h>
+#endif
 
 /*
  * 4018: signed/unsigned mismatch is common (and ok for signed_i < unsigned_i)
@@ -132,7 +138,14 @@ inline bool pthread_equal(pthread_t left, pthread_t right) {
   return left == right;
 }
 
+/*
+ * windows/port.h defines compatibility APIs for several .h files, which
+ * we therefore shouldn't be #including directly.  This hack keeps us from
+ * doing so.  TODO(csilvers): do something more principled.
+ */
+#define GOOGLE_MAYBE_THREADS_H_ 1
 /* This replaces maybe_threads.{h,cc} */
+
 EXTERN_C pthread_key_t PthreadKeyCreate(void (*destr_fn)(void*));  /* port.cc */
 
 inline int perftools_pthread_key_create(pthread_key_t *pkey,
@@ -164,11 +177,12 @@ EXTERN_C int perftools_pthread_once(pthread_once_t *once_control,
                                     void (*init_routine)(void));
 
 #endif  /* __cplusplus */
-#endif  /* HAVE_PTHREAD */
 
 inline void sched_yield(void) {
   Sleep(0);
 }
+
+#endif  /* HAVE_PTHREAD */
 
 /*
  * __declspec(thread) isn't usable in a dll opened via LoadLibrary().
@@ -326,6 +340,7 @@ inline int snprintf(char *str, size_t size, const char *format, ...) {
 }
 #endif
 
+#ifndef HAVE_INTTYPES_H
 #define PRIx64  "I64x"
 #define SCNx64  "I64x"
 #define PRId64  "I64d"
@@ -337,6 +352,7 @@ inline int snprintf(char *str, size_t size, const char *format, ...) {
 #else
 # define PRIuPTR "lu"
 # define PRIxPTR "lx"
+#endif
 #endif
 
 /* ----------------------------------- FILE IO */
@@ -390,7 +406,10 @@ EXTERN_C PERFTOOLS_DLL_DECL void WriteToStderr(const char* buf, int len);
 
 /* ----------------------------------- SYSTEM/PROCESS */
 
+#ifndef HAVE_PID_T
 typedef int pid_t;
+#endif
+
 #if __STDC__ && !defined(__MINGW32__)
 inline pid_t getpid(void) { return _getpid(); }
 #endif
@@ -404,16 +423,23 @@ inline int poll(struct pollfd* fds, int nfds, int timeout) {
   return 0;
 }
 
-EXTERN_C int getpagesize();   /* in port.cc */
+EXTERN_C PERFTOOLS_DLL_DECL int getpagesize();   /* in port.cc */
 
 /* ----------------------------------- OTHER */
 
 inline void srandom(unsigned int seed) { srand(seed); }
 inline long random(void) { return rand(); }
+
+#ifndef HAVE_DECL_SLEEP
+#define HAVE_DECL_SLEEP 0
+#endif
+
+#if !HAVE_DECL_SLEEP
 inline unsigned int sleep(unsigned int seconds) {
   Sleep(seconds * 1000);
   return 0;
 }
+#endif
 
 // mingw64 seems to define timespec (though mingw.org mingw doesn't),
 // protected by the _TIMESPEC_DEFINED macro.
@@ -424,12 +450,20 @@ struct timespec {
 };
 #endif
 
+#ifndef HAVE_DECL_NANOSLEEP
+#define HAVE_DECL_NANOSLEEP 0
+#endif
+
+// latest mingw64 has nanosleep. Earlier mingw and MSVC do not
+#if !HAVE_DECL_NANOSLEEP
 inline int nanosleep(const struct timespec *req, struct timespec *rem) {
   Sleep(req->tv_sec * 1000 + req->tv_nsec / 1000000);
   return 0;
 }
+#endif
 
 #ifndef __MINGW32__
+#if defined(_MSC_VER) && _MSC_VER < 1800
 inline long long int strtoll(const char *nptr, char **endptr, int base) {
     return _strtoi64(nptr, endptr, base);
 }
@@ -440,6 +474,7 @@ inline unsigned long long int strtoull(const char *nptr, char **endptr,
 inline long long int strtoq(const char *nptr, char **endptr, int base) {
     return _strtoi64(nptr, endptr, base);
 }
+#endif
 inline unsigned long long int strtouq(const char *nptr, char **endptr,
                                       int base) {
     return _strtoui64(nptr, endptr, base);
@@ -455,16 +490,6 @@ inline long long atoll(const char *nptr) {
 
 /* tcmalloc.cc calls this so we can patch VirtualAlloc() et al. */
 extern void PatchWindowsFunctions();
-
-// ----------------------------------- BUILD-SPECIFIC
-
-/*
- * windows/port.h defines compatibility APIs for several .h files, which
- * we therefore shouldn't be #including directly.  This hack keeps us from
- * doing so.  TODO(csilvers): do something more principled.
- */
-#define GOOGLE_MAYBE_THREADS_H_ 1
-
 
 #endif  /* _WIN32 */
 

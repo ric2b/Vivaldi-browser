@@ -11,9 +11,10 @@
 #include "components/payments/core/payment_request_delegate.h"
 #include "content/public/browser/stored_payment_app.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
 
 namespace payments {
 namespace {
@@ -76,7 +77,7 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
     modifier_1->total->amount->currency = "USD";
     modifier_1->total->amount->value = "4.00";
     modifier_1->method_data = mojom::PaymentMethodData::New();
-    modifier_1->method_data->supported_methods = {"basic-card"};
+    modifier_1->method_data->supported_method = "basic-card";
     details->modifiers.push_back(std::move(modifier_1));
 
     mojom::PaymentDetailsModifierPtr modifier_2 =
@@ -86,7 +87,7 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
     modifier_2->total->amount->currency = "USD";
     modifier_2->total->amount->value = "3.00";
     modifier_2->method_data = mojom::PaymentMethodData::New();
-    modifier_2->method_data->supported_methods = {"https://bobpay.com"};
+    modifier_2->method_data->supported_method = "https://bobpay.com";
     details->modifiers.push_back(std::move(modifier_2));
 
     mojom::PaymentDetailsModifierPtr modifier_3 =
@@ -96,12 +97,12 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
     modifier_3->total->amount->currency = "USD";
     modifier_3->total->amount->value = "2.00";
     modifier_3->method_data = mojom::PaymentMethodData::New();
-    modifier_3->method_data->supported_methods = {"https://alicepay.com"};
+    modifier_3->method_data->supported_method = "https://alicepay.com";
     details->modifiers.push_back(std::move(modifier_3));
 
     std::vector<mojom::PaymentMethodDataPtr> method_data;
     mojom::PaymentMethodDataPtr entry_1 = mojom::PaymentMethodData::New();
-    entry_1->supported_methods.push_back("basic-card");
+    entry_1->supported_method = "basic-card";
     entry_1->supported_networks.push_back(mojom::BasicCardNetwork::UNIONPAY);
     entry_1->supported_networks.push_back(mojom::BasicCardNetwork::JCB);
     entry_1->supported_networks.push_back(mojom::BasicCardNetwork::VISA);
@@ -109,7 +110,7 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
     method_data.push_back(std::move(entry_1));
 
     mojom::PaymentMethodDataPtr entry_2 = mojom::PaymentMethodData::New();
-    entry_2->supported_methods.push_back("https://bobpay.com");
+    entry_2->supported_method = "https://bobpay.com";
     method_data.push_back(std::move(entry_2));
 
     spec_ = std::make_unique<PaymentRequestSpec>(
@@ -157,6 +158,7 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
 
  private:
   MockPaymentRequestDelegate delegate_;
+  content::TestBrowserThreadBundle thread_bundle_;
   content::TestBrowserContext browser_context_;
 
   std::unique_ptr<PaymentRequestSpec> spec_;
@@ -173,8 +175,7 @@ TEST_F(ServiceWorkerPaymentInstrumentTest, InstrumentInfo) {
   EXPECT_TRUE(GetInstrument()->IsExactlyMatchingMerchantRequest());
 
   EXPECT_EQ(base::UTF16ToUTF8(GetInstrument()->GetLabel()), "bobpay");
-  EXPECT_EQ(base::UTF16ToUTF8(GetInstrument()->GetSublabel()),
-            "https://bobpay.com/");
+  EXPECT_EQ(base::UTF16ToUTF8(GetInstrument()->GetSublabel()), "bobpay.com");
   EXPECT_NE(GetInstrument()->icon_image_skia(), nullptr);
 }
 
@@ -186,18 +187,15 @@ TEST_F(ServiceWorkerPaymentInstrumentTest, CreatePaymentRequestEventData) {
   mojom::PaymentRequestEventDataPtr event_data =
       CreatePaymentRequestEventData();
 
-  EXPECT_EQ(event_data->top_level_origin.spec(), "https://testmerchant.com/");
+  EXPECT_EQ(event_data->top_origin.spec(), "https://testmerchant.com/");
   EXPECT_EQ(event_data->payment_request_origin.spec(),
             "https://testmerchant.com/bobpay");
 
   EXPECT_EQ(event_data->method_data.size(), 2U);
-  EXPECT_EQ(event_data->method_data[0]->supported_methods.size(), 1U);
-  EXPECT_EQ(event_data->method_data[0]->supported_methods[0], "basic-card");
+  EXPECT_EQ(event_data->method_data[0]->supported_method, "basic-card");
   EXPECT_EQ(event_data->method_data[0]->supported_networks.size(), 3U);
   EXPECT_EQ(event_data->method_data[0]->supported_types.size(), 1U);
-  EXPECT_EQ(event_data->method_data[1]->supported_methods.size(), 1U);
-  EXPECT_EQ(event_data->method_data[1]->supported_methods[0],
-            "https://bobpay.com");
+  EXPECT_EQ(event_data->method_data[1]->supported_method, "https://bobpay.com");
 
   EXPECT_EQ(event_data->total->currency, "USD");
   EXPECT_EQ(event_data->total->value, "5.00");
@@ -206,11 +204,11 @@ TEST_F(ServiceWorkerPaymentInstrumentTest, CreatePaymentRequestEventData) {
   EXPECT_EQ(event_data->modifiers.size(), 2U);
   EXPECT_EQ(event_data->modifiers[0]->total->amount->value, "4.00");
   EXPECT_EQ(event_data->modifiers[0]->total->amount->currency, "USD");
-  EXPECT_EQ(event_data->modifiers[0]->method_data->supported_methods[0],
+  EXPECT_EQ(event_data->modifiers[0]->method_data->supported_method,
             "basic-card");
   EXPECT_EQ(event_data->modifiers[1]->total->amount->value, "3.00");
   EXPECT_EQ(event_data->modifiers[1]->total->amount->currency, "USD");
-  EXPECT_EQ(event_data->modifiers[1]->method_data->supported_methods[0],
+  EXPECT_EQ(event_data->modifiers[1]->method_data->supported_method,
             "https://bobpay.com");
 }
 
@@ -226,19 +224,17 @@ TEST_F(ServiceWorkerPaymentInstrumentTest, CreateCanMakePaymentEvent) {
   event_data = CreateCanMakePaymentEventData();
   EXPECT_FALSE(event_data.is_null());
 
-  EXPECT_EQ(event_data->top_level_origin.spec(), "https://testmerchant.com/");
+  EXPECT_EQ(event_data->top_origin.spec(), "https://testmerchant.com/");
   EXPECT_EQ(event_data->payment_request_origin.spec(),
             "https://testmerchant.com/bobpay");
 
   EXPECT_EQ(event_data->method_data.size(), 1U);
-  EXPECT_EQ(event_data->method_data[0]->supported_methods.size(), 1U);
-  EXPECT_EQ(event_data->method_data[0]->supported_methods[0],
-            "https://bobpay.com");
+  EXPECT_EQ(event_data->method_data[0]->supported_method, "https://bobpay.com");
 
   EXPECT_EQ(event_data->modifiers.size(), 1U);
   EXPECT_EQ(event_data->modifiers[0]->total->amount->value, "3.00");
   EXPECT_EQ(event_data->modifiers[0]->total->amount->currency, "USD");
-  EXPECT_EQ(event_data->modifiers[0]->method_data->supported_methods[0],
+  EXPECT_EQ(event_data->modifiers[0]->method_data->supported_method,
             "https://bobpay.com");
 }
 
@@ -246,31 +242,25 @@ TEST_F(ServiceWorkerPaymentInstrumentTest, CreateCanMakePaymentEvent) {
 TEST_F(ServiceWorkerPaymentInstrumentTest, IsValidForModifier) {
   CreateServiceWorkerPaymentInstrument(true);
 
-  EXPECT_TRUE(GetInstrument()->IsValidForModifier({"basic-card"}, false, {},
-                                                  false, {}));
+  EXPECT_TRUE(
+      GetInstrument()->IsValidForModifier("basic-card", false, {}, false, {}));
 
-  EXPECT_TRUE(GetInstrument()->IsValidForModifier({"https://bobpay.com"}, true,
+  EXPECT_TRUE(GetInstrument()->IsValidForModifier("https://bobpay.com", true,
                                                   {}, true, {}));
 
-  EXPECT_TRUE(GetInstrument()->IsValidForModifier(
-      {"basic-card", "https://bobpay.com"}, false, {}, false, {}));
-
-  EXPECT_TRUE(GetInstrument()->IsValidForModifier(
-      {"basic-card", "https://bobpay.com"}, true, {"mastercard"}, false, {}));
-
-  EXPECT_FALSE(GetInstrument()->IsValidForModifier({"basic-card"}, true,
+  EXPECT_FALSE(GetInstrument()->IsValidForModifier("basic-card", true,
                                                    {"mastercard"}, false, {}));
 
-  EXPECT_TRUE(GetInstrument()->IsValidForModifier({"basic-card"}, true,
+  EXPECT_TRUE(GetInstrument()->IsValidForModifier("basic-card", true,
                                                   {"unionpay"}, false, {}));
 
   EXPECT_TRUE(GetInstrument()->IsValidForModifier(
-      {"basic-card"}, true, {"unionpay"}, true,
+      "basic-card", true, {"unionpay"}, true,
       {autofill::CreditCard::CardType::CARD_TYPE_DEBIT,
        autofill::CreditCard::CardType::CARD_TYPE_CREDIT}));
 
   EXPECT_FALSE(GetInstrument()->IsValidForModifier(
-      {"basic-card"}, true, {"unionpay"}, true,
+      "basic-card", true, {"unionpay"}, true,
       {autofill::CreditCard::CardType::CARD_TYPE_CREDIT}));
 }
 

@@ -4,7 +4,7 @@
 
 #include "ash/system/rotation/tray_rotation_lock.h"
 
-#include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -173,7 +173,7 @@ void RotationLockDefaultView::OnUserRotationLockChanged() {
 TrayRotationLock::TrayRotationLock(SystemTray* system_tray)
     : TrayImageItem(system_tray,
                     kSystemTrayRotationLockLockedIcon,
-                    UMA_ROTATION_LOCK) {
+                    SystemTrayItemUmaType::UMA_ROTATION_LOCK) {
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
 

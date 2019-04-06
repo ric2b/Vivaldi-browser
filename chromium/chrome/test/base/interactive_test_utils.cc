@@ -5,9 +5,13 @@
 #include "chrome/test/base/interactive_test_utils.h"
 
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 namespace ui_test_utils {
@@ -24,6 +28,75 @@ bool GetNativeWindow(const Browser* browser, gfx::NativeWindow* native_window) {
 }
 
 }  // namespace
+
+BrowserActivationWaiter::BrowserActivationWaiter(const Browser* browser)
+    : browser_(browser), observed_(false) {
+  // When the active browser closes, the next "last active browser" in the
+  // BrowserList might not be immediately activated. So we need to wait for the
+  // "last active browser" to actually be active.
+  if (chrome::FindLastActive() == browser_ && browser_->window()->IsActive()) {
+    observed_ = true;
+    return;
+  }
+  BrowserList::AddObserver(this);
+}
+
+BrowserActivationWaiter::~BrowserActivationWaiter() {}
+
+void BrowserActivationWaiter::WaitForActivation() {
+  if (observed_)
+    return;
+  DCHECK(!run_loop_.running()) << "WaitForActivation() can be called at most "
+                                  "once. Construct a new "
+                                  "BrowserActivationWaiter instead.";
+  run_loop_.Run();
+}
+
+void BrowserActivationWaiter::OnBrowserSetLastActive(Browser* browser) {
+  if (browser != browser_)
+    return;
+
+// On Mac, BrowserWindowCocoa::Show() sets the active browser before the
+// window becomes the key window.
+#if !defined(OS_MACOSX)
+  EXPECT_TRUE(browser->window()->IsActive());
+#endif
+
+  observed_ = true;
+  BrowserList::RemoveObserver(this);
+  if (run_loop_.running())
+    run_loop_.Quit();
+}
+
+BrowserDeactivationWaiter::BrowserDeactivationWaiter(const Browser* browser)
+    : browser_(browser), observed_(false) {
+  if (chrome::FindLastActive() != browser_ && !browser->window()->IsActive()) {
+    observed_ = true;
+    return;
+  }
+  BrowserList::AddObserver(this);
+}
+
+BrowserDeactivationWaiter::~BrowserDeactivationWaiter() = default;
+
+void BrowserDeactivationWaiter::WaitForDeactivation() {
+  if (observed_)
+    return;
+  DCHECK(!run_loop_.running()) << "WaitForDeactivation() can be called at most "
+                                  "once. Construct a new "
+                                  "BrowserDeactivationWaiter instead.";
+  run_loop_.Run();
+}
+
+void BrowserDeactivationWaiter::OnBrowserNoLongerActive(Browser* browser) {
+  if (browser != browser_)
+    return;
+
+  observed_ = true;
+  BrowserList::RemoveObserver(this);
+  if (run_loop_.running())
+    run_loop_.Quit();
+}
 
 bool BringBrowserWindowToFront(const Browser* browser) {
   gfx::NativeWindow window = NULL;
@@ -114,11 +187,11 @@ bool SendMouseMoveSync(const gfx::Point& location) {
   return !testing::Test::HasFatalFailure();
 }
 
-bool SendMouseEventsSync(ui_controls::MouseButton type, int state) {
+bool SendMouseEventsSync(ui_controls::MouseButton type, int button_state) {
   scoped_refptr<content::MessageLoopRunner> runner =
       new content::MessageLoopRunner;
-  if (!ui_controls::SendMouseEventsNotifyWhenDone(
-          type, state, runner->QuitClosure())) {
+  if (!ui_controls::SendMouseEventsNotifyWhenDone(type, button_state,
+                                                  runner->QuitClosure())) {
     return false;
   }
   runner->Run();
@@ -128,12 +201,15 @@ bool SendMouseEventsSync(ui_controls::MouseButton type, int state) {
 namespace internal {
 
 void ClickTask(ui_controls::MouseButton button,
-               int state,
-               const base::Closure& followup) {
-  if (!followup.is_null())
-    ui_controls::SendMouseEventsNotifyWhenDone(button, state, followup);
-  else
-    ui_controls::SendMouseEvents(button, state);
+               int button_state,
+               base::OnceClosure followup,
+               int accelerator_state) {
+  if (!followup.is_null()) {
+    ui_controls::SendMouseEventsNotifyWhenDone(
+        button, button_state, std::move(followup), accelerator_state);
+  } else {
+    ui_controls::SendMouseEvents(button, button_state, accelerator_state);
+  }
 }
 
 }  // namespace internal

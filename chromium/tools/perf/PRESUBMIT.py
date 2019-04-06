@@ -11,16 +11,23 @@ for more details about the presubmit API built into depot_tools.
 import os
 
 
-def _CommonChecks(input_api, output_api):
-  """Performs common checks, which includes running pylint."""
+def _CommonChecks(input_api, output_api, block_on_failure=False):
+  """Performs common checks, which includes running pylint.
+
+    block_on_failure: For some failures, we would like to warn the
+        user but still allow them to upload the change. However, we
+        don't want them to commit code with those failures, so we
+        need to block the change on commit.
+  """
   results = []
 
-  _UpdatePerfData(input_api)
-  results.extend(_CheckNoUncommittedFiles(input_api, output_api))
-
-  results.extend(_CheckWprShaFiles(input_api, output_api))
-  results.extend(_CheckJson(input_api, output_api))
   results.extend(_CheckExpectations(input_api, output_api))
+  results.extend(_CheckJson(input_api, output_api))
+  results.extend(
+      _CheckPerfDataCurrentness(input_api, output_api, block_on_failure))
+  results.extend(
+      _CheckPerfJsonConfigs(input_api, output_api, block_on_failure))
+  results.extend(_CheckWprShaFiles(input_api, output_api))
   results.extend(input_api.RunTests(input_api.canned_checks.GetPylint(
       input_api, output_api, extra_paths_list=_GetPathsToPrepend(input_api),
       pylintrc='pylintrc')))
@@ -60,8 +67,9 @@ def _RunArgs(args, input_api):
 def _CheckExpectations(input_api, output_api):
   results = []
   perf_dir = input_api.PresubmitLocalPath()
+  vpython = 'vpython.bat' if input_api.is_windows else 'vpython'
   out, return_code = _RunArgs([
-      input_api.python_executable,
+      vpython,
       input_api.os_path.join(perf_dir, 'validate_story_expectation_data')],
       input_api)
   if return_code:
@@ -70,11 +78,39 @@ def _CheckExpectations(input_api, output_api):
   return results
 
 
-def _UpdatePerfData(input_api):
+def _CheckPerfDataCurrentness(input_api, output_api, block_on_failure):
+  results = []
   perf_dir = input_api.PresubmitLocalPath()
-  _RunArgs([
-      input_api.python_executable,
-      input_api.os_path.join(perf_dir, 'generate_perf_data')], input_api)
+  vpython = 'vpython.bat' if input_api.is_windows else 'vpython'
+  out, return_code = _RunArgs([
+      vpython,
+      input_api.os_path.join(perf_dir, 'generate_perf_data'),
+      '--validate-only'], input_api)
+  if return_code:
+    if block_on_failure:
+      results.append(output_api.PresubmitError(
+          'Validating perf data currentness failed', long_text=out))
+    else:
+      results.append(output_api.PresubmitPromptWarning(
+          'Validating perf data currentness failed', long_text=out))
+  return results
+
+
+def _CheckPerfJsonConfigs(input_api, output_api, block_on_failure):
+  results = []
+  perf_dir = input_api.PresubmitLocalPath()
+  vpython = 'vpython.bat' if input_api.is_windows else 'vpython'
+  out, return_code = _RunArgs([
+      vpython,
+      input_api.os_path.join(perf_dir, 'validate_perf_json_config')], input_api)
+  if return_code:
+    if block_on_failure:
+      results.append(output_api.PresubmitError(
+          'Validating perf data correctness failed', long_text=out))
+    else:
+      results.append(output_api.PresubmitPromptWarning(
+          'Validating perf data correctness failed', long_text=out))
+  return results
 
 
 def _CheckWprShaFiles(input_api, output_api):
@@ -89,8 +125,9 @@ def _CheckWprShaFiles(input_api, output_api):
       continue
     wpr_archive_shas.append(filename)
 
+  vpython = 'vpython.bat' if input_api.is_windows else 'vpython'
   out, return_code = _RunArgs([
-      input_api.python_executable,
+      vpython,
       input_api.os_path.join(perf_dir, 'validate_wpr_archives')] +
       wpr_archive_shas,
       input_api)
@@ -113,18 +150,6 @@ def _CheckJson(input_api, output_api):
   return []
 
 
-def _CheckNoUncommittedFiles(input_api, output_api):
-  """Ensures that uncommitted updated files will block presubmit."""
-  results = []
-  diff_text = _RunArgs(['git', 'diff', '--name-only'], input_api)[0]
-
-  if diff_text != "":
-    results.append(output_api.PresubmitError(
-        ('Please add the following changed files to your git client: %s' %
-             diff_text)))
-  return results
-
-
 def CheckChangeOnUpload(input_api, output_api):
   report = []
   report.extend(_CommonChecks(input_api, output_api))
@@ -133,5 +158,5 @@ def CheckChangeOnUpload(input_api, output_api):
 
 def CheckChangeOnCommit(input_api, output_api):
   report = []
-  report.extend(_CommonChecks(input_api, output_api))
+  report.extend(_CommonChecks(input_api, output_api, block_on_failure=True))
   return report

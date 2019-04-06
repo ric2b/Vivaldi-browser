@@ -47,7 +47,7 @@ public final class Http2TestServer {
 
     public static boolean shutdownHttp2TestServer() throws Exception {
         if (sServerChannel != null) {
-            sServerChannel.close();
+            sServerChannel.close().sync();
             sServerChannel = null;
             return true;
         }
@@ -133,7 +133,7 @@ public final class Http2TestServer {
             mBlock.block();
         }
 
-
+        @Override
         public void run() {
             try {
                 // Configure the server.

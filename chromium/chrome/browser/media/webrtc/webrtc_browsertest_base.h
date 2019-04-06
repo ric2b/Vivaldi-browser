@@ -58,15 +58,6 @@ class WebRtcTestBase : public InProcessBrowserTest {
     INDIVIDUAL_STREAMS
   };
 
-  struct TrackEvent {
-    explicit TrackEvent(const std::string& track_id);
-    TrackEvent(const TrackEvent&);
-    ~TrackEvent();
-
-    std::string track_id;
-    std::vector<std::string> stream_ids;
-  };
-
  protected:
   WebRtcTestBase();
   ~WebRtcTestBase() override;
@@ -147,6 +138,13 @@ class WebRtcTestBase : public InProcessBrowserTest {
   void SetupPeerconnectionWithCertificateWithoutLocalStream(
       content::WebContents* tab,
       const std::string& certificate) const;
+  // Same as |SetupPeerconnectionWithLocalStream| except RTCPeerConnection
+  // constraints are specified.
+  void SetupPeerconnectionWithConstraintsAndLocalStream(
+      content::WebContents* tab,
+      const std::string& constraints,
+      const std::string& certificate_keygen_algorithm =
+          kUseDefaultCertKeygen) const;
 
   void CreateDataChannel(content::WebContents* tab, const std::string& label);
 
@@ -216,33 +214,6 @@ class WebRtcTestBase : public InProcessBrowserTest {
   // Add 'usedtx=1' to the offer SDP.
   void EnableOpusDtx(content::WebContents* tab) const;
 
-  void CreateAndAddStreams(content::WebContents* tab, size_t count) const;
-  void VerifyRtpSenders(content::WebContents* tab,
-                        base::Optional<size_t> expected_num_tracks =
-                            base::Optional<size_t>()) const;
-  void VerifyRtpReceivers(content::WebContents* tab,
-                          base::Optional<size_t> expected_num_tracks =
-                              base::Optional<size_t>()) const;
-  std::vector<std::string> CreateAndAddAudioAndVideoTrack(
-      content::WebContents* tab,
-      StreamArgumentType stream_argument_type) const;
-  void RemoveTrack(content::WebContents* tab,
-                   const std::string& track_id) const;
-  bool HasLocalStreamWithTrack(content::WebContents* tab,
-                               const std::string& stream_id,
-                               const std::string& track_id) const;
-  bool HasRemoteStreamWithTrack(content::WebContents* tab,
-                                const std::string& stream_id,
-                                const std::string& track_id) const;
-  bool HasSenderWithTrack(content::WebContents* tab,
-                          std::string track_id) const;
-  bool HasReceiverWithTrack(content::WebContents* tab,
-                            std::string track_id) const;
-  size_t GetNegotiationNeededCount(content::WebContents* tab) const;
-  std::vector<TrackEvent> GetTrackEvents(content::WebContents* tab) const;
-  // Performs garbage collection with "gc()". Requires command line switch
-  // |kJavaScriptFlags| with "--expose-gc".
-  void CollectGarbage(content::WebContents* tab) const;
   // Try to open a dekstop media stream, and return the stream id.
   // On failure, will return empty string.
   std::string GetDesktopMediaStream(content::WebContents* tab);

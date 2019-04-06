@@ -9,18 +9,14 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/shared_memory_mapping.h"
+#include "device/gamepad/public/mojom/gamepad_hardware_buffer.h"
 #include "ppapi/c/ppb_gamepad.h"
 #include "ppapi/proxy/plugin_resource.h"
 #include "ppapi/proxy/ppapi_proxy_export.h"
-#include "ppapi/shared_impl/ppb_gamepad_shared.h"
 #include "ppapi/thunk/ppb_gamepad_api.h"
 
 struct PP_GamepadsSampleData;
-
-namespace base {
-class SharedMemory;
-}
 
 namespace ppapi {
 namespace proxy {
@@ -45,8 +41,8 @@ class PPAPI_PROXY_EXPORT GamepadResource
  private:
   void OnPluginMsgSendMemory(const ResourceMessageReplyParams& params);
 
-  std::unique_ptr<base::SharedMemory> shared_memory_;
-  const ContentGamepadHardwareBuffer* buffer_;
+  base::ReadOnlySharedMemoryMapping shared_memory_mapping_;
+  const device::GamepadHardwareBuffer* buffer_;
 
   // Last data returned so we can use this in the event of a read failure.
   PP_GamepadsSampleData last_read_;

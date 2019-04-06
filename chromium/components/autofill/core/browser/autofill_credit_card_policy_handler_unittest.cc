@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/policy/core/common/policy_map.h"
@@ -25,8 +24,16 @@ TEST_F(AutofillCreditCardPolicyHandlerTest, Default) {
   PrefValueMap prefs;
   AutofillCreditCardPolicyHandler handler;
   handler.ApplyPolicySettings(policy, &prefs);
-  EXPECT_FALSE(
-      prefs.GetValue(autofill::prefs::kAutofillCreditCardEnabled, nullptr));
+
+  // Temporary fix for M69. The pref is enabled by default unless it's disabled
+  // by policy.
+  const base::Value* value = nullptr;
+  ASSERT_TRUE(
+      prefs.GetValue(autofill::prefs::kAutofillCreditCardEnabled, &value));
+  EXPECT_TRUE(value);
+  bool autofill_credit_card_enabled = false;
+  ASSERT_TRUE(value->GetAsBoolean(&autofill_credit_card_enabled));
+  EXPECT_TRUE(autofill_credit_card_enabled);
 }
 
 TEST_F(AutofillCreditCardPolicyHandlerTest, Enabled) {
@@ -39,9 +46,15 @@ TEST_F(AutofillCreditCardPolicyHandlerTest, Enabled) {
   AutofillCreditCardPolicyHandler handler;
   handler.ApplyPolicySettings(policy, &prefs);
 
-  // Enabling Autofill for credit cards should not set the prefs.
-  EXPECT_FALSE(
-      prefs.GetValue(autofill::prefs::kAutofillCreditCardEnabled, nullptr));
+  // Temporary fix for M69. The pref is enabled by default unless it's disabled
+  // by policy.
+  const base::Value* value = nullptr;
+  ASSERT_TRUE(
+      prefs.GetValue(autofill::prefs::kAutofillCreditCardEnabled, &value));
+  EXPECT_TRUE(value);
+  bool autofill_credit_card_enabled = false;
+  ASSERT_TRUE(value->GetAsBoolean(&autofill_credit_card_enabled));
+  EXPECT_TRUE(autofill_credit_card_enabled);
 }
 
 TEST_F(AutofillCreditCardPolicyHandlerTest, Disabled) {
@@ -59,10 +72,10 @@ TEST_F(AutofillCreditCardPolicyHandlerTest, Disabled) {
   EXPECT_TRUE(
       prefs.GetValue(autofill::prefs::kAutofillCreditCardEnabled, &value));
   ASSERT_TRUE(value);
-  bool autofill_credt_card_enabled = true;
-  bool result = value->GetAsBoolean(&autofill_credt_card_enabled);
+  bool autofill_credit_card_enabled = true;
+  bool result = value->GetAsBoolean(&autofill_credit_card_enabled);
   ASSERT_TRUE(result);
-  EXPECT_FALSE(autofill_credt_card_enabled);
+  EXPECT_FALSE(autofill_credit_card_enabled);
 }
 
 }  // namespace autofill

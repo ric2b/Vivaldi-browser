@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/input_method/input_method_engine_base.h"
+#include "chrome/common/extensions/api/input_ime.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -24,6 +25,7 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/extension.h"
+#include "ui/base/ime/ime_bridge_observer.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
 #include "ui/base/ime/text_input_flags.h"
 
@@ -51,7 +53,7 @@ class ImeObserver : public input_method::InputMethodEngineBase::Observer {
   void OnKeyEvent(
       const std::string& component_id,
       const input_method::InputMethodEngineBase::KeyboardEvent& event,
-      IMEEngineHandlerInterface::KeyEventDoneCallback& key_data) override;
+      IMEEngineHandlerInterface::KeyEventDoneCallback key_data) override;
   void OnReset(const std::string& component_id) override;
   void OnDeactivated(const std::string& component_id) override;
   void OnCompositionBoundsChanged(
@@ -62,7 +64,6 @@ class ImeObserver : public input_method::InputMethodEngineBase::Observer {
                                 int cursor_pos,
                                 int anchor_pos,
                                 int offset_pos) override;
-  void OnRequestEngineSwitch() override {}
 
  protected:
   // Helper function used to forward the given event to the |profile_|'s event
@@ -85,11 +86,14 @@ class ImeObserver : public input_method::InputMethodEngineBase::Observer {
   // Functions used to convert InputContext struct to string
   std::string ConvertInputContextType(
       IMEEngineHandlerInterface::InputContext input_context);
-  bool ConvertInputContextAutoCorrect(
+  virtual bool ConvertInputContextAutoCorrect(
       IMEEngineHandlerInterface::InputContext input_context);
-  bool ConvertInputContextAutoComplete(
+  virtual bool ConvertInputContextAutoComplete(
       IMEEngineHandlerInterface::InputContext input_context);
-  bool ConvertInputContextSpellCheck(
+  virtual extensions::api::input_ime::AutoCapitalizeType
+  ConvertInputContextAutoCapitalize(
+      IMEEngineHandlerInterface::InputContext input_context);
+  virtual bool ConvertInputContextSpellCheck(
       IMEEngineHandlerInterface::InputContext input_context);
 
   std::string extension_id_;
@@ -176,6 +180,7 @@ class InputImeAPI : public BrowserContextKeyedAPI,
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<InputImeAPI>* GetFactoryInstance();
+
   void Shutdown() override;
 
   // ExtensionRegistryObserver implementation.
@@ -210,6 +215,8 @@ class InputImeAPI : public BrowserContextKeyedAPI,
       extension_registry_observer_;
 
   content::NotificationRegistrar registrar_;
+
+  std::unique_ptr<ui::IMEBridgeObserver> observer_;
 };
 
 InputImeEventRouter* GetInputImeEventRouter(Profile* profile);

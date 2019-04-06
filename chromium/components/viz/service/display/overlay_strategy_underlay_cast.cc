@@ -5,11 +5,18 @@
 #include "components/viz/service/display/overlay_strategy_underlay_cast.h"
 
 #include "base/containers/adapters.h"
+#include "base/lazy_instance.h"
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace viz {
+namespace {
+
+base::LazyInstance<OverlayStrategyUnderlayCast::OverlayCompositedCallback>::
+    DestructorAtExit g_overlay_composited_callback = LAZY_INSTANCE_INITIALIZER;
+
+}  // namespace
 
 OverlayStrategyUnderlayCast::OverlayStrategyUnderlayCast(
     OverlayCandidateValidator* capability_checker)
@@ -19,15 +26,15 @@ OverlayStrategyUnderlayCast::~OverlayStrategyUnderlayCast() {}
 
 bool OverlayStrategyUnderlayCast::Attempt(
     const SkMatrix44& output_color_matrix,
-    cc::DisplayResourceProvider* resource_provider,
+    DisplayResourceProvider* resource_provider,
     RenderPass* render_pass,
-    cc::OverlayCandidateList* candidate_list,
+    OverlayCandidateList* candidate_list,
     std::vector<gfx::Rect>* content_bounds) {
-  const QuadList& const_quad_list = render_pass->quad_list;
+  QuadList& quad_list = render_pass->quad_list;
   bool found_underlay = false;
   gfx::Rect content_rect;
-  for (const auto* quad : base::Reversed(const_quad_list)) {
-    if (cc::OverlayCandidate::IsInvisibleQuad(quad))
+  for (const auto* quad : base::Reversed(quad_list)) {
+    if (OverlayCandidate::IsInvisibleQuad(quad))
       continue;
 
     const auto& transform = quad->shared_quad_state->quad_to_target_transform;
@@ -36,8 +43,8 @@ bool OverlayStrategyUnderlayCast::Attempt(
 
     bool is_underlay = false;
     if (!found_underlay) {
-      cc::OverlayCandidate candidate;
-      is_underlay = cc::OverlayCandidate::FromDrawQuad(
+      OverlayCandidate candidate;
+      is_underlay = OverlayCandidate::FromDrawQuad(
           resource_provider, output_color_matrix, quad, &candidate);
       found_underlay = is_underlay;
     }
@@ -55,15 +62,54 @@ bool OverlayStrategyUnderlayCast::Attempt(
     }
   }
 
-  const bool result = OverlayStrategyUnderlay::Attempt(
-      output_color_matrix, resource_provider, render_pass, candidate_list,
-      content_bounds);
+  if (is_using_overlay_ != found_underlay) {
+    is_using_overlay_ = found_underlay;
+    VLOG(1) << (found_underlay ? "Overlay activated" : "Overlay deactivated");
+  }
+
+  if (found_underlay) {
+    // If the primary plane shows up in the candidates list make sure it isn't
+    // opaque otherwise the video underlay won't be visible.
+    if (!candidate_list->empty()) {
+      DCHECK_EQ(1u, candidate_list->size());
+      DCHECK(candidate_list->front().use_output_surface_for_resource);
+      candidate_list->front().is_opaque = false;
+    }
+
+    for (auto it = quad_list.begin(); it != quad_list.end(); ++it) {
+      OverlayCandidate candidate;
+      if (!OverlayCandidate::FromDrawQuad(
+              resource_provider, output_color_matrix, *it, &candidate)) {
+        continue;
+      }
+
+      render_pass->quad_list.ReplaceExistingQuadWithOpaqueTransparentSolidColor(
+          it);
+
+      if (!g_overlay_composited_callback.Get().is_null()) {
+        g_overlay_composited_callback.Get().Run(candidate.display_rect,
+                                                candidate.transform);
+      }
+
+      break;
+    }
+  }
+
   DCHECK(content_bounds && content_bounds->empty());
-  DCHECK(result == found_underlay);
   if (found_underlay) {
     content_bounds->push_back(content_rect);
   }
-  return result;
+  return found_underlay;
+}
+
+OverlayProcessor::StrategyType OverlayStrategyUnderlayCast::GetUMAEnum() const {
+  return OverlayProcessor::StrategyType::kUnderlayCast;
+}
+
+// static
+void OverlayStrategyUnderlayCast::SetOverlayCompositedCallback(
+    const OverlayCompositedCallback& cb) {
+  g_overlay_composited_callback.Get() = cb;
 }
 
 }  // namespace viz

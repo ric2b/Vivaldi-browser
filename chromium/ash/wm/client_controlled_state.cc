@@ -27,6 +27,22 @@
 namespace ash {
 namespace wm {
 
+namespace {
+// |kMinimumOnScreenArea + 1| is used to avoid adjusting loop.
+constexpr int kClientControlledWindowMinimumOnScreenArea =
+    kMinimumOnScreenArea + 1;
+}  // namespace
+
+// static
+void ClientControlledState::AdjustBoundsForMinimumWindowVisibility(
+    aura::Window* window,
+    gfx::Rect* bounds) {
+  AdjustBoundsToEnsureWindowVisibility(
+      window->GetRootWindow()->bounds(),
+      kClientControlledWindowMinimumOnScreenArea,
+      kClientControlledWindowMinimumOnScreenArea, bounds);
+}
+
 ClientControlledState::ClientControlledState(std::unique_ptr<Delegate> delegate)
     : BaseState(mojom::WindowStateType::DEFAULT),
       delegate_(std::move(delegate)) {}
@@ -67,9 +83,7 @@ void ClientControlledState::HandleTransitionEvents(WindowState* window_state,
     case WM_EVENT_NORMAL:
     case WM_EVENT_MAXIMIZE:
     case WM_EVENT_MINIMIZE:
-    case WM_EVENT_FULLSCREEN:
-    case WM_EVENT_SNAP_LEFT:
-    case WM_EVENT_SNAP_RIGHT: {
+    case WM_EVENT_FULLSCREEN: {
       // Reset window state
       window_state->UpdateWindowPropertiesFromStateType();
       mojom::WindowStateType next_state = GetStateForTransitionEvent(event);
@@ -77,6 +91,27 @@ void ClientControlledState::HandleTransitionEvents(WindowState* window_state,
               << ", state=" << state_type_ << ", next_state=" << next_state;
       // Then ask delegate to handle the window state change.
       delegate_->HandleWindowStateRequest(window_state, next_state);
+      break;
+    }
+    case WM_EVENT_SNAP_LEFT:
+    case WM_EVENT_SNAP_RIGHT: {
+      if (window_state->CanSnap()) {
+        // Get the desired window bounds for the snap state.
+        gfx::Rect bounds = GetSnappedWindowBoundsInParent(
+            window_state->window(),
+            event->type() == WM_EVENT_SNAP_LEFT
+                ? mojom::WindowStateType::LEFT_SNAPPED
+                : mojom::WindowStateType::RIGHT_SNAPPED);
+        window_state->set_bounds_changed_by_user(true);
+
+        window_state->UpdateWindowPropertiesFromStateType();
+        mojom::WindowStateType next_state = GetStateForTransitionEvent(event);
+        VLOG(1) << "Processing State Transtion: event=" << event->type()
+                << ", state=" << state_type_ << ", next_state=" << next_state;
+
+        // Then ask delegate to set the desired bounds for the snap state.
+        delegate_->HandleBoundsRequest(window_state, next_state, bounds);
+      }
       break;
     }
     case WM_EVENT_SHOW_INACTIVE:
@@ -96,6 +131,15 @@ void ClientControlledState::DetachState(WindowState* window_state) {}
 void ClientControlledState::HandleWorkspaceEvents(WindowState* window_state,
                                                   const WMEvent* event) {
   // Client is responsible for adjusting bounds after workspace bounds change.
+
+  if (event->type() == WM_EVENT_ADDED_TO_WORKSPACE) {
+    aura::Window* window = window_state->window();
+    gfx::Rect bounds = window->bounds();
+    AdjustBoundsForMinimumWindowVisibility(window, &bounds);
+
+    if (window->bounds() != bounds)
+      window_state->SetBoundsConstrained(bounds);
+  }
 }
 
 void ClientControlledState::HandleCompoundEvents(WindowState* window_state,
@@ -135,7 +179,7 @@ void ClientControlledState::HandleCompoundEvents(WindowState* window_state,
       break;
     case WM_EVENT_CYCLE_SNAP_LEFT:
     case WM_EVENT_CYCLE_SNAP_RIGHT:
-      // TODO(oshima): implement this.
+      CycleSnap(window_state, event->type());
       break;
     default:
       NOTREACHED() << "Invalid event :" << event->type();
@@ -161,16 +205,15 @@ void ClientControlledState::HandleBoundsEvents(WindowState* window_state,
             break;
         }
         bounds_change_animation_type_ = kAnimationNone;
-      } else if (window_state->IsPinned() || window_state->IsTrustedPinned()) {
-        // In pinned state, it should ignore the SetBounds from window manager
-        // or user.
-      } else {
-        delegate_->HandleBoundsRequest(window_state, bounds);
+      } else if (!window_state->IsPinned()) {
+        // TODO(oshima): Define behavior for pinned app.
+        delegate_->HandleBoundsRequest(window_state,
+                                       window_state->GetStateType(), bounds);
       }
       break;
     }
     case WM_EVENT_CENTER:
-      // TODO(oshima): implement this.
+      CenterWindow(window_state);
       break;
     default:
       NOTREACHED() << "Unknown event:" << event->type();

@@ -261,7 +261,7 @@ bool MoveTabToWindow(Browser* source_browser,
   *new_index += iteration;
 
   TabStripModel* source_tab_strip = source_browser->tab_strip_model();
-  content::WebContents* web_contents =
+  std::unique_ptr<content::WebContents> web_contents =
       source_tab_strip->DetachWebContentsAt(tab_index);
   if (!web_contents) {
     return false;
@@ -275,7 +275,7 @@ bool MoveTabToWindow(Browser* source_browser,
     *new_index = target_tab_strip->count();
 
   target_tab_strip->InsertWebContentsAt(
-    *new_index, web_contents, TabStripModel::ADD_PINNED);
+    *new_index, std::move(web_contents), TabStripModel::ADD_PINNED);
 
   return true;
 }
@@ -286,7 +286,7 @@ bool GetTabById(int tab_id, content::WebContents** contents, int* index) {
     for (int i = 0; i < target_tab_strip->count(); ++i) {
       content::WebContents* target_contents =
           target_tab_strip->GetWebContentsAt(i);
-      if (SessionTabHelper::IdForTab(target_contents) == tab_id) {
+      if (SessionTabHelper::IdForTab(target_contents).id() == tab_id) {
         if (contents)
           *contents = target_contents;
         if (index)

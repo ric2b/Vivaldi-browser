@@ -59,7 +59,7 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->AddString(version_ui::kVersion,
                          version_info::GetVersionNumber());
   html_source->AddString(version_ui::kVersionModifier,
-                         chrome::GetChannelString());
+                         chrome::GetChannelName());
   html_source->AddString(version_ui::kJSEngine, "V8");
   html_source->AddString(version_ui::kJSVersion, V8_VERSION_STRING);
   html_source->AddLocalizedString(version_ui::kCompany,
@@ -92,7 +92,8 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->AddString(version_ui::kProfilePath, std::string());
   html_source->AddLocalizedString(version_ui::kVariationsName,
                                   IDS_VERSION_UI_VARIATIONS);
-
+  html_source->AddLocalizedString(version_ui::kVariationsCmdName,
+                                  IDS_VERSION_UI_VARIATIONS_CMD);
 #if defined(OS_CHROMEOS)
   html_source->AddLocalizedString(version_ui::kARC, IDS_ARC_LABEL);
   html_source->AddLocalizedString(version_ui::kPlatform, IDS_PLATFORM_LABEL);
@@ -142,25 +143,7 @@ WebUIDataSource* CreateVersionUIDataSource() {
 #endif
 
 #if defined(OS_WIN)
-#if defined(__clang__)
-  html_source->AddString(version_ui::kCompiler, "clang");
-#elif defined(_MSC_VER) && _MSC_VER == 1900
-#if BUILDFLAG(PGO_BUILD)
-  html_source->AddString(version_ui::kCompiler, "MSVC 2015 (PGO)");
-#else
-  html_source->AddString(version_ui::kCompiler, "MSVC 2015");
-#endif
-#elif defined(_MSC_VER) && _MSC_VER >= 1910 && _MSC_VER < 2000
-#if BUILDFLAG(PGO_BUILD)
-  html_source->AddString(version_ui::kCompiler, "MSVC 2017 (PGO)");
-#else
-  html_source->AddString(version_ui::kCompiler, "MSVC 2017");
-#endif
-#elif defined(_MSC_VER)
-#error "Unsupported version of MSVC."
-#else
-  html_source->AddString(version_ui::kCompiler, "Unknown");
-#endif
+  html_source->AddString("linker", CHROMIUM_LINKER_NAME);
 
   base::string16 update_cohort_name =
       install_static::InstallDetails::Get().update_cohort_name();

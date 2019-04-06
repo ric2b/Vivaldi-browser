@@ -15,6 +15,9 @@ void FakeArcBridgeHost::OnAccessibilityHelperInstanceReady(
 
 void FakeArcBridgeHost::OnAppInstanceReady(mojom::AppInstancePtr app_ptr) {}
 
+void FakeArcBridgeHost::OnAppfuseInstanceReady(
+    mojom::AppfuseInstancePtr app_ptr) {}
+
 void FakeArcBridgeHost::OnAudioInstanceReady(
     mojom::AudioInstancePtr audio_ptr) {}
 
@@ -41,6 +44,9 @@ void FakeArcBridgeHost::OnClipboardInstanceReady(
 void FakeArcBridgeHost::OnCrashCollectorInstanceReady(
     mojom::CrashCollectorInstancePtr crash_collector_ptr) {}
 
+void FakeArcBridgeHost::OnDiskQuotaInstanceReady(
+    mojom::DiskQuotaInstancePtr disk_quota_ptr) {}
+
 void FakeArcBridgeHost::OnEnterpriseReportingInstanceReady(
     mojom::EnterpriseReportingInstancePtr enterprise_reporting_ptr) {}
 
@@ -48,6 +54,9 @@ void FakeArcBridgeHost::OnFileSystemInstanceReady(
     mojom::FileSystemInstancePtr file_system_ptr) {}
 
 void FakeArcBridgeHost::OnImeInstanceReady(mojom::ImeInstancePtr ime_ptr) {}
+
+void FakeArcBridgeHost::OnInputMethodManagerInstanceReady(
+    mojom::InputMethodManagerInstancePtr input_method_manager_ptr) {}
 
 void FakeArcBridgeHost::OnIntentHelperInstanceReady(
     mojom::IntentHelperInstancePtr intent_helper_ptr) {}
@@ -90,8 +99,14 @@ void FakeArcBridgeHost::OnProcessInstanceReady(
 void FakeArcBridgeHost::OnRotationLockInstanceReady(
     mojom::RotationLockInstancePtr rotation_lock_ptr) {}
 
+void FakeArcBridgeHost::OnScreenCaptureInstanceReady(
+    mojom::ScreenCaptureInstancePtr screen_capture_ptr) {}
+
 void FakeArcBridgeHost::OnStorageManagerInstanceReady(
     mojom::StorageManagerInstancePtr storage_manager_ptr) {}
+
+void FakeArcBridgeHost::OnTimerInstanceReady(
+    mojom::TimerInstancePtr timer_ptr) {}
 
 void FakeArcBridgeHost::OnTracingInstanceReady(
     mojom::TracingInstancePtr trace_ptr) {}
@@ -112,6 +127,9 @@ void FakeArcBridgeHost::OnVoiceInteractionFrameworkInstanceReady(
 
 void FakeArcBridgeHost::OnVolumeMounterInstanceReady(
     mojom::VolumeMounterInstancePtr volume_mounter_ptr) {}
+
+void FakeArcBridgeHost::OnWakeLockInstanceReady(
+    mojom::WakeLockInstancePtr wakelock_ptr) {}
 
 void FakeArcBridgeHost::OnWallpaperInstanceReady(
     mojom::WallpaperInstancePtr wallpaper_ptr) {}

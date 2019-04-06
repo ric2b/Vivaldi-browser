@@ -38,6 +38,7 @@ class AX_EXPORT AXEventGenerator : public AXTreeDelegate {
     MENU_ITEM_SELECTED,
     NAME_CHANGED,
     OTHER_ATTRIBUTE_CHANGED,
+    RELATED_NODE_CHANGED,
     ROLE_CHANGED,
     ROW_COUNT_CHANGED,
     SCROLL_POSITION_CHANGED,
@@ -47,17 +48,27 @@ class AX_EXPORT AXEventGenerator : public AXTreeDelegate {
     VALUE_CHANGED,
   };
 
-  struct TargetedEvent {
-    TargetedEvent(ui::AXNode* node, Event event);
-    ui::AXNode* node;
+  struct EventParams {
+    EventParams(Event event, ax::mojom::EventFrom event_from);
     Event event;
+    ax::mojom::EventFrom event_from;
+
+    bool operator==(const EventParams& rhs);
+    bool operator<(const EventParams& rhs) const;
+  };
+
+  struct TargetedEvent {
+    TargetedEvent(ui::AXNode* node, const EventParams& event_params);
+    ui::AXNode* node;
+    const EventParams& event_params;
   };
 
   class AX_EXPORT Iterator
       : public std::iterator<std::input_iterator_tag, TargetedEvent> {
    public:
-    Iterator(const std::map<AXNode*, std::set<Event>>& map,
-             const std::map<AXNode*, std::set<Event>>::const_iterator& head);
+    Iterator(
+        const std::map<AXNode*, std::set<EventParams>>& map,
+        const std::map<AXNode*, std::set<EventParams>>::const_iterator& head);
     Iterator(const Iterator& other);
     ~Iterator();
 
@@ -66,9 +77,9 @@ class AX_EXPORT AXEventGenerator : public AXTreeDelegate {
     TargetedEvent operator*() const;
 
    private:
-    const std::map<AXNode*, std::set<Event>>& map_;
-    std::map<AXNode*, std::set<Event>>::const_iterator map_iter_;
-    std::set<Event>::const_iterator set_iter_;
+    const std::map<AXNode*, std::set<EventParams>>& map_;
+    std::map<AXNode*, std::set<EventParams>>::const_iterator map_iter_;
+    std::set<EventParams>::const_iterator set_iter_;
   };
 
   // If you use this constructor, you must call SetTree
@@ -108,6 +119,11 @@ class AX_EXPORT AXEventGenerator : public AXTreeDelegate {
   // same order they were added.
   void AddEvent(ui::AXNode* node, Event event);
 
+  // Set the event_from field for all subsequent generated events.
+  void set_event_from(ax::mojom::EventFrom event_from) {
+    event_from_ = event_from;
+  }
+
  protected:
   // AXTreeDelegate overrides.
   void OnNodeDataWillChange(AXTree* tree,
@@ -115,41 +131,41 @@ class AX_EXPORT AXEventGenerator : public AXTreeDelegate {
                             const AXNodeData& new_node_data) override;
   void OnRoleChanged(AXTree* tree,
                      AXNode* node,
-                     AXRole old_role,
-                     AXRole new_role) override;
+                     ax::mojom::Role old_role,
+                     ax::mojom::Role new_role) override;
   void OnStateChanged(AXTree* tree,
                       AXNode* node,
-                      AXState state,
+                      ax::mojom::State state,
                       bool new_value) override;
   void OnStringAttributeChanged(AXTree* tree,
                                 AXNode* node,
-                                AXStringAttribute attr,
+                                ax::mojom::StringAttribute attr,
                                 const std::string& old_value,
                                 const std::string& new_value) override;
   void OnIntAttributeChanged(AXTree* tree,
                              AXNode* node,
-                             AXIntAttribute attr,
+                             ax::mojom::IntAttribute attr,
                              int32_t old_value,
                              int32_t new_value) override;
   void OnFloatAttributeChanged(AXTree* tree,
                                AXNode* node,
-                               AXFloatAttribute attr,
+                               ax::mojom::FloatAttribute attr,
                                float old_value,
                                float new_value) override;
   void OnBoolAttributeChanged(AXTree* tree,
                               AXNode* node,
-                              AXBoolAttribute attr,
+                              ax::mojom::BoolAttribute attr,
                               bool new_value) override;
   void OnIntListAttributeChanged(
       AXTree* tree,
       AXNode* node,
-      AXIntListAttribute attr,
+      ax::mojom::IntListAttribute attr,
       const std::vector<int32_t>& old_value,
       const std::vector<int32_t>& new_value) override;
   void OnStringListAttributeChanged(
       AXTree* tree,
       AXNode* node,
-      AXStringListAttribute attr,
+      ax::mojom::StringListAttribute attr,
       const std::vector<std::string>& old_value,
       const std::vector<std::string>& new_value) override;
   void OnTreeDataChanged(AXTree* tree,
@@ -169,13 +185,17 @@ class AX_EXPORT AXEventGenerator : public AXTreeDelegate {
  private:
   void FireLiveRegionEvents(AXNode* node);
   void FireActiveDescendantEvents();
+  void FireRelationSourceEvents(AXTree* tree, AXNode* target_node);
 
   AXTree* tree_ = nullptr;  // Not owned.
-  std::map<AXNode*, std::set<Event>> tree_events_;
+  std::map<AXNode*, std::set<EventParams>> tree_events_;
 
   // Valid between the call to OnIntAttributeChanged and the call to
   // OnAtomicUpdateFinished. List of nodes whose active descendant changed.
   std::vector<AXNode*> active_descendant_changed_;
+
+  // The value of the event from field in TargetedEvent.
+  ax::mojom::EventFrom event_from_;
 };
 
 }  // namespace ui

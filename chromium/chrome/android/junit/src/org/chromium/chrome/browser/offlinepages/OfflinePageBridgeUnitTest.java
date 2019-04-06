@@ -24,11 +24,10 @@ import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.multidex.ShadowMultiDex;
 
-import org.chromium.base.BaseChromiumApplication;
 import org.chromium.base.Callback;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,9 +35,8 @@ import java.util.List;
 /**
  * Unit tests for OfflinePageUtils.
  */
-@RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
-        shadows = {ShadowMultiDex.class})
+@RunWith(BaseRobolectricTestRunner.class)
+@Config(manifest = Config.NONE, shadows = {ShadowMultiDex.class})
 public class OfflinePageBridgeUnitTest {
     private OfflinePageBridge mBridge;
 

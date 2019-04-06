@@ -7,7 +7,11 @@
 
 #include <stdint.h>
 
+#include <algorithm>
+#include <map>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -38,7 +42,7 @@ class FakeDriveService : public DriveServiceInterface {
  public:
   class ChangeObserver {
    public:
-    virtual ~ChangeObserver() {}
+    virtual ~ChangeObserver() = default;
     virtual void OnNewChangeAvailable() = 0;
   };
 
@@ -57,6 +61,11 @@ class FakeDriveService : public DriveServiceInterface {
 
   // Adds a Team Drive to the Team Drive resource list.
   void AddTeamDrive(const std::string& id, const std::string& name);
+
+  // Adds a Team Drive to the Team Drive resource list with a start page token.
+  void AddTeamDrive(const std::string& id,
+                    const std::string& name,
+                    const std::string& start_page_token);
 
   // Removes an app by product id.
   void RemoveAppByProductId(const std::string& product_id);
@@ -94,6 +103,11 @@ class FakeDriveService : public DriveServiceInterface {
     return *about_resource_;
   }
 
+  // Returns the start page token
+  const google_apis::StartPageToken& start_page_token() const {
+    return *start_page_token_;
+  }
+
   // Returns the number of times the Team Drive list is successfully loaded by
   // GetAllTeamDriveList().
   int team_drive_list_load_count() const { return team_drive_list_load_count_; }
@@ -126,6 +140,12 @@ class FakeDriveService : public DriveServiceInterface {
     return blocked_file_list_load_count_;
   }
 
+  // Returns the number of times the start page token is successfully loaded
+  // by GetStartPageToken().
+  int start_page_token_load_count() const {
+    return start_page_token_load_count_;
+  }
+
   // Returns the file path whose request is cancelled just before this method
   // invocation.
   const base::FilePath& last_cancelled_file() const {
@@ -154,6 +174,7 @@ class FakeDriveService : public DriveServiceInterface {
   google_apis::CancelCallback GetAllTeamDriveList(
       const google_apis::TeamDriveListCallback& callback) override;
   google_apis::CancelCallback GetAllFileList(
+      const std::string& team_drive_id,
       const google_apis::FileListCallback& callback) override;
   google_apis::CancelCallback GetFileListInDirectory(
       const std::string& directory_resource_id,
@@ -169,6 +190,10 @@ class FakeDriveService : public DriveServiceInterface {
       const google_apis::FileListCallback& callback) override;
   google_apis::CancelCallback GetChangeList(
       int64_t start_changestamp,
+      const google_apis::ChangeListCallback& callback) override;
+  google_apis::CancelCallback GetChangeListByToken(
+      const std::string& team_drive_id,
+      const std::string& start_page_token,
       const google_apis::ChangeListCallback& callback) override;
   google_apis::CancelCallback GetRemainingChangeList(
       const GURL& next_link,
@@ -188,6 +213,9 @@ class FakeDriveService : public DriveServiceInterface {
       const google_apis::GetShareUrlCallback& callback) override;
   google_apis::CancelCallback GetAboutResource(
       const google_apis::AboutResourceCallback& callback) override;
+  google_apis::CancelCallback GetStartPageToken(
+      const std::string& team_drive_id,
+      const google_apis::StartPageTokenCallback& callback) override;
   google_apis::CancelCallback GetAppList(
       const google_apis::AppListCallback& callback) override;
   google_apis::CancelCallback DeleteResource(
@@ -328,6 +356,20 @@ class FakeDriveService : public DriveServiceInterface {
       const base::Time& last_modified_time,
       const google_apis::FileResourceCallback& callback);
 
+  // Sets the capabilities for an entry specified by |resource_id|.
+  // On success, returns HTTP_SUCCESS with the parsed entry.
+  // |callback| must not be null.
+  void SetFileCapabilities(
+      const std::string& resource_id,
+      const google_apis::FileResourceCapabilities& capabilities,
+      const google_apis::FileResourceCallback& callback);
+
+  // Sets the capabilities for the team drive with ID |team_drive_id|.
+  // On success, returns true.
+  bool SetTeamDriveCapabilities(
+      const std::string& team_drive_id,
+      const google_apis::TeamDriveCapabilities& capabilities);
+
   // Sets the user's permission for an entry specified by |resource_id|.
   google_apis::DriveApiErrorCode SetUserPermission(
       const std::string& resource_id,
@@ -356,10 +398,15 @@ class FakeDriveService : public DriveServiceInterface {
   std::string GetNewResourceId();
 
   // Increments |largest_changestamp_| and adds the new changestamp.
-  void AddNewChangestamp(google_apis::ChangeResource* change);
+  void AddNewChangestamp(google_apis::ChangeResource* change,
+                         const std::string& team_drive_id);
 
   // Update ETag of |file| based on |largest_changestamp_|.
   void UpdateETag(google_apis::FileResource* file);
+
+  // Update the latest changelist id
+  void UpdateLatestChangelistId(int64_t change_list_id,
+                                const std::string& team_drive_id);
 
   // Adds a new entry based on the given parameters.
   // |resource_id| can be empty, in the case, the id is automatically generated.
@@ -372,6 +419,11 @@ class FakeDriveService : public DriveServiceInterface {
       const std::string& title,
       bool shared_with_me);
 
+  // Adds a new entry for a team drive.
+  // Returns a pointer to the newly added entry, or NULL if failed.
+  const EntryInfo* AddNewTeamDriveEntry(const std::string& team_drive_id,
+                                        const std::string& team_drive_name);
+
   // Core implementation of GetChangeList.
   // This method returns the slice of the all matched entries, and its range
   // is between |start_offset| (inclusive) and |start_offset| + |max_results|
@@ -380,6 +432,7 @@ class FakeDriveService : public DriveServiceInterface {
   void GetChangeListInternal(int64_t start_changestamp,
                              const std::string& search_query,
                              const std::string& directory_resource_id,
+                             const std::string& team_drive_id,
                              int start_offset,
                              int max_results,
                              int* load_counter,
@@ -401,13 +454,17 @@ class FakeDriveService : public DriveServiceInterface {
 
   std::map<std::string, std::unique_ptr<EntryInfo>> entries_;
   std::unique_ptr<google_apis::AboutResource> about_resource_;
+  std::unique_ptr<google_apis::StartPageToken> start_page_token_;
   std::unique_ptr<base::DictionaryValue> app_info_value_;
   std::vector<std::unique_ptr<google_apis::TeamDriveResource>>
       team_drive_value_;
+  std::map<std::string, std::unique_ptr<google_apis::StartPageToken>>
+      team_drive_start_page_tokens_;
 
   std::map<GURL, UploadSession> upload_sessions_;
   int64_t date_seq_;
   int64_t next_upload_sequence_number_;
+  int64_t largest_changestamp_;
   int default_max_results_;
   int resource_id_count_;
   int team_drive_list_load_count_;
@@ -417,6 +474,7 @@ class FakeDriveService : public DriveServiceInterface {
   int about_resource_load_count_;
   int app_list_load_count_;
   int blocked_file_list_load_count_;
+  int start_page_token_load_count_;
   bool offline_;
   bool never_return_all_file_list_;
   base::FilePath last_cancelled_file_;

@@ -10,16 +10,17 @@
 #include <memory>
 #include <string>
 
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_util.h"
-#include "base/test/histogram_tester.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_reg_util_win.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
@@ -27,11 +28,14 @@
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/install_static/install_details.h"
+#include "chrome/install_static/install_util.h"
+#include "chrome/install_static/test/scoped_install_details.h"
 #include "chrome/installer/setup/installer_state.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_constants.h"
+#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/updating_app_registration_data.h"
 #include "chrome/installer/util/util_constants.h"
@@ -88,11 +92,6 @@ TEST(SetupUtilTest, DeleteFileFromTempProcess) {
   EXPECT_TRUE(installer::DeleteFileFromTempProcess(test_file, 0));
   base::PlatformThread::Sleep(TestTimeouts::tiny_timeout() * 3);
   EXPECT_FALSE(base::PathExists(test_file)) << test_file.value();
-}
-
-TEST(SetupUtilTest, GuidToSquid) {
-  ASSERT_EQ(installer::GuidToSquid(L"EDA620E3-AA98-3846-B81E-3493CB2E0E02"),
-            L"3E026ADE89AA64838BE14339BCE2E020");
 }
 
 TEST(SetupUtilTest, RegisterEventLogProvider) {
@@ -454,6 +453,60 @@ TEST(SetupUtilTest, GetConsoleSessionStartTime) {
   EXPECT_FALSE(start_time.is_null());
 }
 
+TEST(SetupUtilTest, DecodeDMTokenSwitchValue) {
+  // Expect false with empty or badly formed base64-encoded string.
+  EXPECT_FALSE(installer::DecodeDMTokenSwitchValue(L""));
+  EXPECT_FALSE(installer::DecodeDMTokenSwitchValue(L"not-ascii\xff"));
+  EXPECT_FALSE(installer::DecodeDMTokenSwitchValue(L"not-base64-string"));
+
+  std::string token("this is a token");
+  std::string encoded;
+  base::Base64Encode(token, &encoded);
+  EXPECT_EQ(token,
+            *installer::DecodeDMTokenSwitchValue(base::UTF8ToUTF16(encoded)));
+}
+
+TEST(SetupUtilTest, StoreDMTokenToRegistrySuccess) {
+  install_static::ScopedInstallDetails scoped_install_details(true);
+  registry_util::RegistryOverrideManager registry_override_manager;
+  registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE);
+
+  // Use the 2 argument std::string constructor so that the length of the string
+  // is not calculated by assuming the input char array is null terminated.
+  static constexpr char kTokenData[] = "tokens are \0 binary data";
+  static constexpr DWORD kExpectedSize = sizeof(kTokenData) - 1;
+  std::string token(&kTokenData[0], kExpectedSize);
+  ASSERT_EQ(kExpectedSize, token.length());
+  EXPECT_TRUE(installer::StoreDMToken(token));
+
+  std::wstring path;
+  std::wstring name;
+  InstallUtil::GetMachineLevelUserCloudPolicyDMTokenRegistryPath(&path, &name);
+  base::win::RegKey key;
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_LOCAL_MACHINE, path.c_str(),
+                                    KEY_QUERY_VALUE | KEY_WOW64_64KEY));
+
+  DWORD size = kExpectedSize;
+  std::vector<char> raw_value(size);
+  DWORD dtype;
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.ReadValue(name.c_str(), raw_value.data(), &size, &dtype));
+  EXPECT_EQ(REG_BINARY, dtype);
+  ASSERT_EQ(kExpectedSize, size);
+  EXPECT_EQ(0, memcmp(token.data(), raw_value.data(), kExpectedSize));
+}
+
+TEST(SetupUtilTest, StoreDMTokenToRegistryShouldFailWhenDMTokenTooLarge) {
+  install_static::ScopedInstallDetails scoped_install_details(true);
+  registry_util::RegistryOverrideManager registry_override_manager;
+  registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE);
+
+  std::string token_too_large(installer::kMaxDMTokenLength + 1, 'x');
+  ASSERT_GT(token_too_large.size(), installer::kMaxDMTokenLength);
+
+  EXPECT_FALSE(installer::StoreDMToken(token_too_large));
+}
+
 namespace installer {
 
 class DeleteRegistryKeyPartialTest : public ::testing::Test {
@@ -575,7 +628,7 @@ class LegacyCleanupsTest : public ::testing::Test {
     ASSERT_NO_FATAL_FAILURE(
         registry_override_manager_.OverrideRegistry(HKEY_CURRENT_USER));
     installer_state_ =
-        base::MakeUnique<FakeInstallerState>(temp_dir_.GetPath());
+        std::make_unique<FakeInstallerState>(temp_dir_.GetPath());
     // Create the state to be cleared.
     ASSERT_TRUE(base::win::RegKey(HKEY_CURRENT_USER, kBinariesClientsKeyPath,
                                   KEY_WRITE | KEY_WOW64_32KEY)
@@ -646,7 +699,7 @@ class LegacyCleanupsTest : public ::testing::Test {
       operation_ = InstallerState::SINGLE_INSTALL_OR_UPDATE;
       target_path_ = target_path;
       state_key_ = dist->GetStateKey();
-      product_ = base::MakeUnique<Product>(dist);
+      product_ = std::make_unique<Product>(dist);
       level_ = InstallerState::USER_LEVEL;
       root_key_ = HKEY_CURRENT_USER;
     }

@@ -11,7 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
-#include "content/public/browser/permission_manager.h"
+#include "content/public/browser/permission_controller_delegate.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
@@ -29,8 +29,6 @@
 #include "headless/public/headless_devtools_target.h"
 #include "headless/public/headless_web_contents.h"
 #include "headless/test/headless_browser_test.h"
-#include "headless/test/test_protocol_handler.h"
-#include "headless/test/test_url_request_job.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_util.h"
@@ -257,63 +255,6 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, SetHostResolverRules) {
   EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
-IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, HttpProtocolHandler) {
-  const std::string kResponseBody = "<p>HTTP response body</p>";
-  ProtocolHandlerMap protocol_handlers;
-  protocol_handlers[url::kHttpScheme] =
-      std::make_unique<TestProtocolHandler>(kResponseBody);
-
-  HeadlessBrowserContext* browser_context =
-      browser()
-          ->CreateBrowserContextBuilder()
-          .SetProtocolHandlers(std::move(protocol_handlers))
-          .Build();
-
-  // Load a page which doesn't actually exist, but which is fetched by our
-  // custom protocol handler.
-  HeadlessWebContents* web_contents =
-      browser_context->CreateWebContentsBuilder()
-          .SetInitialURL(GURL("http://not-an-actual-domain.tld/hello.html"))
-          .Build();
-  EXPECT_TRUE(web_contents);
-  EXPECT_TRUE(WaitForLoad(web_contents));
-
-  EXPECT_EQ(kResponseBody,
-            EvaluateScript(web_contents, "document.body.innerHTML")
-                ->GetResult()
-                ->GetValue()
-                ->GetString());
-}
-
-IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, HttpsProtocolHandler) {
-  const std::string kResponseBody = "<p>HTTPS response body</p>";
-  ProtocolHandlerMap protocol_handlers;
-  protocol_handlers[url::kHttpsScheme] =
-      std::make_unique<TestProtocolHandler>(kResponseBody);
-
-  HeadlessBrowserContext* browser_context =
-      browser()
-          ->CreateBrowserContextBuilder()
-          .SetProtocolHandlers(std::move(protocol_handlers))
-          .Build();
-
-  // Load a page which doesn't actually exist, but which is fetched by our
-  // custom protocol handler.
-  HeadlessWebContents* web_contents =
-      browser_context->CreateWebContentsBuilder()
-          .SetInitialURL(GURL("https://not-an-actual-domain.tld/hello.html"))
-          .Build();
-  EXPECT_TRUE(web_contents);
-  EXPECT_TRUE(WaitForLoad(web_contents));
-
-  std::string inner_html;
-  EXPECT_EQ(kResponseBody,
-            EvaluateScript(web_contents, "document.body.innerHTML")
-                ->GetResult()
-                ->GetValue()
-                ->GetString());
-}
-
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, WebGLSupported) {
   HeadlessBrowserContext* browser_context =
       browser()->CreateBrowserContextBuilder().Build();
@@ -388,132 +329,6 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, DefaultSizes) {
 
 namespace {
 
-class ProtocolHandlerWithCookies
-    : public net::URLRequestJobFactory::ProtocolHandler {
- public:
-  explicit ProtocolHandlerWithCookies(net::CookieList* sent_cookies);
-  ~ProtocolHandlerWithCookies() override = default;
-
-  net::URLRequestJob* MaybeCreateJob(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override;
-
- private:
-  net::CookieList* sent_cookies_;  // Not owned.
-
-  DISALLOW_COPY_AND_ASSIGN(ProtocolHandlerWithCookies);
-};
-
-class URLRequestJobWithCookies : public TestURLRequestJob {
- public:
-  URLRequestJobWithCookies(net::URLRequest* request,
-                           net::NetworkDelegate* network_delegate,
-                           net::CookieList* sent_cookies);
-  ~URLRequestJobWithCookies() override = default;
-
-  // net::URLRequestJob implementation:
-  void Start() override;
-
- private:
-  void SaveCookiesAndStart(const net::CookieList& cookie_list);
-
-  net::CookieList* sent_cookies_;  // Not owned.
-  base::WeakPtrFactory<URLRequestJobWithCookies> weak_factory_;
-  DISALLOW_COPY_AND_ASSIGN(URLRequestJobWithCookies);
-};
-
-ProtocolHandlerWithCookies::ProtocolHandlerWithCookies(
-    net::CookieList* sent_cookies)
-    : sent_cookies_(sent_cookies) {}
-
-net::URLRequestJob* ProtocolHandlerWithCookies::MaybeCreateJob(
-    net::URLRequest* request,
-    net::NetworkDelegate* network_delegate) const {
-  return new URLRequestJobWithCookies(request, network_delegate, sent_cookies_);
-}
-
-URLRequestJobWithCookies::URLRequestJobWithCookies(
-    net::URLRequest* request,
-    net::NetworkDelegate* network_delegate,
-    net::CookieList* sent_cookies)
-    // Return an empty response for every request.
-    : TestURLRequestJob(request, network_delegate, ""),
-      sent_cookies_(sent_cookies),
-      weak_factory_(this) {}
-
-void URLRequestJobWithCookies::Start() {
-  net::CookieStore* cookie_store = request_->context()->cookie_store();
-  net::CookieOptions options;
-  options.set_include_httponly();
-
-  // See net::URLRequestHttpJob::AddCookieHeaderAndStart().
-  url::Origin requested_origin = url::Origin::Create(request_->url());
-  url::Origin site_for_cookies =
-      url::Origin::Create(request_->site_for_cookies());
-
-  if (net::registry_controlled_domains::SameDomainOrHost(
-          requested_origin, site_for_cookies,
-          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
-    if (net::registry_controlled_domains::SameDomainOrHost(
-            requested_origin, request_->initiator(),
-            net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
-      options.set_same_site_cookie_mode(
-          net::CookieOptions::SameSiteCookieMode::INCLUDE_STRICT_AND_LAX);
-    } else if (net::HttpUtil::IsMethodSafe(request_->method())) {
-      options.set_same_site_cookie_mode(
-          net::CookieOptions::SameSiteCookieMode::INCLUDE_LAX);
-    }
-  }
-  cookie_store->GetCookieListWithOptionsAsync(
-      request_->url(), options,
-      base::Bind(&URLRequestJobWithCookies::SaveCookiesAndStart,
-                 weak_factory_.GetWeakPtr()));
-}
-
-void URLRequestJobWithCookies::SaveCookiesAndStart(
-    const net::CookieList& cookie_list) {
-  *sent_cookies_ = cookie_list;
-  NotifyHeadersComplete();
-}
-
-}  // namespace
-
-IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, ReadCookiesInProtocolHandler) {
-  net::CookieList sent_cookies;
-  ProtocolHandlerMap protocol_handlers;
-  protocol_handlers[url::kHttpsScheme] =
-      std::make_unique<ProtocolHandlerWithCookies>(&sent_cookies);
-
-  HeadlessBrowserContext* browser_context =
-      browser()
-          ->CreateBrowserContextBuilder()
-          .SetProtocolHandlers(std::move(protocol_handlers))
-          .Build();
-
-  HeadlessWebContents* web_contents =
-      browser_context->CreateWebContentsBuilder()
-          .SetInitialURL(GURL("https://example.com/cookie.html"))
-          .Build();
-  EXPECT_TRUE(WaitForLoad(web_contents));
-
-  // The first load has no cookies.
-  EXPECT_EQ(0u, sent_cookies.size());
-
-  // Set a cookie and reload the page.
-  EXPECT_FALSE(EvaluateScript(
-                   web_contents,
-                   "document.cookie = 'shape=oblong', window.location.reload()")
-                   ->HasExceptionDetails());
-  EXPECT_TRUE(WaitForLoad(web_contents));
-
-  // We should have sent the cookie this time.
-  EXPECT_EQ(1u, sent_cookies.size());
-  EXPECT_EQ("shape", sent_cookies[0].Name());
-  EXPECT_EQ("oblong", sent_cookies[0].Value());
-}
-
-namespace {
-
 class CookieSetter {
  public:
   CookieSetter(HeadlessBrowserTest* browser_test,
@@ -525,7 +340,8 @@ class CookieSetter {
     web_contents_->GetDevToolsTarget()->AttachClient(devtools_client_.get());
     devtools_client_->GetNetwork()->GetExperimental()->SetCookie(
         std::move(set_cookie_params),
-        base::Bind(&CookieSetter::OnSetCookieResult, base::Unretained(this)));
+        base::BindOnce(&CookieSetter::OnSetCookieResult,
+                       base::Unretained(this)));
   }
 
   ~CookieSetter() {
@@ -552,76 +368,6 @@ class CookieSetter {
 };
 
 }  // namespace
-
-IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, SetCookiesWithDevTools) {
-  net::CookieList sent_cookies;
-  ProtocolHandlerMap protocol_handlers;
-  protocol_handlers[url::kHttpsScheme] =
-      base::WrapUnique(new ProtocolHandlerWithCookies(&sent_cookies));
-
-  HeadlessBrowserContext* browser_context =
-      browser()
-          ->CreateBrowserContextBuilder()
-          .SetProtocolHandlers(std::move(protocol_handlers))
-          .Build();
-
-  HeadlessWebContents* web_contents =
-      browser_context->CreateWebContentsBuilder()
-          .SetInitialURL(GURL("https://example.com/cookie.html"))
-          .Build();
-  EXPECT_TRUE(WaitForLoad(web_contents));
-
-  // The first load has no cookies.
-  EXPECT_EQ(0u, sent_cookies.size());
-
-  // Set some cookies.
-  {
-    std::unique_ptr<network::SetCookieParams> set_cookie_params =
-        network::SetCookieParams::Builder()
-            .SetUrl("https://example.com")
-            .SetName("shape")
-            .SetValue("oblong")
-            .Build();
-    CookieSetter cookie_setter(this, web_contents,
-                               std::move(set_cookie_params));
-    RunAsynchronousTest();
-    std::unique_ptr<network::SetCookieResult> result =
-        cookie_setter.TakeResult();
-    EXPECT_TRUE(result->GetSuccess());
-  }
-  {
-    // Try setting all the fields so we notice if the protocol for any of them
-    // changes.
-    std::unique_ptr<network::SetCookieParams> set_cookie_params =
-        network::SetCookieParams::Builder()
-            .SetUrl("https://other.com")
-            .SetName("shape")
-            .SetValue("trapezoid")
-            .SetDomain("other.com")
-            .SetPath("")
-            .SetSecure(true)
-            .SetHttpOnly(true)
-            .SetSameSite(network::CookieSameSite::EXACT)
-            .SetExpires(0)
-            .Build();
-    CookieSetter cookie_setter(this, web_contents,
-                               std::move(set_cookie_params));
-    RunAsynchronousTest();
-    std::unique_ptr<network::SetCookieResult> result =
-        cookie_setter.TakeResult();
-    EXPECT_TRUE(result->GetSuccess());
-  }
-
-  // Reload the page.
-  EXPECT_FALSE(EvaluateScript(web_contents, "window.location.reload();")
-                   ->HasExceptionDetails());
-  EXPECT_TRUE(WaitForLoad(web_contents));
-
-  // We should have sent the matching cookies this time.
-  EXPECT_EQ(1u, sent_cookies.size());
-  EXPECT_EQ("shape", sent_cookies[0].Name());
-  EXPECT_EQ("oblong", sent_cookies[0].Value());
-}
 
 // TODO(skyostil): This test currently relies on being able to run a shell
 // script.
@@ -738,8 +484,8 @@ IN_PROC_BROWSER_TEST_F(CrashReporterTest, MAYBE_GenerateMinidump) {
   // Check that one minidump got created.
   {
 #if defined(OS_MACOSX)
-    // Mac outputs dumps in the 'completed' directory.
-    crash_dumps_dir_ = crash_dumps_dir_.Append("completed");
+    // Mac outputs dumps in the 'pending' directory.
+    crash_dumps_dir_ = crash_dumps_dir_.Append("pending");
 #endif
     base::ThreadRestrictions::SetIOAllowed(true);
     base::FileEnumerator it(crash_dumps_dir_, /* recursive */ false,
@@ -771,54 +517,14 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, PermissionManagerAlwaysASK) {
   HeadlessWebContentsImpl* web_contents =
       HeadlessWebContentsImpl::From(headless_web_contents);
 
-  content::PermissionManager* permission_manager =
-      web_contents->browser_context()->GetPermissionManager();
-  EXPECT_NE(nullptr, permission_manager);
+  content::PermissionControllerDelegate* permission_controller_delegate =
+      web_contents->browser_context()->GetPermissionControllerDelegate();
+  EXPECT_NE(nullptr, permission_controller_delegate);
 
   // Check that the permission manager returns ASK for a given permission type.
   EXPECT_EQ(blink::mojom::PermissionStatus::ASK,
-            permission_manager->GetPermissionStatus(
+            permission_controller_delegate->GetPermissionStatus(
                 content::PermissionType::NOTIFICATIONS, url, url));
-}
-
-class HeadlessBrowserTestWithNetLog : public HeadlessBrowserTest {
- public:
-  HeadlessBrowserTestWithNetLog() = default;
-
-  void SetUp() override {
-    base::ThreadRestrictions::SetIOAllowed(true);
-    EXPECT_TRUE(base::CreateTemporaryFile(&net_log_));
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        "--log-net-log", net_log_.MaybeAsASCII());
-    HeadlessBrowserTest::SetUp();
-  }
-
-  void TearDown() override {
-    HeadlessBrowserTest::TearDown();
-    base::DeleteFile(net_log_, false);
-  }
-
- protected:
-  base::FilePath net_log_;
-};
-
-IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestWithNetLog, WriteNetLog) {
-  EXPECT_TRUE(embedded_test_server()->Start());
-
-  HeadlessBrowserContext* browser_context =
-      browser()->CreateBrowserContextBuilder().Build();
-
-  HeadlessWebContents* web_contents =
-      browser_context->CreateWebContentsBuilder()
-          .SetInitialURL(embedded_test_server()->GetURL("/hello.html"))
-          .Build();
-  EXPECT_TRUE(WaitForLoad(web_contents));
-  browser()->Shutdown();
-
-  base::ThreadRestrictions::SetIOAllowed(true);
-  std::string net_log_data;
-  EXPECT_TRUE(base::ReadFileToString(net_log_, &net_log_data));
-  EXPECT_GE(net_log_data.find("hello.html"), 0u);
 }
 
 namespace {
@@ -838,7 +544,7 @@ class TraceHelper : public tracing::ExperimentalObserver {
 
     client_->GetTracing()->GetExperimental()->Start(
         tracing::StartParams::Builder().Build(),
-        base::Bind(&TraceHelper::OnTracingStarted, base::Unretained(this)));
+        base::BindOnce(&TraceHelper::OnTracingStarted, base::Unretained(this)));
   }
 
   ~TraceHelper() override {
@@ -968,6 +674,25 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestAppendCommandLineFlags,
 
   // Used only for lifetime.
   (void)web_contents;
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, ServerWantsClientCertificate) {
+  net::SpawnedTestServer::SSLOptions ssl_options;
+  ssl_options.request_client_certificate = true;
+
+  net::SpawnedTestServer server(
+      net::SpawnedTestServer::TYPE_HTTPS, ssl_options,
+      base::FilePath(FILE_PATH_LITERAL("headless/test/data")));
+  EXPECT_TRUE(server.Start());
+
+  HeadlessBrowserContext* browser_context =
+      browser()->CreateBrowserContextBuilder().Build();
+
+  HeadlessWebContents* web_contents =
+      browser_context->CreateWebContentsBuilder()
+          .SetInitialURL(server.GetURL("/hello.html"))
+          .Build();
+  EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
 }  // namespace headless

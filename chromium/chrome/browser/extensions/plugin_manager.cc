@@ -17,6 +17,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/mime_types_handler.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_NACL)
@@ -70,6 +71,7 @@ void PluginManager::OnExtensionLoaded(content::BrowserContext* browser_context,
     info.type = content::WebPluginInfo::PLUGIN_TYPE_BROWSER_PLUGIN;
     info.name = base::UTF8ToUTF16(extension->name());
     info.path = handler->GetPluginPath();
+    info.background_color = handler->GetBackgroundColor();
 
     for (std::set<std::string>::const_iterator mime_type =
          handler->mime_type_set().begin();
@@ -142,7 +144,7 @@ void PluginManager::UpdatePluginListWithNaClModules() {
   // MIME type to plugins which handle NaCl modules in order to allow the
   // individual modules to handle these types.
   base::FilePath path;
-  if (!PathService::Get(chrome::FILE_NACL_PLUGIN, &path))
+  if (!base::PathService::Get(chrome::FILE_NACL_PLUGIN, &path))
     return;
   const content::PepperPluginInfo* pepper_info =
       PluginService::GetInstance()->GetRegisteredPpapiPluginInfo(path);

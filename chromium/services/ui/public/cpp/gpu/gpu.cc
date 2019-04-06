@@ -4,15 +4,18 @@
 
 #include "services/ui/public/cpp/gpu/gpu.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/debug/stack_trace.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/scheduling_priority.h"
-#include "mojo/public/cpp/bindings/sync_call_restrictions.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/gpu/client_gpu_memory_buffer_manager.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
@@ -245,16 +248,26 @@ Gpu::Gpu(GpuPtrFactory factory,
          scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_task_runner_(std::move(task_runner)),
-      gpu_memory_buffer_manager_(
-          std::make_unique<ClientGpuMemoryBufferManager>(factory.Run())),
       gpu_(new GpuPtrIO(), base::OnTaskRunnerDeleter(io_task_runner_)) {
   DCHECK(main_task_runner_);
   DCHECK(io_task_runner_);
 
-  // Initialize mojom::GpuPtr on the IO thread. |gpu_| can only be used on the
-  // IO thread after this point. It is safe to use base::Unretained with |gpu_|
-  // for IO thread tasks as |gpu_| is destroyed by an IO thread task posted from
-  // the destructor.
+  mojom::GpuMemoryBufferFactoryPtr gpu_memory_buffer_factory;
+  auto gpu_for_buffer_factory = factory.Run();
+  gpu_for_buffer_factory->CreateGpuMemoryBufferFactory(
+      mojo::MakeRequest(&gpu_memory_buffer_factory));
+  gpu_memory_buffer_manager_ = std::make_unique<ClientGpuMemoryBufferManager>(
+      std::move(gpu_memory_buffer_factory));
+  // Attach ownership of |gpu_for_buffer_factory| to
+  // |gpu_memory_buffer_manager_| to ensure |gpu_memory_buffer_factory| stays
+  // alive.
+  gpu_memory_buffer_manager_->SetOptionalDestructionCallback(
+      base::BindOnce([](mojom::GpuPtr) {}, std::move(gpu_for_buffer_factory)));
+
+  // Initialize mojom::GpuPtr on the IO thread. |gpu_| can only be used on
+  // the IO thread after this point. It is safe to use base::Unretained with
+  // |gpu_| for IO thread tasks as |gpu_| is destroyed by an IO thread task
+  // posted from the destructor.
   io_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&GpuPtrIO::Initialize, base::Unretained(gpu_.get()),
@@ -289,6 +302,7 @@ scoped_refptr<viz::ContextProvider> Gpu::CreateContextProvider(
 
   constexpr bool automatic_flushes = false;
   constexpr bool support_locking = false;
+  constexpr bool support_grcontext = false;
 
   gpu::ContextCreationAttribs attributes;
   attributes.alpha_size = -1;
@@ -298,13 +312,12 @@ scoped_refptr<viz::ContextProvider> Gpu::CreateContextProvider(
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
   attributes.lose_context_when_out_of_memory = true;
-  ContextProviderCommandBuffer* shared_context_provider = nullptr;
   return base::MakeRefCounted<ContextProviderCommandBuffer>(
       std::move(gpu_channel), GetGpuMemoryBufferManager(), stream_id,
       stream_priority, gpu::kNullSurfaceHandle,
       GURL("chrome://gpu/MusContextFactory"), automatic_flushes,
-      support_locking, gpu::SharedMemoryLimits(), attributes,
-      shared_context_provider, command_buffer_metrics::MUS_CLIENT_CONTEXT);
+      support_locking, support_grcontext, gpu::SharedMemoryLimits(), attributes,
+      command_buffer_metrics::ContextType::MUS_CLIENT);
 }
 
 void Gpu::CreateJpegDecodeAccelerator(

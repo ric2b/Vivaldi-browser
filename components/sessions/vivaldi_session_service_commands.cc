@@ -34,15 +34,24 @@ void WriteStringToPickle(base::Pickle* pickle,
   }
 }
 
+bool ReadSessionIdFromPickle(base::PickleIterator* iterator, SessionID* id) {
+  SessionID::id_type value;
+  if (!iterator->ReadInt(&value)) {
+    return false;
+  }
+  *id = SessionID::FromSerializedValue(value);
+  return true;
+}
+
 }  // namespace
 
 std::unique_ptr<SessionCommand> CreateSetTabExtDataCommand(
     SessionID::id_type command_id,
-    SessionID::id_type tab_id,
+    SessionID tab_id,
     const std::string& ext_data) {
   // Use pickle to handle marshalling.
   base::Pickle pickle;
-  pickle.WriteInt(tab_id);
+  pickle.WriteInt(tab_id.id());
 
   // Enforce a max for ext data.
   static const SessionCommand::size_type max_ext_data_size =
@@ -58,11 +67,11 @@ std::unique_ptr<SessionCommand> CreateSetTabExtDataCommand(
 
 std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
     SessionID::id_type command_id,
-    SessionID::id_type window_id,
+    SessionID window_id,
     const std::string& ext_data) {
   // Use pickle to handle marshalling.
   base::Pickle pickle;
-  pickle.WriteInt(window_id);
+  pickle.WriteInt(window_id.id());
 
   // Enforce a max for ids. They should never be anywhere near this size.
   static const SessionCommand::size_type max_id_size =
@@ -77,25 +86,25 @@ std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
 }
 
 bool RestoreSetExtDataCommand(const SessionCommand& command,
-                              SessionID::id_type* tab_id,
+                              SessionID* tab_id,
                               std::string* ext_data) {
   std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
   if (!pickle.get())
     return false;
 
   base::PickleIterator iterator(*pickle);
-  return iterator.ReadInt(tab_id) && iterator.ReadString(ext_data);
+  return ReadSessionIdFromPickle(&iterator, tab_id) && iterator.ReadString(ext_data);
 }
 
 bool RestoreSetWindowExtDataCommand(const SessionCommand& command,
-                                    SessionID::id_type* window_id,
+                                    SessionID* window_id,
                                     std::string* ext_data) {
   std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
   if (!pickle.get())
     return false;
 
   base::PickleIterator iterator(*pickle);
-  return iterator.ReadInt(window_id) && iterator.ReadString(ext_data);
+  return ReadSessionIdFromPickle(&iterator, window_id) && iterator.ReadString(ext_data);
 }
 
 }  // namespace vivaldi

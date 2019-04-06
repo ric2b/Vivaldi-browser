@@ -46,19 +46,9 @@ class COLOR_SPACE_EXPORT ICCProfile {
   static ICCProfile FromParametricColorSpace(
       const gfx::ColorSpace& color_space);
 
-  // Return the ICCProfile that was used to create the specified ColorSpace, if
-  // available. Otherwise, return an invalid profile. This is used on macOS for
-  // power reasons.
-  static ICCProfile FromCacheMac(const gfx::ColorSpace& color_space);
-
   // Return a ColorSpace that references this ICCProfile. ColorTransforms
   // created using this ColorSpace will match this ICCProfile precisely.
   ColorSpace GetColorSpace() const;
-
-  // Return a ColorSpace that is the best parametric approximation of this
-  // ICCProfile. The resulting ColorSpace will reference this ICCProfile only
-  // if the parametric approximation is almost exact.
-  ColorSpace GetParametricColorSpace() const;
 
   // Return the data for the profile.
   std::vector<char> GetData() const;
@@ -82,18 +72,11 @@ class COLOR_SPACE_EXPORT ICCProfile {
 
     // This must match ICCProfileAnalyzeResult enum in histograms.xml.
     enum AnalyzeResult {
-      kICCExtractedMatrixAndAnalyticTrFn = 0,
-      kICCExtractedMatrixAndApproximatedTrFn = 1,
-      kICCFailedToConvergeToApproximateTrFn = 2,
-      kICCFailedToExtractRawTrFn = 3,
-      kICCFailedToExtractMatrix = 4,
       kICCFailedToParse = 5,
-      kICCFailedToExtractSkColorSpace = 6,
-      kICCFailedToCreateXform = 7,
-      kICCFailedToApproximateTrFnAccurately = 8,
-      kICCExtractedSRGBColorSpace = 9,
       kICCNoProfile = 10,
-      kICCProfileAnalyzeLast = kICCNoProfile,
+      kICCFailedToMakeUsable = 11,
+      kICCExtractedMatrixAndTrFn = 12,
+      kMaxValue = kICCExtractedMatrixAndTrFn,
     };
 
     const std::vector<char> data_;
@@ -122,11 +105,6 @@ class COLOR_SPACE_EXPORT ICCProfile {
     // The best-fit parametric primaries and transfer function.
     SkMatrix44 to_XYZD50_;
     SkColorSpaceTransferFn transfer_fn_;
-
-    // The L-infinity error of the parametric color space fit. This is undefined
-    // unless |analyze_result_| is kICCFailedToApproximateTrFnAccurately or
-    // kICCExtractedMatrixAndApproximatedTrFn.
-    float transfer_fn_error_ = 0;
 
     // The set of display ids which have have caused this ICC profile to be
     // recorded in UMA histograms. Only record an ICC profile once per display

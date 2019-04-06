@@ -153,7 +153,8 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
         // Notifications permission should still be prompt.
         Assert.assertEquals("\"default\"", runScriptBlocking("Notification.permission"));
 
-        runScriptAndWaitForTitle("sendToTest('reset title')", "reset title");
+        runScriptAndWaitForTitle("sendToTest('reset title')",
+                "clearCachedVerificationsForTesting title");
 
         // PushManager.subscribePush() should show the notifications infobar again.
         runScript("subscribePush()");
@@ -277,8 +278,7 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
      * Runs {@code script} in the current tab but does not wait for the result.
      */
     private void runScript(String script) {
-        JavaScriptUtils.executeJavaScript(
-                mNotificationTestRule.getActivity().getActivityTab().getWebContents(), script);
+        JavaScriptUtils.executeJavaScript(mNotificationTestRule.getWebContents(), script);
     }
 
     /**
@@ -286,7 +286,7 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
      */
     private String runScriptBlocking(String script) throws InterruptedException, TimeoutException {
         return JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                mNotificationTestRule.getActivity().getActivityTab().getWebContents(), script);
+                mNotificationTestRule.getWebContents(), script);
     }
 
     /**
@@ -335,6 +335,7 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
         mMessageHandledHelper.waitForCallback(mMessageHandledHelper.getCallCount());
     }
 
+    @SuppressWarnings("MissingFail")
     private void waitForTitle(Tab tab, String expectedTitle) throws InterruptedException {
         TabTitleObserver titleObserver = new TabTitleObserver(tab, expectedTitle);
         try {

@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -22,6 +25,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -32,6 +36,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "media/base/media_switches.h"
 #include "net/base/filename_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -47,22 +52,14 @@ using content::WebContents;
 namespace {
 
 int RenderProcessHostCount() {
-  content::RenderProcessHost::iterator hosts =
-      content::RenderProcessHost::AllHostsIterator();
-  int count = 0;
-  while (!hosts.IsAtEnd()) {
-    if (hosts.GetCurrentValue()->HasConnection())
-      count++;
-    hosts.Advance();
-  }
-  return count;
+  return content::RenderProcessHost::GetCurrentRenderProcessCountForTesting();
 }
 
 WebContents* FindFirstDevToolsContents() {
   std::unique_ptr<content::RenderWidgetHostIterator> widgets(
       RenderWidgetHost::GetRenderWidgetHosts());
   while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
-    if (!widget->GetProcess()->HasConnection())
+    if (!widget->GetProcess()->IsInitializedAndNotDead())
       continue;
     RenderViewHost* view_host = RenderViewHost::From(widget);
     if (!view_host)
@@ -93,7 +90,7 @@ base::Process ProcessFromHandle(base::ProcessHandle handle) {
 
 }  // namespace
 
-class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
+class ChromeRenderProcessHostTest : public extensions::ExtensionBrowserTest {
  public:
   ChromeRenderProcessHostTest() {}
 
@@ -107,7 +104,8 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
 
     WaitForLauncherThread();
     WaitForMessageProcessing(wc);
-    return ProcessFromHandle(wc->GetMainFrame()->GetProcess()->GetHandle());
+    return ProcessFromHandle(
+        wc->GetMainFrame()->GetProcess()->GetProcess().Handle());
   }
 
   // Loads the given url in a new background tab and returns the handle of its
@@ -124,15 +122,16 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
 
     WaitForLauncherThread();
     WaitForMessageProcessing(wc);
-    return ProcessFromHandle(wc->GetMainFrame()->GetProcess()->GetHandle());
+    return ProcessFromHandle(
+        wc->GetMainFrame()->GetProcess()->GetProcess().Handle());
   }
 
   // Ensures that the backgrounding / foregrounding gets a chance to run.
   void WaitForLauncherThread() {
-    content::BrowserThread::PostTaskAndReply(
-        content::BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
-        base::Bind(&base::DoNothing), base::MessageLoop::QuitWhenIdleClosure());
-    base::RunLoop().Run();
+    base::RunLoop run_loop;
+    content::GetProcessLauncherTaskRunner()->PostTaskAndReply(
+        FROM_HERE, base::DoNothing(), run_loop.QuitWhenIdleClosure());
+    run_loop.Run();
   }
 
   // Implicitly waits for the renderer process associated with the specified
@@ -161,7 +160,7 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
     const extensions::Extension* extension =
         LoadExtension(test_data_dir_.AppendASCII("options_page"));
 
-    // Change the first tab to be the omnibox page (TYPE_WEBUI).
+    // Change the first tab to be the omnibox page (WebUI).
     GURL omnibox(chrome::kChromeUIOmniboxURL);
     ui_test_utils::NavigateToURL(browser(), omnibox);
     EXPECT_EQ(tab_count, browser()->tab_strip_model()->count());
@@ -170,7 +169,7 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
     EXPECT_EQ(omnibox, tab1->GetURL());
     EXPECT_EQ(host_count, RenderProcessHostCount());
 
-    // Create a new TYPE_TABBED tab.  It should be in its own process.
+    // Create a new normal tab with a data URL. It should be in its own process.
     GURL page1("data:text/html,hello world1");
 
     ui_test_utils::WindowedTabAddedNotificationObserver observer1(
@@ -187,23 +186,30 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
     EXPECT_EQ(host_count, RenderProcessHostCount());
     EXPECT_NE(rph1, rph2);
 
-    // Create another TYPE_TABBED tab.  It should share the previous process.
+    // Create another data URL tab.  With Site Isolation, this will require its
+    // own process, but without Site Isolation, it can share the previous
+    // process.
     GURL page2("data:text/html,hello world2");
     ui_test_utils::WindowedTabAddedNotificationObserver observer2(
         content::NotificationService::AllSources());
     ::ShowSingletonTab(browser(), page2);
     observer2.Wait();
     tab_count++;
+    if (content::AreAllSitesIsolatedForTesting())
+      host_count++;
     EXPECT_EQ(tab_count, browser()->tab_strip_model()->count());
     tab2 = browser()->tab_strip_model()->GetWebContentsAt(tab_count - 1);
     EXPECT_EQ(tab2->GetURL(), page2);
     EXPECT_EQ(host_count, RenderProcessHostCount());
-    EXPECT_EQ(tab2->GetMainFrame()->GetProcess(), rph2);
+    if (content::AreAllSitesIsolatedForTesting())
+      EXPECT_NE(tab2->GetMainFrame()->GetProcess(), rph2);
+    else
+      EXPECT_EQ(tab2->GetMainFrame()->GetProcess(), rph2);
 
-    // Create another TYPE_WEBUI tab.  It should share the process with omnibox.
-    // Note: intentionally create this tab after the TYPE_TABBED tabs to
-    // exercise bug 43448 where extension and WebUI tabs could get combined into
-    // normal renderers.
+    // Create another WebUI tab.  It should share the process with omnibox.
+    // Note: intentionally create this tab after the normal tabs to exercise bug
+    // 43448 where extension and WebUI tabs could get combined into normal
+    // renderers.
     GURL history(chrome::kChromeUIHistoryURL);
     ui_test_utils::WindowedTabAddedNotificationObserver observer3(
         content::NotificationService::AllSources());
@@ -216,7 +222,7 @@ class ChromeRenderProcessHostTest : public ExtensionBrowserTest {
     EXPECT_EQ(host_count, RenderProcessHostCount());
     EXPECT_EQ(tab2->GetMainFrame()->GetProcess(), rph1);
 
-    // Create a TYPE_EXTENSION tab.  It should be in its own process.
+    // Create an extension tab.  It should be in its own process.
     GURL extension_url("chrome-extension://" + extension->id());
     ui_test_utils::WindowedTabAddedNotificationObserver observer4(
         content::NotificationService::AllSources());
@@ -262,13 +268,13 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, MAYBE_ProcessPerTab) {
   int tab_count = 1;
   int host_count = 1;
 
-  // Change the first tab to be the new tab page (TYPE_WEBUI).
+  // Change the first tab to be a WebUI page.
   GURL omnibox(chrome::kChromeUIOmniboxURL);
   ui_test_utils::NavigateToURL(browser(), omnibox);
   EXPECT_EQ(tab_count, browser()->tab_strip_model()->count());
   EXPECT_EQ(host_count, RenderProcessHostCount());
 
-  // Create a new TYPE_TABBED tab.  It should be in its own process.
+  // Create a new normal tab with a data URL.  It should be in its own process.
   GURL page1("data:text/html,hello world1");
   ui_test_utils::WindowedTabAddedNotificationObserver observer1(
       content::NotificationService::AllSources());
@@ -279,13 +285,16 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, MAYBE_ProcessPerTab) {
   EXPECT_EQ(tab_count, browser()->tab_strip_model()->count());
   EXPECT_EQ(host_count, RenderProcessHostCount());
 
-  // Create another TYPE_TABBED tab.  It should share the previous process.
+  // Create another data URL tab.  With Site Isolation, this will require its
+  // own process, but without Site Isolation, it can share the previous process.
   GURL page2("data:text/html,hello world2");
   ui_test_utils::WindowedTabAddedNotificationObserver observer2(
       content::NotificationService::AllSources());
   ::ShowSingletonTab(browser(), page2);
   observer2.Wait();
   tab_count++;
+  if (content::AreAllSitesIsolatedForTesting())
+    host_count++;
   EXPECT_EQ(tab_count, browser()->tab_strip_model()->count());
   EXPECT_EQ(host_count, RenderProcessHostCount());
 
@@ -308,22 +317,34 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, MAYBE_ProcessPerTab) {
   EXPECT_EQ(host_count, RenderProcessHostCount());
 }
 
-// We don't change process priorities on Posix because the user lacks the
-// permission to raise a process' priority even after lowering it.
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
-IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
-  if (!base::Process::CanBackgroundProcesses()) {
-    LOG(ERROR) << "Can't background processes";
-    return;
+class ChromeRenderProcessHostBackgroundingTest
+    : public ChromeRenderProcessHostTest,
+      public testing::WithParamInterface<std::string> {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ChromeRenderProcessHostTest::SetUpCommandLine(command_line);
+
+    command_line->AppendSwitch(switches::kProcessPerTab);
+
+    command_line->AppendSwitchASCII(
+        switches::kForceFieldTrials,
+        "BoostRendererPriorityForPendingViews/" + GetParam());
   }
+
+  void SetUpOnMainThread() override {
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(ChromeRenderProcessHostBackgroundingTest, MultipleTabs) {
+  // This test is invalid on platforms that can't background.
+  if (!base::Process::CanBackgroundProcesses())
+    return;
+
 #if defined(OS_MACOSX)
   base::PortProvider* port_provider =
       content::BrowserChildProcessHost::GetPortProvider();
 #endif  //  defined(OS_MACOSX)
-
-  base::CommandLine& parsed_command_line =
-      *base::CommandLine::ForCurrentProcess();
-  parsed_command_line.AppendSwitch(switches::kProcessPerTab);
 
   // Change the first tab to be the omnibox page (TYPE_WEBUI).
   GURL omnibox(chrome::kChromeUIOmniboxURL);
@@ -364,9 +385,9 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
   EXPECT_TRUE(process1.IsProcessBackgrounded(port_provider));
   EXPECT_FALSE(process2.IsProcessBackgrounded(port_provider));
   // TODO(gab): The new background tab should be backgrounded but it currently
-  // intentionally isn't per a workaround to https://crbug.com/560446 in
-  // RenderProcessHostImpl::OnProcessLaunched().
-  EXPECT_FALSE(process3.IsProcessBackgrounded(port_provider));
+  // only is under an experiment.
+  EXPECT_EQ(process3.IsProcessBackgrounded(port_provider),
+            GetParam() == "Enabled");
 
   // Navigate back to the first page. Its renderer should be in foreground
   // again while the other renderers should be backgrounded.
@@ -375,11 +396,13 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
   EXPECT_FALSE(process1.IsProcessBackgrounded(port_provider));
   EXPECT_TRUE(process2.IsProcessBackgrounded(port_provider));
   // TODO(gab): Same as above.
-  EXPECT_FALSE(process3.IsProcessBackgrounded(port_provider));
+  EXPECT_EQ(process3.IsProcessBackgrounded(port_provider),
+            GetParam() == "Enabled");
 
   // TODO(gab): Remove this when https://crbug.com/560446 is fixed, but for now
-  // confirm that the correct state is at least achieved when tab #3 is
-  // explicitly foregrounded and re-backgrounded.
+  // confirm that the correct state is at least achieved, regardless of the
+  // experiment state, when tab #3 is explicitly foregrounded and
+  // re-backgrounded.
   EXPECT_EQ(process3.Pid(), ShowSingletonTab(page3).Pid());
   EXPECT_EQ(process1.Pid(), ShowSingletonTab(page1).Pid());
   EXPECT_FALSE(process1.IsProcessBackgrounded(port_provider));
@@ -389,9 +412,8 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
   EXPECT_TRUE(process1.IsProcessBackgrounded());
   EXPECT_FALSE(process2.IsProcessBackgrounded());
   // TODO(gab): The new background tab should be backgrounded but it currently
-  // intentionally isn't per a workaround to https://crbug.com/560446 in
-  // RenderProcessHostImpl::OnProcessLaunched().
-  EXPECT_FALSE(process3.IsProcessBackgrounded());
+  // only is under an experiment.
+  EXPECT_EQ(process3.IsProcessBackgrounded(), GetParam() == "Enabled");
 
   // Navigate back to the first page. Its renderer should be in foreground
   // again while the other renderers should be backgrounded.
@@ -400,11 +422,12 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
   EXPECT_FALSE(process1.IsProcessBackgrounded());
   EXPECT_TRUE(process2.IsProcessBackgrounded());
   // TODO(gab): Same as above.
-  EXPECT_FALSE(process3.IsProcessBackgrounded());
+  EXPECT_EQ(process3.IsProcessBackgrounded(), GetParam() == "Enabled");
 
   // TODO(gab): Remove this when https://crbug.com/560446 is fixed, but for now
-  // confirm that the correct state is at least achieved when tab #3 is
-  // explicitly foregrounded and re-backgrounded.
+  // confirm that the correct state is at least achieved, regardless of the
+  // experiment state, when tab #3 is explicitly foregrounded and
+  // re-backgrounded.
   EXPECT_EQ(process3.Pid(), ShowSingletonTab(page3).Pid());
   EXPECT_EQ(process1.Pid(), ShowSingletonTab(page1).Pid());
   EXPECT_FALSE(process1.IsProcessBackgrounded());
@@ -412,7 +435,119 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
   EXPECT_TRUE(process3.IsProcessBackgrounded());
 #endif
 }
+
+namespace {
+
+// A helper to post a recurring check that a renderer is foregrounded. The
+// recurring check uses WeakPtr semantic and will die when this class goes out
+// of scope.
+class AssertForegroundHelper {
+ public:
+  AssertForegroundHelper() : weak_ptr_factory_(this) {}
+
+#if defined(OS_MACOSX)
+  // Asserts that |renderer_process| isn't backgrounded and reposts self to
+  // check again shortly. |renderer_process| must outlive this
+  // AssertForegroundHelper instance.
+  void AssertForegroundAndRepost(const base::Process& renderer_process,
+                                 base::PortProvider* port_provider) {
+    ASSERT_FALSE(renderer_process.IsProcessBackgrounded(port_provider));
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AssertForegroundHelper::AssertForegroundAndRepost,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       base::ConstRef(renderer_process), port_provider),
+        base::TimeDelta::FromMilliseconds(1));
+  }
+#else   // defined(OS_MACOSX)
+  // Same as above without the Mac specific base::PortProvider.
+  void AssertForegroundAndRepost(const base::Process& renderer_process) {
+    ASSERT_FALSE(renderer_process.IsProcessBackgrounded());
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AssertForegroundHelper::AssertForegroundAndRepost,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       base::ConstRef(renderer_process)),
+        base::TimeDelta::FromMilliseconds(1));
+  }
+#endif  // defined(OS_MACOSX)
+
+ private:
+  base::WeakPtrFactory<AssertForegroundHelper> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(AssertForegroundHelper);
+};
+
+}  // namespace
+
+// This is a regression test for https://crbug.com/560446 (ensures a foreground
+// navigation isn't backgrounded prior to its navigation committing a "visible"
+// widget). TODO(gab): This test should move to
+// content/browser/renderer_host/render_process_host_browsertest.cc after the
+// experiment (there's nothing chrome specific about it really).
+IN_PROC_BROWSER_TEST_P(ChromeRenderProcessHostBackgroundingTest,
+                       ForegroundNavigationIsNeverBackgrounded) {
+#if defined(OS_MACOSX)
+  base::PortProvider* port_provider =
+      content::BrowserChildProcessHost::GetPortProvider();
+#endif  //  defined(OS_MACOSX)
+
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::TestNavigationManager navigation_manager(web_contents, url);
+
+  content::NavigationController::LoadURLParams load_params(url);
+  web_contents->GetController().LoadURLWithParams(load_params);
+
+  const base::Process& renderer_process =
+      web_contents->GetMainFrame()->GetProcess()->GetProcess();
+  ASSERT_TRUE(renderer_process.IsValid());
+
+  // Kick off an infinite check against self that the tab under navigation is
+  // never backgrounded (the upcoming WaitforResponse() will wait inside a
+  // RunLoop() and hence perform this check regularly throughout the
+  // navigation).
+  AssertForegroundHelper assert_foreground_helper;
+#if defined(OS_MACOSX)
+  assert_foreground_helper.AssertForegroundAndRepost(renderer_process,
+                                                     port_provider);
+#else
+  assert_foreground_helper.AssertForegroundAndRepost(renderer_process);
 #endif
+
+  // Wait until the response (while performing the above check).
+  ASSERT_TRUE(navigation_manager.WaitForResponse());
+
+  // Then perform the check once more after making sure the queues have been
+  // flushed.
+  WaitForLauncherThread();
+  WaitForMessageProcessing(web_contents);
+  ASSERT_EQ(renderer_process.Handle(),
+            web_contents->GetMainFrame()->GetProcess()->GetProcess().Handle());
+#if defined(OS_MACOSX)
+  ASSERT_FALSE(renderer_process.IsProcessBackgrounded(port_provider));
+#else
+  ASSERT_FALSE(renderer_process.IsProcessBackgrounded());
+#endif
+
+  // And same thing until the navigation is complete.
+  navigation_manager.WaitForNavigationFinished();
+  WaitForLauncherThread();
+  WaitForMessageProcessing(web_contents);
+  ASSERT_EQ(renderer_process.Handle(),
+            web_contents->GetMainFrame()->GetProcess()->GetProcess().Handle());
+#if defined(OS_MACOSX)
+  ASSERT_FALSE(renderer_process.IsProcessBackgrounded(port_provider));
+#else
+  ASSERT_FALSE(renderer_process.IsProcessBackgrounded());
+#endif
+}
+
+INSTANTIATE_TEST_CASE_P(BoostRendererPriorityForPendingViews,
+                        ChromeRenderProcessHostBackgroundingTest,
+                        testing::Values("Enabled", "Default"));
 
 // TODO(nasko): crbug.com/173137
 // Disable on Windows and Mac due to ongoing flakiness. (crbug.com/442785)
@@ -533,21 +668,21 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
 class WindowDestroyer : public content::WebContentsObserver {
  public:
   WindowDestroyer(content::WebContents* web_contents, TabStripModel* model)
-      : content::WebContentsObserver(web_contents), tab_strip_model_(model) {}
+      : content::WebContentsObserver(web_contents),
+        tab_strip_model_(model),
+        browser_closed_observer_(chrome::NOTIFICATION_BROWSER_CLOSED,
+                                 content::NotificationService::AllSources()) {}
+
+  // Wait for the browser window to be destroyed.
+  void Wait() { browser_closed_observer_.Wait(); }
 
   void RenderProcessGone(base::TerminationStatus status) override {
-    // Wait for the window to be destroyed, which will ensure all other
-    // RenderViewHost objects are deleted before we return and proceed with
-    // the next iteration of notifications.
-    content::WindowedNotificationObserver observer(
-        chrome::NOTIFICATION_BROWSER_CLOSED,
-        content::NotificationService::AllSources());
     tab_strip_model_->CloseAllTabs();
-    observer.Wait();
   }
 
  private:
   TabStripModel* tab_strip_model_;
+  content::WindowedNotificationObserver browser_closed_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowDestroyer);
 };
@@ -581,16 +716,12 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
   // Create an object that will close the window on a process crash.
   WindowDestroyer destroyer(wc1, browser()->tab_strip_model());
 
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-
   // Kill the renderer process, simulating a crash. This should the ProcessDied
   // method to be called. Alternatively, RenderProcessHost::OnChannelError can
   // be called to directly force a call to ProcessDied.
-  wc1->GetMainFrame()->GetProcess()->Shutdown(-1, true);
+  wc1->GetMainFrame()->GetProcess()->Shutdown(-1);
 
-  observer.Wait();
+  destroyer.Wait();
 }
 
 // Sets up the browser in order to start the tests with two tabs open: one
@@ -598,10 +729,10 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
 // audio in playing state. Also sets up the variables containing the process
 // associated with each tab, the urls of the two pages and the WebContents of
 // the "audio" page.
-class ChromeRenderProcessHostBackgroundingTest
+class ChromeRenderProcessHostBackgroundingTestWithAudio
     : public ChromeRenderProcessHostTest {
  public:
-  ChromeRenderProcessHostBackgroundingTest() {}
+  ChromeRenderProcessHostBackgroundingTestWithAudio() {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ChromeRenderProcessHostTest::SetUpCommandLine(command_line);
@@ -618,7 +749,7 @@ class ChromeRenderProcessHostBackgroundingTest
 
     // Set up the server and get the test pages.
     base::FilePath test_data_dir;
-    ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
+    ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
     embedded_test_server()->ServeFilesFromDirectory(
         test_data_dir.AppendASCII("chrome/test/data/"));
     audio_url_ = embedded_test_server()->GetURL("/extensions/loop_audio.html");
@@ -633,8 +764,10 @@ class ChromeRenderProcessHostBackgroundingTest
 
     // Create a new tab for the no audio page and confirm that the process of
     // each tab is different and that both are valid.
-    audio_process_ = ProcessFromHandle(
-        audio_tab_web_contents_->GetMainFrame()->GetProcess()->GetHandle());
+    audio_process_ = ProcessFromHandle(audio_tab_web_contents_->GetMainFrame()
+                                           ->GetProcess()
+                                           ->GetProcess()
+                                           .Handle());
     no_audio_process_ = ShowSingletonTab(no_audio_url_);
     ASSERT_NE(audio_process_.Pid(), no_audio_process_.Pid());
     ASSERT_TRUE(no_audio_process_.IsValid());
@@ -677,12 +810,12 @@ class ChromeRenderProcessHostBackgroundingTest
   base::PortProvider* port_provider_;
 #endif
 
-  DISALLOW_COPY_AND_ASSIGN(ChromeRenderProcessHostBackgroundingTest);
+  DISALLOW_COPY_AND_ASSIGN(ChromeRenderProcessHostBackgroundingTestWithAudio);
 };
 
 // Test to make sure that a process is backgrounded when the audio stops playing
 // from the active tab and there is an immediate tab switch.
-IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTest,
+IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTestWithAudio,
                        ProcessPriorityAfterStoppedAudio) {
   // This test is invalid on platforms that can't background.
   if (!base::Process::CanBackgroundProcesses())
@@ -706,7 +839,7 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTest,
 
 // Test to make sure that a process is backgrounded automatically when audio
 // stops playing from a hidden tab.
-IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTest,
+IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTestWithAudio,
                        ProcessPriorityAfterAudioStopsOnNotVisibleTab) {
   // This test is invalid on platforms that can't background.
   if (!base::Process::CanBackgroundProcesses())
@@ -727,7 +860,7 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTest,
 // Test to make sure that a process is un-backgrounded automatically when
 // audio
 // starts playing from a backgrounded tab.
-IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTest,
+IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTestWithAudio,
                        ProcessPriorityAfterAudioStartsFromBackgroundTab) {
   // This test is invalid on platforms that can't background.
   if (!base::Process::CanBackgroundProcesses())

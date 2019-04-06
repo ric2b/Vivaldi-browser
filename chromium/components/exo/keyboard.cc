@@ -4,12 +4,15 @@
 
 #include "components/exo/keyboard.h"
 
+#include "ash/public/cpp/app_types.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/keyboard_delegate.h"
 #include "components/exo/keyboard_device_configuration_delegate.h"
 #include "components/exo/seat.h"
+#include "components/exo/shell_surface.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/input_method.h"
@@ -38,8 +41,6 @@ const struct {
   ui::KeyboardCode keycode;
   int modifiers;
 } kReservedAccelerators[] = {
-    {ui::VKEY_SPACE, ui::EF_CONTROL_DOWN},
-    {ui::VKEY_SPACE, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN},
     {ui::VKEY_F13, ui::EF_NONE},
     {ui::VKEY_I, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN}};
 
@@ -139,6 +140,20 @@ bool ProcessAcceleratorIfReserved(Surface* surface, ui::KeyEvent* event) {
   return IsReservedAccelerator(event) && ProcessAccelerator(surface, event);
 }
 
+// Returns true if surface belongs to an ARC application.
+// TODO(yhanada, https://crbug.com/847500): Remove this when we find a way
+// to fix https://crbug.com/847500 without breaking ARC++ apps.
+bool IsArcSurface(Surface* surface) {
+  aura::Window* window = surface->window();
+  for (; window; window = window->parent()) {
+    if (window->GetProperty(aura::client::kAppType) ==
+        static_cast<int>(ash::AppType::ARC_APP)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -216,32 +231,50 @@ void Keyboard::AckKeyboardKey(uint32_t serial, bool handled) {
 // ui::EventHandler overrides:
 
 void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
-  int modifier_flags = event->flags() & kModifierMask;
-  if (modifier_flags != modifier_flags_) {
-    modifier_flags_ = modifier_flags;
-    if (focus_)
-      delegate_->OnKeyboardModifiers(modifier_flags_);
-  }
+  if (!focus_)
+    return;
+
+  // Ignore synthetic key repeat events.
+  if (event->is_repeat())
+    return;
 
   // Process reserved accelerators before sending it to client.
-  if (focus_ && ProcessAcceleratorIfReserved(focus_, event)) {
+  if (ProcessAcceleratorIfReserved(focus_, event)) {
     // Discard a key press event if it's a reserved accelerator and it's
     // enabled.
     event->SetHandled();
-    // Send leave/enter event instead of key event, so the client can know the
-    // actual state of the keyboard.
-    SetFocus(focus_);
-    return;
   }
 
   // When IME ate a key event, we use the event only for tracking key states and
   // ignore for further processing. Otherwise it is handled in two places (IME
   // and client) and causes undesired behavior.
-  bool consumed_by_ime = focus_ ? ConsumedByIme(focus_, event) : false;
+  bool consumed_by_ime = ConsumedByIme(focus_, event);
+
+  // Always update modifiers.
+  int modifier_flags = event->flags() & kModifierMask;
+  if (modifier_flags != modifier_flags_) {
+    modifier_flags_ = modifier_flags;
+    delegate_->OnKeyboardModifiers(modifier_flags_);
+  }
+
+  // TODO(yhanada): This is a quick fix for https://crbug.com/859071. Remove
+  // ARC-specific code path once we can find a way to manage press/release
+  // events pair for synthetic events.
+  ui::DomCode physical_code =
+      seat_->physical_code_for_currently_processing_event();
+  if (physical_code == ui::DomCode::NONE && focus_belongs_to_arc_app_) {
+    // This key event is a synthetic event.
+    // Consider DomCode field of the event as a physical code
+    // for synthetic events when focus surface belongs to an ARC application.
+    physical_code = event->code();
+  }
 
   switch (event->type()) {
-    case ui::ET_KEY_PRESSED:
-      if (focus_ && !consumed_by_ime && !event->handled()) {
+    case ui::ET_KEY_PRESSED: {
+      // Process key press event if not already handled and not already pressed.
+      auto it = pressed_keys_.find(physical_code);
+      if (it == pressed_keys_.end() && !consumed_by_ime && !event->handled() &&
+          physical_code != ui::DomCode::NONE) {
         uint32_t serial =
             delegate_->OnKeyboardKey(event->time_stamp(), event->code(), true);
         if (are_keyboard_key_acks_needed_) {
@@ -251,12 +284,21 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
                             expiration_delay_for_pending_key_acks_}});
           event->SetHandled();
         }
+        // Keep track of both the physical code and potentially re-written
+        // code that this event generated.
+        pressed_keys_.insert({physical_code, event->code()});
       }
-      break;
-    case ui::ET_KEY_RELEASED:
-      if (focus_ && !consumed_by_ime && !event->handled()) {
+    } break;
+    case ui::ET_KEY_RELEASED: {
+      // Process key release event if currently pressed.
+      auto it = pressed_keys_.find(physical_code);
+      if (it != pressed_keys_.end()) {
+        // We use the code that was generate when the physical key was
+        // pressed rather than the current event code. This allows events
+        // to be re-written before dispatch, while still allowing the
+        // client to track the state of the physical keyboard.
         uint32_t serial =
-            delegate_->OnKeyboardKey(event->time_stamp(), event->code(), false);
+            delegate_->OnKeyboardKey(event->time_stamp(), it->second, false);
         if (are_keyboard_key_acks_needed_) {
           pending_key_acks_.insert(
               {serial,
@@ -264,8 +306,9 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
                             expiration_delay_for_pending_key_acks_}});
           event->SetHandled();
         }
+        pressed_keys_.erase(it);
       }
-      break;
+    } break;
     default:
       NOTREACHED();
       break;
@@ -336,10 +379,12 @@ void Keyboard::SetFocus(Surface* surface) {
   }
   if (surface) {
     modifier_flags_ = seat_->modifier_flags() & kModifierMask;
+    pressed_keys_ = seat_->pressed_keys();
     delegate_->OnKeyboardModifiers(modifier_flags_);
-    delegate_->OnKeyboardEnter(surface, seat_->pressed_keys());
+    delegate_->OnKeyboardEnter(surface, pressed_keys_);
     focus_ = surface;
     focus_->AddSurfaceObserver(this);
+    focus_belongs_to_arc_app_ = IsArcSurface(surface);
   }
 }
 

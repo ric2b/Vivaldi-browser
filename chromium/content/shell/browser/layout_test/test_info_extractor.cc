@@ -8,39 +8,61 @@
 
 #include "base/base_paths.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "net/base/filename_util.h"
+#include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
+#include "net/base/url_util.h"
+
+#if defined(OS_FUCHSIA)
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 namespace content {
 
 namespace {
 
-#if defined(OS_ANDROID)
-// On Android, all passed tests will be paths to a local temporary directory.
-// However, because we can't transfer all test files to the device, translate
-// those paths to a local, forwarded URL so the host can serve them.
-bool GetTestUrlForAndroid(std::string& path_or_url, GURL* url) {
-  // Path to search for when translating a layout test path to an URL.
-  const char kAndroidLayoutTestPath[] =
-      "/data/local/tmp/third_party/WebKit/LayoutTests/";
-  // The base URL from which layout tests are being served on Android.
-  const char kAndroidLayoutTestBase[] = "http://127.0.0.1:8000/all-tests/";
+#if defined(OS_FUCHSIA)
+// Fuchsia doesn't support stdin stream for packaged apps. This means that when
+// running content_shell on Fuchsia it's not possible to use stdin to pass list
+// of tests. To workaround this issue for layout tests we redirect stdin stream
+// to a TCP socket connected to the layout test runner. The runner uses
+// --stdin-redirect to specify address and port for stdin redirection.
+constexpr char kStdinRedirectSwitch[] = "stdin-redirect";
 
-  if (path_or_url.find(kAndroidLayoutTestPath) == std::string::npos)
-    return false;
+void ConnectStdinSocket(const std::string& host_and_port) {
+  std::string host;
+  int port;
+  net::IPAddress address;
+  if (!net::ParseHostAndPort(host_and_port, &host, &port) ||
+      !address.AssignFromIPLiteral(host)) {
+    LOG(FATAL) << "Invalid stdin address: " << host_and_port;
+  }
 
-  std::string test_location(kAndroidLayoutTestBase);
-  test_location.append(path_or_url.substr(strlen(kAndroidLayoutTestPath)));
+  sockaddr_storage sockaddr_storage;
+  sockaddr* addr = reinterpret_cast<sockaddr*>(&sockaddr_storage);
+  socklen_t addr_len = sizeof(sockaddr_storage);
+  net::IPEndPoint endpoint(address, port);
+  bool converted = endpoint.ToSockAddr(addr, &addr_len);
+  CHECK(converted);
 
-  *url = GURL(test_location);
-  return true;
+  int fd = socket(addr->sa_family, SOCK_STREAM, 0);
+  PCHECK(fd >= 0);
+  int result = connect(fd, addr, addr_len);
+  PCHECK(result == 0) << "Failed to connect to " << host_and_port;
+
+  result = dup2(fd, STDIN_FILENO);
+  PCHECK(result == STDIN_FILENO) << "Failed to dup socket to stdin";
+
+  PCHECK(close(fd) == 0);
 }
-#endif  // defined(OS_ANDROID)
+
+#endif  // defined(OS_FUCHSIA)
 
 std::unique_ptr<TestInfo> GetTestInfoFromLayoutTestName(
     const std::string& test_name) {
@@ -61,15 +83,7 @@ std::unique_ptr<TestInfo> GetTestInfoFromLayoutTestName(
   const bool enable_pixel_dumping =
       (pixel_switch == "--pixel-test" || pixel_switch == "-p");
 
-  GURL test_url;
-#if defined(OS_ANDROID)
-  if (GetTestUrlForAndroid(path_or_url, &test_url)) {
-    return std::make_unique<TestInfo>(test_url, enable_pixel_dumping,
-                                      expected_pixel_hash, base::FilePath());
-  }
-#endif
-
-  test_url = GURL(path_or_url);
+  GURL test_url(path_or_url);
   if (!(test_url.is_valid() && test_url.has_scheme())) {
     // We're outside of the message loop here, and this is a test.
     base::ScopedAllowBlockingForTesting allow_blocking;
@@ -82,7 +96,7 @@ std::unique_ptr<TestInfo> GetTestInfoFromLayoutTestName(
 #endif
     if (!base::PathExists(local_file)) {
       base::FilePath base_path;
-      PathService::Get(base::DIR_SOURCE_ROOT, &base_path);
+      base::PathService::Get(base::DIR_SOURCE_ROOT, &base_path);
       local_file = base_path.Append(FILE_PATH_LITERAL("third_party"))
                        .Append(FILE_PATH_LITERAL("WebKit"))
                        .Append(FILE_PATH_LITERAL("LayoutTests"))
@@ -116,9 +130,13 @@ TestInfo::TestInfo(const GURL& url,
       current_working_directory(current_working_directory) {}
 TestInfo::~TestInfo() {}
 
-TestInfoExtractor::TestInfoExtractor(
-    const base::CommandLine::StringVector& cmd_args)
-    : cmdline_args_(cmd_args), cmdline_position_(0) {}
+TestInfoExtractor::TestInfoExtractor(const base::CommandLine& cmd_line)
+    : cmdline_args_(cmd_line.GetArgs()), cmdline_position_(0) {
+#if defined(OS_FUCHSIA)
+  if (cmd_line.HasSwitch(kStdinRedirectSwitch))
+    ConnectStdinSocket(cmd_line.GetSwitchValueASCII(kStdinRedirectSwitch));
+#endif  // defined(OS_FUCHSIA)
+}
 
 TestInfoExtractor::~TestInfoExtractor() {}
 

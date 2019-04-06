@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 #include "chrome/browser/chromeos/arc/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -90,8 +89,7 @@ void ArcAppTest::SetUp(Profile* profile) {
       std::make_unique<arc::ArcSessionRunner>(
           base::Bind(arc::FakeArcSession::Create)));
   DCHECK(arc::ArcSessionManager::Get());
-  arc::ArcSessionManager::DisableUIForTesting();
-  arc::ArcAuthNotification::DisableForTesting();
+  arc::ArcSessionManager::SetUiEnabledForTesting(false);
   arc_session_manager_->SetProfile(profile_);
   arc_session_manager_->Initialize();
   arc_play_store_enabled_preference_handler_ =
@@ -113,7 +111,10 @@ void ArcAppTest::SetUp(Profile* profile) {
   app_instance_.reset(new arc::FakeAppInstance(arc_app_list_pref_));
   arc_service_manager_->arc_bridge_service()->app()->SetInstance(
       app_instance_.get());
-  WaitForInstanceReady(arc_service_manager_->arc_bridge_service()->app());
+  // TODO(khmel): Resolve this gracefully. Set of default app tests does not
+  // expect waiting in ArcAppTest setup.
+  if (wait_default_apps_)
+    WaitForInstanceReady(arc_service_manager_->arc_bridge_service()->app());
 }
 
 void ArcAppTest::WaitForDefaultApps() {

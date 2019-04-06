@@ -19,7 +19,7 @@ const char kAccessibilityStickyKeysEnabled[] =
     "settings.a11y.sticky_keys_enabled";
 // A boolean pref which determines whether spoken feedback is enabled.
 const char kAccessibilitySpokenFeedbackEnabled[] = "settings.accessibility";
-// A boolean pref which determines whether high conrast is enabled.
+// A boolean pref which determines whether high contrast is enabled.
 const char kAccessibilityHighContrastEnabled[] =
     "settings.a11y.high_contrast_enabled";
 // A boolean pref which determines whether screen magnifier is enabled.
@@ -63,9 +63,57 @@ const char kAccessibilitySelectToSpeakEnabled[] =
     "settings.a11y.select_to_speak";
 // A boolean pref which determines whether switch access is enabled.
 const char kAccessibilitySwitchAccessEnabled[] = "settings.a11y.switch_access";
+// A boolean pref which determines whether dictation is enabled.
+const char kAccessibilityDictationEnabled[] = "settings.a11y.dictation";
 // A boolean pref which determines whether the accessibility menu shows
 // regardless of the state of a11y features.
 const char kShouldAlwaysShowAccessibilityMenu[] = "settings.a11y.enable_menu";
+
+// A boolean pref storing the enabled status of the Docked Magnifier feature.
+const char kDockedMagnifierEnabled[] = "ash.docked_magnifier.enabled";
+// A double pref storing the scale value of the Docked Magnifier feature by
+// which the screen is magnified.
+const char kDockedMagnifierScale[] = "ash.docked_magnifier.scale";
+
+// A boolean pref which indicates whether the docked magnifier confirmation
+// dialog has ever been shown.
+const char kDockedMagnifierAcceleratorDialogHasBeenAccepted[] =
+    "settings.a11y.docked_magnifier_accelerator_dialog_has_been_accepted";
+// A boolean pref which indicates whether the high contrast magnifier
+// confirmation dialog has ever been shown.
+const char kHighContrastAcceleratorDialogHasBeenAccepted[] =
+    "settings.a11y.high_contrast_accelerator_dialog_has_been_accepted";
+// A boolean pref which indicates whether the screen magnifier confirmation
+// dialog has ever been shown.
+const char kScreenMagnifierAcceleratorDialogHasBeenAccepted[] =
+    "settings.a11y.screen_magnifier_accelerator_dialog_has_been_accepted";
+// A boolean pref which indicates whether the dictation confirmation dialog has
+// ever been shown.
+const char kDictationAcceleratorDialogHasBeenAccepted[] =
+    "settings.a11y.dictation_accelerator_dialog_has_been_accepted";
+
+// A dictionary pref that stores the mixed mirror mode parameters.
+const char kDisplayMixedMirrorModeParams[] =
+    "settings.display.mixed_mirror_mode_param";
+// Power state of the current displays from the last run.
+const char kDisplayPowerState[] = "settings.display.power_state";
+// A dictionary pref that stores per display preferences.
+const char kDisplayProperties[] = "settings.display.properties";
+// A dictionary pref that specifies the state of the rotation lock, and the
+// display orientation, for the internal display.
+const char kDisplayRotationLock[] = "settings.display.rotation_lock";
+// A dictionary pref that stores the touch associations for the device.
+const char kDisplayTouchAssociations[] = "settings.display.touch_associations";
+// A dictionary pref that stores the port mapping for touch devices.
+const char kDisplayTouchPortAssociations[] =
+    "settings.display.port_associations";
+// A list pref that stores the mirror info for each external display.
+const char kExternalDisplayMirrorInfo[] =
+    "settings.display.external_display_mirror_info";
+// A dictionary pref that specifies per-display layout/offset information.
+// Its key is the ID of the display and its value is a dictionary for the
+// layout/offset information.
+const char kSecondaryDisplays[] = "settings.display.secondary_displays";
 
 // A boolean pref which stores whether a stylus has been seen before.
 const char kHasSeenStylus[] = "ash.has_seen_stylus";
@@ -104,6 +152,78 @@ const char kNightLightScheduleType[] = "ash.night_light.schedule_type";
 // See ash::TimeOfDayTime.
 const char kNightLightCustomStartTime[] = "ash.night_light.custom_start_time";
 const char kNightLightCustomEndTime[] = "ash.night_light.custom_end_time";
+
+// Whether the Chrome OS lock screen is allowed.
+const char kAllowScreenLock[] = "allow_screen_lock";
+
+// A boolean pref that turns on automatic screen locking.
+const char kEnableAutoScreenLock[] = "settings.enable_screen_lock";
+
+// Inactivity time in milliseconds while the system is on AC power before
+// the screen should be dimmed, turned off, or locked, before an
+// IdleActionImminent D-Bus signal should be sent, or before
+// kPowerAcIdleAction should be performed.  0 disables the delay (N/A for
+// kPowerAcIdleDelayMs).
+const char kPowerAcScreenDimDelayMs[] = "power.ac_screen_dim_delay_ms";
+const char kPowerAcScreenOffDelayMs[] = "power.ac_screen_off_delay_ms";
+const char kPowerAcScreenLockDelayMs[] = "power.ac_screen_lock_delay_ms";
+const char kPowerAcIdleWarningDelayMs[] = "power.ac_idle_warning_delay_ms";
+
+// Similar delays while the system is on battery power.
+const char kPowerBatteryScreenDimDelayMs[] =
+    "power.battery_screen_dim_delay_ms";
+const char kPowerBatteryScreenOffDelayMs[] =
+    "power.battery_screen_off_delay_ms";
+const char kPowerBatteryScreenLockDelayMs[] =
+    "power.battery_screen_lock_delay_ms";
+const char kPowerBatteryIdleWarningDelayMs[] =
+    "power.battery_idle_warning_delay_ms";
+const char kPowerBatteryIdleDelayMs[] = "power.battery_idle_delay_ms";
+const char kPowerAcIdleDelayMs[] = "power.ac_idle_delay_ms";
+
+// Inactivity delays used to dim the screen or turn it off while the screen is
+// locked.
+const char kPowerLockScreenDimDelayMs[] = "power.lock_screen_dim_delay_ms";
+const char kPowerLockScreenOffDelayMs[] = "power.lock_screen_off_delay_ms";
+
+// Action that should be performed when the idle delay is reached while the
+// system is on AC power or battery power.
+// Values are from the chromeos::PowerPolicyController::Action enum.
+const char kPowerAcIdleAction[] = "power.ac_idle_action";
+const char kPowerBatteryIdleAction[] = "power.battery_idle_action";
+
+// Action that should be performed when the lid is closed.
+// Values are from the chromeos::PowerPolicyController::Action enum.
+const char kPowerLidClosedAction[] = "power.lid_closed_action";
+
+// Should audio and video activity be used to disable the above delays?
+const char kPowerUseAudioActivity[] = "power.use_audio_activity";
+const char kPowerUseVideoActivity[] = "power.use_video_activity";
+
+// Should extensions be able to use the chrome.power API to override
+// screen-related power management (including locking)?
+const char kPowerAllowScreenWakeLocks[] = "power.allow_screen_wake_locks";
+
+// Amount by which the screen-dim delay should be scaled while the system
+// is in presentation mode. Values are limited to a minimum of 1.0.
+const char kPowerPresentationScreenDimDelayFactor[] =
+    "power.presentation_screen_dim_delay_factor";
+
+// Amount by which the screen-dim delay should be scaled when user activity is
+// observed while the screen is dimmed or soon after the screen has been turned
+// off.  Values are limited to a minimum of 1.0.
+const char kPowerUserActivityScreenDimDelayFactor[] =
+    "power.user_activity_screen_dim_delay_factor";
+
+// Whether the power management delays should start running only after the first
+// user activity has been observed in a session.
+const char kPowerWaitForInitialUserActivity[] =
+    "power.wait_for_initial_user_activity";
+
+// Boolean controlling whether the panel backlight should be forced to a
+// nonzero level when user activity is observed.
+const char kPowerForceNonzeroBrightnessForUserActivity[] =
+    "power.force_nonzero_brightness_for_user_activity";
 
 // |kShelfAlignment| and |kShelfAutoHideBehavior| have a local variant. The
 // local variant is not synced and is used if set. If the local variant is not
@@ -147,12 +267,19 @@ const char kUserBluetoothAdapterEnabled[] =
 const char kSystemBluetoothAdapterEnabled[] =
     "ash.system.bluetooth.adapter_enabled";
 
+// A boolean pref which determines whether tap-dragging is enabled.
+const char kTapDraggingEnabled[] = "settings.touchpad.enable_tap_dragging";
+
 // Boolean prefs for the status of the touchscreen and the touchpad.
 const char kTouchpadEnabled[] = "events.touch_pad.enabled";
 const char kTouchscreenEnabled[] = "events.touch_screen.enabled";
 
 // String pref storing the salt for the pin quick unlock mechanism.
 const char kQuickUnlockPinSalt[] = "quick_unlock.pin.salt";
+
+// Dictionary prefs in local state that keeps information about detachable
+// bases - for exmaple the last used base per user.
+const char kDetachableBaseDevices[] = "ash.detachable_base.devices";
 
 // NOTE: New prefs should start with the "ash." prefix. Existing prefs moved
 // into this file should not be renamed, since they may be synced.

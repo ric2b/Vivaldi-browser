@@ -15,6 +15,7 @@
 namespace cc {
 
 class LayerTreeHostImpl;
+struct ScrollNode;
 
 // Encapsulates gesture handling logic on the viewport layers. The "viewport"
 // is made up of two scrolling layers, the inner viewport (visual) and the
@@ -62,6 +63,8 @@ class CC_EXPORT Viewport {
   gfx::Vector2dF ScrollAnimated(const gfx::Vector2dF& delta,
                                 base::TimeDelta delayed_by);
 
+  gfx::ScrollOffset TotalScrollOffset() const;
+
   void PinchUpdate(float magnify_delta, const gfx::Point& anchor);
   void PinchEnd(const gfx::Point& anchor, bool snap_to_min);
 
@@ -84,10 +87,10 @@ class CC_EXPORT Viewport {
   gfx::Vector2dF ScrollBrowserControls(const gfx::Vector2dF& delta);
 
   gfx::ScrollOffset MaxTotalScrollOffset() const;
-  gfx::ScrollOffset TotalScrollOffset() const;
 
-  LayerImpl* InnerScrollLayer() const;
-  LayerImpl* OuterScrollLayer() const;
+  ScrollNode* InnerScrollNode() const;
+  ScrollNode* OuterScrollNode() const;
+  ScrollTree& scroll_tree() const;
 
   void SnapPinchAnchorIfWithinMargin(const gfx::Point& anchor);
 

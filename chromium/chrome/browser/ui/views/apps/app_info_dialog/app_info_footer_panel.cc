@@ -24,15 +24,13 @@
 #if defined(OS_CHROMEOS)
 // gn check complains on Linux Ozone.
 #include "ash/public/cpp/shelf_model.h"  // nogncheck
-#include "ash/shell.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
 #endif
 
-AppInfoFooterPanel::AppInfoFooterPanel(gfx::NativeWindow parent_window,
-                                       Profile* profile,
+AppInfoFooterPanel::AppInfoFooterPanel(Profile* profile,
                                        const extensions::Extension* app)
     : AppInfoPanel(profile, app),
-      parent_window_(parent_window),
       create_shortcuts_button_(NULL),
       pin_to_shelf_button_(NULL),
       unpin_from_shelf_button_(NULL),
@@ -93,13 +91,15 @@ void AppInfoFooterPanel::LayoutButtons() {
 void AppInfoFooterPanel::UpdatePinButtons(bool focus_visible_button) {
 #if defined(OS_CHROMEOS)
   if (pin_to_shelf_button_ && unpin_from_shelf_button_) {
-    bool is_pinned = !ash::Shell::Get()->shelf_model()->IsAppPinned(app_->id());
-    pin_to_shelf_button_->SetVisible(is_pinned);
-    unpin_from_shelf_button_->SetVisible(!is_pinned);
+    const bool was_pinned =
+        ChromeLauncherController::instance()->shelf_model()->IsAppPinned(
+            app_->id());
+    pin_to_shelf_button_->SetVisible(!was_pinned);
+    unpin_from_shelf_button_->SetVisible(was_pinned);
 
     if (focus_visible_button) {
       views::View* button_to_focus =
-          is_pinned ? pin_to_shelf_button_ : unpin_from_shelf_button_;
+          was_pinned ? unpin_from_shelf_button_ : pin_to_shelf_button_;
       button_to_focus->RequestFocus();
     }
   }
@@ -155,7 +155,8 @@ bool AppInfoFooterPanel::CanCreateShortcuts() const {
 #if defined(OS_CHROMEOS)
 void AppInfoFooterPanel::SetPinnedToShelf(bool value) {
   DCHECK(CanSetPinnedToShelf());
-  ash::ShelfModel* shelf_model = ash::Shell::Get()->shelf_model();
+  ash::ShelfModel* shelf_model =
+      ChromeLauncherController::instance()->shelf_model();
   DCHECK(shelf_model);
   if (value)
     shelf_model->PinAppWithID(app_->id());
@@ -167,10 +168,6 @@ void AppInfoFooterPanel::SetPinnedToShelf(bool value) {
 }
 
 bool AppInfoFooterPanel::CanSetPinnedToShelf() const {
-  // Non-Ash platforms don't have a shelf.
-  if (!ash::Shell::HasInstance())
-    return false;
-
   // The Chrome app can't be unpinned, and extensions can't be pinned.
   return app_->id() != extension_misc::kChromeAppId && !app_->is_extension() &&
          (GetPinnableForAppID(app_->id(), profile_) ==

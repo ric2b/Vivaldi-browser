@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "content/public/network/url_request_context_builder_mojo.h"
+#include "services/network/url_request_context_builder_mojo.h"
 
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_task_environment.h"
 #include "content/test/test_mojo_proxy_resolver_factory.h"
 #include "net/base/host_port_pair.h"
-#include "net/proxy/proxy_config.h"
-#include "net/proxy/proxy_config_service_fixed.h"
+#include "net/proxy_resolution/proxy_config.h"
+#include "net/proxy_resolution/proxy_config_service_fixed.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -57,7 +57,7 @@ class URLRequestContextBuilderMojoTest : public PlatformTest {
   base::test::ScopedTaskEnvironment task_environment_;
   TestMojoProxyResolverFactory test_mojo_proxy_resolver_factory_;
   net::EmbeddedTestServer test_server_;
-  URLRequestContextBuilderMojo builder_;
+  network::URLRequestContextBuilderMojo builder_;
 };
 
 TEST_F(URLRequestContextBuilderMojoTest, MojoProxyResolver) {
@@ -65,8 +65,10 @@ TEST_F(URLRequestContextBuilderMojoTest, MojoProxyResolver) {
 
   builder_.set_proxy_config_service(
       std::make_unique<net::ProxyConfigServiceFixed>(
-          net::ProxyConfig::CreateFromCustomPacURL(
-              test_server_.GetURL(kPacPath))));
+          net::ProxyConfigWithAnnotation(
+              net::ProxyConfig::CreateFromCustomPacURL(
+                  test_server_.GetURL(kPacPath)),
+              TRAFFIC_ANNOTATION_FOR_TESTS)));
   builder_.SetMojoProxyResolverFactory(
       test_mojo_proxy_resolver_factory_.CreateFactoryInterface());
 
@@ -94,8 +96,10 @@ TEST_F(URLRequestContextBuilderMojoTest, ShutdownWithHungRequest) {
 
   builder_.set_proxy_config_service(
       std::make_unique<net::ProxyConfigServiceFixed>(
-          net::ProxyConfig::CreateFromCustomPacURL(
-              test_server_.GetURL("/hung"))));
+          net::ProxyConfigWithAnnotation(
+              net::ProxyConfig::CreateFromCustomPacURL(
+                  test_server_.GetURL("/hung")),
+              TRAFFIC_ANNOTATION_FOR_TESTS)));
   builder_.SetMojoProxyResolverFactory(
       test_mojo_proxy_resolver_factory_.CreateFactoryInterface());
 

@@ -10,7 +10,7 @@
 ***
 
 This directory contains integration between [libFuzzer] and Chromium.
-libFuzzer is an in-process coverage-driven evolutionary fuzzer. It helps
+LibFuzzer is an in-process coverage-driven evolutionary fuzzing engine. It helps
 engineers to uncover potential security & stability problems earlier.
 
 *** note
@@ -25,12 +25,14 @@ ClusterFuzz fuzzing system. Cover bug: [crbug.com/539572].
 ## Documentation
 
 * [Getting Started Guide] walks you through all the steps necessary to create
-your fuzzer and submit it to ClusterFuzz.
-* [Efficient Fuzzer Guide] explains how to measure fuzzer effectiveness and
+your fuzz target and submit it to ClusterFuzz.
+* [Efficient Fuzzer Guide] explains how to measure fuzz target effectiveness and
 ways to improve it.
 * [Guide to libprotobuf-mutator] walks through the steps necessary to create a
-fuzzer that libFuzzer gives mutated protobufs to as input (for developers
-already familiar with libFuzzer).
+fuzz target that expects a protobuf as input (instead of a byte stream). In
+addition to fuzzing code that accepts protobufs, it can be used to fuzz
+code that requires multiple mutated inputs, or to generate inputs defined by a
+grammar.
 * [ClusterFuzz Integration] describes integration between ClusterFuzz and
 libFuzzer.
 * [Reproducing] contains information on how to reproduce bugs reported by
@@ -39,7 +41,7 @@ libFuzzer.
 
 ## Trophies
 * [ClusterFuzz Bugs] - issues found and automatically filed by ClusterFuzz.
-* [Manual Bugs] - issues that were filed manually after running fuzzers.
+* [Manual Bugs] - issues that were filed manually after running fuzz targets.
 * [Pdfium Bugs] - bugs found in pdfium by manual fuzzing.
 * [OSS Trophies] - bugs found with libFuzzer in open-source projects.
 

@@ -13,18 +13,16 @@
 #include "base/values.h"
 #include "components/language/core/browser/url_language_histogram.h"
 #include "components/ntp_snippets/category.h"
+#include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
 #include "components/ntp_snippets/user_classifier.h"
-#include "components/signin/core/browser/signin_manager_base.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_request_status.h"
+#include "components/variations/variations_associated_data.h"
+#include "net/base/url_util.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 using language::UrlLanguageHistogram;
-using net::HttpRequestHeaders;
-using net::URLFetcher;
-using net::URLRequestContextGetter;
-using net::URLRequestStatus;
 
 namespace ntp_snippets {
 
@@ -33,10 +31,37 @@ using internal::JsonRequest;
 
 namespace {
 
-const char kSnippetsServerNonAuthorizedFormat[] = "%s?key=%s";
+const char kApiKeyQueryParam[] = "key";
+const char kPriorityQueryParam[] = "priority";
+const char kInteractivePriority[] = "user_action";
+const char kNonInteractivePriority[] = "background_prefetch";
 const char kAuthorizationRequestHeaderFormat[] = "Bearer %s";
 
 const int kFetchTimeHistogramResolution = 5;
+
+// Enables appending request priority as a query parameter to the fetch url,
+// when fetching article suggestions.
+const char kAppendRequestPriorityAsQueryParameterParamName[] =
+    "append_request_priority_as_query_parameter";
+const bool kAppendRequestPriorityAsQueryParameterParamDefault = true;
+
+bool IsAppendingRequestPriorityAsQueryParameterEnabled() {
+  return variations::GetVariationParamByFeatureAsBool(
+      ntp_snippets::kArticleSuggestionsFeature,
+      kAppendRequestPriorityAsQueryParameterParamName,
+      kAppendRequestPriorityAsQueryParameterParamDefault);
+}
+
+GURL AppendPriorityQueryParameterIfEnabled(const GURL& url,
+                                           bool is_interactive_request) {
+  if (IsAppendingRequestPriorityAsQueryParameterEnabled()) {
+    return net::AppendQueryParameter(url, kPriorityQueryParam,
+                                     is_interactive_request
+                                         ? kInteractivePriority
+                                         : kNonInteractivePriority);
+  }
+  return url;
+}
 
 std::string FetchResultToString(FetchResult result) {
   switch (result) {
@@ -54,6 +79,8 @@ std::string FetchResultToString(FetchResult result) {
       return "Error in obtaining an OAuth2 access token.";
     case FetchResult::MISSING_API_KEY:
       return "No API key available.";
+    case FetchResult::HTTP_ERROR_UNAUTHORIZED:
+      return "Access token invalid";
     case FetchResult::RESULT_MAX:
       break;
   }
@@ -74,6 +101,7 @@ Status FetchResultToStatus(FetchResult result) {
     // correctly but the server failed to respond as expected.
     // TODO(fhorschig): Revisit HTTP_ERROR once the rescheduling was reworked.
     case FetchResult::HTTP_ERROR:
+    case FetchResult::HTTP_ERROR_UNAUTHORIZED:
     case FetchResult::URL_REQUEST_STATUS_ERROR:
     case FetchResult::INVALID_SNIPPET_CONTENT_ERROR:
     case FetchResult::JSON_PARSE_ERROR:
@@ -123,25 +151,26 @@ void FilterCategories(FetchedCategoriesVector* categories,
 
 }  // namespace
 
+bool RemoteSuggestionsFetcherImpl::skip_api_key_check_for_testing_ = false;
+
 RemoteSuggestionsFetcherImpl::RemoteSuggestionsFetcherImpl(
-    SigninManagerBase* signin_manager,
-    OAuth2TokenService* token_service,
-    scoped_refptr<URLRequestContextGetter> url_request_context_getter,
+    identity::IdentityManager* identity_manager,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     PrefService* pref_service,
     UrlLanguageHistogram* language_histogram,
     const ParseJSONCallback& parse_json_callback,
     const GURL& api_endpoint,
     const std::string& api_key,
     const UserClassifier* user_classifier)
-    : signin_manager_(signin_manager),
-      token_service_(token_service),
-      url_request_context_getter_(std::move(url_request_context_getter)),
+    : identity_manager_(identity_manager),
+      url_loader_factory_(std::move(url_loader_factory)),
       language_histogram_(language_histogram),
       parse_json_callback_(parse_json_callback),
       fetch_url_(api_endpoint),
       api_key_(api_key),
       clock_(base::DefaultClock::GetInstance()),
-      user_classifier_(user_classifier) {}
+      user_classifier_(user_classifier),
+      last_fetch_authenticated_(false) {}
 
 RemoteSuggestionsFetcherImpl::~RemoteSuggestionsFetcherImpl() = default;
 
@@ -152,6 +181,10 @@ const std::string& RemoteSuggestionsFetcherImpl::GetLastStatusForDebugging()
 const std::string& RemoteSuggestionsFetcherImpl::GetLastJsonForDebugging()
     const {
   return last_fetch_json_;
+}
+bool RemoteSuggestionsFetcherImpl::WasLastFetchAuthenticatedForDebugging()
+    const {
+  return last_fetch_authenticated_;
 }
 const GURL& RemoteSuggestionsFetcherImpl::GetFetchUrlForDebugging() const {
   return fetch_url_;
@@ -176,10 +209,10 @@ void RemoteSuggestionsFetcherImpl::FetchSnippets(
       .SetParams(params)
       .SetParseJsonCallback(parse_json_callback_)
       .SetClock(clock_)
-      .SetUrlRequestContextGetter(url_request_context_getter_)
+      .SetUrlLoaderFactory(url_loader_factory_)
       .SetUserClassifier(*user_classifier_);
 
-  if (signin_manager_->IsAuthenticated()) {
+  if (identity_manager_->HasPrimaryAccount()) {
     // Signed-in: get OAuth token --> fetch suggestions.
     pending_requests_.emplace(std::move(builder), std::move(callback));
     StartTokenRequest();
@@ -192,39 +225,48 @@ void RemoteSuggestionsFetcherImpl::FetchSnippets(
 void RemoteSuggestionsFetcherImpl::FetchSnippetsNonAuthenticated(
     JsonRequest::Builder builder,
     SnippetsAvailableCallback callback) {
-  if (api_key_.empty()) {
+  if (api_key_.empty() && !skip_api_key_check_for_testing_) {
     // If we don't have an API key, don't even try.
     FetchFinished(OptionalFetchedCategories(), std::move(callback),
-                  FetchResult::MISSING_API_KEY, std::string());
+                  FetchResult::MISSING_API_KEY, std::string(),
+                  /*is_authenticated=*/false, std::string());
     return;
   }
   // When not providing OAuth token, we need to pass the Google API key.
-  builder.SetUrl(
-      GURL(base::StringPrintf(kSnippetsServerNonAuthorizedFormat,
-                              fetch_url_.spec().c_str(), api_key_.c_str())));
-  StartRequest(std::move(builder), std::move(callback));
+  GURL url = net::AppendQueryParameter(fetch_url_, kApiKeyQueryParam, api_key_);
+  url = AppendPriorityQueryParameterIfEnabled(url,
+                                              builder.is_interactive_request());
+
+  builder.SetUrl(url);
+  StartRequest(std::move(builder), std::move(callback),
+               /*is_authenticated=*/false, std::string());
 }
 
 void RemoteSuggestionsFetcherImpl::FetchSnippetsAuthenticated(
     JsonRequest::Builder builder,
     SnippetsAvailableCallback callback,
     const std::string& oauth_access_token) {
-  // TODO(jkrcal, treib): Add unit-tests for authenticated fetches.
-  builder.SetUrl(fetch_url_)
-      .SetAuthentication(signin_manager_->GetAuthenticatedAccountId(),
-                         base::StringPrintf(kAuthorizationRequestHeaderFormat,
-                                            oauth_access_token.c_str()));
-  StartRequest(std::move(builder), std::move(callback));
+  GURL url = AppendPriorityQueryParameterIfEnabled(
+      fetch_url_, builder.is_interactive_request());
+
+  builder.SetUrl(url).SetAuthentication(
+      identity_manager_->GetPrimaryAccountInfo().account_id,
+      base::StringPrintf(kAuthorizationRequestHeaderFormat,
+                         oauth_access_token.c_str()));
+  StartRequest(std::move(builder), std::move(callback),
+               /*is_authenticated=*/true, oauth_access_token);
 }
 
 void RemoteSuggestionsFetcherImpl::StartRequest(
     JsonRequest::Builder builder,
-    SnippetsAvailableCallback callback) {
+    SnippetsAvailableCallback callback,
+    bool is_authenticated,
+    std::string access_token) {
   std::unique_ptr<JsonRequest> request = builder.Build();
   JsonRequest* raw_request = request.get();
   raw_request->Start(base::BindOnce(
       &RemoteSuggestionsFetcherImpl::JsonRequestDone, base::Unretained(this),
-      std::move(request), std::move(callback)));
+      std::move(request), std::move(callback), is_authenticated, access_token));
 }
 
 void RemoteSuggestionsFetcherImpl::StartTokenRequest() {
@@ -235,27 +277,24 @@ void RemoteSuggestionsFetcherImpl::StartTokenRequest() {
 
   OAuth2TokenService::ScopeSet scopes{kContentSuggestionsApiScope};
   token_fetcher_ = std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(
-      "ntp_snippets", signin_manager_, token_service_, scopes,
+      "ntp_snippets", identity_manager_, scopes,
       base::BindOnce(&RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished,
                      base::Unretained(this)),
       identity::PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable);
 }
 
 void RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished(
-    const GoogleServiceAuthError& error,
-    const std::string& access_token) {
-  // Delete the fetcher only after we leave this method (which is called from
-  // the fetcher itself).
+    GoogleServiceAuthError error,
+    identity::AccessTokenInfo access_token_info) {
   DCHECK(token_fetcher_);
-  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher>
-      token_fetcher_deleter(std::move(token_fetcher_));
+  token_fetcher_.reset();
 
   if (error.state() != GoogleServiceAuthError::NONE) {
     AccessTokenError(error);
     return;
   }
 
-  DCHECK(!access_token.empty());
+  DCHECK(!access_token_info.token.empty());
 
   while (!pending_requests_.empty()) {
     std::pair<JsonRequest::Builder, SnippetsAvailableCallback>
@@ -263,7 +302,7 @@ void RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished(
     pending_requests_.pop();
     FetchSnippetsAuthenticated(std::move(builder_and_callback.first),
                                std::move(builder_and_callback.second),
-                               access_token);
+                               access_token_info.token);
   }
 }
 
@@ -281,7 +320,8 @@ void RemoteSuggestionsFetcherImpl::AccessTokenError(
                   std::move(builder_and_callback.second),
                   FetchResult::OAUTH_TOKEN_ERROR,
                   /*error_details=*/
-                  base::StringPrintf(" (%s)", error.ToString().c_str()));
+                  base::StringPrintf(" (%s)", error.ToString().c_str()),
+                  /*is_authenticated=*/true, std::string());
     pending_requests_.pop();
   }
 }
@@ -289,6 +329,8 @@ void RemoteSuggestionsFetcherImpl::AccessTokenError(
 void RemoteSuggestionsFetcherImpl::JsonRequestDone(
     std::unique_ptr<JsonRequest> request,
     SnippetsAvailableCallback callback,
+    bool is_authenticated,
+    std::string access_token,
     std::unique_ptr<base::Value> result,
     FetchResult status_code,
     const std::string& error_details) {
@@ -303,7 +345,7 @@ void RemoteSuggestionsFetcherImpl::JsonRequestDone(
 
   if (!result) {
     FetchFinished(OptionalFetchedCategories(), std::move(callback), status_code,
-                  error_details);
+                  error_details, is_authenticated, access_token);
     return;
   }
 
@@ -311,7 +353,8 @@ void RemoteSuggestionsFetcherImpl::JsonRequestDone(
   if (!JsonToCategories(*result, &categories, fetch_time)) {
     LOG(WARNING) << "Received invalid snippets: " << last_fetch_json_;
     FetchFinished(OptionalFetchedCategories(), std::move(callback),
-                  FetchResult::INVALID_SNIPPET_CONTENT_ERROR, std::string());
+                  FetchResult::INVALID_SNIPPET_CONTENT_ERROR, std::string(),
+                  is_authenticated, access_token);
     return;
   }
   // Filter out unwanted categories if necessary.
@@ -320,17 +363,29 @@ void RemoteSuggestionsFetcherImpl::JsonRequestDone(
   FilterCategories(&categories, request->exclusive_category());
 
   FetchFinished(std::move(categories), std::move(callback),
-                FetchResult::SUCCESS, std::string());
+                FetchResult::SUCCESS, std::string(), is_authenticated,
+                access_token);
 }
 
 void RemoteSuggestionsFetcherImpl::FetchFinished(
     OptionalFetchedCategories categories,
     SnippetsAvailableCallback callback,
     FetchResult fetch_result,
-    const std::string& error_details) {
+    const std::string& error_details,
+    bool is_authenticated,
+    std::string access_token) {
   DCHECK(fetch_result == FetchResult::SUCCESS || !categories.has_value());
 
+  if (fetch_result == FetchResult::HTTP_ERROR_UNAUTHORIZED) {
+    OAuth2TokenService::ScopeSet scopes{kContentSuggestionsApiScope};
+    std::string account_id =
+        identity_manager_->GetPrimaryAccountInfo().account_id;
+    identity_manager_->RemoveAccessTokenFromCache(account_id, scopes,
+                                                  access_token);
+  }
+
   last_status_ = FetchResultToString(fetch_result) + error_details;
+  last_fetch_authenticated_ = is_authenticated;
 
   UMA_HISTOGRAM_ENUMERATION("NewTabPage.Snippets.FetchResult",
                             static_cast<int>(fetch_result),
@@ -340,6 +395,11 @@ void RemoteSuggestionsFetcherImpl::FetchFinished(
 
   std::move(callback).Run(FetchResultToStatus(fetch_result),
                           std::move(categories));
+}
+
+// static
+void RemoteSuggestionsFetcherImpl::set_skip_api_key_check_for_testing() {
+  skip_api_key_check_for_testing_ = true;
 }
 
 }  // namespace ntp_snippets

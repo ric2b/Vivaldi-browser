@@ -6,41 +6,41 @@
 
 #include <stdlib.h>
 
+#include "base/base_paths_fuchsia.h"
 #include "base/command_line.h"
-#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/path_service.h"
+#include "base/process/process.h"
 
 namespace base {
+
+base::FilePath GetPackageRoot() {
+  return base::FilePath("/pkg");
+}
 
 bool PathProviderFuchsia(int key, FilePath* result) {
   switch (key) {
     case FILE_MODULE:
-    // Not supported in debug or component builds. Fall back on using the EXE
-    // path for now.
-    // TODO(fuchsia): Get this value from an API. See crbug.com/726124
-    case FILE_EXE: {
-      // Use the binary name as specified on the command line.
-      // TODO(fuchsia): It would be nice to get the canonical executable path
-      // from a kernel API. See https://crbug.com/726124
-      char bin_dir[PATH_MAX + 1];
-      if (realpath(base::CommandLine::ForCurrentProcess()
-                       ->GetProgram()
-                       .AsUTF8Unsafe()
-                       .c_str(),
-                   bin_dir) == NULL) {
-        return false;
-      }
-      *result = FilePath(bin_dir);
+      NOTIMPLEMENTED();
+      return false;
+    case FILE_EXE:
+      *result = CommandLine::ForCurrentProcess()->GetProgram();
       return true;
-    }
-    case DIR_SOURCE_ROOT:
-      // This is only used for tests, so we return the binary location for now.
-      *result = FilePath("/system");
+    case DIR_APP_DATA:
+      // TODO(https://crbug.com/840598): Switch to /data when minfs supports
+      // mmap().
+      DLOG(WARNING) << "Using /tmp as app data dir, changes will NOT be "
+                       "persisted! (crbug.com/840598)";
+      *result = FilePath("/tmp");
       return true;
     case DIR_CACHE:
       *result = FilePath("/data");
       return true;
+    case DIR_ASSETS:
+    case DIR_SOURCE_ROOT:
+      *result = GetPackageRoot();
+      return true;
   }
-
   return false;
 }
 

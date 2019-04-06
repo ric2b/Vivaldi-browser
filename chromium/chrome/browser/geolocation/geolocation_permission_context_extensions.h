@@ -8,7 +8,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 namespace content {
 class WebContents;
@@ -35,10 +35,6 @@ class GeolocationPermissionContextExtensions {
                         const base::Callback<void(ContentSetting)>& callback,
                         bool* permission_set,
                         bool* new_permission);
-
-  // Returns true if the cancellation request was handled.
-  bool CancelPermissionRequest(content::WebContents* web_contents,
-                               int bridge_id);
 
  private:
 #if BUILDFLAG(ENABLE_EXTENSIONS)

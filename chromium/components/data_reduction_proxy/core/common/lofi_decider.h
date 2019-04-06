@@ -7,15 +7,9 @@
 
 #include "base/macros.h"
 
-class GURL;
-
 namespace net {
 class HttpRequestHeaders;
 class URLRequest;
-}
-
-namespace previews {
-class PreviewsDecider;
 }
 
 namespace data_reduction_proxy {
@@ -25,10 +19,6 @@ namespace data_reduction_proxy {
 class LoFiDecider {
  public:
   virtual ~LoFiDecider() {}
-
-  // Returns true when Lo-Fi Previews are on for the given |request|. This means
-  // the Lo-Fi header should be added to the given request.
-  virtual bool IsUsingLoFi(const net::URLRequest& request) const = 0;
 
   // Adds a previews-specific directive to the Chrome-Proxy-Accept-Transform
   // header if needed.
@@ -65,12 +55,6 @@ class LoFiDecider {
   // automatically reloaded because of a decoding error.
   virtual bool IsClientLoFiAutoReloadRequest(
       const net::URLRequest& request) const = 0;
-
-  // Applies the AMP redirection preview by changing the |new_url|.
-  virtual void MaybeApplyAMPPreview(
-      net::URLRequest* request,
-      GURL* new_url,
-      previews::PreviewsDecider* previews_decider) const = 0;
 };
 
 }  // namespace data_reduction_proxy

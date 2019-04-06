@@ -5,12 +5,12 @@
 package org.chromium.chrome.browser.tabmodel;
 
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.StrictMode;
 import android.support.annotation.WorkerThread;
 import android.util.Pair;
 import android.util.SparseBooleanArray;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -243,7 +243,7 @@ public class TabbedModeTabPersistencePolicy implements TabPersistencePolicy {
         File oldMetadataFile = new File(stateDir, LEGACY_SAVED_STATE_FILE);
         if (newMetadataFile.exists()) {
             Log.e(TAG, "New metadata file already exists");
-            if (LibraryLoader.isInitialized()) {
+            if (LibraryLoader.getInstance().isInitialized()) {
                 RecordHistogram.recordBooleanHistogram(
                         "Android.MultiInstanceMigration.NewMetadataFileExists", true);
             }
@@ -252,7 +252,7 @@ public class TabbedModeTabPersistencePolicy implements TabPersistencePolicy {
             if (!oldMetadataFile.renameTo(newMetadataFile)) {
                 Log.e(TAG, "Failed to rename file: " + oldMetadataFile);
 
-                if (LibraryLoader.isInitialized()) {
+                if (LibraryLoader.getInstance().isInitialized()) {
                     RecordHistogram.recordBooleanHistogram(
                             "Android.MultiInstanceMigration.FailedToRenameMetadataFile", true);
                 }

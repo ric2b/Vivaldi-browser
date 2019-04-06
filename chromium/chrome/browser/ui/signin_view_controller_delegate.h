@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_SIGNIN_VIEW_CONTROLLER_DELEGATE_H_
 #define CHROME_BROWSER_UI_SIGNIN_VIEW_CONTROLLER_DELEGATE_H_
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -40,7 +41,8 @@ class SigninViewControllerDelegate
   // itself when the window it's managing is closed.
   static SigninViewControllerDelegate* CreateSyncConfirmationDelegate(
       SigninViewController* signin_view_controller,
-      Browser* browser);
+      Browser* browser,
+      bool is_consent_bump = false);
 
   // Returns a platform-specific SigninViewControllerDelegate instance that
   // displays the modal sign in error dialog. The returned object should delete
@@ -48,6 +50,23 @@ class SigninViewControllerDelegate
   static SigninViewControllerDelegate* CreateSigninErrorDelegate(
       SigninViewController* signin_view_controller,
       Browser* browser);
+
+#if defined(OS_MACOSX)
+  // Temporary shim for Polychrome. See bottom of first comment in
+  // https://crbug.com/80495 for details.
+  static SigninViewControllerDelegate* CreateModalSigninDelegateCocoa(
+      SigninViewController* signin_view_controller,
+      profiles::BubbleViewMode mode,
+      Browser* browser,
+      signin_metrics::AccessPoint access_point);
+  static SigninViewControllerDelegate* CreateSyncConfirmationDelegateCocoa(
+      SigninViewController* signin_view_controller,
+      Browser* browser,
+      bool is_consent_bump = false);
+  static SigninViewControllerDelegate* CreateSigninErrorDelegateCocoa(
+      SigninViewController* signin_view_controller,
+      Browser* browser);
+#endif
 
   // Attaches a dialog manager to this sign-in view controller dialog.
   // Should be called by subclasses when a different dialog may need to be
@@ -94,6 +113,11 @@ class SigninViewControllerDelegate
   // content::WebContentsDelegate
   void LoadingStateChanged(content::WebContents* source,
                            bool to_different_document) override;
+
+  // Subclasses must override this method to correctly handle accelerators.
+  void HandleKeyboardEvent(
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
 
   // This will be called by this base class when the tab-modal window must be
   // closed. This should close the platform-specific window that is currently

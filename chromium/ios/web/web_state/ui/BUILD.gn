@@ -9,6 +9,7 @@ source_set("ui") {
     ":crw_context_menu_controller",
     ":crw_web_view_navigation_proxy",
     ":crw_wk_script_message_router",
+    ":favicon_util",
     ":web_view_js_utils",
     "//base",
     "//ios/net",
@@ -20,10 +21,10 @@ source_set("ui") {
     "//ios/web/public",
     "//ios/web/public/download",
     "//ios/web/web_state:context_menu",
-    "//ios/web/web_state:crw_pass_kit_downloader",
     "//ios/web/web_state:error_translation_util",
     "//ios/web/web_state:navigation_context",
     "//ios/web/web_state:page_viewport_state",
+    "//ios/web/web_state:web_frame",
     "//ios/web/web_state:web_state_impl_header",
     "//ios/web/web_state:web_view_internal_creation_util",
     "//ios/web/web_state:wk_web_view_security_util",
@@ -51,6 +52,8 @@ source_set("ui") {
     "crw_wk_navigation_states.mm",
     "wk_back_forward_list_item_holder.h",
     "wk_back_forward_list_item_holder.mm",
+    "wk_navigation_action_util.h",
+    "wk_navigation_action_util.mm",
   ]
 
   libs = [ "WebKit.framework" ]
@@ -88,11 +91,15 @@ source_set("crw_context_menu_controller") {
     "//base",
     "//ios/web/public",
     "//ios/web/web_state:context_menu",
+    "//ios/web/web_state/ui:crw_wk_script_message_router",
+    "//ios/web/web_state/ui:wk_web_view_configuration_provider",
   ]
 
   sources = [
     "crw_context_menu_controller.h",
     "crw_context_menu_controller.mm",
+    "html_element_fetch_request.h",
+    "html_element_fetch_request.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -125,6 +132,22 @@ source_set("web_view_js_utils") {
   sources = [
     "web_view_js_utils.h",
     "web_view_js_utils.mm",
+  ]
+
+  libs = [ "WebKit.framework" ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("favicon_util") {
+  deps = [
+    "//base",
+    "//ios/web/public",
+  ]
+
+  sources = [
+    "favicon_util.h",
+    "favicon_util.mm",
   ]
 
   libs = [ "WebKit.framework" ]

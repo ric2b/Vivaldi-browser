@@ -6,7 +6,7 @@
 #define SERVICES_VIDEO_CAPTURE_PUBLIC_CPP_RECEIVER_MEDIA_TO_MOJO_ADAPTER_H_
 
 #include "media/capture/video/video_frame_receiver.h"
-#include "services/video_capture/public/interfaces/receiver.mojom.h"
+#include "services/video_capture/public/mojom/receiver.mojom.h"
 
 namespace video_capture {
 
@@ -19,8 +19,8 @@ class ReceiverMediaToMojoAdapter : public mojom::Receiver {
   ~ReceiverMediaToMojoAdapter() override;
 
   // video_capture::mojom::Receiver:
-  void OnNewBufferHandle(int32_t buffer_id,
-                         mojo::ScopedSharedBufferHandle buffer_handle) override;
+  void OnNewBuffer(int32_t buffer_id,
+                   media::mojom::VideoBufferHandlePtr buffer_handle) override;
   void OnFrameReadyInBuffer(
       int32_t buffer_id,
       int32_t frame_feedback_id,

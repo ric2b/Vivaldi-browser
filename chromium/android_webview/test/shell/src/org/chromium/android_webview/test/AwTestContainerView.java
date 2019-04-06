@@ -23,7 +23,6 @@ import android.widget.FrameLayout;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.shell.DrawGL;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -268,10 +267,6 @@ public class AwTestContainerView extends FrameLayout {
 
     public boolean isBackedByHardwareView() {
         return mHardwareView != null;
-    }
-
-    public ContentViewCore getContentViewCore() {
-        return mAwContents.getContentViewCore();
     }
 
     public WebContents getWebContents() {
@@ -547,11 +542,6 @@ public class AwTestContainerView extends FrameLayout {
         @Override
         public void onScrollChanged(int l, int t, int oldl, int oldt) {
             AwTestContainerView.super.onScrollChanged(l, t, oldl, oldt);
-        }
-
-        @Override
-        public boolean super_awakenScrollBars(int startDelay, boolean invalidate) {
-            return AwTestContainerView.super.awakenScrollBars(startDelay, invalidate);
         }
 
         @Override

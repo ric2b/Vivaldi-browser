@@ -5,10 +5,10 @@
 #include <string>
 
 #include "base/json/json_string_value_serializer.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -33,8 +33,9 @@ class TestClient : public content::DevToolsAgentHostClient {
 
 class ScopedDevtoolsOpener {
  public:
-  explicit ScopedDevtoolsOpener(content::WebContents* web_contents)
-      : agent_host_(content::DevToolsAgentHost::GetOrCreateFor(web_contents)) {
+  explicit ScopedDevtoolsOpener(
+      scoped_refptr<content::DevToolsAgentHost> agent_host)
+      : agent_host_(std::move(agent_host)) {
     EXPECT_TRUE(agent_host_);
     agent_host_->AttachClient(&test_client_);
     // Send Page.enable, which is required before any Page methods.
@@ -42,14 +43,18 @@ class ScopedDevtoolsOpener {
         &test_client_, "{\"id\": 0, \"method\": \"Page.enable\"}");
   }
 
-  ~ScopedDevtoolsOpener() { agent_host_->DetachAllClients(); }
+  explicit ScopedDevtoolsOpener(content::WebContents* web_contents)
+      : ScopedDevtoolsOpener(
+            content::DevToolsAgentHost::GetOrCreateFor(web_contents)) {}
+
+  ~ScopedDevtoolsOpener() { agent_host_->DetachClient(&test_client_); }
 
   void EnableAdBlocking(bool enabled) {
     // Send Page.setAdBlockingEnabled, should force activation.
     base::DictionaryValue ad_blocking_command;
     ad_blocking_command.SetInteger("id", 1);
     ad_blocking_command.SetString("method", "Page.setAdBlockingEnabled");
-    auto params = base::MakeUnique<base::DictionaryValue>();
+    auto params = std::make_unique<base::DictionaryValue>();
     params->SetBoolean("enabled", enabled);
     ad_blocking_command.SetDictionary("params", std::move(params));
     std::string json_string;
@@ -131,9 +136,9 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTest,
-                       ForceActivation_NoSubresourceLogging) {
+                       ForceActivation_SubresourceLogging) {
   content::ConsoleObserverDelegate console_observer(web_contents(),
-                                                    "*show ads*");
+                                                    kActivationConsoleMessage);
   web_contents()->SetDelegate(&console_observer);
   const GURL url(
       GetTestUrl("subresource_filter/frame_with_included_script.html"));
@@ -144,7 +149,41 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTest,
 
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
-  EXPECT_TRUE(console_observer.message().empty()) << console_observer.message();
+  EXPECT_FALSE(console_observer.message().empty());
+  console_observer.Wait();
+}
+
+// See crbug.com/813197, where agent hosts from subframes could send messages to
+// disable ad blocking when they are detached (e.g. when the subframe goes
+// away).
+IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTest,
+                       IsolatedSubframe_DoesNotSendAdBlockingMessages) {
+  base::test::ScopedFeatureList scoped_isolation;
+  scoped_isolation.InitAndEnableFeature(features::kSitePerProcess);
+
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  ScopedDevtoolsOpener page_opener(web_contents());
+  page_opener.EnableAdBlocking(true);
+
+  const GURL frame_with_script =
+      GetTestUrl("subresource_filter/frame_with_included_script.html");
+  ui_test_utils::NavigateToURL(browser(), frame_with_script);
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  const GURL cross_site_frames = embedded_test_server()->GetURL(
+      "a.com", "/subresource_filter/frame_cross_site_set.html");
+  ui_test_utils::NavigateToURL(browser(), cross_site_frames);
+
+  // Simulate attaching and detaching subframe clients. The browser should not
+  // process any of the ad blocking messages when the frames detach.
+  for (const auto& host : content::DevToolsAgentHost::GetOrCreateAll()) {
+    if (host->GetType() == content::DevToolsAgentHost::kTypeFrame)
+      ScopedDevtoolsOpener opener(host);
+  }
+
+  ui_test_utils::NavigateToURL(browser(), frame_with_script);
+  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 
 }  // namespace subresource_filter

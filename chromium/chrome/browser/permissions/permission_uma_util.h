@@ -22,8 +22,7 @@ class GURL;
 class PermissionRequest;
 class Profile;
 
-// This should stay in sync with the SourceUI enum in the permission report
-// protobuf (src/chrome/common/safe_browsing/permission_report.proto).
+// Any new values should be inserted immediately prior to NUM.
 enum class PermissionSourceUI {
   PROMPT = 0,
   OIB = 1,
@@ -35,46 +34,14 @@ enum class PermissionSourceUI {
 };
 
 // Any new values should be inserted immediately prior to NUM.
-enum class SafeBrowsingResponse {
-  NOT_BLACKLISTED = 0,
-  TIMEOUT = 1,
-  BLACKLISTED = 2,
-
-  // Always keep this at the end.
-  NUM,
-};
-
-// Any new values should be inserted immediately prior to NUM.
 enum class PermissionEmbargoStatus {
   NOT_EMBARGOED = 0,
-  PERMISSIONS_BLACKLISTING = 1,
+  // Removed: PERMISSIONS_BLACKLISTING = 1,
   REPEATED_DISMISSALS = 2,
   REPEATED_IGNORES = 3,
 
   // Keep this at the end.
   NUM,
-};
-
-// A bundle for the information sent in a PermissionReport.
-struct PermissionReportInfo {
-  PermissionReportInfo(
-      const GURL& origin,
-      ContentSettingsType permission,
-      PermissionAction action,
-      PermissionSourceUI source_ui,
-      PermissionRequestGestureType gesture_type,
-      int num_prior_dismissals,
-      int num_prior_ignores);
-
-  PermissionReportInfo(const PermissionReportInfo& other);
-
-  GURL origin;
-  ContentSettingsType permission;
-  PermissionAction action;
-  PermissionSourceUI source_ui;
-  PermissionRequestGestureType gesture_type;
-  int num_prior_dismissals;
-  int num_prior_ignores;
 };
 
 // Provides a convenient way of logging UMA for permission related operations.
@@ -105,9 +72,6 @@ class PermissionUmaUtil {
 
   static void RecordEmbargoStatus(PermissionEmbargoStatus embargo_status);
 
-  static void RecordSafeBrowsingResponse(base::TimeDelta response_time,
-                                         SafeBrowsingResponse response);
-
   // UMA specifically for when permission prompts are shown. This should be
   // roughly equivalent to the metrics above, however it is
   // useful to have separate UMA to a few reasons:
@@ -127,20 +91,16 @@ class PermissionUmaUtil {
 
   static void RecordWithBatteryBucket(const std::string& histogram);
 
-  // Permission Action Reporting data is only sent in official, Chrome branded
-  // builds. This function allows this to be overridden for testing.
-  static void FakeOfficialBuildForTest();
-
  private:
   friend class PermissionUmaUtilTest;
 
-  static bool IsOptedIntoPermissionActionReporting(Profile* profile);
-
+  // web_contents may be null when for recording non-prompt actions.
   static void RecordPermissionAction(ContentSettingsType permission,
                                      PermissionAction action,
                                      PermissionSourceUI source_ui,
                                      PermissionRequestGestureType gesture_type,
                                      const GURL& requesting_origin,
+                                     const content::WebContents* web_contents,
                                      Profile* profile);
 
   // Records |count| total prior actions for a prompt of type |permission|

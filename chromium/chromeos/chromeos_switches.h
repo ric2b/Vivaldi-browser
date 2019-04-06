@@ -5,8 +5,10 @@
 #ifndef CHROMEOS_CHROMEOS_SWITCHES_H_
 #define CHROMEOS_CHROMEOS_SWITCHES_H_
 
+#include "base/feature_list.h"
 #include "base/memory/memory_pressure_monitor_chromeos.h"
 #include "chromeos/chromeos_export.h"
+#include "chromeos/dbus/dbus_switches.h"
 
 namespace chromeos {
 namespace switches {
@@ -30,12 +32,13 @@ CHROMEOS_EXPORT extern const char kAppAutoLaunched[];
 CHROMEOS_EXPORT extern const char kAppOemManifestFile[];
 CHROMEOS_EXPORT extern const char kArcAvailability[];
 CHROMEOS_EXPORT extern const char kArcAvailable[];
+CHROMEOS_EXPORT extern const char kArcDataCleanupOnStart[];
+CHROMEOS_EXPORT extern const char kArcForceShowOptInUi[];
 CHROMEOS_EXPORT extern const char kArcPackagesCacheMode[];
 CHROMEOS_EXPORT extern const char kArcStartMode[];
 CHROMEOS_EXPORT extern const char kArcTransitionMigrationRequired[];
 CHROMEOS_EXPORT extern const char kArtifactsDir[];
 CHROMEOS_EXPORT extern const char kAshWebUIInit[];
-CHROMEOS_EXPORT extern const char kAttestationServer[];
 CHROMEOS_EXPORT extern const char kCellularFirst[];
 CHROMEOS_EXPORT extern const char kChildWallpaperLarge[];
 CHROMEOS_EXPORT extern const char kChildWallpaperSmall[];
@@ -46,7 +49,6 @@ CHROMEOS_EXPORT extern const char kCrosRegionsMode[];
 CHROMEOS_EXPORT extern const char kCrosRegionsModeHide[];
 CHROMEOS_EXPORT extern const char kCrosRegionsModeOverride[];
 CHROMEOS_EXPORT extern const char kDataSaverPromptDemoMode[];
-CHROMEOS_EXPORT extern const char kDbusStub[];
 CHROMEOS_EXPORT extern const char kDefaultWallpaperIsOem[];
 CHROMEOS_EXPORT extern const char kDefaultWallpaperLarge[];
 CHROMEOS_EXPORT extern const char kDefaultWallpaperSmall[];
@@ -68,12 +70,9 @@ CHROMEOS_EXPORT extern const char kDisableHIDDetectionOnOOBE[];
 CHROMEOS_EXPORT extern const char kDisableLockScreenApps[];
 CHROMEOS_EXPORT extern const char kDisableLoginAnimations[];
 CHROMEOS_EXPORT extern const char kDisableMachineCertRequest[];
-CHROMEOS_EXPORT extern const char kDisableMdErrorScreen[];
-CHROMEOS_EXPORT extern const char kDisableMdOobe[];
 CHROMEOS_EXPORT extern const char kDisableMtpWriteSupport[];
 CHROMEOS_EXPORT extern const char kDisableMultiDisplayLayout[];
 CHROMEOS_EXPORT extern const char kDisableNetworkPortalNotification[];
-CHROMEOS_EXPORT extern const char kEnableNetworkSettingsConfig[];
 CHROMEOS_EXPORT extern const char kDisableNewKoreanIme[];
 CHROMEOS_EXPORT extern const char kDisableNewZIPUnpacker[];
 CHROMEOS_EXPORT extern const char kDisableOfficeEditingComponentApp[];
@@ -86,22 +85,23 @@ CHROMEOS_EXPORT extern const char
     kDisableSystemTimezoneAutomaticDetectionPolicy[];
 CHROMEOS_EXPORT extern const char kDisableVolumeAdjustSound[];
 CHROMEOS_EXPORT extern const char kDisableWakeOnWifi[];
+CHROMEOS_EXPORT extern const char kDisableZipArchiverPacker[];
 CHROMEOS_EXPORT extern const char kDisableZipArchiverUnpacker[];
-CHROMEOS_EXPORT extern const char kEnableAndroidWallpapersApp[];
 CHROMEOS_EXPORT extern const char kEnableArc[];
-CHROMEOS_EXPORT extern const char kEnableArcOOBEOptIn[];
+CHROMEOS_EXPORT extern const char kEnableArcOobeOptinNoSkip[];
 CHROMEOS_EXPORT extern const char kEnableCaptivePortalRandomUrl[];
 CHROMEOS_EXPORT extern const char kEnableCastReceiver[];
-CHROMEOS_EXPORT extern const char kEnableChromeVoxArcSupport[];
 CHROMEOS_EXPORT extern const char kEnableConsumerKiosk[];
 CHROMEOS_EXPORT extern const char kEnableDataSaverPrompt[];
-CHROMEOS_EXPORT extern const char kEnableDisplayZoomSetting[];
+CHROMEOS_EXPORT extern const char kEnableDemoMode[];
 CHROMEOS_EXPORT extern const char kEnableEncryptionMigration[];
 CHROMEOS_EXPORT extern const char kEnableExperimentalAccessibilityFeatures[];
 CHROMEOS_EXPORT extern const char kEnableExtensionAssetsSharing[];
 CHROMEOS_EXPORT extern const char kEnableFileManagerTouchMode[];
 CHROMEOS_EXPORT extern const char kEnableFirstRunUITransitions[];
 CHROMEOS_EXPORT extern const char kEnableNetworkPortalNotification[];
+CHROMEOS_EXPORT extern const char kEnableOfflineDemoMode[];
+CHROMEOS_EXPORT extern const char kEnableOobeRecommendAppsScreen[];
 CHROMEOS_EXPORT extern const char kEnablePhysicalKeyboardAutocorrect[];
 CHROMEOS_EXPORT extern const char kEnableRequestTabletSite[];
 CHROMEOS_EXPORT extern const char kEnableScreenshotTestingWithMode[];
@@ -110,15 +110,18 @@ CHROMEOS_EXPORT extern const char kEnableTouchpadThreeFingerClick[];
 CHROMEOS_EXPORT extern const char kEnableVideoPlayerChromecastSupport[];
 CHROMEOS_EXPORT extern const char kEnableVoiceInteraction[];
 CHROMEOS_EXPORT extern const char kEnableZipArchiverPacker[];
-CHROMEOS_EXPORT extern const char kDisableZipArchiverPacker[];
 CHROMEOS_EXPORT extern const char kEnableZipArchiverUnpacker[];
 CHROMEOS_EXPORT extern const char kEnterpriseDisableArc[];
 CHROMEOS_EXPORT extern const char kEnterpriseDisableLicenseTypeSelection[];
 CHROMEOS_EXPORT extern const char kEnterpriseEnableForcedReEnrollment[];
+CHROMEOS_EXPORT extern const char kEnterpriseEnableInitialEnrollment[];
 CHROMEOS_EXPORT extern const char kEnterpriseEnableZeroTouchEnrollment[];
 CHROMEOS_EXPORT extern const char kEnterpriseEnrollmentInitialModulus[];
 CHROMEOS_EXPORT extern const char kEnterpriseEnrollmentModulusLimit[];
 CHROMEOS_EXPORT extern const char kFirstExecAfterBoot[];
+CHROMEOS_EXPORT extern const char kFakeDriveFsLauncherChrootPath[];
+CHROMEOS_EXPORT extern const char kFakeDriveFsLauncherSocketPath[];
+CHROMEOS_EXPORT extern const char kForceDevToolsAvailable[];
 CHROMEOS_EXPORT extern const char kForceFirstRunUI[];
 CHROMEOS_EXPORT extern const char kForceHappinessTrackingSystem[];
 CHROMEOS_EXPORT extern const char kForceLoginManagerInTests[];
@@ -129,6 +132,8 @@ CHROMEOS_EXPORT extern const char kGuestWallpaperLarge[];
 CHROMEOS_EXPORT extern const char kGuestWallpaperSmall[];
 CHROMEOS_EXPORT extern const char kHasChromeOSDiamondKey[];
 CHROMEOS_EXPORT extern const char kHasChromeOSKeyboard[];
+CHROMEOS_EXPORT extern const char kHideActiveAppsFromShelf[];
+CHROMEOS_EXPORT extern const char kHideAndroidFilesInFilesApp[];
 CHROMEOS_EXPORT extern const char kHomedir[];
 CHROMEOS_EXPORT extern const char kHostPairingOobe[];
 CHROMEOS_EXPORT extern const char kIgnoreUserProfileMappingForTests[];
@@ -138,25 +143,33 @@ CHROMEOS_EXPORT extern const char kLoginUser[];
 CHROMEOS_EXPORT extern const char kMemoryPressureThresholds[];
 CHROMEOS_EXPORT extern const char kNaturalScrollDefault[];
 CHROMEOS_EXPORT extern const char kNeedArcMigrationPolicyCheck[];
-CHROMEOS_EXPORT extern const char kNewWallpaperPicker[];
 CHROMEOS_EXPORT extern const char kNoteTakingAppIds[];
 CHROMEOS_EXPORT extern const char kOobeBootstrappingMaster[];
+CHROMEOS_EXPORT extern const char kOobeConfiguration[];
 CHROMEOS_EXPORT extern const char kOobeForceShowScreen[];
 CHROMEOS_EXPORT extern const char kOobeGuestSession[];
 CHROMEOS_EXPORT extern const char kOobeSkipPostLogin[];
 CHROMEOS_EXPORT extern const char kOobeSkipToLogin[];
 CHROMEOS_EXPORT extern const char kOobeTimerInterval[];
-CHROMEOS_EXPORT extern const char kShillStub[];
+CHROMEOS_EXPORT extern const char kProfileRequiresPolicy[];
+CHROMEOS_EXPORT extern const char kRlzPingDelay[];
+CHROMEOS_EXPORT extern const char kShelfHoverPreviews[];
+CHROMEOS_EXPORT extern const char kShelfNewUi[];
+CHROMEOS_EXPORT extern const char kShowAndroidFilesInFilesApp[];
+CHROMEOS_EXPORT extern const char kFilesAppDisableMyFilesNavigation[];
 CHROMEOS_EXPORT extern const char kShowLoginDevOverlay[];
-CHROMEOS_EXPORT extern const char kShowNonMdLogin[];
-CHROMEOS_EXPORT extern const char kSmsTestMessages[];
 CHROMEOS_EXPORT extern const char kStubCrosSettings[];
-CHROMEOS_EXPORT extern const char kSystemDevMode[];
-CHROMEOS_EXPORT extern const char kTestAutoUpdateUI[];
 CHROMEOS_EXPORT extern const char kTestEncryptionMigrationUI[];
 CHROMEOS_EXPORT extern const char kTetherStub[];
 CHROMEOS_EXPORT extern const char kVoiceInteractionLocales[];
+CHROMEOS_EXPORT extern const char kWaitForInitialPolicyFetchForTest[];
 CHROMEOS_EXPORT extern const char kWakeOnWifiPacket[];
+
+// Controls whether to enable Chrome OS Account Manager.
+CHROMEOS_EXPORT extern const base::Feature kAccountManager;
+
+// Controls whether enable Google Assistant feature.
+CHROMEOS_EXPORT extern const base::Feature kAssistantFeature;
 
 // Returns true if the system should wake in response to wifi traffic.
 CHROMEOS_EXPORT bool WakeOnWifiEnabled();
@@ -184,8 +197,14 @@ CHROMEOS_EXPORT bool IsVoiceInteractionFlagsEnabled();
 // Returns true if voice interaction is enabled.
 CHROMEOS_EXPORT bool IsVoiceInteractionEnabled();
 
-// Returns true if Settings based network configuration is enabled.
-CHROMEOS_EXPORT bool IsNetworkSettingsConfigEnabled();
+// Returns true if Chrome OS Account Manager is enabled.
+CHROMEOS_EXPORT bool IsAccountManagerEnabled();
+
+// Returns true if Google Assistant flags are enabled.
+CHROMEOS_EXPORT bool IsAssistantFlagsEnabled();
+
+// Returns true if Google Assistant is enabled.
+CHROMEOS_EXPORT bool IsAssistantEnabled();
 
 // Returns true if Zip Archiver is enabled for unpacking files.
 CHROMEOS_EXPORT bool IsZipArchiverUnpackerEnabled();
@@ -203,6 +222,20 @@ CHROMEOS_EXPORT bool IsSigninFrameClientCertUserSelectionEnabled();
 
 // Returns true if experimental accessibility features are enabled.
 CHROMEOS_EXPORT bool AreExperimentalAccessibilityFeaturesEnabled();
+
+// Returns true if we should hide open apps that aren't pinned from the shelf.
+CHROMEOS_EXPORT bool ShouldHideActiveAppsFromShelf();
+
+// Returns true if we should show window previews when hovering over an app
+// on the shelf.
+CHROMEOS_EXPORT bool ShouldShowShelfHoverPreviews();
+
+// Returns true if the shelf should adopt the new UI from summer 2018.
+CHROMEOS_EXPORT bool ShouldUseShelfNewUi();
+
+// Returns true if Instant Tethering should support hosts which use the
+// background advertisement model
+CHROMEOS_EXPORT bool IsInstantTetheringBackgroundAdvertisingSupported();
 
 }  // namespace switches
 }  // namespace chromeos

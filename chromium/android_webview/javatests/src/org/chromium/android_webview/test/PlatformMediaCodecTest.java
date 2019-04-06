@@ -15,7 +15,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
 
@@ -30,14 +29,14 @@ public class PlatformMediaCodecTest {
 
     private TestAwContentsClient mContentsClient;
     private AwTestContainerView mTestContainerView;
-    private ContentViewCore mContentViewCore;
+    private WebContents mWebContents;
 
     @Before
     public void setUp() throws Exception {
         mContentsClient = new TestAwContentsClient();
         mTestContainerView = mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
-        mContentViewCore = mTestContainerView.getContentViewCore();
-        mActivityTestRule.enableJavaScriptOnUiThread(mTestContainerView.getAwContents());
+        mWebContents = mTestContainerView.getWebContents();
+        AwActivityTestRule.enableJavaScriptOnUiThread(mTestContainerView.getAwContents());
     }
 
     @Test
@@ -48,13 +47,13 @@ public class PlatformMediaCodecTest {
         mActivityTestRule.loadUrlSync(mTestContainerView.getAwContents(),
                 mContentsClient.getOnPageFinishedHelper(),
                 "file:///android_asset/platform-media-codec-test.html");
-        DOMUtils.clickNode(mContentViewCore, "playButton");
+        DOMUtils.clickNode(mWebContents, "playButton");
         DOMUtils.waitForMediaPlay(getWebContentsOnUiThread(), "videoTag");
     }
 
     private WebContents getWebContentsOnUiThread() {
         try {
-            return ThreadUtils.runOnUiThreadBlocking(() -> mContentViewCore.getWebContents());
+            return ThreadUtils.runOnUiThreadBlocking(() -> mWebContents);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
             return null;

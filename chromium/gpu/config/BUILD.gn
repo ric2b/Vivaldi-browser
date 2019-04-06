@@ -60,6 +60,32 @@ action("process_json") {
   } else {
     args += [ "linux" ]
   }
+
+  public_deps = [
+    ":workaround_list",
+  ]
+}
+
+action("workaround_list") {
+  script = "build_workaround_header.py"
+
+  skia_workaround_list = "//third_party/skia/src/gpu/gpu_workaround_list.txt"
+  inputs = [
+    "gpu_workaround_list.txt",
+    skia_workaround_list,
+  ]
+
+  outputs = [
+    "$target_gen_dir/gpu_driver_bug_workaround_autogen.h",
+  ]
+
+  args = [
+    "--output-file",
+    rebase_path(outputs[0], root_build_dir),
+  ]
+  foreach(file, inputs) {
+    args += [ rebase_path(file, root_build_dir) ]
+  }
 }
 
 source_set("config_sources") {
@@ -95,6 +121,9 @@ source_set("config_sources") {
     "gpu_info_collector_linux.cc",
     "gpu_info_collector_mac.mm",
     "gpu_info_collector_win.cc",
+    "gpu_mode.h",
+    "gpu_preferences.cc",
+    "gpu_preferences.h",
     "gpu_switches.cc",
     "gpu_switches.h",
     "gpu_switching.cc",
@@ -122,6 +151,8 @@ source_set("config_sources") {
   deps = [
     ":process_json",
     "//base",
+    "//gpu/ipc/common:gpu_preferences_interface",
+    "//media:media_buildflags",
     "//third_party/re2",
     "//ui/gl",
     "//ui/gl:gl_features",

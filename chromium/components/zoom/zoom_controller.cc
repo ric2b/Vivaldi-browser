@@ -20,7 +20,7 @@
 #include "net/base/url_util.h"
 
 #include "app/vivaldi_apptools.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "prefs/vivaldi_tab_zoom_pref.h"

@@ -79,20 +79,31 @@ const char kSecurityError[] = "Security error.";
 const char kVolumeNotFoundError[] = "Volume not found.";
 
 // Fills a list of volumes mounted in the system.
-void FillVolumeList(content::BrowserContext* browser_context,
-                    std::vector<file_system::Volume>* result) {
-  file_manager::VolumeManager* const volume_manager =
-      file_manager::VolumeManager::Get(browser_context);
-  DCHECK(volume_manager);
+bool GetVolumeListForExtension(
+    const std::vector<base::WeakPtr<file_manager::Volume>>& available_volumes,
+    ConsentProvider* consent_provider,
+    const Extension& extension,
+    std::vector<file_system::Volume>* result_volumes) {
+  if (!consent_provider)
+    return false;
 
-  const auto& volume_list = volume_manager->GetVolumeList();
-  // Convert volume_list to result_volume_list.
-  for (const auto& volume : volume_list) {
-    file_system::Volume result_volume;
-    result_volume.volume_id = volume->volume_id();
-    result_volume.writable = !volume->is_read_only();
-    result->push_back(std::move(result_volume));
+  const FileSystemDelegate::GrantVolumesMode mode =
+      consent_provider->GetGrantVolumesMode(extension);
+  if (mode == FileSystemDelegate::kGrantNone)
+    return false;
+
+  // Convert available_volumes to result_volume_list.
+  for (const auto& volume : available_volumes) {
+    if (mode == FileSystemDelegate::kGrantAll ||
+        (mode == FileSystemDelegate::kGrantPerVolume &&
+         consent_provider->IsGrantableForVolume(extension, volume))) {
+      file_system::Volume result_volume;
+      result_volume.volume_id = volume->volume_id();
+      result_volume.writable = !volume->is_read_only();
+      result_volumes->push_back(std::move(result_volume));
+    }
   }
+  return true;
 }
 
 // Callback called when consent is granted or denied.
@@ -210,11 +221,17 @@ void DispatchVolumeListChangeEvent(content::BrowserContext* browser_context) {
   ConsentProviderDelegate consent_provider_delegate(
       Profile::FromBrowserContext(browser_context));
   ConsentProvider consent_provider(&consent_provider_delegate);
-  file_system::VolumeListChangedEvent event_args;
-  FillVolumeList(browser_context, &event_args.volumes);
+
+  const std::vector<base::WeakPtr<file_manager::Volume>> volume_list =
+      file_manager::VolumeManager::Get(browser_context)->GetVolumeList();
+
   for (const auto& extension : registry->enabled_extensions()) {
-    if (!consent_provider.IsGrantable(*extension.get()))
+    file_system::VolumeListChangedEvent event_args;
+    if (!GetVolumeListForExtension(volume_list, &consent_provider,
+                                   *extension.get(), &event_args.volumes)) {
       continue;
+    }
+
     event_router->DispatchEventToExtension(
         extension->id(),
         std::make_unique<Event>(
@@ -233,7 +250,7 @@ ChromeFileSystemDelegate::~ChromeFileSystemDelegate() {}
 
 base::FilePath ChromeFileSystemDelegate::GetDefaultDirectory() {
   base::FilePath documents_dir;
-  PathService::Get(chrome::DIR_USER_DOCUMENTS, &documents_dir);
+  base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &documents_dir);
   return documents_dir;
 }
 
@@ -245,35 +262,35 @@ bool ChromeFileSystemDelegate::ShowSelectFileDialog(
     FileSystemDelegate::FilesSelectedCallback files_selected_callback,
     base::OnceClosure file_selection_canceled_callback) {
   const Extension* extension = extension_function->extension();
-  content::WebContents* web_contents = nullptr;
+  content::WebContents* web_contents =
+      extension_function->GetSenderWebContents();
+
+  if (!web_contents)
+    return false;
 
   // TODO(asargent/benwells) - As a short term remediation for
   // crbug.com/179010 we're adding the ability for a whitelisted extension to
   // use this API since chrome.fileBrowserHandler.selectFile is ChromeOS-only.
   // Eventually we'd like a better solution and likely this code will go back
   // to being platform-app only.
-  if (extension->is_platform_app()) {
-    content::WebContents* candidate = content::WebContents::FromRenderFrameHost(
-        extension_function->render_frame_host());
-    // Make sure there is an app window associated with the web contents.
-    if ((vivaldi::IsVivaldiRunning() &&
-         vivaldi::FindBrowserForEmbedderWebContents(candidate)) ||
-        AppWindowRegistry::Get(extension_function->browser_context())
-            ->GetAppWindowForWebContents(candidate)) {
-      web_contents = candidate;
-    }
-  } else {
-    // TODO(michaelpg): As a workaround for crbug.com/736930, allow this to work
-    // from a background page by using the the extended GetAssociatedWebContents
-    // function provided by ChromeExtensionFunctionDetails. This is safe because
-    // only whitelisted extensions can access the chrome.fileSystem API;
-    // platform apps cannot open the file picker from a background page.
-    web_contents = ChromeExtensionFunctionDetails(extension_function.get())
-                       .GetAssociatedWebContents();
+
+  // Make sure there is an app window associated with the web contents, so that
+  // platform apps cannot open the file picker from a background page.
+  // TODO(michaelpg): As a workaround for https://crbug.com/736930, allow this
+  // to work from a background page for non-platform apps (which, in practice,
+  // is restricted to whitelisted extensions).
+  if (extension->is_platform_app() &&
+      !vivaldi::IsVivaldiRunning() &&
+      !AppWindowRegistry::Get(extension_function->browser_context())
+           ->GetAppWindowForWebContents(web_contents)) {
+    return false;
   }
 
-  if (!web_contents)
+  if (extension->is_platform_app() &&
+      vivaldi::IsVivaldiRunning() &&
+      !vivaldi::FindBrowserForEmbedderWebContents(web_contents)) {
     return false;
+  }
 
   // The file picker will hold a reference to the UIThreadExtensionFunction
   // instance, preventing its destruction (and subsequent sending of the
@@ -308,7 +325,8 @@ int ChromeFileSystemDelegate::GetDescriptionIdForAcceptType(
 }
 
 #if defined(OS_CHROMEOS)
-bool ChromeFileSystemDelegate::IsGrantable(
+FileSystemDelegate::GrantVolumesMode
+ChromeFileSystemDelegate::GetGrantVolumesMode(
     content::BrowserContext* browser_context,
     content::RenderFrameHost* render_frame_host,
     const Extension& extension) {
@@ -316,7 +334,8 @@ bool ChromeFileSystemDelegate::IsGrantable(
   // Additionally it is enabled for whitelisted component extensions and apps.
   ConsentProviderDelegate consent_provider_delegate(
       Profile::FromBrowserContext(browser_context));
-  return ConsentProvider(&consent_provider_delegate).IsGrantable(extension);
+  return ConsentProvider(&consent_provider_delegate)
+      .GetGrantVolumesMode(extension);
 }
 
 void ChromeFileSystemDelegate::RequestFileSystem(
@@ -331,11 +350,6 @@ void ChromeFileSystemDelegate::RequestFileSystem(
       Profile::FromBrowserContext(browser_context));
   ConsentProvider consent_provider(&consent_provider_delegate);
 
-  if (!consent_provider.IsGrantable(extension)) {
-    error_callback.Run(kNotSupportedOnNonKioskSessionError);
-    return;
-  }
-
   using file_manager::VolumeManager;
   using file_manager::Volume;
   VolumeManager* const volume_manager = VolumeManager::Get(browser_context);
@@ -347,9 +361,16 @@ void ChromeFileSystemDelegate::RequestFileSystem(
     return;
   }
 
+  if (consent_provider.GetGrantVolumesMode(extension) ==
+      FileSystemDelegate::kGrantNone) {
+    error_callback.Run(kNotSupportedOnNonKioskSessionError);
+    return;
+  }
+
   base::WeakPtr<file_manager::Volume> volume =
       volume_manager->FindVolumeById(volume_id);
-  if (!volume.get()) {
+  if (!volume.get() ||
+      !consent_provider.IsGrantableForVolume(extension, volume)) {
     error_callback.Run(kVolumeNotFoundError);
     return;
   }
@@ -384,11 +405,19 @@ void ChromeFileSystemDelegate::RequestFileSystem(
 
 void ChromeFileSystemDelegate::GetVolumeList(
     content::BrowserContext* browser_context,
+    const Extension& extension,
     const VolumeListCallback& success_callback,
     const ErrorCallback& error_callback) {
-  std::vector<file_system::Volume> result_volume_list;
-  FillVolumeList(browser_context, &result_volume_list);
+  ConsentProviderDelegate consent_provider_delegate(
+      Profile::FromBrowserContext(browser_context));
+  ConsentProvider consent_provider(&consent_provider_delegate);
 
+  const std::vector<base::WeakPtr<file_manager::Volume>> volume_list =
+      file_manager::VolumeManager::Get(browser_context)->GetVolumeList();
+  std::vector<file_system::Volume> result_volume_list;
+
+  GetVolumeListForExtension(volume_list, &consent_provider, extension,
+                            &result_volume_list);
   success_callback.Run(result_volume_list);
 }
 

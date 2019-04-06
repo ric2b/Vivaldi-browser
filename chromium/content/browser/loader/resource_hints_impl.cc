@@ -4,14 +4,12 @@
 
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/trace_event/trace_event.h"
-#include "content/browser/loader/resource_dispatcher_host_impl.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_hints.h"
 #include "net/base/address_list.h"
 #include "net/base/load_flags.h"
-#include "net/dns/host_resolver.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_stream_factory.h"
@@ -25,18 +23,7 @@ namespace content {
 
 namespace {
 
-class RequestHolder {
- public:
-  std::unique_ptr<net::HostResolver::Request>* GetRequest() {
-    return &request_;
-  }
-
- private:
-  std::unique_ptr<net::HostResolver::Request> request_;
-};
-
-void OnResolveComplete(std::unique_ptr<RequestHolder> request_holder,
-                       std::unique_ptr<net::AddressList> addresses,
+void OnResolveComplete(std::unique_ptr<net::AddressList> addresses,
                        const net::CompletionCallback& callback,
                        int result) {
   // Plumb the resolution result into the callback if future consumers want
@@ -50,11 +37,8 @@ void PreconnectUrl(net::URLRequestContextGetter* getter,
                    const GURL& url,
                    const GURL& site_for_cookies,
                    int count,
-                   bool allow_credentials,
-                   net::HttpRequestInfo::RequestMotivation motivation) {
-  DCHECK(ResourceDispatcherHostImpl::Get()
-             ->io_thread_task_runner()
-             ->BelongsToCurrentThread());
+                   bool allow_credentials) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(getter);
   TRACE_EVENT2("net", "PreconnectUrl", "url", url.spec(), "count", count);
 
@@ -74,9 +58,11 @@ void PreconnectUrl(net::URLRequestContextGetter* getter,
   request_info.method = "GET";
   request_info.extra_headers.SetHeader(net::HttpRequestHeaders::kUserAgent,
                                        user_agent);
-  request_info.motivation = motivation;
 
   net::NetworkDelegate* delegate = request_context->network_delegate();
+  // NetworkDelegate is not set in tests.
+  if (!delegate)
+    return;
   if (delegate->CanEnablePrivacyMode(url, site_for_cookies))
     request_info.privacy_mode = net::PRIVACY_MODE_ENABLED;
 
@@ -96,10 +82,9 @@ void PreconnectUrl(net::URLRequestContextGetter* getter,
 
 int PreresolveUrl(net::URLRequestContextGetter* getter,
                   const GURL& url,
-                  const net::CompletionCallback& callback) {
-  DCHECK(ResourceDispatcherHostImpl::Get()
-             ->io_thread_task_runner()
-             ->BelongsToCurrentThread());
+                  const net::CompletionCallback& callback,
+                  std::unique_ptr<net::HostResolver::Request>* out_request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(getter);
   TRACE_EVENT1("net", "PreresolveUrl", "url", url.spec());
 
@@ -107,21 +92,17 @@ int PreresolveUrl(net::URLRequestContextGetter* getter,
   if (!request_context)
     return net::ERR_CONTEXT_SHUT_DOWN;
 
-  auto request_holder = std::make_unique<RequestHolder>();
   auto addresses = std::make_unique<net::AddressList>();
 
-  // Save raw pointers before the unique_ptr is invalidated by base::Passed.
+  // Save raw pointers before the unique_ptr is invalidated by base::Passed().
   net::AddressList* raw_addresses = addresses.get();
-  std::unique_ptr<net::HostResolver::Request>* out_request =
-      request_holder->GetRequest();
 
   net::HostResolver* resolver = request_context->host_resolver();
   net::HostResolver::RequestInfo resolve_info(net::HostPortPair::FromURL(url));
   resolve_info.set_is_speculative(true);
   return resolver->Resolve(
       resolve_info, net::IDLE, raw_addresses,
-      base::Bind(&OnResolveComplete, base::Passed(&request_holder),
-                 base::Passed(&addresses), callback),
+      base::Bind(&OnResolveComplete, base::Passed(&addresses), callback),
       out_request, net::NetLogWithSource());
 }
 

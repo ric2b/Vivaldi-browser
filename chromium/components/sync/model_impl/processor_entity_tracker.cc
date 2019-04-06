@@ -54,6 +54,7 @@ ProcessorEntityTracker::ProcessorEntityTracker(
     const std::string& storage_key,
     sync_pb::EntityMetadata* metadata)
     : storage_key_(storage_key),
+      commit_data_requested_(false),
       commit_requested_sequence_number_(metadata->acked_sequence_number()) {
   DCHECK(metadata->has_client_tag_hash());
   DCHECK(metadata->has_creation_time());
@@ -84,7 +85,12 @@ void ProcessorEntityTracker::SetCommitData(EntityData* data) {
 void ProcessorEntityTracker::CacheCommitData(const EntityDataPtr& data_ptr) {
   DCHECK(RequiresCommitData());
   commit_data_ = data_ptr;
+  commit_data_requested_ = false;
   DCHECK(HasCommitData());
+}
+
+void ProcessorEntityTracker::SetCommitDataRequested() {
+  commit_data_requested_ = true;
 }
 
 bool ProcessorEntityTracker::HasCommitData() const {
@@ -92,8 +98,11 @@ bool ProcessorEntityTracker::HasCommitData() const {
 }
 
 bool ProcessorEntityTracker::MatchesData(const EntityData& data) const {
-  return metadata_.is_deleted() ? data.is_deleted()
-                                : MatchesSpecificsHash(data.specifics);
+  if (metadata_.is_deleted())
+    return data.is_deleted();
+  if (data.is_deleted())
+    return false;
+  return MatchesSpecificsHash(data.specifics);
 }
 
 bool ProcessorEntityTracker::MatchesBaseData(const EntityData& data) const {
@@ -116,6 +125,10 @@ bool ProcessorEntityTracker::RequiresCommitRequest() const {
 
 bool ProcessorEntityTracker::RequiresCommitData() const {
   return RequiresCommitRequest() && !HasCommitData() && !metadata_.is_deleted();
+}
+
+bool ProcessorEntityTracker::FailedGettingCommitData() const {
+  return RequiresCommitData() && commit_data_requested_;
 }
 
 bool ProcessorEntityTracker::CanClearMetadata() const {
@@ -154,6 +167,7 @@ void ProcessorEntityTracker::RecordForcedUpdate(
   // pending commits so they are never enqueued again.
   metadata_.set_acked_sequence_number(metadata_.sequence_number());
   commit_data_.reset();
+  commit_data_requested_ = false;
   RecordAcceptedUpdate(update);
 }
 
@@ -174,7 +188,7 @@ void ProcessorEntityTracker::MakeLocalChange(std::unique_ptr<EntityData> data) {
   metadata_.set_modification_time(TimeToProtoTime(modification_time));
   metadata_.set_is_deleted(false);
 
-  // SetCommitData will update data's fileds from metadata and wrap it into
+  // SetCommitData will update data's fields from metadata and wrap it into
   // immutable EntityDataPtr.
   SetCommitData(data.get());
 }
@@ -186,6 +200,7 @@ bool ProcessorEntityTracker::Delete() {
   metadata_.clear_specifics_hash();
   // Clear any cached pending commit data.
   commit_data_.reset();
+  commit_data_requested_ = false;
   // Return true if server might know about this entity.
   // TODO(crbug/740757): This check will prevent sending tombstone in situation
   // when it should have been sent under following conditions:
@@ -282,6 +297,7 @@ size_t ProcessorEntityTracker::EstimateMemoryUsage() const {
 bool ProcessorEntityTracker::MatchesSpecificsHash(
     const sync_pb::EntitySpecifics& specifics) const {
   DCHECK(!metadata_.is_deleted());
+  DCHECK_GT(specifics.ByteSize(), 0);
   std::string hash;
   HashSpecifics(specifics, &hash);
   return hash == metadata_.specifics_hash();

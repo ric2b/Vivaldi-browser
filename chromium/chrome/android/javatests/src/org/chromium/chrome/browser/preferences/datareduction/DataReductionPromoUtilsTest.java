@@ -18,10 +18,12 @@ import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.FieldTrialList;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge.AboutVersionStrings;
@@ -56,11 +58,21 @@ public class DataReductionPromoUtilsTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+            "force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled"})
     @Feature({"DataReduction"})
-    public void testCanShowPromos() throws Throwable {
+    public void
+    testCanShowPromos() throws Throwable {
         if (DataReductionProxySettings.getInstance().isDataReductionProxyManaged()) return;
         Assert.assertFalse(DataReductionProxySettings.getInstance().isDataReductionProxyEnabled());
+
+        // In some unknown cases, the force-fieldtrials flag may not be effective. This may possibly
+        // be because this test runs on UiThread.
+        if (!FieldTrialList.findFullName("DataCompressionProxyPromoVisibility").equals("Enabled")) {
+            return;
+        }
+        Assert.assertTrue(
+                DataReductionProxySettings.getInstance().isDataReductionProxyPromoAllowed());
         Assert.assertTrue(DataReductionPromoUtils.canShowPromos());
         DataReductionProxySettings.getInstance().setDataReductionProxyEnabled(mContext, true);
         Assert.assertFalse(DataReductionPromoUtils.canShowPromos());

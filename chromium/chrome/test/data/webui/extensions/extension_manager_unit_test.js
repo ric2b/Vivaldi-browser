@@ -15,9 +15,10 @@ cr.define('extension_manager_tests', function() {
     Uninstall: 'uninstall',
     UninstallFromDetails: 'uninstall while in details view',
     UpdateItemData: 'update item data',
+    KioskMode: 'kiosk mode',
   };
 
-  var suiteName = 'ExtensionManagerUnitTest';
+  const suiteName = 'ExtensionManagerUnitTest';
 
   suite(suiteName, function() {
     /** @type {extensions.Manager} */
@@ -26,7 +27,15 @@ cr.define('extension_manager_tests', function() {
     /** @type {TestService} */
     let service;
 
+    /** @type {extensions.KioskBrowserProxy} */
+    let browserProxy;
+
     setup(function() {
+      if (cr.isChromeOS) {
+        browserProxy = new TestKioskBrowserProxy();
+        extensions.KioskBrowserProxyImpl.instance_ = browserProxy;
+      }
+
       PolymerTest.clearBody();
 
       service = new extensions.TestService();
@@ -106,12 +115,12 @@ cr.define('extension_manager_tests', function() {
       const oldDescription = 'old description';
       const newDescription = 'new description';
 
-      const extension = extension_test_util.createExtensionInfo({
-        description: oldDescription
-      });
+      const extension = extension_test_util.createExtensionInfo(
+          {description: oldDescription});
       simulateExtensionInstall(extension);
       const secondExtension = extension_test_util.createExtensionInfo({
-        description: 'irrelevant', id: 'b'.repeat(32),
+        description: 'irrelevant',
+        id: 'b'.repeat(32),
       });
       simulateExtensionInstall(secondExtension);
 
@@ -281,6 +290,20 @@ cr.define('extension_manager_tests', function() {
       });
       expectEquals(ExtensionState.ENABLED, manager.extensions_[0].state);
     });
+
+    if (cr.isChromeOS) {
+      test(assert(TestNames.KioskMode), function() {
+        expectFalse(!!manager.$$('extensions-kiosk-dialog'));
+
+        return browserProxy.whenCalled('initializeKioskAppSettings')
+            .then(() => {
+              expectTrue(manager.$$('extensions-toolbar').kioskEnabled);
+              manager.$$('extensions-toolbar').fire('kiosk-tap');
+              Polymer.dom.flush();
+              expectTrue(!!manager.$$('extensions-kiosk-dialog'));
+            });
+      });
+    }
   });
 
   return {

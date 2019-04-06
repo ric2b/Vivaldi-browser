@@ -9,7 +9,9 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/debug/crash_logging.h"
 #include "base/environment.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
@@ -26,6 +28,8 @@
 #include "headless/lib/headless_crash_reporter_client.h"
 #include "headless/lib/headless_macros.h"
 #include "headless/lib/utility/headless_content_utility_client.h"
+#include "services/service_manager/embedder/switches.h"
+#include "services/service_manager/sandbox/switches.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/switches.h"
@@ -60,13 +64,21 @@ base::LazyInstance<HeadlessCrashReporterClient>::Leaky g_headless_crash_client =
 #endif
 
 const char kLogFileName[] = "CHROME_LOG_FILE";
+const char kHeadlessCrashKey[] = "headless";
 }  // namespace
 
 HeadlessContentMainDelegate::HeadlessContentMainDelegate(
     std::unique_ptr<HeadlessBrowserImpl> browser)
-    : content_client_(browser->options()), browser_(std::move(browser)) {
+    : content_client_(browser->options()),
+      browser_(std::move(browser)),
+      headless_crash_key_(base::debug::AllocateCrashKeyString(
+          kHeadlessCrashKey,
+          base::debug::CrashKeySize::Size32)) {
   DCHECK(!g_current_headless_content_main_delegate);
   g_current_headless_content_main_delegate = this;
+
+  // Mark any bug reports from headless mode as such.
+  base::debug::SetCrashKeyString(headless_crash_key_, "true");
 }
 
 HeadlessContentMainDelegate::~HeadlessContentMainDelegate() {
@@ -85,7 +97,7 @@ bool HeadlessContentMainDelegate::BasicStartupComplete(int* exit_code) {
     command_line->AppendSwitch(switches::kSingleProcess);
 
   if (browser_->options()->disable_sandbox)
-    command_line->AppendSwitch(switches::kNoSandbox);
+    command_line->AppendSwitch(service_manager::switches::kNoSandbox);
 
   if (!browser_->options()->enable_resource_scheduler)
     command_line->AppendSwitch(switches::kDisableResourceScheduler);
@@ -159,10 +171,23 @@ void HeadlessContentMainDelegate::InitLogging(
   base::FilePath log_path;
   logging::LoggingSettings settings;
 
-  if (PathService::Get(base::DIR_MODULE, &log_path)) {
+// In release builds we should log into the user profile directory.
+#ifdef NDEBUG
+  if (!browser_->options()->user_data_dir.empty()) {
+    log_path = browser_->options()->user_data_dir;
+    log_path = log_path.Append(kDefaultProfileName);
+    base::CreateDirectory(log_path);
     log_path = log_path.Append(log_filename);
-  } else {
-    log_path = log_filename;
+  }
+#endif  // NDEBUG
+
+  // Otherwise we log to where the executable is.
+  if (log_path.empty()) {
+    if (base::PathService::Get(base::DIR_MODULE, &log_path)) {
+      log_path = log_path.Append(log_filename);
+    } else {
+      log_path = log_filename;
+    }
   }
 
   std::string filename;
@@ -183,6 +208,8 @@ void HeadlessContentMainDelegate::InitLogging(
 
 void HeadlessContentMainDelegate::InitCrashReporter(
     const base::CommandLine& command_line) {
+  if (command_line.HasSwitch(::switches::kDisableBreakpad))
+    return;
 #if defined(OS_FUCHSIA)
   // TODO(fuchsia): Implement this when crash reporting/Breakpad are available
   // in Fuchsia. (crbug.com/753619)
@@ -201,7 +228,7 @@ void HeadlessContentMainDelegate::InitCrashReporter(
     DCHECK(!breakpad::IsCrashReporterEnabled());
     return;
   }
-  if (process_type != switches::kZygoteProcess)
+  if (process_type != service_manager::switches::kZygoteProcess)
     breakpad::InitCrashReporter(process_type);
 #elif defined(OS_MACOSX)
   crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
@@ -209,8 +236,8 @@ void HeadlessContentMainDelegate::InitCrashReporter(
 // crashpad is already enabled.
 // TODO(dvallet): Ideally we would also want to avoid this for component builds.
 #elif defined(OS_WIN) && !defined(CHROME_MULTIPLE_DLL)
-  crash_reporter::InitializeCrashpadWithEmbeddedHandler(process_type.empty(),
-                                                        process_type, "");
+  crash_reporter::InitializeCrashpadWithEmbeddedHandler(
+      process_type.empty(), process_type, "", base::FilePath());
 #endif  // defined(HEADLESS_USE_BREAKPAD)
 #endif  // defined(OS_FUCHSIA)
 }
@@ -299,7 +326,7 @@ void HeadlessContentMainDelegate::InitializeResourceBundle() {
 #else
 
   base::FilePath dir_module;
-  bool result = PathService::Get(base::DIR_MODULE, &dir_module);
+  bool result = base::PathService::Get(base::DIR_MODULE, &dir_module);
   DCHECK(result);
 
   // Try loading the headless library pak file first. If it doesn't exist (i.e.,

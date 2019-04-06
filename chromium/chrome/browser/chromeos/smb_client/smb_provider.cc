@@ -9,6 +9,9 @@
 #include "chrome/browser/chromeos/file_system_provider/service.h"
 #include "chrome/browser/chromeos/smb_client/smb_file_system.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/common/webui_url_constants.h"
 #include "url/gurl.h"
 
 namespace chromeos {
@@ -24,11 +27,10 @@ SmbProvider::SmbProvider(UnmountCallback unmount_callback)
       // languages. See l10n_util::GetStringUTF8.
       name_("SMB Shares"),
       unmount_callback_(std::move(unmount_callback)) {
-  // TODO(baileyberro): Fill out with proper icons.
   icon_set_.SetIcon(IconSet::IconSize::SIZE_16x16,
-                    GURL("chrome://resources/images/apps/button.png"));
+                    GURL("chrome://theme/IDR_SMB_ICON"));
   icon_set_.SetIcon(IconSet::IconSize::SIZE_32x32,
-                    GURL("chrome://resources/images/2x/apps/button.png"));
+                    GURL("chrome://theme/IDR_SMB_ICON@2x"));
 }
 
 SmbProvider::~SmbProvider() = default;
@@ -55,6 +57,14 @@ const std::string& SmbProvider::GetName() const {
 
 const IconSet& SmbProvider::GetIconSet() const {
   return icon_set_;
+}
+
+bool SmbProvider::RequestMount(Profile* profile) {
+  auto* settings_manager = chrome::SettingsWindowManager::GetInstance();
+  settings_manager->ShowChromePageForProfile(
+      profile, chrome::GetSettingsUrl(chrome::kSmbSharesPage));
+
+  return true;
 }
 
 }  // namespace smb_client

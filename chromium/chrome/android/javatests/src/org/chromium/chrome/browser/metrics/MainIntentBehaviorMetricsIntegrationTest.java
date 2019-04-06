@@ -4,26 +4,42 @@
 
 package org.chromium.chrome.browser.metrics;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThat;
+
+import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.bookmarks.BookmarkActivity;
+import org.chromium.chrome.browser.download.DownloadActivity;
+import org.chromium.chrome.browser.history.HistoryActivity;
 import org.chromium.chrome.browser.omnibox.UrlBar;
+import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.ActivityUtils;
+import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -37,10 +53,20 @@ import java.util.concurrent.Callable;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@SuppressLint({"ApplySharedPref", "CommitPrefEdits"})
 public class MainIntentBehaviorMetricsIntegrationTest {
+    private static final long HOURS_IN_MS = 60 * 60 * 1000L;
+
     @Rule
     public ChromeActivityTestRule<ChromeTabbedActivity> mActivityTestRule =
             new ChromeActivityTestRule<>(ChromeTabbedActivity.class);
+
+    private UserActionTester mActionTester;
+
+    @After
+    public void tearDown() {
+        if (mActionTester != null) mActionTester.tearDown();
+    }
 
     @MediumTest
     @Test
@@ -54,7 +80,7 @@ public class MainIntentBehaviorMetricsIntegrationTest {
                 OmniboxTestUtils.toggleUrlBarFocus(urlBar, true);
             }
         });
-        assertMainIntentBehavior(MainIntentBehaviorMetrics.FOCUS_OMNIBOX);
+        assertMainIntentBehavior(MainIntentBehaviorMetrics.MainIntentActionType.FOCUS_OMNIBOX);
     }
 
     @MediumTest
@@ -84,7 +110,7 @@ public class MainIntentBehaviorMetricsIntegrationTest {
                 TabModelUtils.setIndex(mActivityTestRule.getActivity().getCurrentTabModel(), 1);
             }
         });
-        assertMainIntentBehavior(MainIntentBehaviorMetrics.SWITCH_TABS);
+        assertMainIntentBehavior(MainIntentBehaviorMetrics.MainIntentActionType.SWITCH_TABS);
     }
 
     @MediumTest
@@ -98,7 +124,7 @@ public class MainIntentBehaviorMetricsIntegrationTest {
                 mActivityTestRule.getActivity().finish();
             }
         });
-        assertMainIntentBehavior(MainIntentBehaviorMetrics.BACKGROUNDED);
+        assertMainIntentBehavior(MainIntentBehaviorMetrics.MainIntentActionType.BACKGROUNDED);
     }
 
     @MediumTest
@@ -112,7 +138,7 @@ public class MainIntentBehaviorMetricsIntegrationTest {
                 mActivityTestRule.getActivity().getTabCreator(false).launchNTP();
             }
         });
-        assertMainIntentBehavior(MainIntentBehaviorMetrics.NTP_CREATED);
+        assertMainIntentBehavior(MainIntentBehaviorMetrics.MainIntentActionType.NTP_CREATED);
     }
 
     @MediumTest
@@ -121,7 +147,7 @@ public class MainIntentBehaviorMetricsIntegrationTest {
         try {
             MainIntentBehaviorMetrics.setTimeoutDurationMsForTesting(500);
             startActivity(true);
-            assertMainIntentBehavior(MainIntentBehaviorMetrics.CONTINUATION);
+            assertMainIntentBehavior(MainIntentBehaviorMetrics.MainIntentActionType.CONTINUATION);
         } finally {
             MainIntentBehaviorMetrics.setTimeoutDurationMsForTesting(
                     MainIntentBehaviorMetrics.TIMEOUT_DURATION_MS);
@@ -135,6 +161,170 @@ public class MainIntentBehaviorMetricsIntegrationTest {
         assertMainIntentBehavior(null);
         Assert.assertFalse(mActivityTestRule.getActivity().getMainIntentBehaviorMetricsForTesting()
                 .getPendingActionRecordForMainIntent());
+    }
+
+    @MediumTest
+    @Test
+    public void testBackgroundDuration_24hrs() {
+        assertBackgroundDurationLogged(
+                24 * HOURS_IN_MS, "MobileStartup.MainIntentReceived.After24Hours");
+    }
+
+    @MediumTest
+    @Test
+    public void testBackgroundDuration_12hrs() {
+        assertBackgroundDurationLogged(
+                12 * HOURS_IN_MS, "MobileStartup.MainIntentReceived.After12Hours");
+    }
+
+    @MediumTest
+    @Test
+    public void testBackgroundDuration_6hrs() {
+        assertBackgroundDurationLogged(
+                6 * HOURS_IN_MS, "MobileStartup.MainIntentReceived.After6Hours");
+    }
+
+    @MediumTest
+    @Test
+    public void testBackgroundDuration_1hr() {
+        assertBackgroundDurationLogged(HOURS_IN_MS, "MobileStartup.MainIntentReceived.After1Hour");
+    }
+
+    @MediumTest
+    @Test
+    public void testBackgroundDuration_0hr() {
+        assertBackgroundDurationLogged(0, null);
+        for (String action : mActionTester.getActions()) {
+            if (action.startsWith("MobileStartup.MainIntentReceived.After")) {
+                Assert.fail("Unexpected background duration logged: " + action);
+            }
+        }
+    }
+
+    @MediumTest
+    @Test
+    public void testLaunch_Duration_MoreThan_1Day() throws Exception {
+        long timestamp = System.currentTimeMillis() - 25 * HOURS_IN_MS;
+        ContextUtils.getAppSharedPreferences()
+                .edit()
+                .putLong(MainIntentBehaviorMetrics.LAUNCH_TIMESTAMP_PREF, timestamp)
+                .commit();
+        ContextUtils.getAppSharedPreferences()
+                .edit()
+                .putInt(MainIntentBehaviorMetrics.LAUNCH_COUNT_PREF, 10)
+                .commit();
+        mActivityTestRule.startMainActivityFromLauncher();
+
+        assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "MobileStartup.DailyLaunchCount", 10));
+
+        assertEquals(1,
+                ContextUtils.getAppSharedPreferences().getInt(
+                        MainIntentBehaviorMetrics.LAUNCH_COUNT_PREF, 0));
+
+        long newTimestamp = ContextUtils.getAppSharedPreferences().getLong(
+                MainIntentBehaviorMetrics.LAUNCH_TIMESTAMP_PREF, 0);
+        assertNotEquals(timestamp, newTimestamp);
+        assertNotEquals(0, newTimestamp);
+    }
+
+    @MediumTest
+    @Test
+    public void testLaunch_Duration_LessThan_1Day() throws Exception {
+        long timestamp = System.currentTimeMillis() - 12 * HOURS_IN_MS;
+        ContextUtils.getAppSharedPreferences()
+                .edit()
+                .putLong(MainIntentBehaviorMetrics.LAUNCH_TIMESTAMP_PREF, timestamp)
+                .commit();
+        ContextUtils.getAppSharedPreferences()
+                .edit()
+                .putInt(MainIntentBehaviorMetrics.LAUNCH_COUNT_PREF, 1)
+                .commit();
+        mActivityTestRule.startMainActivityFromLauncher();
+
+        assertEquals(0,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "MobileStartup.DailyLaunchCount", 1));
+
+        assertEquals(2,
+                ContextUtils.getAppSharedPreferences().getInt(
+                        MainIntentBehaviorMetrics.LAUNCH_COUNT_PREF, 0));
+
+        assertEquals(timestamp,
+                ContextUtils.getAppSharedPreferences().getLong(
+                        MainIntentBehaviorMetrics.LAUNCH_TIMESTAMP_PREF, 0));
+    }
+
+    @MediumTest
+    @Test
+    public void testLaunch_From_InAppActivities() throws Exception {
+        try {
+            MainIntentBehaviorMetrics.setTimeoutDurationMsForTesting(0);
+            long timestamp = System.currentTimeMillis() - 12 * HOURS_IN_MS;
+            ContextUtils.getAppSharedPreferences()
+                    .edit()
+                    .putLong(MainIntentBehaviorMetrics.LAUNCH_TIMESTAMP_PREF, timestamp)
+                    .commit();
+
+            mActivityTestRule.startMainActivityFromLauncher();
+
+            Preferences preferences = mActivityTestRule.startPreferences(null);
+            preferences.finish();
+            ChromeActivityTestRule.waitForActivityNativeInitializationComplete(
+                    ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class));
+
+            BookmarkActivity bookmarkActivity = ActivityUtils.waitForActivity(
+                    InstrumentationRegistry.getInstrumentation(), BookmarkActivity.class,
+                    new MenuUtils.MenuActivityTrigger(InstrumentationRegistry.getInstrumentation(),
+                            mActivityTestRule.getActivity(), R.id.all_bookmarks_menu_id));
+            bookmarkActivity.finish();
+            ChromeActivityTestRule.waitForActivityNativeInitializationComplete(
+                    ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class));
+
+            DownloadActivity downloadActivity = ActivityUtils.waitForActivity(
+                    InstrumentationRegistry.getInstrumentation(), DownloadActivity.class,
+                    new MenuUtils.MenuActivityTrigger(InstrumentationRegistry.getInstrumentation(),
+                            mActivityTestRule.getActivity(), R.id.downloads_menu_id));
+            downloadActivity.finish();
+            ChromeActivityTestRule.waitForActivityNativeInitializationComplete(
+                    ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class));
+
+            HistoryActivity historyActivity = ActivityUtils.waitForActivity(
+                    InstrumentationRegistry.getInstrumentation(), HistoryActivity.class,
+                    new MenuUtils.MenuActivityTrigger(InstrumentationRegistry.getInstrumentation(),
+                            mActivityTestRule.getActivity(), R.id.open_history_menu_id));
+            historyActivity.finish();
+
+            assertEquals(1,
+                    ContextUtils.getAppSharedPreferences().getInt(
+                            MainIntentBehaviorMetrics.LAUNCH_COUNT_PREF, 0));
+        } finally {
+            MainIntentBehaviorMetrics.setTimeoutDurationMsForTesting(
+                    MainIntentBehaviorMetrics.TIMEOUT_DURATION_MS);
+        }
+    }
+
+    private void assertBackgroundDurationLogged(long duration, String expectedMetric) {
+        startActivity(false);
+        mActionTester = new UserActionTester();
+        ContextUtils.getAppSharedPreferences()
+                .edit()
+                .putLong(ChromeTabbedActivity.LAST_BACKGROUNDED_TIME_MS_PREF,
+                        System.currentTimeMillis() - duration)
+                .commit();
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> { mActivityTestRule.getActivity().onNewIntent(intent); });
+
+        assertThat(mActionTester.toString(), mActionTester.getActions(),
+                Matchers.hasItem("MobileStartup.MainIntentReceived"));
+        if (expectedMetric != null) {
+            assertThat(mActionTester.toString(), mActionTester.getActions(),
+                    Matchers.hasItem(expectedMetric));
+        }
     }
 
     private void startActivity(boolean addLauncherCategory) {

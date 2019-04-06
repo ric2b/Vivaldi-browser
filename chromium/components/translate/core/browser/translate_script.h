@@ -15,6 +15,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 
+class GURL;
+
 namespace translate {
 
 class TranslateScriptTest;
@@ -23,8 +25,6 @@ class TranslateURLFetcher;
 class TranslateScript {
  public:
   typedef base::Callback<void(bool, const std::string&)> RequestCallback;
-
-  static const int kFetcherId = 0;
 
   TranslateScript();
   virtual ~TranslateScript();
@@ -45,6 +45,9 @@ class TranslateScript {
   // Fetches the JS translate script (the script that is injected in the page
   // to translate it).
   void Request(const RequestCallback& callback);
+
+  // Returns the URL to be used to load the translate script.
+  static GURL GetTranslateScriptURL();
 
  private:
   friend class TranslateScriptTest;
@@ -72,7 +75,7 @@ class TranslateScript {
   static const char kJavascriptLoaderCallbackQueryValue[];
 
   // The callback when the script is fetched or a server error occured.
-  void OnScriptFetchComplete(int id, bool success, const std::string& data);
+  void OnScriptFetchComplete(bool success, const std::string& data);
 
   // URL fetcher to fetch the translate script.
   std::unique_ptr<TranslateURLFetcher> fetcher_;

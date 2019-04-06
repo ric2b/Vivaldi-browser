@@ -9,6 +9,7 @@
 #include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "services/ui/ws2/server_window.h"
 #include "ui/events/test/event_generator.h"
 
 namespace ash {
@@ -46,10 +47,11 @@ TEST_F(LaserPointerControllerTest, LaserPointerRenderer) {
   LaserPointerControllerTestApi controller_test_api_(controller_.get());
 
   // The laser pointer mode only works with stylus.
-  GetEventGenerator().EnterPenPointerMode();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
 
   // When disabled the laser pointer should not be showing.
-  GetEventGenerator().MoveTouch(gfx::Point(1, 1));
+  event_generator->MoveTouch(gfx::Point(1, 1));
   EXPECT_FALSE(controller_test_api_.IsShowingLaserPointer());
 
   // Verify that by enabling the mode, the laser pointer should still not be
@@ -58,27 +60,27 @@ TEST_F(LaserPointerControllerTest, LaserPointerRenderer) {
   EXPECT_FALSE(controller_test_api_.IsShowingLaserPointer());
 
   // Verify moving the stylus 4 times will not display the laser pointer.
-  GetEventGenerator().MoveTouch(gfx::Point(2, 2));
-  GetEventGenerator().MoveTouch(gfx::Point(3, 3));
-  GetEventGenerator().MoveTouch(gfx::Point(4, 4));
-  GetEventGenerator().MoveTouch(gfx::Point(5, 5));
+  event_generator->MoveTouch(gfx::Point(2, 2));
+  event_generator->MoveTouch(gfx::Point(3, 3));
+  event_generator->MoveTouch(gfx::Point(4, 4));
+  event_generator->MoveTouch(gfx::Point(5, 5));
   EXPECT_FALSE(controller_test_api_.IsShowingLaserPointer());
 
   // Verify pressing the stylus will show the laser pointer and add a point but
   // will not activate fading out.
-  GetEventGenerator().PressTouch();
+  event_generator->PressTouch();
   EXPECT_TRUE(controller_test_api_.IsShowingLaserPointer());
   EXPECT_FALSE(controller_test_api_.IsFadingAway());
   EXPECT_EQ(1, controller_test_api_.laser_points().GetNumberOfPoints());
 
   // Verify dragging the stylus 2 times will add 2 more points.
-  GetEventGenerator().MoveTouch(gfx::Point(6, 6));
-  GetEventGenerator().MoveTouch(gfx::Point(7, 7));
+  event_generator->MoveTouch(gfx::Point(6, 6));
+  event_generator->MoveTouch(gfx::Point(7, 7));
   EXPECT_EQ(3, controller_test_api_.laser_points().GetNumberOfPoints());
 
   // Verify releasing the stylus still shows the laser pointer, which is fading
   // away.
-  GetEventGenerator().ReleaseTouch();
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_.IsShowingLaserPointer());
   EXPECT_TRUE(controller_test_api_.IsFadingAway());
 
@@ -90,28 +92,28 @@ TEST_F(LaserPointerControllerTest, LaserPointerRenderer) {
   // Verify that disabling the mode while laser pointer is displayed does not
   // display the laser pointer.
   controller_test_api_.SetEnabled(true);
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(6, 6));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(6, 6));
   EXPECT_TRUE(controller_test_api_.IsShowingLaserPointer());
   controller_test_api_.SetEnabled(false);
   EXPECT_FALSE(controller_test_api_.IsShowingLaserPointer());
 
   // Verify that the laser pointer does not add points while disabled.
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(8, 8));
-  GetEventGenerator().ReleaseTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(9, 9));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(8, 8));
+  event_generator->ReleaseTouch();
+  event_generator->MoveTouch(gfx::Point(9, 9));
   EXPECT_FALSE(controller_test_api_.IsShowingLaserPointer());
 
   // Verify that the laser pointer does not get shown if points are not coming
   // from the stylus, even when enabled.
-  GetEventGenerator().ExitPenPointerMode();
+  event_generator->ExitPenPointerMode();
   controller_test_api_.SetEnabled(true);
-  GetEventGenerator().PressTouch();
-  GetEventGenerator().MoveTouch(gfx::Point(10, 10));
-  GetEventGenerator().MoveTouch(gfx::Point(11, 11));
+  event_generator->PressTouch();
+  event_generator->MoveTouch(gfx::Point(10, 10));
+  event_generator->MoveTouch(gfx::Point(11, 11));
   EXPECT_FALSE(controller_test_api_.IsShowingLaserPointer());
-  GetEventGenerator().ReleaseTouch();
+  event_generator->ReleaseTouch();
 }
 
 // Test to ensure the class responsible for drawing the laser pointer handles
@@ -121,8 +123,9 @@ TEST_F(LaserPointerControllerTest, LaserPointerPrediction) {
 
   controller_test_api_.SetEnabled(true);
   // The laser pointer mode only works with stylus.
-  GetEventGenerator().EnterPenPointerMode();
-  GetEventGenerator().PressTouch();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
+  event_generator->PressTouch();
   EXPECT_TRUE(controller_test_api_.IsShowingLaserPointer());
 
   EXPECT_EQ(1, controller_test_api_.laser_points().GetNumberOfPoints());
@@ -132,9 +135,9 @@ TEST_F(LaserPointerControllerTest, LaserPointerPrediction) {
             controller_test_api_.predicted_laser_points().GetNumberOfPoints());
 
   // Verify dragging the stylus 3 times will add some predicted points.
-  GetEventGenerator().MoveTouch(gfx::Point(10, 10));
-  GetEventGenerator().MoveTouch(gfx::Point(20, 20));
-  GetEventGenerator().MoveTouch(gfx::Point(30, 30));
+  event_generator->MoveTouch(gfx::Point(10, 10));
+  event_generator->MoveTouch(gfx::Point(20, 20));
+  event_generator->MoveTouch(gfx::Point(30, 30));
   EXPECT_NE(0,
             controller_test_api_.predicted_laser_points().GetNumberOfPoints());
   // Verify predicted points are in the right direction.
@@ -145,11 +148,33 @@ TEST_F(LaserPointerControllerTest, LaserPointerPrediction) {
   }
 
   // Verify releasing the stylus removes predicted points.
-  GetEventGenerator().ReleaseTouch();
+  event_generator->ReleaseTouch();
   EXPECT_TRUE(controller_test_api_.IsShowingLaserPointer());
   EXPECT_TRUE(controller_test_api_.IsFadingAway());
   EXPECT_EQ(0,
             controller_test_api_.predicted_laser_points().GetNumberOfPoints());
+}
+
+// Test to laser pointer is shown for touches over a remote app.
+TEST_F(LaserPointerControllerTest, LaserPointerWorksWithRemoteApp) {
+  LaserPointerControllerTestApi controller_test_api_(controller_.get());
+  std::unique_ptr<aura::Window> window =
+      CreateTestWindow(gfx::Rect(50, 50, 100, 100));
+  ui::ws2::ServerWindow* server_window =
+      ui::ws2::ServerWindow::GetMayBeNull(window.get());
+  ASSERT_TRUE(server_window);
+  // Setting the client area triggers slightly different logic.
+  server_window->SetClientArea(gfx::Insets(10), std::vector<gfx::Rect>());
+
+  // The laser pointer mode only works with stylus.
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->EnterPenPointerMode();
+  controller_test_api_.SetEnabled(true);
+
+  event_generator->MoveTouch(gfx::Point(100, 100));
+  EXPECT_FALSE(controller_test_api_.IsShowingLaserPointer());
+  event_generator->PressTouch();
+  EXPECT_TRUE(controller_test_api_.IsShowingLaserPointer());
 }
 
 }  // namespace ash

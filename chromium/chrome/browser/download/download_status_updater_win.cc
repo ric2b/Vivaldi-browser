@@ -54,8 +54,7 @@ void UpdateTaskbarProgressBar(int download_count,
 }  // namespace
 
 void DownloadStatusUpdater::UpdateAppIconDownloadProgress(
-    content::DownloadItem* download) {
-
+    download::DownloadItem* download) {
   // Always update overall progress.
   float progress = 0;
   int download_count = 0;
@@ -69,5 +68,4 @@ void DownloadStatusUpdater::UpdateAppIconDownloadProgress(
                                 progress_known,
                                 progress);
 #endif //VIVALDI_BUILD
-
- }
+}

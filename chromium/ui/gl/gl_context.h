@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/cancellation_flag.h"
-#include "ui/gl/extension_set.h"
+#include "ui/gfx/extension_set.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_state_restorer.h"
@@ -128,15 +128,8 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   // Sets the GLStateRestorer for the context (takes ownership).
   void SetGLStateRestorer(GLStateRestorer* state_restorer);
 
-  // Set swap interval. This context must be current.
-  void SetSwapInterval(int interval);
-
-  // Forces the swap interval to zero (no vsync) regardless of any future values
-  // passed to SetSwapInterval.
-  void ForceSwapIntervalZero(bool force);
-
   // Returns set of extensions. The context must be current.
-  virtual const ExtensionSet& GetExtensions() = 0;
+  virtual const gfx::ExtensionSet& GetExtensions() = 0;
 
   // Indicate that it is safe to force this context to switch GPUs, since
   // transitioning can cause corruption and hangs (OS X only).
@@ -164,9 +157,6 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
 
   // Returns the last GLContext made current, virtual or real.
   static GLContext* GetCurrent();
-
-  // TODO(sunnyps): Remove after crbug.com/724999 is fixed.
-  static GLContext* GetRealCurrentForDebugging();
 
   virtual bool WasAllocatedUsingRobustnessExtension();
 
@@ -203,6 +193,12 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   // current.
   virtual void ForceReleaseVirtuallyCurrent();
 
+#if defined(OS_MACOSX)
+  // Flush the underlying context to avoid crashes due to driver bugs on macOS.
+  // https://crbug.com/863817
+  virtual void FlushForDriverCrashWorkaround();
+#endif
+
  protected:
   virtual ~GLContext();
 
@@ -234,7 +230,6 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   // Returns the last real (non-virtual) GLContext made current.
   static GLContext* GetRealCurrent();
 
-  virtual void OnSetSwapInterval(int interval) = 0;
   virtual void ResetExtensions() = 0;
 
   GLApi* gl_api() { return gl_api_.get(); }
@@ -273,10 +268,6 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   std::unique_ptr<GLStateRestorer> state_restorer_;
   std::unique_ptr<GLVersionInfo> version_info_;
 
-  // Start with an invalid value so that the first SetSwapInterval isn't a nop.
-  int swap_interval_ = -1;
-  bool force_swap_interval_zero_ = false;
-
   DISALLOW_COPY_AND_ASSIGN(GLContext);
 };
 
@@ -284,7 +275,7 @@ class GL_EXPORT GLContextReal : public GLContext {
  public:
   explicit GLContextReal(GLShareGroup* share_group);
   scoped_refptr<GPUTimingClient> CreateGPUTimingClient() override;
-  const ExtensionSet& GetExtensions() override;
+  const gfx::ExtensionSet& GetExtensions() override;
 
  protected:
   ~GLContextReal() override;
@@ -298,7 +289,7 @@ class GL_EXPORT GLContextReal : public GLContext {
  private:
   std::unique_ptr<GPUTiming> gpu_timing_;
   std::string extensions_string_;
-  ExtensionSet extensions_;
+  gfx::ExtensionSet extensions_;
   bool extensions_initialized_ = false;
   DISALLOW_COPY_AND_ASSIGN(GLContextReal);
 };

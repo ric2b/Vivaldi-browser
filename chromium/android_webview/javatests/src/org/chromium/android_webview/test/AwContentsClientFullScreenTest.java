@@ -24,7 +24,6 @@ import org.chromium.android_webview.test.util.JavascriptEventObserver;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
@@ -60,7 +59,6 @@ public class AwContentsClientFullScreenTest {
     private static final String FULLSCREEN_ERROR_OBSERVER = "javaFullScreenErrorObserver";
 
     private FullScreenVideoTestAwContentsClient mContentsClient;
-    private ContentViewCore mContentViewCore;
     private AwTestContainerView mTestContainerView;
 
     @Before
@@ -68,8 +66,7 @@ public class AwContentsClientFullScreenTest {
         mContentsClient = new FullScreenVideoTestAwContentsClient(
                 mActivityTestRule.getActivity(), mActivityTestRule.isHardwareAcceleratedTest());
         mTestContainerView = mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
-        mContentViewCore = mTestContainerView.getContentViewCore();
-        mActivityTestRule.enableJavaScriptOnUiThread(mTestContainerView.getAwContents());
+        AwActivityTestRule.enableJavaScriptOnUiThread(mTestContainerView.getAwContents());
         mTestContainerView.getAwContents().getSettings().setFullscreenSupported(true);
     }
 
@@ -149,8 +146,8 @@ public class AwContentsClientFullScreenTest {
     }
 
     public void doTestOnShowAndHideCustomViewWithJavascript(String videoTestUrl) throws Throwable {
-        doOnShowAndHideCustomViewTest(videoTestUrl,
-                () -> DOMUtils.exitFullscreen(mContentViewCore.getWebContents()));
+        doOnShowAndHideCustomViewTest(
+                videoTestUrl, () -> DOMUtils.exitFullscreen(mTestContainerView.getWebContents()));
     }
 
     /*
@@ -299,9 +296,12 @@ public class AwContentsClientFullScreenTest {
         assertWaitForKeepScreenOnActive(mTestContainerView, false);
     }
 
-    @Test
+    /*
     @MediumTest
     @Feature({"AndroidWebView"})
+    */
+    @Test
+    @DisabledTest(message = "crbug.com/808444")
     public void testPowerSaveBlockerIsTransferredToFullscreen() throws Throwable {
         Assert.assertFalse(DOMUtils.isFullscreen(getWebContentsOnUiThread()));
         loadTestPage(VIDEO_INSIDE_DIV_TEST_URL);
@@ -312,7 +312,7 @@ public class AwContentsClientFullScreenTest {
 
         // Enter fullscreen and verify that the power save blocker is
         // still there.
-        DOMUtils.clickNode(mContentViewCore, CUSTOM_FULLSCREEN_CONTROL_ID);
+        DOMUtils.clickNode(mTestContainerView.getWebContents(), CUSTOM_FULLSCREEN_CONTROL_ID);
         mContentsClient.waitForCustomViewShown();
         assertKeepScreenOnActive(mTestContainerView, true);
 
@@ -358,7 +358,7 @@ public class AwContentsClientFullScreenTest {
             // (containing the fullscreen <video>) so we just rely on that fact here.
             TouchCommon.singleClickView(mContentsClient.getCustomView());
         } else {
-            DOMUtils.clickNode(mContentViewCore, CUSTOM_PLAY_CONTROL_ID);
+            DOMUtils.clickNode(mTestContainerView.getWebContents(), CUSTOM_PLAY_CONTROL_ID);
         }
     }
 
@@ -447,7 +447,7 @@ public class AwContentsClientFullScreenTest {
     private JavascriptEventObserver registerObserver(final String observerName) throws Throwable {
         final JavascriptEventObserver observer = new JavascriptEventObserver();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
-                () -> observer.register(mContentViewCore.getWebContents(), observerName));
+                () -> observer.register(mTestContainerView.getWebContents(), observerName));
         return observer;
     }
 
@@ -467,7 +467,7 @@ public class AwContentsClientFullScreenTest {
 
     private void loadTestPageAndClickFullscreen(String videoTestUrl) throws Exception {
         loadTestPage(videoTestUrl);
-        DOMUtils.clickNode(mContentViewCore, CUSTOM_FULLSCREEN_CONTROL_ID);
+        DOMUtils.clickNode(mTestContainerView.getWebContents(), CUSTOM_FULLSCREEN_CONTROL_ID);
     }
 
     private void loadTestPage(String videoTestUrl) throws Exception {
@@ -479,7 +479,7 @@ public class AwContentsClientFullScreenTest {
 
     private WebContents getWebContentsOnUiThread() {
         try {
-            return ThreadUtils.runOnUiThreadBlocking(() -> mContentViewCore.getWebContents());
+            return ThreadUtils.runOnUiThreadBlocking(() -> mTestContainerView.getWebContents());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
             return null;

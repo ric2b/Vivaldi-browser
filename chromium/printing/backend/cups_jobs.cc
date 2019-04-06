@@ -443,16 +443,22 @@ bool GetPrinterInfo(const std::string& address,
 
   ScopedHttpPtr http = ScopedHttpPtr(httpConnect2(
       address.c_str(), port, nullptr, AF_INET,
-      encrypted ? HTTP_ENCRYPTION_REQUIRED : HTTP_ENCRYPTION_IF_REQUESTED, 0,
+      encrypted ? HTTP_ENCRYPTION_ALWAYS : HTTP_ENCRYPTION_IF_REQUESTED, 0,
       kHttpConnectTimeoutMs, nullptr));
   if (!http) {
     LOG(WARNING) << "Could not connect to host";
     return false;
   }
 
+  // TODO(crbug.com/821497): Use a library to canonicalize the URL.
+  size_t first_non_slash = resource.find_first_not_of('/');
+  const std::string path = (first_non_slash == std::string::npos)
+                               ? ""
+                               : resource.substr(first_non_slash);
+
   std::string printer_uri =
       base::StringPrintf("%s://%s:%d/%s", encrypted ? kIppsScheme : kIppScheme,
-                         address.c_str(), port, resource.c_str());
+                         address.c_str(), port, path.c_str());
 
   ipp_status_t status;
   ScopedIppPtr response =

@@ -117,10 +117,7 @@ ChromeAPIPermissions::GetAllPermissions() const {
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kDeveloperPrivate, "developerPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
-      {APIPermission::kDial, "dial", APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kDownloadsInternal, "downloadsInternal"},
-      {APIPermission::kExperienceSamplingPrivate, "experienceSamplingPrivate",
-       APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kFileBrowserHandlerInternal, "fileBrowserHandlerInternal",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kFileManagerPrivate, "fileManagerPrivate",
@@ -162,6 +159,8 @@ ChromeAPIPermissions::GetAllPermissions() const {
       {APIPermission::kEnterprisePlatformKeysPrivate,
        "enterprise.platformKeysPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
+      {APIPermission::kEnterpriseReportingPrivate,
+       "enterprise.reportingPrivate", APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kWebrtcAudioPrivate, "webrtcAudioPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kWebrtcDesktopCapturePrivate,
@@ -188,6 +187,7 @@ ChromeAPIPermissions::GetAllPermissions() const {
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kResourcesPrivate, "resourcesPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
+      {APIPermission::kSafeBrowsingPrivate, "safeBrowsingPrivate"},
 
       // Full url access permissions.
       {APIPermission::kDebugger, "debugger",

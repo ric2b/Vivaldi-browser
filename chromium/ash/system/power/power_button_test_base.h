@@ -7,29 +7,21 @@
 
 #include <memory>
 
-#include "ash/system/power/convertible_power_button_controller.h"
 #include "ash/system/power/power_button_controller.h"
 #include "ash/test/ash_test_base.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
-
-namespace base {
-class SimpleTestTickClock;
-}  // namespace base
 
 namespace chromeos {
 class FakePowerManagerClient;
 class FakeSessionManagerClient;
 }  // namespace chromeos
 
-namespace gfx {
-class Vector3dF;
-}  // namespace gfx
-
 namespace ash {
 
-class ConvertiblePowerButtonControllerTestApi;
 class LockStateController;
 class LockStateControllerTestApi;
+class PowerButtonControllerTestApi;
 class PowerButtonScreenshotController;
 enum class LoginStatus;
 
@@ -41,40 +33,27 @@ class PowerButtonTestBase : public AshTestBase {
 
   using ButtonType = PowerButtonController::ButtonType;
 
-  // Vector pointing up (e.g. keyboard in clamshell).
-  static constexpr gfx::Vector3dF kUpVector = {
-      0, 0, ConvertiblePowerButtonController::kGravity};
-
-  // Vector pointing down (e.g. keyboard in tablet sitting on table).
-  static constexpr gfx::Vector3dF kDownVector = {
-      0, 0, -ConvertiblePowerButtonController::kGravity};
-
-  // Vector pointing sideways (e.g. screen in 90-degree clamshell).
-  static constexpr gfx::Vector3dF kSidewaysVector = {
-      0, ConvertiblePowerButtonController::kGravity, 0};
-
   // AshTestBase:
   void SetUp() override;
+  void TearDown() override;
 
  protected:
   // Resets the PowerButtonController and associated members.
   void ResetPowerButtonController();
 
   // Initializes |power_button_controller_| and other members that point at
-  // objects owned by it. If |send_accelerometer_update| is true, an
-  // accelerometer update is sent to create ConvertiblePowerButtonController and
-  // PowerButtonScreenshotController.
-  void InitPowerButtonControllerMembers(bool send_accelerometer_update);
+  // objects owned by it. If |initial_tablet_mode_switch_state| is not
+  // UNSUPPORTED, tablet mode switch will be set and PowerButtonController will
+  // set |default_turn_screen_off_for_tap_| to true and create
+  // PowerButtonScreenshotController on getting the switch.
+  void InitPowerButtonControllerMembers(chromeos::PowerManagerClient::TabletMode
+                                            initial_tablet_mode_switch_state);
 
-  // Sends an update with screen and keyboard accelerometer readings to
-  // PowerButtonController, and also |tablet_controller_| if it's non-null and
-  // has registered as an observer.
-  void SendAccelerometerUpdate(const gfx::Vector3dF& screen,
-                               const gfx::Vector3dF& keyboard);
-
-  // Sets the flag for forcing clamshell-like power button behavior and resets
-  // |power_button_controller_|.
-  void ForceClamshellPowerButton();
+  // Sets the tablet mode switch state. PowerButtonController will initialize
+  // |default_turn_screen_off_for_tap_| and |screenshot_controller_| if the
+  // switch state is not UNSUPPORTED.
+  void SetTabletModeSwitchState(
+      chromeos::PowerManagerClient::TabletMode tablet_mode_switch_state);
 
   // Simulates a power button press.
   void PressPowerButton();
@@ -103,9 +82,10 @@ class PowerButtonTestBase : public AshTestBase {
   // Enables or disables tablet mode based on |enable|.
   void EnableTabletMode(bool enable);
 
-  void set_has_tablet_mode_switch(bool has_tablet_mode_switch) {
-    has_tablet_mode_switch_ = has_tablet_mode_switch;
-  }
+  // Advance clock to ensure the intended tablet power button display forcing
+  // off is not ignored since we will ignore the repeated power button up if
+  // they come too close.
+  void AdvanceClockToAvoidIgnoring();
 
   // Ownership is passed on to chromeos::DBusThreadManager.
   chromeos::FakePowerManagerClient* power_manager_client_ = nullptr;
@@ -113,30 +93,13 @@ class PowerButtonTestBase : public AshTestBase {
 
   PowerButtonController* power_button_controller_ = nullptr;  // Not owned.
   LockStateController* lock_state_controller_ = nullptr;      // Not owned.
-  ConvertiblePowerButtonController* convertible_controller_ =
-      nullptr;  // Not owned.
   PowerButtonScreenshotController* screenshot_controller_ =
       nullptr;  // Not owned.
   std::unique_ptr<LockStateControllerTestApi> lock_state_test_api_;
-  std::unique_ptr<ConvertiblePowerButtonControllerTestApi>
-      convertible_test_api_;
-  base::SimpleTestTickClock* tick_clock_ = nullptr;  // Not owned.
-
-  // Indicates whether switches::kAshEnableTabletMode is appended.
-  bool has_tablet_mode_switch_ = true;
+  std::unique_ptr<PowerButtonControllerTestApi> power_button_test_api_;
+  base::SimpleTestTickClock tick_clock_;
 
   DISALLOW_COPY_AND_ASSIGN(PowerButtonTestBase);
-};
-
-// Base test fixture same as PowerButtonTestBase excepts that tablet mode swtich
-// is not set.
-class NoTabletModePowerButtonTestBase : public PowerButtonTestBase {
- public:
-  NoTabletModePowerButtonTestBase() { set_has_tablet_mode_switch(false); }
-  ~NoTabletModePowerButtonTestBase() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NoTabletModePowerButtonTestBase);
 };
 
 }  // namespace ash

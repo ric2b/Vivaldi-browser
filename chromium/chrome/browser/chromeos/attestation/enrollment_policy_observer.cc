@@ -21,9 +21,9 @@
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
@@ -34,6 +34,26 @@ namespace {
 
 const int kRetryDelay = 5;  // Seconds.
 const int kRetryLimit = 100;
+
+// A dbus callback which handles a string result.
+//
+// Parameters
+//   on_success - Called when result is successful and has a value.
+//   on_failure - Called otherwise.
+void DBusStringCallback(
+    base::OnceCallback<void(const std::string&)> on_success,
+    base::OnceClosure on_failure,
+    const base::Location& from_here,
+    base::Optional<chromeos::CryptohomeClient::TpmAttestationDataResult>
+        result) {
+  if (!result.has_value() || !result->success) {
+    LOG(ERROR) << "Cryptohome DBus method failed: " << from_here.ToString();
+    if (!on_failure.is_null())
+      std::move(on_failure).Run();
+    return;
+  }
+  std::move(on_success).Run(result->data);
+}
 
 void DBusPrivacyCACallback(
     const base::RepeatingCallback<void(const std::string&)> on_success,
@@ -102,6 +122,13 @@ void EnrollmentPolicyObserver::DeviceSettingsUpdated() {
 }
 
 void EnrollmentPolicyObserver::Start() {
+  // If we already uploaded an empty identification, we are done, because
+  // we asked to compute and upload it only if the PCA refused to give
+  // us an enrollment certificate, an error that will happen again (the
+  // AIK certificate sent to request an enrollment certificate does not
+  // contain an EID).
+  if (did_upload_empty_eid_)
+    return;
   // If identification for enrollment isn't needed, there is nothing to do.
   const enterprise_management::PolicyData* policy_data =
       device_settings_service_->policy_data();
@@ -153,28 +180,49 @@ void EnrollmentPolicyObserver::GetEnrollmentCertificate() {
           FROM_HERE));
 }
 
-void EnrollmentPolicyObserver::UploadCertificate(
-    const std::string& pem_certificate_chain) {
-  policy_client_->UploadEnterpriseEnrollmentCertificate(
-      pem_certificate_chain,
-      base::Bind(&EnrollmentPolicyObserver::OnUploadComplete,
-                 weak_factory_.GetWeakPtr()));
+void EnrollmentPolicyObserver::GetEnrollmentId() {
+  cryptohome_client_->TpmAttestationGetEnrollmentId(
+      true /* ignore_cache */,
+      base::BindOnce(
+          DBusStringCallback,
+          base::BindOnce(&EnrollmentPolicyObserver::HandleEnrollmentId,
+                         weak_factory_.GetWeakPtr()),
+          base::BindOnce(&EnrollmentPolicyObserver::RescheduleGetEnrollmentId,
+                         weak_factory_.GetWeakPtr()),
+          FROM_HERE));
 }
 
-void EnrollmentPolicyObserver::OnUploadComplete(bool status) {
-  if (!status) {
-    VLOG(1) << "Failed to upload Enterprise Enrollment Certificate"
-            << " to DMServer.";
-    return;
+void EnrollmentPolicyObserver::HandleEnrollmentId(
+    const std::string& enrollment_id) {
+  if (enrollment_id.empty()) {
+    LOG(WARNING) << "EnrollmentPolicyObserver: The enrollment identifier"
+                    " obtained is empty.";
   }
-  VLOG(1) << "Enterprise Enrollment Certificate uploaded to DMServer.";
+  policy_client_->UploadEnterpriseEnrollmentId(
+      enrollment_id,
+      base::BindRepeating(
+          &EnrollmentPolicyObserver::OnUploadEnrollmentIdComplete,
+          weak_factory_.GetWeakPtr(), enrollment_id));
+}
+
+void EnrollmentPolicyObserver::RescheduleGetEnrollmentId() {
+  if (++num_retries_ < retry_limit_) {
+    content::BrowserThread::PostDelayedTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&EnrollmentPolicyObserver::GetEnrollmentId,
+                       weak_factory_.GetWeakPtr()),
+        base::TimeDelta::FromSeconds(retry_delay_));
+  } else {
+    LOG(WARNING) << "EnrollmentPolicyObserver: Retry limit exceeded.";
+  }
 }
 
 void EnrollmentPolicyObserver::HandleGetCertificateFailure(
     AttestationStatus status) {
   if (status == ATTESTATION_SERVER_BAD_REQUEST_FAILURE) {
-    // We cannot get an enrollment cert (no EID) so upload an empty one.
-    UploadCertificate("");
+    // We cannot get an enrollment cert (no EID). However we can compute the
+    // EID we will have after a device wipe, and should upload that.
+    GetEnrollmentId();
   } else if (++num_retries_ < retry_limit_) {
     content::BrowserThread::PostDelayedTask(
         content::BrowserThread::UI, FROM_HERE,
@@ -184,6 +232,34 @@ void EnrollmentPolicyObserver::HandleGetCertificateFailure(
   } else {
     LOG(WARNING) << "EnrollmentPolicyObserver: Retry limit exceeded.";
   }
+}
+
+void EnrollmentPolicyObserver::UploadCertificate(
+    const std::string& pem_certificate_chain) {
+  policy_client_->UploadEnterpriseEnrollmentCertificate(
+      pem_certificate_chain,
+      base::BindRepeating(&EnrollmentPolicyObserver::OnUploadComplete,
+                          weak_factory_.GetWeakPtr(),
+                          "Enterprise Enrollment Certificate"));
+}
+
+void EnrollmentPolicyObserver::OnUploadEnrollmentIdComplete(
+    const std::string& enrollment_id,
+    bool status) {
+  if (status && enrollment_id.empty())
+    did_upload_empty_eid_ = true;
+  OnUploadComplete(enrollment_id.empty() ? "Empty Enrollment Identifier"
+                                         : "Enrollment Identifier",
+                   status);
+}
+
+void EnrollmentPolicyObserver::OnUploadComplete(const std::string& what,
+                                                bool status) {
+  if (!status) {
+    LOG(ERROR) << "Failed to upload " << what << " to DMServer.";
+    return;
+  }
+  VLOG(1) << what << " uploaded to DMServer.";
 }
 
 }  // namespace attestation

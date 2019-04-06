@@ -151,33 +151,33 @@ FT_BEGIN_HEADER
 #endif
 
 
-  /*************************************************************************/
-  /*                                                                       */
-  /* <Section>                                                             */
-  /*    basic_types                                                        */
-  /*                                                                       */
-  /*************************************************************************/
+  /**************************************************************************
+   *
+   * @section:
+   *   basic_types
+   *
+   */
 
 
-  /*************************************************************************/
-  /*                                                                       */
-  /* <Type>                                                                */
-  /*    FT_Int16                                                           */
-  /*                                                                       */
-  /* <Description>                                                         */
-  /*    A typedef for a 16bit signed integer type.                         */
-  /*                                                                       */
+  /**************************************************************************
+   *
+   * @type:
+   *   FT_Int16
+   *
+   * @description:
+   *   A typedef for a 16bit signed integer type.
+   */
   typedef signed short  FT_Int16;
 
 
-  /*************************************************************************/
-  /*                                                                       */
-  /* <Type>                                                                */
-  /*    FT_UInt16                                                          */
-  /*                                                                       */
-  /* <Description>                                                         */
-  /*    A typedef for a 16bit unsigned integer type.                       */
-  /*                                                                       */
+  /**************************************************************************
+   *
+   * @type:
+   *   FT_UInt16
+   *
+   * @description:
+   *   A typedef for a 16bit unsigned integer type.
+   */
   typedef unsigned short  FT_UInt16;
 
   /* */
@@ -186,50 +186,50 @@ FT_BEGIN_HEADER
   /* this #if 0 ... #endif clause is for documentation purposes */
 #if 0
 
-  /*************************************************************************/
-  /*                                                                       */
-  /* <Type>                                                                */
-  /*    FT_Int32                                                           */
-  /*                                                                       */
-  /* <Description>                                                         */
-  /*    A typedef for a 32bit signed integer type.  The size depends on    */
-  /*    the configuration.                                                 */
-  /*                                                                       */
+  /**************************************************************************
+   *
+   * @type:
+   *   FT_Int32
+   *
+   * @description:
+   *   A typedef for a 32bit signed integer type.  The size depends on
+   *   the configuration.
+   */
   typedef signed XXX  FT_Int32;
 
 
-  /*************************************************************************/
-  /*                                                                       */
-  /* <Type>                                                                */
-  /*    FT_UInt32                                                          */
-  /*                                                                       */
-  /*    A typedef for a 32bit unsigned integer type.  The size depends on  */
-  /*    the configuration.                                                 */
-  /*                                                                       */
+  /**************************************************************************
+   *
+   * @type:
+   *   FT_UInt32
+   *
+   *   A typedef for a 32bit unsigned integer type.  The size depends on
+   *   the configuration.
+   */
   typedef unsigned XXX  FT_UInt32;
 
 
-  /*************************************************************************/
-  /*                                                                       */
-  /* <Type>                                                                */
-  /*    FT_Int64                                                           */
-  /*                                                                       */
-  /*    A typedef for a 64bit signed integer type.  The size depends on    */
-  /*    the configuration.  Only defined if there is real 64bit support;   */
-  /*    otherwise, it gets emulated with a structure (if necessary).       */
-  /*                                                                       */
+  /**************************************************************************
+   *
+   * @type:
+   *   FT_Int64
+   *
+   *   A typedef for a 64bit signed integer type.  The size depends on
+   *   the configuration.  Only defined if there is real 64bit support;
+   *   otherwise, it gets emulated with a structure (if necessary).
+   */
   typedef signed XXX  FT_Int64;
 
 
-  /*************************************************************************/
-  /*                                                                       */
-  /* <Type>                                                                */
-  /*    FT_UInt64                                                          */
-  /*                                                                       */
-  /*    A typedef for a 64bit unsigned integer type.  The size depends on  */
-  /*    the configuration.  Only defined if there is real 64bit support;   */
-  /*    otherwise, it gets emulated with a structure (if necessary).       */
-  /*                                                                       */
+  /**************************************************************************
+   *
+   * @type:
+   *   FT_UInt64
+   *
+   *   A typedef for a 64bit unsigned integer type.  The size depends on
+   *   the configuration.  Only defined if there is real 64bit support;
+   *   otherwise, it gets emulated with a structure (if necessary).
+   */
   typedef unsigned XXX  FT_UInt64;
 
   /* */
@@ -422,9 +422,9 @@ FT_BEGIN_HEADER
 #endif /* !FT_BASE_DEF */
 
 
-  /*   When compiling FreeType as a DLL, some systems/compilers need a     */
-  /*   special attribute in front OR after the return type of function     */
-  /*   declarations.                                                       */
+  /*   When compiling FreeType as a DLL or DSO with hidden visibility      */
+  /*   some systems/compilers need a special attribute in front OR after   */
+  /*   the return type of function declarations.                           */
   /*                                                                       */
   /*   Two macros are used within the FreeType source code to define       */
   /*   exported library functions: FT_EXPORT and FT_EXPORT_DEF.            */
@@ -480,19 +480,28 @@ FT_BEGIN_HEADER
 
 #ifndef FT_EXPORT
 
-#ifdef __cplusplus
+#ifdef FT2_BUILD_LIBRARY
+
+#if defined( _WIN32 ) && ( defined( _DLL ) || defined( DLL_EXPORT ) )
+#define FT_EXPORT( x )  __declspec( dllexport )  x
+#elif defined( __GNUC__ ) && __GNUC__ >= 4
+#define FT_EXPORT( x )  __attribute__(( visibility( "default" ) ))  x
+#elif defined( __cplusplus )
 #define FT_EXPORT( x )  extern "C"  x
 #else
 #define FT_EXPORT( x )  extern  x
 #endif
 
-#ifdef _MSC_VER
-#undef FT_EXPORT
-#ifdef _DLL
-#define FT_EXPORT( x )  __declspec( dllexport )  x
 #else
+
+#if defined( FT2_DLLIMPORT )
 #define FT_EXPORT( x )  __declspec( dllimport )  x
+#elif defined( __cplusplus )
+#define FT_EXPORT( x )  extern "C"  x
+#else
+#define FT_EXPORT( x )  extern  x
 #endif
+
 #endif
 
 #endif /* !FT_EXPORT */

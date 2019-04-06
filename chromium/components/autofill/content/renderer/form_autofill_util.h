@@ -15,8 +15,8 @@
 #include "components/autofill/content/renderer/password_form_conversion_utils.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/web/WebElementCollection.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_element_collection.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 class GURL;
@@ -59,22 +59,6 @@ enum ExtractMask {
 // Google code project settings.
 // Copied to components/autofill/ios/browser/resources/autofill_controller.js.
 extern const size_t kMaxParseableFields;
-
-// Create an instance of ScopedLayoutPreventer to stop form_util code from
-// triggering layout as a side-effect. For example, when creating a
-// FormFieldData, a call to WebNode::isFocusable is normally made, which may
-// trigger a layout computation. When an instance of ScopedLayoutPreventer is
-// alive, that call will not be made. On destruction, this class allows
-// layout-triggering calls again. It is not thread safe and multiple instances
-// should not be created at the same time in the same process.
-class ScopedLayoutPreventer {
- public:
-  ScopedLayoutPreventer();
-  ~ScopedLayoutPreventer();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ScopedLayoutPreventer);
-};
 
 // Helper function that strips any authentication data, as well as query and
 // ref portions of URL
@@ -138,6 +122,10 @@ bool IsWebElementVisible(const blink::WebElement& element);
 // Returns the form's |name| attribute if non-empty; otherwise the form's |id|
 // attribute.
 const base::string16 GetFormIdentifier(const blink::WebFormElement& form);
+
+// Returns text alignment for |element|.
+base::i18n::TextDirection GetTextDirectionForElement(
+    const blink::WebFormControlElement& element);
 
 // Returns all the auto-fillable form control elements in |control_elements|.
 std::vector<blink::WebFormControlElement> ExtractAutofillableElementsFromSet(
@@ -245,7 +233,7 @@ void PreviewForm(const FormData& form,
 // autofilled state of |node| to |was_autofilled|.  Returns false if the form is
 // not found.
 bool ClearPreviewedFormWithElement(const blink::WebFormControlElement& element,
-                                   bool was_autofilled);
+                                   blink::WebAutofillState old_autofill_state);
 
 // Checks if the webpage is empty.
 // This kind of webpage is considered as empty:
@@ -283,9 +271,45 @@ base::string16 FindChildText(const blink::WebNode& node);
 base::string16 FindChildTextWithIgnoreListForTesting(
     const blink::WebNode& node,
     const std::set<blink::WebNode>& divs_to_skip);
-base::string16 InferLabelForElementForTesting(
-    const blink::WebFormControlElement& element,
-    const std::vector<base::char16>& stop_words);
+bool InferLabelForElementForTesting(const blink::WebFormControlElement& element,
+                                    const std::vector<base::char16>& stop_words,
+                                    base::string16* label,
+                                    FormFieldData::LabelSource* label_source);
+
+// Returns form by unique renderer id. Return null element if there is no form
+// with given form renderer id.
+blink::WebFormElement FindFormByUniqueRendererId(blink::WebDocument doc,
+                                                 uint32_t form_renderer_id);
+
+// Note: The vector-based API of the following two functions is a tax for limiting
+// the frequency and duration of retrieving a lot of DOM elements. Alternative
+// solutions have been discussed on https://crrev.com/c/1108201.
+
+// Returns form control elements by unique renderer id. The result has the same
+// number elements as |form_control_renderer_ids| and i-th element of the result
+// corresponds to the i-th element of |form_control_renderer_ids|.
+// |form_control_renderer_ids| is supposed to be small (<=10 elements), because
+// it is being frequently searched by linear pass over its elements.
+// The call of this function might be time expensive, because it retrieves all
+// DOM elements.
+std::vector<blink::WebFormControlElement>
+FindFormControlElementsByUniqueRendererId(
+    blink::WebDocument doc,
+    const std::vector<uint32_t>& form_control_renderer_ids);
+
+// Returns form control elements by unique renderer id from the form with unique
+// id |form_renderer_id|. The result has the same number elements as
+// |form_control_renderer_ids| and i-th element of the result corresponds to the
+// i-th element of |form_control_renderer_ids|.
+// |form_control_renderer_ids| is supposed to be small (<=10 elements), because
+// it is being frequently searched by linear pass over its elements.
+// This function is faster than the previous one, because it only retrieves form
+// control elements from a single form.
+std::vector<blink::WebFormControlElement>
+FindFormControlElementsByUniqueRendererId(
+    blink::WebDocument doc,
+    uint32_t form_renderer_id,
+    const std::vector<uint32_t>& form_control_renderer_ids);
 
 }  // namespace form_util
 }  // namespace autofill

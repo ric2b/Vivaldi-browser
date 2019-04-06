@@ -13,8 +13,8 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "content/network/proxy_service_mojo.h"
 #include "content/test/test_mojo_proxy_resolver_factory.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/network_delegate_impl.h"
 #include "net/base/test_completion_callback.h"
 #include "net/dns/mock_host_resolver.h"
@@ -22,13 +22,15 @@
 #include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
-#include "net/proxy/dhcp_proxy_script_fetcher.h"
-#include "net/proxy/mock_proxy_script_fetcher.h"
-#include "net/proxy/proxy_config_service_fixed.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/dhcp_pac_file_fetcher.h"
+#include "net/proxy_resolution/mock_pac_file_fetcher.h"
+#include "net/proxy_resolution/proxy_config_service_fixed.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/test/event_waiter.h"
 #include "net/test/gtest_util.h"
-#include "services/proxy_resolver/public/interfaces/proxy_resolver.mojom.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/proxy_service_mojo.h"
+#include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -85,8 +87,8 @@ void TestNetworkDelegate::OnPACScriptError(int line_number,
 void CheckCapturedNetLogEntries(const net::TestNetLogEntry::List& entries) {
   ASSERT_GT(entries.size(), 2u);
   size_t i = 0;
-  // ProxyService records its own NetLog entries, so skip forward until the
-  // expected event type.
+  // ProxyResolutionService records its own NetLog entries, so skip forward
+  // until the expected event type.
   while (i < entries.size() &&
          entries[i].type != net::NetLogEventType::PAC_JAVASCRIPT_ALERT) {
     i++;
@@ -114,12 +116,12 @@ class LoggingMockHostResolver : public net::MockHostResolver {
   int Resolve(const RequestInfo& info,
               net::RequestPriority priority,
               net::AddressList* addresses,
-              const net::CompletionCallback& callback,
+              net::CompletionOnceCallback callback,
               std::unique_ptr<Request>* out_req,
               const net::NetLogWithSource& net_log) override {
     net_log.AddEvent(net::NetLogEventType::HOST_RESOLVER_IMPL_JOB);
-    return net::MockHostResolver::Resolve(info, priority, addresses, callback,
-                                          out_req, net_log);
+    return net::MockHostResolver::Resolve(
+        info, priority, addresses, std::move(callback), out_req, net_log);
   }
 };
 
@@ -130,34 +132,40 @@ class ProxyServiceMojoTest : public testing::Test {
   void SetUp() override {
     mock_host_resolver_.rules()->AddRule("example.com", "1.2.3.4");
 
-    fetcher_ = new net::MockProxyScriptFetcher;
-    proxy_service_ = CreateProxyServiceUsingMojoFactory(
-        test_mojo_proxy_resolver_factory_.CreateFactoryInterface(),
-        std::make_unique<net::ProxyConfigServiceFixed>(
-            net::ProxyConfig::CreateFromCustomPacURL(GURL(kPacUrl))),
-        base::WrapUnique(fetcher_),
-        std::make_unique<net::DoNothingDhcpProxyScriptFetcher>(),
-        &mock_host_resolver_, &net_log_, &network_delegate_);
+    fetcher_ = new net::MockPacFileFetcher;
+    proxy_resolution_service_ =
+        network::CreateProxyResolutionServiceUsingMojoFactory(
+            test_mojo_proxy_resolver_factory_.CreateFactoryInterface(),
+            std::make_unique<net::ProxyConfigServiceFixed>(
+                net::ProxyConfigWithAnnotation(
+                    net::ProxyConfig::CreateFromCustomPacURL(GURL(kPacUrl)),
+                    TRAFFIC_ANNOTATION_FOR_TESTS)),
+            base::WrapUnique(fetcher_),
+            std::make_unique<net::DoNothingDhcpPacFileFetcher>(),
+            &mock_host_resolver_, &net_log_, &network_delegate_);
   }
 
   base::test::ScopedTaskEnvironment task_environment_;
   content::TestMojoProxyResolverFactory test_mojo_proxy_resolver_factory_;
   TestNetworkDelegate network_delegate_;
   LoggingMockHostResolver mock_host_resolver_;
-  net::MockProxyScriptFetcher* fetcher_;  // Owned by |proxy_service_|.
+  // Owned by |proxy_resolution_service_|.
+  net::MockPacFileFetcher* fetcher_;
   net::TestNetLog net_log_;
-  std::unique_ptr<net::ProxyService> proxy_service_;
+  std::unique_ptr<net::ProxyResolutionService> proxy_resolution_service_;
 };
 
 TEST_F(ProxyServiceMojoTest, Basic) {
   net::ProxyInfo info;
   net::TestCompletionCallback callback;
   EXPECT_EQ(net::ERR_IO_PENDING,
-            proxy_service_->ResolveProxy(GURL("http://foo"), std::string(),
-                                         &info, callback.callback(), nullptr,
-                                         nullptr, net::NetLogWithSource()));
+            proxy_resolution_service_->ResolveProxy(
+                GURL("http://foo"),
+                std::string(),
+                &info, callback.callback(), nullptr,
+                nullptr, net::NetLogWithSource()));
 
-  // Proxy script fetcher should have a fetch triggered by the first
+  // PAC file fetcher should have a fetch triggered by the first
   // |ResolveProxy()| request.
   EXPECT_TRUE(fetcher_->has_pending_request());
   EXPECT_EQ(GURL(kPacUrl), fetcher_->pending_request_url());
@@ -166,7 +174,7 @@ TEST_F(ProxyServiceMojoTest, Basic) {
   EXPECT_THAT(callback.WaitForResult(), IsOk());
   EXPECT_EQ("PROXY foo:1234", info.ToPacString());
   EXPECT_EQ(0u, mock_host_resolver_.num_resolve());
-  proxy_service_.reset();
+  proxy_resolution_service_.reset();
 }
 
 TEST_F(ProxyServiceMojoTest, DnsResolution) {
@@ -174,11 +182,12 @@ TEST_F(ProxyServiceMojoTest, DnsResolution) {
   net::TestCompletionCallback callback;
   net::BoundTestNetLog test_net_log;
   EXPECT_EQ(net::ERR_IO_PENDING,
-            proxy_service_->ResolveProxy(GURL("http://foo"), std::string(),
-                                         &info, callback.callback(), nullptr,
-                                         nullptr, test_net_log.bound()));
+            proxy_resolution_service_->ResolveProxy(
+                GURL("http://foo"), std::string(),
+                &info, callback.callback(), nullptr,
+                nullptr, test_net_log.bound()));
 
-  // Proxy script fetcher should have a fetch triggered by the first
+  // PAC file fetcher should have a fetch triggered by the first
   // |ResolveProxy()| request.
   EXPECT_TRUE(fetcher_->has_pending_request());
   EXPECT_EQ(GURL(kPacUrl), fetcher_->pending_request_url());
@@ -188,7 +197,7 @@ TEST_F(ProxyServiceMojoTest, DnsResolution) {
   EXPECT_THAT(callback.WaitForResult(), IsOk());
   EXPECT_EQ("QUIC bar:4321", info.ToPacString());
   EXPECT_EQ(1u, mock_host_resolver_.num_resolve());
-  proxy_service_.reset();
+  proxy_resolution_service_.reset();
 
   net::TestNetLogEntry::List entries;
   test_net_log.GetEntries(&entries);
@@ -206,11 +215,12 @@ TEST_F(ProxyServiceMojoTest, Error) {
   net::TestCompletionCallback callback;
   net::BoundTestNetLog test_net_log;
   EXPECT_EQ(net::ERR_IO_PENDING,
-            proxy_service_->ResolveProxy(GURL("http://foo"), std::string(),
-                                         &info, callback.callback(), nullptr,
-                                         nullptr, test_net_log.bound()));
+            proxy_resolution_service_->ResolveProxy(
+                GURL("http://foo"), std::string(),
+                &info, callback.callback(), nullptr,
+                nullptr, test_net_log.bound()));
 
-  // Proxy script fetcher should have a fetch triggered by the first
+  // PAC file fetcher should have a fetch triggered by the first
   // |ResolveProxy()| request.
   EXPECT_TRUE(fetcher_->has_pending_request());
   EXPECT_EQ(GURL(kPacUrl), fetcher_->pending_request_url());
@@ -235,11 +245,12 @@ TEST_F(ProxyServiceMojoTest, ErrorOnInitialization) {
   net::ProxyInfo info;
   net::TestCompletionCallback callback;
   EXPECT_EQ(net::ERR_IO_PENDING,
-            proxy_service_->ResolveProxy(GURL("http://foo"), std::string(),
-                                         &info, callback.callback(), nullptr,
-                                         nullptr, net::NetLogWithSource()));
+            proxy_resolution_service_->ResolveProxy(
+                GURL("http://foo"), std::string(),
+                &info, callback.callback(), nullptr,
+                nullptr, net::NetLogWithSource()));
 
-  // Proxy script fetcher should have a fetch triggered by the first
+  // PAC file fetcher should have a fetch triggered by the first
   // |ResolveProxy()| request.
   EXPECT_TRUE(fetcher_->has_pending_request());
   EXPECT_EQ(GURL(kPacUrl), fetcher_->pending_request_url());

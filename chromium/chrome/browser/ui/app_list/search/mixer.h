@@ -12,9 +12,9 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "ui/app_list/search/history_types.h"
 
 class AppListModelUpdater;
+class ChromeSearchResult;
 
 namespace app_list {
 
@@ -23,7 +23,6 @@ FORWARD_DECLARE_TEST(MixerTest, Publish);
 }
 
 class SearchProvider;
-class SearchResult;
 
 // Mixer collects results from providers, sorts them and publishes them to the
 // SearchResults UI model. The targeted results have 6 slots to hold the
@@ -46,7 +45,7 @@ class Mixer {
   void AddProviderToGroup(size_t group_id, SearchProvider* provider);
 
   // Collects the results, sorts and publishes them.
-  void MixAndPublish(const KnownResults& known_results, size_t num_max_results);
+  void MixAndPublish(size_t num_max_results);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(test::MixerTest, Publish);
@@ -54,11 +53,11 @@ class Mixer {
   // Used for sorting and mixing results.
   struct SortData {
     SortData();
-    SortData(SearchResult* result, double score);
+    SortData(ChromeSearchResult* result, double score);
 
     bool operator<(const SortData& other) const;
 
-    SearchResult* result;  // Not owned.
+    ChromeSearchResult* result;  // Not owned.
     double score;
   };
   typedef std::vector<Mixer::SortData> SortedResults;
@@ -72,7 +71,7 @@ class Mixer {
   // |results| may not have been sorted yet.
   static void RemoveDuplicates(SortedResults* results);
 
-  void FetchResults(const KnownResults& known_results);
+  void FetchResults();
 
   AppListModelUpdater* const model_updater_;  // Not owned.
 

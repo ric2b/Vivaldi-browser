@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -80,28 +79,24 @@ bool ValidateAlarmCreateInfo(const std::string& alarm_name,
 }  // namespace
 
 AlarmsCreateFunction::AlarmsCreateFunction()
-    : clock_(new base::DefaultClock()), owns_clock_(true) {
-}
+    : clock_(base::DefaultClock::GetInstance()) {}
 
 AlarmsCreateFunction::AlarmsCreateFunction(base::Clock* clock)
-    : clock_(clock), owns_clock_(false) {
-}
+    : clock_(clock) {}
 
-AlarmsCreateFunction::~AlarmsCreateFunction() {
-  if (owns_clock_)
-    delete clock_;
-}
+AlarmsCreateFunction::~AlarmsCreateFunction() {}
 
-bool AlarmsCreateFunction::RunAsync() {
+ExtensionFunction::ResponseAction AlarmsCreateFunction::Run() {
   std::unique_ptr<alarms::Create::Params> params(
       alarms::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   const std::string& alarm_name =
       params->name.get() ? *params->name : kDefaultAlarmName;
   std::vector<std::string> warnings;
+  std::string error;
   if (!ValidateAlarmCreateInfo(alarm_name, params->alarm_info, extension(),
-                               &error_, &warnings)) {
-    return false;
+                               &error, &warnings)) {
+    return RespondNow(Error(error));
   }
   for (std::vector<std::string>::const_iterator it = warnings.begin();
        it != warnings.end(); ++it)
@@ -119,16 +114,17 @@ bool AlarmsCreateFunction::RunAsync() {
       new Alarm(alarm_name, params->alarm_info, granularity, clock_->Now()));
   AlarmManager::Get(browser_context())
       ->AddAlarm(extension_id(), std::move(alarm),
-                 base::Bind(&AlarmsCreateFunction::Callback, this));
+                 base::BindOnce(&AlarmsCreateFunction::Callback, this));
 
-  return true;
+  // AddAlarm might have already responded.
+  return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
 void AlarmsCreateFunction::Callback() {
-  SendResponse(true);
+  Respond(NoArguments());
 }
 
-bool AlarmsGetFunction::RunAsync() {
+ExtensionFunction::ResponseAction AlarmsGetFunction::Run() {
   std::unique_ptr<alarms::Get::Params> params(
       alarms::Get::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -136,37 +132,38 @@ bool AlarmsGetFunction::RunAsync() {
   std::string name = params->name.get() ? *params->name : kDefaultAlarmName;
   AlarmManager::Get(browser_context())
       ->GetAlarm(extension_id(), name,
-                 base::Bind(&AlarmsGetFunction::Callback, this, name));
+                 base::BindOnce(&AlarmsGetFunction::Callback, this, name));
 
-  return true;
+  // GetAlarm might have already responded.
+  return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
 void AlarmsGetFunction::Callback(const std::string& name,
                                  extensions::Alarm* alarm) {
-  if (alarm) {
-    results_ = alarms::Get::Results::Create(*alarm->js_alarm);
-  }
-  SendResponse(true);
+  if (alarm)
+    Respond(ArgumentList(alarms::Get::Results::Create(*alarm->js_alarm)));
+  else
+    Respond(NoArguments());
 }
 
-bool AlarmsGetAllFunction::RunAsync() {
+ExtensionFunction::ResponseAction AlarmsGetAllFunction::Run() {
   AlarmManager::Get(browser_context())
       ->GetAllAlarms(extension_id(),
-                     base::Bind(&AlarmsGetAllFunction::Callback, this));
-  return true;
+                     base::BindOnce(&AlarmsGetAllFunction::Callback, this));
+  // GetAllAlarms might have already responded.
+  return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
 void AlarmsGetAllFunction::Callback(const AlarmList* alarms) {
-  std::unique_ptr<base::ListValue> alarms_value(new base::ListValue());
+  auto alarms_value = std::make_unique<base::ListValue>();
   if (alarms) {
     for (const std::unique_ptr<Alarm>& alarm : *alarms)
       alarms_value->Append(alarm->js_alarm->ToValue());
   }
-  SetResult(std::move(alarms_value));
-  SendResponse(true);
+  Respond(OneArgument(std::move(alarms_value)));
 }
 
-bool AlarmsClearFunction::RunAsync() {
+ExtensionFunction::ResponseAction AlarmsClearFunction::Run() {
   std::unique_ptr<alarms::Clear::Params> params(
       alarms::Clear::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -174,26 +171,27 @@ bool AlarmsClearFunction::RunAsync() {
   std::string name = params->name.get() ? *params->name : kDefaultAlarmName;
   AlarmManager::Get(browser_context())
       ->RemoveAlarm(extension_id(), name,
-                    base::Bind(&AlarmsClearFunction::Callback, this, name));
+                    base::BindOnce(&AlarmsClearFunction::Callback, this, name));
 
-  return true;
+  // RemoveAlarm might have already responded.
+  return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
 void AlarmsClearFunction::Callback(const std::string& name, bool success) {
-  SetResult(std::make_unique<base::Value>(success));
-  SendResponse(true);
+  Respond(OneArgument(std::make_unique<base::Value>(success)));
 }
 
-bool AlarmsClearAllFunction::RunAsync() {
+ExtensionFunction::ResponseAction AlarmsClearAllFunction::Run() {
   AlarmManager::Get(browser_context())
-      ->RemoveAllAlarms(extension_id(),
-                        base::Bind(&AlarmsClearAllFunction::Callback, this));
-  return true;
+      ->RemoveAllAlarms(
+          extension_id(),
+          base::BindOnce(&AlarmsClearAllFunction::Callback, this));
+  // RemoveAllAlarms might have already responded.
+  return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
 void AlarmsClearAllFunction::Callback() {
-  SetResult(std::make_unique<base::Value>(true));
-  SendResponse(true);
+  Respond(OneArgument(std::make_unique<base::Value>(true)));
 }
 
 }  // namespace extensions

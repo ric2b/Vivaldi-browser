@@ -11,7 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "components/autofill/core/browser/webdata/autocomplete_sync_bridge.h"
-#include "components/autofill/core/browser/webdata/autocomplete_syncable_service.h"
+#include "components/autofill/core/browser/webdata/autofill_profile_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_metadata_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_syncable_service.h"
@@ -19,18 +19,17 @@
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/browser_sync/profile_sync_components_factory_impl.h"
 #include "components/browser_sync/profile_sync_service.h"
+#include "components/consent_auditor/consent_auditor.h"
 #include "components/dom_distiller/core/dom_distiller_service.h"
 #include "components/history/core/browser/history_model_worker.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/typed_url_sync_bridge.h"
-#include "components/history/core/browser/typed_url_syncable_service.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_model_worker.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/search_engines/search_engine_data_type_controller.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_util.h"
@@ -41,6 +40,7 @@
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_router.h"
+#include "components/sync_sessions/session_sync_bridge.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "components/sync_sessions/synced_window_delegates_getter.h"
 #include "ios/chrome/browser/application_context.h"
@@ -56,10 +56,11 @@
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
-#include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
+#include "ios/chrome/browser/sync/consent_auditor_factory.h"
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
-#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
+#include "ios/chrome/browser/sync/model_type_store_service_factory.h"
+#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sessions/ios_chrome_local_session_event_router.h"
 #include "ios/chrome/browser/tabs/tab_model_synced_window_delegate_getter.h"
 #include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
@@ -73,6 +74,14 @@
 #endif
 
 namespace {
+
+syncer::ModelTypeSet GetDisabledTypesFromCommandLine() {
+  std::string disabled_types_str =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kDisableSyncTypes);
+
+  return syncer::ModelTypeSetFromString(disabled_types_str);
+}
 
 // iOS implementation of SyncSessionsClient. Needs to be in a separate class
 // due to possible multiple inheritance issues, wherein IOSChromeSyncClient
@@ -93,11 +102,6 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
   ~SyncSessionsClientImpl() override {}
 
   // SyncSessionsClient implementation.
-  bookmarks::BookmarkModel* GetBookmarkModel() override {
-    DCHECK_CURRENTLY_ON(web::WebThread::UI);
-    return ios::BookmarkModelFactory::GetForBrowserState(browser_state_);
-  }
-
   favicon::FaviconService* GetFaviconService() override {
     DCHECK_CURRENTLY_ON(web::WebThread::UI);
     return ios::FaviconServiceFactory::GetForBrowserState(
@@ -111,7 +115,7 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
   }
 
   bool ShouldSyncURL(const GURL& url) const override {
-    if (url == GURL(kChromeUIHistoryURL)) {
+    if (url == kChromeUIHistoryURL) {
       // The history page is treated specially as we want it to trigger syncable
       // events for UI purposes.
       return true;
@@ -145,8 +149,7 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
 IOSChromeSyncClient::IOSChromeSyncClient(ios::ChromeBrowserState* browser_state)
     : browser_state_(browser_state),
       sync_sessions_client_(
-          std::make_unique<SyncSessionsClientImpl>(browser_state)),
-      weak_ptr_factory_(this) {}
+          std::make_unique<SyncSessionsClientImpl>(browser_state)) {}
 
 IOSChromeSyncClient::~IOSChromeSyncClient() {}
 
@@ -163,28 +166,18 @@ void IOSChromeSyncClient::Initialize() {
 
   // Component factory may already be set in tests.
   if (!GetSyncApiComponentFactory()) {
-    const GURL sync_service_url = syncer::GetSyncServiceURL(
-        *base::CommandLine::ForCurrentProcess(), ::GetChannel());
-    ProfileOAuth2TokenService* token_service =
-        OAuth2TokenServiceFactory::GetForBrowserState(browser_state_);
-
-    net::URLRequestContextGetter* url_request_context_getter =
-        browser_state_->GetRequestContext();
-
     component_factory_.reset(new browser_sync::ProfileSyncComponentsFactoryImpl(
         this, ::GetChannel(), ::GetVersionString(),
         ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET,
-        *base::CommandLine::ForCurrentProcess(),
-        prefs::kSavingBrowserHistoryDisabled, sync_service_url,
+        prefs::kSavingBrowserHistoryDisabled,
         web::WebThread::GetTaskRunnerForThread(web::WebThread::UI), db_thread_,
-        token_service, url_request_context_getter, web_data_service_,
-        password_store_));
+        web_data_service_, password_store_));
   }
 }
 
 syncer::SyncService* IOSChromeSyncClient::GetSyncService() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state_);
+  return ProfileSyncServiceFactory::GetForBrowserState(browser_state_);
 }
 
 PrefService* IOSChromeSyncClient::GetPrefService() {
@@ -194,6 +187,11 @@ PrefService* IOSChromeSyncClient::GetPrefService() {
 
 base::FilePath IOSChromeSyncClient::GetLocalSyncBackendFolder() {
   return base::FilePath();
+}
+
+syncer::ModelTypeStoreService* IOSChromeSyncClient::GetModelTypeStoreService() {
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  return ModelTypeStoreServiceFactory::GetForBrowserState(browser_state_);
 }
 
 bookmarks::BookmarkModel* IOSChromeSyncClient::GetBookmarkModel() {
@@ -230,10 +228,12 @@ base::Closure IOSChromeSyncClient::GetPasswordStateChangedCallback() {
       base::Unretained(browser_state_));
 }
 
-syncer::SyncApiComponentFactory::RegisterDataTypesMethod
-IOSChromeSyncClient::GetRegisterPlatformTypesCallback() {
+syncer::DataTypeController::TypeVector
+IOSChromeSyncClient::CreateDataTypeControllers(
+    syncer::LocalDeviceInfoProvider* local_device_info_provider) {
   // The iOS port does not have any platform-specific datatypes.
-  return syncer::SyncApiComponentFactory::RegisterDataTypesMethod();
+  return component_factory_->CreateCommonDataTypeControllers(
+      GetDisabledTypesFromCommandLine(), local_device_info_provider);
 }
 
 BookmarkUndoService* IOSChromeSyncClient::GetBookmarkUndoServiceIfExists() {
@@ -272,17 +272,12 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return browser_state_->GetSyncablePrefs()
           ->GetSyncableService(syncer::PRIORITY_PREFERENCES)
           ->AsWeakPtr();
-    case syncer::AUTOFILL:
     case syncer::AUTOFILL_PROFILE:
     case syncer::AUTOFILL_WALLET_DATA:
     case syncer::AUTOFILL_WALLET_METADATA: {
       if (!web_data_service_)
         return base::WeakPtr<syncer::SyncableService>();
-      if (type == syncer::AUTOFILL) {
-        return autofill::AutocompleteSyncableService::FromWebDataService(
-                   web_data_service_.get())
-            ->AsWeakPtr();
-      } else if (type == syncer::AUTOFILL_PROFILE) {
+      if (type == syncer::AUTOFILL_PROFILE) {
         return autofill::AutofillProfileSyncableService::FromWebDataService(
                    web_data_service_.get())
             ->AsWeakPtr();
@@ -302,17 +297,10 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return history ? history->AsWeakPtr()
                      : base::WeakPtr<history::HistoryService>();
     }
-    case syncer::TYPED_URLS: {
-      history::HistoryService* history =
-          ios::HistoryServiceFactory::GetForBrowserState(
-              browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
-      return history ? history->GetTypedUrlSyncableService()->AsWeakPtr()
-                     : base::WeakPtr<syncer::SyncableService>();
-    }
     case syncer::FAVICON_IMAGES:
     case syncer::FAVICON_TRACKING: {
       sync_sessions::FaviconCache* favicons =
-          IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state_)
+          ProfileSyncServiceFactory::GetForBrowserState(browser_state_)
               ->GetFaviconCache();
       return favicons ? favicons->AsWeakPtr()
                       : base::WeakPtr<syncer::SyncableService>();
@@ -325,8 +313,7 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return base::WeakPtr<syncer::SyncableService>();
     }
     case syncer::SESSIONS: {
-      return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-                 browser_state_)
+      return ProfileSyncServiceFactory::GetForBrowserState(browser_state_)
           ->GetSessionsSyncableService()
           ->AsWeakPtr();
     }
@@ -340,37 +327,52 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   }
 }
 
-base::WeakPtr<syncer::ModelTypeSyncBridge>
-IOSChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
+base::WeakPtr<syncer::ModelTypeControllerDelegate>
+IOSChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
-      return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-                 browser_state_)
-          ->GetDeviceInfoSyncBridge()
-          ->AsWeakPtr();
+      return ProfileSyncServiceFactory::GetForBrowserState(browser_state_)
+          ->GetDeviceInfoSyncControllerDelegateOnUIThread();
     case syncer::READING_LIST: {
       ReadingListModel* reading_list_model =
           ReadingListModelFactory::GetForBrowserState(browser_state_);
-      return reading_list_model->GetModelTypeSyncBridge()->AsWeakPtr();
+      return reading_list_model->GetModelTypeSyncBridge()
+          ->change_processor()
+          ->GetControllerDelegateOnUIThread();
     }
     case syncer::AUTOFILL:
       return autofill::AutocompleteSyncBridge::FromWebDataService(
                  web_data_service_.get())
-          ->AsWeakPtr();
+          ->change_processor()
+          ->GetControllerDelegateOnUIThread();
+    case syncer::AUTOFILL_PROFILE:
+      return autofill::AutofillProfileSyncBridge::FromWebDataService(
+                 web_data_service_.get())
+          ->change_processor()
+          ->GetControllerDelegateOnUIThread();
     case syncer::TYPED_URLS: {
       history::HistoryService* history =
           ios::HistoryServiceFactory::GetForBrowserState(
               browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
-      return history ? history->GetTypedURLSyncBridge()->AsWeakPtr()
-                     : base::WeakPtr<syncer::ModelTypeSyncBridge>();
+      return history ? history->GetTypedURLSyncBridge()
+                           ->change_processor()
+                           ->GetControllerDelegateOnUIThread()
+                     : base::WeakPtr<syncer::ModelTypeControllerDelegate>();
     }
+    case syncer::USER_CONSENTS:
+      return ConsentAuditorFactory::GetForBrowserState(browser_state_)
+          ->GetControllerDelegateOnUIThread();
     case syncer::USER_EVENTS:
       return IOSUserEventServiceFactory::GetForBrowserState(browser_state_)
           ->GetSyncBridge()
-          ->AsWeakPtr();
+          ->change_processor()
+          ->GetControllerDelegateOnUIThread();
+    case syncer::SESSIONS:
+      return ProfileSyncServiceFactory::GetForBrowserState(browser_state_)
+          ->GetSessionSyncControllerDelegateOnUIThread();
     default:
       NOTREACHED();
-      return base::WeakPtr<syncer::ModelTypeSyncBridge>();
+      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
   }
 }
 
@@ -426,7 +428,7 @@ void IOSChromeSyncClient::GetDeviceInfoTrackers(
           ->GetLoadedBrowserStates();
   for (ios::ChromeBrowserState* browser_state : browser_state_list) {
     browser_sync::ProfileSyncService* profile_sync_service =
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
+        ProfileSyncServiceFactory::GetForBrowserState(browser_state);
     if (profile_sync_service != nullptr) {
       const syncer::DeviceInfoTracker* tracker =
           profile_sync_service->GetDeviceInfoTracker();

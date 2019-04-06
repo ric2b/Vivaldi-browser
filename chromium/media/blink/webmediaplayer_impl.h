@@ -24,13 +24,13 @@
 #include "base/timer/elapsed_timer.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "cc/layers/surface_layer.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "media/base/media_observer.h"
 #include "media/base/media_tracks.h"
 #include "media/base/overlay_info.h"
 #include "media/base/pipeline_impl.h"
 #include "media/base/renderer_factory_selector.h"
-#include "media/base/surface_manager.h"
 #include "media/base/text_track.h"
 #include "media/blink/buffered_data_source_host_impl.h"
 #include "media/blink/media_blink_export.h"
@@ -41,10 +41,10 @@
 #include "media/blink/webmediaplayer_util.h"
 #include "media/filters/pipeline_controller.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
-#include "third_party/WebKit/public/platform/WebAudioSourceProvider.h"
-#include "third_party/WebKit/public/platform/WebContentDecryptionModuleResult.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "third_party/WebKit/public/platform/WebSurfaceLayerBridge.h"
+#include "third_party/blink/public/platform/web_audio_source_provider.h"
+#include "third_party/blink/public/platform/web_content_decryption_module_result.h"
+#include "third_party/blink/public/platform/web_media_player.h"
+#include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)  // WMPI_CAST
@@ -68,8 +68,8 @@ class SingleThreadTaskRunner;
 class TaskRunner;
 }
 
-namespace cc_blink {
-class WebLayerImpl;
+namespace cc {
+class VideoLayer;
 }
 
 namespace gpu {
@@ -79,8 +79,9 @@ class GLES2Interface;
 }
 
 namespace media {
+class CdmContextRef;
 class ChunkDemuxer;
-class ContentDecryptionModule;
+class EncryptionScheme;
 class VideoDecodeStatsReporter;
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 class IPCDemuxer;
@@ -127,12 +128,13 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // WebSurfaceLayerBridgeObserver implementation.
   void OnWebLayerUpdated() override;
-  void RegisterContentsLayer(blink::WebLayer* web_layer) override;
-  void UnregisterContentsLayer(blink::WebLayer* web_layer) override;
+  void RegisterContentsLayer(cc::Layer* layer) override;
+  void UnregisterContentsLayer(cc::Layer* layer) override;
+  void OnSurfaceIdUpdated(viz::SurfaceId surface_id) override;
 
-  void Load(LoadType load_type,
-            const blink::WebMediaPlayerSource& source,
-            CORSMode cors_mode) override;
+  WebMediaPlayer::LoadTiming Load(LoadType load_type,
+                                  const blink::WebMediaPlayerSource& source,
+                                  CORSMode cors_mode) override;
 
   // Playback controls.
   void Play() override;
@@ -140,8 +142,13 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void Seek(double seconds) override;
   void SetRate(double rate) override;
   void SetVolume(double volume) override;
+  void EnterPictureInPicture(
+      blink::WebMediaPlayer::PipWindowOpenedCallback callback) override;
+  void ExitPictureInPicture(
+      blink::WebMediaPlayer::PipWindowClosedCallback callback) override;
+  void RegisterPictureInPictureWindowResizeCallback(
+      blink::WebMediaPlayer::PipWindowResizedCallback callback) override;
   void SetSinkId(const blink::WebString& sink_id,
-                 const blink::WebSecurityOrigin& security_origin,
                  blink::WebSetSinkIdCallbacks* web_callback) override;
   void SetPoster(const blink::WebURL& poster) override;
   void SetPreload(blink::WebMediaPlayer::Preload preload) override;
@@ -151,7 +158,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // paint() the current video frame into |canvas|. This is used to support
   // various APIs and functionalities, including but not limited to: <canvas>,
   // WebGL texImage2D, ImageBitmap, printing and capturing capabilities.
-  void Paint(blink::WebCanvas* canvas,
+  void Paint(cc::PaintCanvas* canvas,
              const blink::WebRect& rect,
              cc::PaintFlags& flags,
              int already_uploaded_id,
@@ -227,7 +234,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void EnteredFullscreen() override;
   void ExitedFullscreen() override;
   void BecameDominantVisibleContent(bool isDominant) override;
-  void SetIsEffectivelyFullscreen(bool isEffectivelyFullscreen) override;
+  void SetIsEffectivelyFullscreen(
+      blink::WebFullscreenVideoStatus fullscreen_video_status) override;
   void OnHasNativeControlsChanged(bool) override;
   void OnDisplayTypeChanged(WebMediaPlayer::DisplayType) override;
 
@@ -242,13 +250,20 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnSeekBackward(double seconds) override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
   void OnBecamePersistentVideo(bool value) override;
+  void OnPictureInPictureModeEnded() override;
+  void OnPictureInPictureControlClicked(const std::string& control_id) override;
 
   void RequestRemotePlaybackDisabled(bool disabled) override;
 #if defined(OS_ANDROID)  // WMPI_CAST
+  // TODO(https://crbug.com/839651): Rename Flinging[Started/Stopped] to
+  // RemotePlayback[Started/Stopped] once the other RemotePlayback methods have
+  // been removed
   bool IsRemote() const override;
   void RequestRemotePlayback() override;
   void RequestRemotePlaybackControl() override;
   void RequestRemotePlaybackStop() override;
+  void FlingingStarted() override;
+  void FlingingStopped() override;
 
   void SetMediaPlayerManager(
       RendererMediaPlayerManagerInterface* media_player_manager);
@@ -269,6 +284,13 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
       MediaObserverClient::ReasonToSwitchToLocal reason) override;
   void ActivateViewportIntersectionMonitoring(bool activate) override;
   void UpdateRemotePlaybackCompatibility(bool is_compatible) override;
+
+  // Test helper methods for exercising media suspension. Once called, when
+  // |target_state| is reached or exceeded the stale flag will be set when
+  // computing the play state, which will trigger suspend if the player is
+  // paused; see UpdatePlayState_ComputePlayState() for the exact details.
+  void ForceStaleStateForTesting(ReadyState target_state) override;
+  bool IsSuspendedForTesting() override;
 
   // Called from WebMediaPlayerCast.
   // TODO(hubbe): WMPI_CAST make private.
@@ -330,6 +352,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnAudioDecoderChange(const std::string& name) override;
   void OnVideoDecoderChange(const std::string& name) override;
 
+  // When we lose the context_provider, we destroy the CompositorFrameSink to
+  // prevent frames from being submitted. The current surface_ids become
+  // invalid.
+  void OnFrameSinkDestroyed();
+
   // Actually seek. Avoids causing |should_notify_time_changed_| to be set when
   // |time_updated| is false.
   void DoSeek(base::TimeDelta time, bool time_updated);
@@ -345,9 +372,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Called when the data source is downloading or paused.
   void NotifyDownloading(bool is_downloading);
-
-  // Called by SurfaceManager when a surface is created.
-  void OnSurfaceCreated(int surface_id);
 
   // Called by RenderFrameImpl with the overlay routing token, if we request it.
   void OnOverlayRoutingToken(const base::UnguessableToken& token);
@@ -414,6 +438,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   //   - is_idle_, must_suspend_,
   //   - paused_, ended_,
   //   - pending_suspend_resume_cycle_,
+  //   - enter_pip_callback_,
   void UpdatePlayState();
 
   // Methods internal to UpdatePlayState().
@@ -449,6 +474,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   bool IsPrerollAttemptNeeded();
 
   void CreateWatchTimeReporter();
+  void UpdateSecondaryProperties();
 
   void CreateVideoDecodeStatsReporter();
 
@@ -538,10 +564,16 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // without buffering.
   bool CanPlayThrough();
 
+  // Internal implementation of Pipeline::Client::OnBufferingStateChange(). When
+  // |for_suspended_start| is true, the given state will be set even if the
+  // pipeline is not currently stable.
+  void OnBufferingStateChangeInternal(BufferingState state,
+                                      bool for_suspended_start = false);
+
   // Records |natural_size| to MediaLog and video height to UMA.
   void RecordVideoNaturalSize(const gfx::Size& natural_size);
 
-  void SetTickClockForTest(base::TickClock* tick_clock);
+  void SetTickClockForTest(const base::TickClock* tick_clock);
 
   // Returns the current time without clamping to Duration() as required by
   // HTMLMediaElement for handling ended. This method will never return a
@@ -557,43 +589,55 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // of |chunk_demuxer_|, while the EME one is only recorded if |is_encrypted_|.
   void RecordTimingUMA(const std::string& key, base::TimeDelta elapsed);
 
-  blink::WebLocalFrame* frame_;
+  // Records the encryption scheme used by the stream |stream_name|. This is
+  // only recorded when metadata is available.
+  void RecordEncryptionScheme(const std::string& stream_name,
+                              const EncryptionScheme& encryption_scheme);
+
+  // Returns whether the player is currently displayed in Picture-in-Picture.
+  // It will return true even if the player is in AutoPIP mode.
+  // The player MUST have a `client_` when this call happen.
+  bool IsInPictureInPicture() const;
+
+  blink::WebLocalFrame* const frame_;
 
   // The playback state last reported to |delegate_|, to avoid setting duplicate
   // states.
   // TODO(sandersd): The delegate should be implementing deduplication.
-  DelegateState delegate_state_;
-  bool delegate_has_audio_;
+  DelegateState delegate_state_ = DelegateState::GONE;
+  bool delegate_has_audio_ = false;
 
-  blink::WebMediaPlayer::NetworkState network_state_;
-  blink::WebMediaPlayer::ReadyState ready_state_;
-  blink::WebMediaPlayer::ReadyState highest_ready_state_;
+  blink::WebMediaPlayer::NetworkState network_state_ =
+      WebMediaPlayer::kNetworkStateEmpty;
+  blink::WebMediaPlayer::ReadyState ready_state_ =
+      WebMediaPlayer::kReadyStateHaveNothing;
+  blink::WebMediaPlayer::ReadyState highest_ready_state_ =
+      WebMediaPlayer::kReadyStateHaveNothing;
 
   // Preload state for when |data_source_| is created after setPreload().
-  MultibufferDataSource::Preload preload_;
+  MultibufferDataSource::Preload preload_ = MultibufferDataSource::METADATA;
 
   // Poster state (for UMA reporting).
-  bool has_poster_;
+  bool has_poster_ = false;
 
   // Task runner for posting tasks on Chrome's main thread. Also used
   // for DCHECKs so methods calls won't execute in the wrong thread.
   const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
-
-  scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
-  scoped_refptr<base::TaskRunner> worker_task_runner_;
+  const scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
+  const scoped_refptr<base::TaskRunner> worker_task_runner_;
   std::unique_ptr<MediaLog> media_log_;
 
   // |pipeline_controller_| owns an instance of Pipeline.
   PipelineController pipeline_controller_;
 
   // The LoadType passed in the |load_type| parameter of the load() call.
-  LoadType load_type_;
+  LoadType load_type_ = kLoadTypeURL;
 
   // Cache of metadata for answering hasAudio(), hasVideo(), and naturalSize().
   PipelineMetadata pipeline_metadata_;
 
   // Whether the video is known to be opaque or not.
-  bool opaque_;
+  bool opaque_ = false;
 
   // Playback state.
   //
@@ -607,22 +651,22 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // time we pause and then return that value in currentTime().  Otherwise our
   // clock can creep forward a little bit while the asynchronous
   // SetPlaybackRate(0) is being executed.
-  double playback_rate_;
+  double playback_rate_ = 0.0;
 
   // Counter that limits spam to |media_log_| of |playback_rate_| changes.
-  int num_playback_rate_logs_;
+  int num_playback_rate_logs_ = 0;
 
   // Set while paused. |paused_time_| is only valid when |paused_| is true.
-  bool paused_;
+  bool paused_ = true;
   base::TimeDelta paused_time_;
 
   // Set if paused automatically when hidden and need to resume when visible.
   // Reset if paused for any other reason.
-  bool paused_when_hidden_;
+  bool paused_when_hidden_ = false;
 
   // Set when starting, seeking, and resuming (all of which require a Pipeline
   // seek). |seek_time_| is only valid when |seeking_| is true.
-  bool seeking_;
+  bool seeking_ = false;
   base::TimeDelta seek_time_;
 
   // Set when doing a restart (a suspend and resume in sequence) of the pipeline
@@ -630,23 +674,23 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // |pending_resume_| and |pending_suspend_| because they can be elided in
   // certain cases, whereas for a restart they must happen.
   // TODO(sandersd,watk): Create a simpler interface for a pipeline restart.
-  bool pending_suspend_resume_cycle_;
+  bool pending_suspend_resume_cycle_ = false;
 
   // TODO(scherkus): Replace with an explicit ended signal to HTMLMediaElement,
   // see http://crbug.com/409280
-  bool ended_;
+  bool ended_ = false;
 
   // Tracks whether to issue time changed notifications during buffering state
   // changes.
-  bool should_notify_time_changed_;
+  bool should_notify_time_changed_ = false;
 
-  bool overlay_enabled_;
+  bool overlay_enabled_ = false;
 
   // Whether the current decoder requires a restart on overlay transitions.
-  bool decoder_requires_restart_for_overlay_;
+  bool decoder_requires_restart_for_overlay_ = false;
 
-  blink::WebMediaPlayerClient* client_;
-  blink::WebMediaPlayerEncryptedMediaClient* encrypted_client_;
+  blink::WebMediaPlayerClient* const client_;
+  blink::WebMediaPlayerEncryptedMediaClient* const encrypted_client_;
 
   // WebMediaPlayer notifies the |delegate_| of playback state changes using
   // |delegate_id_|; an id provided after registering with the delegate.  The
@@ -658,8 +702,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Document::shutdown() is called before the frame detaches (and before the
   // frame is destroyed). RenderFrameImpl owns |delegate_| and is guaranteed
   // to outlive |this|; thus it is safe to store |delegate_| as a raw pointer.
-  media::WebMediaPlayerDelegate* delegate_;
-  int delegate_id_;
+  media::WebMediaPlayerDelegate* const delegate_;
+  int delegate_id_ = 0;
 
   WebMediaPlayerParams::DeferLoadCB defer_load_cb_;
 
@@ -667,14 +711,14 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // |adjust_allocated_memory_cb_| must only be called on |main_task_runner_|.
   base::RepeatingTimer memory_usage_reporting_timer_;
   WebMediaPlayerParams::AdjustAllocatedMemoryCB adjust_allocated_memory_cb_;
-  int64_t last_reported_memory_usage_;
+  int64_t last_reported_memory_usage_ = 0;
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   // Creates object used for decoding media files with platform
   // frameworks.
   IPCMediaPipelineHost::Creator ipc_media_pipeline_host_creator_;
 
-  IPCDemuxer* ipc_demuxer_;
+  IPCDemuxer* ipc_demuxer_ = nullptr;
 
   ProtocolSniffer protocol_sniffer_;
 #endif
@@ -690,14 +734,14 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // load strategy we're using.
   std::unique_ptr<MultibufferDataSource> data_source_;
   std::unique_ptr<Demuxer> demuxer_;
-  ChunkDemuxer* chunk_demuxer_;
+  ChunkDemuxer* chunk_demuxer_ = nullptr;
 
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
-  base::TickClock* tick_clock_;
+  const base::TickClock* tick_clock_ = nullptr;
 
   BufferedDataSourceHostImpl buffered_data_source_host_;
-  UrlIndex* url_index_;
+  UrlIndex* const url_index_;
   scoped_refptr<viz::ContextProvider> context_provider_;
 
   // Video rendering members.
@@ -711,17 +755,17 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // The compositor layer for displaying the video content when using composited
   // playback.
-  std::unique_ptr<cc_blink::WebLayerImpl> video_weblayer_;
+  scoped_refptr<cc::VideoLayer> video_layer_;
 
   std::unique_ptr<blink::WebContentDecryptionModuleResult> set_cdm_result_;
 
-  // If a CDM is attached keep a reference to it, so that it is not destroyed
-  // until after the pipeline is done with it.
-  scoped_refptr<ContentDecryptionModule> cdm_;
+  // If a CdmContext is attached keep a reference to the CdmContextRef, so that
+  // it is not destroyed until after the pipeline is done with it.
+  std::unique_ptr<CdmContextRef> cdm_context_ref_;
 
-  // Keep track of the CDM while it is in the process of attaching to the
-  // pipeline.
-  scoped_refptr<ContentDecryptionModule> pending_cdm_;
+  // Keep track of the CdmContextRef while it is in the process of attaching to
+  // the pipeline.
+  std::unique_ptr<CdmContextRef> pending_cdm_context_ref_;
   std::string content_type_;
 
 #if defined(OS_ANDROID)  // WMPI_CAST
@@ -732,22 +776,13 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // OnVolumeMultiplierUpdate().  The multiplier is typical 1.0, but may be less
   // if the WebMediaPlayerDelegate has requested a volume reduction (ducking)
   // for a transient sound.  Playout volume is derived by volume * multiplier.
-  double volume_;
-  double volume_multiplier_;
+  double volume_ = 1.0;
+  double volume_multiplier_ = 1.0;
 
   std::unique_ptr<RendererFactorySelector> renderer_factory_selector_;
 
-  // For requesting surfaces on behalf of the Android H/W decoder in fullscreen.
-  // This will be null everywhere but Android.
-  SurfaceManager* surface_manager_;
-
   // For canceling ongoing surface creation requests when exiting fullscreen.
   base::CancelableCallback<void(int)> surface_created_cb_;
-
-  // The current overlay surface id. Populated, possibly with kNoSurfaceID if
-  // we're not supposed to use an overlay, unless we have an outstanding surface
-  // request to the SurfaceManager.
-  base::Optional<int> overlay_surface_id_;
 
   // For canceling AndroidOverlay routing token requests.
   base::CancelableCallback<void(const base::UnguessableToken&)>
@@ -763,12 +798,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // SurfaceView instead of SurfaceTexture.
 
   // Allow overlays for all video on android.
-  bool always_enable_overlays_;
+  bool always_enable_overlays_ = false;
 
   // Suppresses calls to OnPipelineError() after destruction / shutdown has been
   // started; prevents us from spuriously logging errors that are transient or
   // unimportant.
-  bool suppress_destruction_errors_;
+  bool suppress_destruction_errors_ = false;
 
   // Used for HLS playback and in certain fallback paths (e.g. on older devices
   // that can't support the unified media pipeline).
@@ -782,18 +817,29 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // removing |cast_impl_|.
   bool using_media_player_renderer_ = false;
 
+  // Set whenever the demuxer encounters an HLS file.
+  // This flag is distinct from |using_media_player_renderer_|, because on older
+  // devices we might use MediaPlayerRenderer for non HLS playback.
+  bool demuxer_found_hls_ = false;
+
   // Called sometime after the media is suspended in a playing state in
   // OnFrameHidden(), causing the state to change to paused.
   base::OneShotTimer background_pause_timer_;
 
   // Monitors the watch time of the played content.
   std::unique_ptr<WatchTimeReporter> watch_time_reporter_;
-  bool is_encrypted_;
+  bool is_encrypted_ = false;
   std::string audio_decoder_name_;
   std::string video_decoder_name_;
 
   // The time at which DoLoad() is executed.
   base::TimeTicks load_start_time_;
+
+  // Time elapsed time from |load_start_time_| to OnMetadata(). Used to later
+  // adjust |load_start_time_| if a suspended startup occurred.
+  base::TimeDelta time_to_metadata_;
+  bool skip_metrics_due_to_startup_suspend_ = false;
+
   bool have_reported_time_to_play_ready_ = false;
 
   // Records pipeline statistics for describing media capabilities.
@@ -806,7 +852,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // |preroll_attempt_pending_| indicates that the clock has been reset
   // (awaiting a resume to start), while |preroll_attempt_start_time_| tracks
   // when a preroll attempt began.
-  bool preroll_attempt_pending_;
+  bool preroll_attempt_pending_ = false;
   base::TimeTicks preroll_attempt_start_time_;
 
   // Monitors the player events.
@@ -855,6 +901,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Whether the use of a surface layer instead of a video layer is enabled.
   bool surface_layer_for_video_enabled_ = false;
 
+  base::OnceCallback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
+      blink::WebSurfaceLayerBridgeObserver*,
+      cc::UpdateSubmissionStateCB)>
+      create_bridge_callback_;
+
   base::CancelableOnceCallback<void(base::TimeTicks)> frame_time_report_cb_;
 
   bool initial_video_height_recorded_ = false;
@@ -889,8 +940,14 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   mojom::MediaMetricsProviderPtr media_metrics_provider_;
 
-  base::Callback<mojom::VideoDecodeStatsRecorderPtr()>
-      create_decode_stats_recorder_cb_;
+  base::Optional<ReadyState> stale_state_override_for_testing_;
+
+  // True if we attempt to start the media pipeline in a suspended state for
+  // preload=metadata. Cleared upon pipeline startup.
+  bool attempting_suspended_start_ = false;
+
+  // True if a frame has ever been rendered.
+  bool has_first_frame_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

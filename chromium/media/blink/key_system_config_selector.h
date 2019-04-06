@@ -15,13 +15,12 @@
 #include "base/memory/weak_ptr.h"
 #include "media/base/eme_constants.h"
 #include "media/blink/media_blink_export.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/blink/public/platform/web_media_key_system_media_capability.h"
+#include "third_party/blink/public/platform/web_vector.h"
 
 namespace blink {
 
 struct WebMediaKeySystemConfiguration;
-struct WebMediaKeySystemMediaCapability;
-class WebSecurityOrigin;
 class WebString;
 
 }  // namespace blink
@@ -43,10 +42,18 @@ class MEDIA_BLINK_EXPORT KeySystemConfigSelector {
       const blink::WebString& key_system,
       const blink::WebVector<blink::WebMediaKeySystemConfiguration>&
           candidate_configurations,
-      const blink::WebSecurityOrigin& security_origin,
       base::Callback<void(const blink::WebMediaKeySystemConfiguration&,
                           const CdmConfig&)> succeeded_cb,
       base::Closure not_supported_cb);
+
+  using IsSupportedMediaTypeCB =
+      base::RepeatingCallback<bool(const std::string& container_mime_type,
+                                   const std::string& codecs,
+                                   bool use_aes_decryptor)>;
+
+  void SetIsSupportedMediaTypeCBForTesting(IsSupportedMediaTypeCB cb) {
+    is_supported_media_type_cb_ = std::move(cb);
+  }
 
  private:
   struct SelectionRequest;
@@ -84,8 +91,18 @@ class MEDIA_BLINK_EXPORT KeySystemConfigSelector {
                               const std::string& codecs,
                               ConfigState* config_state);
 
+  EmeConfigRule GetEncryptionSchemeConfigRule(
+      const std::string& key_system,
+      const blink::WebMediaKeySystemMediaCapability::EncryptionScheme
+          encryption_scheme);
+
   const KeySystems* key_systems_;
   MediaPermission* media_permission_;
+
+  // A callback used to check whether a media type is supported. Only set in
+  // tests. If null the implementation will check the support using MimeUtil.
+  IsSupportedMediaTypeCB is_supported_media_type_cb_;
+
   base::WeakPtrFactory<KeySystemConfigSelector> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(KeySystemConfigSelector);

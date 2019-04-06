@@ -327,8 +327,8 @@ void png_read_filter_row_paeth3_sse2(png_row_infop row_info, png_bytep row,
 
       /* Paeth breaks ties favoring a over b over c. */
       nearest  = if_then_else(_mm_cmpeq_epi16(smallest, pa), a,
-                         if_then_else(_mm_cmpeq_epi16(smallest, pb), b,
-                                                                     c));
+                 if_then_else(_mm_cmpeq_epi16(smallest, pb), b,
+                                                             c));
 
       /* Note `_epi8`: we need addition to wrap modulo 255. */
       d = _mm_add_epi8(d, nearest);

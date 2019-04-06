@@ -4,7 +4,6 @@
 
 package org.chromium.content.browser;
 
-import android.content.res.Configuration;
 import android.os.SystemClock;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
@@ -22,9 +21,9 @@ import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.content.browser.ContentViewCore.InternalAccessDelegate;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.ViewEventSink.InternalAccessDelegate;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule.RerunWithUpdatedContainerView;
 
@@ -68,19 +67,10 @@ public class ContentViewScrollingTest {
         }
 
         @Override
-        public void super_onConfigurationChanged(Configuration newConfig) {
-        }
-
-        @Override
         public void onScrollChanged(int lPix, int tPix, int oldlPix, int oldtPix) {
             synchronized (mLock) {
                 mScrollChanged = true;
             }
-        }
-
-        @Override
-        public boolean super_awakenScrollBars(int startDelay, boolean invalidate) {
-            return false;
         }
 
         /**
@@ -93,7 +83,7 @@ public class ContentViewScrollingTest {
         }
     }
 
-    private RenderCoordinates mCoordinates;
+    private RenderCoordinatesImpl mCoordinates;
 
     private void waitForScroll(final boolean hugLeft, final boolean hugTop) {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
@@ -116,7 +106,7 @@ public class ContentViewScrollingTest {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return mCoordinates.getLastFrameViewportWidthCss() != 0;
+                return mCoordinates.getLastFrameViewportWidthPixInt() != 0;
             }
         });
     }
@@ -125,8 +115,8 @@ public class ContentViewScrollingTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().flingViewport(
-                        SystemClock.uptimeMillis(), vx, vy, false);
+                mActivityTestRule.getWebContents().getEventForwarder().startFling(
+                        SystemClock.uptimeMillis(), vx, vy, false, true);
             }
         });
     }
@@ -135,7 +125,7 @@ public class ContentViewScrollingTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().getContainerView().scrollTo(x, y);
+                mActivityTestRule.getContainerView().scrollTo(x, y);
             }
         });
     }
@@ -144,7 +134,7 @@ public class ContentViewScrollingTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().getContainerView().scrollBy(dx, dy);
+                mActivityTestRule.getContainerView().scrollBy(dx, dy);
             }
         });
     }
@@ -160,8 +150,7 @@ public class ContentViewScrollingTest {
                                 deltaAxisX, deltaAxisY, 0);
                 leftJoystickMotionEvent.setSource(
                         leftJoystickMotionEvent.getSource() | InputDevice.SOURCE_CLASS_JOYSTICK);
-                mActivityTestRule.getContentViewCore().getContainerView().onGenericMotionEvent(
-                        leftJoystickMotionEvent);
+                mActivityTestRule.getContainerView().onGenericMotionEvent(leftJoystickMotionEvent);
             }
         });
     }
@@ -345,12 +334,11 @@ public class ContentViewScrollingTest {
     public void testOnScrollChanged() throws Throwable {
         final int scrollToX = mCoordinates.getScrollXPixInt() + 2500;
         final int scrollToY = mCoordinates.getScrollYPixInt() + 2500;
-        final TestInternalAccessDelegate containerViewInternals = new TestInternalAccessDelegate();
+        final TestInternalAccessDelegate accessDelegate = new TestInternalAccessDelegate();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getContentViewCore().setContainerViewInternals(
-                        containerViewInternals);
+                mActivityTestRule.getViewEventSink().setAccessDelegate(accessDelegate);
             }
         });
         scrollTo(scrollToX, scrollToY);
@@ -358,7 +346,7 @@ public class ContentViewScrollingTest {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return containerViewInternals.isScrollChanged();
+                return accessDelegate.isScrollChanged();
             }
         });
     }

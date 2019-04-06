@@ -7,8 +7,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <memory>
+
 #include "base/base64.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "components/cast_certificate/proto/revocation.pb.h"
 #include "crypto/sha2.h"
@@ -133,7 +134,8 @@ bool VerifyCRL(const Crl& crl,
 
   // SimplePathBuilderDelegate will enforce required signature algorithms of
   // RSASSA PKCS#1 v1.5 with SHA-256, and RSA keys 2048-bits or longer.
-  net::SimplePathBuilderDelegate path_builder_delegate(2048);
+  net::SimplePathBuilderDelegate path_builder_delegate(
+      2048, net::SimplePathBuilderDelegate::DigestPolicy::kWeakAllowSha1);
 
   net::CertPathBuilder::Result result;
   net::CertPathBuilder path_builder(
@@ -337,7 +339,7 @@ std::unique_ptr<CastCRL> ParseAndVerifyCRLUsingCustomTrustStore(
       LOG(ERROR) << "CRL - Verification failed.";
       return nullptr;
     }
-    return base::MakeUnique<CastCRLImpl>(tbs_crl, overall_not_after);
+    return std::make_unique<CastCRLImpl>(tbs_crl, overall_not_after);
   }
   LOG(ERROR) << "No supported version of revocation data.";
   return nullptr;

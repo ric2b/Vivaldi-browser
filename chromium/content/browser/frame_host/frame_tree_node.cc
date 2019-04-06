@@ -11,7 +11,6 @@
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -24,7 +23,8 @@
 #include "content/common/frame_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "third_party/WebKit/common/sandbox_flags.h"
+#include "third_party/blink/public/common/frame/sandbox_flags.h"
+#include "third_party/blink/public/common/frame/user_activation_update_type.h"
 
 namespace content {
 
@@ -40,49 +40,8 @@ base::LazyInstance<FrameTreeNodeIdMap>::DestructorAtExit
 // These values indicate the loading progress status. The minimum progress
 // value matches what Blink's ProgressTracker has traditionally used for a
 // minimum progress value.
-const double kLoadingProgressNotStarted = 0.0;
 const double kLoadingProgressMinimum = 0.1;
 const double kLoadingProgressDone = 1.0;
-
-void RecordUniqueNameSize(FrameTreeNode* node) {
-  const auto& unique_name = node->current_replication_state().unique_name;
-
-  // Don't record numbers for the root node, which always has an empty unique
-  // name.
-  if (!node->parent()) {
-    DCHECK(unique_name.empty());
-    return;
-  }
-
-  // The original requested name is derived from the browsing context name and
-  // is essentially unbounded in size...
-  UMA_HISTOGRAM_COUNTS_1M(
-      "SessionRestore.FrameUniqueNameOriginalRequestedNameSize",
-      node->current_replication_state().name.size());
-  // If the name is a frame path, attempt to normalize the statistics based on
-  // the number of frames in the frame path.
-  if (base::StartsWith(unique_name, "<!--framePath //",
-                       base::CompareCase::SENSITIVE)) {
-    size_t depth = 1;
-    while (node->parent()) {
-      ++depth;
-      node = node->parent();
-    }
-    // The max possible size of a unique name is 80 characters, so the expected
-    // size per component shouldn't be much more than that.
-    UMA_HISTOGRAM_COUNTS_100(
-        "SessionRestore.FrameUniqueNameWithFramePathSizePerComponent",
-        round(unique_name.size() / static_cast<float>(depth)));
-    // Blink allows a maximum of ~1024 subframes in a document, so this should
-    // be less than (80 character name + 1 character delimiter) * 1024.
-    UMA_HISTOGRAM_COUNTS_100000(
-        "SessionRestore.FrameUniqueNameWithFramePathSize", unique_name.size());
-  } else {
-    UMA_HISTOGRAM_COUNTS_100(
-        "SessionRestore.FrameUniqueNameFromRequestedNameSize",
-        unique_name.size());
-  }
-}
 
 }  // namespace
 
@@ -147,6 +106,7 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
                       manager_delegate),
       frame_tree_node_id_(next_frame_tree_node_id_++),
       parent_(parent),
+      depth_(parent ? parent->depth_ + 1 : 0u),
       opener_(nullptr),
       original_opener_(nullptr),
       has_committed_real_load_(false),
@@ -164,17 +124,12 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
       is_created_by_script_(is_created_by_script),
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
-      loading_progress_(kLoadingProgressNotStarted),
-      loaded_bytes_(0),
-      loaded_elements_(0),
-      total_elements_(0),
+      was_discarded_(false),
       blame_context_(frame_tree_node_id_, parent) {
   std::pair<FrameTreeNodeIdMap::iterator, bool> result =
       g_frame_tree_node_id_map.Get().insert(
           std::make_pair(frame_tree_node_id_, this));
   CHECK(result.second);
-
-  RecordUniqueNameSize(this);
 
   // Note: this should always be done last in the constructor.
   blame_context_.Initialize();
@@ -266,9 +221,6 @@ void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
 }
 
 void FrameTreeNode::ResetForNewProcess() {
-  current_frame_host()->SetLastCommittedUrl(GURL());
-  blame_context_.TakeSnapshot();
-
   // Remove child nodes from the tree, then delete them. This destruction
   // operation will notify observers.
   std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
@@ -279,11 +231,9 @@ void FrameTreeNode::ResetForNavigation() {
   replication_state_.accumulated_csp_headers.clear();
   render_manager_.OnDidResetContentSecurityPolicy();
 
-  // Clear the declared feature policy for the frame.
-  replication_state_.feature_policy_header.clear();
-
-  // Clear any CSP-set sandbox flags in the frame.
-  UpdateActiveSandboxFlags(blink::WebSandboxFlags::kNone);
+  // Clear any CSP-set sandbox flags, and the declared feature policy for the
+  // frame.
+  UpdateFramePolicyHeaders(blink::WebSandboxFlags::kNone, {});
 }
 
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
@@ -319,7 +269,7 @@ void FrameTreeNode::SetOriginalOpener(FrameTreeNode* opener) {
 }
 
 void FrameTreeNode::SetCurrentURL(const GURL& url) {
-  if (!has_committed_real_load_ && url != url::kAboutBlankURL)
+  if (!has_committed_real_load_ && !url.IsAboutBlank())
     has_committed_real_load_ = true;
   current_frame_host()->SetLastCommittedUrl(url);
   blame_context_.TakeSnapshot();
@@ -366,16 +316,9 @@ void FrameTreeNode::SetFrameName(const std::string& name,
 
   // Note the unique name should only be able to change before the first real
   // load is committed, but that's not strongly enforced here.
-  if (unique_name != replication_state_.unique_name)
-    RecordUniqueNameSize(this);
   render_manager_.OnDidUpdateName(name, unique_name);
   replication_state_.name = name;
   replication_state_.unique_name = unique_name;
-}
-
-void FrameTreeNode::SetFeaturePolicyHeader(
-    const blink::ParsedFeaturePolicy& parsed_header) {
-  replication_state_.feature_policy_header = parsed_header;
 }
 
 void FrameTreeNode::AddContentSecurityPolicies(
@@ -464,8 +407,16 @@ bool FrameTreeNode::CommitPendingFramePolicy() {
   if (did_change_container_policy)
     replication_state_.frame_policy.container_policy =
         pending_frame_policy_.container_policy;
-  UpdateActiveSandboxFlags(pending_frame_policy_.sandbox_flags);
+  UpdateFramePolicyHeaders(pending_frame_policy_.sandbox_flags,
+                           replication_state_.feature_policy_header);
   return did_change_flags || did_change_container_policy;
+}
+
+void FrameTreeNode::TransferNavigationRequestOwnership(
+    RenderFrameHostImpl* render_frame_host) {
+  RenderFrameDevToolsAgentHost::OnResetNavigationRequest(
+      navigation_request_.get());
+  render_frame_host->SetNavigationRequest(std::move(navigation_request_));
 }
 
 void FrameTreeNode::CreatedNavigationRequest(
@@ -493,6 +444,10 @@ void FrameTreeNode::CreatedNavigationRequest(
   }
 
   navigation_request_ = std::move(navigation_request);
+  if (was_discarded_) {
+    navigation_request_->set_was_discarded();
+    was_discarded_ = false;
+  }
   render_manager()->DidCreateNavigationRequest(navigation_request_.get());
 
   bool to_different_document = !FrameMsg_Navigate_Type::IsSameDocument(
@@ -512,8 +467,9 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state,
 
   // The renderer should be informed if the caller allows to do so and the
   // navigation came from a BeginNavigation IPC.
-  int need_to_inform_renderer =
-      inform_renderer && navigation_request_->from_begin_navigation();
+  bool need_to_inform_renderer =
+      !IsPerNavigationMojoInterfaceEnabled() & inform_renderer &&
+      navigation_request_->from_begin_navigation();
 
   NavigationRequest::AssociatedSiteInstanceType site_instance_type =
       navigation_request_->associated_site_instance_type();
@@ -543,17 +499,6 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state,
     current_frame_host()->Send(
         new FrameMsg_DroppedNavigation(current_frame_host()->GetRoutingID()));
   }
-}
-
-bool FrameTreeNode::has_started_loading() const {
-  return loading_progress_ != kLoadingProgressNotStarted;
-}
-
-void FrameTreeNode::reset_loading_progress() {
-  loading_progress_ = kLoadingProgressNotStarted;
-  loaded_bytes_ = 0;
-  loaded_elements_ = 0;
-  total_elements_ = 0;
 }
 
 void FrameTreeNode::DidStartLoading(bool to_different_document,
@@ -597,8 +542,10 @@ void FrameTreeNode::DidStopLoading() {
 }
 
 void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
-  loading_progress_ = load_progress;
-  frame_tree_->UpdateLoadProgress();
+  DCHECK_GE(load_progress, kLoadingProgressMinimum);
+  DCHECK_LE(load_progress, kLoadingProgressDone);
+  if (IsMainFrame())
+    frame_tree_->UpdateLoadProgress(load_progress);
 }
 
 bool FrameTreeNode::StopLoading() {
@@ -652,9 +599,31 @@ void FrameTreeNode::BeforeUnloadCanceled() {
     ResetNavigationRequest(false, true);
 }
 
-void FrameTreeNode::OnSetHasReceivedUserGesture() {
-  render_manager_.OnSetHasReceivedUserGesture();
+bool FrameTreeNode::NotifyUserActivation() {
+  for (FrameTreeNode* node = this; node; node = node->parent())
+    node->user_activation_state_.Activate();
   replication_state_.has_received_user_gesture = true;
+  return true;
+}
+
+bool FrameTreeNode::ConsumeTransientUserActivation() {
+  bool was_active = user_activation_state_.IsActive();
+  for (FrameTreeNode* node : frame_tree()->Nodes())
+    node->user_activation_state_.ConsumeIfActive();
+  return was_active;
+}
+
+bool FrameTreeNode::UpdateUserActivationState(
+    blink::UserActivationUpdateType update_type) {
+  render_manager_.UpdateUserActivationState(update_type);
+  switch (update_type) {
+    case blink::UserActivationUpdateType::kConsumeTransientActivation:
+      return ConsumeTransientUserActivation();
+
+    case blink::UserActivationUpdateType::kNotifyActivation:
+      return NotifyUserActivation();
+  }
+  NOTREACHED() << "Invalid update_type.";
 }
 
 void FrameTreeNode::OnSetHasReceivedUserGestureBeforeNavigation(bool value) {
@@ -680,28 +649,25 @@ FrameTreeNode* FrameTreeNode::GetSibling(int relative_offset) const {
   return nullptr;
 }
 
-void FrameTreeNode::UpdateActiveSandboxFlags(
-    blink::WebSandboxFlags sandbox_flags) {
+void FrameTreeNode::UpdateFramePolicyHeaders(
+    blink::WebSandboxFlags sandbox_flags,
+    const blink::ParsedFeaturePolicy& parsed_header) {
+  bool changed = false;
+  if (replication_state_.feature_policy_header != parsed_header) {
+    replication_state_.feature_policy_header = parsed_header;
+    changed = true;
+  }
   // TODO(iclelland): Kill the renderer if sandbox flags is not a subset of the
   // currently effective sandbox flags from the frame. https://crbug.com/740556
-  blink::WebSandboxFlags original_flags =
-      replication_state_.active_sandbox_flags;
-  replication_state_.active_sandbox_flags =
+  blink::WebSandboxFlags updated_flags =
       sandbox_flags | effective_frame_policy().sandbox_flags;
-  // Notify any proxies if the flags have been changed.
-  if (replication_state_.active_sandbox_flags != original_flags)
-    render_manager()->OnDidSetActiveSandboxFlags();
-}
-
-void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,
-                                                  double loaded_bytes,
-                                                  int loaded_elements,
-                                                  int total_elements) {
-  loading_progress_ = load_progress;
-  loaded_bytes_ = loaded_bytes;
-  loaded_elements_ = loaded_elements;
-  total_elements_ = total_elements;
-  frame_tree_->UpdateLoadProgress();
+  if (replication_state_.active_sandbox_flags != updated_flags) {
+    replication_state_.active_sandbox_flags = updated_flags;
+    changed = true;
+  }
+  // Notify any proxies if the policies have been changed.
+  if (changed)
+    render_manager()->OnDidSetFramePolicyHeaders();
 }
 
 }  // namespace content

@@ -56,12 +56,9 @@ class PermissionMessagesUnittest : public testing::Test {
       std::unique_ptr<base::ListValue> required_permissions,
       std::unique_ptr<base::ListValue> optional_permissions) {
     app_ = ExtensionBuilder("Test")
-               .MergeManifest(
-                   DictionaryBuilder()
-                       .Set("permissions", std::move(required_permissions))
-                       .Set("optional_permissions",
-                            std::move(optional_permissions))
-                       .Build())
+               .SetManifestKey("permissions", std::move(required_permissions))
+               .SetManifestKey("optional_permissions",
+                               std::move(optional_permissions))
                .SetID(crx_file::id_util::GenerateId("extension"))
                .SetLocation(Manifest::INTERNAL)
                .Build();
@@ -83,8 +80,8 @@ class PermissionMessagesUnittest : public testing::Test {
 
   void GrantOptionalPermissions() {
     PermissionsUpdater perms_updater(env_.profile());
-    perms_updater.AddPermissions(
-        app_.get(), PermissionsParser::GetOptionalPermissions(app_.get()));
+    perms_updater.GrantOptionalPermissions(
+        *app_, PermissionsParser::GetOptionalPermissions(app_.get()));
   }
 
   std::vector<base::string16> active_permissions() {

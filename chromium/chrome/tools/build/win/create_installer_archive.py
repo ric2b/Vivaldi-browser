@@ -212,8 +212,7 @@ def GetLZMAExec(build_dir):
     lzma_exec = os.path.join(build_dir, "..", "..",  "chromium", "third_party",
                              "lzma_sdk", "Executable", "7za.exe")
   else:
-    lzma_exec = '7za'  # Use system 7za.
-
+    lzma_exec = '7zr'  # Use system 7zr.
   return lzma_exec
 
 def GetPrevVersion(build_dir, temp_dir, last_chrome_installer, output_name):
@@ -337,8 +336,8 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
     os.remove(archive_file)
     RunSystemCommand(cmd, options.verbose)
 
-  # Do not compress the archive in developer (component) builds.
-  if options.component_build == '1':
+  # Do not compress the archive when skip_archive_compression is specified.
+  if options.skip_archive_compression:
     compressed_file = os.path.join(
         options.output_dir, options.output_name + COMPRESSED_ARCHIVE_SUFFIX)
     if os.path.exists(compressed_file):
@@ -507,7 +506,7 @@ def CopyIfChanged(src, target_dir):
 
 
 # Taken and modified from:
-# third_party\WebKit\Tools\Scripts\webkitpy\layout_tests\port\factory.py
+# third_party\blink\tools\blinkpy\web_tests\port\factory.py
 def _read_configuration_from_gn(build_dir):
   """Return the configuration to used based on args.gn, if possible."""
   path = os.path.join(build_dir, 'args.gn')
@@ -615,15 +614,7 @@ def main(options):
                                 options.last_chrome_installer,
                                 options.output_name)
 
-  # Preferentially copy the files we can find from the output_dir, as
-  # this is where we'll find the Syzygy-optimized executables when
-  # building the optimized mini_installer.
-  if options.build_dir != options.output_dir:
-    CopyAllFilesToStagingDir(config, options.distribution,
-                             staging_dir, options.output_dir,
-                             options.enable_hidpi)
-
-  # Now copy the remainder of the files from the build dir.
+  # Copy the files from the build dir.
   CopyAllFilesToStagingDir(config, options.distribution,
                            staging_dir, options.build_dir,
                            options.enable_hidpi)
@@ -693,9 +684,11 @@ def _ParseOptions():
   parser.add_option('--enable_hidpi', default='0',
       help='Whether to include HiDPI resource files.')
   parser.add_option('--component_build', default='0',
-      help='Whether this archive is packaging a component build. This will '
-           'also turn off compression of chrome.7z into chrome.packed.7z and '
-           'helpfully delete any old chrome.packed.7z in |output_dir|.')
+      help='Whether this archive is packaging a component build.')
+  parser.add_option('--skip_archive_compression',
+      action='store_true', default=False,
+      help='This will turn off compression of chrome.7z into chrome.packed.7z '
+           'and helpfully delete any old chrome.packed.7z in |output_dir|.')
   parser.add_option('--depfile',
       help='Generate a depfile with the given name listing the implicit inputs '
            'to the archive process that can be used with a build system.')

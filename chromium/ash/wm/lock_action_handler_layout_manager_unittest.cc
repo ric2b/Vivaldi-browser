@@ -27,14 +27,14 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
-#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/test/keyboard_test_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -100,7 +100,7 @@ class LockActionHandlerLayoutManagerTest : public AshTestBase {
 
   void TearDown() override {
     Shell::GetPrimaryRootWindowController()->DeactivateKeyboard(
-        keyboard::KeyboardController::GetInstance());
+        keyboard::KeyboardController::Get());
     lock_window_.reset();
     AshTestBase::TearDown();
     LockScreenActionBackgroundController::SetFactoryCallbackForTesting(nullptr);
@@ -123,22 +123,22 @@ class LockActionHandlerLayoutManagerTest : public AshTestBase {
 
   // Show or hide the keyboard.
   void ShowKeyboard(bool show) {
-    keyboard::KeyboardController* keyboard =
-        keyboard::KeyboardController::GetInstance();
-    ASSERT_TRUE(keyboard);
-    if (show == keyboard->keyboard_visible())
+    auto* keyboard = keyboard::KeyboardController::Get();
+    ASSERT_TRUE(keyboard->enabled());
+    if (show == keyboard->IsKeyboardVisible())
       return;
 
     if (show) {
       keyboard->ShowKeyboard(true);
-      keyboard->ui()->GetContentsWindow()->SetBounds(
+      keyboard->ui()->GetKeyboardWindow()->SetBounds(
           keyboard::KeyboardBoundsFromRootBounds(
               Shell::GetPrimaryRootWindow()->bounds(), kVirtualKeyboardHeight));
+      keyboard->NotifyKeyboardWindowLoaded();
     } else {
-      keyboard->HideKeyboard(keyboard::KeyboardController::HIDE_REASON_MANUAL);
+      keyboard->HideKeyboardByUser();
     }
 
-    DCHECK_EQ(show, keyboard->keyboard_visible());
+    DCHECK_EQ(show, keyboard->IsKeyboardVisible());
   }
 
   void SetUpTrayActionClientAndLockSession(mojom::TrayActionState state) {
@@ -310,7 +310,7 @@ TEST_F(LockActionHandlerLayoutManagerTest, KeyboardBounds) {
   ShowKeyboard(true);
 
   gfx::Rect keyboard_bounds =
-      keyboard::KeyboardController::GetInstance()->current_keyboard_bounds();
+      keyboard::KeyboardController::Get()->visual_bounds_in_screen();
   // Sanity check that the keyboard intersects woth original window bounds - if
   // this is not true, the window bounds would remain unchanged.
   ASSERT_TRUE(keyboard_bounds.Intersects(initial_bounds));
@@ -327,10 +327,10 @@ TEST_F(LockActionHandlerLayoutManagerTest, KeyboardBounds) {
       GetPrimaryShelf()->shelf_layout_manager();
   ASSERT_TRUE(shelf_layout_manager);
 
-  const int chromevox_panel_height = 45;
-  shelf_layout_manager->SetChromeVoxPanelHeight(chromevox_panel_height);
+  const int accessibility_panel_height = 45;
+  shelf_layout_manager->SetAccessibilityPanelHeight(accessibility_panel_height);
 
-  target_bounds.Inset(0 /* left */, chromevox_panel_height /* top */,
+  target_bounds.Inset(0 /* left */, accessibility_panel_height /* top */,
                       0 /* right */, 0 /* bottom */);
   EXPECT_EQ(target_bounds.ToString(), window->GetBoundsInScreen().ToString());
 
@@ -487,8 +487,6 @@ TEST_F(LockActionHandlerLayoutManagerTest, MultipleMonitors) {
 
   window->SetBoundsInScreen(gfx::Rect(0, 0, 30, 40), GetSecondaryDisplay());
   target_bounds = gfx::Rect(400, 500);
-  target_bounds.Inset(0 /* left */, 0 /* top */, 0 /* right */,
-                      kShelfSize /* bottom */);
   target_bounds.Offset(300, 0);
   EXPECT_EQ(root_windows[1], window->GetRootWindow());
   EXPECT_EQ(target_bounds.ToString(), window->GetBoundsInScreen().ToString());

@@ -85,20 +85,21 @@ class ToolPrefixFinder(_PathFinder):
     self._output_directory_finder = output_directory_finder
     self._linker_name = linker_name;
 
+  def IsLld(self):
+    return self._linker_name.startswith('lld') if self._linker_name else True
+
   def Detect(self):
     output_directory = self._output_directory_finder.Tentative()
     if output_directory:
       ret = None
-      if self._linker_name == 'lld':
+      if self.IsLld():
         ret = os.path.join(SRC_ROOT, 'third_party', 'llvm-build',
                            'Release+Asserts', 'bin', 'llvm-')
       else:
         # Auto-detect from build_vars.txt
-        build_vars_path = os.path.join(output_directory, 'build_vars.txt')
-        if os.path.exists(build_vars_path):
-          with open(build_vars_path) as f:
-            build_vars = dict(l.rstrip().split('=', 1) for l in f if '=' in l)
-          tool_prefix = build_vars['android_tool_prefix']
+        build_vars = _LoadBuildVars(output_directory)
+        tool_prefix = build_vars.get('android_tool_prefix')
+        if tool_prefix:
           ret = os.path.normpath(os.path.join(output_directory, tool_prefix))
           # Maintain a trailing '/' if needed.
           if tool_prefix.endswith(os.path.sep):
@@ -128,6 +129,14 @@ class ToolPrefixFinder(_PathFinder):
       raise Exception('Bad --%s. Path not found: %s' % (self._name, full_path))
 
 
+def _LoadBuildVars(output_directory):
+  build_vars_path = os.path.join(output_directory, 'build_vars.txt')
+  if os.path.exists(build_vars_path):
+    with open(build_vars_path) as f:
+      return dict(l.rstrip().split('=', 1) for l in f if '=' in l)
+  return dict()
+
+
 def FromSrcRootRelative(path):
   ret = os.path.relpath(os.path.join(SRC_ROOT, path))
   # Need to maintain a trailing /.
@@ -154,6 +163,18 @@ def GetNmPath(tool_prefix):
   return tool_prefix + 'nm'
 
 
+def GetApkAnalyzerPath(output_directory):
+  build_vars = _LoadBuildVars(output_directory)
+  sdk_analyzer = os.path.normpath(os.path.join(
+      output_directory, build_vars['android_sdk_root'], 'tools', 'bin',
+      'apkanalyzer'))
+  if os.path.exists(sdk_analyzer):
+    return sdk_analyzer
+  # Older SDKs do not contain the tool, so fall back to the one we know exists.
+  return os.path.join(SRC_ROOT, 'third_party', 'android_tools', 'sdk',
+                      'tools', 'bin', 'apkanalyzer')
+
+
 def GetObjDumpPath(tool_prefix):
   return tool_prefix + 'objdump'
 
@@ -164,3 +185,9 @@ def GetReadElfPath(tool_prefix):
   if tool_prefix[-5:] == 'llvm-':
     return 'readelf'
   return tool_prefix + 'readelf'
+
+
+def GetBcAnalyzerPath(tool_prefix):
+  if tool_prefix[-5:] != 'llvm-':
+    raise ValueError('BC analyzer is only supported in LLVM.')
+  return tool_prefix + 'bcanalyzer'

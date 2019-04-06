@@ -12,9 +12,10 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/child_process_termination_info.h"
 #include "content/public/common/process_type.h"
 #include "ipc/ipc_sender.h"
-#include "services/service_manager/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 
 #if defined(OS_MACOSX)
 #include "base/process/port_provider_mac.h"
@@ -69,15 +70,11 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
   // Returns the ChildProcessHost object used by this object.
   virtual ChildProcessHost* GetHost() const = 0;
 
-  // Returns the termination status of a child.  |exit_code| is the
-  // status returned when the process exited (for posix, as returned
-  // from waitpid(), for Windows, as returned from
-  // GetExitCodeProcess()).  |exit_code| may be nullptr.
+  // Returns the termination info of a child.
   // |known_dead| indicates that the child is already dead. On Linux, this
   // information is necessary to retrieve accurate information. See
-  // ChildProcessLauncher::GetChildTerminationStatus() for more details.
-  virtual base::TerminationStatus GetTerminationStatus(
-      bool known_dead, int* exit_code) = 0;
+  // ChildProcessLauncher::GetChildTerminationInfo() for more details.
+  virtual ChildProcessTerminationInfo GetTerminationInfo(bool known_dead) = 0;
 
   // Take ownership of a "shared" metrics allocator (if one exists).
   virtual std::unique_ptr<base::SharedPersistentMemoryAllocator>
@@ -85,6 +82,9 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
 
   // Sets the user-visible name of the process.
   virtual void SetName(const base::string16& name) = 0;
+
+  // Sets the name of the process used for metrics reporting.
+  virtual void SetMetricsName(const std::string& metrics_name) = 0;
 
   // Set the handle of the process. BrowserChildProcessHost will do this when
   // the Launch method is used to start the process. However if the owner

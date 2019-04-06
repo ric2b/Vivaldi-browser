@@ -42,6 +42,154 @@ G_BEGIN_DECLS
 typedef struct _AXPlatformNodeAuraLinuxObject AXPlatformNodeAuraLinuxObject;
 typedef struct _AXPlatformNodeAuraLinuxClass AXPlatformNodeAuraLinuxClass;
 
+// TODO(aleventhal) Remove this and use atk_role_get_name() once the following
+// GNOME bug is fixed: https://bugzilla.gnome.org/show_bug.cgi?id=795983
+const char* role_names[] = {
+    "invalid",  // ATK_ROLE_INVALID.
+    "accelerator label",
+    "alert",
+    "animation",
+    "arrow",
+    "calendar",
+    "canvas",
+    "check box",
+    "check menu item",
+    "color chooser",
+    "column header",
+    "combo box",
+    "dateeditor",
+    "desktop icon",
+    "desktop frame",
+    "dial",
+    "dialog",
+    "directory pane",
+    "drawing area",
+    "file chooser",
+    "filler",
+    "fontchooser",
+    "frame",
+    "glass pane",
+    "html container",
+    "icon",
+    "image",
+    "internal frame",
+    "label",
+    "layered pane",
+    "list",
+    "list item",
+    "menu",
+    "menu bar",
+    "menu item",
+    "option pane",
+    "page tab",
+    "page tab list",
+    "panel",
+    "password text",
+    "popup menu",
+    "progress bar",
+    "push button",
+    "radio button",
+    "radio menu item",
+    "root pane",
+    "row header",
+    "scroll bar",
+    "scroll pane",
+    "separator",
+    "slider",
+    "split pane",
+    "spin button",
+    "statusbar",
+    "table",
+    "table cell",
+    "table column header",
+    "table row header",
+    "tear off menu item",
+    "terminal",
+    "text",
+    "toggle button",
+    "tool bar",
+    "tool tip",
+    "tree",
+    "tree table",
+    "unknown",
+    "viewport",
+    "window",
+    "header",
+    "footer",
+    "paragraph",
+    "ruler",
+    "application",
+    "autocomplete",
+    "edit bar",
+    "embedded component",
+    "entry",
+    "chart",
+    "caption",
+    "document frame",
+    "heading",
+    "page",
+    "section",
+    "redundant object",
+    "form",
+    "link",
+    "input method window",
+    "table row",
+    "tree item",
+    "document spreadsheet",
+    "document presentation",
+    "document text",
+    "document web",
+    "document email",
+    "comment",
+    "list box",
+    "grouping",
+    "image map",
+    "notification",
+    "info bar",
+    "level bar",
+    "title bar",
+    "block quote",
+    "audio",
+    "video",
+    "definition",
+    "article",
+    "landmark",
+    "log",
+    "marquee",
+    "math",
+    "rating",
+    "timer",
+    "description list",
+    "description term",
+    "description value",
+    "static",
+    "math fraction",
+    "math root",
+    "subscript",
+    "superscript",
+    "footnote",  // ATK_ROLE_FOOTNOTE = 122.
+};
+
+#if defined(ATK_CHECK_VERSION) && ATK_CHECK_VERSION(2, 16, 0)
+#define ATK_216
+#endif
+
+#if defined(ATK_CHECK_VERSION) && ATK_CHECK_VERSION(2, 26, 0)
+#define ATK_226
+#endif
+
+#if defined(ATK_216)
+constexpr AtkRole kStaticRole = ATK_ROLE_STATIC;
+#else
+constexpr AtkRole kStaticRole = ATK_ROLE_TEXT;
+#endif
+
+#if defined(ATK_226)
+constexpr AtkRole kAtkFootnoteRole = ATK_ROLE_FOOTNOTE;
+#else
+constexpr AtkRole kAtkFootnoteRole = ATK_ROLE_LIST_ITEM;
+#endif
+
 struct _AXPlatformNodeAuraLinuxObject {
   AtkObject parent;
   ui::AXPlatformNodeAuraLinux* m_object;
@@ -80,12 +228,12 @@ static const gchar* ax_platform_node_auralinux_get_name(AtkObject* atk_object) {
   if (!obj)
     return nullptr;
 
-  if (obj->GetStringAttribute(ui::AX_ATTR_NAME).empty() &&
-      !(obj->GetIntAttribute(ui::AX_ATTR_NAME_FROM) ==
-        ui::AX_NAME_FROM_ATTRIBUTE_EXPLICITLY_EMPTY))
+  ax::mojom::NameFrom name_from = obj->GetData().GetNameFrom();
+  if (obj->GetStringAttribute(ax::mojom::StringAttribute::kName).empty() &&
+      name_from != ax::mojom::NameFrom::kAttributeExplicitlyEmpty)
     return nullptr;
 
-  return obj->GetStringAttribute(ui::AX_ATTR_NAME).c_str();
+  return obj->GetStringAttribute(ax::mojom::StringAttribute::kName).c_str();
 }
 
 static const gchar* ax_platform_node_auralinux_get_description(
@@ -95,8 +243,8 @@ static const gchar* ax_platform_node_auralinux_get_description(
   if (!obj)
     return nullptr;
 
-  return obj->GetStringAttribute(
-      ui::AX_ATTR_DESCRIPTION).c_str();
+  return obj->GetStringAttribute(ax::mojom::StringAttribute::kDescription)
+      .c_str();
 }
 
 static gint ax_platform_node_auralinux_get_index_in_parent(
@@ -374,7 +522,8 @@ static const gchar* ax_platform_node_auralinux_get_action_keybinding(
   if (!obj)
     return nullptr;
 
-  return obj->GetStringAttribute(ui::AX_ATTR_ACCESS_KEY).c_str();
+  return obj->GetStringAttribute(ax::mojom::StringAttribute::kAccessKey)
+      .c_str();
 }
 
 void ax_action_interface_base_init(AtkActionIface* iface) {
@@ -459,7 +608,8 @@ static const gchar* ax_platform_node_auralinux_get_image_description(
   if (!obj)
     return nullptr;
 
-  return obj->GetStringAttribute(ui::AX_ATTR_DESCRIPTION).c_str();
+  return obj->GetStringAttribute(ax::mojom::StringAttribute::kDescription)
+      .c_str();
 }
 
 static void ax_platform_node_auralinux_get_image_size(AtkImage* atk_img,
@@ -501,7 +651,8 @@ static void ax_platform_node_auralinux_get_current_value(AtkValue* atk_value,
   if (!obj)
     return;
 
-  obj->GetFloatAttributeInGValue(ui::AX_ATTR_VALUE_FOR_RANGE, value);
+  obj->GetFloatAttributeInGValue(ax::mojom::FloatAttribute::kValueForRange,
+                                 value);
 }
 
 static void ax_platform_node_auralinux_get_minimum_value(AtkValue* atk_value,
@@ -514,7 +665,8 @@ static void ax_platform_node_auralinux_get_minimum_value(AtkValue* atk_value,
   if (!obj)
     return;
 
-  obj->GetFloatAttributeInGValue(ui::AX_ATTR_MIN_VALUE_FOR_RANGE, value);
+  obj->GetFloatAttributeInGValue(ax::mojom::FloatAttribute::kMinValueForRange,
+                                 value);
 }
 
 static void ax_platform_node_auralinux_get_maximum_value(AtkValue* atk_value,
@@ -527,7 +679,8 @@ static void ax_platform_node_auralinux_get_maximum_value(AtkValue* atk_value,
   if (!obj)
     return;
 
-  obj->GetFloatAttributeInGValue(ui::AX_ATTR_MAX_VALUE_FOR_RANGE, value);
+  obj->GetFloatAttributeInGValue(ax::mojom::FloatAttribute::kMaxValueForRange,
+                                 value);
 }
 
 static void ax_platform_node_auralinux_get_minimum_increment(
@@ -541,7 +694,8 @@ static void ax_platform_node_auralinux_get_minimum_increment(
   if (!obj)
     return;
 
-  obj->GetFloatAttributeInGValue(ui::AX_ATTR_STEP_VALUE_FOR_RANGE, value);
+  obj->GetFloatAttributeInGValue(ax::mojom::FloatAttribute::kStepValueForRange,
+                                 value);
 }
 
 static void ax_value_interface_base_init(AtkValueIface* iface) {
@@ -810,182 +964,364 @@ void AXPlatformNodeAuraLinux::StaticInitialize() {
 
 AtkRole AXPlatformNodeAuraLinux::GetAtkRole() {
   switch (GetData().role) {
-    case ui::AX_ROLE_ALERT:
+    case ax::mojom::Role::kAlert:
       return ATK_ROLE_ALERT;
-    case ui::AX_ROLE_ALERT_DIALOG:
+    case ax::mojom::Role::kAlertDialog:
       return ATK_ROLE_ALERT;
-    case ui::AX_ROLE_APPLICATION:
-      return ATK_ROLE_APPLICATION;
-    case ui::AX_ROLE_AUDIO:
-#if defined(ATK_CHECK_VERSION)
-#if ATK_CHECK_VERSION(2, 12, 0)
-      return ATK_ROLE_AUDIO;
-#else
-      return ATK_ROLE_SECTION;
-#endif
-#else
-      return ATK_ROLE_SECTION;
-#endif
-    case ui::AX_ROLE_BUTTON:
-      return ATK_ROLE_PUSH_BUTTON;
-    case ui::AX_ROLE_CANVAS:
-      return ATK_ROLE_CANVAS;
-    case ui::AX_ROLE_CAPTION:
-      return ATK_ROLE_CAPTION;
-    case ui::AX_ROLE_CHECK_BOX:
-      return ATK_ROLE_CHECK_BOX;
-    case ui::AX_ROLE_COLOR_WELL:
-      return ATK_ROLE_COLOR_CHOOSER;
-    case ui::AX_ROLE_COLUMN_HEADER:
-      return ATK_ROLE_COLUMN_HEADER;
-    case ui::AX_ROLE_COMBO_BOX_GROUPING:
-      return ATK_ROLE_COMBO_BOX;
-    case ui::AX_ROLE_COMBO_BOX_MENU_BUTTON:
-      return ATK_ROLE_COMBO_BOX;
-    case ui::AX_ROLE_DATE:
-      return ATK_ROLE_DATE_EDITOR;
-    case ui::AX_ROLE_DATE_TIME:
-      return ATK_ROLE_DATE_EDITOR;
-    case ui::AX_ROLE_DIALOG:
-      return ATK_ROLE_DIALOG;
-    case ui::AX_ROLE_DOCUMENT:
-      return ATK_ROLE_DOCUMENT_WEB;
-    case ui::AX_ROLE_FORM:
-      return ATK_ROLE_FORM;
-    case ui::AX_ROLE_GENERIC_CONTAINER:
-      return ATK_ROLE_PANEL;
-    case ui::AX_ROLE_GROUP:
-      return ATK_ROLE_PANEL;
-    case ui::AX_ROLE_IGNORED:
-      return ATK_ROLE_REDUNDANT_OBJECT;
-    case ui::AX_ROLE_IMAGE:
-      return ATK_ROLE_IMAGE;
-    case ui::AX_ROLE_IMAGE_MAP:
-      return ATK_ROLE_IMAGE_MAP;
-    case ui::AX_ROLE_LABEL_TEXT:
-      return ATK_ROLE_LABEL;
-    case ui::AX_ROLE_LINK:
+    case ax::mojom::Role::kAnchor:
       return ATK_ROLE_LINK;
-    case ui::AX_ROLE_LIST:
-      return ATK_ROLE_LIST;
-    case ui::AX_ROLE_LIST_BOX:
-      return ATK_ROLE_LIST_BOX;
-    case ui::AX_ROLE_LIST_ITEM:
-      return ATK_ROLE_LIST_ITEM;
-    case ui::AX_ROLE_MATH:
-#if defined(ATK_CHECK_VERSION)
-#if ATK_CHECK_VERSION(2, 12, 0)
-      return ATK_ROLE_MATH;
-#else
-      return ATK_ROLE_TEXT;
-#endif
-#else
-      return ATK_ROLE_TEXT;
-#endif
-    case ui::AX_ROLE_MENU:
-      return ATK_ROLE_MENU;
-    case ui::AX_ROLE_MENU_BAR:
-      return ATK_ROLE_MENU_BAR;
-    case ui::AX_ROLE_MENU_ITEM:
-      return ATK_ROLE_MENU_ITEM;
-    case ui::AX_ROLE_MENU_ITEM_CHECK_BOX:
-      return ATK_ROLE_CHECK_MENU_ITEM;
-    case ui::AX_ROLE_MENU_ITEM_RADIO:
-      return ATK_ROLE_RADIO_MENU_ITEM;
-    case ui::AX_ROLE_METER:
-      return ATK_ROLE_PROGRESS_BAR;
-    case ui::AX_ROLE_PARAGRAPH:
-      return ATK_ROLE_PARAGRAPH;
-    case ui::AX_ROLE_RADIO_BUTTON:
-      return ATK_ROLE_RADIO_BUTTON;
-    case ui::AX_ROLE_ROW_HEADER:
-      return ATK_ROLE_ROW_HEADER;
-    case ui::AX_ROLE_ROOT_WEB_AREA:
-      return ATK_ROLE_DOCUMENT_WEB;
-    case ui::AX_ROLE_SCROLL_BAR:
-      return ATK_ROLE_SCROLL_BAR;
-    case ui::AX_ROLE_SLIDER:
-      return ATK_ROLE_SLIDER;
-    case ui::AX_ROLE_SPIN_BUTTON:
-      return ATK_ROLE_SPIN_BUTTON;
-    case ui::AX_ROLE_SPLITTER:
-      return ATK_ROLE_SEPARATOR;
-    case ui::AX_ROLE_STATIC_TEXT:
-      return ATK_ROLE_TEXT;
-    case ui::AX_ROLE_STATUS:
-      return ATK_ROLE_STATUSBAR;
-    case ui::AX_ROLE_TAB:
-      return ATK_ROLE_PAGE_TAB;
-    case ui::AX_ROLE_TABLE:
-      return ATK_ROLE_TABLE;
-    case ui::AX_ROLE_TAB_LIST:
-      return ATK_ROLE_PAGE_TAB_LIST;
-    case ui::AX_ROLE_TEXT_FIELD:
-      return ATK_ROLE_ENTRY;
-    case ui::AX_ROLE_TEXT_FIELD_WITH_COMBO_BOX:
-      return ATK_ROLE_COMBO_BOX;
-    case ui::AX_ROLE_TOGGLE_BUTTON:
-      return ATK_ROLE_TOGGLE_BUTTON;
-    case ui::AX_ROLE_TOOLBAR:
-      return ATK_ROLE_TOOL_BAR;
-    case ui::AX_ROLE_TOOLTIP:
-      return ATK_ROLE_TOOL_TIP;
-    case ui::AX_ROLE_TREE:
-      return ATK_ROLE_TREE;
-    case ui::AX_ROLE_TREE_ITEM:
-      return ATK_ROLE_TREE_ITEM;
-    case ui::AX_ROLE_TREE_GRID:
-      return ATK_ROLE_TREE_TABLE;
-    case ui::AX_ROLE_VIDEO:
-#if defined(ATK_CHECK_VERSION)
-#if ATK_CHECK_VERSION(2, 12, 0)
-      return ATK_ROLE_VIDEO;
-#else
-      return ATK_ROLE_SECTION;
-#endif
-#else
-      return ATK_ROLE_SECTION;
-#endif
-    case ui::AX_ROLE_WEB_AREA:
-      return ATK_ROLE_DOCUMENT_WEB;
-    case ui::AX_ROLE_WINDOW:
-      return ATK_ROLE_WINDOW;
-    default:
+    case ax::mojom::Role::kAnnotation:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kApplication:
+      // Don't use ATK_ROLE_APPLICATION, which is for top level app windows,
+      // not ARIA applications.
+      return ATK_ROLE_EMBEDDED;
+    case ax::mojom::Role::kArticle:
+      return ATK_ROLE_ARTICLE;
+    case ax::mojom::Role::kAudio:
+      return ATK_ROLE_AUDIO;
+    case ax::mojom::Role::kBanner:
+      return ATK_ROLE_LANDMARK;
+    case ax::mojom::Role::kBlockquote:
+      return ATK_ROLE_BLOCK_QUOTE;
+    case ax::mojom::Role::kCaret:
       return ATK_ROLE_UNKNOWN;
+    case ax::mojom::Role::kButton:
+      return ATK_ROLE_PUSH_BUTTON;
+    case ax::mojom::Role::kCanvas:
+      return ATK_ROLE_CANVAS;
+    case ax::mojom::Role::kCaption:
+      return ATK_ROLE_CAPTION;
+    case ax::mojom::Role::kCell:
+      return ATK_ROLE_TABLE_CELL;
+    case ax::mojom::Role::kCheckBox:
+      return ATK_ROLE_CHECK_BOX;
+    case ax::mojom::Role::kSwitch:
+      return ATK_ROLE_TOGGLE_BUTTON;
+    case ax::mojom::Role::kColorWell:
+      return ATK_ROLE_COLOR_CHOOSER;
+    case ax::mojom::Role::kColumn:
+      return ATK_ROLE_UNKNOWN;
+    case ax::mojom::Role::kColumnHeader:
+      return ATK_ROLE_COLUMN_HEADER;
+    case ax::mojom::Role::kComboBoxGrouping:
+      return ATK_ROLE_COMBO_BOX;
+    case ax::mojom::Role::kComboBoxMenuButton:
+      return ATK_ROLE_COMBO_BOX;
+    case ax::mojom::Role::kComplementary:
+      return ATK_ROLE_LANDMARK;
+    case ax::mojom::Role::kContentDeletion:
+      return ATK_ROLE_PANEL;  // TODO(accessibility) text attribute diff:del.
+    case ax::mojom::Role::kContentInsertion:
+      return ATK_ROLE_PANEL;  // TODO(accessibility) text attribute diff:ins.
+    case ax::mojom::Role::kContentInfo:
+      return ATK_ROLE_LANDMARK;
+    case ax::mojom::Role::kDate:
+      return ATK_ROLE_DATE_EDITOR;
+    case ax::mojom::Role::kDateTime:
+      return ATK_ROLE_DATE_EDITOR;
+    case ax::mojom::Role::kDefinition:
+    case ax::mojom::Role::kDescriptionListDetail:
+      return ATK_ROLE_DESCRIPTION_VALUE;
+    case ax::mojom::Role::kDescriptionList:
+      return ATK_ROLE_DESCRIPTION_LIST;
+    case ax::mojom::Role::kDescriptionListTerm:
+      return ATK_ROLE_DESCRIPTION_TERM;
+    case ax::mojom::Role::kDetails:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kDialog:
+      return ATK_ROLE_DIALOG;
+    case ax::mojom::Role::kDirectory:
+      return ATK_ROLE_LIST;
+    case ax::mojom::Role::kDisclosureTriangle:
+      return ATK_ROLE_TOGGLE_BUTTON;
+    case ax::mojom::Role::kDocCover:
+      return ATK_ROLE_IMAGE;
+    case ax::mojom::Role::kDocBackLink:
+    case ax::mojom::Role::kDocBiblioRef:
+    case ax::mojom::Role::kDocGlossRef:
+    case ax::mojom::Role::kDocNoteRef:
+      return ATK_ROLE_LINK;
+    case ax::mojom::Role::kDocBiblioEntry:
+    case ax::mojom::Role::kDocEndnote:
+      return ATK_ROLE_LIST_ITEM;
+    case ax::mojom::Role::kDocNotice:
+    case ax::mojom::Role::kDocTip:
+      return ATK_ROLE_COMMENT;
+    case ax::mojom::Role::kDocFootnote:
+      return kAtkFootnoteRole;
+    case ax::mojom::Role::kDocPageBreak:
+      return ATK_ROLE_SEPARATOR;
+    case ax::mojom::Role::kDocAcknowledgments:
+    case ax::mojom::Role::kDocAfterword:
+    case ax::mojom::Role::kDocAppendix:
+    case ax::mojom::Role::kDocBibliography:
+    case ax::mojom::Role::kDocChapter:
+    case ax::mojom::Role::kDocConclusion:
+    case ax::mojom::Role::kDocCredits:
+    case ax::mojom::Role::kDocEndnotes:
+    case ax::mojom::Role::kDocEpilogue:
+    case ax::mojom::Role::kDocErrata:
+    case ax::mojom::Role::kDocForeword:
+    case ax::mojom::Role::kDocGlossary:
+    case ax::mojom::Role::kDocIndex:
+    case ax::mojom::Role::kDocIntroduction:
+    case ax::mojom::Role::kDocPageList:
+    case ax::mojom::Role::kDocPart:
+    case ax::mojom::Role::kDocPreface:
+    case ax::mojom::Role::kDocPrologue:
+    case ax::mojom::Role::kDocToc:
+      return ATK_ROLE_LANDMARK;
+    case ax::mojom::Role::kDocAbstract:
+    case ax::mojom::Role::kDocColophon:
+    case ax::mojom::Role::kDocCredit:
+    case ax::mojom::Role::kDocDedication:
+    case ax::mojom::Role::kDocEpigraph:
+    case ax::mojom::Role::kDocExample:
+    case ax::mojom::Role::kDocPullquote:
+    case ax::mojom::Role::kDocQna:
+      return ATK_ROLE_SECTION;
+    case ax::mojom::Role::kDocSubtitle:
+      return ATK_ROLE_HEADING;
+    case ax::mojom::Role::kDocument:
+      return ATK_ROLE_DOCUMENT_WEB;
+    case ax::mojom::Role::kEmbeddedObject:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kForm:
+      return ATK_ROLE_FORM;  // Spec says ATK_ROLE_LANDMARK, checking.
+    case ax::mojom::Role::kFigure:
+    case ax::mojom::Role::kFeed:
+    case ax::mojom::Role::kGenericContainer:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kGraphicsDocument:
+      return ATK_ROLE_DOCUMENT_WEB;
+    case ax::mojom::Role::kGraphicsObject:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kGraphicsSymbol:
+      return ATK_ROLE_IMAGE;
+    case ax::mojom::Role::kGrid:
+      return ATK_ROLE_TABLE;
+    case ax::mojom::Role::kGroup:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kHeading:
+      return ATK_ROLE_HEADING;
+    case ax::mojom::Role::kIframe:
+    case ax::mojom::Role::kIframePresentational:
+      return ATK_ROLE_DOCUMENT_WEB;
+    case ax::mojom::Role::kIgnored:
+      return ATK_ROLE_REDUNDANT_OBJECT;
+    case ax::mojom::Role::kImage:
+      return ATK_ROLE_IMAGE;
+    case ax::mojom::Role::kImageMap:
+      return ATK_ROLE_IMAGE_MAP;
+    case ax::mojom::Role::kInputTime:
+      return ATK_ROLE_DATE_EDITOR;
+    case ax::mojom::Role::kLabelText:
+      return ATK_ROLE_LABEL;
+    case ax::mojom::Role::kLegend:
+      return ATK_ROLE_TEXT;
+    // Layout table objects are treated the same as Role::kGenericContainer.
+    case ax::mojom::Role::kLayoutTable:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kLayoutTableCell:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kLayoutTableColumn:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kLayoutTableRow:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kLineBreak:
+      return ATK_ROLE_TEXT;
+    case ax::mojom::Role::kLink:
+      return ATK_ROLE_LINK;
+    case ax::mojom::Role::kList:
+      return ATK_ROLE_LIST;
+    case ax::mojom::Role::kListBox:
+      return ATK_ROLE_LIST_BOX;
+    // TODO(Accessibility) Use ATK_ROLE_MENU_ITEM inside a combo box, see how
+    // ax_platform_node_win.cc code does this.
+    case ax::mojom::Role::kListBoxOption:
+      return ATK_ROLE_LIST_ITEM;
+    case ax::mojom::Role::kListMarker:
+      return kStaticRole;
+    case ax::mojom::Role::kListItem:
+      return ATK_ROLE_LIST_ITEM;
+    case ax::mojom::Role::kLog:
+      return ATK_ROLE_LOG;
+    case ax::mojom::Role::kMain:
+      return ATK_ROLE_LANDMARK;
+    case ax::mojom::Role::kMark:
+      return ATK_ROLE_TEXT;
+    case ax::mojom::Role::kMath:
+      return ATK_ROLE_MATH;
+    case ax::mojom::Role::kMarquee:
+      return ATK_ROLE_MARQUEE;
+    case ax::mojom::Role::kMenu:
+      return ATK_ROLE_MENU;
+    case ax::mojom::Role::kMenuButton:
+      return ATK_ROLE_MENU;
+    case ax::mojom::Role::kMenuBar:
+      return ATK_ROLE_MENU_BAR;
+    case ax::mojom::Role::kMenuItem:
+      return ATK_ROLE_MENU_ITEM;
+    case ax::mojom::Role::kMenuItemCheckBox:
+      return ATK_ROLE_CHECK_MENU_ITEM;
+    case ax::mojom::Role::kMenuItemRadio:
+      return ATK_ROLE_RADIO_MENU_ITEM;
+    case ax::mojom::Role::kMenuListPopup:
+      return ATK_ROLE_MENU;
+    case ax::mojom::Role::kMenuListOption:
+      return ATK_ROLE_MENU_ITEM;
+    case ax::mojom::Role::kMeter:
+      return ATK_ROLE_PROGRESS_BAR;
+    case ax::mojom::Role::kNavigation:
+      return ATK_ROLE_LANDMARK;
+    case ax::mojom::Role::kNote:
+      return ATK_ROLE_COMMENT;
+    case ax::mojom::Role::kPane:
+    case ax::mojom::Role::kScrollView:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kParagraph:
+      return ATK_ROLE_PARAGRAPH;
+    case ax::mojom::Role::kPopUpButton:
+      return ATK_ROLE_PUSH_BUTTON;
+    case ax::mojom::Role::kPre:
+      return ATK_ROLE_TEXT;
+    case ax::mojom::Role::kProgressIndicator:
+      return ATK_ROLE_PROGRESS_BAR;
+    case ax::mojom::Role::kRadioButton:
+      return ATK_ROLE_RADIO_BUTTON;
+    case ax::mojom::Role::kRadioGroup:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kRegion: {
+      std::string html_tag =
+          GetData().GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
+      if (html_tag == "section" &&
+          GetData()
+              .GetString16Attribute(ax::mojom::StringAttribute::kName)
+              .empty()) {
+        // Do not use ARIA mapping for nameless <section>.
+        return ATK_ROLE_SECTION;
+      } else {
+        // Use ARIA mapping.
+        return ATK_ROLE_LANDMARK;
+      }
+    }
+    case ax::mojom::Role::kRootWebArea:
+      return ATK_ROLE_DOCUMENT_WEB;
+    case ax::mojom::Role::kRow:
+      return ATK_ROLE_TABLE_ROW;
+    case ax::mojom::Role::kRowHeader:
+      return ATK_ROLE_TABLE_ROW_HEADER;  // ATK_ROLE_ROW_HEADER also exists.
+    case ax::mojom::Role::kRuby:
+      return ATK_ROLE_TEXT;
+    case ax::mojom::Role::kScrollBar:
+      return ATK_ROLE_SCROLL_BAR;
+    case ax::mojom::Role::kSearch:
+      return ATK_ROLE_LANDMARK;
+    case ax::mojom::Role::kSlider:
+    case ax::mojom::Role::kSliderThumb:
+      return ATK_ROLE_SLIDER;
+    case ax::mojom::Role::kSpinButton:
+      return ATK_ROLE_SPIN_BUTTON;
+    case ax::mojom::Role::kSplitter:
+      return ATK_ROLE_SEPARATOR;
+    case ax::mojom::Role::kStaticText:
+      return ATK_ROLE_TEXT;
+    case ax::mojom::Role::kStatus:
+      return ATK_ROLE_STATUSBAR;
+    case ax::mojom::Role::kSvgRoot:
+      return ATK_ROLE_IMAGE;
+    case ax::mojom::Role::kTab:
+      return ATK_ROLE_PAGE_TAB;
+    case ax::mojom::Role::kTable:
+      return ATK_ROLE_TABLE;
+    case ax::mojom::Role::kTableHeaderContainer:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kTabList:
+      return ATK_ROLE_PAGE_TAB_LIST;
+    case ax::mojom::Role::kTabPanel:
+      return ATK_ROLE_SCROLL_PANE;
+    case ax::mojom::Role::kTerm:
+      return ATK_ROLE_DESCRIPTION_TERM;
+    case ax::mojom::Role::kTitleBar:
+      return ATK_ROLE_TITLE_BAR;
+    case ax::mojom::Role::kInlineTextBox:
+    case ax::mojom::Role::kTextField:
+    case ax::mojom::Role::kSearchBox:
+      if (!GetStringAttribute(ax::mojom::StringAttribute::kAutoComplete)
+               .empty() ||
+          IsFocusedInputWithSuggestions()) {
+        return ATK_ROLE_AUTOCOMPLETE;
+        ;
+      }
+      return ATK_ROLE_ENTRY;
+    case ax::mojom::Role::kTextFieldWithComboBox:
+      return ATK_ROLE_COMBO_BOX;
+    case ax::mojom::Role::kAbbr:
+    case ax::mojom::Role::kTime:
+      return ATK_ROLE_TEXT;
+    case ax::mojom::Role::kTimer:
+      return ATK_ROLE_TIMER;
+    case ax::mojom::Role::kToggleButton:
+      return ATK_ROLE_TOGGLE_BUTTON;
+    case ax::mojom::Role::kToolbar:
+      return ATK_ROLE_TOOL_BAR;
+    case ax::mojom::Role::kTooltip:
+      return ATK_ROLE_TOOL_TIP;
+    case ax::mojom::Role::kTree:
+      return ATK_ROLE_TREE;
+    case ax::mojom::Role::kTreeItem:
+      return ATK_ROLE_TREE_ITEM;
+    case ax::mojom::Role::kTreeGrid:
+      return ATK_ROLE_TREE_TABLE;
+    case ax::mojom::Role::kVideo:
+      return ATK_ROLE_VIDEO;
+    case ax::mojom::Role::kWebArea:
+    case ax::mojom::Role::kWebView:
+      return ATK_ROLE_DOCUMENT_WEB;
+    case ax::mojom::Role::kWindow:
+      return ATK_ROLE_WINDOW;
+    case ax::mojom::Role::kClient:
+    case ax::mojom::Role::kDesktop:
+    case ax::mojom::Role::kFigcaption:
+      return ATK_ROLE_PANEL;
+    case ax::mojom::Role::kFooter:
+      return ATK_ROLE_FOOTER;
+    case ax::mojom::Role::kNone:
+    case ax::mojom::Role::kPresentational:
+    case ax::mojom::Role::kUnknown:
+      return ATK_ROLE_REDUNDANT_OBJECT;
   }
 }
 
 void AXPlatformNodeAuraLinux::GetAtkState(AtkStateSet* atk_state_set) {
   AXNodeData data = GetData();
-  if (data.HasState(ui::AX_STATE_DEFAULT))
+  if (data.HasState(ax::mojom::State::kDefault))
     atk_state_set_add_state(atk_state_set, ATK_STATE_DEFAULT);
-  if (data.HasState(ui::AX_STATE_EDITABLE))
+  if (data.HasState(ax::mojom::State::kEditable))
     atk_state_set_add_state(atk_state_set, ATK_STATE_EDITABLE);
-  if (data.HasState(ui::AX_STATE_EXPANDED))
+  if (data.HasState(ax::mojom::State::kExpanded))
     atk_state_set_add_state(atk_state_set, ATK_STATE_EXPANDED);
-  if (data.HasState(ui::AX_STATE_FOCUSABLE))
+  if (data.HasState(ax::mojom::State::kFocusable))
     atk_state_set_add_state(atk_state_set, ATK_STATE_FOCUSABLE);
-#if defined(ATK_CHECK_VERSION)
-#if ATK_CHECK_VERSION(2, 11, 2)
-  if (data.HasState(ui::AX_STATE_HASPOPUP))
+#if defined(ATK_216)
+  if (data.HasIntAttribute(ax::mojom::IntAttribute::kHasPopup))
     atk_state_set_add_state(atk_state_set, ATK_STATE_HAS_POPUP);
 #endif
-#endif
-  if (data.HasState(ui::AX_STATE_SELECTED))
+  if (data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected))
     atk_state_set_add_state(atk_state_set, ATK_STATE_SELECTED);
-  if (data.HasState(ui::AX_STATE_SELECTABLE))
+  if (data.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected))
     atk_state_set_add_state(atk_state_set, ATK_STATE_SELECTABLE);
 
   // Checked state
-  const auto checked_state = static_cast<ui::AXCheckedState>(
-      GetIntAttribute(ui::AX_ATTR_CHECKED_STATE));
+  const auto checked_state = GetData().GetCheckedState();
   switch (checked_state) {
-    case ui::AX_CHECKED_STATE_MIXED:
+    case ax::mojom::CheckedState::kMixed:
       atk_state_set_add_state(atk_state_set, ATK_STATE_INDETERMINATE);
       break;
-    case ui::AX_CHECKED_STATE_TRUE:
+    case ax::mojom::CheckedState::kTrue:
       atk_state_set_add_state(atk_state_set,
-                              data.role == ui::AX_ROLE_TOGGLE_BUTTON
+                              data.role == ax::mojom::Role::kToggleButton
                                   ? ATK_STATE_PRESSED
                                   : ATK_STATE_CHECKED);
       break;
@@ -993,16 +1329,16 @@ void AXPlatformNodeAuraLinux::GetAtkState(AtkStateSet* atk_state_set) {
       break;
   }
 
-  switch (GetIntAttribute(ui::AX_ATTR_RESTRICTION)) {
-    case ui::AX_RESTRICTION_NONE:
+  switch (GetData().GetRestriction()) {
+    case ax::mojom::Restriction::kNone:
       atk_state_set_add_state(atk_state_set, ATK_STATE_ENABLED);
       break;
-    case ui::AX_RESTRICTION_READ_ONLY:
-#if defined(ATK_CHECK_VERSION)
-#if ATK_CHECK_VERSION(2, 16, 0)
+    case ax::mojom::Restriction::kReadOnly:
+#if defined(ATK_216)
       atk_state_set_add_state(atk_state_set, ATK_STATE_READ_ONLY);
 #endif
-#endif
+      break;
+    default:
       break;
   }
 
@@ -1050,8 +1386,10 @@ void AXPlatformNodeAuraLinux::DataChanged() {
 void AXPlatformNodeAuraLinux::AddAccessibilityTreeProperties(
     base::DictionaryValue* dict) {
   AtkRole role = GetAtkRole();
-  if (role != ATK_ROLE_UNKNOWN)
-    dict->SetString("role", std::string(atk_role_get_name(role)));
+  if (role != ATK_ROLE_UNKNOWN) {
+    int role_index = static_cast<int>(role);
+    dict->SetString("role", role_names[role_index]);
+  }
   const gchar* name = atk_object_get_name(atk_object_);
   if (name)
     dict->SetString("name", std::string(name));
@@ -1093,9 +1431,11 @@ void AXPlatformNodeAuraLinux::OnFocused() {
                                  true);
 }
 
-void AXPlatformNodeAuraLinux::NotifyAccessibilityEvent(ui::AXEvent event_type) {
+void AXPlatformNodeAuraLinux::NotifyAccessibilityEvent(
+    ax::mojom::Event event_type) {
   switch (event_type) {
-    case AX_EVENT_FOCUS:
+    case ax::mojom::Event::kFocus:
+    case ax::mojom::Event::kFocusContext:
       OnFocused();
       break;
     default:
@@ -1112,7 +1452,7 @@ int AXPlatformNodeAuraLinux::GetIndexInParent() {
 
 void AXPlatformNodeAuraLinux::SetExtentsRelativeToAtkCoordinateType(
     gint* x, gint* y, gint* width, gint* height, AtkCoordType coord_type) {
-  gfx::Rect extents = GetBoundsInScreen();
+  gfx::Rect extents = delegate_->GetUnclippedScreenBoundsRect();
 
   if (x)
     *x = extents.x();
@@ -1172,23 +1512,23 @@ AXPlatformNodeAuraLinux::HitTestSync(gint x, gint y, AtkCoordType coord_type) {
 
 bool AXPlatformNodeAuraLinux::GrabFocus() {
   AXActionData action_data;
-  action_data.action = AX_ACTION_FOCUS;
+  action_data.action = ax::mojom::Action::kFocus;
   return delegate_->AccessibilityPerformAction(action_data);
 }
 
 bool AXPlatformNodeAuraLinux::DoDefaultAction() {
   AXActionData action_data;
-  action_data.action = AX_ACTION_DO_DEFAULT;
+  action_data.action = ax::mojom::Action::kDoDefault;
   return delegate_->AccessibilityPerformAction(action_data);
 }
 
 const gchar* AXPlatformNodeAuraLinux::GetDefaultActionName() {
   int action;
-  if (!GetIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB, &action))
+  if (!GetIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb, &action))
     return nullptr;
 
   base::string16 action_verb = ui::ActionVerbToUnlocalizedString(
-      static_cast<ui::AXDefaultActionVerb>(action));
+      static_cast<ax::mojom::DefaultActionVerb>(action));
 
   ATK_AURALINUX_RETURN_STRING(base::UTF16ToUTF8(action_verb));
 }
@@ -1250,8 +1590,9 @@ AtkHyperlink* AXPlatformNodeAuraLinux::GetAtkHyperlink() {
 // Misc helpers
 //
 
-void AXPlatformNodeAuraLinux::GetFloatAttributeInGValue(AXFloatAttribute attr,
-                                                        GValue* value) {
+void AXPlatformNodeAuraLinux::GetFloatAttributeInGValue(
+    ax::mojom::FloatAttribute attr,
+    GValue* value) {
   float float_val;
   if (GetFloatAttribute(attr, &float_val)) {
     memset(value, 0, sizeof(*value));

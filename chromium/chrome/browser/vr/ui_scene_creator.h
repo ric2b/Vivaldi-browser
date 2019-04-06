@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_VR_UI_SCENE_CREATOR_H_
 
 #include "base/macros.h"
+#include "chrome/browser/vr/elements/content_element.h"
 #include "chrome/browser/vr/elements/text_input.h"
 #include "chrome/browser/vr/elements/ui_element_name.h"
 #include "chrome/browser/vr/keyboard_delegate.h"
+#include "ui/gfx/geometry/size_f.h"
 
 namespace vr {
 
@@ -27,41 +29,36 @@ class UiSceneCreator {
                  ContentInputDelegate* content_input_delegate,
                  KeyboardDelegate* keyboard_delegate,
                  TextInputDelegate* text_input_delegate,
+                 AudioDelegate* audio_delegate,
                  Model* model);
   ~UiSceneCreator();
 
   void CreateScene();
-
-  static std::unique_ptr<TextInput> CreateTextInput(
-      float font_height_meters,
-      Model* model,
-      TextInputInfo* text_input_model,
-      TextInputDelegate* text_input_delegate);
 
  private:
   void Create2dBrowsingSubtreeRoots();
   void CreateWebVrRoot();
   void CreateSystemIndicators();
   void CreateContentQuad();
-  void CreateUnderDevelopmentNotice();
   void CreateBackground();
   void CreateViewportAwareRoot();
   void CreateUrlBar();
-  void CreateLoadingIndicator();
-  void CreateSnackbars();
+  void CreateOverflowMenu();
   void CreateOmnibox();
   void CreateCloseButton();
   void CreateExitPrompt();
-  void CreateAudioPermissionPrompt();
-  void CreateFullscreenToast();
+  void CreatePrompts();
+  void CreateToasts();
   void CreateVoiceSearchUiGroup();
+  void CreateContentRepositioningAffordance();
   void CreateExitWarning();
   void CreateWebVrSubtree();
   void CreateWebVrOverlayElements();
-  void CreateSplashScreenForDirectWebVrLaunch();
   void CreateWebVrTimeoutScreen();
   void CreateController();
   void CreateKeyboard();
+  void Create2dBrowsingHostedUi();
+  void CreateTabsViews();
 
   UiBrowserInterface* browser_;
   UiScene* scene_;
@@ -69,6 +66,7 @@ class UiSceneCreator {
   ContentInputDelegate* content_input_delegate_;
   KeyboardDelegate* keyboard_delegate_;
   TextInputDelegate* text_input_delegate_;
+  AudioDelegate* audio_delegate_;
   Model* model_;
 
   DISALLOW_COPY_AND_ASSIGN(UiSceneCreator);

@@ -7,13 +7,13 @@
 
 #include <memory>
 
+#include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/file_data_pipe_producer.h"
-#include "services/network/public/interfaces/url_loader.mojom.h"
+#include "net/http/http_response_headers.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 
 namespace content {
-
-struct ResourceRequest;
 
 class CONTENT_EXPORT FileURLLoaderObserver
     : public mojo::FileDataPipeProducer::Observer {
@@ -22,7 +22,6 @@ class CONTENT_EXPORT FileURLLoaderObserver
   ~FileURLLoaderObserver() override {}
 
   virtual void OnStart() {}
-  virtual void OnOpenComplete(int result) {}
   virtual void OnSeekComplete(int64_t result) {}
 
  private:
@@ -45,7 +44,8 @@ CONTENT_EXPORT void CreateFileURLLoader(
     const network::ResourceRequest& request,
     network::mojom::URLLoaderRequest loader,
     network::mojom::URLLoaderClientPtr client,
-    std::unique_ptr<FileURLLoaderObserver> observer);
+    std::unique_ptr<FileURLLoaderObserver> observer,
+    scoped_refptr<net::HttpResponseHeaders> extra_response_headers = nullptr);
 
 }  // namespace content
 

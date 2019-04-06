@@ -64,10 +64,12 @@ std::string FFmpegAudioDecoder::GetDisplayName() const {
   return "FFmpegAudioDecoder";
 }
 
-void FFmpegAudioDecoder::Initialize(const AudioDecoderConfig& config,
-                                    CdmContext* /* cdm_context */,
-                                    const InitCB& init_cb,
-                                    const OutputCB& output_cb) {
+void FFmpegAudioDecoder::Initialize(
+    const AudioDecoderConfig& config,
+    CdmContext* /* cdm_context */,
+    const InitCB& init_cb,
+    const OutputCB& output_cb,
+    const WaitingForDecryptionKeyCB& /* waiting_for_decryption_key_cb */) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(config.IsValidConfig());
 
@@ -77,8 +79,6 @@ void FFmpegAudioDecoder::Initialize(const AudioDecoderConfig& config,
     bound_init_cb.Run(false);
     return;
   }
-
-  FFmpegGlue::InitializeFFmpeg();
 
   if (!ConfigureDecoder(config)) {
     av_sample_format_ = 0;
@@ -93,7 +93,7 @@ void FFmpegAudioDecoder::Initialize(const AudioDecoderConfig& config,
   bound_init_cb.Run(true);
 }
 
-void FFmpegAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void FFmpegAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                 const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(!decode_cb.is_null());
@@ -111,7 +111,7 @@ void FFmpegAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
     return;
   }
 
-  DecodeBuffer(buffer, decode_cb_bound);
+  DecodeBuffer(*buffer, decode_cb_bound);
 }
 
 void FFmpegAudioDecoder::Reset(const base::Closure& closure) {
@@ -123,18 +123,16 @@ void FFmpegAudioDecoder::Reset(const base::Closure& closure) {
   task_runner_->PostTask(FROM_HERE, closure);
 }
 
-void FFmpegAudioDecoder::DecodeBuffer(
-    const scoped_refptr<DecoderBuffer>& buffer,
-    const DecodeCB& decode_cb) {
+void FFmpegAudioDecoder::DecodeBuffer(const DecoderBuffer& buffer,
+                                      const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_NE(state_, kUninitialized);
   DCHECK_NE(state_, kDecodeFinished);
   DCHECK_NE(state_, kError);
-  DCHECK(buffer.get());
 
   // Make sure we are notified if http://crbug.com/49709 returns.  Issue also
   // occurs with some damaged files.
-  if (!buffer->end_of_stream() && buffer->timestamp() == kNoTimestamp) {
+  if (!buffer.end_of_stream() && buffer.timestamp() == kNoTimestamp) {
     DVLOG(1) << "Received a buffer without timestamps!";
     decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
@@ -146,45 +144,43 @@ void FFmpegAudioDecoder::DecodeBuffer(
     return;
   }
 
-  if (buffer->end_of_stream())
+  if (buffer.end_of_stream())
     state_ = kDecodeFinished;
 
   decode_cb.Run(DecodeStatus::OK);
 }
 
-bool FFmpegAudioDecoder::FFmpegDecode(
-    const scoped_refptr<DecoderBuffer>& buffer) {
+bool FFmpegAudioDecoder::FFmpegDecode(const DecoderBuffer& buffer) {
   AVPacket packet;
   av_init_packet(&packet);
-  if (buffer->end_of_stream()) {
+  if (buffer.end_of_stream()) {
     packet.data = NULL;
     packet.size = 0;
   } else {
-    packet.data = const_cast<uint8_t*>(buffer->data());
-    packet.size = buffer->data_size();
+    packet.data = const_cast<uint8_t*>(buffer.data());
+    packet.size = buffer.data_size();
 
-    // Since we're not at EOS and there is no data available in the current
-    // buffer, simply return and let the caller provide more data.
-    // crbug.com/663438 has more context on 0-byte buffers.
-    if (!packet.size)
-      return true;
+    DCHECK(packet.data);
+    DCHECK_GT(packet.size, 0);
   }
 
   bool decoded_frame_this_loop = false;
+  // base::Unretained and base::ConstRef are safe to use with the callback given
+  // to DecodePacket() since that callback is only used the function call.
   switch (decoding_loop_->DecodePacket(
-      &packet, base::BindRepeating(&FFmpegAudioDecoder::OnNewFrame,
-                                   base::Unretained(this),
-                                   &decoded_frame_this_loop, buffer))) {
+      &packet, base::BindRepeating(
+                   &FFmpegAudioDecoder::OnNewFrame, base::Unretained(this),
+                   base::ConstRef(buffer), &decoded_frame_this_loop))) {
     case FFmpegDecodingLoop::DecodeStatus::kSendPacketFailed:
       MEDIA_LOG(ERROR, media_log_)
           << "Failed to send audio packet for decoding: "
-          << buffer->AsHumanReadableString();
+          << buffer.AsHumanReadableString();
       return false;
     case FFmpegDecodingLoop::DecodeStatus::kFrameProcessingFailed:
       // OnNewFrame() should have already issued a MEDIA_LOG for this.
       return false;
     case FFmpegDecodingLoop::DecodeStatus::kDecodeFrameFailed:
-      DCHECK(!buffer->end_of_stream())
+      DCHECK(!buffer.end_of_stream())
           << "End of stream buffer produced an error! "
           << "This is quite possibly a bug in the audio decoder not handling "
           << "end of stream AVPackets correctly.";
@@ -192,14 +188,15 @@ bool FFmpegAudioDecoder::FFmpegDecode(
       MEDIA_LOG(DEBUG, media_log_)
           << GetDisplayName() << " failed to decode an audio buffer: "
           << AVErrorToString(decoding_loop_->last_averror_code()) << ", at "
-          << buffer->AsHumanReadableString();
+          << buffer.AsHumanReadableString();
+      break;
     case FFmpegDecodingLoop::DecodeStatus::kOkay:
       break;
   }
 
   // Even if we didn't decode a frame this loop, we should still send the packet
   // to the discard helper for caching.
-  if (!decoded_frame_this_loop && !buffer->end_of_stream()) {
+  if (!decoded_frame_this_loop && !buffer.end_of_stream()) {
     const bool result = discard_helper_->ProcessBuffers(buffer, nullptr);
     DCHECK(!result);
   }
@@ -207,8 +204,8 @@ bool FFmpegAudioDecoder::FFmpegDecode(
   return true;
 }
 
-bool FFmpegAudioDecoder::OnNewFrame(bool* decoded_frame_this_loop,
-                                    const scoped_refptr<DecoderBuffer>& buffer,
+bool FFmpegAudioDecoder::OnNewFrame(const DecoderBuffer& buffer,
+                                    bool* decoded_frame_this_loop,
                                     AVFrame* frame) {
   const int channels = DetermineChannels(frame);
 
@@ -243,7 +240,7 @@ bool FFmpegAudioDecoder::OnNewFrame(bool* decoded_frame_this_loop,
 
     MEDIA_LOG(DEBUG, media_log_)
         << " Detected midstream configuration change"
-        << " PTS:" << buffer->timestamp().InMicroseconds()
+        << " PTS:" << buffer.timestamp().InMicroseconds()
         << " Sample Rate: " << frame->sample_rate << " vs "
         << config_.samples_per_second() << ", ChannelLayout: " << channel_layout
         << " vs " << config_.channel_layout() << ", Channels: " << channels
@@ -305,17 +302,29 @@ bool FFmpegAudioDecoder::ConfigureDecoder(const AudioDecoderConfig& config) {
   if (!config.should_discard_decoder_delay())
     codec_context_->flags2 |= AV_CODEC_FLAG2_SKIP_MANUAL;
 
-  if (config.codec() == kCodecOpus)
+  AVDictionary* codec_options = NULL;
+  if (config.codec() == kCodecOpus) {
     codec_context_->request_sample_fmt = AV_SAMPLE_FMT_FLT;
 
+    // Disable phase inversion to avoid artifacts in mono downmix. See
+    // http://crbug.com/806219
+    if (config.target_output_channel_layout() == CHANNEL_LAYOUT_MONO) {
+      int result = av_dict_set(&codec_options, "apply_phase_inv", "0", 0);
+      DCHECK_GE(result, 0);
+    }
+  }
+
   AVCodec* codec = avcodec_find_decoder(codec_context_->codec_id);
-  if (!codec || avcodec_open2(codec_context_.get(), codec, NULL) < 0) {
+  if (!codec ||
+      avcodec_open2(codec_context_.get(), codec, &codec_options) < 0) {
     DLOG(ERROR) << "Could not initialize audio decoder: "
                 << codec_context_->codec_id;
     ReleaseFFmpegResources();
     state_ = kUninitialized;
     return false;
   }
+  // Verify avcodec_open2() used all given options.
+  DCHECK_EQ(0, av_dict_count(codec_options));
 
   // Success!
   av_sample_format_ = codec_context_->sample_fmt;

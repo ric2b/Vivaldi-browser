@@ -12,24 +12,20 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "cc/blink/web_compositor_support_impl.h"
 #include "content/child/blink_platform_impl.h"
-#include "content/renderer/webfileutilities_impl.h"
 #include "content/test/mock_webblob_registry_impl.h"
-#include "content/test/mock_webclipboard_impl.h"
-#include "third_party/WebKit/public/platform/WebURLLoaderMockFactory.h"
+#include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 
 namespace blink {
 namespace scheduler {
-class RendererScheduler;
+class WebThreadScheduler;
 }
-}
-
-namespace cc {
-class TestSharedBitmapManager;
 }
 
 namespace content {
+
+class BlinkInterfaceProviderImpl;
+class MockClipboardHost;
 
 // An implementation of BlinkPlatformImpl for tests.
 class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
@@ -38,8 +34,6 @@ class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
   ~TestBlinkWebUnitTestSupport() override;
 
   blink::WebBlobRegistry* GetBlobRegistry() override;
-  blink::WebClipboard* Clipboard() override;
-  blink::WebFileUtilities* GetFileUtilities() override;
   blink::WebIDBFactory* IdbFactory() override;
 
   std::unique_ptr<blink::WebURLLoaderFactory> CreateDefaultURLLoaderFactory()
@@ -57,37 +51,37 @@ class TestBlinkWebUnitTestSupport : public BlinkPlatformImpl {
       const blink::WebString& value2) override;
   blink::WebString DefaultLocale() override;
 
-  blink::WebCompositorSupport* CompositorSupport() override;
-
-  std::unique_ptr<blink::WebGestureCurve> CreateFlingAnimationCurve(
-      blink::WebGestureDevice device_source,
-      const blink::WebFloatPoint& velocity,
-      const blink::WebSize& cumulative_scroll) override;
-
   blink::WebURLLoaderMockFactory* GetURLLoaderMockFactory() override;
 
   blink::WebThread* CurrentThread() override;
 
-  std::unique_ptr<viz::SharedBitmap> AllocateSharedBitmap(
-      const blink::WebSize& size) override;
-
-  void GetPluginList(bool refresh,
-                     const blink::WebSecurityOrigin& mainFrameOrigin,
-                     blink::WebPluginListBuilder* builder) override;
+  bool IsThreadedAnimationEnabled() override;
 
   std::unique_ptr<blink::WebRTCCertificateGenerator>
   CreateRTCCertificateGenerator() override;
 
+  service_manager::Connector* GetConnector() override;
+  blink::InterfaceProvider* GetInterfaceProvider() override;
+
+  // May be called when |this| is registered as the active blink Platform
+  // implementation. Overrides the result of IsThreadedAnimationEnabled() to
+  // the provided value, and returns the value it was set to before the call.
+  // The original value should be restored before ending a test to avoid
+  // cross-test side effects.
+  static bool SetThreadedAnimationEnabled(bool enabled);
+
  private:
+  void BindClipboardHost(mojo::ScopedMessagePipeHandle handle);
+
+  std::unique_ptr<service_manager::Connector> connector_;
+  std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
   MockWebBlobRegistryImpl blob_registry_;
-  std::unique_ptr<MockWebClipboardImpl> mock_clipboard_;
-  WebFileUtilitiesImpl file_utilities_;
+  std::unique_ptr<MockClipboardHost> mock_clipboard_host_;
   base::ScopedTempDir file_system_root_;
   std::unique_ptr<blink::WebURLLoaderMockFactory> url_loader_factory_;
-  cc_blink::WebCompositorSupportImpl compositor_support_;
-  std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler_;
+  std::unique_ptr<blink::scheduler::WebThreadScheduler> main_thread_scheduler_;
   std::unique_ptr<blink::WebThread> web_thread_;
-  std::unique_ptr<cc::TestSharedBitmapManager> shared_bitmap_manager_;
+  bool threaded_animation_ = true;
 
   base::WeakPtrFactory<TestBlinkWebUnitTestSupport> weak_factory_;
 

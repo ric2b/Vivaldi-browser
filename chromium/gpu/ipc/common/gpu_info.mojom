@@ -6,8 +6,7 @@
 module gpu.mojom;
 
 import "gpu/ipc/common/dx_diag_node.mojom";
-import "mojo/common/time.mojom";
-import "mojo/common/version.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // gpu::GPUInfo::GPUDevice
@@ -17,14 +16,9 @@ struct GpuDevice {
   bool active;
   string vendor_string;
   string device_string;
-};
-
-// gpu::CollectInfoResult
-enum CollectInfoResult {
-  kCollectInfoNone = 0,
-  kCollectInfoSuccess = 1,
-  kCollectInfoNonFatalFailure = 2,
-  kCollectInfoFatalFailure = 3
+  string driver_vendor;
+  string driver_version;
+  string driver_date;
 };
 
 // gpu::VideoCodecProfile
@@ -54,7 +48,9 @@ enum VideoCodecProfile {
   DOLBYVISION_PROFILE5,
   DOLBYVISION_PROFILE7,
   THEORAPROFILE_ANY,
-  AV1PROFILE_PROFILE0,
+  AV1PROFILE_PROFILE_MAIN,
+  AV1PROFILE_PROFILE_HIGH,
+  AV1PROFILE_PROFILE_PRO,
 };
 
 // gpu::VideoDecodeAcceleratorSupportedProfile
@@ -79,16 +75,27 @@ struct VideoEncodeAcceleratorSupportedProfile {
   uint32 max_framerate_denominator;
 };
 
+// gpu::OverlayFormat
+enum OverlayFormat {
+  UNKNOWN,
+  BGRA,
+  YUY2,
+  NV12,
+};
+
+// gpu::OverlayCapability
+struct OverlayCapability {
+  OverlayFormat format;
+  bool is_scaling_supported;
+};
+
 // Corresponds to |gpu::GPUInfo| in gpu/config/gpu_info.h
 struct GpuInfo {
-  mojo.common.mojom.TimeDelta initialization_time;
+  mojo_base.mojom.TimeDelta initialization_time;
   bool optimus;
   bool amd_switchable;
   GpuDevice gpu;
   array<GpuDevice> secondary_gpus;
-  string driver_vendor;
-  string driver_version;
-  string driver_date;
   string pixel_shader_version;
   string vertex_shader_version;
   string max_msaa_samples;
@@ -105,20 +112,30 @@ struct GpuInfo {
   bool software_rendering;
   bool direct_rendering;
   bool sandboxed;
-  int32 process_crash_count;
   bool in_process_gpu;
   bool passthrough_cmd_decoder;
-  bool direct_composition;
-  bool supports_overlays;
   bool can_support_threaded_texture_mailbox;
-  CollectInfoResult basic_info_state;
-  CollectInfoResult context_info_state;
-  CollectInfoResult dx_diagnostics_info_state;
-  DxDiagNode? dx_diagnostics;
+  [EnableIf=is_win]
+  bool direct_composition;
+  [EnableIf=is_win]
+  bool supports_overlays;
+  [EnableIf=is_win]
+  array<OverlayCapability> overlay_capabilities;
+  [EnableIf=is_win]
+  DxDiagNode dx_diagnostics;
+  [EnableIf=is_win]
+  bool supports_dx12;
+  [EnableIf=is_win]
+  bool supports_vulkan;
+  [EnableIf=is_win]
+  uint32 d3d12_feature_level;
+  [EnableIf=is_win]
+  uint32 vulkan_version;
   VideoDecodeAcceleratorCapabilities video_decode_accelerator_capabilities;
   array<VideoEncodeAcceleratorSupportedProfile>
     video_encode_accelerator_supported_profiles;
   bool jpeg_decode_accelerator_supported;
   uint64 system_visual;
   uint64 rgba_visual;
+  bool oop_rasterization_supported;
 };

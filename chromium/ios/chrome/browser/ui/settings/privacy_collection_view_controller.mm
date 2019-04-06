@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/settings/privacy_collection_view_controller.h"
 
-#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
@@ -12,9 +11,10 @@
 #include "components/google/core/browser/google_util.h"
 #include "components/handoff/pref_names_ios.h"
 #include "components/metrics/metrics_pref_names.h"
+#include "components/payments/core/payment_prefs.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/autofill/autofill_controller.h"
@@ -22,14 +22,13 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/pref_names.h"
-#import "ios/chrome/browser/prefs/pref_observer_bridge.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_switch_item.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/settings/accounts_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_detail_item.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_text_item.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/dataplan_usage_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/do_not_track_collection_view_controller.h"
@@ -58,6 +57,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierOtherDevices = kSectionIdentifierEnumZero,
   SectionIdentifierWebServices,
   SectionIdentifierWebServicesFooter,
+  SectionIdentifierCanMakePayment,
   SectionIdentifierClearBrowsingData,
 };
 
@@ -69,6 +69,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeWebServicesShowSuggestions,
   ItemTypeWebServicesSendUsageData,
   ItemTypeWebServicesDoNotTrack,
+  ItemTypeCanMakePaymentSwitch,
   ItemTypeClearBrowsingDataClear,
 };
 
@@ -79,7 +80,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ios::ChromeBrowserState* _browserState;  // weak
   PrefBackedBoolean* _suggestionsEnabled;
   // The item related to the switch for the show suggestions setting.
-  CollectionViewSwitchItem* _showSuggestionsItem;
+  SettingsSwitchItem* _showSuggestionsItem;
 
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
@@ -88,15 +89,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
   PrefChangeRegistrar _prefChangeRegistrarApplicationContext;
 
   // Updatable Items
-  CollectionViewDetailItem* _handoffDetailItem;
-  CollectionViewDetailItem* _sendUsageDetailItem;
+  SettingsDetailItem* _handoffDetailItem;
+  SettingsDetailItem* _sendUsageDetailItem;
 }
 
 // Initialization methods for various model items.
 - (CollectionViewItem*)handoffDetailItem;
-- (CollectionViewSwitchItem*)showSuggestionsSwitchItem;
+- (SettingsSwitchItem*)showSuggestionsSwitchItem;
 - (CollectionViewItem*)showSuggestionsFooterItem;
 - (CollectionViewItem*)clearBrowsingDetailItem;
+- (CollectionViewItem*)canMakePaymentItem;
 - (CollectionViewItem*)sendUsageDetailItem;
 - (CollectionViewItem*)doNotTrackDetailItem;
 
@@ -158,8 +160,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Other Devices Section
   [model addSectionWithIdentifier:SectionIdentifierOtherDevices];
-  CollectionViewTextItem* otherDevicesHeader =
-      [[CollectionViewTextItem alloc] initWithType:ItemTypeOtherDevicesHeader];
+  SettingsTextItem* otherDevicesHeader =
+      [[SettingsTextItem alloc] initWithType:ItemTypeOtherDevicesHeader];
   otherDevicesHeader.text =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_CONTINUITY_LABEL);
   otherDevicesHeader.textColor = [[MDCPalette greyPalette] tint500];
@@ -170,8 +172,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Web Services Section
   [model addSectionWithIdentifier:SectionIdentifierWebServices];
-  CollectionViewTextItem* webServicesHeader =
-      [[CollectionViewTextItem alloc] initWithType:ItemTypeWebServicesHeader];
+  SettingsTextItem* webServicesHeader =
+      [[SettingsTextItem alloc] initWithType:ItemTypeWebServicesHeader];
   webServicesHeader.text =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_WEB_SERVICES_LABEL);
   webServicesHeader.textColor = [[MDCPalette greyPalette] tint500];
@@ -194,6 +196,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:[self showSuggestionsFooterItem]
       toSectionWithIdentifier:SectionIdentifierWebServicesFooter];
 
+  // CanMakePayment Section
+  [model addSectionWithIdentifier:SectionIdentifierCanMakePayment];
+  [model addItem:[self canMakePaymentItem]
+      toSectionWithIdentifier:SectionIdentifierCanMakePayment];
+
   // Clear Browsing Section
   [model addSectionWithIdentifier:SectionIdentifierClearBrowsingData];
   [model addItem:[self clearBrowsingDetailItem]
@@ -215,10 +222,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return _handoffDetailItem;
 }
 
-- (CollectionViewSwitchItem*)showSuggestionsSwitchItem {
-  CollectionViewSwitchItem* showSuggestionsSwitchItem =
-      [[CollectionViewSwitchItem alloc]
-          initWithType:ItemTypeWebServicesShowSuggestions];
+- (SettingsSwitchItem*)showSuggestionsSwitchItem {
+  SettingsSwitchItem* showSuggestionsSwitchItem = [[SettingsSwitchItem alloc]
+      initWithType:ItemTypeWebServicesShowSuggestions];
   showSuggestionsSwitchItem.text =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_SEARCH_URL_SUGGESTIONS);
   showSuggestionsSwitchItem.on = [_suggestionsEnabled value];
@@ -229,6 +235,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (CollectionViewItem*)showSuggestionsFooterItem {
   CollectionViewFooterItem* showSuggestionsFooterItem =
       [[CollectionViewFooterItem alloc] initWithType:ItemTypeWebServicesFooter];
+  showSuggestionsFooterItem.cellStyle = CollectionViewCellStyle::kUIKit;
   showSuggestionsFooterItem.text =
       l10n_util::GetNSString(IDS_IOS_OPTIONS_PRIVACY_FOOTER);
   showSuggestionsFooterItem.linkURL = google_util::AppendGoogleLocaleParam(
@@ -243,6 +250,25 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return [self detailItemWithType:ItemTypeClearBrowsingDataClear
                           titleId:IDS_IOS_CLEAR_BROWSING_DATA_TITLE
                        detailText:nil];
+}
+
+- (CollectionViewItem*)canMakePaymentItem {
+  SettingsSwitchItem* canMakePaymentItem =
+      [[SettingsSwitchItem alloc] initWithType:ItemTypeCanMakePaymentSwitch];
+  canMakePaymentItem.text =
+      l10n_util::GetNSString(IDS_SETTINGS_CAN_MAKE_PAYMENT_TOGGLE_LABEL);
+  canMakePaymentItem.on = [self isCanMakePaymentEnabled];
+  return canMakePaymentItem;
+}
+
+- (BOOL)isCanMakePaymentEnabled {
+  return _browserState->GetPrefs()->GetBoolean(
+      payments::kCanMakePaymentEnabled);
+}
+
+- (void)setCanMakePaymentEnabled:(BOOL)isEnabled {
+  _browserState->GetPrefs()->SetBoolean(payments::kCanMakePaymentEnabled,
+                                        isEnabled);
 }
 
 - (CollectionViewItem*)sendUsageDetailItem {
@@ -268,11 +294,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
                        detailText:detailText];
 }
 
-- (CollectionViewDetailItem*)detailItemWithType:(NSInteger)type
-                                        titleId:(NSInteger)titleId
-                                     detailText:(NSString*)detailText {
-  CollectionViewDetailItem* detailItem =
-      [[CollectionViewDetailItem alloc] initWithType:type];
+- (SettingsDetailItem*)detailItemWithType:(NSInteger)type
+                                  titleId:(NSInteger)titleId
+                               detailText:(NSString*)detailText {
+  SettingsDetailItem* detailItem =
+      [[SettingsDetailItem alloc] initWithType:type];
   detailItem.text = l10n_util::GetNSString(titleId);
   detailItem.detailText = detailText;
   detailItem.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
@@ -292,10 +318,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.collectionViewModel itemTypeForIndexPath:indexPath];
 
   if (itemType == ItemTypeWebServicesShowSuggestions) {
-    CollectionViewSwitchCell* switchCell =
-        base::mac::ObjCCastStrict<CollectionViewSwitchCell>(cell);
+    SettingsSwitchCell* switchCell =
+        base::mac::ObjCCastStrict<SettingsSwitchCell>(cell);
     [switchCell.switchView addTarget:self
                               action:@selector(showSuggestionsToggled:)
+                    forControlEvents:UIControlEventValueChanged];
+  } else if (itemType == ItemTypeCanMakePaymentSwitch) {
+    SettingsSwitchCell* switchCell =
+        base::mac::ObjCCastStrict<SettingsSwitchCell>(cell);
+    [switchCell.switchView addTarget:self
+                              action:@selector(canMakePaymentSwitchChanged:)
                     forControlEvents:UIControlEventValueChanged];
   }
 
@@ -333,6 +365,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       controller = [[ClearBrowsingDataCollectionViewController alloc]
           initWithBrowserState:_browserState];
       break;
+    case ItemTypeCanMakePaymentSwitch:
     case ItemTypeWebServicesShowSuggestions:
     default:
       break;
@@ -363,6 +396,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   switch (type) {
     case ItemTypeWebServicesFooter:
     case ItemTypeWebServicesShowSuggestions:
+    case ItemTypeCanMakePaymentSwitch:
       return YES;
     default:
       return NO;
@@ -374,10 +408,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   CollectionViewItem* item =
       [self.collectionViewModel itemAtIndexPath:indexPath];
 
-  if (item.type == ItemTypeWebServicesFooter)
+  if (item.type == ItemTypeWebServicesFooter ||
+      item.type == ItemTypeCanMakePaymentSwitch) {
     return [MDCCollectionViewCell
         cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds)
                            forItem:item];
+  }
+
   return MDCCellDefaultOneLineHeight;
 }
 
@@ -412,11 +449,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
       indexPathForItemType:ItemTypeWebServicesShowSuggestions
          sectionIdentifier:SectionIdentifierWebServices];
 
-  CollectionViewSwitchItem* switchItem =
-      base::mac::ObjCCastStrict<CollectionViewSwitchItem>(
+  SettingsSwitchItem* switchItem =
+      base::mac::ObjCCastStrict<SettingsSwitchItem>(
           [self.collectionViewModel itemAtIndexPath:switchPath]);
-  CollectionViewSwitchCell* switchCell =
-      base::mac::ObjCCastStrict<CollectionViewSwitchCell>(
+  SettingsSwitchCell* switchCell =
+      base::mac::ObjCCastStrict<SettingsSwitchCell>(
           [self.collectionView cellForItemAtIndexPath:switchPath]);
 
   if (switchCell.switchView.isOn) {
@@ -431,6 +468,23 @@ typedef NS_ENUM(NSInteger, ItemType) {
   BOOL isOn = switchCell.switchView.isOn;
   switchItem.on = isOn;
   [_suggestionsEnabled setValue:isOn];
+}
+
+- (void)canMakePaymentSwitchChanged:(UISwitch*)sender {
+  NSIndexPath* switchPath = [self.collectionViewModel
+      indexPathForItemType:ItemTypeCanMakePaymentSwitch
+         sectionIdentifier:SectionIdentifierCanMakePayment];
+
+  SettingsSwitchItem* switchItem =
+      base::mac::ObjCCastStrict<SettingsSwitchItem>(
+          [self.collectionViewModel itemAtIndexPath:switchPath]);
+  SettingsSwitchCell* switchCell =
+      base::mac::ObjCCastStrict<SettingsSwitchCell>(
+          [self.collectionView cellForItemAtIndexPath:switchPath]);
+
+  DCHECK_EQ(switchCell.switchView, sender);
+  switchItem.on = sender.isOn;
+  [self setCanMakePaymentEnabled:sender.isOn];
 }
 
 #pragma mark - PrefObserverDelegate

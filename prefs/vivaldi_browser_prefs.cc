@@ -38,6 +38,7 @@ const base::FilePath::CharType kPrefsDefinitionFileName[] =
 
 const char kVivaldiKeyName[] = "vivaldi";
 const char kChromiumKeyName[] = "chromium";
+const char kChromiumLocalKeyName[] = "chromium_local";
 
 const char kTypeKeyName[] = "type";
 const char kDefaultKeyName[] = "default";
@@ -54,14 +55,16 @@ const char kTypeListName[] = "list";
 const char kTypeDictionaryName[] = "dictionary";
 
 PrefProperties::PrefProperties(
+    bool local_pref,
     std::unordered_map<std::string, int> string_to_value,
-    std::unordered_map<int, std::string> value_to_string) {
+    std::unordered_map<int, std::string> value_to_string)
+    : local_pref(local_pref) {
   enum_properties.reset(new EnumProperties);
   enum_properties->value_to_string = std::move(value_to_string);
   enum_properties->string_to_value = std::move(string_to_value);
 }
 
-PrefProperties::PrefProperties() = default;
+PrefProperties::PrefProperties(bool local_pref) : local_pref(local_pref) {}
 PrefProperties::PrefProperties(PrefProperties&&) = default;
 PrefProperties::~PrefProperties() = default;
 
@@ -76,7 +79,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
 std::unique_ptr<base::Value> GetComputedDefault(const std::string& path) {
   if (path == vivaldiprefs::kWebpagesCaptureDirectory) {
     base::FilePath path;
-    PathService::Get(chrome::DIR_USER_PICTURES, &path);
+    base::PathService::Get(chrome::DIR_USER_PICTURES, &path);
     path = path.AppendASCII("Vivaldi Captures");
     return std::make_unique<base::Value>(path.value());
   }
@@ -166,7 +169,7 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
                   << current_path << "'";
 
     prefs_properties->insert(std::make_pair(
-        current_path, PrefProperties(std::move(string_to_value),
+        current_path, PrefProperties(false, std::move(string_to_value),
                                      std::move(value_to_string))));
     registry->RegisterIntegerPref(current_path, default_index, flags);
     return;
@@ -177,7 +180,8 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
       LOG(DFATAL) << "Expected a string at '" << current_path << "."
                   << kDefaultKeyName << "'";
 
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    prefs_properties->insert(
+        std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterStringPref(current_path, default_value->GetString(),
                                  flags);
 
@@ -186,7 +190,8 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
       LOG(DFATAL) << "Expected a string at '" << current_path << "."
                   << kDefaultKeyName << "'";
 
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    prefs_properties->insert(
+        std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterFilePathPref(
         current_path,
         base::FilePath::FromUTF8Unsafe(default_value->GetString()), flags);
@@ -196,7 +201,8 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
       LOG(DFATAL) << "Expected a boolean at '" << current_path << "."
                   << kDefaultKeyName << "'";
 
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    prefs_properties->insert(
+        std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterBooleanPref(current_path, default_value->GetBool(),
                                   flags);
 
@@ -205,7 +211,8 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
       LOG(DFATAL) << "Expected an integer at '" << current_path << "."
                   << kDefaultKeyName << "'";
 
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    prefs_properties->insert(
+        std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterIntegerPref(current_path, default_value->GetInt(), flags);
 
   } else if (type.compare(kTypeDoubleName) == 0) {
@@ -213,7 +220,8 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
       LOG(DFATAL) << "Expected a double at '" << current_path << "."
                   << kDefaultKeyName << "'";
 
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    prefs_properties->insert(
+        std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterDoublePref(current_path, default_value->GetDouble(),
                                  flags);
 
@@ -222,7 +230,8 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
       LOG(DFATAL) << "Expected a list at '" << current_path << "."
                   << kDefaultKeyName << "'";
 
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    prefs_properties->insert(
+        std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterListPref(
         current_path,
         base::ListValue::From(
@@ -234,7 +243,8 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
       LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
                   << kDefaultKeyName << "'";
 
-    prefs_properties->insert(std::make_pair(current_path, PrefProperties()));
+    prefs_properties->insert(
+        std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterDictionaryPref(
         current_path,
         base::DictionaryValue::From(
@@ -323,6 +333,12 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
     LOG(DFATAL) << "Expected a dictionary at '" << kChromiumKeyName << "'";
   }
 
+  base::DictionaryValue* chromium_local_prefs_list = nullptr;
+  if (!prefs_definitions->GetDictionary(kChromiumLocalKeyName,
+                                        &chromium_local_prefs_list)) {
+    LOG(DFATAL) << "Expected a dictionary at '" << kChromiumLocalKeyName << "'";
+  }
+
   PrefsProperties prefs_properties;
 
   RegisterPrefsFromDefinition(vivaldi_pref_definition, kVivaldiKeyName,
@@ -333,7 +349,15 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
     if (!pref.second->GetAsString(&pref_path)) {
       LOG(DFATAL) << "Expected a string at 'chromium." << pref.first;
     }
-    prefs_properties.insert(std::make_pair(pref_path, PrefProperties()));
+    prefs_properties.insert(std::make_pair(pref_path, PrefProperties(false)));
+  }
+
+  for (const auto& pref : *chromium_local_prefs_list) {
+    std::string pref_path;
+    if (!pref.second->GetAsString(&pref_path)) {
+      LOG(DFATAL) << "Expected a string at 'chromium." << pref.first;
+    }
+    prefs_properties.insert(std::make_pair(pref_path, PrefProperties(true)));
   }
 
   return prefs_properties;
@@ -364,11 +388,9 @@ void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry) {
       vivaldiprefs::kOldVivaldiTabZoom, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-#if !defined(OS_ANDROID)
   registry->RegisterIntegerPref(
       vivaldiprefs::kOldVivaldiNumberOfDaysToKeepVisits, 90,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-#endif
 
   registry->RegisterBooleanPref(vivaldiprefs::kOldPluginsWidevideEnabled, true);
 
@@ -386,9 +408,8 @@ void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry) {
       vivaldiprefs::kOldVivaldiUseNativeWindowDecoration, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-  registry->RegisterStringPref(
-      vivaldiprefs::kOldVivaldiHomepage, "",
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterStringPref(vivaldiprefs::kOldVivaldiHomepage, "",
+                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   RegisterOldPlatformPrefs(registry);
 }
@@ -398,9 +419,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
 
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
-#if !defined(OS_ANDROID)
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
-#endif
 }
 
 void MigrateOldPrefs(PrefService* prefs) {

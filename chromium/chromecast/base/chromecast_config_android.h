@@ -8,8 +8,8 @@
 #include <jni.h>
 
 #include "base/callback.h"
-#include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/no_destructor.h"
 
 namespace chromecast {
 namespace android {
@@ -22,6 +22,8 @@ class ChromecastConfigAndroid {
   // crash reports.
   bool CanSendUsageStats();
 
+  void SetSendUsageStats(bool enabled);
+
   // Registers a handler to be notified when SendUsageStats is changed.
   void SetSendUsageStatsChangedCallback(
       base::RepeatingCallback<void(bool)> callback);
@@ -29,7 +31,7 @@ class ChromecastConfigAndroid {
   void RunSendUsageStatsChangedCallback(bool enabled);
 
  private:
-  friend struct base::LazyInstanceTraitsBase<ChromecastConfigAndroid>;
+  friend class base::NoDestructor<ChromecastConfigAndroid>;
 
   ChromecastConfigAndroid();
   ~ChromecastConfigAndroid();

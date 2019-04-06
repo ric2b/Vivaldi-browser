@@ -5,6 +5,7 @@
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 
 #include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 
 int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
@@ -18,8 +19,8 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
     case AutocompleteMatchType::CLIPBOARD:
     case AutocompleteMatchType::NAVSUGGEST:
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
-    case AutocompleteMatchType::PHYSICAL_WEB:
-    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW:
+    case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
+    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
     case AutocompleteMatchType::URL_WHAT_YOU_TYPED:
       return is_incognito ? IDR_IOS_OMNIBOX_HTTP_INCOGNITO
                           : IDR_IOS_OMNIBOX_HTTP;
@@ -28,7 +29,7 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
     case AutocompleteMatchType::HISTORY_TITLE:
     case AutocompleteMatchType::HISTORY_URL:
     case AutocompleteMatchType::SEARCH_HISTORY:
-    case AutocompleteMatchType::TAB_SEARCH:
+    case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
       return is_incognito ? IDR_IOS_OMNIBOX_HISTORY_INCOGNITO
                           : IDR_IOS_OMNIBOX_HISTORY;
     case AutocompleteMatchType::CONTACT_DEPRECATED:
@@ -47,10 +48,56 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
       // never sent to the search provider.
       DCHECK(!is_incognito);
       return IDR_IOS_OMNIBOX_CALCULATOR;
-    case AutocompleteMatchType::EXTENSION_APP:
+    case AutocompleteMatchType::DOCUMENT_SUGGESTION:
+      // Document suggeestions aren't yet supported on mobile.
+      NOTREACHED();
+      return IDR_IOS_OMNIBOX_HTTP;
+    case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:
     case AutocompleteMatchType::NUM_TYPES:
       NOTREACHED();
       return IDR_IOS_OMNIBOX_HTTP;
+  }
+}
+
+std::string GetResourceNameForAutocompleteMatchType(
+    AutocompleteMatchType::Type type,
+    bool is_starred) {
+  if (is_starred)
+    return "omnibox_completion_bookmark";
+
+  switch (type) {
+    case AutocompleteMatchType::BOOKMARK_TITLE:
+    case AutocompleteMatchType::CLIPBOARD:
+    case AutocompleteMatchType::NAVSUGGEST:
+    case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
+    case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
+    case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
+    case AutocompleteMatchType::URL_WHAT_YOU_TYPED:
+    case AutocompleteMatchType::DOCUMENT_SUGGESTION:
+      return "omnibox_completion_default_favicon";
+    case AutocompleteMatchType::HISTORY_BODY:
+    case AutocompleteMatchType::HISTORY_KEYWORD:
+    case AutocompleteMatchType::HISTORY_TITLE:
+    case AutocompleteMatchType::HISTORY_URL:
+    case AutocompleteMatchType::SEARCH_HISTORY:
+    case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
+      return "omnibox_completion_history";
+    case AutocompleteMatchType::CONTACT_DEPRECATED:
+    case AutocompleteMatchType::SEARCH_OTHER_ENGINE:
+    case AutocompleteMatchType::SEARCH_SUGGEST:
+    case AutocompleteMatchType::SEARCH_SUGGEST_ENTITY:
+    case AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED:
+    case AutocompleteMatchType::SEARCH_SUGGEST_PROFILE:
+    case AutocompleteMatchType::SEARCH_SUGGEST_TAIL:
+    case AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED:
+    case AutocompleteMatchType::VOICE_SUGGEST:
+      return "omnibox_completion_search";
+    case AutocompleteMatchType::CALCULATOR:
+      return "omnibox_completion_calculator";
+    case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:
+    case AutocompleteMatchType::NUM_TYPES:
+      NOTREACHED();
+      return "omnibox_completion_default_favicon";
   }
 }
 
@@ -69,5 +116,23 @@ int GetIconForSecurityState(security_state::SecurityLevel security_level) {
     case security_state::SECURITY_LEVEL_COUNT:
       NOTREACHED();
       return IDR_IOS_OMNIBOX_HTTP;
+  }
+}
+
+base::string16 GetUIRefreshIconNameForSecurityState(
+    security_state::SecurityLevel security_level) {
+  switch (security_level) {
+    case security_state::NONE:
+    case security_state::HTTP_SHOW_WARNING:
+      return base::ASCIIToUTF16("location_bar_insecure");
+    case security_state::EV_SECURE:
+    case security_state::SECURE:
+    case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
+      return base::ASCIIToUTF16("location_bar_secure");
+    case security_state::DANGEROUS:
+      return base::ASCIIToUTF16("location_bar_dangerous");
+    case security_state::SECURITY_LEVEL_COUNT:
+      NOTREACHED();
+      return base::ASCIIToUTF16("location_bar_insecure");
   }
 }

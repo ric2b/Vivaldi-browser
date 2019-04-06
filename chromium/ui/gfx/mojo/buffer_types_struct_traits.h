@@ -5,6 +5,7 @@
 #ifndef UI_GFX_MOJO_BUFFER_TYPES_STRUCT_TRAITS_H_
 #define UI_GFX_MOJO_BUFFER_TYPES_STRUCT_TRAITS_H_
 
+#include "build/build_config.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/mojo/buffer_types.mojom.h"
 
@@ -42,6 +43,8 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
         return gfx::mojom::BufferFormat::BGRX_8888;
       case gfx::BufferFormat::BGRX_1010102:
         return gfx::mojom::BufferFormat::BGRX_1010102;
+      case gfx::BufferFormat::RGBX_1010102:
+        return gfx::mojom::BufferFormat::RGBX_1010102;
       case gfx::BufferFormat::BGRA_8888:
         return gfx::mojom::BufferFormat::BGRA_8888;
       case gfx::BufferFormat::RGBA_F16:
@@ -96,6 +99,9 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
       case gfx::mojom::BufferFormat::BGRX_1010102:
         *out = gfx::BufferFormat::BGRX_1010102;
         return true;
+      case gfx::mojom::BufferFormat::RGBX_1010102:
+        *out = gfx::BufferFormat::RGBX_1010102;
+        return true;
       case gfx::mojom::BufferFormat::RGBA_8888:
         *out = gfx::BufferFormat::RGBA_8888;
         return true;
@@ -133,6 +139,8 @@ struct EnumTraits<gfx::mojom::BufferUsage, gfx::BufferUsage> {
         return gfx::mojom::BufferUsage::SCANOUT;
       case gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
         return gfx::mojom::BufferUsage::SCANOUT_CAMERA_READ_WRITE;
+      case gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE:
+        return gfx::mojom::BufferUsage::CAMERA_AND_CPU_READ_WRITE;
       case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
         return gfx::mojom::BufferUsage::SCANOUT_CPU_READ_WRITE;
       case gfx::BufferUsage::SCANOUT_VDA_WRITE:
@@ -156,6 +164,9 @@ struct EnumTraits<gfx::mojom::BufferUsage, gfx::BufferUsage> {
         return true;
       case gfx::mojom::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
         *out = gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE;
+        return true;
+      case gfx::mojom::BufferUsage::CAMERA_AND_CPU_READ_WRITE:
+        *out = gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE;
         return true;
       case gfx::mojom::BufferUsage::SCANOUT_CPU_READ_WRITE:
         *out = gfx::BufferUsage::SCANOUT_CPU_READ_WRITE;
@@ -320,6 +331,17 @@ struct StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
   static const gfx::NativePixmapHandle& native_pixmap_handle(
       const gfx::GpuMemoryBufferHandle& handle);
   static mojo::ScopedHandle mach_port(const gfx::GpuMemoryBufferHandle& handle);
+
+#if defined(OS_WIN)
+  static mojo::ScopedHandle dxgi_handle(
+      const gfx::GpuMemoryBufferHandle& handle);
+#endif
+
+#if defined(OS_ANDROID)
+  static gfx::mojom::AHardwareBufferHandlePtr android_hardware_buffer_handle(
+      const gfx::GpuMemoryBufferHandle& handle);
+#endif
+
   static bool Read(gfx::mojom::GpuMemoryBufferHandleDataView data,
                    gfx::GpuMemoryBufferHandle* handle);
 };

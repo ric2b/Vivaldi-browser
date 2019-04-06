@@ -11,10 +11,10 @@
 
 namespace app_list {
 
-AppListFolderItem::AppListFolderItem(const std::string& id,
-                                     FolderType folder_type)
+AppListFolderItem::AppListFolderItem(const std::string& id)
     : AppListItem(id),
-      folder_type_(folder_type),
+      folder_type_(id == ash::kOemFolderId ? FOLDER_TYPE_OEM
+                                           : FOLDER_TYPE_NORMAL),
       item_list_(new AppListItemList),
       folder_image_(item_list_.get()) {
   folder_image_.AddObserver(this);
@@ -23,10 +23,6 @@ AppListFolderItem::AppListFolderItem(const std::string& id,
 
 AppListFolderItem::~AppListFolderItem() {
   folder_image_.RemoveObserver(this);
-}
-
-const gfx::ImageSkia& AppListFolderItem::GetTopIcon(size_t item_index) {
-  return folder_image_.GetTopIcon(item_index);
 }
 
 gfx::Rect AppListFolderItem::GetTargetIconRectInFolderForItem(
@@ -49,10 +45,6 @@ AppListItem* AppListFolderItem::FindChildItem(const std::string& id) {
 
 size_t AppListFolderItem::ChildItemCount() const {
   return item_list_->item_count();
-}
-
-size_t AppListFolderItem::BadgedItemCount() const {
-  return item_list_->BadgedItemCount();
 }
 
 bool AppListFolderItem::CompareForTest(const AppListItem* other) const {

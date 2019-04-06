@@ -22,7 +22,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/gcm/instance_id/instance_id_profile_service.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
@@ -31,9 +30,9 @@
 #include "chrome/browser/push_messaging/push_messaging_constants.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -41,6 +40,7 @@
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
+#include "components/gcm_driver/instance_id/instance_id_profile_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/public/rappor_utils.h"
@@ -55,7 +55,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/push_messaging_status.mojom.h"
 #include "content/public/common/push_subscription_options.h"
-#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
+#include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
@@ -88,15 +88,11 @@ const char kSilentPushUnsupportedMessage[] =
     "https://goo.gl/yqv4Q4 for more details.";
 
 void RecordDeliveryStatus(content::mojom::PushDeliveryStatus status) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PushMessaging.DeliveryStatus", status,
-      static_cast<int>(content::mojom::PushDeliveryStatus::LAST) + 1);
+  UMA_HISTOGRAM_ENUMERATION("PushMessaging.DeliveryStatus", status);
 }
 
 void RecordUnsubscribeReason(content::mojom::PushUnregistrationReason reason) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PushMessaging.UnregistrationReason", reason,
-      static_cast<int>(content::mojom::PushUnregistrationReason::LAST) + 1);
+  UMA_HISTOGRAM_ENUMERATION("PushMessaging.UnregistrationReason", reason);
 }
 
 void RecordUnsubscribeGCMResult(gcm::GCMClient::Result result) {
@@ -131,19 +127,6 @@ void UnregisterCallbackToClosure(
   DCHECK(!closure.is_null());
   closure.Run();
 }
-
-#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
-bool UseBackgroundMode() {
-  // Note: if push is ever enabled in incognito, the background mode integration
-  // should not be enabled for it.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kDisablePushApiBackgroundMode))
-    return false;
-  if (command_line->HasSwitch(switches::kEnablePushApiBackgroundMode))
-    return true;
-  return base::FeatureList::IsEnabled(features::kPushMessagingBackgroundMode);
-}
-#endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
 
 }  // namespace
 
@@ -180,21 +163,13 @@ PushMessagingServiceImpl::~PushMessagingServiceImpl() = default;
 void PushMessagingServiceImpl::IncreasePushSubscriptionCount(int add,
                                                              bool is_pending) {
   DCHECK_GT(add, 0);
-  if (push_subscription_count_ + pending_push_subscription_count_ == 0) {
+  if (push_subscription_count_ + pending_push_subscription_count_ == 0)
     GetGCMDriver()->AddAppHandler(kPushMessagingAppIdentifierPrefix, this);
-  }
-  if (is_pending) {
+
+  if (is_pending)
     pending_push_subscription_count_ += add;
-  } else {
-#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
-    if (UseBackgroundMode() && g_browser_process->background_mode_manager() &&
-        !push_subscription_count_) {
-      g_browser_process->background_mode_manager()->RegisterTrigger(
-          profile_, this, false /* should_notify_user */);
-    }
-#endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
+  else
     push_subscription_count_ += add;
-  }
 }
 
 void PushMessagingServiceImpl::DecreasePushSubscriptionCount(int subtract,
@@ -207,16 +182,9 @@ void PushMessagingServiceImpl::DecreasePushSubscriptionCount(int subtract,
     push_subscription_count_ -= subtract;
     DCHECK_GE(push_subscription_count_, 0);
   }
-  if (push_subscription_count_ + pending_push_subscription_count_ == 0) {
-    GetGCMDriver()->RemoveAppHandler(kPushMessagingAppIdentifierPrefix);
 
-#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
-    if (UseBackgroundMode() && g_browser_process->background_mode_manager()) {
-      g_browser_process->background_mode_manager()->UnregisterTrigger(profile_,
-                                                                      this);
-    }
-#endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
-  }
+  if (push_subscription_count_ + pending_push_subscription_count_ == 0)
+    GetGCMDriver()->RemoveAppHandler(kPushMessagingAppIdentifierPrefix);
 }
 
 bool PushMessagingServiceImpl::CanHandle(const std::string& app_id) const {
@@ -239,7 +207,7 @@ void PushMessagingServiceImpl::OnStoreReset() {
     // occurs before we finish clearing them.
     ClearPushSubscriptionId(profile_, identifier.origin(),
                             identifier.service_worker_registration_id(),
-                            base::Bind(&base::DoNothing));
+                            base::DoNothing());
     // TODO(johnme): Fire pushsubscriptionchange/pushsubscriptionlost SW event.
   }
   PushMessagingAppIdentifier::DeleteAllFromPrefs(profile_);
@@ -272,7 +240,7 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
 #endif
 
   base::Closure message_handled_closure =
-      message_callback_for_testing_.is_null() ? base::Bind(&base::DoNothing)
+      message_callback_for_testing_.is_null() ? base::DoNothing()
                                               : message_callback_for_testing_;
   PushMessagingAppIdentifier app_identifier =
       PushMessagingAppIdentifier::FindByAppId(profile_, app_id);
@@ -466,8 +434,15 @@ void PushMessagingServiceImpl::SubscribeFromDocument(
     bool user_gesture,
     const RegisterCallback& callback) {
   PushMessagingAppIdentifier app_identifier =
-      PushMessagingAppIdentifier::Generate(requesting_origin,
-                                           service_worker_registration_id);
+      PushMessagingAppIdentifier::FindByServiceWorker(
+          profile_, requesting_origin, service_worker_registration_id);
+
+  // If there is no existing app identifier for the given Service Worker,
+  // generate a new one. This will create a new subscription on the server.
+  if (app_identifier.is_null()) {
+    app_identifier = PushMessagingAppIdentifier::Generate(
+        requesting_origin, service_worker_registration_id);
+  }
 
   if (push_subscription_count_ + pending_push_subscription_count_ >=
       kMaxRegistrations) {
@@ -507,8 +482,15 @@ void PushMessagingServiceImpl::SubscribeFromWorker(
     const content::PushSubscriptionOptions& options,
     const RegisterCallback& register_callback) {
   PushMessagingAppIdentifier app_identifier =
-      PushMessagingAppIdentifier::Generate(requesting_origin,
-                                           service_worker_registration_id);
+      PushMessagingAppIdentifier::FindByServiceWorker(
+          profile_, requesting_origin, service_worker_registration_id);
+
+  // If there is no existing app identifier for the given Service Worker,
+  // generate a new one. This will create a new subscription on the server.
+  if (app_identifier.is_null()) {
+    app_identifier = PushMessagingAppIdentifier::Generate(
+        requesting_origin, service_worker_registration_id);
+  }
 
   if (push_subscription_count_ + pending_push_subscription_count_ >=
       kMaxRegistrations) {
@@ -882,7 +864,7 @@ void PushMessagingServiceImpl::DidDeleteServiceWorkerRegistration(
       std::string() /* sender_id */,
       base::Bind(&UnregisterCallbackToClosure,
                  service_worker_unregistered_callback_for_testing_.is_null()
-                     ? base::Bind(&base::DoNothing)
+                     ? base::DoNothing()
                      : service_worker_unregistered_callback_for_testing_));
 }
 
@@ -900,7 +882,7 @@ void PushMessagingServiceImpl::DidDeleteServiceWorkerDatabase() {
   base::RepeatingClosure completed_closure = base::BarrierClosure(
       app_identifiers.size(),
       service_worker_database_wiped_callback_for_testing_.is_null()
-          ? base::Bind(&base::DoNothing)
+          ? base::DoNothing()
           : service_worker_database_wiped_callback_for_testing_);
 
   for (const PushMessagingAppIdentifier& app_identifier : app_identifiers) {
@@ -927,7 +909,7 @@ void PushMessagingServiceImpl::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
-    std::string resource_identifier) {
+    const std::string& resource_identifier) {
   if (content_type != CONTENT_SETTINGS_TYPE_NOTIFICATIONS)
     return;
 
@@ -937,7 +919,7 @@ void PushMessagingServiceImpl::OnContentSettingChanged(
   base::Closure barrier_closure = base::BarrierClosure(
       all_app_identifiers.size(),
       content_setting_changed_callback_for_testing_.is_null()
-          ? base::Bind(&base::DoNothing)
+          ? base::DoNothing()
           : content_setting_changed_callback_for_testing_);
 
   for (const PushMessagingAppIdentifier& app_identifier : all_app_identifiers) {
@@ -1012,23 +994,6 @@ void PushMessagingServiceImpl::Shutdown() {
   HostContentSettingsMapFactory::GetForProfile(profile_)->RemoveObserver(this);
 }
 
-// BackgroundTrigger methods ---------------------------------------------------
-base::string16 PushMessagingServiceImpl::GetName() {
-  return l10n_util::GetStringUTF16(IDS_NOTIFICATIONS_BACKGROUND_SERVICE_NAME);
-}
-
-gfx::ImageSkia* PushMessagingServiceImpl::GetIcon() {
-  return nullptr;
-}
-
-void PushMessagingServiceImpl::OnMenuClick() {
-#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
-  chrome::ShowContentSettings(
-      BackgroundModeManager::GetBrowserWindowForProfile(profile_),
-      CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
-#endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
-}
-
 // content::NotificationObserver methods ---------------------------------------
 
 void PushMessagingServiceImpl::Observe(
@@ -1071,9 +1036,11 @@ void PushMessagingServiceImpl::GetEncryptionInfoForAppId(
     gcm::GCMEncryptionProvider::EncryptionInfoCallback callback) {
   if (PushMessagingAppIdentifier::UseInstanceID(app_id)) {
     GetInstanceIDDriver()->GetInstanceID(app_id)->GetEncryptionInfo(
-        NormalizeSenderInfo(sender_id), callback);
+        NormalizeSenderInfo(sender_id),
+        base::AdaptCallbackForRepeating(std::move(callback)));
   } else {
-    GetGCMDriver()->GetEncryptionInfo(app_id, callback);
+    GetGCMDriver()->GetEncryptionInfo(
+        app_id, base::AdaptCallbackForRepeating(std::move(callback)));
   }
 }
 

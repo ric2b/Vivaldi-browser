@@ -5,7 +5,6 @@
 #include "content/renderer/loader/request_extra_data.h"
 
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/public/common/service_worker_modes.h"
 #include "services/network/public/cpp/resource_request.h"
 
 using blink::WebString;
@@ -18,14 +17,14 @@ RequestExtraData::RequestExtraData()
       is_main_frame_(false),
       allow_download_(true),
       transition_type_(ui::PAGE_TRANSITION_LINK),
-      should_replace_current_entry_(false),
       service_worker_provider_id_(kInvalidServiceWorkerProviderId),
       originated_from_service_worker_(false),
       initiated_in_secure_context_(false),
-      is_prefetch_(false),
+      is_for_no_state_prefetch_(false),
       download_to_network_cache_only_(false),
       block_mixed_plugin_content_(false),
-      navigation_initiated_by_renderer_(false) {}
+      navigation_initiated_by_renderer_(false),
+      attach_same_site_cookies_(false) {}
 
 RequestExtraData::~RequestExtraData() {
 }
@@ -39,18 +38,11 @@ void RequestExtraData::CopyToResourceRequest(
 
   request->allow_download = allow_download_;
   request->transition_type = transition_type_;
-  request->should_replace_current_entry = should_replace_current_entry_;
   request->service_worker_provider_id = service_worker_provider_id_;
   request->originated_from_service_worker = originated_from_service_worker_;
 
   request->initiated_in_secure_context = initiated_in_secure_context_;
-
-  /*
-  TODO(jam): if have agreement that alternate solution of having a dummy sink
-             in the renderer so that notifications are still received, then undo
-             the cl https://codereview.chromium.org/2262183002.
-  request->download_to_network_cache_only = download_to_network_cache_only_;
-  */
+  request->attach_same_site_cookies = attach_same_site_cookies_;
 }
 
 }  // namespace content

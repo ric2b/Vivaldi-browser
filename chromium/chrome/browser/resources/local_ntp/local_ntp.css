@@ -3,6 +3,10 @@
  * found in the LICENSE file. */
 
 html {
+  /* Material Design constants */
+  --md-tile-height: 112px;
+  --md-tile-margin: 16px;
+
   /* This will be overridden based on the viewport width, see below. */
   --column-count: 2;
 
@@ -26,17 +30,9 @@ html {
   --logo-iframe-height: var(--logo-height);
   --logo-iframe-resize-duration: 150ms;
   --logo-iframe-width: 500px;
-
   --tile-height: 128px;
   --tile-margin: 16px;
   --tile-width: 154px;
-  /* Two rows of tiles, margin between the rows, and 4px/8px of margin on top
-   * and bottom respectively. If you change this, also change the corresponding
-   * values in most_visited_single.css. */
-  --mv-tiles-height: calc(
-      4px + var(--tile-height) + var(--tile-margin) + var(--tile-height) + 8px);
-  /* Base height 16px, plus 8px each of padding on top and bottom. */
-  --mv-notice-height: calc(8px + 16px + 8px);
 
   --mv-notice-time: 10s;
 
@@ -70,8 +66,8 @@ body {
   display: none;
   font-family: arial, sans-serif;
   font-size: small;
-  height: 100%;
   margin: 0;
+  min-height: 100%;
   overflow-x: hidden;
 }
 
@@ -88,10 +84,16 @@ button {
   padding: 0;
 }
 
+.mouse-navigation {
+  outline: none;
+}
+
 #ntp-contents {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 #logo,
@@ -100,12 +102,20 @@ button {
 }
 
 .non-google-page #ntp-contents {
-  justify-content: center;
+  /* The inherited height from #ntp-contents applies from the "top" location,
+   * but uses the size of the overall NTP content area, resulting in an
+   * unnecessary scrollbar. This height corresponds to MV tile height for a
+   * single row, but also works for a row of icons, and works well on small
+   * screens (like Pixelbook), as well as high-res screens. */
+  height: 155px;
+  left: calc(50% - var(--content-width)/2);
+  position: absolute;
+  top: calc(50% - 155px);
 }
 
-body.hide-fakebox-logo #logo,
-body.hide-fakebox-logo #fakebox {
+body.hide-fakebox #fakebox {
   opacity: 0;
+  visibility: hidden;
 }
 
 #logo {
@@ -274,7 +284,7 @@ body.alternate-logo #logo-non-white {
 }
 
 #fakebox-container {
-  margin: 0 auto 8px auto;
+  margin: 0 auto 0 auto;
   width: var(--content-width);
 }
 
@@ -292,6 +302,22 @@ body.alternate-logo #logo-non-white {
   transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.md #fakebox {
+  background-color: rgb(241, 243, 244);
+  border-radius: 22px;
+  box-shadow: none;
+  margin: 0 auto;
+  max-width: 560px;
+  opacity: 1;
+  transition: background-color 300ms ease-in-out;
+  /* Transition should be similar to .mv-tile/.md-tile opacity transition. */
+  transition: opacity 200ms;
+}
+
+.md #fakebox:hover {
+  background-color: rgb(232, 234, 237);
+}
+
 .non-google-page #fakebox-container {
   display: none;
 }
@@ -299,6 +325,11 @@ body.alternate-logo #logo-non-white {
 #fakebox:hover,
 body.fakebox-focused #fakebox {
   box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.md #fakebox:hover,
+body.md.fakebox-focused #fakebox {
+  box-shadow: none;
 }
 
 #fakebox > input {
@@ -313,10 +344,18 @@ body.fakebox-focused #fakebox {
   width: 100%;
 }
 
+.md #fakebox > input {
+  padding-left: 20px;
+}
+
 html[dir=rtl] #fakebox > input {
   padding-left: 0;
   padding-right: 8px;
   right: 0;
+}
+
+html[dir=rtl] .md  #fakebox > input {
+  padding-right: 20px;
 }
 
 #fakebox-text {
@@ -337,9 +376,22 @@ html[dir=rtl] #fakebox > input {
   white-space: nowrap;
 }
 
+.md #fakebox-text {
+  color: rgb(128, 134, 139);
+  font-family: 'Roboto', arial, sans-serif;
+  font-size: 14px;
+  left: 0;
+  padding-left: 20px;
+}
+
 html[dir=rtl] #fakebox-text {
   left: auto;
   right: 13px;
+}
+
+html[dir=rtl] .md #fakebox-text {
+  padding-right: 20px;
+  right: 0;
 }
 
 #fakebox-cursor {
@@ -352,13 +404,21 @@ html[dir=rtl] #fakebox-text {
   width: 1px;
 }
 
+.md #fakebox-cursor {
+  left: 20px;
+}
+
 html[dir=rtl] #fakebox-cursor {
   left: auto;
   right: 13px;
 }
 
+html[dir=rtl] .md #fakebox-cursor {
+  right: 20px;
+}
+
 #fakebox-microphone {
-  background: url(googlemic_clr_24px.svg) no-repeat center;
+  background: url(icons/googlemic_clr_24px.svg) no-repeat center;
   background-size: 24px 24px;
   bottom: 0;
   cursor: pointer;
@@ -369,9 +429,18 @@ html[dir=rtl] #fakebox-cursor {
   width: 41px;
 }
 
+.md #fakebox-microphone {
+  margin-right: 12px;
+  width: 28px;
+}
+
 html[dir=rtl] #fakebox-microphone {
   left: 0;
   right: auto;
+}
+
+html[dir=rtl] .md #fakebox-microphone {
+  margin-left: 12px;
 }
 
 @keyframes blink {
@@ -398,12 +467,15 @@ body.fakebox-focused #fakebox-cursor {
 }
 
 #most-visited {
-  height: 100%;
   margin-top: 56px;
-  max-height: calc(var(--mv-tiles-height) + var(--mv-notice-height));
-  overflow: hidden;
   text-align: -webkit-center;
   user-select: none;
+}
+
+#most-visited.md-icons {
+  /* Total of 40px margin between fakebox and MV tiles: 8px fakebox
+   * margin-bottom + 22px here margin-top + 10px MV margin-top */
+  margin-top: 22px;
 }
 
 /* Non-Google pages have no Fakebox, so don't need top margin. */
@@ -412,13 +484,24 @@ body.fakebox-focused #fakebox-cursor {
 }
 
 #mv-tiles {
-  height: var(--mv-tiles-height);
+  /* Two rows of tiles of 128px each, 16px of spacing between the rows, and
+   * 4px/8px of margin on top and bottom respectively. If you change this, also
+   * change the corresponding values in most_visited_single.css. */
+  height: calc(2*var(--tile-height) + var(--tile-margin)  + 4px + 8px);
   margin: 0;
-  /* Clamp to the remaining window height minus space for #mv-notice. */
-  max-height: calc(100% - var(--mv-notice-height));
   position: relative;
   text-align: -webkit-auto;
   width: var(--content-width);
+}
+
+.md-icons #mv-tiles {
+  /* Two rows of tiles of 112px each, 16px of spacing after each row, and 10px
+   * of margin on top. If you change this, also change the corresponding values
+   * in most_visited_single.css. */
+  height: calc(2*(var(--md-tile-height) + var(--md-tile-margin)) + 10px);
+  /* Add 2*5px to account for drop shadow on the tiles. If you change this, also
+   * change the corresponding values in most_visited_single.css. */
+  width: calc(var(--content-width) + 2*5px);
 }
 
 #mv-notice-x {
@@ -452,12 +535,48 @@ html[dir=rtl] #mv-notice-x {
   background-color: rgb(66,133,244);
 }
 
+.md-icons #mv-notice-x {
+  display: none;
+}
+
+#mv-notice-container {
+  width: 100%;
+}
+
+.md-icons #mv-notice-container {
+  bottom: -50px;
+  margin-bottom: 16px;
+  position: fixed;
+  transition: bottom 400ms;
+}
+
+.md-icons #mv-notice-container.float-up {
+  bottom: 0;
+}
+
+.md-icons #mv-notice-container.mv-notice-hide {
+  display: none;
+}
+
 /* The notification shown when a tile is blacklisted. */
 #mv-notice {
   font-size: 12px;
   font-weight: bold;
   opacity: 1;
-  padding: 8px 0;
+  padding: 10px 0;
+}
+
+.md-icons #mv-notice {
+  background-color: white;
+  border: 1px solid rgb(218, 220, 224);
+  /* Necessary for a "pill" shape. Using 50% creates an oval. */
+  border-radius: 500px;
+  font-family: 'Roboto';
+  font-weight: normal;
+  height: 32px;
+  margin: 0 auto;
+  padding: 0;
+  width: fit-content;
 }
 
 #mv-notice span {
@@ -466,6 +585,13 @@ html[dir=rtl] #mv-notice-x {
   height: 16px;
   line-height: 16px;
   vertical-align: top;
+}
+
+.md-icons #mv-notice span {
+  color: rgb(95,99,104);
+  height: auto;
+  line-height: 32px;
+  vertical-align: unset;
 }
 
 /* Links in the notification. */
@@ -477,20 +603,39 @@ html[dir=rtl] #mv-notice-x {
   padding: 0 4px;
 }
 
+.md-icons #mv-notice-links span {
+  -webkit-margin-start: 0;
+  /* Necessary for a "pill" shape. Using 50% creates an oval. */
+  border-radius: 500px;
+  color: rgb(26,115,232);
+  padding: 0 16px;
+}
+
 #mv-notice-links span:hover,
 #mv-notice-links span:focus {
   text-decoration: underline;
+}
+
+.md-icons #mv-notice-links span:hover,
+.md-icons #mv-notice-links span:active {
+  background-color: rgba(26,115,232, 0.1);
+  text-decoration: none;
+  transition: background-color 200ms;
 }
 
 #mv-msg {
   color: var(--text-color);
 }
 
-.default-theme.dark #mv-msg {
+.md-icons #mv-msg {
+  padding: 0 16px;
+}
+
+.default-theme.dark #mv-msg :not(.md-icons) {
   color: #fff;
 }
 
-.default-theme.dark #mv-notice-links span {
+.default-theme.dark #mv-notice-links :not(.md-icons) span {
   color: #fff;
 }
 
@@ -531,14 +676,177 @@ html[dir=rtl] #attribution,
   width: 100%;
 }
 
+#custom-links-edit-dialog {
+  background: transparent;
+  border: none;
+  height: 100%;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+#custom-links-edit-dialog::backdrop {
+  background-color: rgba(255, 255, 255, .75);
+}
+
+#custom-links-edit {
+  border: none;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+#custom-links-edit.show {
+  display: block;
+}
+
 #one-google {
   position: absolute;
   right: 0;
   top: 0;
   transition: opacity 130ms;
-  z-index: 1;
 }
 
 #one-google.hidden {
   opacity: 0;
+}
+
+.ripple-container {
+  height: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 0;
+  z-index: 100;
+}
+
+.ripple-effect {
+  background-color: rgba(26, 115, 232, 0.1);
+  border-radius: 50%;
+  height: 1px;
+  pointer-events: none;
+  transition: width, height, margin, background-color 400ms 250ms;
+  transition-duration: 400ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  width: 1px;
+}
+
+/* The box containing the slider */
+.switch {
+  background-color: #fff;
+  border-radius: 8px;
+  display: inline-block;
+  height: 12px;
+  left: 3px;
+  position: absolute;
+  top: 2px;
+  transition: background-color linear 80ms;
+  width: 28px;
+  z-index: 0;
+}
+
+/* Hide default checkbox */
+.switch input {
+  display: none;
+}
+
+/* Rounded background element for the toggle */
+.toggle {
+  background-color: #ccc;
+  border-radius: 34px;
+  bottom: 0;
+  cursor: pointer;
+  display: block;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transition: transform linear 80ms, background-color linear 80ms;
+}
+
+.toggle::before {
+  background-color: #fff;
+  border-radius: 50%;
+  bottom: -2px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  content: '';
+  display: block;
+  height: 16px;
+  left: -6px;
+  position: absolute;
+  transition: transform linear 80ms, background-color linear 80ms;
+  width: 16px;
+}
+
+input:checked + .toggle {
+  background-color: rgba(26, 115, 232, .5);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+input:focus + .toggle {
+  box-shadow: 0 0 1px rgb(33, 150, 243);
+}
+
+input:checked + .toggle::before {
+  -webkit-transform: translateX(26px);
+  background-color: rgb(26, 115, 232);
+  transform: translateX(26px);
+}
+
+#message-box-container {
+  bottom: -50px;
+  margin-bottom: 16px;
+  position: fixed;
+  transition: bottom 400ms;
+  vertical-align: middle;
+  visibility: hidden;
+  width: 100%;
+}
+
+#message-box {
+  background-color: white;
+  border: 1px solid rgb(218, 220, 224);
+  border-radius: 16px;
+  color: rgb(255, 0, 0);
+  font-family: 'Roboto', arial, sans-serif;
+  font-size: 12px;
+  height: 32px;
+  left: 50%;
+  margin: 0 auto;
+  padding: 0 16px 0 4px;
+  text-align: center;
+  visibility: visible;
+  width: fit-content;
+}
+
+#message-box-container.float-up {
+  bottom: 0;
+}
+
+#message-box-container.message-box-hide {
+  display: none;
+}
+
+#message-box-icon {
+  background: url(../../../../ui/webui/resources/images/error.svg) no-repeat center;
+  height: 18px;
+  margin-right: 4px;
+  width: 18px;
+}
+
+#message-box-link.has-link {
+  color: rgb(66, 133, 244);
+  margin-left: 6px;
+}
+
+#message-box-message,
+#message-box-link,
+#message-box-icon {
+  vertical-align: middle;
+  display: inline-block;
+  line-height: 32px;
 }

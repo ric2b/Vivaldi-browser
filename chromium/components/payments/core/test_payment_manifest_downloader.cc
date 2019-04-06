@@ -8,13 +8,14 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
 namespace payments {
 
 TestDownloader::TestDownloader(
-    const scoped_refptr<net::URLRequestContextGetter>& context)
-    : impl_(context) {}
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+    : PaymentManifestDownloader(url_loader_factory) {}
 
 TestDownloader::~TestDownloader() {}
 
@@ -41,7 +42,8 @@ void TestDownloader::DownloadPaymentMethodManifest(
     }
   }
 
-  impl_.DownloadPaymentMethodManifest(actual_url, std::move(callback));
+  PaymentManifestDownloader::DownloadPaymentMethodManifest(actual_url,
+                                                           std::move(callback));
 }
 
 }  // namespace payments

@@ -4,10 +4,11 @@
 
 #include "chrome/browser/vr/elements/content_element.h"
 
-#include "chrome/browser/vr/ui_element_renderer.h"
+#include "chrome/browser/vr/content_input_delegate.h"
+#include "chrome/browser/vr/model/text_input_info.h"
+#include "chrome/browser/vr/text_input_delegate.h"
 #include "chrome/browser/vr/ui_scene_constants.h"
 #include "chrome/browser/vr/vr_gl_util.h"
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace vr {
@@ -37,85 +38,109 @@ gfx::Vector3dF GetNormalFromTransform(const gfx::Transform& transform) {
 ContentElement::ContentElement(
     ContentInputDelegate* delegate,
     ContentElement::ScreenBoundsChangedCallback bounds_changed_callback)
-    : delegate_(delegate), bounds_changed_callback_(bounds_changed_callback) {
+    : PlatformUiElement(),
+      bounds_changed_callback_(bounds_changed_callback),
+      content_delegate_(delegate) {
   DCHECK(delegate);
-  set_scrollable(true);
+  SetDelegate(delegate);
 }
 
 ContentElement::~ContentElement() = default;
 
 void ContentElement::Render(UiElementRenderer* renderer,
                             const CameraModel& model) const {
-  if (!texture_id_)
+  if (uses_quad_layer_) {
+    renderer->DrawTexturedQuad(0, 0, texture_location(),
+                               model.view_proj_matrix * world_space_transform(),
+                               GetClipRect(), computed_opacity(), size(),
+                               corner_radius(), false);
     return;
-  gfx::RectF copy_rect(0, 0, 1, 1);
-  renderer->DrawTexturedQuad(texture_id_, texture_location_,
-                             model.view_proj_matrix * world_space_transform(),
-                             copy_rect, computed_opacity(), size(),
-                             corner_radius());
+  }
+
+  unsigned int overlay_texture_id =
+      overlay_texture_non_empty_ ? overlay_texture_id_ : 0;
+  if (texture_id() || overlay_texture_id) {
+    renderer->DrawTexturedQuad(
+        texture_id(), overlay_texture_id, texture_location(),
+        model.view_proj_matrix * world_space_transform(), GetClipRect(),
+        computed_opacity(), size(), corner_radius(), true);
+  }
 }
 
-void ContentElement::OnHoverEnter(const gfx::PointF& position) {
-  delegate_->OnContentEnter(position);
+void ContentElement::OnFocusChanged(bool focused) {
+  if (content_delegate_)
+    content_delegate_->OnFocusChanged(focused);
+
+  focused_ = focused;
+  if (event_handlers_.focus_change)
+    event_handlers_.focus_change.Run(focused);
 }
 
-void ContentElement::OnHoverLeave() {
-  delegate_->OnContentLeave();
+void ContentElement::OnInputEdited(const EditedText& info) {
+  if (content_delegate_)
+    content_delegate_->OnWebInputEdited(info, false);
 }
 
-void ContentElement::OnMove(const gfx::PointF& position) {
-  delegate_->OnContentMove(position);
+void ContentElement::OnInputCommitted(const EditedText& info) {
+  if (content_delegate_)
+    content_delegate_->OnWebInputEdited(info, true);
 }
 
-void ContentElement::OnButtonDown(const gfx::PointF& position) {
-  delegate_->OnContentDown(position);
+void ContentElement::SetOverlayTextureId(unsigned int texture_id) {
+  overlay_texture_id_ = texture_id;
 }
 
-void ContentElement::OnButtonUp(const gfx::PointF& position) {
-  delegate_->OnContentUp(position);
-}
-
-void ContentElement::OnFlingStart(
-    std::unique_ptr<blink::WebGestureEvent> gesture,
-    const gfx::PointF& position) {
-  delegate_->OnContentFlingStart(std::move(gesture), position);
-}
-void ContentElement::OnFlingCancel(
-    std::unique_ptr<blink::WebGestureEvent> gesture,
-    const gfx::PointF& position) {
-  delegate_->OnContentFlingCancel(std::move(gesture), position);
-}
-void ContentElement::OnScrollBegin(
-    std::unique_ptr<blink::WebGestureEvent> gesture,
-    const gfx::PointF& position) {
-  delegate_->OnContentScrollBegin(std::move(gesture), position);
-}
-void ContentElement::OnScrollUpdate(
-    std::unique_ptr<blink::WebGestureEvent> gesture,
-    const gfx::PointF& position) {
-  delegate_->OnContentScrollUpdate(std::move(gesture), position);
-}
-void ContentElement::OnScrollEnd(
-    std::unique_ptr<blink::WebGestureEvent> gesture,
-    const gfx::PointF& position) {
-  delegate_->OnContentScrollEnd(std::move(gesture), position);
-}
-
-void ContentElement::SetTextureId(unsigned int texture_id) {
-  texture_id_ = texture_id;
-}
-
-void ContentElement::SetTextureLocation(
+void ContentElement::SetOverlayTextureLocation(
     UiElementRenderer::TextureLocation location) {
-  texture_location_ = location;
+  overlay_texture_location_ = location;
+}
+
+void ContentElement::SetOverlayTextureEmpty(bool empty) {
+  overlay_texture_non_empty_ = !empty;
+}
+
+bool ContentElement::GetOverlayTextureEmpty() {
+  return !overlay_texture_non_empty_;
 }
 
 void ContentElement::SetProjectionMatrix(const gfx::Transform& matrix) {
   projection_matrix_ = matrix;
 }
 
-bool ContentElement::OnBeginFrame(const base::TimeTicks& time,
-                                  const gfx::Transform& head_pose) {
+void ContentElement::SetTextInputDelegate(
+    TextInputDelegate* text_input_delegate) {
+  text_input_delegate_ = text_input_delegate;
+}
+
+void ContentElement::RequestFocus() {
+  if (!text_input_delegate_)
+    return;
+
+  text_input_delegate_->RequestFocus(id());
+}
+
+void ContentElement::RequestUnfocus() {
+  if (!text_input_delegate_)
+    return;
+
+  text_input_delegate_->RequestUnfocus(id());
+}
+
+void ContentElement::UpdateInput(const EditedText& info) {
+  if (text_input_delegate_ && focused_)
+    text_input_delegate_->UpdateInput(info.current);
+}
+
+void ContentElement::NotifyClientSizeAnimated(const gfx::SizeF& size,
+                                              int target_property_id,
+                                              cc::KeyframeModel* animation) {
+  if (target_property_id == BOUNDS && on_size_changed_callback_) {
+    on_size_changed_callback_.Run(size);
+  }
+  UiElement::NotifyClientSizeAnimated(size, target_property_id, animation);
+}
+
+bool ContentElement::OnBeginFrame(const gfx::Transform& head_pose) {
   // TODO(mthiesse): This projection matrix is always going to be a frame
   // behind when computing the content size. We'll need to address this somehow
   // when we allow content resizing, or we could end up triggering an extra
@@ -169,6 +194,10 @@ bool ContentElement::OnBeginFrame(const base::TimeTicks& time,
     return true;
   }
   return false;
+}
+
+void ContentElement::SetUsesQuadLayer(bool uses_quad_layer) {
+  uses_quad_layer_ = uses_quad_layer;
 }
 
 }  // namespace vr

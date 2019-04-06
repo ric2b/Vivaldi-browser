@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/stylus_utils.h"
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -22,7 +23,7 @@ const char kTestAppId[] = "ljoammodoonkhnehlncldjelhidljdpi";
 
 }  // namespace
 
-class ChromeOSInfoPrivateTest : public ExtensionApiTest {
+class ChromeOSInfoPrivateTest : public extensions::ExtensionApiTest {
  public:
   ChromeOSInfoPrivateTest() {}
   ~ChromeOSInfoPrivateTest() override {}
@@ -61,6 +62,8 @@ IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, TestGetAndSet) {
 
   ASSERT_FALSE(profile()->GetPrefs()->GetBoolean(
       prefs::kLanguageSendFunctionKeys));
+  ASSERT_FALSE(
+      profile()->GetPrefs()->GetBoolean(prefs::kCameraMediaConsolidated));
 
   ASSERT_TRUE(RunComponentExtensionTest("chromeos_info_private/basic"))
       << message_;
@@ -76,6 +79,7 @@ IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, TestGetAndSet) {
   ASSERT_TRUE(prefs->GetBoolean(ash::prefs::kAccessibilityAutoclickEnabled));
 
   ASSERT_TRUE(prefs->GetBoolean(prefs::kLanguageSendFunctionKeys));
+  ASSERT_TRUE(prefs->GetBoolean(prefs::kCameraMediaConsolidated));
 }
 
 // TODO(steel): Investigate merging the following tests.
@@ -127,13 +131,26 @@ IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, UnknownDeviceType) {
       << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, StylusUnsupported) {
+  ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
+                                        "stylus unsupported"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, StylusSupported) {
+  ash::stylus_utils::SetHasStylusInputForTesting();
+  ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
+                                        "stylus supported"))
+      << message_;
+}
+
 class ChromeOSArcInfoPrivateTest : public ChromeOSInfoPrivateTest {
  public:
   ChromeOSArcInfoPrivateTest() = default;
   ~ChromeOSArcInfoPrivateTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
+    extensions::ExtensionApiTest::SetUpCommandLine(command_line);
     // Make ARC enabled for ArcAvailable/ArcEnabled tests.
     arc::SetArcAvailableCommandLineForTesting(command_line);
   }

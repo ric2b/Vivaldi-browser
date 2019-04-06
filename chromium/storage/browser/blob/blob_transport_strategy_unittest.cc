@@ -10,10 +10,11 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_restrictions.h"
-#include "mojo/edk/embedder/embedder.h"
+#include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/test/mock_bytes_provider.h"
@@ -60,7 +61,7 @@ class BlobTransportStrategyTest : public testing::Test {
     limits_.min_page_file_size = kTestBlobStorageMinFileSizeBytes;
     limits_.max_file_size = kTestBlobStorageMaxFileSizeBytes;
 
-    mojo::edk::SetDefaultProcessErrorCallback(base::Bind(
+    mojo::core::SetDefaultProcessErrorCallback(base::Bind(
         &BlobTransportStrategyTest::OnBadMessage, base::Unretained(this)));
 
     // Disallow IO on the main loop.
@@ -70,8 +71,8 @@ class BlobTransportStrategyTest : public testing::Test {
   void TearDown() override {
     base::ThreadRestrictions::SetIOAllowed(true);
 
-    mojo::edk::SetDefaultProcessErrorCallback(
-        mojo::edk::ProcessErrorCallback());
+    mojo::core::SetDefaultProcessErrorCallback(
+        mojo::core::ProcessErrorCallback());
   }
 
   void OnBadMessage(const std::string& error) {

@@ -7,37 +7,46 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/scoped_observer.h"
 #include "base/win/scoped_gdi_object.h"
 #include "chrome/browser/ui/views/frame/avatar_button_manager.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/frame/windows_10_caption_button.h"
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tab_icon_view_model.h"
-#include "chrome/browser/ui/views/tabs/tab_strip_observer.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/window/non_client_view.h"
 
 class BrowserView;
-class TabStrip;
+class HostedAppButtonContainer;
 
 class GlassBrowserFrameView : public BrowserNonClientFrameView,
                               public views::ButtonListener,
-                              public TabIconViewModel,
-                              public TabStripObserver {
+                              public TabIconViewModel {
  public:
+  // Alpha to use for features in the titlebar (the window title and caption
+  // buttons) when the window is inactive. They are opaque when active.
+  static constexpr SkAlpha kInactiveTitlebarFeatureAlpha = 0x65;
+
+  static constexpr char kClassName[] = "GlassBrowserFrameView";
+
   // Constructs a non-client view for an BrowserFrame.
   GlassBrowserFrameView(BrowserFrame* frame, BrowserView* browser_view);
   ~GlassBrowserFrameView() override;
 
   // BrowserNonClientFrameView:
+  bool CaptionButtonsOnLeadingEdge() const override;
   gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const override;
   int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
+  bool HasClientEdge() const override;
+  bool HasVisibleBackgroundTabShapes(ActiveState active_state) const override;
   void UpdateThrobber(bool running) override;
   gfx::Size GetMinimumSize() const override;
-  views::View* GetProfileSwitcherView() const override;
-  void OnBrowserViewInitViewsComplete() override;
+  int GetTabStripLeftInset() const override;
+  bool IsSingleTabModeAvailable() const override;
+  bool ShouldDrawStrokes() const override;
+  void OnTabRemoved(int index) override;
+  void OnTabsMaxXChanged() override;
 
   // views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -47,7 +56,7 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   void UpdateWindowIcon() override;
   void UpdateWindowTitle() override;
   void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask) override {}
-  void ResetWindowControls() override {}
+  void ResetWindowControls() override;
   void SizeConstraintsChanged() override {}
 
   // views::ButtonListener:
@@ -57,11 +66,6 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   bool ShouldTabIconViewAnimate() const override;
   gfx::ImageSkia GetFaviconForTabIconView() override;
 
-  // TabStripObserver:
-  void TabStripMaxXChanged(TabStrip* tab_strip) override;
-  void TabStripDeleted(TabStrip* tab_strip) override;
-  void TabStripRemovedTabAt(TabStrip* tab_strip, int index) override;
-
   bool IsMaximized() const;
 
   // Visual height of the titlebar when the window is maximized (i.e. excluding
@@ -70,18 +74,21 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
   SkColor GetTitlebarColor() const;
 
+  HostedAppButtonContainer* GetHostedAppButtonContainerForTesting() const;
+
  protected:
   // views::View:
+  void ChildPreferredSizeChanged(views::View* child) override;
+  const char* GetClassName() const override;
   void OnPaint(gfx::Canvas* canvas) override;
   void Layout() override;
 
   // BrowserNonClientFrameView:
-  void UpdateProfileIcons() override;
+  AvatarButtonStyle GetAvatarButtonStyle() const override;
 
  private:
   // views::NonClientFrameView:
-  bool DoesIntersectRect(const views::View* target,
-                         const gfx::Rect& rect) const override;
+  void ActivationChanged(bool active) override;
 
   // Returns the thickness of the border around the client area (web content,
   // toolbar, and tabs) that separates it from the frame border. If |restored|
@@ -112,7 +119,7 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   // don't have tabs.
   int TitlebarHeight(bool restored) const;
 
-  // Returns the y coordinate for the top of the frame, which in tablet mode
+  // Returns the y coordinate for the top of the frame, which in maximized mode
   // is the top of the screen and in restored mode is 1 pixel below the top of
   // the window to leave room for the visual border that Windows draws.
   int WindowTopY() const;
@@ -121,18 +128,21 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   // edge of the caption buttons.
   int MinimizeButtonX() const;
 
+  // Returns the spacing between the trailing edge of the tabstrip and the start
+  // of the caption buttons.
+  int TabStripCaptionSpacing() const;
+
   // Returns whether the toolbar is currently visible.
   bool IsToolbarVisible() const;
-
-  // Returns whether the caption buttons are drawn at the leading edge (i.e. the
-  // left in LTR mode, or the right in RTL mode).
-  bool CaptionButtonsOnLeadingEdge() const;
 
   bool ShowCustomIcon() const;
   bool ShowCustomTitle() const;
   bool ShowSystemIcon() const;
 
-  Windows10CaptionButton* CreateCaptionButton(ViewID button_type);
+  Windows10CaptionButton* CreateCaptionButton(ViewID button_type,
+                                              int accessible_name_resource_id);
+
+  SkColor GetTitlebarFeatureColor(ActiveState active_state) const;
 
   // Paint various sub-components of this view.
   void PaintTitlebar(gfx::Canvas* canvas) const;
@@ -183,8 +193,8 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   TabIconView* window_icon_;
   views::Label* window_title_;
 
-  // Wrapper around the in-frame profile switcher.
-  AvatarButtonManager profile_switcher_;
+  // Menu button and page status icons. Only used by hosted app windows.
+  HostedAppButtonContainer* hosted_app_button_container_ = nullptr;
 
   // Custom-drawn caption buttons. Only used when custom-drawing the titlebar.
   Windows10CaptionButton* minimize_button_;
@@ -197,10 +207,6 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
   // The index of the current frame of the throbber animation.
   int throbber_frame_;
-
-  // The window's tabstrip, if any, is observed so we know when to resize any
-  // avatar button.
-  ScopedObserver<TabStrip, GlassBrowserFrameView> tab_strip_observer_;
 
   static const int kThrobberIconCount = 24;
   static HICON throbber_icons_[kThrobberIconCount];

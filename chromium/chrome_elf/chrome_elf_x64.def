@@ -9,6 +9,8 @@ EXPORTS
 
   ; From components/crash/content/app/crash_export_stubs.cc
   CrashForException_ExportThunk
+  DumpHungProcessWithPtype_ExportThunk
+  GetCrashpadDatabasePath_ExportThunk
   GetCrashReports_ExportThunk
   InjectDumpForHungInput_ExportThunk
   RequestSingleCrashUpload_ExportThunk
@@ -18,10 +20,10 @@ EXPORTS
   RegisterNonABICompliantCodeRange_ExportThunk
   UnregisterNonABICompliantCodeRange_ExportThunk
 
-  ; From chrome_elf/crash_helper.cc
+  ; From chrome_elf/crash/crash_helper.cc
   SetMetricsClientId
 
-  ; From chrome_elf_main.cc
+  ; From chrome_elf/chrome_elf_main.cc
   DumpProcessWithoutCrash
   GetUserDataDirectoryThunk
   SignalChromeElf
@@ -30,7 +32,11 @@ EXPORTS
   ; From chrome/install_static
   GetInstallDetailsPayload
 
-  ; From chrome_elf/blacklist.cc
+  ; From chrome_elf/blacklist/blacklist.cc
   AddDllToBlacklist
   IsBlacklistInitialized
   SuccessfullyBlocked
+
+  ; From chrome_elf/third_party_dlls/logs
+  DrainLog
+  RegisterLogNotification

@@ -8,8 +8,6 @@
 #include <memory>
 #include <set>
 
-#include "ash/system/network/network_observer.h"
-#include "ash/system/network/network_portal_detector_observer.h"
 #include "ash/system/network/tray_network_state_observer.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "base/macros.h"
@@ -22,9 +20,9 @@ class NetworkListView;
 class NetworkTrayView;
 }
 
+class DetailedViewDelegate;
+
 class TrayNetwork : public SystemTrayItem,
-                    public NetworkObserver,
-                    public NetworkPortalDetectorObserver,
                     public TrayNetworkStateObserver::Delegate {
  public:
   explicit TrayNetwork(SystemTray* system_tray);
@@ -40,12 +38,6 @@ class TrayNetwork : public SystemTrayItem,
   void OnDefaultViewDestroyed() override;
   void OnDetailedViewDestroyed() override;
 
-  // NetworkObserver
-  void RequestToggleWifi() override;
-
-  // NetworkPortalDetectorObserver
-  void OnCaptivePortalDetected(const std::string& guid) override;
-
   // TrayNetworkStateObserver::Delegate
   void NetworkStateChanged(bool notify_a11y) override;
 
@@ -54,6 +46,8 @@ class TrayNetwork : public SystemTrayItem,
   tray::NetworkDefaultView* default_;
   tray::NetworkListView* detailed_;
   std::unique_ptr<TrayNetworkStateObserver> network_state_observer_;
+
+  const std::unique_ptr<DetailedViewDelegate> detailed_view_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayNetwork);
 };

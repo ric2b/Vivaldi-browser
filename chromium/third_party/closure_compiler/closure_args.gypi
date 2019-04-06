@@ -36,14 +36,12 @@
     'jscomp_error=uselessCode',
     'jscomp_error=visibility',
 
-    'language_in=ECMASCRIPT_NEXT',
+    'language_in=ECMASCRIPT_2017',
     'language_out=ECMASCRIPT5_STRICT',
 
     'checks_only',
     'chrome_pass',
     'polymer_pass',
-
-    'source_map_format=V3',
   ],
 
   'default_disabled_closure_args': [

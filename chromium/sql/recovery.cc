@@ -36,7 +36,8 @@ enum RecoveryEventType {
   RECOVERY_FAILED_VIRTUAL_TABLE_INIT,
 
   // System SQLite doesn't support vtable.
-  RECOVERY_FAILED_VIRTUAL_TABLE_SYSTEM_SQLITE,
+  // This is deprecated. Chrome doesn't support using the system SQLite anymore.
+  DEPRECATED_RECOVERY_FAILED_VIRTUAL_TABLE_SYSTEM_SQLITE,
 
   // Failed attempting to enable writable_schema.
   RECOVERY_FAILED_WRITABLE_SCHEMA,
@@ -141,12 +142,6 @@ void RecordRecoveryEvent(RecoveryEventType recovery_event) {
 }  // namespace
 
 // static
-bool Recovery::FullRecoverySupported() {
-  // TODO(shess): See comment in Init().
-  return true;
-}
-
-// static
 std::unique_ptr<Recovery> Recovery::Begin(Connection* connection,
                                           const base::FilePath& db_path) {
   // Recovery is likely to be used in error handling.  Since recovery changes
@@ -244,7 +239,7 @@ bool Recovery::Init(const base::FilePath& db_path) {
   }
 
   // Enable the recover virtual table for this connection.
-  int rc = recoverVtableInit(recover_db_.db_);
+  int rc = chrome_sqlite3_recoverVtableInit(recover_db_.db_);
   if (rc != SQLITE_OK) {
     RecordRecoveryEvent(RECOVERY_FAILED_VIRTUAL_TABLE_INIT);
     LOG(ERROR) << "Failed to initialize recover module: "
@@ -375,7 +370,7 @@ void Recovery::Shutdown(Recovery::Disposition raze) {
   } else if (raze == POISON) {
     db_->Poison();
   }
-  db_ = NULL;
+  db_ = nullptr;
 }
 
 bool Recovery::AutoRecoverTable(const char* table_name,
@@ -517,7 +512,7 @@ bool Recovery::AutoRecoverTable(const char* table_name,
 }
 
 bool Recovery::SetupMeta() {
-  const char kCreateSql[] =
+  static const char kCreateSql[] =
       "CREATE VIRTUAL TABLE temp.recover_meta USING recover"
       "("
       "corrupt.meta,"
@@ -538,7 +533,7 @@ bool Recovery::GetMetaVersionNumber(int* version) {
   // Unfortunately, DoesTableExist() queries sqlite_master, not
   // sqlite_temp_master.
 
-  const char kVersionSql[] =
+  static const char kVersionSql[] =
       "SELECT value FROM temp.recover_meta WHERE key = 'version'";
   sql::Statement recovery_version(db()->GetUniqueStatement(kVersionSql));
   if (!recovery_version.Step()) {
@@ -725,11 +720,11 @@ std::unique_ptr<Recovery> Recovery::BeginRecoverDatabase(
 
   // Copy triggers and views directly to sqlite_master.  Any tables they refer
   // to should already exist.
-  char kCreateMetaItems[] =
+  static char kCreateMetaItemsSql[] =
       "INSERT INTO main.sqlite_master "
       "SELECT type, name, tbl_name, rootpage, sql "
       "FROM corrupt.sqlite_master WHERE type='view' OR type='trigger'";
-  if (!recovery->db()->Execute(kCreateMetaItems)) {
+  if (!recovery->db()->Execute(kCreateMetaItemsSql)) {
     RecordRecoveryEvent(RECOVERY_FAILED_AUTORECOVERDB_AUX);
     Recovery::Rollback(std::move(recovery));
     return nullptr;

@@ -21,6 +21,8 @@ static_library("lib") {
     "access_policy_delegate.h",
     "accessibility_manager.cc",
     "accessibility_manager.h",
+    "async_event_dispatcher.h",
+    "async_event_dispatcher_lookup.h",
     "compositor_frame_sink_client_binding.cc",
     "compositor_frame_sink_client_binding.h",
     "cursor_location_manager.cc",
@@ -44,12 +46,18 @@ static_library("lib") {
     "drag_cursor_updater.h",
     "drag_source.h",
     "drag_target_connection.h",
-    "event_dispatcher.cc",
     "event_dispatcher.h",
     "event_dispatcher_delegate.h",
+    "event_dispatcher_impl.cc",
+    "event_dispatcher_impl.h",
+    "event_injector.cc",
+    "event_injector.h",
     "event_location.h",
     "event_matcher.cc",
     "event_matcher.h",
+    "event_processor.cc",
+    "event_processor.h",
+    "event_processor_delegate.h",
     "event_targeter.cc",
     "event_targeter.h",
     "event_targeter_delegate.h",
@@ -58,11 +66,6 @@ static_library("lib") {
     "focus_controller_observer.h",
     "frame_generator.cc",
     "frame_generator.h",
-    "gpu_client.cc",
-    "gpu_client.h",
-    "gpu_host.cc",
-    "gpu_host.h",
-    "gpu_host_delegate.h",
     "modal_window_controller.cc",
     "modal_window_controller.h",
     "operation.cc",
@@ -73,8 +76,8 @@ static_library("lib") {
     "platform_display_default.h",
     "platform_display_delegate.h",
     "platform_display_factory.h",
-    "remote_event_dispatcher.cc",
-    "remote_event_dispatcher.h",
+    "platform_display_mirror.cc",
+    "platform_display_mirror.h",
     "server_window.cc",
     "server_window.h",
     "server_window_delegate.h",
@@ -91,10 +94,6 @@ static_library("lib") {
     "user_display_manager.cc",
     "user_display_manager.h",
     "user_display_manager_delegate.h",
-    "user_id.h",
-    "user_id_tracker.cc",
-    "user_id_tracker.h",
-    "user_id_tracker_observer.h",
     "video_detector_impl.cc",
     "video_detector_impl.h",
     "window_coordinate_conversions.cc",
@@ -109,9 +108,7 @@ static_library("lib") {
     "window_manager_state.h",
     "window_manager_window_tree_factory.cc",
     "window_manager_window_tree_factory.h",
-    "window_manager_window_tree_factory_set.cc",
-    "window_manager_window_tree_factory_set.h",
-    "window_manager_window_tree_factory_set_observer.h",
+    "window_manager_window_tree_factory_observer.h",
     "window_server.cc",
     "window_server.h",
     "window_server_delegate.cc",
@@ -127,11 +124,13 @@ static_library("lib") {
   ]
 
   deps = [
+    "//components/discardable_memory/service",
     "//components/viz/service/main",  # TODO(sad): Temporary until GPU process split.
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc/client",
     "//gpu/ipc/common",
+    "//services/ui/gpu_host",
     "//services/viz/privileged/interfaces",
   ]
 
@@ -141,10 +140,10 @@ static_library("lib") {
     "//components/viz/common",
     "//components/viz/host",
     "//components/viz/service",
-    "//mojo/common:common_base",
     "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//services/ui/common:mus_common",
     "//services/ui/display",
     "//services/ui/public/interfaces",
@@ -167,10 +166,6 @@ static_library("lib") {
     public_deps += [ "//ui/ozone" ]
   }
   if (is_chromeos) {
-    sources += [
-      "arc_client.cc",
-      "arc_client.h",
-    ]
     public_deps += [ "//ui/chromeos/events" ]
     if (use_ozone) {
       public_deps += [ "//ui/events/ozone:events_ozone" ]
@@ -224,8 +219,8 @@ static_library("test_support") {
   deps = [
     "//base",
     "//base/test:test_config",
+    "//base/test:test_support",
     "//components/viz/test:test_support",
-    "//mojo/common",
     "//mojo/public/cpp/bindings:bindings",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
@@ -254,15 +249,14 @@ source_set("tests") {
     "cursor_unittest.cc",
     "display_unittest.cc",
     "drag_controller_unittest.cc",
-    "event_dispatcher_unittest.cc",
+    "event_dispatcher_impl_test_api.cc",
+    "event_dispatcher_impl_test_api.h",
     "event_matcher_unittest.cc",
+    "event_processor_unittest.cc",
     "focus_controller_unittest.cc",
     "frame_generator_unittest.cc",
-    "gpu_host_unittest.cc",
     "modal_window_controller_unittest.cc",
     "server_window_drawn_tracker_unittest.cc",
-    "test_gpu_host.cc",
-    "test_gpu_host.h",
     "test_server_window_delegate.cc",
     "test_server_window_delegate.h",
     "test_utils.cc",
@@ -297,15 +291,18 @@ source_set("tests") {
     "//base/test:test_support",
     "//cc:cc",
     "//cc:test_support",
+    "//components/discardable_memory/service",
     "//components/viz/service/main",
     "//components/viz/test:test_support",
     "//gpu/ipc/client",
     "//mojo/public/cpp/bindings:bindings",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//services/ui/common:mus_common",
     "//services/ui/common:task_runner_test_base",
+    "//services/ui/gpu_host",
+    "//services/ui/gpu_host:test_support",
     "//services/ui/public/cpp",
     "//services/ui/public/interfaces",
     "//testing/gtest",
@@ -320,6 +317,10 @@ source_set("tests") {
     "//ui/gl",
     "//ui/gl/init",
   ]
+
+  data_deps = [
+    "//services/ui",
+  ]
 }
 
 service_manifest("unittests_manifest") {
@@ -330,4 +331,5 @@ service_manifest("unittests_manifest") {
 catalog("tests_catalog") {
   testonly = true
   embedded_services = [ ":unittests_manifest" ]
+  standalone_services = [ "//services/ui:manifest" ]
 }

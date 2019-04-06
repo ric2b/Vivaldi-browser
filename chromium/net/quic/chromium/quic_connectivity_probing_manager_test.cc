@@ -4,13 +4,13 @@
 
 #include "net/quic/chromium/quic_connectivity_probing_manager.h"
 
-#include "base/rand_util.h"
+#include "base/stl_util.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "net/log/test_net_log.h"
-#include "net/quic/test_tools/mock_clock.h"
-#include "net/quic/test_tools/quic_test_utils.h"
 #include "net/socket/socket_test_util.h"
 #include "net/test/gtest_util.h"
+#include "net/third_party/quic/test_tools/mock_clock.h"
+#include "net/third_party/quic/test_tools/quic_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -21,11 +21,12 @@ namespace net {
 namespace test {
 namespace {
 
-const IPEndPoint kIpEndPoint = IPEndPoint(IPAddress::IPv4AllZeros(), kTestPort);
+const IPEndPoint kIpEndPoint =
+    IPEndPoint(IPAddress::IPv4AllZeros(), quic::test::kTestPort);
 
 const NetworkChangeNotifier::NetworkHandle testNetworkHandle = 1;
-const QuicSocketAddress testPeerAddress =
-    QuicSocketAddress(QuicSocketAddressImpl(kIpEndPoint));
+const quic::QuicSocketAddress testPeerAddress =
+    quic::QuicSocketAddress(quic::QuicSocketAddressImpl(kIpEndPoint));
 
 }  // anonymous namespace
 
@@ -42,20 +43,20 @@ class MockQuicChromiumClientSession
                void(int result, const DatagramClientSocket* socket));
 
   MOCK_METHOD3(OnPacket,
-               bool(const QuicReceivedPacket& packet,
-                    const QuicSocketAddress& local_address,
-                    const QuicSocketAddress& peer_address));
+               bool(const quic::QuicReceivedPacket& packet,
+                    const quic::QuicSocketAddress& local_address,
+                    const quic::QuicSocketAddress& peer_address));
 
   MOCK_METHOD1(OnProbeNetworkFailed,
                void(NetworkChangeNotifier::NetworkHandle network));
 
   MOCK_METHOD2(OnSendConnectivityProbingPacket,
                bool(QuicChromiumPacketWriter* writer,
-                    const QuicSocketAddress& peer_address));
+                    const quic::QuicSocketAddress& peer_address));
 
   void OnProbeNetworkSucceeded(
       NetworkChangeNotifier::NetworkHandle network,
-      const QuicSocketAddress& self_address,
+      const quic::QuicSocketAddress& self_address,
       std::unique_ptr<DatagramClientSocket> socket,
       std::unique_ptr<QuicChromiumPacketWriter> writer,
       std::unique_ptr<QuicChromiumPacketReader> reader) override {
@@ -80,22 +81,24 @@ class QuicConnectivityProbingManagerTest : public ::testing::Test {
         probing_manager_(&session_, test_task_runner_.get()),
         default_read_(new MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)),
         socket_data_(
-            new SequencedSocketData(default_read_.get(), 1, nullptr, 0)) {
+            new SequencedSocketData(base::make_span(default_read_.get(), 1),
+                                    base::span<MockWrite>())) {
     socket_factory_.AddSocketDataProvider(socket_data_.get());
     // Create a connected socket for probing.
     socket_ = socket_factory_.CreateDatagramClientSocket(
-        DatagramSocket::DEFAULT_BIND, base::Bind(&base::RandInt), &net_log_,
-        NetLogSource());
+        DatagramSocket::DEFAULT_BIND, &net_log_, NetLogSource());
     EXPECT_THAT(socket_->Connect(kIpEndPoint), IsOk());
     IPEndPoint self_address;
     socket_->GetLocalAddress(&self_address);
-    self_address_ = QuicSocketAddress(QuicSocketAddressImpl(self_address));
+    self_address_ =
+        quic::QuicSocketAddress(quic::QuicSocketAddressImpl(self_address));
     // Create packet writer and reader for probing.
     writer_.reset(
         new QuicChromiumPacketWriter(socket_.get(), test_task_runner_.get()));
     reader_.reset(new QuicChromiumPacketReader(
         socket_.get(), &clock_, &session_, kQuicYieldAfterPacketsRead,
-        QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
+        quic::QuicTime::Delta::FromMilliseconds(
+            kQuicYieldAfterDurationMilliseconds),
         bound_test_net_log_.bound()));
   }
 
@@ -112,9 +115,9 @@ class QuicConnectivityProbingManagerTest : public ::testing::Test {
   std::unique_ptr<DatagramClientSocket> socket_;
   std::unique_ptr<QuicChromiumPacketWriter> writer_;
   std::unique_ptr<QuicChromiumPacketReader> reader_;
-  QuicSocketAddress self_address_;
+  quic::QuicSocketAddress self_address_;
 
-  MockClock clock_;
+  quic::MockClock clock_;
   MockClientSocketFactory socket_factory_;
   TestNetLog net_log_;
   BoundTestNetLog bound_test_net_log_;
@@ -204,7 +207,7 @@ TEST_F(QuicConnectivityProbingManagerTest,
   // probing response and continue waiting.
   EXPECT_CALL(session_, OnSendConnectivityProbingPacket(_, testPeerAddress))
       .Times(0);
-  probing_manager_.OnConnectivityProbingReceived(QuicSocketAddress(),
+  probing_manager_.OnConnectivityProbingReceived(quic::QuicSocketAddress(),
                                                  testPeerAddress);
   EXPECT_NE(session_.successful_network(), testNetworkHandle);
   EXPECT_EQ(1u, test_task_runner_->GetPendingTaskCount());

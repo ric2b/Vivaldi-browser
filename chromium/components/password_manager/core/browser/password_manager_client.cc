@@ -29,9 +29,6 @@ bool PasswordManagerClient::OnCredentialManagerUsed() {
   return true;
 }
 
-void PasswordManagerClient::ForceSavePassword() {
-}
-
 void PasswordManagerClient::GeneratePassword() {}
 
 void PasswordManagerClient::PasswordWasAutofilled(
@@ -40,8 +37,12 @@ void PasswordManagerClient::PasswordWasAutofilled(
     const std::vector<const autofill::PasswordForm*>* federated_matches) const {
 }
 
-PasswordSyncState PasswordManagerClient::GetPasswordSyncState() const {
-  return NOT_SYNCING_PASSWORDS;
+SyncState PasswordManagerClient::GetPasswordSyncState() const {
+  return NOT_SYNCING;
+}
+
+SyncState PasswordManagerClient::GetHistorySyncState() const {
+  return NOT_SYNCING;
 }
 
 bool PasswordManagerClient::WasLastNavigationHTTPError() const {
@@ -83,5 +84,16 @@ const LogManager* PasswordManagerClient::GetLogManager() const {
 }
 
 void PasswordManagerClient::AnnotateNavigationEntry(bool has_password_field) {}
+
+PasswordRequirementsService*
+PasswordManagerClient::GetPasswordRequirementsService() {
+  // Not impemented but that is a valid state as per interface definition.
+  // Therefore, don't call NOTIMPLEMENTED() here.
+  return nullptr;
+}
+
+favicon::FaviconService* PasswordManagerClient::GetFaviconService() {
+  return nullptr;
+}
 
 }  // namespace password_manager

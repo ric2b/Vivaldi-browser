@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
+#include "base/time/default_clock.h"
 #include "base/values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/network_properties_manager.h"
@@ -17,7 +19,7 @@
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
-#include "net/proxy/proxy_server.h"
+#include "net/base/proxy_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -28,7 +30,8 @@ class DataReductionProxyConfiguratorTest : public testing::Test {
   void SetUp() override {
     test_prefs.registry()->RegisterDictionaryPref(prefs::kNetworkProperties);
     manager_.reset(new NetworkPropertiesManager(
-        &test_prefs, base::ThreadTaskRunnerHandle::Get()));
+        base::DefaultClock::GetInstance(), &test_prefs,
+        base::ThreadTaskRunnerHandle::Get()));
     manager_->OnChangeInNetworkID("test");
 
     test_context_ = DataReductionProxyTestContext::Builder().Build();
@@ -75,7 +78,7 @@ class DataReductionProxyConfiguratorTest : public testing::Test {
     const net::ProxyConfig::ProxyRules& rules =
         config_->GetProxyConfig().proxy_rules();
     ASSERT_EQ(expected_rules_type, rules.type);
-    if (net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME ==
+    if (net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME ==
         expected_rules_type) {
       ASSERT_EQ(expected_http_proxies, rules.proxies_for_http.ToPacString());
       ASSERT_EQ(std::string(), rules.proxies_for_https.ToPacString());
@@ -91,11 +94,10 @@ class DataReductionProxyConfiguratorTest : public testing::Test {
       const std::string& expected_bypass_list) {
     test_context_->RunUntilIdle();
     net::ProxyConfig::ProxyRules rules =
-        config_
-            ->CreateProxyConfig(probe_url_config, *manager_.get(), http_proxies)
+        config_->CreateProxyConfig(probe_url_config, *manager_, http_proxies)
             .proxy_rules();
     ASSERT_EQ(expected_rules_type, rules.type);
-    if (net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME ==
+    if (net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME ==
         expected_rules_type) {
       ASSERT_EQ(expected_http_proxies, rules.proxies_for_http.ToPacString());
       ASSERT_EQ(std::string(), rules.proxies_for_https.ToPacString());
@@ -114,7 +116,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestUnrestricted) {
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "HTTPS www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                    std::string());
 }
@@ -123,7 +125,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestUnrestrictedQuic) {
   config_->Enable(*manager_,
                   BuildProxyList("quic://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "QUIC www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                    std::string());
 }
@@ -133,7 +135,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestUnrestrictedWithBypassRule) {
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "HTTPS www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                    "<local>;*.goo.com;");
 }
@@ -143,7 +145,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestUnrestrictedWithBypassRuleQuic) {
   config_->Enable(*manager_,
                   BuildProxyList("quic://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "QUIC www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                    "<local>;*.goo.com;");
 }
@@ -152,7 +154,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestUnrestrictedWithoutFallback) {
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  std::string(), ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "HTTPS www.foo.com:443;DIRECT", std::string());
 }
 
@@ -161,7 +163,7 @@ TEST_F(DataReductionProxyConfiguratorTest,
   config_->Enable(*manager_,
                   BuildProxyList("quic://www.foo.com:443", ProxyServer::CORE,
                                  std::string(), ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "QUIC www.foo.com:443;DIRECT", std::string());
 }
 
@@ -170,18 +172,24 @@ TEST_F(DataReductionProxyConfiguratorTest, TestSecureRestrictedProxiesAreCore) {
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "PROXY www.bar.com:80;DIRECT", std::string());
 }
 
 TEST_F(DataReductionProxyConfiguratorTest, TestSecureNonCoreRestricted) {
+  base::HistogramTester histogram_tester;
   manager_->SetHasWarmupURLProbeFailed(true, false, true);
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "HTTPS www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                    std::string());
+
+  manager_->SetHasWarmupURLProbeFailed(true, false, false);
+  histogram_tester.ExpectUniqueSample(
+      "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Secure.NonCore",
+      0, 1);
 }
 
 TEST_F(DataReductionProxyConfiguratorTest,
@@ -191,7 +199,7 @@ TEST_F(DataReductionProxyConfiguratorTest,
       *manager_,
       BuildProxyList("https://www.foo.com:443", ProxyServer::UNSPECIFIED_TYPE,
                      "http://www.bar.com:80", ProxyServer::UNSPECIFIED_TYPE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "HTTPS www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                    std::string());
 }
@@ -201,7 +209,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestInsecureCoreRestricted) {
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "HTTPS www.foo.com:443;DIRECT", std::string());
 }
 
@@ -210,7 +218,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestInsecureNonCoreRestricted) {
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "HTTPS www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                    std::string());
 }
@@ -221,17 +229,37 @@ TEST_F(DataReductionProxyConfiguratorTest, TestSecureInsecureCoreRestricted) {
   config_->Enable(*manager_,
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME, "",
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::EMPTY, "",
                    std::string());
 }
 
 TEST_F(DataReductionProxyConfiguratorTest, TestRestrictedQuic) {
+  base::HistogramTester histogram_tester;
   manager_->SetHasWarmupURLProbeFailed(true, true, true);
   config_->Enable(*manager_,
                   BuildProxyList("quic://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                    "PROXY www.bar.com:80;DIRECT", std::string());
+
+  manager_->SetHasWarmupURLProbeFailed(true, true, false);
+  histogram_tester.ExpectUniqueSample(
+      "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Secure.Core", 0,
+      1);
+
+  manager_->OnWarmupFetchInitiated(true, true);
+  manager_->SetHasWarmupURLProbeFailed(true, true, false);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Secure.Core", 1,
+      1);
+
+  manager_->OnWarmupFetchInitiated(true, true);
+  manager_->SetHasWarmupURLProbeFailed(true, true, false);
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Secure.Core", 2,
+      1);
+  histogram_tester.ExpectTotalCount(
+      "DataReductionProxy.WarmupURL.FetchAttemptsBeforeSuccess.Secure.Core", 3);
 }
 
 TEST_F(DataReductionProxyConfiguratorTest, TestDisable) {
@@ -239,7 +267,7 @@ TEST_F(DataReductionProxyConfiguratorTest, TestDisable) {
                   BuildProxyList("https://www.foo.com:443", ProxyServer::CORE,
                                  "http://www.bar.com:80", ProxyServer::CORE));
   config_->Disable();
-  CheckProxyConfig(net::ProxyConfig::ProxyRules::TYPE_NO_RULES, std::string(),
+  CheckProxyConfig(net::ProxyConfig::ProxyRules::Type::EMPTY, std::string(),
                    std::string());
 }
 
@@ -263,11 +291,11 @@ TEST_F(DataReductionProxyConfiguratorTest,
                      "http://www.bar.com:80", ProxyServer::CORE);
   config_->Enable(*manager_, http_proxies);
   CheckProbeProxyConfig(http_proxies, true /* probe_url_config */,
-                        net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME,
+                        net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME,
                         "HTTPS www.foo.com:443;PROXY www.bar.com:80;DIRECT",
                         std::string());
   CheckProbeProxyConfig(http_proxies, false /* probe_url_config */,
-                        net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME, "",
+                        net::ProxyConfig::ProxyRules::Type::EMPTY, "",
                         std::string());
 }
 

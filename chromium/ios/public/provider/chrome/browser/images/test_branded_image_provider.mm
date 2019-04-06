@@ -13,3 +13,4 @@
 TestBrandedImageProvider::TestBrandedImageProvider() {}
 
 TestBrandedImageProvider::~TestBrandedImageProvider() {}
+

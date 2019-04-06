@@ -20,23 +20,22 @@
 #include "base/strings/string16.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/win_util.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/win/window_event_target.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/sequential_id_generator.h"
+#include "ui/gfx/win/msg_util.h"
 #include "ui/gfx/win/window_impl.h"
 #include "ui/views/views_export.h"
 #include "ui/views/win/pen_event_processor.h"
+#include "ui/views/window/window_resize_utils.h"
 
 namespace gfx {
 class ImageSkia;
 class Insets;
-namespace win {
-class DirectManipulationHelper;
-}  // namespace win
 }  // namespace gfx
 
 namespace ui  {
@@ -44,7 +43,7 @@ class AXSystemCaretWin;
 class InputMethod;
 class TextInputClient;
 class ViewProp;
-}
+}  // namespace ui
 
 namespace views {
 
@@ -67,54 +66,6 @@ const int WM_NCUAHDRAWFRAME = 0xAF;
 // WM_WINDOWPOSCHANGING. It's used to inform the client if a
 // WM_WINDOWPOSCHANGED won't be received.
 const int WM_WINDOWSIZINGFINISHED = WM_USER;
-
-// IsMsgHandled() and BEGIN_SAFE_MSG_MAP_EX are a modified version of
-// BEGIN_MSG_MAP_EX. The main difference is it uses a WeakPtrFactory member
-// (|weak_factory|) that is used in _ProcessWindowMessage() and changing
-// IsMsgHandled() from a member function to a define that checks if the weak
-// factory is still valid in addition to the member. Together these allow for
-// |this| to be deleted during dispatch.
-#define IsMsgHandled() !ref.get() || msg_handled_
-
-#define BEGIN_SAFE_MSG_MAP_EX(weak_factory) \
- private: \
-  BOOL msg_handled_; \
-\
- public: \
-  /* "handled" management for cracked handlers */ \
-  void SetMsgHandled(BOOL handled) { \
-    msg_handled_ = handled; \
-  } \
-  BOOL ProcessWindowMessage(HWND hwnd, \
-                            UINT msg, \
-                            WPARAM w_param, \
-                            LPARAM l_param, \
-                            LRESULT& l_result, \
-                            DWORD msg_map_id = 0) override { \
-    base::WeakPtr<HWNDMessageHandler> ref(weak_factory.GetWeakPtr()); \
-    BOOL old_msg_handled = msg_handled_; \
-    BOOL ret = _ProcessWindowMessage(hwnd, msg, w_param, l_param, l_result, \
-                                     msg_map_id); \
-    if (ref.get()) \
-      msg_handled_ = old_msg_handled; \
-    return ret; \
-  } \
-  BOOL _ProcessWindowMessage(HWND hWnd, \
-                             UINT uMsg, \
-                             WPARAM wParam, \
-                             LPARAM lParam, \
-                             LRESULT& lResult, \
-                             DWORD dwMsgMapID) { \
-    base::WeakPtr<HWNDMessageHandler> ref(weak_factory.GetWeakPtr()); \
-    BOOL bHandled = TRUE; \
-    hWnd; \
-    uMsg; \
-    wParam; \
-    lParam; \
-    lResult; \
-    bHandled; \
-    switch(dwMsgMapID) { \
-      case 0:
 
 // An object that handles messages for a HWND that implements the views
 // "Custom Frame" look. The purpose of this class is to isolate the windows-
@@ -211,6 +162,9 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   void SetFullscreen(bool fullscreen);
 
+  // Updates the aspect ratio of the window.
+  void SetAspectRatio(float aspect_ratio);
+
   // Updates the window style to reflect whether it can be resized or maximized.
   void SizeConstraintsChanged();
 
@@ -238,7 +192,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override;
   void OnTextInputStateChanged(const ui::TextInputClient* client) override;
   void OnInputMethodDestroyed(const ui::InputMethod* input_method) override;
-  void OnShowImeIfNeeded() override;
+  void OnShowVirtualKeyboardIfEnabled() override;
 
   // Overridden from WindowEventTarget
   LRESULT HandleMouseMessage(unsigned int message,
@@ -261,13 +215,25 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
                               WPARAM w_param,
                               LPARAM l_param,
                               bool* handled) override;
-
   LRESULT HandleNcHitTestMessage(unsigned int message,
                                  WPARAM w_param,
                                  LPARAM l_param,
                                  bool* handled) override;
-
   void HandleParentChanged() override;
+  void ApplyPinchZoomScale(float scale) override;
+  void ApplyPinchZoomBegin() override;
+  void ApplyPinchZoomEnd() override;
+  void ApplyPanGestureScroll(int scroll_x, int scroll_y) override;
+  void ApplyPanGestureFling(int scroll_x, int scroll_y) override;
+  void ApplyPanGestureScrollBegin(int scroll_x, int scroll_y) override;
+  void ApplyPanGestureScrollEnd() override;
+  void ApplyPanGestureFlingBegin() override;
+  void ApplyPanGestureFlingEnd() override;
+
+  void ApplyPanGestureEvent(int scroll_x,
+                            int scroll_y,
+                            ui::EventMomentumPhase momentum_phase,
+                            ui::ScrollEventPhase phase);
 
   // Returns the auto-hide edges of the appbar. See
   // ViewsDelegate::GetAppbarAutohideEdges() for details. If the edges change,
@@ -351,11 +317,10 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   // Message Handlers ----------------------------------------------------------
 
-  BEGIN_SAFE_MSG_MAP_EX(weak_factory_)
+  CR_BEGIN_MSG_MAP_EX(HWNDMessageHandler)
     // Range handlers must go first!
     CR_MESSAGE_RANGE_HANDLER_EX(WM_MOUSEFIRST, WM_MOUSELAST, OnMouseRange)
-    CR_MESSAGE_RANGE_HANDLER_EX(WM_NCMOUSEMOVE,
-                                WM_NCXBUTTONDBLCLK,
+    CR_MESSAGE_RANGE_HANDLER_EX(WM_NCMOUSEMOVE, WM_NCXBUTTONDBLCLK,
                                 OnMouseRange)
 
     // CustomFrameWindow hacks
@@ -447,6 +412,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
     CR_MSG_WM_SETTEXT(OnSetText)
     CR_MSG_WM_SETTINGCHANGE(OnSettingChange)
     CR_MSG_WM_SIZE(OnSize)
+    CR_MSG_WM_SIZING(OnSizing)
     CR_MSG_WM_SYSCOMMAND(OnSysCommand)
     CR_MSG_WM_THEMECHANGED(OnThemeChanged)
     CR_MSG_WM_TIMECHANGE(OnTimeChange)
@@ -506,6 +472,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   LRESULT OnSetText(const wchar_t* text);
   void OnSettingChange(UINT flags, const wchar_t* section);
   void OnSize(UINT param, const gfx::Size& size);
+  void OnSizing(UINT param, RECT* rect);
   void OnSysCommand(UINT notification_code, const gfx::Point& point);
   void OnThemeChanged();
   void OnTimeChange();
@@ -550,12 +517,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
       const POINTER_INFO& pointer_info,
       const gfx::Point& point,
       const ui::PointerDetails& pointer_details);
-  LRESULT GenerateTouchEventFromPointerEvent(
-      UINT message,
-      UINT32 pointer_id,
-      const POINTER_INFO& pointer_info,
-      const gfx::Point& point,
-      const ui::PointerDetails& pointer_details);
 
   // Returns true if the mouse message passed in is an OS synthesized mouse
   // message.
@@ -575,7 +536,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // |time_stamp| is the time stamp associated with the message.
   void GenerateTouchEvent(ui::EventType event_type,
                           const gfx::Point& point,
-                          unsigned int id,
+                          size_t id,
                           base::TimeTicks time_stamp,
                           TouchEvents* touch_events);
 
@@ -605,6 +566,10 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // if they request its location.
   void DestroyAXSystemCaret();
 
+  // Updates |rect| to adhere to the |aspect_ratio| of the window. |param|
+  // refers to the edge of the window being sized.
+  void SizeRectToAspectRatio(UINT param, gfx::Rect* rect);
+
   HWNDMessageHandlerDelegate* delegate_;
 
   std::unique_ptr<FullscreenHandler> fullscreen_handler_;
@@ -630,6 +595,10 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   // The icon created from the bitmap image of the app icon.
   base::win::ScopedHICON app_icon_;
+
+  // The aspect ratio for the window. This is only used for sizing operations
+  // for the non-client area.
+  base::Optional<float> aspect_ratio_;
 
   // The current DPI.
   int dpi_;
@@ -734,12 +703,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // Some assistive software need to track the location of the caret.
   std::unique_ptr<ui::AXSystemCaretWin> ax_system_caret_;
 
-  // This class provides functionality to register the legacy window as a
-  // Direct Manipulation consumer. This allows us to support smooth scroll
-  // in Chrome on Windows 10.
-  std::unique_ptr<gfx::win::DirectManipulationHelper>
-      direct_manipulation_helper_;
-
   // The location where the user clicked on the caption. We cache this when we
   // receive the WM_NCLBUTTONDOWN message. We use this in the subsequent
   // WM_NCMOUSEMOVE message to see if the mouse actually moved.
@@ -759,6 +722,14 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // partially or fully transparent.
   bool is_translucent_ = false;
 
+  // True if the window should process WM_POINTER for touch events and
+  // not WM_TOUCH events.
+  bool pointer_events_for_touch_;
+
+  // True if we enable feature kPrecisionTouchpadScrollPhase. Indicate we will
+  // report the scroll phase information or not.
+  bool precision_touchpad_scroll_phase_enabled_;
+
   // This is a map of the HMONITOR to full screeen window instance. It is safe
   // to keep a raw pointer to the HWNDMessageHandler instance as we track the
   // window destruction and ensure that the map is cleaned up.
@@ -766,14 +737,14 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   static base::LazyInstance<FullscreenWindowMonitorMap>::DestructorAtExit
       fullscreen_monitor_map_;
 
-  // The WeakPtrFactories below must occur last in the class definition so they
-  // get destroyed last.
+  // The WeakPtrFactories below (one inside the
+  // CR_MSG_MAP_CLASS_DECLARATIONS macro and autohide_factory_) must
+  // occur last in the class definition so they get destroyed last.
+
+  CR_MSG_MAP_CLASS_DECLARATIONS(HWNDMessageHandler)
 
   // The factory used to lookup appbar autohide edges.
   base::WeakPtrFactory<HWNDMessageHandler> autohide_factory_;
-
-  // The factory used with BEGIN_SAFE_MSG_MAP_EX.
-  base::WeakPtrFactory<HWNDMessageHandler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(HWNDMessageHandler);
 };

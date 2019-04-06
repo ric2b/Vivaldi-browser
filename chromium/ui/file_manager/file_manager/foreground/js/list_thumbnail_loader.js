@@ -45,7 +45,7 @@ function ListThumbnailLoader(
       opt_thumbnailLoaderConstructor || ThumbnailLoader;
 
   /**
-   * @private {Object<!ListThumbnailLoader.Task>}
+   * @private {!Object<!ListThumbnailLoader.Task>}
    */
   this.active_ = {};
 
@@ -244,7 +244,7 @@ ListThumbnailLoader.prototype.continue_ = function() {
   var entry = /** @type {Entry} */ (this.dataModel_.item(this.cursor_));
 
   // Check volume type for optimizing the parameters.
-  var volumeInfo = this.volumeManager_.getVolumeInfo(entry);
+  var volumeInfo = this.volumeManager_.getVolumeInfo(assert(entry));
   this.currentVolumeType_ = volumeInfo ? volumeInfo.volumeType : null;
 
   // If tasks are running full or all items are scanned, do nothing.
@@ -302,7 +302,7 @@ ListThumbnailLoader.prototype.dispatchThumbnailLoaded_ = function(
   // change had happened in the data model during thumbnail fetch.
   var item = this.dataModel_.item(index);
   if (item && item.toURL() !== thumbnail.fileUrl) {
-    index = -1;;
+    index = -1;
     for (var i = 0; i < this.dataModel_.length; i++) {
       if (this.dataModel_.item(i).toURL() === thumbnail.fileUrl) {
         index = i;

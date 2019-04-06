@@ -8,22 +8,26 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
-#include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/wait_util.h"
+#import "ios/testing/earl_grey/matchers.h"
 #import "ios/web/public/test/earl_grey/web_view_actions.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
+#include "ios/web/public/test/element_selector.h"
 #include "ios/web/public/test/http_server/data_response_provider.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
 #include "ios/web/public/test/url_test_util.h"
+#import "ios/web/public/web_client.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -31,11 +35,17 @@
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::OmniboxText;
+using chrome_test_util::TapWebViewElementWithId;
+using testing::ElementToDismissAlert;
+using web::test::ElementSelector;
 
 namespace {
 
 // Response shown on the page of |GetDestinationUrl|.
 const char kDestinationText[] = "bar!";
+
+// Response shown on the page of |GetGenericUrl|.
+const char kGenericText[] = "A generic page";
 
 // Label for the button in the form.
 const char kSubmitButtonLabel[] = "submit";
@@ -110,7 +120,7 @@ void TestFormResponseProvider::GetResponseHeadersAndBody(
 
   *headers = web::ResponseProvider::GetDefaultResponseHeaders();
   if (url == GetGenericUrl()) {
-    *response_body = "A generic page";
+    *response_body = kGenericText;
     return;
   }
   if (url == GetFormPostOnSamePageUrl()) {
@@ -128,7 +138,8 @@ void TestFormResponseProvider::GetResponseHeadersAndBody(
     *response_body =
         base::StringPrintf(kFormHtmlTemplate, GetRedirectUrl().spec().c_str());
     return;
-  } else if (url == GetDestinationUrl()) {
+  }
+  if (url == GetDestinationUrl()) {
     *response_body = request.method + std::string(" ") + request.body;
     return;
   }
@@ -148,6 +159,12 @@ id<GREYMatcher> GoButtonMatcher() {
   return grey_allOf(grey_accessibilityID(@"Go"), grey_interactable(), nil);
 }
 
+// Matcher for the resend POST button in the repost warning dialog.
+id<GREYMatcher> ResendPostButtonMatcher() {
+  return chrome_test_util::ButtonWithAccessibilityLabelId(
+      IDS_HTTP_POST_WARNING_RESEND);
+}
+
 // Waits for view with Tab History accessibility ID.
 - (void)waitForTabHistoryView {
   GREYCondition* condition = [GREYCondition
@@ -155,14 +172,15 @@ id<GREYMatcher> GoButtonMatcher() {
                   block:^BOOL {
                     NSError* error = nil;
                     id<GREYMatcher> tabHistory =
-                        grey_accessibilityID(@"Tab History");
+                        grey_accessibilityID(kPopupMenuNavigationTableViewId);
                     [[EarlGrey selectElementWithMatcher:tabHistory]
                         assertWithMatcher:grey_notNil()
                                     error:&error];
                     return error == nil;
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Tab History View not displayed.");
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Tab History View not displayed.");
 }
 
 // Open back navigation history.
@@ -173,10 +191,7 @@ id<GREYMatcher> GoButtonMatcher() {
 
 // Accepts the warning that the form POST data will be reposted.
 - (void)confirmResendWarning {
-  id<GREYMatcher> resendWarning =
-      chrome_test_util::ButtonWithAccessibilityLabelId(
-          IDS_HTTP_POST_WARNING_RESEND);
-  [[EarlGrey selectElementWithMatcher:resendWarning]
+  [[EarlGrey selectElementWithMatcher:ResendPostButtonMatcher()]
       performAction:grey_longPress()];
 }
 
@@ -184,7 +199,7 @@ id<GREYMatcher> GoButtonMatcher() {
 // |GetFormUrl|, and posts data to |GetDestinationUrl| upon submission.
 - (void)setUpFormTestSimpleHttpServer {
   std::map<GURL, std::string> responses;
-  responses[GetGenericUrl()] = "A generic page";
+  responses[GetGenericUrl()] = kGenericText;
   responses[GetFormUrl()] =
       base::StringPrintf(kFormHtmlTemplate, GetDestinationUrl().spec().c_str());
   responses[GetDestinationUrl()] = kDestinationText;
@@ -197,12 +212,21 @@ id<GREYMatcher> GoButtonMatcher() {
   const GURL destinationURL = GetDestinationUrl();
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
-  chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
-  [ChromeEarlGrey reload];
+  // WKBasedNavigationManager presents repost confirmation dialog before loading
+  // stops.
+  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
+    [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
+  } else {
+    // Legacy navigation manager presents repost confirmation dialog after
+    // loading stops.
+    [ChromeEarlGrey reload];
+  }
   [self confirmResendWarning];
 
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
@@ -217,7 +241,8 @@ id<GREYMatcher> GoButtonMatcher() {
   const GURL destinationURL = GetDestinationUrl();
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
-  chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -238,7 +263,8 @@ id<GREYMatcher> GoButtonMatcher() {
   const GURL destinationURL = GetDestinationUrl();
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
-  chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -258,7 +284,8 @@ id<GREYMatcher> GoButtonMatcher() {
   const GURL destinationURL = GetDestinationUrl();
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
-  chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -272,7 +299,12 @@ id<GREYMatcher> GoButtonMatcher() {
   [[EarlGrey selectElementWithMatcher:historyItem] performAction:grey_tap()];
   [ChromeEarlGrey waitForPageToFinishLoading];
 
-  [self confirmResendWarning];
+  // Back-forward navigation with WKBasedNavigationManager is served from
+  // WKWebView's app-cache, so it won't trigger repost warning.
+  if (!web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
+    [self confirmResendWarning];
+  }
+
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -284,7 +316,8 @@ id<GREYMatcher> GoButtonMatcher() {
   const GURL destinationURL = GetDestinationUrl();
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
-  chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -292,25 +325,8 @@ id<GREYMatcher> GoButtonMatcher() {
   [ChromeEarlGrey goBack];
   [ChromeEarlGrey goForward];
 
-  // Abort the reload.
-  // TODO (crbug.com/705020): Use something like ElementToDismissContextMenu
-  // to cancel form repost.
-  if (IsIPadIdiom()) {
-    // On tablet, dismiss the popover.
-    GREYElementMatcherBlock* matcher = [[GREYElementMatcherBlock alloc]
-        initWithMatchesBlock:^BOOL(UIView* view) {
-          return [NSStringFromClass([view class]) hasPrefix:@"UIDimmingView"];
-        }
-        descriptionBlock:^(id<GREYDescription> description) {
-          [description appendText:@"class prefixed with UIDimmingView"];
-        }];
-    [[EarlGrey selectElementWithMatcher:matcher]
-        performAction:grey_tapAtPoint(CGPointMake(50.0f, 50.0f))];
-  } else {
-    // On handset, dismiss via the cancel button.
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::CancelButton()]
-        performAction:grey_tap()];
-  }
+  [[EarlGrey selectElementWithMatcher:ElementToDismissAlert(@"Cancel")]
+      performAction:grey_tap()];
   [ChromeEarlGrey waitForPageToFinishLoading];
 
   // Verify that navigation was cancelled, and forward navigation is possible.
@@ -321,6 +337,42 @@ id<GREYMatcher> GoButtonMatcher() {
       assertWithMatcher:grey_interactable()];
 }
 
+// A new navigation dismisses the repost dialog.
+- (void)testRepostFormDismissedByNewNavigation {
+  [self setUpFormTestSimpleHttpServer];
+  const GURL destinationURL = GetDestinationUrl();
+
+  [ChromeEarlGrey loadURL:GetFormUrl()];
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
+      assertWithMatcher:grey_notNil()];
+
+  // WKBasedNavigationManager presents repost confirmation dialog before loading
+  // stops.
+  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
+    [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
+  } else {
+    // Legacy navigation manager presents repost confirmation dialog after
+    // loading stops.
+    [ChromeEarlGrey reload];
+  }
+
+  // Repost confirmation box should be visible.
+  [ChromeEarlGrey
+      waitForElementWithMatcherSufficientlyVisible:ResendPostButtonMatcher()];
+
+  // Starting a new navigation while the repost dialog is presented should not
+  // crash.
+  [ChromeEarlGrey loadURL:GetGenericUrl()];
+  [ChromeEarlGrey waitForWebViewContainingText:kGenericText];
+
+  // Repost dialog should not be visible anymore.
+  [[EarlGrey selectElementWithMatcher:ResendPostButtonMatcher()]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
+}
+
 // Tests that pressing the button on a POST-based form changes the page and that
 // the back button works as expected afterwards.
 - (void)testGoBackButtonAfterFormSubmission {
@@ -328,7 +380,8 @@ id<GREYMatcher> GoButtonMatcher() {
   GURL destinationURL = GetDestinationUrl();
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
-  chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
   [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -348,7 +401,8 @@ id<GREYMatcher> GoButtonMatcher() {
   [ChromeEarlGrey loadURL:GetRedirectFormUrl()];
 
   // Submit the form, which redirects before printing the data.
-  chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
+  GREYAssert(TapWebViewElementWithId(kSubmitButtonLabel), @"Failed to tap %s",
+             kSubmitButtonLabel);
 
   // Check that the redirect changes the POST to a GET.
   [ChromeEarlGrey waitForWebViewContainingText:"GET"];
@@ -358,9 +412,7 @@ id<GREYMatcher> GoButtonMatcher() {
   [ChromeEarlGrey reload];
 
   // Check that the popup did not show
-  id<GREYMatcher> resendWarning =
-      ButtonWithAccessibilityLabelId(IDS_HTTP_POST_WARNING_RESEND);
-  [[EarlGrey selectElementWithMatcher:resendWarning]
+  [[EarlGrey selectElementWithMatcher:ResendPostButtonMatcher()]
       assertWithMatcher:grey_nil()];
   [ChromeEarlGrey waitForWebViewContainingText:"GET"];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
@@ -386,7 +438,7 @@ id<GREYMatcher> GoButtonMatcher() {
   // Open the second URL, tap the button, and verify the browser navigates to
   // the expected URL.
   [ChromeEarlGrey loadURL:formURL];
-  chrome_test_util::TapWebViewElementWithId("button");
+  GREYAssert(TapWebViewElementWithId("button"), @"Failed to tap \"button\"");
   [ChromeEarlGrey waitForWebViewContainingText:"POST"];
   [[EarlGrey selectElementWithMatcher:OmniboxText(formURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -406,11 +458,6 @@ id<GREYMatcher> GoButtonMatcher() {
 // keyboard navigates to the correct URL and the back button works as expected
 // afterwards.
 - (void)testPostFormEntryWithKeyboard {
-// TODO(crbug.com/704618): Re-enable this test on devices.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
-#endif
-
   [self setUpFormTestSimpleHttpServer];
   const GURL destinationURL = GetDestinationUrl();
 
@@ -449,13 +496,15 @@ id<GREYMatcher> GoButtonMatcher() {
                                     error:&error];
                     return !error;
                   }];
-  GREYAssert(
-      [interactableCondition waitWithTimeout:testing::kWaitForUIElementTimeout],
-      @"Web view did not become interactable.");
+  GREYAssert([interactableCondition
+                 waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+             @"Web view did not become interactable.");
 
   web::WebState* currentWebState = chrome_test_util::GetCurrentWebState();
   [[EarlGrey selectElementWithMatcher:web::WebViewInWebState(currentWebState)]
-      performAction:web::WebViewTapElement(currentWebState, ID)];
+      performAction:web::WebViewTapElement(
+                        currentWebState,
+                        ElementSelector::ElementSelectorId(ID))];
 
   // Wait until the keyboard shows up before tapping.
   GREYCondition* condition = [GREYCondition
@@ -467,8 +516,9 @@ id<GREYMatcher> GoButtonMatcher() {
                                     error:&error];
                     return (error == nil);
                   }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"No keyboard with 'Go' button showed up.");
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"No keyboard with 'Go' button showed up.");
 
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Go")]
       performAction:grey_tap()];

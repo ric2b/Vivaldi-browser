@@ -9,7 +9,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -110,7 +109,7 @@ TEST(ExtensionL10nUtil, GetValidLocalesWithUnsupportedLocale) {
 
 TEST(ExtensionL10nUtil, GetValidLocalesWithValidLocalesAndMessagesFile) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
   install_dir =
       install_dir.AppendASCII("extension_with_locales").Append(kLocaleFolder);
 
@@ -126,7 +125,7 @@ TEST(ExtensionL10nUtil, GetValidLocalesWithValidLocalesAndMessagesFile) {
 
 TEST(ExtensionL10nUtil, LoadMessageCatalogsValidFallback) {
   base::FilePath install_dir;
-  ASSERT_TRUE(PathService::Get(DIR_TEST_DATA, &install_dir));
+  ASSERT_TRUE(base::PathService::Get(DIR_TEST_DATA, &install_dir));
   install_dir =
       install_dir.AppendASCII("extension_with_locales").Append(kLocaleFolder);
 

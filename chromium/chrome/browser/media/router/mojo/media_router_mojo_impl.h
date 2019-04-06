@@ -127,6 +127,12 @@ class MediaRouterMojoImpl : public MediaRouterBase,
 
   content::BrowserContext* context() const { return context_; }
 
+  // mojom::MediaRouter implementation.
+  void OnSinksReceived(MediaRouteProviderId provider_id,
+                       const std::string& media_source,
+                       const std::vector<MediaSinkInternal>& internal_sinks,
+                       const std::vector<url::Origin>& origins) override;
+
   // Mojo pointers to media route providers. Providers are added via
   // RegisterMediaRouteProvider().
   base::flat_map<MediaRouteProviderId, mojom::MediaRouteProviderPtr>
@@ -327,10 +333,6 @@ class MediaRouterMojoImpl : public MediaRouterBase,
 
   // mojom::MediaRouter implementation.
   void OnIssue(const IssueInfo& issue) override;
-  void OnSinksReceived(MediaRouteProviderId provider_id,
-                       const std::string& media_source,
-                       const std::vector<MediaSinkInternal>& internal_sinks,
-                       const std::vector<url::Origin>& origins) override;
   void OnRoutesUpdated(
       MediaRouteProviderId provider_id,
       const std::vector<MediaRoute>& routes,
@@ -340,19 +342,22 @@ class MediaRouterMojoImpl : public MediaRouterBase,
                                  SinkAvailability availability) override;
   void OnPresentationConnectionStateChanged(
       const std::string& route_id,
-      content::PresentationConnectionState state) override;
+      media_router::mojom::MediaRouter::PresentationConnectionState state)
+      override;
   void OnPresentationConnectionClosed(
       const std::string& route_id,
-      content::PresentationConnectionCloseReason reason,
+      media_router::mojom::MediaRouter::PresentationConnectionCloseReason
+          reason,
       const std::string& message) override;
   void OnRouteMessagesReceived(
       const std::string& route_id,
-      const std::vector<content::PresentationConnectionMessage>& messages)
-      override;
+      std::vector<mojom::RouteMessagePtr> messages) override;
   void OnMediaRemoterCreated(
       int32_t tab_id,
       media::mojom::MirrorServiceRemoterPtr remoter,
       media::mojom::MirrorServiceRemotingSourceRequest source_request) override;
+  void GetMediaSinkServiceStatus(
+      mojom::MediaRouter::GetMediaSinkServiceStatusCallback callback) override;
 
   // Result callback when Mojo TerminateRoute is invoked.
   // |route_id|: ID of MediaRoute passed to the TerminateRoute request.

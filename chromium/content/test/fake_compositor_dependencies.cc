@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/test/test_ukm_recorder_factory.h"
@@ -33,10 +32,6 @@ bool FakeCompositorDependencies::IsLcdTextEnabled() {
   return false;
 }
 
-bool FakeCompositorDependencies::IsDistanceFieldTextEnabled() {
-  return false;
-}
-
 bool FakeCompositorDependencies::IsZeroCopyEnabled() {
   return true;
 }
@@ -53,6 +48,10 @@ bool FakeCompositorDependencies::IsElasticOverscrollEnabled() {
   return true;
 }
 
+bool FakeCompositorDependencies::IsUseZoomForDSFEnabled() {
+  return use_zoom_for_dsf_;
+}
+
 scoped_refptr<base::SingleThreadTaskRunner>
 FakeCompositorDependencies::GetCompositorMainThreadTaskRunner() {
   return base::ThreadTaskRunnerHandle::Get();
@@ -63,17 +62,13 @@ FakeCompositorDependencies::GetCompositorImplThreadTaskRunner() {
   return nullptr;  // Currently never threaded compositing in unit tests.
 }
 
-blink::scheduler::RendererScheduler*
-FakeCompositorDependencies::GetRendererScheduler() {
+blink::scheduler::WebThreadScheduler*
+FakeCompositorDependencies::GetWebMainThreadScheduler() {
   return &renderer_scheduler_;
 }
 
 cc::TaskGraphRunner* FakeCompositorDependencies::GetTaskGraphRunner() {
   return &task_graph_runner_;
-}
-
-bool FakeCompositorDependencies::IsThreadedAnimationEnabled() {
-  return true;
 }
 
 bool FakeCompositorDependencies::IsScrollAnimatorEnabled() {
@@ -84,5 +79,11 @@ std::unique_ptr<cc::UkmRecorderFactory>
 FakeCompositorDependencies::CreateUkmRecorderFactory() {
   return std::make_unique<cc::TestUkmRecorderFactory>();
 }
+
+#ifdef OS_ANDROID
+bool FakeCompositorDependencies::UsingSynchronousCompositing() {
+  return false;
+}
+#endif
 
 }  // namespace content

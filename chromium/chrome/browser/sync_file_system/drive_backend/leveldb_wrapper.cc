@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
 #include "third_party/leveldatabase/src/include/leveldb/slice.h"
@@ -181,7 +180,7 @@ leveldb::Status LevelDBWrapper::Get(const std::string& key,
 }
 
 std::unique_ptr<LevelDBWrapper::Iterator> LevelDBWrapper::NewIterator() {
-  return base::MakeUnique<Iterator>(this);
+  return std::make_unique<Iterator>(this);
 }
 
 leveldb::Status LevelDBWrapper::Commit() {

@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -25,34 +26,50 @@ enum class HeaderOutcome {
   DISCARDED_NO_REPORTING_SERVICE = 0,
   DISCARDED_INVALID_SSL_INFO = 1,
   DISCARDED_CERT_STATUS_ERROR = 2,
-  DISCARDED_INVALID_JSON = 3,
-  PARSED = 4,
+  DISCARDED_JSON_TOO_BIG = 3,
+  DISCARDED_JSON_INVALID = 4,
+  PARSED = 5,
 
   MAX
 };
 
 void RecordHeaderOutcome(HeaderOutcome outcome) {
-  UMA_HISTOGRAM_ENUMERATION("Reporting.HeaderOutcome", outcome,
+  UMA_HISTOGRAM_ENUMERATION("Net.Reporting.HeaderOutcome", outcome,
                             HeaderOutcome::MAX);
+}
+
+enum class HeaderEndpointGroupOutcome {
+  DISCARDED_NOT_DICTIONARY = 0,
+  DISCARDED_GROUP_NOT_STRING = 1,
+  DISCARDED_TTL_MISSING = 2,
+  DISCARDED_TTL_NOT_INTEGER = 3,
+  DISCARDED_TTL_NEGATIVE = 4,
+  DISCARDED_ENDPOINTS_MISSING = 5,
+  DISCARDED_ENDPOINTS_NOT_LIST = 6,
+
+  PARSED = 7,
+
+  MAX
+};
+
+void RecordHeaderEndpointGroupOutcome(HeaderEndpointGroupOutcome outcome) {
+  UMA_HISTOGRAM_ENUMERATION("Net.Reporting.HeaderEndpointGroupOutcome", outcome,
+                            HeaderEndpointGroupOutcome::MAX);
 }
 
 enum class HeaderEndpointOutcome {
   DISCARDED_NOT_DICTIONARY = 0,
-  DISCARDED_ENDPOINT_MISSING = 1,
-  DISCARDED_ENDPOINT_NOT_STRING = 2,
-  DISCARDED_ENDPOINT_INVALID = 3,
-  DISCARDED_ENDPOINT_INSECURE = 4,
-  DISCARDED_TTL_MISSING = 5,
-  DISCARDED_TTL_NOT_INTEGER = 6,
-  DISCARDED_TTL_NEGATIVE = 7,
-  DISCARDED_GROUP_NOT_STRING = 8,
-  REMOVED = 9,
-  SET_REJECTED_BY_DELEGATE = 10,
-  SET = 11,
+  DISCARDED_URL_MISSING = 1,
+  DISCARDED_URL_NOT_STRING = 2,
+  DISCARDED_URL_INVALID = 3,
+  DISCARDED_URL_INSECURE = 4,
+  DISCARDED_PRIORITY_NOT_INTEGER = 5,
+  DISCARDED_WEIGHT_NOT_INTEGER = 6,
+  DISCARDED_WEIGHT_NOT_POSITIVE = 7,
 
-  DISCARDED_PRIORITY_NOT_INTEGER = 12,
-  DISCARDED_WEIGHT_NOT_INTEGER = 13,
-  DISCARDED_WEIGHT_NOT_POSITIVE = 14,
+  REMOVED = 8,
+  SET_REJECTED_BY_DELEGATE = 9,
+  SET = 10,
 
   MAX
 };
@@ -64,15 +81,16 @@ bool EndpointParsedSuccessfully(HeaderEndpointOutcome outcome) {
 }
 
 void RecordHeaderEndpointOutcome(HeaderEndpointOutcome outcome) {
-  UMA_HISTOGRAM_ENUMERATION("Reporting.HeaderEndpointOutcome", outcome,
+  UMA_HISTOGRAM_ENUMERATION("Net.Reporting.HeaderEndpointOutcome", outcome,
                             HeaderEndpointOutcome::MAX);
 }
 
 const char kUrlKey[] = "url";
-const char kIncludeSubdomainsKey[] = "includeSubdomains";
+const char kIncludeSubdomainsKey[] = "include_subdomains";
+const char kEndpointsKey[] = "endpoints";
 const char kGroupKey[] = "group";
 const char kGroupDefaultValue[] = "default";
-const char kMaxAgeKey[] = "max-age";
+const char kMaxAgeKey[] = "max_age";
 const char kPriorityKey[] = "priority";
 const char kWeightKey[] = "weight";
 
@@ -86,6 +104,9 @@ const char kWeightKey[] = "weight";
 HeaderEndpointOutcome ProcessEndpoint(ReportingDelegate* delegate,
                                       ReportingCache* cache,
                                       base::TimeTicks now,
+                                      const std::string& group,
+                                      int ttl_sec,
+                                      ReportingClient::Subdomains subdomains,
                                       const url::Origin& origin,
                                       const base::Value& value,
                                       GURL* endpoint_url_out) {
@@ -98,35 +119,15 @@ HeaderEndpointOutcome ProcessEndpoint(ReportingDelegate* delegate,
 
   std::string endpoint_url_string;
   if (!dict->HasKey(kUrlKey))
-    return HeaderEndpointOutcome::DISCARDED_ENDPOINT_MISSING;
+    return HeaderEndpointOutcome::DISCARDED_URL_MISSING;
   if (!dict->GetString(kUrlKey, &endpoint_url_string))
-    return HeaderEndpointOutcome::DISCARDED_ENDPOINT_NOT_STRING;
+    return HeaderEndpointOutcome::DISCARDED_URL_NOT_STRING;
 
   GURL endpoint_url(endpoint_url_string);
   if (!endpoint_url.is_valid())
-    return HeaderEndpointOutcome::DISCARDED_ENDPOINT_INVALID;
+    return HeaderEndpointOutcome::DISCARDED_URL_INVALID;
   if (!endpoint_url.SchemeIsCryptographic())
-    return HeaderEndpointOutcome::DISCARDED_ENDPOINT_INSECURE;
-
-  int ttl_sec = -1;
-  if (!dict->HasKey(kMaxAgeKey))
-    return HeaderEndpointOutcome::DISCARDED_TTL_MISSING;
-  if (!dict->GetInteger(kMaxAgeKey, &ttl_sec))
-    return HeaderEndpointOutcome::DISCARDED_TTL_NOT_INTEGER;
-  if (ttl_sec < 0)
-    return HeaderEndpointOutcome::DISCARDED_TTL_NEGATIVE;
-
-  std::string group = kGroupDefaultValue;
-  if (dict->HasKey(kGroupKey) && !dict->GetString(kGroupKey, &group))
-    return HeaderEndpointOutcome::DISCARDED_GROUP_NOT_STRING;
-
-  ReportingClient::Subdomains subdomains = ReportingClient::Subdomains::EXCLUDE;
-  bool subdomains_bool = false;
-  if (dict->HasKey(kIncludeSubdomainsKey) &&
-      dict->GetBoolean(kIncludeSubdomainsKey, &subdomains_bool) &&
-      subdomains_bool == true) {
-    subdomains = ReportingClient::Subdomains::INCLUDE;
-  }
+    return HeaderEndpointOutcome::DISCARDED_URL_INSECURE;
 
   int priority = ReportingClient::kDefaultPriority;
   if (dict->HasKey(kPriorityKey) && !dict->GetInteger(kPriorityKey, &priority))
@@ -154,6 +155,65 @@ HeaderEndpointOutcome ProcessEndpoint(ReportingDelegate* delegate,
   return HeaderEndpointOutcome::SET;
 }
 
+// Processes a single endpoint group tuple received in a Report-To header.
+//
+// |origin| is the origin that sent the Report-To header.
+//
+// |value| is the parsed JSON value of the endpoint group tuple.
+HeaderEndpointGroupOutcome ProcessEndpointGroup(ReportingDelegate* delegate,
+                                                ReportingCache* cache,
+                                                std::set<GURL>* new_endpoints,
+                                                base::TimeTicks now,
+                                                const url::Origin& origin,
+                                                const base::Value& value) {
+  const base::DictionaryValue* dict = nullptr;
+  if (!value.GetAsDictionary(&dict))
+    return HeaderEndpointGroupOutcome::DISCARDED_NOT_DICTIONARY;
+  DCHECK(dict);
+
+  std::string group = kGroupDefaultValue;
+  if (dict->HasKey(kGroupKey) && !dict->GetString(kGroupKey, &group))
+    return HeaderEndpointGroupOutcome::DISCARDED_GROUP_NOT_STRING;
+
+  int ttl_sec = -1;
+  if (!dict->HasKey(kMaxAgeKey))
+    return HeaderEndpointGroupOutcome::DISCARDED_TTL_MISSING;
+  if (!dict->GetInteger(kMaxAgeKey, &ttl_sec))
+    return HeaderEndpointGroupOutcome::DISCARDED_TTL_NOT_INTEGER;
+  if (ttl_sec < 0)
+    return HeaderEndpointGroupOutcome::DISCARDED_TTL_NEGATIVE;
+
+  ReportingClient::Subdomains subdomains = ReportingClient::Subdomains::EXCLUDE;
+  bool subdomains_bool = false;
+  if (dict->HasKey(kIncludeSubdomainsKey) &&
+      dict->GetBoolean(kIncludeSubdomainsKey, &subdomains_bool) &&
+      subdomains_bool == true) {
+    subdomains = ReportingClient::Subdomains::INCLUDE;
+  }
+
+  const base::ListValue* endpoint_list = nullptr;
+  if (!dict->HasKey(kEndpointsKey))
+    return HeaderEndpointGroupOutcome::DISCARDED_ENDPOINTS_MISSING;
+  if (!dict->GetList(kEndpointsKey, &endpoint_list))
+    return HeaderEndpointGroupOutcome::DISCARDED_ENDPOINTS_NOT_LIST;
+
+  for (size_t i = 0; i < endpoint_list->GetSize(); i++) {
+    const base::Value* endpoint = nullptr;
+    bool got_endpoint = endpoint_list->Get(i, &endpoint);
+    DCHECK(got_endpoint);
+    GURL endpoint_url;
+
+    HeaderEndpointOutcome outcome =
+        ProcessEndpoint(delegate, cache, now, group, ttl_sec, subdomains,
+                        origin, *endpoint, &endpoint_url);
+    if (EndpointParsedSuccessfully(outcome))
+      new_endpoints->insert(endpoint_url);
+    RecordHeaderEndpointOutcome(outcome);
+  }
+
+  return HeaderEndpointGroupOutcome::PARSED;
+}
+
 }  // namespace
 
 // static
@@ -172,20 +232,23 @@ void ReportingHeaderParser::RecordHeaderDiscardedForCertStatusError() {
 }
 
 // static
+void ReportingHeaderParser::RecordHeaderDiscardedForJsonInvalid() {
+  RecordHeaderOutcome(HeaderOutcome::DISCARDED_JSON_INVALID);
+}
+
+// static
+void ReportingHeaderParser::RecordHeaderDiscardedForJsonTooBig() {
+  RecordHeaderOutcome(HeaderOutcome::DISCARDED_JSON_TOO_BIG);
+}
+
+// static
 void ReportingHeaderParser::ParseHeader(ReportingContext* context,
                                         const GURL& url,
-                                        const std::string& json_value) {
+                                        std::unique_ptr<base::Value> value) {
   DCHECK(url.SchemeIsCryptographic());
 
-  std::unique_ptr<base::Value> value =
-      base::JSONReader::Read("[" + json_value + "]");
-  if (!value) {
-    RecordHeaderOutcome(HeaderOutcome::DISCARDED_INVALID_JSON);
-    return;
-  }
-
-  const base::ListValue* endpoint_list = nullptr;
-  bool is_list = value->GetAsList(&endpoint_list);
+  const base::ListValue* group_list = nullptr;
+  bool is_list = value->GetAsList(&group_list);
   DCHECK(is_list);
 
   ReportingDelegate* delegate = context->delegate();
@@ -199,16 +262,13 @@ void ReportingHeaderParser::ParseHeader(ReportingContext* context,
   std::set<GURL> new_endpoints;
 
   base::TimeTicks now = context->tick_clock()->NowTicks();
-  for (size_t i = 0; i < endpoint_list->GetSize(); i++) {
-    const base::Value* endpoint = nullptr;
-    bool got_endpoint = endpoint_list->Get(i, &endpoint);
-    DCHECK(got_endpoint);
-    GURL endpoint_url;
-    HeaderEndpointOutcome outcome =
-        ProcessEndpoint(delegate, cache, now, origin, *endpoint, &endpoint_url);
-    if (EndpointParsedSuccessfully(outcome))
-      new_endpoints.insert(endpoint_url);
-    RecordHeaderEndpointOutcome(outcome);
+  for (size_t i = 0; i < group_list->GetSize(); i++) {
+    const base::Value* group = nullptr;
+    bool got_group = group_list->Get(i, &group);
+    DCHECK(got_group);
+    HeaderEndpointGroupOutcome outcome = ProcessEndpointGroup(
+        delegate, cache, &new_endpoints, now, origin, *group);
+    RecordHeaderEndpointGroupOutcome(outcome);
   }
 
   // Remove any endpoints that weren't specified in the current header(s).
@@ -216,6 +276,8 @@ void ReportingHeaderParser::ParseHeader(ReportingContext* context,
     if (new_endpoints.count(old_endpoint) == 0u)
       cache->RemoveClientForOriginAndEndpoint(origin, old_endpoint);
   }
+
+  RecordHeaderOutcome(HeaderOutcome::PARSED);
 }
 
 }  // namespace net

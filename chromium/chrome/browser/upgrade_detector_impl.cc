@@ -6,12 +6,14 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <string>
 
 #include "base/bind.h"
 #include "base/build_time.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/no_destructor.h"
 #include "base/process/launch.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -22,6 +24,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/google/google_brand.h"
@@ -43,19 +46,26 @@
 
 namespace {
 
+// The default thresholds for reaching annoyance levels.
+constexpr base::TimeDelta kDefaultLowThreshold = base::TimeDelta::FromDays(2);
+constexpr base::TimeDelta kDefaultElevatedThreshold =
+    base::TimeDelta::FromDays(4);
+constexpr base::TimeDelta kDefaultHighThreshold = base::TimeDelta::FromDays(7);
+
 // How long (in milliseconds) to wait (each cycle) before checking whether
 // Chrome's been upgraded behind our back.
-const int kCheckForUpgradeMs = 2 * 60 * 60 * 1000;  // 2 hours.
+constexpr base::TimeDelta kCheckForUpgrade = base::TimeDelta::FromHours(2);
 
 // How long to wait (each cycle) before checking which severity level we should
 // be at. Once we reach the highest severity, the timer will stop.
-const int kNotifyCycleTimeMs = 20 * 60 * 1000;  // 20 minutes.
+constexpr base::TimeDelta kNotifyCycleTime = base::TimeDelta::FromMinutes(20);
 
 // Same as kNotifyCycleTimeMs but only used during testing.
-const int kNotifyCycleTimeForTestingMs = 500;  // Half a second.
+constexpr base::TimeDelta kNotifyCycleTimeForTesting =
+    base::TimeDelta::FromMilliseconds(500);
 
 // The number of days after which we identify a build/install as outdated.
-const uint64_t kOutdatedBuildAgeInDays = 12 * 7;
+constexpr base::TimeDelta kOutdatedBuildAge = base::TimeDelta::FromDays(12 * 7);
 
 // Return the string that was passed as a value for the
 // kCheckForUpdateIntervalSec switch.
@@ -82,24 +92,25 @@ bool IsTesting() {
 }
 
 // How often to check for an upgrade.
-int GetCheckForUpgradeEveryMs() {
+base::TimeDelta GetCheckForUpgradeDelay() {
   // Check for a value passed via the command line.
-  int interval_ms;
+  int seconds;
   std::string interval = CmdLineInterval();
-  if (!interval.empty() && base::StringToInt(interval, &interval_ms))
-    return interval_ms * 1000;  // Command line value is in seconds.
+  if (!interval.empty() && base::StringToInt(interval, &seconds))
+    return base::TimeDelta::FromSeconds(seconds);
 
-  return kCheckForUpgradeMs;
+  return kCheckForUpgrade;
 }
 
-#if !defined(OS_WIN) || defined(GOOGLE_CHROME_BUILD)
-// Return true if the current build is one of the unstable channels.
+// Return true if the browser is updating on the dev or canary channels.
 bool IsUnstableChannel() {
-  version_info::Channel channel = chrome::GetChannel();
+  // Unbranded (Chromium) builds are on the UNKNOWN channel, so check explicitly
+  // for the Google Chrome channels that are considered "unstable". This ensures
+  // that Chromium builds get the default behavior.
+  const version_info::Channel channel = chrome::GetChannel();
   return channel == version_info::Channel::DEV ||
          channel == version_info::Channel::CANARY;
 }
-#endif  // !defined(OS_WIN) || defined(GOOGLE_CHROME_BUILD)
 
 // Gets the currently installed version. On Windows, if |critical_update| is not
 // NULL, also retrieves the critical update version info if available.
@@ -140,16 +151,21 @@ base::Version GetCurrentlyInstalledVersionImpl(base::Version* critical_update) {
 
 }  // namespace
 
-UpgradeDetectorImpl::UpgradeDetectorImpl()
-    : blocking_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
+UpgradeDetectorImpl::UpgradeDetectorImpl(const base::TickClock* tick_clock)
+    : UpgradeDetector(tick_clock),
+      blocking_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
           {base::TaskPriority::BACKGROUND,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN,
            base::MayBlock()})),
-      is_unstable_channel_(false),
+      detect_upgrade_timer_(this->tick_clock()),
+      upgrade_notification_timer_(this->tick_clock()),
       is_auto_update_enabled_(true),
+      simulating_outdated_(SimulatingOutdated()),
+      is_testing_(simulating_outdated_ || IsTesting()),
       build_date_(base::GetBuildTime()),
       weak_factory_(this) {
-  base::CommandLine command_line(*base::CommandLine::ForCurrentProcess());
+  InitializeThresholds();
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
   // The different command line switches that affect testing can't be used
   // simultaneously, if they do, here's the precedence order, based on the order
   // of the if statements below:
@@ -159,17 +175,17 @@ UpgradeDetectorImpl::UpgradeDetectorImpl()
   // - kSimulateCriticalUpdate has precedence over kSimulateOutdated.
   // - kSimulateOutdatedNoAU has precedence over kSimulateOutdated.
   // - kSimulateOutdated[NoAu] can work on its own, or with a specified date.
-  if (command_line.HasSwitch(switches::kDisableBackgroundNetworking))
+  if (cmd_line.HasSwitch(switches::kDisableBackgroundNetworking))
     return;
-  if (command_line.HasSwitch(switches::kSimulateUpgrade)) {
+  if (cmd_line.HasSwitch(switches::kSimulateUpgrade)) {
     UpgradeDetected(UPGRADE_AVAILABLE_REGULAR);
     return;
   }
-  if (command_line.HasSwitch(switches::kSimulateCriticalUpdate)) {
+  if (cmd_line.HasSwitch(switches::kSimulateCriticalUpdate)) {
     UpgradeDetected(UPGRADE_AVAILABLE_CRITICAL);
     return;
   }
-  if (SimulatingOutdated()) {
+  if (simulating_outdated_) {
     // The outdated simulation can work without a value, which means outdated
     // now, or with a value that must be a well formed date/time string that
     // overrides the build date.
@@ -178,13 +194,13 @@ UpgradeDetectorImpl::UpgradeDetectorImpl()
     // command line switch must also be specified for the service to be
     // available on non GOOGLE_CHROME_BUILD.
     std::string switch_name;
-    if (command_line.HasSwitch(switches::kSimulateOutdatedNoAU)) {
+    if (cmd_line.HasSwitch(switches::kSimulateOutdatedNoAU)) {
       is_auto_update_enabled_ = false;
       switch_name = switches::kSimulateOutdatedNoAU;
     } else {
       switch_name = switches::kSimulateOutdated;
     }
-    std::string build_date = command_line.GetSwitchValueASCII(switch_name);
+    std::string build_date = cmd_line.GetSwitchValueASCII(switch_name);
     base::Time maybe_build_time;
     bool result = base::Time::FromString(build_date.c_str(), &maybe_build_time);
     if (result && !maybe_build_time.is_null()) {
@@ -209,11 +225,9 @@ UpgradeDetectorImpl::UpgradeDetectorImpl()
     variations_service->AddObserver(this);
 
 #if defined(OS_WIN)
-// Only enable upgrade notifications for Google Chrome builds. Chromium has no
-// upgrade channel.
+// Only enable upgrade notifications for Google Chrome builds. Chromium does not
+// use an auto-updater.
 #if defined(GOOGLE_CHROME_BUILD)
-  // Check whether the build is an unstable channel before starting the timer.
-  is_unstable_channel_ = IsUnstableChannel();
   // There might be a policy/enterprise environment preventing updates, so
   // validate updatability and then call StartTimerForUpgradeCheck
   // appropriately. Skip this step if a past attempt has been made to enable
@@ -242,8 +256,6 @@ UpgradeDetectorImpl::UpgradeDetectorImpl()
 #else
   return;
 #endif
-  // Check whether the build is an unstable channel before starting the timer.
-  is_unstable_channel_ = IsUnstableChannel();
   StartTimerForUpgradeCheck();
 #endif  // defined(OS_WIN)
 }
@@ -266,7 +278,7 @@ void UpgradeDetectorImpl::DetectUpgradeTask(
       GetCurrentlyInstalledVersionImpl(&critical_update);
 
   // Get the version of the currently *running* instance of Chrome.
-  base::Version running_version(version_info::GetVersionNumber());
+  const base::Version& running_version = version_info::GetVersion();
   if (!running_version.IsValid()) {
     NOTREACHED();
     return;
@@ -290,9 +302,8 @@ void UpgradeDetectorImpl::DetectUpgradeTask(
 
 void UpgradeDetectorImpl::StartTimerForUpgradeCheck() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  detect_upgrade_timer_.Start(FROM_HERE,
-      base::TimeDelta::FromMilliseconds(GetCheckForUpgradeEveryMs()),
-      this, &UpgradeDetectorImpl::CheckForUpgrade);
+  detect_upgrade_timer_.Start(FROM_HERE, GetCheckForUpgradeDelay(), this,
+                              &UpgradeDetectorImpl::CheckForUpgrade);
 }
 
 void UpgradeDetectorImpl::StartUpgradeNotificationTimer() {
@@ -302,16 +313,95 @@ void UpgradeDetectorImpl::StartUpgradeNotificationTimer() {
   if (upgrade_notification_timer_.IsRunning())
     return;
 
-  upgrade_detected_time_ = base::TimeTicks::Now();
+  if (upgrade_detected_time().is_null())
+    set_upgrade_detected_time(tick_clock()->NowTicks());
 
   // Start the repeating timer for notifying the user after a certain period.
-  // The called function will eventually figure out that enough time has passed
-  // and stop the timer.
-  const int cycle_time_ms = IsTesting() ?
-      kNotifyCycleTimeForTestingMs : kNotifyCycleTimeMs;
-  upgrade_notification_timer_.Start(FROM_HERE,
-      base::TimeDelta::FromMilliseconds(cycle_time_ms),
+  upgrade_notification_timer_.Start(
+      FROM_HERE, is_testing_ ? kNotifyCycleTimeForTesting : kNotifyCycleTime,
       this, &UpgradeDetectorImpl::NotifyOnUpgrade);
+}
+
+void UpgradeDetectorImpl::InitializeThresholds() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!stages_.empty())
+    return;
+
+  DoInitializeThresholds();
+#if DCHECK_IS_ON()
+  // |stages_| must have at least one element, and must be sorted in decreasing
+  // order of time.
+  DCHECK(!stages_.empty());
+  for (auto scan = stages_.begin() + 1; scan != stages_.end(); ++scan)
+    DCHECK_GT((scan - 1)->first, scan->first);
+
+  // elevated_threshold_ must be greater than low_threshold (the last item in)
+  // |stages_|.
+  DCHECK_GT(elevated_threshold_, stages_.back().first);
+
+  // high_threshold_ must be greater than elevated_threshold_.
+  DCHECK_GT(high_threshold_, elevated_threshold_);
+
+  // If elevated_threshold_ and high_threshold_ are present in |stages_|, they
+  // must be equal.
+  if (stages_.size() != 1) {
+    DCHECK(!IsUnstableChannel());
+    DCHECK_EQ(stages_.size(), 3U);
+    DCHECK_EQ(stages_[1].first, elevated_threshold_);
+    DCHECK_EQ(stages_[0].first, high_threshold_);
+  } else {
+    DCHECK(IsUnstableChannel());
+  }
+#endif  // DCHECK_IS_ON()
+}
+
+void UpgradeDetectorImpl::DoInitializeThresholds() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(stages_.empty());
+
+  base::TimeDelta low_threshold;
+
+  // Use a custom notification period for the "high" level, dividing it evenly
+  // to set the "low" and "elevated" levels. Such overrides trump all else.
+  const base::TimeDelta custom_high = GetRelaunchNotificationPeriod();
+  if (!custom_high.is_zero()) {
+    low_threshold = custom_high / 3;
+    elevated_threshold_ = custom_high - low_threshold;
+    high_threshold_ = custom_high;
+    // Stages must be sorted by decreasing TimeDelta.
+    stages_.emplace_back(high_threshold_, UPGRADE_ANNOYANCE_HIGH);
+    stages_.emplace_back(elevated_threshold_, UPGRADE_ANNOYANCE_ELEVATED);
+    stages_.emplace_back(low_threshold, UPGRADE_ANNOYANCE_LOW);
+    return;
+  }
+
+  // Use the default values when no override is set.
+  low_threshold = kDefaultLowThreshold;
+  elevated_threshold_ = kDefaultElevatedThreshold;
+  high_threshold_ = kDefaultHighThreshold;
+
+  // When testing, scale everything back so that a day passes in ten seconds.
+  if (is_testing_) {
+    static constexpr int64_t scale_factor =
+        base::TimeDelta::FromDays(1) / base::TimeDelta::FromSeconds(10);
+    low_threshold /= scale_factor;
+    elevated_threshold_ /= scale_factor;
+    high_threshold_ /= scale_factor;
+  }
+
+  // Canary and dev channels are extra special, and reach "low" annoyance after
+  // one hour (one second in testing) and never advance beyond that.
+  if (IsUnstableChannel()) {
+    low_threshold = is_testing_ ? base::TimeDelta::FromSeconds(1)
+                                : base::TimeDelta::FromHours(1);
+    // High and elevated thresholds are not added to |stages_| on unstable
+    // channels.
+  } else {
+    // Stages must be sorted by decreasing TimeDelta.
+    stages_.emplace_back(high_threshold_, UPGRADE_ANNOYANCE_HIGH);
+    stages_.emplace_back(elevated_threshold_, UPGRADE_ANNOYANCE_ELEVATED);
+  }
+  stages_.emplace_back(low_threshold, UPGRADE_ANNOYANCE_LOW);
 }
 
 void UpgradeDetectorImpl::CheckForUpgrade() {
@@ -344,8 +434,7 @@ bool UpgradeDetectorImpl::DetectOutdatedInstall() {
 
   // Don't show the bubble if we have a brand code that is NOT organic, unless
   // an outdated build is being simulated by command line switches.
-  static bool simulate_outdated = SimulatingOutdated();
-  if (!simulate_outdated) {
+  if (!simulating_outdated_) {
     std::string brand;
     if (google_brand::GetBrand(&brand) && !google_brand::IsOrganic(brand))
       return false;
@@ -373,8 +462,7 @@ bool UpgradeDetectorImpl::DetectOutdatedInstall() {
     return false;
   }
 
-  if (network_time - build_date_ >
-      base::TimeDelta::FromDays(kOutdatedBuildAgeInDays)) {
+  if (network_time - build_date_ > kOutdatedBuildAge) {
     UpgradeDetected(is_auto_update_enabled_ ?
         UPGRADE_NEEDED_OUTDATED_INSTALL :
         UPGRADE_NEEDED_OUTDATED_INSTALL_NO_AU);
@@ -382,14 +470,7 @@ bool UpgradeDetectorImpl::DetectOutdatedInstall() {
   }
   // If we simlated an outdated install with a date, we don't want to keep
   // checking for version upgrades, which happens on non-official builds.
-  return simulate_outdated;
-}
-
-void UpgradeDetectorImpl::OnExperimentChangesDetected(Severity severity) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  set_best_effort_experiment_updates_available(severity == BEST_EFFORT);
-  set_critical_experiment_updates_available(severity == CRITICAL);
-  StartUpgradeNotificationTimer();
+  return simulating_outdated_;
 }
 
 void UpgradeDetectorImpl::UpgradeDetected(UpgradeAvailable upgrade_available) {
@@ -403,59 +484,94 @@ void UpgradeDetectorImpl::UpgradeDetected(UpgradeAvailable upgrade_available) {
   StartUpgradeNotificationTimer();
 }
 
+void UpgradeDetectorImpl::OnExperimentChangesDetected(Severity severity) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  set_best_effort_experiment_updates_available(severity == BEST_EFFORT);
+  set_critical_experiment_updates_available(severity == CRITICAL);
+  StartUpgradeNotificationTimer();
+}
+
 void UpgradeDetectorImpl::NotifyOnUpgradeWithTimePassed(
     base::TimeDelta time_passed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  const bool is_critical_or_outdated =
-      upgrade_available() > UPGRADE_AVAILABLE_REGULAR ||
-      critical_experiment_updates_available();
-  if (is_unstable_channel_) {
-    // There's only one threat level for unstable channels like dev and
-    // canary, and it hits after one hour. During testing, it hits after one
-    // second.
-    const base::TimeDelta unstable_threshold = IsTesting() ?
-        base::TimeDelta::FromSeconds(1) : base::TimeDelta::FromHours(1);
+  const UpgradeNotificationAnnoyanceLevel last_stage =
+      upgrade_notification_stage();
 
-    if (is_critical_or_outdated) {
-      set_upgrade_notification_stage(UPGRADE_ANNOYANCE_CRITICAL);
-    } else if (time_passed >= unstable_threshold) {
-      set_upgrade_notification_stage(UPGRADE_ANNOYANCE_LOW);
+  // Figure out which stage the detector is now in (new_stage) and how far away
+  // the next highest stage is (next_delay).
+  UpgradeNotificationAnnoyanceLevel new_stage = UPGRADE_ANNOYANCE_NONE;
+  base::TimeDelta next_delay;
 
-      // That's as high as it goes.
-      upgrade_notification_timer_.Stop();
-    } else {
-      return;  // Not ready to recommend upgrade.
-    }
+  if (upgrade_available() > UPGRADE_AVAILABLE_REGULAR ||
+      critical_experiment_updates_available()) {
+    new_stage = UPGRADE_ANNOYANCE_CRITICAL;
   } else {
-    const base::TimeDelta multiplier = IsTesting() ?
-        base::TimeDelta::FromSeconds(10) : base::TimeDelta::FromDays(1);
-
-    // 14 days when not testing, otherwise 140 seconds.
-    const base::TimeDelta severe_threshold = 14 * multiplier;
-    const base::TimeDelta high_threshold = 7 * multiplier;
-    const base::TimeDelta elevated_threshold = 4 * multiplier;
-    const base::TimeDelta low_threshold = 2 * multiplier;
-
-    // These if statements must be sorted (highest interval first).
-    if (time_passed >= severe_threshold || is_critical_or_outdated) {
-      set_upgrade_notification_stage(
-          is_critical_or_outdated ? UPGRADE_ANNOYANCE_CRITICAL :
-                                    UPGRADE_ANNOYANCE_SEVERE);
-
-      // We can't get any higher, baby.
-      upgrade_notification_timer_.Stop();
-    } else if (time_passed >= high_threshold) {
-      set_upgrade_notification_stage(UPGRADE_ANNOYANCE_HIGH);
-    } else if (time_passed >= elevated_threshold) {
-      set_upgrade_notification_stage(UPGRADE_ANNOYANCE_ELEVATED);
-    } else if (time_passed >= low_threshold) {
-      set_upgrade_notification_stage(UPGRADE_ANNOYANCE_LOW);
-    } else {
-      return;  // Not ready to recommend upgrade.
-    }
+    // |stages_| must be sorted by decreasing TimeDelta.
+    auto it = std::find_if(stages_.begin(), stages_.end(),
+                           [time_passed](const DeltaAndStage& delta_and_stage) {
+                             return time_passed >= delta_and_stage.first;
+                           });
+    if (it != stages_.end())
+      new_stage = it->second;
+    if (it != stages_.begin())
+      next_delay = (it - 1)->first - time_passed;
   }
 
-  NotifyUpgrade();
+  set_upgrade_notification_stage(new_stage);
+  if (!next_delay.is_zero()) {
+    // Schedule the next wakeup in 20 minutes or when the next change to the
+    // notification stage should take place.
+    upgrade_notification_timer_.Start(
+        FROM_HERE,
+        std::min(next_delay,
+                 is_testing_ ? kNotifyCycleTimeForTesting : kNotifyCycleTime),
+        this, &UpgradeDetectorImpl::NotifyOnUpgrade);
+  } else if (upgrade_notification_timer_.IsRunning()) {
+    // Explicitly stop the timer in case this call is due to a change (e.g., in
+    // the RelaunchNotificationPeriod) that brought the instance up to or above
+    // the "high" annoyance level.
+    upgrade_notification_timer_.Stop();
+  }
+
+  // Issue a notification if the stage is above "none" or if it's dropped down
+  // to "none" from something higher.
+  if (new_stage != UPGRADE_ANNOYANCE_NONE ||
+      last_stage != UPGRADE_ANNOYANCE_NONE) {
+    NotifyUpgrade();
+  }
+}
+
+base::TimeDelta UpgradeDetectorImpl::GetThresholdForLevel(
+    UpgradeNotificationAnnoyanceLevel level) {
+  DCHECK(!stages_.empty());
+  switch (level) {
+    case UPGRADE_ANNOYANCE_LOW:
+      // Low is always the last item in |stages_|.
+      return stages_.back().first;
+    case UPGRADE_ANNOYANCE_ELEVATED:
+      // Elevated is not present in |stages_| on unstable channels.
+      return elevated_threshold_;
+    case UPGRADE_ANNOYANCE_HIGH:
+      break;
+    case UPGRADE_ANNOYANCE_NONE:
+    case UPGRADE_ANNOYANCE_CRITICAL:
+      NOTREACHED();
+      break;
+  }
+  // High is not present in |stages_| on unstable channels.
+  return high_threshold_;
+}
+
+void UpgradeDetectorImpl::OnRelaunchNotificationPeriodPrefChanged() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // Force a recomputation of the thresholds.
+  stages_.clear();
+  InitializeThresholds();
+
+  // Broadcast the appropriate notification if an upgrade has been detected.
+  if (upgrade_available() != UPGRADE_AVAILABLE_NONE)
+    NotifyOnUpgrade();
 }
 
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
@@ -469,18 +585,41 @@ void UpgradeDetectorImpl::OnAutoupdatesEnabledResult(
 
 void UpgradeDetectorImpl::NotifyOnUpgrade() {
   const base::TimeDelta time_passed =
-      base::TimeTicks::Now() - upgrade_detected_time_;
+      tick_clock()->NowTicks() - upgrade_detected_time();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   NotifyOnUpgradeWithTimePassed(time_passed);
 }
 
 // static
 UpgradeDetectorImpl* UpgradeDetectorImpl::GetInstance() {
-  static auto* const instance = new UpgradeDetectorImpl();
-  return instance;
+  static base::NoDestructor<UpgradeDetectorImpl> instance(
+      base::DefaultTickClock::GetInstance());
+  return instance.get();
+}
+
+base::TimeDelta UpgradeDetectorImpl::GetHighAnnoyanceLevelDelta() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Elevated and high thresholds are not present in |stages_| for unstable
+  // channels, but their delta is still valid in such case.
+  return high_threshold_ - elevated_threshold_;
+}
+
+base::TimeTicks UpgradeDetectorImpl::GetHighAnnoyanceDeadline() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  const base::TimeTicks detected_time = upgrade_detected_time();
+  if (detected_time.is_null())
+    return detected_time;
+  // While dev and canary will never reach high annoyance (see comment in
+  // NotifyOnUpgradeWithTimePassed), they do obey its default deadline.
+  return detected_time + high_threshold_;
 }
 
 // static
 UpgradeDetector* UpgradeDetector::GetInstance() {
   return UpgradeDetectorImpl::GetInstance();
+}
+
+// static
+base::TimeDelta UpgradeDetector::GetDefaultHighAnnoyanceThreshold() {
+  return kDefaultHighThreshold;
 }

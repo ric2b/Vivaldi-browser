@@ -15,7 +15,6 @@
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/crx_file/crx3.pb.h"
 #include "components/crx_file/crx_file.h"
@@ -77,7 +76,7 @@ bool ReadHashAndVerifyArchive(base::File* file,
   size_t len = 0;
   while ((len = ReadAndHashBuffer(buffer, arraysize(buffer), file, hash)) > 0) {
     for (auto& verifier : verifiers)
-      verifier->VerifyUpdate(buffer, len);
+      verifier->VerifyUpdate(base::make_span(buffer, len));
   }
   for (auto& verifier : verifiers) {
     if (!verifier->VerifyFinal())
@@ -161,19 +160,16 @@ VerifierResult VerifyCrx3(
       std::vector<uint8_t> key_hash(crypto::kSHA256Length);
       crypto::SHA256HashString(key, key_hash.data(), key_hash.size());
       required_key_set.erase(key_hash);
-      auto v = base::MakeUnique<crypto::SignatureVerifier>();
+      auto v = std::make_unique<crypto::SignatureVerifier>();
       static_assert(sizeof(unsigned char) == sizeof(uint8_t),
                     "Unsupported char size.");
-      if (!v->VerifyInit(
-              proof_type.second, reinterpret_cast<const uint8_t*>(sig.data()),
-              sig.size(), reinterpret_cast<const uint8_t*>(key.data()),
-              key.size()))
+      if (!v->VerifyInit(proof_type.second,
+                         base::as_bytes(base::make_span(sig)),
+                         base::as_bytes(base::make_span(key))))
         return VerifierResult::ERROR_SIGNATURE_INITIALIZATION_FAILED;
-      v->VerifyUpdate(kSignatureContext, arraysize(kSignatureContext));
-      v->VerifyUpdate(header_size_octets, arraysize(header_size_octets));
-      v->VerifyUpdate(
-          reinterpret_cast<const uint8_t*>(signed_header_data_str.data()),
-          signed_header_data_str.size());
+      v->VerifyUpdate(kSignatureContext);
+      v->VerifyUpdate(header_size_octets);
+      v->VerifyUpdate(base::as_bytes(base::make_span(signed_header_data_str)));
       verifiers.push_back(std::move(v));
     }
   }
@@ -221,10 +217,9 @@ VerifierResult VerifyCrx2(
       static_cast<int>(sig_size))
     return VerifierResult::ERROR_HEADER_INVALID;
   std::vector<std::unique_ptr<crypto::SignatureVerifier>> verifiers;
-  verifiers.push_back(base::MakeUnique<crypto::SignatureVerifier>());
-  if (!verifiers[0]->VerifyInit(crypto::SignatureVerifier::RSA_PKCS1_SHA1,
-                                sig.data(), sig.size(), key.data(),
-                                key.size())) {
+  verifiers.push_back(std::make_unique<crypto::SignatureVerifier>());
+  if (!verifiers[0]->VerifyInit(crypto::SignatureVerifier::RSA_PKCS1_SHA1, sig,
+                                key)) {
     return VerifierResult::ERROR_SIGNATURE_INITIALIZATION_FAILED;
   }
 

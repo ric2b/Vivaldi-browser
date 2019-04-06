@@ -20,8 +20,10 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
-#include "third_party/WebKit/common/frame_policy.h"
-#include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
+#include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/frame/user_activation_state.h"
+#include "third_party/blink/public/common/frame/user_activation_update_type.h"
+#include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -126,6 +128,8 @@ class CONTENT_EXPORT FrameTreeNode {
     return children_.size();
   }
 
+  unsigned int depth() const { return depth_; }
+
   FrameTreeNode* parent() const { return parent_; }
 
   FrameTreeNode* opener() const { return opener_; }
@@ -191,9 +195,6 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // Set the current name and notify proxies about the update.
   void SetFrameName(const std::string& name, const std::string& unique_name);
-
-  // Set the frame's feature policy header, clearing any existing header.
-  void SetFeaturePolicyHeader(const blink::ParsedFeaturePolicy& parsed_header);
 
   // Add CSP headers to replication state, notify proxies about the update.
   void AddContentSecurityPolicies(
@@ -282,12 +283,17 @@ class CONTENT_EXPORT FrameTreeNode {
   bool IsLoading() const;
 
   // Returns this node's loading progress.
-  double loading_progress() const { return loading_progress_; }
   double loaded_bytes() const { return loaded_bytes_; }
   double loaded_elements() const { return loaded_elements_; }
   double total_elements() const { return total_elements_; }
 
   NavigationRequest* navigation_request() { return navigation_request_.get(); }
+
+  // Transfers the ownership of the NavigationRequest to |render_frame_host|.
+  // From ReadyToCommit to DidCommit, the NavigationRequest is owned by the
+  // RenderFrameHost that is committing the navigation.
+  void TransferNavigationRequestOwnership(
+      RenderFrameHostImpl* render_frame_host);
 
   // PlzNavigate
   // Takes ownership of |navigation_request| and makes it the current
@@ -305,13 +311,6 @@ class CONTENT_EXPORT FrameTreeNode {
   // |inform_renderer| is true, an IPC will be sent to the renderer process to
   // inform it that the navigation it requested was cancelled.
   void ResetNavigationRequest(bool keep_state, bool inform_renderer);
-
-  // Returns true if this node is in a state where the loading progress is being
-  // tracked.
-  bool has_started_loading() const;
-
-  // Resets this node's loading progress.
-  void reset_loading_progress();
 
   // A RenderFrameHost in this node started loading.
   // |to_different_document| will be true unless the load is a fragment
@@ -354,7 +353,13 @@ class CONTENT_EXPORT FrameTreeNode {
   // Returns the BlameContext associated with this node.
   FrameTreeNodeBlameContext& blame_context() { return blame_context_; }
 
-  void OnSetHasReceivedUserGesture();
+  // Updates the user activation state in the browser frame tree and in the
+  // frame trees in all renderer processes except the renderer for this node
+  // (which initiated the update).  Returns |false| if the update tries to
+  // consume an already consumed/expired transient state, |true| otherwise.  See
+  // the comment on user_activation_state_ below.
+  bool UpdateUserActivationState(blink::UserActivationUpdateType update_type);
+
   void OnSetHasReceivedUserGestureBeforeNavigation(bool value);
 
   // Returns the sandbox flags currently in effect for this frame. This includes
@@ -371,10 +376,38 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // Updates the active sandbox flags in this frame, in response to a
   // Content-Security-Policy header adding additional flags, in addition to
-  // those given to this frame by its parent. Note that on navigation, these
-  // updates will be cleared, and the flags in the pending frame policy will be
-  // applied to the frame.
-  void UpdateActiveSandboxFlags(blink::WebSandboxFlags sandbox_flags);
+  // those given to this frame by its parent, or in response to the
+  // Feature-Policy header being set. Note that on navigation, these updates
+  // will be cleared, and the flags in the pending frame policy will be applied
+  // to the frame.
+  void UpdateFramePolicyHeaders(
+      blink::WebSandboxFlags sandbox_flags,
+      const blink::ParsedFeaturePolicy& parsed_header);
+
+  // Returns whether the frame received a user gesture.
+  bool has_received_user_gesture() const {
+    return replication_state_.has_received_user_gesture;
+  }
+
+  // When a tab is discarded, WebContents sets was_discarded on its
+  // root FrameTreeNode.
+  // In addition, when a child frame is created, this bit is passed on from
+  // parent to child.
+  // When a navigation request is created, was_discarded is passed on to the
+  // request and reset to false in FrameTreeNode.
+  void set_was_discarded() { was_discarded_ = true; }
+
+  // Returns the sticky bit of the User Activation v2 state of the
+  // |FrameTreeNode|.
+  bool HasBeenActivated() const {
+    return user_activation_state_.HasBeenActive();
+  }
+
+  // Returns the transient bit of the User Activation v2 state of the
+  // |FrameTreeNode|.
+  bool HasTransientUserActivation() {
+    return user_activation_state_.IsActive();
+  }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessFeaturePolicyBrowserTest,
@@ -385,6 +418,10 @@ class CONTENT_EXPORT FrameTreeNode {
   class OpenerDestroyedObserver;
 
   FrameTreeNode* GetSibling(int relative_offset) const;
+
+  bool NotifyUserActivation();
+
+  bool ConsumeTransientUserActivation();
 
   // The next available browser-global FrameTreeNode ID.
   static int next_frame_tree_node_id_;
@@ -407,7 +444,10 @@ class CONTENT_EXPORT FrameTreeNode {
   const int frame_tree_node_id_;
 
   // The parent node of this frame. |nullptr| if this node is the root.
-  FrameTreeNode* parent_;
+  FrameTreeNode* const parent_;
+
+  // Number of edges from this node to the root. 0 if this is the root.
+  const unsigned int depth_;
 
   // The frame that opened this frame, if any.  Will be set to null if the
   // opener is closed, or if this frame disowns its opener by setting its
@@ -473,13 +513,10 @@ class CONTENT_EXPORT FrameTreeNode {
   // Note that dynamic updates only take effect on the next frame navigation.
   FrameOwnerProperties frame_owner_properties_;
 
-  // Used to track this node's loading progress (from 0 to 1).
-  double loading_progress_;
-
   // Used to track loaded bytes and elements.
-  double loaded_bytes_;
-  int loaded_elements_;
-  int total_elements_;
+  double loaded_bytes_ = 0;
+  int loaded_elements_ = 0;
+  int total_elements_ = 0;
 
   // PlzNavigate
   // Owns an ongoing NavigationRequest until it is ready to commit. It will then
@@ -490,6 +527,36 @@ class CONTENT_EXPORT FrameTreeNode {
   base::ObserverList<Observer> observers_;
 
   base::TimeTicks last_focus_time_;
+
+  bool was_discarded_;
+
+  // The user activation state of the current frame.
+  //
+  // Changes to this state update other FrameTreeNodes as follows: for
+  // notification updates (on user inputs) all ancestor nodes are updated; for
+  // activation consumption calls, the whole frame tree is updated (w/o such
+  // exhaustive consumption, a rouge iframe can cause multiple consumptions per
+  // user activation).
+  //
+  // The user activation state is replicated in the browser process (in
+  // FrameTreeNode) and in the renderer processes (in LocalFrame and
+  // RemoteFrames).  The replicated states across the browser and renderer
+  // processes are kept in sync as follows:
+  //
+  // [A] Consumption of activation state for popups starts in the frame tree of
+  // the browser process and propagate to the renderer trees through direct IPCs
+  // (one IPC sent to each renderer).
+  //
+  // [B] Consumption calls from JS/blink side (e.g. video picture-in-picture)
+  // update the originating renderer's local frame tree and send an IPC to the
+  // browser; the browser updates its frame tree and sends IPCs to all other
+  // renderers each of which then updates its local frame tree.
+  //
+  // [B'] Notification updates on user inputs still follow [B] but they should
+  // really follow [A].  TODO(mustaq): fix through https://crbug.com/848778.
+  //
+  // [C] Expiration of an active state is tracked independently in each process.
+  blink::UserActivationState user_activation_state_;
 
   // A helper for tracing the snapshots of this FrameTreeNode and attributing
   // browser process activities to this node (when possible).  It is unrelated

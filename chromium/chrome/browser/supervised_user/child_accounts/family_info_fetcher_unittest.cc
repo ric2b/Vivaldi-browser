@@ -12,20 +12,21 @@
 #include <vector>
 
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "net/base/net_errors.h"
-#include "net/url_request/test_url_fetcher_factory.h"
+#include "net/http/http_status_code.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 const char kAccountId[] = "user@gmail.com";
 const char kDifferentAccountId[] = "some_other_user@gmail.com";
-const int kFamilyInfoFetcherURLFetcherID = 0;
 
 bool operator==(const FamilyInfoFetcher::FamilyProfile& family1,
                 const FamilyInfoFetcher::FamilyProfile& family2) {
@@ -48,10 +49,10 @@ namespace {
 std::string BuildGetFamilyProfileResponse(
     const FamilyInfoFetcher::FamilyProfile& family) {
   base::DictionaryValue dict;
-  auto family_dict = base::MakeUnique<base::DictionaryValue>();
+  auto family_dict = std::make_unique<base::DictionaryValue>();
   family_dict->SetKey("familyId", base::Value(family.id));
   std::unique_ptr<base::DictionaryValue> profile_dict =
-      base::MakeUnique<base::DictionaryValue>();
+      std::make_unique<base::DictionaryValue>();
   profile_dict->SetKey("name", base::Value(family.name));
   family_dict->SetWithoutPathExpansion("profile", std::move(profile_dict));
   dict.SetWithoutPathExpansion("family", std::move(family_dict));
@@ -63,7 +64,7 @@ std::string BuildGetFamilyProfileResponse(
 std::string BuildEmptyGetFamilyProfileResponse() {
   base::DictionaryValue dict;
   dict.SetWithoutPathExpansion("family",
-                               base::MakeUnique<base::DictionaryValue>());
+                               std::make_unique<base::DictionaryValue>());
   std::string result;
   base::JSONWriter::Write(dict, &result);
   return result;
@@ -72,7 +73,7 @@ std::string BuildEmptyGetFamilyProfileResponse() {
 std::string BuildGetFamilyMembersResponse(
     const std::vector<FamilyInfoFetcher::FamilyMember>& members) {
   base::DictionaryValue dict;
-  auto list = base::MakeUnique<base::ListValue>();
+  auto list = std::make_unique<base::ListValue>();
   for (size_t i = 0; i < members.size(); i++) {
     const FamilyInfoFetcher::FamilyMember& member = members[i];
     std::unique_ptr<base::DictionaryValue> member_dict(
@@ -84,7 +85,7 @@ std::string BuildGetFamilyMembersResponse(
         !member.email.empty() ||
         !member.profile_url.empty() ||
         !member.profile_image_url.empty()) {
-      auto profile_dict = base::MakeUnique<base::DictionaryValue>();
+      auto profile_dict = std::make_unique<base::DictionaryValue>();
       if (!member.display_name.empty())
         profile_dict->SetKey("displayName", base::Value(member.display_name));
       if (!member.email.empty())
@@ -111,9 +112,12 @@ class FamilyInfoFetcherTest : public testing::Test,
                               public FamilyInfoFetcher::Consumer {
  public:
   FamilyInfoFetcherTest()
-      : request_context_(new net::TestURLRequestContextGetter(
-            base::ThreadTaskRunnerHandle::Get())),
-        fetcher_(this, kAccountId, &token_service_, request_context_.get()) {}
+      : fetcher_(
+            this,
+            kAccountId,
+            &token_service_,
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_)) {}
 
   MOCK_METHOD1(OnGetFamilyProfileSuccess,
                void(const FamilyInfoFetcher::FamilyProfile& family));
@@ -138,20 +142,8 @@ class FamilyInfoFetcherTest : public testing::Test,
         base::Time::Now() + base::TimeDelta::FromHours(1));
   }
 
-  net::TestURLFetcher* GetURLFetcher() {
-    net::TestURLFetcher* url_fetcher =
-        url_fetcher_factory_.GetFetcherByID(
-            kFamilyInfoFetcherURLFetcherID);
-    EXPECT_TRUE(url_fetcher);
-    return url_fetcher;
-  }
-
   void SendResponse(net::Error error, const std::string& response) {
-    net::TestURLFetcher* url_fetcher = GetURLFetcher();
-    url_fetcher->set_status(net::URLRequestStatus::FromError(error));
-    url_fetcher->set_response_code(net::HTTP_OK);
-    url_fetcher->SetResponseString(response);
-    url_fetcher->delegate()->OnURLFetchComplete(url_fetcher);
+    fetcher_.OnSimpleLoaderCompleteInternal(error, net::HTTP_OK, response);
   }
 
   void SendValidGetFamilyProfileResponse(
@@ -174,8 +166,7 @@ class FamilyInfoFetcherTest : public testing::Test,
 
   base::MessageLoop message_loop_;
   FakeProfileOAuth2TokenService token_service_;
-  scoped_refptr<net::TestURLRequestContextGetter> request_context_;
-  net::TestURLFetcherFactory url_fetcher_factory_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
   FamilyInfoFetcher fetcher_;
 };
 

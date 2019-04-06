@@ -6,15 +6,22 @@
 
 #include "base/mac/foundation_util.h"
 #import "base/mac/sdk_forward_declarations.h"
-#import "ui/views/cocoa/bridged_native_widget.h"
 #import "ui/base/cocoa/user_interface_item_command_handler.h"
+#import "ui/views/cocoa/bridged_native_widget.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
+#import "ui/views/cocoa/window_touch_bar_delegate.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/widget_delegate.h"
 
 @interface NSWindow (Private)
++ (Class)frameViewClassForStyleMask:(NSWindowStyleMask)windowStyle;
 - (BOOL)hasKeyAppearance;
+- (long long)_resizeDirectionForMouseLocation:(CGPoint)location;
+
+// Available in later point releases of 10.10. On 10.11+, use the public
+// -performWindowDragWithEvent: instead.
+- (void)beginWindowDragWithEvent:(NSEvent*)event;
 @end
 
 @interface NativeWidgetMacNSWindow ()
@@ -28,10 +35,53 @@
 - (BOOL)_isTitleHidden;
 @end
 
+// Use this category to implement mouseDown: on multiple frame view classes
+// with different superclasses.
+@interface NSView (CRFrameViewAdditions)
+- (void)cr_mouseDownOnFrameView:(NSEvent*)event;
+@end
+
+@implementation NSView (CRFrameViewAdditions)
+// If a mouseDown: falls through to the frame view, turn it into a window drag.
+- (void)cr_mouseDownOnFrameView:(NSEvent*)event {
+  if ([self.window _resizeDirectionForMouseLocation:event.locationInWindow] !=
+      -1)
+    return;
+  if (@available(macOS 10.11, *))
+    [self.window performWindowDragWithEvent:event];
+  else if ([self.window
+               respondsToSelector:@selector(beginWindowDragWithEvent:)])
+    [self.window beginWindowDragWithEvent:event];
+  else
+    NOTREACHED();
+}
+@end
+
+@implementation NativeWidgetMacNSWindowTitledFrame
+- (void)mouseDown:(NSEvent*)event {
+  [self cr_mouseDownOnFrameView:event];
+  [super mouseDown:event];
+}
+- (BOOL)usesCustomDrawing {
+  return NO;
+}
+@end
+
+@implementation NativeWidgetMacNSWindowBorderlessFrame
+- (void)mouseDown:(NSEvent*)event {
+  [self cr_mouseDownOnFrameView:event];
+  [super mouseDown:event];
+}
+- (BOOL)usesCustomDrawing {
+  return NO;
+}
+@end
+
 @implementation NativeWidgetMacNSWindow {
  @private
   base::scoped_nsobject<CommandDispatcher> commandDispatcher_;
   base::scoped_nsprotocol<id<UserInterfaceItemCommandHandler>> commandHandler_;
+  id<WindowTouchBarDelegate> touchBarDelegate_;  // Weak.
 }
 
 - (instancetype)initWithContentRect:(NSRect)contentRect
@@ -59,6 +109,21 @@
   [commandDispatcher_ setDelegate:delegate];
 }
 
+- (void)sheetDidEnd:(NSWindow*)sheet
+         returnCode:(NSInteger)returnCode
+        contextInfo:(void*)contextInfo {
+  // Note BridgedNativeWidget may have cleared [self delegate], in which case
+  // this will no-op. This indirection is necessary to handle AppKit invoking
+  // this selector via a posted task. See https://crbug.com/851376.
+  [[self viewsNSWindowDelegate] sheetDidEnd:sheet
+                                 returnCode:returnCode
+                                contextInfo:contextInfo];
+}
+
+- (void)setWindowTouchBarDelegate:(id<WindowTouchBarDelegate>)delegate {
+  touchBarDelegate_ = delegate;
+}
+
 // Private methods.
 
 - (ViewsNSWindowDelegate*)viewsNSWindowDelegate {
@@ -82,11 +147,29 @@
 
 // NSWindow overrides.
 
++ (Class)frameViewClassForStyleMask:(NSWindowStyleMask)windowStyle {
+  if (windowStyle & NSWindowStyleMaskTitled) {
+    if (Class customFrame = [NativeWidgetMacNSWindowTitledFrame class])
+      return customFrame;
+  } else if (Class customFrame =
+                 [NativeWidgetMacNSWindowBorderlessFrame class]) {
+    return customFrame;
+  }
+  return [super frameViewClassForStyleMask:windowStyle];
+}
+
 - (BOOL)_isTitleHidden {
   if (![self delegate])
     return NO;
 
   return ![self viewsWidget]->widget_delegate()->ShouldShowWindowTitle();
+}
+
+// The base implementation returns YES if the window's frame view is a custom
+// class, which causes undesirable changes in behavior. AppKit NSWindow
+// subclasses are known to override it and return NO.
+- (BOOL)_usesCustomDrawing {
+  return NO;
 }
 
 // Ignore [super canBecome{Key,Main}Window]. The default is NO for windows with
@@ -121,27 +204,6 @@
   // Let CommandDispatcher check if this is a redispatched event.
   if ([commandDispatcher_ preSendEvent:event])
     return;
-
-  // If a window drag event monitor is not used, query the BridgedNativeWidget
-  // to decide if a window drag should be performed.
-  // This conditional is equivalent to
-  // !views::BridgedNativeWidget::ShouldUseDragEventMonitor(), but it also
-  // supresses the -Wunguarded-availability warning.
-  if (@available(macOS 10.11, *)) {
-    views::BridgedNativeWidget* bridge =
-        views::NativeWidgetMac::GetBridgeForNativeWindow(self);
-
-    if (bridge && bridge->ShouldDragWindow(event)) {
-      // Using performWindowDragWithEvent: does not generate a
-      // NSWindowWillMoveNotification. Hence post one.
-      [[NSNotificationCenter defaultCenter]
-          postNotificationName:NSWindowWillMoveNotification
-                        object:self];
-
-      [self performWindowDragWithEvent:event];
-      return;
-    }
-  }
 
   NSEventType type = [event type];
   if ((type != NSKeyDown && type != NSKeyUp) || ![self hasViewsMenuActive]) {
@@ -193,14 +255,18 @@
     [super cursorUpdate:theEvent];
 }
 
+- (NSTouchBar*)makeTouchBar API_AVAILABLE(macos(10.12.2)) {
+  return touchBarDelegate_ ? [touchBarDelegate_ makeTouchBar] : nil;
+}
+
 // CommandDispatchingWindow implementation.
 
 - (void)setCommandHandler:(id<UserInterfaceItemCommandHandler>)commandHandler {
   commandHandler_.reset([commandHandler retain]);
 }
 
-- (BOOL)redispatchKeyEvent:(NSEvent*)event {
-  return [commandDispatcher_ redispatchKeyEvent:event];
+- (CommandDispatcher*)commandDispatcher {
+  return commandDispatcher_.get();
 }
 
 - (BOOL)defaultPerformKeyEquivalent:(NSEvent*)event {
@@ -231,6 +297,9 @@
 // NSWindow overrides (NSAccessibility informal protocol implementation).
 
 - (id)accessibilityFocusedUIElement {
+  if (![self delegate])
+    return [super accessibilityFocusedUIElement];
+
   // The SDK documents this as "The deepest descendant of the accessibility
   // hierarchy that has the focus" and says "if a child element does not have
   // the focus, either return self or, if available, invoke the superclass's

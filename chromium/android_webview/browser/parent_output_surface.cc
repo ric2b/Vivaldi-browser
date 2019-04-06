@@ -43,6 +43,13 @@ void ParentOutputSurface::SwapBuffers(viz::OutputSurfaceFrame frame) {
   context_provider_->ContextGL()->ShallowFlushCHROMIUM();
 }
 
+#if BUILDFLAG(ENABLE_VULKAN)
+gpu::VulkanSurface* ParentOutputSurface::GetVulkanSurface() {
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+#endif
+
 bool ParentOutputSurface::HasExternalStencilTest() const {
   return ScopedAppGLStateRestore::Current()
       ->stencil_state()
@@ -92,8 +99,8 @@ gfx::BufferFormat ParentOutputSurface::GetOverlayBufferFormat() const {
   return gfx::BufferFormat::RGBX_8888;
 }
 
-bool ParentOutputSurface::SurfaceIsSuspendForRecycle() const {
-  return false;
+unsigned ParentOutputSurface::UpdateGpuFence() {
+  return 0;
 }
 
 }  // namespace android_webview

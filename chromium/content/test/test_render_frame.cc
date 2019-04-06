@@ -9,17 +9,17 @@
 #include <vector>
 
 #include "base/debug/stack_trace.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/common/frame_messages.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params.mojom.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/mock_render_thread.h"
+#include "content/renderer/input/frame_input_handler_impl.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
 #include "services/network/public/cpp/resource_response.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace content {
 
@@ -75,15 +75,22 @@ class MockFrameHost : public mojom::FrameHost {
     last_interface_provider_request_ = std::move(request);
   }
 
+  void DidCommitSameDocumentNavigation(
+      std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params)
+      override {
+    last_commit_params_ = std::move(params);
+  }
+
   void BeginNavigation(const CommonNavigationParams& common_params,
-                       mojom::BeginNavigationParamsPtr begin_params) override {}
+                       mojom::BeginNavigationParamsPtr begin_params,
+                       blink::mojom::BlobURLTokenPtr blob_url_token,
+                       mojom::NavigationClientAssociatedPtrInfo) override {}
 
   void SubresourceResponseStarted(const GURL& url,
-                                  const GURL& referrer,
-                                  const std::string& method,
-                                  ResourceType resource_type,
-                                  const std::string& ip,
-                                  uint32_t cert_status) override {}
+                                  net::CertStatus cert_status) override {}
+
+  void ResourceLoadComplete(
+      mojom::ResourceLoadInfoPtr resource_load_info) override {}
 
   void DidChangeName(const std::string& name,
                      const std::string& unique_name) override {}
@@ -100,6 +107,10 @@ class MockFrameHost : public mojom::FrameHost {
   void CancelInitialHistoryLoad() override {}
 
   void UpdateEncoding(const std::string& encoding_name) override {}
+
+  void FrameSizeChanged(const gfx::Size& frame_size) override {}
+
+  void FullscreenStateChanged(bool is_fullscreen) override {}
 
  private:
   std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params>
@@ -141,10 +152,12 @@ void TestRenderFrame::WillSendRequest(blink::WebURLRequest& request) {
 void TestRenderFrame::Navigate(const CommonNavigationParams& common_params,
                                const RequestNavigationParams& request_params) {
   CommitNavigation(
-      network::ResourceResponseHead(), GURL(), common_params, request_params,
-      network::mojom::URLLoaderClientEndpointsPtr(), URLLoaderFactoryBundle(),
+      network::ResourceResponseHead(), common_params, request_params,
+      network::mojom::URLLoaderClientEndpointsPtr(),
+      std::make_unique<URLLoaderFactoryBundleInfo>(), base::nullopt,
       mojom::ControllerServiceWorkerInfoPtr(),
-      base::UnguessableToken::Create());
+      network::mojom::URLLoaderFactoryPtr(), base::UnguessableToken::Create(),
+      CommitNavigationCallback());
 }
 
 void TestRenderFrame::SwapOut(
@@ -155,23 +168,23 @@ void TestRenderFrame::SwapOut(
 }
 
 void TestRenderFrame::SetEditableSelectionOffsets(int start, int end) {
-  OnSetEditableSelectionOffsets(start, end);
+  GetFrameInputHandler()->SetEditableSelectionOffsets(start, end);
 }
 
 void TestRenderFrame::ExtendSelectionAndDelete(int before, int after) {
-  OnExtendSelectionAndDelete(before, after);
+  GetFrameInputHandler()->ExtendSelectionAndDelete(before, after);
 }
 
 void TestRenderFrame::DeleteSurroundingText(int before, int after) {
-  OnDeleteSurroundingText(before, after);
+  GetFrameInputHandler()->DeleteSurroundingText(before, after);
 }
 
 void TestRenderFrame::DeleteSurroundingTextInCodePoints(int before, int after) {
-  OnDeleteSurroundingTextInCodePoints(before, after);
+  GetFrameInputHandler()->DeleteSurroundingTextInCodePoints(before, after);
 }
 
 void TestRenderFrame::CollapseSelection() {
-  OnCollapseSelection();
+  GetFrameInputHandler()->CollapseSelection();
 }
 
 void TestRenderFrame::SetAccessibilityMode(ui::AXMode new_mode) {
@@ -181,12 +194,13 @@ void TestRenderFrame::SetAccessibilityMode(ui::AXMode new_mode) {
 void TestRenderFrame::SetCompositionFromExistingText(
     int start,
     int end,
-    const std::vector<blink::WebImeTextSpan>& ime_text_spans) {
-  OnSetCompositionFromExistingText(start, end, ime_text_spans);
+    const std::vector<ui::ImeTextSpan>& ime_text_spans) {
+  GetFrameInputHandler()->SetCompositionFromExistingText(start, end,
+                                                         ime_text_spans);
 }
 
 blink::WebNavigationPolicy TestRenderFrame::DecidePolicyForNavigation(
-    const blink::WebFrameClient::NavigationPolicyInfo& info) {
+    const blink::WebLocalFrameClient::NavigationPolicyInfo& info) {
   if (IsBrowserSideNavigationEnabled() &&
       info.url_request.CheckForBrowserSideNavigation() &&
       ((GetWebFrame()->Parent() && info.form.IsNull()) ||
@@ -233,6 +247,16 @@ mojom::FrameHost* TestRenderFrame::GetFrameHost() {
   // a message loop already, pumping messags before 1.2 would constitute a
   // nested message loop and is therefore undesired.
   return mock_frame_host_.get();
+}
+
+mojom::FrameInputHandler* TestRenderFrame::GetFrameInputHandler() {
+  if (!frame_input_handler_) {
+    mojom::FrameInputHandlerRequest frame_input_handler_request =
+        mojo::MakeRequest(&frame_input_handler_);
+    FrameInputHandlerImpl::CreateMojoService(
+        weak_factory_.GetWeakPtr(), std::move(frame_input_handler_request));
+  }
+  return frame_input_handler_.get();
 }
 
 }  // namespace content

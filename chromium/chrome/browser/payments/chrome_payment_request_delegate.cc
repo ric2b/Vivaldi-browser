@@ -11,6 +11,7 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/validation_rules_storage_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/payments/payment_request_display_manager_factory.h"
 #include "chrome/browser/payments/ssl_validity_checker.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,11 +27,13 @@
 #include "components/autofill/core/browser/region_data_loader_impl.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
+#include "components/payments/content/payment_request.h"
 #include "components/payments/content/payment_request_dialog.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/chromium/chrome_storage_impl.h"
 
@@ -38,11 +41,12 @@ namespace payments {
 
 namespace {
 
-std::unique_ptr<::i18n::addressinput::Source> GetAddressInputSource(
-    net::URLRequestContextGetter* url_context_getter) {
+std::unique_ptr<::i18n::addressinput::Source> GetAddressInputSource() {
   return std::unique_ptr<::i18n::addressinput::Source>(
-      new autofill::ChromeMetadataSource(I18N_ADDRESS_VALIDATION_DATA_URL,
-                                         url_context_getter));
+      new autofill::ChromeMetadataSource(
+          I18N_ADDRESS_VALIDATION_DATA_URL,
+          g_browser_process->system_network_context_manager()
+              ->GetSharedURLLoaderFactory()));
 }
 
 std::unique_ptr<::i18n::addressinput::Storage> GetAddressInputStorage() {
@@ -53,31 +57,35 @@ std::unique_ptr<::i18n::addressinput::Storage> GetAddressInputStorage() {
 
 ChromePaymentRequestDelegate::ChromePaymentRequestDelegate(
     content::WebContents* web_contents)
-    : dialog_(nullptr), web_contents_(web_contents) {}
+    : shown_dialog_(nullptr), web_contents_(web_contents) {}
 
 ChromePaymentRequestDelegate::~ChromePaymentRequestDelegate() {}
 
 void ChromePaymentRequestDelegate::ShowDialog(PaymentRequest* request) {
-  DCHECK_EQ(nullptr, dialog_);
-  dialog_ = chrome::CreatePaymentRequestDialog(request);
-  dialog_->ShowDialog();
+  DCHECK_EQ(nullptr, shown_dialog_);
+  hidden_dialog_ = std::unique_ptr<PaymentRequestDialog>(
+      chrome::CreatePaymentRequestDialog(request));
+  MaybeShowHiddenDialog(request);
 }
 
 void ChromePaymentRequestDelegate::CloseDialog() {
-  if (dialog_) {
-    dialog_->CloseDialog();
-    dialog_ = nullptr;
+  if (shown_dialog_) {
+    shown_dialog_->CloseDialog();
+    shown_dialog_ = nullptr;
   }
+
+  if (hidden_dialog_)
+    hidden_dialog_.reset();
 }
 
 void ChromePaymentRequestDelegate::ShowErrorMessage() {
-  if (dialog_)
-    dialog_->ShowErrorMessage();
+  if (shown_dialog_)
+    shown_dialog_->ShowErrorMessage();
 }
 
 void ChromePaymentRequestDelegate::ShowProcessingSpinner() {
-  if (dialog_)
-    dialog_->ShowProcessingSpinner();
+  if (shown_dialog_)
+    shown_dialog_->ShowProcessingSpinner();
 }
 
 autofill::PersonalDataManager*
@@ -111,15 +119,16 @@ void ChromePaymentRequestDelegate::DoFullCardRequest(
     const autofill::CreditCard& credit_card,
     base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
         result_delegate) {
-  dialog_->ShowCvcUnmaskPrompt(credit_card, result_delegate, web_contents_);
+  if (shown_dialog_)
+    shown_dialog_->ShowCvcUnmaskPrompt(credit_card, result_delegate,
+                                       web_contents_);
 }
 
 autofill::RegionDataLoader*
 ChromePaymentRequestDelegate::GetRegionDataLoader() {
-  return new autofill::RegionDataLoaderImpl(
-      GetAddressInputSource(g_browser_process->system_request_context())
-          .release(),
-      GetAddressInputStorage().release(), GetApplicationLocale());
+  return new autofill::RegionDataLoaderImpl(GetAddressInputSource().release(),
+                                            GetAddressInputStorage().release(),
+                                            GetApplicationLocale());
 }
 
 autofill::AddressNormalizer*
@@ -171,10 +180,26 @@ ChromePaymentRequestDelegate::GetDisplayManager() {
 void ChromePaymentRequestDelegate::EmbedPaymentHandlerWindow(
     const GURL& url,
     PaymentHandlerOpenWindowCallback callback) {
-  if (dialog_)
-    dialog_->ShowPaymentHandlerScreen(url, std::move(callback));
-  else
-    std::move(callback).Run(false, 0, 0);
+  if (hidden_dialog_) {
+    shown_dialog_ = hidden_dialog_.release();
+    shown_dialog_->ShowDialogAtPaymentHandlerSheet(url, std::move(callback));
+  } else if (shown_dialog_) {
+    shown_dialog_->ShowPaymentHandlerScreen(url, std::move(callback));
+  } else {
+    std::move(callback).Run(/*success=*/false,
+                            /*render_process_id=*/0,
+                            /*render_frame_id=*/0);
+  }
+}
+
+void ChromePaymentRequestDelegate::MaybeShowHiddenDialog(
+    PaymentRequest* request) {
+  if (request->SatisfiesSkipUIConstraints()) {
+    request->Pay();
+  } else {
+    shown_dialog_ = hidden_dialog_.release();
+    shown_dialog_->ShowDialog();
+  }
 }
 
 }  // namespace payments

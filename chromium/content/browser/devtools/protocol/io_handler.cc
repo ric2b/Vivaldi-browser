@@ -15,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/devtools/devtools_io_context.h"
+#include "content/browser/devtools/devtools_stream_blob.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -25,7 +26,8 @@ namespace protocol {
 IOHandler::IOHandler(DevToolsIOContext* io_context)
     : DevToolsDomainHandler(IO::Metainfo::domainName),
       io_context_(io_context),
-      process_host_(nullptr),
+      browser_context_(nullptr),
+      storage_partition_(nullptr),
       weak_factory_(this) {}
 
 IOHandler::~IOHandler() {}
@@ -35,9 +37,16 @@ void IOHandler::Wire(UberDispatcher* dispatcher) {
   IO::Dispatcher::wire(dispatcher, this);
 }
 
-void IOHandler::SetRenderer(RenderProcessHost* process_host,
+void IOHandler::SetRenderer(int process_host_id,
                             RenderFrameHostImpl* frame_host) {
-  process_host_ = process_host;
+  RenderProcessHost* process_host = RenderProcessHost::FromID(process_host_id);
+  if (process_host) {
+    browser_context_ = process_host->GetBrowserContext();
+    storage_partition_ = process_host->GetStoragePartition();
+  } else {
+    browser_context_ = nullptr;
+    storage_partition_ = nullptr;
+  }
 }
 
 void IOHandler::Read(
@@ -48,38 +57,41 @@ void IOHandler::Read(
   static const size_t kDefaultChunkSize = 10 * 1024 * 1024;
   static const char kBlobPrefix[] = "blob:";
 
-  scoped_refptr<DevToolsIOContext::ROStream> stream =
+  scoped_refptr<DevToolsIOContext::Stream> stream =
       io_context_->GetByHandle(handle);
-  if (!stream && process_host_ &&
+  if (!stream && browser_context_ &&
       StartsWith(handle, kBlobPrefix, base::CompareCase::SENSITIVE)) {
-    BrowserContext* browser_context = process_host_->GetBrowserContext();
     ChromeBlobStorageContext* blob_context =
-        ChromeBlobStorageContext::GetFor(browser_context);
-    StoragePartition* storage_partition = process_host_->GetStoragePartition();
+        ChromeBlobStorageContext::GetFor(browser_context_);
     std::string uuid = handle.substr(strlen(kBlobPrefix));
-    stream =
-        io_context_->OpenBlob(blob_context, storage_partition, handle, uuid);
+    stream = DevToolsStreamBlob::Create(io_context_, blob_context,
+                                        storage_partition_, handle, uuid);
   }
 
   if (!stream) {
     callback->sendFailure(Response::InvalidParams("Invalid stream handle"));
     return;
   }
-  stream->Read(
-      offset.fromMaybe(-1), max_size.fromMaybe(kDefaultChunkSize),
-      base::BindOnce(&IOHandler::ReadComplete, weak_factory_.GetWeakPtr(),
-                     base::Passed(std::move(callback))));
+  if (offset.isJust() && !stream->SupportsSeek()) {
+    callback->sendFailure(
+        Response::InvalidParams("Read offset is specificed for a stream that "
+                                "does not support random access"));
+    return;
+  }
+  stream->Read(offset.fromMaybe(-1), max_size.fromMaybe(kDefaultChunkSize),
+               base::BindOnce(&IOHandler::ReadComplete,
+                              weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void IOHandler::ReadComplete(std::unique_ptr<ReadCallback> callback,
                              std::unique_ptr<std::string> data,
                              bool base64_encoded,
                              int status) {
-  if (status == DevToolsIOContext::ROStream::StatusFailure) {
+  if (status == DevToolsIOContext::Stream::StatusFailure) {
     callback->sendFailure(Response::Error("Read failed"));
     return;
   }
-  bool eof = status == DevToolsIOContext::ROStream::StatusEOF;
+  bool eof = status == DevToolsIOContext::Stream::StatusEOF;
   callback->sendSuccess(base64_encoded, std::move(*data), eof);
 }
 

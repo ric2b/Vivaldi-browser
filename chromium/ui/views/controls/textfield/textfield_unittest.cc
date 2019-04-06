@@ -19,17 +19,21 @@
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/window.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/base/ime/input_method_base.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/events/event.h"
@@ -87,14 +91,12 @@ class MockInputMethod : public ui::InputMethodBase {
   ~MockInputMethod() override;
 
   // Overridden from InputMethod:
-  bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
-                                NativeEventResult* result) override;
   ui::EventDispatchDetails DispatchKeyEvent(ui::KeyEvent* key) override;
   void OnTextInputTypeChanged(const ui::TextInputClient* client) override;
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
   void CancelComposition(const ui::TextInputClient* client) override;
   bool IsCandidatePopupOpen() const override;
-  void ShowImeIfNeeded() override {}
+  void ShowVirtualKeyboardIfEnabled() override {}
 
   bool untranslated_ime_message_called() const {
     return untranslated_ime_message_called_;
@@ -146,13 +148,6 @@ MockInputMethod::MockInputMethod()
 }
 
 MockInputMethod::~MockInputMethod() {
-}
-
-bool MockInputMethod::OnUntranslatedIMEMessage(const base::NativeEvent& event,
-                                               NativeEventResult* result) {
-  if (result)
-    *result = NativeEventResult();
-  return false;
 }
 
 ui::EventDispatchDetails MockInputMethod::DispatchKeyEvent(ui::KeyEvent* key) {
@@ -290,6 +285,15 @@ class TestTextfield : public views::Textfield {
     event_flags_ = 0;
   }
 
+  void OnAccessibilityEvent(ax::mojom::Event event_type) override {
+    if (event_type == ax::mojom::Event::kTextSelectionChanged)
+      ++accessibility_selection_fired_count_;
+  }
+
+  int GetAccessibilitySelectionFiredCount() {
+    return accessibility_selection_fired_count_;
+  }
+
  private:
   // views::View override:
   void OnKeyEvent(ui::KeyEvent* event) override {
@@ -314,6 +318,7 @@ class TestTextfield : public views::Textfield {
   bool key_handled_ = false;
   bool key_received_ = false;
   int event_flags_ = 0;
+  int accessibility_selection_fired_count_ = 0;
 
   base::WeakPtrFactory<TestTextfield> weak_ptr_factory_{this};
 
@@ -692,21 +697,31 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
     const bool is_all_selected = !text.empty() &&
         textfield_->GetSelectedRange().length() == text.length();
 
-    EXPECT_EQ(can_undo, menu->IsEnabledAt(0 /* UNDO */));
-    EXPECT_TRUE(menu->IsEnabledAt(1 /* Separator */));
-    EXPECT_EQ(textfield_has_selection, menu->IsEnabledAt(2 /* CUT */));
-    EXPECT_EQ(textfield_has_selection, menu->IsEnabledAt(3 /* COPY */));
+    int menu_index = 0;
+    if (ui::IsEmojiPanelSupported()) {
+      EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* EMOJI */));
+      EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* Separator */));
+    }
+
+    EXPECT_EQ(can_undo, menu->IsEnabledAt(menu_index++ /* UNDO */));
+    EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* Separator */));
+    EXPECT_EQ(textfield_has_selection,
+              menu->IsEnabledAt(menu_index++ /* CUT */));
+    EXPECT_EQ(textfield_has_selection,
+              menu->IsEnabledAt(menu_index++ /* COPY */));
     EXPECT_NE(GetClipboardText(ui::CLIPBOARD_TYPE_COPY_PASTE).empty(),
-              menu->IsEnabledAt(4 /* PASTE */));
-    EXPECT_EQ(textfield_has_selection, menu->IsEnabledAt(5 /* DELETE */));
-    EXPECT_TRUE(menu->IsEnabledAt(6 /* Separator */));
-    EXPECT_EQ(!is_all_selected, menu->IsEnabledAt(7 /* SELECT ALL */));
+              menu->IsEnabledAt(menu_index++ /* PASTE */));
+    EXPECT_EQ(textfield_has_selection,
+              menu->IsEnabledAt(menu_index++ /* DELETE */));
+    EXPECT_TRUE(menu->IsEnabledAt(menu_index++ /* Separator */));
+    EXPECT_EQ(!is_all_selected,
+              menu->IsEnabledAt(menu_index++ /* SELECT ALL */));
   }
 
-  void PressMouseButton(ui::EventFlags mouse_button_flags, int extra_flags) {
+  void PressMouseButton(ui::EventFlags mouse_button_flags) {
     ui::MouseEvent press(ui::ET_MOUSE_PRESSED, mouse_position_, mouse_position_,
                          ui::EventTimeForNow(), mouse_button_flags,
-                         mouse_button_flags | extra_flags);
+                         mouse_button_flags);
     textfield_->OnMousePressed(press);
   }
 
@@ -717,21 +732,21 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
     textfield_->OnMouseReleased(release);
   }
 
-  void PressLeftMouseButton(int extra_flags = 0) {
-    PressMouseButton(ui::EF_LEFT_MOUSE_BUTTON, extra_flags);
+  void PressLeftMouseButton() {
+    PressMouseButton(ui::EF_LEFT_MOUSE_BUTTON);
   }
 
   void ReleaseLeftMouseButton() {
     ReleaseMouseButton(ui::EF_LEFT_MOUSE_BUTTON);
   }
 
-  void ClickLeftMouseButton(int extra_flags = 0) {
-    PressLeftMouseButton(extra_flags);
+  void ClickLeftMouseButton() {
+    PressLeftMouseButton();
     ReleaseLeftMouseButton();
   }
 
   void ClickRightMouseButton() {
-    PressMouseButton(ui::EF_RIGHT_MOUSE_BUTTON, 0);
+    PressMouseButton(ui::EF_RIGHT_MOUSE_BUTTON);
     ReleaseMouseButton(ui::EF_RIGHT_MOUSE_BUTTON);
   }
 
@@ -894,9 +909,11 @@ TEST_F(TextfieldTest, ControlAndSelectTest) {
 
   // Test word select.
   SendWordEvent(ui::VKEY_RIGHT, true);
-#if defined(OS_WIN)  // Select word right includes space/punctuation.
+#if defined(OS_WIN)  // Windows breaks on word starts and includes spaces.
+  EXPECT_STR_EQ("one ", textfield_->GetSelectedText());
+  SendWordEvent(ui::VKEY_RIGHT, true);
   EXPECT_STR_EQ("one two ", textfield_->GetSelectedText());
-#else  // Non-Windows: select word right does NOT include space/punctuation.
+#else  // Non-Windows breaks on word ends and does NOT include spaces.
   EXPECT_STR_EQ("one two", textfield_->GetSelectedText());
 #endif
   SendWordEvent(ui::VKEY_RIGHT, true);
@@ -1445,6 +1462,9 @@ TEST_F(TextfieldTest, CursorMovement) {
   // Ctrl+Right, then Ctrl+Left should move the cursor to the beginning of the
   // first word.
   SendWordEvent(ui::VKEY_RIGHT, shift);
+#if defined(OS_WIN)  // Windows breaks on word start, move further to pass "ne".
+  SendWordEvent(ui::VKEY_RIGHT, shift);
+#endif
   SendWordEvent(ui::VKEY_LEFT, shift);
   SendKeyEvent(ui::VKEY_O);
   EXPECT_STR_EQ(" one two", textfield_->text());
@@ -1515,6 +1535,9 @@ TEST_F(TextfieldTest, FocusTraversalTest) {
 
 TEST_F(TextfieldTest, ContextMenuDisplayTest) {
   InitTextfield();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kEnableEmojiContextMenu);
+
   EXPECT_TRUE(textfield_->context_menu_controller());
   textfield_->SetText(ASCIIToUTF16("hello world"));
   ui::Clipboard::GetForCurrentThread()->Clear(ui::CLIPBOARD_TYPE_COPY_PASTE);
@@ -1544,7 +1567,7 @@ TEST_F(TextfieldTest, DoubleAndTripleClickTest) {
   MoveMouseTo(gfx::Point(0, GetCursorYForTesting()));
   ClickLeftMouseButton();
   EXPECT_TRUE(textfield_->GetSelectedText().empty());
-  ClickLeftMouseButton(ui::EF_IS_DOUBLE_CLICK);
+  ClickLeftMouseButton();
   EXPECT_STR_EQ("hello", textfield_->GetSelectedText());
 
   // Test for triple click.
@@ -3218,18 +3241,18 @@ TEST_F(TextfieldTest, AccessiblePasswordTest) {
 
   ui::AXNodeData node_data_regular;
   textfield_->GetAccessibleNodeData(&node_data_regular);
-  EXPECT_EQ(ui::AX_ROLE_TEXT_FIELD, node_data_regular.role);
-  EXPECT_EQ(ASCIIToUTF16("password"),
-            node_data_regular.GetString16Attribute(ui::AX_ATTR_VALUE));
-  EXPECT_FALSE(node_data_regular.HasState(ui::AX_STATE_PROTECTED));
+  EXPECT_EQ(ax::mojom::Role::kTextField, node_data_regular.role);
+  EXPECT_EQ(ASCIIToUTF16("password"), node_data_regular.GetString16Attribute(
+                                          ax::mojom::StringAttribute::kValue));
+  EXPECT_FALSE(node_data_regular.HasState(ax::mojom::State::kProtected));
 
   textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
   ui::AXNodeData node_data_protected;
   textfield_->GetAccessibleNodeData(&node_data_protected);
-  EXPECT_EQ(ui::AX_ROLE_TEXT_FIELD, node_data_protected.role);
-  EXPECT_EQ(UTF8ToUTF16("••••••••"),
-            node_data_protected.GetString16Attribute(ui::AX_ATTR_VALUE));
-  EXPECT_TRUE(node_data_protected.HasState(ui::AX_STATE_PROTECTED));
+  EXPECT_EQ(ax::mojom::Role::kTextField, node_data_protected.role);
+  EXPECT_EQ(UTF8ToUTF16("••••••••"), node_data_protected.GetString16Attribute(
+                                         ax::mojom::StringAttribute::kValue));
+  EXPECT_TRUE(node_data_protected.HasState(ax::mojom::State::kProtected));
 }
 
 // Verify that cursor visibility is controlled by SetCursorEnabled.
@@ -3404,7 +3427,156 @@ TEST_F(TextfieldTest, SendingDeletePreservesShiftFlag) {
   EXPECT_EQ(ui::EF_SHIFT_DOWN, textfield_->event_flags());
 }
 
+TEST_F(TextfieldTest, EmojiItem_EmptyField) {
+  InitTextfield();
+  EXPECT_TRUE(textfield_->context_menu_controller());
+
+  // Enable the emoji feature.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kEnableEmojiContextMenu);
+
+  // A normal empty field may show the Emoji option (if supported).
+  ui::MenuModel* context_menu = GetContextMenuModel();
+  EXPECT_TRUE(context_menu);
+  EXPECT_GT(context_menu->GetItemCount(), 0);
+  // Not all OS/versions support the emoji menu.
+  EXPECT_EQ(ui::IsEmojiPanelSupported(),
+            context_menu->GetLabelAt(0) ==
+                l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_EMOJI));
+}
+
+TEST_F(TextfieldTest, EmojiItem_ReadonlyField) {
+  InitTextfield();
+  EXPECT_TRUE(textfield_->context_menu_controller());
+
+  // Enable the emoji feature.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kEnableEmojiContextMenu);
+
+  textfield_->SetReadOnly(true);
+  // In no case is the emoji option showing on a read-only field.
+  ui::MenuModel* context_menu = GetContextMenuModel();
+  EXPECT_TRUE(context_menu);
+  EXPECT_GT(context_menu->GetItemCount(), 0);
+  EXPECT_NE(context_menu->GetLabelAt(0),
+            l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_EMOJI));
+}
+
+TEST_F(TextfieldTest, EmojiItem_FieldWithText) {
+  InitTextfield();
+  EXPECT_TRUE(textfield_->context_menu_controller());
+
 #if defined(OS_MACOSX)
+  // On Mac, when there is text, the "Look up" item (+ separator) takes the top
+  // position, and emoji comes after.
+  constexpr int kExpectedEmojiIndex = 2;
+#else
+  constexpr int kExpectedEmojiIndex = 0;
+#endif
+
+  // Enable the emoji feature.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kEnableEmojiContextMenu);
+
+  // A field with text may still show the Emoji option (if supported).
+  textfield_->SetText(base::ASCIIToUTF16("some text"));
+  textfield_->SelectAll(false);
+  ui::MenuModel* context_menu = GetContextMenuModel();
+  EXPECT_TRUE(context_menu);
+  EXPECT_GT(context_menu->GetItemCount(), 0);
+  // Not all OS/versions support the emoji menu.
+  EXPECT_EQ(ui::IsEmojiPanelSupported(),
+            context_menu->GetLabelAt(kExpectedEmojiIndex) ==
+                l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_EMOJI));
+}
+
+#if defined(OS_MACOSX)
+// Tests to see if the BiDi submenu items are updated correctly when the
+// textfield's text direction is changed.
+TEST_F(TextfieldTest, TextServicesContextMenuTextDirectionTest) {
+  InitTextfield();
+  EXPECT_TRUE(textfield_->context_menu_controller());
+
+  EXPECT_TRUE(GetContextMenuModel());
+
+  textfield_->ChangeTextDirectionAndLayoutAlignment(
+      base::i18n::TextDirection::LEFT_TO_RIGHT);
+  test_api_->UpdateContextMenu();
+
+  EXPECT_FALSE(test_api_->IsTextDirectionCheckedInContextMenu(
+      base::i18n::TextDirection::UNKNOWN_DIRECTION));
+  EXPECT_TRUE(test_api_->IsTextDirectionCheckedInContextMenu(
+      base::i18n::TextDirection::LEFT_TO_RIGHT));
+  EXPECT_FALSE(test_api_->IsTextDirectionCheckedInContextMenu(
+      base::i18n::TextDirection::RIGHT_TO_LEFT));
+
+  textfield_->ChangeTextDirectionAndLayoutAlignment(
+      base::i18n::TextDirection::RIGHT_TO_LEFT);
+  test_api_->UpdateContextMenu();
+
+  EXPECT_FALSE(test_api_->IsTextDirectionCheckedInContextMenu(
+      base::i18n::TextDirection::UNKNOWN_DIRECTION));
+  EXPECT_FALSE(test_api_->IsTextDirectionCheckedInContextMenu(
+      base::i18n::TextDirection::LEFT_TO_RIGHT));
+  EXPECT_TRUE(test_api_->IsTextDirectionCheckedInContextMenu(
+      base::i18n::TextDirection::RIGHT_TO_LEFT));
+}
+
+// Tests to see if the look up item is updated when the textfield's selected
+// text has changed.
+TEST_F(TextfieldTest, LookUpItemUpdate) {
+  InitTextfield();
+  EXPECT_TRUE(textfield_->context_menu_controller());
+
+  // Make sure the Emoji feature is disabled for this test.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(features::kEnableEmojiContextMenu);
+
+  const base::string16 kTextOne = ASCIIToUTF16("crake");
+  textfield_->SetText(kTextOne);
+  textfield_->SelectAll(false);
+
+  ui::MenuModel* context_menu = GetContextMenuModel();
+  EXPECT_TRUE(context_menu);
+  EXPECT_GT(context_menu->GetItemCount(), 0);
+  EXPECT_EQ(context_menu->GetLabelAt(0),
+            l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_LOOK_UP, kTextOne));
+
+#if !defined(OS_MACOSX)
+  // Mac context menus don't behave this way: it's not possible to update the
+  // text while the menu is still "open", but also the selection can't change
+  // while the menu is open (because the user can't interact with the rest of
+  // the app).
+  const base::string16 kTextTwo = ASCIIToUTF16("rail");
+  textfield_->SetText(kTextTwo);
+  textfield_->SelectAll(false);
+
+  context_menu = GetContextMenuModel();
+  EXPECT_TRUE(context_menu);
+  EXPECT_GT(context_menu->GetItemCount(), 0);
+  EXPECT_EQ(context_menu->GetLabelAt(0),
+            l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_LOOK_UP, kTextTwo));
+#endif
+}
+
+// Tests to see if the look up item is hidden for password fields.
+TEST_F(TextfieldTest, LookUpPassword) {
+  InitTextfield();
+  textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
+
+  const base::string16 kText = ASCIIToUTF16("Willie Wagtail");
+
+  textfield_->SetText(kText);
+  textfield_->SelectAll(false);
+
+  ui::MenuModel* context_menu = GetContextMenuModel();
+  EXPECT_TRUE(context_menu);
+  EXPECT_GT(context_menu->GetItemCount(), 0);
+  EXPECT_NE(context_menu->GetCommandIdAt(0), IDS_CONTENT_CONTEXT_LOOK_UP);
+  EXPECT_NE(context_menu->GetLabelAt(0),
+            l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_LOOK_UP, kText));
+}
+
 TEST_F(TextfieldTest, SecurePasswordInput) {
   InitTextfield();
   ASSERT_FALSE(ui::ScopedPasswordInputEnabler::IsPasswordInputEnabled());
@@ -3423,5 +3595,147 @@ TEST_F(TextfieldTest, SecurePasswordInput) {
   EXPECT_FALSE(ui::ScopedPasswordInputEnabler::IsPasswordInputEnabled());
 }
 #endif  // defined(OS_MACOSX)
+
+TEST_F(TextfieldTest, AccessibilitySelectionEvents) {
+  const std::string& kText = "abcdef";
+  InitTextfield();
+  textfield_->SetText(ASCIIToUTF16(kText));
+  EXPECT_TRUE(textfield_->HasFocus());
+  int previous_selection_fired_count =
+      textfield_->GetAccessibilitySelectionFiredCount();
+  textfield_->SelectAll(false);
+  EXPECT_LT(previous_selection_fired_count,
+            textfield_->GetAccessibilitySelectionFiredCount());
+  previous_selection_fired_count =
+      textfield_->GetAccessibilitySelectionFiredCount();
+
+  // No selection event when textfield blurred, even though text is
+  // deselected.
+  widget_->GetFocusManager()->ClearFocus();
+  EXPECT_FALSE(textfield_->HasFocus());
+  textfield_->ClearSelection();
+  EXPECT_FALSE(textfield_->HasSelection());
+  // Has not changed.
+  EXPECT_EQ(previous_selection_fired_count,
+            textfield_->GetAccessibilitySelectionFiredCount());
+}
+
+TEST_F(TextfieldTest, FocusReasonMouse) {
+  InitTextfield();
+  widget_->GetFocusManager()->ClearFocus();
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_NONE,
+            textfield_->GetFocusReason());
+
+  const auto& bounds = textfield_->bounds();
+  MouseClick(bounds, 10);
+
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_MOUSE,
+            textfield_->GetFocusReason());
+}
+
+TEST_F(TextfieldTest, FocusReasonTouchTap) {
+  InitTextfield();
+  widget_->GetFocusManager()->ClearFocus();
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_NONE,
+            textfield_->GetFocusReason());
+
+  ui::GestureEventDetails tap_details(ui::ET_GESTURE_TAP_DOWN);
+  tap_details.set_primary_pointer_type(
+      ui::EventPointerType::POINTER_TYPE_TOUCH);
+  GestureEventForTest tap(GetCursorPositionX(0), 0, tap_details);
+  textfield_->OnGestureEvent(&tap);
+
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_TOUCH,
+            textfield_->GetFocusReason());
+}
+
+TEST_F(TextfieldTest, FocusReasonPenTap) {
+  InitTextfield();
+  widget_->GetFocusManager()->ClearFocus();
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_NONE,
+            textfield_->GetFocusReason());
+
+  ui::GestureEventDetails tap_details(ui::ET_GESTURE_TAP_DOWN);
+  tap_details.set_primary_pointer_type(ui::EventPointerType::POINTER_TYPE_PEN);
+  GestureEventForTest tap(GetCursorPositionX(0), 0, tap_details);
+  textfield_->OnGestureEvent(&tap);
+
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_PEN,
+            textfield_->GetFocusReason());
+}
+
+TEST_F(TextfieldTest, FocusReasonMultipleEvents) {
+  InitTextfield();
+  widget_->GetFocusManager()->ClearFocus();
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_NONE,
+            textfield_->GetFocusReason());
+
+  // Pen tap, followed by a touch tap
+  {
+    ui::GestureEventDetails tap_details(ui::ET_GESTURE_TAP_DOWN);
+    tap_details.set_primary_pointer_type(
+        ui::EventPointerType::POINTER_TYPE_PEN);
+    GestureEventForTest tap(GetCursorPositionX(0), 0, tap_details);
+    textfield_->OnGestureEvent(&tap);
+  }
+
+  {
+    ui::GestureEventDetails tap_details(ui::ET_GESTURE_TAP_DOWN);
+    tap_details.set_primary_pointer_type(
+        ui::EventPointerType::POINTER_TYPE_TOUCH);
+    GestureEventForTest tap(GetCursorPositionX(0), 0, tap_details);
+    textfield_->OnGestureEvent(&tap);
+  }
+
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_PEN,
+            textfield_->GetFocusReason());
+}
+
+TEST_F(TextfieldTest, FocusReasonFocusBlurFocus) {
+  InitTextfield();
+  widget_->GetFocusManager()->ClearFocus();
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_NONE,
+            textfield_->GetFocusReason());
+
+  // Pen tap, blur, then programmatic focus.
+  ui::GestureEventDetails tap_details(ui::ET_GESTURE_TAP_DOWN);
+  tap_details.set_primary_pointer_type(ui::EventPointerType::POINTER_TYPE_PEN);
+  GestureEventForTest tap(GetCursorPositionX(0), 0, tap_details);
+  textfield_->OnGestureEvent(&tap);
+
+  widget_->GetFocusManager()->ClearFocus();
+
+  textfield_->RequestFocus();
+
+  EXPECT_EQ(ui::TextInputClient::FOCUS_REASON_OTHER,
+            textfield_->GetFocusReason());
+}
+
+TEST_F(TextfieldTest, ChangeTextDirectionAndLayoutAlignmentTest) {
+  InitTextfield();
+
+  textfield_->ChangeTextDirectionAndLayoutAlignment(
+      base::i18n::TextDirection::RIGHT_TO_LEFT);
+  EXPECT_EQ(textfield_->GetTextDirection(),
+            base::i18n::TextDirection::RIGHT_TO_LEFT);
+  EXPECT_EQ(textfield_->GetHorizontalAlignment(),
+            gfx::HorizontalAlignment::ALIGN_RIGHT);
+
+  textfield_->ChangeTextDirectionAndLayoutAlignment(
+      base::i18n::TextDirection::RIGHT_TO_LEFT);
+  const base::string16& text = test_api_->GetRenderText()->GetDisplayText();
+  base::i18n::TextDirection text_direction =
+      base::i18n::GetFirstStrongCharacterDirection(text);
+  EXPECT_EQ(textfield_->GetTextDirection(), text_direction);
+  EXPECT_EQ(textfield_->GetHorizontalAlignment(),
+            gfx::HorizontalAlignment::ALIGN_RIGHT);
+
+  textfield_->ChangeTextDirectionAndLayoutAlignment(
+      base::i18n::TextDirection::LEFT_TO_RIGHT);
+  EXPECT_EQ(textfield_->GetTextDirection(),
+            base::i18n::TextDirection::LEFT_TO_RIGHT);
+  EXPECT_EQ(textfield_->GetHorizontalAlignment(),
+            gfx::HorizontalAlignment::ALIGN_LEFT);
+}
 
 }  // namespace views

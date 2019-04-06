@@ -29,15 +29,20 @@ class ArcImeBridge {
   // Received IPCs are deserialized and passed to this delegate.
   class Delegate {
    public:
-    virtual void OnTextInputTypeChanged(ui::TextInputType type) = 0;
-    virtual void OnCursorRectChanged(const gfx::Rect& rect) = 0;
+    virtual void OnTextInputTypeChanged(
+        ui::TextInputType type,
+        bool is_personalized_learning_allowed) = 0;
+    virtual void OnCursorRectChanged(const gfx::Rect& rect,
+                                     bool is_screen_cooridnates) = 0;
     virtual void OnCancelComposition() = 0;
-    virtual void ShowImeIfNeeded() = 0;
+    virtual void ShowVirtualKeyboardIfEnabled() = 0;
     virtual void OnCursorRectChangedWithSurroundingText(
         const gfx::Rect& rect,
         const gfx::Range& text_range,
         const base::string16& text_in_range,
-        const gfx::Range& selection_range) = 0;
+        const gfx::Range& selection_range,
+        bool is_screen_coordinates) = 0;
+    virtual void RequestHideIme() = 0;
   };
 
   // Serializes and sends IME related requests through IPCs.

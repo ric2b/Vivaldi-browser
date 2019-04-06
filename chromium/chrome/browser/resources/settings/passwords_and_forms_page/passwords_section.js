@@ -8,182 +8,7 @@
  * save any passwords.
  */
 
-/**
- * Interface for all callbacks to the password API.
- * @interface
- */
-class PasswordManager {
-  /**
-   * Add an observer to the list of saved passwords.
-   * @param {function(!Array<!PasswordManager.PasswordUiEntry>):void} listener
-   */
-  addSavedPasswordListChangedListener(listener) {}
-
-  /**
-   * Remove an observer from the list of saved passwords.
-   * @param {function(!Array<!PasswordManager.PasswordUiEntry>):void} listener
-   */
-  removeSavedPasswordListChangedListener(listener) {}
-
-  /**
-   * Request the list of saved passwords.
-   * @param {function(!Array<!PasswordManager.PasswordUiEntry>):void} callback
-   */
-  getSavedPasswordList(callback) {}
-
-  /**
-   * Should remove the saved password and notify that the list has changed.
-   * @param {number} index The index for the password entry being removed.
-   *     No-op if |index| is not in the list.
-   */
-  removeSavedPassword(index) {}
-
-  /**
-   * Add an observer to the list of password exceptions.
-   * @param {function(!Array<!PasswordManager.ExceptionEntry>):void} listener
-   */
-  addExceptionListChangedListener(listener) {}
-
-  /**
-   * Remove an observer from the list of password exceptions.
-   * @param {function(!Array<!PasswordManager.ExceptionEntry>):void} listener
-   */
-  removeExceptionListChangedListener(listener) {}
-
-  /**
-   * Request the list of password exceptions.
-   * @param {function(!Array<!PasswordManager.ExceptionEntry>):void} callback
-   */
-  getExceptionList(callback) {}
-
-  /**
-   * Should remove the password exception and notify that the list has changed.
-   * @param {number} index The index for the exception url entry being removed.
-   *     No-op if |index| is not in the list.
-   */
-  removeException(index) {}
-
-  /**
-   * Should undo the last saved password or exception removal and notify that
-   * the list has changed.
-   */
-  undoRemoveSavedPasswordOrException() {}
-
-  /**
-   * Gets the saved password for a given login pair.
-   * @param {number} index The index for password entry that should be
-   *     retrieved. No-op if |index| is not in the list.
-   * @param {function(!PasswordManager.PlaintextPasswordEvent):void} callback
-   */
-  getPlaintextPassword(index, callback) {}
-
-  /**
-   * Triggers the dialogue for importing passwords.
-   */
-  importPasswords() {}
-
-  /**
-   * Triggers the dialogue for exporting passwords.
-   */
-  exportPasswords() {}
-}
-
-/** @typedef {chrome.passwordsPrivate.PasswordUiEntry} */
-PasswordManager.PasswordUiEntry;
-
-/** @typedef {chrome.passwordsPrivate.LoginPair} */
-PasswordManager.LoginPair;
-
-/** @typedef {chrome.passwordsPrivate.ExceptionEntry} */
-PasswordManager.ExceptionEntry;
-
-/** @typedef {chrome.passwordsPrivate.PlaintextPasswordEventParameters} */
-PasswordManager.PlaintextPasswordEvent;
-
-/** @typedef {{ entry: !PasswordManager.PasswordUiEntry, password: string }} */
-PasswordManager.UiEntryWithPassword;
-
-/**
- * Implementation that accesses the private API.
- * @implements {PasswordManager}
- */
-class PasswordManagerImpl {
-  /** @override */
-  addSavedPasswordListChangedListener(listener) {
-    chrome.passwordsPrivate.onSavedPasswordsListChanged.addListener(listener);
-  }
-
-  /** @override */
-  removeSavedPasswordListChangedListener(listener) {
-    chrome.passwordsPrivate.onSavedPasswordsListChanged.removeListener(
-        listener);
-  }
-
-  /** @override */
-  getSavedPasswordList(callback) {
-    chrome.passwordsPrivate.getSavedPasswordList(callback);
-  }
-
-  /** @override */
-  removeSavedPassword(index) {
-    chrome.passwordsPrivate.removeSavedPassword(index);
-  }
-
-  /** @override */
-  addExceptionListChangedListener(listener) {
-    chrome.passwordsPrivate.onPasswordExceptionsListChanged.addListener(
-        listener);
-  }
-
-  /** @override */
-  removeExceptionListChangedListener(listener) {
-    chrome.passwordsPrivate.onPasswordExceptionsListChanged.removeListener(
-        listener);
-  }
-
-  /** @override */
-  getExceptionList(callback) {
-    chrome.passwordsPrivate.getPasswordExceptionList(callback);
-  }
-
-  /** @override */
-  removeException(index) {
-    chrome.passwordsPrivate.removePasswordException(index);
-  }
-
-  /** @override */
-  undoRemoveSavedPasswordOrException() {
-    chrome.passwordsPrivate.undoRemoveSavedPasswordOrException();
-  }
-
-  /** @override */
-  getPlaintextPassword(index, callback) {
-    const listener = function(reply) {
-      // Only handle the reply for our loginPair request.
-      if (reply.index == index) {
-        chrome.passwordsPrivate.onPlaintextPasswordRetrieved.removeListener(
-            listener);
-        callback(reply);
-      }
-    };
-    chrome.passwordsPrivate.onPlaintextPasswordRetrieved.addListener(listener);
-    chrome.passwordsPrivate.requestPlaintextPassword(index);
-  }
-
-  /** @override */
-  importPasswords() {
-    chrome.passwordsPrivate.importPasswords();
-  }
-
-  /** @override */
-  exportPasswords() {
-    chrome.passwordsPrivate.exportPasswords();
-  }
-}
-
-cr.addSingletonGetter(PasswordManagerImpl);
-
-/** @typedef {!{model: !{item: !chrome.passwordsPrivate.PasswordUiEntry}}} */
+/** @typedef {!{model: !{item: !PasswordManagerProxy.UiEntryWithPassword}}} */
 let PasswordUiEntryEvent;
 
 /** @typedef {!{model: !{item: !chrome.passwordsPrivate.ExceptionEntry}}} */
@@ -197,6 +22,7 @@ Polymer({
 
   behaviors: [
     I18nBehavior,
+    ListPropertyUpdateBehavior,
     Polymer.IronA11yKeysBehavior,
     settings.GlobalScrollTargetBehavior,
   ],
@@ -210,15 +36,21 @@ Polymer({
 
     /**
      * An array of passwords to display.
-     * @type {!Array<!PasswordManager.PasswordUiEntry>}
+     * @type {!Array<!PasswordManagerProxy.UiEntryWithPassword>}
      */
-    savedPasswords: Array,
+    savedPasswords: {
+      type: Array,
+      value: () => [],
+    },
 
     /**
      * An array of sites to display.
-     * @type {!Array<!PasswordManager.ExceptionEntry>}
+     * @type {!Array<!PasswordManagerProxy.ExceptionEntry>}
      */
-    passwordExceptions: Array,
+    passwordExceptions: {
+      type: Array,
+      value: () => [],
+    },
 
     /**
      * Duration of the undo toast in ms
@@ -251,10 +83,7 @@ Polymer({
     /** @private */
     showExportPasswords_: {
       type: Boolean,
-      value: function() {
-        return loadTimeData.valueExists('showExportPasswords') &&
-            loadTimeData.getBoolean('showExportPasswords');
-      }
+      computed: 'hasPasswords_(savedPasswords.splices)',
     },
 
     /** @private */
@@ -275,7 +104,7 @@ Polymer({
       value: '',
     },
 
-    /** @private {!PasswordManager.PasswordUiEntry} */
+    /** @private {!PasswordManagerProxy.UiEntryWithPassword} */
     lastFocused_: Object,
   },
 
@@ -302,19 +131,19 @@ Polymer({
   activeDialogAnchor_: null,
 
   /**
-   * @type {PasswordManager}
+   * @type {PasswordManagerProxy}
    * @private
    */
   passwordManager_: null,
 
   /**
-   * @type {?function(!Array<PasswordManager.PasswordUiEntry>):void}
+   * @type {?function(!Array<PasswordManagerProxy.PasswordUiEntry>):void}
    * @private
    */
   setSavedPasswordsListener_: null,
 
   /**
-   * @type {?function(!Array<PasswordManager.ExceptionEntry>):void}
+   * @type {?function(!Array<PasswordManagerProxy.ExceptionEntry>):void}
    * @private
    */
   setPasswordExceptionsListener_: null,
@@ -322,14 +151,24 @@ Polymer({
   /** @override */
   attached: function() {
     // Create listener functions.
-    const setSavedPasswordsListener = list => {
-      this.savedPasswords = list.map(entry => {
-        return {
-          entry: entry,
-          password: '',
-        };
-      });
-    };
+    const setSavedPasswordsListener = list =>
+        this.updateList('savedPasswords', item => {
+          // The item uid is built from index, origin, and username for the
+          // following reasons: origin and username are enough to describe and
+          // uniquely identify an entry. It is impossible to have two entries
+          // that have the same origin and username, but different passwords,
+          // as the password update logic prevents these cases. The entry is
+          // required to force a refresh of entries, after a removal or undo of
+          // a removal has taken place. All entries before the point of
+          // modification are uneffected, but the ones following need to be
+          // refreshed. Including the index in the uid achieves this effect.
+          // See https://crbug.com/862119 how this could lead to bugs otherwise.
+          return item.entry.index + '_' + item.entry.loginPair.urls.origin +
+              '_' + item.entry.loginPair.username;
+        }, list.map(entry => ({
+                      entry: entry,
+                      password: '',
+                    })));
 
     const setPasswordExceptionsListener = list => {
       this.passwordExceptions = list;
@@ -351,6 +190,8 @@ Polymer({
     this.passwordManager_.addExceptionListChangedListener(
         setPasswordExceptionsListener);
 
+    this.notifySplices('savedPasswords', []);
+
     Polymer.RenderStatus.afterNextRender(this, function() {
       Polymer.IronA11yAnnouncer.requestAvailability();
     });
@@ -359,11 +200,15 @@ Polymer({
   /** @override */
   detached: function() {
     this.passwordManager_.removeSavedPasswordListChangedListener(
-        /** @type {function(!Array<PasswordManager.PasswordUiEntry>):void} */ (
-            this.setSavedPasswordsListener_));
+        /**
+         * @type {function(!Array<PasswordManagerProxy.PasswordUiEntry>):void}
+         */
+        (this.setSavedPasswordsListener_));
     this.passwordManager_.removeExceptionListChangedListener(
-        /** @type {function(!Array<PasswordManager.ExceptionEntry>):void} */ (
-            this.setPasswordExceptionsListener_));
+        /**
+         * @type {function(!Array<PasswordManagerProxy.ExceptionEntry>):void}
+         */
+        (this.setPasswordExceptionsListener_));
 
     if (this.$.undoToast.open)
       this.$.undoToast.hide();
@@ -392,19 +237,17 @@ Polymer({
   },
 
   /**
-   * @param {!Array<!PasswordManager.UiEntryWithPassword>} savedPasswords
    * @param {string} filter
-   * @return {!Array<!PasswordManager.UiEntryWithPassword>}
+   * @return {!Array<!PasswordManagerProxy.UiEntryWithPassword>}
    * @private
    */
-  getFilteredPasswords_: function(savedPasswords, filter) {
+  getFilteredPasswords_: function(filter) {
     if (!filter)
-      return savedPasswords;
+      return this.savedPasswords.slice();
 
-    return savedPasswords.filter(p => {
-      return [p.entry.loginPair.urls.shown, p.entry.loginPair.username].some(
-          term => term.toLowerCase().includes(filter.toLowerCase()));
-    });
+    return this.savedPasswords.filter(
+        p => [p.entry.loginPair.urls.shown, p.entry.loginPair.username].some(
+            term => term.toLowerCase().includes(filter.toLowerCase())));
   },
 
   /**
@@ -413,9 +256,8 @@ Polymer({
    * @private
    */
   passwordExceptionFilter_: function(filter) {
-    return function(exception) {
-      return exception.urls.shown.toLowerCase().includes(filter.toLowerCase());
-    };
+    return exception => exception.urls.shown.toLowerCase().includes(
+               filter.toLowerCase());
   },
 
   /**
@@ -489,6 +331,7 @@ Polymer({
    */
   onImportTap_: function() {
     this.passwordManager_.importPasswords();
+    this.$.exportImportMenu.close();
   },
 
   /**
@@ -503,6 +346,8 @@ Polymer({
   /** @private */
   onPasswordsExportDialogClosed_: function() {
     this.showPasswordsExportDialog_ = false;
+    cr.ui.focusWithoutInk(assert(this.activeDialogAnchor_));
+    this.activeDialogAnchor_ = null;
   },
 
   /**
@@ -534,6 +379,11 @@ Polymer({
    */
   getOnOffLabel_: function(toggleValue) {
     return toggleValue ? this.i18n('toggleOn') : this.i18n('toggleOff');
+  },
+
+  /** @private */
+  hasPasswords_: function() {
+    return this.savedPasswords.length > 0;
   },
 
   /**

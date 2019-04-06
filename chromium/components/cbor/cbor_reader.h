@@ -6,9 +6,11 @@
 #define COMPONENTS_CBOR_CBOR_READER_H_
 
 #include <stddef.h>
+
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/optional.h"
 #include "components/cbor/cbor_export.h"
 #include "components/cbor/cbor_values.h"
@@ -50,8 +52,6 @@ namespace cbor {
 
 class CBOR_EXPORT CBORReader {
  public:
-  using Bytes = std::vector<uint8_t>;
-
   enum class DecoderError {
     CBOR_NO_ERROR = 0,
     UNSUPPORTED_MAJOR_TYPE,
@@ -61,12 +61,12 @@ class CBOR_EXPORT CBORReader {
     TOO_MUCH_NESTING,
     INVALID_UTF8,
     EXTRANEOUS_DATA,
-    DUPLICATE_KEY,
     OUT_OF_ORDER_KEY,
     NON_MINIMAL_CBOR_ENCODING,
     UNSUPPORTED_SIMPLE_VALUE,
     UNSUPPORTED_FLOATING_POINT_VALUE,
     OUT_OF_RANGE_INTEGER_VALUE,
+    UNKNOWN_ERROR,
   };
 
   // CBOR nested depth sufficient for most use cases.
@@ -78,8 +78,18 @@ class CBOR_EXPORT CBORReader {
   // formats is violated -including unknown additional info and incomplete
   // CBOR data- then an empty optional is returned. Optional |error_code_out|
   // can be provided by the caller to obtain additional information about
-  // decoding failures.
-  static base::Optional<CBORValue> Read(const Bytes& input_data,
+  // decoding failures, which is always available if an empty value is returned.
+  //
+  // Fails if not all the data was consumed and sets |error_code_out| to
+  // EXTRANEOUS_DATA in this case.
+  static base::Optional<CBORValue> Read(base::span<const uint8_t> input_data,
+                                        DecoderError* error_code_out = nullptr,
+                                        int max_nesting_level = kCBORMaxDepth);
+
+  // Never fails with EXTRANEOUS_DATA, but informs the caller of how many bytes
+  // were consumed through |num_bytes_consumed|.
+  static base::Optional<CBORValue> Read(base::span<const uint8_t> input_data,
+                                        size_t* num_bytes_consumed,
                                         DecoderError* error_code_out = nullptr,
                                         int max_nesting_level = kCBORMaxDepth);
 
@@ -87,29 +97,48 @@ class CBOR_EXPORT CBORReader {
   static const char* ErrorCodeToString(DecoderError error_code);
 
  private:
-  CBORReader(Bytes::const_iterator it, const Bytes::const_iterator end);
-  base::Optional<CBORValue> DecodeCBOR(int max_nesting_level);
+  CBORReader(base::span<const uint8_t>::const_iterator it,
+             const base::span<const uint8_t>::const_iterator end);
+
+  // Encapsulates information extracted from the header of a CBOR data item,
+  // which consists of the initial byte, and a variable-length-encoded integer
+  // (if any).
+  struct DataItemHeader {
+    // The major type decoded from the initial byte.
+    CBORValue::Type type;
+
+    // The raw 5-bit additional information from the initial byte.
+    uint8_t additional_info;
+
+    // The integer |value| decoded from the |additional_info| and the
+    // variable-length-encoded integer, if any.
+    uint64_t value;
+  };
+
+  base::Optional<DataItemHeader> DecodeDataItemHeader();
+  base::Optional<CBORValue> DecodeCompleteDataItem(int max_nesting_level);
   base::Optional<CBORValue> DecodeValueToNegative(uint64_t value);
   base::Optional<CBORValue> DecodeValueToUnsigned(uint64_t value);
-  base::Optional<CBORValue> ReadSimpleValue(uint8_t additional_info,
-                                            uint64_t value);
+  base::Optional<CBORValue> DecodeToSimpleValue(const DataItemHeader& header);
   bool ReadVariadicLengthInteger(uint8_t additional_info, uint64_t* value);
-  base::Optional<CBORValue> ReadBytes(uint64_t num_bytes);
-  base::Optional<CBORValue> ReadString(uint64_t num_bytes);
-  base::Optional<CBORValue> ReadCBORArray(uint64_t length,
-                                          int max_nesting_level);
-  base::Optional<CBORValue> ReadCBORMap(uint64_t length, int max_nesting_level);
+  base::Optional<CBORValue> ReadByteStringContent(const DataItemHeader& header);
+  base::Optional<CBORValue> ReadStringContent(const DataItemHeader& header);
+  base::Optional<CBORValue> ReadArrayContent(const DataItemHeader& header,
+                                             int max_nesting_level);
+  base::Optional<CBORValue> ReadMapContent(const DataItemHeader& header,
+                                           int max_nesting_level);
   bool CanConsume(uint64_t bytes);
-  void CheckExtraneousData();
-  bool CheckDuplicateKey(const CBORValue& new_key, CBORValue::MapValue* map);
   bool HasValidUTF8Format(const std::string& string_data);
   bool CheckOutOfOrderKey(const CBORValue& new_key, CBORValue::MapValue* map);
   bool CheckMinimalEncoding(uint8_t additional_bytes, uint64_t uint_data);
 
   DecoderError GetErrorCode();
 
-  Bytes::const_iterator it_;
-  const Bytes::const_iterator end_;
+  size_t num_bytes_consumed() const { return it_ - begin_; }
+
+  const base::span<const uint8_t>::const_iterator begin_;
+  base::span<const uint8_t>::const_iterator it_;
+  const base::span<const uint8_t>::const_iterator end_;
   DecoderError error_code_;
 
   DISALLOW_COPY_AND_ASSIGN(CBORReader);

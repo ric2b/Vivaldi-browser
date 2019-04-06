@@ -2,45 +2,70 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("browsing_data") {
+source_set("feature_flags") {
   sources = [
-    "browsing_data_change_listening.h",
-    "browsing_data_counter_wrapper.cc",
-    "browsing_data_counter_wrapper.h",
-    "browsing_data_remover_helper.cc",
-    "browsing_data_remover_helper.h",
-    "cache_counter.cc",
-    "cache_counter.h",
-    "ios_browsing_data_counter_factory.cc",
-    "ios_browsing_data_counter_factory.h",
-    "ios_chrome_browsing_data_remover.h",
-    "ios_chrome_browsing_data_remover.mm",
+    "browsing_data_features.cc",
+    "browsing_data_features.h",
   ]
   deps = [
+    "//base",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("browsing_data_remove_mask") {
+  sources = [
+    "browsing_data_remove_mask.h",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("browsing_data") {
+  sources = [
+    "browsing_data_counter_wrapper.cc",
+    "browsing_data_counter_wrapper.h",
+    "browsing_data_remover.cc",
+    "browsing_data_remover.h",
+    "browsing_data_remover_factory.h",
+    "browsing_data_remover_factory.mm",
+    "browsing_data_remover_impl.h",
+    "browsing_data_remover_impl.mm",
+    "browsing_data_remover_observer.h",
+  ]
+  deps = [
+    ":counters",
     "//base",
     "//components/autofill/core/browser",
     "//components/browser_sync",
     "//components/browsing_data/core",
     "//components/history/core/browser",
     "//components/keyed_service/core",
+    "//components/keyed_service/ios",
     "//components/language/core/browser",
     "//components/omnibox/browser",
+    "//components/open_from_clipboard",
     "//components/password_manager/core/browser",
     "//components/prefs",
     "//components/sessions",
+    "//components/signin/core/browser",
+    "//components/signin/ios/browser",
     "//components/translate/core/browser:browser",
     "//ios/chrome/browser",
     "//ios/chrome/browser/autofill",
+    "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/history",
     "//ios/chrome/browser/language",
     "//ios/chrome/browser/passwords",
+    "//ios/chrome/browser/reading_list:reading_list_remover",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/sessions",
     "//ios/chrome/browser/sessions:serialisation",
     "//ios/chrome/browser/signin",
+    "//ios/chrome/browser/snapshots",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/translate:translate",
+    "//ios/chrome/browser/ui:external_files",
     "//ios/net",
     "//ios/public/provider/chrome/browser",
     "//ios/web",
@@ -48,10 +73,25 @@ source_set("browsing_data") {
     "//url",
   ]
   public_deps = [
+    ":browsing_data_remove_mask",
     "//components/search_engines",
   ]
-  allow_circular_includes_from = [ "//ios/chrome/browser/signin" ]
 
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("counters") {
+  sources = [
+    "cache_counter.cc",
+    "cache_counter.h",
+  ]
+  deps = [
+    "//base",
+    "//components/browsing_data/core",
+    "//ios/chrome/browser/browser_state",
+    "//ios/web/public",
+    "//net",
+  ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 
@@ -59,49 +99,28 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "browsing_data_removal_controller_unittest.mm",
+    "browsing_data_remover_impl_unittest.mm",
     "cache_counter_unittest.cc",
   ]
   deps = [
     ":browsing_data",
-    ":browsing_data_internal",
+    ":counters",
     "//base",
     "//base/test:test_support",
     "//components/browsing_data/core",
+    "//components/open_from_clipboard",
+    "//components/open_from_clipboard:test_support",
     "//components/pref_registry",
     "//components/prefs",
     "//components/prefs:test_support",
     "//components/sync_preferences",
     "//components/sync_preferences:test_support",
     "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/sessions:serialisation",
     "//ios/web",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
     "//net",
     "//testing/gtest",
-    "//third_party/ocmock",
   ]
-}
-
-source_set("browsing_data_internal") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  sources = [
-    "browsing_data_removal_controller.h",
-    "browsing_data_removal_controller.mm",
-  ]
-  deps = [
-    ":browsing_data",
-    "//base",
-    "//components/browsing_data/core",
-    "//components/open_from_clipboard",
-    "//components/signin/ios/browser",
-    "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/sessions:serialisation",
-    "//ios/chrome/browser/signin",
-    "//ios/chrome/browser/snapshots",
-    "//ios/chrome/browser/ui:ui_internal",
-    "//ios/web",
-    "//net",
-  ]
-  libs = [ "WebKit.framework" ]
 }

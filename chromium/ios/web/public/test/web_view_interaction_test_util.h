@@ -12,6 +12,7 @@
 #import "base/ios/block_types.h"
 #include "base/values.h"
 
+#include "ios/web/public/test/element_selector.h"
 #import "ios/web/public/web_state/web_state.h"
 
 namespace web {
@@ -23,17 +24,29 @@ std::unique_ptr<base::Value> ExecuteJavaScript(web::WebState* web_state,
                                                const std::string& script);
 
 // Returns the CGRect, in the coordinate system of web_state's view, that
-// encloses the element with |element_id| in |web_state|'s webview.
+// encloses the element returned by |selector| in |web_state|'s webview.
 // There is no guarantee that the CGRect returned is inside the current window;
 // callers should check and act accordingly (scrolling the webview, perhaps).
 // Returns CGRectNull if no element could be found.
-CGRect GetBoundingRectOfElementWithId(web::WebState* web_state,
-                                      const std::string& element_id);
+CGRect GetBoundingRectOfElement(web::WebState* web_state,
+                                const web::test::ElementSelector& selector);
 
 // Returns whether the element with |element_id| in the passed |web_state| has
 // been tapped using a JavaScript click() event.
 bool TapWebViewElementWithId(web::WebState* web_state,
                              const std::string& element_id);
+
+// Returns whether the element with |element_id| in the passed |web_state| has
+// been tapped using a JavaScript click() event. |error| can be nil.
+bool TapWebViewElementWithId(web::WebState* web_state,
+                             const std::string& element_id,
+                             NSError* __autoreleasing* error);
+
+// Looks for an element with |element_id| within window.frames[0] in the passed
+// |web_state|. Returns whether this element has been tapped using a JavaScript
+// click() event. This only works on same-origin iframes.
+bool TapWebViewElementWithIdInIframe(web::WebState* web_state,
+                                     const std::string& element_id);
 
 // Returns whether the element with |element_id| in the passed |web_state| has
 // been focused using a JavaScript focus() event.

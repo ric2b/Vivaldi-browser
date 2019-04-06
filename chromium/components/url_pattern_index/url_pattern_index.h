@@ -40,6 +40,14 @@ using UrlPatternIndexOffset = flatbuffers::Offset<flat::UrlPatternIndex>;
 constexpr size_t kNGramSize = 5;
 static_assert(kNGramSize <= sizeof(NGram), "NGram type is too narrow.");
 
+// The default element types mask as specified by the flatbuffer schema.
+constexpr uint16_t kDefaultFlatElementTypesMask =
+    flat::ElementType_ANY & ~flat::ElementType_MAIN_FRAME;
+
+// The default element types mask used by a proto::UrlRule.
+constexpr uint32_t kDefaultProtoElementTypesMask =
+    proto::ELEMENT_TYPE_ALL & ~proto::ELEMENT_TYPE_POPUP;
+
 // Serializes the |rule| to the FlatBuffer |builder|, and returns an offset to
 // it in the resulting buffer. Returns null offset iff the |rule| could not be
 // serialized because of unsupported options or it is otherwise invalid.
@@ -119,7 +127,11 @@ class UrlPatternIndexMatcher {
   // one of them, depending on the |strategy|. Otherwise, returns nullptr.
   //
   // Notes on parameters:
-  //  - |url| should be valid, otherwise the return value is nullptr.
+  //  - |url| should be valid and not longer than url::kMaxURLChars, otherwise
+  //    the return value is nullptr. The length limit is chosen due to
+  //    performance implications of matching giant URLs, along with the fact
+  //    that in many places in Chrome (e.g. at the IPC layer), URLs longer than
+  //    this are dropped already.
   //  - Exactly one of |element_type| and |activation_type| should be specified,
   //    i.e., not equal to *_UNSPECIFIED, otherwise the return value is nullptr.
   //  - |is_third_party| should be pre-computed by the caller, e.g. using the

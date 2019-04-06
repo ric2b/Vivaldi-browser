@@ -21,7 +21,6 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -39,7 +38,6 @@
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/net_export_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ssl/chrome_expect_ct_reporter.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
@@ -65,16 +63,16 @@
 #include "net/http/http_cache.h"
 #include "net/http/http_network_layer.h"
 #include "net/http/http_network_session.h"
-#include "net/http/http_server_properties.h"
 #include "net/http/http_stream_factory.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_entry.h"
 #include "net/log/net_log_util.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/expect_ct_reporter.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/file_manager/filesystem_api_util.h"
@@ -84,6 +82,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
 #include "chromeos/network/onc/onc_certificate_importer_impl.h"
+#include "chromeos/network/onc/onc_parsed_certificates.h"
 #include "chromeos/network/onc/onc_utils.h"
 #endif
 
@@ -140,31 +139,6 @@ std::string HashesToBase64String(const net::HashValueVector& hashes) {
   return str;
 }
 
-bool Base64StringToHashes(const std::string& hashes_str,
-                          net::HashValueVector* hashes) {
-  hashes->clear();
-  std::vector<std::string> vector_hash_str = base::SplitString(
-      hashes_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-
-  for (size_t i = 0; i != vector_hash_str.size(); ++i) {
-    std::string hash_str;
-    base::RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
-    net::HashValue hash;
-    // Skip past unrecognized hash algos
-    // But return false on malformatted input
-    if (hash_str.empty())
-      return false;
-    if (hash_str.compare(0, 5, "sha1/") != 0 &&
-        hash_str.compare(0, 7, "sha256/") != 0) {
-      continue;
-    }
-    if (!hash.FromString(hash_str))
-      return false;
-    hashes->push_back(hash);
-  }
-  return true;
-}
-
 // Returns the http network session for |context| if there is one.
 // Otherwise, returns NULL.
 net::HttpNetworkSession* GetHttpNetworkSession(
@@ -177,6 +151,8 @@ net::HttpNetworkSession* GetHttpNetworkSession(
 content::WebUIDataSource* CreateNetInternalsHTMLSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUINetInternalsHost);
+  source->OverrideContentSecurityPolicyScriptSrc(
+      "script-src chrome://resources 'self' 'unsafe-eval';");
 
   source->SetDefaultResource(IDR_NET_INTERNALS_INDEX_HTML);
   source->AddResourcePath("index.js", IDR_NET_INTERNALS_INDEX_JS);
@@ -388,7 +364,7 @@ class NetInternalsMessageHandler::IOThreadImpl
   // local variable so that it lives long enough to receive the result of
   // sending a report, which is delivered to the JavaScript via a JavaScript
   // command.
-  std::unique_ptr<ChromeExpectCTReporter> expect_ct_reporter_;
+  std::unique_ptr<network::ExpectCTReporter> expect_ct_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(IOThreadImpl);
 };
@@ -423,101 +399,102 @@ void NetInternalsMessageHandler::RegisterMessages() {
 
   web_ui()->RegisterMessageCallback(
       "notifyReady",
-      base::Bind(&NetInternalsMessageHandler::OnRendererReady,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnRendererReady,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "getNetInfo",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnGetNetInfo, proxy_));
+      "getNetInfo", base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                                        &IOThreadImpl::OnGetNetInfo, proxy_));
   web_ui()->RegisterMessageCallback(
       "reloadProxySettings",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnReloadProxySettings, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnReloadProxySettings, proxy_));
   web_ui()->RegisterMessageCallback(
       "clearBadProxies",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnClearBadProxies, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnClearBadProxies, proxy_));
   web_ui()->RegisterMessageCallback(
       "clearHostResolverCache",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnClearHostResolverCache, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnClearHostResolverCache, proxy_));
   web_ui()->RegisterMessageCallback(
       "domainSecurityPolicyDelete",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnDomainSecurityPolicyDelete, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnDomainSecurityPolicyDelete, proxy_));
   web_ui()->RegisterMessageCallback(
-      "hstsQuery",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnHSTSQuery, proxy_));
+      "hstsQuery", base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                                       &IOThreadImpl::OnHSTSQuery, proxy_));
   web_ui()->RegisterMessageCallback(
-      "hstsAdd",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnHSTSAdd, proxy_));
+      "hstsAdd", base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                                     &IOThreadImpl::OnHSTSAdd, proxy_));
   web_ui()->RegisterMessageCallback(
-      "expectCTQuery", base::Bind(&IOThreadImpl::CallbackHelper,
-                                  &IOThreadImpl::OnExpectCTQuery, proxy_));
+      "expectCTQuery",
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnExpectCTQuery, proxy_));
   web_ui()->RegisterMessageCallback(
-      "expectCTAdd", base::Bind(&IOThreadImpl::CallbackHelper,
-                                &IOThreadImpl::OnExpectCTAdd, proxy_));
+      "expectCTAdd", base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                                         &IOThreadImpl::OnExpectCTAdd, proxy_));
   web_ui()->RegisterMessageCallback(
       "expectCTTestReport",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnExpectCTTestReport, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnExpectCTTestReport, proxy_));
   web_ui()->RegisterMessageCallback(
       "closeIdleSockets",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnCloseIdleSockets, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnCloseIdleSockets, proxy_));
   web_ui()->RegisterMessageCallback(
       "flushSocketPools",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnFlushSocketPools, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnFlushSocketPools, proxy_));
 #if defined(OS_WIN)
   web_ui()->RegisterMessageCallback(
       "getServiceProviders",
-      base::Bind(&IOThreadImpl::CallbackHelper,
-                 &IOThreadImpl::OnGetServiceProviders, proxy_));
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnGetServiceProviders, proxy_));
 #endif
 
   web_ui()->RegisterMessageCallback(
-      "setCaptureMode", base::Bind(&IOThreadImpl::CallbackHelper,
-                                   &IOThreadImpl::OnSetCaptureMode, proxy_));
+      "setCaptureMode",
+      base::BindRepeating(&IOThreadImpl::CallbackHelper,
+                          &IOThreadImpl::OnSetCaptureMode, proxy_));
   web_ui()->RegisterMessageCallback(
       "clearBrowserCache",
-      base::Bind(&NetInternalsMessageHandler::OnClearBrowserCache,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnClearBrowserCache,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getPrerenderInfo",
-      base::Bind(&NetInternalsMessageHandler::OnGetPrerenderInfo,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnGetPrerenderInfo,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getHistoricNetworkStats",
-      base::Bind(&NetInternalsMessageHandler::OnGetHistoricNetworkStats,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &NetInternalsMessageHandler::OnGetHistoricNetworkStats,
+          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getSessionNetworkStats",
-      base::Bind(&NetInternalsMessageHandler::OnGetSessionNetworkStats,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnGetSessionNetworkStats,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getExtensionInfo",
-      base::Bind(&NetInternalsMessageHandler::OnGetExtensionInfo,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnGetExtensionInfo,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getDataReductionProxyInfo",
-      base::Bind(&NetInternalsMessageHandler::OnGetDataReductionProxyInfo,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &NetInternalsMessageHandler::OnGetDataReductionProxyInfo,
+          base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "importONCFile",
-      base::Bind(&NetInternalsMessageHandler::OnImportONCFile,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnImportONCFile,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "storeDebugLogs",
-      base::Bind(&NetInternalsMessageHandler::OnStoreDebugLogs,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnStoreDebugLogs,
+                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "setNetworkDebugMode",
-      base::Bind(&NetInternalsMessageHandler::OnSetNetworkDebugMode,
-                 base::Unretained(this)));
+      base::BindRepeating(&NetInternalsMessageHandler::OnSetNetworkDebugMode,
+                          base::Unretained(this)));
 #endif
 }
 
@@ -662,7 +639,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnRendererReady(
       "receivedConstants",
       net_log::ChromeNetLog::GetConstants(
           base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
-          chrome::GetChannelString()));
+          chrome::GetChannelName()));
 
   PrePopulateEventList();
 
@@ -683,7 +660,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnGetNetInfo(
 void NetInternalsMessageHandler::IOThreadImpl::OnReloadProxySettings(
     const base::ListValue* list) {
   DCHECK(!list);
-  GetMainContext()->proxy_service()->ForceReloadProxyConfig();
+  GetMainContext()->proxy_resolution_service()->ForceReloadProxyConfig();
 
   // Cause the renderer to be notified of the new values.
   SendNetInfo(net::NET_INFO_PROXY_SETTINGS);
@@ -692,7 +669,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnReloadProxySettings(
 void NetInternalsMessageHandler::IOThreadImpl::OnClearBadProxies(
     const base::ListValue* list) {
   DCHECK(!list);
-  GetMainContext()->proxy_service()->ClearBadProxiesCache();
+  GetMainContext()->proxy_resolution_service()->ClearBadProxiesCache();
 
   // Cause the renderer to be notified of the new values.
   SendNetInfo(net::NET_INFO_BAD_PROXIES);
@@ -810,8 +787,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
     const base::ListValue* list) {
-  // |list| should be: [<domain to query>, <STS include subdomains>, <PKP
-  // include subdomains>, <key pins>].
+  // |list| should be: [<domain to query>, <STS include subdomains>]
   std::string domain;
   bool result = list->GetString(0, &domain);
   DCHECK(result);
@@ -823,12 +799,6 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   bool sts_include_subdomains;
   result = list->GetBoolean(1, &sts_include_subdomains);
   DCHECK(result);
-  bool pkp_include_subdomains;
-  result = list->GetBoolean(2, &pkp_include_subdomains);
-  DCHECK(result);
-  std::string hashes_str;
-  result = list->GetString(3, &hashes_str);
-  DCHECK(result);
 
   net::TransportSecurityState* transport_security_state =
       GetMainContext()->transport_security_state();
@@ -836,15 +806,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
     return;
 
   base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
-  net::HashValueVector hashes;
-  if (!hashes_str.empty()) {
-    if (!Base64StringToHashes(hashes_str, &hashes))
-      return;
-  }
-
   transport_security_state->AddHSTS(domain, expiry, sts_include_subdomains);
-  transport_security_state->AddHPKP(domain, expiry, pkp_include_subdomains,
-                                    hashes, GURL());
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnExpectCTQuery(
@@ -937,7 +899,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnExpectCTTestReport(
         std::make_unique<base::Value>("success");
     std::unique_ptr<base::Value> failure =
         std::make_unique<base::Value>("failure");
-    expect_ct_reporter_ = std::make_unique<ChromeExpectCTReporter>(
+    expect_ct_reporter_ = std::make_unique<network::ExpectCTReporter>(
         GetMainContext(),
         base::Bind(
             &NetInternalsMessageHandler::IOThreadImpl::SendJavascriptCommand,
@@ -1020,11 +982,10 @@ void NetInternalsMessageHandler::ImportONCFileToNSSDB(
   chromeos::onc::CertificateImporterImpl cert_importer(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO), nssdb);
   cert_importer.ImportCertificates(
-      certificates,
+      std::make_unique<chromeos::onc::OncParsedCertificates>(certificates),
       onc_source,
       base::Bind(&NetInternalsMessageHandler::OnCertificatesImported,
-                 AsWeakPtr(),
-                 error));
+                 AsWeakPtr(), error));
 }
 
 void NetInternalsMessageHandler::OnCertificatesImported(
@@ -1133,9 +1094,9 @@ void NetInternalsMessageHandler::IOThreadImpl::OnSetCaptureMode(
 // can be called from ANY THREAD.
 void NetInternalsMessageHandler::IOThreadImpl::OnAddEntry(
     const net::NetLogEntry& entry) {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&IOThreadImpl::AddEntryToQueue, this,
-                                         base::Passed(entry.ToValue())));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&IOThreadImpl::AddEntryToQueue, this, entry.ToValue()));
 }
 
 // Note that this can be called from ANY THREAD.
@@ -1153,7 +1114,7 @@ void NetInternalsMessageHandler::IOThreadImpl::SendJavascriptCommand(
 
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::BindOnce(&IOThreadImpl::SendJavascriptCommand,
-                                         this, command, base::Passed(&arg)));
+                                         this, command, std::move(arg)));
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::AddEntryToQueue(

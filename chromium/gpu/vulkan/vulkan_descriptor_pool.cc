@@ -5,9 +5,9 @@
 #include "gpu/vulkan/vulkan_descriptor_pool.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "gpu/vulkan/vulkan_descriptor_set.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
 
 namespace gpu {
 

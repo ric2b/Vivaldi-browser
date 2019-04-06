@@ -4,19 +4,31 @@
 
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 
+#include <memory>
+#include <utility>
+
+#include "base/bind_helpers.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
-#include "components/consent_auditor/consent_auditor.h"
+#include "chrome/common/channel_info.h"
+#include "components/browser_sync/profile_sync_service.h"
+#include "components/consent_auditor/consent_auditor_impl.h"
+#include "components/consent_auditor/consent_sync_bridge.h"
+#include "components/consent_auditor/consent_sync_bridge_impl.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/base/report_unrecoverable_error.h"
+#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/model/model_type_store_service.h"
+#include "components/sync/model_impl/client_tag_based_model_type_processor.h"
 #include "components/version_info/version_info.h"
 
 // static
 ConsentAuditorFactory* ConsentAuditorFactory::GetInstance() {
-  CR_DEFINE_STATIC_LOCAL(ConsentAuditorFactory, factory, ());
-  return &factory;
+  return base::Singleton<ConsentAuditorFactory>::get();
 }
 
 // static
@@ -36,6 +48,7 @@ ConsentAuditorFactory::ConsentAuditorFactory()
           "ConsentAuditor",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(browser_sync::UserEventServiceFactory::GetInstance());
+  DependsOn(ModelTypeStoreServiceFactory::GetInstance());
 }
 
 ConsentAuditorFactory::~ConsentAuditorFactory() {}
@@ -43,9 +56,27 @@ ConsentAuditorFactory::~ConsentAuditorFactory() {}
 KeyedService* ConsentAuditorFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = static_cast<Profile*>(context);
-  return new consent_auditor::ConsentAuditor(
-      profile->GetPrefs(),
-      browser_sync::UserEventServiceFactory::GetForProfile(profile),
+
+  std::unique_ptr<syncer::ConsentSyncBridge> consent_sync_bridge;
+  syncer::UserEventService* user_event_service = nullptr;
+  if (base::FeatureList::IsEnabled(switches::kSyncUserConsentSeparateType)) {
+    syncer::OnceModelTypeStoreFactory store_factory =
+        ModelTypeStoreServiceFactory::GetForProfile(profile)->GetStoreFactory();
+
+    auto change_processor =
+        std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
+            syncer::USER_CONSENTS,
+            base::BindRepeating(&syncer::ReportUnrecoverableError,
+                                chrome::GetChannel()));
+    consent_sync_bridge = std::make_unique<syncer::ConsentSyncBridgeImpl>(
+        std::move(store_factory), std::move(change_processor));
+  } else {
+    user_event_service =
+        browser_sync::UserEventServiceFactory::GetForProfile(profile);
+  }
+
+  return new consent_auditor::ConsentAuditorImpl(
+      profile->GetPrefs(), std::move(consent_sync_bridge), user_event_service,
       // The browser version and locale do not change runtime, so we can pass
       // them directly.
       version_info::GetVersionNumber(),
@@ -55,5 +86,5 @@ KeyedService* ConsentAuditorFactory::BuildServiceInstanceFor(
 // static
 void ConsentAuditorFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  consent_auditor::ConsentAuditor::RegisterProfilePrefs(registry);
+  consent_auditor::ConsentAuditorImpl::RegisterProfilePrefs(registry);
 }

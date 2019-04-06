@@ -16,6 +16,7 @@
 #include "base/task_scheduler/scheduler_lock.h"
 #include "base/task_scheduler/scheduler_worker_params.h"
 #include "base/task_scheduler/sequence.h"
+#include "base/task_scheduler/tracked_ref.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -25,6 +26,9 @@
 #endif
 
 namespace base {
+
+class SchedulerWorkerObserver;
+
 namespace internal {
 
 class TaskTracker;
@@ -40,8 +44,22 @@ class TaskTracker;
 //
 // This class is thread-safe.
 class BASE_EXPORT SchedulerWorker
-    : public RefCountedThreadSafe<SchedulerWorker> {
+    : public RefCountedThreadSafe<SchedulerWorker>,
+      public PlatformThread::Delegate {
  public:
+  // Labels this SchedulerWorker's association. This doesn't affect any logic
+  // but will add a stack frame labeling this thread for ease of stack trace
+  // identification.
+  enum class ThreadLabel {
+    POOLED,
+    SHARED,
+    DEDICATED,
+#if defined(OS_WIN)
+    SHARED_COM,
+    DEDICATED_COM,
+#endif  // defined(OS_WIN)
+  };
+
   // Delegate interface for SchedulerWorker. All methods except
   // OnCanScheduleSequence() (inherited from CanScheduleSequenceObserver) are
   // called from the thread managed by the SchedulerWorker instance.
@@ -49,8 +67,12 @@ class BASE_EXPORT SchedulerWorker
    public:
     ~Delegate() override = default;
 
+    // Returns the ThreadLabel the Delegate wants its SchedulerWorkers' stacks
+    // to be labeled with.
+    virtual ThreadLabel GetThreadLabel() const = 0;
+
     // Called by |worker|'s thread when it enters its main function.
-    virtual void OnMainEntry(SchedulerWorker* worker) = 0;
+    virtual void OnMainEntry(const SchedulerWorker* worker) = 0;
 
     // Called by |worker|'s thread to get a Sequence from which to run a Task.
     virtual scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) = 0;
@@ -76,7 +98,10 @@ class BASE_EXPORT SchedulerWorker
     // SchedulerWorker::WakeUp()
     virtual void WaitForWork(WaitableEvent* wake_up_event);
 
-    // Called by |worker|'s thread right before the main function exits.
+    // Called by |worker|'s thread right before the main function exits. The
+    // Delegate is free to release any associated resources in this call. It is
+    // guaranteed that SchedulerWorker won't access the Delegate or the
+    // TaskTracker after calling OnMainExit() on the Delegate.
     virtual void OnMainExit(SchedulerWorker* worker) {}
   };
 
@@ -91,15 +116,18 @@ class BASE_EXPORT SchedulerWorker
   // Cleanup() must be called before releasing the last external reference.
   SchedulerWorker(ThreadPriority priority_hint,
                   std::unique_ptr<Delegate> delegate,
-                  TaskTracker* task_tracker,
+                  TrackedRef<TaskTracker> task_tracker,
                   const SchedulerLock* predecessor_lock = nullptr,
                   SchedulerBackwardCompatibility backward_compatibility =
                       SchedulerBackwardCompatibility::DISABLED);
 
   // Creates a thread to back the SchedulerWorker. The thread will be in a wait
   // state pending a WakeUp() call. No thread will be created if Cleanup() was
-  // called. Returns true on success.
-  bool Start();
+  // called. If specified, |scheduler_worker_observer| will be notified when the
+  // worker enters and exits its main function. It must not be destroyed before
+  // JoinForTesting() has returned (must never be destroyed in production).
+  // Returns true on success.
+  bool Start(SchedulerWorkerObserver* scheduler_worker_observer = nullptr);
 
   // Wakes up this SchedulerWorker if it wasn't already awake. After this is
   // called, this SchedulerWorker will run Tasks from Sequences returned by the
@@ -132,29 +160,91 @@ class BASE_EXPORT SchedulerWorker
   //   worker_ = nullptr;
   void Cleanup();
 
+  // Informs this SchedulerWorker about periods during which it is not being
+  // used. Thread-safe.
+  void BeginUnusedPeriod();
+  void EndUnusedPeriod();
+  // Returns the last time this SchedulerWorker was used. Returns a null time if
+  // this SchedulerWorker is currently in-use. Thread-safe.
+  TimeTicks GetLastUsedTime() const;
+
  private:
   friend class RefCountedThreadSafe<SchedulerWorker>;
   class Thread;
 
-  ~SchedulerWorker();
+  ~SchedulerWorker() override;
 
   bool ShouldExit() const;
 
-  // Synchronizes access to |thread_| (read+write) and |started_| (read+write).
+  // Returns the thread priority to use based on the priority hint, current
+  // shutdown state, and platform capabilities.
+  ThreadPriority GetDesiredThreadPriority() const;
+
+  // Changes the thread priority to |desired_thread_priority|. Must be called on
+  // the thread managed by |this|.
+  void UpdateThreadPriority(ThreadPriority desired_thread_priority);
+
+  // PlatformThread::Delegate:
+  void ThreadMain() override;
+
+  // Dummy frames to act as "RunLabeledWorker()" (see RunMain() below). Their
+  // impl is aliased to prevent compiler/linker from optimizing them out.
+  void RunPooledWorker();
+  void RunBackgroundPooledWorker();
+  void RunSharedWorker();
+  void RunBackgroundSharedWorker();
+  void RunDedicatedWorker();
+  void RunBackgroundDedicatedWorker();
+#if defined(OS_WIN)
+  void RunSharedCOMWorker();
+  void RunBackgroundSharedCOMWorker();
+  void RunDedicatedCOMWorker();
+  void RunBackgroundDedicatedCOMWorker();
+#endif  // defined(OS_WIN)
+
+  // The real main, invoked through :
+  //     ThreadMain() -> RunLabeledWorker() -> RunWorker().
+  // "RunLabeledWorker()" is a dummy frame based on ThreadLabel+ThreadPriority
+  // and used to easily identify threads in stack traces.
+  void RunWorker();
+
+  // Self-reference to prevent destruction of |this| while the thread is alive.
+  // Set in Start() before creating the thread. Reset in ThreadMain() before the
+  // thread exits. No lock required because the first access occurs before the
+  // thread is created and the second access occurs on the thread.
+  scoped_refptr<SchedulerWorker> self_;
+
+  // Synchronizes access to |thread_handle_| and |last_used_time_|.
   mutable SchedulerLock thread_lock_;
 
-  // The underlying thread for this SchedulerWorker.
-  // The thread object will be cleaned up by the running thread unless we join
-  // against the thread. Joining requires the thread object to remain alive for
-  // the Thread::Join() call.
-  std::unique_ptr<Thread> thread_;
+  // Handle for the thread managed by |this|.
+  PlatformThreadHandle thread_handle_;
 
+  // The last time this worker was used by its owner (e.g. to process work or
+  // stand as a required idle thread).
+  TimeTicks last_used_time_;
+
+  // Event to wake up the thread managed by |this|.
+  WaitableEvent wake_up_event_{WaitableEvent::ResetPolicy::AUTOMATIC,
+                               WaitableEvent::InitialState::NOT_SIGNALED};
+
+  // Whether the thread should exit. Set by Cleanup().
   AtomicFlag should_exit_;
 
+  const std::unique_ptr<Delegate> delegate_;
+  const TrackedRef<TaskTracker> task_tracker_;
+
+  // Optional observer notified when a worker enters and exits its main
+  // function. Set in Start() and never modified afterwards.
+  SchedulerWorkerObserver* scheduler_worker_observer_ = nullptr;
+
+  // Desired thread priority.
   const ThreadPriority priority_hint_;
 
-  const std::unique_ptr<Delegate> delegate_;
-  TaskTracker* const task_tracker_;
+  // Actual thread priority. Can be different than |priority_hint_| depending on
+  // system capabilities and shutdown state. No lock required because all post-
+  // construction accesses occur on the thread.
+  ThreadPriority current_thread_priority_;
 
 #if defined(OS_WIN) && !defined(COM_INIT_CHECK_HOOK_ENABLED)
   const SchedulerBackwardCompatibility backward_compatibility_;

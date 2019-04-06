@@ -8,13 +8,14 @@
 #include <stdint.h>
 
 #include <memory>
+#include <set>
 
 #include "base/strings/string16.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/proxy/proxy_retry_info.h"
+#include "net/proxy_resolution/proxy_retry_info.h"
 
 class GURL;
 
@@ -42,10 +43,10 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
 
   // NetworkDelegate implementation:
   int OnBeforeURLRequest(URLRequest* request,
-                         const CompletionCallback& callback,
+                         CompletionOnceCallback callback,
                          GURL* new_url) final;
   int OnBeforeStartTransaction(URLRequest* request,
-                               const CompletionCallback& callback,
+                               CompletionOnceCallback callback,
                                HttpRequestHeaders* headers) final;
   void OnBeforeSendHeaders(URLRequest* request,
                            const ProxyInfo& proxy_info,
@@ -55,7 +56,7 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
                           const HttpRequestHeaders& headers) final;
   int OnHeadersReceived(
       URLRequest* request,
-      const CompletionCallback& callback,
+      CompletionOnceCallback callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
       GURL* allowed_unsafe_redirect_url) final;
@@ -70,7 +71,7 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
   void OnPACScriptError(int line_number, const base::string16& error) final;
   AuthRequiredResponse OnAuthRequired(URLRequest* request,
                                       const AuthChallengeInfo& auth_info,
-                                      const AuthCallback& callback,
+                                      AuthCallback callback,
                                       AuthCredentials* credentials) final;
   bool OnCanGetCookies(const URLRequest& request,
                        const CookieList& cookie_list) final;
@@ -90,7 +91,9 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
 
   bool OnCanQueueReportingReport(const url::Origin& origin) const final;
 
-  bool OnCanSendReportingReport(const url::Origin& origin) const final;
+  void OnCanSendReportingReports(std::set<url::Origin> origins,
+                                 base::OnceCallback<void(std::set<url::Origin>)>
+                                     result_callback) const final;
 
   bool OnCanSetReportingClient(const url::Origin& origin,
                                const GURL& endpoint) const final;
@@ -99,13 +102,10 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
                                const GURL& endpoint) const final;
 
  protected:
-  virtual void OnBeforeURLRequestInternal(URLRequest* request,
-                                          const CompletionCallback& callback,
-                                          GURL* new_url);
+  virtual void OnBeforeURLRequestInternal(URLRequest* request, GURL* new_url);
 
   virtual void OnBeforeStartTransactionInternal(
       URLRequest* request,
-      const CompletionCallback& callback,
       HttpRequestHeaders* headers);
 
   virtual void OnBeforeSendHeadersInternal(
@@ -119,7 +119,6 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
 
   virtual void OnHeadersReceivedInternal(
       URLRequest* request,
-      const CompletionCallback& callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
       GURL* allowed_unsafe_redirect_url);
@@ -135,7 +134,9 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
   virtual void OnNetworkBytesSentInternal(URLRequest* request,
                                           int64_t bytes_sent);
 
-  virtual void OnCompletedInternal(URLRequest* request, bool started);
+  virtual void OnCompletedInternal(URLRequest* request,
+                                   bool started,
+                                   int net_error);
 
   virtual void OnURLRequestDestroyedInternal(URLRequest* request);
 
@@ -151,7 +152,6 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
 
   virtual void OnAuthRequiredInternal(URLRequest* request,
                                       const AuthChallengeInfo& auth_info,
-                                      const AuthCallback& callback,
                                       AuthCredentials* credentials);
 
   virtual void OnCanAccessFileInternal(
@@ -165,7 +165,9 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
 
   virtual void OnAreExperimentalCookieFeaturesEnabledInternal() const;
 
-  virtual void OnCancelURLRequestWithPolicyViolatingReferrerHeaderInternal(
+  // If this returns false, it short circuits the corresponding call in any
+  // nested NetworkDelegates.
+  virtual bool OnCancelURLRequestWithPolicyViolatingReferrerHeaderInternal(
       const URLRequest& request,
       const GURL& target_url,
       const GURL& referrer_url) const;
@@ -173,8 +175,8 @@ class NET_EXPORT LayeredNetworkDelegate : public NetworkDelegate {
   virtual void OnCanQueueReportingReportInternal(
       const url::Origin& origin) const;
 
-  virtual void OnCanSendReportingReportInternal(
-      const url::Origin& origin) const;
+  virtual void OnCanSendReportingReportsInternal(
+      const std::set<url::Origin>& origins) const;
 
   virtual void OnCanSetReportingClientInternal(const url::Origin& origin,
                                                const GURL& endpoint) const;

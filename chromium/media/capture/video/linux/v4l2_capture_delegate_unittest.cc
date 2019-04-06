@@ -182,9 +182,15 @@ class MockVideoCaptureDeviceClient : public VideoCaptureDevice::Client {
                     base::TimeTicks,
                     base::TimeDelta,
                     int));
-  MOCK_METHOD4(
-      ReserveOutputBuffer,
-      Buffer(const gfx::Size&, VideoPixelFormat, VideoPixelStorage, int));
+  MOCK_METHOD6(OnIncomingCapturedGfxBuffer,
+               void(gfx::GpuMemoryBuffer* buffer,
+                    const media::VideoCaptureFormat& frame_format,
+                    int clockwise_rotation,
+                    base::TimeTicks reference_time,
+                    base::TimeDelta timestamp,
+                    int frame_feedback_id));
+  MOCK_METHOD3(ReserveOutputBuffer,
+               Buffer(const gfx::Size&, VideoPixelFormat, int));
   void OnIncomingCapturedBuffer(Buffer buffer,
                                 const VideoCaptureFormat& frame_format,
                                 base::TimeTicks reference_time,
@@ -202,9 +208,8 @@ class MockVideoCaptureDeviceClient : public VideoCaptureDevice::Client {
     DoOnIncomingCapturedVideoFrame();
   }
   MOCK_METHOD0(DoOnIncomingCapturedVideoFrame, void(void));
-  MOCK_METHOD4(
-      ResurrectLastOutputBuffer,
-      Buffer(const gfx::Size&, VideoPixelFormat, VideoPixelStorage, int));
+  MOCK_METHOD3(ResurrectLastOutputBuffer,
+               Buffer(const gfx::Size&, VideoPixelFormat, int));
   MOCK_METHOD2(OnError,
                void(const base::Location& from_here,
                     const std::string& reason));
@@ -216,7 +221,9 @@ class V4L2CaptureDelegateTest : public ::testing::Test {
  public:
   V4L2CaptureDelegateTest()
       : device_descriptor_("Device 0", "/dev/video0"),
+        v4l2_(new V4L2CaptureDeviceImpl()),
         delegate_(std::make_unique<V4L2CaptureDelegate>(
+            v4l2_.get(),
             device_descriptor_,
             base::ThreadTaskRunnerHandle::Get(),
             50)) {}
@@ -224,6 +231,7 @@ class V4L2CaptureDelegateTest : public ::testing::Test {
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   VideoCaptureDeviceDescriptor device_descriptor_;
+  scoped_refptr<V4L2CaptureDevice> v4l2_;
   std::unique_ptr<V4L2CaptureDelegate> delegate_;
 };
 

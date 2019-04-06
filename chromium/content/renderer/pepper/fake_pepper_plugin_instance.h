@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "content/public/renderer/pepper_plugin_instance.h"
 #include "url/gurl.h"
 
@@ -48,7 +50,13 @@ class FakePepperPluginInstance : public PepperPluginInstance {
   void SetSelectionBounds(const gfx::PointF& base,
                           const gfx::PointF& extent) override;
   bool CanEditText() override;
+  bool HasEditableText() override;
   void ReplaceSelection(const std::string& text) override;
+  void SelectAll() override;
+  bool CanUndo() override;
+  bool CanRedo() override;
+  void Undo() override;
+  void Redo() override;
 
  private:
   GURL gurl_;

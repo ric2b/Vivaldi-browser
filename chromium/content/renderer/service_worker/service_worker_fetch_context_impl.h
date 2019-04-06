@@ -5,47 +5,77 @@
 #ifndef CONTENT_RENDERER_SERVICE_WORKER_SERVICE_WORKER_FETCH_CONTEXT_IMPL_H_
 #define CONTENT_RENDERER_SERVICE_WORKER_SERVICE_WORKER_FETCH_CONTEXT_IMPL_H_
 
-#include "content/public/renderer/child_url_loader_factory_getter.h"
-#include "services/network/public/interfaces/url_loader_factory.mojom.h"
-#include "third_party/WebKit/public/platform/WebWorkerFetchContext.h"
+#include "content/public/common/renderer_preferences.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "url/gurl.h"
-
-namespace base {
-class SingleThreadTaskRunner;
-}  // namespace base
 
 namespace content {
 class ResourceDispatcher;
 class URLLoaderThrottleProvider;
+class WebSocketHandshakeThrottleProvider;
 
 class ServiceWorkerFetchContextImpl : public blink::WebWorkerFetchContext {
  public:
+  // |url_loader_factory_info| is used for regular loads from the service worker
+  // (i.e., Fetch API). It typically goes to network, but it might internally
+  // contain non-NetworkService factories for handling non-http(s) URLs like
+  // chrome-extension://.
+  // |script_loader_factory_info| is used for importScripts() from the service
+  // worker when InstalledScriptsManager doesn't have the requested script. It
+  // is a ServiceWorkerScriptLoaderFactory, which loads and installs the script.
   ServiceWorkerFetchContextImpl(
+      RendererPreferences renderer_preferences,
       const GURL& worker_script_url,
-      ChildURLLoaderFactoryGetter::Info url_loader_factory_getter_info,
+      std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+          url_loader_factory_info,
+      std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+          script_loader_factory_info,
       int service_worker_provider_id,
-      std::unique_ptr<URLLoaderThrottleProvider> throttle_provider);
+      std::unique_ptr<URLLoaderThrottleProvider> throttle_provider,
+      std::unique_ptr<WebSocketHandshakeThrottleProvider>
+          websocket_handshake_throttle_provider);
   ~ServiceWorkerFetchContextImpl() override;
 
   // blink::WebWorkerFetchContext implementation:
-  void InitializeOnWorkerThread(
-      scoped_refptr<base::SingleThreadTaskRunner>) override;
+  void SetTerminateSyncLoadEvent(base::WaitableEvent*) override;
+  void InitializeOnWorkerThread() override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
+  std::unique_ptr<blink::WebURLLoaderFactory> WrapURLLoaderFactory(
+      mojo::ScopedMessagePipeHandle url_loader_factory_handle) override;
+  std::unique_ptr<blink::WebURLLoaderFactory> CreateScriptLoaderFactory()
+      override;
   void WillSendRequest(blink::WebURLRequest&) override;
-  bool IsControlledByServiceWorker() const override;
+  blink::mojom::ControllerServiceWorkerMode IsControlledByServiceWorker()
+      const override;
   blink::WebURL SiteForCookies() const override;
+  std::unique_ptr<blink::WebSocketHandshakeThrottle>
+  CreateWebSocketHandshakeThrottle() override;
 
  private:
+  RendererPreferences renderer_preferences_;
   const GURL worker_script_url_;
-  // Consumed on the worker thread to create |url_loader_factory_getter_|.
-  ChildURLLoaderFactoryGetter::Info url_loader_factory_getter_info_;
+  // Consumed on the worker thread to create |url_loader_factory_|.
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo> url_loader_factory_info_;
+  // Consumed on the worker thread to create |script_loader_factory_|.
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+      script_loader_factory_info_;
   const int service_worker_provider_id_;
 
   // Initialized on the worker thread when InitializeOnWorkerThread() is called.
   std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
-  scoped_refptr<ChildURLLoaderFactoryGetter> url_loader_factory_getter_;
+
+  // Responsible for regular loads from the service worker (i.e., Fetch API).
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
+  // Responsible for handling importScripts().
+  scoped_refptr<network::SharedURLLoaderFactory> script_loader_factory_;
 
   std::unique_ptr<URLLoaderThrottleProvider> throttle_provider_;
+  std::unique_ptr<WebSocketHandshakeThrottleProvider>
+      websocket_handshake_throttle_provider_;
+
+  // This is owned by ThreadedMessagingProxyBase on the main thread.
+  base::WaitableEvent* terminate_sync_load_event_ = nullptr;
 };
 
 }  // namespace content

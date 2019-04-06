@@ -15,7 +15,7 @@
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_surface_overlay.h"
 #include "ui/gl/scoped_binders.h"
-#include "ui/ozone/platform/drm/gpu/overlay_plane.h"
+#include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
 
 namespace ui {
 
@@ -32,7 +32,7 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
                  std::unique_ptr<DrmWindowProxy> window,
                  gfx::AcceleratedWidget widget);
 
-  void QueueOverlayPlane(const OverlayPlane& plane);
+  void QueueOverlayPlane(DrmOverlayPlane plane);
 
   // gl::GLSurface:
   bool Initialize(gl::GLSurfaceFormat format) override;
@@ -41,7 +41,9 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
                             gfx::OverlayTransform transform,
                             gl::GLImage* image,
                             const gfx::Rect& bounds_rect,
-                            const gfx::RectF& crop_rect) override;
+                            const gfx::RectF& crop_rect,
+                            bool enable_blend,
+                            std::unique_ptr<gfx::GpuFence> gpu_fence) override;
   bool IsOffscreen() override;
   gfx::VSyncProvider* GetVSyncProvider() override;
   bool SupportsPresentationCallback() override;
@@ -64,6 +66,7 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
       const PresentationCallback& presentation_callback) override;
   EGLConfig GetConfig() override;
   void SetRelyOnImplicitSync() override;
+  void SetUsePlaneGpuFences() override;
 
  protected:
   ~GbmSurfaceless() override;
@@ -80,11 +83,10 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
     void Flush();
 
     bool ready = false;
+    gfx::SwapResult swap_result = gfx::SwapResult::SWAP_FAILED;
     std::vector<gl::GLSurfaceOverlay> overlays;
-    using SwapCompletionAndPresentationCallback =
-        base::OnceCallback<void(gfx::SwapResult,
-                                const gfx::PresentationFeedback&)>;
-    SwapCompletionAndPresentationCallback callback;
+    SwapCompletionCallback completion_callback;
+    PresentationCallback presentation_callback;
   };
 
   void SubmitFrame();
@@ -92,23 +94,22 @@ class GbmSurfaceless : public gl::SurfacelessEGL {
   EGLSyncKHR InsertFence(bool implicit);
   void FenceRetired(PendingFrame* frame);
 
-  void SwapCompleted(const SwapCompletionCallback& completion_callback,
-                     const PresentationCallback& presentation_callback,
-                     gfx::SwapResult result,
-                     const gfx::PresentationFeedback& feedback);
+  void OnSubmission(gfx::SwapResult result,
+                    std::unique_ptr<gfx::GpuFence> out_fence);
+  void OnPresentation(const gfx::PresentationFeedback& feedback);
 
   GbmSurfaceFactory* surface_factory_;
   std::unique_ptr<DrmWindowProxy> window_;
-  std::vector<OverlayPlane> planes_;
+  std::vector<DrmOverlayPlane> planes_;
 
   // The native surface. Deleting this is allowed to free the EGLNativeWindow.
   gfx::AcceleratedWidget widget_;
   std::unique_ptr<gfx::VSyncProvider> vsync_provider_;
   std::vector<std::unique_ptr<PendingFrame>> unsubmitted_frames_;
+  std::unique_ptr<PendingFrame> submitted_frame_;
   bool has_implicit_external_sync_;
   bool last_swap_buffers_result_ = true;
-  bool swap_buffers_pending_ = false;
-  bool rely_on_implicit_sync_ = false;
+  bool use_egl_fence_sync_ = true;
   // Conservatively assume we begin on a device that requires
   // explicit synchronization.
   bool is_on_external_drm_device_ = true;

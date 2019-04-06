@@ -10,6 +10,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/account_id/account_id.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -23,7 +24,6 @@
 #include "components/policy/core/common/schema_registry.h"
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -83,21 +83,19 @@ TEST_F(ProfilePolicyConnectorTest, IsManagedForManagedUsers) {
   connector.Init(nullptr /* user */, &schema_registry_,
                  cloud_policy_manager_.get(), &cloud_policy_store_, false);
   EXPECT_FALSE(connector.IsManaged());
-  EXPECT_EQ(connector.GetManagementDomain(), "");
 
   cloud_policy_store_.policy_.reset(new enterprise_management::PolicyData());
   cloud_policy_store_.policy_->set_username("test@testdomain.com");
   cloud_policy_store_.policy_->set_state(
       enterprise_management::PolicyData::ACTIVE);
   EXPECT_TRUE(connector.IsManaged());
-  EXPECT_EQ(connector.GetManagementDomain(), "testdomain.com");
 
   // Cleanup.
   connector.Shutdown();
 }
 
 #if defined(OS_CHROMEOS)
-TEST_F(ProfilePolicyConnectorTest, ManagedRealmForActiveDirectoryUsers) {
+TEST_F(ProfilePolicyConnectorTest, IsManagedForActiveDirectoryUsers) {
   user_manager::ScopedUserManager scoped_user_manager_enabler(
       std::make_unique<chromeos::FakeChromeUserManager>());
   ProfilePolicyConnector connector;
@@ -110,13 +108,11 @@ TEST_F(ProfilePolicyConnectorTest, ManagedRealmForActiveDirectoryUsers) {
   cloud_policy_store_.policy_->set_state(
       enterprise_management::PolicyData::ACTIVE);
   EXPECT_TRUE(connector.IsManaged());
-  EXPECT_EQ(connector.GetManagementDomain(), "realm.example");
 
   // Policy username does not override management realm for Active Directory
   // user.
   cloud_policy_store_.policy_->set_username("test@testdomain.com");
   EXPECT_TRUE(connector.IsManaged());
-  EXPECT_EQ(connector.GetManagementDomain(), "realm.example");
 
   // Cleanup.
   connector.Shutdown();

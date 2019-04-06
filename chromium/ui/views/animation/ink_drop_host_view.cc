@@ -4,7 +4,7 @@
 
 #include "ui/views/animation/ink_drop_host_view.h"
 
-#include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "ui/events/event.h"
 #include "ui/events/scoped_target_handler.h"
 #include "ui/gfx/color_palette.h"
@@ -22,16 +22,16 @@ namespace {
 
 // The scale factor to compute the large size of the default
 // SquareInkDropRipple.
-const float kLargeInkDropScale = 1.333f;
+constexpr float kLargeInkDropScale = 1.333f;
 
 // Default opacity of the ink drop when it is visible.
-const float kInkDropVisibleOpacity = 0.175f;
+constexpr float kInkDropVisibleOpacity = 0.175f;
+
+// Default corner radii used for the SquareInkDropRipple.
+constexpr int kInkDropSmallCornerRadius = 2;
+constexpr int kInkDropLargeCornerRadius = 4;
 
 }  // namespace
-
-// static
-constexpr int InkDropHostView::kInkDropSmallCornerRadius;
-constexpr int InkDropHostView::kInkDropLargeCornerRadius;
 
 // An EventHandler that is guaranteed to be invoked and is not prone to
 // InkDropHostView descendents who do not call
@@ -118,8 +118,9 @@ gfx::Size InkDropHostView::CalculateLargeInkDropSize(
 InkDropHostView::InkDropHostView()
     : ink_drop_mode_(InkDropMode::OFF),
       ink_drop_(nullptr),
-      ink_drop_visible_opacity_(
-          PlatformStyle::kUseRipples ? kInkDropVisibleOpacity : 0),
+      ink_drop_visible_opacity_(kInkDropVisibleOpacity),
+      ink_drop_small_corner_radius_(kInkDropSmallCornerRadius),
+      ink_drop_large_corner_radius_(kInkDropLargeCornerRadius),
       old_paint_to_layer_(false),
       destroying_(false) {}
 
@@ -168,12 +169,16 @@ std::unique_ptr<InkDropHighlight> InkDropHostView::CreateInkDropHighlight()
       gfx::RectF(GetMirroredRect(GetContentsBounds())).CenterPoint());
 }
 
+std::unique_ptr<views::InkDropMask> InkDropHostView::CreateInkDropMask() const {
+  return nullptr;
+}
+
 std::unique_ptr<InkDropRipple> InkDropHostView::CreateDefaultInkDropRipple(
     const gfx::Point& center_point,
     const gfx::Size& size) const {
   std::unique_ptr<InkDropRipple> ripple(new SquareInkDropRipple(
-      CalculateLargeInkDropSize(size), kInkDropLargeCornerRadius, size,
-      kInkDropSmallCornerRadius, center_point, GetInkDropBaseColor(),
+      CalculateLargeInkDropSize(size), ink_drop_large_corner_radius_, size,
+      ink_drop_small_corner_radius_, center_point, GetInkDropBaseColor(),
       ink_drop_visible_opacity()));
   return ripple;
 }
@@ -181,8 +186,9 @@ std::unique_ptr<InkDropRipple> InkDropHostView::CreateDefaultInkDropRipple(
 std::unique_ptr<InkDropHighlight>
 InkDropHostView::CreateDefaultInkDropHighlight(const gfx::PointF& center_point,
                                                const gfx::Size& size) const {
-  std::unique_ptr<InkDropHighlight> highlight(new InkDropHighlight(
-      size, kInkDropSmallCornerRadius, center_point, GetInkDropBaseColor()));
+  std::unique_ptr<InkDropHighlight> highlight(
+      new InkDropHighlight(size, ink_drop_small_corner_radius_, center_point,
+                           GetInkDropBaseColor()));
   highlight->set_explode_size(gfx::SizeF(CalculateLargeInkDropSize(size)));
   return highlight;
 }
@@ -221,11 +227,21 @@ void InkDropHostView::AnimateInkDrop(InkDropState state,
   GetInkDrop()->AnimateToState(state);
 }
 
+void InkDropHostView::ViewHierarchyChanged(
+    const ViewHierarchyChangedDetails& details) {
+  // If we're being removed hide the ink-drop so if we're highlighted now the
+  // highlight won't be active if we're added back again.
+  if (!details.is_add && details.child == this && ink_drop_) {
+    GetInkDrop()->SnapToHidden();
+    GetInkDrop()->SetHovered(false);
+  }
+  View::ViewHierarchyChanged(details);
+}
+
 void InkDropHostView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   if (ink_drop_)
     ink_drop_->HostSizeChanged(size());
-  if (ink_drop_mask_)
-    ink_drop_mask_->UpdateLayerSize(size());
+  UpdateInkDropMaskLayerSize(size());
 }
 
 void InkDropHostView::VisibilityChanged(View* starting_from, bool is_visible) {
@@ -268,10 +284,6 @@ SkColor InkDropHostView::GetInkDropBaseColor() const {
   return gfx::kPlaceholderColor;
 }
 
-std::unique_ptr<views::InkDropMask> InkDropHostView::CreateInkDropMask() const {
-  return nullptr;
-}
-
 bool InkDropHostView::HasInkDrop() const {
   return !!ink_drop_;
 }
@@ -288,23 +300,24 @@ InkDrop* InkDropHostView::GetInkDrop() {
 }
 
 void InkDropHostView::InstallInkDropMask(ui::Layer* ink_drop_layer) {
-// Layer masks don't work on Windows. See crbug.com/713359
-#if !defined(OS_WIN)
   ink_drop_mask_ = CreateInkDropMask();
   if (ink_drop_mask_)
     ink_drop_layer->SetMaskLayer(ink_drop_mask_->layer());
-#endif
 }
 
 void InkDropHostView::ResetInkDropMask() {
   ink_drop_mask_.reset();
 }
 
+void InkDropHostView::UpdateInkDropMaskLayerSize(const gfx::Size& new_size) {
+  if (ink_drop_mask_)
+    ink_drop_mask_->UpdateLayerSize(new_size);
+}
+
 std::unique_ptr<InkDropImpl> InkDropHostView::CreateDefaultInkDropImpl() {
-  std::unique_ptr<InkDropImpl> ink_drop =
-      std::make_unique<InkDropImpl>(this, size());
+  auto ink_drop = std::make_unique<InkDropImpl>(this, size());
   ink_drop->SetAutoHighlightMode(
-      views::InkDropImpl::AutoHighlightMode::HIDE_ON_RIPPLE);
+      InkDropImpl::AutoHighlightMode::HIDE_ON_RIPPLE);
   return ink_drop;
 }
 

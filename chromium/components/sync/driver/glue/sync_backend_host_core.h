@@ -15,8 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "components/invalidation/public/invalidation.h"
@@ -90,6 +89,10 @@ class SyncBackendHostCore
   // SyncEngine::UpdateCredentials.
   void DoUpdateCredentials(const SyncCredentials& credentials);
 
+  // Called to invalidate the credentials on behalf of
+  // SyncEngine::InvalidateCredentials.
+  void DoInvalidateCredentials();
+
   // Switches sync engine into configuration mode. In this mode only initial
   // data for newly enabled types is downloaded from server. No local changes
   // are committed to server.
@@ -128,7 +131,7 @@ class SyncBackendHostCore
   //    directory and destroy sync manager.
   void ShutdownOnUIThread();
   void DoShutdown(ShutdownReason reason);
-  void DoDestroySyncManager(ShutdownReason reason);
+  void DoDestroySyncManager();
 
   // Configuration methods that must execute on sync loop.
   void DoPurgeDisabledTypes(const ModelTypeSet& to_purge,
@@ -168,6 +171,8 @@ class SyncBackendHostCore
   void DoOnCookieJarChanged(bool account_mismatch,
                             bool empty_jar,
                             const base::Closure& callback);
+
+  bool HasUnsyncedItemsForTest() const;
 
  private:
   friend class base::RefCountedThreadSafe<SyncBackendHostCore>;
@@ -231,7 +236,7 @@ class SyncBackendHostCore
   std::map<ModelType, int64_t> last_invalidation_versions_;
 
   // Checks that we are on the sync thread.
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<SyncBackendHostCore> weak_ptr_factory_;
 

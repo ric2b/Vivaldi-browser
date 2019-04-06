@@ -14,11 +14,11 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Coordinates;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -31,7 +31,6 @@ import java.util.Locale;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
-
 
 /**
  * Integration test to ensure that OSK resizes only the visual viewport.
@@ -83,9 +82,7 @@ public class OSKOverscrollTest {
             @Override
             public boolean isSatisfied() {
                 return UiUtils.isKeyboardShowing(mActivityTestRule.getActivity(),
-                        mActivityTestRule.getActivity()
-                                .getCurrentContentViewCore()
-                                .getContainerView());
+                        mActivityTestRule.getActivity().getActivityTab().getContentView());
             }
         });
     }
@@ -114,6 +111,7 @@ public class OSKOverscrollTest {
      * @throws ExecutionException
      */
     @Test
+    @DisabledTest(message = "crbug.com/773076")
     @MediumTest
     @CommandLineFlags.Add({ChromeSwitches.ENABLE_OSK_OVERSCROLL})
     @RetryOnFailure
@@ -121,12 +119,9 @@ public class OSKOverscrollTest {
             throws InterruptedException, TimeoutException, ExecutionException {
         mActivityTestRule.startMainActivityWithURL(FIXED_FOOTER_PAGE);
 
-        final AtomicReference<ContentViewCore> viewCoreRef = new AtomicReference<ContentViewCore>();
         final AtomicReference<WebContents> webContentsRef = new AtomicReference<WebContents>();
-        ThreadUtils.runOnUiThreadBlocking(() -> {
-            viewCoreRef.set(mActivityTestRule.getActivity().getCurrentContentViewCore());
-            webContentsRef.set(viewCoreRef.get().getWebContents());
-        });
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> { webContentsRef.set(mActivityTestRule.getWebContents()); });
 
         DOMUtils.waitForNonZeroNodeBounds(webContentsRef.get(), "fn");
 
@@ -139,7 +134,7 @@ public class OSKOverscrollTest {
 
         // Click on the unfocused input element for the first time to focus on it. This brings up
         // the OSK.
-        DOMUtils.clickNode(viewCoreRef.get(), "fn");
+        DOMUtils.clickNode(webContentsRef.get(), "fn");
 
         waitForKeyboard();
 

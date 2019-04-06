@@ -63,11 +63,24 @@ UserInitiatedInfo CreateUserInitiatedInfo(
 
 }  // namespace
 
+// static
+void MetricsWebContentsObserver::RecordFeatureUsage(
+    content::RenderFrameHost* render_frame_host,
+    const mojom::PageLoadFeatures& new_features) {
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host);
+  MetricsWebContentsObserver* observer =
+      MetricsWebContentsObserver::FromWebContents(web_contents);
+  if (observer)
+    observer->OnBrowserFeatureUsage(render_frame_host, new_features);
+}
+
 MetricsWebContentsObserver::MetricsWebContentsObserver(
     content::WebContents* web_contents,
     std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface)
     : content::WebContentsObserver(web_contents),
-      in_foreground_(web_contents->IsVisible()),
+      in_foreground_(web_contents->GetVisibility() !=
+                     content::Visibility::HIDDEN),
       embedder_interface_(std::move(embedder_interface)),
       has_navigated_(false),
       page_load_metrics_binding_(web_contents, this) {
@@ -97,6 +110,10 @@ MetricsWebContentsObserver* MetricsWebContentsObserver::CreateForWebContents(
 }
 
 MetricsWebContentsObserver::~MetricsWebContentsObserver() {}
+
+void MetricsWebContentsObserver::WebContentsWillSoonBeDestroyed() {
+  web_contents_will_soon_be_destroyed_ = true;
+}
 
 void MetricsWebContentsObserver::WebContentsDestroyed() {
   // TODO(csharrison): Use a more user-initiated signal for CLOSE.
@@ -136,15 +153,14 @@ void MetricsWebContentsObserver::RenderViewHostChanged(
 void MetricsWebContentsObserver::MediaStartedPlaying(
     const content::WebContentsObserver::MediaPlayerInfo& video_type,
     const content::WebContentsObserver::MediaPlayerId& id) {
-  content::RenderFrameHost* render_frame_host = id.first;
-  if (GetMainFrame(render_frame_host) != web_contents()->GetMainFrame()) {
+  if (GetMainFrame(id.render_frame_host) != web_contents()->GetMainFrame()) {
     // Ignore media that starts playing in a document that was navigated away
     // from.
     return;
   }
   if (committed_load_)
     committed_load_->MediaStartedPlaying(
-        video_type, render_frame_host == web_contents()->GetMainFrame());
+        video_type, id.render_frame_host == web_contents()->GetMainFrame());
 }
 
 void MetricsWebContentsObserver::WillStartNavigationRequest(
@@ -303,16 +319,6 @@ void MetricsWebContentsObserver::OnRequestComplete(
         std::move(load_timing_info));
     tracker->OnLoadedResource(extra_request_complete_info);
   }
-}
-
-void MetricsWebContentsObserver::OnNavigationDelayComplete(
-    content::NavigationHandle* navigation_handle,
-    base::TimeDelta scheduled_delay,
-    base::TimeDelta actual_delay) {
-  auto it = provisional_loads_.find(navigation_handle);
-  if (it == provisional_loads_.end())
-    return;
-  it->second->OnNavigationDelayComplete(scheduled_delay, actual_delay);
 }
 
 const PageLoadExtraInfo
@@ -480,25 +486,29 @@ void MetricsWebContentsObserver::DidRedirectNavigation(
   it->second->Redirect(navigation_handle);
 }
 
-void MetricsWebContentsObserver::WasShown() {
-  if (in_foreground_)
+void MetricsWebContentsObserver::OnVisibilityChanged(
+    content::Visibility visibility) {
+  if (web_contents_will_soon_be_destroyed_)
     return;
-  in_foreground_ = true;
-  if (committed_load_)
-    committed_load_->WebContentsShown();
-  for (const auto& kv : provisional_loads_) {
-    kv.second->WebContentsShown();
-  }
-}
 
-void MetricsWebContentsObserver::WasHidden() {
-  if (!in_foreground_)
+  // TODO(bmcquade): Consider handling an OCCLUDED tab as not in foreground.
+  bool was_in_foreground = in_foreground_;
+  in_foreground_ = visibility != content::Visibility::HIDDEN;
+  if (in_foreground_ == was_in_foreground)
     return;
-  in_foreground_ = false;
-  if (committed_load_)
-    committed_load_->WebContentsHidden();
-  for (const auto& kv : provisional_loads_) {
-    kv.second->WebContentsHidden();
+
+  if (in_foreground_) {
+    if (committed_load_)
+      committed_load_->WebContentsShown();
+    for (const auto& kv : provisional_loads_) {
+      kv.second->WebContentsShown();
+    }
+  } else {
+    if (committed_load_)
+      committed_load_->WebContentsHidden();
+    for (const auto& kv : provisional_loads_) {
+      kv.second->WebContentsHidden();
+    }
   }
 }
 
@@ -591,7 +601,8 @@ void MetricsWebContentsObserver::OnTimingUpdated(
     content::RenderFrameHost* render_frame_host,
     const mojom::PageLoadTiming& timing,
     const mojom::PageLoadMetadata& metadata,
-    const mojom::PageLoadFeatures& new_features) {
+    const mojom::PageLoadFeatures& new_features,
+    const mojom::PageLoadDataUse& new_data_use) {
   // We may receive notifications from frames that have been navigated away
   // from. We simply ignore them.
   if (GetMainFrame(render_frame_host) != web_contents()->GetMainFrame()) {
@@ -624,17 +635,19 @@ void MetricsWebContentsObserver::OnTimingUpdated(
 
   if (committed_load_) {
     committed_load_->metrics_update_dispatcher()->UpdateMetrics(
-        render_frame_host, timing, metadata, new_features);
+        render_frame_host, timing, metadata, new_features, new_data_use);
   }
 }
 
 void MetricsWebContentsObserver::UpdateTiming(
     const mojom::PageLoadTimingPtr timing,
     const mojom::PageLoadMetadataPtr metadata,
-    const mojom::PageLoadFeaturesPtr new_features) {
+    const mojom::PageLoadFeaturesPtr new_features,
+    const mojom::PageLoadDataUsePtr new_data_use) {
   content::RenderFrameHost* render_frame_host =
       page_load_metrics_binding_.GetCurrentTargetFrame();
-  OnTimingUpdated(render_frame_host, *timing, *metadata, *new_features);
+  OnTimingUpdated(render_frame_host, *timing, *metadata, *new_features,
+                  *new_data_use);
 }
 
 bool MetricsWebContentsObserver::ShouldTrackNavigation(
@@ -645,6 +658,22 @@ bool MetricsWebContentsObserver::ShouldTrackNavigation(
 
   return BrowserPageTrackDecider(embedder_interface_.get(), navigation_handle)
       .ShouldTrack();
+}
+
+void MetricsWebContentsObserver::OnBrowserFeatureUsage(
+    content::RenderFrameHost* render_frame_host,
+    const mojom::PageLoadFeatures& new_features) {
+  // Since this call is coming directly from the browser, it should not pass us
+  // data from frames that have already been navigated away from.
+  DCHECK_EQ(GetMainFrame(render_frame_host), web_contents()->GetMainFrame());
+
+  if (!committed_load_) {
+    RecordInternalError(ERR_BROWSER_USAGE_WITH_NO_RELEVANT_LOAD);
+    return;
+  }
+
+  committed_load_->metrics_update_dispatcher()->UpdateFeatures(
+      render_frame_host, new_features);
 }
 
 void MetricsWebContentsObserver::AddTestingObserver(TestingObserver* observer) {

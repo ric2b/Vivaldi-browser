@@ -6,10 +6,6 @@
 // are implemented using templates, with a class per callback signature, adding
 // methods to Callback<> itself is unattractive (lots of extra code gets
 // generated).  Instead, consider adding methods here.
-//
-// ResetAndReturn(&cb) is like cb.Reset() but allows executing a callback (via a
-// move or copy) after the original callback is Reset().  This can be handy if
-// Run() reads/writes the variable holding the Callback.
 
 #ifndef BASE_CALLBACK_HELPERS_H_
 #define BASE_CALLBACK_HELPERS_H_
@@ -25,6 +21,7 @@
 
 namespace base {
 
+// Prefer std::move() over ResetAndReturn().
 template <typename CallbackType>
 CallbackType ResetAndReturn(CallbackType* cb) {
   CallbackType ret(std::move(*cb));
@@ -61,6 +58,10 @@ class AdaptCallbackForRepeatingHelper final {
 // Wraps the given OnceCallback into a RepeatingCallback that relays its
 // invocation to the original OnceCallback on the first invocation. The
 // following invocations are just ignored.
+//
+// Note that this deliberately subverts the Once/Repeating paradigm of Callbacks
+// but helps ease the migration from old-style Callbacks. Avoid if possible; use
+// if necessary for migration. TODO(tzik): Remove it. https://crbug.com/730593
 template <typename... Args>
 RepeatingCallback<void(Args...)> AdaptCallbackForRepeating(
     OnceCallback<void(Args...)> callback) {

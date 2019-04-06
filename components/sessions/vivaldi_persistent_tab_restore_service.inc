@@ -16,7 +16,7 @@
       return;                                                              \
     }                                                                      \
                                                                            \
-    SessionID::id_type window_id;                                          \
+    SessionID window_id = SessionID::InvalidValue();                       \
     std::string ext_data;                                                  \
     if (!vivaldi::RestoreSetWindowExtDataCommand(command, &window_id,      \
                                                  &ext_data))               \
@@ -31,7 +31,7 @@
       /* Should be in a tab when we get this. */                           \
       return;                                                              \
     }                                                                      \
-    SessionID::id_type tab_id;                                             \
+    SessionID tab_id = SessionID::InvalidValue();                          \
     std::string ext_data;                                                  \
     if (!vivaldi::RestoreSetExtDataCommand(command, &tab_id, &ext_data)) { \
       return;                                                              \

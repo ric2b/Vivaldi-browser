@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/load_states.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
@@ -107,7 +107,7 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
                             const SocketTag& socket_tag,
                             RespectLimits respect_limits,
                             ClientSocketHandle* handle,
-                            const CompletionCallback& callback,
+                            CompletionOnceCallback callback,
                             const NetLogWithSource& net_log) = 0;
 
   // RequestSockets is used to request that |num_sockets| be connected in the
@@ -119,15 +119,11 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   // ClientSocketPool will assign a priority to the new connections, if any.
   // This priority will probably be lower than all others, since this method
   // is intended to make sure ahead of time that |num_sockets| sockets are
-  // available to talk to a host. The |motivation| is threaded through connect
-  // jobs and passed down to StreamSocket implementations. Note that it is not
-  // passed into already created or idle sockets.
-  virtual void RequestSockets(
-      const std::string& group_name,
-      const void* params,
-      int num_sockets,
-      const NetLogWithSource& net_log,
-      HttpRequestInfo::RequestMotivation motivation) = 0;
+  // available to talk to a host.
+  virtual void RequestSockets(const std::string& group_name,
+                              const void* params,
+                              int num_sockets,
+                              const NetLogWithSource& net_log) = 0;
 
   // Called to change the priority of a RequestSocket call that returned
   // ERR_IO_PENDING and has not yet asynchronously completed.  The same handle
@@ -141,9 +137,8 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
 
   // Called to cancel a RequestSocket call that returned ERR_IO_PENDING.  The
   // same handle parameter must be passed to this method as was passed to the
-  // RequestSocket call being cancelled.  The associated CompletionCallback is
-  // not run.  However, for performance, we will let one ConnectJob complete
-  // and go idle.
+  // RequestSocket call being cancelled.  The associated callback is not run.
+  // However, for performance, we will let one ConnectJob complete and go idle.
   virtual void CancelRequest(const std::string& group_name,
                              ClientSocketHandle* handle) = 0;
 
@@ -216,9 +211,8 @@ void RequestSocketsForPool(
     const std::string& group_name,
     const scoped_refptr<typename PoolType::SocketParams>& params,
     int num_sockets,
-    const NetLogWithSource& net_log,
-    HttpRequestInfo::RequestMotivation motivation) {
-  pool->RequestSockets(group_name, &params, num_sockets, net_log, motivation);
+    const NetLogWithSource& net_log) {
+  pool->RequestSockets(group_name, &params, num_sockets, net_log);
 }
 
 }  // namespace net

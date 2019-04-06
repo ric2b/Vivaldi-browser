@@ -33,7 +33,7 @@ config("internal_config") {
     "//build/config/compiler:no_size_t_to_int_warning",
     "//build/config/sanitizers:cfi_icall_generalize_pointers",
   ]
-  if (is_posix) {
+  if (is_posix || is_fuchsia) {
     cflags_c = [ "-std=c99" ]
     defines += [ "_XOPEN_SOURCE=700" ]
   }
@@ -45,6 +45,7 @@ config("no_asm_config") {
 }
 
 all_sources = crypto_sources + ssl_sources
+all_headers = crypto_headers + ssl_headers
 
 # Windows' assembly is built with Yasm. The other platforms use the platform
 # assembler.
@@ -62,25 +63,9 @@ if (is_win && !is_msan) {
   source_set("boringssl_asm") {
     visibility = [ ":*" ]  # Only targets in this file can depend on this.
 
-    defines = [ "BORINGSSL_CLANG_SUPPORTS_DOT_ARCH" ]
     sources = []
     asmflags = []
     include_dirs = [ "src/include" ]
-
-    if ((current_cpu == "arm" || current_cpu == "arm64") && is_clang &&
-        !is_ios) {
-      if (current_cpu == "arm" && arm_version != 6) {
-        # TODO(hans) Enable integrated-as (crbug.com/124610).
-        asmflags += [ "-fno-integrated-as" ]
-      }
-      if (is_android) {
-        rebased_android_toolchain_root =
-            rebase_path(android_toolchain_root, root_build_dir)
-
-        # Else /usr/bin/as gets picked up.
-        asmflags += [ "-B${rebased_android_toolchain_root}/bin" ]
-      }
-    }
 
     if (is_msan) {
       public_configs = [ ":no_asm_config" ]
@@ -124,6 +109,8 @@ if (is_win && !is_msan) {
 
 component("boringssl") {
   sources = all_sources
+  public = all_headers
+  friend = [ ":*" ]
   deps = [
     ":boringssl_asm",
     "//third_party/boringssl/src/third_party/fiat:fiat_license",
@@ -232,6 +219,8 @@ if (build_with_chromium) {
     fuzzer_test("boringssl_${fuzzer}_fuzzer") {
       sources = [
         "src/fuzz/${fuzzer}.cc",
+        "src/ssl/test/fuzzer.h",
+        "src/ssl/test/fuzzer_tags.h",
       ]
       deps = [
         ":boringssl_fuzzer",
@@ -291,6 +280,8 @@ if (build_with_chromium) {
   fuzzer_test("boringssl_client_no_fuzzer_mode_fuzzer") {
     sources = [
       "src/fuzz/client.cc",
+      "src/ssl/test/fuzzer.h",
+      "src/ssl/test/fuzzer_tags.h",
     ]
     deps = [
       ":boringssl_fuzzer_no_fuzzer_mode",
@@ -301,6 +292,8 @@ if (build_with_chromium) {
   fuzzer_test("boringssl_server_no_fuzzer_mode_fuzzer") {
     sources = [
       "src/fuzz/server.cc",
+      "src/ssl/test/fuzzer.h",
+      "src/ssl/test/fuzzer_tags.h",
     ]
     deps = [
       ":boringssl_fuzzer_no_fuzzer_mode",

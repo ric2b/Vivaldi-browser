@@ -9,7 +9,6 @@
 
 #include "ash/ash_export.h"
 #include "base/macros.h"
-#include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display.h"
@@ -29,6 +28,7 @@ class ScopedWindowTargeter;
 namespace ash {
 
 class SplitViewController;
+enum class OrientationLockType;
 
 // Split view divider. It passes the mouse/gesture events to SplitViewController
 // to resize the left and right windows accordingly. The divider widget should
@@ -41,20 +41,19 @@ class ASH_EXPORT SplitViewDivider : public aura::WindowObserver,
 
   // Gets the size of the divider widget. The divider widget is enlarged during
   // dragging. For now, it's a vertical rectangle.
-  static gfx::Size GetDividerSize(
-      const gfx::Rect& work_area_bounds,
-      blink::WebScreenOrientationLockType screen_orientation,
-      bool is_dragging);
+  static gfx::Size GetDividerSize(const gfx::Rect& work_area_bounds,
+                                  OrientationLockType screen_orientation,
+                                  bool is_dragging);
 
   // static version of GetDividerBoundsInScreen(bool is_dragging) function.
   static gfx::Rect GetDividerBoundsInScreen(
       const gfx::Rect& work_area_bounds_in_screen,
-      blink::WebScreenOrientationLockType screen_orientation,
+      OrientationLockType screen_orientation,
       int divider_position,
       bool is_dragging);
 
   // Updates |divider_widget_|'s bounds.
-  void UpdateDividerBounds(bool is_dragging);
+  void UpdateDividerBounds();
 
   // Calculates the divider's expected bounds according to the divider's
   // position.
@@ -62,6 +61,11 @@ class ASH_EXPORT SplitViewDivider : public aura::WindowObserver,
 
   void AddObservedWindow(aura::Window* window);
   void RemoveObservedWindow(aura::Window* window);
+
+  // Called when a window tab(s) are being dragged around the workspace. The
+  // divider should be placed beneath the dragged window during dragging.
+  void OnWindowDragStarted(aura::Window* dragged_window);
+  void OnWindowDragEnded();
 
   // aura::WindowObserver:
   void OnWindowDestroying(aura::Window* window) override;
@@ -71,7 +75,7 @@ class ASH_EXPORT SplitViewDivider : public aura::WindowObserver,
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
 
-  views::Widget* divider_widget() { return divider_widget_.get(); }
+  views::Widget* divider_widget() { return divider_widget_; }
 
  private:
   void CreateDividerWidget(aura::Window* root_window);
@@ -88,7 +92,10 @@ class ASH_EXPORT SplitViewDivider : public aura::WindowObserver,
   // screen to the other, containing a small white drag bar in the middle. As
   // the user presses on it and drag it to left or right, the left and right
   // window will be resized accordingly.
-  std::unique_ptr<views::Widget> divider_widget_;
+  views::Widget* divider_widget_ = nullptr;
+
+  // If true there is a window whose tabs are currently being dragged around.
+  bool is_dragging_window_ = false;
 
   // Tracks observed windows.
   aura::Window::Windows observed_windows_;

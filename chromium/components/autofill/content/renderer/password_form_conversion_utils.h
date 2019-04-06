@@ -15,12 +15,11 @@
 #include "components/autofill/content/renderer/html_based_username_detector.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
-#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "url/gurl.h"
 
 namespace blink {
 class WebFormElement;
-class WebFormControlElement;
 class WebInputElement;
 class WebLocalFrame;
 }
@@ -42,16 +41,34 @@ enum UsernameDetectionMethod {
   USERNAME_DETECTION_METHOD_COUNT
 };
 
+// The susbset of autocomplete flags related to passwords.
+enum class AutocompleteFlag {
+  NONE,
+  USERNAME,
+  CURRENT_PASSWORD,
+  NEW_PASSWORD,
+  // Represents the whole family of cc-* flags.
+  CREDIT_CARD
+};
+
+// Returns the AutocompleteFlag derived from |element|'s autocomplete attribute.
+AutocompleteFlag AutocompleteFlagForElement(
+    const blink::WebInputElement& element);
+
 // The caller of this function is responsible for deleting the returned object.
 re2::RE2* CreateMatcher(void* instance, const char* pattern);
 
 // Tests whether the given form is a GAIA reauthentication form.
 bool IsGaiaReauthenticationForm(const blink::WebFormElement& form);
 
-typedef std::map<
-    const blink::WebFormControlElement,
-    std::pair<std::unique_ptr<base::string16>, FieldPropertiesMask>>
-    FieldValueAndPropertiesMaskMap;
+// Tests whether the given form is a GAIA form with a skip password argument.
+bool IsGaiaWithSkipSavePasswordForm(const blink::WebFormElement& form);
+
+// TODO(https://crbug.com/849291): Create separate class for keeping information
+// from FieldValueAndPropertiesMaskMap.
+using FieldValueAndPropertiesMaskMap =
+    std::map<uint32_t,
+             std::pair<std::unique_ptr<base::string16>, FieldPropertiesMask>>;
 
 // Create a PasswordForm from DOM form. Webkit doesn't allow storing
 // custom metadata to DOM nodes, so we have to do this every time an event
@@ -77,19 +94,6 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
     const FieldValueAndPropertiesMaskMap* nonscript_modified_values,
     const FormsPredictionsMap* form_predictions,
     UsernameDetectorCache* username_detector_cache);
-
-// Checks in a case-insensitive way if the autocomplete attribute for the given
-// |element| is present and has the specified |value_in_lowercase|.
-bool HasAutocompleteAttributeValue(const blink::WebInputElement& element,
-                                   base::StringPiece value_in_lowercase);
-
-// Checks in a case-insensitive way if credit card autocomplete attributes for
-// the given |element| are present.
-bool HasCreditCardAutocompleteAttributes(const blink::WebInputElement& element);
-
-// Returns whether the form |field| has a "password" type, but looks like a
-// credit card verification field.
-bool IsCreditCardVerificationPasswordField(const blink::WebInputElement& field);
 
 // The "Realm" for the sign-on. This is scheme, host, port.
 std::string GetSignOnRealm(const GURL& origin);

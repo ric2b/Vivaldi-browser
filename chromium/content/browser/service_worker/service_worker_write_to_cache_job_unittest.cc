@@ -35,10 +35,10 @@
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
 #include "services/network/public/cpp/resource_request_body.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 namespace service_worker_write_to_cache_job_unittest {
@@ -210,48 +210,52 @@ class ResponseVerifier : public base::RefCounted<ResponseVerifier> {
  public:
   ResponseVerifier(std::unique_ptr<ServiceWorkerResponseReader> reader,
                    const std::string& expected,
-                   const base::Callback<void(bool)> callback)
-      : reader_(reader.release()), expected_(expected), callback_(callback) {}
+                   base::OnceCallback<void(bool)> callback)
+      : reader_(reader.release()),
+        expected_(expected),
+        callback_(std::move(callback)) {}
 
   void Start() {
     info_buffer_ = new HttpResponseInfoIOBuffer();
     io_buffer_ = new net::IOBuffer(kBlockSize);
-    reader_->ReadInfo(info_buffer_.get(),
-                      base::Bind(&ResponseVerifier::OnReadInfoComplete, this));
+    reader_->ReadInfo(
+        info_buffer_.get(),
+        base::BindOnce(&ResponseVerifier::OnReadInfoComplete, this));
     bytes_read_ = 0;
   }
 
   void OnReadInfoComplete(int result) {
     if (result < 0) {
-      callback_.Run(false);
+      std::move(callback_).Run(false);
       return;
     }
     if (info_buffer_->response_data_size !=
         static_cast<int>(expected_.size())) {
-      callback_.Run(false);
+      std::move(callback_).Run(false);
       return;
     }
     ReadSomeData();
   }
 
   void ReadSomeData() {
-    reader_->ReadData(io_buffer_.get(), kBlockSize,
-                      base::Bind(&ResponseVerifier::OnReadDataComplete, this));
+    reader_->ReadData(
+        io_buffer_.get(), kBlockSize,
+        base::BindOnce(&ResponseVerifier::OnReadDataComplete, this));
   }
 
   void OnReadDataComplete(int result) {
     if (result < 0) {
-      callback_.Run(false);
+      std::move(callback_).Run(false);
       return;
     }
     if (result == 0) {
-      callback_.Run(true);
+      std::move(callback_).Run(true);
       return;
     }
     std::string str(io_buffer_->data(), result);
     std::string expect = expected_.substr(bytes_read_, result);
     if (str != expect) {
-      callback_.Run(false);
+      std::move(callback_).Run(false);
       return;
     }
     bytes_read_ += result;
@@ -264,7 +268,7 @@ class ResponseVerifier : public base::RefCounted<ResponseVerifier> {
 
   std::unique_ptr<ServiceWorkerResponseReader> reader_;
   const std::string expected_;
-  base::Callback<void(bool)> callback_;
+  base::OnceCallback<void(bool)> callback_;
   scoped_refptr<HttpResponseInfoIOBuffer> info_buffer_;
   scoped_refptr<net::IOBuffer> io_buffer_;
   size_t bytes_read_;
@@ -286,13 +290,9 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
   base::WeakPtr<ServiceWorkerProviderHost> CreateHostForVersion(
       int process_id,
       const scoped_refptr<ServiceWorkerVersion>& version) {
-    std::unique_ptr<ServiceWorkerProviderHost> host =
-        CreateProviderHostForServiceWorkerContext(
-            process_id, true /* is_parent_frame_secure */, version.get(),
-            context()->AsWeakPtr(), &remote_endpoint_);
-    base::WeakPtr<ServiceWorkerProviderHost> host_weakptr = host->AsWeakPtr();
-    context()->AddProviderHost(std::move(host));
-    return host_weakptr;
+    return CreateProviderHostForServiceWorkerContext(
+        process_id, true /* is_parent_frame_secure */, version.get(),
+        context()->AsWeakPtr(), &remote_endpoint_);
   }
 
   void SetUpScriptRequest(int process_id, int provider_id) {
@@ -342,8 +342,7 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     ASSERT_TRUE(host);
     SetUpScriptRequest(helper_->mock_render_process_id(), host->provider_id());
 
-    context()->storage()->LazyInitializeForTest(
-        base::BindOnce(&base::DoNothing));
+    context()->storage()->LazyInitializeForTest(base::DoNothing());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -392,7 +391,7 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     scoped_refptr<ServiceWorkerVersion> new_version =
         new ServiceWorkerVersion(registration_.get(), script_url_,
                                  NextVersionId(), context()->AsWeakPtr());
-    new_version->set_pause_after_download(true);
+    new_version->SetToPauseAfterDownload(base::DoNothing());
     base::WeakPtr<ServiceWorkerProviderHost> host =
         CreateHostForVersion(helper_->mock_render_process_id(), new_version);
     EXPECT_TRUE(host);
@@ -406,14 +405,14 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
 
   void VerifyResource(int64_t id, const std::string& expected) {
     ASSERT_NE(kInvalidServiceWorkerResourceId, id);
-    bool is_equal = false;
+    base::Optional<bool> is_equal;
     std::unique_ptr<ServiceWorkerResponseReader> reader =
         context()->storage()->CreateResponseReader(id);
     scoped_refptr<ResponseVerifier> verifier = new ResponseVerifier(
         std::move(reader), expected, CreateReceiverOnCurrentThread(&is_equal));
     verifier->Start();
     base::RunLoop().RunUntilIdle();
-    EXPECT_TRUE(is_equal);
+    EXPECT_TRUE(is_equal.value());
   }
 
   ServiceWorkerContextCore* context() const { return helper_->context(); }

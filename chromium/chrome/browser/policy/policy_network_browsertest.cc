@@ -4,10 +4,12 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
@@ -18,7 +20,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/grpc_support/test/quic_test_server.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -29,15 +30,14 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/cert/test_root_certs.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/http/http_transaction_factory.h"
+#include "net/test/quic_simple_test_server.h"
 #include "net/test/test_data_directory.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/network_service_test.mojom.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/chromeos_switches.h"
@@ -45,41 +45,9 @@
 
 namespace {
 
-// Checks if QUIC is enabled for new streams in the passed
-// |request_context_getter|. Will set the bool pointed to by |quic_enabled|.
-void IsQuicEnabledOnIOThread(
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
-    bool* quic_enabled) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-
-  *quic_enabled = request_context_getter->GetURLRequestContext()
-                      ->http_transaction_factory()
-                      ->GetSession()
-                      ->IsQuicEnabled();
-}
-
-// Can be called on the UI thread, returns if QUIC is enabled for new streams in
-// the passed |request_context_getter|.
-bool IsQuicEnabled(
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  base::RunLoop run_loop;
-  bool is_quic_enabled = false;
-  content::BrowserThread::PostTaskAndReply(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(IsQuicEnabledOnIOThread, request_context_getter,
-                     &is_quic_enabled),
-      run_loop.QuitClosure());
-  run_loop.Run();
-  return is_quic_enabled;
-}
-
 bool IsQuicEnabled(network::mojom::NetworkContext* network_context) {
-  GURL url =
-      GURL(std::string("https://") + grpc_support::kTestServerHost + ":" +
-           base::NumberToString(grpc_support::GetQuicTestServerPort()) +
-           grpc_support::kHelloPath);
+  GURL url = net::QuicSimpleTestServer::GetFileURL(
+      net::QuicSimpleTestServer::GetHelloPath());
   int rv = content::LoadBasicRequest(network_context, url);
   return rv == net::OK;
 }
@@ -90,26 +58,14 @@ bool IsQuicEnabled(Profile* profile) {
           ->GetNetworkContext());
 }
 
-// Short-hand access to global SafeBrowsingService's URLRequestContextGetter for
-// better readability.
-scoped_refptr<net::URLRequestContextGetter>
-safe_browsing_service_request_context() {
-  return g_browser_process->safe_browsing_service()->url_request_context();
-}
-
-// Short-hand access to global system request context getter for better
-// readability.
-scoped_refptr<net::URLRequestContextGetter> system_request_context() {
-  return g_browser_process->system_request_context();
-}
-
 bool IsQuicEnabledForSystem() {
-  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-    return IsQuicEnabled(
-        g_browser_process->system_network_context_manager()->GetContext());
-  }
+  return IsQuicEnabled(
+      g_browser_process->system_network_context_manager()->GetContext());
+}
 
-  return IsQuicEnabled(system_request_context());
+bool IsQuicEnabledForSafeBrowsing() {
+  return IsQuicEnabled(
+      g_browser_process->safe_browsing_service()->GetNetworkContext());
 }
 
 // Called when an additional profile has been created.
@@ -138,7 +94,7 @@ class QuicTestBase : public InProcessBrowserTest {
     net::TestRootCerts* root_certs = net::TestRootCerts::GetInstance();
     root_certs->AddFromFile(
         net::GetTestCertsDirectory().AppendASCII("quic-root.pem"));
-    grpc_support::StartQuicTestServer();
+    net::QuicSimpleTestServer::Start();
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 };
@@ -164,6 +120,19 @@ class QuicAllowedPolicyTestBase : public QuicTestBase {
 
   virtual void GetQuicAllowedPolicy(PolicyMap* values) = 0;
 
+  // Crashes the network service and restarts the QUIC server. If the QUIC
+  // server isn't restarted, requests will fail with ERR_QUIC_PROTOCOL_ERROR.
+  // TODO(https://crbug.com/851532): The reason the server restart is needed is
+  // unclear, but ideally that should be fixed.
+  void CrashNetworkServiceAndRestartQuicServer() {
+    {
+      base::ScopedAllowBlockingForTesting allow_blocking;
+      net::QuicSimpleTestServer::Shutdown();
+    }
+    SimulateNetworkServiceCrash();
+    ASSERT_TRUE(net::QuicSimpleTestServer::Start());
+  }
+
  private:
   MockConfigurationPolicyProvider provider_;
   DISALLOW_COPY_AND_ASSIGN(QuicAllowedPolicyTestBase);
@@ -185,10 +154,52 @@ class QuicAllowedPolicyIsFalse: public QuicAllowedPolicyTestBase {
   DISALLOW_COPY_AND_ASSIGN(QuicAllowedPolicyIsFalse);
 };
 
-IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse, QuicDisallowed) {
+// It's important that all these tests be separate, as the first NetworkContext
+// instantiated after the crash could re-disable QUIC globally itself, so can't
+// just crash the network service once, and then test all network contexts in
+// some particular order.
+
+IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse, QuicDisallowedForSystem) {
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+
+  // If using the network service, crash the service, and make sure QUIC is
+  // still disabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    CrashNetworkServiceAndRestartQuicServer();
+    // Make sure the NetworkContext has noticed the pipe was closed.
+    g_browser_process->system_network_context_manager()
+        ->FlushNetworkInterfaceForTesting();
+    EXPECT_FALSE(IsQuicEnabledForSystem());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse,
+                       QuicDisallowedForSafeBrowsing) {
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
+
+  // If using the network service, crash the service, and make sure QUIC is
+  // still disabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    CrashNetworkServiceAndRestartQuicServer();
+    // Make sure the NetworkContext has noticed the pipe was closed.
+    g_browser_process->safe_browsing_service()
+        ->FlushNetworkInterfaceForTesting();
+    EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse, QuicDisallowedForProfile) {
   EXPECT_FALSE(IsQuicEnabled(browser()->profile()));
+
+  // If using the network service, crash the service, and make sure QUIC is
+  // still disabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    CrashNetworkServiceAndRestartQuicServer();
+    // Make sure the NetworkContext has noticed the pipe was closed.
+    content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+        ->FlushNetworkInterfaceForTesting();
+    EXPECT_FALSE(IsQuicEnabled(browser()->profile()));
+  }
 }
 
 // Policy QuicAllowed set to true.
@@ -207,20 +218,60 @@ class QuicAllowedPolicyIsTrue: public QuicAllowedPolicyTestBase {
   DISALLOW_COPY_AND_ASSIGN(QuicAllowedPolicyIsTrue);
 };
 
-IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowed) {
+// It's important that all these tests be separate, as the first NetworkContext
+// instantiated after the crash could re-disable QUIC globally itself, so can't
+// just crash the network service once, and then test all network contexts in
+// some particular order.
+
+IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForSystem) {
   EXPECT_TRUE(IsQuicEnabledForSystem());
-  EXPECT_TRUE(IsQuicEnabled(safe_browsing_service_request_context()));
+
+  // If using the network service, crash the service, and make sure QUIC is
+  // still enabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    CrashNetworkServiceAndRestartQuicServer();
+    // Make sure the NetworkContext has noticed the pipe was closed.
+    g_browser_process->system_network_context_manager()
+        ->FlushNetworkInterfaceForTesting();
+    EXPECT_TRUE(IsQuicEnabledForSystem());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForSafeBrowsing) {
+  EXPECT_TRUE(IsQuicEnabledForSafeBrowsing());
+
+  // If using the network service, crash the service, and make sure QUIC is
+  // still enabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    CrashNetworkServiceAndRestartQuicServer();
+    // Make sure the NetworkContext has noticed the pipe was closed.
+    g_browser_process->safe_browsing_service()
+        ->FlushNetworkInterfaceForTesting();
+    EXPECT_TRUE(IsQuicEnabledForSafeBrowsing());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForProfile) {
   EXPECT_TRUE(IsQuicEnabled(browser()->profile()));
+
+  // If using the network service, crash the service, and make sure QUIC is
+  // still enabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    CrashNetworkServiceAndRestartQuicServer();
+    // Make sure the NetworkContext has noticed the pipe was closed.
+    content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+        ->FlushNetworkInterfaceForTesting();
+    EXPECT_TRUE(IsQuicEnabled(browser()->profile()));
+  }
 }
 
 // Policy QuicAllowed is not set.
-class QuicAllowedPolicyIsNotSet: public QuicAllowedPolicyTestBase {
+class QuicAllowedPolicyIsNotSet : public QuicAllowedPolicyTestBase {
  public:
   QuicAllowedPolicyIsNotSet() : QuicAllowedPolicyTestBase() {}
 
  protected:
-  void GetQuicAllowedPolicy(PolicyMap* values) override {
-  }
+  void GetQuicAllowedPolicy(PolicyMap* values) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicAllowedPolicyIsNotSet);
@@ -228,7 +279,7 @@ class QuicAllowedPolicyIsNotSet: public QuicAllowedPolicyTestBase {
 
 IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsNotSet, NoQuicRegulations) {
   EXPECT_TRUE(IsQuicEnabledForSystem());
-  EXPECT_TRUE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_TRUE(IsQuicEnabledForSafeBrowsing());
   EXPECT_TRUE(IsQuicEnabled(browser()->profile()));
 }
 
@@ -304,6 +355,11 @@ class QuicAllowedPolicyDynamicTest : public QuicTestBase {
                    nullptr);
     provider->UpdateChromePolicy(policy_map);
     base::RunLoop().RunUntilIdle();
+
+    // To avoid any races between checking the status and disabling QUIC, flush
+    // the NetworkService Mojo interface, which is the one that has the
+    // DisableQuic() method.
+    content::FlushNetworkServiceInstanceForTesting();
   }
 
   // Removes all policies for a Profile.
@@ -317,8 +373,7 @@ class QuicAllowedPolicyDynamicTest : public QuicTestBase {
     // To avoid any races between sending future requests and disabling QUIC in
     // the network process, flush the NetworkService Mojo interface, which is
     // the one that has the DisableQuic() method.
-    if (base::FeatureList::IsEnabled(features::kNetworkService))
-      content::FlushNetworkServiceInstanceForTesting();
+    content::FlushNetworkServiceInstanceForTesting();
   }
 
   // Returns the first Profile.
@@ -361,7 +416,7 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyDynamicTest, QuicAllowedFalseThenTrue) {
   // After browser start, QuicAllowed=false comes in dynamically
   SetQuicAllowedPolicy(policy_for_profile_1(), false);
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
 
   // Set the QuicAllowed policy to true again
@@ -369,7 +424,7 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyDynamicTest, QuicAllowedFalseThenTrue) {
   // Effectively, QUIC is still disabled because QUIC re-enabling is not
   // supported.
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
 
   // Completely remove the QuicAllowed policy
@@ -377,13 +432,13 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyDynamicTest, QuicAllowedFalseThenTrue) {
   // Effectively, QUIC is still disabled because QUIC re-enabling is not
   // supported.
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
 
   // QuicAllowed=false is set again
   SetQuicAllowedPolicy(policy_for_profile_1(), false);
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
 }
 
@@ -393,25 +448,25 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyDynamicTest, QuicAllowedTrueThenFalse) {
   // After browser start, QuicAllowed=true comes in dynamically
   SetQuicAllowedPolicy(policy_for_profile_1(), true);
   EXPECT_TRUE(IsQuicEnabledForSystem());
-  EXPECT_TRUE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_TRUE(IsQuicEnabledForSafeBrowsing());
   EXPECT_TRUE(IsQuicEnabled(profile_1()));
 
   // Completely remove the QuicAllowed policy
   RemoveAllPolicies(policy_for_profile_1());
   EXPECT_TRUE(IsQuicEnabledForSystem());
-  EXPECT_TRUE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_TRUE(IsQuicEnabledForSafeBrowsing());
   EXPECT_TRUE(IsQuicEnabled(profile_1()));
 
   // Set the QuicAllowed policy to true again
   SetQuicAllowedPolicy(policy_for_profile_1(), true);
   EXPECT_TRUE(IsQuicEnabledForSystem());
-  EXPECT_TRUE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_TRUE(IsQuicEnabledForSafeBrowsing());
   EXPECT_TRUE(IsQuicEnabled(profile_1()));
 
   // Now set QuicAllowed=false
   SetQuicAllowedPolicy(policy_for_profile_1(), false);
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
 }
 
@@ -425,14 +480,14 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyDynamicTest,
 
   SetQuicAllowedPolicy(policy_for_profile_1(), false);
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
 
   CreateSecondProfile();
 
   // QUIC is disabled in both profiles
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
   EXPECT_FALSE(IsQuicEnabled(profile_2()));
 }
@@ -450,21 +505,21 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyDynamicTest,
 
   // QUIC is enabled in both profiles
   EXPECT_TRUE(IsQuicEnabledForSystem());
-  EXPECT_TRUE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_TRUE(IsQuicEnabledForSafeBrowsing());
   EXPECT_TRUE(IsQuicEnabled(profile_1()));
   EXPECT_TRUE(IsQuicEnabled(profile_2()));
 
   // Disable QUIC in first profile
   SetQuicAllowedPolicy(policy_for_profile_1(), false);
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
   EXPECT_FALSE(IsQuicEnabled(profile_2()));
 
   // Disable QUIC in second profile
   SetQuicAllowedPolicy(policy_for_profile_2(), false);
   EXPECT_FALSE(IsQuicEnabledForSystem());
-  EXPECT_FALSE(IsQuicEnabled(safe_browsing_service_request_context()));
+  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing());
   EXPECT_FALSE(IsQuicEnabled(profile_1()));
   EXPECT_FALSE(IsQuicEnabled(profile_2()));
 }

@@ -18,8 +18,6 @@ class Value;
 }
 
 class DeviceManager;
-class PortManager;
-class PortServer;
 struct Session;
 class Status;
 class URLRequestContextGetter;
@@ -27,17 +25,13 @@ class URLRequestContextGetter;
 struct InitSessionParams {
   InitSessionParams(scoped_refptr<URLRequestContextGetter> context_getter,
                     const SyncWebSocketFactory& socket_factory,
-                    DeviceManager* device_manager,
-                    PortServer* port_server,
-                    PortManager* port_manager);
+                    DeviceManager* device_manager);
   InitSessionParams(const InitSessionParams& other);
   ~InitSessionParams();
 
   scoped_refptr<URLRequestContextGetter> context_getter;
   SyncWebSocketFactory socket_factory;
   DeviceManager* device_manager;
-  PortServer* port_server;
-  PortManager* port_manager;
 };
 
 bool MergeCapabilities(const base::DictionaryValue* always_match,
@@ -86,9 +80,9 @@ Status ExecuteSwitchToWindow(Session* session,
 
 // Configure the amount of time that a particular type of operation can execute
 // for before they are aborted and a timeout error is returned to the client.
-Status ExecuteSetTimeout(Session* session,
-                         const base::DictionaryValue& params,
-                         std::unique_ptr<base::Value>* value);
+Status ExecuteSetTimeouts(Session* session,
+                          const base::DictionaryValue& params,
+                          std::unique_ptr<base::Value>* value);
 
 // Get the implicit, script and page load timeouts in milliseconds.
 Status ExecuteGetTimeouts(Session* session,
@@ -154,6 +148,10 @@ Status ExecuteSetWindowSize(Session* session,
                             std::unique_ptr<base::Value>* value);
 
 Status ExecuteMaximizeWindow(Session* session,
+                             const base::DictionaryValue& params,
+                             std::unique_ptr<base::Value>* value);
+
+Status ExecuteMinimizeWindow(Session* session,
                              const base::DictionaryValue& params,
                              std::unique_ptr<base::Value>* value);
 

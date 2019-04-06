@@ -15,6 +15,7 @@
 #include "components/sync/model/entity_data.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/model_error.h"
+#include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/model_type_sync_bridge.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/model_type_state.pb.h"
@@ -89,7 +90,7 @@ class FakeModelTypeSyncBridge : public ModelTypeSyncBridge {
   };
 
   explicit FakeModelTypeSyncBridge(
-      const ChangeProcessorFactory& change_processor_factory);
+      std::unique_ptr<ModelTypeChangeProcessor> change_processor);
   ~FakeModelTypeSyncBridge() override;
 
   // Local data modification. Emulates signals from the model thread.
@@ -112,7 +113,7 @@ class FakeModelTypeSyncBridge : public ModelTypeSyncBridge {
       std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) override;
   void GetData(StorageKeyList storage_keys, DataCallback callback) override;
-  void GetAllData(DataCallback callback) override;
+  void GetAllDataForDebugging(DataCallback callback) override;
   std::string GetClientTag(const EntityData& entity_data) override;
   std::string GetStorageKey(const EntityData& entity_data) override;
   bool SupportsGetStorageKey() const override;

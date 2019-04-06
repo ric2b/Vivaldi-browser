@@ -9,7 +9,6 @@
 #include <mach-o/loader.h>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_math.h"
 
 namespace safe_browsing {
@@ -134,7 +133,7 @@ bool MachOImageReader::Initialize(const uint8_t* image, size_t image_size) {
       if (!slice.IsValid())
         return false;
 
-      fat_images_.push_back(base::MakeUnique<MachOImageReader>());
+      fat_images_.push_back(std::make_unique<MachOImageReader>());
       if (!fat_images_.back()->Initialize(slice.data(), slice.size()))
         return false;
 

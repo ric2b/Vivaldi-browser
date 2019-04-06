@@ -8,12 +8,6 @@
 
 namespace chromecast {
 
-// static
-std::unique_ptr<CastWindowManager> CastWindowManager::Create(
-    bool enable_input) {
-  return base::WrapUnique(new CastWindowManagerDefault());
-}
-
 CastWindowManagerDefault::CastWindowManagerDefault() {}
 
 CastWindowManagerDefault::~CastWindowManagerDefault() {}
@@ -26,5 +20,13 @@ void CastWindowManagerDefault::InjectEvent(ui::Event* event) {}
 gfx::NativeView CastWindowManagerDefault::GetRootWindow() {
   return nullptr;
 }
+
+void CastWindowManagerDefault::SetColorInversion(bool enable) {}
+
+// Register a new handler for system gesture events.
+void CastWindowManagerDefault::AddGestureHandler(CastGestureHandler* handler) {}
+// Remove the registration of a system gesture events handler.
+void CastWindowManagerDefault::RemoveGestureHandler(
+    CastGestureHandler* handler) {}
 
 }  // namespace chromecast

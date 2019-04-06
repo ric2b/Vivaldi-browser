@@ -15,8 +15,9 @@
 #include "content/public/common/resource_type.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_prefs_observer.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/view_type.h"
-#include "services/network/public/interfaces/url_loader.mojom.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "ui/base/page_transition_types.h"
 
@@ -140,6 +141,23 @@ class ExtensionsBrowserClient {
       const std::string& content_security_policy,
       bool send_cors_header) = 0;
 
+  // Return the resource relative path and id for the given request.
+  virtual base::FilePath GetBundleResourcePath(
+      const network::ResourceRequest& request,
+      const base::FilePath& extension_resources_path,
+      int* resource_id) const = 0;
+
+  // Creates and starts a URLLoader to load an extension resource from the
+  // embedder's resource bundle (.pak) files. Used for component extensions.
+  virtual void LoadResourceFromResourceBundle(
+      const network::ResourceRequest& request,
+      network::mojom::URLLoaderRequest loader,
+      const base::FilePath& resource_relative_path,
+      int resource_id,
+      const std::string& content_security_policy,
+      network::mojom::URLLoaderClientPtr client,
+      bool send_cors_header) = 0;
+
   // Returns true if the embedder wants to allow a chrome-extension:// resource
   // request coming from renderer A to access a resource in an extension running
   // in renderer B. For example, Chrome overrides this to provide support for
@@ -183,8 +201,15 @@ class ExtensionsBrowserClient {
   // ExternalProtocolHandler::PermitLaunchUrl() in Chrome.
   virtual void PermitExternalProtocolHandler() = 0;
 
+  // Return true if the device is enrolled in Demo Mode.
+  virtual bool IsInDemoMode() = 0;
+
   // Return true if the system is run in forced app mode.
   virtual bool IsRunningInForcedAppMode() = 0;
+
+  // Returns whether the system is run in forced app mode for app with the
+  // provided extension ID.
+  virtual bool IsAppModeForcedForApp(const ExtensionId& id) = 0;
 
   // Return true if the user is logged in as a public session.
   virtual bool IsLoggedInAsPublicAccount() = 0;
@@ -274,6 +299,15 @@ class ExtensionsBrowserClient {
   virtual ExtensionNavigationUIData* GetExtensionNavigationUIData(
       net::URLRequest* request);
 
+  // Retrives the embedder's notion of tab and window ID for a given
+  // WebContents. May return -1 for either or both values if the embedder does
+  // not implement any such concepts. This is used to support the WebRequest API
+  // exposing such numbers to callers.
+  virtual void GetTabAndWindowIdForWebContents(
+      content::WebContents* web_contents,
+      int* tab_id,
+      int* window_id);
+
   // Returns a delegate that provides kiosk mode functionality.
   virtual KioskDelegate* GetKioskDelegate() = 0;
 
@@ -292,6 +326,13 @@ class ExtensionsBrowserClient {
   // value of this function is false.
   virtual bool IsExtensionEnabled(const std::string& extension_id,
                                   content::BrowserContext* context) const;
+
+  // http://crbug.com/829412
+  // Renderers with WebUI bindings shouldn't make http(s) requests for security
+  // reasons (e.g. to avoid malicious responses being able to run code in
+  // priviliged renderers). Fix these webui's to make requests through C++
+  // code instead.
+  virtual bool IsWebUIAllowedToMakeNetworkRequests(const url::Origin& origin);
 
   // Returns the single instance of |this|.
   static ExtensionsBrowserClient* Get();

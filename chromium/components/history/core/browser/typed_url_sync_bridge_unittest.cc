@@ -4,6 +4,8 @@
 
 #include "components/history/core/browser/typed_url_sync_bridge.h"
 
+#include <memory>
+
 #include "base/big_endian.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/message_loop/message_loop.h"
@@ -68,7 +70,9 @@ void AddNewestVisit(ui::PageTransition transition,
                     URLRow* url,
                     VisitVector* visits) {
   base::Time time = base::Time::FromInternalValue(visit_time);
-  visits->insert(visits->begin(), VisitRow(url->id(), time, 0, transition, 0));
+  visits->insert(visits->begin(),
+                 VisitRow(url->id(), time, 0, transition, 0,
+                          HistoryBackend::IsTypedIncrement(transition)));
 
   if (ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED)) {
     url->set_typed_count(url->typed_count() + 1);
@@ -83,7 +87,8 @@ void AddOldestVisit(ui::PageTransition transition,
                     URLRow* url,
                     VisitVector* visits) {
   base::Time time = base::Time::FromInternalValue(visit_time);
-  visits->push_back(VisitRow(url->id(), time, 0, transition, 0));
+  visits->push_back(VisitRow(url->id(), time, 0, transition, 0,
+                             HistoryBackend::IsTypedIncrement(transition)));
 
   if (ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED)) {
     url->set_typed_count(url->typed_count() + 1);
@@ -113,11 +118,11 @@ URLRow MakeTypedUrlRow(const std::string& url,
   if (typed_count > 0) {
     // Add a typed visit for time |last_visit|.
     visits->push_back(VisitRow(history_url.id(), last_visit_time, 0,
-                               ui::PAGE_TRANSITION_TYPED, 0));
+                               ui::PAGE_TRANSITION_TYPED, 0, true));
   } else {
     // Add a non-typed visit for time |last_visit|.
     visits->push_back(VisitRow(history_url.id(), last_visit_time, 0,
-                               ui::PAGE_TRANSITION_RELOAD, 0));
+                               ui::PAGE_TRANSITION_RELOAD, 0, false));
   }
 
   history_url.set_visit_count(visits->size());
@@ -176,10 +181,7 @@ class TestHistoryBackendDelegate : public HistoryBackend::Delegate {
                         const RedirectList& redirects,
                         base::Time visit_time) override {}
   void NotifyURLsModified(const URLRows& changed_urls) override {}
-  void NotifyURLsDeleted(bool all_history,
-                         bool expired,
-                         const URLRows& deleted_rows,
-                         const std::set<GURL>& favicon_urls) override {}
+  void NotifyURLsDeleted(DeletionInfo deletion_info) override {}
   void NotifyKeywordSearchTermUpdated(const URLRow& row,
                                       KeywordID keyword_id,
                                       const base::string16& term) override {}
@@ -236,11 +238,11 @@ class TypedURLSyncBridgeTest : public testing::Test {
     ASSERT_TRUE(test_dir_.CreateUniqueTempDir());
     fake_history_backend_->Init(
         false, TestHistoryDatabaseParamsForPath(test_dir_.GetPath()));
-    std::unique_ptr<TypedURLSyncBridge> bridge =
-        base::MakeUnique<TypedURLSyncBridge>(
-            fake_history_backend_.get(), fake_history_backend_->db(),
-            RecordingModelTypeChangeProcessor::FactoryForBridgeTest(&processor_,
-                                                                    false));
+    std::unique_ptr<TypedURLSyncBridge> bridge = std::make_unique<
+        TypedURLSyncBridge>(
+        fake_history_backend_.get(), fake_history_backend_->db(),
+        RecordingModelTypeChangeProcessor::CreateProcessorAndAssignRawPointer(
+            &processor_));
     typed_url_sync_bridge_ = bridge.get();
     typed_url_sync_bridge_->Init();
     typed_url_sync_bridge_->history_backend_observer_.RemoveAll();
@@ -303,14 +305,15 @@ class TypedURLSyncBridgeTest : public testing::Test {
                                       int typed_count,
                                       int64_t last_visit,
                                       bool hidden,
+                                      bool update_metadata,
                                       EntityChange::ChangeType change_type) {
     VisitVector visits;
     URLRow row =
         MakeTypedUrlRow(url, title, typed_count, last_visit, hidden, &visits);
     sync_pb::TypedUrlSpecifics typed_url_specifics;
     WriteToTypedUrlSpecifics(row, visits, &typed_url_specifics);
-    std::unique_ptr<MetadataChangeList> metadata_changes =
-        bridge()->CreateMetadataChangeList();
+    std::string storage_key = GetStorageKey(typed_url_specifics.url());
+
     EntityChangeList entity_changes;
     switch (change_type) {
       case EntityChange::ACTION_ADD:
@@ -318,15 +321,24 @@ class TypedURLSyncBridgeTest : public testing::Test {
             std::string(), SpecificsToEntity(typed_url_specifics)));
         break;
       case EntityChange::ACTION_UPDATE:
-        entity_changes.push_back(
-            EntityChange::CreateUpdate(GetStorageKey(typed_url_specifics.url()),
-                                       SpecificsToEntity(typed_url_specifics)));
+        entity_changes.push_back(EntityChange::CreateUpdate(
+            storage_key, SpecificsToEntity(typed_url_specifics)));
         break;
       case EntityChange::ACTION_DELETE:
-        entity_changes.push_back(EntityChange::CreateDelete(
-            GetStorageKey(typed_url_specifics.url())));
+        entity_changes.push_back(EntityChange::CreateDelete(storage_key));
         break;
     }
+
+    std::unique_ptr<MetadataChangeList> metadata_changes =
+        bridge()->CreateMetadataChangeList();
+    // There needs to be data present in the history DB before inserting
+    // metadata.
+    if (update_metadata) {
+      sync_pb::EntityMetadata metadata;
+      metadata.set_sequence_number(1);
+      metadata_changes->UpdateMetadata(storage_key, metadata);
+    }
+
     bridge()->ApplySyncChanges(std::move(metadata_changes), entity_changes);
     return visits;
   }
@@ -376,7 +388,8 @@ class TypedURLSyncBridgeTest : public testing::Test {
 
   void VerifyAllLocalHistoryData(
       const std::vector<TypedUrlSpecifics>& expected) {
-    bridge()->GetAllData(base::Bind(&VerifyDataBatch, ExpectedMap(expected)));
+    bridge()->GetAllDataForDebugging(
+        base::Bind(&VerifyDataBatch, ExpectedMap(expected)));
   }
 
   void VerifyGetData(TypedURLSyncBridge::StorageKeyList storage_keys,
@@ -414,7 +427,8 @@ class TypedURLSyncBridgeTest : public testing::Test {
   }
 
   static VisitRow CreateVisit(ui::PageTransition type, int64_t timestamp) {
-    return VisitRow(0, base::Time::FromInternalValue(timestamp), 0, type, 0);
+    return VisitRow(0, base::Time::FromInternalValue(timestamp), 0, type, 0,
+                    HistoryBackend::IsTypedIncrement(type));
   }
 
   static TypedURLSyncBridge::MergeResult MergeUrls(
@@ -996,6 +1010,68 @@ TEST_F(TypedURLSyncBridgeTest, DeleteLocalTypedUrl) {
   ASSERT_TRUE(deleted_storage_keys.empty());
 }
 
+// Expire several (but not all) local typed urls. This has only impact on local
+// store (metadata in the db and in-memory maps), nothing gets synced up.
+TEST_F(TypedURLSyncBridgeTest, ExpireLocalTypedUrl) {
+  StartSyncing(std::vector<TypedUrlSpecifics>());
+
+  URLRows url_rows;
+  std::vector<VisitVector> visit_vectors;
+  std::vector<std::string> urls;
+  urls.push_back("http://pie.com/");
+  urls.push_back("http://cake.com/");
+  urls.push_back("http://google.com/");
+  urls.push_back("http://foo.com/");
+  urls.push_back("http://bar.com/");
+
+  // Add the URLs into the history db and notify the bridge.
+  ASSERT_TRUE(BuildAndPushLocalChanges(5, 0, urls, &url_rows, &visit_vectors));
+  ASSERT_EQ(5U, processor().put_multimap().size());
+  int previous_put_size = processor().put_multimap().size();
+  // Store the typed_urls incl. metadata into the bridge's database.
+  for (const std::string& url : urls) {
+    ApplyUrlAndVisitsChange(url, kTitle, /*typed_count=*/1, /*last_visit=*/3,
+                            /*hidden=*/false, /*update_metadata=*/true,
+                            EntityChange::ACTION_ADD);
+  }
+
+  // Check all the metadata is here, no need to untrack anything so far.
+  MetadataBatch metadata_batch;
+  metadata_store()->GetAllSyncMetadata(&metadata_batch);
+  ASSERT_EQ(5u, metadata_batch.TakeAllMetadata().size());
+  ASSERT_EQ(0U, processor().untrack_for_storage_key_set().size());
+
+  // Simulate expiration - delete some urls from the backend and create deleted
+  // row vector.
+  URLRows rows;
+  std::set<std::string> deleted_storage_keys;
+  for (size_t i = 0; i < 3u; ++i) {
+    std::string storage_key = GetStorageKey(url_rows[i].url().spec());
+    deleted_storage_keys.insert(storage_key);
+    fake_history_backend_->DeleteURL(url_rows[i].url());
+    rows.push_back(url_rows[i]);
+  }
+
+  // Notify typed url sync service of these URLs getting expired.
+  bridge()->OnURLsDeleted(fake_history_backend_.get(), /*all_history=*/false,
+                          /*expired=*/true, rows, std::set<GURL>());
+
+  // This does not propagate to the processor.
+  EXPECT_EQ(0U, processor().put_multimap().size() - previous_put_size);
+  EXPECT_EQ(0U, processor().delete_set().size());
+  // The processor is still informed to clear its in-memory maps.
+  EXPECT_EQ(3U, processor().untrack_for_storage_key_set().size());
+
+  // The urls are removed from the metadata store.
+  MetadataBatch smaller_metadata_batch;
+  metadata_store()->GetAllSyncMetadata(&smaller_metadata_batch);
+  EXPECT_EQ(2u, smaller_metadata_batch.GetAllMetadata().size());
+  for (const auto& kv : smaller_metadata_batch.GetAllMetadata()) {
+    EXPECT_TRUE(deleted_storage_keys.find(kv.first) ==
+                deleted_storage_keys.end());
+  }
+}
+
 // Saturate the visits for a typed url with both TYPED and LINK navigations.
 // Check that no more than kMaxTypedURLVisits are synced, and that LINK visits
 // are dropped rather than TYPED ones.
@@ -1103,8 +1179,10 @@ TEST_F(TypedURLSyncBridgeTest, ThrottleVisitLocalTypedUrl) {
 // has started. Check that local DB is received the new URL and visit.
 TEST_F(TypedURLSyncBridgeTest, AddUrlAndVisits) {
   StartSyncing(std::vector<TypedUrlSpecifics>());
-  VisitVector visits = ApplyUrlAndVisitsChange(kURL, kTitle, 1, 3, false,
-                                               EntityChange::ACTION_ADD);
+  VisitVector visits = ApplyUrlAndVisitsChange(
+      kURL, kTitle, /*typed_count=*/1, /*last_visit=*/3,
+      /*hidden=*/false,
+      /*update_metadata=*/false, EntityChange::ACTION_ADD);
 
   ASSERT_EQ(0U, processor().put_multimap().size());
   ASSERT_EQ(1U, processor().update_multimap().size());
@@ -1136,8 +1214,9 @@ TEST_F(TypedURLSyncBridgeTest, AddUrlAndVisits) {
 // visit.
 TEST_F(TypedURLSyncBridgeTest, AddExpiredUrlAndVisits) {
   StartSyncing(std::vector<TypedUrlSpecifics>());
-  VisitVector visits = ApplyUrlAndVisitsChange(kURL, kTitle, 1, kExpiredVisit,
-                                               false, EntityChange::ACTION_ADD);
+  VisitVector visits = ApplyUrlAndVisitsChange(
+      kURL, kTitle, /*typed_count=*/1, /*last_visit=*/kExpiredVisit,
+      /*hidden=*/false, /*update_metadata=*/false, EntityChange::ACTION_ADD);
 
   ASSERT_EQ(0U, processor().put_multimap().size());
   ASSERT_EQ(0U, processor().update_multimap().size());
@@ -1153,8 +1232,10 @@ TEST_F(TypedURLSyncBridgeTest, AddExpiredUrlAndVisits) {
 TEST_F(TypedURLSyncBridgeTest, UpdateUrlAndVisits) {
   StartSyncing(std::vector<TypedUrlSpecifics>());
 
-  VisitVector visits = ApplyUrlAndVisitsChange(kURL, kTitle, 1, 3, false,
-                                               EntityChange::ACTION_ADD);
+  VisitVector visits = ApplyUrlAndVisitsChange(
+      kURL, kTitle, /*typed_count=*/1, /*last_visit=*/3,
+      /*hidden=*/false,
+      /*update_metadata=*/false, EntityChange::ACTION_ADD);
   base::Time visit_time = base::Time::FromInternalValue(3);
   VisitVector all_visits;
   URLRow url_row;
@@ -1171,8 +1252,10 @@ TEST_F(TypedURLSyncBridgeTest, UpdateUrlAndVisits) {
   EXPECT_TRUE(fake_history_backend_->GetURL(GURL(kURL), &url_row));
   EXPECT_EQ(kTitle, base::UTF16ToUTF8(url_row.title()));
 
-  VisitVector new_visits = ApplyUrlAndVisitsChange(kURL, kTitle2, 2, 6, false,
-                                                   EntityChange::ACTION_UPDATE);
+  VisitVector new_visits = ApplyUrlAndVisitsChange(
+      kURL, kTitle2, /*typed_count=*/2, /*last_visit=*/6,
+      /*hidden=*/false,
+      /*update_metadata=*/false, EntityChange::ACTION_UPDATE);
 
   base::Time new_visit_time = base::Time::FromInternalValue(6);
   url_id = fake_history_backend_->GetIdByUrl(GURL(kURL));
@@ -1217,7 +1300,8 @@ TEST_F(TypedURLSyncBridgeTest, DeleteUrlAndVisits) {
   // changes back from fake_history_backend_.
   AddObserver();
 
-  ApplyUrlAndVisitsChange(kURL, kTitle, 1, 3, false,
+  ApplyUrlAndVisitsChange(kURL, kTitle, /*typed_count=*/1, /*last_visit=*/3,
+                          /*hidden=*/false, /*update_metadata=*/false,
                           EntityChange::ACTION_DELETE);
 
   EXPECT_FALSE(fake_history_backend_->GetURL(GURL(kURL), &url_row));
@@ -1239,7 +1323,7 @@ TEST_F(TypedURLSyncBridgeTest, DiffVisitsSame) {
 
   for (int64_t visit : visits) {
     old_visits.push_back(VisitRow(0, base::Time::FromInternalValue(visit), 0,
-                                  ui::PAGE_TRANSITION_TYPED, 0));
+                                  ui::PAGE_TRANSITION_TYPED, 0, true));
     new_url.add_visits(visit);
     new_url.add_visit_transitions(ui::PAGE_TRANSITION_TYPED);
   }
@@ -1269,7 +1353,7 @@ TEST_F(TypedURLSyncBridgeTest, DiffVisitsRemove) {
 
   for (int64_t visit : visits_left) {
     old_visits.push_back(VisitRow(0, base::Time::FromInternalValue(visit), 0,
-                                  ui::PAGE_TRANSITION_TYPED, 0));
+                                  ui::PAGE_TRANSITION_TYPED, 0, true));
   }
 
   for (int64_t visit : visits_right) {
@@ -1303,7 +1387,7 @@ TEST_F(TypedURLSyncBridgeTest, DiffVisitsAdd) {
 
   for (int64_t visit : visits_left) {
     old_visits.push_back(VisitRow(0, base::Time::FromInternalValue(visit), 0,
-                                  ui::PAGE_TRANSITION_TYPED, 0));
+                                  ui::PAGE_TRANSITION_TYPED, 0, true));
   }
 
   for (int64_t visit : visits_right) {
@@ -1493,7 +1577,7 @@ TEST_F(TypedURLSyncBridgeTest, MergeUrlsAfterExpiration) {
   // First, create a history row that has two visits, with timestamps 2 and 3.
   VisitVector(history_visits);
   history_visits.push_back(VisitRow(0, base::Time::FromInternalValue(2), 0,
-                                    ui::PAGE_TRANSITION_TYPED, 0));
+                                    ui::PAGE_TRANSITION_TYPED, 0, true));
   URLRow history_url(
       MakeTypedUrlRow(kURL, kTitle, 2, 3, false, &history_visits));
 

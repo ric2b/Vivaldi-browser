@@ -113,8 +113,7 @@ TEST(FileTest, SelfSwap) {
   FilePath file_path = temp_dir.GetPath().AppendASCII("create_file_1");
   File file(file_path,
             base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_DELETE_ON_CLOSE);
-  using namespace std;
-  swap(file, file);
+  std::swap(file, file);
   EXPECT_TRUE(file.IsValid());
 }
 
@@ -542,6 +541,33 @@ TEST(FileTest, DuplicateDeleteOnClose) {
 }
 
 #if defined(OS_WIN)
+// Flakily times out on Windows, see http://crbug.com/846276.
+#define MAYBE_WriteDataToLargeOffset DISABLED_WriteDataToLargeOffset
+#else
+#define MAYBE_WriteDataToLargeOffset WriteDataToLargeOffset
+#endif
+TEST(FileTest, MAYBE_WriteDataToLargeOffset) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  FilePath file_path = temp_dir.GetPath().AppendASCII("file");
+  File file(file_path,
+            (base::File::FLAG_CREATE | base::File::FLAG_READ |
+             base::File::FLAG_WRITE | base::File::FLAG_DELETE_ON_CLOSE));
+  ASSERT_TRUE(file.IsValid());
+
+  const char kData[] = "this file is sparse.";
+  const int kDataLen = sizeof(kData) - 1;
+  const int64_t kLargeFileOffset = (1LL << 31);
+
+  // If the file fails to write, it is probably we are running out of disk space
+  // and the file system doesn't support sparse file.
+  if (file.Write(kLargeFileOffset - kDataLen - 1, kData, kDataLen) < 0)
+    return;
+
+  ASSERT_EQ(kDataLen, file.Write(kLargeFileOffset + 1, kData, kDataLen));
+}
+
+#if defined(OS_WIN)
 TEST(FileTest, GetInfoForDirectory) {
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
@@ -718,5 +744,19 @@ TEST(FileTest, NoDeleteOnCloseWithMappedFile) {
 
   file.Close();
   ASSERT_TRUE(base::PathExists(file_path));
+}
+
+// Check that we handle the async bit being set incorrectly in a sane way.
+TEST(FileTest, UseSyncApiWithAsyncFile) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  FilePath file_path = temp_dir.GetPath().AppendASCII("file");
+
+  File file(file_path, base::File::FLAG_CREATE | base::File::FLAG_WRITE |
+                           base::File::FLAG_ASYNC);
+  File lying_file(file.TakePlatformFile(), false /* async */);
+  ASSERT_TRUE(lying_file.IsValid());
+
+  ASSERT_EQ(lying_file.WriteAtCurrentPos("12345", 5), -1);
 }
 #endif  // defined(OS_WIN)

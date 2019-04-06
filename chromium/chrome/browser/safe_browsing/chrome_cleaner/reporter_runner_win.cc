@@ -16,6 +16,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
@@ -95,6 +96,7 @@ enum SwReporterLogsUploadsEnabled {
   REPORTER_LOGS_UPLOADS_RECENTLY_SENT_LOGS = 2,
   REPORTER_LOGS_UPLOADS_DISABLED_BY_USER = 3,
   REPORTER_LOGS_UPLOADS_ENABLED_BY_USER = 4,
+  REPORTER_LOGS_UPLOADS_DISABLED_BY_POLICY = 5,
   REPORTER_LOGS_UPLOADS_MAX,
 };
 
@@ -486,11 +488,24 @@ int LaunchAndWaitForExitOnBackgroundThread(
     const SwReporterInvocation& invocation) {
   if (g_testing_delegate_)
     return g_testing_delegate_->LaunchReporter(invocation);
+
+  base::FilePath tmpdir;
+  int exit_code = kReporterNotLaunchedExitCode;
+  if (!base::GetTempDir(&tmpdir)) {
+    return exit_code;
+  }
+
+  // The reporter runs from the system tmp directory. This is to avoid
+  // unnecessarily holding on to the installation directory while running as it
+  // prevents uninstallation of chrome.
+  base::LaunchOptions launch_options;
+  launch_options.current_directory = tmpdir;
+
   base::Process reporter_process =
-      base::LaunchProcess(invocation.command_line(), base::LaunchOptions());
+      base::LaunchProcess(invocation.command_line(), launch_options);
+
   // This exit code is used to identify that a reporter run didn't happen, so
   // the result should be ignored and a rerun scheduled for the usual delay.
-  int exit_code = kReporterNotLaunchedExitCode;
   UMAHistogramReporter uma(invocation.suffix());
   if (reporter_process.IsValid()) {
     uma.RecordReporterStep(SW_REPORTER_START_EXECUTION);
@@ -594,6 +609,9 @@ class ReporterRunner {
     if (!invocations.version().IsValid() || !local_state)
       return;
 
+    // By this point the reporter should be allowed to run.
+    DCHECK(SwReporterIsAllowedByPolicy());
+
     ReporterRunTimeInfo time_info(local_state);
 
     // The UI should block a new user-initiated run if the reporter is
@@ -616,7 +634,7 @@ class ReporterRunner {
 
     // The reporter sequence has been scheduled to run, so don't notify that
     // it has not been scheduled.
-    std::move(scoped_runner.Release());
+    ignore_result(scoped_runner.Release());
   }
 
  private:
@@ -747,8 +765,8 @@ class ReporterRunner {
     if (!invocations_.container().empty()) {
       // If there are other invocations to start, then we shouldn't finalize
       // this object. ScopedClosureRunner::Release requires its return value to
-      // be used, so simply std::move it, since it will not be needed.
-      std::move(scoped_runner.Release());
+      // be used, so simply ignore_result it, since it will not be needed.
+      ignore_result(scoped_runner.Release());
       PostNextInvocation();
     }
 
@@ -843,6 +861,13 @@ class ReporterRunner {
   // started during the logs upload interval.
   bool ShouldSendReporterLogs(const std::string& suffix) {
     UMAHistogramReporter uma(suffix);
+
+    // The enterprise policy overrides all other choices.
+    if (!SwReporterReportingIsAllowedByPolicy()) {
+      uma.RecordLogsUploadEnabled(REPORTER_LOGS_UPLOADS_DISABLED_BY_POLICY);
+      return false;
+    }
+
     switch (invocation_type_) {
       case SwReporterInvocationType::kUnspecified:
       case SwReporterInvocationType::kMax:
@@ -1129,6 +1154,31 @@ void MaybeStartSwReporter(SwReporterInvocationType invocation_type,
 
   ReporterRunner::MaybeStartInvocations(invocation_type,
                                         std::move(invocations));
+}
+
+bool SwReporterIsAllowedByPolicy() {
+  static auto is_allowed = []() {
+    PrefService* local_state = g_browser_process->local_state();
+    return !local_state ||
+           !local_state->IsManagedPreference(prefs::kSwReporterEnabled) ||
+           local_state->GetBoolean(prefs::kSwReporterEnabled);
+  }();
+  return is_allowed;
+}
+
+bool SwReporterReportingIsAllowedByPolicy() {
+  // Reporting is allowed when cleanup is enabled by policy and when the
+  // specific reporting policy is allowed.  While the former policy is not
+  // dynamic, the latter one is.
+  bool is_allowed = SwReporterIsAllowedByPolicy();
+  if (is_allowed) {
+    PrefService* local_state = g_browser_process->local_state();
+    is_allowed =
+        !local_state ||
+        !local_state->IsManagedPreference(prefs::kSwReporterReportingEnabled) ||
+        local_state->GetBoolean(prefs::kSwReporterReportingEnabled);
+  }
+  return is_allowed;
 }
 
 void SetSwReporterTestingDelegate(SwReporterTestingDelegate* delegate) {

@@ -23,8 +23,6 @@ cr.define('extensions', function() {
         value: false,
       },
 
-      isGuest: Boolean,
-
       filter: {
         type: String,
       },
@@ -54,7 +52,7 @@ cr.define('extensions', function() {
      * @return {?Element}
      */
     getDetailsButton: function(id) {
-      return this.$$(`#${id} /deep/ #details-button`);
+      return this.$$(`#${id}`).getDetailsButton();
     },
 
     /**
@@ -62,7 +60,7 @@ cr.define('extensions', function() {
      * @return {?Element}
      */
     getErrorsButton: function(id) {
-      return this.$$(`#${id} /deep/ #errors-button`);
+      return this.$$(`#${id}`).getErrorsButton();
     },
 
     /**
@@ -81,13 +79,15 @@ cr.define('extensions', function() {
 
     /** @private */
     shouldShowEmptyItemsMessage_: function() {
-      return !this.isGuest && this.apps.length === 0 &&
-          this.extensions.length === 0;
+      if (!this.apps || !this.extensions)
+        return;
+
+      return this.apps.length === 0 && this.extensions.length === 0;
     },
 
     /** @private */
     shouldShowEmptySearchMessage_: function() {
-      return !this.isGuest && !this.shouldShowEmptyItemsMessage_() &&
+      return !this.shouldShowEmptyItemsMessage_() &&
           this.shownAppsCount_ === 0 && this.shownExtensionsCount_ === 0;
     },
 

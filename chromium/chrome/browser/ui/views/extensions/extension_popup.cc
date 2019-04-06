@@ -20,14 +20,6 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 
-namespace {
-
-ExtensionViewViews* GetExtensionView(extensions::ExtensionViewHost* host) {
-  return static_cast<ExtensionViewViews*>(host->view());
-}
-
-}  // namespace
-
 // The minimum/maximum dimensions of the popup.
 // The minimum is just a little larger than the size of the button itself.
 // The maximum is an arbitrary number that should be smaller than most screens.
@@ -52,12 +44,15 @@ ExtensionPopup::ExtensionPopup(extensions::ExtensionViewHost* host,
                                views::View* anchor_view,
                                views::BubbleBorder::Arrow arrow,
                                ShowAction show_action)
-    : BubbleDialogDelegateView(anchor_view, arrow), host_(host) {
+    : BubbleDialogDelegateView(anchor_view,
+                               arrow,
+                               views::BubbleBorder::SMALL_SHADOW),
+      host_(host) {
   inspect_with_devtools_ = show_action == SHOW_AND_INSPECT;
   set_margins(gfx::Insets());
   SetLayoutManager(std::make_unique<views::FillLayout>());
-  AddChildView(GetExtensionView(host));
-  GetExtensionView(host)->set_container(this);
+  AddChildView(GetExtensionView());
+  GetExtensionView()->set_container(this);
   // ExtensionPopup closes itself on very specific de-activation conditions.
   set_close_on_deactivate(false);
 
@@ -68,7 +63,7 @@ ExtensionPopup::ExtensionPopup(extensions::ExtensionViewHost* host,
       content::Source<content::BrowserContext>(host->browser_context()));
   content::DevToolsAgentHost::AddObserver(this);
 
-  GetExtensionView(host)->GetBrowser()->tab_strip_model()->AddObserver(this);
+  GetExtensionView()->GetBrowser()->tab_strip_model()->AddObserver(this);
 
   // If the host had somehow finished loading, then we'd miss the notification
   // and not show.  This seems to happen in single-process mode.
@@ -86,8 +81,7 @@ ExtensionPopup::ExtensionPopup(extensions::ExtensionViewHost* host,
 ExtensionPopup::~ExtensionPopup() {
   content::DevToolsAgentHost::RemoveObserver(this);
 
-  GetExtensionView(
-      host_.get())->GetBrowser()->tab_strip_model()->RemoveObserver(this);
+  GetExtensionView()->GetBrowser()->tab_strip_model()->RemoveObserver(this);
 }
 
 int ExtensionPopup::GetDialogButtons() const {
@@ -131,6 +125,10 @@ void ExtensionPopup::DevToolsAgentHostDetached(
   inspect_with_devtools_ = false;
 }
 
+ExtensionViewViews* ExtensionPopup::GetExtensionView() {
+  return static_cast<ExtensionViewViews*>(host_.get()->view());
+}
+
 void ExtensionPopup::OnExtensionSizeChanged(ExtensionViewViews* view) {
   SizeToContents();
 }
@@ -147,7 +145,7 @@ void ExtensionPopup::AddedToWidget() {
   const int radius =
       GetBubbleFrameView()->bubble_border()->GetBorderCornerRadius();
   const bool contents_has_rounded_corners =
-      GetExtensionView(host_.get())->holder()->SetCornerRadius(radius);
+      GetExtensionView()->holder()->SetCornerRadius(radius);
   SetBorder(views::CreateEmptyBorder(
       gfx::Insets(contents_has_rounded_corners ? 0 : radius, 0)));
 }
@@ -155,7 +153,7 @@ void ExtensionPopup::AddedToWidget() {
 void ExtensionPopup::OnWidgetActivationChanged(views::Widget* widget,
                                                bool active) {
   if (active && widget == anchor_widget())
-    OnAnchorWindowActivation();
+    CloseUnlessUnderInspection();
 }
 
 void ExtensionPopup::ActiveTabChanged(content::WebContents* old_contents,
@@ -165,7 +163,7 @@ void ExtensionPopup::ActiveTabChanged(content::WebContents* old_contents,
   GetWidget()->Close();
 }
 
-void ExtensionPopup::OnAnchorWindowActivation() {
+void ExtensionPopup::CloseUnlessUnderInspection() {
   if (!inspect_with_devtools_)
     GetWidget()->Close();
 }

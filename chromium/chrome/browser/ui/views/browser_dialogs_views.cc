@@ -13,12 +13,7 @@
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/views/task_manager_view.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/ui/views/intent_picker_bubble_view.h"
-#else
-#include "chrome/browser/ui/views/first_run_bubble.h"
-#endif  // OS_CHROMEOS
+#include "chrome/browser/ui/views_mode_controller.h"
 
 // This file provides definitions of desktop browser dialog-creation methods for
 // all toolkit-views platforms other than Mac. It also provides the definitions
@@ -26,11 +21,13 @@
 // excluded in a Mac Cocoa build: definitions under chrome/browser/ui/cocoa may
 // select at runtime whether to show a Cocoa dialog, or the toolkit-views dialog
 // provided by browser_dialogs.h.
-
 // static
-LoginHandler* LoginHandler::Create(net::AuthChallengeInfo* auth_info,
-                                   net::URLRequest* request) {
-  return chrome::CreateLoginHandlerViews(auth_info, request);
+scoped_refptr<LoginHandler> LoginHandler::Create(
+    net::AuthChallengeInfo* auth_info,
+    content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+    LoginAuthRequiredCallback auth_required_callback) {
+  return chrome::CreateLoginHandlerViews(auth_info, web_contents_getter,
+                                         std::move(auth_required_callback));
 }
 
 // static
@@ -40,12 +37,6 @@ void BookmarkEditor::Show(gfx::NativeWindow parent_window,
                           Configuration configuration) {
   chrome::ShowBookmarkEditorViews(parent_window, profile, details,
                                   configuration);
-}
-
-// static
-ExtensionInstallPrompt::ShowDialogCallback
-ExtensionInstallPrompt::GetDefaultShowDialogCallback() {
-  return ExtensionInstallPrompt::GetViewsShowDialogCallback();
 }
 
 void ChromeDevicePermissionsPrompt::ShowDialog() {
@@ -69,18 +60,4 @@ void HideTaskManager() {
 }
 #endif
 
-void ShowFirstRunBubble(Browser* browser) {
-#if !defined(OS_CHROMEOS)
-  FirstRunBubble::Show(browser);
-#endif  // OS_CHROMEOS
-}
-
 }  // namespace chrome
-
-#if defined(OS_CHROMEOS)
-
-BubbleShowPtr ShowIntentPickerBubble() {
-  return IntentPickerBubbleView::ShowBubble;
-}
-
-#endif  // OS_CHROMEOS

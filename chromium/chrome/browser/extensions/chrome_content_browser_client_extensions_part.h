@@ -35,12 +35,13 @@ class ChromeContentBrowserClientExtensionsPart
   static GURL GetEffectiveURL(Profile* profile, const GURL& url);
   static bool ShouldUseProcessPerSite(Profile* profile,
                                       const GURL& effective_url);
+  static bool ShouldUseSpareRenderProcessHost(Profile* profile,
+                                              const GURL& site_url);
   static bool DoesSiteRequireDedicatedProcess(
       content::BrowserContext* browser_context,
       const GURL& effective_site_url);
   static bool ShouldLockToOrigin(content::BrowserContext* browser_context,
                                  const GURL& effective_site_url);
-  static bool ShouldBypassDocumentBlocking(const url::Origin& initiator);
   static bool CanCommitURL(content::RenderProcessHost* process_host,
                            const GURL& url);
   static bool IsSuitableHost(Profile* profile,

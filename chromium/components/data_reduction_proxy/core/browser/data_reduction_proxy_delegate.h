@@ -11,7 +11,7 @@
 #include "base/threading/thread_checker.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/proxy_delegate.h"
-#include "net/proxy/proxy_retry_info.h"
+#include "net/proxy_resolution/proxy_retry_info.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -34,7 +34,7 @@ class DataReductionProxyIOData;
 
 class DataReductionProxyDelegate
     : public net::ProxyDelegate,
-      public net::NetworkChangeNotifier::IPAddressObserver {
+      public net::NetworkChangeNotifier::NetworkChangeObserver {
  public:
   // ProxyDelegate instance is owned by io_thread. |auth_handler| and |config|
   // outlives this class instance.
@@ -55,16 +55,10 @@ class DataReductionProxyDelegate
                       const net::ProxyRetryInfoMap& proxy_retry_info,
                       net::ProxyInfo* result) override;
   void OnFallback(const net::ProxyServer& bad_proxy, int net_error) override;
-  bool IsTrustedSpdyProxy(const net::ProxyServer& proxy_server) override;
 
-  void SetTickClockForTesting(base::TickClock* tick_clock);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
  protected:
-  // Protected so that this method is accessible for testing.
-  // net::ProxyDelegate implementation:
-  void OnAlternativeProxyBroken(
-      const net::ProxyServer& alternative_proxy_server) override;
-
   // Protected so that it can be overridden during testing.
   // Returns true if |proxy_server| supports QUIC.
   virtual bool SupportsQUIC(const net::ProxyServer& proxy_server) const;
@@ -83,28 +77,23 @@ class DataReductionProxyDelegate
   // Records the availability status of data reduction proxy.
   void RecordQuicProxyStatus(QuicProxyStatus status) const;
 
-  // NetworkChangeNotifier::IPAddressObserver:
-  void OnIPAddressChanged() override;
+  // NetworkChangeNotifier::NetworkChangeObserver:
+  void OnNetworkChanged(
+      net::NetworkChangeNotifier::ConnectionType type) override;
 
+  // Checks if the first proxy server in |result| supports QUIC and if so
+  // adds an alternative proxy configuration to |result|.
   void GetAlternativeProxy(const GURL& url,
-                           const net::ProxyServer& resolved_proxy_server,
-                           net::ProxyServer* alternative_proxy_server) const;
+                           const net::ProxyRetryInfoMap& proxy_retry_info,
+                           net::ProxyInfo* result) const;
 
   const DataReductionProxyConfig* config_;
   const DataReductionProxyConfigurator* configurator_;
   DataReductionProxyEventCreator* event_creator_;
   DataReductionProxyBypassStats* bypass_stats_;
 
-  // True if the use of alternate proxies is disabled.
-  bool alternative_proxies_broken_;
-
   // Tick clock used for obtaining the current time.
-  base::TickClock* tick_clock_;
-
-  // True if the metrics related to the first request whose resolved proxy was a
-  // data saver proxy has been recorded. |first_data_saver_request_recorded_| is
-  // reset to false on IP address change events.
-  bool first_data_saver_request_recorded_;
+  const base::TickClock* tick_clock_;
 
   // Set to the time when last IP address change event was received, or the time
   // of initialization of |this|, whichever is later.

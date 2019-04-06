@@ -149,7 +149,7 @@ FileTableColumnModel.prototype.getHitColumn = function(x) {
 
 /** @override */
 FileTableColumnModel.prototype.setVisible = function(index, visible) {
-  if (index < 0 || index > this.columns_.size -1)
+  if (index < 0 || index > this.columns_.length - 1)
     return;
 
   var column = this.columns_[index];
@@ -429,11 +429,13 @@ FileTable.decorate = function(
   self.columnModel = columnModel;
 
   self.formatter_ = new FileMetadataFormatter();
-  self.setRenderFunction(self.renderTableRow_.bind(self,
-      self.getRenderFunction()));
+
+  var selfAsTable = /** @type {!cr.ui.Table} */ (self);
+  selfAsTable.setRenderFunction(
+      self.renderTableRow_.bind(self, selfAsTable.getRenderFunction()));
 
   // Keep focus on the file list when clicking on the header.
-  self.header.addEventListener('mousedown', function(e) {
+  selfAsTable.header.addEventListener('mousedown', function(e) {
     self.list.focus();
     e.preventDefault();
   });
@@ -443,7 +445,7 @@ FileTable.decorate = function(
 
   // Override header#redraw to use FileTableSplitter.
   /** @this {cr.ui.table.TableHeader} */
-  self.header.redraw = function() {
+  selfAsTable.header.redraw = function() {
     this.__proto__.redraw.call(this);
     // Extend table splitters
     var splitters = this.querySelectorAll('.table-header-splitter');
@@ -463,6 +465,7 @@ FileTable.decorate = function(
   }.bind(self), true);
   self.list.shouldStartDragSelection =
       self.shouldStartDragSelection_.bind(self);
+  self.list.hasDragHitElement = self.hasDragHitElement_.bind(self);
 
   /**
    * Obtains the index list of elements that are hit by the point or the
@@ -479,7 +482,7 @@ FileTable.decorate = function(
     var currentSelection = [];
     var bottom = y + (opt_height || 0);
     for (var i = 0; i < this.selectionModel_.length; i++) {
-      var itemMetrics = this.getHeightsForIndex_(i);
+      var itemMetrics = this.getHeightsForIndex(i);
       if (itemMetrics.top < bottom && itemMetrics.top + itemMetrics.height >= y)
         currentSelection.push(i);
     }
@@ -635,22 +638,36 @@ FileTable.prototype.setUseModificationByMeTime = function(
 };
 
 /**
+ * Returns whether the drag event is inside a file entry in the list (and not
+ * the background padding area).
+ * @param {MouseEvent} event Drag start event.
+ * @return {boolean} True if the mouse is over an element in the list, False if
+ *                   it is in the background.
+ */
+FileTable.prototype.hasDragHitElement_ = function(event) {
+  var pos = DragSelector.getScrolledPosition(this.list, event);
+  return this.list.getHitElements(pos.x, pos.y).length !== 0;
+};
+
+/**
  * Obtains if the drag selection should be start or not by referring the mouse
  * event.
  * @param {MouseEvent} event Drag start event.
- * @return {boolean} True if the mouse is hit to the background of the list.
+ * @return {boolean} True if the mouse is hit to the background of the list, or
+ *                   certain areas of the inside of the list that would start a
+ *                   drag selection.
  * @private
  */
 FileTable.prototype.shouldStartDragSelection_ = function(event) {
   // If the shift key is pressed, it should starts drag selection.
   if (event.shiftKey)
     return true;
-  // We don't support drag selection by touch.
-  if (event.sourceCapabilities && event.sourceCapabilities.firesTouchEvents)
-    return false;
+
+  // If we're outside of the element list, start the drag selection.
+  if (!this.list.hasDragHitElement(event))
+    return true;
 
   // If the position values are negative, it points the out of list.
-  // It should start the drag selection.
   var pos = DragSelector.getScrolledPosition(this.list, event);
   if (!pos)
     return false;
@@ -882,6 +899,13 @@ FileTable.prototype.renderDate_ = function(entry, columnId, table) {
  * @private
  */
 FileTable.prototype.updateDate_ = function(div, entry) {
+  // For now, Team Drive roots have the incorrect modified date value. Hide it
+  // until we get the proper one (see https://crbug.com/861622).
+  if (util.isTeamDriveRoot(entry)) {
+    div.textContent = '--';
+    return;
+  }
+
   var item = this.metadataModel_.getCache(
       [entry], ['modificationTime', 'modificationByMeTime'])[0];
   var modTime = this.useModificationByMeTime_ ?
@@ -936,7 +960,8 @@ FileTable.prototype.updateListItemsMetadata = function(type, entries) {
       filelist.updateListItemExternalProps(
           listItem,
           this.metadataModel_.getCache(
-              [entry], ['availableOffline', 'customIconUrl', 'shared'])[0]);
+              [entry], ['availableOffline', 'customIconUrl', 'shared'])[0],
+          util.isTeamDriveRoot(entry));
     });
   } else if (type === 'import-history') {
     forEachCell('.table-row-cell > .status', function(item, entry, unused) {
@@ -954,7 +979,15 @@ FileTable.prototype.updateListItemsMetadata = function(type, entries) {
  */
 FileTable.prototype.renderTableRow_ = function(baseRenderFunction, entry) {
   var item = baseRenderFunction(entry, this);
+  var nameId = item.id + '-entry-name';
+  var sizeId = item.id + '-size';
+  var dateId = item.id + '-date';
   filelist.decorateListItem(item, entry, this.metadataModel_);
+  item.setAttribute('file-name', entry.name);
+  item.querySelector('.entry-name').setAttribute('id', nameId);
+  item.querySelector('.size').setAttribute('id', sizeId);
+  item.querySelector('.date').setAttribute('id', dateId);
+  item.setAttribute('aria-labelledby', nameId + ' ' + sizeId + ' ' + dateId);
   return item;
 };
 

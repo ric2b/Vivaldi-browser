@@ -16,11 +16,16 @@
 // be a subview of the CRWContentView.
 @property(nonatomic, strong, readonly) UIScrollView* scrollView;
 
-// Adds a top padding to content view. Implementations of this protocol can
+// Adds an offset to the content view.  This updates the location of the scroll
+// view relative to the receiver, and does not update the scroll view's content
+// offset.
+@property(nonatomic, assign) CGPoint contentOffset;
+
+// Adds an inset to content view. Implementations of this protocol can
 // implement this method using UIScrollView.contentInset (where applicable) or
 // via resizing a subview's frame. Can be used as a workaround for WKWebView
 // bug, where UIScrollView.content inset does not work (rdar://23584409).
-@property(nonatomic, assign) CGFloat topContentPadding;
+@property(nonatomic, assign) UIEdgeInsets contentInset;
 
 // Returns YES if content is being displayed in the scroll view.
 // TODO(stuartmorgan): See if this can be removed from the public interface.
@@ -29,8 +34,8 @@
 @optional
 
 // Whether or not the content view should use the content inset when setting
-// |topContentPadding|.
-@property(nonatomic, assign) BOOL shouldUseInsetForTopPadding;
+// |contentInset|.
+@property(nonatomic, assign) BOOL shouldUseViewContentInset;
 
 @end
 

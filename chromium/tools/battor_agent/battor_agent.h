@@ -90,6 +90,7 @@ class BattOrAgent : public BattOrConnection::Listener,
 
   // BattOrConnection::Listener implementation.
   void OnConnectionOpened(bool success) override;
+  void OnConnectionFlushed(bool success) override;
   void OnBytesSent(bool success) override;
   void OnMessageRead(bool success,
                      BattOrMessageType type,
@@ -102,7 +103,7 @@ class BattOrAgent : public BattOrConnection::Listener,
   std::unique_ptr<BattOrConnection> connection_;
 
   // A source of TimeTicks. Protected so that it can be faked in testing.
-  std::unique_ptr<base::TickClock> tick_clock_;
+  const base::TickClock* tick_clock_;
 
   // Timeout for when an action isn't completed within the allotted time. This
   // is virtual and protected so that timeouts can be disabled in testing. The
@@ -124,6 +125,7 @@ class BattOrAgent : public BattOrConnection::Listener,
 
     // Actions required to connect to a BattOr.
     REQUEST_CONNECTION,
+    POST_CONNECT_FLUSH,
 
     // Actions required for starting tracing.
     SEND_INIT,
@@ -139,6 +141,7 @@ class BattOrAgent : public BattOrConnection::Listener,
     SEND_SAMPLES_REQUEST,
     READ_CALIBRATION_FRAME,
     READ_DATA_FRAME,
+    POST_READ_ERROR_FLUSH,
 
     // Actions required for recording a clock sync marker.
     SEND_CURRENT_SAMPLE_REQUEST,
@@ -171,6 +174,9 @@ class BattOrAgent : public BattOrConnection::Listener,
   // Retry the last command.
   void RetryCommand();
 
+  // Retry the last sample frame.
+  void RetryFrame();
+
   // Completes the command with the specified error.
   void CompleteCommand(BattOrError error);
 
@@ -179,6 +185,10 @@ class BattOrAgent : public BattOrConnection::Listener,
 
   // Sets and restarts the action timeout timer.
   void SetActionTimeout(uint16_t timeout_seconds);
+
+  // Returns the first action for the specified command (excluding connection
+  // actions).
+  Action GetFirstAction(Command command);
 
   // The listener that handles the commands' results. It must outlive the agent.
   Listener* listener_;
@@ -217,6 +227,9 @@ class BattOrAgent : public BattOrConnection::Listener,
 
   // The number of times we've attempted a command.
   uint8_t num_command_attempts_;
+
+  // The number of times we've attempted receiving a frame.
+  uint8_t num_frame_attempts_;
 
   // The timeout that's run when an action times out.
   base::CancelableClosure timeout_callback_;

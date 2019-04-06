@@ -40,9 +40,6 @@ const char* GetProtoFieldString(ProtoField proto_field);
 
 const char* GetUniquePositionFieldString(UniquePositionField position_field);
 
-const char* GetAttachmentMetadataFieldString(
-    AttachmentMetadataField attachment_metadata_field);
-
 const char* GetBitTempString(BitTemp bit_temp);
 
 }  // namespace syncable

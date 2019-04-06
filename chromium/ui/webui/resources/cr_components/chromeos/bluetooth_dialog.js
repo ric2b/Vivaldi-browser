@@ -326,10 +326,10 @@ Polymer({
         (this.pairingEvent_.pairing == PairingEventType.REQUEST_PINCODE) ?
         '#pincode' :
         '#passkey';
-    var paperInput = /** @type {!PaperInputElement} */ (this.$$(inputId));
-    assert(paperInput);
-    /** @type {string} */ var value = paperInput.value;
-    return !!value && paperInput.validate();
+    var crInput = /** @type {!CrInputElement} */ (this.$$(inputId));
+    assert(crInput);
+    /** @type {string} */ var value = crInput.value;
+    return !!value && crInput.validate();
   },
 
   /**
@@ -422,9 +422,9 @@ Polymer({
         (pairing == PairingEventType.DISPLAY_PASSKEY ||
          pairing == PairingEventType.KEYS_ENTERED ||
          pairing == PairingEventType.CONFIRM_PASSKEY)) {
-      var passkeyString = String(this.pairingEvent_.passkey);
-      if (index < passkeyString.length)
-        digit = passkeyString[index];
+      var passkeyString =
+          String(this.pairingEvent_.passkey).padStart(this.digits_.length, '0');
+      digit = passkeyString[index];
     }
     return digit;
   },

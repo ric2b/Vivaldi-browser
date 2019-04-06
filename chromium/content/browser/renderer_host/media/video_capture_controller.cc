@@ -12,17 +12,16 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "components/viz/common/gl_helper.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
-#include "content/common/video_capture.mojom.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "media/base/video_frame.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "media/capture/video/video_capture_device_client.h"
@@ -112,13 +111,13 @@ VideoCaptureController::BufferContext::BufferContext(
     int buffer_context_id,
     int buffer_id,
     media::VideoFrameConsumerFeedbackObserver* consumer_feedback_observer,
-    mojo::ScopedSharedBufferHandle handle)
+    media::mojom::VideoBufferHandlePtr buffer_handle)
     : buffer_context_id_(buffer_context_id),
       buffer_id_(buffer_id),
       is_retired_(false),
       frame_feedback_id_(0),
       consumer_feedback_observer_(consumer_feedback_observer),
-      buffer_handle_(std::move(handle)),
+      buffer_handle_(std::move(buffer_handle)),
       max_consumer_utilization_(
           media::VideoFrameConsumerFeedbackObserver::kNoUtilizationRecorded),
       consumer_hold_count_(0) {}
@@ -158,16 +157,29 @@ void VideoCaptureController::BufferContext::DecreaseConsumerCount() {
   }
 }
 
-mojo::ScopedSharedBufferHandle
-VideoCaptureController::BufferContext::CloneHandle() {
-  // Special behavior here: If the handle was already read-only, the Clone()
-  // call here will maintain that read-only permission. If it was read-write,
-  // the cloned handle will have read-write permission.
-  //
-  // TODO(crbug.com/797470): We should be able to demote read-write to read-only
-  // permissions when Clone()'ing handles. Currently, this causes a crash.
-  return buffer_handle_->Clone(
-      mojo::SharedBufferHandle::AccessMode::READ_WRITE);
+media::mojom::VideoBufferHandlePtr
+VideoCaptureController::BufferContext::CloneBufferHandle() {
+  // Unable to use buffer_handle_->Clone(), because shared_buffer does not
+  // support the copy constructor.
+  media::mojom::VideoBufferHandlePtr result =
+      media::mojom::VideoBufferHandle::New();
+  if (buffer_handle_->is_shared_buffer_handle()) {
+    // Special behavior here: If the handle was already read-only, the Clone()
+    // call here will maintain that read-only permission. If it was read-write,
+    // the cloned handle will have read-write permission.
+    //
+    // TODO(crbug.com/797470): We should be able to demote read-write to
+    // read-only permissions when Clone()'ing handles. Currently, this causes a
+    // crash.
+    result->set_shared_buffer_handle(
+        buffer_handle_->get_shared_buffer_handle()->Clone(
+            mojo::SharedBufferHandle::AccessMode::READ_WRITE));
+  } else if (buffer_handle_->is_mailbox_handles()) {
+    result->set_mailbox_handles(buffer_handle_->get_mailbox_handles()->Clone());
+  } else {
+    NOTREACHED() << "Unexpected video buffer handle type";
+  }
+  return result;
 }
 
 VideoCaptureController::VideoCaptureController(
@@ -213,8 +225,8 @@ void VideoCaptureController::AddClient(
   // report an error immediately and punt.
   if (!params.IsValid() ||
       !(params.requested_format.pixel_format == media::PIXEL_FORMAT_I420 ||
-        params.requested_format.pixel_format == media::PIXEL_FORMAT_Y16) ||
-      params.requested_format.pixel_storage != media::VideoPixelStorage::CPU) {
+        params.requested_format.pixel_format == media::PIXEL_FORMAT_Y16 ||
+        params.requested_format.pixel_format == media::PIXEL_FORMAT_ARGB)) {
     // Crash in debug builds since the renderer should not have asked for
     // invalid or unsupported parameters.
     LOG(DFATAL) << "Invalid or unsupported video capture parameters requested: "
@@ -384,16 +396,15 @@ VideoCaptureController::GetVideoCaptureFormat() const {
   return video_capture_format_;
 }
 
-void VideoCaptureController::OnNewBufferHandle(
-    int buffer_id,
-    std::unique_ptr<media::VideoCaptureDevice::Client::Buffer::HandleProvider>
-        handle_provider) {
+void VideoCaptureController::OnNewBuffer(
+    int32_t buffer_id,
+    media::mojom::VideoBufferHandlePtr buffer_handle) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(FindUnretiredBufferContextFromBufferId(buffer_id) ==
          buffer_contexts_.end());
-  buffer_contexts_.emplace_back(
-      next_buffer_context_id_++, buffer_id, launched_device_.get(),
-      handle_provider->GetHandleForInterProcessTransit(true /* read only */));
+  buffer_contexts_.emplace_back(next_buffer_context_id_++, buffer_id,
+                                launched_device_.get(),
+                                std::move(buffer_handle));
 }
 
 void VideoCaptureController::OnFrameReadyInBuffer(
@@ -424,11 +435,10 @@ void VideoCaptureController::OnFrameReadyInBuffer(
         client->known_buffer_context_ids.push_back(buffer_context_id);
         const size_t mapped_size =
             media::VideoCaptureFormat(frame_info->coded_size, 0.0f,
-                                      frame_info->pixel_format,
-                                      frame_info->storage_type)
+                                      frame_info->pixel_format)
                 .ImageAllocationSize();
-        client->event_handler->OnBufferCreated(
-            client->controller_id, buffer_context_iter->CloneHandle(),
+        client->event_handler->OnNewBuffer(
+            client->controller_id, buffer_context_iter->CloneBufferHandle(),
             mapped_size, buffer_context_id);
       }
 
@@ -458,7 +468,7 @@ void VideoCaptureController::OnFrameReadyInBuffer(
     double frame_rate = 0.0f;
     if (video_capture_format_) {
       media::VideoFrameMetadata metadata;
-      metadata.MergeInternalValuesFrom(*frame_info->metadata);
+      metadata.MergeInternalValuesFrom(frame_info->metadata);
       if (!metadata.GetDouble(VideoFrameMetadata::FRAME_RATE, &frame_rate)) {
         frame_rate = video_capture_format_->frame_rate;
       }

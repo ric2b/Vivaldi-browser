@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
@@ -84,7 +83,7 @@ IN_PROC_BROWSER_TEST_F(GlobalConfirmInfoBarTest, MultipleTabs) {
   for (int i = 0; i < tab_strip_model->count(); i++)
     EXPECT_EQ(0u, GetInfoBarServiceFromTabIndex(i)->infobar_count());
 
-  auto delegate = base::MakeUnique<TestConfirmInfoBarDelegate>();
+  auto delegate = std::make_unique<TestConfirmInfoBarDelegate>();
   TestConfirmInfoBarDelegate* delegate_ptr = delegate.get();
 
   base::WeakPtr<GlobalConfirmInfoBar> global_confirm_info_bar =
@@ -116,7 +115,7 @@ IN_PROC_BROWSER_TEST_F(GlobalConfirmInfoBarTest, UserInteraction) {
   for (int i = 0; i < tab_strip_model->count(); i++)
     EXPECT_EQ(0u, GetInfoBarServiceFromTabIndex(i)->infobar_count());
 
-  auto delegate = base::MakeUnique<TestConfirmInfoBarDelegate>();
+  auto delegate = std::make_unique<TestConfirmInfoBarDelegate>();
   TestConfirmInfoBarDelegate* delegate_ptr = delegate.get();
 
   base::WeakPtr<GlobalConfirmInfoBar> global_confirm_info_bar =

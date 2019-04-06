@@ -38,6 +38,8 @@
 #include "chrome/installer/util/scoped_token_privilege.h"
 #include "components/chrome_cleaner/public/constants/constants.h"
 #include "components/component_updater/component_updater_service.h"
+#include "components/component_updater/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/http/http_status_code.h"
@@ -219,16 +221,14 @@ void ChromeCleanerControllerDelegate::StartRebootPromptFlow(
   ChromeCleanerRebootDialogControllerImpl::Create(controller);
 }
 
-bool ChromeCleanerControllerDelegate::UserInitiatedCleanupsFeatureEnabled() {
-  return UserInitiatedCleanupsEnabled();
-}
-
 // static
 ChromeCleanerControllerImpl* ChromeCleanerControllerImpl::GetInstance() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!g_controller)
+  if (!g_controller) {
     g_controller = new ChromeCleanerControllerImpl();
+    g_controller->Init();
+  }
 
   return g_controller;
 }
@@ -242,22 +242,6 @@ ChromeCleanerController* ChromeCleanerController::GetInstance() {
 ChromeCleanerController::ChromeCleanerController() = default;
 
 ChromeCleanerController::~ChromeCleanerController() = default;
-
-bool ChromeCleanerControllerImpl::ShouldShowCleanupInSettingsUI() {
-  // When user-initiated cleanups are enabled, the cleanup card is always shown,
-  // since it's not rendered at the top of chrome://settings.
-  if (delegate_->UserInitiatedCleanupsFeatureEnabled())
-    return true;
-
-  // When user-initiated cleanups are disabled, the cleanup card is only shown
-  // when the controller's current state provides useful information about a
-  // cleanup to the user.
-  return state_ == State::kInfected || state_ == State::kCleaning ||
-         state_ == State::kRebootRequired ||
-         (state_ == State::kIdle &&
-          (idle_reason_ == IdleReason::kCleaningFailed ||
-           idle_reason_ == IdleReason::kConnectionLost));
-}
 
 ChromeCleanerController::State ChromeCleanerControllerImpl::state() const {
   return state_;
@@ -331,8 +315,6 @@ void ChromeCleanerControllerImpl::OnReporterSequenceStarted() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   RecordReporterSequenceTypeHistogram(pending_invocation_type_);
-  if (!delegate_->UserInitiatedCleanupsFeatureEnabled())
-    return;
 
   if (state() == State::kIdle)
     SetStateAndNotifyObservers(State::kReporterRunning);
@@ -344,9 +326,6 @@ void ChromeCleanerControllerImpl::OnReporterSequenceDone(
   DCHECK_NE(SwReporterInvocationResult::kUnspecified, result);
 
   RecordReporterSequenceResultHistogram(pending_invocation_type_, result);
-
-  if (!delegate_->UserInitiatedCleanupsFeatureEnabled())
-    return;
 
   // Ignore if any interaction with cleaner runs is ongoing. This can happen
   // in two situations:
@@ -417,6 +396,7 @@ void ChromeCleanerControllerImpl::OnSwReporterReady(
 
 void ChromeCleanerControllerImpl::RequestUserInitiatedScan() {
   base::AutoLock autolock(lock_);
+  DCHECK(IsAllowedByPolicy());
   DCHECK(pending_invocation_type_ !=
              SwReporterInvocationType::kUserInitiatedWithLogsAllowed &&
          pending_invocation_type_ !=
@@ -463,6 +443,7 @@ void ChromeCleanerControllerImpl::RequestUserInitiatedScan() {
 void ChromeCleanerControllerImpl::Scan(
     const SwReporterInvocation& reporter_invocation) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(IsAllowedByPolicy());
   DCHECK(reporter_invocation.BehaviourIsSupported(
       SwReporterInvocation::BEHAVIOUR_TRIGGER_PROMPT));
 
@@ -546,6 +527,23 @@ void ChromeCleanerControllerImpl::Reboot() {
   InitiateReboot();
 }
 
+bool ChromeCleanerControllerImpl::IsAllowedByPolicy() {
+  return safe_browsing::SwReporterIsAllowedByPolicy();
+}
+
+bool ChromeCleanerControllerImpl::IsReportingAllowedByPolicy() {
+  return safe_browsing::SwReporterReportingIsAllowedByPolicy();
+}
+
+bool ChromeCleanerControllerImpl::IsReportingManagedByPolicy() {
+  // Logs are considered managed if the logs themselves are managed or if the
+  // entire cleanup feature is disabled by policy.
+  PrefService* local_state = g_browser_process->local_state();
+  return !IsAllowedByPolicy() ||
+         (local_state &&
+          local_state->IsManagedPreference(prefs::kSwReporterReportingEnabled));
+}
+
 ChromeCleanerControllerImpl::ChromeCleanerControllerImpl()
     : real_delegate_(std::make_unique<ChromeCleanerControllerDelegate>()),
       delegate_(real_delegate_.get()),
@@ -554,6 +552,10 @@ ChromeCleanerControllerImpl::ChromeCleanerControllerImpl()
 }
 
 ChromeCleanerControllerImpl::~ChromeCleanerControllerImpl() = default;
+
+void ChromeCleanerControllerImpl::Init() {
+  logs_enabled_ = IsReportingAllowedByPolicy();
+}
 
 void ChromeCleanerControllerImpl::NotifyObserver(Observer* observer) const {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -662,6 +664,7 @@ void ChromeCleanerControllerImpl::OnPromptUser(
   DCHECK_EQ(State::kScanning, state());
   DCHECK(scanner_results_.files_to_delete().empty());
   DCHECK(scanner_results_.registry_keys().empty());
+  DCHECK(scanner_results_.extension_ids().empty());
   DCHECK(!prompt_user_callback_);
   DCHECK(!time_scanning_started_.is_null());
 
@@ -751,7 +754,7 @@ void ChromeCleanerControllerImpl::OnCleanerProcessDone(
       RecordCleanupResultHistogram(CLEANUP_RESULT_SUCCEEDED);
       delegate_->ResetTaggedProfiles(
           g_browser_process->profile_manager()->GetLoadedProfiles(),
-          base::BindOnce(&base::DoNothing));
+          base::DoNothing());
       idle_reason_ = IdleReason::kCleaningSucceeded;
       SetStateAndNotifyObservers(State::kIdle);
       return;

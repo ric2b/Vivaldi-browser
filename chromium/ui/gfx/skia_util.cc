@@ -12,7 +12,6 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColorPriv.h"
 #include "third_party/skia/include/core/SkUnPreMultiply.h"
-#include "third_party/skia/include/effects/SkBlurMaskFilter.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/effects/SkLayerDrawLooper.h"
 #include "ui/gfx/geometry/quad_f.h"
@@ -67,6 +66,10 @@ RectF SkRectToRectF(const SkRect& rect) {
 SkSize SizeFToSkSize(const SizeF& size) {
   return SkSize::Make(SkFloatToScalar(size.width()),
                       SkFloatToScalar(size.height()));
+}
+
+SkISize SizeToSkISize(const Size& size) {
+  return SkISize::Make(size.width(), size.height());
 }
 
 SizeF SkSizeToSizeF(const SkSize& size) {

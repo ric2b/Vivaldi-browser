@@ -27,7 +27,6 @@ class WebContentsViewChildFrame : public WebContentsView,
   gfx::NativeView GetNativeView() const override;
   gfx::NativeView GetContentNativeView() const override;
   gfx::NativeWindow GetTopLevelNativeWindow() const override;
-  void GetScreenInfo(ScreenInfo* screen_info) const override;
   void GetContainerBounds(gfx::Rect* out) const override;
   void SizeContents(const gfx::Size& size) override;
   void Focus() override;
@@ -46,7 +45,9 @@ class WebContentsViewChildFrame : public WebContentsView,
       RenderWidgetHost* render_widget_host) override;
   void SetPageTitle(const base::string16& title) override;
   void RenderViewCreated(RenderViewHost* host) override;
-  void RenderViewSwappedIn(RenderViewHost* host) override;
+  void RenderViewReady() override;
+  void RenderViewHostChanged(RenderViewHost* old_host,
+                             RenderViewHost* new_host) override;
   void SetOverscrollControllerEnabled(bool enabled) override;
 #if defined(OS_MACOSX)
   void SetAllowOtherViews(bool allow) override;
@@ -67,6 +68,7 @@ class WebContentsViewChildFrame : public WebContentsView,
   void UpdateDragCursor(blink::WebDragOperation operation) override;
   void GotFocus(RenderWidgetHostImpl* render_widget_host) override;
   void TakeFocus(bool reverse) override;
+  bool IsWebContentsViewChildFrame() const override;
 
  private:
   WebContentsView* GetOuterView();

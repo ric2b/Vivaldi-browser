@@ -11,6 +11,9 @@
 namespace payments {
 namespace features {
 
+// Used to control whether Google Pay cards are returned for basic-card.
+extern const base::Feature kReturnGooglePayInBasicCard;
+
 #if defined(OS_IOS)
 // Used to control the state of the Payment Request API feature.
 extern const base::Feature kWebPayments;
@@ -26,6 +29,13 @@ extern const base::Feature kWebPaymentsMethodSectionOrderV2;
 
 // Used to control the support for Payment Details modifiers.
 extern const base::Feature kWebPaymentsModifiers;
+
+// Used to control whether the Payment Sheet can be skipped for Payment Requests
+// with a single URL based payment app and no other info requested.
+extern const base::Feature kWebPaymentsSingleAppUiSkip;
+
+// Used to control whether allow crawling just-in-time installable payment app.
+extern const base::Feature kWebPaymentsJustInTimePaymentApp;
 
 }  // namespace features
 }  // namespace payments

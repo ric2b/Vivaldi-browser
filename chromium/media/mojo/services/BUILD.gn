@@ -12,8 +12,7 @@ import("//testing/test.gni")
 component("services") {
   output_name = "media_mojo_services"
   sources = [
-    "cdm_service.cc",
-    "cdm_service.h",
+    "deferred_destroy_strong_binding_set.h",
     "gpu_mojo_media_client.cc",
     "gpu_mojo_media_client.h",
     "interface_factory_impl.cc",
@@ -49,6 +48,8 @@ component("services") {
     "mojo_demuxer_stream_adapter.h",
     "mojo_jpeg_decode_accelerator_service.cc",
     "mojo_jpeg_decode_accelerator_service.h",
+    "mojo_jpeg_encode_accelerator_service.cc",
+    "mojo_jpeg_encode_accelerator_service.h",
     "mojo_media_client.cc",
     "mojo_media_client.h",
     "mojo_media_log.cc",
@@ -83,7 +84,7 @@ component("services") {
     "//media",
     "//media/gpu",
     "//media/gpu/ipc/common",
-    "//media/mojo:features",
+    "//media/mojo:buildflags",
     "//media/mojo/interfaces",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
@@ -96,14 +97,13 @@ component("services") {
     "//media:shared_memory_support",
     "//media/cdm:cdm_manager",
     "//media/gpu",
-    "//media/gpu:features",
+    "//media/gpu:buildflags",
     "//media/gpu/ipc/service",
     "//media/mojo/common",
     "//media/mojo/common:mojo_shared_buffer_video_frame",
-    "//mojo/common",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/cpp:ukm_builders",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
   ]
 
   if (is_android) {
@@ -117,6 +117,8 @@ component("services") {
 
   if (enable_library_cdms) {
     sources += [
+      "cdm_service.cc",
+      "cdm_service.h",
       "mojo_cdm_allocator.cc",
       "mojo_cdm_allocator.h",
       "mojo_cdm_file_io.cc",
@@ -128,7 +130,11 @@ component("services") {
       "mojo_cdm_proxy_service.cc",
       "mojo_cdm_proxy_service.h",
     ]
-    deps += [ "//media/cdm:cdm_api" ]
+    deps += [
+      "//media/cdm:cdm_api",
+      "//media/cdm:cdm_paths",
+      "//media/cdm/library_cdm/clear_key_cdm:clear_key_cdm_proxy",
+    ]
 
     # TODO(xhwang): Ideally media should not worry about sandbox. Find a way to
     # remove this dependency.
@@ -137,6 +143,64 @@ component("services") {
     }
   }
 }
+
+service_manifest("cdm_manifest") {
+  name = "cdm"
+  source = "cdm_manifest.json"
+}
+
+service_manifest("media_manifest") {
+  name = "media"
+  source = "media_manifest.json"
+}
+
+# Unit Tests
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "deferred_destroy_strong_binding_set_unittest.cc",
+    "media_metrics_provider_unittest.cc",
+    "mojo_audio_input_stream_unittest.cc",
+    "mojo_audio_output_stream_provider_unittest.cc",
+    "mojo_audio_output_stream_unittest.cc",
+    "mojo_jpeg_decode_accelerator_service_unittest.cc",
+    "mojo_video_encode_accelerator_service_unittest.cc",
+    "video_decode_perf_history_unittest.cc",
+    "watch_time_recorder_unittest.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//components/ukm:test_support",
+    "//media:test_support",
+    "//media/mojo:test_support",
+    "//mojo/core/embedder",
+    "//mojo/public/interfaces/bindings/tests:test_interfaces",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (enable_library_cdms) {
+    sources += [
+      "mojo_cdm_allocator_unittest.cc",
+      "mojo_cdm_file_io_unittest.cc",
+      "mojo_cdm_helper_unittest.cc",
+      "mojo_cdm_proxy_unittest.cc",
+    ]
+
+    deps += [ "//media/cdm:cdm_api" ]
+  }
+}
+
+# Service Tests
+
+# MediaService is tested by using a standalone "media" service, which runs the
+# service out-of-process. While CdmService is tested as a packaged service,
+# which runs the service in-process.
 
 service("media") {
   testonly = true
@@ -164,12 +228,17 @@ service_test("media_service_unittests") {
     "media_service_unittest.cc",
   ]
 
-  catalog = ":media_service_unittests_catalog"
+  if (enable_library_cdms) {
+    sources += [ "cdm_service_unittest.cc" ]
+  }
+
+  catalog = ":service_tests_catalog"
 
   deps = [
     ":services",
     "//base",
     "//media:test_support",
+    "//media/cdm:cdm_paths",
     "//media/mojo/clients",
     "//media/mojo/common",
     "//media/mojo/interfaces",
@@ -184,21 +253,37 @@ service_test("media_service_unittests") {
   ]
 }
 
-service_manifest("cdm_manifest") {
-  name = "cdm"
-  source = "cdm_manifest.json"
-}
-
-service_manifest("media_manifest") {
-  name = "media"
-  source = "media_manifest.json"
-}
-
-service_manifest("test_manifest") {
+service_manifest("media_service_unittest_manifest") {
   name = "media_service_unittests"
   source = "test_manifest.json"
 }
 
+catalog("media_service_unittest_catalog") {
+  testonly = true
+  embedded_services = [ ":media_service_unittest_manifest" ]
+  standalone_services = [ ":media_manifest" ]
+}
+
+service_manifest("cdm_service_unittest_manifest") {
+  name = "cdm_service_unittest"
+  source = "cdm_service_unittest_manifest.json"
+  packaged_services = [ ":cdm_manifest" ]
+}
+
+catalog("cdm_service_unittest_catalog") {
+  testonly = true
+  embedded_services = [ ":cdm_service_unittest_manifest" ]
+}
+
+catalog("service_tests_catalog") {
+  testonly = true
+  catalog_deps = [
+    ":cdm_service_unittest_catalog",
+    ":media_service_unittest_catalog",
+  ]
+}
+
+# media_pipeline_integration_unittests is out of date and disabled by default.
 service_test("media_pipeline_integration_unittests") {
   testonly = true
 
@@ -218,49 +303,7 @@ service_manifest("pipeline_test_manifest") {
   source = "pipeline_test_manifest.json"
 }
 
-catalog("media_service_unittests_catalog") {
-  embedded_services = [ ":test_manifest" ]
-  standalone_services = [ ":media_manifest" ]
-}
-
 catalog("media_pipeline_integration_unittests_catalog") {
   embedded_services = [ ":pipeline_test_manifest" ]
   standalone_services = [ ":media_manifest" ]
-}
-
-source_set("unit_tests") {
-  testonly = true
-
-  sources = [
-    "media_metrics_provider_unittest.cc",
-    "mojo_audio_input_stream_unittest.cc",
-    "mojo_audio_output_stream_provider_unittest.cc",
-    "mojo_audio_output_stream_unittest.cc",
-    "mojo_jpeg_decode_accelerator_service_unittest.cc",
-    "mojo_video_encode_accelerator_service_unittest.cc",
-    "video_decode_perf_history_unittest.cc",
-    "watch_time_recorder_unittest.cc",
-  ]
-
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//components/ukm:test_support",
-    "//media:test_support",
-    "//media/mojo:test_support",
-    "//mojo/edk/system",
-    "//services/metrics/public/cpp:ukm_builders",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-
-  if (enable_library_cdms) {
-    sources += [
-      "mojo_cdm_allocator_unittest.cc",
-      "mojo_cdm_file_io_unittest.cc",
-      "mojo_cdm_helper_unittest.cc",
-    ]
-
-    deps += [ "//media/cdm:cdm_api" ]
-  }
 }

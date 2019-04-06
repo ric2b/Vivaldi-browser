@@ -2,7 +2,7 @@
 <grit-part>
   <!-- Security summary strings -->
   <message name="IDS_PAGE_INFO_SECURE_SUMMARY" desc="A short summary phrase at the top of the Page Info bubble (which shows when you click the lock icon) that indicates that the connection to the current website is secure.">
-    Secure connection
+    Connection is secure
   </message>
   <message name="IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the connection to the current website is using mainly using a secure connection but has some insecure parts (like insecurely loaded images).">
     Your connection to this site is not fully secure
@@ -212,8 +212,8 @@
     <message name="IDS_PAGE_INFO_TYPE_JAVASCRIPT" desc="The label used for JavaScript permission controls in the Page Info popup.">
       JavaScript
     </message>
-    <message name="IDS_PAGE_INFO_TYPE_POPUPS" desc="The label used for popups permission controls in the Page Info popup.">
-      Popups
+    <message name="IDS_PAGE_INFO_TYPE_POPUPS_REDIRECTS" desc="The label used for the popup/redirect permission controls in the Page Info popup.">
+      Pop-ups and redirects
     </message>
     <message name="IDS_PAGE_INFO_TYPE_FLASH" desc="The label used for Flash permissions in the Page Info popup.">
       Flash
@@ -238,6 +238,12 @@
     </message>
     <message name="IDS_PAGE_INFO_TYPE_CLIPBOARD" desc="The label used for the clipboard permission controls in the Page Info popup.">
       Clipboard
+    </message>
+    <message name="IDS_PAGE_INFO_TYPE_SENSORS" desc="The label used for the sensor permission controls in the Page Info popup. Title case format.">
+      Motion or Light Sensors
+    </message>
+    <message name="IDS_PAGE_INFO_TYPE_USB" desc="The label used for the USB permission controls in the Page Info popup.">
+      USB devices
     </message>
     <!-- TODO(crbug.com/716303): A few permissions are missing here. -->
 
@@ -287,7 +293,10 @@
     <message name="IDS_PAGE_INFO_MENU_ITEM_BLOCK" desc="The text of the menu item of a permissions menu on the Page Info UI that sets the setting to allow.">
       Always block on this site
     </message>
-    <message name="IDS_PAGE_INFO_MENU_ITEM_DETECT_IMPORTANT_CONTENT" desc="The text of the menu item of a permissions menu on the Page Info UI that sets the setting to detect important content.">
+    <message name="IDS_PAGE_INFO_MENU_ITEM_ASK" desc="The text of the menu item of a permissions menu on the Page Info UI that sets the setting to ask.">
+      Always ask on this site
+    </message>
+     <message name="IDS_PAGE_INFO_MENU_ITEM_DETECT_IMPORTANT_CONTENT" desc="The text of the menu item of a permissions menu on the Page Info UI that sets the setting to detect important content.">
       Always detect important content on this site
     </message>
     <message name="IDS_PAGE_INFO_MENU_ITEM_ADS_BLOCK" desc="The text of the menu item of a permissions menu on the Page Info UI for the ads permission in Block mode">
@@ -301,6 +310,9 @@
     <!-- UI for device access granted to the site using the device chooser (e.g. USB, Bluetooth) -->
     <message name="IDS_PAGE_INFO_USB_DEVICE_LABEL" desc="The label used to describe a USB device that the user has granted the site permission to access.">
       <ph name="DEVICE_NAME">$1<ex>Android Phone</ex></ph>
+    </message>
+    <message name="IDS_PAGE_INFO_USB_DEVICE_SECONDARY_LABEL" desc="The label displayed underneath IDS_PAGE_INFO_USB_DEVICE_LABEL to inform the user that the device name listed is a USB device.">
+      USB device
     </message>
     <message name="IDS_PAGE_INFO_DELETE_USB_DEVICE" desc="The tooltip displayed when hovering over the button that will remove permission to access a USB device that the user previously granted to the site.">
       Revoke access
@@ -353,27 +365,36 @@
     <!-- Password Protection -->
     <if expr="not is_android">
       <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if user has reuse their google password on current website.">
-        This site may have just stolen your password
-      </message>
-      <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY_SOFTER" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if user has reuse their google password on current website.">
         Your password may be compromised
       </message>
       <if expr="_google_chrome">
         <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS" desc="A short paragraph explaining to the user that they has reuse their google password on current website.">
           You could lose access to your Google Account or experience identity theft. Chrome recommends changing your password now.
         </message>
+        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_ENTERPRISE" desc="A short paragraph explaining to the user that they have reused their password on the current website.">
+          You could lose access to your organization's account or experience identity theft. Chrome recommends changing your password now.
+        </message>
+        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_ENTERPRISE_WITH_ORG_NAME" desc="A short paragraph explaining to the user that they have reused their password on the current website.">
+          You could lose access to your <ph name="ORG_NAME">$1<ex>Google</ex></ph> account or experience identity theft. Chrome recommends changing your password now.
+        </message>
       </if>
       <if expr="not _google_chrome">
         <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS" desc="A short paragraph explaining to the user that they has reuse their google password on current website.">
           You could lose access to your Google Account or experience identity theft. Chromium recommends changing your password now.
         </message>
+        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_ENTERPRISE" desc="A short paragraph explaining to the user that they have reused their password on the current website.">
+          You could lose access to your organization's account or experience identity theft. Chromium recommends changing your password now.
+        </message>
+        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_ENTERPRISE_WITH_ORG_NAME" desc="A short paragraph explaining to the user that they have reused their password on the current website.">
+          You could lose access to your <ph name="ORG_NAME">$1<ex>Google</ex></ph> account or experience identity theft. Chromium recommends changing your password now.
+        </message>
       </if>
 
       <if expr="use_titlecase">
-        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON" desc="The string used in the page info change password button. Title case format.">
+        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON" desc="In Title Case: The string used in the page info change password button.">
           Help Me Fix This
         </message>
-        <message name="IDS_PAGE_INFO_IGNORE_PASSWORD_WARNING_BUTTON" desc="The string used in the page info ignore password warning button. Title case format.">
+        <message name="IDS_PAGE_INFO_IGNORE_PASSWORD_WARNING_BUTTON" desc="In Title Case: The string used in the page info ignore password warning button.">
           Ignore
         </message>
       </if>

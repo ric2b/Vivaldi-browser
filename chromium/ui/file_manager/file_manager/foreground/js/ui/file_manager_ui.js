@@ -119,9 +119,16 @@ function FileManagerUI(providersModel, element, launchParam) {
       providersModel, this.element, launchParam.suggestAppsDialogState);
 
   /**
+   * Dialog for installing .deb files
+   * @type {!cr.filebrowser.InstallLinuxPackageDialog}
+   * @const
+   */
+  this.installLinuxPackageDialog =
+      new cr.filebrowser.InstallLinuxPackageDialog(this.element);
+
+  /**
    * The container element of the dialog.
    * @type {!HTMLElement}
-   * @private
    */
   this.dialogContainer =
       queryRequiredElement('.dialog-container', this.element);
@@ -146,6 +153,14 @@ function FileManagerUI(providersModel, element, launchParam) {
    * @const
    */
   this.toolbar = queryRequiredElement('.dialog-header', this.element);
+
+  /**
+   * The actionbar which contains buttons to perform actions on selected
+   * file(s).
+   * @type {!HTMLElement}
+   * @const
+   */
+  this.actionbar = queryRequiredElement('#action-bar', this.toolbar);
 
   /**
    * The navigation list.
@@ -189,7 +204,7 @@ function FileManagerUI(providersModel, element, launchParam) {
 
   /**
    * Ripple effect of sort button.
-   * @private {!FilesToggleRipple}
+   * @type {!FilesToggleRipple}
    * @const
    */
   this.sortButtonToggleRipple =
@@ -203,6 +218,14 @@ function FileManagerUI(providersModel, element, launchParam) {
    */
   this.gearButton = util.queryDecoratedElement(
       '#gear-button', cr.ui.MenuButton);
+
+  /**
+   * The button to add new service (file system providers).
+   * @type {!cr.ui.MenuButton}
+   * @const
+   */
+  this.newServiceButton =
+      util.queryDecoratedElement('#new-service-button', cr.ui.MenuButton);
 
   /**
    * Ripple effect of gear button.
@@ -542,7 +565,7 @@ FileManagerUI.prototype.decorateSplitter_ = function(splitterElement,
     }
   };
 
-  customSplitter.decorate(splitterElement);
+  /** @type Object */ (customSplitter).decorate(splitterElement);
   splitterElement.resizeNextElement = !!opt_resizeNextElement;
 };
 

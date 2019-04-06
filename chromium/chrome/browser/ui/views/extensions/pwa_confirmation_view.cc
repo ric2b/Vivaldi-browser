@@ -76,14 +76,15 @@ void PWAConfirmationView::WindowClosing() {
 }
 
 bool PWAConfirmationView::Accept() {
-  base::ResetAndReturn(&callback_).Run(true, web_app_info_);
+  std::move(callback_).Run(true, web_app_info_);
   return true;
 }
 
 base::string16 PWAConfirmationView::GetDialogButtonLabel(
     ui::DialogButton button) const {
-  return l10n_util::GetStringUTF16(button == ui::DIALOG_BUTTON_OK ? IDS_ADD
-                                                                  : IDS_CANCEL);
+  return l10n_util::GetStringUTF16(button == ui::DIALOG_BUTTON_OK
+                                       ? IDS_INSTALL_PWA_BUTTON_LABEL
+                                       : IDS_CANCEL);
 }
 
 namespace {

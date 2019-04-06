@@ -8,6 +8,7 @@
         "AutoConnect":false,
         "Host":"vpn.my.domain.com",
         "OpenVPN":{
+          "OTP":"ignored OTP",
           "Password":"some password",
           "Port":443,
           "Proto":"udp",

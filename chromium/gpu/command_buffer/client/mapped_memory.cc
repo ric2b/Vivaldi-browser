@@ -53,7 +53,7 @@ MappedMemoryManager::MappedMemoryManager(CommandBufferHelper* helper,
 }
 
 MappedMemoryManager::~MappedMemoryManager() {
-  helper_->FlushLazy();
+  helper_->OrderingBarrier();
   CommandBuffer* cmd_buf = helper_->command_buffer();
   for (auto& chunk : chunks_) {
     cmd_buf->DestroyTransferBuffer(chunk->shm_id());
@@ -152,7 +152,7 @@ void MappedMemoryManager::FreeUnused() {
     chunk->FreeUnused();
     if (chunk->bytes_in_use() == 0u) {
       if (chunk->InUseOrFreePending())
-        helper_->FlushLazy();
+        helper_->OrderingBarrier();
       cmd_buf->DestroyTransferBuffer(chunk->shm_id());
       allocated_memory_ -= chunk->GetSize();
       iter = chunks_.erase(iter);
@@ -192,8 +192,7 @@ bool MappedMemoryManager::OnMemoryDump(
     dump->AddScalar("free_size", MemoryAllocatorDump::kUnitsBytes,
                     chunk->GetFreeSize());
 
-    auto shared_memory_guid =
-        chunk->shared_memory()->backing()->shared_memory_handle().GetGUID();
+    auto shared_memory_guid = chunk->shared_memory()->backing()->GetGUID();
     const int kImportance = 2;
     if (!shared_memory_guid.is_empty()) {
       pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), shared_memory_guid,

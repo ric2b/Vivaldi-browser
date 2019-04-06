@@ -17,12 +17,22 @@
 chrome.passwordsPrivate = {};
 
 /**
+ * @enum {string}
+ */
+chrome.passwordsPrivate.ExportProgressStatus = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED_CANCELLED: 'FAILED_CANCELLED',
+  FAILED_WRITE_FAILED: 'FAILED_WRITE_FAILED',
+};
+
+/**
  * @typedef {{
  *   origin: string,
  *   shown: string,
  *   link: string
  * }}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#type-UrlCollection
  */
 chrome.passwordsPrivate.UrlCollection;
 
@@ -31,7 +41,6 @@ chrome.passwordsPrivate.UrlCollection;
  *   urls: !chrome.passwordsPrivate.UrlCollection,
  *   username: string
  * }}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#type-LoginPair
  */
 chrome.passwordsPrivate.LoginPair;
 
@@ -42,7 +51,6 @@ chrome.passwordsPrivate.LoginPair;
  *   federationText: (string|undefined),
  *   index: number
  * }}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#type-PasswordUiEntry
  */
 chrome.passwordsPrivate.PasswordUiEntry;
 
@@ -51,7 +59,6 @@ chrome.passwordsPrivate.PasswordUiEntry;
  *   index: number,
  *   plaintextPassword: string
  * }}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#type-PlaintextPasswordEventParameters
  */
 chrome.passwordsPrivate.PlaintextPasswordEventParameters;
 
@@ -60,15 +67,21 @@ chrome.passwordsPrivate.PlaintextPasswordEventParameters;
  *   urls: !chrome.passwordsPrivate.UrlCollection,
  *   index: number
  * }}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#type-ExceptionEntry
  */
 chrome.passwordsPrivate.ExceptionEntry;
+
+/**
+ * @typedef {{
+ *   status: !chrome.passwordsPrivate.ExportProgressStatus,
+ *   message: (string|undefined),
+ * }}
+ */
+chrome.passwordsPrivate.PasswordExportProgress;
 
 /**
  * Removes the saved password corresponding to |loginPair|. If no saved password
  * for this pair exists, this function is a no-op.
  * @param {number} index The index for the password entry being removed.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-removeSavedPassword
  */
 chrome.passwordsPrivate.removeSavedPassword = function(index) {};
 
@@ -76,13 +89,11 @@ chrome.passwordsPrivate.removeSavedPassword = function(index) {};
  * Removes the saved password exception corresponding to |exceptionUrl|. If no
  * exception with this URL exists, this function is a no-op.
  * @param {number} index The index for the exception url entry being removed.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-removePasswordException
  */
 chrome.passwordsPrivate.removePasswordException = function(index) {};
 
 /**
  * Undoes the last removal of a saved password or exception.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-undoRemoveSavedPasswordOrException
  */
 chrome.passwordsPrivate.undoRemoveSavedPasswordOrException = function() {};
 
@@ -93,7 +104,6 @@ chrome.passwordsPrivate.undoRemoveSavedPasswordOrException = function() {};
  * onPlaintextPasswordRetrieved event. TODO(hcarmona): Investigate using a
  * callback for consistency.
  * @param {number} index The index for the password entry being being retrieved.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-requestPlaintextPassword
  */
 chrome.passwordsPrivate.requestPlaintextPassword = function(index) {};
 
@@ -101,7 +111,6 @@ chrome.passwordsPrivate.requestPlaintextPassword = function(index) {};
  * Returns the list of saved passwords.
  * @param {function(!Array<!chrome.passwordsPrivate.PasswordUiEntry>):void}
  *     callback Called with the list of saved passwords.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-getSavedPasswordList
  */
 chrome.passwordsPrivate.getSavedPasswordList = function(callback) {};
 
@@ -109,27 +118,39 @@ chrome.passwordsPrivate.getSavedPasswordList = function(callback) {};
  * Returns the list of password exceptions.
  * @param {function(!Array<!chrome.passwordsPrivate.ExceptionEntry>):void}
  *     callback Called with the list of password exceptions.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-getPasswordExceptionList
  */
 chrome.passwordsPrivate.getPasswordExceptionList = function(callback) {};
 
 /**
  * Triggers the Password Manager password import functionality.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-importPasswords
  */
 chrome.passwordsPrivate.importPasswords = function() {};
 
 /**
  * Triggers the Password Manager password export functionality.
- * @see https://developer.chrome.com/extensions/passwordsPrivate#method-exportPasswords
+ * @param {function():void}
+ *     callback Called with no error, if the new export request was accepted and
+ *         started. If rejected, <code>chrome.runtime.lastError</code> will be
+ *         set to 'in-progress'.
  */
-chrome.passwordsPrivate.exportPasswords = function() {};
+chrome.passwordsPrivate.exportPasswords = function(callback) {};
+
+/**
+ * Triggers the cancelling of a password export flow.
+ */
+chrome.passwordsPrivate.cancelExportPasswords = function() {};
+
+/**
+ * Triggers the Password Manager password export status query functionality.
+ * @param {function(!chrome.passwordsPrivate.ExportProgressStatus):void}
+ *     callback Called with the status of the current export.
+ */
+chrome.passwordsPrivate.requestExportProgressStatus = function(callback) {};
 
 /**
  * Fired when the saved passwords list has changed, meaning that an entry has
  * been added or removed.
  * @type {!ChromeEvent}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#event-onSavedPasswordsListChanged
  */
 chrome.passwordsPrivate.onSavedPasswordsListChanged;
 
@@ -137,7 +158,6 @@ chrome.passwordsPrivate.onSavedPasswordsListChanged;
  * Fired when the password exceptions list has changed, meaning that an entry
  * has been added or removed.
  * @type {!ChromeEvent}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#event-onPasswordExceptionsListChanged
  */
 chrome.passwordsPrivate.onPasswordExceptionsListChanged;
 
@@ -145,6 +165,12 @@ chrome.passwordsPrivate.onPasswordExceptionsListChanged;
  * Fired when a plaintext password has been fetched in response to a call to
  * chrome.passwordsPrivate.requestPlaintextPassword().
  * @type {!ChromeEvent}
- * @see https://developer.chrome.com/extensions/passwordsPrivate#event-onPlaintextPasswordRetrieved
  */
 chrome.passwordsPrivate.onPlaintextPasswordRetrieved;
+
+
+/**
+ * Fired when status of the export has progressed.
+ * @type {!ChromeEvent}
+ */
+chrome.passwordsPrivate.onPasswordsFileExportProgress;

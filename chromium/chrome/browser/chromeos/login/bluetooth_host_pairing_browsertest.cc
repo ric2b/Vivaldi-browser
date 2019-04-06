@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "components/pairing/bluetooth_host_pairing_controller.h"
 #include "components/pairing/bluetooth_pairing_constants.h"
 #include "components/pairing/shark_connection_listener.h"
@@ -19,8 +18,8 @@
 #include "device/bluetooth/dbus/fake_bluetooth_adapter_client.h"
 #include "device/bluetooth/dbus/fake_bluetooth_device_client.h"
 #include "services/device/public/cpp/hid/fake_input_service_linux.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/input_service.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/input_service.mojom.h"
 #include "services/service_manager/public/cpp/service_context.h"
 
 namespace chromeos {
@@ -94,7 +93,11 @@ class BluetoothHostPairingNoInputTest : public OobeBaseTest {
         static_cast<bluez::FakeBluetoothDeviceClient*>(
             bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient());
   }
-  ~BluetoothHostPairingNoInputTest() override {}
+
+  ~BluetoothHostPairingNoInputTest() override {
+    service_manager::ServiceContext::ClearGlobalBindersForTesting(
+        device::mojom::kServiceName);
+  }
 
   // OobeBaseTest override:
   void SetUpOnMainThread() override {
@@ -166,7 +169,6 @@ class BluetoothHostPairingNoInputTest : public OobeBaseTest {
   pairing_chromeos::BluetoothHostPairingController* controller_ = nullptr;
 
   bluez::FakeBluetoothDeviceClient* fake_bluetooth_device_client_ = nullptr;
-  base::MessageLoopForUI message_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(BluetoothHostPairingNoInputTest);
 };
@@ -239,7 +241,7 @@ IN_PROC_BROWSER_TEST_F(BluetoothHostPairingNoInputTest, ForgetDevice) {
 }
 
 // This is the class to simulate the OOBE process for devices that have
-// sufficient input, i.e., the first screen of OOBE is the network screen.
+// sufficient input, i.e., the first screen of OOBE is the welcome screen.
 // The device will not put itself in Bluetooth discoverable mode until the user
 // manually trigger it using the proper accelerator.
 class BluetoothHostPairingWithInputTest
@@ -259,7 +261,7 @@ class BluetoothHostPairingWithInputTest
 // the Bluetooth is disabled by default.
 IN_PROC_BROWSER_TEST_F(BluetoothHostPairingWithInputTest,
                        BluetoothDisableByDefault) {
-  OobeScreenWaiter(OobeScreen::SCREEN_OOBE_NETWORK).Wait();
+  OobeScreenWaiter(OobeScreen::SCREEN_OOBE_WELCOME).Wait();
   EXPECT_FALSE(controller());
   EXPECT_FALSE(bluetooth_adapter());
 }

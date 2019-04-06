@@ -17,8 +17,12 @@
 #include "ui/accessibility/ax_tree.h"
 #include "v8/include/v8.h"
 
-struct ExtensionMsg_AccessibilityEventParams;
+struct ExtensionMsg_AccessibilityEventBundleParams;
 struct ExtensionMsg_AccessibilityLocationChangeParams;
+
+namespace ui {
+struct AXEvent;
+}
 
 namespace extensions {
 
@@ -37,19 +41,34 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
  public:
   AutomationInternalCustomBindings(ScriptContext* context,
                                    ExtensionBindingsSystem* bindings_system);
-
   ~AutomationInternalCustomBindings() override;
+
+  // ObjectBackedNativeHandler:
+  void AddRoutes() override;
 
   void OnMessageReceived(const IPC::Message& message);
 
-  AutomationAXTreeWrapper* GetAutomationAXTreeWrapperFromTreeID(int tree_id);
+  AutomationAXTreeWrapper* GetAutomationAXTreeWrapperFromTreeID(
+      int tree_id) const;
 
   // Given a tree (|in_out_tree_wrapper|) and a node, returns the parent.
   // If |node| is the root of its tree, the return value will be the host
   // node of the parent tree and |in_out_tree_wrapper| will be updated to
   // point to that parent tree.
   ui::AXNode* GetParent(ui::AXNode* node,
-                        AutomationAXTreeWrapper** in_out_tree_wrapper);
+                        AutomationAXTreeWrapper** in_out_tree_wrapper) const;
+
+  // Gets the root of a node's child tree and adjusts incoming arguments
+  // accordingly. Returns false if no adjustments were made.
+  bool GetRootOfChildTree(ui::AXNode** in_out_node,
+                          AutomationAXTreeWrapper** in_out_tree_wrapper) const;
+
+  ui::AXNode* GetNextInTreeOrder(
+      ui::AXNode* start,
+      AutomationAXTreeWrapper** in_out_tree_wrapper) const;
+  ui::AXNode* GetPreviousInTreeOrder(
+      ui::AXNode* start,
+      AutomationAXTreeWrapper** in_out_tree_wrapper) const;
 
   ScriptContext* context() const {
     return ObjectBackedNativeHandler::context();
@@ -61,8 +80,9 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
   void SendTreeChangeEvent(api::automation::TreeChangeType change_type,
                            ui::AXTree* tree,
                            ui::AXNode* node);
-  void SendAutomationEvent(const ExtensionMsg_AccessibilityEventParams& params,
-                           int target_id,
+  void SendAutomationEvent(int tree_id,
+                           const gfx::Point& mouse_location,
+                           ui::AXEvent& event,
                            api::automation::EventType event_type);
 
  private:
@@ -112,15 +132,15 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
 
   void RouteNodeIDFunction(
       const std::string& name,
-      void (*callback)(v8::Isolate* isolate,
-                       v8::ReturnValue<v8::Value> result,
-                       AutomationAXTreeWrapper* tree_wrapper,
-                       ui::AXNode* node));
-
+      std::function<void(v8::Isolate* isolate,
+                         v8::ReturnValue<v8::Value> result,
+                         AutomationAXTreeWrapper* tree_wrapper,
+                         ui::AXNode* node)> callback);
   void RouteNodeIDPlusAttributeFunction(
       const std::string& name,
       void (*callback)(v8::Isolate* isolate,
                        v8::ReturnValue<v8::Value> result,
+                       ui::AXTree* tree,
                        ui::AXNode* node,
                        const std::string& attribute_name));
   void RouteNodeIDPlusRangeFunction(
@@ -131,6 +151,14 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
                        ui::AXNode* node,
                        int start,
                        int end));
+  void RouteNodeIDPlusStringBoolFunction(
+      const std::string& name,
+      std::function<void(v8::Isolate* isolate,
+                         v8::ReturnValue<v8::Value> result,
+                         AutomationAXTreeWrapper* tree_wrapper,
+                         ui::AXNode* node,
+                         const std::string& strVal,
+                         bool boolVal)> callback);
 
   //
   // Access the cached accessibility trees and properties of their nodes.
@@ -152,14 +180,15 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
   //
 
   // Handle accessibility events from the browser process.
-  void OnAccessibilityEvent(const ExtensionMsg_AccessibilityEventParams& params,
-                            bool is_active_profile);
+  void OnAccessibilityEvents(
+      const ExtensionMsg_AccessibilityEventBundleParams& events,
+      bool is_active_profile);
   void OnAccessibilityLocationChange(
       const ExtensionMsg_AccessibilityLocationChangeParams& params);
 
   void UpdateOverallTreeChangeObserverFilter();
 
-  void SendChildTreeIDEvent(ui::AXTree* tree, ui::AXNode* node);
+  void SendChildTreeIDEvent(int child_tree_id);
 
   std::map<int, std::unique_ptr<AutomationAXTreeWrapper>>
       tree_id_to_tree_wrapper_map_;

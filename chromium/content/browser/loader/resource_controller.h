@@ -5,7 +5,12 @@
 #ifndef CONTENT_BROWSER_LOADER_RESOURCE_CONTROLLER_H_
 #define CONTENT_BROWSER_LOADER_RESOURCE_CONTROLLER_H_
 
+#include "base/optional.h"
 #include "content/common/content_export.h"
+
+namespace net {
+class HttpRequestHeaders;
+};
 
 namespace content {
 
@@ -24,12 +29,13 @@ class CONTENT_EXPORT ResourceController {
   // Resumes the request. May only be called if the request was previously
   // deferred. Guaranteed not to call back into the ResourceHandler, or destroy
   // it, synchronously.
-  /* NOTE(yngve): Risk of infinite loop, should only be a problem for us,
-   * if we add new subclasses, chromium will still use the abstract definition.
-   */
-  virtual void Resume();
-  virtual void ResumeParam(bool open_when_done,
-                      bool ask_for_target=false);
+  virtual void Resume() = 0;
+
+  // Similar to |Resume()| but can only be called if the request was previously
+  // redirected. |modified_request_headers| are changes applied to the request
+  // headers after updating them for the redirect.
+  virtual void ResumeForRedirect(const base::Optional<net::HttpRequestHeaders>&
+                                     modified_request_headers) = 0;
 };
 
 }  // namespace content

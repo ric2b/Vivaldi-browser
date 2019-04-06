@@ -27,10 +27,6 @@ namespace base {
 class SequencedTaskRunner;
 }  // namespace base
 
-namespace google_apis {
-class AboutResource;
-}  // namespace google_apis
-
 namespace drive {
 
 class EventLogger;
@@ -39,11 +35,12 @@ class ResourceEntry;
 
 namespace internal {
 
-class AboutResourceLoader;
+class RootFolderIdLoader;
 class ChangeListLoaderObserver;
 class DirectoryFetchInfo;
 class LoaderController;
 class ResourceMetadata;
+class StartPageTokenLoader;
 
 // DirectoryLoader is used to load directory contents.
 class DirectoryLoader {
@@ -52,8 +49,10 @@ class DirectoryLoader {
                   base::SequencedTaskRunner* blocking_task_runner,
                   ResourceMetadata* resource_metadata,
                   JobScheduler* scheduler,
-                  AboutResourceLoader* about_resource_loader,
-                  LoaderController* apply_task_controller);
+                  RootFolderIdLoader* root_folder_id_loader,
+                  StartPageTokenLoader* start_page_token_loader,
+                  LoaderController* apply_task_controller,
+                  const base::FilePath& root_entry_path);
   ~DirectoryLoader();
 
   // Adds and removes the observer.
@@ -84,15 +83,22 @@ class DirectoryLoader {
       const ReadDirectoryEntriesCallback& entries_callback,
       const FileOperationCallback& completion_callback,
       FileError error);
-  void ReadDirectoryAfterGetAboutResource(
+  void ReadDirectoryAfterGetRootFolderId(
       const std::string& local_id,
+      FileError error,
+      base::Optional<std::string> root_folder_id);
+  void ReadDirectoryAfterGetStartPageToken(
+      const std::string& local_id,
+      const std::string& root_folder_id,
       google_apis::DriveApiErrorCode status,
-      std::unique_ptr<google_apis::AboutResource> about_resource);
+      std::unique_ptr<google_apis::StartPageToken> start_page_token);
+
   void ReadDirectoryAfterCheckLocalState(
-      std::unique_ptr<google_apis::AboutResource> about_resource,
+      const std::string& remote_start_page_token,
       const std::string& local_id,
+      const std::string& root_folder_id,
       const ResourceEntry* entry,
-      const int64_t* local_changestamp,
+      const std::string* local_start_page_token,
       FileError error);
 
   // Part of ReadDirectory().
@@ -110,7 +116,8 @@ class DirectoryLoader {
   // ================= Implementation for directory loading =================
   // Loads the directory contents from server, and updates the local metadata.
   // Runs |callback| when it is finished.
-  void LoadDirectoryFromServer(const DirectoryFetchInfo& directory_fetch_info);
+  void LoadDirectoryFromServer(const DirectoryFetchInfo& directory_fetch_info,
+                               const std::string& root_folder_id);
 
   // Part of LoadDirectoryFromServer() for a normal directory.
   void LoadDirectoryFromServerAfterLoad(
@@ -119,7 +126,7 @@ class DirectoryLoader {
       FileError error);
 
   // Part of LoadDirectoryFromServer().
-  void LoadDirectoryFromServerAfterUpdateChangestamp(
+  void LoadDirectoryFromServerAfterUpdateStartPageToken(
       const DirectoryFetchInfo& directory_fetch_info,
       const base::FilePath* directory_path,
       FileError error);
@@ -128,7 +135,8 @@ class DirectoryLoader {
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
   ResourceMetadata* resource_metadata_;  // Not owned.
   JobScheduler* scheduler_;  // Not owned.
-  AboutResourceLoader* about_resource_loader_;  // Not owned.
+  RootFolderIdLoader* root_folder_id_loader_;      // Not owned.
+  StartPageTokenLoader* start_page_token_loader_;  // Not owned
   LoaderController* loader_controller_;  // Not owned.
   base::ObserverList<ChangeListLoaderObserver> observers_;
   typedef std::map<std::string, std::vector<ReadDirectoryCallbackState> >
@@ -138,7 +146,12 @@ class DirectoryLoader {
   // Set of the running feed fetcher for the fast fetch.
   std::set<std::unique_ptr<FeedFetcher>> fast_fetch_feed_fetcher_set_;
 
-  base::ThreadChecker thread_checker_;
+  // The root entry path for changes being loaded by this directory loader.
+  // Can be a team drive root entry or for the users default corpus will be the
+  // drive root entry.
+  const base::FilePath root_entry_path_;
+
+  THREAD_CHECKER(thread_checker_);
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

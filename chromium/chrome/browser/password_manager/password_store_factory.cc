@@ -9,7 +9,6 @@
 
 #include "base/command_line.h"
 #include "base/environment.h"
-#include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "build/build_config.h"
@@ -24,8 +23,8 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/os_crypt/os_crypt_switches.h"
-#include "components/password_manager/core/browser/http_data_cleaner.h"
 #include "components/password_manager/core/browser/login_database.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_reuse_defines.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_default.h"
@@ -33,6 +32,10 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/signin_manager.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/password_manager/password_manager_util_win.h"
@@ -67,6 +70,15 @@ const LocalProfileId kInvalidLocalProfileId =
     static_cast<LocalProfileId>(0);
 #endif
 
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+std::string GetSyncUsername(Profile* profile) {
+  SigninManagerBase* signin_manager =
+      SigninManagerFactory::GetForProfileIfExists(profile);
+  return signin_manager ? signin_manager->GetAuthenticatedAccountInfo().email
+                        : std::string();
+}
+#endif
+
 }  // namespace
 
 // static
@@ -97,11 +109,11 @@ void PasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged(
     return;
   syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
-  net::URLRequestContextGetter* request_context_getter =
-      profile->GetRequestContext();
 
   password_manager::ToggleAffiliationBasedMatchingBasedOnPasswordSyncedState(
-      password_store.get(), sync_service, request_context_getter,
+      password_store.get(), sync_service,
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess(),
       profile->GetPath());
 }
 
@@ -244,6 +256,7 @@ PasswordStoreFactory::BuildServiceInstanceFor(
         " for more information about password storage options.";
   }
 
+  login_db->disable_encryption();
   ps = new PasswordStoreX(std::move(login_db), std::move(backend));
   RecordBackendStatistics(desktop_env, store_type, used_backend);
 #elif defined(USE_OZONE)
@@ -260,14 +273,20 @@ PasswordStoreFactory::BuildServiceInstanceFor(
     return nullptr;
   }
 
-  password_manager::DelayCleanObsoleteHttpDataForPasswordStoreAndPrefs(
-      ps.get(), profile->GetPrefs(),
-      base::WrapRefCounted(profile->GetRequestContext()));
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  // Prepare password hash data for reuse detection.
+  ps->PreparePasswordHashData(GetSyncUsername(profile));
+#endif
+
+  // TODO(https://crbug.com/817754): remove the code once majority of the users
+  // executed it.
+  password_manager_util::CleanUserDataInBlacklistedCredentials(
+      ps.get(), profile->GetPrefs(), 60);
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   std::unique_ptr<password_manager::PasswordStoreSigninNotifier> notifier =
-      base::MakeUnique<password_manager::PasswordStoreSigninNotifierImpl>(
+      std::make_unique<password_manager::PasswordStoreSigninNotifierImpl>(
           profile);
   ps->SetPasswordStoreSigninNotifier(std::move(notifier));
 #endif

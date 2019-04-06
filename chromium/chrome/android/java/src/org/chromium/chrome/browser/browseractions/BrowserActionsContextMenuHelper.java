@@ -16,6 +16,7 @@ import android.content.res.Resources;
 import android.content.res.Resources.NotFoundException;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Build;
 import android.support.annotation.IntDef;
 import android.support.customtabs.browseractions.BrowserActionItem;
 import android.support.customtabs.browseractions.BrowserActionsIntent;
@@ -33,7 +34,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.contextmenu.ChromeContextMenuItem;
@@ -83,18 +84,22 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
      * Note: these values must match the BrowserActionsMenuOption enum in enums.xml.
      * And the values are persisted to logs so they cannot be renumbered or reused.
      */
-    @IntDef({ACTION_OPEN_IN_NEW_CHROME_TAB, ACTION_OPEN_IN_INCOGNITO_TAB, ACTION_DOWNLOAD_PAGE,
-            ACTION_COPY_LINK, ACTION_SHARE, ACTION_APP_PROVIDED})
+    @IntDef({BrowserActionsActionId.OPEN_IN_NEW_CHROME_TAB,
+            BrowserActionsActionId.OPEN_IN_INCOGNITO_TAB, BrowserActionsActionId.DOWNLOAD_PAGE,
+            BrowserActionsActionId.COPY_LINK, BrowserActionsActionId.SHARE,
+            BrowserActionsActionId.APP_PROVIDED})
     @Retention(RetentionPolicy.SOURCE)
-    public @interface BrowserActionsActionId {}
-    private static final int ACTION_OPEN_IN_NEW_CHROME_TAB = 0;
-    private static final int ACTION_OPEN_IN_INCOGNITO_TAB = 1;
-    private static final int ACTION_DOWNLOAD_PAGE = 2;
-    private static final int ACTION_COPY_LINK = 3;
-    private static final int ACTION_SHARE = 4;
-    // Actions for selecting custom items.
-    private static final int ACTION_APP_PROVIDED = 5;
-    private static final int NUM_ACTIONS = 6;
+    private @interface BrowserActionsActionId {
+        int OPEN_IN_NEW_CHROME_TAB = 0;
+        int OPEN_IN_INCOGNITO_TAB = 1;
+        int DOWNLOAD_PAGE = 2;
+        int COPY_LINK = 3;
+        int SHARE = 4;
+        // Actions for selecting custom items.
+        int APP_PROVIDED = 5;
+
+        int NUM_ENTRIES = 6;
+    }
 
     static final List<Integer> CUSTOM_BROWSER_ACTIONS_ID_GROUP =
             Arrays.asList(R.id.browser_actions_custom_item_one,
@@ -119,6 +124,7 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
     private final Runnable mOnMenuShownListener;
     private final Callback<Boolean> mOnShareClickedRunnable;
     private final PendingIntent mOnBrowserActionSelectedCallback;
+    private final EnumeratedHistogramSample mActionHistogram;
 
     private final List<Pair<Integer, List<ContextMenuItem>>> mItems;
 
@@ -127,6 +133,7 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
     private BrowserActionsTestDelegate mTestDelegate;
     private int mPendingItemId;
     private boolean mIsNativeInitialized;
+    private boolean mShouldFinishActivity;
 
     public BrowserActionsContextMenuHelper(Activity activity, ContextMenuParams params,
             List<BrowserActionItem> customItems, String sourcePackageName,
@@ -134,6 +141,8 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
         mActivity = activity;
         mCurrentContextMenuParams = params;
         mOnMenuShownListener = listener;
+        mShouldFinishActivity = true;
+
         mOnMenuShown = new Runnable() {
             @Override
             public void run() {
@@ -146,7 +155,7 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
         mOnMenuClosed = new Runnable() {
             @Override
             public void run() {
-                if (mPendingItemId == 0) {
+                if (mPendingItemId == 0 && mShouldFinishActivity) {
                     mActivity.finish();
                 }
             }
@@ -154,13 +163,13 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
         mItemSelectedCallback = new Callback<Integer>() {
             @Override
             public void onResult(Integer result) {
-                onItemSelected(result);
+                onItemSelected(result, true);
             }
         };
         mOnShareClickedRunnable = new Callback<Boolean>() {
             @Override
             public void onResult(Boolean isShareLink) {
-                mMenuItemDelegate.share(true, mCurrentContextMenuParams.getLinkUrl());
+                mMenuItemDelegate.share(true, mCurrentContextMenuParams.getLinkUrl(), false);
             }
         };
         ShareContextMenuItem shareItem = new ShareContextMenuItem(R.drawable.ic_share_white_24dp,
@@ -179,6 +188,8 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
         mMenuItemDelegate = new BrowserActionsContextMenuItemDelegate(mActivity, sourcePackageName);
         mOnBrowserActionSelectedCallback = onBrowserActionSelectedCallback;
         mProgressDialog = new ProgressDialog(mActivity);
+        mActionHistogram = new EnumeratedHistogramSample(
+                "BrowserActions.SelectedOption", BrowserActionsActionId.NUM_ENTRIES);
 
         mItems = buildContextMenuItems(customItems, sourcePackageName);
     }
@@ -241,53 +252,66 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
                     }
                 }
             }
-            items.add(
-                    new BrowserActionsCustomContextMenuItem(CUSTOM_BROWSER_ACTIONS_ID_GROUP.get(i),
-                            customItems.get(i).getTitle(), drawable));
+            items.add(new BrowserActionsCustomContextMenuItem(
+                    CUSTOM_BROWSER_ACTIONS_ID_GROUP.get(i), customItems.get(i).getTitle(), drawable,
+                    customItems.get(i).getIconUri()));
             mCustomItemActionMap.put(
                     CUSTOM_BROWSER_ACTIONS_ID_GROUP.get(i), customItems.get(i).getAction());
         }
     }
 
-    boolean onItemSelected(int itemId) {
+    boolean onItemSelected(int itemId, boolean recordMetrics) {
         if (itemId == R.id.browser_actions_open_in_background) {
             if (mIsNativeInitialized) {
-                recordBrowserActionsSelection(ACTION_OPEN_IN_NEW_CHROME_TAB);
                 handleOpenInBackground();
             } else {
                 mPendingItemId = itemId;
                 waitNativeInitialized();
             }
         } else if (itemId == R.id.browser_actions_open_in_incognito_tab) {
-            recordBrowserActionsSelection(ACTION_OPEN_IN_INCOGNITO_TAB);
             mMenuItemDelegate.onOpenInIncognitoTab(mCurrentContextMenuParams.getLinkUrl());
             notifyBrowserActionSelected(BrowserActionsIntent.ITEM_OPEN_IN_INCOGNITO);
         } else if (itemId == R.id.browser_actions_save_link_as) {
             if (mIsNativeInitialized) {
-                recordBrowserActionsSelection(ACTION_DOWNLOAD_PAGE);
                 handleDownload();
             } else {
                 mPendingItemId = itemId;
                 waitNativeInitialized();
             }
         } else if (itemId == R.id.browser_actions_copy_address) {
-            recordBrowserActionsSelection(ACTION_COPY_LINK);
             mMenuItemDelegate.onSaveToClipboard(mCurrentContextMenuParams.getLinkUrl());
             notifyBrowserActionSelected(BrowserActionsIntent.ITEM_COPY);
         } else if (itemId == R.id.browser_actions_share) {
-            recordBrowserActionsSelection(ACTION_SHARE);
-            mMenuItemDelegate.share(false, mCurrentContextMenuParams.getLinkUrl());
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
+                mShouldFinishActivity = false;
+            }
+            mMenuItemDelegate.share(
+                    false, mCurrentContextMenuParams.getLinkUrl(), !mShouldFinishActivity);
             notifyBrowserActionSelected(BrowserActionsIntent.ITEM_SHARE);
         } else if (mCustomItemActionMap.indexOfKey(itemId) >= 0) {
-            recordBrowserActionsSelection(ACTION_APP_PROVIDED);
             mMenuItemDelegate.onCustomItemSelected(mCustomItemActionMap.get(itemId));
         }
+        if (recordMetrics) recordBrowserActionsSelection(itemId);
         return true;
     }
 
-    private void recordBrowserActionsSelection(@BrowserActionsActionId int itemId) {
-        RecordHistogram.recordEnumeratedHistogram(
-                "BrowserActions.SelectedOption", itemId, NUM_ACTIONS);
+    private void recordBrowserActionsSelection(int itemId) {
+        @BrowserActionsActionId
+        final int actionId;
+        if (itemId == R.id.browser_actions_open_in_background) {
+            actionId = BrowserActionsActionId.OPEN_IN_NEW_CHROME_TAB;
+        } else if (itemId == R.id.browser_actions_open_in_incognito_tab) {
+            actionId = BrowserActionsActionId.OPEN_IN_INCOGNITO_TAB;
+        } else if (itemId == R.id.browser_actions_save_link_as) {
+            actionId = BrowserActionsActionId.DOWNLOAD_PAGE;
+        } else if (itemId == R.id.browser_actions_copy_address) {
+            actionId = BrowserActionsActionId.COPY_LINK;
+        } else if (itemId == R.id.browser_actions_share) {
+            actionId = BrowserActionsActionId.SHARE;
+        } else {
+            actionId = BrowserActionsActionId.APP_PROVIDED;
+        }
+        mActionHistogram.record(actionId);
     }
 
     private void notifyBrowserActionSelected(int menuId) {
@@ -365,9 +389,9 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
         }
         if (mPendingItemId != 0) {
             dismissProgressDialog();
-            onItemSelected(mPendingItemId);
+            onItemSelected(mPendingItemId, false);
             mPendingItemId = 0;
-            mActivity.finish();
+            if (mShouldFinishActivity) mActivity.finish();
         }
     }
 

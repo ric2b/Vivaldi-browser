@@ -65,7 +65,7 @@
 /* #undef HAVE_LIBHISTORY */
 
 /* Define if pthread library is there (-lpthread) */
-#define HAVE_LIBPTHREAD /**/
+/* #undef HAVE_LIBPTHREAD */
 
 /* Define if readline library is there (-lreadline) */
 /* #undef HAVE_LIBREADLINE */
@@ -115,7 +115,7 @@
 #define HAVE_PRINTF 1
 
 /* Define if <pthread.h> is there */
-#define HAVE_PTHREAD_H /**/
+/* #undef HAVE_PTHREAD_H */
 
 /* Define to 1 if you have the `putenv' function. */
 #define HAVE_PUTENV 1
@@ -267,7 +267,7 @@
 #define VA_LIST_IS_ARRAY 1
 
 /* Version number of package */
-#define VERSION "2.9.7"
+#define VERSION "2.9.8"
 
 /* Determine what socket length (socklen_t) data type is */
 #define XML_SOCKLEN_T socklen_t

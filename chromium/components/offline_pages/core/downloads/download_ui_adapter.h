@@ -27,6 +27,8 @@ using OfflineContentAggregator =
     offline_items_collection::OfflineContentAggregator;
 
 namespace offline_pages {
+class ThumbnailDecoder;
+
 // C++ side of the UI Adapter. Mimics DownloadManager/Item/History (since we
 // share UI with Downloads).
 // An instance of this class is owned by OfflinePageModel and is shared between
@@ -49,12 +51,6 @@ class DownloadUIAdapter : public OfflineContentProvider,
     // be visible in the collection of items exposed by this Adapter. This also
     // indicates if Observers will be notified about changes for the given page.
     virtual bool IsVisibleInUI(const ClientId& client_id) = 0;
-    // Sometimes the item should be in the collection but not visible in the UI,
-    // temporarily. This is a relatively special case, for example for Last_N
-    // snapshots that are only valid while their tab is alive. When the status
-    // of temporary visibility changes, the Delegate is supposed to call
-    // DownloadUIAdapter::TemporarilyHiddenStatusChanged().
-    virtual bool IsTemporarilyHiddenInUI(const ClientId& client_id) = 0;
 
     // Delegates need a reference to the UI adapter in order to notify it about
     // visibility changes.
@@ -62,11 +58,19 @@ class DownloadUIAdapter : public OfflineContentProvider,
 
     // Opens an offline item.
     virtual void OpenItem(const OfflineItem& item, int64_t offline_id) = 0;
+
+    // Suppresses the download complete notification
+    // depending on flags and origin.
+    virtual bool MaybeSuppressNotification(const std::string& origin,
+                                           const ClientId& id) = 0;
   };
 
+  // Create the adapter. thumbnail_decoder may be null, in which case,
+  // thumbnails will not be provided through GetVisualsForItem.
   DownloadUIAdapter(OfflineContentAggregator* aggregator,
                     OfflinePageModel* model,
                     RequestCoordinator* coordinator,
+                    std::unique_ptr<ThumbnailDecoder> thumbnail_decoder,
                     std::unique_ptr<Delegate> delegate);
   ~DownloadUIAdapter() override;
 
@@ -75,10 +79,7 @@ class DownloadUIAdapter : public OfflineContentProvider,
       std::unique_ptr<DownloadUIAdapter> adapter,
       OfflinePageModel* model);
 
-  int64_t GetOfflineIdByGuid(const std::string& guid) const;
-
-  // OfflineContentProvider implmentation.
-  bool AreItemsAvailable() override;
+  // OfflineContentProvider implementation.
   void OpenItem(const ContentId& id) override;
   void RemoveItem(const ContentId& id) override;
   void CancelDownload(const ContentId& id) override;
@@ -90,7 +91,7 @@ class DownloadUIAdapter : public OfflineContentProvider,
   void GetAllItems(
       OfflineContentProvider::MultipleItemCallback callback) override;
   void GetVisualsForItem(const ContentId& id,
-                         const VisualsCallback& callback) override{};
+                         const VisualsCallback& callback) override;
   void AddObserver(OfflineContentProvider::Observer* observer) override;
   void RemoveObserver(OfflineContentProvider::Observer* observer) override;
 
@@ -100,6 +101,8 @@ class DownloadUIAdapter : public OfflineContentProvider,
                         const OfflinePageItem& added_page) override;
   void OfflinePageDeleted(
       const OfflinePageModel::DeletedPageInfo& page_info) override;
+  void ThumbnailAdded(OfflinePageModel* model,
+                      const OfflinePageThumbnail& thumbnail) override;
 
   // RequestCoordinator::Observer
   void OnAdded(const SavePageRequest& request) override;
@@ -109,50 +112,11 @@ class DownloadUIAdapter : public OfflineContentProvider,
   void OnNetworkProgress(const SavePageRequest& request,
                          int64_t received_bytes) override;
 
-  // For the DownloadUIAdapter::Delegate, to report the temporary hidden status
-  // change.
-  void TemporaryHiddenStatusChanged(const ClientId& client_id);
-
   Delegate* delegate() { return delegate_.get(); }
 
  private:
-  enum class State { NOT_LOADED, LOADING_PAGES, LOADING_REQUESTS, LOADED };
-
-  struct ItemInfo {
-    ItemInfo(const OfflinePageItem& page,
-             bool temporarily_hidden,
-             bool is_suggested);
-    ItemInfo(const SavePageRequest& request, bool temporarily_hidden);
-    ~ItemInfo();
-
-    std::unique_ptr<OfflineItem> ui_item;
-
-    // Additional cached data, not exposed to UI through OfflineItem.
-    // Indicates if this item wraps the completed page or in-progress request.
-    bool is_request;
-
-    // These are shared between pages and requests.
-    int64_t offline_id;
-
-    // ClientId is here to support the Delegate that can toggle temporary
-    // visibility of the items in the collection.
-    ClientId client_id;
-
-    // This item is present in the collection but temporarily hidden from UI.
-    // This is useful when unrelated reasons cause the UI item to be excluded
-    // (filtered out) from UI. When item becomes temporarily hidden the adapter
-    // issues ItemDeleted notification to observers, and ItemAdded when it
-    // becomes visible again.
-    bool temporarily_hidden;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(ItemInfo);
-  };
-
-  typedef std::map<std::string, std::unique_ptr<ItemInfo>> OfflineItems;
-
-  void LoadCache();
-  void ClearCache();
+  using VisualResultCallback = base::OnceCallback<void(
+      std::unique_ptr<offline_items_collection::OfflineItemVisuals>)>;
 
   // Task callbacks.
   void CancelDownloadContinuation(
@@ -164,17 +128,33 @@ class DownloadUIAdapter : public OfflineContentProvider,
   void ResumeDownloadContinuation(
       const std::string& guid,
       std::vector<std::unique_ptr<SavePageRequest>> requests);
-  void OnOfflinePagesLoaded(const MultipleOfflinePageItemResult& pages);
-  void OnRequestsLoaded(std::vector<std::unique_ptr<SavePageRequest>> requests);
+  void OnOfflinePagesLoaded(
+      OfflineContentProvider::MultipleItemCallback callback,
+      std::unique_ptr<OfflineContentProvider::OfflineItemList> offline_items,
+      const MultipleOfflinePageItemResult& pages);
+  void OnThumbnailLoaded(VisualResultCallback callback,
+                         std::unique_ptr<OfflinePageThumbnail> thumbnail);
+  void OnRequestsLoaded(
+      OfflineContentProvider::MultipleItemCallback callback,
+      std::unique_ptr<OfflineContentProvider::OfflineItemList> offline_items,
+      std::vector<std::unique_ptr<SavePageRequest>> requests);
+  void OnPageGetForVisuals(const ContentId& id,
+                           const VisualsCallback& visuals_callback,
+                           const OfflinePageItem* page);
+  void OnPageGetForGetItem(const ContentId& id,
+                           OfflineContentProvider::SingleItemCallback callback,
+                           const OfflinePageItem* page);
+  void OnAllRequestsGetForGetItem(
+      const ContentId& id,
+      OfflineContentProvider::SingleItemCallback callback,
+      std::vector<std::unique_ptr<SavePageRequest>> requests);
 
-  void NotifyItemsLoaded(OfflineContentProvider::Observer* observer);
+  void OnPageGetForOpenItem(const OfflinePageItem* page);
+  void OnPageGetForThumbnailAdded(const OfflinePageItem* page);
+
   void OnDeletePagesDone(DeletePageResult result);
 
-  void AddItemHelper(std::unique_ptr<ItemInfo> item_info);
-  // This function is not re-entrant.  It temporarily sets |deleting_item_|
-  // while it runs, so that functions such as |GetOfflineIdByGuid| will work
-  // during the |ItemDeleted| callback.
-  void DeleteItemHelper(const std::string& guid);
+  void OpenItemByGuid(const std::string& guid);
 
   // A valid offline content aggregator, supplied at construction.
   OfflineContentAggregator* aggregator_;
@@ -185,19 +165,14 @@ class DownloadUIAdapter : public OfflineContentProvider,
   // Always valid, a service.
   RequestCoordinator* request_coordinator_;
 
+  // May be null if thumbnails are not required.
+  std::unique_ptr<ThumbnailDecoder> thumbnail_decoder_;
+
   // A delegate, supplied at construction.
   std::unique_ptr<Delegate> delegate_;
 
-  State state_;
-
-  // The cache of UI items. The key is OfflineItem.guid.
-  OfflineItems items_;
-
-  std::unique_ptr<ItemInfo> deleting_item_;
-
   // The observers.
   base::ObserverList<OfflineContentProvider::Observer> observers_;
-  int observers_count_;
 
   base::WeakPtrFactory<DownloadUIAdapter> weak_ptr_factory_;
 

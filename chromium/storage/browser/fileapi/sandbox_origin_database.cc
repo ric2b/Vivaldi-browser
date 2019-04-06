@@ -112,7 +112,7 @@ bool SandboxOriginDatabase::Init(InitOption init_option,
       }
       UMA_HISTOGRAM_ENUMERATION(kDatabaseRepairHistogramLabel,
                                 DB_REPAIR_FAILED, DB_REPAIR_MAX);
-      // fall through
+      FALLTHROUGH;
     case DELETE_ON_CORRUPTION:
       if (!base::DeleteFile(file_system_directory_, true))
         return false;
@@ -159,13 +159,10 @@ bool SandboxOriginDatabase::RepairDatabase(const std::string& db_path) {
   }
 
   // Delete any obsolete entries from the origins database.
-  for (std::vector<OriginRecord>::iterator db_origin_itr = origins.begin();
-       db_origin_itr != origins.end();
-       ++db_origin_itr) {
-    std::set<base::FilePath>::iterator dir_itr =
-        directories.find(db_origin_itr->path);
+  for (const OriginRecord& record : origins) {
+    std::set<base::FilePath>::iterator dir_itr = directories.find(record.path);
     if (dir_itr == directories.end()) {
-      if (!RemovePathForOrigin(db_origin_itr->origin)) {
+      if (!RemovePathForOrigin(record.origin)) {
         DropDatabase();
         return false;
       }
@@ -175,11 +172,9 @@ bool SandboxOriginDatabase::RepairDatabase(const std::string& db_path) {
   }
 
   // Delete any directories not listed in the origins database.
-  for (std::set<base::FilePath>::iterator dir_itr = directories.begin();
-       dir_itr != directories.end();
-       ++dir_itr) {
-    if (!base::DeleteFile(file_system_directory_.Append(*dir_itr),
-                           true /* recursive */)) {
+  for (const base::FilePath& dir : directories) {
+    if (!base::DeleteFile(file_system_directory_.Append(dir),
+                          true /* recursive */)) {
       DropDatabase();
       return false;
     }

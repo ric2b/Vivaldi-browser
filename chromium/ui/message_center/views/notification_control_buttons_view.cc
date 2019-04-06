@@ -9,7 +9,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
-#include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
@@ -20,19 +19,6 @@
 #include "ui/views/background.h"
 #include "ui/views/layout/box_layout.h"
 
-namespace {
-
-// This value should be the same as the duration of reveal animation of
-// the settings view of an Android notification.
-constexpr auto kBackgroundColorChangeDuration =
-    base::TimeDelta::FromMilliseconds(360);
-
-// The initial background color of the view.
-constexpr SkColor kInitialBackgroundColor =
-    message_center::kControlButtonBackgroundColor;
-
-}  // anonymous namespace
-
 namespace message_center {
 
 const char NotificationControlButtonsView::kViewClassName[] =
@@ -40,9 +26,7 @@ const char NotificationControlButtonsView::kViewClassName[] =
 
 NotificationControlButtonsView::NotificationControlButtonsView(
     MessageView* message_view)
-    : message_view_(message_view),
-      bgcolor_origin_(kInitialBackgroundColor),
-      bgcolor_target_(kInitialBackgroundColor) {
+    : message_view_(message_view) {
   DCHECK(message_view);
   SetLayoutManager(
       std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal));
@@ -51,14 +35,14 @@ NotificationControlButtonsView::NotificationControlButtonsView(
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
-  SetBackground(views::CreateSolidBackground(kInitialBackgroundColor));
+  SetBackground(views::CreateSolidBackground(kControlButtonBackgroundColor));
 }
 
 NotificationControlButtonsView::~NotificationControlButtonsView() = default;
 
 void NotificationControlButtonsView::ShowCloseButton(bool show) {
   if (show && !close_button_) {
-    close_button_ = std::make_unique<message_center::PaddedButton>(this);
+    close_button_ = std::make_unique<PaddedButton>(this);
     close_button_->set_owned_by_client();
     close_button_->SetImage(views::Button::STATE_NORMAL,
                             gfx::CreateVectorIcon(kNotificationCloseButtonIcon,
@@ -71,8 +55,8 @@ void NotificationControlButtonsView::ShowCloseButton(bool show) {
         views::CreateSolidBackground(SK_ColorTRANSPARENT));
 
     // Add the button at the last.
-    DCHECK_LE(child_count(), 1);
     AddChildView(close_button_.get());
+    Layout();
   } else if (!show && close_button_) {
     DCHECK(Contains(close_button_.get()));
     close_button_.reset();
@@ -81,7 +65,7 @@ void NotificationControlButtonsView::ShowCloseButton(bool show) {
 
 void NotificationControlButtonsView::ShowSettingsButton(bool show) {
   if (show && !settings_button_) {
-    settings_button_ = std::make_unique<message_center::PaddedButton>(this);
+    settings_button_ = std::make_unique<PaddedButton>(this);
     settings_button_->set_owned_by_client();
     settings_button_->SetImage(
         views::Button::STATE_NORMAL,
@@ -94,27 +78,37 @@ void NotificationControlButtonsView::ShowSettingsButton(bool show) {
     settings_button_->SetBackground(
         views::CreateSolidBackground(SK_ColorTRANSPARENT));
 
-    // Add the button at the first.
-    DCHECK_LE(child_count(), 1);
-    AddChildViewAt(settings_button_.get(), 0);
+    // Add the button next right to the snooze button.
+    int position = snooze_button_ ? 1 : 0;
+    AddChildViewAt(settings_button_.get(), position);
+    Layout();
   } else if (!show && settings_button_) {
     DCHECK(Contains(settings_button_.get()));
     settings_button_.reset();
   }
 }
 
-void NotificationControlButtonsView::SetBackgroundColor(
-    const SkColor& target_bgcolor) {
-  DCHECK(background());
-  if (background()->get_color() != target_bgcolor) {
-    bgcolor_origin_ = background()->get_color();
-    bgcolor_target_ = target_bgcolor;
+void NotificationControlButtonsView::ShowSnoozeButton(bool show) {
+  if (show && !snooze_button_) {
+    snooze_button_ = std::make_unique<PaddedButton>(this);
+    snooze_button_->set_owned_by_client();
+    snooze_button_->SetImage(
+        views::Button::STATE_NORMAL,
+        gfx::CreateVectorIcon(kNotificationSnoozeButtonIcon,
+                              gfx::kChromeIconGrey));
+    snooze_button_->SetAccessibleName(l10n_util::GetStringUTF16(
+        IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
+    snooze_button_->SetTooltipText(l10n_util::GetStringUTF16(
+        IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
+    snooze_button_->SetBackground(
+        views::CreateSolidBackground(SK_ColorTRANSPARENT));
 
-    if (bgcolor_animation_)
-      bgcolor_animation_->End();
-    bgcolor_animation_.reset(new gfx::LinearAnimation(this));
-    bgcolor_animation_->SetDuration(kBackgroundColorChangeDuration);
-    bgcolor_animation_->Start();
+    // Add the button at the first.
+    AddChildViewAt(snooze_button_.get(), 0);
+    Layout();
+  } else if (!show && snooze_button_) {
+    DCHECK(Contains(snooze_button_.get()));
+    snooze_button_.reset();
   }
 }
 
@@ -147,6 +141,10 @@ views::Button* NotificationControlButtonsView::settings_button() const {
   return settings_button_.get();
 }
 
+views::Button* NotificationControlButtonsView::snooze_button() const {
+  return snooze_button_.get();
+}
+
 const char* NotificationControlButtonsView::GetClassName() const {
   return kViewClassName;
 }
@@ -156,35 +154,10 @@ void NotificationControlButtonsView::ButtonPressed(views::Button* sender,
   if (close_button_ && sender == close_button_.get()) {
     message_view_->OnCloseButtonPressed();
   } else if (settings_button_ && sender == settings_button_.get()) {
-    message_view_->OnSettingsButtonPressed();
+    message_view_->OnSettingsButtonPressed(event);
+  } else if (snooze_button_ && sender == snooze_button_.get()) {
+    message_view_->OnSnoozeButtonPressed(event);
   }
-}
-
-void NotificationControlButtonsView::AnimationProgressed(
-    const gfx::Animation* animation) {
-  DCHECK_EQ(animation, bgcolor_animation_.get());
-
-  const SkColor color = gfx::Tween::ColorValueBetween(
-      animation->GetCurrentValue(), bgcolor_origin_, bgcolor_target_);
-  SetBackground(views::CreateSolidBackground(color));
-  SchedulePaint();
-}
-
-void NotificationControlButtonsView::AnimationEnded(
-    const gfx::Animation* animation) {
-  DCHECK_EQ(animation, bgcolor_animation_.get());
-  bgcolor_animation_.reset();
-  bgcolor_origin_ = bgcolor_target_;
-}
-
-void NotificationControlButtonsView::AnimationCanceled(
-    const gfx::Animation* animation) {
-  // The animation is never cancelled explicitly.
-  NOTREACHED();
-
-  bgcolor_origin_ = bgcolor_target_;
-  SetBackground(views::CreateSolidBackground(bgcolor_target_));
-  SchedulePaint();
 }
 
 }  // namespace message_center

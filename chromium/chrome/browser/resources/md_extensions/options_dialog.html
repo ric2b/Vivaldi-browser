@@ -22,25 +22,36 @@
 
       ExtensionOptions {
         display: block;
-        min-width: 300px;
+        height: 100%;
+        overflow: hidden;
       }
 
-      dialog {
-        width: fit-content;
+      cr-dialog {
+        --scroll-border: 0;
         --cr-dialog-body: {
+          -webkit-padding-end: 0;
+          -webkit-padding-start: 0;
+          height: 100%;
+          padding-bottom: 0;
+          padding-top: 0;
+        };
+
+        --cr-dialog-wrapper: {
+          height: 100%;
+          max-height: initial;
           overflow: hidden;
-          padding: 0;
         };
 
         --cr-dialog-body-container: {
           border: none;
+          height: 100%;
           min-height: initial;
         };
       }
     </style>
 
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}"
-        on-close="onClose_">
+    <cr-dialog id="dialog" close-text="$i18n{close}"
+        on-close="onClose_" show-close-button>
       <div slot="title">
         <div id="icon-and-name-wrapper">
           <img id="icon" src="[[data_.iconUrl]]"
@@ -53,7 +64,7 @@
       </div>
       <div slot="body" id="body">
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
   <script src="options_dialog.js"></script>
 </dom-module>

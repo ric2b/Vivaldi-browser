@@ -12,6 +12,8 @@
 // than the corresponding #define labels.  If you change a given command's
 // number, any NIB files that refer to it will also need to be updated.
 
+// clang-format off
+
 // Values below IDC_MinimumLabelValue are reserved for dynamic menu items.
 #define IDC_MinimumLabelValue           4000
 
@@ -70,11 +72,13 @@
 #define IDC_RESTORE_WINDOW              34052
 #endif
 
+#define IDC_OPEN_IN_PWA_WINDOW          34053
+
 // Hosted app commands
 #define IDC_COPY_URL                    34060
 #define IDC_OPEN_IN_CHROME              34061
 #define IDC_SITE_SETTINGS               34062
-#define IDC_APP_INFO                    34063
+#define IDC_HOSTED_APP_MENU_APP_INFO    34063
 
 // Page-related commands
 #define IDC_BOOKMARK_PAGE               35000
@@ -90,6 +94,7 @@
 #define IDC_ROUTE_MEDIA                 35011
 #define IDC_WINDOW_MUTE_SITE            35012
 #define IDC_WINDOW_PIN_TAB              35013
+#define IDC_MIGRATE_LOCAL_CREDIT_CARD_FOR_PAGE 35014
 
 // Clipboard commands
 #define IDC_CUT                         36000
@@ -118,7 +123,7 @@
 #define IDC_FOCUS_NEXT_PANE             39004
 #define IDC_FOCUS_PREVIOUS_PANE         39005
 #define IDC_FOCUS_BOOKMARKS             39006
-#define IDC_FOCUS_INFOBARS              39007
+#define IDC_FOCUS_INACTIVE_POPUP_FOR_ACCESSIBILITY 39007
 
 // Show various bits of UI
 #define IDC_OPEN_FILE                   40000
@@ -147,7 +152,6 @@
 #define IDC_MANAGE_EXTENSIONS           40022
 #define IDC_DEV_TOOLS_INSPECT           40023
 #define IDC_UPGRADE_DIALOG              40024
-#define IDC_VIEW_INCOMPATIBILITIES      40025
 #define IDC_SHOW_KEYBOARD_OVERLAY       40027
 #define IDC_PROFILING_ENABLED           40028
 #define IDC_BOOKMARKS_MENU              40029
@@ -179,6 +183,7 @@
 #define IDC_CUSTOMIZE_TOUCH_BAR         40251
 #define IDC_SHOW_BETA_FORUM             40252
 #define IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS 40253
+#define IDC_TOGGLE_CONFIRM_TO_QUIT_OPTION 40254
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.
@@ -250,7 +255,7 @@
 #define IDC_CONTENT_CONTEXT_SAVEAVAS 50120
 #define IDC_CONTENT_CONTEXT_COPYAVLOCATION 50121
 #define IDC_CONTENT_CONTEXT_OPENAVNEWTAB 50122
-#define IDC_CONTENT_CONTENT_PICTUREINPICTURE 50123
+#define IDC_CONTENT_CONTEXT_PICTUREINPICTURE 50123
 // Media items.
 #define IDC_CONTENT_CONTEXT_PLAYPAUSE 50130
 #define IDC_CONTENT_CONTEXT_MUTE 50131
@@ -276,9 +281,6 @@
 #define IDC_CONTENT_CONTEXT_NO_SPELLING_SUGGESTIONS 50155
 #define IDC_CONTENT_CONTEXT_SPELLING_SUGGESTION 50156
 #define IDC_CONTENT_CONTEXT_SPELLING_TOGGLE 50157
-#define IDC_CONTENT_CONTEXT_SPEECH_MENU 50158
-#define IDC_CONTENT_CONTEXT_SPEECH_START_SPEAKING 50159
-#define IDC_CONTENT_CONTEXT_SPEECH_STOP_SPEAKING 50160
 #define IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE 50161
 #define IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP 50162
 #define IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP 50163
@@ -309,6 +311,8 @@
 #define IDC_CONTENT_CONTEXT_OPEN_WITH13 50202
 #define IDC_CONTENT_CONTEXT_OPEN_WITH14 50203
 #define IDC_CONTENT_CONTEXT_OPEN_WITH_LAST IDC_CONTENT_CONTEXT_OPEN_WITH14
+// Context menu items that provide fast access to input methods.
+#define IDC_CONTENT_CONTEXT_EMOJI 50210
 // Context menu items in the bookmark bar
 #define IDC_BOOKMARK_BAR_OPEN_ALL 51000
 #define IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW 51001
@@ -354,6 +358,9 @@
 // Open link in profile entries
 #define IDC_OPEN_LINK_IN_PROFILE_FIRST 52300
 #define IDC_OPEN_LINK_IN_PROFILE_LAST  52399
+
+// Start smart text selection action
+#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION 52400
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/json/json_writer.h"
-#include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
@@ -29,7 +28,7 @@ GcdRestClient::GcdRestClient(const std::string& gcd_base_url,
       gcd_device_id_(gcd_device_id),
       url_request_context_getter_(url_request_context_getter),
       token_getter_(token_getter),
-      clock_(new base::DefaultClock) {}
+      clock_(base::DefaultClock::GetInstance()) {}
 
 GcdRestClient::~GcdRestClient() = default;
 
@@ -88,8 +87,8 @@ void GcdRestClient::PatchState(
       base::Bind(&GcdRestClient::OnTokenReceived, base::Unretained(this)));
 }
 
-void GcdRestClient::SetClockForTest(std::unique_ptr<base::Clock> clock) {
-  clock_ = std::move(clock);
+void GcdRestClient::SetClockForTest(base::Clock* clock) {
+  clock_ = clock;
 }
 
 void GcdRestClient::OnTokenReceived(OAuthTokenGetter::Status status,

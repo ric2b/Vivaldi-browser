@@ -13,11 +13,11 @@
 #include "content/renderer/mouse_lock_dispatcher.h"
 #include "content/renderer/pepper/fullscreen_container.h"
 #include "content/renderer/render_widget.h"
-#include "third_party/WebKit/public/web/WebWidget.h"
+#include "third_party/blink/public/web/web_widget.h"
 #include "url/gurl.h"
 
-namespace blink {
-class WebLayer;
+namespace cc {
+class Layer;
 }
 
 namespace content {
@@ -32,7 +32,7 @@ class RenderWidgetFullscreenPepper : public RenderWidget,
  public:
   static RenderWidgetFullscreenPepper* Create(
       int32_t routing_id,
-      const RenderWidget::ShowCallback& show_callback,
+      RenderWidget::ShowCallback show_callback,
       CompositorDependencies* compositor_deps,
       PepperPluginInstanceImpl* plugin,
       const GURL& active_url,
@@ -45,7 +45,7 @@ class RenderWidgetFullscreenPepper : public RenderWidget,
   void ScrollRect(int dx, int dy, const blink::WebRect& rect) override;
   void Destroy() override;
   void PepperDidChangeCursor(const blink::WebCursorInfo& cursor) override;
-  void SetLayer(blink::WebLayer* layer) override;
+  void SetLayer(cc::Layer* layer) override;
 
   // RenderWidget overrides.
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -69,20 +69,22 @@ class RenderWidgetFullscreenPepper : public RenderWidget,
   // RenderWidget API.
   void DidInitiatePaint() override;
   void Close() override;
-  void OnResize(const ResizeParams& params) override;
+  void OnSynchronizeVisualProperties(
+      const VisualProperties& visual_properties) override;
 
   // RenderWidget overrides.
   GURL GetURLForGraphicsContext3D() override;
-  void OnDeviceScaleFactorChanged() override;
 
  private:
+  void UpdateLayerBounds();
+
   // URL that is responsible for this widget, passed to ggl::CreateViewContext.
   GURL active_url_;
 
   // The plugin instance this widget wraps.
   PepperPluginInstanceImpl* plugin_;
 
-  blink::WebLayer* layer_;
+  cc::Layer* layer_;
 
   std::unique_ptr<MouseLockDispatcher> mouse_lock_dispatcher_;
 

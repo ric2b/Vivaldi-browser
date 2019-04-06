@@ -96,11 +96,9 @@ const int kHostStatusReportDelay = 5 * 60 * 1000;
 void StartUpdateCallback(UpdateScreen* screen,
                          UpdateEngineClient::UpdateCheckResult result) {
   VLOG(1) << "Callback from RequestUpdateCheck, result " << result;
-  if (UpdateScreen::HasInstance(screen)) {
-    if (result == UpdateEngineClient::UPDATE_RESULT_SUCCESS)
-      screen->SetIgnoreIdleStatus(false);
-    else
-      screen->ExitUpdate(UpdateScreen::REASON_UPDATE_INIT_FAILED);
+  if (UpdateScreen::HasInstance(screen) &&
+      result != UpdateEngineClient::UPDATE_RESULT_SUCCESS) {
+    screen->ExitUpdate(UpdateScreen::REASON_UPDATE_INIT_FAILED);
   }
 }
 
@@ -199,8 +197,8 @@ void UpdateScreen::ExitUpdate(UpdateScreen::ExitReason reason) {
         case UpdateEngineClient::UPDATE_STATUS_VERIFYING:
         case UpdateEngineClient::UPDATE_STATUS_NEED_PERMISSION_TO_UPDATE:
           DCHECK(!HasCriticalUpdate());
-        // Noncritical update, just exit screen as if there is no update.
-        // no break
+          // Noncritical update, just exit screen as if there is no update.
+          FALLTHROUGH;
         case UpdateEngineClient::UPDATE_STATUS_IDLE:
           Finish(ScreenExitCode::UPDATE_NOUPDATE);
           break;
@@ -325,7 +323,7 @@ void UpdateScreen::UpdateStatusChanged(
         // It is first IDLE status that is sent before we initiated the check.
         break;
       }
-    // else no break
+      FALLTHROUGH;
     case UpdateEngineClient::UPDATE_STATUS_ERROR:
     case UpdateEngineClient::UPDATE_STATUS_REPORTING_ERROR_EVENT:
     case UpdateEngineClient::UPDATE_STATUS_NEED_PERMISSION_TO_UPDATE:
@@ -357,10 +355,10 @@ void UpdateScreen::OnPortalDetectionCompleted(
       is_first_detection_notification_) {
     is_first_detection_notification_ = false;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            base::IgnoreResult(&NetworkPortalDetector::StartDetectionIfIdle),
-            base::Unretained(network_portal_detector::GetInstance())));
+        FROM_HERE, base::BindOnce([]() {
+          network_portal_detector::GetInstance()->StartPortalDetection(
+              false /* force */);
+        }));
     return;
   }
   is_first_detection_notification_ = false;

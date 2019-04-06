@@ -10,8 +10,12 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/model_type_sync_bridge.h"
 #include "components/sync/user_events/global_id_mapper.h"
@@ -20,12 +24,14 @@ namespace syncer {
 
 class UserEventSyncBridge : public ModelTypeSyncBridge {
  public:
-  UserEventSyncBridge(const ModelTypeStoreFactory& store_factory,
-                      const ChangeProcessorFactory& change_processor_factory,
-                      GlobalIdMapper* global_id_mapper);
+  UserEventSyncBridge(
+      OnceModelTypeStoreFactory store_factory,
+      std::unique_ptr<ModelTypeChangeProcessor> change_processor,
+      GlobalIdMapper* global_id_mapper);
   ~UserEventSyncBridge() override;
 
   // ModelTypeSyncBridge implementation.
+  void OnSyncStarting(const DataTypeActivationRequest& request) override;
   std::unique_ptr<MetadataChangeList> CreateMetadataChangeList() override;
   base::Optional<ModelError> MergeSyncData(
       std::unique_ptr<MetadataChangeList> metadata_change_list,
@@ -34,28 +40,43 @@ class UserEventSyncBridge : public ModelTypeSyncBridge {
       std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) override;
   void GetData(StorageKeyList storage_keys, DataCallback callback) override;
-  void GetAllData(DataCallback callback) override;
+  void GetAllDataForDebugging(DataCallback callback) override;
   std::string GetClientTag(const EntityData& entity_data) override;
   std::string GetStorageKey(const EntityData& entity_data) override;
-  void DisableSync() override;
+  StopSyncResponse ApplyStopSyncChanges(
+      std::unique_ptr<MetadataChangeList> delete_metadata_change_list) override;
 
   void RecordUserEvent(std::unique_ptr<sync_pb::UserEventSpecifics> specifics);
 
  private:
-  void OnStoreCreated(ModelTypeStore::Result result,
+  void RecordUserEventImpl(
+      std::unique_ptr<sync_pb::UserEventSpecifics> specifics);
+  // Record events in the deferred queue and clear the queue.
+  void ProcessQueuedEvents();
+
+  void OnStoreCreated(const base::Optional<ModelError>& error,
                       std::unique_ptr<ModelTypeStore> store);
-  void OnReadAllMetadata(base::Optional<ModelError> error,
+  void OnReadAllMetadata(const base::Optional<ModelError>& error,
                          std::unique_ptr<MetadataBatch> metadata_batch);
-  void OnCommit(ModelTypeStore::Result result);
+  void OnCommit(const base::Optional<ModelError>& error);
   void OnReadData(DataCallback callback,
-                  ModelTypeStore::Result result,
+                  const base::Optional<ModelError>& error,
                   std::unique_ptr<ModelTypeStore::RecordList> data_records,
                   std::unique_ptr<ModelTypeStore::IdList> missing_id_list);
   void OnReadAllData(DataCallback callback,
-                     ModelTypeStore::Result result,
+                     const base::Optional<ModelError>& error,
                      std::unique_ptr<ModelTypeStore::RecordList> data_records);
   void OnReadAllDataToDelete(
-      ModelTypeStore::Result result,
+      std::unique_ptr<MetadataChangeList> delete_metadata_change_list,
+      const base::Optional<ModelError>& error,
+      std::unique_ptr<ModelTypeStore::RecordList> data_records);
+
+  // Resubmit all the events persisted in the store to sync events, which were
+  // preserved when sync was disabled. This may resubmit entities that the
+  // processor already knows about (i.e. with metadata), but it is allowed.
+  void ReadAllDataAndResubmit();
+  void OnReadAllDataToResubmit(
+      const base::Optional<ModelError>& error,
       std::unique_ptr<ModelTypeStore::RecordList> data_records);
 
   void HandleGlobalIdChange(int64_t old_global_id, int64_t new_global_id);
@@ -64,11 +85,21 @@ class UserEventSyncBridge : public ModelTypeSyncBridge {
   // delete upon commit confirmation.
   std::unique_ptr<ModelTypeStore> store_;
 
+  // Used to store important events while the store or change processor are not
+  // ready. This currently only handles user consents.
+  std::vector<std::unique_ptr<sync_pb::UserEventSpecifics>>
+      deferred_user_events_while_initializing_;
+
   // The key is the global_id of the navigation the event is linked to.
   std::multimap<int64_t, sync_pb::UserEventSpecifics>
       in_flight_nav_linked_events_;
 
   GlobalIdMapper* global_id_mapper_;
+
+  // Empty if sync not running.
+  std::string syncing_account_id_;
+
+  base::WeakPtrFactory<UserEventSyncBridge> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(UserEventSyncBridge);
 };

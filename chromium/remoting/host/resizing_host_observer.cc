@@ -6,12 +6,12 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <list>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "remoting/host/desktop_resizer.h"
 #include "remoting/host/screen_resolution.h"
 
@@ -126,8 +126,8 @@ ResizingHostObserver::ResizingHostObserver(
       weak_factory_(this) {}
 
 ResizingHostObserver::~ResizingHostObserver() {
-  if (restore_ && !original_resolution_.IsEmpty())
-    desktop_resizer_->RestoreResolution(original_resolution_);
+  if (restore_)
+    RestoreScreenResolution();
 }
 
 void ResizingHostObserver::SetScreenResolution(
@@ -136,8 +136,10 @@ void ResizingHostObserver::SetScreenResolution(
   // to SetScreenResolution to simplify the implementation of unit-tests.
   base::TimeTicks now = now_function_.Run();
 
-  if (resolution.IsEmpty())
+  if (resolution.IsEmpty()) {
+    RestoreScreenResolution();
     return;
+  }
 
   // Resizing the desktop too often is probably not a good idea, so apply a
   // simple rate-limiting scheme.
@@ -183,6 +185,13 @@ void ResizingHostObserver::SetScreenResolution(
 void ResizingHostObserver::SetNowFunctionForTesting(
     const base::Callback<base::TimeTicks(void)>& now_function) {
   now_function_ = now_function;
+}
+
+void ResizingHostObserver::RestoreScreenResolution() {
+  if (!original_resolution_.IsEmpty()) {
+    desktop_resizer_->RestoreResolution(original_resolution_);
+    original_resolution_ = ScreenResolution();
+  }
 }
 
 }  // namespace remoting

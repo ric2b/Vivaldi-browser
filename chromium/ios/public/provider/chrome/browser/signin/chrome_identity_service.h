@@ -162,7 +162,6 @@ class ChromeIdentityService {
   // Asynchronously retrieves access tokens for the given identity and scopes.
   virtual void GetAccessToken(ChromeIdentity* identity,
                               const std::string& client_id,
-                              const std::string& client_secret,
                               const std::set<std::string>& scopes,
                               AccessTokenCallback callback);
 

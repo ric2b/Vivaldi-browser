@@ -17,9 +17,8 @@ import org.chromium.base.MemoryPressureListener;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.content.browser.BrowserStartupController;
-import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.DeviceUtils;
+import org.chromium.content_public.browser.BrowserStartupController;
+import org.chromium.content_public.browser.DeviceUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_shell.Shell;
 import org.chromium.content_shell.ShellManager;
@@ -35,8 +34,8 @@ public class ContentShellActivity extends Activity {
     private static final String ACTIVE_SHELL_URL_KEY = "activeUrl";
     public static final String COMMAND_LINE_ARGS_KEY = "commandLineArgs";
 
-    // Native switch - shell_switches::kRunLayoutTest
-    private static final String RUN_LAYOUT_TEST_SWITCH = "run-layout-test";
+    // Native switch - shell_switches::kRunWebTests
+    private static final String RUN_WEB_TESTS_SWITCH = "run-web-tests";
 
     private ShellManager mShellManager;
     private ActivityWindowAndroid mWindowAndroid;
@@ -56,10 +55,10 @@ public class ContentShellActivity extends Activity {
             }
         }
 
-        DeviceUtils.addDeviceSpecificUserAgentSwitch(this);
+        DeviceUtils.addDeviceSpecificUserAgentSwitch();
 
         try {
-            LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER).ensureInitialized();
+            LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
         } catch (ProcessInitException e) {
             Log.e(TAG, "ContentView initialization failed.", e);
             // Since the library failed to initialize nothing in the application
@@ -84,7 +83,7 @@ public class ContentShellActivity extends Activity {
             mShellManager.setStartupUrl(Shell.sanitizeUrl(mStartupUrl));
         }
 
-        if (CommandLine.getInstance().hasSwitch(RUN_LAYOUT_TEST_SWITCH)) {
+        if (CommandLine.getInstance().hasSwitch(RUN_WEB_TESTS_SWITCH)) {
             try {
                 BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                         .startBrowserProcessesSync(false);
@@ -96,10 +95,9 @@ public class ContentShellActivity extends Activity {
             try {
                 BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                         .startBrowserProcessesAsync(
-                                true,
-                                new BrowserStartupController.StartupCallback() {
+                                true, false, new BrowserStartupController.StartupCallback() {
                                     @Override
-                                    public void onSuccess(boolean alreadyStarted) {
+                                    public void onSuccess() {
                                         finishInitialization(savedInstanceState);
                                     }
 
@@ -141,10 +139,9 @@ public class ContentShellActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        ContentViewCore contentViewCore = getActiveContentViewCore();
-        if (contentViewCore != null) {
-            outState.putString(
-                    ACTIVE_SHELL_URL_KEY, contentViewCore.getWebContents().getLastCommittedUrl());
+        WebContents webContents = getActiveWebContents();
+        if (webContents != null) {
+            outState.putString(ACTIVE_SHELL_URL_KEY, webContents.getLastCommittedUrl());
         }
 
         mWindowAndroid.saveInstanceState(outState);
@@ -153,10 +150,9 @@ public class ContentShellActivity extends Activity {
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            ContentViewCore contentViewCore = getActiveContentViewCore();
-            if (contentViewCore != null && contentViewCore.getWebContents()
-                    .getNavigationController().canGoBack()) {
-                contentViewCore.getWebContents().getNavigationController().goBack();
+            WebContents webContents = getActiveWebContents();
+            if (webContents != null && webContents.getNavigationController().canGoBack()) {
+                webContents.getNavigationController().goBack();
                 return true;
             }
         }
@@ -185,8 +181,8 @@ public class ContentShellActivity extends Activity {
     protected void onStart() {
         super.onStart();
 
-        ContentViewCore contentViewCore = getActiveContentViewCore();
-        if (contentViewCore != null) contentViewCore.onShow();
+        WebContents webContents = getActiveWebContents();
+        if (webContents != null) webContents.onShow();
     }
 
     @Override
@@ -232,15 +228,6 @@ public class ContentShellActivity extends Activity {
      */
     public Shell getActiveShell() {
         return mShellManager != null ? mShellManager.getActiveShell() : null;
-    }
-
-    /**
-     * @return The {@link ContentViewCore} owned by the currently visible {@link Shell} or null if
-     *         one is not showing.
-     */
-    public ContentViewCore getActiveContentViewCore() {
-        Shell shell = getActiveShell();
-        return shell != null ? shell.getContentViewCore() : null;
     }
 
     /**

@@ -43,7 +43,8 @@
 --                     transition INTEGER DEFAULT 0 NOT NULL,
 --                     segment_id INTEGER,
 --                     is_indexed BOOLEAN,
---                     visit_duration INTEGER DEFAULT 0 NOT NULL)
+--                     visit_duration INTEGER DEFAULT 0 NOT NULL,
+--                     incremented_omnibox_typed_score BOOLEAN DEFAULT FALSE NOT NULL)
 INSERT INTO "urls" VALUES(1,'http://www.reuters.com/article/idUSN0839880620100708','UPDATE 1-US 30-yr mortgage rate drops to new record low | Reuters',3,1,2,0);  -- Qualifies
 INSERT INTO "urls" VALUES(2,'http://www.golfweek.com/news/2010/jul/08/goydos-opens-john-deere-classic-59/','Goydos opens John Deere Classic with 59',3,1,4,0);  -- Qualifies
 INSERT INTO "urls" VALUES(3,'http://www.businessandmedia.org/articles/2010/20100708120415.aspx','LeBronomics: Could High Taxes Influence James'' Team Decision?',4,1,2,0);  -- Qualifies
@@ -55,7 +56,7 @@ INSERT INTO "urls" VALUES(8,'http://getsharekit.com/index.html','ShareKit : Drop
 INSERT INTO "urls" VALUES(9,'http://en.wikipedia.org/wiki/Control-Z','Control-Z - Wikipedia, the free encyclopedia',0,0,6,0);
 INSERT INTO "urls" VALUES(10,'http://vmware.com/info?id=724','VMware Account Management Login',1,0,6,0);
 INSERT INTO "urls" VALUES(11,'http://www.tech-recipes.com/rx/2621/os_x_change_path_environment_variable/','OS X: Change your PATH environment variable | Mac system administration | Tech-Recipes',0,1,6,0);  -- Qualifies
-INSERT INTO "urls" VALUES(12,'http://view.atdmt.com/PPJ/iview/194841301/direct;wi.160;hi.600/01?click=','',6,6,0,1);  -- Qualifies
+INSERT INTO "urls" VALUES(12,'http://view.atdmt.com/PPJ/iview/194841301/direct;wi.160;hi.600/01?click=','',6,6,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(15,'http://www.cnn.com/','CNN.com International - Breaking, World, Business, Sports, Entertainment and Video News',6,6,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(16,'http://www.zdnet.com/','Technology News, Analysis, Comments and Product Reviews for IT Professionals | ZDNet',6,6,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(17,'http://www.crash.net/','Crash.Net | Formula 1 & MotoGP | Motorsport News',6,6,0,0);  -- Qualifies
@@ -70,7 +71,7 @@ INSERT INTO "urls" VALUES(25,'http://www.codeguru.com/','CodeGuru : codeguru',6,
 INSERT INTO "urls" VALUES(26,'http://www.codeproject.com/','Your Development Resource - CodeProject',6,6,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(27,'http://www.tomshardware.com/us/#redir','Tom''s Hardware: Hardware News, Tests and Reviews',6,6,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(28,'http://www.ddj.com/windows/184416623','Dr. ABRACADABRA''s | Avoiding the Visual C++ Runtime Library | 2 1, 2003',6,6,0,0);  -- Qualifies
-INSERT INTO "urls" VALUES(29,'http://svcs.cnn.com/weather/getForecast?time=34&mode=json_html&zipCode=336736767676&locCode=EGLL&celcius=true&csiID=csi2','',6,6,0,1);  -- Qualifies
+INSERT INTO "urls" VALUES(29,'http://svcs.cnn.com/weather/getForecast?time=34&mode=json_html&zipCode=336736767676&locCode=EGLL&celcius=true&csiID=csi2','',6,6,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(30,'http://www.drudgery.com/Dogs%20and%20Mice','Life in the Slow Lane',8,2,2,0);  -- Qualifies
 INSERT INTO "urls" VALUES(31,'http://www.redrudgerydo.com/','Music of the Wild Landscape',0,0,6,0);
 INSERT INTO "urls" VALUES(32,'https://NearlyPerfectResult.com/','Practically Perfect Search Result',99,99,0,0);  -- Qualifies
@@ -78,29 +79,31 @@ INSERT INTO "urls" VALUES(33,'http://QuiteUselessSearchResultxyz.com/','Practica
 INSERT INTO "urls" VALUES(34,'http://FubarFubarAndFubar.com/','Situation Normal -- FUBARED',99,99,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(35,'http://en.wikipedia.org/wiki/1%25_rule_(Internet_culture)','Do Not Need Title',2,2,0,0);  -- Qualifies
 INSERT INTO "urls" VALUES(36,'http://default-engine.com?q=query','Query Query Query',2,2,0,0);  -- Qualifies
+INSERT INTO "urls" VALUES(37,'http://view.atdmt.com/PPJ/iview/194841301/hidden/direct;wi.160;hi.600/01?click=','',6,6,0,1);
+INSERT INTO "urls" VALUES(38,'http://svcs.cnn.com/hidden/weather/getForecast?time=34&mode=json_html&zipCode=336736767676&locCode=EGLL&celcius=true&csiID=csi2','',6,6,0,1);
 
 -- This file creates some visits, enough to test (in InMemoryURLIndexTest)
 -- the visits functionality, certainly not as many visits as are implied
 -- by the visit counts associated with the URLs above.
-INSERT INTO "visits" VALUES(1, 1, 2, 4, 0, 0, 1);
-INSERT INTO "visits" VALUES(2, 1, 5, 0, 1, 0, 1);
-INSERT INTO "visits" VALUES(3, 1, 12, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(4, 32, 1, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(5, 32, 2, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(6, 32, 3, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(7, 32, 4, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(8, 32, 5, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(9, 32, 6, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(10, 32, 7, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(11, 32, 8, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(12, 32, 9, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(13, 32, 10, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(14, 32, 11, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(15, 32, 12, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(16, 32, 13, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(17, 32, 14, 0, 0, 0, 1);
-INSERT INTO "visits" VALUES(18, 32, 15, 0, 1, 0, 1);
-INSERT INTO "visits" VALUES(19, 35, 0, 0, 1, 0, 1);
-INSERT INTO "visits" VALUES(20, 35, 7, 0, 1, 0, 1);
-INSERT INTO "visits" VALUES(21, 36, 1, 0, 1, 0, 1);
-INSERT INTO "visits" VALUES(22, 36, 2, 0, 1, 0, 1);
+INSERT INTO "visits" VALUES(1, 1, 2, 4, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(2, 1, 5, 0, 1, 0, 1, TRUE);
+INSERT INTO "visits" VALUES(3, 1, 12, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(4, 32, 1, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(5, 32, 2, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(6, 32, 3, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(7, 32, 4, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(8, 32, 5, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(9, 32, 6, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(10, 32, 7, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(11, 32, 8, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(12, 32, 9, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(13, 32, 10, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(14, 32, 11, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(15, 32, 12, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(16, 32, 13, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(17, 32, 14, 0, 0, 0, 1, FALSE);
+INSERT INTO "visits" VALUES(18, 32, 15, 0, 1, 0, 1, TRUE);
+INSERT INTO "visits" VALUES(19, 35, 0, 0, 1, 0, 1, TRUE);
+INSERT INTO "visits" VALUES(20, 35, 7, 0, 1, 0, 1, TRUE);
+INSERT INTO "visits" VALUES(21, 36, 1, 0, 1, 0, 1, TRUE);
+INSERT INTO "visits" VALUES(22, 36, 2, 0, 1, 0, 1, TRUE);

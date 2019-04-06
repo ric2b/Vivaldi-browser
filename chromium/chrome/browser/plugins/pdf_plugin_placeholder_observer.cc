@@ -8,24 +8,24 @@
 #include <utility>
 
 #include "chrome/common/render_messages.h"
+#include "components/download/public/common/download_item.h"
+#include "components/download/public/common/download_url_parameters.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_security_policy.h"
-#include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
-#include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 
 namespace {
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-void OnDownloadStarted(content::DownloadItem* item,
-                       content::DownloadInterruptReason interrupt_reason) {
-  if (item && interrupt_reason == content::DOWNLOAD_INTERRUPT_REASON_NONE)
+void OnDownloadStarted(download::DownloadItem* item,
+                       download::DownloadInterruptReason interrupt_reason) {
+  if (item && interrupt_reason == download::DOWNLOAD_INTERRUPT_REASON_NONE)
     item->SetOpenWhenComplete(true);
 }
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
@@ -94,13 +94,15 @@ void PDFPluginPlaceholderObserver::OnOpenPDF(
             }
           }
         })");
-  std::unique_ptr<content::DownloadUrlParameters> params =
-      base::MakeUnique<content::DownloadUrlParameters>(
+  std::unique_ptr<download::DownloadUrlParameters> params =
+      std::make_unique<download::DownloadUrlParameters>(
           url, web_contents()->GetRenderViewHost()->GetProcess()->GetID(),
           web_contents()->GetRenderViewHost()->GetRoutingID(),
           render_frame_host->GetRoutingID(),
           storage_partition->GetURLRequestContext(), traffic_annotation);
-  params->set_referrer(referrer);
+  params->set_referrer(referrer.url);
+  params->set_referrer_policy(
+      content::Referrer::ReferrerPolicyForUrlRequest(referrer.policy));
   params->set_callback(base::Bind(&OnDownloadStarted));
 
   content::BrowserContext::GetDownloadManager(

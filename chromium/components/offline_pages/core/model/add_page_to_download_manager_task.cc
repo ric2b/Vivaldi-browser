@@ -5,7 +5,7 @@
 #include "components/offline_pages/core/model/add_page_to_download_manager_task.h"
 
 #include "base/bind.h"
-#include "components/offline_pages/core/offline_page_metadata_store_sql.h"
+#include "components/offline_pages/core/offline_page_metadata_store.h"
 #include "components/offline_pages/core/system_download_manager.h"
 #include "sql/connection.h"
 #include "sql/statement.h"
@@ -22,9 +22,9 @@ bool SetDownloadIdSync(int64_t offline_id,
   if (!db)
     return false;
 
-  const char kSql[] = "UPDATE OR IGNORE " OFFLINE_PAGES_TABLE_NAME
-                      " SET system_download_id = ?"
-                      " WHERE offline_id = ?";
+  static const char kSql[] = "UPDATE OR IGNORE " OFFLINE_PAGES_TABLE_NAME
+                             " SET system_download_id = ?"
+                             " WHERE offline_id = ?";
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
   statement.BindInt64(0, download_id);
   statement.BindInt64(1, offline_id);
@@ -34,7 +34,7 @@ bool SetDownloadIdSync(int64_t offline_id,
 }  // namespace
 
 AddPageToDownloadManagerTask::AddPageToDownloadManagerTask(
-    OfflinePageMetadataStoreSQL* store,
+    OfflinePageMetadataStore* store,
     SystemDownloadManager* download_manager,
     int64_t offline_id,
     const std::string& title,

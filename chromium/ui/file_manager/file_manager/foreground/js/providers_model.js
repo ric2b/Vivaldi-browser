@@ -7,8 +7,7 @@
  * An item in the model. Represents a single providing extension.
  *
  * @param {string} providerId
- * @param {!IconSet} iconSet
- * @param {string} largeIconUrl
+ * @param {!chrome.fileManagerPrivate.IconSet} iconSet
  * @param {string} name
  * @param {boolean} configurable
  * @param {boolean} watchable
@@ -18,8 +17,8 @@
  * @struct
  */
 function ProvidersModelItem(
-    providerId, iconSet, largeIconUrl, name, configurable, watchable,
-    multipleMounts, source) {
+    providerId, iconSet, name, configurable, watchable, multipleMounts,
+    source) {
   /**
    * @private {string}
    * @const
@@ -27,16 +26,10 @@ function ProvidersModelItem(
   this.providerId_ = providerId;
 
   /**
-   * @private {!IconSet}
+   * @private {!chrome.fileManagerPrivate.IconSet}
    * @const
    */
   this.iconSet_ = iconSet;
-
-  /**
-   * @private {string}
-   * @const
-   */
-  this.largeIconUrl_ = largeIconUrl;
 
   /**
    * @private {string}
@@ -78,17 +71,10 @@ ProvidersModelItem.prototype = {
   },
 
   /**
-   * @return {!IconSet}
+   * @return {!chrome.fileManagerPrivate.IconSet}
    */
   get iconSet() {
     return this.iconSet_;
-  },
-
-  /**
-   * @return {string}
-   */
-  get largeIconUrl() {
-    return this.largeIconUrl_;
   },
 
   /**
@@ -157,9 +143,9 @@ ProvidersModel.prototype.getInstalledProviders = function() {
       var results = [];
       providers.forEach(function(provider) {
         results.push(new ProvidersModelItem(
-            provider.providerId, provider.iconSet, provider.largeIconUrl,
-            provider.name, provider.configurable, provider.watchable,
-            provider.multipleMounts, provider.source));
+            provider.providerId, provider.iconSet, provider.name,
+            provider.configurable, provider.watchable, provider.multipleMounts,
+            provider.source));
       });
       fulfill(results);
     });

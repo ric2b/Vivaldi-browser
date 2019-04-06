@@ -18,7 +18,9 @@ ServiceWorkerDataPipeReader::ServiceWorkerDataPipeReader(
     : owner_(owner),
       streaming_version_(streaming_version),
       stream_pending_buffer_size_(0),
-      handle_watcher_(FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL),
+      handle_watcher_(FROM_HERE,
+                      mojo::SimpleWatcher::ArmingPolicy::MANUAL,
+                      base::SequencedTaskRunnerHandle::Get()),
       stream_(std::move(stream_handle->stream)),
       binding_(this, std::move(stream_handle->callback_request)),
       producer_state_(State::kStreaming) {
@@ -150,6 +152,7 @@ void ServiceWorkerDataPipeReader::AsyncComplete() {
   switch (state()) {
     case State::kStreaming:
       NOTREACHED();
+      break;
     case State::kCompleted:
       stream_pending_buffer_ = nullptr;
       stream_pending_buffer_size_ = 0;

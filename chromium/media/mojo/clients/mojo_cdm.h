@@ -33,6 +33,10 @@ class Origin;
 
 namespace media {
 
+namespace mojom {
+class InterfaceFactory;
+}
+
 class MojoDecryptor;
 
 // A ContentDecryptionModule that proxies to a mojom::ContentDecryptionModule.
@@ -49,6 +53,7 @@ class MojoCdm : public ContentDecryptionModule,
       const url::Origin& security_origin,
       const CdmConfig& cdm_config,
       mojom::ContentDecryptionModulePtr remote_cdm,
+      mojom::InterfaceFactory* interface_factory,
       const SessionMessageCB& session_message_cb,
       const SessionClosedCB& session_closed_cb,
       const SessionKeysChangeCB& session_keys_change_cb,
@@ -84,6 +89,7 @@ class MojoCdm : public ContentDecryptionModule,
 
  private:
   MojoCdm(mojom::ContentDecryptionModulePtr remote_cdm,
+          mojom::InterfaceFactory* interface_factory,
           const SessionMessageCB& session_message_cb,
           const SessionClosedCB& session_closed_cb,
           const SessionKeysChangeCB& session_keys_change_cb,
@@ -129,10 +135,12 @@ class MojoCdm : public ContentDecryptionModule,
                                     mojom::CdmPromiseResultPtr result,
                                     const std::string& session_id);
 
-  base::ThreadChecker thread_checker_;
+  THREAD_CHECKER(thread_checker_);
 
   mojom::ContentDecryptionModulePtr remote_cdm_;
-  mojo::Binding<ContentDecryptionModuleClient> binding_;
+  mojom::InterfaceFactory* interface_factory_;
+  mojo::Binding<ContentDecryptionModuleClient> client_binding_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // Protects |cdm_id_|, |decryptor_ptr_|, |decryptor_| and
   // |decryptor_task_runner_| which could be accessed from other threads.

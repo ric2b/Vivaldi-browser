@@ -15,6 +15,7 @@
 #include "ash/system/network/vpn_list.h"
 #include "ash/system/network/vpn_list_view.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_item_detailed_view_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_item_more.h"
 #include "ash/system/tray/tray_popup_item_style.h"
@@ -32,6 +33,37 @@ using chromeos::NetworkTypePattern;
 namespace ash {
 namespace tray {
 
+bool IsVPNVisibleInSystemTray() {
+  LoginStatus login_status = Shell::Get()->session_controller()->login_status();
+  if (login_status == LoginStatus::NOT_LOGGED_IN)
+    return false;
+
+  // Show the VPN entry in the ash tray bubble if at least one third-party VPN
+  // provider is installed.
+  if (Shell::Get()->vpn_list()->HaveThirdPartyOrArcVPNProviders())
+    return true;
+
+  // Also show the VPN entry if at least one VPN network is configured.
+  NetworkStateHandler* const handler =
+      NetworkHandler::Get()->network_state_handler();
+  if (handler->FirstNetworkByType(NetworkTypePattern::VPN()))
+    return true;
+  return false;
+}
+
+bool IsVPNEnabled() {
+  NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
+  return handler->FirstNetworkByType(NetworkTypePattern::VPN());
+}
+
+bool IsVPNConnected() {
+  NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
+  const NetworkState* vpn =
+      handler->FirstNetworkByType(NetworkTypePattern::VPN());
+  return IsVPNEnabled() &&
+         (vpn->IsConnectedState() || vpn->IsConnectingState());
+}
+
 class VpnDefaultView : public TrayItemMore,
                        public network_icon::AnimationObserver {
  public:
@@ -39,20 +71,6 @@ class VpnDefaultView : public TrayItemMore,
 
   ~VpnDefaultView() override {
     network_icon::NetworkIconAnimation::GetInstance()->RemoveObserver(this);
-  }
-
-  static bool ShouldShow() {
-    // Show the VPN entry in the ash tray bubble if at least one third-party VPN
-    // provider is installed.
-    if (Shell::Get()->vpn_list()->HaveThirdPartyOrArcVPNProviders())
-      return true;
-
-    // Also show the VPN entry if at least one VPN network is configured.
-    NetworkStateHandler* const handler =
-        NetworkHandler::Get()->network_state_handler();
-    if (handler->FirstNetworkByType(NetworkTypePattern::VPN()))
-      return true;
-    return false;
   }
 
   void Update() {
@@ -78,9 +96,9 @@ class VpnDefaultView : public TrayItemMore,
     std::unique_ptr<TrayPopupItemStyle> style =
         TrayItemMore::HandleCreateStyle();
     style->set_color_style(
-        !IsVpnEnabled()
+        !IsVPNEnabled()
             ? TrayPopupItemStyle::ColorStyle::DISABLED
-            : IsVpnConnected() ? TrayPopupItemStyle::ColorStyle::ACTIVE
+            : IsVPNConnected() ? TrayPopupItemStyle::ColorStyle::ACTIVE
                                : TrayPopupItemStyle::ColorStyle::INACTIVE);
     return style;
   }
@@ -91,21 +109,6 @@ class VpnDefaultView : public TrayItemMore,
   }
 
  private:
-  bool IsVpnEnabled() const {
-    NetworkStateHandler* handler =
-        NetworkHandler::Get()->network_state_handler();
-    return handler->FirstNetworkByType(NetworkTypePattern::VPN());
-  }
-
-  bool IsVpnConnected() const {
-    NetworkStateHandler* handler =
-        NetworkHandler::Get()->network_state_handler();
-    const NetworkState* vpn =
-        handler->FirstNetworkByType(NetworkTypePattern::VPN());
-    return IsVpnEnabled() &&
-           (vpn->IsConnectedState() || vpn->IsConnectingState());
-  }
-
   void GetNetworkStateHandlerImageAndLabel(gfx::ImageSkia* image,
                                            base::string16* label,
                                            bool* animating) {
@@ -118,7 +121,7 @@ class VpnDefaultView : public TrayItemMore,
                              vpn && vpn->IsConnectedState()
                                  ? TrayPopupItemStyle::ColorStyle::ACTIVE
                                  : TrayPopupItemStyle::ColorStyle::INACTIVE));
-    if (!IsVpnConnected()) {
+    if (!IsVPNConnected()) {
       if (label) {
         *label =
             l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECTED);
@@ -139,9 +142,11 @@ class VpnDefaultView : public TrayItemMore,
 }  // namespace tray
 
 TrayVPN::TrayVPN(SystemTray* system_tray)
-    : SystemTrayItem(system_tray, UMA_VPN),
+    : SystemTrayItem(system_tray, SystemTrayItemUmaType::UMA_VPN),
       default_(nullptr),
-      detailed_(nullptr) {
+      detailed_(nullptr),
+      detailed_view_delegate_(
+          std::make_unique<SystemTrayItemDetailedViewDelegate>(this)) {
   network_state_observer_.reset(new TrayNetworkStateObserver(this));
 }
 
@@ -151,9 +156,7 @@ views::View* TrayVPN::CreateDefaultView(LoginStatus status) {
   CHECK(default_ == nullptr);
   if (!chromeos::NetworkHandler::IsInitialized())
     return nullptr;
-  if (status == LoginStatus::NOT_LOGGED_IN)
-    return nullptr;
-  if (!tray::VpnDefaultView::ShouldShow())
+  if (!tray::IsVPNVisibleInSystemTray())
     return nullptr;
 
   const bool is_in_secondary_login_screen =
@@ -173,7 +176,7 @@ views::View* TrayVPN::CreateDetailedView(LoginStatus status) {
 
   Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_DETAILED_VPN_VIEW);
-  detailed_ = new tray::VPNListView(this, status);
+  detailed_ = new tray::VPNListView(detailed_view_delegate_.get(), status);
   detailed_->Init();
   return detailed_;
 }

@@ -6,6 +6,7 @@
 #define UI_EVENTS_GESTURE_DETECTION_FILTERED_GESTURE_PROVIDER_H_
 
 #include <stdint.h>
+#include <memory>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -25,6 +26,9 @@ class GESTURE_DETECTION_EXPORT FilteredGestureProvider
   // and allowed by the |gesture_filter_|.
   FilteredGestureProvider(const GestureProvider::Config& config,
                           GestureProviderClient* client);
+  ~FilteredGestureProvider() final;
+
+  void UpdateConfig(const GestureProvider::Config& config);
 
   struct TouchHandlingResult {
     TouchHandlingResult();
@@ -55,13 +59,14 @@ class GESTURE_DETECTION_EXPORT FilteredGestureProvider
  private:
   // GestureProviderClient implementation.
   void OnGestureEvent(const ui::GestureEventData& event) override;
+  bool RequiresDoubleTapGestureEvents() const override;
 
   // TouchDispositionGestureFilterClient implementation.
   void ForwardGestureEvent(const ui::GestureEventData& event) override;
 
   GestureProviderClient* const client_;
 
-  ui::GestureProvider gesture_provider_;
+  std::unique_ptr<ui::GestureProvider> gesture_provider_;
   ui::TouchDispositionGestureFilter gesture_filter_;
 
   bool handling_event_;

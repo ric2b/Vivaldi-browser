@@ -6,8 +6,8 @@
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "extensions/browser/media_capture_util.h"
 #include "extensions/browser/serial_extension_host_queue.h"
-#include "extensions/shell/browser/media_capture_util.h"
 #include "extensions/shell/browser/shell_extension_web_contents_observer.h"
 
 namespace extensions {
@@ -35,11 +35,12 @@ ShellExtensionHostDelegate::GetJavaScriptDialogManager() {
   return NULL;
 }
 
-void ShellExtensionHostDelegate::CreateTab(content::WebContents* web_contents,
-                                           const std::string& extension_id,
-                                           WindowOpenDisposition disposition,
-                                           const gfx::Rect& initial_rect,
-                                           bool user_gesture) {
+void ShellExtensionHostDelegate::CreateTab(
+    std::unique_ptr<content::WebContents> web_contents,
+    const std::string& extension_id,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
+    bool user_gesture) {
   // TODO(jamescook): Should app_shell support opening popup windows?
   NOTREACHED();
 }
@@ -47,15 +48,15 @@ void ShellExtensionHostDelegate::CreateTab(content::WebContents* web_contents,
 void ShellExtensionHostDelegate::ProcessMediaAccessRequest(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback,
+    content::MediaResponseCallback callback,
     const Extension* extension) {
   // Allow access to the microphone and/or camera.
-  media_capture_util::GrantMediaStreamRequest(
-      web_contents, request, callback, extension);
+  media_capture_util::GrantMediaStreamRequest(web_contents, request,
+                                              std::move(callback), extension);
 }
 
 bool ShellExtensionHostDelegate::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type,
     const Extension* extension) {

@@ -33,8 +33,8 @@ class TabScrubber : public ui::EventHandler,
   // Returns a the single instance of a TabScrubber.
   static TabScrubber* GetInstance();
 
-  // Returns the virtual position of a swipe starting in the tab at |index|,
-  // base on the |direction|.
+  // Returns the starting position (in tabstrip coordinates) of a swipe starting
+  // in the tab at |index| and traveling in |direction|.
   static gfx::Point GetStartPoint(TabStrip* tab_strip,
                                   int index,
                                   TabScrubber::Direction direction);
@@ -60,12 +60,9 @@ class TabScrubber : public ui::EventHandler,
                const content::NotificationDetails& details) override;
 
   // TabStripObserver overrides.
-  void TabStripAddedTabAt(TabStrip* tab_strip, int index) override;
-  void TabStripMovedTab(TabStrip* tab_strip,
-                        int from_index,
-                        int to_index) override;
-  void TabStripRemovedTabAt(TabStrip* tab_strip, int index) override;
-  void TabStripDeleted(TabStrip* tab_strip) override;
+  void OnTabAdded(int index) override;
+  void OnTabMoved(int from_index, int to_index) override;
+  void OnTabRemoved(int index) override;
 
   Browser* GetActiveBrowser();
 
@@ -99,7 +96,7 @@ class TabScrubber : public ui::EventHandler,
   // The index of the tab that is currently highlighted.
   int highlighted_tab_;
   // Timer to control a delayed activation of the |highlighted_tab_|.
-  base::Timer activate_timer_;
+  base::RetainingOneShotTimer activate_timer_;
   // Time to wait in ms before newly selected tab becomes active.
   int activation_delay_;
   // Set if activation_delay had been explicitly set.

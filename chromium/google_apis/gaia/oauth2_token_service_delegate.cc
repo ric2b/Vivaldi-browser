@@ -5,6 +5,11 @@
 #include "google_apis/gaia/oauth2_token_service_delegate.h"
 
 #include "google_apis/gaia/oauth2_token_service.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+
+// static
+const char OAuth2TokenServiceDelegate::kInvalidRefreshToken[] =
+    "invalid_refresh_token";
 
 OAuth2TokenServiceDelegate::ScopedBatchChange::ScopedBatchChange(
     OAuth2TokenServiceDelegate* delegate)
@@ -51,11 +56,6 @@ void OAuth2TokenServiceDelegate::RemoveObserver(
   observer_list_.RemoveObserver(observer);
 }
 
-// static
-bool OAuth2TokenServiceDelegate::IsError(const GoogleServiceAuthError& error) {
-  return error.IsPersistentError();
-}
-
 void OAuth2TokenServiceDelegate::StartBatchChanges() {
   ++batch_change_depth_;
   if (batch_change_depth_ == 1) {
@@ -90,14 +90,21 @@ void OAuth2TokenServiceDelegate::FireRefreshTokensLoaded() {
     observer.OnRefreshTokensLoaded();
 }
 
-net::URLRequestContextGetter* OAuth2TokenServiceDelegate::GetRequestContext()
-    const {
+void OAuth2TokenServiceDelegate::FireAuthErrorChanged(
+    const std::string& account_id,
+    const GoogleServiceAuthError& error) {
+  for (auto& observer : observer_list_)
+    observer.OnAuthErrorChanged(account_id, error);
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+OAuth2TokenServiceDelegate::GetURLLoaderFactory() const {
   return nullptr;
 }
 
-bool OAuth2TokenServiceDelegate::RefreshTokenHasError(
+GoogleServiceAuthError OAuth2TokenServiceDelegate::GetAuthError(
     const std::string& account_id) const {
-  return false;
+  return GoogleServiceAuthError::AuthErrorNone();
 }
 
 std::vector<std::string> OAuth2TokenServiceDelegate::GetAccounts() {

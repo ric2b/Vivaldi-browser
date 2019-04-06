@@ -23,6 +23,7 @@
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/client_view.h"
+#include "ui/vivaldi_native_app_window.h"
 
 class SkRegion;
 class VivaldiBrowserWindow;
@@ -58,8 +59,7 @@ class VivaldiAppWindowClientView : public views::ClientView {
 // A VivaldiNativeAppWindow backed by a views::Widget and is based on the
 // NativeAppWindow, but decoupled from AppWindow. This is a merge of
 // NativeAppWindowViews and ChromeNativeAppWindowViews.
-class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
-                                    public content::WebContentsObserver,
+class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
                                     public views::WidgetDelegateView,
                                     public views::WidgetObserver {
  public:
@@ -120,6 +120,7 @@ class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
   void Show() override;
   void ShowInactive() override;
   void Hide() override;
+  bool IsVisible() const override;
   void Close() override;
   void Activate() override;
   void Deactivate() override;

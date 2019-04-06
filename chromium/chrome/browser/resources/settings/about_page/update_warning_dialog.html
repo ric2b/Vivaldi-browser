@@ -9,20 +9,20 @@
 <dom-module id="settings-update-warning-dialog">
   <template>
     <style include="settings-shared"></style>
-    <dialog is="cr-dialog" id="dialog" close-text="$i18n{close}">
+    <cr-dialog id="dialog" close-text="$i18n{close}">
       <div slot="title">$i18n{aboutUpdateWarningTitle}</div>
       <div slot="body">
         <div id="update-warning-message"></div>
       </div>
       <div slot="button-container">
         <paper-button id="cancel" class="cancel-button"
-            on-tap="onCancelTap_">$i18n{cancel}</paper-button>
+            on-click="onCancelTap_">$i18n{cancel}</paper-button>
         <paper-button id="continue" class="action-button"
-            on-tap="onContinueTap_">
+            on-click="onContinueTap_">
           $i18n{aboutUpdateWarningContinue}
         </paper-button>
       </div>
-    </dialog>
+    </cr-dialog>
   </template>
   <script src="update_warning_dialog.js"></script>
 </dom-module>

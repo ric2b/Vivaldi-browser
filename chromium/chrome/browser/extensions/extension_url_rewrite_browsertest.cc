@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/md_bookmarks/md_bookmarks_ui.h"
 #include "chrome/common/url_constants.h"
@@ -25,11 +26,11 @@
 
 using content::NavigationEntry;
 
-class ExtensionURLRewriteBrowserTest : public ExtensionBrowserTest {
+class ExtensionURLRewriteBrowserTest : public extensions::ExtensionBrowserTest {
  public:
   void SetUp() override {
     extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
-    ExtensionBrowserTest::SetUp();
+    extensions::ExtensionBrowserTest::SetUp();
   }
 
  protected:
@@ -43,8 +44,10 @@ class ExtensionURLRewriteBrowserTest : public ExtensionBrowserTest {
   }
 
   content::NavigationController* GetNavigationController() const {
-    return &browser()->tab_strip_model()->GetActiveWebContents()->
-        GetController();
+    return &browser()
+                ->tab_strip_model()
+                ->GetActiveWebContents()
+                ->GetController();
   }
 
   NavigationEntry* GetNavigationEntry() const {
@@ -78,9 +81,14 @@ class ExtensionURLRewriteBrowserTest : public ExtensionBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(ExtensionURLRewriteBrowserTest, NewTabPageURL) {
   // Navigate to chrome://newtab and check that the location bar text is blank.
-  GURL url(chrome::kChromeUINewTabURL);
-  TestURLNotShown(url);
-  // Check that the actual URL corresponds to the new tab URL.
+  // We do not use TestURLNotShown here because the virtual URL may be
+  // updated to the local NTP since we do not have a network connection to
+  // reach the remote NTP.
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+  EXPECT_EQ("", GetLocationBarText());
+  // Check that the actual and virtual URL corresponds to the new tab URL.
+  EXPECT_EQ(local_ntp_test_utils::GetFinalNtpUrl(browser()->profile()),
+            GetNavigationEntry()->GetVirtualURL());
   EXPECT_TRUE(search::IsNTPURL(GetNavigationEntry()->GetURL(), profile()));
 }
 
@@ -92,32 +100,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionURLRewriteBrowserTest, NewTabPageURLOverride) {
   // Check that the internal URL uses the chrome-extension:// scheme.
   EXPECT_TRUE(GetNavigationEntry()->GetURL().SchemeIs(
       extensions::kExtensionScheme));
-}
-
-IN_PROC_BROWSER_TEST_F(ExtensionURLRewriteBrowserTest, BookmarksURL) {
-  if (MdBookmarksUI::IsEnabled())
-    return;
-
-  // Navigate to chrome://bookmarks and check that the location bar URL is
-  // what was entered and the internal URL uses the chrome-extension:// scheme.
-  const GURL bookmarks_url(chrome::kChromeUIBookmarksURL);
-  ui_test_utils::NavigateToURL(browser(), bookmarks_url);
-  // The default chrome://bookmarks implementation will append /#1 to the URL
-  // once loaded. Use |GetWithEmptyPath()| to avoid flakyness.
-  EXPECT_EQ(bookmarks_url, GetLocationBarTextAsURL().GetWithEmptyPath());
-  NavigationEntry* navigation = GetNavigationEntry();
-  EXPECT_EQ(bookmarks_url, navigation->GetVirtualURL().GetWithEmptyPath());
-  EXPECT_TRUE(navigation->GetURL().SchemeIs(extensions::kExtensionScheme));
-}
-
-IN_PROC_BROWSER_TEST_F(ExtensionURLRewriteBrowserTest, BookmarksURLWithRef) {
-  if (MdBookmarksUI::IsEnabled())
-    return;
-
-  // Navigate to chrome://bookmarks/#1 and check that the location bar URL is
-  // what was entered and the internal URL uses the chrome-extension:// scheme.
-  GURL url_with_ref(chrome::kChromeUIBookmarksURL + std::string("#1"));
-  TestExtensionURLOverride(url_with_ref);
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionURLRewriteBrowserTest, BookmarksURLOverride) {

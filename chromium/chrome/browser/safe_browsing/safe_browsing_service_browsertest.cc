@@ -22,7 +22,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -68,7 +67,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/db/metadata.pb.h"
-#include "components/safe_browsing/db/notification_types.h"
 #include "components/safe_browsing/db/test_database_manager.h"
 #include "components/safe_browsing/db/util.h"
 #include "components/safe_browsing/db/v4_database.h"
@@ -77,6 +75,7 @@
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/db/v4_test_util.h"
 #include "components/security_interstitials/core/controller_client.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_details.h"
@@ -90,7 +89,10 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/websockets/websocket_handshake_constants.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "sql/connection.h"
 #include "sql/statement.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -181,7 +183,7 @@ class QuasiWebSocketHttpResponse : public net::test_server::HttpResponse {
         "Sec-WebSocket-Accept: %s\r\n"
         "\r\n",
         accept_hash_.c_str());
-    send.Run(response_headers, base::Bind(&base::DoNothing));
+    send.Run(response_headers, base::DoNothing());
     // Never call done(). The connection should stay open.
   }
 
@@ -201,6 +203,7 @@ enum class ContextType { kWindow, kWorker, kSharedWorker, kServiceWorker };
 
 enum class JsRequestType {
   kWebSocket,
+  kOffMainThreadWebSocket,
   // Load a URL using the Fetch API.
   kFetch
 };
@@ -232,6 +235,7 @@ std::string ContextTypeToString(ContextType context_type) {
 std::string JsRequestTypeToString(JsRequestType request_type) {
   switch (request_type) {
     case JsRequestType::kWebSocket:
+    case JsRequestType::kOffMainThreadWebSocket:
       return "websocket";
     case JsRequestType::kFetch:
       return "fetch";
@@ -263,9 +267,15 @@ GURL ConstructWebSocketURL(const GURL& main_url) {
 }
 
 GURL ConstructJsRequestURL(const GURL& base_url, JsRequestType request_type) {
-  return request_type == JsRequestType::kWebSocket
-             ? ConstructWebSocketURL(base_url)
-             : base_url.Resolve(kMalwarePage);
+  switch (request_type) {
+    case JsRequestType::kWebSocket:
+    case JsRequestType::kOffMainThreadWebSocket:
+      return ConstructWebSocketURL(base_url);
+    case JsRequestType::kFetch:
+      return base_url.Resolve(kMalwarePage);
+  }
+  NOTREACHED();
+  return GURL();
 }
 
 // Navigate |browser| to |url| and wait for the title to change to "NOT BLOCKED"
@@ -573,10 +583,11 @@ class TestSafeBrowsingDatabaseFactory : public SafeBrowsingDatabaseFactory {
 // safebrowsing server for testing purpose.
 class TestProtocolManager : public SafeBrowsingProtocolManager {
  public:
-  TestProtocolManager(SafeBrowsingProtocolManagerDelegate* delegate,
-                      net::URLRequestContextGetter* request_context_getter,
-                      const SafeBrowsingProtocolConfig& config)
-      : SafeBrowsingProtocolManager(delegate, request_context_getter, config) {
+  TestProtocolManager(
+      SafeBrowsingProtocolManagerDelegate* delegate,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      const SafeBrowsingProtocolConfig& config)
+      : SafeBrowsingProtocolManager(delegate, url_loader_factory, config) {
     create_count_++;
   }
 
@@ -632,11 +643,11 @@ class TestSBProtocolManagerFactory : public SBProtocolManagerFactory {
 
   std::unique_ptr<SafeBrowsingProtocolManager> CreateProtocolManager(
       SafeBrowsingProtocolManagerDelegate* delegate,
-      net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const SafeBrowsingProtocolConfig& config) override {
     base::AutoLock locker(lock_);
 
-    pm_ = new TestProtocolManager(delegate, request_context_getter, config);
+    pm_ = new TestProtocolManager(delegate, url_loader_factory, config);
 
     if (!quit_closure_.is_null()) {
       quit_closure_.Run();
@@ -679,7 +690,7 @@ class TestSBProtocolManagerFactory : public SBProtocolManagerFactory {
 class MockObserver : public SafeBrowsingUIManager::Observer {
  public:
   MockObserver() {}
-  virtual ~MockObserver() {}
+  ~MockObserver() override {}
   MOCK_METHOD1(OnSafeBrowsingHit,
                void(const security_interstitials::UnsafeResource&));
 };
@@ -778,7 +789,7 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
 
   void SetUpInProcessBrowserTestFixture() override {
     base::FilePath test_data_dir;
-    PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+    base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
     embedded_test_server()->RegisterRequestHandler(
         base::Bind(&HandleNeverCompletingRequests));
     embedded_test_server()->RegisterRequestHandler(
@@ -1035,7 +1046,14 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceMetadataTest, MalwareIFrame) {
   EXPECT_TRUE(hit_report().is_subresource);
 }
 
-IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceMetadataTest, MalwareImg) {
+// TODO(https://crbug.com/860445) - Reenable this once potential race condition
+// is addressed, which is triggered in certain conditions under MSAN, see bug.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_MalwareImg DISABLED_MalwareImg
+#else
+#define MAYBE_MalwareImg MalwareImg
+#endif
+IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceMetadataTest, MAYBE_MalwareImg) {
   GURL main_url = embedded_test_server()->GetURL(kMalwarePage);
   GURL img_url = embedded_test_server()->GetURL(kMalwareImg);
 
@@ -1781,17 +1799,55 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, StartAndStop) {
   EXPECT_FALSE(csd_service->enabled());
 }
 
+// This test should not end in an AssertNoURLLRequests CHECK.
+IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, ShutdownWithLiveRequest) {
+  std::unique_ptr<network::ResourceRequest> request =
+      std::make_unique<network::ResourceRequest>();
+  request->url = embedded_test_server()->GetURL("/hung-after-headers");
+  std::unique_ptr<network::SimpleURLLoader> loader =
+      network::SimpleURLLoader::Create(std::move(request),
+                                       TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  base::RunLoop run_loop;
+  loader->SetOnResponseStartedCallback(base::BindOnce(
+      [](const base::Closure& quit_closure, const GURL& final_url,
+         const network::ResourceResponseHead& response_head) {
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+  loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      g_browser_process->safe_browsing_service()->GetURLLoaderFactory().get(),
+      base::BindOnce([](std::unique_ptr<std::string> response_body) {}));
+
+  // Ensure that the request has already reached the URLLoader responsible for
+  // making it, or otherwise this test might pass if we have a regression.
+  run_loop.Run();
+  loader.release();
+}
+
 // Parameterised fixture to permit running the same test for Window and Worker
 // scopes.
 class SafeBrowsingServiceJsRequestTest
     : public ::testing::WithParamInterface<JsRequestTestParam>,
       public SafeBrowsingServiceTest {
  public:
+  void SetUp() override {
+    JsRequestTestParam param = GetParam();
+    if (param.request_type == JsRequestType::kWebSocket) {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kOffMainThreadWebSocket);
+    }
+    SafeBrowsingServiceTest::SetUp();
+  }
+
   void MarkAsMalware(const GURL& url) {
     SBFullHashResult uws_full_hash;
     GenUrlFullHashResult(url, MALWARE, &uws_full_hash);
     SetupResponseForUrl(url, uws_full_hash);
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 using SafeBrowsingServiceJsRequestInterstitialTest =
@@ -1833,6 +1889,10 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Values(
         JsRequestTestParam(ContextType::kWindow, JsRequestType::kWebSocket),
         JsRequestTestParam(ContextType::kWorker, JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kWindow,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
         JsRequestTestParam(ContextType::kWindow, JsRequestType::kFetch),
         JsRequestTestParam(ContextType::kWorker, JsRequestType::kFetch)));
 
@@ -1860,14 +1920,18 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceJsRequestNoInterstitialTest,
 INSTANTIATE_TEST_CASE_P(
     /* no prefix */,
     SafeBrowsingServiceJsRequestNoInterstitialTest,
-    ::testing::Values(JsRequestTestParam(ContextType::kSharedWorker,
-                                         JsRequestType::kWebSocket),
-                      JsRequestTestParam(ContextType::kServiceWorker,
-                                         JsRequestType::kWebSocket),
-                      JsRequestTestParam(ContextType::kSharedWorker,
-                                         JsRequestType::kFetch),
-                      JsRequestTestParam(ContextType::kServiceWorker,
-                                         JsRequestType::kFetch)));
+    ::testing::Values(
+        JsRequestTestParam(ContextType::kSharedWorker,
+                           JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kSharedWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kSharedWorker, JsRequestType::kFetch),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kFetch)));
 
 using SafeBrowsingServiceJsRequestSafeTest = SafeBrowsingServiceJsRequestTest;
 
@@ -1891,6 +1955,14 @@ INSTANTIATE_TEST_CASE_P(
                            JsRequestType::kWebSocket),
         JsRequestTestParam(ContextType::kServiceWorker,
                            JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kWindow,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kSharedWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
         JsRequestTestParam(ContextType::kWindow, JsRequestType::kFetch),
         JsRequestTestParam(ContextType::kWorker, JsRequestType::kFetch),
         JsRequestTestParam(ContextType::kSharedWorker, JsRequestType::kFetch),
@@ -2002,7 +2074,7 @@ class SafeBrowsingDatabaseManagerCookieTest : public InProcessBrowserTest {
     EXPECT_FALSE(base::PathExists(cookie_path));
 
     base::FilePath test_dir;
-    if (!PathService::Get(chrome::DIR_TEST_DATA, &test_dir)) {
+    if (!base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir)) {
       EXPECT_TRUE(false);
       return false;
     }
@@ -2113,15 +2185,18 @@ class SafeBrowsingDatabaseManagerCookieTest : public InProcessBrowserTest {
 // and can save cookies.
 IN_PROC_BROWSER_TEST_F(SafeBrowsingDatabaseManagerCookieTest,
                        TestSBUpdateCookies) {
-  content::WindowedNotificationObserver observer(
-      NOTIFICATION_SAFE_BROWSING_UPDATE_COMPLETE,
-      content::Source<SafeBrowsingDatabaseManager>(
-          sb_factory_->test_safe_browsing_service()->database_manager().get()));
+  base::RunLoop run_loop;
+  auto callback_subscription =
+      sb_factory_->test_safe_browsing_service()
+          ->database_manager()
+          .get()
+          ->RegisterDatabaseUpdatedCallback(run_loop.QuitClosure());
+
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&SafeBrowsingDatabaseManagerCookieTest::ForceUpdate,
                      base::Unretained(this)));
-  observer.Wait();
+  run_loop.Run();
 }
 
 // Tests the safe browsing blocking page in a browser.
@@ -2657,6 +2732,10 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Values(
         JsRequestTestParam(ContextType::kWindow, JsRequestType::kWebSocket),
         JsRequestTestParam(ContextType::kWorker, JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kWindow,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
         JsRequestTestParam(ContextType::kWindow, JsRequestType::kFetch),
         JsRequestTestParam(ContextType::kWorker, JsRequestType::kFetch)));
 
@@ -2684,14 +2763,18 @@ IN_PROC_BROWSER_TEST_P(V4SafeBrowsingServiceJsRequestNoInterstitialTest,
 INSTANTIATE_TEST_CASE_P(
     /* no prefix */,
     V4SafeBrowsingServiceJsRequestNoInterstitialTest,
-    ::testing::Values(JsRequestTestParam(ContextType::kSharedWorker,
-                                         JsRequestType::kWebSocket),
-                      JsRequestTestParam(ContextType::kServiceWorker,
-                                         JsRequestType::kWebSocket),
-                      JsRequestTestParam(ContextType::kSharedWorker,
-                                         JsRequestType::kFetch),
-                      JsRequestTestParam(ContextType::kServiceWorker,
-                                         JsRequestType::kFetch)));
+    ::testing::Values(
+        JsRequestTestParam(ContextType::kSharedWorker,
+                           JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kSharedWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kSharedWorker, JsRequestType::kFetch),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kFetch)));
 
 using V4SafeBrowsingServiceJsRequestSafeTest =
     V4SafeBrowsingServiceJsRequestTest;
@@ -2719,6 +2802,14 @@ INSTANTIATE_TEST_CASE_P(
                            JsRequestType::kWebSocket),
         JsRequestTestParam(ContextType::kServiceWorker,
                            JsRequestType::kWebSocket),
+        JsRequestTestParam(ContextType::kWindow,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kSharedWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
+        JsRequestTestParam(ContextType::kServiceWorker,
+                           JsRequestType::kOffMainThreadWebSocket),
         JsRequestTestParam(ContextType::kWindow, JsRequestType::kFetch),
         JsRequestTestParam(ContextType::kWorker, JsRequestType::kFetch),
         JsRequestTestParam(ContextType::kSharedWorker, JsRequestType::kFetch),

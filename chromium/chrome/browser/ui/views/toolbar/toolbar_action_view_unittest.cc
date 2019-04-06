@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -13,11 +12,11 @@
 #include "chrome/browser/ui/toolbar/test_toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_contents_factory.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/views/test/views_test_base.h"
 
 namespace {
 
@@ -38,6 +37,7 @@ class TestToolbarActionViewDelegate : public ToolbarActionView::Delegate {
   views::MenuButton* GetOverflowReferenceView() override {
     return overflow_reference_view_;
   }
+  gfx::Size GetToolbarActionSize() override { return gfx::Size(32, 32); }
   void WriteDragDataForView(views::View* sender,
                             const gfx::Point& press_pt,
                             ui::OSExchangeData* data) override {}
@@ -96,13 +96,13 @@ class OpenMenuListener : public views::ContextMenuController {
 
 }  // namespace
 
-class ToolbarActionViewUnitTest : public views::ViewsTestBase {
+class ToolbarActionViewUnitTest : public ChromeViewsTestBase {
  public:
   ToolbarActionViewUnitTest() : widget_(nullptr) {}
   ~ToolbarActionViewUnitTest() override {}
 
   void SetUp() override {
-    views::ViewsTestBase::SetUp();
+    ChromeViewsTestBase::SetUp();
 
     widget_ = new views::Widget;
     views::Widget::InitParams params =
@@ -110,10 +110,11 @@ class ToolbarActionViewUnitTest : public views::ViewsTestBase {
     params.bounds = gfx::Rect(0, 0, 200, 200);
     widget_->Init(params);
   }
+
   void TearDown() override {
     if (!widget_->IsClosed())
       widget_->Close();
-    views::ViewsTestBase::TearDown();
+    ChromeViewsTestBase::TearDown();
   }
 
   views::Widget* widget() { return widget_; }
@@ -220,7 +221,8 @@ TEST_F(ToolbarActionViewUnitTest, BasicToolbarActionViewTest) {
   EXPECT_EQ(tooltip, tooltip_test);
   ui::AXNodeData ax_node_data;
   view.GetAccessibleNodeData(&ax_node_data);
-  EXPECT_EQ(name, ax_node_data.GetString16Attribute(ui::AX_ATTR_NAME));
+  EXPECT_EQ(name, ax_node_data.GetString16Attribute(
+                      ax::mojom::StringAttribute::kName));
 
   // The button should start in normal state, with no actions executed.
   EXPECT_EQ(views::Button::STATE_NORMAL, view.state());

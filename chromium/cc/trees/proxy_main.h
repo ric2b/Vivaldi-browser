@@ -19,6 +19,7 @@ class LayerTreeFrameSink;
 class LayerTreeHost;
 class LayerTreeMutator;
 class ProxyImpl;
+class RenderFrameMetadataObserver;
 
 // This class aggregates all interactions that the impl side of the compositor
 // needs to have with the main side.
@@ -51,10 +52,10 @@ class CC_EXPORT ProxyMain : public Proxy {
   void DidCompletePageScaleAnimation();
   void BeginMainFrame(
       std::unique_ptr<BeginMainFrameAndCommitState> begin_main_frame_state);
-  void DidPresentCompositorFrame(const std::vector<int>& source_frames,
-                                 base::TimeTicks time,
-                                 base::TimeDelta refresh,
-                                 uint32_t flags);
+  void DidPresentCompositorFrame(
+      uint32_t frame_token,
+      std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
+      const gfx::PresentationFeedback& feedback);
 
   CommitPipelineStage max_requested_pipeline_stage() const {
     return max_requested_pipeline_stage_;
@@ -78,10 +79,10 @@ class CC_EXPORT ProxyMain : public Proxy {
   void SetNeedsCommit() override;
   void SetNeedsRedraw(const gfx::Rect& damage_rect) override;
   void SetNextCommitWaitsForActivation() override;
+  bool RequestedAnimatePending() override;
   void NotifyInputThrottledUntilCommit() override;
   void SetDeferCommits(bool defer_commits) override;
   bool CommitRequested() const override;
-  void MainThreadHasStoppedFlinging() override;
   void Start() override;
   void Stop() override;
   bool SupportsImplScrolling() const override;
@@ -93,7 +94,9 @@ class CC_EXPORT ProxyMain : public Proxy {
                                   bool animate) override;
   void RequestBeginMainFrameNotExpected(bool new_state) override;
   void SetURLForUkm(const GURL& url) override;
-  void ClearHistoryOnNavigation() override;
+  void ClearHistory() override;
+  void SetRenderFrameObserver(
+      std::unique_ptr<RenderFrameMetadataObserver> observer) override;
 
   // Returns |true| if the request was actually sent, |false| if one was
   // already outstanding.

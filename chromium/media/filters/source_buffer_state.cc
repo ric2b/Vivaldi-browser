@@ -55,6 +55,17 @@ bool CheckBytestreamTrackIds(
   return true;
 }
 
+unsigned GetMSEBufferSizeLimitIfExists(base::StringPiece switch_string) {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  unsigned memory_limit;
+  if (command_line->HasSwitch(switch_string) &&
+      base::StringToUint(command_line->GetSwitchValueASCII(switch_string),
+                         &memory_limit)) {
+    return memory_limit * 1024 * 1024;
+  }
+  return 0;
+}
+
 }  // namespace
 
 // List of time ranges for each SourceBuffer.
@@ -126,8 +137,7 @@ SourceBufferState::SourceBufferState(
       frame_processor_(frame_processor.release()),
       create_demuxer_stream_cb_(create_demuxer_stream_cb),
       media_log_(media_log),
-      state_(UNINITIALIZED),
-      auto_update_timestamp_offset_(false) {
+      state_(UNINITIALIZED) {
   DCHECK(!create_demuxer_stream_cb_.is_null());
   DCHECK(frame_processor_);
 }
@@ -137,47 +147,32 @@ SourceBufferState::~SourceBufferState() {
 }
 
 void SourceBufferState::Init(
-    const StreamParser::InitCB& init_cb,
+    StreamParser::InitCB init_cb,
     const std::string& expected_codecs,
     const StreamParser::EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
     const NewTextTrackCB& new_text_track_cb) {
   DCHECK_EQ(state_, UNINITIALIZED);
-  init_cb_ = init_cb;
+  init_cb_ = std::move(init_cb);
   encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
   new_text_track_cb_ = new_text_track_cb;
-
-  std::vector<std::string> expected_codecs_parsed;
-  SplitCodecsToVector(expected_codecs, &expected_codecs_parsed, false);
-
-  std::vector<AudioCodec> expected_acodecs;
-  std::vector<VideoCodec> expected_vcodecs;
-  for (const auto& codec_id : expected_codecs_parsed) {
-    AudioCodec acodec = StringToAudioCodec(codec_id);
-    if (acodec != kUnknownAudioCodec) {
-      expected_audio_codecs_.push_back(acodec);
-      continue;
-    }
-    VideoCodec vcodec = StringToVideoCodec(codec_id);
-    if (vcodec != kUnknownVideoCodec) {
-      expected_video_codecs_.push_back(vcodec);
-      continue;
-    }
-    MEDIA_LOG(INFO, media_log_) << "Unrecognized media codec: " << codec_id;
-  }
-
   state_ = PENDING_PARSER_CONFIG;
-  stream_parser_->Init(
-      base::Bind(&SourceBufferState::OnSourceInitDone, base::Unretained(this)),
-      base::Bind(&SourceBufferState::OnNewConfigs, base::Unretained(this),
-                 expected_codecs),
-      base::Bind(&SourceBufferState::OnNewBuffers, base::Unretained(this)),
-      new_text_track_cb_.is_null(),
-      base::Bind(&SourceBufferState::OnEncryptedMediaInitData,
-                 base::Unretained(this)),
-      base::Bind(&SourceBufferState::OnNewMediaSegment, base::Unretained(this)),
-      base::Bind(&SourceBufferState::OnEndOfMediaSegment,
-                 base::Unretained(this)),
-      media_log_);
+  InitializeParser(expected_codecs);
+}
+
+void SourceBufferState::ChangeType(
+    std::unique_ptr<StreamParser> new_stream_parser,
+    const std::string& new_expected_codecs) {
+  DCHECK_GE(state_, PENDING_PARSER_CONFIG);
+  DCHECK_NE(state_, PENDING_PARSER_INIT);
+  DCHECK(!parsing_media_segment_);
+
+  // If this source buffer has already handled an initialization segment, avoid
+  // running |init_cb_| again later.
+  if (state_ == PARSER_INITIALIZED)
+    state_ = PENDING_PARSER_RECONFIG;
+
+  stream_parser_ = std::move(new_stream_parser);
+  InitializeParser(new_expected_codecs);
 }
 
 void SourceBufferState::SetSequenceMode(bool sequence_mode) {
@@ -545,6 +540,46 @@ bool SourceBufferState::IsSeekWaitingForData() const {
   return false;
 }
 
+void SourceBufferState::InitializeParser(const std::string& expected_codecs) {
+  expected_audio_codecs_.clear();
+  expected_video_codecs_.clear();
+
+  std::vector<std::string> expected_codecs_parsed;
+  SplitCodecsToVector(expected_codecs, &expected_codecs_parsed, false);
+
+  std::vector<AudioCodec> expected_acodecs;
+  std::vector<VideoCodec> expected_vcodecs;
+  for (const auto& codec_id : expected_codecs_parsed) {
+    AudioCodec acodec = StringToAudioCodec(codec_id);
+    if (acodec != kUnknownAudioCodec) {
+      expected_audio_codecs_.push_back(acodec);
+      continue;
+    }
+    VideoCodec vcodec = StringToVideoCodec(codec_id);
+    if (vcodec != kUnknownVideoCodec) {
+      expected_video_codecs_.push_back(vcodec);
+      continue;
+    }
+    MEDIA_LOG(INFO, media_log_) << "Unrecognized media codec: " << codec_id;
+  }
+
+  stream_parser_->Init(
+      base::BindOnce(&SourceBufferState::OnSourceInitDone,
+                     base::Unretained(this)),
+      base::BindRepeating(&SourceBufferState::OnNewConfigs,
+                          base::Unretained(this), expected_codecs),
+      base::BindRepeating(&SourceBufferState::OnNewBuffers,
+                          base::Unretained(this)),
+      new_text_track_cb_.is_null(),
+      base::BindRepeating(&SourceBufferState::OnEncryptedMediaInitData,
+                          base::Unretained(this)),
+      base::BindRepeating(&SourceBufferState::OnNewMediaSegment,
+                          base::Unretained(this)),
+      base::BindRepeating(&SourceBufferState::OnEndOfMediaSegment,
+                          base::Unretained(this)),
+      media_log_);
+}
+
 bool SourceBufferState::OnNewConfigs(
     std::string expected_codecs,
     std::unique_ptr<MediaTracks> tracks,
@@ -575,6 +610,11 @@ bool SourceBufferState::OnNewConfigs(
   // issue https://github.com/w3c/media-source/issues/161 is resolved.
   std::vector<AudioCodec> expected_acodecs = expected_audio_codecs_;
   std::vector<VideoCodec> expected_vcodecs = expected_video_codecs_;
+
+  // TODO(wolenetz): Once codec strictness is relaxed, we can change
+  // |allow_codec_changes| to always be true. Until then, we only allow codec
+  // changes on explicit ChangeType().
+  const bool allow_codec_changes = state_ == PENDING_PARSER_RECONFIG;
 
   FrameProcessor::TrackIdChanges track_id_changes;
   for (const auto& track : tracks->tracks()) {
@@ -635,7 +675,8 @@ bool SourceBufferState::OnNewConfigs(
 
       track->set_id(stream->media_track_id());
       frame_processor_->OnPossibleAudioConfigUpdate(audio_config);
-      success &= stream->UpdateAudioConfig(audio_config, media_log_);
+      success &= stream->UpdateAudioConfig(audio_config, allow_codec_changes,
+                                           media_log_);
     } else if (track->type() == MediaTrack::Video) {
       VideoDecoderConfig video_config = tracks->getVideoConfig(track_id);
       DVLOG(1) << "Video track_id=" << track_id
@@ -690,7 +731,8 @@ bool SourceBufferState::OnNewConfigs(
       }
 
       track->set_id(stream->media_track_id());
-      success &= stream->UpdateVideoConfig(video_config, media_log_);
+      success &= stream->UpdateVideoConfig(video_config, allow_codec_changes,
+                                           media_log_);
     } else {
       MEDIA_LOG(ERROR, media_log_) << "Error: unsupported media track type "
                                    << track->type();
@@ -798,6 +840,8 @@ bool SourceBufferState::OnNewConfigs(
   if (success) {
     if (state_ == PENDING_PARSER_CONFIG)
       state_ = PENDING_PARSER_INIT;
+    if (state_ == PENDING_PARSER_RECONFIG)
+      state_ = PENDING_PARSER_REINIT;
     DCHECK(!init_segment_received_cb_.is_null());
     init_segment_received_cb_.Run(std::move(tracks));
   }
@@ -806,32 +850,24 @@ bool SourceBufferState::OnNewConfigs(
 }
 
 void SourceBufferState::SetStreamMemoryLimits() {
-  auto* cmd_line = base::CommandLine::ForCurrentProcess();
-
-  std::string audio_buf_limit_switch =
-      cmd_line->GetSwitchValueASCII(switches::kMSEAudioBufferSizeLimit);
-  unsigned audio_buf_size_limit = 0;
-  if (base::StringToUint(audio_buf_limit_switch, &audio_buf_size_limit) &&
-      audio_buf_size_limit > 0) {
+  size_t audio_buf_size_limit =
+      GetMSEBufferSizeLimitIfExists(switches::kMSEAudioBufferSizeLimitMb);
+  if (audio_buf_size_limit) {
     MEDIA_LOG(INFO, media_log_)
         << "Custom audio per-track SourceBuffer size limit="
         << audio_buf_size_limit;
-    for (const auto& it : audio_streams_) {
+    for (const auto& it : audio_streams_)
       it.second->SetStreamMemoryLimit(audio_buf_size_limit);
-    }
   }
 
-  std::string video_buf_limit_switch =
-      cmd_line->GetSwitchValueASCII(switches::kMSEVideoBufferSizeLimit);
-  unsigned video_buf_size_limit = 0;
-  if (base::StringToUint(video_buf_limit_switch, &video_buf_size_limit) &&
-      video_buf_size_limit > 0) {
+  size_t video_buf_size_limit =
+      GetMSEBufferSizeLimitIfExists(switches::kMSEVideoBufferSizeLimitMb);
+  if (video_buf_size_limit) {
     MEDIA_LOG(INFO, media_log_)
         << "Custom video per-track SourceBuffer size limit="
         << video_buf_size_limit;
-    for (const auto& it : video_streams_) {
+    for (const auto& it : video_streams_)
       it.second->SetStreamMemoryLimit(video_buf_size_limit);
-    }
   }
 }
 
@@ -886,9 +922,10 @@ bool SourceBufferState::OnNewBuffers(
       *timestamp_offset_during_append_;
 
   // Calculate the new timestamp offset for audio/video tracks if the stream
-  // parser has requested automatic updates.
-  TimeDelta new_timestamp_offset = timestamp_offset_before_processing;
-  if (auto_update_timestamp_offset_) {
+  // parser corresponds to MSE MIME type with 'Generate Timestamps Flag' set
+  // true.
+  TimeDelta predicted_timestamp_offset = timestamp_offset_before_processing;
+  if (generate_timestamps_flag()) {
     TimeDelta min_end_timestamp = kNoTimestamp;
     for (const auto& it : buffer_queue_map) {
       const StreamParser::BufferQueue& bufq = it.second;
@@ -900,7 +937,7 @@ bool SourceBufferState::OnNewBuffers(
       }
     }
     if (min_end_timestamp != kNoTimestamp)
-      new_timestamp_offset += min_end_timestamp;
+      predicted_timestamp_offset += min_end_timestamp;
   }
 
   if (!frame_processor_->ProcessFrames(
@@ -910,9 +947,11 @@ bool SourceBufferState::OnNewBuffers(
   }
 
   // Only update the timestamp offset if the frame processor hasn't already.
-  if (auto_update_timestamp_offset_ &&
+  if (generate_timestamps_flag() &&
       timestamp_offset_before_processing == *timestamp_offset_during_append_) {
-    *timestamp_offset_during_append_ = new_timestamp_offset;
+    // TODO(wolenetz): This prediction assumes the last frame in each track
+    // isn't dropped by append window trimming. See https://crbug.com/850316.
+    *timestamp_offset_during_append_ = predicted_timestamp_offset;
   }
 
   return true;
@@ -927,10 +966,15 @@ void SourceBufferState::OnEncryptedMediaInitData(
 
 void SourceBufferState::OnSourceInitDone(
     const StreamParser::InitParameters& params) {
-  DCHECK_EQ(state_, PENDING_PARSER_INIT);
+  // We've either yet-to-run |init_cb_| if pending init, or we've previously
+  // run it if pending reinit.
+  DCHECK((!init_cb_.is_null() && state_ == PENDING_PARSER_INIT) ||
+         (init_cb_.is_null() && state_ == PENDING_PARSER_REINIT));
+  State old_state = state_;
   state_ = PARSER_INITIALIZED;
-  auto_update_timestamp_offset_ = params.auto_update_timestamp_offset;
-  base::ResetAndReturn(&init_cb_).Run(params);
+
+  if (old_state == PENDING_PARSER_INIT)
+    std::move(init_cb_).Run(params);
 }
 
 }  // namespace media

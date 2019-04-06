@@ -15,25 +15,28 @@ TEST(Text, MultiLine) {
 
   // Create an initialize a text element with a long string.
   auto text = std::make_unique<Text>(0.020);
-  text->SetSize(kInitialSize, 0);
+  text->SetFieldWidth(kInitialSize);
   text->SetText(base::UTF8ToUTF16(std::string(1000, 'x')));
 
   // Make sure we get multiple lines of rendered text from the string.
-  size_t initial_num_lines = text->LayOutTextForTest().size();
-  auto initial_size = text->GetTextureSizeForTest();
+  text->PrepareToDrawForTest();
+  size_t initial_num_lines = text->LinesForTest().size();
+  auto initial_size = text->texture_size_for_test();
   EXPECT_GT(initial_num_lines, 1u);
   EXPECT_GT(initial_size.height(), 0.f);
 
   // Reduce the field width, and ensure that the number of lines increases along
   // with the texture height.
-  text->SetSize(kInitialSize / 2, 0);
-  EXPECT_GT(text->LayOutTextForTest().size(), initial_num_lines);
-  EXPECT_GT(text->GetTextureSizeForTest().height(), initial_size.height());
+  text->SetFieldWidth(kInitialSize / 2);
+  text->PrepareToDrawForTest();
+  EXPECT_GT(text->LinesForTest().size(), initial_num_lines);
+  EXPECT_GT(text->texture_size_for_test().height(), initial_size.height());
 
   // Enforce single-line rendering.
   text->SetLayoutMode(kSingleLineFixedWidth);
-  EXPECT_EQ(text->LayOutTextForTest().size(), 1u);
-  EXPECT_LT(text->GetTextureSizeForTest().height(), initial_size.height());
+  text->PrepareToDrawForTest();
+  EXPECT_EQ(text->LinesForTest().size(), 1u);
+  EXPECT_LT(text->texture_size_for_test().height(), initial_size.height());
 }
 
 TEST(Text, Formatting) {
@@ -41,15 +44,21 @@ TEST(Text, Formatting) {
   formatting.push_back(
       TextFormattingAttribute(SK_ColorGREEN, gfx::Range(1, 2)));
   formatting.push_back(
+      TextFormattingAttribute(SK_ColorGREEN, gfx::Range::InvalidRange()));
+  formatting.push_back(
       TextFormattingAttribute(gfx::Font::Weight::BOLD, gfx::Range(3, 4)));
+  formatting.push_back(TextFormattingAttribute(gfx::Font::Weight::BOLD,
+                                               gfx::Range::InvalidRange()));
   formatting.push_back(
       TextFormattingAttribute(gfx::DirectionalityMode::DIRECTIONALITY_AS_URL));
 
   testing::InSequence in_sequence;
   testing::StrictMock<MockRenderText> render_text;
   EXPECT_CALL(render_text, ApplyColor(SK_ColorGREEN, gfx::Range(1, 2)));
+  EXPECT_CALL(render_text, SetColor(SK_ColorGREEN));
   EXPECT_CALL(render_text,
               ApplyWeight(gfx::Font::Weight::BOLD, gfx::Range(3, 4)));
+  EXPECT_CALL(render_text, SetWeight(gfx::Font::Weight::BOLD));
   EXPECT_CALL(render_text, SetDirectionalityMode(
                                gfx::DirectionalityMode::DIRECTIONALITY_AS_URL));
 

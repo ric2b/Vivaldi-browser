@@ -17,8 +17,11 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
+#include "components/google/core/browser/google_util.h"
+#include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/url_database.h"
 #include "sql/statement.h"
+#include "sql/transaction.h"
 #include "ui/base/page_transition_types.h"
 #include "url/url_constants.h"
 
@@ -42,7 +45,8 @@ bool VisitDatabase::InitVisitTable() {
             "segment_id INTEGER,"
             // Some old DBs may have an "is_indexed" field here, but this is no
             // longer used and should NOT be read or written from any longer.
-            "visit_duration INTEGER DEFAULT 0 NOT NULL)"))
+            "visit_duration INTEGER DEFAULT 0 NOT NULL,"
+            "incremented_omnibox_typed_score BOOLEAN DEFAULT FALSE NOT NULL)"))
       return false;
   }
 
@@ -98,6 +102,7 @@ void VisitDatabase::FillVisitRow(const sql::Statement& statement,
   visit->segment_id = statement.ColumnInt64(5);
   visit->visit_duration =
       base::TimeDelta::FromInternalValue(statement.ColumnInt64(6));
+  visit->incremented_omnibox_typed_score = statement.ColumnBool(7);
 }
 
 // static
@@ -149,16 +154,19 @@ bool VisitDatabase::FillVisitVectorWithOptions(sql::Statement& statement,
 }
 
 VisitID VisitDatabase::AddVisit(VisitRow* visit, VisitSource source) {
-  sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
       "INSERT INTO visits "
       "(url, visit_time, from_visit, transition, segment_id, "
-      "visit_duration) VALUES (?,?,?,?,?,?)"));
+      "visit_duration, incremented_omnibox_typed_score) "
+      "VALUES (?,?,?,?,?,?,?)"));
   statement.BindInt64(0, visit->url_id);
   statement.BindInt64(1, visit->visit_time.ToInternalValue());
   statement.BindInt64(2, visit->referring_visit);
   statement.BindInt64(3, visit->transition);
   statement.BindInt64(4, visit->segment_id);
   statement.BindInt64(5, visit->visit_duration.ToInternalValue());
+  statement.BindBool(6, visit->incremented_omnibox_typed_score);
 
   if (!statement.Run()) {
     DVLOG(0) << "Failed to execute visit insert statement:  "
@@ -235,17 +243,19 @@ bool VisitDatabase::UpdateVisitRow(const VisitRow& visit) {
   if (visit.visit_id == visit.referring_visit)
     return false;
 
-  sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
       "UPDATE visits SET "
       "url=?,visit_time=?,from_visit=?,transition=?,segment_id=?,"
-      "visit_duration=? WHERE id=?"));
+      "visit_duration=?,incremented_omnibox_typed_score=? WHERE id=?"));
   statement.BindInt64(0, visit.url_id);
   statement.BindInt64(1, visit.visit_time.ToInternalValue());
   statement.BindInt64(2, visit.referring_visit);
   statement.BindInt64(3, visit.transition);
   statement.BindInt64(4, visit.segment_id);
   statement.BindInt64(5, visit.visit_duration.ToInternalValue());
-  statement.BindInt64(6, visit.visit_id);
+  statement.BindBool(6, visit.incremented_omnibox_typed_score);
+  statement.BindInt64(7, visit.visit_id);
 
   return statement.Run();
 }
@@ -610,6 +620,46 @@ void VisitDatabase::GetVisitsSource(const VisitVector& visits,
   }
 }
 
+std::vector<DomainVisit>
+VisitDatabase::GetGoogleDomainVisitsFromSearchesInRange(base::Time begin_time,
+                                                        base::Time end_time) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
+      "SELECT "
+      "  visit_time, "
+      "  u.url "
+      "FROM  "
+      "  urls u JOIN visits v ON u.id = v.url "
+      "WHERE "
+      // Pre-filtering to limit the number of entries to process in
+      // C++. The url column is indexed so this makes the query more
+      // efficient. We then confirm in C++ that the domain of an entry
+      // is a valid Google domain before counting the visit.
+      "  (u.url LIKE \"https://www.google.__/search%\" OR "
+      "   u.url LIKE \"https://www.google.___/search%\" OR "
+      "   u.url LIKE \"https://www.google.__.__/search%\" OR "
+      "   u.url LIKE \"https://www.google.___.__/search%\") AND "
+      // Restrict to visits that are more recent than the specified start
+      // time.
+      "  visit_time >= ? AND "
+      // Restrict to visits that are older than the specified end time.
+      "  visit_time < ? "));
+  statement.BindInt64(0,
+                      begin_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
+  statement.BindInt64(1, end_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
+  std::vector<DomainVisit> domain_visits;
+  while (statement.Step()) {
+    const GURL url(statement.ColumnString(1));
+    if (google_util::IsGoogleSearchUrl(url)) {
+      domain_visits.emplace_back(
+          url.host(),
+          base::Time::FromDeltaSinceWindowsEpoch(
+              base::TimeDelta::FromMicroseconds(statement.ColumnInt64(0))));
+    }
+  }
+  return domain_visits;
+}
+
 bool VisitDatabase::MigrateVisitsWithoutDuration() {
   if (!GetDB().DoesTableExist("visits")) {
     NOTREACHED() << " Visits table should exist before migration";
@@ -626,11 +676,60 @@ bool VisitDatabase::MigrateVisitsWithoutDuration() {
   return true;
 }
 
-bool VisitDatabase::DropHistoryTables() {
-  // This will also drop the indices over the table.
-  return
-    GetDB().Execute("DROP TABLE visits") &&
-    GetDB().Execute("DROP TABLE urls");
+bool VisitDatabase::MigrateVisitsWithoutIncrementedOmniboxTypedScore() {
+  if (!GetDB().DoesTableExist("visits")) {
+    NOTREACHED() << " Visits table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("visits", "incremented_omnibox_typed_score")) {
+    // Wrap the creation and initialization of the new column in a transaction
+    // since the value must be computed outside of SQL and iteratively updated.
+    sql::Transaction committer(&GetDB());
+    if (!committer.Begin())
+      return false;
+
+    // Old versions don't have the incremented_omnibox_typed_score column, we
+    // modify the table to add that field. We iterate through the table and
+    // compute the result for each row.
+    if (!GetDB().Execute("ALTER TABLE visits "
+                         "ADD COLUMN incremented_omnibox_typed_score BOOLEAN "
+                         "DEFAULT FALSE NOT NULL"))
+      return false;
+
+    // Iterate through rows in the visits table and update each with the
+    // appropriate increment_omnibox_typed_score value. Because this column was
+    // newly added, the existing (default) value is not valid/correct.
+    sql::Statement read(GetDB().GetUniqueStatement(
+        "SELECT" HISTORY_VISIT_ROW_FIELDS "FROM visits"));
+    while (read.is_valid() && read.Step()) {
+      VisitRow row;
+      FillVisitRow(read, &row);
+      // Check if the visit row is in an invalid state and if it is then
+      // leave the new field as the default value.
+      if (row.visit_id == row.referring_visit)
+        continue;
+      row.incremented_omnibox_typed_score =
+          HistoryBackend::IsTypedIncrement(row.transition);
+      if (!UpdateVisitRow(row))
+        return false;
+    }
+    if (!read.Succeeded() || !committer.Commit())
+      return false;
+  }
+  return true;
+}
+
+bool VisitDatabase::GetAllVisitedURLRowidsForMigrationToVersion40(
+    std::vector<URLID>* visited_url_rowids_sorted) {
+  DCHECK(visited_url_rowids_sorted);
+  sql::Statement statement(GetDB().GetUniqueStatement(
+      "SELECT DISTINCT url FROM visits ORDER BY url"));
+
+  while (statement.Step()) {
+    visited_url_rowids_sorted->push_back(statement.ColumnInt64(0));
+  }
+  return statement.Succeeded();
 }
 
 }  // namespace history

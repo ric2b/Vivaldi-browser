@@ -18,7 +18,7 @@
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
-#include "chromeos/login/auth/authpolicy_login_helper.h"
+#include "chromeos/dbus/util/tpm_util.h"
 #include "crypto/rsa_private_key.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,8 +33,8 @@ namespace {
 
 void WriteInstallAttributesFile(const std::string& install_attrs_blob) {
   base::FilePath install_attrs_file;
-  ASSERT_TRUE(
-      PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES, &install_attrs_file));
+  ASSERT_TRUE(base::PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES,
+                                     &install_attrs_file));
   ASSERT_EQ(base::checked_cast<int>(install_attrs_blob.size()),
             base::WriteFile(install_attrs_file, install_attrs_blob.c_str(),
                             install_attrs_blob.size()));
@@ -59,9 +59,7 @@ void DevicePolicyCrosTestHelper::MarkAsEnterpriseOwnedBy(
 void DevicePolicyCrosTestHelper::MarkAsActiveDirectoryEnterpriseOwned(
     const std::string& realm) {
   OverridePaths();
-  ASSERT_TRUE(
-      chromeos::AuthPolicyLoginHelper::LockDeviceActiveDirectoryForTesting(
-          realm));
+  ASSERT_TRUE(chromeos::tpm_util::LockDeviceActiveDirectoryForTesting(realm));
 }
 
 void DevicePolicyCrosTestHelper::MarkAsEnterpriseOwned() {
@@ -72,7 +70,8 @@ void DevicePolicyCrosTestHelper::InstallOwnerKey() {
   OverridePaths();
 
   base::FilePath owner_key_file;
-  ASSERT_TRUE(PathService::Get(chromeos::FILE_OWNER_KEY, &owner_key_file));
+  ASSERT_TRUE(
+      base::PathService::Get(chromeos::FILE_OWNER_KEY, &owner_key_file));
   std::string owner_key_bits = device_policy()->GetPublicSigningKeyAsString();
   ASSERT_FALSE(owner_key_bits.empty());
   ASSERT_EQ(base::checked_cast<int>(owner_key_bits.length()),
@@ -86,7 +85,7 @@ void DevicePolicyCrosTestHelper::OverridePaths() {
   // use the overridden paths before ChromeBrowserMain starts. Make sure that
   // the paths are overridden before using them.
   base::FilePath user_data_dir;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   chromeos::RegisterStubPathOverrides(user_data_dir);
 }
 

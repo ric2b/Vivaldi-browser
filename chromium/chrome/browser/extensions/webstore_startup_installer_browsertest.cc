@@ -158,9 +158,9 @@ IN_PROC_BROWSER_TEST_F(WebstoreStartupInstallerTest, InstallFromHostedApp) {
           .Build();
   ASSERT_TRUE(hosted_app.get());
 
-  ExtensionService* extension_service =
-      extensions::ExtensionSystem::Get(browser()->profile())->
-          extension_service();
+  extensions::ExtensionService* extension_service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(browser()->profile());
 
@@ -215,7 +215,7 @@ class WebstoreStartupInstallUnpackFailureTest
 
   void SetUpInProcessBrowserTestFixture() override {
     WebstoreStartupInstallerTest::SetUpInProcessBrowserTestFixture();
-    extensions::ExtensionInstallUI::set_disable_failure_ui_for_tests();
+    extensions::ExtensionInstallUI::set_disable_ui_for_tests();
   }
 };
 

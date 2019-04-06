@@ -5,6 +5,8 @@
 #ifndef CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 #define CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
@@ -13,10 +15,11 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/common/features.h"
+#include "chrome/browser/ui/page_action/page_action_icon_container.h"
+#include "chrome/common/buildflags.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
+#include "chrome/browser/chromeos/apps/intent_helper/apps_navigation_types.h"
 #endif  // defined(OS_CHROMEOS)
 
 class LocationBarTesting;
@@ -38,6 +41,7 @@ class TestBrowserWindow : public BrowserWindow {
   void Show() override {}
   void ShowInactive() override {}
   void Hide() override {}
+  bool IsVisible() const override;
   void SetBounds(const gfx::Rect& bounds) override {}
   void Close() override {}
   void Activate() override {}
@@ -73,6 +77,7 @@ class TestBrowserWindow : public BrowserWindow {
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
   LocationBar* GetLocationBar() const override;
+  PageActionIconContainer* GetPageActionIconContainer() override;
   void SetFocusToLocationBar(bool select_all) override {}
   void UpdateReloadStopState(bool is_loading, bool force) override {}
   void UpdateToolbar(content::WebContents* contents) override {}
@@ -82,7 +87,7 @@ class TestBrowserWindow : public BrowserWindow {
   void ToolbarSizeChanged(bool is_animating) override {}
   void FocusAppMenu() override {}
   void FocusBookmarksToolbar() override {}
-  void FocusInfobars() override {}
+  void FocusInactivePopupForAccessibility() override {}
   void RotatePaneFocus(bool forwards) override {}
   void ShowAppMenu() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
@@ -98,13 +103,18 @@ class TestBrowserWindow : public BrowserWindow {
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
 #if defined(OS_CHROMEOS)
   void ShowIntentPickerBubble(
-      std::vector<arc::ArcNavigationThrottle::AppInfo> app_info,
+      std::vector<chromeos::IntentPickerAppInfo> app_info,
+      bool disable_stay_in_chrome,
       IntentPickerResponse callback) override {}
   void SetIntentPickerViewVisibility(bool visible) override {}
 #endif  // defined(OS_CHROMEOS)
   autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
+      bool user_gesture) override;
+  autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
+      content::WebContents* contents,
+      autofill::LocalCardMigrationBubbleController* controller,
       bool user_gesture) override;
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
@@ -125,8 +135,6 @@ class TestBrowserWindow : public BrowserWindow {
       const base::Callback<void(bool)>& callback) override {}
   void UserChangedTheme() override {}
   void CutCopyPaste(int command_id) override {}
-  WindowOpenDisposition GetDispositionForPopupBounds(
-      const gfx::Rect& bounds) override;
   FindBar* CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
@@ -165,9 +173,8 @@ class TestBrowserWindow : public BrowserWindow {
     void UpdateContentSettingsIcons() override {}
     void UpdateManagePasswordsIconAndBubble() override {}
     void UpdateSaveCreditCardIcon() override {}
-    void UpdateFindBarIconVisibility() override {}
+    void UpdateLocalCardMigrationIcon() override {}
     void UpdateBookmarkStarVisibility() override {}
-    void UpdateZoomViewVisibility() override {}
     void UpdateLocationBarVisibility(bool visible, bool animate) override {}
     void SaveStateToContents(content::WebContents* contents) override {}
     void Revert() override {}

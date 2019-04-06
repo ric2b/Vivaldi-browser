@@ -22,7 +22,7 @@ class UkmRecorderFactory;
 
 namespace blink {
 namespace scheduler {
-class RendererScheduler;
+class WebThreadScheduler;
 }
 }
 
@@ -33,23 +33,26 @@ class CompositorDependencies {
   virtual bool IsGpuRasterizationForced() = 0;
   virtual int GetGpuRasterizationMSAASampleCount() = 0;
   virtual bool IsLcdTextEnabled() = 0;
-  virtual bool IsDistanceFieldTextEnabled() = 0;
   virtual bool IsZeroCopyEnabled() = 0;
   virtual bool IsPartialRasterEnabled() = 0;
   virtual bool IsGpuMemoryBufferCompositorResourcesEnabled() = 0;
   virtual bool IsElasticOverscrollEnabled() = 0;
+  virtual bool IsUseZoomForDSFEnabled() = 0;
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorMainThreadTaskRunner() = 0;
   // Returns null if the compositor is in single-threaded mode (ie. there is no
   // compositor thread).
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorImplThreadTaskRunner() = 0;
-  virtual blink::scheduler::RendererScheduler* GetRendererScheduler() = 0;
+  virtual blink::scheduler::WebThreadScheduler* GetWebMainThreadScheduler() = 0;
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
-  virtual bool IsThreadedAnimationEnabled() = 0;
   virtual bool IsScrollAnimatorEnabled() = 0;
   virtual std::unique_ptr<cc::UkmRecorderFactory>
   CreateUkmRecorderFactory() = 0;
+
+#ifdef OS_ANDROID
+  virtual bool UsingSynchronousCompositing() = 0;
+#endif
 
   virtual ~CompositorDependencies() {}
 };

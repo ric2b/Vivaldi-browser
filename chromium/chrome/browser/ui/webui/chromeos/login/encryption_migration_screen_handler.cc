@@ -39,8 +39,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/device/public/interfaces/constants.mojom.h"
-#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/text/bytes_formatting.h"
@@ -255,7 +255,7 @@ namespace chromeos {
 
 EncryptionMigrationScreenHandler::EncryptionMigrationScreenHandler()
     : BaseScreenHandler(kScreenId),
-      tick_clock_(std::make_unique<base::DefaultTickClock>()),
+      tick_clock_(base::DefaultTickClock::GetInstance()),
       weak_ptr_factory_(this) {
   set_call_js_prefix(kJsScreenPath);
   free_disk_space_fetcher_ = base::Bind(&base::SysInfo::AmountOfFreeDiskSpace,
@@ -367,6 +367,7 @@ void EncryptionMigrationScreenHandler::DeclareLocalizedValues(
                IDS_ENCRYPTION_MIGRATION_BUTTON_CONTINUE);
   builder->Add("migrationButtonSignIn", IDS_ENCRYPTION_MIGRATION_BUTTON_SIGNIN);
   builder->Add("migrationButtonReportAnIssue", IDS_REPORT_AN_ISSUE);
+  builder->Add("migrationBoardName", base::SysInfo::GetLsbReleaseBoard());
   builder->Add("gaiaLoading", IDS_LOGIN_GAIA_LOADING_MESSAGE);
 }
 
@@ -386,8 +387,8 @@ void EncryptionMigrationScreenHandler::SetFreeDiskSpaceFetcherForTesting(
 }
 
 void EncryptionMigrationScreenHandler::SetTickClockForTesting(
-    std::unique_ptr<base::TickClock> tick_clock) {
-  tick_clock_ = std::move(tick_clock);
+    const base::TickClock* tick_clock) {
+  tick_clock_ = tick_clock;
 }
 
 void EncryptionMigrationScreenHandler::RegisterMessages() {
@@ -581,11 +582,13 @@ void EncryptionMigrationScreenHandler::StartMigration() {
 
 void EncryptionMigrationScreenHandler::OnMountExistingVault(
     base::Optional<cryptohome::BaseReply> reply) {
-  if (cryptohome::BaseReplyToMountError(reply) !=
-      cryptohome::MOUNT_ERROR_NONE) {
+  cryptohome::MountError return_code =
+      cryptohome::MountExReplyToMountError(reply);
+  if (return_code != cryptohome::MOUNT_ERROR_NONE) {
     RecordMigrationResultMountFailure(IsResumingIncompleteMigration(),
                                       IsArcKiosk());
     UpdateUIState(UIState::MIGRATION_FAILED);
+    LOG(ERROR) << "Mount existing vault failed. Error: " << return_code;
     return;
   }
 

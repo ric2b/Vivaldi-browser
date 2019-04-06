@@ -6,11 +6,10 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
-#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
-#include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
@@ -24,6 +23,7 @@
 #endif
 
 using chrome_test_util::GetOriginalBrowserState;
+using chrome_test_util::TapWebViewElementWithId;
 
 namespace {
 
@@ -60,7 +60,8 @@ GURL GetTestUrl() {
 
   // Tap on the test link and wait for the page to display "Click done", as an
   // indicator that the element was tapped.
-  chrome_test_util::TapWebViewElementWithId(linkID);
+  GREYAssert(TapWebViewElementWithId(linkID), @"Failed to tap %s",
+             linkID.c_str());
   [ChromeEarlGrey waitForWebViewContainingText:"Click done"];
 
   // Check that no navigation occurred and no new tabs were opened.
@@ -105,7 +106,7 @@ GURL GetTestUrl() {
                   block:^BOOL {
                     const GURL& currentURL =
                         chrome_test_util::GetCurrentWebState()->GetVisibleURL();
-                    return currentURL == GURL(url::kAboutBlankURL);
+                    return currentURL == url::kAboutBlankURL;
                   }] waitWithTimeout:kConditionTimeout];
   [ChromeEarlGrey waitForMainTabCount:1];
 }

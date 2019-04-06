@@ -79,7 +79,16 @@ class STORAGE_EXPORT FileSystemURL {
  public:
   FileSystemURL();
   FileSystemURL(const FileSystemURL& other);
+  // Constructs FileSystemURL with the contents of |other|, which is left in
+  // valid but unspecified state.
+  FileSystemURL(FileSystemURL&& other) noexcept;
   ~FileSystemURL();
+
+  // Replaces the contents with those of |rhs|, which is left in valid but
+  // unspecified state.
+  FileSystemURL& operator=(FileSystemURL&& rhs);
+
+  FileSystemURL& operator=(const FileSystemURL& rhs);
 
   // Methods for creating FileSystemURL without attempting to crack them.
   // Should be used only in tests.
@@ -182,7 +191,7 @@ class STORAGE_EXPORT FileSystemURL {
   FileSystemMountOption mount_option_;
 };
 
-typedef std::set<FileSystemURL, FileSystemURL::Comparator> FileSystemURLSet;
+using FileSystemURLSet = std::set<FileSystemURL, FileSystemURL::Comparator>;
 
 }  // namespace storage
 

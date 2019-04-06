@@ -34,9 +34,9 @@
 #endif
 
 ChromeBrowserMainPartsLinux::ChromeBrowserMainPartsLinux(
-    const content::MainFunctionParams& parameters)
-    : ChromeBrowserMainPartsPosix(parameters) {
-}
+    const content::MainFunctionParams& parameters,
+    std::unique_ptr<ui::DataPack> data_pack)
+    : ChromeBrowserMainPartsPosix(parameters, std::move(data_pack)) {}
 
 ChromeBrowserMainPartsLinux::~ChromeBrowserMainPartsLinux() {
 }
@@ -64,6 +64,8 @@ void ChromeBrowserMainPartsLinux::PreProfileInit() {
       l10n_util::GetStringUTF8(IDS_SHORT_PRODUCT_NAME));
 
 #if !defined(OS_CHROMEOS)
+  // Set up crypt config. This should be kept in sync with the OSCrypt parts of
+  // SystemNetworkContextManager::OnNetworkServiceCreated.
   std::unique_ptr<os_crypt::Config> config(new os_crypt::Config());
   // Forward to os_crypt the flag to use a specific password store.
   config->store =

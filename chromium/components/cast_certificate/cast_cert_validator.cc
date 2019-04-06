@@ -11,7 +11,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/stl_util.h"
 #include "components/cast_certificate/cast_crl.h"
@@ -106,7 +105,10 @@ net::der::Input AudioOnlyPolicyOid() {
 // It will also require RSA keys have a modulus at least 2048-bits long.
 class CastPathBuilderDelegate : public net::SimplePathBuilderDelegate {
  public:
-  CastPathBuilderDelegate() : SimplePathBuilderDelegate(2048) {}
+  CastPathBuilderDelegate()
+      : SimplePathBuilderDelegate(
+            2048,
+            SimplePathBuilderDelegate::DigestPolicy::kWeakAllowSha1) {}
 };
 
 class CertVerificationContextImpl : public CertVerificationContext {
@@ -332,7 +334,7 @@ std::unique_ptr<CertVerificationContext> CertVerificationContextImplForTest(
     const base::StringPiece& spki) {
   // Use a bogus CommonName, since this is just exposed for testing signature
   // verification by unittests.
-  return base::MakeUnique<CertVerificationContextImpl>(net::der::Input(spki),
+  return std::make_unique<CertVerificationContextImpl>(net::der::Input(spki),
                                                        "CommonName");
 }
 

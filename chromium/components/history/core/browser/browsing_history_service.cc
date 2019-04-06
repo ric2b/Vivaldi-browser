@@ -161,7 +161,7 @@ BrowsingHistoryService::BrowsingHistoryService(
     BrowsingHistoryDriver* driver,
     HistoryService* local_history,
     syncer::SyncService* sync_service,
-    std::unique_ptr<base::Timer> web_history_timer)
+    std::unique_ptr<base::OneShotTimer> web_history_timer)
     : web_history_timer_(std::move(web_history_timer)),
       history_service_observer_(this),
       web_history_service_observer_(this),
@@ -742,11 +742,9 @@ static bool DeletionsDiffer(const URLRows& deleted_rows,
 }
 
 void BrowsingHistoryService::OnURLsDeleted(HistoryService* history_service,
-                                           bool all_history,
-                                           bool expired,
-                                           const URLRows& deleted_rows,
-                                           const std::set<GURL>& favicon_urls) {
-  if (all_history || DeletionsDiffer(deleted_rows, urls_to_be_deleted_))
+                                           const DeletionInfo& deletion_info) {
+  if (deletion_info.IsAllHistory() ||
+      DeletionsDiffer(deletion_info.deleted_rows(), urls_to_be_deleted_))
     driver_->HistoryDeleted();
 }
 

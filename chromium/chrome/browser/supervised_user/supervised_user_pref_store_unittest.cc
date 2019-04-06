@@ -5,7 +5,6 @@
 #include <set>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "chrome/browser/net/safe_search_util.h"
@@ -60,7 +59,7 @@ void SupervisedUserPrefStoreFixture::OnPrefValueChanged(
     const std::string& key) {
   const base::Value* value = NULL;
   ASSERT_TRUE(pref_store_->GetValue(key, &value));
-  changed_prefs_.Set(key, base::MakeUnique<base::Value>(value->Clone()));
+  changed_prefs_.Set(key, std::make_unique<base::Value>(value->Clone()));
 }
 
 void SupervisedUserPrefStoreFixture::OnInitializationCompleted(bool succeeded) {

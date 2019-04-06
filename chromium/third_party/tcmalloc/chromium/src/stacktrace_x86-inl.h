@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 //
@@ -65,13 +66,10 @@ typedef ucontext ucontext_t;
 #endif
 
 #include "gperftools/stacktrace.h"
-#if defined(KEEP_SHADOW_STACKS)
-#include "linux_shadow_stacks.h"
-#endif  // KEEP_SHADOW_STACKS
 
 #if defined(__linux__) && defined(__i386__) && defined(__ELF__) && defined(HAVE_MMAP)
 // Count "push %reg" instructions in VDSO __kernel_vsyscall(),
-// preceeding "syscall" or "sysenter".
+// preceding "syscall" or "sysenter".
 // If __kernel_vsyscall uses frame pointer, answer 0.
 //
 // kMaxBytes tells how many instruction bytes of __kernel_vsyscall
@@ -290,7 +288,7 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
 //   int skip_count: how many stack pointers to skip before storing in result
 //   void* ucp: a ucontext_t* (GetStack{Trace,Frames}WithContext only)
 
-int GET_STACK_TRACE_OR_FRAMES {
+static int GET_STACK_TRACE_OR_FRAMES {
   void **sp;
 #if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2) || __llvm__
   // __builtin_frame_address(0) can return the wrong address on gcc-4.1.0-k8.
@@ -323,22 +321,9 @@ int GET_STACK_TRACE_OR_FRAMES {
 # error Using stacktrace_x86-inl.h on a non x86 architecture!
 #endif
 
+  skip_count++; // skip parent's frame due to indirection in stacktrace.cc
+
   int n = 0;
-#if defined(KEEP_SHADOW_STACKS)
-  void **shadow_ip_stack;
-  void **shadow_sp_stack;
-  int stack_size;
-  shadow_ip_stack = (void**) get_shadow_ip_stack(&stack_size);
-  shadow_sp_stack = (void**) get_shadow_sp_stack(&stack_size);
-  int shadow_index = stack_size - 1;
-  for (int i = stack_size - 1; i >= 0; i--) {
-    if (sp == shadow_sp_stack[i]) {
-      shadow_index = i;
-      break;
-    }
-  }
-  void **prev_sp = NULL;
-#endif  // KEEP_SHADOW_STACKS
   while (sp && n < max_depth) {
     if (*(sp+1) == reinterpret_cast<void *>(0)) {
       // In 64-bit code, we often see a frame that
@@ -351,17 +336,8 @@ int GET_STACK_TRACE_OR_FRAMES {
     void **next_sp = NextStackFrame<!IS_STACK_FRAMES, IS_WITH_CONTEXT>(sp, ucp);
     if (skip_count > 0) {
       skip_count--;
-#if defined(KEEP_SHADOW_STACKS)
-      shadow_index--;
-#endif  // KEEP_SHADOW_STACKS
     } else {
       result[n] = *(sp+1);
-#if defined(KEEP_SHADOW_STACKS)
-      if ((shadow_index > 0) && (sp == shadow_sp_stack[shadow_index])) {
-        shadow_index--;
-      }
-#endif  // KEEP_SHADOW_STACKS
-
 #if IS_STACK_FRAMES
       if (next_sp > sp) {
         sizes[n] = (uintptr_t)next_sp - (uintptr_t)sp;
@@ -372,25 +348,7 @@ int GET_STACK_TRACE_OR_FRAMES {
 #endif
       n++;
     }
-#if defined(KEEP_SHADOW_STACKS)
-    prev_sp = sp;
-#endif  // KEEP_SHADOW_STACKS
     sp = next_sp;
   }
-
-#if defined(KEEP_SHADOW_STACKS)
-  if (shadow_index >= 0) {
-    for (int i = shadow_index; i >= 0; i--) {
-      if (shadow_sp_stack[i] > prev_sp) {
-        result[n] = shadow_ip_stack[i];
-        if (n + 1 < max_depth) {
-          n++;
-          continue;
-        }
-      }
-      break;
-    }
-  }
-#endif  // KEEP_SHADOW_STACKS
   return n;
 }

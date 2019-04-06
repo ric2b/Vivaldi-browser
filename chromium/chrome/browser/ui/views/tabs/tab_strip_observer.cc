@@ -4,18 +4,12 @@
 
 #include "chrome/browser/ui/views/tabs/tab_strip_observer.h"
 
-void TabStripObserver::TabStripAddedTabAt(TabStrip* tab_strip, int index) {
-}
+void TabStripObserver::OnTabAdded(int index) {}
 
-void TabStripObserver::TabStripMovedTab(TabStrip* tab_strip,
-                                        int from_index,
-                                        int to_index) {
-}
+void TabStripObserver::OnTabMoved(int from_index, int to_index) {}
 
-void TabStripObserver::TabStripRemovedTabAt(TabStrip* tab_strip, int index) {
-}
+void TabStripObserver::OnTabRemoved(int index) {}
 
-void TabStripObserver::TabStripDeleted(TabStrip* tab_strip) {
-}
+void TabStripObserver::OnTabsMaxXChanged() {}
 
-void TabStripObserver::TabStripMaxXChanged(TabStrip* tab_strip) {}
+void TabStripObserver::OnSingleTabModeChanged() {}

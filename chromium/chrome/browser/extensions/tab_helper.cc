@@ -12,7 +12,6 @@
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/api/bookmark_manager_private/bookmark_manager_private_api.h"
 #include "chrome/browser/extensions/api/declarative_content/chrome_content_rules_registry.h"
-#include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/bookmark_app_helper.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
@@ -30,7 +29,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/extensions/api/webstore/webstore_api_constants.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -62,7 +61,7 @@
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/url_constants.h"
 
 #if defined(OS_WIN)
@@ -171,9 +170,7 @@ TabHelper::TabHelper(content::WebContents* web_contents)
   web_contents->ForEachFrame(
       base::BindRepeating(&TabHelper::SetTabId, base::Unretained(this)));
   active_tab_permission_granter_.reset(new ActiveTabPermissionGranter(
-      web_contents,
-      SessionTabHelper::IdForTab(web_contents),
-      profile_));
+      web_contents, SessionTabHelper::IdForTab(web_contents).id(), profile_));
 
   AddScriptExecutionObserver(ActivityLog::GetInstance(profile_));
 
@@ -196,12 +193,12 @@ void TabHelper::CreateHostedAppFromWebContents() {
     return;
 
   // Start fetching web app info for CreateApplicationShortcut dialog and show
-  // the dialog when the data is available in OnDidGetApplicationInfo.
+  // the dialog when the data is available in OnDidGetWebApplicationInfo.
   GetApplicationInfo(CREATE_HOSTED_APP);
 }
 
 bool TabHelper::CanCreateBookmarkApp() const {
-  return !profile_->IsGuestSession() &&
+  return !profile_->IsGuestSession() && !profile_->IsOffTheRecord() &&
          !profile_->IsSystemProfile() &&
          IsValidBookmarkAppUrl(web_contents()->GetURL());
 }
@@ -317,9 +314,6 @@ void TabHelper::DidFinishNavigation(
     UpdateExtensionAppIcon(
         enabled_extensions.GetExtensionOrAppByURL(navigation_handle->GetURL()));
   }
-
-  if (!navigation_handle->IsSameDocument())
-    ExtensionActionAPI::Get(context)->ClearAllValuesForTab(web_contents());
 }
 
 bool TabHelper::OnMessageReceived(const IPC::Message& message,
@@ -617,9 +611,9 @@ void TabHelper::GetApplicationInfo(WebAppAction action) {
 }
 
 void TabHelper::SetTabId(content::RenderFrameHost* render_frame_host) {
-  render_frame_host->Send(
-      new ExtensionMsg_SetTabId(render_frame_host->GetRoutingID(),
-                                SessionTabHelper::IdForTab(web_contents())));
+  render_frame_host->Send(new ExtensionMsg_SetTabId(
+      render_frame_host->GetRoutingID(),
+      SessionTabHelper::IdForTab(web_contents()).id()));
 }
 
 }  // namespace extensions

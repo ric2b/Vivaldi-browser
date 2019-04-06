@@ -10,10 +10,8 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "chrome/browser/ui/autofill/password_generation_popup_view.h"
+#include "chrome/browser/ui/passwords/password_generation_popup_view.h"
 #include "ui/android/view_android.h"
-
-namespace autofill {
 
 class PasswordGenerationPopupController;
 
@@ -44,6 +42,7 @@ class PasswordGenerationPopupViewAndroid : public PasswordGenerationPopupView {
   void Show() override;
   void Hide() override;
   gfx::Size GetPreferredSizeOfPasswordView() override;
+  void UpdateState() override;
   void UpdateBoundsAndRedrawPopup() override;
   void PasswordSelectionUpdated() override;
   bool IsPointInPasswordBounds(const gfx::Point& point) override;
@@ -59,7 +58,5 @@ class PasswordGenerationPopupViewAndroid : public PasswordGenerationPopupView {
 
   DISALLOW_COPY_AND_ASSIGN(PasswordGenerationPopupViewAndroid);
 };
-
-}  // namespace autofill
 
 #endif  // CHROME_BROWSER_UI_ANDROID_AUTOFILL_PASSWORD_GENERATION_POPUP_VIEW_ANDROID_H_

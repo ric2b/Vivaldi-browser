@@ -130,19 +130,19 @@ class MetricsRecorder {
   }
 
   HistogramBase::Count GetCountWithoutSnapshot(HistogramBase::Sample value) {
-    if (!samples_.get())
+    if (!samples_)
       return 0;
     HistogramBase::Count count = samples_->GetCount(value);
-    if (!base_samples_.get())
+    if (!base_samples_)
       return count;
     return count - base_samples_->GetCount(value);
   }
 
   HistogramBase::Count GetTotalCount() {
-    if (!samples_.get())
+    if (!samples_)
       return 0;
     HistogramBase::Count count = samples_->TotalCount();
-    if (!base_samples_.get())
+    if (!base_samples_)
       return count;
     return count - base_samples_->TotalCount();
   }
@@ -277,17 +277,6 @@ TEST(TranslateMetricsTest, ReportSimilarLanguageMatch) {
   translate::ReportSimilarLanguageMatch(false);
   EXPECT_EQ(1, recorder.GetCount(kTrue));
   EXPECT_EQ(1, recorder.GetCount(kFalse));
-}
-
-TEST(TranslateMetricsTest, ReportLanguageDetectionTime) {
-  MetricsRecorder recorder(
-      translate::metrics_internal::kRenderer4LanguageDetection);
-  recorder.CheckTotalCount(0);
-  TimeTicks begin = TimeTicks::Now();
-  TimeTicks end = begin + base::TimeDelta::FromMicroseconds(9009);
-  translate::ReportLanguageDetectionTime(begin, end);
-  recorder.CheckValueInLogs(9.009);
-  recorder.CheckTotalCount(1);
 }
 
 TEST(TranslateMetricsTest, ReportLanguageDetectionConflict) {

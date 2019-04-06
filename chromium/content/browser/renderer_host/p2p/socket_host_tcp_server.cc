@@ -112,10 +112,12 @@ void P2PSocketHostTcpServer::OnAccepted(int result) {
     DoAccept();
 }
 
-void P2PSocketHostTcpServer::Send(const net::IPEndPoint& to,
-                                  const std::vector<char>& data,
-                                  const rtc::PacketOptions& options,
-                                  uint64_t packet_id) {
+void P2PSocketHostTcpServer::Send(
+    const net::IPEndPoint& to,
+    const std::vector<char>& data,
+    const rtc::PacketOptions& options,
+    uint64_t packet_id,
+    const net::NetworkTrafficAnnotationTag traffic_annotation) {
   NOTREACHED();
   OnError();
 }
@@ -133,11 +135,11 @@ P2PSocketHostTcpServer::AcceptIncomingTcpConnection(
 
   std::unique_ptr<P2PSocketHostTcpBase> result;
   if (client_type_ == P2P_SOCKET_TCP_CLIENT) {
-    result.reset(
-        new P2PSocketHostTcp(message_sender_, id, client_type_, nullptr));
+    result.reset(new P2PSocketHostTcp(message_sender_, id, client_type_,
+                                      nullptr, nullptr));
   } else {
-    result.reset(
-        new P2PSocketHostStunTcp(message_sender_, id, client_type_, nullptr));
+    result.reset(new P2PSocketHostStunTcp(message_sender_, id, client_type_,
+                                          nullptr, nullptr));
   }
   if (!result->InitAccepted(remote_address, std::move(socket)))
     return nullptr;

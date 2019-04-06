@@ -16,6 +16,11 @@
 #include <string>
 #include <vector>
 
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #include "base/base_export.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -24,12 +29,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_types.h"
-#elif defined(OS_POSIX)
-#include <sys/stat.h>
-#include <unistd.h>
-#endif
-
-#if defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include "base/file_descriptor_posix.h"
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
@@ -178,7 +178,7 @@ BASE_EXPORT bool ReadFileToStringWithMaxSize(const FilePath& path,
                                              std::string* contents,
                                              size_t max_size);
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 // Read exactly |bytes| bytes from file descriptor |fd|, storing the result
 // in |buffer|. This function is protected against EINTR and partial reads.
@@ -191,9 +191,9 @@ BASE_EXPORT bool ReadFromFD(int fd, char* buffer, size_t bytes);
 BASE_EXPORT int CreateAndOpenFdForTemporaryFileInDir(const FilePath& dir,
                                                      FilePath* path);
 
-// The following functions use POSIX functionality that isn't supported by
-// Fuchsia.
-#if !defined(OS_FUCHSIA)
+#endif  // OS_POSIX || OS_FUCHSIA
+
+#if defined(OS_POSIX)
 
 // Creates a symbolic link at |symlink| pointing to |target|.  Returns
 // false on failure.
@@ -235,7 +235,15 @@ BASE_EXPORT bool SetPosixFilePermissions(const FilePath& path, int mode);
 BASE_EXPORT bool ExecutableExistsInPath(Environment* env,
                                         const FilePath::StringType& executable);
 
-#endif  // !OS_FUCHSIA
+#if defined(OS_LINUX) || defined(OS_AIX)
+// Determine if files under a given |path| can be mapped and then mprotect'd
+// PROT_EXEC. This depends on the mount options used for |path|, which vary
+// among different Linux distributions and possibly local configuration. It also
+// depends on details of kernel--ChromeOS uses the noexec option for /dev/shm
+// but its kernel allows mprotect with PROT_EXEC anyway.
+BASE_EXPORT bool IsPathExecutable(const FilePath& path);
+#endif  // OS_LINUX || OS_AIX
+
 #endif  // OS_POSIX
 
 // Returns true if the given directory is empty
@@ -363,7 +371,7 @@ BASE_EXPORT int ReadFile(const FilePath& filename, char* data, int max_size);
 BASE_EXPORT int WriteFile(const FilePath& filename, const char* data,
                           int size);
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 // Appends |data| to |fd|. Does not close |fd| when done.  Returns true iff
 // |size| bytes of |data| were written to |fd|.
 BASE_EXPORT bool WriteFileDescriptor(const int fd, const char* data, int size);
@@ -393,7 +401,7 @@ BASE_EXPORT int GetUniquePathNumber(const FilePath& path,
 // false.
 BASE_EXPORT bool SetNonBlocking(int fd);
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 // Creates a non-blocking, close-on-exec pipe.
 // This creates a non-blocking pipe that is not intended to be shared with any
 // child process. This will be done atomically if the operating system supports
@@ -420,7 +428,7 @@ BASE_EXPORT bool VerifyPathControlledByUser(const base::FilePath& base,
                                             const base::FilePath& path,
                                             uid_t owner_uid,
                                             const std::set<gid_t>& group_gids);
-#endif  // defined(OS_POSIX)
+#endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 // Is |path| writable only by a user with administrator privileges?
@@ -457,7 +465,7 @@ enum FileSystemType {
 BASE_EXPORT bool GetFileSystemType(const FilePath& path, FileSystemType* type);
 #endif
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 // Get a temporary directory for shared memory files. The directory may depend
 // on whether the destination is intended for executable files, which in turn
 // depends on how /dev/shmem was mounted. As a result, you must supply whether

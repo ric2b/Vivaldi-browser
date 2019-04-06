@@ -4,7 +4,7 @@
 
 #include "google_apis/gaia/fake_oauth2_token_service.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
 
 FakeOAuth2TokenService::PendingRequest::PendingRequest() {
 }
@@ -16,8 +16,7 @@ FakeOAuth2TokenService::PendingRequest::~PendingRequest() {
 }
 
 FakeOAuth2TokenService::FakeOAuth2TokenService()
-    : OAuth2TokenService(
-          base::MakeUnique<FakeOAuth2TokenServiceDelegate>(nullptr)) {}
+    : OAuth2TokenService(std::make_unique<FakeOAuth2TokenServiceDelegate>()) {}
 
 FakeOAuth2TokenService::~FakeOAuth2TokenService() {
 }
@@ -25,7 +24,7 @@ FakeOAuth2TokenService::~FakeOAuth2TokenService() {
 void FakeOAuth2TokenService::FetchOAuth2Token(
     RequestImpl* request,
     const std::string& account_id,
-    net::URLRequestContextGetter* getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const std::string& client_id,
     const std::string& client_secret,
     const ScopeSet& scopes) {

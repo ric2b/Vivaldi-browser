@@ -10,7 +10,7 @@
 
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/network/public/interfaces/cookie_manager.mojom.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 
 class Profile;
 
@@ -21,20 +21,18 @@ class CanonicalCookie;
 // Sends cookie-change notifications on the UI thread via
 // chrome::NOTIFICATION_COOKIE_CHANGED_FOR_EXTENSIONS for all cookie
 // changes associated with the given profile.
-class ExtensionCookieNotifier
-    : public network::mojom::CookieChangeNotification {
+class ExtensionCookieNotifier : public network::mojom::CookieChangeListener {
  public:
   explicit ExtensionCookieNotifier(Profile* profile);
   ~ExtensionCookieNotifier() override;
 
  private:
-  // network::mojom::CookieChangeNotification implementation.
-  void OnCookieChanged(const net::CanonicalCookie& cookie,
-                       network::mojom::CookieChangeCause cause) override;
+  // network::mojom::CookieChangeListener implementation.
+  void OnCookieChange(const net::CanonicalCookie& cookie,
+                      network::mojom::CookieChangeCause cause) override;
 
   Profile* profile_;
-  std::unique_ptr<mojo::Binding<network::mojom::CookieChangeNotification>>
-      binding_;
+  mojo::Binding<network::mojom::CookieChangeListener> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionCookieNotifier);
 };

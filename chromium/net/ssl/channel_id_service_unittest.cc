@@ -16,7 +16,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task_runner.h"
 #include "base/test/null_task_runner.h"
-#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "crypto/ec_private_key.h"
 #include "net/base/net_errors.h"
@@ -26,7 +25,7 @@
 #include "net/ssl/default_channel_id_store.h"
 #include "net/test/channel_id_test_util.h"
 #include "net/test/gtest_util.h"
-#include "net/test/net_test_suite.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -49,7 +48,7 @@ class MockChannelIDStoreWithAsyncGet
 
   int GetChannelID(const std::string& server_identifier,
                    std::unique_ptr<crypto::ECPrivateKey>* key_result,
-                   const GetChannelIDCallback& callback) override;
+                   GetChannelIDCallback callback) override;
 
   void SetChannelID(std::unique_ptr<ChannelID> channel_id) override {
     channel_id_count_ = 1;
@@ -68,9 +67,9 @@ class MockChannelIDStoreWithAsyncGet
 int MockChannelIDStoreWithAsyncGet::GetChannelID(
     const std::string& server_identifier,
     std::unique_ptr<crypto::ECPrivateKey>* key_result,
-    const GetChannelIDCallback& callback) {
+    GetChannelIDCallback callback) {
   server_identifier_ = server_identifier;
-  callback_ = callback;
+  callback_ = std::move(callback);
   // Reset the cert count, it'll get incremented in either SetChannelID or
   // CallGetChannelIDCallbackWithResult.
   channel_id_count_ = 0;
@@ -85,11 +84,11 @@ void MockChannelIDStoreWithAsyncGet::CallGetChannelIDCallbackWithResult(
   if (err == OK)
     channel_id_count_ = 1;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback_, err, server_identifier_,
-                            base::Passed(key ? key->Copy() : nullptr)));
+      FROM_HERE, base::BindOnce(std::move(callback_), err, server_identifier_,
+                                base::Passed(key ? key->Copy() : nullptr)));
 }
 
-class ChannelIDServiceTest : public testing::Test {
+class ChannelIDServiceTest : public TestWithScopedTaskEnvironment {
  public:
   ChannelIDServiceTest()
       : service_(new ChannelIDService(new DefaultChannelIDStore(NULL))) {}
@@ -301,7 +300,7 @@ TEST_F(ChannelIDServiceTest, CancelRequest) {
 
   // Wait for reply from ChannelIDServiceWorker to be posted back to the
   // ChannelIDService.
-  NetTestSuite::GetScopedTaskEnvironment()->RunUntilIdle();
+  RunUntilIdle();
 
   // Even though the original request was cancelled, the service will still
   // store the result, it just doesn't call the callback.
@@ -326,7 +325,7 @@ TEST_F(ChannelIDServiceTest, CancelRequestByHandleDestruction) {
 
   // Wait for reply from ChannelIDServiceWorker to be posted back to the
   // ChannelIDService.
-  NetTestSuite::GetScopedTaskEnvironment()->RunUntilIdle();
+  RunUntilIdle();
 
   // Even though the original request was cancelled, the service will still
   // store the result, it just doesn't call the callback.
@@ -353,7 +352,8 @@ TEST_F(ChannelIDServiceTest, DestructionWithPendingRequest) {
   // doesn't.
   base::RunLoop().RunUntilIdle();
 
-  // If we got here without crashing or a valgrind error, it worked.
+  // If we got here without crashing or triggering errors in memory
+  // corruption detectors, it worked.
 }
 
 // Tests that making new requests when the ChannelIDService can no longer post
@@ -370,7 +370,8 @@ TEST_F(ChannelIDServiceTest, RequestAfterPoolShutdown) {
 
   error = service_->GetOrCreateChannelID(host, &key, base::Bind(&FailTest),
                                          &request);
-  // If we got here without crashing or a valgrind error, it worked.
+  // If we got here without crashing or triggering errors in memory
+  // corruption detectors, it worked.
   ASSERT_THAT(error, IsError(ERR_IO_PENDING));
   EXPECT_TRUE(request.is_active());
 }

@@ -15,6 +15,7 @@
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
+#include "chromeos/dbus/dbus_method_call_status.h"
 
 namespace base {
 class FilePath;
@@ -35,6 +36,7 @@ enum MountType {
   MOUNT_TYPE_INVALID,
   MOUNT_TYPE_DEVICE,
   MOUNT_TYPE_ARCHIVE,
+  MOUNT_TYPE_NETWORK_STORAGE,
 };
 
 // Type of device.
@@ -309,8 +311,8 @@ class CHROMEOS_EXPORT CrosDisksClient : public DBusClient {
   // Unregisters the |observer| from this instance.
   virtual void RemoveObserver(Observer* observer) = 0;
 
-  // Calls Mount method.  |callback| is called after the method call succeeds,
-  // otherwise, |error_callback| is called.
+  // Calls Mount method.  On method call completion, |callback| is called with
+  // |true| on success, or with |false| otherwise.
   // When mounting an archive, caller may set two optional arguments:
   // - The |source_format| argument passes the file extension (with the leading
   //   dot, for example ".zip"). If |source_format| is empty then the source
@@ -321,17 +323,16 @@ class CHROMEOS_EXPORT CrosDisksClient : public DBusClient {
   virtual void Mount(const std::string& source_path,
                      const std::string& source_format,
                      const std::string& mount_label,
+                     const std::vector<std::string>& mount_options,
                      MountAccessMode access_mode,
                      RemountOption remount,
-                     const base::Closure& callback,
-                     const base::Closure& error_callback) = 0;
+                     VoidDBusMethodCallback callback) = 0;
 
-  // Calls Unmount method.  |callback| is called after the method call succeeds,
-  // otherwise, |error_callback| is called.
+  // Calls Unmount method.  On method call completion, |callback| is called
+  // with |true| on success, or with |false| otherwise.
   virtual void Unmount(const std::string& device_path,
                        UnmountOptions options,
-                       const base::Closure& callback,
-                       const base::Closure& error_callback) = 0;
+                       VoidDBusMethodCallback callback) = 0;
 
   // Calls EnumerateAutoMountableDevices method.  |callback| is called after the
   // method call succeeds, otherwise, |error_callback| is called.
@@ -350,19 +351,17 @@ class CHROMEOS_EXPORT CrosDisksClient : public DBusClient {
       const EnumerateMountEntriesCallback& callback,
       const base::Closure& error_callback) = 0;
 
-  // Calls Format method.  |callback| is called after the method call succeeds,
-  // otherwise, |error_callback| is called.
+  // Calls Format method. On completion, |callback| is called, with |true| on
+  // success, or with |false| otherwise.
   virtual void Format(const std::string& device_path,
                       const std::string& filesystem,
-                      const base::Closure& callback,
-                      const base::Closure& error_callback) = 0;
+                      VoidDBusMethodCallback callback) = 0;
 
-  // Calls Rename method. |callback| is called after the method call succeeds,
-  // otherwise, |error_callback| is called.
+  // Calls Rename method. On completion, |callback| is called, with |true| on
+  // success, or with |false| otherwise.
   virtual void Rename(const std::string& device_path,
                       const std::string& volume_name,
-                      const base::Closure& callback,
-                      const base::Closure& error_callback) = 0;
+                      VoidDBusMethodCallback callback) = 0;
 
   // Calls GetDeviceProperties method.  |callback| is called after the method
   // call succeeds, otherwise, |error_callback| is called.
@@ -382,6 +381,7 @@ class CHROMEOS_EXPORT CrosDisksClient : public DBusClient {
 
   // Composes a list of mount options.
   static std::vector<std::string> ComposeMountOptions(
+      const std::vector<std::string>& options,
       const std::string& mount_label,
       MountAccessMode access_mode,
       RemountOption remount);

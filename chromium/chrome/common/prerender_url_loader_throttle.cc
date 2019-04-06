@@ -88,7 +88,7 @@ void PrerenderURLLoaderThrottle::WillStartRequest(
     if (mode_ == FULL_PRERENDER) {
       canceler_getter_task_runner_->PostTask(
           FROM_HERE, base::BindOnce(CancelPrerenderForUnsupportedMethod,
-                                    base::Passed(std::move(canceler_getter_))));
+                                    std::move(canceler_getter_)));
       return;
     }
   }
@@ -104,8 +104,7 @@ void PrerenderURLLoaderThrottle::WillStartRequest(
     delegate_->CancelWithError(net::ERR_ABORTED);
     canceler_getter_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(CancelPrerenderForUnsupportedScheme,
-                                  base::Passed(std::move(canceler_getter_)),
-                                  request->url));
+                                  std::move(canceler_getter_), request->url));
     return;
   }
 
@@ -132,6 +131,7 @@ void PrerenderURLLoaderThrottle::WillStartRequest(
 #endif  // OS_ANDROID
 
   if (mode_ == PREFETCH_ONLY) {
+    request->headers.SetHeader(kPurposeHeaderName, kPurposeHeaderValue);
     detached_timer_.Start(FROM_HERE,
                           base::TimeDelta::FromMilliseconds(
                               content::kDefaultDetachableCancelDelayMs),
@@ -142,7 +142,8 @@ void PrerenderURLLoaderThrottle::WillStartRequest(
 void PrerenderURLLoaderThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
     const network::ResourceResponseHead& response_head,
-    bool* defer) {
+    bool* defer,
+    std::vector<std::string>* to_be_removed_headers) {
   redirect_count_++;
   if (mode_ == PREFETCH_ONLY) {
     RecordPrefetchResponseReceived(
@@ -157,9 +158,9 @@ void PrerenderURLLoaderThrottle::WillRedirectRequest(
   if (!DoesURLHaveValidScheme(redirect_info.new_url)) {
     delegate_->CancelWithError(net::ERR_ABORTED);
     canceler_getter_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(CancelPrerenderForUnsupportedScheme,
-                                  base::Passed(std::move(canceler_getter_)),
-                                  redirect_info.new_url));
+        FROM_HERE,
+        base::BindOnce(CancelPrerenderForUnsupportedScheme,
+                       std::move(canceler_getter_), redirect_info.new_url));
   } else if (follow_only_when_prerender_shown_header == "1" &&
              resource_type_ != content::RESOURCE_TYPE_MAIN_FRAME) {
     // Only defer redirects with the Follow-Only-When-Prerender-Shown
@@ -169,7 +170,7 @@ void PrerenderURLLoaderThrottle::WillRedirectRequest(
       // indefinitely hang up a renderer process.
       canceler_getter_task_runner_->PostTask(
           FROM_HERE, base::BindOnce(CancelPrerenderForSyncDeferredRedirect,
-                                    base::Passed(std::move(canceler_getter_))));
+                                    std::move(canceler_getter_)));
       delegate_->CancelWithError(net::ERR_ABORTED);
     } else {
       // Defer the redirect until the prerender is used or canceled.

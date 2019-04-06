@@ -22,8 +22,6 @@ namespace {
 // client side blacklist.
 const char kClientSidePreviewsFieldTrial[] = "ClientSidePreviews";
 
-const char kEnabled[] = "Enabled";
-
 // Name for the version parameter of a field trial. Version changes will
 // result in older blacklist entries being removed.
 const char kVersion[] = "version";
@@ -33,8 +31,6 @@ const char kVersion[] = "version";
 // See net/nqe/effective_connection_type.h for mapping from string to value.
 const char kEffectiveConnectionTypeThreshold[] =
     "max_allowed_effective_connection_type";
-
-const char kClientLoFiExperimentName[] = "PreviewsClientLoFi";
 
 // Inflation parameters for estimating NoScript data savings.
 const char kNoScriptInflationPercent[] = "NoScriptInflationPercent";
@@ -68,6 +64,15 @@ net::EffectiveConnectionType GetParamValueAsECT(
     net::EffectiveConnectionType default_value) {
   return net::GetEffectiveConnectionTypeForName(
              base::GetFieldTrialParamValue(trial_name, param_name))
+      .value_or(default_value);
+}
+
+net::EffectiveConnectionType GetParamValueAsECTByFeature(
+    const base::Feature& feature,
+    const std::string& param_name,
+    net::EffectiveConnectionType default_value) {
+  return net::GetEffectiveConnectionTypeForName(
+             base::GetFieldTrialParamValueByFeature(feature, param_name))
       .value_or(default_value);
 }
 
@@ -133,16 +138,19 @@ net::EffectiveConnectionType GetECTThresholdForPreview(
                                 kEffectiveConnectionTypeThreshold,
                                 net::EFFECTIVE_CONNECTION_TYPE_2G);
     case PreviewsType::LOFI:
-      return GetParamValueAsECT(kClientLoFiExperimentName,
-                                kEffectiveConnectionTypeThreshold,
-                                net::EFFECTIVE_CONNECTION_TYPE_2G);
+      return GetParamValueAsECTByFeature(features::kClientLoFi,
+                                         kEffectiveConnectionTypeThreshold,
+                                         net::EFFECTIVE_CONNECTION_TYPE_2G);
     case PreviewsType::LITE_PAGE:
       NOTREACHED();
       break;
-    case PreviewsType::AMP_REDIRECTION:
-      return net::EFFECTIVE_CONNECTION_TYPE_LAST;  // Trigger irrespective of
-                                                   // ECT.
     case PreviewsType::NONE:
+    case PreviewsType::UNSPECIFIED:
+    case PreviewsType::RESOURCE_LOADING_HINTS:
+      return GetParamValueAsECTByFeature(features::kResourceLoadingHints,
+                                         kEffectiveConnectionTypeThreshold,
+                                         net::EFFECTIVE_CONNECTION_TYPE_2G);
+    case PreviewsType::DEPRECATED_AMP_REDIRECTION:
     case PreviewsType::LAST:
       break;
   }
@@ -150,23 +158,24 @@ net::EffectiveConnectionType GetECTThresholdForPreview(
   return net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
 }
 
+bool ArePreviewsAllowed() {
+  return base::FeatureList::IsEnabled(features::kPreviews);
+}
+
 bool IsOfflinePreviewsEnabled() {
   return base::FeatureList::IsEnabled(features::kOfflinePreviews);
 }
 
 bool IsClientLoFiEnabled() {
-  return base::FeatureList::IsEnabled(features::kClientLoFi) ||
-         base::StartsWith(
-             base::FieldTrialList::FindFullName(kClientLoFiExperimentName),
-             kEnabled, base::CompareCase::SENSITIVE);
-}
-
-bool IsAMPRedirectionPreviewEnabled() {
-  return base::FeatureList::IsEnabled(features::kAMPRedirection);
+  return base::FeatureList::IsEnabled(features::kClientLoFi);
 }
 
 bool IsNoScriptPreviewsEnabled() {
   return base::FeatureList::IsEnabled(features::kNoScriptPreviews);
+}
+
+bool IsResourceLoadingHintsEnabled() {
+  return base::FeatureList::IsEnabled(features::kResourceLoadingHints);
 }
 
 int OfflinePreviewsVersion() {
@@ -174,12 +183,8 @@ int OfflinePreviewsVersion() {
 }
 
 int ClientLoFiVersion() {
-  return GetParamValueAsInt(kClientLoFiExperimentName, kVersion, 0);
-}
-
-int AMPRedirectionPreviewsVersion() {
-  return GetFieldTrialParamByFeatureAsInt(features::kAMPRedirection, kVersion,
-                                          0);
+  return base::GetFieldTrialParamByFeatureAsInt(features::kClientLoFi, kVersion,
+                                                0);
 }
 
 int NoScriptPreviewsVersion() {
@@ -187,21 +192,26 @@ int NoScriptPreviewsVersion() {
                                           0);
 }
 
+int ResourceLoadingHintsVersion() {
+  return GetFieldTrialParamByFeatureAsInt(features::kResourceLoadingHints,
+                                          kVersion, 0);
+}
+
 bool IsOptimizationHintsEnabled() {
   return base::FeatureList::IsEnabled(features::kOptimizationHints);
 }
 
 net::EffectiveConnectionType EffectiveConnectionTypeThresholdForClientLoFi() {
-  return GetParamValueAsECT(kClientLoFiExperimentName,
-                            kEffectiveConnectionTypeThreshold,
-                            net::EFFECTIVE_CONNECTION_TYPE_2G);
+  return GetParamValueAsECTByFeature(features::kClientLoFi,
+                                     kEffectiveConnectionTypeThreshold,
+                                     net::EFFECTIVE_CONNECTION_TYPE_2G);
 }
 
 std::vector<std::string> GetBlackListedHostsForClientLoFiFieldTrial() {
-  return base::SplitString(
-      base::GetFieldTrialParamValue(kClientLoFiExperimentName,
-                                    "short_host_blacklist"),
-      ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  return base::SplitString(base::GetFieldTrialParamValueByFeature(
+                               features::kClientLoFi, "short_host_blacklist"),
+                           ",", base::TRIM_WHITESPACE,
+                           base::SPLIT_WANT_NONEMPTY);
 }
 
 int NoScriptPreviewsInflationPercent() {
@@ -223,17 +233,21 @@ std::string GetStringNameForType(PreviewsType type) {
   // The returned string is used to record histograms for the new preview type.
   // Also add the string to Previews.Types histogram suffix in histograms.xml.
   switch (type) {
+    case PreviewsType::NONE:
+      return "None";
     case PreviewsType::OFFLINE:
       return "Offline";
     case PreviewsType::LOFI:
       return "LoFi";
     case PreviewsType::LITE_PAGE:
       return "LitePage";
-    case PreviewsType::AMP_REDIRECTION:
-      return "AMPRedirection";
     case PreviewsType::NOSCRIPT:
       return "NoScript";
-    case PreviewsType::NONE:
+    case PreviewsType::UNSPECIFIED:
+      return "Unspecified";
+    case PreviewsType::RESOURCE_LOADING_HINTS:
+      return "ResourceLoadingHints";
+    case PreviewsType::DEPRECATED_AMP_REDIRECTION:
     case PreviewsType::LAST:
       break;
   }

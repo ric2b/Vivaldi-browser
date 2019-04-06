@@ -17,6 +17,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/common/view_type.h"
+#include "ui/base/ui_features.h"
 
 // The minimum/maximum dimensions of the popup.
 const CGFloat ExtensionViewMac::kMinWidth = 25.0;
@@ -62,7 +63,9 @@ void ExtensionViewMac::RenderViewCreated(content::RenderViewHost* host) {
                        ExtensionViewMac::kMinHeight);
     gfx::Size max_size(ExtensionViewMac::kMaxWidth,
                        ExtensionViewMac::kMaxHeight);
-    render_view_host()->EnableAutoResize(min_size, max_size);
+    extension_host_->host_contents()
+        ->GetRenderWidgetHostView()
+        ->EnableAutoResize(min_size, max_size);
   }
 }
 
@@ -78,10 +81,10 @@ void ExtensionViewMac::HandleKeyboardEvent(
   ChromeEventProcessingWindow* event_window =
       base::mac::ObjCCastStrict<ChromeEventProcessingWindow>(
           [GetNativeView() window]);
-  [event_window redispatchKeyEvent:event.os_event];
+  [[event_window commandDispatcher] redispatchKeyEvent:event.os_event];
 }
 
-void ExtensionViewMac::DidStopLoading() {
+void ExtensionViewMac::OnLoaded() {
   ShowIfCompletelyLoaded();
 }
 
@@ -102,7 +105,7 @@ void ExtensionViewMac::ShowIfCompletelyLoaded() {
 namespace extensions {
 
 // static
-std::unique_ptr<ExtensionView> ExtensionViewHost::CreateExtensionView(
+std::unique_ptr<ExtensionView> ExtensionViewHost::CreateExtensionViewCocoa(
     ExtensionViewHost* host,
     Browser* browser) {
   return std::make_unique<ExtensionViewMac>(host, browser);

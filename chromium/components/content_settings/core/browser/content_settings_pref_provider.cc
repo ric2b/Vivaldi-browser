@@ -13,14 +13,14 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_clock.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_pref.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -108,15 +108,31 @@ PrefProvider::PrefProvider(PrefService* prefs,
 
   pref_change_registrar_.Init(prefs_);
 
+  ContentSettingsRegistry* content_settings =
+      ContentSettingsRegistry::GetInstance();
   WebsiteSettingsRegistry* website_settings =
       WebsiteSettingsRegistry::GetInstance();
   for (const WebsiteSettingsInfo* info : *website_settings) {
-    content_settings_prefs_.insert(std::make_pair(
-        info->type(),
-        base::MakeUnique<ContentSettingsPref>(
-            info->type(), prefs_, &pref_change_registrar_, info->pref_name(),
-            is_incognito_,
-            base::Bind(&PrefProvider::Notify, base::Unretained(this)))));
+    const ContentSettingsInfo* content_type_info =
+        content_settings->Get(info->type());
+    // If it's not a content setting, or it's persistent, handle it in this
+    // class.
+    if (!content_type_info || content_type_info->storage_behavior() ==
+                                  ContentSettingsInfo::PERSISTENT) {
+      content_settings_prefs_.insert(std::make_pair(
+          info->type(),
+          std::make_unique<ContentSettingsPref>(
+              info->type(), prefs_, &pref_change_registrar_, info->pref_name(),
+              is_incognito_,
+              base::Bind(&PrefProvider::Notify, base::Unretained(this)))));
+    } else if (info->type() == CONTENT_SETTINGS_TYPE_PLUGINS) {
+      // TODO(https://crbug.com/850062): Remove after M71, two milestones after
+      // migration of the Flash permissions to ephemeral provider.
+      flash_content_settings_pref_ = std::make_unique<ContentSettingsPref>(
+          info->type(), prefs_, &pref_change_registrar_, info->pref_name(),
+          is_incognito_,
+          base::Bind(&PrefProvider::Notify, base::Unretained(this)));
+    }
   }
 
   if (!is_incognito_) {
@@ -137,6 +153,9 @@ std::unique_ptr<RuleIterator> PrefProvider::GetRuleIterator(
     ContentSettingsType content_type,
     const ResourceIdentifier& resource_identifier,
     bool incognito) const {
+  if (!supports_type(content_type))
+    return nullptr;
+
   return GetPref(content_type)->GetRuleIterator(resource_identifier, incognito);
 }
 
@@ -148,6 +167,9 @@ bool PrefProvider::SetWebsiteSetting(
     base::Value* in_value) {
   DCHECK(CalledOnValidThread());
   DCHECK(prefs_);
+
+  if (!supports_type(content_type))
+    return false;
 
   // Default settings are set using a wildcard pattern for both
   // |primary_pattern| and |secondary_pattern|. Don't store default settings in
@@ -176,6 +198,9 @@ base::Time PrefProvider::GetWebsiteSettingLastModified(
   DCHECK(CalledOnValidThread());
   DCHECK(prefs_);
 
+  if (!supports_type(content_type))
+    return base::Time();
+
   return GetPref(content_type)
       ->GetWebsiteSettingLastModified(primary_pattern, secondary_pattern,
                                       resource_identifier);
@@ -186,7 +211,17 @@ void PrefProvider::ClearAllContentSettingsRules(
   DCHECK(CalledOnValidThread());
   DCHECK(prefs_);
 
-  GetPref(content_type)->ClearAllContentSettingsRules();
+  if (supports_type(content_type))
+    GetPref(content_type)->ClearAllContentSettingsRules();
+
+  // TODO(https://crbug.com/850062): Remove after M71, two milestones after
+  // migration of the Flash permissions to ephemeral provider.
+  // |flash_content_settings_pref_| is not null only if Flash permissions are
+  // ephemeral and handled in EphemeralProvider.
+  if (content_type == CONTENT_SETTINGS_TYPE_PLUGINS &&
+      flash_content_settings_pref_) {
+    flash_content_settings_pref_->ClearAllContentSettingsRules();
+  }
 }
 
 void PrefProvider::ShutdownOnUIThread() {

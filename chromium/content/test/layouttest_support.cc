@@ -13,11 +13,12 @@
 
 #include "base/callback.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "cc/test/pixel_test_output_surface.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "content/browser/bluetooth/bluetooth_device_chooser_controller.h"
@@ -31,29 +32,32 @@
 #include "content/public/common/page_state.h"
 #include "content/public/common/screen_info.h"
 #include "content/public/renderer/renderer_gamepad_provider.h"
-#include "content/renderer/gpu/render_widget_compositor.h"
+#include "content/renderer/gpu/layer_tree_view.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/layout_test_dependencies.h"
 #include "content/renderer/loader/request_extra_data.h"
+#include "content/renderer/loader/web_worker_fetch_context_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
+#include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/test_runner/test_common.h"
 #include "content/shell/test_runner/web_frame_test_proxy.h"
 #include "content/shell/test_runner/web_view_test_proxy.h"
 #include "content/shell/test_runner/web_widget_test_proxy.h"
-#include "device/sensors/public/cpp/motion_data.h"
-#include "device/sensors/public/cpp/orientation_data.h"
 #include "gpu/ipc/service/image_transport_surface.h"
+#include "services/device/public/cpp/generic_sensor/motion_data.h"
+#include "services/device/public/cpp/generic_sensor/orientation_data.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
-#include "third_party/WebKit/public/platform/WebFloatRect.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/web_float_rect.h"
+#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/web/web_view.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/icc_profile.h"
@@ -63,9 +67,9 @@
 #include "content/browser/frame_host/popup_menu_helper_mac.h"
 #elif defined(OS_WIN)
 #include "content/child/font_warmup_win.h"
-#include "third_party/WebKit/public/web/win/WebFontRendering.h"
+#include "third_party/blink/public/web/win/web_font_rendering.h"
+#include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/ports/SkFontMgr.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #include "ui/gfx/win/direct_write.h"
 #endif
@@ -88,24 +92,9 @@ base::LazyInstance<WidgetProxyCreationCallback>::Leaky
 base::LazyInstance<FrameProxyCreationCallback>::Leaky
     g_frame_test_proxy_callback = LAZY_INSTANCE_INITIALIZER;
 
-using WebViewTestProxyType =
-    test_runner::WebViewTestProxy<RenderViewImpl,
-                                  CompositorDependencies*,
-                                  const mojom::CreateViewParams&,
-                                  scoped_refptr<base::SingleThreadTaskRunner>>;
-using WebWidgetTestProxyType = test_runner::WebWidgetTestProxy<
-    RenderWidget,
-    int32_t,
-    CompositorDependencies*,
-    blink::WebPopupType,
-    const ScreenInfo&,
-    bool,
-    bool,
-    bool,
-    scoped_refptr<base::SingleThreadTaskRunner>>;
-using WebFrameTestProxyType =
-    test_runner::WebFrameTestProxy<RenderFrameImpl,
-                                   RenderFrameImpl::CreateParams>;
+using WebViewTestProxyType = test_runner::WebViewTestProxy<RenderViewImpl>;
+using WebWidgetTestProxyType = test_runner::WebWidgetTestProxy<RenderWidget>;
+using WebFrameTestProxyType = test_runner::WebFrameTestProxy<RenderFrameImpl>;
 
 RenderViewImpl* CreateWebViewTestProxy(CompositorDependencies* compositor_deps,
                                        const mojom::CreateViewParams& params) {
@@ -190,9 +179,8 @@ test_runner::WebWidgetTestProxyBase* GetWebWidgetTestProxyBase(
   if (local_root->IsMainFrame()) {
     test_runner::WebViewTestProxyBase* web_view_test_proxy_base =
         GetWebViewTestProxyBase(local_root->GetRenderView());
-    auto* web_widget_test_proxy_base =
-        static_cast<test_runner::WebWidgetTestProxyBase*>(
-            web_view_test_proxy_base);
+    test_runner::WebWidgetTestProxyBase* web_widget_test_proxy_base =
+        web_view_test_proxy_base->web_widget_test_proxy_base();
     DCHECK(web_widget_test_proxy_base->web_widget()->IsWebView());
     return web_widget_test_proxy_base;
   } else {
@@ -215,11 +203,13 @@ RenderWidget* GetRenderWidget(
   blink::WebWidget* widget = web_widget_test_proxy_base->web_widget();
   // TODO(lfg): Simplify once RenderView no longer inherits from RenderWidget.
   if (widget->IsWebView()) {
+    test_runner::WebViewTestProxyBase* render_view_proxy_base =
+        web_widget_test_proxy_base->web_view_test_proxy_base();
     WebViewTestProxyType* render_view_proxy =
-        static_cast<WebViewTestProxyType*>(web_widget_test_proxy_base);
+        static_cast<WebViewTestProxyType*>(render_view_proxy_base);
     RenderViewImpl* render_view_impl =
         static_cast<RenderViewImpl*>(render_view_proxy);
-    return render_view_impl;
+    return render_view_impl->GetWidget();
   } else if (widget->IsWebFrameWidget()) {
     WebWidgetTestProxyType* render_widget_proxy =
         static_cast<WebWidgetTestProxyType*>(web_widget_test_proxy_base);
@@ -249,18 +239,8 @@ void FetchManifest(blink::WebView* view, FetchManifestCallback callback) {
       .RequestManifest(std::move(callback));
 }
 
-void SetMockGamepadProvider(std::unique_ptr<RendererGamepadProvider> provider) {
-  RenderThreadImpl::current_blink_platform_impl()
-      ->SetPlatformEventObserverForTesting(blink::kWebPlatformEventTypeGamepad,
-                                           std::move(provider));
-}
-
-void SetMockDeviceMotionData(const MotionData& data) {
-  RendererBlinkPlatformImpl::SetMockDeviceMotionDataForTesting(data);
-}
-
-void SetMockDeviceOrientationData(const OrientationData& data) {
-  RendererBlinkPlatformImpl::SetMockDeviceOrientationDataForTesting(data);
+void SetWorkerRewriteURLFunction(RewriteURLFunction rewrite_url_function) {
+  WebWorkerFetchContextImpl::InstallRewriteURLFunction(rewrite_url_function);
 }
 
 namespace {
@@ -286,16 +266,14 @@ class CopyRequestSwapPromise : public cc::SwapPromise {
     DCHECK(layer_tree_frame_sink_from_commit_);
   }
   void DidActivate() override {}
-  void WillSwap(viz::CompositorFrameMetadata*,
-                cc::RenderFrameMetadata*) override {
+  void WillSwap(viz::CompositorFrameMetadata*) override {
     layer_tree_frame_sink_from_commit_->RequestCopyOfOutput(
         std::move(copy_request_));
   }
   void DidSwap() override {}
-  DidNotSwapAction DidNotSwap(DidNotSwapReason r) override {
+  void DidNotSwap(DidNotSwapReason r) override {
     // The compositor should always swap in layout test mode.
     NOTREACHED() << "did not swap for reason " << r;
-    return DidNotSwapAction::BREAK_PROMISE;
   }
   int64_t TraceId() const override { return 0; }
 
@@ -310,6 +288,11 @@ class CopyRequestSwapPromise : public cc::SwapPromise {
 class LayoutTestDependenciesImpl : public LayoutTestDependencies,
                                    public viz::TestLayerTreeFrameSinkClient {
  public:
+  bool UseDisplayCompositorPixelDump() const override {
+    base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+    return cmd->HasSwitch(switches::kEnableDisplayCompositorPixelDump);
+  }
+
   std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink(
       int32_t routing_id,
       scoped_refptr<gpu::GpuChannelHost> gpu_channel,
@@ -336,14 +319,15 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
     // Keep texture sizes exactly matching the bounds of the RenderPass to avoid
     // floating point badness in texcoords.
     renderer_settings.dont_round_texture_sizes_for_pixel_tests = true;
+    renderer_settings.use_skia_renderer = features::IsUsingSkiaRenderer();
 
     constexpr bool disable_display_vsync = false;
     constexpr double refresh_rate = 60.0;
     auto layer_tree_frame_sink = std::make_unique<viz::TestLayerTreeFrameSink>(
         std::move(compositor_context_provider),
-        std::move(worker_context_provider), nullptr /* shared_bitmap_manager */,
-        gpu_memory_buffer_manager, renderer_settings, task_runner,
-        synchronous_composite, disable_display_vsync, refresh_rate);
+        std::move(worker_context_provider), gpu_memory_buffer_manager,
+        renderer_settings, task_runner, synchronous_composite,
+        disable_display_vsync, refresh_rate);
     layer_tree_frame_sink->SetClient(this);
     layer_tree_frame_sinks_[routing_id] = layer_tree_frame_sink.get();
     return std::move(layer_tree_frame_sink);
@@ -381,17 +365,25 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
     attributes.lose_context_when_out_of_memory = true;
     const bool automatic_flushes = false;
     const bool support_locking = false;
+    const bool support_grcontext = true;
 
-    auto context_provider =
-        base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
-            gpu_channel_, gpu_memory_buffer_manager_, kGpuStreamIdDefault,
-            kGpuStreamPriorityDefault, gpu::kNullSurfaceHandle,
-            GURL("chrome://gpu/"
-                 "LayoutTestDependenciesImpl::CreateOutputSurface"),
-            automatic_flushes, support_locking, gpu::SharedMemoryLimits(),
-            attributes, nullptr,
-            ui::command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING);
-    context_provider->BindToCurrentThread();
+    scoped_refptr<viz::ContextProvider> context_provider;
+
+    gpu::ContextResult context_result = gpu::ContextResult::kTransientFailure;
+    while (context_result != gpu::ContextResult::kSuccess) {
+      context_provider = base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
+          gpu_channel_, gpu_memory_buffer_manager_, kGpuStreamIdDefault,
+          kGpuStreamPriorityDefault, gpu::kNullSurfaceHandle,
+          GURL("chrome://gpu/"
+               "LayoutTestDependenciesImpl::CreateOutputSurface"),
+          automatic_flushes, support_locking, support_grcontext,
+          gpu::SharedMemoryLimits(), attributes,
+          ui::command_buffer_metrics::ContextType::FOR_TESTING);
+      context_result = context_provider->BindToCurrentThread();
+
+      // Layout tests can't recover from a fatal failure.
+      CHECK_NE(context_result, gpu::ContextResult::kFatalFailure);
+    }
 
     bool flipped_output_surface = false;
     return std::make_unique<cc::PixelTestOutputSurface>(
@@ -507,8 +499,19 @@ void SetDeviceColorSpace(RenderView* render_view,
       ->SetDeviceColorSpaceForTesting(color_space);
 }
 
-void SetTestBluetoothScanDuration() {
-  BluetoothDeviceChooserController::SetTestScanDurationForTesting();
+void SetTestBluetoothScanDuration(BluetoothTestScanDurationSetting setting) {
+  switch (setting) {
+    case BluetoothTestScanDurationSetting::kImmediateTimeout:
+      BluetoothDeviceChooserController::SetTestScanDurationForTesting(
+          BluetoothDeviceChooserController::TestScanDurationSetting::
+              IMMEDIATE_TIMEOUT);
+      break;
+    case BluetoothTestScanDurationSetting::kNeverTimeout:
+      BluetoothDeviceChooserController::SetTestScanDurationForTesting(
+          BluetoothDeviceChooserController::TestScanDurationSetting::
+              NEVER_TIMEOUT);
+      break;
+  }
 }
 
 void UseSynchronousResizeMode(RenderView* render_view, bool enable) {
@@ -528,10 +531,10 @@ void DisableAutoResizeMode(RenderView* render_view, const WebSize& new_size) {
       DisableAutoResizeForTesting(new_size);
 }
 
-void SchedulerRunIdleTasks(const base::Closure& callback) {
-  blink::scheduler::RendererScheduler* scheduler =
-      content::RenderThreadImpl::current()->GetRendererScheduler();
-  blink::scheduler::RunIdleTasksForTesting(scheduler, callback);
+void SchedulerRunIdleTasks(base::OnceClosure callback) {
+  blink::scheduler::WebThreadScheduler* scheduler =
+      content::RenderThreadImpl::current()->GetWebMainThreadScheduler();
+  blink::scheduler::RunIdleTasksForTesting(scheduler, std::move(callback));
 }
 
 void ForceTextInputStateUpdateForRenderFrame(RenderFrame* frame) {

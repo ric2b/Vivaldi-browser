@@ -146,8 +146,8 @@ TEST_F(ProcessTest, Terminate) {
 
   EXPECT_NE(TERMINATION_STATUS_STILL_RUNNING,
             GetTerminationStatus(process.Handle(), &exit_code));
-#if !defined(OS_POSIX)
-  // The POSIX implementation actually ignores the exit_code.
+#if !defined(OS_POSIX) && !defined(OS_FUCHSIA)
+  // The POSIX & Fuchsia implementations actually ignore the exit_code.
   EXPECT_EQ(kExpectedExitCode, exit_code);
 #endif
 }
@@ -170,8 +170,6 @@ MULTIPROCESS_TEST_MAIN(TerminateCurrentProcessImmediatelyWithCode0) {
   base::ThreadLocalPointer<ThreadLocalObject> object;
   base::AtExitManager::RegisterCallback(&AtExitHandler, nullptr);
   Process::TerminateCurrentProcessImmediately(0);
-  NOTREACHED();
-  return 42;
 }
 
 TEST_F(ProcessTest, TerminateCurrentProcessImmediatelyWithZeroExitCode) {
@@ -185,8 +183,6 @@ TEST_F(ProcessTest, TerminateCurrentProcessImmediatelyWithZeroExitCode) {
 
 MULTIPROCESS_TEST_MAIN(TerminateCurrentProcessImmediatelyWithCode250) {
   Process::TerminateCurrentProcessImmediately(250);
-  NOTREACHED();
-  return 42;
 }
 
 TEST_F(ProcessTest, TerminateCurrentProcessImmediatelyWithNonZeroExitCode) {

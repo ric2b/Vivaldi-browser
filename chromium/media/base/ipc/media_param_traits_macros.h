@@ -15,6 +15,7 @@
 #include "media/base/channel_layout.h"
 #include "media/base/content_decryption_module.h"
 #include "media/base/decode_status.h"
+#include "media/base/decrypt_config.h"
 #include "media/base/decryptor.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/eme_constants.h"
@@ -34,7 +35,7 @@
 // TODO(crbug.com/676224): When EnabledIf attribute is supported in mojom files,
 // move CdmProxy related code into #if BUILDFLAG(ENABLE_LIBRARY_CDMS).
 #include "media/cdm/cdm_proxy.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "ui/gfx/ipc/color/gfx_param_traits_macros.h"
 
 // Enum traits.
@@ -60,16 +61,16 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::CdmPromise::Exception,
                           media::CdmPromise::Exception::EXCEPTION_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmProxy::Function,
-                          media::CdmProxy::Function::kMax)
+                          media::CdmProxy::Function::kMaxValue)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmProxy::Protocol,
-                          media::CdmProxy::Protocol::kMax)
+                          media::CdmProxy::Protocol::kMaxValue)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmProxy::Status,
-                          media::CdmProxy::Status::kMax)
+                          media::CdmProxy::Status::kMaxValue)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmSessionType,
-                          media::CdmSessionType::SESSION_TYPE_MAX)
+                          media::CdmSessionType::kMaxValue)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::ChannelLayout, media::CHANNEL_LAYOUT_MAX)
 
@@ -91,6 +92,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::DemuxerStream::Type,
                           media::DemuxerStream::TYPE_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::EmeInitDataType, media::EmeInitDataType::MAX)
+
+IPC_ENUM_TRAITS_MAX_VALUE(media::EncryptionMode,
+                          media::EncryptionMode::kMaxValue)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::EncryptionScheme::CipherMode,
                           media::EncryptionScheme::CipherMode::CIPHER_MODE_MAX)
@@ -189,7 +193,6 @@ IPC_STRUCT_TRAITS_BEGIN(media::HDRMetadata)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(media::OverlayInfo)
-  IPC_STRUCT_TRAITS_MEMBER(surface_id)
   IPC_STRUCT_TRAITS_MEMBER(routing_token)
   IPC_STRUCT_TRAITS_MEMBER(is_fullscreen)
 IPC_STRUCT_TRAITS_END()

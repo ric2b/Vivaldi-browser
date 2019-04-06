@@ -6,17 +6,29 @@
 
 #import <MobileCoreServices/MobileCoreServices.h>
 
+#include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#include "base/test/scoped_feature_list.h"
+#include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/passwords/password_form_filler.h"
+#import "ios/chrome/browser/ui/activity_services/activities/bookmark_activity.h"
+#import "ios/chrome/browser/ui/activity_services/activities/print_activity.h"
+#import "ios/chrome/browser/ui/activity_services/activities/request_desktop_or_mobile_site_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activity_type_util.h"
 #import "ios/chrome/browser/ui/activity_services/appex_constants.h"
 #import "ios/chrome/browser/ui/activity_services/chrome_activity_item_source.h"
-#import "ios/chrome/browser/ui/activity_services/print_activity.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_password.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
 #import "ios/chrome/browser/ui/activity_services/share_to_data.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
@@ -65,7 +77,9 @@
 @interface ActivityServiceController (CrVisibleForTesting)
 - (NSArray*)activityItemsForData:(ShareToData*)data;
 - (NSArray*)applicationActivitiesForData:(ShareToData*)data
-                              dispatcher:(id<BrowserCommands>)dispatcher;
+                              dispatcher:(id<BrowserCommands>)dispatcher
+                           bookmarkModel:
+                               (bookmarks::BookmarkModel*)bookmarkModel;
 
 - (BOOL)processItemsReturnedFromActivity:(NSString*)activityType
                                   status:(ShareTo::ShareResult)result
@@ -180,16 +194,23 @@ class ActivityServiceControllerTest : public PlatformTest {
  protected:
   void SetUp() override {
     PlatformTest::SetUp();
+    TestChromeBrowserState::Builder test_cbs_builder;
+    chrome_browser_state_ = test_cbs_builder.Build();
+    chrome_browser_state_->CreateBookmarkModel(false);
+    bookmark_model_ = ios::BookmarkModelFactory::GetForBrowserState(
+        chrome_browser_state_.get());
+    bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
     parentController_ =
         [[UIViewController alloc] initWithNibName:nil bundle:nil];
     [[UIApplication sharedApplication] keyWindow].rootViewController =
         parentController_;
     shareData_ =
         [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org")
-                           passwordManagerURL:GURL("https://chromium.org")
+                                   visibleURL:GURL("https://chromium.org")
                                         title:@""
                               isOriginalTitle:YES
                               isPagePrintable:YES
+                                    userAgent:web::UserAgentType::MOBILE
                            thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   }
 
@@ -297,6 +318,8 @@ class ActivityServiceControllerTest : public PlatformTest {
   web::TestWebThreadBundle thread_bundle_;
   UIViewController* parentController_;
   ShareToData* shareData_;
+  std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
+  bookmarks::BookmarkModel* bookmark_model_;
 };
 
 TEST_F(ActivityServiceControllerTest, PresentAndDismissController) {
@@ -312,7 +335,7 @@ TEST_F(ActivityServiceControllerTest, PresentAndDismissController) {
 
   // Test sharing.
   [activityController shareWithData:shareData_
-                       browserState:nullptr
+                       browserState:chrome_browser_state_.get()
                          dispatcher:nil
                    passwordProvider:provider
                    positionProvider:provider
@@ -339,10 +362,11 @@ TEST_F(ActivityServiceControllerTest, ActivityItemsForData) {
   // contain an image source.
   ShareToData* data =
       [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org")
-                         passwordManagerURL:GURL("https://chromium.org")
+                                 visibleURL:GURL("https://chromium.org")
                                       title:@"foo"
                             isOriginalTitle:YES
                             isPagePrintable:YES
+                                  userAgent:web::UserAgentType::DESKTOP
                          thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
   EXPECT_FALSE(ArrayContainsImageSource(items));
@@ -361,10 +385,11 @@ TEST_F(ActivityServiceControllerTest, ActivityItemsForDataWithPasswordAppEx) {
       [[ActivityServiceController alloc] init];
   ShareToData* data = [[ShareToData alloc]
         initWithShareURL:GURL("https://chromium.org/login.html")
-      passwordManagerURL:GURL("https://m.chromium.org/login.html")
+              visibleURL:GURL("https://m.chromium.org/login.html")
                    title:@"kung fu fighting"
          isOriginalTitle:YES
          isPagePrintable:YES
+               userAgent:web::UserAgentType::DESKTOP
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
   NSString* findLoginAction =
@@ -423,10 +448,11 @@ TEST_F(ActivityServiceControllerTest,
       [[ActivityServiceController alloc] init];
   ShareToData* data = [[ShareToData alloc]
         initWithShareURL:GURL("https://chromium.org/login.html")
-      passwordManagerURL:GURL("https://m.chromium.org/login.html")
+              visibleURL:GURL("https://m.chromium.org/login.html")
                    title:@"kung fu fighting"
          isOriginalTitle:YES
          isPagePrintable:YES
+               userAgent:web::UserAgentType::DESKTOP
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
   NSString* shareAction = @"com.apple.UIKit.activity.PostToFacebook";
@@ -525,28 +551,200 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
   // Verify printable data.
   ShareToData* data = [[ShareToData alloc]
         initWithShareURL:GURL("https://chromium.org/printable")
-      passwordManagerURL:GURL("https://chromium.org/printable")
+              visibleURL:GURL("https://chromium.org/printable")
                    title:@"bar"
          isOriginalTitle:YES
          isPagePrintable:YES
+               userAgent:web::UserAgentType::NONE
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
 
-  NSArray* items = [activityController applicationActivitiesForData:data
-                                                         dispatcher:nil];
-  ASSERT_EQ(2U, [items count]);
-  EXPECT_EQ([PrintActivity class], [[items objectAtIndex:0] class]);
+  NSArray* items =
+      [activityController applicationActivitiesForData:data
+                                            dispatcher:nil
+                                         bookmarkModel:bookmark_model_];
+  ASSERT_EQ(IsUIRefreshPhase1Enabled() ? 4U : 2U, [items count]);
+  BOOL foundPrintActivity = NO;
+  for (id item in items) {
+    if ([item class] == [PrintActivity class]) {
+      foundPrintActivity = YES;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundPrintActivity);
 
   // Verify non-printable data.
   data = [[ShareToData alloc]
         initWithShareURL:GURL("https://chromium.org/unprintable")
-      passwordManagerURL:GURL("https://chromium.org/unprintable")
+              visibleURL:GURL("https://chromium.org/unprintable")
                    title:@"baz"
          isOriginalTitle:YES
          isPagePrintable:NO
+               userAgent:web::UserAgentType::NONE
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   items = [activityController applicationActivitiesForData:data
-                                                dispatcher:nil];
-  EXPECT_EQ(1U, [items count]);
+                                                dispatcher:nil
+                                             bookmarkModel:bookmark_model_];
+  EXPECT_EQ(IsUIRefreshPhase1Enabled() ? 3U : 1U, [items count]);
+  foundPrintActivity = NO;
+  for (id item in items) {
+    if ([item class] == [PrintActivity class]) {
+      foundPrintActivity = YES;
+      break;
+    }
+  }
+  EXPECT_FALSE(foundPrintActivity);
+}
+
+// Verifies that the Bookmark, Find in Page, Request Desktop/Mobile Site and
+// Read Later activities are only here for http/https pages.
+TEST_F(ActivityServiceControllerTest, HTTPActivities) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(kUIRefreshPhase1);
+
+  ActivityServiceController* activityController =
+      [[ActivityServiceController alloc] init];
+
+  // Verify HTTP URL.
+  ShareToData* data =
+      [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org/")
+                                 visibleURL:GURL("https://chromium.org/")
+                                      title:@"bar"
+                            isOriginalTitle:YES
+                            isPagePrintable:YES
+                                  userAgent:web::UserAgentType::MOBILE
+                         thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+
+  NSArray* items =
+      [activityController applicationActivitiesForData:data
+                                            dispatcher:nil
+                                         bookmarkModel:bookmark_model_];
+  ASSERT_EQ(5U, [items count]);
+
+  // Verify non-HTTP URL.
+  data = [[ShareToData alloc] initWithShareURL:GURL("chrome://chromium.org/")
+                                    visibleURL:GURL("chrome://chromium.org/")
+                                         title:@"baz"
+                               isOriginalTitle:YES
+                               isPagePrintable:YES
+                                     userAgent:web::UserAgentType::MOBILE
+                            thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  items = [activityController applicationActivitiesForData:data
+                                                dispatcher:nil
+                                             bookmarkModel:bookmark_model_];
+  ASSERT_EQ(1U, [items count]);
+}
+
+// Verifies that the Bookmark Activity is correct on bookmarked pages.
+TEST_F(ActivityServiceControllerTest, BookmarkActivities) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(kUIRefreshPhase1);
+
+  ActivityServiceController* activityController =
+      [[ActivityServiceController alloc] init];
+
+  // Verify non-bookmarked URL.
+  ShareToData* data =
+      [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org/")
+                                 visibleURL:GURL("https://chromium.org/")
+                                      title:@"bar"
+                            isOriginalTitle:YES
+                            isPagePrintable:YES
+                                  userAgent:web::UserAgentType::NONE
+                         thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+
+  NSArray* items =
+      [activityController applicationActivitiesForData:data
+                                            dispatcher:nil
+                                         bookmarkModel:bookmark_model_];
+  ASSERT_EQ(4U, [items count]);
+  UIActivity* activity = [items objectAtIndex:1];
+  EXPECT_EQ([BookmarkActivity class], [activity class]);
+  NSString* addToBookmarkString =
+      l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS);
+  EXPECT_TRUE([addToBookmarkString isEqualToString:activity.activityTitle]);
+
+  // Verify bookmarked URL.
+  GURL bookmarkedURL = GURL("https://chromium.org/page");
+  const bookmarks::BookmarkNode* defaultFolder = bookmark_model_->mobile_node();
+  bookmark_model_->AddURL(defaultFolder, defaultFolder->child_count(),
+                          base::SysNSStringToUTF16(@"Test bookmark"),
+                          bookmarkedURL);
+  data = [[ShareToData alloc]
+        initWithShareURL:GURL("https://chromium.org/canonical")
+              visibleURL:bookmarkedURL
+                   title:@"baz"
+         isOriginalTitle:YES
+         isPagePrintable:YES
+               userAgent:web::UserAgentType::NONE
+      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  items = [activityController applicationActivitiesForData:data
+                                                dispatcher:nil
+                                             bookmarkModel:bookmark_model_];
+  ASSERT_EQ(4U, [items count]);
+  activity = [items objectAtIndex:1];
+  EXPECT_EQ([BookmarkActivity class], [activity class]);
+  NSString* editBookmark =
+      l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_EDIT_BOOKMARK);
+  EXPECT_NSEQ(editBookmark, activity.activityTitle);
+
+  bookmark_model_->RemoveAllUserBookmarks();
+}
+
+// Verifies that the Request Desktop/Mobile activity has the correct label and
+// the correct action.
+TEST_F(ActivityServiceControllerTest, RequestMobileDesktopSite) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(kUIRefreshPhase1);
+
+  ActivityServiceController* activityController =
+      [[ActivityServiceController alloc] init];
+
+  // Verify mobile version.
+  ShareToData* data =
+      [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org/")
+                                 visibleURL:GURL("https://chromium.org/")
+                                      title:@"bar"
+                            isOriginalTitle:YES
+                            isPagePrintable:YES
+                                  userAgent:web::UserAgentType::MOBILE
+                         thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  id mockDispatcher = OCMProtocolMock(@protocol(BrowserCommands));
+  OCMExpect([mockDispatcher requestDesktopSite]);
+  NSArray* items =
+      [activityController applicationActivitiesForData:data
+                                            dispatcher:mockDispatcher
+                                         bookmarkModel:bookmark_model_];
+  ASSERT_EQ(5U, [items count]);
+  UIActivity* activity = [items objectAtIndex:3];
+  EXPECT_EQ([RequestDesktopOrMobileSiteActivity class], [activity class]);
+  NSString* requestDesktopSiteString =
+      l10n_util::GetNSString(IDS_IOS_SHARE_MENU_REQUEST_DESKTOP_SITE);
+  EXPECT_TRUE(
+      [requestDesktopSiteString isEqualToString:activity.activityTitle]);
+  [activity performActivity];
+  EXPECT_OCMOCK_VERIFY(mockDispatcher);
+
+  // Verify desktop version.
+  data = [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org/")
+                                    visibleURL:GURL("https://chromium.org/")
+                                         title:@"bar"
+                               isOriginalTitle:YES
+                               isPagePrintable:YES
+                                     userAgent:web::UserAgentType::DESKTOP
+                            thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  mockDispatcher = OCMProtocolMock(@protocol(BrowserCommands));
+  OCMExpect([mockDispatcher requestMobileSite]);
+  items = [activityController applicationActivitiesForData:data
+                                                dispatcher:mockDispatcher
+                                             bookmarkModel:bookmark_model_];
+  ASSERT_EQ(5U, [items count]);
+  activity = [items objectAtIndex:3];
+  EXPECT_EQ([RequestDesktopOrMobileSiteActivity class], [activity class]);
+  NSString* requestMobileSiteString =
+      l10n_util::GetNSString(IDS_IOS_SHARE_MENU_REQUEST_MOBILE_SITE);
+  EXPECT_TRUE([requestMobileSiteString isEqualToString:activity.activityTitle]);
+  [activity performActivity];
+  EXPECT_OCMOCK_VERIFY(mockDispatcher);
 }
 
 TEST_F(ActivityServiceControllerTest, FindLoginActionTypeConformsToPublicURL) {

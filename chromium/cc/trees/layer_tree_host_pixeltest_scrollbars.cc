@@ -4,7 +4,6 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "cc/input/scrollbar.h"
 #include "cc/layers/painted_overlay_scrollbar_layer.h"
@@ -31,7 +30,7 @@ class LayerTreeHostScrollbarsPixelTest : public LayerTreePixelTest {
   }
 
   void SetupTree() override {
-    layer_tree_host()->SetDeviceScaleFactor(device_scale_factor_);
+    SetInitialDeviceScaleFactor(device_scale_factor_);
     LayerTreePixelTest::SetupTree();
   }
 
@@ -52,6 +51,7 @@ class PaintedScrollbar : public Scrollbar {
   gfx::Rect TrackRect() const override { return rect_; }
   float ThumbOpacity() const override { return 1.f; }
   bool NeedsPaintPart(ScrollbarPart part) const override { return true; }
+  bool HasTickmarks() const override { return false; }
   void PaintPart(PaintCanvas* canvas,
                  ScrollbarPart part,
                  const gfx::Rect& content_rect) override {
@@ -137,7 +137,13 @@ TEST_F(LayerTreeHostScrollbarsPixelTest, TransformScale) {
                base::FilePath(FILE_PATH_LITERAL("spiral_double_scale.png")));
 }
 
-TEST_F(LayerTreeHostScrollbarsPixelTest, HugeTransformScale) {
+// Disabled on TSan due to frequent timeouts. crbug.com/848994
+#if defined(THREAD_SANITIZER)
+#define MAYBE_HugeTransformScale DISABLED_HugeTransformScale
+#else
+#define MAYBE_HugeTransformScale HugeTransformScale
+#endif
+TEST_F(LayerTreeHostScrollbarsPixelTest, MAYBE_HugeTransformScale) {
   scoped_refptr<SolidColorLayer> background =
       CreateSolidColorLayer(gfx::Rect(400, 400), SK_ColorWHITE);
 
@@ -150,7 +156,8 @@ TEST_F(LayerTreeHostScrollbarsPixelTest, HugeTransformScale) {
   background->AddChild(layer);
 
   scoped_refptr<TestInProcessContextProvider> context(
-      new TestInProcessContextProvider(nullptr));
+      new TestInProcessContextProvider(/*enable_oop_rasterization=*/false,
+                                       /*support_locking=*/false));
   context->BindToCurrentThread();
   int max_texture_size = 0;
   context->ContextGL()->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);

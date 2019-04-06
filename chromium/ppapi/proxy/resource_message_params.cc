@@ -5,6 +5,7 @@
 #include "ppapi/proxy/resource_message_params.h"
 
 #include "base/logging.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/proxy/ppapi_messages.h"
 
@@ -84,10 +85,8 @@ SerializedHandle ResourceMessageParams::TakeHandleOfTypeAtIndex(
     SerializedHandle::Type type) const {
   SerializedHandle handle;
   std::vector<SerializedHandle>& data = handles_->data();
-  if (index < data.size() && data[index].type() == type) {
-    handle = data[index];
-    data[index] = SerializedHandle();
-  }
+  if (index < data.size() && data[index].type() == type)
+    handle = std::move(data[index]);
   return handle;
 }
 
@@ -99,6 +98,18 @@ bool ResourceMessageParams::TakeSharedMemoryHandleAtIndex(
   if (!serialized.is_shmem())
     return false;
   *handle = serialized.shmem();
+  return true;
+}
+
+bool ResourceMessageParams::TakeReadOnlySharedMemoryRegionAtIndex(
+    size_t index,
+    base::ReadOnlySharedMemoryRegion* region) const {
+  SerializedHandle serialized =
+      TakeHandleOfTypeAtIndex(index, SerializedHandle::SHARED_MEMORY_REGION);
+  if (!serialized.is_shmem_region())
+    return false;
+  *region = base::ReadOnlySharedMemoryRegion::Deserialize(
+      serialized.TakeSharedMemoryRegion());
   return true;
 }
 
@@ -133,8 +144,15 @@ void ResourceMessageParams::TakeAllSharedMemoryHandles(
   }
 }
 
-void ResourceMessageParams::AppendHandle(const SerializedHandle& handle) const {
-  handles_->data().push_back(handle);
+void ResourceMessageParams::TakeAllHandles(
+    std::vector<SerializedHandle>* handles) const {
+  std::vector<SerializedHandle>& data = handles_->data();
+  for (size_t i = 0; i < data.size(); ++i)
+    handles->push_back(std::move(data[i]));
+}
+
+void ResourceMessageParams::AppendHandle(SerializedHandle handle) const {
+  handles_->data().push_back(std::move(handle));
 }
 
 ResourceMessageCallParams::ResourceMessageCallParams()

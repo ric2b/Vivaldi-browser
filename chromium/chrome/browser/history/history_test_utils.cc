@@ -6,7 +6,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -50,6 +49,6 @@ void WaitForHistoryBackendToRun(Profile* profile) {
   std::unique_ptr<history::HistoryDBTask> task(new WaitForHistoryTask());
   history::HistoryService* history = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
-  history->ScheduleDBTask(std::move(task), &task_tracker);
+  history->ScheduleDBTask(FROM_HERE, std::move(task), &task_tracker);
   content::RunMessageLoop();
 }

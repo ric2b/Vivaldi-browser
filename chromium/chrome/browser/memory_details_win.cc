@@ -28,14 +28,9 @@
 
 using content::BrowserThread;
 
-// Known browsers which we collect details for.
-enum BrowserProcess {
-  CHROME_BROWSER = 0,
-};
-
 MemoryDetails::MemoryDetails() {
   base::FilePath browser_process_path;
-  PathService::Get(base::FILE_EXE, &browser_process_path);
+  base::PathService::Get(base::FILE_EXE, &browser_process_path);
 
   ProcessData process;
   process.name = l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
@@ -82,11 +77,6 @@ void MemoryDetails::CollectProcessData(
     info.process_type = pid == GetCurrentProcessId()
                             ? content::PROCESS_TYPE_BROWSER
                             : content::PROCESS_TYPE_UNKNOWN;
-
-    std::unique_ptr<base::ProcessMetrics> metrics =
-        base::ProcessMetrics::CreateProcessMetrics(process_handle.Get());
-    metrics->GetCommittedKBytes(&info.committed);
-    metrics->GetWorkingSetKBytes(&info.working_set);
 
     // Get Version Information.
     info.version = base::ASCIIToUTF16(version_info::GetVersionNumber());
